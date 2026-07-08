@@ -16,9 +16,33 @@ const RS = StyleSheet.create({
   page: { fontSize: 9, padding: 30, backgroundColor: '#fff' },
 })
 
+// 한 글자의 대략적 폭 (CJK는 폰트크기와 같은 전각, 그 외는 절반) 기준으로
+// 텍스트가 박스(innerW x innerH) 안에 다 들어가는 가장 큰 폰트 크기를 찾는다.
+const CJK = /[가-힣　-〿぀-ヿ一-鿿＀-￯]/
+function fitFontSize(text: string, innerW: number, innerH: number, base = 9, min = 5, lineHeight = 1.6): number {
+  const content = text ?? ''
+  if (!content.trim()) return base
+  const explicitLines = content.split('\n')
+  for (let fs = base; fs >= min; fs -= 0.25) {
+    let totalLines = 0
+    for (const line of explicitLines) {
+      let w = 0
+      for (const ch of line) w += CJK.test(ch) ? fs : fs * 0.5
+      totalLines += Math.max(1, Math.ceil(w / innerW))
+    }
+    if (totalLines * fs * lineHeight <= innerH) return fs
+  }
+  return min
+}
+
 export default function ServiceReportDoc({ service, device, customer, contact, engineerNames, firstEngineerName, engineerSignDataUrl, customerSignDataUrl }: Props) {
   const deviceTitle = `${device.device_name ?? ''} ${device.device_name2 ?? ''} ${device.option ?? ''}`.replace(/\s+/g, ' ').trim()
   const fontFamily = 'NotoSansCJK'
+
+  // 내용 칸: 고정 높이 안에 다 들어가도록 폰트 크기 자동 축소
+  // (A/S 칸 height 300 / 기타사항 칸 height 78, 좌우 padding 10, 상하 padding 8)
+  const asFontSize = fitFontSize(service.service_notes ?? '', 500, 284)
+  const etcFontSize = fitFontSize(service.etc_notes ?? '', 500, 62)
 
   const infoRows = [
     { label: '엔지니어 이름', value: engineerNames, label2: '사업부', value2: '계측' },
@@ -149,22 +173,24 @@ export default function ServiceReportDoc({ service, device, customer, contact, e
             </View>
           ))}
 
-          {/* A/S 내용 */}
+          {/* A/S 내용 — 고정 높이 + 넘치면 잘림(한 페이지 유지) */}
           <View style={{ borderBottomWidth: 1, borderBottomColor: '#000' }}>
             <View style={{ borderBottomWidth: 1, borderBottomColor: '#555', padding: '4 0', alignItems: 'center' }}>
               <Text style={{ fontSize: 9, fontFamily }}>A/S 및 납입 내용</Text>
             </View>
-            <View style={{ minHeight: 260, padding: '8 10' }}>
-              <Text style={{ fontSize: 9, fontFamily, lineHeight: 1.6 }}>{service.service_notes ?? ''}</Text>
+            <View style={{ height: 300, padding: '8 10', overflow: 'hidden' }}>
+              <Text style={{ fontSize: asFontSize, fontFamily, lineHeight: 1.6 }}>{service.service_notes ?? ''}</Text>
             </View>
           </View>
 
-          {/* 기타사항 */}
+          {/* 기타사항 — 고정 높이 + 넘치면 잘림 */}
           <View>
             <View style={{ borderBottomWidth: 1, borderBottomColor: '#555', padding: '4 0', alignItems: 'center' }}>
               <Text style={{ fontSize: 9, fontFamily }}>기타사항</Text>
             </View>
-            <View style={{ minHeight: 60, padding: '8 10' }} />
+            <View style={{ height: 78, padding: '8 10', overflow: 'hidden' }}>
+              <Text style={{ fontSize: etcFontSize, fontFamily, lineHeight: 1.6 }}>{service.etc_notes ?? ''}</Text>
+            </View>
           </View>
         </View>
 

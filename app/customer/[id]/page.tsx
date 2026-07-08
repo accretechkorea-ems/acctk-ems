@@ -120,6 +120,7 @@ export default function CustomerDetailPage() {
     const { data: newService, error } = await supabase.from('service_history').insert([{
       customer_id: customerId, device_id: selectedDeviceId, visit_year: visitYear,
       visit_date: form.visit_date.trim(), service_notes: form.service_notes.trim(),
+      etc_notes: form.etc_notes.trim() || null,
       visitor: engineerSnapshot || null, service_type: form.service_type,
       contact_id: form.contact_id || null, is_paid: form.is_paid,
       work_hours: form.work_hours ? parseFloat(form.work_hours) : null,
@@ -146,7 +147,8 @@ export default function CustomerDetailPage() {
 
       const updatePayload: Record<string, unknown> = {
         visit_year: visitYear, visit_date: form.visit_date.trim(),
-        service_notes: form.service_notes.trim(), visitor: engineerSnapshot || null,
+        service_notes: form.service_notes.trim(), etc_notes: form.etc_notes.trim() || null,
+        visitor: engineerSnapshot || null,
         service_type: form.service_type, contact_id: form.contact_id || null,
         is_paid: form.is_paid, work_hours: form.work_hours ? parseFloat(form.work_hours) : null,
       }
@@ -248,6 +250,23 @@ export default function CustomerDetailPage() {
     } catch (error: any) {
       if (win) win.close()
       alert(error?.message || '레포트를 여는 중 오류가 발생했습니다.')
+    }
+  }
+
+  // 저장된 레포트 삭제 — 스토리지 파일 제거 + report_url 비움 (재작성 가능하도록)
+  const handleDeleteReport = async (service: ServiceHistory) => {
+    if (!service.report_url) return
+    if (!confirm('이 레포트를 삭제하시겠습니까?\n삭제 후 다시 작성할 수 있습니다.')) return
+    try {
+      const path = toReportPath(service.report_url)
+      await supabase.storage.from('service-report').remove([path])
+      const { error } = await supabase.from('service_history').update({ report_url: null }).eq('service_id', service.service_id)
+      if (error) throw error
+      setSelectedService(prev => prev ? { ...prev, report_url: null } : prev)
+      await fetchDetail()
+      alert('레포트가 삭제되었습니다.')
+    } catch (error: any) {
+      alert(error?.message || '레포트 삭제 중 오류가 발생했습니다.')
     }
   }
 
@@ -363,14 +382,33 @@ export default function CustomerDetailPage() {
   }
 
   // ── 장비 CRUD ──
-  const handleAddDevice = async (form: DeviceForm) => {
+  const handleAddDevice = async (form: DeviceForm, packingFile: File | null) => {
     setIsSavingDevice(true)
-    const { error } = await supabase.from('devices').insert([{ customer_id: customerId, device_name: form.device_name.trim(), device_name2: form.device_name2.trim() || null, option: form.option.trim() || null, serial_number: form.serial_number.trim() || null, program: form.program, install_date: form.install_date || null, install_year: null, category: form.category }])
-    setIsSavingDevice(false)
-    if (error) { alert(error.message || '장비 추가 중 오류가 발생했습니다.'); return }
-    alert('장비가 추가되었습니다.')
-    setIsAddDeviceModalOpen(false)
-    await fetchDetail()
+    try {
+      // 장비를 먼저 등록하고 device_id를 받아온다 (패킹 파일명에 사용)
+      const { data: inserted, error } = await supabase.from('devices').insert([{
+        customer_id: customerId, device_name: form.device_name.trim(),
+        device_name2: form.device_name2.trim() || null, option: form.option.trim() || null,
+        serial_number: form.serial_number.trim() || null, program: form.program,
+        install_date: form.install_date || null, install_year: null, category: form.category,
+      }]).select('device_id').single()
+      if (error || !inserted) throw error || new Error('장비 추가 실패')
+
+      // 납입의사록·패킹리스트 파일이 있으면 업로드 후 경로 연결
+      if (packingFile) {
+        const path = await uploadPackingFile(inserted.device_id, packingFile)
+        const { error: upErr } = await supabase.from('devices').update({ packing_list_url: path }).eq('device_id', inserted.device_id)
+        if (upErr) throw upErr
+      }
+
+      alert('장비가 추가되었습니다.')
+      setIsAddDeviceModalOpen(false)
+      await fetchDetail()
+    } catch (error: any) {
+      alert(error?.message || '장비 추가 중 오류가 발생했습니다.')
+    } finally {
+      setIsSavingDevice(false)
+    }
   }
 
   const handleUpdateDevice = async (form: DeviceForm, packingFile: File | null) => {
@@ -663,6 +701,7 @@ export default function CustomerDetailPage() {
         <ServiceEditModal
           service={selectedService}
           onOpenReport={() => selectedService && handleOpenReport(selectedService)}
+          onDeleteReport={() => selectedService && handleDeleteReport(selectedService)}
           contacts={contacts}
           engineers={engineers}
           isSaving={isSavingServiceEdit}

@@ -38,6 +38,7 @@ export type ServiceHistory = {
   visit_year: string | null
   visit_date: string | null
   service_notes: string | null
+  etc_notes: string | null
   visitor: string | null
   service_type: string | null
   contact_id: number | null
@@ -75,6 +76,7 @@ export type Quote = {
 export type ServiceForm = {
   visit_date: string
   service_notes: string
+  etc_notes: string
   visitor: string
   service_type: string
   contact_id: number | null

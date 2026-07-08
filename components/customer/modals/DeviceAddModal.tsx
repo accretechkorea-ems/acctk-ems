@@ -11,7 +11,7 @@ type Props = {
   isOpen: boolean
   isSaving: boolean
   onClose: () => void
-  onSave: (form: DeviceForm) => void
+  onSave: (form: DeviceForm, packingFile: File | null) => void
 }
 
 const emptyForm: DeviceForm = { device_name: '', device_name2: '', option: '', serial_number: '', program: 'ACCTee', install_date: '', category: '20' }
@@ -19,16 +19,18 @@ const labelStyle = { fontSize: 12, fontWeight: 600, color: TEXT_MUTED, marginBot
 
 export default function DeviceAddModal({ isOpen, isSaving, onClose, onSave }: Props) {
   const [form, setForm] = useState<DeviceForm>(emptyForm)
+  const [packingFile, setPackingFile] = useState<File | null>(null)
 
   if (!isOpen) return null
 
   const handleSave = () => {
     if (!form.device_name.trim()) { alert('장비 라인업을 입력해주세요.'); return }
-    onSave(form)
+    onSave(form, packingFile)
     setForm(emptyForm)
+    setPackingFile(null)
   }
 
-  const handleClose = () => { setForm(emptyForm); onClose() }
+  const handleClose = () => { setForm(emptyForm); setPackingFile(null); onClose() }
 
   return (
     <div onClick={handleClose} style={modalOverlayStyle}>
@@ -88,6 +90,24 @@ export default function DeviceAddModal({ isOpen, isSaving, onClose, onSave }: Pr
                 <option value="84">84</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label style={labelStyle}>납입의사록•패킹리스트</label>
+            <label style={{ ...inputStyle, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', overflow: 'hidden' }}>
+              <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: WHITE_BUTTON_TEXT, background: WHITE_BUTTON_BG, borderRadius: 7, padding: '5px 10px' }}>
+                파일 선택
+              </span>
+              <span style={{ flex: 1, fontSize: 12, color: packingFile ? TEXT_PRIMARY : '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {packingFile ? packingFile.name : '납입의사록•패킹리스트 파일 선택'}
+              </span>
+              <input
+                type="file"
+                accept=".pdf,.xlsx,.xls,.doc,.docx,.png,.jpg,.jpeg"
+                onChange={(e) => setPackingFile(e.target.files?.[0] ?? null)}
+                style={{ display: 'none' }}
+              />
+            </label>
           </div>
         </div>
 

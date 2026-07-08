@@ -21,7 +21,7 @@ type Props = {
 const labelStyle = { fontSize: 12, fontWeight: 600, color: TEXT_MUTED, marginBottom: 5, display: 'block' } as const
 
 export default function ServiceAddModal({ deviceId, contacts, engineers, currentUserEngineerId, isSaving, onClose, onSave }: Props) {
-  const [form, setForm] = useState<ServiceForm>({ visit_date: '', service_notes: '', visitor: '', service_type: '신규설치', contact_id: null, is_paid: true, work_hours: '2' })
+  const [form, setForm] = useState<ServiceForm>({ visit_date: '', service_notes: '', etc_notes: '', visitor: '', service_type: '신규설치', contact_id: null, is_paid: true, work_hours: '2' })
   const [selectedEngineerIds, setSelectedEngineerIds] = useState<number[]>([])
   const [showExtraEngineers, setShowExtraEngineers] = useState(false)
 
@@ -29,7 +29,7 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
     if (deviceId !== null) {
       const today = new Date()
       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-      setForm({ visit_date: todayStr, service_notes: '', visitor: '', service_type: '신규설치', contact_id: null, is_paid: true, work_hours: '2' })
+      setForm({ visit_date: todayStr, service_notes: '', etc_notes: '', visitor: '', service_type: '신규설치', contact_id: null, is_paid: true, work_hours: '2' })
       setSelectedEngineerIds(currentUserEngineerId ? [currentUserEngineerId] : [])
       setShowExtraEngineers(false)
     }
@@ -76,6 +76,11 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
           <div>
             <label style={labelStyle}>서비스 내용</label>
             <textarea value={form.service_notes} onChange={(e) => setForm(p => ({ ...p, service_notes: e.target.value }))} placeholder="서비스 내용을 입력하세요" rows={5} style={textareaStyle} />
+          </div>
+
+          <div>
+            <label style={labelStyle}>기타사항</label>
+            <textarea value={form.etc_notes} onChange={(e) => setForm(p => ({ ...p, etc_notes: e.target.value }))} placeholder="기타사항 (레포트 하단 '기타사항' 칸에 표시)" rows={2} style={textareaStyle} />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1.2fr', gap: 12 }}>
