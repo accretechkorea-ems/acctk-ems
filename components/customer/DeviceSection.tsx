@@ -4,15 +4,7 @@ import { useRef, useState } from 'react'
 import type { Device, ServiceHistory } from './types'
 import { INPUT_BORDER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY, WHITE_BUTTON_BG, WHITE_BUTTON_TEXT } from './constants'
 import { getInstallDisplay, getDefaultImageUrl } from './utils'
-
-const SERVICE_TYPE_COLOR: Record<string, string> = {
-  '신규설치': '#3b82f6',
-  '이전설치': '#8b5cf6',
-  'A/S': '#f59e0b',
-  'B/S': '#ef4444',
-  '교육': '#16a34a',
-  '유선기술지원': '#0d9488',
-}
+import { SERVICE_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 
 type Props = {
   devices: Device[]
@@ -30,7 +22,7 @@ type Props = {
 
 function ServiceCard({ h, d, onEdit, onPrint, onOpenReport }: { h: ServiceHistory; d: Device; onEdit: () => void; onPrint: () => void; onOpenReport: () => void }) {
   const [hovered, setHovered] = useState(false)
-  const typeColor = SERVICE_TYPE_COLOR[h.service_type ?? ''] ?? TEXT_MUTED
+  const typeColor = getCategoryColor(SERVICE_TYPE_COLORS, h.service_type).text
 
   return (
     <div
@@ -85,7 +77,7 @@ function ServiceCard({ h, d, onEdit, onPrint, onOpenReport }: { h: ServiceHistor
                   transition: 'all 0.15s ease',
                 }}
               >
-                레포트
+                레포트 열기
               </button>
             ) : (
               <button
