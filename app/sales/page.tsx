@@ -4,6 +4,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { isActiveInPeriod } from '@/lib/engineers'
+import { SALES_STATUS_COLORS, TEAM_COLORS, getCategoryColor } from '@/lib/categoryColors'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#f4f5f7'
@@ -65,18 +66,6 @@ type SalesTarget = {
   year: number
   quarter: number | null
   target_amount: number
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  '견적중': '#d97706', '수주': '#2563eb', '매출완료': '#15803d', '실패': '#b91c1c', '보류': '#6b7280',
-  '발주(주문 대기)': '#7c3aed', '주문완료': '#0369a1', '세금계산서 요청': '#b45309', '취소요청': '#be123c',
-}
-
-const TEAM_COLORS: Record<string, { bg: string; text: string; bar: string }> = {
-  '1': { bg: '#eff4ff', text: '#234ea2', bar: '#234ea2' },
-  '2': { bg: '#f0f9ff', text: '#0369a1', bar: '#0369a1' },
-  '3': { bg: '#f0fdf4', text: '#15803d', bar: '#15803d' },
-  '4': { bg: '#fdf4ff', text: '#7e22ce', bar: '#7e22ce' },
 }
 
 const RANK_MEDAL = ['#b8860b', '#64748b', '#92400e'] as const
@@ -363,7 +352,7 @@ function EngineerChartModal({ engineer, quotes, targets, fy, onClose }: {
 
   const maxAmt = Math.max(...monthData.map(d => Math.max(d.revenueAmt, monthTarget)), 1)
   const targetH = Math.max(2, (monthTarget / maxAmt) * BAR_H)
-  const tc = TEAM_COLORS[engineer.teams ?? ''] || { bg: '#f3f4f6', text: BLUE, bar: BLUE }
+  const tc = getCategoryColor(TEAM_COLORS, engineer.teams)
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -438,7 +427,7 @@ function TeamCard({ teamId, engineers, filteredQuotes, targets, mode, fy, onCard
   teamId: string; engineers: Engineer[]; filteredQuotes: Quote[]; targets: SalesTarget[]
   mode: string; fy: number; onCardClick: (id: string) => void; isSelected: boolean
 }) {
-  const tc = TEAM_COLORS[teamId] || { bg: '#f3f4f6', text: BLUE, bar: BLUE }
+  const tc = getCategoryColor(TEAM_COLORS, teamId)
   const teamEngIds = engineers.filter(e => e.teams === teamId).map(e => e.engineer_id)
   const teamQuotes = filteredQuotes.filter(q => teamEngIds.includes(q.engineer_id))
   const revenueQuotes = teamQuotes.filter(q => q.status === '매출완료')
@@ -458,8 +447,8 @@ function TeamCard({ teamId, engineers, filteredQuotes, targets, mode, fy, onCard
   return (
     <div onClick={() => onCardClick(teamId)} style={{
       background: CARD_BG, borderRadius: 14, padding: '16px 18px',
-      border: `1px solid ${isSelected ? tc.bar : BORDER}`,
-      borderLeft: `3px solid ${tc.bar}`,
+      border: `1px solid ${isSelected ? tc.text : BORDER}`,
+      borderLeft: `3px solid ${tc.text}`,
       cursor: 'pointer', transition: 'box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease',
       boxShadow: isSelected ? `0 4px 18px rgba(0,0,0,0.10)` : '0 1px 3px rgba(0,0,0,0.04)',
     }}
@@ -544,7 +533,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   const [taxSending, setTaxSending] = useState(false)
   // 메모 툴팁
   const [hoveredMemoId, setHoveredMemoId] = useState<number | null>(null)
-  const tc = TEAM_COLORS[engineer.teams ?? ''] || { bg: '#f3f4f6', text: BLUE, bar: BLUE }
+  const tc = getCategoryColor(TEAM_COLORS, engineer.teams)
   const achieveColor = engineer.achieve === null ? GRAY : engineer.achieve >= 100 ? '#16a34a' : engineer.achieve >= 70 ? '#f59e0b' : '#dc2626'
   const filtered = quotes.filter(q => {
     const matchSearch = !search.trim() ||
@@ -694,7 +683,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
             <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="견적번호 / 고객사 / 내용 검색" style={{ ...inp, flex: 1, minWidth: 200 }} />
             {['전체', '견적중', '발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료', '취소요청', '실패'].map(s => (
               <button key={s} onClick={() => { setStatusFilter(s); setPage(1) }}
-                style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: statusFilter === s ? (STATUS_COLORS[s] || BLUE) : '#f3f4f6', color: statusFilter === s ? '#fff' : TEXT }}>
+                style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: statusFilter === s ? (s === '전체' ? BLUE : getCategoryColor(SALES_STATUS_COLORS, s).text) : '#f3f4f6', color: statusFilter === s ? '#fff' : TEXT }}>
                 {s}
               </button>
             ))}
@@ -759,7 +748,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                       </td>
                       <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
-                          <span style={{ padding: '3px 7px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: (STATUS_COLORS[q.status] || GRAY) + '18', color: STATUS_COLORS[q.status] || GRAY, whiteSpace: 'nowrap', alignSelf: 'center' }}>
+                          <span style={{ padding: '3px 7px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text, whiteSpace: 'nowrap', alignSelf: 'center' }}>
                             {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : q.status}
                           </span>
                           {showOrderInfo && (q.shipping_date || q.order_memo) && (
@@ -975,7 +964,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
               <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
                 {(['취소요청', '실패'] as const).map(s => (
                   <button key={s} onClick={() => setEditStatus(s)}
-                    style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: `1.5px solid ${editStatus === s ? STATUS_COLORS[s] : BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: editStatus === s ? STATUS_COLORS[s] + '14' : '#f9fafb', color: editStatus === s ? STATUS_COLORS[s] : GRAY, transition: 'all 0.12s' }}>
+                    style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: `1.5px solid ${editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).bg : '#f9fafb', color: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : GRAY, transition: 'all 0.12s' }}>
                     {s}
                   </button>
                 ))}
@@ -993,7 +982,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
               <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
                 <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
                 <button onClick={handleSave} disabled={saving}
-                  style={{ flex: 1, padding: '9px', background: STATUS_COLORS[editStatus] || BLUE, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, opacity: saving ? 0.7 : 1 }}>
+                  style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, opacity: saving ? 0.7 : 1 }}>
                   {saving ? '처리 중...' : `${editStatus} 확정`}
                 </button>
               </div>
@@ -1193,7 +1182,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
                 style={{ padding: '5px 11px', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: teamFilter === null ? '#fff' : 'transparent', color: teamFilter === null ? TEXT : GRAY, boxShadow: teamFilter === null ? '0 1px 3px rgba(0,0,0,0.10)' : 'none', transition: 'all 0.15s ease' }}>전체</button>
               {teams.filter(t => !['임원', '영업관리'].includes(t)).map(t => (
                 <button key={t} onClick={() => setTeamFilter(teamFilter === t ? null : t)}
-                  style={{ padding: '5px 11px', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: teamFilter === t ? '#fff' : 'transparent', color: teamFilter === t ? TEAM_COLORS[t]?.bar || BLUE : GRAY, boxShadow: teamFilter === t ? '0 1px 3px rgba(0,0,0,0.10)' : 'none', transition: 'all 0.15s ease' }}>{t}팀</button>
+                  style={{ padding: '5px 11px', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: teamFilter === t ? '#fff' : 'transparent', color: teamFilter === t ? getCategoryColor(TEAM_COLORS, t).text : GRAY, boxShadow: teamFilter === t ? '0 1px 3px rgba(0,0,0,0.10)' : 'none', transition: 'all 0.15s ease' }}>{t}팀</button>
               ))}
             </div>
           </div>
@@ -1277,7 +1266,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 14 }}>
             {engineerStats.map((eng, idx) => {
-              const tc = TEAM_COLORS[eng.teams ?? ''] || { bg: '#f3f4f6', text: BLUE, bar: BLUE }
+              const tc = getCategoryColor(TEAM_COLORS, eng.teams)
               const achieveColor = eng.achieve === null ? GRAY : eng.achieve >= 100 ? '#16a34a' : eng.achieve >= 70 ? '#f59e0b' : '#dc2626'
               const rank = revenueRankMap.get(eng.engineer_id)
               return (
