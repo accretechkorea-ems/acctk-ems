@@ -106,6 +106,7 @@ export default function Header() {
 
   const isAdmin = user?.email === ADMIN_EMAIL
   const isPurchaseManager = permissionLevel === 'superadmin' || engineerTeams === '영업관리'
+  const canSeeRepair = permissionLevel === 'superadmin' || permissionLevel === 'manager' || engineerTeams === '20'
   const unreadCount = notifications.filter(n => !n.is_read).length
 
   const menuItems = [
@@ -114,6 +115,7 @@ export default function Header() {
     { label: '견적서', onClick: () => router.push('/quote'), path: '/quote' },
     { label: '실적 현황', onClick: () => router.push('/sales'), path: '/sales' },
     { label: '재고 관리', onClick: () => router.push('/inventory'), path: '/inventory' },
+    ...(canSeeRepair ? [{ label: '20수리 현황', onClick: () => router.push('/repair'), path: '/repair' }] : []),
     { label: '자료실', onClick: () => router.push('/library'), path: '/library' },
     ...(isPurchaseManager ? [{ label: '발주 관리', onClick: () => router.push('/purchase'), path: '/purchase' }] : []),
     ...(isAdmin ? [{ label: '관리자', onClick: () => router.push('/admin'), path: '/admin' }] : []),
