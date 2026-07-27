@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { SALES_STATUS_COLORS, DELIVERY_METHOD_COLORS, getCategoryColor } from '@/lib/categoryColors'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#f4f5f7'
@@ -12,13 +13,6 @@ const GRAY = '#6b7280'
 const MUTED = '#9ca3af'
 const GREEN = '#15803d'
 const ORANGE = '#d97706'
-
-const STATUS_COLORS: Record<string, string> = {
-  '발주(주문 대기)': '#7c3aed',
-  '주문완료': '#0369a1',
-  '세금계산서 요청': '#b45309',
-  '매출완료': '#15803d',
-}
 
 type PurchaseQuote = {
   quote_id: number
@@ -220,19 +214,22 @@ export default function PurchasePage() {
         {/* 현황 카드 */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
           {([
-            { label: '주문 대기', key: '발주(주문 대기)', color: '#7c3aed', bg: '#f5f3ff' },
-            { label: '주문 완료', key: '주문완료', color: '#0369a1', bg: '#eff6ff' },
-            { label: '세금계산서 요청', key: '세금계산서 요청', color: '#b45309', bg: '#fffbeb' },
-            { label: '매출 완료', key: '매출완료', color: GREEN, bg: '#f0fdf4' },
-          ] as const).map(({ label, key, color, bg }) => (
+            { label: '주문 대기', key: '발주(주문 대기)' },
+            { label: '주문 완료', key: '주문완료' },
+            { label: '세금계산서 요청', key: '세금계산서 요청' },
+            { label: '매출 완료', key: '매출완료' },
+          ] as const).map(({ label, key }) => {
+            const cc = getCategoryColor(SALES_STATUS_COLORS, key)
+            return (
             <div key={key}
               onClick={() => setStatusFilter(statusFilter === key ? '전체' : key)}
-              style={{ background: CARD_BG, borderRadius: 12, padding: '14px 16px', border: `1.5px solid ${statusFilter === key ? color : BORDER}`, cursor: 'pointer', transition: 'all 0.15s' }}>
+              style={{ background: CARD_BG, borderRadius: 12, padding: '14px 16px', border: `1.5px solid ${statusFilter === key ? cc.text : BORDER}`, cursor: 'pointer', transition: 'all 0.15s' }}>
               <div style={{ fontSize: 11, color: GRAY, marginBottom: 6, fontWeight: 600 }}>{label}</div>
-              <div style={{ fontSize: 26, fontWeight: 800, color }}>{counts[key]}</div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: cc.text }}>{counts[key]}</div>
               <div style={{ fontSize: 10, color: MUTED, marginTop: 2 }}>건</div>
             </div>
-          ))}
+            )
+          })}
         </div>
 
         {/* 검색 + 필터 */}
@@ -242,7 +239,7 @@ export default function PurchasePage() {
           <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 10, padding: 3, gap: 1 }}>
             {['전체', '발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료'].map(s => (
               <button key={s} onClick={() => setStatusFilter(s)}
-                style={{ padding: '5px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: statusFilter === s ? (STATUS_COLORS[s] || BLUE) : 'transparent', color: statusFilter === s ? '#fff' : GRAY, transition: 'all 0.12s' }}>
+                style={{ padding: '5px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: statusFilter === s ? (s === '전체' ? BLUE : getCategoryColor(SALES_STATUS_COLORS, s).text) : 'transparent', color: statusFilter === s ? '#fff' : GRAY, transition: 'all 0.12s' }}>
                 {s}
               </button>
             ))}
@@ -269,7 +266,8 @@ export default function PurchasePage() {
                   const company = custMap[q.customer_id ?? 0] ?? '-'
                   const eng = q.engineers as any
                   const engName = eng ? [eng.name, eng.position].filter(Boolean).join(' ') : '-'
-                  const sc = STATUS_COLORS[q.status] || GRAY
+                  const sc = getCategoryColor(SALES_STATUS_COLORS, q.status)
+                  const dc = getCategoryColor(DELIVERY_METHOD_COLORS, q.delivery_method)
                   const isParcel = q.delivery_method === '택배발송'
                   return (
                     <tr key={q.quote_id}
@@ -291,7 +289,7 @@ export default function PurchasePage() {
                           <div style={{ position: 'relative', display: 'inline-block' }}>
                             <span
                               onClick={() => isParcel && q.delivery_info ? setAddressPopupId(addressPopupId === q.quote_id ? null : q.quote_id) : undefined}
-                              style={{ fontSize: 10, padding: '2px 7px', borderRadius: 5, fontWeight: 700, background: isParcel ? '#eff6ff' : '#f0fdf4', color: isParcel ? '#3b82f6' : '#16a34a', border: `1px solid ${isParcel ? '#dbeafe' : '#dcfce7'}`, cursor: isParcel && q.delivery_info ? 'pointer' : 'default', userSelect: 'none' }}>
+                              style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, fontWeight: 700, background: dc.bg, color: dc.text, cursor: isParcel && q.delivery_info ? 'pointer' : 'default', userSelect: 'none' }}>
                               {q.delivery_method}
                             </span>
                             {addressPopupId === q.quote_id && q.delivery_info && (
@@ -352,7 +350,7 @@ export default function PurchasePage() {
                       </td>
                       <td style={{ padding: '9px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'center' }}>
-                          <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: sc + '18', color: sc, whiteSpace: 'nowrap' }}>
+                          <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>
                             {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : q.status}
                           </span>
                           {q.status === '세금계산서 요청' && q.tax_invoice_date && (
