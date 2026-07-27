@@ -1,20 +1,28 @@
+import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import https from 'https'
 
-// 한국수출입은행 API는 공공기관 CA 인증서를 사용하므로 Node.js 기본 CA 번들에 포함되지 않음.
-// 이 요청에 한해 TLS 검증을 우회한다. 수신 데이터는 공개 환율 숫자뿐이라 MITM 위험 무시.
-// 환율은 공개 데이터이므로 인증 체크 불필요 — Vercel 쿠키 파싱 이슈 방지를 위해 미적용.
+// 한국수출입은행 API는 공공기관 CA(정부 인증서)를 사용하며 Node 기본 CA 번들에 없음.
+// 이 요청에 한해 TLS 검증을 우회한다. 대상 호스트는 oapi.koreaexim.go.kr 로 고정되어 있고
+// 수신 데이터는 공개 환율 숫자뿐이다. (완전 제거하려면 정부 CA 인증서를 ca 옵션으로 주입 필요)
 function httpsGet(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    https.get(url, { rejectUnauthorized: false }, (res) => {
+    const req = https.get(url, { rejectUnauthorized: false, timeout: 10000 }, (res) => {
       let data = ''
       res.on('data', chunk => data += chunk)
       res.on('end', () => resolve(data))
-    }).on('error', reject)
+    })
+    req.on('timeout', () => { req.destroy(new Error('exchange-rate request timeout')) })
+    req.on('error', reject)
   })
 }
 
 export async function GET() {
+  // 로그인한 사용자만 호출 가능 (외부 무인증 호출로 인한 API 쿼터 남용 방지)
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const authKey = process.env.KOREA_EXIM_API_KEY
   if (!authKey) {
     return NextResponse.json({ error: 'API key not configured' }, { status: 500 })
@@ -40,7 +48,7 @@ export async function GET() {
     }
     return NextResponse.json({ error: 'no data' }, { status: 500 })
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Unknown error'
-    return NextResponse.json({ error: message }, { status: 500 })
+    console.error('[exchange-rate] 조회 실패', e)
+    return NextResponse.json({ error: '환율 조회에 실패했습니다.' }, { status: 500 })
   }
 }

@@ -31,6 +31,16 @@ export async function GET(req: NextRequest) {
     .from('device-images')
     .createSignedUrl(safePath, 60 * 60)
 
-  if (error || !data) return NextResponse.json({ error: error?.message || 'failed' }, { status: 500 })
+  if (error || !data) {
+    console.error('[device-image] signed url 발급 실패', error)
+    return NextResponse.json({ error: '파일을 불러오지 못했습니다.' }, { status: 500 })
+  }
+
+  try {
+    await supabaseAdmin.from('audit_log').insert({
+      actor_email: user.email, action: 'READ', table_name: 'device-images', row_id: safePath,
+    })
+  } catch { /* best-effort */ }
+
   return NextResponse.json({ signedUrl: data.signedUrl })
 }

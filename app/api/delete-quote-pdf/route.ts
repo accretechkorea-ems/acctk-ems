@@ -43,7 +43,10 @@ export async function POST(req: NextRequest) {
   )
 
   const { error } = await supabaseAdmin.storage.from('quote-pdfs').remove([safePath])
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    console.error('[delete-quote-pdf] 삭제 실패', error)
+    return NextResponse.json({ error: '파일 삭제에 실패했습니다.' }, { status: 500 })
+  }
 
   return NextResponse.json({ success: true })
 }

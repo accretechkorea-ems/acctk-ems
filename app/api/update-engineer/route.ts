@@ -73,7 +73,10 @@ export async function POST(req: Request) {
     .update(updateData)
     .eq('engineer_id', Number(engineer_id))
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  if (error) {
+    console.error('[update-engineer] 수정 실패', error)
+    return NextResponse.json({ error: '직원 정보 수정에 실패했습니다.' }, { status: 400 })
+  }
 
   return NextResponse.json({ success: true })
 }
