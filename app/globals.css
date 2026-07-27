@@ -1,26 +1,96 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ============================================================
+   EMS 디자인 토큰 — 1단계: 정의만.
+   (기존 하드코딩 값 치환은 다음 단계에서 진행)
+   값은 프로젝트 전수 조사에서 역할별 "최다 빈도값"을 채택.
+   ============================================================ */
+@theme {
+  /* ── Brand / Accent (blue) ── */
+  --color-brand:        #234ea2;               /* 메인 액센트 (78회) */
+  --color-brand-dark:   #1c3e87;               /* hover / press */
+  --color-brand-tint:   #eff4ff;               /* 연한 배경 / 선택 (40회) */
+  --color-brand-border: #c7d7f8;               /* 블루 보더 (15회) */
+  --color-brand-ring:   rgba(35, 78, 162, 0.1); /* 포커스 링 */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  /* ── Text / Ink ── */
+  --color-ink:            #111113;             /* 본문 primary (23회) */
+  --color-text-secondary: #6b7280;             /* secondary (36회) */
+  --color-text-muted:     #9ca3af;             /* muted (37회) */
+
+  /* ── Surface / Background ── */
+  --color-white:     #ffffff;
+  --color-surface:   #ffffff;                  /* 카드 */
+  --color-bg:        #f4f5f7;                  /* 페이지 배경 (48회) */
+  --color-bg-subtle: #f8fafc;                  /* 보조 배경 (49회) */
+
+  /* ── Border ── */
+  --color-border:        #e2e4e9;              /* 기본 보더 (27회) */
+  --color-border-subtle: #f0f0f0;              /* 연한 구분선 (10회) */
+  --color-border-strong: #d1d5db;              /* 진한 보더 */
+
+  /* ── Semantic: success (green) ── */
+  --color-success:        #16a34a;
+  --color-success-strong: #15803d;
+  --color-success-tint:   #f0fdf4;
+  --color-success-border: #bbf7d0;
+
+  /* ── Semantic: danger (red) ── */
+  --color-danger:        #dc2626;
+  --color-danger-tint:   #fef2f2;
+  --color-danger-border: #fecaca;
+
+  /* ── Semantic: warning (amber) ── */
+  --color-warning:        #d97706;
+  --color-warning-strong: #f59e0b;
+  --color-warning-tint:   #fffbeb;
+  --color-warning-border: #fde68a;
+
+  /* ── Radius ── */
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   10px;                          /* 최다 (87회) */
+  --radius-xl:   14px;
+  --radius-2xl:  16px;
+  --radius-pill: 999px;
+
+  /* ── Font size ── */
+  --text-2xs:  10px;
+  --text-xs:   11px;
+  --text-sm:   12px;                            /* 최다 (203회) */
+  --text-base: 13px;
+  --text-md:   14px;
+  --text-lg:   16px;
+  --text-xl:   18px;
+  --text-2xl:  20px;
+  --text-3xl:  22px;
+  --text-4xl:  28px;
+
+  /* ── Spacing ── */
+  --spacing-2xs: 4px;
+  --spacing-xs:  6px;
+  --spacing-sm:  8px;                           /* 최다 gap (71회) */
+  --spacing-md:  12px;
+  --spacing-lg:  16px;
+  --spacing-xl:  20px;
+  --spacing-2xl: 24px;
+  --spacing-3xl: 28px;
+  --spacing-4xl: 40px;
+
+  /* ── Elevation (shadow) ── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.14);
+
+  /* ── Font family (layout.tsx의 next/font 변수와 연결 — 유지) ── */
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-/* @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-} */
-
+/* 기존 --background(#ffffff) / --foreground(#171717) 는 제거.
+   body 는 동일한 렌더링을 유지하기 위해 기존 값으로 재배선. */
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: #ffffff;
+  color: #171717;
   font-family: Arial, Helvetica, sans-serif;
 }
