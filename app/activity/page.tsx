@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { isActiveInPeriod } from '@/lib/engineers'
+import { SERVICE_TYPE_COLORS, TEAM_COLORS, getCategoryColor } from '@/lib/categoryColors'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#f4f5f7'
@@ -13,23 +14,7 @@ const GRAY = '#6b7280'
 const MUTED = '#9ca3af'
 
 const SERVICE_TYPES = ['신규설치', '이전설치', 'A/S', 'B/S', '교육', '유선기술지원']
-const TEAM_OPTIONS = ['전체', '1팀', '2팀', '3팀', '4팀']
-
-const SERVICE_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
-  '신규설치': { bg: '#eff4ff', text: '#234ea2', dot: '#234ea2' },
-  '이전설치': { bg: '#f0f9ff', text: '#0369a1', dot: '#0369a1' },
-  'A/S':     { bg: '#fffbeb', text: '#d97706', dot: '#d97706' },
-  'B/S':     { bg: '#fdf4ff', text: '#7c3aed', dot: '#7c3aed' },
-  '교육':    { bg: '#f0fdf4', text: '#059669', dot: '#059669' },
-  '유선기술지원': { bg: '#f0fdfa', text: '#0d9488', dot: '#0d9488' },
-}
-
-const TEAM_COLORS: Record<string, { bg: string; text: string }> = {
-  '1': { bg: '#eff4ff', text: '#234ea2' },
-  '2': { bg: '#f0f9ff', text: '#0369a1' },
-  '3': { bg: '#f0fdf4', text: '#15803d' },
-  '4': { bg: '#fdf4ff', text: '#7c3aed' },
-}
+const TEAM_OPTIONS = ['전체', '80영업', '80CS', '20', 'Apps.']
 
 type Engineer = {
   engineer_id: number
@@ -122,7 +107,7 @@ export default function ActivityPage() {
       if (me && !currentUser) {
         setCurrentUser(me)
         if (me.teams && !['임원', '영업관리'].includes(me.teams)) {
-          setSelectedTeam(`${me.teams}팀`)
+          setSelectedTeam(me.teams)
         } else {
           setSelectedTeam('전체')
         }
@@ -256,7 +241,7 @@ export default function ActivityPage() {
 
   const filteredRows = selectedTeam === '전체'
     ? rows
-    : rows.filter(row => row.engineer.teams === selectedTeam.replace('팀', ''))
+    : rows.filter(row => row.engineer.teams === selectedTeam)
 
   const filteredDetails = filterType === '전체'
     ? details
@@ -343,7 +328,7 @@ export default function ActivityPage() {
             <span style={{ fontSize: 11, color: MUTED, fontWeight: 600, letterSpacing: '0.2px' }}>팀</span>
             <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 10, padding: 3, gap: 1 }}>
               {TEAM_OPTIONS.map(team => {
-                const tc = team !== '전체' ? TEAM_COLORS[team.replace('팀', '')] : null
+                const tc = team === '전체' ? null : getCategoryColor(TEAM_COLORS, team)
                 const isActive = selectedTeam === team
                 return (
                   <button key={team} onClick={() => setSelectedTeam(team)}
@@ -351,7 +336,7 @@ export default function ActivityPage() {
                       padding: '5px 12px', borderRadius: 7, border: 'none', cursor: 'pointer',
                       fontWeight: 700, fontSize: 12,
                       background: isActive ? '#fff' : 'transparent',
-                      color: isActive ? (tc?.text ?? TEXT) : GRAY,
+                      color: isActive ? (tc?.text ?? BLUE) : GRAY,
                       boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
                       transition: 'all 0.15s ease',
                     }}>
@@ -368,7 +353,7 @@ export default function ActivityPage() {
           {loading
             ? Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)
             : filteredRows.map((row) => {
-                const tc = TEAM_COLORS[row.engineer.teams ?? ''] ?? null
+                const tc = getCategoryColor(TEAM_COLORS, row.engineer.teams)
                 return (
                   <div key={row.engineer.engineer_id}
                     onClick={() => fetchDetails(row.engineer)}
@@ -404,10 +389,10 @@ export default function ActivityPage() {
                       {row.engineer.teams && (
                         <span style={{
                           fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, flexShrink: 0,
-                          background: tc?.bg ?? '#f3f4f6',
-                          color: tc?.text ?? GRAY,
+                          background: tc.bg,
+                          color: tc.text,
                         }}>
-                          {row.engineer.teams}팀
+                          {row.engineer.teams}
                         </span>
                       )}
                     </div>
@@ -415,12 +400,12 @@ export default function ActivityPage() {
                     {/* 서비스 타입별 건수 */}
                     <div style={{ display: 'grid', gap: 7, marginBottom: 12 }}>
                       {SERVICE_TYPES.map((type) => {
-                        const sc = SERVICE_COLORS[type]
+                        const sc = getCategoryColor(SERVICE_TYPE_COLORS, type)
                         const cnt = row.counts[type] ?? 0
                         return (
                           <div key={type} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <div style={{ width: 6, height: 6, borderRadius: '50%', background: cnt > 0 ? sc.dot : '#d1d5db', flexShrink: 0 }} />
+                              <div style={{ width: 6, height: 6, borderRadius: '50%', background: cnt > 0 ? sc.text : '#d1d5db', flexShrink: 0 }} />
                               <span style={{ fontSize: 12, color: cnt > 0 ? GRAY : MUTED, fontWeight: cnt > 0 ? 500 : 400 }}>{type}</span>
                             </div>
                             <span style={{
@@ -478,10 +463,10 @@ export default function ActivityPage() {
                     <span style={{ fontSize: 20, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>{selectedEngineer.name}</span>
                     <span style={{ fontSize: 12, color: GRAY, fontWeight: 500 }}>{selectedEngineer.position}</span>
                     {selectedEngineer.teams && (() => {
-                      const c = TEAM_COLORS[selectedEngineer.teams ?? ''] ?? { bg: '#f3f4f6', text: GRAY }
+                      const c = getCategoryColor(TEAM_COLORS, selectedEngineer.teams)
                       return (
                         <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: c.bg, color: c.text }}>
-                          {selectedEngineer.teams}팀
+                          {selectedEngineer.teams}
                         </span>
                       )
                     })()}
@@ -515,14 +500,14 @@ export default function ActivityPage() {
             {/* 서비스 타입 필터 */}
             <div style={{ padding: '10px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {(['전체', ...SERVICE_TYPES] as string[]).map(type => {
-                const sc = type !== '전체' ? SERVICE_COLORS[type] : null
+                const sc = type === '전체' ? null : getCategoryColor(SERVICE_TYPE_COLORS, type)
                 const cnt = type === '전체' ? details.length : details.filter(d => d.service_type === type).length
                 const isActive = filterType === type
                 return (
                   <button key={type} onClick={() => setFilterType(type)}
                     style={{
                       padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                      border: `1px solid ${isActive ? (sc?.dot ?? BLUE) : BORDER}`,
+                      border: `1px solid ${isActive ? (sc?.text ?? BLUE) : BORDER}`,
                       background: isActive ? (sc?.bg ?? '#eff4ff') : '#f8fafc',
                       color: isActive ? (sc?.text ?? BLUE) : GRAY,
                       transition: 'all 0.15s ease',
@@ -563,7 +548,7 @@ export default function ActivityPage() {
                 </div>
               ) : (
                 filteredDetails.map((d, idx) => {
-                  const sc = SERVICE_COLORS[d.service_type] ?? { bg: '#f3f4f6', text: GRAY, dot: GRAY }
+                  const sc = getCategoryColor(SERVICE_TYPE_COLORS, d.service_type)
                   return (
                     <div key={d.service_id}
                       style={{
