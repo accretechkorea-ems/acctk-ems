@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { SALES_STATUS_COLORS, ROLE_COLORS, INVENTORY_MANAGER_COLOR, getCategoryColor } from '@/lib/categoryColors'
 
 const BLUE = '#234ea2'
 const GREEN = '#16a34a'
@@ -12,7 +13,6 @@ const BORDER = '#e5e7eb'
 const TEXT = '#111113'
 const GRAY = '#6b7280'
 const DANGER = '#dc2626'
-const PURPLE = '#7c3aed'
 
 type Quote = {
   quote_id: number
@@ -56,10 +56,6 @@ type Team = {
 }
 
 const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
-
-const STATUS_COLORS: Record<string, string> = {
-  '견적중': '#f59e0b', '수주': '#3b82f6', '매출완료': '#16a34a', '실패': '#dc2626', '보류': '#9ca3af',
-}
 
 const POSITION_ORDER: Record<string, number> = {
   '총괄': 0, '관리자': 1, '수석': 2, '책임': 3, '선임': 4, '사원': 5,
@@ -629,7 +625,7 @@ export default function AdminPage() {
                         <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>{q.customers?.company_name || '-'}</td>
                         <td style={{ padding: '10px 12px', fontWeight: 700, whiteSpace: 'nowrap' }}>₩{numKR(q.total_supply)}</td>
                         <td style={{ padding: '10px 12px' }}>
-                          <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: (STATUS_COLORS[q.status] || GRAY) + '22', color: STATUS_COLORS[q.status] || GRAY }}>{q.status}</span>
+                          <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text }}>{q.status}</span>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
                           <button onClick={() => handleDeleteQuote(q)} disabled={deleting === q.quote_id}
@@ -749,11 +745,10 @@ export default function AdminPage() {
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                             {(() => {
                               const level = eng.permission_level || 'member'
-                              const badges: { label: string; bg: string; color: string }[] = []
-                              if (level === 'superadmin') badges.push({ label: '최고관리자', bg: '#faf5ff', color: PURPLE })
-                              else if (level === 'manager') badges.push({ label: '팀장', bg: '#eff6ff', color: BLUE })
-                              else badges.push({ label: '팀원', bg: '#f3f4f6', color: GRAY })
-                              if (eng.is_inventory_manager) badges.push({ label: '재고관리자', bg: '#f0fdf4', color: GREEN })
+                              const rc = getCategoryColor(ROLE_COLORS, level)
+                              const roleLabel = level === 'superadmin' ? '최고관리자' : level === 'manager' ? '팀장' : '팀원'
+                              const badges: { label: string; bg: string; color: string }[] = [{ label: roleLabel, bg: rc.bg, color: rc.text }]
+                              if (eng.is_inventory_manager) badges.push({ label: '재고관리자', bg: INVENTORY_MANAGER_COLOR.bg, color: INVENTORY_MANAGER_COLOR.text })
                               return badges.map(b => (
                                 <span key={b.label} style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: b.bg, color: b.color, whiteSpace: 'nowrap' }}>
                                   {b.label}
@@ -868,17 +863,18 @@ export default function AdminPage() {
                   <div style={{ fontSize: 12, color: GRAY, marginBottom: 8, fontWeight: 700 }}>권한</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                     {([
-                      { key: 'superadmin', label: '최고관리자', desc: '전체 조회 및 관리자 접근', color: PURPLE, bg: '#faf5ff', border: '#d8b4fe' },
-                      { key: 'manager',    label: '팀장',       desc: '본인 팀 전체 실적 조회', color: BLUE,   bg: '#eff6ff', border: '#bfdbfe' },
-                    ] as const).map(({ key, label, desc, color, bg, border }) => {
+                      { key: 'superadmin', label: '최고관리자', desc: '전체 조회 및 관리자 접근' },
+                      { key: 'manager',    label: '팀장',       desc: '본인 팀 전체 실적 조회' },
+                    ] as const).map(({ key, label, desc }) => {
                       const checked = editForm.permission_level === key
+                      const rc = getCategoryColor(ROLE_COLORS, key)
                       return (
-                        <label key={key} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', padding: '10px 12px', background: checked ? bg : '#f8fafc', borderRadius: 8, border: `1px solid ${checked ? border : BORDER}`, transition: 'all 0.15s' }}>
+                        <label key={key} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', padding: '11px 12px', background: checked ? rc.bg : '#f8fafc', borderRadius: 8, transition: 'all 0.15s' }}>
                           <input type="checkbox" checked={checked}
                             onChange={e => setEditForm(p => ({ ...p, permission_level: e.target.checked ? key : 'member' }))}
-                            style={{ width: 15, height: 15, accentColor: color, cursor: 'pointer', marginTop: 2, flexShrink: 0 }} />
+                            style={{ width: 15, height: 15, accentColor: rc.text, cursor: 'pointer', marginTop: 2, flexShrink: 0 }} />
                           <div>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: checked ? color : TEXT }}>{label}</div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: checked ? rc.text : TEXT }}>{label}</div>
                             <div style={{ fontSize: 11, color: GRAY, marginTop: 2, lineHeight: 1.4 }}>{desc}</div>
                           </div>
                         </label>
@@ -887,12 +883,12 @@ export default function AdminPage() {
                     {(() => {
                       const checked = editForm.is_inventory_manager
                       return (
-                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', padding: '10px 12px', background: checked ? '#f0fdf4' : '#f8fafc', borderRadius: 8, border: `1px solid ${checked ? '#86efac' : BORDER}`, transition: 'all 0.15s' }}>
+                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', padding: '11px 12px', background: checked ? '#f0fdf4' : '#f8fafc', borderRadius: 8, transition: 'all 0.15s' }}>
                           <input type="checkbox" checked={checked}
                             onChange={e => setEditForm(p => ({ ...p, is_inventory_manager: e.target.checked }))}
-                            style={{ width: 15, height: 15, accentColor: GREEN, cursor: 'pointer', marginTop: 2, flexShrink: 0 }} />
+                            style={{ width: 15, height: 15, accentColor: INVENTORY_MANAGER_COLOR.text, cursor: 'pointer', marginTop: 2, flexShrink: 0 }} />
                           <div>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: checked ? GREEN : TEXT }}>재고관리자</div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: checked ? INVENTORY_MANAGER_COLOR.text : TEXT }}>재고관리자</div>
                             <div style={{ fontSize: 11, color: GRAY, marginTop: 2, lineHeight: 1.4 }}>출고 요청 승인·반려 가능</div>
                           </div>
                         </label>
