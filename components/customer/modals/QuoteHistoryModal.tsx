@@ -1,7 +1,8 @@
 'use client'
 
 import type { Customer, Quote } from '../types'
-import { CARD_BG, INPUT_BORDER, STATUS_COLORS, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY, WHITE_BUTTON_BG, numKR, modalOverlayStyle } from '../constants'
+import { CARD_BG, INPUT_BORDER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY, WHITE_BUTTON_BG, numKR, modalOverlayStyle } from '../constants'
+import { SALES_STATUS_COLORS, getCategoryColor } from '@/lib/categoryColors'
 
 type Props = {
   isOpen: boolean
@@ -87,7 +88,7 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose }:
                           : <span style={{ color: '#d1d5db' }}>-</span>}
                       </td>
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                        <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: (STATUS_COLORS[q.status] || '#9ca3af') + '22', color: STATUS_COLORS[q.status] || TEXT_SECONDARY }}>
+                        <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text }}>
                           {q.status}
                         </span>
                       </td>

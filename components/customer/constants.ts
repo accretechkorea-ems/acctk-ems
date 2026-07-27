@@ -13,14 +13,6 @@ export const WHITE_BUTTON_BG = '#234ea2'
 export const WHITE_BUTTON_TEXT = '#ffffff'
 export const DANGER_BG = '#dc2626'
 
-export const STATUS_COLORS: Record<string, string> = {
-  '견적중': '#f59e0b',
-  '수주': '#3b82f6',
-  '매출완료': '#16a34a',
-  '실패': '#dc2626',
-  '보류': '#9ca3af',
-}
-
 export const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
 
 export const inputStyle: CSSProperties = {
