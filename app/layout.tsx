@@ -1,14 +1,7 @@
 import SessionManager from '@/components/common/SessionManager'
 import HeaderWrapper from '@/components/common/HeaderWrapper'
 import type { Metadata } from "next";
-import { JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "ACCRETECH KOREA",
@@ -23,12 +16,13 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <head>
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
         <link
           rel="stylesheet"
-          href="https://cdn.jsdelivr.net/gh/wanteddev/wanted-sans@v1.0.3/packages/wanted-sans/fonts/webfonts/variable/complete/WantedSansVariable.min.css"
+          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
         />
       </head>
-      <body className={`${jetbrainsMono.variable} antialiased bg-white text-black`}>
+      <body className={`antialiased bg-white text-black`}>
         <SessionManager />
         <HeaderWrapper />
         {children}

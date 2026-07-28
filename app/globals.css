@@ -83,7 +83,7 @@
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.14);
 
   /* ── Font family ── */
-  --font-sans: 'Wanted Sans Variable', 'Wanted Sans', -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
+  --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -92,13 +92,12 @@
 body {
   background: #ffffff;
   color: #171717;
-  font-family: 'Wanted Sans Variable', 'Wanted Sans', -apple-system,
+  font-family: 'Pretendard Variable', Pretendard, -apple-system,
                BlinkMacSystemFont, system-ui, 'Segoe UI', sans-serif;
   font-feature-settings: 'tnum' 1;
 }
 
 .num {
-  font-family: var(--font-mono), 'Wanted Sans Variable', monospace;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
 }
