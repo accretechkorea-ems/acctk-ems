@@ -6,9 +6,9 @@ import { isActiveInPeriod } from '@/lib/engineers'
 import { SERVICE_TYPE_COLORS, TEAM_COLORS, getCategoryColor } from '@/lib/categoryColors'
 
 const BLUE = '#234ea2'
-const PAGE_BG = '#f4f5f7'
+const PAGE_BG = '#fafafa'
 const CARD_BG = '#ffffff'
-const BORDER = '#e2e4e9'
+const BORDER = '#ebebeb'
 const TEXT = '#111113'
 const GRAY = '#6b7280'
 const MUTED = '#9ca3af'
@@ -42,22 +42,22 @@ type ServiceDetail = {
 
 function SkeletonCard() {
   return (
-    <div style={{ background: CARD_BG, borderRadius: 14, padding: 18, border: `1px solid ${BORDER}`, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+    <div style={{ background: CARD_BG, borderRadius: 8, padding: '14px 16px', border: `1px solid ${BORDER}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14, paddingBottom: 12, borderBottom: `1px solid ${BORDER}` }}>
         <div>
           <div style={{ width: 68, height: 16, background: '#e5e7eb', borderRadius: 6, marginBottom: 7, animation: 'pulse 1.5s ease-in-out infinite' }} />
-          <div style={{ width: 36, height: 11, background: '#e5e7eb', borderRadius: 4, animation: 'pulse 1.5s ease-in-out infinite' }} />
+          <div style={{ width: 36, height: 11, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
         </div>
         <div style={{ width: 34, height: 20, background: '#e5e7eb', borderRadius: 99, animation: 'pulse 1.5s ease-in-out infinite' }} />
       </div>
       {SERVICE_TYPES.map(t => (
         <div key={t} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 9 }}>
-          <div style={{ width: 52, height: 11, background: '#e5e7eb', borderRadius: 4, animation: 'pulse 1.5s ease-in-out infinite' }} />
-          <div style={{ width: 30, height: 11, background: '#e5e7eb', borderRadius: 4, animation: 'pulse 1.5s ease-in-out infinite' }} />
+          <div style={{ width: 52, height: 11, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
+          <div style={{ width: 30, height: 11, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
         </div>
       ))}
-      <div style={{ marginTop: 12, background: '#f3f4f6', borderRadius: 8, padding: '8px 12px', display: 'flex', justifyContent: 'space-between' }}>
-        <div style={{ width: 24, height: 13, background: '#e5e7eb', borderRadius: 4, animation: 'pulse 1.5s ease-in-out infinite' }} />
+      <div style={{ marginTop: 12, padding: '5px 0', display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ width: 24, height: 13, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
         <div style={{ width: 44, height: 18, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
       </div>
     </div>
@@ -248,7 +248,7 @@ export default function ActivityPage() {
     : details.filter(d => d.service_type === filterType)
 
   const inp: React.CSSProperties = {
-    padding: '7px 11px', border: `1.5px solid ${BORDER}`, borderRadius: 9,
+    padding: '7px 11px', border: `1.5px solid ${BORDER}`, borderRadius: 6,
     background: CARD_BG, color: TEXT, fontSize: 13, outline: 'none',
     fontFamily: 'inherit', colorScheme: 'light' as const,
   }
@@ -270,8 +270,8 @@ export default function ActivityPage() {
 
         {/* 필터 카드 */}
         <div style={{
-          background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 14,
-          padding: '13px 18px', marginBottom: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8,
+          padding: '14px 16px', marginBottom: 12,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
 
@@ -288,7 +288,7 @@ export default function ActivityPage() {
             <button onClick={handleSearch}
               style={{
                 padding: '7px 16px', background: BLUE, color: '#fff', border: 'none',
-                borderRadius: 9, fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: 5, transition: 'background 0.15s ease',
               }}
               onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = '#1c3e87'}
@@ -300,7 +300,7 @@ export default function ActivityPage() {
             </button>
 
             {/* 빠른 날짜 선택 */}
-            <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 10, padding: 3, gap: 1 }}>
+            <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 8, padding: 3, gap: 1 }}>
               {([
                 { label: '금일', fn: handleToday },
                 { label: '작일', fn: handleYesterday },
@@ -309,11 +309,10 @@ export default function ActivityPage() {
               ] as { label: string; fn: () => void }[]).map(({ label, fn }) => (
                 <button key={label} onClick={fn}
                   style={{
-                    padding: '5px 12px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                    padding: '5px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
                     fontWeight: 700, fontSize: 12,
                     background: activeBtn === label ? '#fff' : 'transparent',
                     color: activeBtn === label ? TEXT : GRAY,
-                    boxShadow: activeBtn === label ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
                     transition: 'all 0.15s ease',
                   }}>
                   {label}
@@ -326,18 +325,16 @@ export default function ActivityPage() {
             {/* 팀 필터 */}
             <div style={{ width: 1, height: 20, background: BORDER }} />
             <span style={{ fontSize: 11, color: MUTED, fontWeight: 600, letterSpacing: '0.2px' }}>팀</span>
-            <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 10, padding: 3, gap: 1 }}>
+            <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 8, padding: 3, gap: 1 }}>
               {TEAM_OPTIONS.map(team => {
-                const tc = team === '전체' ? null : getCategoryColor(TEAM_COLORS, team)
                 const isActive = selectedTeam === team
                 return (
                   <button key={team} onClick={() => setSelectedTeam(team)}
                     style={{
-                      padding: '5px 12px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                      padding: '5px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
                       fontWeight: 700, fontSize: 12,
-                      background: isActive ? '#fff' : 'transparent',
-                      color: isActive ? (tc?.text ?? BLUE) : GRAY,
-                      boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.10)' : 'none',
+                      background: isActive ? '#f1f1f1' : 'transparent',
+                      color: isActive ? '#111827' : '#6b7280',
                       transition: 'all 0.15s ease',
                     }}>
                     {team}
@@ -349,29 +346,25 @@ export default function ActivityPage() {
         </div>
 
         {/* 카드 그리드 */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 12 }}>
           {loading
             ? Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)
             : filteredRows.map((row) => {
-                const tc = getCategoryColor(TEAM_COLORS, row.engineer.teams)
                 return (
                   <div key={row.engineer.engineer_id}
                     onClick={() => fetchDetails(row.engineer)}
                     style={{
-                      background: CARD_BG, borderRadius: 14, padding: 18,
+                      background: CARD_BG, borderRadius: 8, padding: '14px 16px',
                       border: `1px solid ${BORDER}`, cursor: 'pointer',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                      transition: 'box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease',
+                      transition: 'transform 0.15s ease, border-color 0.15s ease',
                     }}
                     onMouseEnter={e => {
                       const el = e.currentTarget as HTMLDivElement
-                      el.style.boxShadow = '0 8px 24px rgba(35,78,162,0.12)'
                       el.style.transform = 'translateY(-2px)'
                       el.style.borderColor = '#c7d7f8'
                     }}
                     onMouseLeave={e => {
                       const el = e.currentTarget as HTMLDivElement
-                      el.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)'
                       el.style.transform = ''
                       el.style.borderColor = BORDER
                     }}
@@ -389,8 +382,8 @@ export default function ActivityPage() {
                       {row.engineer.teams && (
                         <span style={{
                           fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, flexShrink: 0,
-                          background: tc.bg,
-                          color: tc.text,
+                          background: '#f3f4f6',
+                          color: '#6b7280',
                         }}>
                           {row.engineer.teams}
                         </span>
@@ -405,17 +398,17 @@ export default function ActivityPage() {
                         return (
                           <div key={type} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <div style={{ width: 6, height: 6, borderRadius: '50%', background: cnt > 0 ? sc.text : '#d1d5db', flexShrink: 0 }} />
-                              <span style={{ fontSize: 12, color: cnt > 0 ? GRAY : MUTED, fontWeight: cnt > 0 ? 500 : 400 }}>{type}</span>
+                              <div style={{ width: 9, height: 9, borderRadius: '50%', background: cnt > 0 ? (sc.dot ?? sc.text) : '#d1d5db', flexShrink: 0 }} />
+                              <span style={{ fontSize: 12, color: cnt > 0 ? '#111827' : '#d1d5db', fontWeight: cnt > 0 ? 500 : 400 }}>{type}</span>
                             </div>
                             <span style={{
-                              fontSize: 12, fontWeight: cnt > 0 ? 700 : 400,
-                              color: cnt > 0 ? sc.text : MUTED,
-                              background: cnt > 0 ? sc.bg : 'transparent',
+                              fontSize: 12, fontWeight: 600,
+                              color: cnt > 0 ? '#111827' : '#d1d5db',
+                              background: cnt > 0 ? '#f3f4f6' : 'transparent',
+                              borderRadius: cnt > 0 ? 6 : 0,
                               padding: cnt > 0 ? '2px 8px' : '2px 0',
-                              borderRadius: 99,
                             }}>
-                              {cnt}건
+                              {cnt}<span style={{ color: cnt > 0 ? '#9ca3af' : '#d1d5db' }}>건</span>
                             </span>
                           </div>
                         )
@@ -424,16 +417,15 @@ export default function ActivityPage() {
 
                     {/* 합계 */}
                     <div style={{
-                      background: row.total > 0 ? '#eff4ff' : '#f8fafc',
-                      borderRadius: 9, padding: '9px 12px',
+                      padding: '5px 0', borderTop: '1px solid #ebebeb',
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: row.total > 0 ? '#6b8fce' : MUTED }}>합계</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: MUTED }}>합계</span>
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
-                        <span style={{ fontSize: 20, fontWeight: 800, color: row.total > 0 ? BLUE : MUTED, letterSpacing: '-0.5px' }}>
+                        <span style={{ fontSize: 20, fontWeight: 600, color: BLUE, letterSpacing: '-0.5px' }}>
                           {row.total}
                         </span>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: row.total > 0 ? BLUE : MUTED }}>건</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: MUTED }}>건</span>
                       </div>
                     </div>
                   </div>
@@ -449,14 +441,14 @@ export default function ActivityPage() {
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <div onClick={e => e.stopPropagation()}
             style={{
-              background: CARD_BG, borderRadius: 20, width: '100%', maxWidth: 700,
+              background: CARD_BG, borderRadius: 8, width: '100%', maxWidth: 700,
               maxHeight: '88vh', display: 'flex', flexDirection: 'column',
               boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
               animation: 'modal-in 0.18s ease',
             }}>
 
             {/* 모달 헤더 */}
-            <div style={{ padding: '20px 24px', borderBottom: `1px solid ${BORDER}` }}>
+            <div style={{ padding: '14px 16px', borderBottom: `1px solid ${BORDER}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -498,18 +490,17 @@ export default function ActivityPage() {
             </div>
 
             {/* 서비스 타입 필터 */}
-            <div style={{ padding: '10px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <div style={{ padding: '10px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {(['전체', ...SERVICE_TYPES] as string[]).map(type => {
-                const sc = type === '전체' ? null : getCategoryColor(SERVICE_TYPE_COLORS, type)
                 const cnt = type === '전체' ? details.length : details.filter(d => d.service_type === type).length
                 const isActive = filterType === type
                 return (
                   <button key={type} onClick={() => setFilterType(type)}
                     style={{
-                      padding: '5px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                      border: `1px solid ${isActive ? (sc?.text ?? BLUE) : BORDER}`,
-                      background: isActive ? (sc?.bg ?? '#eff4ff') : '#f8fafc',
-                      color: isActive ? (sc?.text ?? BLUE) : GRAY,
+                      padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                      border: 'none',
+                      background: isActive ? '#f1f1f1' : 'transparent',
+                      color: isActive ? '#111827' : '#6b7280',
                       transition: 'all 0.15s ease',
                     }}>
                     {type}
@@ -520,18 +511,18 @@ export default function ActivityPage() {
             </div>
 
             {/* 서비스 목록 */}
-            <div style={{ overflowY: 'auto', flex: 1, padding: '4px 24px 24px' }}>
+            <div style={{ overflowY: 'auto', flex: 1, padding: '4px 16px 16px' }}>
               {detailLoading ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 0, paddingTop: 8 }}>
                   {Array.from({ length: 5 }).map((_, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0', borderBottom: `1px solid ${BORDER}` }}>
                       <div>
                         <div style={{ width: 130, height: 14, background: '#e5e7eb', borderRadius: 6, marginBottom: 8, animation: 'pulse 1.5s ease-in-out infinite' }} />
-                        <div style={{ width: 200, height: 11, background: '#e5e7eb', borderRadius: 4, animation: 'pulse 1.5s ease-in-out infinite' }} />
+                        <div style={{ width: 200, height: 11, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 7 }}>
                         <div style={{ width: 58, height: 20, background: '#e5e7eb', borderRadius: 99, animation: 'pulse 1.5s ease-in-out infinite' }} />
-                        <div style={{ width: 72, height: 11, background: '#e5e7eb', borderRadius: 4, animation: 'pulse 1.5s ease-in-out infinite' }} />
+                        <div style={{ width: 72, height: 11, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
                       </div>
                     </div>
                   ))}

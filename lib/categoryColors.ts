@@ -2,15 +2,15 @@
  * 카테고리/상태 색상 단일 소스 (확정본)
  */
 
-export type CategoryColor = { text: string; bg: string };
+export type CategoryColor = { text: string; bg: string; dot?: string };
 
 export const SERVICE_TYPE_COLORS = {
-  '신규설치':     { text: '#234ea2', bg: '#eff4ff' },
-  '이전설치':     { text: '#0369a1', bg: '#f0f9ff' },
-  'A/S':          { text: '#b45309', bg: '#fffbeb' },
-  'B/S':          { text: '#7c3aed', bg: '#fdf4ff' },
-  '교육':         { text: '#047857', bg: '#f0fdf4' },
-  '유선기술지원':  { text: '#0f766e', bg: '#f0fdfa' },
+  '신규설치':     { text: '#234ea2', bg: '#eff4ff', dot: '#3b82f6' },
+  '이전설치':     { text: '#7c3aed', bg: '#f5f3ff', dot: '#8b5cf6' },
+  'A/S':          { text: '#b45309', bg: '#fffbeb', dot: '#f59e0b' },
+  'B/S':          { text: '#be123c', bg: '#fef2f2', dot: '#f43f5e' },
+  '교육':         { text: '#15803d', bg: '#f0fdf4', dot: '#22c55e' },
+  '유선기술지원':  { text: '#0f766e', bg: '#f0fdfa', dot: '#14b8a6' },
 } as const satisfies Record<string, CategoryColor>;
 
 /* 실적/견적 상태 — quotes.status 단일 컬럼(견적~발주 전 생애주기)이므로 맵도 하나 */
@@ -51,7 +51,7 @@ export const INVENTORY_MANAGER_COLOR: CategoryColor = {
 };
 
 export const FALLBACK_COLOR: CategoryColor = {
-  text: '#6b7280', bg: '#f3f4f6',
+  text: '#6b7280', bg: '#f3f4f6', dot: '#9ca3af',
 };
 
 export type ServiceType    = keyof typeof SERVICE_TYPE_COLORS;
