@@ -1,9 +1,10 @@
 'use client'
 
 import { useRouter, usePathname } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { HOME_STATE_KEY } from '@/lib/home'
+import { useOutsideClick } from '@/hooks/useOutsideClick'
 
 const ADMIN_EMAIL = 'jwkwon@accretechkorea.com'
 
@@ -31,6 +32,14 @@ export default function Header() {
   const [permissionLevel, setPermissionLevel] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [notifOpen, setNotifOpen] = useState(false)
+
+  const notifRef = useRef<HTMLDivElement>(null)
+  const accountRef = useRef<HTMLDivElement>(null)
+  const mobileMenuRef = useRef<HTMLDivElement>(null)
+
+  useOutsideClick(notifRef, () => setNotifOpen(false), notifOpen)
+  useOutsideClick(accountRef, () => setIsOpen(false), isOpen)
+  useOutsideClick(mobileMenuRef, () => setIsMenuOpen(false), isMenuOpen)
 
   const fetchNotifications = async (eid: number) => {
     const { data } = await supabase
@@ -153,7 +162,7 @@ export default function Header() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
 
           {/* 🔔 알림 벨 */}
-          <div style={{ position: 'relative' }}>
+          <div ref={notifRef} style={{ position: 'relative' }}>
             <button
               onClick={() => { setNotifOpen(o => !o); setIsOpen(false) }}
               style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', lineHeight: 1, display: 'flex', alignItems: 'center' }}
@@ -176,8 +185,6 @@ export default function Header() {
             </button>
 
             {notifOpen && (
-              <>
-                <div onClick={() => setNotifOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 9997 }} />
                 <div style={{
                   position: 'absolute', right: 0, top: 42, zIndex: 9998,
                   background: '#fff', border: '1px solid #e5e5e5',
@@ -225,12 +232,11 @@ export default function Header() {
                     ))}
                   </div>
                 </div>
-              </>
             )}
           </div>
 
           {/* 유저 아바타 */}
-          <div style={{ position: 'relative' }}>
+          <div ref={accountRef} style={{ position: 'relative' }}>
             <div onClick={() => { setIsOpen(!isOpen); setNotifOpen(false) }} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
               <div style={{
                 width: 32, height: 32, borderRadius: '50%',
@@ -263,23 +269,25 @@ export default function Header() {
             )}
           </div>
 
-          <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="mobile-menu-btn"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, padding: 4, color: '#111111', display: 'none' }}>
-            ☰
-          </button>
+          <div ref={mobileMenuRef} style={{ display: 'contents' }}>
+            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="mobile-menu-btn"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, padding: 4, color: '#111111', display: 'none' }}>
+              ☰
+            </button>
+
+            {isMenuOpen && (
+              <div className="mobile-menu" style={{ position: 'fixed', top: 44, left: 0, right: 0, background: '#fff', borderBottom: '1px solid #e5e5e5', zIndex: 9998, padding: '8px 0' }}>
+                {menuItems.map((item) => (
+                  <div key={item.label} onClick={() => { item.onClick(); setIsMenuOpen(false) }}
+                    style={{ padding: '14px 24px', fontSize: 16, fontWeight: 700, color: '#111111', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' }}>
+                    {item.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-
-      {isMenuOpen && (
-        <div className="mobile-menu" style={{ position: 'fixed', top: 44, left: 0, right: 0, background: '#fff', borderBottom: '1px solid #e5e5e5', zIndex: 9998, padding: '8px 0' }}>
-          {menuItems.map((item) => (
-            <div key={item.label} onClick={() => { item.onClick(); setIsMenuOpen(false) }}
-              style={{ padding: '14px 24px', fontSize: 16, fontWeight: 700, color: '#111111', cursor: 'pointer', borderBottom: '1px solid #f0f0f0' }}>
-              {item.label}
-            </div>
-          ))}
-        </div>
-      )}
 
       <style>{`
         @media (max-width: 768px) {
