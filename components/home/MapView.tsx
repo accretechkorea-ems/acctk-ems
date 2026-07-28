@@ -17,6 +17,7 @@ import {
   type Customer,
   type Device,
 } from '@/lib/home'
+import { CATEGORY_OPTIONS } from '@/lib/constants'
 
 type Props = {
   customers: Customer[]
@@ -56,7 +57,6 @@ export default function MapView({
   const clustererRef = useRef<any>(null)
   const customerMapRef = useRef<Map<number, Customer>>(new Map())
   const [isMapReady, setIsMapReady] = useState(false)
-  const [showCategoryMenu, setShowCategoryMenu] = useState(false)
   const restoredMapStateAppliedRef = useRef(false)
 
   // 길찾기 출발지 — 동탄 좌표는 고정, 울산·구미는 init에서 주소를 지오코딩해 채운다.
@@ -200,7 +200,7 @@ useEffect(() => {
        const isMobile = window.innerWidth <= 768
         kakaoMapRef.current = new kakao.maps.Map(mapRef.current, {
           center: new kakao.maps.LatLng(isMobile ? 38.6 : 36.5, isMobile ? 128.0 : 127.8),
-          level: isMobile ? 13 : 13,
+          level: isMobile ? 12 : 12,
         })
 
          ;(window as any).__kakaoMapInstance = kakaoMapRef.current
@@ -322,7 +322,7 @@ useEffect(() => {
               {
                 width: '48px', height: '48px',
                 background: 'rgba(255,255,255,0.82)', color: '#111113',
-                textAlign: 'center', lineHeight: '48px', borderRadius: '50%',
+                textAlign: 'center', lineHeight: '48px', borderRadius: '8px',
                 fontSize: '14px', fontWeight: '700',
                 border: '1px solid rgba(255,255,255,0.95)',
                 boxShadow: '0 6px 16px rgba(0,0,0,0.35)',
@@ -330,7 +330,7 @@ useEffect(() => {
               {
                 width: '56px', height: '56px',
                 background: 'rgba(245,245,245,0.88)', color: '#111113',
-                textAlign: 'center', lineHeight: '56px', borderRadius: '50%',
+                textAlign: 'center', lineHeight: '56px', borderRadius: '8px',
                 fontSize: '15px', fontWeight: '700',
                 border: '1px solid rgba(255,255,255,0.95)',
                 boxShadow: '0 6px 16px rgba(0,0,0,0.35)',
@@ -338,7 +338,7 @@ useEffect(() => {
               {
                 width: '64px', height: '64px',
                 background: 'rgba(230,230,230,0.9)', color: '#111113',
-                textAlign: 'center', lineHeight: '64px', borderRadius: '50%',
+                textAlign: 'center', lineHeight: '64px', borderRadius: '8px',
                 fontSize: '16px', fontWeight: '700',
                 border: '1px solid rgba(255,255,255,0.95)',
                 boxShadow: '0 6px 16px rgba(0,0,0,0.35)',
@@ -445,81 +445,60 @@ useEffect(() => {
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       {/* 좌측 상단 필터 */}
-      <div style={{ position: 'absolute', top: 14, left: 14, zIndex: 1000, display: 'flex', gap: 6, alignItems: 'center' }}>
-        {/* 상태 필터 */}
-        {([
-          { label: '활성', color: '#16a34a', shadow: 'rgba(22,163,74,0.30)' },
-          { label: '잠재', color: '#f59e0b', shadow: 'rgba(245,158,11,0.30)' },
-          { label: '이탈', color: '#ef4444', shadow: 'rgba(239,68,68,0.30)' },
-        ] as const).map(({ label, color, shadow }) => {
-          const active = selectedStatuses.includes(label)
-          return (
-            <button key={label} onClick={() => toggleStatus(label)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                padding: '7px 13px', borderRadius: 10, border: 'none',
-                background: active ? color : 'rgba(255,255,255,0.92)',
-                color: active ? '#ffffff' : '#1a1a2e',
-                fontWeight: 700, fontSize: 13, cursor: 'pointer',
-                boxShadow: active
-                  ? `0 4px 12px ${shadow}`
-                  : '0 2px 8px rgba(0,0,0,0.10)',
-                backdropFilter: 'blur(6px)',
-                transition: 'background 0.15s ease, box-shadow 0.15s ease, color 0.15s ease',
-              }}>
-              <span style={{
-                width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-                background: active ? 'rgba(255,255,255,0.75)' : color,
-                transition: 'background 0.15s ease',
-              }} />
-              {label}
-            </button>
-          )
-        })}
+      <div style={{ position: 'absolute', top: 14, left: 14, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+        {/* 1행: 상태 필터 */}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {([
+            { label: '활성', color: '#16a34a', shadow: 'rgba(22,163,74,0.30)' },
+            { label: '잠재', color: '#f59e0b', shadow: 'rgba(245,158,11,0.30)' },
+            { label: '이탈', color: '#ef4444', shadow: 'rgba(239,68,68,0.30)' },
+          ] as const).map(({ label, color }) => {
+            const active = selectedStatuses.includes(label)
+            return (
+              <button key={label} onClick={() => toggleStatus(label)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  padding: '6px 12px', borderRadius: 8,
+                  border: `1px solid ${active ? '#d1d5db' : '#ebebeb'}`,
+                  background: 'rgba(255,255,255,0.95)',
+                  color: active ? '#111827' : '#9ca3af',
+                  fontWeight: active ? 600 : 400, fontSize: 13, cursor: 'pointer',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                  backdropFilter: 'blur(4px)',
+                  transition: 'all 150ms cubic-bezier(0.4,0,0.2,1)',
+                }}>
+                <span style={{
+                  width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                  background: color,
+                  opacity: active ? 1 : 0.35,
+                  transition: 'opacity 150ms cubic-bezier(0.4,0,0.2,1)',
+                }} />
+                {label}
+              </button>
+            )
+          })}
+        </div>
 
-        {/* 계열 필터 드롭다운 */}
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={() => setShowCategoryMenu(prev => !prev)}
-            style={{
-              padding: '7px 13px', borderRadius: 10, border: 'none', cursor: 'pointer',
-              fontWeight: 700, fontSize: 13,
-              background: selectedCategories.length === 3 ? 'rgba(255,255,255,0.92)' : '#234ea2',
-              color: selectedCategories.length === 3 ? '#1a1a2e' : '#ffffff',
-              boxShadow: selectedCategories.length === 3
-                ? '0 2px 8px rgba(0,0,0,0.10)'
-                : '0 4px 12px rgba(35,78,162,0.32)',
-              backdropFilter: 'blur(6px)',
-              transition: 'background 0.15s ease, box-shadow 0.15s ease, color 0.15s ease',
-            }}>
-            계열{selectedCategories.length < 3 ? ` (${[...selectedCategories].sort().join(',')})` : ''}
-          </button>
-          {showCategoryMenu && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 2000,
-              background: 'rgba(255,255,255,0.96)', backdropFilter: 'blur(8px)',
-              borderRadius: 12, padding: '6px',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.14)',
-              display: 'flex', flexDirection: 'row', gap: 4,
-            }}>
-              {['81', '83', '84'].map(cat => {
-                const checked = selectedCategories.includes(cat)
-                return (
-                  <button key={cat} onClick={() => toggleCategory(cat)}
-                    style={{
-                      padding: '7px 14px', borderRadius: 8, border: 'none',
-                      cursor: 'pointer', fontWeight: 700, fontSize: 13,
-                      background: checked ? '#234ea2' : 'rgba(0,0,0,0.05)',
-                      color: checked ? '#ffffff' : '#1a1a2e',
-                      boxShadow: checked ? '0 3px 8px rgba(35,78,162,0.28)' : 'none',
-                      transition: 'background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease',
-                    }}>
-                    {cat}
-                  </button>
-                )
-              })}
-            </div>
-          )}
+        {/* 2행: 계열 필터 */}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {CATEGORY_OPTIONS.map(cat => {
+            const active = selectedCategories.includes(cat)
+            return (
+              <button key={cat} onClick={() => toggleCategory(cat)}
+                style={{
+                  padding: '6px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13,
+                  border: `1px solid ${active ? '#d1d5db' : '#ebebeb'}`,
+                  background: 'rgba(255,255,255,0.95)',
+                  color: active ? '#111827' : '#9ca3af',
+                  fontWeight: active ? 600 : 400,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                  backdropFilter: 'blur(4px)',
+                  transition: 'all 150ms cubic-bezier(0.4,0,0.2,1)',
+                }}>
+                {cat}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -529,10 +508,10 @@ useEffect(() => {
           onClick={onAddClick}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px 16px', borderRadius: 10, border: 'none',
+            padding: '8px 14px', borderRadius: 8, border: 'none',
             background: '#234ea2', color: '#ffffff',
-            fontWeight: 700, fontSize: 13, cursor: 'pointer',
-            boxShadow: '0 4px 14px rgba(35,78,162,0.35)',
+            fontWeight: 600, fontSize: 13, cursor: 'pointer',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
           }}
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

@@ -9,6 +9,7 @@ import MapView from '@/components/home/MapView'
 import AddCustomerModal from '@/components/home/AddCustomerModal'
 import { useHomeData } from '@/hooks/useHomeData'
 import { addCustomer } from '@/lib/addCustomer'
+import { CATEGORY_OPTIONS } from '@/lib/constants'
 
 
 import {
@@ -60,7 +61,7 @@ useEffect(() => {
 }, [])
   const [query, setQuery] = useState('')
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['활성', '잠재'])
-const [selectedCategories, setSelectedCategories] = useState<string[]>(['81', '83', '84'])
+const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS])
 
 const toggleCategory = (category: string) => {
   setSelectedCategories((prev) =>
