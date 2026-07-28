@@ -87,40 +87,42 @@ export default function MapView({
       <div style="
         width:296px;
         background:#ffffff;
-        color:#111111;
+        color:#111827;
         border-radius:8px;
-        border:1px solid #e5e7eb;
-        font-size:13px;
-        line-height:1.55;
+        border:1px solid #ebebeb;
         box-sizing:border-box;
         word-break:break-word;
         box-shadow:0 16px 40px rgba(0,0,0,0.18);
         overflow:hidden;
       ">
-        <div style="padding:16px 16px 14px; display:flex; flex-direction:column; gap:12px;">
+        <div style="padding:14px 16px;">
 
-          <div>
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:7px;">
-              <div style="font-weight:700; font-size:15px; color:#111111; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;">
-                ${esc(c.company_name)}
-              </div>
-              <span style="font-size:11px; font-weight:700; padding:2px 8px; border-radius:99px; background:${statusColor}1a; color:${statusColor}; flex-shrink:0; white-space:nowrap;">
-                ${esc(c.status) || '-'}
-              </span>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:5px;">
+            <div style="font-weight:800; font-size:17px; color:#111827; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0;">
+              ${esc(c.company_name)}
             </div>
-            <div style="font-size:12px; color:#6b7280; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-              ${esc(c.address) || '-'}
-            </div>
-            <div style="font-size:11px; color:#adb5bd; margin-top:2px;">대리점 ${esc(c.agency) || '-'}</div>
+            <span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:#6b7280; flex-shrink:0; white-space:nowrap;">
+              <span style="width:7px; height:7px; border-radius:50%; background:${statusColor}; flex-shrink:0;"></span>
+              ${esc(c.status) || '-'}
+            </span>
           </div>
 
-          ${deviceLines.length ? `<div style="display:flex; flex-wrap:wrap; gap:5px;">
-            ${deviceLines.map(l => `<span style="font-size:11px; padding:3px 8px; border-radius:6px; background:#f3f4f6; color:#234ea2; font-weight:600; white-space:nowrap;">${esc(l)}</span>`).join('')}
-          </div>` : ''}
+          <div style="font-size:12px; color:${c.address ? '#6b7280' : '#ef4444'}; font-weight:${c.address ? '400' : '600'}; line-height:1.45; margin-bottom:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+            ${c.address ? esc(c.address) : '주소 정보 없음 — 등록 필요'}
+          </div>
 
-          <div class="overlay-detail"></div>
+          <div style="font-size:11px; color:#9ca3af; margin-bottom:8px;">대리점 ${esc(c.agency) || '-'}</div>
 
-          <div class="overlay-nav" style="display:flex; align-items:center; gap:7px;"></div>
+          <div style="display:flex; flex-direction:column; gap:3px;">
+            ${deviceLines.length === 1 && deviceLines[0] === '-'
+              ? `<span style="font-size:11px; color:#d1d5db; font-style:italic;">장비 없음</span>`
+              : `${deviceLines.slice(0, 4).map(l => `<span style="font-size:11px; color:#234ea2; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(l)}</span>`).join('')}${deviceLines.length > 4 ? `<span style="font-size:11px; font-weight:500; color:#9ca3af;">외 ${deviceLines.length - 4}대 더</span>` : ''}`}
+          </div>
+
+          <div style="margin-top:12px; padding-top:12px; border-top:1px solid #ebebeb; display:flex; flex-direction:column; gap:7px;">
+            <div class="overlay-detail"></div>
+            <div class="overlay-nav" style="display:flex; align-items:center; gap:7px;"></div>
+          </div>
 
         </div>
       </div>
@@ -140,7 +142,7 @@ export default function MapView({
 
       const detailBtn = document.createElement('button')
       detailBtn.textContent = '상세보기'
-      detailBtn.style.cssText = 'width:100%;text-align:center;padding:10px;background:#234ea2;color:#ffffff;border-radius:6px;font-size:13px;font-weight:700;border:none;cursor:pointer;'
+      detailBtn.style.cssText = 'width:100%;text-align:center;padding:8px 14px;background:#234ea2;color:#ffffff;border-radius:6px;font-size:13px;font-weight:700;border:none;cursor:pointer;'
       // touchstart에서 stopPropagation — 카카오맵이 터치 시퀀스 자체를 가로채지 못하도록
       detailBtn.addEventListener('touchstart', (e) => { e.stopPropagation() }, { passive: true })
       detailBtn.addEventListener('touchend', (e) => { e.stopPropagation(); e.preventDefault(); goDetail() })
@@ -153,7 +155,7 @@ export default function MapView({
         a.target = '_blank'
         a.rel = 'noopener noreferrer'
         a.textContent = label
-        a.style.cssText = 'flex:1 1 0;text-align:center;padding:7px 0;background:#ffffff;color:#6b7280;border:1px solid #ebebeb;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;'
+        a.style.cssText = 'flex:1 1 0;text-align:center;padding:7px 0;background:#ffffff;color:#6b7280;border:1px solid #ebebeb;border-radius:6px;font-size:12px;text-decoration:none;font-weight:700;'
         a.addEventListener('touchstart', (e) => { e.stopPropagation() }, { passive: true })
         a.addEventListener('click', (e) => { e.stopPropagation() })
         return a

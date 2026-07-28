@@ -32,12 +32,13 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
         marginBottom: 8,
         borderRadius: 8,
         border: `1px solid ${hovered ? '#c7d7f8' : '#ebebeb'}`,
-        background: hovered ? '#fafafa' : '#ffffff',
+        background: '#ffffff',
         cursor: 'pointer',
         boxSizing: 'border-box',
         padding: '14px 16px',
         minWidth: 0,
-        transition: 'background 0.15s ease, border-color 0.15s ease',
+        transform: hovered ? 'translateY(-2px)' : '',
+        transition: 'transform 0.15s ease, border-color 0.15s ease',
       }}
     >
       {/* 헤더: 회사명 + 상태 */}
