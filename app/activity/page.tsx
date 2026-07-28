@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { isActiveInPeriod } from '@/lib/engineers'
-import { SERVICE_TYPE_COLORS, TEAM_COLORS, getCategoryColor } from '@/lib/categoryColors'
+import { SERVICE_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#fafafa'
@@ -64,6 +64,55 @@ function SkeletonCard() {
   )
 }
 
+function SegmentedControl({ items, activeKey }: {
+  items: { label: string; key: string; onClick: () => void; suffix?: number }[]
+  activeKey: string
+}) {
+  const trackRef = useRef<HTMLDivElement>(null)
+  const [ind, setInd] = useState<{ left: number; width: number } | null>(null)
+
+  useEffect(() => {
+    const measure = () => {
+      const track = trackRef.current
+      if (!track) return
+      const btn = track.querySelector(`[data-seg="${activeKey}"]`) as HTMLElement | null
+      const next = btn ? { left: btn.offsetLeft, width: btn.offsetWidth } : null
+      setInd(prev => {
+        if (!prev && !next) return prev
+        if (prev && next && prev.left === next.left && prev.width === next.width) return prev
+        return next
+      })
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [activeKey, items])
+
+  return (
+    <div ref={trackRef} style={{ position: 'relative', display: 'flex', background: '#f3f4f6', borderRadius: 8, padding: 3, gap: 1 }}>
+      {ind && (
+        <div style={{
+          position: 'absolute', top: 3, bottom: 3, left: ind.left, width: ind.width,
+          background: '#fff', borderRadius: 6, pointerEvents: 'none',
+          transition: 'left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        }} />
+      )}
+      {items.map(it => (
+        <button key={it.key} data-seg={it.key} onClick={it.onClick}
+          style={{
+            position: 'relative', zIndex: 1,
+            padding: '5px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
+            fontWeight: 700, fontSize: 12, background: 'transparent', whiteSpace: 'nowrap',
+            color: it.key === activeKey ? TEXT : GRAY,
+            transition: 'color 0.15s ease',
+          }}>
+          {it.label}{it.suffix != null && <span style={{ marginLeft: 4, fontSize: 11, opacity: 0.75 }}>{it.suffix}</span>}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function ActivityPage() {
   const supabase = createClient()
 
@@ -91,6 +140,8 @@ export default function ActivityPage() {
   const [details, setDetails] = useState<ServiceDetail[]>([])
   const [detailLoading, setDetailLoading] = useState(false)
   const [filterType, setFilterType] = useState<string>('전체')
+  const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false })
+  const listRef = useRef<HTMLDivElement>(null)
 
   const fetchActivity = async (start: string, end: string) => {
     setLoading(true)
@@ -205,6 +256,15 @@ export default function ActivityPage() {
     fetchActivity(defaultStart, defaultEnd)
   }, [])
 
+  // 스크롤 위치에 따라 상/하단 스크롤 힌트 표시 여부 갱신
+  useEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    const top = el.scrollTop > 0
+    const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 1
+    setScrollEdges(prev => (prev.top === top && prev.bottom === bottom) ? prev : { top, bottom })
+  }, [detailLoading, selectedEngineer, filterType])
+
   const handleThisMonth = () => {
     const s = formatDate(thisYear, thisMonth, 1)
     const e = formatDate(thisYear, thisMonth, lastDay(thisYear, thisMonth))
@@ -264,6 +324,8 @@ export default function ActivityPage() {
           from { opacity: 0; transform: scale(0.97) translateY(8px); }
           to { opacity: 1; transform: scale(1) translateY(0); }
         }
+        .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
 
       <div style={{ maxWidth: 1280, margin: '0 auto' }}>
@@ -300,48 +362,23 @@ export default function ActivityPage() {
             </button>
 
             {/* 빠른 날짜 선택 */}
-            <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 8, padding: 3, gap: 1 }}>
-              {([
-                { label: '금일', fn: handleToday },
-                { label: '작일', fn: handleYesterday },
-                { label: '당월', fn: handleThisMonth },
-                { label: '전월', fn: handleLastMonth },
-              ] as { label: string; fn: () => void }[]).map(({ label, fn }) => (
-                <button key={label} onClick={fn}
-                  style={{
-                    padding: '5px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
-                    fontWeight: 700, fontSize: 12,
-                    background: activeBtn === label ? '#fff' : 'transparent',
-                    color: activeBtn === label ? TEXT : GRAY,
-                    transition: 'all 0.15s ease',
-                  }}>
-                  {label}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              activeKey={activeBtn}
+              items={[
+                { label: '금일', key: '금일', onClick: handleToday },
+                { label: '작일', key: '작일', onClick: handleYesterday },
+                { label: '당월', key: '당월', onClick: handleThisMonth },
+                { label: '전월', key: '전월', onClick: handleLastMonth },
+              ]}
+            />
 
             <div style={{ flex: 1 }} />
 
             {/* 팀 필터 */}
-            <div style={{ width: 1, height: 20, background: BORDER }} />
-            <span style={{ fontSize: 11, color: MUTED, fontWeight: 600, letterSpacing: '0.2px' }}>팀</span>
-            <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 8, padding: 3, gap: 1 }}>
-              {TEAM_OPTIONS.map(team => {
-                const isActive = selectedTeam === team
-                return (
-                  <button key={team} onClick={() => setSelectedTeam(team)}
-                    style={{
-                      padding: '5px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
-                      fontWeight: 700, fontSize: 12,
-                      background: isActive ? '#f1f1f1' : 'transparent',
-                      color: isActive ? '#111827' : '#6b7280',
-                      transition: 'all 0.15s ease',
-                    }}>
-                    {team}
-                  </button>
-                )
-              })}
-            </div>
+            <SegmentedControl
+              activeKey={selectedTeam}
+              items={TEAM_OPTIONS.map(team => ({ label: team, key: team, onClick: () => setSelectedTeam(team) }))}
+            />
           </div>
         </div>
 
@@ -454,14 +491,11 @@ export default function ActivityPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <span style={{ fontSize: 20, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>{selectedEngineer.name}</span>
                     <span style={{ fontSize: 12, color: GRAY, fontWeight: 500 }}>{selectedEngineer.position}</span>
-                    {selectedEngineer.teams && (() => {
-                      const c = getCategoryColor(TEAM_COLORS, selectedEngineer.teams)
-                      return (
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: c.bg, color: c.text }}>
-                          {selectedEngineer.teams}
-                        </span>
-                      )
-                    })()}
+                    {selectedEngineer.teams && (
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: '#f3f4f6', color: '#6b7280' }}>
+                        {selectedEngineer.teams}
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: MUTED }}>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -470,7 +504,7 @@ export default function ActivityPage() {
                     </svg>
                     <span>{startDate.replace(/-/g, '.')} ~ {endDate.replace(/-/g, '.')}</span>
                     {!detailLoading && (
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 99, background: '#eff4ff', color: BLUE }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 99, background: '#f3f4f6', color: BLUE }}>
                         총 {details.length}건
                       </span>
                     )}
@@ -490,32 +524,40 @@ export default function ActivityPage() {
             </div>
 
             {/* 서비스 타입 필터 */}
-            <div style={{ padding: '10px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {(['전체', ...SERVICE_TYPES] as string[]).map(type => {
-                const cnt = type === '전체' ? details.length : details.filter(d => d.service_type === type).length
-                const isActive = filterType === type
-                return (
-                  <button key={type} onClick={() => setFilterType(type)}
-                    style={{
-                      padding: '5px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                      border: 'none',
-                      background: isActive ? '#f1f1f1' : 'transparent',
-                      color: isActive ? '#111827' : '#6b7280',
-                      transition: 'all 0.15s ease',
-                    }}>
-                    {type}
-                    <span style={{ marginLeft: 4, fontSize: 11, opacity: 0.75 }}>{cnt}</span>
-                  </button>
-                )
-              })}
+            <div style={{ padding: '10px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex' }}>
+              <SegmentedControl
+                activeKey={filterType}
+                items={(['전체', ...SERVICE_TYPES] as string[]).map(type => ({
+                  label: type,
+                  key: type,
+                  onClick: () => setFilterType(type),
+                  suffix: type === '전체' ? details.length : details.filter(d => d.service_type === type).length,
+                }))}
+              />
             </div>
 
             {/* 서비스 목록 */}
-            <div style={{ overflowY: 'auto', flex: 1, padding: '4px 16px 16px' }}>
+            <div
+              ref={listRef}
+              onScroll={e => {
+                const el = e.currentTarget
+                const top = el.scrollTop > 0
+                const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 1
+                setScrollEdges(prev => (prev.top === top && prev.bottom === bottom) ? prev : { top, bottom })
+              }}
+              className="no-scrollbar"
+              style={{
+                overflowY: 'auto', height: 567, flexShrink: 0,
+                transition: 'box-shadow 0.15s ease',
+                boxShadow: [
+                  scrollEdges.top ? 'inset 0 9px 7px -8px rgba(0,0,0,0.12)' : '',
+                  scrollEdges.bottom ? 'inset 0 -9px 7px -8px rgba(0,0,0,0.12)' : '',
+                ].filter(Boolean).join(', ') || undefined,
+              }}>
               {detailLoading ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 0, paddingTop: 8 }}>
                   {Array.from({ length: 5 }).map((_, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0', borderBottom: `1px solid ${BORDER}` }}>
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${BORDER}` }}>
                       <div>
                         <div style={{ width: 130, height: 14, background: '#e5e7eb', borderRadius: 6, marginBottom: 8, animation: 'pulse 1.5s ease-in-out infinite' }} />
                         <div style={{ width: 200, height: 11, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
@@ -543,36 +585,33 @@ export default function ActivityPage() {
                   return (
                     <div key={d.service_id}
                       style={{
-                        padding: '13px 0',
-                        borderBottom: idx < filteredDetails.length - 1 ? `1px solid ${BORDER}` : 'none',
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14,
+                        display: 'flex', alignItems: 'flex-start', padding: '11px 12px', gap: 12,
+                        borderBottom: `1px solid ${BORDER}`,
                       }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: TEXT, marginBottom: 4, letterSpacing: '-0.2px' }}>
+                        <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', lineHeight: '22px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {d.customer_name}
                         </div>
-                        {d.service_notes && (
-                          <div style={{ fontSize: 12, color: GRAY, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {d.service_notes}
-                          </div>
-                        )}
+                        <div style={{ fontSize: 12, fontWeight: 400, color: '#9ca3af', lineHeight: '16px', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {d.service_notes || ' '}
+                        </div>
                       </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end', marginBottom: 5 }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: sc.bg, color: sc.text }}>
+                      <div style={{ width: 110, flexShrink: 0, textAlign: 'left' }}>
+                        <div style={{ lineHeight: '22px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: '#111827' }}>
+                            <span style={{ width: 9, height: 9, borderRadius: '50%', background: sc.dot ?? sc.text, flexShrink: 0 }} />
                             {d.service_type}
                           </span>
-                          {d.is_paid !== null && (
-                            <span style={{
-                              fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 99,
-                              background: d.is_paid ? '#f0fdf4' : '#f3f4f6',
-                              color: d.is_paid ? '#15803d' : GRAY,
-                            }}>
-                              {d.is_paid ? '유상' : '무상'}
-                            </span>
-                          )}
                         </div>
-                        <div style={{ fontSize: 12, color: MUTED, fontWeight: 500 }}>{d.visit_date.replace(/-/g, '.')}</div>
+                        <div style={{ fontSize: 12, lineHeight: '16px', marginTop: 3 }}>
+                          {d.is_paid !== null && (
+                            <>
+                              <span style={{ color: '#6b7280' }}>{d.is_paid ? '유상' : '무상'}</span>
+                              <span style={{ color: '#d1d5db' }}> · </span>
+                            </>
+                          )}
+                          <span style={{ color: '#9ca3af' }}>{d.visit_date.replace(/-/g, '.')}</span>
+                        </div>
                       </div>
                     </div>
                   )
