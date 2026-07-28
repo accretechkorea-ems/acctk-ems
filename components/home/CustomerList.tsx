@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { type Customer, type Device } from '@/lib/home'
 import CustomerCard from './CustomerCard'
 
@@ -46,8 +47,18 @@ export default function CustomerList({
   onScrollSave,
   isLoading = false,
 }: Props) {
+  const [moreBelow, setMoreBelow] = useState(false)
+
+  // 스크롤 위치에 따라 "아래로 더 있음" 힌트 표시 여부 갱신
+  useEffect(() => {
+    const el = listScrollRef.current
+    const next = !!el && el.scrollTop + el.clientHeight < el.scrollHeight - 1
+    setMoreBelow(prev => (prev === next ? prev : next))
+  }, [customers, isLoading, listScrollRef])
+
   return (
     <div style={{
+      position: 'relative',
       borderRadius: 16,
       background: '#f8f9fb',
       border: '1px solid #eaecef',
@@ -58,14 +69,21 @@ export default function CustomerList({
           0%, 100% { opacity: 1; }
           50% { opacity: 0.5; }
         }
-        .customer-list-scroll::-webkit-scrollbar { width: 4px; }
-        .customer-list-scroll::-webkit-scrollbar-track { background: transparent; }
-        .customer-list-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 99px; }
-        .customer-list-scroll::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+        @keyframes hint-bob {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(2px); }
+        }
+        .customer-list-scroll { scrollbar-width: none; -ms-overflow-style: none; }
+        .customer-list-scroll::-webkit-scrollbar { display: none; }
       `}</style>
       <div
         ref={listScrollRef}
-        onScroll={onScrollSave}
+        onScroll={(e) => {
+          onScrollSave?.()
+          const el = e.currentTarget
+          const next = el.scrollTop + el.clientHeight < el.scrollHeight - 1
+          setMoreBelow(prev => (prev === next ? prev : next))
+        }}
         className="customer-list-scroll"
         style={{ height: '100%', overflowY: 'auto', overflowX: 'hidden', padding: '8px', boxSizing: 'border-box' }}
       >
@@ -98,6 +116,26 @@ export default function CustomerList({
             )
           })
         )}
+      </div>
+
+      {/* 스크롤 힌트 — 아래로 더 있을 때만 표시 */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute', left: '50%', bottom: 12,
+          transform: 'translateX(-50%)',
+          pointerEvents: 'none',
+          opacity: moreBelow ? 1 : 0,
+          transition: 'opacity 0.2s ease',
+          width: 24, height: 24, borderRadius: 9999,
+          background: '#ffffff', border: '1px solid #ebebeb',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"
+          style={{ animation: 'hint-bob 1.4s ease-in-out infinite' }}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
       </div>
     </div>
   )
