@@ -8,7 +8,7 @@ const GRAY = '#6b7280'
 
 export default function DocumentsPage() {
   return (
-    <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '24px 28px', fontFamily: 'Malgun Gothic, sans-serif' }}>
+    <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '24px 28px' }}>
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
 
         {/* 헤더 */}

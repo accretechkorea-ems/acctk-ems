@@ -435,7 +435,7 @@ export default function AdminPage() {
   const totalAllTarget = engineers.reduce((s, e) => s + (getTarget(e.engineer_id)?.target_amount || 0), 0)
 
   return (
-    <div style={{ background: PAGE_BG, minHeight: '100vh', padding: 24, fontFamily: 'Malgun Gothic, sans-serif' }}>
+    <div style={{ background: PAGE_BG, minHeight: '100vh', padding: 24 }}>
       <div style={{ maxWidth: 900, margin: '0 auto' }}>
 
         <div style={{ marginBottom: 28 }}>

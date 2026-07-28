@@ -493,7 +493,7 @@ function InventoryPage() {
       : <span style={{ color: MUTED }}>-</span>
 
   return (
-    <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '24px 28px', fontFamily: 'Malgun Gothic, sans-serif' }}>
+    <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '24px 28px' }}>
       <style>{`
         .inv-input:focus { border-color: ${BLUE} !important; box-shadow: 0 0 0 3px rgba(35,78,162,0.10) !important; }
         .inv-tr { transition: background 0.12s ease; }

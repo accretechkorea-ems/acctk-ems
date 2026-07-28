@@ -1147,7 +1147,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
   )
 
   return (
-    <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '24px 28px', fontFamily: 'Malgun Gothic, sans-serif' }}>
+    <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '24px 28px' }}>
       
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
 

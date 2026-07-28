@@ -208,7 +208,7 @@ export default function PurchasePage() {
   )
 
   return (
-    <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '24px 28px', fontFamily: 'Malgun Gothic, sans-serif' }}>
+    <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '24px 28px' }}>
       <div style={{ maxWidth: 1600, margin: '0 auto' }}>
 
         {/* 현황 카드 */}

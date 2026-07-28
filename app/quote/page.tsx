@@ -781,7 +781,7 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
   }
 
   return (
-    <div style={{ background: '#eef0f4', minHeight: '100vh', fontFamily: 'Malgun Gothic, sans-serif' }}>
+    <div style={{ background: '#eef0f4', minHeight: '100vh' }}>
       <style>{`
         .q-input:focus {
           border-color: #234ea2 !important;

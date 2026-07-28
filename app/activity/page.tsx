@@ -254,7 +254,7 @@ export default function ActivityPage() {
   }
 
   return (
-    <main style={{ padding: '24px 28px', background: PAGE_BG, minHeight: '100vh', fontFamily: 'Malgun Gothic, sans-serif' }}>
+    <main style={{ padding: '24px 28px', background: PAGE_BG, minHeight: '100vh' }}>
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; }
