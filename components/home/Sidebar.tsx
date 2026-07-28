@@ -42,7 +42,7 @@ export default function Sidebar({
   const [searchFocused, setSearchFocused] = useState(false)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%', gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%', gap: 12 }}>
 
       {/* 검색창 */}
       <div style={{ position: 'relative' }}>
@@ -83,7 +83,7 @@ export default function Sidebar({
             style={{
               position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
               width: 20, height: 20, borderRadius: '50%', border: 'none',
-              background: '#e5e7eb', color: '#6b7280',
+              background: '#f3f4f6', color: '#6b7280',
               fontSize: 10, fontWeight: 800, cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}

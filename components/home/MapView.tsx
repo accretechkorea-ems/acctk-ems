@@ -7,7 +7,6 @@ import {
   BASE_LAT,
   BASE_LNG,
   CARD_BG,
-  INPUT_BORDER,
   PANEL_BG,
   TEXT_PRIMARY,
   TEXT_SECONDARY,
@@ -154,7 +153,7 @@ export default function MapView({
         a.target = '_blank'
         a.rel = 'noopener noreferrer'
         a.textContent = label
-        a.style.cssText = 'flex:1 1 0;text-align:center;padding:7px 0;background:#ffffff;color:#374151;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;text-decoration:none;font-weight:600;'
+        a.style.cssText = 'flex:1 1 0;text-align:center;padding:7px 0;background:#ffffff;color:#6b7280;border:1px solid #ebebeb;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;'
         a.addEventListener('touchstart', (e) => { e.stopPropagation() }, { passive: true })
         a.addEventListener('click', (e) => { e.stopPropagation() })
         return a
@@ -459,9 +458,9 @@ useEffect(() => {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 5,
                   padding: '6px 12px', borderRadius: 6,
-                  border: `1px solid ${active ? '#d1d5db' : '#ebebeb'}`,
-                  background: 'rgba(255,255,255,0.95)',
-                  color: active ? '#111827' : '#6b7280',
+                  border: `1px solid ${active ? '#d1d5db' : 'rgba(235,235,235,0.8)'}`,
+                  background: active ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.65)',
+                  color: active ? '#111827' : '#9ca3af',
                   fontWeight: 700, fontSize: 12, cursor: 'pointer',
                   backdropFilter: 'blur(4px)',
                   transition: 'all 0.15s ease',
@@ -486,9 +485,9 @@ useEffect(() => {
               <button key={cat} onClick={() => toggleCategory(cat)}
                 style={{
                   padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12,
-                  border: `1px solid ${active ? '#d1d5db' : '#ebebeb'}`,
-                  background: 'rgba(255,255,255,0.95)',
-                  color: active ? '#111827' : '#6b7280',
+                  border: `1px solid ${active ? '#d1d5db' : 'rgba(235,235,235,0.8)'}`,
+                  background: active ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.65)',
+                  color: active ? '#111827' : '#9ca3af',
                   fontWeight: 700,
                   backdropFilter: 'blur(4px)',
                   transition: 'all 0.15s ease',
@@ -525,8 +524,8 @@ useEffect(() => {
         className="kakao-map-container"
         style={{
           width: '100%', height: '100%', minHeight: 0,
-          borderRadius: 20, overflow: 'hidden',
-          border: `1px solid ${INPUT_BORDER}`,
+          borderRadius: 8, overflow: 'hidden',
+          border: `1px solid #ebebeb`,
           boxSizing: 'border-box', background: PANEL_BG,
         }}
       />

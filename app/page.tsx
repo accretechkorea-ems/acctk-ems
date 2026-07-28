@@ -477,7 +477,7 @@ useEffect(() => {
         style={{
           display: 'grid',
           gridTemplateColumns: '360px 1fr',
-          gap: 16,
+          gap: 12,
           alignItems: 'stretch',
           flex: 1,
           minHeight: 0,
