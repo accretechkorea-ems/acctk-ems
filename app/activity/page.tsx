@@ -9,7 +9,7 @@ const BLUE = '#234ea2'
 const PAGE_BG = '#fafafa'
 const CARD_BG = '#ffffff'
 const BORDER = '#ebebeb'
-const TEXT = '#111113'
+const TEXT = '#111827'
 const GRAY = '#6b7280'
 const MUTED = '#9ca3af'
 
@@ -308,7 +308,7 @@ export default function ActivityPage() {
     : details.filter(d => d.service_type === filterType)
 
   const inp: React.CSSProperties = {
-    padding: '7px 11px', border: `1.5px solid ${BORDER}`, borderRadius: 6,
+    padding: '8px 11px', border: `1px solid ${BORDER}`, borderRadius: 6,
     background: CARD_BG, color: TEXT, fontSize: 13, outline: 'none',
     fontFamily: 'inherit', colorScheme: 'light' as const,
   }
@@ -454,7 +454,7 @@ export default function ActivityPage() {
 
                     {/* 합계 */}
                     <div style={{
-                      padding: '5px 0', borderTop: '1px solid #ebebeb',
+                      padding: '5px 0', borderTop: `1px solid ${BORDER}`,
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     }}>
                       <span style={{ fontSize: 12, fontWeight: 600, color: MUTED }}>합계</span>
@@ -512,12 +512,12 @@ export default function ActivityPage() {
                 </div>
                 <button onClick={() => setSelectedEngineer(null)}
                   style={{
-                    width: 30, height: 30, borderRadius: '50%', background: '#f4f5f7', border: 'none',
+                    width: 30, height: 30, borderRadius: '50%', background: '#f3f4f6', border: 'none',
                     cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: GRAY, flexShrink: 0, transition: 'background 0.15s ease',
                   }}
                   onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = '#e5e7eb'}
-                  onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#f4f5f7'}>
+                  onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6'}>
                   ✕
                 </button>
               </div>
