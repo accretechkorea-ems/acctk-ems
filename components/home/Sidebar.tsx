@@ -51,7 +51,7 @@ export default function Sidebar({
           pointerEvents: 'none', display: 'flex', alignItems: 'center',
         }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-            stroke={searchFocused ? '#234ea2' : '#adb5bd'}
+            stroke={searchFocused ? '#234ea2' : '#9ca3af'}
             strokeWidth="2.2"
             style={{ transition: 'stroke 0.15s ease' }}>
             <circle cx="11" cy="11" r="8" />
@@ -66,18 +66,15 @@ export default function Sidebar({
           placeholder="회사명, 주소, 대리점 검색"
           style={{
             width: '100%',
-            padding: '10px 36px 10px 34px',
-            border: `1.5px solid ${searchFocused ? '#234ea2' : '#e5e7eb'}`,
-            borderRadius: 12,
+            padding: '11px 36px 11px 34px',
+            border: `1px solid ${searchFocused ? '#234ea2' : '#ebebeb'}`,
+            borderRadius: 6,
             background: '#ffffff',
             color: TEXT_PRIMARY,
-            fontSize: 14,
+            fontSize: 13,
             boxSizing: 'border-box',
             outline: 'none',
-            boxShadow: searchFocused
-              ? '0 0 0 3px rgba(35,78,162,0.10)'
-              : '0 1px 2px rgba(0,0,0,0.04)',
-            transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+            transition: 'border-color 0.15s ease',
           }}
         />
         {query ? (
@@ -96,7 +93,7 @@ export default function Sidebar({
         ) : (
           <span style={{
             position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-            fontSize: 12, color: '#adb5bd', fontWeight: 600, pointerEvents: 'none',
+            fontSize: 12, color: '#9ca3af', fontWeight: 600, pointerEvents: 'none',
           }}>
             {isLoading ? '-' : `${customers.length}개`}
           </span>

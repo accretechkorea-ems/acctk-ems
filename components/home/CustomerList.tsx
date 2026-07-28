@@ -17,22 +17,20 @@ type Props = {
 function SkeletonCard() {
   return (
     <div style={{
-      display: 'flex', marginBottom: 8, borderRadius: 14,
-      border: '1px solid #eaecef', background: '#ffffff', overflow: 'hidden',
+      marginBottom: 8, borderRadius: 8,
+      border: '1px solid #ebebeb', background: '#ffffff',
+      padding: '14px 16px',
       animation: 'sk-pulse 1.6s ease-in-out infinite',
     }}>
-      <div style={{ width: 4, flexShrink: 0, background: '#e9eaec' }} />
-      <div style={{ flex: 1, padding: '11px 13px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
-          <div style={{ width: '50%', height: 14, borderRadius: 6, background: '#f0f1f3' }} />
-          <div style={{ width: 34, height: 16, borderRadius: 99, background: '#f0f1f3' }} />
-        </div>
-        <div style={{ width: '76%', height: 12, borderRadius: 6, background: '#f0f1f3', marginBottom: 5 }} />
-        <div style={{ width: '36%', height: 11, borderRadius: 6, background: '#f0f1f3', marginBottom: 9 }} />
-        <div style={{ display: 'flex', gap: 5 }}>
-          <div style={{ width: 62, height: 20, borderRadius: 6, background: '#f0f1f3' }} />
-          <div style={{ width: 78, height: 20, borderRadius: 6, background: '#f0f1f3' }} />
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
+        <div style={{ width: '50%', height: 16, borderRadius: 6, background: '#e5e7eb' }} />
+        <div style={{ width: 34, height: 16, borderRadius: 99, background: '#e5e7eb' }} />
+      </div>
+      <div style={{ width: '76%', height: 12, borderRadius: 6, background: '#e5e7eb', marginBottom: 5 }} />
+      <div style={{ width: '36%', height: 11, borderRadius: 6, background: '#e5e7eb', marginBottom: 9 }} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ width: 130, height: 11, borderRadius: 6, background: '#e5e7eb' }} />
+        <div style={{ width: 104, height: 11, borderRadius: 6, background: '#e5e7eb' }} />
       </div>
     </div>
   )
@@ -59,9 +57,9 @@ export default function CustomerList({
   return (
     <div style={{
       position: 'relative',
-      borderRadius: 16,
-      background: '#f8f9fb',
-      border: '1px solid #eaecef',
+      borderRadius: 8,
+      background: '#fafafa',
+      border: '1px solid #ebebeb',
       flex: 1, minHeight: 0, boxSizing: 'border-box', overflow: 'hidden',
     }}>
       <style>{`

@@ -31,11 +31,11 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
         width: '100%',
         marginBottom: 8,
         borderRadius: 8,
-        border: `1px solid ${hovered ? '#d1d5db' : '#ebebeb'}`,
+        border: `1px solid ${hovered ? '#c7d7f8' : '#ebebeb'}`,
         background: hovered ? '#fafafa' : '#ffffff',
         cursor: 'pointer',
         boxSizing: 'border-box',
-        padding: '12px 14px',
+        padding: '14px 16px',
         minWidth: 0,
         transition: 'background 0.15s ease, border-color 0.15s ease',
       }}
@@ -43,7 +43,7 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
       {/* 헤더: 회사명 + 상태 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
         <div style={{
-          fontWeight: 700, color: '#111827', fontSize: 16,
+          fontWeight: 800, color: '#111827', fontSize: 17,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
         }}>
           {customer.company_name}

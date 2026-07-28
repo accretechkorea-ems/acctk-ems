@@ -89,7 +89,7 @@ export default function MapView({
         width:296px;
         background:#ffffff;
         color:#111111;
-        border-radius:16px;
+        border-radius:8px;
         border:1px solid #e5e7eb;
         font-size:13px;
         line-height:1.55;
@@ -116,7 +116,7 @@ export default function MapView({
           </div>
 
           ${deviceLines.length ? `<div style="display:flex; flex-wrap:wrap; gap:5px;">
-            ${deviceLines.map(l => `<span style="font-size:11px; padding:3px 8px; border-radius:7px; background:#f1f5fd; color:#234ea2; font-weight:600; white-space:nowrap;">${esc(l)}</span>`).join('')}
+            ${deviceLines.map(l => `<span style="font-size:11px; padding:3px 8px; border-radius:6px; background:#f3f4f6; color:#234ea2; font-weight:600; white-space:nowrap;">${esc(l)}</span>`).join('')}
           </div>` : ''}
 
           <div class="overlay-detail"></div>
@@ -141,7 +141,7 @@ export default function MapView({
 
       const detailBtn = document.createElement('button')
       detailBtn.textContent = '상세보기'
-      detailBtn.style.cssText = 'width:100%;text-align:center;padding:10px;background:#234ea2;color:#ffffff;border-radius:10px;font-size:13px;font-weight:700;border:none;cursor:pointer;'
+      detailBtn.style.cssText = 'width:100%;text-align:center;padding:10px;background:#234ea2;color:#ffffff;border-radius:6px;font-size:13px;font-weight:700;border:none;cursor:pointer;'
       // touchstart에서 stopPropagation — 카카오맵이 터치 시퀀스 자체를 가로채지 못하도록
       detailBtn.addEventListener('touchstart', (e) => { e.stopPropagation() }, { passive: true })
       detailBtn.addEventListener('touchend', (e) => { e.stopPropagation(); e.preventDefault(); goDetail() })
@@ -458,20 +458,19 @@ useEffect(() => {
               <button key={label} onClick={() => toggleStatus(label)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 5,
-                  padding: '6px 12px', borderRadius: 8,
+                  padding: '6px 12px', borderRadius: 6,
                   border: `1px solid ${active ? '#d1d5db' : '#ebebeb'}`,
                   background: 'rgba(255,255,255,0.95)',
-                  color: active ? '#111827' : '#9ca3af',
-                  fontWeight: active ? 600 : 400, fontSize: 13, cursor: 'pointer',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                  color: active ? '#111827' : '#6b7280',
+                  fontWeight: 700, fontSize: 12, cursor: 'pointer',
                   backdropFilter: 'blur(4px)',
-                  transition: 'all 150ms cubic-bezier(0.4,0,0.2,1)',
+                  transition: 'all 0.15s ease',
                 }}>
                 <span style={{
                   width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
                   background: color,
                   opacity: active ? 1 : 0.35,
-                  transition: 'opacity 150ms cubic-bezier(0.4,0,0.2,1)',
+                  transition: 'opacity 0.15s ease',
                 }} />
                 {label}
               </button>
@@ -486,14 +485,13 @@ useEffect(() => {
             return (
               <button key={cat} onClick={() => toggleCategory(cat)}
                 style={{
-                  padding: '6px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13,
+                  padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12,
                   border: `1px solid ${active ? '#d1d5db' : '#ebebeb'}`,
                   background: 'rgba(255,255,255,0.95)',
-                  color: active ? '#111827' : '#9ca3af',
-                  fontWeight: active ? 600 : 400,
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                  color: active ? '#111827' : '#6b7280',
+                  fontWeight: 700,
                   backdropFilter: 'blur(4px)',
-                  transition: 'all 150ms cubic-bezier(0.4,0,0.2,1)',
+                  transition: 'all 0.15s ease',
                 }}>
                 {cat}
               </button>
@@ -508,10 +506,9 @@ useEffect(() => {
           onClick={onAddClick}
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px 14px', borderRadius: 8, border: 'none',
+            padding: '8px 14px', borderRadius: 6, border: 'none',
             background: '#234ea2', color: '#ffffff',
-            fontWeight: 600, fontSize: 13, cursor: 'pointer',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+            fontWeight: 700, fontSize: 13, cursor: 'pointer',
           }}
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
