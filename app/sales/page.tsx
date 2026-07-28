@@ -461,7 +461,7 @@ function TeamCard({ teamId, engineers, filteredQuotes, targets, mode, fy, onCard
           <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 99, background: tc.bg, color: tc.text, fontWeight: 700 }}>{teamEngIds.length}명</span>
         </div>
         {achieve !== null && (
-          <span style={{ fontSize: 13, fontWeight: 800, color: achieveColor, background: achieveColor + '12', padding: '2px 8px', borderRadius: 99 }}>
+          <span className="num" style={{ fontSize: 13, fontWeight: 800, color: achieveColor, background: achieveColor + '12', padding: '2px 8px', borderRadius: 99 }}>
             {achieve.toFixed(1)}%
           </span>
         )}
@@ -476,8 +476,8 @@ function TeamCard({ teamId, engineers, filteredQuotes, targets, mode, fy, onCard
         ].map(({ label, value, color, sub }) => (
           <div key={label} style={{ background: '#f8fafc', borderRadius: 9, padding: '9px 11px', border: `1px solid ${BORDER}` }}>
             <div style={{ fontSize: 10, color: MUTED, marginBottom: 3, fontWeight: 500 }}>{label}</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color }}>{value}</div>
-            {sub && <div style={{ fontSize: 10, color: '#15803d', fontWeight: 700, marginTop: 1 }}>{sub}</div>}
+            <div className="num" style={{ fontSize: 13, fontWeight: 700, color }}>{value}</div>
+            {sub && <div className="num" style={{ fontSize: 10, color: '#15803d', fontWeight: 700, marginTop: 1 }}>{sub}</div>}
           </div>
         ))}
       </div>
@@ -486,7 +486,7 @@ function TeamCard({ teamId, engineers, filteredQuotes, targets, mode, fy, onCard
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 11 }}>
             <span style={{ color: MUTED }}>달성률</span>
-            <span style={{ color: achieveColor, fontWeight: 700 }}>₩{numKR(periodTarget)}</span>
+            <span className="num" style={{ color: achieveColor, fontWeight: 700 }}>₩{numKR(periodTarget)}</span>
           </div>
           <AnimatedGauge pct={achieve || 0} color={achieveColor} height={7} delay={200} />
         </>
@@ -636,17 +636,17 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                 {engineer.teams && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: tc.bg, color: tc.text, fontWeight: 700 }}>{engineer.teams}팀</span>}
               </div>
               <div style={{ display: 'flex', gap: 20, fontSize: 13 }}>
-                <div><span style={{ color: GRAY, fontSize: 11 }}>포캐스트</span><div style={{ fontWeight: 700, color: TEXT }}>₩{numKR(engineer.quotedAmt)}</div></div>
-                <div><span style={{ color: GRAY, fontSize: 11 }}>매출 완료</span><div style={{ fontWeight: 700, color: BLUE }}>₩{numKR(engineer.revenueAmt)}</div></div>
+                <div><span style={{ color: GRAY, fontSize: 11 }}>포캐스트</span><div className="num" style={{ fontWeight: 700, color: TEXT }}>₩{numKR(engineer.quotedAmt)}</div></div>
+                <div><span style={{ color: GRAY, fontSize: 11 }}>매출 완료</span><div className="num" style={{ fontWeight: 700, color: BLUE }}>₩{numKR(engineer.revenueAmt)}</div></div>
                 <div>
                   <span style={{ color: GRAY, fontSize: 11 }}>순이익</span>
-                  <div style={{ fontWeight: 800, color: '#16a34a' }}>
+                  <div className="num" style={{ fontWeight: 800, color: '#16a34a' }}>
                     {engineer.profitAmt > 0 ? `₩${numKR(engineer.profitAmt)}` : '-'}
                     {engineer.profitRate !== null && engineer.profitAmt > 0 && <span style={{ fontSize: 11, marginLeft: 4 }}>({engineer.profitRate.toFixed(1)}%)</span>}
                   </div>
                 </div>
                 {engineer.achieve !== null && (
-                  <div><span style={{ color: GRAY, fontSize: 11 }}>목표 달성률</span><div style={{ fontWeight: 800, color: achieveColor }}>{engineer.achieve.toFixed(1)}%</div></div>
+                  <div><span style={{ color: GRAY, fontSize: 11 }}>목표 달성률</span><div className="num" style={{ fontWeight: 800, color: achieveColor }}>{engineer.achieve.toFixed(1)}%</div></div>
                 )}
               </div>
             </div>
@@ -671,7 +671,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                   {dealers.map(d => (
                     <div key={d.name} style={{ background: '#fff', border: '1px solid #fed7aa', borderRadius: 7, padding: '4px 10px', fontSize: 11 }}>
                       <span style={{ fontWeight: 700, color: '#c2410c' }}>{d.name}</span>
-                      <span style={{ color: GRAY, marginLeft: 6 }}>₩{numKR(d.supply)}</span>
+                      <span className="num" style={{ color: GRAY, marginLeft: 6 }}>₩{numKR(d.supply)}</span>
                       <span style={{ color: MUTED, marginLeft: 4, fontSize: 10 }}>({d.count}건)</span>
                     </div>
                   ))}
@@ -742,9 +742,9 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                       </td>
                       <td style={{ padding: '8px 10px', fontWeight: 600, whiteSpace: 'nowrap', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{q.customers?.company_name || '-'}</td>
                       <td style={{ padding: '8px 10px', color: GRAY, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>{itemNames}</td>
-                      <td style={{ padding: '8px 10px', fontWeight: 700, whiteSpace: 'nowrap', color: TEXT, textAlign: 'center' }}>₩{numKR(q.total_supply)}</td>
+                      <td className="num" style={{ padding: '8px 10px', fontWeight: 700, whiteSpace: 'nowrap', color: TEXT, textAlign: 'center' }}>₩{numKR(q.total_supply)}</td>
                       <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                        {hasProfit ? <span style={{ fontWeight: 700, color: profitColor, fontSize: 11 }}>₩{numKR(q.total_profit!)}<span style={{ color: profitRateColor, marginLeft: 4 }}>{q.profit_rate?.toFixed(0)}%</span></span> : <span style={{ color: BORDER }}>—</span>}
+                        {hasProfit ? <span className="num" style={{ fontWeight: 700, color: profitColor, fontSize: 11 }}>₩{numKR(q.total_profit!)}<span style={{ color: profitRateColor, marginLeft: 4 }}>{q.profit_rate?.toFixed(0)}%</span></span> : <span style={{ color: BORDER }}>—</span>}
                       </td>
                       <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
@@ -1218,7 +1218,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
             ].map(({ label, value, sub, accent, color }: any) => (
               <div key={label} style={{ background: accent ? '#eff4ff' : '#f8fafc', borderRadius: 11, padding: '13px 15px', border: `1px solid ${accent ? '#c7d7f8' : BORDER}` }}>
                 <div style={{ fontSize: 10, fontWeight: 600, color: MUTED, marginBottom: 5, letterSpacing: '0.2px' }}>{label}</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: color || (accent ? BLUE : TEXT), letterSpacing: '-0.3px', lineHeight: 1 }}>{value}</div>
+                <div className="num" style={{ fontSize: 16, fontWeight: 800, color: color || (accent ? BLUE : TEXT), letterSpacing: '-0.3px', lineHeight: 1 }}>{value}</div>
                 {sub && <div style={{ fontSize: 10, color: MUTED, marginTop: 4 }}>{sub}</div>}
               </div>
             ))}
@@ -1227,7 +1227,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12 }}>
                 <span style={{ color: MUTED, fontWeight: 500 }}>사업부 목표 달성률</span>
-                <span style={{ fontWeight: 700, color: totalAchieveColor }}>₩{numKR(totalRevenueAmt)} / ₩{numKR(totalTargetAmt)} ({totalAchieve?.toFixed(1)}%)</span>
+                <span className="num" style={{ fontWeight: 700, color: totalAchieveColor }}>₩{numKR(totalRevenueAmt)} / ₩{numKR(totalTargetAmt)} ({totalAchieve?.toFixed(1)}%)</span>
               </div>
               <AnimatedGauge pct={totalAchieve || 0} color={totalAchieveColor} height={12} delay={100} />
             </>
@@ -1294,28 +1294,28 @@ const visibleEngineers = sortedEngineers.filter(e => {
                       <span style={{ fontSize: 12, color: GRAY, marginLeft: 6 }}>{eng.position}</span>
                     </div>
                     {eng.teams && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: tc.bg, color: tc.text }}>{eng.teams}팀</span>}
-                    {eng.achieve !== null && <span style={{ fontSize: 13, fontWeight: 800, color: achieveColor, marginLeft: 'auto' }}>{eng.achieve.toFixed(0)}%</span>}
+                    {eng.achieve !== null && <span className="num" style={{ fontSize: 13, fontWeight: 800, color: achieveColor, marginLeft: 'auto' }}>{eng.achieve.toFixed(0)}%</span>}
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
                     <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: `1px solid ${BORDER}` }}>
                       <div style={{ fontSize: 10, color: MUTED, marginBottom: 2, fontWeight: 500 }}>포캐스트</div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>₩{numKR(eng.quotedAmt)}</div>
+                      <div className="num" style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>₩{numKR(eng.quotedAmt)}</div>
                       <div style={{ fontSize: 10, color: MUTED }}>{eng.quotedCnt}건</div>
                     </div>
                     <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: `1px solid ${BORDER}` }}>
                       <div style={{ fontSize: 10, color: MUTED, marginBottom: 2, fontWeight: 500 }}>수주</div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>₩{numKR(eng.orderedAmt)}</div>
+                      <div className="num" style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>₩{numKR(eng.orderedAmt)}</div>
                       <div style={{ fontSize: 10, color: MUTED }}>{eng.orderedCnt}건</div>
                     </div>
                     <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: `1px solid ${BORDER}` }}>
                       <div style={{ fontSize: 10, color: MUTED, marginBottom: 2, fontWeight: 500 }}>매출 완료</div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: BLUE }}>₩{numKR(eng.revenueAmt)}</div>
+                      <div className="num" style={{ fontSize: 13, fontWeight: 700, color: BLUE }}>₩{numKR(eng.revenueAmt)}</div>
                     </div>
                     <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: `1px solid ${BORDER}` }}>
                       <div style={{ fontSize: 10, color: MUTED, marginBottom: 2, fontWeight: 500 }}>순이익</div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: eng.profitAmt > 0 ? '#16a34a' : MUTED }}>{eng.profitAmt > 0 ? `₩${numKR(eng.profitAmt)}` : '-'}</div>
-                      {eng.profitRate !== null && eng.profitAmt > 0 && <div style={{ fontSize: 10, color: '#16a34a', fontWeight: 700 }}>{eng.profitRate.toFixed(1)}%</div>}
+                      <div className="num" style={{ fontSize: 13, fontWeight: 700, color: eng.profitAmt > 0 ? '#16a34a' : MUTED }}>{eng.profitAmt > 0 ? `₩${numKR(eng.profitAmt)}` : '-'}</div>
+                      {eng.profitRate !== null && eng.profitAmt > 0 && <div className="num" style={{ fontSize: 10, color: '#16a34a', fontWeight: 700 }}>{eng.profitRate.toFixed(1)}%</div>}
                     </div>
                   </div>
                   {eng.targetAmt > 0 && (
