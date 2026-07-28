@@ -103,7 +103,7 @@ function SegmentedControl({ items, activeKey }: {
             position: 'relative', zIndex: 1,
             padding: '5px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
             fontWeight: 700, fontSize: 12, background: 'transparent', whiteSpace: 'nowrap',
-            color: it.key === activeKey ? TEXT : GRAY,
+            color: it.key === activeKey ? TEXT : MUTED,
             transition: 'color 0.15s ease',
           }}>
           {it.label}{it.suffix != null && <span style={{ marginLeft: 4, fontSize: 11, opacity: 0.75 }}>{it.suffix}</span>}

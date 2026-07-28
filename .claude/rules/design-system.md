@@ -63,6 +63,8 @@ paths:
   (`font-variant-numeric: tabular-nums; letter-spacing: -0.01em`).
 - 코드에 실재하는 size: **11 / 12 / 13 / 15 / 17 / 20**. 이 외 신규 금지.
 - weight: 본문·라벨 ≤600, 카드/모달 제목·버튼·배지 700, 대형 제목 800.
+- **letter-spacing**: 17px 이상 제목(`-0.3px`)과 20px 숫자(`-0.5px`)에만 음수 자간.
+  16px 이하는 자간 없음. (CustomerCard 제목 17px 포함 — `-0.3px`)
 
 ## 여백 / 간격
 
@@ -92,9 +94,10 @@ paths:
 
 ## 필터 패러다임
 
+- **비활성 필터 텍스트는 패러다임과 무관하게 `#9ca3af`** (SegmentedControl·pill 공통).
 - **단일 선택 = SegmentedControl** (activity): 트랙 `#f3f4f6`/radius 8/padding 3,
   흰 인디케이터가 슬라이드(radius 6, `transition: left/width 0.25s cubic-bezier(0.4,0,0.2,1)`).
-  버튼 12/700, 활성 `#111827` / 비활성 `#6b7280`.
+  버튼 12/700, 활성 `#111827` / 비활성 `#9ca3af`.
 - **다중 선택 = pill 토글** (MapView 지도 필터): radius 6, 12/700, `blur(4px)` 유지.
   - 활성: bg `rgba(255,255,255,0.95)`, 테두리 `#d1d5db`, `#111827`.
   - 비활성: bg `rgba(255,255,255,0.65)`, 테두리 `rgba(235,235,235,0.8)`, `#9ca3af`.
@@ -126,3 +129,5 @@ paths:
 
 - `borderRadius: '50%'`(dot·닫기 버튼·아바타)는 원형 유지 — pill로 바꾸지 말 것.
 - react-pdf 인쇄용 색(`#000` 등)은 화면 토큰으로 치환 금지.
+- transition 기본은 `0.15s ease`. `0.25s cubic-bezier(0.4,0,0.2,1)`는
+  SegmentedControl 슬라이딩 인디케이터 전용 예외.

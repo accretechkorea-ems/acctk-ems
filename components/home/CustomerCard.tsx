@@ -44,7 +44,7 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
       {/* 헤더: 회사명 + 상태 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
         <div style={{
-          fontWeight: 800, color: '#111827', fontSize: 17,
+          fontWeight: 800, color: '#111827', fontSize: 17, letterSpacing: '-0.3px',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
         }}>
           {customer.company_name}
