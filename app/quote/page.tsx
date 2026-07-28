@@ -308,8 +308,8 @@ function ProfitPanel({ rows, exchangeRate, rateUpdatedAt, rateLoading, onFetchRa
   const profitPct = totalSupply > 0 ? (totalProfit / totalSupply) * 100 : 0
   const isGood = profitPct >= 40
   return (
-    <div style={{ background: '#fff', borderRadius: 8, border: `1px solid ${isGood ? '#bbf7d0' : '#fecaca'}`, marginBottom: 14, overflow: 'hidden' }}>
-      <div style={{ background: isGood ? '#f0fdf4' : '#fef2f2', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${isGood ? '#dcfce7' : '#fee2e2'}` }}>
+    <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #ebebeb', marginBottom: 14, overflow: 'hidden' }}>
+      <div style={{ background: '#fff', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #ebebeb' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 3, height: 14, background: '#234ea2', borderRadius: 6, flexShrink: 0 }} />
@@ -347,39 +347,35 @@ function ProfitPanel({ rows, exchangeRate, rateUpdatedAt, rateLoading, onFetchRa
             </button>
           </div>
         </div>
-        <span style={{ fontSize: 13, fontWeight: 800, padding: '5px 14px', borderRadius: 99, background: isGood ? '#16a34a' : '#dc2626', color: '#fff' }}>
-          {isGood ? '✓' : '!'} 이익률 {profitPct.toFixed(1)}%
+        <span style={{ fontSize: 13, fontWeight: 600, color: isGood ? '#16a34a' : '#dc2626' }}>
+          이익률 {profitPct.toFixed(1)}%
         </span>
       </div>
       <div style={{ padding: '12px 16px' }}>
         {rows.map((r, i) => r.supply_price > 0 && (
-          <div key={r.id} style={{ marginBottom: 10, padding: '10px 12px', background: '#f3f4f6', borderRadius: 8, border: '1px solid #ebebeb' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <div key={r.id} style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#234ea2', color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
               <span style={{ fontSize: 11, color: '#111827', fontWeight: 600 }}>{r.itemText && r.itemText}{r.selectedItem && ` (${r.selectedItem.model_jp})`}</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-              {r.selectedItem && (<>
-                <div style={{ background: '#fff', borderRadius: 6, padding: '6px 9px', border: '1px solid #ebebeb' }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>구입가</div><div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>¥{r.cost_price_jpy.toLocaleString()}</div></div>
-                <div style={{ background: '#fff', borderRadius: 6, padding: '6px 9px', border: '1px solid #ebebeb' }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>관세 × 환율</div><div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>×{r.tariff_rate} × {r.exchange_rate.toFixed(2)}</div></div>
-                <div style={{ background: '#fff', borderRadius: 6, padding: '6px 9px', border: '1px solid #ebebeb' }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>원가</div><div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>₩{numKR(r.product_price)}</div></div>
-              </>)}
-              <div style={{ background: '#fff', borderRadius: 6, padding: '6px 9px', border: '1px solid #ebebeb' }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>판매단가</div><div style={{ fontSize: 12, fontWeight: 700, color: '#234ea2' }}>₩{numKR(r.unit_price)}</div></div>
-              <div style={{ background: '#fff', borderRadius: 6, padding: '6px 9px', border: '1px solid #ebebeb' }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>공급가</div><div style={{ fontSize: 12, fontWeight: 700, color: '#234ea2' }}>₩{numKR(r.supply_price)}</div></div>
-              <div style={{ background: r.profit >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: 6, padding: '6px 9px', border: `1px solid ${r.profit >= 0 ? '#bbf7d0' : '#fecaca'}` }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>매출이익 ({r.profit_rate}%)</div><div style={{ fontSize: 12, fontWeight: 800, color: r.profit >= 0 ? '#16a34a' : '#dc2626' }}>₩{numKR(r.profit)}</div></div>
+            {r.selectedItem && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>구입가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>¥{r.cost_price_jpy.toLocaleString()}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>관세 × 환율</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>×{r.tariff_rate} × {r.exchange_rate.toFixed(2)}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>원가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>₩{numKR(r.product_price)}</span></div>
+              </>
+            )}
+            <div style={{ borderTop: r.selectedItem ? '1px solid #ebebeb' : undefined }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>판매단가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>₩{numKR(r.unit_price)}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>공급가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>₩{numKR(r.supply_price)}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>매출이익 ({r.profit_rate}%)</span><span style={{ fontSize: 13, color: r.profit >= 0 ? '#16a34a' : '#dc2626', fontWeight: 500 }}>₩{numKR(r.profit)}</span></div>
             </div>
           </div>
         ))}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 4, paddingTop: 10, borderTop: '1px solid #ebebeb' }}>
-          <div style={{ background: '#eff4ff', borderRadius: 8, padding: '10px 12px', border: '1px solid #c7d7f8', textAlign: 'center' }}><div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, fontWeight: 500 }}>공급가 합계</div><div style={{ fontSize: 14, fontWeight: 800, color: '#234ea2' }}>₩{numKR(totalSupply)}</div></div>
-          <div style={{ background: '#f3f4f6', borderRadius: 8, padding: '10px 12px', border: '1px solid #ebebeb', textAlign: 'center' }}><div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, fontWeight: 500 }}>원가 합계</div><div style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>₩{numKR(totalProduct)}</div></div>
-          <div style={{ background: isGood ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '10px 12px', border: `1px solid ${isGood ? '#bbf7d0' : '#fecaca'}`, textAlign: 'center' }}>
-            <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, fontWeight: 500 }}>매출이익 합계</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 4 }}>
-              <span style={{ fontSize: 14, fontWeight: 800, color: isGood ? '#16a34a' : '#dc2626' }}>₩{numKR(totalProfit)}</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: isGood ? '#16a34a' : '#dc2626' }}>({profitPct.toFixed(1)}%)</span>
-            </div>
-          </div>
+        <div style={{ marginTop: 4, paddingTop: 6, borderTop: '1px solid #ebebeb' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>공급가 합계</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>₩{numKR(totalSupply)}</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>원가 합계</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>₩{numKR(totalProduct)}</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>매출이익 합계</span><span style={{ fontSize: 13, color: isGood ? '#16a34a' : '#dc2626', fontWeight: 600 }}>₩{numKR(totalProfit)} ({profitPct.toFixed(1)}%)</span></div>
         </div>
       </div>
     </div>
