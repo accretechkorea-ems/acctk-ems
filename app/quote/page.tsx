@@ -308,12 +308,12 @@ function ProfitPanel({ rows, exchangeRate, rateUpdatedAt, rateLoading, onFetchRa
   const profitPct = totalSupply > 0 ? (totalProfit / totalSupply) * 100 : 0
   const isGood = profitPct >= 40
   return (
-    <div style={{ background: '#fff', borderRadius: 14, border: `1.5px solid ${isGood ? '#bbf7d0' : '#fecaca'}`, marginBottom: 14, overflow: 'hidden' }}>
+    <div style={{ background: '#fff', borderRadius: 8, border: `1px solid ${isGood ? '#bbf7d0' : '#fecaca'}`, marginBottom: 14, overflow: 'hidden' }}>
       <div style={{ background: isGood ? '#f0fdf4' : '#fef2f2', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${isGood ? '#dcfce7' : '#fee2e2'}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 3, height: 14, background: '#234ea2', borderRadius: 2, flexShrink: 0 }} />
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#111113', letterSpacing: '-0.2px' }}>수익 분석</span>
+            <div style={{ width: 3, height: 14, background: '#234ea2', borderRadius: 6, flexShrink: 0 }} />
+            <span style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>수익 분석</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             {editingRate ? (
@@ -324,7 +324,7 @@ function ProfitPanel({ rows, exchangeRate, rateUpdatedAt, rateLoading, onFetchRa
                 onBlur={commitEdit}
                 onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingRate(false) }}
                 autoFocus
-                style={{ width: 80, fontSize: 11, fontWeight: 700, color: '#234ea2', border: '1px solid #234ea2', borderRadius: 5, padding: '1px 5px', outline: 'none' }}
+                style={{ width: 80, fontSize: 11, fontWeight: 700, color: '#234ea2', border: '1px solid #234ea2', borderRadius: 6, padding: '1px 5px', outline: 'none' }}
               />
             ) : (
               <span
@@ -338,42 +338,42 @@ function ProfitPanel({ rows, exchangeRate, rateUpdatedAt, rateLoading, onFetchRa
             <button
               onClick={onFetchRate}
               disabled={rateLoading}
-              style={{ width: 22, height: 22, borderRadius: '50%', background: '#fff', border: '1px solid #e2e4e9', cursor: rateLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s ease' }}
+              style={{ width: 22, height: 22, borderRadius: '50%', background: '#fff', border: '1px solid #ebebeb', cursor: rateLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s ease' }}
             >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={rateLoading ? '#9ca3af' : '#374151'} strokeWidth="2.5">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={rateLoading ? '#9ca3af' : '#111827'} strokeWidth="2.5">
                 <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
                 <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
               </svg>
             </button>
           </div>
         </div>
-        <span style={{ fontSize: 13, fontWeight: 800, padding: '5px 14px', borderRadius: 99, background: isGood ? '#16a34a' : '#dc2626', color: '#fff', letterSpacing: '-0.1px' }}>
+        <span style={{ fontSize: 13, fontWeight: 800, padding: '5px 14px', borderRadius: 99, background: isGood ? '#16a34a' : '#dc2626', color: '#fff' }}>
           {isGood ? '✓' : '!'} 이익률 {profitPct.toFixed(1)}%
         </span>
       </div>
       <div style={{ padding: '12px 16px' }}>
         {rows.map((r, i) => r.supply_price > 0 && (
-          <div key={r.id} style={{ marginBottom: 10, padding: '10px 12px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e8eaed' }}>
+          <div key={r.id} style={{ marginBottom: 10, padding: '10px 12px', background: '#f3f4f6', borderRadius: 8, border: '1px solid #ebebeb' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#234ea2', color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
-              <span style={{ fontSize: 11, color: '#374151', fontWeight: 600 }}>{r.itemText && r.itemText}{r.selectedItem && ` (${r.selectedItem.model_jp})`}</span>
+              <span style={{ fontSize: 11, color: '#111827', fontWeight: 600 }}>{r.itemText && r.itemText}{r.selectedItem && ` (${r.selectedItem.model_jp})`}</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
               {r.selectedItem && (<>
-                <div style={{ background: '#fff', borderRadius: 7, padding: '6px 9px', border: '1px solid #e8eaed' }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>구입가</div><div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>¥{r.cost_price_jpy.toLocaleString()}</div></div>
-                <div style={{ background: '#fff', borderRadius: 7, padding: '6px 9px', border: '1px solid #e8eaed' }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>관세 × 환율</div><div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>×{r.tariff_rate} × {r.exchange_rate.toFixed(2)}</div></div>
-                <div style={{ background: '#fff', borderRadius: 7, padding: '6px 9px', border: '1px solid #e8eaed' }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>원가</div><div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>₩{numKR(r.product_price)}</div></div>
+                <div style={{ background: '#fff', borderRadius: 6, padding: '6px 9px', border: '1px solid #ebebeb' }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>구입가</div><div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>¥{r.cost_price_jpy.toLocaleString()}</div></div>
+                <div style={{ background: '#fff', borderRadius: 6, padding: '6px 9px', border: '1px solid #ebebeb' }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>관세 × 환율</div><div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>×{r.tariff_rate} × {r.exchange_rate.toFixed(2)}</div></div>
+                <div style={{ background: '#fff', borderRadius: 6, padding: '6px 9px', border: '1px solid #ebebeb' }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>원가</div><div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>₩{numKR(r.product_price)}</div></div>
               </>)}
-              <div style={{ background: '#fff', borderRadius: 7, padding: '6px 9px', border: '1px solid #e8eaed' }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>판매단가</div><div style={{ fontSize: 12, fontWeight: 700, color: '#234ea2' }}>₩{numKR(r.unit_price)}</div></div>
-              <div style={{ background: '#fff', borderRadius: 7, padding: '6px 9px', border: '1px solid #e8eaed' }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>공급가</div><div style={{ fontSize: 12, fontWeight: 700, color: '#234ea2' }}>₩{numKR(r.supply_price)}</div></div>
-              <div style={{ background: r.profit >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: 7, padding: '6px 9px', border: `1px solid ${r.profit >= 0 ? '#bbf7d0' : '#fecaca'}` }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>매출이익 ({r.profit_rate}%)</div><div style={{ fontSize: 12, fontWeight: 800, color: r.profit >= 0 ? '#16a34a' : '#dc2626' }}>₩{numKR(r.profit)}</div></div>
+              <div style={{ background: '#fff', borderRadius: 6, padding: '6px 9px', border: '1px solid #ebebeb' }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>판매단가</div><div style={{ fontSize: 12, fontWeight: 700, color: '#234ea2' }}>₩{numKR(r.unit_price)}</div></div>
+              <div style={{ background: '#fff', borderRadius: 6, padding: '6px 9px', border: '1px solid #ebebeb' }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>공급가</div><div style={{ fontSize: 12, fontWeight: 700, color: '#234ea2' }}>₩{numKR(r.supply_price)}</div></div>
+              <div style={{ background: r.profit >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius: 6, padding: '6px 9px', border: `1px solid ${r.profit >= 0 ? '#bbf7d0' : '#fecaca'}` }}><div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 2, fontWeight: 500 }}>매출이익 ({r.profit_rate}%)</div><div style={{ fontSize: 12, fontWeight: 800, color: r.profit >= 0 ? '#16a34a' : '#dc2626' }}>₩{numKR(r.profit)}</div></div>
             </div>
           </div>
         ))}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 4, paddingTop: 10, borderTop: '1px solid #e8eaed' }}>
-          <div style={{ background: '#eff4ff', borderRadius: 10, padding: '10px 12px', border: '1px solid #c7d7f8', textAlign: 'center' }}><div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, fontWeight: 500 }}>공급가 합계</div><div style={{ fontSize: 14, fontWeight: 800, color: '#234ea2' }}>₩{numKR(totalSupply)}</div></div>
-          <div style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 12px', border: '1px solid #e8eaed', textAlign: 'center' }}><div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, fontWeight: 500 }}>원가 합계</div><div style={{ fontSize: 14, fontWeight: 800, color: '#374151' }}>₩{numKR(totalProduct)}</div></div>
-          <div style={{ background: isGood ? '#f0fdf4' : '#fef2f2', borderRadius: 10, padding: '10px 12px', border: `1px solid ${isGood ? '#bbf7d0' : '#fecaca'}`, textAlign: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 4, paddingTop: 10, borderTop: '1px solid #ebebeb' }}>
+          <div style={{ background: '#eff4ff', borderRadius: 8, padding: '10px 12px', border: '1px solid #c7d7f8', textAlign: 'center' }}><div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, fontWeight: 500 }}>공급가 합계</div><div style={{ fontSize: 14, fontWeight: 800, color: '#234ea2' }}>₩{numKR(totalSupply)}</div></div>
+          <div style={{ background: '#f3f4f6', borderRadius: 8, padding: '10px 12px', border: '1px solid #ebebeb', textAlign: 'center' }}><div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, fontWeight: 500 }}>원가 합계</div><div style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>₩{numKR(totalProduct)}</div></div>
+          <div style={{ background: isGood ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '10px 12px', border: `1px solid ${isGood ? '#bbf7d0' : '#fecaca'}`, textAlign: 'center' }}>
             <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, fontWeight: 500 }}>매출이익 합계</div>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 4 }}>
               <span style={{ fontSize: 14, fontWeight: 800, color: isGood ? '#16a34a' : '#dc2626' }}>₩{numKR(totalProfit)}</span>
@@ -775,13 +775,13 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
     setRows(prev => prev.map(r => r.id !== rowId ? r : { ...r, subLines: r.subLines.filter((_, i) => i !== idx) }))
 
   const inp: React.CSSProperties = {
-    padding: '8px 11px', border: '1.5px solid #e2e4e9', borderRadius: 9,
+    padding: '8px 11px', border: '1px solid #ebebeb', borderRadius: 6,
     fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box',
-    color: '#111113', transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+    color: '#111827', transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
   }
 
   return (
-    <div style={{ background: '#eef0f4', minHeight: '100vh' }}>
+    <div style={{ background: '#fafafa', minHeight: '100vh' }}>
       <style>{`
         .q-input:focus {
           border-color: #234ea2 !important;
@@ -798,10 +798,10 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
         <div style={{ width: 430, flexShrink: 0 }}>
 
           {/* 기본 정보 */}
-          <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', marginBottom: 14, border: '1px solid #e2e4e9' }}>
+          <div style={{ background: '#fff', borderRadius: 8, padding: '14px 16px', marginBottom: 14, border: '1px solid #ebebeb' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-              <div style={{ width: 3, height: 14, background: '#234ea2', borderRadius: 2, flexShrink: 0 }} />
-              <span style={{ fontWeight: 800, fontSize: 13, color: '#111113', letterSpacing: '-0.2px' }}>기본 정보</span>
+              <div style={{ width: 3, height: 14, background: '#234ea2', borderRadius: 6, flexShrink: 0 }} />
+              <span style={{ fontWeight: 800, fontSize: 13, color: '#111827' }}>기본 정보</span>
             </div>
 
             {/* 사명 + 대리점 체크박스 */}
@@ -815,7 +815,7 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
                     onChange={e => handleCustomerSearch(e.target.value)}
                     onFocus={() => customerResults.length > 0 && setCustomerSearchOpen(true)}
                     placeholder="업체명 검색 또는 직접 입력"
-                    style={{ ...inp, width: '100%', paddingRight: selectedCustomer ? 32 : 11, border: customerSearchOpen ? '1.5px solid #234ea2' : '1.5px solid #e2e4e9' }}
+                    style={{ ...inp, width: '100%', paddingRight: selectedCustomer ? 32 : 11, border: customerSearchOpen ? '1px solid #234ea2' : '1px solid #ebebeb' }}
                   />
                   {selectedCustomer && (
                     <button onClick={handleCustomerClear}
@@ -824,10 +824,10 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
                     </button>
                   )}
                   {customerSearchOpen && customerResults.length > 0 && (
-                    <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 1000, background: '#fff', border: '1.5px solid #234ea2', borderRadius: 10, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
+                    <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 1000, background: '#fff', border: '1px solid #234ea2', borderRadius: 8, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
                       {customerResults.map(c => (
                         <div key={c.customer_id} onClick={() => handleCustomerSelect(c)}
-                          style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: 12, transition: 'background 0.12s ease' }}
+                          style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 12, transition: 'background 0.15s ease' }}
                           onMouseEnter={e => (e.currentTarget.style.background = '#f0f4ff')}
                           onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
                           <div style={{ fontWeight: 700, color: '#234ea2' }}>{c.company_name}</div>
@@ -873,7 +873,7 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
                       onChange={e => handleEUSearch(e.target.value)}
                       onFocus={() => euResults.length > 0 && setEuSearchOpen(true)}
                       placeholder="최종 사용 업체 검색 또는 직접 입력"
-                      style={{ ...inp, width: '100%', paddingRight: selectedEU ? 32 : 11, border: euSearchOpen ? '1.5px solid #c2410c' : '1.5px solid #fed7aa' }}
+                      style={{ ...inp, width: '100%', paddingRight: selectedEU ? 32 : 11, border: euSearchOpen ? '1px solid #c2410c' : '1px solid #fed7aa' }}
                     />
                     {selectedEU && (
                       <button onClick={handleEUClear}
@@ -882,10 +882,10 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
                       </button>
                     )}
                     {euSearchOpen && euResults.length > 0 && (
-                      <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 1000, background: '#fff', border: '1.5px solid #c2410c', borderRadius: 10, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(194,65,12,0.12)' }}>
+                      <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 1000, background: '#fff', border: '1px solid #c2410c', borderRadius: 8, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(194,65,12,0.12)' }}>
                         {euResults.map(c => (
                           <div key={c.customer_id} onClick={() => handleEUSelect(c)}
-                            style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: 12, transition: 'background 0.12s ease' }}
+                            style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 12, transition: 'background 0.15s ease' }}
                             onMouseEnter={e => (e.currentTarget.style.background = '#fff7ed')}
                             onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
                             <div style={{ fontWeight: 700, color: '#c2410c' }}>{c.company_name}</div>
@@ -946,9 +946,9 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
           </div>
 
           {/* 품목 */}
-          <div onClick={() => showPriceGuide && setShowPriceGuide(false)} style={{ background: '#fff', borderRadius: 14, padding: '20px 20px', border: '1px solid #e2e4e9', position: 'relative' }}>
+          <div onClick={() => showPriceGuide && setShowPriceGuide(false)} style={{ background: '#fff', borderRadius: 8, padding: '20px 20px', border: '1px solid #ebebeb', position: 'relative' }}>
             {/* 워터마크 — 자체 overflow:hidden 컨테이너로 분리하여 팝업이 잘리지 않도록 */}
-            <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 10, borderRadius: 14 }}>
+            <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 10, borderRadius: 8 }}>
               {Array.from({ length: 20 }, (_, i) => i).map(i => (
                 <div key={i} style={{ position: 'absolute', top: `${i * 140}px`, left: 0, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transform: 'rotate(-20deg)', opacity: 0.05 }}>
                   <span style={{ fontSize: 42, fontWeight: 900, color: '#000', whiteSpace: 'nowrap' }}>{engineerName}</span>
@@ -956,8 +956,8 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
               ))}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-              <div style={{ width: 3, height: 16, background: '#234ea2', borderRadius: 2, flexShrink: 0 }} />
-              <span style={{ fontWeight: 800, fontSize: 14, color: '#111113', letterSpacing: '-0.2px' }}>품목</span>
+              <div style={{ width: 3, height: 16, background: '#234ea2', borderRadius: 6, flexShrink: 0 }} />
+              <span style={{ fontWeight: 800, fontSize: 14, color: '#111827' }}>품목</span>
               {rows.length > 0 && (
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#eff4ff', color: '#234ea2' }}>{rows.length}</span>
               )}
@@ -971,31 +971,31 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
                 {/* 팝업 — 버튼 오른쪽, 세로 중앙 정렬 */}
                 {showPriceGuide && (
                   <div
-                    style={{ position: 'absolute', left: 'calc(100% + 8px)', top: '50%', transform: 'translateY(-50%)', zIndex: 300, background: '#fff', borderRadius: 14, border: '1px solid #e2e4e9', boxShadow: '0 12px 36px rgba(0,0,0,0.16)', width: 340, padding: '16px 18px', maxHeight: '70vh', overflowY: 'auto' }}
+                    style={{ position: 'absolute', left: 'calc(100% + 8px)', top: '50%', transform: 'translateY(-50%)', zIndex: 300, background: '#fff', borderRadius: 8, border: '1px solid #ebebeb', boxShadow: '0 12px 36px rgba(0,0,0,0.16)', width: 340, padding: '16px 18px', maxHeight: '70vh', overflowY: 'auto' }}
                   >
                   {/* 닫기 */}
-                  <button onClick={() => setShowPriceGuide(false)} style={{ position: 'absolute', top: 10, right: 10, width: 22, height: 22, borderRadius: '50%', border: 'none', background: '#f4f5f7', cursor: 'pointer', fontSize: 11, color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                  <button onClick={() => setShowPriceGuide(false)} style={{ position: 'absolute', top: 10, right: 10, width: 22, height: 22, borderRadius: '50%', border: 'none', background: '#f3f4f6', cursor: 'pointer', fontSize: 11, color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
 
                   {/* 섹션1: 견적서 마진 */}
                   <div style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: '#1e3a6e', borderRadius: 7, padding: '4px 10px', marginBottom: 8, display: 'inline-block' }}>견적서 제출 마진</div>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: '#1e3a6e', borderRadius: 6, padding: '4px 10px', marginBottom: 8, display: 'inline-block' }}>견적서 제출 마진</div>
                     {[
                       { label: '대리점 및 기존 고객사 (스타일러스)', value: '40%' },
                       { label: '신규고객사 (스타일러스)', value: '50%' },
                       { label: '장비 업그레이드 / 일본가격문의', value: '60%' },
                     ].map((item, i) => (
-                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 6px', borderRadius: 6, background: i % 2 === 0 ? '#f8fafc' : '#fff', marginBottom: 2 }}>
-                        <span style={{ fontSize: 11, color: '#374151' }}>{item.label}</span>
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 6px', borderRadius: 6, background: i % 2 === 0 ? '#f3f4f6' : '#fff', marginBottom: 2 }}>
+                        <span style={{ fontSize: 11, color: '#111827' }}>{item.label}</span>
                         <span style={{ fontSize: 12, fontWeight: 800, color: '#234ea2', flexShrink: 0, marginLeft: 8 }}>{item.value}</span>
                       </div>
                     ))}
                   </div>
 
-                  <div style={{ height: 1, background: '#e2e4e9', marginBottom: 14 }} />
+                  <div style={{ height: 1, background: '#ebebeb', marginBottom: 14 }} />
 
                   {/* 섹션2: 정도검사 */}
                   <div>
-                    <div style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: '#1e3a6e', borderRadius: 7, padding: '4px 10px', marginBottom: 8, display: 'inline-block' }}>측정기 정도 검사</div>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: '#1e3a6e', borderRadius: 6, padding: '4px 10px', marginBottom: 8, display: 'inline-block' }}>측정기 정도 검사</div>
                     {[
                       { cat: '83', items: [{ label: '조도', price: '600,000' }, { label: '형상', price: '800,000' }, { label: '조도형상', price: '1,000,000' }] },
                       { cat: '84', items: [{ label: '소형 43C', price: '800,000' }, { label: '중형 R-NEX200', price: '1,000,000' }, { label: 'R55/R60', price: '1,200,000' }, { label: 'R73A', price: '4,000,000' }] },
@@ -1003,13 +1003,13 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
                     ].map((group, gi) => (
                       <div key={gi} style={{ display: 'flex', marginBottom: gi < 2 ? 6 : 0 }}>
                         <div style={{ width: 28, flexShrink: 0, display: 'flex', alignItems: 'flex-start', paddingTop: 5 }}>
-                          <span style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: '#234ea2', borderRadius: 5, padding: '1px 5px' }}>{group.cat}</span>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: '#234ea2', borderRadius: 6, padding: '1px 5px' }}>{group.cat}</span>
                         </div>
                         <div style={{ flex: 1 }}>
                           {group.items.map((item, ii) => (
-                            <div key={ii} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 6px', borderRadius: 5, background: ii % 2 === 0 ? '#f8fafc' : '#fff', marginBottom: 2 }}>
-                              <span style={{ fontSize: 11, color: '#374151' }}>{item.label}</span>
-                              <span style={{ fontSize: 11, fontWeight: 700, color: '#111113' }}>₩{item.price}</span>
+                            <div key={ii} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 6px', borderRadius: 6, background: ii % 2 === 0 ? '#f3f4f6' : '#fff', marginBottom: 2 }}>
+                              <span style={{ fontSize: 11, color: '#111827' }}>{item.label}</span>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: '#111827' }}>₩{item.price}</span>
                             </div>
                           ))}
                         </div>
@@ -1022,11 +1022,11 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
             </div>
 
             {rows.map((row, rowIdx) => (
-              <div key={row.id} style={{ background: '#f8fafc', borderRadius: 12, padding: '14px', marginBottom: 10, border: '1px solid #e2e4e9' }}>
+              <div key={row.id} style={{ background: '#f3f4f6', borderRadius: 8, padding: '14px', marginBottom: 10, border: '1px solid #ebebeb' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 22, height: 22, borderRadius: '50%', background: '#234ea2', color: '#fff', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{rowIdx + 1}</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#111113' }}>품목</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>품목</span>
                   </div>
                   <button onClick={() => setRows(prev => prev.filter(r => r.id !== row.id))}
                     style={{ padding: '2px 0', background: 'none', color: '#dc2626', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>삭제</button>
@@ -1046,30 +1046,30 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
                       onFocus={() => setSearchOpen(prev => ({ ...prev, [row.id]: true }))}
                       placeholder="코드 또는 모델명 검색" style={{ ...inp, width: '100%' }} />
                     {searchOpen[row.id] && (searchResults[row.id] || []).length > 0 && (
-                      <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 999, background: '#fff', border: '1.5px solid #234ea2', borderRadius: 10, maxHeight: 200, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
+                      <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 999, background: '#fff', border: '1px solid #234ea2', borderRadius: 8, maxHeight: 200, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
                         {searchResults[row.id].map(item => (
                           <div key={item.id} onClick={() => handleSelect(row.id, item)}
-                            style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', fontSize: 11, transition: 'background 0.12s ease' }}
+                            style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 11, transition: 'background 0.15s ease' }}
                             onMouseEnter={e => (e.currentTarget.style.background = '#f0f4ff')}
                             onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
-                            <div><span style={{ fontWeight: 700, color: '#234ea2' }}>{item.item_code}</span><span style={{ marginLeft: 6, color: '#374151' }}>{item.item_name_jp}</span><span style={{ marginLeft: 6, color: '#6b7280' }}>({item.model_jp})</span></div>
+                            <div><span style={{ fontWeight: 700, color: '#234ea2' }}>{item.item_code}</span><span style={{ marginLeft: 6, color: '#111827' }}>{item.item_name_jp}</span><span style={{ marginLeft: 6, color: '#6b7280' }}>({item.model_jp})</span></div>
                             <div style={{ color: '#9ca3af', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
                               <span>정가: ¥{item.price_jpy?.toLocaleString()} / 구입가: ¥{item.cost_jpy?.toLocaleString()}</span>
                               {(() => {
                                 const hasStock = item.stock_quantity != null && item.stock_quantity > 0
                                 const hasDelivery = item.delivery_time != null
                                 if (hasStock) return (
-                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 5, background: '#dcfce7', color: '#15803d' }}>
+                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: '#dcfce7', color: '#15803d' }}>
                                     재고 {item.stock_quantity}개
                                   </span>
                                 )
                                 if (hasDelivery) return (
-                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 5, background: '#fef9c3', color: '#854d0e' }}>
+                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: '#fef9c3', color: '#854d0e' }}>
                                     발주 후 {item.delivery_time}주
                                   </span>
                                 )
                                 return (
-                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 5, background: '#fee2e2', color: '#b91c1c' }}>
+                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: '#fee2e2', color: '#b91c1c' }}>
                                     담당자 납기 문의
                                   </span>
                                 )
@@ -1087,20 +1087,20 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
                 </div>
 
                 {/* 스테퍼 — 통합 컨테이너 */}
-                <div style={{ background: '#fff', borderRadius: 10, border: '1px solid #e2e4e9', display: 'flex', marginBottom: !row.selectedItem && priceInputOpen[row.id] ? 0 : 10, overflow: 'hidden' }}>
+                <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #ebebeb', display: 'flex', marginBottom: !row.selectedItem && priceInputOpen[row.id] ? 0 : 10, overflow: 'hidden' }}>
                   <div style={{ flex: 1, padding: '5px 8px', textAlign: 'center' }}>
                     <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 2, fontWeight: 600 }}>수량</div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
-                      <button onClick={() => updateRow(row.id, 'quantity', Math.max(1, row.quantity - 1))} style={{ width: 20, height: 20, border: '1px solid #e2e4e9', borderRadius: 4, background: '#f8fafc', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>−</button>
-                      <span style={{ minWidth: 26, textAlign: 'center', fontWeight: 800, fontSize: 13, color: '#111113' }}>{row.quantity}</span>
-                      <button onClick={() => updateRow(row.id, 'quantity', row.quantity + 1)} style={{ width: 20, height: 20, border: '1px solid #e2e4e9', borderRadius: 4, background: '#f8fafc', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>+</button>
+                      <button onClick={() => updateRow(row.id, 'quantity', Math.max(1, row.quantity - 1))} style={{ width: 20, height: 20, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>−</button>
+                      <span style={{ minWidth: 26, textAlign: 'center', fontWeight: 800, fontSize: 13, color: '#111827' }}>{row.quantity}</span>
+                      <button onClick={() => updateRow(row.id, 'quantity', row.quantity + 1)} style={{ width: 20, height: 20, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>+</button>
                     </div>
                   </div>
-                  <div style={{ width: 1, background: '#e2e4e9', flexShrink: 0 }} />
+                  <div style={{ width: 1, background: '#ebebeb', flexShrink: 0 }} />
                   <div style={{ flex: 1, padding: '5px 8px', textAlign: 'center' }}>
                     <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 2, fontWeight: 600 }}>이익률</div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
-                      <button onClick={() => updateRow(row.id, 'profit_rate', Math.max(0, row.profit_rate - 5))} style={{ width: 20, height: 20, border: '1px solid #e2e4e9', borderRadius: 4, background: '#f8fafc', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>−</button>
+                      <button onClick={() => updateRow(row.id, 'profit_rate', Math.max(0, row.profit_rate - 5))} style={{ width: 20, height: 20, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>−</button>
                       {editingProfitRate[row.id] ? (
                         <input
                           autoFocus
@@ -1115,7 +1115,7 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
                           onKeyDown={e => {
                             if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur()
                           }}
-                          style={{ width: 40, textAlign: 'center', fontWeight: 800, fontSize: 12, border: '1px solid #234ea2', borderRadius: 4, padding: '1px 2px', outline: 'none', color: '#111113' }}
+                          style={{ width: 40, textAlign: 'center', fontWeight: 800, fontSize: 12, border: '1px solid #234ea2', borderRadius: 6, padding: '1px 2px', outline: 'none', color: '#111827' }}
                         />
                       ) : (
                         <span
@@ -1124,21 +1124,21 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
                           style={{ minWidth: 36, textAlign: 'center', fontWeight: 800, fontSize: 13, color: row.profit_rate >= 40 ? '#16a34a' : '#dc2626', cursor: 'text' }}
                         >{row.profit_rate}%</span>
                       )}
-                      <button onClick={() => updateRow(row.id, 'profit_rate', Math.min(95, row.profit_rate + 5))} style={{ width: 20, height: 20, border: '1px solid #e2e4e9', borderRadius: 4, background: '#f8fafc', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>+</button>
+                      <button onClick={() => updateRow(row.id, 'profit_rate', Math.min(95, row.profit_rate + 5))} style={{ width: 20, height: 20, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>+</button>
                     </div>
                   </div>
-                  <div style={{ width: 1, background: '#e2e4e9', flexShrink: 0 }} />
+                  <div style={{ width: 1, background: '#ebebeb', flexShrink: 0 }} />
                   <div style={{ flex: 1, padding: '5px 8px', textAlign: 'center' }}>
                     <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 2, fontWeight: 600 }}>관세율</div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
-                      <button onClick={() => updateRow(row.id, 'tariff_rate', parseFloat((row.tariff_rate - 0.01).toFixed(2)))} style={{ width: 20, height: 20, border: '1px solid #e2e4e9', borderRadius: 4, background: '#f8fafc', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>−</button>
-                      <span style={{ minWidth: 36, textAlign: 'center', fontSize: 12, fontWeight: 700, color: '#374151' }}>×{row.tariff_rate.toFixed(2)}</span>
-                      <button onClick={() => updateRow(row.id, 'tariff_rate', parseFloat((row.tariff_rate + 0.01).toFixed(2)))} style={{ width: 20, height: 20, border: '1px solid #e2e4e9', borderRadius: 4, background: '#f8fafc', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>+</button>
+                      <button onClick={() => updateRow(row.id, 'tariff_rate', parseFloat((row.tariff_rate - 0.01).toFixed(2)))} style={{ width: 20, height: 20, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>−</button>
+                      <span style={{ minWidth: 36, textAlign: 'center', fontSize: 12, fontWeight: 700, color: '#111827' }}>×{row.tariff_rate.toFixed(2)}</span>
+                      <button onClick={() => updateRow(row.id, 'tariff_rate', parseFloat((row.tariff_rate + 0.01).toFixed(2)))} style={{ width: 20, height: 20, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>+</button>
                     </div>
                   </div>
                   {!row.selectedItem && (
                     <>
-                      <div style={{ width: 1, background: '#e2e4e9', flexShrink: 0 }} />
+                      <div style={{ width: 1, background: '#ebebeb', flexShrink: 0 }} />
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 10px' }}>
                         <button
                           onClick={() => setPriceInputOpen(p => ({ ...p, [row.id]: !p[row.id] }))}
@@ -1149,7 +1149,7 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
                   )}
                 </div>
                 {!row.selectedItem && priceInputOpen[row.id] && (
-                  <div style={{ background: '#fff', border: '1px solid #e2e4e9', borderTop: 'none', borderRadius: '0 0 10px 10px', padding: '8px 10px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ background: '#fff', border: '1px solid #ebebeb', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '8px 10px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>단가 직접입력</span>
                     <input className="q-input" autoFocus type="number" value={row.manual_unit_price || ''}
                       onChange={e => updateRow(row.id, 'manual_unit_price', parseInt(e.target.value) || 0)}
@@ -1163,10 +1163,10 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
                   {row.subLines.map((line, li) => (
                     <div key={li} style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
                       <input className="q-input" value={line} onChange={e => updateSubLine(row.id, li, e.target.value)} placeholder="예: - Leaf Spring 교체" style={{ ...inp, flex: 1, fontSize: 11 }} />
-                      <button onClick={() => removeSubLine(row.id, li)} style={{ padding: '0 9px', background: 'none', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 7, cursor: 'pointer', fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center' }}>−</button>
+                      <button onClick={() => removeSubLine(row.id, li)} style={{ padding: '0 9px', background: 'none', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, cursor: 'pointer', fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center' }}>−</button>
                     </div>
                   ))}
-                  <button onClick={() => addSubLine(row.id)} style={{ padding: '4px 12px', background: '#eff4ff', color: '#234ea2', border: '1px solid #c7d7f8', borderRadius: 7, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>+ 세부항목 추가</button>
+                  <button onClick={() => addSubLine(row.id)} style={{ padding: '4px 12px', background: '#eff4ff', color: '#234ea2', border: '1px solid #c7d7f8', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>+ 세부항목 추가</button>
                 </div>
 
                 {row.supply_price > 0 && (
@@ -1179,7 +1179,7 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
 
             <button
               onClick={() => setRows(prev => [...prev, createRow()])}
-              style={{ width: '100%', padding: '11px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'background 0.15s ease' }}
+              style={{ width: '100%', padding: '11px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'background 0.15s ease' }}
               onMouseEnter={e => (e.currentTarget.style.background = '#1c3e87')}
               onMouseLeave={e => (e.currentTarget.style.background = '#234ea2')}
             >
@@ -1190,20 +1190,20 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
 
         {/* PDF 미리보기 */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ background: '#f4f5f7', borderRadius: 14, overflow: 'hidden', border: '1px solid #e2e4e9', height: 'calc(100vh - 40px)', position: 'sticky', top: 20 }}>
+          <div style={{ background: '#f3f4f6', borderRadius: 8, overflow: 'hidden', border: '1px solid #ebebeb', height: 'calc(100vh - 40px)', position: 'sticky', top: 20 }}>
 
             {/* 헤더 */}
-            <div style={{ background: 'linear-gradient(135deg, #1c3e87 0%, #234ea2 100%)', padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ background: '#234ea2', padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: 500, marginBottom: 2 }}>견적 번호</div>
-                <div style={{ fontSize: 14, color: '#fff', fontWeight: 800, letterSpacing: '-0.2px' }}>{quoteNo}</div>
+                <div style={{ fontSize: 14, color: '#fff', fontWeight: 800 }}>{quoteNo}</div>
               </div>
               <button
                 onClick={() => setShowConfirmModal(true)}
                 disabled={isSaving}
                 style={{
                   padding: '8px 20px', background: isSaving ? 'rgba(255,255,255,0.15)' : '#16a34a', color: '#fff',
-                  border: 'none', borderRadius: 9, fontWeight: 700, fontSize: 13,
+                  border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13,
                   cursor: isSaving ? 'not-allowed' : 'pointer',
                   display: 'flex', alignItems: 'center', gap: 6,
                   transition: 'background 0.15s ease',
@@ -1243,24 +1243,24 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
       {/* 견적 확정 확인 모달 */}
       {showConfirmModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: '#fff', borderRadius: 20, padding: 32, width: '100%', maxWidth: 440, boxShadow: '0 24px 64px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
-            <div style={{ fontSize: 20, fontWeight: 800, color: '#111113', marginBottom: 4, letterSpacing: '-0.3px' }}>견적 확정</div>
+          <div style={{ background: '#fff', borderRadius: 8, padding: 32, width: '100%', maxWidth: 440, boxShadow: '0 24px 64px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 4, letterSpacing: '-0.3px' }}>견적 확정</div>
             <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, fontWeight: 500 }}>{quoteNo}</div>
-            <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 10, padding: '12px 14px', marginBottom: 20 }}>
+            <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: '12px 14px', marginBottom: 20 }}>
               <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.8 }}>
                 견적 확정 시 실적으로 기록되며, <b>관리자의 승인 없이는 삭제가 불가능합니다.</b>
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 24 }}>
-              <div style={{ background: '#eff4ff', borderRadius: 10, padding: '12px 14px', border: '1px solid #c7d7f8', textAlign: 'center' }}>
+              <div style={{ background: '#eff4ff', borderRadius: 8, padding: '12px 14px', border: '1px solid #c7d7f8', textAlign: 'center' }}>
                 <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, fontWeight: 500 }}>공급가</div>
                 <div style={{ fontSize: 14, fontWeight: 800, color: '#234ea2' }}>₩{numKR(totalSupply)}</div>
               </div>
-              <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px solid #e8eaed', textAlign: 'center' }}>
+              <div style={{ background: '#f3f4f6', borderRadius: 8, padding: '12px 14px', border: '1px solid #ebebeb', textAlign: 'center' }}>
                 <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, fontWeight: 500 }}>원가</div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: '#374151' }}>₩{numKR(totalCost)}</div>
+                <div style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>₩{numKR(totalCost)}</div>
               </div>
-              <div style={{ background: totalProfitRate >= 40 ? '#f0fdf4' : '#fef2f2', borderRadius: 10, padding: '12px 14px', border: `1px solid ${totalProfitRate >= 40 ? '#bbf7d0' : '#fecaca'}`, textAlign: 'center' }}>
+              <div style={{ background: totalProfitRate >= 40 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '12px 14px', border: `1px solid ${totalProfitRate >= 40 ? '#bbf7d0' : '#fecaca'}`, textAlign: 'center' }}>
                 <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, fontWeight: 500 }}>순이익</div>
                 <div style={{ fontSize: 13, fontWeight: 800, color: totalProfitRate >= 40 ? '#16a34a' : '#dc2626' }}>
                   ₩{numKR(totalProfit)}<br />
@@ -1270,7 +1270,7 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setShowConfirmModal(false)}
-                style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer', color: '#374151' }}>
+                style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: 'pointer', color: '#111827' }}>
                 취소
               </button>
               <button onClick={async () => {
@@ -1285,7 +1285,7 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
                 await handleDownloadPDF(snapshotCompany, snapshotReceiver, snapshotTitleItem, snapshotRows, snapshotRemarks, snapshotQuoteNo)
                 setSeqIndex(prev => prev + 1)
               }}
-                style={{ flex: 1, padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                style={{ flex: 1, padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
                 확인
               </button>
             </div>
