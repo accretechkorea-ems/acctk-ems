@@ -80,8 +80,8 @@ export default function CustomerDetailPage() {
       { data: historyData }, { data: engineersData }, { data: quotesData },
     ] = await Promise.all([
       supabase.from('customers').select('*').eq('customer_id', customerId).single(),
-      supabase.from('devices').select('*').eq('customer_id', customerId).order('device_id', { ascending: true }),
-      supabase.from('contacts').select('*').eq('customer_id', customerId).order('contact_id', { ascending: true }),
+      supabase.from('devices').select('*').is('deleted_at', null).eq('customer_id', customerId).order('device_id', { ascending: true }),
+      supabase.from('contacts').select('*').is('deleted_at', null).eq('customer_id', customerId).order('contact_id', { ascending: true }),
       supabase.from('service_history').select('*, service_engineers(engineer_id, engineers(name, position))').eq('customer_id', customerId).order('service_id', { ascending: false }),
       supabase.from('engineers').select('*, email').order('engineer_id', { ascending: true }),
       supabase.from('quotes').select('*, engineers(name, position), quote_items(product_name, price_list(model_jp))').eq('customer_id', customerId).order('quote_date', { ascending: false }),

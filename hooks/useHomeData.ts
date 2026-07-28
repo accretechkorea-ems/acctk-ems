@@ -20,6 +20,7 @@ export function useHomeData({
       supabase
   .from('customers')
   .select('customer_id, company_name, address, latitude, longitude, status, agency, category')
+        .is('deleted_at', null)
         .order('customer_id', { ascending: false })
         .range(0, 5000),
 
@@ -28,6 +29,7 @@ export function useHomeData({
         .select(
           'device_id, customer_id, device_name, device_name2, option, serial_number, program, install_date, category, packing_list_url'
         )
+        .is('deleted_at', null)
         .range(0, 5000),
 
       supabase.from('service_history').select('customer_id, visit_date').range(0, 5000),

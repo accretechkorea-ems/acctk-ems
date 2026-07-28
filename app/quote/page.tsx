@@ -510,6 +510,7 @@ export default function QuotePage() {
     if (!q.trim()) { setCustomerResults([]); return }
     const { data } = await supabase
       .from('customers').select('customer_id, company_name, address, status')
+      .is('deleted_at', null)
       .ilike('company_name', `%${q}%`).limit(10)
     setCustomerResults(data || [])
     setCustomerSearchOpen(true)
@@ -536,6 +537,7 @@ export default function QuotePage() {
     if (!q.trim()) { setEuResults([]); return }
     const { data } = await supabase
       .from('customers').select('customer_id, company_name, address, status')
+      .is('deleted_at', null)
       .ilike('company_name', `%${q}%`).limit(10)
     setEuResults(data || [])
     setEuSearchOpen(true)

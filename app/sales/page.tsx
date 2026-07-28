@@ -556,7 +556,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   useEffect(() => {
     if (!poQuote?.customer_id) { setPoContacts([]); setPoCompanyAddress(null); return }
     Promise.all([
-      supabase.from('contacts').select('contact_id, name, phone, position, department').eq('customer_id', poQuote.customer_id).order('contact_id'),
+      supabase.from('contacts').select('contact_id, name, phone, position, department').is('deleted_at', null).eq('customer_id', poQuote.customer_id).order('contact_id'),
       supabase.from('customers').select('address').eq('customer_id', poQuote.customer_id).single(),
     ]).then(([{ data: contacts }, { data: cust }]) => {
       setPoContacts(contacts ?? [])
