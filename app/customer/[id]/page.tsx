@@ -306,27 +306,13 @@ export default function CustomerDetailPage() {
 
   const handleDeleteCustomer = async () => {
     if (!customer) return
-    if (!confirm('이 업체를 삭제하시겠습니까?\n관련 담당자, 장비, 서비스기록, 견적/거래 이력이 모두 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.')) return
+    if (!confirm('이 업체를 삭제하시겠습니까?\n담당자·장비·서비스기록·견적 이력은 보존됩니다.')) return
     setIsDeletingCustomer(true)
     const cid = customer.customer_id
     try {
-      // 견적(quotes): 자식(quote_items) 먼저 삭제 후 quotes 삭제
-      const { data: cQuotes } = await supabase.from('quotes').select('quote_id').eq('customer_id', cid)
-      const quoteIds = (cQuotes ?? []).map((q: { quote_id: number }) => q.quote_id)
-      if (quoteIds.length) {
-        await supabase.from('quote_items').delete().in('quote_id', quoteIds)
-        const { error: qErr } = await supabase.from('quotes').delete().in('quote_id', quoteIds)
-        if (qErr) throw qErr
-      }
-      // 이 업체가 대리점(dealer)으로 참조된 다른 견적은 연결만 해제
-      await supabase.from('quotes').update({ dealer_id: null }).eq('dealer_id', cid)
-
-      await supabase.from('service_history').delete().eq('customer_id', cid)
-      await supabase.from('contacts').delete().eq('customer_id', cid)
-      await supabase.from('devices').delete().eq('customer_id', cid)
-      const { error } = await supabase.from('customers').delete().eq('customer_id', cid)
+      const { error } = await supabase.from('customers').update({ deleted_at: new Date().toISOString() }).eq('customer_id', cid)
       if (error) throw error
-      alert('업체 및 관련 데이터가 삭제되었습니다.')
+      alert('업체가 삭제되었습니다.')
       setIsEditCustomerModalOpen(false)
       router.push('/')
     } catch (error: any) {
@@ -362,18 +348,7 @@ export default function CustomerDetailPage() {
     if (!selectedContact) return
     if (!confirm('이 담당자를 삭제하시겠습니까?')) return
     setIsSavingContactEdit(true)
-    // 이 담당자를 참조하는 서비스 기록의 contact_id를 먼저 비워 외래키 제약을 해제
-    // (서비스 기록 자체는 보존, 담당자 연결만 끊음)
-    const { error: refError } = await supabase
-      .from('service_history')
-      .update({ contact_id: null })
-      .eq('contact_id', selectedContact.contact_id)
-    if (refError) {
-      setIsSavingContactEdit(false)
-      alert(refError.message || '담당자 삭제 중 오류가 발생했습니다.')
-      return
-    }
-    const { error } = await supabase.from('contacts').delete().eq('contact_id', selectedContact.contact_id)
+    const { error } = await supabase.from('contacts').update({ deleted_at: new Date().toISOString() }).eq('contact_id', selectedContact.contact_id)
     setIsSavingContactEdit(false)
     if (error) { alert(error.message || '담당자 삭제 중 오류가 발생했습니다.'); return }
     alert('담당자가 삭제되었습니다.')
@@ -451,7 +426,7 @@ export default function CustomerDetailPage() {
     if (!selectedDevice) return
     if (!confirm('이 장비를 삭제하시겠습니까?')) return
     setIsSavingDeviceEdit(true)
-    const { error } = await supabase.from('devices').delete().eq('device_id', selectedDevice.device_id)
+    const { error } = await supabase.from('devices').update({ deleted_at: new Date().toISOString() }).eq('device_id', selectedDevice.device_id)
     setIsSavingDeviceEdit(false)
     if (error) { alert(error.message || '장비 삭제 중 오류가 발생했습니다.'); return }
     alert('장비가 삭제되었습니다.')
