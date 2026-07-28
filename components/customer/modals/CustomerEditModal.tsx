@@ -10,10 +10,10 @@ import {
 type Props = {
   customer: Customer | null
   isSaving: boolean
-  isDeleting: boolean
+  isDeleting?: boolean
   onClose: () => void
   onSave: (form: CustomerEditFormData) => void
-  onDelete: () => void
+  onDelete?: () => void
 }
 
 const labelStyle = { fontSize: 12, fontWeight: 600, color: TEXT_MUTED, marginBottom: 5, display: 'block' } as const
@@ -77,13 +77,15 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 24 }}>
-          <button
-            onClick={onDelete}
-            disabled={isDeleting}
-            style={{ padding: '10px 16px', background: DANGER_BG, color: '#fff', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isDeleting ? 0.7 : 1 }}
-          >
-            {isDeleting ? '삭제 중...' : '삭제'}
-          </button>
+          {onDelete ? (
+            <button
+              onClick={onDelete}
+              disabled={isDeleting}
+              style={{ padding: '10px 16px', background: DANGER_BG, color: '#fff', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isDeleting ? 0.7 : 1 }}
+            >
+              {isDeleting ? '삭제 중...' : '삭제'}
+            </button>
+          ) : <span />}
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={onClose}

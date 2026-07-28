@@ -44,6 +44,7 @@ export default function CustomerDetailPage() {
   const [engineers, setEngineers] = useState<Engineer[]>([])
   const [loading, setLoading] = useState(true)
   const [currentUserEngineerId, setCurrentUserEngineerId] = useState<number | null>(null)
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
 
   // ── 모달 열림 상태 ──
   const [isQuoteHistoryModalOpen, setIsQuoteHistoryModalOpen] = useState(false)
@@ -95,7 +96,10 @@ export default function CustomerDetailPage() {
     const { data: { user } } = await supabase.auth.getUser()
     if (user && engineersData) {
       const me = (engineersData as any[]).find(e => e.email === user.email)
-      if (me) setCurrentUserEngineerId(me.engineer_id)
+      if (me) {
+        setCurrentUserEngineerId(me.engineer_id)
+        setCurrentUserRole(me.permission_level ?? null)
+      }
     }
 
     setLoading(false)
@@ -635,7 +639,7 @@ export default function CustomerDetailPage() {
           isDeleting={isDeletingCustomer}
           onClose={() => setIsEditCustomerModalOpen(false)}
           onSave={handleUpdateCustomer}
-          onDelete={handleDeleteCustomer}
+          onDelete={currentUserRole === 'superadmin' ? handleDeleteCustomer : undefined}
         />
         <ContactAddModal
           isOpen={isAddContactModalOpen}
