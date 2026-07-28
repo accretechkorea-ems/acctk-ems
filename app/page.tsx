@@ -257,15 +257,19 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
         selectedStatuses.length === 0 ? false : selectedStatuses.includes(c.status ?? '')
 
       if (!statusMatched) return false
-      const categoryMatched =
-  selectedCategories.length === 0 ? false :
-  !c.category || c.category === '' || c.category === 'EMPTY'
-    ? true
-    : selectedCategories.includes(c.category)
-
-if (!categoryMatched) return false
-
       const devices = deviceMap.get(Number(c.customer_id)) || []
+      const cats = devices.map((d) => d.category).filter((cat): cat is string => Boolean(cat))
+      const hasFilterable = cats.some((cat) =>
+        (CATEGORY_OPTIONS as readonly string[]).includes(cat)
+      )
+
+      const categoryMatched =
+        selectedCategories.length === 0 ? false :
+        !hasFilterable ? true :
+        cats.some((cat) => selectedCategories.includes(cat))
+
+      if (!categoryMatched) return false
+
       const deviceLine = getDeviceLine(devices).toLowerCase()
 
       if (!q) return true
