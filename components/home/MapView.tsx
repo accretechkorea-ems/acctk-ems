@@ -82,7 +82,7 @@ export default function MapView({
     overlayContent.addEventListener('touchend', (e) => e.stopPropagation())
     overlayContent.addEventListener('touchmove', (e) => e.stopPropagation())
 
-    const statusColor = c.status === '활성' ? '#16a34a' : c.status === '잠재' ? '#f59e0b' : c.status === '이탈' ? '#ef4444' : '#9ca3af'
+    const statusColor = c.status === '활성' ? '#22c55e' : c.status === '잠재' ? '#f59e0b' : c.status === '이탈' ? '#f43f5e' : '#9ca3af'
     overlayContent.innerHTML = `
       <div style="
         width:296px;
@@ -450,9 +450,9 @@ useEffect(() => {
         {/* 1행: 상태 필터 */}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {([
-            { label: '활성', color: '#16a34a', shadow: 'rgba(22,163,74,0.30)' },
+            { label: '활성', color: '#22c55e', shadow: 'rgba(22,163,74,0.30)' },
             { label: '잠재', color: '#f59e0b', shadow: 'rgba(245,158,11,0.30)' },
-            { label: '이탈', color: '#ef4444', shadow: 'rgba(239,68,68,0.30)' },
+            { label: '이탈', color: '#f43f5e', shadow: 'rgba(239,68,68,0.30)' },
           ] as const).map(({ label, color }) => {
             const active = selectedStatuses.includes(label)
             return (

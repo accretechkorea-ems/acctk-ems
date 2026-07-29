@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import type { Device } from '../types'
-import { INPUT_BORDER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY, WHITE_BUTTON_BG, WHITE_BUTTON_TEXT, inputStyle, modalOverlayStyle } from '../constants'
+import { INPUT_BORDER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY, WHITE_BUTTON_BG, WHITE_BUTTON_TEXT, inputStyle } from '../constants'
+import ModalOverlay from '@/components/common/ModalOverlay'
 
 type Props = {
   device: Device | null
@@ -25,7 +26,7 @@ export default function DeviceImageModal({ device, isSaving, onClose, onSave }: 
   }
 
   return (
-    <div onClick={handleClose} style={modalOverlayStyle}>
+    <ModalOverlay onClose={handleClose}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
@@ -58,6 +59,6 @@ export default function DeviceImageModal({ device, isSaving, onClose, onSave }: 
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

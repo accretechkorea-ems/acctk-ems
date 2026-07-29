@@ -13,6 +13,7 @@ import {
   type Contact,
   type NewDeviceForm,
 } from '@/lib/home'
+import ModalOverlay from '@/components/common/ModalOverlay'
 
 type CustomerForm = {
   company_name: string
@@ -57,19 +58,7 @@ export default function AddCustomerModal({
   if (!isOpen) return null
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0, 0, 0, 0.65)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 9999,
-        padding: 20,
-      }}
-    >
+    <ModalOverlay onClose={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
@@ -513,6 +502,6 @@ export default function AddCustomerModal({
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

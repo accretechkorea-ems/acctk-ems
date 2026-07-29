@@ -1,11 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import type { ContactForm } from '../types'
-import {
-  INPUT_BORDER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY,
-  WHITE_BUTTON_BG, WHITE_BUTTON_TEXT, inputStyle, modalOverlayStyle,
-} from '../constants'
+import ModalOverlay from '@/components/common/ModalOverlay'
 
 type Props = {
   isOpen: boolean
@@ -15,7 +12,11 @@ type Props = {
 }
 
 const emptyForm: ContactForm = { name: '', department: '', position: '', phone: '', email: '' }
-const labelStyle = { fontSize: 12, fontWeight: 600, color: TEXT_MUTED, marginBottom: 5, display: 'block' } as const
+const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
+const fieldStyle: CSSProperties = {
+  width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: 6,
+  boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
+}
 
 export default function ContactAddModal({ isOpen, isSaving, onClose, onSave }: Props) {
   const [form, setForm] = useState<ContactForm>(emptyForm)
@@ -31,62 +32,72 @@ export default function ContactAddModal({ isOpen, isSaving, onClose, onSave }: P
   const handleClose = () => { setForm(emptyForm); onClose() }
 
   return (
-    <div onClick={handleClose} style={modalOverlayStyle}>
+    <ModalOverlay onClose={handleClose}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: 480, background: '#ffffff', borderRadius: 20, padding: 28,
-          boxShadow: '0 16px 48px rgba(0,0,0,0.22)', border: `1px solid ${INPUT_BORDER}`,
+          width: '100%', maxWidth: 480, background: '#ffffff', borderRadius: 8, padding: 24,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb',
           animation: 'modal-in 0.18s ease',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: TEXT_PRIMARY }}>담당자 추가</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>담당자 추가</div>
           <button
             onClick={handleClose}
-            style={{ width: 30, height: 30, borderRadius: '50%', background: '#f4f5f7', border: 'none', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', color: TEXT_SECONDARY }}
-          >✕</button>
+            title="닫기"
+            onMouseEnter={(e) => (e.currentTarget.style.color = '#111827')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = '#6b7280')}
+            style={{ width: 28, height: 28, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', transition: 'color 0.15s ease' }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
         </div>
 
         <div style={{ display: 'grid', gap: 14 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <label style={labelStyle}>이름 *</label>
-              <input value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} placeholder="이름" style={inputStyle} />
+              <input value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} placeholder="이름" style={fieldStyle} />
             </div>
             <div>
               <label style={labelStyle}>직책</label>
-              <input value={form.position} onChange={(e) => setForm(p => ({ ...p, position: e.target.value }))} placeholder="직책" style={inputStyle} />
+              <input value={form.position} onChange={(e) => setForm(p => ({ ...p, position: e.target.value }))} placeholder="직책" style={fieldStyle} />
             </div>
           </div>
           <div>
             <label style={labelStyle}>부서</label>
-            <input value={form.department} onChange={(e) => setForm(p => ({ ...p, department: e.target.value }))} placeholder="부서" style={inputStyle} />
+            <input value={form.department} onChange={(e) => setForm(p => ({ ...p, department: e.target.value }))} placeholder="부서" style={fieldStyle} />
           </div>
           <div>
             <label style={labelStyle}>전화번호</label>
-            <input value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="전화번호" style={inputStyle} />
+            <input value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} placeholder="전화번호" style={fieldStyle} />
           </div>
           <div>
             <label style={labelStyle}>이메일</label>
-            <input value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} placeholder="이메일" type="email" style={inputStyle} />
+            <input value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} placeholder="이메일" type="email" style={fieldStyle} />
           </div>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 24 }}>
           <button
             onClick={handleClose}
-            style={{ padding: '10px 16px', background: '#f4f5f7', color: TEXT_PRIMARY, borderRadius: 10, border: `1px solid ${INPUT_BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+            style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: 6, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
           >취소</button>
           <button
             onClick={handleSave}
             disabled={isSaving}
-            style={{ padding: '10px 20px', background: WHITE_BUTTON_BG, color: WHITE_BUTTON_TEXT, borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.7 : 1 }}
+            onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
+            onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
+            style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
           >
             {isSaving ? '저장 중...' : '저장'}
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

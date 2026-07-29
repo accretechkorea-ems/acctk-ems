@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { isActiveInPeriod } from '@/lib/engineers'
 import { SERVICE_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
+import ModalOverlay from '@/components/common/ModalOverlay'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#fafafa'
@@ -440,7 +441,7 @@ export default function ActivityPage() {
                             </div>
                             <span style={{
                               fontSize: 12, fontWeight: 600,
-                              color: cnt > 0 ? '#111827' : '#d1d5db',
+                              color: cnt > 0 ? (sc.dot ?? sc.text) : '#d1d5db',
                               background: cnt > 0 ? '#f3f4f6' : 'transparent',
                               borderRadius: cnt > 0 ? 6 : 0,
                               padding: cnt > 0 ? '2px 8px' : '2px 0',
@@ -474,7 +475,7 @@ export default function ActivityPage() {
 
       {/* 상세 모달 */}
       {selectedEngineer && (
-        <div onClick={() => setSelectedEngineer(null)}
+        <ModalOverlay onClose={() => setSelectedEngineer(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <div onClick={e => e.stopPropagation()}
             style={{
@@ -619,7 +620,7 @@ export default function ActivityPage() {
               )}
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </main>
   )

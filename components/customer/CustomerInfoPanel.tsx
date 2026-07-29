@@ -32,7 +32,7 @@ export default function CustomerInfoPanel({ customer, quotes, totalRevenueAmt, o
   return (
     <div style={{
       background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8,
-      padding: '16px 20px', marginBottom: 24, position: 'relative',
+      padding: '16px 20px', marginBottom: 18, position: 'relative',
     }}>
       {/* 수정 버튼 */}
       <button

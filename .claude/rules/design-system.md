@@ -121,7 +121,9 @@ paths:
 
 - 표에 없는 hex·size·radius 신규 생성 금지.
 - 그라데이션 금지. 모달/팝업 외 box-shadow 금지.
-- 이모지를 UI 아이콘으로 쓰지 않는다 — lucide식 SVG만.
+- 이모지를 UI 아이콘으로 쓰지 않는다.
+  lucide 스타일 인라인 SVG를 사용한다 (stroke-width 2, 선 아이콘).
+  lucide-react 패키지는 미설치이므로 import 하지 마라.
 - 배지에 상태색 틴트 배경 쓰지 말 것 — 색은 dot으로만.
 - 로직(쿼리·상태·props)은 스타일 작업 중 건드리지 않는다.
 

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import type { Device, ServiceHistory } from './types'
-import { INPUT_BORDER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY } from './constants'
+import { INPUT_BORDER, TEXT_MUTED } from './constants'
 import { getInstallDisplay, getDefaultImageUrl } from './utils'
 import { SERVICE_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 
@@ -22,96 +22,96 @@ type Props = {
 
 function ServiceCard({ h, d, onEdit, onPrint, onOpenReport }: { h: ServiceHistory; d: Device; onEdit: () => void; onPrint: () => void; onOpenReport: () => void }) {
   const [hovered, setHovered] = useState(false)
-  const typeColor = getCategoryColor(SERVICE_TYPE_COLORS, h.service_type).text
+  const sc = getCategoryColor(SERVICE_TYPE_COLORS, h.service_type)
 
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        width: '100%', background: hovered ? '#fafbfc' : '#f8f9fb', borderRadius: 12,
-        border: `1px solid ${hovered ? '#dce1ea' : INPUT_BORDER}`,
-        boxSizing: 'border-box', overflow: 'hidden',
-        display: 'flex', transition: 'border-color 0.15s ease, background 0.15s ease',
+        width: '100%', background: '#fff', borderRadius: 8, padding: '12px 14px 12px 17px',
+        border: `1px solid ${hovered ? '#c7d7f8' : '#ebebeb'}`,
+        boxSizing: 'border-box', transition: 'border-color 0.15s ease',
+        position: 'relative', overflow: 'hidden',
       }}
     >
-      {/* 타입 컬러 바 */}
-      <div style={{ width: 3, flexShrink: 0, background: typeColor }} />
+      {/* 좌측 서비스 유형 색상 띠 */}
+      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: sc.dot ?? sc.text, borderRadius: '8px 0 0 8px' }} />
 
-      <div style={{ flex: 1, padding: '11px 13px' }}>
-        {/* 헤더: 타입 + 배지 + 버튼들 */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: typeColor }}>
-              {h.service_type ?? '-'}
-            </span>
-            {h.is_paid !== null && (
-              <span style={{
-                fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
-                background: h.is_paid ? '#eff4ff' : '#f0fdf4',
-                color: h.is_paid ? '#234ea2' : '#16a34a',
-              }}>
-                {h.is_paid ? '유상' : '무상'}
-              </span>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: 5 }}>
-            <button
-              onClick={onEdit}
-              style={{
-                padding: '4px 9px', background: '#f4f5f7', color: TEXT_SECONDARY,
-                borderRadius: 7, border: `1px solid ${INPUT_BORDER}`,
-                cursor: 'pointer', fontWeight: 600, fontSize: 11,
-                transition: 'all 0.15s ease',
-              }}
-            >
-              수정
-            </button>
-            {h.report_url ? (
-              <button
-                onClick={onOpenReport}
-                style={{
-                  padding: '4px 9px', background: '#f0fdf4', color: '#16a34a',
-                  borderRadius: 7, border: '1px solid #bbf7d0',
-                  cursor: 'pointer', fontWeight: 700, fontSize: 11,
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                레포트 열기
-              </button>
-            ) : (
-              <button
-                onClick={onPrint}
-                style={{
-                  padding: '4px 9px', background: '#f4f5f7', color: TEXT_SECONDARY,
-                  borderRadius: 7, border: `1px solid ${INPUT_BORDER}`,
-                  cursor: 'pointer', fontWeight: 600, fontSize: 11,
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                레포트 작성
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* 서비스 노트 */}
-        <div style={{
-          fontSize: 13, color: TEXT_PRIMARY, whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word', lineHeight: 1.55, marginBottom: 10,
-        }}>
-          {h.service_notes ?? '-'}
-        </div>
-
-        {/* 메타 정보 */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: TEXT_MUTED }}>
-          <span>{h.visit_date ?? '-'}</span>
-          <span style={{ textAlign: 'right' }}>
-            {h.service_engineers && h.service_engineers.length > 0
-              ? h.service_engineers.map(se => `${se.engineers.name} ${se.engineers.position ?? ''}`.trim()).join(', ')
-              : (h.visitor ?? '-')}
+      {/* 윗줄: 타입 · 유무상 (좌) / 수정 (우) */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>
+            {h.service_type ?? '-'}
           </span>
+          {h.is_paid !== null && (
+            <span style={{ fontSize: 12, color: '#9ca3af' }}>
+              <span style={{ color: '#d1d5db' }}> · </span>{h.is_paid ? '유상' : '무상'}
+            </span>
+          )}
         </div>
+        <button
+          onClick={onEdit}
+          title="수정"
+          onMouseEnter={(e) => (e.currentTarget.style.color = '#234ea2')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = '#9ca3af')}
+          style={{ padding: 0, background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', color: '#9ca3af', transition: 'color 0.15s ease' }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+          </svg>
+        </button>
+      </div>
+
+      {/* 서비스 노트 */}
+      <div style={{
+        fontSize: 13, color: '#111827', whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word', lineHeight: '20px',
+      }}>
+        {h.service_notes ?? '-'}
+      </div>
+
+      {/* 아랫줄: 날짜/참여자 (좌, 세로) / 레포트 (우) */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+          <span style={{ fontSize: 12, color: '#9ca3af' }}>{h.visit_date ?? '-'}</span>
+          {(() => {
+            const names = h.service_engineers && h.service_engineers.length > 0
+              ? h.service_engineers.map(se => `${se.engineers.name} ${se.engineers.position ?? ''}`.trim())
+              : [h.visitor ?? '-']
+            const rows: string[] = []
+            for (let i = 0; i < names.length; i += 2) rows.push(names.slice(i, i + 2).join(', '))
+            return rows.map((r, i) => (
+              <span key={i} style={{ fontSize: 12, color: '#9ca3af' }}>{r}</span>
+            ))
+          })()}
+        </div>
+        {h.report_url ? (
+          <button
+            onClick={onOpenReport}
+            style={{
+              padding: '4px 10px', background: '#fff', color: '#111827',
+              borderRadius: 6, border: '1px solid #ebebeb',
+              cursor: 'pointer', fontWeight: 600, fontSize: 12,
+              flexShrink: 0, whiteSpace: 'nowrap',
+            }}
+          >
+            레포트 열기
+          </button>
+        ) : (
+          <button
+            onClick={onPrint}
+            style={{
+              padding: '4px 10px', background: '#fff', color: '#6b7280',
+              borderRadius: 6, border: '1px solid #ebebeb',
+              cursor: 'pointer', fontWeight: 600, fontSize: 12,
+              flexShrink: 0, whiteSpace: 'nowrap',
+            }}
+          >
+            레포트 작성
+          </button>
+        )}
       </div>
     </div>
   )
@@ -197,11 +197,11 @@ function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditServic
       </div>
 
       {/* 스펙 정보 */}
-      <div style={{ fontSize: 12, color: '#6b7280', textAlign: 'center', marginTop: 4 }}>
+      <div style={{ fontSize: 12, color: '#111827', textAlign: 'center', marginTop: 4 }}>
         S/N: {d.serial_number ?? '-'}<span style={{ color: '#d1d5db' }}> · </span>{d.program ?? '-'}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 8, marginTop: 2, marginBottom: 14 }}>
-        <span style={{ fontSize: 12, color: '#9ca3af' }}>납입: {getInstallDisplay(d)}</span>
+        <span style={{ fontSize: 12, color: '#111827' }}>납입: {getInstallDisplay(d)}</span>
         {d.packing_list_url ? (
           <button
             onClick={onOpenPacking}

@@ -4,9 +4,9 @@ import { useState } from 'react'
 import { getDeviceLines, type Customer, type Device } from '@/lib/home'
 
 const STATUS_COLOR: Record<string, string> = {
-  '활성': '#16a34a',
+  '활성': '#22c55e',
   '잠재': '#f59e0b',
-  '이탈': '#ef4444',
+  '이탈': '#f43f5e',
 }
 
 type Props = {
@@ -54,7 +54,7 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
           fontSize: 11, fontWeight: 600, color: '#6b7280',
           flexShrink: 0, whiteSpace: 'nowrap',
         }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
           {customer.status ?? '-'}
         </span>
       </div>
@@ -77,7 +77,7 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
 
       {/* 장비 태그 — 최대 4개 표시, 5개 이상은 힌트로 대체 */}
       <div style={{
-        display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 8,
+        display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 2,
       }}>
         {hasNoDevice ? (
           <span style={{ fontSize: 11, color: '#d1d5db', fontStyle: 'italic' }}>장비 없음</span>
@@ -106,13 +106,15 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
         <a
           href={`/customer/${customer.customer_id}`}
           onClick={(e) => { e.stopPropagation(); onDetailClick() }}
+          onMouseEnter={(e) => { const el = e.currentTarget; el.style.color = '#234ea2'; el.style.transform = 'scale(1.06)' }}
+          onMouseLeave={(e) => { const el = e.currentTarget; el.style.color = '#111827'; el.style.transform = 'scale(1)' }}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 3,
-            fontSize: 12, fontWeight: 600, color: '#234ea2',
+            fontSize: 12, fontWeight: 600, color: '#111827',
             whiteSpace: 'nowrap',
-            padding: '4px 9px', borderRadius: 6,
-            background: hovered ? '#f3f4f6' : 'transparent',
-            transition: 'background 0.15s ease',
+            padding: '2px 4px',
+            transformOrigin: 'right center',
+            transition: 'color 0.15s ease, transform 0.15s ease',
             textDecoration: 'none',
           }}
         >

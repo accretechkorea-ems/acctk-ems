@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
-  Document, Page, Text, View, StyleSheet, Image, PDFViewer, Font, pdf
+  Document, Page, Text, View, StyleSheet, Image, BlobProvider, Font, pdf
 } from '@react-pdf/renderer'
 
 Font.register({
@@ -368,11 +368,11 @@ function ProfitPanel({ rows, exchangeRate, rateUpdatedAt, rateLoading, onFetchRa
             <div style={{ borderTop: r.selectedItem ? '1px solid #ebebeb' : undefined }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>판매단가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>₩{numKR(r.unit_price)}</span></div>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>공급가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>₩{numKR(r.supply_price)}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>매출이익 ({r.profit_rate}%)</span><span style={{ fontSize: 13, color: r.profit >= 0 ? '#16a34a' : '#dc2626', fontWeight: 500 }}>₩{numKR(r.profit)}</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>매출이익 <span style={{ color: r.profit >= 0 ? '#16a34a' : '#dc2626' }}>({r.profit_rate}%)</span></span><span style={{ fontSize: 13, color: r.profit >= 0 ? '#16a34a' : '#dc2626', fontWeight: 500 }}>₩{numKR(r.profit)}</span></div>
             </div>
           </div>
         ))}
-        <div style={{ marginTop: 4, paddingTop: 6, borderTop: '1px solid #ebebeb' }}>
+        <div style={{ marginTop: 4, paddingTop: 6, borderTop: '2px solid #111827' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>공급가 합계</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>₩{numKR(totalSupply)}</span></div>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>원가 합계</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>₩{numKR(totalProduct)}</span></div>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>매출이익 합계</span><span style={{ fontSize: 13, color: isGood ? '#16a34a' : '#dc2626', fontWeight: 600 }}>₩{numKR(totalProfit)} ({profitPct.toFixed(1)}%)</span></div>
@@ -776,6 +776,9 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
     color: '#111827', transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
   }
 
+  // 스테퍼 3분할 1칸 폭 = "직접 입력" 버튼 폭 (동일 값 참조용)
+  const STEPPER_COL = 'calc((100% - 12px) / 3)'
+
   return (
     <div style={{ background: '#fafafa', minHeight: '100vh' }}>
       <style>{`
@@ -955,7 +958,7 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
               <div style={{ width: 3, height: 16, background: '#234ea2', borderRadius: 6, flexShrink: 0 }} />
               <span style={{ fontWeight: 800, fontSize: 14, color: '#111827' }}>품목</span>
               {rows.length > 0 && (
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: '#eff4ff', color: '#234ea2' }}>{rows.length}</span>
+                <span style={{ fontSize: 12, color: '#9ca3af' }}>총 {rows.length}개</span>
               )}
               {/* 마진/정도검사 가이드 버튼 — 오른쪽 끝 */}
               <div ref={priceGuideRef} style={{ marginLeft: 'auto', position: 'relative' }}>
@@ -1018,29 +1021,70 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
             </div>
 
             {rows.map((row, rowIdx) => (
-              <div key={row.id} style={{ background: '#f3f4f6', borderRadius: 8, padding: '14px', marginBottom: 10, border: '1px solid #ebebeb' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ width: 22, height: 22, borderRadius: '50%', background: '#234ea2', color: '#fff', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{rowIdx + 1}</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>품목</span>
+              <div key={row.id} style={{ background: '#ffffff', borderRadius: 8, padding: '14px', marginBottom: 10, border: '1px solid #ebebeb' }}>
+                {rows.length > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ width: 20, height: 20, borderRadius: 999, background: '#234ea2', color: '#fff', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}>{rowIdx + 1}</span>
+                    <button onClick={() => setRows(prev => prev.filter(r => r.id !== row.id))}
+                      title="삭제"
+                      style={{ width: 24, height: 24, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'color 0.15s ease' }}
+                      onMouseEnter={e => (e.currentTarget.style.color = '#dc2626')}
+                      onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                    </button>
                   </div>
-                  <button onClick={() => setRows(prev => prev.filter(r => r.id !== row.id))}
-                    style={{ padding: '2px 0', background: 'none', color: '#dc2626', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>삭제</button>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <label style={{ fontSize: 12, color: '#6b7280', width: 44, flexShrink: 0 }}>품명</label>
+                  <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+                    <input className="q-input" value={row.itemText} onChange={e => updateRow(row.id, 'itemText', e.target.value)} placeholder="예: 1. 스타일러스" style={{ ...inp, width: '100%', paddingRight: 56 }} />
+                    <button onClick={() => addSubLine(row.id)}
+                      title="상세 내용 줄 추가"
+                      style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', padding: '2px 6px', background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', transition: 'color 0.15s ease' }}
+                      onMouseEnter={e => (e.currentTarget.style.color = '#234ea2')}
+                      onMouseLeave={e => (e.currentTarget.style.color = '#6b7280')}>
+                      줄 추가
+                    </button>
+                  </div>
                 </div>
 
-                <div style={{ marginBottom: 10 }}>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 4, display: 'block' }}>품명</label>
-                  <input className="q-input" value={row.itemText} onChange={e => updateRow(row.id, 'itemText', e.target.value)} placeholder="예: 1. 스타일러스" style={{ ...inp, width: '100%' }} />
+                {row.subLines.length > 0 && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <div style={{ width: 44, flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    {row.subLines.map((line, li) => (
+                      <div key={li} style={{ position: 'relative', marginBottom: 4 }}>
+                        <input className="q-input" value={line} onChange={e => updateSubLine(row.id, li, e.target.value)} placeholder="예: - Leaf Spring 교체" style={{ ...inp, width: '100%', fontSize: 11, paddingRight: 28 }} />
+                        <button onClick={() => removeSubLine(row.id, li)}
+                          title="삭제"
+                          style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 20, height: 20, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'color 0.15s ease' }}
+                          onMouseEnter={e => (e.currentTarget.style.color = '#dc2626')}
+                          onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
+                )}
 
-                <div style={{ marginBottom: 10 }}>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 4, display: 'block' }}>
-                    상품 검색{row.selectedItem && <span style={{ color: '#16a34a', marginLeft: 6, fontWeight: 700 }}>✓ 선택됨</span>}
-                  </label>
-                  <div style={{ position: 'relative' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <label style={{ fontSize: 12, color: '#6b7280', width: 44, flexShrink: 0 }}>단가</label>
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
                     <input className="q-input" value={searchQuery[row.id] || ''} onChange={e => handleSearch(row.id, e.target.value)}
                       onFocus={() => setSearchOpen(prev => ({ ...prev, [row.id]: true }))}
-                      placeholder="코드 또는 모델명 검색" style={{ ...inp, width: '100%' }} />
+                      placeholder="코드 또는 모델명 검색" style={{ ...inp, width: '100%', paddingRight: row.selectedItem ? 28 : 11 }} />
+                    {row.selectedItem && (
+                      <button onClick={() => clearItem(row.id)}
+                        title="품목 해제"
+                        style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 20, height: 20, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'color 0.15s ease' }}
+                        onMouseEnter={e => (e.currentTarget.style.color = '#dc2626')}
+                        onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                      </button>
+                    )}
                     {searchOpen[row.id] && (searchResults[row.id] || []).length > 0 && (
                       <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 999, background: '#fff', border: '1px solid #234ea2', borderRadius: 8, maxHeight: 200, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
                         {searchResults[row.id].map(item => (
@@ -1076,97 +1120,82 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
                       </div>
                     )}
                   </div>
-                  {row.selectedItem && (
-                    <button onClick={() => clearItem(row.id)}
-                      style={{ marginTop: 6, padding: '3px 10px', background: '#fffbeb', color: '#92400e', border: '1px solid #fcd34d', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>품목 해제</button>
-                  )}
-                </div>
-
-                {/* 스테퍼 — 통합 컨테이너 */}
-                <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #ebebeb', display: 'flex', marginBottom: !row.selectedItem && priceInputOpen[row.id] ? 0 : 10, overflow: 'hidden' }}>
-                  <div style={{ flex: 1, padding: '5px 8px', textAlign: 'center' }}>
-                    <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 2, fontWeight: 600 }}>수량</div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
-                      <button onClick={() => updateRow(row.id, 'quantity', Math.max(1, row.quantity - 1))} style={{ width: 20, height: 20, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>−</button>
-                      <span style={{ minWidth: 26, textAlign: 'center', fontWeight: 800, fontSize: 13, color: '#111827' }}>{row.quantity}</span>
-                      <button onClick={() => updateRow(row.id, 'quantity', row.quantity + 1)} style={{ width: 20, height: 20, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>+</button>
-                    </div>
-                  </div>
-                  <div style={{ width: 1, background: '#ebebeb', flexShrink: 0 }} />
-                  <div style={{ flex: 1, padding: '5px 8px', textAlign: 'center' }}>
-                    <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 2, fontWeight: 600 }}>이익률</div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
-                      <button onClick={() => updateRow(row.id, 'profit_rate', Math.max(0, row.profit_rate - 5))} style={{ width: 20, height: 20, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>−</button>
-                      {editingProfitRate[row.id] ? (
-                        <input
-                          autoFocus
-                          type="number"
-                          value={profitRateInput[row.id] ?? ''}
-                          onChange={e => setProfitRateInput(p => ({ ...p, [row.id]: e.target.value }))}
-                          onBlur={() => {
-                            const v = Math.min(95, Math.max(0, parseInt(profitRateInput[row.id] || '0') || 0))
-                            updateRow(row.id, 'profit_rate', v)
-                            setEditingProfitRate(p => ({ ...p, [row.id]: false }))
-                          }}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur()
-                          }}
-                          style={{ width: 40, textAlign: 'center', fontWeight: 800, fontSize: 12, border: '1px solid #234ea2', borderRadius: 6, padding: '1px 2px', outline: 'none', color: '#111827' }}
-                        />
-                      ) : (
-                        <span
-                          onClick={() => { setEditingProfitRate(p => ({ ...p, [row.id]: true })); setProfitRateInput(p => ({ ...p, [row.id]: String(row.profit_rate) })) }}
-                          title="클릭하여 직접 입력"
-                          style={{ minWidth: 36, textAlign: 'center', fontWeight: 800, fontSize: 13, color: row.profit_rate >= 40 ? '#16a34a' : '#dc2626', cursor: 'text' }}
-                        >{row.profit_rate}%</span>
-                      )}
-                      <button onClick={() => updateRow(row.id, 'profit_rate', Math.min(95, row.profit_rate + 5))} style={{ width: 20, height: 20, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>+</button>
-                    </div>
-                  </div>
-                  <div style={{ width: 1, background: '#ebebeb', flexShrink: 0 }} />
-                  <div style={{ flex: 1, padding: '5px 8px', textAlign: 'center' }}>
-                    <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 2, fontWeight: 600 }}>관세율</div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
-                      <button onClick={() => updateRow(row.id, 'tariff_rate', parseFloat((row.tariff_rate - 0.01).toFixed(2)))} style={{ width: 20, height: 20, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>−</button>
-                      <span style={{ minWidth: 36, textAlign: 'center', fontSize: 12, fontWeight: 700, color: '#111827' }}>×{row.tariff_rate.toFixed(2)}</span>
-                      <button onClick={() => updateRow(row.id, 'tariff_rate', parseFloat((row.tariff_rate + 0.01).toFixed(2)))} style={{ width: 20, height: 20, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>+</button>
-                    </div>
-                  </div>
                   {!row.selectedItem && (
-                    <>
-                      <div style={{ width: 1, background: '#ebebeb', flexShrink: 0 }} />
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 10px' }}>
-                        <button
-                          onClick={() => setPriceInputOpen(p => ({ ...p, [row.id]: !p[row.id] }))}
-                          style={{ padding: '4px 10px', background: priceInputOpen[row.id] ? '#234ea2' : '#eff4ff', color: priceInputOpen[row.id] ? '#fff' : '#234ea2', border: '1px solid #c7d7f8', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', transition: 'all 0.15s ease' }}
-                        >₩ 단가</button>
-                      </div>
-                    </>
+                    <button
+                      onClick={() => setPriceInputOpen(p => ({ ...p, [row.id]: !p[row.id] }))}
+                      style={{ width: STEPPER_COL, flexShrink: 0, boxSizing: 'border-box', padding: '8px 0', textAlign: 'center', background: priceInputOpen[row.id] ? '#f3f4f6' : '#fff', color: '#6b7280', border: '1px solid #ebebeb', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', transition: 'all 0.15s ease' }}
+                    >직접 입력</button>
                   )}
+                  </div>
                 </div>
                 {!row.selectedItem && priceInputOpen[row.id] && (
-                  <div style={{ background: '#fff', border: '1px solid #ebebeb', borderTop: 'none', borderRadius: '0 0 8px 8px', padding: '8px 10px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, whiteSpace: 'nowrap' }}>단가 직접입력</span>
-                    <input className="q-input" autoFocus type="number" value={row.manual_unit_price || ''}
-                      onChange={e => updateRow(row.id, 'manual_unit_price', parseInt(e.target.value) || 0)}
-                      placeholder="0" style={{ ...inp, flex: 1, textAlign: 'right', fontSize: 13 }} />
-                    <span style={{ fontSize: 11, color: '#6b7280' }}>원</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, marginBottom: 8 }}>
+                    <div style={{ width: 44, flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+                        <input className="q-input" autoFocus type="number" value={row.manual_unit_price || ''}
+                          onChange={e => updateRow(row.id, 'manual_unit_price', parseInt(e.target.value) || 0)}
+                          placeholder="0" style={{ ...inp, width: '100%', textAlign: 'right', fontSize: 13, paddingRight: 28 }} />
+                        <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#9ca3af', pointerEvents: 'none' }}>원</span>
+                      </div>
+                      <div style={{ width: STEPPER_COL, flexShrink: 0 }} />
+                    </div>
                   </div>
                 )}
 
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', marginBottom: 4, display: 'block' }}>세부항목</label>
-                  {row.subLines.map((line, li) => (
-                    <div key={li} style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
-                      <input className="q-input" value={line} onChange={e => updateSubLine(row.id, li, e.target.value)} placeholder="예: - Leaf Spring 교체" style={{ ...inp, flex: 1, fontSize: 11 }} />
-                      <button onClick={() => removeSubLine(row.id, li)} style={{ padding: '0 9px', background: 'none', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, cursor: 'pointer', fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center' }}>−</button>
+                {/* 스테퍼 — 수량·이익률·관세 (grid 3등분) */}
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <div style={{ width: 44, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, marginBottom: 4 }}>
+                      <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>수량</div>
+                      <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>이익률</div>
+                      <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>관세율</div>
                     </div>
-                  ))}
-                  <button onClick={() => addSubLine(row.id)} style={{ padding: '4px 12px', background: '#eff4ff', color: '#234ea2', border: '1px solid #c7d7f8', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>+ 세부항목 추가</button>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
+                      <div title="수량" style={{ height: 34, border: '1px solid #ebebeb', borderRadius: 6, display: 'flex', alignItems: 'center', padding: '0 6px', gap: 4, minWidth: 0, boxSizing: 'border-box' }}>
+                        <button onClick={() => updateRow(row.id, 'quantity', Math.max(1, row.quantity - 1))} style={{ width: 18, height: 18, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}>−</button>
+                        <span style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'visible', color: '#111827' }}>{row.quantity}</span>
+                        <button onClick={() => updateRow(row.id, 'quantity', row.quantity + 1)} style={{ width: 18, height: 18, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}>+</button>
+                      </div>
+                      <div title="이익률" style={{ height: 34, border: '1px solid #ebebeb', borderRadius: 6, display: 'flex', alignItems: 'center', padding: '0 6px', gap: 4, minWidth: 0, boxSizing: 'border-box' }}>
+                        <button onClick={() => updateRow(row.id, 'profit_rate', Math.max(0, row.profit_rate - 5))} style={{ width: 18, height: 18, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}>−</button>
+                        {editingProfitRate[row.id] ? (
+                          <input
+                            autoFocus
+                            type="number"
+                            value={profitRateInput[row.id] ?? ''}
+                            onChange={e => setProfitRateInput(p => ({ ...p, [row.id]: e.target.value }))}
+                            onBlur={() => {
+                              const v = Math.min(95, Math.max(0, parseInt(profitRateInput[row.id] || '0') || 0))
+                              updateRow(row.id, 'profit_rate', v)
+                              setEditingProfitRate(p => ({ ...p, [row.id]: false }))
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur()
+                            }}
+                            style={{ flex: 1, minWidth: 0, width: '100%', textAlign: 'center', fontWeight: 500, fontSize: 12, border: '1px solid #234ea2', borderRadius: 6, padding: '1px 2px', outline: 'none', color: '#111827', boxSizing: 'border-box' }}
+                          />
+                        ) : (
+                          <span
+                            onClick={() => { setEditingProfitRate(p => ({ ...p, [row.id]: true })); setProfitRateInput(p => ({ ...p, [row.id]: String(row.profit_rate) })) }}
+                            title="클릭하여 직접 입력"
+                            style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'visible', color: row.profit_rate >= 40 ? '#16a34a' : '#dc2626', cursor: 'text' }}
+                          >{row.profit_rate}%</span>
+                        )}
+                        <button onClick={() => updateRow(row.id, 'profit_rate', Math.min(95, row.profit_rate + 5))} style={{ width: 18, height: 18, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}>+</button>
+                      </div>
+                      <div title="관세율" style={{ height: 34, border: '1px solid #ebebeb', borderRadius: 6, display: 'flex', alignItems: 'center', padding: '0 6px', gap: 4, minWidth: 0, boxSizing: 'border-box' }}>
+                        <button onClick={() => updateRow(row.id, 'tariff_rate', parseFloat((row.tariff_rate - 0.01).toFixed(2)))} style={{ width: 18, height: 18, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}>−</button>
+                        <span style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'visible', color: '#111827' }}>×{row.tariff_rate.toFixed(2)}</span>
+                        <button onClick={() => updateRow(row.id, 'tariff_rate', parseFloat((row.tariff_rate + 0.01).toFixed(2)))} style={{ width: 18, height: 18, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}>+</button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {row.supply_price > 0 && (
-                  <div style={{ marginTop: 10, padding: '8px 12px', background: '#f0fdf4', borderRadius: 8, fontSize: 11, color: '#166534', borderLeft: '3px solid #16a34a' }}>
+                  <div style={{ marginTop: 10, fontSize: 12, color: '#6b7280' }}>
                     단가 ₩{numKR(row.unit_price)} × {row.quantity} = 공급가 <b>₩{numKR(row.supply_price)}</b> | 부가세 ₩{numKR(row.tax)}
                   </div>
                 )}
@@ -1186,51 +1215,60 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
 
         {/* PDF 미리보기 */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ background: '#f3f4f6', borderRadius: 8, overflow: 'hidden', border: '1px solid #ebebeb', height: 'calc(100vh - 40px)', position: 'sticky', top: 20 }}>
+          <div style={{ background: '#f3f4f6', borderRadius: 8, overflow: 'hidden', border: '1px solid #ebebeb', height: 'calc(100vh - 40px)', position: 'sticky', top: 20, display: 'flex', flexDirection: 'column' }}>
 
             {/* 헤더 */}
-            <div style={{ background: '#234ea2', padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ background: '#234ea2', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: 500, marginBottom: 2 }}>견적 번호</div>
-                <div style={{ fontSize: 14, color: '#fff', fontWeight: 800 }}>{quoteNo}</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: 500, marginBottom: 2 }}>견적 번호</div>
+                <div style={{ fontSize: 14, color: '#ffffff', fontWeight: 600 }}>{quoteNo}</div>
               </div>
               <button
                 onClick={() => setShowConfirmModal(true)}
                 disabled={isSaving}
                 style={{
-                  padding: '8px 20px', background: isSaving ? 'rgba(255,255,255,0.15)' : '#16a34a', color: '#fff',
-                  border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13,
+                  padding: '6px 14px', boxSizing: 'border-box',
+                  background: isSaving ? 'transparent' : '#ffffff',
+                  color: isSaving ? '#ffffff' : '#234ea2',
+                  border: isSaving ? '1px solid #ffffff' : 'none',
+                  borderRadius: 6, fontWeight: 600, fontSize: 13,
                   cursor: isSaving ? 'not-allowed' : 'pointer',
-                  display: 'flex', alignItems: 'center', gap: 6,
                   transition: 'background 0.15s ease',
-                }}>
-                {!isSaving && (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <polyline points="20 6 9 17 4 12"/>
-                  </svg>
-                )}
+                }}
+                onMouseEnter={e => { if (!isSaving) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6' }}
+                onMouseLeave={e => { if (!isSaving) (e.currentTarget as HTMLButtonElement).style.background = '#ffffff' }}>
                 {isSaving ? '저장 중...' : '견적 확정'}
               </button>
             </div>
 
             {/* PDF — debounced 값 사용으로 깜빡임 방지 */}
             {isClient && (
-              <PDFViewer width="100%" height="100%" showToolbar={false} style={{ border: 'none' }}>
-                <QuotePDFDoc
-                  company={debouncedCompany}
-                  receiver={debouncedReceiver}
-                  quoteNo={quoteNo}
-                  dateDisplay={dateDisplay}
-                  titleItem={debouncedTitleItem}
-                  rows={debouncedRows}
-                  remarks={debouncedFinalRemarks}
-                  engineerName={engineerName}
-                  totalSupply={pdfTotalSupply}
-                  totalTax={pdfTotalTax}
-                  totalAmount={pdfTotalAmount}
-                  showWatermark={true}
-                />
-              </PDFViewer>
+              <div style={{ flex: 1, minWidth: 0, padding: 0, overflow: 'hidden' }}>
+                <BlobProvider document={
+                  <QuotePDFDoc
+                    company={debouncedCompany}
+                    receiver={debouncedReceiver}
+                    quoteNo={quoteNo}
+                    dateDisplay={dateDisplay}
+                    titleItem={debouncedTitleItem}
+                    rows={debouncedRows}
+                    remarks={debouncedFinalRemarks}
+                    engineerName={engineerName}
+                    totalSupply={pdfTotalSupply}
+                    totalTax={pdfTotalTax}
+                    totalAmount={pdfTotalAmount}
+                    showWatermark={true}
+                  />
+                }>
+                  {({ url }) => url ? (
+                    <iframe
+                      title="견적서 미리보기"
+                      src={`${url}#view=FitH&toolbar=0&navpanes=0&scrollbar=0`}
+                      style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+                    />
+                  ) : null}
+                </BlobProvider>
+              </div>
             )}
           </div>
         </div>

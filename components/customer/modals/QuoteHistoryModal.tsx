@@ -1,7 +1,8 @@
 'use client'
 
 import type { Customer, Quote } from '../types'
-import { CARD_BG, INPUT_BORDER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY, WHITE_BUTTON_BG, numKR, modalOverlayStyle } from '../constants'
+import { CARD_BG, INPUT_BORDER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY, WHITE_BUTTON_BG, numKR } from '../constants'
+import ModalOverlay from '@/components/common/ModalOverlay'
 import { SALES_STATUS_COLORS, getCategoryColor } from '@/lib/categoryColors'
 
 type Props = {
@@ -30,7 +31,7 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose }:
   ]
 
   return (
-    <div onClick={onClose} style={modalOverlayStyle}>
+    <ModalOverlay onClose={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 1100, maxHeight: '90vh', background: CARD_BG, borderRadius: 18, padding: 24, boxShadow: '0 12px 40px rgba(0,0,0,0.35)', border: `1px solid ${INPUT_BORDER}`, display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
@@ -100,6 +101,6 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose }:
           )}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

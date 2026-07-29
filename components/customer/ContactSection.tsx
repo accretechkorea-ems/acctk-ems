@@ -101,7 +101,7 @@ function ContactCard({ contact, onEdit }: { contact: Contact; onEdit: () => void
 
 export default function ContactSection({ contacts, onAdd, onEdit }: Props) {
   return (
-    <div style={{ marginBottom: 28 }}>
+    <div style={{ marginBottom: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
         <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#111827' }}>담당자</h2>
         {contacts.length > 0 && (
