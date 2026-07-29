@@ -2,12 +2,12 @@
 
 import { useState } from 'react'
 import type { Customer, Quote } from './types'
-import { INPUT_BORDER, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, WHITE_BUTTON_BG, numKR } from './constants'
+import { numKR } from './constants'
 
-const STATUS_CFG: Record<string, { bg: string; color: string }> = {
-  '활성': { bg: '#dcfce7', color: '#16a34a' },
-  '잠재': { bg: '#fef3c7', color: '#d97706' },
-  '이탈': { bg: '#fee2e2', color: '#dc2626' },
+const STATUS_CFG: Record<string, string> = {
+  '활성': '#22c55e',
+  '잠재': '#f59e0b',
+  '이탈': '#ef4444',
 }
 
 type Props = {
@@ -20,7 +20,7 @@ type Props = {
 
 export default function CustomerInfoPanel({ customer, quotes, totalRevenueAmt, onEdit, onQuoteHistoryOpen }: Props) {
   const [copied, setCopied] = useState(false)
-  const sc = STATUS_CFG[customer?.status ?? ''] ?? { bg: '#f3f4f6', color: TEXT_MUTED }
+  const sc = STATUS_CFG[customer?.status ?? ''] ?? '#9ca3af'
 
   const handleCopy = () => {
     if (!customer?.address) return
@@ -31,17 +31,17 @@ export default function CustomerInfoPanel({ customer, quotes, totalRevenueAmt, o
 
   return (
     <div style={{
-      background: '#ffffff', border: `1px solid ${INPUT_BORDER}`, borderRadius: 20,
-      padding: '22px 26px', marginBottom: 24, position: 'relative',
+      background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8,
+      padding: '16px 20px', marginBottom: 24, position: 'relative',
     }}>
       {/* 수정 버튼 */}
       <button
         onClick={onEdit}
         style={{
           position: 'absolute', top: 20, right: 20,
-          display: 'flex', alignItems: 'center', gap: 5, padding: '6px 13px',
-          background: '#f4f5f7', border: `1px solid ${INPUT_BORDER}`, borderRadius: 9,
-          cursor: 'pointer', fontSize: 13, fontWeight: 600, color: TEXT_SECONDARY,
+          display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px',
+          background: '#fff', border: '1px solid #ebebeb', borderRadius: 6,
+          cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#6b7280',
         }}
       >
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -52,64 +52,72 @@ export default function CustomerInfoPanel({ customer, quotes, totalRevenueAmt, o
       </button>
 
       {/* 회사명 + 상태 배지 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, color: TEXT_PRIMARY, lineHeight: 1.2 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#111827', lineHeight: 1.2 }}>
           {customer?.company_name ?? '업체 정보 없음'}
         </h1>
         {customer?.status && (
           <span style={{
-            fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 99,
-            background: sc.bg, color: sc.color, flexShrink: 0,
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontSize: 12, color: '#6b7280', flexShrink: 0,
           }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: sc, flexShrink: 0 }} />
             {customer.status}
           </span>
         )}
       </div>
 
       {/* 정보 행 */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={TEXT_MUTED} strokeWidth="2" style={{ flexShrink: 0 }}>
-            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
-            <circle cx="12" cy="10" r="3" />
-          </svg>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: '#9ca3af', width: 44, flexShrink: 0 }}>주소</span>
           <span style={{
-            color: customer?.address ? TEXT_SECONDARY : '#ef4444',
+            fontSize: 13,
+            color: customer?.address ? '#111827' : '#ef4444',
             fontWeight: customer?.address ? 400 : 600,
           }}>
             {customer?.address ?? '주소 정보 없음 — 수정 필요'}
           </span>
           {customer?.address && (
-            <button onClick={handleCopy} style={{
-              padding: '2px 9px', fontSize: 11, fontWeight: 700,
-              background: copied ? '#dcfce7' : '#eff4ff',
-              color: copied ? '#16a34a' : WHITE_BUTTON_BG,
-              border: 'none', borderRadius: 6, cursor: 'pointer',
-              transition: 'all 0.15s ease', flexShrink: 0,
-            }}>
-              {copied ? '복사됨' : '복사'}
+            <button onClick={handleCopy}
+              title="주소 복사"
+              onMouseEnter={e => { if (!copied) e.currentTarget.style.color = '#234ea2' }}
+              onMouseLeave={e => { if (!copied) e.currentTarget.style.color = '#9ca3af' }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', padding: 0,
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: copied ? '#22c55e' : '#9ca3af',
+                transition: 'color 0.15s ease', flexShrink: 0,
+              }}>
+              {copied ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+              )}
             </button>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, color: TEXT_SECONDARY }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={TEXT_MUTED} strokeWidth="2" style={{ flexShrink: 0 }}>
-            <rect x="2" y="7" width="20" height="14" rx="2" />
-            <path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16" />
-          </svg>
-          대리점 {customer?.agency ?? '-'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: '#9ca3af', width: 44, flexShrink: 0 }}>대리점</span>
+          <span style={{ fontSize: 13, color: '#111827' }}>{customer?.agency ?? '-'}</span>
         </div>
       </div>
 
       {/* 거래 이력 버튼 */}
-      <div style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${INPUT_BORDER}` }}>
+      <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid #ebebeb' }}>
         <button
           onClick={onQuoteHistoryOpen}
           style={{
-            padding: '8px 16px',
-            background: quotes.length > 0 ? '#eff4ff' : '#f4f5f7',
-            color: quotes.length > 0 ? WHITE_BUTTON_BG : TEXT_MUTED,
-            border: `1px solid ${quotes.length > 0 ? '#c7d7f8' : INPUT_BORDER}`,
-            borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer',
+            padding: '6px 12px',
+            background: '#fff',
+            color: '#6b7280',
+            border: '1px solid #ebebeb',
+            borderRadius: 6, fontWeight: 600, fontSize: 13, cursor: 'pointer',
             display: 'inline-flex', alignItems: 'center', gap: 8,
           }}
         >
