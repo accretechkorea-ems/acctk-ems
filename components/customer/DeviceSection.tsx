@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import type { Device, ServiceHistory } from './types'
-import { INPUT_BORDER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY, WHITE_BUTTON_BG, WHITE_BUTTON_TEXT } from './constants'
+import { INPUT_BORDER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY } from './constants'
 import { getInstallDisplay, getDefaultImageUrl } from './utils'
 import { SERVICE_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 
@@ -136,22 +136,23 @@ function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditServic
 
   return (
     <div style={{
-      minWidth: 300, maxWidth: 300, background: '#ffffff', borderRadius: 18, padding: 16,
-      border: `1px solid ${INPUT_BORDER}`, flex: '0 0 auto', position: 'relative',
-      alignSelf: 'flex-start', boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+      minWidth: 300, maxWidth: 300, background: '#ffffff', borderRadius: 8, padding: '14px 16px',
+      border: '1px solid #ebebeb', flex: '0 0 auto', position: 'relative',
+      alignSelf: 'flex-start',
     }}>
       {/* 수정 버튼 */}
       <button
         onClick={onEditDevice}
+        onMouseEnter={(e) => (e.currentTarget.style.color = '#234ea2')}
+        onMouseLeave={(e) => (e.currentTarget.style.color = '#9ca3af')}
         style={{
           position: 'absolute', top: 12, right: 12, zIndex: 2,
-          width: 28, height: 28, borderRadius: '50%',
-          background: '#f4f5f7', border: 'none', cursor: 'pointer',
+          padding: 0, background: 'none', border: 'none', cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: TEXT_MUTED,
+          color: '#9ca3af', transition: 'color 0.15s ease',
         }}
       >
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
           <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
         </svg>
@@ -159,8 +160,9 @@ function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditServic
 
       {/* 이미지 영역 */}
       <div style={{
-        height: 170, borderRadius: 12, background: '#f4f5f7',
-        marginBottom: 14, overflow: 'hidden',
+        aspectRatio: '4 / 3', borderRadius: 6, background: 'transparent',
+        border: (d.image_url || defaultImg) ? 'none' : '1px dashed #ebebeb',
+        overflow: 'hidden',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         {d.image_url ? (
@@ -175,48 +177,41 @@ function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditServic
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
             }}
           >
-            <div style={{
-              width: 40, height: 40, borderRadius: '50%', background: '#e8edf8',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={WHITE_BUTTON_BG} strokeWidth="2">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <circle cx="8.5" cy="8.5" r="1.5" />
-                <polyline points="21 15 16 10 5 21" />
-              </svg>
-            </div>
-            <span style={{ fontSize: 11, color: TEXT_MUTED, fontWeight: 600 }}>사진 등록</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <polyline points="21 15 16 10 5 21" />
+            </svg>
+            <span style={{ fontSize: 12, color: '#9ca3af', fontWeight: 600 }}>사진 등록</span>
           </button>
         )}
       </div>
 
       {/* 장비명 */}
       <div style={{
-        fontSize: 15, fontWeight: 800, color: TEXT_PRIMARY, textAlign: 'center',
+        fontSize: 15, fontWeight: 700, color: '#111827', textAlign: 'center',
         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        marginBottom: 8, padding: '0 4px',
+        marginTop: 10, padding: '0 4px',
       }} title={deviceTitle || '-'}>
         {deviceTitle || '-'}
       </div>
 
       {/* 스펙 정보 */}
-      <div style={{ fontSize: 12, color: TEXT_SECONDARY, textAlign: 'center', marginBottom: 3 }}>
-        S/N: {d.serial_number ?? '-'} &nbsp;|&nbsp; {d.program ?? '-'}
+      <div style={{ fontSize: 12, color: '#6b7280', textAlign: 'center', marginTop: 4 }}>
+        S/N: {d.serial_number ?? '-'}<span style={{ color: '#d1d5db' }}> · </span>{d.program ?? '-'}
       </div>
-      <div style={{ fontSize: 12, color: TEXT_MUTED, textAlign: 'center', marginBottom: 8 }}>
-        납입: {getInstallDisplay(d)}
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 8, marginTop: 2, marginBottom: 14 }}>
+        <span style={{ fontSize: 12, color: '#9ca3af' }}>납입: {getInstallDisplay(d)}</span>
         {d.packing_list_url ? (
           <button
             onClick={onOpenPacking}
-            style={{
-              fontSize: 11, fontWeight: 700, color: WHITE_BUTTON_BG,
-              background: '#eff4ff', border: '1px solid #cfe0ff', borderRadius: 7,
-              padding: '5px 10px', cursor: 'pointer', whiteSpace: 'nowrap',
-            }}
+            title="패킹리스트 열기"
+            style={{ padding: 2, background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3, color: '#234ea2' }}
           >
-            납입의사록•패킹리스트
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+            </svg>
+            <span style={{ fontSize: 11 }}>패킹리스트</span>
           </button>
         ) : (
           <>
@@ -233,13 +228,15 @@ function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditServic
             />
             <button
               onClick={() => packingInputRef.current?.click()}
-              style={{
-                fontSize: 11, fontWeight: 600, color: TEXT_MUTED,
-                background: '#f4f5f7', border: `1px solid ${INPUT_BORDER}`, borderRadius: 7,
-                padding: '5px 10px', cursor: 'pointer', whiteSpace: 'nowrap',
-              }}
+              title="납입의사록·패킹리스트 업로드"
+              onMouseEnter={(e) => (e.currentTarget.style.color = '#234ea2')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = '#9ca3af')}
+              style={{ padding: 2, background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3, color: '#9ca3af', transition: 'color 0.15s ease' }}
             >
-              납입의사록•패킹리스트 업로드
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+              </svg>
+              <span style={{ fontSize: 11 }}>패킹리스트 등록</span>
             </button>
           </>
         )}
@@ -249,8 +246,8 @@ function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditServic
       <button
         onClick={onAddService}
         style={{
-          width: '100%', padding: '9px 14px', background: WHITE_BUTTON_BG, color: WHITE_BUTTON_TEXT,
-          borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, marginBottom: 12,
+          width: '100%', padding: '8px 12px', background: '#234ea2', color: '#fff',
+          borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, marginBottom: 12,
         }}
       >
         서비스 레포트 추가
@@ -286,15 +283,10 @@ export default function DeviceSection({ devices, historyByDevice, onAddDevice, o
   return (
     <div style={{ marginBottom: 28 }}>
       {/* 섹션 헤더 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: TEXT_PRIMARY }}>장비</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#111827' }}>장비</h2>
         {devices.length > 0 && (
-          <span style={{
-            fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
-            background: '#eff4ff', color: WHITE_BUTTON_BG,
-          }}>
-            {devices.length}
-          </span>
+          <span style={{ fontSize: 12, color: '#9ca3af' }}>총 {devices.length}대</span>
         )}
       </div>
 
@@ -322,26 +314,23 @@ export default function DeviceSection({ devices, historyByDevice, onAddDevice, o
           style={{
             minWidth: 300, minHeight: 460, flex: '0 0 auto',
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
-            background: '#ffffff', border: `2px dashed ${INPUT_BORDER}`, borderRadius: 18,
-            cursor: 'pointer', color: TEXT_MUTED, fontSize: 13, fontWeight: 600,
+            background: 'transparent', border: '1px dashed #d1d5db', borderRadius: 8,
+            cursor: 'pointer', color: '#6b7280', fontSize: 13, fontWeight: 600,
             transition: 'all 0.15s ease', alignSelf: 'flex-start',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = '#234ea2'
-            e.currentTarget.style.color = '#234ea2'
-            e.currentTarget.style.background = '#f8faff'
+            e.currentTarget.style.borderColor = '#9ca3af'
+            e.currentTarget.style.background = '#fafafa'
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = INPUT_BORDER
-            e.currentTarget.style.color = TEXT_MUTED
-            e.currentTarget.style.background = '#ffffff'
+            e.currentTarget.style.borderColor = '#d1d5db'
+            e.currentTarget.style.background = 'transparent'
           }}
         >
-          <div style={{
-            width: 40, height: 40, borderRadius: '50%', background: '#f4f5f7',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 22, fontWeight: 700, lineHeight: 1,
-          }}>+</div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
           장비 추가
         </button>
       </div>
