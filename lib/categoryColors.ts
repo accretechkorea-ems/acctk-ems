@@ -13,6 +13,25 @@ export const SERVICE_TYPE_COLORS = {
   '유선기술지원':  { text: '#0f766e', bg: '#f0fdfa', dot: '#14b8a6' },
 } as const satisfies Record<string, CategoryColor>;
 
+/* 차트 그래픽 전용 팔레트 (활동 현황 dot 색과 동일 값).
+   서비스 유형 의미와 어긋나지 않도록 SERVICE_TYPE_COLORS 와 분리한 별도 상수. */
+export const CHART_COLORS = {
+  blue:   '#3b82f6',
+  violet: '#8b5cf6',
+  amber:  '#f59e0b',
+  rose:   '#f43f5e',
+  green:  '#22c55e',
+  teal:   '#14b8a6',
+} as const;
+
+/* 수리 상태 색 — CHART_COLORS 값 재사용 (목록 dot·대시보드 도넛에서 공유) */
+export const REPAIR_STATUS_COLORS = {
+  '입고':     '#f43f5e',  // rose
+  '수리중':   '#f59e0b',  // amber
+  '출고대기': '#22c55e',  // green
+  '출고완료': '#3b82f6',  // blue
+} as const;
+
 /* 실적/견적 상태 — quotes.status 단일 컬럼(견적~발주 전 생애주기)이므로 맵도 하나 */
 export const SALES_STATUS_COLORS = {
   '견적중':          { text: '#b45309', bg: '#fffbeb' },

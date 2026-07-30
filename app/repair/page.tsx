@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRepairs, type Repair, type RepairStatus } from '@/hooks/useRepairs'
 import { useRepairAuth } from '@/hooks/useRepairAuth'
 import RepairEditModal from '@/components/repair/RepairEditModal'
 import SegmentedControl from '@/components/common/SegmentedControl'
+import AutocompleteInput from '@/components/common/AutocompleteInput'
+import { REPAIR_STATUS_COLORS } from '@/lib/categoryColors'
 
 // ── 색상 (기존 페이지 컨벤션과 동일) ──
 const BLUE = '#234ea2'
@@ -21,14 +23,19 @@ const GRAY = '#6b7280'
 const MUTED = '#9ca3af'
 const ACTIVE_BG = '#f1f1f1' // 필터 활성 배경 (중립)
 
-const STATUSES: RepairStatus[] = ['입고', '수리중', '출고대기', '출고완료']
+// 목록 컬럼 폭 (한 곳에만 정의 — 수리 진행 중 블록·전체 목록이 동일하게 참조)
+// 순번·구분·입고일·회사명·제품구분·시리얼번호·출고일·상태·수정
+const COL_WIDTHS = [52, 58, 104, 174, 148, 140, 104, 176, 44]
 
-// 상태 dot 색 (배경·테두리 없이 dot 으로만 상태 구분)
-const STATUS_DOT: Record<RepairStatus, string> = {
-  '입고': '#9ca3af',
-  '수리중': '#f59e0b',
-  '출고대기': '#22c55e',
-  '출고완료': '#3b82f6',
+// 자동완성 후보: 빈 값·null 제외, 사용 빈도 높은 순 정렬
+const freqSorted = (values: (string | null | undefined)[]): string[] => {
+  const count = new Map<string, number>()
+  for (const v of values) {
+    const s = (v ?? '').trim()
+    if (!s) continue
+    count.set(s, (count.get(s) ?? 0) + 1)
+  }
+  return [...count.entries()].sort((a, b) => b[1] - a[1]).map(([s]) => s)
 }
 
 // 현재 상태에서 누를 수 있는 다음 단계 (버튼 라벨 → 전환될 상태)
@@ -115,6 +122,8 @@ export default function RepairPage() {
   const [page, setPage] = useState(0)
   const [editing, setEditing] = useState<Repair | null>(null)
   const [isEditSaving, setIsEditSaving] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false) // 검색 줄 열림/닫힘 (초기 닫힘)
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   // ── KPI '출고완료' 카드 + 그래프 기준 월 ──
   const [viewMonth, setViewMonth] = useState(monthKey(todayStr()))
@@ -293,6 +302,16 @@ export default function RepairPage() {
   const applySearch = () => setSearch(searchInput)
   const resetSearchAndDate = () => { setSearchInput(''); setSearch(''); setDateBasis('received'); setDateMonth('') }
 
+  // 검색어 또는 월 필터가 실제로 적용돼 있으면 아이콘에 활성 점 표시
+  const searchActive = search.trim() !== '' || dateMonth !== ''
+  // 아이콘 토글: 열릴 때 입력창 포커스
+  const toggleSearch = () => {
+    setSearchOpen(open => {
+      if (!open) setTimeout(() => searchInputRef.current?.focus(), 220)
+      return !open
+    })
+  }
+
   const filteredRepairs = useMemo(
     () => repairs.filter(r => {
       if (statusFilter !== '전체' && r.status !== statusFilter) return false
@@ -324,6 +343,8 @@ export default function RepairPage() {
 
   // 수리 진행 중(수리중) — 항상 상단 고정 표시 (구분 필터는 반영)
   const repairingList = repairs.filter(r => r.status === '수리중' && (categoryFilter === '전체' || r.item_type === categoryFilter))
+  // 출고 대기 — 항상 상단 고정 표시 (구분 필터는 반영, 수리 진행 중과 동일 방식)
+  const waitingList = repairs.filter(r => r.status === '출고대기' && (categoryFilter === '전체' || r.item_type === categoryFilter))
 
   // ── 순번 (자동): 입고일 내림차순 목록에서 최신이 큰 번호 ──
   const seqMap = useMemo(() => {
@@ -331,6 +352,10 @@ export default function RepairPage() {
     repairs.forEach((r, i) => m.set(r.repair_id, repairs.length - i))
     return m
   }, [repairs])
+
+  // ── 자동완성 후보 (이미 로드된 repairs 에서 고유값 추출, 별도 쿼리 없음) ──
+  const customerNameOptions = useMemo(() => freqSorted(repairs.map(r => r.customer_name)), [repairs])
+  const productTypeOptions = useMemo(() => freqSorted(repairs.map(r => r.product_type)), [repairs])
 
   // ── 엑셀 미리보기 ──
   const importPreview = useMemo(() => importRows.map(row => {
@@ -382,17 +407,19 @@ export default function RepairPage() {
       <td style={td}>{r.product_type || '-'}</td>
       <td style={td}>{r.serial_number || '-'}</td>
       <td style={{ ...td, textAlign: 'center', color: GRAY }}>{r.shipped_date || '-'}</td>
-      <td style={{ ...td, textAlign: 'center' }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_DOT[r.status], flexShrink: 0 }} />
+      <td style={{ ...td, overflow: 'visible' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', width: 76, flexShrink: 0 }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: REPAIR_STATUS_COLORS[r.status], flexShrink: 0 }} />
             <span style={{ fontSize: 13, color: TEXT }}>{r.status}</span>
           </span>
           {NEXT_ACTION[r.status] && (
-            <button onClick={() => advanceStatus(r, NEXT_ACTION[r.status]!.next)}
-              style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: GRAY, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              {NEXT_ACTION[r.status]!.label}
-            </button>
+            <span style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+              <button onClick={() => advanceStatus(r, NEXT_ACTION[r.status]!.next)}
+                style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: GRAY, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                {NEXT_ACTION[r.status]!.label}
+              </button>
+            </span>
           )}
         </div>
       </td>
@@ -413,9 +440,10 @@ export default function RepairPage() {
 
   const renderTable = (list: Repair[]) => (
     <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1000 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1000, tableLayout: 'fixed' }}>
+        <colgroup>{COL_WIDTHS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
         <thead>
-          <tr style={{ borderBottom: `1px solid ${BORDER}`, color: GRAY, fontSize: 12 }}>
+          <tr style={{ borderBottom: '1px solid #d1d5db', color: TEXT, fontSize: 13 }}>
             <th style={{ ...th, textAlign: 'center' }}>순번</th>
             <th style={{ ...th, textAlign: 'center' }}>구분</th>
             <th style={th}>입고일</th>
@@ -423,7 +451,7 @@ export default function RepairPage() {
             <th style={th}>제품 구분</th>
             <th style={th}>시리얼번호</th>
             <th style={{ ...th, textAlign: 'center' }}>출고일</th>
-            <th style={{ ...th, textAlign: 'center' }}>상태</th>
+            <th style={th}>상태</th>
             <th style={{ ...th, textAlign: 'center' }}></th>
           </tr>
         </thead>
@@ -440,17 +468,8 @@ export default function RepairPage() {
 
       <div style={{ maxWidth: 1080, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-        {/* ── 페이지 제목 + 대시보드 이동 ── */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontSize: 20, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>수리 현황</div>
-          <button onClick={() => router.push('/repair/dashboard')}
-            style={{ padding: '6px 12px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: GRAY, fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            대시보드 →
-          </button>
-        </div>
-
-        {/* ── KPI 카드 ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }} className="repair-kpi">
+        {/* ── KPI 카드 (+ 대시보드 이동) ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }} className="repair-kpi">
           <div style={card}>
             <div style={{ fontSize: 12, color: MUTED, fontWeight: 600, marginBottom: 6 }}>보유 수리품</div>
             <div style={{ fontSize: 24, fontWeight: 700, color: TEXT, lineHeight: 1 }}>
@@ -472,13 +491,23 @@ export default function RepairPage() {
               {kpiShippedThisMonth}<span style={{ fontSize: 13, fontWeight: 700, color: MUTED, marginLeft: 3 }}>건</span>
             </div>
           </div>
+          {/* 대시보드 이동 (KPI 그리드 5번째 칸) */}
+          <button onClick={() => router.push('/repair/dashboard')} tabIndex={-1}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = MUTED; e.currentTarget.style.background = '#fafafa' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.background = '#fff' }}
+            style={{ ...card, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', color: GRAY, fontSize: 13, fontWeight: 700, transition: 'border-color 0.15s ease, background 0.15s ease' }}>
+            대시보드
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+            </svg>
+          </button>
         </div>
 
         {/* ── 새 수리품 접수 등록 ── */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>입고 등록</div>
-            <button onClick={openImport}
+            <button onClick={openImport} tabIndex={-1}
               style={{ padding: '6px 12px', border: `1px solid ${BORDER}`, borderRadius: 6, background: '#fff', color: GRAY, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
               엑셀 일괄 등록
             </button>
@@ -488,32 +517,33 @@ export default function RepairPage() {
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }} className="repair-form-row">
             <div style={fieldGroup}>
               <label style={label}>구분</label>
-              <div style={{ display: 'flex', height: 36, border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden' }}>
-                {CATEGORIES.map(c => (
-                  <button key={c} type="button" onClick={() => setFormCategory(c)}
-                    style={{ padding: '0 16px', border: 'none', background: formCategory === c ? BLUE : '#fff', color: formCategory === c ? '#fff' : GRAY, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                    {c}
-                  </button>
-                ))}
-              </div>
+              <SegmentedControl
+                options={[...CATEGORIES]}
+                value={formCategory}
+                onChange={v => setFormCategory(v as Category)}
+                equal
+                height={36}
+                minItemWidth={64}
+                itemTabIndex={-1}
+              />
             </div>
             <div style={{ ...fieldGroup, width: 150, flexShrink: 0 }}>
               <label style={label}>입고일</label>
-              <input type="date" value={receivedDate} onChange={e => setReceivedDate(e.target.value)} style={inp} />
+              <input type="date" value={receivedDate} onChange={e => setReceivedDate(e.target.value)} style={inp} tabIndex={-1} />
             </div>
             <div style={{ ...fieldGroup, flex: 1, minWidth: 0 }}>
               <label style={label}>회사명</label>
-              <input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="회사명 입력" style={inp} />
+              <AutocompleteInput value={customerName} onChange={setCustomerName} suggestions={customerNameOptions} placeholder="회사명 입력" style={inp} tabIndex={1} />
             </div>
             <div style={{ ...fieldGroup, flex: 1, minWidth: 0 }}>
               <label style={label}>제품 구분</label>
-              <input value={productType} onChange={e => setProductType(e.target.value)} placeholder="예: E-TS-4182-P6" style={inp} />
+              <AutocompleteInput value={productType} onChange={setProductType} suggestions={productTypeOptions} placeholder="예: E-TS-4182-P6" style={inp} tabIndex={2} />
             </div>
             <div style={{ ...fieldGroup, flex: 1, minWidth: 0 }}>
               <label style={label}>시리얼번호</label>
-              <input value={serialNumber} onChange={e => setSerialNumber(e.target.value)} placeholder="시리얼번호" style={inp} />
+              <input value={serialNumber} onChange={e => setSerialNumber(e.target.value)} placeholder="시리얼번호" style={inp} tabIndex={3} />
             </div>
-            <button onClick={handleSubmit} disabled={isSaving}
+            <button onClick={handleSubmit} disabled={isSaving} tabIndex={4}
               style={{ height: 36, padding: '0 18px', flexShrink: 0, border: 'none', borderRadius: 6, background: isSaving ? MUTED : BLUE, color: '#fff', fontSize: 14, fontWeight: 700, cursor: isSaving ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
               {isSaving ? '등록 중...' : '접수 등록'}
             </button>
@@ -522,27 +552,62 @@ export default function RepairPage() {
 
         {/* ── 수리품 목록 ── */}
         <div style={card}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+          <div className="repair-list-header" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, gap: 8 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>수리품 목록 <span style={{ color: MUTED, fontWeight: 700 }}>({hasFilter ? `${filteredRepairs.length} / ${repairs.length}` : repairs.length})</span></div>
-            <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
+            {/* 정중앙(absolute): 구분 필터 — 좌우 요소 폭과 무관하게 카드 중앙. 좁은 화면은 CSS 로 아래 줄 처리 */}
+            <div className="repair-cat-center" style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}>
+              {/* 표시 순서만 게이지·전체·앰프, 값·로직 동일 */}
               <SegmentedControl
-                options={['전체', ...CATEGORIES]}
+                options={['게이지', '전체', '앰프']}
                 value={categoryFilter}
                 onChange={v => setCategoryFilter(v as '전체' | Category)}
+                equal
+                minItemWidth={64}
               />
+            </div>
+            {/* 우: 상태 필터 + 검색 아이콘 토글 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {/* 수리중·출고대기는 고정 블록으로 항상 노출되므로 필터에서 제외 */}
               <SegmentedControl
-                options={['전체', ...STATUSES]}
+                options={['전체', '입고', '출고완료']}
                 value={statusFilter}
                 onChange={v => setStatusFilter(v as '전체' | RepairStatus)}
+                equal
+                minItemWidth={64}
               />
+              <button
+                onClick={toggleSearch}
+                title="검색"
+                onMouseEnter={e => (e.currentTarget.style.color = BLUE)}
+                onMouseLeave={e => (e.currentTarget.style.color = searchOpen ? BLUE : MUTED)}
+                style={{
+                  position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  padding: 4, border: 'none', cursor: 'pointer',
+                  background: searchOpen ? ACTIVE_BG : 'transparent', borderRadius: 6,
+                  color: searchOpen ? BLUE : MUTED, transition: 'color 0.15s ease, background 0.15s ease',
+                }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                {searchActive && (
+                  <span style={{ position: 'absolute', top: 2, right: 2, width: 6, height: 6, borderRadius: '50%', background: BLUE }} />
+                )}
+              </button>
             </div>
           </div>
 
-          {/* ── 검색 + 날짜 필터 ── */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 14, flexWrap: 'wrap' }}>
+          {/* ── 검색 + 날짜 필터 (슬라이드) ── */}
+          <div style={{
+            overflow: 'hidden',
+            maxHeight: searchOpen ? 80 : 0,
+            opacity: searchOpen ? 1 : 0,
+            transition: 'max-height 220ms cubic-bezier(0.4, 0, 0.2, 1), opacity 160ms ease',
+          }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 24, marginBottom: 14, flexWrap: 'wrap' }}>
             {/* 검색 그룹 */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <input
+                ref={searchInputRef}
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') applySearch() }}
@@ -578,6 +643,7 @@ export default function RepairPage() {
               </button>
             </div>
           </div>
+          </div>
 
           {loading ? (
             <div style={{ padding: '40px 0', textAlign: 'center', color: MUTED, fontSize: 14 }}>불러오는 중...</div>
@@ -593,6 +659,18 @@ export default function RepairPage() {
                   </div>
                   <div style={{ border: `1px solid #fde68a`, borderRadius: 10, overflow: 'hidden', background: '#fffdf7' }}>
                     {renderTable(repairingList)}
+                  </div>
+                </div>
+              )}
+
+              {/* 출고 대기 — 항상 상단 고정 (수리 진행 중과 동일 구조, 초록 테마) */}
+              {waitingList.length > 0 && (
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#15803d', marginBottom: 8 }}>
+                    출고 대기 <span style={{ color: MUTED }}>({waitingList.length})</span>
+                  </div>
+                  <div style={{ border: `1px solid #bbf7d0`, borderRadius: 10, overflow: 'hidden', background: '#f8fffe' }}>
+                    {renderTable(waitingList)}
                   </div>
                 </div>
               )}
@@ -713,13 +791,22 @@ export default function RepairPage() {
           .repair-kpi { grid-template-columns: 1fr 1fr !important; }
           .repair-form-row { flex-direction: column !important; align-items: stretch !important; }
         }
+        /* 카드 폭이 부족하면 정중앙 구분 필터를 아래 줄로 내려 좌우 요소와 겹치지 않게 한다 */
+        @media (max-width: 880px) {
+          .repair-list-header { flex-wrap: wrap; }
+          .repair-cat-center {
+            position: static !important; transform: none !important;
+            order: 2; width: 100%; margin-top: 10px;
+            display: flex; justify-content: center;
+          }
+        }
       `}</style>
     </div>
   )
 }
 
 const th: React.CSSProperties = { textAlign: 'left', padding: '8px 10px', fontWeight: 600, whiteSpace: 'nowrap' }
-const td: React.CSSProperties = { padding: '7px 10px', color: TEXT, verticalAlign: 'middle' }
+const td: React.CSSProperties = { padding: '7px 10px', color: TEXT, verticalAlign: 'middle', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
 
 // ── 서브 컴포넌트 ──
 function KpiCard({ title, value, unit, sub }: { title: string; value: number; unit: string; sub?: string }) {
@@ -736,7 +823,7 @@ function KpiCard({ title, value, unit, sub }: { title: string; value: number; un
 
 function MonthBtn({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
   return (
-    <button onClick={onClick}
+    <button onClick={onClick} tabIndex={-1}
       style={{ width: 22, height: 22, borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: GRAY, cursor: 'pointer', fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
       {children}
     </button>

@@ -10,7 +10,8 @@
       "Bash(python3 -c \"import pptx; print\\(pptx.__version__\\)\")",
       "Bash(pip install *)",
       "Bash(which python3 *)",
-      "Read(//usr/**)"
+      "Read(//usr/**)",
+      "Bash(git commit -m 'feat\\(repair\\): 목록 검색·필터 개선 및 수정 모달 추가 *)"
     ]
   }
 }

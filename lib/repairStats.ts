@@ -204,6 +204,74 @@ export function cumulativeFlow(rows: Repair[]): { month: string; cumReceived: nu
   })
 }
 
+/**
+ * 월별 미출고 잔량(월말 사내 보유 건수) + 그 달 접수/출고/순증감.
+ * 축은 전체(접수·출고) 월 범위를 빈 달 포함해 채운다. 데이터 없으면 빈 배열.
+ *
+ * 각 월 M(그 달 마지막 날 endM) 기준 '사내 보유(잔량)' 판정 — received_date <= endM 이고 아직 미출고:
+ *   1) status === '출고완료' → 출고된 것으로 본다 → 잔량 제외 (shipped_date 없어도 마찬가지. 46건이 이 경우)
+ *   2) status !== '출고완료' → shipped_date 유무로 판정
+ *      - shipped_date 있으면 그 날짜가 endM 이후(월말 이후)일 때만 잔량에 포함
+ *      - shipped_date 없으면 잔량에 포함
+ * received = 그 달 접수 건수, shipped = 그 달 출고(shipped_date 기준) 건수, net = received - shipped.
+ */
+export function monthlyBacklog(rows: Repair[]): { month: string; backlog: number; received: number; shipped: number; net: number }[] {
+  const months = new Set<string>()
+  const recByMonth = new Map<string, number>()
+  const shpByMonth = new Map<string, number>()
+  for (const r of rows) {
+    const rm = monthOf(r.received_date)
+    if (rm) { months.add(rm); recByMonth.set(rm, (recByMonth.get(rm) ?? 0) + 1) }
+    const sm = monthOf(r.shipped_date)
+    if (sm) { months.add(sm); shpByMonth.set(sm, (shpByMonth.get(sm) ?? 0) + 1) }
+  }
+  if (months.size === 0) return []
+  const sorted = [...months].sort()
+  return fillMonthRange(sorted[0], sorted[sorted.length - 1]).map(m => {
+    const [y, mo] = m.split('-').map(Number)
+    const endM = new Date(Date.UTC(y, mo, 0)) // 그 달 마지막 날
+    let backlog = 0
+    for (const r of rows) {
+      const rec = parseDate(r.received_date)
+      if (!rec || rec > endM) continue        // 아직 입고 전
+      if (r.status === '출고완료') continue    // 출고된 것으로 봄 (dateless 포함)
+      const shp = parseDate(r.shipped_date)
+      if (shp && shp <= endM) continue         // 월말까지 출고됨
+      backlog++
+    }
+    const received = recByMonth.get(m) ?? 0
+    const shipped = shpByMonth.get(m) ?? 0
+    return { month: m, backlog, received, shipped, net: received - shipped }
+  })
+}
+
+/**
+ * 월별 평균 소요일 추이. 각 달의 값 = '그 달에 출고된' 건들의 avgLeadTime.
+ * 축은 전체 데이터(접수·출고)의 최소~최대 월 범위를 빈 달 포함해 채워 연속성 유지.
+ * 해당 월에 출고된 건이 없으면 avg = null (라인이 끊기도록). 전체 데이터 없으면 빈 배열.
+ */
+export function monthlyLeadTime(rows: Repair[]): { month: string; avg: number | null }[] {
+  const shippedByMonth = new Map<string, Repair[]>()
+  const months = new Set<string>()
+  for (const r of rows) {
+    const rm = monthOf(r.received_date)
+    if (rm) months.add(rm)
+    const sm = monthOf(r.shipped_date)
+    if (sm) {
+      months.add(sm)
+      const a = shippedByMonth.get(sm) ?? []
+      a.push(r)
+      shippedByMonth.set(sm, a)
+    }
+  }
+  if (months.size === 0) return []
+  const sorted = [...months].sort()
+  return fillMonthRange(sorted[0], sorted[sorted.length - 1]).map(m => {
+    const rs = shippedByMonth.get(m)
+    return { month: m, avg: rs ? avgLeadTime(rs) : null }
+  })
+}
+
 /** d 의 ISO-8601 주차 키 'YYYY-Www' (월요일 시작, 목요일 기준). */
 function isoWeekKey(d: Date): string {
   const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
@@ -232,4 +300,53 @@ export function weeklyPattern(rows: Repair[]): { week: string; count: number }[]
   return [...map.entries()]
     .map(([week, count]) => ({ week, count }))
     .sort((a, b) => a.week.localeCompare(b.week))
+}
+
+/** 해당 UTC 날짜가 속한 주의 월요일(00:00 UTC). */
+function mondayOf(d: Date): Date {
+  const day = (d.getUTCDay() + 6) % 7 // Mon=0 … Sun=6
+  const m = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
+  m.setUTCDate(m.getUTCDate() - day)
+  return m
+}
+
+/**
+ * 최근 N주(기본 8주, 오늘이 속한 주 포함) 구분별 접수 건수.
+ *  - received_date 기준 집계. 주 시작 = 월요일(ISO). 라벨 = 주 시작일 'M/D'.
+ *  - 접수 0건인 주도 0으로 채운다(구간 비지 않게).
+ *  - item_type 이 '게이지'/'앰프' 가 아니거나 null 이면 제외(반환값에 포함하지 않음).
+ */
+export function weeklyByType(rows: Repair[], weeks = 8): { week: string; gauge: number; amp: number }[] {
+  const now = new Date()
+  const todayUTC = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
+  const thisMonday = mondayOf(todayUTC)
+
+  const buckets = new Map<number, { gauge: number; amp: number }>()
+  const order: number[] = []
+  for (let i = weeks - 1; i >= 0; i--) {
+    const w = new Date(thisMonday.getTime())
+    w.setUTCDate(w.getUTCDate() - i * 7)
+    buckets.set(w.getTime(), { gauge: 0, amp: 0 })
+    order.push(w.getTime())
+  }
+  const first = order[0]
+  const last = order[order.length - 1]
+
+  for (const r of rows) {
+    if (r.item_type !== '게이지' && r.item_type !== '앰프') continue
+    const rec = parseDate(r.received_date)
+    if (!rec) continue
+    const mt = mondayOf(rec).getTime()
+    if (mt < first || mt > last) continue
+    const b = buckets.get(mt)
+    if (!b) continue
+    if (r.item_type === '게이지') b.gauge++
+    else b.amp++
+  }
+
+  return order.map(t => {
+    const d = new Date(t)
+    const b = buckets.get(t)!
+    return { week: `${d.getUTCMonth() + 1}/${d.getUTCDate()}`, gauge: b.gauge, amp: b.amp }
+  })
 }

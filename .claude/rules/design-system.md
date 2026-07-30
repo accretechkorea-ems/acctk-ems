@@ -61,7 +61,9 @@ paths:
 
 - 폰트: Pretendard (`--font-sans`, globals.css). 숫자 정렬은 `.num`
   (`font-variant-numeric: tabular-nums; letter-spacing: -0.01em`).
-- 코드에 실재하는 size: **11 / 12 / 13 / 15 / 17 / 20**. 이 외 신규 금지.
+- font-size: 11 / 12 / 13 / 14 / 15 / 16 / 17 / 20 px 외 신규 사용 금지
+- 예외: 대시보드 KPI 값 등 디스플레이 용도에 한해 24 / 28 허용
+- 소수점 크기(12.5 등) 금지
 - weight: 본문·라벨 ≤600, 카드/모달 제목·버튼·배지 700, 대형 제목 800.
 - **letter-spacing**: 17px 이상 제목(`-0.3px`)과 20px 숫자(`-0.5px`)에만 음수 자간.
   16px 이하는 자간 없음. (CustomerCard 제목 17px 포함 — `-0.3px`)

@@ -18,11 +18,19 @@ type Props = {
   options: Array<string | Option>
   value: string
   onChange: (v: string) => void
+  /** true 면 모든 항목이 같은 폭(grid minmax(0,1fr)). 기본 false = 내용 폭(inline-flex). */
+  equal?: boolean
+  /** 컨트롤 총 높이(px). 지정 시 버튼이 트랙 높이를 채운다. 미지정 시 버튼 30 + 패딩 6 = 36. */
+  height?: number
+  /** equal 일 때 각 항목의 최소 폭(px). 지정 시 minmax(minItemWidth, 1fr). 미지정 시 minmax(0, 1fr). */
+  minItemWidth?: number
+  /** 각 버튼의 tabIndex. 미지정 시 기본(0). -1 이면 키보드 탭 순회에서 제외(클릭은 유지). */
+  itemTabIndex?: number
 }
 
 const norm = (o: string | Option): Option => (typeof o === 'string' ? { label: o, value: o } : o)
 
-export default function SegmentedControl({ options, value, onChange }: Props) {
+export default function SegmentedControl({ options, value, onChange, equal = false, height, minItemWidth, itemTabIndex }: Props) {
   const opts = options.map(norm)
   const containerRef = useRef<HTMLDivElement>(null)
   const btnRefs = useRef<(HTMLButtonElement | null)[]>([])
@@ -56,11 +64,16 @@ export default function SegmentedControl({ options, value, onChange }: Props) {
     }
   }, [ind, animate])
 
+  const containerStyle: React.CSSProperties = {
+    position: 'relative', background: '#f5f5f5', borderRadius: 8, padding: 3, gap: 0,
+    ...(equal
+      ? { display: 'grid', gridTemplateColumns: `repeat(${opts.length}, minmax(${minItemWidth != null ? `${minItemWidth}px` : 0}, 1fr))` }
+      : { display: 'inline-flex' }),
+    ...(height != null ? { height } : {}),
+  }
+
   return (
-    <div ref={containerRef} style={{
-      position: 'relative', display: 'inline-flex', background: '#f5f5f5',
-      borderRadius: 8, padding: 3, gap: 0,
-    }}>
+    <div ref={containerRef} style={containerStyle}>
       {ind && (
         <div style={{
           position: 'absolute', top: 3, bottom: 3, left: 0, width: ind.width,
@@ -75,9 +88,10 @@ export default function SegmentedControl({ options, value, onChange }: Props) {
       {opts.map((o, i) => {
         const active = o.value === value
         return (
-          <button key={o.value} ref={el => { btnRefs.current[i] = el }} onClick={() => onChange(o.value)}
+          <button key={o.value} ref={el => { btnRefs.current[i] = el }} onClick={() => onChange(o.value)} tabIndex={itemTabIndex}
             style={{
-              position: 'relative', zIndex: 1, height: 30, padding: '0 12px', borderRadius: 6,
+              position: 'relative', zIndex: 1, height: height != null ? '100%' : 30,
+              padding: equal ? 0 : '0 12px', textAlign: 'center', borderRadius: 6,
               fontSize: 13, background: 'transparent', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
               color: active ? '#111827' : '#6b7280', fontWeight: active ? 600 : 400,
               transition: 'color 200ms',
