@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRepairs, type Repair, type RepairStatus } from '@/hooks/useRepairs'
 import { useRepairAuth } from '@/hooks/useRepairAuth'
+import RepairEditModal from '@/components/repair/RepairEditModal'
+import SegmentedControl from '@/components/common/SegmentedControl'
 
 // ── 색상 (기존 페이지 컨벤션과 동일) ──
 const BLUE = '#234ea2'
@@ -13,18 +15,20 @@ const ORANGE = '#d97706'
 const RED = '#dc2626'
 const PAGE_BG = '#f4f5f7'
 const CARD_BG = '#ffffff'
-const BORDER = '#e2e4e9'
-const TEXT = '#111113'
+const BORDER = '#ebebeb'
+const TEXT = '#111827'
 const GRAY = '#6b7280'
 const MUTED = '#9ca3af'
+const ACTIVE_BG = '#f1f1f1' // 필터 활성 배경 (중립)
 
 const STATUSES: RepairStatus[] = ['입고', '수리중', '출고대기', '출고완료']
 
-const STATUS_STYLE: Record<RepairStatus, { bg: string; color: string; border: string }> = {
-  '입고': { bg: '#f3f4f6', color: GRAY, border: BORDER },
-  '수리중': { bg: '#fffbeb', color: ORANGE, border: '#fde68a' },
-  '출고대기': { bg: '#eff4ff', color: BLUE, border: '#bfd3f2' },
-  '출고완료': { bg: '#f0fdf4', color: GREEN, border: '#bbf7d0' },
+// 상태 dot 색 (배경·테두리 없이 dot 으로만 상태 구분)
+const STATUS_DOT: Record<RepairStatus, string> = {
+  '입고': '#9ca3af',
+  '수리중': '#f59e0b',
+  '출고대기': '#22c55e',
+  '출고완료': '#3b82f6',
 }
 
 // 현재 상태에서 누를 수 있는 다음 단계 (버튼 라벨 → 전환될 상태)
@@ -37,10 +41,6 @@ const NEXT_ACTION: Partial<Record<RepairStatus, { label: string; next: RepairSta
 // 구분 (게이지 / 앰프)
 type Category = '게이지' | '앰프'
 const CATEGORIES: Category[] = ['게이지', '앰프']
-const CATEGORY_STYLE: Record<string, { bg: string; color: string; border: string }> = {
-  '게이지': { bg: '#eff4ff', color: BLUE, border: '#bfd3f2' },
-  '앰프': { bg: '#f0fdf4', color: GREEN, border: '#bbf7d0' },
-}
 
 // ── 날짜 유틸 ──
 const todayStr = () => {
@@ -108,7 +108,13 @@ export default function RepairPage() {
   // ── 목록 필터 / 페이지 ──
   const [statusFilter, setStatusFilter] = useState<'전체' | RepairStatus>('전체')
   const [categoryFilter, setCategoryFilter] = useState<'전체' | Category>('전체')
+  const [searchInput, setSearchInput] = useState('') // 입력창 로컬 값 (버튼/Enter 로만 반영)
+  const [search, setSearch] = useState('')            // 실제 필터에 적용된 검색어
+  const [dateBasis, setDateBasis] = useState<'received' | 'shipped'>('received')
+  const [dateMonth, setDateMonth] = useState('')      // YYYY-MM (단일 월, 비면 필터 없음)
   const [page, setPage] = useState(0)
+  const [editing, setEditing] = useState<Repair | null>(null)
+  const [isEditSaving, setIsEditSaving] = useState(false)
 
   // ── KPI '출고완료' 카드 + 그래프 기준 월 ──
   const [viewMonth, setViewMonth] = useState(monthKey(todayStr()))
@@ -123,7 +129,7 @@ export default function RepairPage() {
   const [importResult, setImportResult] = useState<{ ok: number; fail: number } | null>(null)
 
   // 필터 변경 시 첫 페이지로
-  useEffect(() => { setPage(0) }, [statusFilter, categoryFilter])
+  useEffect(() => { setPage(0) }, [statusFilter, categoryFilter, search, dateBasis, dateMonth])
 
   // ── 접수 등록 ──
   const handleSubmit = async () => {
@@ -165,6 +171,17 @@ export default function RepairPage() {
     if (!confirm(`'${r.customer_name ?? ''} / ${r.serial_number ?? '-'}' 접수 건을 삭제하시겠습니까?`)) return
     const { error } = await supabase.from('repairs').delete().eq('repair_id', r.repair_id)
     if (error) { alert('삭제 실패: ' + error.message); return }
+    setEditing(null)
+    await refetch()
+  }
+
+  // ── 수정 저장 (타임스탬프 정리는 RepairEditModal 의 buildPatch 에서 처리한 patch 를 그대로 적용) ──
+  const handleEditSave = async (repairId: number, patch: Record<string, unknown>) => {
+    setIsEditSaving(true)
+    const { error } = await supabase.from('repairs').update(patch).eq('repair_id', repairId)
+    setIsEditSaving(false)
+    if (error) { alert('수정 실패: ' + error.message); return }
+    setEditing(null)
     await refetch()
   }
 
@@ -262,13 +279,41 @@ export default function RepairPage() {
   const kpiWaiting = countBy(r => r.status === '출고대기')
   const kpiShippedThisMonth = countBy(r => r.status === '출고완료' && monthKey(r.shipped_date) === viewMonth)
 
-  // ── 목록 필터 ──
+  // ── 목록 필터 (구분·상태·검색·날짜 AND 조합, 클라이언트 처리) ──
+  const searchTerms = useMemo(
+    () => search.trim().toLowerCase().split(/\s+/).filter(Boolean),
+    [search]
+  )
+  const hasFilter =
+    statusFilter !== '전체' || categoryFilter !== '전체' ||
+    searchTerms.length > 0 || dateMonth !== ''
+
+  // 입력창에 값이 있고 아직 적용 전이면 검색 버튼 강조
+  const searchPending = searchInput.trim() !== '' && searchInput !== search
+  const applySearch = () => setSearch(searchInput)
+  const resetSearchAndDate = () => { setSearchInput(''); setSearch(''); setDateBasis('received'); setDateMonth('') }
+
   const filteredRepairs = useMemo(
-    () => repairs.filter(r =>
-      (statusFilter === '전체' || r.status === statusFilter) &&
-      (categoryFilter === '전체' || r.item_type === categoryFilter)
-    ),
-    [repairs, statusFilter, categoryFilter]
+    () => repairs.filter(r => {
+      if (statusFilter !== '전체' && r.status !== statusFilter) return false
+      if (categoryFilter !== '전체' && r.item_type !== categoryFilter) return false
+
+      // 검색: customer_name · product_type · serial_number 부분 일치, 여러 단어는 AND
+      if (searchTerms.length > 0) {
+        const haystack = [r.customer_name, r.product_type, r.serial_number]
+          .filter(Boolean).join(' ').toLowerCase()
+        if (!searchTerms.every(t => haystack.includes(t))) return false
+      }
+
+      // 날짜: 기준(입고일/출고일) 필드가 선택한 그 달(1일 ~ 말일)에 속하는지
+      if (dateMonth) {
+        const field = dateBasis === 'received' ? r.received_date : r.shipped_date
+        if (!field) return false // 출고일 기준일 때 미출고(null) 제외
+        if (field.slice(0, 7) !== dateMonth) return false
+      }
+      return true
+    }),
+    [repairs, statusFilter, categoryFilter, searchTerms, dateBasis, dateMonth]
   )
 
   // 페이지네이션 (50개씩)
@@ -305,20 +350,6 @@ export default function RepairPage() {
   }), [importRows, importYear])
   const importValidCount = importPreview.filter(p => p.valid).length
 
-  // ── 월별 집계 (건수 기준, 최근 6개월) ──
-  const monthlyStats = useMemo(() => {
-    const months: string[] = []
-    for (let i = 5; i >= 0; i--) months.push(shiftMonth(viewMonth, -i))
-    return months.map(ym => ({
-      ym,
-      label: fmtMonthLabel(ym),
-      received: repairs.filter(r => monthKey(r.received_date) === ym).length,
-      shipped: repairs.filter(r => r.status === '출고완료' && monthKey(r.shipped_date) === ym).length,
-    }))
-  }, [repairs, viewMonth])
-
-  const maxMonthly = Math.max(1, ...monthlyStats.map(m => Math.max(m.received, m.shipped)))
-
   // ── 렌더 게이트 ──
   if (authorized === null) {
     return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', fontSize: 16, color: GRAY }}>확인 중...</div>
@@ -333,45 +364,48 @@ export default function RepairPage() {
     )
   }
 
-  const card: React.CSSProperties = { background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 18 }
-  const inp: React.CSSProperties = { width: '100%', padding: '9px 11px', border: `1px solid ${BORDER}`, borderRadius: 9, fontSize: 14, outline: 'none', background: '#fff', color: TEXT, boxSizing: 'border-box' }
-  const label: React.CSSProperties = { fontSize: 12.5, fontWeight: 700, color: GRAY, marginBottom: 6, display: 'block' }
+  const card: React.CSSProperties = { background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '14px 16px' }
+  const inp: React.CSSProperties = { width: '100%', height: 36, padding: '0 11px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 14, outline: 'none', background: '#fff', color: TEXT, boxSizing: 'border-box' }
+  const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: MUTED }
+  const fieldGroup: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4 }
 
   // 목록 행 (고정 블록·페이지 목록 공용)
   const repairRow = (r: Repair) => {
-    const cs = CATEGORY_STYLE[r.item_type ?? ''] ?? { bg: '#f3f4f6', color: GRAY, border: BORDER }
     return (
-    <tr key={r.repair_id} style={{ borderBottom: `1px solid #f0f1f4` }}>
-      <td style={{ ...td, textAlign: 'center', color: GRAY, fontWeight: 700 }}>{seqMap.get(r.repair_id)}</td>
+    <tr key={r.repair_id} style={{ borderBottom: `1px solid ${BORDER}` }}>
+      <td style={{ ...td, textAlign: 'center', color: GRAY }}>{seqMap.get(r.repair_id)}</td>
       <td style={{ ...td, textAlign: 'center' }}>
-        <span style={{ padding: '3px 9px', borderRadius: 999, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', background: cs.bg, color: cs.color, border: `1px solid ${cs.border}` }}>{r.item_type || '-'}</span>
+        <span style={{ fontSize: 13, color: GRAY }}>{r.item_type || '-'}</span>
       </td>
-      <td style={{ ...td, textAlign: 'center', color: GRAY }}>{fmtWeek(r.received_date)}</td>
       <td style={td}>{r.received_date}</td>
-      <td style={{ ...td, fontWeight: 700, color: TEXT }}>{r.customer_name}</td>
+      <td style={{ ...td, fontWeight: 600, color: TEXT }}>{r.customer_name}</td>
       <td style={td}>{r.product_type || '-'}</td>
       <td style={td}>{r.serial_number || '-'}</td>
       <td style={{ ...td, textAlign: 'center', color: GRAY }}>{r.shipped_date || '-'}</td>
       <td style={{ ...td, textAlign: 'center' }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <span style={{
-            padding: '4px 10px', borderRadius: 999, fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap',
-            background: STATUS_STYLE[r.status].bg, color: STATUS_STYLE[r.status].color,
-            border: `1px solid ${STATUS_STYLE[r.status].border}`,
-          }}>
-            {r.status}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_DOT[r.status], flexShrink: 0 }} />
+            <span style={{ fontSize: 13, color: TEXT }}>{r.status}</span>
           </span>
           {NEXT_ACTION[r.status] && (
             <button onClick={() => advanceStatus(r, NEXT_ACTION[r.status]!.next)}
-              style={{ padding: '4px 12px', borderRadius: 999, border: `1px solid ${BLUE}`, background: BLUE, color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: GRAY, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
               {NEXT_ACTION[r.status]!.label}
             </button>
           )}
         </div>
       </td>
       <td style={{ ...td, textAlign: 'center' }}>
-        <button onClick={() => handleDelete(r)} title="삭제"
-          style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED, fontSize: 15, lineHeight: 1 }}>🗑</button>
+        <button onClick={() => setEditing(r)} title="수정"
+          onMouseEnter={(e) => (e.currentTarget.style.color = '#234ea2')}
+          onMouseLeave={(e) => (e.currentTarget.style.color = '#9ca3af')}
+          style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9ca3af', display: 'inline-flex', alignItems: 'center', padding: 0, transition: 'color 0.15s ease' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+          </svg>
+        </button>
       </td>
     </tr>
     )
@@ -379,12 +413,11 @@ export default function RepairPage() {
 
   const renderTable = (list: Repair[]) => (
     <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5, minWidth: 1000 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1000 }}>
         <thead>
-          <tr style={{ borderBottom: `1.5px solid ${BORDER}`, color: GRAY, fontSize: 12.5 }}>
+          <tr style={{ borderBottom: `1px solid ${BORDER}`, color: GRAY, fontSize: 12 }}>
             <th style={{ ...th, textAlign: 'center' }}>순번</th>
             <th style={{ ...th, textAlign: 'center' }}>구분</th>
-            <th style={{ ...th, textAlign: 'center' }}>월-주차</th>
             <th style={th}>입고일</th>
             <th style={th}>회사명</th>
             <th style={th}>제품 구분</th>
@@ -405,35 +438,38 @@ export default function RepairPage() {
         select { appearance: none; -webkit-appearance: none; -moz-appearance: none; }
       `}</style>
 
-      <div style={{ maxWidth: 1080, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ maxWidth: 1080, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+        {/* ── 페이지 제목 + 대시보드 이동 ── */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: 20, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>수리 현황</div>
+          <button onClick={() => router.push('/repair/dashboard')}
+            style={{ padding: '6px 12px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: GRAY, fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            대시보드 →
+          </button>
+        </div>
 
         {/* ── KPI 카드 ── */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }} className="repair-kpi">
-          <div style={{ ...card, padding: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: GRAY }}>보유 수리품</span>
-              <button onClick={() => router.push('/repair/dashboard')}
-                style={{ padding: '4px 10px', borderRadius: 999, border: `1px solid ${BLUE}`, background: '#fff', color: BLUE, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                대시보드 →
-              </button>
+          <div style={card}>
+            <div style={{ fontSize: 12, color: MUTED, fontWeight: 600, marginBottom: 6 }}>보유 수리품</div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: TEXT, lineHeight: 1 }}>
+              {kpiHeld}<span style={{ fontSize: 13, fontWeight: 700, color: MUTED, marginLeft: 3 }}>건</span>
             </div>
-            <div style={{ fontSize: 28, fontWeight: 900, color: BLUE, lineHeight: 1 }}>
-              {kpiHeld}<span style={{ fontSize: 14, fontWeight: 700, color: MUTED, marginLeft: 3 }}>건</span>
-            </div>
-            <div style={{ fontSize: 11.5, color: MUTED, marginTop: 6, fontWeight: 600 }}>입고 + 수리중 + 출고대기</div>
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 6, fontWeight: 600 }}>입고 + 수리중 + 출고대기</div>
           </div>
-          <KpiCard title="수리중" value={kpiRepairing} unit="건" color={BLUE} />
-          <KpiCard title="출고 대기" value={kpiWaiting} unit="건" color={BLUE} sub="수리 완료" />
-          <div style={{ ...card, padding: 16, position: 'relative' }}>
+          <KpiCard title="수리중" value={kpiRepairing} unit="건" />
+          <KpiCard title="출고 대기" value={kpiWaiting} unit="건" sub="수리 완료" />
+          <div style={{ ...card, position: 'relative' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: GRAY }}>{fmtMonthLabel(viewMonth)} 출고완료</span>
+              <span style={{ fontSize: 12, color: MUTED, fontWeight: 600 }}>{fmtMonthLabel(viewMonth)} 출고완료</span>
               <span style={{ display: 'flex', gap: 4 }}>
                 <MonthBtn onClick={() => setViewMonth(m => shiftMonth(m, -1))}>◀</MonthBtn>
                 <MonthBtn onClick={() => setViewMonth(m => shiftMonth(m, 1))}>▶</MonthBtn>
               </span>
             </div>
-            <div style={{ fontSize: 28, fontWeight: 900, color: BLUE, lineHeight: 1 }}>
-              {kpiShippedThisMonth}<span style={{ fontSize: 14, fontWeight: 700, color: MUTED, marginLeft: 3 }}>건</span>
+            <div style={{ fontSize: 24, fontWeight: 700, color: TEXT, lineHeight: 1 }}>
+              {kpiShippedThisMonth}<span style={{ fontSize: 13, fontWeight: 700, color: MUTED, marginLeft: 3 }}>건</span>
             </div>
           </div>
         </div>
@@ -441,84 +477,105 @@ export default function RepairPage() {
         {/* ── 새 수리품 접수 등록 ── */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: TEXT }}>새 수리품 접수 등록</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>입고 등록</div>
             <button onClick={openImport}
-              style={{ padding: '7px 14px', border: `1px solid ${BLUE}`, borderRadius: 8, background: '#fff', color: BLUE, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              style={{ padding: '6px 12px', border: `1px solid ${BORDER}`, borderRadius: 6, background: '#fff', color: GRAY, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
               엑셀 일괄 등록
             </button>
           </div>
 
-          {/* 구분 · 입고일 · 회사명 · 제품 구분 · 시리얼번호 · 등록 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.3fr 1.1fr 1.1fr 150px', gap: 12, alignItems: 'flex-end' }} className="repair-form-row">
-            <div>
+          {/* 구분 · 입고일 · 회사명 · 제품 구분 · 시리얼번호 · 등록 (하단 정렬) */}
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }} className="repair-form-row">
+            <div style={fieldGroup}>
               <label style={label}>구분</label>
-              <div style={{ display: 'flex', border: `1px solid ${BORDER}`, borderRadius: 9, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', height: 36, border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden' }}>
                 {CATEGORIES.map(c => (
                   <button key={c} type="button" onClick={() => setFormCategory(c)}
-                    style={{ flex: 1, padding: '9px 0', border: 'none', background: formCategory === c ? BLUE : '#fff', color: formCategory === c ? '#fff' : GRAY, fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>
+                    style={{ padding: '0 16px', border: 'none', background: formCategory === c ? BLUE : '#fff', color: formCategory === c ? '#fff' : GRAY, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
                     {c}
                   </button>
                 ))}
               </div>
             </div>
-            <div>
+            <div style={{ ...fieldGroup, width: 150, flexShrink: 0 }}>
               <label style={label}>입고일</label>
               <input type="date" value={receivedDate} onChange={e => setReceivedDate(e.target.value)} style={inp} />
             </div>
-            <div>
+            <div style={{ ...fieldGroup, flex: 1, minWidth: 0 }}>
               <label style={label}>회사명</label>
               <input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="회사명 입력" style={inp} />
             </div>
-            <div>
+            <div style={{ ...fieldGroup, flex: 1, minWidth: 0 }}>
               <label style={label}>제품 구분</label>
               <input value={productType} onChange={e => setProductType(e.target.value)} placeholder="예: E-TS-4182-P6" style={inp} />
             </div>
-            <div>
+            <div style={{ ...fieldGroup, flex: 1, minWidth: 0 }}>
               <label style={label}>시리얼번호</label>
               <input value={serialNumber} onChange={e => setSerialNumber(e.target.value)} placeholder="시리얼번호" style={inp} />
             </div>
-            <div>
-              <button onClick={handleSubmit} disabled={isSaving}
-                style={{ width: '100%', padding: '9px 0', border: 'none', borderRadius: 9, background: isSaving ? MUTED : BLUE, color: '#fff', fontSize: 14.5, fontWeight: 800, cursor: isSaving ? 'default' : 'pointer' }}>
-                {isSaving ? '등록 중...' : '접수 등록'}
-              </button>
-            </div>
+            <button onClick={handleSubmit} disabled={isSaving}
+              style={{ height: 36, padding: '0 18px', flexShrink: 0, border: 'none', borderRadius: 6, background: isSaving ? MUTED : BLUE, color: '#fff', fontSize: 14, fontWeight: 700, cursor: isSaving ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+              {isSaving ? '등록 중...' : '접수 등록'}
+            </button>
           </div>
         </div>
 
         {/* ── 수리품 목록 ── */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: TEXT }}>수리품 목록 <span style={{ color: MUTED, fontWeight: 700 }}>({filteredRepairs.length})</span></div>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {(['전체', ...CATEGORIES] as const).map(c => {
-                  const active = categoryFilter === c
+            <div style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>수리품 목록 <span style={{ color: MUTED, fontWeight: 700 }}>({hasFilter ? `${filteredRepairs.length} / ${repairs.length}` : repairs.length})</span></div>
+            <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
+              <SegmentedControl
+                options={['전체', ...CATEGORIES]}
+                value={categoryFilter}
+                onChange={v => setCategoryFilter(v as '전체' | Category)}
+              />
+              <SegmentedControl
+                options={['전체', ...STATUSES]}
+                value={statusFilter}
+                onChange={v => setStatusFilter(v as '전체' | RepairStatus)}
+              />
+            </div>
+          </div>
+
+          {/* ── 검색 + 날짜 필터 ── */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 14, flexWrap: 'wrap' }}>
+            {/* 검색 그룹 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') applySearch() }}
+                placeholder="회사명 · 제품 구분 · 시리얼번호 검색"
+                style={{ width: 260, height: 32, boxSizing: 'border-box', padding: '0 10px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 13, color: TEXT, outline: 'none' }}
+              />
+              <button
+                onClick={applySearch}
+                style={{ height: 32, boxSizing: 'border-box', padding: '0 12px', borderRadius: 6, border: `1px solid ${searchPending ? BLUE : BORDER}`, background: searchPending ? BLUE : '#fff', color: searchPending ? '#fff' : GRAY, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                검색
+              </button>
+            </div>
+
+            {/* 날짜 그룹 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ display: 'flex', height: 32, border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden' }}>
+                {([['received', '입고'], ['shipped', '출고']] as const).map(([val, txt]) => {
+                  const active = dateBasis === val
                   return (
-                    <button key={c} onClick={() => setCategoryFilter(c)}
-                      style={{
-                        padding: '6px 13px', borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                        border: `1px solid ${active ? BLUE : BORDER}`, background: active ? BLUE : '#fff', color: active ? '#fff' : GRAY,
-                      }}>
-                      {c}
+                    <button key={val} onClick={() => setDateBasis(val)}
+                      style={{ padding: '0 12px', border: 'none', background: active ? ACTIVE_BG : 'transparent', color: active ? TEXT : GRAY, fontSize: 13, fontWeight: active ? 600 : 400, cursor: 'pointer' }}>
+                      {txt}
                     </button>
                   )
                 })}
               </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {(['전체', ...STATUSES] as const).map(s => {
-                  const active = statusFilter === s
-                  return (
-                    <button key={s} onClick={() => setStatusFilter(s)}
-                      style={{
-                        padding: '6px 13px', borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                        border: `1px solid ${active ? BLUE : BORDER}`, background: active ? BLUE : '#fff', color: active ? '#fff' : GRAY,
-                      }}>
-                      {s}
-                    </button>
-                  )
-                })}
-              </div>
+              <input type="month" value={dateMonth} onChange={e => setDateMonth(e.target.value)}
+                style={{ height: 32, boxSizing: 'border-box', padding: '0 8px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 13, color: TEXT, colorScheme: 'light' }} />
+              <button
+                onClick={resetSearchAndDate}
+                style={{ height: 32, boxSizing: 'border-box', padding: '0 13px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: GRAY, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                초기화
+              </button>
             </div>
           </div>
 
@@ -561,30 +618,10 @@ export default function RepairPage() {
           )}
         </div>
 
-        {/* ── 월별 접수/출고 그래프 (건수) ── */}
-        <div style={card}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: TEXT }}>월별 접수 / 출고 현황 <span style={{ color: MUTED, fontWeight: 700, fontSize: 13 }}>(건수, 최근 6개월)</span></div>
-            <div style={{ display: 'flex', gap: 16 }}>
-              <Legend color={BLUE} label="접수" />
-              <Legend color={GREEN} label="출고" />
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 0, height: 200, paddingTop: 10 }}>
-            {monthlyStats.map(m => (
-              <div key={m.ym} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, height: '100%' }}>
-                <div style={{ flex: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 6, width: '100%' }}>
-                  <Bar value={m.received} max={maxMonthly} color={BLUE} />
-                  <Bar value={m.shipped} max={maxMonthly} color={GREEN} />
-                </div>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: GRAY }}>{m.label}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
       </div>
+
+      {/* ── 수리품 수정 모달 ── */}
+      <RepairEditModal repair={editing} isSaving={isEditSaving} onClose={() => setEditing(null)} onSave={handleEditSave} onDelete={handleDelete} />
 
       {/* ── 엑셀 일괄 등록 모달 ── */}
       {showImport && (
@@ -674,25 +711,25 @@ export default function RepairPage() {
       <style>{`
         @media (max-width: 768px) {
           .repair-kpi { grid-template-columns: 1fr 1fr !important; }
-          .repair-form-row { grid-template-columns: 1fr !important; }
+          .repair-form-row { flex-direction: column !important; align-items: stretch !important; }
         }
       `}</style>
     </div>
   )
 }
 
-const th: React.CSSProperties = { textAlign: 'left', padding: '9px 10px', fontWeight: 700, whiteSpace: 'nowrap' }
-const td: React.CSSProperties = { padding: '10px', color: TEXT, verticalAlign: 'middle' }
+const th: React.CSSProperties = { textAlign: 'left', padding: '8px 10px', fontWeight: 600, whiteSpace: 'nowrap' }
+const td: React.CSSProperties = { padding: '7px 10px', color: TEXT, verticalAlign: 'middle' }
 
 // ── 서브 컴포넌트 ──
-function KpiCard({ title, value, unit, color, sub }: { title: string; value: number; unit: string; color: string; sub?: string }) {
+function KpiCard({ title, value, unit, sub }: { title: string; value: number; unit: string; sub?: string }) {
   return (
-    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 16 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: GRAY, marginBottom: 6 }}>{title}</div>
-      <div style={{ fontSize: 28, fontWeight: 900, color, lineHeight: 1 }}>
-        {value}<span style={{ fontSize: 14, fontWeight: 700, color: MUTED, marginLeft: 3 }}>{unit}</span>
+    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '14px 16px' }}>
+      <div style={{ fontSize: 12, color: MUTED, fontWeight: 600, marginBottom: 6 }}>{title}</div>
+      <div style={{ fontSize: 24, fontWeight: 700, color: TEXT, lineHeight: 1 }}>
+        {value}<span style={{ fontSize: 13, fontWeight: 700, color: MUTED, marginLeft: 3 }}>{unit}</span>
       </div>
-      {sub && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 6, fontWeight: 600 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 11, color: MUTED, marginTop: 6, fontWeight: 600 }}>{sub}</div>}
     </div>
   )
 }
@@ -706,21 +743,3 @@ function MonthBtn({ children, onClick }: { children: React.ReactNode; onClick: (
   )
 }
 
-function Legend({ color, label }: { color: string; label: string }) {
-  return (
-    <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: GRAY }}>
-      <span style={{ width: 12, height: 12, borderRadius: 3, background: color, display: 'inline-block' }} />
-      {label}
-    </span>
-  )
-}
-
-function Bar({ value, max, color }: { value: number; max: number; color: string }) {
-  const h = value === 0 ? 0 : Math.max(4, Math.round((value / max) * 100))
-  return (
-    <div style={{ flex: 1, maxWidth: 34, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
-      <div style={{ fontSize: 12, fontWeight: 800, color: value === 0 ? MUTED : TEXT, marginBottom: 4 }}>{value}</div>
-      <div style={{ width: '100%', height: `${h}%`, background: color, borderRadius: '5px 5px 0 0', minHeight: value === 0 ? 0 : 4, transition: 'height 0.2s' }} />
-    </div>
-  )
-}

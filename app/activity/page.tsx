@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { isActiveInPeriod } from '@/lib/engineers'
 import { SERVICE_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import SegmentedControl from '@/components/common/SegmentedControl'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#fafafa'
@@ -61,55 +62,6 @@ function SkeletonCard() {
         <div style={{ width: 24, height: 13, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
         <div style={{ width: 44, height: 18, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
       </div>
-    </div>
-  )
-}
-
-function SegmentedControl({ items, activeKey }: {
-  items: { label: string; key: string; onClick: () => void; suffix?: number }[]
-  activeKey: string
-}) {
-  const trackRef = useRef<HTMLDivElement>(null)
-  const [ind, setInd] = useState<{ left: number; width: number } | null>(null)
-
-  useEffect(() => {
-    const measure = () => {
-      const track = trackRef.current
-      if (!track) return
-      const btn = track.querySelector(`[data-seg="${activeKey}"]`) as HTMLElement | null
-      const next = btn ? { left: btn.offsetLeft, width: btn.offsetWidth } : null
-      setInd(prev => {
-        if (!prev && !next) return prev
-        if (prev && next && prev.left === next.left && prev.width === next.width) return prev
-        return next
-      })
-    }
-    measure()
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [activeKey, items])
-
-  return (
-    <div ref={trackRef} style={{ position: 'relative', display: 'flex', background: '#f3f4f6', borderRadius: 8, padding: 3, gap: 1 }}>
-      {ind && (
-        <div style={{
-          position: 'absolute', top: 3, bottom: 3, left: ind.left, width: ind.width,
-          background: '#fff', borderRadius: 6, pointerEvents: 'none',
-          transition: 'left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-        }} />
-      )}
-      {items.map(it => (
-        <button key={it.key} data-seg={it.key} onClick={it.onClick}
-          style={{
-            position: 'relative', zIndex: 1,
-            padding: '5px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
-            fontWeight: 700, fontSize: 12, background: 'transparent', whiteSpace: 'nowrap',
-            color: it.key === activeKey ? TEXT : MUTED,
-            transition: 'color 0.15s ease',
-          }}>
-          {it.label}{it.suffix != null && <span style={{ marginLeft: 4, fontSize: 11, opacity: 0.75 }}>{it.suffix}</span>}
-        </button>
-      ))}
     </div>
   )
 }
@@ -364,21 +316,23 @@ export default function ActivityPage() {
 
             {/* 빠른 날짜 선택 */}
             <SegmentedControl
-              activeKey={activeBtn}
-              items={[
-                { label: '금일', key: '금일', onClick: handleToday },
-                { label: '작일', key: '작일', onClick: handleYesterday },
-                { label: '당월', key: '당월', onClick: handleThisMonth },
-                { label: '전월', key: '전월', onClick: handleLastMonth },
-              ]}
+              value={activeBtn}
+              options={['금일', '작일', '당월', '전월']}
+              onChange={v => {
+                if (v === '금일') handleToday()
+                else if (v === '작일') handleYesterday()
+                else if (v === '당월') handleThisMonth()
+                else if (v === '전월') handleLastMonth()
+              }}
             />
 
             <div style={{ flex: 1 }} />
 
             {/* 팀 필터 */}
             <SegmentedControl
-              activeKey={selectedTeam}
-              items={TEAM_OPTIONS.map(team => ({ label: team, key: team, onClick: () => setSelectedTeam(team) }))}
+              value={selectedTeam}
+              options={TEAM_OPTIONS}
+              onChange={setSelectedTeam}
             />
           </div>
         </div>
@@ -527,13 +481,13 @@ export default function ActivityPage() {
             {/* 서비스 타입 필터 */}
             <div style={{ padding: '10px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex' }}>
               <SegmentedControl
-                activeKey={filterType}
-                items={(['전체', ...SERVICE_TYPES] as string[]).map(type => ({
+                value={filterType}
+                options={(['전체', ...SERVICE_TYPES] as string[]).map(type => ({
                   label: type,
-                  key: type,
-                  onClick: () => setFilterType(type),
-                  suffix: type === '전체' ? details.length : details.filter(d => d.service_type === type).length,
+                  value: type,
+                  suffix: String(type === '전체' ? details.length : details.filter(d => d.service_type === type).length),
                 }))}
+                onChange={setFilterType}
               />
             </div>
 
