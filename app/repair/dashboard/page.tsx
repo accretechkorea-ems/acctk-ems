@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import SegmentedControl from '@/components/common/SegmentedControl'
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, ComposedChart, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList,
@@ -12,10 +13,11 @@ import { useRepairs, type Repair } from '@/hooks/useRepairs'
 import { useCountUp } from '@/hooks/useCountUp'
 import { CHART_COLORS, REPAIR_STATUS_COLORS } from '@/lib/categoryColors'
 import {
-  avgLeadTime, medianLeadTime, monthlyCounts, getLeadTime,
+  avgLeadTime, monthlyCounts,
   leadTimeBuckets, monthlyLeadTime, monthlyBacklog,
   customerRanking, productRanking, weeklyByType,
   getAgingDays, getRepeatSerials,
+  avgRepairDuration, countRepairDurationSamples,
 } from '@/lib/repairStats'
 
 // ── 색상: EMS 팔레트(lib/categoryColors.ts 기존 값)만 사용 ──
@@ -68,25 +70,36 @@ const emptyBox: React.CSSProperties = { flex: 1, minHeight: CHART_H, display: 'f
 type MonthDatum = { month: string; received: number; shipped: number }
 
 // ── KPI 카드 (값 카운트업) ──
-function Kpi({ label, value, unit, sub, valueColor }: { label: string; value: number | null; unit: string; sub?: string; valueColor?: string }) {
+const kpiCardStyle: React.CSSProperties = { ...cardStyle, justifyContent: 'center', padding: '10px 12px' }
+function Kpi({ label, value, unit, sub, valueColor, noData, noDataSub, noSub }: { label: string; value: number | null; unit: string; sub?: string; valueColor?: string; noData?: boolean; noDataSub?: string; noSub?: boolean }) {
   const isNull = value === null
-  const dec = !isNull && !Number.isInteger(value) ? 1 : 0 // 소수 있는 값(평균 소요일)만 1자리 유지
+  const dec = !isNull && !Number.isInteger(value) ? 1 : 0 // 소수 있는 값(소요일·수리기간)만 1자리 유지
   const animated = useCountUp(value ?? 0)
+  // 표본 0 등 데이터 미축적: 카운트업 없이 안내 문구만 (큰 숫자 자리에 숫자보다 작은 글씨로 표시)
+  if (noData) {
+    return (
+      <div style={kpiCardStyle}>
+        <div style={{ fontSize: 11, color: MUTED }}>{label}</div>
+        <div style={{ fontSize: 13, fontWeight: 500, color: MUTED, marginTop: 4, lineHeight: 1.1 }}>데이터 축적 중</div>
+        {!noSub && <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{noDataSub || ' '}</div>}
+      </div>
+    )
+  }
   return (
-    <div style={{ ...cardStyle, justifyContent: 'center' }}>
+    <div style={kpiCardStyle}>
       <div style={{ fontSize: 11, color: MUTED }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, color: valueColor ?? TEXT, marginTop: 4, lineHeight: 1.1 }}>
+      <div style={{ fontSize: 20, fontWeight: 700, color: valueColor ?? TEXT, marginTop: 4, lineHeight: 1.1 }}>
         {isNull ? '—' : animated.toFixed(dec)}
         {!isNull && <span style={{ fontSize: 13, fontWeight: 400, color: MUTED, marginLeft: 3 }}>{unit}</span>}
       </div>
-      <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{isNull ? '데이터 없음' : (sub || ' ')}</div>
+      {!noSub && <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{isNull ? '데이터 없음' : (sub || ' ')}</div>}
     </div>
   )
 }
 
 function KpiSkeleton() {
   return (
-    <div style={{ ...cardStyle, justifyContent: 'center' }}>
+    <div style={kpiCardStyle}>
       <div style={{ height: 11, width: '48%', background: SKELETON, borderRadius: 6 }} />
       <div style={{ height: 22, width: '34%', background: SKELETON, borderRadius: 6, marginTop: 8 }} />
       <div style={{ height: 11, width: '40%', background: SKELETON, borderRadius: 6, marginTop: 8 }} />
@@ -425,6 +438,22 @@ export default function RepairDashboardPage() {
   }, [])
   const animate = !reduceMotion
 
+  // ── 기간(연도) 필터 — 입고일 연도 기준. 상태/현재재고 카드는 제외하고 흐름·분석 카드에만 적용 ──
+  const years = useMemo(() => {
+    const s = new Set<string>()
+    for (const r of repairs) { const y = (r.received_date ?? '').slice(0, 4); if (y) s.add(y) }
+    return [...s].sort((a, b) => b.localeCompare(a)) // 최신 연도 먼저
+  }, [repairs])
+  const [year, setYear] = useState<string | null>(null) // null = 미설정(로드 후 최신 연도로 초기화)
+  useEffect(() => {
+    if (year === null && years.length > 0) setYear(years[0])
+  }, [years, year])
+  const sel = year ?? '전체'
+  const periodRepairs = useMemo(
+    () => (sel === '전체' ? repairs : repairs.filter(r => (r.received_date ?? '').slice(0, 4) === sel)),
+    [repairs, sel],
+  )
+
   if (authorized === null) {
     return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', fontSize: 16, color: MUTED }}>확인 중...</div>
   }
@@ -443,35 +472,40 @@ export default function RepairDashboardPage() {
   const repairing = repairs.filter(r => r.status === '수리중').length
   const waiting = repairs.filter(r => r.status === '출고대기').length
 
-  const avgAll = avgLeadTime(repairs)
-  const medAll = medianLeadTime(repairs)
+  // 소요일 (입고→출고): 대표값=평균
+  const avgAll = avgLeadTime(periodRepairs)
 
-  const gaugeRows = repairs.filter(r => r.item_type === '게이지')
-  const ampRows = repairs.filter(r => r.item_type === '앰프')
+  const gaugeRows = periodRepairs.filter(r => r.item_type === '게이지')
+  const ampRows = periodRepairs.filter(r => r.item_type === '앰프')
   const avgGauge = avgLeadTime(gaugeRows)
   const avgAmp = avgLeadTime(ampRows)
-  const gaugeSample = gaugeRows.filter(r => getLeadTime(r) !== null).length
-  const ampSample = ampRows.filter(r => getLeadTime(r) !== null).length
+
+  // 실제 수리 기간 (수리 시작→완료): 대표값=평균 + 유효 표본 수
+  const durAll = avgRepairDuration(periodRepairs)
+  const durGauge = avgRepairDuration(gaugeRows)
+  const durAmp = avgRepairDuration(ampRows)
+  const durAllN = countRepairDurationSamples(periodRepairs)
+  const durGaugeN = countRepairDurationSamples(gaugeRows)
+  const durAmpN = countRepairDurationSamples(ampRows)
 
   // ── 월별 접수/출고 (최근 6개월, 전체·게이지·앰프) ──
-  const monthlyAll = monthlyCounts(repairs).slice(-6)
+  const monthlyAll = monthlyCounts(periodRepairs).slice(-6)
   const monthlyGauge = monthlyCounts(gaugeRows).slice(-6)
   const monthlyAmp = monthlyCounts(ampRows).slice(-6)
 
   // ── 추가 차트 데이터 ──
-  const leadBuckets = leadTimeBuckets(repairs)
+  const leadBuckets = leadTimeBuckets(periodRepairs)
   const leadTotal = leadBuckets.reduce((s, b) => s + b.count, 0)
-  const leadTrend = monthlyLeadTime(repairs)
-  const backlog = monthlyBacklog(repairs)
+  const leadTrend = monthlyLeadTime(periodRepairs)
+  const backlog = monthlyBacklog(periodRepairs)
 
-  // 평균 소요일: 최근 달이 그 전 달보다 길면(악화) KPI 값만 로즈. 비교 데이터 없으면 기본색.
-  const leadMonthsWithAvg = leadTrend.filter((d): d is { month: string; avg: number } => d.avg !== null)
-  const leadWorse = leadMonthsWithAvg.length >= 2 &&
-    leadMonthsWithAvg[leadMonthsWithAvg.length - 1].avg > leadMonthsWithAvg[leadMonthsWithAvg.length - 2].avg
+  // 평균 소요일 KPI 구간별 색: ~10 파랑 / ~14 초록 / ~17.5 노랑 / 그 이상 빨강. 값 없으면 기본색.
+  const leadColor = (v: number | null): string | undefined =>
+    v == null ? undefined : v <= 10 ? C_BLUE : v <= 14 ? C_GREEN : v <= 17.5 ? C_AMBER : C_ROSE
 
-  const custTop = customerRanking(repairs, 5)
-  const prodTop = productRanking(repairs, 5)
-  const weeklyType = weeklyByType(repairs, 8)
+  const custTop = customerRanking(periodRepairs, 5)
+  const prodTop = productRanking(periodRepairs, 5)
+  const weeklyType = weeklyByType(repairs, 8) // '최근 8주'는 항상 현재 기준
   const holdData = [
     { name: '입고', value: repairs.filter(r => r.status === '입고').length, color: REPAIR_STATUS_COLORS['입고'] },
     { name: '수리중', value: repairs.filter(r => r.status === '수리중').length, color: REPAIR_STATUS_COLORS['수리중'] },
@@ -486,7 +520,7 @@ export default function RepairDashboardPage() {
     .slice(0, 5)
 
   // ── 재입고 목록 (2회 이상 접수 시리얼, 횟수 내림차순) ──
-  const repeatMap = getRepeatSerials(repairs)
+  const repeatMap = getRepeatSerials(periodRepairs)
   const repeatRows = [...repeatMap.entries()]
     .map(([serial, rs]) => {
       const sorted = [...rs].sort((a, b) => (b.received_date || '').localeCompare(a.received_date || ''))
@@ -496,7 +530,7 @@ export default function RepairDashboardPage() {
     .slice(0, 5)
   // 재입고 건수 = 각 시리얼의 2번째 이후 접수 건 합계
   const reintakeCount = [...repeatMap.values()].reduce((s, rs) => s + (rs.length - 1), 0)
-  const totalCount = repairs.length
+  const totalCount = periodRepairs.length
   const reintakePct = totalCount > 0 ? Math.round((reintakeCount / totalCount) * 100) : 0
 
   return (
@@ -509,10 +543,27 @@ export default function RepairDashboardPage() {
           @media (max-width: 560px) { .repair-kpi-grid { grid-template-columns: 1fr; } }
         `}</style>
 
-        {/* 헤더 */}
+        {/* 헤더: 기간(연도) 필터 · 목록 이동 */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>수리 대시보드</h1>
-          <Link href="/repair" style={{ fontSize: 13, fontWeight: 700, color: ACCENT, textDecoration: 'none' }}>← 목록으로</Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: SUB }}>기간</span>
+            {years.length > 0 && (
+              <SegmentedControl
+                options={['전체', ...years.map(y => ({ label: `${y}년`, value: y }))]}
+                value={sel}
+                onChange={setYear}
+              />
+            )}
+          </div>
+          <Link href="/repair"
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = MUTED; (e.currentTarget as HTMLElement).style.background = PAGE_BG }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = BORDER; (e.currentTarget as HTMLElement).style.background = CARD_BG }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: `1px solid ${BORDER}`, borderRadius: 8, background: CARD_BG, color: SUB, fontSize: 13, fontWeight: 700, textDecoration: 'none', transition: 'border-color 0.15s ease, background 0.15s ease' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+            </svg>
+            목록으로
+          </Link>
         </div>
 
         {/* 상단 개요: 보유 구성 + 월별 전체(왼쪽) · KPI(오른쪽), 높이 통일 */}
@@ -526,15 +577,21 @@ export default function RepairDashboardPage() {
           <div style={{ flex: '2 1 400px', minWidth: 0 }}>
             <div className="repair-kpi-grid" style={{ display: 'grid', gap: 8, height: '100%', gridAutoRows: '1fr' }}>
               {loading ? (
-                Array.from({ length: 6 }).map((_, i) => <KpiSkeleton key={i} />)
+                Array.from({ length: 9 }).map((_, i) => <KpiSkeleton key={i} />)
               ) : (
                 <>
+                  {/* 1줄: 재고 상태 */}
                   <Kpi label="보유 수리품" value={held} unit="건" sub="출고완료 제외" />
                   <Kpi label="수리중" value={repairing} unit="건" />
                   <Kpi label="출고 대기" value={waiting} unit="건" />
-                  <Kpi label="평균 소요일" value={avgAll} unit="일" sub={avgAll !== null ? `중앙값 ${medAll}일` : undefined} valueColor={leadWorse ? WARN : undefined} />
-                  <Kpi label="게이지 평균" value={avgGauge} unit="일" sub={avgGauge !== null ? `표본 ${gaugeSample}건` : undefined} />
-                  <Kpi label="앰프 평균" value={avgAmp} unit="일" sub={avgAmp !== null ? `표본 ${ampSample}건` : undefined} />
+                  {/* 2줄: 소요일 (입고→출고, 평균 기준) */}
+                  <Kpi label="전체 입출고 평균 소요일" value={avgAll} unit="일" valueColor={leadColor(avgAll)} />
+                  <Kpi label="게이지 입출고 평균 소요일" value={avgGauge} unit="일" />
+                  <Kpi label="앰프 입출고 평균 소요일" value={avgAmp} unit="일" />
+                  {/* 3줄: 작업 평균 소요일 (수리 시작→완료, 평균 기준). 보조문구 없음 · 표본0이면 '데이터 축적 중' */}
+                  <Kpi label="전체 작업 평균 소요일" value={durAll} unit="일" noData={durAllN === 0} noSub />
+                  <Kpi label="게이지 작업 평균 소요일" value={durGauge} unit="일" noData={durGaugeN === 0} noSub />
+                  <Kpi label="앰프 작업 평균 소요일" value={durAmp} unit="일" noData={durAmpN === 0} noSub />
                 </>
               )}
             </div>

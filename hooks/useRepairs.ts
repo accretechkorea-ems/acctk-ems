@@ -16,7 +16,7 @@ export type Repair = {
   shipped_date: string | null     // 출고일
   repair_started_at: string | null // 수리 시작 시각
   repair_done_at: string | null    // 수리 완료(출고대기) 시각
-  shipped_at: string | null        // 출고 시각
+  repair_content: string | null    // 특이사항 (본사수리·수리불가 등)
   created_by: number | null
   created_at: string
 }

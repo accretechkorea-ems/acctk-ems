@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Contact, Engineer, ServiceForm, ServiceHistory } from '../types'
 import { SERVICE_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import { toMin, stepTime, normTime, computeWorkHours, lunchOverlapHours, reverseEndTime } from '@/lib/workHours'
 
 type Props = {
   service: ServiceHistory | null
@@ -29,17 +30,43 @@ const areaStyle: CSSProperties = {
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 16,
   resize: 'vertical', lineHeight: 1.5,
 }
+// 작업시간 스테퍼 UI 스타일 (계산 로직은 @/lib/workHours 공용)
+const stepBtnStyle: CSSProperties = { width: 30, height: 30, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 13, fontWeight: 700, flexShrink: 0 }
+const timeBoxStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 4, background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, padding: '0 6px', height: 44, boxSizing: 'border-box' }
 
 export default function ServiceEditModal({ service, contacts, engineers, isSaving, onClose, onSave, onDelete, onOpenReport, onDeleteReport }: Props) {
-  const [form, setForm] = useState<ServiceForm>({ visit_date: '', service_notes: '', etc_notes: '', visitor: '', service_type: '신규설치', contact_id: null, is_paid: true, work_hours: '2' })
+  const [form, setForm] = useState<ServiceForm>({ visit_date: '', service_notes: '', etc_notes: '', visitor: '', service_type: '신규설치', contact_id: null, is_paid: true, work_hours: '', start_time: '08:30', end_time: '17:30' })
   const [selectedEngineerIds, setSelectedEngineerIds] = useState<number[]>([])
   const [showExtraEngineers, setShowExtraEngineers] = useState(false)
   const [reportFile, setReportFile] = useState<File | null>(null)
+  const [showHint, setShowHint] = useState(false)
   const scrollBodyRef = useRef<HTMLDivElement | null>(null)
   const reportInputRef = useRef<HTMLInputElement | null>(null)
+  const hintRef = useRef<HTMLDivElement | null>(null)
+
+  // 작업시간 자동 계산 (점심 12:00~13:00 공제). 종료<=시작 또는 작업시간<=0 이면 무효.
+  const orderValid = toMin(form.end_time) > toMin(form.start_time)
+  const lunchHours = lunchOverlapHours(form.start_time, form.end_time)
+  const workHours = computeWorkHours(form.start_time, form.end_time)
+  const timeValid = orderValid && workHours > 0
+
+  // 안내 팝오버: 바깥 mousedown 시 닫기
+  useEffect(() => {
+    if (!showHint) return
+    const onDown = (e: MouseEvent) => { if (hintRef.current && !hintRef.current.contains(e.target as Node)) setShowHint(false) }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [showHint])
 
   useEffect(() => {
     if (service) {
+      // 시작/종료시간: 신규 컬럼 우선 → 없으면 work_hours 로 08:30 기준 역산(점심 보정) → 그것도 없으면 기본값
+      let start = normTime(service.start_time)
+      let end = normTime(service.end_time)
+      if (!start || !end) {
+        start = '08:30'
+        end = (service.work_hours != null && service.work_hours > 0) ? reverseEndTime(service.work_hours) : '17:30'
+      }
       setForm({
         visit_date: service.visit_date ?? '',
         service_notes: service.service_notes ?? '',
@@ -49,6 +76,8 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
         contact_id: service.contact_id ?? null,
         is_paid: service.is_paid ?? true,
         work_hours: service.work_hours ? String(service.work_hours) : '',
+        start_time: start,
+        end_time: end,
       })
       setSelectedEngineerIds((service.service_engineers ?? []).map(se => se.engineer_id))
       setShowExtraEngineers(false)
@@ -63,7 +92,8 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
     if (!form.service_notes.trim()) { alert('서비스 내용을 입력해주세요.'); return }
     if (!form.contact_id) { alert('고객 담당자를 선택해주세요.'); return }
     if (selectedEngineerIds.length === 0) { alert('방문 엔지니어를 선택해주세요.'); return }
-    onSave(form, selectedEngineerIds, reportFile)
+    if (!timeValid) return
+    onSave({ ...form, work_hours: String(workHours) }, selectedEngineerIds, reportFile)
   }
 
   return (
@@ -138,7 +168,8 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
+            {/* 유무상 */}
             <div>
               <label style={labelStyle}>유무상</label>
               <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 6, padding: 3, height: 44, boxSizing: 'border-box' }}>
@@ -148,13 +179,45 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
                   style={{ flex: 1, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 700, background: !form.is_paid ? '#ffffff' : 'transparent', color: !form.is_paid ? '#111827' : '#9ca3af', transition: 'color 0.15s ease' }}>무상</button>
               </div>
             </div>
+            {/* 시작시간 */}
             <div>
-              <label style={labelStyle}>작업시간 (h)</label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, padding: '0 12px', height: 44, boxSizing: 'border-box' }}>
-                <button onClick={() => setForm(p => ({ ...p, work_hours: String(Math.max(0, parseFloat(p.work_hours || '2') - 0.5)) }))} style={{ width: 32, height: 32, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>▼</button>
-                <span style={{ flex: 1, textAlign: 'center', fontWeight: 700, fontSize: 16 }}>{form.work_hours || '2'}</span>
-                <button onClick={() => setForm(p => ({ ...p, work_hours: String(parseFloat(p.work_hours || '2') + 0.5) }))} style={{ width: 32, height: 32, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>▲</button>
+              <label style={labelStyle}>시작시간</label>
+              <div style={timeBoxStyle}>
+                <button type="button" onClick={() => setForm(p => ({ ...p, start_time: stepTime(p.start_time, -30) }))} style={stepBtnStyle}>▼</button>
+                <span style={{ flex: 1, textAlign: 'center', fontWeight: 700, fontSize: 16 }}>{form.start_time}</span>
+                <button type="button" onClick={() => setForm(p => ({ ...p, start_time: stepTime(p.start_time, 30) }))} style={stepBtnStyle}>▲</button>
               </div>
+            </div>
+            {/* 종료시간 (+ 안내 팝오버) */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>종료시간</span>
+                <div ref={hintRef} style={{ position: 'relative', display: 'flex' }}>
+                  <button type="button" onClick={() => setShowHint(s => !s)}
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: showHint ? '#234ea2' : '#9ca3af', display: 'inline-flex', alignItems: 'center' }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                  </button>
+                  {showHint && (
+                    <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 30, width: 200, background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: '8px 10px', fontSize: 12, fontWeight: 500, color: '#111827', lineHeight: 1.5 }}>
+                      이동시간 + 작업 시간으로 기재 부탁드립니다
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div style={timeBoxStyle}>
+                <button type="button" onClick={() => setForm(p => ({ ...p, end_time: stepTime(p.end_time, -30) }))} style={stepBtnStyle}>▼</button>
+                <span style={{ flex: 1, textAlign: 'center', fontWeight: 700, fontSize: 16 }}>{form.end_time}</span>
+                <button type="button" onClick={() => setForm(p => ({ ...p, end_time: stepTime(p.end_time, 30) }))} style={stepBtnStyle}>▲</button>
+              </div>
+              {!orderValid ? (
+                <div style={{ marginTop: 6, fontSize: 12, color: '#dc2626' }}>종료시간을 시작시간 이후로 설정해주세요</div>
+              ) : workHours <= 0 ? (
+                <div style={{ marginTop: 6, fontSize: 12, color: '#dc2626' }}>점심시간을 제외하면 작업시간이 0입니다</div>
+              ) : (
+                <div style={{ marginTop: 6, fontSize: 12, color: '#9ca3af' }}>작업시간 {workHours}h{lunchHours > 0 ? ` (점심 ${lunchHours}h 제외)` : ''}</div>
+              )}
             </div>
           </div>
 
@@ -247,10 +310,10 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
           <button onClick={onDelete} disabled={isSaving} style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}>삭제</button>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={onClose} style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: 6, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
-            <button onClick={handleSave} disabled={isSaving}
-              onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
-              onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
-              style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}>
+            <button onClick={handleSave} disabled={isSaving || !timeValid}
+              onMouseEnter={(e) => { if (!isSaving && timeValid) e.currentTarget.style.background = '#1c3e87' }}
+              onMouseLeave={(e) => { if (!isSaving && timeValid) e.currentTarget.style.background = '#234ea2' }}
+              style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: 6, border: 'none', cursor: (isSaving || !timeValid) ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, opacity: (isSaving || !timeValid) ? 0.6 : 1, transition: 'background 0.15s ease' }}>
               {isSaving ? '저장 중...' : '저장'}
             </button>
           </div>

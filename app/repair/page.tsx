@@ -170,7 +170,7 @@ export default function RepairPage() {
     const patch: Partial<Repair> = { status: next }
     if (next === '수리중') patch.repair_started_at = nowIso
     else if (next === '출고대기') patch.repair_done_at = nowIso
-    else if (next === '출고완료') { patch.shipped_at = nowIso; patch.shipped_date = todayStr() }
+    else if (next === '출고완료') { patch.shipped_date = todayStr() }
     const { error } = await supabase.from('repairs').update(patch).eq('repair_id', r.repair_id)
     if (error) { alert('상태 변경 실패: ' + error.message); return }
     await refetch()
@@ -413,14 +413,18 @@ export default function RepairPage() {
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: REPAIR_STATUS_COLORS[r.status], flexShrink: 0 }} />
             <span style={{ fontSize: 13, color: TEXT }}>{r.status}</span>
           </span>
-          {NEXT_ACTION[r.status] && (
+          {r.repair_content ? (
+            <span style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+              <span style={{ fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>{r.repair_content}</span>
+            </span>
+          ) : NEXT_ACTION[r.status] ? (
             <span style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
               <button onClick={() => advanceStatus(r, NEXT_ACTION[r.status]!.next)}
                 style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: GRAY, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 {NEXT_ACTION[r.status]!.label}
               </button>
             </span>
-          )}
+          ) : null}
         </div>
       </td>
       <td style={{ ...td, textAlign: 'center' }}>

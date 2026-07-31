@@ -107,7 +107,6 @@ export default function AdminPage() {
   const [teamsList, setTeamsList] = useState<Team[]>([])
   const [teamLoading, setTeamLoading] = useState(false)
   const [newTeamName, setNewTeamName] = useState('')
-  const [newTeamIsSpecial, setNewTeamIsSpecial] = useState(false)
   const [addTeamLoading, setAddTeamLoading] = useState(false)
   const [deletingTeam, setDeletingTeam] = useState<number | null>(null)
   const [logs, setLogs] = useState<any[]>([])
@@ -357,13 +356,6 @@ export default function AdminPage() {
   }
 
   // ── 팀 관리 ────────────────────────────────────────────────────────────────
-  const getTeamDisplay = (name: string, list: Team[] = teamsList) => {
-    if (!name) return '-'
-    const t = list.find(t => t.name === name)
-    if (t) return t.is_special ? t.name : t.name + '팀'
-    return ['임원', '영업관리', 'Apps.'].includes(name) ? name : name + '팀'
-  }
-
   const fetchTeams = async () => {
     setTeamLoading(true)
     const { data } = await supabase.from('teams').select('*').order('display_order')
@@ -377,13 +369,11 @@ export default function AdminPage() {
     const maxOrder = teamsList.length > 0 ? Math.max(...teamsList.map(t => t.display_order)) : 0
     const { error } = await supabase.from('teams').insert({
       name: newTeamName.trim(),
-      is_special: newTeamIsSpecial,
       display_order: maxOrder + 1,
     })
     setAddTeamLoading(false)
     if (error) { alert(error.message); return }
     setNewTeamName('')
-    setNewTeamIsSpecial(false)
     fetchTeams()
   }
 
@@ -396,7 +386,7 @@ export default function AdminPage() {
       alert(`이 팀에 ${count}명의 직원이 배정되어 있습니다. 먼저 직원 팀을 변경해주세요.`)
       return
     }
-    if (!confirm(`'${getTeamDisplay(team.name)}' 팀을 삭제하시겠습니까?`)) return
+    if (!confirm(`'${team.name}' 팀을 삭제하시겠습니까?`)) return
     setDeletingTeam(team.id)
     await supabase.from('teams').delete().eq('id', team.id)
     setDeletingTeam(null)
@@ -537,7 +527,7 @@ export default function AdminPage() {
                 teamOrder.map(team => (
                   <div key={team} style={{ marginBottom: 20 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, padding: '6px 0', borderBottom: `2px solid ${BORDER}` }}>
-                      <span style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{team === '미배정' ? '미배정' : `${team}팀`}</span>
+                      <span style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{team === '미배정' ? '미배정' : team}</span>
                       <span style={{ fontSize: 13, fontWeight: 700, color: GRAY }}>소계 ₩{numKR(getTeamTotal(teamGroups[team]))}</span>
                     </div>
                     {teamGroups[team].map(eng => {
@@ -737,7 +727,7 @@ export default function AdminPage() {
 </td>
                         <td style={{ padding: '10px 12px', color: GRAY, whiteSpace: 'nowrap' }}>{eng.position || '-'}</td>
                         <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                          {eng.teams ? getTeamDisplay(eng.teams) : '-'}
+                          {eng.teams || '-'}
                         </td>
                         <td style={{ padding: '10px 12px', color: GRAY, whiteSpace: 'nowrap' }}>{eng.email || '-'}</td>
                         <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>{eng.initials || '-'}</td>
@@ -800,7 +790,7 @@ export default function AdminPage() {
                 <div>
                   <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>팀 *</div>
                   <select value={addForm.teams} onChange={e => setAddForm(p => ({ ...p, teams: e.target.value }))} style={inp}>
-                    {teamsOptions.map(t => <option key={t} value={t}>{getTeamDisplay(t)}</option>)}
+                    {teamsOptions.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
               </div>
@@ -850,7 +840,7 @@ export default function AdminPage() {
                 <div>
                   <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>팀</div>
                   <select value={editForm.teams} onChange={e => setEditForm(p => ({ ...p, teams: e.target.value }))} style={inp}>
-                    {teamsOptions.map(t => <option key={t} value={t}>{getTeamDisplay(t)}</option>)}
+                    {teamsOptions.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
               </div>
@@ -931,10 +921,6 @@ export default function AdminPage() {
                   {addTeamLoading ? '...' : '추가'}
                 </button>
               </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: GRAY, cursor: 'pointer', userSelect: 'none' }}>
-                <input type="checkbox" checked={newTeamIsSpecial} onChange={e => setNewTeamIsSpecial(e.target.checked)} />
-                "팀" 접미사 없이 표시 (임원, 영업관리 등 특수 팀에 사용)
-              </label>
             </div>
 
             {/* 팀 목록 */}
@@ -946,8 +932,7 @@ export default function AdminPage() {
               ) : teamsList.map(team => (
                 <div key={team.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 4px', borderBottom: `1px solid ${BORDER}` }}>
                   <div>
-                    <span style={{ fontWeight: 700, fontSize: 15, color: TEXT }}>{getTeamDisplay(team.name)}</span>
-                    {team.is_special && <span style={{ fontSize: 11, color: GRAY, marginLeft: 6 }}>(접미사 없음)</span>}
+                    <span style={{ fontWeight: 700, fontSize: 15, color: TEXT }}>{team.name}</span>
                   </div>
                   <button onClick={() => handleDeleteTeam(team)} disabled={deletingTeam === team.id}
                     style={{ padding: '4px 14px', background: DANGER, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, opacity: deletingTeam === team.id ? 0.6 : 1 }}>

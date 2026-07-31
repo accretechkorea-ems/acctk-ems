@@ -11,7 +11,9 @@
       "Bash(pip install *)",
       "Bash(which python3 *)",
       "Read(//usr/**)",
-      "Bash(git commit -m 'feat\\(repair\\): 목록 검색·필터 개선 및 수정 모달 추가 *)"
+      "Bash(git commit -m 'feat\\(repair\\): 목록 검색·필터 개선 및 수정 모달 추가 *)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\({...p.dependencies, ...p.devDependencies}, null, 2\\)\\)\")",
+      "Bash(echo \"=== tsc exit: $? ===\")"
     ]
   }
 }

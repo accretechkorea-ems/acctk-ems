@@ -82,6 +82,41 @@ export function medianLeadTime(rows: Repair[]): number | null {
 }
 
 /**
+ * 실제 수리 기간(일, 소수 1자리) = repair_done_at - repair_started_at.
+ * 타임스탬프(시각 포함)라 소수 일수로 계산한다.
+ * 둘 중 하나라도 null/파싱불가면 null. 음수(완료<시작)면 null.
+ */
+export function getRepairDuration(r: Repair): number | null {
+  if (!r.repair_started_at || !r.repair_done_at) return null
+  const start = new Date(r.repair_started_at).getTime()
+  const done = new Date(r.repair_done_at).getTime()
+  if (isNaN(start) || isNaN(done)) return null
+  const days = (done - start) / DAY
+  if (days < 0) return null
+  return Math.round(days * 10) / 10
+}
+
+/** 유효 수리 기간의 평균(소수 1자리). 유효 행 0개면 null. */
+export function avgRepairDuration(rows: Repair[]): number | null {
+  const vals = rows.map(getRepairDuration).filter((v): v is number => v !== null)
+  if (vals.length === 0) return null
+  return Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 10) / 10
+}
+
+/** 유효 수리 기간의 중앙값(짝수 개면 가운데 두 값 평균, 소수 1자리). 유효 행 0개면 null. */
+export function medianRepairDuration(rows: Repair[]): number | null {
+  const vals = rows.map(getRepairDuration).filter((v): v is number => v !== null).sort((a, b) => a - b)
+  if (vals.length === 0) return null
+  const mid = Math.floor(vals.length / 2)
+  return vals.length % 2 ? vals[mid] : Math.round(((vals[mid - 1] + vals[mid]) / 2) * 10) / 10
+}
+
+/** getRepairDuration 이 null 이 아닌(유효 수리 기간) 행 수. */
+export function countRepairDurationSamples(rows: Repair[]): number {
+  return rows.filter(r => getRepairDuration(r) !== null).length
+}
+
+/**
  * 경과일 = 오늘 - 입고일 (미출고 건의 대기 일수 산출용).
  * 입고일 파싱 불가면 0. 음수(미래 입고일)는 0으로 보정.
  * ※ 출고 여부는 이 함수가 판단하지 않음 — '미출고' 필터는 호출측에서.

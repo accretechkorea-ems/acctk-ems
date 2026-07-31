@@ -362,7 +362,7 @@ function EngineerChartModal({ engineer, quotes, targets, fy, onClose }: {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <span style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>{engineer.name}</span>
               <span style={{ fontSize: 12, color: GRAY }}>{engineer.position}</span>
-              {engineer.teams && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: tc.bg, color: tc.text, fontWeight: 700 }}>{engineer.teams}팀</span>}
+              {engineer.teams && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: tc.bg, color: tc.text, fontWeight: 700 }}>{engineer.teams}</span>}
             </div>
             <div style={{ fontSize: 12, color: GRAY }}>FY{fy} 월별 매출 현황 · 월 목표 {monthTarget > 0 ? `₩${numKR(monthTarget)}` : '미설정'}</div>
           </div>
@@ -457,7 +457,7 @@ function TeamCard({ teamId, engineers, filteredQuotes, targets, mode, fy, onCard
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 16, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>{teamId}팀</span>
+          <span style={{ fontSize: 16, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>{teamId}</span>
           <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 99, background: tc.bg, color: tc.text, fontWeight: 700 }}>{teamEngIds.length}명</span>
         </div>
         {achieve !== null && (
@@ -633,7 +633,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <span style={{ fontSize: 20, fontWeight: 800, color: TEXT }}>{engineer.name}</span>
                 <span style={{ fontSize: 12, color: GRAY }}>{engineer.position}</span>
-                {engineer.teams && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: tc.bg, color: tc.text, fontWeight: 700 }}>{engineer.teams}팀</span>}
+                {engineer.teams && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: tc.bg, color: tc.text, fontWeight: 700 }}>{engineer.teams}</span>}
               </div>
               <div style={{ display: 'flex', gap: 20, fontSize: 13 }}>
                 <div><span style={{ color: GRAY, fontSize: 11 }}>포캐스트</span><div className="num" style={{ fontWeight: 700, color: TEXT }}>₩{numKR(engineer.quotedAmt)}</div></div>
@@ -1182,7 +1182,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
                 style={{ padding: '5px 11px', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: teamFilter === null ? '#fff' : 'transparent', color: teamFilter === null ? TEXT : GRAY, boxShadow: teamFilter === null ? '0 1px 3px rgba(0,0,0,0.10)' : 'none', transition: 'all 0.15s ease' }}>전체</button>
               {teams.filter(t => !['임원', '영업관리'].includes(t)).map(t => (
                 <button key={t} onClick={() => setTeamFilter(teamFilter === t ? null : t)}
-                  style={{ padding: '5px 11px', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: teamFilter === t ? '#fff' : 'transparent', color: teamFilter === t ? getCategoryColor(TEAM_COLORS, t).text : GRAY, boxShadow: teamFilter === t ? '0 1px 3px rgba(0,0,0,0.10)' : 'none', transition: 'all 0.15s ease' }}>{t}팀</button>
+                  style={{ padding: '5px 11px', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: teamFilter === t ? '#fff' : 'transparent', color: teamFilter === t ? getCategoryColor(TEAM_COLORS, t).text : GRAY, boxShadow: teamFilter === t ? '0 1px 3px rgba(0,0,0,0.10)' : 'none', transition: 'all 0.15s ease' }}>{t}</button>
               ))}
             </div>
           </div>
@@ -1194,7 +1194,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ width: 3, height: 18, background: BLUE, borderRadius: 2 }} />
               <span style={{ fontSize: 15, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>
-                {teamFilter ? `${teamFilter}팀` : '계측부 전체'}
+                {teamFilter ? teamFilter : '계측부 전체'}
               </span>
               <span style={{ fontSize: 12, color: MUTED, fontWeight: 400 }}>{getPeriodLabel(mode, fy, month)}</span>
             </div>
@@ -1293,7 +1293,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
                       <span style={{ fontSize: 15, fontWeight: 800, color: TEXT }}>{eng.name}</span>
                       <span style={{ fontSize: 12, color: GRAY, marginLeft: 6 }}>{eng.position}</span>
                     </div>
-                    {eng.teams && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: tc.bg, color: tc.text }}>{eng.teams}팀</span>}
+                    {eng.teams && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: tc.bg, color: tc.text }}>{eng.teams}</span>}
                     {eng.achieve !== null && <span className="num" style={{ fontSize: 13, fontWeight: 800, color: achieveColor, marginLeft: 'auto' }}>{eng.achieve.toFixed(0)}%</span>}
                   </div>
 

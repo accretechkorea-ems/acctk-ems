@@ -128,6 +128,7 @@ export default function CustomerDetailPage() {
       visitor: engineerSnapshot || null, service_type: form.service_type,
       contact_id: form.contact_id || null, is_paid: form.is_paid,
       work_hours: form.work_hours ? parseFloat(form.work_hours) : null,
+      start_time: form.start_time || null, end_time: form.end_time || null,
     }]).select().single()
     if (error) { setIsSavingService(false); alert(error.message || '서비스 기록 저장 중 오류가 발생했습니다.'); return }
     const { error: engineerError } = await supabase.from('service_engineers').insert(engineerIds.map(eid => ({ service_id: newService.service_id, engineer_id: eid })))
@@ -155,6 +156,7 @@ export default function CustomerDetailPage() {
         visitor: engineerSnapshot || null,
         service_type: form.service_type, contact_id: form.contact_id || null,
         is_paid: form.is_paid, work_hours: form.work_hours ? parseFloat(form.work_hours) : null,
+        start_time: form.start_time || null, end_time: form.end_time || null,
       }
 
       // 새 레포트 파일이 선택됐으면 업로드 후 경로 갱신
