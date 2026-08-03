@@ -3,6 +3,12 @@
 import { useEffect, useState, useMemo, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useConfirm } from '@/components/common/ConfirmDialog'
+import { useToast } from '@/components/common/Toast'
+import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
+import { usePageGuard } from '@/hooks/usePageGuard'
+import AccessGate from '@/components/common/AccessGate'
+import { canAccessSales } from '@/lib/permissions'
 
 const BLUE = '#234ea2'
 const ORANGE = '#d97706'
@@ -83,7 +89,6 @@ type Engineer = {
   position: string | null
   teams: string | null
   email: string | null
-  is_inventory_manager: boolean
   permission_level: string | null
 }
 
@@ -101,6 +106,9 @@ const LOC_STYLE: Record<string, { bg: string; color: string }> = {
 
 function InventoryPage() {
   const supabase = createClient()
+  const { loading: guardLoading, authorized } = usePageGuard(canAccessSales)
+  const confirmDialog = useConfirm()
+  const toast = useToast()
   const searchParams = useSearchParams()
 
   // ── 데이터 ──
@@ -145,6 +153,15 @@ function InventoryPage() {
   // 반려 모달
   const [rejectingRequest, setRejectingRequest] = useState<InventoryRequest | null>(null)
   const [rejectReason, setRejectReason] = useState('')
+
+  // 출고 요청 폼 / 반려 폼은 서로 다른 폼 → 훅 인스턴스를 각각 분리 (에러가 서로 새지 않음)
+  const reqErr = useFieldErrors<'outlet' | 'reason'>()
+  const rejErr = useFieldErrors<'reason'>()
+  // 각 폼(모달)이 열리거나 닫힐 때(gate state 토글) 에러 초기화
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { reqErr.setErrors({}) }, [requestItem])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { rejErr.setErrors({}) }, [rejectingRequest])
   const [isProcessing, setIsProcessing] = useState(false)
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -167,7 +184,7 @@ function InventoryPage() {
         .select('*, inventory_items(item_name, part_code, location)')
         .order('requested_at', { ascending: false }),
       supabase.from('engineers')
-        .select('engineer_id, name, position, teams, email, is_inventory_manager, permission_level')
+        .select('engineer_id, name, position, teams, email, permission_level')
         .order('engineer_id'),
     ])
     setItems((itemsData as InventoryItem[]) ?? [])
@@ -182,7 +199,7 @@ function InventoryPage() {
   }
 
   // ── 파생 상태 ──
-  const isManager = currentEngineer?.is_inventory_manager ?? false
+  const isManager = canAccessSales(currentEngineer)
   const isSuperAdmin = currentEngineer?.permission_level === 'superadmin'
 
   const filteredItems = useMemo(() => items.filter(item => {
@@ -207,8 +224,11 @@ function InventoryPage() {
   // ── 출고 요청 ──
   const handleRequest = async () => {
     if (!requestItem || !currentEngineer || requestQty < 1) return
-    if (!requestOutletCompany.trim()) { alert('출고 업체를 입력해주세요.'); return }
-    if (!requestReason.trim()) { alert('출고 사유를 입력해주세요.'); return }
+    const ok = reqErr.validate({
+      outlet: requestOutletCompany.trim() ? null : '출고 업체를 입력해주세요',
+      reason: requestReason.trim() ? null : '출고 사유를 입력해주세요',
+    })
+    if (!ok) return
     setIsSavingRequest(true)
     try {
       const { error } = await supabase.from('inventory_requests').insert([{
@@ -223,7 +243,7 @@ function InventoryPage() {
       }])
       if (error) throw error
 
-      const managers = allEngineers.filter(e => e.is_inventory_manager)
+      const managers = allEngineers.filter(e => canAccessSales(e))
       if (managers.length > 0) {
         await supabase.from('notifications').insert(
           managers.map(m => ({
@@ -237,11 +257,11 @@ function InventoryPage() {
           }))
         )
       }
-      alert('출고 요청이 등록되었습니다.')
+      toast.success('출고 요청이 등록되었습니다')
       setRequestItem(null); setRequestQty(1); setRequestOutletCompany(''); setRequestReason(''); setRequestNote('')
       await fetchAll()
     } catch (err) {
-      alert((err as { message?: string })?.message || '요청 중 오류가 발생했습니다.')
+      toast.error((err as { message?: string })?.message || '요청 중 오류가 발생했습니다')
     } finally {
       setIsSavingRequest(false)
     }
@@ -249,7 +269,8 @@ function InventoryPage() {
 
   // ── 승인 ── (서버 API 경유 — 권한 강제)
   const handleApprove = async (req: InventoryRequest) => {
-    if (!confirm(`${req.inventory_items?.item_name ?? '품목'} ${req.quantity}개 출고 요청을 승인하시겠습니까?`)) return
+    const ok = await confirmDialog({ title: '출고 승인', message: `${req.inventory_items?.item_name ?? '품목'} ${req.quantity}개 출고 요청을 승인하시겠습니까?`, confirmText: '승인', variant: 'default' })
+    if (!ok) return
     setIsProcessing(true)
     try {
       const res = await fetch('/api/inventory-approval', {
@@ -258,11 +279,11 @@ function InventoryPage() {
         body: JSON.stringify({ action: 'approve', request_id: req.request_id }),
       })
       const result = await res.json().catch(() => ({}))
-      if (!res.ok) { alert(result.error || '승인 처리 중 오류가 발생했습니다.'); return }
-      alert('승인이 완료되었습니다.')
+      if (!res.ok) { toast.error(result.error || '승인 처리 중 오류가 발생했습니다'); return }
+      toast.success('승인이 완료되었습니다')
       await fetchAll()
     } catch (err) {
-      alert((err as { message?: string })?.message || '승인 처리 중 오류가 발생했습니다.')
+      toast.error((err as { message?: string })?.message || '승인 처리 중 오류가 발생했습니다')
     } finally {
       setIsProcessing(false)
     }
@@ -271,7 +292,8 @@ function InventoryPage() {
   // ── 반려 ── (서버 API 경유 — 권한 강제)
   const handleReject = async () => {
     if (!rejectingRequest) return
-    if (!rejectReason.trim()) { alert('반려 사유를 입력해주세요.'); return }
+    const ok = rejErr.validate({ reason: rejectReason.trim() ? null : '반려 사유를 입력해주세요' })
+    if (!ok) return
     setIsProcessing(true)
     try {
       const res = await fetch('/api/inventory-approval', {
@@ -280,12 +302,12 @@ function InventoryPage() {
         body: JSON.stringify({ action: 'reject', request_id: rejectingRequest.request_id, reject_reason: rejectReason }),
       })
       const result = await res.json().catch(() => ({}))
-      if (!res.ok) { alert(result.error || '반려 처리 중 오류가 발생했습니다.'); return }
-      alert('반려 처리되었습니다.')
+      if (!res.ok) { toast.error(result.error || '반려 처리 중 오류가 발생했습니다'); return }
+      toast.success('반려 처리되었습니다')
       setRejectingRequest(null); setRejectReason('')
       await fetchAll()
     } catch (err) {
-      alert((err as { message?: string })?.message || '반려 처리 중 오류가 발생했습니다.')
+      toast.error((err as { message?: string })?.message || '반려 처리 중 오류가 발생했습니다')
     } finally {
       setIsProcessing(false)
     }
@@ -324,10 +346,10 @@ function InventoryPage() {
         ...prev.map(l => l.log_id === selectedLog.log_id ? { ...l, is_restocked: true } : l),
       ])
 
-      alert('재입고가 완료되었습니다.')
+      toast.success('재입고가 완료되었습니다')
       setSelectedLog(null); setRestockQty(1); setRestockReason('')
     } catch (err) {
-      alert((err as { message?: string })?.message || '재입고 처리 중 오류가 발생했습니다.')
+      toast.error((err as { message?: string })?.message || '재입고 처리 중 오류가 발생했습니다')
     } finally {
       setIsRestocking(false)
     }
@@ -491,6 +513,8 @@ function InventoryPage() {
     code
       ? <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 5, background: '#eff4ff', color: BLUE, letterSpacing: '0.2px', whiteSpace: 'nowrap' }}>{code}</span>
       : <span style={{ color: MUTED }}>-</span>
+
+  if (!authorized) return <AccessGate loading={guardLoading} />
 
   return (
     <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '24px 28px' }}>
@@ -1078,16 +1102,18 @@ function InventoryPage() {
                 <label style={{ fontSize: 12, fontWeight: 700, color: TEXT, display: 'block', marginBottom: 6 }}>
                   출고 업체 <span style={{ color: RED }}>*</span>
                 </label>
-                <input className="inv-input" value={requestOutletCompany} onChange={e => setRequestOutletCompany(e.target.value)}
-                  placeholder="출고 업체명을 입력하세요" style={{ ...inp }} />
+                <input className="inv-input" value={requestOutletCompany} onChange={e => { setRequestOutletCompany(e.target.value); reqErr.clearError('outlet') }}
+                  placeholder="출고 업체명을 입력하세요" style={reqErr.errors.outlet ? { ...inp, border: errBorder } : { ...inp }} />
+                <FieldError message={reqErr.errors.outlet} />
               </div>
               <div style={{ marginBottom: 14 }}>
                 <label style={{ fontSize: 12, fontWeight: 700, color: TEXT, display: 'block', marginBottom: 6 }}>
                   출고 사유 <span style={{ color: RED }}>*</span>
                 </label>
-                <textarea className="inv-input" value={requestReason} onChange={e => setRequestReason(e.target.value)}
+                <textarea className="inv-input" value={requestReason} onChange={e => { setRequestReason(e.target.value); reqErr.clearError('reason') }}
                   placeholder="출고 사유 또는 사용처를 입력하세요" rows={3}
-                  style={{ ...inp, resize: 'vertical', lineHeight: 1.6, fontFamily: 'inherit' }} />
+                  style={reqErr.errors.reason ? { ...inp, resize: 'vertical', lineHeight: 1.6, fontFamily: 'inherit', border: errBorder } : { ...inp, resize: 'vertical', lineHeight: 1.6, fontFamily: 'inherit' }} />
+                <FieldError message={reqErr.errors.reason} />
               </div>
               <div style={{ marginBottom: 24 }}>
                 <label style={{ fontSize: 12, fontWeight: 700, color: TEXT, display: 'block', marginBottom: 6 }}>
@@ -1216,9 +1242,10 @@ function InventoryPage() {
                 <label style={{ fontSize: 12, fontWeight: 700, color: TEXT, display: 'block', marginBottom: 6 }}>
                   반려 사유 <span style={{ color: RED }}>*</span>
                 </label>
-                <textarea className="inv-input" value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+                <textarea className="inv-input" value={rejectReason} onChange={e => { setRejectReason(e.target.value); rejErr.clearError('reason') }}
                   placeholder="반려 사유를 입력해주세요" rows={3}
-                  style={{ ...inp, resize: 'vertical', lineHeight: 1.6, fontFamily: 'inherit' }} />
+                  style={rejErr.errors.reason ? { ...inp, resize: 'vertical', lineHeight: 1.6, fontFamily: 'inherit', border: errBorder } : { ...inp, resize: 'vertical', lineHeight: 1.6, fontFamily: 'inherit' }} />
+                <FieldError message={rejErr.errors.reason} />
               </div>
             </div>
 

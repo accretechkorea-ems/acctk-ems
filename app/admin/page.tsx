@@ -1,9 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { SALES_STATUS_COLORS, ROLE_COLORS, INVENTORY_MANAGER_COLOR, getCategoryColor } from '@/lib/categoryColors'
+import { canAccessMaintenance } from '@/lib/permissions'
+import AccessGate from '@/components/common/AccessGate'
+import { SALES_STATUS_COLORS, ROLE_COLORS, getCategoryColor } from '@/lib/categoryColors'
+import { useToast } from '@/components/common/Toast'
+import { useConfirm } from '@/components/common/ConfirmDialog'
+import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 
 const BLUE = '#234ea2'
 const GREEN = '#16a34a'
@@ -34,9 +38,7 @@ type Engineer = {
   teams: string | null
   email: string | null
   initials: string | null
-  is_admin: boolean
   permission_level: string
-  is_inventory_manager: boolean
   resigned_date: string | null
 }
 
@@ -62,11 +64,11 @@ const POSITION_ORDER: Record<string, number> = {
 }
 
 const POSITIONS = ['사장', '총괄', '수석', '책임', '선임', '사원']
-const TEAMS = ['임원', '영업관리', '1', '2', '3', '4', 'Apps.']
 
 export default function AdminPage() {
   const supabase = createClient()
-  const router = useRouter()
+  const toast = useToast()
+  const confirmDialog = useConfirm() // native confirm 과 이름 충돌 피하려 confirmDialog
   const [loading, setLoading] = useState(true)
   const [authorized, setAuthorized] = useState(false)
   const [currentEngineer, setCurrentEngineer] = useState<Engineer | null>(null)
@@ -95,7 +97,7 @@ export default function AdminPage() {
   const [addForm, setAddForm] = useState({ name: '', position: '사원', teams: '1', email: '', initials: '', password: '' })
   const [addLoading, setAddLoading] = useState(false)
   const [editEngineer, setEditEngineer] = useState<Engineer | null>(null)
-  const [editForm, setEditForm] = useState({ name: '', position: '', teams: '', email: '', initials: '', permission_level: 'member', is_inventory_manager: false })
+  const [editForm, setEditForm] = useState({ name: '', position: '', teams: '', email: '', initials: '', permission_level: 'member' })
   const [editLoading, setEditLoading] = useState(false)
   const [deleteEngineer, setDeleteEngineer] = useState<Engineer | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -112,10 +114,25 @@ export default function AdminPage() {
   const [logs, setLogs] = useState<any[]>([])
   const [logLoading, setLogLoading] = useState(false)
 
+  // ── 폼별 검증 에러 (폼마다 독립 인스턴스 → 서로 새지 않음). 각 gate state 로 초기화 ──
+  const targetErr = useFieldErrors<'amount'>()
+  const addEngErr = useFieldErrors<'name' | 'email' | 'password' | 'initials'>()
+  const editEngErr = useFieldErrors<'name'>()
+  const resignErr = useFieldErrors<'resignDate'>()
+  const teamErr = useFieldErrors<'teamName'>()
+  /* eslint-disable react-hooks/exhaustive-deps */
+  useEffect(() => { targetErr.setErrors({}) }, [editingTarget])
+  useEffect(() => { addEngErr.setErrors({}) }, [showAddEngineer])
+  useEffect(() => { editEngErr.setErrors({}) }, [editEngineer])
+  useEffect(() => { resignErr.setErrors({}) }, [deleteEngineer])
+  useEffect(() => { teamErr.setErrors({}) }, [showTeamModal])
+  /* eslint-enable react-hooks/exhaustive-deps */
+
   useEffect(() => {
     const check = async () => {
       const { data } = await supabase.auth.getUser()
-      if (!data.user?.email) { router.replace('/'); return }
+      // 미로그인은 미들웨어가 /login 으로 보낸다. 리다이렉트 대신 미허가 처리(AccessGate).
+      if (!data.user?.email) { setLoading(false); return }
 
       const { data: engData } = await supabase
         .from('engineers')
@@ -123,11 +140,10 @@ export default function AdminPage() {
         .eq('email', data.user.email)
         .single()
 
-      if (engData && ['superadmin', 'manager'].includes(engData.permission_level)) {
+      // 진입 판정을 canAccessMaintenance(superadmin 전용)로 통일. currentEngineer 는 기존대로 유지.
+      if (engData && canAccessMaintenance(engData)) {
         setCurrentEngineer(engData)
         setAuthorized(true)
-      } else {
-        router.replace('/')
       }
       setLoading(false)
     }
@@ -169,7 +185,7 @@ export default function AdminPage() {
   }
 
   const handleDeleteQuote = async (quote: Quote) => {
-    const ok = confirm(`견적서 ${quote.quote_number}을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)
+    const ok = await confirmDialog({ title: '견적서 삭제', message: `견적서 ${quote.quote_number}을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`, confirmText: '삭제', variant: 'danger' })
     if (!ok) return
     setDeleting(quote.quote_id)
     await supabase.from('quote_items').delete().eq('quote_id', quote.quote_id)
@@ -215,7 +231,7 @@ export default function AdminPage() {
       return
     }
     const amount = Number(editingTarget.amount.replace(/,/g, ''))
-    if (isNaN(amount) || amount < 0) { alert('올바른 금액을 입력해주세요.'); return }
+    if (!targetErr.validate({ amount: (isNaN(amount) || amount < 0) ? '올바른 금액을 입력해주세요' : null })) return
     setSavingTarget(true)
     const existing = getTarget(editingTarget.engineerId)
     if (existing) {
@@ -240,10 +256,13 @@ export default function AdminPage() {
   }
 
   const handleAddEngineer = async () => {
-    if (!addForm.name.trim()) { alert('이름을 입력해주세요.'); return }
-    if (!addForm.email.trim()) { alert('이메일을 입력해주세요.'); return }
-    if (!addForm.password.trim()) { alert('초기 비밀번호를 입력해주세요.'); return }
-    if (!addForm.initials.trim()) { alert('이니셜을 입력해주세요.'); return }
+    const ok = addEngErr.validate({
+      name: addForm.name.trim() ? null : '이름을 입력해주세요',
+      email: addForm.email.trim() ? null : '이메일을 입력해주세요',
+      password: addForm.password.trim() ? null : '초기 비밀번호를 입력해주세요',
+      initials: addForm.initials.trim() ? null : '이니셜을 입력해주세요',
+    })
+    if (!ok) return
     setAddLoading(true)
     try {
       const res = await fetch('/api/create-user', {
@@ -260,25 +279,25 @@ export default function AdminPage() {
       })
       if (!res.ok) {
         const result = await res.json().catch(() => ({ error: `서버 오류 (${res.status})` }))
-        alert(`오류: ${result.error ?? '알 수 없는 오류'}`)
+        toast.error(`오류: ${result.error ?? '알 수 없는 오류'}`)
         setAddLoading(false)
         return
       }
       const result = await res.json()
-      if (result.error) { alert(`오류: ${result.error}`); setAddLoading(false); return }
-      alert(`✅ ${addForm.name} 직원이 등록되었습니다!`)
+      if (result.error) { toast.error(`오류: ${result.error}`); setAddLoading(false); return }
+      toast.success(`${addForm.name} 직원이 등록되었습니다`)
       setShowAddEngineer(false)
       setAddForm({ name: '', position: '사원', teams: '1', email: '', initials: '', password: '' })
       fetchEngineers()
     } catch (e) {
-      alert('오류가 발생했습니다.')
+      toast.error('오류가 발생했습니다')
     }
     setAddLoading(false)
   }
 
   const handleUpdateEngineer = async () => {
     if (!editEngineer) return
-    if (!editForm.name.trim()) { alert('이름을 입력해주세요.'); return }
+    if (!editEngErr.validate({ name: editForm.name.trim() ? null : '이름을 입력해주세요' })) return
     setEditLoading(true)
     try {
       const res = await fetch('/api/update-engineer', {
@@ -291,24 +310,23 @@ export default function AdminPage() {
           teams: editForm.teams,
           email: editForm.email.trim(),
           initials: editForm.initials.trim().toUpperCase(),
-          is_inventory_manager: editForm.is_inventory_manager,
           permission_level: editForm.permission_level,
         }),
       })
       const result = await res.json().catch(() => ({ error: `서버 오류 (${res.status})` }))
-      if (!res.ok || result.error) { alert(`오류: ${result.error ?? '알 수 없는 오류'}`); setEditLoading(false); return }
-      alert('직원 정보가 수정되었습니다.')
+      if (!res.ok || result.error) { toast.error(`오류: ${result.error ?? '알 수 없는 오류'}`); setEditLoading(false); return }
+      toast.success('직원 정보가 수정되었습니다')
       setEditEngineer(null)
       fetchEngineers()
     } catch {
-      alert('오류가 발생했습니다.')
+      toast.error('오류가 발생했습니다')
     }
     setEditLoading(false)
   }
 
   const handleDeleteEngineer = async () => {
     if (!deleteEngineer) return
-    if (!resignDate) { alert('퇴사일을 선택해주세요.'); return }
+    if (!resignErr.validate({ resignDate: resignDate ? null : '퇴사일을 선택해주세요' })) return
     setDeleteLoading(true)
     try {
       const res = await fetch('/api/delete-user', {
@@ -318,24 +336,25 @@ export default function AdminPage() {
       })
       if (!res.ok) {
         const result = await res.json().catch(() => ({ error: `서버 오류 (${res.status})` }))
-        alert(`오류: ${result.error ?? '알 수 없는 오류'}`)
+        toast.error(`오류: ${result.error ?? '알 수 없는 오류'}`)
         setDeleteLoading(false)
         return
       }
       const result = await res.json()
-      if (result.error) { alert(`오류: ${result.error}`); setDeleteLoading(false); return }
-      alert(`${deleteEngineer.name} 직원이 퇴사 처리되었습니다. (퇴사일 ${resignDate})\n과거 기록은 그대로 보존됩니다.`)
+      if (result.error) { toast.error(`오류: ${result.error}`); setDeleteLoading(false); return }
+      toast.success(`${deleteEngineer.name} 직원이 퇴사 처리되었습니다 (퇴사일 ${resignDate})`)
       setDeleteEngineer(null)
       fetchEngineers()
     } catch (e) {
-      alert('오류가 발생했습니다.')
+      toast.error('오류가 발생했습니다')
     }
     setDeleteLoading(false)
   }
 
   // 복직 처리 — 퇴사일을 비워 다시 재직 상태로
   const handleRestoreEngineer = async (eng: Engineer) => {
-    if (!confirm(`${eng.name} 직원을 복직 처리하시겠습니까?\n(로그인 계정은 '직원 등록'에서 다시 생성해야 합니다.)`)) return
+    const ok = await confirmDialog({ title: '복직 처리', message: `${eng.name} 직원을 복직 처리하시겠습니까?\n(로그인 계정은 '직원 등록'에서 다시 생성해야 합니다.)`, confirmText: '복직 처리', variant: 'default' })
+    if (!ok) return
     try {
       const res = await fetch('/api/update-engineer', {
         method: 'POST',
@@ -343,15 +362,15 @@ export default function AdminPage() {
         body: JSON.stringify({
           engineer_id: eng.engineer_id, name: eng.name, position: eng.position,
           teams: eng.teams, email: eng.email, initials: eng.initials,
-          is_inventory_manager: eng.is_inventory_manager, resigned_date: null,
+          resigned_date: null,
         }),
       })
       const result = await res.json().catch(() => ({ error: `서버 오류 (${res.status})` }))
-      if (!res.ok || result.error) { alert(`오류: ${result.error ?? '알 수 없는 오류'}`); return }
-      alert(`${eng.name} 직원이 복직 처리되었습니다.`)
+      if (!res.ok || result.error) { toast.error(`오류: ${result.error ?? '알 수 없는 오류'}`); return }
+      toast.success(`${eng.name} 직원이 복직 처리되었습니다`)
       fetchEngineers()
     } catch {
-      alert('오류가 발생했습니다.')
+      toast.error('오류가 발생했습니다')
     }
   }
 
@@ -364,7 +383,7 @@ export default function AdminPage() {
   }
 
   const handleAddTeam = async () => {
-    if (!newTeamName.trim()) { alert('팀 이름을 입력해주세요.'); return }
+    if (!teamErr.validate({ teamName: newTeamName.trim() ? null : '팀 이름을 입력해주세요' })) return
     setAddTeamLoading(true)
     const maxOrder = teamsList.length > 0 ? Math.max(...teamsList.map(t => t.display_order)) : 0
     const { error } = await supabase.from('teams').insert({
@@ -372,7 +391,7 @@ export default function AdminPage() {
       display_order: maxOrder + 1,
     })
     setAddTeamLoading(false)
-    if (error) { alert(error.message); return }
+    if (error) { toast.error(error.message); return }
     setNewTeamName('')
     fetchTeams()
   }
@@ -383,10 +402,11 @@ export default function AdminPage() {
       .select('engineer_id', { count: 'exact', head: true })
       .eq('teams', team.name)
     if (count && count > 0) {
-      alert(`이 팀에 ${count}명의 직원이 배정되어 있습니다. 먼저 직원 팀을 변경해주세요.`)
+      toast.error(`이 팀에 ${count}명의 직원이 배정되어 있습니다. 먼저 직원 팀을 변경해주세요`)
       return
     }
-    if (!confirm(`'${team.name}' 팀을 삭제하시겠습니까?`)) return
+    const ok = await confirmDialog({ title: '팀 삭제', message: `'${team.name}' 팀을 삭제하시겠습니까?`, confirmText: '삭제', variant: 'danger' })
+    if (!ok) return
     setDeletingTeam(team.id)
     await supabase.from('teams').delete().eq('id', team.id)
     setDeletingTeam(null)
@@ -396,15 +416,14 @@ export default function AdminPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchTeams() }, [])
 
-  const teamsOptions = teamsList.length > 0 ? teamsList.map(t => t.name) : TEAMS
+  const teamsOptions = teamsList.map(t => t.name)
 
   const inp: React.CSSProperties = {
     padding: '8px 12px', border: `1px solid ${BORDER}`, borderRadius: 8,
     fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box', width: '100%',
   }
 
-  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', fontSize: 16, color: GRAY }}>확인 중...</div>
-  if (!authorized) return null
+  if (loading || !authorized) return <AccessGate loading={loading} />
 
   // 팀별 그룹핑 (목표 금액용)
   const teamGroups = engineers.reduce((acc, eng) => {
@@ -479,16 +498,8 @@ export default function AdminPage() {
             <div style={{ fontSize: 28, marginBottom: 12 }}>📊</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>가격표 업로드</div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>엑셀 파일을 업로드해서 견적서 가격표를 최신 버전으로 업데이트합니다.</div>
-            <button style={{ width: '100%', padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
-              onClick={() => alert('준비 중입니다.')}>업로드하기</button>
-          </div>
-
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}` }}>
-            <div style={{ fontSize: 28, marginBottom: 12 }}>💱</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>환율 수동 설정</div>
-            <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>자동 갱신이 안 될 때 JPY 환율을 수동으로 입력합니다.</div>
-            <button style={{ width: '100%', padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
-              onClick={() => alert('준비 중입니다.')}>설정하기</button>
+            <button disabled style={{ width: '100%', padding: '10px', background: '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'not-allowed' }}>업로드하기</button>
+            <div style={{ fontSize: 11, color: GRAY, marginTop: 6, textAlign: 'center' }}>준비 중</div>
           </div>
 
  <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
@@ -540,17 +551,18 @@ export default function AdminPage() {
                             <span style={{ fontSize: 11, color: GRAY, marginLeft: 6 }}>{eng.position}</span>
                           </div>
                           {isEditing ? (
-                            <div style={{ flex: 1, display: 'flex', gap: 6 }}>
+                            <div style={{ flex: 1, display: 'flex', gap: 6, position: 'relative' }}>
                               <input type="number" value={editingTarget.amount}
-                                onChange={e => setEditingTarget(prev => prev ? { ...prev, amount: e.target.value } : null)}
+                                onChange={e => { setEditingTarget(prev => prev ? { ...prev, amount: e.target.value } : null); targetErr.clearError('amount') }}
                                 onKeyDown={e => e.key === 'Enter' && handleSaveTarget()}
-                                placeholder="금액 입력 (비우면 삭제)" style={{ ...inp, flex: 1 }} autoFocus />
+                                placeholder="금액 입력 (비우면 삭제)" style={targetErr.errors.amount ? { ...inp, flex: 1, border: errBorder } : { ...inp, flex: 1 }} autoFocus />
                               <button onClick={handleSaveTarget} disabled={savingTarget}
                                 style={{ padding: '6px 14px', background: BLUE, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', opacity: savingTarget ? 0.7 : 1 }}>
                                 {savingTarget ? '...' : '저장'}
                               </button>
                               <button onClick={() => setEditingTarget(null)}
                                 style={{ padding: '6px 10px', background: '#f3f4f6', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>취소</button>
+                              <FieldError message={targetErr.errors.amount} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 2, whiteSpace: 'nowrap' }} />
                             </div>
                           ) : (
                             <>
@@ -738,7 +750,6 @@ export default function AdminPage() {
                               const rc = getCategoryColor(ROLE_COLORS, level)
                               const roleLabel = level === 'superadmin' ? '최고관리자' : level === 'manager' ? '팀장' : '팀원'
                               const badges: { label: string; bg: string; color: string }[] = [{ label: roleLabel, bg: rc.bg, color: rc.text }]
-                              if (eng.is_inventory_manager) badges.push({ label: '재고관리자', bg: INVENTORY_MANAGER_COLOR.bg, color: INVENTORY_MANAGER_COLOR.text })
                               return badges.map(b => (
                                 <span key={b.label} style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: b.bg, color: b.color, whiteSpace: 'nowrap' }}>
                                   {b.label}
@@ -748,7 +759,7 @@ export default function AdminPage() {
                           </div>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
-                          <button onClick={() => { setEditEngineer(eng); setEditForm({ name: eng.name, position: eng.position || '사원', teams: eng.teams || '1', email: eng.email || '', initials: eng.initials || '', permission_level: eng.permission_level || 'member', is_inventory_manager: eng.is_inventory_manager || false }) }}
+                          <button onClick={() => { setEditEngineer(eng); setEditForm({ name: eng.name, position: eng.position || '사원', teams: eng.teams || '1', email: eng.email || '', initials: eng.initials || '', permission_level: eng.permission_level || 'member' }) }}
                             style={{ padding: '4px 12px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>수정</button>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
@@ -778,7 +789,8 @@ export default function AdminPage() {
             <div style={{ display: 'grid', gap: 12 }}>
               <div>
                 <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>이름 *</div>
-                <input value={addForm.name} onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))} placeholder="예: 홍길동" style={inp} />
+                <input value={addForm.name} onChange={e => { setAddForm(p => ({ ...p, name: e.target.value })); addEngErr.clearError('name') }} placeholder="예: 홍길동" style={addEngErr.errors.name ? { ...inp, border: errBorder } : inp} />
+                <FieldError message={addEngErr.errors.name} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
@@ -796,15 +808,18 @@ export default function AdminPage() {
               </div>
               <div>
                 <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>이메일 * (로그인 ID)</div>
-                <input value={addForm.email} onChange={e => setAddForm(p => ({ ...p, email: e.target.value }))} placeholder="예: hong@accretechkorea.com" style={inp} />
+                <input value={addForm.email} onChange={e => { setAddForm(p => ({ ...p, email: e.target.value })); addEngErr.clearError('email') }} placeholder="예: hong@accretechkorea.com" style={addEngErr.errors.email ? { ...inp, border: errBorder } : inp} />
+                <FieldError message={addEngErr.errors.email} />
               </div>
               <div>
                 <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>초기 비밀번호 *</div>
-                <input type="password" value={addForm.password} onChange={e => setAddForm(p => ({ ...p, password: e.target.value }))} placeholder="8자 이상" style={inp} />
+                <input type="password" value={addForm.password} onChange={e => { setAddForm(p => ({ ...p, password: e.target.value })); addEngErr.clearError('password') }} placeholder="8자 이상" style={addEngErr.errors.password ? { ...inp, border: errBorder } : inp} />
+                <FieldError message={addEngErr.errors.password} />
               </div>
               <div>
                 <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>이니셜 * (견적번호용)</div>
-                <input value={addForm.initials} onChange={e => setAddForm(p => ({ ...p, initials: e.target.value }))} placeholder="예: HGD" style={inp} maxLength={5} />
+                <input value={addForm.initials} onChange={e => { setAddForm(p => ({ ...p, initials: e.target.value })); addEngErr.clearError('initials') }} placeholder="예: HGD" style={addEngErr.errors.initials ? { ...inp, border: errBorder } : inp} maxLength={5} />
+                <FieldError message={addEngErr.errors.initials} />
                 <div style={{ fontSize: 11, color: GRAY, marginTop: 3 }}>견적번호에 사용됩니다 (예: No.HGD20260511-A)</div>
               </div>
             </div>
@@ -829,7 +844,8 @@ export default function AdminPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 <div>
                   <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>이름 *</div>
-                  <input value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} style={inp} />
+                  <input value={editForm.name} onChange={e => { setEditForm(p => ({ ...p, name: e.target.value })); editEngErr.clearError('name') }} style={editEngErr.errors.name ? { ...inp, border: errBorder } : inp} />
+                  <FieldError message={editEngErr.errors.name} />
                 </div>
                 <div>
                   <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>직책</div>
@@ -870,20 +886,6 @@ export default function AdminPage() {
                         </label>
                       )
                     })}
-                    {(() => {
-                      const checked = editForm.is_inventory_manager
-                      return (
-                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', padding: '11px 12px', background: checked ? '#f0fdf4' : '#f8fafc', borderRadius: 8, transition: 'all 0.15s' }}>
-                          <input type="checkbox" checked={checked}
-                            onChange={e => setEditForm(p => ({ ...p, is_inventory_manager: e.target.checked }))}
-                            style={{ width: 15, height: 15, accentColor: INVENTORY_MANAGER_COLOR.text, cursor: 'pointer', marginTop: 2, flexShrink: 0 }} />
-                          <div>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: checked ? INVENTORY_MANAGER_COLOR.text : TEXT }}>재고관리자</div>
-                            <div style={{ fontSize: 11, color: GRAY, marginTop: 2, lineHeight: 1.4 }}>출고 요청 승인·반려 가능</div>
-                          </div>
-                        </label>
-                      )
-                    })()}
                   </div>
                 </div>
               )}
@@ -913,14 +915,15 @@ export default function AdminPage() {
             <div style={{ background: '#f8fafc', borderRadius: 12, padding: '14px 16px', marginBottom: 16, border: `1px solid ${BORDER}` }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 10 }}>새 팀 추가</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-                <input value={newTeamName} onChange={e => setNewTeamName(e.target.value)}
+                <input value={newTeamName} onChange={e => { setNewTeamName(e.target.value); teamErr.clearError('teamName') }}
                   onKeyDown={e => e.key === 'Enter' && handleAddTeam()}
-                  placeholder="팀 이름 (예: Apps., 5)" style={{ ...inp, flex: 1 }} />
+                  placeholder="팀 이름 (예: Apps., 5)" style={teamErr.errors.teamName ? { ...inp, flex: 1, border: errBorder } : { ...inp, flex: 1 }} />
                 <button onClick={handleAddTeam} disabled={addTeamLoading || !newTeamName.trim()}
                   style={{ padding: '8px 18px', background: BLUE, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', opacity: (addTeamLoading || !newTeamName.trim()) ? 0.6 : 1 }}>
                   {addTeamLoading ? '...' : '추가'}
                 </button>
               </div>
+              <FieldError message={teamErr.errors.teamName} />
             </div>
 
             {/* 팀 목록 */}
@@ -959,8 +962,9 @@ export default function AdminPage() {
             </div>
             <div style={{ marginBottom: 20 }}>
               <label style={{ fontSize: 13, fontWeight: 700, color: TEXT, display: 'block', marginBottom: 6 }}>퇴사일</label>
-              <input type="date" value={resignDate} onChange={e => setResignDate(e.target.value)}
-                style={{ ...inp, width: '100%', colorScheme: 'light' }} />
+              <input type="date" value={resignDate} onChange={e => { setResignDate(e.target.value); resignErr.clearError('resignDate') }}
+                style={resignErr.errors.resignDate ? { ...inp, width: '100%', colorScheme: 'light', border: errBorder } : { ...inp, width: '100%', colorScheme: 'light' }} />
+              <FieldError message={resignErr.errors.resignDate} />
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setDeleteEngineer(null)}

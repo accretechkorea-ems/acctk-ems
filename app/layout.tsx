@@ -1,5 +1,7 @@
 import SessionManager from '@/components/common/SessionManager'
 import HeaderWrapper from '@/components/common/HeaderWrapper'
+import { ToastProvider } from '@/components/common/Toast'
+import { ConfirmProvider } from '@/components/common/ConfirmDialog'
 import type { Metadata } from "next";
 import "./globals.css";
 
@@ -18,7 +20,11 @@ export default function RootLayout({
       <body className={`antialiased bg-white text-black`}>
         <SessionManager />
         <HeaderWrapper />
-        {children}
+        <ToastProvider>
+          <ConfirmProvider>
+            {children}
+          </ConfirmProvider>
+        </ToastProvider>
       </body>
     </html>
   );

@@ -13,32 +13,9 @@ export const addCustomer = async ({
 }: any) => {
   const supabase = createClient()
 
-  if (!customerForm.company_name.trim()) {
-    alert('업체명을 입력해주세요.')
-    return
-  }
-
-  if (!customerForm.address.trim()) {
-    alert('주소를 입력해주세요.')
-    return
-  }
-
-  if (!contactForm.name.trim()) {
-    alert('담당자 이름을 입력해주세요.')
-    return
-  }
-
-  if (deviceForms.length === 0) {
-    alert('장비 정보를 최소 1개 입력해주세요.')
-    return
-  }
-
-  for (const device of deviceForms) {
-    if (!device.device_name.trim()) {
-      alert('장비 라인업을 입력해주세요.')
-      return
-    }
-  }
+  // 사용자 검증은 호출 컴포넌트(AddCustomerModal)에서 인라인으로 처리한다.
+  // 여기서는 방어용 최소 가드만 둔다 (throw → 호출부 catch 에서 toast.error 로 표면화).
+  if (!customerForm.company_name?.trim()) throw new Error('업체명을 입력해주세요')
 
   setIsSavingCustomer(true)
 
@@ -114,13 +91,12 @@ export const addCustomer = async ({
     ])
     if (contactError) throw contactError
 
-    alert('업체가 추가되었습니다.')
-
     resetForms()
     setIsAddCustomerModalOpen(false)
     setQuery('')
 
     await fetchData()
+    return true // 성공 여부를 반환 → 호출 컴포넌트에서 토스트 표시
   } catch (error: any) {
     console.error(error)
 
@@ -128,7 +104,8 @@ export const addCustomer = async ({
       await supabase.from('customers').delete().eq('customer_id', insertedCustomerId)
     }
 
-    alert(error?.message || '에러 발생')
+    // 훅을 쓸 수 없는 모듈이므로 에러를 호출부로 전파 → 컴포넌트에서 toast.error 표시
+    throw error
   } finally {
     setIsSavingCustomer(false)
   }

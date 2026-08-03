@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import type { Device, DeviceForm } from '../types'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 
 type Props = {
   device: Device | null
@@ -23,6 +24,7 @@ const dateStyle: CSSProperties = { ...fieldStyle, colorScheme: 'light' }
 export default function DeviceEditModal({ device, isSaving, onClose, onSave, onDelete, onOpenPacking }: Props) {
   const [form, setForm] = useState<DeviceForm>({ device_name: '', device_name2: '', option: '', serial_number: '', program: 'ACCTee', install_date: '', category: '20' })
   const [packingFile, setPackingFile] = useState<File | null>(null)
+  const { errors, setErrors, clearError, validate } = useFieldErrors<'device_name'>()
 
   useEffect(() => {
     if (device) {
@@ -36,13 +38,15 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
         category: device.category ?? '20',
       })
       setPackingFile(null)
+      setErrors({})
     }
   }, [device])
 
   if (!device) return null
 
   const handleSave = () => {
-    if (!form.device_name.trim()) { alert('장비 라인업을 입력해주세요.'); return }
+    const ok = validate({ device_name: form.device_name.trim() ? null : '장비 라인업을 입력해주세요' })
+    if (!ok) return
     onSave(form, packingFile)
   }
 
@@ -76,10 +80,11 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
           <div>
             <label style={labelStyle}>장비 라인업 / 모델명 / 옵션</label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-              <input value={form.device_name} onChange={(e) => setForm(p => ({ ...p, device_name: e.target.value }))} placeholder="라인업" style={{ ...fieldStyle, fontSize: 13 }} />
+              <input value={form.device_name} onChange={(e) => { setForm(p => ({ ...p, device_name: e.target.value })); clearError('device_name') }} placeholder="라인업" style={errors.device_name ? { ...fieldStyle, fontSize: 13, border: errBorder } : { ...fieldStyle, fontSize: 13 }} />
               <input value={form.device_name2} onChange={(e) => setForm(p => ({ ...p, device_name2: e.target.value }))} placeholder="모델명" style={{ ...fieldStyle, fontSize: 13 }} />
               <input value={form.option} onChange={(e) => setForm(p => ({ ...p, option: e.target.value }))} placeholder="옵션" style={{ ...fieldStyle, fontSize: 13 }} />
             </div>
+            <FieldError message={errors.device_name} />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>

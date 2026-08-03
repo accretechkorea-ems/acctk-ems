@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import type { Contact, ContactForm } from '../types'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 
 type Props = {
   contact: Contact | null
@@ -20,6 +21,7 @@ const fieldStyle: CSSProperties = {
 
 export default function ContactEditModal({ contact, isSaving, onClose, onSave, onDelete }: Props) {
   const [form, setForm] = useState<ContactForm>({ name: '', department: '', position: '', phone: '', email: '' })
+  const { errors, setErrors, clearError, validate } = useFieldErrors<'name'>()
 
   useEffect(() => {
     if (contact) {
@@ -30,13 +32,15 @@ export default function ContactEditModal({ contact, isSaving, onClose, onSave, o
         phone: contact.phone ?? '',
         email: contact.email ?? '',
       })
+      setErrors({})
     }
   }, [contact])
 
   if (!contact) return null
 
   const handleSave = () => {
-    if (!form.name.trim()) { alert('이름을 입력해주세요.'); return }
+    const ok = validate({ name: form.name.trim() ? null : '이름을 입력해주세요' })
+    if (!ok) return
     onSave(form)
   }
 
@@ -70,7 +74,8 @@ export default function ContactEditModal({ contact, isSaving, onClose, onSave, o
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <label style={labelStyle}>이름 *</label>
-              <input value={form.name} onChange={(e) => setForm(p => ({ ...p, name: e.target.value }))} placeholder="이름" style={fieldStyle} />
+              <input value={form.name} onChange={(e) => { setForm(p => ({ ...p, name: e.target.value })); clearError('name') }} placeholder="이름" style={errors.name ? { ...fieldStyle, border: errBorder } : fieldStyle} />
+              <FieldError message={errors.name} />
             </div>
             <div>
               <label style={labelStyle}>직책</label>

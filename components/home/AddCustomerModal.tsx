@@ -14,6 +14,8 @@ import {
   type NewDeviceForm,
 } from '@/lib/home'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import { useEffect } from 'react'
+import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 
 type CustomerForm = {
   company_name: string
@@ -21,6 +23,9 @@ type CustomerForm = {
   agency: string
   status: string
 }
+
+// 검증 에러 key: 스칼라 3종 + 장비 항목별(device_0, device_1 …) — 인덱스는 템플릿 리터럴로 타입 안전
+type ErrKey = 'company_name' | 'address' | 'contact_name' | `device_${number}`
 
 type Props = {
   isOpen: boolean
@@ -55,7 +60,29 @@ export default function AddCustomerModal({
   onClose,
   onSave,
 }: Props) {
+  const { errors, setErrors, clearError, validate } = useFieldErrors<ErrKey>()
+  // 모달 열림/닫힘(gate=isOpen) 시 에러 초기화
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setErrors({}) }, [isOpen])
+
   if (!isOpen) return null
+
+  // 장비 카드 삭제 시 인덱스가 밀리므로 device_* 에러는 전부 정리 (스칼라 에러는 유지)
+  const clearDeviceErrors = () => setErrors(prev =>
+    Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith('device_'))) as Partial<Record<ErrKey, string>>
+  )
+
+  // 사용자 검증은 여기(모달)에서 인라인으로 한꺼번에 수집. 통과해야만 onSave() → addCustomer 호출.
+  const handleSave = () => {
+    const rules: Partial<Record<ErrKey, string | null>> = {
+      company_name: customerForm.company_name.trim() ? null : '업체명을 입력해주세요',
+      address: customerForm.address.trim() ? null : '주소를 입력해주세요',
+      contact_name: contactForm.name.trim() ? null : '담당자 이름을 입력해주세요',
+    }
+    deviceForms.forEach((d, i) => { rules[`device_${i}`] = d.device_name.trim() ? null : '장비 라인업을 입력해주세요' })
+    if (!validate(rules)) return
+    onSave()
+  }
 
   return (
     <ModalOverlay onClose={onClose}>
@@ -105,17 +132,15 @@ export default function AddCustomerModal({
                 gap: 10,
               }}
             >
-              <input
-                value={customerForm.company_name}
-                onChange={(e) =>
-                  setCustomerForm((prev) => ({
-                    ...prev,
-                    company_name: e.target.value,
-                  }))
-                }
-                placeholder="업체명(company_name)"
-                style={inputStyle}
-              />
+              <div>
+                <input
+                  value={customerForm.company_name}
+                  onChange={(e) => { setCustomerForm((prev) => ({ ...prev, company_name: e.target.value })); clearError('company_name') }}
+                  placeholder="업체명(company_name)"
+                  style={errors.company_name ? { ...inputStyle, border: errBorder } : inputStyle}
+                />
+                <FieldError message={errors.company_name} />
+              </div>
 
               <select
                 value={customerForm.status}
@@ -135,15 +160,11 @@ export default function AddCustomerModal({
 
             <input
               value={customerForm.address}
-              onChange={(e) =>
-                setCustomerForm((prev) => ({
-                  ...prev,
-                  address: e.target.value,
-                }))
-              }
+              onChange={(e) => { setCustomerForm((prev) => ({ ...prev, address: e.target.value })); clearError('address') }}
               placeholder="주소(전체 주소를 입력 ex. 울산광역시 북구 명촌 7길 30)"
-              style={inputStyle}
+              style={errors.address ? { ...inputStyle, border: errBorder } : inputStyle}
             />
+            <FieldError message={errors.address} />
 
             <input
               value={customerForm.agency}
@@ -221,7 +242,7 @@ export default function AddCustomerModal({
                   {deviceForms.length > 1 && (
                     <button
                       type="button"
-                      onClick={() => removeDeviceFormCard(index)}
+                      onClick={() => { removeDeviceFormCard(index); clearDeviceErrors() }}
                       style={{
                         padding: '6px 10px',
                         borderRadius: 8,
@@ -247,11 +268,9 @@ export default function AddCustomerModal({
                   >
                     <input
                       value={device.device_name}
-                      onChange={(e) =>
-                        updateDeviceForm(index, 'device_name', e.target.value)
-                      }
+                      onChange={(e) => { updateDeviceForm(index, 'device_name', e.target.value); clearError(`device_${index}`) }}
                       placeholder="장비 라인업(ex. SURFCOM)"
-                      style={{ ...inputStyle, fontSize: 12 }}
+                      style={errors[`device_${index}`] ? { ...inputStyle, fontSize: 12, border: errBorder } : { ...inputStyle, fontSize: 12 }}
                     />
 
                     <input
@@ -272,6 +291,7 @@ export default function AddCustomerModal({
                       style={{ ...inputStyle, fontSize: 12 }}
                     />
                   </div>
+                  <FieldError message={errors[`device_${index}`]} />
 
                   <div
                     style={{
@@ -422,17 +442,15 @@ export default function AddCustomerModal({
                 gap: 10,
               }}
             >
-              <input
-                value={contactForm.name}
-                onChange={(e) =>
-                  setContactForm((prev) => ({
-                    ...prev,
-                    name: e.target.value,
-                  }))
-                }
-                placeholder="이름(name)"
-                style={inputStyle}
-              />
+              <div>
+                <input
+                  value={contactForm.name}
+                  onChange={(e) => { setContactForm((prev) => ({ ...prev, name: e.target.value })); clearError('contact_name') }}
+                  placeholder="이름(name)"
+                  style={errors.contact_name ? { ...inputStyle, border: errBorder } : inputStyle}
+                />
+                <FieldError message={errors.contact_name} />
+              </div>
 
               <input
                 value={contactForm.position}
@@ -485,7 +503,7 @@ export default function AddCustomerModal({
           </button>
 
           <button
-            onClick={onSave}
+            onClick={handleSave}
             disabled={isSavingCustomer}
             style={{
               padding: '10px 14px',

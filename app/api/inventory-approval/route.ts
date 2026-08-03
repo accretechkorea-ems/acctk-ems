@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { canAccessSales } from '@/lib/permissions'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,13 +13,13 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // 재고관리자 또는 superadmin만 허용
+  // 영업관리팀 또는 superadmin만 허용 (canAccessSales)
   const { data: caller } = await supabase
     .from('engineers')
-    .select('engineer_id, is_inventory_manager, permission_level')
+    .select('engineer_id, teams, permission_level')
     .eq('email', user.email!)
     .single()
-  if (!caller || !(caller.is_inventory_manager || caller.permission_level === 'superadmin')) {
+  if (!caller || !canAccessSales(caller)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

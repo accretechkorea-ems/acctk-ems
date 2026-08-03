@@ -6,6 +6,7 @@ import { isCurrentlyEmployed } from '@/lib/engineers'
 import { SERVICE_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { toMin, stepTime, computeWorkHours, lunchOverlapHours } from '@/lib/workHours'
+import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 
 type Props = {
   deviceId: number | null
@@ -38,6 +39,7 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
   const [selectedEngineerIds, setSelectedEngineerIds] = useState<number[]>([])
   const [showExtraEngineers, setShowExtraEngineers] = useState(false)
   const [showHint, setShowHint] = useState(false)
+  const { errors, setErrors, clearError, validate } = useFieldErrors<'visit_date' | 'service_notes' | 'contact_id' | 'engineers'>()
   const scrollBodyRef = useRef<HTMLDivElement | null>(null)
   const hintRef = useRef<HTMLDivElement | null>(null)
 
@@ -62,6 +64,7 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
       setForm({ visit_date: todayStr, service_notes: '', etc_notes: '', visitor: '', service_type: '신규설치', contact_id: null, is_paid: true, work_hours: '', start_time: '08:30', end_time: '17:30' })
       setSelectedEngineerIds(currentUserEngineerId ? [currentUserEngineerId] : [])
       setShowExtraEngineers(false)
+      setErrors({})
     }
   }, [deviceId, currentUserEngineerId])
 
@@ -72,10 +75,14 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
   const selectableEngineers = engineers.filter(e => isCurrentlyEmployed(e.resigned_date, todayStr))
 
   const handleSave = () => {
-    if (!form.visit_date.trim()) { alert('방문일자를 입력해주세요.'); return }
-    if (!form.service_notes.trim()) { alert('서비스 내용을 입력해주세요.'); return }
-    if (!form.contact_id) { alert('고객 담당자를 선택해주세요.'); return }
-    if (selectedEngineerIds.length === 0) { alert('방문 엔지니어를 선택해주세요.'); return }
+    // 검증 규칙은 동일. alert 대신 필드별 인라인 에러로 한꺼번에 표시.
+    const ok = validate({
+      visit_date: form.visit_date.trim() ? null : '방문일자를 입력해주세요',
+      service_notes: form.service_notes.trim() ? null : '서비스 내용을 입력해주세요',
+      contact_id: form.contact_id ? null : '고객 담당자를 선택해주세요',
+      engineers: selectedEngineerIds.length > 0 ? null : '방문 엔지니어를 선택해주세요',
+    })
+    if (!ok) return
     if (!timeValid) return
     onSave({ ...form, work_hours: String(workHours) }, selectedEngineerIds)
   }
@@ -113,7 +120,8 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
         <div ref={scrollBodyRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '16px 20px', display: 'grid', gap: 14 }}>
           <div>
             <label style={labelStyle}>서비스 내용</label>
-            <textarea value={form.service_notes} onChange={(e) => setForm(p => ({ ...p, service_notes: e.target.value }))} placeholder="서비스 내용을 입력하세요" rows={5} style={areaStyle} />
+            <textarea value={form.service_notes} onChange={(e) => { setForm(p => ({ ...p, service_notes: e.target.value })); clearError('service_notes') }} placeholder="서비스 내용을 입력하세요" rows={5} style={errors.service_notes ? { ...areaStyle, border: errBorder } : areaStyle} />
+            <FieldError message={errors.service_notes} />
           </div>
 
           <div>
@@ -141,14 +149,16 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
             <div>
               <label style={labelStyle}>고객 담당자</label>
-              <select value={form.contact_id ?? ''} onChange={(e) => setForm(p => ({ ...p, contact_id: e.target.value ? Number(e.target.value) : null }))} style={fieldStyle}>
+              <select value={form.contact_id ?? ''} onChange={(e) => { setForm(p => ({ ...p, contact_id: e.target.value ? Number(e.target.value) : null })); clearError('contact_id') }} style={errors.contact_id ? { ...fieldStyle, border: errBorder } : fieldStyle}>
                 <option value="">담당자 선택</option>
                 {contacts.map(c => <option key={c.contact_id} value={c.contact_id}>{c.name} {c.position ?? ''}</option>)}
               </select>
+              <FieldError message={errors.contact_id} />
             </div>
             <div>
               <label style={labelStyle}>방문일자</label>
-              <input type="date" value={form.visit_date} onChange={(e) => setForm(p => ({ ...p, visit_date: e.target.value }))} style={dateFieldStyle} />
+              <input type="date" value={form.visit_date} onChange={(e) => { setForm(p => ({ ...p, visit_date: e.target.value })); clearError('visit_date') }} style={errors.visit_date ? { ...dateFieldStyle, border: errBorder } : dateFieldStyle} />
+              <FieldError message={errors.visit_date} />
             </div>
           </div>
 
@@ -205,7 +215,7 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
             </div>
           </div>
 
-          <div style={{ border: '1px solid #ebebeb', borderRadius: 8, padding: 14, background: '#f8f9fb' }}>
+          <div style={{ border: errors.engineers ? errBorder : '1px solid #ebebeb', borderRadius: 8, padding: 14, background: '#f8f9fb' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 7 }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', marginRight: 4 }}>방문 엔지니어</span>
               {selectedEngineerIds.map(id => {
@@ -231,13 +241,14 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
             {showExtraEngineers && (
               <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 7, paddingTop: 10, borderTop: '1px solid #ebebeb' }}>
                 {selectableEngineers.filter(e => !selectedEngineerIds.includes(e.engineer_id)).map(eng => (
-                  <button key={eng.engineer_id} onClick={() => { setSelectedEngineerIds(p => [...p, eng.engineer_id]); setShowExtraEngineers(false) }}
+                  <button key={eng.engineer_id} onClick={() => { setSelectedEngineerIds(p => [...p, eng.engineer_id]); setShowExtraEngineers(false); clearError('engineers') }}
                     style={{ padding: '6px 12px', borderRadius: 20, border: '1px solid #ebebeb', background: '#fff', color: '#111827', fontWeight: 600, fontSize: 12, cursor: 'pointer', minWidth: 96, textAlign: 'center' }}>
                     {eng.name} {eng.position || ''}
                   </button>
                 ))}
               </div>
             )}
+            <FieldError message={errors.engineers} style={{ marginTop: 10 }} />
           </div>
         </div>
 

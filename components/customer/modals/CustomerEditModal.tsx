@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import type { Customer, CustomerEditFormData } from '../types'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 
 type Props = {
   customer: Customer | null
@@ -21,6 +22,7 @@ const fieldStyle: CSSProperties = {
 
 export default function CustomerEditModal({ customer, isSaving, isDeleting, onClose, onSave, onDelete }: Props) {
   const [form, setForm] = useState<CustomerEditFormData>({ company_name: '', address: '', agency: '', status: '활성' })
+  const { errors, setErrors, clearError, validate } = useFieldErrors<'company_name' | 'address'>()
 
   useEffect(() => {
     if (customer) {
@@ -30,10 +32,21 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
         agency: customer.agency ?? '',
         status: customer.status ?? '활성',
       })
+      setErrors({})
     }
   }, [customer])
 
   if (!customer) return null
+
+  // 검증은 여기(모달)에서 인라인으로 수집 → 통과 시에만 onSave(form)
+  const handleSave = () => {
+    const ok = validate({
+      company_name: form.company_name.trim() ? null : '업체명을 입력해주세요',
+      address: form.address.trim() ? null : '주소를 입력해주세요',
+    })
+    if (!ok) return
+    onSave(form)
+  }
 
   return (
     <ModalOverlay onClose={onClose}>
@@ -65,11 +78,13 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
         <div style={{ display: 'grid', gap: 14 }}>
           <div>
             <label style={labelStyle}>업체명</label>
-            <input value={form.company_name} onChange={(e) => setForm(p => ({ ...p, company_name: e.target.value }))} placeholder="업체명" style={fieldStyle} />
+            <input value={form.company_name} onChange={(e) => { setForm(p => ({ ...p, company_name: e.target.value })); clearError('company_name') }} placeholder="업체명" style={errors.company_name ? { ...fieldStyle, border: errBorder } : fieldStyle} />
+            <FieldError message={errors.company_name} />
           </div>
           <div>
             <label style={labelStyle}>주소</label>
-            <input value={form.address} onChange={(e) => setForm(p => ({ ...p, address: e.target.value }))} placeholder="주소" style={fieldStyle} />
+            <input value={form.address} onChange={(e) => { setForm(p => ({ ...p, address: e.target.value })); clearError('address') }} placeholder="주소" style={errors.address ? { ...fieldStyle, border: errBorder } : fieldStyle} />
+            <FieldError message={errors.address} />
           </div>
           <div>
             <label style={labelStyle}>대리점</label>
@@ -101,7 +116,7 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
               style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: 6, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
             >취소</button>
             <button
-              onClick={() => onSave(form)}
+              onClick={handleSave}
               disabled={isSaving}
               onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
               onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}

@@ -3,8 +3,13 @@
 
 import React, { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/components/common/Toast'
+import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { isActiveInPeriod } from '@/lib/engineers'
 import { SALES_STATUS_COLORS, TEAM_COLORS, getCategoryColor } from '@/lib/categoryColors'
+import { usePageGuard } from '@/hooks/usePageGuard'
+import AccessGate from '@/components/common/AccessGate'
+import { canAccessAdmin } from '@/lib/permissions'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#f4f5f7'
@@ -506,6 +511,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
 })
  {
   const supabase = createClient()
+  const toast = useToast()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('전체')
   const [page, setPage] = useState(1)
@@ -531,6 +537,10 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   const [taxQuote, setTaxQuote] = useState<Quote | null>(null)
   const [taxDate, setTaxDate] = useState('')
   const [taxSending, setTaxSending] = useState(false)
+  // 세금계산서 요청 모달 검증 (모달이라 gate state = taxQuote 로 열림/닫힘 시 에러 초기화)
+  const { errors, setErrors, clearError, validate } = useFieldErrors<'taxDate'>()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { setErrors({}) }, [taxQuote])
   // 메모 툴팁
   const [hoveredMemoId, setHoveredMemoId] = useState<number | null>(null)
   const tc = getCategoryColor(TEAM_COLORS, engineer.teams)
@@ -591,7 +601,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
     const json = await res.json().catch(() => ({}))
     setPoUploading(false)
     if (!res.ok) {
-      alert(`발주서 등록 실패: ${json.error || res.status}`)
+      toast.error(`발주서 등록 실패: ${json.error || res.status}`)
       return
     }
     setPoQuote(null)
@@ -606,7 +616,8 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
 
   const handleTaxRequest = async () => {
     if (!taxQuote) return
-    if (!taxDate) { alert('요청 발행일을 선택해주세요.'); return }
+    const ok = validate({ taxDate: taxDate ? null : '요청 발행일을 선택해주세요' })
+    if (!ok) return
     setTaxSending(true)
     const fd = new FormData()
     fd.append('quoteId', String(taxQuote.quote_id))
@@ -616,7 +627,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
     const json = await res.json().catch(() => ({}))
     setTaxSending(false)
     if (!res.ok) {
-      alert(`세금계산서 요청 실패: ${json.error || res.status}`)
+      toast.error(`세금계산서 요청 실패: ${json.error || res.status}`)
       return
     }
     setTaxQuote(null)
@@ -940,8 +951,9 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
               <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{taxQuote.quote_number}</div>
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, color: GRAY, marginBottom: 6, fontWeight: 600 }}>요청 발행일 <span style={{ color: '#dc2626' }}>*</span></div>
-                <input type="date" value={taxDate} onChange={e => setTaxDate(e.target.value)}
-                  style={{ width: '100%', padding: '7px 10px', border: `1px solid ${taxDate ? BORDER : '#fca5a5'}`, borderRadius: 8, fontSize: 13, outline: 'none', colorScheme: 'light', boxSizing: 'border-box' }} />
+                <input type="date" value={taxDate} onChange={e => { setTaxDate(e.target.value); clearError('taxDate') }}
+                  style={{ width: '100%', padding: '7px 10px', border: errors.taxDate ? errBorder : `1px solid ${taxDate ? BORDER : '#fca5a5'}`, borderRadius: 8, fontSize: 13, outline: 'none', colorScheme: 'light', boxSizing: 'border-box' }} />
+                <FieldError message={errors.taxDate} />
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => { setTaxQuote(null); setTaxDate('') }} disabled={taxSending}
@@ -997,6 +1009,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
 // ── 메인 페이지 ───────────────────────────────────────────────────────────────
 export default function SalesPage() {
   const supabase = createClient()
+  const { loading: guardLoading, authorized } = usePageGuard(canAccessAdmin)
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [engineers, setEngineers] = useState<Engineer[]>([])
   const [targets, setTargets] = useState<SalesTarget[]>([])
@@ -1141,6 +1154,8 @@ const visibleEngineers = sortedEngineers.filter(e => {
   }
 
   const inp: React.CSSProperties = { padding: '6px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' }
+
+  if (!authorized) return <AccessGate loading={guardLoading} />
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', fontSize: 16, color: GRAY }}>불러오는 중...</div>

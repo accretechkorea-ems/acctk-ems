@@ -3,6 +3,8 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import type { Repair, RepairStatus } from '@/hooks/useRepairs'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import { useConfirm } from '@/components/common/ConfirmDialog'
+import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 
 /**
  * 수리품 수정 모달.
@@ -106,6 +108,8 @@ function buildPatch(
 }
 
 export default function RepairEditModal({ repair, isSaving, onClose, onSave, onDelete }: Props) {
+  const confirmDialog = useConfirm()
+  const { errors, setErrors, clearError, validate } = useFieldErrors<'customerName' | 'receivedDate'>()
   const [itemType, setItemType] = useState<Category>('게이지')
   const [receivedDate, setReceivedDate] = useState('')
   const [customerName, setCustomerName] = useState('')
@@ -125,6 +129,7 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
       setStatus(repair.status)
       setShippedDate(repair.shipped_date ?? '')
       setRepairContent(repair.repair_content ?? '')
+      setErrors({})
     }
   }, [repair])
 
@@ -143,15 +148,19 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
     if (v) { setStatus('출고완료'); setShippedDate(receivedDate) }
   }
 
-  const handleSave = () => {
-    if (!customerName.trim()) { alert('회사명을 입력해주세요.'); return }
-    if (!receivedDate) { alert('입고일을 입력해주세요.'); return }
+  const handleSave = async () => {
+    const ok0 = validate({
+      customerName: customerName.trim() ? null : '회사명을 입력해주세요',
+      receivedDate: receivedDate ? null : '입고일을 입력해주세요',
+    })
+    if (!ok0) return
     // 특이사항 건은 항상 출고완료로 처리되므로 되돌리기 확인 대상이 아니다.
     if (!isSpecial) {
       const origIdx = STATUSES.indexOf(repair.status)
       const newIdx = STATUSES.indexOf(status)
       if (newIdx < origIdx) {
-        if (!confirm('상태를 되돌리면 이후 단계의 기록(수리 완료일, 출고일)이 삭제됩니다. 계속할까요?')) return
+        const ok = await confirmDialog({ title: '상태 되돌리기', message: '상태를 되돌리면 이후 단계의 기록(수리 완료일, 출고일)이 삭제됩니다. 계속할까요?', confirmText: '계속', variant: 'default' })
+        if (!ok) return
       }
     }
     onSave(repair.repair_id, buildPatch(repair, { itemType, receivedDate, customerName, productType, serialNumber, status, shippedDate, repairContent }))
@@ -198,13 +207,15 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
             </div>
             <div>
               <label style={labelStyle}>입고일</label>
-              <input type="date" value={receivedDate} onChange={e => setReceivedDate(e.target.value)} style={{ ...fieldStyle, colorScheme: 'light' }} />
+              <input type="date" value={receivedDate} onChange={e => { setReceivedDate(e.target.value); clearError('receivedDate') }} style={errors.receivedDate ? { ...fieldStyle, colorScheme: 'light', border: errBorder } : { ...fieldStyle, colorScheme: 'light' }} />
+              <FieldError message={errors.receivedDate} />
             </div>
           </div>
 
           <div>
             <label style={labelStyle}>회사명</label>
-            <input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="회사명" style={fieldStyle} />
+            <input value={customerName} onChange={e => { setCustomerName(e.target.value); clearError('customerName') }} placeholder="회사명" style={errors.customerName ? { ...fieldStyle, border: errBorder } : fieldStyle} />
+            <FieldError message={errors.customerName} />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>

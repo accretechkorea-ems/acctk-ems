@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { Device } from '../types'
 import { INPUT_BORDER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY, WHITE_BUTTON_BG, WHITE_BUTTON_TEXT, inputStyle } from '../constants'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 
 type Props = {
   device: Device | null
@@ -14,14 +15,16 @@ type Props = {
 
 export default function DeviceImageModal({ device, isSaving, onClose, onSave }: Props) {
   const [file, setFile] = useState<File | null>(null)
+  const { errors, setErrors, clearError, validate } = useFieldErrors<'file'>()
 
   if (!device) return null
 
-  const handleClose = () => { setFile(null); onClose() }
+  const handleClose = () => { setFile(null); setErrors({}); onClose() }
 
   const handleSave = () => {
-    if (!file) { alert('이미지 파일을 선택해주세요.'); return }
-    onSave(file)
+    const ok = validate({ file: file ? null : '이미지 파일을 선택해주세요' })
+    if (!ok) return
+    onSave(file!)
     setFile(null)
   }
 
@@ -44,7 +47,8 @@ export default function DeviceImageModal({ device, isSaving, onClose, onSave }: 
         </div>
 
         <div style={{ fontSize: 12, fontWeight: 600, color: TEXT_MUTED, marginBottom: 6 }}>이미지 파일 선택</div>
-        <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] ?? null)} style={inputStyle} />
+        <input type="file" accept="image/*" onChange={(e) => { setFile(e.target.files?.[0] ?? null); clearError('file') }} style={errors.file ? { ...inputStyle, border: errBorder } : inputStyle} />
+        <FieldError message={errors.file} />
 
         {file && (
           <div style={{ marginTop: 10, fontSize: 13, color: TEXT_SECONDARY }}>

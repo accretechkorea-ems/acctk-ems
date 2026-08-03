@@ -4,10 +4,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRepairs, type Repair, type RepairStatus } from '@/hooks/useRepairs'
-import { useRepairAuth } from '@/hooks/useRepairAuth'
+import { usePageGuard } from '@/hooks/usePageGuard'
+import AccessGate from '@/components/common/AccessGate'
+import { canAccess20 } from '@/lib/permissions'
 import RepairEditModal from '@/components/repair/RepairEditModal'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import AutocompleteInput from '@/components/common/AutocompleteInput'
+import { useConfirm } from '@/components/common/ConfirmDialog'
+import { useToast } from '@/components/common/Toast'
+import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { REPAIR_STATUS_COLORS } from '@/lib/categoryColors'
 
 // ── 색상 (기존 페이지 컨벤션과 동일) ──
@@ -100,8 +105,11 @@ const impTd: React.CSSProperties = { padding: '7px 10px', color: '#111113', whit
 export default function RepairPage() {
   const supabase = createClient()
   const router = useRouter()
+  const confirmDialog = useConfirm()
+  const toast = useToast()
+  const { errors, clearError, validate } = useFieldErrors<'customerName'>()
 
-  const { authorized, currentEngineer } = useRepairAuth()
+  const { engineer: currentEngineer, loading: guardLoading, authorized } = usePageGuard(canAccess20)
   const { repairs, loading, refetch } = useRepairs()
 
   // ── 접수 등록 폼 ──
@@ -143,7 +151,8 @@ export default function RepairPage() {
   // ── 접수 등록 ──
   const handleSubmit = async () => {
     if (!currentEngineer) return
-    if (!customerName.trim()) { alert('회사명을 입력해주세요.'); return }
+    const ok = validate({ customerName: customerName.trim() ? null : '회사명을 입력해주세요' })
+    if (!ok) return
     setIsSaving(true)
     const { error } = await supabase.from('repairs').insert({
       received_date: receivedDate,
@@ -155,7 +164,7 @@ export default function RepairPage() {
       created_by: currentEngineer.engineer_id,
     })
     setIsSaving(false)
-    if (error) { alert('등록 중 오류가 발생했습니다: ' + error.message); return }
+    if (error) { toast.error('등록 중 오류가 발생했습니다: ' + error.message); return }
     // 폼 초기화
     setCustomerName('')
     setProductType('')
@@ -172,14 +181,15 @@ export default function RepairPage() {
     else if (next === '출고대기') patch.repair_done_at = nowIso
     else if (next === '출고완료') { patch.shipped_date = todayStr() }
     const { error } = await supabase.from('repairs').update(patch).eq('repair_id', r.repair_id)
-    if (error) { alert('상태 변경 실패: ' + error.message); return }
+    if (error) { toast.error('상태 변경 실패: ' + error.message); return }
     await refetch()
   }
 
   const handleDelete = async (r: Repair) => {
-    if (!confirm(`'${r.customer_name ?? ''} / ${r.serial_number ?? '-'}' 접수 건을 삭제하시겠습니까?`)) return
+    const ok = await confirmDialog({ title: '접수 건 삭제', message: `'${r.customer_name ?? ''} / ${r.serial_number ?? '-'}' 접수 건을 삭제하시겠습니까?`, confirmText: '삭제', variant: 'danger' })
+    if (!ok) return
     const { error } = await supabase.from('repairs').delete().eq('repair_id', r.repair_id)
-    if (error) { alert('삭제 실패: ' + error.message); return }
+    if (error) { toast.error('삭제 실패: ' + error.message); return }
     setEditing(null)
     await refetch()
   }
@@ -189,7 +199,7 @@ export default function RepairPage() {
     setIsEditSaving(true)
     const { error } = await supabase.from('repairs').update(patch).eq('repair_id', repairId)
     setIsEditSaving(false)
-    if (error) { alert('수정 실패: ' + error.message); return }
+    if (error) { toast.error('수정 실패: ' + error.message); return }
     setEditing(null)
     await refetch()
   }
@@ -211,7 +221,7 @@ export default function RepairPage() {
           if (cells.some(c => c.includes('입고일')) && cells.some(c => /회사명|업체|고객/.test(c))) { headerIdx = i; break }
         }
         if (headerIdx === -1) {
-          alert('헤더(입고일·회사명 …)를 찾지 못했습니다. 시트 형식을 확인해주세요.')
+          toast.error('헤더(입고일·회사명 …)를 찾지 못했습니다. 시트 형식을 확인해주세요')
           setImportRows([]); setImportFileName(file.name); setImportResult(null)
           return
         }
@@ -272,7 +282,7 @@ export default function RepairPage() {
     let ok = 0
     if (payload.length > 0) {
       const { data, error } = await supabase.from('repairs').insert(payload).select('repair_id')
-      if (error) { setIsImporting(false); alert('가져오기 오류: ' + error.message); return }
+      if (error) { setIsImporting(false); toast.error('가져오기 오류: ' + error.message); return }
       ok = data?.length ?? payload.length
     }
     setIsImporting(false)
@@ -376,18 +386,7 @@ export default function RepairPage() {
   const importValidCount = importPreview.filter(p => p.valid).length
 
   // ── 렌더 게이트 ──
-  if (authorized === null) {
-    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', fontSize: 16, color: GRAY }}>확인 중...</div>
-  }
-  if (authorized === false) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'center', alignItems: 'center', height: '60vh', color: GRAY }}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>접근 권한이 없습니다</div>
-        <div style={{ fontSize: 14 }}>이 페이지는 20팀 담당자와 관리자만 열람할 수 있습니다.</div>
-        <button onClick={() => router.push('/')} style={{ marginTop: 8, padding: '8px 18px', border: 'none', borderRadius: 8, background: BLUE, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>홈으로</button>
-      </div>
-    )
-  }
+  if (!authorized) return <AccessGate loading={guardLoading} />
 
   const card: React.CSSProperties = { background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '14px 16px' }
   const inp: React.CSSProperties = { width: '100%', height: 36, padding: '0 11px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 14, outline: 'none', background: '#fff', color: TEXT, boxSizing: 'border-box' }
@@ -535,9 +534,11 @@ export default function RepairPage() {
               <label style={label}>입고일</label>
               <input type="date" value={receivedDate} onChange={e => setReceivedDate(e.target.value)} style={inp} tabIndex={-1} />
             </div>
-            <div style={{ ...fieldGroup, flex: 1, minWidth: 0 }}>
+            <div style={{ ...fieldGroup, flex: 1, minWidth: 0, position: 'relative' }}>
               <label style={label}>회사명</label>
-              <AutocompleteInput value={customerName} onChange={setCustomerName} suggestions={customerNameOptions} placeholder="회사명 입력" style={inp} tabIndex={1} />
+              <AutocompleteInput value={customerName} onChange={(v) => { setCustomerName(v); clearError('customerName') }} suggestions={customerNameOptions} placeholder="회사명 입력" style={errors.customerName ? { ...inp, border: errBorder } : inp} tabIndex={1} />
+              {/* 가로 한 줄 폼이라 에러는 절대배치로 띄워 옆 칸이 밀리지 않게 함 */}
+              <FieldError message={errors.customerName} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 2, whiteSpace: 'nowrap' }} />
             </div>
             <div style={{ ...fieldGroup, flex: 1, minWidth: 0 }}>
               <label style={label}>제품 구분</label>

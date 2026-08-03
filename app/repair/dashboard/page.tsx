@@ -1,14 +1,15 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, ComposedChart, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList,
 } from 'recharts'
-import { useRepairAuth } from '@/hooks/useRepairAuth'
+import { usePageGuard } from '@/hooks/usePageGuard'
+import AccessGate from '@/components/common/AccessGate'
+import { canAccess20 } from '@/lib/permissions'
 import { useRepairs, type Repair } from '@/hooks/useRepairs'
 import { useCountUp } from '@/hooks/useCountUp'
 import { CHART_COLORS, REPAIR_STATUS_COLORS } from '@/lib/categoryColors'
@@ -21,7 +22,6 @@ import {
 } from '@/lib/repairStats'
 
 // ── 색상: EMS 팔레트(lib/categoryColors.ts 기존 값)만 사용 ──
-const ACCENT = '#234ea2' // 브랜드 액센트: 링크·버튼 등 UI 전용 (차트 아님)
 // 차트 그래픽 전용 팔레트 (활동 현황 dot 색)
 const C_BLUE = CHART_COLORS.blue   // 접수·입고·단일 계열
 const C_GREEN = CHART_COLORS.green // 출고·완료
@@ -425,8 +425,7 @@ function RepeatCard({ rows, reintake, total, pct }: {
 const FULL: React.CSSProperties = { gridColumn: '1 / -1' }
 
 export default function RepairDashboardPage() {
-  const router = useRouter()
-  const { authorized } = useRepairAuth()
+  const { loading: guardLoading, authorized } = usePageGuard(canAccess20)
   const { repairs, loading } = useRepairs()
 
   // 접근성: reduced-motion 이면 recharts 애니메이션도 끔
@@ -454,18 +453,7 @@ export default function RepairDashboardPage() {
     [repairs, sel],
   )
 
-  if (authorized === null) {
-    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', fontSize: 16, color: MUTED }}>확인 중...</div>
-  }
-  if (authorized === false) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'center', alignItems: 'center', height: '60vh', color: MUTED }}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>접근 권한이 없습니다</div>
-        <div style={{ fontSize: 14 }}>이 페이지는 20팀 담당자와 관리자만 열람할 수 있습니다.</div>
-        <button onClick={() => router.push('/')} style={{ marginTop: 8, padding: '8px 18px', border: 'none', borderRadius: 8, background: ACCENT, color: '#fff', fontWeight: 700, cursor: 'pointer' }}>홈으로</button>
-      </div>
-    )
-  }
+  if (!authorized) return <AccessGate loading={guardLoading} />
 
   // ── KPI 계산 ──
   const held = repairs.filter(r => r.status !== '출고완료').length

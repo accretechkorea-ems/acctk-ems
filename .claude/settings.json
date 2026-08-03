@@ -13,7 +13,18 @@
       "Read(//usr/**)",
       "Bash(git commit -m 'feat\\(repair\\): 목록 검색·필터 개선 및 수정 모달 추가 *)",
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\({...p.dependencies, ...p.devDependencies}, null, 2\\)\\)\")",
-      "Bash(echo \"=== tsc exit: $? ===\")"
+      "Bash(echo \"=== tsc exit: $? ===\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(Object.keys\\({...p.dependencies,...p.devDependencies}\\).filter\\(k=>/toast|sonner|snack|notistack/i.test\\(k\\)\\).join\\(', '\\)||'\\(none\\)'\\)\")",
+      "Bash(grep -nE \"^function |^  function |^const [A-Z].*=.*\\\\\\(.*\\\\\\).*=>|^export default function|=> \\\\{$\" app/sales/page.tsx)",
+      "Bash(awk -F: '$1>490 && $1<640')",
+      "Bash(echo \"tsc exit: $?\")",
+      "Bash(grep -vE \"confirmDialog|// |/\\\\*|\\\\* \")",
+      "Bash(node probe.mjs)",
+      "Bash(node probe2.mjs)",
+      "Bash(awk 'NR>368' app/page.tsx)",
+      "Bash(awk 'NR>587' \"app/customer/[id]/page.tsx\")",
+      "Bash(rm app/library/page.tsx)",
+      "Bash(rmdir app/library)"
     ]
   }
 }

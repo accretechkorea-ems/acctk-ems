@@ -5,6 +5,11 @@ import { useParams, useRouter } from 'next/navigation'
 import { Font, pdf } from '@react-pdf/renderer'
 import { geocodeAddress } from '@/lib/geocode'
 import { createClient } from '@/lib/supabase/client'
+import { useConfirm } from '@/components/common/ConfirmDialog'
+import { useToast } from '@/components/common/Toast'
+import { usePageGuard } from '@/hooks/usePageGuard'
+import AccessGate from '@/components/common/AccessGate'
+import { canAccess80 } from '@/lib/permissions'
 
 import type { Customer, Device, Contact, ServiceHistory, Engineer, Quote, ServiceForm, DeviceForm, ContactForm, CustomerEditFormData } from '@/components/customer/types'
 import { PAGE_BG, TEXT_MUTED } from '@/components/customer/constants'
@@ -31,8 +36,11 @@ Font.register({
 
 export default function CustomerDetailPage() {
   const supabase = createClient()
+  const { loading: guardLoading, authorized } = usePageGuard(canAccess80)
   const params = useParams()
   const router = useRouter()
+  const confirmDialog = useConfirm()
+  const toast = useToast()
   const customerId = Number(params.id)
 
   // ── 데이터 상태 ──
@@ -130,11 +138,11 @@ export default function CustomerDetailPage() {
       work_hours: form.work_hours ? parseFloat(form.work_hours) : null,
       start_time: form.start_time || null, end_time: form.end_time || null,
     }]).select().single()
-    if (error) { setIsSavingService(false); alert(error.message || '서비스 기록 저장 중 오류가 발생했습니다.'); return }
+    if (error) { setIsSavingService(false); toast.error(error.message || '서비스 기록 저장 중 오류가 발생했습니다'); return }
     const { error: engineerError } = await supabase.from('service_engineers').insert(engineerIds.map(eid => ({ service_id: newService.service_id, engineer_id: eid })))
     setIsSavingService(false)
-    if (engineerError) { alert(engineerError.message || '엔지니어 연결 저장 중 오류가 발생했습니다.'); return }
-    alert('서비스 기록이 추가되었습니다.')
+    if (engineerError) { toast.error(engineerError.message || '엔지니어 연결 저장 중 오류가 발생했습니다'); return }
+    toast.success('서비스 기록이 추가되었습니다')
     setSelectedDeviceId(null)
     await fetchDetail()
   }
@@ -178,11 +186,11 @@ export default function CustomerDetailPage() {
         if (oldPath && oldPath !== newReportPath) await supabase.storage.from('service-report').remove([oldPath])
       }
 
-      alert('서비스 기록이 수정되었습니다.')
+      toast.success('서비스 기록이 수정되었습니다')
       setSelectedService(null)
       await fetchDetail()
     } catch (error: any) {
-      alert(error?.message || '서비스 기록 수정 중 오류가 발생했습니다.')
+      toast.error(error?.message || '서비스 기록 수정 중 오류가 발생했습니다')
     } finally {
       setIsSavingServiceEdit(false)
     }
@@ -190,12 +198,13 @@ export default function CustomerDetailPage() {
 
   const handleDeleteService = async () => {
     if (!selectedService) return
-    if (!confirm('이 서비스 기록을 삭제하시겠습니까?')) return
+    const ok = await confirmDialog({ title: '서비스 기록 삭제', message: '이 서비스 기록을 삭제하시겠습니까?', confirmText: '삭제', variant: 'danger' })
+    if (!ok) return
     setIsSavingServiceEdit(true)
     const { error } = await supabase.from('service_history').delete().eq('service_id', selectedService.service_id)
     setIsSavingServiceEdit(false)
-    if (error) { alert(error.message || '서비스 기록 삭제 중 오류가 발생했습니다.'); return }
-    alert('서비스 기록이 삭제되었습니다.')
+    if (error) { toast.error(error.message || '서비스 기록 삭제 중 오류가 발생했습니다'); return }
+    toast.success('서비스 기록이 삭제되었습니다')
     setSelectedService(null)
     await fetchDetail()
   }
@@ -236,10 +245,10 @@ export default function CustomerDetailPage() {
         if (oldPath && oldPath !== fileName) await supabase.storage.from('service-report').remove([oldPath])
       }
 
-      alert('레포트가 저장되었습니다.')
+      toast.success('레포트가 저장되었습니다')
       await fetchDetail()
     } catch (error: any) {
-      alert(error?.message || '레포트 저장 중 오류가 발생했습니다.')
+      toast.error(error?.message || '레포트 저장 중 오류가 발생했습니다')
     }
   }, [contacts, customer])
 
@@ -255,14 +264,15 @@ export default function CustomerDetailPage() {
       else window.open(data.signedUrl, '_blank')
     } catch (error: any) {
       if (win) win.close()
-      alert(error?.message || '레포트를 여는 중 오류가 발생했습니다.')
+      toast.error(error?.message || '레포트를 여는 중 오류가 발생했습니다')
     }
   }
 
   // 저장된 레포트 삭제 — 스토리지 파일 제거 + report_url 비움 (재작성 가능하도록)
   const handleDeleteReport = async (service: ServiceHistory) => {
     if (!service.report_url) return
-    if (!confirm('이 레포트를 삭제하시겠습니까?\n삭제 후 다시 작성할 수 있습니다.')) return
+    const ok = await confirmDialog({ title: '레포트 삭제', message: '이 레포트를 삭제하시겠습니까?\n삭제 후 다시 작성할 수 있습니다.', confirmText: '삭제', variant: 'danger' })
+    if (!ok) return
     try {
       const path = toReportPath(service.report_url)
       await supabase.storage.from('service-report').remove([path])
@@ -270,9 +280,9 @@ export default function CustomerDetailPage() {
       if (error) throw error
       setSelectedService(prev => prev ? { ...prev, report_url: null } : prev)
       await fetchDetail()
-      alert('레포트가 삭제되었습니다.')
+      toast.success('레포트가 삭제되었습니다')
     } catch (error: any) {
-      alert(error?.message || '레포트 삭제 중 오류가 발생했습니다.')
+      toast.error(error?.message || '레포트 삭제 중 오류가 발생했습니다')
     }
   }
 
@@ -289,8 +299,7 @@ export default function CustomerDetailPage() {
   // ── 업체 CRUD ──
   const handleUpdateCustomer = async (form: CustomerEditFormData) => {
     if (!customer) return
-    if (!form.company_name.trim()) { alert('업체명을 입력해주세요.'); return }
-    if (!form.address.trim()) { alert('주소를 입력해주세요.'); return }
+    // 사용자 검증(업체명/주소)은 CustomerEditModal 에서 인라인으로 처리한다.
     setIsSavingCustomerEdit(true)
     try {
       const coords = await geocodeAddress(form.address.trim())
@@ -300,29 +309,30 @@ export default function CustomerDetailPage() {
         latitude: coords.latitude, longitude: coords.longitude,
       }).eq('customer_id', customer.customer_id)
       setIsSavingCustomerEdit(false)
-      if (error) { alert(error.message || '업체 정보 수정 중 오류가 발생했습니다.'); return }
-      alert('업체 정보가 수정되었습니다.')
+      if (error) { toast.error(error.message || '업체 정보 수정 중 오류가 발생했습니다'); return }
+      toast.success('업체 정보가 수정되었습니다')
       setIsEditCustomerModalOpen(false)
       await fetchDetail()
     } catch (error: any) {
       setIsSavingCustomerEdit(false)
-      alert(error?.message || '업체 정보 수정 중 오류가 발생했습니다.')
+      toast.error(error?.message || '업체 정보 수정 중 오류가 발생했습니다')
     }
   }
 
   const handleDeleteCustomer = async () => {
     if (!customer) return
-    if (!confirm('이 업체를 삭제하시겠습니까?\n담당자·장비·서비스기록·견적 이력은 보존됩니다.')) return
+    const ok = await confirmDialog({ title: '업체 삭제', message: '이 업체를 삭제하시겠습니까?\n담당자·장비·서비스기록·견적 이력은 보존됩니다.', confirmText: '삭제', variant: 'danger' })
+    if (!ok) return
     setIsDeletingCustomer(true)
     const cid = customer.customer_id
     try {
       const { error } = await supabase.from('customers').update({ deleted_at: new Date().toISOString() }).eq('customer_id', cid)
       if (error) throw error
-      alert('업체가 삭제되었습니다.')
+      toast.success('업체가 삭제되었습니다')
       setIsEditCustomerModalOpen(false)
       router.push('/')
     } catch (error: any) {
-      alert(error?.message || '업체 삭제 중 오류가 발생했습니다.')
+      toast.error(error?.message || '업체 삭제 중 오류가 발생했습니다')
     } finally {
       setIsDeletingCustomer(false)
     }
@@ -333,8 +343,8 @@ export default function CustomerDetailPage() {
     setIsSavingContact(true)
     const { error } = await supabase.from('contacts').insert([{ customer_id: customerId, name: form.name.trim(), department: form.department.trim() || null, position: form.position.trim() || null, phone: form.phone.trim() || null, email: form.email.trim() || null }])
     setIsSavingContact(false)
-    if (error) { alert(error.message || '담당자 추가 중 오류가 발생했습니다.'); return }
-    alert('담당자가 추가되었습니다.')
+    if (error) { toast.error(error.message || '담당자 추가 중 오류가 발생했습니다'); return }
+    toast.success('담당자가 추가되었습니다')
     setIsAddContactModalOpen(false)
     await fetchDetail()
   }
@@ -344,20 +354,21 @@ export default function CustomerDetailPage() {
     setIsSavingContactEdit(true)
     const { error } = await supabase.from('contacts').update({ name: form.name.trim(), department: form.department.trim() || null, position: form.position.trim() || null, phone: form.phone.trim() || null, email: form.email.trim() || null }).eq('contact_id', selectedContact.contact_id)
     setIsSavingContactEdit(false)
-    if (error) { alert(error.message || '담당자 수정 중 오류가 발생했습니다.'); return }
-    alert('담당자 정보가 수정되었습니다.')
+    if (error) { toast.error(error.message || '담당자 수정 중 오류가 발생했습니다'); return }
+    toast.success('담당자 정보가 수정되었습니다')
     setSelectedContact(null)
     await fetchDetail()
   }
 
   const handleDeleteContact = async () => {
     if (!selectedContact) return
-    if (!confirm('이 담당자를 삭제하시겠습니까?')) return
+    const ok = await confirmDialog({ title: '담당자 삭제', message: '이 담당자를 삭제하시겠습니까?', confirmText: '삭제', variant: 'danger' })
+    if (!ok) return
     setIsSavingContactEdit(true)
     const { error } = await supabase.from('contacts').update({ deleted_at: new Date().toISOString() }).eq('contact_id', selectedContact.contact_id)
     setIsSavingContactEdit(false)
-    if (error) { alert(error.message || '담당자 삭제 중 오류가 발생했습니다.'); return }
-    alert('담당자가 삭제되었습니다.')
+    if (error) { toast.error(error.message || '담당자 삭제 중 오류가 발생했습니다'); return }
+    toast.success('담당자가 삭제되었습니다')
     setSelectedContact(null)
     await fetchDetail()
   }
@@ -382,11 +393,11 @@ export default function CustomerDetailPage() {
         if (upErr) throw upErr
       }
 
-      alert('장비가 추가되었습니다.')
+      toast.success('장비가 추가되었습니다')
       setIsAddDeviceModalOpen(false)
       await fetchDetail()
     } catch (error: any) {
-      alert(error?.message || '장비 추가 중 오류가 발생했습니다.')
+      toast.error(error?.message || '장비 추가 중 오류가 발생했습니다')
     } finally {
       setIsSavingDevice(false)
     }
@@ -418,11 +429,11 @@ export default function CustomerDetailPage() {
         }
       }
 
-      alert('장비 정보가 수정되었습니다.')
+      toast.success('장비 정보가 수정되었습니다')
       setSelectedDevice(null)
       await fetchDetail()
     } catch (error: any) {
-      alert(error?.message || '장비 수정 중 오류가 발생했습니다.')
+      toast.error(error?.message || '장비 수정 중 오류가 발생했습니다')
     } finally {
       setIsSavingDeviceEdit(false)
     }
@@ -430,12 +441,13 @@ export default function CustomerDetailPage() {
 
   const handleDeleteDevice = async () => {
     if (!selectedDevice) return
-    if (!confirm('이 장비를 삭제하시겠습니까?')) return
+    const ok = await confirmDialog({ title: '장비 삭제', message: '이 장비를 삭제하시겠습니까?', confirmText: '삭제', variant: 'danger' })
+    if (!ok) return
     setIsSavingDeviceEdit(true)
     const { error } = await supabase.from('devices').update({ deleted_at: new Date().toISOString() }).eq('device_id', selectedDevice.device_id)
     setIsSavingDeviceEdit(false)
-    if (error) { alert(error.message || '장비 삭제 중 오류가 발생했습니다.'); return }
-    alert('장비가 삭제되었습니다.')
+    if (error) { toast.error(error.message || '장비 삭제 중 오류가 발생했습니다'); return }
+    toast.success('장비가 삭제되었습니다')
     setSelectedDevice(null)
     await fetchDetail()
   }
@@ -445,11 +457,11 @@ export default function CustomerDetailPage() {
     if (!selectedImageDevice) return
     const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
     if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-      alert('JPG, PNG, WEBP, GIF 형식의 이미지만 업로드 가능합니다.')
+      toast.error('JPG, PNG, WEBP, GIF 형식의 이미지만 업로드 가능합니다')
       return
     }
     if (file.size > 10 * 1024 * 1024) {
-      alert('파일 크기는 10MB 이하여야 합니다.')
+      toast.error('파일 크기는 10MB 이하여야 합니다')
       return
     }
     setIsSavingDeviceImage(true)
@@ -461,11 +473,11 @@ export default function CustomerDetailPage() {
       const { data } = supabase.storage.from('device-images').getPublicUrl(fileName)
       const { error: updateError } = await supabase.from('devices').update({ image_url: data.publicUrl }).eq('device_id', selectedImageDevice.device_id)
       if (updateError) throw updateError
-      alert('장비 사진이 등록되었습니다.')
+      toast.success('장비 사진이 등록되었습니다')
       setSelectedImageDevice(null)
       await fetchDetail()
     } catch (error: any) {
-      alert(error?.message || '장비 사진 업로드 중 오류가 발생했습니다.')
+      toast.error(error?.message || '장비 사진 업로드 중 오류가 발생했습니다')
     } finally {
       setIsSavingDeviceImage(false)
     }
@@ -521,7 +533,7 @@ export default function CustomerDetailPage() {
       }
     } catch (error: any) {
       if (win) win.close()
-      alert(error?.message || '파일을 여는 중 오류가 발생했습니다.')
+      toast.error(error?.message || '파일을 여는 중 오류가 발생했습니다')
     }
   }
 
@@ -530,10 +542,10 @@ export default function CustomerDetailPage() {
       const path = await uploadPackingFile(device.device_id, file)
       const { error } = await supabase.from('devices').update({ packing_list_url: path }).eq('device_id', device.device_id)
       if (error) throw error
-      alert('납입의사록·패킹리스트가 등록되었습니다.')
+      toast.success('납입의사록·패킹리스트가 등록되었습니다')
       await fetchDetail()
     } catch (error: any) {
-      alert(error?.message || '파일 업로드 중 오류가 발생했습니다.')
+      toast.error(error?.message || '파일 업로드 중 오류가 발생했습니다')
     }
   }
 
@@ -571,6 +583,8 @@ export default function CustomerDetailPage() {
     }
     @keyframes sk-pulse { 0%,100% { opacity:1 } 50% { opacity:0.45 } }
   `
+
+  if (!authorized) return <AccessGate loading={guardLoading} />
 
   if (loading) {
     return (

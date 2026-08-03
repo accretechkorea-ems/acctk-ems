@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { SALES_STATUS_COLORS, DELIVERY_METHOD_COLORS, getCategoryColor } from '@/lib/categoryColors'
+import { canAccessSales } from '@/lib/permissions'
+import AccessGate from '@/components/common/AccessGate'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#f4f5f7'
@@ -112,7 +114,7 @@ export default function PurchasePage() {
 
   useEffect(() => { fetchAll() }, [])
 
-  const isAllowed = me && (me.permission_level === 'superadmin' || me.teams === '영업관리')
+  const isAllowed = canAccessSales(me)
 
   const filtered = quotes.filter(q => {
     const matchStatus = statusFilter === '전체' || q.status === statusFilter
@@ -203,9 +205,7 @@ export default function PurchasePage() {
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', fontSize: 16, color: GRAY }}>불러오는 중...</div>
   )
 
-  if (!isAllowed) return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', fontSize: 15, color: GRAY }}>접근 권한이 없습니다.</div>
-  )
+  if (!isAllowed) return <AccessGate loading={false} />
 
   return (
     <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '24px 28px' }}>

@@ -10,6 +10,10 @@ import AddCustomerModal from '@/components/home/AddCustomerModal'
 import { useHomeData } from '@/hooks/useHomeData'
 import { addCustomer } from '@/lib/addCustomer'
 import { CATEGORY_OPTIONS } from '@/lib/constants'
+import { useToast } from '@/components/common/Toast'
+import { usePageGuard } from '@/hooks/usePageGuard'
+import AccessGate from '@/components/common/AccessGate'
+import { canAccess80 } from '@/lib/permissions'
 
 
 import {
@@ -35,6 +39,8 @@ import {
 
 export default function HomePage() {
   const supabase = createClient()
+  const { loading: guardLoading, authorized } = usePageGuard(canAccess80)
+  const toast = useToast()
 
   const listScrollRef = useRef<HTMLDivElement | null>(null)
   const restoredHomeStateRef = useRef(false)
@@ -359,10 +365,11 @@ useEffect(() => {
     return fileName
   }
 
+  if (!authorized) return <AccessGate loading={guardLoading} />
 
   return (
     <>
-    
+
       <style jsx global>{`
         input[type="date"].white-date::-webkit-calendar-picker-indicator {
           filter: invert(1);
@@ -539,18 +546,23 @@ onAddClick={() => setIsAddCustomerModalOpen(true)}
           addDeviceFormCard={addDeviceFormCard}
           removeDeviceFormCard={removeDeviceFormCard}
           onClose={() => setIsAddCustomerModalOpen(false)}
-         onSave={() =>
-  addCustomer({
-    customerForm,
-    contactForm,
-    deviceForms,
-    fetchData,
-    resetForms,
-    setIsSavingCustomer,
-    setIsAddCustomerModalOpen,
-    setQuery,
-  })
-}
+         onSave={async () => {
+  try {
+    const ok = await addCustomer({
+      customerForm,
+      contactForm,
+      deviceForms,
+      fetchData,
+      resetForms,
+      setIsSavingCustomer,
+      setIsAddCustomerModalOpen,
+      setQuery,
+    })
+    if (ok) toast.success('업체가 추가되었습니다')
+  } catch (e: any) {
+    toast.error(e?.message || '에러 발생')
+  }
+}}
         />
       </div>
     </>

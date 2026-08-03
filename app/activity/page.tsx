@@ -6,6 +6,9 @@ import { isActiveInPeriod } from '@/lib/engineers'
 import { SERVICE_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import SegmentedControl from '@/components/common/SegmentedControl'
+import { usePageGuard } from '@/hooks/usePageGuard'
+import AccessGate from '@/components/common/AccessGate'
+import { canAccessAdmin } from '@/lib/permissions'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#fafafa'
@@ -68,6 +71,7 @@ function SkeletonCard() {
 
 export default function ActivityPage() {
   const supabase = createClient()
+  const { loading: guardLoading, authorized } = usePageGuard(canAccessAdmin)
 
   const now = new Date()
   const thisYear = now.getFullYear()
@@ -265,6 +269,8 @@ export default function ActivityPage() {
     background: CARD_BG, color: TEXT, fontSize: 13, outline: 'none',
     fontFamily: 'inherit', colorScheme: 'light' as const,
   }
+
+  if (!authorized) return <AccessGate loading={guardLoading} />
 
   return (
     <main style={{ padding: '24px 28px', background: PAGE_BG, minHeight: '100vh' }}>

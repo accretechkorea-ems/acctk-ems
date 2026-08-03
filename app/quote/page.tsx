@@ -2,6 +2,11 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/components/common/Toast'
+import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
+import { usePageGuard } from '@/hooks/usePageGuard'
+import AccessGate from '@/components/common/AccessGate'
+import { canAccessQuote } from '@/lib/permissions'
 import {
   Document, Page, Text, View, StyleSheet, Image, BlobProvider, Font, pdf
 } from '@react-pdf/renderer'
@@ -400,6 +405,9 @@ function useDebounce<T>(value: T, delay: number): T {
 
 export default function QuotePage() {
   const supabase = createClient()
+  const { loading: guardLoading, authorized } = usePageGuard(canAccessQuote)
+  const toast = useToast()
+  const { errors, clearError, validate } = useFieldErrors<'company' | 'items'>()
   const [isClient, setIsClient] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
@@ -519,6 +527,7 @@ export default function QuotePage() {
     setCustomerQuery(c.company_name)
     setCustomerSearchOpen(false)
     setCustomerResults([])
+    clearError('company')
   }
 
   const handleCustomerClear = () => {
@@ -621,9 +630,14 @@ const handleDownloadPDF = async (
   }
 
   const handleSaveQuote = async () => {
-    if (!engineer) { alert('엔지니어 정보를 불러오는 중입니다.'); return }
-    if (!company.trim() && !customerQuery.trim()) { alert('사명을 입력해주세요.'); return }
-    if (rows.every(r => r.supply_price === 0)) { alert('품목 금액을 입력해주세요.'); return }
+    if (!engineer) { toast.error('엔지니어 정보를 불러오는 중입니다'); return }
+    // 사명은 직접 입력(customerQuery) 또는 검색 선택(company) 중 하나면 통과.
+    // 품목 금액은 배열이지만 "적어도 한 품목에 금액" 이라는 집계 규칙이라 단일 key(items) 로 처리한다.
+    const ok = validate({
+      company: (company.trim() || customerQuery.trim()) ? null : '사명을 입력해주세요',
+      items: rows.some(r => r.supply_price > 0) ? null : '품목 금액을 입력해주세요',
+    })
+    if (!ok) return
 
     setIsSaving(true)
     try {
@@ -675,10 +689,10 @@ const handleDownloadPDF = async (
         const { error: itemsError } = await supabase.from('quote_items').insert(items)
         if (itemsError) throw itemsError
       }
-alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
+toast.success(`견적서 ${quoteNo} 확정 완료`)
     } catch (e) {
       console.error(e)
-      alert('저장 중 오류가 발생했습니다.')
+      toast.error('저장 중 오류가 발생했습니다')
     }
     setIsSaving(false)
   }
@@ -729,6 +743,8 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
 
   useEffect(() => { fetchRate() }, [fetchRate])
   useEffect(() => { if (!exchangeRate) return; setRows(prev => prev.map(r => calcRow(r, exchangeRate))) }, [exchangeRate])
+  // 어느 품목이든 금액이 생기면 집계 에러(items) 를 즉시 해제한다.
+  useEffect(() => { if (rows.some(r => r.supply_price > 0)) clearError('items') }, [rows]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRateChange = useCallback(async (rate: number) => {
     const todayStr = new Date().toISOString().slice(0, 10)
@@ -779,6 +795,8 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
   // 스테퍼 3분할 1칸 폭 = "직접 입력" 버튼 폭 (동일 값 참조용)
   const STEPPER_COL = 'calc((100% - 12px) / 3)'
 
+  if (!authorized) return <AccessGate loading={guardLoading} />
+
   return (
     <div style={{ background: '#fafafa', minHeight: '100vh' }}>
       <style>{`
@@ -811,10 +829,10 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
                   <input
                     className="q-input"
                     value={customerQuery}
-                    onChange={e => handleCustomerSearch(e.target.value)}
+                    onChange={e => { handleCustomerSearch(e.target.value); clearError('company') }}
                     onFocus={() => customerResults.length > 0 && setCustomerSearchOpen(true)}
                     placeholder="업체명 검색 또는 직접 입력"
-                    style={{ ...inp, width: '100%', paddingRight: selectedCustomer ? 32 : 11, border: customerSearchOpen ? '1px solid #234ea2' : '1px solid #ebebeb' }}
+                    style={{ ...inp, width: '100%', paddingRight: selectedCustomer ? 32 : 11, border: errors.company ? errBorder : (customerSearchOpen ? '1px solid #234ea2' : '1px solid #ebebeb') }}
                   />
                   {selectedCustomer && (
                     <button onClick={handleCustomerClear}
@@ -822,6 +840,7 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
                   )}
+                  <FieldError message={errors.company} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 2, whiteSpace: 'nowrap' }} />
                   {customerSearchOpen && customerResults.length > 0 && (
                     <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 1000, background: '#fff', border: '1px solid #234ea2', borderRadius: 8, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
                       {customerResults.map(c => (
@@ -1210,6 +1229,7 @@ alert(`✅ 견적서 ${quoteNo} 확정 완료!`)
             >
               + 품목 추가
             </button>
+            <FieldError message={errors.items} style={{ marginTop: 8 }} />
           </div>
         </div>
 
