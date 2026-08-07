@@ -5,8 +5,10 @@ import { loadKakaoMap } from '@/lib/loadKakaoMap'
 import type { RouteStop } from '@/lib/routeMap'
 import { getOffice } from '@/lib/offices'
 
-// 엔지니어 동선 지도(전체 화면 오버레이). 방문지 마커 + 같은 날 실선 + 사무실 마커.
-// 날짜가 바뀌는 구간은 실제 이동 경로를 알 수 없어(사무실/자택 경유 추정) 선을 긋지 않는다.
+// 엔지니어 동선 지도(전체 화면 오버레이). 방문지 마커 + 연결선 + 사무실 마커.
+// 연결선은 두 모드:
+//   visits(기본) — 같은 날 방문지끼리만 실선. 날짜가 바뀌는 구간은 실제 경로를 알 수 없어 선 없음.
+//   office        — 날짜별로 사무실→방문지들→사무실. 사무실 구간은 점선(가정), 방문지 간은 실선.
 // NOTE: props 스펙은 { stops, onClose } 이지만 §2(상단 이름·기간)·사무실 표시를 위해
 //       engineerName/startDate/endDate/officeCode 를 추가로 받는다.
 type Props = {
@@ -17,6 +19,7 @@ type Props = {
   endDate?: string
   officeCode?: string | null // engineers.office. getOffice() 로 조회, 없으면 사무실 마커 미표시.
   excludedCount?: number     // 유선기술지원으로 제외된 기록 수(하단 안내용)
+  mode?: 'visits' | 'office' // 연결선 방식. 마커 표시 방식은 두 모드 공통.
 }
 
 // 이 level 이하(확대)에서만 마커를 부채꼴/원형으로 분산한다. 그 이상(축소)이면
@@ -24,7 +27,7 @@ type Props = {
 // 실측하며 조정할 수 있게 상수로 분리(카카오 level 은 작을수록 확대).
 const SPREAD_MAX_LEVEL = 5
 
-export default function RouteMapView({ stops, onClose, engineerName, startDate, endDate, officeCode, excludedCount = 0 }: Props) {
+export default function RouteMapView({ stops, onClose, engineerName, startDate, endDate, officeCode, excludedCount = 0, mode = 'visits' }: Props) {
   const mapRef = useRef<HTMLDivElement>(null)
   const infoRef = useRef<any>(null) // 현재 열린 정보창(하나만 유지)
   const polylinesRef = useRef<any[]>([]) // 구간별 연결선(언마운트 시 정리)
@@ -32,7 +35,8 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
   const officeOverlayRef = useRef<any>(null) // 사무실 마커(1회 생성, 언마운트 시 정리)
 
   const officeInfo = getOffice(officeCode) // 소속 사무실(없으면 undefined)
-  // 같은 날 인접 구간이 하나라도 있으면 실선이 그려지므로 범례를 노출.
+  const isOffice = mode === 'office' && !!officeInfo
+  // 같은 날 인접 구간이 하나라도 있으면 실선이 그려지므로 범례를 노출(visits 모드 전용).
   const hasSameDaySegment = stops.some((s, i) => i > 0 && stops[i - 1].date === s.date)
 
   // ESC 로 닫기
@@ -222,7 +226,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
       kakao.maps.event.addListener(map, 'zoom_changed', drawMarkers)
 
       // 사무실 마커 — 진한 회색(#374151) 집 아이콘 배지로 방문지(파란 dot)와 색·형태 구분.
-      // 사무실에서 방문지로 선은 잇지 않는다(실제 출발 여부를 알 수 없음).
+      // (visits 모드에선 마커만 표시하고 선은 잇지 않는다. office 모드에선 위에서 점선으로 연결.)
       if (officeInfo) {
         const wrap = document.createElement('div')
         wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center'
@@ -238,22 +242,50 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
         officeOverlayRef.current = officeOv
       }
 
-      // 연결선(Polyline) — stops 순서대로 직선으로 잇되(도로 경로 아님), 같은 날 구간만 그린다.
+      // 연결선(Polyline) — stops 순서대로 직선으로 잇는다(도로 경로 아님).
       // stops 는 날짜 오름차순 + 같은 날은 service_id 순 정렬 상태.
-      // date 가 다르면 그 사이 사무실/자택을 거쳤을 것이라 실제 이동이 아니므로 선을 긋지 않는다.
-      if (stops.length >= 2) {
+      // 방문지↔방문지 실선: 배경 분리용 흰 테두리(weight 7) 위에 파란 선(weight 4).
+      const drawSolid = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+        const path = [new kakao.maps.LatLng(a.lat, a.lng), new kakao.maps.LatLng(b.lat, b.lng)]
+        const halo = new kakao.maps.Polyline({ path, strokeWeight: 7, strokeColor: '#ffffff', strokeOpacity: 0.7, strokeStyle: 'solid' })
+        halo.setMap(map)
+        polylinesRef.current.push(halo)
+        const line = new kakao.maps.Polyline({ path, strokeWeight: 4, strokeColor: '#234ea2', strokeOpacity: 0.9, strokeStyle: 'solid' })
+        line.setMap(map)
+        polylinesRef.current.push(line)
+      }
+      // 사무실↔방문지 점선(office 모드 전용): 실제 출발 여부를 모르는 '가정' 구간이라 style·투명도로 구분.
+      const drawDashed = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+        const path = [new kakao.maps.LatLng(a.lat, a.lng), new kakao.maps.LatLng(b.lat, b.lng)]
+        const line = new kakao.maps.Polyline({ path, strokeWeight: 3, strokeColor: '#234ea2', strokeOpacity: 0.65, strokeStyle: 'shortdash' })
+        line.setMap(map)
+        polylinesRef.current.push(line)
+      }
+
+      if (mode === 'office' && officeInfo) {
+        // office 모드: 날짜별로 사무실 → 그날 방문지들(순서대로) → 사무실.
+        // 날짜가 다르면 각각 사무실에서 시작해 사무실로 복귀하는 독립 경로.
+        const office = { lat: officeInfo.lat, lng: officeInfo.lng }
+        const byDate = new Map<string, RouteStop[]>()
+        for (const s of stops) {
+          const arr = byDate.get(s.date)
+          if (arr) arr.push(s)
+          else byDate.set(s.date, [s])
+        }
+        for (const dayStops of byDate.values()) {
+          drawDashed(office, dayStops[0])                         // 사무실 → 첫 방문지 (가정)
+          for (let i = 0; i < dayStops.length - 1; i++) {
+            drawSolid(dayStops[i], dayStops[i + 1])               // 방문지 간 이동
+          }
+          drawDashed(dayStops[dayStops.length - 1], office)       // 마지막 방문지 → 사무실 (가정)
+        }
+      } else if (stops.length >= 2) {
+        // visits 모드(기존): 같은 날 인접 구간만 실선. date 가 바뀌는 구간은 경로 불명이라 선 없음.
         for (let i = 0; i < stops.length - 1; i++) {
           const a = stops[i]
           const b = stops[i + 1]
           if (a.date !== b.date) continue // 날짜 바뀌는 구간은 선 없음
-          const path = [new kakao.maps.LatLng(a.lat, a.lng), new kakao.maps.LatLng(b.lat, b.lng)]
-          // 배경 분리용 흰 테두리 선을 먼저 깔고(weight 7), 그 위에 파란 선을 얹는다(weight 4).
-          const halo = new kakao.maps.Polyline({ path, strokeWeight: 7, strokeColor: '#ffffff', strokeOpacity: 0.7, strokeStyle: 'solid' })
-          halo.setMap(map)
-          polylinesRef.current.push(halo)
-          const line = new kakao.maps.Polyline({ path, strokeWeight: 4, strokeColor: '#234ea2', strokeOpacity: 0.9, strokeStyle: 'solid' })
-          line.setMap(map)
-          polylinesRef.current.push(line)
+          drawSolid(a, b)
         }
       }
 
@@ -279,7 +311,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
       if (officeOverlayRef.current) { officeOverlayRef.current.setMap(null); officeOverlayRef.current = null }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stops, officeCode])
+  }, [stops, officeCode, mode])
 
   const period = startDate && endDate
     ? `${startDate.replace(/-/g, '.')} ~ ${endDate.replace(/-/g, '.')}`
@@ -315,6 +347,18 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
           {period && <span style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{period}</span>}
         </div>
 
+        {/* office 모드 가정 안내 (상단 중앙) — 데이터에 없는 가정임을 회색 작은 글씨로 명확히. */}
+        {isOffice && stops.length > 0 && (
+          <div style={{
+            position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 2,
+            background: 'rgba(255,255,255,0.95)', border: '1px solid #ebebeb', borderRadius: 8,
+            padding: '7px 12px', fontSize: 12, fontWeight: 600, color: '#9ca3af', whiteSpace: 'nowrap',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+          }}>
+            사무실에서 출발·복귀했다고 가정한 경로입니다
+          </div>
+        )}
+
         {/* 닫기 버튼 */}
         <button
           onClick={onClose}
@@ -340,16 +384,37 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
           <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
         )}
 
-        {/* 범례 (좌하단) — 같은 날 실선이 실제로 그려질 때만 표시 */}
-        {hasSameDaySegment && (
-          <div style={{
-            position: 'absolute', bottom: 16, left: 16, zIndex: 2,
-            background: '#fff', border: '1px solid #ebebeb', borderRadius: 8,
-            padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8,
-          }}>
-            <span style={{ display: 'inline-block', width: 22, borderTop: '3px solid #234ea2', opacity: 0.7 }} />
-            <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280' }}>같은 날 이동</span>
-          </div>
+        {/* 범례 (좌하단) */}
+        {isOffice ? (
+          // office 모드: 실선 = 방문지 간 이동, 점선 = 사무실 출발·복귀(가정)
+          stops.length > 0 && (
+            <div style={{
+              position: 'absolute', bottom: 16, left: 16, zIndex: 2,
+              background: '#fff', border: '1px solid #ebebeb', borderRadius: 8,
+              padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ display: 'inline-block', width: 22, borderTop: '3px solid #234ea2', opacity: 0.9 }} />
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280' }}>방문지 간 이동</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ display: 'inline-block', width: 22, borderTop: '2px dashed #234ea2', opacity: 0.65 }} />
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280' }}>사무실 출발·복귀 (가정)</span>
+              </div>
+            </div>
+          )
+        ) : (
+          // visits 모드(기존): 같은 날 실선이 실제로 그려질 때만 표시
+          hasSameDaySegment && (
+            <div style={{
+              position: 'absolute', bottom: 16, left: 16, zIndex: 2,
+              background: '#fff', border: '1px solid #ebebeb', borderRadius: 8,
+              padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <span style={{ display: 'inline-block', width: 22, borderTop: '3px solid #234ea2', opacity: 0.7 }} />
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280' }}>같은 날 이동</span>
+            </div>
+          )
         )}
 
         {/* 유선기술지원 제외 안내 (하단 중앙) */}
