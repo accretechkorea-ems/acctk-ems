@@ -12,15 +12,12 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // 권한 확인: superadmin 또는 영업관리팀만 발주 처리 가능
   const { data: caller } = await supabase
     .from('engineers')
     .select('engineer_id, name, position, permission_level, teams')
     .eq('email', user.email!)
     .single()
-  if (!caller || !(caller.permission_level === 'superadmin' || caller.teams === '영업관리')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  if (!caller) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const formData = await req.formData()
   const file = formData.get('file') as File | null
@@ -29,6 +26,24 @@ export async function POST(req: Request) {
   const action = formData.get('action') as string | null
 
   if (!quoteId) return NextResponse.json({ error: '필수 값 누락' }, { status: 400 })
+
+  // 권한: superadmin/영업관리팀은 모든 견적. 그 외에는 본인 견적(소유자)만 허용.
+  // 모든 action 이 quoteId 를 필수로 받으므로(위 검증) 항상 소유자 판정이 가능하다.
+  // service role(supabaseAdmin)로 조회해 RLS 를 우회하므로, 아래에서 engineer_id 를 명시적으로 비교한다.
+  const privileged = caller.permission_level === 'superadmin' || caller.teams === '영업관리'
+  if (!privileged) {
+    const { data: ownerQuote } = await supabaseAdmin
+      .from('quotes')
+      .select('engineer_id')
+      .eq('quote_id', Number(quoteId))
+      .single()
+    if (!ownerQuote || ownerQuote.engineer_id !== caller.engineer_id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
+
+  // 로그: 누가 어떤 action 을 어떤 견적에 했는지 추적
+  console.log('[purchase-order]', { action, quoteId, callerId: caller.engineer_id, callerEmail: user.email, privileged })
 
   const sender = caller
   const senderLabel = [sender.name, sender.position].filter(Boolean).join(' ') || (user.email ?? '')
@@ -69,7 +84,7 @@ export async function POST(req: Request) {
       .select('engineer_id, teams, permission_level')
 
     const targets = (allEng || []).filter((e: { engineer_id: number; teams: string | null; permission_level: string }) =>
-      e.teams === '영업관리' || e.permission_level === 'superadmin'
+      (e.teams === '영업관리' || e.permission_level === 'superadmin') && e.engineer_id !== caller.engineer_id
     )
 
     if (targets.length > 0) {
@@ -107,7 +122,7 @@ export async function POST(req: Request) {
     }).eq('quote_id', Number(quoteId))
 
     // 견적 발행자에게 알림
-    if (quote?.engineer_id) {
+    if (quote?.engineer_id && quote.engineer_id !== caller.engineer_id) {
       await supabaseAdmin.from('notifications').insert({
         engineer_id: quote.engineer_id,
         title: '✅ 주문 완료',
@@ -135,7 +150,7 @@ export async function POST(req: Request) {
       .select('engineer_id, teams, permission_level')
 
     const taxTargets = (taxAllEng || []).filter((e: { engineer_id: number; teams: string | null; permission_level: string }) =>
-      e.teams === '영업관리' || e.permission_level === 'superadmin'
+      (e.teams === '영업관리' || e.permission_level === 'superadmin') && e.engineer_id !== caller.engineer_id
     )
 
     const { data: quote } = await supabaseAdmin
@@ -173,7 +188,7 @@ export async function POST(req: Request) {
       tax_completed_by: senderLabel,
     }).eq('quote_id', Number(quoteId))
 
-    if (quote?.engineer_id) {
+    if (quote?.engineer_id && quote.engineer_id !== caller.engineer_id) {
       await supabaseAdmin.from('notifications').insert({
         engineer_id: quote.engineer_id,
         title: '🎉 세금계산서 발행 완료',
@@ -202,7 +217,7 @@ export async function POST(req: Request) {
       order_memo: orderMemo || null,
     }).eq('quote_id', Number(quoteId))
 
-    if (quote?.engineer_id) {
+    if (quote?.engineer_id && quote.engineer_id !== caller.engineer_id) {
       const parts: string[] = []
       if (shippingDate) parts.push(`출하 예정: ${shippingDate}`)
       if (orderMemo) parts.push(`메모: ${orderMemo}`)

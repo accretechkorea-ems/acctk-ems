@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { canAccessMaintenance } from '@/lib/permissions'
 import AccessGate from '@/components/common/AccessGate'
+import { OFFICES } from '@/lib/offices'
 import { SALES_STATUS_COLORS, ROLE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
@@ -40,6 +41,7 @@ type Engineer = {
   initials: string | null
   permission_level: string
   resigned_date: string | null
+  office: string | null
 }
 
 type SalesTarget = {
@@ -94,10 +96,10 @@ export default function AdminPage() {
   const [engineers, setEngineers] = useState<Engineer[]>([])
   const [engineerLoading, setEngineerLoading] = useState(false)
   const [showAddEngineer, setShowAddEngineer] = useState(false)
-  const [addForm, setAddForm] = useState({ name: '', position: '사원', teams: '1', email: '', initials: '', password: '' })
+  const [addForm, setAddForm] = useState({ name: '', position: '사원', teams: '', email: '', initials: '', password: '', office: '' })
   const [addLoading, setAddLoading] = useState(false)
   const [editEngineer, setEditEngineer] = useState<Engineer | null>(null)
-  const [editForm, setEditForm] = useState({ name: '', position: '', teams: '', email: '', initials: '', permission_level: 'member' })
+  const [editForm, setEditForm] = useState({ name: '', position: '', teams: '', email: '', initials: '', permission_level: 'member', office: '' })
   const [editLoading, setEditLoading] = useState(false)
   const [deleteEngineer, setDeleteEngineer] = useState<Engineer | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -116,8 +118,8 @@ export default function AdminPage() {
 
   // ── 폼별 검증 에러 (폼마다 독립 인스턴스 → 서로 새지 않음). 각 gate state 로 초기화 ──
   const targetErr = useFieldErrors<'amount'>()
-  const addEngErr = useFieldErrors<'name' | 'email' | 'password' | 'initials'>()
-  const editEngErr = useFieldErrors<'name'>()
+  const addEngErr = useFieldErrors<'name' | 'email' | 'password' | 'initials' | 'teams'>()
+  const editEngErr = useFieldErrors<'name' | 'teams'>()
   const resignErr = useFieldErrors<'resignDate'>()
   const teamErr = useFieldErrors<'teamName'>()
   /* eslint-disable react-hooks/exhaustive-deps */
@@ -261,6 +263,7 @@ export default function AdminPage() {
       email: addForm.email.trim() ? null : '이메일을 입력해주세요',
       password: addForm.password.trim() ? null : '초기 비밀번호를 입력해주세요',
       initials: addForm.initials.trim() ? null : '이니셜을 입력해주세요',
+      teams: addForm.teams ? null : '팀을 선택해주세요',
     })
     if (!ok) return
     setAddLoading(true)
@@ -275,6 +278,7 @@ export default function AdminPage() {
           position: addForm.position,
           teams: addForm.teams,
           initials: addForm.initials.trim().toUpperCase(),
+          office: addForm.office,
         }),
       })
       if (!res.ok) {
@@ -287,7 +291,7 @@ export default function AdminPage() {
       if (result.error) { toast.error(`오류: ${result.error}`); setAddLoading(false); return }
       toast.success(`${addForm.name} 직원이 등록되었습니다`)
       setShowAddEngineer(false)
-      setAddForm({ name: '', position: '사원', teams: '1', email: '', initials: '', password: '' })
+      setAddForm({ name: '', position: '사원', teams: '', email: '', initials: '', password: '', office: '' })
       fetchEngineers()
     } catch (e) {
       toast.error('오류가 발생했습니다')
@@ -297,7 +301,10 @@ export default function AdminPage() {
 
   const handleUpdateEngineer = async () => {
     if (!editEngineer) return
-    if (!editEngErr.validate({ name: editForm.name.trim() ? null : '이름을 입력해주세요' })) return
+    if (!editEngErr.validate({
+      name: editForm.name.trim() ? null : '이름을 입력해주세요',
+      teams: editForm.teams ? null : '팀을 선택해주세요',
+    })) return
     setEditLoading(true)
     try {
       const res = await fetch('/api/update-engineer', {
@@ -311,6 +318,7 @@ export default function AdminPage() {
           email: editForm.email.trim(),
           initials: editForm.initials.trim().toUpperCase(),
           permission_level: editForm.permission_level,
+          office: editForm.office,
         }),
       })
       const result = await res.json().catch(() => ({ error: `서버 오류 (${res.status})` }))
@@ -362,7 +370,7 @@ export default function AdminPage() {
         body: JSON.stringify({
           engineer_id: eng.engineer_id, name: eng.name, position: eng.position,
           teams: eng.teams, email: eng.email, initials: eng.initials,
-          resigned_date: null,
+          office: eng.office, resigned_date: null,
         }),
       })
       const result = await res.json().catch(() => ({ error: `서버 오류 (${res.status})` }))
@@ -759,7 +767,7 @@ export default function AdminPage() {
                           </div>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
-                          <button onClick={() => { setEditEngineer(eng); setEditForm({ name: eng.name, position: eng.position || '사원', teams: eng.teams || '1', email: eng.email || '', initials: eng.initials || '', permission_level: eng.permission_level || 'member' }) }}
+                          <button onClick={() => { setEditEngineer(eng); setEditForm({ name: eng.name, position: eng.position || '사원', teams: eng.teams || '', email: eng.email || '', initials: eng.initials || '', permission_level: eng.permission_level || 'member', office: eng.office || '' }) }}
                             style={{ padding: '4px 12px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>수정</button>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
@@ -801,10 +809,19 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>팀 *</div>
-                  <select value={addForm.teams} onChange={e => setAddForm(p => ({ ...p, teams: e.target.value }))} style={inp}>
+                  <select value={addForm.teams} onChange={e => { setAddForm(p => ({ ...p, teams: e.target.value })); addEngErr.clearError('teams') }} style={addEngErr.errors.teams ? { ...inp, border: errBorder } : inp}>
+                    <option value="" disabled>팀 선택</option>
                     {teamsOptions.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
+                  <FieldError message={addEngErr.errors.teams} />
                 </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>사무실</div>
+                <select value={addForm.office} onChange={e => setAddForm(p => ({ ...p, office: e.target.value }))} style={inp}>
+                  <option value="">사무실 미지정</option>
+                  {OFFICES.map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
+                </select>
               </div>
               <div>
                 <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>이메일 * (로그인 ID)</div>
@@ -824,7 +841,7 @@ export default function AdminPage() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
-              <button onClick={() => { setShowAddEngineer(false); setAddForm({ name: '', position: '사원', teams: '1', email: '', initials: '', password: '' }) }}
+              <button onClick={() => { setShowAddEngineer(false); setAddForm({ name: '', position: '사원', teams: '', email: '', initials: '', password: '', office: '' }) }}
                 style={{ flex: 1, padding: '11px', background: '#f3f4f6', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>취소</button>
               <button onClick={handleAddEngineer} disabled={addLoading}
                 style={{ flex: 1, padding: '11px', background: BLUE, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer', opacity: addLoading ? 0.7 : 1 }}>
@@ -854,11 +871,20 @@ export default function AdminPage() {
                   </select>
                 </div>
                 <div>
-                  <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>팀</div>
-                  <select value={editForm.teams} onChange={e => setEditForm(p => ({ ...p, teams: e.target.value }))} style={inp}>
+                  <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>팀 *</div>
+                  <select value={editForm.teams} onChange={e => { setEditForm(p => ({ ...p, teams: e.target.value })); editEngErr.clearError('teams') }} style={editEngErr.errors.teams ? { ...inp, border: errBorder } : inp}>
+                    <option value="" disabled>팀 선택</option>
                     {teamsOptions.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
+                  <FieldError message={editEngErr.errors.teams} />
                 </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>사무실</div>
+                <select value={editForm.office} onChange={e => setEditForm(p => ({ ...p, office: e.target.value }))} style={inp}>
+                  <option value="">사무실 미지정</option>
+                  {OFFICES.map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
+                </select>
               </div>
               <div>
                 <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>이메일</div>

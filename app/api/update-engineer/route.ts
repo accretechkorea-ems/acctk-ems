@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json()
-  const { engineer_id, name, position, teams, email, initials, permission_level, resigned_date } = body
+  const { engineer_id, name, position, teams, email, initials, permission_level, resigned_date, office } = body
 
   if (!engineer_id || !name?.trim()) {
     return NextResponse.json({ error: '필수 값 누락' }, { status: 400 })
@@ -43,6 +43,7 @@ export async function POST(req: Request) {
     teams: teams?.trim() || null,
     email: email?.trim() || null,
     initials: initials?.trim().toUpperCase() || null,
+    office: office?.trim() || null,
   }
 
   // 복직 처리: resigned_date 를 명시적으로 보냈을 때만 반영 (null = 재직 복귀)

@@ -4,8 +4,6 @@ import { useEffect, useRef, useState } from 'react'
 import { loadKakaoMap } from '@/lib/loadKakaoMap'
 import { geocodeAddress } from '@/lib/geocode'
 import {
-  BASE_LAT,
-  BASE_LNG,
   CARD_BG,
   PANEL_BG,
   TEXT_PRIMARY,
@@ -16,6 +14,7 @@ import {
   type Customer,
   type Device,
 } from '@/lib/home'
+import { OFFICES } from '@/lib/offices'
 import { CATEGORY_OPTIONS } from '@/lib/constants'
 
 type Props = {
@@ -58,12 +57,13 @@ export default function MapView({
   const [isMapReady, setIsMapReady] = useState(false)
   const restoredMapStateAppliedRef = useRef(false)
 
-  // 길찾기 출발지 — 동탄 좌표는 고정, 울산·구미는 init에서 주소를 지오코딩해 채운다.
-  const originsRef = useRef<Record<string, { lat: number; lng: number; name: string }>>({
-    ulsan: { lat: BASE_LAT, lng: BASE_LNG, name: '울산 울주군 삼남읍 울산역로 274' },
-    gumi: { lat: 36.0315, lng: 128.3899, name: '경북 칠곡군 남중리1길 14' },
-    dongtan: { lat: 37.217719, lng: 127.108180, name: '경기 화성시 동탄구 동탄대로24길 31-8' },
-  })
+  // 길찾기 출발지 — 사무실 공용 상수(lib/offices)에서 로드. name 은 주소(=출발지 이름).
+  // 동탄 좌표는 고정, 울산·구미는 init에서 주소를 지오코딩해 채운다(아래 로직 유지).
+  const originsRef = useRef<Record<string, { lat: number; lng: number; name: string }>>(
+    Object.fromEntries(
+      OFFICES.map(o => [o.code, { lat: o.lat, lng: o.lng, name: o.address }])
+    ) as Record<string, { lat: number; lng: number; name: string }>
+  )
 
   // HTML 특수문자 이스케이프 — innerHTML에 DB 데이터 삽입 시 XSS 방지
   const esc = (s: string | null | undefined): string =>

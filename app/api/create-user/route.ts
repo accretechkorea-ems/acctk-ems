@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json()
-  const { email, password, name, position, teams, initials } = body
+  const { email, password, name, position, teams, initials, office } = body
 
   // 필수 입력값 검증
   if (!email?.trim() || !password?.trim() || !name?.trim()) {
@@ -51,6 +51,7 @@ export async function POST(req: Request) {
     teams: teams?.trim() || null,
     initials: initials?.trim().toUpperCase() || null,
     email: email.trim(),
+    office: office?.trim() || null,
   }, { onConflict: 'email' })
 
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 400 })

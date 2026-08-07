@@ -10,6 +10,7 @@ import { SALES_STATUS_COLORS, TEAM_COLORS, getCategoryColor } from '@/lib/catego
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { canAccessAdmin } from '@/lib/permissions'
+import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice } from '@/lib/quoteMutations'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#f4f5f7'
@@ -579,12 +580,8 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   const handlePoUpload = async () => {
     if (!poQuote || !poFile) return
     setPoUploading(true)
-    const fd = new FormData()
-    fd.append('quoteId', String(poQuote.quote_id))
-    fd.append('quoteNumber', poQuote.quote_number)
-    fd.append('action', 'upload')
-    fd.append('file', poFile)
-    fd.append('deliveryMethod', poDelivery)
+    // 배송정보(deliveryAddress) 구성은 UI 파생이라 여기 유지. DB/API 호출만 공용 함수로.
+    let deliveryAddress: string | undefined
     if (poDelivery === '택배발송') {
       const selectedContact = poContacts.find(c => c.contact_id === poContactId)
       const finalAddress = poAddressMode === 'company' ? (poCompanyAddress ?? '') : poAddress.trim()
@@ -595,13 +592,18 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
         if (selectedContact.phone) parts.push(`연락처: ${selectedContact.phone}`)
       }
       if (finalAddress) parts.push(`주소: ${finalAddress}`)
-      if (parts.length > 0) fd.append('deliveryAddress', parts.join('\n'))
+      if (parts.length > 0) deliveryAddress = parts.join('\n')
     }
-    const res = await fetch('/api/purchase-order', { method: 'POST', body: fd })
-    const json = await res.json().catch(() => ({}))
+    const result = await uploadPurchaseOrder({
+      quoteId: poQuote.quote_id,
+      quoteNumber: poQuote.quote_number,
+      file: poFile,
+      deliveryMethod: poDelivery,
+      deliveryAddress,
+    })
     setPoUploading(false)
-    if (!res.ok) {
-      toast.error(`발주서 등록 실패: ${json.error || res.status}`)
+    if (!result.ok) {
+      toast.error(`발주서 등록 실패: ${result.error}`)
       return
     }
     setPoQuote(null)
@@ -619,15 +621,10 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
     const ok = validate({ taxDate: taxDate ? null : '요청 발행일을 선택해주세요' })
     if (!ok) return
     setTaxSending(true)
-    const fd = new FormData()
-    fd.append('quoteId', String(taxQuote.quote_id))
-    fd.append('action', 'request_tax')
-    if (taxDate) fd.append('taxDate', taxDate)
-    const res = await fetch('/api/purchase-order', { method: 'POST', body: fd })
-    const json = await res.json().catch(() => ({}))
+    const result = await requestTaxInvoice({ quoteId: taxQuote.quote_id, taxDate: taxDate || undefined })
     setTaxSending(false)
-    if (!res.ok) {
-      toast.error(`세금계산서 요청 실패: ${json.error || res.status}`)
+    if (!result.ok) {
+      toast.error(`세금계산서 요청 실패: ${result.error}`)
       return
     }
     setTaxQuote(null)
@@ -1149,7 +1146,10 @@ const visibleEngineers = sortedEngineers.filter(e => {
   )
 
   const handleStatusSave = async (q: Quote, status: string, orderDate: string, revenueDate: string, failReason: string) => {
-    await supabase.from('quotes').update({ status, order_date: orderDate || null, revenue_date: revenueDate || null, fail_reason: failReason || null }).eq('quote_id', q.quote_id)
+    // 원본 동작 유지: 상태 업데이트 오류는 무시하고 목록만 갱신(공용 함수는 실패 시 throw).
+    try {
+      await updateQuoteStatus({ quoteId: q.quote_id, status, orderDate, revenueDate, failReason })
+    } catch { /* noop */ }
     await fetchAll()
   }
 

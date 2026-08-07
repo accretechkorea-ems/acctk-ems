@@ -24,7 +24,13 @@
       "Bash(awk 'NR>368' app/page.tsx)",
       "Bash(awk 'NR>587' \"app/customer/[id]/page.tsx\")",
       "Bash(rm app/library/page.tsx)",
-      "Bash(rmdir app/library)"
+      "Bash(rmdir app/library)",
+      "Bash(node engcols.mjs)",
+      "Bash(node routeprobe.mjs)",
+      "Bash(node routeprobe2.mjs)",
+      "Bash(node qcols.mjs)",
+      "Bash(grep -nA2 'marginTop: 8' app/dashboard/page.tsx)",
+      "PowerShell(npx tsc --noEmit 2>&1)"
     ]
   }
 }
