@@ -8,7 +8,7 @@ import { useToast } from '@/components/common/Toast'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canAccessSales } from '@/lib/permissions'
+import { canAccessSales, isSuperAdmin } from '@/lib/permissions'
 
 const BLUE = '#234ea2'
 const ORANGE = '#d97706'
@@ -200,7 +200,7 @@ function InventoryPage() {
 
   // ── 파생 상태 ──
   const isManager = canAccessSales(currentEngineer)
-  const isSuperAdmin = currentEngineer?.permission_level === 'superadmin'
+  const isSuper = isSuperAdmin(currentEngineer)
 
   const filteredItems = useMemo(() => items.filter(item => {
     const q = search.trim().toLowerCase()
@@ -210,9 +210,9 @@ function InventoryPage() {
 
   const myRequests = useMemo(() => {
     if (!currentEngineer) return []
-    if (isSuperAdmin) return requests
+    if (isSuper) return requests
     return requests.filter(r => r.requester_id === currentEngineer.engineer_id)
-  }, [requests, currentEngineer, isSuperAdmin])
+  }, [requests, currentEngineer, isSuper])
 
   const pendingRequests = requests.filter(r => r.status === '대기중')
 
@@ -900,7 +900,7 @@ function InventoryPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ borderBottom: `1.5px solid ${BORDER}`, background: '#f8fafc' }}>
-                    {['요청일시', '품명', '부품코드', ...(isSuperAdmin ? ['요청자'] : []), '요청 수량', '사유', '상태', '반려 사유'].map(h => (
+                    {['요청일시', '품명', '부품코드', ...(isSuper ? ['요청자'] : []), '요청 수량', '사유', '상태', '반려 사유'].map(h => (
                       <th key={h} style={{ padding: '10px 14px', textAlign: 'left', color: MUTED, fontWeight: 700, whiteSpace: 'nowrap', fontSize: 11, letterSpacing: '0.4px', textTransform: 'uppercase' }}>{h}</th>
                     ))}
                   </tr>
@@ -929,7 +929,7 @@ function InventoryPage() {
                         <td style={{ padding: '11px 14px', whiteSpace: 'nowrap' }}>
                           <PartTag code={req.inventory_items?.part_code ?? null} />
                         </td>
-                        {isSuperAdmin && <td style={{ padding: '11px 14px', whiteSpace: 'nowrap', color: TEXT, fontSize: 12 }}>{getEngName(req.requester_id)}</td>}
+                        {isSuper && <td style={{ padding: '11px 14px', whiteSpace: 'nowrap', color: TEXT, fontSize: 12 }}>{getEngName(req.requester_id)}</td>}
                         <td style={{ padding: '11px 14px', fontWeight: 700, color: TEXT, whiteSpace: 'nowrap' }}>{req.quantity}개</td>
                         <td style={{ padding: '11px 14px', color: GRAY, fontSize: 12, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{req.reason ?? '-'}</td>
                         <td style={{ padding: '11px 14px', whiteSpace: 'nowrap' }}>

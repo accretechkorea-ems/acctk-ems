@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { canManageEngineers } from '@/lib/permissions'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
     .select('permission_level')
     .eq('email', user.email!)
     .single()
-  if (!caller || !['superadmin', 'manager'].includes(caller.permission_level)) {
+  if (!caller || !canManageEngineers(caller)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

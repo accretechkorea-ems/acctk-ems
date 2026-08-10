@@ -9,7 +9,7 @@ import { isActiveInPeriod } from '@/lib/engineers'
 import { SALES_STATUS_COLORS, TEAM_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canAccessAdmin } from '@/lib/permissions'
+import { canAccessAdmin, getViewScope, isFieldEngineerTeam } from '@/lib/permissions'
 import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice } from '@/lib/quoteMutations'
 
 const BLUE = '#234ea2'
@@ -1070,11 +1070,12 @@ export default function SalesPage() {
 
   // 권한별 열람 가능 엔지니어 필터 (+ 퇴사자는 조회 기간 시작일까지 재직한 경우만)
 const visibleEngineers = sortedEngineers.filter(e => {
-    if (['임원', '영업관리'].includes(e.teams ?? '')) return false
+    if (!isFieldEngineerTeam(e)) return false
     if (!isActiveInPeriod(e.resigned_date, periodStart)) return false
     if (!currentEngineer) return false
-    if (currentEngineer.permission_level === 'superadmin') return true
-    if (currentEngineer.permission_level === 'manager') return e.teams === currentEngineer.teams
+    const scope = getViewScope(currentEngineer)
+    if (scope === 'all') return true
+    if (scope === 'team') return e.teams === currentEngineer.teams
     return e.engineer_id === currentEngineer.engineer_id
   })
 
@@ -1097,7 +1098,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
     return true
   }
 
-  const allEngineers = sortedEngineers.filter(e => !['임원', '영업관리'].includes(e.teams ?? '') && isActiveInPeriod(e.resigned_date, periodStart))
+  const allEngineers = sortedEngineers.filter(e => isFieldEngineerTeam(e) && isActiveInPeriod(e.resigned_date, periodStart))
   const allEngineerIds = allEngineers.map(e => e.engineer_id)
   const filteredQuotes = quotes.filter(q => matchPeriod(q.quote_date, fy) && (teamFilter ? filteredEngineerIds.includes(q.engineer_id) : true))
   const allFilteredQuotes = quotes.filter(q => matchPeriod(q.quote_date, fy) && allEngineerIds.includes(q.engineer_id))
@@ -1195,7 +1196,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
             <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 10, padding: 3, gap: 1 }}>
               <button onClick={() => setTeamFilter(null)}
                 style={{ padding: '5px 11px', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: teamFilter === null ? '#fff' : 'transparent', color: teamFilter === null ? TEXT : GRAY, boxShadow: teamFilter === null ? '0 1px 3px rgba(0,0,0,0.10)' : 'none', transition: 'all 0.15s ease' }}>전체</button>
-              {teams.filter(t => !['임원', '영업관리'].includes(t)).map(t => (
+              {teams.filter(t => isFieldEngineerTeam({ teams: t })).map(t => (
                 <button key={t} onClick={() => setTeamFilter(teamFilter === t ? null : t)}
                   style={{ padding: '5px 11px', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: teamFilter === t ? '#fff' : 'transparent', color: teamFilter === t ? getCategoryColor(TEAM_COLORS, t).text : GRAY, boxShadow: teamFilter === t ? '0 1px 3px rgba(0,0,0,0.10)' : 'none', transition: 'all 0.15s ease' }}>{t}</button>
               ))}
@@ -1255,7 +1256,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
         </div>
 
         {/* 팀별 실적 — superadmin과 각팀 manager, 해당 팀원에게만 표시 */}
-        {!teamFilter && teams.length > 0 && (currentEngineer?.permission_level === 'superadmin' || currentEngineer?.permission_level === 'manager') && (
+        {!teamFilter && teams.length > 0 && getViewScope(currentEngineer) !== 'self' && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
               <div style={{ width: 3, height: 16, background: BLUE, borderRadius: 2 }} />
@@ -1263,8 +1264,8 @@ const visibleEngineers = sortedEngineers.filter(e => {
             </div>
            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
                {teams.filter(t => {
-                if (['임원', '영업관리'].includes(t)) return false
-                if (currentEngineer?.permission_level === 'manager') return t === currentEngineer.teams
+                if (!isFieldEngineerTeam({ teams: t })) return false
+                if (getViewScope(currentEngineer) === 'team') return t === currentEngineer?.teams
                 return true
               }).map(t => (
               <TeamCard key={t} teamId={t} engineers={sortedEngineers} filteredQuotes={filteredQuotes} targets={targets} mode={mode} fy={fy} onCardClick={id => setTeamFilter(id === teamFilter ? null : id)} isSelected={teamFilter === t} />

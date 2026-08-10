@@ -1,16 +1,16 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { loadKakaoMap } from '@/lib/loadKakaoMap'
+import { createClient } from '@/lib/supabase/client'
 import type { RouteStop } from '@/lib/routeMap'
 import { getOffice } from '@/lib/offices'
 
 // 엔지니어 동선 지도(전체 화면 오버레이). 방문지 마커 + 연결선 + 사무실 마커.
-// 연결선은 두 모드:
-//   visits(기본) — 같은 날 방문지끼리만 실선. 날짜가 바뀌는 구간은 실제 경로를 알 수 없어 선 없음.
-//   office        — 날짜별로 사무실→방문지들→사무실. 사무실 구간은 점선(가정), 방문지 간은 실선.
-// NOTE: props 스펙은 { stops, onClose } 이지만 §2(상단 이름·기간)·사무실 표시를 위해
-//       engineerName/startDate/endDate/officeCode 를 추가로 받는다.
+// 연결선 모드는 지도 안 토글로 전환한다(기본 visits, 열 때마다 초기화):
+//   visits — 같은 날 방문지끼리만 실선. 날짜가 바뀌는 구간은 실제 경로를 알 수 없어 선 없음.
+//   office — 날짜별로 사무실→방문지들→사무실. 사무실 구간은 점선(가정), 방문지 간은 실선.
+// [주변 업체] 토글: 각 방문지 반경 5km 이내 customers 를 회색 점으로 표시(방문지 제외, 첫 켤 때만 조회·캐시).
 type Props = {
   stops: RouteStop[]
   onClose: () => void
@@ -19,7 +19,6 @@ type Props = {
   endDate?: string
   officeCode?: string | null // engineers.office. getOffice() 로 조회, 없으면 사무실 마커 미표시.
   excludedCount?: number     // 유선기술지원으로 제외된 기록 수(하단 안내용)
-  mode?: 'visits' | 'office' // 연결선 방식. 마커 표시 방식은 두 모드 공통.
 }
 
 // 이 level 이하(확대)에서만 마커를 부채꼴/원형으로 분산한다. 그 이상(축소)이면
@@ -27,12 +26,39 @@ type Props = {
 // 실측하며 조정할 수 있게 상수로 분리(카카오 level 은 작을수록 확대).
 const SPREAD_MAX_LEVEL = 5
 
-export default function RouteMapView({ stops, onClose, engineerName, startDate, endDate, officeCode, excludedCount = 0, mode = 'visits' }: Props) {
+const NEARBY_RADIUS_KM = 5 // 주변 업체 표시 반경
+
+// 두 좌표 사이 거리(km) — 하버사인. 주변 업체 5km 필터용.
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(a))
+}
+
+type NearbyCustomer = { lat: number; lng: number; name: string }
+
+export default function RouteMapView({ stops, onClose, engineerName, startDate, endDate, officeCode, excludedCount = 0 }: Props) {
+  const supabase = useMemo(() => createClient(), [])
   const mapRef = useRef<HTMLDivElement>(null)
   const infoRef = useRef<any>(null) // 현재 열린 정보창(하나만 유지)
-  const polylinesRef = useRef<any[]>([]) // 구간별 연결선(언마운트 시 정리)
+  const polylinesRef = useRef<any[]>([]) // 구간별 연결선(모드 전환·언마운트 시 정리)
   const markerOverlaysRef = useRef<any[]>([]) // 클러스터 마커(줌 변경 시 다시 그림)
   const officeOverlayRef = useRef<any>(null) // 사무실 마커(1회 생성, 언마운트 시 정리)
+  const mapObjRef = useRef<any>(null) // 카카오 지도 인스턴스(토글 효과에서 사용)
+  const drawPolylinesRef = useRef<((m: 'visits' | 'office') => void) | null>(null)
+  const drawNearbyRef = useRef<(() => void) | null>(null)
+  const clearNearbyRef = useRef<(() => void) | null>(null)
+  const nearbyOverlaysRef = useRef<any[]>([]) // 주변 업체 회색 점
+  const nearbyCacheRef = useRef<NearbyCustomer[] | null>(null) // null = 아직 미조회(첫 켤 때만 조회)
+
+  // 지도 안 토글 상태. 지도를 닫았다 열면 컴포넌트가 새로 마운트되므로 자동으로 기본값(visits/off)로 초기화된다.
+  const [mode, setMode] = useState<'visits' | 'office'>('visits')
+  const [showNearby, setShowNearby] = useState(false)
+  const [nearbyFailed, setNearbyFailed] = useState(false) // customers 조회 실패 시 토글 비활성화
+  const [mapReady, setMapReady] = useState(false)
 
   const officeInfo = getOffice(officeCode) // 소속 사무실(없으면 undefined)
   const isOffice = mode === 'office' && !!officeInfo
@@ -48,11 +74,13 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
 
   // 지도 초기화 — useEffect 는 페인트 이후 실행되므로 오버레이 컨테이너 크기가
   // 확정된 뒤에 지도를 만든다. 추가로 relayout() 1회 + ResizeObserver 로 보정.
+  // 모드/주변업체 토글은 재초기화 없이 별도 effect 에서 다시 그린다(지도 시점 유지).
   useEffect(() => {
     if (stops.length === 0) return // 빈 경우 지도 미생성(아래 렌더에서 안내)
 
     let mounted = true
     let ro: ResizeObserver | null = null
+    setMapReady(false)
 
     const initMap = async () => {
       const kakao = await loadKakaoMap()
@@ -62,6 +90,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
         center: new kakao.maps.LatLng(stops[0].lat, stops[0].lng),
         level: 6,
       })
+      mapObjRef.current = map
 
       // 모달 안에서 0 크기로 초기화되면 회색만 나오는 문제 대비: 생성 직후 한 번 relayout.
       map.relayout()
@@ -226,7 +255,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
       kakao.maps.event.addListener(map, 'zoom_changed', drawMarkers)
 
       // 사무실 마커 — 진한 회색(#374151) 집 아이콘 배지로 방문지(파란 dot)와 색·형태 구분.
-      // (visits 모드에선 마커만 표시하고 선은 잇지 않는다. office 모드에선 위에서 점선으로 연결.)
+      // (visits 모드에선 마커만 표시하고 선은 잇지 않는다. office 모드에선 아래에서 점선으로 연결.)
       if (officeInfo) {
         const wrap = document.createElement('div')
         wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center'
@@ -262,32 +291,68 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
         polylinesRef.current.push(line)
       }
 
-      if (mode === 'office' && officeInfo) {
-        // office 모드: 날짜별로 사무실 → 그날 방문지들(순서대로) → 사무실.
-        // 날짜가 다르면 각각 사무실에서 시작해 사무실로 복귀하는 독립 경로.
-        const office = { lat: officeInfo.lat, lng: officeInfo.lng }
-        const byDate = new Map<string, RouteStop[]>()
-        for (const s of stops) {
-          const arr = byDate.get(s.date)
-          if (arr) arr.push(s)
-          else byDate.set(s.date, [s])
-        }
-        for (const dayStops of byDate.values()) {
-          drawDashed(office, dayStops[0])                         // 사무실 → 첫 방문지 (가정)
-          for (let i = 0; i < dayStops.length - 1; i++) {
-            drawSolid(dayStops[i], dayStops[i + 1])               // 방문지 간 이동
+      // 모드별 연결선 그리기(기존 선 제거 후 재작성). 토글 시 지도 재생성 없이 이 함수만 다시 호출.
+      const drawPolylines = (m: 'visits' | 'office') => {
+        polylinesRef.current.forEach(p => p.setMap(null))
+        polylinesRef.current = []
+        if (m === 'office' && officeInfo) {
+          // office 모드: 날짜별로 사무실 → 그날 방문지들(순서대로) → 사무실. 날짜가 다르면 독립 경로.
+          const office = { lat: officeInfo.lat, lng: officeInfo.lng }
+          const byDate = new Map<string, RouteStop[]>()
+          for (const s of stops) {
+            const arr = byDate.get(s.date)
+            if (arr) arr.push(s)
+            else byDate.set(s.date, [s])
           }
-          drawDashed(dayStops[dayStops.length - 1], office)       // 마지막 방문지 → 사무실 (가정)
-        }
-      } else if (stops.length >= 2) {
-        // visits 모드(기존): 같은 날 인접 구간만 실선. date 가 바뀌는 구간은 경로 불명이라 선 없음.
-        for (let i = 0; i < stops.length - 1; i++) {
-          const a = stops[i]
-          const b = stops[i + 1]
-          if (a.date !== b.date) continue // 날짜 바뀌는 구간은 선 없음
-          drawSolid(a, b)
+          for (const dayStops of byDate.values()) {
+            drawDashed(office, dayStops[0])                     // 사무실 → 첫 방문지 (가정)
+            for (let i = 0; i < dayStops.length - 1; i++) drawSolid(dayStops[i], dayStops[i + 1]) // 방문지 간
+            drawDashed(dayStops[dayStops.length - 1], office)   // 마지막 방문지 → 사무실 (가정)
+          }
+        } else if (stops.length >= 2) {
+          // visits 모드: 같은 날 인접 구간만 실선. date 가 바뀌는 구간은 경로 불명이라 선 없음.
+          for (let i = 0; i < stops.length - 1; i++) {
+            const a = stops[i], b = stops[i + 1]
+            if (a.date !== b.date) continue
+            drawSolid(a, b)
+          }
         }
       }
+      drawPolylinesRef.current = drawPolylines
+      drawPolylines(mode)
+
+      // 주변 업체(회색 점) — 라벨 없이 8px 회색 점. 클릭 시 업체명 툴팁. 분산 없이 원좌표에 그대로.
+      const openNearbyTooltip = (pos: any, name: string) => {
+        if (infoRef.current) infoRef.current.setMap(null)
+        const box = document.createElement('div')
+        box.style.cssText = 'padding:6px 10px;background:#fff;border:1px solid #ebebeb;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.15);white-space:nowrap;font-size:12px;font-weight:700;color:#374151'
+        box.textContent = name
+        const info = new kakao.maps.CustomOverlay({ position: pos, yAnchor: 1.6, zIndex: 6, content: box })
+        info.setMap(map)
+        infoRef.current = info
+      }
+      const clearNearby = () => {
+        nearbyOverlaysRef.current.forEach(o => o.setMap(null))
+        nearbyOverlaysRef.current = []
+      }
+      const drawNearby = () => {
+        clearNearby()
+        const data = nearbyCacheRef.current
+        if (!data) return
+        for (const c of data) {
+          const pos = new kakao.maps.LatLng(c.lat, c.lng)
+          const el = document.createElement('div')
+          // 방문지(파란 원 16px + 날짜 라벨)와 확실히 구분: 작은 회색 점 8px, 라벨 없음, zIndex 낮음.
+          el.style.cssText = 'width:8px;height:8px;border-radius:50%;background:#9ca3af;border:1.5px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.35);cursor:pointer'
+          el.addEventListener('click', (e) => { e.stopPropagation(); openNearbyTooltip(pos, c.name) })
+          const ov = new kakao.maps.CustomOverlay({ position: pos, xAnchor: 0.5, yAnchor: 0.5, zIndex: 2, content: el })
+          ov.setMap(map)
+          nearbyOverlaysRef.current.push(ov)
+        }
+      }
+      clearNearbyRef.current = clearNearby
+      drawNearbyRef.current = drawNearby
+      if (showNearby && nearbyCacheRef.current) drawNearby() // 재초기화 시 이미 켜져 있으면 즉시 복원
 
       // 지도 빈 곳 클릭 시 정보창 닫기
       kakao.maps.event.addListener(map, 'click', () => {
@@ -297,6 +362,8 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
       // ResizeObserver 로 컨테이너 크기 변화 대응
       ro = new ResizeObserver(() => map.relayout())
       ro.observe(mapRef.current)
+
+      setMapReady(true)
     }
 
     initMap()
@@ -308,14 +375,73 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
       polylinesRef.current = []
       markerOverlaysRef.current.forEach(o => o.setMap(null))
       markerOverlaysRef.current = []
+      nearbyOverlaysRef.current.forEach(o => o.setMap(null))
+      nearbyOverlaysRef.current = []
       if (officeOverlayRef.current) { officeOverlayRef.current.setMap(null); officeOverlayRef.current = null }
+      drawPolylinesRef.current = null; drawNearbyRef.current = null; clearNearbyRef.current = null
+      mapObjRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stops, officeCode, mode])
+  }, [stops, officeCode])
+
+  // 모드 토글 → 지도 재생성 없이 연결선만 다시 그린다.
+  useEffect(() => {
+    drawPolylinesRef.current?.(mode)
+  }, [mode])
+
+  // 주변 업체 토글 → 첫 켤 때만 customers 조회(캐시). 끄면 점 제거.
+  // RLS 상 canAccess80 사용자만 customers 를 읽으므로, 조회 실패 시 조용히 토글 비활성화.
+  useEffect(() => {
+    if (!mapReady) return
+    if (!showNearby) { clearNearbyRef.current?.(); return }
+    let cancelled = false
+    ;(async () => {
+      if (nearbyCacheRef.current === null) {
+        try {
+          const { data, error } = await supabase
+            .from('customers')
+            .select('customer_id, company_name, latitude, longitude')
+            .not('latitude', 'is', null)
+            .not('longitude', 'is', null)
+          if (error) throw error
+          const visited = new Set(stops.map(s => s.customerId))
+          const list: NearbyCustomer[] = []
+          for (const c of data ?? []) {
+            if (visited.has(c.customer_id)) continue // 방문한 업체는 제외(이미 마커 있음)
+            const lat = Number(c.latitude), lng = Number(c.longitude)
+            if (!isFinite(lat) || !isFinite(lng)) continue
+            if (stops.some(s => haversineKm(s.lat, s.lng, lat, lng) <= NEARBY_RADIUS_KM)) {
+              list.push({ lat, lng, name: c.company_name })
+            }
+          }
+          if (cancelled) return
+          nearbyCacheRef.current = list
+        } catch {
+          if (!cancelled) { setNearbyFailed(true); setShowNearby(false) }
+          return
+        }
+      }
+      if (!cancelled) drawNearbyRef.current?.()
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showNearby, mapReady])
 
   const period = startDate && endDate
     ? `${startDate.replace(/-/g, '.')} ~ ${endDate.replace(/-/g, '.')}`
     : ''
+
+  // 지도 안 토글(pill) 공통 스타일
+  const pillStyle = (active: boolean, disabled: boolean): CSSProperties => ({
+    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 99,
+    fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+    border: `1px solid ${disabled ? '#ebebeb' : active ? '#234ea2' : '#d1d5db'}`,
+    background: disabled ? '#f3f4f6' : active ? '#234ea2' : '#fff',
+    color: disabled ? '#9ca3af' : active ? '#fff' : '#374151',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+    transition: 'all 0.12s ease',
+  })
 
   return (
     <div
@@ -382,6 +508,33 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
           </div>
         ) : (
           <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
+        )}
+
+        {/* 지도 안 토글 (우하단 — 좌하단 범례와 겹치지 않게). 사무실 기준 연결선 / 주변 업체 */}
+        {stops.length > 0 && (
+          <div style={{ position: 'absolute', bottom: 16, right: 16, zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => { if (officeInfo) setMode(m => (m === 'office' ? 'visits' : 'office')) }}
+                disabled={!officeInfo}
+                title={!officeInfo ? '소속 사무실이 지정되지 않았습니다' : '사무실 기준 왕복 연결선'}
+                style={pillStyle(isOffice, !officeInfo)}>
+                사무실 기준 연결선
+              </button>
+              <button
+                onClick={() => { if (!nearbyFailed) setShowNearby(v => !v) }}
+                disabled={nearbyFailed}
+                title={nearbyFailed ? '주변 업체를 불러올 수 없습니다' : '방문지 반경 5km 이내 고객사'}
+                style={pillStyle(showNearby, nearbyFailed)}>
+                주변 업체
+              </button>
+            </div>
+            {!officeInfo && (
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', background: 'rgba(255,255,255,0.92)', border: '1px solid #ebebeb', borderRadius: 6, padding: '2px 7px' }}>
+                소속 사무실이 지정되지 않았습니다
+              </span>
+            )}
+          </div>
         )}
 
         {/* 범례 (좌하단) */}

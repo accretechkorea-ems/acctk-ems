@@ -90,3 +90,21 @@ export function getViewScope(engineer?: EngineerLike | null): 'all' | 'team' | '
   if (engineer.permission_level === 'manager') return 'team'
   return 'self'
 }
+
+/**
+ * 직원 계정 관리(등록/수정/퇴사/삭제 등) 권한. superadmin 또는 manager.
+ * 서버 라우트들의 `['superadmin','manager'].includes(permission_level)` 판정을 한 곳으로 모은다.
+ */
+export function canManageEngineers(engineer?: EngineerLike | null): boolean {
+  if (!engineer) return false
+  return engineer.permission_level === 'superadmin' || engineer.permission_level === 'manager'
+}
+
+/**
+ * '현장 엔지니어 팀' 여부 — 임원·영업관리를 제외한 팀.
+ * 실적/활동 집계에서 임원·영업관리를 빼는 반복 필터(`!['임원','영업관리'].includes(teams ?? '')`)를 모은다.
+ * teams 가 없으면(null/미지정) 기존 동작과 동일하게 현장 엔지니어로 간주한다(true).
+ */
+export function isFieldEngineerTeam(engineer?: EngineerLike | null): boolean {
+  return !['임원', '영업관리'].includes(engineer?.teams ?? '')
+}

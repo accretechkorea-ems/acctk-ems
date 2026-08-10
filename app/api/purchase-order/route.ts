@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { canAccessSales } from '@/lib/permissions'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
   // 권한: superadmin/영업관리팀은 모든 견적. 그 외에는 본인 견적(소유자)만 허용.
   // 모든 action 이 quoteId 를 필수로 받으므로(위 검증) 항상 소유자 판정이 가능하다.
   // service role(supabaseAdmin)로 조회해 RLS 를 우회하므로, 아래에서 engineer_id 를 명시적으로 비교한다.
-  const privileged = caller.permission_level === 'superadmin' || caller.teams === '영업관리'
+  const privileged = canAccessSales(caller)
   if (!privileged) {
     const { data: ownerQuote } = await supabaseAdmin
       .from('quotes')
@@ -84,7 +85,7 @@ export async function POST(req: Request) {
       .select('engineer_id, teams, permission_level')
 
     const targets = (allEng || []).filter((e: { engineer_id: number; teams: string | null; permission_level: string }) =>
-      (e.teams === '영업관리' || e.permission_level === 'superadmin') && e.engineer_id !== caller.engineer_id
+      canAccessSales(e) && e.engineer_id !== caller.engineer_id
     )
 
     if (targets.length > 0) {
@@ -150,7 +151,7 @@ export async function POST(req: Request) {
       .select('engineer_id, teams, permission_level')
 
     const taxTargets = (taxAllEng || []).filter((e: { engineer_id: number; teams: string | null; permission_level: string }) =>
-      (e.teams === '영업관리' || e.permission_level === 'superadmin') && e.engineer_id !== caller.engineer_id
+      canAccessSales(e) && e.engineer_id !== caller.engineer_id
     )
 
     const { data: quote } = await supabaseAdmin

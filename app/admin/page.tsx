@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { canAccessMaintenance } from '@/lib/permissions'
+import { canAccessMaintenance, isSuperAdmin } from '@/lib/permissions'
 import AccessGate from '@/components/common/AccessGate'
 import { OFFICES } from '@/lib/offices'
 import { SALES_STATUS_COLORS, ROLE_COLORS, getCategoryColor } from '@/lib/categoryColors'
@@ -484,8 +484,8 @@ export default function AdminPage() {
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>직원 등록, 정보 수정, 관리자 권한, 계정 삭제를 관리합니다.</div>
             <button
               onClick={() => { setShowEngineerModal(true); fetchEngineers(); fetchTeams() }}
-              disabled={currentEngineer?.permission_level !== 'superadmin'}
-              style={{ width: '100%', padding: '10px', background: currentEngineer?.permission_level === 'superadmin' ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: currentEngineer?.permission_level === 'superadmin' ? 'pointer' : 'not-allowed' }}>
+              disabled={!isSuperAdmin(currentEngineer)}
+              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
               관리하기
             </button>
           </div>
@@ -496,8 +496,8 @@ export default function AdminPage() {
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>팀을 추가하거나 삭제합니다. 직원 등록·수정 시 팀 목록에 즉시 반영됩니다.</div>
             <button
               onClick={() => { setShowTeamModal(true); fetchTeams() }}
-              disabled={currentEngineer?.permission_level !== 'superadmin'}
-              style={{ width: '100%', padding: '10px', background: currentEngineer?.permission_level === 'superadmin' ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: currentEngineer?.permission_level === 'superadmin' ? 'pointer' : 'not-allowed' }}>
+              disabled={!isSuperAdmin(currentEngineer)}
+              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
               관리하기
             </button>
           </div>
@@ -890,7 +890,7 @@ export default function AdminPage() {
                 <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>이메일</div>
                 <input value={editForm.email} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} style={inp} />
               </div>
-              {currentEngineer?.permission_level === 'superadmin' && (
+              {isSuperAdmin(currentEngineer) && (
                 <div>
                   <div style={{ fontSize: 12, color: GRAY, marginBottom: 8, fontWeight: 700 }}>권한</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>

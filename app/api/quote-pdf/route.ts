@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { canAccessSales } from '@/lib/permissions'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,13 +23,25 @@ export async function GET(req: NextRequest) {
   if (!safePath || safePath.includes('/'))
     return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
 
-  // 실제 등록된 견적 PDF인지 DB로 확인 (버킷 내 임의 객체 열람 방지)
-  const { count } = await supabase
+  // 권한: 견적 소유자 또는 superadmin/영업관리만 열람 가능.
+  // RLS 에 의존하지 않도록 service role 로 caller 와 대상 견적을 직접 조회해 코드에서 판정한다.
+  const { data: caller } = await supabaseAdmin
+    .from('engineers')
+    .select('engineer_id, permission_level, teams')
+    .eq('email', user.email!)
+    .single()
+  if (!caller) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const { data: quoteRows } = await supabaseAdmin
     .from('quotes')
-    .select('quote_id', { count: 'exact', head: true })
+    .select('engineer_id')
     .eq('pdf_url', `quote-pdfs/${safePath}`)
-  if (!count || count === 0)
+  if (!quoteRows || quoteRows.length === 0)
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const privileged = canAccessSales(caller)
+  if (!privileged && !quoteRows.some(q => q.engineer_id === caller.engineer_id))
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { data, error } = await supabaseAdmin.storage
     .from('quote-pdfs')

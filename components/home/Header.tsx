@@ -27,6 +27,8 @@ export default function Header() {
   const [hoveredMenu, setHoveredMenu] = useState<string | null>(null)   // PC 드롭다운
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null) // 모바일 아코디언
   const [menuFocusIndex, setMenuFocusIndex] = useState(-1) // 드롭다운 키보드 포커스 인덱스(-1=없음)
+  // 열린 드롭다운의 가로 정렬: 기본은 트리거 기준 중앙, 화면 밖으로 넘치는 가장자리 메뉴만 좌/우로 예외 처리.
+  const [menuAlign, setMenuAlign] = useState<'center' | 'left' | 'right'>('center')
 
   const notifRef = useRef<HTMLDivElement>(null)
   const accountRef = useRef<HTMLDivElement>(null)
@@ -35,6 +37,7 @@ export default function Header() {
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)  // 닫는 지연 핸들
   const tabRefs = useRef<Record<string, HTMLSpanElement | null>>({})     // 상위 탭(ESC 복귀용)
   const itemRefs = useRef<(HTMLDivElement | null)[]>([])                  // 열린 드롭다운의 하위 항목
+  const panelRef = useRef<HTMLDivElement>(null)                          // 열린 드롭다운 패널(오버플로 측정용)
 
   useOutsideClick(notifRef, () => setNotifOpen(false), notifOpen)
   useOutsideClick(accountRef, () => setIsOpen(false), isOpen)
@@ -73,6 +76,23 @@ export default function Header() {
   useEffect(() => {
     if (hoveredMenu && menuFocusIndex >= 0) itemRefs.current[menuFocusIndex]?.focus()
   }, [hoveredMenu, menuFocusIndex])
+
+  // 드롭다운 정렬: 트리거 기준 중앙이 기본. 다만 좌/우 끝 메뉴에서 중앙 정렬 시 패널이
+  // 화면(헤더) 밖으로 삐져나가는 경우에만 해당 항목을 좌/우 가장자리 정렬로 예외 처리한다.
+  // 패널 폭은 렌더 후에야 알 수 있으므로 열린 뒤 측정한다.
+  useEffect(() => {
+    if (!hoveredMenu) return
+    const panel = panelRef.current
+    const trigger = tabRefs.current[hoveredMenu]
+    if (!panel || !trigger) return
+    const MARGIN = 12 // 화면 가장자리 최소 여백
+    const t = trigger.getBoundingClientRect()
+    const center = t.left + t.width / 2
+    const half = panel.offsetWidth / 2
+    if (center - half < MARGIN) setMenuAlign('left')
+    else if (center + half > window.innerWidth - MARGIN) setMenuAlign('right')
+    else setMenuAlign('center')
+  }, [hoveredMenu])
 
   // 언마운트 시 지연 타이머 정리
   useEffect(() => () => {
@@ -211,10 +231,17 @@ export default function Header() {
                     {m.label}
                   </span>
 
-                  {/* 드롭다운: paddingTop 6 이 상위 탭과 패널을 끊김 없이 연결한다(투명 브리지). */}
+                  {/* 드롭다운: 트리거 기준 가로 중앙(left:50% + translateX(-50%)). paddingTop 6 이 상위 탭과
+                      패널을 끊김 없이 연결한다(투명 브리지). 가장자리에서 넘칠 때만 menuAlign 으로 좌/우 정렬. */}
                   {hasChildren && hoveredMenu === m.label && (
-                    <div role="menu" style={{ position: 'absolute', top: '100%', left: 0, paddingTop: 6, zIndex: 9998 }}>
-                      <div style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: 6, minWidth: 180 }}>
+                    <div role="menu" ref={panelRef}
+                      style={{
+                        position: 'absolute', top: '100%', paddingTop: 6, zIndex: 9998,
+                        ...(menuAlign === 'center'
+                          ? { left: '50%', transform: 'translateX(-50%)' }
+                          : menuAlign === 'right' ? { right: 0 } : { left: 0 }),
+                      }}>
+                      <div style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: 6, minWidth: 180, width: 'fit-content' }}>
                         {m.children!.map((c, i) => {
                           const cActive = matchExact(c.path)
                           return (

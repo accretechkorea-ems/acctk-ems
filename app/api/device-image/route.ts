@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { canAccess80 } from '@/lib/permissions'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,8 +20,17 @@ export async function GET(req: NextRequest) {
   if (!safePath || safePath.includes('/'))
     return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
 
-  // 해당 경로가 실제 장비 이미지인지 DB 확인 (RLS 적용)
-  const { count } = await supabase
+  // 권한: 고객 장비 사진이므로 80 그룹(canAccess80)만 열람 가능.
+  // RLS 에 의존하지 않도록 service role 로 caller 를 조회해 코드에서 판정한다.
+  const { data: caller } = await supabaseAdmin
+    .from('engineers')
+    .select('permission_level, teams')
+    .eq('email', user.email!)
+    .single()
+  if (!canAccess80(caller)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  // 서명 대상이 실제 장비 이미지 경로인지 service role 로 확인.
+  const { count } = await supabaseAdmin
     .from('devices')
     .select('device_id', { count: 'exact', head: true })
     .eq('image_url', safePath)

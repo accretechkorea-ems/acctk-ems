@@ -9,7 +9,7 @@ import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useToast } from '@/components/common/Toast'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canAccess80 } from '@/lib/permissions'
+import { canAccess80, isSuperAdmin } from '@/lib/permissions'
 
 import type { Customer, Device, Contact, ServiceHistory, Engineer, Quote, ServiceForm, DeviceForm, ContactForm, CustomerEditFormData } from '@/components/customer/types'
 import { PAGE_BG, TEXT_MUTED } from '@/components/customer/constants'
@@ -655,7 +655,7 @@ export default function CustomerDetailPage() {
           isDeleting={isDeletingCustomer}
           onClose={() => setIsEditCustomerModalOpen(false)}
           onSave={handleUpdateCustomer}
-          onDelete={currentUserRole === 'superadmin' ? handleDeleteCustomer : undefined}
+          onDelete={isSuperAdmin({ permission_level: currentUserRole }) ? handleDeleteCustomer : undefined}
         />
         <ContactAddModal
           isOpen={isAddContactModalOpen}

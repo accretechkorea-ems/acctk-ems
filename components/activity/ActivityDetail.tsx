@@ -49,7 +49,6 @@ export default function ActivityDetail({ engineer, startDate, endDate, variant, 
   const [routeStops, setRouteStops] = useState<RouteStop[]>([])
   const [routeExcluded, setRouteExcluded] = useState(0)
   const [showRouteMap, setShowRouteMap] = useState(false)
-  const [routeMode, setRouteMode] = useState<'visits' | 'office'>('visits')
 
   useEffect(() => {
     let cancelled = false
@@ -159,58 +158,31 @@ export default function ActivityDetail({ engineer, startDate, endDate, variant, 
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
             {headerRight}
-            {(() => {
+            {/* 동선 보기 — 활동 현황(모달)에서만 노출. 대시보드(인라인)에선 숨김.
+                모드 전환(visits/office)·주변 업체는 지도 안 토글로 처리한다. */}
+            {isModal && (() => {
               const noStops = detailLoading || routeResult.stops.length === 0
-              const noOffice = !engineer.office
-              const openRoute = (m: 'visits' | 'office') => {
-                setRouteStops(routeResult.stops); setRouteExcluded(routeResult.excluded.length); setRouteMode(m); setShowRouteMap(true)
-              }
               return (
-                <>
-                  {/* 동선 보기 — visits 모드(기존) */}
-                  <button
-                    onClick={() => { if (noStops) return; openRoute('visits') }}
-                    disabled={noStops}
-                    title={routeResult.stops.length === 0 ? '표시할 방문 기록이 없습니다' : '동선 지도 보기'}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      padding: '6px 12px', borderRadius: 6, border: 'none',
-                      fontSize: 13, fontWeight: 700,
-                      background: noStops ? '#f3f4f6' : BLUE,
-                      color: noStops ? '#9ca3af' : '#fff',
-                      cursor: noStops ? 'not-allowed' : 'pointer',
-                      transition: 'background 0.15s ease',
-                    }}
-                    onMouseEnter={e => { if (!noStops) (e.currentTarget as HTMLButtonElement).style.background = '#1c3e87' }}
-                    onMouseLeave={e => { if (!noStops) (e.currentTarget as HTMLButtonElement).style.background = BLUE }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" /><line x1="8" y1="2" x2="8" y2="18" /><line x1="16" y1="6" x2="16" y2="22" />
-                    </svg>
-                    동선 보기
-                  </button>
-                  {/* 동선 추적(연결선) — office 모드(신규). 사무실 미지정이면 비활성. */}
-                  <button
-                    onClick={() => { if (noStops || noOffice) return; openRoute('office') }}
-                    disabled={noStops || noOffice}
-                    title={noOffice ? '소속 사무실이 지정되지 않았습니다' : routeResult.stops.length === 0 ? '표시할 방문 기록이 없습니다' : '사무실 기준 연결선 보기'}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 6,
-                      padding: '6px 12px', borderRadius: 6,
-                      fontSize: 13, fontWeight: 700,
-                      background: '#fff',
-                      border: `1px solid ${(noStops || noOffice) ? '#ebebeb' : BLUE}`,
-                      color: (noStops || noOffice) ? '#9ca3af' : BLUE,
-                      cursor: (noStops || noOffice) ? 'not-allowed' : 'pointer',
-                      transition: 'background 0.15s ease',
-                    }}
-                    onMouseEnter={e => { if (!(noStops || noOffice)) (e.currentTarget as HTMLButtonElement).style.background = '#f0f4fb' }}
-                    onMouseLeave={e => { if (!(noStops || noOffice)) (e.currentTarget as HTMLButtonElement).style.background = '#fff' }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="6" cy="19" r="3" /><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15" /><circle cx="18" cy="5" r="3" />
-                    </svg>
-                    동선 추적(연결선)
-                  </button>
-                </>
+                <button
+                  onClick={() => { if (noStops) return; setRouteStops(routeResult.stops); setRouteExcluded(routeResult.excluded.length); setShowRouteMap(true) }}
+                  disabled={noStops}
+                  title={routeResult.stops.length === 0 ? '표시할 방문 기록이 없습니다' : '동선 지도 보기'}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '6px 12px', borderRadius: 6, border: 'none',
+                    fontSize: 13, fontWeight: 700,
+                    background: noStops ? '#f3f4f6' : BLUE,
+                    color: noStops ? '#9ca3af' : '#fff',
+                    cursor: noStops ? 'not-allowed' : 'pointer',
+                    transition: 'background 0.15s ease',
+                  }}
+                  onMouseEnter={e => { if (!noStops) (e.currentTarget as HTMLButtonElement).style.background = '#1c3e87' }}
+                  onMouseLeave={e => { if (!noStops) (e.currentTarget as HTMLButtonElement).style.background = BLUE }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" /><line x1="8" y1="2" x2="8" y2="18" /><line x1="16" y1="6" x2="16" y2="22" />
+                  </svg>
+                  동선 보기
+                </button>
               )
             })()}
             {isModal && onClose && (
@@ -327,7 +299,6 @@ export default function ActivityDetail({ engineer, startDate, endDate, variant, 
           endDate={endDate}
           officeCode={engineer.office}
           excludedCount={routeExcluded}
-          mode={routeMode}
           onClose={() => setShowRouteMap(false)}
         />
       )}

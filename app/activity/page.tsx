@@ -6,7 +6,7 @@ import { isActiveInPeriod } from '@/lib/engineers'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canAccessAdmin } from '@/lib/permissions'
+import { canAccessAdmin, isFieldEngineerTeam } from '@/lib/permissions'
 import ActivityCard, { SERVICE_TYPES } from '@/components/activity/ActivityCard'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
 
@@ -124,7 +124,7 @@ export default function ActivityPage() {
 
     const positionOrder: Record<string, number> = { '수석': 0, '책임': 1, '선임': 2, '사원': 3 }
     const sortedEngineers = (engineers ?? [])
-      .filter((e: any) => !['임원', '영업관리'].includes(e.teams ?? ''))
+      .filter((e: any) => isFieldEngineerTeam(e))
       // 퇴사자는 조회 기간 시작일까지 재직했을 때만 표시 (7/10 퇴사 → 8월 조회 시 숨김)
       .filter((e: any) => isActiveInPeriod(e.resigned_date, start))
       .sort((a, b) => {

@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { canManageEngineers } from '@/lib/permissions'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,10 +19,10 @@ export async function POST(req: Request) {
   // 호출자 권한 확인
   const { data: caller } = await supabase
     .from('engineers')
-    .select('permission_level')
+    .select('permission_level, engineer_id')
     .eq('email', user.email!)
     .single()
-  if (!caller || !['superadmin', 'manager'].includes(caller.permission_level)) {
+  if (!caller || !canManageEngineers(caller)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -30,6 +31,22 @@ export async function POST(req: Request) {
 
   if (!engineer_id || !name?.trim()) {
     return NextResponse.json({ error: '필수 값 누락' }, { status: 400 })
+  }
+
+  // 대상 가드 — 본인 정보 수정은 허용. 타인 수정 시 대상이 superadmin/manager 인데
+  // caller 가 superadmin 이 아니면 거부(manager 가 상위 계정을 덮어쓰지 못하게).
+  // delete-user 와 동일한 판정. 대상 레벨은 RLS 에 막히지 않도록 service role 로 조회한다.
+  if (Number(engineer_id) !== caller.engineer_id) {
+    const { data: target } = await supabaseAdmin
+      .from('engineers')
+      .select('permission_level')
+      .eq('engineer_id', Number(engineer_id))
+      .single()
+    if (target && ['superadmin', 'manager'].includes(target.permission_level)) {
+      if (caller.permission_level !== 'superadmin') {
+        return NextResponse.json({ error: '해당 계정을 수정할 권한이 없습니다.' }, { status: 403 })
+      }
+    }
   }
 
   // 입력값 검증

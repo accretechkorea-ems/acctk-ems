@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { canManageEngineers } from '@/lib/permissions'
 
 export async function POST(req: NextRequest) {
   // 인증 확인
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
     .select('permission_level')
     .eq('email', user.email!)
     .single()
-  if (!caller || !['superadmin', 'manager'].includes(caller.permission_level)) {
+  if (!caller || !canManageEngineers(caller)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
     .from('quotes')
     .select('quote_id', { count: 'exact', head: true })
     .eq('pdf_url', `quote-pdfs/${safePath}`)
-  if (count === 0) {
+  if (!count || count === 0) {
     return NextResponse.json({ error: 'File not found' }, { status: 404 })
   }
 
