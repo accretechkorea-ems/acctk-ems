@@ -24,17 +24,30 @@ export const CHART_COLORS = {
   teal:   '#14b8a6',
 } as const;
 
-/* 수리 상태 색 — CHART_COLORS 값 재사용 (목록 dot·대시보드 도넛에서 공유) */
-export const REPAIR_STATUS_COLORS = {
-  '입고':     '#f43f5e',  // rose
+/* 20 수리 의미색 단일 소스 — 상태 4종 + 본사 + 잔량.
+   목록 dot·대시보드 도넛/KPI/그래프가 모두 이 상수를 참조해 의미↔색을 통일한다.
+   (잔량은 여러 상태의 합이라 중립 회색.) */
+export const REPAIR_MEANING_COLORS = {
+  '입고':     '#f43f5e',  // rose  — 접수
   '수리중':   '#f59e0b',  // amber
   '출고대기': '#22c55e',  // green
   '출고완료': '#3b82f6',  // blue
+  '본사':     '#7c3aed',  // violet — 본사 발송/보유
+  '잔량':     '#6b7280',  // gray  — 미출고 잔량(중립)
+} as const;
+
+/* 수리 상태 색 — REPAIR_MEANING_COLORS 의 상태 4종을 재사용 (목록 dot·대시보드 도넛에서 status 로 인덱싱). */
+export const REPAIR_STATUS_COLORS = {
+  '입고':     REPAIR_MEANING_COLORS['입고'],
+  '수리중':   REPAIR_MEANING_COLORS['수리중'],
+  '출고대기': REPAIR_MEANING_COLORS['출고대기'],
+  '출고완료': REPAIR_MEANING_COLORS['출고완료'],
 } as const;
 
 /* 실적/견적 상태 — quotes.status 단일 컬럼(견적~발주 전 생애주기)이므로 맵도 하나 */
 export const SALES_STATUS_COLORS = {
   '견적중':          { text: '#b45309', bg: '#fffbeb' },
+  '수리중':          { text: '#92400e', bg: '#fef3c7' },  // 국내수리 견적 전용. 견적중(밝은 amber)과 톤 구분되는 진한 amber.
   '수주':            { text: '#2563eb', bg: '#eff6ff' },
   '발주(주문 대기)':  { text: '#7c3aed', bg: '#f5f3ff' },
   '주문완료':        { text: '#0369a1', bg: '#eff6ff' },

@@ -26,11 +26,14 @@ export async function POST() {
   cutoff.setDate(cutoff.getDate() - 30)
   const cutoffStr = cutoff.toISOString().split('T')[0]
 
+  // 국내수리 견적(quote_type='repair_domestic')은 견적중을 거치지 않는 별도 흐름이므로 자동 실패 대상에서 제외.
+  // (일반=null, 본사수리=repair_hq 는 기존대로 30일 만료 대상.) NULL 을 살리기 위해 neq 대신 or(is null) 로 처리.
   const { data: expired } = await supabaseAdmin
     .from('quotes')
     .select('quote_id')
     .eq('status', '견적중')
     .lt('quote_date', cutoffStr)
+    .or('quote_type.is.null,quote_type.neq.repair_domestic')
 
   if (!expired || expired.length === 0) {
     return NextResponse.json({ updated: 0 })

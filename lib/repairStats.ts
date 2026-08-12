@@ -7,6 +7,20 @@ import type { Repair } from '@/hooks/useRepairs'
 //  - product_type 은 원본 그대로 사용(정규화·병합하지 않는다).
 // ============================================================
 
+/**
+ * 특이사항 유형(special_type: 본사수리·수리불가·수리진행안함)이 지정된 건은 일반 수리 흐름이
+ * 아니므로 수리 '성과' 통계에서 제외한다. special_type == null 이면 정상 수리 건.
+ * (물리 보유·접수 사실 자체를 세는 지표 — 보유/도넛·고객·모델·재입고·최근 입고 — 에는 쓰지 않는다.)
+ */
+export function isNormalRepair(r: Repair): boolean {
+  return r.special_type == null
+}
+
+/** special_type 이 있는 건을 제외한 목록(성과 통계 입력용). */
+export function excludeSpecial(rows: Repair[]): Repair[] {
+  return rows.filter(isNormalRepair)
+}
+
 /** 'YYYY-MM-DD...' → UTC Date. 형식이 아니거나 유효하지 않으면 null. */
 function parseDate(s: string | null | undefined): Date | null {
   if (!s) return null
@@ -43,6 +57,20 @@ function fillMonthRange(startYM: string, endYM: string): string[] {
     if (out.length > 600) break // 안전장치(50년)
   }
   return out
+}
+
+/**
+ * 이번 달을 포함한 최근 count 개월의 'YYYY-MM' 배열(오름차순, 고정 범위).
+ * 데이터와 무관하게 '지금' 기준으로 만들어 달이 바뀌면 자동으로 이번 달이 포함된다.
+ * (입출고·잔량 추이 등 '최근 N개월' 그래프가 0인 달도 축에 표시하도록 공용으로 쓴다.)
+ */
+export function recentMonths(count: number): string[] {
+  const now = new Date()
+  const ey = now.getFullYear(), em = now.getMonth() + 1
+  const startDate = new Date(Date.UTC(ey, em - 1 - (count - 1), 1))
+  const startYM = `${startDate.getUTCFullYear()}-${String(startDate.getUTCMonth() + 1).padStart(2, '0')}`
+  const endYM = `${ey}-${String(em).padStart(2, '0')}`
+  return fillMonthRange(startYM, endYM)
 }
 
 const DAY = 86400000
@@ -169,16 +197,32 @@ export function monthlyCounts(rows: Repair[]): { month: string; received: number
 }
 
 /**
+ * 이번 달 포함 최근 count 개월(고정 범위)의 접수/출고 건수. 0인 달도 포함.
+ * monthlyCounts 와 달리 데이터가 없는 최근 달(예: 이번 달 0건)도 축에 남는다.
+ */
+export function monthlyCountsRecent(rows: Repair[], count = 6): { month: string; received: number; shipped: number }[] {
+  const rec = new Map<string, number>()
+  const shp = new Map<string, number>()
+  for (const r of rows) {
+    const rm = monthOf(r.received_date)
+    if (rm) rec.set(rm, (rec.get(rm) ?? 0) + 1)
+    const sm = monthOf(r.shipped_date)
+    if (sm) shp.set(sm, (shp.get(sm) ?? 0) + 1)
+  }
+  return recentMonths(count).map(m => ({ month: m, received: rec.get(m) ?? 0, shipped: shp.get(m) ?? 0 }))
+}
+
+/**
  * 리드타임 구간 분포: 0-3일 / 4-7일 / 8-14일 / 15일+.
  * getLeadTime === null 인 행은 제외. 음수 이상치는 0으로 보정하여 '0-3일'에 포함.
  * (항상 4개 구간을 count 0 이상으로 반환)
  */
 export function leadTimeBuckets(rows: Repair[]): { label: string; count: number }[] {
   const buckets = [
-    { label: '0-3일', lo: 0, hi: 3 },
+    { label: '3일 이내', lo: 0, hi: 3 },
     { label: '4-7일', lo: 4, hi: 7 },
     { label: '8-14일', lo: 8, hi: 14 },
-    { label: '15일+', lo: 15, hi: Infinity },
+    { label: '15일 이상', lo: 15, hi: Infinity },
   ]
   const counts = buckets.map(() => 0)
   for (const r of rows) {
@@ -240,71 +284,104 @@ export function cumulativeFlow(rows: Repair[]): { month: string; cumReceived: nu
 }
 
 /**
- * 월별 미출고 잔량(월말 사내 보유 건수) + 그 달 접수/출고/순증감.
- * 축은 전체(접수·출고) 월 범위를 빈 달 포함해 채운다. 데이터 없으면 빈 배열.
+ * 이번 달을 제외한 직전 count 개월(고정 범위)의 월말 미출고 잔량 + 전월 대비 증감(delta).
+ * 미출고 잔량은 '그 달이 끝난 시점의 잔량' 지표라 아직 진행 중인 이번 달은 값이 확정되지 않아 제외한다.
+ * (예: 오늘 2026-08 → 2026-02 ~ 2026-07. 현재 잔량은 별도 KPI '현재 보유' 가 보여준다.)
+ * delta = 그 달 월말 잔량 − 전월 월말 잔량. 가장 오래된 달의 delta 를 위해 한 달 앞을 추가로 계산한다.
+ * 데이터가 0이어도 고정 범위라 항상 count 개월을 반환한다(0인 달도 축에 표시).
  *
- * 각 월 M(그 달 마지막 날 endM) 기준 '사내 보유(잔량)' 판정 — received_date <= endM 이고 아직 미출고:
- *   1) status === '출고완료' → 출고된 것으로 본다 → 잔량 제외 (shipped_date 없어도 마찬가지. 46건이 이 경우)
- *   2) status !== '출고완료' → shipped_date 유무로 판정
- *      - shipped_date 있으면 그 날짜가 endM 이후(월말 이후)일 때만 잔량에 포함
- *      - shipped_date 없으면 잔량에 포함
- * received = 그 달 접수 건수, shipped = 그 달 출고(shipped_date 기준) 건수, net = received - shipped.
+ * ── 기준: '미출고'(고객에게 아직 출고되지 않음) = received_date <= endM 이고 shipped 되지 않음.
+ *    본사에 나가 있어도(본사수리 발송 중) 고객 출고가 아니므로 잔량에 포함한다. 본사 발송/복귀는 입고·출고
+ *    이벤트가 없어, 제외하면 '전월말 잔량 + 입고 − 출고 = 당월말 잔량' 검산이 어긋난다.
+ *    성과 통계가 아니므로 excludeSpecial 을 적용하지 않은 전체 repairs 를 넣어야 '현재 보유' KPI·입출고 추이와 수가 맞는다. ──
+ * 각 월 M(그 달 마지막 날 endM) 기준, received_date <= endM 인 건에 대해 출고 판정은 '현재 status' 가 아니라 shipped_date 로 한다(과거 시점 재현):
+ *   - shipped_date 있음: endM 이하면 그 시점 이미 출고됨 → 제외, endM 초과면 아직 미출고 → 포함.
+ *   - shipped_date 없음: 날짜 없는 레거시 '출고완료' 만 출고된 것으로 보고 제외(그 외는 미출고 → 포함).
+ *   ※ 과거 버그: status==='출고완료' 를 먼저 걸러, 다음 달에 출고된 건까지 이전 달 잔량에서 빠져 과소집계됐다.
  */
-export function monthlyBacklog(rows: Repair[]): { month: string; backlog: number; received: number; shipped: number; net: number }[] {
-  const months = new Set<string>()
-  const recByMonth = new Map<string, number>()
-  const shpByMonth = new Map<string, number>()
-  for (const r of rows) {
-    const rm = monthOf(r.received_date)
-    if (rm) { months.add(rm); recByMonth.set(rm, (recByMonth.get(rm) ?? 0) + 1) }
-    const sm = monthOf(r.shipped_date)
-    if (sm) { months.add(sm); shpByMonth.set(sm, (shpByMonth.get(sm) ?? 0) + 1) }
-  }
-  if (months.size === 0) return []
-  const sorted = [...months].sort()
-  return fillMonthRange(sorted[0], sorted[sorted.length - 1]).map(m => {
+export function monthlyBacklogRecent(rows: Repair[], count = 6): { month: string; backlog: number; delta: number }[] {
+  const backlogAt = (m: string): number => {
     const [y, mo] = m.split('-').map(Number)
     const endM = new Date(Date.UTC(y, mo, 0)) // 그 달 마지막 날
     let backlog = 0
     for (const r of rows) {
       const rec = parseDate(r.received_date)
-      if (!rec || rec > endM) continue        // 아직 입고 전
-      if (r.status === '출고완료') continue    // 출고된 것으로 봄 (dateless 포함)
+      if (!rec || rec > endM) continue         // 그 달 말까지 아직 입고 전
+      // 월말 시점 출고 여부는 shipped_date 로 판단(현재 status 로 판단하면 이후 달 출고분까지 과거 잔량에서 빠진다).
       const shp = parseDate(r.shipped_date)
-      if (shp && shp <= endM) continue         // 월말까지 출고됨
+      if (shp) { if (shp <= endM) continue }    // 월말 이전 출고 → 제외
+      else if (r.status === '출고완료') continue // 날짜 없는 레거시 출고완료만 출고로 간주(전 기간 제외)
+      // 본사 발송 중이어도 고객 출고 전이므로 미출고 잔량에 포함(입출고 이벤트와 검산 일치).
       backlog++
     }
-    const received = recByMonth.get(m) ?? 0
-    const shipped = shpByMonth.get(m) ?? 0
-    return { month: m, backlog, received, shipped, net: received - shipped }
-  })
+    return backlog
+  }
+  // recentMonths(count+2) = 이번 달 포함 count+2 개월 → 마지막(이번 달) 하나를 떼어 '이번 달 제외 + delta 계산용 앞 1개월' 포함(count+1개).
+  const months = recentMonths(count + 2).slice(0, -1)
+  const series = months.map(m => ({ month: m, backlog: backlogAt(m) }))
+  return series.slice(1).map((cur, i) => ({ month: cur.month, backlog: cur.backlog, delta: cur.backlog - series[i].backlog }))
+}
+
+// ============================================================
+// 본사수리 전용 통계. special_type='본사수리' 건의 발송(hq_requested_at)·복귀(hq_returned_at) 기준.
+// (hq_* 컬럼은 본사수리 건에만 채워지므로 special_type 가드는 방어적.)
+// ============================================================
+
+/** 본사에 나가 있는(발송 후 미복귀) 건 여부. special_type='본사수리' AND hq_returned_at 없음. */
+export function isAtHq(r: Repair): boolean {
+  return r.special_type === '본사수리' && !r.hq_returned_at
+}
+
+/** 현재 본사 발송 중(미복귀) 건수. */
+export function hqOutstandingCount(rows: Repair[]): number {
+  return rows.filter(isAtHq).length
 }
 
 /**
- * 월별 평균 소요일 추이. 각 달의 값 = '그 달에 출고된' 건들의 avgLeadTime.
- * 축은 전체 데이터(접수·출고)의 최소~최대 월 범위를 빈 달 포함해 채워 연속성 유지.
- * 해당 월에 출고된 건이 없으면 avg = null (라인이 끊기도록). 전체 데이터 없으면 빈 배열.
+ * 본사 평균 소요일 = (hq_returned_at - hq_requested_at) 평균(소수 1자리). 복귀 완료된 건만.
+ * 두 날짜 중 하나라도 없거나 파싱 불가면 제외. 음수(복귀<발송) 제외. 유효 0개면 null.
  */
-export function monthlyLeadTime(rows: Repair[]): { month: string; avg: number | null }[] {
-  const shippedByMonth = new Map<string, Repair[]>()
-  const months = new Set<string>()
+export function hqAvgTurnaround(rows: Repair[]): number | null {
+  const vals: number[] = []
   for (const r of rows) {
-    const rm = monthOf(r.received_date)
-    if (rm) months.add(rm)
-    const sm = monthOf(r.shipped_date)
-    if (sm) {
-      months.add(sm)
-      const a = shippedByMonth.get(sm) ?? []
-      a.push(r)
-      shippedByMonth.set(sm, a)
-    }
+    if (r.special_type !== '본사수리') continue
+    const req = parseDate(r.hq_requested_at)
+    const ret = parseDate(r.hq_returned_at)
+    if (!req || !ret) continue
+    const d = Math.round((ret.getTime() - req.getTime()) / DAY)
+    if (d < 0) continue
+    vals.push(d)
   }
-  if (months.size === 0) return []
-  const sorted = [...months].sort()
-  return fillMonthRange(sorted[0], sorted[sorted.length - 1]).map(m => {
-    const rs = shippedByMonth.get(m)
-    return { month: m, avg: rs ? avgLeadTime(rs) : null }
-  })
+  if (vals.length === 0) return null
+  return Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 10) / 10
+}
+
+/** 특정 'YYYY-MM' 의 본사 발송(hq_requested_at)·복귀(hq_returned_at) 건수. */
+export function hqMonthCounts(rows: Repair[], month: string): { requested: number; returned: number } {
+  let requested = 0, returned = 0
+  for (const r of rows) {
+    if (r.special_type !== '본사수리') continue
+    if (monthOf(r.hq_requested_at) === month) requested++
+    if (monthOf(r.hq_returned_at) === month) returned++
+  }
+  return { requested, returned }
+}
+
+/**
+ * 최근 N개월(기본 6, 이번 달 포함) 본사 발송/복귀 건수. month='YYYY-MM' 오름차순.
+ * weeklyByType 과 동일하게 '지금' 기준으로 고정 범위를 만들어 데이터가 0인 달도 포함한다.
+ */
+export function hqMonthlyFlow(rows: Repair[], months = 6): { month: string; requested: number; returned: number }[] {
+  const req = new Map<string, number>()
+  const ret = new Map<string, number>()
+  for (const r of rows) {
+    if (r.special_type !== '본사수리') continue
+    const rm = monthOf(r.hq_requested_at)
+    if (rm) req.set(rm, (req.get(rm) ?? 0) + 1)
+    const tm = monthOf(r.hq_returned_at)
+    if (tm) ret.set(tm, (ret.get(tm) ?? 0) + 1)
+  }
+  return recentMonths(months).map(m => ({ month: m, requested: req.get(m) ?? 0, returned: ret.get(m) ?? 0 }))
 }
 
 /** d 의 ISO-8601 주차 키 'YYYY-Www' (월요일 시작, 목요일 기준). */

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { useRepairs, type Repair, type RepairStatus } from '@/hooks/useRepairs'
+import { useRepairs, type Repair, type RepairStatus, type RepairQuote } from '@/hooks/useRepairs'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { canAccess20 } from '@/lib/permissions'
@@ -13,7 +13,8 @@ import AutocompleteInput from '@/components/common/AutocompleteInput'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useToast } from '@/components/common/Toast'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
-import { REPAIR_STATUS_COLORS } from '@/lib/categoryColors'
+import { REPAIR_STATUS_COLORS, REPAIR_MEANING_COLORS } from '@/lib/categoryColors'
+import { isAtHq } from '@/lib/repairStats'
 
 // ── 색상 (기존 페이지 컨벤션과 동일) ──
 const BLUE = '#234ea2'
@@ -28,9 +29,13 @@ const GRAY = '#6b7280'
 const MUTED = '#9ca3af'
 const ACTIVE_BG = '#f1f1f1' // 필터 활성 배경 (중립)
 
-// 목록 컬럼 폭 (한 곳에만 정의 — 수리 진행 중 블록·전체 목록이 동일하게 참조)
-// 순번·구분·입고일·회사명·제품구분·시리얼번호·출고일·상태·수정
-const COL_WIDTHS = [52, 58, 104, 174, 148, 140, 104, 176, 44]
+// 목록 컬럼 폭 (한 곳에만 정의 — 수리 진행 중 블록·전체 목록이 동일하게 참조).
+// 텍스트 컬럼(회사명·제품구분·시리얼번호)은 'auto' 로 남는 폭을 균등 분배 + ellipsis 말줄임,
+// 나머지는 내용에 맞춘 고정 px. 일반 데스크톱 폭에서 가로 스크롤이 없도록 합계를 맞춘다.
+// 순번·구분·입고일·회사명·제품구분·시리얼번호·출고일·견적·상태·수정
+// 견적(아이콘+금액)·상태(상태텍스트+본사 발송 배지+본사 복귀 버튼 동시 노출)는 잘리지 않도록 넉넉히.
+// 상태 컬럼 = 4구역 고정폭(80+90+44+28) + 구역 gap(3×6) + td 좌우 padding(20) ≈ 280
+const COL_WIDTHS: (number | 'auto')[] = [46, 56, 92, 'auto', 'auto', 'auto', 92, 130, 280, 44]
 
 // 자동완성 후보: 빈 값·null 제외, 사용 빈도 높은 순 정렬
 const freqSorted = (values: (string | null | undefined)[]): string[] => {
@@ -59,6 +64,7 @@ const todayStr = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
+const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
 const monthKey = (dateStr: string | null) => (dateStr ? dateStr.slice(0, 7) : '') // YYYY-MM
 const fmtMonthLabel = (ym: string) => `${Number(ym.slice(5, 7))}월`
 const shiftMonth = (ym: string, delta: number) => {
@@ -118,6 +124,8 @@ export default function RepairPage() {
   const [productType, setProductType] = useState('')
   const [serialNumber, setSerialNumber] = useState('')
   const [formCategory, setFormCategory] = useState<Category>('게이지')
+  const [memoContent, setMemoContent] = useState('')   // 입고 등록 메모(repair_content, 선택)
+  const [memoOpen, setMemoOpen] = useState(false)       // 메모 칸 접기/펼치기
   const [isSaving, setIsSaving] = useState(false)
 
   // ── 목록 필터 / 페이지 ──
@@ -130,6 +138,15 @@ export default function RepairPage() {
   const [page, setPage] = useState(0)
   const [editing, setEditing] = useState<Repair | null>(null)
   const [isEditSaving, setIsEditSaving] = useState(false)
+  // 연결된 견적 요약(목록 금액 표시용). quotes RLS 우회를 위해 /api/repair-quotes 로 배치 조회.
+  const [quoteMap, setQuoteMap] = useState<Record<number, RepairQuote>>({})
+  const [openMemoId, setOpenMemoId] = useState<number | null>(null) // 클릭으로 열리는 메모 팝오버 대상 repair_id (한 번에 하나)
+  // 메모 팝오버 위치(fixed) — 테이블 overflow/row 스태킹을 벗어나려고 뷰포트 기준으로 띄운다.
+  const [memoAnchor, setMemoAnchor] = useState<{ up: boolean; right: number; top?: number; bottom?: number } | null>(null)
+  // 본사 복귀 처리(복귀일 입력) 다이얼로그
+  const [hqReturning, setHqReturning] = useState<Repair | null>(null)
+  const [hqReturnDate, setHqReturnDate] = useState(todayStr())
+  const [isHqSaving, setIsHqSaving] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false) // 검색 줄 열림/닫힘 (초기 닫힘)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -148,6 +165,31 @@ export default function RepairPage() {
   // 필터 변경 시 첫 페이지로
   useEffect(() => { setPage(0) }, [statusFilter, categoryFilter, search, dateBasis, dateMonth])
 
+  // 메모 팝오버: 바깥(문서) 클릭 시 닫기. 아이콘/팝오버 내부 클릭은 stopPropagation 으로 유지.
+  // fixed 라 스크롤하면 아이콘과 어긋나므로 스크롤 시에도 닫는다(capture 로 내부 스크롤 컨테이너 포함).
+  useEffect(() => {
+    if (openMemoId == null) return
+    const close = () => setOpenMemoId(null)
+    document.addEventListener('click', close)
+    window.addEventListener('scroll', close, true)
+    return () => { document.removeEventListener('click', close); window.removeEventListener('scroll', close, true) }
+  }, [openMemoId])
+
+  // 연결된 견적 요약을 API 로 배치 조회(20팀 견적만 service role 로 오픈). 연결 없으면 호출 안 함.
+  useEffect(() => {
+    const ids = [...new Set(repairs.map(r => r.quote_id).filter((v): v is number => v != null))]
+    if (ids.length === 0) { setQuoteMap({}); return }
+    let cancelled = false
+    fetch(`/api/repair-quotes?quote_ids=${ids.join(',')}`)
+      .then(r => r.json()).then(j => {
+        if (cancelled) return
+        const m: Record<number, RepairQuote> = {}
+        for (const q of (j.quotes ?? []) as RepairQuote[]) m[q.quote_id] = q
+        setQuoteMap(m)
+      }).catch(() => { /* 못 읽으면 금액 미표시(오류 없음) */ })
+    return () => { cancelled = true }
+  }, [repairs])
+
   // ── 접수 등록 ──
   const handleSubmit = async () => {
     if (!currentEngineer) return
@@ -161,15 +203,18 @@ export default function RepairPage() {
       serial_number: serialNumber.trim() || null,
       item_type: formCategory,
       status: '입고',
+      repair_content: memoContent.trim() || null,   // 메모(선택)
       created_by: currentEngineer.engineer_id,
     })
     setIsSaving(false)
     if (error) { toast.error('등록 중 오류가 발생했습니다: ' + error.message); return }
-    // 폼 초기화
+    // 폼 초기화 (메모도 접고 비운다)
     setCustomerName('')
     setProductType('')
     setSerialNumber('')
     setReceivedDate(todayStr())
+    setMemoContent('')
+    setMemoOpen(false)
     await refetch()
   }
 
@@ -185,8 +230,22 @@ export default function RepairPage() {
     await refetch()
   }
 
+  // ── 본사 복귀: 복귀일 기록 + 출고대기 전환 (이후 기존 흐름대로 출고완료 진행) ──
+  const openHqReturn = (r: Repair) => { setHqReturnDate(todayStr()); setHqReturning(r) }
+  const confirmHqReturn = async () => {
+    if (!hqReturning) return
+    setIsHqSaving(true)
+    const { error } = await supabase.from('repairs')
+      .update({ hq_returned_at: hqReturnDate, status: '출고대기' })
+      .eq('repair_id', hqReturning.repair_id)
+    setIsHqSaving(false)
+    if (error) { toast.error('본사 복귀 처리 실패: ' + error.message); return }
+    setHqReturning(null)
+    await refetch()
+  }
+
   const handleDelete = async (r: Repair) => {
-    const ok = await confirmDialog({ title: '접수 건 삭제', message: `'${r.customer_name ?? ''} / ${r.serial_number ?? '-'}' 접수 건을 삭제하시겠습니까?`, confirmText: '삭제', variant: 'danger' })
+    const ok = await confirmDialog({ title: '입고 건 삭제', message: `'${r.customer_name ?? ''} / ${r.serial_number ?? '-'}' 입고 건을 삭제하시겠습니까?`, confirmText: '삭제', variant: 'danger' })
     if (!ok) return
     const { error } = await supabase.from('repairs').delete().eq('repair_id', r.repair_id)
     if (error) { toast.error('삭제 실패: ' + error.message); return }
@@ -195,13 +254,23 @@ export default function RepairPage() {
   }
 
   // ── 수정 저장 (타임스탬프 정리는 RepairEditModal 의 buildPatch 에서 처리한 patch 를 그대로 적용) ──
-  const handleEditSave = async (repairId: number, patch: Record<string, unknown>) => {
+  // 성공 여부를 반환한다(저장 후 이동이 필요한 '견적서 작성' 가드용). 저장 동작 자체는 기존과 동일.
+  const handleEditSave = async (repairId: number, patch: Record<string, unknown>): Promise<boolean> => {
     setIsEditSaving(true)
     const { error } = await supabase.from('repairs').update(patch).eq('repair_id', repairId)
     setIsEditSaving(false)
-    if (error) { toast.error('수정 실패: ' + error.message); return }
+    if (error) { toast.error('수정 실패: ' + error.message); return false }
     setEditing(null)
     await refetch()
+    return true
+  }
+
+  // 연결된 견적서 PDF 열기 — /api/repair-quotes?pdf=. 서버가 20팀·연결 여부 검사(임의 견적 차단).
+  const openQuotePdf = async (quoteId: number) => {
+    const res = await fetch(`/api/repair-quotes?pdf=${quoteId}`)
+    const json = await res.json().catch(() => ({}))
+    if (res.ok && json.url) window.open(json.url, '_blank')
+    else toast.error(json.error === 'No PDF' ? '견적서 PDF가 없습니다' : json.error === 'Forbidden' ? '견적서 열람 권한이 없습니다' : '견적서를 열 수 없습니다')
   }
 
   // ── 엑셀 일괄 등록 ──
@@ -293,9 +362,11 @@ export default function RepairPage() {
   // ── KPI (건수 기준) ──
   const countBy = (pred: (r: Repair) => boolean) => repairs.filter(pred).length
 
-  const kpiHeld = countBy(r => r.status !== '출고완료') // 보유 수리품 (입고+수리중+출고대기)
-  const kpiRepairing = countBy(r => r.status === '수리중')
-  const kpiWaiting = countBy(r => r.status === '출고대기')
+  // 대시보드와 동일 기준: 보유 = 미출고 전체(본사 발송 포함), 수리중 = 국내 + 본사.
+  const kpiHeld = countBy(r => r.status !== '출고완료')                     // 보유 수리품(본사 발송 포함)
+  const hqHeld = countBy(r => r.status !== '출고완료' && isAtHq(r))         // 본사 발송 중(보유)
+  const kpiRepairing = countBy(r => r.status === '수리중' && !isAtHq(r))    // 국내 수리중
+  const kpiWaiting = countBy(r => r.status === '출고대기')                  // 그대로
   const kpiShippedThisMonth = countBy(r => r.status === '출고완료' && monthKey(r.shipped_date) === viewMonth)
 
   // ── 목록 필터 (구분·상태·검색·날짜 AND 조합, 클라이언트 처리) ──
@@ -393,6 +464,24 @@ export default function RepairPage() {
   const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: MUTED }
   const fieldGroup: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4 }
 
+  // 특이사항 배지 — special_type 있으면 상태와 무관하게 항상 표시. 좁은 칸이라 짧게(한 줄),
+  // 전체 이름은 title 로. (본사수리→본사 / 수리불가→불가 / 수리진행안함→안함)
+  const SPECIAL_BADGE: Record<string, { short: string; color: string; bg: string }> = {
+    '본사수리':     { short: '본사', color: '#7c3aed', bg: '#f5f3ff' },
+    '수리불가':     { short: '불가', color: '#b91c1c', bg: '#fef2f2' },
+    '수리진행안함': { short: '안함', color: '#6b7280', bg: '#f3f4f6' },
+  }
+  const specialBadge = (r: Repair) => {
+    const b = r.special_type ? SPECIAL_BADGE[r.special_type] : undefined
+    if (!b) return null
+    return (
+      <span title={r.special_type ?? undefined}
+        style={{ fontSize: 11, fontWeight: 700, color: b.color, background: b.bg, padding: '2px 7px', borderRadius: 99, whiteSpace: 'nowrap' }}>
+        {b.short}
+      </span>
+    )
+  }
+
   // 목록 행 (고정 블록·페이지 목록 공용)
   const repairRow = (r: Repair) => {
     return (
@@ -406,24 +495,94 @@ export default function RepairPage() {
       <td style={td}>{r.product_type || '-'}</td>
       <td style={td}>{r.serial_number || '-'}</td>
       <td style={{ ...td, textAlign: 'center', color: GRAY }}>{r.shipped_date || '-'}</td>
+      <td style={{ ...td, textAlign: 'center' }}>
+        {/* 연결된 견적의 청구 금액(클릭 시 PDF). 연결 안 된 건은 비워둠. 금액은 견적서(total_supply)가 유일 출처. */}
+        {(() => {
+          const q = r.quote_id != null ? quoteMap[r.quote_id] : undefined
+          if (!q) return null                              // 연결 안 된 건: 빈 칸(아이콘 없음)
+          return (
+            // 문서 아이콘 + 금액 = 클릭하면 견적서 PDF. 아이콘으로 클릭 가능함을 드러낸다.
+            <span onClick={() => openQuotePdf(q.quote_id)} title={`${q.quote_number} · 견적서 보기`}
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer', color: BLUE, fontWeight: 600, whiteSpace: 'nowrap', lineHeight: 1 }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, display: 'block' }}>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+                <line x1="10" y1="9" x2="8" y2="9" />
+              </svg>
+              ₩{numKR(q.total_supply ?? 0)}
+            </span>
+          )
+        })()}
+      </td>
       <td style={{ ...td, overflow: 'visible' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', width: 76, flexShrink: 0 }}>
+        {/* 4구역 고정폭: [상태 80] [액션 90] [특이사항 44] [메모 28] — 요소 없으면 빈 채로 두어 행마다 x 위치 고정 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {/* 1) 상태 dot + 텍스트 */}
+          <span style={{ width: 80, flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: REPAIR_STATUS_COLORS[r.status], flexShrink: 0 }} />
             <span style={{ fontSize: 13, color: TEXT }}>{r.status}</span>
           </span>
-          {r.repair_content ? (
-            <span style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-              <span style={{ fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>{r.repair_content}</span>
-            </span>
-          ) : NEXT_ACTION[r.status] ? (
-            <span style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-              <button onClick={() => advanceStatus(r, NEXT_ACTION[r.status]!.next)}
-                style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: GRAY, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                {NEXT_ACTION[r.status]!.label}
-              </button>
-            </span>
-          ) : null}
+          {/* 2) 액션 버튼 */}
+          <span style={{ width: 90, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
+            {(() => {
+              const isHqOut = r.special_type === '본사수리' && !r.hq_returned_at       // 본사에 나가 있음
+              const isTerminal = r.special_type === '수리불가' || r.special_type === '수리진행안함' // 종료
+              // 본사 발송 중 → 복귀 버튼. 종료 유형 → 진행 버튼 없음. 그 외(복귀 후 포함) → 정상 진행.
+              if (isHqOut) {
+                return (
+                  <button onClick={() => openHqReturn(r)}
+                    style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#f5f3ff', color: '#7c3aed', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    본사 복귀
+                  </button>
+                )
+              }
+              if (!isTerminal && NEXT_ACTION[r.status]) {
+                return (
+                  <button onClick={() => advanceStatus(r, NEXT_ACTION[r.status]!.next)}
+                    style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: GRAY, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    {NEXT_ACTION[r.status]!.label}
+                  </button>
+                )
+              }
+              return null
+            })()}
+          </span>
+          {/* 3) 특이사항 배지 (항상: special_type 있으면) */}
+          <span style={{ width: 44, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
+            {specialBadge(r)}
+          </span>
+          {/* 4) 메모 아이콘 — 클릭 시 말풍선 펼침(우측 정렬로 열어 우측 끝 잘림 방지) */}
+          <span style={{ width: 28, flexShrink: 0, display: 'flex', justifyContent: 'center', position: 'relative' }}>
+            {r.repair_content && (
+              <>
+                <button type="button" title="메모"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const opening = openMemoId !== r.repair_id
+                    if (opening) {
+                      // fixed 로 띄운다(테이블 overflow/row 스태킹 탈출). 아이콘 rect 로 뷰포트 기준 위치 계산.
+                      const rc = e.currentTarget.getBoundingClientRect()
+                      const up = rc.top >= 300   // 위 공간 충분하면 위로, 부족하면 아래로 자동 전환
+                      setMemoAnchor(up
+                        ? { up, right: window.innerWidth - rc.right, bottom: window.innerHeight - rc.top + 6 }
+                        : { up, right: window.innerWidth - rc.right, top: rc.bottom + 6 })
+                    }
+                    setOpenMemoId(id => (id === r.repair_id ? null : r.repair_id))
+                  }}
+                  style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontSize: 14, lineHeight: 1, display: 'inline-flex' }}>📋</button>
+                {openMemoId === r.repair_id && memoAnchor && (
+                  <div onClick={(e) => e.stopPropagation()}
+                    style={{ position: 'fixed', right: memoAnchor.right, zIndex: 9999, animation: 'memo-pop 0.16s ease-out',
+                      ...(memoAnchor.up ? { bottom: memoAnchor.bottom, transformOrigin: 'bottom right' } : { top: memoAnchor.top, transformOrigin: 'top right' }),
+                      background: '#fff', color: '#111827', border: '1px solid #e5e7eb', borderRadius: 8, padding: '14px 16px', fontSize: 13, minWidth: 240, maxWidth: 280, minHeight: 160, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word', textAlign: 'left', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+                    {r.repair_content}
+                  </div>
+                )}
+              </>
+            )}
+          </span>
         </div>
       </td>
       <td style={{ ...td, textAlign: 'center' }}>
@@ -443,8 +602,8 @@ export default function RepairPage() {
 
   const renderTable = (list: Repair[]) => (
     <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1000, tableLayout: 'fixed' }}>
-        <colgroup>{COL_WIDTHS.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 1140, tableLayout: 'fixed' }}>
+        <colgroup>{COL_WIDTHS.map((w, i) => <col key={i} style={w === 'auto' ? undefined : { width: w }} />)}</colgroup>
         <thead>
           <tr style={{ borderBottom: '1px solid #d1d5db', color: TEXT, fontSize: 13 }}>
             <th style={{ ...th, textAlign: 'center' }}>순번</th>
@@ -454,6 +613,7 @@ export default function RepairPage() {
             <th style={th}>제품 구분</th>
             <th style={th}>시리얼번호</th>
             <th style={{ ...th, textAlign: 'center' }}>출고일</th>
+            <th style={{ ...th, textAlign: 'center' }}>견적</th>
             <th style={th}>상태</th>
             <th style={{ ...th, textAlign: 'center' }}></th>
           </tr>
@@ -467,9 +627,10 @@ export default function RepairPage() {
     <div style={{ background: PAGE_BG, minHeight: 'calc(100vh - 44px)', padding: 20, boxSizing: 'border-box' }}>
       <style jsx global>{`
         select { appearance: none; -webkit-appearance: none; -moz-appearance: none; }
+        @keyframes memo-pop { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
       `}</style>
 
-      <div style={{ maxWidth: 1080, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ maxWidth: 1320, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
         {/* ── KPI 카드 (+ 대시보드 이동) ── */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }} className="repair-kpi">
@@ -478,9 +639,9 @@ export default function RepairPage() {
             <div style={{ fontSize: 24, fontWeight: 700, color: TEXT, lineHeight: 1 }}>
               {kpiHeld}<span style={{ fontSize: 13, fontWeight: 700, color: MUTED, marginLeft: 3 }}>건</span>
             </div>
-            <div style={{ fontSize: 11, color: MUTED, marginTop: 6, fontWeight: 600 }}>입고 + 수리중 + 출고대기</div>
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 6, fontWeight: 600 }}>출고완료 제외</div>
           </div>
-          <KpiCard title="수리중" value={kpiRepairing} unit="건" />
+          <KpiCard title="수리중" value={kpiRepairing + hqHeld} unit="건" sub={`국내 ${kpiRepairing} · 본사 ${hqHeld}`} />
           <KpiCard title="출고 대기" value={kpiWaiting} unit="건" sub="수리 완료" />
           <div style={{ ...card, position: 'relative' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -490,7 +651,7 @@ export default function RepairPage() {
                 <MonthBtn onClick={() => setViewMonth(m => shiftMonth(m, 1))}>▶</MonthBtn>
               </span>
             </div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: TEXT, lineHeight: 1 }}>
+            <div style={{ fontSize: 24, fontWeight: 700, color: REPAIR_MEANING_COLORS['출고완료'], lineHeight: 1 }}>
               {kpiShippedThisMonth}<span style={{ fontSize: 13, fontWeight: 700, color: MUTED, marginLeft: 3 }}>건</span>
             </div>
           </div>
@@ -506,7 +667,7 @@ export default function RepairPage() {
           </button>
         </div>
 
-        {/* ── 새 수리품 접수 등록 ── */}
+        {/* ── 새 수리품 입고 등록 ── */}
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>입고 등록</div>
@@ -548,10 +709,22 @@ export default function RepairPage() {
               <label style={label}>시리얼번호</label>
               <input value={serialNumber} onChange={e => setSerialNumber(e.target.value)} placeholder="시리얼번호" style={inp} tabIndex={3} />
             </div>
+            {/* 메모(선택) — 입고 등록 버튼 왼쪽. 클릭 시 아래 textarea 를 펼친다 */}
+            <button onClick={() => setMemoOpen(o => !o)} tabIndex={-1}
+              style={{ height: 36, padding: '0 14px', flexShrink: 0, border: `1px solid ${memoOpen ? BLUE : BORDER}`, borderRadius: 6, background: '#fff', color: memoOpen ? BLUE : GRAY, fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              메모
+            </button>
             <button onClick={handleSubmit} disabled={isSaving} tabIndex={4}
               style={{ height: 36, padding: '0 18px', flexShrink: 0, border: 'none', borderRadius: 6, background: isSaving ? MUTED : BLUE, color: '#fff', fontSize: 14, fontWeight: 700, cursor: isSaving ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
-              {isSaving ? '등록 중...' : '접수 등록'}
+              {isSaving ? '등록 중...' : '입고 등록'}
             </button>
+          </div>
+
+          {/* 메모(repair_content) — 버튼 클릭 시 아래로 슬라이드되며 펼쳐짐. 선택 입력, 검증 없음. */}
+          <div style={{ overflow: 'hidden', maxHeight: memoOpen ? 130 : 0, opacity: memoOpen ? 1 : 0, marginTop: memoOpen ? 12 : 0, transition: 'max-height 0.2s ease-out, opacity 0.2s ease-out, margin-top 0.2s ease-out' }}>
+            <label style={{ ...label, display: 'block', marginBottom: 4 }}>메모</label>
+            <textarea value={memoContent} onChange={e => setMemoContent(e.target.value)} placeholder="자유 메모 (선택)" rows={3} tabIndex={-1}
+              style={{ width: '100%', padding: '9px 11px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 14, outline: 'none', background: '#fff', color: TEXT, boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.5, fontFamily: 'inherit' }} />
           </div>
         </div>
 
@@ -653,7 +826,7 @@ export default function RepairPage() {
           {loading ? (
             <div style={{ padding: '40px 0', textAlign: 'center', color: MUTED, fontSize: 14 }}>불러오는 중...</div>
           ) : repairs.length === 0 ? (
-            <div style={{ padding: '40px 0', textAlign: 'center', color: MUTED, fontSize: 14 }}>접수된 수리품이 없습니다.</div>
+            <div style={{ padding: '40px 0', textAlign: 'center', color: MUTED, fontSize: 14 }}>입고된 수리품이 없습니다.</div>
           ) : (
             <>
               {/* 수리 진행 중 — 항상 상단 고정 */}
@@ -705,6 +878,31 @@ export default function RepairPage() {
 
       {/* ── 수리품 수정 모달 ── */}
       <RepairEditModal repair={editing} isSaving={isEditSaving} onClose={() => setEditing(null)} onSave={handleEditSave} onDelete={handleDelete} />
+
+      {/* ── 본사 복귀 처리 다이얼로그 (복귀일 입력 → 출고대기) ── */}
+      {hqReturning && (
+        <div onClick={() => !isHqSaving && setHqReturning(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: CARD_BG, borderRadius: 10, width: '100%', maxWidth: 360, padding: 22, border: `1px solid ${BORDER}`, boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>본사 복귀 처리</div>
+            <div style={{ fontSize: 13, color: GRAY, marginBottom: 16 }}>
+              {hqReturning.customer_name ?? ''} · {hqReturning.serial_number ?? '-'} — 복귀 시 <b style={{ color: TEXT }}>출고대기</b>로 전환됩니다.
+            </div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: MUTED }}>복귀일</label>
+            <input type="date" value={hqReturnDate} onChange={e => setHqReturnDate(e.target.value)}
+              style={{ ...inp, marginTop: 4, colorScheme: 'light' }} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+              <button onClick={() => setHqReturning(null)} disabled={isHqSaving}
+                style={{ padding: '9px 16px', background: '#fff', color: GRAY, borderRadius: 6, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+              <button onClick={confirmHqReturn} disabled={isHqSaving || !hqReturnDate}
+                style={{ padding: '9px 18px', background: (isHqSaving || !hqReturnDate) ? MUTED : BLUE, color: '#fff', borderRadius: 6, border: 'none', cursor: (isHqSaving || !hqReturnDate) ? 'default' : 'pointer', fontWeight: 700, fontSize: 13 }}>
+                {isHqSaving ? '처리 중...' : '복귀 확정'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── 엑셀 일괄 등록 모달 ── */}
       {showImport && (

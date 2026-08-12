@@ -11,7 +11,6 @@ import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 
 const BLUE = '#234ea2'
-const GREEN = '#16a34a'
 const PAGE_BG = '#f4f5f7'
 const CARD_BG = '#ffffff'
 const BORDER = '#e5e7eb'
@@ -334,7 +333,7 @@ export default function AdminPage() {
 
   const handleDeleteEngineer = async () => {
     if (!deleteEngineer) return
-    if (!resignErr.validate({ resignDate: resignDate ? null : '퇴사일을 선택해주세요' })) return
+    if (!resignErr.validate({ resignDate: resignDate ? null : '삭제일을 선택해주세요' })) return
     setDeleteLoading(true)
     try {
       const res = await fetch('/api/delete-user', {
@@ -350,7 +349,7 @@ export default function AdminPage() {
       }
       const result = await res.json()
       if (result.error) { toast.error(`오류: ${result.error}`); setDeleteLoading(false); return }
-      toast.success(`${deleteEngineer.name} 직원이 퇴사 처리되었습니다 (퇴사일 ${resignDate})`)
+      toast.success(`${deleteEngineer.name} 직원이 삭제되었습니다`)
       setDeleteEngineer(null)
       fetchEngineers()
     } catch (e) {
@@ -359,28 +358,6 @@ export default function AdminPage() {
     setDeleteLoading(false)
   }
 
-  // 복직 처리 — 퇴사일을 비워 다시 재직 상태로
-  const handleRestoreEngineer = async (eng: Engineer) => {
-    const ok = await confirmDialog({ title: '복직 처리', message: `${eng.name} 직원을 복직 처리하시겠습니까?\n(로그인 계정은 '직원 등록'에서 다시 생성해야 합니다.)`, confirmText: '복직 처리', variant: 'default' })
-    if (!ok) return
-    try {
-      const res = await fetch('/api/update-engineer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          engineer_id: eng.engineer_id, name: eng.name, position: eng.position,
-          teams: eng.teams, email: eng.email, initials: eng.initials,
-          office: eng.office, resigned_date: null,
-        }),
-      })
-      const result = await res.json().catch(() => ({ error: `서버 오류 (${res.status})` }))
-      if (!res.ok || result.error) { toast.error(`오류: ${result.error ?? '알 수 없는 오류'}`); return }
-      toast.success(`${eng.name} 직원이 복직 처리되었습니다`)
-      fetchEngineers()
-    } catch {
-      toast.error('오류가 발생했습니다')
-    }
-  }
 
   // ── 팀 관리 ────────────────────────────────────────────────────────────────
   const fetchTeams = async () => {
@@ -731,20 +708,12 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {engineers.map(eng => (
-                      <tr key={eng.engineer_id} style={{ borderBottom: `1px solid ${BORDER}`, opacity: eng.resigned_date ? 0.55 : 1 }}
+                    {/* 삭제된 직원(resigned_date 있음)은 목록에서 완전히 제외. DB 행은 보존. */}
+                    {engineers.filter(eng => !eng.resigned_date).map(eng => (
+                      <tr key={eng.engineer_id} style={{ borderBottom: `1px solid ${BORDER}` }}
                         onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
                         onMouseLeave={e => (e.currentTarget.style.background = '')}>
-                        <td style={{ padding: '10px 12px', fontWeight: 700, whiteSpace: 'nowrap' }}>
-  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-    {eng.name}
-    {eng.resigned_date && (
-      <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#fef2f2', color: DANGER, whiteSpace: 'nowrap' }}>
-        퇴사 {eng.resigned_date}
-      </span>
-    )}
-  </span>
-</td>
+                        <td style={{ padding: '10px 12px', fontWeight: 700, whiteSpace: 'nowrap' }}>{eng.name}</td>
                         <td style={{ padding: '10px 12px', color: GRAY, whiteSpace: 'nowrap' }}>{eng.position || '-'}</td>
                         <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                           {eng.teams || '-'}
@@ -771,13 +740,8 @@ export default function AdminPage() {
                             style={{ padding: '4px 12px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>수정</button>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
-                          {eng.resigned_date ? (
-                            <button onClick={() => handleRestoreEngineer(eng)}
-                              style={{ padding: '4px 12px', background: '#ecfdf5', color: GREEN, border: `1px solid ${GREEN}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>복직</button>
-                          ) : (
-                            <button onClick={() => { const t = new Date().toISOString().slice(0, 10); setResignDate(t); setDeleteEngineer(eng) }}
-                              style={{ padding: '4px 12px', background: DANGER, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>퇴사</button>
-                          )}
+                          <button onClick={() => { const t = new Date().toISOString().slice(0, 10); setResignDate(t); setDeleteEngineer(eng) }}
+                            style={{ padding: '4px 12px', background: DANGER, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>삭제</button>
                         </td>
                       </tr>
                     ))}
@@ -975,19 +939,21 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* ── 직원 퇴사 처리 모달 ── */}
+      {/* ── 직원 삭제 모달 ── */}
       {deleteEngineer && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: CARD_BG, borderRadius: 16, padding: 28, width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
-            <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, marginBottom: 12 }}>직원 퇴사 처리</div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, marginBottom: 12 }}>직원 삭제</div>
             <div style={{ fontSize: 14, color: GRAY, lineHeight: 1.8, marginBottom: 16 }}>
-              <b style={{ color: TEXT }}>{deleteEngineer.name}</b> ({deleteEngineer.position}) 을 퇴사 처리하시겠습니까?<br />
-              <span style={{ fontSize: 12, color: GRAY }}>· 과거 서비스·견적·실적 기록은 그대로 보존됩니다.<br />
-              · 퇴사일 이후 기간의 활동/실적 목록과 담당자 선택에서 제외됩니다.<br />
-              · 로그인 계정은 삭제되어 더 이상 로그인할 수 없습니다.</span>
+              <b style={{ color: TEXT }}>{deleteEngineer.name}</b> ({deleteEngineer.position}) 직원을 삭제하시겠습니까?<br />
+              <span style={{ fontSize: 13, color: GRAY }}>
+                이 직원의 로그인 계정을 삭제합니다.<br />
+                활동·견적 등 과거 기록의 이름은 그대로 보존됩니다.<br />
+                되돌릴 수 없으며, 다시 근무하게 되면 직원 등록으로 새로 만들어야 합니다.
+              </span>
             </div>
             <div style={{ marginBottom: 20 }}>
-              <label style={{ fontSize: 13, fontWeight: 700, color: TEXT, display: 'block', marginBottom: 6 }}>퇴사일</label>
+              <label style={{ fontSize: 13, fontWeight: 700, color: TEXT, display: 'block', marginBottom: 6 }}>삭제일</label>
               <input type="date" value={resignDate} onChange={e => { setResignDate(e.target.value); resignErr.clearError('resignDate') }}
                 style={resignErr.errors.resignDate ? { ...inp, width: '100%', colorScheme: 'light', border: errBorder } : { ...inp, width: '100%', colorScheme: 'light' }} />
               <FieldError message={resignErr.errors.resignDate} />
@@ -997,7 +963,7 @@ export default function AdminPage() {
                 style={{ flex: 1, padding: '11px', background: '#f3f4f6', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>취소</button>
               <button onClick={handleDeleteEngineer} disabled={deleteLoading}
                 style={{ flex: 1, padding: '11px', background: DANGER, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer', opacity: deleteLoading ? 0.7 : 1 }}>
-                {deleteLoading ? '처리 중...' : '퇴사 처리'}
+                {deleteLoading ? '처리 중...' : '삭제'}
               </button>
             </div>
           </div>

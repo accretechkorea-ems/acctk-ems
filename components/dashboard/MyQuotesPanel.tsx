@@ -13,7 +13,7 @@ import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice } from '@/lib
 
 const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
 const PAGE_SIZE = 10
-const STATUS_TABS = ['전체', '견적중', '발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료', '취소요청', '실패']
+const STATUS_TABS = ['전체', '견적중', '수리중', '발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료', '취소요청', '실패']
 
 const BLUE = '#234ea2', TEXT = '#111827', GRAY = '#6b7280', MUTED = '#9ca3af', BORDER = '#ebebeb'
 const ORANGE = '#d97706'
@@ -52,6 +52,7 @@ type Quote = {
   total_profit: number | null
   profit_rate: number | null
   status: string
+  quote_type: string | null
   customer_id: number | null
   dealer_id: number | null
   subject: string | null
@@ -124,7 +125,7 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
   const loadData = async () => {
     const { data: qs } = await supabase
       .from('quotes')
-      .select('quote_id, quote_number, quote_date, total_supply, total_profit, profit_rate, status, customer_id, dealer_id, subject, pdf_url, shipping_date, order_memo, order_completed_by, tax_completed_by, tax_invoice_date, fail_reason, quote_items(product_name, price_list(model_jp))')
+      .select('quote_id, quote_number, quote_date, total_supply, total_profit, profit_rate, status, quote_type, customer_id, dealer_id, subject, pdf_url, shipping_date, order_memo, order_completed_by, tax_completed_by, tax_invoice_date, fail_reason, quote_items(product_name, price_list(model_jp))')
       .eq('engineer_id', engineerId)
       .order('created_at', { ascending: false })
     const list = (qs ?? []) as any[]
@@ -407,13 +408,14 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
                     </td>
                     <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'right' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-                        {q.status === '견적중' && (
+                        {/* 국내수리(repair_domestic)는 발주 없이 수리중→세금계산서 요청으로 바로 간다 → 발주서 등록 숨김 */}
+                        {q.status === '견적중' && q.quote_type !== 'repair_domestic' && (
                           <button onClick={() => { setPoQuote(q); setPoFile(null) }}
                             style={{ padding: '3px 7px', background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#7c3aed' }}>
                             발주서 등록
                           </button>
                         )}
-                        {q.status === '주문완료' && (
+                        {(q.status === '주문완료' || (q.quote_type === 'repair_domestic' && q.status === '수리중')) && (
                           <button onClick={() => { setTaxQuote(q); setTaxDate(q.tax_invoice_date || '') }}
                             style={{ padding: '3px 7px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#b45309' }}>
                             계산서 요청

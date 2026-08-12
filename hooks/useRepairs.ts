@@ -16,9 +16,21 @@ export type Repair = {
   shipped_date: string | null     // 출고일
   repair_started_at: string | null // 수리 시작 시각
   repair_done_at: string | null    // 수리 완료(출고대기) 시각
-  repair_content: string | null    // 특이사항 (본사수리·수리불가 등)
+  repair_content: string | null    // 자유 메모 (구 특이사항 텍스트 → 메모 용도로 유지)
+  special_type: string | null      // 특이사항 유형: '본사수리' | '수리불가' | '수리진행안함' | null
+  hq_requested_at: string | null   // 본사 발송일
+  hq_returned_at: string | null    // 본사 복귀일
+  quote_id: number | null          // 연결된 견적서(quotes.quote_id). 청구 금액의 유일 출처.
   created_by: number | null
   created_at: string
+}
+
+// 20팀 수리용 견적 요약(최소 필드). /api/repair-quotes 응답 형태. quotes 를 직접 조회하지 않는다.
+export type RepairQuote = {
+  quote_id: number
+  quote_number: string
+  total_supply: number | null
+  company_name: string | null
 }
 
 /**
@@ -39,6 +51,8 @@ export function useRepairs() {
       .select('*')
       .order('received_date', { ascending: false })
       .order('repair_id', { ascending: false })
+    // 연결된 견적 요약은 quotes RLS 에 막히므로 여기서 붙이지 않는다.
+    // 목록/모달이 /api/repair-quotes 로 별도 조회한다(20팀 견적만 service role 로 좁게 오픈).
     setRepairs((data as Repair[]) ?? [])
     setLoading(false)
   }, [supabase])

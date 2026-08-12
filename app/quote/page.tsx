@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useCallback, useRef, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
@@ -403,8 +404,13 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced
 }
 
-export default function QuotePage() {
+function QuotePageInner() {
   const supabase = createClient()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  // 수리 건에서 넘어온 경우: repair_id(숫자만 유효) + prefill 파라미터. 없거나 무효면 일반 견적서.
+  const repairIdRaw = searchParams.get('repair_id')
+  const repairId = repairIdRaw && /^\d+$/.test(repairIdRaw) ? Number(repairIdRaw) : null
   const { loading: guardLoading, authorized } = usePageGuard(canAccessQuote)
   const toast = useToast()
   const { errors, clearError, validate } = useFieldErrors<'company' | 'items'>()
@@ -640,10 +646,23 @@ const handleDownloadPDF = async (
     if (!ok) return
 
     setIsSaving(true)
+    let linkedRepair = false
     try {
       await supabase.from('quote_sequence').insert({
         date_str: dateStr, engineer_id: engineer.engineer_id, seq: seqIndex,
       })
+
+      // 수리 건에서 온 견적이면 그 수리의 special_type 으로 견적 유형(quote_type)을 결정한다.
+      //   본사수리 → 'repair_hq'(기존 흐름), 그 외(국내수리) → 'repair_domestic'(단축 흐름), 수리 건 없음 → null(일반).
+      // 국내수리는 견적중을 거치지 않고 '수리중' 상태로 시작한다(수리가 이미 진행 중이므로).
+      let quoteType: string | null = null
+      let initialStatus = '견적중'
+      if (repairId != null) {
+        const { data: repairRow } = await supabase
+          .from('repairs').select('special_type').eq('repair_id', repairId).single()
+        quoteType = repairRow?.special_type === '본사수리' ? 'repair_hq' : 'repair_domestic'
+        if (quoteType === 'repair_domestic') initialStatus = '수리중'
+      }
 
       const { data: quoteData, error: quoteError } = await supabase
         .from('quotes').insert({
@@ -659,7 +678,8 @@ const handleDownloadPDF = async (
           total_cost: totalCost,
           total_profit: totalProfit,
           profit_rate: parseFloat(totalProfitRate.toFixed(2)),
-          status: '견적중',
+          quote_type: quoteType,
+          status: initialStatus,
           recipient: receiver,
           subject: titleItem,
           note: finalRemarksForPDF,
@@ -690,11 +710,25 @@ const handleDownloadPDF = async (
         if (itemsError) throw itemsError
       }
 toast.success(`견적서 ${quoteNo} 확정 완료`)
+
+      // 수리 건에서 온 경우: repairs.quote_id 자동 연결 (repairs RLS 상 teams='20' UPDATE 허용).
+      // 연결 실패해도 견적서 저장 자체는 유효 → 실패만 안내하고 수동 연결 유도.
+      if (repairId != null) {
+        const { data: linked, error: linkError } = await supabase
+          .from('repairs').update({ quote_id: quoteData.quote_id }).eq('repair_id', repairId).select('repair_id')
+        if (linkError || !linked || linked.length === 0) {
+          toast.error('견적서는 저장됐지만 수리 건 연결에 실패했습니다. 수리 목록에서 수동으로 연결해주세요.')
+        } else {
+          toast.success(`수리 건 #${repairId} 에 견적서가 연결되었습니다`)
+          linkedRepair = true
+        }
+      }
     } catch (e) {
       console.error(e)
       toast.error('저장 중 오류가 발생했습니다')
     }
     setIsSaving(false)
+    return linkedRepair
   }
 
   useEffect(() => { setIsClient(true) }, [])
@@ -708,6 +742,32 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
     }
     f()
   }, [])
+
+  // 수리 건 → 견적서 prefill (1회). repair_id 가 유효할 때만. 없으면 일반 견적서로 동작.
+  const prefillDone = useRef(false)
+  useEffect(() => {
+    if (prefillDone.current || repairId == null) return
+    prefillDone.current = true
+    const product = (searchParams.get('product') ?? '').trim()
+    const serial = (searchParams.get('serial') ?? '').trim()
+    const customer = (searchParams.get('customer') ?? '').trim()
+    // product → 첫 품목 itemText, serial → 첫 품목 subLines
+    if (product || serial) {
+      setRows(prev => {
+        if (prev.length === 0) return prev
+        const first = { ...prev[0], itemText: product || prev[0].itemText, subLines: serial ? [serial] : prev[0].subLines }
+        return [first, ...prev.slice(1)]
+      })
+    }
+    // customer → customers ilike. 정확히 1건이면 자동선택, 아니면 검색어만 채우고 사용자가 고름.
+    if (customer) {
+      setCustomerQuery(customer)
+      supabase.from('customers').select('customer_id, company_name, address, status')
+        .is('deleted_at', null).ilike('company_name', `%${customer}%`).limit(10)
+        .then(({ data }) => { if (data && data.length === 1) handleCustomerSelect(data[0]) })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repairId])
 
   const fetchRate = useCallback(async () => {
     setRateLoading(true)
@@ -810,6 +870,13 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
           to { opacity: 1; transform: scale(1) translateY(0); }
         }
       `}</style>
+      {repairId != null && (
+        <div style={{ maxWidth: 1320, margin: '0 auto', padding: '16px 20px 0' }}>
+          <div style={{ background: '#eff4ff', border: '1px solid #c7d7f8', borderRadius: 8, padding: '10px 14px', fontSize: 13, fontWeight: 700, color: '#234ea2' }}>
+            수리 건 #{repairId} 의 견적서를 작성 중입니다
+          </div>
+        </div>
+      )}
       <div style={{ maxWidth: 1320, margin: '0 auto', padding: 20, display: 'flex', gap: 20 }}>
 
         <div style={{ width: 430, flexShrink: 0 }}>
@@ -1335,9 +1402,11 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                 const snapshotRows = [...rows]
                 const snapshotRemarks = finalRemarksForPDF
                 const snapshotQuoteNo = quoteNo
-                await handleSaveQuote()
+                const linked = await handleSaveQuote()
                 await handleDownloadPDF(snapshotCompany, snapshotReceiver, snapshotTitleItem, snapshotRows, snapshotRemarks, snapshotQuoteNo)
                 setSeqIndex(prev => prev + 1)
+                // 수리 건 연결이 됐으면 PDF 생성 후 수리 목록으로 이동
+                if (linked) router.push('/repair')
               }}
                 style={{ flex: 1, padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
                 확인
@@ -1347,5 +1416,14 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
         </div>
       )}
     </div>
+  )
+}
+
+// useSearchParams 는 Suspense 경계가 필요하므로 감싼다(인벤토리 페이지와 동일 패턴).
+export default function QuotePage() {
+  return (
+    <Suspense fallback={null}>
+      <QuotePageInner />
+    </Suspense>
   )
 }

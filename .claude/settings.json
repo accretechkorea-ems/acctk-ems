@@ -30,7 +30,8 @@
       "Bash(node routeprobe2.mjs)",
       "Bash(node qcols.mjs)",
       "Bash(grep -nA2 'marginTop: 8' app/dashboard/page.tsx)",
-      "PowerShell(npx tsc --noEmit 2>&1)"
+      "PowerShell(npx tsc --noEmit 2>&1)",
+      "Bash(echo \"=== exit $? ===\")"
     ]
   }
 }

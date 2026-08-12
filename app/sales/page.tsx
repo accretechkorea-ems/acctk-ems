@@ -33,6 +33,7 @@ type Quote = {
   total_profit: number | null
   profit_rate: number | null
   status: string
+  quote_type?: string | null
   order_date: string | null
   revenue_date: string | null
   fail_reason: string | null
@@ -689,7 +690,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
           })()}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="견적번호 / 고객사 / 내용 검색" style={{ ...inp, flex: 1, minWidth: 200 }} />
-            {['전체', '견적중', '발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료', '취소요청', '실패'].map(s => (
+            {['전체', '견적중', '수리중', '발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료', '취소요청', '실패'].map(s => (
               <button key={s} onClick={() => { setStatusFilter(s); setPage(1) }}
                 style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: statusFilter === s ? (s === '전체' ? BLUE : getCategoryColor(SALES_STATUS_COLORS, s).text) : '#f3f4f6', color: statusFilter === s ? '#fff' : TEXT }}>
                 {s}
@@ -800,13 +801,14 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                       </td>
                       <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'right' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-                          {q.status === '견적중' && (
+                          {/* 국내수리(repair_domestic)는 발주 없이 수리중→세금계산서 요청으로 바로 간다 → 발주서 등록 숨김 */}
+                          {q.status === '견적중' && q.quote_type !== 'repair_domestic' && (
                             <button onClick={() => { setPoQuote(q); setPoFile(null) }}
                               style={{ padding: '3px 7px', background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#7c3aed' }}>
                               발주서 등록
                             </button>
                           )}
-                          {q.status === '주문완료' && (
+                          {(q.status === '주문완료' || (q.quote_type === 'repair_domestic' && q.status === '수리중')) && (
                             <button onClick={() => { setTaxQuote(q); setTaxDate(q.tax_invoice_date || '') }}
                               style={{ padding: '3px 7px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#b45309' }}>
                               계산서 요청

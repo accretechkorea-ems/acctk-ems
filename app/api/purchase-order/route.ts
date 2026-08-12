@@ -82,10 +82,10 @@ export async function POST(req: Request) {
     // 영업관리팀 + superadmin 알림
     const { data: allEng } = await supabaseAdmin
       .from('engineers')
-      .select('engineer_id, teams, permission_level')
+      .select('engineer_id, teams, permission_level, resigned_date')
 
-    const targets = (allEng || []).filter((e: { engineer_id: number; teams: string | null; permission_level: string }) =>
-      canAccessSales(e) && e.engineer_id !== caller.engineer_id
+    const targets = (allEng || []).filter((e: { engineer_id: number; teams: string | null; permission_level: string; resigned_date: string | null }) =>
+      canAccessSales(e) && !e.resigned_date && e.engineer_id !== caller.engineer_id
     )
 
     if (targets.length > 0) {
@@ -148,10 +148,10 @@ export async function POST(req: Request) {
 
     const { data: taxAllEng } = await supabaseAdmin
       .from('engineers')
-      .select('engineer_id, teams, permission_level')
+      .select('engineer_id, teams, permission_level, resigned_date')
 
-    const taxTargets = (taxAllEng || []).filter((e: { engineer_id: number; teams: string | null; permission_level: string }) =>
-      canAccessSales(e) && e.engineer_id !== caller.engineer_id
+    const taxTargets = (taxAllEng || []).filter((e: { engineer_id: number; teams: string | null; permission_level: string; resigned_date: string | null }) =>
+      canAccessSales(e) && !e.resigned_date && e.engineer_id !== caller.engineer_id
     )
 
     const { data: quote } = await supabaseAdmin

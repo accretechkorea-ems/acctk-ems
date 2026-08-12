@@ -54,9 +54,10 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
   const nearbyOverlaysRef = useRef<any[]>([]) // 주변 업체 회색 점
   const nearbyCacheRef = useRef<NearbyCustomer[] | null>(null) // null = 아직 미조회(첫 켤 때만 조회)
 
-  // 지도 안 토글 상태. 지도를 닫았다 열면 컴포넌트가 새로 마운트되므로 자동으로 기본값(visits/off)로 초기화된다.
-  const [mode, setMode] = useState<'visits' | 'office'>('visits')
-  const [showNearby, setShowNearby] = useState(false)
+  // 지도 안 토글 상태. 기본값은 둘 다 켜짐(office 모드 + 주변 업체). 사무실 미지정이면 office 는 시각상 visits 로 처리된다.
+  // 지도를 닫았다 열면 컴포넌트가 새로 마운트되므로 이 기본값으로 다시 초기화된다.
+  const [mode, setMode] = useState<'visits' | 'office'>('office')
+  const [showNearby, setShowNearby] = useState(true)
   const [nearbyFailed, setNearbyFailed] = useState(false) // customers 조회 실패 시 토글 비활성화
   const [mapReady, setMapReady] = useState(false)
 

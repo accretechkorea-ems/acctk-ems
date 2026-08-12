@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import {
-  ResponsiveContainer, BarChart, Bar, LineChart, Line, ComposedChart, PieChart, Pie, Cell,
+  ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList,
 } from 'recharts'
 import { usePageGuard } from '@/hooks/usePageGuard'
@@ -12,13 +12,14 @@ import AccessGate from '@/components/common/AccessGate'
 import { canAccess20 } from '@/lib/permissions'
 import { useRepairs, type Repair } from '@/hooks/useRepairs'
 import { useCountUp } from '@/hooks/useCountUp'
-import { CHART_COLORS, REPAIR_STATUS_COLORS } from '@/lib/categoryColors'
+import { CHART_COLORS, REPAIR_STATUS_COLORS, REPAIR_MEANING_COLORS } from '@/lib/categoryColors'
 import {
-  avgLeadTime, monthlyCounts,
-  leadTimeBuckets, monthlyLeadTime, monthlyBacklog,
+  avgLeadTime, monthlyCountsRecent,
+  leadTimeBuckets, monthlyBacklogRecent,
   customerRanking, productRanking, weeklyByType,
   getAgingDays, getRepeatSerials,
   avgRepairDuration, countRepairDurationSamples,
+  excludeSpecial, isAtHq, hqAvgTurnaround, hqMonthCounts,
 } from '@/lib/repairStats'
 
 // ── 색상: EMS 팔레트(lib/categoryColors.ts 기존 값)만 사용 ──
@@ -45,7 +46,6 @@ const RANK_COLORS = [CHART_COLORS.blue, CHART_COLORS.violet, CHART_COLORS.amber,
 // recharts 공통
 const AXIS_TICK = { fontSize: 11, fill: MUTED } as const // 축 글자(폰트 규칙상 최소 11px 유지)
 const CHART_MARGIN = { top: 24, right: 8, bottom: 0, left: 0 } as const       // Legend 있는 차트 (상단 값 라벨 여유)
-const CHART_MARGIN_NOLEG = { top: 8, right: 8, bottom: 20, left: 0 } as const // Legend 없는 차트: 하단 20 확보
 const TOOLTIP_STYLE: React.CSSProperties = { fontSize: 12, borderRadius: 8, border: `1px solid ${BORDER}` }
 const ANIM_MS = 800 // 진입 애니메이션 기본 길이
 const CHART_H = 220 // 빈 상태 최소 높이
@@ -143,10 +143,10 @@ function MonthBarCard({ title, data, animate }: { title: string; data: MonthDatu
             <Tooltip cursor={{ fill: NEUTRAL_BG }} contentStyle={TOOLTIP_STYLE} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             <Bar dataKey="received" name="입고" fill={C_ROSE} radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={animate} animationDuration={ANIM_MS} animationEasing="ease-out" animationBegin={0}>
-              <LabelList dataKey="received" position="top" fill={MUTED} fontSize={11} />
+              <LabelList dataKey="received" position="top" fill={MUTED} fontSize={9} />
             </Bar>
             <Bar dataKey="shipped" name="출고" fill={C_BLUE} radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={animate} animationDuration={ANIM_MS} animationEasing="ease-out" animationBegin={150}>
-              <LabelList dataKey="shipped" position="top" fill={MUTED} fontSize={11} />
+              <LabelList dataKey="shipped" position="top" fill={MUTED} fontSize={9} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -160,7 +160,7 @@ function MonthBarCard({ title, data, animate }: { title: string; data: MonthDatu
 function LeadDistCard({ buckets, total, animate }: { buckets: { label: string; count: number }[]; total: number; animate: boolean }) {
   return (
     <div style={chartCardStyle}>
-      <CardTitle title="소요일 분포" sub={`출고 완료 건 기준, 총 ${total}건`} />
+      <CardTitle title="입출고 소요기간 분포" />
       {total === 0 ? (
         <div style={emptyBox}>데이터가 없습니다</div>
       ) : (
@@ -176,31 +176,6 @@ function LeadDistCard({ buckets, total, animate }: { buckets: { label: string; c
               <LabelList dataKey="count" position="top" fill={MUTED} fontSize={11} />
             </Bar>
           </BarChart>
-        </ResponsiveContainer>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── 평균 소요일 월별 추이 (선, 결측 달은 끊김, 단일 계열) ──
-function LeadTrendCard({ data, animate }: { data: { month: string; avg: number | null }[]; animate: boolean }) {
-  const points = data.filter(d => d.avg !== null).length
-  return (
-    <div style={chartCardStyle}>
-      <CardTitle title="평균 소요일 월별 추이" />
-      {points < 3 ? (
-        <div style={emptyBox}>추세를 보려면 최소 3개월 데이터가 필요합니다</div>
-      ) : (
-        <div style={chartArea}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={CHART_MARGIN_NOLEG}>
-            <CartesianGrid vertical={false} stroke={BORDER} />
-            <XAxis dataKey="month" tickFormatter={(m: string) => m.slice(2).replace('-', '.')} tick={AXIS_TICK} axisLine={{ stroke: BORDER }} tickLine={false} />
-            <YAxis allowDecimals={false} width={40} tickFormatter={(v: number) => `${v}일`} tick={AXIS_TICK} axisLine={{ stroke: BORDER }} tickLine={false} />
-            <Tooltip contentStyle={TOOLTIP_STYLE} />
-            <Line type="monotone" dataKey="avg" name="평균 소요일" stroke={C_BLUE} strokeWidth={2} dot connectNulls={false} isAnimationActive={animate} animationDuration={ANIM_MS} animationEasing="ease-out" animationBegin={0} />
-          </LineChart>
         </ResponsiveContainer>
         </div>
       )}
@@ -298,10 +273,11 @@ function WeeklyTypeCard({ data, animate }: { data: { week: string; gauge: number
             <YAxis allowDecimals={false} width={32} tick={AXIS_TICK} axisLine={{ stroke: BORDER }} tickLine={false} />
             <Tooltip cursor={{ fill: NEUTRAL_BG }} contentStyle={TOOLTIP_STYLE} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="gauge" stackId="a" fill={CHART_COLORS.blue} name="게이지" maxBarSize={28} isAnimationActive={animate} animationDuration={ANIM_MS} animationEasing="ease-out" animationBegin={0}>
+            {/* 입고 지표라 빨강 계열로 통일 — 게이지/앰프 구분은 유지하되 밝은/진한 로즈 2톤으로 구분(둘 다 '입고=빨강') */}
+            <Bar dataKey="gauge" stackId="a" fill={C_ROSE} name="게이지" maxBarSize={28} isAnimationActive={animate} animationDuration={ANIM_MS} animationEasing="ease-out" animationBegin={0}>
               <LabelList dataKey="total" position="top" fill={MUTED} fontSize={11} />
             </Bar>
-            <Bar dataKey="amp" stackId="a" fill={CHART_COLORS.violet} name="앰프" maxBarSize={28} radius={[4, 4, 0, 0]} isAnimationActive={animate} animationDuration={ANIM_MS} animationEasing="ease-out" animationBegin={150} />
+            <Bar dataKey="amp" stackId="a" fill={WARN} name="앰프" maxBarSize={28} radius={[4, 4, 0, 0]} isAnimationActive={animate} animationDuration={ANIM_MS} animationEasing="ease-out" animationBegin={150} />
           </BarChart>
         </ResponsiveContainer>
         </div>
@@ -310,31 +286,39 @@ function WeeklyTypeCard({ data, animate }: { data: { week: string; gauge: number
   )
 }
 
-// ── 미출고 잔량 추이 (막대: 월 순증감 / 선: 월말 잔량) ──
-function BacklogCard({ data, animate }: { data: { month: string; backlog: number; received: number; shipped: number; net: number }[]; animate: boolean }) {
+// ── 미출고 잔량 추이 (막대: 월말 잔량 + 숫자 라벨, 위에 전월 대비 증감 +/- 색 구분) ──
+function BacklogCard({ data, animate }: { data: { month: string; backlog: number; delta: number }[]; animate: boolean }) {
+  // 증감 색은 팔레트 값: 증가=경고(WARN #be123c), 감소=안전(C_GREEN #22c55e).
+  const renderLabel = (props: { x?: number | string; y?: number | string; width?: number | string; index?: number }) => {
+    const x = Number(props.x ?? 0), y = Number(props.y ?? 0), width = Number(props.width ?? 0), index = props.index ?? 0
+    const d = data[index]
+    if (!d) return null
+    const cx = x + width / 2
+    const deltaColor = d.delta > 0 ? WARN : d.delta < 0 ? C_GREEN : MUTED
+    const deltaText = d.delta > 0 ? `+${d.delta}` : String(d.delta) // 음수는 이미 '-' 포함
+    return (
+      <g>
+        <text x={cx} y={y - 22} textAnchor="middle" fontSize={11} fontWeight={700} fill={deltaColor}>{deltaText}</text>
+        <text x={cx} y={y - 6} textAnchor="middle" fontSize={13} fontWeight={700} fill={TEXT}>{d.backlog}</text>
+      </g>
+    )
+  }
   return (
     <div style={chartCardStyle}>
-      <CardTitle title="미출고 잔량 추이" sub="월말 기준 사내 보유 건수" />
-      {data.length === 0 ? (
-        <div style={emptyBox}>데이터가 없습니다</div>
-      ) : (
-        <div style={chartArea}>
+      <CardTitle title="월별 잔량" />
+      <div style={chartArea}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={CHART_MARGIN}>
+          <BarChart data={data} margin={{ top: 34, right: 8, bottom: 0, left: 0 }}>
             <CartesianGrid vertical={false} stroke={BORDER} />
             <XAxis dataKey="month" tickFormatter={(m: string) => m.slice(2).replace('-', '.')} tick={AXIS_TICK} axisLine={{ stroke: BORDER }} tickLine={false} />
-            <YAxis yAxisId="left" allowDecimals={false} width={32} tick={AXIS_TICK} axisLine={{ stroke: BORDER }} tickLine={false} />
-            <YAxis yAxisId="right" orientation="right" allowDecimals={false} width={32} tick={AXIS_TICK} axisLine={{ stroke: BORDER }} tickLine={false} />
-            <Tooltip contentStyle={TOOLTIP_STYLE} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar yAxisId="left" dataKey="net" name="순증감" radius={[4, 4, 0, 0]} maxBarSize={28} isAnimationActive={animate} animationDuration={ANIM_MS} animationEasing="ease-out" animationBegin={0}>
-              {data.map((d, i) => <Cell key={i} fill={d.net >= 0 ? C_ROSE : C_BLUE} />)}
+            <YAxis allowDecimals={false} width={32} tick={AXIS_TICK} axisLine={{ stroke: BORDER }} tickLine={false} />
+            <Tooltip cursor={{ fill: NEUTRAL_BG }} contentStyle={TOOLTIP_STYLE} />
+            <Bar dataKey="backlog" name="월말 잔량" fill={REPAIR_MEANING_COLORS['잔량']} radius={[4, 4, 0, 0]} maxBarSize={44} isAnimationActive={animate} animationDuration={ANIM_MS} animationEasing="ease-out" animationBegin={0}>
+              <LabelList content={renderLabel} />
             </Bar>
-            <Line yAxisId="right" type="monotone" dataKey="backlog" name="월말 잔량" stroke={C_ROSE} strokeWidth={2} dot isAnimationActive={animate} animationDuration={ANIM_MS} animationEasing="ease-out" animationBegin={150} />
-          </ComposedChart>
+          </BarChart>
         </ResponsiveContainer>
-        </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -367,7 +351,12 @@ function StuckCard({ rows }: { rows: { r: Repair; aging: number }[] }) {
                 <td style={listTd}>{r.customer_name || '-'}</td>
                 <td style={listTd}>{r.product_type || '-'}</td>
                 <td style={listTd}>{r.serial_number || '-'}</td>
-                <td style={listTd}>{r.status}</td>
+                <td style={listTd}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: REPAIR_STATUS_COLORS[r.status], flexShrink: 0 }} />
+                    {r.status}
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -421,8 +410,48 @@ function RepeatCard({ rows, reintake, total, pct }: {
   )
 }
 
-// 전체 폭을 차지하는 그리드 아이템 래퍼
-const FULL: React.CSSProperties = { gridColumn: '1 / -1' }
+// 금액 축약: 억/만원 (막대 라벨·축·툴팁 공용)
+const fmtKRW = (won: number): string => {
+  if (won >= 1e8) { const eok = won / 1e8; return `${eok % 1 === 0 ? eok.toFixed(0) : eok.toFixed(1)}억원` }
+  if (won >= 1e4) return `${Math.round(won / 1e4).toLocaleString('ko-KR')}만원`
+  return `${Math.round(won).toLocaleString('ko-KR')}원`
+}
+
+// ── 월별 매출 (출고일 기준, 최근 6개월. 막대 위 금액 축약 라벨. 이번 달 매출은 제목 옆에) ──
+function RevenueCard({ data, unlinkedCount, animate }: { data: { month: string; amount: number }[]; unlinkedCount: number; animate: boolean }) {
+  const thisMonth = data.length ? data[data.length - 1].amount : 0
+  const renderAmount = (props: { x?: number | string; y?: number | string; width?: number | string; index?: number }) => {
+    const x = Number(props.x ?? 0), y = Number(props.y ?? 0), width = Number(props.width ?? 0), index = props.index ?? 0
+    const amt = data[index]?.amount ?? 0
+    if (amt <= 0) return null
+    return <text x={x + width / 2} y={y - 6} textAnchor="middle" fontSize={11} fontWeight={700} fill={TEXT}>{fmtKRW(amt)}</text>
+  }
+  return (
+    <div style={chartCardStyle}>
+      <CardTitle title="월별 매출" sub={`출고일 기준 · 이번 달 ${fmtKRW(thisMonth)}`} />
+      <div style={chartArea}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 24, right: 8, bottom: 0, left: 0 }}>
+            <CartesianGrid vertical={false} stroke={BORDER} />
+            <XAxis dataKey="month" tickFormatter={(m: string) => m.slice(2).replace('-', '.')} tick={AXIS_TICK} axisLine={{ stroke: BORDER }} tickLine={false} />
+            <YAxis width={44} tick={AXIS_TICK} axisLine={{ stroke: BORDER }} tickLine={false}
+              tickFormatter={(v: number) => v >= 1e8 ? `${Math.round(v / 1e8)}억` : v >= 1e4 ? `${Math.round(v / 1e4)}만` : String(v)} />
+            <Tooltip cursor={{ fill: NEUTRAL_BG }} contentStyle={TOOLTIP_STYLE} formatter={(value) => [fmtKRW(Number(value)), '매출']} />
+            <Bar dataKey="amount" name="매출" fill={C_GREEN} radius={[4, 4, 0, 0]} maxBarSize={44} isAnimationActive={animate} animationDuration={ANIM_MS} animationEasing="ease-out" animationBegin={0}>
+              <LabelList content={renderAmount} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      {unlinkedCount > 0 && (
+        <div style={{ fontSize: 11, color: MUTED, textAlign: 'right', marginTop: 6 }}>
+          견적 미연결 {unlinkedCount}건은 매출에서 제외됨
+        </div>
+      )}
+    </div>
+  )
+}
+
 
 export default function RepairDashboardPage() {
   const { loading: guardLoading, authorized } = usePageGuard(canAccess20)
@@ -436,6 +465,16 @@ export default function RepairDashboardPage() {
     }
   }, [])
   const animate = !reduceMotion
+
+  // 월별 매출(출고일 기준) — quotes RLS 우회를 위해 /api/repair-quotes 집계 사용. 연도 필터 무관(최근 6개월 고정).
+  const [revenue, setRevenue] = useState<{ months: { month: string; amount: number }[]; unlinkedCount: number } | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/repair-quotes?revenue=monthly')
+      .then(r => r.json()).then(j => { if (!cancelled && Array.isArray(j.months)) setRevenue({ months: j.months, unlinkedCount: j.unlinkedCount ?? 0 }) })
+      .catch(() => { /* 못 불러오면 카드 스켈레톤 유지 */ })
+    return () => { cancelled = true }
+  }, [])
 
   // ── 기간(연도) 필터 — 입고일 연도 기준. 상태/현재재고 카드는 제외하고 흐름·분석 카드에만 적용 ──
   const years = useMemo(() => {
@@ -455,37 +494,55 @@ export default function RepairDashboardPage() {
 
   if (!authorized) return <AccessGate loading={guardLoading} />
 
+  // 성과 통계(소요일·소요일 분포·작업 소요일·적체)만 특이사항 건(special_type: 본사수리·수리불가·수리진행안함)을 제외한다.
+  // 사실 지표(입고·출고·잔량·매출)는 특이사항을 포함한다 — 본사수리도 실제 매출·물량이므로.
+  const normalPeriod = excludeSpecial(periodRepairs)
+  const excludedCount = periodRepairs.length - normalPeriod.length
+
   // ── KPI 계산 ──
-  const held = repairs.filter(r => r.status !== '출고완료').length
-  const repairing = repairs.filter(r => r.status === '수리중').length
-  const waiting = repairs.filter(r => r.status === '출고대기').length
+  // 보유/도넛은 '미출고' 기준(status!=='출고완료'). 본사 발송 중(isAtHq)도 고객 출고 전이라 포함하되,
+  // 도넛·'수리중' KPI 에서 '본사' 구간으로 분리한다. 네 구간(입고·국내수리중·출고대기·본사)의 합 = held.
+  const held = repairs.filter(r => r.status !== '출고완료').length                 // 미출고 총량(본사 발송 중 포함)
+  const hqHeld = repairs.filter(r => r.status !== '출고완료' && isAtHq(r)).length   // 본사 발송 중(보유)
+  const intake = repairs.filter(r => r.status === '입고' && !isAtHq(r)).length
+  const repairing = repairs.filter(r => r.status === '수리중' && !isAtHq(r)).length // 국내 수리중
+  const waiting = repairs.filter(r => r.status === '출고대기' && !isAtHq(r)).length
 
-  // 소요일 (입고→출고): 대표값=평균
-  const avgAll = avgLeadTime(periodRepairs)
+  // 소요일 (입고→출고): 대표값=평균 — 특이사항 제외
+  const avgAll = avgLeadTime(normalPeriod)
 
-  const gaugeRows = periodRepairs.filter(r => r.item_type === '게이지')
-  const ampRows = periodRepairs.filter(r => r.item_type === '앰프')
+  const gaugeRows = normalPeriod.filter(r => r.item_type === '게이지')
+  const ampRows = normalPeriod.filter(r => r.item_type === '앰프')
   const avgGauge = avgLeadTime(gaugeRows)
   const avgAmp = avgLeadTime(ampRows)
 
-  // 실제 수리 기간 (수리 시작→완료): 대표값=평균 + 유효 표본 수
-  const durAll = avgRepairDuration(periodRepairs)
+  // 실제 수리 기간 (수리 시작→완료): 대표값=평균 + 유효 표본 수 — 특이사항 제외
+  const durAll = avgRepairDuration(normalPeriod)
   const durGauge = avgRepairDuration(gaugeRows)
   const durAmp = avgRepairDuration(ampRows)
-  const durAllN = countRepairDurationSamples(periodRepairs)
+  const durAllN = countRepairDurationSamples(normalPeriod)
   const durGaugeN = countRepairDurationSamples(gaugeRows)
   const durAmpN = countRepairDurationSamples(ampRows)
 
-  // ── 월별 접수/출고 (최근 6개월, 전체·게이지·앰프) ──
-  const monthlyAll = monthlyCounts(periodRepairs).slice(-6)
-  const monthlyGauge = monthlyCounts(gaugeRows).slice(-6)
-  const monthlyAmp = monthlyCounts(ampRows).slice(-6)
+  // ── 최근 6개월 입출고 추이 (이번 달 포함 고정 6개월, 0인 달도 표시) — 전체·게이지·앰프 ──
+  // '실제로 일어난 사실'(입고·출고)이라 특이사항 포함 전체 repairs 기준. 미출고 잔량(backlog)과 같은 모집단이라
+  // '전월말 잔량 + 입고 − 출고 = 당월말 잔량' 이 성립한다. 연도 필터는 잔량과 동일하게 미적용(이번 달 기준 고정 6개월).
+  const monthlyAll = monthlyCountsRecent(repairs, 6)
+  const monthlyGauge = monthlyCountsRecent(repairs.filter(r => r.item_type === '게이지'), 6)
+  const monthlyAmp = monthlyCountsRecent(repairs.filter(r => r.item_type === '앰프'), 6)
 
-  // ── 추가 차트 데이터 ──
-  const leadBuckets = leadTimeBuckets(periodRepairs)
+  // ── 소요일 분포(연도 기준, 특이사항 제외) ──
+  const leadBuckets = leadTimeBuckets(normalPeriod)
   const leadTotal = leadBuckets.reduce((s, b) => s + b.count, 0)
-  const leadTrend = monthlyLeadTime(periodRepairs)
-  const backlog = monthlyBacklog(periodRepairs)
+  // 미출고 잔량 추이: '현재 보유' KPI(held)와 동일 기준(물리 보유·특이사항 포함·본사발송중 제외)이라 전체 repairs 를 넣는다.
+  // (성과 통계가 아니므로 excludeSpecial 을 쓰지 않는다 — 넣으면 KPI 및 입출고 추이와 모집단이 어긋난다.)
+  const backlog = monthlyBacklogRecent(repairs, 6)
+
+  // ── 본사수리 KPI 데이터 (발송/복귀 날짜 기준이라 연도 필터와 무관하게 전체 repairs 사용) ──
+  const thisMonth = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}` })()
+  const hqThisMonth = hqMonthCounts(repairs, thisMonth)   // 이번 달 본사 발송/복귀
+  const hqAvg = hqAvgTurnaround(repairs)                  // 본사 평균 소요일(복귀 완료 건)
+  const shippedThisMonth = repairs.filter(r => (r.shipped_date ?? '').slice(0, 7) === thisMonth).length // 이번 달 출고완료(스루풋)
 
   // 평균 소요일 KPI 구간별 색: ~10 파랑 / ~14 초록 / ~17.5 노랑 / 그 이상 빨강. 값 없으면 기본색.
   const leadColor = (v: number | null): string | undefined =>
@@ -494,14 +551,16 @@ export default function RepairDashboardPage() {
   const custTop = customerRanking(periodRepairs, 5)
   const prodTop = productRanking(periodRepairs, 5)
   const weeklyType = weeklyByType(repairs, 8) // '최근 8주'는 항상 현재 기준
+  // 도넛(현재 입고 구성): 미출고 전체를 네 구간으로. 합 = held(보유 수리품 KPI)와 일치.
   const holdData = [
-    { name: '입고', value: repairs.filter(r => r.status === '입고').length, color: REPAIR_STATUS_COLORS['입고'] },
-    { name: '수리중', value: repairs.filter(r => r.status === '수리중').length, color: REPAIR_STATUS_COLORS['수리중'] },
-    { name: '출고대기', value: repairs.filter(r => r.status === '출고대기').length, color: REPAIR_STATUS_COLORS['출고대기'] },
+    { name: '입고', value: intake, color: REPAIR_STATUS_COLORS['입고'] },
+    { name: '수리중', value: repairing, color: REPAIR_STATUS_COLORS['수리중'] },
+    { name: '출고대기', value: waiting, color: REPAIR_STATUS_COLORS['출고대기'] },
+    { name: '본사', value: hqHeld, color: REPAIR_MEANING_COLORS['본사'] },
   ]
 
-  // ── 적체 Top 5 (미출고, 경과일 내림차순) ──
-  const stuck = repairs
+  // ── 적체 Top 5 (미출고, 경과일 내림차순) — 특이사항 제외(본사 발송 중 건이 적체로 잡히지 않게) ──
+  const stuck = excludeSpecial(repairs)
     .filter(r => r.status !== '출고완료')
     .map(r => ({ r, aging: getAgingDays(r) }))
     .sort((a, b) => b.aging - a.aging)
@@ -525,8 +584,8 @@ export default function RepairDashboardPage() {
     <div style={{ background: PAGE_BG, minHeight: 'calc(100vh - 44px)', padding: 16, boxSizing: 'border-box' }}>
       <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <style>{`
-          /* KPI: 3열 × 2줄 고정, 좁아지면 2열 → 1열 */
-          .repair-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+          /* KPI: 4열 × 3줄(12칸) 고정, 좁아지면 2열 → 1열 */
+          .repair-kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
           @media (max-width: 900px) { .repair-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
           @media (max-width: 560px) { .repair-kpi-grid { grid-template-columns: 1fr; } }
         `}</style>
@@ -554,54 +613,69 @@ export default function RepairDashboardPage() {
           </Link>
         </div>
 
-        {/* 상단 개요: 보유 구성 + 월별 전체(왼쪽) · KPI(오른쪽), 높이 통일 */}
+        {/* 성과 통계 제외 안내 (특이사항 건) — 선택 기간 기준. 입출고·잔량·매출은 포함하고 소요일 성과에서만 제외한다. */}
+        {excludedCount > 0 && (
+          <div style={{ fontSize: 11, color: MUTED }}>
+            특이사항 건(본사수리·수리불가·수리진행안함) {excludedCount}건은 소요일 등 성과 통계에서만 제외됨
+          </div>
+        )}
+
+        {/* 1행: 현재 입고 구성(도넛) · 적체 Top5 · KPI 12칸, 높이 통일(카드 300px, 적체는 내부 스크롤) */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'stretch' }}>
-          <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+          <div style={{ flex: '1 1 260px', minWidth: 0 }}>
             {loading ? <ChartSkeleton title="현재 입고 구성" height={190} /> : <HoldDonutCard data={holdData} total={held} animate={animate} />}
           </div>
-          <div style={{ flex: '1.4 1 340px', minWidth: 0 }}>
-            {loading ? <ChartSkeleton title="전체 입출고" height={200} /> : <MonthBarCard title="전체 입출고" data={monthlyAll} animate={animate} />}
+          <div style={{ flex: '2 1 480px', minWidth: 0 }}>
+            {loading ? <ChartSkeleton title="적체 Top 5" height={200} /> : <StuckCard rows={stuck} />}
           </div>
-          <div style={{ flex: '2 1 400px', minWidth: 0 }}>
+          <div style={{ flex: '2.2 1 440px', minWidth: 0 }}>
             <div className="repair-kpi-grid" style={{ display: 'grid', gap: 8, height: '100%', gridAutoRows: '1fr' }}>
               {loading ? (
-                Array.from({ length: 9 }).map((_, i) => <KpiSkeleton key={i} />)
+                Array.from({ length: 12 }).map((_, i) => <KpiSkeleton key={i} />)
               ) : (
                 <>
-                  {/* 1줄: 재고 상태 */}
+                  {/* 1줄: 재고 상태 + 이번 달 스루풋 */}
                   <Kpi label="보유 수리품" value={held} unit="건" sub="출고완료 제외" />
-                  <Kpi label="수리중" value={repairing} unit="건" />
+                  <Kpi label="수리중" value={repairing + hqHeld} unit="건" sub={`국내 ${repairing} · 본사 ${hqHeld}`} />
                   <Kpi label="출고 대기" value={waiting} unit="건" />
-                  {/* 2줄: 소요일 (입고→출고, 평균 기준) */}
+                  <Kpi label="이번 달 출고완료" value={shippedThisMonth} unit="건" valueColor={REPAIR_MEANING_COLORS['출고완료']} />
+                  {/* 2줄: 입출고 소요일 (입고→출고, 평균) + 본사 평균 소요일 */}
                   <Kpi label="전체 입출고 평균 소요일" value={avgAll} unit="일" valueColor={leadColor(avgAll)} />
                   <Kpi label="게이지 입출고 평균 소요일" value={avgGauge} unit="일" />
                   <Kpi label="앰프 입출고 평균 소요일" value={avgAmp} unit="일" />
-                  {/* 3줄: 작업 평균 소요일 (수리 시작→완료, 평균 기준). 보조문구 없음 · 표본0이면 '데이터 축적 중' */}
+                  <Kpi label="본사 평균 소요일" value={hqAvg} unit="일" sub="복귀 완료 건" />
+                  {/* 3줄: 작업 평균 소요일 (수리 시작→완료, 평균) + 이번 달 본사 발송/복귀 */}
                   <Kpi label="전체 작업 평균 소요일" value={durAll} unit="일" noData={durAllN === 0} noSub />
                   <Kpi label="게이지 작업 평균 소요일" value={durGauge} unit="일" noData={durGaugeN === 0} noSub />
                   <Kpi label="앰프 작업 평균 소요일" value={durAmp} unit="일" noData={durAmpN === 0} noSub />
+                  <Kpi label="이번 달 본사 발송" value={hqThisMonth.requested} unit="건" sub={`복귀 ${hqThisMonth.returned}건`} valueColor={REPAIR_MEANING_COLORS['본사']} />
                 </>
               )}
             </div>
           </div>
         </div>
 
-        {/* 차트 그리드 (auto-fit, 전체폭 항목은 gridColumn 1/-1) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 8, alignItems: 'stretch' }}>
-          {loading ? <ChartSkeleton title="게이지" height={200} /> : <MonthBarCard title="게이지" data={monthlyGauge} animate={animate} />}
-          {loading ? <ChartSkeleton title="앰프" height={200} /> : <MonthBarCard title="앰프" data={monthlyAmp} animate={animate} />}
-          {loading ? <ChartSkeleton title="소요일 분포" height={190} /> : <LeadDistCard buckets={leadBuckets} total={leadTotal} animate={animate} />}
-          {loading ? <ChartSkeleton title="평균 소요일 월별 추이" height={190} /> : <LeadTrendCard data={leadTrend} animate={animate} />}
-          {loading ? <ChartSkeleton title="최근 8주 입고" height={190} /> : <WeeklyTypeCard data={weeklyType} animate={animate} />}
+        {/* 차트 영역: 행 단위 세로 스택 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* 2행: 전체 입출고 / 게이지 / 앰프 / 소요일 분포 / 최근 8주 입고 (5개 균등) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 8, alignItems: 'stretch' }}>
+            {loading ? <ChartSkeleton title="전체 입출고" height={200} /> : <MonthBarCard title="전체 입출고" data={monthlyAll} animate={animate} />}
+            {loading ? <ChartSkeleton title="게이지" height={200} /> : <MonthBarCard title="게이지" data={monthlyGauge} animate={animate} />}
+            {loading ? <ChartSkeleton title="앰프" height={200} /> : <MonthBarCard title="앰프" data={monthlyAmp} animate={animate} />}
+            {loading ? <ChartSkeleton title="입출고 소요기간 분포" height={190} /> : <LeadDistCard buckets={leadBuckets} total={leadTotal} animate={animate} />}
+            {loading ? <ChartSkeleton title="최근 8주 입고" height={190} /> : <WeeklyTypeCard data={weeklyType} animate={animate} />}
+          </div>
 
-          {/* 전체 폭 */}
-          <div style={FULL}>{loading ? <ChartSkeleton title="미출고 잔량 추이" height={190} /> : <BacklogCard data={backlog} animate={animate} />}</div>
+          {/* 3행: 월별 매출 | 월별 잔량 (좌우 반반) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, alignItems: 'stretch' }}>
+            {!revenue ? <ChartSkeleton title="월별 매출" height={190} /> : <RevenueCard data={revenue.months} unlinkedCount={revenue.unlinkedCount} animate={animate} />}
+            {loading ? <ChartSkeleton title="월별 잔량" height={190} /> : <BacklogCard data={backlog} animate={animate} />}
+          </div>
 
-          {/* 전체 폭: 주요 고객 · 모델별 · 적체 · 재입고 4분할 */}
-          <div style={{ ...FULL, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, alignItems: 'stretch' }}>
+          {/* 4행: 주요 고객 / 모델별 / 재입고 (3개 균등, 적체는 1행으로 이동) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, alignItems: 'stretch' }}>
             {loading ? <ChartSkeleton title="주요 고객 Top 5" height={190} /> : <HBarCard title="주요 고객 Top 5" data={custTop} catKey="name" height={190} animate={animate} />}
             {loading ? <ChartSkeleton title="모델별 Top 5" height={190} /> : <HBarCard title="모델별 Top 5" data={prodTop} catKey="type" height={190} animate={animate} />}
-            {loading ? <ChartSkeleton title="적체 Top 5" height={190} /> : <StuckCard rows={stuck} />}
             {loading ? <ChartSkeleton title="재입고 목록" height={190} /> : <RepeatCard rows={repeatRows} reintake={reintakeCount} total={totalCount} pct={reintakePct} />}
           </div>
         </div>
