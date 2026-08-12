@@ -489,7 +489,6 @@ export default function RepairDashboardPage() {
   // 성과 통계(소요일·소요일 분포·작업 소요일·적체)만 특이사항 건(special_type: 본사수리·수리불가·수리진행안함)을 제외한다.
   // 사실 지표(입고·출고·잔량·매출)는 특이사항을 포함한다 — 본사수리도 실제 매출·물량이므로.
   const normalPeriod = excludeSpecial(periodRepairs)
-  const excludedCount = periodRepairs.length - normalPeriod.length
 
   // ── KPI 계산 ──
   // 보유/도넛은 '미출고' 기준(status!=='출고완료'). 본사 발송 중(isAtHq)도 고객 출고 전이라 포함하되,
@@ -605,22 +604,16 @@ export default function RepairDashboardPage() {
           </Link>
         </div>
 
-        {/* 성과 통계 제외 안내 (특이사항 건) — 선택 기간 기준. 입출고·잔량·매출은 포함하고 소요일 성과에서만 제외한다. */}
-        {excludedCount > 0 && (
-          <div style={{ fontSize: 11, color: MUTED }}>
-            특이사항 건(본사수리·수리불가·수리진행안함) {excludedCount}건은 소요일 등 성과 통계에서만 제외됨
-          </div>
-        )}
-
-        {/* 1행: 현재 입고 구성(도넛) · 적체 Top5 · KPI 12칸, 높이 통일(카드 300px, 적체는 내부 스크롤) */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'stretch' }}>
-          <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+        {/* 1행: 현재 입고 구성(도넛) · 적체 Top5 · KPI 12칸, 높이 통일(카드 300px, 적체는 내부 스크롤).
+            하단 차트(2행)와 동일한 5열 그리드에 맞춘다 — 도넛=1열(전체 입출고 폭), 적체=2열(게이지+앰프 폭), KPI=2열. */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 8, alignItems: 'stretch' }}>
+          <div style={{ gridColumn: 'span 1', minWidth: 0 }}>
             {loading ? <ChartSkeleton title="현재 입고 구성" height={190} /> : <HoldDonutCard data={holdData} total={held} animate={animate} />}
           </div>
-          <div style={{ flex: '2 1 480px', minWidth: 0 }}>
+          <div style={{ gridColumn: 'span 2', minWidth: 0 }}>
             {loading ? <ChartSkeleton title="적체 Top 5" height={200} /> : <StuckCard rows={stuck} />}
           </div>
-          <div style={{ flex: '2.2 1 440px', minWidth: 0 }}>
+          <div style={{ gridColumn: 'span 2', minWidth: 0 }}>
             <div className="repair-kpi-grid" style={{ display: 'grid', gap: 8, height: '100%', gridAutoRows: '1fr' }}>
               {loading ? (
                 Array.from({ length: 12 }).map((_, i) => <KpiSkeleton key={i} />)
