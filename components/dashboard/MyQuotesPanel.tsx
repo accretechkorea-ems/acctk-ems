@@ -6,6 +6,7 @@ import { SALES_STATUS_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/c
 import { useToast } from '@/components/common/Toast'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice } from '@/lib/quoteMutations'
+import { achieveColorOf } from '@/lib/fiscal'
 
 // 대시보드 '내 견적' 패널. 실적 현황 EngineerQuoteModal 의 표시 + 관리 기능을 동일하게 구현한다.
 // mutation 은 lib/quoteMutations.ts 공용 함수 사용(직접 supabase.update/fetch 안 씀).
@@ -25,10 +26,13 @@ const pad = (n: number) => String(n).padStart(2, '0')
 
 const MONTHS_FISCAL = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
 const UNIT_DIVISOR = { month: 12, quarter: 4, half: 2, year: 1 } as const
-type Unit = keyof typeof UNIT_DIVISOR
+type PeriodUnit = keyof typeof UNIT_DIVISOR
+// 'valid' = 유효 견적(작성일+1개월 이내). 회계연도 기반 4단위와 별개로 오늘 기준 롤링 범위를 쓴다.
+type Unit = 'valid' | PeriodUnit
 const lastDay = (y: number, mm: number) => new Date(y, mm, 0).getDate()
+const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 
-function periodRange(fy: number, unit: Unit, sel: number): { start: string; end: string } {
+function periodRange(fy: number, unit: PeriodUnit, sel: number): { start: string; end: string } {
   if (unit === 'year') return { start: `${fy}-04-01`, end: `${fy + 1}-03-31` }
   if (unit === 'half') return sel === 1
     ? { start: `${fy}-04-01`, end: `${fy}-09-30` }
@@ -72,7 +76,7 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
   const supabase = useMemo(() => createClient(), [])
   const toast = useToast()
   const [quotes, setQuotes] = useState<Quote[]>([])
-  const [targetsByYear, setTargetsByYear] = useState<Record<number, number>>({})
+  const [targetsByYear, setTargetsByYear] = useState<Record<number, { target: number; orderTarget: number }>>({})
   const [loading, setLoading] = useState(true)
 
   const now = new Date()
@@ -81,7 +85,7 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
   const curQuarter = cm >= 4 && cm <= 6 ? 1 : cm >= 7 && cm <= 9 ? 2 : cm >= 10 ? 3 : 4
   const curHalf = cm >= 4 && cm <= 9 ? 1 : 2
   const [fy, setFy] = useState(curFy)
-  const [unit, setUnit] = useState<Unit>('month')
+  const [unit, setUnit] = useState<Unit>('valid')   // 기본값: 유효 견적(작성일+1개월 이내)
   const [sel, setSel] = useState(cm)
   const [statusFilter, setStatusFilter] = useState('전체')
   const [search, setSearch] = useState('')
@@ -136,9 +140,9 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
       const { data: custs } = await supabase.from('customers').select('customer_id, company_name').in('customer_id', ids as number[])
       for (const c of custs ?? []) custMap[c.customer_id] = c.company_name
     }
-    const { data: tgts } = await supabase.from('sales_targets').select('year, target_amount').eq('engineer_id', engineerId).is('quarter', null)
-    const tmap: Record<number, number> = {}
-    for (const t of tgts ?? []) if (t.year != null) tmap[t.year] = t.target_amount
+    const { data: tgts } = await supabase.from('sales_targets').select('year, target_amount, order_target_amount').eq('engineer_id', engineerId).is('quarter', null)
+    const tmap: Record<number, { target: number; orderTarget: number }> = {}
+    for (const t of tgts ?? []) if (t.year != null) tmap[t.year] = { target: t.target_amount || 0, orderTarget: t.order_target_amount || 0 }
     setQuotes(list.map(q => ({
       ...q,
       company_name: (q.customer_id != null && custMap[q.customer_id]) || '-',
@@ -168,17 +172,31 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
   }, [poQuote])
 
   // 선택 기간 → 날짜 범위. KPI·테이블 모두 이 범위 기준.
-  const { start: rangeStart, end: rangeEnd } = periodRange(fy, unit, sel)
+  // 유효 견적: 견적 유효기간(작성일+1개월)이 아직 안 지난 견적 = (오늘-1개월+1일) ~ 오늘.
+  const validStart = () => { const s = new Date(now); s.setMonth(s.getMonth() - 1); s.setDate(s.getDate() + 1); return s }
+  const { start: rangeStart, end: rangeEnd } = unit === 'valid'
+    ? { start: ymd(validStart()), end: ymd(now) }
+    : periodRange(fy, unit, sel)
   const dateFiltered = quotes.filter(q => q.quote_date >= rangeStart && q.quote_date <= rangeEnd)
   const quotedAmt = dateFiltered.reduce((s, q) => s + (q.total_supply || 0), 0)
+  // 수주 금액: 실적 현황과 동일 — 상태가 ['수주','매출완료'] 인 건의 total_supply 합.
+  const orderedAmt = dateFiltered.filter(q => ['수주', '매출완료'].includes(q.status)).reduce((s, q) => s + (q.total_supply || 0), 0)
   const revenueQuotes = dateFiltered.filter(q => q.status === '매출완료')
   const revenueAmt = revenueQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
   const profitAmt = revenueQuotes.reduce((s, q) => s + (q.total_profit || 0), 0)
   const profitRate = revenueAmt > 0 ? (profitAmt / revenueAmt * 100) : null
-  const annualTarget = targetsByYear[fy] ?? null
-  const periodTarget = annualTarget != null ? annualTarget / UNIT_DIVISOR[unit] : null
-  const achieve = periodTarget && periodTarget > 0 ? (revenueAmt / periodTarget * 100) : null
-  const achieveColor = achieve === null ? GRAY : achieve >= 100 ? '#16a34a' : achieve >= 70 ? '#f59e0b' : '#dc2626'
+
+  // ── 달성률: 선택 기간에 맞춰 연간 목표를 분할(월÷12·분기÷4·반기÷2·연간×1). 유효 견적은 월에 준해 ÷12. ──
+  //    수주 달성률 = 수주액 / 수주목표(order_target_amount), 매출 달성률 = 매출액 / 매출목표(target_amount).
+  const divisor = unit === 'valid' ? 12 : UNIT_DIVISOR[unit]
+  const targetYear = unit === 'valid' ? curFy : fy   // 유효 견적은 현재 회계연도 목표 기준
+  const yearTargets = targetsByYear[targetYear]
+  const salesTarget = yearTargets ? Math.round(yearTargets.target / divisor) : 0
+  const orderTarget = yearTargets ? Math.round(yearTargets.orderTarget / divisor) : 0
+  const achieve = salesTarget > 0 ? (revenueAmt / salesTarget * 100) : null
+  const orderAchieve = orderTarget > 0 ? (orderedAmt / orderTarget * 100) : null
+  const achieveColor = achieveColorOf(achieve)
+  const orderAchieveColor = achieveColorOf(orderAchieve)
 
   const filtered = dateFiltered.filter(q => {
     const matchSearch = !search.trim() ||
@@ -271,14 +289,24 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
         ) : (
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 13 }}>
             <div><div style={{ color: GRAY, fontSize: 11 }}>견적 제출</div><div className="num" style={{ fontWeight: 700, color: TEXT }}>₩{numKR(quotedAmt)}</div></div>
+            <div><div style={{ color: GRAY, fontSize: 11 }}>수주</div><div className="num" style={{ fontWeight: 700, color: orderedAmt > 0 ? TEXT : MUTED }}>₩{numKR(orderedAmt)}</div></div>
             <div><div style={{ color: GRAY, fontSize: 11 }}>매출 완료</div><div className="num" style={{ fontWeight: 700, color: BLUE }}>₩{numKR(revenueAmt)}</div></div>
             <div><div style={{ color: GRAY, fontSize: 11 }}>순이익</div><div className="num" style={{ fontWeight: 800, color: '#16a34a' }}>{profitAmt > 0 ? `₩${numKR(profitAmt)}` : '-'}{profitRate !== null && profitAmt > 0 && <span style={{ fontSize: 11, marginLeft: 4 }}>({profitRate.toFixed(1)}%)</span>}</div></div>
-            {achieve !== null && periodTarget !== null && (
+            {orderAchieve !== null && (
               <div>
-                <div style={{ color: GRAY, fontSize: 11 }}>목표 달성률</div>
+                <div style={{ color: GRAY, fontSize: 11 }}>수주 달성률</div>
+                <div className="num" style={{ fontWeight: 800, color: orderAchieveColor }}>
+                  {orderAchieve.toFixed(1)}%
+                  <span style={{ fontSize: 11, fontWeight: 600, color: GRAY, marginLeft: 6 }}>(목표 {numKR(orderTarget)}원)</span>
+                </div>
+              </div>
+            )}
+            {achieve !== null && (
+              <div>
+                <div style={{ color: GRAY, fontSize: 11 }}>매출 달성률</div>
                 <div className="num" style={{ fontWeight: 800, color: achieveColor }}>
                   {achieve.toFixed(1)}%
-                  <span style={{ fontSize: 11, fontWeight: 600, color: GRAY, marginLeft: 6 }}>(목표 {numKR(periodTarget)}원)</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: GRAY, marginLeft: 6 }}>(목표 {numKR(salesTarget)}원)</span>
                 </div>
               </div>
             )}
@@ -288,10 +316,14 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
 
       {/* 필터: 회계연도 + 단위 + 기간 + 검색 */}
       <div style={{ padding: '10px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <select value={fy} onChange={e => { setFy(Number(e.target.value)); setPage(1) }} style={inp}>
-          {fyOptions.map(y => <option key={y} value={y}>{y}년도</option>)}
-        </select>
+        {/* 유효 견적 모드에선 회계연도 선택이 의미 없어 숨긴다(오늘 기준 롤링 범위) */}
+        {unit !== 'valid' && (
+          <select value={fy} onChange={e => { setFy(Number(e.target.value)); setPage(1) }} style={inp}>
+            {fyOptions.map(y => <option key={y} value={y}>{y}년도</option>)}
+          </select>
+        )}
         <select value={unit} onChange={e => changeUnit(e.target.value as Unit)} style={inp}>
+          <option value="valid">유효 견적</option>
           <option value="month">월</option>
           <option value="quarter">분기</option>
           <option value="half">반기</option>
