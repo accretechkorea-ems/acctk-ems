@@ -284,10 +284,9 @@ export function cumulativeFlow(rows: Repair[]): { month: string; cumReceived: nu
 }
 
 /**
- * 이번 달을 제외한 직전 count 개월(고정 범위)의 월말 미출고 잔량 + 전월 대비 증감(delta).
+ * 이번 달을 제외한 직전 count 개월(고정 범위)의 월말 미출고 잔량.
  * 미출고 잔량은 '그 달이 끝난 시점의 잔량' 지표라 아직 진행 중인 이번 달은 값이 확정되지 않아 제외한다.
  * (예: 오늘 2026-08 → 2026-02 ~ 2026-07. 현재 잔량은 별도 KPI '현재 보유' 가 보여준다.)
- * delta = 그 달 월말 잔량 − 전월 월말 잔량. 가장 오래된 달의 delta 를 위해 한 달 앞을 추가로 계산한다.
  * 데이터가 0이어도 고정 범위라 항상 count 개월을 반환한다(0인 달도 축에 표시).
  *
  * ── 기준: '미출고'(고객에게 아직 출고되지 않음) = received_date <= endM 이고 shipped 되지 않음.
@@ -299,7 +298,7 @@ export function cumulativeFlow(rows: Repair[]): { month: string; cumReceived: nu
  *   - shipped_date 없음: 날짜 없는 레거시 '출고완료' 만 출고된 것으로 보고 제외(그 외는 미출고 → 포함).
  *   ※ 과거 버그: status==='출고완료' 를 먼저 걸러, 다음 달에 출고된 건까지 이전 달 잔량에서 빠져 과소집계됐다.
  */
-export function monthlyBacklogRecent(rows: Repair[], count = 6): { month: string; backlog: number; delta: number }[] {
+export function monthlyBacklogRecent(rows: Repair[], count = 6): { month: string; backlog: number }[] {
   const backlogAt = (m: string): number => {
     const [y, mo] = m.split('-').map(Number)
     const endM = new Date(Date.UTC(y, mo, 0)) // 그 달 마지막 날
@@ -316,10 +315,8 @@ export function monthlyBacklogRecent(rows: Repair[], count = 6): { month: string
     }
     return backlog
   }
-  // recentMonths(count+2) = 이번 달 포함 count+2 개월 → 마지막(이번 달) 하나를 떼어 '이번 달 제외 + delta 계산용 앞 1개월' 포함(count+1개).
-  const months = recentMonths(count + 2).slice(0, -1)
-  const series = months.map(m => ({ month: m, backlog: backlogAt(m) }))
-  return series.slice(1).map((cur, i) => ({ month: cur.month, backlog: cur.backlog, delta: cur.backlog - series[i].backlog }))
+  // recentMonths(count+1) = 이번 달 포함 count+1 개월 → 마지막(이번 달) 하나를 떼어 '이번 달 제외, 지난 count 개월'.
+  return recentMonths(count + 1).slice(0, -1).map(m => ({ month: m, backlog: backlogAt(m) }))
 }
 
 // ============================================================

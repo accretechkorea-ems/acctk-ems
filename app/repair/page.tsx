@@ -474,6 +474,17 @@ export default function RepairPage() {
   const specialBadge = (r: Repair) => {
     const b = r.special_type ? SPECIAL_BADGE[r.special_type] : undefined
     if (!b) return null
+    // 본사수리: '본사'가 일본 본사임을 명확히 — '일본 / 본사'를 두 줄로. 작은 글씨+좁은 line-height 로
+    // 배지 높이를 액션 버튼보다 낮게 유지해 행 높이가 변하지 않게 한다.
+    if (r.special_type === '본사수리') {
+      return (
+        <span title={r.special_type ?? undefined}
+          style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, lineHeight: 1.1, color: b.color, background: b.bg, padding: '1px 6px', borderRadius: 8, whiteSpace: 'nowrap' }}>
+          <span>일본</span>
+          <span>본사</span>
+        </span>
+      )
+    }
     return (
       <span title={r.special_type ?? undefined}
         style={{ fontSize: 11, fontWeight: 700, color: b.color, background: b.bg, padding: '2px 7px', borderRadius: 99, whiteSpace: 'nowrap' }}>
@@ -534,7 +545,7 @@ export default function RepairPage() {
                 return (
                   <button onClick={() => openHqReturn(r)}
                     style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#f5f3ff', color: '#7c3aed', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                    본사 복귀
+                    한국 도착
                   </button>
                 )
               }
@@ -614,7 +625,16 @@ export default function RepairPage() {
             <th style={th}>시리얼번호</th>
             <th style={{ ...th, textAlign: 'center' }}>출고일</th>
             <th style={{ ...th, textAlign: 'center' }}>견적</th>
-            <th style={th}>상태</th>
+            {/* 상태 컬럼 헤더 — 본문과 동일한 4구역 고정폭(80/90/44/28, gap 6)으로 '상태'·'상태 변경'을 각 구역 위에 정렬.
+                본문 td 와 좌우 padding(10) 동일하므로 x 위치가 정확히 맞는다. 배지·메모 구역 위는 비움. */}
+            <th style={{ ...th, overflow: 'visible' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 80, flexShrink: 0 }}>상태</span>
+                <span style={{ width: 90, flexShrink: 0, textAlign: 'center' }}>상태 변경</span>
+                <span style={{ width: 44, flexShrink: 0 }} />
+                <span style={{ width: 28, flexShrink: 0 }} />
+              </div>
+            </th>
             <th style={{ ...th, textAlign: 'center' }}></th>
           </tr>
         </thead>

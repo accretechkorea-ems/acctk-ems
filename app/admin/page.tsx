@@ -9,6 +9,7 @@ import { SALES_STATUS_COLORS, ROLE_COLORS, getCategoryColor } from '@/lib/catego
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
+import AutocompleteInput from '@/components/common/AutocompleteInput'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#f4f5f7'
@@ -48,7 +49,8 @@ type SalesTarget = {
   engineer_id: number | null
   year: number
   quarter: number | null
-  target_amount: number
+  target_amount: number | null        // 매출 목표
+  order_target_amount: number | null  // 수주 목표
 }
 
 type Team = {
@@ -87,7 +89,7 @@ export default function AdminPage() {
   const [targetLoading, setTargetLoading] = useState(false)
   const thisYear = new Date().getFullYear()
   const [targetYear, setTargetYear] = useState(thisYear)
-  const [editingTarget, setEditingTarget] = useState<{ engineerId: number | null; amount: string } | null>(null)
+  const [editingTarget, setEditingTarget] = useState<{ engineerId: number | null; amount: string; orderAmount: string } | null>(null)
   const [savingTarget, setSavingTarget] = useState(false)
 
   // 직원 관리
@@ -224,21 +226,27 @@ export default function AdminPage() {
 
   const handleSaveTarget = async () => {
     if (!editingTarget) return
-    if (!editingTarget.amount.trim()) {
+    const salesRaw = editingTarget.amount.trim()
+    const orderRaw = editingTarget.orderAmount.trim()
+    // 수주·매출 둘 다 비면 기존 목표 삭제
+    if (!salesRaw && !orderRaw) {
       const existing = getTarget(editingTarget.engineerId)
       if (existing) await supabase.from('sales_targets').delete().eq('target_id', existing.target_id)
       setEditingTarget(null)
       fetchTargetData()
       return
     }
-    const amount = Number(editingTarget.amount.replace(/,/g, ''))
-    if (!targetErr.validate({ amount: (isNaN(amount) || amount < 0) ? '올바른 금액을 입력해주세요' : null })) return
+    // 비어 있으면 null, 값이 있으면 숫자. 하나만 입력해도 저장.
+    const sales = salesRaw ? Number(salesRaw.replace(/,/g, '')) : null
+    const order = orderRaw ? Number(orderRaw.replace(/,/g, '')) : null
+    const bad = (v: number | null) => v != null && (isNaN(v) || v < 0)
+    if (!targetErr.validate({ amount: (bad(sales) || bad(order)) ? '올바른 금액을 입력해주세요' : null })) return
     setSavingTarget(true)
     const existing = getTarget(editingTarget.engineerId)
     if (existing) {
-      await supabase.from('sales_targets').update({ target_amount: amount }).eq('target_id', existing.target_id)
+      await supabase.from('sales_targets').update({ target_amount: sales, order_target_amount: order }).eq('target_id', existing.target_id)
     } else {
-      await supabase.from('sales_targets').insert({ engineer_id: editingTarget.engineerId, year: targetYear, quarter: null, target_amount: amount })
+      await supabase.from('sales_targets').insert({ engineer_id: editingTarget.engineerId, year: targetYear, quarter: null, target_amount: sales, order_target_amount: order })
     }
     setSavingTarget(false)
     setEditingTarget(null)
@@ -410,8 +418,12 @@ export default function AdminPage() {
 
   if (loading || !authorized) return <AccessGate loading={loading} />
 
-  // 팀별 그룹핑 (목표 금액용)
-  const teamGroups = engineers.reduce((acc, eng) => {
+  // 목표 금액 관리도 '지금 관리하는 대상' 목록 → 직원 관리 테이블과 동일하게 삭제(resigned_date 있음) 즉시 제외.
+  // (과거 기간 집계는 실적 현황이 isActiveInPeriod 로 별도 처리. 여기선 현재 재직자만.)
+  const activeEngineers = engineers.filter(e => !e.resigned_date)
+
+  // 팀별 그룹핑 (목표 금액용) — 현재 재직자만
+  const teamGroups = activeEngineers.reduce((acc, eng) => {
     const team = eng.teams ?? '미배정'
     if (!acc[team]) acc[team] = []
     acc[team].push(eng)
@@ -426,7 +438,10 @@ export default function AdminPage() {
 
   const getTeamTotal = (teamEngineers: Engineer[]) =>
     teamEngineers.reduce((s, e) => s + (getTarget(e.engineer_id)?.target_amount || 0), 0)
-  const totalAllTarget = engineers.reduce((s, e) => s + (getTarget(e.engineer_id)?.target_amount || 0), 0)
+  const getTeamTotalOrder = (teamEngineers: Engineer[]) =>
+    teamEngineers.reduce((s, e) => s + (getTarget(e.engineer_id)?.order_target_amount || 0), 0)
+  const totalAllTarget = activeEngineers.reduce((s, e) => s + (getTarget(e.engineer_id)?.target_amount || 0), 0)
+  const totalAllOrder = activeEngineers.reduce((s, e) => s + (getTarget(e.engineer_id)?.order_target_amount || 0), 0)
 
   return (
     <div style={{ background: PAGE_BG, minHeight: '100vh', padding: 24 }}>
@@ -516,7 +531,7 @@ export default function AdminPage() {
             </div>
             <div style={{ background: '#eff6ff', borderRadius: 10, padding: '12px 16px', marginBottom: 16, border: '1px solid #bfdbfe', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: BLUE }}>계측부 전체 목표</span>
-              <span style={{ fontSize: 18, fontWeight: 800, color: BLUE }}>₩{numKR(totalAllTarget)}</span>
+              <span style={{ fontSize: 14, fontWeight: 800, color: BLUE }}>수주 ₩{numKR(totalAllOrder)} · 매출 ₩{numKR(totalAllTarget)}</span>
             </div>
             <div style={{ overflowY: 'auto', flex: 1 }}>
               {targetLoading ? <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>불러오는 중...</div> : (
@@ -524,7 +539,7 @@ export default function AdminPage() {
                   <div key={team} style={{ marginBottom: 20 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, padding: '6px 0', borderBottom: `2px solid ${BORDER}` }}>
                       <span style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>{team === '미배정' ? '미배정' : team}</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: GRAY }}>소계 ₩{numKR(getTeamTotal(teamGroups[team]))}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: GRAY }}>소계 수주 ₩{numKR(getTeamTotalOrder(teamGroups[team]))} · 매출 ₩{numKR(getTeamTotal(teamGroups[team]))}</span>
                     </div>
                     {teamGroups[team].map(eng => {
                       const target = getTarget(eng.engineer_id)
@@ -536,27 +551,50 @@ export default function AdminPage() {
                             <span style={{ fontSize: 11, color: GRAY, marginLeft: 6 }}>{eng.position}</span>
                           </div>
                           {isEditing ? (
-                            <div style={{ flex: 1, display: 'flex', gap: 6, position: 'relative' }}>
-                              <input type="number" value={editingTarget.amount}
-                                onChange={e => { setEditingTarget(prev => prev ? { ...prev, amount: e.target.value } : null); targetErr.clearError('amount') }}
-                                onKeyDown={e => e.key === 'Enter' && handleSaveTarget()}
-                                placeholder="금액 입력 (비우면 삭제)" style={targetErr.errors.amount ? { ...inp, flex: 1, border: errBorder } : { ...inp, flex: 1 }} autoFocus />
+                            <div style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'flex-end', position: 'relative' }}>
+                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                <label style={{ fontSize: 11, fontWeight: 600, color: GRAY }}>수주 목표</label>
+                                <input type="number" value={editingTarget.orderAmount}
+                                  onChange={e => { setEditingTarget(prev => prev ? { ...prev, orderAmount: e.target.value } : null); targetErr.clearError('amount') }}
+                                  onKeyDown={e => e.key === 'Enter' && handleSaveTarget()}
+                                  placeholder="선택 입력" style={targetErr.errors.amount ? { ...inp, width: '100%', border: errBorder } : { ...inp, width: '100%' }} />
+                              </div>
+                              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                <label style={{ fontSize: 11, fontWeight: 600, color: GRAY }}>매출 목표</label>
+                                <input type="number" value={editingTarget.amount}
+                                  onChange={e => { setEditingTarget(prev => prev ? { ...prev, amount: e.target.value } : null); targetErr.clearError('amount') }}
+                                  onKeyDown={e => e.key === 'Enter' && handleSaveTarget()}
+                                  placeholder="선택 입력" style={targetErr.errors.amount ? { ...inp, width: '100%', border: errBorder } : { ...inp, width: '100%' }} autoFocus />
+                              </div>
                               <button onClick={handleSaveTarget} disabled={savingTarget}
-                                style={{ padding: '6px 14px', background: BLUE, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', opacity: savingTarget ? 0.7 : 1 }}>
+                                style={{ padding: '6px 14px', background: BLUE, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', opacity: savingTarget ? 0.7 : 1, whiteSpace: 'nowrap' }}>
                                 {savingTarget ? '...' : '저장'}
                               </button>
                               <button onClick={() => setEditingTarget(null)}
-                                style={{ padding: '6px 10px', background: '#f3f4f6', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>취소</button>
+                                style={{ padding: '6px 10px', background: '#f3f4f6', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>취소</button>
                               <FieldError message={targetErr.errors.amount} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 2, whiteSpace: 'nowrap' }} />
                             </div>
                           ) : (
                             <>
                               <div style={{ flex: 1 }}>
-                                {target
-                                  ? <div><span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>₩{numKR(target.target_amount)}</span><span style={{ fontSize: 11, color: GRAY, marginLeft: 8 }}>월 ₩{numKR(Math.round(target.target_amount / 12))}</span></div>
-                                  : <span style={{ fontSize: 13, color: '#d1d5db' }}>미설정</span>}
+                                {target ? (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                    <div>
+                                      <span style={{ fontSize: 11, color: GRAY, marginRight: 6 }}>수주</span>
+                                      {target.order_target_amount != null
+                                        ? <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>₩{numKR(target.order_target_amount)}</span>
+                                        : <span style={{ fontSize: 12, color: '#d1d5db' }}>미설정</span>}
+                                    </div>
+                                    <div>
+                                      <span style={{ fontSize: 11, color: GRAY, marginRight: 6 }}>매출</span>
+                                      {target.target_amount != null
+                                        ? <><span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>₩{numKR(target.target_amount)}</span><span style={{ fontSize: 11, color: GRAY, marginLeft: 8 }}>월 ₩{numKR(Math.round(target.target_amount / 12))}</span></>
+                                        : <span style={{ fontSize: 12, color: '#d1d5db' }}>미설정</span>}
+                                    </div>
+                                  </div>
+                                ) : <span style={{ fontSize: 13, color: '#d1d5db' }}>미설정</span>}
                               </div>
-                              <button onClick={() => setEditingTarget({ engineerId: eng.engineer_id, amount: target ? String(target.target_amount) : '' })}
+                              <button onClick={() => setEditingTarget({ engineerId: eng.engineer_id, amount: target?.target_amount != null ? String(target.target_amount) : '', orderAmount: target?.order_target_amount != null ? String(target.order_target_amount) : '' })}
                                 style={{ padding: '5px 12px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap' }}>
                                 {target ? '수정' : '설정'}
                               </button>
@@ -569,7 +607,7 @@ export default function AdminPage() {
                 ))
               )}
             </div>
-            <div style={{ marginTop: 12, fontSize: 12, color: GRAY }}>* 금액을 비운 채 저장하면 해당 목표가 삭제됩니다</div>
+            <div style={{ marginTop: 12, fontSize: 12, color: GRAY }}>* 수주·매출 목표는 각각 선택 입력이며, 둘 다 비운 채 저장하면 해당 목표가 삭제됩니다</div>
           </div>
         </div>
       )}
@@ -767,9 +805,8 @@ export default function AdminPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>직책 *</div>
-                  <select value={addForm.position} onChange={e => setAddForm(p => ({ ...p, position: e.target.value }))} style={inp}>
-                    {POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
+                  {/* 목록 검색 + 직접 입력(목록 외 값도 그대로 저장) */}
+                  <AutocompleteInput value={addForm.position} onChange={v => setAddForm(p => ({ ...p, position: v }))} suggestions={POSITIONS} placeholder="직책 선택 또는 직접 입력" style={inp} />
                 </div>
                 <div>
                   <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>팀 *</div>
@@ -830,9 +867,8 @@ export default function AdminPage() {
                 </div>
                 <div>
                   <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>직책</div>
-                  <select value={editForm.position} onChange={e => setEditForm(p => ({ ...p, position: e.target.value }))} style={inp}>
-                    {POSITIONS.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
+                  {/* 목록 검색 + 직접 입력(목록 외 값도 그대로 저장) */}
+                  <AutocompleteInput value={editForm.position} onChange={v => setEditForm(p => ({ ...p, position: v }))} suggestions={POSITIONS} placeholder="직책 선택 또는 직접 입력" style={inp} />
                 </div>
                 <div>
                   <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>팀 *</div>

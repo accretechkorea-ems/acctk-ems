@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { SALES_STATUS_COLORS, getCategoryColor } from '@/lib/categoryColors'
+import { SALES_STATUS_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import { useToast } from '@/components/common/Toast'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice } from '@/lib/quoteMutations'
@@ -270,7 +270,7 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
           <div style={{ fontSize: 13, color: MUTED }}>불러오는 중...</div>
         ) : (
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 13 }}>
-            <div><div style={{ color: GRAY, fontSize: 11 }}>포캐스트</div><div className="num" style={{ fontWeight: 700, color: TEXT }}>₩{numKR(quotedAmt)}</div></div>
+            <div><div style={{ color: GRAY, fontSize: 11 }}>견적 제출</div><div className="num" style={{ fontWeight: 700, color: TEXT }}>₩{numKR(quotedAmt)}</div></div>
             <div><div style={{ color: GRAY, fontSize: 11 }}>매출 완료</div><div className="num" style={{ fontWeight: 700, color: BLUE }}>₩{numKR(revenueAmt)}</div></div>
             <div><div style={{ color: GRAY, fontSize: 11 }}>순이익</div><div className="num" style={{ fontWeight: 800, color: '#16a34a' }}>{profitAmt > 0 ? `₩${numKR(profitAmt)}` : '-'}{profitRate !== null && profitAmt > 0 && <span style={{ fontSize: 11, marginLeft: 4 }}>({profitRate.toFixed(1)}%)</span>}</div></div>
             {achieve !== null && periodTarget !== null && (
@@ -323,7 +323,7 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
         {STATUS_TABS.map(s => (
           <button key={s} onClick={() => { setStatusFilter(s); setPage(1) }}
             style={{ padding: '4px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: statusFilter === s ? (s === '전체' ? BLUE : getCategoryColor(SALES_STATUS_COLORS, s).text) : '#f3f4f6', color: statusFilter === s ? '#fff' : TEXT }}>
-            {s}
+            {salesStatusLabel(s)}
           </button>
         ))}
       </div>
@@ -377,7 +377,7 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
                     <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
                         <span style={{ padding: '3px 7px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text, whiteSpace: 'nowrap', alignSelf: 'center' }}>
-                          {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : q.status}
+                          {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : salesStatusLabel(q.status)}
                         </span>
                         {showOrderInfo && (q.shipping_date || q.order_memo) && (
                           <div style={{ position: 'relative' }}
@@ -563,29 +563,29 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
       {editQuote && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: SUBMODAL_Z, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 4 }}>취소 / 실패 처리</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 4 }}>삭제 / 실패 처리</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{editQuote.quote_number} · {editQuote.company_name || ''}</div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
               {(['취소요청', '실패'] as const).map(s => (
                 <button key={s} onClick={() => setEditStatus(s)}
                   style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: `1.5px solid ${editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).bg : '#f9fafb', color: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : GRAY, transition: 'all 0.12s' }}>
-                  {s}
+                  {s === '취소요청' ? '삭제' : s}
                 </button>
               ))}
             </div>
             <div style={{ marginBottom: 6 }}>
               <div style={{ fontSize: 11, color: GRAY, marginBottom: 5, fontWeight: 600 }}>
-                {editStatus === '취소요청' ? '취소 사유' : '실패 사유'}
+                {editStatus === '취소요청' ? '삭제 사유' : '실패 사유'}
               </div>
               <textarea value={editFailReason} onChange={e => setEditFailReason(e.target.value)} rows={3}
-                placeholder={editStatus === '취소요청' ? '취소 요청 사유를 입력하세요' : '실패 사유를 입력하세요'}
+                placeholder={editStatus === '취소요청' ? '삭제 요청 사유를 입력하세요' : '실패 사유를 입력하세요'}
                 style={{ width: '100%', padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
               <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
               <button onClick={handleSave} disabled={saving}
                 style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, opacity: saving ? 0.7 : 1 }}>
-                {saving ? '처리 중...' : `${editStatus} 확정`}
+                {saving ? '처리 중...' : (editStatus === '취소요청' ? '삭제 요청' : `${editStatus} 확정`)}
               </button>
             </div>
           </div>

@@ -58,6 +58,11 @@ export const SALES_STATUS_COLORS = {
   '보류':            { text: '#6b7280', bg: '#f3f4f6' },
 } as const satisfies Record<string, CategoryColor>;
 
+/** 견적 상태값 → 화면 표시 라벨. 저장값('취소요청' 등)은 그대로 두고 표기만 바꾼다. */
+export function salesStatusLabel(status: string): string {
+  return status === '취소요청' ? '삭제 요청' : status;
+}
+
 export const DELIVERY_METHOD_COLORS = {
   '택배발송': { text: '#2563eb', bg: '#eff6ff' },
   '직납':     { text: '#15803d', bg: '#f0fdf4' },

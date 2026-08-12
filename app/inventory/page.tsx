@@ -90,6 +90,7 @@ type Engineer = {
   teams: string | null
   email: string | null
   permission_level: string | null
+  resigned_date: string | null
 }
 
 const STATUS_STYLE: Record<string, { bg: string; color: string; border: string }> = {
@@ -184,7 +185,7 @@ function InventoryPage() {
         .select('*, inventory_items(item_name, part_code, location)')
         .order('requested_at', { ascending: false }),
       supabase.from('engineers')
-        .select('engineer_id, name, position, teams, email, permission_level')
+        .select('engineer_id, name, position, teams, email, permission_level, resigned_date')
         .order('engineer_id'),
     ])
     setItems((itemsData as InventoryItem[]) ?? [])
@@ -243,7 +244,8 @@ function InventoryPage() {
       }])
       if (error) throw error
 
-      const managers = allEngineers.filter(e => canAccessSales(e))
+      // 알림 수신자(현재 시점 대상) — 삭제(퇴사)된 직원은 제외. (발주서 알림 로직과 동일 기준)
+      const managers = allEngineers.filter(e => canAccessSales(e) && !e.resigned_date)
       if (managers.length > 0) {
         await supabase.from('notifications').insert(
           managers.map(m => ({

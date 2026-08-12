@@ -18,6 +18,7 @@ type Engineer = {
   name: string
   position: string | null
   email: string | null
+  tel: string | null
 }
 
 export default function AccountPage() {
@@ -28,6 +29,7 @@ export default function AccountPage() {
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [initials, setInitials] = useState('')
+  const [tel, setTel] = useState('')   // 전화번호(선택)
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null)
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
@@ -67,6 +69,7 @@ export default function AccountPage() {
         setEngineer(engineerData)
         setName(engineerData.name ?? '')
         setInitials(engineerData.initials ?? '')
+        setTel(engineerData.tel ?? '')
         setProfileImageUrl(engineerData.profile_image_url ?? null)
       }
     }
@@ -121,6 +124,7 @@ export default function AccountPage() {
       .update({
   name: name.trim(),
   initials: initials.trim().toUpperCase() || null,
+  tel: tel.trim() || null,   // 선택 입력, 검증 없음
   profile_image_url: imageUrl,
 })
       .eq('engineer_id', engineer.engineer_id)
@@ -268,6 +272,17 @@ export default function AccountPage() {
                 style={inputStyle}
               />
             </div>
+          </div>
+
+          {/* 전화번호 (선택 입력) */}
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 13, color: TEXT_SECONDARY, marginBottom: 6 }}>전화번호</div>
+            <input
+              value={tel}
+              onChange={(e) => setTel(e.target.value)}
+              placeholder="010-1234-5678"
+              style={inputStyle}
+            />
           </div>
 
           {/* 이메일 (수정 불가) */}

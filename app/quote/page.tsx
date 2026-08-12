@@ -23,6 +23,7 @@ type Engineer = {
   position: string | null
   email: string | null
   initials: string | null
+  tel: string | null
 }
 
 type PriceItem = {
@@ -128,7 +129,10 @@ function amountToKorean(n: number): string {
 
 const THICK = 1.3
 const THIN = 0.5
-const COL = { name: '48%', qty: '7%', unit: '15%', supply: '17%', tax: '13%' }
+const COL = { seq: '5%', code: '12%', name: '38%', qty: '6%', unit: '14%', supply: '15%', tax: '10%' }
+const COL_LABEL_SPAN = '55%'  // 요약행 라벨 셀 = seq(5)+code(12)+name(38) 합, 합계값이 계속 맨 오른쪽 정렬
+// 선두 수동 번호(1. / 2) / 3.) 제거 — 자동 순번과 중복 방지. 데이터는 안 바꾸고 표시 직전에만 적용.
+const stripLeadNo = (s: string) => (s || '').replace(/^\s*\d+[.)]\s*/, '')
 
 const S = StyleSheet.create({
   page: {
@@ -136,7 +140,7 @@ const S = StyleSheet.create({
     paddingTop: 38, paddingBottom: 25, paddingLeft: 30, paddingRight: 30,
     backgroundColor: '#ffffff',
   },
-  titleText: { fontSize: 22, fontFamily: 'NotoSansCJK', letterSpacing: 8, textAlign: 'center', paddingBottom: 3 },
+  titleText: { fontSize: 22, fontFamily: 'NotoSansCJK', letterSpacing: 8, textAlign: 'center', paddingBottom: 1 },
   dateRow: { textAlign: 'center', fontSize: 10, marginBottom: 10 },
   headerRow: { flexDirection: 'row', marginBottom: 4 },
   headerLeft: { flex: 1 },
@@ -155,7 +159,7 @@ const S = StyleSheet.create({
   },
   dividerText: { fontSize: 11, fontFamily: 'NotoSansCJK', textAlign: 'center' },
   table: { width: '100%', borderWidth: THICK, borderColor: '#000' },
-  tableHeader: { flexDirection: 'row', backgroundColor: '#f4a460', borderBottomWidth: THICK, borderBottomColor: '#000' },
+  tableHeader: { flexDirection: 'row', backgroundColor: '#FFCC99', borderBottomWidth: THICK, borderBottomColor: '#000' },
   th: { borderRightWidth: THICK, borderRightColor: '#000', paddingVertical: 1, paddingHorizontal: 3, fontFamily: 'NotoSansCJK', fontSize: 9, textAlign: 'center' },
   thLast: { paddingVertical: 1, paddingHorizontal: 3, fontFamily: 'NotoSansCJK', fontSize: 9, textAlign: 'center' },
   itemRow: { flexDirection: 'row', borderTopWidth: THIN, borderTopColor: '#999', minHeight: 16 },
@@ -169,12 +173,12 @@ const S = StyleSheet.create({
 
 type PDFDocProps = {
   company: string; receiver: string; quoteNo: string; dateDisplay: string
-  titleItem: string; rows: QuoteRow[]; remarks: string; engineerName: string
+  titleItem: string; rows: QuoteRow[]; remarks: string; engineerName: string; engineerTel: string
   totalSupply: number; totalTax: number; totalAmount: number
   showWatermark?: boolean
 }
 
-const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, quoteNo, dateDisplay, titleItem, rows, remarks, engineerName, totalSupply, totalTax, totalAmount, showWatermark }: PDFDocProps) {
+const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, quoteNo, dateDisplay, titleItem, rows, remarks, engineerName, engineerTel, totalSupply, totalTax, totalAmount, showWatermark }: PDFDocProps) {
   const EMPTY_ROWS = Math.max(0, 10 - rows.length)
   return (
     <Document>
@@ -187,21 +191,21 @@ const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, quoteNo
         )}
         <View style={{ position: 'relative', marginBottom: 3 }}>
           <View style={{ alignItems: 'center', marginBottom: 0 }}>
-            <Text style={S.titleText}>見　積　書</Text>
-            <View style={{ height: 2, backgroundColor: '#000', width: 150, marginBottom: 2 }} />
-            <View style={{ height: 2, backgroundColor: '#000', width: 150 }} />
+            <Text style={S.titleText}>견　적　서</Text>
+            <View style={{ height: 1, backgroundColor: '#000', width: 150, marginBottom: 1 }} />
+            <View style={{ height: 1, backgroundColor: '#000', width: 150 }} />
           </View>
           <View style={{ position: 'absolute', right: 0, top: 8 }}>
             <Text style={{ fontSize: 9, textAlign: 'right', marginBottom: 3 }}>{quoteNo}</Text>
             {receiver ? <Text style={{ fontSize: 9, textAlign: 'right' }}>수신인 : {receiver}</Text> : null}
           </View>
         </View>
-        <Text style={S.dateRow}>西紀　{dateDisplay}</Text>
+        <Text style={S.dateRow}>{dateDisplay}</Text>
         <View style={S.headerRow}>
           <View style={S.headerLeft}>
-            <Text style={S.companyName}>{company || '　'} 貴下</Text>
-            <Text style={S.headerSubText}>下記와 如히 견적함</Text>
-            {[['1.납품일정 :', '담당자와 협의'], ['2.지불조건 :', '현금'], ['3.인도조건 :', '지정장소'], ['4.견적유효 :', '작성일로부터 1개월']].map(([label, val]) => (
+            <Text style={S.companyName}>{company || '　'} 귀하</Text>
+            <Text style={S.headerSubText}>아래와 같이 견적합니다</Text>
+            {[['1.납품일정 :', '담당자와 협의'], ['2.지불조건 :', '익월말 현금 결제'], ['3.인도조건 :', '지정장소'], ['4.견적유효 :', '작성일로부터 1개월']].map(([label, val]) => (
               <View key={label} style={S.conditionRow}>
                 <Text style={S.conditionLabel}>{label}</Text>
                 <Text style={S.conditionValue}>{val}</Text>
@@ -217,32 +221,42 @@ const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, quoteNo
           </View>
         </View>
         <View style={S.dividerBox}>
-          <Text style={S.dividerText}>一金　　{amountToKorean(totalSupply)}　　({totalSupply > 0 ? `₩${numKR(totalSupply)}` : '₩0'} -)　　부가세 별도</Text>
+          <Text style={S.dividerText}>일금　　{amountToKorean(totalSupply)}　　({totalSupply > 0 ? `₩${numKR(totalSupply)}` : '₩0'} -)　　부가세 별도</Text>
         </View>
         <View style={S.table}>
           <View style={S.tableHeader}>
-            <Text style={[S.th, { width: COL.name }]}>品　　名</Text>
-            <Text style={[S.th, { width: COL.qty }]}>數量</Text>
-            <Text style={[S.th, { width: COL.unit }]}>單價</Text>
-            <Text style={[S.th, { width: COL.supply }]}>供給價額</Text>
-            <Text style={[S.thLast, { width: COL.tax }]}>附加稅</Text>
+            <Text style={[S.th, { width: COL.seq }]}>순번</Text>
+            <Text style={[S.th, { width: COL.code }]}>품번</Text>
+            <Text style={[S.th, { width: COL.name, borderRightWidth: 0 }]}>품　　명</Text>
+            <Text style={[S.th, { width: COL.qty, borderLeftWidth: THICK, borderLeftColor: '#000' }]}>수량</Text>
+            <Text style={[S.th, { width: COL.unit }]}>단가</Text>
+            <Text style={[S.th, { width: COL.supply }]}>공급가액</Text>
+            <Text style={[S.thLast, { width: COL.tax }]}>부가세</Text>
           </View>
           {titleItem ? (
             <View style={{ flexDirection: 'row', borderBottomWidth: THICK, borderBottomColor: '#000' }}>
-              <View style={[S.td, { width: COL.name, paddingVertical: 2 }]}>
+              <View style={[S.td, { width: COL.seq }]} />
+              <View style={[S.td, { width: COL.code }]} />
+              <View style={[S.td, { width: COL.name, paddingVertical: 2, borderRightWidth: 0 }]}>
                 <Text style={{ textAlign: 'center', fontFamily: 'NotoSansCJK', fontSize: 9 }}>{titleItem}</Text>
               </View>
-              <View style={[S.td, { width: COL.qty }]} /><View style={[S.td, { width: COL.unit }]} />
+              <View style={[S.td, { width: COL.qty, borderLeftWidth: THICK, borderLeftColor: '#000' }]} /><View style={[S.td, { width: COL.unit }]} />
               <View style={[S.td, { width: COL.supply }]} /><View style={[S.tdLast, { width: COL.tax }]} />
             </View>
           ) : null}
-          {rows.map((row) => (
+          {rows.map((row, ri) => (
             <View key={row.id} style={[S.itemRow, { borderBottomWidth: THICK, borderBottomColor: '#000' }]}>
-              <View style={[S.td, { width: COL.name }]}>
-                <Text>{row.itemText}{row.selectedItem ? `(${row.selectedItem.model_jp || row.selectedItem.item_code})` : ''}</Text>
+              <View style={[S.td, { width: COL.seq, justifyContent: 'center', alignItems: 'center' }]}>
+                <Text style={{ textAlign: 'center' }}>{ri + 1}</Text>
+              </View>
+              <View style={[S.td, { width: COL.code, justifyContent: 'center', alignItems: 'center' }]}>
+                <Text style={{ textAlign: 'center' }}>{row.selectedItem?.item_code ?? ''}</Text>
+              </View>
+              <View style={[S.td, { width: COL.name, borderRightWidth: 0 }]}>
+                <Text>{stripLeadNo(row.itemText)}</Text>
                 {row.subLines.map((line, i) => line ? <Text key={i} style={{ fontSize: 8.5, marginTop: 1 }}>{line}</Text> : null)}
               </View>
-              <View style={[S.td, { width: COL.qty, justifyContent: 'center', alignItems: 'center' }]}>
+              <View style={[S.td, { width: COL.qty, borderLeftWidth: THICK, borderLeftColor: '#000', justifyContent: 'center', alignItems: 'center' }]}>
                 <Text style={{ textAlign: 'center' }}>{row.quantity > 0 ? String(row.quantity) : ''}</Text>
               </View>
               <View style={[S.td, { width: COL.unit, justifyContent: 'center', alignItems: 'flex-end' }]}>
@@ -257,29 +271,33 @@ const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, quoteNo
             </View>
           ))}
           <View style={{ flexDirection: 'row', height: EMPTY_ROWS * 18 }}>
-            <View style={{ width: COL.name, borderRightWidth: THICK, borderRightColor: '#000' }} />
-            <View style={{ width: COL.qty, borderRightWidth: THICK, borderRightColor: '#000' }} />
+            {/* 순번·품번·품명: 빈 행에선 세로 구분선을 그리지 않음(비고 영역처럼 열어둠) */}
+            <View style={{ width: COL.seq }} />
+            <View style={{ width: COL.code }} />
+            <View style={{ width: COL.name }} />
+            {/* 금액 칸(수량~부가세)은 구분선 유지. 수량 좌측선(=금액영역 시작, 55%)은 아래 비고 셀 우측선과 이어짐 */}
+            <View style={{ width: COL.qty, borderLeftWidth: THICK, borderLeftColor: '#000', borderRightWidth: THICK, borderRightColor: '#000' }} />
             <View style={{ width: COL.unit, borderRightWidth: THICK, borderRightColor: '#000' }} />
             <View style={{ width: COL.supply, borderRightWidth: THICK, borderRightColor: '#000' }} />
             <View style={{ width: COL.tax }} />
           </View>
           <View style={S.remarkRow}>
-            <View style={S.remarkContent}>
+            <View style={[S.remarkContent, { borderRightWidth: 0, justifyContent: 'flex-end' }]}>
               <Text style={[S.remarkLine, { fontFamily: 'NotoSansCJK' }]}>　비고</Text>
               {remarks.split('\n').map((line, i) => <Text key={i} style={S.remarkLine}>{line}</Text>)}
-              <Text style={[S.remarkLine, { marginTop: 2 }]}>* 담당자 : {engineerName}</Text>
+              <Text style={[S.remarkLine, { marginTop: 2 }]}>* 담당자 : {engineerName}{engineerTel ? ` (TEL : ${engineerTel})` : ''}</Text>
             </View>
-            <View style={{ width: COL.qty, borderRightWidth: THICK, borderRightColor: '#000' }} />
+            <View style={{ width: COL.qty, borderLeftWidth: THICK, borderLeftColor: '#000', borderRightWidth: THICK, borderRightColor: '#000' }} />
             <View style={{ width: COL.unit, borderRightWidth: THICK, borderRightColor: '#000' }} />
             <View style={{ width: COL.supply, borderRightWidth: THICK, borderRightColor: '#000' }} />
             <View style={{ width: COL.tax }} />
           </View>
           {[{ label: '합　　계', value: totalSupply }, { label: '부 가 세', value: totalTax }, { label: '총　　계', value: totalAmount }].map(({ label, value }) => (
             <View key={label} style={S.summaryRow}>
-              <View style={[S.td, { width: COL.name, height: 22, justifyContent: 'center', alignItems: 'center' }]}>
+              <View style={[S.td, { width: COL_LABEL_SPAN, height: 22, justifyContent: 'center', alignItems: 'center', borderRightWidth: 0 }]}>
                 <Text style={{ fontSize: 9, fontFamily: 'NotoSansCJK' }}>{label}</Text>
               </View>
-              <View style={[S.td, { width: COL.qty, height: 22 }]} />
+              <View style={[S.td, { width: COL.qty, height: 22, borderLeftWidth: THICK, borderLeftColor: '#000' }]} />
               <View style={[S.td, { width: COL.unit, height: 22 }]} />
               <View style={[S.td, { width: COL.supply, height: 22 }]} />
               <View style={[S.tdLast, { width: COL.tax, height: 22, justifyContent: 'center' }]}>
@@ -468,7 +486,7 @@ function QuotePageInner() {
   const mm = today.getMonth() + 1
   const dd = today.getDate()
   const dateStr = `${yyyy}${String(mm).padStart(2, '0')}${String(dd).padStart(2, '0')}`
-  const dateDisplay = `${yyyy}年　${String(mm).padStart(2, '0')}月　${String(dd).padStart(2, '0')}日`
+  const dateDisplay = `${yyyy}년　${String(mm).padStart(2, '0')}월　${String(dd).padStart(2, '0')}일`
 
   const [seqIndex, setSeqIndex] = useState(0)
   const seqLetter = String.fromCharCode(65 + seqIndex)
@@ -509,6 +527,7 @@ function QuotePageInner() {
   const totalProfit = rows.reduce((s, r) => s + r.profit, 0)
   const totalProfitRate = totalSupply > 0 ? (totalProfit / totalSupply) * 100 : 0
   const engineerName = engineer ? `${engineer.name} ${engineer.position || ''}`.trim() : ''
+  const engineerTel = engineer?.tel?.trim() || ''   // 견적 작성자(로그인 사용자) 전화번호. 등록 시 담당자란에 병기.
 
   // PDF용 합계 (debounced rows 기준)
   const pdfTotalSupply = debouncedRows.reduce((s, r) => s + r.supply_price, 0)
@@ -607,6 +626,7 @@ const handleDownloadPDF = async (
         rows={finalRows}
         remarks={finalRemarks}
         engineerName={engineerName}
+        engineerTel={engineerTel}
         totalSupply={finalTotalSupply}
         totalTax={finalTotalTax}
         totalAmount={finalTotalAmount}
@@ -691,6 +711,7 @@ const handleDownloadPDF = async (
       const items = rows.filter(r => r.supply_price > 0).map(r => ({
         quote_id: quoteData.quote_id,
         price_list_id: r.selectedItem?.id ?? null,
+        part_code: r.selectedItem?.item_code ?? null,   // 품번 스냅샷(가격표 변경돼도 과거 견적 유지). 직접 입력 품목은 null.
         product_name: r.itemText || r.selectedItem?.model_jp || '',
         quantity: r.quantity,
         unit_price_jpy: r.selectedItem?.cost_jpy ?? null,
@@ -1123,8 +1144,10 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   <label style={{ fontSize: 12, color: '#6b7280', width: 44, flexShrink: 0 }}>품명</label>
+                  {/* 자동 순번 — 품명 입력칸 앞에 표시(PDF 순번 컬럼과 동일한 행 순서) */}
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#234ea2', flexShrink: 0, minWidth: 16, textAlign: 'right' }}>{rowIdx + 1}.</span>
                   <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-                    <input className="q-input" value={row.itemText} onChange={e => updateRow(row.id, 'itemText', e.target.value)} placeholder="예: 1. 스타일러스" style={{ ...inp, width: '100%', paddingRight: 56 }} />
+                    <input className="q-input" value={row.itemText} onChange={e => updateRow(row.id, 'itemText', e.target.value)} placeholder="예: 스타일러스" style={{ ...inp, width: '100%', paddingRight: 56 }} />
                     <button onClick={() => addSubLine(row.id)}
                       title="상세 내용 줄 추가"
                       style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', padding: '2px 6px', background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', transition: 'color 0.15s ease' }}
@@ -1341,6 +1364,7 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                     rows={debouncedRows}
                     remarks={debouncedFinalRemarks}
                     engineerName={engineerName}
+                    engineerTel={engineerTel}
                     totalSupply={pdfTotalSupply}
                     totalTax={pdfTotalTax}
                     totalAmount={pdfTotalAmount}

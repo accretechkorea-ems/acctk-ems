@@ -286,29 +286,21 @@ function WeeklyTypeCard({ data, animate }: { data: { week: string; gauge: number
   )
 }
 
-// ── 미출고 잔량 추이 (막대: 월말 잔량 + 숫자 라벨, 위에 전월 대비 증감 +/- 색 구분) ──
-function BacklogCard({ data, animate }: { data: { month: string; backlog: number; delta: number }[]; animate: boolean }) {
-  // 증감 색은 팔레트 값: 증가=경고(WARN #be123c), 감소=안전(C_GREEN #22c55e).
+// ── 미출고 잔량 추이 (막대: 월말 잔량 + 숫자 라벨) ──
+function BacklogCard({ data, animate }: { data: { month: string; backlog: number }[]; animate: boolean }) {
+  // 막대 위에 월말 잔량 숫자만 표시(전월 대비 증감 제거).
   const renderLabel = (props: { x?: number | string; y?: number | string; width?: number | string; index?: number }) => {
     const x = Number(props.x ?? 0), y = Number(props.y ?? 0), width = Number(props.width ?? 0), index = props.index ?? 0
     const d = data[index]
     if (!d) return null
-    const cx = x + width / 2
-    const deltaColor = d.delta > 0 ? WARN : d.delta < 0 ? C_GREEN : MUTED
-    const deltaText = d.delta > 0 ? `+${d.delta}` : String(d.delta) // 음수는 이미 '-' 포함
-    return (
-      <g>
-        <text x={cx} y={y - 22} textAnchor="middle" fontSize={11} fontWeight={700} fill={deltaColor}>{deltaText}</text>
-        <text x={cx} y={y - 6} textAnchor="middle" fontSize={13} fontWeight={700} fill={TEXT}>{d.backlog}</text>
-      </g>
-    )
+    return <text x={x + width / 2} y={y - 6} textAnchor="middle" fontSize={13} fontWeight={700} fill={TEXT}>{d.backlog}</text>
   }
   return (
     <div style={chartCardStyle}>
       <CardTitle title="월별 잔량" />
       <div style={chartArea}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 34, right: 8, bottom: 0, left: 0 }}>
+          <BarChart data={data} margin={{ top: 22, right: 8, bottom: 0, left: 0 }}>
             <CartesianGrid vertical={false} stroke={BORDER} />
             <XAxis dataKey="month" tickFormatter={(m: string) => m.slice(2).replace('-', '.')} tick={AXIS_TICK} axisLine={{ stroke: BORDER }} tickLine={false} />
             <YAxis allowDecimals={false} width={32} tick={AXIS_TICK} axisLine={{ stroke: BORDER }} tickLine={false} />
