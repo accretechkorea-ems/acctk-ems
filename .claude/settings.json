@@ -32,7 +32,9 @@
       "Bash(grep -nA2 'marginTop: 8' app/dashboard/page.tsx)",
       "PowerShell(npx tsc --noEmit 2>&1)",
       "Bash(echo \"=== exit $? ===\")",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "PowerShell(npm run lint)",
+      "Bash(grep -oE \"[a-z@/-]+[a-z-]$\")"
     ]
   }
 }
