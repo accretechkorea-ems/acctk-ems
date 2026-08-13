@@ -173,12 +173,12 @@ const S = StyleSheet.create({
 
 type PDFDocProps = {
   company: string; receiver: string; quoteNo: string; dateDisplay: string
-  titleItem: string; rows: QuoteRow[]; remarks: string; engineerName: string; engineerTel: string
+  rows: QuoteRow[]; remarks: string; engineerName: string; engineerTel: string
   totalSupply: number; totalTax: number; totalAmount: number
   showWatermark?: boolean
 }
 
-const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, quoteNo, dateDisplay, titleItem, rows, remarks, engineerName, engineerTel, totalSupply, totalTax, totalAmount, showWatermark }: PDFDocProps) {
+const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, quoteNo, dateDisplay, rows, remarks, engineerName, engineerTel, totalSupply, totalTax, totalAmount, showWatermark }: PDFDocProps) {
   const EMPTY_ROWS = Math.max(0, 10 - rows.length)
   return (
     <Document>
@@ -233,17 +233,6 @@ const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, quoteNo
             <Text style={[S.th, { width: COL.supply }]}>공급가액</Text>
             <Text style={[S.thLast, { width: COL.tax }]}>부가세</Text>
           </View>
-          {titleItem ? (
-            <View style={{ flexDirection: 'row', borderBottomWidth: THICK, borderBottomColor: '#000' }}>
-              <View style={[S.td, { width: COL.seq }]} />
-              <View style={[S.td, { width: COL.code }]} />
-              <View style={[S.td, { width: COL.name, paddingVertical: 2, borderRightWidth: 0 }]}>
-                <Text style={{ textAlign: 'center', fontFamily: 'NotoSansCJK', fontSize: 9 }}>{titleItem}</Text>
-              </View>
-              <View style={[S.td, { width: COL.qty, borderLeftWidth: THICK, borderLeftColor: '#000' }]} /><View style={[S.td, { width: COL.unit }]} />
-              <View style={[S.td, { width: COL.supply }]} /><View style={[S.tdLast, { width: COL.tax }]} />
-            </View>
-          ) : null}
           {rows.map((row, ri) => (
             <View key={row.id} style={[S.itemRow, { borderBottomWidth: THICK, borderBottomColor: '#000' }]}>
               <View style={[S.td, { width: COL.seq, justifyContent: 'center', alignItems: 'center' }]}>
@@ -443,7 +432,6 @@ function QuotePageInner() {
 
   const [company, setCompany] = useState('')
   const [receiver, setReceiver] = useState('')
-  const [titleItem, setTitleItem] = useState('')
   const [remarks, setRemarks] = useState('* 발주 진행 시 팩스 또는 메일로 발주서 회신 요망\n   (FAX : 031-786-4090)')
   const [delivery, setDelivery] = useState('')
   const [isDealer, setIsDealer] = useState(false)
@@ -494,7 +482,6 @@ function QuotePageInner() {
   // ── PDF용 debounced 값 (600ms 지연) ─────────────────────────────────────────
   const debouncedCompany = useDebounce(company || customerQuery, 600)
   const debouncedReceiver = useDebounce(receiver, 600)
-  const debouncedTitleItem = useDebounce(titleItem, 600)
   const debouncedRows = useDebounce(rows, 600)
 
   const finalRemarksForPDF = (() => {
@@ -590,14 +577,12 @@ function QuotePageInner() {
 const handleDownloadPDF = async (
     overrideCompany?: string,
     overrideReceiver?: string,
-    overrideTitleItem?: string,
     overrideRows?: QuoteRow[],
     overrideRemarks?: string,
     overrideQuoteNo?: string,
   ) => {
     const finalCompany = overrideCompany ?? (company || customerQuery)
     const finalReceiver = overrideReceiver ?? receiver
-    const finalTitleItem = overrideTitleItem ?? titleItem
     const finalRows = overrideRows ?? rows
     const finalRemarks = overrideRemarks ?? finalRemarksForPDF
     const finalQuoteNo = overrideQuoteNo ?? quoteNo
@@ -622,7 +607,6 @@ const handleDownloadPDF = async (
         receiver={finalReceiver}
         quoteNo={finalQuoteNo}
         dateDisplay={dateDisplay}
-        titleItem={finalTitleItem}
         rows={finalRows}
         remarks={finalRemarks}
         engineerName={engineerName}
@@ -701,7 +685,6 @@ const handleDownloadPDF = async (
           quote_type: quoteType,
           status: initialStatus,
           recipient: receiver,
-          subject: titleItem,
           note: finalRemarksForPDF,
           pdf_url: `quote-pdfs/${quoteNo}.pdf`,
         }).select().single()
@@ -1017,11 +1000,6 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', width: 56, flexShrink: 0 }}>수신인</span>
               <input className="q-input" value={receiver} onChange={e => setReceiver(e.target.value)} placeholder="예: 홍길동 부장님" style={{ ...inp, flex: 1 }} />
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', width: 56, flexShrink: 0 }}>견적 내용</span>
-              <input className="q-input" value={titleItem} onChange={e => setTitleItem(e.target.value)} placeholder="예: 측정기 부품 견적의 건" style={{ ...inp, flex: 1 }} />
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -1360,7 +1338,6 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                     receiver={debouncedReceiver}
                     quoteNo={quoteNo}
                     dateDisplay={dateDisplay}
-                    titleItem={debouncedTitleItem}
                     rows={debouncedRows}
                     remarks={debouncedFinalRemarks}
                     engineerName={engineerName}
@@ -1422,12 +1399,11 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                 setShowConfirmModal(false)
                 const snapshotCompany = company || customerQuery
                 const snapshotReceiver = receiver
-                const snapshotTitleItem = titleItem
                 const snapshotRows = [...rows]
                 const snapshotRemarks = finalRemarksForPDF
                 const snapshotQuoteNo = quoteNo
                 const linked = await handleSaveQuote()
-                await handleDownloadPDF(snapshotCompany, snapshotReceiver, snapshotTitleItem, snapshotRows, snapshotRemarks, snapshotQuoteNo)
+                await handleDownloadPDF(snapshotCompany, snapshotReceiver, snapshotRows, snapshotRemarks, snapshotQuoteNo)
                 setSeqIndex(prev => prev + 1)
                 // 수리 건 연결이 됐으면 PDF 생성 후 수리 목록으로 이동
                 if (linked) router.push('/repair')
