@@ -13,11 +13,12 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: caller } = await supabase
+  const { data: caller, error: callerErr } = await supabase
     .from('engineers')
     .select('engineer_id, name, position, permission_level, teams')
     .eq('email', user.email!)
     .single()
+  if (callerErr) console.error(' caller lookup failed', { email: user.email, error: callerErr })
   if (!caller) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const formData = await req.formData()
@@ -33,11 +34,12 @@ export async function POST(req: Request) {
   // service role(supabaseAdmin)로 조회해 RLS 를 우회하므로, 아래에서 engineer_id 를 명시적으로 비교한다.
   const privileged = canAccessSales(caller)
   if (!privileged) {
-    const { data: ownerQuote } = await supabaseAdmin
+    const { data: ownerQuote, error: ownerErr } = await supabaseAdmin
       .from('quotes')
       .select('engineer_id')
       .eq('quote_id', Number(quoteId))
       .single()
+    if (ownerErr) console.error(' owner lookup failed', { action, quoteId, error: ownerErr })
     if (!ownerQuote || ownerQuote.engineer_id !== caller.engineer_id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -71,25 +73,27 @@ export async function POST(req: Request) {
     const deliveryMethod = formData.get('deliveryMethod') as string | null
     const deliveryAddress = formData.get('deliveryAddress') as string | null
 
-    await supabaseAdmin.from('quotes').update({
+    const { error: updErr } = await supabaseAdmin.from('quotes').update({
       status: '발주(주문 대기)',
       purchase_order_url: `purchase_orders/${fileName}`,
       purchase_order_at: new Date().toISOString(),
       delivery_method: deliveryMethod || null,
       delivery_info: deliveryAddress || null,
     }).eq('quote_id', Number(quoteId))
+    if (updErr) console.error(' quotes update failed', { action, quoteId, error: updErr })
 
     // 영업관리팀 + superadmin 알림
-    const { data: allEng } = await supabaseAdmin
+    const { data: allEng, error: engErr } = await supabaseAdmin
       .from('engineers')
       .select('engineer_id, teams, permission_level, resigned_date')
+    if (engErr) console.error(' engineers lookup failed', { action, quoteId, error: engErr })
 
     const targets = (allEng || []).filter((e: { engineer_id: number; teams: string | null; permission_level: string; resigned_date: string | null }) =>
       canAccessSales(e) && !e.resigned_date && e.engineer_id !== caller.engineer_id
     )
 
     if (targets.length > 0) {
-      await supabaseAdmin.from('notifications').insert(
+      const { error: notiErr } = await supabaseAdmin.from('notifications').insert(
         targets.map((m: { engineer_id: number }) => ({
           engineer_id: m.engineer_id,
           title: '📦 발주서 등록',
@@ -99,6 +103,7 @@ export async function POST(req: Request) {
           is_read: false,
         }))
       )
+      if (notiErr) console.error(' notification insert failed', { action, quoteId, targets: targets.length, error: notiErr })
     }
     return NextResponse.json({ success: true })
   }
@@ -108,23 +113,25 @@ export async function POST(req: Request) {
     const shippingDate = formData.get('shippingDate') as string | null
     const orderMemo = formData.get('orderMemo') as string | null
 
-    const { data: quote } = await supabaseAdmin
+    const { data: quote, error: quoteErr } = await supabaseAdmin
       .from('quotes')
       .select('quote_number, engineer_id')
       .eq('quote_id', Number(quoteId))
       .single()
+    if (quoteErr) console.error(' quote lookup failed', { action, quoteId, error: quoteErr })
 
-    await supabaseAdmin.from('quotes').update({
+    const { error: updErr } = await supabaseAdmin.from('quotes').update({
       status: '주문완료',
       shipping_date: shippingDate || null,
       order_memo: orderMemo || null,
       order_completed_at: new Date().toISOString(),
       order_completed_by: senderLabel,
     }).eq('quote_id', Number(quoteId))
+    if (updErr) console.error(' quotes update failed', { action, quoteId, error: updErr })
 
     // 견적 발행자에게 알림
     if (quote?.engineer_id && quote.engineer_id !== caller.engineer_id) {
-      await supabaseAdmin.from('notifications').insert({
+      const { error: notiErr } = await supabaseAdmin.from('notifications').insert({
         engineer_id: quote.engineer_id,
         title: '✅ 주문 완료',
         message: `[${quote.quote_number}] 주문이 완료되었습니다.${shippingDate ? ` 출하 예정: ${shippingDate}` : ''}`,
@@ -132,6 +139,7 @@ export async function POST(req: Request) {
         link: '/sales',
         is_read: false,
       })
+      if (notiErr) console.error(' notification insert failed', { action, quoteId, error: notiErr })
     }
     return NextResponse.json({ success: true })
   }
@@ -140,28 +148,31 @@ export async function POST(req: Request) {
   if (action === 'request_tax') {
     const taxDate = formData.get('taxDate') as string | null
 
-    await supabaseAdmin.from('quotes').update({
+    const { error: updErr } = await supabaseAdmin.from('quotes').update({
       status: '세금계산서 요청',
       tax_invoice_date: taxDate || null,
       tax_invoice_requested_at: new Date().toISOString(),
     }).eq('quote_id', Number(quoteId))
+    if (updErr) console.error(' quotes update failed', { action, quoteId, error: updErr })
 
-    const { data: taxAllEng } = await supabaseAdmin
+    const { data: taxAllEng, error: taxEngErr } = await supabaseAdmin
       .from('engineers')
       .select('engineer_id, teams, permission_level, resigned_date')
+    if (taxEngErr) console.error(' engineers lookup failed', { action, quoteId, error: taxEngErr })
 
     const taxTargets = (taxAllEng || []).filter((e: { engineer_id: number; teams: string | null; permission_level: string; resigned_date: string | null }) =>
       canAccessSales(e) && !e.resigned_date && e.engineer_id !== caller.engineer_id
     )
 
-    const { data: quote } = await supabaseAdmin
+    const { data: quote, error: quoteErr } = await supabaseAdmin
       .from('quotes')
       .select('quote_number')
       .eq('quote_id', Number(quoteId))
       .single()
+    if (quoteErr) console.error(' quote lookup failed', { action, quoteId, error: quoteErr })
 
     if (taxTargets.length > 0) {
-      await supabaseAdmin.from('notifications').insert(
+      const { error: notiErr } = await supabaseAdmin.from('notifications').insert(
         taxTargets.map((m: { engineer_id: number }) => ({
           engineer_id: m.engineer_id,
           title: '🧾 세금계산서 발행 요청',
@@ -171,26 +182,29 @@ export async function POST(req: Request) {
           is_read: false,
         }))
       )
+      if (notiErr) console.error(' notification insert failed', { action, quoteId, targets: taxTargets.length, error: notiErr })
     }
     return NextResponse.json({ success: true })
   }
 
   // 세금계산서 발행완료
   if (action === 'complete_tax') {
-    const { data: quote } = await supabaseAdmin
+    const { data: quote, error: quoteErr } = await supabaseAdmin
       .from('quotes')
       .select('quote_number, engineer_id')
       .eq('quote_id', Number(quoteId))
       .single()
+    if (quoteErr) console.error(' quote lookup failed', { action, quoteId, error: quoteErr })
 
-    await supabaseAdmin.from('quotes').update({
+    const { error: updErr } = await supabaseAdmin.from('quotes').update({
       status: '매출완료',
       tax_invoice_completed_at: new Date().toISOString(),
       tax_completed_by: senderLabel,
     }).eq('quote_id', Number(quoteId))
+    if (updErr) console.error(' quotes update failed', { action, quoteId, error: updErr })
 
     if (quote?.engineer_id && quote.engineer_id !== caller.engineer_id) {
-      await supabaseAdmin.from('notifications').insert({
+      const { error: notiErr } = await supabaseAdmin.from('notifications').insert({
         engineer_id: quote.engineer_id,
         title: '🎉 세금계산서 발행 완료',
         message: `[${quote.quote_number}] 세금계산서가 발행되었습니다. 매출 완료 처리되었습니다.`,
@@ -198,6 +212,7 @@ export async function POST(req: Request) {
         link: '/sales',
         is_read: false,
       })
+      if (notiErr) console.error(' notification insert failed', { action, quoteId, error: notiErr })
     }
     return NextResponse.json({ success: true })
   }
@@ -207,22 +222,24 @@ export async function POST(req: Request) {
     const shippingDate = formData.get('shippingDate') as string | null
     const orderMemo = formData.get('orderMemo') as string | null
 
-    const { data: quote } = await supabaseAdmin
+    const { data: quote, error: quoteErr } = await supabaseAdmin
       .from('quotes')
       .select('quote_number, engineer_id')
       .eq('quote_id', Number(quoteId))
       .single()
+    if (quoteErr) console.error(' quote lookup failed', { action, quoteId, error: quoteErr })
 
-    await supabaseAdmin.from('quotes').update({
+    const { error: updErr } = await supabaseAdmin.from('quotes').update({
       shipping_date: shippingDate || null,
       order_memo: orderMemo || null,
     }).eq('quote_id', Number(quoteId))
+    if (updErr) console.error(' quotes update failed', { action, quoteId, error: updErr })
 
     if (quote?.engineer_id && quote.engineer_id !== caller.engineer_id) {
       const parts: string[] = []
       if (shippingDate) parts.push(`출하 예정: ${shippingDate}`)
       if (orderMemo) parts.push(`메모: ${orderMemo}`)
-      await supabaseAdmin.from('notifications').insert({
+      const { error: notiErr } = await supabaseAdmin.from('notifications').insert({
         engineer_id: quote.engineer_id,
         title: '📅 출하일정/메모 업데이트',
         message: `[${quote.quote_number}] ${senderLabel}이(가) 일정/메모를 수정했습니다.${parts.length > 0 ? ' ' + parts.join(' / ') : ''}`,
@@ -230,6 +247,7 @@ export async function POST(req: Request) {
         link: '/sales',
         is_read: false,
       })
+      if (notiErr) console.error(' notification insert failed', { action, quoteId, error: notiErr })
     }
     return NextResponse.json({ success: true })
   }
@@ -257,10 +275,11 @@ export async function GET(req: Request) {
   }
 
   // DB에서 해당 파일이 실제 발주서인지 확인 (RLS 적용됨)
-  const { count } = await supabase
+  const { count, error: countErr } = await supabase
     .from('quotes')
     .select('quote_id', { count: 'exact', head: true })
     .eq('purchase_order_url', `purchase_orders/${fileName}`)
+  if (countErr) console.error(' GET quote lookup failed', { fileName, error: countErr })
   if (!count || count === 0) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }

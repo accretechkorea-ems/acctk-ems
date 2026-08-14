@@ -125,6 +125,7 @@ export default function Header() {
     { label: '80', canAccess: canAccess80, children: [{ label: '고객사 현황', path: '/' }] },
     { label: '20', canAccess: canAccess20, children: [{ label: '입고 등록', path: '/repair' }, { label: '수리 현황 대시보드', path: '/repair/dashboard' }] },
     { label: '견적서', canAccess: canAccessQuote, path: '/quote' },
+    { label: '건의사항', canAccess: canAccessQuote, path: '/suggestions' },
     { label: '영업관리', canAccess: canAccessSales, children: [{ label: '발주관리', path: '/purchase' }, { label: '재고관리', path: '/inventory' }] },
     { label: '관리자', canAccess: canAccessAdmin, children: [{ label: '실적 현황', path: '/sales' }, { label: '활동 현황', path: '/activity' }] },
     { label: '유지보수', canAccess: canAccessMaintenance, path: '/admin' },

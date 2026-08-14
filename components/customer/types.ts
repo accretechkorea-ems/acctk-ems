@@ -67,7 +67,6 @@ export type Quote = {
   total_profit: number | null
   profit_rate: number | null
   status: string
-  subject: string | null
   recipient: string | null
   order_date: string | null
   revenue_date: string | null

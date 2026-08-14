@@ -1,415 +1,23 @@
 'use client'
 
-import React, { useEffect, useState, useCallback, useRef, Suspense } from 'react'
+import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { usePageGuard } from '@/hooks/usePageGuard'
+import { useOutsideClick } from '@/hooks/useOutsideClick'
 import AccessGate from '@/components/common/AccessGate'
 import { canAccessQuote } from '@/lib/permissions'
-import {
-  Document, Page, Text, View, StyleSheet, Image, BlobProvider, Font, pdf
-} from '@react-pdf/renderer'
-
-Font.register({
-  family: 'NotoSansCJK',
-  src: 'https://fonts.gstatic.com/s/notosanskr/v36/PbyxFmXiEBPT4ITbgNA5Cgms3VYcOA-vvnIzzuoyeLTq8H4hfeE.ttf',
-})
-
-type Engineer = {
-  engineer_id: number
-  name: string
-  position: string | null
-  email: string | null
-  initials: string | null
-  tel: string | null
-}
-
-type PriceItem = {
-  id: number
-  sheet_name: string
-  item_code: string
-  item_name_jp: string | null
-  model_jp: string | null
-  item_name_en: string | null
-  model_en: string | null
-  price_jpy: number | null
-  cost_jpy: number | null
-  delivery_time: string | null
-  stock_quantity: number | null
-}
-
-type CustomerResult = {
-  customer_id: number
-  company_name: string
-  address: string | null
-  status: string | null
-}
-
-type QuoteRow = {
-  id: string
-  itemText: string
-  selectedItem: PriceItem | null
-  subLines: string[]
-  quantity: number
-  manual_unit_price: number
-  tariff_rate: number
-  exchange_rate: number
-  profit_rate: number
-  unit_price: number
-  supply_price: number
-  tax: number
-  cost_price_jpy: number
-  product_price: number
-  profit: number
-}
-
-function calcRow(row: QuoteRow, rate: number): QuoteRow {
-  const exRate = rate || row.exchange_rate
-  if (row.selectedItem?.cost_jpy && exRate) {
-    const costJpy = row.selectedItem.cost_jpy
-    const rawUnit = (costJpy * exRate * row.tariff_rate) / (1 - row.profit_rate / 100)
-    const unitPrice = Math.ceil(rawUnit / 1000) * 1000
-    const supplyPrice = unitPrice * row.quantity
-    const tax = Math.round(supplyPrice * 0.1)
-    const productPrice = Math.round(costJpy * exRate * row.tariff_rate * row.quantity)
-    return {
-      ...row, exchange_rate: exRate,
-      cost_price_jpy: costJpy, unit_price: unitPrice,
-      supply_price: supplyPrice, tax,
-      product_price: productPrice, profit: supplyPrice - productPrice,
-    }
-  } else {
-    const unitPrice = row.manual_unit_price
-    const supplyPrice = unitPrice * row.quantity
-    const tax = Math.round(supplyPrice * 0.1)
-    return {
-      ...row, exchange_rate: exRate,
-      unit_price: unitPrice, supply_price: supplyPrice, tax,
-      cost_price_jpy: 0, product_price: 0, profit: supplyPrice,
-    }
-  }
-}
-
-function createRow(): QuoteRow {
-  return {
-    id: Math.random().toString(36).slice(2),
-    itemText: '', selectedItem: null, subLines: [],
-    quantity: 1, manual_unit_price: 0,
-    tariff_rate: 1.13, exchange_rate: 0, profit_rate: 40,
-    unit_price: 0, supply_price: 0, tax: 0,
-    cost_price_jpy: 0, product_price: 0, profit: 0,
-  }
-}
-
-const numKR = (n: number) => n.toLocaleString('ko-KR')
-
-function amountToKorean(n: number): string {
-  if (n === 0) return '영원 정'
-  const units = ['', '만', '억', '조']
-  const nums = ['영', '일', '이', '삼', '사', '오', '육', '칠', '팔', '구']
-  let result = '', unitIdx = 0, num = n
-  while (num > 0) {
-    const chunk = num % 10000
-    if (chunk > 0) {
-      let s = ''
-      const t = Math.floor(chunk / 1000), h = Math.floor((chunk % 1000) / 100)
-      const te = Math.floor((chunk % 100) / 10), o = chunk % 10
-      if (t > 0) s += (t > 1 ? nums[t] : '') + '천'
-      if (h > 0) s += (h > 1 ? nums[h] : '') + '백'
-      if (te > 0) s += (te > 1 ? nums[te] : '') + '십'
-      if (o > 0) s += nums[o]
-      result = s + units[unitIdx] + result
-    }
-    num = Math.floor(num / 10000); unitIdx++
-  }
-  return result + '원 정'
-}
-
-const THICK = 1.3
-const THIN = 0.5
-const COL = { seq: '5%', code: '12%', name: '38%', qty: '6%', unit: '14%', supply: '15%', tax: '10%' }
-const COL_LABEL_SPAN = '55%'  // 요약행 라벨 셀 = seq(5)+code(12)+name(38) 합, 합계값이 계속 맨 오른쪽 정렬
-// 선두 수동 번호(1. / 2) / 3.) 제거 — 자동 순번과 중복 방지. 데이터는 안 바꾸고 표시 직전에만 적용.
-const stripLeadNo = (s: string) => (s || '').replace(/^\s*\d+[.)]\s*/, '')
-
-const S = StyleSheet.create({
-  page: {
-    fontFamily: 'NotoSansCJK', fontSize: 9,
-    paddingTop: 38, paddingBottom: 25, paddingLeft: 30, paddingRight: 30,
-    backgroundColor: '#ffffff',
-  },
-  titleText: { fontSize: 22, fontFamily: 'NotoSansCJK', letterSpacing: 8, textAlign: 'center', paddingBottom: 1 },
-  dateRow: { textAlign: 'center', fontSize: 10, marginBottom: 10 },
-  headerRow: { flexDirection: 'row', marginBottom: 4 },
-  headerLeft: { flex: 1 },
-  companyName: { fontSize: 12, fontFamily: 'NotoSansCJK', textDecoration: 'underline', marginBottom: 4 },
-  headerSubText: { fontSize: 10, marginBottom: 5 },
-  conditionRow: { flexDirection: 'row', marginBottom: 3 },
-  conditionLabel: { fontSize: 10, width: 85, paddingLeft: 8 },
-  conditionValue: { fontSize: 10 },
-  headerRight: { width: 195, alignItems: 'flex-start' },
-  logo: { width: 125, height: 30, marginBottom: 4 },
-  headerRightText: { fontSize: 9.5, textAlign: 'left', marginBottom: 2 },
-  dividerBox: {
-    borderTopWidth: THICK, borderColor: '#000',
-    paddingVertical: 4, marginTop: 5, marginBottom: 0,
-    flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
-  },
-  dividerText: { fontSize: 11, fontFamily: 'NotoSansCJK', textAlign: 'center' },
-  table: { width: '100%', borderWidth: THICK, borderColor: '#000' },
-  tableHeader: { flexDirection: 'row', backgroundColor: '#FFCC99', borderBottomWidth: THICK, borderBottomColor: '#000' },
-  th: { borderRightWidth: THICK, borderRightColor: '#000', paddingVertical: 1, paddingHorizontal: 3, fontFamily: 'NotoSansCJK', fontSize: 9, textAlign: 'center' },
-  thLast: { paddingVertical: 1, paddingHorizontal: 3, fontFamily: 'NotoSansCJK', fontSize: 9, textAlign: 'center' },
-  itemRow: { flexDirection: 'row', borderTopWidth: THIN, borderTopColor: '#999', minHeight: 16 },
-  td: { borderRightWidth: THICK, borderRightColor: '#000', paddingVertical: 3, paddingHorizontal: 4, fontSize: 9 },
-  tdLast: { paddingVertical: 3, paddingHorizontal: 4, fontSize: 9 },
-  remarkRow: { flexDirection: 'row', minHeight: 80 },
-  remarkContent: { flex: 1, borderRightWidth: THICK, borderRightColor: '#000', padding: 6 },
-  remarkLine: { fontSize: 8.5, marginBottom: 2 },
-  summaryRow: { flexDirection: 'row', borderTopWidth: THICK, borderTopColor: '#000', height: 22, alignItems: 'center' },
-})
-
-type PDFDocProps = {
-  company: string; receiver: string; quoteNo: string; dateDisplay: string
-  rows: QuoteRow[]; remarks: string; engineerName: string; engineerTel: string
-  totalSupply: number; totalTax: number; totalAmount: number
-  showWatermark?: boolean
-}
-
-const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, quoteNo, dateDisplay, rows, remarks, engineerName, engineerTel, totalSupply, totalTax, totalAmount, showWatermark }: PDFDocProps) {
-  const EMPTY_ROWS = Math.max(0, 10 - rows.length)
-  return (
-    <Document>
-      <Page size="A4" style={S.page}>
-        {showWatermark && (
-          <View style={{ position: 'absolute', top: 180, left: 20, right: 20, alignItems: 'center', transform: 'rotate(-35deg)', zIndex: 999, opacity: 0.10 }}>
-            <Text style={{ fontSize: 72, fontFamily: 'NotoSansCJK', color: '#000000', textAlign: 'center' }}>미리보기</Text>
-            <Text style={{ fontSize: 36, fontFamily: 'NotoSansCJK', color: '#000000', textAlign: 'center', marginTop: 12 }}>{engineerName}</Text>
-          </View>
-        )}
-        <View style={{ position: 'relative', marginBottom: 3 }}>
-          <View style={{ alignItems: 'center', marginBottom: 0 }}>
-            <Text style={S.titleText}>견　적　서</Text>
-            <View style={{ height: 1, backgroundColor: '#000', width: 150, marginBottom: 1 }} />
-            <View style={{ height: 1, backgroundColor: '#000', width: 150 }} />
-          </View>
-          <View style={{ position: 'absolute', right: 0, top: 8 }}>
-            <Text style={{ fontSize: 9, textAlign: 'right', marginBottom: 3 }}>{quoteNo}</Text>
-            {receiver ? <Text style={{ fontSize: 9, textAlign: 'right' }}>수신인 : {receiver}</Text> : null}
-          </View>
-        </View>
-        <Text style={S.dateRow}>{dateDisplay}</Text>
-        <View style={S.headerRow}>
-          <View style={S.headerLeft}>
-            <Text style={S.companyName}>{company || '　'} 귀하</Text>
-            <Text style={S.headerSubText}>아래와 같이 견적합니다</Text>
-            {[['1.납품일정 :', '담당자와 협의'], ['2.지불조건 :', '익월말 현금 결제'], ['3.인도조건 :', '지정장소'], ['4.견적유효 :', '작성일로부터 1개월']].map(([label, val]) => (
-              <View key={label} style={S.conditionRow}>
-                <Text style={S.conditionLabel}>{label}</Text>
-                <Text style={S.conditionValue}>{val}</Text>
-              </View>
-            ))}
-          </View>
-          <View style={S.headerRight}>
-            <Image src="/quotelogo.png" style={S.logo} />
-            <Text style={S.headerRightText}>화성시 동탄대로 24길 31-8</Text>
-            <Text style={S.headerRightText}>Accretech Korea Co., Ltd.</Text>
-            <Text style={S.headerRightText}>대표이사 이상철</Text>
-            <Text style={S.headerRightText}>대표전화 031)786-4093</Text>
-          </View>
-        </View>
-        <View style={S.dividerBox}>
-          <Text style={S.dividerText}>일금　　{amountToKorean(totalSupply)}　　({totalSupply > 0 ? `₩${numKR(totalSupply)}` : '₩0'} -)　　부가세 별도</Text>
-        </View>
-        <View style={S.table}>
-          <View style={S.tableHeader}>
-            <Text style={[S.th, { width: COL.seq }]}>순번</Text>
-            <Text style={[S.th, { width: COL.code }]}>품번</Text>
-            <Text style={[S.th, { width: COL.name, borderRightWidth: 0 }]}>품　　명</Text>
-            <Text style={[S.th, { width: COL.qty, borderLeftWidth: THICK, borderLeftColor: '#000' }]}>수량</Text>
-            <Text style={[S.th, { width: COL.unit }]}>단가</Text>
-            <Text style={[S.th, { width: COL.supply }]}>공급가액</Text>
-            <Text style={[S.thLast, { width: COL.tax }]}>부가세</Text>
-          </View>
-          {rows.map((row, ri) => (
-            <View key={row.id} style={[S.itemRow, { borderBottomWidth: THICK, borderBottomColor: '#000' }]}>
-              <View style={[S.td, { width: COL.seq, justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={{ textAlign: 'center' }}>{ri + 1}</Text>
-              </View>
-              <View style={[S.td, { width: COL.code, justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={{ textAlign: 'center' }}>{row.selectedItem?.item_code ?? ''}</Text>
-              </View>
-              <View style={[S.td, { width: COL.name, borderRightWidth: 0 }]}>
-                <Text>{stripLeadNo(row.itemText)}</Text>
-                {row.subLines.map((line, i) => line ? <Text key={i} style={{ fontSize: 8.5, marginTop: 1 }}>{line}</Text> : null)}
-              </View>
-              <View style={[S.td, { width: COL.qty, borderLeftWidth: THICK, borderLeftColor: '#000', justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={{ textAlign: 'center' }}>{row.quantity > 0 ? String(row.quantity) : ''}</Text>
-              </View>
-              <View style={[S.td, { width: COL.unit, justifyContent: 'center', alignItems: 'flex-end' }]}>
-                <Text>{row.unit_price > 0 ? `₩  ${numKR(row.unit_price)}` : ''}</Text>
-              </View>
-              <View style={[S.td, { width: COL.supply, justifyContent: 'center', alignItems: 'flex-end' }]}>
-                <Text>{row.supply_price > 0 ? `₩  ${numKR(row.supply_price)}` : ''}</Text>
-              </View>
-              <View style={[S.tdLast, { width: COL.tax, justifyContent: 'center', alignItems: 'flex-end' }]}>
-                <Text style={{ paddingRight: 4 }}>{row.tax > 0 ? `₩  ${numKR(row.tax)}` : ''}</Text>
-              </View>
-            </View>
-          ))}
-          <View style={{ flexDirection: 'row', height: EMPTY_ROWS * 18 }}>
-            {/* 순번·품번·품명: 빈 행에선 세로 구분선을 그리지 않음(비고 영역처럼 열어둠) */}
-            <View style={{ width: COL.seq }} />
-            <View style={{ width: COL.code }} />
-            <View style={{ width: COL.name }} />
-            {/* 금액 칸(수량~부가세)은 구분선 유지. 수량 좌측선(=금액영역 시작, 55%)은 아래 비고 셀 우측선과 이어짐 */}
-            <View style={{ width: COL.qty, borderLeftWidth: THICK, borderLeftColor: '#000', borderRightWidth: THICK, borderRightColor: '#000' }} />
-            <View style={{ width: COL.unit, borderRightWidth: THICK, borderRightColor: '#000' }} />
-            <View style={{ width: COL.supply, borderRightWidth: THICK, borderRightColor: '#000' }} />
-            <View style={{ width: COL.tax }} />
-          </View>
-          <View style={S.remarkRow}>
-            <View style={[S.remarkContent, { borderRightWidth: 0, justifyContent: 'flex-end' }]}>
-              <Text style={[S.remarkLine, { fontFamily: 'NotoSansCJK' }]}>　비고</Text>
-              {remarks.split('\n').map((line, i) => <Text key={i} style={S.remarkLine}>{line}</Text>)}
-              <Text style={[S.remarkLine, { marginTop: 2 }]}>* 담당자 : {engineerName}{engineerTel ? ` (TEL : ${engineerTel})` : ''}</Text>
-            </View>
-            <View style={{ width: COL.qty, borderLeftWidth: THICK, borderLeftColor: '#000', borderRightWidth: THICK, borderRightColor: '#000' }} />
-            <View style={{ width: COL.unit, borderRightWidth: THICK, borderRightColor: '#000' }} />
-            <View style={{ width: COL.supply, borderRightWidth: THICK, borderRightColor: '#000' }} />
-            <View style={{ width: COL.tax }} />
-          </View>
-          {[{ label: '합　　계', value: totalSupply }, { label: '부 가 세', value: totalTax }, { label: '총　　계', value: totalAmount }].map(({ label, value }) => (
-            <View key={label} style={S.summaryRow}>
-              <View style={[S.td, { width: COL_LABEL_SPAN, height: 22, justifyContent: 'center', alignItems: 'center', borderRightWidth: 0 }]}>
-                <Text style={{ fontSize: 9, fontFamily: 'NotoSansCJK' }}>{label}</Text>
-              </View>
-              <View style={[S.td, { width: COL.qty, height: 22, borderLeftWidth: THICK, borderLeftColor: '#000' }]} />
-              <View style={[S.td, { width: COL.unit, height: 22 }]} />
-              <View style={[S.td, { width: COL.supply, height: 22 }]} />
-              <View style={[S.tdLast, { width: COL.tax, height: 22, justifyContent: 'center' }]}>
-                <Text style={{ fontSize: 9, textAlign: 'right', paddingRight: 4 }}>{value > 0 ? `₩${numKR(value)}` : ''}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      </Page>
-    </Document>
-  )
-}, (prev, next) => JSON.stringify(prev) === JSON.stringify(next))
-
-type ProfitPanelProps = { rows: QuoteRow[]; exchangeRate: number; rateUpdatedAt: string; rateLoading: boolean; onFetchRate: () => void; onRateChange: (rate: number) => void }
-
-function ProfitPanel({ rows, exchangeRate, rateUpdatedAt, rateLoading, onFetchRate, onRateChange }: ProfitPanelProps) {
-  const [editingRate, setEditingRate] = useState(false)
-  const [editRateVal, setEditRateVal] = useState('')
-
-  const startEdit = () => {
-    setEditRateVal(exchangeRate ? exchangeRate.toFixed(4) : '')
-    setEditingRate(true)
-  }
-  const commitEdit = () => {
-    const n = parseFloat(editRateVal)
-    if (!isNaN(n) && n > 0) onRateChange(n)
-    setEditingRate(false)
-  }
-  const totalSupply = rows.reduce((s, r) => s + r.supply_price, 0)
-  const totalProduct = rows.reduce((s, r) => s + r.product_price, 0)
-  const totalProfit = rows.reduce((s, r) => s + r.profit, 0)
-  const profitPct = totalSupply > 0 ? (totalProfit / totalSupply) * 100 : 0
-  const isGood = profitPct >= 40
-  return (
-    <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #ebebeb', marginBottom: 14, overflow: 'hidden' }}>
-      <div style={{ background: '#fff', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #ebebeb' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 3, height: 14, background: '#234ea2', borderRadius: 6, flexShrink: 0 }} />
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>수익 분석</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            {editingRate ? (
-              <input
-                type="number"
-                value={editRateVal}
-                onChange={e => setEditRateVal(e.target.value)}
-                onBlur={commitEdit}
-                onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingRate(false) }}
-                autoFocus
-                style={{ width: 80, fontSize: 11, fontWeight: 700, color: '#234ea2', border: '1px solid #234ea2', borderRadius: 6, padding: '1px 5px', outline: 'none' }}
-              />
-            ) : (
-              <span
-                onDoubleClick={startEdit}
-                title="더블클릭하여 수동 입력"
-                style={{ fontSize: 11, color: '#6b7280', fontWeight: 500, cursor: 'text', borderBottom: '1px dashed #9ca3af' }}>
-                {exchangeRate ? `${exchangeRate.toFixed(4)}원` : '환율 로딩중...'}
-              </span>
-            )}
-            {rateUpdatedAt && !editingRate && <span style={{ fontSize: 10, color: '#9ca3af' }}>({rateUpdatedAt})</span>}
-            <button
-              onClick={onFetchRate}
-              disabled={rateLoading}
-              style={{ width: 22, height: 22, borderRadius: '50%', background: '#fff', border: '1px solid #ebebeb', cursor: rateLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s ease' }}
-            >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={rateLoading ? '#9ca3af' : '#111827'} strokeWidth="2.5">
-                <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
-                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-        <span style={{ fontSize: 13, fontWeight: 600, color: isGood ? '#16a34a' : '#dc2626' }}>
-          이익률 {profitPct.toFixed(1)}%
-        </span>
-      </div>
-      <div style={{ padding: '12px 16px' }}>
-        {rows.map((r, i) => r.supply_price > 0 && (
-          <div key={r.id} style={{ marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#234ea2', color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
-              <span style={{ fontSize: 11, color: '#111827', fontWeight: 600 }}>{r.itemText && r.itemText}{r.selectedItem && ` (${r.selectedItem.model_jp})`}</span>
-            </div>
-            {r.selectedItem && (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>구입가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>¥{r.cost_price_jpy.toLocaleString()}</span></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>관세 × 환율</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>×{r.tariff_rate} × {r.exchange_rate.toFixed(2)}</span></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>원가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>₩{numKR(r.product_price)}</span></div>
-              </>
-            )}
-            <div style={{ borderTop: r.selectedItem ? '1px solid #ebebeb' : undefined }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>판매단가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>₩{numKR(r.unit_price)}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>공급가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>₩{numKR(r.supply_price)}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>매출이익 <span style={{ color: r.profit >= 0 ? '#16a34a' : '#dc2626' }}>({r.profit_rate}%)</span></span><span style={{ fontSize: 13, color: r.profit >= 0 ? '#16a34a' : '#dc2626', fontWeight: 500 }}>₩{numKR(r.profit)}</span></div>
-            </div>
-          </div>
-        ))}
-        <div style={{ marginTop: 4, paddingTop: 6, borderTop: '2px solid #111827' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>공급가 합계</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>₩{numKR(totalSupply)}</span></div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>원가 합계</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>₩{numKR(totalProduct)}</span></div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>매출이익 합계</span><span style={{ fontSize: 13, color: isGood ? '#16a34a' : '#dc2626', fontWeight: 600 }}>₩{numKR(totalProfit)} ({profitPct.toFixed(1)}%)</span></div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── debounce 훅 ───────────────────────────────────────────────────────────────
-function useDebounce<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState<T>(value)
-  useEffect(() => {
-    let mounted = true
-    const timer = setTimeout(() => {
-      if (mounted) setDebounced(value)
-    }, delay)
-    return () => {
-      mounted = false
-      clearTimeout(timer)
-    }
-  }, [value, delay])
-  return debounced
-}
+import { BlobProvider, pdf } from '@react-pdf/renderer'
+import type { CustomerResult, Engineer, ExpensePreset, ExpenseRow, PriceItem, QuoteRow } from './types'
+import { calcExpense, calcRow, calcTotals, createDomesticRow, createExpenseRow, createManualJpyRow, createRow, createServiceRow } from './calc'
+import { numKR } from './format'
+import { inp } from './styles'
+import { useDebounce } from './useDebounce'
+import { QuotePDFDoc } from './QuotePDFDoc'
+import ProfitPanel from './ProfitPanel'
+import QuoteItemRow from './QuoteItemRow'
 
 function QuotePageInner() {
   const supabase = createClient()
@@ -420,7 +28,7 @@ function QuotePageInner() {
   const repairId = repairIdRaw && /^\d+$/.test(repairIdRaw) ? Number(repairIdRaw) : null
   const { loading: guardLoading, authorized } = usePageGuard(canAccessQuote)
   const toast = useToast()
-  const { errors, clearError, validate } = useFieldErrors<'company' | 'items'>()
+  const { errors, clearError, validate } = useFieldErrors<'company' | 'items' | 'expenses'>()
   const [isClient, setIsClient] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
@@ -449,14 +57,22 @@ function QuotePageInner() {
   const [selectedEU, setSelectedEU] = useState<CustomerResult | null>(null)
 
   const [rows, setRows] = useState<QuoteRow[]>([createRow()])
+  const [expensePresets, setExpensePresets] = useState<ExpensePreset[]>([])
+  const [presetError, setPresetError] = useState(false)
   const [searchQuery, setSearchQuery] = useState<Record<string, string>>({})
   const [searchResults, setSearchResults] = useState<Record<string, PriceItem[]>>({})
   const [searchOpen, setSearchOpen] = useState<Record<string, boolean>>({})
-  const [priceInputOpen, setPriceInputOpen] = useState<Record<string, boolean>>({})
   const [editingProfitRate, setEditingProfitRate] = useState<Record<string, boolean>>({})
   const [profitRateInput, setProfitRateInput] = useState<Record<string, string>>({})
   const [showPriceGuide, setShowPriceGuide] = useState(false)
   const priceGuideRef = useRef<HTMLDivElement | null>(null)
+
+  // 사명·E.U 검색 드롭다운 — 바깥 클릭(및 ESC)으로 닫는다(품목 검색창과 동일 방식).
+  // 드롭다운이 ref 안쪽에 있어 항목 클릭은 '바깥'으로 판정되지 않는다.
+  const customerSearchRef = useRef<HTMLDivElement | null>(null)
+  const euSearchRef = useRef<HTMLDivElement | null>(null)
+  useOutsideClick(customerSearchRef, useCallback(() => setCustomerSearchOpen(false), []), customerSearchOpen)
+  useOutsideClick(euSearchRef, useCallback(() => setEuSearchOpen(false), []), euSearchOpen)
 
   useEffect(() => {
     if (!showPriceGuide) return
@@ -507,19 +123,12 @@ function QuotePageInner() {
   }, [engineer, dateStr])
 
   const quoteNo = `No.${(engineer?.initials || 'KJW').toUpperCase()}${dateStr}-${seqLetter}`
-  const totalSupply = rows.reduce((s, r) => s + r.supply_price, 0)
-  const totalTax = rows.reduce((s, r) => s + r.tax, 0)
-  const totalAmount = totalSupply + totalTax
-  const totalCost = rows.reduce((s, r) => s + r.product_price, 0)
-  const totalProfit = rows.reduce((s, r) => s + r.profit, 0)
-  const totalProfitRate = totalSupply > 0 ? (totalProfit / totalSupply) * 100 : 0
+  const { totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate } = calcTotals(rows)
   const engineerName = engineer ? `${engineer.name} ${engineer.position || ''}`.trim() : ''
   const engineerTel = engineer?.tel?.trim() || ''   // 견적 작성자(로그인 사용자) 전화번호. 등록 시 담당자란에 병기.
 
   // PDF용 합계 (debounced rows 기준)
-  const pdfTotalSupply = debouncedRows.reduce((s, r) => s + r.supply_price, 0)
-  const pdfTotalTax = debouncedRows.reduce((s, r) => s + r.tax, 0)
-  const pdfTotalAmount = pdfTotalSupply + pdfTotalTax
+  const { totalSupply: pdfTotalSupply, totalTax: pdfTotalTax, totalAmount: pdfTotalAmount } = calcTotals(debouncedRows)
 
   const handleCustomerSearch = async (q: string) => {
     setCustomerQuery(q)
@@ -597,9 +206,7 @@ const handleDownloadPDF = async (
       .join('_')
       .replace(/[\\/:*?"<>|]/g, '') + '.pdf'
 
-    const finalTotalSupply = finalRows.reduce((s, r) => s + r.supply_price, 0)
-    const finalTotalTax = finalRows.reduce((s, r) => s + r.tax, 0)
-    const finalTotalAmount = finalTotalSupply + finalTotalTax
+    const { totalSupply: finalTotalSupply, totalTax: finalTotalTax, totalAmount: finalTotalAmount } = calcTotals(finalRows)
 
     const blob = await pdf(
       <QuotePDFDoc
@@ -643,9 +250,12 @@ const handleDownloadPDF = async (
     if (!engineer) { toast.error('엔지니어 정보를 불러오는 중입니다'); return }
     // 사명은 직접 입력(customerQuery) 또는 검색 선택(company) 중 하나면 통과.
     // 품목 금액은 배열이지만 "적어도 한 품목에 금액" 이라는 집계 규칙이라 단일 key(items) 로 처리한다.
+    // 부대비용은 빈 행(항목명 미선택)은 조용히 무시하고, 항목명만 고른 채 금액이 0 인 행만 막는다.
     const ok = validate({
       company: (company.trim() || customerQuery.trim()) ? null : '사명을 입력해주세요',
       items: rows.some(r => r.supply_price > 0) ? null : '품목 금액을 입력해주세요',
+      expenses: expenses.some(e => e.item_name.trim() && e.amount <= 0)
+        ? '단가 · 인원 · 일수를 입력해주세요' : null,
     })
     if (!ok) return
 
@@ -694,10 +304,11 @@ const handleDownloadPDF = async (
       const items = rows.filter(r => r.supply_price > 0).map(r => ({
         quote_id: quoteData.quote_id,
         price_list_id: r.selectedItem?.id ?? null,
-        part_code: r.selectedItem?.item_code ?? null,   // 품번 스냅샷(가격표 변경돼도 과거 견적 유지). 직접 입력 품목은 null.
+        part_code: r.partCode.trim() || null,   // 품번 스냅샷(가격표 변경돼도 과거 견적 유지). 직접 입력한 품번도 그대로 저장, 빈 값은 null.
+        row_kind: r.row_kind,
         product_name: r.itemText || r.selectedItem?.model_jp || '',
         quantity: r.quantity,
-        unit_price_jpy: r.selectedItem?.cost_jpy ?? null,
+        unit_price_jpy: r.row_kind === 'manual_jpy' ? r.manual_cost_jpy : (r.selectedItem?.cost_jpy ?? null),
         unit_price_krw: r.unit_price,
         supply_amount: r.supply_price,
         tax_amount: r.tax,
@@ -712,6 +323,24 @@ const handleDownloadPDF = async (
       if (items.length > 0) {
         const { error: itemsError } = await supabase.from('quote_items').insert(items)
         if (itemsError) throw itemsError
+      }
+
+      // 부대비용(내부 관리용). 견적 합계·PDF 와 무관하게 quote_expenses 에만 기록한다.
+      // unit_price 는 저장 시점 스냅샷이므로 프리셋 재조회 없이 화면 값을 그대로 넣는다.
+      const expenseRows = expenses
+        .filter(e => e.item_name.trim() && e.amount > 0)
+        .map(e => ({
+          quote_id: quoteData.quote_id,
+          item_name: e.item_name.trim(),
+          unit_price: e.unit_price,
+          headcount: e.headcount,
+          days: e.days,
+          amount: e.amount,
+        }))
+
+      if (expenseRows.length > 0) {
+        const { error: expensesError } = await supabase.from('quote_expenses').insert(expenseRows)
+        if (expensesError) throw expensesError
       }
 toast.success(`견적서 ${quoteNo} 확정 완료`)
 
@@ -743,6 +372,25 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
       if (!u.user?.email) return
       const { data } = await supabase.from('engineers').select('*').eq('email', u.user.email).single()
       if (data) setEngineer(data)
+    }
+    f()
+  }, [])
+
+  // 부대비용 표준 항목·단가(expense_presets) 1회 로드.
+  // 실패 시 presetError → 카드에 안내 + 추가 버튼 비활성(단가 0 스냅샷 방지).
+  useEffect(() => {
+    const f = async () => {
+      // 관리자 화면과 같은 순서(display_order)로, 비활성 항목은 제외하고 가져온다.
+      const { data, error } = await supabase.from('expense_presets')
+        .select('item_name, unit_price')
+        .eq('is_active', true)
+        .order('display_order')
+      if (error || !data) {
+        setPresetError(true)
+        toast.error('부대비용 단가 정보를 불러오지 못했습니다')
+        return
+      }
+      setExpensePresets(data.map(p => ({ item_name: p.item_name, unit_price: Number(p.unit_price) || 0 })))
     }
     f()
   }, [])
@@ -809,6 +457,11 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
   useEffect(() => { if (!exchangeRate) return; setRows(prev => prev.map(r => calcRow(r, exchangeRate))) }, [exchangeRate])
   // 어느 품목이든 금액이 생기면 집계 에러(items) 를 즉시 해제한다.
   useEffect(() => { if (rows.some(r => r.supply_price > 0)) clearError('items') }, [rows]) // eslint-disable-line react-hooks/exhaustive-deps
+  // 금액 0 인 부대비용 행이 모두 해소되면 에러를 즉시 해제한다(부대비용은 rows 안에 있다).
+  useEffect(() => {
+    const list = rows.find(r => r.row_kind === 'service')?.expenses ?? []
+    if (!list.some(e => e.item_name.trim() && e.amount <= 0)) clearError('expenses')
+  }, [rows]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRateChange = useCallback(async (rate: number) => {
     const todayStr = new Date().toISOString().slice(0, 10)
@@ -819,6 +472,8 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
 
   const handleSearch = async (rowId: string, q: string) => {
     setSearchQuery(prev => ({ ...prev, [rowId]: q }))
+    // 품번은 검색창 내용을 그대로 따라간다 — 가격표에서 고르지 않고 직접 친 값도 PDF 품번 칸에 나간다.
+    setRows(prev => prev.map(r => r.id !== rowId ? r : { ...r, partCode: q }))
     if (!q.trim()) { setSearchResults(prev => ({ ...prev, [rowId]: [] })); return }
     const { data } = await supabase.from('price_list').select('*').or(`item_code.ilike.%${q}%,model_jp.ilike.%${q}%`).limit(20)
     setSearchResults(prev => ({ ...prev, [rowId]: data || [] }))
@@ -826,9 +481,21 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
   }
 
   const handleSelect = (rowId: string, item: PriceItem) => {
-    setRows(prev => prev.map(r => r.id !== rowId ? r : calcRow({ ...r, selectedItem: item }, exchangeRate)))
+    setRows(prev => prev.map(r => {
+      if (r.id !== rowId) return r
+      // 품목 선택 시점에 품명에 모델명을 1회 넣는다(이후 itemText 는 순수 사용자 입력).
+      //  - 처음 선택   : 사용자가 적어 둔 품명 뒤에 덧붙인다
+      //  - 다른 품목으로 교체 : 품명을 비우고 새 모델명만 넣는다
+      const model = item.model_jp ? `(${item.model_jp})` : ''
+      const base = r.itemText.trimEnd()
+      // 이미 다른 가격표 품목이 선택돼 있었으면 품명을 비우고 새 모델명만 넣는다.
+      const itemText = r.selectedItem
+        ? model
+        : (model ? (base ? `${base} ${model}` : model) : r.itemText)
+      return calcRow({ ...r, selectedItem: item, itemText, partCode: item.item_code }, exchangeRate)
+    }))
     setSearchOpen(prev => ({ ...prev, [rowId]: false }))
-    setSearchQuery(prev => ({ ...prev, [rowId]: item.model_jp || item.item_code }))
+    setSearchQuery(prev => ({ ...prev, [rowId]: item.item_code }))
     if (item.delivery_time && delivery === '') {
       setDelivery(item.delivery_time + '주')
     }
@@ -838,7 +505,8 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
     setRows(prev => prev.map(r => r.id !== rowId ? r : calcRow({ ...r, [field]: value }, exchangeRate)))
 
   const clearItem = (rowId: string) => {
-    setRows(prev => prev.map(r => r.id !== rowId ? r : calcRow({ ...r, selectedItem: null, manual_unit_price: 0 }, exchangeRate)))
+    // 품목 해제(× 버튼) — 종류는 price_list 그대로 두고 선택만 비운다.
+    setRows(prev => prev.map(r => r.id !== rowId ? r : calcRow({ ...r, selectedItem: null, manual_unit_price: 0, partCode: '' }, exchangeRate)))
     setSearchQuery(prev => ({ ...prev, [rowId]: '' }))
     setSearchResults(prev => ({ ...prev, [rowId]: [] }))
   }
@@ -850,24 +518,52 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
   const removeSubLine = (rowId: string, idx: number) =>
     setRows(prev => prev.map(r => r.id !== rowId ? r : { ...r, subLines: r.subLines.filter((_, i) => i !== idx) }))
 
-  const inp: React.CSSProperties = {
-    padding: '8px 11px', border: '1px solid #ebebeb', borderRadius: 6,
-    fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box',
-    color: '#111827', transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+  // 부대비용은 서비스비 행(견적당 1건)에 속한다. 별도 state 없이 rows 에서 파생시킨다.
+  const serviceRow = rows.find(r => r.row_kind === 'service') ?? null
+  const expenses = serviceRow?.expenses ?? []
+
+  // 부대비용 내역 갱신 — 서비스비 행의 expenses 를 바꾼 뒤 calcRow 로 원가·이익을 재계산한다.
+  // (calcExpense 로 amount 재계산 → calcRow 로 행 원가 반영, 두 단계 모두 map 안에서 처리)
+  const updateServiceExpenses = (fn: (list: ExpenseRow[]) => ExpenseRow[]) =>
+    setRows(prev => prev.map(r => r.row_kind !== 'service' ? r : calcRow({ ...r, expenses: fn(r.expenses) }, exchangeRate)))
+
+  // 항목명 선택은 unit_price 도 함께 바꾸므로 patch 객체로 받는다.
+  const updateExpense = (expenseId: string, patch: Partial<ExpenseRow>) =>
+    updateServiceExpenses(list => list.map(e => e.id !== expenseId ? e : calcExpense({ ...e, ...patch })))
+
+  const addExpense = () => updateServiceExpenses(list => [...list, createExpenseRow()])
+  const removeExpense = (expenseId: string) => updateServiceExpenses(list => list.filter(e => e.id !== expenseId))
+
+  const selectExpensePreset = (expenseId: string, itemName: string) => {
+    const preset = expensePresets.find(p => p.item_name === itemName)
+    updateExpense(expenseId, { item_name: itemName, unit_price: preset?.unit_price ?? 0 })
   }
 
-  // 스테퍼 3분할 1칸 폭 = "직접 입력" 버튼 폭 (동일 값 참조용)
-  const STEPPER_COL = 'calc((100% - 12px) / 3)'
+  const totalExpense = expenses.reduce((s, e) => s + e.amount, 0)
+  // 항목명은 골랐는데 금액이 0 인 행(= 단가·인원·일수 중 0). 저장 시 에러 표시 대상.
+  const invalidExpenseIds = new Set(expenses.filter(e => e.item_name.trim() && e.amount <= 0).map(e => e.id))
 
   if (!authorized) return <AccessGate loading={guardLoading} />
 
   return (
-    <div style={{ background: '#fafafa', minHeight: '100vh' }}>
+    <div className="quote-page" style={{ background: '#fafafa', minHeight: '100vh' }}>
       <style>{`
         .q-input:focus {
           border-color: #234ea2 !important;
           box-shadow: 0 0 0 3px rgba(35,78,162,0.10) !important;
           outline: none;
+        }
+        /* 숫자 입력창의 브라우저 기본 스피너(위아래 화살표) 제거.
+           type="number" 는 그대로 둬서 모바일 숫자 키패드는 유지된다.
+           .quote-page 하위로 한정해 다른 화면에는 영향이 없다. */
+        .quote-page input[type="number"]::-webkit-outer-spin-button,
+        .quote-page input[type="number"]::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        .quote-page input[type="number"] {
+          -moz-appearance: textfield;
+          appearance: textfield;
         }
         @keyframes modal-in {
           from { opacity: 0; transform: scale(0.97) translateY(6px); }
@@ -896,7 +592,7 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
             <div style={{ marginBottom: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', width: 56, flexShrink: 0 }}>사명</span>
-                <div style={{ position: 'relative', flex: 1 }}>
+                <div ref={customerSearchRef} style={{ position: 'relative', flex: 1 }}>
                   <input
                     className="q-input"
                     value={customerQuery}
@@ -955,7 +651,7 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
               <div style={{ marginBottom: 8, animation: 'modal-in 0.15s ease' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', width: 56, flexShrink: 0 }}>E.U</span>
-                  <div style={{ position: 'relative', flex: 1 }}>
+                  <div ref={euSearchRef} style={{ position: 'relative', flex: 1 }}>
                     <input
                       className="q-input"
                       value={euQuery}
@@ -1106,197 +802,81 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
             </div>
 
             {rows.map((row, rowIdx) => (
-              <div key={row.id} style={{ background: '#ffffff', borderRadius: 8, padding: '14px', marginBottom: 10, border: '1px solid #ebebeb' }}>
-                {rows.length > 1 && (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <span style={{ width: 20, height: 20, borderRadius: 999, background: '#234ea2', color: '#fff', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}>{rowIdx + 1}</span>
-                    <button onClick={() => setRows(prev => prev.filter(r => r.id !== row.id))}
-                      title="삭제"
-                      style={{ width: 24, height: 24, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'color 0.15s ease' }}
-                      onMouseEnter={e => (e.currentTarget.style.color = '#dc2626')}
-                      onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                    </button>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <label style={{ fontSize: 12, color: '#6b7280', width: 44, flexShrink: 0 }}>품명</label>
-                  {/* 자동 순번 — 품명 입력칸 앞에 표시(PDF 순번 컬럼과 동일한 행 순서) */}
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#234ea2', flexShrink: 0, minWidth: 16, textAlign: 'right' }}>{rowIdx + 1}.</span>
-                  <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-                    <input className="q-input" value={row.itemText} onChange={e => updateRow(row.id, 'itemText', e.target.value)} placeholder="예: 스타일러스" style={{ ...inp, width: '100%', paddingRight: 56 }} />
-                    <button onClick={() => addSubLine(row.id)}
-                      title="상세 내용 줄 추가"
-                      style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', padding: '2px 6px', background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', transition: 'color 0.15s ease' }}
-                      onMouseEnter={e => (e.currentTarget.style.color = '#234ea2')}
-                      onMouseLeave={e => (e.currentTarget.style.color = '#6b7280')}>
-                      줄 추가
-                    </button>
-                  </div>
-                </div>
-
-                {row.subLines.length > 0 && (
-                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                  <div style={{ width: 44, flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    {row.subLines.map((line, li) => (
-                      <div key={li} style={{ position: 'relative', marginBottom: 4 }}>
-                        <input className="q-input" value={line} onChange={e => updateSubLine(row.id, li, e.target.value)} placeholder="예: - Leaf Spring 교체" style={{ ...inp, width: '100%', fontSize: 11, paddingRight: 28 }} />
-                        <button onClick={() => removeSubLine(row.id, li)}
-                          title="삭제"
-                          style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 20, height: 20, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'color 0.15s ease' }}
-                          onMouseEnter={e => (e.currentTarget.style.color = '#dc2626')}
-                          onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                )}
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <label style={{ fontSize: 12, color: '#6b7280', width: 44, flexShrink: 0 }}>단가</label>
-                  <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-                    <input className="q-input" value={searchQuery[row.id] || ''} onChange={e => handleSearch(row.id, e.target.value)}
-                      onFocus={() => setSearchOpen(prev => ({ ...prev, [row.id]: true }))}
-                      placeholder="코드 또는 모델명 검색" style={{ ...inp, width: '100%', paddingRight: row.selectedItem ? 28 : 11 }} />
-                    {row.selectedItem && (
-                      <button onClick={() => clearItem(row.id)}
-                        title="품목 해제"
-                        style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 20, height: 20, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'color 0.15s ease' }}
-                        onMouseEnter={e => (e.currentTarget.style.color = '#dc2626')}
-                        onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                      </button>
-                    )}
-                    {searchOpen[row.id] && (searchResults[row.id] || []).length > 0 && (
-                      <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 999, background: '#fff', border: '1px solid #234ea2', borderRadius: 8, maxHeight: 200, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
-                        {searchResults[row.id].map(item => (
-                          <div key={item.id} onClick={() => handleSelect(row.id, item)}
-                            style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 11, transition: 'background 0.15s ease' }}
-                            onMouseEnter={e => (e.currentTarget.style.background = '#f0f4ff')}
-                            onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
-                            <div><span style={{ fontWeight: 700, color: '#234ea2' }}>{item.item_code}</span><span style={{ marginLeft: 6, color: '#111827' }}>{item.item_name_jp}</span><span style={{ marginLeft: 6, color: '#6b7280' }}>({item.model_jp})</span></div>
-                            <div style={{ color: '#9ca3af', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span>정가: ¥{item.price_jpy?.toLocaleString()} / 구입가: ¥{item.cost_jpy?.toLocaleString()}</span>
-                              {(() => {
-                                const hasStock = item.stock_quantity != null && item.stock_quantity > 0
-                                const hasDelivery = item.delivery_time != null
-                                if (hasStock) return (
-                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: '#dcfce7', color: '#15803d' }}>
-                                    재고 {item.stock_quantity}개
-                                  </span>
-                                )
-                                if (hasDelivery) return (
-                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: '#fef9c3', color: '#854d0e' }}>
-                                    발주 후 {item.delivery_time}주
-                                  </span>
-                                )
-                                return (
-                                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: '#fee2e2', color: '#b91c1c' }}>
-                                    담당자 납기 문의
-                                  </span>
-                                )
-                              })()}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {!row.selectedItem && (
-                    <button
-                      onClick={() => setPriceInputOpen(p => ({ ...p, [row.id]: !p[row.id] }))}
-                      style={{ width: STEPPER_COL, flexShrink: 0, boxSizing: 'border-box', padding: '8px 0', textAlign: 'center', background: priceInputOpen[row.id] ? '#f3f4f6' : '#fff', color: '#6b7280', border: '1px solid #ebebeb', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', transition: 'all 0.15s ease' }}
-                    >직접 입력</button>
-                  )}
-                  </div>
-                </div>
-                {!row.selectedItem && priceInputOpen[row.id] && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, marginBottom: 8 }}>
-                    <div style={{ width: 44, flexShrink: 0 }} />
-                    <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-                        <input className="q-input" autoFocus type="number" value={row.manual_unit_price || ''}
-                          onChange={e => updateRow(row.id, 'manual_unit_price', parseInt(e.target.value) || 0)}
-                          placeholder="0" style={{ ...inp, width: '100%', textAlign: 'right', fontSize: 13, paddingRight: 28 }} />
-                        <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#9ca3af', pointerEvents: 'none' }}>원</span>
-                      </div>
-                      <div style={{ width: STEPPER_COL, flexShrink: 0 }} />
-                    </div>
-                  </div>
-                )}
-
-                {/* 스테퍼 — 수량·이익률·관세 (grid 3등분) */}
-                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                  <div style={{ width: 44, flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, marginBottom: 4 }}>
-                      <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>수량</div>
-                      <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>이익률</div>
-                      <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>관세율</div>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
-                      <div title="수량" style={{ height: 34, border: '1px solid #ebebeb', borderRadius: 6, display: 'flex', alignItems: 'center', padding: '0 6px', gap: 4, minWidth: 0, boxSizing: 'border-box' }}>
-                        <button onClick={() => updateRow(row.id, 'quantity', Math.max(1, row.quantity - 1))} style={{ width: 18, height: 18, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}>−</button>
-                        <span style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'visible', color: '#111827' }}>{row.quantity}</span>
-                        <button onClick={() => updateRow(row.id, 'quantity', row.quantity + 1)} style={{ width: 18, height: 18, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}>+</button>
-                      </div>
-                      <div title="이익률" style={{ height: 34, border: '1px solid #ebebeb', borderRadius: 6, display: 'flex', alignItems: 'center', padding: '0 6px', gap: 4, minWidth: 0, boxSizing: 'border-box' }}>
-                        <button onClick={() => updateRow(row.id, 'profit_rate', Math.max(0, row.profit_rate - 5))} style={{ width: 18, height: 18, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}>−</button>
-                        {editingProfitRate[row.id] ? (
-                          <input
-                            autoFocus
-                            type="number"
-                            value={profitRateInput[row.id] ?? ''}
-                            onChange={e => setProfitRateInput(p => ({ ...p, [row.id]: e.target.value }))}
-                            onBlur={() => {
-                              const v = Math.min(95, Math.max(0, parseInt(profitRateInput[row.id] || '0') || 0))
-                              updateRow(row.id, 'profit_rate', v)
-                              setEditingProfitRate(p => ({ ...p, [row.id]: false }))
-                            }}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur()
-                            }}
-                            style={{ flex: 1, minWidth: 0, width: '100%', textAlign: 'center', fontWeight: 500, fontSize: 12, border: '1px solid #234ea2', borderRadius: 6, padding: '1px 2px', outline: 'none', color: '#111827', boxSizing: 'border-box' }}
-                          />
-                        ) : (
-                          <span
-                            onClick={() => { setEditingProfitRate(p => ({ ...p, [row.id]: true })); setProfitRateInput(p => ({ ...p, [row.id]: String(row.profit_rate) })) }}
-                            title="클릭하여 직접 입력"
-                            style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'visible', color: row.profit_rate >= 40 ? '#16a34a' : '#dc2626', cursor: 'text' }}
-                          >{row.profit_rate}%</span>
-                        )}
-                        <button onClick={() => updateRow(row.id, 'profit_rate', Math.min(95, row.profit_rate + 5))} style={{ width: 18, height: 18, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}>+</button>
-                      </div>
-                      <div title="관세율" style={{ height: 34, border: '1px solid #ebebeb', borderRadius: 6, display: 'flex', alignItems: 'center', padding: '0 6px', gap: 4, minWidth: 0, boxSizing: 'border-box' }}>
-                        <button onClick={() => updateRow(row.id, 'tariff_rate', parseFloat((row.tariff_rate - 0.01).toFixed(2)))} style={{ width: 18, height: 18, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}>−</button>
-                        <span style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'visible', color: '#111827' }}>×{row.tariff_rate.toFixed(2)}</span>
-                        <button onClick={() => updateRow(row.id, 'tariff_rate', parseFloat((row.tariff_rate + 0.01).toFixed(2)))} style={{ width: 18, height: 18, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}>+</button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {row.supply_price > 0 && (
-                  <div style={{ marginTop: 10, fontSize: 12, color: '#6b7280' }}>
-                    단가 ₩{numKR(row.unit_price)} × {row.quantity} = 공급가 <b>₩{numKR(row.supply_price)}</b> | 부가세 ₩{numKR(row.tax)}
-                  </div>
-                )}
-              </div>
+              <QuoteItemRow
+                key={row.id}
+                row={row}
+                rowIdx={rowIdx}
+                rows={rows}
+                setRows={setRows}
+                updateRow={updateRow}
+                addSubLine={addSubLine}
+                updateSubLine={updateSubLine}
+                removeSubLine={removeSubLine}
+                handleSearch={handleSearch}
+                handleSelect={handleSelect}
+                clearItem={clearItem}
+                searchQuery={searchQuery}
+                searchResults={searchResults}
+                searchOpen={searchOpen}
+                setSearchOpen={setSearchOpen}
+                editingProfitRate={editingProfitRate}
+                setEditingProfitRate={setEditingProfitRate}
+                profitRateInput={profitRateInput}
+                setProfitRateInput={setProfitRateInput}
+                expensePresets={expensePresets}
+                presetError={presetError}
+                errors={errors}
+                invalidExpenseIds={invalidExpenseIds}
+                totalExpense={totalExpense}
+                addExpense={addExpense}
+                removeExpense={removeExpense}
+                updateExpense={updateExpense}
+                selectExpensePreset={selectExpensePreset}
+              />
             ))}
 
-            <button
-              onClick={() => setRows(prev => [...prev, createRow()])}
-              style={{ width: '100%', padding: '11px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, transition: 'background 0.15s ease' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#1c3e87')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#234ea2')}
-            >
-              + 품목 추가
-            </button>
+            {/* 행 추가 버튼 — 1행: 주버튼(품목) + 수동입력 / 2행: 국내조달품 + 서비스비 */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+              <button
+                onClick={() => setRows(prev => [...prev, createRow()])}
+                style={{ minWidth: 0, padding: '11px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', transition: 'background 0.15s ease' }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#1c3e87')}
+                onMouseLeave={e => (e.currentTarget.style.background = '#234ea2')}
+              >
+                + 품목 추가
+              </button>
+              {/* 수동입력 품목 — 가격표에 없는 제품. 개수 제한 없음. */}
+              <button
+                onClick={() => setRows(prev => [...prev, createManualJpyRow()])}
+                title="가격표에 없는 품목을 구입가(JPY) 직접 입력으로 추가합니다"
+                style={{ minWidth: 0, padding: '11px', background: '#fff', color: '#234ea2', border: '1px solid #ebebeb', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', transition: 'background 0.15s ease' }}
+                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6')}
+                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#fff')}
+              >
+                + 수동입력
+              </button>
+              {/* 국내조달품 — 원화 원가만. 고객 견적서에는 금액 없이 포함사항으로 나간다. */}
+              <button
+                onClick={() => setRows(prev => [...prev, createDomesticRow()])}
+                title="국내에서 조달하는 항목(원화 원가만, 마진 없음)"
+                style={{ minWidth: 0, padding: '11px', background: '#fff', color: '#234ea2', border: '1px solid #ebebeb', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', transition: 'background 0.15s ease' }}
+                onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6')}
+                onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#fff')}
+              >
+                + 국내조달품
+              </button>
+              {/* 서비스비는 견적당 1건. 이미 있으면 비활성. */}
+              <button
+                onClick={() => setRows(prev => [...prev, createServiceRow()])}
+                disabled={serviceRow !== null}
+                title={serviceRow !== null ? '서비스비는 견적당 1건만 추가할 수 있습니다' : undefined}
+                style={{ minWidth: 0, padding: '11px', background: '#fff', color: serviceRow !== null ? '#9ca3af' : '#234ea2', border: '1px solid #ebebeb', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: serviceRow !== null ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', transition: 'background 0.15s ease' }}
+                onMouseEnter={e => { if (serviceRow === null) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6' }}
+                onMouseLeave={e => { if (serviceRow === null) (e.currentTarget as HTMLButtonElement).style.background = '#fff' }}
+              >
+                + 서비스비
+              </button>
+            </div>
             <FieldError message={errors.items} style={{ marginTop: 8 }} />
           </div>
         </div>

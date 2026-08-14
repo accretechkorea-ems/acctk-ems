@@ -25,7 +25,6 @@ type Quote = {
   quote_date: string
   total_supply: number
   status: string
-  subject: string | null
   pdf_url?: string | null
   customer_id?: number | null
   engineers?: { name: string } | null
@@ -58,6 +57,16 @@ type Team = {
   name: string
   is_special: boolean
   display_order: number
+}
+
+// 견적서 서비스비의 부대비용 표준 항목·단가. 견적서는 저장 시점 단가를 복사해 쓰므로
+// 여기서 값을 바꿔도 과거 견적의 금액은 변하지 않는다.
+type ExpensePreset = {
+  preset_id: number
+  item_name: string
+  unit_price: number
+  display_order: number
+  is_active: boolean
 }
 
 const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
@@ -117,18 +126,31 @@ export default function AdminPage() {
   const [logs, setLogs] = useState<any[]>([])
   const [logLoading, setLogLoading] = useState(false)
 
+  const [showPresetModal, setShowPresetModal] = useState(false)
+  const [presets, setPresets] = useState<ExpensePreset[]>([])
+  const [presetLoading, setPresetLoading] = useState(false)
+  const [editingPreset, setEditingPreset] = useState<{ presetId: number; itemName: string; unitPrice: string } | null>(null)
+  const [savingPreset, setSavingPreset] = useState(false)
+  const [newPreset, setNewPreset] = useState({ itemName: '', unitPrice: '' })
+  const [addPresetLoading, setAddPresetLoading] = useState(false)
+  const [deletingPreset, setDeletingPreset] = useState<number | null>(null)
+
   // ── 폼별 검증 에러 (폼마다 독립 인스턴스 → 서로 새지 않음). 각 gate state 로 초기화 ──
   const targetErr = useFieldErrors<'amount'>()
   const addEngErr = useFieldErrors<'name' | 'email' | 'password' | 'initials' | 'teams'>()
   const editEngErr = useFieldErrors<'name' | 'teams'>()
   const resignErr = useFieldErrors<'resignDate'>()
   const teamErr = useFieldErrors<'teamName'>()
+  const presetErr = useFieldErrors<'itemName'>()          // 항목 추가 폼
+  const presetEditErr = useFieldErrors<'itemName'>()      // 인라인 수정
   /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => { targetErr.setErrors({}) }, [editingTarget])
   useEffect(() => { addEngErr.setErrors({}) }, [showAddEngineer])
   useEffect(() => { editEngErr.setErrors({}) }, [editEngineer])
   useEffect(() => { resignErr.setErrors({}) }, [deleteEngineer])
   useEffect(() => { teamErr.setErrors({}) }, [showTeamModal])
+  useEffect(() => { presetErr.setErrors({}) }, [showPresetModal])
+  useEffect(() => { presetEditErr.setErrors({}) }, [editingPreset])
   /* eslint-enable react-hooks/exhaustive-deps */
 
   useEffect(() => {
@@ -170,7 +192,7 @@ export default function AdminPage() {
   const fetchQuotes = async (q?: string) => {
     setQuoteLoading(true)
     let query = supabase.from('quotes').select('*, engineers(name)').order('quote_date', { ascending: false }).limit(50)
-    if (q && q.trim()) query = query.or(`quote_number.ilike.%${q}%,subject.ilike.%${q}%`)
+    if (q && q.trim()) query = query.ilike('quote_number', `%${q}%`)
     const { data: qData } = await query
     const rows = (qData || []) as Quote[]
     const customerIds = [...new Set(rows.map(r => r.customer_id).filter((id): id is number => id != null))]
@@ -409,6 +431,59 @@ export default function AdminPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchTeams() }, [])
 
+  // ── 부대비용 단가 ───────────────────────────────────────────────────────────
+  const fetchPresets = async () => {
+    setPresetLoading(true)
+    const { data } = await supabase.from('expense_presets').select('*').order('display_order')
+    setPresets((data as ExpensePreset[]) ?? [])
+    setPresetLoading(false)
+  }
+
+  const handleAddPreset = async () => {
+    if (!presetErr.validate({ itemName: newPreset.itemName.trim() ? null : '항목명을 입력해주세요' })) return
+    setAddPresetLoading(true)
+    const maxOrder = presets.length > 0 ? Math.max(...presets.map(p => p.display_order)) : 0
+    const { error } = await supabase.from('expense_presets').insert({
+      item_name: newPreset.itemName.trim(),
+      unit_price: parseInt(newPreset.unitPrice) || 0,
+      display_order: maxOrder + 1,
+      is_active: true,
+    })
+    setAddPresetLoading(false)
+    if (error) { toast.error(error.message); return }
+    setNewPreset({ itemName: '', unitPrice: '' })
+    fetchPresets()
+  }
+
+  const handleSavePreset = async () => {
+    if (!editingPreset) return
+    if (!presetEditErr.validate({ itemName: editingPreset.itemName.trim() ? null : '항목명을 입력해주세요' })) return
+    setSavingPreset(true)
+    const { error } = await supabase.from('expense_presets').update({
+      item_name: editingPreset.itemName.trim(),
+      unit_price: parseInt(editingPreset.unitPrice) || 0,
+    }).eq('preset_id', editingPreset.presetId)
+    setSavingPreset(false)
+    if (error) { toast.error(error.message); return }
+    setEditingPreset(null)
+    fetchPresets()
+  }
+
+  // 견적서는 저장 시점 단가를 quote_expenses 에 복사해 두므로 과거 견적은 영향받지 않는다.
+  const handleDeletePreset = async (preset: ExpensePreset) => {
+    const ok = await confirmDialog({
+      title: '항목 삭제',
+      message: `'${preset.item_name}' 항목을 삭제하시겠습니까?\n이미 저장된 견적의 부대비용에는 영향이 없습니다.`,
+      confirmText: '삭제', variant: 'danger',
+    })
+    if (!ok) return
+    setDeletingPreset(preset.preset_id)
+    const { error } = await supabase.from('expense_presets').delete().eq('preset_id', preset.preset_id)
+    setDeletingPreset(null)
+    if (error) { toast.error(error.message); return }
+    fetchPresets()
+  }
+
   const teamsOptions = teamsList.map(t => t.name)
 
   const inp: React.CSSProperties = {
@@ -488,6 +563,18 @@ export default function AdminPage() {
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>팀을 추가하거나 삭제합니다. 직원 등록·수정 시 팀 목록에 즉시 반영됩니다.</div>
             <button
               onClick={() => { setShowTeamModal(true); fetchTeams() }}
+              disabled={!isSuperAdmin(currentEngineer)}
+              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
+              관리하기
+            </button>
+          </div>
+
+          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}` }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>🧾</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>부대비용 단가</div>
+            <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>견적서 서비스비의 부대비용 표준 항목과 단가를 관리합니다.</div>
+            <button
+              onClick={() => { setShowPresetModal(true); setEditingPreset(null); setNewPreset({ itemName: '', unitPrice: '' }); fetchPresets() }}
               disabled={!isSuperAdmin(currentEngineer)}
               style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
               관리하기
@@ -623,7 +710,7 @@ export default function AdminPage() {
             <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
               <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && fetchQuotes(searchQuery)}
-                placeholder="견적번호 또는 견적 내용으로 검색" style={inp} />
+                placeholder="견적번호로 검색" style={inp} />
               <button onClick={() => fetchQuotes(searchQuery)}
                 style={{ padding: '8px 16px', background: BLUE, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>검색</button>
             </div>
@@ -924,6 +1011,92 @@ export default function AdminPage() {
                 {editLoading ? '저장 중...' : '저장'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 부대비용 단가 모달 ── */}
+      {showPresetModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🧾 부대비용 단가</div>
+              <button onClick={() => { setShowPresetModal(false); setEditingPreset(null) }} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
+            </div>
+
+            {/* 항목 추가 폼 */}
+            <div style={{ background: '#f8fafc', borderRadius: 12, padding: '14px 16px', marginBottom: 16, border: `1px solid ${BORDER}` }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 10 }}>새 항목 추가</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                <input value={newPreset.itemName}
+                  onChange={e => { setNewPreset(p => ({ ...p, itemName: e.target.value })); presetErr.clearError('itemName') }}
+                  onKeyDown={e => e.key === 'Enter' && handleAddPreset()}
+                  placeholder="항목명 (예: 숙박비)" style={presetErr.errors.itemName ? { ...inp, flex: 1, border: errBorder } : { ...inp, flex: 1 }} />
+                <input type="number" value={newPreset.unitPrice}
+                  onChange={e => setNewPreset(p => ({ ...p, unitPrice: e.target.value }))}
+                  onKeyDown={e => e.key === 'Enter' && handleAddPreset()}
+                  placeholder="단가(선택)" style={{ ...inp, width: 130, textAlign: 'right' }} />
+                <button onClick={handleAddPreset} disabled={addPresetLoading || !newPreset.itemName.trim()}
+                  style={{ padding: '8px 18px', background: BLUE, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', opacity: (addPresetLoading || !newPreset.itemName.trim()) ? 0.6 : 1 }}>
+                  {addPresetLoading ? '...' : '추가'}
+                </button>
+              </div>
+              <FieldError message={presetErr.errors.itemName} />
+            </div>
+
+            {/* 항목 목록 */}
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {presetLoading ? (
+                <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>불러오는 중...</div>
+              ) : presets.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>등록된 항목이 없습니다</div>
+              ) : presets.map(preset => {
+                const isEditing = editingPreset?.presetId === preset.preset_id
+                return (
+                  <div key={preset.preset_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 4px', borderBottom: `1px solid ${BORDER}` }}>
+                    {isEditing ? (
+                      <div style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'center', position: 'relative' }}>
+                        <input value={editingPreset.itemName} autoFocus
+                          onChange={e => { setEditingPreset(prev => prev ? { ...prev, itemName: e.target.value } : null); presetEditErr.clearError('itemName') }}
+                          onKeyDown={e => e.key === 'Enter' && handleSavePreset()}
+                          style={presetEditErr.errors.itemName ? { ...inp, flex: 1, border: errBorder } : { ...inp, flex: 1 }} />
+                        <input type="number" value={editingPreset.unitPrice}
+                          onChange={e => setEditingPreset(prev => prev ? { ...prev, unitPrice: e.target.value } : null)}
+                          onKeyDown={e => e.key === 'Enter' && handleSavePreset()}
+                          placeholder="0" style={{ ...inp, width: 120, textAlign: 'right' }} />
+                        <button onClick={handleSavePreset} disabled={savingPreset}
+                          style={{ padding: '6px 14px', background: BLUE, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', opacity: savingPreset ? 0.7 : 1, whiteSpace: 'nowrap' }}>
+                          {savingPreset ? '...' : '저장'}
+                        </button>
+                        <button onClick={() => setEditingPreset(null)}
+                          style={{ padding: '6px 10px', background: '#f3f4f6', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>취소</button>
+                        <FieldError message={presetEditErr.errors.itemName} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 2, whiteSpace: 'nowrap' }} />
+                      </div>
+                    ) : (
+                      <>
+                        {/* 항목명·단가 어느 쪽을 눌러도 인라인 수정으로 들어간다 */}
+                        <div onClick={() => setEditingPreset({ presetId: preset.preset_id, itemName: preset.item_name, unitPrice: String(preset.unit_price || '') })}
+                          style={{ flex: 1, cursor: 'pointer', minWidth: 0 }}>
+                          <span style={{ fontWeight: 700, fontSize: 15, color: TEXT }}>{preset.item_name}</span>
+                        </div>
+                        <div onClick={() => setEditingPreset({ presetId: preset.preset_id, itemName: preset.item_name, unitPrice: String(preset.unit_price || '') })}
+                          title="클릭하여 수정"
+                          style={{ width: 120, textAlign: 'right', cursor: 'pointer', flexShrink: 0 }}>
+                          {preset.unit_price > 0
+                            ? <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>₩{numKR(preset.unit_price)}</span>
+                            : <span style={{ fontSize: 13, color: GRAY }}>미정</span>}
+                        </div>
+                        <button onClick={() => handleDeletePreset(preset)} disabled={deletingPreset === preset.preset_id}
+                          style={{ padding: '4px 14px', background: DANGER, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, flexShrink: 0, opacity: deletingPreset === preset.preset_id ? 0.6 : 1 }}>
+                          {deletingPreset === preset.preset_id ? '삭제 중...' : '삭제'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ marginTop: 12, fontSize: 11, color: GRAY }}>* 항목명이나 단가를 클릭하면 바로 수정할 수 있습니다. 단가를 바꿔도 이미 저장된 견적서 금액은 변하지 않습니다</div>
           </div>
         </div>
       )}

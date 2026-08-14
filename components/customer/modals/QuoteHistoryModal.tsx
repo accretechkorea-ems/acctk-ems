@@ -58,7 +58,7 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose }:
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 900 }}>
               <thead style={{ position: 'sticky', top: 0, background: CARD_BG }}>
                 <tr style={{ borderBottom: `2px solid ${INPUT_BORDER}` }}>
-                  {['견적번호', '날짜', '담당자', '내용', '품목', '금액', '순이익', '이익률', '상태'].map(h => (
+                  {['견적번호', '날짜', '담당자', '품목', '금액', '순이익', '이익률', '상태'].map(h => (
                     <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: TEXT_SECONDARY, fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
@@ -75,7 +75,6 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose }:
                       <td style={{ padding: '10px 12px', fontWeight: 700, color: WHITE_BUTTON_BG, whiteSpace: 'nowrap' }}>{q.quote_number}</td>
                       <td style={{ padding: '10px 12px', color: TEXT_SECONDARY, whiteSpace: 'nowrap' }}>{q.quote_date}</td>
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>{q.engineers?.name ?? '-'}</td>
-                      <td style={{ padding: '10px 12px', color: TEXT_SECONDARY, maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.subject ?? '-'}</td>
                       <td style={{ padding: '10px 12px', color: TEXT_SECONDARY, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemNames}</td>
                       <td style={{ padding: '10px 12px', fontWeight: 700, whiteSpace: 'nowrap' }}>₩{numKR(q.total_supply)}</td>
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>

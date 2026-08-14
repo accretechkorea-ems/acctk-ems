@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { SALES_STATUS_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import { useToast } from '@/components/common/Toast'
+import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
+import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice } from '@/lib/quoteMutations'
 import { achieveColorOf } from '@/lib/fiscal'
@@ -59,7 +61,6 @@ type Quote = {
   quote_type: string | null
   customer_id: number | null
   dealer_id: number | null
-  subject: string | null
   pdf_url: string | null
   shipping_date: string | null
   order_memo: string | null
@@ -129,7 +130,7 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
   const loadData = async () => {
     const { data: qs } = await supabase
       .from('quotes')
-      .select('quote_id, quote_number, quote_date, total_supply, total_profit, profit_rate, status, quote_type, customer_id, dealer_id, subject, pdf_url, shipping_date, order_memo, order_completed_by, tax_completed_by, tax_invoice_date, fail_reason, quote_items(product_name, price_list(model_jp))')
+      .select('quote_id, quote_number, quote_date, total_supply, total_profit, profit_rate, status, quote_type, customer_id, dealer_id, pdf_url, shipping_date, order_memo, order_completed_by, tax_completed_by, tax_invoice_date, fail_reason, quote_items(product_name, price_list(model_jp))')
       .eq('engineer_id', engineerId)
       .order('created_at', { ascending: false })
     const list = (qs ?? []) as any[]
@@ -201,13 +202,16 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
   const filtered = dateFiltered.filter(q => {
     const matchSearch = !search.trim() ||
       q.quote_number.toLowerCase().includes(search.toLowerCase()) ||
-      q.company_name.toLowerCase().includes(search.toLowerCase()) ||
-      (q.subject || '').toLowerCase().includes(search.toLowerCase())
+      q.company_name.toLowerCase().includes(search.toLowerCase())
     return matchSearch && (statusFilter === '전체' || q.status === statusFilter)
   })
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageSafe = Math.min(page, totalPages)
   const paged = filtered.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE)
+  // 목록(검색·상태·기간)이 바뀌면 사라진 견적의 선택은 자동으로 걷힌다. 이 파일엔 sel 상태가 이미 있어 이름을 달리한다.
+  const quoteSel = useQuoteSelection(filtered.map(q => q.quote_id))
+  const pagedIds = paged.map(q => q.quote_id)
+  const allPagedSelected = pagedIds.length > 0 && pagedIds.every(id => quoteSel.isSelected(id))
 
   const openPdf = async (q: Quote) => {
     if (!q.pdf_url) return
@@ -358,6 +362,13 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
             {salesStatusLabel(s)}
           </button>
         ))}
+        {/* 선택한 견적을 이익률 분석표 엑셀로 내보낸다(보이는 행만 선택 가능). */}
+        <QuoteExcelButton
+          quoteIds={quoteSel.selected}
+          engineerId={engineerId}
+          onDone={quoteSel.clear}
+          style={{ padding: '4px 10px', borderRadius: 6, border: 'none', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: BLUE, color: '#fff' }}
+        />
       </div>
 
       {/* 테이블 */}
@@ -370,6 +381,10 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                <th style={{ width: 36, padding: '8px 6px', textAlign: 'center', background: '#f8fafc' }}>
+                  <input type="checkbox" checked={allPagedSelected} onChange={() => quoteSel.toggleAll(pagedIds)}
+                    title="이 페이지 전체 선택/해제" style={{ cursor: 'pointer' }} />
+                </th>
                 {['견적번호', '날짜', '대리점', '고객사', '품목', '매출액', '순이익', '상태', '관리'].map(h => (
                   <th key={h} style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap', background: '#f8fafc' }}>{h}</th>
                 ))}
@@ -389,6 +404,9 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
                   <tr key={q.quote_id} style={{ borderBottom: `1px solid ${BORDER}`, transition: 'background 0.12s ease' }}
                     onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
                     onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                    <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                      <input type="checkbox" checked={quoteSel.isSelected(q.quote_id)} onChange={() => quoteSel.toggle(q.quote_id)} style={{ cursor: 'pointer' }} />
+                    </td>
                     <td style={{ padding: '8px 10px', fontWeight: 700, color: BLUE, whiteSpace: 'nowrap', textAlign: 'center' }}>
                       <span onClick={() => openPdf(q)} style={{ cursor: q.pdf_url ? 'pointer' : 'default' }}>
                         {q.quote_number}{q.pdf_url && <span style={{ marginLeft: 4, fontSize: 9, color: MUTED }}>PDF</span>}

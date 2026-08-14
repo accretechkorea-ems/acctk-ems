@@ -14,11 +14,12 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   // 영업관리팀 또는 superadmin만 허용 (canAccessSales)
-  const { data: caller } = await supabase
+  const { data: caller, error: callerErr } = await supabase
     .from('engineers')
     .select('engineer_id, teams, permission_level')
     .eq('email', user.email!)
     .single()
+  if (callerErr) console.error(' caller lookup failed', { email: user.email, error: callerErr })
   if (!caller || !canAccessSales(caller)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -41,11 +42,12 @@ export async function POST(req: Request) {
 
   if (action === 'approve') {
     // 재고 수량 확인
-    const { data: item } = await supabaseAdmin
+    const { data: item, error: itemErr } = await supabaseAdmin
       .from('inventory_items')
       .select('quantity')
       .eq('item_id', req_data.item_id)
       .single()
+    if (itemErr) console.error(' item lookup failed', { action, request_id, itemId: req_data.item_id, error: itemErr })
 
     if (!item || item.quantity < req_data.quantity) {
       return NextResponse.json({ error: `재고 부족 (현재: ${item?.quantity ?? 0}개, 요청: ${req_data.quantity}개)` }, { status: 400 })
@@ -81,7 +83,7 @@ export async function POST(req: Request) {
     if (e3) return NextResponse.json({ error: e3.message }, { status: 500 })
 
     // 요청자에게 알림
-    await supabaseAdmin.from('notifications').insert([{
+    const { error: notiErr } = await supabaseAdmin.from('notifications').insert([{
       engineer_id: req_data.requester_id,
       title: '출고 요청 승인됨',
       message: `${req_data.inventory_items?.item_name ?? '품목'} ${req_data.quantity}개 출고 요청이 승인되었습니다`,
@@ -90,6 +92,7 @@ export async function POST(req: Request) {
       is_read: false,
       created_at: new Date().toISOString(),
     }])
+    if (notiErr) console.error(' notification insert failed', { action, request_id, requesterId: req_data.requester_id, error: notiErr })
 
     return NextResponse.json({ success: true })
   }
@@ -108,7 +111,7 @@ export async function POST(req: Request) {
     .eq('request_id', Number(request_id))
   if (e1) return NextResponse.json({ error: e1.message }, { status: 500 })
 
-  await supabaseAdmin.from('notifications').insert([{
+  const { error: rejectNotiErr } = await supabaseAdmin.from('notifications').insert([{
     engineer_id: req_data.requester_id,
     title: '출고 요청 반려됨',
     message: `${req_data.inventory_items?.item_name ?? '품목'} ${req_data.quantity}개 출고 요청이 반려되었습니다. 사유: ${reject_reason.trim()}`,
@@ -117,6 +120,7 @@ export async function POST(req: Request) {
     is_read: false,
     created_at: new Date().toISOString(),
   }])
+  if (rejectNotiErr) console.error(' notification insert failed', { action, request_id, requesterId: req_data.requester_id, error: rejectNotiErr })
 
   return NextResponse.json({ success: true })
 }

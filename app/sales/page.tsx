@@ -12,6 +12,8 @@ import AccessGate from '@/components/common/AccessGate'
 import { canAccessAdmin, getViewScope, isFieldEngineerTeam } from '@/lib/permissions'
 import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice } from '@/lib/quoteMutations'
 import SegmentedControl from '@/components/common/SegmentedControl'
+import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
+import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 
 // 기간 필터 모드 — 회계연도(4월 시작) 기준. h1=상반기(4~9월), h2=하반기(10~다음해 3월)
 type PeriodMode = 'year' | 'h1' | 'h2' | 'q1' | 'q2' | 'q3' | 'q4' | 'month'
@@ -45,7 +47,6 @@ type Quote = {
   revenue_date: string | null
   fail_reason: string | null
   recipient: string | null
-  subject: string | null
   engineer_id: number
   customer_id: number | null
   dealer_id: number | null
@@ -580,13 +581,16 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   const filtered = quotes.filter(q => {
     const matchSearch = !search.trim() ||
       q.quote_number.toLowerCase().includes(search.toLowerCase()) ||
-      (q.customers?.company_name || '').toLowerCase().includes(search.toLowerCase()) ||
-      (q.subject || '').toLowerCase().includes(search.toLowerCase())
+      (q.customers?.company_name || '').toLowerCase().includes(search.toLowerCase())
     return matchSearch && (statusFilter === '전체' || q.status === statusFilter)
   })
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-  const inp: React.CSSProperties = { padding: '6px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' }
+  // 검색·상태 필터로 목록이 바뀌면 화면에서 사라진 견적의 선택은 자동으로 걷힌다.
+  const sel = useQuoteSelection(filtered.map(q => q.quote_id))
+  const pagedIds = paged.map(q => q.quote_id)
+  const allPagedSelected = pagedIds.length > 0 && pagedIds.every(id => sel.isSelected(id))
+  const inp: React.CSSProperties ={ padding: '6px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' }
   const handleSave = async () => {
     if (!editQuote) return
     setSaving(true)
@@ -722,13 +726,20 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
             )
           })()}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="견적번호 / 고객사 / 내용 검색" style={{ ...inp, flex: 1, minWidth: 200 }} />
+            <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="견적번호 / 고객사 검색" style={{ ...inp, flex: 1, minWidth: 200 }} />
             {['전체', '견적중', '수리중', '발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료', '취소요청', '실패'].map(s => (
               <button key={s} onClick={() => { setStatusFilter(s); setPage(1) }}
                 style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: statusFilter === s ? (s === '전체' ? BLUE : getCategoryColor(SALES_STATUS_COLORS, s).text) : '#f3f4f6', color: statusFilter === s ? '#fff' : TEXT }}>
                 {salesStatusLabel(s)}
               </button>
             ))}
+            {/* 선택한 견적을 이익률 분석표 엑셀로 내보낸다(보이는 행만 선택 가능 → 열람 범위와 동일). */}
+            <QuoteExcelButton
+              quoteIds={sel.selected}
+              engineerId={currentEngineerId}
+              onDone={sel.clear}
+              style={{ padding: '5px 12px', borderRadius: 8, border: 'none', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: BLUE, color: '#fff' }}
+            />
           </div>
         </div>
         <div style={{ overflowY: 'auto', flex: 1 }}>
@@ -738,6 +749,10 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead style={{ position: 'sticky', top: 0, background: CARD_BG, zIndex: 1 }}>
                 <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                  <th style={{ width: 36, padding: '8px 6px', textAlign: 'center', background: '#f8fafc' }}>
+                    <input type="checkbox" checked={allPagedSelected} onChange={() => sel.toggleAll(pagedIds)}
+                      title="이 페이지 전체 선택/해제" style={{ cursor: 'pointer' }} />
+                  </th>
                   {['견적번호', '날짜', '대리점', '고객사', '품목', '매출액', '순이익', '상태', '관리'].map(h => (
                     <th key={h} style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap', background: '#f8fafc' }}>{h}</th>
                   ))}
@@ -757,6 +772,9 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                     <tr key={q.quote_id} style={{ borderBottom: `1px solid ${BORDER}`, transition: 'background 0.12s ease' }}
                       onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
                       onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                      <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                        <input type="checkbox" checked={sel.isSelected(q.quote_id)} onChange={() => sel.toggle(q.quote_id)} style={{ cursor: 'pointer' }} />
+                      </td>
                       <td style={{ padding: '8px 10px', fontWeight: 700, color: BLUE, whiteSpace: 'nowrap', textAlign: 'center' }}>
                         <span
                           onClick={async () => {

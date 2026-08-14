@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { SALES_STATUS_COLORS, DELIVERY_METHOD_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import { canAccessSales } from '@/lib/permissions'
+import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
+import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import AccessGate from '@/components/common/AccessGate'
 
 const BLUE = '#234ea2'
@@ -35,7 +37,6 @@ type PurchaseQuote = {
   tax_completed_by: string | null
   delivery_info: string | null
   delivery_method: string | null
-  subject: string | null
   engineer_id: number
   customer_id: number | null
   engineers?: { name: string; position: string | null } | null
@@ -95,7 +96,7 @@ export default function PurchasePage() {
     const [{ data: meData }, { data: qData }, { data: custData }, { data: engData }] = await Promise.all([
       supabase.from('engineers').select('*').eq('email', userData.user?.email || '').single(),
       supabase.from('quotes')
-        .select('quote_id, quote_number, quote_date, total_supply, status, pdf_url, purchase_order_url, purchase_order_at, shipping_date, order_memo, order_completed_at, order_completed_by, tax_invoice_date, tax_invoice_requested_at, tax_invoice_completed_at, tax_completed_by, delivery_info, delivery_method, subject, engineer_id, customer_id, engineers(name, position)')
+        .select('quote_id, quote_number, quote_date, total_supply, status, pdf_url, purchase_order_url, purchase_order_at, shipping_date, order_memo, order_completed_at, order_completed_by, tax_invoice_date, tax_invoice_requested_at, tax_invoice_completed_at, tax_completed_by, delivery_info, delivery_method, engineer_id, customer_id, engineers(name, position)')
         .in('status', ['발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료'])
         .order('purchase_order_at', { ascending: false }),
       supabase.from('customers').select('customer_id, company_name'),
@@ -116,15 +117,20 @@ export default function PurchasePage() {
 
   const isAllowed = canAccessSales(me)
 
+  // 목록(검색·상태 필터)이 바뀌면 화면에서 사라진 견적의 선택은 자동으로 걷힌다.
   const filtered = quotes.filter(q => {
     const matchStatus = statusFilter === '전체' || q.status === statusFilter
     const company = custMap[q.customer_id ?? 0] ?? ''
     const matchSearch = !search.trim() ||
       q.quote_number.includes(search) ||
-      company.toLowerCase().includes(search.toLowerCase()) ||
-      (q.subject || '').toLowerCase().includes(search.toLowerCase())
+      company.toLowerCase().includes(search.toLowerCase())
     return matchStatus && matchSearch
   })
+
+  // 이 화면은 페이징이 없어 filtered 가 곧 화면에 보이는 목록이다.
+  const visibleIds = filtered.map(q => q.quote_id)
+  const sel = useQuoteSelection(visibleIds)
+  const allSelected = visibleIds.length > 0 && visibleIds.every(id => sel.isSelected(id))
 
   const counts = {
     '발주(주문 대기)': quotes.filter(q => q.status === '발주(주문 대기)').length,
@@ -234,7 +240,7 @@ export default function PurchasePage() {
 
         {/* 검색 + 필터 */}
         <div style={{ background: CARD_BG, borderRadius: 12, padding: '12px 16px', marginBottom: 16, border: `1px solid ${BORDER}`, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="견적번호 / 고객사 / 내용 검색"
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="견적번호 / 고객사 검색"
             style={{ ...inp, width: 240 }} />
           <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 10, padding: 3, gap: 1 }}>
             {['전체', '발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료'].map(s => (
@@ -245,6 +251,13 @@ export default function PurchasePage() {
             ))}
           </div>
           <span style={{ fontSize: 12, color: MUTED, marginLeft: 'auto' }}>{filtered.length}건</span>
+          {/* 선택한 견적을 이익률 분석표 엑셀로 내보낸다(보이는 행만 선택 가능). */}
+          <QuoteExcelButton
+            quoteIds={sel.selected}
+            engineerId={me?.engineer_id ?? null}
+            onDone={sel.clear}
+            style={{ padding: '6px 12px', borderRadius: 8, border: 'none', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', background: BLUE, color: '#fff' }}
+          />
         </div>
 
         {/* 테이블 */}
@@ -255,6 +268,10 @@ export default function PurchasePage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: `1px solid ${BORDER}` }}>
+                  <th style={{ width: 36, padding: '9px 6px', textAlign: 'center' }}>
+                    <input type="checkbox" checked={allSelected} onChange={() => sel.toggleAll(visibleIds)}
+                      title="전체 선택/해제" style={{ cursor: 'pointer' }} />
+                  </th>
                   {['견적서(견적번호)', '고객사', '담당자', '배송', '공급가액', '발주일', '출하예정', '메모', '상태', '발주서'].map(h => (
                     <th key={h} style={{ padding: '9px 10px', textAlign: 'center', fontSize: 11, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
@@ -274,6 +291,9 @@ export default function PurchasePage() {
                       style={{ borderBottom: `1px solid ${BORDER}`, transition: 'background 0.1s' }}
                       onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
                       onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                      <td style={{ padding: '9px 6px', textAlign: 'center' }}>
+                        <input type="checkbox" checked={sel.isSelected(q.quote_id)} onChange={() => sel.toggle(q.quote_id)} style={{ cursor: 'pointer' }} />
+                      </td>
                       <td style={{ padding: '9px 10px', fontWeight: 700, color: BLUE, whiteSpace: 'nowrap', textAlign: 'center' }}>
                         <span
                           onClick={() => handleViewQuotePDF(q)}

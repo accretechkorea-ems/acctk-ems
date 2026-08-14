@@ -247,7 +247,7 @@ function InventoryPage() {
       // 알림 수신자(현재 시점 대상) — 삭제(퇴사)된 직원은 제외. (발주서 알림 로직과 동일 기준)
       const managers = allEngineers.filter(e => canAccessSales(e) && !e.resigned_date)
       if (managers.length > 0) {
-        await supabase.from('notifications').insert(
+        const { error: notiErr } = await supabase.from('notifications').insert(
           managers.map(m => ({
             engineer_id: m.engineer_id,
             title: '출고 요청 승인 필요',
@@ -258,6 +258,7 @@ function InventoryPage() {
             created_at: new Date().toISOString(),
           }))
         )
+        if (notiErr) console.error('[inventory] notification insert failed', { action: 'stock_request', itemId: requestItem.item_id, targets: managers.length, error: notiErr })
       }
       toast.success('출고 요청이 등록되었습니다')
       setRequestItem(null); setRequestQty(1); setRequestOutletCompany(''); setRequestReason(''); setRequestNote('')
