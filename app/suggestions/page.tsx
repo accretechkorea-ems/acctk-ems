@@ -24,6 +24,11 @@ const STATUSES = ['접수', '검토중', '완료', '보류'] as const
 type Status = typeof STATUSES[number]
 const STATUS_TABS = ['전체', ...STATUSES]
 
+// suggestions.category 의 CHECK 제약과 같은 값이어야 한다.
+const CATEGORIES = ['80', '20', '영업관리', '견적서', '기타'] as const
+type Category = typeof CATEGORIES[number]
+const CATEGORY_TABS = ['전체', ...CATEGORIES]
+
 // 상태 뱃지 — 배경은 공용 회색 pill 하나로 통일하고 글자색만 기존 토큰에서 가져다 쓴다.
 const STATUS_TEXT: Record<string, string> = {
   '접수': GRAY,
@@ -39,6 +44,7 @@ type Suggestion = {
   engineer_id: number
   title: string
   content: string
+  category: string
   status: string
   admin_reply: string | null
   replied_by: number | null
@@ -63,6 +69,7 @@ export default function SuggestionsPage() {
   const [rows, setRows] = useState<Suggestion[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('전체')
+  const [categoryFilter, setCategoryFilter] = useState('전체')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
 
@@ -71,6 +78,7 @@ export default function SuggestionsPage() {
   const [editing, setEditing] = useState<Suggestion | null>(null)
   const [formTitle, setFormTitle] = useState('')
   const [formContent, setFormContent] = useState('')
+  const [formCategory, setFormCategory] = useState<Category>('기타')
   const [saving, setSaving] = useState(false)
   const formErr = useFieldErrors<'title' | 'content'>()
 
@@ -86,15 +94,24 @@ export default function SuggestionsPage() {
   useEffect(() => { replyErr.setErrors({}) }, [detail])
   /* eslint-enable react-hooks/exhaustive-deps */
 
-  const load = async () => {
+  // suggestions 는 engineers 를 engineer_id(작성자)·replied_by(답변자) 두 번 참조한다.
+  // 그냥 engineers(...) 로 쓰면 어느 관계인지 정해지지 않아 PGRST201 로 조회 전체가 실패하므로
+  // 제약 이름으로 작성자 쪽을 지정한다. (답변자 이름은 화면에서 쓰지 않아 가져오지 않는다)
+  // 반환값: 조회 성공 여부. 호출한 쪽이 성공 안내를 띄울지 판단하는 데 쓴다.
+  const load = async (): Promise<boolean> => {
     setLoading(true)
     const { data, error } = await supabase
       .from('suggestions')
-      .select('*, engineers(name, position)')
+      .select('*, engineers!suggestions_engineer_id_fkey(name, position)')
       .order('created_at', { ascending: false })
-    if (error) toast.error('건의사항을 불러오지 못했습니다')
-    setRows((data ?? []) as unknown as Suggestion[])
     setLoading(false)
+    if (error) {
+      console.error('[suggestions] load failed', error)
+      toast.error(`건의사항을 불러오지 못했습니다 (${error.code || error.message})`)
+      return false
+    }
+    setRows((data ?? []) as unknown as Suggestion[])
+    return true
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -110,12 +127,13 @@ export default function SuggestionsPage() {
 
   const filtered = rows.filter(r => {
     const matchStatus = statusFilter === '전체' || r.status === statusFilter
+    const matchCategory = categoryFilter === '전체' || r.category === categoryFilter
     const q = search.trim().toLowerCase()
     const matchSearch = !q ||
       r.title.toLowerCase().includes(q) ||
       r.content.toLowerCase().includes(q) ||
       (r.engineers?.name ?? '').toLowerCase().includes(q)
-    return matchStatus && matchSearch
+    return matchStatus && matchCategory && matchSearch
   })
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageSafe = Math.min(page, totalPages)
@@ -127,8 +145,15 @@ export default function SuggestionsPage() {
   // 답변이 달린 글은 작성자가 지울 수 없다(관리자 답변까지 사라지므로). superadmin 은 항상 가능.
   const canDelete = (s: Suggestion) => superAdmin || (isMine(s) && !s.admin_reply)
 
-  const openNew = () => { setEditing(null); setFormTitle(''); setFormContent(''); setFormOpen(true) }
-  const openEdit = (s: Suggestion) => { setEditing(s); setFormTitle(s.title); setFormContent(s.content); setFormOpen(true) }
+  const asCategory = (v: string): Category =>
+    (CATEGORIES as readonly string[]).includes(v) ? (v as Category) : '기타'
+
+  const openNew = () => {
+    setEditing(null); setFormTitle(''); setFormContent(''); setFormCategory('기타'); setFormOpen(true)
+  }
+  const openEdit = (s: Suggestion) => {
+    setEditing(s); setFormTitle(s.title); setFormContent(s.content); setFormCategory(asCategory(s.category)); setFormOpen(true)
+  }
 
   const handleSave = async () => {
     const ok = formErr.validate({
@@ -143,15 +168,15 @@ export default function SuggestionsPage() {
     const { error } = editing
       // 수정 — updated_at 자동 갱신 트리거 유무가 확인되지 않아 앱에서 명시적으로 넣는다.
       ? await supabase.from('suggestions')
-          .update({ title: formTitle.trim(), content: formContent.trim(), updated_at: nowIso })
+          .update({ title: formTitle.trim(), content: formContent.trim(), category: formCategory, updated_at: nowIso })
           .eq('suggestion_id', editing.suggestion_id)
       : await supabase.from('suggestions')
-          .insert({ engineer_id: engineer.engineer_id, title: formTitle.trim(), content: formContent.trim() })
+          .insert({ engineer_id: engineer.engineer_id, title: formTitle.trim(), content: formContent.trim(), category: formCategory })
     setSaving(false)
     if (error) { toast.error(error.message); return }
-    toast.success(editing ? '수정되었습니다' : '건의사항이 등록되었습니다')
     setFormOpen(false)
-    await load()
+    // 목록 갱신이 실패하면 load() 가 원인을 알리므로 성공 안내는 띄우지 않는다.
+    if (await load()) toast.success(editing ? '수정되었습니다' : '건의사항이 등록되었습니다')
   }
 
   const handleDelete = async (s: Suggestion) => {
@@ -163,9 +188,8 @@ export default function SuggestionsPage() {
     if (!ok) return
     const { error } = await supabase.from('suggestions').delete().eq('suggestion_id', s.suggestion_id)
     if (error) { toast.error(error.message); return }
-    toast.success('삭제되었습니다')
     setDetail(null)
-    await load()
+    if (await load()) toast.success('삭제되었습니다')
   }
 
   const openDetail = (s: Suggestion) => {
@@ -188,8 +212,7 @@ export default function SuggestionsPage() {
     }).eq('suggestion_id', detail.suggestion_id)
     setReplySaving(false)
     if (error) { toast.error(error.message); return }
-    toast.success('답변이 저장되었습니다')
-    await load()
+    if (await load()) toast.success('답변이 저장되었습니다')
   }
 
   // 답변 없이 상태만 바꾸는 경우(예: 검토중으로만 이동)
@@ -208,9 +231,18 @@ export default function SuggestionsPage() {
     background: CARD_BG, color: TEXT, fontSize: 13, outline: 'none',
     fontFamily: 'inherit', boxSizing: 'border-box',
   }
-  const badge = (status: string) => (
-    <span style={{ padding: '3px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: '#f3f4f6', color: STATUS_TEXT[status] ?? GRAY, whiteSpace: 'nowrap' }}>{status}</span>
+  // 상태·분류 공용 뱃지. 배경은 회색 pill 하나로 통일하고, 상태만 글자색을 달리 한다
+  // (분류는 STATUS_TEXT 에 없으므로 기본 GRAY 로 떨어진다).
+  const badge = (label: string) => (
+    <span style={{ padding: '3px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: '#f3f4f6', color: STATUS_TEXT[label] ?? GRAY, whiteSpace: 'nowrap' }}>{label}</span>
   )
+
+  const filterLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap' }
+  const tabBtn = (active: boolean): React.CSSProperties => ({
+    padding: '5px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
+    fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap',
+    background: active ? BLUE : '#f3f4f6', color: active ? '#fff' : TEXT,
+  })
 
   if (!authorized) return <AccessGate loading={guardLoading} />
 
@@ -235,8 +267,7 @@ export default function SuggestionsPage() {
             <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}
               placeholder="제목 / 내용 / 작성자 검색" style={{ ...inp, flex: 1, minWidth: 200 }} />
             {STATUS_TABS.map(s => (
-              <button key={s} onClick={() => { setStatusFilter(s); setPage(1) }}
-                style={{ padding: '5px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: statusFilter === s ? BLUE : '#f3f4f6', color: statusFilter === s ? '#fff' : TEXT }}>
+              <button key={s} onClick={() => { setStatusFilter(s); setPage(1) }} style={tabBtn(statusFilter === s)}>
                 {s}
               </button>
             ))}
@@ -244,6 +275,16 @@ export default function SuggestionsPage() {
               style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', background: BLUE, color: '#fff' }}>
               + 건의사항 작성
             </button>
+          </div>
+
+          {/* 분류 필터 — 상태 필터와 AND 로 함께 걸린다 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+            <span style={filterLabel}>분류</span>
+            {CATEGORY_TABS.map(c => (
+              <button key={c} onClick={() => { setCategoryFilter(c); setPage(1) }} style={tabBtn(categoryFilter === c)}>
+                {c}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -257,7 +298,7 @@ export default function SuggestionsPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
-                  {['제목', '작성자', '상태', '답변', '작성일'].map(h => (
+                  {['제목', '분류', '작성자', '상태', '답변', '작성일'].map(h => (
                     <th key={h} style={{ padding: '9px 10px', textAlign: 'center', fontSize: 11, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap', background: '#f8fafc' }}>{h}</th>
                   ))}
                 </tr>
@@ -272,6 +313,7 @@ export default function SuggestionsPage() {
                       {s.title}
                       {isEdited(s) && <span style={{ marginLeft: 6, fontSize: 11, color: MUTED, fontWeight: 500 }}>(수정됨)</span>}
                     </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>{badge(s.category)}</td>
                     <td style={{ padding: '10px 12px', color: GRAY, whiteSpace: 'nowrap', textAlign: 'center' }}>
                       {s.engineers ? `${s.engineers.name}${s.engineers.position ? ' ' + s.engineers.position : ''}` : '-'}
                     </td>
@@ -310,7 +352,13 @@ export default function SuggestionsPage() {
               <button onClick={() => setFormOpen(false)} style={{ width: 30, height: 30, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 14, color: GRAY }}>✕</button>
             </div>
 
-            <label style={{ fontSize: 12, fontWeight: 700, color: GRAY, display: 'block', marginBottom: 4 }}>제목</label>
+            <label style={{ fontSize: 12, fontWeight: 700, color: GRAY, display: 'block', marginBottom: 4 }}>분류</label>
+            <select value={formCategory} onChange={e => setFormCategory(e.target.value as Category)}
+              style={{ ...inp, width: '100%' }}>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+
+            <label style={{ fontSize: 12, fontWeight: 700, color: GRAY, display: 'block', margin: '14px 0 4px' }}>제목</label>
             <input value={formTitle} onChange={e => { setFormTitle(e.target.value); formErr.clearError('title') }}
               placeholder="예: 견적서 화면 검색 개선 요청"
               style={{ ...inp, width: '100%', border: formErr.errors.title ? errBorder : `1px solid ${BORDER}` }} />
@@ -346,6 +394,7 @@ export default function SuggestionsPage() {
                 </div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   {badge(detail.status)}
+                  {badge(detail.category)}
                   <span>{detail.engineers ? `${detail.engineers.name}${detail.engineers.position ? ' ' + detail.engineers.position : ''}` : '-'}</span>
                   <span>·</span>
                   <span>{fmtDateTime(detail.created_at)}</span>
