@@ -12,6 +12,8 @@ import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { isClosed } from '@/components/customer/opportunity'
 import { deviceLabel, elapsedDays } from '@/components/customer/holding'
+import { SERVICE_TYPES } from '@/components/activity/ActivityCard'
+import { SALES_TYPES } from '@/lib/activity'
 import type { Holding, SalesActivity, SalesOpportunity } from '@/components/customer/types'
 
 export const STALE_DAYS = 30
@@ -25,6 +27,28 @@ export type MonthStats = {
   wonCount: number        // 이번 달 발주서가 등록된 건(= 수주)
   revenue: number         // 이번 달 매출완료된 건의 공급가 합
 }
+
+/** 이번 달 활동 — 총 건수와 유형별 건수. 유형 목록은 입력 화면이 쓰는 상수를 그대로 따른다. */
+export type ActivityStats = {
+  total: number
+  byType: { type: string; count: number }[]
+}
+
+/** 유효기간이 다가오는 견적 한 줄. */
+export type ExpiringQuote = {
+  quoteId: number
+  quoteNumber: string
+  quoteDate: string
+  companyName: string
+  expiry: string      // 만료일 YYYY-MM-DD
+  daysLeft: number    // 음수면 이미 지난 것
+}
+
+// 견적 유효기간이 걸리는 상태 — 고객 회신을 기다리는 "견적중" 뿐이다.
+// 발주 이후(발주(주문 대기)·주문완료·세금계산서 요청·매출완료)는 이미 물건이 움직였고,
+// 수주는 고객이 받아들인 뒤, 수리중은 국내수리가 진행 중, 실패·취소요청·보류는 멈춘 건이라
+// 어느 쪽도 "1개월 안에 답을 받아야 하는" 상태가 아니다.
+const EXPIRY_TARGET_STATUS = '견적중'
 
 export type UrgentKind = '홀딩' | '정체' | '마감'
 
@@ -61,6 +85,24 @@ function monthRange(d: Date) {
 }
 
 const emptyStats = (): MonthStats => ({ quoteCount: 0, wonCount: 0, revenue: 0 })
+const emptyActivity = (types: readonly string[]): ActivityStats => ({
+  total: 0, byType: types.map(type => ({ type, count: 0 })),
+})
+
+/**
+ * 견적 유효기간 만료일 = 작성일 + 1개월 - 1일 (견적서 PDF 의 "작성일로부터 1개월" 문구 기준).
+ * 30일을 더하지 않고 월 단위로 옮긴다. 다음 달에 같은 날짜가 없으면(1/31 → 2/31)
+ * 그 달 말일로 맞춘 뒤 하루를 뺀다.
+ */
+export function quoteExpiry(quoteDate: string): string {
+  const [y, m, d] = quoteDate.split('-').map(Number)
+  const nextY = m === 12 ? y + 1 : y
+  const nextM = m === 12 ? 1 : m + 1
+  const lastDay = new Date(nextY, nextM, 0).getDate()   // 다음 달 말일
+  const dt = new Date(nextY, nextM - 1, Math.min(d, lastDay))
+  dt.setDate(dt.getDate() - 1)
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`
+}
 
 /**
  * 홀딩 · 정체 기회 · 마감 임박을 한 목록으로 합친다(순수 함수).
@@ -143,6 +185,9 @@ export function useDashboard80() {
   const [opportunities, setOpportunities] = useState<SalesOpportunity[]>([])
   const [lastActivityByOpp, setLastActivityByOpp] = useState<Map<number, string>>(new Map())
   const [oppActivities, setOppActivities] = useState<SalesActivity[]>([])
+  const [salesActivity, setSalesActivity] = useState<ActivityStats>(() => emptyActivity(SALES_TYPES))
+  const [serviceActivity, setServiceActivity] = useState<ActivityStats>(() => emptyActivity(SERVICE_TYPES))
+  const [expiringQuotes, setExpiringQuotes] = useState<ExpiringQuote[]>([])
   const [loading, setLoading] = useState(true)
   const alive = useRef(true)
 
@@ -169,19 +214,41 @@ export function useDashboard80() {
     }
   }
 
+  // 이번 달 활동 — 유형 컬럼만 읽어 화면에서 센다(집계 함수를 새로 만들지 않는다).
+  // 유형 목록은 입력 화면이 쓰는 상수를 그대로 쓰므로 0건인 유형도 자리를 지킨다.
+  const countByType = (rows: { type: string | null }[], types: readonly string[]): ActivityStats => {
+    const m = new Map<string, number>()
+    for (const r of rows) if (r.type) m.set(r.type, (m.get(r.type) ?? 0) + 1)
+    return {
+      total: rows.length,
+      byType: types.map(type => ({ type, count: m.get(type) ?? 0 })),
+    }
+  }
+
   // 반환값 = 조회 성공 여부(모달 저장 후 성공 안내를 띄울지 판단하는 데 쓴다).
   const load = async (): Promise<boolean> => {
     setLoading(true)
     const now = new Date()
     const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1)
     try {
-      const [cur, before, oppRes] = await Promise.all([
-        loadMonth(monthRange(now)),
+      const range = monthRange(now)
+      const [cur, before, oppRes, salesRes, serviceRes, expiryRes] = await Promise.all([
+        loadMonth(range),
         loadMonth(monthRange(prev)),
         // 진행 중인 기회만 (종료·실주 제외). 담당자 이름은 여기서 함께 받는다.
         supabase.from('sales_opportunities')
           .select('*, customers(company_name), engineers(name, position)')
           .is('closed_at', null).neq('stage', '실주'),
+        // 이번 달 영업 활동 — 유형만
+        supabase.from('sales_activities').select('activity_type')
+          .gte('activity_date', range.start).lt('activity_date', range.end),
+        // 이번 달 C/S 활동 — 유형만
+        supabase.from('service_history').select('service_type')
+          .gte('visit_date', range.start).lt('visit_date', range.end),
+        // 유효기간이 걸리는 견적(견적중)만. 업체명은 두 FK 를 구분해 임베딩한다.
+        supabase.from('quotes')
+          .select('quote_id, quote_number, quote_date, customers!quotes_customer_id_fkey(company_name)')
+          .eq('status', EXPIRY_TARGET_STATUS),
       ])
       if (!alive.current) return false
       if (oppRes.error) {
@@ -206,6 +273,41 @@ export function useDashboard80() {
         }
       }
       if (!alive.current) return false
+
+      if (salesRes.error) console.error('[dashboard80] sales activity failed', salesRes.error)
+      if (serviceRes.error) console.error('[dashboard80] service activity failed', serviceRes.error)
+      setSalesActivity(countByType(
+        ((salesRes.data ?? []) as { activity_type: string | null }[]).map(r => ({ type: r.activity_type })),
+        SALES_TYPES,
+      ))
+      setServiceActivity(countByType(
+        ((serviceRes.data ?? []) as { service_type: string | null }[]).map(r => ({ type: r.service_type })),
+        SERVICE_TYPES,
+      ))
+
+      if (expiryRes.error) console.error('[dashboard80] expiring quotes failed', expiryRes.error)
+      const today = todayStr()
+      type QuoteRow = {
+        quote_id: number; quote_number: string; quote_date: string | null
+        customers: { company_name: string | null } | null
+      }
+      setExpiringQuotes(
+        ((expiryRes.data ?? []) as unknown as QuoteRow[])
+          .filter(q => !!q.quote_date)
+          .map(q => {
+            const expiry = quoteExpiry(q.quote_date as string)
+            return {
+              quoteId: q.quote_id,
+              quoteNumber: q.quote_number,
+              quoteDate: q.quote_date as string,
+              companyName: q.customers?.company_name ?? '-',
+              expiry,
+              daysLeft: daysBetween(today, expiry),
+            }
+          })
+          .sort((a, b) => a.daysLeft - b.daysLeft || a.quoteId - b.quoteId),
+      )
+
       setThisMonth(cur)
       setLastMonth(before)
       setOpportunities(opps)
@@ -257,5 +359,6 @@ export function useDashboard80() {
   return {
     thisMonth, lastMonth, opportunities, lastActivityByOpp,
     ownerCounts, oppActivities, loadOppActivities, loading, reload: load,
+    salesActivity, serviceActivity, expiringQuotes,
   }
 }

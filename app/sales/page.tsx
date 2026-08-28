@@ -12,6 +12,7 @@ import AccessGate from '@/components/common/AccessGate'
 import { canViewAdmin, getViewScope, isFieldEngineerTeam, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerm, withTeamPerms } from '@/lib/teamPerms'
 import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice } from '@/lib/quoteMutations'
+import { isAutoFailed, REVERT_NOTICE, AUTO_FAIL_NOTICE } from '@/lib/quoteStatus'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
@@ -535,6 +536,10 @@ function TeamCard({ teamId, engineers, filteredQuotes, targets, mode, fy, period
 }
 
 // ── 개인 견적 모달 ────────────────────────────────────────────────────────────
+// 상태 변경 창의 선택지. 되돌리기(견적중)는 실패한 건에만 붙는다.
+type EditStatus = '취소요청' | '실패' | '견적중'
+const EDIT_STATUSES: EditStatus[] = ['취소요청', '실패']
+const EDIT_STATUSES_WITH_REVERT: EditStatus[] = ['취소요청', '실패', '견적중']
 function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, onClose, onStatusSave }: {
   engineer: Engineer & { quotedAmt: number; orderedAmt: number; revenueAmt: number; profitAmt: number; profitRate: number | null; targetAmt: number; achieve: number | null; orderTargetAmt: number; orderAchieve: number | null }
   quotes: Quote[]
@@ -596,7 +601,9 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   const handleSave = async () => {
     if (!editQuote) return
     setSaving(true)
-    await onStatusSave(editQuote, editStatus, editOrderDate, editRevenueDate, editFailReason)
+    // 되돌릴 때는 실패 사유를 지운다(빈 문자열 → 공용 함수가 null 로 저장한다).
+    const reason = editStatus === '견적중' ? '' : editFailReason
+    await onStatusSave(editQuote, editStatus, editOrderDate, editRevenueDate, reason)
     setSaving(false)
     setEditQuote(null)
   }
@@ -1025,8 +1032,13 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
               <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 4 }}>삭제 / 실패 처리</div>
               <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{editQuote.quote_number} · {editQuote.customers?.company_name || ''}</div>
 
+              {/* 되돌리기(견적중)는 사람이 손으로 실패시킨 건에만 연다.
+                  자동 실주 건은 견적일이 이미 한 달을 넘겨, 되살리면 고객에게 나간 PDF 의
+                  유효기간과 어긋나므로 선택지 자체를 만들지 않는다. */}
               <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-                {(['취소요청', '실패'] as const).map(s => (
+                {(editQuote.status === '실패' && !isAutoFailed(editQuote.status, editQuote.fail_reason)
+                  ? EDIT_STATUSES_WITH_REVERT
+                  : EDIT_STATUSES).map(s => (
                   <button key={s} onClick={() => setEditStatus(s)}
                     style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: `1.5px solid ${editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).bg : '#f9fafb', color: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : GRAY, transition: 'all 0.12s' }}>
                     {s === '취소요청' ? '삭제' : s}
@@ -1034,20 +1046,38 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                 ))}
               </div>
 
-              <div style={{ marginBottom: 6 }}>
-                <div style={{ fontSize: 11, color: GRAY, marginBottom: 5, fontWeight: 600 }}>
-                  {editStatus === '취소요청' ? '삭제 사유' : '실패 사유'}
+              {/* 되돌릴 수 없는 건이면 왜 선택지가 없는지 알려준다 */}
+              {isAutoFailed(editQuote.status, editQuote.fail_reason) && (
+                <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, color: GRAY, lineHeight: 1.6, marginBottom: 12 }}>
+                  {AUTO_FAIL_NOTICE}
                 </div>
-                <textarea value={editFailReason} onChange={e => setEditFailReason(e.target.value)} rows={3}
-                  placeholder={editStatus === '취소요청' ? '삭제 요청 사유를 입력하세요' : '실패 사유를 입력하세요'}
-                  style={{ width: '100%', padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
+              )}
+
+              <div style={{ marginBottom: 6 }}>
+                {editStatus === '견적중' ? (
+                  <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, color: GRAY, lineHeight: 1.6 }}>
+                    {REVERT_NOTICE}
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 11, color: GRAY, marginBottom: 5, fontWeight: 600 }}>
+                      {editStatus === '취소요청' ? '삭제 사유' : '실패 사유'}
+                    </div>
+                    <textarea value={editFailReason} onChange={e => setEditFailReason(e.target.value)} rows={3}
+                      placeholder={editStatus === '취소요청' ? '삭제 요청 사유를 입력하세요' : '실패 사유를 입력하세요'}
+                      style={{ width: '100%', padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
+                  </>
+                )}
               </div>
 
               <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
                 <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
                 <button onClick={handleSave} disabled={saving}
                   style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, opacity: saving ? 0.7 : 1 }}>
-                  {saving ? '처리 중...' : (editStatus === '취소요청' ? '삭제 요청' : `${editStatus} 확정`)}
+                  {saving ? '처리 중...'
+                    : editStatus === '취소요청' ? '삭제 요청'
+                    : editStatus === '견적중' ? '견적중으로 되돌리기'
+                    : `${editStatus} 확정`}
                 </button>
               </div>
             </div>
@@ -1212,10 +1242,13 @@ const visibleEngineers = sortedEngineers.filter(e => {
   )
 
   const handleStatusSave = async (q: Quote, status: string, orderDate: string, revenueDate: string, failReason: string) => {
-    // 원본 동작 유지: 상태 업데이트 오류는 무시하고 목록만 갱신(공용 함수는 실패 시 throw).
+    // 예전에는 오류를 그냥 삼켜서, RLS 등으로 막히면 목록만 새로고침되고 아무 일도 없는 것처럼 보였다.
+    // 원인은 공용 함수가 콘솔에 남기고, 여기서는 사용자에게 실패를 알린다.
     try {
       await updateQuoteStatus({ quoteId: q.quote_id, status, orderDate, revenueDate, failReason })
-    } catch { /* noop */ }
+    } catch (e) {
+      console.error('[sales] status save failed', { quoteId: q.quote_id, status, error: e })
+    }
     await fetchAll()
   }
 

@@ -28,7 +28,11 @@ export async function updateQuoteStatus(params: UpdateQuoteStatusParams): Promis
       fail_reason: params.failReason || null,
     })
     .eq('quote_id', params.quoteId)
-  if (error) throw new Error(error.message)
+  if (error) {
+    // RLS 로 막히면 화면에는 메시지만 남아 원인을 알기 어렵다. 원본 객체(code·details·hint)를 콘솔에 남긴다.
+    console.error('[quote] status update failed', { quoteId: params.quoteId, status: params.status, error })
+    throw new Error(error.message)
+  }
 }
 
 export type UploadPurchaseOrderParams = {

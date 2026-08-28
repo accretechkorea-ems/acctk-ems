@@ -8,6 +8,7 @@ import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice } from '@/lib/quoteMutations'
+import { isAutoFailed, REVERT_NOTICE, AUTO_FAIL_NOTICE } from '@/lib/quoteStatus'
 import { achieveColorOf } from '@/lib/fiscal'
 
 // 대시보드 '내 견적' 패널. 실적 현황 EngineerQuoteModal 의 표시 + 관리 기능을 동일하게 구현한다.
@@ -15,7 +16,13 @@ import { achieveColorOf } from '@/lib/fiscal'
 // 본인 견적만 조회하므로(.eq engineer_id) 소유자 검사는 불필요(§5).
 
 const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
+// 한 페이지에 싣는 기본 줄 수. fitToHeight 를 켜면 카드에 주어진 높이만큼 이 값에서 늘어난다.
 const PAGE_SIZE = 10
+const MAX_PAGE_SIZE = 40
+// 목록 높이를 건수와 무관하게 고정하기 위한 한 줄 높이(패딩 8+8 + 글자 줄높이).
+// 한 페이지가 다 안 차면 이 높이의 빈 줄로 채워, 페이지를 넘길 때 아래 요소가 튀지 않게 한다.
+const ROW_H = 33
+const TABLE_COLS = 10
 const STATUS_TABS = ['전체', '견적중', '수리중', '발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료', '취소요청', '실패']
 
 const BLUE = '#234ea2', TEXT = '#111827', GRAY = '#6b7280', MUTED = '#9ca3af', BORDER = '#ebebeb'
@@ -73,12 +80,22 @@ type Quote = {
   dealer_name: string | null
 }
 
-export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
+// 상태 변경 창의 선택지. 되돌리기(견적중)는 실패한 건에만 붙는다.
+type EditStatus = '취소요청' | '실패' | '견적중'
+const EDIT_STATUSES: EditStatus[] = ['취소요청', '실패']
+const EDIT_STATUSES_WITH_REVERT: EditStatus[] = ['취소요청', '실패', '견적중']
+// fitToHeight: 카드가 (옆 열에 맞춰) 늘어난 높이를 목록 줄 수로 채운다.
+// 끄면 지금까지처럼 10줄 고정이다.
+export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { engineerId: number; fitToHeight?: boolean }) {
   const supabase = useMemo(() => createClient(), [])
   const toast = useToast()
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [targetsByYear, setTargetsByYear] = useState<Record<number, { target: number; orderTarget: number }>>({})
   const [loading, setLoading] = useState(true)
+  // 실제로 그리는 줄 수 = 페이징 단위. 화면 높이에 따라 달라지므로 상태로 둔다.
+  const [pageSize, setPageSize] = useState(PAGE_SIZE)
+  const listBoxRef = useRef<HTMLDivElement>(null)   // 표가 들어가는 상자(남는 높이를 받는다)
+  const headRef = useRef<HTMLTableSectionElement>(null)
 
   const now = new Date()
   const curFy = fiscalYear(now)
@@ -96,7 +113,7 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
   const [hoveredMemoId, setHoveredMemoId] = useState<number | null>(null)
   // 취소/실패
   const [editQuote, setEditQuote] = useState<Quote | null>(null)
-  const [editStatus, setEditStatus] = useState<'취소요청' | '실패'>('취소요청')
+  const [editStatus, setEditStatus] = useState<EditStatus>('취소요청')
   const [editFailReason, setEditFailReason] = useState('')
   const [saving, setSaving] = useState(false)
   // 발주서 등록
@@ -199,15 +216,33 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
   const achieveColor = achieveColorOf(achieve)
   const orderAchieveColor = achieveColorOf(orderAchieve)
 
+  // 옆 열(활동·알림)에 맞춰 카드가 늘어나면, 표 상자에 남는 높이만큼 줄을 더 싣는다.
+  // 표 상자는 flex: 1 + overflowY: hidden 이라 줄이 늘어도 상자가 되레 커지지 않는다 →
+  // 줄 수가 계속 늘어나는 되먹임 없이 한두 번에 멈춘다.
+  // 초기 측정도 ResizeObserver 가 등록 직후 한 번 호출해준다(그래서 effect 본문에서 상태를 건드리지 않는다).
+  useEffect(() => {
+    if (!fitToHeight) return
+    const box = listBoxRef.current
+    if (!box || typeof ResizeObserver === 'undefined') return
+    const measure = () => {
+      const avail = box.clientHeight - (headRef.current?.offsetHeight ?? 0)
+      const next = Math.max(PAGE_SIZE, Math.min(MAX_PAGE_SIZE, Math.floor(avail / ROW_H)))
+      setPageSize(prev => (prev === next ? prev : next))
+    }
+    const ro = new ResizeObserver(measure)
+    ro.observe(box)
+    return () => ro.disconnect()
+  }, [fitToHeight])
+
   const filtered = dateFiltered.filter(q => {
     const matchSearch = !search.trim() ||
       q.quote_number.toLowerCase().includes(search.toLowerCase()) ||
       q.company_name.toLowerCase().includes(search.toLowerCase())
     return matchSearch && (statusFilter === '전체' || q.status === statusFilter)
   })
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const pageSafe = Math.min(page, totalPages)
-  const paged = filtered.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE)
+  const paged = filtered.slice((pageSafe - 1) * pageSize, pageSafe * pageSize)
   // 목록(검색·상태·기간)이 바뀌면 사라진 견적의 선택은 자동으로 걷힌다. 이 파일엔 sel 상태가 이미 있어 이름을 달리한다.
   const quoteSel = useQuoteSelection(filtered.map(q => q.quote_id))
   const pagedIds = paged.map(q => q.quote_id)
@@ -231,8 +266,10 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
     if (!editQuote) return
     setSaving(true)
     try {
-      await updateQuoteStatus({ quoteId: editQuote.quote_id, status: editStatus, failReason: editFailReason })
-      toast.success(`${editStatus} 처리되었습니다`)
+      // 되돌릴 때는 실패 사유를 지운다(빈 문자열 → 공용 함수가 null 로 저장한다).
+      const reason = editStatus === '견적중' ? '' : editFailReason
+      await updateQuoteStatus({ quoteId: editQuote.quote_id, status: editStatus, failReason: reason })
+      toast.success(editStatus === '견적중' ? '견적중으로 되돌렸습니다' : `${editStatus} 처리되었습니다`)
       setEditQuote(null)
       await loadData()
     } catch (e: any) {
@@ -284,7 +321,9 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
   const inp: CSSProperties = { padding: '6px 10px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box', colorScheme: 'light' }
 
   return (
-    <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
+    <div
+      style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden',
+        ...(fitToHeight ? { flex: 1, display: 'flex', flexDirection: 'column' } as const : null) }}>
       {/* 제목 + KPI */}
       <div style={{ padding: '14px 16px', borderBottom: `1px solid ${BORDER}` }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: TEXT, marginBottom: 10 }}>내 견적</div>
@@ -371,15 +410,15 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
         />
       </div>
 
-      {/* 테이블 */}
-      <div style={{ overflowX: 'auto' }}>
+      {/* 테이블 — fitToHeight 면 카드에서 남는 높이를 이 상자가 받고, 그 높이만큼 줄을 싣는다 */}
+      <div ref={listBoxRef} style={{ overflowX: 'auto', ...(fitToHeight ? { flex: 1, minHeight: 0, overflowY: 'hidden' } as const : null) }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 32, color: MUTED, fontSize: 13 }}>불러오는 중...</div>
         ) : paged.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 32, color: MUTED, fontSize: 13 }}>견적이 없습니다</div>
+          <div style={{ height: ROW_H * pageSize, display: 'flex', alignItems: 'center', justifyContent: 'center', color: MUTED, fontSize: 13 }}>견적이 없습니다</div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-            <thead>
+            <thead ref={headRef}>
               <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
                 <th style={{ width: 36, padding: '8px 6px', textAlign: 'center', background: '#f8fafc' }}>
                   <input type="checkbox" checked={allPagedSelected} onChange={() => quoteSel.toggleAll(pagedIds)}
@@ -482,13 +521,19 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
                   </tr>
                 )
               })}
+              {/* 다 안 차는 페이지는 빈 줄로 채워 목록 높이를 고정한다 */}
+              {Array.from({ length: Math.max(0, pageSize - paged.length) }).map((_, i) => (
+                <tr key={`pad-${i}`} style={{ height: ROW_H, borderBottom: `1px solid ${BORDER}` }}>
+                  <td colSpan={TABLE_COLS} />
+                </tr>
+              ))}
             </tbody>
           </table>
         )}
       </div>
 
       {/* 페이지네이션 */}
-      {!loading && filtered.length > PAGE_SIZE && (
+      {!loading && filtered.length > pageSize && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, padding: '10px 16px', borderTop: `1px solid ${BORDER}` }}>
           <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={pageSafe <= 1}
             style={{ padding: '5px 12px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', cursor: pageSafe <= 1 ? 'default' : 'pointer', color: pageSafe <= 1 ? MUTED : TEXT, fontSize: 12, fontWeight: 700 }}>이전</button>
@@ -615,27 +660,50 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
           <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 4 }}>삭제 / 실패 처리</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{editQuote.quote_number} · {editQuote.company_name || ''}</div>
+            {/* 되돌리기(견적중)는 사람이 손으로 실패시킨 건에만 연다.
+                자동 실주 건은 견적일이 이미 한 달을 넘겨, 되살리면 고객에게 나간 PDF 의
+                유효기간과 어긋나므로 선택지 자체를 만들지 않는다. */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-              {(['취소요청', '실패'] as const).map(s => (
+              {(editQuote.status === '실패' && !isAutoFailed(editQuote.status, editQuote.fail_reason)
+                ? EDIT_STATUSES_WITH_REVERT
+                : EDIT_STATUSES).map(s => (
                 <button key={s} onClick={() => setEditStatus(s)}
                   style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: `1.5px solid ${editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).bg : '#f9fafb', color: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : GRAY, transition: 'all 0.12s' }}>
                   {s === '취소요청' ? '삭제' : s}
                 </button>
               ))}
             </div>
-            <div style={{ marginBottom: 6 }}>
-              <div style={{ fontSize: 11, color: GRAY, marginBottom: 5, fontWeight: 600 }}>
-                {editStatus === '취소요청' ? '삭제 사유' : '실패 사유'}
+            {/* 되돌릴 수 없는 건이면 왜 선택지가 없는지 알려준다 */}
+            {isAutoFailed(editQuote.status, editQuote.fail_reason) && (
+              <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, color: GRAY, lineHeight: 1.6, marginBottom: 12 }}>
+                {AUTO_FAIL_NOTICE}
               </div>
-              <textarea value={editFailReason} onChange={e => setEditFailReason(e.target.value)} rows={3}
-                placeholder={editStatus === '취소요청' ? '삭제 요청 사유를 입력하세요' : '실패 사유를 입력하세요'}
-                style={{ width: '100%', padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
+            )}
+
+            <div style={{ marginBottom: 6 }}>
+              {editStatus === '견적중' ? (
+                <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, color: GRAY, lineHeight: 1.6 }}>
+                  {REVERT_NOTICE}
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 11, color: GRAY, marginBottom: 5, fontWeight: 600 }}>
+                    {editStatus === '취소요청' ? '삭제 사유' : '실패 사유'}
+                  </div>
+                  <textarea value={editFailReason} onChange={e => setEditFailReason(e.target.value)} rows={3}
+                    placeholder={editStatus === '취소요청' ? '삭제 요청 사유를 입력하세요' : '실패 사유를 입력하세요'}
+                    style={{ width: '100%', padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
+                </>
+              )}
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
               <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
               <button onClick={handleSave} disabled={saving}
                 style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, opacity: saving ? 0.7 : 1 }}>
-                {saving ? '처리 중...' : (editStatus === '취소요청' ? '삭제 요청' : `${editStatus} 확정`)}
+                {saving ? '처리 중...'
+                  : editStatus === '취소요청' ? '삭제 요청'
+                  : editStatus === '견적중' ? '견적중으로 되돌리기'
+                  : `${editStatus} 확정`}
               </button>
             </div>
           </div>
