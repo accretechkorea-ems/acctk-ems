@@ -1,13 +1,14 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canAccess20 } from '@/lib/permissions'
+import { canViewCustomers } from '@/lib/permissions'
+import { withTeamPerm } from '@/lib/teamPermsServer'
 
 // 20팀 수리 업무용 견적 조회 API.
 // quotes RLS 는 개인 소유 모델이라, 동료·superadmin·타팀이 20팀 수리 건의 견적을 대신 작성하면 20팀이 못 읽는다.
 // 그래서 여기서 service role 로 좁게 연다.
 // 원칙:
-//   - caller 는 canAccess20 이어야 한다(20팀 아니면 전부 403).
+//   - caller 는 canViewCustomers 여야 한다(20 수리등록 화면과 같은 권한. 없으면 전부 403).
 //   - 조회/PDF/매출집계는 'repairs.quote_id 에 연결된 견적' 만 허용한다. 작성자 팀은 보지 않는다(대리 작성 견적 포함).
 //     연결 안 된 임의 견적은 403 또는 제외.
 //   - 예외: ?q= 검색만 작성자 teams='20' 기준 유지(수리 모달 미사용, 범위 확대 금지).
@@ -27,12 +28,13 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: caller } = await supabaseAdmin
+  const { data: callerRow } = await supabaseAdmin
     .from('engineers')
     .select('engineer_id, permission_level, teams')
     .eq('email', user.email!)
     .single()
-  if (!canAccess20(caller)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const caller = await withTeamPerm(callerRow)
+  if (!canViewCustomers(caller)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const sp = req.nextUrl.searchParams
   const pdfParam = sp.get('pdf')

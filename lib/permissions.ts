@@ -1,18 +1,30 @@
 // 권한 규칙 단일 소스(single source of truth).
 // 메뉴 노출 · 페이지 진입 · 데이터 범위 판정을 이 모듈 한 곳에서 관리한다.
-// 이번 단계에서는 정의만 하며, 기존 체크 코드 교체는 다음 단계에서 한다.
+//
+// 팀 이름은 이 파일에 없다. 권한은 teams 테이블의 플래그 6개로만 판정하며,
+// 새 팀이 생기면 유지보수 화면에서 체크박스만 켜면 코드 수정 없이 반영된다.
+// 플래그는 lib/teamPerms.ts 가 읽어와 engineer.perm 에 붙여준다.
 
-// teams 테이블 기준 실제 팀 값의 전부.
-export type TeamName = '80CS' | '80영업' | '20' | '영업관리' | '임원' | 'Apps.'
+// engineers.permission_level 의 값. 'manager'(팀장)는 폐지했다.
+// 남아 있는 옛 데이터를 만나도 member 와 똑같이 취급되어 깨지지 않는다.
+export type PermissionLevel = 'superadmin' | 'member'
 
-// engineers.permission_level 의 값 전부.
-export type PermissionLevel = 'superadmin' | 'manager' | 'member'
+// teams 테이블의 권한 플래그. 컬럼명과 1:1로 대응한다.
+export type TeamPerm = {
+  customers: boolean    // can_view_customers  — 20·80 (고객사 현황 · 20 수리등록)
+  dashboard: boolean    // can_view_dashboard  — 대시보드
+  quote: boolean        // can_view_quote      — 견적서
+  pipeline: boolean     // can_view_pipeline   — 영업 현황
+  salesMgmt: boolean    // can_view_sales_mgmt — 영업관리 (발주·재고)
+  admin: boolean        // can_view_admin      — 관리자 (실적 현황 · 유지보수)
+}
 
 // 판정 함수에 넘기는 최소 형태. 실제 engineer 객체(추가 필드 다수)를 그대로 넘길 수 있도록 느슨하게 둔다.
-// DB 상 두 컬럼 모두 null 가능하므로 string | null 을 허용한다.
+// teams 는 표시·매칭용 이름이며 권한 판정에는 쓰지 않는다.
 export type EngineerLike = {
   permission_level?: PermissionLevel | string | null
-  teams?: TeamName | string | null
+  teams?: string | null
+  perm?: TeamPerm | null
 }
 
 /**
@@ -23,88 +35,61 @@ export function isSuperAdmin(engineer?: EngineerLike | null): boolean {
   return engineer?.permission_level === 'superadmin'
 }
 
-/**
- * 80 그룹 → 고객사 현황.
- * teams 테이블에 단일 '80' 값은 없고 '80CS' · '80영업' 두 값으로 나뉜다.
- */
-export function canAccess80(engineer?: EngineerLike | null): boolean {
-  if (!engineer) return false // 로딩 중(미확정)엔 잠근다
-  if (isSuperAdmin(engineer)) return true
-  return engineer.teams === '80CS' || engineer.teams === '80영업'
-}
-
-/**
- * 20 그룹 → 입고 등록 / 수리 현황 대시보드.
- */
-export function canAccess20(engineer?: EngineerLike | null): boolean {
+// 플래그 하나를 보는 공통 판정. engineer 미확정(로딩)이면 잠근다.
+function hasPerm(engineer: EngineerLike | null | undefined, key: keyof TeamPerm): boolean {
   if (!engineer) return false
   if (isSuperAdmin(engineer)) return true
-  return engineer.teams === '20'
+  return engineer.perm?.[key] === true
 }
 
-/**
- * 견적서 → 전체 공개.
- * 로그인 사용자면 누구나 접근하지만, engineer 미확정(로딩) 상태에서는 잠근다.
- */
-export function canAccessQuote(engineer?: EngineerLike | null): boolean {
-  if (!engineer) return false
-  return true
-}
+/** 20·80 — 고객사 현황 · 고객사 상세 · 20 수리등록 */
+export function canViewCustomers(e?: EngineerLike | null): boolean { return hasPerm(e, 'customers') }
+
+/** 대시보드 — 20 대시보드 · 80 대시보드 · 활동 현황 */
+export function canViewDashboard(e?: EngineerLike | null): boolean { return hasPerm(e, 'dashboard') }
+
+/** 견적서 */
+export function canViewQuote(e?: EngineerLike | null): boolean { return hasPerm(e, 'quote') }
+
+/** 영업 현황(파이프라인) */
+export function canViewPipeline(e?: EngineerLike | null): boolean { return hasPerm(e, 'pipeline') }
+
+/** 영업관리 — 발주관리 · 재고관리 */
+export function canViewSalesMgmt(e?: EngineerLike | null): boolean { return hasPerm(e, 'salesMgmt') }
+
+/** 관리자 — 실적 현황 · 유지보수 */
+export function canViewAdmin(e?: EngineerLike | null): boolean { return hasPerm(e, 'admin') }
 
 /**
- * 영업관리 → 발주관리 / 재고관리 (영업관리팀 소속만).
+ * 로그인만 하면 되는 화면(건의사항 · 본인 페이지).
+ * engineer 미확정(로딩) 상태에서는 잠근다.
  */
-export function canAccessSales(engineer?: EngineerLike | null): boolean {
-  if (!engineer) return false
-  if (isSuperAdmin(engineer)) return true
-  return engineer.teams === '영업관리'
-}
-
-/**
- * 관리자 → 실적 현황 / 활동 현황 (superadmin 만).
- */
-export function canAccessAdmin(engineer?: EngineerLike | null): boolean {
-  if (!engineer) return false
-  return isSuperAdmin(engineer)
-}
-
-/**
- * 유지보수 → 기존 '관리자' 탭의 이름 변경본 (superadmin 만).
- */
-export function canAccessMaintenance(engineer?: EngineerLike | null): boolean {
-  if (!engineer) return false
-  return isSuperAdmin(engineer)
-}
+export function canViewAll(e?: EngineerLike | null): boolean { return !!e }
 
 /**
  * 데이터 열람 범위(진입 여부와 별개로 "어디까지 보이는가").
  *  - 'all'  : 전사 전체 (superadmin)
- *  - 'team' : 본인 팀만 (manager)
- *  - 'self' : 본인 것만 (member / 미확정)
- * 현재 실적 현황(app/sales/page.tsx) 열람 범위 로직을 추출한 것.
- * engineer 미확정 시엔 가장 좁은 'self' 를 반환한다(잘못 넓게 열리지 않도록).
+ *  - 'self' : 본인 것만 (그 외 / 미확정)
  */
-export function getViewScope(engineer?: EngineerLike | null): 'all' | 'team' | 'self' {
-  if (!engineer) return 'self'
-  if (isSuperAdmin(engineer)) return 'all'
-  if (engineer.permission_level === 'manager') return 'team'
-  return 'self'
+export function getViewScope(engineer?: EngineerLike | null): 'all' | 'self' {
+  if (!engineer) return 'self'   // 로딩 중(미확정)엔 본인 것만
+  return isSuperAdmin(engineer) ? 'all' : 'self'
 }
 
 /**
- * 직원 계정 관리(등록/수정/퇴사/삭제 등) 권한. superadmin 또는 manager.
- * 서버 라우트들의 `['superadmin','manager'].includes(permission_level)` 판정을 한 곳으로 모은다.
+ * 직원 계정 관리(등록/수정/퇴사/삭제 등) 권한. '팀장' 폐지로 superadmin 전용이 됐다.
  */
 export function canManageEngineers(engineer?: EngineerLike | null): boolean {
-  if (!engineer) return false
-  return engineer.permission_level === 'superadmin' || engineer.permission_level === 'manager'
+  return isSuperAdmin(engineer)
 }
 
 /**
- * '현장 엔지니어 팀' 여부 — 임원·영업관리를 제외한 팀.
- * 실적/활동 집계에서 임원·영업관리를 빼는 반복 필터(`!['임원','영업관리'].includes(teams ?? '')`)를 모은다.
- * teams 가 없으면(null/미지정) 기존 동작과 동일하게 현장 엔지니어로 간주한다(true).
+ * 실적·활동 집계에 넣을 '현장 엔지니어' 여부.
+ * 팀 이름 대신 플래그로 본다 — 고객사와 대시보드를 함께 보는 팀이 곧 현장 팀이다.
+ * (임원·영업관리·Apps. 는 이 조건에서 자연히 빠진다)
+ * perm 이 아직 안 붙은 상태(로딩 등)에서는 기존 동작대로 포함시킨다.
  */
 export function isFieldEngineerTeam(engineer?: EngineerLike | null): boolean {
-  return !['임원', '영업관리'].includes(engineer?.teams ?? '')
+  if (!engineer?.perm) return true
+  return engineer.perm.customers && engineer.perm.dashboard && !engineer.perm.admin
 }

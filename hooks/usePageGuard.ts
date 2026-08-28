@@ -2,20 +2,23 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { EngineerLike } from '@/lib/permissions'
+import { withTeamPerm } from '@/lib/teamPerms'
+import type { EngineerLike, TeamPerm } from '@/lib/permissions'
 
 export type GuardEngineer = {
   engineer_id: number
   name: string | null
   teams: string | null
   permission_level: string | null
+  perm?: TeamPerm | null      // 소속 팀의 권한 플래그 (teams 테이블에서 붙여준다)
 }
 
 /**
  * 페이지 진입 권한 확인 공용 훅.
- * lib/permissions.ts 의 판정 함수(canAccess80 등)를 checkFn 으로 받는다.
+ * lib/permissions.ts 의 판정 함수(canViewCustomers 등)를 checkFn 으로 받는다.
+ * 팀 권한 플래그(engineer.perm)는 이 훅이 붙여준 뒤 판정한다.
  *
- *   const { engineer, loading, authorized } = usePageGuard(canAccess80)
+ *   const { engineer, loading, authorized } = usePageGuard(canViewCustomers)
  *   if (!authorized) return <AccessGate loading={loading} />
  *
  * - loading      : 판정 전(true). 이 동안 페이지 본문을 그리지 않아 잠깐 노출되는 일이 없다.
@@ -45,8 +48,9 @@ export function usePageGuard(checkFn: (e: EngineerLike | null) => boolean) {
         .select('engineer_id, name, teams, permission_level')
         .eq('email', data.user.email)
         .single()
+      // 권한 판정에 팀 플래그가 필요하므로 붙인 뒤에 판정한다.
+      const e = await withTeamPerm((eng as GuardEngineer | null) ?? null)
       if (cancelled) return
-      const e = (eng as GuardEngineer | null) ?? null
       setEngineer(e)
       setAuthorized(checkFn(e))
       setLoading(false)

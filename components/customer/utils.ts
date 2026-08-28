@@ -1,4 +1,24 @@
-import type { Device } from './types'
+import type { Device, Quote } from './types'
+
+// 이 업체 기준으로 견적이 직판인지 대리점 경유인지 가른다.
+// 상세의 quotes 조회가 customer_id 와 dealer_id 를 함께 걸어오므로 두 종류가 섞여 있다.
+// 두 컬럼이 모두 이 업체를 가리키는 경우는 없어야 하지만, 있으면 직판으로 본다.
+export function isDealerQuote(q: Quote, customerId: number): boolean {
+  if (q.customer_id === customerId) return false
+  return q.dealer_id === customerId
+}
+
+export function countQuoteChannels(quotes: Quote[], customerId: number) {
+  let direct = 0
+  let dealer = 0
+  let both = 0
+  for (const q of quotes) {
+    if (q.customer_id === customerId && q.dealer_id === customerId) both++
+    if (isDealerQuote(q, customerId)) dealer++
+    else direct++
+  }
+  return { direct, dealer, both, total: quotes.length }
+}
 
 export function getInstallDisplay(device: Device): string {
   const rawYear = device.install_year?.toString().trim() || ''

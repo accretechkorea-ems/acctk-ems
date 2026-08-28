@@ -13,7 +13,8 @@ import { CATEGORY_OPTIONS } from '@/lib/constants'
 import { useToast } from '@/components/common/Toast'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canAccess80 } from '@/lib/permissions'
+import { canViewCustomers, canViewQuote } from '@/lib/permissions'
+import { useQuotePdf } from '@/hooks/customer/useQuotePdf'
 
 
 import {
@@ -39,7 +40,11 @@ import {
 
 export default function HomePage() {
   const supabase = createClient()
-  const { loading: guardLoading, authorized } = usePageGuard(canAccess80)
+  const { engineer: me, loading: guardLoading, authorized } = usePageGuard(canViewCustomers)
+  // 이 화면은 고객사 권한으로 들어오지만, 부품 검색은 견적 내용을 보여주므로 견적 권한을 따로 본다.
+  const canSearchParts = canViewQuote(me)
+  // 부품 결과의 PDF 아이콘 — 업체 상세와 같은 방식(서명 URL + 조회 기록)을 그대로 쓴다.
+  const quotePdf = useQuotePdf({ customer: null, engineerId: me?.engineer_id ?? null })
   const toast = useToast()
 
   const listScrollRef = useRef<HTMLDivElement | null>(null)
@@ -66,6 +71,15 @@ useEffect(() => {
   return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
 }, [])
   const [query, setQuery] = useState('')
+  // 검색 모드 — 업체(기본) / 부품. 저장하지 않으므로 화면을 새로 열면 늘 업체로 시작한다.
+  const [searchMode, setSearchMode] = useState<'업체' | '부품'>('업체')
+  const [partQuery, setPartQuery] = useState('')
+  // 업체명과 품번은 성격이 달라 이어 쓸 일이 없다. 모드를 바꾸면 양쪽 검색어를 비운다.
+  const changeSearchMode = (next: '업체' | '부품') => {
+    setSearchMode(next)
+    setQuery('')
+    setPartQuery('')
+  }
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['활성', '잠재'])
 const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS])
 
@@ -147,6 +161,7 @@ if (navType.type !== 'back_forward') {
       if (typeof parsed.query === 'string') {
         setQuery(parsed.query)
       }
+
 
       if (
         Array.isArray(parsed.selectedStatuses) &&
@@ -492,6 +507,12 @@ useEffect(() => {
       >
 <div className={mobileTab === 'map' ? 'mobile-hide' : ''} style={{ minHeight: 0, minWidth: 0, height: '100%', overflow: 'hidden' }}>
           <Sidebar
+            canSearchParts={canSearchParts}
+            onOpenQuotePdf={quotePdf.openQuotePdfByUrl}
+            searchMode={searchMode}
+            setSearchMode={changeSearchMode}
+            partQuery={partQuery}
+            setPartQuery={setPartQuery}
             query={query}
             setQuery={setQuery}
             selectedStatuses={selectedStatuses}

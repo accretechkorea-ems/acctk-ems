@@ -8,7 +8,8 @@ import { useToast } from '@/components/common/Toast'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canAccessSales, isSuperAdmin } from '@/lib/permissions'
+import { canViewSalesMgmt, isSuperAdmin, type TeamPerm } from '@/lib/permissions'
+import { withTeamPerms } from '@/lib/teamPerms'
 
 const BLUE = '#234ea2'
 const ORANGE = '#d97706'
@@ -91,6 +92,7 @@ type Engineer = {
   email: string | null
   permission_level: string | null
   resigned_date: string | null
+  perm?: TeamPerm | null
 }
 
 const STATUS_STYLE: Record<string, { bg: string; color: string; border: string }> = {
@@ -107,7 +109,7 @@ const LOC_STYLE: Record<string, { bg: string; color: string }> = {
 
 function InventoryPage() {
   const supabase = createClient()
-  const { loading: guardLoading, authorized } = usePageGuard(canAccessSales)
+  const { loading: guardLoading, authorized } = usePageGuard(canViewSalesMgmt)
   const confirmDialog = useConfirm()
   const toast = useToast()
   const searchParams = useSearchParams()
@@ -191,16 +193,18 @@ function InventoryPage() {
     setItems((itemsData as InventoryItem[]) ?? [])
     setLogs((logsData as InventoryLog[]) ?? [])
     setRequests((requestsData as InventoryRequest[]) ?? [])
-    setAllEngineers((engData as Engineer[]) ?? [])
-    if (user?.email && engData) {
-      const me = (engData as Engineer[]).find(e => e.email === user.email)
+    // 재고 승인 권한·알림 대상 판정에 팀 플래그가 필요하므로 목록 전체에 붙여둔다.
+    const engs = await withTeamPerms(engData as Engineer[] | null)
+    setAllEngineers(engs)
+    if (user?.email) {
+      const me = engs.find(e => e.email === user.email)
       if (me) setCurrentEngineer(me)
     }
     setLoading(false)
   }
 
   // ── 파생 상태 ──
-  const isManager = canAccessSales(currentEngineer)
+  const isManager = canViewSalesMgmt(currentEngineer)
   const isSuper = isSuperAdmin(currentEngineer)
 
   const filteredItems = useMemo(() => items.filter(item => {
@@ -245,7 +249,7 @@ function InventoryPage() {
       if (error) throw error
 
       // 알림 수신자(현재 시점 대상) — 삭제(퇴사)된 직원은 제외. (발주서 알림 로직과 동일 기준)
-      const managers = allEngineers.filter(e => canAccessSales(e) && !e.resigned_date)
+      const managers = allEngineers.filter(e => canViewSalesMgmt(e) && !e.resigned_date)
       if (managers.length > 0) {
         const { error: notiErr } = await supabase.from('notifications').insert(
           managers.map(m => ({

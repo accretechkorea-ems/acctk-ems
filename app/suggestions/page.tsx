@@ -10,7 +10,7 @@ import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canAccessQuote, isSuperAdmin } from '@/lib/permissions'
+import { canViewAll, isSuperAdmin } from '@/lib/permissions'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#f4f5f7'
@@ -63,7 +63,7 @@ export default function SuggestionsPage() {
   const supabase = createClient()
   const toast = useToast()
   const confirmDialog = useConfirm()
-  const { engineer, loading: guardLoading, authorized } = usePageGuard(canAccessQuote)
+  const { engineer, loading: guardLoading, authorized } = usePageGuard(canViewAll)
   const superAdmin = isSuperAdmin(engineer)
 
   const [rows, setRows] = useState<Suggestion[]>([])

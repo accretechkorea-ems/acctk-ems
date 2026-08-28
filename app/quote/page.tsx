@@ -8,9 +8,11 @@ import { useFieldErrors, FieldError, errBorder } from '@/components/common/field
 import { usePageGuard } from '@/hooks/usePageGuard'
 import { useOutsideClick } from '@/hooks/useOutsideClick'
 import AccessGate from '@/components/common/AccessGate'
-import { canAccessQuote } from '@/lib/permissions'
+import { canViewQuote } from '@/lib/permissions'
 import { BlobProvider, pdf } from '@react-pdf/renderer'
 import type { CustomerResult, Engineer, ExpensePreset, ExpenseRow, PriceItem, QuoteRow } from './types'
+import type { SalesOpportunity } from '@/components/customer/types'
+import { isClosed } from '@/components/customer/opportunity'
 import { calcExpense, calcRow, calcTotals, createDomesticRow, createExpenseRow, createManualJpyRow, createRow, createServiceRow } from './calc'
 import { numKR } from './format'
 import { inp } from './styles'
@@ -26,9 +28,9 @@ function QuotePageInner() {
   // 수리 건에서 넘어온 경우: repair_id(숫자만 유효) + prefill 파라미터. 없거나 무효면 일반 견적서.
   const repairIdRaw = searchParams.get('repair_id')
   const repairId = repairIdRaw && /^\d+$/.test(repairIdRaw) ? Number(repairIdRaw) : null
-  const { loading: guardLoading, authorized } = usePageGuard(canAccessQuote)
+  const { loading: guardLoading, authorized } = usePageGuard(canViewQuote)
   const toast = useToast()
-  const { errors, clearError, validate } = useFieldErrors<'company' | 'items' | 'expenses'>()
+  const { errors, clearError, validate } = useFieldErrors<'company' | 'eu' | 'items' | 'expenses'>()
   const [isClient, setIsClient] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
@@ -48,7 +50,12 @@ function QuotePageInner() {
   const [customerQuery, setCustomerQuery] = useState('')
   const [customerResults, setCustomerResults] = useState<CustomerResult[]>([])
   const [customerSearchOpen, setCustomerSearchOpen] = useState(false)
+  // ?customer= 로 넘어왔는데 후보가 여러 건일 때 띄우는 안내(사용자가 직접 골라야 저장된다)
+  const [prefillNotice, setPrefillNotice] = useState<string | null>(null)
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerResult | null>(null)
+  // 영업기회 연결 (선택 사항). 견적 계산·PDF 와는 무관한 내부 정보다.
+  const [opportunities, setOpportunities] = useState<SalesOpportunity[]>([])
+  const [opportunityId, setOpportunityId] = useState<number | null>(null)
 
   const [euCustomerId, setEuCustomerId] = useState<number | null>(null)
   const [euQuery, setEuQuery] = useState('')
@@ -96,7 +103,8 @@ function QuotePageInner() {
   const seqLetter = String.fromCharCode(65 + seqIndex)
 
   // ── PDF용 debounced 값 (600ms 지연) ─────────────────────────────────────────
-  const debouncedCompany = useDebounce(company || customerQuery, 600)
+  // 고객사를 골라야만 저장되므로 미리보기도 선택된 이름만 쓴다(타이핑 중인 값은 반영하지 않는다).
+  const debouncedCompany = useDebounce(company, 600)
   const debouncedReceiver = useDebounce(receiver, 600)
   const debouncedRows = useDebounce(rows, 600)
 
@@ -141,6 +149,19 @@ function QuotePageInner() {
     setCustomerSearchOpen(true)
   }
 
+  // 견적이 실제로 붙는 업체(대리점 건이면 E.U)의 진행 중 기회만 후보로 삼는다.
+  const loadOpportunities = async (cid: number | null) => {
+    setOpportunityId(null)
+    if (!cid) { setOpportunities([]); return }
+    const { data, error } = await supabase
+      .from('sales_opportunities')
+      .select('*')
+      .eq('customer_id', cid)
+      .order('created_at', { ascending: false })
+    if (error) { console.error('[quote] load opportunities failed', error); setOpportunities([]); return }
+    setOpportunities((data as SalesOpportunity[]) ?? [])
+  }
+
   const handleCustomerSelect = (c: CustomerResult) => {
     setSelectedCustomer(c)
     setCustomerId(c.customer_id)
@@ -149,6 +170,7 @@ function QuotePageInner() {
     setCustomerSearchOpen(false)
     setCustomerResults([])
     clearError('company')
+    if (!isDealer) loadOpportunities(c.customer_id)
   }
 
   const handleCustomerClear = () => {
@@ -156,6 +178,7 @@ function QuotePageInner() {
     setCustomerId(null)
     setCustomerQuery('')
     setCompany('')
+    if (!isDealer) loadOpportunities(null)
   }
 
   const handleEUSearch = async (q: string) => {
@@ -175,12 +198,14 @@ function QuotePageInner() {
     setEuQuery(c.company_name)
     setEuSearchOpen(false)
     setEuResults([])
+    loadOpportunities(c.customer_id)
   }
 
   const handleEUClear = () => {
     setSelectedEU(null)
     setEuCustomerId(null)
     setEuQuery('')
+    loadOpportunities(null)
   }
 
 const handleDownloadPDF = async (
@@ -190,7 +215,7 @@ const handleDownloadPDF = async (
     overrideRemarks?: string,
     overrideQuoteNo?: string,
   ) => {
-    const finalCompany = overrideCompany ?? (company || customerQuery)
+    const finalCompany = overrideCompany ?? company
     const finalReceiver = overrideReceiver ?? receiver
     const finalRows = overrideRows ?? rows
     const finalRemarks = overrideRemarks ?? finalRemarksForPDF
@@ -246,13 +271,34 @@ const handleDownloadPDF = async (
     })
   }
 
+  // 사명·E.U 아래 안내 문구. 셋 중 하나만 나온다.
+  //   ① ?customer= 로 후보가 여럿일 때 ② 검색 결과가 없을 때 ③ 평소(상시 안내)
+  const custNoResult = customerQuery.trim().length > 0 && customerResults.length === 0
+  const customerGuide = prefillNotice
+    ?? (custNoResult
+      ? '검색 결과가 없습니다. 고객사 현황에서 업체를 먼저 등록해주세요'
+      : '견적서 작성 전 고객사 현황에서 업체를 먼저 등록해주세요')
+  // 링크는 "검색해도 없다" 일 때만 — 후보가 여럿인 경우엔 고르면 되므로 링크가 오히려 방해다.
+  const showCustomerLink = !prefillNotice && custNoResult
+  const euNoResult = euQuery.trim().length > 0 && euResults.length === 0
+  const euGuide = euNoResult
+    ? '검색 결과가 없습니다. 고객사 현황에서 업체를 먼저 등록해주세요'
+    : '견적서 작성 전 고객사 현황에서 업체를 먼저 등록해주세요'
+
   const handleSaveQuote = async () => {
     if (!engineer) { toast.error('엔지니어 정보를 불러오는 중입니다'); return }
-    // 사명은 직접 입력(customerQuery) 또는 검색 선택(company) 중 하나면 통과.
+    // 고객사는 반드시 등록된 업체를 골라야 한다(customer_id 기준).
+    // 직접 친 상호는 quotes 에 저장되는 곳이 없어 PDF 에만 남고, 실적·발주·엑셀에서는 빈칸이 된다.
+    //   · 직판   : customerId 필수
+    //   · 대리점 : customerId(대리점) + euCustomerId(최종 사용 업체) 둘 다 필수
+    //              (저장 시 customer_id 에는 E.U 가 들어간다 — 거래 이력이 붙는 곳이 최종 사용 업체이므로)
     // 품목 금액은 배열이지만 "적어도 한 품목에 금액" 이라는 집계 규칙이라 단일 key(items) 로 처리한다.
     // 부대비용은 빈 행(항목명 미선택)은 조용히 무시하고, 항목명만 고른 채 금액이 0 인 행만 막는다.
     const ok = validate({
-      company: (company.trim() || customerQuery.trim()) ? null : '사명을 입력해주세요',
+      company: customerId
+        ? null
+        : (isDealer ? '등록된 대리점을 검색해서 선택해주세요' : '등록된 고객사를 검색해서 선택해주세요'),
+      eu: isDealer && !euCustomerId ? '최종 사용 업체를 검색해서 선택해주세요' : null,
       items: rows.some(r => r.supply_price > 0) ? null : '품목 금액을 입력해주세요',
       expenses: expenses.some(e => e.item_name.trim() && e.amount <= 0)
         ? '단가 · 인원 · 일수를 입력해주세요' : null,
@@ -283,6 +329,7 @@ const handleDownloadPDF = async (
           quote_number: quoteNo,
           customer_id: isDealer ? euCustomerId : customerId,
           dealer_id: isDealer ? customerId : null,
+          opportunity_id: opportunityId,
           delivery_info: delivery.trim() || null,
           engineer_id: engineer.engineer_id,
           quote_date: `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`,
@@ -411,12 +458,19 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
         return [first, ...prev.slice(1)]
       })
     }
-    // customer → customers ilike. 정확히 1건이면 자동선택, 아니면 검색어만 채우고 사용자가 고름.
+    // customer → customers ilike. 정확히 1건이면 자동선택.
+    // 여러 건이면 고객사를 고르지 않으면 저장이 막히므로, 후보 목록을 바로 펼쳐 두고 안내한다.
     if (customer) {
       setCustomerQuery(customer)
       supabase.from('customers').select('customer_id, company_name, address, status')
         .is('deleted_at', null).ilike('company_name', `%${customer}%`).limit(10)
-        .then(({ data }) => { if (data && data.length === 1) handleCustomerSelect(data[0]) })
+        .then(({ data }) => {
+          if (!data || data.length === 0) return
+          if (data.length === 1) { handleCustomerSelect(data[0]); return }
+          setCustomerResults(data)
+          setCustomerSearchOpen(true)
+          setPrefillNotice('여러 업체가 검색되었습니다. 하나를 선택해주세요')
+        })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repairId])
@@ -596,9 +650,9 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                   <input
                     className="q-input"
                     value={customerQuery}
-                    onChange={e => { handleCustomerSearch(e.target.value); clearError('company') }}
+                    onChange={e => { handleCustomerSearch(e.target.value); clearError('company'); setPrefillNotice(null) }}
                     onFocus={() => customerResults.length > 0 && setCustomerSearchOpen(true)}
-                    placeholder="업체명 검색 또는 직접 입력"
+                    placeholder="업체명 검색"
                     style={{ ...inp, width: '100%', paddingRight: selectedCustomer ? 32 : 11, border: errors.company ? errBorder : (customerSearchOpen ? '1px solid #234ea2' : '1px solid #ebebeb') }}
                   />
                   {selectedCustomer && (
@@ -629,6 +683,8 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                     onChange={e => {
                       setIsDealer(e.target.checked)
                       if (!e.target.checked) { handleEUClear() }
+                      // 견적이 붙는 업체가 바뀌므로 영업기회 후보도 다시 잡는다
+                      loadOpportunities(e.target.checked ? euCustomerId : customerId)
                     }}
                     style={{ width: 14, height: 14, cursor: 'pointer', accentColor: '#234ea2' }}
                   />
@@ -641,8 +697,17 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                   {selectedCustomer.company_name} {isDealer ? '(대리점)' : '연결됨'}
                 </div>
               )}
-              {!selectedCustomer && customerQuery && (
-                <div style={{ marginTop: 2, marginLeft: 64, fontSize: 11, color: '#9ca3af' }}>검색 결과 없으면 그대로 사용됩니다</div>
+              {!selectedCustomer && (
+                <div style={{ marginTop: 4, marginLeft: 64, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span style={{ padding: '3px 8px', background: '#f3f4f6', borderRadius: 6, fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>미선택</span>
+                  <span style={{ fontSize: 11, color: '#9ca3af' }}>{customerGuide}</span>
+                  {showCustomerLink && (
+                    <a href="/" target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize: 11, color: '#234ea2', fontWeight: 600, textDecoration: 'none' }}>
+                      고객사 현황 열기 →
+                    </a>
+                  )}
+                </div>
               )}
             </div>
 
@@ -655,9 +720,9 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                     <input
                       className="q-input"
                       value={euQuery}
-                      onChange={e => handleEUSearch(e.target.value)}
+                      onChange={e => { handleEUSearch(e.target.value); clearError('eu') }}
                       onFocus={() => euResults.length > 0 && setEuSearchOpen(true)}
-                      placeholder="최종 사용 업체 검색 또는 직접 입력"
+                      placeholder="최종 사용 업체 검색"
                       style={{ ...inp, width: '100%', paddingRight: selectedEU ? 32 : 11, border: euSearchOpen ? '1px solid #c2410c' : '1px solid #fed7aa' }}
                     />
                     {selectedEU && (
@@ -687,11 +752,45 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                     {selectedEU.company_name} 연결됨 (거래이력 연동)
                   </div>
                 )}
-                {!selectedEU && euQuery && (
-                  <div style={{ marginTop: 2, marginLeft: 64, fontSize: 11, color: '#9ca3af' }}>검색 결과 없으면 그대로 사용됩니다</div>
+                {!selectedEU && (
+                  <div style={{ marginTop: 4, marginLeft: 64, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span style={{ padding: '3px 8px', background: '#f3f4f6', borderRadius: 6, fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>미선택</span>
+                    <span style={{ fontSize: 11, color: '#9ca3af' }}>{euGuide}</span>
+                    {euNoResult && (
+                      <a href="/" target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 11, color: '#234ea2', fontWeight: 600, textDecoration: 'none' }}>
+                        고객사 현황 열기 →
+                      </a>
+                    )}
+                  </div>
                 )}
+                <FieldError message={errors.eu} style={{ marginLeft: 64 }} />
               </div>
             )}
+
+            {/* 영업기회 연결 — 선택 사항. 내부 정보이며 PDF 에는 나가지 않는다.
+                업체가 정해져야 후보를 고를 수 있다(대리점 건이면 E.U 기준). */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', width: 56, flexShrink: 0 }}>영업기회</span>
+              <select
+                className="q-input"
+                value={opportunityId ?? ''}
+                disabled={opportunities.length === 0}
+                onChange={e => setOpportunityId(e.target.value ? Number(e.target.value) : null)}
+                style={{ ...inp, flex: 1, background: opportunities.length === 0 ? '#f9fafb' : '#fff' }}
+              >
+                <option value="">
+                  {(isDealer ? euCustomerId : customerId)
+                    ? (opportunities.length === 0 ? '진행 중인 기회 없음' : '연결 안 함')
+                    : '업체를 먼저 선택하세요'}
+                </option>
+                {opportunities
+                  .filter(o => !isClosed(o) || o.opportunity_id === opportunityId)
+                  .map(o => (
+                    <option key={o.opportunity_id} value={o.opportunity_id}>{`${o.stage} · ${o.title}`}</option>
+                  ))}
+              </select>
+            </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', width: 56, flexShrink: 0 }}>수신인</span>
@@ -977,7 +1076,7 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
               </button>
               <button onClick={async () => {
                 setShowConfirmModal(false)
-                const snapshotCompany = company || customerQuery
+                const snapshotCompany = company
                 const snapshotReceiver = receiver
                 const snapshotRows = [...rows]
                 const snapshotRemarks = finalRemarksForPDF

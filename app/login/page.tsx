@@ -3,6 +3,9 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { isMobileViewport } from '@/lib/viewport'
+import { withTeamPerm } from '@/lib/teamPerms'
+import { canViewCustomers } from '@/lib/permissions'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -17,19 +20,33 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
 
-    setLoading(false)
-
     if (error) {
+      setLoading(false)
       setError('아이디 또는 비밀번호가 올바르지 않습니다.')
       return
     }
 
-    router.push('/dashboard')
+    // 모바일은 현장 서비스 인원만 쓰므로 첫 화면을 고객사 현황으로 연다.
+    // 단, 고객사 열람 권한이 없는 팀(영업관리 등)이 모바일로 들어오면 막힌 화면을
+    // 마주치게 되므로 그때는 기존대로 본인 페이지로 보낸다.
+    let target = '/dashboard'
+    if (isMobileViewport() && data.user?.email) {
+      const { data: eng } = await supabase
+        .from('engineers')
+        .select('permission_level, teams')
+        .eq('email', data.user.email)
+        .single()
+      const me = await withTeamPerm(eng)
+      if (canViewCustomers(me)) target = '/'
+    }
+
+    setLoading(false)
+    router.push(target)
     router.refresh()
   }
 

@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canAccess80 } from '@/lib/permissions'
+import { canViewCustomers } from '@/lib/permissions'
+import { withTeamPerm } from '@/lib/teamPermsServer'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,14 +21,15 @@ export async function GET(req: NextRequest) {
   if (!safePath || safePath.includes('/'))
     return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
 
-  // 권한: 고객 장비 사진이므로 80 그룹(canAccess80)만 열람 가능.
+  // 권한: 고객 장비 사진이므로 고객사 열람 권한(can_view_customers)이 있는 팀만 볼 수 있다.
   // RLS 에 의존하지 않도록 service role 로 caller 를 조회해 코드에서 판정한다.
-  const { data: caller } = await supabaseAdmin
+  const { data: callerRow } = await supabaseAdmin
     .from('engineers')
     .select('permission_level, teams')
     .eq('email', user.email!)
     .single()
-  if (!canAccess80(caller)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const caller = await withTeamPerm(callerRow)
+  if (!canViewCustomers(caller)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   // 서명 대상이 실제 장비 이미지 경로인지 service role 로 확인.
   const { count } = await supabaseAdmin

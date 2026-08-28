@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
-import { createEmptyDeviceForm } from '@/lib/home'
+import { createEmptyDeviceForm, isEmptyDeviceForm, isEmptyContactForm, type NewDeviceForm } from '@/lib/home'
 
 export const addCustomer = async ({
   customerForm,
@@ -46,9 +46,11 @@ export const addCustomer = async ({
 
     insertedCustomerId = insertedCustomer.customer_id
 
+    // 아무것도 입력하지 않은 장비 카드는 걸러낸다 (장비 없는 신규 업체도 등록 가능).
+    const filledDevices: NewDeviceForm[] = deviceForms.filter((d: NewDeviceForm) => !isEmptyDeviceForm(d))
     const devicePayload = []
-    for (let i = 0; i < deviceForms.length; i++) {
-      const d = deviceForms[i]
+    for (let i = 0; i < filledDevices.length; i++) {
+      const d = filledDevices[i]
 
       // 납입의사록·패킹리스트 파일이 있으면 packing-lists(비공개) 버킷에 업로드.
       // DB에는 전체 URL이 아니라 "저장 경로(파일명)"만 보관 → 열 때 서명 URL 발급.
@@ -77,19 +79,25 @@ export const addCustomer = async ({
       })
     }
 
-    const { error: deviceError } = await supabase.from('devices').insert(devicePayload)
-    if (deviceError) throw deviceError
+    // 남은 것이 없으면 insert 자체를 건너뛴다.
+    if (devicePayload.length > 0) {
+      const { error: deviceError } = await supabase.from('devices').insert(devicePayload)
+      if (deviceError) throw deviceError
+    }
 
-    const { error: contactError } = await supabase.from('contacts').insert([
-      {
-        customer_id: insertedCustomerId,
-        name: contactForm.name.trim(),
-        department: contactForm.department.trim() || null,
-        position: contactForm.position.trim() || null,
-        phone: contactForm.phone.trim() || null,
-      },
-    ])
-    if (contactError) throw contactError
+    // 담당자도 선택 사항 — 아무것도 입력하지 않았으면 넣지 않는다.
+    if (!isEmptyContactForm(contactForm)) {
+      const { error: contactError } = await supabase.from('contacts').insert([
+        {
+          customer_id: insertedCustomerId,
+          name: contactForm.name.trim(),
+          department: contactForm.department.trim() || null,
+          position: contactForm.position.trim() || null,
+          phone: contactForm.phone.trim() || null,
+        },
+      ])
+      if (contactError) throw contactError
+    }
 
     resetForms()
     setIsAddCustomerModalOpen(false)

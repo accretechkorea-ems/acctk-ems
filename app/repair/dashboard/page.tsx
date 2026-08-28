@@ -9,7 +9,7 @@ import {
 } from 'recharts'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canAccess20 } from '@/lib/permissions'
+import { canViewDashboard } from '@/lib/permissions'
 import { useRepairs, type Repair } from '@/hooks/useRepairs'
 import { useCountUp } from '@/hooks/useCountUp'
 import { CHART_COLORS, REPAIR_STATUS_COLORS, REPAIR_MEANING_COLORS } from '@/lib/categoryColors'
@@ -446,7 +446,7 @@ function RevenueCard({ data, unlinkedCount, animate }: { data: { month: string; 
 
 
 export default function RepairDashboardPage() {
-  const { loading: guardLoading, authorized } = usePageGuard(canAccess20)
+  const { loading: guardLoading, authorized } = usePageGuard(canViewDashboard)
   const { repairs, loading } = useRepairs()
 
   // 접근성: reduced-motion 이면 recharts 애니메이션도 끔

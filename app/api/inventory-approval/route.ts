@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { canAccessSales } from '@/lib/permissions'
+import { canViewSalesMgmt } from '@/lib/permissions'
+import { withTeamPerm } from '@/lib/teamPermsServer'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,14 +14,15 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // 영업관리팀 또는 superadmin만 허용 (canAccessSales)
-  const { data: caller, error: callerErr } = await supabase
+  // 영업관리 권한(can_view_sales_mgmt) 또는 superadmin만 허용
+  const { data: callerRow, error: callerErr } = await supabase
     .from('engineers')
     .select('engineer_id, teams, permission_level')
     .eq('email', user.email!)
     .single()
   if (callerErr) console.error(' caller lookup failed', { email: user.email, error: callerErr })
-  if (!caller || !canAccessSales(caller)) {
+  const caller = await withTeamPerm(callerRow)
+  if (!caller || !canViewSalesMgmt(caller)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

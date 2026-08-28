@@ -6,9 +6,10 @@ import { createClient } from '@/lib/supabase/client'
 import { HOME_STATE_KEY } from '@/lib/home'
 import { useOutsideClick } from '@/hooks/useOutsideClick'
 import {
-  canAccess80, canAccess20, canAccessQuote, canAccessSales,
-  canAccessAdmin, canAccessMaintenance, type EngineerLike,
+  canViewCustomers, canViewDashboard, canViewQuote, canViewPipeline,
+  canViewSalesMgmt, canViewAdmin, canViewAll, type EngineerLike, type TeamPerm,
 } from '@/lib/permissions'
+import { loadTeamPerms } from '@/lib/teamPerms'
 import { useNotifications, type Notification } from '@/hooks/useNotifications'
 import NotificationList from '@/components/common/NotificationList'
 
@@ -23,6 +24,7 @@ export default function Header() {
   const [engineerId, setEngineerId] = useState<number | null>(null)
   const [engineerTeams, setEngineerTeams] = useState<string | null>(null)
   const [permissionLevel, setPermissionLevel] = useState<string | null>(null)
+  const [teamPerm, setTeamPerm] = useState<TeamPerm | null>(null)
   const [notifOpen, setNotifOpen] = useState(false)
   const [hoveredMenu, setHoveredMenu] = useState<string | null>(null)   // PC 드롭다운
   const [mobileExpanded, setMobileExpanded] = useState<string | null>(null) // 모바일 아코디언
@@ -60,6 +62,9 @@ export default function Header() {
           setEngineerId(eng.engineer_id)
           setEngineerTeams(eng.teams ?? null)
           setPermissionLevel(eng.permission_level ?? null)
+          // 메뉴 노출은 팀 플래그로 판정한다(팀 이름을 코드에 두지 않기 위해).
+          const map = await loadTeamPerms()
+          setTeamPerm(eng.teams ? map.get(eng.teams) ?? null : null)
         }
       }
     }
@@ -112,34 +117,77 @@ export default function Header() {
   }
 
   // 권한 판정은 lib/permissions.ts 로 일원화한다(조건식을 여기 직접 쓰지 않는다).
-  const engineer: EngineerLike | null = user ? { permission_level: permissionLevel, teams: engineerTeams } : null
+  const engineer: EngineerLike | null = user ? { permission_level: permissionLevel, teams: engineerTeams, perm: teamPerm } : null
 
   // 2단 메뉴 구조: path(단일 링크) 또는 children(드롭다운) 중 하나만 갖는다.
+  // 그룹 안에 권한이 다른 항목이 섞이므로 권한은 항목마다 붙이고,
+  // 그룹은 보이는 하위 항목이 하나라도 있을 때만 노출한다.
+  type MenuChild = { label: string; path: string; canAccess: (e: EngineerLike | null) => boolean }
   type MenuNode = {
     label: string
     path?: string
-    children?: { label: string; path: string }[]
-    canAccess: (e: EngineerLike | null) => boolean
+    children?: MenuChild[]
+    canAccess?: (e: EngineerLike | null) => boolean   // 하위 없는 단일 링크에만 쓴다
   }
   const menu: MenuNode[] = [
-    { label: '80', canAccess: canAccess80, children: [{ label: '고객사 현황', path: '/' }] },
-    { label: '20', canAccess: canAccess20, children: [{ label: '입고 등록', path: '/repair' }, { label: '수리 현황 대시보드', path: '/repair/dashboard' }] },
-    { label: '견적서', canAccess: canAccessQuote, path: '/quote' },
-    { label: '건의사항', canAccess: canAccessQuote, path: '/suggestions' },
-    { label: '영업관리', canAccess: canAccessSales, children: [{ label: '발주관리', path: '/purchase' }, { label: '재고관리', path: '/inventory' }] },
-    { label: '관리자', canAccess: canAccessAdmin, children: [{ label: '실적 현황', path: '/sales' }, { label: '활동 현황', path: '/activity' }] },
-    { label: '유지보수', canAccess: canAccessMaintenance, path: '/admin' },
+    {
+      label: '20·80',
+      children: [
+        { label: '고객사 현황', path: '/', canAccess: canViewCustomers },
+        { label: '20 수리등록', path: '/repair', canAccess: canViewCustomers },
+        // 홀딩 현황(/holdings)은 메뉴에서 뺐다. 80 대시보드의 홀딩 위젯에서 들어간다.
+      ],
+    },
+    {
+      label: '대시보드',
+      children: [
+        { label: '20 대시보드', path: '/repair/dashboard', canAccess: canViewDashboard },
+        { label: '80 대시보드', path: '/dashboard/80', canAccess: canViewDashboard },
+        { label: '활동 현황', path: '/activity', canAccess: canViewDashboard },
+      ],
+    },
+    // 가장 자주 쓰는 두 화면이라 그룹으로 묶지 않고 한 번에 열리게 둔다.
+    { label: '견적서', canAccess: canViewQuote, path: '/quote' },
+    { label: '영업 현황', canAccess: canViewPipeline, path: '/pipeline' },
+    {
+      label: '영업관리',
+      children: [
+        { label: '발주관리', path: '/purchase', canAccess: canViewSalesMgmt },
+        { label: '재고관리', path: '/inventory', canAccess: canViewSalesMgmt },
+      ],
+    },
+    { label: '건의사항', canAccess: canViewAll, path: '/suggestions' },
+    {
+      label: '관리자',
+      children: [
+        { label: '실적 현황', path: '/sales', canAccess: canViewAdmin },
+        { label: '유지보수', path: '/admin', canAccess: canViewAdmin },
+      ],
+    },
   ]
-  const visibleMenu = menu.filter(m => m.canAccess(engineer))
+  // 하위 항목을 먼저 걸러내고, 남은 것이 없는 그룹은 통째로 숨긴다.
+  const visibleMenu = menu
+    .map(m => (m.children ? { ...m, children: m.children.filter(c => c.canAccess(engineer)) } : m))
+    .filter(m => (m.children ? m.children.length > 0 : (m.canAccess?.(engineer) ?? true)))
 
   // '/' 는 홈 상태 초기화 + 하드 내비게이션이 필요하므로 별도 처리한다.
   const navigate = (path: string) => {
     if (path === '/') { sessionStorage.removeItem(HOME_STATE_KEY); window.location.href = '/'; return }
     router.push(path)
   }
-  const matchExact = (p: string) => pathname === p
+  // 활성 표시는 "현재 경로에 가장 잘 맞는 메뉴 경로 한 개"만 고른다.
+  // 완전 일치를 우선하고, 하위 경로 매칭은 더 긴 경로가 이긴다.
+  // (/repair 와 /repair/dashboard 처럼 한쪽이 다른 쪽의 상위 경로이면
+  //  예전 방식으로는 '20·80' 과 '대시보드' 두 그룹이 동시에 켜졌다)
+  // 권한으로 걸러지기 전 menu 를 기준으로 계산해, 안 보이는 메뉴 때문에 판정이 흔들리지 않게 한다.
   const matchSub = (p: string) => pathname === p || (p !== '/' && pathname.startsWith(p + '/'))
-  const isNodeActive = (m: MenuNode) => m.path ? matchSub(m.path) : !!m.children?.some(c => matchSub(c.path))
+  const activePath = menu
+    .flatMap(m => (m.children ? m.children.map(c => c.path) : m.path ? [m.path] : []))
+    .filter(matchSub)
+    .sort((a, b) => (a === pathname ? 1 : 0) - (b === pathname ? 1 : 0) || a.length - b.length)
+    .pop() ?? null
+  const matchExact = (p: string) => p === activePath
+  const isNodeActive = (m: MenuNode) => m.path ? m.path === activePath : !!m.children?.some(c => c.path === activePath)
 
   // ── 드롭다운 호버 지연 (Linear 방식) ──
   const clearTimers = () => {
@@ -225,8 +273,11 @@ export default function Header() {
                     style={{
                       fontSize: 16, fontWeight: 700,
                       color: active ? '#234ea2' : '#111111',
-                      cursor: 'pointer', whiteSpace: 'nowrap', paddingBottom: 4,
-                      borderBottom: active ? '2.5px solid #234ea2' : '2.5px solid transparent',
+                      cursor: 'pointer', whiteSpace: 'nowrap',
+                      // 글자 아래에 밑줄(3) + 간격(2) 만큼이 붙으므로 위에도 같은 5 를 둔다.
+                      // 상자가 글자를 기준으로 대칭이 되어야 alignItems: center 가 로고와 같은 중심에 맞춘다.
+                      paddingTop: 5, paddingBottom: 2,
+                      borderBottom: active ? '3px solid #234ea2' : '3px solid transparent',
                       transition: 'all 0.15s', display: 'inline-block', outline: 'none',
                     }}>
                     {m.label}

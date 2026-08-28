@@ -104,6 +104,22 @@ export function createEmptyDeviceForm(): NewDeviceForm {
   }
 }
 
+// 사용자가 아무것도 채우지 않은 장비 카드인지.
+// program·category 는 기본값이 미리 들어 있어 판정에서 뺀다(비어 있음의 근거가 못 된다).
+export function isEmptyDeviceForm(d: NewDeviceForm): boolean {
+  return !d.device_name.trim()
+    && !d.device_name2.trim()
+    && !d.option.trim()
+    && !d.serial_number.trim()
+    && !d.install_date.trim()
+    && !d.packing_file
+}
+
+// 담당자도 같은 방식 — 이름·부서·직책·전화가 모두 비면 입력하지 않은 것으로 본다.
+export function isEmptyContactForm(c: { name: string; department: string; position: string; phone: string }): boolean {
+  return !c.name.trim() && !c.department.trim() && !c.position.trim() && !c.phone.trim()
+}
+
 export function getDeviceLines(devices: Device[]): string[] {
   if (!devices || devices.length === 0) return ['-']
 

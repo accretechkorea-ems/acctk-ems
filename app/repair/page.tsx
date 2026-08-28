@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRepairs, type Repair, type RepairStatus, type RepairQuote } from '@/hooks/useRepairs'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canAccess20 } from '@/lib/permissions'
+import { canViewCustomers } from '@/lib/permissions'
 import RepairEditModal from '@/components/repair/RepairEditModal'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import AutocompleteInput from '@/components/common/AutocompleteInput'
@@ -115,7 +115,7 @@ export default function RepairPage() {
   const toast = useToast()
   const { errors, clearError, validate } = useFieldErrors<'customerName'>()
 
-  const { engineer: currentEngineer, loading: guardLoading, authorized } = usePageGuard(canAccess20)
+  const { engineer: currentEngineer, loading: guardLoading, authorized } = usePageGuard(canViewCustomers)
   const { repairs, loading, refetch } = useRepairs()
 
   // ── 접수 등록 폼 ──
@@ -364,6 +364,7 @@ export default function RepairPage() {
 
   // 대시보드와 동일 기준: 보유 = 미출고 전체(본사 발송 포함), 수리중 = 국내 + 본사.
   const kpiHeld = countBy(r => r.status !== '출고완료')                     // 보유 수리품(본사 발송 포함)
+  const kpiIncoming = countBy(r => r.status === '입고')                     // 입고(수리 시작 전)
   const hqHeld = countBy(r => r.status !== '출고완료' && isAtHq(r))         // 본사 발송 중(보유)
   const kpiRepairing = countBy(r => r.status === '수리중' && !isAtHq(r))    // 국내 수리중
   const kpiWaiting = countBy(r => r.status === '출고대기')                  // 그대로
@@ -653,14 +654,9 @@ export default function RepairPage() {
       <div style={{ maxWidth: 1320, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
         {/* ── KPI 카드 (+ 대시보드 이동) ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }} className="repair-kpi">
-          <div style={card}>
-            <div style={{ fontSize: 12, color: MUTED, fontWeight: 600, marginBottom: 6 }}>보유 수리품</div>
-            <div style={{ fontSize: 24, fontWeight: 700, color: TEXT, lineHeight: 1 }}>
-              {kpiHeld}<span style={{ fontSize: 13, fontWeight: 700, color: MUTED, marginLeft: 3 }}>건</span>
-            </div>
-            <div style={{ fontSize: 11, color: MUTED, marginTop: 6, fontWeight: 600 }}>출고완료 제외</div>
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12 }} className="repair-kpi">
+          <KpiCard title="보유 수리품" value={kpiHeld} unit="건" />
+          <KpiCard title="입고" value={kpiIncoming} unit="건" />
           <KpiCard title="수리중" value={kpiRepairing + hqHeld} unit="건" sub={`국내 ${kpiRepairing} · 본사 ${hqHeld}`} />
           <KpiCard title="출고 대기" value={kpiWaiting} unit="건" sub="수리 완료" />
           <div style={{ ...card, position: 'relative' }}>
@@ -675,7 +671,7 @@ export default function RepairPage() {
               {kpiShippedThisMonth}<span style={{ fontSize: 13, fontWeight: 700, color: MUTED, marginLeft: 3 }}>건</span>
             </div>
           </div>
-          {/* 대시보드 이동 (KPI 그리드 5번째 칸) */}
+          {/* 대시보드 이동 (KPI 그리드 6번째 칸) */}
           <button onClick={() => router.push('/repair/dashboard')} tabIndex={-1}
             onMouseEnter={e => { e.currentTarget.style.borderColor = MUTED; e.currentTarget.style.background = '#fafafa' }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.background = '#fff' }}

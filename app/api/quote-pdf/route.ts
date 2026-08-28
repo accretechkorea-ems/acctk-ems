@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canAccessSales } from '@/lib/permissions'
+import { canViewSalesMgmt } from '@/lib/permissions'
+import { withTeamPerm } from '@/lib/teamPermsServer'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,11 +26,12 @@ export async function GET(req: NextRequest) {
 
   // 권한: 견적 소유자 또는 superadmin/영업관리만 열람 가능.
   // RLS 에 의존하지 않도록 service role 로 caller 와 대상 견적을 직접 조회해 코드에서 판정한다.
-  const { data: caller } = await supabaseAdmin
+  const { data: callerRow } = await supabaseAdmin
     .from('engineers')
     .select('engineer_id, permission_level, teams')
     .eq('email', user.email!)
     .single()
+  const caller = await withTeamPerm(callerRow)
   if (!caller) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { data: quoteRows } = await supabaseAdmin
@@ -39,7 +41,7 @@ export async function GET(req: NextRequest) {
   if (!quoteRows || quoteRows.length === 0)
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const privileged = canAccessSales(caller)
+  const privileged = canViewSalesMgmt(caller)
   if (!privileged && !quoteRows.some(q => q.engineer_id === caller.engineer_id))
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 

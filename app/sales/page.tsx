@@ -9,7 +9,8 @@ import { isActiveInPeriod } from '@/lib/engineers'
 import { SALES_STATUS_COLORS, TEAM_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canAccessAdmin, getViewScope, isFieldEngineerTeam } from '@/lib/permissions'
+import { canViewAdmin, getViewScope, isFieldEngineerTeam, type TeamPerm } from '@/lib/permissions'
+import { withTeamPerm, withTeamPerms } from '@/lib/teamPerms'
 import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice } from '@/lib/quoteMutations'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
@@ -73,6 +74,7 @@ type Engineer = {
   teams: string | null
   permission_level: string
   resigned_date?: string | null
+  perm?: TeamPerm | null
 }
 
 type SalesTarget = {
@@ -1059,7 +1061,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
 // ── 메인 페이지 ───────────────────────────────────────────────────────────────
 export default function SalesPage() {
   const supabase = createClient()
-  const { loading: guardLoading, authorized } = usePageGuard(canAccessAdmin)
+  const { loading: guardLoading, authorized } = usePageGuard(canViewAdmin)
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [engineers, setEngineers] = useState<Engineer[]>([])
   const [targets, setTargets] = useState<SalesTarget[]>([])
@@ -1098,13 +1100,15 @@ export default function SalesPage() {
       dealer: q.dealer_id ? { company_name: custMap[q.dealer_id] ?? null } : null,
     }))
     setQuotes(merged as Quote[])
-    setEngineers(eData || [])
+    // 현장 엔지니어 판정(isFieldEngineerTeam)이 팀 플래그를 보므로 목록에 붙여둔다.
+    setEngineers(await withTeamPerms(eData as Engineer[] | null))
     setTargets(tData || [])
-    setCurrentEngineer(meData || null)
+    setCurrentEngineer(await withTeamPerm(meData as Engineer | null))
     setLoading(false)
   }
 
-  const teams = [...new Set(engineers.map(e => e.teams).filter(Boolean))].sort() as string[]
+  // 팀 필터 목록 — 실적 집계 대상인 현장 팀만(팀 플래그로 판정).
+  const teams = [...new Set(engineers.filter(e => isFieldEngineerTeam(e)).map(e => e.teams).filter(Boolean))].sort() as string[]
   const sortedEngineers = [...engineers].sort((a, b) => (POSITION_ORDER[a.position ?? ''] ?? 99) - (POSITION_ORDER[b.position ?? ''] ?? 99))
 
   // 조회 기간의 시작일(YYYY-MM-DD) — 회계연도 4월 시작 기준
@@ -1129,7 +1133,6 @@ const visibleEngineers = sortedEngineers.filter(e => {
     if (!currentEngineer) return false
     const scope = getViewScope(currentEngineer)
     if (scope === 'all') return true
-    if (scope === 'team') return e.teams === currentEngineer.teams
     return e.engineer_id === currentEngineer.engineer_id
   })
 
@@ -1268,7 +1271,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
             <div style={{ width: 1, height: 20, background: BORDER }} />
             <span style={{ fontSize: 11, color: MUTED, fontWeight: 600, letterSpacing: '0.2px' }}>팀</span>
             <SegmentedControl
-              options={['전체', ...teams.filter(t => isFieldEngineerTeam({ teams: t }))]}
+              options={['전체', ...teams]}
               value={teamFilter ?? '전체'}
               onChange={v => setTeamFilter(v === '전체' ? null : v)}
             />
@@ -1335,18 +1338,15 @@ const visibleEngineers = sortedEngineers.filter(e => {
           <PerformanceChart quotes={quotes} fy={fy} targets={targets} engineers={sortedEngineers} filteredEngineerIds={filteredEngineerIds} teamFilter={teamFilter} />
         </div>
 
-        {/* 팀별 실적 — superadmin과 각팀 manager, 해당 팀원에게만 표시 */}
+        {/* 팀별 실적 — 이 화면은 관리자 전용이라 항상 전사 범위다.
+            (engineer 가 아직 안 잡힌 로딩 중에는 'self' 라 숨긴다) */}
         {!teamFilter && teams.length > 0 && getViewScope(currentEngineer) !== 'self' && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
               <span style={{ fontSize: 15, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>팀별 실적</span>
             </div>
            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
-               {teams.filter(t => {
-                if (!isFieldEngineerTeam({ teams: t })) return false
-                if (getViewScope(currentEngineer) === 'team') return t === currentEngineer?.teams
-                return true
-              }).map(t => (
+               {teams.map(t => (
               <TeamCard key={t} teamId={t} engineers={sortedEngineers} filteredQuotes={filteredQuotes} targets={targets} mode={mode} fy={fy} periodStart={periodStart} onCardClick={id => setTeamFilter(id === teamFilter ? null : id)} isSelected={teamFilter === t} />
             ))}            </div>
           </div>

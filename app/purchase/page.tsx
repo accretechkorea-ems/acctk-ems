@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { SALES_STATUS_COLORS, DELIVERY_METHOD_COLORS, getCategoryColor } from '@/lib/categoryColors'
-import { canAccessSales } from '@/lib/permissions'
+import { canViewSalesMgmt, type TeamPerm } from '@/lib/permissions'
+import { withTeamPerm } from '@/lib/teamPerms'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import AccessGate from '@/components/common/AccessGate'
@@ -48,6 +49,7 @@ type Engineer = {
   email: string
   teams: string | null
   permission_level: string
+  perm?: TeamPerm | null
 }
 
 const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
@@ -102,7 +104,8 @@ export default function PurchasePage() {
       supabase.from('customers').select('customer_id, company_name'),
       supabase.from('engineers').select('name, position'),
     ])
-    setMe(meData || null)
+    // 진입 판정(canViewSalesMgmt)에 팀 플래그가 필요하다.
+    setMe(await withTeamPerm(meData as Engineer | null))
     const em: Record<string, string> = {}
     for (const e of engData || []) if (e.name && e.position) em[e.name] = e.position
     setEngMap(em)
@@ -115,7 +118,7 @@ export default function PurchasePage() {
 
   useEffect(() => { fetchAll() }, [])
 
-  const isAllowed = canAccessSales(me)
+  const isAllowed = canViewSalesMgmt(me)
 
   // 목록(검색·상태 필터)이 바뀌면 화면에서 사라진 견적의 선택은 자동으로 걷힌다.
   const filtered = quotes.filter(q => {

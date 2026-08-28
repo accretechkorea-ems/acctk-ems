@@ -134,7 +134,7 @@ export default function MyQuotesPanel({ engineerId }: { engineerId: number }) {
       .eq('engineer_id', engineerId)
       .order('created_at', { ascending: false })
     const list = (qs ?? []) as any[]
-    // 고객사/대리점명: customers 별도 조회 후 병합(is_team80 게이팅으로 막히면 '-'/null).
+    // 고객사/대리점명: customers 별도 조회 후 병합(고객사 열람 권한이 없어 막히면 '-'/null).
     const ids = [...new Set(list.flatMap(q => [q.customer_id, q.dealer_id]).filter(Boolean))]
     const custMap: Record<number, string> = {}
     if (ids.length) {

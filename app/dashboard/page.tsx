@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { canAccess80 } from '@/lib/permissions'
+import { canViewCustomers, type TeamPerm } from '@/lib/permissions'
+import { withTeamPerm } from '@/lib/teamPerms'
 import { useNotifications, type Notification } from '@/hooks/useNotifications'
 import NotificationList from '@/components/common/NotificationList'
 import ActivityDetail from '@/components/activity/ActivityDetail'
@@ -16,6 +17,7 @@ type Me = {
   teams: string | null
   permission_level: string | null
   office: string | null
+  perm?: TeamPerm | null
 }
 
 export default function DashboardPage() {
@@ -51,7 +53,9 @@ export default function DashboardPage() {
           .select('engineer_id, name, position, teams, permission_level, office')
           .eq('email', data.user.email)
           .single()
-        if (!cancelled) setMe((eng as Me | null) ?? null)
+        // 활동 위젯 노출 판정에 팀 플래그가 필요해 붙여서 담는다.
+        const withPerm = await withTeamPerm((eng as Me | null) ?? null)
+        if (!cancelled) setMe(withPerm)
       }
       if (!cancelled) setLoading(false)
     }
@@ -66,7 +70,7 @@ export default function DashboardPage() {
 
   const _now = new Date()
   const todayLabel = `${_now.getFullYear()}년 ${_now.getMonth() + 1}월 ${_now.getDate()}일`
-  const showActivity = !!me && canAccess80(me) // is_team80 RLS 대상만 노출
+  const showActivity = canViewCustomers(me) // customers 를 읽을 수 있는 팀에만 노출
 
   return (
     <div style={{ background: '#fafafa', minHeight: '100vh', padding: '24px 28px' }}>

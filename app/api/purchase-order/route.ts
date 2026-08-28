@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { canAccessSales } from '@/lib/permissions'
+import { canViewSalesMgmt } from '@/lib/permissions'
+import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,6 +22,9 @@ export async function POST(req: Request) {
   if (callerErr) console.error(' caller lookup failed', { email: user.email, error: callerErr })
   if (!caller) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
+  // 팀 권한 플래그 — caller 판정과 아래 알림 대상 선별에 함께 쓴다.
+  const teamPerms = await loadTeamPerms()
+
   const formData = await req.formData()
   const file = formData.get('file') as File | null
   const quoteId = formData.get('quoteId') as string | null
@@ -32,7 +36,7 @@ export async function POST(req: Request) {
   // 권한: superadmin/영업관리팀은 모든 견적. 그 외에는 본인 견적(소유자)만 허용.
   // 모든 action 이 quoteId 를 필수로 받으므로(위 검증) 항상 소유자 판정이 가능하다.
   // service role(supabaseAdmin)로 조회해 RLS 를 우회하므로, 아래에서 engineer_id 를 명시적으로 비교한다.
-  const privileged = canAccessSales(caller)
+  const privileged = canViewSalesMgmt(attachTeamPerm(teamPerms, caller))
   if (!privileged) {
     const { data: ownerQuote, error: ownerErr } = await supabaseAdmin
       .from('quotes')
@@ -89,7 +93,7 @@ export async function POST(req: Request) {
     if (engErr) console.error(' engineers lookup failed', { action, quoteId, error: engErr })
 
     const targets = (allEng || []).filter((e: { engineer_id: number; teams: string | null; permission_level: string; resigned_date: string | null }) =>
-      canAccessSales(e) && !e.resigned_date && e.engineer_id !== caller.engineer_id
+      canViewSalesMgmt(attachTeamPerm(teamPerms, e)) && !e.resigned_date && e.engineer_id !== caller.engineer_id
     )
 
     if (targets.length > 0) {
@@ -161,7 +165,7 @@ export async function POST(req: Request) {
     if (taxEngErr) console.error(' engineers lookup failed', { action, quoteId, error: taxEngErr })
 
     const taxTargets = (taxAllEng || []).filter((e: { engineer_id: number; teams: string | null; permission_level: string; resigned_date: string | null }) =>
-      canAccessSales(e) && !e.resigned_date && e.engineer_id !== caller.engineer_id
+      canViewSalesMgmt(attachTeamPerm(teamPerms, e)) && !e.resigned_date && e.engineer_id !== caller.engineer_id
     )
 
     const { data: quote, error: quoteErr } = await supabaseAdmin
@@ -191,7 +195,7 @@ export async function POST(req: Request) {
   if (action === 'complete_tax') {
     const { data: quote, error: quoteErr } = await supabaseAdmin
       .from('quotes')
-      .select('quote_number, engineer_id')
+      .select('quote_number, engineer_id, opportunity_id')
       .eq('quote_id', Number(quoteId))
       .single()
     if (quoteErr) console.error(' quote lookup failed', { action, quoteId, error: quoteErr })
@@ -202,6 +206,18 @@ export async function POST(req: Request) {
       tax_completed_by: senderLabel,
     }).eq('quote_id', Number(quoteId))
     if (updErr) console.error(' quotes update failed', { action, quoteId, error: updErr })
+
+    // 매출이 확정되면 연결된 영업기회를 종료한다(closed_at 기록).
+    // 영업 단계는 수주까지만 다루고, 그 뒤 회계 흐름은 quotes.status 가 담당한다.
+    // 이미 종료된 건은 최초 종료 시점을 덮지 않는다. 실패해도 매출 처리는 되돌리지 않는다.
+    if (!updErr && quote?.opportunity_id) {
+      const { error: oppErr } = await supabaseAdmin
+        .from('sales_opportunities')
+        .update({ closed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('opportunity_id', quote.opportunity_id)
+        .is('closed_at', null)
+      if (oppErr) console.error(' opportunity auto-close failed', { action, quoteId, opportunityId: quote.opportunity_id, error: oppErr })
+    }
 
     if (quote?.engineer_id && quote.engineer_id !== caller.engineer_id) {
       const { error: notiErr } = await supabaseAdmin.from('notifications').insert({

@@ -9,7 +9,8 @@ const supabaseAdmin = createClient(
 )
 
 const ALLOWED_POSITIONS = ['사장', '총괄', '수석', '책임', '선임', '사원']
-const ALLOWED_PERMISSIONS = ['superadmin', 'manager', 'member']
+// '팀장'(manager) 은 폐지했다. 새로 부여할 수 없다.
+const ALLOWED_PERMISSIONS = ['superadmin', 'member']
 
 export async function POST(req: Request) {
   const supabase = await createServerClient()
@@ -33,8 +34,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '필수 값 누락' }, { status: 400 })
   }
 
-  // 대상 가드 — 본인 정보 수정은 허용. 타인 수정 시 대상이 superadmin/manager 인데
-  // caller 가 superadmin 이 아니면 거부(manager 가 상위 계정을 덮어쓰지 못하게).
+  // 대상 가드 — 본인 정보 수정은 허용. 타인이 superadmin 이면 caller 도 superadmin 이어야 한다.
   // delete-user 와 동일한 판정. 대상 레벨은 RLS 에 막히지 않도록 service role 로 조회한다.
   if (Number(engineer_id) !== caller.engineer_id) {
     const { data: target } = await supabaseAdmin
@@ -42,10 +42,8 @@ export async function POST(req: Request) {
       .select('permission_level')
       .eq('engineer_id', Number(engineer_id))
       .single()
-    if (target && ['superadmin', 'manager'].includes(target.permission_level)) {
-      if (caller.permission_level !== 'superadmin') {
-        return NextResponse.json({ error: '해당 계정을 수정할 권한이 없습니다.' }, { status: 403 })
-      }
+    if (target?.permission_level === 'superadmin' && caller.permission_level !== 'superadmin') {
+      return NextResponse.json({ error: '해당 계정을 수정할 권한이 없습니다.' }, { status: 403 })
     }
   }
 

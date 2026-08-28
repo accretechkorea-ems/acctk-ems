@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // 권한 확인 (superadmin 또는 manager만 허용)
+  // 권한 확인 (계정 관리는 superadmin 전용)
   const { data: caller } = await supabase
     .from('engineers')
     .select('permission_level')

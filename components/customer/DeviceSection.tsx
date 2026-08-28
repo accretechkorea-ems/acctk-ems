@@ -1,9 +1,10 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import type { Device, ServiceHistory } from './types'
+import type { Device, Holding, ServiceHistory } from './types'
 import { INPUT_BORDER, TEXT_MUTED } from './constants'
 import { getInstallDisplay, getDefaultImageUrl } from './utils'
+import { elapsedLabel } from './holding'
 import { SERVICE_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 
 type Props = {
@@ -18,9 +19,14 @@ type Props = {
   onOpenReport: (service: ServiceHistory) => void
   onUploadPacking: (device: Device, file: File) => void
   onOpenPacking: (device: Device) => void
+  // 홀딩 — 장비별 진행 중 1건, 레포트별 연결 건
+  activeHoldingByDevice: Map<number, Holding>
+  holdingByService: Map<number, Holding>
+  onAddHolding: (deviceId: number, serviceId?: number | null) => void
+  onOpenHolding: (h: Holding) => void
 }
 
-function ServiceCard({ h, d, onEdit, onPrint, onOpenReport }: { h: ServiceHistory; d: Device; onEdit: () => void; onPrint: () => void; onOpenReport: () => void }) {
+function ServiceCard({ h, d, onEdit, onPrint, onOpenReport, holding, onAddHolding, onOpenHolding }: { h: ServiceHistory; d: Device; onEdit: () => void; onPrint: () => void; onOpenReport: () => void; holding: Holding | undefined; onAddHolding: () => void; onOpenHolding: () => void }) {
   const [hovered, setHovered] = useState(false)
   const sc = getCategoryColor(SERVICE_TYPE_COLORS, h.service_type)
 
@@ -48,6 +54,18 @@ function ServiceCard({ h, d, onEdit, onPrint, onOpenReport }: { h: ServiceHistor
             <span style={{ fontSize: 12, color: '#9ca3af' }}>
               <span style={{ color: '#d1d5db' }}> · </span>{h.is_paid ? '유상' : '무상'}
             </span>
+          )}
+          {/* 홀딩이 걸린 레포트는 배지를, 없으면 호버 시 등록 진입점을 보여준다 */}
+          {holding ? (
+            <button onClick={onOpenHolding} title={holding.title}
+              style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              {holding.resolved_at ? '홀딩 해제됨' : '홀딩 중'}
+            </button>
+          ) : (
+            <button onClick={onAddHolding} title="이 건으로 홀딩"
+              style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', background: 'none', border: '1px solid #ebebeb', borderRadius: 99, padding: '1px 8px', cursor: 'pointer', whiteSpace: 'nowrap', visibility: hovered ? 'visible' : 'hidden' }}>
+              홀딩
+            </button>
           )}
         </div>
         <button
@@ -117,11 +135,15 @@ function ServiceCard({ h, d, onEdit, onPrint, onOpenReport }: { h: ServiceHistor
   )
 }
 
-function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, onUploadPacking, onOpenPacking, supabaseUrl }: {
+function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, onUploadPacking, onOpenPacking, supabaseUrl, activeHolding, holdingByService, onAddHolding, onOpenHolding }: {
   d: Device
   deviceHistory: ServiceHistory[]
   onEditDevice: () => void
   onAddService: () => void
+  activeHolding: Holding | undefined
+  holdingByService: Map<number, Holding>
+  onAddHolding: (serviceId?: number | null) => void
+  onOpenHolding: (h: Holding) => void
   onEditService: (s: ServiceHistory) => void
   onImageUpload: () => void
   onPrintReport: (s: ServiceHistory) => void
@@ -195,6 +217,20 @@ function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditServic
       }} title={deviceTitle || '-'}>
         {deviceTitle || '-'}
       </div>
+
+      {/* 진행 중 홀딩 배지 */}
+      {activeHolding && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
+          <button onClick={() => onOpenHolding(activeHolding)} title={activeHolding.title}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', border: 'none', borderRadius: 99, padding: '3px 10px', cursor: 'pointer' }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+            </svg>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>홀딩 · {activeHolding.title}</span>
+            <span style={{ flexShrink: 0, color: '#9ca3af' }}>{elapsedLabel(activeHolding)}</span>
+          </button>
+        </div>
+      )}
 
       {/* 스펙 정보 */}
       <div style={{ fontSize: 12, color: '#111827', textAlign: 'center', marginTop: 4 }}>
@@ -270,6 +306,12 @@ function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditServic
             onEdit={() => onEditService(h)}
             onPrint={() => onPrintReport(h)}
             onOpenReport={() => onOpenReport(h)}
+            holding={holdingByService.get(h.service_id)}
+            onAddHolding={() => onAddHolding(h.service_id)}
+            onOpenHolding={() => {
+              const linked = holdingByService.get(h.service_id)
+              if (linked) onOpenHolding(linked)
+            }}
           />
         ))}
       </div>
@@ -277,18 +319,13 @@ function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditServic
   )
 }
 
-export default function DeviceSection({ devices, historyByDevice, onAddDevice, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, onUploadPacking, onOpenPacking }: Props) {
+export default function DeviceSection({ devices, historyByDevice, onAddDevice, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, onUploadPacking, onOpenPacking, activeHoldingByDevice, holdingByService, onAddHolding, onOpenHolding }: Props) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
+  // 섹션 제목도, 바깥 여백도 두지 않는다 — 업체 상세의 탭 라벨('장비 N')과 중복이고,
+  // 감싸는 카드가 안쪽 여백을 갖기 때문이다.
   return (
-    <div style={{ marginBottom: 28 }}>
-      {/* 섹션 헤더 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#111827' }}>장비</h2>
-        {devices.length > 0 && (
-          <span style={{ fontSize: 12, color: '#9ca3af' }}>총 {devices.length}대</span>
-        )}
-      </div>
+    <div>
 
       <div style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 4, alignItems: 'flex-start' }}>
         {devices.map((d) => (
@@ -304,6 +341,10 @@ export default function DeviceSection({ devices, historyByDevice, onAddDevice, o
             onOpenReport={(s) => onOpenReport(s)}
             onUploadPacking={(file) => onUploadPacking(d, file)}
             onOpenPacking={() => onOpenPacking(d)}
+            activeHolding={activeHoldingByDevice.get(d.device_id)}
+            holdingByService={holdingByService}
+            onAddHolding={(serviceId) => onAddHolding(d.device_id, serviceId ?? null)}
+            onOpenHolding={onOpenHolding}
             supabaseUrl={supabaseUrl}
           />
         ))}

@@ -6,8 +6,10 @@ import { isActiveInPeriod } from '@/lib/engineers'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canAccessAdmin, isFieldEngineerTeam } from '@/lib/permissions'
-import ActivityCard, { SERVICE_TYPES } from '@/components/activity/ActivityCard'
+import { canViewDashboard, isFieldEngineerTeam, type TeamPerm } from '@/lib/permissions'
+import { withTeamPerms } from '@/lib/teamPerms'
+import ActivityCard from '@/components/activity/ActivityCard'
+import { ACTIVITY_TYPES } from '@/lib/activity'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
 
 const BLUE = '#234ea2'
@@ -17,8 +19,6 @@ const BORDER = '#ebebeb'
 const TEXT = '#111827'
 const MUTED = '#9ca3af'
 
-const TEAM_OPTIONS = ['전체', '80영업', '80CS', '20', 'Apps.']
-
 type Engineer = {
   engineer_id: number
   name: string
@@ -27,6 +27,15 @@ type Engineer = {
   email: string | null
   resigned_date: string | null
   office: string | null
+  perm?: TeamPerm | null
+}
+
+// 활동 현황 집계에 필요한 최소 필드(sales_activities).
+type SalesActivityRow = {
+  activity_id: number
+  engineer_id: number
+  activity_date: string
+  activity_type: string
 }
 
 type ActivityRow = {
@@ -45,8 +54,9 @@ function SkeletonCard() {
         </div>
         <div style={{ width: 34, height: 20, background: '#e5e7eb', borderRadius: 99, animation: 'pulse 1.5s ease-in-out infinite' }} />
       </div>
-      {SERVICE_TYPES.map(t => (
-        <div key={t} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 9 }}>
+      {/* 유형 6줄 자리 — 카드 목록 영역이 6줄 높이로 고정돼 있다 */}
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 9 }}>
           <div style={{ width: 52, height: 11, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
           <div style={{ width: 30, height: 11, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
         </div>
@@ -61,7 +71,7 @@ function SkeletonCard() {
 
 export default function ActivityPage() {
   const supabase = createClient()
-  const { loading: guardLoading, authorized } = usePageGuard(canAccessAdmin)
+  const { loading: guardLoading, authorized } = usePageGuard(canViewDashboard)
 
   const now = new Date()
   const thisYear = now.getFullYear()
@@ -90,20 +100,20 @@ export default function ActivityPage() {
 
     const { data: { user } } = await supabase.auth.getUser()
 
-    const { data: engineers } = await supabase
+    const { data: engineerRows } = await supabase
       .from('engineers')
       .select('*')
       .order('engineer_id', { ascending: true })
 
-    if (user && engineers) {
-      const me = (engineers as Engineer[]).find(e => e.email === user.email)
+    // 집계 대상(현장 팀) 판정에 팀 플래그가 필요하므로 목록에 붙여둔다.
+    const engineers = await withTeamPerms(engineerRows as Engineer[] | null)
+
+    if (user) {
+      const me = engineers.find(e => e.email === user.email)
       if (me && !currentUser) {
         setCurrentUser(me)
-        if (me.teams && !['임원', '영업관리'].includes(me.teams)) {
-          setSelectedTeam(me.teams)
-        } else {
-          setSelectedTeam('전체')
-        }
+        // 본인 팀이 집계 대상이면 그 팀으로 시작하고, 아니면(임원·영업관리 등) 전체로 시작한다.
+        setSelectedTeam(me.teams && isFieldEngineerTeam(me) ? me.teams : '전체')
       }
     }
 
@@ -116,6 +126,14 @@ export default function ActivityPage() {
       .select('service_id, service_type, visit_date')
       .gte('visit_date', start)
       .lte('visit_date', end)
+
+    // 영업 활동 — engineer_id 가 단일이라 이 한 줄이 곧 (기록, 사람) 이다.
+    // 서비스처럼 다대다 표를 거칠 필요가 없어 그대로 사람별로 센다.
+    const { data: saData } = await supabase
+      .from('sales_activities')
+      .select('activity_id, engineer_id, activity_date, activity_type')
+      .gte('activity_date', start)
+      .lte('activity_date', end)
 
     const shMap: Record<number, { service_type: string; visit_date: string }> = {}
     ;(shData ?? []).forEach((sh: any) => {
@@ -135,14 +153,24 @@ export default function ActivityPage() {
 
     const result: ActivityRow[] = sortedEngineers.map((eng) => {
       const counts: Record<string, number> = {}
-      SERVICE_TYPES.forEach((t) => { counts[t] = 0 })
+      ACTIVITY_TYPES.forEach((t) => { counts[t] = 0 })
 
+      // 서비스 — 참여자 표(service_engineers)를 거쳐 사람별로 센다.
       ;(seData ?? [])
         .filter((se: any) => se.engineer_id === eng.engineer_id)
         .forEach((se: any) => {
           const sh = shMap[se.service_id]
           if (sh && sh.service_type && counts[sh.service_type] !== undefined) {
             counts[sh.service_type]++
+          }
+        })
+
+      // 영업 활동 — 목록에 없는 유형은 서비스와 같은 규칙으로 무시한다.
+      ;((saData ?? []) as SalesActivityRow[])
+        .filter(a => a.engineer_id === eng.engineer_id)
+        .forEach(a => {
+          if (a.activity_type && counts[a.activity_type] !== undefined) {
+            counts[a.activity_type]++
           }
         })
 
@@ -196,6 +224,9 @@ export default function ActivityPage() {
   const filteredRows = selectedTeam === '전체'
     ? rows
     : rows.filter(row => row.engineer.teams === selectedTeam)
+
+  // 팀 필터 목록은 조회 결과에 실제로 있는 팀에서 만든다(팀 이름 하드코딩 금지).
+  const teamOptions = ['전체', ...[...new Set(rows.map(r => r.engineer.teams).filter(Boolean))].sort() as string[]]
 
   const inp: React.CSSProperties = {
     padding: '8px 11px', border: `1px solid ${BORDER}`, borderRadius: 6,
@@ -270,7 +301,7 @@ export default function ActivityPage() {
             {/* 팀 필터 */}
             <SegmentedControl
               value={selectedTeam}
-              options={TEAM_OPTIONS}
+              options={teamOptions}
               onChange={setSelectedTeam}
             />
           </div>
@@ -286,6 +317,7 @@ export default function ActivityPage() {
                   engineer={row.engineer}
                   counts={row.counts}
                   total={row.total}
+                  types={ACTIVITY_TYPES}
                   onClick={() => setSelectedEngineer(row.engineer)}
                 />
               ))

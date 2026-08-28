@@ -18,7 +18,7 @@ type Props = {
   startDate?: string
   endDate?: string
   officeCode?: string | null // engineers.office. getOffice() 로 조회, 없으면 사무실 마커 미표시.
-  excludedCount?: number     // 유선기술지원으로 제외된 기록 수(하단 안내용)
+  excludedCount?: number     // 비방문(유선기술지원·전화상담)으로 제외된 기록 수(하단 안내용)
 }
 
 // 이 level 이하(확대)에서만 마커를 부채꼴/원형으로 분산한다. 그 이상(축소)이면
@@ -391,7 +391,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
   }, [mode])
 
   // 주변 업체 토글 → 첫 켤 때만 customers 조회(캐시). 끄면 점 제거.
-  // RLS 상 canAccess80 사용자만 customers 를 읽으므로, 조회 실패 시 조용히 토글 비활성화.
+  // RLS 상 고객사 열람 권한이 있는 팀만 customers 를 읽으므로, 조회 실패 시 조용히 토글 비활성화.
   useEffect(() => {
     if (!mapReady) return
     if (!showNearby) { clearNearbyRef.current?.(); return }
@@ -402,6 +402,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
           const { data, error } = await supabase
             .from('customers')
             .select('customer_id, company_name, latitude, longitude')
+            .is('deleted_at', null)
             .not('latitude', 'is', null)
             .not('longitude', 'is', null)
           if (error) throw error
@@ -571,14 +572,14 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
           )
         )}
 
-        {/* 유선기술지원 제외 안내 (하단 중앙) */}
+        {/* 비방문 기록 제외 안내 (하단 중앙) */}
         {excludedCount > 0 && (
           <div style={{
             position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 2,
             background: '#fff', border: '1px solid #ebebeb', borderRadius: 8, padding: '6px 12px',
             fontSize: 11, fontWeight: 600, color: '#9ca3af', boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
           }}>
-            유선 지원 {excludedCount}건 제외
+            비방문 {excludedCount}건 제외
           </div>
         )}
       </div>

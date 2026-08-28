@@ -10,6 +10,8 @@ import {
   inputStyle,
   dateInputStyle,
   sectionCardStyle,
+  isEmptyDeviceForm,
+  isEmptyContactForm,
   type Contact,
   type NewDeviceForm,
 } from '@/lib/home'
@@ -73,13 +75,21 @@ export default function AddCustomerModal({
   )
 
   // 사용자 검증은 여기(모달)에서 인라인으로 한꺼번에 수집. 통과해야만 onSave() → addCustomer 호출.
+  // 장비·담당자는 선택 사항이다(신규 영업 업체는 아직 장비도 담당자도 없다).
+  // 다만 뭔가 입력했다면 그 안의 필수 칸은 그대로 검증한다.
   const handleSave = () => {
     const rules: Partial<Record<ErrKey, string | null>> = {
       company_name: customerForm.company_name.trim() ? null : '업체명을 입력해주세요',
       address: customerForm.address.trim() ? null : '주소를 입력해주세요',
-      contact_name: contactForm.name.trim() ? null : '담당자 이름을 입력해주세요',
+      contact_name: isEmptyContactForm(contactForm) || contactForm.name.trim()
+        ? null
+        : '담당자 이름을 입력해주세요',
     }
-    deviceForms.forEach((d, i) => { rules[`device_${i}`] = d.device_name.trim() ? null : '장비 라인업을 입력해주세요' })
+    deviceForms.forEach((d, i) => {
+      rules[`device_${i}`] = isEmptyDeviceForm(d) || d.device_name.trim()
+        ? null
+        : '장비 라인업을 입력해주세요'
+    })
     if (!validate(rules)) return
     onSave()
   }
@@ -189,8 +199,13 @@ export default function AddCustomerModal({
               marginBottom: 14,
             }}
           >
-            <div style={{ fontSize: 18, fontWeight: 800, color: TEXT_PRIMARY }}>
-              장비 정보
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: TEXT_PRIMARY }}>
+                장비 정보
+              </div>
+              <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
+                선택 사항입니다. 비워두면 등록되지 않고, 나중에 업체 상세에서 추가할 수 있습니다
+              </div>
             </div>
 
             <button
@@ -411,15 +426,13 @@ export default function AddCustomerModal({
         </div>
 
         <div style={{ ...sectionCardStyle, marginBottom: 16 }}>
-          <div
-            style={{
-              fontSize: 18,
-              fontWeight: 800,
-              marginBottom: 14,
-              color: TEXT_PRIMARY,
-            }}
-          >
-            담당자 정보
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: TEXT_PRIMARY }}>
+              담당자 정보
+            </div>
+            <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
+              선택 사항입니다. 나중에 업체 상세에서 추가할 수 있습니다
+            </div>
           </div>
 
           <div style={{ display: 'grid', gap: 12 }}>
