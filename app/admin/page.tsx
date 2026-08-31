@@ -244,6 +244,35 @@ export default function AdminPage() {
     const ok = await confirmDialog({ title: '견적서 삭제', message: `견적서 ${quote.quote_number}을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`, confirmText: '삭제', variant: 'danger' })
     if (!ok) return
     setDeleting(quote.quote_id)
+
+    // 스토리지 PDF 를 먼저 지운다. 삭제 라우트가 quotes.pdf_url 로 대조해 파일을 찾으므로
+    // 견적 행이 남아 있는 동안에만 지울 수 있다(행을 먼저 지우면 늘 404 로 끝난다).
+    // 대조되는 행이 없으면(404) 지울 파일이 없다는 뜻이므로 견적 삭제는 그대로 이어간다.
+    if (quote.pdf_url) {
+      const filePath = quote.pdf_url.replace('quote-pdfs/', '')
+      try {
+        const res = await fetch('/api/delete-quote-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePath }),
+        })
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}))
+          console.error('[admin] delete quote pdf failed', { filePath, status: res.status, body })
+          if (res.status !== 404) {
+            toast.error('PDF 파일 삭제에 실패했습니다. 견적은 삭제되지 않았습니다.')
+            setDeleting(null)
+            return
+          }
+        }
+      } catch (e) {
+        console.error('[admin] delete quote pdf request failed', { filePath, error: e })
+        toast.error('PDF 파일 삭제에 실패했습니다. 견적은 삭제되지 않았습니다.')
+        setDeleting(null)
+        return
+      }
+    }
+
     // quote_expenses·quote_items 가 quotes 를 참조한다(FK 는 NO ACTION). 자식부터 지우고
     // 매 단계 error 를 확인한다 — 중간에 실패하면 멈춰야 품목만 지워진 상태로 남지 않는다.
     const { error: expErr } = await supabase.from('quote_expenses').delete().eq('quote_id', quote.quote_id)
@@ -267,14 +296,6 @@ export default function AdminPage() {
       setDeleting(null)
       fetchQuotes(searchQuery)
       return
-    }
-   if (quote.pdf_url) {
-      const filePath = quote.pdf_url.replace('quote-pdfs/', '')
-      await fetch('/api/delete-quote-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filePath }),
-      })
     }
     setDeleting(null)
     fetchQuotes(searchQuery)
