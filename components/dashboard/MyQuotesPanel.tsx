@@ -7,7 +7,7 @@ import { useToast } from '@/components/common/Toast'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
-import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice } from '@/lib/quoteMutations'
+import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, notifyDeleteRequest } from '@/lib/quoteMutations'
 import { isAutoFailed, REVERT_NOTICE, AUTO_FAIL_NOTICE } from '@/lib/quoteStatus'
 import { achieveColorOf } from '@/lib/fiscal'
 
@@ -262,13 +262,19 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   }
 
   // ── mutation 핸들러 (공용 함수 사용 + toast + refetch) ──
+  // 삭제 요청은 사유가 있어야 관리자가 판단할 수 있다. 다른 상태는 기존대로 선택 입력.
+  const reasonRequired = editStatus === '취소요청'
+  const reasonMissing = reasonRequired && !editFailReason.trim()
+
   const handleSave = async () => {
-    if (!editQuote) return
+    if (!editQuote || reasonMissing) return
     setSaving(true)
     try {
       // 되돌릴 때는 실패 사유를 지운다(빈 문자열 → 공용 함수가 null 로 저장한다).
       const reason = editStatus === '견적중' ? '' : editFailReason
-      await updateQuoteStatus({ quoteId: editQuote.quote_id, status: editStatus, failReason: reason })
+      await updateQuoteStatus({ quoteId: editQuote.quote_id, status: editStatus, reason })
+      // 삭제 요청은 관리자에게 알린다. 알림이 실패해도 요청 자체는 이미 저장됐으므로 흐름을 막지 않는다.
+      if (reasonRequired) await notifyDeleteRequest(editQuote.quote_id)
       toast.success(editStatus === '견적중' ? '견적중으로 되돌렸습니다' : `${editStatus} 처리되었습니다`)
       setEditQuote(null)
       await loadData()
@@ -692,14 +698,15 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                   </div>
                   <textarea value={editFailReason} onChange={e => setEditFailReason(e.target.value)} rows={3}
                     placeholder={editStatus === '취소요청' ? '삭제 요청 사유를 입력하세요' : '실패 사유를 입력하세요'}
-                    style={{ width: '100%', padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
+                    style={{ width: '100%', padding: '8px 10px', border: reasonMissing ? errBorder : `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
+                  <FieldError message={reasonMissing ? '삭제 사유를 입력해주세요' : undefined} />
                 </>
               )}
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
               <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
-              <button onClick={handleSave} disabled={saving}
-                style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, opacity: saving ? 0.7 : 1 }}>
+              <button onClick={handleSave} disabled={saving || reasonMissing}
+                style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: (saving || reasonMissing) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing) ? 0.7 : 1 }}>
                 {saving ? '처리 중...'
                   : editStatus === '취소요청' ? '삭제 요청'
                   : editStatus === '견적중' ? '견적중으로 되돌리기'

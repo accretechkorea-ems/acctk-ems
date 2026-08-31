@@ -11,7 +11,7 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { canViewAdmin, getViewScope, isFieldEngineerTeam, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerm, withTeamPerms } from '@/lib/teamPerms'
-import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice } from '@/lib/quoteMutations'
+import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, notifyDeleteRequest } from '@/lib/quoteMutations'
 import { isAutoFailed, REVERT_NOTICE, AUTO_FAIL_NOTICE } from '@/lib/quoteStatus'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
@@ -598,12 +598,18 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   const pagedIds = paged.map(q => q.quote_id)
   const allPagedSelected = pagedIds.length > 0 && pagedIds.every(id => sel.isSelected(id))
   const inp: React.CSSProperties ={ padding: '6px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' }
+  // 삭제 요청은 사유가 있어야 관리자가 판단할 수 있다. 다른 상태는 기존대로 선택 입력.
+  const reasonRequired = editStatus === '취소요청'
+  const reasonMissing = reasonRequired && !editFailReason.trim()
+
   const handleSave = async () => {
-    if (!editQuote) return
+    if (!editQuote || reasonMissing) return
     setSaving(true)
     // 되돌릴 때는 실패 사유를 지운다(빈 문자열 → 공용 함수가 null 로 저장한다).
     const reason = editStatus === '견적중' ? '' : editFailReason
     await onStatusSave(editQuote, editStatus, editOrderDate, editRevenueDate, reason)
+    // 삭제 요청은 관리자에게 알린다. 알림이 실패해도 요청 자체는 저장됐으므로 흐름을 막지 않는다.
+    if (reasonRequired) await notifyDeleteRequest(editQuote.quote_id)
     setSaving(false)
     setEditQuote(null)
   }
@@ -1065,15 +1071,16 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                     </div>
                     <textarea value={editFailReason} onChange={e => setEditFailReason(e.target.value)} rows={3}
                       placeholder={editStatus === '취소요청' ? '삭제 요청 사유를 입력하세요' : '실패 사유를 입력하세요'}
-                      style={{ width: '100%', padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
+                      style={{ width: '100%', padding: '8px 10px', border: reasonMissing ? errBorder : `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
+                    <FieldError message={reasonMissing ? '삭제 사유를 입력해주세요' : undefined} />
                   </>
                 )}
               </div>
 
               <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
                 <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
-                <button onClick={handleSave} disabled={saving}
-                  style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, opacity: saving ? 0.7 : 1 }}>
+                <button onClick={handleSave} disabled={saving || reasonMissing}
+                  style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: (saving || reasonMissing) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing) ? 0.7 : 1 }}>
                   {saving ? '처리 중...'
                     : editStatus === '취소요청' ? '삭제 요청'
                     : editStatus === '견적중' ? '견적중으로 되돌리기'
@@ -1245,7 +1252,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
     // 예전에는 오류를 그냥 삼켜서, RLS 등으로 막히면 목록만 새로고침되고 아무 일도 없는 것처럼 보였다.
     // 원인은 공용 함수가 콘솔에 남기고, 여기서는 사용자에게 실패를 알린다.
     try {
-      await updateQuoteStatus({ quoteId: q.quote_id, status, orderDate, revenueDate, failReason })
+      await updateQuoteStatus({ quoteId: q.quote_id, status, orderDate, revenueDate, reason: failReason })
     } catch (e) {
       console.error('[sales] status save failed', { quoteId: q.quote_id, status, error: e })
     }

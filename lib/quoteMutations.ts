@@ -12,8 +12,18 @@ export type UpdateQuoteStatusParams = {
   status: string
   orderDate?: string
   revenueDate?: string
-  failReason?: string
+  /** 사유. 삭제 요청이면 delete_reason 에, 그 밖의 상태면 fail_reason 에 저장된다. */
+  reason?: string
 }
+
+// 삭제 요청('취소요청')과 실패는 성격이 달라 사유를 다른 칸에 남긴다.
+//   · '취소요청' → delete_reason 에 저장하고 fail_reason 은 건드리지 않는다.
+//   · 그 밖의 상태 → 기존대로 fail_reason 에 저장하고, 남아 있던 삭제 사유는 지운다
+//     (반려 후 되돌린 건에 옛 요청 사유가 남지 않게).
+const reasonPatch = (status: string, reason?: string) =>
+  status === '취소요청'
+    ? { delete_reason: reason || null }
+    : { fail_reason: reason || null, delete_reason: null }
 
 // 견적 상태 변경(취소요청/실패 등). RLS 적용된 사용자 클라이언트로 직접 update.
 // 실패 시 throw. (빈 문자열은 null 로 저장 — 실적 현황 기존 동작과 동일.)
@@ -25,7 +35,7 @@ export async function updateQuoteStatus(params: UpdateQuoteStatusParams): Promis
       status: params.status,
       order_date: params.orderDate || null,
       revenue_date: params.revenueDate || null,
-      fail_reason: params.failReason || null,
+      ...reasonPatch(params.status, params.reason),
     })
     .eq('quote_id', params.quoteId)
   if (error) {
@@ -72,3 +82,28 @@ export async function requestTaxInvoice(p: RequestTaxInvoiceParams): Promise<Mut
   const json = await res.json().catch(() => ({}))
   return res.ok ? { ok: true } : { ok: false, error: json.error || String(res.status) }
 }
+
+// 견적 삭제 흐름의 알림(/api/quote-delete). 동작은 action 으로 나뉜다.
+// 알림은 부가 처리라 실패해도 화면 흐름을 막지 않고 콘솔에만 남긴다 —
+// 요청(quotes.status)이나 삭제 자체는 이미 끝나 있기 때문이다.
+async function notifyQuoteDelete(quoteId: number, action: 'request' | 'completed'): Promise<void> {
+  try {
+    const res = await fetch('/api/quote-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quoteId, action }),
+    })
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}))
+      console.error('[quote] delete notify failed', { quoteId, action, status: res.status, json })
+    }
+  } catch (e) {
+    console.error('[quote] delete notify failed', { quoteId, action, error: e })
+  }
+}
+
+/** 삭제 요청을 관리자에게 알린다. 상태 변경이 끝난 뒤에 부른다. */
+export const notifyDeleteRequest = (quoteId: number) => notifyQuoteDelete(quoteId, 'request')
+
+/** 삭제가 끝났음을 요청자(견적 작성자)에게 알린다. 견적 행이 지워진 뒤에 부른다. */
+export const notifyDeleteCompleted = (quoteId: number) => notifyQuoteDelete(quoteId, 'completed')

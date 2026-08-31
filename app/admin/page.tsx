@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import { Fragment, Suspense, useEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { canViewAdmin, isSuperAdmin } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPerms'
@@ -8,6 +9,7 @@ import AccessGate from '@/components/common/AccessGate'
 import { OFFICES } from '@/lib/offices'
 import { SALES_STATUS_COLORS, ROLE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import { useToast } from '@/components/common/Toast'
+import { notifyDeleteCompleted } from '@/lib/quoteMutations'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import AutocompleteInput from '@/components/common/AutocompleteInput'
@@ -26,6 +28,7 @@ type Quote = {
   quote_date: string
   total_supply: number
   status: string
+  delete_reason?: string | null
   pdf_url?: string | null
   customer_id?: number | null
   engineers?: { name: string } | null
@@ -102,8 +105,13 @@ const POSITION_ORDER: Record<string, number> = {
 
 const POSITIONS = ['사장', '총괄', '수석', '책임', '선임', '사원']
 
-export default function AdminPage() {
+// 삭제 요청 상태값. 목록 정렬·건수 집계에서 함께 쓴다.
+const DELETE_REQUEST_STATUS = '취소요청'
+
+function AdminPageInner() {
   const supabase = createClient()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const toast = useToast()
   const confirmDialog = useConfirm() // native confirm 과 이름 충돌 피하려 confirmDialog
   const [loading, setLoading] = useState(true)
@@ -116,6 +124,8 @@ export default function AdminPage() {
   const [quoteLoading, setQuoteLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [deleting, setDeleting] = useState<number | null>(null)
+  // 첫 화면 배지용 — 처리 대기 중인 삭제 요청 건수.
+  const [pendingDeleteCount, setPendingDeleteCount] = useState(0)
 
   // 목표 금액 관리
   const [showTargetModal, setShowTargetModal] = useState(false)
@@ -206,6 +216,29 @@ export default function AdminPage() {
     check()
   }, [])
 
+  // 첫 화면 배지 — 권한이 확인되면 대기 건수를 한 번 읽는다.
+  useEffect(() => {
+    if (authorized) fetchPendingDeleteCount()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authorized])
+
+  // 알림(link: '/admin?tab=quotes')으로 들어오면 견적서 삭제 목록을 바로 연다.
+  // 이미 이 화면에 있을 때 눌러도 열리도록 useState 초기값이 아니라 주소 변화를 본다.
+  useEffect(() => {
+    if (!authorized) return
+    if (searchParams.get('tab') !== 'quotes') return
+    setShowQuoteModal(true)
+    setSearchQuery('')
+    fetchQuotes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authorized, searchParams])
+
+  // 모달을 닫으면 주소의 tab 도 지운다(뒤로 가기 기록을 늘리지 않도록 replace).
+  const closeQuoteModal = () => {
+    setShowQuoteModal(false)
+    if (searchParams.get('tab')) router.replace('/admin')
+  }
+
   const fetchLogs = async () => {
     setLogLoading(true)
     const sevenDaysAgo = new Date()
@@ -220,12 +253,29 @@ export default function AdminPage() {
     setLogLoading(false)
   }
   // ── 견적서 ──────────────────────────────────────────────────────────────────
+  // 대기 중인 삭제 요청 건수(배지용). 목록을 새로 읽을 때마다 함께 갱신한다.
+  const fetchPendingDeleteCount = async () => {
+    const { count } = await supabase
+      .from('quotes')
+      .select('quote_id', { count: 'exact', head: true })
+      .eq('status', DELETE_REQUEST_STATUS)
+    setPendingDeleteCount(count ?? 0)
+  }
+
+  // 삭제 요청 건은 오래돼도 놓치면 안 되므로 limit 과 무관하게 따로 전부 읽어
+  // 최신 50건 앞에 붙인다(둘 다 견적일 내림차순, 중복은 제거).
   const fetchQuotes = async (q?: string) => {
     setQuoteLoading(true)
+    const term = q?.trim()
+    let pendingQuery = supabase.from('quotes').select('*, engineers(name)')
+      .eq('status', DELETE_REQUEST_STATUS).order('quote_date', { ascending: false })
+    if (term) pendingQuery = pendingQuery.ilike('quote_number', `%${term}%`)
     let query = supabase.from('quotes').select('*, engineers(name)').order('quote_date', { ascending: false }).limit(50)
-    if (q && q.trim()) query = query.ilike('quote_number', `%${q}%`)
-    const { data: qData } = await query
-    const rows = (qData || []) as Quote[]
+    if (term) query = query.ilike('quote_number', `%${term}%`)
+    const [{ data: pendingData }, { data: qData }] = await Promise.all([pendingQuery, query])
+    const pendingRows = (pendingData || []) as Quote[]
+    const pendingIds = new Set(pendingRows.map(r => r.quote_id))
+    const rows = [...pendingRows, ...((qData || []) as Quote[]).filter(r => !pendingIds.has(r.quote_id))]
     const customerIds = [...new Set(rows.map(r => r.customer_id).filter((id): id is number => id != null))]
     const { data: custData } = customerIds.length > 0
       ? await supabase.from('customers').select('customer_id, company_name').in('customer_id', customerIds)
@@ -238,6 +288,7 @@ export default function AdminPage() {
     }))
     setQuotes(merged)
     setQuoteLoading(false)
+    fetchPendingDeleteCount()
   }
 
   const handleDeleteQuote = async (quote: Quote) => {
@@ -297,6 +348,9 @@ export default function AdminPage() {
       fetchQuotes(searchQuery)
       return
     }
+    // 삭제가 끝났음을 견적 작성자에게 알린다(견적 행이 사라진 뒤라 감사 기록을 근거로 만든다).
+    // 알림이 실패해도 삭제는 이미 끝났으므로 화면 흐름은 그대로 진행한다.
+    await notifyDeleteCompleted(quote.quote_id)
     setDeleting(null)
     fetchQuotes(searchQuery)
   }
@@ -677,7 +731,15 @@ export default function AdminPage() {
 
           <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}` }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>🗑️</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>견적서 삭제</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>견적서 삭제</div>
+              {/* 처리할 삭제 요청이 있을 때만 배지를 띄운다 */}
+              {pendingDeleteCount > 0 && (
+                <span style={{ fontSize: 11, fontWeight: 800, color: DANGER, background: '#fef2f2', border: `1px solid ${DANGER}`, borderRadius: 20, padding: '2px 8px', whiteSpace: 'nowrap' }}>
+                  삭제 요청 {pendingDeleteCount}건
+                </span>
+              )}
+            </div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>실수로 저장된 견적서를 조회하고 삭제합니다.</div>
             <button style={{ width: '100%', padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
               onClick={() => { setShowQuoteModal(true); setSearchQuery(''); fetchQuotes() }}>관리하기</button>
@@ -842,8 +904,15 @@ export default function AdminPage() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🗑️ 견적서 삭제</div>
-              <button onClick={() => setShowQuoteModal(false)} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🗑️ 견적서 삭제</div>
+                {pendingDeleteCount > 0 && (
+                  <span style={{ fontSize: 12, fontWeight: 800, color: DANGER, background: '#fef2f2', border: `1px solid ${DANGER}`, borderRadius: 20, padding: '2px 10px', whiteSpace: 'nowrap' }}>
+                    삭제 요청 {pendingDeleteCount}건
+                  </span>
+                )}
+              </div>
+              <button onClick={closeQuoteModal} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
             </div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
               <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
@@ -865,8 +934,11 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {quotes.map(q => (
-                      <tr key={q.quote_id} style={{ borderBottom: `1px solid ${BORDER}` }}
+                    {quotes.map(q => {
+                      const pending = q.status === DELETE_REQUEST_STATUS
+                      return (
+                      <Fragment key={q.quote_id}>
+                      <tr style={{ borderBottom: pending && q.delete_reason ? 'none' : `1px solid ${BORDER}` }}
                         onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
                         onMouseLeave={e => (e.currentTarget.style.background = '')}>
                         <td style={{ padding: '10px 12px', fontWeight: 700, color: BLUE, whiteSpace: 'nowrap' }}>{q.quote_number}</td>
@@ -884,7 +956,20 @@ export default function AdminPage() {
                           </button>
                         </td>
                       </tr>
-                    ))}
+                      {/* 삭제 요청 건은 사유를 아래 줄에 그대로 펼친다 — 표가 좁아 열을 늘리면 사유가 잘린다 */}
+                      {pending && q.delete_reason && (
+                        <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                          <td colSpan={7} style={{ padding: '0 12px 10px' }}>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', background: '#fef2f2', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px' }}>
+                              <span style={{ fontSize: 11, fontWeight: 800, color: DANGER, whiteSpace: 'nowrap' }}>삭제 사유</span>
+                              <span style={{ fontSize: 12, color: TEXT, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>{q.delete_reason}</span>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
+                      )
+                    })}
                   </tbody>
                 </table>
               )}
@@ -1376,5 +1461,14 @@ export default function AdminPage() {
         </div>
       )}
     </div>
+  )
+}
+
+// useSearchParams 는 Suspense 경계가 필요하다(재고·견적 화면과 같은 패턴).
+export default function AdminPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminPageInner />
+    </Suspense>
   )
 }
