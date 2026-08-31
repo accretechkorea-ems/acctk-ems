@@ -99,7 +99,8 @@ export default function PipelinePage() {
   // 연결된 견적 PDF 열기. 업체명은 견적별로 달라 로그에는 남기지 않는다.
   const quotePdf = useQuotePdf({ customer: null, engineerId: me.engineer_id })
 
-  const [owner, setOwner] = useState<Owner>('내 기회')
+  // 처음에는 회사 전체 기회를 보여준다. '내 기회'는 사용자가 직접 고른다.
+  const [owner, setOwner] = useState<Owner>('전체')
   const [search, setSearch] = useState('')
   const [showLost, setShowLost] = useState(false)
 

@@ -34,6 +34,8 @@ function QuotePageInner() {
   const [isClient, setIsClient] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
+  // 확정 모달의 확인 버튼 중복 클릭 방지. 저장 → PDF 가 끝날 때까지 잠근다.
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [engineer, setEngineer] = useState<Engineer | null>(null)
   const [exchangeRate, setExchangeRate] = useState<number>(0)
@@ -285,25 +287,32 @@ const handleDownloadPDF = async (
     ? '검색 결과가 없습니다. 고객사 현황에서 업체를 먼저 등록해주세요'
     : '견적서 작성 전 고객사 현황에서 업체를 먼저 등록해주세요'
 
-  const handleSaveQuote = async () => {
-    if (!engineer) { toast.error('엔지니어 정보를 불러오는 중입니다'); return }
-    // 고객사는 반드시 등록된 업체를 골라야 한다(customer_id 기준).
-    // 직접 친 상호는 quotes 에 저장되는 곳이 없어 PDF 에만 남고, 실적·발주·엑셀에서는 빈칸이 된다.
-    //   · 직판   : customerId 필수
-    //   · 대리점 : customerId(대리점) + euCustomerId(최종 사용 업체) 둘 다 필수
-    //              (저장 시 customer_id 에는 E.U 가 들어간다 — 거래 이력이 붙는 곳이 최종 사용 업체이므로)
-    // 품목 금액은 배열이지만 "적어도 한 품목에 금액" 이라는 집계 규칙이라 단일 key(items) 로 처리한다.
-    // 부대비용은 빈 행(항목명 미선택)은 조용히 무시하고, 항목명만 고른 채 금액이 0 인 행만 막는다.
-    const ok = validate({
-      company: customerId
-        ? null
-        : (isDealer ? '등록된 대리점을 검색해서 선택해주세요' : '등록된 고객사를 검색해서 선택해주세요'),
-      eu: isDealer && !euCustomerId ? '최종 사용 업체를 검색해서 선택해주세요' : null,
-      items: rows.some(r => r.supply_price > 0) ? null : '품목 금액을 입력해주세요',
-      expenses: expenses.some(e => e.item_name.trim() && e.amount <= 0)
-        ? '단가 · 인원 · 일수를 입력해주세요' : null,
-    })
-    if (!ok) return
+  // 저장 가능 여부 검증. 확정 모달을 열 때와 실제 저장 직전에 같은 규칙을 쓴다.
+  // 고객사는 반드시 등록된 업체를 골라야 한다(customer_id 기준).
+  // 직접 친 상호는 quotes 에 저장되는 곳이 없어 PDF 에만 남고, 실적·발주·엑셀에서는 빈칸이 된다.
+  //   · 직판   : customerId 필수
+  //   · 대리점 : customerId(대리점) + euCustomerId(최종 사용 업체) 둘 다 필수
+  //              (저장 시 customer_id 에는 E.U 가 들어간다 — 거래 이력이 붙는 곳이 최종 사용 업체이므로)
+  // 품목 금액은 배열이지만 "적어도 한 품목에 금액" 이라는 집계 규칙이라 단일 key(items) 로 처리한다.
+  // 부대비용은 빈 행(항목명 미선택)은 조용히 무시하고, 항목명만 고른 채 금액이 0 인 행만 막는다.
+  const runValidation = () => validate({
+    company: customerId
+      ? null
+      : (isDealer ? '등록된 대리점을 검색해서 선택해주세요' : '등록된 고객사를 검색해서 선택해주세요'),
+    eu: isDealer && !euCustomerId ? '최종 사용 업체를 검색해서 선택해주세요' : null,
+    items: rows.some(r => r.supply_price > 0) ? null : '품목 금액을 입력해주세요',
+    expenses: expenses.some(e => e.item_name.trim() && e.amount <= 0)
+      ? '단가 · 인원 · 일수를 입력해주세요' : null,
+  })
+
+  // 저장 결과 — 검증·저장 실패({ ok: false })와 저장 성공을 호출부가 구분할 수 있게 한다.
+  // 성공일 때만 PDF 생성·견적번호 증가로 넘어간다.
+  type SaveResult = { ok: false } | { ok: true; linked: boolean }
+
+  const handleSaveQuote = async (): Promise<SaveResult> => {
+    if (!engineer) { toast.error('엔지니어 정보를 불러오는 중입니다'); return { ok: false } }
+    const ok = runValidation()
+    if (!ok) return { ok: false }
 
     setIsSaving(true)
     let linkedRepair = false
@@ -406,9 +415,11 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
     } catch (e) {
       console.error(e)
       toast.error('저장 중 오류가 발생했습니다')
+      setIsSaving(false)
+      return { ok: false }
     }
     setIsSaving(false)
-    return linkedRepair
+    return { ok: true, linked: linkedRepair }
   }
 
   useEffect(() => { setIsClient(true) }, [])
@@ -991,7 +1002,7 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                 <div style={{ fontSize: 14, color: '#ffffff', fontWeight: 600 }}>{quoteNo}</div>
               </div>
               <button
-                onClick={() => setShowConfirmModal(true)}
+                onClick={() => { if (!runValidation()) return; setShowConfirmModal(true) }}
                 disabled={isSaving}
                 style={{
                   padding: '6px 14px', boxSizing: 'border-box',
@@ -1069,26 +1080,49 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                 </div>
               </div>
             </div>
+            {/* 저장이 막혔을 때 창을 닫지 않고 이유를 여기 모아 보여준다(칸 옆 빨간 글씨는 그대로 있다) */}
+            {(() => {
+              const messages = [errors.company, errors.eu, errors.items, errors.expenses].filter(Boolean)
+              if (messages.length === 0) return null
+              return (
+                <div style={{ marginBottom: 10, padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6 }}>
+                  {messages.map((m, i) => (
+                    <div key={i} style={{ fontSize: 12, color: '#dc2626', lineHeight: 1.6 }}>{m}</div>
+                  ))}
+                </div>
+              )
+            })()}
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setShowConfirmModal(false)}
-                style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: 'pointer', color: '#111827' }}>
+                disabled={isSubmitting}
+                style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: isSubmitting ? 'not-allowed' : 'pointer', color: '#111827', opacity: isSubmitting ? 0.6 : 1 }}>
                 취소
               </button>
               <button onClick={async () => {
-                setShowConfirmModal(false)
-                const snapshotCompany = company
-                const snapshotReceiver = receiver
-                const snapshotRows = [...rows]
-                const snapshotRemarks = finalRemarksForPDF
-                const snapshotQuoteNo = quoteNo
-                const linked = await handleSaveQuote()
-                await handleDownloadPDF(snapshotCompany, snapshotReceiver, snapshotRows, snapshotRemarks, snapshotQuoteNo)
-                setSeqIndex(prev => prev + 1)
-                // 수리 건 연결이 됐으면 PDF 생성 후 수리 목록으로 이동
-                if (linked) router.push('/repair')
+                if (isSubmitting) return
+                setIsSubmitting(true)
+                try {
+                  const snapshotCompany = company
+                  const snapshotReceiver = receiver
+                  const snapshotRows = [...rows]
+                  const snapshotRemarks = finalRemarksForPDF
+                  const snapshotQuoteNo = quoteNo
+                  const result = await handleSaveQuote()
+                  // 저장이 막히면 여기서 끝낸다 — PDF 도 만들지 않고 견적번호도 올리지 않는다.
+                  if (!result.ok) return
+
+                  await handleDownloadPDF(snapshotCompany, snapshotReceiver, snapshotRows, snapshotRemarks, snapshotQuoteNo)
+                  setSeqIndex(prev => prev + 1)
+                  setShowConfirmModal(false)
+                  // 수리 건 연결이 됐으면 PDF 생성 후 수리 목록으로 이동
+                  if (result.linked) router.push('/repair')
+                } finally {
+                  setIsSubmitting(false)
+                }
               }}
-                style={{ flex: 1, padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                확인
+                disabled={isSubmitting}
+                style={{ flex: 1, padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.6 : 1 }}>
+                {isSubmitting ? '저장 중...' : '확인'}
               </button>
             </div>
           </div>
