@@ -28,7 +28,7 @@ type Form = {
   interest_product: string; request_note: string
   competitor: string[]; competitor_other: string
   budget_status: string; purchase_period: string; expected_purchase: string
-  contact_first_name: string; contact_last_name: string
+  contact_name: string
   contact_dept: string; contact_title: string
   contact_email: string; contact_office_tel: string; contact_mobile: string
   meeting_note: string
@@ -41,7 +41,7 @@ const emptyForm = (): Form => ({
   interest_product: '', request_note: '',
   competitor: [], competitor_other: '',
   budget_status: '', purchase_period: '', expected_purchase: '',
-  contact_first_name: '', contact_last_name: '',
+  contact_name: '',
   contact_dept: '', contact_title: '',
   contact_email: '', contact_office_tel: '', contact_mobile: '',
   meeting_note: '',
@@ -72,6 +72,12 @@ const logoStyle = (height: number): CSSProperties => ({
 const gridStyle: CSSProperties = {
   display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12,
 }
+// 좌: 안내 문구 / 우: 폼. 폭이 모자라면 flex-wrap 으로 안내가 폼 위로 올라간다.
+// 기준폭(260+520+gap)을 못 채우면 줄바꿈되므로 별도 미디어쿼리 없이 좁은 화면을 받는다.
+const introColStyle: CSSProperties = { flex: '1 1 300px', minWidth: 0 }
+const formColStyle: CSSProperties = { flex: '999 1 520px', minWidth: 0 }
+// 안내 문구 문단. 문단 사이를 띄워 읽기 쉽게 한다.
+const introParaStyle: CSSProperties = { fontSize: 12, color: MUTED, lineHeight: 1.8, marginBottom: 12 }
 
 // 입력 한 칸. 반드시 LeadPage 바깥에 둔다 —
 // 컴포넌트 함수 안에서 정의하면 렌더마다 새 타입이 되어 React 가 기존 DOM 을 버리고 새로 만든다.
@@ -132,8 +138,7 @@ export default function LeadPage() {
       ['country', '국가를 입력해주세요.'],
       ['interest_product', '관심 제품을 선택해주세요.'],
       ['budget_status', '예산을 선택해주세요.'],
-      ['contact_first_name', '이름을 입력해주세요.'],
-      ['contact_last_name', '성을 입력해주세요.'],
+      ['contact_name', '이름을 입력해주세요.'],
       ['contact_email', '이메일을 입력해주세요.'],
       ['contact_mobile', '휴대폰 번호를 입력해주세요.'],
     ]
@@ -206,24 +211,35 @@ export default function LeadPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: PAGE_BG, padding: '32px 16px 48px' }}>
-      <div style={{ maxWidth: 880, margin: '0 auto' }}>
-        <div style={{ ...sectionStyle, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div role="img" aria-label="ACCRETECH KOREA" style={logoStyle(26)} />
-          <div style={{ borderLeft: `1px solid ${BORDER}`, paddingLeft: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: INK }}>파트너 리드 등록</div>
-            <div style={{ fontSize: 11, color: FAINT, marginTop: 2 }}>
+      <div style={{ maxWidth: 1080, margin: '0 auto', display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' }}>
+        <div style={introColStyle}>
+          <div style={sectionStyle}>
+            <div role="img" aria-label="ACCRETECH KOREA" style={logoStyle(26)} />
+            <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginTop: 12, marginBottom: 12, lineHeight: 1.5 }}>
+              ACCRETECH KOREA<br />계측사업부 영업 지원 시스템
+            </div>
+            <div style={{ ...introParaStyle, color: INK, fontWeight: 700 }}>
+              아크레텍코리아 계측사업부<br />파트너사 여러분께
+            </div>
+            <div style={introParaStyle}>
+              현장에서 만나신 고객 정보를 등록해 주십시오.<br />
+              담당 영업팀이 바로 확인하고 필요한 지원을 준비하겠습니다.
+            </div>
+            <div style={{ ...introParaStyle, marginBottom: 0 }}>늘 함께해 주셔서 감사합니다.</div>
+            <div style={{ fontSize: 11, color: FAINT, marginTop: 16, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
               <span style={{ color: DANGER }}>*</span> 표시는 필수 입력 항목입니다.
             </div>
           </div>
         </div>
 
-        {/* 허니팟 — 사람에게는 보이지 않는다. 값이 차 있으면 서버가 조용히 버린다. */}
-        <div style={{ position: 'absolute', left: -9999, top: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true">
-          <label htmlFor={HONEYPOT_FIELD}>Website</label>
-          <input
-            id={HONEYPOT_FIELD} name={HONEYPOT_FIELD} type="text" tabIndex={-1} autoComplete="off"
-            value={honeypot} onChange={e => setHoneypot(e.target.value)}
-          />
+        <div style={formColStyle}>
+          {/* 허니팟 — 사람에게는 보이지 않는다. 값이 차 있으면 서버가 조용히 버린다. */}
+          <div style={{ position: 'absolute', left: -9999, top: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true">
+            <label htmlFor={HONEYPOT_FIELD}>Website</label>
+            <input
+              id={HONEYPOT_FIELD} name={HONEYPOT_FIELD} type="text" tabIndex={-1} autoComplete="off"
+              value={honeypot} onChange={e => setHoneypot(e.target.value)}
+            />
         </div>
 
         <div style={sectionStyle}>
@@ -327,8 +343,7 @@ export default function LeadPage() {
         <div style={sectionStyle}>
           <div style={sectionTitleStyle}>고객 정보</div>
           <div style={gridStyle}>
-            <Field label="이름" name="contact_first_name" value={form.contact_first_name} error={errors.contact_first_name} onChange={set} required />
-            <Field label="성" name="contact_last_name" value={form.contact_last_name} error={errors.contact_last_name} onChange={set} required />
+            <Field label="이름" name="contact_name" value={form.contact_name} error={errors.contact_name} onChange={set} required />
             <Field label="부서" name="contact_dept" value={form.contact_dept} error={errors.contact_dept} onChange={set} />
             <Field label="직위" name="contact_title" value={form.contact_title} error={errors.contact_title} onChange={set} />
             <Field label="이메일" name="contact_email" value={form.contact_email} error={errors.contact_email} onChange={set} required type="email" />
@@ -364,6 +379,7 @@ export default function LeadPage() {
           }}>
           {submitting ? '등록 중...' : '리드 등록'}
         </button>
+        </div>
       </div>
     </div>
   )

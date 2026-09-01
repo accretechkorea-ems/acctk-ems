@@ -54,8 +54,7 @@ export async function POST(req: Request) {
     customer_company: '고객사 회사명',
     products: '생산품',
     city: '시',
-    contact_first_name: '이름',
-    contact_last_name: '성',
+    contact_name: '이름',
     contact_email: '이메일',
     contact_mobile: '휴대폰 번호',
     meeting_note: '회의록',
@@ -140,8 +139,9 @@ export async function POST(req: Request) {
     budget_status: budgetStatus,
     purchase_period: purchasePeriod || null,
     expected_purchase: expectedPurchase || null,
-    contact_first_name: value.contact_first_name,
-    contact_last_name: value.contact_last_name,
+    // 화면은 이름을 한 칸으로 받고 contact_name 에 그대로 담는다.
+    // 옛 contact_first_name / contact_last_name 은 NOT NULL 이 풀렸으므로 건드리지 않는다(NULL 로 남는다).
+    contact_name: value.contact_name,
     contact_dept: value.contact_dept || null,
     contact_title: value.contact_title || null,
     contact_email: value.contact_email,

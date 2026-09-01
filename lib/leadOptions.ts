@@ -57,8 +57,8 @@ export const MAX_LEN = {
   country: 50,
   request_note: 2000,
   competitor_other: 100,
-  contact_first_name: 50,
-  contact_last_name: 50,
+  // 성·이름을 한 칸으로 받아 leads.contact_name 에 그대로 저장한다.
+  contact_name: 100,
   contact_dept: 100,
   contact_title: 100,
   contact_email: 254,
