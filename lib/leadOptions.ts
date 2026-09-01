@@ -67,12 +67,24 @@ export const MAX_LEN = {
   meeting_note: 5000,
 } as const
 
+/** 리드 처리 상태. leads.status 의 기본값이 '신규' 다. */
+export const LEAD_STATUSES = ['신규', '확인중', '전환완료', '보류'] as const
+
+/** 화면에서 손으로 고를 수 있는 상태. '전환완료' 는 영업기회 전환이 성공했을 때만 붙는다. */
+export const LEAD_MANUAL_STATUSES = LEAD_STATUSES.filter(s => s !== '전환완료')
+
+export const LEAD_STATUS_NEW = '신규'
+export const LEAD_STATUS_CONVERTED = '전환완료'
+
 export const DEFAULT_COUNTRY = 'South Korea'
 
 /** 봇 판별용 숨김 칸의 이름. 사람 눈에 보이지 않으므로 값이 차 있으면 봇이다. */
 export const HONEYPOT_FIELD = 'website'
 
-/** 성공 제출 뒤 이 시간(밀리초) 동안 같은 브라우저에서 다시 보내지 못하게 한다. */
-export const RESUBMIT_BLOCK_MS = 60_000
+/**
+ * 성공 제출 뒤 이 시간(밀리초) 동안 같은 브라우저에서 다시 보내지 못하게 한다.
+ * 완료 화면의 '추가 등록하기' 로 연달아 등록하는 흐름을 막지 않을 만큼만 둔다(예외 없이 모든 제출에 적용).
+ */
+export const RESUBMIT_BLOCK_MS = 10_000
 
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/

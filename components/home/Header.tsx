@@ -152,6 +152,8 @@ export default function Header() {
     {
       label: '영업관리',
       children: [
+        // 리드는 영업 업무라 발주·재고(영업관리 권한)와 달리 영업 현황과 같은 권한으로 연다.
+        { label: '리드', path: '/leads', canAccess: canViewPipeline },
         { label: '발주관리', path: '/purchase', canAccess: canViewSalesMgmt },
         { label: '재고관리', path: '/inventory', canAccess: canViewSalesMgmt },
       ],

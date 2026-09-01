@@ -52,6 +52,8 @@ type FieldKey = keyof Form
 const fieldStyle: CSSProperties = {
   width: '100%', padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 6,
   fontSize: 13, color: INK, background: '#fff', outline: 'none', fontFamily: 'inherit',
+  // 포커스 표시는 아래 <style> 의 .lead-page 규칙이 담당한다(견적·재고·고객사 상세와 같은 값).
+  transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
 }
 const errorFieldStyle: CSSProperties = { ...fieldStyle, border: errBorder }
 const labelStyle: CSSProperties = { fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 4, display: 'block' }
@@ -69,15 +71,44 @@ const logoStyle = (height: number): CSSProperties => ({
   backgroundRepeat: 'no-repeat', backgroundPosition: 'left center', flexShrink: 0,
 })
 
-const gridStyle: CSSProperties = {
-  display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12,
-}
-// 좌: 안내 문구 / 우: 폼. 폭이 모자라면 flex-wrap 으로 안내가 폼 위로 올라간다.
-// 기준폭(260+520+gap)을 못 채우면 줄바꿈되므로 별도 미디어쿼리 없이 좁은 화면을 받는다.
-const introColStyle: CSSProperties = { flex: '1 1 300px', minWidth: 0 }
-const formColStyle: CSSProperties = { flex: '999 1 520px', minWidth: 0 }
 // 안내 문구 문단. 문단 사이를 띄워 읽기 쉽게 한다.
-const introParaStyle: CSSProperties = { fontSize: 12, color: MUTED, lineHeight: 1.8, marginBottom: 12 }
+// wordBreak keep-all — 한글은 기본값이면 글자 단위로 접혀 '준비하 / 겠습니다' 처럼 낱말이 쪼개진다.
+// 어절(띄어쓰기) 단위로 접히게 해 좁은 화면에서도 읽기 흐름이 끊기지 않게 한다.
+const introParaStyle: CSSProperties = { fontSize: 12, color: MUTED, lineHeight: 1.8, marginBottom: 12, wordBreak: 'keep-all' }
+// 본문 최대 폭 — 한 줄이 너무 길면 눈이 다음 줄을 찾기 어렵다.
+// 12px 한글 기준 한 줄 약 50자 남짓이 되도록 잡았다.
+const INTRO_TEXT_MAX = 640
+
+// 주버튼 hover 색 — 프로젝트 전역에서 쓰는 액센트의 진한 값.
+const ACCENT_HOVER = '#1c3e87'
+// 보조버튼 hover 배경 — 기존 중립 배경 토큰.
+const NEUTRAL_BG = '#f3f4f6'
+
+// 포커스 표시. 견적 화면(.q-input) · 재고 화면(.inv-input) · 고객사 상세가 모두 같은 값을 쓰고 있어
+// 그대로 가져왔다. .lead-page 하위로 한정해 다른 화면에는 영향이 없다.
+// 폭에 따라 열 수가 바뀌는 곳은 인라인 스타일로 못 쓰므로 여기 모아 둔다.
+//   .lead-grid  — 폼 입력칸. 좁은 화면 1열 → 640px 2열 → 1024px 3열.
+//   .lead-intro — 안내 카드. 1024px 이상에서 좌(로고·타이틀) / 우(문구) 2단.
+const INTERACTION_CSS = `
+  .lead-page input:focus, .lead-page textarea:focus, .lead-page select:focus {
+    border-color: #234ea2 !important;
+    box-shadow: 0 0 0 3px rgba(35,78,162,0.10) !important;
+    outline: none;
+  }
+  .lead-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  /* 위 맞춤 — 로고 윗선과 오른쪽 첫 문단 윗선이 맞아야 정돈돼 보인다(가운데 맞춤은 로고가 처진다). */
+  .lead-intro { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+  @media (min-width: 640px) {
+    .lead-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (min-width: 1024px) {
+    .lead-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    /* 배너를 반으로 나누되 왼쪽 타이틀이 한 줄에 들어가는 것을 우선한다.
+       nowrap 으로 못 접게 하고, 열 폭은 그 한 줄이 들어갈 만큼만 왼쪽에 더 준다. */
+    .lead-intro { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 20px; }
+    .lead-intro-title { white-space: nowrap; }
+  }
+`
 
 // 입력 한 칸. 반드시 LeadPage 바깥에 둔다 —
 // 컴포넌트 함수 안에서 정의하면 렌더마다 새 타입이 되어 React 가 기존 DOM 을 버리고 새로 만든다.
@@ -110,6 +141,16 @@ export default function LeadPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [done, setDone] = useState(false)
+
+  /** 완료 화면에서 이어서 등록할 때 — 새로고침 없이 상태만 처음으로 되돌린다. */
+  const resetForm = () => {
+    setForm(emptyForm())   // 국가는 emptyForm 이 기본값(South Korea)으로 채운다
+    setHoneypot('')
+    setErrors({})
+    setSubmitError('')
+    setDone(false)
+    window.scrollTo({ top: 0 })
+  }
 
   const set = (key: FieldKey, v: string | string[]) => {
     setForm(p => ({ ...p, [key]: v }))
@@ -196,7 +237,8 @@ export default function LeadPage() {
 
   if (done) {
     return (
-      <div style={{ minHeight: '100vh', background: PAGE_BG, padding: '48px 16px' }}>
+      <div className="lead-page" style={{ minHeight: '100vh', background: PAGE_BG, padding: '48px 16px' }}>
+        <style>{INTERACTION_CSS}</style>
         <div style={{ maxWidth: 520, margin: '0 auto', ...sectionStyle, textAlign: 'center', padding: 32 }}>
           <div role="img" aria-label="ACCRETECH KOREA" style={{ ...logoStyle(28), margin: '0 auto 24px' }} />
           <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginBottom: 8 }}>리드가 등록되었습니다.</div>
@@ -204,35 +246,48 @@ export default function LeadPage() {
             등록해주셔서 감사합니다.<br />
             담당 영업팀이 확인 후 연락드리겠습니다.
           </div>
+          <button
+            onClick={resetForm}
+            onMouseEnter={e => (e.currentTarget.style.background = NEUTRAL_BG)}
+            onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
+            style={{
+              marginTop: 20, padding: '9px 16px', background: '#fff', color: MUTED,
+              border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer',
+              fontSize: 13, fontWeight: 600, fontFamily: 'inherit', transition: 'background 0.15s ease',
+            }}
+          >추가 등록하기</button>
         </div>
       </div>
     )
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: PAGE_BG, padding: '32px 16px 48px' }}>
-      <div style={{ maxWidth: 1080, margin: '0 auto', display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-start' }}>
-        <div style={introColStyle}>
-          <div style={sectionStyle}>
-            <div role="img" aria-label="ACCRETECH KOREA" style={logoStyle(26)} />
-            <div style={{ fontSize: 13, fontWeight: 700, color: INK, marginTop: 12, marginBottom: 12, lineHeight: 1.5 }}>
-              ACCRETECH KOREA<br />계측사업부 영업 지원 시스템
+    <div className="lead-page" style={{ minHeight: '100vh', background: PAGE_BG, padding: '32px 16px 48px' }}>
+      <style>{INTERACTION_CSS}</style>
+      <div style={{ maxWidth: 880, margin: '0 auto' }}>
+        {/* 안내 — 좌(로고·타이틀) / 우(문구) 2단. 좁아지면 .lead-intro 가 1열로 접혀 위아래로 쌓인다. */}
+        <div style={sectionStyle}>
+          <div className="lead-intro">
+            <div>
+              <div role="img" aria-label="ACCRETECH KOREA" style={logoStyle(30)} />
+              <div className="lead-intro-title" style={{ fontSize: 16, fontWeight: 800, color: INK, marginTop: 12, lineHeight: 1.45, letterSpacing: '-0.3px', wordBreak: 'keep-all' }}>
+                ACCRETECH KOREA <span style={{ color: FAINT, fontWeight: 400 }}>|</span> 계측사업부 영업 지원 시스템
+              </div>
             </div>
-            <div style={{ ...introParaStyle, color: INK, fontWeight: 700 }}>
-              아크레텍코리아 계측사업부<br />파트너사 여러분께
-            </div>
-            <div style={introParaStyle}>
-              현장에서 만나신 고객 정보를 등록해 주십시오.<br />
-              담당 영업팀이 바로 확인하고 필요한 지원을 준비하겠습니다.
-            </div>
-            <div style={{ ...introParaStyle, marginBottom: 0 }}>늘 함께해 주셔서 감사합니다.</div>
-            <div style={{ fontSize: 11, color: FAINT, marginTop: 16, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
-              <span style={{ color: DANGER }}>*</span> 표시는 필수 입력 항목입니다.
+            <div style={{ maxWidth: INTRO_TEXT_MAX }}>
+              <div style={{ ...introParaStyle, color: INK, fontWeight: 700, marginBottom: 10 }}>
+                아크레텍코리아 계측사업부<br />파트너사 여러분께
+              </div>
+              <div style={introParaStyle}>
+                현장에서 만나신 고객 정보를 등록해 주십시오.<br />
+                담당 영업팀이 바로 확인하고 필요한 지원을 준비하겠습니다.
+              </div>
+              <div style={{ ...introParaStyle, marginBottom: 0 }}>늘 함께해 주셔서 감사합니다.</div>
             </div>
           </div>
         </div>
 
-        <div style={formColStyle}>
+        <div>
           {/* 허니팟 — 사람에게는 보이지 않는다. 값이 차 있으면 서버가 조용히 버린다. */}
           <div style={{ position: 'absolute', left: -9999, top: -9999, width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true">
             <label htmlFor={HONEYPOT_FIELD}>Website</label>
@@ -242,9 +297,13 @@ export default function LeadPage() {
             />
         </div>
 
+        <div style={{ fontSize: 11, color: FAINT, margin: '0 2px 8px' }}>
+          <span style={{ color: DANGER }}>*</span> 표시는 필수 입력 항목입니다.
+        </div>
+
         <div style={sectionStyle}>
           <div style={sectionTitleStyle}>파트너사</div>
-          <div style={gridStyle}>
+          <div className="lead-grid">
             <Field label="회사명" name="partner_company" value={form.partner_company} error={errors.partner_company} onChange={set} required />
             <Field label="등록자 성함" name="partner_name" value={form.partner_name} error={errors.partner_name} onChange={set} required />
             <Field label="연락처" name="partner_contact" value={form.partner_contact} error={errors.partner_contact} onChange={set} />
@@ -253,7 +312,7 @@ export default function LeadPage() {
 
         <div style={sectionStyle}>
           <div style={sectionTitleStyle}>고객사</div>
-          <div style={gridStyle}>
+          <div className="lead-grid">
             <Field label="회사명" name="customer_company" value={form.customer_company} error={errors.customer_company} onChange={set} required />
             <div>
               <label style={labelStyle}>산업군<span style={{ color: DANGER }}> *</span></label>
@@ -279,7 +338,7 @@ export default function LeadPage() {
 
         <div style={sectionStyle}>
           <div style={sectionTitleStyle}>관심 제품</div>
-          <div style={gridStyle}>
+          <div className="lead-grid">
             <div>
               <label style={labelStyle}>관심 제품<span style={{ color: DANGER }}> *</span></label>
               <select value={form.interest_product} onChange={e => set('interest_product', e.target.value)}
@@ -311,13 +370,12 @@ export default function LeadPage() {
                 onChange={e => set('expected_purchase', e.target.value)}
                 style={{ ...fieldStyle, colorScheme: 'light' }} />
             </div>
-          </div>
 
-          <div style={{ marginTop: 12 }}>
+          <div>
             <label style={labelStyle}>경쟁사</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
               {COMPETITORS.map(c => (
-                <label key={c} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                <label key={c} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', transition: 'color 0.15s ease' }}>
                   <input type="checkbox" checked={form.competitor.includes(c)} onChange={() => toggleCompetitor(c)}
                     style={{ width: 14, height: 14, cursor: 'pointer', accentColor: ACCENT }} />
                   <span style={{ fontSize: 12, color: form.competitor.includes(c) ? ACCENT : MUTED, fontWeight: 700 }}>{c}</span>
@@ -331,6 +389,7 @@ export default function LeadPage() {
                 style={{ ...fieldStyle, marginTop: 8 }} />
             )}
           </div>
+          </div>
 
           <div style={{ marginTop: 12 }}>
             <label style={labelStyle}>요청사항</label>
@@ -342,7 +401,7 @@ export default function LeadPage() {
 
         <div style={sectionStyle}>
           <div style={sectionTitleStyle}>고객 정보</div>
-          <div style={gridStyle}>
+          <div className="lead-grid">
             <Field label="이름" name="contact_name" value={form.contact_name} error={errors.contact_name} onChange={set} required />
             <Field label="부서" name="contact_dept" value={form.contact_dept} error={errors.contact_dept} onChange={set} />
             <Field label="직위" name="contact_title" value={form.contact_title} error={errors.contact_title} onChange={set} />
@@ -372,10 +431,13 @@ export default function LeadPage() {
         )}
 
         <button onClick={handleSubmit} disabled={submitting}
+          onMouseEnter={e => { if (!submitting) e.currentTarget.style.background = ACCENT_HOVER }}
+          onMouseLeave={e => { if (!submitting) e.currentTarget.style.background = ACCENT }}
           style={{
             width: '100%', padding: '12px 0', border: 'none', borderRadius: 8,
             background: submitting ? FAINT : ACCENT, color: '#fff',
             fontSize: 13, fontWeight: 700, cursor: submitting ? 'default' : 'pointer', fontFamily: 'inherit',
+            transition: 'background 0.15s ease',
           }}>
           {submitting ? '등록 중...' : '리드 등록'}
         </button>

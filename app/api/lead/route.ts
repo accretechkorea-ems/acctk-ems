@@ -180,7 +180,7 @@ export async function POST(req: Request) {
           title: '신규 리드 등록',
           message: `[${value.partner_company}] 이(가) [${value.customer_company}] 리드를 등록했습니다.`,
           type: 'lead_created',
-          link: '/admin?tab=leads',
+          link: '/leads',
           is_read: false,
         }))
       )
