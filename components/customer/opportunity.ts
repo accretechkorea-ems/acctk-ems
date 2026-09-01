@@ -38,6 +38,14 @@ export function compactKRW(n: number | null): string {
 }
 
 // expected_close 는 date 컬럼이지만 월 단위로만 입력받는다.
-//   저장: 'YYYY-MM' → 'YYYY-MM-01'   / 표시·입력: 'YYYY-MM-01' → 'YYYY-MM'
-export const monthToDate = (ym: string) => (ym ? `${ym}-01` : null)
+//   저장: 'YYYY-MM' → 그 달의 말일 'YYYY-MM-DD'   / 표시·입력: 'YYYY-MM-DD' → 'YYYY-MM'
+// 말일로 두는 이유: 1일로 저장하면 그 달이 아직 한참 남았는데도 2일부터 마감이 지난 것으로 잡힌다.
+export const monthToDate = (ym: string) => {
+  if (!ym) return null
+  const [y, m] = ym.split('-').map(Number)
+  // 다음 달 0일 = 이번 달 말일이라 윤년 2월(29일)도 그대로 맞는다.
+  // Date.UTC 로 만들고 UTC 로 읽어야 로컬 시간대에 따라 하루가 밀리지 않는다.
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate()
+  return `${ym}-${String(lastDay).padStart(2, '0')}`
+}
 export const dateToMonth = (d: string | null) => (d ? d.slice(0, 7) : '')

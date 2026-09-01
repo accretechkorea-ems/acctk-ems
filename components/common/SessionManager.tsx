@@ -1,14 +1,20 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { isPublicPath } from '@/lib/publicPaths'
 
 export default function SessionManager() {
   const router = useRouter()
+  const pathname = usePathname()
   const supabase = createClient()
+  // 공개 페이지는 로그인 세션이 없다. 감시를 걸어두면 외부 방문자가 폼을 오래 붙들고 있을 때
+  // 자동 로그아웃 안내가 뜨고 /login 으로 튕긴다. 훅 순서는 유지한 채 동작만 건너뛴다.
+  const isPublic = isPublicPath(pathname)
 
   useEffect(() => {
+    if (isPublic) return
     const updateLastActivity = () => {
       localStorage.setItem('lastActivity', Date.now().toString())
     }
@@ -32,9 +38,10 @@ export default function SessionManager() {
       window.removeEventListener('keydown', updateLastActivity)
       window.removeEventListener('mousemove', updateLastActivityThrottled)
     }
-  }, [])
+  }, [isPublic])
 
   useEffect(() => {
+    if (isPublic) return
     const interval = setInterval(async () => {
       const last = localStorage.getItem('lastActivity')
       if (!last) return
@@ -49,7 +56,7 @@ export default function SessionManager() {
     }, 60000)
 
     return () => clearInterval(interval)
-  }, [router, supabase])
+  }, [router, supabase, isPublic])
 
   return null
 }

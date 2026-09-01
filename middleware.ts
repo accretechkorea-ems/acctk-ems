@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { isPublicPath, isPublicAsset } from '@/lib/publicPaths'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -31,7 +32,9 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   }
 
-  if (!user && pathname !== '/login') {
+  // 공개 경로(로그인 화면, 대리점 리드 등록 폼)와 그 화면이 쓰는 정적 파일은 미로그인도 그대로 연다.
+  // 그 밖의 모든 경로는 종전대로 /login 으로 돌려보낸다.
+  if (!user && !isPublicPath(pathname) && !isPublicAsset(pathname)) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
