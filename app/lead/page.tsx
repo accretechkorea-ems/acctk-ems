@@ -73,6 +73,30 @@ const gridStyle: CSSProperties = {
   display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12,
 }
 
+// 입력 한 칸. 반드시 LeadPage 바깥에 둔다 —
+// 컴포넌트 함수 안에서 정의하면 렌더마다 새 타입이 되어 React 가 기존 DOM 을 버리고 새로 만든다.
+// 그러면 한 글자 입력할 때마다 포커스가 사라지고 한글은 자모 하나만 남는다.
+function Field({ label, name, value, error, onChange, required, type = 'text', placeholder }: {
+  label: string; name: FieldKey; value: string; error?: string
+  onChange: (key: FieldKey, v: string) => void
+  required?: boolean; type?: string; placeholder?: string
+}) {
+  return (
+    <div>
+      <label style={labelStyle}>{label}{required && <span style={{ color: DANGER }}> *</span>}</label>
+      <input
+        type={type}
+        value={value}
+        maxLength={MAX_LEN[name as keyof typeof MAX_LEN]}
+        placeholder={placeholder}
+        onChange={e => onChange(name, e.target.value)}
+        style={error ? errorFieldStyle : fieldStyle}
+      />
+      <FieldError message={error} style={{ marginTop: 3, fontSize: 11 }} />
+    </div>
+  )
+}
+
 export default function LeadPage() {
   const [form, setForm] = useState<Form>(emptyForm)
   const [honeypot, setHoneypot] = useState('')
@@ -164,22 +188,6 @@ export default function LeadPage() {
     }
   }
 
-  const Field = ({ label, name, required, type = 'text', placeholder }: {
-    label: string; name: FieldKey; required?: boolean; type?: string; placeholder?: string
-  }) => (
-    <div>
-      <label style={labelStyle}>{label}{required && <span style={{ color: DANGER }}> *</span>}</label>
-      <input
-        type={type}
-        value={String(form[name])}
-        maxLength={MAX_LEN[name as keyof typeof MAX_LEN]}
-        placeholder={placeholder}
-        onChange={e => set(name, e.target.value)}
-        style={errors[name] ? errorFieldStyle : fieldStyle}
-      />
-      <FieldError message={errors[name]} style={{ marginTop: 3, fontSize: 11 }} />
-    </div>
-  )
 
   if (done) {
     return (
@@ -221,16 +229,16 @@ export default function LeadPage() {
         <div style={sectionStyle}>
           <div style={sectionTitleStyle}>파트너사</div>
           <div style={gridStyle}>
-            <Field label="회사명" name="partner_company" required />
-            <Field label="등록자 성함" name="partner_name" required />
-            <Field label="연락처" name="partner_contact" />
+            <Field label="회사명" name="partner_company" value={form.partner_company} error={errors.partner_company} onChange={set} required />
+            <Field label="등록자 성함" name="partner_name" value={form.partner_name} error={errors.partner_name} onChange={set} required />
+            <Field label="연락처" name="partner_contact" value={form.partner_contact} error={errors.partner_contact} onChange={set} />
           </div>
         </div>
 
         <div style={sectionStyle}>
           <div style={sectionTitleStyle}>고객사</div>
           <div style={gridStyle}>
-            <Field label="회사명" name="customer_company" required />
+            <Field label="회사명" name="customer_company" value={form.customer_company} error={errors.customer_company} onChange={set} required />
             <div>
               <label style={labelStyle}>산업군<span style={{ color: DANGER }}> *</span></label>
               <select value={form.industry} onChange={e => set('industry', e.target.value)}
@@ -246,10 +254,10 @@ export default function LeadPage() {
               </select>
               <FieldError message={errors.industry} style={{ marginTop: 3, fontSize: 11 }} />
             </div>
-            <Field label="생산품" name="products" required />
-            <Field label="주소" name="address" />
-            <Field label="시" name="city" required />
-            <Field label="국가" name="country" required />
+            <Field label="생산품" name="products" value={form.products} error={errors.products} onChange={set} required />
+            <Field label="주소" name="address" value={form.address} error={errors.address} onChange={set} />
+            <Field label="시" name="city" value={form.city} error={errors.city} onChange={set} required />
+            <Field label="국가" name="country" value={form.country} error={errors.country} onChange={set} required />
           </div>
         </div>
 
@@ -319,13 +327,13 @@ export default function LeadPage() {
         <div style={sectionStyle}>
           <div style={sectionTitleStyle}>고객 정보</div>
           <div style={gridStyle}>
-            <Field label="이름" name="contact_first_name" required />
-            <Field label="성" name="contact_last_name" required />
-            <Field label="부서" name="contact_dept" />
-            <Field label="직위" name="contact_title" />
-            <Field label="이메일" name="contact_email" required type="email" />
-            <Field label="회사번호" name="contact_office_tel" />
-            <Field label="휴대폰 번호" name="contact_mobile" required />
+            <Field label="이름" name="contact_first_name" value={form.contact_first_name} error={errors.contact_first_name} onChange={set} required />
+            <Field label="성" name="contact_last_name" value={form.contact_last_name} error={errors.contact_last_name} onChange={set} required />
+            <Field label="부서" name="contact_dept" value={form.contact_dept} error={errors.contact_dept} onChange={set} />
+            <Field label="직위" name="contact_title" value={form.contact_title} error={errors.contact_title} onChange={set} />
+            <Field label="이메일" name="contact_email" value={form.contact_email} error={errors.contact_email} onChange={set} required type="email" />
+            <Field label="회사번호" name="contact_office_tel" value={form.contact_office_tel} error={errors.contact_office_tel} onChange={set} />
+            <Field label="휴대폰 번호" name="contact_mobile" value={form.contact_mobile} error={errors.contact_mobile} onChange={set} required />
           </div>
         </div>
 
