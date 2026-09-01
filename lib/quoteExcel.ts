@@ -97,6 +97,8 @@ export async function fetchQuotesForExcel(ids: number[]): Promise<QuoteExcelData
 // ── 시트 생성 ────────────────────────────────────────────────────────────────
 // exceljs 인스턴스는 호출부가 동적 import 해서 넘긴다(번들 증가 방지).
 
+// 할인 표기 색 — 앱 전역의 DANGER(#dc2626) 와 같은 값.
+const FF_DANGER = 'FFDC2626'
 const FMT_KRW = '#,##0'
 const FMT_JPY = '¥#,##0'
 const FMT_RATE = '0.0"%"'
@@ -133,7 +135,7 @@ function safeSheetName(raw: string, used: string[]): string {
 }
 
 // row_kind 가 null 이거나 모르는 값이면 (A) 블록에 넣고 품목명에 표시를 남긴다.
-const KNOWN_KINDS = ['price_list', 'manual_jpy', 'domestic', 'service']
+const KNOWN_KINDS = ['price_list', 'manual_jpy', 'domestic', 'service', 'discount']
 const isUnknownKind = (k: string | null) => k === null || !KNOWN_KINDS.includes(k)
 
 /**
@@ -152,6 +154,7 @@ export function buildQuoteSheet(workbook: Workbook, quote: QuoteExcelData): Work
   const groupA = items.filter(i => i.row_kind === 'price_list' || i.row_kind === 'manual_jpy' || isUnknownKind(i.row_kind))
   const groupB = items.filter(i => i.row_kind === 'domestic')
   const serviceItem = items.find(i => i.row_kind === 'service') ?? null
+  const discountItem = items.find(i => i.row_kind === 'discount') ?? null
   const expenses = quote.quote_expenses ?? []
 
   // 환율은 행별 컬럼이라 값이 갈리면 대표값을 쓰지 않는다.
@@ -249,7 +252,21 @@ export function buildQuoteSheet(workbook: Workbook, quote: QuoteExcelData): Work
   ws.getCell(r, 9).value = sumAProfit
   for (const c of [6, 8, 9]) { ws.getCell(r, c).numFmt = FMT_KRW; ws.getCell(r, c).font = { bold: true } }
   for (let c = 1; c <= LAST_COL; c++) borderTopThick(ws.getCell(r, c))
-  r += 2
+  r++
+
+  // ── 할인 — (A) 계 바로 아래 한 줄. 총액에서만 빼는 항목이라 원가·이익률 칸은 비운다.
+  //    이익 칸에는 줄어든 금액(음수)을 그대로 적는다 — 총계의 순이익과 이어지도록.
+  if (discountItem) {
+    ws.getCell(r, 1).value = '-'
+    ws.getCell(r, 2).value = discountItem.product_name ?? 'DISCOUNT'
+    ws.getCell(r, 2).font = { bold: true }
+    ws.getCell(r, 8).value = discountItem.supply_amount ?? 0
+    ws.getCell(r, 9).value = discountItem.profit_amount ?? 0
+    for (const c of [8, 9]) { ws.getCell(r, c).numFmt = FMT_KRW; ws.getCell(r, c).font = { bold: true, color: { argb: FF_DANGER } } }
+    for (let c = 1; c <= LAST_COL; c++) borderThin(ws.getCell(r, c))
+    r++
+  }
+  r++
 
   // ── (B) 국내조달품 (해당 행이 없으면 블록 자체를 생략) ──
   if (groupB.length > 0) {

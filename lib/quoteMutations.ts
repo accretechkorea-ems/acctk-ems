@@ -10,8 +10,6 @@ export type MutationResult = { ok: boolean; error?: string }
 export type UpdateQuoteStatusParams = {
   quoteId: number
   status: string
-  orderDate?: string
-  revenueDate?: string
   /** 사유. 삭제 요청이면 delete_reason 에, 그 밖의 상태면 fail_reason 에 저장된다. */
   reason?: string
 }
@@ -31,10 +29,10 @@ export async function updateQuoteStatus(params: UpdateQuoteStatusParams): Promis
   const supabase = createClient()
   const { error } = await supabase
     .from('quotes')
+    // order_date · revenue_date 는 더 이상 쓰지 않는다. 수주·매출 시점은
+    // 발주 라우트가 남기는 purchase_order_at · tax_invoice_completed_at 이 정본이다.
     .update({
       status: params.status,
-      order_date: params.orderDate || null,
-      revenue_date: params.revenueDate || null,
       ...reasonPatch(params.status, params.reason),
     })
     .eq('quote_id', params.quoteId)

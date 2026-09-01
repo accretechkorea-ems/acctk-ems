@@ -157,8 +157,7 @@ export type Quote = {
   profit_rate: number | null
   status: string
   recipient: string | null
-  order_date: string | null
-  revenue_date: string | null
+  // order_date · revenue_date 는 코드에서 쓰지 않는다(수주·매출 시점은 처리 시각 컬럼이 정본).
   pdf_url?: string | null
   engineers?: { name: string; position: string | null }
   quote_items?: { product_name: string | null; price_list?: { model_jp: string | null } | null }[]

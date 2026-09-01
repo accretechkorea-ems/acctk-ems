@@ -1,5 +1,6 @@
 // 견적서 계산 로직(순수 함수). 화면·PDF·저장이 모두 이 파일의 결과를 쓴다.
 
+import { DISCOUNT_LABELS } from './types'
 import type { QuoteRow, ExpenseRow } from './types'
 
 export function calcRow(row: QuoteRow, rate: number): QuoteRow {
@@ -17,6 +18,20 @@ export function calcRow(row: QuoteRow, rate: number): QuoteRow {
       supply_price: supplyPrice, tax,
       product_price: productPrice, profit,
       profit_rate: supplyPrice > 0 ? (profit / supplyPrice) * 100 : 0,
+    }
+  }
+  // 할인 — 사용자는 깎을 금액을 양수로 넣고(manual_unit_price), 계산에는 음수로 들어간다.
+  // 총액에서만 빼는 방식이라 원가는 0 이고, 그만큼 이익이 그대로 줄어든다.
+  // 부가세도 음수로 잡아 "할인된 합계 × 10%" 와 같은 결과가 되게 한다(수기 엑셀과 동일).
+  if (row.row_kind === 'discount') {
+    const supplyPrice = -Math.abs(row.manual_unit_price)
+    return {
+      ...row, exchange_rate: exRate, quantity: 0,
+      cost_price_jpy: 0, unit_price: 0,
+      supply_price: supplyPrice, tax: Math.round(supplyPrice * 0.1),
+      product_price: 0, profit: supplyPrice,
+      // 행 자체의 이익률은 뜻이 없다(원가 0). 합계 이익률은 calcTotals 가 매출−원가로 다시 잡는다.
+      profit_rate: 0,
     }
   }
   // 국내조달품 — 원화 원가를 그대로 공급가로 쓴다(마진 0). 환율·관세는 쓰지 않는다.
@@ -109,6 +124,12 @@ export function createServiceRow(): QuoteRow {
   return { ...createRow(), row_kind: 'service', itemText: '서비스비', profit_rate: 0 }
 }
 
+// 할인 행 — 라벨 기본값 'DISCOUNT'(사용자가 SPECIAL DISCOUNT 로 바꿀 수 있다).
+// 수량·이익률은 쓰지 않으므로 0 에서 시작한다.
+export function createDiscountRow(): QuoteRow {
+  return { ...createRow(), row_kind: 'discount', itemText: DISCOUNT_LABELS[0], quantity: 0, profit_rate: 0, tariff_rate: 0 }
+}
+
 // 단가 × 인원 × 일수. 세 값 중 하나라도 바뀌면 이 함수를 통과시켜 재계산한다.
 export function calcExpense(e: ExpenseRow): ExpenseRow {
   return { ...e, amount: e.unit_price * e.headcount * e.days }
@@ -126,6 +147,7 @@ export function createExpenseRow(): ExpenseRow {
 export function calcTotals(rows: QuoteRow[]) {
   // 국내조달품은 고객에게 청구하지 않는 자사 부담 비용이다.
   // 매출(공급가·부가세)에서는 빼고 원가에만 반영해 순이익을 깎는다.
+  // 할인 행은 청구 대상(billable)이며 공급가·부가세가 음수라 그대로 더하면 차감이 된다.
   const billable = rows.filter(r => r.row_kind !== 'domestic')
   const totalSupply = billable.reduce((s, r) => s + r.supply_price, 0)
   const totalTax = billable.reduce((s, r) => s + r.tax, 0)

@@ -11,9 +11,10 @@
 // 그냥 customers(...) 로 쓰면 PGRST201 로 조회 전체가 실패한다.
 
 import { createClient } from '@/lib/supabase/client'
+import { ORDERED_STATUSES } from '@/lib/quoteStatus'
 
-/** 실제로 물건이 나간 것으로 보는 상태 — 발주서가 등록된 이후. 80 대시보드의 수주 기준과 같다. */
-export const DELIVERED_STATUSES = ['발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료']
+/** 실제로 물건이 나간 것으로 보는 상태 — 발주서가 등록된 이후. 실적 현황의 수주 기준과 같은 목록이다. */
+export const DELIVERED_STATUSES: readonly string[] = ORDERED_STATUSES
 
 /** 이 글자 수 미만이면 조회하지 않는다(한두 글자로 전체를 긁지 않게). */
 export const MIN_QUERY_LEN = 2
@@ -77,6 +78,9 @@ export async function searchParts(
     .from('quote_items')
     .select(SELECT)
     .or(`part_code.ilike.%${term}%,product_name.ilike.%${term}%`)
+    // 할인 행은 부품이 아니라 총액 차감이라 결과에서 뺀다.
+    // row_kind 가 비어 있는 옛 데이터까지 떨어지지 않도록 is.null 을 함께 허용한다.
+    .or('row_kind.is.null,row_kind.neq.discount')
     .order('quote_date', { referencedTable: 'quotes', ascending: false })
     .limit(LIMIT)
 

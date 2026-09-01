@@ -13,7 +13,7 @@ import { BlobProvider, pdf } from '@react-pdf/renderer'
 import type { CustomerResult, Engineer, ExpensePreset, ExpenseRow, PriceItem, QuoteRow } from './types'
 import type { SalesOpportunity } from '@/components/customer/types'
 import { isClosed } from '@/components/customer/opportunity'
-import { calcExpense, calcRow, calcTotals, createDomesticRow, createExpenseRow, createManualJpyRow, createRow, createServiceRow } from './calc'
+import { calcExpense, calcRow, calcTotals, createDiscountRow, createDomesticRow, createExpenseRow, createManualJpyRow, createRow, createServiceRow } from './calc'
 import { numKR } from './format'
 import { inp } from './styles'
 import { useDebounce } from './useDebounce'
@@ -45,6 +45,8 @@ function QuotePageInner() {
   const [company, setCompany] = useState('')
   const [receiver, setReceiver] = useState('')
   const [remarks, setRemarks] = useState('* 발주 진행 시 팩스 또는 메일로 발주서 회신 요망\n   (FAX : 031-786-4090)')
+  // 견적서 PDF 하단 서명란 표시 여부. 저장하지 않는 화면 상태라 견적을 다시 열면 항상 꺼진 상태로 시작한다.
+  const [showSignature, setShowSignature] = useState(false)
   const [delivery, setDelivery] = useState('')
   const [isDealer, setIsDealer] = useState(false)
 
@@ -248,6 +250,7 @@ const handleDownloadPDF = async (
         totalSupply={finalTotalSupply}
         totalTax={finalTotalTax}
         totalAmount={finalTotalAmount}
+        showSignature={showSignature}
       />
     ).toBlob()
 
@@ -357,7 +360,9 @@ const handleDownloadPDF = async (
 
       if (quoteError) throw quoteError
 
-      const items = rows.filter(r => r.supply_price > 0).map(r => ({
+      // 금액이 있는 행만 저장한다. 할인은 공급가가 음수라 별도로 통과시킨다
+      // (금액 0 인 채로 남은 할인 행은 기록할 것이 없어 저장하지 않는다).
+      const items = rows.filter(r => r.supply_price > 0 || (r.row_kind === 'discount' && r.supply_price < 0)).map(r => ({
         quote_id: quoteData.quote_id,
         price_list_id: r.selectedItem?.id ?? null,
         part_code: r.partCode.trim() || null,   // 품번 스냅샷(가격표 변경돼도 과거 견적 유지). 직접 입력한 품번도 그대로 저장, 빈 값은 null.
@@ -585,6 +590,8 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
 
   // 부대비용은 서비스비 행(견적당 1건)에 속한다. 별도 state 없이 rows 에서 파생시킨다.
   const serviceRow = rows.find(r => r.row_kind === 'service') ?? null
+  // 할인도 서비스비와 같이 견적당 1건이다(총액에서 한 번만 뺀다).
+  const discountRow = rows.find(r => r.row_kind === 'discount') ?? null
   const expenses = serviceRow?.expenses ?? []
 
   // 부대비용 내역 갱신 — 서비스비 행의 expenses 를 바꾼 뒤 calcRow 로 원가·이익을 재계산한다.
@@ -823,6 +830,15 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
               <label style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 4, display: 'block' }}>비고</label>
               <textarea className="q-input" value={remarks} onChange={e => setRemarks(e.target.value)} rows={3}
                 style={{ ...inp, width: '100%', resize: 'vertical', lineHeight: 1.7 }} />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', marginTop: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={showSignature}
+                  onChange={e => setShowSignature(e.target.checked)}
+                  style={{ width: 14, height: 14, cursor: 'pointer', accentColor: '#234ea2' }}
+                />
+                <span style={{ fontSize: 11, fontWeight: 700, color: showSignature ? '#234ea2' : '#6b7280' }}>고객사 서명란 추가</span>
+              </label>
             </div>
           </div>
 
@@ -986,6 +1002,17 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
               >
                 + 서비스비
               </button>
+              {/* 할인 — 총액에서 한 번만 빼므로 견적당 1건. 이미 있으면 비활성. */}
+              <button
+                onClick={() => setRows(prev => [...prev, createDiscountRow()])}
+                disabled={discountRow !== null}
+                title={discountRow !== null ? '할인은 견적당 1건만 추가할 수 있습니다' : '총액에서 빼는 할인 행을 추가합니다'}
+                style={{ gridColumn: '1 / -1', minWidth: 0, padding: '11px', background: '#fff', color: discountRow !== null ? '#9ca3af' : '#234ea2', border: '1px solid #ebebeb', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: discountRow !== null ? 'not-allowed' : 'pointer', transition: 'background 0.15s ease' }}
+                onMouseEnter={e => { if (discountRow === null) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6' }}
+                onMouseLeave={e => { if (discountRow === null) (e.currentTarget as HTMLButtonElement).style.background = '#fff' }}
+              >
+                + DISCOUNT
+              </button>
             </div>
             <FieldError message={errors.items} style={{ marginTop: 8 }} />
           </div>
@@ -1036,6 +1063,7 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                     totalTax={pdfTotalTax}
                     totalAmount={pdfTotalAmount}
                     showWatermark={true}
+                    showSignature={showSignature}
                   />
                 }>
                   {({ url }) => url ? (

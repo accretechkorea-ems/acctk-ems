@@ -35,7 +35,13 @@ export type CustomerResult = {
 //   manual_jpy — 수동입력 품목(구입가 JPY 를 직접 입력, 계산은 price_list 와 동일)
 //   domestic   — 국내조달품(원화 원가만, 마진 0. 고객 PDF 금액란은 '-')
 //   service    — 서비스비(견적당 1건)
-export type RowKind = 'price_list' | 'manual_jpy' | 'domestic' | 'service'
+//   discount   — 할인(견적당 1건). 총액에서만 빼며 품목별로 안분하지 않는다.
+//                라벨('DISCOUNT' / 'SPECIAL DISCOUNT')은 itemText 에 담아 품명 칸으로 그대로 나간다.
+export type RowKind = 'price_list' | 'manual_jpy' | 'domestic' | 'service' | 'discount'
+
+// 할인 행의 라벨. 로직은 같고 견적서에 찍히는 문구만 다르다.
+export const DISCOUNT_LABELS = ['DISCOUNT', 'SPECIAL DISCOUNT'] as const
+export type DiscountLabel = typeof DISCOUNT_LABELS[number]
 
 // 수동입력 품목의 판매가 산출 방식.
 //   rate  — 목표이익률로 판매단가를 역산

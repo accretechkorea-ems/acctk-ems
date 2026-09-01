@@ -5,6 +5,7 @@ import { CARD_BG, INPUT_BORDER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY, WHITE_
 import { isDealerQuote } from '../utils'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { SALES_STATUS_COLORS, getCategoryColor } from '@/lib/categoryColors'
+import { isOrdered, REVENUE_STATUS } from '@/lib/quoteStatus'
 
 type Props = {
   isOpen: boolean
@@ -17,15 +18,15 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose }:
   if (!isOpen) return null
 
   const totalQuoteAmt = quotes.reduce((s, q) => s + (q.total_supply || 0), 0)
-  const totalOrderAmt = quotes.filter(q => ['수주', '매출완료'].includes(q.status)).reduce((s, q) => s + (q.total_supply || 0), 0)
-  const totalRevenueAmt = quotes.filter(q => q.status === '매출완료').reduce((s, q) => s + (q.total_supply || 0), 0)
-  const revenueQuotes = quotes.filter(q => q.status === '매출완료')
+  const totalOrderAmt = quotes.filter(q => isOrdered(q.status)).reduce((s, q) => s + (q.total_supply || 0), 0)
+  const totalRevenueAmt = quotes.filter(q => q.status === REVENUE_STATUS).reduce((s, q) => s + (q.total_supply || 0), 0)
+  const revenueQuotes = quotes.filter(q => q.status === REVENUE_STATUS)
   const totalProfitAmt = revenueQuotes.reduce((s, q) => s + (q.total_profit || 0), 0)
   const totalProfitRate = totalRevenueAmt > 0 ? (totalProfitAmt / totalRevenueAmt * 100) : null
 
   const summaryCards = [
     { label: '총 견적 발행액', value: `₩${numKR(totalQuoteAmt)}`, sub: `${quotes.length}건`, color: TEXT_PRIMARY },
-    { label: '총 수주액', value: `₩${numKR(totalOrderAmt)}`, sub: `${quotes.filter(q => ['수주', '매출완료'].includes(q.status)).length}건`, color: '#3b82f6' },
+    { label: '총 수주액', value: `₩${numKR(totalOrderAmt)}`, sub: `${quotes.filter(q => isOrdered(q.status)).length}건`, color: '#3b82f6' },
     { label: '누적 매출액', value: `₩${numKR(totalRevenueAmt)}`, sub: `${revenueQuotes.length}건`, color: WHITE_BUTTON_BG },
     { label: '누적 순이익', value: totalProfitAmt > 0 ? `₩${numKR(totalProfitAmt)}` : '-', sub: '매출완료 기준', color: '#16a34a' },
     { label: '평균 이익률', value: totalProfitRate !== null && totalProfitAmt > 0 ? `${totalProfitRate.toFixed(1)}%` : '-', sub: '매출완료 기준', color: totalProfitRate !== null && totalProfitRate >= 40 ? '#16a34a' : '#f59e0b' },

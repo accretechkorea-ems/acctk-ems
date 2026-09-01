@@ -5,6 +5,7 @@ import { useOutsideClick } from '@/hooks/useOutsideClick'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import type { ExpensePreset, ExpenseRow, PriceItem, QuoteRow, RowKind } from './types'
 import { numKR } from './format'
+import { DISCOUNT_LABELS } from './types'
 import { inp } from './styles'
 import ExpenseSection from './ExpenseSection'
 
@@ -14,6 +15,7 @@ const KIND_LABEL: Record<RowKind, string> = {
   manual_jpy: '수동 입력',
   domestic: '국내 조달품',
   service: '서비스 비용',
+  discount: '할인',
 }
 
 // 품목 행 카드 1개(일반 품목 / 서비스비 공용). page.tsx 의 rows.map 본문을 그대로 옮긴 것.
@@ -69,6 +71,8 @@ export default function QuoteItemRow({
   const priceInputMode = row.row_kind === 'manual_jpy' && row.price_mode === 'price'
   // 국내조달품 — 마진이 없어 이익률·관세율 스테퍼가 필요 없다(수량만 사용).
   const isDomestic = row.row_kind === 'domestic'
+  // 할인 — 라벨과 금액만 받는다. 품번·상세줄·수량·이익률·관세는 쓰지 않는다.
+  const isDiscount = row.row_kind === 'discount'
 
   // 품목을 고르면 품명 칸으로 커서를 옮긴다. 위치는 맨 앞(자동으로 들어간 모델명 앞에 이어 적도록).
   // 품명 값이 갱신된 뒤에 커서를 잡아야 해서 다음 프레임에서 실행한다.
@@ -84,6 +88,10 @@ export default function QuoteItemRow({
   const summaryLines: React.ReactNode[] = []
   if (row.row_kind === 'manual_jpy' && row.product_price > 0) {
     summaryLines.push(<>구입가 ¥{numKR(row.cost_price_jpy)} × 환율 {row.exchange_rate.toFixed(2)} × 관세 ×{row.tariff_rate.toFixed(2)} = 원가 <b>₩{numKR(row.product_price)}</b></>)
+  }
+  if (isDiscount && row.supply_price < 0) {
+    summaryLines.push(<>할인 <b>−₩{numKR(Math.abs(row.supply_price))}</b></>)
+    summaryLines.push(<>부가세 −₩{numKR(Math.abs(row.tax))}</>)
   }
   if (row.supply_price > 0) {
     if (isDomestic) {
@@ -187,6 +195,37 @@ export default function QuoteItemRow({
         </div>
       )}
 
+      {/* 할인 — 견적서에 찍히는 문구만 고른다(로직은 동일) */}
+      {isDiscount && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', width: 44, flexShrink: 0 }}>표기</label>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <SegmentedControl
+              options={DISCOUNT_LABELS.map(v => ({ label: v, value: v }))}
+              value={row.itemText}
+              onChange={v => updateRow(row.id, 'itemText', v)}
+              equal
+              height={34}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 할인 — 깎을 금액을 양수로 입력한다(계산에는 음수로 들어간다) */}
+      {isDiscount && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', width: 44, flexShrink: 0 }}>금액</label>
+          <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+            <input className="q-input" type="number" value={row.manual_unit_price || ''}
+              onChange={e => updateRow(row.id, 'manual_unit_price', parseInt(e.target.value) || 0)}
+              placeholder="0"
+              style={{ ...inp, width: '100%', textAlign: 'right', fontSize: 12, paddingRight: 28 }} />
+            <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#9ca3af', pointerEvents: 'none' }}>원</span>
+          </div>
+        </div>
+      )}
+
+      {!isDiscount && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', width: 44, flexShrink: 0 }}>품명</label>
         <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
@@ -203,6 +242,7 @@ export default function QuoteItemRow({
           )}
         </div>
       </div>
+      )}
 
       {row.subLines.length > 0 && (
       <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
@@ -267,7 +307,7 @@ export default function QuoteItemRow({
       )}
 
       {/* 스테퍼 — 수량 · (이익률 또는 판매단가) · 관세율. 서비스비만 제외한다. */}
-      {row.row_kind !== 'service' && (
+      {row.row_kind !== 'service' && !isDiscount && (
       <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
         <div style={{ width: 44, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>

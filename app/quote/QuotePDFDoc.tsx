@@ -10,10 +10,16 @@ Font.register({
   src: 'https://fonts.gstatic.com/s/notosanskr/v36/PbyxFmXiEBPT4ITbgNA5Cgms3VYcOA-vvnIzzuoyeLTq8H4hfeE.ttf',
 })
 
+// 할인 표기 색 — 앱 전역에서 쓰는 위험/차감 색과 같은 값.
+const DANGER = '#dc2626'
+
 const THICK = 1.3
 const THIN = 0.5
-const COL = { seq: '5%', code: '12%', name: '38%', qty: '6%', unit: '14%', supply: '15%', tax: '10%' }
-const COL_LABEL_SPAN = '55%'  // 요약행 라벨 셀 = seq(5)+code(12)+name(38) 합, 합계값이 계속 맨 오른쪽 정렬
+// 열 너비 — 금액이 억 단위(₩ 999,999,999)가 되어도 한 줄에 들어가도록 잡은 값이다.
+// 표 안에서 가장 좁았던 부가세 칸이 넘쳐 줄바꿈되던 것을 품명·수량·단가·공급가액에서 조금씩 덜어 채웠다.
+// 폭을 줄일 때는 각 칸이 실제로 담는 가장 긴 글자를 먼저 재 볼 것(품명 183pt, 품번 53pt, 억 단위 금액 59pt).
+const COL = { seq: '5%', code: '12%', name: '36.4%', qty: '5.4%', unit: '13.4%', supply: '13.8%', tax: '14%' }
+const COL_LABEL_SPAN = '53.4%'  // 요약행 라벨 셀 = seq(5)+code(12)+name(36.4) 합, 합계값이 계속 맨 오른쪽 정렬
 // 선두 수동 번호(1. / 2) / 3.) 제거 — 자동 순번과 중복 방지. 데이터는 안 바꾸고 표시 직전에만 적용.
 const stripLeadNo = (s: string) => (s || '').replace(/^\s*\d+[.)]\s*/, '')
 
@@ -33,7 +39,8 @@ const S = StyleSheet.create({
   conditionLabel: { fontSize: 10, width: 85, paddingLeft: 8 },
   conditionValue: { fontSize: 10 },
   headerRight: { width: 195, alignItems: 'flex-start' },
-  logo: { width: 125, height: 30, marginBottom: 4 },
+  // 로고 원본(pdflogo.png)의 가로세로 비가 6.4:1 이라 높이를 폭 ÷ 6.4 로 맞춘다. 어긋나면 눌리거나 늘어난다.
+  logo: { width: 125, height: 19.53, marginBottom: 4 },
   headerRightText: { fontSize: 9.5, textAlign: 'left', marginBottom: 2 },
   dividerBox: {
     borderTopWidth: THICK, borderColor: '#000',
@@ -54,6 +61,10 @@ const S = StyleSheet.create({
   remarkContent: { flex: 1, borderRightWidth: THICK, borderRightColor: '#000', padding: 6 },
   remarkLine: { fontSize: 8.5, marginBottom: 2 },
   summaryRow: { flexDirection: 'row', borderTopWidth: THICK, borderTopColor: '#000', height: 22, alignItems: 'center' },
+  // 고객사 서명란 — 표 바깥, 표 아래에 한 줄. 표가 flexGrow 로 남는 높이를 먹으므로
+  // 이 줄의 높이만큼 표의 빈 영역이 줄어들 뿐 품목·비고·합계의 순서와 간격은 그대로다.
+  signRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 8 },
+  signText: { fontSize: 9, fontFamily: 'NotoSansCJK' },
 })
 
 export type PDFDocProps = {
@@ -61,10 +72,16 @@ export type PDFDocProps = {
   rows: QuoteRow[]; remarks: string; engineerName: string; engineerTel: string
   totalSupply: number; totalTax: number; totalAmount: number
   showWatermark?: boolean
+  // 화면에서 체크했을 때만 표 아래 서명란을 낸다. DB 에 저장하지 않는 표시 전용 값.
+  showSignature?: boolean
 }
 
-export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, quoteNo, dateDisplay, rows, remarks, engineerName, engineerTel, totalSupply, totalTax, totalAmount, showWatermark }: PDFDocProps) {
+export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, quoteNo, dateDisplay, rows, remarks, engineerName, engineerTel, totalSupply, totalTax, totalAmount, showWatermark, showSignature }: PDFDocProps) {
   const EMPTY_ROWS = Math.max(0, 10 - rows.length)
+  // 할인은 품목 목록의 맨 끝(합계 바로 위)에 고정한다 — 입력 순서와 무관하게.
+  const orderedRows = [...rows.filter(r => r.row_kind !== 'discount'), ...rows.filter(r => r.row_kind === 'discount')]
+  // 금액 표기 — 음수는 빼는 금액이라는 뜻이므로 부호를 붙인다.
+  const won = (v: number) => (v < 0 ? `−₩  ${numKR(Math.abs(v))}` : `₩  ${numKR(v)}`)
   return (
     <Document>
       <Page size="A4" style={S.page}>
@@ -98,7 +115,7 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, 
             ))}
           </View>
           <View style={S.headerRight}>
-            <Image src="/quotelogo.png" style={S.logo} />
+            <Image src="/pdflogo.png" style={S.logo} />
             <Text style={S.headerRightText}>화성시 동탄대로 24길 31-8</Text>
             <Text style={S.headerRightText}>Accretech Korea Co., Ltd.</Text>
             <Text style={S.headerRightText}>대표이사 이상철</Text>
@@ -106,7 +123,10 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, 
           </View>
         </View>
         <View style={S.dividerBox}>
-          <Text style={S.dividerText}>일금　　{amountToKorean(totalSupply)}　　({totalSupply > 0 ? `₩${numKR(totalSupply)}` : '₩0'} -)　　부가세 별도</Text>
+          {/* 할인이 품목 합계보다 커서 총액이 음수가 되면 amountToKorean 이 빈 문자열을 내므로 부호를 앞에 붙여 읽히게 한다 */}
+          <Text style={S.dividerText}>
+            일금　　{totalSupply < 0 ? `마이너스 ${amountToKorean(-totalSupply)}` : amountToKorean(totalSupply)}　　({totalSupply !== 0 ? won(totalSupply).replace('  ', '') : '₩0'} -)　　부가세 별도
+          </Text>
         </View>
         <View style={S.table}>
           <View style={S.tableHeader}>
@@ -118,33 +138,39 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, 
             <Text style={[S.th, { width: COL.supply }]}>공급가액</Text>
             <Text style={[S.thLast, { width: COL.tax }]}>부가세</Text>
           </View>
-          {rows.map((row, ri) => {
+          {orderedRows.map((row, ri) => {
             // 국내조달품 — 포함사항으로만 나가고 금액은 고객에게 공개하지 않는다(합계에도 미포함).
             const hideAmount = row.row_kind === 'domestic'
+            // 할인 — 라벨·금액을 빨간색으로 내고 수량·단가·부가세 칸은 비운다(부가세는 합계에만 반영).
+            // 순번·품번도 붙이지 않고 행 안의 세로선을 전부 지워, 라벨과 금액만 놓인 한 줄로 보이게 한다.
+            const isDiscount = row.row_kind === 'discount'
+            const noRule = isDiscount ? { borderRightWidth: 0 } : {}
             return (
             <View key={row.id} style={[S.itemRow, { borderBottomWidth: THICK, borderBottomColor: '#000' }]}>
-              <View style={[S.td, { width: COL.seq, justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={{ textAlign: 'center' }}>{ri + 1}</Text>
+              <View style={[S.td, { width: COL.seq, justifyContent: 'center', alignItems: 'center' }, noRule]}>
+                <Text style={{ textAlign: 'center' }}>{isDiscount ? '' : ri + 1}</Text>
               </View>
-              <View style={[S.td, { width: COL.code, justifyContent: 'center', alignItems: 'center' }]}>
+              <View style={[S.td, { width: COL.code, justifyContent: 'center', alignItems: 'center' }, noRule]}>
                 {/* 품번 — 가격표 선택값이든 직접 입력값이든 행의 partCode 를 쓴다.
-                    내용이 있는 행인데 품번이 없으면(서비스비 등) '-' 로 채운다. */}
+                    내용이 있는 행인데 품번이 없으면(서비스비 등) '-' 로 채운다. 할인은 품번 자체가 없어 비운다. */}
                 <Text style={{ textAlign: 'center' }}>
-                  {row.partCode.trim() || ((row.itemText.trim() || row.supply_price > 0) ? '-' : '')}
+                  {isDiscount ? '' : (row.partCode.trim() || ((row.itemText.trim() || row.supply_price > 0) ? '-' : ''))}
                 </Text>
               </View>
-              <View style={[S.td, { width: COL.name, borderRightWidth: 0 }]}>
-                <Text>{stripLeadNo(row.itemText)}</Text>
+              <View style={[S.td, { width: COL.name, borderRightWidth: 0, alignItems: isDiscount ? 'flex-end' : undefined, justifyContent: 'center' }]}>
+                <Text style={isDiscount ? { color: DANGER, textAlign: 'right' } : undefined}>{stripLeadNo(row.itemText)}</Text>
                 {row.subLines.map((line, i) => line ? <Text key={i} style={{ fontSize: 8.5, marginTop: 1 }}>{line}</Text> : null)}
               </View>
-              <View style={[S.td, { width: COL.qty, borderLeftWidth: THICK, borderLeftColor: '#000', justifyContent: 'center', alignItems: 'center' }]}>
+              <View style={[S.td, { width: COL.qty, borderLeftWidth: isDiscount ? 0 : THICK, borderLeftColor: '#000', justifyContent: 'center', alignItems: 'center' }, noRule]}>
                 <Text style={{ textAlign: 'center' }}>{row.quantity > 0 ? String(row.quantity) : ''}</Text>
               </View>
-              <View style={[S.td, { width: COL.unit, justifyContent: 'center', alignItems: hideAmount ? 'center' : 'flex-end' }]}>
+              <View style={[S.td, { width: COL.unit, justifyContent: 'center', alignItems: hideAmount ? 'center' : 'flex-end' }, noRule]}>
                 <Text>{hideAmount ? '-' : (row.unit_price > 0 ? `₩  ${numKR(row.unit_price)}` : '')}</Text>
               </View>
-              <View style={[S.td, { width: COL.supply, justifyContent: 'center', alignItems: hideAmount ? 'center' : 'flex-end' }]}>
-                <Text>{hideAmount ? '-' : (row.supply_price > 0 ? `₩  ${numKR(row.supply_price)}` : '')}</Text>
+              <View style={[S.td, { width: COL.supply, justifyContent: 'center', alignItems: hideAmount ? 'center' : 'flex-end' }, noRule]}>
+                <Text style={isDiscount ? { color: DANGER } : undefined}>
+                  {hideAmount ? '-' : (row.supply_price !== 0 ? won(row.supply_price) : '')}
+                </Text>
               </View>
               <View style={[S.tdLast, { width: COL.tax, justifyContent: 'center', alignItems: hideAmount ? 'center' : 'flex-end' }]}>
                 <Text style={{ paddingRight: hideAmount ? 0 : 4 }}>{hideAmount ? '-' : (row.tax > 0 ? `₩  ${numKR(row.tax)}` : '')}</Text>
@@ -184,11 +210,18 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, 
               <View style={[S.td, { width: COL.unit, height: 22 }]} />
               <View style={[S.td, { width: COL.supply, height: 22 }]} />
               <View style={[S.tdLast, { width: COL.tax, height: 22, justifyContent: 'center' }]}>
-                <Text style={{ fontSize: 9, textAlign: 'right', paddingRight: 4 }}>{value > 0 ? `₩${numKR(value)}` : ''}</Text>
+                <Text style={{ fontSize: 9, textAlign: 'right', paddingRight: 4, color: value < 0 ? DANGER : undefined }}>
+                  {value !== 0 ? won(value).replace('  ', '') : ''}
+                </Text>
               </View>
             </View>
           ))}
         </View>
+        {showSignature && (
+          <View style={S.signRow}>
+            <Text style={S.signText}>발주 확인 및 서명 :   ____________(서명)</Text>
+          </View>
+        )}
       </Page>
     </Document>
   )

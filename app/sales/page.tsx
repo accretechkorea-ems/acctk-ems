@@ -12,7 +12,7 @@ import AccessGate from '@/components/common/AccessGate'
 import { canViewAdmin, getViewScope, isFieldEngineerTeam, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerm, withTeamPerms } from '@/lib/teamPerms'
 import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, notifyDeleteRequest } from '@/lib/quoteMutations'
-import { isAutoFailed, REVERT_NOTICE, AUTO_FAIL_NOTICE } from '@/lib/quoteStatus'
+import { isAutoFailed, isOrdered, REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE } from '@/lib/quoteStatus'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
@@ -45,8 +45,7 @@ type Quote = {
   profit_rate: number | null
   status: string
   quote_type?: string | null
-  order_date: string | null
-  revenue_date: string | null
+  // order_date · revenue_date 는 코드에서 쓰지 않는다(수주·매출 시점은 처리 시각 컬럼이 정본).
   fail_reason: string | null
   recipient: string | null
   engineer_id: number
@@ -55,6 +54,7 @@ type Quote = {
   delivery_info: string | null
   purchase_order_url?: string | null
   purchase_order_at?: string | null
+  tax_invoice_completed_at?: string | null
   shipping_date?: string | null
   order_memo?: string | null
   order_completed_at?: string | null
@@ -66,7 +66,7 @@ type Quote = {
   engineers?: { name: string; position: string | null }
   customers?: { company_name: string } | null
   dealer?: { company_name: string } | null
-  quote_items?: { product_name: string | null; price_list?: { model_jp: string | null } | null }[]
+  quote_items?: { product_name: string | null; row_kind?: string | null; price_list?: { model_jp: string | null } | null }[]
 }
 type Engineer = {
   engineer_id: number
@@ -221,6 +221,8 @@ function PerformanceChart({ quotes, fy, targets, engineers, filteredEngineerIds,
   const scopedQuotes = teamFilter
     ? quotes.filter(q => filteredEngineerIds.includes(q.engineer_id))
     : quotes
+  // 매출로 세는 건 — 상태가 매출완료이고 계산서 완료 시각이 있는 것만.
+  const revenueQuotes = scopedQuotes.filter(q => q.status === REVENUE_STATUS && !!q.tax_invoice_completed_at)
 
   // 연간 목표 합계도 그 회계연도(4/1 시작)에 재직한 직원만 — 과거 연도는 그때 재직자 포함, 현재는 삭제자 제외.
   const totalYearTarget = engineers.reduce((s, e) => {
@@ -236,8 +238,8 @@ function PerformanceChart({ quotes, fy, targets, engineers, filteredEngineerIds,
     { key: 'Q3', desc: '10~12월', q: 3 },
     { key: 'Q4', desc: '1~3월', q: 4 },
   ].map(qd => {
-    const qQ = scopedQuotes.filter(q => getFiscalYear(q.quote_date) === fy && getFiscalQuarter(q.quote_date) === qd.q)
-    const rev = qQ.filter(q => q.status === '매출완료')
+    // 매출은 세금계산서 발행이 끝난 날 기준으로 센다(완료 시각이 없는 건은 어느 분기에도 안 잡힌다).
+    const rev = revenueQuotes.filter(q => getFiscalYear(q.tax_invoice_completed_at!) === fy && getFiscalQuarter(q.tax_invoice_completed_at!) === qd.q)
     return {
       ...qd,
       revenueAmt: rev.reduce((s, q) => s + (q.total_supply || 0), 0),
@@ -248,11 +250,10 @@ function PerformanceChart({ quotes, fy, targets, engineers, filteredEngineerIds,
   })
 
   const monthData = getFYMonths(fy).map(({ label, month, year }) => {
-    const mQ = scopedQuotes.filter(q => {
-      const d = new Date(q.quote_date)
+    const rev = revenueQuotes.filter(q => {
+      const d = new Date(q.tax_invoice_completed_at!)
       return d.getFullYear() === year && d.getMonth() + 1 === month
     })
-    const rev = mQ.filter(q => q.status === '매출완료')
     const isCurrent = year === nowYear && month === nowMonth
     return {
       label, month, year,
@@ -265,8 +266,7 @@ function PerformanceChart({ quotes, fy, targets, engineers, filteredEngineerIds,
   })
 
   const yearData = [fy - 1, fy, fy + 1].map(y => {
-    const yQ = scopedQuotes.filter(q => getFiscalYear(q.quote_date) === y)
-    const rev = yQ.filter(q => q.status === '매출완료')
+    const rev = revenueQuotes.filter(q => getFiscalYear(q.tax_invoice_completed_at!) === y)
     const yTarget = engineers.reduce((s, e) => {
       if (teamFilter && e.teams !== teamFilter) return s
       if (!isActiveInPeriod(e.resigned_date, `${y}-04-01`)) return s   // 각 회계연도 시작 기준 재직자만
@@ -363,8 +363,10 @@ function EngineerChartModal({ engineer, quotes, targets, fy, onClose }: {
   const monthData = getFYMonths(fy).map(({ label, month, year }) => {
     const mQ = quotes.filter(q => {
       if (q.engineer_id !== engineer.engineer_id) return false
-      const d = new Date(q.quote_date)
-      return d.getFullYear() === year && d.getMonth() + 1 === month && q.status === '매출완료'
+      if (q.status !== REVENUE_STATUS || !q.tax_invoice_completed_at) return false
+      // 매출은 세금계산서 발행이 끝난 달에 잡는다.
+      const d = new Date(q.tax_invoice_completed_at)
+      return d.getFullYear() === year && d.getMonth() + 1 === month
     })
     const revenueAmt = mQ.reduce((s, q) => s + (q.total_supply || 0), 0)
     const profitAmt = mQ.reduce((s, q) => s + (q.total_profit || 0), 0)
@@ -446,8 +448,11 @@ function EngineerChartModal({ engineer, quotes, targets, fy, onClose }: {
 }
 
 // ── 팀 실적 카드 (4칸: 견적 제출/수주/매출완료/순이익) ─────────────────────────
-function TeamCard({ teamId, engineers, filteredQuotes, targets, mode, fy, periodStart, onCardClick, isSelected }: {
-  teamId: string; engineers: Engineer[]; filteredQuotes: Quote[]; targets: SalesTarget[]
+function TeamCard({ teamId, engineers, filteredQuotes, orderQuotes, revenueQuotes: revenueScoped, targets, mode, fy, periodStart, onCardClick, isSelected }: {
+  teamId: string; engineers: Engineer[]; filteredQuotes: Quote[]
+  // 수주·매출은 기간을 재는 날짜가 달라(발주 등록일·계산서 완료일) 부모가 따로 걸러 넘긴다.
+  orderQuotes: Quote[]; revenueQuotes: Quote[]
+  targets: SalesTarget[]
   mode: string; fy: number; periodStart: string; onCardClick: (id: string) => void; isSelected: boolean
 }) {
   // 팀 인원(N명)·목표 합계는 '그 기간에 재직한' 팀원만 — 부모와 동일한 isActiveInPeriod 기준.
@@ -455,9 +460,9 @@ function TeamCard({ teamId, engineers, filteredQuotes, targets, mode, fy, period
   const teamEngList = engineers.filter(e => e.teams === teamId && isActiveInPeriod(e.resigned_date, periodStart))
   const teamEngIds = teamEngList.map(e => e.engineer_id)
   const teamQuotes = filteredQuotes.filter(q => teamEngIds.includes(q.engineer_id))
-  const revenueQuotes = teamQuotes.filter(q => q.status === '매출완료')
+  const revenueQuotes = revenueScoped.filter(q => teamEngIds.includes(q.engineer_id))
   const quoteAmt = teamQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
-  const orderAmt = teamQuotes.filter(q => ['수주', '매출완료'].includes(q.status)).reduce((s, q) => s + (q.total_supply || 0), 0)
+  const orderAmt = orderQuotes.filter(q => teamEngIds.includes(q.engineer_id)).reduce((s, q) => s + (q.total_supply || 0), 0)
   const revenueAmt = revenueQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
   const profitAmt = revenueQuotes.reduce((s, q) => s + (q.total_profit || 0), 0)
   const profitRate = revenueAmt > 0 ? (profitAmt / revenueAmt * 100) : null
@@ -546,7 +551,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   currentEngineerId: number | null
   engineers: Engineer[]
   onClose: () => void
-  onStatusSave: (q: Quote, status: string, orderDate: string, revenueDate: string, failReason: string) => Promise<void>
+  onStatusSave: (q: Quote, status: string, failReason: string) => Promise<void>
 })
  {
   const supabase = createClient()
@@ -556,8 +561,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   const [page, setPage] = useState(1)
   const [editQuote, setEditQuote] = useState<Quote | null>(null)
   const [editStatus, setEditStatus] = useState('')
-  const [editOrderDate, setEditOrderDate] = useState('')
-  const [editRevenueDate, setEditRevenueDate] = useState('')
+
   const [editFailReason, setEditFailReason] = useState('')
   const [saving, setSaving] = useState(false)
   // 발주서 등록
@@ -607,7 +611,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
     setSaving(true)
     // 되돌릴 때는 실패 사유를 지운다(빈 문자열 → 공용 함수가 null 로 저장한다).
     const reason = editStatus === '견적중' ? '' : editFailReason
-    await onStatusSave(editQuote, editStatus, editOrderDate, editRevenueDate, reason)
+    await onStatusSave(editQuote, editStatus, reason)
     // 삭제 요청은 관리자에게 알린다. 알림이 실패해도 요청 자체는 저장됐으므로 흐름을 막지 않는다.
     if (reasonRequired) await notifyDeleteRequest(editQuote.quote_id)
     setSaving(false)
@@ -663,7 +667,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
     setPoCompanyAddress(null)
     setPoContactId('')
     setPoContacts([])
-    await onStatusSave(poQuote, '발주(주문 대기)', '', '', '')
+    await onStatusSave(poQuote, '발주(주문 대기)', '')
   }
 
   const handleTaxRequest = async () => {
@@ -679,7 +683,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
     }
     setTaxQuote(null)
     setTaxDate('')
-    await onStatusSave(taxQuote, '세금계산서 요청', '', '', '')
+    await onStatusSave(taxQuote, '세금계산서 요청', '')
   }
 
   return (
@@ -780,7 +784,8 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                   const profitColor = profitConfirmed ? '#15803d' : TEXT
                   const profitRateColor = profitConfirmed ? ((q.profit_rate || 0) >= 40 ? '#15803d' : ORANGE) : GRAY
                   const itemNames = q.quote_items && q.quote_items.length > 0
-                    ? q.quote_items.map(i => i.price_list?.model_jp || i.product_name).filter(Boolean).join(', ')
+                    // 할인은 품목이 아니라 총액 차감이라 목록에서 뺀다.
+                    ? q.quote_items.filter(i => i.row_kind !== 'discount').map(i => i.price_list?.model_jp || i.product_name).filter(Boolean).join(', ')
                     : '-'
                   const showOrderInfo = ['주문완료', '세금계산서 요청', '매출완료'].includes(q.status)
                   return (
@@ -1122,7 +1127,7 @@ export default function SalesPage() {
     const { data: userData } = await supabase.auth.getUser()
     const [{ data: qData }, { data: eData }, { data: tData }, { data: meData }, { data: custData }] = await Promise.all([
       supabase.from('quotes')
-        .select('*, engineers(name, position), quote_items(product_name, price_list(model_jp))')
+        .select('*, engineers(name, position), quote_items(product_name, row_kind, price_list(model_jp))')
         .order('quote_date', { ascending: false }).order('quote_number', { ascending: false }),
       supabase.from('engineers').select('engineer_id, name, position, teams, permission_level, resigned_date').order('engineer_id'),
       supabase.from('sales_targets').select('*'),
@@ -1196,20 +1201,34 @@ const visibleEngineers = sortedEngineers.filter(e => {
 
   const allEngineers = sortedEngineers.filter(e => isFieldEngineerTeam(e) && isActiveInPeriod(e.resigned_date, periodStart))
   const allEngineerIds = allEngineers.map(e => e.engineer_id)
+  // 기간을 재는 날짜가 지표마다 다르다.
+  //   견적 제출 — 견적을 낸 날(quote_date)
+  //   수주      — 발주서를 등록한 날(purchase_order_at)
+  //   매출      — 세금계산서 발행이 끝난 날(tax_invoice_completed_at)
+  // 처리 시각이 비어 있는 건은 그 지표의 어느 기간에도 잡히지 않는다(임의 대체 없음).
+  const inOrderPeriod = (q: Quote, year: number) => isOrdered(q.status) && !!q.purchase_order_at && matchPeriod(q.purchase_order_at, year)
+  const inRevenuePeriod = (q: Quote, year: number) => q.status === REVENUE_STATUS && !!q.tax_invoice_completed_at && matchPeriod(q.tax_invoice_completed_at, year)
+
   const filteredQuotes = quotes.filter(q => matchPeriod(q.quote_date, fy) && (teamFilter ? filteredEngineerIds.includes(q.engineer_id) : true))
   const allFilteredQuotes = quotes.filter(q => matchPeriod(q.quote_date, fy) && allEngineerIds.includes(q.engineer_id))
-  const allRevenueQuotes = allFilteredQuotes.filter(q => q.status === '매출완료')
+  // 수주·매출은 기간 기준이 달라 별도 집합으로 모은다(팀 카드·개인 카드도 이 집합을 쓴다).
+  const scopedOrderQuotes = quotes.filter(q => inOrderPeriod(q, fy) && (teamFilter ? filteredEngineerIds.includes(q.engineer_id) : true))
+  const scopedRevenueQuotes = quotes.filter(q => inRevenuePeriod(q, fy) && (teamFilter ? filteredEngineerIds.includes(q.engineer_id) : true))
+  const allOrderQuotes = quotes.filter(q => inOrderPeriod(q, fy) && allEngineerIds.includes(q.engineer_id))
+  const allRevenueQuotes = quotes.filter(q => inRevenuePeriod(q, fy) && allEngineerIds.includes(q.engineer_id))
   const totalQuoteAmt = allFilteredQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
-  const totalOrderAmt = allFilteredQuotes.filter(q => ['수주', '매출완료'].includes(q.status)).reduce((s, q) => s + (q.total_supply || 0), 0)
+  const totalOrderAmt = allOrderQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
   const totalRevenueAmt = allRevenueQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
   const totalCostAmt = allRevenueQuotes.reduce((s, q) => s + (q.total_cost || 0), 0)
   const totalProfitAmt = allRevenueQuotes.reduce((s, q) => s + (q.total_profit || 0), 0)
   const totalProfitRate = totalRevenueAmt > 0 ? (totalProfitAmt / totalRevenueAmt * 100) : null
   const totalQuoteCnt = allFilteredQuotes.length
-  const totalOrderCnt = allFilteredQuotes.filter(q => ['수주', '매출완료'].includes(q.status)).length
+  const totalOrderCnt = allOrderQuotes.length
+  // 전환율 — 분자(수주)는 발주 시점, 분모(견적)는 작성 시점 기준이라 기간이 정확히 겹치지는 않는다.
   const convRate = totalQuoteCnt > 0 ? (totalOrderCnt / totalQuoteCnt * 100) : 0
-  const allPrevQuotes = quotes.filter(q => matchPeriod(q.quote_date, fy - 1) && allEngineerIds.includes(q.engineer_id))
-  const prevRevenue = allPrevQuotes.filter(q => q.status === '매출완료').reduce((s, q) => s + (q.total_supply || 0), 0)
+  const prevRevenue = quotes
+    .filter(q => inRevenuePeriod(q, fy - 1) && allEngineerIds.includes(q.engineer_id))
+    .reduce((s, q) => s + (q.total_supply || 0), 0)
   const yoyChange = prevRevenue > 0 ? ((totalRevenueAmt - prevRevenue) / prevRevenue * 100) : null
   const sumAllTarget = (key: 'target_amount' | 'order_target_amount') => allEngineers.reduce((s, e) => {
     const t = targets.find(t => t.engineer_id === e.engineer_id && t.year === fy && t.quarter === null)
@@ -1226,14 +1245,15 @@ const visibleEngineers = sortedEngineers.filter(e => {
 
   const engineerStats = filteredEngineers.map(eng => {
     const myQuotes = filteredQuotes.filter(q => q.engineer_id === eng.engineer_id)
-    const myRevenueQuotes = myQuotes.filter(q => q.status === '매출완료')
+    const myOrderQuotes = scopedOrderQuotes.filter(q => q.engineer_id === eng.engineer_id)
+    const myRevenueQuotes = scopedRevenueQuotes.filter(q => q.engineer_id === eng.engineer_id)
     const quotedAmt = myQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
     const revenueAmt = myRevenueQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
-    const orderedAmt = myQuotes.filter(q => ['수주', '매출완료'].includes(q.status)).reduce((s, q) => s + (q.total_supply || 0), 0)
+    const orderedAmt = myOrderQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
     const profitAmt = myRevenueQuotes.reduce((s, q) => s + (q.total_profit || 0), 0)
     const profitRate = revenueAmt > 0 ? (profitAmt / revenueAmt * 100) : null
     const quotedCnt = myQuotes.length
-    const orderedCnt = myQuotes.filter(q => ['수주', '매출완료'].includes(q.status)).length
+    const orderedCnt = myOrderQuotes.length
     const myTarget = targets.find(t => t.engineer_id === eng.engineer_id && t.year === fy && t.quarter === null)
     const toPeriod = (annual: number) => mode === 'year' ? annual : mode === 'month' ? Math.round(annual / 12) : (mode === 'h1' || mode === 'h2') ? Math.round(annual / 2) : Math.round(annual / 4)
     const targetAmt = toPeriod(myTarget?.target_amount || 0)              // 매출 목표
@@ -1248,11 +1268,11 @@ const visibleEngineers = sortedEngineers.filter(e => {
     rankedByRevenue.filter(e => e.revenueAmt > 0).map((e, i) => [e.engineer_id, i])
   )
 
-  const handleStatusSave = async (q: Quote, status: string, orderDate: string, revenueDate: string, failReason: string) => {
+  const handleStatusSave = async (q: Quote, status: string, failReason: string) => {
     // 예전에는 오류를 그냥 삼켜서, RLS 등으로 막히면 목록만 새로고침되고 아무 일도 없는 것처럼 보였다.
     // 원인은 공용 함수가 콘솔에 남기고, 여기서는 사용자에게 실패를 알린다.
     try {
-      await updateQuoteStatus({ quoteId: q.quote_id, status, orderDate, revenueDate, reason: failReason })
+      await updateQuoteStatus({ quoteId: q.quote_id, status, reason: failReason })
     } catch (e) {
       console.error('[sales] status save failed', { quoteId: q.quote_id, status, error: e })
     }
@@ -1387,7 +1407,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
             </div>
            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
                {teams.map(t => (
-              <TeamCard key={t} teamId={t} engineers={sortedEngineers} filteredQuotes={filteredQuotes} targets={targets} mode={mode} fy={fy} periodStart={periodStart} onCardClick={id => setTeamFilter(id === teamFilter ? null : id)} isSelected={teamFilter === t} />
+              <TeamCard key={t} teamId={t} engineers={sortedEngineers} filteredQuotes={filteredQuotes} orderQuotes={scopedOrderQuotes} revenueQuotes={scopedRevenueQuotes} targets={targets} mode={mode} fy={fy} periodStart={periodStart} onCardClick={id => setTeamFilter(id === teamFilter ? null : id)} isSelected={teamFilter === t} />
             ))}            </div>
           </div>
         )}
@@ -1489,8 +1509,8 @@ const visibleEngineers = sortedEngineers.filter(e => {
           currentEngineerId={currentEngineer?.engineer_id ?? null}
           engineers={engineers}
           onClose={() => setSelectedEngineer(null)}
-          onStatusSave={async (q, status, orderDate, revenueDate, failReason) => {
-            await handleStatusSave(q, status, orderDate, revenueDate, failReason)
+          onStatusSave={async (q, status, failReason) => {
+            await handleStatusSave(q, status, failReason)
             setSelectedEngineer((prev: any) => prev ? { ...prev } : null)
           }}
         />

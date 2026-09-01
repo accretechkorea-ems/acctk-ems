@@ -8,7 +8,7 @@ import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, notifyDeleteRequest } from '@/lib/quoteMutations'
-import { isAutoFailed, REVERT_NOTICE, AUTO_FAIL_NOTICE } from '@/lib/quoteStatus'
+import { isAutoFailed, isOrdered, REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE } from '@/lib/quoteStatus'
 import { achieveColorOf } from '@/lib/fiscal'
 
 // 대시보드 '내 견적' 패널. 실적 현황 EngineerQuoteModal 의 표시 + 관리 기능을 동일하게 구현한다.
@@ -56,7 +56,7 @@ function periodRange(fy: number, unit: PeriodUnit, sel: number): { start: string
   return { start: `${yr}-${pad(sel)}-01`, end: `${yr}-${pad(sel)}-${pad(lastDay(yr, sel))}` }
 }
 
-type QuoteItem = { product_name: string | null; price_list?: { model_jp: string | null } | null }
+type QuoteItem = { product_name: string | null; row_kind?: string | null; price_list?: { model_jp: string | null } | null }
 type Quote = {
   quote_id: number
   quote_number: string
@@ -74,6 +74,8 @@ type Quote = {
   order_completed_by: string | null
   tax_completed_by: string | null
   tax_invoice_date: string | null
+  purchase_order_at: string | null
+  tax_invoice_completed_at: string | null
   fail_reason: string | null
   quote_items: QuoteItem[] | null
   company_name: string
@@ -147,7 +149,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const loadData = async () => {
     const { data: qs } = await supabase
       .from('quotes')
-      .select('quote_id, quote_number, quote_date, total_supply, total_profit, profit_rate, status, quote_type, customer_id, dealer_id, pdf_url, shipping_date, order_memo, order_completed_by, tax_completed_by, tax_invoice_date, fail_reason, quote_items(product_name, price_list(model_jp))')
+      .select('quote_id, quote_number, quote_date, total_supply, total_profit, profit_rate, status, quote_type, customer_id, dealer_id, pdf_url, shipping_date, order_memo, order_completed_by, tax_completed_by, tax_invoice_date, fail_reason, purchase_order_at, tax_invoice_completed_at, quote_items(product_name, row_kind, price_list(model_jp))')
       .eq('engineer_id', engineerId)
       .order('created_at', { ascending: false })
     const list = (qs ?? []) as any[]
@@ -197,9 +199,13 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
     : periodRange(fy, unit, sel)
   const dateFiltered = quotes.filter(q => q.quote_date >= rangeStart && q.quote_date <= rangeEnd)
   const quotedAmt = dateFiltered.reduce((s, q) => s + (q.total_supply || 0), 0)
-  // 수주 금액: 실적 현황과 동일 — 상태가 ['수주','매출완료'] 인 건의 total_supply 합.
-  const orderedAmt = dateFiltered.filter(q => ['수주', '매출완료'].includes(q.status)).reduce((s, q) => s + (q.total_supply || 0), 0)
-  const revenueQuotes = dateFiltered.filter(q => q.status === '매출완료')
+  // 기간을 재는 날짜가 지표마다 다르다(실적 현황과 같은 규칙).
+  //   견적 제출 — quote_date / 수주 — purchase_order_at / 매출 — tax_invoice_completed_at
+  // 처리 시각이 비어 있는 건은 그 지표의 어느 기간에도 잡히지 않는다.
+  const inRange = (ts: string | null) => !!ts && ts.slice(0, 10) >= rangeStart && ts.slice(0, 10) <= rangeEnd
+  const orderedQuotes = quotes.filter(q => isOrdered(q.status) && inRange(q.purchase_order_at))
+  const orderedAmt = orderedQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
+  const revenueQuotes = quotes.filter(q => q.status === REVENUE_STATUS && inRange(q.tax_invoice_completed_at))
   const revenueAmt = revenueQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
   const profitAmt = revenueQuotes.reduce((s, q) => s + (q.total_profit || 0), 0)
   const profitRate = revenueAmt > 0 ? (profitAmt / revenueAmt * 100) : null
@@ -442,7 +448,8 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                 const profitColor = profitConfirmed ? '#15803d' : TEXT
                 const profitRateColor = profitConfirmed ? ((q.profit_rate || 0) >= 40 ? '#15803d' : ORANGE) : GRAY
                 const itemNames = q.quote_items && q.quote_items.length > 0
-                  ? q.quote_items.map(i => i.price_list?.model_jp || i.product_name).filter(Boolean).join(', ')
+                  // 할인은 품목이 아니라 총액 차감이라 목록에서 뺀다.
+                  ? q.quote_items.filter(i => i.row_kind !== 'discount').map(i => i.price_list?.model_jp || i.product_name).filter(Boolean).join(', ')
                   : '-'
                 const showOrderInfo = ['주문완료', '세금계산서 요청', '매출완료'].includes(q.status)
                 return (

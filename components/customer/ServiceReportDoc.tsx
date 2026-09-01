@@ -65,7 +65,8 @@ export default function ServiceReportDoc({ service, device, customer, contact, e
               <Text style={{ fontSize: 8, color: '#555', fontFamily, marginTop: 2 }}>(http://www.accretechkorea.com)</Text>
             </View>
             <View style={{ flex: 1, alignItems: 'flex-end' }}>
-              <Image src="/quotelogo.png" style={{ width: 110, height: 26 }} />
+              {/* 높이는 로고 원본 비율(6.4:1)에 맞춘 값이다 — 110 ÷ 6.4. */}
+              <Image src="/pdflogo.png" style={{ width: 110, height: 17.19 }} />
             </View>
           </View>
 
