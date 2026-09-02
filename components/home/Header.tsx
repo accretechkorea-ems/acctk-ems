@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { HOME_STATE_KEY } from '@/lib/home'
 import { useOutsideClick } from '@/hooks/useOutsideClick'
 import {
-  canViewCustomers, canViewDashboard, canViewQuote, canViewPipeline,
+  canViewCustomers, canViewDashboard, canViewQuote, canViewPipeline, canViewLeads,
   canViewSalesMgmt, canViewAdmin, canViewAll, type EngineerLike, type TeamPerm,
 } from '@/lib/permissions'
 import { loadTeamPerms } from '@/lib/teamPerms'
@@ -149,8 +149,8 @@ export default function Header() {
     // 자주 쓰는 세 화면이라 그룹으로 묶지 않고 한 번에 열리게 둔다.
     { label: '견적서', canAccess: canViewQuote, path: '/quote' },
     { label: '영업 현황', canAccess: canViewPipeline, path: '/pipeline' },
-    // 리드는 영업 업무라 발주·재고(영업관리 권한)와 달리 영업 현황과 같은 권한으로 연다.
-    { label: '리드', canAccess: canViewPipeline, path: '/leads' },
+    // 리드 전용 플래그. hasPerm 이 superadmin 을 먼저 통과시키므로 관리자는 팀 플래그와 무관하게 보인다.
+    { label: '리드', canAccess: canViewLeads, path: '/leads' },
     {
       label: '영업관리',
       children: [

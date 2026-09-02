@@ -6,7 +6,8 @@ import { createClient } from '@/lib/supabase/client'
 import { canViewAdmin, isSuperAdmin } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPerms'
 import AccessGate from '@/components/common/AccessGate'
-import { OFFICES } from '@/lib/offices'
+import { useOffices, selectableOffices, invalidateOffices, type Office } from '@/lib/offices'
+import { geocodeAddress } from '@/lib/geocode'
 import { SALES_STATUS_COLORS, ROLE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import { useToast } from '@/components/common/Toast'
 import { notifyDeleteCompleted } from '@/lib/quoteMutations'
@@ -63,13 +64,14 @@ type Team = {
   display_order: number
 } & Record<TeamPermField, boolean | null>
 
-// teams 의 권한 플래그 6개. 라벨은 헤더 메뉴 이름과 같게 둔다.
+// teams 의 권한 플래그 7개. 라벨은 헤더 메뉴 이름과 같게 둔다.
 // RLS 함수 has_team_perm() 과 lib/permissions.ts 가 보는 컬럼이 바로 이것들이다.
 const TEAM_PERM_FIELDS = [
   { key: 'can_view_customers',  label: '고객사',   desc: '고객사 현황 · 20 수리등록' },
   { key: 'can_view_dashboard',  label: '대시보드', desc: '20·80 대시보드 · 활동 현황' },
   { key: 'can_view_quote',      label: '견적서',   desc: '견적서 작성·조회' },
   { key: 'can_view_pipeline',   label: '영업 현황', desc: '영업기회 파이프라인' },
+  { key: 'can_view_leads',      label: '리드',     desc: '배정받은 대리점 리드 처리' },
   { key: 'can_view_sales_mgmt', label: '영업관리', desc: '발주관리 · 재고관리' },
   { key: 'can_view_admin',      label: '관리자',   desc: '실적 현황 · 유지보수' },
 ] as const
@@ -78,11 +80,13 @@ type TeamPermForm = Record<TeamPermField, boolean>
 
 const EMPTY_TEAM_PERM: TeamPermForm = {
   can_view_customers: false, can_view_dashboard: false, can_view_quote: false,
-  can_view_pipeline: false, can_view_sales_mgmt: false, can_view_admin: false,
+  can_view_pipeline: false, can_view_leads: false, can_view_sales_mgmt: false, can_view_admin: false,
 }
-// 팀 관리 표의 열 폭 — 팀 이름(남는 폭) · 권한 6칸(고정) · 삭제(고정).
+// 팀 관리 표의 열 폭 — 팀 이름(남는 폭) · 권한 7칸(고정) · 삭제(고정).
 // 권한 칸이 고정이라 모든 행에서 같은 x 에 놓여 팀끼리 비교된다.
-const TEAM_GRID = 'minmax(120px, 1fr) repeat(6, 84px) 76px'
+const TEAM_GRID = 'minmax(120px, 1fr) repeat(7, 84px) 76px'
+// 사무실 표 — 코드·이름·주소(남는 폭)·좌표·순서·사용·버튼.
+const OFFICE_GRID = '90px 80px minmax(160px, 1fr) 170px 48px 48px 150px'
 
 const teamPermOf = (t: Team): TeamPermForm =>
   TEAM_PERM_FIELDS.reduce((acc, f) => ({ ...acc, [f.key]: t[f.key] === true }), {} as TeamPermForm)
@@ -153,6 +157,18 @@ function AdminPageInner() {
 
   // 팀 관리
   const [showTeamModal, setShowTeamModal] = useState(false)
+
+  // ── 사무실 관리 ──
+  // 값은 offices 테이블이 정본이다. 직원 등록·수정의 사무실 드롭다운도 같은 목록을 쓴다.
+  const { offices, loading: officesLoading } = useOffices()
+  const [officeList, setOfficeList] = useState<Office[]>([])
+  const [showOfficeModal, setShowOfficeModal] = useState(false)
+  const [officeSaving, setOfficeSaving] = useState(false)
+  const [officeEditing, setOfficeEditing] = useState<Office | null>(null)   // null 이면 추가
+  const [officeAddOpen, setOfficeAddOpen] = useState(false)
+  const emptyOfficeForm = { code: '', label: '', address: '', latitude: '', longitude: '', sort_order: '0' }
+  const [officeForm, setOfficeForm] = useState(emptyOfficeForm)
+  const [geoState, setGeoState] = useState<{ busy: boolean; message: string }>({ busy: false, message: '' })
   const [teamsList, setTeamsList] = useState<Team[]>([])
   const [teamLoading, setTeamLoading] = useState(false)
   const [newTeamName, setNewTeamName] = useState('')
@@ -578,7 +594,104 @@ function AdminPageInner() {
     </div>
   )
 
-  // 체크박스 하나를 누르면 그 팀의 권한 6개를 통째로 다시 저장한다(저장 버튼 없음).
+  // 훅이 읽어 온 목록을 화면 상태로 옮겨 둔다. 저장 뒤에는 fetchOffices 로 다시 읽는다.
+  useEffect(() => { setOfficeList(offices) }, [offices])
+
+  /** 저장 뒤 캐시를 버리고 다시 읽는다 — 다른 화면(동선·업체 카드)도 새로고침하면 새 값을 본다. */
+  const fetchOffices = async () => {
+    invalidateOffices()
+    const { data } = await supabase
+      .from('offices')
+      .select('office_id, code, label, address, latitude, longitude, sort_order, is_active')
+      .order('sort_order').order('code')
+    setOfficeList((data ?? []) as Office[])
+  }
+
+  const openOfficeAdd = () => {
+    setOfficeEditing(null)
+    setOfficeForm(emptyOfficeForm)
+    setGeoState({ busy: false, message: '' })
+    setOfficeAddOpen(true)
+  }
+  const openOfficeEdit = (o: Office) => {
+    setOfficeEditing(o)
+    setOfficeForm({
+      code: o.code, label: o.label, address: o.address,
+      latitude: o.latitude == null ? '' : String(o.latitude),
+      longitude: o.longitude == null ? '' : String(o.longitude),
+      sort_order: String(o.sort_order),
+    })
+    setGeoState({ busy: false, message: '' })
+    setOfficeAddOpen(true)
+  }
+  const closeOfficeForm = () => {
+    setOfficeAddOpen(false)
+    setOfficeEditing(null)
+    setOfficeForm(emptyOfficeForm)
+    setGeoState({ busy: false, message: '' })
+  }
+
+  /** 주소를 좌표로 바꿔 입력칸에 채운다. 실패하면 직접 입력하도록 안내만 남긴다. */
+  const runGeocode = async () => {
+    const address = officeForm.address.trim()
+    if (!address) { setGeoState({ busy: false, message: '주소를 먼저 입력해주세요.' }); return }
+    setGeoState({ busy: true, message: '' })
+    try {
+      const { latitude, longitude } = await geocodeAddress(address)
+      setOfficeForm(f => ({ ...f, latitude: String(latitude), longitude: String(longitude) }))
+      setGeoState({ busy: false, message: `좌표를 찾았습니다 — ${latitude}, ${longitude}. 저장 전에 확인해주세요.` })
+    } catch (e) {
+      setGeoState({ busy: false, message: (e as Error).message + ' 좌표를 직접 입력해주세요.' })
+    }
+  }
+
+  const callOffice = async (payload: Record<string, unknown>, okMsg: string) => {
+    setOfficeSaving(true)
+    try {
+      const res = await fetch('/api/office', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { toast.error(json?.error || '저장하지 못했습니다.'); return false }
+      await fetchOffices()
+      toast.success(okMsg)
+      return true
+    } finally {
+      setOfficeSaving(false)
+    }
+  }
+
+  const saveOffice = async () => {
+    const payload = {
+      action: officeEditing ? 'update' : 'create',
+      officeId: officeEditing?.office_id,
+      code: officeForm.code,
+      label: officeForm.label,
+      address: officeForm.address,
+      latitude: officeForm.latitude,
+      longitude: officeForm.longitude,
+      sort_order: Number(officeForm.sort_order),
+    }
+    const ok = await callOffice(payload, officeEditing ? '사무실을 수정했습니다.' : '사무실을 추가했습니다.')
+    if (ok) closeOfficeForm()
+  }
+
+  const toggleOfficeActive = async (o: Office) => {
+    if (o.is_active) {
+      const ok = await confirmDialog({
+        title: '사무실 비활성화',
+        message: `${o.label} 사무실을 비활성화합니다. 선택 목록에서 사라지지만 기존 데이터의 표시는 그대로 남습니다.`,
+        confirmText: '비활성화',
+        variant: 'danger',
+      })
+      if (!ok) return
+      await callOffice({ action: 'deactivate', officeId: o.office_id }, '비활성화했습니다.')
+    } else {
+      await callOffice({ action: 'activate', officeId: o.office_id }, '다시 사용하도록 바꿨습니다.')
+    }
+  }
+
+  // 체크박스 하나를 누르면 그 팀의 권한 7개를 통째로 다시 저장한다(저장 버튼 없음).
   // 쿼리·에러 처리는 종전과 같고, 어떤 값을 보낼지만 호출부가 정한다.
   const handleSaveTeamPerm = async (team: Team, perm: TeamPermForm) => {
     setSavingTeamId(team.id)
@@ -711,13 +824,8 @@ function AdminPageInner() {
   const totalAllOrder = activeEngineers.reduce((s, e) => s + (getTarget(e.engineer_id)?.order_target_amount || 0), 0)
 
   return (
-    <div style={{ background: PAGE_BG, minHeight: '100vh', padding: 24 }}>
+    <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '32px 24px 24px' }}>
       <div style={{ maxWidth: 900, margin: '0 auto' }}>
-
-        <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: TEXT, margin: 0 }}>⚙️ 관리자</h1>
-          <p style={{ fontSize: 13, color: GRAY, marginTop: 6 }}>시스템 운영 및 유지보수 기능</p>
-        </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
 
@@ -751,6 +859,18 @@ function AdminPageInner() {
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>직원 등록, 정보 수정, 관리자 권한, 계정 삭제를 관리합니다.</div>
             <button
               onClick={() => { setShowEngineerModal(true); fetchEngineers(); fetchTeams() }}
+              disabled={!isSuperAdmin(currentEngineer)}
+              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
+              관리하기
+            </button>
+          </div>
+
+          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}` }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>🏢</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>사무실 관리</div>
+            <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>사무실 주소와 좌표를 관리합니다. 길찾기 출발지·동선 지도·직원 소속이 이 값을 함께 씁니다.</div>
+            <button
+              onClick={() => { setShowOfficeModal(true); fetchOffices() }}
               disabled={!isSuperAdmin(currentEngineer)}
               style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
               관리하기
@@ -1131,7 +1251,7 @@ function AdminPageInner() {
                 <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>사무실</div>
                 <select value={addForm.office} onChange={e => setAddForm(p => ({ ...p, office: e.target.value }))} style={inp}>
                   <option value="">사무실 미지정</option>
-                  {OFFICES.map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
+                  {selectableOffices(officeList, addForm.office).map(o => <option key={o.code} value={o.code}>{o.label}{o.is_active ? '' : ' (비활성)'}</option>)}
                 </select>
               </div>
               <div>
@@ -1193,7 +1313,7 @@ function AdminPageInner() {
                 <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>사무실</div>
                 <select value={editForm.office} onChange={e => setEditForm(p => ({ ...p, office: e.target.value }))} style={inp}>
                   <option value="">사무실 미지정</option>
-                  {OFFICES.map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
+                  {selectableOffices(officeList, editForm.office).map(o => <option key={o.code} value={o.code}>{o.label}{o.is_active ? '' : ' (비활성)'}</option>)}
                 </select>
               </div>
               <div>
@@ -1325,6 +1445,117 @@ function AdminPageInner() {
       )}
 
       {/* ── 팀 관리 모달 ── */}
+      {showOfficeModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🏢 사무실 관리</div>
+              <button onClick={() => { setShowOfficeModal(false); closeOfficeForm() }} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
+            </div>
+
+            {/* 추가·수정 폼 — 어쩌다 한 번 쓰므로 접어 둔다. */}
+            {!officeAddOpen ? (
+              <button onClick={openOfficeAdd} disabled={!isSuperAdmin(currentEngineer)}
+                style={{ padding: '9px 16px', background: '#f3f4f6', color: TEXT, border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 16, alignSelf: 'flex-start' }}>
+                + 새 사무실 추가
+              </button>
+            ) : (
+              <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: TEXT, marginBottom: 12 }}>
+                  {officeEditing ? `${officeEditing.label} 수정` : '새 사무실'}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>코드 *</div>
+                    <input value={officeForm.code} disabled={!!officeEditing}
+                      onChange={e => setOfficeForm(f => ({ ...f, code: e.target.value }))}
+                      placeholder="예: busan"
+                      style={{ ...inp, background: officeEditing ? '#f3f4f6' : '#fff', color: officeEditing ? GRAY : TEXT }} />
+                    <div style={{ fontSize: 11, color: GRAY, marginTop: 4, lineHeight: 1.6 }}>
+                      {officeEditing
+                        ? '코드는 직원 소속(engineers.office)이 참조하는 값이라 수정할 수 없습니다.'
+                        : '영문 소문자·숫자·하이픈. 만든 뒤에는 바꿀 수 없습니다.'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>이름 *</div>
+                    <input value={officeForm.label} onChange={e => setOfficeForm(f => ({ ...f, label: e.target.value }))} placeholder="예: 부산" style={inp} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>표시 순서</div>
+                    <input type="number" value={officeForm.sort_order} onChange={e => setOfficeForm(f => ({ ...f, sort_order: e.target.value }))} style={inp} />
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>주소 *</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input value={officeForm.address} onChange={e => setOfficeForm(f => ({ ...f, address: e.target.value }))}
+                      placeholder="도로명 또는 지번 주소" style={{ ...inp, flex: 1 }} />
+                    <button onClick={runGeocode} disabled={geoState.busy}
+                      style={{ padding: '9px 14px', background: geoState.busy ? '#9ca3af' : '#f3f4f6', color: geoState.busy ? '#fff' : TEXT, border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: geoState.busy ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+                      {geoState.busy ? '변환 중...' : '좌표 찾기'}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginTop: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>위도</div>
+                    <input value={officeForm.latitude} onChange={e => setOfficeForm(f => ({ ...f, latitude: e.target.value }))} placeholder="-90 ~ 90" style={inp} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>경도</div>
+                    <input value={officeForm.longitude} onChange={e => setOfficeForm(f => ({ ...f, longitude: e.target.value }))} placeholder="-180 ~ 180" style={inp} />
+                  </div>
+                </div>
+                {geoState.message && (
+                  <div style={{ fontSize: 12, color: GRAY, marginTop: 8, lineHeight: 1.6 }}>{geoState.message}</div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+                  <button onClick={closeOfficeForm} disabled={officeSaving}
+                    style={{ padding: '9px 16px', background: '#fff', color: GRAY, borderRadius: 8, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+                  <button onClick={saveOffice} disabled={officeSaving}
+                    style={{ padding: '9px 18px', background: officeSaving ? '#9ca3af' : BLUE, color: '#fff', borderRadius: 8, border: 'none', cursor: officeSaving ? 'default' : 'pointer', fontWeight: 700, fontSize: 13 }}>
+                    {officeSaving ? '저장 중...' : '저장'}</button>
+                </div>
+              </div>
+            )}
+
+            {/* 목록 */}
+            <div style={{ overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: OFFICE_GRID, alignItems: 'center', gap: 8, padding: '10px 14px', background: '#f8fafc', borderBottom: `1px solid ${BORDER}`, fontSize: 11, fontWeight: 700, color: GRAY }}>
+                <div>코드</div><div>이름</div><div>주소</div><div>좌표</div><div>순서</div><div>사용</div><div />
+              </div>
+              {officesLoading && officeList.length === 0 ? (
+                <div style={{ padding: 40, textAlign: 'center', color: GRAY, fontSize: 13 }}>불러오는 중...</div>
+              ) : officeList.length === 0 ? (
+                <div style={{ padding: 40, textAlign: 'center', color: GRAY, fontSize: 13 }}>등록된 사무실이 없습니다</div>
+              ) : officeList.map(o => (
+                <div key={o.office_id} style={{ display: 'grid', gridTemplateColumns: OFFICE_GRID, alignItems: 'center', gap: 8, padding: '11px 14px', borderBottom: `1px solid ${BORDER}`, fontSize: 12, color: o.is_active ? TEXT : GRAY }}>
+                  <div style={{ fontWeight: 700 }}>{o.code}</div>
+                  <div>{o.label}</div>
+                  <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={o.address}>{o.address}</div>
+                  <div style={{ color: o.latitude == null ? '#9ca3af' : undefined }}>
+                    {o.latitude == null || o.longitude == null ? '좌표 없음' : `${o.latitude}, ${o.longitude}`}
+                  </div>
+                  <div>{o.sort_order}</div>
+                  <div>{o.is_active ? '사용' : '중지'}</div>
+                  <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                    <button onClick={() => openOfficeEdit(o)} disabled={officeSaving}
+                      style={{ padding: '5px 10px', background: '#f3f4f6', color: TEXT, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>수정</button>
+                    <button onClick={() => toggleOfficeActive(o)} disabled={officeSaving}
+                      style={{ padding: '5px 10px', background: o.is_active ? DANGER : '#f3f4f6', color: o.is_active ? '#fff' : TEXT, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                      {o.is_active ? '비활성화' : '다시 사용'}</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showTeamModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           {/* 팀 목록이 본체라 다른 모달보다 넓게 쓴다(이 모달에만 적용) */}

@@ -79,6 +79,18 @@ export const LEAD_MANUAL_STATUSES = LEAD_STATUSES.filter(s => s !== '전환완�
 export const LEAD_CONVERT_ACTIVITY_TYPE = '방문미팅'
 
 export const LEAD_STATUS_NEW = '신규'
+export const LEAD_STATUS_HOLD = '보류'
+
+/** 리드 번호 접두 — 'LD-26-' 처럼 연도 뒤 2자리까지 붙는다. */
+export const LEAD_NO_PREFIX = 'LD'
+
+/**
+ * 알림 문구 앞에 붙이는 리드 번호 표시.
+ * 번호가 없는 리드(발급 실패)는 대괄호째 빼서 문장이 어색해지지 않게 한다.
+ *   있음: '[LD-26-001] 신규 리드가 등록되었습니다.'
+ *   없음: '신규 리드가 등록되었습니다.'
+ */
+export const leadNoTag = (leadNo: string | null | undefined) => (leadNo ? `[${leadNo}] ` : '')
 export const LEAD_STATUS_CONVERTED = '전환완료'
 
 export const DEFAULT_COUNTRY = 'South Korea'

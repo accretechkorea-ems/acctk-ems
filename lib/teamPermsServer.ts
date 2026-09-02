@@ -17,10 +17,11 @@ type TeamRow = {
   can_view_pipeline: boolean | null
   can_view_sales_mgmt: boolean | null
   can_view_admin: boolean | null
+  can_view_leads: boolean | null
 }
 
 const COLUMNS =
-  'name, can_view_customers, can_view_dashboard, can_view_quote, can_view_pipeline, can_view_sales_mgmt, can_view_admin'
+  'name, can_view_customers, can_view_dashboard, can_view_quote, can_view_pipeline, can_view_sales_mgmt, can_view_admin, can_view_leads'
 
 const toPerm = (r: TeamRow): TeamPerm => ({
   customers: r.can_view_customers === true,
@@ -29,6 +30,7 @@ const toPerm = (r: TeamRow): TeamPerm => ({
   pipeline: r.can_view_pipeline === true,
   salesMgmt: r.can_view_sales_mgmt === true,
   admin: r.can_view_admin === true,
+  leads: r.can_view_leads === true,
 })
 
 /** teams 전체를 읽어 팀 이름 → 플래그 맵으로 돌려준다. 실패하면 빈 맵(= 전원 권한 없음). */

@@ -9,10 +9,13 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { isSuperAdmin } from '@/lib/permissions'
+import { canViewLeads, isSuperAdmin } from '@/lib/permissions'
+import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
 import { monthToDate } from '@/components/customer/opportunity'
+import { adminEngineerIds, notifyLead } from '@/lib/leadNotify'
 import {
-  LEAD_MANUAL_STATUSES, LEAD_STATUS_CONVERTED, LEAD_CONVERT_ACTIVITY_TYPE, MAX_LEN,
+  LEAD_MANUAL_STATUSES, LEAD_STATUS_CONVERTED, LEAD_STATUS_HOLD,
+  LEAD_CONVERT_ACTIVITY_TYPE, MAX_LEN, leadNoTag,
 } from '@/lib/leadOptions'
 
 const supabaseAdmin = createClient(
@@ -24,6 +27,7 @@ const bad = (message: string, status = 400) => NextResponse.json({ error: messag
 
 type LeadRow = {
   lead_id: number
+  lead_no: string | null
   customer_company: string
   interest_product: string
   expected_purchase: string | null
@@ -42,7 +46,7 @@ export async function POST(req: Request) {
 
   const { data: caller, error: callerErr } = await supabase
     .from('engineers')
-    .select('engineer_id, name, permission_level')
+    .select('engineer_id, name, permission_level, teams')
     .eq('email', user.email!)
     .single()
   if (callerErr) console.error('[lead-manage] caller lookup failed', { email: user.email, error: callerErr })
@@ -62,13 +66,16 @@ export async function POST(req: Request) {
   // 권한 판정은 화면이 보낸 값이 아니라 DB 의 현재 값으로 한다.
   const { data: lead, error: leadErr } = await supabaseAdmin
     .from('leads')
-    .select('lead_id, customer_company, interest_product, expected_purchase, meeting_note, request_note, status, assigned_to, converted_opportunity_id, created_at')
+    .select('lead_id, lead_no, customer_company, interest_product, expected_purchase, meeting_note, request_note, status, assigned_to, converted_opportunity_id, created_at')
     .eq('lead_id', leadId)
     .single<LeadRow>()
   if (leadErr || !lead) return bad('리드를 찾을 수 없습니다.', 404)
 
   const admin = isSuperAdmin(caller)
-  const assignee = lead.assigned_to != null && lead.assigned_to === caller.engineer_id
+  // 소속 팀에 리드 권한이 있는지 — 배정만으로 통과시키면 나중에 팀 플래그를 꺼도
+  // 과거에 배정받은 건을 계속 만질 수 있다. superadmin 은 hasPerm 이 먼저 통과시킨다.
+  const hasLeadPerm = canViewLeads(attachTeamPerm(await loadTeamPerms(), caller))
+  const assignee = hasLeadPerm && lead.assigned_to != null && lead.assigned_to === caller.engineer_id
   // 관리자도 담당자도 아니면 이 리드에 손댈 수 없다(존재 여부도 알려주지 않는다).
   if (!admin && !assignee) return bad('Forbidden', 403)
 
@@ -97,7 +104,20 @@ export async function POST(req: Request) {
 
     const { error } = await supabaseAdmin.from('leads').update({ assigned_to: assignedTo, ...touch }).eq('lead_id', leadId)
     if (error) return fail('assign update failed', error)
-    // 새 담당자가 생겼을 때만 그 사람에게 알린다(③단계에서 붙인다).
+
+    // 새 담당자가 생겼을 때만 그 사람에게 알린다.
+    //   null → A : A 에게   /   A → B : B 에게만   /   A → null : 없음   /   A → A : 없음
+    // 회수·교체 때 이전 담당자에게 보내지 않는 것은, 관리자가 조정 중일 뿐인 경우가 많고
+    // "당신 것이 아니게 되었다"는 알림이 받는 사람에게 득이 없기 때문이다.
+    if (assignedTo !== null && assignedTo !== lead.assigned_to) {
+      await notifyLead({
+        engineerIds: [assignedTo],
+        title: '리드 배정',
+        message: `${leadNoTag(lead.lead_no)}리드가 배정되었습니다.`,
+        type: 'lead_assigned',
+        leadId,
+      })
+    }
     return NextResponse.json({ success: true, assignedTo })
   }
 
@@ -110,6 +130,19 @@ export async function POST(req: Request) {
 
     const { error } = await supabaseAdmin.from('leads').update({ status, ...touch }).eq('lead_id', leadId)
     if (error) return fail('status update failed', error)
+
+    // 담당자가 보류로 돌린 것만 관리자에게 알린다.
+    // 관리자가 직접 바꾼 경우(admin)는 본인이 한 일이라 보내지 않고,
+    // 이미 보류인 건을 다시 보류로 저장하는 경우도 보내지 않는다.
+    if (!admin && status === LEAD_STATUS_HOLD && lead.status !== LEAD_STATUS_HOLD) {
+      await notifyLead({
+        engineerIds: await adminEngineerIds(),
+        title: '리드 보류',
+        message: `${leadNoTag(lead.lead_no)}리드가 보류 처리되었습니다.`,
+        type: 'lead_held',
+        leadId,
+      })
+    }
     return NextResponse.json({ success: true, status })
   }
 

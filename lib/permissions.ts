@@ -17,6 +17,7 @@ export type TeamPerm = {
   pipeline: boolean     // can_view_pipeline   — 영업 현황
   salesMgmt: boolean    // can_view_sales_mgmt — 영업관리 (발주·재고)
   admin: boolean        // can_view_admin      — 관리자 (실적 현황 · 유지보수)
+  leads: boolean        // can_view_leads       — 리드 (배정받은 리드 처리)
 }
 
 // 판정 함수에 넘기는 최소 형태. 실제 engineer 객체(추가 필드 다수)를 그대로 넘길 수 있도록 느슨하게 둔다.
@@ -59,6 +60,12 @@ export function canViewSalesMgmt(e?: EngineerLike | null): boolean { return hasP
 
 /** 관리자 — 실적 현황 · 유지보수 */
 export function canViewAdmin(e?: EngineerLike | null): boolean { return hasPerm(e, 'admin') }
+
+/**
+ * 리드 — 대리점이 등록한 리드를 다룰 수 있는 팀.
+ * 이 권한만으로는 배정받은 건만 볼 수 있고, 전체 조회·배정·삭제는 superadmin 만 한다.
+ */
+export function canViewLeads(e?: EngineerLike | null): boolean { return hasPerm(e, 'leads') }
 
 /**
  * 로그인만 하면 되는 화면(건의사항 · 본인 페이지).

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { loadKakaoMap } from '@/lib/loadKakaoMap'
 import { createClient } from '@/lib/supabase/client'
 import type { RouteStop } from '@/lib/routeMap'
-import { getOffice } from '@/lib/offices'
+import { useOffices, findOffice } from '@/lib/offices'
 
 // 엔지니어 동선 지도(전체 화면 오버레이). 방문지 마커 + 연결선 + 사무실 마커.
 // 연결선 모드는 지도 안 토글로 전환한다(기본 visits, 열 때마다 초기화):
@@ -61,7 +61,10 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
   const [nearbyFailed, setNearbyFailed] = useState(false) // customers 조회 실패 시 토글 비활성화
   const [mapReady, setMapReady] = useState(false)
 
-  const officeInfo = getOffice(officeCode) // 소속 사무실(없으면 undefined)
+  // 사무실은 offices 테이블이 정본이다. 비활성 사무실도 findOffice 로 찾아 마커를 그린다
+  // (지난 활동이 그 사무실 소속일 수 있으므로).
+  const { offices } = useOffices()
+  const officeInfo = findOffice(offices, officeCode) // 소속 사무실(없으면 undefined)
   const isOffice = mode === 'office' && !!officeInfo
   // 같은 날 인접 구간이 하나라도 있으면 실선이 그려지므로 범례를 노출(visits 모드 전용).
   const hasSameDaySegment = stops.some((s, i) => i > 0 && stops[i - 1].date === s.date)
@@ -98,7 +101,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
 
       // 초기 범위: 방문지 + 사무실(있으면) 을 모두 포함. 지점이 하나면 센터만 잡고 확대.
       const boundsPoints = stops.map(s => ({ lat: s.lat, lng: s.lng }))
-      if (officeInfo) boundsPoints.push({ lat: officeInfo.lat, lng: officeInfo.lng })
+      if (officeInfo?.latitude != null && officeInfo.longitude != null) boundsPoints.push({ lat: officeInfo.latitude, lng: officeInfo.longitude })
       if (boundsPoints.length === 1) {
         map.setCenter(new kakao.maps.LatLng(boundsPoints[0].lat, boundsPoints[0].lng))
         map.setLevel(5)
@@ -267,7 +270,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
         badge.style.cssText = 'width:22px;height:22px;border-radius:6px;background:#374151;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center'
         badge.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>'
         wrap.append(pill, badge)
-        const officeOv = new kakao.maps.CustomOverlay({ position: new kakao.maps.LatLng(officeInfo.lat, officeInfo.lng), yAnchor: 1, zIndex: 4, content: wrap })
+        const officeOv = new kakao.maps.CustomOverlay({ position: new kakao.maps.LatLng(officeInfo.latitude ?? 0, officeInfo.longitude ?? 0), yAnchor: 1, zIndex: 4, content: wrap })
         officeOv.setMap(map)
         officeOverlayRef.current = officeOv
       }
@@ -298,7 +301,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
         polylinesRef.current = []
         if (m === 'office' && officeInfo) {
           // office 모드: 날짜별로 사무실 → 그날 방문지들(순서대로) → 사무실. 날짜가 다르면 독립 경로.
-          const office = { lat: officeInfo.lat, lng: officeInfo.lng }
+          const office = { lat: officeInfo.latitude ?? 0, lng: officeInfo.longitude ?? 0 }
           const byDate = new Map<string, RouteStop[]>()
           for (const s of stops) {
             const arr = byDate.get(s.date)

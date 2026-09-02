@@ -18,6 +18,7 @@ type TeamRow = {
   can_view_pipeline: boolean | null
   can_view_sales_mgmt: boolean | null
   can_view_admin: boolean | null
+  can_view_leads: boolean | null
 }
 
 // 진행 중인 요청을 공유해, 여러 화면이 동시에 떠도 조회는 한 번만 나간다.
@@ -30,6 +31,7 @@ const toPerm = (r: TeamRow): TeamPerm => ({
   pipeline: r.can_view_pipeline === true,
   salesMgmt: r.can_view_sales_mgmt === true,
   admin: r.can_view_admin === true,
+  leads: r.can_view_leads === true,
 })
 
 export function loadTeamPerms(): Promise<Map<string, TeamPerm>> {
@@ -38,7 +40,7 @@ export function loadTeamPerms(): Promise<Map<string, TeamPerm>> {
     const supabase = createClient()
     const { data, error } = await supabase
       .from('teams')
-      .select('name, can_view_customers, can_view_dashboard, can_view_quote, can_view_pipeline, can_view_sales_mgmt, can_view_admin')
+      .select('name, can_view_customers, can_view_dashboard, can_view_quote, can_view_pipeline, can_view_sales_mgmt, can_view_admin, can_view_leads')
     if (error) {
       // 실패하면 캐시를 비워 다음 호출에서 다시 시도한다. 그동안은 권한 없음으로 취급된다.
       console.error('[teamPerms] load failed', error)

@@ -63,8 +63,8 @@ export const WHITE_BUTTON_BG = '#f4f4f5'
 export const WHITE_BUTTON_TEXT = '#111113'
 export const RADIUS = 12
 
-// BASE_LAT/BASE_LNG(울산 사무실 좌표)는 lib/offices.ts 의 OFFICES 로 통합했다.
-export const BASE_NAME = '울산광역시 북구 명촌 7길 30'
+// 사무실 좌표·주소는 public.offices 테이블이 정본이다(lib/offices.ts 가 읽어 온다).
+
 
 export const inputStyle: CSSProperties = {
   width: '100%',

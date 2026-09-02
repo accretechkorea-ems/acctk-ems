@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState, Suspense, Fragment, type CSSProperties } 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { usePageGuard } from '@/hooks/usePageGuard'
-import { canViewPipeline, isSuperAdmin } from '@/lib/permissions'
+import { canViewLeads, isSuperAdmin } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPerms'
 import AccessGate from '@/components/common/AccessGate'
 import { useToast } from '@/components/common/Toast'
@@ -43,6 +43,7 @@ const leadStatusColor = (status: string): CategoryColor => {
 
 type Lead = {
   lead_id: number
+  lead_no: string | null
   partner_company: string; partner_name: string; partner_contact: string | null
   customer_company: string; industry: string; products: string
   address: string | null; city: string; country: string
@@ -92,7 +93,7 @@ function LeadsPageInner() {
   const searchParams = useSearchParams()
   const toast = useToast()
   const confirm = useConfirm()
-  const { engineer: me, loading: guardLoading, authorized } = usePageGuard(canViewPipeline)
+  const { engineer: me, loading: guardLoading, authorized } = usePageGuard(canViewLeads)
   // 리드 관리자 = superadmin. 그 밖에는 자기에게 배정된 건만 다루는 담당자다.
   const isAdmin = isSuperAdmin(me)
   const myEngineerId = me?.engineer_id ?? null
@@ -143,13 +144,13 @@ function LeadsPageInner() {
     return () => { cancelled = true }
   }, [authorized, supabase, isAdmin, myEngineerId])
 
-  // 담당자 후보 — 영업 현황 권한이 있는 재직자만.
+  // 담당자 후보 — 리드 권한이 있는 재직자만. 리드를 받을 수 없는 사람은 후보에 넣지 않는다.
   const [assignable, setAssignable] = useState<Engineer[]>([])
   useEffect(() => {
     let cancelled = false
     const run = async () => {
       const rows = await Promise.all(
-        engineers.filter(e => !e.resigned_date).map(async e => ({ e, ok: canViewPipeline(await withTeamPerm(e)) }))
+        engineers.filter(e => !e.resigned_date).map(async e => ({ e, ok: canViewLeads(await withTeamPerm(e)) }))
       )
       if (!cancelled) setAssignable(rows.filter(r => r.ok).map(r => r.e))
     }
@@ -288,10 +289,21 @@ function LeadsPageInner() {
     setPickedCustomer(null); setCustQuery('')
   }
 
-  // 메뉴는 영업 현황 권한자에게 열려 있지만, 실제 접근은 관리자이거나
-  // 배정받은 리드가 하나라도 있는 사람으로 좁힌다.
-  const noLeadAccess = !loading && !isAdmin && leads.length === 0
-  if (!authorized || noLeadAccess) return <AccessGate loading={guardLoading || loading} />
+  // 접근은 세 갈래다.
+  //   superadmin           → 통과(전체)
+  //   리드 권한 + 배정 있음 → 통과(자기 건)
+  //   리드 권한 + 배정 0건 → 잘못된 것이 아니라 아직 받은 일이 없는 상태이므로 문구를 달리한다
+  //   리드 권한 없음        → 권한 없음
+  if (!authorized) return <AccessGate loading={guardLoading} />
+  if (!loading && !isAdmin && leads.length === 0) {
+    return (
+      <AccessGate
+        loading={false}
+        title="배정된 리드가 없습니다"
+        message="담당으로 배정된 리드가 생기면 여기에 표시됩니다."
+      />
+    )
+  }
 
   return (
     <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '20px 24px 48px' }}>
@@ -317,7 +329,7 @@ function LeadsPageInner() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: HEAD_BG, borderBottom: `1px solid ${BORDER}` }}>
-                  {['등록일', '파트너사', '고객사', '관심제품', '담당자', '상태'].map(h => <th key={h} style={th}>{h}</th>)}
+                  {['번호', '등록일', '파트너사', '고객사', '관심제품', '담당자', '상태'].map(h => <th key={h} style={th}>{h}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -334,6 +346,8 @@ function LeadsPageInner() {
                         onMouseEnter={e => { if (!open) e.currentTarget.style.background = ROW_HOVER }}
                         onMouseLeave={e => { if (!open) e.currentTarget.style.background = '' }}
                       >
+                        {/* 번호가 없는 리드(발급 실패)는 자리를 비우지 않고 - 로 채운다 */}
+                        <td style={{ ...td, fontWeight: 700, color: lead.lead_no ? BLUE : FAINT }}>{lead.lead_no ?? '-'}</td>
                         <td style={{ ...td, color: MUTED }}>{lead.created_at.slice(0, 10)}</td>
                         <td style={{ ...td, fontWeight: 700 }}>{lead.partner_company}</td>
                         <td style={td}>{lead.customer_company}</td>
@@ -348,8 +362,9 @@ function LeadsPageInner() {
 
                       {open && (
                         <tr style={{ borderBottom: `1px solid ${BORDER}`, background: ROW_HOVER }}>
-                          <td colSpan={6} style={{ padding: '0 12px 14px' }}>
+                          <td colSpan={7} style={{ padding: '0 12px 14px' }}>
                             {/* ── 상세 ── */}
+                            <div style={{ fontSize: 11, color: FAINT, marginBottom: 8 }}>리드 번호 · {lead.lead_no ?? '없음'}</div>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginBottom: 12 }}>
                               <div>
                                 <div style={groupTitle}>파트너사</div>

@@ -6,11 +6,11 @@
 // 익명 사용자가 notifications 를 직접 건드릴 수 있으면 안 되기 때문이다.
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-import { canViewPipeline } from '@/lib/permissions'
-import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
+import { adminEngineerIds, notifyLead } from '@/lib/leadNotify'
 import {
   INDUSTRIES, INTEREST_PRODUCTS, COMPETITORS, BUDGET_STATUSES, PURCHASE_PERIODS,
   MAX_LEN, MEETING_NOTE_MIN, HONEYPOT_FIELD, EMAIL_RE, DEFAULT_COUNTRY,
+  LEAD_NO_PREFIX, leadNoTag,
 } from '@/lib/leadOptions'
 
 const supabaseAdmin = createClient(
@@ -22,6 +22,33 @@ type Body = Record<string, unknown>
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 const bad = (message: string) => NextResponse.json({ error: message }, { status: 400 })
+
+/**
+ * 그 해의 리드 번호 접두. 서버가 어느 시간대에 떠 있든 한국 기준 연도를 쓴다
+ * (UTC 서버라면 1월 1일 오전에 전년도 번호가 나갈 수 있어서 명시한다).
+ */
+function leadNoPrefix(): string {
+  const year = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric' }).format(new Date())
+  return `${LEAD_NO_PREFIX}-${year.slice(2)}-`
+}
+
+/**
+ * 그 해의 다음 번호. 뒷자리를 숫자로 파싱해 최댓값을 찾는다
+ * (문자열 max 로는 'LD-26-9' 가 'LD-26-10' 보다 커진다).
+ * 세 자리로 채우되 999 를 넘으면 자릿수가 자연히 늘어난다.
+ */
+async function nextLeadNo(prefix: string): Promise<string> {
+  const { data, error } = await supabaseAdmin
+    .from('leads')
+    .select('lead_no')
+    .like('lead_no', `${prefix}%`)
+  if (error) console.error('[lead] 번호 조회 실패', error)
+  const max = ((data ?? []) as { lead_no: string | null }[]).reduce((m, r) => {
+    const n = Number(String(r.lead_no ?? '').slice(prefix.length))
+    return Number.isInteger(n) && n > m ? n : m
+  }, 0)
+  return prefix + String(max + 1).padStart(3, '0')
+}
 
 /** 'YYYY-MM-DD' 인지, 그리고 실재하는 날짜인지(2026-02-30 같은 값 차단) 본다. */
 function isValidDate(s: string): boolean {
@@ -150,47 +177,56 @@ export async function POST(req: Request) {
     meeting_note: value.meeting_note,
   }
 
-  const { data: saved, error: insErr } = await supabaseAdmin
-    .from('leads')
-    .insert(row)
-    .select('lead_id')
-    .single()
-  if (insErr || !saved) {
-    console.error('[lead] insert failed', insErr)
+  // 번호를 붙여 넣는다. 동시에 들어온 두 요청이 같은 번호를 계산해도 unique 인덱스가
+  // 한쪽을 튕겨내므로, 튕긴 쪽은 다시 읽어 다음 번호를 받는다. 인덱스가 최종 방어선이다.
+  const prefix = leadNoPrefix()
+  type Saved = { lead_id: number; lead_no: string | null }
+  let saved: Saved | null = null
+  let conflicted = false
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const leadNo = await nextLeadNo(prefix)
+    const { data, error } = await supabaseAdmin
+      .from('leads')
+      .insert({ ...row, lead_no: leadNo })
+      .select('lead_id, lead_no')
+      .single<Saved>()
+    if (!error && data) { saved = data; break }
+    if (error?.code === '23505') {   // 번호가 겹쳤다 — 다시 계산해서 재시도
+      conflicted = true
+      console.error('[lead] 번호 충돌, 재시도', { attempt: attempt + 1, leadNo })
+      continue
+    }
+    console.error('[lead] insert failed', error)
+    return NextResponse.json({ error: '등록에 실패했습니다. 잠시 후 다시 시도해주세요.' }, { status: 500 })
+  }
+
+  // 다섯 번 모두 번호가 겹쳤다면 번호 없이 저장한다 — 리드 자체를 잃는 것보다 낫다.
+  if (!saved && conflicted) {
+    console.error('[lead] 번호 발급 5회 실패 — 번호 없이 저장한다', { prefix })
+    const { data, error } = await supabaseAdmin
+      .from('leads')
+      .insert(row)
+      .select('lead_id, lead_no')
+      .single<Saved>()
+    if (error || !data) {
+      console.error('[lead] insert failed', error)
+      return NextResponse.json({ error: '등록에 실패했습니다. 잠시 후 다시 시도해주세요.' }, { status: 500 })
+    }
+    saved = data
+  }
+  if (!saved) {
     return NextResponse.json({ error: '등록에 실패했습니다. 잠시 후 다시 시도해주세요.' }, { status: 500 })
   }
 
   // 알림은 부가 작업이다 — 실패해도 리드 저장을 되돌리지 않고 성공으로 응답한다.
-  try {
-    const teamPerms = await loadTeamPerms()
-    const { data: engineers, error: engErr } = await supabaseAdmin
-      .from('engineers')
-      .select('engineer_id, name, permission_level, teams, resigned_date')
-    if (engErr) throw engErr
-
-    type Row = { engineer_id: number; name: string | null; permission_level: string | null; teams: string | null; resigned_date: string | null }
-    const targets = ((engineers ?? []) as Row[]).filter(
-      e => !e.resigned_date && canViewPipeline(attachTeamPerm(teamPerms, e))
-    )
-
-    if (targets.length) {
-      const { error: notiErr } = await supabaseAdmin.from('notifications').insert(
-        targets.map(e => ({
-          engineer_id: e.engineer_id,
-          title: '신규 리드 등록',
-          message: `[${value.partner_company}] 이(가) [${value.customer_company}] 리드를 등록했습니다.`,
-          type: 'lead_created',
-          link: '/leads',
-          is_read: false,
-        }))
-      )
-      if (notiErr) throw notiErr
-    } else {
-      console.error('[lead] 알림 대상이 없습니다 — 영업 현황 권한을 가진 재직 직원 없음')
-    }
-  } catch (e) {
-    console.error('[lead] notification failed', { leadId: saved.lead_id, error: e })
-  }
+  // 등록 알림은 리드 관리자(재직 superadmin)에게만 간다. 담당자는 배정될 때 따로 받는다.
+  await notifyLead({
+    engineerIds: await adminEngineerIds(),
+    title: '신규 리드 등록',
+    message: `${leadNoTag(saved.lead_no)}신규 리드가 등록되었습니다.`,
+    type: 'lead_created',
+    leadId: saved.lead_id,
+  })
 
   return NextResponse.json({ success: true })
 }

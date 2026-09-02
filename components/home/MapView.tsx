@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { loadKakaoMap } from '@/lib/loadKakaoMap'
-import { geocodeAddress } from '@/lib/geocode'
 import {
   CARD_BG,
   PANEL_BG,
@@ -14,7 +13,7 @@ import {
   type Customer,
   type Device,
 } from '@/lib/home'
-import { OFFICES } from '@/lib/offices'
+import { loadOffices, activeOffices, type Office } from '@/lib/offices'
 import { CATEGORY_OPTIONS } from '@/lib/constants'
 
 type Props = {
@@ -57,13 +56,11 @@ export default function MapView({
   const [isMapReady, setIsMapReady] = useState(false)
   const restoredMapStateAppliedRef = useRef(false)
 
-  // 길찾기 출발지 — 사무실 공용 상수(lib/offices)에서 로드. name 은 주소(=출발지 이름).
-  // 동탄 좌표는 고정, 울산·구미는 init에서 주소를 지오코딩해 채운다(아래 로직 유지).
-  const originsRef = useRef<Record<string, { lat: number; lng: number; name: string }>>(
-    Object.fromEntries(
-      OFFICES.map(o => [o.code, { lat: o.lat, lng: o.lng, name: o.address }])
-    ) as Record<string, { lat: number; lng: number; name: string }>
-  )
+  // 길찾기 출발지 — offices 테이블이 정본이다. 지도를 만들 때 한 번 읽어 담아 둔다.
+  // 예전에는 여기서 울산·구미만 주소를 다시 지오코딩해 좌표를 덮어썼는데,
+  // 그 결과 같은 사무실인데 동선 지도와 길찾기가 다른 위치를 가리켰다. 이제 DB 좌표를 그대로 쓴다
+  // (좌표는 관리자 화면에서 주소를 저장할 때 지오코딩해 함께 저장한다).
+  const officesRef = useRef<Office[]>([])
 
   // HTML 특수문자 이스케이프 — innerHTML에 DB 데이터 삽입 시 XSS 방지
   const esc = (s: string | null | undefined): string =>
@@ -161,11 +158,15 @@ export default function MapView({
         return a
       }
 
-      const O = originsRef.current
       detailSlot.appendChild(detailBtn)
-      navRow.appendChild(makeNavLink(makeNavUrl(O.ulsan), '울산 출발'))
-      navRow.appendChild(makeNavLink(makeNavUrl(O.gumi), '구미 출발'))
-      navRow.appendChild(makeNavLink(makeNavUrl(O.dongtan), '동탄 출발'))
+      // 활성 사무실 전부를 sort_order 순으로. 좌표가 없는 곳은 길을 못 찾으므로 건너뛴다.
+      for (const o of activeOffices(officesRef.current)) {
+        if (o.latitude == null || o.longitude == null) continue
+        navRow.appendChild(makeNavLink(
+          makeNavUrl({ lat: o.latitude, lng: o.longitude, name: o.address }),
+          `${o.label} 출발`,
+        ))
+      }
     }
 
     return new kakao.maps.CustomOverlay({
@@ -185,17 +186,8 @@ useEffect(() => {
       const kakao = await loadKakaoMap()
       if (!mounted) return
 
-      // 출발지(울산·구미) 주소를 좌표로 변환해 캐시 — 길찾기 출발 좌표 정확도 확보
-      void Promise.all(
-        (['ulsan', 'gumi'] as const).map(async (key) => {
-          try {
-            const { latitude, longitude } = await geocodeAddress(originsRef.current[key].name)
-            originsRef.current[key] = { ...originsRef.current[key], lat: latitude, lng: longitude }
-          } catch {
-            /* 지오코딩 실패 시 초기 좌표 유지 */
-          }
-        })
-      )
+      // 길찾기 출발지 — DB 값을 그대로 담는다(지오코딩하지 않는다).
+      officesRef.current = await loadOffices()
 
       if (!kakaoMapRef.current) {
        const isMobile = window.innerWidth <= 768

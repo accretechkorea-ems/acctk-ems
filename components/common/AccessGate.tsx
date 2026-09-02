@@ -7,8 +7,15 @@ import { useRouter } from 'next/navigation'
  * usePageGuard 와 함께 쓴다: `if (!authorized) return <AccessGate loading={loading} />`
  * - loading true  → '확인 중...'
  * - loading false → '접근 권한이 없습니다' (리다이렉트 대신 렌더)
+ *
+ * title·message 를 넘기면 문구만 바뀐다. 권한이 없는 것이 아니라 "아직 받은 일이 없는" 경우처럼
+ * 원인이 다른 화면에서 쓴다(넘기지 않으면 종전 문구 그대로).
  */
-export default function AccessGate({ loading }: { loading: boolean }) {
+export default function AccessGate({
+  loading,
+  title = '접근 권한이 없습니다',
+  message = '이 페이지에 접근할 권한이 없습니다.',
+}: { loading: boolean; title?: string; message?: string }) {
   const router = useRouter()
 
   if (loading) {
@@ -21,8 +28,8 @@ export default function AccessGate({ loading }: { loading: boolean }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'center', alignItems: 'center', height: '60vh', color: '#6b7280' }}>
-      <div style={{ fontSize: 18, fontWeight: 800, color: '#111827' }}>접근 권한이 없습니다</div>
-      <div style={{ fontSize: 14 }}>이 페이지에 접근할 권한이 없습니다.</div>
+      <div style={{ fontSize: 18, fontWeight: 800, color: '#111827' }}>{title}</div>
+      <div style={{ fontSize: 14 }}>{message}</div>
       <button
         onClick={() => router.back()}
         style={{ marginTop: 8, padding: '8px 18px', border: 'none', borderRadius: 8, background: '#234ea2', color: '#fff', fontWeight: 700, cursor: 'pointer' }}
