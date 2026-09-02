@@ -7,14 +7,13 @@ import { useEffect, useMemo, useState, Suspense, Fragment, type CSSProperties } 
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { usePageGuard } from '@/hooks/usePageGuard'
-import { canViewPipeline } from '@/lib/permissions'
+import { canViewPipeline, isSuperAdmin } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPerms'
 import AccessGate from '@/components/common/AccessGate'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { getCategoryColor, SALES_STATUS_COLORS, type CategoryColor } from '@/lib/categoryColors'
-import { monthToDate } from '@/components/customer/opportunity'
-import { ACTIVITY_TYPES as SALES_ACTIVITY_TYPES } from '@/components/customer/modals/SalesActivityModal'
+
 import {
   LEAD_MANUAL_STATUSES, LEAD_STATUS_NEW, LEAD_STATUS_CONVERTED,
   COMPETITOR_OTHER, MAX_LEN,
@@ -29,6 +28,9 @@ const CARD_BG = '#ffffff'
 const PAGE_BG = '#fafafa'
 const ROW_HOVER = '#f8fafc'
 const HEAD_BG = '#f8fafc'
+const DANGER = '#dc2626'
+// 경고 상자 배경 — 관리자 화면의 삭제 사유 상자와 같은 값.
+const DANGER_BG = '#fef2f2'
 
 // 리드 상태 배지 색. 새 색은 만들지 않는다 —
 // '보류' 는 SALES_STATUS_COLORS 에 이미 있고, '신규' 만 눈에 띄어야 해서
@@ -91,6 +93,9 @@ function LeadsPageInner() {
   const toast = useToast()
   const confirm = useConfirm()
   const { engineer: me, loading: guardLoading, authorized } = usePageGuard(canViewPipeline)
+  // 리드 관리자 = superadmin. 그 밖에는 자기에게 배정된 건만 다루는 담당자다.
+  const isAdmin = isSuperAdmin(me)
+  const myEngineerId = me?.engineer_id ?? null
 
   const [leads, setLeads] = useState<Lead[]>([])
   const [engineers, setEngineers] = useState<Engineer[]>([])
@@ -111,13 +116,20 @@ function LeadsPageInner() {
   const [custQuery, setCustQuery] = useState('')
   const [custOpen, setCustOpen] = useState(false)
   const [pickedCustomer, setPickedCustomer] = useState<Customer | null>(null)
+  // 전환된 리드는 고객사명을 그대로 입력해야 지워진다. 어느 리드에서 확인 중인지와 입력값을 함께 들고 있는다.
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; text: string } | null>(null)
+  const [deleting, setDeleting] = useState<number | null>(null)
 
   useEffect(() => {
     if (!authorized) return
     let cancelled = false
     const run = async () => {
+      // 담당자에게는 자기 배정 건만 내려준다. 조회 자체를 막는 것은 RLS 의 몫이고
+      // 여기서 거르는 것은 화면이 남의 리드를 그리지 않게 하기 위해서다.
+      let leadQuery = supabase.from('leads').select('*').order('created_at', { ascending: false })
+      if (!isAdmin && myEngineerId != null) leadQuery = leadQuery.eq('assigned_to', myEngineerId)
       const [{ data: ld }, { data: eng }, { data: cus }] = await Promise.all([
-        supabase.from('leads').select('*').order('created_at', { ascending: false }),
+        leadQuery,
         supabase.from('engineers').select('engineer_id, name, position, teams, permission_level, resigned_date'),
         supabase.from('customers').select('customer_id, company_name, address').is('deleted_at', null),
       ])
@@ -129,7 +141,7 @@ function LeadsPageInner() {
     }
     run()
     return () => { cancelled = true }
-  }, [authorized, supabase])
+  }, [authorized, supabase, isAdmin, myEngineerId])
 
   // 담당자 후보 — 영업 현황 권한이 있는 재직자만.
   const [assignable, setAssignable] = useState<Engineer[]>([])
@@ -177,23 +189,83 @@ function LeadsPageInner() {
     if (paramId) router.replace('/leads')
   }
 
-  const patchLead = async (leadId: number, patch: Record<string, unknown>, okMsg: string) => {
+  /**
+   * 리드 처리 요청. 배정·상태·메모·전환 모두 /api/lead-manage 를 거친다 —
+   * 클라이언트에서 직접 쓰면 역할 판정을 서버가 할 수 없다.
+   * patch 는 성공했을 때 화면의 목록을 갱신할 값이다(서버가 실제로 쓴 것과 같아야 한다).
+   */
+  const callManage = async (
+    leadId: number,
+    payload: Record<string, unknown>,
+    patch: Record<string, unknown>,
+    okMsg: string,
+  ) => {
     setSaving(leadId)
-    const { error } = await supabase
-      .from('leads')
-      .update({ ...patch, updated_at: new Date().toISOString() })
-      .eq('lead_id', leadId)
-    setSaving(null)
-    if (error) { toast.error('저장하지 못했습니다: ' + error.message); return false }
-    setLeads(prev => prev.map(l => (l.lead_id === leadId ? { ...l, ...patch } as Lead : l)))
-    toast.success(okMsg)
-    return true
+    try {
+      const res = await fetch('/api/lead-manage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId, ...payload }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(json?.error || '저장하지 못했습니다.')
+        return null
+      }
+      setLeads(prev => prev.map(l => (l.lead_id === leadId ? { ...l, ...patch } as Lead : l)))
+      toast.success(okMsg)
+      return json as Record<string, unknown>
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  /**
+   * 리드 삭제(하드 삭제). 권한과 확인 문구는 라우트에서 다시 본다 —
+   * 여기서 막는 것은 편의일 뿐이고 화면을 거치지 않는 호출은 서버만 막을 수 있다.
+   */
+  const removeLead = async (lead: Lead, confirmText?: string) => {
+    setDeleting(lead.lead_id)
+    try {
+      const res = await fetch('/api/lead-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId: lead.lead_id, confirmText }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        toast.error(json?.error || '삭제하지 못했습니다.')
+        return
+      }
+      // 목록에서 빼면 상단 미처리 배지 건수도 함께 줄어든다(같은 배열에서 세므로).
+      setLeads(prev => prev.filter(l => l.lead_id !== lead.lead_id))
+      setDeleteConfirm(null)
+      if (clickedId === lead.lead_id) setClickedId(null)
+      toast.success('리드를 삭제했습니다.')
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  /** 삭제 버튼 — 전환된 리드는 문구 확인 칸을 열고, 아니면 확인 창 한 번으로 끝낸다. */
+  const askDelete = async (lead: Lead) => {
+    if (lead.converted_opportunity_id) {
+      setDeleteConfirm({ id: lead.lead_id, text: '' })
+      return
+    }
+    const ok = await confirm({
+      title: '리드 삭제',
+      message: `${lead.partner_company} 이(가) 등록한 ${lead.customer_company} 리드를 삭제합니다. 되돌릴 수 없습니다.`,
+      confirmText: '삭제',
+      variant: 'danger',
+    })
+    if (ok) await removeLead(lead)
   }
 
   /** 영업기회 전환 — 기회 행을 만들고 리드를 전환완료로 닫는다. */
   const convert = async (lead: Lead) => {
     if (!pickedCustomer) { toast.error('고객사를 선택해주세요.'); return }
-    if (!lead.assigned_to) { toast.error('담당자를 먼저 배정해주세요.'); return }
+    if (lead.assigned_to !== myEngineerId) { toast.error('배정받은 담당자만 전환할 수 있습니다.'); return }
     const ok = await confirm({
       title: '영업기회로 전환',
       message: `${pickedCustomer.company_name} 로 영업기회를 만듭니다. 전환한 뒤에는 되돌릴 수 없습니다.`,
@@ -201,47 +273,25 @@ function LeadsPageInner() {
     })
     if (!ok) return
 
-    setSaving(lead.lead_id)
-    // 리드에는 고객사명 문자열만 있어 업체는 화면에서 고른 것을 쓴다.
-    // expected_close 는 date 컬럼이라 예상 구매 시기가 있으면 그 달의 말일로 맞춘다(영업기회 규칙과 동일).
-    const payload = {
-      customer_id: pickedCustomer.customer_id,
-      engineer_id: lead.assigned_to,
-      title: `${lead.customer_company} ${lead.interest_product}`.trim(),
-      expected_close: lead.expected_purchase ? monthToDate(lead.expected_purchase.slice(0, 7)) : null,
-    }
-    const { data: opp, error: oppErr } = await supabase
-      .from('sales_opportunities')
-      .insert(payload)
-      .select('opportunity_id')
-      .single()
-    if (oppErr || !opp) {
-      setSaving(null)
-      toast.error('영업기회를 만들지 못했습니다: ' + (oppErr?.message ?? ''))
-      return
-    }
-
-    // 회의록·요청사항을 영업활동으로 남긴다. 실패해도 전환 자체는 되돌리지 않는다.
-    const content = [lead.meeting_note, lead.request_note].filter(t => t && t.trim()).join('\n\n')
-    const { error: actErr } = await supabase.from('sales_activities').insert({
-      opportunity_id: opp.opportunity_id,
-      customer_id: pickedCustomer.customer_id,
-      engineer_id: lead.assigned_to,
-      activity_date: lead.created_at.slice(0, 10),
-      activity_type: SALES_ACTIVITY_TYPES[1],   // 방문미팅 — 파트너사가 현장에서 만나 적어 온 기록
-      content,
-    })
-    if (actErr) console.error('[leads] 활동 기록 생성 실패', { leadId: lead.lead_id, error: actErr })
-
-    const done = await patchLead(
+    // 영업기회 생성·활동 기록·리드 마감은 전부 라우트가 한다(담당자 여부를 서버가 판정해야 하므로).
+    const res = await callManage(
       lead.lead_id,
-      { status: LEAD_STATUS_CONVERTED, converted_opportunity_id: opp.opportunity_id },
-      actErr ? '영업기회를 만들었습니다. (활동 기록은 남기지 못했습니다)' : '영업기회로 전환했습니다.'
+      { action: 'convert', customerId: pickedCustomer.customer_id },
+      { status: LEAD_STATUS_CONVERTED },
+      '영업기회로 전환했습니다.',
     )
-    if (done) { setPickedCustomer(null); setCustQuery('') }
+    if (!res) return
+    // 서버가 만든 기회 번호로 화면을 맞춘다.
+    const oppId = Number(res.opportunityId)
+    setLeads(prev => prev.map(l => (l.lead_id === lead.lead_id ? { ...l, converted_opportunity_id: oppId } : l)))
+    if (res.activityLogged === false) toast.error('활동 기록은 남기지 못했습니다.')
+    setPickedCustomer(null); setCustQuery('')
   }
 
-  if (!authorized) return <AccessGate loading={guardLoading} />
+  // 메뉴는 영업 현황 권한자에게 열려 있지만, 실제 접근은 관리자이거나
+  // 배정받은 리드가 하나라도 있는 사람으로 좁힌다.
+  const noLeadAccess = !loading && !isAdmin && leads.length === 0
+  if (!authorized || noLeadAccess) return <AccessGate loading={guardLoading || loading} />
 
   return (
     <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '20px 24px 48px' }}>
@@ -357,7 +407,7 @@ function LeadsPageInner() {
                                   <select
                                     value={converted ? LEAD_STATUS_CONVERTED : lead.status}
                                     disabled={converted || busy}
-                                    onChange={e => patchLead(lead.lead_id, { status: e.target.value }, '상태를 저장했습니다.')}
+                                    onChange={e => callManage(lead.lead_id, { action: 'status', status: e.target.value }, { status: e.target.value }, '상태를 저장했습니다.')}
                                     style={fieldStyle}
                                   >
                                     {/* 전환완료는 손으로 고를 수 없다. 이미 전환된 건에서만 현재 값으로 보인다. */}
@@ -366,12 +416,16 @@ function LeadsPageInner() {
                                       : LEAD_MANUAL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                                   </select>
                                 </div>
+                                {/* 배정은 관리자만 한다. 담당자에게는 배정된 사람 이름만 보인다. */}
                                 <div>
                                   <label style={labelStyle}>담당자</label>
+                                  {!isAdmin ? (
+                                    <div style={{ ...fieldStyle, background: HEAD_BG, color: MUTED }}>{engName(lead.assigned_to)}</div>
+                                  ) : (
                                   <select
                                     value={lead.assigned_to ?? ''}
                                     disabled={busy}
-                                    onChange={e => patchLead(lead.lead_id, { assigned_to: e.target.value ? Number(e.target.value) : null }, '담당자를 저장했습니다.')}
+                                    onChange={e => callManage(lead.lead_id, { action: 'assign', assignedTo: e.target.value ? Number(e.target.value) : null }, { assigned_to: e.target.value ? Number(e.target.value) : null }, '담당자를 저장했습니다.')}
                                     style={fieldStyle}
                                   >
                                     <option value="">배정 안 함</option>
@@ -379,6 +433,7 @@ function LeadsPageInner() {
                                       <option key={e.engineer_id} value={e.engineer_id}>{[e.name, e.position].filter(Boolean).join(' ')}</option>
                                     ))}
                                   </select>
+                                  )}
                                 </div>
                                 <div>
                                   <label style={labelStyle}>메모</label>
@@ -392,14 +447,15 @@ function LeadsPageInner() {
                                     />
                                     <button
                                       disabled={busy || memoValue(lead) === (lead.admin_memo ?? '')}
-                                      onClick={() => patchLead(lead.lead_id, { admin_memo: memoValue(lead).trim() || null }, '메모를 저장했습니다.')}
+                                      onClick={() => callManage(lead.lead_id, { action: 'memo', memo: memoValue(lead) }, { admin_memo: memoValue(lead).trim() || null }, '메모를 저장했습니다.')}
                                       style={btnStyle(busy || memoValue(lead) === (lead.admin_memo ?? ''))}
                                     >저장</button>
                                   </div>
                                 </div>
                               </div>
 
-                              {/* ── 영업기회 전환 ── */}
+                              {/* ── 영업기회 전환 — 배정받은 담당자만. 관리자 화면에는 나오지 않는다. ── */}
+                              {lead.assigned_to === myEngineerId && (
                               <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
                                 <div style={groupTitle}>영업기회 전환</div>
                                 {converted ? (
@@ -451,15 +507,14 @@ function LeadsPageInner() {
                                         )}
                                       </div>
                                       <button
-                                        disabled={busy || !lead.assigned_to || !pickedCustomer}
+                                        disabled={busy || !pickedCustomer}
                                         onClick={() => convert(lead)}
-                                        style={btnStyle(busy || !lead.assigned_to || !pickedCustomer)}
+                                        style={btnStyle(busy || !pickedCustomer)}
                                       >
                                         {busy ? '전환 중...' : '영업기회로 전환'}
                                       </button>
                                     </div>
                                     <div style={{ fontSize: 11, color: FAINT, marginTop: 6, lineHeight: 1.7 }}>
-                                      {!lead.assigned_to && <div>담당자를 먼저 배정해주세요.</div>}
                                       {custQuery.trim() && custMatches.length === 0 && !pickedCustomer && (
                                         <div>검색 결과가 없습니다. 고객사가 등록되어 있지 않다면 고객사를 먼저 등록해주세요.</div>
                                       )}
@@ -467,10 +522,56 @@ function LeadsPageInner() {
                                   </>
                                 )}
                               </div>
+                              )}
 
                               {lead.admin_memo && (
                                 <div style={{ marginTop: 10, fontSize: 11, color: FAINT }}>
                                   저장된 메모 · {lead.admin_memo}
+                                </div>
+                              )}
+
+                              {/* 삭제 — superadmin 에게만 보인다. 서버도 같은 권한을 다시 확인한다. */}
+                              {isSuperAdmin(me) && (
+                                <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
+                                  {deleteConfirm?.id === lead.lead_id ? (
+                                    <div style={{ background: DANGER_BG, border: `1px solid ${BORDER}`, borderRadius: 6, padding: 12 }}>
+                                      <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.8, marginBottom: 10 }}>
+                                        이 리드는 영업기회 #{lead.converted_opportunity_id} 으로 전환되었습니다.<br />
+                                        삭제하면 해당 영업기회의 출처 기록이 사라집니다.<br />
+                                        영업기회 자체는 삭제되지 않습니다.
+                                      </div>
+                                      <div style={{ fontSize: 11, color: MUTED, marginBottom: 6 }}>
+                                        삭제하려면 고객사명 「{lead.customer_company}」 을 입력하세요
+                                      </div>
+                                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                        <input
+                                          value={deleteConfirm.text}
+                                          onChange={e => setDeleteConfirm({ id: lead.lead_id, text: e.target.value })}
+                                          placeholder={lead.customer_company}
+                                          style={{ ...fieldStyle, flex: '1 1 200px', minWidth: 0 }}
+                                        />
+                                        <button
+                                          disabled={deleting === lead.lead_id || deleteConfirm.text.trim() !== lead.customer_company.trim()}
+                                          onClick={() => removeLead(lead, deleteConfirm.text)}
+                                          style={{
+                                            ...btnStyle(deleting === lead.lead_id || deleteConfirm.text.trim() !== lead.customer_company.trim()),
+                                            background: deleting === lead.lead_id || deleteConfirm.text.trim() !== lead.customer_company.trim() ? FAINT : DANGER,
+                                          }}
+                                        >{deleting === lead.lead_id ? '삭제 중...' : '삭제'}</button>
+                                        <button
+                                          onClick={() => setDeleteConfirm(null)}
+                                          disabled={deleting === lead.lead_id}
+                                          style={{ padding: '7px 14px', background: '#fff', color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}
+                                        >취소</button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => askDelete(lead)}
+                                      disabled={deleting === lead.lead_id}
+                                      style={{ ...btnStyle(deleting === lead.lead_id), background: deleting === lead.lead_id ? FAINT : DANGER }}
+                                    >{deleting === lead.lead_id ? '삭제 중...' : '리드 삭제'}</button>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -484,8 +585,7 @@ function LeadsPageInner() {
             </table>
           )}
         </div>
-        {/* me 는 권한 판정에만 쓰이고 화면에는 드러내지 않는다 */}
-        <div style={{ display: 'none' }}>{me?.engineer_id}</div>
+
       </div>
     </div>
   )

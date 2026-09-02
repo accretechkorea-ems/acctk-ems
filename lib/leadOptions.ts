@@ -73,6 +73,11 @@ export const LEAD_STATUSES = ['신규', '확인중', '전환완료', '보류'] a
 /** 화면에서 손으로 고를 수 있는 상태. '전환완료' 는 영업기회 전환이 성공했을 때만 붙는다. */
 export const LEAD_MANUAL_STATUSES = LEAD_STATUSES.filter(s => s !== '전환완료')
 
+/** 전환 시 남기는 영업활동의 유형. SalesActivityModal 의 ACTIVITY_TYPES 에 있는 값이어야 한다.
+ *  파트너사가 현장에서 만나 적어 온 기록이라 '방문미팅' 으로 남긴다.
+ *  (그 상수는 'use client' 모듈에 있어 API 라우트에서 import 할 수 없으므로 여기에 둔다) */
+export const LEAD_CONVERT_ACTIVITY_TYPE = '방문미팅'
+
 export const LEAD_STATUS_NEW = '신규'
 export const LEAD_STATUS_CONVERTED = '전환완료'
 
