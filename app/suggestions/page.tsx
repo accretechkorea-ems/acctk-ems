@@ -11,6 +11,7 @@ import { useFieldErrors, FieldError, errBorder } from '@/components/common/field
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { canViewAll, isSuperAdmin } from '@/lib/permissions'
+import { Z } from '@/lib/zIndex'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#f4f5f7'
@@ -345,7 +346,7 @@ export default function SuggestionsPage() {
 
       {/* ── 작성·수정 모달 ── */}
       {formOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: CARD_BG, borderRadius: 8, padding: 24, width: '100%', maxWidth: 560, boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
               <div style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>{editing ? '건의사항 수정' : '건의사항 작성'}</div>
@@ -384,7 +385,7 @@ export default function SuggestionsPage() {
 
       {/* ── 상세 모달 ── */}
       {detail && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: CARD_BG, borderRadius: 8, padding: 24, width: '100%', maxWidth: 640, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 6 }}>
               <div style={{ minWidth: 0 }}>

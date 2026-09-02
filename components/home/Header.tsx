@@ -12,6 +12,7 @@ import {
 import { loadTeamPerms } from '@/lib/teamPerms'
 import { useNotifications, type Notification } from '@/hooks/useNotifications'
 import NotificationList from '@/components/common/NotificationList'
+import { Z } from '@/lib/zIndex'
 
 export default function Header() {
   const router = useRouter()
@@ -246,7 +247,7 @@ export default function Header() {
   return (
     <>
       <div style={{
-        position: 'sticky', top: 0, zIndex: 9999,
+        position: 'sticky', top: 0, zIndex: Z.header,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '4px 20px', borderBottom: '1px solid #e5e5e5',
         background: '#fff', minHeight: 44,
@@ -290,7 +291,7 @@ export default function Header() {
                   {hasChildren && hoveredMenu === m.label && (
                     <div role="menu" ref={panelRef}
                       style={{
-                        position: 'absolute', top: '100%', paddingTop: 6, zIndex: 9998,
+                        position: 'absolute', top: '100%', paddingTop: 6, zIndex: Z.headerMenu,
                         ...(menuAlign === 'center'
                           ? { left: '50%', transform: 'translateX(-50%)' }
                           : menuAlign === 'right' ? { right: 0 } : { left: 0 }),
@@ -356,7 +357,7 @@ export default function Header() {
 
             {notifOpen && (
                 <div style={{
-                  position: 'absolute', right: 0, top: 42, zIndex: 9998,
+                  position: 'absolute', right: 0, top: 42, zIndex: Z.headerMenu,
                   background: '#fff', border: '1px solid #e5e5e5',
                   borderRadius: 14, width: 340, maxHeight: 480,
                   boxShadow: '0 8px 32px rgba(0,0,0,0.14)',
@@ -394,7 +395,7 @@ export default function Header() {
 
             {isOpen && (
               <div style={{
-                position: 'absolute', right: 0, top: 40, zIndex: 10000,
+                position: 'absolute', right: 0, top: 40, zIndex: Z.headerMenu,
                 background: '#ffffff', border: '1px solid #e5e5e5',
                 borderRadius: 12, padding: 8, width: 150,
                 boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
@@ -418,7 +419,7 @@ export default function Header() {
             </button>
 
             {isMenuOpen && (
-              <div className="mobile-menu" style={{ position: 'fixed', top: 44, left: 0, right: 0, background: '#fff', borderBottom: '1px solid #e5e5e5', zIndex: 9998, padding: '8px 0', maxHeight: 'calc(100vh - 44px)', overflowY: 'auto' }}>
+              <div className="mobile-menu" style={{ position: 'fixed', top: 44, left: 0, right: 0, background: '#fff', borderBottom: '1px solid #e5e5e5', zIndex: Z.headerMenu, padding: '8px 0', maxHeight: 'calc(100vh - 44px)', overflowY: 'auto' }}>
                 {visibleMenu.map((m) => {
                   const hasChildren = !!m.children?.length
                   // 하위 없는 탭(견적서·유지보수): 바로 이동

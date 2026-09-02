@@ -16,6 +16,8 @@ import { isAutoFailed, isOrdered, REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTIC
 import SegmentedControl from '@/components/common/SegmentedControl'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
+import { Z } from '@/lib/zIndex'
+import Popover from '@/components/common/Popover'
 
 // 기간 필터 모드 — 회계연도(4월 시작) 기준. h1=상반기(4~9월), h2=하반기(10~다음해 3월)
 type PeriodMode = 'year' | 'h1' | 'h2' | 'q1' | 'q2' | 'q3' | 'q4' | 'month'
@@ -380,7 +382,7 @@ function EngineerChartModal({ engineer, quotes, targets, fy, onClose }: {
   const tc = getCategoryColor(TEAM_COLORS, engineer.teams)
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: CARD_BG, borderRadius: 18, width: '100%', maxWidth: 860, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
         <div style={{ padding: '18px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
@@ -586,6 +588,8 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   useEffect(() => { setErrors({}) }, [taxQuote])
   // 메모 툴팁
   const [hoveredMemoId, setHoveredMemoId] = useState<number | null>(null)
+  // 표 상자가 overflow 로 잘라서 툴팁을 포털로 띄운다. 앵커는 지금 가리키고 있는 줄.
+  const memoAnchorRef = useRef<HTMLDivElement>(null)
   const tc = getCategoryColor(TEAM_COLORS, engineer.teams)
   const achieveColor = achieveColorOf(engineer.achieve)
   const orderAchieveColor = achieveColorOf(engineer.orderAchieve)
@@ -687,7 +691,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ background: CARD_BG, borderRadius: 18, width: '100%', minWidth: 900, maxWidth: 1200, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', position: 'relative' }}>
         <div style={{ padding: '18px 24px', borderBottom: `1px solid ${BORDER}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
@@ -766,7 +770,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
             <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>견적이 없습니다</div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead style={{ position: 'sticky', top: 0, background: CARD_BG, zIndex: 1 }}>
+              <thead style={{ position: 'sticky', top: 0, background: CARD_BG, zIndex: Z.thead }}>
                 <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
                   <th style={{ width: 36, padding: '8px 6px', textAlign: 'center', background: '#f8fafc' }}>
                     <input type="checkbox" checked={allPagedSelected} onChange={() => sel.toggleAll(pagedIds)}
@@ -832,7 +836,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                             {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : salesStatusLabel(q.status)}
                           </span>
                           {showOrderInfo && (q.shipping_date || q.order_memo) && (
-                            <div style={{ position: 'relative' }}
+                            <div ref={hoveredMemoId === q.quote_id ? memoAnchorRef : null}
                               onMouseEnter={() => setHoveredMemoId(q.quote_id)}
                               onMouseLeave={() => setHoveredMemoId(null)}>
                               <span style={{ fontSize: 10, cursor: 'help', display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -852,7 +856,14 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                                 }
                                 const processor = enrichProcessor(rawProcessor)
                                 return (
-                                  <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 9999, background: '#1e293b', color: '#e2e8f0', borderRadius: 9, padding: '8px 12px', fontSize: 11, minWidth: 180, maxWidth: 260, lineHeight: 1.6, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', pointerEvents: 'none' }}>
+                                  <Popover
+                                    anchorRef={memoAnchorRef}
+                                    open
+                                    onClose={() => setHoveredMemoId(null)}
+                                    align="center"
+                                    gap={6}
+                                    style={{ background: '#1e293b', color: '#e2e8f0', borderRadius: 9, padding: '8px 12px', fontSize: 11, minWidth: 180, maxWidth: 260, lineHeight: 1.6, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', pointerEvents: 'none' }}
+                                  >
                                     <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginBottom: 4 }}>처리 담당자</div>
                                     <div style={{ fontWeight: 700, color: '#e2e8f0', marginBottom: q.order_memo ? 8 : 0 }}>
                                       {processor}
@@ -863,7 +874,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                                         <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{q.order_memo}</div>
                                       </>
                                     )}
-                                  </div>
+                                  </Popover>
                                 )
                               })()}
                             </div>
@@ -912,7 +923,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
         )}
         {/* 발주서 등록 모달 */}
         {poQuote && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>발주서 등록</div>
               <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{poQuote.quote_number}</div>
@@ -1015,7 +1026,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
 
         {/* 세금계산서 요청 모달 */}
         {taxQuote && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 340, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>세금계산서 발행 요청</div>
               <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{taxQuote.quote_number}</div>
@@ -1038,7 +1049,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
         )}
 
         {editQuote && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 4 }}>삭제 / 실패 처리</div>
               <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{editQuote.quote_number} · {editQuote.customers?.company_name || ''}</div>

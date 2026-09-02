@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Z } from '@/lib/zIndex'
 
 /**
  * 토스트 알림 시스템 (Context 기반).
@@ -13,7 +14,7 @@ import { createContext, useCallback, useContext, useMemo, useRef, useState, type
  * - 우측 하단 고정, 세로로 쌓임(최대 3개, 초과 시 오래된 것부터 제거)
  * - 성공 3초 / 에러 5초 후 자동 사라짐, 우측 x 버튼으로 즉시 닫기
  * - 등장: 아래→위 슬라이드 + 페이드인 / 퇴장: 페이드아웃
- * - z-index 10100 (기존 모달 최대 10001 보다 위)
+ * - z-index 는 Z.toast — 사다리의 맨 위
  */
 
 type ToastType = 'success' | 'error'
@@ -64,7 +65,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={api}>
       {children}
       <div style={{
-        position: 'fixed', right: 20, bottom: 20, zIndex: 10100,
+        position: 'fixed', right: 20, bottom: 20, zIndex: Z.toast,
         display: 'flex', flexDirection: 'column', gap: 10,
         pointerEvents: 'none', // 컨테이너는 클릭 통과, 카드만 클릭 가능
       }}>

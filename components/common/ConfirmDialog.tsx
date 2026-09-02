@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import ModalOverlay from './ModalOverlay'
+import { Z } from '@/lib/zIndex'
 
 /**
  * 확인 다이얼로그 시스템 (Context 기반, Toast.tsx 와 동일 패턴).
@@ -20,7 +21,7 @@ import ModalOverlay from './ModalOverlay'
  * - variant 'danger' → 확인 버튼 빨강, 'default'(기본) → #234ea2
  * - message 의 줄바꿈(\n) 반영 (whiteSpace: pre-line)
  * - 열리면 확인 버튼 포커스 / ESC·오버레이 바깥 클릭 → false 반환
- * - z-index 10050 (기존 모달 10001 위, Toast 10100 아래)
+ * - z-index 는 Z.confirm — 모달·전체화면 지도 위, Toast 아래
  */
 
 type ConfirmOptions = {
@@ -81,7 +82,7 @@ function ConfirmDialog({ options, onClose }: { options: ConfirmOptions; onClose:
   }, [onClose])
 
   return (
-    <ModalOverlay onClose={() => onClose(false)} style={{ zIndex: 10050 }}>
+    <ModalOverlay onClose={() => onClose(false)} style={{ zIndex: Z.confirm }}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{

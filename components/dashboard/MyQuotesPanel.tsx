@@ -10,6 +10,8 @@ import { useFieldErrors, FieldError, errBorder } from '@/components/common/field
 import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, notifyDeleteRequest } from '@/lib/quoteMutations'
 import { isAutoFailed, isOrdered, REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE } from '@/lib/quoteStatus'
 import { achieveColorOf } from '@/lib/fiscal'
+import { Z } from '@/lib/zIndex'
+import Popover from '@/components/common/Popover'
 
 // 대시보드 '내 견적' 패널. 실적 현황 EngineerQuoteModal 의 표시 + 관리 기능을 동일하게 구현한다.
 // mutation 은 lib/quoteMutations.ts 공용 함수 사용(직접 supabase.update/fetch 안 씀).
@@ -27,8 +29,8 @@ const STATUS_TABS = ['전체', '견적중', '수리중', '발주(주문 대기)'
 
 const BLUE = '#234ea2', TEXT = '#111827', GRAY = '#6b7280', MUTED = '#9ca3af', BORDER = '#ebebeb'
 const ORANGE = '#d97706'
-// 서브모달 z-index: 기존 모달 체계(10001)와 Toast(10100) 사이.
-const SUBMODAL_Z = 10060
+// 서브모달은 모달 위에 겹쳐 열린다.
+const SUBMODAL_Z = Z.subModal
 
 function fiscalYear(d: Date) { const m = d.getMonth() + 1; const y = d.getFullYear(); return m >= 4 ? y : y - 1 }
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -113,6 +115,8 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
 
   // 메모 툴팁 + 서브모달 상태
   const [hoveredMemoId, setHoveredMemoId] = useState<number | null>(null)
+  // 목록 상자가 overflow 로 잘라서 툴팁을 포털로 띄운다. 앵커는 지금 가리키고 있는 줄.
+  const memoAnchorRef = useRef<HTMLDivElement>(null)
   // 취소/실패
   const [editQuote, setEditQuote] = useState<Quote | null>(null)
   const [editStatus, setEditStatus] = useState<EditStatus>('취소요청')
@@ -482,7 +486,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                           {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : salesStatusLabel(q.status)}
                         </span>
                         {showOrderInfo && (q.shipping_date || q.order_memo) && (
-                          <div style={{ position: 'relative' }}
+                          <div ref={hoveredMemoId === q.quote_id ? memoAnchorRef : null}
                             onMouseEnter={() => setHoveredMemoId(q.quote_id)}
                             onMouseLeave={() => setHoveredMemoId(null)}>
                             <span style={{ fontSize: 10, cursor: 'help', display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -490,8 +494,14 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                               <span style={{ color: '#0369a1', fontWeight: 700 }}>{q.shipping_date || '미정'}</span>
                               {q.order_memo && <span style={{ fontSize: 9 }}>📋</span>}
                             </span>
-                            {hoveredMemoId === q.quote_id && (
-                              <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)', zIndex: 9999, background: '#1e293b', color: '#e2e8f0', borderRadius: 9, padding: '8px 12px', fontSize: 11, minWidth: 180, maxWidth: 260, lineHeight: 1.6, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', pointerEvents: 'none' }}>
+                            <Popover
+                              anchorRef={memoAnchorRef}
+                              open={hoveredMemoId === q.quote_id}
+                              onClose={() => setHoveredMemoId(null)}
+                              align="center"
+                              gap={6}
+                              style={{ background: '#1e293b', color: '#e2e8f0', borderRadius: 9, padding: '8px 12px', fontSize: 11, minWidth: 180, maxWidth: 260, lineHeight: 1.6, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', pointerEvents: 'none' }}
+                            >
                                 <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginBottom: 4 }}>처리 담당자</div>
                                 <div style={{ fontWeight: 700, color: '#e2e8f0', marginBottom: q.order_memo ? 8 : 0 }}>
                                   {q.tax_completed_by || q.order_completed_by || '-'}
@@ -502,8 +512,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                                     <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{q.order_memo}</div>
                                   </>
                                 )}
-                              </div>
-                            )}
+                            </Popover>
                           </div>
                         )}
                       </div>

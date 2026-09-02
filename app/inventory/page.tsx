@@ -10,6 +10,7 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { canViewSalesMgmt, isSuperAdmin, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerms } from '@/lib/teamPerms'
+import { Z } from '@/lib/zIndex'
 
 const BLUE = '#234ea2'
 const ORANGE = '#d97706'
@@ -1047,7 +1048,7 @@ function InventoryPage() {
 
       {/* ══ 출고 요청 모달 ══ */}
       {requestItem && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div className="modal-box" style={{ background: CARD_BG, borderRadius: 20, width: '100%', maxWidth: 460, boxShadow: '0 24px 80px rgba(0,0,0,0.22)', maxHeight: '92vh', overflowY: 'auto', border: `1px solid ${BORDER}` }}>
             <ModalHeader title="출고 요청" accentColor={BLUE} onClose={() => { setRequestItem(null); setRequestOutletCompany(''); setRequestReason(''); setRequestNote('') }} />
 
@@ -1146,7 +1147,7 @@ function InventoryPage() {
 
       {/* ══ 재입고 모달 ══ */}
       {selectedLog && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div className="modal-box" style={{ background: CARD_BG, borderRadius: 20, width: '100%', maxWidth: 460, boxShadow: '0 24px 80px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}` }}>
             <ModalHeader title="재입고 처리" accentColor="#15803d" onClose={() => setSelectedLog(null)} />
 
@@ -1218,7 +1219,7 @@ function InventoryPage() {
 
       {/* ══ 반려 모달 ══ */}
       {rejectingRequest && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div className="modal-box" style={{ background: CARD_BG, borderRadius: 20, width: '100%', maxWidth: 440, boxShadow: '0 24px 80px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}` }}>
             <ModalHeader title="출고 요청 반려" accentColor={RED} onClose={() => setRejectingRequest(null)} />
 
@@ -1272,7 +1273,7 @@ function InventoryPage() {
 
       {/* ══ 엑셀 일괄 처리 모달 ══ */}
       {showExcelModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div className="modal-box" style={{ background: CARD_BG, borderRadius: 20, width: '100%', maxWidth: 840, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}` }}>
 
             <ModalHeader title="엑셀 일괄 처리" accentColor={BLUE} onClose={() => setShowExcelModal(false)} />

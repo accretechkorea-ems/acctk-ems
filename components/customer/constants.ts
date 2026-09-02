@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import { Z } from '@/lib/zIndex'
 
 export const PAGE_BG = '#f4f5f7'
 export const PANEL_BG = '#ffffff'
@@ -39,5 +40,5 @@ export const iconButtonStyle: CSSProperties = {
 
 export const modalOverlayStyle: CSSProperties = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20,
+  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: Z.modal, padding: 20,
 }

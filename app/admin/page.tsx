@@ -14,6 +14,7 @@ import { notifyDeleteCompleted } from '@/lib/quoteMutations'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import AutocompleteInput from '@/components/common/AutocompleteInput'
+import { Z } from '@/lib/zIndex'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#f4f5f7'
@@ -923,7 +924,7 @@ function AdminPageInner() {
 
       {/* ── 목표 금액 모달 ── */}
       {showTargetModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 680, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🎯 목표 금액 관리</div>
@@ -958,7 +959,7 @@ function AdminPageInner() {
                             <span style={{ fontSize: 11, color: GRAY, marginLeft: 6 }}>{eng.position}</span>
                           </div>
                           {isEditing ? (
-                            <div style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'flex-end', position: 'relative' }}>
+                            <div style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'flex-end', position: 'relative', marginBottom: targetErr.errors.amount ? 18 : 0 }}>
                               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
                                 <label style={{ fontSize: 11, fontWeight: 600, color: GRAY }}>수주 목표</label>
                                 <input type="number" value={editingTarget.orderAmount}
@@ -1021,7 +1022,7 @@ function AdminPageInner() {
 
       {/* ── 견적서 삭제 모달 ── */}
       {showQuoteModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1101,7 +1102,7 @@ function AdminPageInner() {
 
       {/* ── 다운로드 로그 모달 ── */}
       {showLogModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 1100, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>📋 다운로드 로그</div>
@@ -1154,7 +1155,7 @@ function AdminPageInner() {
 
       {/* ── 직원 관리 모달 ── */}
       {showEngineerModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
              <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>👥 직원 관리</div>
@@ -1223,7 +1224,7 @@ function AdminPageInner() {
 
       {/* ── 직원 등록 모달 ── */}
       {showAddEngineer && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 28, width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, marginBottom: 20 }}>직원 등록</div>
             <div style={{ display: 'grid', gap: 12 }}>
@@ -1285,7 +1286,7 @@ function AdminPageInner() {
 
       {/* ── 직원 수정 모달 ── */}
       {editEngineer && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 28, width: '100%', maxWidth: 640, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, marginBottom: 20 }}>직원 정보 수정</div>
             <div style={{ display: 'grid', gap: 12 }}>
@@ -1360,7 +1361,7 @@ function AdminPageInner() {
 
       {/* ── 부대비용 단가 모달 ── */}
       {showPresetModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🧾 부대비용 단가</div>
@@ -1398,7 +1399,7 @@ function AdminPageInner() {
                 return (
                   <div key={preset.preset_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 4px', borderBottom: `1px solid ${BORDER}` }}>
                     {isEditing ? (
-                      <div style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'center', position: 'relative' }}>
+                      <div style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'center', position: 'relative', marginBottom: presetEditErr.errors.itemName ? 18 : 0 }}>
                         <input value={editingPreset.itemName} autoFocus
                           onChange={e => { setEditingPreset(prev => prev ? { ...prev, itemName: e.target.value } : null); presetEditErr.clearError('itemName') }}
                           onKeyDown={e => e.key === 'Enter' && handleSavePreset()}
@@ -1446,7 +1447,7 @@ function AdminPageInner() {
 
       {/* ── 팀 관리 모달 ── */}
       {showOfficeModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🏢 사무실 관리</div>
@@ -1557,7 +1558,7 @@ function AdminPageInner() {
       )}
 
       {showTeamModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           {/* 팀 목록이 본체라 다른 모달보다 넓게 쓴다(이 모달에만 적용) */}
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -1613,7 +1614,7 @@ function AdminPageInner() {
                   <div style={{
                     display: 'grid', gridTemplateColumns: TEAM_GRID, alignItems: 'center',
                     padding: '0 4px 8px', borderBottom: `1px solid ${BORDER}`,
-                    position: 'sticky', top: 0, background: CARD_BG, zIndex: 1,
+                    position: 'sticky', top: 0, background: CARD_BG, zIndex: Z.thead,
                   }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>팀</span>
                     {TEAM_PERM_FIELDS.map(f => (
@@ -1663,7 +1664,7 @@ function AdminPageInner() {
 
       {/* ── 직원 삭제 모달 ── */}
       {deleteEngineer && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: CARD_BG, borderRadius: 16, padding: 28, width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, marginBottom: 12 }}>직원 삭제</div>
             <div style={{ fontSize: 14, color: GRAY, lineHeight: 1.8, marginBottom: 16 }}>

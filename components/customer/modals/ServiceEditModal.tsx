@@ -7,6 +7,7 @@ import ModalOverlay from '@/components/common/ModalOverlay'
 import { toMin, stepTime, normTime, computeWorkHours, lunchOverlapHours, reverseEndTime } from '@/lib/workHours'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { isCurrentlyEmployed } from '@/lib/engineers'
+import Popover from '@/components/common/Popover'
 
 type Props = {
   service: ServiceHistory | null
@@ -53,13 +54,8 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
   const workHours = computeWorkHours(form.start_time, form.end_time)
   const timeValid = orderValid && workHours > 0
 
-  // 안내 팝오버: 바깥 mousedown 시 닫기
-  useEffect(() => {
-    if (!showHint) return
-    const onDown = (e: MouseEvent) => { if (hintRef.current && !hintRef.current.contains(e.target as Node)) setShowHint(false) }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [showHint])
+  // 안내 팝오버의 바깥 클릭·ESC 닫기는 Popover 가 맡는다.
+
 
   useEffect(() => {
     if (service) {
@@ -203,18 +199,25 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>종료시간</span>
-                <div ref={hintRef} style={{ position: 'relative', display: 'flex' }}>
+                <div ref={hintRef} style={{ display: 'flex' }}>
                   <button type="button" onClick={() => setShowHint(s => !s)}
                     style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: showHint ? '#234ea2' : '#9ca3af', display: 'inline-flex', alignItems: 'center' }}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
                     </svg>
                   </button>
-                  {showHint && (
-                    <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 30, width: 200, background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: '8px 10px', fontSize: 12, fontWeight: 500, color: '#111827', lineHeight: 1.5 }}>
-                      이동시간 + 작업 시간으로 기재 부탁드립니다
-                    </div>
-                  )}
+                  {/* 모달 본문이 overflowY: auto 라 안에 두면 잘린다 — 포털로 띄운다 */}
+                  <Popover
+                    anchorRef={hintRef}
+                    open={showHint}
+                    onClose={() => setShowHint(false)}
+                    align="end"
+                    gap={6}
+                    width={200}
+                    style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: '8px 10px', fontSize: 12, fontWeight: 500, color: '#111827', lineHeight: 1.5 }}
+                  >
+                    이동시간 + 작업 시간으로 기재 부탁드립니다
+                  </Popover>
                 </div>
               </div>
               <div style={timeBoxStyle}>

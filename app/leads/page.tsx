@@ -3,7 +3,7 @@
 // 리드 관리 — /lead 공개 폼으로 들어온 리드를 확인하고 처리한다.
 // 영업관리 메뉴 안에 있지만 영업 업무라 접근 권한은 영업 현황과 같은 canViewPipeline 을 쓴다.
 
-import { useEffect, useMemo, useState, Suspense, Fragment, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, Suspense, Fragment, type CSSProperties } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { usePageGuard } from '@/hooks/usePageGuard'
@@ -14,6 +14,7 @@ import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { getCategoryColor, SALES_STATUS_COLORS, type CategoryColor } from '@/lib/categoryColors'
 import SegmentedControl from '@/components/common/SegmentedControl'
+import Popover from '@/components/common/Popover'
 
 import {
   LEAD_STATUS_NEW, LEAD_STATUS_ACTIVE, LEAD_STATUS_CONVERTED, LEAD_STATUS_SKIPPED,
@@ -107,6 +108,38 @@ const ghostBtn: CSSProperties = {
 const dlRow: CSSProperties = { display: 'flex', gap: 8, fontSize: 13, lineHeight: '20px' }
 const dlKey: CSSProperties = { width: 78, flexShrink: 0, color: FAINT, fontSize: 12 }
 
+/**
+ * 경쟁사 표시 문자열. 배열을 쉼표로 잇고, '기타' 가 있으면 직접 입력값을 덧붙인다.
+ * 화면과 PDF 가 같은 규칙을 쓰도록 한곳에 둔다.
+ */
+function competitorText(lead: Lead) {
+  const list = lead.competitor ?? []
+  if (!list.length) return ''
+  const joined = list.join(', ')
+  return list.includes(COMPETITOR_OTHER) && lead.competitor_other
+    ? `${joined} (${lead.competitor_other})`
+    : joined
+}
+
+/**
+ * PDF 파일명 한 토막. 파일명에 쓸 수 없는 문자와 제어문자를 지우고 공백을 한 칸으로 줄인다.
+ * 전부 지워져 빈 값이 되면 '-' 로 자리를 채운다(빈 토막이 이어져 __ 가 되지 않게).
+ */
+const safeFilePart = (v: string) =>
+  (v || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '').replace(/\s+/g, ' ').trim() || '-'
+
+/**
+ * <리드번호>_<파트너사>_<고객사>_<관심제품>.pdf
+ * 번호가 아직 없는 리드는 등록일(YYYYMMDD)을 그 자리에 쓴다 — 메일에 첨부했을 때
+ * 무엇의 출력물인지 구분되는 값이어야 하고, 화면에 없는 내부 id 를 드러내지 않는다.
+ */
+function leadPdfFileName(lead: Lead) {
+  const head = lead.lead_no?.trim() || lead.created_at.slice(0, 10).replace(/-/g, '')
+  return [head, lead.partner_company, lead.customer_company, lead.interest_product]
+    .map(safeFilePart)
+    .join('_') + '.pdf'
+}
+
 /** 상세의 한 줄. 값이 비면 '-' 로 자리를 지킨다. */
 function Row({ k, v }: { k: string; v: string | null | undefined }) {
   return (
@@ -150,10 +183,13 @@ function LeadsPageInner() {
   const [panel, setPanel] = useState<{ id: number; kind: 'memo' | 'convert' | 'skip' } | null>(null)
   const [custQuery, setCustQuery] = useState('')
   const [custOpen, setCustOpen] = useState(false)
+  // 고객사 검색 결과는 표 컨테이너 밖으로 나가야 해서 포털로 띄운다. 그 기준이 되는 입력칸.
+  const custAnchorRef = useRef<HTMLDivElement>(null)
   const [pickedCustomer, setPickedCustomer] = useState<Customer | null>(null)
   // 전환된 리드는 고객사명을 그대로 입력해야 지워진다. 어느 리드에서 확인 중인지와 입력값을 함께 들고 있는다.
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; text: string } | null>(null)
   const [deleting, setDeleting] = useState<number | null>(null)
+  const [pdfBusy, setPdfBusy] = useState<number | null>(null)
 
   useEffect(() => {
     if (!authorized) return
@@ -316,6 +352,60 @@ function LeadsPageInner() {
       '미진행으로 처리했습니다.',
     )
     if (res) closePanel()
+  }
+
+  /**
+   * 리드 상세를 PDF 로 내려받는다. 배정된 담당자에게 메일로 보내는 용도라
+   * 저장(스토리지)도 기록(download_logs)도 남기지 않는다 — 만들어서 바로 내려주기만 한다.
+   * 화면 상세와 같은 항목만 담고 담당자·상태·메모 같은 관리 정보는 넣지 않는다.
+   */
+  const downloadPdf = async (lead: Lead) => {
+    setPdfBusy(lead.lead_id)
+    try {
+      // @react-pdf/renderer 는 무거워서 리드 화면 첫 로딩에 얹지 않는다. 누를 때 불러온다.
+      const [{ pdf }, { LeadPDFDoc }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('./LeadPDFDoc'),
+      ])
+      const blob = await pdf(
+        <LeadPDFDoc
+          leadNo={lead.lead_no}
+          createdAt={lead.created_at.slice(0, 10)}
+          partnerCompany={lead.partner_company}
+          partnerName={lead.partner_name}
+          partnerContact={lead.partner_contact}
+          customerCompany={lead.customer_company}
+          industry={lead.industry}
+          products={lead.products}
+          address={lead.address}
+          city={lead.city}
+          country={lead.country}
+          interestProduct={lead.interest_product}
+          budgetStatus={lead.budget_status}
+          purchasePeriod={lead.purchase_period}
+          expectedPurchase={lead.expected_purchase}
+          competitor={competitorText(lead)}
+          requestNote={lead.request_note}
+          contactName={lead.contact_name}
+          contactDeptTitle={[lead.contact_dept, lead.contact_title].filter(Boolean).join(' / ')}
+          contactEmail={lead.contact_email}
+          contactOfficeTel={lead.contact_office_tel}
+          contactMobile={lead.contact_mobile}
+          meetingNote={lead.meeting_note}
+        />
+      ).toBlob()
+
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = leadPdfFileName(lead)
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error('PDF 를 만들지 못했습니다.')
+    } finally {
+      setPdfBusy(null)
+    }
   }
 
   /**
@@ -538,15 +628,7 @@ function LeadsPageInner() {
                                     <Row k="예산" v={lead.budget_status} />
                                     <Row k="구매 기간" v={lead.purchase_period} />
                                     <Row k="구매 시기" v={lead.expected_purchase} />
-                                    {/* 경쟁사는 배열이라 쉼표로 잇고, '기타' 가 있으면 직접 입력값을 덧붙인다 */}
-                                    <Row k="경쟁사" v={(() => {
-                                      const list = lead.competitor ?? []
-                                      if (!list.length) return ''
-                                      const joined = list.join(', ')
-                                      return list.includes(COMPETITOR_OTHER) && lead.competitor_other
-                                        ? `${joined} (${lead.competitor_other})`
-                                        : joined
-                                    })()} />
+                                    <Row k="경쟁사" v={competitorText(lead)} />
                                     <Row k="요청사항" v={lead.request_note} />
                                   </div>
                                 </div>
@@ -610,6 +692,15 @@ function LeadsPageInner() {
                                     onChange={v => togglePanel(lead.lead_id, v)}
                                   />
                                 )}
+                                {/* PDF 출력 — 관리자만. 누르면 펼쳐지는 영역 없이 바로 받아지므로
+                                    "하나만 열린다"는 SegmentedControl 에 넣지 않고 따로 둔다. */}
+                                {isAdmin && (
+                                  <button
+                                    onClick={() => downloadPdf(lead)}
+                                    disabled={pdfBusy === lead.lead_id}
+                                    style={{ ...ghostBtn, cursor: pdfBusy === lead.lead_id ? 'default' : 'pointer', color: pdfBusy === lead.lead_id ? FAINT : MUTED }}
+                                  >{pdfBusy === lead.lead_id ? '만드는 중...' : 'PDF 출력'}</button>
+                                )}
                               </div>
 
                               {/* 종결된 리드는 무엇으로 끝났는지와 그 사유를 여기서 밝힌다(버튼은 잠겨 있다). */}
@@ -651,7 +742,7 @@ function LeadsPageInner() {
                               {openPanel === 'convert' && (
                                 <div style={dividerTop}>
                                   <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                                    <div style={{ position: 'relative', flex: '1 1 260px', minWidth: 0 }}>
+                                    <div ref={custAnchorRef} style={{ flex: '1 1 260px', minWidth: 0 }}>
                                       {pickedCustomer ? (
                                         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                                           <div style={{ ...inpStyle, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -672,12 +763,15 @@ function LeadsPageInner() {
                                           style={{ ...inpStyle, width: '100%' }}
                                         />
                                       )}
-                                      {custOpen && !pickedCustomer && custMatches.length > 0 && (
-                                        <div style={{
-                                          position: 'absolute', top: '100%', left: 0, width: '100%', marginTop: 4, zIndex: 20,
-                                          background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 6,
-                                          boxShadow: '0 4px 12px rgba(0,0,0,0.08)', maxHeight: 240, overflowY: 'auto',
-                                        }}>
+                                      {/* 표 컨테이너가 자르지 못하도록 포털로 띄운다(위치만 입력칸을 따라간다) */}
+                                      <Popover
+                                        anchorRef={custAnchorRef}
+                                        open={custOpen && !pickedCustomer && custMatches.length > 0}
+                                        onClose={() => setCustOpen(false)}
+                                        matchAnchorWidth
+                                        maxHeight={240}
+                                        style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                                      >
                                           {custMatches.map(c => (
                                             <div key={c.customer_id}
                                               onMouseDown={ev => { ev.preventDefault(); setPickedCustomer(c); setCustOpen(false) }}
@@ -689,8 +783,7 @@ function LeadsPageInner() {
                                               <div style={{ fontSize: 12, color: FAINT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.address ?? '주소 없음'}</div>
                                             </div>
                                           ))}
-                                        </div>
-                                      )}
+                                      </Popover>
                                     </div>
                                     <button
                                       disabled={busy || !pickedCustomer}

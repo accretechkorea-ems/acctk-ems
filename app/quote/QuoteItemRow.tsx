@@ -8,6 +8,7 @@ import { numKR } from './format'
 import { DISCOUNT_LABELS } from './types'
 import { inp } from './styles'
 import ExpenseSection from './ExpenseSection'
+import { Z } from '@/lib/zIndex'
 
 // 행 카드 헤더에 붙는 종류 이름. 색 구분 없이 전부 같은 회색 배지로 쓴다.
 const KIND_LABEL: Record<RowKind, string> = {
@@ -147,7 +148,7 @@ export default function QuoteItemRow({
             </button>
           )}
           {searchOpen[row.id] && (searchResults[row.id] || []).length > 0 && (
-            <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 999, background: '#fff', border: '1px solid #234ea2', borderRadius: 8, maxHeight: 200, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
+            <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #234ea2', borderRadius: 8, maxHeight: 200, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
               {searchResults[row.id].map(item => (
                 <div key={item.id} onClick={() => { handleSelect(row.id, item); focusItemName() }}
                   style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 11, transition: 'background 0.15s ease' }}

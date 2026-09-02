@@ -15,6 +15,7 @@ import {
 } from '@/lib/home'
 import { loadOffices, activeOffices, type Office } from '@/lib/offices'
 import { CATEGORY_OPTIONS } from '@/lib/constants'
+import { Z } from '@/lib/zIndex'
 
 type Props = {
   customers: Customer[]
@@ -438,7 +439,7 @@ useEffect(() => {
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       {/* 좌측 상단 필터 */}
-      <div style={{ position: 'absolute', top: 14, left: 14, zIndex: 1000, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+      <div style={{ position: 'absolute', top: 14, left: 14, zIndex: Z.inPage, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
         {/* 1행: 상태 필터 */}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {([
@@ -494,7 +495,7 @@ useEffect(() => {
       </div>
 
       {/* 우측 상단 업체 등록 */}
-      <div style={{ position: 'absolute', top: 14, right: 14, zIndex: 1000 }}>
+      <div style={{ position: 'absolute', top: 14, right: 14, zIndex: Z.inPage }}>
         <button
           onClick={onAddClick}
           style={{

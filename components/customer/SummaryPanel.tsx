@@ -3,11 +3,12 @@
 // 업체 상세 우측 요약. 이번 단계에서는 표시 전용이며 클릭 동작이 없다.
 // (영업기회 카드는 다음 단계에서 이 아래에 붙는다)
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useMemo, useRef, useState, type CSSProperties } from 'react'
 import { countQuoteChannels } from './utils'
 import { STAGES, compactKRW, isClosed, stageRank } from './opportunity'
 import { deviceLabel, elapsedLabel } from './holding'
 import type { Holding, Quote, SalesOpportunity, ServiceHistory } from './types'
+import Popover from '@/components/common/Popover'
 
 type Props = {
   quotes: Quote[]
@@ -71,16 +72,9 @@ function OppRow({ o, canEdit, onOpen, onChangeStage, onPickLost }: {
   onChangeStage: (next: string) => void
   onPickLost: () => void
 }) {
-  const [menu, setMenu] = useState<{ left: number; top: number } | null>(null)
+  // 열림 여부만 들고 있으면 된다 — 자리 계산·바깥 클릭·ESC·스크롤 추종은 Popover 가 한다.
+  const [menuOpen, setMenuOpen] = useState(false)
   const pillRef = useRef<HTMLButtonElement>(null)
-
-  useEffect(() => {
-    if (!menu) return
-    const close = () => setMenu(null)
-    document.addEventListener('mousedown', close)
-    window.addEventListener('scroll', close, true)
-    return () => { document.removeEventListener('mousedown', close); window.removeEventListener('scroll', close, true) }
-  }, [menu])
 
   return (
     <div
@@ -98,8 +92,7 @@ function OppRow({ o, canEdit, onOpen, onChangeStage, onPickLost }: {
         onMouseDown={e => e.stopPropagation()}
         onClick={() => {
           if (!canEdit) return
-          const r = pillRef.current?.getBoundingClientRect()
-          setMenu(m => (m ? null : r ? { left: r.left, top: r.bottom + 4 } : null))
+          setMenuOpen(o => !o)
         }}
         style={{
           fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6',
@@ -122,20 +115,19 @@ function OppRow({ o, canEdit, onOpen, onChangeStage, onPickLost }: {
         </span>
       </button>
 
-      {menu && (
-        <div
-          onMouseDown={e => e.stopPropagation()}
-          style={{
-            position: 'fixed', left: menu.left, top: menu.top, zIndex: 9999,
-            background: '#fff', border: '1px solid #ebebeb', borderRadius: 6,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: 4, minWidth: 104,
-          }}
-        >
+      {/* sticky + overflow-y 인 좌우 열에서 잘리지 않도록 포털로 띄운다 */}
+      <Popover
+        anchorRef={pillRef}
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        width={104}
+        style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: 4 }}
+      >
           {STAGES.map(s => (
             <button
               key={s}
               onClick={() => {
-                setMenu(null)
+                setMenuOpen(false)
                 // 실주는 사유가 필요해 바로 바꾸지 않고 모달로 넘긴다
                 if (s === '실주') onPickLost()
                 else onChangeStage(s)
@@ -153,8 +145,7 @@ function OppRow({ o, canEdit, onOpen, onChangeStage, onPickLost }: {
               {s}
             </button>
           ))}
-        </div>
-      )}
+      </Popover>
     </div>
   )
 }

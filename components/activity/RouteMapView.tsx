@@ -5,6 +5,7 @@ import { loadKakaoMap } from '@/lib/loadKakaoMap'
 import { createClient } from '@/lib/supabase/client'
 import type { RouteStop } from '@/lib/routeMap'
 import { useOffices, findOffice } from '@/lib/offices'
+import { Z } from '@/lib/zIndex'
 
 // 엔지니어 동선 지도(전체 화면 오버레이). 방문지 마커 + 연결선 + 사무실 마커.
 // 연결선 모드는 지도 안 토글로 전환한다(기본 visits, 열 때마다 초기화):
@@ -452,7 +453,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
     <div
       onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, zIndex: 10080,
+        position: 'fixed', inset: 0, zIndex: Z.fullscreen,
         background: 'rgba(0,0,0,0.45)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}

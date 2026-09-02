@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { SALES_STATUS_COLORS, DELIVERY_METHOD_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import { canViewSalesMgmt, type TeamPerm } from '@/lib/permissions'
@@ -8,6 +8,8 @@ import { withTeamPerm } from '@/lib/teamPerms'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import AccessGate from '@/components/common/AccessGate'
+import { Z } from '@/lib/zIndex'
+import Popover from '@/components/common/Popover'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#f4f5f7'
@@ -83,8 +85,12 @@ export default function PurchasePage() {
   const [taxProcessing, setTaxProcessing] = useState(false)
   // 메모 툴팁
   const [hoveredMemoId, setHoveredMemoId] = useState<number | null>(null)
+  // 표 컨테이너가 잘라서 툴팁을 포털로 띄운다. 앵커는 지금 가리키고 있는 줄.
+  const memoAnchorRef = useRef<HTMLDivElement>(null)
   // 배송 주소 팝업
   const [addressPopupId, setAddressPopupId] = useState<number | null>(null)
+  // 열린 행의 배송 배지. 포털 팝오버가 이 좌표를 기준으로 뜬다.
+  const addressAnchorRef = useRef<HTMLDivElement>(null)
   const [copiedId, setCopiedId] = useState<number | null>(null)
   // 출하일정/메모 편집 모달
   const [editScheduleModal, setEditScheduleModal] = useState<PurchaseQuote | null>(null)
@@ -308,17 +314,24 @@ export default function PurchasePage() {
                       <td style={{ padding: '9px 10px', fontWeight: 600, whiteSpace: 'nowrap', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{company}</td>
                       <td style={{ padding: '9px 10px', color: GRAY, whiteSpace: 'nowrap', textAlign: 'center' }}>{engName}</td>
                       <td style={{ padding: '9px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        {/* 표 컨테이너(overflow: hidden)가 팝오버를 자르므로, 열린 행에만 앵커를 걸어 포털로 띄운다 */}
                         {q.delivery_method ? (
-                          <div style={{ position: 'relative', display: 'inline-block' }}>
+                          <div ref={addressPopupId === q.quote_id ? addressAnchorRef : null} style={{ display: 'inline-block' }}>
                             <span
                               onClick={() => isParcel && q.delivery_info ? setAddressPopupId(addressPopupId === q.quote_id ? null : q.quote_id) : undefined}
                               style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, fontWeight: 700, background: dc.bg, color: dc.text, cursor: isParcel && q.delivery_info ? 'pointer' : 'default', userSelect: 'none' }}>
                               {q.delivery_method}
                             </span>
-                            {addressPopupId === q.quote_id && q.delivery_info && (
-                              <>
-                                <div onClick={() => setAddressPopupId(null)} style={{ position: 'fixed', inset: 0, zIndex: 9990 }} />
-                                <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 9991, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '12px 14px', minWidth: 240, maxWidth: 320, boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}>
+                            {q.delivery_info && (
+                              <Popover
+                                anchorRef={addressAnchorRef}
+                                open={addressPopupId === q.quote_id}
+                                onClose={() => setAddressPopupId(null)}
+                                gap={6}
+                                width={280}
+                                style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '12px 14px', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}
+                              >
+                                <div>
                                   <div style={{ fontSize: 10, color: MUTED, fontWeight: 700, marginBottom: 8 }}>배송 정보</div>
                                   <div style={{ marginBottom: 10 }}>
                                     {q.delivery_info!.split('\n').map((line, i) => {
@@ -344,7 +357,7 @@ export default function PurchasePage() {
                                     {copiedId === q.quote_id ? '✓ 복사됨' : '주소 복사'}
                                   </button>
                                 </div>
-                              </>
+                              </Popover>
                             )}
                           </div>
                         ) : <span style={{ color: MUTED, fontSize: 11 }}>-</span>}
@@ -358,16 +371,22 @@ export default function PurchasePage() {
                       </td>
                       <td style={{ padding: '9px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                         {q.order_memo ? (
-                          <div style={{ position: 'relative', display: 'inline-block' }}
+                          <div ref={hoveredMemoId === q.quote_id ? memoAnchorRef : null} style={{ display: 'inline-block' }}
                             onMouseEnter={() => setHoveredMemoId(q.quote_id)}
                             onMouseLeave={() => setHoveredMemoId(null)}>
                             <span style={{ fontSize: 11, cursor: 'help', color: GRAY }}>📋 메모</span>
-                            {hoveredMemoId === q.quote_id && (
-                              <div style={{ position: 'absolute', bottom: 'calc(100% + 6px)', left: 0, zIndex: 9999, background: '#1e293b', color: '#e2e8f0', borderRadius: 9, padding: '8px 12px', fontSize: 11, minWidth: 160, maxWidth: 260, lineHeight: 1.6, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', pointerEvents: 'none' }}>
-                                <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 3, fontWeight: 700 }}>담당자 메모</div>
-                                {q.order_memo}
-                              </div>
-                            )}
+                            {/* 표 컨테이너가 자르지 못하도록 포털로 띄운다. 원래대로 위쪽을 먼저 시도한다. */}
+                            <Popover
+                              anchorRef={memoAnchorRef}
+                              open={hoveredMemoId === q.quote_id}
+                              onClose={() => setHoveredMemoId(null)}
+                              prefer="top"
+                              gap={6}
+                              style={{ background: '#1e293b', color: '#e2e8f0', borderRadius: 9, padding: '8px 12px', fontSize: 11, minWidth: 160, maxWidth: 260, lineHeight: 1.6, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', pointerEvents: 'none' }}
+                            >
+                              <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 3, fontWeight: 700 }}>담당자 메모</div>
+                              {q.order_memo}
+                            </Popover>
                           </div>
                         ) : <span style={{ color: MUTED, fontSize: 11 }}>-</span>}
                       </td>
@@ -442,7 +461,7 @@ export default function PurchasePage() {
 
       {/* 주문완료 처리 모달 */}
       {orderModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 400, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>주문완료 처리</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 20 }}>{orderModal.quote_number} · {custMap[orderModal.customer_id ?? 0] ?? '-'}</div>
@@ -475,7 +494,7 @@ export default function PurchasePage() {
 
       {/* 세금계산서 발행완료 모달 */}
       {taxModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 380, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>세금계산서 발행 완료</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{taxModal.quote_number} · {custMap[taxModal.customer_id ?? 0] ?? '-'}</div>
@@ -507,7 +526,7 @@ export default function PurchasePage() {
 
       {/* 출하일정/메모 편집 모달 */}
       {editScheduleModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 400, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>일정/메모 수정</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 20 }}>{editScheduleModal.quote_number} · {custMap[editScheduleModal.customer_id ?? 0] ?? '-'}</div>

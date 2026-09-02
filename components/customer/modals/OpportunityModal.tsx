@@ -4,13 +4,14 @@
 // 기존 기회를 열면 아래에 그 기회에 묶인 활동 목록을 읽기 전용으로 함께 보여준다
 // (타임라인은 업체 전체를 시간순으로 보는 곳이라, 한 건의 흐름만 모아 보려면 여기가 필요하다).
 
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { isCurrentlyEmployed } from '@/lib/engineers'
 import { STAGES, LOST_REASONS, dateToMonth, compactKRW, isClosed } from '../opportunity'
 import { numKR } from '../constants'
 import type { Customer, Engineer, OpportunityForm, SalesActivity, SalesOpportunity } from '../types'
+import Popover from '@/components/common/Popover'
 
 type Props = {
   isOpen: boolean
@@ -53,6 +54,8 @@ export default function OpportunityModal({
   const { errors, setErrors, clearError, validate } = useFieldErrors<'title' | 'lost_reason' | 'customer_id'>()
   const [custQuery, setCustQuery] = useState('')
   const [custOpen, setCustOpen] = useState(false)
+  // 모달 본문이 스크롤 상자라 검색 결과를 포털로 띄운다. 그 기준이 되는 입력칸.
+  const custAnchorRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!isOpen) return
@@ -147,7 +150,7 @@ export default function OpportunityModal({
               </div>
             </div>
           ) : (
-            <div style={{ position: 'relative' }}>
+            <div ref={custAnchorRef}>
               <label style={labelStyle}>업체 *</label>
               {form.customer_id ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -173,12 +176,15 @@ export default function OpportunityModal({
               )}
               <FieldError message={errors.customer_id} />
 
-              {custOpen && !form.customer_id && custMatches.length > 0 && (
-                <div style={{
-                  position: 'absolute', top: '100%', left: 0, width: '100%', marginTop: 4, zIndex: 20,
-                  background: '#fff', border: '1px solid #ebebeb', borderRadius: 6,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.08)', maxHeight: 240, overflowY: 'auto',
-                }}>
+              {/* 모달 본문이 overflowY: auto 라 안에 두면 잘린다 — 포털로 띄운다 */}
+              <Popover
+                anchorRef={custAnchorRef}
+                open={custOpen && !form.customer_id && custMatches.length > 0}
+                onClose={() => setCustOpen(false)}
+                matchAnchorWidth
+                maxHeight={240}
+                style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+              >
                   {custMatches.map(c => (
                     <div key={c.customer_id}
                       onMouseDown={(e) => {
@@ -199,8 +205,7 @@ export default function OpportunityModal({
                       </div>
                     </div>
                   ))}
-                </div>
-              )}
+              </Popover>
             </div>
           )}
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { Z } from '@/lib/zIndex'
 
 /**
  * 자동완성 입력창.
@@ -94,7 +95,7 @@ export default function AutocompleteInput({ value, onChange, suggestions, placeh
         <div style={{
           position: 'absolute', top: '100%', left: 0, width: '100%', marginTop: 4,
           background: '#fff', border: '1px solid #ebebeb', borderRadius: 6,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.08)', maxHeight: 240, overflowY: 'auto', zIndex: 20,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.08)', maxHeight: 240, overflowY: 'auto', zIndex: Z.inPage,
         }}>
           {filtered.map((s, i) => {
             const bg = i === highlighted ? '#f1f1f1' : i === hovered ? '#f5f5f5' : 'transparent'

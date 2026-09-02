@@ -15,6 +15,7 @@ import { useToast } from '@/components/common/Toast'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { REPAIR_STATUS_COLORS, REPAIR_MEANING_COLORS } from '@/lib/categoryColors'
 import { isAtHq } from '@/lib/repairStats'
+import { Z } from '@/lib/zIndex'
 
 // ── 색상 (기존 페이지 컨벤션과 동일) ──
 const BLUE = '#234ea2'
@@ -586,7 +587,7 @@ export default function RepairPage() {
                   style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontSize: 14, lineHeight: 1, display: 'inline-flex' }}>📋</button>
                 {openMemoId === r.repair_id && memoAnchor && (
                   <div onClick={(e) => e.stopPropagation()}
-                    style={{ position: 'fixed', right: memoAnchor.right, zIndex: 9999, animation: 'memo-pop 0.16s ease-out',
+                    style={{ position: 'fixed', right: memoAnchor.right, zIndex: Z.popover, animation: 'memo-pop 0.16s ease-out',
                       ...(memoAnchor.up ? { bottom: memoAnchor.bottom, transformOrigin: 'bottom right' } : { top: memoAnchor.top, transformOrigin: 'top right' }),
                       background: '#fff', color: '#111827', border: '1px solid #e5e7eb', borderRadius: 8, padding: '14px 16px', fontSize: 13, minWidth: 240, maxWidth: 280, minHeight: 160, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word', textAlign: 'left', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
                     {r.repair_content}
@@ -711,7 +712,7 @@ export default function RepairPage() {
               <label style={label}>입고일</label>
               <input type="date" value={receivedDate} onChange={e => setReceivedDate(e.target.value)} style={inp} tabIndex={-1} />
             </div>
-            <div style={{ ...fieldGroup, flex: 1, minWidth: 0, position: 'relative' }}>
+            <div style={{ ...fieldGroup, flex: 1, minWidth: 0, position: 'relative', marginBottom: errors.customerName ? 18 : 0 }}>
               <label style={label}>회사명</label>
               <AutocompleteInput value={customerName} onChange={(v) => { setCustomerName(v); clearError('customerName') }} suggestions={customerNameOptions} placeholder="회사명 입력" style={errors.customerName ? { ...inp, border: errBorder } : inp} tabIndex={1} />
               {/* 가로 한 줄 폼이라 에러는 절대배치로 띄워 옆 칸이 밀리지 않게 함 */}
@@ -898,7 +899,7 @@ export default function RepairPage() {
       {/* ── 본사 복귀 처리 다이얼로그 (복귀일 입력 → 출고대기) ── */}
       {hqReturning && (
         <div onClick={() => !isHqSaving && setHqReturning(null)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10001, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.subModal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background: CARD_BG, borderRadius: 10, width: '100%', maxWidth: 360, padding: 22, border: `1px solid ${BORDER}`, boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>본사 복귀 처리</div>
@@ -922,7 +923,7 @@ export default function RepairPage() {
 
       {/* ── 엑셀 일괄 등록 모달 ── */}
       {showImport && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: CARD_BG, borderRadius: 14, width: '100%', maxWidth: 920, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', border: `1px solid ${BORDER}` }}>
             {/* 헤더 */}
             <div style={{ padding: '16px 20px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
