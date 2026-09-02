@@ -15,8 +15,8 @@ import { useConfirm } from '@/components/common/ConfirmDialog'
 import { getCategoryColor, SALES_STATUS_COLORS, type CategoryColor } from '@/lib/categoryColors'
 
 import {
-  LEAD_MANUAL_STATUSES, LEAD_STATUS_NEW, LEAD_STATUS_CONVERTED,
-  COMPETITOR_OTHER, MAX_LEN,
+  LEAD_STATUS_NEW, LEAD_STATUS_ACTIVE, LEAD_STATUS_CONVERTED, LEAD_STATUS_SKIPPED,
+  COMPETITOR_OTHER, MAX_LEN, SKIP_REASON_MIN, isLeadClosed,
 } from '@/lib/leadOptions'
 
 const BLUE = '#234ea2'
@@ -26,20 +26,28 @@ const FAINT = '#9ca3af'
 const BORDER = '#ebebeb'
 const CARD_BG = '#ffffff'
 const PAGE_BG = '#fafafa'
-const ROW_HOVER = '#f8fafc'
-const HEAD_BG = '#f8fafc'
+// 표의 세 단계를 서로 다른 기존 값으로 갈라 놓는다 — 같은 값을 쓰면 헤더·hover·펼친 행이 구분되지 않는다.
+const ROW_HOVER = '#f8fafc'   // 마우스만 올린 행
+const HEAD_BG = '#f3f4f6'     // 헤더 — 디자인 토큰의 중립 배경
+const OPEN_BG = '#eff4ff'     // 펼쳐진 행과 그 상세 띠 — 액센트 틴트(견적 화면 안내 띠와 같은 값)
+const OPEN_BORDER = '#c7d7f8' // 펼쳐진 구간의 테두리 — 카드 hover 테두리와 같은 값
 const DANGER = '#dc2626'
 // 경고 상자 배경 — 관리자 화면의 삭제 사유 상자와 같은 값.
 const DANGER_BG = '#fef2f2'
 
-// 리드 상태 배지 색. 새 색은 만들지 않는다 —
-// '보류' 는 SALES_STATUS_COLORS 에 이미 있고, '신규' 만 눈에 띄어야 해서
-// 같은 맵의 '견적중'(아직 손대지 않은 건을 뜻하는 amber)을 빌려 쓴다.
-// '확인중' · '전환완료' 는 맵에 없으므로 회색 폴백 그대로다.
-const leadStatusColor = (status: string): CategoryColor => {
-  if (status === LEAD_STATUS_NEW) return SALES_STATUS_COLORS['견적중']
-  return getCategoryColor(SALES_STATUS_COLORS, status)
+// 리드 상태 배지 색. 새 색은 만들지 않고 SALES_STATUS_COLORS 안에서만 골라 쓴다.
+//   신규     ← '견적중'   아직 손대지 않은 건(amber)
+//   진행중   ← '수주'     담당자가 붙어 굴러가는 건(blue)
+//   전환완료 ← '매출완료' 성공적으로 끝난 건(green)
+//   미진행   ← '보류'     더 가지 않기로 끝낸 건(gray). '실패'(red)는 과한 표현이라 쓰지 않는다.
+const LEAD_STATUS_COLOR_KEY: Record<string, string> = {
+  [LEAD_STATUS_NEW]: '견적중',
+  [LEAD_STATUS_ACTIVE]: '수주',
+  [LEAD_STATUS_CONVERTED]: '매출완료',
+  [LEAD_STATUS_SKIPPED]: '보류',
 }
+const leadStatusColor = (status: string): CategoryColor =>
+  getCategoryColor(SALES_STATUS_COLORS, LEAD_STATUS_COLOR_KEY[status])
 
 type Lead = {
   lead_id: number
@@ -53,7 +61,7 @@ type Lead = {
   contact_name: string | null; contact_dept: string | null; contact_title: string | null
   contact_email: string; contact_office_tel: string | null; contact_mobile: string
   meeting_note: string
-  status: string; assigned_to: number | null; admin_memo: string | null
+  status: string; assigned_to: number | null; admin_memo: string | null; skip_reason: string | null
   converted_opportunity_id: number | null
   created_at: string
 }
@@ -74,6 +82,9 @@ const btnStyle = (disabled: boolean): CSSProperties => ({
   cursor: disabled ? 'default' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
 })
 const groupTitle: CSSProperties = { fontSize: 11, fontWeight: 700, color: BLUE, marginBottom: 6 }
+// 펼친 상세는 옅은 띠 위에 놓이고, 그 안의 덩어리는 전부 흰 상자로 감싼다.
+// 띠(어느 행에 속하는지) → 상자(어디까지가 한 묶음인지) 두 겹으로 경계를 만든다.
+const detailBox: CSSProperties = { background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, padding: 12 }
 const dlRow: CSSProperties = { display: 'flex', gap: 8, fontSize: 12, lineHeight: 1.7 }
 const dlKey: CSSProperties = { width: 78, flexShrink: 0, color: FAINT }
 
@@ -114,6 +125,8 @@ function LeadsPageInner() {
   // 처리 입력값 — 펼친 리드 하나에 대해서만 들고 있는다.
   // 리드 id 를 함께 들고 있어야 알림으로 바로 펼쳐진 리드의 저장된 메모가 그대로 보인다.
   const [memoDraft, setMemoDraft] = useState<{ id: number; text: string } | null>(null)
+  // 미진행 사유 입력값. 메모와 같은 방식으로 리드 id 를 함께 들고 있는다.
+  const [skipDraft, setSkipDraft] = useState<{ id: number; text: string } | null>(null)
   const [custQuery, setCustQuery] = useState('')
   const [custOpen, setCustOpen] = useState(false)
   const [pickedCustomer, setPickedCustomer] = useState<Customer | null>(null)
@@ -158,6 +171,21 @@ function LeadsPageInner() {
     return () => { cancelled = true }
   }, [engineers])
 
+  /**
+   * 담당자 드롭다운에 넣을 목록. 후보는 리드 권한이 있는 재직자지만, 이미 배정된 사람이
+   * 그 조건에서 벗어나면(퇴사·권한 회수) 목록에서 빠져 select 가 저장된 값과 다른 항목을
+   * 가리킨다. 그래서 현재 배정된 사람은 이유를 붙여 목록에 남긴다.
+   */
+  const assigneeOptions = (currentId: number | null) => {
+    const list = assignable.map(e => ({ id: e.engineer_id, label: [e.name, e.position].filter(Boolean).join(' ') }))
+    if (currentId != null && !list.some(o => o.id === currentId)) {
+      const e = engineers.find(x => x.engineer_id === currentId)
+      const why = !e ? '없는 계정' : e.resigned_date ? '퇴사' : '리드 권한 없음'
+      list.push({ id: currentId, label: `${engName(currentId)} (${why})` })
+    }
+    return list
+  }
+
   const engName = (id: number | null) => {
     if (!id) return '-'
     const e = engineers.find(x => x.engineer_id === id)
@@ -184,7 +212,7 @@ function LeadsPageInner() {
   const openLead = (lead: Lead) => {
     const next = openId === lead.lead_id ? null : lead.lead_id
     setClickedId(next)
-    setMemoDraft(null)
+    setMemoDraft(null); setSkipDraft(null)
     setCustQuery(''); setCustOpen(false); setPickedCustomer(null)
     // 알림으로 들어와 붙은 파라미터는 사용자가 목록을 건드리는 순간 지운다.
     if (paramId) router.replace('/leads')
@@ -219,6 +247,41 @@ function LeadsPageInner() {
     } finally {
       setSaving(null)
     }
+  }
+
+  /**
+   * 담당자 배정. 상태는 손으로 고르지 않고 배정을 따라간다(배정하면 진행중, 풀면 신규).
+   * 서버가 같은 규칙으로 쓰므로 화면에 반영할 값도 여기서 같이 계산한다.
+   * 이미 종결된 건(전환완료·미진행)의 상태는 배정을 바꿔도 그대로 둔다.
+   */
+  const assign = (lead: Lead, assignedTo: number | null) =>
+    callManage(
+      lead.lead_id,
+      { action: 'assign', assignedTo },
+      isLeadClosed(lead.status)
+        ? { assigned_to: assignedTo }
+        : { assigned_to: assignedTo, status: assignedTo === null ? LEAD_STATUS_NEW : LEAD_STATUS_ACTIVE },
+      '담당자를 저장했습니다.',
+    )
+
+  /** 미진행 처리 — 담당자가 사유를 남기고 리드를 닫는다. 전환과 마찬가지로 되돌릴 수 없다. */
+  const skipLead = async (lead: Lead) => {
+    const reason = (skipDraft?.id === lead.lead_id ? skipDraft.text : '').trim()
+    if (reason.length < SKIP_REASON_MIN) { toast.error(`미진행 사유를 ${SKIP_REASON_MIN}자 이상 입력해주세요.`); return }
+    const ok = await confirm({
+      title: '미진행 처리',
+      message: `${lead.customer_company} 리드를 미진행으로 닫습니다. 되돌릴 수 없습니다.`,
+      confirmText: '미진행 처리',
+      variant: 'danger',
+    })
+    if (!ok) return
+    const res = await callManage(
+      lead.lead_id,
+      { action: 'skip', reason },
+      { status: LEAD_STATUS_SKIPPED, skip_reason: reason },
+      '미진행으로 처리했습니다.',
+    )
+    if (res) setSkipDraft(null)
   }
 
   /**
@@ -328,7 +391,8 @@ function LeadsPageInner() {
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ background: HEAD_BG, borderBottom: `1px solid ${BORDER}` }}>
+                {/* 헤더 — 옅은 배경만으로는 흰 행과 잘 안 갈라져, 관리자 견적서 표와 같은 2px 아래선을 함께 준다 */}
+                <tr style={{ background: HEAD_BG, borderBottom: `2px solid ${BORDER}` }}>
                   {['번호', '등록일', '파트너사', '고객사', '관심제품', '담당자', '상태'].map(h => <th key={h} style={th}>{h}</th>)}
                 </tr>
               </thead>
@@ -337,12 +401,17 @@ function LeadsPageInner() {
                   const open = openId === lead.lead_id
                   const sc = leadStatusColor(lead.status)
                   const converted = lead.status === LEAD_STATUS_CONVERTED || !!lead.converted_opportunity_id
+                  // 종결 = 더 손댈 수 없는 상태. 전환완료·미진행이면 두 버튼을 모두 잠근다.
+                  const closed = converted || isLeadClosed(lead.status)
+                  // 사유가 최소 길이를 넘어야 미진행 버튼이 열린다(서버도 같은 길이를 다시 본다).
+                  const skipReady = (skipDraft?.id === lead.lead_id ? skipDraft.text : '').trim().length >= SKIP_REASON_MIN
                   const busy = saving === lead.lead_id
                   return (
                     <Fragment key={lead.lead_id}>
+                      {/* 펼쳐진 행은 아래선을 지워 바로 밑 상세와 한 덩어리로 읽히게 한다 */}
                       <tr
                         onClick={() => openLead(lead)}
-                        style={{ borderBottom: `1px solid ${BORDER}`, cursor: 'pointer', background: open ? ROW_HOVER : undefined }}
+                        style={{ borderTop: open ? `2px solid ${OPEN_BORDER}` : undefined, borderBottom: open ? 'none' : `1px solid ${BORDER}`, cursor: 'pointer', background: open ? OPEN_BG : undefined }}
                         onMouseEnter={e => { if (!open) e.currentTarget.style.background = ROW_HOVER }}
                         onMouseLeave={e => { if (!open) e.currentTarget.style.background = '' }}
                       >
@@ -361,18 +430,18 @@ function LeadsPageInner() {
                       </tr>
 
                       {open && (
-                        <tr style={{ borderBottom: `1px solid ${BORDER}`, background: ROW_HOVER }}>
-                          <td colSpan={7} style={{ padding: '0 12px 14px' }}>
-                            {/* ── 상세 ── */}
+                        <tr style={{ borderBottom: `2px solid ${OPEN_BORDER}`, background: OPEN_BG }}>
+                          <td colSpan={7} style={{ padding: '4px 12px 14px' }}>
+                            {/* ── 상세 ── 옅은 띠가 위 행에 속함을 알리고, 그룹마다 흰 상자로 경계를 준다 */}
                             <div style={{ fontSize: 11, color: FAINT, marginBottom: 8 }}>리드 번호 · {lead.lead_no ?? '없음'}</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginBottom: 12 }}>
-                              <div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginBottom: 12, alignItems: 'start' }}>
+                              <div style={detailBox}>
                                 <div style={groupTitle}>파트너사</div>
                                 <Row k="회사명" v={lead.partner_company} />
                                 <Row k="등록자" v={lead.partner_name} />
                                 <Row k="연락처" v={lead.partner_contact} />
                               </div>
-                              <div>
+                              <div style={detailBox}>
                                 <div style={groupTitle}>고객사</div>
                                 <Row k="회사명" v={lead.customer_company} />
                                 <Row k="산업군" v={lead.industry} />
@@ -380,7 +449,7 @@ function LeadsPageInner() {
                                 <Row k="주소" v={lead.address} />
                                 <Row k="시 / 국가" v={`${lead.city} / ${lead.country}`} />
                               </div>
-                              <div>
+                              <div style={detailBox}>
                                 <div style={groupTitle}>관심 제품</div>
                                 <Row k="관심 제품" v={lead.interest_product} />
                                 <Row k="예산" v={lead.budget_status} />
@@ -397,7 +466,7 @@ function LeadsPageInner() {
                                 })()} />
                                 <Row k="요청사항" v={lead.request_note} />
                               </div>
-                              <div>
+                              <div style={detailBox}>
                                 <div style={groupTitle}>고객 정보</div>
                                 <Row k="이름" v={lead.contact_name} />
                                 <Row k="부서 / 직위" v={[lead.contact_dept, lead.contact_title].filter(Boolean).join(' / ')} />
@@ -407,30 +476,22 @@ function LeadsPageInner() {
                               </div>
                             </div>
 
-                            <div style={{ marginBottom: 12 }}>
+                            <div style={{ ...detailBox, marginBottom: 12 }}>
                               <div style={groupTitle}>미팅 노트</div>
-                              <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.8, whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 6, padding: '9px 11px' }}>
+                              <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.8, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                                 {lead.meeting_note}
                               </div>
                             </div>
 
-                            {/* ── 처리 ── */}
-                            <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, padding: 12 }}>
-                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-                                <div>
-                                  <label style={labelStyle}>상태</label>
-                                  <select
-                                    value={converted ? LEAD_STATUS_CONVERTED : lead.status}
-                                    disabled={converted || busy}
-                                    onChange={e => callManage(lead.lead_id, { action: 'status', status: e.target.value }, { status: e.target.value }, '상태를 저장했습니다.')}
-                                    style={fieldStyle}
-                                  >
-                                    {/* 전환완료는 손으로 고를 수 없다. 이미 전환된 건에서만 현재 값으로 보인다. */}
-                                    {converted
-                                      ? <option value={LEAD_STATUS_CONVERTED}>{LEAD_STATUS_CONVERTED}</option>
-                                      : LEAD_MANUAL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                                  </select>
+                            {/* ── 처리 ── 상태를 고르는 칸은 없다. 배정·전환·미진행이 상태를 정한다. */}
+                            <div style={detailBox}>
+                              {lead.status === LEAD_STATUS_SKIPPED && (
+                                <div style={{ background: HEAD_BG, borderRadius: 6, padding: '9px 11px', marginBottom: 12, fontSize: 12, color: TEXT, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                  <span style={{ color: FAINT, marginRight: 6 }}>미진행 사유</span>
+                                  {lead.skip_reason?.trim() || '-'}
                                 </div>
+                              )}
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
                                 {/* 배정은 관리자만 한다. 담당자에게는 배정된 사람 이름만 보인다. */}
                                 <div>
                                   <label style={labelStyle}>담당자</label>
@@ -440,12 +501,12 @@ function LeadsPageInner() {
                                   <select
                                     value={lead.assigned_to ?? ''}
                                     disabled={busy}
-                                    onChange={e => callManage(lead.lead_id, { action: 'assign', assignedTo: e.target.value ? Number(e.target.value) : null }, { assigned_to: e.target.value ? Number(e.target.value) : null }, '담당자를 저장했습니다.')}
+                                    onChange={e => assign(lead, e.target.value ? Number(e.target.value) : null)}
                                     style={fieldStyle}
                                   >
                                     <option value="">배정 안 함</option>
-                                    {assignable.map(e => (
-                                      <option key={e.engineer_id} value={e.engineer_id}>{[e.name, e.position].filter(Boolean).join(' ')}</option>
+                                    {assigneeOptions(lead.assigned_to).map(o => (
+                                      <option key={o.id} value={o.id}>{o.label}</option>
                                     ))}
                                   </select>
                                   )}
@@ -469,13 +530,16 @@ function LeadsPageInner() {
                                 </div>
                               </div>
 
-                              {/* ── 영업기회 전환 — 배정받은 담당자만. 관리자 화면에는 나오지 않는다. ── */}
+                              {/* ── 전환 · 미진행 — 배정받은 담당자만. 관리자 화면에는 두 버튼 모두 나오지 않는다. ── */}
                               {lead.assigned_to === myEngineerId && (
+                              <>
                               <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
                                 <div style={groupTitle}>영업기회 전환</div>
-                                {converted ? (
+                                {closed ? (
                                   <div style={{ fontSize: 12, color: MUTED }}>
-                                    이미 전환된 리드입니다. (영업기회 #{lead.converted_opportunity_id})
+                                    {converted
+                                      ? `이미 전환된 리드입니다. (영업기회 #${lead.converted_opportunity_id})`
+                                      : '미진행으로 닫힌 리드입니다.'}
                                   </div>
                                 ) : (
                                   <>
@@ -537,6 +601,34 @@ function LeadsPageInner() {
                                   </>
                                 )}
                               </div>
+
+                              {/* 미진행 — 더 진행하지 않기로 한 리드를 사유와 함께 닫는다. 전환처럼 되돌릴 수 없다. */}
+                              {!closed && (
+                                <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
+                                  <div style={groupTitle}>미진행 처리</div>
+                                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                    <input
+                                      value={skipDraft?.id === lead.lead_id ? skipDraft.text : ''}
+                                      onChange={e => setSkipDraft({ id: lead.lead_id, text: e.target.value })}
+                                      maxLength={MAX_LEN.skip_reason}
+                                      placeholder={`미진행 사유 (${SKIP_REASON_MIN}자 이상)`}
+                                      style={{ ...fieldStyle, flex: '1 1 260px', minWidth: 0 }}
+                                    />
+                                    {/* 삭제(빨간 버튼)와는 무게가 다르다 — 흰 바탕에 붉은 글자로, 되돌릴 수 없다는 것만 알린다. */}
+                                    <button
+                                      disabled={busy || !skipReady}
+                                      onClick={() => skipLead(lead)}
+                                      style={{
+                                        padding: '7px 14px', border: `1px solid ${BORDER}`, borderRadius: 6,
+                                        fontSize: 12, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap',
+                                        background: '#fff', color: busy || !skipReady ? FAINT : DANGER,
+                                        cursor: busy || !skipReady ? 'default' : 'pointer',
+                                      }}
+                                    >미진행 처리</button>
+                                  </div>
+                                </div>
+                              )}
+                              </>
                               )}
 
                               {lead.admin_memo && (

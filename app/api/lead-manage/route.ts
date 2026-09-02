@@ -4,8 +4,11 @@
 // RLS 를 켜기 전이든 뒤든 이 라우트만으로 방어가 완결되어야 한다 — RLS 는 두 번째 방어선이다.
 //
 // 역할
-//   관리자(isSuperAdmin) : 전체 조회 / 배정 / 상태 / 메모 / 삭제        (전환 불가)
-//   담당자(assigned_to)  : 자기 배정 건 조회 / 상태 / 메모 / 전환       (배정·삭제 불가)
+//   관리자(isSuperAdmin) : 전체 조회 / 배정 / 메모 / 삭제               (전환·미진행 불가)
+//   담당자(assigned_to)  : 자기 배정 건 조회 / 메모 / 전환 / 미진행     (배정·삭제 불가)
+//
+// 상태는 손으로 고르지 않는다. 배정하면 진행중, 전환하면 전환완료, 미진행 처리하면 미진행이 된다.
+// 그래서 status 를 직접 받는 action 이 없다 — 없어진 '확인중'·'보류' 는 어떤 경로로도 들어올 수 없다.
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
@@ -14,8 +17,8 @@ import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
 import { monthToDate } from '@/components/customer/opportunity'
 import { adminEngineerIds, notifyLead } from '@/lib/leadNotify'
 import {
-  LEAD_MANUAL_STATUSES, LEAD_STATUS_CONVERTED, LEAD_STATUS_HOLD,
-  LEAD_CONVERT_ACTIVITY_TYPE, MAX_LEN, leadNoTag,
+  LEAD_STATUS_NEW, LEAD_STATUS_ACTIVE, LEAD_STATUS_CONVERTED, LEAD_STATUS_SKIPPED,
+  LEAD_CONVERT_ACTIVITY_TYPE, MAX_LEN, SKIP_REASON_MIN, isLeadClosed, leadNoTag,
 } from '@/lib/leadOptions'
 
 const supabaseAdmin = createClient(
@@ -102,7 +105,14 @@ export async function POST(req: Request) {
       if (!target || target.resigned_date) return bad('배정할 수 없는 담당자입니다.')
     }
 
-    const { error } = await supabaseAdmin.from('leads').update({ assigned_to: assignedTo, ...touch }).eq('lead_id', leadId)
+    // 배정에 따라 상태가 자동으로 따라간다. 다만 종결된 건(전환완료·미진행)은 건드리지 않는다.
+    const statusPatch = isLeadClosed(lead.status)
+      ? {}
+      : { status: assignedTo === null ? LEAD_STATUS_NEW : LEAD_STATUS_ACTIVE }
+
+    const { error } = await supabaseAdmin.from('leads')
+      .update({ assigned_to: assignedTo, ...statusPatch, ...touch })
+      .eq('lead_id', leadId)
     if (error) return fail('assign update failed', error)
 
     // 새 담당자가 생겼을 때만 그 사람에게 알린다.
@@ -118,32 +128,34 @@ export async function POST(req: Request) {
         leadId,
       })
     }
-    return NextResponse.json({ success: true, assignedTo })
+    return NextResponse.json({ success: true, assignedTo, status: statusPatch.status ?? lead.status })
   }
 
-  // ── 상태 변경 — 관리자·담당자 ──
-  if (action === 'status') {
-    const status = typeof body.status === 'string' ? body.status : ''
-    // '전환완료' 는 전환이 성공했을 때만 붙는 값이라 손으로 고를 수 없다.
-    if (!(LEAD_MANUAL_STATUSES as readonly string[]).includes(status)) return bad('상태 값이 올바르지 않습니다.')
-    if (lead.converted_opportunity_id) return bad('이미 전환된 리드는 상태를 바꿀 수 없습니다.')
+  // ── 미진행 처리 — 담당자만. 되돌릴 수 없는 종결이라 사유를 반드시 받는다. ──
+  if (action === 'skip') {
+    if (!assignee) return bad('배정받은 담당자만 미진행 처리할 수 있습니다.', 403)
+    if (isLeadClosed(lead.status)) return bad('이미 종결된 리드입니다.')
 
-    const { error } = await supabaseAdmin.from('leads').update({ status, ...touch }).eq('lead_id', leadId)
-    if (error) return fail('status update failed', error)
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
+    if (!reason) return bad('미진행 사유를 입력해주세요.')
+    if (reason.length < SKIP_REASON_MIN) return bad(`미진행 사유는 ${SKIP_REASON_MIN}자 이상 입력해주세요.`)
+    if (reason.length > MAX_LEN.skip_reason) return bad(`미진행 사유는 ${MAX_LEN.skip_reason}자를 넘을 수 없습니다.`)
 
-    // 담당자가 보류로 돌린 것만 관리자에게 알린다.
-    // 관리자가 직접 바꾼 경우(admin)는 본인이 한 일이라 보내지 않고,
-    // 이미 보류인 건을 다시 보류로 저장하는 경우도 보내지 않는다.
-    if (!admin && status === LEAD_STATUS_HOLD && lead.status !== LEAD_STATUS_HOLD) {
-      await notifyLead({
-        engineerIds: await adminEngineerIds(),
-        title: '리드 보류',
-        message: `${leadNoTag(lead.lead_no)}리드가 보류 처리되었습니다.`,
-        type: 'lead_held',
-        leadId,
-      })
-    }
-    return NextResponse.json({ success: true, status })
+    const { error } = await supabaseAdmin.from('leads')
+      .update({ status: LEAD_STATUS_SKIPPED, skip_reason: reason, ...touch })
+      .eq('lead_id', leadId)
+    if (error) return fail('skip update failed', error)
+
+    // 담당자의 판단이므로 관리자에게 알린다. 사유는 길이가 제각각이라 메시지에 넣지 않는다
+    // (대시보드 알림 카드는 한 줄로 잘린다). 링크를 누르면 상세에서 전문을 볼 수 있다.
+    await notifyLead({
+      engineerIds: await adminEngineerIds(),
+      title: '리드 미진행',
+      message: `${leadNoTag(lead.lead_no)}리드가 미진행 처리되었습니다.`,
+      type: 'lead_skipped',
+      leadId,
+    })
+    return NextResponse.json({ success: true, status: LEAD_STATUS_SKIPPED })
   }
 
   // ── 메모 — 관리자·담당자 ──
@@ -160,7 +172,7 @@ export async function POST(req: Request) {
   // 관리자는 전환하지 않는다. 자기 자신을 담당자로 배정한 경우에만 담당자 자격으로 가능하다.
   if (action === 'convert') {
     if (!assignee) return bad('배정받은 담당자만 영업기회로 전환할 수 있습니다.', 403)
-    if (lead.converted_opportunity_id) return bad('이미 전환된 리드입니다.')
+    if (isLeadClosed(lead.status) || lead.converted_opportunity_id) return bad('이미 종결된 리드입니다.')
 
     const customerId = Number(body.customerId)
     if (!Number.isInteger(customerId) || customerId <= 0) return bad('고객사를 선택해주세요.')

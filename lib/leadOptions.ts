@@ -65,13 +65,20 @@ export const MAX_LEN = {
   contact_office_tel: 30,
   contact_mobile: 30,
   meeting_note: 5000,
+  // 미진행 사유 — 한두 문장이면 충분하다.
+  skip_reason: 500,
 } as const
 
-/** 리드 처리 상태. leads.status 의 기본값이 '신규' 다. */
-export const LEAD_STATUSES = ['신규', '확인중', '전환완료', '보류'] as const
-
-/** 화면에서 손으로 고를 수 있는 상태. '전환완료' 는 영업기회 전환이 성공했을 때만 붙는다. */
-export const LEAD_MANUAL_STATUSES = LEAD_STATUSES.filter(s => s !== '전환완료')
+/**
+ * 리드 처리 상태. leads.status 의 기본값이 '신규' 다.
+ * 리드는 영업기회로 전환할지 판단하는 대상이라 중간 상태를 두지 않는다.
+ *   신규     — 등록되면 자동
+ *   진행중   — 담당자가 배정되면 자동(배정을 풀면 신규로 돌아간다)
+ *   전환완료 — 영업기회로 전환되면 자동. 종결
+ *   미진행   — 담당자가 사유를 적어 종결. 되돌릴 수 없다
+ * 손으로 고를 수 있는 것은 미진행 하나뿐이라 상태 드롭다운이 없다.
+ */
+export const LEAD_STATUSES = ['신규', '진행중', '전환완료', '미진행'] as const
 
 /** 전환 시 남기는 영업활동의 유형. SalesActivityModal 의 ACTIVITY_TYPES 에 있는 값이어야 한다.
  *  파트너사가 현장에서 만나 적어 온 기록이라 '방문미팅' 으로 남긴다.
@@ -79,7 +86,20 @@ export const LEAD_MANUAL_STATUSES = LEAD_STATUSES.filter(s => s !== '전환완�
 export const LEAD_CONVERT_ACTIVITY_TYPE = '방문미팅'
 
 export const LEAD_STATUS_NEW = '신규'
-export const LEAD_STATUS_HOLD = '보류'
+export const LEAD_STATUS_ACTIVE = '진행중'
+export const LEAD_STATUS_CONVERTED = '전환완료'
+export const LEAD_STATUS_SKIPPED = '미진행'
+
+/** 종결된 리드 — 배정을 바꿔도 상태를 건드리지 않고, 전환·미진행 버튼도 잠근다. */
+export const isLeadClosed = (status: string | null | undefined) =>
+  status === LEAD_STATUS_CONVERTED || status === LEAD_STATUS_SKIPPED
+
+/**
+ * 미진행 사유 최소 길이(자).
+ * 회의록(30자)처럼 길게 요구하면 형식적으로 채우게 된다. '예산 부족'·'경쟁사 확정' 같은
+ * 짧고 분명한 사유는 통과시키되 한두 글자로 때우는 것은 막는 선에서 5자로 둔다.
+ */
+export const SKIP_REASON_MIN = 5
 
 /** 리드 번호 접두 — 'LD-26-' 처럼 연도 뒤 2자리까지 붙는다. */
 export const LEAD_NO_PREFIX = 'LD'
@@ -91,7 +111,6 @@ export const LEAD_NO_PREFIX = 'LD'
  *   없음: '신규 리드가 등록되었습니다.'
  */
 export const leadNoTag = (leadNo: string | null | undefined) => (leadNo ? `[${leadNo}] ` : '')
-export const LEAD_STATUS_CONVERTED = '전환완료'
 
 export const DEFAULT_COUNTRY = 'South Korea'
 
