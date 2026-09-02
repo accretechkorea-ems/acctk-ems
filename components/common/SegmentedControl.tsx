@@ -12,8 +12,9 @@ import { useLayoutEffect, useRef, useState } from 'react'
  *
  * options 는 문자열 배열 또는 { label, value, suffix? } 객체 배열 둘 다 허용.
  * suffix 는 라벨 오른쪽에 11px #9ca3af 로 표시.
+ * disabled 항목은 눌리지 않고 흐리게(#d1d5db) 표시된다.
  */
-type Option = { label: string; value: string; suffix?: string }
+type Option = { label: string; value: string; suffix?: string; disabled?: boolean }
 type Props = {
   options: Array<string | Option>
   value: string
@@ -89,11 +90,14 @@ export default function SegmentedControl({ options, value, onChange, equal = fal
         const active = o.value === value
         return (
           <button key={o.value} ref={el => { btnRefs.current[i] = el }} onClick={() => onChange(o.value)} tabIndex={itemTabIndex}
+            disabled={o.disabled}
             style={{
               position: 'relative', zIndex: 1, height: height != null ? '100%' : 30,
               padding: equal ? 0 : '0 12px', textAlign: 'center', borderRadius: 6,
-              fontSize: 13, background: 'transparent', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-              color: active ? '#111827' : '#6b7280', fontWeight: active ? 600 : 400,
+              fontSize: 13, background: 'transparent', border: 'none', whiteSpace: 'nowrap',
+              cursor: o.disabled ? 'not-allowed' : 'pointer',
+              color: o.disabled ? '#d1d5db' : active ? '#111827' : '#6b7280',
+              fontWeight: active ? 600 : 400,
               transition: 'color 200ms',
             }}>
             {o.label}

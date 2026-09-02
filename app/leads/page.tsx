@@ -13,6 +13,7 @@ import AccessGate from '@/components/common/AccessGate'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { getCategoryColor, SALES_STATUS_COLORS, type CategoryColor } from '@/lib/categoryColors'
+import SegmentedControl from '@/components/common/SegmentedControl'
 
 import {
   LEAD_STATUS_NEW, LEAD_STATUS_ACTIVE, LEAD_STATUS_CONVERTED, LEAD_STATUS_SKIPPED,
@@ -28,9 +29,8 @@ const CARD_BG = '#ffffff'
 const PAGE_BG = '#fafafa'
 // 표의 세 단계를 서로 다른 기존 값으로 갈라 놓는다 — 같은 값을 쓰면 헤더·hover·펼친 행이 구분되지 않는다.
 const ROW_HOVER = '#f8fafc'   // 마우스만 올린 행
-const HEAD_BG = '#f3f4f6'     // 헤더 — 디자인 토큰의 중립 배경
-const OPEN_BG = '#eff4ff'     // 펼쳐진 행과 그 상세 띠 — 액센트 틴트(견적 화면 안내 띠와 같은 값)
-const OPEN_BORDER = '#c7d7f8' // 펼쳐진 구간의 테두리 — 카드 hover 테두리와 같은 값
+const HEAD_BG = '#f3f4f6'     // 헤더 · 열린 행 — 활동 현황의 중립 배경(뱃지·칩과 같은 값)
+const ACCENT_BAR = BLUE       // 열린 행 왼쪽 액센트 바
 const DANGER = '#dc2626'
 // 경고 상자 배경 — 관리자 화면의 삭제 사유 상자와 같은 값.
 const DANGER_BG = '#fef2f2'
@@ -71,29 +71,48 @@ type Customer = { customer_id: number; company_name: string | null; address: str
 
 const th: CSSProperties = { padding: '9px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap' }
 const td: CSSProperties = { padding: '10px 10px', fontSize: 12, color: TEXT, whiteSpace: 'nowrap' }
-const fieldStyle: CSSProperties = {
-  width: '100%', padding: '7px 9px', border: `1px solid ${BORDER}`, borderRadius: 6,
-  fontSize: 12, color: TEXT, background: '#fff', outline: 'none', fontFamily: 'inherit',
+
+// ── 아래 다섯 개는 활동 현황 화면의 규칙을 그대로 옮긴 것이다(새 값 없음) ──
+// 카드: 활동 카드와 같은 흰 바탕 · 1px 테두리 · radius 8 · padding 14/16
+const cardStyle: CSSProperties = { background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '14px 16px' }
+// 카드 제목: 활동 카드의 이름 줄(17/800/-0.3px) + 아래 구분선(paddingBottom 12, marginBottom 14)
+const cardTitle: CSSProperties = {
+  fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px', lineHeight: 1.2,
+  marginBottom: 14, paddingBottom: 12, borderBottom: `1px solid ${BORDER}`,
 }
-const labelStyle: CSSProperties = { fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 4, display: 'block' }
-const btnStyle = (disabled: boolean): CSSProperties => ({
-  padding: '7px 14px', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700,
-  background: disabled ? FAINT : BLUE, color: '#fff',
-  cursor: disabled ? 'default' : 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+// 카드 안 줄 간격: 활동 카드의 유형 목록과 같은 7px
+const cardRows: CSSProperties = { display: 'grid', gap: 7 }
+// 카드 안에서 구역을 나눌 때: 배경이 아니라 선 + 12px 여백(활동 카드의 합계 줄과 같은 방식)
+const dividerTop: CSSProperties = { marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER}` }
+// 입력칸: 활동 현황 필터 카드의 input 과 같은 값
+const inpStyle: CSSProperties = {
+  padding: '8px 11px', border: `1px solid ${BORDER}`, borderRadius: 6, background: CARD_BG,
+  color: TEXT, fontSize: 13, outline: 'none', fontFamily: 'inherit',
+}
+// 실행 버튼: 활동 현황의 조회 버튼(파랑) / 비활성은 동선 보기 버튼의 회색 규칙
+const primaryBtn = (disabled: boolean): CSSProperties => ({
+  padding: '7px 16px', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 700,
+  fontFamily: 'inherit', whiteSpace: 'nowrap', transition: 'background 0.15s ease',
+  background: disabled ? '#f3f4f6' : BLUE, color: disabled ? FAINT : '#fff',
+  cursor: disabled ? 'not-allowed' : 'pointer',
 })
-const groupTitle: CSSProperties = { fontSize: 11, fontWeight: 700, color: BLUE, marginBottom: 6 }
-// 펼친 상세는 옅은 띠 위에 놓이고, 그 안의 덩어리는 전부 흰 상자로 감싼다.
-// 띠(어느 행에 속하는지) → 상자(어디까지가 한 묶음인지) 두 겹으로 경계를 만든다.
-const detailBox: CSSProperties = { background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, padding: 12 }
-const dlRow: CSSProperties = { display: 'flex', gap: 8, fontSize: 12, lineHeight: 1.7 }
-const dlKey: CSSProperties = { width: 78, flexShrink: 0, color: FAINT }
+// 취소 버튼: 상세 모달 닫기 버튼과 같은 회색 조합
+const ghostBtn: CSSProperties = {
+  padding: '7px 16px', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 700,
+  fontFamily: 'inherit', whiteSpace: 'nowrap', background: '#f3f4f6', color: MUTED, cursor: 'pointer',
+}
+
+// 라벨-값 한 줄: 라벨은 상세 목록의 보조 텍스트(12/#9ca3af), 값은 유형 텍스트(13/500/#111827),
+// 줄 높이는 활동 카드의 행 높이(20px)를 쓴다.
+const dlRow: CSSProperties = { display: 'flex', gap: 8, fontSize: 13, lineHeight: '20px' }
+const dlKey: CSSProperties = { width: 78, flexShrink: 0, color: FAINT, fontSize: 12 }
 
 /** 상세의 한 줄. 값이 비면 '-' 로 자리를 지킨다. */
 function Row({ k, v }: { k: string; v: string | null | undefined }) {
   return (
     <div style={dlRow}>
       <span style={dlKey}>{k}</span>
-      <span style={{ color: TEXT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v?.trim() || '-'}</span>
+      <span style={{ color: TEXT, fontWeight: 500, minWidth: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v?.trim() || '-'}</span>
     </div>
   )
 }
@@ -127,6 +146,8 @@ function LeadsPageInner() {
   const [memoDraft, setMemoDraft] = useState<{ id: number; text: string } | null>(null)
   // 미진행 사유 입력값. 메모와 같은 방식으로 리드 id 를 함께 들고 있는다.
   const [skipDraft, setSkipDraft] = useState<{ id: number; text: string } | null>(null)
+  // 처리 줄에서 펼친 입력 영역. 한 번에 하나만 열리므로 리드 id + 종류 한 쌍이면 충분하다.
+  const [panel, setPanel] = useState<{ id: number; kind: 'memo' | 'convert' | 'skip' } | null>(null)
   const [custQuery, setCustQuery] = useState('')
   const [custOpen, setCustOpen] = useState(false)
   const [pickedCustomer, setPickedCustomer] = useState<Customer | null>(null)
@@ -206,14 +227,27 @@ function LeadsPageInner() {
     ? customers.filter(c => (c.company_name ?? '').toLowerCase().includes(custQuery.trim().toLowerCase())).slice(0, 8)
     : []
 
+  /** 처리 줄의 입력 영역을 닫고 그 안의 임시 입력값을 버린다. */
+  const closePanel = () => {
+    setPanel(null)
+    setMemoDraft(null); setSkipDraft(null)
+    setPickedCustomer(null); setCustQuery(''); setCustOpen(false)
+  }
+
+  /** 같은 것을 다시 누르면 닫히고, 다른 것을 누르면 그쪽으로 바뀐다(한 번에 하나만 열린다). */
+  const togglePanel = (leadId: number, kind: string) => {
+    const same = panel?.id === leadId && panel.kind === kind
+    closePanel()
+    if (!same) setPanel({ id: leadId, kind: kind as 'memo' | 'convert' | 'skip' })
+  }
+
   /** 펼친 리드의 메모 입력값. 아직 손대지 않았으면 저장된 값을 그대로 보여준다. */
   const memoValue = (lead: Lead) => (memoDraft?.id === lead.lead_id ? memoDraft.text : (lead.admin_memo ?? ''))
 
   const openLead = (lead: Lead) => {
     const next = openId === lead.lead_id ? null : lead.lead_id
     setClickedId(next)
-    setMemoDraft(null); setSkipDraft(null)
-    setCustQuery(''); setCustOpen(false); setPickedCustomer(null)
+    closePanel()
     // 알림으로 들어와 붙은 파라미터는 사용자가 목록을 건드리는 순간 지운다.
     if (paramId) router.replace('/leads')
   }
@@ -281,7 +315,7 @@ function LeadsPageInner() {
       { status: LEAD_STATUS_SKIPPED, skip_reason: reason },
       '미진행으로 처리했습니다.',
     )
-    if (res) setSkipDraft(null)
+    if (res) closePanel()
   }
 
   /**
@@ -349,7 +383,7 @@ function LeadsPageInner() {
     const oppId = Number(res.opportunityId)
     setLeads(prev => prev.map(l => (l.lead_id === lead.lead_id ? { ...l, converted_opportunity_id: oppId } : l)))
     if (res.activityLogged === false) toast.error('활동 기록은 남기지 못했습니다.')
-    setPickedCustomer(null); setCustQuery('')
+    closePanel()
   }
 
   // 접근은 세 갈래다.
@@ -370,6 +404,29 @@ function LeadsPageInner() {
 
   return (
     <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '20px 24px 48px' }}>
+      {/* 상세 격자와 노트 스크롤바. 활동 현황의 .adm-thin-scroll 과 같은 규칙을 쓴다.
+          접히는 기준은 화면 폭이 아니라 상세가 놓인 칸의 폭이다 — 상세는 표 안에 있어
+          화면이 좁아도 칸은 표만큼 넓다. */}
+      <style>{`
+        .ld-scope { container-type: inline-size; }
+        .ld-detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12; align-items: stretch; }
+        .ld-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12; align-content: start; }
+        /* 노트 칸의 높이는 왼쪽 4개 카드가 정한다. 카드를 흐름에서 빼지 않으면 긴 노트가
+           행 높이를 밀어 올려 왼쪽 카드 아래에 빈 칸이 생긴다. */
+        .ld-note-slot { position: relative; min-height: 180px; }
+        .ld-note-card { position: absolute; inset: 0; }
+        .ld-note { scrollbar-width: thin; scrollbar-color: #d1d5db transparent; }
+        .ld-note::-webkit-scrollbar { width: 6px; }
+        .ld-note::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+        .ld-note::-webkit-scrollbar-track { background: transparent; }
+        @container (max-width: 900px) {
+          .ld-detail { grid-template-columns: minmax(0, 1fr); }
+          /* 세로로 접히면 맞출 높이가 없다 — 흐름으로 되돌리고 대신 최대 높이를 준다. */
+          .ld-note-slot { position: static; }
+          .ld-note-card { position: static; max-height: 420px; }
+        }
+        @container (max-width: 560px) { .ld-cards { grid-template-columns: minmax(0, 1fr); } }
+      `}</style>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
           <h1 style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px', margin: 0 }}>리드</h1>
@@ -383,7 +440,7 @@ function LeadsPageInner() {
           )}
         </div>
 
-        <div style={{ background: CARD_BG, borderRadius: 8, border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
+        <div style={{ background: CARD_BG, borderRadius: 8, border: `1px solid ${BORDER}`, overflowX: 'auto' }}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: 60, color: MUTED, fontSize: 13 }}>불러오는 중...</div>
           ) : sorted.length === 0 ? (
@@ -406,17 +463,36 @@ function LeadsPageInner() {
                   // 사유가 최소 길이를 넘어야 미진행 버튼이 열린다(서버도 같은 길이를 다시 본다).
                   const skipReady = (skipDraft?.id === lead.lead_id ? skipDraft.text : '').trim().length >= SKIP_REASON_MIN
                   const busy = saving === lead.lead_id
+                  const isAssignee = lead.assigned_to === myEngineerId
+                  // 처리 줄의 선택지. 관리자는 담당자 배정과 메모, 담당자는 메모·전환·미진행을 쓴다.
+                  // 메모는 접혀 있으면 내용이 있는지 알 수 없으므로 suffix 로 표시한다(활동 현황의 건수 suffix 와 같은 자리).
+                  const actions = [
+                    ...(isAdmin || isAssignee
+                      ? [{ label: '메모', value: 'memo', suffix: (lead.admin_memo ?? '').trim() ? '있음' : undefined }]
+                      : []),
+                    ...(isAssignee
+                      ? [
+                          { label: '영업기회 전환', value: 'convert', disabled: closed },
+                          { label: '미진행 처리', value: 'skip', disabled: closed },
+                        ]
+                      : []),
+                  ]
+                  const openPanel = panel?.id === lead.lead_id ? panel.kind : ''
+                  const memoDirty = memoValue(lead) !== (lead.admin_memo ?? '')
                   return (
                     <Fragment key={lead.lead_id}>
-                      {/* 펼쳐진 행은 아래선을 지워 바로 밑 상세와 한 덩어리로 읽히게 한다 */}
+                      {/* 열린 행 표시는 목록 쪽에만 둔다 — 중립 배경 + 왼쪽 액센트 바.
+                          아래선을 지워 바로 밑 상세와 한 덩어리로 읽히게 한다. */}
                       <tr
                         onClick={() => openLead(lead)}
-                        style={{ borderTop: open ? `2px solid ${OPEN_BORDER}` : undefined, borderBottom: open ? 'none' : `1px solid ${BORDER}`, cursor: 'pointer', background: open ? OPEN_BG : undefined }}
+                        style={{ borderBottom: open ? 'none' : `1px solid ${BORDER}`, cursor: 'pointer', background: open ? HEAD_BG : undefined }}
                         onMouseEnter={e => { if (!open) e.currentTarget.style.background = ROW_HOVER }}
                         onMouseLeave={e => { if (!open) e.currentTarget.style.background = '' }}
                       >
                         {/* 번호가 없는 리드(발급 실패)는 자리를 비우지 않고 - 로 채운다 */}
-                        <td style={{ ...td, fontWeight: 700, color: lead.lead_no ? BLUE : FAINT }}>{lead.lead_no ?? '-'}</td>
+                        <td style={{ ...td, fontWeight: 700, color: lead.lead_no ? BLUE : FAINT, borderLeft: open ? `3px solid ${ACCENT_BAR}` : `3px solid transparent` }}>
+                          {lead.lead_no ?? '-'}
+                        </td>
                         <td style={{ ...td, color: MUTED }}>{lead.created_at.slice(0, 10)}</td>
                         <td style={{ ...td, fontWeight: 700 }}>{lead.partner_company}</td>
                         <td style={td}>{lead.customer_company}</td>
@@ -430,245 +506,262 @@ function LeadsPageInner() {
                       </tr>
 
                       {open && (
-                        <tr style={{ borderBottom: `2px solid ${OPEN_BORDER}`, background: OPEN_BG }}>
-                          <td colSpan={7} style={{ padding: '4px 12px 14px' }}>
-                            {/* ── 상세 ── 옅은 띠가 위 행에 속함을 알리고, 그룹마다 흰 상자로 경계를 준다 */}
-                            <div style={{ fontSize: 11, color: FAINT, marginBottom: 8 }}>리드 번호 · {lead.lead_no ?? '없음'}</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginBottom: 12, alignItems: 'start' }}>
-                              <div style={detailBox}>
-                                <div style={groupTitle}>파트너사</div>
-                                <Row k="회사명" v={lead.partner_company} />
-                                <Row k="등록자" v={lead.partner_name} />
-                                <Row k="연락처" v={lead.partner_contact} />
-                              </div>
-                              <div style={detailBox}>
-                                <div style={groupTitle}>고객사</div>
-                                <Row k="회사명" v={lead.customer_company} />
-                                <Row k="산업군" v={lead.industry} />
-                                <Row k="생산품" v={lead.products} />
-                                <Row k="주소" v={lead.address} />
-                                <Row k="시 / 국가" v={`${lead.city} / ${lead.country}`} />
-                              </div>
-                              <div style={detailBox}>
-                                <div style={groupTitle}>관심 제품</div>
-                                <Row k="관심 제품" v={lead.interest_product} />
-                                <Row k="예산" v={lead.budget_status} />
-                                <Row k="구매 기간" v={lead.purchase_period} />
-                                <Row k="구매 시기" v={lead.expected_purchase} />
-                                {/* 경쟁사는 배열이라 쉼표로 잇고, '기타' 가 있으면 직접 입력값을 덧붙인다 */}
-                                <Row k="경쟁사" v={(() => {
-                                  const list = lead.competitor ?? []
-                                  if (!list.length) return ''
-                                  const joined = list.join(', ')
-                                  return list.includes(COMPETITOR_OTHER) && lead.competitor_other
-                                    ? `${joined} (${lead.competitor_other})`
-                                    : joined
-                                })()} />
-                                <Row k="요청사항" v={lead.request_note} />
-                              </div>
-                              <div style={detailBox}>
-                                <div style={groupTitle}>고객 정보</div>
-                                <Row k="이름" v={lead.contact_name} />
-                                <Row k="부서 / 직위" v={[lead.contact_dept, lead.contact_title].filter(Boolean).join(' / ')} />
-                                <Row k="이메일" v={lead.contact_email} />
-                                <Row k="회사번호" v={lead.contact_office_tel} />
-                                <Row k="휴대폰" v={lead.contact_mobile} />
-                              </div>
-                            </div>
-
-                            <div style={{ ...detailBox, marginBottom: 12 }}>
-                              <div style={groupTitle}>미팅 노트</div>
-                              <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.8, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                {lead.meeting_note}
-                              </div>
-                            </div>
-
-                            {/* ── 처리 ── 상태를 고르는 칸은 없다. 배정·전환·미진행이 상태를 정한다. */}
-                            <div style={detailBox}>
-                              {lead.status === LEAD_STATUS_SKIPPED && (
-                                <div style={{ background: HEAD_BG, borderRadius: 6, padding: '9px 11px', marginBottom: 12, fontSize: 12, color: TEXT, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                                  <span style={{ color: FAINT, marginRight: 6 }}>미진행 사유</span>
-                                  {lead.skip_reason?.trim() || '-'}
+                        <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                          {/* 상세는 활동 현황과 같은 구조 — 옅은 바탕 위에 흰 카드가 놓인다. */}
+                          <td colSpan={7} style={{ padding: 12, background: PAGE_BG }}>
+                            <div className="ld-scope">
+                            <div className="ld-detail">
+                              {/* 왼쪽 2×2. 같은 행끼리 높이가 맞는다(그리드 기본 stretch). */}
+                              <div className="ld-cards">
+                                <div style={cardStyle}>
+                                  <div style={cardTitle}>파트너사</div>
+                                  <div style={cardRows}>
+                                    <Row k="회사명" v={lead.partner_company} />
+                                    <Row k="등록자" v={lead.partner_name} />
+                                    <Row k="연락처" v={lead.partner_contact} />
+                                  </div>
                                 </div>
-                              )}
-                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+                                <div style={cardStyle}>
+                                  <div style={cardTitle}>고객사</div>
+                                  <div style={cardRows}>
+                                    <Row k="회사명" v={lead.customer_company} />
+                                    <Row k="산업군" v={lead.industry} />
+                                    <Row k="생산품" v={lead.products} />
+                                    <Row k="주소" v={lead.address} />
+                                    <Row k="시 / 국가" v={`${lead.city} / ${lead.country}`} />
+                                  </div>
+                                </div>
+                                <div style={cardStyle}>
+                                  <div style={cardTitle}>관심 제품</div>
+                                  <div style={cardRows}>
+                                    <Row k="관심 제품" v={lead.interest_product} />
+                                    <Row k="예산" v={lead.budget_status} />
+                                    <Row k="구매 기간" v={lead.purchase_period} />
+                                    <Row k="구매 시기" v={lead.expected_purchase} />
+                                    {/* 경쟁사는 배열이라 쉼표로 잇고, '기타' 가 있으면 직접 입력값을 덧붙인다 */}
+                                    <Row k="경쟁사" v={(() => {
+                                      const list = lead.competitor ?? []
+                                      if (!list.length) return ''
+                                      const joined = list.join(', ')
+                                      return list.includes(COMPETITOR_OTHER) && lead.competitor_other
+                                        ? `${joined} (${lead.competitor_other})`
+                                        : joined
+                                    })()} />
+                                    <Row k="요청사항" v={lead.request_note} />
+                                  </div>
+                                </div>
+                                <div style={cardStyle}>
+                                  <div style={cardTitle}>고객 정보</div>
+                                  <div style={cardRows}>
+                                    <Row k="이름" v={lead.contact_name} />
+                                    <Row k="부서 / 직위" v={[lead.contact_dept, lead.contact_title].filter(Boolean).join(' / ')} />
+                                    <Row k="이메일" v={lead.contact_email} />
+                                    <Row k="회사번호" v={lead.contact_office_tel} />
+                                    <Row k="휴대폰" v={lead.contact_mobile} />
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* 미팅 노트 — 왼쪽 전체 높이에 맞춰 늘어나고, 길면 이 안에서만 스크롤한다.
+                                  짧아도 자리가 유지되도록 최소 높이를 둔다. */}
+                              <div className="ld-note-slot">
+                                <div className="ld-note-card" style={{ ...cardStyle, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                                  <div style={cardTitle}>미팅 노트</div>
+                                  <div
+                                    className="ld-note"
+                                    style={{
+                                      flex: 1, minHeight: 0, overflowY: 'auto',
+                                      fontSize: 13, color: TEXT, lineHeight: '22px',
+                                      whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                                    }}
+                                  >
+                                    {lead.meeting_note}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* ── 처리 ── 활동 현황의 필터 카드처럼 한 줄에 늘어놓고, 누른 것만 아래로 펼친다. */}
+                            <div style={{ ...cardStyle, marginTop: 12 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                 {/* 배정은 관리자만 한다. 담당자에게는 배정된 사람 이름만 보인다. */}
-                                <div>
-                                  <label style={labelStyle}>담당자</label>
-                                  {!isAdmin ? (
-                                    <div style={{ ...fieldStyle, background: HEAD_BG, color: MUTED }}>{engName(lead.assigned_to)}</div>
-                                  ) : (
+                                {isAdmin ? (
                                   <select
                                     value={lead.assigned_to ?? ''}
                                     disabled={busy}
                                     onChange={e => assign(lead, e.target.value ? Number(e.target.value) : null)}
-                                    style={fieldStyle}
+                                    style={{ ...inpStyle, width: 'auto' }}
                                   >
                                     <option value="">배정 안 함</option>
                                     {assigneeOptions(lead.assigned_to).map(o => (
                                       <option key={o.id} value={o.id}>{o.label}</option>
                                     ))}
                                   </select>
-                                  )}
+                                ) : (
+                                  <span style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap' }}>
+                                    <span style={{ color: FAINT, marginRight: 6 }}>담당자</span>
+                                    {engName(lead.assigned_to)}
+                                  </span>
+                                )}
+                                {actions.length > 0 && (
+                                  <SegmentedControl
+                                    value={openPanel}
+                                    options={actions}
+                                    onChange={v => togglePanel(lead.lead_id, v)}
+                                  />
+                                )}
+                              </div>
+
+                              {/* 종결된 리드는 무엇으로 끝났는지와 그 사유를 여기서 밝힌다(버튼은 잠겨 있다). */}
+                              {closed && (
+                                <div style={{ ...dividerTop, display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                                  <span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: sc.bg, color: sc.text, flexShrink: 0 }}>
+                                    {lead.status}
+                                  </span>
+                                  <span style={{ flex: '1 1 240px', minWidth: 0, fontSize: 13, color: MUTED, lineHeight: '20px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                    {converted
+                                      ? `영업기회 #${lead.converted_opportunity_id} 로 전환되었습니다.`
+                                      : (lead.skip_reason?.trim() || '사유가 남아 있지 않습니다.')}
+                                  </span>
                                 </div>
-                                <div>
-                                  <label style={labelStyle}>메모</label>
-                                  <div style={{ display: 'flex', gap: 6 }}>
+                              )}
+
+                              {/* ── 메모 ── */}
+                              {openPanel === 'memo' && (
+                                <div style={dividerTop}>
+                                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                     <input
                                       value={memoValue(lead)}
                                       maxLength={MAX_LEN.request_note}
                                       onChange={e => setMemoDraft({ id: lead.lead_id, text: e.target.value })}
                                       placeholder="처리 메모"
-                                      style={fieldStyle}
+                                      style={{ ...inpStyle, flex: '1 1 260px', minWidth: 0 }}
                                     />
                                     <button
-                                      disabled={busy || memoValue(lead) === (lead.admin_memo ?? '')}
+                                      disabled={busy || !memoDirty}
                                       onClick={() => callManage(lead.lead_id, { action: 'memo', memo: memoValue(lead) }, { admin_memo: memoValue(lead).trim() || null }, '메모를 저장했습니다.')}
-                                      style={btnStyle(busy || memoValue(lead) === (lead.admin_memo ?? ''))}
+                                      style={primaryBtn(busy || !memoDirty)}
                                     >저장</button>
+                                    <button onClick={closePanel} style={ghostBtn}>취소</button>
                                   </div>
                                 </div>
-                              </div>
+                              )}
 
-                              {/* ── 전환 · 미진행 — 배정받은 담당자만. 관리자 화면에는 두 버튼 모두 나오지 않는다. ── */}
-                              {lead.assigned_to === myEngineerId && (
-                              <>
-                              <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
-                                <div style={groupTitle}>영업기회 전환</div>
-                                {closed ? (
-                                  <div style={{ fontSize: 12, color: MUTED }}>
-                                    {converted
-                                      ? `이미 전환된 리드입니다. (영업기회 #${lead.converted_opportunity_id})`
-                                      : '미진행으로 닫힌 리드입니다.'}
-                                  </div>
-                                ) : (
-                                  <>
-                                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                                      <div style={{ position: 'relative', flex: '1 1 260px', minWidth: 0 }}>
-                                        {pickedCustomer ? (
-                                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                                            <div style={{ ...fieldStyle, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                              {pickedCustomer.company_name ?? '-'}
-                                              {pickedCustomer.address && <span style={{ marginLeft: 6, fontSize: 11, color: FAINT }}>{pickedCustomer.address}</span>}
+                              {/* ── 영업기회 전환 — 배정받은 담당자만 열 수 있다. ── */}
+                              {openPanel === 'convert' && (
+                                <div style={dividerTop}>
+                                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                                    <div style={{ position: 'relative', flex: '1 1 260px', minWidth: 0 }}>
+                                      {pickedCustomer ? (
+                                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                          <div style={{ ...inpStyle, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {pickedCustomer.company_name ?? '-'}
+                                            {pickedCustomer.address && <span style={{ marginLeft: 6, fontSize: 12, color: FAINT }}>{pickedCustomer.address}</span>}
+                                          </div>
+                                          <button
+                                            onClick={() => { setPickedCustomer(null); setCustQuery(''); setCustOpen(true) }}
+                                            style={ghostBtn}
+                                          >변경</button>
+                                        </div>
+                                      ) : (
+                                        <input
+                                          value={custQuery}
+                                          onChange={e => { setCustQuery(e.target.value); setCustOpen(true) }}
+                                          onFocus={() => setCustOpen(true)}
+                                          placeholder="업체명으로 검색"
+                                          style={{ ...inpStyle, width: '100%' }}
+                                        />
+                                      )}
+                                      {custOpen && !pickedCustomer && custMatches.length > 0 && (
+                                        <div style={{
+                                          position: 'absolute', top: '100%', left: 0, width: '100%', marginTop: 4, zIndex: 20,
+                                          background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 6,
+                                          boxShadow: '0 4px 12px rgba(0,0,0,0.08)', maxHeight: 240, overflowY: 'auto',
+                                        }}>
+                                          {custMatches.map(c => (
+                                            <div key={c.customer_id}
+                                              onMouseDown={ev => { ev.preventDefault(); setPickedCustomer(c); setCustOpen(false) }}
+                                              style={{ padding: '8px 11px', cursor: 'pointer' }}
+                                              onMouseEnter={ev => { ev.currentTarget.style.background = '#f5f5f5' }}
+                                              onMouseLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
+                                            >
+                                              <div style={{ fontSize: 13, fontWeight: 500, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.company_name ?? '-'}</div>
+                                              <div style={{ fontSize: 12, color: FAINT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.address ?? '주소 없음'}</div>
                                             </div>
-                                            <button
-                                              onClick={() => { setPickedCustomer(null); setCustQuery(''); setCustOpen(true) }}
-                                              style={{ padding: '7px 12px', background: '#f3f4f6', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: MUTED, flexShrink: 0 }}
-                                            >변경</button>
-                                          </div>
-                                        ) : (
-                                          <input
-                                            value={custQuery}
-                                            onChange={e => { setCustQuery(e.target.value); setCustOpen(true) }}
-                                            onFocus={() => setCustOpen(true)}
-                                            placeholder="업체명으로 검색"
-                                            style={fieldStyle}
-                                          />
-                                        )}
-                                        {custOpen && !pickedCustomer && custMatches.length > 0 && (
-                                          <div style={{
-                                            position: 'absolute', top: '100%', left: 0, width: '100%', marginTop: 4, zIndex: 20,
-                                            background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 6,
-                                            boxShadow: '0 4px 12px rgba(0,0,0,0.08)', maxHeight: 240, overflowY: 'auto',
-                                          }}>
-                                            {custMatches.map(c => (
-                                              <div key={c.customer_id}
-                                                onMouseDown={ev => { ev.preventDefault(); setPickedCustomer(c); setCustOpen(false) }}
-                                                style={{ padding: '8px 11px', cursor: 'pointer' }}
-                                                onMouseEnter={ev => { ev.currentTarget.style.background = '#f5f5f5' }}
-                                                onMouseLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
-                                              >
-                                                <div style={{ fontSize: 12, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.company_name ?? '-'}</div>
-                                                <div style={{ fontSize: 11, color: FAINT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.address ?? '주소 없음'}</div>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </div>
-                                      <button
-                                        disabled={busy || !pickedCustomer}
-                                        onClick={() => convert(lead)}
-                                        style={btnStyle(busy || !pickedCustomer)}
-                                      >
-                                        {busy ? '전환 중...' : '영업기회로 전환'}
-                                      </button>
-                                    </div>
-                                    <div style={{ fontSize: 11, color: FAINT, marginTop: 6, lineHeight: 1.7 }}>
-                                      {custQuery.trim() && custMatches.length === 0 && !pickedCustomer && (
-                                        <div>검색 결과가 없습니다. 고객사가 등록되어 있지 않다면 고객사를 먼저 등록해주세요.</div>
+                                          ))}
+                                        </div>
                                       )}
                                     </div>
-                                  </>
-                                )}
-                              </div>
+                                    <button
+                                      disabled={busy || !pickedCustomer}
+                                      onClick={() => convert(lead)}
+                                      style={primaryBtn(busy || !pickedCustomer)}
+                                    >
+                                      {busy ? '전환 중...' : '영업기회로 전환'}
+                                    </button>
+                                    <button onClick={closePanel} style={ghostBtn}>취소</button>
+                                  </div>
+                                  {custQuery.trim() && custMatches.length === 0 && !pickedCustomer && (
+                                    <div style={{ fontSize: 12, color: FAINT, marginTop: 6, lineHeight: '20px' }}>
+                                      검색 결과가 없습니다. 고객사가 등록되어 있지 않다면 고객사를 먼저 등록해주세요.
+                                    </div>
+                                  )}
+                                </div>
+                              )}
 
-                              {/* 미진행 — 더 진행하지 않기로 한 리드를 사유와 함께 닫는다. 전환처럼 되돌릴 수 없다. */}
-                              {!closed && (
-                                <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
-                                  <div style={groupTitle}>미진행 처리</div>
+                              {/* ── 미진행 처리 — 되돌릴 수 없어 사유를 받는다. ── */}
+                              {openPanel === 'skip' && (
+                                <div style={dividerTop}>
                                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                     <input
                                       value={skipDraft?.id === lead.lead_id ? skipDraft.text : ''}
                                       onChange={e => setSkipDraft({ id: lead.lead_id, text: e.target.value })}
                                       maxLength={MAX_LEN.skip_reason}
                                       placeholder={`미진행 사유 (${SKIP_REASON_MIN}자 이상)`}
-                                      style={{ ...fieldStyle, flex: '1 1 260px', minWidth: 0 }}
+                                      style={{ ...inpStyle, flex: '1 1 260px', minWidth: 0 }}
                                     />
-                                    {/* 삭제(빨간 버튼)와는 무게가 다르다 — 흰 바탕에 붉은 글자로, 되돌릴 수 없다는 것만 알린다. */}
                                     <button
                                       disabled={busy || !skipReady}
                                       onClick={() => skipLead(lead)}
-                                      style={{
-                                        padding: '7px 14px', border: `1px solid ${BORDER}`, borderRadius: 6,
-                                        fontSize: 12, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap',
-                                        background: '#fff', color: busy || !skipReady ? FAINT : DANGER,
-                                        cursor: busy || !skipReady ? 'default' : 'pointer',
-                                      }}
+                                      style={primaryBtn(busy || !skipReady)}
                                     >미진행 처리</button>
+                                    <button onClick={closePanel} style={ghostBtn}>취소</button>
                                   </div>
-                                </div>
-                              )}
-                              </>
-                              )}
-
-                              {lead.admin_memo && (
-                                <div style={{ marginTop: 10, fontSize: 11, color: FAINT }}>
-                                  저장된 메모 · {lead.admin_memo}
                                 </div>
                               )}
 
                               {/* 삭제 — superadmin 에게만 보인다. 서버도 같은 권한을 다시 확인한다. */}
                               {isSuperAdmin(me) && (
-                                <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
+                                <div style={dividerTop}>
                                   {deleteConfirm?.id === lead.lead_id ? (
                                     <div style={{ background: DANGER_BG, border: `1px solid ${BORDER}`, borderRadius: 6, padding: 12 }}>
-                                      <div style={{ fontSize: 12, color: TEXT, lineHeight: 1.8, marginBottom: 10 }}>
+                                      <div style={{ fontSize: 13, color: TEXT, lineHeight: '22px', marginBottom: 10 }}>
                                         이 리드는 영업기회 #{lead.converted_opportunity_id} 으로 전환되었습니다.<br />
                                         삭제하면 해당 영업기회의 출처 기록이 사라집니다.<br />
                                         영업기회 자체는 삭제되지 않습니다.
                                       </div>
-                                      <div style={{ fontSize: 11, color: MUTED, marginBottom: 6 }}>
+                                      <div style={{ fontSize: 12, color: FAINT, marginBottom: 6 }}>
                                         삭제하려면 고객사명 「{lead.customer_company}」 을 입력하세요
                                       </div>
-                                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                                         <input
                                           value={deleteConfirm.text}
                                           onChange={e => setDeleteConfirm({ id: lead.lead_id, text: e.target.value })}
                                           placeholder={lead.customer_company}
-                                          style={{ ...fieldStyle, flex: '1 1 200px', minWidth: 0 }}
+                                          style={{ ...inpStyle, flex: '1 1 200px', minWidth: 0 }}
                                         />
                                         <button
                                           disabled={deleting === lead.lead_id || deleteConfirm.text.trim() !== lead.customer_company.trim()}
                                           onClick={() => removeLead(lead, deleteConfirm.text)}
                                           style={{
-                                            ...btnStyle(deleting === lead.lead_id || deleteConfirm.text.trim() !== lead.customer_company.trim()),
-                                            background: deleting === lead.lead_id || deleteConfirm.text.trim() !== lead.customer_company.trim() ? FAINT : DANGER,
+                                            ...primaryBtn(deleting === lead.lead_id || deleteConfirm.text.trim() !== lead.customer_company.trim()),
+                                            background: deleting === lead.lead_id || deleteConfirm.text.trim() !== lead.customer_company.trim() ? '#f3f4f6' : DANGER,
                                           }}
                                         >{deleting === lead.lead_id ? '삭제 중...' : '삭제'}</button>
                                         <button
                                           onClick={() => setDeleteConfirm(null)}
                                           disabled={deleting === lead.lead_id}
-                                          style={{ padding: '7px 14px', background: '#fff', color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}
+                                          style={ghostBtn}
                                         >취소</button>
                                       </div>
                                     </div>
@@ -676,11 +769,15 @@ function LeadsPageInner() {
                                     <button
                                       onClick={() => askDelete(lead)}
                                       disabled={deleting === lead.lead_id}
-                                      style={{ ...btnStyle(deleting === lead.lead_id), background: deleting === lead.lead_id ? FAINT : DANGER }}
+                                      style={{
+                                        ...primaryBtn(deleting === lead.lead_id),
+                                        background: deleting === lead.lead_id ? '#f3f4f6' : DANGER,
+                                      }}
                                     >{deleting === lead.lead_id ? '삭제 중...' : '리드 삭제'}</button>
                                   )}
                                 </div>
                               )}
+                            </div>
                             </div>
                           </td>
                         </tr>
