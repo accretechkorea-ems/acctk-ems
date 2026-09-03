@@ -25,6 +25,12 @@ const PAGE_BG = '#f4f5f7'
 const MAX_WIDTH = 1600
 const TOP_HOLDINGS = 6   // 홀딩 격자 3열 × 2행
 const TOP_UPCOMING = 6   // 다가오는 일정 격자 — 홀딩과 같은 3열 × 2행
+/**
+ * 격자에 깔 칸 수. 3건 이하면 한 줄(3칸)만 깔아 아래 한 줄이 통째로 비지 않게 한다.
+ * 4건부터는 종전대로 두 줄(6칸). 모자란 자리는 그대로 점선 칸으로 채워 격자 모양을 지킨다.
+ * 행 높이가 고정(72px)이라 칸 수가 줄면 카드 높이도 그만큼 줄어든다.
+ */
+const gridSlots = (count: number, max: number) => (count <= 3 ? 3 : max)
 // 목록은 건수가 모자라도 이만큼의 줄 자리를 늘 차지한다(카드 높이를 고정하기 위해).
 const TOP_OPPS = 10
 const TOP_EXPIRING = 7
@@ -346,11 +352,10 @@ export default function Dashboard80Page() {
               ) : holdingItems.length === 0 ? (
                 <Empty text="홀딩 중인 건이 없습니다" />
               ) : (
-                // 6칸 격자. 건수가 모자라면 빈 칸을 채워 격자 모양을 유지한다
-                // (칸을 비우지 않으면 3건일 때 한 줄만 남아 카드 높이가 들쭉날쭉해진다).
+                // 3칸 또는 6칸 격자. 건수가 모자라면 빈 칸을 점선으로 채워 격자 모양을 유지한다.
                 // 전체 건수는 헤더 뱃지에 있으므로 여기서는 "외 N건" 을 두지 않는다.
                 <div className="d80-hold">
-                  {Array.from({ length: TOP_HOLDINGS }).map((_, i) => {
+                  {Array.from({ length: gridSlots(holdingItems.length, TOP_HOLDINGS) }).map((_, i) => {
                     const u = holdingItems[i]
                     if (!u) {
                       return <div key={`empty-${i}`} style={{ border: '1px dashed #ebebeb', borderRadius: 6 }} />
@@ -397,9 +402,9 @@ export default function Dashboard80Page() {
               ) : upcomingVisits.length === 0 ? (
                 <Empty text="예정된 일정이 없습니다" />
               ) : (
-                // 홀딩과 같은 규칙 — 건수가 모자라면 빈 칸을 채워 격자 모양을 유지한다.
+                // 홀딩과 같은 규칙 — 3건 이하면 한 줄, 모자란 자리는 점선 칸.
                 <div className="d80-hold">
-                  {Array.from({ length: TOP_UPCOMING }).map((_, i) => {
+                  {Array.from({ length: gridSlots(upcomingVisits.length, TOP_UPCOMING) }).map((_, i) => {
                     const v = upcomingVisits[i]
                     if (!v) {
                       return <div key={`up-empty-${i}`} style={{ border: '1px dashed #ebebeb', borderRadius: 6 }} />
