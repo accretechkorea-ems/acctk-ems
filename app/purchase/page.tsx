@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { SALES_STATUS_COLORS, DELIVERY_METHOD_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import { canViewSalesMgmt, type TeamPerm } from '@/lib/permissions'
@@ -10,6 +11,7 @@ import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import AccessGate from '@/components/common/AccessGate'
 import { Z } from '@/lib/zIndex'
 import Popover from '@/components/common/Popover'
+import AssigneePicker from '@/components/quote/AssigneePicker'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#f4f5f7'
@@ -66,11 +68,14 @@ const fmtShort = (s: string | null) => {
 
 export default function PurchasePage() {
   const supabase = createClient()
+  const router = useRouter()
   const [quotes, setQuotes] = useState<PurchaseQuote[]>([])
   const [custMap, setCustMap] = useState<Record<number, string>>({})
   const [engMap, setEngMap] = useState<Record<string, string>>({})
   const [me, setMe] = useState<Engineer | null>(null)
   const [loading, setLoading] = useState(true)
+  // 조회가 실패했는지. 빈 목록과 구분해서 알려주기 위한 것이다.
+  const [loadError, setLoadError] = useState(false)
   const [statusFilter, setStatusFilter] = useState<string>('전체')
   const [search, setSearch] = useState('')
 
@@ -92,6 +97,8 @@ export default function PurchasePage() {
   // 열린 행의 배송 배지. 포털 팝오버가 이 좌표를 기준으로 뜬다.
   const addressAnchorRef = useRef<HTMLDivElement>(null)
   const [copiedId, setCopiedId] = useState<number | null>(null)
+  // 견적서 대필 — 실적을 받을 담당자 고르기
+  const [assigneeOpen, setAssigneeOpen] = useState(false)
   // 출하일정/메모 편집 모달
   const [editScheduleModal, setEditScheduleModal] = useState<PurchaseQuote | null>(null)
   const [editShippingDate, setEditShippingDate] = useState('')
@@ -101,15 +108,20 @@ export default function PurchasePage() {
   const fetchAll = async () => {
     setLoading(true)
     const { data: userData } = await supabase.auth.getUser()
-    const [{ data: meData }, { data: qData }, { data: custData }, { data: engData }] = await Promise.all([
+    const [{ data: meData }, { data: qData, error: qErr }, { data: custData }, { data: engData }] = await Promise.all([
       supabase.from('engineers').select('*').eq('email', userData.user?.email || '').single(),
       supabase.from('quotes')
-        .select('quote_id, quote_number, quote_date, total_supply, status, pdf_url, purchase_order_url, purchase_order_at, shipping_date, order_memo, order_completed_at, order_completed_by, tax_invoice_date, tax_invoice_requested_at, tax_invoice_completed_at, tax_completed_by, delivery_info, delivery_method, engineer_id, customer_id, engineers(name, position)')
+        // quotes 는 engineers 를 engineer_id(실적 귀속자)·created_by(작성자) 두 번 참조한다.
+        // 관계를 지정하지 않으면 PGRST201(300 Multiple Choices)로 조회 전체가 실패한다.
+        // 이 화면의 「담당자」 열과 처리 알림 수신자는 모두 실적 귀속자다.
+        .select('quote_id, quote_number, quote_date, total_supply, status, pdf_url, purchase_order_url, purchase_order_at, shipping_date, order_memo, order_completed_at, order_completed_by, tax_invoice_date, tax_invoice_requested_at, tax_invoice_completed_at, tax_completed_by, delivery_info, delivery_method, engineer_id, customer_id, engineers!quotes_engineer_id_fkey(name, position)')
         .in('status', ['발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료'])
         .order('purchase_order_at', { ascending: false }),
       supabase.from('customers').select('customer_id, company_name'),
       supabase.from('engineers').select('name, position'),
     ])
+    if (qErr) console.error('[purchase] 발주 목록 조회 실패', qErr)
+    setLoadError(!!qErr)
     // 진입 판정(canViewSalesMgmt)에 팀 플래그가 필요하다.
     setMe(await withTeamPerm(meData as Engineer | null))
     const em: Record<string, string> = {}
@@ -259,7 +271,14 @@ export default function PurchasePage() {
               </button>
             ))}
           </div>
-          <span style={{ fontSize: 12, color: MUTED, marginLeft: 'auto' }}>{filtered.length}건</span>
+          {/* 발주서만 먼저 오는 건은 견적이 없어 등록할 수 없다. 영업관리가 대신 견적을 쓰고
+              실적은 원래 담당자에게 남긴다. 담당자를 고르면 견적 작성 화면으로 넘어간다. */}
+          <button onClick={() => setAssigneeOpen(true)}
+            style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 8, border: `1px solid ${BORDER}`, background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 12, color: GRAY, whiteSpace: 'nowrap' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = BLUE; e.currentTarget.style.color = BLUE }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = GRAY }}>
+            견적서 대필
+          </button>
           {/* 선택한 견적을 이익률 분석표 엑셀로 내보낸다(보이는 행만 선택 가능). */}
           <QuoteExcelButton
             quoteIds={sel.selected}
@@ -271,7 +290,10 @@ export default function PurchasePage() {
 
         {/* 테이블 */}
         <div style={{ background: CARD_BG, borderRadius: 14, border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
-          {filtered.length === 0 ? (
+          {loadError ? (
+            // 빈 목록과 조회 실패는 구분해서 보여준다 — 둘 다 빈 화면이면 장애를 알아챌 수 없다.
+            <div style={{ textAlign: 'center', padding: 60, color: '#ef4444', fontSize: 14, fontWeight: 700 }}>데이터를 불러오지 못했습니다</div>
+          ) : filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 60, color: MUTED, fontSize: 14 }}>해당 조건의 발주가 없습니다</div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -460,6 +482,14 @@ export default function PurchasePage() {
       </div>
 
       {/* 주문완료 처리 모달 */}
+      {/* 견적서 대필 — 담당자를 고르면 그 사람 실적으로 잡히는 견적 작성 화면으로 넘어간다.
+          허용 여부는 화면이 아니라 /quote 진입 때 서버(/api/quote-on-behalf)가 판정한다. */}
+      <AssigneePicker
+        open={assigneeOpen}
+        onClose={() => setAssigneeOpen(false)}
+        onPick={a => { setAssigneeOpen(false); router.push(`/quote?on_behalf=${a.engineer_id}`) }}
+      />
+
       {orderModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 400, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>

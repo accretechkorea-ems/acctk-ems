@@ -13,12 +13,12 @@ import { Z } from '@/lib/zIndex'
  * 팀이 늘어도 이 파일은 손대지 않는다(리드 배정 후보 선별과 같은 규칙).
  *
  * 드롭다운이 아니라 이름 검색인 이유: 후보가 스무 명을 넘어 목록에서 눈으로 찾기 느리다.
- * 검색어가 없으면 팀별로 묶어 전원을 보여준다 — 이름을 정확히 몰라도 고를 수 있어야 한다.
+ * 검색어가 없으면 전원을 보여준다 — 이름을 정확히 몰라도 고를 수 있어야 한다.
  */
 
 export type Assignee = { engineer_id: number; name: string; position: string | null; teams: string | null }
 
-const BLUE = '#234ea2', TEXT = '#111827', GRAY = '#6b7280', MUTED = '#9ca3af', BORDER = '#ebebeb'
+const TEXT = '#111827', GRAY = '#6b7280', MUTED = '#9ca3af', BORDER = '#ebebeb'
 
 const inputStyle: CSSProperties = {
   width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 6,
@@ -27,18 +27,20 @@ const inputStyle: CSSProperties = {
 
 type Row = Assignee & { resigned_date: string | null; permission_level: string | null }
 
-export default function AssigneePicker({ open, onClose, onPick }: {
-  open: boolean
-  onClose: () => void
-  onPick: (assignee: Assignee) => void
-}) {
+type Props = { open: boolean; onClose: () => void; onPick: (assignee: Assignee) => void }
+
+// 열려 있을 때만 붙는다. 검색어·목록이 모달의 수명과 같아져, 닫을 때 상태를 되돌리는 effect 가 필요 없다.
+export default function AssigneePicker({ open, onClose, onPick }: Props) {
+  if (!open) return null
+  return <Panel onClose={onClose} onPick={onPick} />
+}
+
+function Panel({ onClose, onPick }: Omit<Props, 'open'>) {
   const [list, setList] = useState<Assignee[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
 
-  // 열릴 때마다 새로 읽지 않는다 — 팀 플래그는 세션 캐시라 첫 조회 한 번이면 충분하다.
   useEffect(() => {
-    if (!open) return
     let cancelled = false
     const run = async () => {
       const supabase = createClient()
@@ -61,10 +63,7 @@ export default function AssigneePicker({ open, onClose, onPick }: {
     }
     run()
     return () => { cancelled = true }
-  }, [open])
-
-  // 모달을 닫을 때 검색어를 버린다(다음에 열면 전원 목록부터).
-  useEffect(() => { if (!open) setQuery('') }, [open])
+  }, [])
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -74,8 +73,6 @@ export default function AssigneePicker({ open, onClose, onPick }: {
       (e.teams ?? '').toLowerCase().includes(q)
     )
   }, [list, query])
-
-  if (!open) return null
 
   return (
     <div
@@ -123,7 +120,6 @@ export default function AssigneePicker({ open, onClose, onPick }: {
           style={{ marginTop: 16, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: GRAY }}>
           취소
         </button>
-        <span style={{ display: 'none', color: BLUE }} />
       </div>
     </div>
   )

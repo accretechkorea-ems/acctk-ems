@@ -52,13 +52,16 @@ export async function POST(req: NextRequest) {
   if (action === 'request') {
     const { data: quote, error: quoteErr } = await supabaseAdmin
       .from('quotes')
-      .select('quote_id, quote_number, status, delete_reason, engineer_id')
+      .select('quote_id, quote_number, status, delete_reason, engineer_id, created_by')
       .eq('quote_id', quoteId)
       .single()
     if (quoteErr || !quote) return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
 
-    // 요청 권한 — 본인 견적이거나, 실적 현황에서 남의 견적을 처리할 수 있는 관리자 권한.
-    const isOwner = caller?.engineer_id === quote.engineer_id
+    // 요청 권한 — 그 견적을 쓴 사람이거나, 실적 현황에서 남의 견적을 처리할 수 있는 관리자 권한.
+    // 대필 건은 실적 담당자(engineer_id)가 아니라 쓴 사람(created_by)이 기준이다 —
+    // 견적서를 만들지 않은 쪽은 지워도 되는 건인지 판단할 수 없다.
+    // created_by 가 빈 옛 데이터는 engineer_id 로 본다(대필 도입 전 건은 둘이 같다).
+    const isOwner = caller?.engineer_id === (quote.created_by ?? quote.engineer_id)
     if (!isOwner && !canViewAdmin(caller)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }

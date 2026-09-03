@@ -22,6 +22,7 @@ import ProfitPanel from './ProfitPanel'
 import QuoteItemRow from './QuoteItemRow'
 import { Z } from '@/lib/zIndex'
 import { parentCompanyName } from '@/components/customer/ParentPicker'
+import { resolveOnBehalf, notifyOnBehalf, type OnBehalfAssignee } from '@/lib/quoteMutations'
 
 function QuotePageInner() {
   const supabase = createClient()
@@ -30,6 +31,11 @@ function QuotePageInner() {
   // 수리 건에서 넘어온 경우: repair_id(숫자만 유효) + prefill 파라미터. 없거나 무효면 일반 견적서.
   const repairIdRaw = searchParams.get('repair_id')
   const repairId = repairIdRaw && /^\d+$/.test(repairIdRaw) ? Number(repairIdRaw) : null
+  // 견적 대필: ?on_behalf=<engineer_id> 로 넘어온 경우. 이 파라미터는 주소창으로 아무나 만들 수 있어
+  // 값 자체를 믿지 않는다 — 서버(/api/quote-on-behalf)가 "작성자가 영업관리인가" 를 판정하고,
+  // 통과했을 때 돌려주는 담당자 정보만 대필 모드의 근거로 쓴다.
+  const onBehalfRaw = searchParams.get('on_behalf')
+  const onBehalfId = onBehalfRaw && /^\d+$/.test(onBehalfRaw) ? Number(onBehalfRaw) : null
   const { loading: guardLoading, authorized } = usePageGuard(canViewQuote)
   const toast = useToast()
   const { errors, clearError, validate } = useFieldErrors<'company' | 'eu' | 'items' | 'expenses'>()
@@ -40,6 +46,8 @@ function QuotePageInner() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [engineer, setEngineer] = useState<Engineer | null>(null)
+  // 대필 대상. 서버가 승인한 뒤에만 채워진다(null 이면 평소대로 본인 견적).
+  const [onBehalf, setOnBehalf] = useState<OnBehalfAssignee | null>(null)
   const [exchangeRate, setExchangeRate] = useState<number>(0)
   const [rateUpdatedAt, setRateUpdatedAt] = useState('')
   const [rateLoading, setRateLoading] = useState(false)
@@ -138,8 +146,12 @@ function QuotePageInner() {
 
   const quoteNo = `No.${(engineer?.initials || 'KJW').toUpperCase()}${dateStr}-${seqLetter}`
   const { totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate } = calcTotals(rows)
-  const engineerName = engineer ? `${engineer.name} ${engineer.position || ''}`.trim() : ''
-  const engineerTel = engineer?.tel?.trim() || ''   // 견적 작성자(로그인 사용자) 전화번호. 등록 시 담당자란에 병기.
+  // 견적서에 찍히는 담당자는 실적 담당자다 — 고객이 연락할 사람이 작성자가 아니라 그쪽이기 때문이다.
+  // 대필이 아니면 실적 담당자가 곧 본인이라 종전과 같다. (견적번호는 반대로 작성자 이니셜을 쓴다.)
+  const creditedName = onBehalf ? onBehalf.name : (engineer?.name ?? '')
+  const creditedPosition = onBehalf ? onBehalf.position : (engineer?.position ?? null)
+  const engineerName = creditedName ? `${creditedName} ${creditedPosition || ''}`.trim() : ''
+  const engineerTel = (onBehalf ? onBehalf.tel : engineer?.tel)?.trim() || ''   // 담당자란에 병기하는 전화번호
 
   // PDF용 합계 (debounced rows 기준)
   const { totalSupply: pdfTotalSupply, totalTax: pdfTotalTax, totalAmount: pdfTotalAmount } = calcTotals(debouncedRows)
@@ -356,7 +368,10 @@ const handleDownloadPDF = async (
           dealer_id: isDealer ? customerId : null,
           opportunity_id: opportunityId,
           delivery_info: delivery.trim() || null,
-          engineer_id: engineer.engineer_id,
+          // engineer_id = 실적 귀속자, created_by = 실제로 이 화면에서 쓴 사람.
+          // 대필이 아니면 두 값이 같다. 실적 집계는 전부 engineer_id 를 보므로 집계 코드는 그대로다.
+          engineer_id: onBehalf ? onBehalf.engineer_id : engineer.engineer_id,
+          created_by: engineer.engineer_id,
           quote_date: `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`,
           total_supply: totalSupply,
           total_tax: totalTax,
@@ -418,6 +433,11 @@ const handleDownloadPDF = async (
       }
 toast.success(`견적서 ${quoteNo} 확정 완료`)
 
+      // 대필이면 실적 담당자에게 알린다. 자기가 쓰지 않은 견적이 자기 실적에 잡히기 때문이다.
+      // 대필 여부·수신자는 서버가 견적 행을 보고 다시 판정하므로 여기서는 부르기만 한다.
+      // 알림이 실패해도 견적 확정은 성공이다(라우트 안에서 콘솔에만 남는다).
+      if (onBehalf) await notifyOnBehalf(quoteData.quote_id)
+
       // 수리 건에서 온 경우: repairs.quote_id 자동 연결 (repairs RLS 상 teams='20' UPDATE 허용).
       // 연결 실패해도 견적서 저장 자체는 유효 → 실패만 안내하고 수동 연결 유도.
       if (repairId != null) {
@@ -470,6 +490,19 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
     }
     f()
   }, [])
+
+  // 대필 승인 (1회). 서버가 거절하면 대필 모드로 들어가지 않고 평소대로 본인 견적을 쓴다
+  // — 거절 사유는 "영업관리가 아니다" 또는 "대필할 수 없는 담당자다" 둘 중 하나다.
+  const onBehalfDone = useRef(false)
+  useEffect(() => {
+    if (onBehalfDone.current || onBehalfId == null) return
+    onBehalfDone.current = true
+    resolveOnBehalf(onBehalfId).then(r => {
+      if (r.ok) { setOnBehalf(r.assignee); return }
+      toast.error(r.error || '대필할 수 없습니다')
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onBehalfId])
 
   // 수리 건 → 견적서 prefill (1회). repair_id 가 유효할 때만. 없으면 일반 견적서로 동작.
   const prefillDone = useRef(false)
@@ -1037,10 +1070,16 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
 
             {/* 헤더 */}
             <div style={{ background: '#234ea2', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: 500, marginBottom: 2 }}>견적 번호</div>
                 <div style={{ fontSize: 14, color: '#ffffff', fontWeight: 600 }}>{quoteNo}</div>
               </div>
+              {/* 대필 중임을 작성하는 내내 보이게 둔다 — 남의 실적으로 저장되는 화면이라 헷갈리면 안 된다. */}
+              {onBehalf && (
+                <span style={{ padding: '4px 10px', borderRadius: 99, background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.5)', color: '#ffffff', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  {`${onBehalf.name} ${onBehalf.position || ''}`.trim()} 대신 작성 중
+                </span>
+              )}
               <button
                 onClick={() => { if (!runValidation()) return; setShowConfirmModal(true) }}
                 disabled={isSaving}

@@ -100,6 +100,49 @@ async function notifyQuoteDelete(quoteId: number, action: 'request' | 'completed
   }
 }
 
+export type OnBehalfAssignee = { engineer_id: number; name: string; position: string | null; tel: string | null }
+
+/**
+ * 대필 대상이 유효한지 서버에 묻는다(/api/quote-on-behalf, action=resolve).
+ * ?on_behalf= 는 주소창으로 아무나 만들 수 있어, 화면은 이 응답이 성공했을 때만 대필 모드로 들어간다.
+ */
+export async function resolveOnBehalf(engineerId: number): Promise<{ ok: true; assignee: OnBehalfAssignee } | { ok: false; error: string }> {
+  try {
+    const res = await fetch('/api/quote-on-behalf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'resolve', engineerId }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: json.error || String(res.status) }
+    return { ok: true, assignee: json.assignee as OnBehalfAssignee }
+  } catch (e) {
+    console.error('[quote] on-behalf resolve failed', { engineerId, error: e })
+    return { ok: false, error: '담당자 확인에 실패했습니다.' }
+  }
+}
+
+/**
+ * 대필 견적이 확정됐음을 실적 담당자에게 알린다(/api/quote-on-behalf, action=notify).
+ * 알림은 부가 처리라 실패해도 화면 흐름을 막지 않고 콘솔에만 남긴다 — 견적은 이미 저장돼 있다.
+ * 대필이 아닌 견적이면 서버가 스스로 걸러 알림을 만들지 않는다.
+ */
+export async function notifyOnBehalf(quoteId: number): Promise<void> {
+  try {
+    const res = await fetch('/api/quote-on-behalf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'notify', quoteId }),
+    })
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}))
+      console.error('[quote] on-behalf notify failed', { quoteId, status: res.status, json })
+    }
+  } catch (e) {
+    console.error('[quote] on-behalf notify failed', { quoteId, error: e })
+  }
+}
+
 /** 삭제 요청을 관리자에게 알린다. 상태 변경이 끝난 뒤에 부른다. */
 export const notifyDeleteRequest = (quoteId: number) => notifyQuoteDelete(quoteId, 'request')
 

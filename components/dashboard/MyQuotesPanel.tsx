@@ -28,6 +28,10 @@ const TABLE_COLS = 10
 const STATUS_TABS = ['전체', '견적중', '수리중', '발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료', '취소요청', '실패']
 
 const BLUE = '#234ea2', TEXT = '#111827', GRAY = '#6b7280', MUTED = '#9ca3af', BORDER = '#ebebeb'
+// 대필 견적 — 쓴 사람(created_by)과 실적 담당자(engineer_id)가 다른 건.
+// created_by 가 비어 있는 옛 데이터는 대필이 아니다.
+const isOnBehalf = (q: { engineer_id: number; created_by: number | null }) =>
+  q.created_by != null && q.created_by !== q.engineer_id
 const ORANGE = '#d97706'
 // 서브모달은 모달 위에 겹쳐 열린다.
 const SUBMODAL_Z = Z.subModal
@@ -82,6 +86,9 @@ type Quote = {
   quote_items: QuoteItem[] | null
   company_name: string
   dealer_name: string | null
+  // engineer_id = 실적 귀속자, created_by = 실제로 쓴 사람. 대필이 아니면 두 값이 같다.
+  engineer_id: number
+  created_by: number | null
 }
 
 // 상태 변경 창의 선택지. 되돌리기(견적중)는 실패한 건에만 붙는다.
@@ -96,6 +103,8 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [targetsByYear, setTargetsByYear] = useState<Record<number, { target: number; orderTarget: number }>>({})
   const [loading, setLoading] = useState(true)
+  // 조회가 실패했는지. 빈 목록과 구분해서 알려주기 위한 것이다.
+  const [loadError, setLoadError] = useState(false)
   // 실제로 그리는 줄 수 = 페이징 단위. 화면 높이에 따라 달라지므로 상태로 둔다.
   const [pageSize, setPageSize] = useState(PAGE_SIZE)
   const listBoxRef = useRef<HTMLDivElement>(null)   // 표가 들어가는 상자(남는 높이를 받는다)
@@ -110,7 +119,12 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const [unit, setUnit] = useState<Unit>('valid')   // 기본값: 유효 견적(작성일+1개월 이내)
   const [sel, setSel] = useState(cm)
   const [statusFilter, setStatusFilter] = useState('전체')
-  const [search, setSearch] = useState('')
+  // 대필 알림(/dashboard?quote=견적번호)으로 들어오면 그 견적이 바로 보이도록 검색어로 시작한다.
+  // 이 패널은 me 를 받은 뒤에야 붙어 서버 렌더에는 존재하지 않으므로 window 를 읽어도 안전하다.
+  const [search, setSearch] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    return new URLSearchParams(window.location.search).get('quote')?.trim() ?? ''
+  })
   const [page, setPage] = useState(1)
 
   // 메모 툴팁 + 서브모달 상태
@@ -151,11 +165,17 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
 
   // 데이터 로드(초기 + mutation 후 refetch). 본인 견적만.
   const loadData = async () => {
-    const { data: qs } = await supabase
+    const { data: qs, error } = await supabase
       .from('quotes')
-      .select('quote_id, quote_number, quote_date, total_supply, total_profit, profit_rate, status, quote_type, customer_id, dealer_id, pdf_url, shipping_date, order_memo, order_completed_by, tax_completed_by, tax_invoice_date, fail_reason, purchase_order_at, tax_invoice_completed_at, quote_items(product_name, row_kind, price_list(model_jp))')
-      .eq('engineer_id', engineerId)
+      .select('quote_id, quote_number, quote_date, total_supply, total_profit, profit_rate, status, quote_type, customer_id, dealer_id, pdf_url, shipping_date, order_memo, order_completed_by, tax_completed_by, tax_invoice_date, fail_reason, purchase_order_at, tax_invoice_completed_at, engineer_id, created_by, quote_items(product_name, row_kind, price_list(model_jp))')
+      // 내 실적으로 잡히는 견적(engineer_id) + 내가 남 대신 쓴 견적(created_by).
+      // 목록에는 둘 다 실리지만, 아래 실적 요약은 engineer_id 가 나인 것만 센다.
+      .or(`engineer_id.eq.${engineerId},created_by.eq.${engineerId}`)
       .order('created_at', { ascending: false })
+    // 조회가 실패해도 빈 배열이 되던 자리다. 그러면 "견적이 없다" 와 구분되지 않아
+    // 장애를 알아챌 수 없었다 — 실패는 콘솔과 화면 양쪽에 남긴다.
+    if (error) console.error('[myQuotes] 견적 조회 실패', error)
+    setLoadError(!!error)
     const list = (qs ?? []) as any[]
     // 고객사/대리점명: customers 별도 조회 후 병합(고객사 열람 권한이 없어 막히면 '-'/null).
     const ids = [...new Set(list.flatMap(q => [q.customer_id, q.dealer_id]).filter(Boolean))]
@@ -202,14 +222,20 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
     ? { start: ymd(validStart()), end: ymd(now) }
     : periodRange(fy, unit, sel)
   const dateFiltered = quotes.filter(q => q.quote_date >= rangeStart && q.quote_date <= rangeEnd)
-  const quotedAmt = dateFiltered.reduce((s, q) => s + (q.total_supply || 0), 0)
+  // ── 실적 요약(아래 KPI·달성률)은 목록과 모수가 다르다. ──
+  // 목록에는 내가 남 대신 쓴 견적도 실리지만, 그 실적은 원래 담당자의 것이다.
+  // 그래서 집계는 engineer_id 가 나인 건만 쓴다 — 실적 현황(app/sales)과 같은 기준.
+  const creditedQuotes = quotes.filter(q => q.engineer_id === engineerId)
+  const quotedAmt = creditedQuotes
+    .filter(q => q.quote_date >= rangeStart && q.quote_date <= rangeEnd)
+    .reduce((s, q) => s + (q.total_supply || 0), 0)
   // 기간을 재는 날짜가 지표마다 다르다(실적 현황과 같은 규칙).
   //   견적 제출 — quote_date / 수주 — purchase_order_at / 매출 — tax_invoice_completed_at
   // 처리 시각이 비어 있는 건은 그 지표의 어느 기간에도 잡히지 않는다.
   const inRange = (ts: string | null) => !!ts && ts.slice(0, 10) >= rangeStart && ts.slice(0, 10) <= rangeEnd
-  const orderedQuotes = quotes.filter(q => isOrdered(q.status) && inRange(q.purchase_order_at))
+  const orderedQuotes = creditedQuotes.filter(q => isOrdered(q.status) && inRange(q.purchase_order_at))
   const orderedAmt = orderedQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
-  const revenueQuotes = quotes.filter(q => q.status === REVENUE_STATUS && inRange(q.tax_invoice_completed_at))
+  const revenueQuotes = creditedQuotes.filter(q => q.status === REVENUE_STATUS && inRange(q.tax_invoice_completed_at))
   const revenueAmt = revenueQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
   const profitAmt = revenueQuotes.reduce((s, q) => s + (q.total_profit || 0), 0)
   const profitRate = revenueAmt > 0 ? (profitAmt / revenueAmt * 100) : null
@@ -270,6 +296,11 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
       await supabase.from('download_logs').insert({ engineer_id: engineerId, quote_id: q.quote_id, quote_number: q.quote_number, company_name: q.company_name === '-' ? null : q.company_name, action: 'view' })
     }
   }
+
+  // 삭제 요청은 그 견적을 쓴 사람만 할 수 있다. 대필 건이면 실적 담당자가 아니라 대필한 사람이다
+  // — 실적을 받은 쪽은 견적서를 만들지 않았으므로 지워도 되는 건인지 판단할 수 없다.
+  // (대필이 아니면 두 값이 같아 종전과 똑같이 동작한다. created_by 가 빈 옛 데이터는 engineer_id 로 본다.)
+  const canRequestDelete = (q: Quote) => (q.created_by ?? q.engineer_id) === engineerId
 
   // ── mutation 핸들러 (공용 함수 사용 + toast + refetch) ──
   // 삭제 요청은 사유가 있어야 관리자가 판단할 수 있다. 다른 상태는 기존대로 선택 입력.
@@ -345,6 +376,9 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
         <div style={{ fontSize: 14, fontWeight: 700, color: TEXT, marginBottom: 10 }}>내 견적</div>
         {loading ? (
           <div style={{ fontSize: 13, color: MUTED }}>불러오는 중...</div>
+        ) : loadError ? (
+          // 조회 실패를 0원과 구분해서 보여준다 — 실적이 0 인 것과 못 읽은 것은 전혀 다르다.
+          <div style={{ fontSize: 13, color: '#ef4444', fontWeight: 700 }}>데이터를 불러오지 못했습니다</div>
         ) : (
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 13 }}>
             <div><div style={{ color: GRAY, fontSize: 11 }}>견적 제출</div><div className="num" style={{ fontWeight: 700, color: TEXT }}>₩{numKR(quotedAmt)}</div></div>
@@ -430,6 +464,8 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
       <div ref={listBoxRef} style={{ overflowX: 'auto', ...(fitToHeight ? { flex: 1, minHeight: 0, overflowY: 'hidden' } as const : null) }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: 32, color: MUTED, fontSize: 13 }}>불러오는 중...</div>
+        ) : loadError ? (
+          <div style={{ height: ROW_H * pageSize, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', fontSize: 13, fontWeight: 700 }}>데이터를 불러오지 못했습니다</div>
         ) : paged.length === 0 ? (
           <div style={{ height: ROW_H * pageSize, display: 'flex', alignItems: 'center', justifyContent: 'center', color: MUTED, fontSize: 13 }}>견적이 없습니다</div>
         ) : (
@@ -465,6 +501,10 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                     </td>
                     <td style={{ padding: '8px 10px', fontWeight: 700, color: BLUE, whiteSpace: 'nowrap', textAlign: 'center' }}>
                       <span onClick={() => openPdf(q)} style={{ cursor: q.pdf_url ? 'pointer' : 'default' }}>
+                        {/* 대필 건 표시. 쓴 사람과 실적 담당자가 다른 견적에만 붙는다. */}
+                        {isOnBehalf(q) && (
+                          <span title="대필 견적" style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: BLUE, marginRight: 5, verticalAlign: 'middle' }} />
+                        )}
                         {q.quote_number}{q.pdf_url && <span style={{ marginLeft: 4, fontSize: 9, color: MUTED }}>PDF</span>}
                       </span>
                     </td>
@@ -533,7 +573,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                           </button>
                         )}
                         <button
-                          onClick={() => { setEditQuote(q); setEditStatus('취소요청'); setEditFailReason(q.fail_reason || '') }}
+                          onClick={() => { setEditQuote(q); setEditStatus(canRequestDelete(q) ? '취소요청' : '실패'); setEditFailReason(q.fail_reason || '') }}
                           style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 13, color: MUTED, lineHeight: 1, flexShrink: 0 }}
                           onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fef2f2'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#fecdd3'; (e.currentTarget as HTMLButtonElement).style.color = '#be123c' }}
                           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.borderColor = BORDER; (e.currentTarget as HTMLButtonElement).style.color = MUTED }}
@@ -688,13 +728,22 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
             <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
               {(editQuote.status === '실패' && !isAutoFailed(editQuote.status, editQuote.fail_reason)
                 ? EDIT_STATUSES_WITH_REVERT
-                : EDIT_STATUSES).map(s => (
+                : EDIT_STATUSES)
+                // 남이 나 대신 쓴 견적은 삭제를 요청할 수 없다(실패 처리는 실적 담당자의 몫이라 남긴다).
+                .filter(s => s !== '취소요청' || canRequestDelete(editQuote))
+                .map(s => (
                 <button key={s} onClick={() => setEditStatus(s)}
                   style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: `1.5px solid ${editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).bg : '#f9fafb', color: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : GRAY, transition: 'all 0.12s' }}>
                   {s === '취소요청' ? '삭제' : s}
                 </button>
               ))}
             </div>
+            {/* 삭제 선택지가 왜 없는지 알려준다 */}
+            {!canRequestDelete(editQuote) && (
+              <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, color: GRAY, lineHeight: 1.6, marginBottom: 12 }}>
+                대신 작성된 견적입니다. 삭제 요청은 작성한 사람이 할 수 있습니다.
+              </div>
+            )}
             {/* 되돌릴 수 없는 건이면 왜 선택지가 없는지 알려준다 */}
             {isAutoFailed(editQuote.status, editQuote.fail_reason) && (
               <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, color: GRAY, lineHeight: 1.6, marginBottom: 12 }}>

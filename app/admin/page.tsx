@@ -127,6 +127,8 @@ function AdminPageInner() {
   const [showQuoteModal, setShowQuoteModal] = useState(false)
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [quoteLoading, setQuoteLoading] = useState(false)
+  // 조회가 실패했는지. 빈 목록과 구분해서 알려주기 위한 것이다.
+  const [quoteLoadError, setQuoteLoadError] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [deleting, setDeleting] = useState<number | null>(null)
   // 첫 화면 배지용 — 처리 대기 중인 삭제 요청 건수.
@@ -292,12 +294,18 @@ function AdminPageInner() {
   const fetchQuotes = async (q?: string) => {
     setQuoteLoading(true)
     const term = q?.trim()
-    let pendingQuery = supabase.from('quotes').select('*, engineers(name)')
+    // quotes 는 engineers 를 engineer_id(실적 귀속자)·created_by(작성자) 두 번 참조한다.
+    // 관계를 지정하지 않으면 PGRST201(300 Multiple Choices)로 조회 전체가 실패한다.
+    // 이 목록의 「담당자」 열은 실적 귀속자다.
+    const QUOTE_SELECT = '*, engineers!quotes_engineer_id_fkey(name)'
+    let pendingQuery = supabase.from('quotes').select(QUOTE_SELECT)
       .eq('status', DELETE_REQUEST_STATUS).order('quote_date', { ascending: false })
     if (term) pendingQuery = pendingQuery.ilike('quote_number', `%${term}%`)
-    let query = supabase.from('quotes').select('*, engineers(name)').order('quote_date', { ascending: false }).limit(50)
+    let query = supabase.from('quotes').select(QUOTE_SELECT).order('quote_date', { ascending: false }).limit(50)
     if (term) query = query.ilike('quote_number', `%${term}%`)
-    const [{ data: pendingData }, { data: qData }] = await Promise.all([pendingQuery, query])
+    const [{ data: pendingData, error: pendingErr }, { data: qData, error: qErr }] = await Promise.all([pendingQuery, query])
+    if (pendingErr || qErr) console.error('[admin] 견적 조회 실패', pendingErr ?? qErr)
+    setQuoteLoadError(!!(pendingErr || qErr))
     const pendingRows = (pendingData || []) as Quote[]
     const pendingIds = new Set(pendingRows.map(r => r.quote_id))
     const rows = [...pendingRows, ...((qData || []) as Quote[]).filter(r => !pendingIds.has(r.quote_id))]
@@ -1063,7 +1071,10 @@ function AdminPageInner() {
                 style={{ padding: '8px 16px', background: BLUE, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>검색</button>
             </div>
             <div style={{ overflowY: 'auto', overflowX: 'auto', flex: 1 }}>
-              {quoteLoading ? <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>불러오는 중...</div> : quotes.length === 0 ? (
+              {quoteLoading ? <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>불러오는 중...</div> : quoteLoadError ? (
+                // 빈 목록과 조회 실패는 구분해서 보여준다 — 둘 다 빈 화면이면 장애를 알아챌 수 없다.
+                <div style={{ textAlign: 'center', padding: 40, color: '#ef4444', fontWeight: 700 }}>데이터를 불러오지 못했습니다</div>
+              ) : quotes.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>견적서가 없습니다</div>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 800 }}>

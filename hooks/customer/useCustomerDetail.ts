@@ -10,6 +10,11 @@ import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import type { Customer, Device, Contact, ServiceHistory, Engineer, Quote, SalesActivity, SalesOpportunity, Holding } from '@/components/customer/types'
 
+// quotes 는 engineers 를 engineer_id(실적 귀속자)·created_by(작성자) 두 번 참조한다.
+// 관계를 지정하지 않으면 PGRST201(300 Multiple Choices)로 조회 전체가 실패한다.
+// 거래 이력에 보여줄 담당자는 실적 귀속자다.
+const QUOTE_SELECT = '*, engineers!quotes_engineer_id_fkey(name, position), quote_items(product_name, price_list(model_jp))'
+
 export function useCustomerDetail(customerId: number) {
   const supabase = createClient()
   const router = useRouter()
@@ -62,11 +67,12 @@ export function useCustomerDetail(customerId: number) {
     if (ids.length > 0) {
       const list = ids.join(',')
       // 상세와 같은 규칙으로 모은다 — 수요처로 잡힌 건과 대리점으로 낀 건 모두.
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('quotes')
-        .select('*, engineers(name, position), quote_items(product_name, price_list(model_jp))')
+        .select(QUOTE_SELECT)
         .or(`customer_id.in.(${list}),dealer_id.in.(${list})`)
         .order('quote_date', { ascending: false })
+      if (error) console.error('[customerDetail] 회사 전체 거래 이력 조회 실패', error)
       famQuotes = (data as Quote[]) ?? []
     }
     setFamily({ name: parentRow?.company_name ?? '', siteCount: ids.length, quotes: famQuotes })
@@ -88,7 +94,7 @@ export function useCustomerDetail(customerId: number) {
       supabase.from('engineers').select('*, email').order('engineer_id', { ascending: true }),
       // 이 업체가 수요처(customer_id)인 견적과 대리점(dealer_id)으로 낀 견적을 함께 가져온다.
       // 거래 이력·요약·타임라인이 같은 배열을 쓰므로 세 곳 모두 대리점 건을 포함하게 된다.
-      supabase.from('quotes').select('*, engineers(name, position), quote_items(product_name, price_list(model_jp))').or(`customer_id.eq.${customerId},dealer_id.eq.${customerId}`).order('quote_date', { ascending: false }),
+      supabase.from('quotes').select(QUOTE_SELECT).or(`customer_id.eq.${customerId},dealer_id.eq.${customerId}`).order('quote_date', { ascending: false }),
       // 영업 활동. engineers·contacts 로 향하는 FK 가 각각 하나뿐이라 관계 지정 없이 임베딩된다.
       // (contacts 의 이름 컬럼은 contact_name 이 아니라 name 이다)
       supabase.from('sales_activities')

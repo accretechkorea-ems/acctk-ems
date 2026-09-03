@@ -1119,6 +1119,8 @@ export default function SalesPage() {
   const [engineers, setEngineers] = useState<Engineer[]>([])
   const [targets, setTargets] = useState<SalesTarget[]>([])
   const [loading, setLoading] = useState(true)
+  // 조회가 실패했는지. 빈 실적과 구분해서 알려주기 위한 것이다.
+  const [loadError, setLoadError] = useState(false)
   const currentFY = getCurrentFY()
   const thisMonth = new Date().getMonth() + 1
   const [fy, setFy] = useState(currentFY)
@@ -1136,15 +1138,21 @@ export default function SalesPage() {
     setLoading(true)
     await fetch('/api/auto-fail', { method: 'POST' }).catch(() => {})
     const { data: userData } = await supabase.auth.getUser()
-    const [{ data: qData }, { data: eData }, { data: tData }, { data: meData }, { data: custData }] = await Promise.all([
+    const [{ data: qData, error: qErr }, { data: eData }, { data: tData }, { data: meData }, { data: custData }] = await Promise.all([
       supabase.from('quotes')
-        .select('*, engineers(name, position), quote_items(product_name, row_kind, price_list(model_jp))')
+        // quotes 는 engineers 를 engineer_id(실적 귀속자)·created_by(작성자) 두 번 참조한다.
+        // 관계를 지정하지 않으면 PGRST201(300 Multiple Choices)로 조회 전체가 실패한다.
+        // 실적 현황은 실적 귀속자 기준이므로 engineer_id 쪽을 쓴다.
+        .select('*, engineers!quotes_engineer_id_fkey(name, position), quote_items(product_name, row_kind, price_list(model_jp))')
         .order('quote_date', { ascending: false }).order('quote_number', { ascending: false }),
       supabase.from('engineers').select('engineer_id, name, position, teams, permission_level, resigned_date').order('engineer_id'),
       supabase.from('sales_targets').select('*'),
       supabase.from('engineers').select('*').eq('email', userData.user?.email || '').single(),
       supabase.from('customers').select('customer_id, company_name'),
     ])
+    // 조회가 실패해도 빈 배열이 되던 자리다. 실적이 0 인 것과 못 읽은 것은 다르므로 구분해 알린다.
+    if (qErr) console.error('[sales] 견적 조회 실패', qErr)
+    setLoadError(!!qErr)
     const custMap: Record<number, string> = {}
     for (const c of custData || []) custMap[c.customer_id] = c.company_name
     const merged = (qData || []).map((q: any) => ({
@@ -1300,8 +1308,15 @@ const visibleEngineers = sortedEngineers.filter(e => {
 
   return (
     <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '24px 28px' }}>
-      
+
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+
+        {/* 조회 실패는 "실적 0" 과 구분해서 알린다 — 숫자가 0 으로 보이면 장애를 알아챌 수 없다. */}
+        {loadError && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fecdd3', borderRadius: 8, padding: '12px 16px', marginBottom: 16, color: '#be123c', fontSize: 13, fontWeight: 700 }}>
+            데이터를 불러오지 못했습니다
+          </div>
+        )}
 
         {/* 필터 */}
         <div style={{ background: CARD_BG, borderRadius: 14, padding: '12px 16px', marginBottom: 20, border: `1px solid ${BORDER}` }}>

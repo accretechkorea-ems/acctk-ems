@@ -56,13 +56,16 @@ export type QuoteExcelData = {
   quote_expenses: QuoteExcelExpense[]
 }
 
-// quotes 는 customers 를 두 번(customer_id · dealer_id) 참조하므로 별칭으로 어느 FK 인지 명시해야 한다.
+// quotes 는 customers 를 두 번(customer_id · dealer_id), engineers 를 두 번
+// (engineer_id · created_by) 참조하므로 어느 FK 인지 명시해야 한다.
+// 지정하지 않으면 PGRST201(300 Multiple Choices)로 조회 전체가 실패한다.
+// 여기의 사람 이름은 실적 귀속자(engineer_id)다.
 const SELECT = `
   quote_id, quote_number, quote_date, recipient, note, delivery_info, status, quote_type,
   total_supply, total_tax, total_amount, total_cost, total_profit, profit_rate,
   customers:customer_id ( company_name ),
   dealer:dealer_id ( company_name ),
-  engineers ( name, position ),
+  engineers!quotes_engineer_id_fkey ( name, position ),
   quote_items ( item_id, row_kind, part_code, product_name, quantity,
                 unit_price_jpy, unit_price_krw, supply_amount, tax_amount,
                 cost_amount, profit_amount, profit_rate, exchange_rate, tariff_rate ),
@@ -209,7 +212,9 @@ export function buildQuoteSheet(workbook: Workbook, quote: QuoteExcelData): Work
   const info: [string, string | number | null, string, string | number | null][] = [
     ['견적번호', quote.quote_number, '환율적용월', (quote.quote_date ?? '').slice(0, 7) || '-'],
     ['고객사', quote.customers?.company_name ?? '-', '엔화 환율', fxLabel],
-    ['작성자', [quote.engineers?.name, quote.engineers?.position].filter(Boolean).join(' ') || '-', '대리점', quote.dealer?.company_name ?? '(직판)'],
+    // 이 이름은 실적 귀속자(quotes.engineer_id)다. 대필이면 쓴 사람과 다르므로 「작성자」가 아니라 「담당자」다.
+    // 다른 화면(실적 현황·발주관리·유지보수·고객사 상세)도 같은 값을 「담당자」로 부른다.
+    ['담당자', [quote.engineers?.name, quote.engineers?.position].filter(Boolean).join(' ') || '-', '대리점', quote.dealer?.company_name ?? '(직판)'],
     ['견적일자', quote.quote_date ?? '-', '상태', quote.status ?? '-'],
   ]
   for (const [l1, v1, l2, v2] of info) {
