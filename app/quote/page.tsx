@@ -21,6 +21,7 @@ import { QuotePDFDoc } from './QuotePDFDoc'
 import ProfitPanel from './ProfitPanel'
 import QuoteItemRow from './QuoteItemRow'
 import { Z } from '@/lib/zIndex'
+import { parentCompanyName } from '@/components/customer/ParentPicker'
 
 function QuotePageInner() {
   const supabase = createClient()
@@ -168,6 +169,11 @@ function QuotePageInner() {
     setOpportunities((data as SalesOpportunity[]) ?? [])
   }
 
+  // company 는 화면 입력칸이 아니라 PDF 의 「○○ 귀하」 한 줄에만 쓰는 값이다.
+  // 사업장이 회사(부모) 아래 묶여 있으면 수신처는 회사 이름이어야 한다
+  // — 「현대트랜시스(성연공장) 귀하」 는 문서로 나가기에 어색하다.
+  // 검색·선택·저장은 종전대로 사업장(customer_id) 기준이라 내부에서 어느 사업장인지는 그대로 보인다.
+  // 대리점 건이면 이 칸이 대리점이므로 같은 규칙이 대리점에도 적용된다. E.U 는 손대지 않는다.
   const handleCustomerSelect = (c: CustomerResult) => {
     setSelectedCustomer(c)
     setCustomerId(c.customer_id)
@@ -177,6 +183,10 @@ function QuotePageInner() {
     setCustomerResults([])
     clearError('company')
     if (!isDealer) loadOpportunities(c.customer_id)
+    // 회사 이름은 뒤늦게 와도 된다 — 미리보기·저장 모두 이 값을 그때 읽는다.
+    parentCompanyName(c.customer_id)
+      .then(name => { if (name) setCompany(name) })
+      .catch(e => console.error('[quote] parent lookup failed', e))
   }
 
   const handleCustomerClear = () => {

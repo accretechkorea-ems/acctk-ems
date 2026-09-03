@@ -42,6 +42,22 @@ export function loadParents(): Promise<ParentOption[]> {
   return cache
 }
 
+/**
+ * 이 업체를 묶고 있는 회사(부모)의 이름. 부모가 없으면 null.
+ * 견적서의 수신처처럼 "사업장이 아니라 회사 이름" 이어야 하는 자리에 쓴다.
+ * 캐시(loadParents)는 활성 부모만 담으므로 여기서는 id 로 곧장 읽는다.
+ */
+export async function parentCompanyName(customerId: number): Promise<string | null> {
+  const supabase = createClient()
+  const { data: self } = await supabase
+    .from('customers').select('parent_customer_id').eq('customer_id', customerId).maybeSingle()
+  const parentId = self?.parent_customer_id ?? null
+  if (parentId == null) return null
+  const { data: parent } = await supabase
+    .from('customers').select('company_name').eq('customer_id', parentId).maybeSingle()
+  return parent?.company_name?.trim() || null
+}
+
 /** 부모를 새로 만들거나 지운 뒤 부른다. 다음 호출에서 다시 읽는다. */
 export function invalidateParents(): void {
   cache = null
