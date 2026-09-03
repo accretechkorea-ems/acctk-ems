@@ -56,6 +56,7 @@ export default function CustomerDetailPage() {
   const detail = useCustomerDetail(customerId)
   const {
     customer, devices, contacts, history, quotes, activities, opportunities, engineers,
+    family, childSites,
     holdings, activeHoldingByDevice, holdingByService,
     loading, currentUserEngineerId, currentUserRole,
     historyByDevice, fetchDetail,
@@ -78,7 +79,8 @@ export default function CustomerDetailPage() {
   // 첫 렌더는 서버에서도 도는데 그때는 false(데스크톱)라, 화면에 나오는 것은
   // 어차피 로딩 스켈레톤이므로 hydration 이 어긋나지 않는다.
   const [tab, setTab] = useState<'활동 이력' | '장비'>(() => (isMobileViewport() ? '장비' : '활동 이력'))
-  const [isQuoteHistoryModalOpen, setIsQuoteHistoryModalOpen] = useState(false)
+  // 거래 이력은 두 기준으로 열린다 — 이 사업장만(site), 같은 회사 전체(family).
+  const [quoteScope, setQuoteScope] = useState<'site' | 'family' | null>(null)
   const [isSignModalOpen, setIsSignModalOpen] = useState(false)
   const [pendingReportService, setPendingReportService] = useState<ServiceHistory | null>(null)
   const [pendingReportDevice, setPendingReportDevice] = useState<Device | null>(null)
@@ -167,6 +169,63 @@ export default function CustomerDetailPage() {
     )
   }
 
+  // 부모 행은 사업장을 묶기만 하는 껍데기다(주소·장비·견적이 없다).
+  // 일반 상세를 그대로 보여주면 빈 화면이 되므로, 무엇인지 알려주고 소속 사업장만 낸다.
+  if (customer?.is_parent) {
+    return (
+      <>
+        <style jsx global>{globalCss}</style>
+        <main style={{ padding: '20px 24px', background: PAGE_BG, minHeight: '100vh' }}>
+          <div style={{ maxWidth: 720, margin: '0 auto' }}>
+            <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, padding: '14px 16px' }}>
+              <div style={{ fontSize: 17, fontWeight: 800, color: '#111827', letterSpacing: '-0.3px', marginBottom: 6 }}>
+                {customer.company_name}
+              </div>
+              <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.7 }}>
+                이 업체는 사업장을 묶는 상위 항목입니다.
+              </div>
+            </div>
+
+            <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, padding: '14px 16px', marginTop: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>소속 사업장</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>
+                  {childSites.length}곳
+                </span>
+              </div>
+              {childSites.length === 0 ? (
+                <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 12, color: '#9ca3af' }}>
+                  묶인 사업장이 없습니다
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {childSites.map(c => (
+                    <a key={c.customer_id}
+                      href={`/customer/${c.customer_id}`}
+                      style={{
+                        textDecoration: 'none',
+                        display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                        padding: '9px 8px', background: 'none', border: 'none', borderBottom: '1px solid #ebebeb',
+                        cursor: 'pointer', fontSize: 13, color: '#111827', fontFamily: 'inherit',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#fafafa' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+                    >
+                      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {c.company_name ?? '-'}
+                      </span>
+                      <span style={{ color: '#9ca3af', flexShrink: 0 }}>→</span>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </main>
+      </>
+    )
+  }
+
   return (
     <>
       <style jsx global>{globalCss}</style>
@@ -203,7 +262,9 @@ export default function CustomerDetailPage() {
               canEditOpportunity={opp.canEditOpp}
               holdings={holdings}
               onOpenHolding={holding.openHolding}
-              onQuoteHistoryOpen={() => setIsQuoteHistoryModalOpen(true)}
+              onQuoteHistoryOpen={() => setQuoteScope('site')}
+              family={family ? { name: family.name, siteCount: family.siteCount, quoteCount: family.quotes.length } : null}
+              onFamilyQuoteHistoryOpen={() => setQuoteScope('family')}
             />
           </div>
 
@@ -278,10 +339,11 @@ export default function CustomerDetailPage() {
 
         {/* ── 모달 ── */}
         <QuoteHistoryModal
-          isOpen={isQuoteHistoryModalOpen}
+          isOpen={quoteScope !== null}
           customer={customer}
-          quotes={quotes}
-          onClose={() => setIsQuoteHistoryModalOpen(false)}
+          quotes={quoteScope === 'family' && family ? family.quotes : quotes}
+          family={quoteScope === 'family' && family ? { name: family.name, siteCount: family.siteCount } : null}
+          onClose={() => setQuoteScope(null)}
         />
         <CustomerEditModal
           customer={customerCrud.isEditCustomerModalOpen ? customer : null}

@@ -449,6 +449,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
             .from('customers')
             .select('customer_id, company_name, latitude, longitude')
             .is('deleted_at', null)
+            .eq('is_parent', false)   // 부모 행(회사 묶음)은 지도에 찍지 않는다
             .not('latitude', 'is', null)
             .not('longitude', 'is', null)
           if (error) throw error

@@ -18,12 +18,14 @@ import {
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useEffect } from 'react'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
+import ParentPicker from '@/components/customer/ParentPicker'
 
 type CustomerForm = {
   company_name: string
   address: string
   agency: string
   status: string
+  parent_customer_id: number | null
 }
 
 // 검증 에러 key: 스칼라 3종 + 장비 항목별(device_0, device_1 …) — 인덱스는 템플릿 리터럴로 타입 안전
@@ -167,6 +169,13 @@ export default function AddCustomerModal({
                 <option value="이탈">이탈</option>
               </select>
             </div>
+
+            {/* 상위 업체 — 같은 회사의 사업장이면 여기서 묶는다. 비워 두면 단독 업체가 된다. */}
+            <ParentPicker
+              value={customerForm.parent_customer_id}
+              onChange={id => setCustomerForm(prev => ({ ...prev, parent_customer_id: id }))}
+              allowCreate
+            />
 
             <input
               value={customerForm.address}

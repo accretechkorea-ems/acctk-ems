@@ -34,7 +34,7 @@ export function usePipelineData() {
         .order('activity_date', { ascending: false }),
       supabase.from('engineers').select('*, email').order('engineer_id', { ascending: true }),
       // 신규 등록 시 업체를 고르기 위한 목록 (숨김 처리된 업체는 제외)
-      supabase.from('customers').select('customer_id, company_name, address, status, agency').is('deleted_at', null).order('company_name'),
+      supabase.from('customers').select('customer_id, company_name, address, status, agency').is('deleted_at', null).eq('is_parent', false).order('company_name'),
     ])
     setLoading(false)
 

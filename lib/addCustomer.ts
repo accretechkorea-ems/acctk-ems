@@ -33,6 +33,8 @@ export const addCustomer = async ({
           address: customerForm.address.trim(),
           agency: customerForm.agency.trim() || null,
           status: customerForm.status,
+          // 상위 업체(선택). 나중에 따로 UPDATE 하면 실패했을 때 연결이 빠진 채 남으므로 함께 넣는다.
+          parent_customer_id: customerForm.parent_customer_id ?? null,
           latitude: coords.latitude,
           longitude: coords.longitude,
         },

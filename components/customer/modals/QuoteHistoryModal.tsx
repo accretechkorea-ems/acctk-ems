@@ -12,9 +12,15 @@ type Props = {
   customer: Customer | null
   quotes: Quote[]
   onClose: () => void
+  /**
+   * 회사(부모) 기준으로 열렸을 때만 채워진다.
+   * 제목을 회사명으로 바꾸고 '구분' 열을 뺀다 — 직판·대리점은 '이 업체 기준' 이라야 뜻이 있는데,
+   * 형제 사업장 건까지 섞이면 기준이 없어져 표시가 틀리게 된다.
+   */
+  family?: { name: string; siteCount: number } | null
 }
 
-export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose }: Props) {
+export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, family }: Props) {
   if (!isOpen) return null
 
   const totalQuoteAmt = quotes.reduce((s, q) => s + (q.total_supply || 0), 0)
@@ -38,7 +44,9 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose }:
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
             <div style={{ fontSize: 20, fontWeight: 800, color: TEXT_PRIMARY, marginBottom: 4 }}>📋 거래 이력</div>
-            <div style={{ fontSize: 13, color: TEXT_SECONDARY }}>{customer?.company_name}</div>
+            <div style={{ fontSize: 13, color: TEXT_SECONDARY }}>
+              {family ? `${family.name} (사업장 ${family.siteCount}곳)` : customer?.company_name}
+            </div>
           </div>
           <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
         </div>
@@ -60,7 +68,7 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose }:
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 900 }}>
               <thead style={{ position: 'sticky', top: 0, background: CARD_BG }}>
                 <tr style={{ borderBottom: `2px solid ${INPUT_BORDER}` }}>
-                  {['견적번호', '구분', '날짜', '담당자', '품목', '금액', '순이익', '이익률', '상태'].map(h => (
+                  {['견적번호', ...(family ? [] : ['구분']), '날짜', '담당자', '품목', '금액', '순이익', '이익률', '상태'].map(h => (
                     <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: TEXT_SECONDARY, fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
                   ))}
                 </tr>
@@ -75,11 +83,13 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose }:
                       onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
                       onMouseLeave={e => (e.currentTarget.style.background = '')}>
                       <td style={{ padding: '10px 12px', fontWeight: 700, color: WHITE_BUTTON_BG, whiteSpace: 'nowrap' }}>{q.quote_number}</td>
-                      <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                        <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: '#f3f4f6', color: TEXT_SECONDARY }}>
-                          {isDealerQuote(q, customer?.customer_id ?? -1) ? '대리점' : '직판'}
-                        </span>
-                      </td>
+                      {!family && (
+                        <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                          <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: '#f3f4f6', color: TEXT_SECONDARY }}>
+                            {isDealerQuote(q, customer?.customer_id ?? -1) ? '대리점' : '직판'}
+                          </span>
+                        </td>
+                      )}
                       <td style={{ padding: '10px 12px', color: TEXT_SECONDARY, whiteSpace: 'nowrap' }}>{q.quote_date}</td>
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>{q.engineers?.name ?? '-'}</td>
                       <td style={{ padding: '10px 12px', color: TEXT_SECONDARY, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemNames}</td>

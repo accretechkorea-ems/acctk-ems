@@ -149,6 +149,7 @@ function QuotePageInner() {
     const { data } = await supabase
       .from('customers').select('customer_id, company_name, address, status')
       .is('deleted_at', null)
+      .eq('is_parent', false)   // 부모 행(회사 묶음)은 견적 대상이 아니다
       .ilike('company_name', `%${q}%`).limit(10)
     setCustomerResults(data || [])
     setCustomerSearchOpen(true)
@@ -192,6 +193,7 @@ function QuotePageInner() {
     const { data } = await supabase
       .from('customers').select('customer_id, company_name, address, status')
       .is('deleted_at', null)
+      .eq('is_parent', false)   // 부모 행(회사 묶음)은 견적 대상이 아니다
       .ilike('company_name', `%${q}%`).limit(10)
     setEuResults(data || [])
     setEuSearchOpen(true)
@@ -480,7 +482,7 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
     if (customer) {
       setCustomerQuery(customer)
       supabase.from('customers').select('customer_id, company_name, address, status')
-        .is('deleted_at', null).ilike('company_name', `%${customer}%`).limit(10)
+        .is('deleted_at', null).eq('is_parent', false).ilike('company_name', `%${customer}%`).limit(10)
         .then(({ data }) => {
           if (!data || data.length === 0) return
           if (data.length === 1) { handleCustomerSelect(data[0]); return }

@@ -202,7 +202,7 @@ function LeadsPageInner() {
       const [{ data: ld }, { data: eng }, { data: cus }] = await Promise.all([
         leadQuery,
         supabase.from('engineers').select('engineer_id, name, position, teams, permission_level, resigned_date'),
-        supabase.from('customers').select('customer_id, company_name, address').is('deleted_at', null),
+        supabase.from('customers').select('customer_id, company_name, address').is('deleted_at', null).eq('is_parent', false),
       ])
       if (cancelled) return
       setLeads((ld ?? []) as Lead[])

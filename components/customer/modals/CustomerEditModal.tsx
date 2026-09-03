@@ -4,6 +4,7 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import type { Customer, CustomerEditFormData } from '../types'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
+import ParentPicker from '@/components/customer/ParentPicker'
 
 type Props = {
   customer: Customer | null
@@ -21,7 +22,7 @@ const fieldStyle: CSSProperties = {
 }
 
 export default function CustomerEditModal({ customer, isSaving, isDeleting, onClose, onSave, onDelete }: Props) {
-  const [form, setForm] = useState<CustomerEditFormData>({ company_name: '', address: '', agency: '', status: '활성' })
+  const [form, setForm] = useState<CustomerEditFormData>({ company_name: '', address: '', agency: '', status: '활성', parent_customer_id: null })
   const { errors, setErrors, clearError, validate } = useFieldErrors<'company_name' | 'address'>()
 
   useEffect(() => {
@@ -31,6 +32,7 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
         address: customer.address ?? '',
         agency: customer.agency ?? '',
         status: customer.status ?? '활성',
+        parent_customer_id: customer.parent_customer_id ?? null,
       })
       setErrors({})
     }
@@ -89,6 +91,17 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
           <div>
             <label style={labelStyle}>대리점</label>
             <input value={form.agency} onChange={(e) => setForm(p => ({ ...p, agency: e.target.value }))} placeholder="대리점" style={fieldStyle} />
+          </div>
+
+          <div>
+            <label style={labelStyle}>상위 업체</label>
+            {/* 같은 회사의 사업장을 묶는 행. 바꾸거나 해제해도 견적·장비는 이 업체에 그대로 남는다. */}
+            <ParentPicker
+              value={form.parent_customer_id}
+              onChange={id => setForm(p => ({ ...p, parent_customer_id: id }))}
+              allowCreate
+              disabled={isSaving}
+            />
           </div>
           <div>
             <label style={labelStyle}>상태</label>

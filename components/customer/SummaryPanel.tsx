@@ -23,6 +23,9 @@ type Props = {
   holdings: Holding[]
   onOpenHolding: (h: Holding) => void
   onQuoteHistoryOpen: () => void
+  /** 이 업체가 어느 회사에 묶여 있을 때만 채워진다. 없으면 보조줄을 내지 않는다. */
+  family?: { name: string; siteCount: number; quoteCount: number } | null
+  onFamilyQuoteHistoryOpen?: () => void
 }
 
 // onClick 이 있으면 눌러지는 줄이 된다 — 호버 배경과 오른쪽 셰브론으로 그 사실을 알린다.
@@ -179,7 +182,7 @@ function HoldingRow({ h, onClick }: { h: Holding; onClick: () => void }) {
 export default function SummaryPanel({
   quotes, deviceCount, history, customerId, opportunities,
   onAddOpportunity, onOpenOpportunity, onChangeStage, canEditOpportunity,
-  holdings, onOpenHolding, onQuoteHistoryOpen,
+  holdings, onOpenHolding, onQuoteHistoryOpen, family, onFamilyQuoteHistoryOpen,
 }: Props) {
   const ch = countQuoteChannels(quotes, customerId)
   const [showClosed, setShowClosed] = useState(false)
@@ -225,6 +228,18 @@ export default function SummaryPanel({
           <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'right', marginTop: -5 }}>
             직판 {ch.direct} · 대리점 {ch.dealer}
           </div>
+        )}
+        {/* 같은 회사의 다른 사업장까지 합친 건수. 위의 「N건」은 이 사업장 기준 그대로다. */}
+        {family && family.quoteCount > 0 && (
+          <button
+            onClick={onFamilyQuoteHistoryOpen}
+            style={{
+              fontSize: 11, color: '#234ea2', textAlign: 'right', marginTop: -5,
+              background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            {family.name} 전체 {family.quoteCount}건 →
+          </button>
         )}
         <Row label="장비" value={`${deviceCount}대`} muted={deviceCount === 0} />
         <Row label="최근 방문" value={lastVisit ?? '-'} muted={!lastVisit} />

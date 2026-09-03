@@ -21,6 +21,8 @@ export function useHomeData({
   .from('customers')
   .select('customer_id, company_name, address, latitude, longitude, status, agency, category')
         .is('deleted_at', null)
+        // 부모 행(회사 묶음)은 지도 마커·업체 목록에 나오면 안 된다
+        .eq('is_parent', false)
         .order('customer_id', { ascending: false })
         .range(0, 5000),
 
