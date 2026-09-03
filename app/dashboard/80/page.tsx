@@ -24,6 +24,7 @@ const PAGE_BG = '#f4f5f7'
 // 고객사 상세의 가운데 열과 같은 상한. 넓은 화면에서 한 줄이 끝없이 길어지지 않게 한다.
 const MAX_WIDTH = 1600
 const TOP_HOLDINGS = 6   // 홀딩 격자 3열 × 2행
+const TOP_UPCOMING = 6   // 다가오는 일정 격자 — 홀딩과 같은 3열 × 2행
 // 목록은 건수가 모자라도 이만큼의 줄 자리를 늘 차지한다(카드 높이를 고정하기 위해).
 const TOP_OPPS = 10
 const TOP_EXPIRING = 7
@@ -55,6 +56,17 @@ function HoldIcon() {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"
       strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
       <circle cx="12" cy="12" r="10" /><line x1="10" y1="9" x2="10" y2="15" /><line x1="14" y1="9" x2="14" y2="15" />
+    </svg>
+  )
+}
+
+// 달력 아이콘 — 활동 현황 헤더에서 쓰는 것과 같은 path. 홀딩의 HoldIcon 자리에 들어간다.
+function CalendarIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" />
     </svg>
   )
 }
@@ -118,7 +130,7 @@ export default function Dashboard80Page() {
   const {
     thisMonth, lastMonth, opportunities, lastActivityByOpp,
     oppActivities, loadOppActivities, loading, reload,
-    salesActivity, serviceActivity, expiringQuotes,
+    salesActivity, serviceActivity, expiringQuotes, upcomingVisits,
     // ownerCounts(담당자별 집계)는 훅에 그대로 두되 화면에서는 쓰지 않는다.
     // 담당자를 각 줄에 붙이면서 카드 아래 집계 줄이 필요 없어졌다.
   } = useDashboard80()
@@ -370,6 +382,56 @@ export default function Dashboard80Page() {
                           <span style={{ color: '#6b7280', fontWeight: 700 }}>{u.status}</span>
                         </span>
                       </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* ── 다가오는 일정 — 아직 오지 않은 방문 예정. 홀딩 카드와 같은 3열 × 2행 격자를 쓴다.
+                모아 볼 화면이 따로 없어 "전체 보기" 는 두지 않고 헤더 건수만 낸다. ── */}
+            <div style={cardStyle}>
+              <CardHead title="다가오는 일정" right={<Count>{upcomingVisits.length}건</Count>} />
+              {loading ? (
+                <Empty text="불러오는 중..." />
+              ) : upcomingVisits.length === 0 ? (
+                <Empty text="예정된 일정이 없습니다" />
+              ) : (
+                // 홀딩과 같은 규칙 — 건수가 모자라면 빈 칸을 채워 격자 모양을 유지한다.
+                <div className="d80-hold">
+                  {Array.from({ length: TOP_UPCOMING }).map((_, i) => {
+                    const v = upcomingVisits[i]
+                    if (!v) {
+                      return <div key={`up-empty-${i}`} style={{ border: '1px dashed #ebebeb', borderRadius: 6 }} />
+                    }
+                    return (
+                      <div key={v.serviceId}
+                        style={{
+                          display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, overflow: 'hidden',
+                          textAlign: 'left', padding: '8px 10px', background: '#ffffff',
+                          border: '1px solid #ebebeb', borderRadius: 6,
+                        }}
+                      >
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                          <CalendarIcon />
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+                            {v.company}
+                          </span>
+                        </span>
+                        <span style={{ fontSize: 12, color: '#234ea2', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {v.device}
+                        </span>
+                        {/* 칸이 좁아 세 조각이 다 들어가지 않을 때가 있다(폭 123px, 긴 조합은 158px 필요).
+                            한 줄로 두면 맨 뒤의 D-N 부터 잘려서, 정작 급한 정보가 먼저 사라진다.
+                            유형과 D-N 은 폭을 지키게 하고 담당자만 줄여 ... 로 접는다. */}
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#9ca3af', minWidth: 0 }}>
+                          <span style={{ color: '#6b7280', fontWeight: 700, flexShrink: 0 }}>{v.serviceType}</span>
+                          <span style={{ color: '#d1d5db', flexShrink: 0 }}>·</span>
+                          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.owner}</span>
+                          <span style={{ color: '#d1d5db', flexShrink: 0 }}>·</span>
+                          <span style={{ flexShrink: 0 }}>D-{v.daysLeft}</span>
+                        </span>
+                      </div>
                     )
                   })}
                 </div>

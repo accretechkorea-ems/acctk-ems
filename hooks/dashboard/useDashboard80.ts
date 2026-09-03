@@ -50,6 +50,17 @@ export type ExpiringQuote = {
 // 어느 쪽도 "1개월 안에 답을 받아야 하는" 상태가 아니다.
 const EXPIRY_TARGET_STATUS = '견적중'
 
+/** 다가오는 일정 한 칸 — 아직 오지 않은 방문 예정. */
+export type UpcomingVisit = {
+  serviceId: number
+  visitDate: string      // YYYY-MM-DD
+  company: string
+  device: string         // 장비명(없으면 장비 미지정)
+  serviceType: string    // 서비스 유형(없으면 유형 미정)
+  owner: string          // 담당자(visitor 스냅샷)
+  daysLeft: number       // 오늘로부터 남은 날 (1 이상 — 오늘 건은 목록에 넣지 않는다)
+}
+
 export type UrgentKind = '홀딩' | '정체' | '마감'
 
 /** '지금 챙길 것' 한 줄. 세 종류를 한 목록에 섞기 위한 공통 모양. */
@@ -70,6 +81,14 @@ const todayStr = () => {
   const d = new Date()
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
+/**
+ * 오늘 날짜를 한국 시간으로 고정해서 얻는다.
+ * 위 todayStr() 은 브라우저의 시간대를 따르는데, 한국 밖(또는 UTC 로 맞춘 장비)에서 열면
+ * 오전에 하루가 어긋난다. 방문 예정은 "오늘보다 뒤"가 기준이라 하루 차이가 곧 오답이 된다.
+ * sv-SE 로케일은 YYYY-MM-DD 를 내주므로 형식을 따로 만들지 않는다.
+ * (기존 계산들은 종전 동작을 유지하려고 todayStr() 을 그대로 쓴다.)
+ */
+const todayKST = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
 // 'YYYY-MM-DD' 두 개의 날짜 차이(일). 값이 이상하면 0.
 const daysBetween = (from: string, to: string) => {
   const a = Date.parse(`${from}T00:00:00`), b = Date.parse(`${to}T00:00:00`)
@@ -188,6 +207,7 @@ export function useDashboard80() {
   const [salesActivity, setSalesActivity] = useState<ActivityStats>(() => emptyActivity(SALES_TYPES))
   const [serviceActivity, setServiceActivity] = useState<ActivityStats>(() => emptyActivity(SERVICE_TYPES))
   const [expiringQuotes, setExpiringQuotes] = useState<ExpiringQuote[]>([])
+  const [upcomingVisits, setUpcomingVisits] = useState<UpcomingVisit[]>([])
   const [loading, setLoading] = useState(true)
   const alive = useRef(true)
 
@@ -232,7 +252,8 @@ export function useDashboard80() {
     const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1)
     try {
       const range = monthRange(now)
-      const [cur, before, oppRes, salesRes, serviceRes, expiryRes] = await Promise.all([
+      const upcomingFrom = todayKST()
+      const [cur, before, oppRes, salesRes, serviceRes, expiryRes, upcomingRes] = await Promise.all([
         loadMonth(range),
         loadMonth(monthRange(prev)),
         // 진행 중인 기회만 (종료·실주 제외). 담당자 이름은 여기서 함께 받는다.
@@ -249,6 +270,12 @@ export function useDashboard80() {
         supabase.from('quotes')
           .select('quote_id, quote_number, quote_date, customers!quotes_customer_id_fkey(company_name)')
           .eq('status', EXPIRY_TARGET_STATUS),
+        // 다가오는 일정 — 오늘보다 뒤에 잡힌 방문만. gt 라서 오늘(D-0)은 들어오지 않는다.
+        // 기간 상한은 두지 않는다. 예정 건은 몇 건뿐이라 전부 받아 헤더 건수까지 정확히 낸다.
+        supabase.from('service_history')
+          .select('service_id, visit_date, service_type, visitor, customers(company_name), devices(device_name, device_name2)')
+          .gt('visit_date', upcomingFrom)
+          .order('visit_date').order('service_id'),
       ])
       if (!alive.current) return false
       if (oppRes.error) {
@@ -308,6 +335,27 @@ export function useDashboard80() {
           .sort((a, b) => a.daysLeft - b.daysLeft || a.quoteId - b.quoteId),
       )
 
+      if (upcomingRes.error) console.error('[dashboard80] upcoming visits failed', upcomingRes.error)
+      type VisitRow = {
+        service_id: number; visit_date: string | null; service_type: string | null; visitor: string | null
+        customers: { company_name: string | null } | null
+        devices: { device_name: string | null; device_name2: string | null } | null
+      }
+      setUpcomingVisits(
+        ((upcomingRes.data ?? []) as unknown as VisitRow[])
+          .filter(v => !!v.visit_date)
+          .map(v => ({
+            serviceId: v.service_id,
+            visitDate: v.visit_date as string,
+            company: v.customers?.company_name ?? '-',
+            // 장비 두 컬럼을 공백으로 잇는다(홀딩의 deviceLabel 과 같은 규칙).
+            device: [v.devices?.device_name, v.devices?.device_name2].filter(Boolean).join(' ') || '장비 미지정',
+            serviceType: v.service_type?.trim() || '유형 미정',
+            owner: v.visitor?.trim() || '담당자 미정',
+            daysLeft: daysBetween(upcomingFrom, v.visit_date as string),
+          })),
+      )
+
       setThisMonth(cur)
       setLastMonth(before)
       setOpportunities(opps)
@@ -359,6 +407,6 @@ export function useDashboard80() {
   return {
     thisMonth, lastMonth, opportunities, lastActivityByOpp,
     ownerCounts, oppActivities, loadOppActivities, loading, reload: load,
-    salesActivity, serviceActivity, expiringQuotes,
+    salesActivity, serviceActivity, expiringQuotes, upcomingVisits,
   }
 }

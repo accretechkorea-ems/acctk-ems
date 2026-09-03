@@ -170,6 +170,14 @@ function AdminPageInner() {
   const emptyOfficeForm = { code: '', label: '', address: '', latitude: '', longitude: '', sort_order: '0' }
   const [officeForm, setOfficeForm] = useState(emptyOfficeForm)
   const [geoState, setGeoState] = useState<{ busy: boolean; message: string }>({ busy: false, message: '' })
+  /**
+   * 지금 입력칸에 있는 좌표가 "어느 주소의 것인지".
+   * 좌표값끼리 비교하지 않는 이유: 주소를 조금만 고쳐 좌표가 같게 나오는 경우
+   * (예: 끝에 층수 추가) 좌표 찾기를 눌러도 값이 그대로라 영영 저장할 수 없게 된다.
+   * 수정 창을 열 때는 저장된 주소, 좌표 찾기에 성공하면 그때 쓴 주소,
+   * 좌표를 손으로 고치면 그 시점의 주소를 담는다.
+   */
+  const [coordAddress, setCoordAddress] = useState('')
   const [teamsList, setTeamsList] = useState<Team[]>([])
   const [teamLoading, setTeamLoading] = useState(false)
   const [newTeamName, setNewTeamName] = useState('')
@@ -611,6 +619,7 @@ function AdminPageInner() {
   const openOfficeAdd = () => {
     setOfficeEditing(null)
     setOfficeForm(emptyOfficeForm)
+    setCoordAddress('')
     setGeoState({ busy: false, message: '' })
     setOfficeAddOpen(true)
   }
@@ -622,6 +631,7 @@ function AdminPageInner() {
       longitude: o.longitude == null ? '' : String(o.longitude),
       sort_order: String(o.sort_order),
     })
+    setCoordAddress(o.address)   // 저장된 좌표는 저장된 주소의 것이다
     setGeoState({ busy: false, message: '' })
     setOfficeAddOpen(true)
   }
@@ -629,6 +639,7 @@ function AdminPageInner() {
     setOfficeAddOpen(false)
     setOfficeEditing(null)
     setOfficeForm(emptyOfficeForm)
+    setCoordAddress('')
     setGeoState({ busy: false, message: '' })
   }
 
@@ -640,6 +651,7 @@ function AdminPageInner() {
     try {
       const { latitude, longitude } = await geocodeAddress(address)
       setOfficeForm(f => ({ ...f, latitude: String(latitude), longitude: String(longitude) }))
+      setCoordAddress(address)   // 이 좌표는 이 주소의 것이다
       setGeoState({ busy: false, message: `좌표를 찾았습니다 — ${latitude}, ${longitude}. 저장 전에 확인해주세요.` })
     } catch (e) {
       setGeoState({ busy: false, message: (e as Error).message + ' 좌표를 직접 입력해주세요.' })
@@ -662,7 +674,15 @@ function AdminPageInner() {
     }
   }
 
+  const COORD_STALE_MSG = '주소가 변경되었습니다. 「좌표 찾기」로 좌표를 갱신해주세요.'
+  // 좌표를 손으로 고친 경우에는 coordAddress 도 함께 옮겨 두므로 여기서 걸리지 않는다
+  // (지오코딩이 안 되는 주소를 직접 넣는 경우가 있다).
+  const coordStale = !!officeEditing && officeForm.address.trim() !== coordAddress.trim()
+
   const saveOffice = async () => {
+    // 주소를 고치고 좌표를 그대로 두면 지도만 옛 자리를 가리킨다. 원인을 찾기 어려운 오작동이라 저장 전에 막는다.
+    // 새로 추가할 때는 비교할 원본이 없으므로 수정할 때만 본다.
+    if (coordStale) { toast.error(COORD_STALE_MSG); return }
     const payload = {
       action: officeEditing ? 'update' : 'create',
       officeId: officeEditing?.office_id,
@@ -1503,15 +1523,16 @@ function AdminPageInner() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginTop: 12 }}>
                   <div>
                     <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>위도</div>
-                    <input value={officeForm.latitude} onChange={e => setOfficeForm(f => ({ ...f, latitude: e.target.value }))} placeholder="-90 ~ 90" style={inp} />
+                    <input value={officeForm.latitude} onChange={e => { setOfficeForm(f => ({ ...f, latitude: e.target.value })); setCoordAddress(officeForm.address) }} placeholder="-90 ~ 90" style={inp} />
                   </div>
                   <div>
                     <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>경도</div>
-                    <input value={officeForm.longitude} onChange={e => setOfficeForm(f => ({ ...f, longitude: e.target.value }))} placeholder="-180 ~ 180" style={inp} />
+                    <input value={officeForm.longitude} onChange={e => { setOfficeForm(f => ({ ...f, longitude: e.target.value })); setCoordAddress(officeForm.address) }} placeholder="-180 ~ 180" style={inp} />
                   </div>
                 </div>
-                {geoState.message && (
-                  <div style={{ fontSize: 12, color: GRAY, marginTop: 8, lineHeight: 1.6 }}>{geoState.message}</div>
+                {/* 주소와 좌표가 어긋난 상태는 저장을 누르기 전에도 계속 보이게 둔다. */}
+                {(coordStale || geoState.message) && (
+                  <div style={{ fontSize: 12, color: GRAY, marginTop: 8, lineHeight: 1.6 }}>{coordStale ? COORD_STALE_MSG : geoState.message}</div>
                 )}
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>

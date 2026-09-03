@@ -64,11 +64,48 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
 
   // 사무실은 offices 테이블이 정본이다. 비활성 사무실도 findOffice 로 찾아 마커를 그린다
   // (지난 활동이 그 사무실 소속일 수 있으므로).
-  const { offices } = useOffices()
+  const { offices, loading: officesLoading } = useOffices()
   const officeInfo = findOffice(offices, officeCode) // 소속 사무실(없으면 undefined)
-  const isOffice = mode === 'office' && !!officeInfo
+
+  /**
+   * 사무실을 지도에 쓸 수 있는지, 못 쓴다면 왜인지.
+   * 예전에는 이 넷이 모두 "선이 안 그려짐" 하나로 뭉개져 원인을 알 수 없었다.
+   *   loading  조회 중 — 지도 생성을 미룬다(이때 만든 지도는 사무실을 모른 채 굳는다)
+   *   failed   조회 실패. offices 는 늘 몇 행 있으므로 다 읽고도 0행이면 실패로 본다
+   *   none     engineers.office 가 비어 있음
+   *   missing  코드는 있는데 offices 에 그 code 가 없음
+   *   nocoord  사무실은 찾았는데 위경도가 비어 있음
+   *   ok       쓸 수 있다
+   */
+  const officeState: 'loading' | 'failed' | 'none' | 'missing' | 'nocoord' | 'ok' =
+    officesLoading ? 'loading'
+    : offices.length === 0 ? 'failed'
+    : !officeCode ? 'none'
+    : !officeInfo ? 'missing'
+    : officeInfo.latitude == null || officeInfo.longitude == null ? 'nocoord'
+    : 'ok'
+
+  // 좌표까지 확인된 사무실만 지도에 쓴다. 없는 좌표를 0 으로 메우면 (0,0) 바다에 마커와 선이 그려진다.
+  const officePoint = officeState === 'ok' && officeInfo
+    ? { lat: officeInfo.latitude as number, lng: officeInfo.longitude as number }
+    : null
+
+  /** 사무실을 못 쓰는 이유. 토글 옆 안내와 버튼 title 에 같은 문구를 쓴다. */
+  const officeHint =
+    officeState === 'none' ? '소속 사무실이 지정되지 않았습니다'
+    : officeState === 'missing' ? `사무실 정보를 찾을 수 없습니다 (코드: ${officeCode})`
+    : officeState === 'nocoord' ? '사무실 좌표가 등록되지 않았습니다'
+    : officeState === 'failed' ? '사무실 정보를 불러오지 못했습니다'
+    : null
+
+  const isOffice = mode === 'office' && !!officePoint
   // 같은 날 인접 구간이 하나라도 있으면 실선이 그려지므로 범례를 노출(visits 모드 전용).
   const hasSameDaySegment = stops.some((s, i) => i > 0 && stops[i - 1].date === s.date)
+
+  // 조회 실패는 화면 문구만으로는 원인을 좁히기 어려우므로 콘솔에도 남긴다.
+  useEffect(() => {
+    if (officeState === 'failed') console.error('[RouteMapView] 사무실 정보를 불러오지 못했습니다 (offices 조회 결과 0행)')
+  }, [officeState])
 
   // ESC 로 닫기
   useEffect(() => {
@@ -82,6 +119,9 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
   // 모드/주변업체 토글은 재초기화 없이 별도 effect 에서 다시 그린다(지도 시점 유지).
   useEffect(() => {
     if (stops.length === 0) return // 빈 경우 지도 미생성(아래 렌더에서 안내)
+    // 사무실 조회가 끝나기 전에 지도를 만들면, 이 아래 코드가 officeInfo 를 undefined 인 채로
+    // 클로저에 가둬 사무실 마커·경로선이 영영 그려지지 않는다(조회를 DB 로 옮기며 생긴 문제).
+    if (officesLoading) return
 
     let mounted = true
     let ro: ResizeObserver | null = null
@@ -102,7 +142,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
 
       // 초기 범위: 방문지 + 사무실(있으면) 을 모두 포함. 지점이 하나면 센터만 잡고 확대.
       const boundsPoints = stops.map(s => ({ lat: s.lat, lng: s.lng }))
-      if (officeInfo?.latitude != null && officeInfo.longitude != null) boundsPoints.push({ lat: officeInfo.latitude, lng: officeInfo.longitude })
+      if (officePoint) boundsPoints.push(officePoint)
       if (boundsPoints.length === 1) {
         map.setCenter(new kakao.maps.LatLng(boundsPoints[0].lat, boundsPoints[0].lng))
         map.setLevel(5)
@@ -261,7 +301,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
 
       // 사무실 마커 — 진한 회색(#374151) 집 아이콘 배지로 방문지(파란 dot)와 색·형태 구분.
       // (visits 모드에선 마커만 표시하고 선은 잇지 않는다. office 모드에선 아래에서 점선으로 연결.)
-      if (officeInfo) {
+      if (officeInfo && officePoint) {
         const wrap = document.createElement('div')
         wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center'
         const pill = document.createElement('div')
@@ -271,7 +311,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
         badge.style.cssText = 'width:22px;height:22px;border-radius:6px;background:#374151;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center'
         badge.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>'
         wrap.append(pill, badge)
-        const officeOv = new kakao.maps.CustomOverlay({ position: new kakao.maps.LatLng(officeInfo.latitude ?? 0, officeInfo.longitude ?? 0), yAnchor: 1, zIndex: 4, content: wrap })
+        const officeOv = new kakao.maps.CustomOverlay({ position: new kakao.maps.LatLng(officePoint.lat, officePoint.lng), yAnchor: 1, zIndex: 4, content: wrap })
         officeOv.setMap(map)
         officeOverlayRef.current = officeOv
       }
@@ -300,9 +340,9 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
       const drawPolylines = (m: 'visits' | 'office') => {
         polylinesRef.current.forEach(p => p.setMap(null))
         polylinesRef.current = []
-        if (m === 'office' && officeInfo) {
+        if (m === 'office' && officePoint) {
           // office 모드: 날짜별로 사무실 → 그날 방문지들(순서대로) → 사무실. 날짜가 다르면 독립 경로.
-          const office = { lat: officeInfo.latitude ?? 0, lng: officeInfo.longitude ?? 0 }
+          const office = officePoint
           const byDate = new Map<string, RouteStop[]>()
           for (const s of stops) {
             const arr = byDate.get(s.date)
@@ -386,8 +426,10 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
       drawPolylinesRef.current = null; drawNearbyRef.current = null; clearNearbyRef.current = null
       mapObjRef.current = null
     }
+    // mode·showNearby 는 일부러 의존성에서 뺀다 — 토글할 때마다 지도를 다시 만들면
+    // 사용자가 맞춰 둔 줌·중심이 초기화된다. 둘은 아래 별도 effect 에서 다시 그린다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stops, officeCode])
+  }, [stops, officeCode, officeInfo?.code, officesLoading])
 
   // 모드 토글 → 지도 재생성 없이 연결선만 다시 그린다.
   useEffect(() => {
@@ -521,10 +563,10 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
           <div style={{ position: 'absolute', bottom: 16, right: 16, zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
-                onClick={() => { if (officeInfo) setMode(m => (m === 'office' ? 'visits' : 'office')) }}
-                disabled={!officeInfo}
-                title={!officeInfo ? '소속 사무실이 지정되지 않았습니다' : '사무실 기준 왕복 연결선'}
-                style={pillStyle(isOffice, !officeInfo)}>
+                onClick={() => { if (officePoint) setMode(m => (m === 'office' ? 'visits' : 'office')) }}
+                disabled={!officePoint}
+                title={officePoint ? '사무실 기준 왕복 연결선' : (officeHint ?? '사무실 정보를 불러오는 중입니다')}
+                style={pillStyle(isOffice, !officePoint)}>
                 사무실 기준 연결선
               </button>
               <button
@@ -535,9 +577,9 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
                 주변 업체
               </button>
             </div>
-            {!officeInfo && (
+            {officeHint && (
               <span style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', background: 'rgba(255,255,255,0.92)', border: '1px solid #ebebeb', borderRadius: 6, padding: '2px 7px' }}>
-                소속 사무실이 지정되지 않았습니다
+                {officeHint}
               </span>
             )}
           </div>
