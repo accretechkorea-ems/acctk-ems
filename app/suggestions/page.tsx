@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
+import { josa } from '@/lib/josa'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { canViewAll, isSuperAdmin } from '@/lib/permissions'
@@ -183,7 +184,7 @@ export default function SuggestionsPage() {
   const handleDelete = async (s: Suggestion) => {
     const ok = await confirmDialog({
       title: '건의사항 삭제',
-      message: `'${s.title}' 을(를) 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`,
+      message: `'${s.title}'${josa(s.title, '을')} 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`,
       confirmText: '삭제', variant: 'danger',
     })
     if (!ok) return

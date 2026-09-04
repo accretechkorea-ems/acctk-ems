@@ -3,6 +3,7 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { canViewSalesMgmt } from '@/lib/permissions'
 import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
+import { josa } from '@/lib/josa'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -101,7 +102,7 @@ export async function POST(req: Request) {
         targets.map((m: { engineer_id: number }) => ({
           engineer_id: m.engineer_id,
           title: '📦 발주서 등록',
-          message: `${senderLabel}이(가) 발주서를 등록했습니다. [${quoteNumber}]`,
+          message: `${senderLabel}${josa(senderLabel, '이')} 발주서를 등록했습니다. [${quoteNumber}]`,
           type: 'purchase_order',
           link: '/purchase',
           is_read: false,
@@ -180,7 +181,7 @@ export async function POST(req: Request) {
         taxTargets.map((m: { engineer_id: number }) => ({
           engineer_id: m.engineer_id,
           title: '🧾 세금계산서 발행 요청',
-          message: `${senderLabel}이(가) 세금계산서 발행을 요청했습니다. [${quote?.quote_number}]${taxDate ? ` 요청일: ${taxDate}` : ''}`,
+          message: `${senderLabel}${josa(senderLabel, '이')} 세금계산서 발행을 요청했습니다. [${quote?.quote_number}]${taxDate ? ` 요청일: ${taxDate}` : ''}`,
           type: 'tax_invoice_request',
           link: '/purchase',
           is_read: false,
@@ -258,7 +259,7 @@ export async function POST(req: Request) {
       const { error: notiErr } = await supabaseAdmin.from('notifications').insert({
         engineer_id: quote.engineer_id,
         title: '📅 출하일정/메모 업데이트',
-        message: `[${quote.quote_number}] ${senderLabel}이(가) 일정/메모를 수정했습니다.${parts.length > 0 ? ' ' + parts.join(' / ') : ''}`,
+        message: `[${quote.quote_number}] ${senderLabel}${josa(senderLabel, '이')} 일정/메모를 수정했습니다.${parts.length > 0 ? ' ' + parts.join(' / ') : ''}`,
         type: 'schedule_updated',
         link: '/sales',
         is_read: false,

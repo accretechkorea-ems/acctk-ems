@@ -15,6 +15,8 @@ import { useConfirm } from '@/components/common/ConfirmDialog'
 import { getCategoryColor, SALES_STATUS_COLORS, type CategoryColor } from '@/lib/categoryColors'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import Popover from '@/components/common/Popover'
+import { Z } from '@/lib/zIndex'
+import { josa } from '@/lib/josa'
 
 import {
   LEAD_STATUS_NEW, LEAD_STATUS_ACTIVE, LEAD_STATUS_CONVERTED, LEAD_STATUS_SKIPPED,
@@ -62,6 +64,8 @@ type Lead = {
   contact_name: string | null; contact_dept: string | null; contact_title: string | null
   contact_email: string; contact_office_tel: string | null; contact_mobile: string
   meeting_note: string
+  /** 명함 이미지의 스토리지 파일명(비공개 버킷). 없으면 null. */
+  business_card_url: string | null
   status: string; assigned_to: number | null; admin_memo: string | null; skip_reason: string | null
   converted_opportunity_id: number | null
   created_at: string
@@ -150,6 +154,44 @@ function Row({ k, v }: { k: string; v: string | null | undefined }) {
   )
 }
 
+/**
+ * 명함 썸네일. 버킷이 비공개라 파일명만으로는 그릴 수 없어 서명 URL 을 받아 온다.
+ * 발급이 실패하면(권한·파일 없음) 아무것도 그리지 않는다 — 깨진 이미지 아이콘을 보이는 것보다 낫다.
+ */
+function LeadCardThumb({ path, onOpen }: { path: string; onOpen: (url: string) => void }) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      try {
+        const res = await fetch(`/api/lead-card?path=${encodeURIComponent(path)}`)
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) { console.error('[leads] 명함 URL 발급 실패', { path, status: res.status, json }); return }
+        if (!cancelled && json.signedUrl) setUrl(json.signedUrl as string)
+      } catch (e) {
+        console.error('[leads] 명함 URL 발급 실패', { path, error: e })
+      }
+    }
+    run()
+    return () => { cancelled = true }
+  }, [path])
+
+  if (!url) return null
+  return (
+    <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${BORDER}` }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: FAINT, marginBottom: 6 }}>명함</div>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={url}
+        alt="명함"
+        onClick={() => onOpen(url)}
+        title="클릭하면 크게 볼 수 있습니다"
+        style={{ width: '100%', maxWidth: 220, maxHeight: 140, objectFit: 'contain', border: `1px solid ${BORDER}`, borderRadius: 6, background: '#fff', cursor: 'zoom-in', display: 'block' }}
+      />
+    </div>
+  )
+}
+
 function LeadsPageInner() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
@@ -190,6 +232,14 @@ function LeadsPageInner() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; text: string } | null>(null)
   const [deleting, setDeleting] = useState<number | null>(null)
   const [pdfBusy, setPdfBusy] = useState<number | null>(null)
+  // 명함 크게 보기. 썸네일이 이미 받아온 서명 URL 을 그대로 쓴다(다시 발급하지 않는다).
+  const [cardViewer, setCardViewer] = useState<string | null>(null)
+  useEffect(() => {
+    if (!cardViewer) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setCardViewer(null) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [cardViewer])
 
   useEffect(() => {
     if (!authorized) return
@@ -359,13 +409,42 @@ function LeadsPageInner() {
    * 저장(스토리지)도 기록(download_logs)도 남기지 않는다 — 만들어서 바로 내려주기만 한다.
    * 화면 상세와 같은 항목만 담고 담당자·상태·메모 같은 관리 정보는 넣지 않는다.
    */
+  /**
+   * PDF 에 넣을 명함을 data URL 로 만든다.
+   * 서명 URL 을 그대로 넘기면 react-pdf 가 스스로 받아오는데, 만료·CORS 를 우리가 통제할 수 없다.
+   * 여기서 한 번 받아 base64 로 바꿔 넘기면 그런 변수가 사라진다.
+   * 실패하면 null — 명함만 빠지고 PDF 는 그대로 만든다.
+   */
+  const loadCardDataUrl = async (path: string | null): Promise<string | null> => {
+    if (!path) return null
+    try {
+      const res = await fetch(`/api/lead-card?path=${encodeURIComponent(path)}`)
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.signedUrl) {
+        console.error('[leads] PDF 명함 URL 발급 실패', { path, status: res.status, json })
+        return null
+      }
+      const blob = await (await fetch(json.signedUrl as string)).blob()
+      return await new Promise<string | null>(resolve => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null)
+        reader.onerror = () => resolve(null)
+        reader.readAsDataURL(blob)
+      })
+    } catch (e) {
+      console.error('[leads] PDF 명함 준비 실패', { path, error: e })
+      return null
+    }
+  }
+
   const downloadPdf = async (lead: Lead) => {
     setPdfBusy(lead.lead_id)
     try {
       // @react-pdf/renderer 는 무거워서 리드 화면 첫 로딩에 얹지 않는다. 누를 때 불러온다.
-      const [{ pdf }, { LeadPDFDoc }] = await Promise.all([
+      const [{ pdf }, { LeadPDFDoc }, businessCard] = await Promise.all([
         import('@react-pdf/renderer'),
         import('./LeadPDFDoc'),
+        loadCardDataUrl(lead.business_card_url),
       ])
       const blob = await pdf(
         <LeadPDFDoc
@@ -392,6 +471,7 @@ function LeadsPageInner() {
           contactOfficeTel={lead.contact_office_tel}
           contactMobile={lead.contact_mobile}
           meetingNote={lead.meeting_note}
+          businessCard={businessCard}
         />
       ).toBlob()
 
@@ -443,7 +523,7 @@ function LeadsPageInner() {
     }
     const ok = await confirm({
       title: '리드 삭제',
-      message: `${lead.partner_company} 이(가) 등록한 ${lead.customer_company} 리드를 삭제합니다. 되돌릴 수 없습니다.`,
+      message: `${lead.partner_company}${josa(lead.partner_company, '이')} 등록한 ${lead.customer_company} 리드를 삭제합니다. 되돌릴 수 없습니다.`,
       confirmText: '삭제',
       variant: 'danger',
     })
@@ -641,6 +721,10 @@ function LeadsPageInner() {
                                     <Row k="회사번호" v={lead.contact_office_tel} />
                                     <Row k="휴대폰" v={lead.contact_mobile} />
                                   </div>
+                                  {/* 명함 — 첨부된 리드에만 나온다. 비공개 버킷이라 서명 URL 을 받아 그린다. */}
+                                  {lead.business_card_url && (
+                                    <LeadCardThumb path={lead.business_card_url} onOpen={setCardViewer} />
+                                  )}
                                 </div>
                               </div>
 
@@ -884,6 +968,18 @@ function LeadsPageInner() {
         </div>
 
       </div>
+
+      {/* 명함 크게 보기. 화면에 이 용도의 기존 부품이 없어 새로 둔다 —
+          겹칠 것이 없는 전체 화면 오버레이라 바깥 클릭·ESC 로만 닫는다. */}
+      {cardViewer && (
+        <div
+          onClick={() => setCardViewer(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: Z.fullscreen, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32, cursor: 'zoom-out' }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={cardViewer} alt="명함" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8, background: '#fff' }} />
+        </div>
+      )}
     </div>
   )
 }

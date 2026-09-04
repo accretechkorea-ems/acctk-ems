@@ -59,6 +59,11 @@ const S = StyleSheet.create({
 
   noteBody: { fontSize: 9, color: TEXT, lineHeight: 1.6 },
 
+  // 명함 이미지. 높이를 고정하고 objectFit 으로 비율을 지킨다 —
+  // 세로 사진이든 가로 명함이든 이 상자 안에 들어가고, 늘어나거나 눌리지 않는다.
+  // 왼쪽 네 장(약 455pt)에 이 상자를 더해도 본문 높이(약 709pt) 안에 남는다.
+  cardImage: { width: '100%', height: 120, objectFit: 'contain' },
+
   footer: {
     position: 'absolute', bottom: 16, left: 30, right: 30,
     borderTopWidth: 0.5, borderTopColor: BORDER, paddingTop: 5,
@@ -117,6 +122,8 @@ export type LeadPDFProps = {
   contactName: string | null; contactDeptTitle: string
   contactEmail: string; contactOfficeTel: string | null; contactMobile: string
   meetingNote: string
+  /** 명함 이미지(data URL). 없으면 null — 그 자리는 비워 둔다. */
+  businessCard?: string | null
 }
 
 export const LeadPDFDoc = React.memo(function LeadPDFDoc(p: LeadPDFProps) {
@@ -160,13 +167,24 @@ export const LeadPDFDoc = React.memo(function LeadPDFDoc(p: LeadPDFProps) {
               <Row k="주소" v={p.address} />
               <Row k="시 / 국가" v={`${p.city} / ${p.country}`} />
             </Card>
-            <Card title="고객 정보" last>
+            <Card title="고객 정보" last={!p.businessCard}>
               <Row k="이름" v={p.contactName} />
               <Row k="부서 / 직위" v={p.contactDeptTitle} />
               <Row k="이메일" v={p.contactEmail} />
               <Row k="회사번호" v={p.contactOfficeTel} />
               <Row k="휴대폰" v={p.contactMobile} />
             </Card>
+            {/* 명함 — 고객 정보 카드 아래. 없으면 이 자리 자체가 없다. */}
+            {p.businessCard && (
+              <View wrap={false}>
+                <View style={S.card}>
+                  <Text style={S.cardTitle}>명함</Text>
+                  {/* 높이를 못 박고 objectFit: contain 으로 비율을 지킨다.
+                      이 높이(CARD_IMG_H)는 왼쪽 카드가 다 늘어나도 한 장 안에 남는 여백에서 잡았다. */}
+                  <PdfImage src={p.businessCard} style={S.cardImage} />
+                </View>
+              </View>
+            )}
           </View>
 
           {/* 미팅 노트 — 왼쪽 네 장을 합한 높이를 채우고, 넘치면 잘라내지 않고 다음 장으로 흐른다.

@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { isSuperAdmin } from '@/lib/permissions'
+import { CARD_BUCKET } from '@/lib/leadOptions'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -41,7 +42,7 @@ export async function POST(req: Request) {
 
   const { data: lead, error: leadErr } = await supabaseAdmin
     .from('leads')
-    .select('lead_id, customer_company, converted_opportunity_id')
+    .select('lead_id, customer_company, converted_opportunity_id, business_card_url')
     .eq('lead_id', leadId)
     .single()
   if (leadErr || !lead) return NextResponse.json({ error: '리드를 찾을 수 없습니다.' }, { status: 404 })
@@ -52,6 +53,26 @@ export async function POST(req: Request) {
     const typed = typeof body.confirmText === 'string' ? body.confirmText.trim() : ''
     if (typed !== (lead.customer_company ?? '').trim()) {
       return NextResponse.json({ error: '고객사명이 일치하지 않습니다.' }, { status: 400 })
+    }
+  }
+
+  // 명함 파일을 리드보다 먼저 지운다. 행이 사라지면 파일명을 알 길이 없어 아무도 못 찾는 파일이 남는다.
+  //
+  // remove() 는 없는 키를 지워도 error 없이 data: [] 를 돌려준다. 그래서 셋을 구분한다.
+  //   error 있음        → 정말 실패다. 리드를 지우지 않고 여기서 멈춘다.
+  //   data 가 빈 배열   → 파일이 이미 없다. 지울 것이 없으니 그대로 진행한다.
+  //   data 에 항목 있음 → 지웠다.
+  const cardPath = (lead.business_card_url ?? '').trim()
+  if (cardPath) {
+    const { data: removed, error: rmErr } = await supabaseAdmin.storage.from(CARD_BUCKET).remove([cardPath])
+    if (rmErr) {
+      console.error('[lead-delete] 명함 파일 삭제 실패 — 리드를 지우지 않는다', { leadId, cardPath, error: rmErr })
+      return NextResponse.json({ error: '명함 파일을 지우지 못해 삭제를 중단했습니다.' }, { status: 500 })
+    }
+    if (!removed || removed.length === 0) {
+      console.error('[lead-delete] 명함 파일이 이미 없다 — 그대로 진행', { leadId, cardPath })
+    } else {
+      console.log('[lead-delete] 명함 파일 삭제', { leadId, cardPath })
     }
   }
 

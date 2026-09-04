@@ -9,9 +9,10 @@ import { NextResponse } from 'next/server'
 import { adminEngineerIds, notifyLead } from '@/lib/leadNotify'
 import {
   INDUSTRIES, INTEREST_PRODUCTS, COMPETITORS, BUDGET_STATUSES, PURCHASE_PERIODS,
-  MAX_LEN, MEETING_NOTE_MIN, HONEYPOT_FIELD, EMAIL_RE, DEFAULT_COUNTRY,
-  LEAD_NO_PREFIX, leadNoTag,
+  MAX_LEN, FIELD_LABELS, MEETING_NOTE_MIN, HONEYPOT_FIELD, EMAIL_RE, DEFAULT_COUNTRY,
+  LEAD_NO_PREFIX, leadNoTag, CARD_MAX_BYTES, CARD_BUCKET,
 } from '@/lib/leadOptions'
+import { josa } from '@/lib/josa'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -50,6 +51,44 @@ async function nextLeadNo(prefix: string): Promise<string> {
   return prefix + String(max + 1).padStart(3, '0')
 }
 
+/**
+ * 명함 이미지 검증. 화면이 canvas 로 줄여 data URL 로 보내지만, 공개 라우트라
+ * 화면을 거치지 않는 호출을 가정하고 여기서 다시 본다.
+ *   · 선언된 MIME 만 믿지 않고 앞머리 바이트로 실제 형식을 확인한다
+ *   · 크기 상한 (CARD_MAX_BYTES)
+ * 파일명은 서버가 정한다 — 클라이언트가 보낸 이름은 쓰지 않는다(경로 조작·덮어쓰기 방지).
+ */
+type CardImage = { bytes: Buffer; ext: 'jpg' | 'png' | 'webp'; contentType: string }
+
+function parseCard(raw: unknown): { ok: true; card: CardImage | null } | { ok: false; error: string } {
+  if (raw == null || raw === '') return { ok: true, card: null }
+  if (typeof raw !== 'string') return { ok: false, error: '명함 이미지를 읽을 수 없습니다.' }
+
+  const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(raw)
+  if (!m) return { ok: false, error: '명함은 이미지 파일만 첨부할 수 있습니다.' }
+
+  let bytes: Buffer
+  try {
+    bytes = Buffer.from(m[2], 'base64')
+  } catch {
+    return { ok: false, error: '명함 이미지를 읽을 수 없습니다.' }
+  }
+  if (bytes.length === 0) return { ok: false, error: '명함 이미지를 읽을 수 없습니다.' }
+  if (bytes.length > CARD_MAX_BYTES) {
+    return { ok: false, error: `명함 이미지는 ${Math.floor(CARD_MAX_BYTES / (1024 * 1024))}MB 를 넘을 수 없습니다.` }
+  }
+
+  // 앞머리 바이트로 실제 형식을 본다. 선언된 MIME 과 다르면 거부한다.
+  const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+  const isPng = bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  const isWebp = bytes.subarray(0, 4).toString('latin1') === 'RIFF' && bytes.subarray(8, 12).toString('latin1') === 'WEBP'
+  const actual = isJpeg ? 'image/jpeg' : isPng ? 'image/png' : isWebp ? 'image/webp' : null
+  if (!actual || actual !== m[1]) return { ok: false, error: '명함은 이미지 파일만 첨부할 수 있습니다.' }
+
+  const ext = isJpeg ? 'jpg' : isPng ? 'png' : 'webp'
+  return { ok: true, card: { bytes, ext, contentType: actual } }
+}
+
 /** 'YYYY-MM-DD' 인지, 그리고 실재하는 날짜인지(2026-02-30 같은 값 차단) 본다. */
 function isValidDate(s: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false
@@ -75,21 +114,15 @@ export async function POST(req: Request) {
   }
 
   // ── 필수 텍스트 ──
-  const required = {
-    partner_company: '파트너사 회사명',
-    partner_name: '등록자 성함',
-    customer_company: '고객사 회사명',
-    products: '생산품',
-    city: '시',
-    contact_name: '이름',
-    contact_email: '이메일',
-    contact_mobile: '휴대폰 번호',
-    meeting_note: '회의록',
-  } as const
+  // 항목 이름은 FIELD_LABELS 한 곳에서만 온다(길이 초과 문구도 같은 것을 쓴다).
+  const required = [
+    'partner_company', 'partner_name', 'customer_company', 'products', 'city',
+    'contact_name', 'contact_dept', 'contact_mobile', 'meeting_note',
+  ] as const
   const value: Record<string, string> = {}
-  for (const [key, label] of Object.entries(required)) {
+  for (const key of required) {
     const v = str(body[key])
-    if (!v) return bad(`${label}을(를) 입력해주세요.`)
+    if (!v) return bad(`${FIELD_LABELS[key]}${josa(FIELD_LABELS[key], '을')} 입력해주세요.`)
     value[key] = v
   }
 
@@ -97,17 +130,21 @@ export async function POST(req: Request) {
   value.country = str(body.country) || DEFAULT_COUNTRY
 
   // ── 선택 텍스트 ──
-  for (const key of ['partner_contact', 'address', 'request_note', 'contact_dept', 'contact_title', 'contact_office_tel'] as const) {
+  for (const key of ['partner_contact', 'address', 'request_note', 'contact_title', 'contact_office_tel', 'contact_email'] as const) {
     value[key] = str(body[key])
   }
 
   // ── 길이 제한 — 컬럼이 text 라 서버에서 막지 않으면 무제한으로 들어온다 ──
   for (const [key, max] of Object.entries(MAX_LEN)) {
-    if ((value[key] ?? '').length > max) return bad(`${key} 은(는) ${max}자를 넘을 수 없습니다.`)
+    if ((value[key] ?? '').length > max) {
+      const label = FIELD_LABELS[key as keyof typeof MAX_LEN]
+      return bad(`${label}${josa(label, '은')} ${max}자를 넘을 수 없습니다.`)
+    }
   }
 
   // ── 형식·길이 규칙 ──
-  if (!EMAIL_RE.test(value.contact_email)) return bad('이메일 형식이 올바르지 않습니다.')
+  // 이메일은 선택 항목이다 — 적어 보냈을 때만 형식을 본다.
+  if (value.contact_email && !EMAIL_RE.test(value.contact_email)) return bad('이메일 형식이 올바르지 않습니다.')
   if (value.meeting_note.length < MEETING_NOTE_MIN) {
     return bad(`회의록은 ${MEETING_NOTE_MIN}자 이상 입력해주세요.`)
   }
@@ -127,8 +164,8 @@ export async function POST(req: Request) {
   }
 
   const purchasePeriod = str(body.purchase_period)
-  if (purchasePeriod && !(PURCHASE_PERIODS as readonly string[]).includes(purchasePeriod)) {
-    return bad('예상 구매 기간 값이 올바르지 않습니다.')
+  if (!(PURCHASE_PERIODS as readonly string[]).includes(purchasePeriod)) {
+    return bad('예상 구매 기간을 선택해주세요.')
   }
 
   const rawCompetitor = Array.isArray(body.competitor) ? body.competitor : []
@@ -140,7 +177,7 @@ export async function POST(req: Request) {
 
   const competitorOther = str(body.competitor_other)
   if (competitorOther.length > MAX_LEN.competitor_other) {
-    return bad(`competitor_other 은(는) ${MAX_LEN.competitor_other}자를 넘을 수 없습니다.`)
+    return bad(`${FIELD_LABELS.competitor_other}${josa(FIELD_LABELS.competitor_other, '은')} ${MAX_LEN.competitor_other}자를 넘을 수 없습니다.`)
   }
 
   // 날짜는 date 컬럼이라 'YYYY-MM-DD' 문자열을 그대로 넣는다(Date 객체를 거치지 않는다).
@@ -148,6 +185,11 @@ export async function POST(req: Request) {
   if (expectedPurchase && !isValidDate(expectedPurchase)) {
     return bad('예상 구매 시기가 올바른 날짜가 아닙니다.')
   }
+
+  // 명함(선택). 형식이 틀리면 여기서 거절한다 — 리드를 저장한 뒤 실패하는 것보다 낫다.
+  const parsed = parseCard(body.business_card)
+  if (!parsed.ok) return bad(parsed.error)
+  const card = parsed.card
 
   const row = {
     partner_company: value.partner_company,
@@ -171,6 +213,8 @@ export async function POST(req: Request) {
     contact_name: value.contact_name,
     contact_dept: value.contact_dept || null,
     contact_title: value.contact_title || null,
+    // 이메일은 선택 항목이 됐지만 leads.contact_email 은 NOT NULL 이다(스키마는 건드리지 않는다).
+    // 빈 문자열로 저장한다 — 화면·PDF 의 Row 는 빈 값을 '-' 로 그리므로 표시는 달라지지 않는다.
     contact_email: value.contact_email,
     contact_office_tel: value.contact_office_tel || null,
     contact_mobile: value.contact_mobile,
@@ -218,6 +262,37 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '등록에 실패했습니다. 잠시 후 다시 시도해주세요.' }, { status: 500 })
   }
 
+  // ── 명함 업로드 ──
+  // 리드를 저장한 뒤에 올린다. 파일명에 lead_id 를 넣어야 어느 리드의 명함인지 파일만 봐도 알 수 있고,
+  // 이름을 서버가 정하므로 클라이언트가 경로를 조작하거나 남의 파일을 덮어쓸 수 없다.
+  //
+  // 업로드가 실패해도 리드 저장은 되돌리지 않는다 — 명함은 부가 정보이고,
+  // 여기서 리드를 지우면 파트너사가 애써 적은 내용이 통째로 사라진다.
+  // 대신 그 사실을 응답에 담아 완료 화면이 알리도록 한다.
+  let cardWarning: string | null = null
+  if (card) {
+    const fileName = `lead-${saved.lead_id}-${Date.now()}.${card.ext}`
+    const { error: upErr } = await supabaseAdmin.storage
+      .from(CARD_BUCKET)
+      .upload(fileName, card.bytes, { contentType: card.contentType, upsert: false })
+    if (upErr) {
+      console.error('[lead] 명함 업로드 실패', { leadId: saved.lead_id, fileName, error: upErr })
+      cardWarning = '명함 이미지를 저장하지 못했습니다. 담당자에게 따로 전달해주세요.'
+    } else {
+      const { error: linkErr } = await supabaseAdmin
+        .from('leads')
+        .update({ business_card_url: fileName })
+        .eq('lead_id', saved.lead_id)
+      if (linkErr) {
+        // 파일은 올라갔는데 연결에 실패했다 — 아무도 찾을 수 없는 파일이 남으므로 되돌린다.
+        console.error('[lead] 명함 연결 실패, 올린 파일을 지운다', { leadId: saved.lead_id, fileName, error: linkErr })
+        const { error: rmErr } = await supabaseAdmin.storage.from(CARD_BUCKET).remove([fileName])
+        if (rmErr) console.error('[lead] 고아 명함 파일 삭제 실패', { fileName, error: rmErr })
+        cardWarning = '명함 이미지를 저장하지 못했습니다. 담당자에게 따로 전달해주세요.'
+      }
+    }
+  }
+
   // 알림은 부가 작업이다 — 실패해도 리드 저장을 되돌리지 않고 성공으로 응답한다.
   // 등록 알림은 리드 관리자(재직 superadmin)에게만 간다. 담당자는 배정될 때 따로 받는다.
   await notifyLead({
@@ -228,5 +303,5 @@ export async function POST(req: Request) {
     leadId: saved.lead_id,
   })
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, ...(cardWarning ? { cardWarning } : null) })
 }

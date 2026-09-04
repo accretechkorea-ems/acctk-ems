@@ -70,6 +70,52 @@ export const MAX_LEN = {
 } as const
 
 /**
+ * 오류 문구에 쓰는 항목 이름. 폼 라벨과 같은 말을 쓴다 —
+ * 파트너사가 보는 문구에 DB 컬럼명(contact_email 등)이 나가면 무슨 칸인지 알 수 없다.
+ *
+ * MAX_LEN 과 같은 키를 갖도록 타입으로 묶어 둔다. 길이 제한을 새로 추가하면서
+ * 이름을 빠뜨리면 타입 검사에서 걸린다(라벨이 두 벌로 갈리지 않게 하는 장치다).
+ *
+ * 같은 '회사명' 이 파트너사·고객사 두 곳에 있어 그 둘만 앞에 소속을 붙인다.
+ */
+export const FIELD_LABELS: Record<keyof typeof MAX_LEN, string> = {
+  partner_company: '파트너사 회사명',
+  partner_name: '등록자 성함',
+  partner_contact: '연락처',
+  customer_company: '고객사 회사명',
+  products: '생산품',
+  address: '주소',
+  city: '시',
+  country: '국가',
+  request_note: '요청사항',
+  competitor_other: '경쟁사',
+  contact_name: '이름',
+  contact_dept: '부서',
+  contact_title: '직위',
+  contact_email: '이메일',
+  contact_office_tel: '회사번호',
+  contact_mobile: '휴대폰 번호',
+  meeting_note: '회의록',
+  skip_reason: '미진행 사유',
+}
+
+/**
+ * 명함 이미지 — 화면에서 canvas 로 줄인 뒤 data URL 로 보낸다.
+ *
+ * 상한을 2MB 로 잡은 근거:
+ *   · 6MB 짜리 폰 사진을 줄이면 실측 830KB 였다. 2MB 는 그 두 배가 넘는 여유다.
+ *   · base64 는 원본의 4/3 로 부풀어, 2MB 이미지가 2.7MB 본문이 된다. 이 서비스는 본문이
+ *     약 4MB 를 넘으면 라우트에 닿기도 전에 플랫폼이 500 으로 끊는다(실측). 그 아래에 두어야
+ *     "이미지가 너무 큽니다" 라는 우리 문구가 사용자에게 보인다.
+ * 화면과 서버가 같은 값을 본다 — 화면은 줄인 결과가 이 값을 넘으면 아예 보내지 않는다.
+ */
+export const CARD_MAX_EDGE = 1600
+export const CARD_JPEG_QUALITY = 0.8
+export const CARD_MAX_BYTES = 2 * 1024 * 1024
+/** 스토리지 버킷 이름. 업로드(서버)와 서명 URL 발급(서버)이 같은 값을 본다. */
+export const CARD_BUCKET = 'lead-cards'
+
+/**
  * 리드 처리 상태. leads.status 의 기본값이 '신규' 다.
  * 리드는 영업기회로 전환할지 판단하는 대상이라 중간 상태를 두지 않는다.
  *   신규     — 등록되면 자동

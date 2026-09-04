@@ -13,6 +13,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { josa } from '@/lib/josa'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { isSuperAdmin } from '@/lib/permissions'
@@ -232,7 +233,7 @@ export function useHoldingCrud({ customerId, holdings, engineerId, fetchDetail, 
     if (!canDeleteHolding(h)) { toast.error('등록한 사람만 삭제할 수 있습니다'); return }
     const ok = await confirmDialog({
       title: '홀딩 삭제',
-      message: `'${h.title}' 을(를) 삭제하시겠습니까?\n메모를 포함한 기록이 완전히 사라지며 되돌릴 수 없습니다.`,
+      message: `'${h.title}'${josa(h.title, '을')} 삭제하시겠습니까?\n메모를 포함한 기록이 완전히 사라지며 되돌릴 수 없습니다.`,
       confirmText: '삭제', variant: 'danger',
     })
     if (!ok) return

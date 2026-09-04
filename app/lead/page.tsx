@@ -4,12 +4,13 @@
 // 로그인 없이 열린다(미들웨어의 공개 경로 목록 참고). 헤더·네비게이션·세션 감시는 붙지 않는다.
 // 화면 검증은 편의일 뿐이고 실제 방어는 /api/lead 가 한다.
 
-import { useState, type CSSProperties } from 'react'
+import { useRef, useState, type CSSProperties } from 'react'
 import {
   INDUSTRY_GROUPS, INTEREST_PRODUCTS, COMPETITORS, COMPETITOR_OTHER,
   BUDGET_STATUSES, PURCHASE_PERIODS, MAX_LEN, MEETING_NOTE_MIN,
-  HONEYPOT_FIELD, EMAIL_RE, DEFAULT_COUNTRY, RESUBMIT_BLOCK_MS,
+  HONEYPOT_FIELD, EMAIL_RE, DEFAULT_COUNTRY, RESUBMIT_BLOCK_MS, CARD_MAX_BYTES,
 } from '@/lib/leadOptions'
+import { downsizeImage } from '@/lib/leadCardImage'
 import { errText, errBorder, FieldError } from '@/components/common/fieldErrors'
 
 const ACCENT = '#234ea2'
@@ -57,6 +58,11 @@ const fieldStyle: CSSProperties = {
 }
 const errorFieldStyle: CSSProperties = { ...fieldStyle, border: errBorder }
 const labelStyle: CSSProperties = { fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 4, display: 'block' }
+// 명함 첨부·교체·삭제 버튼. 폼 안의 보조 동작이라 회색 고스트로 둔다.
+const cardBtnStyle: CSSProperties = {
+  padding: '8px 12px', background: '#f3f4f6', border: 'none', borderRadius: 6,
+  cursor: 'pointer', fontSize: 12, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap',
+}
 const sectionStyle: CSSProperties = {
   background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, padding: 16, marginBottom: 12,
 }
@@ -141,6 +147,14 @@ export default function LeadPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [done, setDone] = useState(false)
+  // 명함 — 선택 항목. 고른 즉시 canvas 로 줄여 미리보기(data URL)까지 만들어 둔다.
+  // 상태에 담는 것은 이미 줄인 이미지다. 원본은 어디에도 보관하지 않는다.
+  const [card, setCard] = useState<{ dataUrl: string; name: string; bytes: number } | null>(null)
+  const [cardBusy, setCardBusy] = useState(false)
+  const [cardError, setCardError] = useState('')
+  // 저장은 됐지만 명함만 실패한 경우 완료 화면에 알린다.
+  const [cardWarning, setCardWarning] = useState('')
+  const cardInputRef = useRef<HTMLInputElement>(null)
 
   /** 완료 화면에서 이어서 등록할 때 — 새로고침 없이 상태만 처음으로 되돌린다. */
   const resetForm = () => {
@@ -149,7 +163,37 @@ export default function LeadPage() {
     setErrors({})
     setSubmitError('')
     setDone(false)
+    setCard(null)
+    setCardError('')
+    setCardWarning('')
+    if (cardInputRef.current) cardInputRef.current.value = ''
     window.scrollTo({ top: 0 })
+  }
+
+  /** 명함 선택 — 고르는 즉시 줄인다. 실패하면 원본을 보내지 않고 칸에 사유를 남긴다. */
+  const pickCard = async (file: File | undefined) => {
+    if (!file) return
+    setCardError('')
+    if (!file.type.startsWith('image/')) {
+      setCardError('이미지 파일만 첨부할 수 있습니다.')
+      return
+    }
+    setCardBusy(true)
+    try {
+      const r = await downsizeImage(file)
+      if (r.after > CARD_MAX_BYTES) {
+        setCardError('이미지가 너무 큽니다. 다른 사진을 선택해주세요.')
+        return
+      }
+      setCard({ dataUrl: r.dataUrl, name: file.name, bytes: r.after })
+    } catch (e) {
+      console.error('[명함] 변환 실패', e)
+      setCardError('이미지를 처리하지 못했습니다. 다른 사진을 선택해주세요.')
+    } finally {
+      setCardBusy(false)
+      // 같은 파일을 다시 고를 수 있게 비운다(교체 후 취소했다가 같은 파일을 다시 고르는 경우).
+      if (cardInputRef.current) cardInputRef.current.value = ''
+    }
   }
 
   const set = (key: FieldKey, v: string | string[]) => {
@@ -179,13 +223,15 @@ export default function LeadPage() {
       ['country', '국가를 입력해주세요.'],
       ['interest_product', '관심 제품을 선택해주세요.'],
       ['budget_status', '예산을 선택해주세요.'],
+      ['purchase_period', '예상 구매 기간을 선택해주세요.'],
       ['contact_name', '이름을 입력해주세요.'],
-      ['contact_email', '이메일을 입력해주세요.'],
+      ['contact_dept', '부서를 입력해주세요.'],
       ['contact_mobile', '휴대폰 번호를 입력해주세요.'],
     ]
     for (const [key, msg] of need) if (!String(form[key]).trim()) e[key] = msg
 
-    if (!e.contact_email && !EMAIL_RE.test(form.contact_email.trim())) {
+    // 이메일은 선택 항목이다 — 적었을 때만 형식을 본다.
+    if (form.contact_email.trim() && !EMAIL_RE.test(form.contact_email.trim())) {
       e.contact_email = '이메일 형식이 올바르지 않습니다.'
     }
     const note = form.meeting_note.trim()
@@ -218,7 +264,8 @@ export default function LeadPage() {
       const res = await fetch('/api/lead', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, [HONEYPOT_FIELD]: honeypot }),
+        // 명함은 이미 줄인 data URL 을 그대로 싣는다(원본은 보내지 않는다). 없으면 아예 넣지 않는다.
+        body: JSON.stringify({ ...form, [HONEYPOT_FIELD]: honeypot, ...(card ? { business_card: card.dataUrl } : null) }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -226,6 +273,8 @@ export default function LeadPage() {
         return
       }
       try { localStorage.setItem('leadSubmittedAt', String(Date.now())) } catch {}
+      // 리드는 저장됐는데 명함만 못 올린 경우 — 등록 자체는 성공이므로 완료 화면에 안내만 남긴다.
+      setCardWarning(typeof json?.cardWarning === 'string' ? json.cardWarning : '')
       setDone(true)
     } catch {
       setSubmitError('네트워크 오류로 등록하지 못했습니다. 잠시 후 다시 시도해주세요.')
@@ -246,6 +295,10 @@ export default function LeadPage() {
             등록해주셔서 감사합니다.<br />
             담당 영업팀이 확인 후 연락드리겠습니다.
           </div>
+          {/* 리드는 저장됐지만 명함만 실패한 경우. 등록을 되돌리지 않고 사실만 알린다. */}
+          {cardWarning && (
+            <div style={{ marginTop: 12, fontSize: 12, color: DANGER, lineHeight: 1.7 }}>{cardWarning}</div>
+          )}
           <button
             onClick={resetForm}
             onMouseEnter={e => (e.currentTarget.style.background = NEUTRAL_BG)}
@@ -358,11 +411,13 @@ export default function LeadPage() {
               <FieldError message={errors.budget_status} style={{ marginTop: 3, fontSize: 11 }} />
             </div>
             <div>
-              <label style={labelStyle}>예상 구매 기간</label>
-              <select value={form.purchase_period} onChange={e => set('purchase_period', e.target.value)} style={fieldStyle}>
+              <label style={labelStyle}>예상 구매 기간<span style={{ color: DANGER }}> *</span></label>
+              <select value={form.purchase_period} onChange={e => set('purchase_period', e.target.value)}
+                style={errors.purchase_period ? errorFieldStyle : fieldStyle}>
                 <option value="">선택해주세요</option>
                 {PURCHASE_PERIODS.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
+              <FieldError message={errors.purchase_period} style={{ marginTop: 3, fontSize: 11 }} />
             </div>
             <div>
               <label style={labelStyle}>예상 구매 시기</label>
@@ -403,11 +458,38 @@ export default function LeadPage() {
           <div style={sectionTitleStyle}>고객 정보</div>
           <div className="lead-grid">
             <Field label="이름" name="contact_name" value={form.contact_name} error={errors.contact_name} onChange={set} required />
-            <Field label="부서" name="contact_dept" value={form.contact_dept} error={errors.contact_dept} onChange={set} />
+            <Field label="부서" name="contact_dept" value={form.contact_dept} error={errors.contact_dept} onChange={set} required />
             <Field label="직위" name="contact_title" value={form.contact_title} error={errors.contact_title} onChange={set} />
-            <Field label="이메일" name="contact_email" value={form.contact_email} error={errors.contact_email} onChange={set} required type="email" />
+            <Field label="이메일" name="contact_email" value={form.contact_email} error={errors.contact_email} onChange={set} type="email" />
             <Field label="회사번호" name="contact_office_tel" value={form.contact_office_tel} error={errors.contact_office_tel} onChange={set} />
             <Field label="휴대폰 번호" name="contact_mobile" value={form.contact_mobile} error={errors.contact_mobile} onChange={set} required />
+          </div>
+
+          {/* 명함 — 선택 항목. 고르면 그 자리에서 줄여 미리보기를 띄우고, 교체·삭제할 수 있다. */}
+          <div style={{ marginTop: 12 }}>
+            <label style={labelStyle}>명함</label>
+            <input ref={cardInputRef} type="file" accept="image/*" style={{ display: 'none' }}
+              onChange={e => pickCard(e.target.files?.[0])} />
+            {card ? (
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={card.dataUrl} alt="첨부한 명함"
+                  style={{ width: 180, maxHeight: 120, objectFit: 'contain', border: `1px solid ${BORDER}`, borderRadius: 6, background: '#fff' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <span style={{ fontSize: 11, color: FAINT }}>{card.name} · {(card.bytes / 1024).toFixed(0)}KB</span>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button type="button" onClick={() => cardInputRef.current?.click()} style={cardBtnStyle}>교체</button>
+                    <button type="button" onClick={() => { setCard(null); setCardError('') }} style={cardBtnStyle}>삭제</button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <button type="button" disabled={cardBusy} onClick={() => cardInputRef.current?.click()}
+                style={{ ...cardBtnStyle, opacity: cardBusy ? 0.6 : 1, cursor: cardBusy ? 'default' : 'pointer' }}>
+                {cardBusy ? '이미지 처리 중...' : '명함 사진 첨부'}
+              </button>
+            )}
+            <FieldError message={cardError} style={{ marginTop: 3, fontSize: 11 }} />
           </div>
         </div>
 

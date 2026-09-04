@@ -8,6 +8,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { josa } from '@/lib/josa'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { isSuperAdmin } from '@/lib/permissions'
@@ -88,7 +89,7 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
     if (!canEditOpp(editingOpp)) { toast.error('담당자 본인만 삭제할 수 있습니다'); return }
     const ok = await confirmDialog({
       title: '영업기회 삭제',
-      message: `'${editingOpp.title}' 을(를) 삭제하시겠습니까?\n연결된 활동 기록은 남고 기회 연결만 풀립니다.`,
+      message: `'${editingOpp.title}'${josa(editingOpp.title, '을')} 삭제하시겠습니까?\n연결된 활동 기록은 남고 기회 연결만 풀립니다.`,
       confirmText: '삭제', variant: 'danger',
     })
     if (!ok) return
@@ -134,7 +135,7 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
       toast.error(error.message || '단계 변경 중 오류가 발생했습니다')
       return false
     }
-    if (await fetchDetail()) toast.success(`'${o.title}' 을(를) ${next} 로 옮겼습니다`)
+    if (await fetchDetail()) toast.success(`'${o.title}'${josa(o.title, '을')} ${next}${josa(next, '으로')} 옮겼습니다`)
     return true
   }
 
@@ -152,8 +153,8 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
     }
     if (await fetchDetail()) {
       toast.success(close
-        ? `'${o.title}' 을(를) 종료했습니다`
-        : `'${o.title}' 을(를) 다시 진행 중으로 되돌렸습니다`)
+        ? `'${o.title}'${josa(o.title, '을')} 종료했습니다`
+        : `'${o.title}'${josa(o.title, '을')} 다시 진행 중으로 되돌렸습니다`)
     }
     return true
   }
