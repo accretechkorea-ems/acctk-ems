@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { INITIALS_TAKEN_MESSAGE, isInitialsTaken, isInitialsUniqueViolation, normalizeInitials } from '@/lib/initials'
 
 const PAGE_BG = '#f4f5f7'
 const PANEL_BG = '#ffffff'
@@ -87,6 +88,22 @@ export default function AccountPage() {
     setIsSavingProfile(true)
     setProfileMessage(null)
 
+    // 본인 페이지도 이니셜을 고칠 수 있는 자리다 — 관리자 화면과 같은 규칙으로 막는다.
+    // (여기는 라우트를 거치지 않고 사용자 클라이언트로 바로 저장하므로 검사도 여기서 한다.
+    //  재직자만 세고, 자기 자신은 뺀다. 최종 판정은 아래 update 의 23505 처리다.)
+    if (initials.trim()) {
+      const { data: peers, error: peerErr } = await supabase
+        .from('engineers')
+        .select('engineer_id, initials, resigned_date')
+        .eq('initials', normalizeInitials(initials))
+      if (peerErr) console.error('[account] 이니셜 조회 실패', peerErr)
+      if (isInitialsTaken(peers, initials, engineer.engineer_id)) {
+        setProfileMessage({ type: 'error', text: INITIALS_TAKEN_MESSAGE })
+        setIsSavingProfile(false)
+        return
+      }
+    }
+
     let imageUrl = profileImageUrl
 
     // 프로필 사진 업로드
@@ -132,7 +149,11 @@ export default function AccountPage() {
     setIsSavingProfile(false)
 
     if (error) {
-      setProfileMessage({ type: 'error', text: '저장 중 오류가 발생했습니다.' })
+      console.error('[account] 프로필 저장 실패', error)
+      setProfileMessage({
+        type: 'error',
+        text: isInitialsUniqueViolation(error) ? INITIALS_TAKEN_MESSAGE : '저장 중 오류가 발생했습니다.',
+      })
       return
     }
 

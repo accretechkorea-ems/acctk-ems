@@ -43,9 +43,9 @@ export type RowKind = 'price_list' | 'manual_jpy' | 'domestic' | 'service' | 'di
 export const DISCOUNT_LABELS = ['DISCOUNT', 'SPECIAL DISCOUNT'] as const
 export type DiscountLabel = typeof DISCOUNT_LABELS[number]
 
-// 수동입력 품목의 판매가 산출 방식.
-//   rate  — 목표이익률로 판매단가를 역산
-//   price — 판매단가를 직접 입력하고 이익률을 계산
+// 판매가 산출 방식. 가격표 품목·수동입력 품목이 함께 쓴다.
+//   rate  — 목표이익률로 판매단가를 역산(1,000원 올림)
+//   price — 판매단가를 직접 입력하고 이익률을 계산(올림 없음 — 친 값이 그대로 나가야 한다)
 export type PriceMode = 'rate' | 'price'
 
 export type QuoteRow = {
@@ -57,7 +57,13 @@ export type QuoteRow = {
   manual_unit_price: number
   tariff_rate: number
   exchange_rate: number
+  // 이익률 스테퍼에 묶인 값. 이익률 모드에서는 사용자가 넣은 **목표값**이라
+  // 올림된 단가로 실제 나오는 이익률과는 다르다(¥1,000·40% → 실제 42.69%).
+  // 사용자가 친 값이 저절로 바뀌면 안 되므로 그대로 둔다.
   profit_rate: number
+  // 올림·직접입력까지 반영된 **실현 이익률**. 화면 요약과 quote_items 저장이 이 값을 쓴다.
+  // 계산 결과라 사용자가 직접 넣지 않는다(calcRow 가 매번 다시 채운다).
+  realized_profit_rate: number
   unit_price: number
   supply_price: number
   tax: number

@@ -134,6 +134,7 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
               <select value={form.service_type} onChange={(e) => setForm(p => ({ ...p, service_type: e.target.value }))} style={{ ...fieldStyle, paddingLeft: 32 }}>
                 <option value="신규설치">신규 설치</option>
                 <option value="이전설치">이전 설치</option>
+                <option value="장비교정">장비 교정</option>
                 <option value="A/S">A/S</option>
                 <option value="B/S">B/S</option>
                 <option value="교육">교육</option>

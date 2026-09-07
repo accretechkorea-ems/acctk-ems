@@ -4,6 +4,7 @@ import { Fragment, Suspense, useEffect, useState, type Dispatch, type SetStateAc
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { canViewAdmin, isSuperAdmin } from '@/lib/permissions'
+import { INITIALS_TAKEN_MESSAGE, isInitialsTaken } from '@/lib/initials'
 import { withTeamPerm } from '@/lib/teamPerms'
 import AccessGate from '@/components/common/AccessGate'
 import { useOffices, selectableOffices, invalidateOffices, type Office } from '@/lib/offices'
@@ -205,7 +206,7 @@ function AdminPageInner() {
   // ── 폼별 검증 에러 (폼마다 독립 인스턴스 → 서로 새지 않음). 각 gate state 로 초기화 ──
   const targetErr = useFieldErrors<'amount'>()
   const addEngErr = useFieldErrors<'name' | 'email' | 'password' | 'initials' | 'teams'>()
-  const editEngErr = useFieldErrors<'name' | 'teams'>()
+  const editEngErr = useFieldErrors<'name' | 'teams' | 'initials'>()
   const resignErr = useFieldErrors<'resignDate'>()
   const teamErr = useFieldErrors<'teamName'>()
   const presetErr = useFieldErrors<'itemName'>()          // 항목 추가 폼
@@ -452,7 +453,11 @@ function AdminPageInner() {
       name: addForm.name.trim() ? null : '이름을 입력해주세요',
       email: addForm.email.trim() ? null : '이메일을 입력해주세요',
       password: addForm.password.trim() ? null : '초기 비밀번호를 입력해주세요',
-      initials: addForm.initials.trim() ? null : '이니셜을 입력해주세요',
+      // 이미 쓰는 이니셜이면 여기서 막는다. 최종 판정은 DB 인덱스가 하고(아래 23505 처리),
+      // 이 검사는 저장을 눌러보기 전에 알려주기 위한 것이다.
+      initials: !addForm.initials.trim()
+        ? '이니셜을 입력해주세요'
+        : isInitialsTaken(engineers, addForm.initials) ? INITIALS_TAKEN_MESSAGE : null,
       teams: addForm.teams ? null : '팀을 선택해주세요',
     })
     if (!ok) return
@@ -471,14 +476,17 @@ function AdminPageInner() {
           office: addForm.office,
         }),
       })
-      if (!res.ok) {
-        const result = await res.json().catch(() => ({ error: `서버 오류 (${res.status})` }))
-        toast.error(`오류: ${result.error ?? '알 수 없는 오류'}`)
+      const result = res.ok
+        ? await res.json().catch(() => ({}))
+        : await res.json().catch(() => ({ error: `서버 오류 (${res.status})` }))
+      if (!res.ok || result.error) {
+        const msg = result.error ?? '알 수 없는 오류'
+        // 이니셜 중복은 어느 칸이 문제인지 분명하므로 토스트가 아니라 그 칸에 붙인다.
+        if (msg === INITIALS_TAKEN_MESSAGE) addEngErr.setErrors(p => ({ ...p, initials: msg }))
+        else toast.error(`오류: ${msg}`)
         setAddLoading(false)
         return
       }
-      const result = await res.json()
-      if (result.error) { toast.error(`오류: ${result.error}`); setAddLoading(false); return }
       toast.success(`${addForm.name} 직원이 등록되었습니다`)
       setShowAddEngineer(false)
       setAddForm({ name: '', position: '사원', teams: '', email: '', initials: '', password: '', office: '' })
@@ -494,6 +502,11 @@ function AdminPageInner() {
     if (!editEngErr.validate({
       name: editForm.name.trim() ? null : '이름을 입력해주세요',
       teams: editForm.teams ? null : '팀을 선택해주세요',
+      // 자기 자신은 뺀다 — 값을 그대로 다시 저장하는 것이 정상 경로다.
+      initials: !editForm.initials.trim()
+        ? '이니셜을 입력해주세요'
+        : isInitialsTaken(engineers, editForm.initials, editEngineer.engineer_id)
+          ? INITIALS_TAKEN_MESSAGE : null,
     })) return
     setEditLoading(true)
     try {
@@ -512,7 +525,14 @@ function AdminPageInner() {
         }),
       })
       const result = await res.json().catch(() => ({ error: `서버 오류 (${res.status})` }))
-      if (!res.ok || result.error) { toast.error(`오류: ${result.error ?? '알 수 없는 오류'}`); setEditLoading(false); return }
+      if (!res.ok || result.error) {
+        const msg = result.error ?? '알 수 없는 오류'
+        // 이니셜 중복은 어느 칸이 문제인지 분명하므로 등록 모달과 같이 그 칸에 붙인다.
+        if (msg === INITIALS_TAKEN_MESSAGE) editEngErr.setErrors(p => ({ ...p, initials: msg }))
+        else toast.error(`오류: ${msg}`)
+        setEditLoading(false)
+        return
+      }
       toast.success('직원 정보가 수정되었습니다')
       setEditEngineer(null)
       fetchEngineers()
@@ -1351,6 +1371,13 @@ function AdminPageInner() {
               <div>
                 <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>이메일</div>
                 <input value={editForm.email} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} style={inp} />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>이니셜 * (견적번호용)</div>
+                <input value={editForm.initials} onChange={e => { setEditForm(p => ({ ...p, initials: e.target.value })); editEngErr.clearError('initials') }} placeholder="예: HGD" style={editEngErr.errors.initials ? { ...inp, border: errBorder } : inp} maxLength={5} />
+                <FieldError message={editEngErr.errors.initials} />
+                {/* 이니셜을 바꿔도 이미 나간 견적번호는 그대로다(번호는 발급 시점의 값을 쓴다). */}
+                <div style={{ fontSize: 11, color: GRAY, marginTop: 3 }}>견적번호에 사용됩니다 (예: No.HGD20260511-A)</div>
               </div>
               {isSuperAdmin(currentEngineer) && (
                 <div>

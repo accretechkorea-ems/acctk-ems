@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { canManageEngineers } from '@/lib/permissions'
+import { INITIALS_TAKEN_MESSAGE, isInitialsTaken, isInitialsUniqueViolation, normalizeInitials } from '@/lib/initials'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,6 +36,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '비밀번호는 8자 이상이어야 합니다.' }, { status: 400 })
   }
 
+  // 이니셜 중복은 Auth 계정을 만들기 전에 본다.
+  // engineers 저장은 Auth 계정 생성 뒤라, 여기서 걸러내지 않으면 DB 인덱스가 튕겨낼 때
+  // 로그인 계정만 덩그러니 남는다. 최종 판정은 아래 upsert 의 23505 처리가 한다.
+  const wantInitials = normalizeInitials(initials)
+  if (wantInitials) {
+    const { data: peers, error: peerErr } = await supabaseAdmin
+      .from('engineers')
+      .select('engineer_id, initials, resigned_date')
+      .eq('initials', wantInitials)
+    if (peerErr) console.error('[create-user] 이니셜 조회 실패', peerErr)
+    if (isInitialsTaken(peers, wantInitials)) {
+      return NextResponse.json({ error: INITIALS_TAKEN_MESSAGE }, { status: 400 })
+    }
+  }
+
   // 1. Auth 계정 생성
   const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
     email: email.trim(),
@@ -55,7 +71,13 @@ export async function POST(req: Request) {
     office: office?.trim() || null,
   }, { onConflict: 'email' })
 
-  if (dbError) return NextResponse.json({ error: dbError.message }, { status: 400 })
+  if (dbError) {
+    // 위 사전 검사와 이 저장 사이에 다른 요청이 같은 이니셜을 채갈 수 있다. 인덱스가 최종 방어선이다.
+    if (isInitialsUniqueViolation(dbError)) {
+      return NextResponse.json({ error: INITIALS_TAKEN_MESSAGE }, { status: 400 })
+    }
+    return NextResponse.json({ error: dbError.message }, { status: 400 })
+  }
 
   return NextResponse.json({ success: true })
 }

@@ -15,12 +15,34 @@ import type { SalesOpportunity } from '@/components/customer/types'
 import { isClosed } from '@/components/customer/opportunity'
 import { calcExpense, calcRow, calcTotals, createDiscountRow, createDomesticRow, createExpenseRow, createManualJpyRow, createRow, createServiceRow } from './calc'
 import { numKR } from './format'
-import { inp } from './styles'
 import { useDebounce } from './useDebounce'
 import { QuotePDFDoc } from './QuotePDFDoc'
 import ProfitPanel from './ProfitPanel'
 import QuoteItemRow from './QuoteItemRow'
 import { Z } from '@/lib/zIndex'
+
+/**
+ * 비고 기본 문구. 내용은 그대로 두고, 사용자가 손댔는지 비교하려고 상수로 뺐다.
+ */
+const DEFAULT_REMARKS = '* 발주 진행 시 팩스 또는 메일로 발주서 회신 요망\n   (FAX : 031-786-4090)'
+
+/**
+ * 견적서 PDF 파일명이 겹쳤을 때 접미사를 붙여 시도하는 최대 횟수.
+ * 같은 이니셜·같은 날·같은 순번이 다섯 번 겹치는 일은 실제로 없다 — 무한 루프를 막는 상한이다.
+ */
+const MAX_PDF_NAME_TRIES = 5
+
+/**
+ * 스토리지 업로드 오류가 "이름이 이미 있다" 인지. 이때만 다른 이름으로 다시 시도한다.
+ * supabase-js 는 이 경우 409 를 주는데, 버전에 따라 statusCode 가 문자열/숫자로 오고
+ * 메시지도 조금씩 달라 둘 다 본다.
+ */
+function isNameTakenError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const e = err as { statusCode?: string | number; message?: string; error?: string }
+  if (String(e.statusCode ?? '') === '409') return true
+  return /already exists|duplicate/i.test(`${e.message ?? ''} ${e.error ?? ''}`)
+}
 import { parentCompanyName } from '@/components/customer/ParentPicker'
 import { resolveOnBehalf, notifyOnBehalf, type OnBehalfAssignee } from '@/lib/quoteMutations'
 
@@ -54,7 +76,9 @@ function QuotePageInner() {
 
   const [company, setCompany] = useState('')
   const [receiver, setReceiver] = useState('')
-  const [remarks, setRemarks] = useState('* 발주 진행 시 팩스 또는 메일로 발주서 회신 요망\n   (FAX : 031-786-4090)')
+  const [remarks, setRemarks] = useState(DEFAULT_REMARKS)
+  // 비고는 기본 문구가 채워져 있고 고칠 일이 드물어 접어서 시작한다(내용은 계속 마운트돼 있다).
+  const [remarksOpen, setRemarksOpen] = useState(false)
   // 견적서 PDF 하단 서명란 표시 여부. 저장하지 않는 화면 상태라 견적을 다시 열면 항상 꺼진 상태로 시작한다.
   const [showSignature, setShowSignature] = useState(false)
   const [delivery, setDelivery] = useState('')
@@ -169,6 +193,8 @@ function QuotePageInner() {
   }
 
   // 견적이 실제로 붙는 업체(대리점 건이면 E.U)의 진행 중 기회만 후보로 삼는다.
+  // 업체가 바뀌면 후보를 다시 읽고 선택도 푼다 — 새 업체에 없는 기회가 남아 있으면 안 된다.
+  // (칸 자체가 후보 유무로 나타났다 사라지므로, 선택이 화면에서 안 보이는 채 남는 일도 막는다)
   const loadOpportunities = async (cid: number | null) => {
     setOpportunityId(null)
     if (!cid) { setOpportunities([]); return }
@@ -243,6 +269,8 @@ const handleDownloadPDF = async (
     overrideRows?: QuoteRow[],
     overrideRemarks?: string,
     overrideQuoteNo?: string,
+    /** 확정 직후 저장된 견적 id. 업로드가 끝나면 이 행의 pdf_url 을 실제 이름으로 채운다. */
+    quoteId?: number,
   ) => {
     const finalCompany = overrideCompany ?? company
     const finalReceiver = overrideReceiver ?? receiver
@@ -279,11 +307,37 @@ const handleDownloadPDF = async (
       />
     ).toBlob()
 
-    const safeFileName = `${finalQuoteNo}.pdf`
-    await supabase.storage.from('quote-pdfs').upload(safeFileName, blob, {
-      contentType: 'application/pdf',
-      upsert: true,
-    })
+    // 스토리지 저장. upsert 를 쓰지 않는다 — 파일명이 견적번호라, 이니셜이 겹치는 두 사람이
+    // 같은 날 같은 순번을 받으면 남의 견적서를 조용히 덮어썼다.
+    // 이름이 이미 있으면 접미사를 붙여 새 이름으로 올린다(둘 다 남긴다).
+    let storedName: string | null = null
+    for (let attempt = 1; attempt <= MAX_PDF_NAME_TRIES; attempt++) {
+      const candidate = attempt === 1 ? `${finalQuoteNo}.pdf` : `${finalQuoteNo}_${attempt}.pdf`
+      const { error } = await supabase.storage.from('quote-pdfs').upload(candidate, blob, {
+        contentType: 'application/pdf',
+        upsert: false,
+      })
+      if (!error) { storedName = candidate; break }
+      if (!isNameTakenError(error)) {
+        // 이름 충돌이 아니면 다시 시도해도 같은 결과다(권한·용량 등).
+        console.error('[quote] PDF 업로드 실패', { candidate, error })
+        break
+      }
+      console.error('[quote] PDF 파일명이 이미 있어 다른 이름으로 시도한다', { candidate })
+    }
+
+    if (storedName && quoteId) {
+      // 실제로 저장된 이름을 그대로 넣는다. 접미사가 붙었으면 그 이름이 들어간다.
+      const { error: urlErr } = await supabase
+        .from('quotes').update({ pdf_url: `quote-pdfs/${storedName}` }).eq('quote_id', quoteId)
+      if (urlErr) {
+        console.error('[quote] pdf_url 갱신 실패', { quoteId, storedName, error: urlErr })
+        toast.error('견적은 저장되었으나 PDF 연결에 실패했습니다. 관리자에게 알려주세요.')
+      }
+    } else if (!storedName) {
+      // pdf_url 은 비워 둔 채로 남는다 — 없는 파일을 가리키지 않게 하는 것이 중요하다.
+      toast.error('견적은 저장되었으나 PDF 생성에 실패했습니다. 관리자에게 알려주세요.')
+    }
 
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -304,17 +358,19 @@ const handleDownloadPDF = async (
   // 사명·E.U 아래 안내 문구. 셋 중 하나만 나온다.
   //   ① ?customer= 로 후보가 여럿일 때 ② 검색 결과가 없을 때 ③ 평소(상시 안내)
   const custNoResult = customerQuery.trim().length > 0 && customerResults.length === 0
+  // 안내는 "찾아봤는데 없다" 일 때만 낸다. 사전 등록이 필요하다는 사실은 placeholder 가 이미 말한다.
   const customerGuide = prefillNotice
-    ?? (custNoResult
-      ? '검색 결과가 없습니다. 고객사 현황에서 업체를 먼저 등록해주세요'
-      : '견적서 작성 전 고객사 현황에서 업체를 먼저 등록해주세요')
+    ?? (custNoResult ? '검색 결과가 없습니다. 고객사 현황에서 업체를 먼저 등록해주세요' : null)
   // 링크는 "검색해도 없다" 일 때만 — 후보가 여럿인 경우엔 고르면 되므로 링크가 오히려 방해다.
   const showCustomerLink = !prefillNotice && custNoResult
-  const euNoResult = euQuery.trim().length > 0 && euResults.length === 0
-  const euGuide = euNoResult
-    ? '검색 결과가 없습니다. 고객사 현황에서 업체를 먼저 등록해주세요'
-    : '견적서 작성 전 고객사 현황에서 업체를 먼저 등록해주세요'
 
+  // 고를 수 있는 영업기회 — 종결된 건은 이미 연결돼 있을 때만 남긴다(선택 유지용).
+  // 이 목록이 비면 영업기회 칸 자체를 그리지 않는다.
+  const selectableOpportunities = opportunities.filter(o => !isClosed(o) || o.opportunity_id === opportunityId)
+
+  // 비고 — 접힌 줄에 보여줄 첫 줄과, 기본 문구에서 손댔는지 여부.
+  const remarksPreview = remarks.trim().split('\n')[0] ?? ''
+  const remarksEdited = remarks.trim() !== DEFAULT_REMARKS.trim()
   // 저장 가능 여부 검증. 확정 모달을 열 때와 실제 저장 직전에 같은 규칙을 쓴다.
   // 고객사는 반드시 등록된 업체를 골라야 한다(customer_id 기준).
   // 직접 친 상호는 quotes 에 저장되는 곳이 없어 PDF 에만 남고, 실적·발주·엑셀에서는 빈칸이 된다.
@@ -335,7 +391,8 @@ const handleDownloadPDF = async (
 
   // 저장 결과 — 검증·저장 실패({ ok: false })와 저장 성공을 호출부가 구분할 수 있게 한다.
   // 성공일 때만 PDF 생성·견적번호 증가로 넘어간다.
-  type SaveResult = { ok: false } | { ok: true; linked: boolean }
+  // quoteId 는 PDF 를 올린 뒤 pdf_url 을 실제 파일 이름으로 채우는 데 쓴다.
+  type SaveResult = { ok: false } | { ok: true; linked: boolean; quoteId: number }
 
   const handleSaveQuote = async (): Promise<SaveResult> => {
     if (!engineer) { toast.error('엔지니어 정보를 불러오는 중입니다'); return { ok: false } }
@@ -344,6 +401,8 @@ const handleDownloadPDF = async (
 
     setIsSaving(true)
     let linkedRepair = false
+    // 저장된 견적 id — PDF 업로드 뒤 pdf_url 을 채우는 데 쓴다.
+    let savedQuoteId = 0
     try {
       await supabase.from('quote_sequence').insert({
         date_str: dateStr, engineer_id: engineer.engineer_id, seq: seqIndex,
@@ -383,10 +442,13 @@ const handleDownloadPDF = async (
           status: initialStatus,
           recipient: receiver,
           note: finalRemarksForPDF,
-          pdf_url: `quote-pdfs/${quoteNo}.pdf`,
+          // 파일을 올리기 전에는 비워 둔다. 올린 뒤 실제로 저장된 이름으로 채운다
+          // (예전에는 여기서 이름을 미리 넣어, 업로드가 실패해도 없는 파일을 가리켰다).
+          pdf_url: null,
         }).select().single()
 
       if (quoteError) throw quoteError
+      savedQuoteId = quoteData.quote_id
 
       // 금액이 있는 행만 저장한다. 할인은 공급가가 음수라 별도로 통과시킨다
       // (금액 0 인 채로 남은 할인 행은 기록할 것이 없어 저장하지 않는다).
@@ -404,7 +466,9 @@ const handleDownloadPDF = async (
         category: null,
         cost_amount: r.product_price,
         profit_amount: r.profit,
-        profit_rate: r.profit_rate,
+        // 목표값이 아니라 실현 이익률을 남긴다 — 1,000원 올림·판매단가 직접 입력이 반영된 값이라
+        // profit_amount / supply_amount 와 앞뒤가 맞는다(엑셀 분석표가 이 값을 그대로 쓴다).
+        profit_rate: r.realized_profit_rate,
         exchange_rate: r.exchange_rate || exchangeRate,
         tariff_rate: r.tariff_rate,
       }))
@@ -457,7 +521,7 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
       return { ok: false }
     }
     setIsSaving(false)
-    return { ok: true, linked: linkedRepair }
+    return { ok: true, linked: linkedRepair, quoteId: savedQuoteId }
   }
 
   useEffect(() => { setIsClient(true) }, [])
@@ -687,6 +751,100 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
           from { opacity: 0; transform: scale(0.97) translateY(6px); }
           to { opacity: 1; transform: scale(1) translateY(0); }
         }
+        /* 두 칸을 한 줄로. 화면이 좁아지면 세로로 접힌다. */
+        .q-two {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+        }
+        /* grid 자식은 기본이 min-width:auto 라 내용보다 작아지지 않는다.
+           풀어주지 않으면 두 상자가 카드 밖으로 밀려난다. */
+        .q-two > * { min-width: 0; }
+        @media (max-width: 1100px) {
+          .q-two { grid-template-columns: 1fr; }
+        }
+
+        /* 라벨을 입력칸 안에 넣는 상자.
+           포커스는 :focus-within 으로 상자 전체에 건다 — 라벨만 남고 입력만 파래지는 모양을 피한다.
+           값은 .q-input:focus 와 같은 것을 쓴다. */
+        .q-box {
+          display: flex;
+          align-items: stretch;
+          position: relative;
+          background: #fff;
+          border: 1px solid #ebebeb;
+          border-radius: 6px;
+          transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .q-box:focus-within {
+          border-color: #234ea2;
+          box-shadow: 0 0 0 3px rgba(35,78,162,0.10);
+        }
+        /* 라벨 — 상자 안 왼쪽. 오른쪽에 세로 구분선을 둔다.
+           폭은 가장 긴 상시 라벨(수신인 = 54px)에 맞춰 모두 같게 한다. 글자 수대로 두면
+           상자마다 입력이 시작되는 자리가 어긋나 균형이 깨진다.
+           min-width 라서 더 긴 라벨(영업기회)만 필요한 만큼 늘어나고 잘리지 않는다. */
+        .q-box-label {
+          display: flex;
+          align-items: center;
+          flex-shrink: 0;
+          min-width: 54px;
+          box-sizing: border-box;
+          padding: 0 10px;
+          border-right: 1px solid #ebebeb;
+          font-size: 12px;
+          font-weight: 600;
+          color: #111827;
+          white-space: nowrap;
+        }
+        .q-box-field {
+          flex: 1;
+          min-width: 0;
+          padding: 8px 11px;
+          border: none;
+          outline: none;
+          background: transparent;
+          font-family: inherit;
+          font-size: 12px;
+          color: #111827;
+        }
+        /* 상자 오른쪽 끝 컨트롤(체크박스·지우기·펼침 화살표) */
+        .q-box-tail {
+          display: flex;
+          align-items: center;
+          flex-shrink: 0;
+          gap: 6px;
+          padding-right: 10px;
+        }
+        /* 비고 상자 — 머리줄 아래로 textarea 가 펼쳐진다 */
+        .q-box-col { flex-direction: column; align-items: stretch; }
+        .q-box-head {
+          display: flex;
+          align-items: stretch;
+          width: 100%;
+          /* 미리보기 글자가 본문(12px)보다 작아 다른 상자보다 1px 낮아지던 것을 맞춘다 */
+          min-height: 34px;
+          padding: 0;
+          background: none;
+          border: none;
+          cursor: pointer;
+          font-family: inherit;
+          text-align: left;
+        }
+        .q-box-area {
+          width: 100%;
+          box-sizing: border-box;
+          padding: 8px 11px;
+          border: none;
+          border-top: 1px solid #ebebeb;
+          outline: none;
+          background: transparent;
+          font-family: inherit;
+          font-size: 12px;
+          line-height: 1.7;
+          color: #111827;
+          resize: vertical;
+        }
       `}</style>
       {repairId != null && (
         <div style={{ maxWidth: 1320, margin: '0 auto', padding: '16px 20px 0' }}>
@@ -708,23 +866,52 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
 
             {/* 사명 + 대리점 체크박스 */}
             <div style={{ marginBottom: errors.company ? 8 + 18 : 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', width: 56, flexShrink: 0 }}>사명</span>
-                <div ref={customerSearchRef} style={{ position: 'relative', flex: 1 }}>
-                  <input
-                    className="q-input"
-                    value={customerQuery}
-                    onChange={e => { handleCustomerSearch(e.target.value); clearError('company'); setPrefillNotice(null) }}
-                    onFocus={() => customerResults.length > 0 && setCustomerSearchOpen(true)}
-                    placeholder="업체명 검색"
-                    style={{ ...inp, width: '100%', paddingRight: selectedCustomer ? 32 : 11, border: errors.company ? errBorder : (customerSearchOpen ? '1px solid #234ea2' : '1px solid #ebebeb') }}
-                  />
-                  {selectedCustomer && (
-                    <button onClick={handleCustomerClear}
-                      style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 0, display: 'flex', alignItems: 'center' }}>
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    </button>
+              <div ref={customerSearchRef} className="q-box" style={{ border: errors.company ? errBorder : undefined }}>
+                <span className="q-box-label">사명</span>
+                  {/* 고르고 나면 이름을 글자로 보여준다 — 체크를 이름 바로 뒤에 붙이려면
+                      칸이 글자 폭만큼만 차지해야 하고, input 은 그렇게 줄지 않는다.
+                      다시 찾을 때는 × 로 비운다(그 편이 '고른 업체'와 '치고 있는 글자'가 어긋나지 않는다). */}
+                  {selectedCustomer ? (
+                    <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 11px' }}>
+                      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: '#111827' }}>
+                        {customerQuery}
+                      </span>
+                      <span title="등록된 업체와 연결됨" style={{ display: 'flex', alignItems: 'center', color: '#234ea2', flexShrink: 0 }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                      </span>
+                    </span>
+                  ) : (
+                    <input
+                      className="q-box-field"
+                      value={customerQuery}
+                      onChange={e => { handleCustomerSearch(e.target.value); clearError('company'); setPrefillNotice(null) }}
+                      onFocus={() => customerResults.length > 0 && setCustomerSearchOpen(true)}
+                      placeholder="업체명 검색 (사전 등록 필요)"
+                    />
                   )}
+                  {/* 상자 오른쪽 끝 — 지우기 × 와 대리점 체크박스 */}
+                  <div className="q-box-tail">
+                    {selectedCustomer && (
+                      <button onClick={handleCustomerClear}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 0, display: 'flex', alignItems: 'center' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
+                    )}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      <input
+                        type="checkbox"
+                        checked={isDealer}
+                        onChange={e => {
+                          setIsDealer(e.target.checked)
+                          if (!e.target.checked) { handleEUClear() }
+                          // 견적이 붙는 업체가 바뀌므로 영업기회 후보도 다시 잡는다
+                          loadOpportunities(e.target.checked ? euCustomerId : customerId)
+                        }}
+                        style={{ width: 14, height: 14, cursor: 'pointer', accentColor: '#234ea2' }}
+                      />
+                      <span style={{ fontSize: 11, fontWeight: 700, color: isDealer ? '#234ea2' : '#6b7280' }}>대리점</span>
+                    </label>
+                  </div>
                   <FieldError message={errors.company} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 2, whiteSpace: 'nowrap' }} />
                   {customerSearchOpen && customerResults.length > 0 && (
                     <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #234ea2', borderRadius: 8, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
@@ -739,31 +926,12 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                       ))}
                     </div>
                   )}
-                </div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                  <input
-                    type="checkbox"
-                    checked={isDealer}
-                    onChange={e => {
-                      setIsDealer(e.target.checked)
-                      if (!e.target.checked) { handleEUClear() }
-                      // 견적이 붙는 업체가 바뀌므로 영업기회 후보도 다시 잡는다
-                      loadOpportunities(e.target.checked ? euCustomerId : customerId)
-                    }}
-                    style={{ width: 14, height: 14, cursor: 'pointer', accentColor: '#234ea2' }}
-                  />
-                  <span style={{ fontSize: 11, fontWeight: 700, color: isDealer ? '#234ea2' : '#6b7280' }}>대리점</span>
-                </label>
               </div>
-              {selectedCustomer && (
-                <div style={{ marginTop: 4, marginLeft: 64, padding: '3px 8px', background: isDealer ? '#fff7ed' : '#eff4ff', borderRadius: 6, fontSize: 11, color: isDealer ? '#c2410c' : '#234ea2', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
-                  {selectedCustomer.company_name} {isDealer ? '(대리점)' : '연결됨'}
-                </div>
-              )}
-              {!selectedCustomer && (
-                <div style={{ marginTop: 4, marginLeft: 64, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <span style={{ padding: '3px 8px', background: '#f3f4f6', borderRadius: 6, fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>미선택</span>
+              {/* 고른 업체를 알리는 칩 줄은 두지 않는다 — 상자 안에 업체명이 그대로 들어가 있어
+                  같은 말을 두 번 하는 셈이고, 대리점 여부는 상자 안 체크박스와 E.U 상자가 보여준다.
+                  미선택 상태도 시작 상태일 뿐이라 배지로 강조하지 않는다(안 고르면 검증이 붉게 막는다). */}
+              {!selectedCustomer && customerGuide && (
+                <div style={{ marginTop: 4, marginLeft: 10, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 11, color: '#9ca3af' }}>{customerGuide}</span>
                   {showCustomerLink && (
                     <a href="/" target="_blank" rel="noopener noreferrer"
@@ -778,22 +946,27 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
             {/* E.U 필드 (대리점 체크 시 표시) */}
             {isDealer && (
               <div style={{ marginBottom: 8, animation: 'modal-in 0.15s ease' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', width: 56, flexShrink: 0 }}>E.U</span>
-                  <div ref={euSearchRef} style={{ position: 'relative', flex: 1 }}>
+                {/* E.U 상자 — 대리점 건이라 테두리만 주황 계열을 유지한다(기존 색). */}
+                <div ref={euSearchRef} className="q-box" style={{ borderColor: '#fed7aa' }}>
+                    <span className="q-box-label" style={{ borderRightColor: '#fed7aa' }}>E.U</span>
                     <input
-                      className="q-input"
+                      className="q-box-field"
                       value={euQuery}
                       onChange={e => { handleEUSearch(e.target.value); clearError('eu') }}
                       onFocus={() => euResults.length > 0 && setEuSearchOpen(true)}
-                      placeholder="최종 사용 업체 검색"
-                      style={{ ...inp, width: '100%', paddingRight: selectedEU ? 32 : 11, border: euSearchOpen ? '1px solid #c2410c' : '1px solid #fed7aa' }}
+                      placeholder="최종 사용 업체 검색 (사전 등록 필요)"
                     />
+                    {/* 고른 뒤에는 상자 안 오른쪽 끝에 체크(= 거래이력 연동)와 지우기만 남긴다. */}
                     {selectedEU && (
-                      <button onClick={handleEUClear}
-                        style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 0, display: 'flex', alignItems: 'center' }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                      </button>
+                      <div className="q-box-tail">
+                        <span title="거래이력 연동" style={{ display: 'flex', alignItems: 'center', color: '#c2410c' }}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                        </span>
+                        <button onClick={handleEUClear}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 0, display: 'flex', alignItems: 'center' }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                      </div>
                     )}
                     {euSearchOpen && euResults.length > 0 && (
                       <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #c2410c', borderRadius: 8, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(194,65,12,0.12)' }}>
@@ -808,75 +981,83 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                         ))}
                       </div>
                     )}
-                  </div>
                 </div>
-                {selectedEU && (
-                  <div style={{ marginTop: 4, marginLeft: 64, padding: '3px 8px', background: '#fff7ed', borderRadius: 6, fontSize: 11, color: '#c2410c', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
-                    {selectedEU.company_name} 연결됨 (거래이력 연동)
-                  </div>
-                )}
-                {!selectedEU && (
-                  <div style={{ marginTop: 4, marginLeft: 64, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <span style={{ padding: '3px 8px', background: '#f3f4f6', borderRadius: 6, fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>미선택</span>
-                    <span style={{ fontSize: 11, color: '#9ca3af' }}>{euGuide}</span>
-                    {euNoResult && (
-                      <a href="/" target="_blank" rel="noopener noreferrer"
-                        style={{ fontSize: 11, color: '#234ea2', fontWeight: 600, textDecoration: 'none' }}>
-                        고객사 현황 열기 →
-                      </a>
-                    )}
-                  </div>
-                )}
-                <FieldError message={errors.eu} style={{ marginLeft: 64 }} />
+                {/* 미선택 안내는 두지 않는다 — 사전 등록이 필요하다는 사실은 placeholder 가 말하고,
+                    안 고른 채 저장하면 아래 검증이 붉게 막는다(사명 칸과 같은 규칙). */}
+                <FieldError message={errors.eu} style={{ marginLeft: 10 }} />
               </div>
             )}
 
             {/* 영업기회 연결 — 선택 사항. 내부 정보이며 PDF 에는 나가지 않는다.
-                업체가 정해져야 후보를 고를 수 있다(대리점 건이면 E.U 기준). */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', width: 56, flexShrink: 0 }}>영업기회</span>
-              <select
-                className="q-input"
-                value={opportunityId ?? ''}
-                disabled={opportunities.length === 0}
-                onChange={e => setOpportunityId(e.target.value ? Number(e.target.value) : null)}
-                style={{ ...inp, flex: 1, background: opportunities.length === 0 ? '#f9fafb' : '#fff' }}
-              >
-                <option value="">
-                  {(isDealer ? euCustomerId : customerId)
-                    ? (opportunities.length === 0 ? '진행 중인 기회 없음' : '연결 안 함')
-                    : '업체를 먼저 선택하세요'}
-                </option>
-                {opportunities
-                  .filter(o => !isClosed(o) || o.opportunity_id === opportunityId)
-                  .map(o => (
+                후보가 있는 업체는 몇 곳뿐이라, 고를 것이 있을 때만 칸을 낸다.
+                (업체 미선택·기회 없음 상태에서는 안내만 남고 늘 비어 있던 칸이다) */}
+            {selectableOpportunities.length > 0 && (
+              <div className="q-box" style={{ marginBottom: 8, animation: 'modal-in 0.15s ease' }}>
+                <span className="q-box-label">영업기회</span>
+                <select
+                  className="q-box-field"
+                  value={opportunityId ?? ''}
+                  onChange={e => setOpportunityId(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">연결 안 함</option>
+                  {selectableOpportunities.map(o => (
                     <option key={o.opportunity_id} value={o.opportunity_id}>{`${o.stage} · ${o.title}`}</option>
                   ))}
-              </select>
+                </select>
+              </div>
+            )}
+
+            {/* 수신인 · 납기 — 한 줄. 좁아지면 .q-two 가 1열로 접힌다. */}
+            <div className="q-two" style={{ marginBottom: 8 }}>
+              <div className="q-box">
+                <span className="q-box-label">수신인</span>
+                <input className="q-box-field" value={receiver} onChange={e => setReceiver(e.target.value)} placeholder="예: 홍길동 부장님" />
+              </div>
+              <div className="q-box">
+                <span className="q-box-label">납기</span>
+                <input
+                  className="q-box-field"
+                  value={delivery}
+                  onChange={e => setDelivery(e.target.value)}
+                  placeholder="없을 시 입력 (N주)"
+                />
+              </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', width: 56, flexShrink: 0 }}>수신인</span>
-              <input className="q-input" value={receiver} onChange={e => setReceiver(e.target.value)} placeholder="예: 홍길동 부장님" style={{ ...inp, flex: 1 }} />
+            {/* 비고 — 기본 문구가 채워져 있고 고칠 일이 드물어 접어 둔다.
+                접힌 줄에 첫 줄을 회색으로 보여주고, 기본 문구에서 손댔으면 「수정됨」을 붙인다. */}
+            <div className="q-box q-box-col">
+              {/* 머리줄 — [비고 │ 미리보기 … ›]. 펼치기 화살표는 상자 오른쪽 끝. */}
+              <button type="button" className="q-box-head" onClick={() => setRemarksOpen(o => !o)}>
+                <span className="q-box-label">비고</span>
+                <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 11px' }}>
+                  {remarksEdited && (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#234ea2', flexShrink: 0 }}>수정됨</span>
+                  )}
+                  {!remarksOpen && (
+                    <span style={{ fontSize: 11, color: '#9ca3af', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {remarksPreview}
+                    </span>
+                  )}
+                </span>
+                <span className="q-box-tail">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="3"
+                    style={{ transition: 'transform 0.15s ease', transform: remarksOpen ? 'rotate(90deg)' : 'none' }}>
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </span>
+              </button>
+              {/* grid 1fr↔0fr 로 높이를 애니메이션한다. 내용은 늘 마운트돼 있어 접었다 펴도 값이 남는다. */}
+              <div style={{ display: 'grid', gridTemplateRows: remarksOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.15s ease' }}>
+                <div style={{ overflow: 'hidden', minHeight: 0 }}>
+                  <textarea className="q-box-area" value={remarks} onChange={e => setRemarks(e.target.value)} rows={3} />
+                </div>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', width: 56, flexShrink: 0 }}>납기</span>
-              <input
-                className="q-input"
-                value={delivery}
-                onChange={e => setDelivery(e.target.value)}
-                placeholder="품목 선택 후 납기 정보가 없을 시 입력"
-                style={{ ...inp, flex: 1 }}
-              />
-            </div>
-
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 4, display: 'block' }}>비고</label>
-              <textarea className="q-input" value={remarks} onChange={e => setRemarks(e.target.value)} rows={3}
-                style={{ ...inp, width: '100%', resize: 'vertical', lineHeight: 1.7 }} />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', marginTop: 6 }}>
+            {/* 서명란은 비고와 별개 항목이라 상자 밖 독립된 줄로 뺀다. 줄 오른쪽 끝에 붙인다. */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
                 <input
                   type="checkbox"
                   checked={showSignature}
@@ -1191,7 +1372,7 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                   // 저장이 막히면 여기서 끝낸다 — PDF 도 만들지 않고 견적번호도 올리지 않는다.
                   if (!result.ok) return
 
-                  await handleDownloadPDF(snapshotCompany, snapshotReceiver, snapshotRows, snapshotRemarks, snapshotQuoteNo)
+                  await handleDownloadPDF(snapshotCompany, snapshotReceiver, snapshotRows, snapshotRemarks, snapshotQuoteNo, result.quoteId)
                   setSeqIndex(prev => prev + 1)
                   setShowConfirmModal(false)
                   // 수리 건 연결이 됐으면 PDF 생성 후 수리 목록으로 이동

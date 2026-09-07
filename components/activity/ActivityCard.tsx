@@ -4,8 +4,9 @@ import { type ReactNode } from 'react'
 import { ACTIVITY_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 
 // 서비스 유형(단일 소스). 영업 4종까지 합친 전체 목록은 lib/activity.ts 의 ACTIVITY_TYPES.
-// (여기 두는 이유: 상세 모달의 유형 필터가 서비스 6종만 쓴다)
-export const SERVICE_TYPES = ['신규설치', '이전설치', 'A/S', 'B/S', '교육', '유선기술지원']
+// (여기 두는 이유: 상세 모달의 유형 필터가 서비스 유형만 쓴다)
+// 순서는 성격순이다 — 계획된 현장 작업(설치·교정) → 고장 대응(A/S·B/S) → 그 밖(교육·원격).
+export const SERVICE_TYPES = ['신규설치', '이전설치', '장비교정', 'A/S', 'B/S', '교육', '유선기술지원']
 
 // 카드의 유형 목록은 6줄 높이로 고정한다 — 사람마다 유형 수가 달라도 카드 높이가 들쭉날쭉하지 않게.
 // 유형이 6개를 넘으면(서비스+영업이 섞인 사람) 이 영역 안에서만 세로로 스크롤된다.

@@ -68,8 +68,11 @@ export default function QuoteItemRow({
   )
   useOutsideClick(searchRef, closeSearch, !!searchOpen[row.id])
 
-  // 수동입력 품목의 '판매가' 모드 — 스테퍼 가운데 칸이 이익률 대신 판매단가 입력이 된다.
-  const priceInputMode = row.row_kind === 'manual_jpy' && row.price_mode === 'price'
+  // 판매가 산출 방식을 고를 수 있는 종류 — 가격표 품목과 수동입력 품목.
+  // (국내조달품·서비스비·할인은 금액을 직접 받으므로 해당 없음)
+  const hasPriceMode = row.row_kind === 'price_list' || row.row_kind === 'manual_jpy'
+  // '판매가' 모드 — 스테퍼 가운데 칸이 이익률 대신 판매단가 입력이 된다.
+  const priceInputMode = hasPriceMode && row.price_mode === 'price'
   // 국내조달품 — 마진이 없어 이익률·관세율 스테퍼가 필요 없다(수량만 사용).
   const isDomestic = row.row_kind === 'domestic'
   // 할인 — 라벨과 금액만 받는다. 품번·상세줄·수량·이익률·관세는 쓰지 않는다.
@@ -104,8 +107,16 @@ export default function QuoteItemRow({
     } else {
       summaryLines.push(<>단가 ₩{numKR(row.unit_price)} × {row.quantity} = 공급가 <b>₩{numKR(row.supply_price)}</b></>)
       summaryLines.push(<>부가세 ₩{numKR(row.tax)}</>)
-      // 판매가 모드에서는 이익률이 계산 결과라 스테퍼에 나오지 않는다.
-      if (priceInputMode) summaryLines.push(<>이익률 {row.profit_rate.toFixed(1)}%</>)
+      // 실현 이익률 — 1,000원 올림과 판매단가 직접 입력이 반영된 실제 값이다.
+      // 이익률 모드의 스테퍼는 '목표'라 올림 때문에 이 값과 다를 수 있어 항상 함께 보여준다.
+      // 원가 이하로 팔면 음수가 되므로 그때는 붉게 낸다.
+      summaryLines.push(
+        <>실현 이익률{' '}
+          <b style={{ color: row.realized_profit_rate < 0 ? '#dc2626' : '#6b7280' }}>
+            {row.realized_profit_rate.toFixed(1)}%
+          </b>
+        </>,
+      )
     }
   }
 
@@ -279,32 +290,35 @@ export default function QuoteItemRow({
         </div>
       )}
 
-      {/* 수동입력 품목 — 구입가 JPY / 판매가 모드 */}
+      {/* 수동입력 품목 — 구입가 JPY */}
       {row.row_kind === 'manual_jpy' && (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', width: 44, flexShrink: 0 }}>구입가</label>
-            <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-              <input className="q-input" type="number" value={row.manual_cost_jpy || ''}
-                onChange={e => updateRow(row.id, 'manual_cost_jpy', parseInt(e.target.value) || 0)}
-                placeholder="구입가 직접 입력"
-                style={{ ...inp, width: '100%', textAlign: 'right', fontSize: 12, paddingRight: 28 }} />
-              <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#9ca3af', pointerEvents: 'none' }}>¥</span>
-            </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', width: 44, flexShrink: 0 }}>구입가</label>
+          <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+            <input className="q-input" type="number" value={row.manual_cost_jpy || ''}
+              onChange={e => updateRow(row.id, 'manual_cost_jpy', parseInt(e.target.value) || 0)}
+              placeholder="구입가 직접 입력"
+              style={{ ...inp, width: '100%', textAlign: 'right', fontSize: 12, paddingRight: 28 }} />
+            <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#9ca3af', pointerEvents: 'none' }}>¥</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', width: 44, flexShrink: 0 }}>판매가</label>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <SegmentedControl
-                options={[{ label: '이익률', value: 'rate' }, { label: '판매가', value: 'price' }]}
-                value={row.price_mode}
-                onChange={v => updateRow(row.id, 'price_mode', v)}
-                equal
-                height={34}
-              />
-            </div>
+        </div>
+      )}
+
+      {/* 판매가 산출 방식 — 가격표 품목과 수동입력 품목이 함께 쓴다.
+          발주서가 먼저 온 건은 고객이 정한 금액이 있어, 이익률을 더듬는 대신 그 단가를 그대로 넣는다. */}
+      {hasPriceMode && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', width: 44, flexShrink: 0 }}>판매가</label>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <SegmentedControl
+              options={[{ label: '이익률', value: 'rate' }, { label: '판매가', value: 'price' }]}
+              value={row.price_mode}
+              onChange={v => updateRow(row.id, 'price_mode', v)}
+              equal
+              height={34}
+            />
           </div>
-        </>
+        </div>
       )}
 
       {/* 스테퍼 — 수량 · (이익률 또는 판매단가) · 관세율. 서비스비만 제외한다. */}

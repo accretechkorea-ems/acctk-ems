@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { canManageEngineers } from '@/lib/permissions'
+import { INITIALS_TAKEN_MESSAGE, isInitialsTaken, isInitialsUniqueViolation, normalizeInitials } from '@/lib/initials'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -83,6 +84,20 @@ export async function POST(req: Request) {
     updateData.permission_level = permission_level
   }
 
+  // 이니셜 중복 — 자기 자신은 뺀다(값을 그대로 다시 저장하는 경우가 정상 경로다).
+  // 퇴사자는 세지 않는다. 최종 판정은 아래 update 의 23505 처리가 한다.
+  const wantInitials = normalizeInitials(initials)
+  if (wantInitials) {
+    const { data: peers, error: peerErr } = await supabaseAdmin
+      .from('engineers')
+      .select('engineer_id, initials, resigned_date')
+      .eq('initials', wantInitials)
+    if (peerErr) console.error('[update-engineer] 이니셜 조회 실패', peerErr)
+    if (isInitialsTaken(peers, wantInitials, Number(engineer_id))) {
+      return NextResponse.json({ error: INITIALS_TAKEN_MESSAGE }, { status: 400 })
+    }
+  }
+
   const { error } = await supabaseAdmin
     .from('engineers')
     .update(updateData)
@@ -90,6 +105,9 @@ export async function POST(req: Request) {
 
   if (error) {
     console.error('[update-engineer] 수정 실패', error)
+    if (isInitialsUniqueViolation(error)) {
+      return NextResponse.json({ error: INITIALS_TAKEN_MESSAGE }, { status: 400 })
+    }
     return NextResponse.json({ error: '직원 정보 수정에 실패했습니다.' }, { status: 400 })
   }
 

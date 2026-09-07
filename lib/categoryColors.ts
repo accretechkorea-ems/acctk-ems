@@ -11,6 +11,10 @@ export const SERVICE_TYPE_COLORS = {
   'B/S':          { text: '#be123c', bg: '#fef2f2', dot: '#f43f5e' },
   '교육':         { text: '#15803d', bg: '#f0fdf4', dot: '#22c55e' },
   '유선기술지원':  { text: '#0f766e', bg: '#f0fdfa', dot: '#14b8a6' },
+  // 장비교정 — 새 색을 만들지 않고 파일 안에 이미 있는 값(TEAM_COLORS['80CS'])을 그대로 쓴다.
+  // 기존 6색(파랑·보라·주황·자홍·초록·청록) 및 타임라인의 슬레이트(견적)·회색(홀딩)과 겹치지 않는
+  // 유일하게 남은 계열이라, 활동 카드와 고객사 타임라인에서 다른 유형과 구분된다.
+  '장비교정':     { text: '#0369a1', bg: '#f0f9ff', dot: '#0369a1' },
 } as const satisfies Record<string, CategoryColor>;
 
 /* 활동 유형 색 — 활동 현황(카드·상세)에서 서비스 6종과 영업 4종을 함께 그릴 때 쓴다.

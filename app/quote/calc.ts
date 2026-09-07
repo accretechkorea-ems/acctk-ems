@@ -3,6 +3,14 @@
 import { DISCOUNT_LABELS } from './types'
 import type { QuoteRow, ExpenseRow } from './types'
 
+/**
+ * 실현 이익률 — 공급가와 원가로 다시 잡는다.
+ * 이익률 모드의 목표값과 달리 1,000원 올림·판매단가 직접 입력이 모두 반영된 값이다.
+ * 공급가가 0 이하면 뜻이 없어 0 으로 둔다(할인 행은 아예 이 값을 쓰지 않는다).
+ */
+const realizedRate = (supplyPrice: number, profit: number) =>
+  supplyPrice > 0 ? (profit / supplyPrice) * 100 : 0
+
 export function calcRow(row: QuoteRow, rate: number): QuoteRow {
   const exRate = rate || row.exchange_rate
   // 서비스비 — 공급가는 직접 입력, 원가는 부대비용 내역의 합. 수량은 1 고정.
@@ -17,7 +25,9 @@ export function calcRow(row: QuoteRow, rate: number): QuoteRow {
       cost_price_jpy: 0, unit_price: unitPrice,
       supply_price: supplyPrice, tax,
       product_price: productPrice, profit,
-      profit_rate: supplyPrice > 0 ? (profit / supplyPrice) * 100 : 0,
+      // 서비스비는 원래 계산 결과라 목표·실현이 같다.
+      profit_rate: realizedRate(supplyPrice, profit),
+      realized_profit_rate: realizedRate(supplyPrice, profit),
     }
   }
   // 할인 — 사용자는 깎을 금액을 양수로 넣고(manual_unit_price), 계산에는 음수로 들어간다.
@@ -31,7 +41,7 @@ export function calcRow(row: QuoteRow, rate: number): QuoteRow {
       supply_price: supplyPrice, tax: Math.round(supplyPrice * 0.1),
       product_price: 0, profit: supplyPrice,
       // 행 자체의 이익률은 뜻이 없다(원가 0). 합계 이익률은 calcTotals 가 매출−원가로 다시 잡는다.
-      profit_rate: 0,
+      profit_rate: 0, realized_profit_rate: 0,
     }
   }
   // 국내조달품 — 원화 원가를 그대로 공급가로 쓴다(마진 0). 환율·관세는 쓰지 않는다.
@@ -45,7 +55,8 @@ export function calcRow(row: QuoteRow, rate: number): QuoteRow {
       // 고객에게 청구하지 않는 자사 부담 비용 — 부가세도 발생하지 않는다.
       supply_price: supplyPrice, tax: 0,
       product_price: unitPrice * row.quantity,
-      profit: 0, profit_rate: 0,
+      // 마진이 없는 것이 정의다. 실현 이익률도 0.
+      profit: 0, profit_rate: 0, realized_profit_rate: 0,
     }
   }
   // 수동입력 품목 — 구입가 JPY 만 사용자가 직접 넣고, 계산은 가격표 품목 분기와 동일하다.
@@ -66,9 +77,29 @@ export function calcRow(row: QuoteRow, rate: number): QuoteRow {
       cost_price_jpy: costJpy, unit_price: unitPrice,
       supply_price: supplyPrice, tax,
       product_price: productPrice, profit,
-      profit_rate: row.price_mode === 'price'
-        ? (supplyPrice > 0 ? (profit / supplyPrice) * 100 : 0)
-        : row.profit_rate,
+      // 가격표 품목과 같은 이유로 profit_rate 를 덮어쓰지 않는다(모드 전환 시 입력값 보존).
+      realized_profit_rate: realizedRate(supplyPrice, profit),
+    }
+  }
+  // 가격표 품목 — 판매가 모드면 단가를 직접 받는다.
+  // 원가를 계산할 수 없어도(품목 미선택·구입가 없음·환율 없음) 단가만으로 성립하므로
+  // 아래 이익률 모드 분기보다 앞에서 갈라진다. 원가가 0 이면 이익률은 100% 가 된다.
+  if (row.row_kind === 'price_list' && row.price_mode === 'price') {
+    const costJpy = row.selectedItem?.cost_jpy ?? 0
+    // 사용자가 친 값을 그대로 쓴다 — 여기서 올리면 발주서 금액을 정확히 맞출 수 없다.
+    const unitPrice = row.manual_unit_price
+    const supplyPrice = unitPrice * row.quantity
+    const tax = Math.round(supplyPrice * 0.1)
+    const productPrice = Math.round(costJpy * exRate * row.tariff_rate * row.quantity)
+    const profit = supplyPrice - productPrice
+    return {
+      ...row, exchange_rate: exRate,
+      cost_price_jpy: costJpy, unit_price: unitPrice,
+      supply_price: supplyPrice, tax,
+      product_price: productPrice, profit,
+      // profit_rate 는 건드리지 않는다 — 이익률 스테퍼의 입력값이라 모드를 오갈 때 그대로 남아야 한다.
+      // (예전에는 여기서 실현값으로 덮어써, 단가를 넣기 전에 모드를 바꾸면 공급가 0 → 이익률이 0 으로 지워졌다.)
+      realized_profit_rate: realizedRate(supplyPrice, profit),
     }
   }
   if (row.row_kind === 'price_list' && row.selectedItem?.cost_jpy && exRate) {
@@ -78,11 +109,14 @@ export function calcRow(row: QuoteRow, rate: number): QuoteRow {
     const supplyPrice = unitPrice * row.quantity
     const tax = Math.round(supplyPrice * 0.1)
     const productPrice = Math.round(costJpy * exRate * row.tariff_rate * row.quantity)
+    const profit = supplyPrice - productPrice
     return {
       ...row, exchange_rate: exRate,
       cost_price_jpy: costJpy, unit_price: unitPrice,
       supply_price: supplyPrice, tax,
-      product_price: productPrice, profit: supplyPrice - productPrice,
+      product_price: productPrice, profit,
+      // profit_rate 는 목표값 그대로 두고(입력칸), 저장·요약이 쓸 실현값을 따로 채운다.
+      realized_profit_rate: realizedRate(supplyPrice, profit),
     }
   }
   // 가격표 품목인데 아직 품목을 고르지 않았거나(구입가·환율 없음) 계산할 근거가 없는 상태.
@@ -91,7 +125,7 @@ export function calcRow(row: QuoteRow, rate: number): QuoteRow {
     ...row, exchange_rate: exRate,
     cost_price_jpy: 0, unit_price: 0,
     supply_price: 0, tax: 0,
-    product_price: 0, profit: 0,
+    product_price: 0, profit: 0, realized_profit_rate: 0,
   }
 }
 
@@ -100,7 +134,7 @@ export function createRow(): QuoteRow {
     id: Math.random().toString(36).slice(2),
     itemText: '', selectedItem: null, subLines: [],
     quantity: 1, manual_unit_price: 0,
-    tariff_rate: 1.13, exchange_rate: 0, profit_rate: 40,
+    tariff_rate: 1.13, exchange_rate: 0, profit_rate: 40, realized_profit_rate: 0,
     unit_price: 0, supply_price: 0, tax: 0,
     cost_price_jpy: 0, product_price: 0, profit: 0,
     partCode: '', row_kind: 'price_list', manual_cost_jpy: 0, price_mode: 'rate', expenses: [],

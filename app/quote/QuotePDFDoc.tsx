@@ -13,6 +13,18 @@ Font.register({
 // 할인 표기 색 — 앱 전역에서 쓰는 위험/차감 색과 같은 값.
 const DANGER = '#dc2626'
 
+// 표 머리글 배경 — 회사 컬러(#234ea2)의 연한 톤.
+//
+// 세 단계를 재 보고 고른 값이다. 되돌릴 때는 이 상수만 바꾸면 된다.
+//
+//   V1   '#c7d7f8'  카드 hover 테두리 토큰. 옛 주황(#FFCC99)과 명도가 거의 같다(흑백 214 vs 213).
+//   V1.5 '#b8cbf1'  ← 현재. V1 과 V2 의 중간. 흑백 202 · 검은 글자 12.9:1 · 흰 바탕 1.63.
+//   V2   '#a9bee9'  V1 을 회사색 쪽으로 옮긴 값. 흑백 189 · 검은 글자 11.2:1 · 흰 바탕 1.87.
+//   V3   '#6583be'  흰색과 회사색을 30:70 으로 섞어 로고색에 가장 가깝다. 흑백 129 · 검은 글자 5.54:1.
+//                   검은 글자를 유지하는 한 이보다 진하게는 못 간다(80% 면 4.36:1 로 AA 미달,
+//                   로고색 그대로는 2.68:1 이라 글자가 묻힌다).
+const HEADER_BG = '#b8cbf1'
+
 const THICK = 1.3
 const THIN = 0.5
 // 열 너비 — 금액이 억 단위(₩ 999,999,999)가 되어도 한 줄에 들어가도록 잡은 값이다.
@@ -51,7 +63,7 @@ const S = StyleSheet.create({
   // flexGrow: 품목이 적어도 표가 페이지 세로를 채우고 합계 블록이 하단에 놓이도록 한다.
   // 남는 공간이 없으면(품목이 많아 2페이지로 넘어가면) 아무 것도 더하지 않아 기존 동작 그대로다.
   table: { width: '100%', borderWidth: THICK, borderColor: '#000', flexGrow: 1 },
-  tableHeader: { flexDirection: 'row', backgroundColor: '#FFCC99', borderBottomWidth: THICK, borderBottomColor: '#000' },
+  tableHeader: { flexDirection: 'row', backgroundColor: HEADER_BG, borderBottomWidth: THICK, borderBottomColor: '#000' },
   th: { borderRightWidth: THICK, borderRightColor: '#000', paddingVertical: 1, paddingHorizontal: 3, fontFamily: 'NotoSansCJK', fontSize: 9, textAlign: 'center' },
   thLast: { paddingVertical: 1, paddingHorizontal: 3, fontFamily: 'NotoSansCJK', fontSize: 9, textAlign: 'center' },
   itemRow: { flexDirection: 'row', borderTopWidth: THIN, borderTopColor: '#999', minHeight: 16 },
