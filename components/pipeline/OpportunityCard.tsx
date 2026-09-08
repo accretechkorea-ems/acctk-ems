@@ -7,6 +7,7 @@
 
 import { STAGES, compactKRW, dateToMonth } from '@/components/customer/opportunity'
 import type { SalesOpportunity } from '@/components/customer/types'
+import { daysBetween, kstYmd, todayKST } from '@/lib/date'
 
 const STALE_DAYS = 30
 
@@ -20,12 +21,10 @@ type Props = {
   onClose?: () => void      // 수주 단계에서만 — 매출 없이 끝난 건을 직접 종료
 }
 
-// 마지막 활동(없으면 등록일)로부터 며칠 지났는지
+// 마지막 활동(없으면 등록일)로부터 며칠 지났는지 — 오늘은 한국 기준.
 function staleDays(lastActivity: string | null, createdAt: string): number {
-  const base = lastActivity ?? createdAt.slice(0, 10)
-  const diff = Date.parse(`${base}T00:00:00`)
-  if (Number.isNaN(diff)) return 0
-  return Math.floor((Date.now() - diff) / 86400000)
+  const base = lastActivity ?? kstYmd(createdAt)
+  return daysBetween(base, todayKST())
 }
 
 export default function OpportunityCard({ opp, lastActivity, canEdit, onOpen, onChangeStage, onPickLost, onClose }: Props) {

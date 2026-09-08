@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { SALES_STATUS_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import { useToast } from '@/components/common/Toast'
@@ -12,6 +13,7 @@ import { isAutoFailed, isOrdered, REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTIC
 import { achieveColorOf } from '@/lib/fiscal'
 import { Z } from '@/lib/zIndex'
 import Popover from '@/components/common/Popover'
+import { nowKSTParts, todayKST } from '@/lib/date'
 
 // 대시보드 '내 견적' 패널. 실적 현황 EngineerQuoteModal 의 표시 + 관리 기능을 동일하게 구현한다.
 // mutation 은 lib/quoteMutations.ts 공용 함수 사용(직접 supabase.update/fetch 안 씀).
@@ -36,7 +38,6 @@ const ORANGE = '#d97706'
 // 서브모달은 모달 위에 겹쳐 열린다.
 const SUBMODAL_Z = Z.subModal
 
-function fiscalYear(d: Date) { const m = d.getMonth() + 1; const y = d.getFullYear(); return m >= 4 ? y : y - 1 }
 const pad = (n: number) => String(n).padStart(2, '0')
 
 const MONTHS_FISCAL = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
@@ -45,7 +46,6 @@ type PeriodUnit = keyof typeof UNIT_DIVISOR
 // 'valid' = 유효 견적(작성일+1개월 이내). 회계연도 기반 4단위와 별개로 오늘 기준 롤링 범위를 쓴다.
 type Unit = 'valid' | PeriodUnit
 const lastDay = (y: number, mm: number) => new Date(y, mm, 0).getDate()
-const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 
 function periodRange(fy: number, unit: PeriodUnit, sel: number): { start: string; end: string } {
   if (unit === 'year') return { start: `${fy}-04-01`, end: `${fy + 1}-03-31` }
@@ -110,9 +110,10 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const listBoxRef = useRef<HTMLDivElement>(null)   // 표가 들어가는 상자(남는 높이를 받는다)
   const headRef = useRef<HTMLTableSectionElement>(null)
 
-  const now = new Date()
-  const curFy = fiscalYear(now)
-  const cm = now.getMonth() + 1
+  // 오늘·이번 달은 한국 기준.
+  const nowParts = nowKSTParts()
+  const curFy = nowParts.m >= 4 ? nowParts.y : nowParts.y - 1
+  const cm = nowParts.m
   const curQuarter = cm >= 4 && cm <= 6 ? 1 : cm >= 7 && cm <= 9 ? 2 : cm >= 10 ? 3 : 4
   const curHalf = cm >= 4 && cm <= 9 ? 1 : 2
   const [fy, setFy] = useState(curFy)
@@ -131,6 +132,10 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const [hoveredMemoId, setHoveredMemoId] = useState<number | null>(null)
   // 목록 상자가 overflow 로 잘라서 툴팁을 포털로 띄운다. 앵커는 지금 가리키고 있는 줄.
   const memoAnchorRef = useRef<HTMLDivElement>(null)
+  // 행 동작 메뉴(⋮). 한 번에 하나만 열리므로 앵커 ref 도 하나를 돌려 쓴다(메모 팝오버와 같은 방식).
+  const [menuQuoteId, setMenuQuoteId] = useState<number | null>(null)
+  const menuAnchorRef = useRef<HTMLDivElement>(null)
+  const router = useRouter()
   // 취소/실패
   const [editQuote, setEditQuote] = useState<Quote | null>(null)
   const [editStatus, setEditStatus] = useState<EditStatus>('취소요청')
@@ -217,9 +222,14 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
 
   // 선택 기간 → 날짜 범위. KPI·테이블 모두 이 범위 기준.
   // 유효 견적: 견적 유효기간(작성일+1개월)이 아직 안 지난 견적 = (오늘-1개월+1일) ~ 오늘.
-  const validStart = () => { const s = new Date(now); s.setMonth(s.getMonth() - 1); s.setDate(s.getDate() + 1); return s }
+  // 오늘에서 한 달 전 다음 날. 월 단위로 옮긴 뒤 하루를 더한다(기존과 같은 계산).
+  const validStart = () => {
+    const s = new Date(Date.UTC(nowParts.y, nowParts.m - 1, nowParts.d))
+    s.setUTCMonth(s.getUTCMonth() - 1); s.setUTCDate(s.getUTCDate() + 1)
+    return s.toISOString().slice(0, 10)
+  }
   const { start: rangeStart, end: rangeEnd } = unit === 'valid'
-    ? { start: ymd(validStart()), end: ymd(now) }
+    ? { start: validStart(), end: todayKST() }
     : periodRange(fy, unit, sel)
   const dateFiltered = quotes.filter(q => q.quote_date >= rangeStart && q.quote_date <= rangeEnd)
   // ── 실적 요약(아래 KPI·달성률)은 목록과 모수가 다르다. ──
@@ -572,12 +582,35 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                             계산서 요청
                           </button>
                         )}
-                        <button
-                          onClick={() => { setEditQuote(q); setEditStatus(canRequestDelete(q) ? '취소요청' : '실패'); setEditFailReason(q.fail_reason || '') }}
-                          style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 13, color: MUTED, lineHeight: 1, flexShrink: 0 }}
-                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fef2f2'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#fecdd3'; (e.currentTarget as HTMLButtonElement).style.color = '#be123c' }}
-                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.borderColor = BORDER; (e.currentTarget as HTMLButtonElement).style.color = MUTED }}
-                        >⋮</button>
+                        <div ref={menuQuoteId === q.quote_id ? menuAnchorRef : null} style={{ display: 'flex' }}>
+                          <button
+                            onClick={() => setMenuQuoteId(prev => prev === q.quote_id ? null : q.quote_id)}
+                            title="행 동작"
+                            style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: menuQuoteId === q.quote_id ? '#f3f4f6' : 'none', border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 13, color: MUTED, lineHeight: 1, flexShrink: 0 }}
+                          >⋮</button>
+                          {/* 목록이 표 안이라 메뉴가 잘린다 — 메모 팝오버와 같은 포털(Popover)로 띄운다. */}
+                          <Popover
+                            anchorRef={menuAnchorRef}
+                            open={menuQuoteId === q.quote_id}
+                            onClose={() => setMenuQuoteId(null)}
+                            align="end"
+                            gap={4}
+                            width={150}
+                            style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, padding: 4, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}
+                          >
+                            {/* 다시쓰기 — 원본은 그대로 두고 같은 내용으로 새 견적을 쓴다. 본인 견적만. */}
+                            <button
+                              onClick={() => { setMenuQuoteId(null); router.push(`/quote?duplicate=${q.quote_id}`) }}
+                              disabled={!canRequestDelete(q)}
+                              title={canRequestDelete(q) ? '같은 내용으로 새 견적을 씁니다(원본은 그대로)' : '본인이 작성한 견적만 다시 쓸 수 있습니다'}
+                              style={{ width: '100%', textAlign: 'left', padding: '8px 10px', background: 'none', border: 'none', borderRadius: 6, cursor: canRequestDelete(q) ? 'pointer' : 'not-allowed', fontSize: 12, fontWeight: 700, color: canRequestDelete(q) ? TEXT : MUTED, fontFamily: 'inherit' }}
+                            >다시쓰기</button>
+                            <button
+                              onClick={() => { setMenuQuoteId(null); setEditQuote(q); setEditStatus(canRequestDelete(q) ? '취소요청' : '실패'); setEditFailReason(q.fail_reason || '') }}
+                              style={{ width: '100%', textAlign: 'left', padding: '8px 10px', background: 'none', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: TEXT, fontFamily: 'inherit' }}
+                            >상태 변경·삭제 요청</button>
+                          </Popover>
+                        </div>
                       </div>
                     </td>
                   </tr>

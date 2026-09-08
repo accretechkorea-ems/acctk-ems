@@ -18,6 +18,7 @@ import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import { Z } from '@/lib/zIndex'
 import Popover from '@/components/common/Popover'
+import { todayKST, nowKSTParts, daysBetween, kstYmd, ymdParts } from '@/lib/date'
 
 // 기간 필터 모드 — 회계연도(4월 시작) 기준. h1=상반기(4~9월), h2=하반기(10~다음해 3월)
 type PeriodMode = 'year' | 'h1' | 'h2' | 'q1' | 'q2' | 'q3' | 'q4' | 'month'
@@ -106,14 +107,18 @@ const numM = (n: number) => {
 }
 const PAGE_SIZE = 20
 
+// 회계연도·분기는 한국 날짜로 읽는다. 계산서 완료 시각(timestamptz)이 한국 새벽에 찍히면
+// 브라우저·서버 시간대에 따라 전날(=다른 분기·다른 회계연도)로 읽힐 수 있어서다.
+// 회계연도 시작월(4월) 등 업무 규칙은 그대로다.
+const calParts = (dateStr: string) => ymdParts(kstYmd(dateStr))
+
 function getFiscalYear(dateStr: string): number {
-  const m = new Date(dateStr).getMonth() + 1
-  const y = new Date(dateStr).getFullYear()
+  const { y, m } = calParts(dateStr)
   return m >= 4 ? y : y - 1
 }
 
 function getFiscalQuarter(dateStr: string): number {
-  const m = new Date(dateStr).getMonth() + 1
+  const { m } = calParts(dateStr)
   if (m >= 4 && m <= 6) return 1
   if (m >= 7 && m <= 9) return 2
   if (m >= 10 && m <= 12) return 3
@@ -121,33 +126,33 @@ function getFiscalQuarter(dateStr: string): number {
 }
 
 function getCurrentFY(): number {
-  const now = new Date()
-  return now.getMonth() + 1 >= 4 ? now.getFullYear() : now.getFullYear() - 1
+  const { y, m } = nowKSTParts()
+  return m >= 4 ? y : y - 1
 }
 
 function getRemainingLabel(mode: string, fy: number, month: number): string | null {
-  const now = new Date()
+  const today = todayKST()
+  const { y: nowYear, m: nowMonth } = nowKSTParts()
   const nowFY = getCurrentFY()
   // 남은 기간을 통일 표기: 1개월(30일) 미만이면 '잔여 N일', 아니면 '잔여 X개월 Y일'(월≈30일 근사).
-  const fmt = (end: Date): string => {
-    const days = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+  const fmt = (end: string): string => {
+    const days = daysBetween(today, end)
     if (days <= 0) return '기간 종료'
     if (days < 30) return `잔여 ${days}일`
     const months = Math.floor(days / 30)
     const rem = days - months * 30
     return rem > 0 ? `잔여 ${months}개월 ${rem}일` : `잔여 ${months}개월`
   }
-  const lastDayOf = (year: number, monthNo: number) => new Date(year, monthNo, 0) // monthNo(1~12) 말일
+  // monthNo(1~12) 말일을 'YYYY-MM-DD' 로. Date.UTC(y, monthNo, 0) 이 그 달 마지막 날이다.
+  const lastDayOf = (year: number, monthNo: number) => new Date(Date.UTC(year, monthNo, 0)).toISOString().slice(0, 10)
 
   if (mode === 'month') {
-    const nowMonth = now.getMonth() + 1
-    const nowYear = now.getFullYear()
     const targetYear = month < 4 ? fy + 1 : fy
     if (targetYear === nowYear && month === nowMonth) return fmt(lastDayOf(nowYear, nowMonth))
     return null
   }
   if (fy !== nowFY) return null
-  const nowFQ = getFiscalQuarter(now.toISOString())
+  const nowFQ = getFiscalQuarter(today)
   if (mode === 'year') return fmt(lastDayOf(fy + 1, 3))                       // 회계연도 말 = 다음해 3/31
   if (mode === 'h1') return nowFQ <= 2 ? fmt(lastDayOf(fy, 9)) : null         // 상반기 말 = 9/30
   if (mode === 'h2') return nowFQ >= 3 ? fmt(lastDayOf(fy + 1, 3)) : null     // 하반기 말 = 다음해 3/31
@@ -216,9 +221,8 @@ function PerformanceChart({ quotes, fy, targets, engineers, filteredEngineerIds,
   const BAR_H = 160
 
   const nowFY = getCurrentFY()
-  const nowMonth = new Date().getMonth() + 1
-  const nowYear = new Date().getFullYear()
-  const nowFQ = getFiscalQuarter(new Date().toISOString())
+  const { y: nowYear, m: nowMonth } = nowKSTParts()
+  const nowFQ = getFiscalQuarter(todayKST())
 
   const scopedQuotes = teamFilter
     ? quotes.filter(q => filteredEngineerIds.includes(q.engineer_id))
@@ -354,8 +358,7 @@ function PerformanceChart({ quotes, fy, targets, engineers, filteredEngineerIds,
 function EngineerChartModal({ engineer, quotes, targets, fy, onClose }: {
   engineer: Engineer; quotes: Quote[]; targets: SalesTarget[]; fy: number; onClose: () => void
 }) {
-  const nowMonth = new Date().getMonth() + 1
-  const nowYear = new Date().getFullYear()
+  const { y: nowYear, m: nowMonth } = nowKSTParts()
   const BAR_H = 140
 
   const myTarget = targets.find(t => t.engineer_id === engineer.engineer_id && t.year === fy && t.quarter === null)
@@ -1122,7 +1125,7 @@ export default function SalesPage() {
   // 조회가 실패했는지. 빈 실적과 구분해서 알려주기 위한 것이다.
   const [loadError, setLoadError] = useState(false)
   const currentFY = getCurrentFY()
-  const thisMonth = new Date().getMonth() + 1
+  const thisMonth = nowKSTParts().m
   const [fy, setFy] = useState(currentFY)
   const [mode, setMode] = useState<PeriodMode>('month')
   const [month, setMonth] = useState(thisMonth)
@@ -1201,9 +1204,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
   const filteredEngineerIds = filteredEngineers.map(e => e.engineer_id)
 
   const matchPeriod = (dateStr: string, fiscalYear: number) => {
-    const d = new Date(dateStr)
-    const calYear = d.getFullYear()
-    const calMonth = d.getMonth() + 1
+    const { y: calYear, m: calMonth } = calParts(dateStr)
     if (mode === 'year') return getFiscalYear(dateStr) === fiscalYear
     if (mode === 'month') {
       const targetYear = month < 4 ? fiscalYear + 1 : fiscalYear
@@ -1335,7 +1336,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
               // q1~q4 는 '분기' 세그먼트로 묶어 표시, 실제 선택은 옆 드롭다운으로.
               value={isQuarterMode(mode) ? 'quarter' : mode}
               onChange={v => {
-                if (v === 'quarter') { if (!isQuarterMode(mode)) setMode(`q${getFiscalQuarter(new Date().toISOString())}` as PeriodMode) }
+                if (v === 'quarter') { if (!isQuarterMode(mode)) setMode(`q${getFiscalQuarter(todayKST())}` as PeriodMode) }
                 else setMode(v as PeriodMode)
               }}
             />

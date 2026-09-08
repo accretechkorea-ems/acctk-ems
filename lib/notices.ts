@@ -1,3 +1,6 @@
+// 오늘 날짜는 공용 유틸(lib/date.ts)에서 가져온다 — 화면·서버가 같은 기준을 쓰게 한다.
+import { todayKST } from './date'
+
 // 공지 팝업 공용 상수·판정. 화면(관리자 폼·팝업)과 API 라우트가 같은 값을 본다.
 
 /** 스토리지 버킷(공개). 팝업이 서명 URL 없이 바로 그리도록 공개로 둔다. */
@@ -27,8 +30,6 @@ export type Notice = {
   created_at: string
 }
 
-/** 오늘(한국 기준) YYYY-MM-DD. 게시 기간 판정은 서버 시간대와 무관해야 한다. */
-export const todayKST = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
 
 /** 게시 상태 — 목록 탭과 팝업 노출 판정에 같은 함수를 쓴다. */
 export type NoticePhase = 'upcoming' | 'active' | 'ended'

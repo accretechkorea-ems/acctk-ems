@@ -8,6 +8,7 @@ import ModalOverlay from '@/components/common/ModalOverlay'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { isClosed } from '../opportunity'
 import type { Contact, SalesActivity, SalesActivityForm, SalesOpportunity } from '../types'
+import { todayKST } from '@/lib/date'
 
 // sales_activities.activity_type CHECK 와 같은 값이어야 한다.
 export const ACTIVITY_TYPES = ['전화상담', '방문미팅', '사양검토', '경쟁입찰'] as const
@@ -32,13 +33,9 @@ const fieldStyle: CSSProperties = {
 const dateFieldStyle: CSSProperties = { ...fieldStyle, colorScheme: 'light' }
 const areaStyle: CSSProperties = { ...fieldStyle, resize: 'vertical', lineHeight: 1.6, fontFamily: 'inherit' }
 
-const todayStr = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 
 const emptyForm = (): SalesActivityForm => ({
-  opportunity_id: null, activity_date: todayStr(), activity_type: '방문미팅', contact_id: null, content: '',
+  opportunity_id: null, activity_date: todayKST(), activity_type: '방문미팅', contact_id: null, content: '',
 })
 
 export default function SalesActivityModal({ isOpen, activity, contacts, opportunities, isSaving, canDelete, onClose, onSave, onDelete }: Props) {
@@ -52,7 +49,7 @@ export default function SalesActivityModal({ isOpen, activity, contacts, opportu
     setForm(activity
       ? {
           opportunity_id: activity.opportunity_id,
-          activity_date: activity.activity_date ?? todayStr(),
+          activity_date: activity.activity_date ?? todayKST(),
           activity_type: activity.activity_type,
           contact_id: activity.contact_id,
           content: activity.content ?? '',

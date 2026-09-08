@@ -7,6 +7,7 @@ import ModalOverlay from '@/components/common/ModalOverlay'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useToast } from '@/components/common/Toast'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
+import { todayKST } from '@/lib/date'
 
 /**
  * 수리품 수정 모달.
@@ -38,11 +39,6 @@ const STATUSES: RepairStatus[] = ['입고', '수리중', '출고대기', '출고
 // 특이사항 옵션 ((없음) = 빈 문자열)
 const SPECIAL_OPTIONS = ['본사수리', '수리불가', '수리진행안함'] as const
 
-// 로컬 오늘 날짜 'YYYY-MM-DD' (app/repair/page.tsx 의 todayStr 와 동일 로직 — export 안 돼 있어 중복 정의, 추후 공용화 예정)
-const todayStr = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
 
 type Props = {
@@ -71,7 +67,7 @@ type PatchForm = {
 
 // 최종 status 기준 타임스탬프 정리 + 특이사항/본사수리 메타 기록.
 function buildPatch(repair: Repair, form: PatchForm): Record<string, unknown> {
-  const today = todayStr()
+  const today = todayKST()
   const isHq = form.specialType === '본사수리'
   const patch: Record<string, unknown> = {
     item_type: form.itemType,
@@ -233,17 +229,17 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
     if (v === '본사수리') {
       // 본사 발송: 수리중 + 발송일(기본 오늘), 출고일 없음
       setStatus('수리중'); setShippedDate('')
-      setHqRequestedAt(prev => prev || todayStr())
+      setHqRequestedAt(prev => prev || todayKST())
     } else if (v === '수리불가' || v === '수리진행안함') {
       // 종료: 출고완료
-      setStatus('출고완료'); setShippedDate(prev => prev || todayStr())
+      setStatus('출고완료'); setShippedDate(prev => prev || todayKST())
     }
     // v === '' : 상태 그대로 (메모/일반 건과 동일)
   }
 
   // 본사 복귀 처리(모달): 복귀일=오늘 + 출고대기. 이후 기존 흐름대로 출고완료 진행 가능.
   const onHqReturnFill = () => {
-    setHqReturnedAt(todayStr()); setStatus('출고대기'); setShippedDate('')
+    setHqReturnedAt(todayKST()); setStatus('출고대기'); setShippedDate('')
   }
 
   const handleSave = async () => {

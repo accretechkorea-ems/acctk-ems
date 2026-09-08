@@ -1,4 +1,5 @@
 import type { Repair } from '@/hooks/useRepairs'
+import { nowKSTParts } from './date'
 
 // ============================================================
 // 20 수리 통계용 순수 함수 모음. 화면(React)에 의존하지 않는다.
@@ -30,10 +31,10 @@ function parseDate(s: string | null | undefined): Date | null {
   return isNaN(d.getTime()) ? null : d
 }
 
-/** 오늘 00:00(UTC 기준, 로컬 달력 날짜). */
+/** 오늘 00:00 (한국 날짜를 UTC 자정으로 잡은 값 — 아래 날짜 계산이 전부 UTC 자정 기준이다). */
 function startOfToday(): Date {
-  const n = new Date()
-  return new Date(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()))
+  const { y, m, d } = nowKSTParts()
+  return new Date(Date.UTC(y, m - 1, d))
 }
 
 /** 'YYYY-MM' 추출. 파싱 불가면 null. */
@@ -65,8 +66,7 @@ function fillMonthRange(startYM: string, endYM: string): string[] {
  * (입출고·잔량 추이 등 '최근 N개월' 그래프가 0인 달도 축에 표시하도록 공용으로 쓴다.)
  */
 export function recentMonths(count: number): string[] {
-  const now = new Date()
-  const ey = now.getFullYear(), em = now.getMonth() + 1
+  const { y: ey, m: em } = nowKSTParts()
   const startDate = new Date(Date.UTC(ey, em - 1 - (count - 1), 1))
   const startYM = `${startDate.getUTCFullYear()}-${String(startDate.getUTCMonth() + 1).padStart(2, '0')}`
   const endYM = `${ey}-${String(em).padStart(2, '0')}`
@@ -426,8 +426,8 @@ function mondayOf(d: Date): Date {
  *  - item_type 이 '게이지'/'앰프' 가 아니거나 null 이면 제외(반환값에 포함하지 않음).
  */
 export function weeklyByType(rows: Repair[], weeks = 8): { week: string; gauge: number; amp: number }[] {
-  const now = new Date()
-  const todayUTC = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
+  const { y, m, d } = nowKSTParts()
+  const todayUTC = new Date(Date.UTC(y, m - 1, d))
   const thisMonday = mondayOf(todayUTC)
 
   const buckets = new Map<number, { gauge: number; amp: number }>()

@@ -8,6 +8,7 @@ import ModalOverlay from '@/components/common/ModalOverlay'
 import { toMin, stepTime, computeWorkHours, lunchOverlapHours } from '@/lib/workHours'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import Popover from '@/components/common/Popover'
+import { todayKST } from '@/lib/date'
 
 type Props = {
   deviceId: number | null
@@ -57,9 +58,7 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
 
   useEffect(() => {
     if (deviceId !== null) {
-      const today = new Date()
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-      setForm({ visit_date: todayStr, service_notes: '', etc_notes: '', visitor: '', service_type: '신규설치', contact_id: null, is_paid: true, work_hours: '', start_time: '08:30', end_time: '17:30' })
+      setForm({ visit_date: todayKST(), service_notes: '', etc_notes: '', visitor: '', service_type: '신규설치', contact_id: null, is_paid: true, work_hours: '', start_time: '08:30', end_time: '17:30' })
       setSelectedEngineerIds(currentUserEngineerId ? [currentUserEngineerId] : [])
       setShowExtraEngineers(false)
       setErrors({})
@@ -69,7 +68,7 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
   if (deviceId === null) return null
 
   // 현재 재직 중인 엔지니어만 신규 배정 대상으로 노출 (퇴사자 제외)
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const todayStr = todayKST()
   const selectableEngineers = engineers.filter(e => isCurrentlyEmployed(e.resigned_date, todayStr))
 
   const handleSave = () => {

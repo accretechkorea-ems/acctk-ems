@@ -1,18 +1,12 @@
 // 홀딩 공용 유틸. 요약 패널·장비 카드·타임라인·모달이 함께 쓴다.
 
 import type { Holding } from './types'
+import { daysBetween, todayKST } from '@/lib/date'
 
-export const todayStr = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 
-// 경과일수. 진행 중이면 오늘까지, 해제됐으면 해제일까지.
+// 경과일수. 진행 중이면 오늘(한국 기준)까지, 해제됐으면 해제일까지.
 export function elapsedDays(h: Holding): number {
-  const from = Date.parse(`${h.started_at}T00:00:00`)
-  const to = h.resolved_at ? Date.parse(`${h.resolved_at}T00:00:00`) : Date.now()
-  if (Number.isNaN(from) || Number.isNaN(to)) return 0
-  return Math.max(0, Math.floor((to - from) / 86400000))
+  return Math.max(0, daysBetween(h.started_at, h.resolved_at ?? todayKST()))
 }
 
 // 카드·목록에 쓰는 짧은 라벨

@@ -13,7 +13,8 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Z } from '@/lib/zIndex'
-import { dismissNotice, isDismissed, noticePhase, todayKST, type DismissKind, type Notice } from '@/lib/notices'
+import { dismissNotice, isDismissed, noticePhase, type DismissKind, type Notice } from '@/lib/notices'
+import { todayKST } from '@/lib/date'
 
 /** 팝업을 이미 띄운 로그인 세션의 id. 화면 이동 때 저장소를 다시 읽지 않으려는 캐시다. */
 let shownFor: string | null = null

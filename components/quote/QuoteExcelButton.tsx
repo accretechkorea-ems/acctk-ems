@@ -4,6 +4,7 @@ import { useState, type CSSProperties } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { fetchQuotesForExcel, buildQuoteSheet } from '@/lib/quoteExcel'
+import { todayKST } from '@/lib/date'
 
 /**
  * 선택한 견적들을 "이익률 분석표" 엑셀로 내보내는 버튼.
@@ -45,8 +46,7 @@ export default function QuoteExcelButton({ quoteIds, engineerId, style, onDone }
       const buf = await wb.xlsx.writeBuffer()
       const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
 
-      const today = new Date()
-      const ymd = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`
+      const ymd = todayKST().replace(/-/g, '')
       const fileName = safeFileName(
         quotes.length === 1 ? `${quotes[0].quote_number}.xlsx` : `견적_분석표_${ymd}_${quotes.length}건.xlsx`
       )

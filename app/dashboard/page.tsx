@@ -11,6 +11,7 @@ import { ACTIVITY_TYPES } from '@/lib/activity'
 import ActivityCard from '@/components/activity/ActivityCard'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
 import MyQuotesPanel from '@/components/dashboard/MyQuotesPanel'
+import { nowKSTParts } from '@/lib/date'
 
 // 대시보드는 훑어보는 화면이라 알림은 이만큼만 싣는다(전체는 헤더의 종 아이콘에서 본다).
 const NOTIF_LIMIT = 5
@@ -35,7 +36,7 @@ export default function DashboardPage() {
   const router = useRouter()
   const [me, setMe] = useState<Me | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activityYm, setActivityYm] = useState(() => { const n = new Date(); return { y: n.getFullYear(), m: n.getMonth() + 1 } })
+  const [activityYm, setActivityYm] = useState(() => { const n = nowKSTParts(); return { y: n.y, m: n.m } })
   // 활동 요약 건수. 아직 못 받았으면 null(카드를 그리지 않는다).
   const [actCounts, setActCounts] = useState<Record<string, number> | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
@@ -48,11 +49,11 @@ export default function DashboardPage() {
 
   // 활동 조회 기간: 선택한 달의 1일 ~ 말일. 이번 달이면 1일 ~ 오늘.
   const pad2 = (n: number) => String(n).padStart(2, '0')
-  const nowD = new Date()
-  const atCurrentMonth = activityYm.y === nowD.getFullYear() && activityYm.m === nowD.getMonth() + 1
+  const nowD = nowKSTParts()
+  const atCurrentMonth = activityYm.y === nowD.y && activityYm.m === nowD.m
   const activityStart = `${activityYm.y}-${pad2(activityYm.m)}-01`
   const activityEnd = atCurrentMonth
-    ? `${nowD.getFullYear()}-${pad2(nowD.getMonth() + 1)}-${pad2(nowD.getDate())}`
+    ? `${nowD.y}-${pad2(nowD.m)}-${pad2(nowD.d)}`
     : `${activityYm.y}-${pad2(activityYm.m)}-${pad2(new Date(activityYm.y, activityYm.m, 0).getDate())}` // 월마다 다른 말일
   const stepMonth = (delta: number) => setActivityYm(({ y, m }) => { const d = new Date(y, m - 1 + delta, 1); return { y: d.getFullYear(), m: d.getMonth() + 1 } })
 
@@ -81,7 +82,7 @@ export default function DashboardPage() {
     ? `${me.teams ? me.teams + ' ' : ''}${me.name ?? ''}${me.position ? ` ${me.position}` : ''}님, 안녕하세요`
     : '안녕하세요'
 
-  const todayLabel = `${nowD.getFullYear()}년 ${nowD.getMonth() + 1}월 ${nowD.getDate()}일`
+  const todayLabel = `${nowD.y}년 ${nowD.m}월 ${nowD.d}일`
   const showActivity = canViewCustomers(me) // customers 를 읽을 수 있는 팀에만 노출
   const engineerId = me?.engineer_id ?? null
 

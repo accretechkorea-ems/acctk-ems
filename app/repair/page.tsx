@@ -16,6 +16,7 @@ import { useFieldErrors, FieldError, errBorder } from '@/components/common/field
 import { REPAIR_STATUS_COLORS, REPAIR_MEANING_COLORS } from '@/lib/categoryColors'
 import { isAtHq } from '@/lib/repairStats'
 import { Z } from '@/lib/zIndex'
+import { todayKST, nowKSTParts } from '@/lib/date'
 
 // ── 색상 (기존 페이지 컨벤션과 동일) ──
 const BLUE = '#234ea2'
@@ -61,10 +62,6 @@ type Category = '게이지' | '앰프'
 const CATEGORIES: Category[] = ['게이지', '앰프']
 
 // ── 날짜 유틸 ──
-const todayStr = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
 const monthKey = (dateStr: string | null) => (dateStr ? dateStr.slice(0, 7) : '') // YYYY-MM
 const fmtMonthLabel = (ym: string) => `${Number(ym.slice(5, 7))}월`
@@ -120,7 +117,7 @@ export default function RepairPage() {
   const { repairs, loading, refetch } = useRepairs()
 
   // ── 접수 등록 폼 ──
-  const [receivedDate, setReceivedDate] = useState(todayStr())
+  const [receivedDate, setReceivedDate] = useState(todayKST())
   const [customerName, setCustomerName] = useState('')
   const [productType, setProductType] = useState('')
   const [serialNumber, setSerialNumber] = useState('')
@@ -146,19 +143,19 @@ export default function RepairPage() {
   const [memoAnchor, setMemoAnchor] = useState<{ up: boolean; right: number; top?: number; bottom?: number } | null>(null)
   // 본사 복귀 처리(복귀일 입력) 다이얼로그
   const [hqReturning, setHqReturning] = useState<Repair | null>(null)
-  const [hqReturnDate, setHqReturnDate] = useState(todayStr())
+  const [hqReturnDate, setHqReturnDate] = useState(todayKST())
   const [isHqSaving, setIsHqSaving] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false) // 검색 줄 열림/닫힘 (초기 닫힘)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
   // ── KPI '출고완료' 카드 + 그래프 기준 월 ──
-  const [viewMonth, setViewMonth] = useState(monthKey(todayStr()))
+  const [viewMonth, setViewMonth] = useState(monthKey(todayKST()))
 
   // ── 엑셀 일괄 등록 ──
   const [showImport, setShowImport] = useState(false)
   const [importRows, setImportRows] = useState<ExcelRow[]>([])
   const [importFileName, setImportFileName] = useState('')
-  const [importYear, setImportYear] = useState(new Date().getFullYear())
+  const [importYear, setImportYear] = useState(nowKSTParts().y)
   const [importCategory, setImportCategory] = useState<Category>('게이지')
   const [isImporting, setIsImporting] = useState(false)
   const [importResult, setImportResult] = useState<{ ok: number; fail: number } | null>(null)
@@ -213,7 +210,7 @@ export default function RepairPage() {
     setCustomerName('')
     setProductType('')
     setSerialNumber('')
-    setReceivedDate(todayStr())
+    setReceivedDate(todayKST())
     setMemoContent('')
     setMemoOpen(false)
     await refetch()
@@ -225,14 +222,14 @@ export default function RepairPage() {
     const patch: Partial<Repair> = { status: next }
     if (next === '수리중') patch.repair_started_at = nowIso
     else if (next === '출고대기') patch.repair_done_at = nowIso
-    else if (next === '출고완료') { patch.shipped_date = todayStr() }
+    else if (next === '출고완료') { patch.shipped_date = todayKST() }
     const { error } = await supabase.from('repairs').update(patch).eq('repair_id', r.repair_id)
     if (error) { toast.error('상태 변경 실패: ' + error.message); return }
     await refetch()
   }
 
   // ── 본사 복귀: 복귀일 기록 + 출고대기 전환 (이후 기존 흐름대로 출고완료 진행) ──
-  const openHqReturn = (r: Repair) => { setHqReturnDate(todayStr()); setHqReturning(r) }
+  const openHqReturn = (r: Repair) => { setHqReturnDate(todayKST()); setHqReturning(r) }
   const confirmHqReturn = async () => {
     if (!hqReturning) return
     setIsHqSaving(true)

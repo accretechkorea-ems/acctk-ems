@@ -12,6 +12,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { isClosed } from '@/components/customer/opportunity'
 import { deviceLabel, elapsedDays } from '@/components/customer/holding'
+import { todayKST, daysBetween, nowKSTParts, nowHmKST } from '@/lib/date'
 import { SERVICE_TYPES } from '@/components/activity/ActivityCard'
 import { SALES_TYPES } from '@/lib/activity'
 import type { Holding, SalesActivity, SalesOpportunity } from '@/components/customer/types'
@@ -77,29 +78,13 @@ export type UrgentItem = {
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
-const todayStr = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
-/**
- * 오늘 날짜를 한국 시간으로 고정해서 얻는다.
- * 위 todayStr() 은 브라우저의 시간대를 따르는데, 한국 밖(또는 UTC 로 맞춘 장비)에서 열면
- * 오전에 하루가 어긋난다. 방문 예정은 "오늘보다 뒤"가 기준이라 하루 차이가 곧 오답이 된다.
- * sv-SE 로케일은 YYYY-MM-DD 를 내주므로 형식을 따로 만들지 않는다.
- * (기존 계산들은 종전 동작을 유지하려고 todayStr() 을 그대로 쓴다.)
- */
-const todayKST = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' })
-// 'YYYY-MM-DD' 두 개의 날짜 차이(일). 값이 이상하면 0.
-const daysBetween = (from: string, to: string) => {
-  const a = Date.parse(`${from}T00:00:00`), b = Date.parse(`${to}T00:00:00`)
-  if (Number.isNaN(a) || Number.isNaN(b)) return 0
-  return Math.floor((b - a) / 86400000)
-}
+// 오늘 날짜·날짜 차이는 lib/date.ts 의 todayKST · daysBetween 을 쓴다(화면·서버 공용, 한국 기준).
 // 그 달의 시작일과 다음 달 시작일 ('YYYY-MM-DD'). 범위는 [start, end) 로 쓴다.
-function monthRange(d: Date) {
-  const start = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`
-  const n = new Date(d.getFullYear(), d.getMonth() + 1, 1)
-  const end = `${n.getFullYear()}-${pad(n.getMonth() + 1)}-01`
+// 연·월(1~12)을 받는다 — Date 를 받으면 브라우저 시간대에 끌려간다.
+function monthRange(y: number, m: number) {
+  const start = `${y}-${pad(m)}-01`
+  const n = new Date(Date.UTC(y, m, 1))
+  const end = `${n.getUTCFullYear()}-${pad(n.getUTCMonth() + 1)}-01`
   return { start, end }
 }
 
@@ -139,11 +124,12 @@ export function buildUrgentItems(args: {
   today?: string
 }): UrgentItem[] {
   const { holdings, opportunities, lastActivityByOpp } = args
-  const today = args.today ?? todayStr()
+  const today = args.today ?? todayKST()
+  // 이번 달 말일 — 한국 기준. (UTC 자정으로 잡아 말일 숫자만 뽑는다)
   const monthEnd = (() => {
-    const d = new Date()
-    const last = new Date(d.getFullYear(), d.getMonth() + 1, 0)
-    return `${last.getFullYear()}-${pad(last.getMonth() + 1)}-${pad(last.getDate())}`
+    const { y, m } = nowKSTParts()
+    const last = new Date(Date.UTC(y, m, 0))
+    return `${y}-${pad(m)}-${pad(last.getUTCDate())}`
   })()
 
   const items: UrgentItem[] = []
@@ -248,14 +234,15 @@ export function useDashboard80() {
   // 반환값 = 조회 성공 여부(모달 저장 후 성공 안내를 띄울지 판단하는 데 쓴다).
   const load = async (): Promise<boolean> => {
     setLoading(true)
-    const now = new Date()
-    const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+    // 이번 달·지난달 모두 한국 기준.
+    const { y: nowY, m: nowM } = nowKSTParts()
+    const prev = new Date(Date.UTC(nowY, nowM - 2, 1))
     try {
-      const range = monthRange(now)
+      const range = monthRange(nowY, nowM)
       const upcomingFrom = todayKST()
       const [cur, before, oppRes, salesRes, serviceRes, expiryRes, upcomingRes] = await Promise.all([
         loadMonth(range),
-        loadMonth(monthRange(prev)),
+        loadMonth(monthRange(prev.getUTCFullYear(), prev.getUTCMonth() + 1)),
         // 진행 중인 기회만 (종료·실주 제외). 담당자 이름은 여기서 함께 받는다.
         supabase.from('sales_opportunities')
           .select('*, customers(company_name), engineers(name, position)')
@@ -275,7 +262,7 @@ export function useDashboard80() {
         // 지난 날짜는 그대로 빠지고, 기간 상한은 두지 않는다 —
         // 예정 건은 몇 건뿐이라 전부 받아 헤더 건수까지 정확히 낸다.
         supabase.from('service_history')
-          .select('service_id, visit_date, service_type, visitor, customers(company_name), devices(device_name, device_name2)')
+          .select('service_id, visit_date, start_time, service_type, visitor, customers(company_name), devices(device_name, device_name2)')
           .gte('visit_date', upcomingFrom)
           .order('visit_date').order('service_id'),
       ])
@@ -315,7 +302,7 @@ export function useDashboard80() {
       ))
 
       if (expiryRes.error) console.error('[dashboard80] expiring quotes failed', expiryRes.error)
-      const today = todayStr()
+      const today = todayKST()
       type QuoteRow = {
         quote_id: number; quote_number: string; quote_date: string | null
         customers: { company_name: string | null } | null
@@ -339,13 +326,20 @@ export function useDashboard80() {
 
       if (upcomingRes.error) console.error('[dashboard80] upcoming visits failed', upcomingRes.error)
       type VisitRow = {
-        service_id: number; visit_date: string | null; service_type: string | null; visitor: string | null
+        service_id: number; visit_date: string | null; start_time: string | null; service_type: string | null; visitor: string | null
         customers: { company_name: string | null } | null
         devices: { device_name: string | null; device_name2: string | null } | null
       }
+      // 오늘 건은 시작시각이 아직 안 지난 것만 남긴다 — 오후에 끝낸 일이 '다가오는 일정' 에
+      // 남아 있으면 이상하고, 반대로 오늘 오후 예정 건은 아침에 보여야 한다.
+      //   · 내일 이후는 시각과 무관하게 전부(쿼리가 어제 이전은 이미 걸렀다).
+      //   · start_time 이 비어 있는 오늘 건은 남긴다 — 시각을 몰라 거를 근거가 없고,
+      //     '잊지 않으려고 미리 쓴 건' 을 감추는 쪽이 더 손해다(2026-07 이전 기록에만 있다).
+      const nowHm = nowHmKST()
       setUpcomingVisits(
         ((upcomingRes.data ?? []) as unknown as VisitRow[])
           .filter(v => !!v.visit_date)
+          .filter(v => v.visit_date !== upcomingFrom || !v.start_time || String(v.start_time).slice(0, 5) > nowHm)
           .map(v => ({
             serviceId: v.service_id,
             visitDate: v.visit_date as string,

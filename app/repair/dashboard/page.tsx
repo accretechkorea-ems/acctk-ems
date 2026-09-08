@@ -13,6 +13,7 @@ import { canViewDashboard } from '@/lib/permissions'
 import { useRepairs, type Repair } from '@/hooks/useRepairs'
 import { useCountUp } from '@/hooks/useCountUp'
 import { CHART_COLORS, REPAIR_STATUS_COLORS, REPAIR_MEANING_COLORS } from '@/lib/categoryColors'
+import { nowKSTParts } from '@/lib/date'
 import {
   avgLeadTime, monthlyCountsRecent,
   leadTimeBuckets, monthlyBacklogRecent,
@@ -530,7 +531,7 @@ export default function RepairDashboardPage() {
   const backlog = monthlyBacklogRecent(repairs, 6)
 
   // ── 본사수리 KPI 데이터 (발송/복귀 날짜 기준이라 연도 필터와 무관하게 전체 repairs 사용) ──
-  const thisMonth = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}` })()
+  const thisMonth = (() => { const n = nowKSTParts(); return `${n.y}-${String(n.m).padStart(2, '0')}` })()
   const hqThisMonth = hqMonthCounts(repairs, thisMonth)   // 이번 달 본사 발송/복귀
   const hqAvg = hqAvgTurnaround(repairs)                  // 본사 평균 소요일(복귀 완료 건)
   const shippedThisMonth = repairs.filter(r => (r.shipped_date ?? '').slice(0, 7) === thisMonth).length // 이번 달 출고완료(스루풋)

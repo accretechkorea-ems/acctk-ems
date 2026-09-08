@@ -11,6 +11,7 @@ import { withTeamPerms } from '@/lib/teamPerms'
 import ActivityCard from '@/components/activity/ActivityCard'
 import { ACTIVITY_TYPES } from '@/lib/activity'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
+import { nowKSTParts, addDays } from '@/lib/date'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#fafafa'
@@ -73,9 +74,9 @@ export default function ActivityPage() {
   const supabase = createClient()
   const { loading: guardLoading, authorized } = usePageGuard(canViewDashboard)
 
-  const now = new Date()
-  const thisYear = now.getFullYear()
-  const thisMonth = now.getMonth() + 1
+  const now = nowKSTParts()
+  const thisYear = now.y
+  const thisMonth = now.m
 
   const formatDate = (y: number, m: number, d: number) =>
     `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
@@ -204,14 +205,14 @@ export default function ActivityPage() {
   }
 
   const handleToday = () => {
-    const t = formatDate(thisYear, thisMonth, now.getDate())
+    const t = formatDate(thisYear, thisMonth, now.d)
     setStartDate(t); setEndDate(t); setActiveBtn('금일')
     fetchActivity(t, t)
   }
 
   const handleYesterday = () => {
-    const d = new Date(now); d.setDate(d.getDate() - 1)
-    const t = formatDate(d.getFullYear(), d.getMonth() + 1, d.getDate())
+    // 어제 = 한국 기준 오늘에서 하루 뺀 날.
+    const t = addDays(formatDate(thisYear, thisMonth, now.d), -1)
     setStartDate(t); setEndDate(t); setActiveBtn('작일')
     fetchActivity(t, t)
   }

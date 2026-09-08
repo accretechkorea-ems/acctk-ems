@@ -13,8 +13,9 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
-import { elapsedLabel, todayStr, type HoldingReport } from '../holding'
+import { elapsedLabel, type HoldingReport } from '../holding'
 import type { Holding, HoldingForm, HoldingNote, ServiceHistory } from '../types'
+import { todayKST } from '@/lib/date'
 
 type Props = {
   isOpen: boolean
@@ -148,7 +149,7 @@ export default function HoldingModal({
   reports = [], reportsLoading = false, onOpenReport,
   canEditNote, onUpdateNote, onDeleteNote,
 }: Props) {
-  const [form, setForm] = useState<HoldingForm>({ title: '', started_at: todayStr(), first_note: '' })
+  const [form, setForm] = useState<HoldingForm>({ title: '', started_at: todayKST(), first_note: '' })
   const [titleEdit, setTitleEdit] = useState('')
   const [startedEdit, setStartedEdit] = useState('')
   const [note, setNote] = useState('')
@@ -159,7 +160,7 @@ export default function HoldingModal({
   useEffect(() => {
     if (!isOpen) return
     setErrors({})
-    setForm({ title: '', started_at: todayStr(), first_note: '' })
+    setForm({ title: '', started_at: todayKST(), first_note: '' })
     setTitleEdit(holding?.title ?? '')
     setStartedEdit(holding?.started_at ?? '')
     setNote('')

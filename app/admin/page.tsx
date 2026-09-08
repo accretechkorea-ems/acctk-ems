@@ -10,7 +10,7 @@ import { josa } from '@/lib/josa'
 import { downsizeImage } from '@/lib/leadCardImage'
 import {
   NOTICE_MAX_IMAGES, NOTICE_TITLE_MAX, NOTICE_BODY_MAX,
-  clearDismiss, noticePhase, todayKST, type Notice, type NoticePhase,
+  clearDismiss, noticePhase, type Notice, type NoticePhase,
 } from '@/lib/notices'
 import { withTeamPerm } from '@/lib/teamPerms'
 import AccessGate from '@/components/common/AccessGate'
@@ -23,6 +23,7 @@ import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import AutocompleteInput from '@/components/common/AutocompleteInput'
 import { Z } from '@/lib/zIndex'
+import { todayKST, nowKSTParts } from '@/lib/date'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#f4f5f7'
@@ -154,7 +155,7 @@ function AdminPageInner() {
   const [showTargetModal, setShowTargetModal] = useState(false)
   const [targets, setTargets] = useState<SalesTarget[]>([])
   const [targetLoading, setTargetLoading] = useState(false)
-  const thisYear = new Date().getFullYear()
+  const thisYear = nowKSTParts().y
   const [targetYear, setTargetYear] = useState(thisYear)
   const [editingTarget, setEditingTarget] = useState<{ engineerId: number | null; amount: string; orderAmount: string } | null>(null)
   const [savingTarget, setSavingTarget] = useState(false)
@@ -1539,7 +1540,7 @@ function AdminPageInner() {
                             style={{ padding: '4px 12px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>수정</button>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
-                          <button onClick={() => { const t = new Date().toISOString().slice(0, 10); setResignDate(t); setDeleteEngineer(eng) }}
+                          <button onClick={() => { setResignDate(todayKST()); setDeleteEngineer(eng) }}
                             style={{ padding: '4px 12px', background: DANGER, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>삭제</button>
                         </td>
                       </tr>

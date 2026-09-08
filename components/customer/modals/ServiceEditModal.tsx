@@ -8,6 +8,7 @@ import { toMin, stepTime, normTime, computeWorkHours, lunchOverlapHours, reverse
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { isCurrentlyEmployed } from '@/lib/engineers'
 import Popover from '@/components/common/Popover'
+import { todayKST } from '@/lib/date'
 
 type Props = {
   service: ServiceHistory | null
@@ -288,7 +289,7 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
             {showExtraEngineers && (
               <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 7, paddingTop: 10, borderTop: '1px solid #ebebeb' }}>
                 {/* '+추가' 후보는 현재 재직 중(삭제 안 됨)만. 이미 배정된 직원은 이 목록엔 없고(선택칩으로 유지) 과거 기록도 그대로 보존. */}
-                {engineers.filter(e => !selectedEngineerIds.includes(e.engineer_id) && isCurrentlyEmployed(e.resigned_date, new Date().toISOString().slice(0, 10))).map(eng => (
+                {engineers.filter(e => !selectedEngineerIds.includes(e.engineer_id) && isCurrentlyEmployed(e.resigned_date, todayKST())).map(eng => (
                   <button key={eng.engineer_id} onClick={() => { setSelectedEngineerIds(p => [...p, eng.engineer_id]); setShowExtraEngineers(false); clearError('engineers') }}
                     style={{ padding: '6px 12px', borderRadius: 20, border: '1px solid #ebebeb', background: '#fff', color: '#111827', fontWeight: 600, fontSize: 12, cursor: 'pointer', minWidth: 96, textAlign: 'center' }}>
                     {eng.name} {eng.position || ''}

@@ -7,8 +7,9 @@
 
 import { useState, type CSSProperties } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
-import { elapsedLabel, todayStr } from '../holding'
+import { elapsedLabel } from '../holding'
 import type { Holding } from '../types'
+import { todayKST } from '@/lib/date'
 
 type Props = {
   isOpen: boolean
@@ -36,7 +37,7 @@ export default function HoldingResolveModal({ isOpen, holding, ...rest }: Props)
 
 function ResolveForm({ holding, notice, isSaving, onClose, onResolve }: Omit<Props, 'isOpen' | 'holding'> & { holding: Holding }) {
   const [note, setNote] = useState('')
-  const [resolvedAt, setResolvedAt] = useState(todayStr)
+  const [resolvedAt, setResolvedAt] = useState(todayKST)
 
   return (
     <ModalOverlay onClose={onClose}>

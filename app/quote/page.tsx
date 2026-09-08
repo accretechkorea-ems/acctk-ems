@@ -10,7 +10,7 @@ import { useOutsideClick } from '@/hooks/useOutsideClick'
 import AccessGate from '@/components/common/AccessGate'
 import { canViewQuote } from '@/lib/permissions'
 import { BlobProvider, pdf } from '@react-pdf/renderer'
-import type { CustomerResult, Engineer, ExpensePreset, ExpenseRow, PriceItem, QuoteRow } from './types'
+import type { CustomerResult, Engineer, ExpensePreset, ExpenseRow, PriceItem, QuoteRow, RowKind } from './types'
 import type { SalesOpportunity } from '@/components/customer/types'
 import { isClosed } from '@/components/customer/opportunity'
 import { calcExpense, calcRow, calcTotals, createDiscountRow, createDomesticRow, createExpenseRow, createManualJpyRow, createRow, createServiceRow } from './calc'
@@ -24,6 +24,23 @@ import { Z } from '@/lib/zIndex'
 /**
  * 비고 기본 문구. 내용은 그대로 두고, 사용자가 손댔는지 비교하려고 상수로 뺐다.
  */
+// /api/quote-duplicate 응답. 원본 견적의 '입력값' 만 담는다(금액은 새 환율로 다시 계산한다).
+type DuplicatePayload = {
+  quote: {
+    quote_number: string
+    customer_id: number | null; dealer_id: number | null; opportunity_id: number | null
+    recipient: string | null; delivery_info: string | null; note: string | null; quote_type: string | null
+  }
+  items: {
+    price_list_id: number | null; part_code: string | null; row_kind: string | null
+    product_name: string | null; quantity: number | null; unit_price_jpy: number | null
+    unit_price_krw: number | null; supply_amount: number | null
+    profit_rate: number | null; tariff_rate: number | null
+    price_list: PriceItem | null
+  }[]
+  expenses: { item_name: string | null; unit_price: number | null; headcount: number | null; days: number | null }[]
+}
+
 const DEFAULT_REMARKS = '* 발주 진행 시 팩스 또는 메일로 발주서 회신 요망\n   (FAX : 031-786-4090)'
 
 /**
@@ -44,7 +61,10 @@ function isNameTakenError(err: unknown): boolean {
   return /already exists|duplicate/i.test(`${e.message ?? ''} ${e.error ?? ''}`)
 }
 import { parentCompanyName } from '@/components/customer/ParentPicker'
+import { loadDraft, saveDraft, clearDraft, isDraftMeaningful, draftSavedLabel, type QuoteDraft } from '@/lib/quoteDraft'
 import { resolveOnBehalf, notifyOnBehalf, type OnBehalfAssignee } from '@/lib/quoteMutations'
+import { todayKST } from '@/lib/date'
+import { nowKSTParts } from '@/lib/date'
 
 function QuotePageInner() {
   const supabase = createClient()
@@ -58,6 +78,12 @@ function QuotePageInner() {
   // 통과했을 때 돌려주는 담당자 정보만 대필 모드의 근거로 쓴다.
   const onBehalfRaw = searchParams.get('on_behalf')
   const onBehalfId = onBehalfRaw && /^\d+$/.test(onBehalfRaw) ? Number(onBehalfRaw) : null
+  // 다시쓰기: ?duplicate=<quote_id>. on_behalf 와 같은 이유로 값 자체는 믿지 않는다 —
+  // 서버(/api/quote-duplicate)가 본인 견적인지 확인한 뒤 돌려주는 내용만 화면에 채운다.
+  const duplicateRaw = searchParams.get('duplicate')
+  const duplicateId = duplicateRaw && /^\d+$/.test(duplicateRaw) ? Number(duplicateRaw) : null
+  // 주소로 들어온 프리필이 있으면 그쪽이 우선이다 — 임시저장분은 묻지 않고 버린다.
+  const hasUrlPrefill = repairId != null || onBehalfId != null || duplicateId != null
   const { loading: guardLoading, authorized } = usePageGuard(canViewQuote)
   const toast = useToast()
   const { errors, clearError, validate } = useFieldErrors<'company' | 'eu' | 'items' | 'expenses'>()
@@ -66,11 +92,18 @@ function QuotePageInner() {
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   // 확정 모달의 확인 버튼 중복 클릭 방지. 저장 → PDF 가 끝날 때까지 잠근다.
   const [isSubmitting, setIsSubmitting] = useState(false)
+  // 임시저장 — 저장분이 있으면 이어쓸지 먼저 묻는다. 답하기 전에는 자동 저장을 시작하지 않는다
+  // (빈 화면이 저장분을 덮어써 버리기 때문).
+  const [draftAsk, setDraftAsk] = useState<QuoteDraft | null>(null)
+  const [draftReady, setDraftReady] = useState(false)
 
   const [engineer, setEngineer] = useState<Engineer | null>(null)
   // 대필 대상. 서버가 승인한 뒤에만 채워진다(null 이면 평소대로 본인 견적).
   const [onBehalf, setOnBehalf] = useState<OnBehalfAssignee | null>(null)
   const [exchangeRate, setExchangeRate] = useState<number>(0)
+  // 임시저장·다시쓰기 복원은 비동기라, 값을 넣는 시점의 최신 환율을 참조로 읽는다.
+  // (환율이 아직 0 이면 아래 [exchangeRate] 효과가 도착 후 전 행을 다시 계산한다.)
+  const rateRef = useRef(0)
   const [rateUpdatedAt, setRateUpdatedAt] = useState('')
   const [rateLoading, setRateLoading] = useState(false)
 
@@ -130,10 +163,8 @@ function QuotePageInner() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showPriceGuide])
 
-  const today = new Date()
-  const yyyy = today.getFullYear()
-  const mm = today.getMonth() + 1
-  const dd = today.getDate()
+  // 견적번호와 작성일은 한국 날짜로 쓴다 — 해외에서 열어도 번호·표시가 어긋나지 않게.
+  const { y: yyyy, m: mm, d: dd } = nowKSTParts()
   const dateStr = `${yyyy}${String(mm).padStart(2, '0')}${String(dd).padStart(2, '0')}`
   const dateDisplay = `${yyyy}년　${String(mm).padStart(2, '0')}월　${String(dd).padStart(2, '0')}일`
 
@@ -205,6 +236,79 @@ function QuotePageInner() {
       .order('created_at', { ascending: false })
     if (error) { console.error('[quote] load opportunities failed', error); setOpportunities([]); return }
     setOpportunities((data as SalesOpportunity[]) ?? [])
+  }
+
+  // ── 다시쓰기: 서버가 돌려준 원본 내용을 화면 상태로 되돌린다 ──
+  // 환율만 오늘 것을 쓴다. 각 행의 exchange_rate 를 0 으로 비워 두면 calcRow 가 현재 환율을 잡는다
+  // — 과거 환율이 남으면 단가가 그때 값으로 굳어 버린다.
+  const applyDuplicate = async (payload: DuplicatePayload) => {
+    const { quote, items, expenses } = payload
+    // 부대비용은 서비스비 행 하나에 통째로 붙는다(견적당 1건).
+    const expenseRows: ExpenseRow[] = expenses.map(e => calcExpense({
+      ...createExpenseRow(),
+      item_name: e.item_name ?? '', unit_price: Number(e.unit_price) || 0,
+      headcount: Number(e.headcount) || 0, days: Number(e.days) || 0,
+    }))
+    const built: QuoteRow[] = items.map(it => {
+      const kind = (it.row_kind as RowKind) || 'price_list'
+      const unitKrw = Number(it.unit_price_krw) || 0
+      const base = createRow()
+      return calcRow({
+        ...base,
+        row_kind: kind,
+        itemText: it.product_name ?? '',
+        partCode: it.part_code ?? '',
+        quantity: Number(it.quantity) || base.quantity,
+        tariff_rate: it.tariff_rate == null ? base.tariff_rate : Number(it.tariff_rate),
+        // 저장된 값은 목표값이 아니라 실현 이익률이다. 그대로 목표값 자리에 넣고 새 환율로 다시 계산한다.
+        profit_rate: Number(it.profit_rate) || 0,
+        exchange_rate: 0,
+        selectedItem: it.price_list ?? null,
+        manual_cost_jpy: kind === 'manual_jpy' ? Number(it.unit_price_jpy) || 0 : 0,
+        // 할인은 사용자가 양수로 넣는 값이라 음수 공급가를 되돌린다.
+        manual_unit_price: kind === 'discount' ? Math.abs(Number(it.supply_amount) || 0) : unitKrw,
+        // price_mode 는 저장되지 않는다. 이익률 모드는 반드시 1,000원 올림을 하므로
+        // 단가가 1,000원 배수가 아니면 판매가 모드였던 것이 확실하다. 배수면 기본값(rate)으로 둔다.
+        price_mode: (kind === 'price_list' || kind === 'manual_jpy') && unitKrw % 1000 !== 0 ? 'price' : 'rate',
+        expenses: kind === 'service' ? expenseRows : [],
+      }, rateRef.current)
+    })
+    setRows(built.length > 0 ? built : [createRow()])
+
+    // 대리점 견적이면 청구처가 대리점(dealer_id), 최종 사용 업체가 customer_id 다.
+    const dealer = quote.dealer_id != null
+    const mainId = dealer ? quote.dealer_id : quote.customer_id
+    const euId = dealer ? quote.customer_id : null
+    setIsDealer(dealer)
+    setCustomerId(mainId); setEuCustomerId(euId)
+    const ids = [mainId, euId].filter((v): v is number => v != null)
+    if (ids.length > 0) {
+      const { data } = await supabase.from('customers')
+        .select('customer_id, company_name, address, status').in('customer_id', ids)
+      const find = (id: number | null) => (data ?? []).find(c => c.customer_id === id) ?? null
+      const main = find(mainId), eu = find(euId)
+      if (main) { setSelectedCustomer(main); setCustomerQuery(main.company_name); setCompany(main.company_name) }
+      if (eu) { setSelectedEU(eu); setEuQuery(eu.company_name) }
+      // 수신처는 소속회사 이름이 우선이다(작성 화면의 고객사 선택과 같은 규칙).
+      if (mainId != null) parentCompanyName(mainId).then(name => { if (name) setCompany(name) }).catch(() => {})
+    }
+
+    setReceiver(quote.recipient ?? '')
+    setDelivery(quote.delivery_info ?? '')
+    // note 에는 납기·E.U 줄이 합쳐져 저장된다. 그 둘은 각자 칸에서 다시 만들어지므로 본문만 남긴다.
+    setRemarks((quote.note ?? '').split('\n')
+      .filter(line => !/^\*\s*납기\s*:/.test(line) && !/^\*\s*E\.U/.test(line))
+      .join('\n').trim())
+
+    // 영업기회는 아직 살아 있을 때만 잇는다(수주·종료된 기회에 새 견적을 달지 않는다).
+    if (!dealer && mainId != null) {
+      await loadOpportunities(mainId)
+      const { data: opps } = await supabase.from('sales_opportunities')
+        .select('opportunity_id').eq('customer_id', mainId)
+      const alive = (opps ?? []).some(o => o.opportunity_id === quote.opportunity_id)
+      setOpportunityId(alive ? quote.opportunity_id : null)
+    }
+    toast.success(`${quote.quote_number} 의 내용을 불러왔습니다. 확정하면 새 번호로 발급됩니다`)
   }
 
   // company 는 화면 입력칸이 아니라 PDF 의 「○○ 귀하」 한 줄에만 쓰는 값이다.
@@ -449,6 +553,9 @@ const handleDownloadPDF = async (
 
       if (quoteError) throw quoteError
       savedQuoteId = quoteData.quote_id
+      // 견적이 실제로 들어간 시점에 임시저장분을 지운다. 뒤이은 품목·PDF 단계가 실패해도
+      // 견적 자체는 이미 남았으므로, 초안을 남겨 두면 같은 내용을 두 번 쓰게 된다.
+      clearDraft(engineer.engineer_id)
 
       // 금액이 있는 행만 저장한다. 할인은 공급가가 음수라 별도로 통과시킨다
       // (금액 0 인 채로 남은 할인 행은 기록할 것이 없어 저장하지 않는다).
@@ -536,6 +643,79 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
     f()
   }, [])
 
+  useEffect(() => { rateRef.current = exchangeRate }, [exchangeRate])
+
+  // ── 임시저장: 저장분 확인 (1회) ──
+  // 계정이 정해진 뒤에 본다 — 키가 engineer_id 라 남의 저장분은 애초에 읽히지 않는다.
+  const draftCheckDone = useRef(false)
+  useEffect(() => {
+    if (draftCheckDone.current || !engineer) return
+    draftCheckDone.current = true
+    if (hasUrlPrefill) { clearDraft(engineer.engineer_id); setDraftReady(true); return }
+    const d = loadDraft(engineer.engineer_id)
+    if (d) setDraftAsk(d)
+    else setDraftReady(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engineer])
+
+  // 저장분을 화면에 되돌린다.
+  // 대필만 저장된 값을 쓰지 않고 서버에 다시 물어본다 — localStorage 를 고쳐
+  // 남의 실적으로 견적을 만드는 길을 막기 위해서다(id 만 저장하는 이유).
+  const applyDraft = async (d: QuoteDraft) => {
+    setCompany(d.company); setCustomerId(d.customerId); setSelectedCustomer(d.selectedCustomer)
+    setCustomerQuery(d.customerQuery); setIsDealer(d.isDealer)
+    setEuCustomerId(d.euCustomerId); setSelectedEU(d.selectedEU); setEuQuery(d.euQuery)
+    setReceiver(d.receiver); setDelivery(d.delivery); setRemarks(d.remarks); setShowSignature(d.showSignature)
+    setRows(d.rows.map(r => calcRow(r, rateRef.current)))
+    // 영업기회 목록은 고객사에 딸린 값이라 다시 불러온 뒤 저장분의 선택을 되돌린다.
+    if (d.customerId != null && !d.isDealer) {
+      await loadOpportunities(d.customerId)
+      setOpportunityId(d.opportunityId)
+    }
+    setDraftAsk(null); setDraftReady(true)
+    if (d.onBehalfId != null) {
+      const r = await resolveOnBehalf(d.onBehalfId)
+      if (r.ok) setOnBehalf(r.assignee)
+      else toast.error(r.error || '대필 상태를 되살리지 못했습니다')
+    }
+  }
+
+  // ── 임시저장: 자동 저장 ──
+  // PDF 미리보기가 쓰는 600ms debounce 값을 그대로 트리거로 삼는다(타이핑마다 쓰지 않는다).
+  // 저장하는 값은 그 순간의 최신 상태다.
+  useEffect(() => {
+    if (!engineer || !draftReady) return
+    const draft = {
+      onBehalfId: onBehalf?.engineer_id ?? null,
+      company, customerId, selectedCustomer, customerQuery, isDealer,
+      euCustomerId, selectedEU, euQuery, opportunityId,
+      receiver, delivery, remarks, showSignature, rows,
+    }
+    if (isDraftMeaningful(draft)) saveDraft(engineer.engineer_id, draft)
+    else clearDraft(engineer.engineer_id)   // 다 지운 뒤에는 저장분도 없애 안내가 뜨지 않게 한다
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engineer, draftReady, debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks,
+      onBehalf, customerId, selectedCustomer, isDealer, euCustomerId, selectedEU, opportunityId, showSignature])
+
+  // ── 다시쓰기 (1회) ──
+  // 원본은 그대로 두고 내용만 가져온다. 확정하면 새 번호가 발급된다(번호 규칙은 손대지 않는다).
+  const duplicateDone = useRef(false)
+  useEffect(() => {
+    if (duplicateDone.current || duplicateId == null || !engineer) return
+    duplicateDone.current = true
+    const run = async () => {
+      const res = await fetch('/api/quote-duplicate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quoteId: duplicateId }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) { toast.error(json.error || '견적을 불러오지 못했습니다'); return }
+      applyDuplicate(json)
+    }
+    run()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [duplicateId, engineer])
+
   // 부대비용 표준 항목·단가(expense_presets) 1회 로드.
   // 실패 시 presetError → 카드에 안내 + 추가 버튼 비활성(단가 0 스냅샷 방지).
   useEffect(() => {
@@ -605,7 +785,7 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
     setRateLoading(true)
     try {
       const { data: cached } = await supabase.from('exchange_rate').select('*').order('id', { ascending: false }).limit(1).single()
-      const todayStr = new Date().toISOString().slice(0, 10)
+      const todayStr = todayKST()
 
       // 오늘 날짜 캐시가 있으면 바로 사용
       if (cached && cached.updated_at === todayStr) {
@@ -644,7 +824,7 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
   }, [rows]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleRateChange = useCallback(async (rate: number) => {
-    const todayStr = new Date().toISOString().slice(0, 10)
+    const todayStr = todayKST()
     setExchangeRate(rate)
     setRateUpdatedAt(todayStr)
     await supabase.from('exchange_rate').insert([{ rate, updated_at: todayStr }])
@@ -1314,6 +1494,35 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
       </div>
 
       {/* 견적 확정 확인 모달 */}
+      {/* 임시저장 안내 — 저장분이 있을 때만. 답하기 전에는 자동 저장이 시작되지 않는다. */}
+      {draftAsk && engineer && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#fff', borderRadius: 8, padding: 32, width: '100%', maxWidth: 440, boxShadow: '0 24px 64px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 4, letterSpacing: '-0.3px' }}>작성 중이던 내용이 있습니다</div>
+            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, fontWeight: 500 }}>
+              {draftSavedLabel(draftAsk.savedAt)} 까지 쓴 내용{draftAsk.company.trim() ? ` · ${draftAsk.company.trim()}` : ''}
+            </div>
+            <div style={{ background: '#eff4ff', border: '1px solid #c7d7f8', borderRadius: 8, padding: '12px 14px', marginBottom: 24 }}>
+              <div style={{ fontSize: 12, color: '#234ea2', lineHeight: 1.8 }}>
+                이어서 쓰거나, 새로 시작할 수 있습니다. <b>새로 쓰기를 고르면 저장분은 사라집니다.</b>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => { clearDraft(engineer.engineer_id); setDraftAsk(null); setDraftReady(true) }}
+                style={{ padding: '11px 20px', background: '#fff', color: '#6b7280', border: '1px solid #ebebeb', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                새로 쓰기
+              </button>
+              <button
+                onClick={() => { applyDraft(draftAsk) }}
+                style={{ padding: '11px 24px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                이어쓰기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showConfirmModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: '#fff', borderRadius: 8, padding: 32, width: '100%', maxWidth: 440, boxShadow: '0 24px 64px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>

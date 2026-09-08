@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { canManageEngineers } from '@/lib/permissions'
+import { todayKST } from '@/lib/date'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -40,7 +41,8 @@ export async function POST(req: Request) {
     }
     resignedDate = resigned_date
   } else {
-    resignedDate = new Date().toISOString().slice(0, 10)
+    // 서버는 UTC 라 toISOString 을 쓰면 한국 오전에 어제로 기록된다.
+    resignedDate = todayKST()
   }
 
   // 자기 자신은 퇴사 처리 불가

@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { canManageEngineers } from '@/lib/permissions'
+import { todayKST, addDays } from '@/lib/date'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,9 +23,9 @@ export async function POST() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const cutoff = new Date()
-  cutoff.setDate(cutoff.getDate() - 30)
-  const cutoffStr = cutoff.toISOString().split('T')[0]
+  // quote_date 는 한국 업무 날짜다. 서버(UTC)에서 만든 날짜로 자르면 한국 오전에 컷오프가
+  // 하루 앞서, 만 30일이 된 견적이 다음 날까지 남는다.
+  const cutoffStr = addDays(todayKST(), -30)
 
   // 국내수리 견적(quote_type='repair_domestic')은 견적중을 거치지 않는 별도 흐름이므로 자동 실패 대상에서 제외.
   // (일반=null, 본사수리=repair_hq 는 기존대로 30일 만료 대상.) NULL 을 살리기 위해 neq 대신 or(is null) 로 처리.

@@ -14,6 +14,7 @@ import {
 } from '@/lib/leadOptions'
 import { josa } from '@/lib/josa'
 import { parseDataUrlImage } from '@/lib/imageUpload'
+import { todayKST } from '@/lib/date'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,8 +31,7 @@ const bad = (message: string) => NextResponse.json({ error: message }, { status:
  * (UTC 서버라면 1월 1일 오전에 전년도 번호가 나갈 수 있어서 명시한다).
  */
 function leadNoPrefix(): string {
-  const year = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric' }).format(new Date())
-  return `${LEAD_NO_PREFIX}-${year.slice(2)}-`
+  return `${LEAD_NO_PREFIX}-${todayKST().slice(2, 4)}-`
 }
 
 /**

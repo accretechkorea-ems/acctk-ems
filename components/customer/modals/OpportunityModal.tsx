@@ -12,6 +12,7 @@ import { STAGES, LOST_REASONS, dateToMonth, compactKRW, isClosed } from '../oppo
 import { numKR } from '../constants'
 import type { Customer, Engineer, OpportunityForm, SalesActivity, SalesOpportunity } from '../types'
 import Popover from '@/components/common/Popover'
+import { todayKST } from '@/lib/date'
 
 type Props = {
   isOpen: boolean
@@ -79,7 +80,7 @@ export default function OpportunityModal({
 
   if (!isOpen) return null
 
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const todayStr = todayKST()
   const selectableEngineers = engineers.filter(e => isCurrentlyEmployed(e.resigned_date, todayStr))
   const linked = opportunity
     ? activities.filter(a => a.opportunity_id === opportunity.opportunity_id)
