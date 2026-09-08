@@ -5,9 +5,9 @@ import { createClient } from '@/lib/supabase/client'
 import Popover from '@/components/common/Popover'
 
 /**
- * 상위 업체(부모) 선택 칸.
+ * 소속회사(부모) 선택 칸.
  *
- * 같은 회사가 사업장·라인 단위로 여러 행에 나뉘어 있어, 그것을 묶는 껍데기 행을 부모로 둔다.
+ * 같은 회사가 측정실·공장 단위로 여러 행에 나뉘어 있어, 그것을 묶는 껍데기 행을 부모로 둔다.
  * 부모는 주소·좌표·장비가 없고 `is_parent = true` 로만 구분한다.
  *
  * 후보를 `is_parent = true` 로만 한정하는 것이 곧 순환 방지다 —
@@ -44,7 +44,7 @@ export function loadParents(): Promise<ParentOption[]> {
 
 /**
  * 이 업체를 묶고 있는 회사(부모)의 이름. 부모가 없으면 null.
- * 견적서의 수신처처럼 "사업장이 아니라 회사 이름" 이어야 하는 자리에 쓴다.
+ * 견적서의 수신처처럼 "개별 업체가 아니라 회사 이름" 이어야 하는 자리에 쓴다.
  * 캐시(loadParents)는 활성 부모만 담으므로 여기서는 id 로 곧장 읽는다.
  */
 export async function parentCompanyName(customerId: number): Promise<string | null> {
@@ -58,7 +58,7 @@ export async function parentCompanyName(customerId: number): Promise<string | nu
   return parent?.company_name?.trim() || null
 }
 
-/** 부모를 새로 만들거나 지운 뒤 부른다. 다음 호출에서 다시 읽는다. */
+/** 소속회사를 새로 만들거나 지운 뒤 부른다. 다음 호출에서 다시 읽는다. */
 export function invalidateParents(): void {
   cache = null
 }
@@ -70,13 +70,13 @@ export function invalidateParents(): void {
 export async function createParent(companyName: string): Promise<ParentOption> {
   const supabase = createClient()
   const name = companyName.trim()
-  if (!name) throw new Error('상위 업체명을 입력해주세요')
+  if (!name) throw new Error('소속회사명을 입력해주세요')
   const { data, error } = await supabase
     .from('customers')
     .insert([{ company_name: name, is_parent: true }])
     .select('customer_id, company_name')
     .single()
-  if (error || !data) throw error || new Error('상위 업체를 만들지 못했습니다')
+  if (error || !data) throw error || new Error('소속회사를 만들지 못했습니다')
   invalidateParents()
   return { customer_id: data.customer_id, company_name: data.company_name ?? name }
 }
@@ -137,7 +137,7 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, o
       onChange(made.customer_id)
       setQuery(''); setOpen(false)
     } catch (e) {
-      onError?.((e as Error).message || '상위 업체를 만들지 못했습니다')
+      onError?.((e as Error).message || '소속회사를 만들지 못했습니다')
     } finally {
       setCreating(false)
     }
@@ -148,7 +148,7 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, o
     return (
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <div style={{ ...fieldStyle, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: '#f9fafb' }}>
-          {picked ? picked.company_name : `상위 업체 #${value}`}
+          {picked ? picked.company_name : `소속회사 #${value}`}
         </div>
         <button type="button" disabled={disabled} onClick={() => { onChange(null); setQuery('') }} style={ghostBtn}>해제</button>
       </div>
@@ -162,7 +162,7 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, o
         disabled={disabled || creating}
         onChange={e => { setQuery(e.target.value); setOpen(true) }}
         onFocus={() => setOpen(true)}
-        placeholder="상위 업체 검색 (선택)"
+        placeholder="소속회사 검색 (선택)"
         style={fieldStyle}
       />
       {/* 모달 안에서 열려도 잘리지 않도록 포털로 띄운다 */}
@@ -191,7 +191,7 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, o
             onMouseEnter={e => { e.currentTarget.style.background = '#f5f5f5' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
           >
-            {creating ? '만드는 중...' : `「${query.trim()}」 새 상위 업체로 만들기`}
+            {creating ? '만드는 중...' : `「${query.trim()}」 새 소속회사로 만들기`}
           </div>
         )}
       </Popover>

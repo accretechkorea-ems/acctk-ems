@@ -434,7 +434,11 @@ export default function Dashboard80Page() {
                           <span style={{ color: '#d1d5db', flexShrink: 0 }}>·</span>
                           <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.owner}</span>
                           <span style={{ color: '#d1d5db', flexShrink: 0 }}>·</span>
-                          <span style={{ flexShrink: 0 }}>D-{v.daysLeft}</span>
+                          {/* 오늘 건은 D-0 대신 「오늘」. 오늘 가야 하는 일이라 흐린 회색에 묻히지 않게
+                              액센트로 낸다(만료 경고의 빨강과는 성격이 달라 DANGER 는 쓰지 않는다). */}
+                          <span style={{ flexShrink: 0, ...(v.daysLeft === 0 ? { color: '#234ea2', fontWeight: 700 } : null) }}>
+                            {v.daysLeft === 0 ? '오늘' : `D-${v.daysLeft}`}
+                          </span>
                         </span>
                       </div>
                     )

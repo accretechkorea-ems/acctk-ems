@@ -170,7 +170,7 @@ export default function AddCustomerModal({
               </select>
             </div>
 
-            {/* 상위 업체 — 같은 회사의 사업장이면 여기서 묶는다. 비워 두면 단독 업체가 된다. */}
+            {/* 소속회사 — 같은 회사에 속하면 여기서 묶는다. 비워 두면 단독 업체가 된다. */}
             <ParentPicker
               value={customerForm.parent_customer_id}
               onChange={id => setCustomerForm(prev => ({ ...prev, parent_customer_id: id }))}

@@ -96,7 +96,7 @@ const toggleCategory = (category: string) => {
     address: '',
     agency: '',
     status: '활성',
-    // 사업장을 묶는 상위 업체. 고르지 않으면 종전과 같이 단독 업체로 등록된다.
+    // 소속 업체를 묶는 소속회사. 고르지 않으면 종전과 같이 단독 업체로 등록된다.
     parent_customer_id: null as number | null,
   })
 

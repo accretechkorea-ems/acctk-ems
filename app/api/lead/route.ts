@@ -13,6 +13,7 @@ import {
   LEAD_NO_PREFIX, leadNoTag, CARD_MAX_BYTES, CARD_BUCKET,
 } from '@/lib/leadOptions'
 import { josa } from '@/lib/josa'
+import { parseDataUrlImage } from '@/lib/imageUpload'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -51,42 +52,13 @@ async function nextLeadNo(prefix: string): Promise<string> {
   return prefix + String(max + 1).padStart(3, '0')
 }
 
-/**
- * 명함 이미지 검증. 화면이 canvas 로 줄여 data URL 로 보내지만, 공개 라우트라
- * 화면을 거치지 않는 호출을 가정하고 여기서 다시 본다.
- *   · 선언된 MIME 만 믿지 않고 앞머리 바이트로 실제 형식을 확인한다
- *   · 크기 상한 (CARD_MAX_BYTES)
- * 파일명은 서버가 정한다 — 클라이언트가 보낸 이름은 쓰지 않는다(경로 조작·덮어쓰기 방지).
- */
+// 명함 이미지 검증은 공지 이미지와 같은 규칙이라 lib/imageUpload.ts 로 뺐다.
+// (검사 내용·오류 문구는 종전과 같다 — 상한과 이름만 넘겨준다.)
 type CardImage = { bytes: Buffer; ext: 'jpg' | 'png' | 'webp'; contentType: string }
 
-function parseCard(raw: unknown): { ok: true; card: CardImage | null } | { ok: false; error: string } {
-  if (raw == null || raw === '') return { ok: true, card: null }
-  if (typeof raw !== 'string') return { ok: false, error: '명함 이미지를 읽을 수 없습니다.' }
-
-  const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(raw)
-  if (!m) return { ok: false, error: '명함은 이미지 파일만 첨부할 수 있습니다.' }
-
-  let bytes: Buffer
-  try {
-    bytes = Buffer.from(m[2], 'base64')
-  } catch {
-    return { ok: false, error: '명함 이미지를 읽을 수 없습니다.' }
-  }
-  if (bytes.length === 0) return { ok: false, error: '명함 이미지를 읽을 수 없습니다.' }
-  if (bytes.length > CARD_MAX_BYTES) {
-    return { ok: false, error: `명함 이미지는 ${Math.floor(CARD_MAX_BYTES / (1024 * 1024))}MB 를 넘을 수 없습니다.` }
-  }
-
-  // 앞머리 바이트로 실제 형식을 본다. 선언된 MIME 과 다르면 거부한다.
-  const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
-  const isPng = bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
-  const isWebp = bytes.subarray(0, 4).toString('latin1') === 'RIFF' && bytes.subarray(8, 12).toString('latin1') === 'WEBP'
-  const actual = isJpeg ? 'image/jpeg' : isPng ? 'image/png' : isWebp ? 'image/webp' : null
-  if (!actual || actual !== m[1]) return { ok: false, error: '명함은 이미지 파일만 첨부할 수 있습니다.' }
-
-  const ext = isJpeg ? 'jpg' : isPng ? 'png' : 'webp'
-  return { ok: true, card: { bytes, ext, contentType: actual } }
+const parseCard = (raw: unknown): { ok: true; card: CardImage | null } | { ok: false; error: string } => {
+  const r = parseDataUrlImage(raw, CARD_MAX_BYTES, '명함')
+  return r.ok ? { ok: true, card: r.image } : r
 }
 
 /** 'YYYY-MM-DD' 인지, 그리고 실재하는 날짜인지(2026-02-30 같은 값 차단) 본다. */

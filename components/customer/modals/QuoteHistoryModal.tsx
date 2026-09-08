@@ -15,7 +15,7 @@ type Props = {
   /**
    * 회사(부모) 기준으로 열렸을 때만 채워진다.
    * 제목을 회사명으로 바꾸고 '구분' 열을 뺀다 — 직판·대리점은 '이 업체 기준' 이라야 뜻이 있는데,
-   * 형제 사업장 건까지 섞이면 기준이 없어져 표시가 틀리게 된다.
+   * 같은 회사의 다른 업체 건까지 섞이면 기준이 없어져 표시가 틀리게 된다.
    */
   family?: { name: string; siteCount: number } | null
 }
@@ -45,7 +45,7 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, f
           <div>
             <div style={{ fontSize: 20, fontWeight: 800, color: TEXT_PRIMARY, marginBottom: 4 }}>📋 거래 이력</div>
             <div style={{ fontSize: 13, color: TEXT_SECONDARY }}>
-              {family ? `${family.name} (사업장 ${family.siteCount}곳)` : customer?.company_name}
+              {family ? `${family.name} (소속 업체 ${family.siteCount}곳)` : customer?.company_name}
             </div>
           </div>
           <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>

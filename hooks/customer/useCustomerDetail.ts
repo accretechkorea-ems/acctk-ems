@@ -29,10 +29,10 @@ export function useCustomerDetail(customerId: number) {
   const [activities, setActivities] = useState<SalesActivity[]>([])
   const [opportunities, setOpportunities] = useState<SalesOpportunity[]>([])
   const [holdings, setHoldings] = useState<Holding[]>([])
-  // 이 업체가 어느 회사에 묶여 있으면(부모가 있으면) 형제 사업장의 견적까지 따로 담는다.
+  // 이 업체가 어느 회사에 묶여 있으면(부모가 있으면) 같은 회사 다른 업체의 견적까지 따로 담는다.
   // 요약의 건수·타임라인은 이 배열을 쓰지 않는다 — 거래 이력 모달에서만 쓴다.
   const [family, setFamily] = useState<{ name: string; siteCount: number; quotes: Quote[] } | null>(null)
-  // 반대로 이 업체가 부모면 소속 사업장 목록을 담는다(부모 상세는 이 목록만 보여준다).
+  // 반대로 이 업체가 부모면 소속 업체 목록을 담는다(부모 상세는 이 목록만 보여준다).
   const [childSites, setChildSites] = useState<{ customer_id: number; company_name: string | null }[]>([])
   const [engineers, setEngineers] = useState<Engineer[]>([])
   const [loading, setLoading] = useState(true)
@@ -42,7 +42,7 @@ export function useCustomerDetail(customerId: number) {
   // ── 데이터 페칭 ──
   // 반환값 = 상세를 읽어 화면에 반영했는지. 저장 후 성공 안내를 띄울지 판단하는 데 쓴다.
   /**
-   * 부모가 있으면 형제 사업장의 견적을, 자신이 부모면 소속 사업장 목록을 읽는다.
+   * 부모가 있으면 같은 회사 다른 업체의 견적을, 자신이 부모면 소속 업체 목록을 읽는다.
    * 둘 다 아니면 요청을 보내지 않는다 — 단독 업체의 화면은 종전과 완전히 같아야 한다.
    */
   const loadFamily = async (row: Customer) => {

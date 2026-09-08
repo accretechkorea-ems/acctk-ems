@@ -5,6 +5,13 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { canViewAdmin, isSuperAdmin } from '@/lib/permissions'
 import { INITIALS_TAKEN_MESSAGE, isInitialsTaken } from '@/lib/initials'
+import { invalidateParents } from '@/components/customer/ParentPicker'
+import { josa } from '@/lib/josa'
+import { downsizeImage } from '@/lib/leadCardImage'
+import {
+  NOTICE_MAX_IMAGES, NOTICE_TITLE_MAX, NOTICE_BODY_MAX,
+  clearDismiss, noticePhase, todayKST, type Notice, type NoticePhase,
+} from '@/lib/notices'
 import { withTeamPerm } from '@/lib/teamPerms'
 import AccessGate from '@/components/common/AccessGate'
 import { useOffices, selectableOffices, invalidateOffices, type Office } from '@/lib/offices'
@@ -48,6 +55,14 @@ type Engineer = {
   permission_level: string
   resigned_date: string | null
   office: string | null
+}
+
+/** 소속회사 한 줄 — 목록에 필요한 것만. childCount 는 살아있는 소속 업체 수다. */
+type ParentRow = {
+  customer_id: number
+  company_name: string
+  created_at: string | null
+  childCount: number
 }
 
 type SalesTarget = {
@@ -161,6 +176,32 @@ function AdminPageInner() {
 
   // 팀 관리
   const [showTeamModal, setShowTeamModal] = useState(false)
+
+  // ── 공지 관리 ──
+  // 목록 조회는 RLS(authenticated SELECT)로 직접 읽고, 쓰기는 전부 /api/notice 로 보낸다.
+  const [showNoticeModal, setShowNoticeModal] = useState(false)
+  const [notices, setNotices] = useState<Notice[]>([])
+  const [noticeLoading, setNoticeLoading] = useState(false)
+  const [noticeTab, setNoticeTab] = useState<NoticePhase>('active')
+  const [noticeSaving, setNoticeSaving] = useState(false)
+  // 작성/수정 폼. editing 이 null 이면 폼을 닫은 상태, 0 이면 새 공지다.
+  const [noticeEditing, setNoticeEditing] = useState<number | null>(null)
+  const [noticeForm, setNoticeForm] = useState({ title: '', body: '', starts_at: '', ends_at: '' })
+  // 이미지 — 이미 올라간 것은 URL, 새로 고른 것은 data URL 로 같은 배열에 담는다(배열 순서가 표시 순서).
+  const [noticeImages, setNoticeImages] = useState<string[]>([])
+  const noticeErr = useFieldErrors<'title' | 'starts_at' | 'ends_at'>()
+
+  // ── 소속회사 관리 ──
+  // 소속회사(customers.is_parent = true)는 여러 업체를 묶는 껍데기 행이라 주소·장비가 없다.
+  // 만들기만 하고 지울 수단이 없어 오타 행이 쌓이던 것을 여기서 정리한다.
+  const [showParentModal, setShowParentModal] = useState(false)
+  const [parentRows, setParentRows] = useState<ParentRow[]>([])
+  const [parentLoading, setParentLoading] = useState(false)
+  const [parentSearch, setParentSearch] = useState('')
+  const [parentOnlyEmpty, setParentOnlyEmpty] = useState(false)
+  const [parentBusy, setParentBusy] = useState<number | null>(null)
+  // 이름 수정 중인 행과 입력값. 한 번에 한 행만 고친다.
+  const [parentEditing, setParentEditing] = useState<{ id: number; name: string } | null>(null)
 
   // ── 사무실 관리 ──
   // 값은 offices 테이블이 정본이다. 직원 등록·수정의 사무실 드롭다운도 같은 목록을 쓴다.
@@ -573,6 +614,192 @@ function AdminPageInner() {
   }
 
 
+  // ── 공지 관리 ──────────────────────────────────────────────────────────────
+  const fetchNotices = async () => {
+    setNoticeLoading(true)
+    const { data, error } = await supabase
+      .from('notices')
+      .select('notice_id, title, body, image_urls, starts_at, ends_at, created_at')
+      .order('notice_id', { ascending: false })
+    if (error) console.error('[admin] 공지 조회 실패', error)
+    setNotices((data as Notice[]) ?? [])
+    setNoticeLoading(false)
+  }
+
+  const openNoticeForm = (n: Notice | null) => {
+    noticeErr.setErrors({})
+    if (n) {
+      setNoticeEditing(n.notice_id)
+      setNoticeForm({ title: n.title, body: n.body ?? '', starts_at: n.starts_at, ends_at: n.ends_at })
+      setNoticeImages((n.image_urls ?? []).filter(Boolean))
+    } else {
+      const today = todayKST()
+      setNoticeEditing(0)
+      setNoticeForm({ title: '', body: '', starts_at: today, ends_at: today })
+      setNoticeImages([])
+    }
+  }
+
+  /** 고른 파일을 화면에서 줄여 배열에 담는다. 원본은 서버로 보내지 않는다(명함과 같은 방식). */
+  const addNoticeImages = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    const room = NOTICE_MAX_IMAGES - noticeImages.length
+    if (room <= 0) { toast.error(`이미지는 최대 ${NOTICE_MAX_IMAGES}장까지 올릴 수 있습니다`); return }
+    const picked = Array.from(files).slice(0, room)
+    if (files.length > room) toast.error(`이미지는 최대 ${NOTICE_MAX_IMAGES}장까지 올릴 수 있습니다`)
+    const added: string[] = []
+    for (const f of picked) {
+      if (!f.type.startsWith('image/')) { toast.error('이미지 파일만 올릴 수 있습니다'); continue }
+      try {
+        const r = await downsizeImage(f)
+        added.push(r.dataUrl)
+      } catch (e) {
+        console.error('[notice] 이미지 변환 실패', e)
+        toast.error('이미지를 처리하지 못했습니다')
+      }
+    }
+    if (added.length) setNoticeImages(prev => [...prev, ...added])
+  }
+
+  const moveNoticeImage = (from: number, to: number) =>
+    setNoticeImages(prev => {
+      if (to < 0 || to >= prev.length) return prev
+      const next = [...prev]
+      const [x] = next.splice(from, 1)
+      next.splice(to, 0, x)
+      return next
+    })
+
+  const saveNotice = async () => {
+    const ok = noticeErr.validate({
+      title: noticeForm.title.trim() ? null : '제목을 입력해주세요',
+      starts_at: noticeForm.starts_at ? null : '게시 시작일을 선택해주세요',
+      ends_at: !noticeForm.ends_at ? '게시 종료일을 선택해주세요'
+        : noticeForm.ends_at < noticeForm.starts_at ? '종료일이 시작일보다 앞설 수 없습니다' : null,
+    })
+    if (!ok) return
+    setNoticeSaving(true)
+    const res = await fetch('/api/notice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: noticeEditing ? 'update' : 'create',
+        noticeId: noticeEditing || undefined,
+        title: noticeForm.title.trim(),
+        body: noticeForm.body,
+        starts_at: noticeForm.starts_at,
+        ends_at: noticeForm.ends_at,
+        images: noticeImages,
+      }),
+    })
+    const json = await res.json().catch(() => ({}))
+    setNoticeSaving(false)
+    if (!res.ok || json.error) { toast.error(json.error ?? `서버 오류 (${res.status})`); return }
+    toast.success(noticeEditing ? '공지를 수정했습니다' : '공지를 등록했습니다')
+    setNoticeEditing(null)
+    fetchNotices()
+  }
+
+  const deleteNotice = async (n: Notice) => {
+    const ok = await confirmDialog({
+      title: '공지 삭제',
+      message: `'${n.title}'${josa(n.title, '을')} 삭제하시겠습니까?\n첨부한 이미지도 함께 지워지며 되돌릴 수 없습니다.`,
+      confirmText: '삭제', variant: 'danger',
+    })
+    if (!ok) return
+    const res = await fetch('/api/notice', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete', noticeId: n.notice_id }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || json.error) { toast.error(json.error ?? `서버 오류 (${res.status})`); return }
+    // 이 브라우저에 남아 있던 「보지 않기」 기록도 함께 치운다.
+    clearDismiss(n.notice_id)
+    toast.success('공지를 삭제했습니다')
+    if (noticeEditing === n.notice_id) setNoticeEditing(null)
+    fetchNotices()
+  }
+
+  const visibleNotices = notices.filter(n => noticePhase(n) === noticeTab)
+
+  // ── 소속회사 관리 ──────────────────────────────────────────────────────────
+  // 소속 업체 수는 자식 행을 한 번에 읽어 화면에서 센다. 소속회사가 수백 개라
+  // 회사마다 count 질의를 날리면 요청이 그만큼 늘어난다(삭제 직전 판정은 서버가 다시 한다).
+  const fetchParents = async () => {
+    setParentLoading(true)
+    const [{ data: parents, error: pErr }, { data: children, error: cErr }] = await Promise.all([
+      supabase.from('customers')
+        .select('customer_id, company_name, created_at')
+        .eq('is_parent', true).is('deleted_at', null),
+      supabase.from('customers')
+        .select('parent_customer_id')
+        .not('parent_customer_id', 'is', null).is('deleted_at', null),
+    ])
+    if (pErr || cErr) console.error('[admin] 소속회사 조회 실패', pErr ?? cErr)
+    const count: Record<number, number> = {}
+    for (const c of (children ?? []) as { parent_customer_id: number }[]) {
+      count[c.parent_customer_id] = (count[c.parent_customer_id] ?? 0) + 1
+    }
+    setParentRows(((parents ?? []) as { customer_id: number; company_name: string | null; created_at: string | null }[])
+      .map(p => ({
+        customer_id: p.customer_id,
+        company_name: p.company_name ?? '',
+        created_at: p.created_at,
+        childCount: count[p.customer_id] ?? 0,
+      })))
+    setParentLoading(false)
+  }
+
+  const callParentRoute = async (action: 'rename' | 'delete', parentId: number, name?: string) => {
+    const res = await fetch('/api/parent-company', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, parentId, name }),
+    })
+    const json = await res.json().catch(() => ({}))
+    return res.ok && !json.error ? { ok: true as const } : { ok: false as const, error: json.error ?? `서버 오류 (${res.status})` }
+  }
+
+  const handleParentRename = async () => {
+    if (!parentEditing) return
+    const name = parentEditing.name.trim()
+    if (!name) { toast.error('소속회사명을 입력해주세요'); return }
+    setParentBusy(parentEditing.id)
+    const r = await callParentRoute('rename', parentEditing.id, name)
+    setParentBusy(null)
+    if (!r.ok) { toast.error(r.error); return }
+    toast.success('소속회사명을 수정했습니다')
+    setParentEditing(null)
+    // 이름이 바뀌면 ParentPicker 의 캐시도 옛 이름을 들고 있다.
+    invalidateParents()
+    fetchParents()
+  }
+
+  const handleParentDelete = async (row: ParentRow) => {
+    // 화면에서 이미 0곳인 것만 버튼이 열리지만, 최종 판정은 라우트가 다시 센다.
+    const ok = await confirmDialog({
+      title: '소속회사 삭제',
+      message: `'${row.company_name}'${josa(row.company_name, '을')} 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`,
+      confirmText: '삭제', variant: 'danger',
+    })
+    if (!ok) return
+    setParentBusy(row.customer_id)
+    const r = await callParentRoute('delete', row.customer_id)
+    setParentBusy(null)
+    if (!r.ok) { toast.error(r.error); fetchParents(); return }
+    toast.success(`${row.company_name} 소속회사를 삭제했습니다`)
+    invalidateParents()
+    fetchParents()
+  }
+
+  // 정리가 필요한 것(소속 업체 0곳)을 맨 위로, 그다음 이름순.
+  const visibleParents = parentRows
+    .filter(p => !parentOnlyEmpty || p.childCount === 0)
+    .filter(p => !parentSearch.trim() || p.company_name.toLowerCase().includes(parentSearch.trim().toLowerCase()))
+    .sort((a, b) =>
+      (a.childCount === 0 ? 0 : 1) - (b.childCount === 0 ? 0 : 1) ||
+      a.company_name.localeCompare(b.company_name, 'ko'))
+
   // ── 팀 관리 ────────────────────────────────────────────────────────────────
   const fetchTeams = async () => {
     setTeamLoading(true)
@@ -874,19 +1101,31 @@ function AdminPageInner() {
 
   return (
     <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '32px 24px 24px' }}>
-      <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      {/* 카드 그리드 폭 — 카드가 10개라 3열이면 4행이 되어 스크롤이 길다.
+          열 수를 정하는 것은 아래 auto-fill 이 아니라 이 컨테이너의 최대 폭이다
+          (900px 로는 260px 카드가 3개까지만 들어간다).
+          넓은 화면에서만 1216px 로 늘려 4열이 되게 한다 — 카드 폭은 3열 289px,
+          4열 292px 로 사실상 그대로다. 이 컨테이너 안에는 카드 그리드밖에 없고
+          모달은 전부 바깥 형제라 폭 변화의 영향을 받지 않는다. */}
+      <style>{`
+        .admin-cards { max-width: 900px; margin: 0 auto; }
+        @media (min-width: 1400px) { .admin-cards { max-width: 1216px; } }
+      `}</style>
+      <div className="admin-cards">
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
 
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}` }}>
+          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>🎯</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>목표 금액 관리</div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>연간 목표 금액을 개인별 / 팀별로 설정하고 수정합니다.</div>
+            {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
+            <div style={{ flex: 1 }} />
             <button style={{ width: '100%', padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
               onClick={() => { setShowTargetModal(true); setEditingTarget(null); fetchTargetData() }}>관리하기</button>
           </div>
 
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}` }}>
+          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>🗑️</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <div style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>견적서 삭제</div>
@@ -898,14 +1137,18 @@ function AdminPageInner() {
               )}
             </div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>실수로 저장된 견적서를 조회하고 삭제합니다.</div>
+            {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
+            <div style={{ flex: 1 }} />
             <button style={{ width: '100%', padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
               onClick={() => { setShowQuoteModal(true); setSearchQuery(''); fetchQuotes() }}>관리하기</button>
           </div>
 
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}` }}>
+          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>👥</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>직원 관리</div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>직원 등록, 정보 수정, 관리자 권한, 계정 삭제를 관리합니다.</div>
+            {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
+            <div style={{ flex: 1 }} />
             <button
               onClick={() => { setShowEngineerModal(true); fetchEngineers(); fetchTeams() }}
               disabled={!isSuperAdmin(currentEngineer)}
@@ -914,10 +1157,12 @@ function AdminPageInner() {
             </button>
           </div>
 
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}` }}>
+          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>🏢</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>사무실 관리</div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>사무실 주소와 좌표를 관리합니다. 길찾기 출발지·동선 지도·직원 소속이 이 값을 함께 씁니다.</div>
+            {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
+            <div style={{ flex: 1 }} />
             <button
               onClick={() => { setShowOfficeModal(true); fetchOffices() }}
               disabled={!isSuperAdmin(currentEngineer)}
@@ -926,10 +1171,12 @@ function AdminPageInner() {
             </button>
           </div>
 
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}` }}>
+          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>🏷️</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>팀 관리</div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>팀을 추가하거나 삭제합니다. 직원 등록·수정 시 팀 목록에 즉시 반영됩니다.</div>
+            {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
+            <div style={{ flex: 1 }} />
             <button
               onClick={() => { setShowTeamModal(true); fetchTeams() }}
               disabled={!isSuperAdmin(currentEngineer)}
@@ -938,10 +1185,40 @@ function AdminPageInner() {
             </button>
           </div>
 
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}` }}>
+          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>📢</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>공지 관리</div>
+            <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>로그인 후 팝업으로 뜨는 공지를 작성하고 게시 기간을 관리합니다.</div>
+            {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
+            <div style={{ flex: 1 }} />
+            <button
+              onClick={() => { setShowNoticeModal(true); setNoticeTab('active'); setNoticeEditing(null); fetchNotices() }}
+              disabled={!isSuperAdmin(currentEngineer)}
+              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
+              관리하기
+            </button>
+          </div>
+
+          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>🏬</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>소속회사 관리</div>
+            <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>여러 업체를 묶는 회사 단위를 관리합니다. 이름을 고치거나, 소속 업체가 없는 회사를 정리합니다.</div>
+            {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
+            <div style={{ flex: 1 }} />
+            <button
+              onClick={() => { setShowParentModal(true); setParentSearch(''); setParentOnlyEmpty(false); setParentEditing(null); fetchParents() }}
+              disabled={!isSuperAdmin(currentEngineer)}
+              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
+              관리하기
+            </button>
+          </div>
+
+          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>🧾</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>부대비용 단가</div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>견적서 서비스비의 부대비용 표준 항목과 단가를 관리합니다.</div>
+            {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
+            <div style={{ flex: 1 }} />
             <button
               onClick={() => { setShowPresetModal(true); setEditingPreset(null); setNewPreset({ itemName: '', unitPrice: '' }); fetchPresets() }}
               disabled={!isSuperAdmin(currentEngineer)}
@@ -950,10 +1227,12 @@ function AdminPageInner() {
             </button>
           </div>
 
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}` }}>
+          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>📊</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>가격표 업로드</div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>엑셀 파일을 업로드해서 견적서 가격표를 최신 버전으로 업데이트합니다.</div>
+            {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
+            <div style={{ flex: 1 }} />
             <button disabled style={{ width: '100%', padding: '10px', background: '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'not-allowed' }}>업로드하기</button>
             <div style={{ fontSize: 11, color: GRAY, marginTop: 6, textAlign: 'center' }}>준비 중</div>
           </div>
@@ -1499,6 +1778,261 @@ function AdminPageInner() {
               })}
             </div>
             <div style={{ marginTop: 12, fontSize: 11, color: GRAY }}>* 항목명이나 단가를 클릭하면 바로 수정할 수 있습니다. 단가를 바꿔도 이미 저장된 견적서 금액은 변하지 않습니다</div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 공지 관리 모달 ── */}
+      {showNoticeModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 760, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>📢 공지 관리</div>
+              <button onClick={() => { setShowNoticeModal(false); setNoticeEditing(null) }}
+                style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
+            </div>
+
+            {noticeEditing === null ? (
+              <>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+                  {/* 기간이 지나도 지우지 않는다 — 탭으로만 나눈다. 시작 전 건은 손볼 대상이라 따로 뺀다. */}
+                  <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 8, padding: 3, gap: 1 }}>
+                    {([
+                      { key: 'active' as const, label: '게시중' },
+                      { key: 'upcoming' as const, label: '시작 전' },
+                      { key: 'ended' as const, label: '종료됨' },
+                    ]).map(t => (
+                      <button key={t.key} onClick={() => setNoticeTab(t.key)}
+                        style={{ padding: '5px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: noticeTab === t.key ? '#fff' : 'transparent', color: noticeTab === t.key ? TEXT : '#9ca3af' }}>
+                        {t.label} {notices.filter(n => noticePhase(n) === t.key).length}
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={() => openNoticeForm(null)}
+                    style={{ marginLeft: 'auto', padding: '7px 14px', background: BLUE, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+                    + 새 공지
+                  </button>
+                </div>
+
+                <div style={{ overflowY: 'auto', flex: 1, border: `1px solid ${BORDER}`, borderRadius: 10 }}>
+                  {noticeLoading ? (
+                    <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>불러오는 중...</div>
+                  ) : visibleNotices.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>공지가 없습니다</div>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead style={{ position: 'sticky', top: 0, background: CARD_BG, zIndex: Z.thead }}>
+                        <tr style={{ borderBottom: `2px solid ${BORDER}` }}>
+                          {['제목', '게시 기간', '이미지', '작성일', '관리'].map(h => (
+                            <th key={h} style={{ padding: '9px 12px', textAlign: 'left', color: GRAY, fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleNotices.map(n => (
+                          <tr key={n.notice_id} style={{ borderBottom: `1px solid ${BORDER}` }}>
+                            <td style={{ padding: '9px 12px', color: TEXT, fontWeight: 600, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.title}</td>
+                            <td style={{ padding: '9px 12px', whiteSpace: 'nowrap', color: GRAY }}>{n.starts_at} ~ {n.ends_at}</td>
+                            <td style={{ padding: '9px 12px', whiteSpace: 'nowrap', color: GRAY }}>{(n.image_urls ?? []).length}장</td>
+                            <td style={{ padding: '9px 12px', whiteSpace: 'nowrap', color: GRAY }}>{n.created_at?.slice(0, 10)}</td>
+                            <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <button onClick={() => openNoticeForm(n)}
+                                  style={{ padding: '4px 10px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>수정</button>
+                                <button onClick={() => deleteNotice(n)}
+                                  style={{ padding: '4px 10px', background: DANGER, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>삭제</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </>
+            ) : (
+              /* 작성·수정 폼 — 순서 고정: 제목 → 이미지 → 본문 → 게시 기간 */
+              <div style={{ overflowY: 'auto', flex: 1, display: 'grid', gap: 14 }}>
+                <div>
+                  <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>제목 *</div>
+                  <input value={noticeForm.title} maxLength={NOTICE_TITLE_MAX}
+                    onChange={e => { setNoticeForm(p => ({ ...p, title: e.target.value })); noticeErr.clearError('title') }}
+                    placeholder="공지 제목"
+                    style={noticeErr.errors.title ? { ...inp, border: errBorder } : inp} />
+                  <FieldError message={noticeErr.errors.title} />
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>이미지 (최대 {NOTICE_MAX_IMAGES}장)</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                    {noticeImages.map((src, i) => (
+                      <div key={i} style={{ width: 110, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 6, display: 'grid', gap: 5 }}>
+                        {/* 미리보기 — data URL 이거나 스토리지 공개 URL 이라 next/image 를 쓰지 않는다 */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={src} alt={`이미지 ${i + 1}`} style={{ width: '100%', height: 70, objectFit: 'cover', borderRadius: 4, display: 'block' }} />
+                        <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
+                          <button onClick={() => moveNoticeImage(i, i - 1)} disabled={i === 0} title="앞으로"
+                            style={{ padding: '2px 6px', background: '#f3f4f6', border: 'none', borderRadius: 4, cursor: i === 0 ? 'not-allowed' : 'pointer', fontSize: 11, color: GRAY }}>←</button>
+                          <button onClick={() => moveNoticeImage(i, i + 1)} disabled={i === noticeImages.length - 1} title="뒤로"
+                            style={{ padding: '2px 6px', background: '#f3f4f6', border: 'none', borderRadius: 4, cursor: i === noticeImages.length - 1 ? 'not-allowed' : 'pointer', fontSize: 11, color: GRAY }}>→</button>
+                          <button onClick={() => setNoticeImages(prev => prev.filter((_, k) => k !== i))} title="삭제"
+                            style={{ padding: '2px 6px', background: '#f3f4f6', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, color: DANGER }}>✕</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <input type="file" accept="image/*" multiple
+                    onChange={e => { addNoticeImages(e.target.files); e.target.value = '' }}
+                    disabled={noticeImages.length >= NOTICE_MAX_IMAGES}
+                    style={{ fontSize: 12, color: GRAY }} />
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>본문</div>
+                  <textarea value={noticeForm.body} maxLength={NOTICE_BODY_MAX} rows={5}
+                    onChange={e => setNoticeForm(p => ({ ...p, body: e.target.value }))}
+                    placeholder="줄바꿈은 그대로 표시됩니다"
+                    style={{ ...inp, width: '100%', resize: 'vertical', lineHeight: 1.7 }} />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>게시 시작일 *</div>
+                    <input type="date" value={noticeForm.starts_at}
+                      onChange={e => { setNoticeForm(p => ({ ...p, starts_at: e.target.value })); noticeErr.clearError('starts_at') }}
+                      style={{ ...(noticeErr.errors.starts_at ? { ...inp, border: errBorder } : inp), colorScheme: 'light' }} />
+                    <FieldError message={noticeErr.errors.starts_at} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>게시 종료일 *</div>
+                    <input type="date" value={noticeForm.ends_at}
+                      onChange={e => { setNoticeForm(p => ({ ...p, ends_at: e.target.value })); noticeErr.clearError('ends_at') }}
+                      style={{ ...(noticeErr.errors.ends_at ? { ...inp, border: errBorder } : inp), colorScheme: 'light' }} />
+                    <FieldError message={noticeErr.errors.ends_at} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                  <button onClick={() => setNoticeEditing(null)} disabled={noticeSaving}
+                    style={{ flex: 1, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: GRAY }}>취소</button>
+                  <button onClick={saveNotice} disabled={noticeSaving}
+                    style={{ flex: 1, padding: 10, background: BLUE, color: '#fff', border: 'none', borderRadius: 8, cursor: noticeSaving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 13, opacity: noticeSaving ? 0.7 : 1 }}>
+                    {noticeSaving ? '저장 중...' : noticeEditing ? '수정' : '등록'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── 소속회사 관리 모달 ── */}
+      {showParentModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 720, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🏬 소속회사 관리</div>
+              <button onClick={() => { setShowParentModal(false); setParentEditing(null) }}
+                style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+              <input value={parentSearch} onChange={e => setParentSearch(e.target.value)}
+                placeholder="소속회사명 검색" style={{ ...inp, width: 220 }} />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                <input type="checkbox" checked={parentOnlyEmpty} onChange={e => setParentOnlyEmpty(e.target.checked)}
+                  style={{ width: 14, height: 14, cursor: 'pointer', accentColor: BLUE }} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: parentOnlyEmpty ? BLUE : GRAY }}>소속 업체 없음만 보기</span>
+              </label>
+              <span style={{ marginLeft: 'auto', fontSize: 12, color: GRAY }}>
+                {visibleParents.length}개 / 전체 {parentRows.length}개
+              </span>
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1, border: `1px solid ${BORDER}`, borderRadius: 10 }}>
+              {parentLoading ? (
+                <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>불러오는 중...</div>
+              ) : visibleParents.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>소속회사가 없습니다</div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead style={{ position: 'sticky', top: 0, background: CARD_BG, zIndex: Z.thead }}>
+                    <tr style={{ borderBottom: `2px solid ${BORDER}` }}>
+                      {['소속회사', '소속 업체', '등록일', '관리'].map(h => (
+                        <th key={h} style={{ padding: '9px 12px', textAlign: 'left', color: GRAY, fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleParents.map(p => {
+                      const editing = parentEditing?.id === p.customer_id
+                      const busy = parentBusy === p.customer_id
+                      return (
+                        <tr key={p.customer_id} style={{ borderBottom: `1px solid ${BORDER}` }}>
+                          <td style={{ padding: '9px 12px' }}>
+                            {editing ? (
+                              <input
+                                autoFocus
+                                value={parentEditing.name}
+                                onChange={e => setParentEditing({ id: p.customer_id, name: e.target.value })}
+                                onKeyDown={e => { if (e.key === 'Enter') handleParentRename(); if (e.key === 'Escape') setParentEditing(null) }}
+                                style={{ ...inp, width: '100%' }}
+                              />
+                            ) : (
+                              <span style={{ color: TEXT, fontWeight: 600 }}>{p.company_name}</span>
+                            )}
+                          </td>
+                          {/* 0곳이면 정리 대상이라는 뜻이라 눈에 띄게 둔다 */}
+                          <td style={{ padding: '9px 12px', whiteSpace: 'nowrap', color: p.childCount === 0 ? GRAY : TEXT, fontWeight: p.childCount === 0 ? 400 : 700 }}>
+                            {p.childCount === 0 ? '없음' : `${p.childCount}곳`}
+                          </td>
+                          <td style={{ padding: '9px 12px', whiteSpace: 'nowrap', color: GRAY }}>{p.created_at?.slice(0, 10) ?? '-'}</td>
+                          <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              {editing ? (
+                                <>
+                                  <button onClick={handleParentRename} disabled={busy}
+                                    style={{ padding: '4px 10px', background: BLUE, color: '#fff', border: 'none', borderRadius: 6, cursor: busy ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700 }}>
+                                    {busy ? '저장 중...' : '저장'}
+                                  </button>
+                                  <button onClick={() => setParentEditing(null)} disabled={busy}
+                                    style={{ padding: '4px 10px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+                                    취소
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button onClick={() => setParentEditing({ id: p.customer_id, name: p.company_name })}
+                                    style={{ padding: '4px 10px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+                                    이름 수정
+                                  </button>
+                                  {/* 소속 업체가 있으면 지울 수 없다 — 지우면 그 업체들의 연결이 끊긴다 */}
+                                  <button
+                                    onClick={() => handleParentDelete(p)}
+                                    disabled={p.childCount > 0 || busy}
+                                    title={p.childCount > 0 ? `소속 업체 ${p.childCount}곳이 연결되어 있습니다` : '삭제'}
+                                    style={{
+                                      padding: '4px 10px', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700,
+                                      background: p.childCount > 0 ? '#f3f4f6' : DANGER,
+                                      color: p.childCount > 0 ? '#9ca3af' : '#fff',
+                                      cursor: p.childCount > 0 || busy ? 'not-allowed' : 'pointer',
+                                    }}>
+                                    {busy ? '처리 중...' : '삭제'}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: GRAY, marginTop: 10, lineHeight: 1.6 }}>
+              소속 업체가 연결된 회사는 삭제할 수 없습니다. 업체 쪽에서 소속회사를 해제한 뒤 지워주세요.
+            </div>
           </div>
         </div>
       )}

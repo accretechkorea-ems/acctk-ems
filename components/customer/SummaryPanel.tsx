@@ -229,7 +229,7 @@ export default function SummaryPanel({
             직판 {ch.direct} · 대리점 {ch.dealer}
           </div>
         )}
-        {/* 같은 회사의 다른 사업장까지 합친 건수. 위의 「N건」은 이 사업장 기준 그대로다. */}
+        {/* 같은 회사의 다른 업체까지 합친 건수. 위의 「N건」은 이 업체 기준 그대로다. */}
         {family && family.quoteCount > 0 && (
           <button
             onClick={onFamilyQuoteHistoryOpen}

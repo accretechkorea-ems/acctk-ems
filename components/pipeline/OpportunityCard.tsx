@@ -50,7 +50,7 @@ export default function OpportunityCard({ opp, lastActivity, canEdit, onOpen, on
           onClick={onOpen}
           style={{ flex: 1, minWidth: 0, textAlign: 'left', padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}
         >
-          {/* 업체명 — 사업장 구분이 잘리지 않도록 2줄까지 허용 */}
+          {/* 업체명 — 이름 뒤의 구분 표기(측정실·공장 등)가 잘리지 않도록 2줄까지 허용 */}
           <div
             title={opp.customers?.company_name ?? '-'}
             style={{

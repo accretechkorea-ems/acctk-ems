@@ -4,7 +4,7 @@ export type Customer = {
   address: string | null
   status: string | null
   agency: string | null
-  // 사업장을 묶는 상위 업체. 상세는 select(*) 로 읽으므로 값이 들어온다.
+  // 소속 업체를 묶는 소속회사. 상세는 select(*) 로 읽으므로 값이 들어온다.
   // 목록·검색용 조회는 이 컬럼을 가져오지 않으므로 선택 속성으로 둔다.
   parent_customer_id?: number | null
   is_parent?: boolean | null

@@ -31,7 +31,7 @@ export function useCustomerCrud({ customer, fetchDetail }: Args) {
     // 사용자 검증(업체명/주소)은 CustomerEditModal 에서 인라인으로 처리한다.
     setIsSavingCustomerEdit(true)
     try {
-      // 주소를 그대로 두고 다른 값만 고친 경우(상위 업체 변경 등)에는 좌표를 다시 구하지 않는다.
+      // 주소를 그대로 두고 다른 값만 고친 경우(소속회사 변경 등)에는 좌표를 다시 구하지 않는다.
       // 좌표는 주소에서만 나오는 값이라, 주소가 같으면 결과도 같다 — 괜히 외부 호출을 하고
       // 지오코딩이 실패하면 저장 자체가 막힌다.
       const addressChanged = form.address.trim() !== (customer.address ?? '').trim()

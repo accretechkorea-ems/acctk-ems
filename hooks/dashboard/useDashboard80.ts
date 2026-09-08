@@ -50,7 +50,7 @@ export type ExpiringQuote = {
 // 어느 쪽도 "1개월 안에 답을 받아야 하는" 상태가 아니다.
 const EXPIRY_TARGET_STATUS = '견적중'
 
-/** 다가오는 일정 한 칸 — 아직 오지 않은 방문 예정. */
+/** 다가오는 일정 한 칸 — 오늘 이후의 방문 예정. */
 export type UpcomingVisit = {
   serviceId: number
   visitDate: string      // YYYY-MM-DD
@@ -58,7 +58,7 @@ export type UpcomingVisit = {
   device: string         // 장비명(없으면 장비 미지정)
   serviceType: string    // 서비스 유형(없으면 유형 미정)
   owner: string          // 담당자(visitor 스냅샷)
-  daysLeft: number       // 오늘로부터 남은 날 (1 이상 — 오늘 건은 목록에 넣지 않는다)
+  daysLeft: number       // 오늘로부터 남은 날 (0 이상 — 0 이면 오늘 방문)
 }
 
 export type UrgentKind = '홀딩' | '정체' | '마감'
@@ -270,11 +270,13 @@ export function useDashboard80() {
         supabase.from('quotes')
           .select('quote_id, quote_number, quote_date, customers!quotes_customer_id_fkey(company_name)')
           .eq('status', EXPIRY_TARGET_STATUS),
-        // 다가오는 일정 — 오늘보다 뒤에 잡힌 방문만. gt 라서 오늘(D-0)은 들어오지 않는다.
-        // 기간 상한은 두지 않는다. 예정 건은 몇 건뿐이라 전부 받아 헤더 건수까지 정확히 낸다.
+        // 다가오는 일정 — 오늘 것부터. gte 라서 당일 방문도 남는다
+        // (레포트를 미리 쓰는 이유가 잊지 않으려는 것인데, 정작 당일에 목록에서 사라졌었다).
+        // 지난 날짜는 그대로 빠지고, 기간 상한은 두지 않는다 —
+        // 예정 건은 몇 건뿐이라 전부 받아 헤더 건수까지 정확히 낸다.
         supabase.from('service_history')
           .select('service_id, visit_date, service_type, visitor, customers(company_name), devices(device_name, device_name2)')
-          .gt('visit_date', upcomingFrom)
+          .gte('visit_date', upcomingFrom)
           .order('visit_date').order('service_id'),
       ])
       if (!alive.current) return false
