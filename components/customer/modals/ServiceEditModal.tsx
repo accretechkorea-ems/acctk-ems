@@ -34,7 +34,9 @@ const areaStyle: CSSProperties = {
   resize: 'vertical', lineHeight: 1.5,
 }
 // 작업시간 스테퍼 UI 스타일 (계산 로직은 @/lib/workHours 공용)
-const stepBtnStyle: CSSProperties = { width: 30, height: 30, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 13, fontWeight: 700, flexShrink: 0 }
+// 크기(width·height)는 .svc-step 에 있다 — 모바일에서만 키워야 해서 미디어 쿼리가 필요하고,
+// 인라인 스타일이 남아 있으면 그 쿼리를 이기지 못한다.
+const stepBtnStyle: CSSProperties = { border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 13, fontWeight: 700, flexShrink: 0 }
 const timeBoxStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 4, background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, padding: '0 6px', height: 44, boxSizing: 'border-box' }
 
 export default function ServiceEditModal({ service, contacts, engineers, isSaving, onClose, onSave, onDelete, onOpenReport, onDeleteReport }: Props) {
@@ -112,6 +114,30 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
           display: 'flex', flexDirection: 'column',
         }}
       >
+        {/* 좁은 화면(768px 미만) 배치. 768px 이상은 기존과 동일한 2열·3열 그대로다.
+            인라인 스타일로는 미디어 쿼리를 쓸 수 없어 이 두 줄만 클래스로 뺐다. */}
+        <style>{`
+          /* 시간 스테퍼 화살표 — PC 는 30×30, 좁은 화면에서는 손가락으로 누를 수 있게 넓힌다.
+             상자 높이(44)는 건드리지 않으므로 세로는 상자 안쪽(44 − 테두리 2 = 42)을 꽉 채운다. */
+          .svc-step { width: 30px; height: 30px; }
+          @media (max-width: 767px) { .svc-step { width: 44px; height: 100%; } }
+          .svc-row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+          .svc-row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+          @media (max-width: 767px) {
+            /* 고객 담당자 · 방문일자 — 각각 한 줄 전체 */
+            .svc-row2 { grid-template-columns: minmax(0, 1fr); }
+            /* 유무상은 한 줄 전체, 시작·종료시간은 그 아래 두 칸 */
+            .svc-row3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+            .svc-row3 > :first-child { grid-column: 1 / -1; }
+          }
+          /* 더 좁아지면 시작·종료시간도 각각 한 줄. 나란히 두면 칸이 121px 까지 줄어
+             「작업시간 8h (점심 1h 제외)」(글자 폭 136px)가 두 줄로 접힌다.
+             390px 은 칸 156px 로 한 줄에 들어가므로 그대로 나란히 둔다. */
+          @media (max-width: 379px) {
+            .svc-row3 { grid-template-columns: minmax(0, 1fr); }
+            .svc-row3 > :first-child { grid-column: auto; }
+          }
+        `}</style>
         {/* 헤더 — 고정 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', flexShrink: 0, borderBottom: '1px solid #ebebeb' }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>서비스 기록 수정</div>
@@ -160,7 +186,7 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 12 }}>
+          <div className="svc-row2">
             <div>
               <label style={labelStyle}>고객 담당자</label>
               <select value={form.contact_id ?? ''} onChange={(e) => { setForm(p => ({ ...p, contact_id: e.target.value ? Number(e.target.value) : null })); clearError('contact_id') }} style={errors.contact_id ? { ...fieldStyle, border: errBorder } : fieldStyle}>
@@ -176,7 +202,7 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
+          <div className="svc-row3">
             {/* 유무상 */}
             <div>
               <label style={labelStyle}>유무상</label>
@@ -191,9 +217,9 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
             <div>
               <label style={labelStyle}>시작시간</label>
               <div style={timeBoxStyle}>
-                <button type="button" onClick={() => setForm(p => ({ ...p, start_time: stepTime(p.start_time, -30) }))} style={stepBtnStyle}>▼</button>
+                <button type="button" onClick={() => setForm(p => ({ ...p, start_time: stepTime(p.start_time, -30) }))} className="svc-step" style={stepBtnStyle}>▼</button>
                 <span style={{ flex: 1, textAlign: 'center', fontWeight: 700, fontSize: 16 }}>{form.start_time}</span>
-                <button type="button" onClick={() => setForm(p => ({ ...p, start_time: stepTime(p.start_time, 30) }))} style={stepBtnStyle}>▲</button>
+                <button type="button" onClick={() => setForm(p => ({ ...p, start_time: stepTime(p.start_time, 30) }))} className="svc-step" style={stepBtnStyle}>▲</button>
               </div>
             </div>
             {/* 종료시간 (+ 안내 팝오버) */}
@@ -222,9 +248,9 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
                 </div>
               </div>
               <div style={timeBoxStyle}>
-                <button type="button" onClick={() => setForm(p => ({ ...p, end_time: stepTime(p.end_time, -30) }))} style={stepBtnStyle}>▼</button>
+                <button type="button" onClick={() => setForm(p => ({ ...p, end_time: stepTime(p.end_time, -30) }))} className="svc-step" style={stepBtnStyle}>▼</button>
                 <span style={{ flex: 1, textAlign: 'center', fontWeight: 700, fontSize: 16 }}>{form.end_time}</span>
-                <button type="button" onClick={() => setForm(p => ({ ...p, end_time: stepTime(p.end_time, 30) }))} style={stepBtnStyle}>▲</button>
+                <button type="button" onClick={() => setForm(p => ({ ...p, end_time: stepTime(p.end_time, 30) }))} className="svc-step" style={stepBtnStyle}>▲</button>
               </div>
               {!orderValid ? (
                 <div style={{ marginTop: 6, fontSize: 12, color: '#dc2626' }}>종료시간을 시작시간 이후로 설정해주세요</div>
