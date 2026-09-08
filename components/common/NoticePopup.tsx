@@ -2,10 +2,12 @@
 
 // 로그인 후 첫 화면에서 게시 중인 공지를 팝업으로 보여준다.
 //
-// 세션당 한 번만 뜬다.
-//   · 화면 이동(클라이언트 라우팅)에는 모듈 플래그가 막는다 — 레이아웃에 붙어 있어 다시 마운트되지 않는다.
-//   · 새로고침·주소 직접 입력처럼 문서가 새로 뜨는 경우는 모듈 플래그가 사라지므로 sessionStorage 로 막는다.
-//     탭을 닫으면 지워지니 "다음 접속" 에는 다시 뜬다(닫기(X)만 눌렀을 때의 요구 동작).
+// 로그인 한 번에 한 번만 뜬다. 기준은 탭이 아니라 로그인 세션이다.
+//   · 로그인 세션의 id 는 access token 의 session_id 다 — 토큰이 갱신돼도 그대로고,
+//     로그아웃 후 다시 로그인하면 새 값이 된다. 그래서 같은 탭에서 재로그인해도 다시 뜬다.
+//   · 로그아웃 처리는 두 군데(헤더·자동 로그아웃)에 있다. 그쪽에 "가드 지우기" 를 심으면
+//     새 로그아웃 경로가 생길 때마다 빠뜨리게 되므로, 로그인 자체를 기준으로 삼았다.
+//   · 화면 이동에는 모듈 캐시가, 새로고침·새 탭에는 localStorage 가 막는다.
 // 「보지 않기」는 localStorage 에 남긴다(누가 봤는지 볼 일이 없어 DB 에 쓰지 않는다).
 
 import { useEffect, useState } from 'react'
@@ -13,18 +15,19 @@ import { createClient } from '@/lib/supabase/client'
 import { Z } from '@/lib/zIndex'
 import { dismissNotice, isDismissed, noticePhase, todayKST, type DismissKind, type Notice } from '@/lib/notices'
 
-/** 이 탭에서 이미 띄웠는지. 화면 이동에는 이 플래그가, 새로고침에는 sessionStorage 가 막는다. */
-let shown = false
-const SESSION_KEY = 'notice:shownThisSession'
+/** 팝업을 이미 띄운 로그인 세션의 id. 화면 이동 때 저장소를 다시 읽지 않으려는 캐시다. */
+let shownFor: string | null = null
+const SHOWN_KEY = 'notice:shownForLogin'
 
-function alreadyShownThisSession(): boolean {
-  if (shown) return true
-  try { return sessionStorage.getItem(SESSION_KEY) === '1' } catch { return false }
+function alreadyShown(loginId: string): boolean {
+  if (shownFor === loginId) return true
+  // 저장소를 못 쓰면 모듈 캐시만으로 판단한다 — 화면 이동은 막히고, 새로고침에는 다시 뜬다.
+  try { return localStorage.getItem(SHOWN_KEY) === loginId } catch { return false }
 }
 
-function markShownThisSession(): void {
-  shown = true
-  try { sessionStorage.setItem(SESSION_KEY, '1') } catch { /* 못 써도 모듈 플래그로 화면 이동은 막힌다 */ }
+function markShown(loginId: string): void {
+  shownFor = loginId
+  try { localStorage.setItem(SHOWN_KEY, loginId) } catch { /* 캐시만으로도 화면 이동은 막힌다 */ }
 }
 
 export default function NoticePopup() {
@@ -32,14 +35,16 @@ export default function NoticePopup() {
   const [index, setIndex] = useState(0)
 
   useEffect(() => {
-    if (alreadyShownThisSession()) return
-    markShownThisSession()
     let cancelled = false
     const run = async () => {
       const supabase = createClient()
-      // 로그인한 사람에게만 띄운다. 세션이 없으면 조용히 지나간다(공개 화면에서는 애초에 렌더되지 않는다).
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user || cancelled) return
+      // 로그인 여부와 로그인 세션 id 를 한 번에 얻는다.
+      // 세션이 없으면 조용히 지나간다(공개 화면에서는 애초에 렌더되지 않는다).
+      const { data: claimData, error: claimError } = await supabase.auth.getClaims()
+      const loginId = claimData?.claims?.session_id
+      if (claimError || !loginId || cancelled) return
+      if (alreadyShown(loginId)) return
+      markShown(loginId)
 
       const today = todayKST()
       // 기간 판정은 DB 에서 한 번 거르고(오늘이 시작~종료 사이), 화면에서 다시 확인한다.
@@ -87,7 +92,9 @@ export default function NoticePopup() {
     >
       <div
         style={{
-          background: '#ffffff', borderRadius: 14, width: '100%', maxWidth: 460,
+          // 640 은 이미 관리자 모달들이 쓰는 폭이다(새 값이 아니다).
+          // 이미지가 세로로 쌓이므로 넘치는 만큼은 아래 본체가 세로로 스크롤한다.
+          background: '#ffffff', borderRadius: 14, width: '100%', maxWidth: 640,
           maxHeight: '86vh', display: 'flex', flexDirection: 'column',
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
         }}
@@ -115,9 +122,11 @@ export default function NoticePopup() {
         <div style={{ overflowY: 'auto', padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {images.map((url, i) => (
             // 공지 이미지는 크기를 알 수 없어 next/image 대신 img 를 쓴다(외부 스토리지 URL).
+            // width 를 주지 않는 것이 핵심 — 원본보다 크게 늘어나지 않는다.
+            // 세로 flex 안에서는 stretch 로 폭이 늘어날 수 있어 alignSelf 로 막고 가운데 둔다.
             // eslint-disable-next-line @next/next/no-img-element
             <img key={url} src={url} alt={`공지 이미지 ${i + 1}`}
-              style={{ width: '100%', height: 'auto', display: 'block', borderRadius: 8, border: '1px solid #ebebeb' }} />
+              style={{ maxWidth: '100%', height: 'auto', alignSelf: 'center', display: 'block', borderRadius: 8, border: '1px solid #ebebeb' }} />
           ))}
           {notice.body?.trim() && (
             <div style={{ fontSize: 13, color: '#111827', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>

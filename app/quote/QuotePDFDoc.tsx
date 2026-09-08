@@ -157,8 +157,11 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, 
             // 순번·품번도 붙이지 않고 행 안의 세로선을 전부 지워, 라벨과 금액만 놓인 한 줄로 보이게 한다.
             const isDiscount = row.row_kind === 'discount'
             const noRule = isDiscount ? { borderRightWidth: 0 } : {}
+            // 할인 줄 아래에는 선을 두지 않는다 — 할인은 늘 마지막 줄이고, 그 아래(빈 영역·비고)가
+            // 칸 없는 한 덩어리라 여기서 선을 그으면 열린 공간이 도로 잘려 보인다.
+            // 할인이 없으면 마지막 품목 아래에도 선을 그대로 둔다(품목 목록의 끝을 닫는 선).
             return (
-            <View key={row.id} style={[S.itemRow, { borderBottomWidth: THICK, borderBottomColor: '#000' }]}>
+            <View key={row.id} style={[S.itemRow, isDiscount ? {} : { borderBottomWidth: THICK, borderBottomColor: '#000' }]}>
               <View style={[S.td, { width: COL.seq, justifyContent: 'center', alignItems: 'center' }, noRule]}>
                 <Text style={{ textAlign: 'center' }}>{isDiscount ? '' : ri + 1}</Text>
               </View>
@@ -190,27 +193,21 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, 
             </View>
             )
           })}
-          {/* 표의 남는 세로 공간을 흡수하는 빈 영역. 최소 높이는 기존과 동일(부족한 행 × 18pt). */}
-          <View style={{ flexDirection: 'row', flexGrow: 1, minHeight: EMPTY_ROWS * 18 }}>
-            {/* 순번·품번·품명: 빈 행에선 세로 구분선을 그리지 않음(비고 영역처럼 열어둠) */}
-            <View style={{ width: COL.seq }} />
-            <View style={{ width: COL.code }} />
-            <View style={{ width: COL.name }} />
-            {/* 금액 칸(수량~부가세)은 구분선 유지. 수량 좌측선(=금액영역 시작, 55%)은 아래 비고 셀 우측선과 이어짐 */}
-            <View style={{ width: COL.qty, borderLeftWidth: THICK, borderLeftColor: '#000', borderRightWidth: THICK, borderRightColor: '#000' }} />
-            <View style={{ width: COL.unit, borderRightWidth: THICK, borderRightColor: '#000' }} />
-            <View style={{ width: COL.supply, borderRightWidth: THICK, borderRightColor: '#000' }} />
-            <View style={{ width: COL.tax }} />
-          </View>
+          {/* 표의 남는 세로 공간을 흡수하는 빈 영역. 최소 높이는 기존과 동일(부족한 행 × 18pt).
+              선은 하나도 긋지 않는다 — 칸을 나눠 봐야 채울 내용이 없어 어수선하기만 하다.
+              높이는 flexGrow 와 minHeight 가 정하므로 안에 열을 두지 않아도 폭·높이는 그대로다.
+              좌우 끝은 표 바깥 테두리(S.table)가 그린다. */}
+          <View style={{ flexGrow: 1, minHeight: EMPTY_ROWS * 18 }} />
           <View style={S.remarkRow}>
             <View style={[S.remarkContent, { borderRightWidth: 0, justifyContent: 'flex-end' }]}>
               <Text style={[S.remarkLine, { fontFamily: 'NotoSansCJK' }]}>　비고</Text>
               {remarks.split('\n').map((line, i) => <Text key={i} style={S.remarkLine}>{line}</Text>)}
               <Text style={[S.remarkLine, { marginTop: 2 }]}>* 담당자 : {engineerName}{engineerTel ? ` (TEL : ${engineerTel})` : ''}</Text>
             </View>
-            <View style={{ width: COL.qty, borderLeftWidth: THICK, borderLeftColor: '#000', borderRightWidth: THICK, borderRightColor: '#000' }} />
-            <View style={{ width: COL.unit, borderRightWidth: THICK, borderRightColor: '#000' }} />
-            <View style={{ width: COL.supply, borderRightWidth: THICK, borderRightColor: '#000' }} />
+            {/* 선 없는 자리 잡기용 칸 — 비고 글의 폭(=이 넷을 뺀 나머지)을 그대로 지킨다. */}
+            <View style={{ width: COL.qty }} />
+            <View style={{ width: COL.unit }} />
+            <View style={{ width: COL.supply }} />
             <View style={{ width: COL.tax }} />
           </View>
           {[{ label: '합　　계', value: totalSupply }, { label: '부 가 세', value: totalTax }, { label: '총　　계', value: totalAmount }].map(({ label, value }) => (
