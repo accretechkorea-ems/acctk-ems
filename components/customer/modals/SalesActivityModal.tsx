@@ -108,7 +108,7 @@ export default function SalesActivityModal({ isOpen, activity, contacts, opportu
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <label style={labelStyle}>활동일 *</label>
-              <input type="date" value={form.activity_date}
+              <input type="date" className="date-fit" value={form.activity_date}
                 onChange={(e) => { setForm(p => ({ ...p, activity_date: e.target.value })); clearError('activity_date') }}
                 style={errors.activity_date ? { ...dateFieldStyle, border: errBorder } : dateFieldStyle} />
               <FieldError message={errors.activity_date} />

@@ -498,7 +498,7 @@ export default function PurchasePage() {
 
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 11, color: GRAY, marginBottom: 5, fontWeight: 600 }}>출하 예정일</div>
-              <input type="date" value={shippingDate} onChange={e => setShippingDate(e.target.value)}
+              <input type="date" className="date-fit" value={shippingDate} onChange={e => setShippingDate(e.target.value)}
                 style={{ ...inp, colorScheme: 'light' }} />
             </div>
             <div style={{ marginBottom: 20 }}>
@@ -562,7 +562,7 @@ export default function PurchasePage() {
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 20 }}>{editScheduleModal.quote_number} · {custMap[editScheduleModal.customer_id ?? 0] ?? '-'}</div>
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 11, color: GRAY, marginBottom: 5, fontWeight: 600 }}>출하 예정일</div>
-              <input type="date" value={editShippingDate} onChange={e => setEditShippingDate(e.target.value)}
+              <input type="date" className="date-fit" value={editShippingDate} onChange={e => setEditShippingDate(e.target.value)}
                 style={{ ...inp, colorScheme: 'light' }} />
             </div>
             <div style={{ marginBottom: 20 }}>

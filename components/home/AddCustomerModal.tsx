@@ -356,7 +356,7 @@ export default function AddCustomerModal({
                   >
                     <input
                       type="date"
-                      className="white-date"
+                      className="white-date date-fit"
                       value={device.install_date}
                       onChange={(e) =>
                         updateDeviceForm(index, 'install_date', e.target.value)

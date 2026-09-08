@@ -270,7 +270,7 @@ export default function HoldingModal({
               </div>
               <div>
                 <label style={labelStyle}>시작일</label>
-                <input type="date" value={form.started_at}
+                <input type="date" className="date-fit" value={form.started_at}
                   onChange={(e) => setForm(p => ({ ...p, started_at: e.target.value }))}
                   style={dateFieldStyle} />
               </div>
@@ -306,7 +306,7 @@ export default function HoldingModal({
                   </div>
                   <div style={{ width: 150, flexShrink: 0 }}>
                     <label style={labelStyle}>시작일</label>
-                    <input type="date" value={startedEdit} onChange={(e) => setStartedEdit(e.target.value)} style={dateFieldStyle} />
+                    <input type="date" className="date-fit" value={startedEdit} onChange={(e) => setStartedEdit(e.target.value)} style={dateFieldStyle} />
                   </div>
                   <button
                     onClick={() => onUpdateHolding(holding, titleEdit, startedEdit)}

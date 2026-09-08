@@ -421,7 +421,7 @@ export default function LeadPage() {
             </div>
             <div>
               <label style={labelStyle}>예상 구매 시기</label>
-              <input type="date" value={form.expected_purchase}
+              <input type="date" className="date-fit" value={form.expected_purchase}
                 onChange={e => set('expected_purchase', e.target.value)}
                 style={{ ...fieldStyle, colorScheme: 'light' }} />
             </div>

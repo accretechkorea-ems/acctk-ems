@@ -1032,7 +1032,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
               <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{taxQuote.quote_number}</div>
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, color: GRAY, marginBottom: 6, fontWeight: 600 }}>요청 발행일 <span style={{ color: '#dc2626' }}>*</span></div>
-                <input type="date" value={taxDate} onChange={e => { setTaxDate(e.target.value); clearError('taxDate') }}
+                <input type="date" className="date-fit" value={taxDate} onChange={e => { setTaxDate(e.target.value); clearError('taxDate') }}
                   style={{ width: '100%', padding: '7px 10px', border: errors.taxDate ? errBorder : `1px solid ${taxDate ? BORDER : '#fca5a5'}`, borderRadius: 8, fontSize: 13, outline: 'none', colorScheme: 'light', boxSizing: 'border-box' }} />
                 <FieldError message={errors.taxDate} />
               </div>

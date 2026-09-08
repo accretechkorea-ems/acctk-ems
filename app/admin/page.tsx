@@ -1898,14 +1898,14 @@ function AdminPageInner() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <div>
                     <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>게시 시작일 *</div>
-                    <input type="date" value={noticeForm.starts_at}
+                    <input type="date" className="date-fit" value={noticeForm.starts_at}
                       onChange={e => { setNoticeForm(p => ({ ...p, starts_at: e.target.value })); noticeErr.clearError('starts_at') }}
                       style={{ ...(noticeErr.errors.starts_at ? { ...inp, border: errBorder } : inp), colorScheme: 'light' }} />
                     <FieldError message={noticeErr.errors.starts_at} />
                   </div>
                   <div>
                     <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>게시 종료일 *</div>
-                    <input type="date" value={noticeForm.ends_at}
+                    <input type="date" className="date-fit" value={noticeForm.ends_at}
                       onChange={e => { setNoticeForm(p => ({ ...p, ends_at: e.target.value })); noticeErr.clearError('ends_at') }}
                       style={{ ...(noticeErr.errors.ends_at ? { ...inp, border: errBorder } : inp), colorScheme: 'light' }} />
                     <FieldError message={noticeErr.errors.ends_at} />
@@ -2270,7 +2270,7 @@ function AdminPageInner() {
             </div>
             <div style={{ marginBottom: 20 }}>
               <label style={{ fontSize: 13, fontWeight: 700, color: TEXT, display: 'block', marginBottom: 6 }}>삭제일</label>
-              <input type="date" value={resignDate} onChange={e => { setResignDate(e.target.value); resignErr.clearError('resignDate') }}
+              <input type="date" className="date-fit" value={resignDate} onChange={e => { setResignDate(e.target.value); resignErr.clearError('resignDate') }}
                 style={resignErr.errors.resignDate ? { ...inp, width: '100%', colorScheme: 'light', border: errBorder } : { ...inp, width: '100%', colorScheme: 'light' }} />
               <FieldError message={resignErr.errors.resignDate} />
             </div>

@@ -96,6 +96,25 @@ body {
   font-feature-settings: 'tnum' 1;
 }
 
+/* iOS 사파리는 input[type=date] 안쪽에 자체 최소 폭을 강제해, 저자가 준 width: 100% 를
+   무시하고 칸을 컨테이너 밖으로 밀어낸다(오른쪽 테두리가 잘려 보인다).
+   appearance 를 끄면 그 최소 폭이 사라져 컨테이너 폭을 따른다.
+
+   · @supports (-webkit-touch-callout) 는 iOS 사파리에서만 참이다.
+     데스크톱 크롬·엣지·사파리는 이 블록에 들어오지 않아 화면이 그대로다(실측 확인).
+   · .date-fit 은 이미 width: 100% 를 준 날짜 칸에만 붙인다. 폭을 지정하지 않은 칸
+     (활동 현황 조회 기간 필터)은 붙이지 않는다 — 줄어들 폭의 기준이 없다.
+   · 값 정렬은 appearance 를 끄면 가운데로 갈 수 있어 왼쪽으로 고정한다. */
+@supports (-webkit-touch-callout: none) {
+  input[type="date"].date-fit {
+    -webkit-appearance: none;
+    appearance: none;
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  input[type="date"].date-fit::-webkit-date-and-time-value { text-align: left; }
+}
 .num {
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;

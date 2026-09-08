@@ -84,7 +84,7 @@ function ResolveForm({ holding, notice, isSaving, onClose, onResolve }: Omit<Pro
         <div style={{ display: 'grid', gap: 14 }}>
           <div>
             <label style={labelStyle}>해제일</label>
-            <input type="date" value={resolvedAt} onChange={(e) => setResolvedAt(e.target.value)} style={dateFieldStyle} />
+            <input type="date" className="date-fit" value={resolvedAt} onChange={(e) => setResolvedAt(e.target.value)} style={dateFieldStyle} />
           </div>
           <div>
             <label style={labelStyle}>해제 사유</label>

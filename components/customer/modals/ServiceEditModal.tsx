@@ -197,7 +197,7 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
             </div>
             <div>
               <label style={labelStyle}>방문일자</label>
-              <input type="date" value={form.visit_date} onChange={(e) => { setForm(p => ({ ...p, visit_date: e.target.value })); clearError('visit_date') }} style={errors.visit_date ? { ...dateFieldStyle, border: errBorder } : dateFieldStyle} />
+              <input type="date" className="date-fit" value={form.visit_date} onChange={(e) => { setForm(p => ({ ...p, visit_date: e.target.value })); clearError('visit_date') }} style={errors.visit_date ? { ...dateFieldStyle, border: errBorder } : dateFieldStyle} />
               <FieldError message={errors.visit_date} />
             </div>
           </div>

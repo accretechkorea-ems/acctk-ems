@@ -307,7 +307,7 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
                 </div>
                 <div>
                   <label style={labelStyle}>입고일</label>
-                  <input type="date" value={receivedDate} onChange={e => { setReceivedDate(e.target.value); clearError('receivedDate') }} style={errors.receivedDate ? { ...fieldStyle, colorScheme: 'light', border: errBorder } : { ...fieldStyle, colorScheme: 'light' }} />
+                  <input type="date" className="date-fit" value={receivedDate} onChange={e => { setReceivedDate(e.target.value); clearError('receivedDate') }} style={errors.receivedDate ? { ...fieldStyle, colorScheme: 'light', border: errBorder } : { ...fieldStyle, colorScheme: 'light' }} />
                   <FieldError message={errors.receivedDate} />
                 </div>
               </div>
@@ -348,7 +348,7 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
                 </div>
                 <div>
                   <label style={labelStyle}>출고일</label>
-                  <input type="date" disabled={!isShipped}
+                  <input type="date" className="date-fit" disabled={!isShipped}
                     value={isShipped ? shippedDate : ''}
                     onChange={e => setShippedDate(e.target.value)}
                     style={{ ...fieldStyle, colorScheme: 'light', background: !isShipped ? '#f3f4f6' : '#fff', color: !isShipped ? '#9ca3af' : '#111827', cursor: !isShipped ? 'not-allowed' : 'auto' }} />
@@ -361,13 +361,13 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
               <div style={{ ...twoCol, gap: 10, padding: 10, background: '#f5f3ff', border: '1px solid #ebebeb', borderRadius: 6 }}>
                 <div>
                   <label style={labelStyle}>본사 발송일</label>
-                  <input type="date" value={hqRequestedAt} onChange={e => setHqRequestedAt(e.target.value)}
+                  <input type="date" className="date-fit" value={hqRequestedAt} onChange={e => setHqRequestedAt(e.target.value)}
                     style={{ ...fieldStyle, colorScheme: 'light' }} />
                 </div>
                 <div>
                   <label style={labelStyle}>본사 복귀일</label>
                   {hqReturnedAt ? (
-                    <input type="date" value={hqReturnedAt} onChange={e => setHqReturnedAt(e.target.value)}
+                    <input type="date" className="date-fit" value={hqReturnedAt} onChange={e => setHqReturnedAt(e.target.value)}
                       style={{ ...fieldStyle, colorScheme: 'light' }} />
                   ) : (
                     <button type="button" onClick={onHqReturnFill}

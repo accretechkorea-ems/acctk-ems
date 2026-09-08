@@ -106,7 +106,7 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             <div>
               <label style={labelStyle}>납입일자</label>
-              <input type="date" value={form.install_date} onChange={(e) => setForm(p => ({ ...p, install_date: e.target.value }))} style={dateStyle} />
+              <input type="date" className="date-fit" value={form.install_date} onChange={(e) => setForm(p => ({ ...p, install_date: e.target.value }))} style={dateStyle} />
             </div>
             <div>
               <label style={labelStyle}>구분</label>

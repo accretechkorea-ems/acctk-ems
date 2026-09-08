@@ -710,7 +710,7 @@ export default function RepairPage() {
             </div>
             <div style={{ ...fieldGroup, width: 150, flexShrink: 0 }}>
               <label style={label}>입고일</label>
-              <input type="date" value={receivedDate} onChange={e => setReceivedDate(e.target.value)} style={inp} tabIndex={-1} />
+              <input type="date" className="date-fit" value={receivedDate} onChange={e => setReceivedDate(e.target.value)} style={inp} tabIndex={-1} />
             </div>
             <div style={{ ...fieldGroup, flex: 1, minWidth: 0, position: 'relative', marginBottom: errors.customerName ? 18 : 0 }}>
               <label style={label}>회사명</label>
@@ -907,7 +907,7 @@ export default function RepairPage() {
               {hqReturning.customer_name ?? ''} · {hqReturning.serial_number ?? '-'} — 복귀 시 <b style={{ color: TEXT }}>출고대기</b>로 전환됩니다.
             </div>
             <label style={{ fontSize: 12, fontWeight: 600, color: MUTED }}>복귀일</label>
-            <input type="date" value={hqReturnDate} onChange={e => setHqReturnDate(e.target.value)}
+            <input type="date" className="date-fit" value={hqReturnDate} onChange={e => setHqReturnDate(e.target.value)}
               style={{ ...inp, marginTop: 4, colorScheme: 'light' }} />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
               <button onClick={() => setHqReturning(null)} disabled={isHqSaving}
