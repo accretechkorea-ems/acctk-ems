@@ -72,11 +72,22 @@ export type LeadMailData = {
  * 그래서 환경변수를 우선하고, Vercel 이 자동으로 넣어 주는 배포 주소를 그다음으로 본다.
  */
 export function siteUrl(): string {
-  const explicit = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL
-  if (explicit) return explicit.replace(/\/+$/, '')
+  const explicit = (process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || '').trim()
+  if (explicit) return normalizeOrigin(explicit)
   // Vercel 은 스킴 없이 넣어 준다. 프리뷰 배포마다 값이 달라지므로 SITE_URL 이 있으면 그쪽이 이긴다.
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
+  const vercel = (process.env.VERCEL_URL || '').trim()
+  if (vercel) return normalizeOrigin(vercel)
   return 'http://localhost:3000'
+}
+
+/**
+ * 사람이 손으로 넣는 값이라 형태가 제각각이다. 링크가 깨지지 않게 두 가지를 방어한다.
+ * - 스킴이 없으면 https 를 붙인다. 'ems.example.com' 그대로 두면 메일에서 상대 경로로 읽혀 열리지 않는다.
+ * - 끝의 슬래시를 뗀다. 뒤에 '/leads?...' 를 붙이므로 남겨 두면 '//leads' 가 된다.
+ */
+function normalizeOrigin(raw: string): string {
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw.replace(/^\/+/, '')}`
+  return withScheme.replace(/\/+$/, '')
 }
 
 /** 리드 관리자 이메일 — 종 알림과 같은 판정(재직 중인 superadmin)을 쓴다. */
