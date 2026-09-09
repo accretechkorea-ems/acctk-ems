@@ -17,6 +17,8 @@ type Props = {
   onImageUpload: (device: Device) => void
   onPrintReport: (service: ServiceHistory, device: Device) => void
   onOpenReport: (service: ServiceHistory) => void
+  // 레포트를 만들거나 여는 중인 service_id. 그 카드의 버튼만 잠근다.
+  reportBusyId: number | null
   onUploadPacking: (device: Device, file: File) => void
   onOpenPacking: (device: Device) => void
   // 홀딩 — 장비별 진행 중 1건, 레포트별 연결 건
@@ -26,7 +28,7 @@ type Props = {
   onOpenHolding: (h: Holding) => void
 }
 
-function ServiceCard({ h, d, onEdit, onPrint, onOpenReport, holding, onAddHolding, onOpenHolding }: { h: ServiceHistory; d: Device; onEdit: () => void; onPrint: () => void; onOpenReport: () => void; holding: Holding | undefined; onAddHolding: () => void; onOpenHolding: () => void }) {
+function ServiceCard({ h, d, onEdit, onPrint, onOpenReport, reportBusy, holding, onAddHolding, onOpenHolding }: { h: ServiceHistory; d: Device; onEdit: () => void; onPrint: () => void; onOpenReport: () => void; reportBusy: boolean; holding: Holding | undefined; onAddHolding: () => void; onOpenHolding: () => void }) {
   const [hovered, setHovered] = useState(false)
   const sc = getCategoryColor(SERVICE_TYPE_COLORS, h.service_type)
 
@@ -108,26 +110,28 @@ function ServiceCard({ h, d, onEdit, onPrint, onOpenReport, holding, onAddHoldin
         {h.report_url ? (
           <button
             onClick={onOpenReport}
+            disabled={reportBusy}
             style={{
               padding: '4px 10px', background: '#fff', color: '#111827',
               borderRadius: 6, border: '1px solid #ebebeb',
-              cursor: 'pointer', fontWeight: 600, fontSize: 12,
-              flexShrink: 0, whiteSpace: 'nowrap',
+              cursor: reportBusy ? 'default' : 'pointer', fontWeight: 600, fontSize: 12,
+              flexShrink: 0, whiteSpace: 'nowrap', opacity: reportBusy ? 0.5 : 1,
             }}
           >
-            레포트 열기
+            {reportBusy ? '여는 중…' : '레포트 열기'}
           </button>
         ) : (
           <button
             onClick={onPrint}
+            disabled={reportBusy}
             style={{
               padding: '4px 10px', background: '#fff', color: '#6b7280',
               borderRadius: 6, border: '1px solid #ebebeb',
-              cursor: 'pointer', fontWeight: 600, fontSize: 12,
-              flexShrink: 0, whiteSpace: 'nowrap',
+              cursor: reportBusy ? 'default' : 'pointer', fontWeight: 600, fontSize: 12,
+              flexShrink: 0, whiteSpace: 'nowrap', opacity: reportBusy ? 0.5 : 1,
             }}
           >
-            레포트 작성
+            {reportBusy ? '만드는 중…' : '레포트 작성'}
           </button>
         )}
       </div>
@@ -135,7 +139,7 @@ function ServiceCard({ h, d, onEdit, onPrint, onOpenReport, holding, onAddHoldin
   )
 }
 
-function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, onUploadPacking, onOpenPacking, supabaseUrl, activeHolding, holdingByService, onAddHolding, onOpenHolding }: {
+function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, reportBusyId, onUploadPacking, onOpenPacking, supabaseUrl, activeHolding, holdingByService, onAddHolding, onOpenHolding }: {
   d: Device
   deviceHistory: ServiceHistory[]
   onEditDevice: () => void
@@ -147,6 +151,7 @@ function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditServic
   onEditService: (s: ServiceHistory) => void
   onImageUpload: () => void
   onPrintReport: (s: ServiceHistory) => void
+  reportBusyId: number | null
   onOpenReport: (s: ServiceHistory) => void
   onUploadPacking: (file: File) => void
   onOpenPacking: () => void
@@ -304,6 +309,7 @@ function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditServic
             h={h}
             d={d}
             onEdit={() => onEditService(h)}
+            reportBusy={reportBusyId === h.service_id}
             onPrint={() => onPrintReport(h)}
             onOpenReport={() => onOpenReport(h)}
             holding={holdingByService.get(h.service_id)}
@@ -319,7 +325,7 @@ function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditServic
   )
 }
 
-export default function DeviceSection({ devices, historyByDevice, onAddDevice, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, onUploadPacking, onOpenPacking, activeHoldingByDevice, holdingByService, onAddHolding, onOpenHolding }: Props) {
+export default function DeviceSection({ devices, historyByDevice, onAddDevice, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, reportBusyId, onUploadPacking, onOpenPacking, activeHoldingByDevice, holdingByService, onAddHolding, onOpenHolding }: Props) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
   // 섹션 제목도, 바깥 여백도 두지 않는다 — 업체 상세의 탭 라벨('장비 N')과 중복이고,
@@ -336,6 +342,7 @@ export default function DeviceSection({ devices, historyByDevice, onAddDevice, o
             onEditDevice={() => onEditDevice(d)}
             onAddService={() => onAddService(d.device_id)}
             onEditService={onEditService}
+            reportBusyId={reportBusyId}
             onImageUpload={() => onImageUpload(d)}
             onPrintReport={(s) => onPrintReport(s, d)}
             onOpenReport={(s) => onOpenReport(s)}

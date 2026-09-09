@@ -21,7 +21,8 @@ export async function POST(req: Request) {
     .eq('email', user.email!)
     .single()
   if (callerErr) console.error(' caller lookup failed', { email: user.email, error: callerErr })
-  const caller = await withTeamPerm(callerRow)
+  // 재고 요청을 승인·반려하는 라우트다. 권한 변경이 즉시 반영돼야 해 캐시를 건너뛴다.
+  const caller = await withTeamPerm(callerRow, { fresh: true })
   if (!caller || !canViewSalesMgmt(caller)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

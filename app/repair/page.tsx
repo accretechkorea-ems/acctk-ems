@@ -157,6 +157,9 @@ export default function RepairPage() {
   const [importFileName, setImportFileName] = useState('')
   const [importYear, setImportYear] = useState(nowKSTParts().y)
   const [importCategory, setImportCategory] = useState<Category>('게이지')
+  // PDF 를 여는 중인 견적 id — 연타 방지 + 그 줄만 흐리게.
+  const [pdfBusyId, setPdfBusyId] = useState<number | null>(null)
+  const pdfBusyRef = useRef(false)
   const [isImporting, setIsImporting] = useState(false)
   const [importResult, setImportResult] = useState<{ ok: number; fail: number } | null>(null)
 
@@ -265,10 +268,19 @@ export default function RepairPage() {
 
   // 연결된 견적서 PDF 열기 — /api/repair-quotes?pdf=. 서버가 20팀·연결 여부 검사(임의 견적 차단).
   const openQuotePdf = async (quoteId: number) => {
-    const res = await fetch(`/api/repair-quotes?pdf=${quoteId}`)
-    const json = await res.json().catch(() => ({}))
-    if (res.ok && json.url) window.open(json.url, '_blank')
-    else toast.error(json.error === 'No PDF' ? '견적서 PDF가 없습니다' : json.error === 'Forbidden' ? '견적서 열람 권한이 없습니다' : '견적서를 열 수 없습니다')
+    // state 는 다음 렌더에야 반영돼 같은 틱의 연타를 못 막는다 — 판정은 ref 로 한다.
+    if (pdfBusyRef.current) return
+    pdfBusyRef.current = true
+    setPdfBusyId(quoteId)
+    try {
+      const res = await fetch(`/api/repair-quotes?pdf=${quoteId}`)
+      const json = await res.json().catch(() => ({}))
+      if (res.ok && json.url) window.open(json.url, '_blank')
+      else toast.error(json.error === 'No PDF' ? '견적서 PDF가 없습니다' : json.error === 'Forbidden' ? '견적서 열람 권한이 없습니다' : '견적서를 열 수 없습니다')
+    } finally {
+      pdfBusyRef.current = false
+      setPdfBusyId(null)   // 실패해도 원래대로 돌아온다
+    }
   }
 
   // ── 엑셀 일괄 등록 ──
@@ -513,7 +525,7 @@ export default function RepairPage() {
           return (
             // 문서 아이콘 + 금액 = 클릭하면 견적서 PDF. 아이콘으로 클릭 가능함을 드러낸다.
             <span onClick={() => openQuotePdf(q.quote_id)} title={`${q.quote_number} · 견적서 보기`}
-              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer', color: BLUE, fontWeight: 600, whiteSpace: 'nowrap', lineHeight: 1 }}>
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: pdfBusyId === null ? 'pointer' : 'default', color: BLUE, fontWeight: 600, whiteSpace: 'nowrap', lineHeight: 1, opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, display: 'block' }}>
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                 <polyline points="14 2 14 8 20 8" />

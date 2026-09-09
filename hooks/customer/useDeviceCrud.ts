@@ -4,7 +4,7 @@
 // 패킹리스트 업로드(uploadPackingFile)는 장비 추가·수정에서도 쓰이고 카드에서 직접 올릴 때도 쓰여서
 // 장비 도메인 안에 함께 둔다.
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
@@ -21,6 +21,8 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
   const confirmDialog = useConfirm()
 
   const [isAddDeviceModalOpen, setIsAddDeviceModalOpen] = useState(false)
+  // 파일 열기 연타 가드(렌더를 기다리지 않는다). 화면에는 빈 탭이 먼저 떠 반응이 보인다.
+  const openBusyRef = useRef(false)
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
   const [selectedImageDevice, setSelectedImageDevice] = useState<Device | null>(null)
   const [isSavingDevice, setIsSavingDevice] = useState(false)
@@ -170,6 +172,9 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
   }
 
   const handleOpenPacking = async (device: Device) => {
+    // 렌더를 기다리지 않는 연타 가드 — 두 번 들어오면 탭이 두 개 열린다.
+    if (openBusyRef.current) return
+    openBusyRef.current = true
     if (!device.packing_list_url) return
     // 팝업 차단 회피: 클릭 시점에 빈 탭을 먼저 연 뒤 서명 URL을 채운다.
     // (주의: window.open 옵션에 'noopener'를 넣으면 null이 반환되어 탭 제어가 불가하므로 넣지 않는다)
@@ -188,6 +193,8 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
     } catch (error: any) {
       if (win) win.close()
       toast.error(error?.message || '파일을 여는 중 오류가 발생했습니다')
+    } finally {
+      openBusyRef.current = false   // 실패해도 다시 누를 수 있어야 한다
     }
   }
 

@@ -12,7 +12,7 @@ import {
   NOTICE_MAX_IMAGES, NOTICE_TITLE_MAX, NOTICE_BODY_MAX,
   clearDismiss, noticePhase, type Notice, type NoticePhase,
 } from '@/lib/notices'
-import { withTeamPerm } from '@/lib/teamPerms'
+import { withTeamPerm, invalidateTeamPerms } from '@/lib/teamPerms'
 import AccessGate from '@/components/common/AccessGate'
 import { useOffices, selectableOffices, invalidateOffices, type Office } from '@/lib/offices'
 import { geocodeAddress } from '@/lib/geocode'
@@ -823,6 +823,7 @@ function AdminPageInner() {
     setNewTeamName('')
     setNewTeamPerm(EMPTY_TEAM_PERM)
     setAddTeamOpen(false)
+    dropTeamPermCache()
     fetchTeams()
   }
 
@@ -968,6 +969,17 @@ function AdminPageInner() {
     }
   }
 
+  // 팀 권한 캐시 버리기 — 화면(lib/teamPerms)과 서버(lib/teamPermsServer) 양쪽이다.
+  // 서버 캐시는 라우트 프로세스 메모리에 있어 화면에서 직접 못 지운다 → /api/team-perms 로 알린다.
+  // 실패해도 30초 뒤 스스로 만료되므로 흐름을 막지 않고 로그만 남긴다.
+  const dropTeamPermCache = async () => {
+    invalidateTeamPerms()
+    try {
+      const res = await fetch('/api/team-perms', { method: 'POST' })
+      if (!res.ok) console.error('[admin] 팀 권한 서버 캐시 무효화 실패', res.status)
+    } catch (e) { console.error('[admin] 팀 권한 서버 캐시 무효화 실패', e) }
+  }
+
   // 체크박스 하나를 누르면 그 팀의 권한 7개를 통째로 다시 저장한다(저장 버튼 없음).
   // 쿼리·에러 처리는 종전과 같고, 어떤 값을 보낼지만 호출부가 정한다.
   const handleSaveTeamPerm = async (team: Team, perm: TeamPermForm) => {
@@ -980,6 +992,7 @@ function AdminPageInner() {
       return
     }
     await fetchTeams()
+    await dropTeamPermCache()
     toast.success(`'${team.name}' 팀 권한을 저장했습니다`)
   }
 
@@ -1007,6 +1020,7 @@ function AdminPageInner() {
       toast.error(`팀 삭제에 실패했습니다 (${error.code || error.message})`)
       return
     }
+    dropTeamPermCache()
     fetchTeams()
   }
 

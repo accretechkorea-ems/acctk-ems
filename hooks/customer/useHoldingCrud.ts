@@ -11,7 +11,7 @@
 // 열려 있는 홀딩은 id 만 들고 있다가 매 렌더에서 목록에서 찾아 쓴다(스냅샷을 복사하지 않는다).
 // 예전처럼 객체를 state 에 복사해 두면 메모를 고쳐도 목록만 갱신되고 모달은 옛 내용을 그렸다.
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { josa } from '@/lib/josa'
 import { useToast } from '@/components/common/Toast'
@@ -56,6 +56,8 @@ export function useHoldingCrud({ customerId, holdings, engineerId, fetchDetail, 
   const superAdmin = isSuperAdmin({ permission_level: role })
 
   const [modalOpen, setModalOpen] = useState(false)
+  // 파일 열기 연타 가드(렌더를 기다리지 않는다). 화면에는 빈 탭이 먼저 떠 반응이 보인다.
+  const openBusyRef = useRef(false)
   // 상세에서 함께 보여줄 서비스 레포트 — 열 때만 읽는다(목록 조회에는 필요 없다)
   const [holdingReports, setHoldingReports] = useState<HoldingReport[]>([])
   const [reportsLoading, setReportsLoading] = useState(false)
@@ -126,7 +128,10 @@ export function useHoldingCrud({ customerId, holdings, engineerId, fetchDetail, 
 
   // 레포트 PDF 열기 — 비공개 버킷이라 서명 URL 을 받아 새 탭에 띄운다.
   const handleOpenReport = async (report: HoldingReport) => {
-    if (!report.report_url) return
+    // 렌더를 기다리지 않는 연타 가드 — 서명 URL 왕복 동안 두 번 들어오면 탭이 두 개 열린다.
+    if (openBusyRef.current || !report.report_url) return
+    openBusyRef.current = true
+    // 빈 탭을 먼저 여는 것은 팝업 차단 회피용이라 그대로 둔다.
     const win = window.open('', '_blank')
     try {
       const path = toReportPath(report.report_url)
@@ -138,6 +143,8 @@ export function useHoldingCrud({ customerId, holdings, engineerId, fetchDetail, 
       if (win) win.close()
       console.error('[holding] open report failed', e)
       toast.error('레포트를 여는 중 오류가 발생했습니다')
+    } finally {
+      openBusyRef.current = false   // 실패해도 다시 누를 수 있어야 한다
     }
   }
 

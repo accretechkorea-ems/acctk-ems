@@ -34,6 +34,11 @@ const toPerm = (r: TeamRow): TeamPerm => ({
   leads: r.can_view_leads === true,
 })
 
+/** 관리자 화면에서 팀 권한을 바꾼 뒤 부른다. 다음 호출에서 다시 읽는다(offices 와 같은 방식). */
+export function invalidateTeamPerms(): void {
+  cache = null
+}
+
 export function loadTeamPerms(): Promise<Map<string, TeamPerm>> {
   if (cache) return cache
   cache = (async () => {

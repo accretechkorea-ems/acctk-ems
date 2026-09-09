@@ -84,6 +84,9 @@ export default function PurchasePage() {
   const [shippingDate, setShippingDate] = useState('')
   const [orderMemo, setOrderMemo] = useState('')
   const [processing, setProcessing] = useState(false)
+  // PDF 를 여는 중인 견적 id — 연타 방지 + 그 줄만 흐리게.
+  const [pdfBusyId, setPdfBusyId] = useState<number | null>(null)
+  const pdfBusyRef = useRef(false)
 
   // 세금계산서 발행완료 모달
   const [taxModal, setTaxModal] = useState<PurchaseQuote | null>(null)
@@ -167,21 +170,32 @@ export default function PurchasePage() {
     return `희망 발행일 : ${yy}년 ${d.getMonth() + 1}월 ${d.getDate()}일`
   }
 
+  // PDF 를 여는 중인 견적 id — 견적서·발주서가 같은 상태를 쓴다(한 번에 하나만 연다).
   const handleViewQuotePDF = async (q: PurchaseQuote) => {
+    if (pdfBusyRef.current) return
     if (!q.pdf_url) return
     if (q.pdf_url.includes('synology')) { window.open(q.pdf_url, '_blank'); return }
     const path = q.pdf_url.startsWith('quote-pdfs/') ? q.pdf_url.replace('quote-pdfs/', '') : q.pdf_url.split('/quote-pdfs/')[1]
     if (!path) return
-    const res = await fetch(`/api/quote-pdf?path=${encodeURIComponent(path)}`)
-    const json = await res.json()
-    if (json.signedUrl) window.open(json.signedUrl, '_blank')
+    pdfBusyRef.current = true
+    setPdfBusyId(q.quote_id)
+    try {
+      const res = await fetch(`/api/quote-pdf?path=${encodeURIComponent(path)}`)
+      const json = await res.json()
+      if (json.signedUrl) window.open(json.signedUrl, '_blank')
+    } finally { pdfBusyRef.current = false; setPdfBusyId(null) }
   }
 
   const handleViewPO = async (q: PurchaseQuote) => {
+    if (pdfBusyRef.current) return
     if (!q.purchase_order_url) return
-    const res = await fetch(`/api/purchase-order?path=${encodeURIComponent(q.purchase_order_url)}`)
-    const json = await res.json()
-    if (json.signedUrl) window.open(json.signedUrl, '_blank')
+    pdfBusyRef.current = true
+    setPdfBusyId(q.quote_id)
+    try {
+      const res = await fetch(`/api/purchase-order?path=${encodeURIComponent(q.purchase_order_url)}`)
+      const json = await res.json()
+      if (json.signedUrl) window.open(json.signedUrl, '_blank')
+    } finally { pdfBusyRef.current = false; setPdfBusyId(null) }
   }
 
   const handleCompleteOrder = async () => {
@@ -328,7 +342,8 @@ export default function PurchasePage() {
                       <td style={{ padding: '9px 10px', fontWeight: 700, color: BLUE, whiteSpace: 'nowrap', textAlign: 'center' }}>
                         <span
                           onClick={() => handleViewQuotePDF(q)}
-                          style={{ cursor: q.pdf_url ? 'pointer' : 'default', textDecoration: q.pdf_url ? 'underline' : 'none', textUnderlineOffset: 2 }}>
+                          title={pdfBusyId === q.quote_id ? '여는 중…' : undefined}
+                          style={{ cursor: q.pdf_url && pdfBusyId === null ? 'pointer' : 'default', textDecoration: q.pdf_url ? 'underline' : 'none', textUnderlineOffset: 2, opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
                           {q.quote_number}
                           {q.pdf_url && <span style={{ marginLeft: 4, fontSize: 9, color: MUTED }}>PDF</span>}
                         </span>
@@ -438,9 +453,9 @@ export default function PurchasePage() {
                       </td>
                       <td style={{ padding: '9px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                         {q.purchase_order_url ? (
-                          <button onClick={() => handleViewPO(q)}
-                            style={{ padding: '4px 9px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: 7, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: TEXT }}>
-                            PDF
+                          <button onClick={() => handleViewPO(q)} disabled={pdfBusyId !== null}
+                            style={{ padding: '4px 9px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: 7, cursor: pdfBusyId === null ? 'pointer' : 'default', fontSize: 11, fontWeight: 700, color: TEXT, opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
+                            {pdfBusyId === q.quote_id ? '여는 중…' : 'PDF'}
                           </button>
                         ) : <span style={{ color: MUTED, fontSize: 11 }}>-</span>}
                       </td>

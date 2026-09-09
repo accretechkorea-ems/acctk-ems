@@ -134,6 +134,9 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const memoAnchorRef = useRef<HTMLDivElement>(null)
   // 행 동작 메뉴(⋮). 한 번에 하나만 열리므로 앵커 ref 도 하나를 돌려 쓴다(메모 팝오버와 같은 방식).
   const [menuQuoteId, setMenuQuoteId] = useState<number | null>(null)
+  // PDF 를 여는 중인 견적 id. 서명 URL 왕복 동안 아무 반응이 없으면 다시 누르게 된다.
+  const [pdfBusyId, setPdfBusyId] = useState<number | null>(null)
+  const pdfBusyRef = useRef(false)
   const menuAnchorRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   // 취소/실패
@@ -295,15 +298,24 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const allPagedSelected = pagedIds.length > 0 && pagedIds.every(id => quoteSel.isSelected(id))
 
   const openPdf = async (q: Quote) => {
+    // state 는 다음 렌더에야 반영돼 같은 틱의 연타를 못 막는다 — 판정은 ref 로 한다.
+    if (pdfBusyRef.current) return
     if (!q.pdf_url) return
     if (q.pdf_url.includes('synology')) { window.open(q.pdf_url, '_blank'); return }
     const path = q.pdf_url.startsWith('quote-pdfs/') ? q.pdf_url.replace('quote-pdfs/', '') : q.pdf_url.split('/quote-pdfs/')[1]
     if (!path) return
-    const res = await fetch(`/api/quote-pdf?path=${encodeURIComponent(path)}`)
-    const json = await res.json()
-    if (json.signedUrl) {
-      window.open(json.signedUrl, '_blank')
-      await supabase.from('download_logs').insert({ engineer_id: engineerId, quote_id: q.quote_id, quote_number: q.quote_number, company_name: q.company_name === '-' ? null : q.company_name, action: 'view' })
+    pdfBusyRef.current = true
+    setPdfBusyId(q.quote_id)
+    try {
+      const res = await fetch(`/api/quote-pdf?path=${encodeURIComponent(path)}`)
+      const json = await res.json()
+      if (json.signedUrl) {
+        window.open(json.signedUrl, '_blank')
+        await supabase.from('download_logs').insert({ engineer_id: engineerId, quote_id: q.quote_id, quote_number: q.quote_number, company_name: q.company_name === '-' ? null : q.company_name, action: 'view' })
+      }
+    } finally {
+      pdfBusyRef.current = false
+      setPdfBusyId(null)   // 실패해도 원래대로 돌아온다
     }
   }
 
@@ -510,7 +522,8 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                       <input type="checkbox" checked={quoteSel.isSelected(q.quote_id)} onChange={() => quoteSel.toggle(q.quote_id)} style={{ cursor: 'pointer' }} />
                     </td>
                     <td style={{ padding: '8px 10px', fontWeight: 700, color: BLUE, whiteSpace: 'nowrap', textAlign: 'center' }}>
-                      <span onClick={() => openPdf(q)} style={{ cursor: q.pdf_url ? 'pointer' : 'default' }}>
+                      <span onClick={() => openPdf(q)} title={pdfBusyId === q.quote_id ? '여는 중…' : undefined}
+                        style={{ cursor: q.pdf_url && pdfBusyId === null ? 'pointer' : 'default', opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
                         {/* 대필 건 표시. 쓴 사람과 실적 담당자가 다른 견적에만 붙는다. */}
                         {isOnBehalf(q) && (
                           <span title="대필 견적" style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: BLUE, marginRight: 5, verticalAlign: 'middle' }} />

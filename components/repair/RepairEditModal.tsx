@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Repair, RepairStatus, RepairQuote } from '@/hooks/useRepairs'
 import ModalOverlay from '@/components/common/ModalOverlay'
@@ -120,6 +120,9 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
   const router = useRouter()
   const { errors, setErrors, clearError, validate } = useFieldErrors<'customerName' | 'receivedDate'>()
   const [itemType, setItemType] = useState<Category>('게이지')
+  // 견적서 PDF 를 여는 중인지 — 연타 방지 + 버튼 문구 변경.
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const pdfBusyRef = useRef(false)
   const [receivedDate, setReceivedDate] = useState('')
   const [customerName, setCustomerName] = useState('')
   const [productType, setProductType] = useState('')
@@ -214,11 +217,19 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
 
   // 연결된 견적서 PDF 열기 — /api/repair-quotes?pdf=. 서버가 20팀·연결 여부를 검사(임의 견적 차단).
   const openQuotePdf = async () => {
-    if (quoteId == null) return
-    const res = await fetch(`/api/repair-quotes?pdf=${quoteId}`)
-    const json = await res.json().catch(() => ({}))
-    if (res.ok && json.url) window.open(json.url, '_blank')
-    else toast.error(json.error === 'No PDF' ? '견적서 PDF가 없습니다' : json.error === 'Forbidden' ? '견적서 열람 권한이 없습니다' : '견적서를 열 수 없습니다')
+    // state 는 다음 렌더에야 반영돼 같은 틱의 연타를 못 막는다 — 판정은 ref 로 한다.
+    if (pdfBusyRef.current || quoteId == null) return
+    pdfBusyRef.current = true
+    setPdfBusy(true)
+    try {
+      const res = await fetch(`/api/repair-quotes?pdf=${quoteId}`)
+      const json = await res.json().catch(() => ({}))
+      if (res.ok && json.url) window.open(json.url, '_blank')
+      else toast.error(json.error === 'No PDF' ? '견적서 PDF가 없습니다' : json.error === 'Forbidden' ? '견적서 열람 권한이 없습니다' : '견적서를 열 수 없습니다')
+    } finally {
+      pdfBusyRef.current = false
+      setPdfBusy(false)   // 실패해도 원래대로 돌아온다
+    }
   }
   // 특이사항 select 는 special_type 컬럼 기준. 목록에 없는 값은 (없음)으로 표시.
   const selectValue = (SPECIAL_OPTIONS as readonly string[]).includes(specialType) ? specialType : ''
@@ -394,8 +405,8 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
                     </div>
                     <div style={{ fontSize: 13, color: '#111827', marginTop: 2 }}>청구 금액 <b>₩{numKR(linkedSummary.total_supply ?? 0)}</b></div>
                   </div>
-                  <button type="button" onClick={openQuotePdf}
-                    style={{ padding: '7px 12px', border: '1px solid #ebebeb', borderRadius: 6, background: '#fff', color: '#6b7280', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>견적서 보기</button>
+                  <button type="button" onClick={openQuotePdf} disabled={pdfBusy}
+                    style={{ padding: '7px 12px', border: '1px solid #ebebeb', borderRadius: 6, background: '#fff', color: '#6b7280', fontSize: 13, fontWeight: 700, cursor: pdfBusy ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: pdfBusy ? 0.5 : 1 }}>{pdfBusy ? '여는 중…' : '견적서 보기'}</button>
                   <button type="button" onClick={unlinkQuote}
                     style={{ padding: '7px 12px', border: '1px solid #fecdd3', borderRadius: 6, background: '#fff', color: '#be123c', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>연결 해제</button>
                 </>
@@ -403,8 +414,8 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
                 // 연결은 돼 있으나 요약을 못 읽음(권한/네트워크). PDF·해제는 가능.
                 <>
                   <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: '#9ca3af' }}>견적 #{quoteId} · 요약을 불러올 수 없습니다</div>
-                  <button type="button" onClick={openQuotePdf}
-                    style={{ padding: '7px 12px', border: '1px solid #ebebeb', borderRadius: 6, background: '#fff', color: '#6b7280', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>견적서 보기</button>
+                  <button type="button" onClick={openQuotePdf} disabled={pdfBusy}
+                    style={{ padding: '7px 12px', border: '1px solid #ebebeb', borderRadius: 6, background: '#fff', color: '#6b7280', fontSize: 13, fontWeight: 700, cursor: pdfBusy ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: pdfBusy ? 0.5 : 1 }}>{pdfBusy ? '여는 중…' : '견적서 보기'}</button>
                   <button type="button" onClick={unlinkQuote}
                     style={{ padding: '7px 12px', border: '1px solid #fecdd3', borderRadius: 6, background: '#fff', color: '#be123c', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>연결 해제</button>
                 </>

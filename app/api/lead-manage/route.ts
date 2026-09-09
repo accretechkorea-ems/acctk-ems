@@ -77,7 +77,8 @@ export async function POST(req: Request) {
   const admin = isSuperAdmin(caller)
   // 소속 팀에 리드 권한이 있는지 — 배정만으로 통과시키면 나중에 팀 플래그를 꺼도
   // 과거에 배정받은 건을 계속 만질 수 있다. superadmin 은 hasPerm 이 먼저 통과시킨다.
-  const hasLeadPerm = canViewLeads(attachTeamPerm(await loadTeamPerms(), caller))
+  // 리드를 배정·이관하는 라우트다. 권한 변경이 즉시 반영돼야 해 캐시를 건너뛴다.
+  const hasLeadPerm = canViewLeads(attachTeamPerm(await loadTeamPerms({ fresh: true }), caller))
   const assignee = hasLeadPerm && lead.assigned_to != null && lead.assigned_to === caller.engineer_id
   // 관리자도 담당자도 아니면 이 리드에 손댈 수 없다(존재 여부도 알려주지 않는다).
   if (!admin && !assignee) return bad('Forbidden', 403)

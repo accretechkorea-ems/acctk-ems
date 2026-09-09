@@ -566,6 +566,9 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   const [page, setPage] = useState(1)
   const [editQuote, setEditQuote] = useState<Quote | null>(null)
   const [editStatus, setEditStatus] = useState('')
+  // PDF 를 여는 중인 견적 id — 연타 방지 + 그 줄만 흐리게.
+  const [pdfBusyId, setPdfBusyId] = useState<number | null>(null)
+  const pdfBusyRef = useRef(false)
 
   const [editFailReason, setEditFailReason] = useState('')
   const [saving, setSaving] = useState(false)
@@ -805,18 +808,28 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                       <td style={{ padding: '8px 10px', fontWeight: 700, color: BLUE, whiteSpace: 'nowrap', textAlign: 'center' }}>
                         <span
                           onClick={async () => {
+                            // state 는 다음 렌더에야 반영돼 같은 틱의 연타를 못 막는다 — 판정은 ref 로 한다.
+                            if (pdfBusyRef.current) return
                             if (!q.pdf_url) return
                             if (q.pdf_url.includes('synology')) { window.open(q.pdf_url, '_blank'); return }
                             const path = q.pdf_url.startsWith('quote-pdfs/') ? q.pdf_url.replace('quote-pdfs/', '') : q.pdf_url.split('/quote-pdfs/')[1]
                             if (!path) return
-                            const res = await fetch(`/api/quote-pdf?path=${encodeURIComponent(path)}`)
-                            const json = await res.json()
-                            if (json.signedUrl) {
-                              window.open(json.signedUrl, '_blank')
-                              await supabase.from('download_logs').insert({ engineer_id: currentEngineerId, quote_id: q.quote_id, quote_number: q.quote_number, company_name: q.customers?.company_name ?? null, action: 'view' })
+                            pdfBusyRef.current = true
+                            setPdfBusyId(q.quote_id)
+                            try {
+                              const res = await fetch(`/api/quote-pdf?path=${encodeURIComponent(path)}`)
+                              const json = await res.json()
+                              if (json.signedUrl) {
+                                window.open(json.signedUrl, '_blank')
+                                await supabase.from('download_logs').insert({ engineer_id: currentEngineerId, quote_id: q.quote_id, quote_number: q.quote_number, company_name: q.customers?.company_name ?? null, action: 'view' })
+                              }
+                            } finally {
+                              pdfBusyRef.current = false
+                              setPdfBusyId(null)   // 실패해도 원래대로 돌아온다
                             }
                           }}
-                          style={{ cursor: q.pdf_url ? 'pointer' : 'default' }}>
+                          title={pdfBusyId === q.quote_id ? '여는 중…' : undefined}
+                          style={{ cursor: q.pdf_url && pdfBusyId === null ? 'pointer' : 'default', opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
                           {q.quote_number}
                           {q.pdf_url && <span style={{ marginLeft: 4, fontSize: 9, color: MUTED }}>PDF</span>}
                         </span>

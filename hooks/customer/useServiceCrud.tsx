@@ -6,7 +6,7 @@
 // 실제로 같은 상태를 공유하는 한 덩어리라 분리하지 않았다.
 // 레포트 PDF 를 만들 때 JSX 를 쓰므로 이 파일만 .tsx 다.
 
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { pdf } from '@react-pdf/renderer'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
@@ -34,6 +34,10 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
   const [selectedService, setSelectedService] = useState<ServiceHistory | null>(null)
   const [isSavingService, setIsSavingService] = useState(false)
   const [isSavingServiceEdit, setIsSavingServiceEdit] = useState(false)
+  // 레포트 생성·열기 중인 service_id. 화면은 이 값으로 버튼 문구를 바꾼다.
+  const [reportBusyId, setReportBusyId] = useState<number | null>(null)
+  // 렌더를 기다리지 않는 연타 가드. state 는 다음 렌더에야 반영돼 그 사이 두 번 들어올 수 있다.
+  const reportBusyRef = useRef(false)
 
   // ── 서비스 CRUD ──
   const handleAddService = async (form: ServiceForm, engineerIds: number[]) => {
@@ -145,6 +149,10 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
 
   // 사인 완료 후 PDF를 생성해 service-report 버킷에 저장 (다운로드 X)
   const handlePrintReport = useCallback(async (service: ServiceHistory, device: Device, engineerSignDataUrl?: string, customerSignDataUrl?: string) => {
+    // 레포트 생성은 PDF 만들기 + 업로드 + DB 갱신이라 몇 초 걸린다. 그동안 버튼을 잠근다.
+    if (reportBusyRef.current) return
+    reportBusyRef.current = true
+    setReportBusyId(service.service_id)
     try {
       const contact = contacts.find(c => c.contact_id === service.contact_id) ?? null
       const engineers = service.service_engineers ?? []
@@ -175,12 +183,18 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
       await fetchDetail()
     } catch (error: any) {
       toast.error(error?.message || '레포트 저장 중 오류가 발생했습니다')
+    } finally {
+      reportBusyRef.current = false
+      setReportBusyId(null)   // 실패해도 원래대로 돌아온다
     }
   }, [contacts, customer])
 
   // 저장된 레포트를 서명 URL로 열기
   const handleOpenReport = async (service: ServiceHistory) => {
-    if (!service.report_url) return
+    if (reportBusyRef.current || !service.report_url) return
+    reportBusyRef.current = true
+    setReportBusyId(service.service_id)
+    // 빈 탭을 먼저 여는 것은 팝업 차단 회피용이라 그대로 둔다.
     const win = window.open('', '_blank')
     try {
       const path = toReportPath(service.report_url)
@@ -191,6 +205,9 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
     } catch (error: any) {
       if (win) win.close()
       toast.error(error?.message || '레포트를 여는 중 오류가 발생했습니다')
+    } finally {
+      reportBusyRef.current = false
+      setReportBusyId(null)
     }
   }
 
@@ -223,6 +240,7 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
   }
 
   return {
+    reportBusyId,
     selectedDeviceId, setSelectedDeviceId,
     selectedService, setSelectedService,
     isSavingService, isSavingServiceEdit,

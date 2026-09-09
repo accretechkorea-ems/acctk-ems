@@ -7,6 +7,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { adminEngineerIds, notifyLead } from '@/lib/leadNotify'
+import { sendLeadMail } from '@/lib/leadMail'
 import {
   INDUSTRIES, INTEREST_PRODUCTS, COMPETITORS, BUDGET_STATUSES, PURCHASE_PERIODS,
   MAX_LEN, FIELD_LABELS, MEETING_NOTE_MIN, HONEYPOT_FIELD, EMAIL_RE, DEFAULT_COUNTRY,
@@ -274,6 +275,10 @@ export async function POST(req: Request) {
     type: 'lead_created',
     leadId: saved.lead_id,
   })
+
+  // 메일도 부가 작업이다. 종 알림과 독립적으로 처리한다 — 한쪽이 실패해도 다른 쪽과 리드 저장은 그대로다.
+  // 값은 방금 저장한 row 를 그대로 쓴다(다시 조회하지 않는다).
+  await sendLeadMail({ lead_id: saved.lead_id, lead_no: saved.lead_no, ...row })
 
   return NextResponse.json({ success: true, ...(cardWarning ? { cardWarning } : null) })
 }

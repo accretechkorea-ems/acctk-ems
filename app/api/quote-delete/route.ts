@@ -44,7 +44,8 @@ export async function POST(req: NextRequest) {
     .eq('email', user.email!)
     .single()
   if (!callerRow) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  const caller = await withTeamPerm(callerRow as Caller)
+  // 견적을 실제로 지우는 라우트다. 권한을 거둔 직후에도 통과하면 곤란해 캐시를 건너뛴다.
+  const caller = await withTeamPerm(callerRow as Caller, { fresh: true })
 
   const supabaseAdmin = admin()
 

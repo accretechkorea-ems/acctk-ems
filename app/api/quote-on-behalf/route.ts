@@ -34,7 +34,8 @@ export async function POST(req: NextRequest) {
   }
 
   const supabaseAdmin = admin()
-  const teamPerms = await loadTeamPerms()
+  // 남의 실적으로 견적을 쓸 자격을 판정하는 라우트다. 권한 변경이 즉시 반영돼야 해 캐시를 건너뛴다.
+  const teamPerms = await loadTeamPerms({ fresh: true })
 
   const { data: callerRow } = await supabase
     .from('engineers')

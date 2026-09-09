@@ -24,7 +24,8 @@ export async function POST(req: Request) {
   if (!caller) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   // 팀 권한 플래그 — caller 판정과 아래 알림 대상 선별에 함께 쓴다.
-  const teamPerms = await loadTeamPerms()
+  // 발주·계산서 상태를 바꾸는 라우트다. 권한 변경이 즉시 반영돼야 해 캐시를 건너뛴다.
+  const teamPerms = await loadTeamPerms({ fresh: true })
 
   const formData = await req.formData()
   const file = formData.get('file') as File | null

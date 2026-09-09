@@ -322,6 +322,7 @@ export default function CustomerDetailPage() {
             setIsSignModalOpen(true)
           }}
           onOpenReport={service.handleOpenReport}
+          reportBusyId={service.reportBusyId}
           onUploadPacking={device.handleUploadPacking}
           onOpenPacking={device.handleOpenPacking}
           activeHoldingByDevice={activeHoldingByDevice}
