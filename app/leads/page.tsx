@@ -4,7 +4,7 @@
 // 영업관리 메뉴 안에 있지만 영업 업무라 접근 권한은 영업 현황과 같은 canViewPipeline 을 쓴다.
 
 import { useEffect, useMemo, useRef, useState, Suspense, Fragment, type CSSProperties } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import { canViewLeads, isSuperAdmin } from '@/lib/permissions'
@@ -194,7 +194,6 @@ function LeadCardThumb({ path, onOpen }: { path: string; onOpen: (url: string) =
 
 function LeadsPageInner() {
   const supabase = useMemo(() => createClient(), [])
-  const router = useRouter()
   const searchParams = useSearchParams()
   const toast = useToast()
   const confirm = useConfirm()
@@ -211,10 +210,13 @@ function LeadsPageInner() {
   const [saving, setSaving] = useState<number | null>(null)
 
   // 알림(link '/leads?lead=12')으로 들어오면 그 리드를 펼친다.
-  // 파라미터를 state 로 옮기지 않고 렌더할 때마다 읽는다 — 이미 이 화면에 있어도 즉시 반영되고,
-  // effect 안에서 setState 하는 모양(연쇄 렌더)도 생기지 않는다.
+  // 파라미터는 '어느 리드를 열지'의 씨앗으로만 쓰고 열림 상태 자체는 clickedId 한 곳에서만 들고 있는다.
+  // 렌더할 때마다 파라미터를 우선하면(openId = paramId ?? clickedId) 파라미터가 붙어 있는 동안
+  // 목록에서 다른 리드를 클릭해도 파라미터가 이겨 버려 열리지 않는다.
+  // 값이 '바뀔 때만' 반영하므로 이미 이 화면에 있는 상태에서 알림을 눌러도 그 리드가 열린다.
   const paramId = Number(searchParams.get('lead')) || null
-  const openId = paramId ?? clickedId
+  useEffect(() => { if (paramId) setClickedId(paramId) }, [paramId])
+  const openId = clickedId
 
   // 처리 입력값 — 펼친 리드 하나에 대해서만 들고 있는다.
   // 리드 id 를 함께 들고 있어야 알림으로 바로 펼쳐진 리드의 저장된 메모가 그대로 보인다.
@@ -335,7 +337,9 @@ function LeadsPageInner() {
     setClickedId(next)
     closePanel()
     // 알림으로 들어와 붙은 파라미터는 사용자가 목록을 건드리는 순간 지운다.
-    if (paramId) router.replace('/leads')
+    // 라우터를 거치지 않고 주소만 바꾼다 — router.replace 로 지우면 useSearchParams 를 감싼
+    // Suspense 경계가 다시 걸리며 이 컴포넌트가 새로 마운트되어 방금 연 리드가 도로 닫힌다.
+    if (paramId) window.history.replaceState(null, '', '/leads')
   }
 
   /**
