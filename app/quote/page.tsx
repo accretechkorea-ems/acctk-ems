@@ -179,6 +179,9 @@ function QuotePageInner() {
   const dateDisplay = `${yyyy}년　${String(mm).padStart(2, '0')}월　${String(dd).padStart(2, '0')}일`
 
   const [seqIndex, setSeqIndex] = useState(0)
+  // 씨앗 조회가 실패했을 때만 채워진다. 채워져 있으면 번호를 믿을 수 없다는 뜻이라
+  // 헤더에 그 사실을 내고 확정 버튼을 잠근다(모르는 채로 -A 가 다시 발급되는 일을 막는다).
+  const [seqLoadError, setSeqLoadError] = useState<string | null>(null)
   const seqLetter = String.fromCharCode(65 + seqIndex)
 
   // ── PDF용 debounced 값 (600ms 지연) ─────────────────────────────────────────
@@ -199,11 +202,21 @@ function QuotePageInner() {
  useEffect(() => {
     if (!engineer) return
     const f = async () => {
-      const { data } = await supabase
+      // maybeSingle 을 쓴다 — single 은 '행 없음'도 오류(PGRST116)로 돌려주어,
+      // 그날의 첫 견적(정상)과 권한 거부(사고)를 구분할 수 없다.
+      // maybeSingle 은 행이 없으면 data=null, error=null 이므로 남는 error 는 전부 진짜 실패다.
+      const { data, error } = await supabase
         .from('quote_sequence').select('seq')
         .eq('date_str', dateStr).eq('engineer_id', engineer.engineer_id)
-        .order('seq', { ascending: false }).limit(1).single()
-      // 오늘 마지막으로 쓴 seq+1 로 시작 (없으면 0 = A)
+        .order('seq', { ascending: false }).limit(1).maybeSingle()
+      if (error) {
+        // 조용히 0(=A)으로 떨어지면 안 된다 — 그러면 이미 쓴 번호가 다시 발급된다.
+        console.error('[quote] quote_sequence 조회 실패', { dateStr, engineerId: engineer.engineer_id, error })
+        setSeqLoadError(error.code || error.message || '알 수 없는 오류')
+        return
+      }
+      setSeqLoadError(null)
+      // 오늘 마지막으로 쓴 seq+1 로 시작 (행이 없으면 그날 첫 견적이므로 0 = A)
       setSeqIndex(data ? data.seq + 1 : 0)
     }
     f()
@@ -550,9 +563,17 @@ const handleDownloadPDF = async (
     // 저장된 견적 id — PDF 업로드 뒤 pdf_url 을 채우는 데 쓴다.
     let savedQuoteId = 0
     try {
-      await supabase.from('quote_sequence').insert({
+      // 순번 기록을 quotes 저장보다 먼저 한다(원래 순서 그대로다). 여기서 실패하면 그 자리에서 멈춘다 —
+      // 견적을 먼저 넣어 버리면 번호만 기록되지 않은 건이 남고, 같은 번호가 다음 견적에 다시 발급된다.
+      const { error: seqError } = await supabase.from('quote_sequence').insert({
         date_str: dateStr, engineer_id: engineer.engineer_id, seq: seqIndex,
       })
+      if (seqError) {
+        console.error('[quote] quote_sequence insert 실패', { dateStr, engineerId: engineer.engineer_id, seq: seqIndex, error: seqError })
+        toast.error(`견적번호 발급에 실패했습니다. 관리자에게 문의해주세요 (${seqError.code || seqError.message})`)
+        setIsSaving(false)
+        return { ok: false }
+      }
 
       // 수리 건에서 온 견적이면 그 수리의 special_type 으로 견적 유형(quote_type)을 결정한다.
       //   본사수리 → 'repair_hq'(기존 흐름), 그 외(국내수리) → 'repair_domestic'(단축 흐름), 수리 건 없음 → null(일반).
@@ -1475,7 +1496,18 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
             <div style={{ background: '#234ea2', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: 500, marginBottom: 2 }}>견적 번호</div>
-                <div style={{ fontSize: 14, color: '#ffffff', fontWeight: 600 }}>{quoteNo}</div>
+                {/* 조회가 실패했으면 번호 대신 그 사실을 낸다 — 잘못된 번호를 그럴듯하게 보여주지 않는다.
+                    파란 헤더 위라 붉은 글씨는 읽히지 않으므로, 흰 글씨에 반투명 테두리로 구분한다(기존 대필 배지와 같은 방식). */}
+                {seqLoadError ? (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.5)' }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    <span style={{ fontSize: 12, color: '#ffffff', fontWeight: 700 }}>견적번호 조회 실패 ({seqLoadError})</span>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 14, color: '#ffffff', fontWeight: 600 }}>{quoteNo}</div>
+                )}
               </div>
               {/* 대필 중임을 작성하는 내내 보이게 둔다 — 남의 실적으로 저장되는 화면이라 헷갈리면 안 된다. */}
               {onBehalf && (
@@ -1483,22 +1515,30 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                   {`${onBehalf.name} ${onBehalf.position || ''}`.trim()} 대신 작성 중
                 </span>
               )}
-              <button
-                onClick={() => { if (!runValidation()) return; setShowConfirmModal(true) }}
-                disabled={isSaving}
-                style={{
-                  padding: '6px 14px', boxSizing: 'border-box',
-                  background: isSaving ? 'transparent' : '#ffffff',
-                  color: isSaving ? '#ffffff' : '#234ea2',
-                  border: isSaving ? '1px solid #ffffff' : 'none',
-                  borderRadius: 6, fontWeight: 600, fontSize: 13,
-                  cursor: isSaving ? 'not-allowed' : 'pointer',
-                  transition: 'background 0.15s ease',
-                }}
-                onMouseEnter={e => { if (!isSaving) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6' }}
-                onMouseLeave={e => { if (!isSaving) (e.currentTarget as HTMLButtonElement).style.background = '#ffffff' }}>
-                {isSaving ? '저장 중...' : '견적 확정'}
-              </button>
+              {/* 번호를 못 읽은 상태에서는 확정을 막는다 — 그대로 진행하면 이미 쓴 번호가 다시 나간다 */}
+              {(() => {
+                const locked = isSaving || seqLoadError !== null
+                return (
+                  <button
+                    onClick={() => { if (!runValidation()) return; setShowConfirmModal(true) }}
+                    disabled={locked}
+                    title={seqLoadError ? '견적번호를 확인하지 못해 확정할 수 없습니다. 새로고침 후에도 같으면 관리자에게 문의해주세요' : undefined}
+                    style={{
+                      padding: '6px 14px', boxSizing: 'border-box',
+                      background: locked ? 'transparent' : '#ffffff',
+                      color: locked ? '#ffffff' : '#234ea2',
+                      border: locked ? '1px solid #ffffff' : 'none',
+                      borderRadius: 6, fontWeight: 600, fontSize: 13,
+                      cursor: locked ? 'not-allowed' : 'pointer',
+                      opacity: seqLoadError ? 0.6 : 1,
+                      transition: 'background 0.15s ease',
+                    }}
+                    onMouseEnter={e => { if (!locked) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6' }}
+                    onMouseLeave={e => { if (!locked) (e.currentTarget as HTMLButtonElement).style.background = '#ffffff' }}>
+                    {isSaving ? '저장 중...' : '견적 확정'}
+                  </button>
+                )
+              })()}
             </div>
 
             {/* PDF — debounced 값 사용으로 깜빡임 방지 */}
