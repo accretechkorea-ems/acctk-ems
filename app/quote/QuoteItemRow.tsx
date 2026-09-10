@@ -2,6 +2,7 @@
 
 import React, { useCallback, useRef } from 'react'
 import { useOutsideClick } from '@/hooks/useOutsideClick'
+import { useListKeyboard } from '@/hooks/useListKeyboard'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import type { ExpensePreset, ExpenseRow, PriceItem, QuoteRow, RowKind } from './types'
 import { numKR } from './format'
@@ -9,6 +10,9 @@ import { DISCOUNT_LABELS } from './types'
 import { inp } from './styles'
 import ExpenseSection from './ExpenseSection'
 import { Z } from '@/lib/zIndex'
+
+// 후보가 없을 때 쓰는 고정 빈 배열 — 렌더마다 새 배열을 만들지 않기 위해 모듈 상수로 둔다.
+const EMPTY_ITEMS: PriceItem[] = []
 
 // 행 카드 헤더에 붙는 종류 이름. 색 구분 없이 전부 같은 회색 배지로 쓴다.
 const KIND_LABEL: Record<RowKind, string> = {
@@ -88,6 +92,15 @@ export default function QuoteItemRow({
     el.setSelectionRange(0, 0)
   })
 
+  // 가격표 후보 목록의 ↓/↑·Enter. 닫기(Esc·바깥 클릭)는 위 useOutsideClick 이 이미 맡고 있다.
+  // 후보가 없을 때 매번 새 배열을 만들면 훅 안의 effect 가 계속 다시 도므로 고정된 빈 배열을 쓴다.
+  const itemResults = searchResults[row.id] ?? EMPTY_ITEMS
+  const itemListRef = useRef<HTMLDivElement | null>(null)
+  const itemKeys = useListKeyboard(itemResults, !!searchOpen[row.id], itemListRef, (item: PriceItem) => {
+    handleSelect(row.id, item)
+    focusItemName()
+  })
+
   // 행 하단 요약 — 한 줄에 몰아넣으면 억 단위에서 넘치므로 항목별로 줄을 나눈다.
   const summaryLines: React.ReactNode[] = []
   if (row.row_kind === 'manual_jpy' && row.product_price > 0) {
@@ -148,6 +161,7 @@ export default function QuoteItemRow({
         <div ref={searchRef} style={{ position: 'relative', flex: 1, minWidth: 0 }}>
           <input className="q-input" value={searchQuery[row.id] || ''} onChange={e => handleSearch(row.id, e.target.value)}
             onFocus={() => setSearchOpen(prev => ({ ...prev, [row.id]: true }))}
+            onKeyDown={itemKeys.onKeyDown}
             placeholder="코드 또는 모델명 검색" style={{ ...inp, width: '100%', paddingRight: row.selectedItem ? 28 : 11 }} />
           {row.selectedItem && (
             <button onClick={() => clearItem(row.id)}
@@ -158,13 +172,12 @@ export default function QuoteItemRow({
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             </button>
           )}
-          {searchOpen[row.id] && (searchResults[row.id] || []).length > 0 && (
-            <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #234ea2', borderRadius: 8, maxHeight: 200, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
-              {searchResults[row.id].map(item => (
+          {searchOpen[row.id] && itemResults.length > 0 && (
+            <div ref={itemListRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #234ea2', borderRadius: 8, maxHeight: 200, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
+              {itemResults.map((item, i) => (
                 <div key={item.id} onClick={() => { handleSelect(row.id, item); focusItemName() }}
-                  style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 11, transition: 'background 0.15s ease' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#f0f4ff')}
-                  onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
+                  style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 11, transition: 'background 0.15s ease', background: itemKeys.active === i ? '#f0f4ff' : '#fff' }}
+                  onMouseEnter={() => itemKeys.setActive(i)}>
                   <div><span style={{ fontWeight: 700, color: '#234ea2' }}>{item.item_code}</span><span style={{ marginLeft: 6, color: '#111827' }}>{item.item_name_jp}</span><span style={{ marginLeft: 6, color: '#6b7280' }}>({item.model_jp})</span></div>
                   <div style={{ color: '#9ca3af', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span>정가: ¥{item.price_jpy?.toLocaleString()} / 구입가: ¥{item.cost_jpy?.toLocaleString()}</span>

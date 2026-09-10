@@ -1,7 +1,7 @@
 // 소속회사(부모 업체) 관리 — 이름 수정과 삭제.
 //
 // 라우트로 둔 이유:
-//   · 삭제는 되돌릴 수 없고, 소속 업체가 남아 있으면 그 업체들의 parent_customer_id 가 끊긴다.
+//   · 삭제는 되돌릴 수 없고, 사업장이 남아 있으면 그 사업장들의 parent_customer_id 가 끊긴다.
 //     화면에서 세는 것만으로는 그 사이에 다른 사람이 업체를 연결했을 때를 막지 못하므로,
 //     지우기 직전에 서버가 다시 세어 0 이 아니면 거부한다.
 //   · service role 로 세야 RLS·필터에 가려 실제보다 적게 세는 일이 없다.
@@ -87,10 +87,10 @@ export async function POST(req: Request) {
       children = await childCount(parentId)
     } catch (e) {
       console.error('[parent-company] child count failed', { parentId, error: e })
-      return bad('소속 업체 수를 확인하지 못했습니다.', 500)
+      return bad('사업장 수를 확인하지 못했습니다.', 500)
     }
     // 화면에서 이미 걸렀더라도 여기서 다시 센다 — 그 사이에 업체가 연결됐을 수 있다.
-    if (children > 0) return bad(`소속 업체 ${children}곳이 연결되어 있습니다.`, 409)
+    if (children > 0) return bad(`사업장 ${children}곳이 연결되어 있습니다.`, 409)
 
     const { error } = await supabaseAdmin
       .from('customers').delete().eq('customer_id', parentId)

@@ -169,8 +169,8 @@ export default function CustomerDetailPage() {
     )
   }
 
-  // 부모 행은 소속 업체를 묶기만 하는 껍데기다(주소·장비·견적이 없다).
-  // 일반 상세를 그대로 보여주면 빈 화면이 되므로, 무엇인지 알려주고 소속 업체만 낸다.
+  // 부모 행은 사업장을 묶기만 하는 껍데기다(주소·장비·견적이 없다).
+  // 일반 상세를 그대로 보여주면 빈 화면이 되므로, 무엇인지 알려주고 사업장만 낸다.
   if (customer?.is_parent) {
     return (
       <>
@@ -182,20 +182,20 @@ export default function CustomerDetailPage() {
                 {customer.company_name}
               </div>
               <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.7 }}>
-                이 업체는 소속 업체를 묶는 회사 단위입니다.
+                이 업체는 사업장을 묶는 회사 단위입니다.
               </div>
             </div>
 
             <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, padding: '14px 16px', marginTop: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>소속 업체</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>소속 사업장</span>
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>
                   {childSites.length}곳
                 </span>
               </div>
               {childSites.length === 0 ? (
                 <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 12, color: '#9ca3af' }}>
-                  묶인 업체가 없습니다
+                  묶인 사업장이 없습니다
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -263,6 +263,7 @@ export default function CustomerDetailPage() {
               holdings={holdings}
               onOpenHolding={holding.openHolding}
               onQuoteHistoryOpen={() => setQuoteScope('site')}
+              onDeviceOpen={() => setTab('장비')}
               family={family ? { name: family.name, siteCount: family.siteCount, quoteCount: family.quotes.length } : null}
               onFamilyQuoteHistoryOpen={() => setQuoteScope('family')}
             />

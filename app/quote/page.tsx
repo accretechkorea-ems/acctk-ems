@@ -7,6 +7,7 @@ import { useToast } from '@/components/common/Toast'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import { useOutsideClick } from '@/hooks/useOutsideClick'
+import { useListKeyboard } from '@/hooks/useListKeyboard'
 import AccessGate from '@/components/common/AccessGate'
 import { canViewQuote } from '@/lib/permissions'
 import { BlobProvider, pdf } from '@react-pdf/renderer'
@@ -70,23 +71,27 @@ function QuotePageInner() {
   const supabase = createClient()
   const router = useRouter()
   const searchParams = useSearchParams()
+  // 확정 후 초기화에서 주소창 파라미터를 지우는데, useSearchParams 가 그것을 언제 반영하는지에
+  // 기대지 않는다 — 이 깃발이 서면 파라미터를 읽지 않은 것으로 친다. repair_id 가 남으면 다음 견적이
+  // 또 수리 건으로 저장되고 repairs.quote_id 가 덮어써지므로, 화면 표시만의 문제가 아니다.
+  const [paramsCleared, setParamsCleared] = useState(false)
   // 수리 건에서 넘어온 경우: repair_id(숫자만 유효) + prefill 파라미터. 없거나 무효면 일반 견적서.
-  const repairIdRaw = searchParams.get('repair_id')
+  const repairIdRaw = paramsCleared ? null : searchParams.get('repair_id')
   const repairId = repairIdRaw && /^\d+$/.test(repairIdRaw) ? Number(repairIdRaw) : null
   // 견적 대필: ?on_behalf=<engineer_id> 로 넘어온 경우. 이 파라미터는 주소창으로 아무나 만들 수 있어
   // 값 자체를 믿지 않는다 — 서버(/api/quote-on-behalf)가 "작성자가 영업관리인가" 를 판정하고,
   // 통과했을 때 돌려주는 담당자 정보만 대필 모드의 근거로 쓴다.
-  const onBehalfRaw = searchParams.get('on_behalf')
+  const onBehalfRaw = paramsCleared ? null : searchParams.get('on_behalf')
   const onBehalfId = onBehalfRaw && /^\d+$/.test(onBehalfRaw) ? Number(onBehalfRaw) : null
   // 다시쓰기: ?duplicate=<quote_id>. on_behalf 와 같은 이유로 값 자체는 믿지 않는다 —
   // 서버(/api/quote-duplicate)가 본인 견적인지 확인한 뒤 돌려주는 내용만 화면에 채운다.
-  const duplicateRaw = searchParams.get('duplicate')
+  const duplicateRaw = paramsCleared ? null : searchParams.get('duplicate')
   const duplicateId = duplicateRaw && /^\d+$/.test(duplicateRaw) ? Number(duplicateRaw) : null
   // 주소로 들어온 프리필이 있으면 그쪽이 우선이다 — 임시저장분은 묻지 않고 버린다.
   const hasUrlPrefill = repairId != null || onBehalfId != null || duplicateId != null
   const { loading: guardLoading, authorized } = usePageGuard(canViewQuote)
   const toast = useToast()
-  const { errors, clearError, validate } = useFieldErrors<'company' | 'eu' | 'items' | 'expenses'>()
+  const { errors, setErrors, clearError, validate } = useFieldErrors<'company' | 'eu' | 'items' | 'expenses'>()
   const [isClient, setIsClient] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
@@ -151,6 +156,11 @@ function QuotePageInner() {
   const euSearchRef = useRef<HTMLDivElement | null>(null)
   useOutsideClick(customerSearchRef, useCallback(() => setCustomerSearchOpen(false), []), customerSearchOpen)
   useOutsideClick(euSearchRef, useCallback(() => setEuSearchOpen(false), []), euSearchOpen)
+  // 후보 목록의 ↓/↑·Enter. 닫기(Esc·바깥 클릭)는 위 useOutsideClick 이 이미 맡고 있다.
+  const customerListRef = useRef<HTMLDivElement | null>(null)
+  const euListRef = useRef<HTMLDivElement | null>(null)
+  const customerKeys = useListKeyboard(customerResults, customerSearchOpen, customerListRef, c => handleCustomerSelect(c))
+  const euKeys = useListKeyboard(euResults, euSearchOpen, euListRef, c => handleEUSelect(c))
 
   useEffect(() => {
     if (!showPriceGuide) return
@@ -497,6 +507,38 @@ const handleDownloadPDF = async (
   // 성공일 때만 PDF 생성·견적번호 증가로 넘어간다.
   // quoteId 는 PDF 를 올린 뒤 pdf_url 을 실제 파일 이름으로 채우는 데 쓴다.
   type SaveResult = { ok: false } | { ok: true; linked: boolean; quoteId: number }
+
+  /**
+   * 확정 후 화면을 처음 들어왔을 때 상태로 되돌린다.
+   *
+   * 라우터 이동·새로고침 대신 state 만 되돌린다 — useSearchParams 를 감싼 Suspense 경계가
+   * 다시 걸리면 화면이 한 번 비었다가 그려지고(깜빡임), 환율·부대비용 프리셋을 다시 받아오며,
+   * 스크롤도 맨 위로 튄다. state 리셋은 그 셋 다 없다.
+   *
+   * 건드리지 않는 것: 견적번호(seqIndex — 호출부에서 다음 번호로 올린다), 환율, 로그인 정보,
+   * 부대비용 프리셋. 부대비용·DISCOUNT 는 rows 안에 들어 있어 rows 를 비우면 함께 사라진다.
+   */
+  const resetForm = () => {
+    setCompany(''); setCustomerId(null); setCustomerQuery(''); setCustomerResults([])
+    setCustomerSearchOpen(false); setSelectedCustomer(null); setPrefillNotice(null)
+    setIsDealer(false)
+    setEuCustomerId(null); setEuQuery(''); setEuResults([]); setEuSearchOpen(false); setSelectedEU(null)
+    setOpportunities([]); setOpportunityId(null)
+    setReceiver(''); setDelivery(''); setRemarks(DEFAULT_REMARKS); setRemarksOpen(false); setShowSignature(false)
+    setRows([createRow()])
+    setSearchQuery({}); setSearchResults({}); setSearchOpen({})
+    setEditingProfitRate({}); setProfitRateInput({})
+    setOnBehalf(null)
+    setErrors({})
+    // 주소창의 프리필 파라미터를 지운다. 라우터를 거치지 않아 이 컴포넌트가 다시 마운트되지 않는다.
+    // 값 자체는 paramsCleared 로 무효화하므로 useSearchParams 의 갱신 시점과 무관하게 안전하다.
+    if (hasUrlPrefill) {
+      setParamsCleared(true)
+      window.history.replaceState(null, '', '/quote')
+    }
+    // 자동 저장 effect 도 빈 상태를 보고 지우지만, 확정 직후 저장분이 남는 순간이 없도록 여기서 먼저 지운다.
+    if (engineer) clearDraft(engineer.engineer_id)
+  }
 
   const handleSaveQuote = async (): Promise<SaveResult> => {
     if (!engineer) { toast.error('엔지니어 정보를 불러오는 중입니다'); return { ok: false } }
@@ -1066,6 +1108,7 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                       value={customerQuery}
                       onChange={e => { handleCustomerSearch(e.target.value); clearError('company'); setPrefillNotice(null) }}
                       onFocus={() => customerResults.length > 0 && setCustomerSearchOpen(true)}
+                      onKeyDown={customerKeys.onKeyDown}
                       placeholder="업체명 검색 (사전 등록 필요)"
                     />
                   )}
@@ -1094,12 +1137,11 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                   </div>
                   <FieldError message={errors.company} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 2, whiteSpace: 'nowrap' }} />
                   {customerSearchOpen && customerResults.length > 0 && (
-                    <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #234ea2', borderRadius: 8, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
-                      {customerResults.map(c => (
+                    <div ref={customerListRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #234ea2', borderRadius: 8, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
+                      {customerResults.map((c, i) => (
                         <div key={c.customer_id} onClick={() => handleCustomerSelect(c)}
-                          style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 12, transition: 'background 0.15s ease' }}
-                          onMouseEnter={e => (e.currentTarget.style.background = '#f0f4ff')}
-                          onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
+                          style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 12, transition: 'background 0.15s ease', background: customerKeys.active === i ? '#f0f4ff' : '#fff' }}
+                          onMouseEnter={() => customerKeys.setActive(i)}>
                           <div style={{ fontWeight: 700, color: '#234ea2' }}>{c.company_name}</div>
                           <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{c.address ?? ''}{c.status ? ` · ${c.status}` : ''}</div>
                         </div>
@@ -1134,6 +1176,7 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                       value={euQuery}
                       onChange={e => { handleEUSearch(e.target.value); clearError('eu') }}
                       onFocus={() => euResults.length > 0 && setEuSearchOpen(true)}
+                      onKeyDown={euKeys.onKeyDown}
                       placeholder="최종 사용 업체 검색 (사전 등록 필요)"
                     />
                     {/* 고른 뒤에는 상자 안 오른쪽 끝에 체크(= 거래이력 연동)와 지우기만 남긴다. */}
@@ -1149,12 +1192,11 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                       </div>
                     )}
                     {euSearchOpen && euResults.length > 0 && (
-                      <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #c2410c', borderRadius: 8, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(194,65,12,0.12)' }}>
-                        {euResults.map(c => (
+                      <div ref={euListRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #c2410c', borderRadius: 8, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(194,65,12,0.12)' }}>
+                        {euResults.map((c, i) => (
                           <div key={c.customer_id} onClick={() => handleEUSelect(c)}
-                            style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 12, transition: 'background 0.15s ease' }}
-                            onMouseEnter={e => (e.currentTarget.style.background = '#fff7ed')}
-                            onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
+                            style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 12, transition: 'background 0.15s ease', background: euKeys.active === i ? '#fff7ed' : '#fff' }}
+                            onMouseEnter={() => euKeys.setActive(i)}>
                             <div style={{ fontWeight: 700, color: '#c2410c' }}>{c.company_name}</div>
                             <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{c.address ?? ''}{c.status ? ` · ${c.status}` : ''}</div>
                           </div>
@@ -1585,7 +1627,9 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                   setSeqIndex(prev => prev + 1)
                   setShowConfirmModal(false)
                   // 수리 건 연결이 됐으면 PDF 생성 후 수리 목록으로 이동
-                  if (result.linked) router.push('/repair')
+                  if (result.linked) { router.push('/repair'); return }
+                  // 이어서 다음 견적을 쓸 수 있게 화면을 비운다(번호는 위에서 이미 다음 것으로 올렸다).
+                  resetForm()
                 } finally {
                   setIsSubmitting(false)
                 }

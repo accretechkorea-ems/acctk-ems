@@ -58,7 +58,7 @@ type Engineer = {
   office: string | null
 }
 
-/** 소속회사 한 줄 — 목록에 필요한 것만. childCount 는 살아있는 소속 업체 수다. */
+/** 소속회사 한 줄 — 목록에 필요한 것만. childCount 는 살아있는 사업장 수다. */
 type ParentRow = {
   customer_id: number
   company_name: string
@@ -724,7 +724,7 @@ function AdminPageInner() {
   const visibleNotices = notices.filter(n => noticePhase(n) === noticeTab)
 
   // ── 소속회사 관리 ──────────────────────────────────────────────────────────
-  // 소속 업체 수는 자식 행을 한 번에 읽어 화면에서 센다. 소속회사가 수백 개라
+  // 사업장 수는 자식 행을 한 번에 읽어 화면에서 센다. 소속회사가 수백 개라
   // 회사마다 count 질의를 날리면 요청이 그만큼 늘어난다(삭제 직전 판정은 서버가 다시 한다).
   const fetchParents = async () => {
     setParentLoading(true)
@@ -793,7 +793,7 @@ function AdminPageInner() {
     fetchParents()
   }
 
-  // 정리가 필요한 것(소속 업체 0곳)을 맨 위로, 그다음 이름순.
+  // 정리가 필요한 것(사업장 0곳)을 맨 위로, 그다음 이름순.
   const visibleParents = parentRows
     .filter(p => !parentOnlyEmpty || p.childCount === 0)
     .filter(p => !parentSearch.trim() || p.company_name.toLowerCase().includes(parentSearch.trim().toLowerCase()))
@@ -1217,7 +1217,7 @@ function AdminPageInner() {
           <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>🏬</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>소속회사 관리</div>
-            <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>여러 업체를 묶는 회사 단위를 관리합니다. 이름을 고치거나, 소속 업체가 없는 회사를 정리합니다.</div>
+            <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>여러 업체를 묶는 회사 단위를 관리합니다. 이름을 고치거나, 사업장이 없는 회사를 정리합니다.</div>
             {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
             <div style={{ flex: 1 }} />
             <button
@@ -1957,7 +1957,7 @@ function AdminPageInner() {
               <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
                 <input type="checkbox" checked={parentOnlyEmpty} onChange={e => setParentOnlyEmpty(e.target.checked)}
                   style={{ width: 14, height: 14, cursor: 'pointer', accentColor: BLUE }} />
-                <span style={{ fontSize: 12, fontWeight: 700, color: parentOnlyEmpty ? BLUE : GRAY }}>소속 업체 없음만 보기</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: parentOnlyEmpty ? BLUE : GRAY }}>사업장 없음만 보기</span>
               </label>
               <span style={{ marginLeft: 'auto', fontSize: 12, color: GRAY }}>
                 {visibleParents.length}개 / 전체 {parentRows.length}개
@@ -1973,7 +1973,7 @@ function AdminPageInner() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead style={{ position: 'sticky', top: 0, background: CARD_BG, zIndex: Z.thead }}>
                     <tr style={{ borderBottom: `2px solid ${BORDER}` }}>
-                      {['소속회사', '소속 업체', '등록일', '관리'].map(h => (
+                      {['소속회사', '사업장', '등록일', '관리'].map(h => (
                         <th key={h} style={{ padding: '9px 12px', textAlign: 'left', color: GRAY, fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -2021,11 +2021,11 @@ function AdminPageInner() {
                                     style={{ padding: '4px 10px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
                                     이름 수정
                                   </button>
-                                  {/* 소속 업체가 있으면 지울 수 없다 — 지우면 그 업체들의 연결이 끊긴다 */}
+                                  {/* 사업장이 있으면 지울 수 없다 — 지우면 그 사업장들의 연결이 끊긴다 */}
                                   <button
                                     onClick={() => handleParentDelete(p)}
                                     disabled={p.childCount > 0 || busy}
-                                    title={p.childCount > 0 ? `소속 업체 ${p.childCount}곳이 연결되어 있습니다` : '삭제'}
+                                    title={p.childCount > 0 ? `사업장 ${p.childCount}곳이 연결되어 있습니다` : '삭제'}
                                     style={{
                                       padding: '4px 10px', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700,
                                       background: p.childCount > 0 ? '#f3f4f6' : DANGER,
@@ -2046,7 +2046,7 @@ function AdminPageInner() {
               )}
             </div>
             <div style={{ fontSize: 11, color: GRAY, marginTop: 10, lineHeight: 1.6 }}>
-              소속 업체가 연결된 회사는 삭제할 수 없습니다. 업체 쪽에서 소속회사를 해제한 뒤 지워주세요.
+              사업장이 연결된 회사는 삭제할 수 없습니다. 사업장 쪽에서 소속회사를 해제한 뒤 지워주세요.
             </div>
           </div>
         </div>

@@ -94,7 +94,7 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
           </div>
 
           <div>
-            <label style={labelStyle}>소속회사</label>
+            <label style={labelStyle}>소속</label>
             {/* 같은 회사의 업체들을 묶는 행. 바꾸거나 해제해도 견적·장비는 이 업체에 그대로 남는다. */}
             <ParentPicker
               value={form.parent_customer_id}

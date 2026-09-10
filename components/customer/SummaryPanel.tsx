@@ -26,6 +26,20 @@ type Props = {
   /** 이 업체가 어느 회사에 묶여 있을 때만 채워진다. 없으면 보조줄을 내지 않는다. */
   family?: { name: string; siteCount: number; quoteCount: number } | null
   onFamilyQuoteHistoryOpen?: () => void
+  /** 장비 줄을 누르면 가운데 장비 탭으로 옮긴다. 없으면 장비 줄은 표시 전용이다. */
+  onDeviceOpen?: () => void
+}
+
+/** 값이 없을 때의 표기. 항목마다 '-' 와 '없음' 이 섞이지 않게 한곳에서 정한다. */
+const NONE = '없음'
+
+/** 눌러지는 곳에 붙는 셰브론. 줄(Row)과 보조줄이 같은 모양을 쓴다. */
+function Chevron({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginRight: -2 }}>
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  )
 }
 
 // onClick 이 있으면 눌러지는 줄이 된다 — 호버 배경과 오른쪽 셰브론으로 그 사실을 알린다.
@@ -37,11 +51,7 @@ function Row({ label, value, muted, onClick }: { label: string; value: string; m
       <span style={{ fontSize: 13, fontWeight: 600, color: muted ? '#9ca3af' : '#111827', textAlign: 'right', wordBreak: 'break-all' }}>
         {value}
       </span>
-      {onClick && (
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginRight: -2 }}>
-          <polyline points="9 18 15 12 9 6" />
-        </svg>
-      )}
+      {onClick && <Chevron />}
     </>
   )
   const base: CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 8 }
@@ -182,7 +192,7 @@ function HoldingRow({ h, onClick }: { h: Holding; onClick: () => void }) {
 export default function SummaryPanel({
   quotes, deviceCount, history, customerId, opportunities,
   onAddOpportunity, onOpenOpportunity, onChangeStage, canEditOpportunity,
-  holdings, onOpenHolding, onQuoteHistoryOpen, family, onFamilyQuoteHistoryOpen,
+  holdings, onOpenHolding, onQuoteHistoryOpen, family, onFamilyQuoteHistoryOpen, onDeviceOpen,
 }: Props) {
   const ch = countQuoteChannels(quotes, customerId)
   const [showClosed, setShowClosed] = useState(false)
@@ -214,48 +224,66 @@ export default function SummaryPanel({
 
   return (
     <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, padding: '14px 16px' }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 12 }}>요약</div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 12, textAlign: 'center' }}>요약</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-        {/* 견적이 있을 때만 눌러진다 — 0건이면 셰브론도 없는 표시 전용 줄 */}
+        {/* 견적과 그 보조줄은 한 덩어리로 묶는다 — 바깥 gap(9)이 아니라 안쪽 gap(5)으로 붙여
+            보조줄이 견적에 딸린 것임이 간격에서도 드러나게 한다. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {/* 견적이 있을 때만 눌러진다 — 0건이면 셰브론도 없는 표시 전용 줄 */}
+          <Row
+            label="견적"
+            value={quotes.length > 0 ? `${quotes.length}건` : NONE}
+            muted={quotes.length === 0}
+            onClick={quotes.length > 0 ? onQuoteHistoryOpen : undefined}
+          />
+          {(ch.dealer > 0 || (family && family.quoteCount > 0)) && (
+            // 라벨 자리만큼 들여쓰고 왼쪽에 선을 둔다 — 독립 항목이 아니라 견적의 딸림줄이라는 표시다.
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, marginLeft: 6, paddingLeft: 9, borderLeft: '1px solid #ebebeb' }}>
+              {/* 대리점 경유가 섞였을 때만 내역을 덧붙인다 */}
+              {ch.dealer > 0 && (
+                <span style={{ fontSize: 11, color: '#9ca3af' }}>직판 {ch.direct} · 대리점 {ch.dealer}</span>
+              )}
+              {/* 같은 회사의 다른 업체까지 합친 건수. 위의 「N건」은 이 업체 기준 그대로다. */}
+              {family && family.quoteCount > 0 && (
+                <button
+                  onClick={onFamilyQuoteHistoryOpen}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#fafafa' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 2, maxWidth: '100%',
+                    fontSize: 11, color: '#234ea2', fontWeight: 600,
+                    background: 'transparent', border: 'none', borderRadius: 6,
+                    margin: '-2px -4px', padding: '2px 4px',
+                    cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                    transition: 'background 0.15s ease',
+                  }}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {family.name} 전체 {family.quoteCount}건
+                  </span>
+                  <Chevron size={12} />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        {/* 장비가 있을 때만 눌러진다 — 누르면 가운데 장비 탭으로 옮긴다 */}
         <Row
-          label="견적"
-          value={quotes.length > 0 ? `${quotes.length}건` : '없음'}
-          muted={quotes.length === 0}
-          onClick={quotes.length > 0 ? onQuoteHistoryOpen : undefined}
+          label="장비"
+          value={deviceCount > 0 ? `${deviceCount}대` : NONE}
+          muted={deviceCount === 0}
+          onClick={deviceCount > 0 ? onDeviceOpen : undefined}
         />
-        {/* 대리점 경유가 섞였을 때만 내역을 덧붙인다 */}
-        {ch.dealer > 0 && (
-          <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'right', marginTop: -5 }}>
-            직판 {ch.direct} · 대리점 {ch.dealer}
-          </div>
-        )}
-        {/* 같은 회사의 다른 업체까지 합친 건수. 위의 「N건」은 이 업체 기준 그대로다. */}
-        {family && family.quoteCount > 0 && (
-          <button
-            onClick={onFamilyQuoteHistoryOpen}
-            style={{
-              fontSize: 11, color: '#234ea2', textAlign: 'right', marginTop: -5,
-              background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit',
-            }}
-          >
-            {family.name} 전체 {family.quoteCount}건 →
-          </button>
-        )}
-        <Row label="장비" value={`${deviceCount}대`} muted={deviceCount === 0} />
-        <Row label="최근 방문" value={lastVisit ?? '-'} muted={!lastVisit} />
+        <Row label="최근 방문" value={lastVisit ?? NONE} muted={!lastVisit} />
       </div>
 
       {/* ── 영업기회 ── */}
       <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #ebebeb' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
-          <span style={{ fontSize: 12, color: '#6b7280' }}>영업기회</span>
-          <span style={{ fontSize: 13, fontWeight: 600, color: open.length > 0 ? '#111827' : '#9ca3af' }}>
-            {open.length > 0 ? `${open.length}건` : '없음'}
-          </span>
-        </div>
+        {/* 위 요약 줄과 같은 형태(라벨—값)를 쓴다. 아래 목록이 곧 내용이라 셰브론은 두지 않는다. */}
+        <Row label="영업기회" value={open.length > 0 ? `${open.length}건` : NONE} muted={open.length === 0} />
 
         {open.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, margin: '0 -8px 8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, margin: '8px -8px 0' }}>
             {open.map(o => (
               <OppRow key={o.opportunity_id} o={o} canEdit={canEditOpportunity(o)}
                 onOpen={() => onOpenOpportunity(o)}
@@ -267,7 +295,7 @@ export default function SummaryPanel({
 
         {/* 종료된 기회는 건수만 보여주고 접어둔다 */}
         {closed.length > 0 && (
-          <div style={{ marginBottom: 8 }}>
+          <div style={{ marginTop: 8 }}>
             <button
               onClick={() => setShowClosed(v => !v)}
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}
@@ -288,39 +316,21 @@ export default function SummaryPanel({
           </div>
         )}
 
-        <button
-          onClick={onAddOpportunity}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#234ea2' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = '#ebebeb' }}
-          style={{
-            width: '100%', padding: '7px 0', boxSizing: 'border-box',
-            background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 6,
-            cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#234ea2',
-            transition: 'border-color 0.15s ease',
-          }}
-        >
-          + 영업기회
-        </button>
       </div>
 
       {/* ── 홀딩 ── */}
       <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #ebebeb' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
-          <span style={{ fontSize: 12, color: '#6b7280' }}>홀딩</span>
-          <span style={{ fontSize: 13, fontWeight: 600, color: openHoldings.length > 0 ? '#111827' : '#9ca3af' }}>
-            {openHoldings.length > 0 ? `${openHoldings.length}건` : '없음'}
-          </span>
-        </div>
+        <Row label="홀딩" value={openHoldings.length > 0 ? `${openHoldings.length}건` : NONE} muted={openHoldings.length === 0} />
 
         {openHoldings.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, margin: '0 -8px 8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, margin: '8px -8px 0' }}>
             {openHoldings.map(h => <HoldingRow key={h.holding_id} h={h} onClick={() => onOpenHolding(h)} />)}
           </div>
         )}
 
         {/* 해제된 것은 건수만 보여주고 접어둔다 */}
         {resolvedHoldings.length > 0 && (
-          <div>
+          <div style={{ marginTop: 8 }}>
             <button
               onClick={() => setShowResolved(v => !v)}
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}
@@ -335,6 +345,24 @@ export default function SummaryPanel({
             )}
           </div>
         )}
+      </div>
+
+      {/* ── 액션 ── 항목 사이에 버튼이 끼면 줄의 리듬이 끊긴다. 만드는 동작은 카드 맨 아래에 모은다.
+          지금은 영업기회 하나뿐이지만, 다른 추가 동작이 생기면 이 자리에 나란히 둔다. */}
+      <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #ebebeb' }}>
+        <button
+          onClick={onAddOpportunity}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = '#234ea2' }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = '#ebebeb' }}
+          style={{
+            width: '100%', padding: '7px 0', boxSizing: 'border-box',
+            background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 6,
+            cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#234ea2',
+            transition: 'border-color 0.15s ease',
+          }}
+        >
+          + 영업기회
+        </button>
       </div>
     </div>
   )

@@ -681,8 +681,10 @@ function LeadsPageInner() {
 
                       {open && (
                         <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
-                          {/* 상세는 활동 현황과 같은 구조 — 옅은 바탕 위에 흰 카드가 놓인다. */}
-                          <td colSpan={7} style={{ padding: 12, background: PAGE_BG }}>
+                          {/* 상세는 활동 현황과 같은 구조 — 옅은 바탕 위에 흰 카드가 놓인다.
+                              액센트 바는 위 행의 첫 칸과 같은 값을 그대로 준다. 표가 borderCollapse:collapse 라
+                              두 칸의 왼쪽 선이 위아래로 맞붙어, 펼친 행 시작부터 상세 끝까지 한 줄로 이어진다. */}
+                          <td colSpan={7} style={{ padding: 12, background: PAGE_BG, borderLeft: `3px solid ${ACCENT_BAR}` }}>
                             <div className="ld-scope">
                             <div className="ld-detail">
                               {/* 왼쪽 2×2. 같은 행끼리 높이가 맞는다(그리드 기본 stretch). */}

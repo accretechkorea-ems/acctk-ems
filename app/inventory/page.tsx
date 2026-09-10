@@ -237,34 +237,22 @@ function InventoryPage() {
     if (!ok) return
     setIsSavingRequest(true)
     try {
-      const { error } = await supabase.from('inventory_requests').insert([{
-        item_id: requestItem.item_id,
-        requester_id: currentEngineer.engineer_id,
-        quantity: requestQty,
-        outlet_company: requestOutletCompany.trim(),
-        reason: requestReason.trim(),
-        note: requestNote.trim() || null,
-        status: '대기중',
-        requested_at: new Date().toISOString(),
-      }])
-      if (error) throw error
+      // 요청자는 서버가 세션에서 판정한다 — 여기서 engineer_id 를 보내지 않는다.
+      // 알림 생성도 라우트가 service role 로 처리한다(남의 engineer_id 로 넣을 수 없게).
+      const res = await fetch('/api/inventory-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_id: requestItem.item_id,
+          quantity: requestQty,
+          outlet_company: requestOutletCompany.trim(),
+          reason: requestReason.trim(),
+          note: requestNote.trim() || null,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || '요청 중 오류가 발생했습니다')
 
-      // 알림 수신자(현재 시점 대상) — 삭제(퇴사)된 직원은 제외. (발주서 알림 로직과 동일 기준)
-      const managers = allEngineers.filter(e => canViewSalesMgmt(e) && !e.resigned_date)
-      if (managers.length > 0) {
-        const { error: notiErr } = await supabase.from('notifications').insert(
-          managers.map(m => ({
-            engineer_id: m.engineer_id,
-            title: '출고 요청 승인 필요',
-            message: `${requestItem.item_name ?? '알 수 없음'} ${requestQty}개 출고 요청이 들어왔습니다`,
-            type: 'stock_request',
-            link: '/inventory?tab=approval',
-            is_read: false,
-            created_at: new Date().toISOString(),
-          }))
-        )
-        if (notiErr) console.error('[inventory] notification insert failed', { action: 'stock_request', itemId: requestItem.item_id, targets: managers.length, error: notiErr })
-      }
       toast.success('출고 요청이 등록되었습니다')
       setRequestItem(null); setRequestQty(1); setRequestOutletCompany(''); setRequestReason(''); setRequestNote('')
       await fetchAll()
