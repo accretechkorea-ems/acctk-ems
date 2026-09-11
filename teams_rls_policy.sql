@@ -13,12 +13,12 @@
 
 -- ── superadmin 판별 헬퍼 ──────────────────────────────────────────
 -- 현재 로그인 사용자(JWT 이메일)가 engineers 에서 permission_level='superadmin' 인지 확인.
--- SECURITY INVOKER: engineers 의 조회 정책(engineers_select_authenticated)이 using(true)라
---   호출자 권한으로도 조회 가능하므로 DEFINER 가 필요 없다.
+-- SECURITY DEFINER: engineers RLS 를 조여도 이 함수가 무너지지 않도록 전환 (2026-09-11)
+-- 소유자 postgres. search_path 고정 필수.
 create or replace function public.is_superadmin()
 returns boolean
 language sql
-security invoker
+security definer
 stable
 set search_path = public
 as $$

@@ -29,12 +29,13 @@
 
 -- ── 로그인 사용자의 engineer_id 헬퍼 ──────────────────────────────
 -- is_superadmin() 과 같은 방식이다(JWT 이메일 → engineers 매칭).
--- SECURITY INVOKER: engineers 의 조회 정책이 로그인 사용자 전체에 열려 있어 DEFINER 가 필요 없다.
+-- SECURITY DEFINER: DB 는 이미 DEFINER 였음. 레포를 DB 상태에 맞춤 (2026-09-11)
+-- 소유자 postgres. search_path 고정 필수.
 -- 이메일이 engineers 에 없으면 NULL 을 돌려주고, NULL 비교는 항상 false 라 아무 행도 안 보인다.
 create or replace function public.current_engineer_id()
 returns integer
 language sql
-security invoker
+security definer
 stable
 set search_path = public
 as $$

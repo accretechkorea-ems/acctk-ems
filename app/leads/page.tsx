@@ -17,6 +17,9 @@ import SegmentedControl from '@/components/common/SegmentedControl'
 import Popover from '@/components/common/Popover'
 import { Z } from '@/lib/zIndex'
 import { josa } from '@/lib/josa'
+import { useLeadFilters, ALL, NONE } from '@/hooks/leads/useLeadFilters'
+import { useQuoteSelection } from '@/hooks/useQuoteSelection'
+import LeadExcelButton from '@/components/leads/LeadExcelButton'
 
 import {
   LEAD_STATUS_NEW, LEAD_STATUS_ACTIVE, LEAD_STATUS_CONVERTED, LEAD_STATUS_SKIPPED,
@@ -31,7 +34,7 @@ const BORDER = '#ebebeb'
 const CARD_BG = '#ffffff'
 const PAGE_BG = '#fafafa'
 // 표의 세 단계를 서로 다른 기존 값으로 갈라 놓는다 — 같은 값을 쓰면 헤더·hover·펼친 행이 구분되지 않는다.
-const ROW_HOVER = '#f8fafc'   // 마우스만 올린 행
+const ROW_HOVER = PAGE_BG      // 마우스만 올린 행 — 기준 화면(활동 이력·요약 카드)의 행 hover 와 같은 값
 const HEAD_BG = '#f3f4f6'     // 헤더 · 열린 행 — 활동 현황의 중립 배경(뱃지·칩과 같은 값)
 const ACCENT_BAR = BLUE       // 열린 행 왼쪽 액센트 바
 const DANGER = '#dc2626'
@@ -67,6 +70,8 @@ type Lead = {
   /** 명함 이미지의 스토리지 파일명(비공개 버킷). 없으면 null. */
   business_card_url: string | null
   status: string; assigned_to: number | null; admin_memo: string | null; skip_reason: string | null
+  /** 배정한 사람. 배정 라우트가 실행자로 채운다(기존 건은 null). */
+  assigned_by: number | null
   converted_opportunity_id: number | null
   created_at: string
 }
@@ -94,6 +99,8 @@ const inpStyle: CSSProperties = {
   padding: '8px 11px', border: `1px solid ${BORDER}`, borderRadius: 6, background: CARD_BG,
   color: TEXT, fontSize: 13, outline: 'none', fontFamily: 'inherit',
 }
+// 날짜·월 입력은 브라우저 기본 배색을 따라가지 않도록 활동 현황과 같은 값을 함께 준다.
+const dateInpStyle: CSSProperties = { ...inpStyle, colorScheme: 'light' }
 // 실행 버튼: 활동 현황의 조회 버튼(파랑) / 비활성은 동선 보기 버튼의 회색 규칙
 const primaryBtn = (disabled: boolean): CSSProperties => ({
   padding: '7px 16px', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 700,
@@ -224,7 +231,10 @@ function LeadsPageInner() {
   // 미진행 사유 입력값. 메모와 같은 방식으로 리드 id 를 함께 들고 있는다.
   const [skipDraft, setSkipDraft] = useState<{ id: number; text: string } | null>(null)
   // 처리 줄에서 펼친 입력 영역. 한 번에 하나만 열리므로 리드 id + 종류 한 쌍이면 충분하다.
-  const [panel, setPanel] = useState<{ id: number; kind: 'memo' | 'convert' | 'skip' } | null>(null)
+  const [panel, setPanel] = useState<{ id: number; kind: 'convert' | 'skip' } | null>(null)
+  // 메모를 고치고 있는 리드. 평소에는 내용만 보이고, 여기에 id 가 들어왔을 때만 입력칸과 저장·취소가 나온다
+  // (메모 칸 오른쪽 위의 연필로 들어간다).
+  const [memoEditing, setMemoEditing] = useState<number | null>(null)
   const [custQuery, setCustQuery] = useState('')
   const [custOpen, setCustOpen] = useState(false)
   // 고객사 검색 결과는 표 컨테이너 밖으로 나가야 해서 포털로 띄운다. 그 기준이 되는 입력칸.
@@ -301,13 +311,29 @@ function LeadsPageInner() {
     return e ? [e.name, e.position].filter(Boolean).join(' ') : '-'
   }
 
-  // 신규 건을 위로, 각 묶음 안에서는 등록 최신순.
+  // 필터·검색·페이지는 훅이 맡는다(전체 조회 → 메모리 filter → slice, 수리 화면과 같은 방식).
+  const f = useLeadFilters(leads, engName)
+
+  // 신규 건을 위로, 각 묶음 안에서는 등록 최신순. 거른 뒤에 정렬한다(규칙은 그대로다).
   const sorted = useMemo(() => {
     const isNew = (l: Lead) => l.status === LEAD_STATUS_NEW
-    return [...leads].sort((a, b) =>
+    return [...f.filtered].sort((a, b) =>
       (isNew(b) ? 1 : 0) - (isNew(a) ? 1 : 0) || (a.created_at < b.created_at ? 1 : -1)
     )
-  }, [leads])
+  }, [f.filtered])
+
+  // 화면에 그릴 한 페이지분.
+  const paged = useMemo(
+    () => sorted.slice(f.page * f.pageSize, f.page * f.pageSize + f.pageSize),
+    [sorted, f.page, f.pageSize],
+  )
+
+  // 체크박스 선택 — 견적 목록과 같은 훅을 그대로 쓴다.
+  // 남겨둘 범위로 filtered(필터된 전체)를 넘긴다. paged 를 넘기면 페이지를 넘길 때마다
+  // 이전 페이지의 선택이 통째로 걷힌다. 필터를 바꿔 사라진 건만 자동으로 빠진다.
+  const sel = useQuoteSelection(f.filtered.map(l => l.lead_id))
+  const pagedIds = paged.map(l => l.lead_id)
+  const allPagedSelected = pagedIds.length > 0 && pagedIds.every(id => sel.isSelected(id))
 
   const newCount = leads.filter(l => l.status === LEAD_STATUS_NEW).length
 
@@ -326,7 +352,7 @@ function LeadsPageInner() {
   const togglePanel = (leadId: number, kind: string) => {
     const same = panel?.id === leadId && panel.kind === kind
     closePanel()
-    if (!same) setPanel({ id: leadId, kind: kind as 'memo' | 'convert' | 'skip' })
+    if (!same) setPanel({ id: leadId, kind: kind as 'convert' | 'skip' })
   }
 
   /** 펼친 리드의 메모 입력값. 아직 손대지 않았으면 저장된 값을 그대로 보여준다. */
@@ -583,7 +609,11 @@ function LeadsPageInner() {
           화면이 좁아도 칸은 표만큼 넓다. */}
       <style>{`
         .ld-scope { container-type: inline-size; }
-        .ld-detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12; align-items: stretch; }
+        /* 왼쪽 2×2 카드 : 미팅 노트 : 관리 = 6 : 4 : 3.
+           컨테이너가 1,171px(바깥 maxWidth 1200)이라 gap 을 빼면 약 529 : 353 : 265 가 된다.
+           노트는 왼쪽 카드 한 칸(약 265)보다 넓게 남기고, 관리 카드는 담당자 드롭다운이
+           들어갈 만큼만 가져간다. 관리는 더 줄면 드롭다운이 읽히지 않아 230px 를 바닥으로 둔다. */
+        .ld-detail { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 4fr) minmax(230px, 3fr); gap: 12; align-items: stretch; }
         .ld-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12; align-content: start; }
         /* 노트 칸의 높이는 왼쪽 4개 카드가 정한다. 카드를 흐름에서 빼지 않으면 긴 노트가
            행 높이를 밀어 올려 왼쪽 카드 아래에 빈 칸이 생긴다. */
@@ -593,6 +623,11 @@ function LeadsPageInner() {
         .ld-note::-webkit-scrollbar { width: 6px; }
         .ld-note::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
         .ld-note::-webkit-scrollbar-track { background: transparent; }
+        @container (max-width: 1000px) {
+          /* 세 열로는 좁아지면 관리 카드를 아래 한 줄로 내린다(노트 폭을 먼저 지킨다). */
+          .ld-detail { grid-template-columns: minmax(0, 6fr) minmax(0, 4fr); }
+          .ld-admin-slot { grid-column: 1 / -1; }
+        }
         @container (max-width: 900px) {
           .ld-detail { grid-template-columns: minmax(0, 1fr); }
           /* 세로로 접히면 맞출 높이가 없다 — 흐름으로 되돌리고 대신 최대 높이를 준다. */
@@ -602,33 +637,95 @@ function LeadsPageInner() {
         @container (max-width: 560px) { .ld-cards { grid-template-columns: minmax(0, 1fr); } }
       `}</style>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <h1 style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px', margin: 0 }}>리드</h1>
-          {newCount > 0 && (
-            <span style={{
-              fontSize: 11, fontWeight: 700, borderRadius: 99, padding: '2px 9px',
-              background: leadStatusColor(LEAD_STATUS_NEW).bg, color: leadStatusColor(LEAD_STATUS_NEW).text,
-            }}>
-              미처리 {newCount}
-            </span>
-          )}
-        </div>
+        {/* ── 필터 · 검색 ──
+            활동 현황 화면과 같은 필터 카드에 담는다(흰 바탕 · 1px 테두리 · radius 8 · padding 14/16 · 아래 12).
+            컨트롤도 그 화면의 input 규칙(inpStyle)을 그대로 쓴다 — 높이를 못 박지 않고 padding 으로 맞춘다.
+            선택지는 코드에 박지 않고 지금 목록에 실제로 있는 값에서 뽑는다. */}
+        {!loading && (
+          <div style={{ ...cardStyle, marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {/* 미처리 건수 — 필터가 아니라 목록 전체의 상태다. 담당자 카드의 '총 N명',
+                  재고 화면의 'N개 품목' 과 같이 줄 맨 앞에 둔다. 모난 컨트롤들 사이에서
+                  pill 모양과 상태색이 스스로 구분되므로 필터로 오해되지 않는다. */}
+              {newCount > 0 && (
+                <span style={{
+                  fontSize: 11, fontWeight: 700, borderRadius: 99, padding: '2px 9px', whiteSpace: 'nowrap',
+                  background: leadStatusColor(LEAD_STATUS_NEW).bg, color: leadStatusColor(LEAD_STATUS_NEW).text,
+                }}>
+                  미처리 {newCount}
+                </span>
+              )}
+              <input type="month" value={f.month} onChange={e => f.setMonth(e.target.value)}
+                title="등록일 기준 월" style={dateInpStyle} />
+              <select value={f.assignedBy} onChange={e => f.setAssignedBy(e.target.value)} style={inpStyle}>
+                <option value={ALL}>배정자 전체</option>
+                <option value={NONE}>배정자 없음</option>
+                {f.byOptions.map(o => <option key={o.id} value={String(o.id)}>{o.label}</option>)}
+              </select>
+              <select value={f.assignedTo} onChange={e => f.setAssignedTo(e.target.value)} style={inpStyle}>
+                <option value={ALL}>담당자 전체</option>
+                <option value={NONE}>미배정</option>
+                {f.toOptions.map(o => <option key={o.id} value={String(o.id)}>{o.label}</option>)}
+              </select>
+              <select value={f.product} onChange={e => f.setProduct(e.target.value)} style={inpStyle}>
+                <option value={ALL}>관심제품 전체</option>
+                {f.productOptions.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+              <input value={f.searchInput} onChange={e => f.setSearchInput(e.target.value)}
+                placeholder="번호 · 배정자 · 담당자 · 고객사 · 관심제품 · 파트너사"
+                style={{ ...inpStyle, flex: 1, minWidth: 200 }} />
+              {/* 건수 + 전체 초기화 — 자리를 늘 잡아 두고 보이기만 감춘다.
+                  담당자 카드의 수정 아이콘과 같은 방식(visibility)이다 — 나타났다 사라져도 옆 칸이 밀리지 않는다. */}
+              <div style={{
+                width: 128, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8,
+                visibility: f.active ? 'visible' : 'hidden',
+              }}>
+                <span style={{ fontSize: 12, color: FAINT, whiteSpace: 'nowrap' }}>{f.filtered.length}건</span>
+                <button onClick={f.reset} style={ghostBtn}>초기화</button>
+              </div>
+              {/* 엑셀 — 줄 맨 오른쪽 끝. 걸러서(왼쪽) → 고르고(표) → 내보낸다(여기)는 흐름의 끝이고,
+                  자리를 늘 지키는 초기화 슬롯 바깥이라 나타났다 사라져도 다른 칸을 밀지 않는다.
+                  선택이 없으면 비활성(견적 화면과 같은 규칙). */}
+              <LeadExcelButton
+                leadIds={sel.selected}
+                engName={engName}
+                onDone={sel.clear}
+                style={{ ...ghostBtn, flexShrink: 0 }}
+              />
+            </div>
+          </div>
+        )}
 
         <div style={{ background: CARD_BG, borderRadius: 8, border: `1px solid ${BORDER}`, overflowX: 'auto' }}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: 60, color: MUTED, fontSize: 13 }}>불러오는 중...</div>
           ) : sorted.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 60, color: MUTED, fontSize: 13 }}>등록된 리드가 없습니다</div>
+            <div style={{ textAlign: 'center', padding: 60, color: MUTED, fontSize: 13 }}>
+              {f.active ? '조건에 맞는 리드가 없습니다' : '등록된 리드가 없습니다'}
+            </div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 {/* 헤더 — 옅은 배경만으로는 흰 행과 잘 안 갈라져, 관리자 견적서 표와 같은 2px 아래선을 함께 준다 */}
                 <tr style={{ background: HEAD_BG, borderBottom: `2px solid ${BORDER}` }}>
-                  {['번호', '등록일', '파트너사', '고객사', '관심제품', '담당자', '상태'].map(h => <th key={h} style={th}>{h}</th>)}
+                  {/* 선택 칸 — 견적 목록과 같은 폭·정렬. 이 페이지에 보이는 것만 한 번에 켜고 끈다. */}
+                  <th style={{ width: 36, padding: '9px 6px', textAlign: 'center', background: HEAD_BG }}>
+                    <input
+                      type="checkbox"
+                      checked={allPagedSelected}
+                      onChange={() => sel.toggleAll(pagedIds)}
+                      title="이 페이지 전체 선택/해제"
+                      style={{ cursor: 'pointer' }}
+                    />
+                  </th>
+                  {/* 배정자 → 담당자 칸은 가운데 화살표에 맞춰 값이 좌우로 갈리므로 머리글도 가운데로 둔다 */}
+                  {['번호', '등록일', '파트너사', '고객사', '관심제품', '배정자 → 담당자', '상태'].map(h => (
+                    <th key={h} style={h === '배정자 → 담당자' ? { ...th, textAlign: 'center' } : th}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {sorted.map(lead => {
+                {paged.map(lead => {
                   const open = openId === lead.lead_id
                   const sc = leadStatusColor(lead.status)
                   const converted = lead.status === LEAD_STATUS_CONVERTED || !!lead.converted_opportunity_id
@@ -638,19 +735,16 @@ function LeadsPageInner() {
                   const skipReady = (skipDraft?.id === lead.lead_id ? skipDraft.text : '').trim().length >= SKIP_REASON_MIN
                   const busy = saving === lead.lead_id
                   const isAssignee = lead.assigned_to === myEngineerId
-                  // 처리 줄의 선택지. 관리자는 담당자 배정과 메모, 담당자는 메모·전환·미진행을 쓴다.
-                  // 메모는 접혀 있으면 내용이 있는지 알 수 없으므로 suffix 로 표시한다(활동 현황의 건수 suffix 와 같은 자리).
-                  const actions = [
-                    ...(isAdmin || isAssignee
-                      ? [{ label: '메모', value: 'memo', suffix: (lead.admin_memo ?? '').trim() ? '있음' : undefined }]
-                      : []),
-                    ...(isAssignee
-                      ? [
-                          { label: '영업기회 전환', value: 'convert', disabled: closed },
-                          { label: '미진행 처리', value: 'skip', disabled: closed },
-                        ]
-                      : []),
-                  ]
+                  // 처리 줄의 선택지 — 배정받은 담당자만 쓰는 두 가지.
+                  // (메모는 관리 카드 안에서 바로 고치므로 여기 두지 않는다)
+                  const actions = isAssignee
+                    ? [
+                        { label: '영업기회 전환', value: 'convert', disabled: closed },
+                        { label: '미진행 처리', value: 'skip', disabled: closed },
+                      ]
+                    : []
+                  const canMemo = isAdmin || isAssignee
+                  const editingMemo = memoEditing === lead.lead_id
                   const openPanel = panel?.id === lead.lead_id ? panel.kind : ''
                   const memoDirty = memoValue(lead) !== (lead.admin_memo ?? '')
                   return (
@@ -663,6 +757,20 @@ function LeadsPageInner() {
                         onMouseEnter={e => { if (!open) e.currentTarget.style.background = ROW_HOVER }}
                         onMouseLeave={e => { if (!open) e.currentTarget.style.background = '' }}
                       >
+                        {/* 선택 — 이 행을 누르면 상세가 펼쳐지므로, 체크는 거기까지 번지지 않게 막는다.
+                            칸(td)과 입력(input) 양쪽에서 멈춘다 — 체크박스 옆 빈자리를 눌러도 열리면 안 된다. */}
+                        <td
+                          onClick={e => e.stopPropagation()}
+                          style={{ width: 36, padding: '10px 6px', textAlign: 'center' }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={sel.isSelected(lead.lead_id)}
+                            onClick={e => e.stopPropagation()}
+                            onChange={() => sel.toggle(lead.lead_id)}
+                            style={{ cursor: 'pointer' }}
+                          />
+                        </td>
                         {/* 번호가 없는 리드(발급 실패)는 자리를 비우지 않고 - 로 채운다 */}
                         <td style={{ ...td, fontWeight: 700, color: lead.lead_no ? BLUE : FAINT, borderLeft: open ? `3px solid ${ACCENT_BAR}` : `3px solid transparent` }}>
                           {lead.lead_no ?? '-'}
@@ -671,7 +779,17 @@ function LeadsPageInner() {
                         <td style={{ ...td, fontWeight: 700 }}>{lead.partner_company}</td>
                         <td style={td}>{lead.customer_company}</td>
                         <td style={{ ...td, color: MUTED }}>{lead.interest_product}</td>
-                        <td style={{ ...td, color: lead.assigned_to ? TEXT : FAINT }}>{engName(lead.assigned_to)}</td>
+                        {/* 배정자 → 담당자.
+                            세 칸 그리드로 고정한다 — 배정자는 오른쪽, 화살표는 가운데, 담당자는 왼쪽 정렬.
+                            표의 같은 열은 폭이 같으므로 값이 있든 없든 모든 행에서 화살표가 한 줄로 선다.
+                            (한쪽만 비었을 때 화살표를 빼면 행마다 글자가 밀려 열이 어긋난다) */}
+                        <td style={td}>
+                          <span style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 6, width: '100%' }}>
+                            <span style={{ textAlign: 'right', color: lead.assigned_by ? TEXT : FAINT }}>{engName(lead.assigned_by)}</span>
+                            <span style={{ color: FAINT }}>→</span>
+                            <span style={{ textAlign: 'left', color: lead.assigned_to ? TEXT : FAINT }}>{engName(lead.assigned_to)}</span>
+                          </span>
+                        </td>
                         <td style={td}>
                           <span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: sc.bg, color: sc.text }}>
                             {lead.status}
@@ -684,7 +802,7 @@ function LeadsPageInner() {
                           {/* 상세는 활동 현황과 같은 구조 — 옅은 바탕 위에 흰 카드가 놓인다.
                               액센트 바는 위 행의 첫 칸과 같은 값을 그대로 준다. 표가 borderCollapse:collapse 라
                               두 칸의 왼쪽 선이 위아래로 맞붙어, 펼친 행 시작부터 상세 끝까지 한 줄로 이어진다. */}
-                          <td colSpan={7} style={{ padding: 12, background: PAGE_BG, borderLeft: `3px solid ${ACCENT_BAR}` }}>
+                          <td colSpan={8} style={{ padding: 12, background: PAGE_BG, borderLeft: `3px solid ${ACCENT_BAR}` }}>
                             <div className="ld-scope">
                             <div className="ld-detail">
                               {/* 왼쪽 2×2. 같은 행끼리 높이가 맞는다(그리드 기본 stretch). */}
@@ -751,47 +869,115 @@ function LeadsPageInner() {
                                   </div>
                                 </div>
                               </div>
-                            </div>
 
-                            {/* ── 처리 ── 활동 현황의 필터 카드처럼 한 줄에 늘어놓고, 누른 것만 아래로 펼친다. */}
-                            <div style={{ ...cardStyle, marginTop: 12 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                {/* 배정은 관리자만 한다. 담당자에게는 배정된 사람 이름만 보인다. */}
-                                {isAdmin ? (
-                                  <select
-                                    value={lead.assigned_to ?? ''}
-                                    disabled={busy}
-                                    onChange={e => assign(lead, e.target.value ? Number(e.target.value) : null)}
-                                    style={{ ...inpStyle, width: 'auto' }}
-                                  >
-                                    <option value="">배정 안 함</option>
-                                    {assigneeOptions(lead.assigned_to).map(o => (
-                                      <option key={o.id} value={o.id}>{o.label}</option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <span style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap' }}>
-                                    <span style={{ color: FAINT, marginRight: 6 }}>담당자</span>
-                                    {engName(lead.assigned_to)}
-                                  </span>
-                                )}
-                                {actions.length > 0 && (
-                                  <SegmentedControl
-                                    value={openPanel}
-                                    options={actions}
-                                    onChange={v => togglePanel(lead.lead_id, v)}
-                                  />
-                                )}
-                                {/* PDF 출력 — 관리자만. 누르면 펼쳐지는 영역 없이 바로 받아지므로
-                                    "하나만 열린다"는 SegmentedControl 에 넣지 않고 따로 둔다. */}
-                                {isAdmin && (
-                                  <button
-                                    onClick={() => downloadPdf(lead)}
-                                    disabled={pdfBusy === lead.lead_id}
-                                    style={{ ...ghostBtn, cursor: pdfBusy === lead.lead_id ? 'default' : 'pointer', color: pdfBusy === lead.lead_id ? FAINT : MUTED }}
-                                  >{pdfBusy === lead.lead_id ? '만드는 중...' : 'PDF 출력'}</button>
-                                )}
-                              </div>
+                            {/* ── 관리 ── 맨 오른쪽 세로 카드. 처리에 쓰는 것만 모아 둔다.
+                                카드·제목·라벨은 왼쪽 카드들과 같은 상수(cardStyle·cardTitle·dlRow·dlKey)를 쓴다. */}
+                            <div className="ld-admin-slot ld-note-slot">
+                              <div className="ld-note-card" style={{ ...cardStyle, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                                {/* 제목 줄 오른쪽 끝에 PDF 출력. cardTitle 의 아래 구분선을 그대로 쓰려고 같은 줄에 겹쳐 둔다. */}
+                                <div style={{ ...cardTitle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                                  <span>관리</span>
+                                  {isAdmin && (
+                                    <button
+                                      onClick={() => downloadPdf(lead)}
+                                      disabled={pdfBusy === lead.lead_id}
+                                      style={{ ...ghostBtn, padding: '5px 11px', fontSize: 12, cursor: pdfBusy === lead.lead_id ? 'default' : 'pointer', color: pdfBusy === lead.lead_id ? FAINT : MUTED }}
+                                    >{pdfBusy === lead.lead_id ? '만드는 중...' : 'PDF 출력'}</button>
+                                  )}
+                                </div>
+
+                                <div style={cardRows}>
+                                  {/* 배정자 — 읽기 전용. 배정 라우트가 실행자로 채운다. */}
+                                  <div style={dlRow}>
+                                    <span style={dlKey}>배정자</span>
+                                    <span style={{ color: lead.assigned_by ? TEXT : FAINT, fontWeight: 500, minWidth: 0 }}>
+                                      {lead.assigned_by ? engName(lead.assigned_by) : '-'}
+                                    </span>
+                                  </div>
+
+                                  {/* 담당자 — 배정은 관리자만. 담당자에게는 이름만 보인다. */}
+                                  <div style={{ ...dlRow, alignItems: 'center' }}>
+                                    <span style={dlKey}>담당자</span>
+                                    {isAdmin ? (
+                                      <select
+                                        value={lead.assigned_to ?? ''}
+                                        disabled={busy}
+                                        onChange={e => assign(lead, e.target.value ? Number(e.target.value) : null)}
+                                        style={{ ...inpStyle, flex: 1, minWidth: 0 }}
+                                      >
+                                        <option value="">배정 안 함</option>
+                                        {assigneeOptions(lead.assigned_to).map(o => (
+                                          <option key={o.id} value={o.id}>{o.label}</option>
+                                        ))}
+                                      </select>
+                                    ) : (
+                                      <span style={{ color: lead.assigned_to ? TEXT : FAINT, fontWeight: 500, minWidth: 0 }}>
+                                        {engName(lead.assigned_to)}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* ── 메모 ── 평소에는 내용만 보이고, 연필을 누르면 그때 입력칸과 저장·취소가 열린다.
+                                    연필은 메모 칸 오른쪽 위에 늘 떠 있다 — 숨겨 두면 고칠 수 있다는 것을 알기 어렵다. */}
+                                <div style={{ ...dividerTop, position: 'relative' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, marginBottom: 6 }}>
+                                    <span style={{ fontSize: 12, color: FAINT }}>메모</span>
+                                    {canMemo && !editingMemo && (lead.admin_memo ?? '').trim() && (
+                                      <button
+                                        onClick={() => { setMemoEditing(lead.lead_id); setMemoDraft({ id: lead.lead_id, text: lead.admin_memo ?? '' }) }}
+                                        title="메모 수정" aria-label="메모 수정"
+                                        style={{
+                                          padding: 0, background: 'none', border: 'none', cursor: 'pointer',
+                                          color: FAINT, display: 'inline-flex', transition: 'color 0.15s ease',
+                                        }}
+                                        onMouseEnter={e => { e.currentTarget.style.color = BLUE }}
+                                        onMouseLeave={e => { e.currentTarget.style.color = FAINT }}
+                                      >
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                                          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                        </svg>
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {editingMemo ? (
+                                    <>
+                                      <textarea
+                                        value={memoValue(lead)}
+                                        rows={3}
+                                        maxLength={MAX_LEN.request_note}
+                                        onChange={e => setMemoDraft({ id: lead.lead_id, text: e.target.value })}
+                                        placeholder="처리 메모"
+                                        style={{ ...inpStyle, width: '100%', boxSizing: 'border-box', resize: 'vertical', lineHeight: '22px' }}
+                                      />
+                                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 6 }}>
+                                        <button onClick={() => { setMemoEditing(null); setMemoDraft(null) }} style={ghostBtn}>취소</button>
+                                        <button
+                                          disabled={busy || !memoDirty}
+                                          onClick={async () => {
+                                            await callManage(lead.lead_id, { action: 'memo', memo: memoValue(lead) }, { admin_memo: memoValue(lead).trim() || null }, '메모를 저장했습니다.')
+                                            setMemoEditing(null)
+                                          }}
+                                          style={primaryBtn(busy || !memoDirty)}
+                                        >저장</button>
+                                      </div>
+                                    </>
+                                  ) : (lead.admin_memo ?? '').trim() ? (
+                                    <div style={{ fontSize: 13, color: TEXT, lineHeight: '22px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                      {lead.admin_memo}
+                                    </div>
+                                  ) : canMemo ? (
+                                    // 메모가 없을 때의 유일한 진입점. 연필은 가리킬 내용이 없으므로 내지 않는다.
+                                    <button
+                                      onClick={() => { setMemoEditing(lead.lead_id); setMemoDraft({ id: lead.lead_id, text: '' }) }}
+                                      style={{ padding: 0, background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: BLUE, fontFamily: 'inherit' }}
+                                    >+ 메모 추가</button>
+                                  ) : (
+                                    <span style={{ fontSize: 13, color: FAINT }}>-</span>
+                                  )}
+                                </div>
 
                               {/* 종결된 리드는 무엇으로 끝났는지와 그 사유를 여기서 밝힌다(버튼은 잠겨 있다). */}
                               {closed && (
@@ -807,24 +993,14 @@ function LeadsPageInner() {
                                 </div>
                               )}
 
-                              {/* ── 메모 ── */}
-                              {openPanel === 'memo' && (
+                              {/* 배정받은 담당자의 처리 — 누른 것만 아래로 펼친다(종전 동작 그대로). */}
+                              {actions.length > 0 && (
                                 <div style={dividerTop}>
-                                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                    <input
-                                      value={memoValue(lead)}
-                                      maxLength={MAX_LEN.request_note}
-                                      onChange={e => setMemoDraft({ id: lead.lead_id, text: e.target.value })}
-                                      placeholder="처리 메모"
-                                      style={{ ...inpStyle, flex: '1 1 260px', minWidth: 0 }}
-                                    />
-                                    <button
-                                      disabled={busy || !memoDirty}
-                                      onClick={() => callManage(lead.lead_id, { action: 'memo', memo: memoValue(lead) }, { admin_memo: memoValue(lead).trim() || null }, '메모를 저장했습니다.')}
-                                      style={primaryBtn(busy || !memoDirty)}
-                                    >저장</button>
-                                    <button onClick={closePanel} style={ghostBtn}>취소</button>
-                                  </div>
+                                  <SegmentedControl
+                                    value={openPanel}
+                                    options={actions}
+                                    onChange={v => togglePanel(lead.lead_id, v)}
+                                  />
                                 </div>
                               )}
 
@@ -913,9 +1089,11 @@ function LeadsPageInner() {
                                 </div>
                               )}
 
-                              {/* 삭제 — superadmin 에게만 보인다. 서버도 같은 권한을 다시 확인한다. */}
+                              {/* 삭제 — superadmin 에게만 보인다. 서버도 같은 권한을 다시 확인한다.
+                                  marginTop: auto 로 남는 높이를 전부 위에서 먹어 카드 맨 아래에 붙는다 —
+                                  메모가 길든 짧든, 편집 중이든 아니든 버튼 자리가 움직이지 않는다. */}
                               {isSuperAdmin(me) && (
-                                <div style={dividerTop}>
+                                <div style={{ ...dividerTop, marginTop: 'auto' }}>
                                   {deleteConfirm?.id === lead.lead_id ? (
                                     <div style={{ background: DANGER_BG, border: `1px solid ${BORDER}`, borderRadius: 6, padding: 12 }}>
                                       <div style={{ fontSize: 13, color: TEXT, lineHeight: '22px', marginBottom: 10 }}>
@@ -949,17 +1127,22 @@ function LeadsPageInner() {
                                       </div>
                                     </div>
                                   ) : (
-                                    <button
-                                      onClick={() => askDelete(lead)}
-                                      disabled={deleting === lead.lead_id}
-                                      style={{
-                                        ...primaryBtn(deleting === lead.lead_id),
-                                        background: deleting === lead.lead_id ? '#f3f4f6' : DANGER,
-                                      }}
-                                    >{deleting === lead.lead_id ? '삭제 중...' : '리드 삭제'}</button>
+                                    // 카드 오른쪽 아래. 되돌릴 수 없는 동작이라 다른 것과 붙지 않게 끝에 둔다.
+                                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                      <button
+                                        onClick={() => askDelete(lead)}
+                                        disabled={deleting === lead.lead_id}
+                                        style={{
+                                          ...primaryBtn(deleting === lead.lead_id),
+                                          background: deleting === lead.lead_id ? '#f3f4f6' : DANGER,
+                                        }}
+                                      >{deleting === lead.lead_id ? '삭제 중...' : '리드 삭제'}</button>
+                                    </div>
                                   )}
                                 </div>
                               )}
+                              </div>
+                            </div>
                             </div>
                             </div>
                           </td>
@@ -972,6 +1155,27 @@ function LeadsPageInner() {
             </table>
           )}
         </div>
+
+        {/* 페이지 버튼 — 한 페이지에 다 들어가면 내지 않는다.
+            모양은 이 화면이 이미 쓰는 보조 버튼(ghostBtn)을 그대로 쓴다.
+            비활성은 디자인 규칙대로 글자만 흐리게 한다(#9ca3af) — 새 배경색을 만들지 않는다. */}
+        {!loading && f.totalPages > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginTop: 16 }}>
+            {([['이전', -1], ['다음', 1]] as const).map(([label, step], i) => {
+              const off = step < 0 ? f.page === 0 : f.page >= f.totalPages - 1
+              const btn = (
+                <button key={label} disabled={off}
+                  onClick={() => f.setPage(p => Math.min(f.totalPages - 1, Math.max(0, p + step)))}
+                  style={{ ...ghostBtn, color: off ? FAINT : MUTED, cursor: off ? 'not-allowed' : 'pointer' }}>
+                  {label}
+                </button>
+              )
+              return i === 0
+                ? <Fragment key={label}>{btn}<span style={{ fontSize: 13, fontWeight: 700, color: MUTED }}>{f.page + 1} / {f.totalPages}</span></Fragment>
+                : btn
+            })}
+          </div>
+        )}
 
       </div>
 

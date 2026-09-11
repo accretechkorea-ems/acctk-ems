@@ -111,8 +111,11 @@ export async function POST(req: Request) {
       ? {}
       : { status: assignedTo === null ? LEAD_STATUS_NEW : LEAD_STATUS_ACTIVE }
 
+    // 배정자 = 이 배정을 실행한 사람. 세션에서 판정한 caller 만 쓴다(요청 본문의 값은 읽지 않는다).
+    // 재배정하면 그때의 실행자로 갱신된다 — 최초 배정자를 고정해 두지 않는다.
+    // 회수(assignedTo === null)도 실행 기록이므로 같이 남긴다.
     const { error } = await supabaseAdmin.from('leads')
-      .update({ assigned_to: assignedTo, ...statusPatch, ...touch })
+      .update({ assigned_to: assignedTo, assigned_by: caller.engineer_id, ...statusPatch, ...touch })
       .eq('lead_id', leadId)
     if (error) return fail('assign update failed', error)
 

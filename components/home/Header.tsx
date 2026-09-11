@@ -163,6 +163,7 @@ export default function Header() {
     {
       label: '관리자',
       children: [
+        { label: '요청함', path: '/requests', canAccess: canViewAdmin },
         { label: '실적 현황', path: '/sales', canAccess: canViewAdmin },
         { label: '유지보수', path: '/admin', canAccess: canViewAdmin },
       ],
