@@ -172,7 +172,7 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
             <div>
               <label style={labelStyle}>고객 담당자</label>
               <select value={form.contact_id ?? ''} onChange={(e) => { setForm(p => ({ ...p, contact_id: e.target.value ? Number(e.target.value) : null })); clearError('contact_id') }} style={errors.contact_id ? { ...fieldStyle, border: errBorder } : fieldStyle}>
-                <option value="">담당자 선택</option>
+                <option value="">고객 담당자 선택</option>
                 {contacts.map(c => <option key={c.contact_id} value={c.contact_id}>{c.name} {c.position ?? ''}</option>)}
               </select>
               <FieldError message={errors.contact_id} />

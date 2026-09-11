@@ -45,7 +45,7 @@ export default function ContactAddModal({ isOpen, isSaving, onClose, onSave }: P
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>담당자 추가</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>고객 담당자 추가</div>
           <button
             onClick={handleClose}
             title="닫기"

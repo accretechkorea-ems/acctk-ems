@@ -55,7 +55,7 @@ export default function ContactEditModal({ contact, isSaving, onClose, onSave, o
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>담당자 수정</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>고객 담당자 수정</div>
           <button
             onClick={onClose}
             title="닫기"

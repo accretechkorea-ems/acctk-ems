@@ -37,7 +37,7 @@ function ContactRow({ contact, onEdit, first }: { contact: Contact; onEdit: () =
         onClick={onEdit}
         onMouseEnter={() => setBtnHover(true)}
         onMouseLeave={() => setBtnHover(false)}
-        aria-label="담당자 수정"
+        aria-label="고객 담당자 수정"
         style={{
           position: 'absolute', top: 11, right: 14,
           padding: 0, background: 'none', border: 'none', cursor: 'pointer',
@@ -108,7 +108,7 @@ export default function ContactSection({ contacts, onAdd, onEdit }: Props) {
     <div style={{ background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px' }}>
-        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#111827' }}>담당자</h2>
+        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#111827' }}>고객 담당자</h2>
         {contacts.length > 0 && (
           <span style={{ fontSize: 12, color: '#9ca3af' }}>총 {contacts.length}명</span>
         )}
@@ -135,7 +135,7 @@ export default function ContactSection({ contacts, onAdd, onEdit }: Props) {
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
-        담당자 추가
+        고객 담당자 추가
       </button>
     </div>
   )

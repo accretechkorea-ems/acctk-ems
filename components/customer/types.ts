@@ -163,6 +163,8 @@ export type Quote = {
   recipient: string | null
   // order_date · revenue_date 는 코드에서 쓰지 않는다(수주·매출 시점은 처리 시각 컬럼이 정본).
   pdf_url?: string | null
+  /** 등록 시각. 활동 이력 정렬이 이 값을 쓴다(select('*') 로 들어온다). */
+  created_at?: string | null
   engineers?: { name: string; position: string | null }
   quote_items?: { product_name: string | null; price_list?: { model_jp: string | null } | null }[]
 }

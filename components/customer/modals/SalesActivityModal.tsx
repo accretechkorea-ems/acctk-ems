@@ -135,7 +135,7 @@ export default function SalesActivityModal({ isOpen, activity, contacts, opportu
           </div>
 
           <div>
-            <label style={labelStyle}>만난 담당자</label>
+            <label style={labelStyle}>만난 고객 담당자</label>
             <select value={form.contact_id ?? ''}
               onChange={(e) => setForm(p => ({ ...p, contact_id: e.target.value ? Number(e.target.value) : null }))}
               style={fieldStyle}>

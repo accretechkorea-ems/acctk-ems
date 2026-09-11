@@ -48,7 +48,27 @@ type Item = {
   badge?: string         // 대리점 견적 표시 등
   onClick?: () => void
   onEdit?: () => void    // 영업 활동에만 있다 (호버 시 나타나는 연필)
-  sortId: number         // 같은 날짜일 때 최신 것을 위로 올리기 위한 보조 키
+  sortAt: number         // 정렬 키 — 등록 시각(epoch ms). 종류와 무관하게 이 값만으로 순서가 정해진다
+  sortId: number         // 등록 시각까지 같을 때만 쓰는 보조 키 (id 큰 것이 위)
+}
+
+/**
+ * 정렬 키. 실제 등록 시각(created_at, timestamptz)을 epoch ms 로 바꾼다.
+ *
+ * service_history 에는 created_at 컬럼이 아예 없다(스키마는 건드리지 않는다).
+ * 그런 소스는 표시 날짜의 KST 자정으로 대신한다 — 같은 날에 다른 종류와 섞이면
+ * 서비스가 그날의 맨 아래로 내려간다. 종전에도 서비스는 맨 아래였으므로 보이는 결과는 같다.
+ */
+const sortKey = (createdAt: string | null | undefined, fallbackDate: string | null): number => {
+  if (createdAt) {
+    const t = Date.parse(createdAt)
+    if (!Number.isNaN(t)) return t
+  }
+  if (fallbackDate) {
+    const d = Date.parse(`${fallbackDate}T00:00:00+09:00`)
+    if (!Number.isNaN(d)) return d
+  }
+  return 0
 }
 
 // 'YYYY-MM-DD' → '2026년 8월'
@@ -69,11 +89,13 @@ const LONGEST_PAID = '· 유상'
 // 한 줄 표시가 깨지지 않게 공백을 하나로 눌러 둔다.
 const oneLine = (v?: string | null) => (v ?? '').replace(/\s+/g, ' ').trim()
 
-// 고객사 담당자 — "(이름 직급)". 이름이 비어 있는 행이 3할이라 그때는 통째로 생략한다.
-// ('고객사' 라벨은 붙이지 않는다 — 업체 상세라 고객사는 이미 화면에 고정돼 있다)
+// 고객사 담당자 — "(고객사 담당자 : 이름 직급)". 이름이 비어 있는 행이 3할이라 그때는 통째로 생략한다.
+// 괄호 안이 sales_activities.contact_id 로 연결된 '고객사' 담당자임을 밝힌다 —
+// 라벨이 없으면 우리 쪽 방문자로 오해할 수 있다(오른쪽 열의 작성자와 헷갈린다).
+// contact_id 가 없는 활동(전화상담 등)은 빈 문자열이라 괄호 자체가 그려지지 않는다.
 const contactLabel = (c?: { name: string | null; position: string | null } | null) => {
   const t = oneLine(`${c?.name ?? ''} ${c?.position ?? ''}`)
-  return t ? `(${t})` : ''
+  return t ? `(고객사 담당자 : ${t})` : ''
 }
 
 // 담당자 표기는 어디서나 "이름 직급". 직급이 없으면 이름만.
@@ -250,6 +272,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
       body: h.service_notes ?? '',
       labelSuffix: h.is_paid !== null ? (h.is_paid ? '유상' : '무상') : undefined,
       owner: engineerNames(h),
+      sortAt: sortKey(null, h.visit_date),
       sortId: h.service_id,
     }))
 
@@ -264,6 +287,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
       owner: withPosition(q.engineers),
       badge: isDealerQuote(q, customerId) ? '대리점' : undefined,
       onClick: q.pdf_url ? () => onOpenQuotePdf(q) : undefined,
+      sortAt: sortKey(q.created_at, q.quote_date),
       sortId: q.quote_id,
     }))
 
@@ -281,6 +305,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
       bodySuffix: contactLabel(a.contacts),
       owner: withPosition(a.engineers),
       onEdit: canEditActivity(a) ? () => onEditActivity(a) : undefined,
+      sortAt: sortKey(a.created_at, a.activity_date),
       sortId: a.activity_id,
     }))
 
@@ -298,6 +323,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
       owner: withPosition(h.engineers),
       badge: h.resolved_at ? '해제됨' : '진행 중',
       onClick: () => onOpenHolding(h),
+      sortAt: sortKey(h.created_at, h.started_at),
       sortId: h.holding_id,
     }))
 
@@ -313,15 +339,20 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
   }), [items])
 
   // 날짜 있는 것만 내림차순으로 월별 묶음, 날짜 없는 것은 따로 모은다.
-  // 같은 날짜면 견적 → 서비스 순으로 두고, 같은 종류끼리는 나중에 등록된 것(id 큰 것)을 위로.
+  // 전 구간 내림차순 — 달도, 날도, 같은 날 안도 최신이 위다. 종류(견적/영업/홀딩/서비스)에 따른
+  // 우선순위는 두지 않는다. 같은 날 안의 순서는 오로지 등록 시각(sortAt)이 정한다.
+  //
+  // 날짜를 먼저 비교하는 이유는 월 머리글 때문이다 — 아래 묶음 루프가 이어진 같은 라벨만 한 묶음으로
+  // 만들므로, 표시 날짜 순서가 흐트러지면 '2026년 8월' 머리글이 중간에 또 생긴다.
+  // (홀딩은 started_at 을 표시하는데 등록 시각이 그보다 한참 뒤일 수 있어 실제로 벌어진다)
+  // 같은 날짜 안에서는 sortAt 만 보므로, 요청하신 '등록 시각 내림차순'과 결과가 같다.
   const { months, undated } = useMemo(() => {
     const shown = filter === '전체' ? items : items.filter(i => i.kind === filter)
     const dated = shown.filter(i => i.date)
     const undated = shown.filter(i => !i.date)
-    const rank = (k: Kind) => (k === '견적' ? 0 : k === '영업' ? 1 : k === '홀딩' ? 2 : 3)
     dated.sort((a, b) => {
       if (a.date! !== b.date!) return a.date! < b.date! ? 1 : -1
-      if (a.kind !== b.kind) return rank(a.kind) - rank(b.kind)
+      if (a.sortAt !== b.sortAt) return b.sortAt - a.sortAt
       return b.sortId - a.sortId
     })
 

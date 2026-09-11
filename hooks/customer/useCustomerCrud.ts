@@ -107,7 +107,7 @@ export function useCustomerCrud({ customer, fetchDetail }: Args) {
       // ── 견적이 없으면 완전 삭제 ──
       const ok = await confirmDialog({
         title: '업체 완전 삭제',
-        message: `담당자 ${contactCount}명, 장비 ${deviceCount}대, 서비스 기록 ${historyCount}건이 함께 삭제되며 되돌릴 수 없습니다.\n계속하시겠습니까?`,
+        message: `고객 담당자 ${contactCount}명, 장비 ${deviceCount}대, 서비스 기록 ${historyCount}건이 함께 삭제되며 되돌릴 수 없습니다.\n계속하시겠습니까?`,
         confirmText: '완전 삭제', variant: 'danger',
       })
       if (!ok) return
@@ -136,7 +136,7 @@ export function useCustomerCrud({ customer, fetchDetail }: Args) {
       if (e2) { console.error('[customer] delete service_history failed', e2); await abort('서비스 기록', e2.message); return }
 
       const { error: e3 } = await supabase.from('contacts').delete().eq('customer_id', cid)
-      if (e3) { console.error('[customer] delete contacts failed', e3); await abort('담당자', e3.message); return }
+      if (e3) { console.error('[customer] delete contacts failed', e3); await abort('고객 담당자', e3.message); return }
 
       const { error: e4 } = await supabase.from('devices').delete().eq('customer_id', cid)
       if (e4) { console.error('[customer] delete devices failed', e4); await abort('장비', e4.message); return }

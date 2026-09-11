@@ -85,7 +85,7 @@ export default function AddCustomerModal({
       address: customerForm.address.trim() ? null : '주소를 입력해주세요',
       contact_name: isEmptyContactForm(contactForm) || contactForm.name.trim()
         ? null
-        : '담당자 이름을 입력해주세요',
+        : '고객 담당자 이름을 입력해주세요',
     }
     deviceForms.forEach((d, i) => {
       rules[`device_${i}`] = isEmptyDeviceForm(d) || d.device_name.trim()
@@ -437,7 +437,7 @@ export default function AddCustomerModal({
         <div style={{ ...sectionCardStyle, marginBottom: 16 }}>
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: TEXT_PRIMARY }}>
-              담당자 정보
+              고객 담당자 정보
             </div>
             <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
               선택 사항입니다. 나중에 업체 상세에서 추가할 수 있습니다
