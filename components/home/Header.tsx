@@ -136,6 +136,7 @@ export default function Header() {
       children: [
         { label: '고객사 현황', path: '/', canAccess: canViewCustomers },
         { label: '20 수리등록', path: '/repair', canAccess: canViewCustomers },
+        { label: '쇼룸', path: '/showroom', canAccess: canViewCustomers },
         // 홀딩 현황(/holdings)은 메뉴에서 뺐다. 80 대시보드의 홀딩 위젯에서 들어간다.
       ],
     },

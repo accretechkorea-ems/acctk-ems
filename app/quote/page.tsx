@@ -45,6 +45,31 @@ type DuplicatePayload = {
 const DEFAULT_REMARKS = '* 발주 진행 시 팩스 또는 메일로 발주서 회신 요망\n   (FAX : 031-786-4090)'
 
 /**
+ * 견적번호 끝의 순번 글자. seq 는 1부터다(next_quote_seq 가 그날 첫 호출에 1 을 준다).
+ *   1 → A … 26 → Z, 27 → AA, 28 → AB … 52 → AZ, 53 → BA (엑셀 열 이름과 같은 방식)
+ * 예전에는 0 부터 세어 'A'+seq 로 만들어, 27번째부터 'Z' 다음 문자('[')가 나왔다.
+ */
+function seqToLetters(seq: number): string {
+  let n = seq
+  let s = ''
+  while (n > 0) {
+    const r = (n - 1) % 26
+    s = String.fromCharCode(65 + r) + s
+    n = Math.floor((n - 1) / 26)
+  }
+  return s
+}
+
+/** 이니셜이 없는 사람은 번호를 만들 수 없다 — 다른 사람 이니셜로 대신하면 번호가 겹친다. */
+const NO_INITIALS_MESSAGE = '이니셜이 등록되지 않았습니다. 관리자에게 문의해주세요'
+
+/**
+ * 견적번호 발급 최대 시도 횟수. next_quote_seq 가 준 번호가 이미 quotes 에 있으면 다시 발급받는다
+ * (카운터가 실제 발급과 어긋난 경우 — 예: 발급 방식을 바꾼 날 남아 있던 옛 방식 카운터).
+ */
+const MAX_ISSUE_TRIES = 5
+
+/**
  * 견적서 PDF 파일명이 겹쳤을 때 접미사를 붙여 시도하는 최대 횟수.
  * 같은 이니셜·같은 날·같은 순번이 다섯 번 겹치는 일은 실제로 없다 — 무한 루프를 막는 상한이다.
  */
@@ -178,11 +203,12 @@ function QuotePageInner() {
   const dateStr = `${yyyy}${String(mm).padStart(2, '0')}${String(dd).padStart(2, '0')}`
   const dateDisplay = `${yyyy}년　${String(mm).padStart(2, '0')}월　${String(dd).padStart(2, '0')}일`
 
-  const [seqIndex, setSeqIndex] = useState(0)
-  // 씨앗 조회가 실패했을 때만 채워진다. 채워져 있으면 번호를 믿을 수 없다는 뜻이라
-  // 헤더에 그 사실을 내고 확정 버튼을 잠근다(모르는 채로 -A 가 다시 발급되는 일을 막는다).
+  // 미리보기용 예상 순번(1부터). 실제 번호는 확정할 때 next_quote_seq 가 정한다 —
+  // 두 사람이 거의 동시에 확정하면 여기 보이는 번호와 실제 번호가 다를 수 있다.
+  const [previewSeq, setPreviewSeq] = useState(1)
+  // 예상 순번 조회가 실패했을 때만 채워진다. 미리보기만 못 할 뿐 번호는 저장할 때 DB 가
+  // 원자적으로 발급하므로, 이것 때문에 확정을 막지는 않는다(헤더에 사실만 알린다).
   const [seqLoadError, setSeqLoadError] = useState<string | null>(null)
-  const seqLetter = String.fromCharCode(65 + seqIndex)
 
   // ── PDF용 debounced 값 (600ms 지연) ─────────────────────────────────────────
   // 고객사를 골라야만 저장되므로 미리보기도 선택된 이름만 쓴다(타이핑 중인 값은 반영하지 않는다).
@@ -216,13 +242,19 @@ function QuotePageInner() {
         return
       }
       setSeqLoadError(null)
-      // 오늘 마지막으로 쓴 seq+1 로 시작 (행이 없으면 그날 첫 견적이므로 0 = A)
-      setSeqIndex(data ? data.seq + 1 : 0)
+      // 그날 이 사람의 카운터 값 + 1 이 다음에 발급될 순번이다(행이 없으면 그날 첫 견적 = 1 = A).
+      setPreviewSeq(data ? data.seq + 1 : 1)
     }
     f()
   }, [engineer, dateStr])
 
-  const quoteNo = `No.${(engineer?.initials || 'KJW').toUpperCase()}${dateStr}-${seqLetter}`
+  // 견적번호 = 작성자 이니셜 + 날짜 + 순번 글자. 이니셜이 없으면 번호를 만들지 않는다(저장도 막는다).
+  // 예전에는 'KJW' 로 대신해, 이니셜이 빈 사람의 번호가 4번 엔지니어(KJW)의 번호와 겹칠 수 있었다.
+  const initials = engineer?.initials?.trim().toUpperCase() || null
+  const missingInitials = !!engineer && !initials
+  const buildQuoteNo = (seq: number) => (initials ? `No.${initials}${dateStr}-${seqToLetters(seq)}` : '')
+  /** 미리보기 번호. 저장되는 번호는 handleSaveQuote 가 next_quote_seq 결과로 다시 만든다. */
+  const quoteNo = buildQuoteNo(previewSeq)
   const { totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate } = calcTotals(rows)
   // 견적서에 찍히는 담당자는 실적 담당자다 — 고객이 연락할 사람이 작성자가 아니라 그쪽이기 때문이다.
   // 대필이 아니면 실적 담당자가 곧 본인이라 종전과 같다. (견적번호는 반대로 작성자 이니셜을 쓴다.)
@@ -519,7 +551,8 @@ const handleDownloadPDF = async (
   // 저장 결과 — 검증·저장 실패({ ok: false })와 저장 성공을 호출부가 구분할 수 있게 한다.
   // 성공일 때만 PDF 생성·견적번호 증가로 넘어간다.
   // quoteId 는 PDF 를 올린 뒤 pdf_url 을 실제 파일 이름으로 채우는 데 쓴다.
-  type SaveResult = { ok: false } | { ok: true; linked: boolean; quoteId: number }
+  // quoteNo·seq 는 실제로 발급·저장된 번호다(미리보기 번호와 다를 수 있다) — PDF·다음 미리보기가 이 값을 쓴다.
+  type SaveResult = { ok: false } | { ok: true; linked: boolean; quoteId: number; quoteNo: string; seq: number }
 
   /**
    * 확정 후 화면을 처음 들어왔을 때 상태로 되돌린다.
@@ -528,7 +561,7 @@ const handleDownloadPDF = async (
    * 다시 걸리면 화면이 한 번 비었다가 그려지고(깜빡임), 환율·부대비용 프리셋을 다시 받아오며,
    * 스크롤도 맨 위로 튄다. state 리셋은 그 셋 다 없다.
    *
-   * 건드리지 않는 것: 견적번호(seqIndex — 호출부에서 다음 번호로 올린다), 환율, 로그인 정보,
+   * 건드리지 않는 것: 견적번호(previewSeq — 호출부에서 실제 발급 번호의 다음으로 맞춘다), 환율, 로그인 정보,
    * 부대비용 프리셋. 부대비용·DISCOUNT 는 rows 안에 들어 있어 rows 를 비우면 함께 사라진다.
    */
   const resetForm = () => {
@@ -555,6 +588,8 @@ const handleDownloadPDF = async (
 
   const handleSaveQuote = async (): Promise<SaveResult> => {
     if (!engineer) { toast.error('엔지니어 정보를 불러오는 중입니다'); return { ok: false } }
+    // 이니셜이 없으면 번호를 만들 수 없다. 순번을 소비하기 전에 막는다.
+    if (!initials) { toast.error(NO_INITIALS_MESSAGE); return { ok: false } }
     const ok = runValidation()
     if (!ok) return { ok: false }
 
@@ -562,15 +597,53 @@ const handleDownloadPDF = async (
     let linkedRepair = false
     // 저장된 견적 id — PDF 업로드 뒤 pdf_url 을 채우는 데 쓴다.
     let savedQuoteId = 0
+    // 실제로 발급된 순번과 번호 — 화면에 보이던 미리보기 번호가 아니라 이것이 저장된다.
+    let issuedSeq = 0
+    let issuedNo = ''
     try {
-      // 순번 기록을 quotes 저장보다 먼저 한다(원래 순서 그대로다). 여기서 실패하면 그 자리에서 멈춘다 —
-      // 견적을 먼저 넣어 버리면 번호만 기록되지 않은 건이 남고, 같은 번호가 다음 견적에 다시 발급된다.
-      const { error: seqError } = await supabase.from('quote_sequence').insert({
-        date_str: dateStr, engineer_id: engineer.engineer_id, seq: seqIndex,
-      })
-      if (seqError) {
-        console.error('[quote] quote_sequence insert 실패', { dateStr, engineerId: engineer.engineer_id, seq: seqIndex, error: seqError })
-        toast.error(`견적번호 발급에 실패했습니다. 관리자에게 문의해주세요 (${seqError.code || seqError.message})`)
+      // 번호 발급을 quotes 저장보다 먼저 한다(원래 순서 그대로다). 여기서 실패하면 그 자리에서 멈춘다 —
+      // quotes 에는 아무것도 들어가지 않는다.
+      // next_quote_seq 는 (날짜, 작성자) 카운터를 on conflict … seq + 1 로 한 번에 올리고 그 값을 준다.
+      // 예전처럼 화면을 열 때 읽은 값으로 행을 insert 하면, 같은 사람이 두 곳에서 확정할 때 번호가 겹치거나
+      // (유니크 인덱스가 있으면) 그날 두 번째 견적부터 막혔다.
+      // 받은 번호가 이미 quotes 에 있으면 다시 발급받는다(최대 MAX_ISSUE_TRIES 회). 카운터가 실제 발급과
+      // 어긋나도 같은 번호가 두 번 나가지 않게 하는 마지막 방어다. 정상이면 첫 번호가 비어 있어 확인 1회로 끝난다.
+      // 다시 받을 때마다 순번이 하나씩 소비된다 — 건너뛴 글자는 빈 번호로 남고, 겹치는 것보다 낫다.
+      const tried: string[] = []
+      for (let attempt = 1; attempt <= MAX_ISSUE_TRIES; attempt++) {
+        const { data: seq, error: seqError } = await supabase.rpc('next_quote_seq', {
+          p_date: dateStr, p_engineer_id: engineer.engineer_id,
+        })
+        if (seqError || !Number.isInteger(seq) || seq < 1) {
+          console.error('[quote] next_quote_seq 실패', { dateStr, engineerId: engineer.engineer_id, seq, attempt, error: seqError })
+          toast.error(`견적번호 발급에 실패했습니다. 관리자에게 문의해주세요 (${seqError?.code || seqError?.message || `잘못된 순번 ${seq}`})`)
+          setIsSaving(false)
+          return { ok: false }
+        }
+        const candidate = buildQuoteNo(seq)
+        tried.push(candidate)
+        const { count, error: dupError } = await supabase
+          .from('quotes')
+          .select('quote_id', { count: 'exact', head: true })
+          .eq('quote_number', candidate)
+        // 확인 자체가 실패하면 중복인지 알 수 없다 — 그대로 저장하지 않고 멈춘다.
+        if (dupError || count == null) {
+          console.error('[quote] 견적번호 중복 확인 실패', { candidate, attempt, error: dupError })
+          toast.error(`견적번호 발급에 실패했습니다. 관리자에게 문의해주세요 (${dupError?.code || dupError?.message || '중복 확인 실패'})`)
+          setIsSaving(false)
+          return { ok: false }
+        }
+        if (count === 0) {
+          issuedSeq = seq
+          issuedNo = candidate
+          break
+        }
+      }
+      if (tried.length > 1 || !issuedNo) {
+        console.warn('[quote] 견적번호가 이미 있어 다시 발급받았다', { attempts: tried.length, numbers: tried, issued: issuedNo || null })
+      }
+      if (!issuedNo) {
+        toast.error('견적번호 발급에 실패했습니다. 관리자에게 문의해주세요 (번호 중복)')
         setIsSaving(false)
         return { ok: false }
       }
@@ -589,7 +662,7 @@ const handleDownloadPDF = async (
 
       const { data: quoteData, error: quoteError } = await supabase
         .from('quotes').insert({
-          quote_number: quoteNo,
+          quote_number: issuedNo,
           customer_id: isDealer ? euCustomerId : customerId,
           dealer_id: isDealer ? customerId : null,
           opportunity_id: opportunityId,
@@ -665,7 +738,10 @@ const handleDownloadPDF = async (
         const { error: expensesError } = await supabase.from('quote_expenses').insert(expenseRows)
         if (expensesError) throw expensesError
       }
-toast.success(`견적서 ${quoteNo} 확정 완료`)
+      // 동시 확정으로 미리보기와 다른 번호가 나왔으면 그 사실을 함께 알린다.
+      toast.success(issuedNo === quoteNo
+        ? `견적서 ${issuedNo} 확정 완료`
+        : `견적서 ${issuedNo} 확정 완료 · 견적번호가 ${issuedNo} 로 발급되었습니다`)
 
       // 대필이면 실적 담당자에게 알린다. 자기가 쓰지 않은 견적이 자기 실적에 잡히기 때문이다.
       // 대필 여부·수신자는 서버가 견적 행을 보고 다시 판정하므로 여기서는 부르기만 한다.
@@ -691,7 +767,7 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
       return { ok: false }
     }
     setIsSaving(false)
-    return { ok: true, linked: linkedRepair, quoteId: savedQuoteId }
+    return { ok: true, linked: linkedRepair, quoteId: savedQuoteId, quoteNo: issuedNo, seq: issuedSeq }
   }
 
   useEffect(() => { setIsClient(true) }, [])
@@ -1495,15 +1571,17 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
             {/* 헤더 */}
             <div style={{ background: '#234ea2', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: 500, marginBottom: 2 }}>견적 번호</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: 500, marginBottom: 2 }}>예상 견적 번호</div>
                 {/* 조회가 실패했으면 번호 대신 그 사실을 낸다 — 잘못된 번호를 그럴듯하게 보여주지 않는다.
                     파란 헤더 위라 붉은 글씨는 읽히지 않으므로, 흰 글씨에 반투명 테두리로 구분한다(기존 대필 배지와 같은 방식). */}
-                {seqLoadError ? (
+                {missingInitials || seqLoadError ? (
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.5)' }}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
                     </svg>
-                    <span style={{ fontSize: 12, color: '#ffffff', fontWeight: 700 }}>견적번호 조회 실패 ({seqLoadError})</span>
+                    <span style={{ fontSize: 12, color: '#ffffff', fontWeight: 700 }}>
+                      {missingInitials ? '이니셜 미등록 — 견적번호를 만들 수 없습니다' : `예상 번호 조회 실패 (${seqLoadError}) — 번호는 확정할 때 발급됩니다`}
+                    </span>
                   </div>
                 ) : (
                   <div style={{ fontSize: 14, color: '#ffffff', fontWeight: 600 }}>{quoteNo}</div>
@@ -1515,14 +1593,18 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                   {`${onBehalf.name} ${onBehalf.position || ''}`.trim()} 대신 작성 중
                 </span>
               )}
-              {/* 번호를 못 읽은 상태에서는 확정을 막는다 — 그대로 진행하면 이미 쓴 번호가 다시 나간다 */}
+              {/* 번호는 확정할 때 DB 가 발급하므로, 예상 번호를 못 읽었다고 확정을 막지 않는다.
+                  이니셜이 없으면 번호를 만들 수 없어 누르는 즉시 안내하고 멈춘다. */}
               {(() => {
-                const locked = isSaving || seqLoadError !== null
+                const locked = isSaving
                 return (
                   <button
-                    onClick={() => { if (!runValidation()) return; setShowConfirmModal(true) }}
+                    onClick={() => {
+                      if (missingInitials) { toast.error(NO_INITIALS_MESSAGE); return }
+                      if (!runValidation()) return
+                      setShowConfirmModal(true)
+                    }}
                     disabled={locked}
-                    title={seqLoadError ? '견적번호를 확인하지 못해 확정할 수 없습니다. 새로고침 후에도 같으면 관리자에게 문의해주세요' : undefined}
                     style={{
                       padding: '6px 14px', boxSizing: 'border-box',
                       background: locked ? 'transparent' : '#ffffff',
@@ -1530,7 +1612,6 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                       border: locked ? '1px solid #ffffff' : 'none',
                       borderRadius: 6, fontWeight: 600, fontSize: 13,
                       cursor: locked ? 'not-allowed' : 'pointer',
-                      opacity: seqLoadError ? 0.6 : 1,
                       transition: 'background 0.15s ease',
                     }}
                     onMouseEnter={e => { if (!locked) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6' }}
@@ -1609,7 +1690,7 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: '#fff', borderRadius: 8, padding: 32, width: '100%', maxWidth: 440, boxShadow: '0 24px 64px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 4, letterSpacing: '-0.3px' }}>견적 확정</div>
-            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, fontWeight: 500 }}>{quoteNo}</div>
+            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, fontWeight: 500 }}>{quoteNo} <span style={{ color: '#9ca3af' }}>(예상 번호 — 확정할 때 발급)</span></div>
             <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: '12px 14px', marginBottom: 20 }}>
               <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.8 }}>
                 견적 확정 시 실적으로 기록되며, <b>관리자의 승인 없이는 삭제가 불가능합니다.</b>
@@ -1658,13 +1739,14 @@ toast.success(`견적서 ${quoteNo} 확정 완료`)
                   const snapshotReceiver = receiver
                   const snapshotRows = [...rows]
                   const snapshotRemarks = finalRemarksForPDF
-                  const snapshotQuoteNo = quoteNo
                   const result = await handleSaveQuote()
-                  // 저장이 막히면 여기서 끝낸다 — PDF 도 만들지 않고 견적번호도 올리지 않는다.
+                  // 저장이 막히면 여기서 끝낸다 — PDF 도 만들지 않고 미리보기 번호도 그대로 둔다.
                   if (!result.ok) return
 
-                  await handleDownloadPDF(snapshotCompany, snapshotReceiver, snapshotRows, snapshotRemarks, snapshotQuoteNo, result.quoteId)
-                  setSeqIndex(prev => prev + 1)
+                  // PDF 는 실제로 발급·저장된 번호로 만든다(화면에 보이던 미리보기 번호가 아니다).
+                  await handleDownloadPDF(snapshotCompany, snapshotReceiver, snapshotRows, snapshotRemarks, result.quoteNo, result.quoteId)
+                  // 다음 미리보기는 방금 발급된 순번의 다음이다.
+                  setPreviewSeq(result.seq + 1)
                   setShowConfirmModal(false)
                   // 수리 건 연결이 됐으면 PDF 생성 후 수리 목록으로 이동
                   if (result.linked) { router.push('/repair'); return }
