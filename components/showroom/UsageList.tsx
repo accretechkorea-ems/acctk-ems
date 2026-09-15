@@ -1,12 +1,14 @@
 'use client'
 
 // 사용 기록 표 — 전체기록 탭. 한 줄 한 건이고, 행을 누르면 그 아래로 상세가 펼쳐진다(아코디언, 한 번에 한 건).
-//   열: 날짜 · 목적 · 장비 · 대상 고객사 · 시간 · 참여 엔지니어 · 결과 · (액션)
+//   열: 날짜 · 목적 · 장비 · 대상 고객사 · 시간 · 참여 엔지니어 · 승인 · 결과 · (액션)
+//   승인 — 데모 신청으로 만든 기록의 승인자(사후 신청이면 이름 뒤에 「확인」, 확인 전이면 「확인 대기」). 신청이 아니면 「-」.
 //   상세: 프로젝트명 · 상세 내용 · 사용결과 · 문제/이상발생 · 후속조치 · 견적 연결 · 비고 — 값이 있는 것만
+//         맨 아래 줄: 작성자 · 승인자와 승인일시 · [승인서 보기]
 //
 // 표 머리는 화면을 내려도 붙어 있다(sticky). 전역 헤더(components/home/Header.tsx — sticky, minHeight 44)
 // 바로 아래에 붙인다. 가로 스크롤 상자를 두면 sticky 가 그 상자 기준이 되어 버려서 두지 않는다 —
-// 대신 좁은 화면에서는 열을 줄인다(1023px 이하 참여 엔지니어, 767px 이하 목적·시간·결과를 뺀다).
+// 대신 좁은 화면에서는 열을 줄인다(1023px 이하 참여 엔지니어·승인, 767px 이하 목적·시간·결과까지 뺀다).
 // 액션은 행 hover·초점 때만 보인다(자리는 늘 잡아 둔다). 복사는 누구나, 수정·삭제는 권한 있는 행만.
 // 삭제는 두 번 눌러야 실행된다(요청함과 같은 방식).
 
@@ -16,8 +18,9 @@ import { Z } from '@/lib/zIndex'
 import { normTime } from '@/lib/workHours'
 import { USAGE_PURPOSE_COLORS, type ShowroomUsageRow } from '@/lib/showroom'
 import {
-  TEXT, MUTED, SUB, DANGER, FAINT, BLUE, BORDER, CARD_BG, NEUTRAL_BG, ROW_HOVER_BG, skeletonBlock,
+  TEXT, MUTED, SUB, DANGER, FAINT, BLUE, BORDER, CARD_BG, NEUTRAL_BG, ROW_HOVER_BG, skeletonBlock, countBadge,
 } from '@/components/common/ui'
+import { openApprovalPdf } from './openApprovalPdf'
 
 /** 삭제는 두 번 눌러야 실행된다. 첫 클릭 뒤 이 시간이 지나면 원래대로 돌아간다(요청함과 같은 방식). */
 const CONFIRM_MS = 3000
@@ -27,23 +30,27 @@ const GLOBAL_HEADER_H = 44
 const TABLE_CSS = `
   .sr-ut-row {
     display: grid; align-items: center; column-gap: 10px; padding: 0 12px;
-    grid-template-columns: 92px 96px minmax(0, 1.4fr) minmax(0, 1.2fr) 148px minmax(0, 1fr) 104px 76px;
+    grid-template-columns: 92px 124px minmax(0, 1.4fr) minmax(0, 1.2fr) 148px minmax(0, 1fr) 88px 104px 76px;
   }
   .sr-ut-body { min-height: 40px; border-top: 1px solid ${BORDER}; cursor: pointer; transition: background 0.15s ease; }
   .sr-ut-body:hover, .sr-ut-body:focus-visible, .sr-ut-body[aria-expanded="true"] { background: ${ROW_HOVER_BG}; outline: none; }
   .sr-ut-act { visibility: hidden; }
   .sr-ut-body:hover .sr-ut-act, .sr-ut-body:focus-within .sr-ut-act, .sr-ut-act[data-keep="1"] { visibility: visible; }
   @media (max-width: 1023px) {
-    .sr-ut-row { grid-template-columns: 92px 96px minmax(0, 1.4fr) minmax(0, 1.2fr) 148px 104px 76px; }
-    .sr-ut-eng { display: none; }
+    .sr-ut-row { grid-template-columns: 92px 124px minmax(0, 1.4fr) minmax(0, 1.2fr) 148px 104px 76px; }
+    /* !important — 몸통 칸은 안쪽 배치용 인라인 display(flex 등)가 있어 그냥 두면 이 규칙을 이긴다(머리만 숨고 칸이 밀린다). */
+    .sr-ut-eng, .sr-ut-appr { display: none !important; }
   }
   @media (max-width: 767px) {
     .sr-ut-row { grid-template-columns: 84px minmax(0, 1fr) minmax(0, 1fr) 76px; }
-    .sr-ut-purpose, .sr-ut-time, .sr-ut-eng, .sr-ut-result { display: none; }
+    .sr-ut-purpose, .sr-ut-time, .sr-ut-eng, .sr-ut-appr, .sr-ut-result { display: none !important; }
   }
 `
 
 const ellipsis: CSSProperties = { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+/** 'YYYY-MM-DD HH:MM' (KST) — 승인일시. */
+const fmtKst = (iso: string | null): string =>
+  iso ? new Date(iso).toLocaleString('sv-SE', { timeZone: 'Asia/Seoul', hour12: false }).slice(0, 16) : '-'
 const headCell: CSSProperties = { fontSize: 11, fontWeight: 700, color: SUB, ...ellipsis }
 const iconBtn = (color: string): CSSProperties => ({
   background: 'none', border: 'none', padding: 2, cursor: 'pointer', color, display: 'inline-flex', alignItems: 'center',
@@ -65,8 +72,14 @@ type Props = {
   onDelete: (row: ShowroomUsageRow) => Promise<string | null>
 }
 
-/** 상세(아코디언) — 값이 있는 항목만. */
-function Detail({ row, author }: { row: ShowroomUsageRow; author: string }) {
+/** 상세(아코디언) — 값이 있는 항목만. 데모 신청으로 만든 기록이면 맨 아래에 승인자·승인일시와 [승인서 보기]. */
+function Detail({ row, author, approval, onOpenPdf }: {
+  row: ShowroomUsageRow
+  author: string
+  /** 「승인 홍길동 · 2026-09-15 14:30」 — 신청이 아니거나 아직 확인 전이면 null */
+  approval: string | null
+  onOpenPdf: () => void
+}) {
   const items: { label: string; value: string; accent?: boolean }[] = [
     { label: '프로젝트명', value: row.project_name ?? '' },
     { label: '상세 내용', value: row.content ?? '' },
@@ -92,7 +105,16 @@ function Detail({ row, author }: { row: ShowroomUsageRow; author: string }) {
           ))}
         </div>
       )}
-      <div style={{ marginTop: 8, fontSize: 11, color: MUTED }}>작성 {author || '-'}</div>
+      <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 11, color: MUTED }}>작성 {author || '-'}</span>
+        {approval && <span style={{ fontSize: 11, color: MUTED }}>{approval}</span>}
+        {row.request_id != null && (
+          <button type="button" onClick={onOpenPdf}
+            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: BLUE, fontFamily: 'inherit' }}>
+            승인서 보기
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -130,6 +152,14 @@ export default function UsageList({
     if (message) setRowError(prev => ({ ...prev, [row.usage_id]: message }))
   }
 
+  /** 승인서 열기 — 요청함·「내 신청」과 같은 경로(openApprovalPdf → /api/showroom/requests/pdf). 실패는 그 행 아래에. */
+  const openPdf = async (row: ShowroomUsageRow) => {
+    if (row.request_id == null) return
+    setRowError(prev => ({ ...prev, [row.usage_id]: '' }))
+    const message = await openApprovalPdf(row.request_id)
+    if (message) setRowError(prev => ({ ...prev, [row.usage_id]: message }))
+  }
+
   const toggle = (id: number) => setOpenId(cur => (cur === id ? null : id))
   /** 액션 버튼 클릭이 행 펼치기로 번지지 않게 한다. */
   const stop = (e: MouseEvent) => e.stopPropagation()
@@ -149,6 +179,7 @@ export default function UsageList({
         <span style={headCell}>대상 고객사</span>
         <span className="sr-ut-time" style={headCell}>시간</span>
         <span className="sr-ut-eng" style={headCell}>참여 엔지니어</span>
+        <span className="sr-ut-appr" style={headCell}>승인</span>
         <span className="sr-ut-result" style={headCell}>결과</span>
         <span />
       </div>
@@ -156,7 +187,7 @@ export default function UsageList({
       {loading ? (
         [0, 1, 2, 3, 4].map(i => (
           <div key={i} className="sr-ut-row" style={{ minHeight: 40, borderTop: i === 0 ? 'none' : `1px solid ${BORDER}` }}>
-            {[70, 60, 120, 90, 110, 80, 50].map((w, j) => <div key={j} style={skeletonBlock(w, 12)} />)}
+            {[70, 60, 120, 90, 110, 80, 56, 50].map((w, j) => <div key={j} style={skeletonBlock(w, 12)} />)}
             <span />
           </div>
         ))
@@ -171,6 +202,11 @@ export default function UsageList({
           const open = openId === r.usage_id
           const names = (usageEngineers[r.usage_id] ?? []).map(id => engineerName(id)).filter(Boolean).join(', ')
           const err = rowError[r.usage_id]
+          // 승인 — 신청으로 만든 기록만. 사후 신청은 「확인」(확인 전이면 승인자가 비어 「확인 대기」).
+          const ar = r.approval_requests
+          const retro = ar?.retro === true
+          const approver = ar?.approver_id != null ? engineerName(ar.approver_id) || '-' : null
+          const approval = approver && ar ? `${retro ? '확인' : '승인'} ${approver} · ${fmtKst(ar.decided_at)}` : null
           const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
             if (e.target !== e.currentTarget) return
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(r.usage_id) }
@@ -183,6 +219,10 @@ export default function UsageList({
                 <span className="sr-ut-purpose" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: color.dot ?? color.text, flexShrink: 0 }} />
                   <span style={{ fontSize: 12, fontWeight: 500, color: TEXT, ...ellipsis }}>{r.purpose}</span>
+                  {/* 데모 신청(승인·확인)을 거쳐 만들어진 기록 */}
+                  {r.request_id != null && (
+                    <span title="데모 신청으로 만든 기록" style={{ ...countBadge, padding: '1px 6px' }}>신청</span>
+                  )}
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 600, color: TEXT, ...ellipsis }} title={deviceName(r.device_id)}>
                   {deviceName(r.device_id)}
@@ -195,6 +235,18 @@ export default function UsageList({
                 </span>
                 <span className="sr-ut-eng" style={{ fontSize: 12, color: names ? SUB : FAINT, ...ellipsis }} title={names || undefined}>
                   {names || '-'}
+                </span>
+                <span className="sr-ut-appr" style={{ display: 'flex', alignItems: 'baseline', gap: 4, minWidth: 0 }}>
+                  {r.request_id == null ? (
+                    <span style={{ fontSize: 12, color: MUTED }}>-</span>
+                  ) : approver ? (
+                    <>
+                      <span style={{ fontSize: 12, color: SUB, ...ellipsis }} title={approval ?? undefined}>{approver}</span>
+                      {retro && <span style={{ fontSize: 11, color: MUTED, flexShrink: 0 }}>확인</span>}
+                    </>
+                  ) : (
+                    <span style={{ fontSize: 11, color: MUTED, ...ellipsis }}>{retro ? '확인 대기' : '-'}</span>
+                  )}
                 </span>
                 <span className="sr-ut-result" style={{ minWidth: 0, display: 'flex' }}>
                   {r.result_category ? (
@@ -252,7 +304,7 @@ export default function UsageList({
                 </span>
               </div>
               {err && <div style={{ padding: '0 12px 8px', fontSize: 12, fontWeight: 600, color: DANGER }}>{err}</div>}
-              {open && <Detail row={r} author={engineerName(r.created_by)} />}
+              {open && <Detail row={r} author={engineerName(r.created_by)} approval={approval} onOpenPdf={() => openPdf(r)} />}
             </div>
           )
         })

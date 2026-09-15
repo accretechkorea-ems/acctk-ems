@@ -451,9 +451,9 @@ export type ShowroomStats = {
   siteUtil: SiteUtil[]
   /** 기간이 한 해 전체(1/1~12/31)일 때만 — 연간 보기의 히트맵·월별 추이. 그 밖의 기간은 null */
   yearly: YearlyStats | null
-  /** 상위 10 곳 */
+  /** 고객사별 활동 — 기본 상위 10, customers=all 이면 전체(건수 내림차순) */
   customers: CustomerStat[]
-  /** 기간 기록에 걸린 고객사 전체 수(customers 는 상위 10 만 담는다) */
+  /** 기간 기록에 걸린 고객사 전체 수(기본 호출이면 customers 는 그중 상위 10 만 담는다) */
   customerTotal: number
   holidays: { seeded: boolean }
 }
@@ -516,6 +516,12 @@ export type ShowroomUsageRow = {
   note: string | null
   /** 데모 신청으로 만든 기록이면 그 신청(approval_requests.request_id) */
   request_id: number | null
+  /**
+   * 연결된 데모 신청의 처리 정보(showroom_usage.request_id 로 임베딩). 신청이 아닌 기록은 null.
+   * 승인자는 id 만 온다 — 이름은 화면이 가진 엔지니어 목록으로 바꾼다. retro 는 payload.is_retroactive(사후 신청).
+   * 사후 신청은 확인 전이면 status 가 '대기중'이고 approver_id 가 비어 있다.
+   */
+  approval_requests: { approver_id: number | null; decided_at: string | null; status: string; retro: boolean | null } | null
   created_by: number
   customers: { company_name: string | null } | null
   quotes: { quote_number: string | null } | null

@@ -3,8 +3,8 @@
 // 전체기록 탭 — 사용 기록 목록·필터·수정·삭제·복사·추가. 예전 /showroom/usage 화면을 탭으로 옮긴 것이다.
 //
 // 필터는 주소가 원본이다(usageQuery.ts). 받은 query 로 그리고, 바꿀 때는 onQueryChange 로 새 query 를 올린다.
-//   [기간] [장비 선택] [목적] [검색창] ........ [기록 추가]
-// 필터를 바꾸면 1쪽으로 돌아간다.
+//   [기간] [장비 선택] [목적] [검색창] ........ [엑셀] [기록 추가]
+// 필터를 바꾸면 1쪽으로 돌아간다. [엑셀]은 걸러진 전체(쪽 나눔 무시)를 내보낸다(ShowroomExcelButton).
 //
 // 조회는 기간 단위로 한 번(loadPeriodUsages) 하고, 장비·목적·검색·쪽 나눔은 받은 행에서 화면이 거른다.
 //   · 검색 대상에 대상 고객사명(customers 조인)이 들어가는데, PostgREST 는 본 테이블 칸과 조인한 칸을 한 or() 로
@@ -29,6 +29,8 @@ import UsageModal, { type UsageInitial, type UsageSubmission } from './UsageModa
 import MyRequests from './MyRequests'
 import PeriodNav from './PeriodNav'
 import DeviceMultiSelect from './DeviceMultiSelect'
+import ShowroomExcelButton from './ShowroomExcelButton'
+import type { UsageSheetContext } from '@/lib/showroomExcel'
 import type { PickerEngineer } from './EngineerPicker'
 import { loadPeriodUsages, callShowroomApi, saveSubmission, editInitial, copyInitial } from './showroomData'
 import { SEARCH_MAX, type UsageQuery } from './usageQuery'
@@ -170,6 +172,17 @@ export default function UsageTab({
     (id: number | null) => (id == null ? '' : engineers.find(e => e.engineer_id === id)?.name ?? ''),
     [engineers],
   )
+  // 엑셀 사용기록 시트 — 기록 id 를 이름으로 바꾸는 함수들. 사무실은 짧은 이름, 목록에 없는 장비(삭제 등)는 빈 칸.
+  const siteShort = useMemo(() => new Map(sites.map(s => [s.customer_id, s.short])), [sites])
+  const excelCtx = useMemo<UsageSheetContext>(() => ({
+    deviceName,
+    siteName: id => {
+      const d = deviceById.get(id)
+      return d ? siteShort.get(d.customer_id) ?? d.site_name : ''
+    },
+    engineerName,
+    usageEngineers,
+  }), [deviceName, deviceById, siteShort, engineerName, usageEngineers])
   const canEdit = useCallback(
     (row: ShowroomUsageRow) => isAdmin || (myId != null && row.created_by === myId),
     [isAdmin, myId],
@@ -237,7 +250,7 @@ export default function UsageTab({
         onRewrite={row => setModal({ open: true, initial: null, preset: null, rewrite: row })}
       />
 
-      {/* 필터 줄 — [기간] [장비] [목적] [검색] ...... [기록 추가] */}
+      {/* 필터 줄 — [기간] [장비] [목적] [검색] ...... [엑셀] [기록 추가] */}
       <div style={{ ...cardStyle, marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <PeriodNav
@@ -277,6 +290,7 @@ export default function UsageTab({
 
           <div style={{ flex: 1 }} />
 
+          <ShowroomExcelButton from={query.from} to={query.to} rows={filtered} ctx={excelCtx} disabled={loading || devicesLoading} />
           <button onClick={() => setModal({ open: true, initial: null, preset: query.devices.length === 1 ? query.devices[0] : null })}
             style={btnPrimary()}>
             기록 추가

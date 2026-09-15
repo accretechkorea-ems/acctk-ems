@@ -19,11 +19,16 @@ type Browser = ReturnType<typeof createClient>
 
 const DEVICE_COLUMNS =
   'device_id, customer_id, device_name, device_name2, option, serial_number, packing_list_url, install_date, install_year, program, image_url, category'
+// 데모 신청으로 만든 기록은 그 신청의 처리 정보(승인자 id·승인일시·상태·사후 여부)를 함께 붙여 읽는다.
+// showroom_usage → approval_requests 는 FK 가 request_id 하나라 이름 없이 임베딩한다.
+// approval_requests → engineers 는 FK 가 두 개(requester_id·approver_id)라 붙여 읽지 않고, 승인자 이름은
+// 화면이 이미 가진 엔지니어 목록으로 바꾼다. 읽기 정책 ar_select_showroom 이 쇼룸 권한자에게 데모 신청을 연다.
 const USAGE_SELECT =
   'usage_id, device_id, usage_date, start_time, end_time, work_hours, purpose, customer_id,' +
   ' project_name, customer_dept, content, sample_material, carried_out, expected_cost, nda_status,' +
   ' expected_result, result, result_category, issue, follow_up, quote_id, note, request_id, created_by,' +
-  ' customers(company_name), quotes(quote_number)'
+  ' customers(company_name), quotes(quote_number),' +
+  ' approval_requests(approver_id, decided_at, status, retro:payload->is_retroactive)'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 

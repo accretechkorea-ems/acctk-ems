@@ -2,6 +2,7 @@
 //
 // GET ?from=YYYY-MM-DD&to=YYYY-MM-DD&site=<customer_id>|all   (로그인 + canViewCustomers)
 //   기간은 양 끝을 포함하고 최대 MAX_PERIOD_DAYS(366)일이다. site 를 빼면 all(모든 사무실 합산).
+//   &customers=all 이면 고객사별 활동을 건수 내림차순 전체로 준다(엑셀 내보내기용). 없으면 상위 TOP_N(10).
 //   월·분기·반기·지정 기간은 모두 같은 계산(기간 지표 + 장비별 가동률)이다.
 //   기간이 한 해 전체(1/1~12/31)면 연간 보기용 히트맵·월별 추이(yearly)를 더 만든다.
 //   증감 비교의 기준(previous)은 직전 기간이다 — lib/showroom.ts previousRange.
@@ -280,9 +281,9 @@ function yearlyStats(year: number, usage: UsageRow[], devices: DeviceInfo[], hol
 
 /**
  * 고객사별 활동 — 대상 고객사가 적힌 기록을 목적과 상관없이 고객사로 묶는다.
- * 견적·수주 칸은 그 고객사 기록 중 견적이 연결된 건이다. 상위 TOP_N 과 전체 곳 수를 함께 돌려준다.
+ * 견적·수주 칸은 그 고객사 기록 중 견적이 연결된 건이다. 상위 limit 곳(null 이면 전체)과 전체 곳 수를 함께 돌려준다.
  */
-function customerBreakdown(rows: UsageRow[]): { top: CustomerStat[]; total: number } {
+function customerBreakdown(rows: UsageRow[], limit: number | null): { top: CustomerStat[]; total: number } {
   const map = new Map<number, CustomerStat>()
   for (const r of rows) {
     if (r.customer_id == null) continue
@@ -296,11 +297,10 @@ function customerBreakdown(rows: UsageRow[]): { top: CustomerStat[]; total: numb
     }
     map.set(r.customer_id, c)
   }
-  const top = [...map.values()]
+  const sorted = [...map.values()]
     .map(c => ({ ...c, hours: round1(c.hours) }))
     .sort((a, b) => b.count - a.count || b.hours - a.hours || a.name.localeCompare(b.name))
-    .slice(0, TOP_N)
-  return { top, total: map.size }
+  return { top: limit == null ? sorted : sorted.slice(0, limit), total: map.size }
 }
 
 // ── GET ─────────────────────────────────────────────────────────────
@@ -324,6 +324,7 @@ export async function GET(req: NextRequest) {
     if (!Number.isInteger(n) || n <= 0) return bad('사무실이 올바르지 않습니다.')
     site = n
   }
+  const allCustomers = sp.get('customers') === 'all'
 
   const today = todayKST()
   const prev = previousRange(from, to)
@@ -450,7 +451,7 @@ export async function GET(req: NextRequest) {
     return b.utilization - a.utilization || a.name.localeCompare(b.name)
   })
 
-  const cust = customerBreakdown(current.rows)
+  const cust = customerBreakdown(current.rows, allCustomers ? null : TOP_N)
 
   const body: ShowroomStats = {
     from,

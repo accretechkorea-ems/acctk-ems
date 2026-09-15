@@ -66,3 +66,8 @@ alter table public.showroom_usage drop column downtime_hours;
 -- 2026-09-15: 데모 사용 신청. pdf_url = 승인서 PDF 경로, 신청 1건당 사용 기록 1건.
 alter table public.approval_requests add column pdf_url text;
 alter table public.showroom_usage add constraint su_request_unique unique (request_id);
+
+-- 2026-09-15: 데모 신청은 쇼룸 권한자 전체가 조회 가능. 사내 장비 사용 내역은 공유 대상.
+create policy ar_select_showroom on public.approval_requests
+  for select to authenticated
+  using (request_type = 'showroom_demo' and public.has_team_perm('customers'));
