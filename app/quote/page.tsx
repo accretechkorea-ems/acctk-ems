@@ -600,6 +600,8 @@ const handleDownloadPDF = async (
     // 실제로 발급된 순번과 번호 — 화면에 보이던 미리보기 번호가 아니라 이것이 저장된다.
     let issuedSeq = 0
     let issuedNo = ''
+    // 실패한 단계. 예전에는 견적·품목·부대비용 실패가 한 문구로 묶여 무엇이 막혔는지 알 수 없었다.
+    let stage = '견적 저장'
     try {
       // 번호 발급을 quotes 저장보다 먼저 한다(원래 순서 그대로다). 여기서 실패하면 그 자리에서 멈춘다 —
       // quotes 에는 아무것도 들어가지 않는다.
@@ -716,6 +718,7 @@ const handleDownloadPDF = async (
         tariff_rate: r.tariff_rate,
       }))
 
+      stage = '품목 저장'
       if (items.length > 0) {
         const { error: itemsError } = await supabase.from('quote_items').insert(items)
         if (itemsError) throw itemsError
@@ -734,6 +737,7 @@ const handleDownloadPDF = async (
           amount: e.amount,
         }))
 
+      stage = '부대비용 저장'
       if (expenseRows.length > 0) {
         const { error: expensesError } = await supabase.from('quote_expenses').insert(expenseRows)
         if (expensesError) throw expensesError
@@ -761,8 +765,11 @@ const handleDownloadPDF = async (
         }
       }
     } catch (e) {
-      console.error(e)
-      toast.error('저장 중 오류가 발생했습니다')
+      // 어느 단계에서 무엇 때문에 막혔는지 함께 알린다 — 번호 발급 실패 문구와 같은 형식이다.
+      const err = e as { code?: string; message?: string } | null
+      const cause = err?.code || err?.message || '알 수 없는 오류'
+      console.error('[quote] 저장 실패', { stage, issuedNo, quoteId: savedQuoteId || null, error: e })
+      toast.error(`저장 중 오류가 발생했습니다 (${stage} · ${cause})`)
       setIsSaving(false)
       return { ok: false }
     }
@@ -1734,6 +1741,8 @@ const handleDownloadPDF = async (
               <button onClick={async () => {
                 if (isSubmitting) return
                 setIsSubmitting(true)
+                // 저장이 끝난 뒤의 실패(PDF 생성 등)를 저장 실패와 가르는 근거. 저장 성공 시에만 채워진다.
+                let saved: Extract<SaveResult, { ok: true }> | null = null
                 try {
                   const snapshotCompany = company
                   const snapshotReceiver = receiver
@@ -1742,6 +1751,7 @@ const handleDownloadPDF = async (
                   const result = await handleSaveQuote()
                   // 저장이 막히면 여기서 끝낸다 — PDF 도 만들지 않고 미리보기 번호도 그대로 둔다.
                   if (!result.ok) return
+                  saved = result
 
                   // PDF 는 실제로 발급·저장된 번호로 만든다(화면에 보이던 미리보기 번호가 아니다).
                   await handleDownloadPDF(snapshotCompany, snapshotReceiver, snapshotRows, snapshotRemarks, result.quoteNo, result.quoteId)
@@ -1751,6 +1761,20 @@ const handleDownloadPDF = async (
                   // 수리 건 연결이 됐으면 PDF 생성 후 수리 목록으로 이동
                   if (result.linked) { router.push('/repair'); return }
                   // 이어서 다음 견적을 쓸 수 있게 화면을 비운다(번호는 위에서 이미 다음 것으로 올렸다).
+                  resetForm()
+                } catch (e) {
+                  console.error('[quote] 확정 처리 실패', { saved, error: e })
+                  if (!saved) {
+                    // 저장 전에 난 예외 — 아무것도 저장되지 않았다. 모달을 열어 둔 채 다시 시도할 수 있게 한다.
+                    toast.error('저장 중 오류가 발생했습니다')
+                    return
+                  }
+                  // 견적은 이미 저장됐다. 모달을 그대로 두면 사용자가 다시 눌러 같은 내용이 새 번호로 또 저장되므로,
+                  // 성공했을 때와 똑같이 번호를 올리고 모달을 닫고 화면을 비운다(PDF 만 없는 상태로 남는다).
+                  toast.error(`견적 ${saved.quoteNo} 은 저장되었습니다. PDF 생성에 실패했습니다 — 다시 확정하지 마시고 관리자에게 알려주세요.`)
+                  setPreviewSeq(saved.seq + 1)
+                  setShowConfirmModal(false)
+                  if (saved.linked) { router.push('/repair'); return }
                   resetForm()
                 } finally {
                   setIsSubmitting(false)
