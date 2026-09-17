@@ -5,9 +5,13 @@ import { Document, Page, Text, View, StyleSheet, Image, Font } from '@react-pdf/
 import type { QuoteRow } from './types'
 import { numKR, amountToKorean } from './format'
 
+// 한글 폰트 — 예전에는 구글(fonts.gstatic.com)에서 매번 받았다. 외부가 느리거나 막히면 PDF 렌더가
+// 예외로 끝나는데, 그 예외는 견적이 이미 저장된 뒤에 나므로 같은 파일을 public 에 두고 같은 출처에서 받는다.
+// 이 문서는 브라우저에서 렌더되므로 파일시스템 경로가 아니라 public 경로를 쓴다
+// (서버에서 만드는 쇼룸 승인서는 같은 이유로 반대로 path.join(process.cwd(), …) 을 쓴다).
 Font.register({
   family: 'NotoSansCJK',
-  src: 'https://fonts.gstatic.com/s/notosanskr/v36/PbyxFmXiEBPT4ITbgNA5Cgms3VYcOA-vvnIzzuoyeLTq8H4hfeE.ttf',
+  src: '/fonts/NotoSansKR-Regular.ttf',
 })
 
 // 할인 표기 색 — 앱 전역에서 쓰는 위험/차감 색과 같은 값.

@@ -64,12 +64,6 @@ function seqToLetters(seq: number): string {
 const NO_INITIALS_MESSAGE = '이니셜이 등록되지 않았습니다. 관리자에게 문의해주세요'
 
 /**
- * 견적번호 발급 최대 시도 횟수. next_quote_seq 가 준 번호가 이미 quotes 에 있으면 다시 발급받는다
- * (카운터가 실제 발급과 어긋난 경우 — 예: 발급 방식을 바꾼 날 남아 있던 옛 방식 카운터).
- */
-const MAX_ISSUE_TRIES = 5
-
-/**
  * 견적서 PDF 파일명이 겹쳤을 때 접미사를 붙여 시도하는 최대 횟수.
  * 같은 이니셜·같은 날·같은 순번이 다섯 번 겹치는 일은 실제로 없다 — 무한 루프를 막는 상한이다.
  */
@@ -203,7 +197,7 @@ function QuotePageInner() {
   const dateStr = `${yyyy}${String(mm).padStart(2, '0')}${String(dd).padStart(2, '0')}`
   const dateDisplay = `${yyyy}년　${String(mm).padStart(2, '0')}월　${String(dd).padStart(2, '0')}일`
 
-  // 미리보기용 예상 순번(1부터). 실제 번호는 확정할 때 next_quote_seq 가 정한다 —
+  // 미리보기용 예상 순번(1부터). 실제 번호는 확정할 때 create_quote 함수가 정한다 —
   // 두 사람이 거의 동시에 확정하면 여기 보이는 번호와 실제 번호가 다를 수 있다.
   const [previewSeq, setPreviewSeq] = useState(1)
   // 예상 순번 조회가 실패했을 때만 채워진다. 미리보기만 못 할 뿐 번호는 저장할 때 DB 가
@@ -253,7 +247,7 @@ function QuotePageInner() {
   const initials = engineer?.initials?.trim().toUpperCase() || null
   const missingInitials = !!engineer && !initials
   const buildQuoteNo = (seq: number) => (initials ? `No.${initials}${dateStr}-${seqToLetters(seq)}` : '')
-  /** 미리보기 번호. 저장되는 번호는 handleSaveQuote 가 next_quote_seq 결과로 다시 만든다. */
+  /** 미리보기 번호. 저장되는 번호는 create_quote 함수가 만든다(동시 확정 시 이 값과 다를 수 있다). */
   const quoteNo = buildQuoteNo(previewSeq)
   const { totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate } = calcTotals(rows)
   // 견적서에 찍히는 담당자는 실적 담당자다 — 고객이 연락할 사람이 작성자가 아니라 그쪽이기 때문이다.
@@ -554,6 +548,10 @@ const handleDownloadPDF = async (
   // quoteNo·seq 는 실제로 발급·저장된 번호다(미리보기 번호와 다를 수 있다) — PDF·다음 미리보기가 이 값을 쓴다.
   type SaveResult = { ok: false } | { ok: true; linked: boolean; quoteId: number; quoteNo: string; seq: number }
 
+  // create_quote(RPC) 가 돌려주는 행. returns table 이라 배열로 온다.
+  //   repair_linked — true 연결됨 / false 대상 수리 건이 없었음 / null 연결 시도 자체가 없었음
+  type CreateQuoteRow = { quote_id: number; quote_number: string; seq: number; repair_linked: boolean | null }
+
   /**
    * 확정 후 화면을 처음 들어왔을 때 상태로 되돌린다.
    *
@@ -588,7 +586,7 @@ const handleDownloadPDF = async (
 
   const handleSaveQuote = async (): Promise<SaveResult> => {
     if (!engineer) { toast.error('엔지니어 정보를 불러오는 중입니다'); return { ok: false } }
-    // 이니셜이 없으면 번호를 만들 수 없다. 순번을 소비하기 전에 막는다.
+    // 이니셜이 없으면 번호를 만들 수 없다. 함수도 같은 검사를 하지만 왕복 전에 먼저 막는다.
     if (!initials) { toast.error(NO_INITIALS_MESSAGE); return { ok: false } }
     const ok = runValidation()
     if (!ok) return { ok: false }
@@ -600,56 +598,7 @@ const handleDownloadPDF = async (
     // 실제로 발급된 순번과 번호 — 화면에 보이던 미리보기 번호가 아니라 이것이 저장된다.
     let issuedSeq = 0
     let issuedNo = ''
-    // 실패한 단계. 예전에는 견적·품목·부대비용 실패가 한 문구로 묶여 무엇이 막혔는지 알 수 없었다.
-    let stage = '견적 저장'
     try {
-      // 번호 발급을 quotes 저장보다 먼저 한다(원래 순서 그대로다). 여기서 실패하면 그 자리에서 멈춘다 —
-      // quotes 에는 아무것도 들어가지 않는다.
-      // next_quote_seq 는 (날짜, 작성자) 카운터를 on conflict … seq + 1 로 한 번에 올리고 그 값을 준다.
-      // 예전처럼 화면을 열 때 읽은 값으로 행을 insert 하면, 같은 사람이 두 곳에서 확정할 때 번호가 겹치거나
-      // (유니크 인덱스가 있으면) 그날 두 번째 견적부터 막혔다.
-      // 받은 번호가 이미 quotes 에 있으면 다시 발급받는다(최대 MAX_ISSUE_TRIES 회). 카운터가 실제 발급과
-      // 어긋나도 같은 번호가 두 번 나가지 않게 하는 마지막 방어다. 정상이면 첫 번호가 비어 있어 확인 1회로 끝난다.
-      // 다시 받을 때마다 순번이 하나씩 소비된다 — 건너뛴 글자는 빈 번호로 남고, 겹치는 것보다 낫다.
-      const tried: string[] = []
-      for (let attempt = 1; attempt <= MAX_ISSUE_TRIES; attempt++) {
-        const { data: seq, error: seqError } = await supabase.rpc('next_quote_seq', {
-          p_date: dateStr, p_engineer_id: engineer.engineer_id,
-        })
-        if (seqError || !Number.isInteger(seq) || seq < 1) {
-          console.error('[quote] next_quote_seq 실패', { dateStr, engineerId: engineer.engineer_id, seq, attempt, error: seqError })
-          toast.error(`견적번호 발급에 실패했습니다. 관리자에게 문의해주세요 (${seqError?.code || seqError?.message || `잘못된 순번 ${seq}`})`)
-          setIsSaving(false)
-          return { ok: false }
-        }
-        const candidate = buildQuoteNo(seq)
-        tried.push(candidate)
-        const { count, error: dupError } = await supabase
-          .from('quotes')
-          .select('quote_id', { count: 'exact', head: true })
-          .eq('quote_number', candidate)
-        // 확인 자체가 실패하면 중복인지 알 수 없다 — 그대로 저장하지 않고 멈춘다.
-        if (dupError || count == null) {
-          console.error('[quote] 견적번호 중복 확인 실패', { candidate, attempt, error: dupError })
-          toast.error(`견적번호 발급에 실패했습니다. 관리자에게 문의해주세요 (${dupError?.code || dupError?.message || '중복 확인 실패'})`)
-          setIsSaving(false)
-          return { ok: false }
-        }
-        if (count === 0) {
-          issuedSeq = seq
-          issuedNo = candidate
-          break
-        }
-      }
-      if (tried.length > 1 || !issuedNo) {
-        console.warn('[quote] 견적번호가 이미 있어 다시 발급받았다', { attempts: tried.length, numbers: tried, issued: issuedNo || null })
-      }
-      if (!issuedNo) {
-        toast.error('견적번호 발급에 실패했습니다. 관리자에게 문의해주세요 (번호 중복)')
-        setIsSaving(false)
-        return { ok: false }
-      }
-
       // 수리 건에서 온 견적이면 그 수리의 special_type 으로 견적 유형(quote_type)을 결정한다.
       //   본사수리 → 'repair_hq'(기존 흐름), 그 외(국내수리) → 'repair_domestic'(단축 흐름), 수리 건 없음 → null(일반).
       // 국내수리는 견적중을 거치지 않고 '수리중' 상태로 시작한다(수리가 이미 진행 중이므로).
@@ -662,43 +611,10 @@ const handleDownloadPDF = async (
         if (quoteType === 'repair_domestic') initialStatus = '수리중'
       }
 
-      const { data: quoteData, error: quoteError } = await supabase
-        .from('quotes').insert({
-          quote_number: issuedNo,
-          customer_id: isDealer ? euCustomerId : customerId,
-          dealer_id: isDealer ? customerId : null,
-          opportunity_id: opportunityId,
-          delivery_info: delivery.trim() || null,
-          // engineer_id = 실적 귀속자, created_by = 실제로 이 화면에서 쓴 사람.
-          // 대필이 아니면 두 값이 같다. 실적 집계는 전부 engineer_id 를 보므로 집계 코드는 그대로다.
-          engineer_id: onBehalf ? onBehalf.engineer_id : engineer.engineer_id,
-          created_by: engineer.engineer_id,
-          quote_date: `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`,
-          total_supply: totalSupply,
-          total_tax: totalTax,
-          total_amount: totalAmount,
-          total_cost: totalCost,
-          total_profit: totalProfit,
-          profit_rate: parseFloat(totalProfitRate.toFixed(2)),
-          quote_type: quoteType,
-          status: initialStatus,
-          recipient: receiver,
-          note: finalRemarksForPDF,
-          // 파일을 올리기 전에는 비워 둔다. 올린 뒤 실제로 저장된 이름으로 채운다
-          // (예전에는 여기서 이름을 미리 넣어, 업로드가 실패해도 없는 파일을 가리켰다).
-          pdf_url: null,
-        }).select().single()
-
-      if (quoteError) throw quoteError
-      savedQuoteId = quoteData.quote_id
-      // 견적이 실제로 들어간 시점에 임시저장분을 지운다. 뒤이은 품목·PDF 단계가 실패해도
-      // 견적 자체는 이미 남았으므로, 초안을 남겨 두면 같은 내용을 두 번 쓰게 된다.
-      clearDraft(engineer.engineer_id)
-
       // 금액이 있는 행만 저장한다. 할인은 공급가가 음수라 별도로 통과시킨다
       // (금액 0 인 채로 남은 할인 행은 기록할 것이 없어 저장하지 않는다).
+      // quote_id 는 넣지 않는다 — 함수가 방금 만든 견적의 id 로 채운다(클라이언트 값은 믿지 않는다).
       const items = rows.filter(r => r.supply_price > 0 || (r.row_kind === 'discount' && r.supply_price < 0)).map(r => ({
-        quote_id: quoteData.quote_id,
         price_list_id: r.selectedItem?.id ?? null,
         part_code: r.partCode.trim() || null,   // 품번 스냅샷(가격표 변경돼도 과거 견적 유지). 직접 입력한 품번도 그대로 저장, 빈 값은 null.
         row_kind: r.row_kind,
@@ -718,18 +634,11 @@ const handleDownloadPDF = async (
         tariff_rate: r.tariff_rate,
       }))
 
-      stage = '품목 저장'
-      if (items.length > 0) {
-        const { error: itemsError } = await supabase.from('quote_items').insert(items)
-        if (itemsError) throw itemsError
-      }
-
       // 부대비용(내부 관리용). 견적 합계·PDF 와 무관하게 quote_expenses 에만 기록한다.
       // unit_price 는 저장 시점 스냅샷이므로 프리셋 재조회 없이 화면 값을 그대로 넣는다.
       const expenseRows = expenses
         .filter(e => e.item_name.trim() && e.amount > 0)
         .map(e => ({
-          quote_id: quoteData.quote_id,
           item_name: e.item_name.trim(),
           unit_price: e.unit_price,
           headcount: e.headcount,
@@ -737,11 +646,42 @@ const handleDownloadPDF = async (
           amount: e.amount,
         }))
 
-      stage = '부대비용 저장'
-      if (expenseRows.length > 0) {
-        const { error: expensesError } = await supabase.from('quote_expenses').insert(expenseRows)
-        if (expensesError) throw expensesError
-      }
+      // 견적·품목·부대비용·수리 연결을 DB 함수 하나로 묶는다(전부 한 트랜잭션).
+      // 예전에는 여기서 세 번 나눠 insert 해, 중간에 실패하면 품목 없는 견적이 남았다.
+      // 번호 채번·조립과 created_by, 자식 행의 quote_id 는 함수가 정한다 — 보내지 않는다.
+      const { data, error } = await supabase.rpc('create_quote', {
+        p_date: dateStr,
+        p_quote: {
+          customer_id: isDealer ? euCustomerId : customerId,
+          dealer_id: isDealer ? customerId : null,
+          opportunity_id: opportunityId,
+          delivery_info: delivery.trim() || null,
+          // 실적 귀속자. 대필이 아니면 작성자와 같다(대필 자격은 함수가 다시 본다).
+          engineer_id: onBehalf ? onBehalf.engineer_id : engineer.engineer_id,
+          recipient: receiver,
+          note: finalRemarksForPDF,
+          quote_type: quoteType,
+          status: initialStatus,
+          total_supply: totalSupply,
+          total_tax: totalTax,
+          total_amount: totalAmount,
+          total_cost: totalCost,
+          total_profit: totalProfit,
+          profit_rate: parseFloat(totalProfitRate.toFixed(2)),
+        },
+        p_items: items,
+        p_expenses: expenseRows,
+        p_repair_id: repairId ?? null,
+      })
+      if (error) throw error
+      const saved = (data as CreateQuoteRow[] | null)?.[0]
+      if (!saved?.quote_id) throw new Error('견적을 저장하지 못했습니다')
+      savedQuoteId = Number(saved.quote_id)
+      issuedNo = saved.quote_number
+      issuedSeq = saved.seq
+
+      // 저장이 전부 끝난 뒤에 지운다. 실패하면 아무것도 저장되지 않으므로 초안을 남겨 이어 쓰게 한다.
+      clearDraft(engineer.engineer_id)
       // 동시 확정으로 미리보기와 다른 번호가 나왔으면 그 사실을 함께 알린다.
       toast.success(issuedNo === quoteNo
         ? `견적서 ${issuedNo} 확정 완료`
@@ -750,26 +690,22 @@ const handleDownloadPDF = async (
       // 대필이면 실적 담당자에게 알린다. 자기가 쓰지 않은 견적이 자기 실적에 잡히기 때문이다.
       // 대필 여부·수신자는 서버가 견적 행을 보고 다시 판정하므로 여기서는 부르기만 한다.
       // 알림이 실패해도 견적 확정은 성공이다(라우트 안에서 콘솔에만 남는다).
-      if (onBehalf) await notifyOnBehalf(quoteData.quote_id)
+      if (onBehalf) await notifyOnBehalf(savedQuoteId)
 
-      // 수리 건에서 온 경우: repairs.quote_id 자동 연결 (repairs RLS 상 teams='20' UPDATE 허용).
-      // 연결 실패해도 견적서 저장 자체는 유효 → 실패만 안내하고 수동 연결 유도.
-      if (repairId != null) {
-        const { data: linked, error: linkError } = await supabase
-          .from('repairs').update({ quote_id: quoteData.quote_id }).eq('repair_id', repairId).select('repair_id')
-        if (linkError || !linked || linked.length === 0) {
-          toast.error('견적서는 저장됐지만 수리 건 연결에 실패했습니다. 수리 목록에서 수동으로 연결해주세요.')
-        } else {
-          toast.success(`수리 건 #${repairId} 에 견적서가 연결되었습니다`)
-          linkedRepair = true
-        }
+      // 수리 건 연결은 함수가 같은 트랜잭션에서 끝냈다. 결과만 안내한다.
+      //   false = 그 수리 건이 없어 연결하지 못함 / null = 수리 건에서 온 견적이 아님(안내 없음)
+      if (saved.repair_linked === false) {
+        toast.error('견적서는 저장됐지만 수리 건 연결에 실패했습니다. 수리 목록에서 수동으로 연결해주세요.')
+      } else if (saved.repair_linked === true) {
+        toast.success(`수리 건 #${repairId} 에 견적서가 연결되었습니다`)
+        linkedRepair = true
       }
     } catch (e) {
-      // 어느 단계에서 무엇 때문에 막혔는지 함께 알린다 — 번호 발급 실패 문구와 같은 형식이다.
+      // 함수가 던지는 예외 메시지는 사용자에게 그대로 보여도 되는 한국어다
+      // ('견적 작성 권한이 없습니다' 등). 코드가 있으면 괄호로 덧붙인다.
       const err = e as { code?: string; message?: string } | null
-      const cause = err?.code || err?.message || '알 수 없는 오류'
-      console.error('[quote] 저장 실패', { stage, issuedNo, quoteId: savedQuoteId || null, error: e })
-      toast.error(`저장 중 오류가 발생했습니다 (${stage} · ${cause})`)
+      console.error('[quote] 저장 실패', { dateStr, engineerId: engineer.engineer_id, error: e })
+      toast.error(`${err?.message || '저장 중 오류가 발생했습니다'}${err?.code ? ` (${err.code})` : ''}`)
       setIsSaving(false)
       return { ok: false }
     }
