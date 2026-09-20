@@ -22,7 +22,7 @@ import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import LeadExcelButton from '@/components/leads/LeadExcelButton'
 
 import {
-  LEAD_STATUS_NEW, LEAD_STATUS_ACTIVE, LEAD_STATUS_CONVERTED, LEAD_STATUS_SKIPPED,
+  LEAD_STATUS_NEW, LEAD_STATUS_ACTIVE, LEAD_STATUS_CONVERTED, LEAD_STATUS_SKIPPED, LEAD_STATUS_BLOCKED,
   COMPETITOR_OTHER, MAX_LEN, SKIP_REASON_MIN, isLeadClosed,
 } from '@/lib/leadOptions'
 
@@ -45,12 +45,15 @@ const DANGER_BG = '#fef2f2'
 //   신규     ← '견적중'   아직 손대지 않은 건(amber)
 //   진행중   ← '수주'     담당자가 붙어 굴러가는 건(blue)
 //   전환완료 ← '매출완료' 성공적으로 끝난 건(green)
-//   미진행   ← '보류'     더 가지 않기로 끝낸 건(gray). '실패'(red)는 과한 표현이라 쓰지 않는다.
+//   미진행   ← '보류'     담당자가 검토한 뒤 더 가지 않기로 끝낸 건(gray). 판단의 결과라 중립색을 쓴다.
+//   배정불가 ← '실패'     관리자가 담당자를 붙이지 않고 되돌린 건(red). 미진행과 갈라 보이면서도
+//                        종결로 읽혀야 해 같은 종결 계열 중 더 강한 쪽을 쓴다(새 색은 만들지 않는다).
 const LEAD_STATUS_COLOR_KEY: Record<string, string> = {
   [LEAD_STATUS_NEW]: '견적중',
   [LEAD_STATUS_ACTIVE]: '수주',
   [LEAD_STATUS_CONVERTED]: '매출완료',
   [LEAD_STATUS_SKIPPED]: '보류',
+  [LEAD_STATUS_BLOCKED]: '실패',
 }
 const leadStatusColor = (status: string): CategoryColor =>
   getCategoryColor(SALES_STATUS_COLORS, LEAD_STATUS_COLOR_KEY[status])
@@ -59,6 +62,8 @@ type Lead = {
   lead_id: number
   lead_no: string | null
   partner_company: string; partner_name: string; partner_contact: string | null
+  /** 파트너사 담당자 메일. 칸이 생기기 전 등록분은 null 이다(고객사 담당자 메일 contact_email 과 다른 값). */
+  partner_email: string | null
   customer_company: string; industry: string; products: string
   address: string | null; city: string; country: string
   interest_product: string; request_note: string | null
@@ -69,7 +74,9 @@ type Lead = {
   meeting_note: string
   /** 명함 이미지의 스토리지 파일명(비공개 버킷). 없으면 null. */
   business_card_url: string | null
-  status: string; assigned_to: number | null; admin_memo: string | null; skip_reason: string | null
+  status: string; assigned_to: number | null; admin_memo: string | null
+  /** 미진행 사유(담당자) · 배정 불가 사유(관리자). 성격이 달라 칸을 나눠 둔다. */
+  skip_reason: string | null; block_reason: string | null
   /** 배정한 사람. 배정 라우트가 실행자로 채운다(기존 건은 null). */
   assigned_by: number | null
   converted_opportunity_id: number | null
@@ -240,8 +247,12 @@ function LeadsPageInner() {
   // 고객사 검색 결과는 표 컨테이너 밖으로 나가야 해서 포털로 띄운다. 그 기준이 되는 입력칸.
   const custAnchorRef = useRef<HTMLDivElement>(null)
   const [pickedCustomer, setPickedCustomer] = useState<Customer | null>(null)
-  // 전환된 리드는 고객사명을 그대로 입력해야 지워진다. 어느 리드에서 확인 중인지와 입력값을 함께 들고 있는다.
+  // 삭제는 「<고객사명> 삭제 확인」을 그대로 쳐야 한다. 어느 리드에서 확인 중인지와 입력값을 함께 들고 있는다.
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; text: string } | null>(null)
+  // 「리드 처리」로 연 영역 — 배정 불가와 삭제 중 무엇을 고른 상태인지. 한 번에 한 리드만 연다.
+  const [proc, setProc] = useState<{ id: number; kind: 'block' | 'delete' } | null>(null)
+  // 배정 불가 사유 입력값. 미진행 사유와 같은 방식으로 리드 id 를 함께 들고 있는다.
+  const [blockDraft, setBlockDraft] = useState<{ id: number; text: string } | null>(null)
   const [deleting, setDeleting] = useState<number | null>(null)
   const [pdfBusy, setPdfBusy] = useState<number | null>(null)
   // 명함 크게 보기. 썸네일이 이미 받아온 서명 URL 을 그대로 쓴다(다시 발급하지 않는다).
@@ -341,6 +352,13 @@ function LeadsPageInner() {
     ? customers.filter(c => (c.company_name ?? '').toLowerCase().includes(custQuery.trim().toLowerCase())).slice(0, 8)
     : []
 
+  /** 「리드 처리」 영역을 닫고 그 안의 임시 입력값(사유·확인 문구)을 버린다. */
+  const closeProcess = () => {
+    setProc(null)
+    setBlockDraft(null)
+    setDeleteConfirm(null)
+  }
+
   /** 처리 줄의 입력 영역을 닫고 그 안의 임시 입력값을 버린다. */
   const closePanel = () => {
     setPanel(null)
@@ -377,7 +395,8 @@ function LeadsPageInner() {
     leadId: number,
     payload: Record<string, unknown>,
     patch: Record<string, unknown>,
-    okMsg: string,
+    /** null 이면 성공 toast 를 띄우지 않는다 — 호출부가 결과에 따라 직접 알릴 때 쓴다. */
+    okMsg: string | null,
   ) => {
     setSaving(leadId)
     try {
@@ -392,7 +411,7 @@ function LeadsPageInner() {
         return null
       }
       setLeads(prev => prev.map(l => (l.lead_id === leadId ? { ...l, ...patch } as Lead : l)))
-      toast.success(okMsg)
+      if (okMsg) toast.success(okMsg)
       return json as Record<string, unknown>
     } finally {
       setSaving(null)
@@ -404,8 +423,8 @@ function LeadsPageInner() {
    * 서버가 같은 규칙으로 쓰므로 화면에 반영할 값도 여기서 같이 계산한다.
    * 이미 종결된 건(전환완료·미진행)의 상태는 배정을 바꿔도 그대로 둔다.
    */
-  const assign = (lead: Lead, assignedTo: number | null) =>
-    callManage(
+  const assign = async (lead: Lead, assignedTo: number | null) => {
+    const res = await callManage(
       lead.lead_id,
       { action: 'assign', assignedTo },
       isLeadClosed(lead.status)
@@ -413,6 +432,21 @@ function LeadsPageInner() {
         : { assigned_to: assignedTo, status: assignedTo === null ? LEAD_STATUS_NEW : LEAD_STATUS_ACTIVE },
       '담당자를 저장했습니다.',
     )
+    // 파트너사 메일은 담당자가 실제로 바뀐 건에만 나간다(해제·같은 사람 재저장은 보내지 않는다).
+    // 주소가 없는 리드도 애초에 보내지 않으므로 실패로 알리지 않는다.
+    if (res && assignedTo !== null && assignedTo !== lead.assigned_to && lead.partner_email && res.partnerMailSent === false) {
+      toast.error('배정되었습니다. 파트너사 메일 발송에 실패했습니다 — 직접 연락해주세요')
+    }
+    return res
+  }
+
+  /** 파트너사에 배정 통보 메일을 다시 보낸다. 리드 데이터는 바뀌지 않는다. */
+  const resendPartnerMail = async (lead: Lead) => {
+    const res = await callManage(lead.lead_id, { action: 'resend_mail' }, {}, null)
+    if (!res) return
+    if (res.partnerMailSent) toast.success('파트너사에 배정 안내 메일을 다시 보냈습니다.')
+    else toast.error('파트너사 메일 발송에 실패했습니다 — 직접 연락해주세요')
+  }
 
   /** 미진행 처리 — 담당자가 사유를 남기고 리드를 닫는다. 전환과 마찬가지로 되돌릴 수 없다. */
   const skipLead = async (lead: Lead) => {
@@ -482,6 +516,7 @@ function LeadsPageInner() {
           createdAt={lead.created_at.slice(0, 10)}
           partnerCompany={lead.partner_company}
           partnerName={lead.partner_name}
+          partnerEmail={lead.partner_email}
           partnerContact={lead.partner_contact}
           customerCompany={lead.customer_company}
           industry={lead.industry}
@@ -537,7 +572,7 @@ function LeadsPageInner() {
       }
       // 목록에서 빼면 상단 미처리 배지 건수도 함께 줄어든다(같은 배열에서 세므로).
       setLeads(prev => prev.filter(l => l.lead_id !== lead.lead_id))
-      setDeleteConfirm(null)
+      closeProcess()
       if (clickedId === lead.lead_id) setClickedId(null)
       toast.success('리드를 삭제했습니다.')
     } finally {
@@ -545,19 +580,20 @@ function LeadsPageInner() {
     }
   }
 
-  /** 삭제 버튼 — 전환된 리드는 문구 확인 칸을 열고, 아니면 확인 창 한 번으로 끝낸다. */
-  const askDelete = async (lead: Lead) => {
-    if (lead.converted_opportunity_id) {
-      setDeleteConfirm({ id: lead.lead_id, text: '' })
-      return
-    }
-    const ok = await confirm({
-      title: '리드 삭제',
-      message: `${lead.partner_company}${josa(lead.partner_company, '이')} 등록한 ${lead.customer_company} 리드를 삭제합니다. 되돌릴 수 없습니다.`,
-      confirmText: '삭제',
-      variant: 'danger',
-    })
-    if (ok) await removeLead(lead)
+  /**
+   * 배정 불가 — 관리자가 사유를 남기고 리드를 닫는다. 담당자가 배정되어 있었다면 서버가 배정도 함께 푼다.
+   * 미진행(담당자 판단)과 같은 최소 길이를 쓰고, 종결이라 되돌릴 수 없다.
+   */
+  const blockLead = async (lead: Lead) => {
+    const reason = (blockDraft?.id === lead.lead_id ? blockDraft.text : '').trim()
+    if (reason.length < SKIP_REASON_MIN) { toast.error(`배정 불가 사유를 ${SKIP_REASON_MIN}자 이상 입력해주세요.`); return }
+    const res = await callManage(
+      lead.lead_id,
+      { action: 'block', reason },
+      { status: LEAD_STATUS_BLOCKED, block_reason: reason, assigned_to: null },
+      '배정 불가로 처리했습니다.',
+    )
+    if (res) closeProcess()
   }
 
   /** 영업기회 전환 — 기회 행을 만들고 리드를 전환완료로 닫는다. */
@@ -708,8 +744,10 @@ function LeadsPageInner() {
               <thead>
                 {/* 헤더 — 옅은 배경만으로는 흰 행과 잘 안 갈라져, 관리자 견적서 표와 같은 2px 아래선을 함께 준다 */}
                 <tr style={{ background: HEAD_BG, borderBottom: `2px solid ${BORDER}` }}>
-                  {/* 선택 칸 — 견적 목록과 같은 폭·정렬. 이 페이지에 보이는 것만 한 번에 켜고 끈다. */}
-                  <th style={{ width: 36, padding: '9px 6px', textAlign: 'center', background: HEAD_BG }}>
+                  {/* 선택 칸 — 견적 목록과 같은 폭·정렬. 이 페이지에 보이는 것만 한 번에 켜고 끈다.
+                      열린 행의 액센트 바가 이 칸에 붙으므로(아래 td) 헤더에도 같은 폭의 투명 선을 줘 열 폭을 맞춘다.
+                      폭은 3px 늘리고 왼쪽 여백을 3px 줄여, 선이 생겨도 체크박스 자리는 그대로다. */}
+                  <th style={{ width: 39, padding: '9px 6px 9px 3px', textAlign: 'center', background: HEAD_BG, borderLeft: '3px solid transparent' }}>
                     <input
                       type="checkbox"
                       checked={allPagedSelected}
@@ -733,6 +771,15 @@ function LeadsPageInner() {
                   const closed = converted || isLeadClosed(lead.status)
                   // 사유가 최소 길이를 넘어야 미진행 버튼이 열린다(서버도 같은 길이를 다시 본다).
                   const skipReady = (skipDraft?.id === lead.lead_id ? skipDraft.text : '').trim().length >= SKIP_REASON_MIN
+                  // 배정 불가 사유 — 미진행과 같은 최소 길이를 쓴다.
+                  const blockText = blockDraft?.id === lead.lead_id ? blockDraft.text : ''
+                  const blockReady = blockText.trim().length >= SKIP_REASON_MIN
+                  // 삭제 확인 문구 — 「<고객사명> 삭제 확인」을 그대로 쳐야 버튼이 열린다(서버도 같은 문구를 본다).
+                  const deletePhrase = `${lead.customer_company} 삭제 확인`
+                  const deleteText = deleteConfirm?.id === lead.lead_id ? deleteConfirm.text : ''
+                  const deleteReady = deleteText.trim() === deletePhrase
+                  const deletingNow = deleting === lead.lead_id
+                  const procKind = proc?.id === lead.lead_id ? proc.kind : null
                   const busy = saving === lead.lead_id
                   const isAssignee = lead.assigned_to === myEngineerId
                   // 처리 줄의 선택지 — 배정받은 담당자만 쓰는 두 가지.
@@ -761,7 +808,12 @@ function LeadsPageInner() {
                             칸(td)과 입력(input) 양쪽에서 멈춘다 — 체크박스 옆 빈자리를 눌러도 열리면 안 된다. */}
                         <td
                           onClick={e => e.stopPropagation()}
-                          style={{ width: 36, padding: '10px 6px', textAlign: 'center' }}
+                          style={{
+                            width: 39, padding: '10px 6px 10px 3px', textAlign: 'center',
+                            // 열린 행의 액센트 바. 표의 첫 칸에 둬야 아래 상세 행(colSpan)의 바와 같은 자리에서 시작한다
+                            // — 번호 칸에 두면 체크박스 칸(39px)만큼 밀려 위아래가 끊겨 보인다.
+                            borderLeft: open ? `3px solid ${ACCENT_BAR}` : '3px solid transparent',
+                          }}
                         >
                           <input
                             type="checkbox"
@@ -772,7 +824,7 @@ function LeadsPageInner() {
                           />
                         </td>
                         {/* 번호가 없는 리드(발급 실패)는 자리를 비우지 않고 - 로 채운다 */}
-                        <td style={{ ...td, fontWeight: 700, color: lead.lead_no ? BLUE : FAINT, borderLeft: open ? `3px solid ${ACCENT_BAR}` : `3px solid transparent` }}>
+                        <td style={{ ...td, fontWeight: 700, color: lead.lead_no ? BLUE : FAINT }}>
                           {lead.lead_no ?? '-'}
                         </td>
                         <td style={{ ...td, color: MUTED }}>{lead.created_at.slice(0, 10)}</td>
@@ -812,6 +864,7 @@ function LeadsPageInner() {
                                   <div style={cardRows}>
                                     <Row k="회사명" v={lead.partner_company} />
                                     <Row k="등록자" v={lead.partner_name} />
+                                    <Row k="이메일" v={lead.partner_email} />
                                     <Row k="연락처" v={lead.partner_contact} />
                                   </div>
                                 </div>
@@ -916,6 +969,28 @@ function LeadsPageInner() {
                                       </span>
                                     )}
                                   </div>
+
+                                  {/* 파트너사 메일 재발송 — 배정 통보를 다시 보낸다. 담당자가 붙은 건에만 보인다.
+                                      주소가 없는 옛 리드(칸이 생기기 전 등록분)는 누르지 못하게 하고 그 이유를 옆에 적는다. */}
+                                  {isAdmin && lead.assigned_to != null && (
+                                    <div style={{ ...dlRow, alignItems: 'center' }}>
+                                      <span style={dlKey}>파트너사</span>
+                                      <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
+                                        <button
+                                          onClick={() => resendPartnerMail(lead)}
+                                          disabled={busy || !lead.partner_email}
+                                          style={{
+                                            ...ghostBtn, padding: '5px 11px', fontSize: 12,
+                                            cursor: busy || !lead.partner_email ? 'default' : 'pointer',
+                                            color: busy || !lead.partner_email ? FAINT : MUTED,
+                                          }}
+                                        >{busy ? '보내는 중...' : '메일 재발송'}</button>
+                                        {!lead.partner_email && (
+                                          <span style={{ fontSize: 11, color: FAINT }}>파트너사 이메일이 없습니다</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
 
                                 {/* ── 메모 ── 평소에는 내용만 보이고, 연필을 누르면 그때 입력칸과 저장·취소가 열린다.
@@ -988,7 +1063,8 @@ function LeadsPageInner() {
                                   <span style={{ flex: '1 1 240px', minWidth: 0, fontSize: 13, color: MUTED, lineHeight: '20px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                                     {converted
                                       ? `영업기회 #${lead.converted_opportunity_id} 로 전환되었습니다.`
-                                      : (lead.skip_reason?.trim() || '사유가 남아 있지 않습니다.')}
+                                      : ((lead.status === LEAD_STATUS_BLOCKED ? lead.block_reason : lead.skip_reason)?.trim()
+                                        || '사유가 남아 있지 않습니다.')}
                                   </span>
                                 </div>
                               )}
@@ -1092,51 +1168,103 @@ function LeadsPageInner() {
                               {/* 삭제 — superadmin 에게만 보인다. 서버도 같은 권한을 다시 확인한다.
                                   marginTop: auto 로 남는 높이를 전부 위에서 먹어 카드 맨 아래에 붙는다 —
                                   메모가 길든 짧든, 편집 중이든 아니든 버튼 자리가 움직이지 않는다. */}
+                              {/* ── 리드 처리 ── superadmin 에게만. 되돌릴 수 없는 두 가지(배정 불가·삭제)를 한 자리에 모은다.
+                                  marginTop: auto 로 남는 높이를 위에서 먹어 카드 맨 아래에 붙는다 — 메모 길이와 무관하게 자리가 고정된다. */}
                               {isSuperAdmin(me) && (
                                 <div style={{ ...dividerTop, marginTop: 'auto' }}>
-                                  {deleteConfirm?.id === lead.lead_id ? (
+                                  {procKind ? (
                                     <div style={{ background: DANGER_BG, border: `1px solid ${BORDER}`, borderRadius: 6, padding: 12 }}>
-                                      <div style={{ fontSize: 13, color: TEXT, lineHeight: '22px', marginBottom: 10 }}>
-                                        이 리드는 영업기회 #{lead.converted_opportunity_id} 으로 전환되었습니다.<br />
-                                        삭제하면 해당 영업기회의 출처 기록이 사라집니다.<br />
-                                        영업기회 자체는 삭제되지 않습니다.
-                                      </div>
-                                      <div style={{ fontSize: 12, color: FAINT, marginBottom: 6 }}>
-                                        삭제하려면 고객사명 「{lead.customer_company}」 을 입력하세요
-                                      </div>
-                                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                                        <input
-                                          value={deleteConfirm.text}
-                                          onChange={e => setDeleteConfirm({ id: lead.lead_id, text: e.target.value })}
-                                          placeholder={lead.customer_company}
-                                          style={{ ...inpStyle, flex: '1 1 200px', minWidth: 0 }}
-                                        />
-                                        <button
-                                          disabled={deleting === lead.lead_id || deleteConfirm.text.trim() !== lead.customer_company.trim()}
-                                          onClick={() => removeLead(lead, deleteConfirm.text)}
-                                          style={{
-                                            ...primaryBtn(deleting === lead.lead_id || deleteConfirm.text.trim() !== lead.customer_company.trim()),
-                                            background: deleting === lead.lead_id || deleteConfirm.text.trim() !== lead.customer_company.trim() ? '#f3f4f6' : DANGER,
-                                          }}
-                                        >{deleting === lead.lead_id ? '삭제 중...' : '삭제'}</button>
-                                        <button
-                                          onClick={() => setDeleteConfirm(null)}
-                                          disabled={deleting === lead.lead_id}
-                                          style={ghostBtn}
-                                        >취소</button>
-                                      </div>
+                                      {/* 종결된 리드에는 배정 불가를 두지 않는다(이미 닫힌 건이다). 삭제는 그대로 둔다. */}
+                                      <SegmentedControl
+                                        value={procKind}
+                                        options={closed
+                                          ? [{ label: '삭제', value: 'delete' }]
+                                          : [{ label: '배정 불가로 변경', value: 'block' }, { label: '삭제', value: 'delete' }]}
+                                        onChange={v => setProc({ id: lead.lead_id, kind: v as 'block' | 'delete' })}
+                                      />
+
+                                      {procKind === 'block' && (
+                                        <div style={{ marginTop: 10 }}>
+                                          <div style={{ fontSize: 13, color: TEXT, lineHeight: '22px', marginBottom: 8 }}>
+                                            담당자를 붙이지 않고 이 리드를 닫습니다. 되돌릴 수 없습니다.
+                                            {lead.assigned_to != null && (
+                                              <><br />배정된 담당자({engName(lead.assigned_to)})는 해제되고 알림을 받습니다.</>
+                                            )}
+                                          </div>
+                                          <textarea
+                                            value={blockText}
+                                            rows={3}
+                                            maxLength={MAX_LEN.skip_reason}
+                                            onChange={e => setBlockDraft({ id: lead.lead_id, text: e.target.value })}
+                                            placeholder={`배정 불가 사유 (${SKIP_REASON_MIN}자 이상)`}
+                                            style={{ ...inpStyle, width: '100%', boxSizing: 'border-box', resize: 'vertical', lineHeight: '22px' }}
+                                          />
+                                          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+                                            <button onClick={closeProcess} disabled={busy} style={ghostBtn}>취소</button>
+                                            <button
+                                              disabled={busy || !blockReady}
+                                              onClick={() => blockLead(lead)}
+                                              style={{
+                                                ...primaryBtn(busy || !blockReady),
+                                                background: busy || !blockReady ? '#f3f4f6' : DANGER,
+                                              }}
+                                            >{busy ? '처리 중...' : '배정 불가 처리'}</button>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {procKind === 'delete' && (
+                                        <div style={{ marginTop: 10 }}>
+                                          <div style={{ fontSize: 13, color: TEXT, lineHeight: '22px', marginBottom: 8 }}>
+                                            {converted ? (
+                                              <>
+                                                이 리드는 영업기회 #{lead.converted_opportunity_id} 으로 전환되었습니다.<br />
+                                                삭제하면 해당 영업기회의 출처 기록이 사라집니다.<br />
+                                                영업기회 자체는 삭제되지 않습니다.
+                                              </>
+                                            ) : (
+                                              <>{lead.partner_company}{josa(lead.partner_company, '이')} 등록한 리드를 지웁니다. 되돌릴 수 없습니다.</>
+                                            )}
+                                          </div>
+                                          <div style={{ fontSize: 12, color: FAINT, marginBottom: 6 }}>아래 문구를 그대로 입력하세요</div>
+                                          {/* 따라 칠 문구 — 표 헤더와 같은 중립 배경에 얹어 입력칸과 구분한다. */}
+                                          <div style={{
+                                            background: HEAD_BG, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '8px 10px',
+                                            marginBottom: 6, fontSize: 13, fontWeight: 700, color: TEXT, wordBreak: 'break-word',
+                                          }}>
+                                            {deletePhrase}
+                                          </div>
+                                          <input
+                                            value={deleteText}
+                                            onChange={e => setDeleteConfirm({ id: lead.lead_id, text: e.target.value })}
+                                            placeholder={deletePhrase}
+                                            style={{ ...inpStyle, width: '100%', boxSizing: 'border-box' }}
+                                          />
+                                          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+                                            <button onClick={closeProcess} disabled={deletingNow} style={ghostBtn}>취소</button>
+                                            <button
+                                              disabled={deletingNow || !deleteReady}
+                                              onClick={() => removeLead(lead, deleteText)}
+                                              style={{
+                                                ...primaryBtn(deletingNow || !deleteReady),
+                                                background: deletingNow || !deleteReady ? '#f3f4f6' : DANGER,
+                                              }}
+                                            >{deletingNow ? '삭제 중...' : '삭제'}</button>
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                   ) : (
                                     // 카드 오른쪽 아래. 되돌릴 수 없는 동작이라 다른 것과 붙지 않게 끝에 둔다.
                                     <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                                       <button
-                                        onClick={() => askDelete(lead)}
-                                        disabled={deleting === lead.lead_id}
+                                        onClick={() => setProc({ id: lead.lead_id, kind: closed ? 'delete' : 'block' })}
+                                        disabled={deletingNow}
                                         style={{
-                                          ...primaryBtn(deleting === lead.lead_id),
-                                          background: deleting === lead.lead_id ? '#f3f4f6' : DANGER,
+                                          ...primaryBtn(deletingNow),
+                                          background: deletingNow ? '#f3f4f6' : DANGER,
                                         }}
-                                      >{deleting === lead.lead_id ? '삭제 중...' : '리드 삭제'}</button>
+                                      >리드 처리</button>
                                     </div>
                                   )}
                                 </div>

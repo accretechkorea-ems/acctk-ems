@@ -113,7 +113,7 @@ function Card({ title, last, children }: { title: string; last?: boolean; childr
 export type LeadPDFProps = {
   leadNo: string | null
   createdAt: string
-  partnerCompany: string; partnerName: string; partnerContact: string | null
+  partnerCompany: string; partnerName: string; partnerEmail: string | null; partnerContact: string | null
   customerCompany: string; industry: string; products: string
   address: string | null; city: string; country: string
   interestProduct: string; budgetStatus: string
@@ -150,6 +150,7 @@ export const LeadPDFDoc = React.memo(function LeadPDFDoc(p: LeadPDFProps) {
             <Card title="파트너사">
               <Row k="회사명" v={p.partnerCompany} />
               <Row k="등록자" v={p.partnerName} />
+              <Row k="이메일" v={p.partnerEmail} />
               <Row k="연락처" v={p.partnerContact} />
             </Card>
             <Card title="관심 제품">

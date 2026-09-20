@@ -4,8 +4,8 @@
 // RLS 를 켜기 전이든 뒤든 이 라우트만으로 방어가 완결되어야 한다 — RLS 는 두 번째 방어선이다.
 //
 // 역할
-//   관리자(isSuperAdmin) : 전체 조회 / 배정 / 메모 / 삭제               (전환·미진행 불가)
-//   담당자(assigned_to)  : 자기 배정 건 조회 / 메모 / 전환 / 미진행     (배정·삭제 불가)
+//   관리자(isSuperAdmin) : 전체 조회 / 배정 / 메모 / 배정불가 / 삭제    (전환·미진행 불가)
+//   담당자(assigned_to)  : 자기 배정 건 조회 / 메모 / 전환 / 미진행     (배정·배정불가·삭제 불가)
 //
 // 상태는 손으로 고르지 않는다. 배정하면 진행중, 전환하면 전환완료, 미진행 처리하면 미진행이 된다.
 // 그래서 status 를 직접 받는 action 이 없다 — 없어진 '확인중'·'보류' 는 어떤 경로로도 들어올 수 없다.
@@ -16,8 +16,9 @@ import { canViewLeads, isSuperAdmin } from '@/lib/permissions'
 import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
 import { monthToDate } from '@/components/customer/opportunity'
 import { adminEngineerIds, notifyLead } from '@/lib/leadNotify'
+import { sendPartnerAssignMail } from '@/lib/leadMail'
 import {
-  LEAD_STATUS_NEW, LEAD_STATUS_ACTIVE, LEAD_STATUS_CONVERTED, LEAD_STATUS_SKIPPED,
+  LEAD_STATUS_NEW, LEAD_STATUS_ACTIVE, LEAD_STATUS_CONVERTED, LEAD_STATUS_SKIPPED, LEAD_STATUS_BLOCKED,
   LEAD_CONVERT_ACTIVITY_TYPE, MAX_LEN, SKIP_REASON_MIN, isLeadClosed, leadNoTag,
 } from '@/lib/leadOptions'
 
@@ -31,6 +32,9 @@ const bad = (message: string, status = 400) => NextResponse.json({ error: messag
 type LeadRow = {
   lead_id: number
   lead_no: string | null
+  partner_name: string | null
+  /** 파트너사 담당자 메일. 칸이 생기기 전 등록분은 null 이라 그때는 메일을 보내지 않는다. */
+  partner_email: string | null
   customer_company: string
   interest_product: string
   expected_purchase: string | null
@@ -40,6 +44,34 @@ type LeadRow = {
   assigned_to: number | null
   converted_opportunity_id: number | null
   created_at: string
+}
+
+/**
+ * 파트너사에 담당자 배정을 알린다. 담당자 정보는 engineers 에서 읽는다
+ * (이 표의 전화 칸은 tel 하나뿐이다 — contact_mobile 은 고객사 담당자 것이라 쓰지 않는다).
+ * 외부로 나가는 메일이라 성패를 돌려준다. 실패해도 배정 자체는 되돌리지 않는다.
+ */
+async function notifyPartnerAssigned(lead: LeadRow, assignedTo: number, changed: boolean): Promise<boolean> {
+  if (!lead.partner_email) return false
+  const { data, error } = await supabaseAdmin
+    .from('engineers')
+    .select('name, position, tel, email')
+    .eq('engineer_id', assignedTo)
+    .maybeSingle()
+  if (error || !data) {
+    console.error('[lead-manage] 담당자 조회 실패 — 파트너사 메일을 보내지 못했다', { leadId: lead.lead_id, assignedTo, error })
+    return false
+  }
+  const e = data as { name: string | null; position: string | null; tel: string | null; email: string | null }
+  return sendPartnerAssignMail({
+    lead_id: lead.lead_id,
+    lead_no: lead.lead_no,
+    partner_email: lead.partner_email,
+    partner_name: lead.partner_name,
+    customer_company: lead.customer_company,
+    engineer: { name: e.name, position: e.position, tel: e.tel, email: e.email },
+    changed,
+  })
 }
 
 export async function POST(req: Request) {
@@ -69,7 +101,7 @@ export async function POST(req: Request) {
   // 권한 판정은 화면이 보낸 값이 아니라 DB 의 현재 값으로 한다.
   const { data: lead, error: leadErr } = await supabaseAdmin
     .from('leads')
-    .select('lead_id, lead_no, customer_company, interest_product, expected_purchase, meeting_note, request_note, status, assigned_to, converted_opportunity_id, created_at')
+    .select('lead_id, lead_no, partner_name, partner_email, customer_company, interest_product, expected_purchase, meeting_note, request_note, status, assigned_to, converted_opportunity_id, created_at')
     .eq('lead_id', leadId)
     .single<LeadRow>()
   if (leadErr || !lead) return bad('리드를 찾을 수 없습니다.', 404)
@@ -132,7 +164,12 @@ export async function POST(req: Request) {
         leadId,
       })
     }
-    return NextResponse.json({ success: true, assignedTo, status: statusPatch.status ?? lead.status })
+    // 파트너사에 담당자를 알린다. 배정을 푸는 경우(null)와 같은 사람으로 다시 저장한 경우는 보내지 않는다.
+    // 이전 담당자가 있었으면 '변경', 없었으면 '배정'으로 제목·첫 문장이 갈린다.
+    const partnerMailSent = assignedTo !== null && assignedTo !== lead.assigned_to
+      ? await notifyPartnerAssigned(lead, assignedTo, lead.assigned_to != null)
+      : false
+    return NextResponse.json({ success: true, assignedTo, status: statusPatch.status ?? lead.status, partnerMailSent })
   }
 
   // ── 미진행 처리 — 담당자만. 되돌릴 수 없는 종결이라 사유를 반드시 받는다. ──
@@ -160,6 +197,48 @@ export async function POST(req: Request) {
       leadId,
     })
     return NextResponse.json({ success: true, status: LEAD_STATUS_SKIPPED })
+  }
+
+  // ── 배정 불가 — 관리자만. 담당자를 붙이지 않고 닫는 종결이라 사유를 반드시 받는다. ──
+  if (action === 'block') {
+    if (!admin) return bad('배정 불가 처리는 관리자만 할 수 있습니다.', 403)
+    if (isLeadClosed(lead.status)) return bad('이미 종결된 리드입니다.', 409)
+
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
+    if (!reason) return bad('배정 불가 사유를 입력해주세요.')
+    if (reason.length < SKIP_REASON_MIN) return bad(`배정 불가 사유는 ${SKIP_REASON_MIN}자 이상 입력해주세요.`)
+    if (reason.length > MAX_LEN.skip_reason) return bad(`배정 불가 사유는 ${MAX_LEN.skip_reason}자를 넘을 수 없습니다.`)
+
+    // 배정 불가인데 담당자가 남아 있으면 모순이라 배정을 함께 푼다.
+    // 배정자(assigned_by)는 남긴다 — 누가 배정했던 건인지는 기록으로 남아야 한다.
+    const previousAssignee = lead.assigned_to
+    const { error } = await supabaseAdmin.from('leads')
+      .update({ status: LEAD_STATUS_BLOCKED, block_reason: reason, assigned_to: null, ...touch })
+      .eq('lead_id', leadId)
+    if (error) return fail('block update failed', error)
+
+    // 배정되어 있던 담당자에게만 알린다(배정 전 건이면 알릴 사람이 없다).
+    // 사유는 길이가 제각각이라 메시지에 넣지 않는다 — 링크를 누르면 상세에서 전문을 본다(미진행과 같은 규칙).
+    if (previousAssignee != null) {
+      await notifyLead({
+        engineerIds: [previousAssignee],
+        title: '리드 배정 불가',
+        message: `${leadNoTag(lead.lead_no)}리드가 배정 불가로 처리되어 배정이 해제되었습니다.`,
+        type: 'lead_blocked',
+        leadId,
+      })
+    }
+    return NextResponse.json({ success: true, status: LEAD_STATUS_BLOCKED, unassigned: previousAssignee != null })
+  }
+
+  // ── 파트너사 메일 재발송 — 관리자만. 배정 통보를 다시 보낸다(데이터는 건드리지 않는다). ──
+  if (action === 'resend_mail') {
+    if (!admin) return bad('메일 재발송은 관리자만 할 수 있습니다.', 403)
+    if (lead.assigned_to == null) return bad('담당자가 배정된 리드만 다시 보낼 수 있습니다.')
+    if (!lead.partner_email) return bad('파트너사 이메일이 없습니다.')
+    // 재발송은 '변경' 이 아니라 지금 상태를 다시 알리는 것이므로 배정 문구로 보낸다.
+    const partnerMailSent = await notifyPartnerAssigned(lead, lead.assigned_to, false)
+    return NextResponse.json({ success: true, partnerMailSent })
   }
 
   // ── 메모 — 관리자·담당자 ──

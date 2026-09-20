@@ -47,13 +47,13 @@ export async function POST(req: Request) {
     .single()
   if (leadErr || !lead) return NextResponse.json({ error: '리드를 찾을 수 없습니다.' }, { status: 404 })
 
-  // 전환된 리드는 영업기회의 출처 기록이 사라지므로 고객사명을 그대로 입력해야 지워진다.
+  // 되돌릴 수 없는 하드 삭제라, 전환 여부와 상관없이 모든 리드에 확인 문구를 요구한다.
+  // 문구는 「<고객사명> 삭제 확인」 — 고객사명만 받으면 목록에서 눈으로 베껴 넣기 쉬워 실수를 거르지 못한다.
   // 화면에서도 같은 검사를 하지만, 화면을 거치지 않는 호출을 막는 것은 이 검사다.
-  if (lead.converted_opportunity_id) {
-    const typed = typeof body.confirmText === 'string' ? body.confirmText.trim() : ''
-    if (typed !== (lead.customer_company ?? '').trim()) {
-      return NextResponse.json({ error: '고객사명이 일치하지 않습니다.' }, { status: 400 })
-    }
+  const phrase = `${(lead.customer_company ?? '').trim()} 삭제 확인`
+  const typed = typeof body.confirmText === 'string' ? body.confirmText.trim() : ''
+  if (typed !== phrase) {
+    return NextResponse.json({ error: `확인 문구가 일치하지 않습니다. 「${phrase}」 를 그대로 입력해주세요.` }, { status: 400 })
   }
 
   // 명함 파일을 리드보다 먼저 지운다. 행이 사라지면 파일명을 알 길이 없어 아무도 못 찾는 파일이 남는다.

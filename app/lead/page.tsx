@@ -23,7 +23,7 @@ const INK = '#111827'
 const PAGE_BG = '#fafafa'
 
 type Form = {
-  partner_company: string; partner_name: string; partner_contact: string
+  partner_company: string; partner_name: string; partner_email: string; partner_contact: string
   customer_company: string; industry: string; products: string
   address: string; city: string; country: string
   interest_product: string; request_note: string
@@ -36,7 +36,7 @@ type Form = {
 }
 
 const emptyForm = (): Form => ({
-  partner_company: '', partner_name: '', partner_contact: '',
+  partner_company: '', partner_name: '', partner_email: '', partner_contact: '',
   customer_company: '', industry: '', products: '',
   address: '', city: '', country: DEFAULT_COUNTRY,
   interest_product: '', request_note: '',
@@ -216,6 +216,7 @@ export default function LeadPage() {
     const need: [FieldKey, string][] = [
       ['partner_company', '회사명을 입력해주세요.'],
       ['partner_name', '등록자 성함을 입력해주세요.'],
+      ['partner_email', '이메일을 입력해주세요.'],
       ['customer_company', '회사명을 입력해주세요.'],
       ['industry', '산업군을 선택해주세요.'],
       ['products', '생산품을 입력해주세요.'],
@@ -230,7 +231,11 @@ export default function LeadPage() {
     ]
     for (const [key, msg] of need) if (!String(form[key]).trim()) e[key] = msg
 
-    // 이메일은 선택 항목이다 — 적었을 때만 형식을 본다.
+    // 파트너사 이메일은 필수다. 빈 값은 위 need 가 잡으므로 여기서는 형식만 본다.
+    if (form.partner_email.trim() && !EMAIL_RE.test(form.partner_email.trim())) {
+      e.partner_email = '이메일 형식이 올바르지 않습니다.'
+    }
+    // 고객사 담당자 이메일은 선택 항목이다 — 적었을 때만 형식을 본다.
     if (form.contact_email.trim() && !EMAIL_RE.test(form.contact_email.trim())) {
       e.contact_email = '이메일 형식이 올바르지 않습니다.'
     }
@@ -359,7 +364,13 @@ export default function LeadPage() {
           <div className="lead-grid">
             <Field label="회사명" name="partner_company" value={form.partner_company} error={errors.partner_company} onChange={set} required />
             <Field label="등록자 성함" name="partner_name" value={form.partner_name} error={errors.partner_name} onChange={set} required />
+            <Field label="이메일" name="partner_email" value={form.partner_email} error={errors.partner_email} onChange={set} required
+              type="email" placeholder="이메일을 입력해주세요" />
             <Field label="연락처" name="partner_contact" value={form.partner_contact} error={errors.partner_contact} onChange={set} />
+          </div>
+          {/* 왜 받는지 밝힌다 — 밝히지 않으면 광고 수신용으로 오해하기 쉽다. */}
+          <div style={{ fontSize: 11, color: FAINT, marginTop: 8 }}>
+            접수 확인과 담당자 배정 안내를 이 주소로 보내드립니다
           </div>
         </div>
 

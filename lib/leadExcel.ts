@@ -16,6 +16,8 @@ export type LeadExcelData = {
   assigned_to: number | null
   partner_company: string | null
   partner_name: string | null
+  /** 파트너사 담당자 메일. 칸이 생기기 전 등록분은 null 이다. */
+  partner_email: string | null
   partner_contact: string | null
   customer_company: string | null
   industry: string | null
@@ -41,7 +43,7 @@ export type LeadExcelData = {
 // meeting_note 는 뽑지 않는다 — 수천 자라 셀에 넣으면 시트가 망가진다.
 const SELECT = `
   lead_id, lead_no, created_at, status, assigned_by, assigned_to,
-  partner_company, partner_name, partner_contact,
+  partner_company, partner_name, partner_email, partner_contact,
   customer_company, industry, products, city, country,
   interest_product, budget_status, purchase_period, expected_purchase,
   contact_name, contact_title, contact_dept, contact_mobile, contact_office_tel, contact_email,
@@ -114,6 +116,7 @@ const columns = (engName: (id: number | null) => string): Col[] => [
   { label: '담당자', width: 14, get: l => (l.assigned_to ? engName(l.assigned_to) : '') },
   { label: '파트너사', width: 20, get: l => l.partner_company ?? '' },
   { label: '등록자', width: 12, get: l => l.partner_name ?? '' },
+  { label: '파트너사 이메일', width: 24, get: l => l.partner_email ?? '' },
   { label: '파트너 연락처', width: 16, get: l => l.partner_contact ?? '' },
   { label: '고객사', width: 22, get: l => l.customer_company ?? '' },
   { label: '산업군', width: 20, get: l => l.industry ?? '' },

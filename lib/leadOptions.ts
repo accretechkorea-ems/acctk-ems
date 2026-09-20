@@ -28,7 +28,11 @@ export const INTEREST_PRODUCTS = [
   '대형 진원도 측정기', '삼차원 측정기', '포터블타입 소형 측정기',
 ] as const
 
-export const COMPETITORS = ['미츠도요', '마하', '태일러홉슨', '코사카', '기타'] as const
+/**
+ * 경쟁사 선택지(복수 선택). 3차원 측정기 경쟁사인 자이스를 미츠도요 옆에 둔다.
+ * 「기타」는 직접 입력칸을 여는 값이라 늘 맨 뒤에 둔다.
+ */
+export const COMPETITORS = ['미츠도요', '자이스', '마하', '태일러홉슨', '코사카', '덕인', '기타'] as const
 
 /** 경쟁사에서 이 값을 고르면 직접 입력칸(competitor_other)이 열린다. */
 export const COMPETITOR_OTHER = '기타'
@@ -49,6 +53,8 @@ export const MEETING_NOTE_MIN = 30
 export const MAX_LEN = {
   partner_company: 100,
   partner_name: 50,
+  // 파트너사 담당자 메일 — 접수 확인·배정 통보를 보내는 주소. 254 는 고객사 이메일과 같은 RFC 5321 상한이다.
+  partner_email: 254,
   partner_contact: 50,
   customer_company: 100,
   products: 200,
@@ -81,6 +87,7 @@ export const MAX_LEN = {
 export const FIELD_LABELS: Record<keyof typeof MAX_LEN, string> = {
   partner_company: '파트너사 회사명',
   partner_name: '등록자 성함',
+  partner_email: '파트너사 이메일',
   partner_contact: '연락처',
   customer_company: '고객사 회사명',
   products: '생산품',
@@ -121,10 +128,11 @@ export const CARD_BUCKET = 'lead-cards'
  *   신규     — 등록되면 자동
  *   진행중   — 담당자가 배정되면 자동(배정을 풀면 신규로 돌아간다)
  *   전환완료 — 영업기회로 전환되면 자동. 종결
- *   미진행   — 담당자가 사유를 적어 종결. 되돌릴 수 없다
- * 손으로 고를 수 있는 것은 미진행 하나뿐이라 상태 드롭다운이 없다.
+ *   미진행   — 담당자가 사유를 적어 종결(leads.skip_reason). 되돌릴 수 없다
+ *   배정불가 — 관리자가 사유를 적어 종결(leads.block_reason). 담당자 배정도 함께 풀린다. 되돌릴 수 없다
+ * 손으로 고르는 것은 미진행(담당자)·배정불가(관리자) 둘뿐이라 상태 드롭다운은 두지 않는다.
  */
-export const LEAD_STATUSES = ['신규', '진행중', '전환완료', '미진행'] as const
+export const LEAD_STATUSES = ['신규', '진행중', '전환완료', '미진행', '배정불가'] as const
 
 /** 전환 시 남기는 영업활동의 유형. SalesActivityModal 의 ACTIVITY_TYPES 에 있는 값이어야 한다.
  *  파트너사가 현장에서 만나 적어 온 기록이라 '방문미팅' 으로 남긴다.
@@ -135,15 +143,17 @@ export const LEAD_STATUS_NEW = '신규'
 export const LEAD_STATUS_ACTIVE = '진행중'
 export const LEAD_STATUS_CONVERTED = '전환완료'
 export const LEAD_STATUS_SKIPPED = '미진행'
+export const LEAD_STATUS_BLOCKED = '배정불가'
 
-/** 종결된 리드 — 배정을 바꿔도 상태를 건드리지 않고, 전환·미진행 버튼도 잠근다. */
+/** 종결된 리드 — 배정을 바꿔도 상태를 건드리지 않고, 전환·미진행·배정불가 버튼도 잠근다. */
 export const isLeadClosed = (status: string | null | undefined) =>
-  status === LEAD_STATUS_CONVERTED || status === LEAD_STATUS_SKIPPED
+  status === LEAD_STATUS_CONVERTED || status === LEAD_STATUS_SKIPPED || status === LEAD_STATUS_BLOCKED
 
 /**
  * 미진행 사유 최소 길이(자).
  * 회의록(30자)처럼 길게 요구하면 형식적으로 채우게 된다. '예산 부족'·'경쟁사 확정' 같은
  * 짧고 분명한 사유는 통과시키되 한두 글자로 때우는 것은 막는 선에서 5자로 둔다.
+ * 배정 불가 사유도 같은 값을 쓴다(길이 상한도 MAX_LEN.skip_reason 을 함께 쓴다) — 성격이 같은 종결 사유다.
  */
 export const SKIP_REASON_MIN = 5
 

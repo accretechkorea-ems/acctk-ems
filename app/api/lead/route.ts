@@ -7,7 +7,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { adminEngineerIds, notifyLead } from '@/lib/leadNotify'
-import { sendLeadMail } from '@/lib/leadMail'
+import { sendLeadMail, sendPartnerReceiptMail } from '@/lib/leadMail'
 import {
   INDUSTRIES, INTEREST_PRODUCTS, COMPETITORS, BUDGET_STATUSES, PURCHASE_PERIODS,
   MAX_LEN, FIELD_LABELS, MEETING_NOTE_MIN, HONEYPOT_FIELD, EMAIL_RE, DEFAULT_COUNTRY,
@@ -89,7 +89,7 @@ export async function POST(req: Request) {
   // ── 필수 텍스트 ──
   // 항목 이름은 FIELD_LABELS 한 곳에서만 온다(길이 초과 문구도 같은 것을 쓴다).
   const required = [
-    'partner_company', 'partner_name', 'customer_company', 'products', 'city',
+    'partner_company', 'partner_name', 'partner_email', 'customer_company', 'products', 'city',
     'contact_name', 'contact_dept', 'contact_mobile', 'meeting_note',
   ] as const
   const value: Record<string, string> = {}
@@ -116,7 +116,9 @@ export async function POST(req: Request) {
   }
 
   // ── 형식·길이 규칙 ──
-  // 이메일은 선택 항목이다 — 적어 보냈을 때만 형식을 본다.
+  // 파트너사 이메일은 필수다(빈 값은 위 required 가 걸렀다). 형식은 고객사 이메일과 같은 EMAIL_RE 로 본다.
+  if (!EMAIL_RE.test(value.partner_email)) return bad('파트너사 이메일 형식이 올바르지 않습니다.')
+  // 고객사 담당자 이메일은 선택 항목이다 — 적어 보냈을 때만 형식을 본다.
   if (value.contact_email && !EMAIL_RE.test(value.contact_email)) return bad('이메일 형식이 올바르지 않습니다.')
   if (value.meeting_note.length < MEETING_NOTE_MIN) {
     return bad(`회의록은 ${MEETING_NOTE_MIN}자 이상 입력해주세요.`)
@@ -167,6 +169,8 @@ export async function POST(req: Request) {
   const row = {
     partner_company: value.partner_company,
     partner_name: value.partner_name,
+    // str() 이 앞뒤 공백만 뗀 값을 그대로 넣는다 — 이 코드베이스에 메일 소문자 변환 규칙이 없어 새로 만들지 않는다.
+    partner_email: value.partner_email,
     partner_contact: value.partner_contact || null,
     customer_company: value.customer_company,
     industry,
@@ -197,7 +201,8 @@ export async function POST(req: Request) {
   // 번호를 붙여 넣는다. 동시에 들어온 두 요청이 같은 번호를 계산해도 unique 인덱스가
   // 한쪽을 튕겨내므로, 튕긴 쪽은 다시 읽어 다음 번호를 받는다. 인덱스가 최종 방어선이다.
   const prefix = leadNoPrefix()
-  type Saved = { lead_id: number; lead_no: string | null }
+  // created_at 은 접수 확인 메일의 '접수일시'에 쓴다(저장 시각을 다시 조회하지 않으려고 함께 받는다).
+  type Saved = { lead_id: number; lead_no: string | null; created_at: string | null }
   let saved: Saved | null = null
   let conflicted = false
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -205,7 +210,7 @@ export async function POST(req: Request) {
     const { data, error } = await supabaseAdmin
       .from('leads')
       .insert({ ...row, lead_no: leadNo })
-      .select('lead_id, lead_no')
+      .select('lead_id, lead_no, created_at')
       .single<Saved>()
     if (!error && data) { saved = data; break }
     if (error?.code === '23505') {   // 번호가 겹쳤다 — 다시 계산해서 재시도
@@ -223,7 +228,7 @@ export async function POST(req: Request) {
     const { data, error } = await supabaseAdmin
       .from('leads')
       .insert(row)
-      .select('lead_id, lead_no')
+      .select('lead_id, lead_no, created_at')
       .single<Saved>()
     if (error || !data) {
       console.error('[lead] insert failed', error)
@@ -280,5 +285,21 @@ export async function POST(req: Request) {
   // 값은 방금 저장한 row 를 그대로 쓴다(다시 조회하지 않는다).
   await sendLeadMail({ lead_id: saved.lead_id, lead_no: saved.lead_no, ...row })
 
-  return NextResponse.json({ success: true, ...(cardWarning ? { cardWarning } : null) })
+  // 파트너사 접수 확인 메일 — 내부 알림을 보낸 뒤에 보낸다(순서: 내부 먼저, 파트너사 나중).
+  // 주소가 없으면(칸이 생기기 전 등록분) 건너뛴다. 실패해도 접수는 성공이며, 성패는 응답에 담는다.
+  // 공개 폼은 파트너사가 보는 화면이라 실패를 안내하지 않는다 — 이미 못 받은 상태고 접수는 정상이다.
+  let partnerMailSent = false
+  if (row.partner_email) {
+    partnerMailSent = await sendPartnerReceiptMail({
+      lead_id: saved.lead_id,
+      lead_no: saved.lead_no,
+      partner_email: row.partner_email,
+      partner_name: row.partner_name,
+      customer_company: row.customer_company,
+      interest_product: row.interest_product,
+      created_at: saved.created_at,
+    })
+  }
+
+  return NextResponse.json({ success: true, partnerMailSent, ...(cardWarning ? { cardWarning } : null) })
 }

@@ -242,3 +242,203 @@ export async function sendLeadMail(d: LeadMailData): Promise<void> {
     console.error('[leadMail] 발송 중 오류', { leadId: d.lead_id, error: e })
   }
 }
+
+// ── 파트너사(대리점) 메일 ─────────────────────────────────────────────
+// 위 sendLeadMail 은 내부 직원에게 가는 알림이다. 아래 둘은 리드를 올린 파트너사 담당자에게 나간다.
+// 외부로 나가는 메일이라 호출부가 성패를 알아야 한다 — 이쪽은 boolean 을 돌려준다(예외는 던지지 않는다).
+// 카드 모양·발신 주소·평문 동시 발송은 내부 알림 메일과 같은 규칙을 쓴다.
+
+/** 'YYYY-MM-DD HH:mm' (KST). 접수일시처럼 사람이 읽는 시각에 쓴다. */
+const kstDateTime = (iso: string | null | undefined): string =>
+  iso ? new Date(iso).toLocaleString('sv-SE', { timeZone: 'Asia/Seoul', hour12: false }).slice(0, 16) : '-'
+
+/**
+ * Resend 한 번 호출(수신자 1명). 성공이면 true.
+ * 실패는 여기서 전문을 로그로 남기고 false 로만 알린다 — 호출부가 응답에 담아 화면이 안내한다.
+ */
+async function sendPartnerResend(args: {
+  to: string
+  subject: string
+  html: string
+  text: string
+  ctx: Record<string, unknown>
+}): Promise<boolean> {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) {
+    console.error('[leadMail] RESEND_API_KEY 가 없어 파트너사 메일을 보내지 않는다', args.ctx)
+    return false
+  }
+  const to = args.to.trim()
+  if (!to) {
+    console.error('[leadMail] 파트너사 주소가 비어 있다', args.ctx)
+    return false
+  }
+  // 내부 알림과 같은 시험용 제외 장치를 파트너사 주소에도 적용한다(목록이 비어 있으면 아무 영향 없다).
+  if (TEST_EXCLUDED_EMAILS.map(e => e.toLowerCase()).includes(to.toLowerCase())) {
+    console.error('[leadMail] 테스트 제외 주소 — 파트너사 메일을 보내지 않는다', { ...args.ctx, to })
+    return false
+  }
+  try {
+    const res = await fetch(RESEND_ENDPOINT, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: FROM, to: [to], subject: args.subject, html: args.html, text: args.text }),
+    })
+    if (!res.ok) {
+      console.error('[leadMail] 파트너사 발송 실패', { ...args.ctx, to, status: res.status, body: (await res.text()).slice(0, 300) })
+      return false
+    }
+    console.log('[leadMail] 파트너사 발송', { ...args.ctx, to })
+    return true
+  } catch (e) {
+    console.error('[leadMail] 파트너사 발송 중 오류', { ...args.ctx, to, error: e })
+    return false
+  }
+}
+
+/** 파트너사 메일 공통 껍데기. 제목 줄 · 인사말 · 표 · 맺음말 순서는 두 메일이 같다. */
+function partnerMailHtml(args: {
+  heading: string
+  greeting: string
+  lead: string[]
+  rows: [string, string][]
+  closing: string[]
+}): string {
+  const tr = args.rows
+    .map(([k, v]) => `
+      <tr>
+        <td style="padding:7px 12px;background:#f3f4f6;color:#6b7280;font-size:13px;font-weight:700;white-space:nowrap;border-bottom:1px solid #ebebeb;">${esc(k)}</td>
+        <td style="padding:7px 12px;color:#111827;font-size:13px;border-bottom:1px solid #ebebeb;">${esc(v)}</td>
+      </tr>`)
+    .join('')
+  const para = (s: string) => `<div style="font-size:13px;color:#111827;line-height:1.8;">${esc(s)}</div>`
+  return `<div style="margin:0;padding:24px 16px;background:#fafafa;font-family:Arial,Helvetica,sans-serif;">
+  <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #ebebeb;border-radius:8px;overflow:hidden;">
+    <div style="padding:18px 20px;border-bottom:1px solid #ebebeb;">
+      <div style="font-size:16px;font-weight:800;color:#111827;">${esc(args.heading)}</div>
+      <div style="font-size:12px;color:#6b7280;margin-top:4px;">아크레텍코리아 계측사업부</div>
+    </div>
+    <div style="padding:18px 20px;">
+      <div style="font-size:13px;color:#111827;line-height:1.8;font-weight:700;">${esc(args.greeting)}</div>
+      <div style="margin-top:12px;">${args.lead.map(para).join('')}</div>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin-top:16px;">${tr}</table>
+      <div style="margin-top:16px;">${args.closing.map(para).join('')}</div>
+    </div>
+  </div>
+  <div style="max-width:640px;margin:12px auto 0;font-size:11px;color:#9ca3af;text-align:center;">
+    이 메일은 리드 등록·담당자 배정 시 자동으로 발송됩니다. 회신은 담당자에게 직접 부탁드립니다.
+  </div>
+</div>`
+}
+
+/** 파트너사 메일 평문. HTML 과 같은 내용을 같은 순서로 담는다. */
+function partnerMailText(args: {
+  heading: string
+  greeting: string
+  lead: string[]
+  rows: [string, string][]
+  closing: string[]
+}): string {
+  return [
+    `${args.heading} — 아크레텍코리아 계측사업부`,
+    '',
+    args.greeting,
+    '',
+    ...args.lead,
+    '',
+    ...args.rows.map(([k, v]) => `${k}: ${v}`),
+    '',
+    ...args.closing,
+    '',
+    '이 메일은 리드 등록·담당자 배정 시 자동으로 발송됩니다. 회신은 담당자에게 직접 부탁드립니다.',
+  ].join('\n')
+}
+
+/** 접수 확인 메일에 실을 값. */
+export type PartnerReceiptMailData = {
+  lead_id: number
+  lead_no: string | null
+  partner_email: string | null
+  partner_name: string | null
+  customer_company: string | null
+  interest_product: string | null
+  created_at: string | null
+}
+
+/**
+ * 리드 접수 확인 — 등록 직후 파트너사 담당자에게 보낸다.
+ * 주소가 없으면 호출부가 아예 부르지 않는다(여기서도 방어한다).
+ */
+export async function sendPartnerReceiptMail(d: PartnerReceiptMailData): Promise<boolean> {
+  const name = (d.partner_name ?? '').trim() || '담당자'
+  const content = {
+    heading: '리드 접수 확인',
+    greeting: `${name}님, 안녕하십니까.`,
+    lead: [
+      '아크레텍코리아에 리드를 등록해 주셔서 감사합니다.',
+      '아래 내용으로 정상 접수되었습니다.',
+    ],
+    rows: [
+      ['접수번호', dash(d.lead_no)],
+      ['접수일시', kstDateTime(d.created_at)],
+      ['고객사', dash(d.customer_company)],
+      ['관심제품', dash(d.interest_product)],
+    ] as [string, string][],
+    closing: [
+      '담당자 배정이 완료되면 담당자 정보를 다시 안내드리겠습니다.',
+      '감사합니다.',
+    ],
+  }
+  return sendPartnerResend({
+    to: d.partner_email ?? '',
+    subject: `[아크레텍코리아] 리드 접수 확인 - ${dash(d.customer_company)}`,
+    html: partnerMailHtml(content),
+    text: partnerMailText(content),
+    ctx: { kind: 'receipt', leadId: d.lead_id, leadNo: d.lead_no },
+  })
+}
+
+/** 배정 통보 메일에 실을 값. */
+export type PartnerAssignMailData = {
+  lead_id: number
+  lead_no: string | null
+  partner_email: string | null
+  partner_name: string | null
+  customer_company: string | null
+  /** 배정된 담당자. 휴대폰은 engineers.tel 이고, 비어 있으면 그 줄을 빼고 보낸다. */
+  engineer: { name: string | null; position: string | null; tel: string | null; email: string | null }
+  /** 이전 담당자가 있었으면 true — 제목·첫 문장이 '변경'으로 바뀐다. */
+  changed: boolean
+}
+
+/** 담당자 배정(변경) 통보 — 배정 직후와 재발송 버튼이 함께 쓴다. */
+export async function sendPartnerAssignMail(d: PartnerAssignMailData): Promise<boolean> {
+  const name = (d.partner_name ?? '').trim() || '담당자'
+  const who = [d.engineer.name, d.engineer.position].map(v => (v ?? '').trim()).filter(Boolean).join(' ')
+  const tel = (d.engineer.tel ?? '').trim()
+  const rows: [string, string][] = [['담당자', who || '-']]
+  // 연락처는 값이 있을 때만 넣는다 — 빈 줄을 '-' 로 내보내면 연락처가 없는 것처럼 읽힌다.
+  if (tel) rows.push(['연락처', tel])
+  rows.push(['이메일', dash(d.engineer.email)])
+  const content = {
+    heading: d.changed ? '담당자 변경 안내' : '담당자 배정 안내',
+    greeting: `${name}님, 안녕하십니까.`,
+    lead: [
+      d.changed
+        ? `접수번호 ${dash(d.lead_no)} 건의 담당자가 변경되었습니다.`
+        : `접수번호 ${dash(d.lead_no)} 건의 담당자가 배정되었습니다.`,
+    ],
+    rows,
+    closing: [
+      '담당자가 곧 연락드릴 예정이며, 진행 관련 문의는 위 연락처로 부탁드립니다.',
+      '감사합니다.',
+    ],
+  }
+  return sendPartnerResend({
+    to: d.partner_email ?? '',
+    subject: `[아크레텍코리아] ${d.changed ? '담당자 변경 안내' : '담당자 배정 안내'} - ${dash(d.customer_company)}`,
+    html: partnerMailHtml(content),
+    text: partnerMailText(content),
+    ctx: { kind: 'assign', leadId: d.lead_id, leadNo: d.lead_no, changed: d.changed },
+  })
+}
