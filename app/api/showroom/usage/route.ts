@@ -39,6 +39,8 @@ const admin = () => createClient(
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
 const DEMO_VIA_REQUEST = '고객 데모는 사용 신청으로 등록해주세요(관리자 승인을 거칩니다).'
+/** 2026-09-21 — 목적 5종이 전부 신청·승인을 거친다. 이 라우트로는 새 기록을 만들 수 없다. */
+const USAGE_VIA_REQUEST = '사용 기록은 사용 신청으로 등록해주세요(관리자 승인을 거칩니다).'
 
 /** 로그인 + 고객사 권한 확인. app/api/requests/quote-delete/route.ts 의 authorize() 와 같은 모양이다. */
 async function authorize() {
@@ -246,48 +248,12 @@ const usageColumns = (v: ValidInput) => ({
 const engineerRows = (usageId: number, ids: number[]) =>
   ids.map(engineer_id => ({ usage_id: usageId, engineer_id }))
 
-// ── POST: 작성 ──────────────────────────────────────────────────────
-export async function POST(req: NextRequest) {
-  const auth = await authorize()
-  if (auth.error) return auth.error
-  const caller = auth.caller
-
-  const body = await req.json().catch(() => ({})) as Record<string, unknown>
-  // 고객 데모는 사용 신청으로만 들어온다(승인·확인을 거친다).
-  if (body.purpose === DEMO_PURPOSE) return bad(DEMO_VIA_REQUEST)
-  const supabaseAdmin = admin()
-
-  const v = await validateBody(supabaseAdmin, body, null)
-  if (v.error) return v.error
-  const input = v.value
-
-  const { data: created, error: insErr } = await supabaseAdmin
-    .from('showroom_usage')
-    .insert({
-      ...usageColumns(input),
-      request_id: null,           // 신청서 연동은 다음 단계
-      created_by: caller.engineer_id,
-    })
-    .select('usage_id')
-    .single()
-  if (insErr || !created) {
-    console.error('[showroom/usage] insert failed', { error: insErr })
-    return bad('사용 기록 저장에 실패했습니다.', 500)
-  }
-
-  // 참여 엔지니어까지 들어가야 한 건이 완성된다. 실패하면 방금 만든 행을 지워
-  // 엔지니어가 없는 반쪽 기록이 남지 않게 한다.
-  const { error: engErr } = await supabaseAdmin
-    .from('showroom_usage_engineers')
-    .insert(engineerRows(created.usage_id, input.engineerIds))
-  if (engErr) {
-    console.error('[showroom/usage] engineer insert failed, rolling back', { usageId: created.usage_id, error: engErr })
-    const { error: rbErr } = await supabaseAdmin.from('showroom_usage').delete().eq('usage_id', created.usage_id)
-    if (rbErr) console.error('[showroom/usage] rollback failed', { usageId: created.usage_id, error: rbErr })
-    return bad('참여 엔지니어 저장에 실패했습니다.', 500)
-  }
-
-  return NextResponse.json({ success: true, usage_id: created.usage_id })
+// ── POST: 막아 둔다 ─────────────────────────────────────────────────
+// 2026-09-21 — 사용목적 5종이 전부 사용 신청(승인·확인)을 거친다. 화면은 /api/showroom/requests 로만 보낸다.
+// 승인·확인 때 만들어지는 기록은 서버가 직접 넣으므로(shared.ts createUsageFromRequest) 이 라우트를 거치지 않는다.
+// 수정(PATCH)·삭제(DELETE)는 그대로 쓴다.
+export async function POST() {
+  return bad(USAGE_VIA_REQUEST)
 }
 
 // ── PATCH: 수정 ─────────────────────────────────────────────────────

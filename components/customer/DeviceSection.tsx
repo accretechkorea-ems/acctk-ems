@@ -6,9 +6,13 @@ import { INPUT_BORDER, TEXT_MUTED } from './constants'
 import { getInstallDisplay, getDefaultImageUrl } from './utils'
 import { elapsedLabel } from './holding'
 import { SERVICE_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
+import { ServiceFilesButton, reportDownloadName } from './ServiceAttachments'
+
 
 type Props = {
   devices: Device[]
+  /** 레포트 표시 이름에 쓴다. 내려받을 때의 이름과 같아야 한다. */
+  companyName: string | null
   historyByDevice: Map<number, ServiceHistory[]>
   onAddDevice: () => void
   onEditDevice: (device: Device) => void
@@ -28,7 +32,7 @@ type Props = {
   onOpenHolding: (h: Holding) => void
 }
 
-function ServiceCard({ h, d, onEdit, onPrint, onOpenReport, reportBusy, holding, onAddHolding, onOpenHolding }: { h: ServiceHistory; d: Device; onEdit: () => void; onPrint: () => void; onOpenReport: () => void; reportBusy: boolean; holding: Holding | undefined; onAddHolding: () => void; onOpenHolding: () => void }) {
+function ServiceCard({ h, d, companyName, onEdit, onPrint, onOpenReport, reportBusy, holding, onAddHolding, onOpenHolding }: { h: ServiceHistory; d: Device; companyName: string | null; onEdit: () => void; onPrint: () => void; onOpenReport: () => void; reportBusy: boolean; holding: Holding | undefined; onAddHolding: () => void; onOpenHolding: () => void }) {
   const [hovered, setHovered] = useState(false)
   const sc = getCategoryColor(SERVICE_TYPE_COLORS, h.service_type)
 
@@ -92,55 +96,57 @@ function ServiceCard({ h, d, onEdit, onPrint, onOpenReport, reportBusy, holding,
         {h.service_notes ?? '-'}
       </div>
 
-      {/* 아랫줄: 날짜/참여자 (좌, 세로) / 레포트 (우) */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 10 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-          <span style={{ fontSize: 12, color: '#9ca3af' }}>{h.visit_date ?? '-'}</span>
+      {/* 아랫줄: 날짜·참여자 한 줄 / 버튼은 그 아래 줄 */}
+      <div style={{ marginTop: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, fontSize: 12, color: '#9ca3af' }}>
+          <span style={{ flexShrink: 0 }}>{h.visit_date ?? '-'}</span>
           {(() => {
             const names = h.service_engineers && h.service_engineers.length > 0
-              ? h.service_engineers.map(se => `${se.engineers.name} ${se.engineers.position ?? ''}`.trim())
-              : [h.visitor ?? '-']
-            const rows: string[] = []
-            for (let i = 0; i < names.length; i += 2) rows.push(names.slice(i, i + 2).join(', '))
-            return rows.map((r, i) => (
-              <span key={i} style={{ fontSize: 12, color: '#9ca3af' }}>{r}</span>
-            ))
+              ? h.service_engineers.map(se => `${se.engineers.name} ${se.engineers.position ?? ''}`.trim()).join(', ')
+              : (h.visitor ?? '-')
+            return (
+              <>
+                <span style={{ color: '#d1d5db', flexShrink: 0 }}>·</span>
+                {/* 이름이 길면 한 줄로 자른다. 전체는 title 로 본다 */}
+                <span title={names} style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{names}</span>
+              </>
+            )
           })()}
         </div>
-        {h.report_url ? (
-          <button
-            onClick={onOpenReport}
-            disabled={reportBusy}
-            style={{
-              padding: '4px 10px', background: '#fff', color: '#111827',
-              borderRadius: 6, border: '1px solid #ebebeb',
-              cursor: reportBusy ? 'default' : 'pointer', fontWeight: 600, fontSize: 12,
-              flexShrink: 0, whiteSpace: 'nowrap', opacity: reportBusy ? 0.5 : 1,
-            }}
-          >
-            {reportBusy ? '여는 중…' : '레포트 열기'}
-          </button>
-        ) : (
-          <button
-            onClick={onPrint}
-            disabled={reportBusy}
-            style={{
-              padding: '4px 10px', background: '#fff', color: '#6b7280',
-              borderRadius: 6, border: '1px solid #ebebeb',
-              cursor: reportBusy ? 'default' : 'pointer', fontWeight: 600, fontSize: 12,
-              flexShrink: 0, whiteSpace: 'nowrap', opacity: reportBusy ? 0.5 : 1,
-            }}
-          >
-            {reportBusy ? '만드는 중…' : '레포트 작성'}
-          </button>
-        )}
+
+        {/* 파일 버튼 — 레포트 본체와 첨부를 「파일 N」 하나로 연다. 버튼 줄과 펼친 목록은 그 컴포넌트가 들고 있다.
+            「레포트 작성」은 파일을 여는 것이 아니라 만드는 동작이라 같은 줄에 따로 둔다. */}
+        <ServiceFilesButton
+          attachments={h.service_attachments ?? []}
+          report={h.report_url ? {
+            fileName: reportDownloadName({
+              visitDate: h.visit_date, companyName, serviceType: h.service_type, storedPath: h.report_url,
+            }),
+            busy: reportBusy, onOpen: onOpenReport,
+          } : null}
+          trailing={!h.report_url ? (
+            <button
+              onClick={onPrint}
+              disabled={reportBusy}
+              style={{
+                padding: '4px 10px', background: '#fff', color: '#6b7280',
+                borderRadius: 6, border: '1px solid #ebebeb',
+                cursor: reportBusy ? 'default' : 'pointer', fontWeight: 600, fontSize: 12,
+                flexShrink: 0, whiteSpace: 'nowrap', opacity: reportBusy ? 0.5 : 1,
+              }}
+            >
+              {reportBusy ? '만드는 중…' : '레포트 작성'}
+            </button>
+          ) : undefined}
+        />
       </div>
     </div>
   )
 }
 
-function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, reportBusyId, onUploadPacking, onOpenPacking, supabaseUrl, activeHolding, holdingByService, onAddHolding, onOpenHolding }: {
+function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, reportBusyId, onUploadPacking, onOpenPacking, supabaseUrl, activeHolding, holdingByService, onAddHolding, onOpenHolding }: {
   d: Device
+  companyName: string | null
   deviceHistory: ServiceHistory[]
   onEditDevice: () => void
   onAddService: () => void
@@ -185,7 +191,7 @@ function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditServic
         </svg>
       </button>
 
-      {/* 이미지 영역 */}
+      {/* 이미지 영역 — 사진 변경·삭제는 장비 수정 모달에서 한다(카드 우측 위는 수정 아이콘 자리다) */}
       <div style={{
         aspectRatio: '4 / 3', borderRadius: 6, background: 'transparent',
         border: (d.image_url || defaultImg) ? 'none' : '1px dashed #ebebeb',
@@ -308,6 +314,7 @@ function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditServic
             key={`${d.device_id}-${h.service_id}`}
             h={h}
             d={d}
+            companyName={companyName}
             onEdit={() => onEditService(h)}
             reportBusy={reportBusyId === h.service_id}
             onPrint={() => onPrintReport(h)}
@@ -325,7 +332,7 @@ function DeviceCard({ d, deviceHistory, onEditDevice, onAddService, onEditServic
   )
 }
 
-export default function DeviceSection({ devices, historyByDevice, onAddDevice, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, reportBusyId, onUploadPacking, onOpenPacking, activeHoldingByDevice, holdingByService, onAddHolding, onOpenHolding }: Props) {
+export default function DeviceSection({ devices, companyName, historyByDevice, onAddDevice, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, reportBusyId, onUploadPacking, onOpenPacking, activeHoldingByDevice, holdingByService, onAddHolding, onOpenHolding }: Props) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
   // 섹션 제목도, 바깥 여백도 두지 않는다 — 업체 상세의 탭 라벨('장비 N')과 중복이고,
@@ -338,6 +345,7 @@ export default function DeviceSection({ devices, historyByDevice, onAddDevice, o
           <DeviceCard
             key={d.device_id}
             d={d}
+            companyName={companyName}
             deviceHistory={historyByDevice.get(d.device_id) || []}
             onEditDevice={() => onEditDevice(d)}
             onAddService={() => onAddService(d.device_id)}

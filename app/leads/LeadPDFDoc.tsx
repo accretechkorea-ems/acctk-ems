@@ -5,8 +5,8 @@ import React from 'react'
 // react-pdf 의 Image 는 alt 를 받지 않으므로 이름을 바꿔 쓴다.
 import { Document, Page, Text, View, StyleSheet, Image as PdfImage, Font } from '@react-pdf/renderer'
 
-// 리드 상세 출력물. 관리자가 배정된 담당자에게 메일로 보내는 용도라
-// 화면 상세에 있는 항목만 담는다(담당자·상태·메모·미진행 사유 같은 관리 정보는 넣지 않는다).
+// 리드 상세 출력물. 관리자가 배정된 담당자에게 메일로 보내는 용도다.
+// 화면 상세에 있는 항목과 배정된 담당자까지 담는다(상태·메모·미진행 사유 같은 관리 정보는 넣지 않는다).
 //
 // 폰트·로고·용지 여백은 견적서(QuotePDFDoc)와 같은 값을 쓴다. 한글이 나오는 문서라
 // 폰트를 등록하지 않으면 글자가 통째로 비어 나온다.
@@ -124,6 +124,8 @@ export type LeadPDFProps = {
   meetingNote: string
   /** 명함 이미지(data URL). 없으면 null — 그 자리는 비워 둔다. */
   businessCard?: string | null
+  /** 배정된 담당자. 배정 전이면 null — 그 카드 자체가 나오지 않는다. */
+  assignee?: { name: string; position: string | null; tel: string | null; email: string | null } | null
 }
 
 export const LeadPDFDoc = React.memo(function LeadPDFDoc(p: LeadPDFProps) {
@@ -191,6 +193,18 @@ export const LeadPDFDoc = React.memo(function LeadPDFDoc(p: LeadPDFProps) {
           {/* 미팅 노트 — 왼쪽 네 장을 합한 높이를 채우고, 넘치면 잘라내지 않고 다음 장으로 흐른다.
               (2쪽에는 왼쪽 카드 없이 노트만 이어진다) */}
           <View style={S.right}>
+            {/* 담당자 — 배정된 건만. 왼쪽 열은 명함이 붙으면 한 장을 꽉 채워서,
+                여기에 두면 쪽수가 늘지 않는다(노트 칸이 그만큼 줄어든다). */}
+            {p.assignee && (
+              <Card title="아크레텍코리아 담당자">
+                <Row k="이름" v={p.assignee.name} />
+                <Row k="직급" v={p.assignee.position} />
+                {/* 연락처는 값이 있을 때만 넣는다 — 빈 줄을 '-' 로 내보내면 연락처가 없는 것처럼 읽힌다
+                    (파트너사 배정 메일과 같은 규칙). */}
+                {p.assignee.tel?.trim() ? <Row k="연락처" v={p.assignee.tel} /> : null}
+                <Row k="이메일" v={p.assignee.email} />
+              </Card>
+            )}
             <View style={S.noteCard}>
               <Text style={S.cardTitle}>미팅 노트</Text>
               <Text style={S.noteBody}>{breakable(p.meetingNote?.trim() || '-', NOTE_CHARS)}</Text>

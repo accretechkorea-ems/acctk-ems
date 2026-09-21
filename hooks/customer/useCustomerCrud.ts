@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import type { Customer, CustomerEditFormData } from '@/components/customer/types'
+import { deleteServiceAttachments } from '@/components/customer/attachments'
 
 type Args = {
   customer: Customer | null
@@ -128,6 +129,13 @@ export function useCustomerCrud({ customer, fetchDetail }: Args) {
       const serviceIds = (svc ?? []).map(s => s.service_id)
 
       if (serviceIds.length > 0) {
+        // 첨부파일을 먼저 치운다. 행은 service_history 가 지워질 때 CASCADE 로 따라가지만
+        // 스토리지 파일은 남으므로 라우트(service role)로 파일까지 지운다.
+        // 여기서 실패해도 삭제는 계속한다 — 남는 것은 아무도 가리키지 않는 파일뿐이다(로그로 남긴다).
+        for (const sid of serviceIds) {
+          const r = await deleteServiceAttachments(sid)
+          if (!r.ok) console.error('[customer] 첨부 정리 실패', { serviceId: sid, error: r.error })
+        }
         const { error: e1 } = await supabase.from('service_engineers').delete().in('service_id', serviceIds)
         if (e1) { console.error('[customer] delete service_engineers failed', e1); await abort('서비스 담당자', e1.message); return }
       }

@@ -11,7 +11,7 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { canViewAdmin, getViewScope, isFieldEngineerTeam, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerm, withTeamPerms } from '@/lib/teamPerms'
-import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, notifyDeleteRequest } from '@/lib/quoteMutations'
+import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, notifyDeleteRequest, PO_MEMO_MAX } from '@/lib/quoteMutations'
 import { isAutoFailed, isOrdered, REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE } from '@/lib/quoteStatus'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
@@ -60,6 +60,8 @@ type Quote = {
   tax_invoice_completed_at?: string | null
   shipping_date?: string | null
   order_memo?: string | null
+  /** 발주서를 올린 견적 작성자가 남긴 요청 메모. order_memo 와 다른 칸이다. */
+  order_request_memo?: string | null
   order_completed_at?: string | null
   order_completed_by?: string | null
   tax_invoice_date?: string | null
@@ -575,6 +577,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   // 발주서 등록
   const [poQuote, setPoQuote] = useState<Quote | null>(null)
   const [poFile, setPoFile] = useState<File | null>(null)
+  const [poMemo, setPoMemo] = useState('')
   const [poDelivery, setPoDelivery] = useState<'직납' | '택배발송'>('직납')
   const [poAddress, setPoAddress] = useState('')
   const [poAddressMode, setPoAddressMode] = useState<'company' | 'direct'>('company')
@@ -664,6 +667,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
       file: poFile,
       deliveryMethod: poDelivery,
       deliveryAddress,
+      requestMemo: poMemo,
     })
     setPoUploading(false)
     if (!result.ok) {
@@ -672,6 +676,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
     }
     setPoQuote(null)
     setPoFile(null)
+    setPoMemo('')
     setPoAddress('')
     setPoAddressMode('company')
     setPoCompanyAddress(null)
@@ -851,14 +856,14 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                           <span style={{ padding: '3px 7px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text, whiteSpace: 'nowrap', alignSelf: 'center' }}>
                             {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : salesStatusLabel(q.status)}
                           </span>
-                          {showOrderInfo && (q.shipping_date || q.order_memo) && (
+                          {showOrderInfo && (q.shipping_date || q.order_memo || q.order_request_memo) && (
                             <div ref={hoveredMemoId === q.quote_id ? memoAnchorRef : null}
                               onMouseEnter={() => setHoveredMemoId(q.quote_id)}
                               onMouseLeave={() => setHoveredMemoId(null)}>
                               <span style={{ fontSize: 10, cursor: 'help', display: 'flex', alignItems: 'center', gap: 3 }}>
                                 <span style={{ color: MUTED, fontWeight: 600 }}>출하예정</span>
                                 <span style={{ color: '#0369a1', fontWeight: 700 }}>{q.shipping_date || '미정'}</span>
-                                {q.order_memo && <span style={{ fontSize: 9 }}>📋</span>}
+                                {(q.order_memo || q.order_request_memo) && <span style={{ fontSize: 9 }}>📋</span>}
                               </span>
                               {hoveredMemoId === q.quote_id && (() => {
                                 const rawProcessor = q.tax_completed_by || q.order_completed_by
@@ -881,12 +886,19 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                                     style={{ background: '#1e293b', color: '#e2e8f0', borderRadius: 9, padding: '8px 12px', fontSize: 11, minWidth: 180, maxWidth: 260, lineHeight: 1.6, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', pointerEvents: 'none' }}
                                   >
                                     <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginBottom: 4 }}>처리 담당자</div>
-                                    <div style={{ fontWeight: 700, color: '#e2e8f0', marginBottom: q.order_memo ? 8 : 0 }}>
+                                    <div style={{ fontWeight: 700, color: '#e2e8f0', marginBottom: (q.order_memo || q.order_request_memo) ? 8 : 0 }}>
                                       {processor}
                                     </div>
+                                    {/* 메모는 두 칸이다 — 누가 쓴 것인지 라벨로 구분한다. */}
+                                    {q.order_request_memo && (
+                                      <>
+                                        <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginBottom: 3 }}>작성자 요청</div>
+                                        <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginBottom: q.order_memo ? 8 : 0 }}>{q.order_request_memo}</div>
+                                      </>
+                                    )}
                                     {q.order_memo && (
                                       <>
-                                        <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginBottom: 3 }}>메모</div>
+                                        <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginBottom: 3 }}>영업관리 메모</div>
                                         <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{q.order_memo}</div>
                                       </>
                                     )}
@@ -901,7 +913,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
                           {/* 국내수리(repair_domestic)는 발주 없이 수리중→세금계산서 요청으로 바로 간다 → 발주서 등록 숨김 */}
                           {q.status === '견적중' && q.quote_type !== 'repair_domestic' && (
-                            <button onClick={() => { setPoQuote(q); setPoFile(null) }}
+                            <button onClick={() => { setPoQuote(q); setPoFile(null); setPoMemo('') }}
                               style={{ padding: '3px 7px', background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#7c3aed' }}>
                               발주서 등록
                             </button>
@@ -1028,8 +1040,19 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                     style={{ display: 'none' }} />
                 </div>
               </div>
+              {/* 요청 메모 — 영업관리가 쓰는 메모와 다른 칸에 저장된다(서로 덮어쓰지 않는다) */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 11, color: GRAY, marginBottom: 6, fontWeight: 600 }}>
+                  요청 메모 <span style={{ color: MUTED, fontWeight: 500 }}>(선택)</span>
+                  <span style={{ float: 'right', color: MUTED, fontWeight: 500 }}>{poMemo.length} / {PO_MEMO_MAX}</span>
+                </div>
+                <textarea value={poMemo} onChange={e => setPoMemo(e.target.value.slice(0, PO_MEMO_MAX))} rows={3}
+                  maxLength={PO_MEMO_MAX}
+                  placeholder="납기 요청, 고객 특이사항 등 영업관리에 전달할 내용"
+                  style={{ width: '100%', padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+              </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => { setPoQuote(null); setPoFile(null) }} disabled={poUploading}
+                <button onClick={() => { setPoQuote(null); setPoFile(null); setPoMemo('') }} disabled={poUploading}
                   style={{ flex: 1, padding: 9, background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>취소</button>
                 <button onClick={handlePoUpload} disabled={poUploading || !poFile}
                   style={{ flex: 1, padding: 9, background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, opacity: (poUploading || !poFile) ? 0.6 : 1 }}>

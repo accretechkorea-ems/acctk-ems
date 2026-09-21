@@ -1,20 +1,19 @@
 'use client'
 
-// 쇼룸 사용 기록 · 사용 신청 모달. 장비 카드 「사용 신청 · 기록」, 전체기록 탭 [기록 추가]·수정·복사,
-// 「내 데모 신청」 [재작성]이 모두 이 모달을 연다. 엑셀 「장비 사용승인서」 항목을 담는다.
+// 쇼룸 사용 신청 · 사용 기록 수정 모달. 장비 카드 [사용 신청], 전체기록 탭 [사용 신청]·수정·복사,
+// 「내 사용 신청」 [재작성]이 모두 이 모달을 연다. 엑셀 「장비 사용승인서」 항목을 담는다.
 //
-// 사용목적을 고르는 순간 무엇을 만드는지 정해진다.
-//   측정대행 · 유지보수 · 교육 · 기타 → 사용 기록(/api/showroom/usage, 승인 없음)
-//   고객 데모                         → 사용 신청(/api/showroom/requests, 관리자 승인)
+// 2026-09-21 — 목적 5종(측정대행·고객 데모·유지보수·교육·기타)이 전부 신청·승인을 거친다.
+//   새로 쓰는 것(복사 포함)·반려 건 재작성 → 사용 신청(/api/showroom/requests, 관리자 승인)
+//   이미 있는 기록을 고치는 것             → 사용 기록 수정(/api/showroom/usage PATCH)
 //     사전·사후는 사용일자로 정한다(고르는 칸이 없다) — 오늘 뒤면 사전 신청(승인되면 사용 기록이 생긴다),
 //     오늘까지면 사후 신청(사용 기록이 바로 생기고 관리자 확인을 받는다). 서버도 날짜로 다시 판정한다.
-//     신청할 때는 결과·견적 연결·비고가 없다 — 승인된 뒤 만들어진 사용 기록을 수정할 때 적는다.
-// 이미 있는 사용 기록을 고칠 때(수정)는 목적이 고객 데모여도 사용 기록으로 저장한다(승인으로 만들어진 기록).
+//     신청할 때는 결과·견적 연결이 없다 — 승인된 뒤 만들어진 사용 기록을 수정할 때 적는다.
 //   신청으로 만든 기록은 목적을 바꿀 수 없고, 다른 목적의 기록을 고객 데모로 바꿀 수도 없다(서버도 막는다).
-// 반려된 신청 재작성은 목적이 고객 데모로 고정되고 PATCH 로 다시 신청한다.
+// 반려된 신청 재작성은 그 신청의 목적으로 고정되고 PATCH 로 다시 신청한다.
 //
 // 모달 껍데기·입력칸 치수는 ServiceAddModal.tsx:88-296 과 같고, 폭은 900(좁은 화면은 90vw)이다.
-// 어떤 칸이 보이는지는 lib/showroom.ts 의 PURPOSE_FIELDS(사용 기록)·DEMO_REQUEST_FIELDS(신청)가 정하고,
+// 어떤 칸이 보이는지는 lib/showroom.ts 의 PURPOSE_FIELDS(사용 기록)·requestHasField(신청)가 정하고,
 // 라우트도 같은 표로 거른다. 목적을 바꾸면 새 목적에 없는 칸의 값은 지운다. 섹션은 접지 않는다.
 // 본문은 2열 — 좌: 사용 정보(공통) · 고객 / 보안 · 영업 연결 / 우: 작업 내용 · 결과(신청이면 기대결과만).
 // 신청 사유 칸은 따로 없다 — 상세 내용이 곧 사유라 서버가 같은 값을 approval_requests.reason 에 넣는다.
@@ -29,8 +28,8 @@ import { getCategoryColor } from '@/lib/categoryColors'
 import { todayKST } from '@/lib/date'
 import { numKR } from '@/components/customer/constants'
 import {
-  USAGE_PURPOSES, USAGE_PURPOSE_COLORS, NDA_STATUSES, RESULT_CATEGORIES, DEMO_PURPOSE, DEMO_REQUEST_FIELDS,
-  purposeNeedsCustomer, purposeHasField, isRetroactiveDate, deviceTitle,
+  USAGE_PURPOSES, USAGE_PURPOSE_COLORS, NDA_STATUSES, RESULT_CATEGORIES, DEMO_PURPOSE,
+  purposeNeedsCustomer, purposeHasField, requestHasField, requestPurpose, isRetroactiveDate, deviceTitle,
   DEFAULT_START_TIME, DEFAULT_END_TIME, type DemoRequestRow, type ShowroomDevice, type UsageField,
 } from '@/lib/showroom'
 import { BLUE, BLUE_HOVER, BORDER, CARD_BG, TEXT, SUB, MUTED, FAINT, DANGER, NEUTRAL_BG } from '@/components/common/ui'
@@ -105,22 +104,28 @@ export type UsagePayload = {
   engineer_ids: number[]
 }
 
-/** 고객 데모 신청 본문(/api/showroom/requests). 사전·사후는 서버가 사용일자로 정한다(플래그를 보내지 않는다). */
+/**
+ * 사용 신청 본문(/api/showroom/requests). 사전·사후는 서버가 사용일자로 정한다(플래그를 보내지 않는다).
+ * 목적에 없는 칸은 빈 값으로 보내고, 서버도 같은 표로 다시 거른다.
+ */
 export type DemoRequestBody = {
   device_id: number
   usage_date: string
   start_time: string
   end_time: string
   engineer_ids: number[]
+  purpose: string
   project_name: string
   content: string
-  customer_id: number
+  /** 측정대행·고객 데모만 필수. 나머지 목적은 null */
+  customer_id: number | null
   customer_dept: string
   nda_status: string | null
   expected_result: string
   sample_material: string
   carried_out: boolean
   expected_cost: number | null
+  note: string
 }
 
 /** 모달이 부모에게 넘기는 저장 요청 — 무엇을 어디로 보낼지 모달이 정한다(showroomData saveSubmission). */
@@ -195,7 +200,7 @@ export default function UsageModal({
   const [expandEngineers, setExpandEngineers] = useState(false)
 
   // ── 사용목적 — 신규 작성은 비어 있다. 재작성은 고객 데모로 고정 ──
-  const [purpose, setPurpose] = useState<string>(rp ? DEMO_PURPOSE : initial?.purpose ?? '')
+  const [purpose, setPurpose] = useState<string>(rp ? requestPurpose(rp) : initial?.purpose ?? '')
 
   // ── 목적별 칸 ──
   const [projectName, setProjectName] = useState(rp?.project_name ?? initial?.project_name ?? '')
@@ -204,7 +209,10 @@ export default function UsageModal({
   const [carriedOut, setCarriedOut] = useState(rp?.carried_out ?? initial?.carried_out ?? false)
   const [expectedCost, setExpectedCost] = useState(cost0 != null ? numKR(cost0) : '')
   const [customer, setCustomer] = useState<CustomerHit | null>(
-    rp ? { customer_id: rp.customer_id, company_name: rp.customer_name, address: null, status: null } : initial?.customer ?? null
+    // 대상 고객사가 없는 목적(유지보수·교육·기타)의 재작성은 고객 칸 자체가 없다.
+    rp && rp.customer_id != null
+      ? { customer_id: rp.customer_id, company_name: rp.customer_name ?? '', address: null, status: null }
+      : initial?.customer ?? null
   )
   const [customerDept, setCustomerDept] = useState(rp?.customer_dept ?? initial?.customer_dept ?? '')
   const [ndaStatus, setNdaStatus] = useState(rp?.nda_status ?? initial?.nda_status ?? '')
@@ -230,9 +238,8 @@ export default function UsageModal({
   // ── 이 모달이 무엇을 만드는지 ──
   const editing = initial?.usage_id != null
   const rewriting = rewrite != null
-  const isDemo = purpose === DEMO_PURPOSE
-  /** 사용 신청을 만드는지 — 고객 데모 새 작성(복사 포함)과 재작성. 기존 기록 수정은 신청이 아니다. */
-  const asRequest = rewriting || (!editing && isDemo)
+  /** 사용 신청을 만드는지 — 새로 쓰는 것(복사 포함)과 재작성. 기존 기록 수정만 신청이 아니다. */
+  const asRequest = rewriting || !editing
   const retroactive = isRetroactiveDate(usageDate, today)
   /** 사전 신청 — 시간이 '계획'이다 */
   const planned = asRequest && !retroactive
@@ -242,9 +249,9 @@ export default function UsageModal({
   const demoBlocked = editing && initial?.purpose !== DEMO_PURPOSE
 
   const chosen = purpose !== ''
-  /** 그 목적·방식에서 보이는 칸. 신청이면 DEMO_REQUEST_FIELDS, 사용 기록이면 PURPOSE_FIELDS. */
+  /** 그 목적·방식에서 보이는 칸. 신청이면 결과·견적 연결을 뺀 목적별 항목, 사용 기록이면 목적별 항목 전부. */
   const fieldsOf = (p: string, request: boolean) => (f: UsageField) =>
-    request ? DEMO_REQUEST_FIELDS.includes(f) : purposeHasField(p, f)
+    request ? requestHasField(p, f) : purposeHasField(p, f)
   const has = fieldsOf(purpose, asRequest)
   const needsCustomer = purposeNeedsCustomer(purpose)
 
@@ -253,7 +260,7 @@ export default function UsageModal({
     setPurpose(next)
     clearError('purpose')
     clearError('customer')
-    const keep = fieldsOf(next, rewriting || (!editing && next === DEMO_PURPOSE))
+    const keep = fieldsOf(next, rewriting || !editing)
     if (!keep('project_name')) setProjectName('')
     if (!keep('content')) setContent('')
     if (!keep('customer')) { setCustomer(null); setQuote(null) }
@@ -284,7 +291,8 @@ export default function UsageModal({
     const cost = digits(expectedCost)
     let submission: UsageSubmission
     if (asRequest) {
-      if (!customer) return
+      // 목적에 없는 칸은 화면에 값이 남아 있어도 보내지 않는다(사용 기록 저장과 같은 규칙).
+      const sent = (f: UsageField, v: string) => (has(f) ? v : '')
       submission = {
         kind: 'request',
         requestId: rewrite?.request_id ?? null,
@@ -294,15 +302,17 @@ export default function UsageModal({
           start_time: startTime,
           end_time: endTime,
           engineer_ids: engineerIds,
-          project_name: projectName,
-          content,
-          customer_id: customer.customer_id,
-          customer_dept: customerDept,
-          nda_status: ndaStatus || null,
-          expected_result: expectedResult,
-          sample_material: sampleMaterial,
-          carried_out: carriedOut,
-          expected_cost: cost ? Number(cost) : null,
+          purpose,
+          project_name: sent('project_name', projectName),
+          content: sent('content', content),
+          customer_id: has('customer') ? customer?.customer_id ?? null : null,
+          customer_dept: sent('customer_dept', customerDept),
+          nda_status: has('nda_status') ? ndaStatus || null : null,
+          expected_result: sent('expected_result', expectedResult),
+          sample_material: sent('sample_material', sampleMaterial),
+          carried_out: has('carried_out') ? carriedOut : false,
+          expected_cost: has('expected_cost') && cost ? Number(cost) : null,
+          note: sent('note', note),
         },
       }
     } else {
@@ -362,7 +372,7 @@ export default function UsageModal({
     </>
   )
 
-  const title = rewriting ? '신청 재작성' : editing ? '사용 기록 수정' : isDemo ? '장비 사용 신청' : '사용 기록 추가'
+  const title = rewriting ? '신청 재작성' : editing ? '사용 기록 수정' : '장비 사용 신청'
   const saveLabel = saving ? (asRequest ? '신청 중...' : '저장 중...') : asRequest ? '신청' : '저장'
 
   return (
@@ -427,12 +437,12 @@ export default function UsageModal({
               })}
             </div>
             <FieldError message={errors.purpose} />
-            {/* 고객 데모 신청 안내 — 사용일자로 사전·사후가 갈린다 */}
+            {/* 신청 안내 — 목적 5종 모두에 보인다. 사용일자로 사전·사후가 갈린다 */}
             {asRequest && (
               <div style={{ marginTop: 8, fontSize: 12, color: MUTED }}>
                 {retroactive
-                  ? '이미 진행된 데모입니다. 사용 기록이 바로 생성되고 관리자 확인을 받습니다'
-                  : '고객 데모는 관리자 승인 후 사용 기록이 생성됩니다'}
+                  ? '이미 진행된 사용입니다. 사용 기록이 바로 생성되고 관리자 확인을 받습니다'
+                  : '관리자 승인 후 사용 기록이 생성됩니다'}
               </div>
             )}
           </div>

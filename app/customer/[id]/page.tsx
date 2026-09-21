@@ -311,6 +311,7 @@ export default function CustomerDetailPage() {
         <HorizontalScroller>
         <DeviceSection
           devices={devices}
+          companyName={customer?.company_name ?? null}
           historyByDevice={historyByDevice}
           onAddDevice={() => device.setIsAddDeviceModalOpen(true)}
           onEditDevice={device.setSelectedDevice}
@@ -381,6 +382,7 @@ export default function CustomerDetailPage() {
           onSave={device.handleUpdateDevice}
           onDelete={device.handleDeleteDevice}
           onOpenPacking={() => device.selectedDevice && device.handleOpenPacking(device.selectedDevice)}
+          onImageChanged={fetchDetail}
         />
         <ServiceAddModal
           deviceId={service.selectedDeviceId}
@@ -400,6 +402,7 @@ export default function CustomerDetailPage() {
           isSaving={service.isSavingServiceEdit}
           onClose={() => service.setSelectedService(null)}
           onSave={service.handleUpdateService}
+          onAttachmentsChanged={fetchDetail}
           onDelete={service.handleDeleteService}
         />
         <SignModal

@@ -9,6 +9,8 @@ import { toMin, stepTime, computeWorkHours, lunchOverlapHours } from '@/lib/work
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import Popover from '@/components/common/Popover'
 import { todayKST } from '@/lib/date'
+import { ATTACH_ACCEPT, ATTACH_MAX } from '../attachments'
+import { AttachmentListBox, AttachmentRow, footerBtn, formatBytes } from '../ServiceAttachments'
 
 type Props = {
   deviceId: number | null
@@ -17,7 +19,8 @@ type Props = {
   currentUserEngineerId: number | null
   isSaving: boolean
   onClose: () => void
-  onSave: (form: ServiceForm, engineerIds: number[]) => void
+  /** files — 저장 직후 올릴 첨부파일. 서비스 기록이 생겨야 service_id 가 나오므로 그때까지 브라우저에 둔다. */
+  onSave: (form: ServiceForm, engineerIds: number[], files: File[]) => void
 }
 
 const labelStyle = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' } as const
@@ -43,8 +46,10 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
   const [selectedEngineerIds, setSelectedEngineerIds] = useState<number[]>([])
   const [showExtraEngineers, setShowExtraEngineers] = useState(false)
   const [showHint, setShowHint] = useState(false)
+  const [files, setFiles] = useState<File[]>([])
   const { errors, setErrors, clearError, validate } = useFieldErrors<'visit_date' | 'service_notes' | 'contact_id' | 'engineers'>()
   const scrollBodyRef = useRef<HTMLDivElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const hintRef = useRef<HTMLDivElement | null>(null)
 
   // 작업시간 자동 계산 (점심 12:00~13:00 공제). 종료<=시작 또는 작업시간<=0 이면 무효.
@@ -81,7 +86,7 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
     })
     if (!ok) return
     if (!timeValid) return
-    onSave({ ...form, work_hours: String(workHours) }, selectedEngineerIds)
+    onSave({ ...form, work_hours: String(workHours) }, selectedEngineerIds, files)
   }
 
   return (
@@ -278,6 +283,52 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
               </div>
             )}
             <FieldError message={errors.engineers} style={{ marginTop: 10 }} />
+          </div>
+
+          {/* 첨부파일 — 저장할 때 한꺼번에 올린다. 그 전까지는 브라우저에만 있다.
+              아직 서버에 올라간 것이 없으므로 제거는 목록에서 빼기만 하면 된다(2단 확인이 필요 없다).
+              행 모양·스크롤은 수정 모달과 같은 것을 쓴다. */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>첨부파일</span>
+              <span className="num" style={{ fontSize: 12, color: '#9ca3af' }}>첨부 {files.length} / {ATTACH_MAX}</span>
+            </div>
+
+            {files.length > 0 && (
+              <AttachmentListBox>
+                {files.map((f, i) => (
+                  <AttachmentRow
+                    key={`${f.name}-${i}`}
+                    name={f.name}
+                    meta={formatBytes(f.size)}
+                    divider={i < files.length - 1}
+                    actions={
+                      <button type="button" onClick={() => setFiles(p => p.filter((_, idx) => idx !== i))}
+                        style={{ border: '1px solid #ebebeb', borderRadius: 6, background: '#fff', color: '#9ca3af', fontSize: 12, fontWeight: 600, padding: '4px 9px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        제거
+                      </button>
+                    }
+                  />
+                ))}
+              </AttachmentListBox>
+            )}
+
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={files.length >= ATTACH_MAX}
+              style={{ ...footerBtn, color: files.length >= ATTACH_MAX ? '#d1d5db' : '#6b7280', cursor: files.length >= ATTACH_MAX ? 'default' : 'pointer' }}>
+              {files.length >= ATTACH_MAX ? '최대 10개' : '첨부 추가'}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={ATTACH_ACCEPT}
+              onChange={(e) => {
+                const picked = Array.from(e.target.files ?? [])
+                e.target.value = ''
+                setFiles(p => [...p, ...picked].slice(0, ATTACH_MAX))
+              }}
+              style={{ display: 'none' }}
+            />
           </div>
         </div>
 

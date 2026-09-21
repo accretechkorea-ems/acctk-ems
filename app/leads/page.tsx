@@ -83,7 +83,8 @@ type Lead = {
   created_at: string
 }
 
-type Engineer = { engineer_id: number; name: string | null; position: string | null; teams: string | null; permission_level: string | null; resigned_date: string | null }
+// tel·email 은 리드 PDF 의 담당자 카드에 쓴다.
+type Engineer = { engineer_id: number; name: string | null; position: string | null; tel: string | null; email: string | null; teams: string | null; permission_level: string | null; resigned_date: string | null }
 type Customer = { customer_id: number; company_name: string | null; address: string | null }
 
 const th: CSSProperties = { padding: '9px 10px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap' }
@@ -274,7 +275,7 @@ function LeadsPageInner() {
       if (!isAdmin && myEngineerId != null) leadQuery = leadQuery.eq('assigned_to', myEngineerId)
       const [{ data: ld }, { data: eng }, { data: cus }] = await Promise.all([
         leadQuery,
-        supabase.from('engineers').select('engineer_id, name, position, teams, permission_level, resigned_date'),
+        supabase.from('engineers').select('engineer_id, name, position, tel, email, teams, permission_level, resigned_date'),
         supabase.from('customers').select('customer_id, company_name, address').is('deleted_at', null).eq('is_parent', false),
       ])
       if (cancelled) return
@@ -503,6 +504,10 @@ function LeadsPageInner() {
 
   const downloadPdf = async (lead: Lead) => {
     setPdfBusy(lead.lead_id)
+    // 배정된 담당자 — 화면이 이미 들고 있는 engineers 에서 찾는다(추가 조회 없음).
+    const assigned = lead.assigned_to != null
+      ? engineers.find(e => e.engineer_id === lead.assigned_to) ?? null
+      : null
     try {
       // @react-pdf/renderer 는 무거워서 리드 화면 첫 로딩에 얹지 않는다. 누를 때 불러온다.
       const [{ pdf }, { LeadPDFDoc }, businessCard] = await Promise.all([
@@ -537,6 +542,7 @@ function LeadsPageInner() {
           contactMobile={lead.contact_mobile}
           meetingNote={lead.meeting_note}
           businessCard={businessCard}
+          assignee={assigned ? { name: assigned.name ?? '-', position: assigned.position, tel: assigned.tel, email: assigned.email } : null}
         />
       ).toBlob()
 

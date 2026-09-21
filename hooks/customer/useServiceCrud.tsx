@@ -11,6 +11,8 @@ import { pdf } from '@react-pdf/renderer'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
+import { deleteServiceAttachments, uploadAttachments } from '@/components/customer/attachments'
+import { reportDownloadName } from '@/components/customer/ServiceAttachments'
 import ServiceReportDoc from '@/components/customer/ServiceReportDoc'
 import type { Customer, Device, Contact, ServiceHistory, Engineer, ServiceForm, Holding } from '@/components/customer/types'
 
@@ -40,7 +42,8 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
   const reportBusyRef = useRef(false)
 
   // ── 서비스 CRUD ──
-  const handleAddService = async (form: ServiceForm, engineerIds: number[]) => {
+  // files — 추가 모달이 들고 있던 첨부파일. service_id 는 기록을 넣어야 나오므로 저장 뒤에 올린다.
+  const handleAddService = async (form: ServiceForm, engineerIds: number[], files: File[] = []) => {
     if (!selectedDeviceId) return
     setIsSavingService(true)
     const engineerSnapshot = engineerIds
@@ -59,9 +62,18 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
     }]).select().single()
     if (error) { setIsSavingService(false); toast.error(error.message || '서비스 기록 저장 중 오류가 발생했습니다'); return }
     const { error: engineerError } = await supabase.from('service_engineers').insert(engineerIds.map(eid => ({ service_id: newService.service_id, engineer_id: eid })))
+    if (engineerError) { setIsSavingService(false); toast.error(engineerError.message || '엔지니어 연결 저장 중 오류가 발생했습니다'); return }
+
+    // 첨부 업로드는 서비스 기록 저장의 성패를 가르지 않는다 — 기록은 이미 들어갔다.
+    // 실패하면 그 사실만 알리고 진행한다(파일은 브라우저에서 사라지므로 다시 골라야 한다).
+    let attachFailed = false
+    if (files.length > 0) {
+      const r = await uploadAttachments(newService.service_id, files)
+      if (!r.ok) { attachFailed = true; console.error('[customer] 첨부 업로드 실패', { serviceId: newService.service_id, error: r.error }) }
+    }
     setIsSavingService(false)
-    if (engineerError) { toast.error(engineerError.message || '엔지니어 연결 저장 중 오류가 발생했습니다'); return }
-    toast.success('서비스 기록이 추가되었습니다')
+    if (attachFailed) toast.error('서비스 기록은 저장되었습니다. 첨부파일 업로드에 실패했습니다')
+    else toast.success('서비스 기록이 추가되었습니다')
     const savedDeviceId = selectedDeviceId
     setSelectedDeviceId(null)
     // 목록을 먼저 갱신하고, 그 다음에 해제 모달을 띄운다.
@@ -131,6 +143,9 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
     const ok = await confirmDialog({ title: '서비스 기록 삭제', message: '이 서비스 기록을 삭제하시겠습니까?', confirmText: '삭제', variant: 'danger' })
     if (!ok) return
     setIsSavingServiceEdit(true)
+    // 행은 CASCADE 로 지워지지만 스토리지 파일은 남는다 — 먼저 라우트로 파일까지 정리한다.
+    const attach = await deleteServiceAttachments(selectedService.service_id)
+    if (!attach.ok) console.error('[customer] 첨부 정리 실패', { serviceId: selectedService.service_id, error: attach.error })
     const { error } = await supabase.from('service_history').delete().eq('service_id', selectedService.service_id)
     setIsSavingServiceEdit(false)
     if (error) { toast.error(error.message || '서비스 기록 삭제 중 오류가 발생했습니다'); return }
@@ -194,16 +209,22 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
     if (reportBusyRef.current || !service.report_url) return
     reportBusyRef.current = true
     setReportBusyId(service.service_id)
-    // 빈 탭을 먼저 여는 것은 팝업 차단 회피용이라 그대로 둔다.
-    const win = window.open('', '_blank')
     try {
       const path = toReportPath(service.report_url)
-      const { data, error } = await supabase.storage.from('service-report').createSignedUrl(path, 3600)
+      // 스토리지의 파일명(report-<id>-<시각>.pdf)은 그대로 두고 내려받을 때의 이름만 지정한다
+      // — 경로에 한글을 넣으면 업로드·서명 URL 에서 문제가 생긴다.
+      const downloadName = reportDownloadName({
+        visitDate: service.visit_date,
+        companyName: customer?.company_name ?? null,
+        serviceType: service.service_type,
+        storedPath: path,
+      })
+      const { data, error } = await supabase.storage.from('service-report').createSignedUrl(path, 3600, { download: downloadName })
       if (error || !data?.signedUrl) throw error || new Error('레포트를 열 수 없습니다.')
-      if (win) { win.opener = null; win.location.href = data.signedUrl }
-      else window.open(data.signedUrl, '_blank')
+      // 서명 URL 이 attachment 로 내려오므로 이 페이지는 그대로 있고 내려받기만 시작된다.
+      // 새 탭을 열면 빈 탭만 남아 탭을 쓰지 않는다.
+      window.location.href = data.signedUrl
     } catch (error: any) {
-      if (win) win.close()
       toast.error(error?.message || '레포트를 여는 중 오류가 발생했습니다')
     } finally {
       reportBusyRef.current = false

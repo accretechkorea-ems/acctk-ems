@@ -24,8 +24,9 @@ import { withTeamPerm } from '@/lib/teamPermsServer'
 import { addDays, kstYmd } from '@/lib/date'
 import { toMin, computeWorkHours, normTime, TIME_MIN, TIME_MAX } from '@/lib/workHours'
 import {
-  DEMO_REQUEST_TYPE, DEMO_PURPOSE, REQUEST_APPROVED, APPROVAL_BUCKET, NDA_STATUSES,
+  DEMO_REQUEST_TYPE, REQUEST_APPROVED, APPROVAL_BUCKET, NDA_STATUSES,
   optionalOneOf, deviceTitle, isValidYmd, isRetroactiveDate, assertShowroomDevice, ensureDeviceConfig, demoStatusLabel,
+  isUsagePurpose, purposeNeedsCustomer, requestPurpose,
   type DemoRequestPayload,
 } from '@/lib/showroom'
 import { approvalPdfDocument, type ApprovalPdfData } from '@/components/showroom/ApprovalPdfDoc'
@@ -95,15 +96,17 @@ export type DemoInput = {
   end_time: string
   work_hours: number
   engineer_ids: number[]
+  purpose: string
   project_name: string | null
   content: string | null
-  customer_id: number
+  customer_id: number | null
   customer_dept: string | null
   nda_status: string | null
   expected_result: string | null
   sample_material: string | null
   carried_out: boolean
   expected_cost: number | null
+  note: string | null
   reason: string | null
 }
 
@@ -130,8 +133,15 @@ export function parseDemoBody(body: Record<string, unknown>, today: string): { e
   const workHours = computeWorkHours(start, end)
   if (workHours <= 0) return { error: '점심시간을 제외하면 작업시간이 0입니다.' }
 
-  const customerId = Number(body.customer_id)
-  if (!Number.isInteger(customerId) || customerId <= 0) return { error: '대상 고객사를 선택해주세요.' }
+  // 사용목적 — 2026-09-21 부터 5종 전부 신청·승인을 거친다. 목적에 따라 필요한 칸이 다르다.
+  const purpose = typeof body.purpose === 'string' ? body.purpose.trim() : ''
+  if (!isUsagePurpose(purpose)) return { error: '사용목적을 선택해주세요.' }
+
+  // 대상 고객사는 측정대행·고객 데모만 필수다(DB 제약 su_customer_required 와 같은 규칙).
+  const rawCustomer = body.customer_id
+  const customerId = rawCustomer === undefined || rawCustomer === null || rawCustomer === '' ? null : Number(rawCustomer)
+  if (customerId !== null && (!Number.isInteger(customerId) || customerId <= 0)) return { error: '대상 고객사가 올바르지 않습니다.' }
+  if (purposeNeedsCustomer(purpose) && customerId === null) return { error: '대상 고객사를 선택해주세요.' }
 
   const nda = optionalOneOf(body.nda_status, NDA_STATUSES)
   if (!nda.ok) return { error: 'NDA 상태가 올바르지 않습니다.' }
@@ -155,6 +165,7 @@ export function parseDemoBody(body: Record<string, unknown>, today: string): { e
       end_time: end,
       work_hours: workHours,
       engineer_ids: engineerIds,
+      purpose,
       project_name: text(body.project_name),
       content: text(body.content),
       customer_id: customerId,
@@ -164,6 +175,7 @@ export function parseDemoBody(body: Record<string, unknown>, today: string): { e
       sample_material: text(body.sample_material),
       carried_out: body.carried_out === true,
       expected_cost: expectedCost,
+      note: text(body.note),
       // 신청 사유 칸은 없다 — 상세 내용이 곧 사유라 payload.content 와 같은 값을 approval_requests.reason 에 넣는다
       // (요청함 3줄째·승인서의 「신청 사유」가 reason 을 읽는다). 신청(POST)·재작성(PATCH) 모두 이 값을 쓴다.
       reason: text(body.content),
@@ -171,7 +183,7 @@ export function parseDemoBody(body: Record<string, unknown>, today: string): { e
   }
 }
 
-type Snapshot = { device_name: string; site_name: string; customer_name: string; engineer_names: string[] }
+type Snapshot = { device_name: string; site_name: string; customer_name: string | null; engineer_names: string[] }
 
 /** DB 를 보고 확인하고 표시용 이름을 모은다(승인서·요청함에 신청 시점 이름으로 남긴다). 막히면 { error, status }. */
 export async function resolveDemo(sb: SupabaseClient, input: DemoInput): Promise<{ error: string; status: number } | { snap: Snapshot }> {
@@ -181,7 +193,10 @@ export async function resolveDemo(sb: SupabaseClient, input: DemoInput): Promise
   const [devRes, cfgRes, custRes, engRes] = await Promise.all([
     sb.from('devices').select('device_name, device_name2, option, customer_id').eq('device_id', input.device_id).maybeSingle(),
     sb.from('showroom_devices').select('is_active').eq('device_id', input.device_id).maybeSingle(),
-    sb.from('customers').select('company_name').eq('customer_id', input.customer_id).maybeSingle(),
+    // 대상 고객사가 없는 목적(유지보수·교육·기타)은 조회할 것이 없다.
+    input.customer_id === null
+      ? Promise.resolve({ data: null, error: null })
+      : sb.from('customers').select('company_name').eq('customer_id', input.customer_id).maybeSingle(),
     sb.from('engineers').select('engineer_id, name').in('engineer_id', input.engineer_ids),
   ])
   if (devRes.error || cfgRes.error || custRes.error || engRes.error) {
@@ -190,7 +205,7 @@ export async function resolveDemo(sb: SupabaseClient, input: DemoInput): Promise
   }
   if (!devRes.data) return { error: '장비를 찾을 수 없습니다.', status: 404 }
   if (cfgRes.data?.is_active === false) return { error: '사용하지 않는 장비는 신청할 수 없습니다.', status: 400 }
-  if (!custRes.data) return { error: '대상 고객사를 찾을 수 없습니다.', status: 404 }
+  if (input.customer_id !== null && !custRes.data) return { error: '대상 고객사를 찾을 수 없습니다.', status: 404 }
   const engs = (engRes.data ?? []) as { engineer_id: number; name: string | null }[]
   if (engs.length !== input.engineer_ids.length) return { error: '참여 엔지니어를 다시 선택해주세요.', status: 400 }
 
@@ -203,7 +218,7 @@ export async function resolveDemo(sb: SupabaseClient, input: DemoInput): Promise
     snap: {
       device_name: deviceTitle(dev),
       site_name: site?.company_name ?? '-',
-      customer_name: custRes.data.company_name ?? '-',
+      customer_name: input.customer_id === null ? null : custRes.data?.company_name ?? '-',
       engineer_names: input.engineer_ids.map(id => nameById.get(id) ?? ''),
     },
   }
@@ -222,6 +237,7 @@ export function buildPayload(input: DemoInput, snap: Snapshot, requestNo: string
     work_hours: input.work_hours,
     engineer_ids: input.engineer_ids,
     engineer_names: snap.engineer_names,
+    purpose: input.purpose,
     project_name: input.project_name,
     content: input.content,
     customer_id: input.customer_id,
@@ -232,6 +248,7 @@ export function buildPayload(input: DemoInput, snap: Snapshot, requestNo: string
     sample_material: input.sample_material,
     carried_out: input.carried_out,
     expected_cost: input.expected_cost,
+    note: input.note,
     requester_name: caller.name ?? '-',
     requester_team: caller.teams,
   }
@@ -261,7 +278,8 @@ export async function findOverlap(sb: SupabaseClient, deviceId: number, date: st
 }
 
 /**
- * 신청으로 사용 기록(고객 데모)을 만든다. 결과 항목(결과분류·사용결과·문제·후속조치·견적)은 비워 둔다.
+ * 신청으로 사용 기록을 만든다. 목적은 신청에 적힌 것이다(2026-09-21 부터 5종 전부 신청을 거친다).
+ * 결과 항목(결과분류·사용결과·문제·후속조치·견적)은 비워 둔다.
  * 작성자는 신청자 — 나중에 신청자가 실제 시간·결과를 고친다. 신청 1건당 사용 기록 1건(su_request_unique).
  */
 export async function createUsageFromRequest(sb: SupabaseClient, requestId: number, p: DemoRequestPayload, createdBy: number): Promise<{ error: string; status: number } | { usageId: number }> {
@@ -276,7 +294,7 @@ export async function createUsageFromRequest(sb: SupabaseClient, requestId: numb
       start_time: p.start_time,
       end_time: p.end_time,
       work_hours: p.work_hours,
-      purpose: DEMO_PURPOSE,
+      purpose: requestPurpose(p),
       customer_id: p.customer_id,
       project_name: p.project_name,
       customer_dept: p.customer_dept,
@@ -286,6 +304,7 @@ export async function createUsageFromRequest(sb: SupabaseClient, requestId: numb
       expected_cost: p.expected_cost,
       nda_status: p.nda_status,
       expected_result: p.expected_result,
+      note: p.note ?? null,
       request_id: requestId,
       created_by: createdBy,
     })
@@ -411,7 +430,8 @@ async function removePdf(sb: SupabaseClient, pdfUrl: string | null) {
   if (error) console.error('[showroom/requests] pdf remove failed', { name, error })
 }
 
-const won = (n: number | null) => (n == null ? '-' : `₩${n.toLocaleString('ko-KR')}`)
+// 값이 없으면 빈 문자열 — 승인서의 Row 가 빈 값을 「해당없음」으로 채운다.
+const won = (n: number | null) => (n == null ? '' : `₩${n.toLocaleString('ko-KR')}`)
 
 async function pdfDataOf(sb: SupabaseClient, r: RequestRecord): Promise<ApprovalPdfData> {
   const p = r.payload
@@ -426,10 +446,11 @@ async function pdfDataOf(sb: SupabaseClient, r: RequestRecord): Promise<Approval
   return {
     requestNo: p.request_no,
     requestDate: kstYmd(r.created_at),
-    requesterTeam: p.requester_team ?? '-',
+    requesterTeam: p.requester_team ?? '',
     requesterName: p.requester_name,
     statusLabel: demoStatusLabel(r.status, p.is_retroactive),
     isRetroactive: p.is_retroactive,
+    purpose: requestPurpose(p),
     reason: r.reason ?? '',
     deviceName: p.device_name,
     siteName: p.site_name,
@@ -441,7 +462,7 @@ async function pdfDataOf(sb: SupabaseClient, r: RequestRecord): Promise<Approval
     sampleMaterial: p.sample_material ?? '',
     carriedOut: p.carried_out ? '있음' : '없음',
     expectedCost: won(p.expected_cost),
-    customerName: p.customer_name,
+    customerName: p.customer_name ?? '',
     customerDept: p.customer_dept ?? '',
     nda: p.nda_status ?? '',
     expectedResult: p.expected_result ?? '',
@@ -479,7 +500,7 @@ type Notice = { title: string; message: string; type: string; link: string | nul
 
 /** 알림 문구 — [신청번호] 신청자 · 장비 · 고객사 · 날짜 시간. 번호는 읽음 처리 때 대조한다. */
 export const requestSummary = (p: DemoRequestPayload): string =>
-  `[${p.request_no}] ${p.requester_name} · ${p.device_name} · ${p.customer_name} · ${p.usage_date} ${normTime(p.start_time)}~${normTime(p.end_time)}`
+  `[${p.request_no}] ${p.requester_name} · ${p.device_name} · ${p.customer_name ?? requestPurpose(p)} · ${p.usage_date} ${normTime(p.start_time)}~${normTime(p.end_time)}`
 
 export async function notifyEngineer(sb: SupabaseClient, engineerId: number, n: Notice) {
   const { error } = await sb.from('notifications').insert({ engineer_id: engineerId, ...n, is_read: false })

@@ -227,7 +227,7 @@ export default function ShowroomDeviceCard({
           width: '100%', padding: '8px 12px', background: BLUE, color: '#fff',
           borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, marginBottom: 12,
         }}>
-        사용 신청 ● 기록
+        사용 신청
       </button>
 
       {/* 이번 달 가동률 도넛 + 합계·사용목적 범례 — 누르면 사용 기록 화면으로 가서 이 장비만 남긴다.

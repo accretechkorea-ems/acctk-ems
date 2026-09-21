@@ -2,7 +2,7 @@
 
 // 쇼룸 — 장비 | 가동률 | 전체기록 (기본은 장비).
 //   매일 쓰는 화면은 장비이고, 가동률·전체기록은 확인용이다.
-//   사용 기록과 데모 신청은 같은 모달(UsageModal)로 들어온다 — 고객 데모를 고르면 신청, 나머지는 사용 기록이다.
+//   사용 신청과 사용 기록 수정은 같은 모달(UsageModal)로 들어온다 — 새로 쓰면 신청, 기존 기록을 고치면 수정이다.
 //   헤더 한 줄(ShowroomHeader)을 세 탭이 함께 쓴다 — 탭은 늘 우측 끝이고, 장비 탭이면 좌측에 첫 사무실 제목,
 //   가동률 탭이면 사무실 선택 · 기간(◀ ▶ + 기간 선택 모달)이 나타난다.
 //
@@ -136,7 +136,7 @@ function ShowroomPageInner() {
   const [deviceUtilKey, setDeviceUtilKey] = useState<number | null>(null)
 
   const [pageError, setPageError] = useState<string | null>(null)
-  // 장비·가동률 탭에서 데모 신청을 보낸 뒤 안내(이 탭에는 「내 데모 신청」 카드가 없다).
+  // 장비·가동률 탭에서 사용 신청을 보낸 뒤 안내(이 탭에는 「내 사용 신청」 카드가 없다).
   const [notice, setNotice] = useState<string | null>(null)
   const [addModal, setAddModal] = useState<{ open: boolean; preset: number | null }>({ open: false, preset: null })
   const [settingsDevice, setSettingsDevice] = useState<ShowroomDevice | null>(null)
@@ -217,7 +217,7 @@ function ShowroomPageInner() {
   }, [bumpStats])
 
   // ── 쓰기 ──────────────────────────────────────────────────────────
-  /** 장비 카드·가동률의 추가 — 고객 데모면 사용 신청, 나머지는 사용 기록(saveSubmission 이 가른다). */
+  /** 장비 카드·가동률에서 여는 사용 신청 — 목적과 무관하게 승인을 거친다(saveSubmission 이 보낸다). */
   const submitUsage = async (sub: UsageSubmission): Promise<string | null> => {
     const r = await saveSubmission(sub)
     if (!r.ok) return r.error

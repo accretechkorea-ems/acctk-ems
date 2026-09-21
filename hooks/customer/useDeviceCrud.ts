@@ -8,7 +8,130 @@ import { useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
+import { downsizeImage } from '@/lib/leadCardImage'
 import type { Device, DeviceForm } from '@/components/customer/types'
+
+// ── 장비 사진 ──
+// 카드의 사진 아이콘과 「사진 등록」 모달이 같은 경로를 쓰도록 훅 바깥에 둔다.
+const DEVICE_IMAGE_BUCKET = 'device-images'
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+const DEVICE_IMAGE_MAX_BYTES = 10 * 1024 * 1024
+
+/**
+ * 던져진 오류에서 보여줄 문구를 꺼낸다.
+ * 스토리지 오류는 Error 지만 PostgrestError 는 평범한 객체라 둘 다 본다.
+ */
+function errText(e: unknown, fallback: string): string {
+  if (e instanceof Error && e.message) return e.message
+  if (e && typeof e === 'object' && 'message' in e) {
+    const m = (e as { message?: unknown }).message
+    if (typeof m === 'string' && m) return m
+  }
+  return fallback
+}
+
+/**
+ * 공개 URL 에서 버킷 안 파일명만 꺼낸다.
+ * 기본 이미지(default_*)면 null 을 돌려준다 — 여러 장비가 함께 쓰는 파일이라 절대 지우면 안 된다.
+ */
+export function deviceImageFileName(url: string | null | undefined): string | null {
+  if (!url) return null
+  const marker = `/${DEVICE_IMAGE_BUCKET}/`
+  const i = url.indexOf(marker)
+  const name = (i >= 0 ? url.slice(i + marker.length) : url).split('?')[0]
+  if (!name || name.includes('/')) return null
+  if (/^default[_-]/i.test(name)) return null
+  return name
+}
+
+/**
+ * data URL 을 Blob 으로 바꾼다.
+ * fetch(dataUrl) 로 하면 안 된다 — 그 요청은 CSP 의 connect-src 를 타는데(next.config.ts)
+ * 거기에 data: 가 없어 브라우저가 막고 「Failed to fetch」 로 떨어진다. 여기서 직접 디코딩한다.
+ */
+function dataUrlToBlob(dataUrl: string): Blob {
+  const comma = dataUrl.indexOf(',')
+  if (!dataUrl.startsWith('data:') || comma < 0) throw new Error('이미지를 변환하지 못했습니다')
+  const mime = /^data:([^;,]+)/.exec(dataUrl)?.[1] ?? 'image/jpeg'
+  const bin = atob(dataUrl.slice(comma + 1))
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return new Blob([bytes], { type: mime })
+}
+
+/**
+ * 장비 사진 1장 업로드.
+ * 명함과 같은 방식으로 브라우저에서 줄여(긴 변 1600px, JPEG 0.8) 올린다 — 원본 그대로 올리면
+ * 카드 한 장에 수 MB 짜리가 걸린다. 갈아 끼운 뒤에는 옛 파일을 지운다(기본 이미지는 제외).
+ * 실패하면 어느 단계였는지 함께 남긴다 — 축소·변환·업로드·갱신이 각각 다른 이유로 실패한다.
+ */
+export async function uploadDeviceImage(
+  device: Device,
+  file: File,
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    return { ok: false, error: 'JPG, PNG, WEBP, GIF 형식의 이미지만 업로드 가능합니다' }
+  }
+  if (file.size > DEVICE_IMAGE_MAX_BYTES) {
+    return { ok: false, error: '파일 크기는 10MB 이하여야 합니다' }
+  }
+
+  const supabase = createClient()
+  let step = '준비'
+  try {
+    step = '이미지 축소'
+    const { dataUrl } = await downsizeImage(file)
+
+    step = '이미지 변환'
+    const blob = dataUrlToBlob(dataUrl)
+    const fileName = `device-${device.device_id}-${Date.now()}.jpg`
+
+    step = '스토리지 업로드'
+    const { error: uploadError } = await supabase.storage
+      .from(DEVICE_IMAGE_BUCKET)
+      .upload(fileName, blob, { upsert: true, contentType: 'image/jpeg' })
+    if (uploadError) throw uploadError
+
+    step = 'DB 갱신'
+    const { data } = supabase.storage.from(DEVICE_IMAGE_BUCKET).getPublicUrl(fileName)
+    const { error: updateError } = await supabase
+      .from('devices').update({ image_url: data.publicUrl }).eq('device_id', device.device_id)
+    if (updateError) throw updateError
+
+    // 옛 파일 정리. 여기서 실패해도 교체 자체는 끝난 것이라 되돌리지 않고 로그만 남긴다.
+    const old = deviceImageFileName(device.image_url)
+    if (old && old !== fileName) {
+      const { error } = await supabase.storage.from(DEVICE_IMAGE_BUCKET).remove([old])
+      if (error) console.error('[장비사진] 옛 파일 삭제 실패 — 고아 파일이 남는다', { old, error })
+    }
+    return { ok: true, url: data.publicUrl }
+  } catch (error) {
+    console.error('[장비사진] 업로드 실패', {
+      step, deviceId: device.device_id, fileName: file.name, fileType: file.type, fileSize: file.size, error,
+    })
+    return { ok: false, error: `${errText(error, '장비 사진 업로드 중 오류가 발생했습니다')} (${step})` }
+  }
+}
+
+/** 개별 사진을 지운다 — image_url 을 비우고 파일도 지운다. 화면은 기본 이미지로 돌아간다. */
+export async function removeDeviceImage(device: Device): Promise<{ ok: true } | { ok: false; error: string }> {
+  const supabase = createClient()
+  try {
+    const { error } = await supabase
+      .from('devices').update({ image_url: null }).eq('device_id', device.device_id)
+    if (error) throw error
+
+    const old = deviceImageFileName(device.image_url)
+    if (old) {
+      const { error: rmErr } = await supabase.storage.from(DEVICE_IMAGE_BUCKET).remove([old])
+      if (rmErr) console.error('[장비사진] 파일 삭제 실패 — 고아 파일이 남는다', { old, error: rmErr })
+    }
+    return { ok: true }
+  } catch (error) {
+    console.error('[장비사진] 삭제 실패', { deviceId: device.device_id, error })
+    return { ok: false, error: errText(error, '장비 사진 삭제 중 오류가 발생했습니다') }
+  }
+}
 
 type Args = {
   customerId: number
@@ -108,35 +231,17 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
     await fetchDetail()
   }
 
-  // ── 장비 사진 업로드 ──
+  // ── 장비 사진 업로드 (모달) ──
+  // 실제 업로드는 카드와 공유하는 uploadDeviceImage 가 한다. 여기서는 모달 상태와 목록 갱신만 맡는다.
   const handleUploadDeviceImage = async (file: File) => {
     if (!selectedImageDevice) return
-    const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-      toast.error('JPG, PNG, WEBP, GIF 형식의 이미지만 업로드 가능합니다')
-      return
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('파일 크기는 10MB 이하여야 합니다')
-      return
-    }
     setIsSavingDeviceImage(true)
-    try {
-      const fileExt = file.name.split('.').pop()
-      const fileName = `device-${selectedImageDevice.device_id}-${Date.now()}.${fileExt}`
-      const { error: uploadError } = await supabase.storage.from('device-images').upload(fileName, file, { upsert: true })
-      if (uploadError) throw uploadError
-      const { data } = supabase.storage.from('device-images').getPublicUrl(fileName)
-      const { error: updateError } = await supabase.from('devices').update({ image_url: data.publicUrl }).eq('device_id', selectedImageDevice.device_id)
-      if (updateError) throw updateError
-      toast.success('장비 사진이 등록되었습니다')
-      setSelectedImageDevice(null)
-      await fetchDetail()
-    } catch (error: any) {
-      toast.error(error?.message || '장비 사진 업로드 중 오류가 발생했습니다')
-    } finally {
-      setIsSavingDeviceImage(false)
-    }
+    const r = await uploadDeviceImage(selectedImageDevice, file)
+    setIsSavingDeviceImage(false)
+    if (!r.ok) { toast.error(r.error); return }
+    toast.success('장비 사진이 등록되었습니다')
+    setSelectedImageDevice(null)
+    await fetchDetail()
   }
 
   // ── 납입의사록·패킹리스트 (비공개 버킷 + 서명 URL) ──

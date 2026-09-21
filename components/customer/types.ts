@@ -35,6 +35,22 @@ export type Contact = {
   email: string | null
 }
 
+/** 서비스 레포트 첨부파일. report_url(레포트 본체)과는 별개다 — PDF 에는 들어가지 않는다. */
+export type ServiceAttachment = {
+  attachment_id: number
+  service_id: number
+  /** service-attachments 버킷 안의 파일명. 열 때 서명 URL 을 받는다. */
+  file_path: string
+  /** 올린 사람이 보던 이름. 표시 전용이다. */
+  file_name: string
+  content_type: string | null
+  byte_size: number | null
+  sort_order: number
+  uploaded_by: number | null
+  created_at: string
+  engineers?: { name: string; position: string | null } | null
+}
+
 export type ServiceHistory = {
   service_id: number
   customer_id: number
@@ -51,6 +67,7 @@ export type ServiceHistory = {
   end_time: string | null
   report_url: string | null
   service_engineers?: { engineer_id: number; engineers: { name: string; position: string | null } }[]
+  service_attachments?: ServiceAttachment[]
 }
 
 export type SalesActivity = {

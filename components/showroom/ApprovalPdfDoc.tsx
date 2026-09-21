@@ -43,6 +43,8 @@ export type ApprovalPdfData = {
    * 넘겨주는 쪽(app/api/showroom/requests/shared.ts)이 그대로 채우므로 칸은 남겨 둔다.
    */
   reason: string
+  /** 사용목적 5종 — 2026-09-21 부터 데모 외 목적도 신청·승인을 거친다. */
+  purpose: string
   deviceName: string
   siteName: string
   projectName: string
@@ -87,14 +89,14 @@ const S = StyleSheet.create({
   footer: { position: 'absolute', bottom: 20, left: 40, right: 40, fontSize: 7, color: GREY, textAlign: 'center' },
 })
 
-/** 한 줄 — 라벨/값 쌍을 가로로 나란히. 값이 비면 '-'. */
+/** 한 줄 — 라벨/값 쌍을 가로로 나란히. 목적에 따라 비는 칸이 있어, 빈 값은 「해당없음」으로 채운다. */
 function Row({ cells, minHeight }: { cells: [string, string][]; minHeight?: number }) {
   return (
     <View style={S.row} wrap={false}>
       {cells.map(([label, value]) => (
         <View key={label} style={{ flexDirection: 'row', flex: 1 }}>
           <Text style={[S.label, minHeight ? { minHeight } : {}]}>{label}</Text>
-          <Text style={[S.value, minHeight ? { minHeight } : {}]}>{value.trim() || '-'}</Text>
+          <Text style={[S.value, minHeight ? { minHeight } : {}]}>{value.trim() || '해당없음'}</Text>
         </View>
       ))}
     </View>
@@ -145,7 +147,7 @@ function ApprovalPdfDoc({ data }: { data: ApprovalPdfData }) {
           <Text style={S.sectionTitle}>2. 장비 및 사용계획</Text>
           <View style={S.table}>
             <Row cells={[['장비명', data.deviceName], ['설치위치', data.siteName]]} />
-            <Row cells={[['사용목적', '고객 데모'], ['프로젝트명', data.projectName]]} />
+            <Row cells={[['사용목적', data.purpose], ['프로젝트명', data.projectName]]} />
             <Row cells={[[`${plan} 시작`, data.start], [`${plan} 종료`, data.end]]} />
             <Row cells={[[`${plan}시간`, data.hours], ['외부반출', data.carriedOut]]} />
             <Row cells={[['샘플/자재', data.sampleMaterial], ['예상비용', data.expectedCost]]} />

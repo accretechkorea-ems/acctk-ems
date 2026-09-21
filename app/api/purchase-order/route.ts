@@ -5,6 +5,11 @@ import { canViewSalesMgmt } from '@/lib/permissions'
 import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
 import { josa } from '@/lib/josa'
 
+/** 요청 메모 길이 상한. 화면도 같은 값으로 입력을 막는다. */
+const REQUEST_MEMO_MAX = 500
+/** 알림에 덧붙이는 메모 미리보기 길이. */
+const MEMO_PREVIEW_MAX = 40
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -78,6 +83,9 @@ export async function POST(req: Request) {
 
     const deliveryMethod = formData.get('deliveryMethod') as string | null
     const deliveryAddress = formData.get('deliveryAddress') as string | null
+    // 견적 작성자가 남기는 요청 메모. 영업관리가 쓰는 order_memo 와 다른 칸이라 서로 덮어쓰지 않는다.
+    // 재등록이면 새 값으로 갈아 끼운다(비웠으면 null 로 되돌린다).
+    const requestMemo = ((formData.get('requestMemo') as string | null) ?? '').trim().slice(0, REQUEST_MEMO_MAX)
 
     const { error: updErr } = await supabaseAdmin.from('quotes').update({
       status: '발주(주문 대기)',
@@ -85,8 +93,12 @@ export async function POST(req: Request) {
       purchase_order_at: new Date().toISOString(),
       delivery_method: deliveryMethod || null,
       delivery_info: deliveryAddress || null,
+      order_request_memo: requestMemo || null,
     }).eq('quote_id', Number(quoteId))
     if (updErr) console.error(' quotes update failed', { action, quoteId, error: updErr })
+
+    // 알림에 메모 첫 줄을 덧붙인다 — 목록을 열기 전에 무슨 건인지 보이게.
+    const memoPreview = requestMemo.split('\n')[0].trim().slice(0, MEMO_PREVIEW_MAX)
 
     // 영업관리팀 + superadmin 알림
     const { data: allEng, error: engErr } = await supabaseAdmin
@@ -103,7 +115,9 @@ export async function POST(req: Request) {
         targets.map((m: { engineer_id: number }) => ({
           engineer_id: m.engineer_id,
           title: '📦 발주서 등록',
-          message: `${senderLabel}${josa(senderLabel, '이')} 발주서를 등록했습니다. [${quoteNumber}]`,
+          message: memoPreview
+            ? `${senderLabel}${josa(senderLabel, '이')} 발주서를 등록했습니다. [${quoteNumber}] 메모: ${memoPreview}`
+            : `${senderLabel}${josa(senderLabel, '이')} 발주서를 등록했습니다. [${quoteNumber}]`,
           type: 'purchase_order',
           link: '/purchase',
           is_read: false,

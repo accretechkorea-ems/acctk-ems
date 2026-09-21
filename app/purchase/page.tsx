@@ -34,6 +34,8 @@ type PurchaseQuote = {
   purchase_order_at: string | null
   shipping_date: string | null
   order_memo: string | null
+  /** 발주서를 올린 견적 작성자가 남긴 요청 메모. order_memo 와 다른 칸이다. */
+  order_request_memo: string | null
   order_completed_at: string | null
   order_completed_by: string | null
   tax_invoice_date: string | null
@@ -117,7 +119,7 @@ export default function PurchasePage() {
         // quotes 는 engineers 를 engineer_id(실적 귀속자)·created_by(작성자) 두 번 참조한다.
         // 관계를 지정하지 않으면 PGRST201(300 Multiple Choices)로 조회 전체가 실패한다.
         // 이 화면의 「담당자」 열과 처리 알림 수신자는 모두 실적 귀속자다.
-        .select('quote_id, quote_number, quote_date, total_supply, status, pdf_url, purchase_order_url, purchase_order_at, shipping_date, order_memo, order_completed_at, order_completed_by, tax_invoice_date, tax_invoice_requested_at, tax_invoice_completed_at, tax_completed_by, delivery_info, delivery_method, engineer_id, customer_id, engineers!quotes_engineer_id_fkey(name, position)')
+        .select('quote_id, quote_number, quote_date, total_supply, status, pdf_url, purchase_order_url, purchase_order_at, shipping_date, order_memo, order_request_memo, order_completed_at, order_completed_by, tax_invoice_date, tax_invoice_requested_at, tax_invoice_completed_at, tax_completed_by, delivery_info, delivery_method, engineer_id, customer_id, engineers!quotes_engineer_id_fkey(name, position)')
         .in('status', ['발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료'])
         .order('purchase_order_at', { ascending: false }),
       supabase.from('customers').select('customer_id, company_name'),
@@ -407,7 +409,7 @@ export default function PurchasePage() {
                           : <span style={{ color: MUTED, fontSize: 12 }}>-</span>}
                       </td>
                       <td style={{ padding: '9px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                        {q.order_memo ? (
+                        {(q.order_memo || q.order_request_memo) ? (
                           <div ref={hoveredMemoId === q.quote_id ? memoAnchorRef : null} style={{ display: 'inline-block' }}
                             onMouseEnter={() => setHoveredMemoId(q.quote_id)}
                             onMouseLeave={() => setHoveredMemoId(null)}>
@@ -421,8 +423,19 @@ export default function PurchasePage() {
                               gap={6}
                               style={{ background: '#1e293b', color: '#e2e8f0', borderRadius: 9, padding: '8px 12px', fontSize: 11, minWidth: 160, maxWidth: 260, lineHeight: 1.6, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', pointerEvents: 'none' }}
                             >
-                              <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 3, fontWeight: 700 }}>담당자 메모</div>
-                              {q.order_memo}
+                              {/* 메모는 두 칸이다 — 발주서를 올린 작성자가 쓴 것과 영업관리가 쓴 것을 나눠 보여준다. */}
+                              {q.order_request_memo && (
+                                <>
+                                  <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 3, fontWeight: 700 }}>작성자 요청</div>
+                                  <div style={{ marginBottom: q.order_memo ? 8 : 0 }}>{q.order_request_memo}</div>
+                                </>
+                              )}
+                              {q.order_memo && (
+                                <>
+                                  <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 3, fontWeight: 700 }}>영업관리 메모</div>
+                                  <div>{q.order_memo}</div>
+                                </>
+                              )}
                             </Popover>
                           </div>
                         ) : <span style={{ color: MUTED, fontSize: 11 }}>-</span>}

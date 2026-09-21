@@ -43,12 +43,17 @@ export async function updateQuoteStatus(params: UpdateQuoteStatusParams): Promis
   }
 }
 
+/** 발주 요청 메모 길이 상한. app/api/purchase-order 의 REQUEST_MEMO_MAX 와 같아야 한다. */
+export const PO_MEMO_MAX = 500
+
 export type UploadPurchaseOrderParams = {
   quoteId: number
   quoteNumber: string
   file: File
   deliveryMethod: string
   deliveryAddress?: string // 이미 구성된 배송정보 문자열(UI 파생). 있으면만 전송.
+  /** 견적 작성자가 남기는 요청 메모(선택). 영업관리가 쓰는 order_memo 와 다른 칸이다. */
+  requestMemo?: string
 }
 
 // 발주서 업로드(/api/purchase-order, action=upload). deliveryAddress 구성은 호출부 책임.
@@ -60,6 +65,8 @@ export async function uploadPurchaseOrder(p: UploadPurchaseOrderParams): Promise
   fd.append('file', p.file)
   fd.append('deliveryMethod', p.deliveryMethod)
   if (p.deliveryAddress) fd.append('deliveryAddress', p.deliveryAddress)
+  // 빈 값도 보낸다 — 재등록에서 메모를 지운 경우를 서버가 알아야 null 로 되돌린다.
+  fd.append('requestMemo', p.requestMemo ?? '')
   const res = await fetch('/api/purchase-order', { method: 'POST', body: fd })
   const json = await res.json().catch(() => ({}))
   return res.ok ? { ok: true } : { ok: false, error: json.error || String(res.status) }

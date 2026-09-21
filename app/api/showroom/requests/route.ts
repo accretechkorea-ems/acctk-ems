@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
   const pdfOk = await refreshApprovalPdf(sb, record, '')
 
   await notifySuperadmins(sb, caller.engineer_id, {
-    title: input.is_retroactive ? '쇼룸 데모 신청 (사후)' : '쇼룸 데모 신청',
+    title: input.is_retroactive ? '쇼룸 사용 신청 (사후)' : '쇼룸 사용 신청',
     message: requestSummary(record.payload),
     type: NOTICE_REQUEST,
     link: '/requests',
@@ -188,7 +188,7 @@ export async function PATCH(req: NextRequest) {
   const pdfOk = await refreshApprovalPdf(sb, record, 'rev')
 
   await notifySuperadmins(sb, caller.engineer_id, {
-    title: input.is_retroactive ? '쇼룸 데모 신청 (재작성 · 사후)' : '쇼룸 데모 신청 (재작성)',
+    title: input.is_retroactive ? '쇼룸 사용 신청 (재작성 · 사후)' : '쇼룸 사용 신청 (재작성)',
     message: requestSummary(record.payload),
     type: NOTICE_REQUEST,
     link: '/requests',

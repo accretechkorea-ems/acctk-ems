@@ -9,6 +9,7 @@ import { useFieldErrors, FieldError, errBorder } from '@/components/common/field
 import { isCurrentlyEmployed } from '@/lib/engineers'
 import Popover from '@/components/common/Popover'
 import { todayKST } from '@/lib/date'
+import { ServiceAttachmentEditor, type ReportSlot } from '../ServiceAttachments'
 
 type Props = {
   service: ServiceHistory | null
@@ -20,6 +21,8 @@ type Props = {
   onDelete: () => void
   onOpenReport: () => void
   onDeleteReport: () => void
+  /** 첨부를 올리거나 지운 직후 목록을 다시 읽는다 — 카드의 「파일 N」 이 바로 따라오게. */
+  onAttachmentsChanged?: () => void
 }
 
 const labelStyle = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' } as const
@@ -40,7 +43,7 @@ const areaStyle: CSSProperties = {
 const stepBtnStyle: CSSProperties = { border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 13, fontWeight: 700, flexShrink: 0 }
 const timeBoxStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 4, background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, padding: '0 6px', height: 44, boxSizing: 'border-box' }
 
-export default function ServiceEditModal({ service, contacts, engineers, isSaving, onClose, onSave, onDelete, onOpenReport, onDeleteReport }: Props) {
+export default function ServiceEditModal({ service, contacts, engineers, isSaving, onClose, onSave, onDelete, onOpenReport, onDeleteReport, onAttachmentsChanged }: Props) {
   const [form, setForm] = useState<ServiceForm>({ visit_date: '', service_notes: '', etc_notes: '', visitor: '', service_type: '신규설치', contact_id: null, is_paid: true, work_hours: '', start_time: '08:30', end_time: '17:30' })
   const [selectedEngineerIds, setSelectedEngineerIds] = useState<number[]>([])
   const [showExtraEngineers, setShowExtraEngineers] = useState(false)
@@ -89,6 +92,19 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
   }, [service])
 
   if (!service) return null
+
+  // 레포트 본체를 첨부 목록의 맨 윗줄로 넘긴다. 저장 전에 고른 교체 파일이 있으면 그 이름을 먼저 보여준다
+  // (아직 서버에 없으므로 열 수는 없고, 삭제는 고른 것을 무르는 뜻이 된다).
+  const savedReportName = service.report_url ? (service.report_url.split('/').pop() || '서비스 레포트') : null
+  const reportName = reportFile?.name ?? savedReportName
+  const reportSlot: ReportSlot | null = reportName ? {
+    fileName: reportName,
+    pending: reportFile != null,
+    canOpen: !reportFile && !!service.report_url,
+    onOpen: onOpenReport,
+    onReplace: () => reportInputRef.current?.click(),
+    onDelete: reportFile ? () => setReportFile(null) : onDeleteReport,
+  } : null
 
   const handleSave = () => {
     // 검증 규칙은 동일. alert 대신 필드별 인라인 에러로 한꺼번에 표시. (ServiceAddModal 과 동일)
@@ -300,54 +316,27 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
             <FieldError message={errors.engineers} style={{ marginTop: 10 }} />
           </div>
 
-          <div>
-            {/* 라벨 줄 */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>서비스 레포트 파일</span>
-              <span style={{ fontSize: 12, color: '#9ca3af' }}>{service.report_url ? '등록됨' : '미등록'}</span>
-            </div>
+          {/* 서비스 레포트 본체와 첨부파일을 한 목록으로 본다.
+              레포트 행의 동작(열기·교체·삭제)은 기존 그대로 모달이 맡는다.
+              key 로 서비스가 바뀌면 다시 마운트해 첨부 목록을 새로 잡는다. */}
+          <ServiceAttachmentEditor
+            key={service.service_id}
+            serviceId={service.service_id}
+            initial={service.service_attachments ?? []}
+            report={reportSlot}
+            onPickReport={() => reportInputRef.current?.click()}
+            onChanged={onAttachmentsChanged}
+          />
 
-            {/* 동작 줄 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              {service.report_url ? (
-                <>
-                  <button type="button" onClick={onOpenReport}
-                    style={{ border: '1px solid #ebebeb', borderRadius: 6, background: '#fff', color: '#6b7280', fontSize: 13, fontWeight: 600, padding: '7px 12px', cursor: 'pointer' }}>
-                    레포트 열기
-                  </button>
-                  <button type="button" onClick={() => reportInputRef.current?.click()}
-                    style={{ border: '1px solid #ebebeb', borderRadius: 6, background: '#fff', color: '#6b7280', fontSize: 13, fontWeight: 600, padding: '7px 12px', cursor: 'pointer' }}>
-                    파일 교체
-                  </button>
-                  <button type="button" onClick={onDeleteReport} title="레포트 삭제"
-                    onMouseEnter={(e) => (e.currentTarget.style.color = '#dc2626')}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = '#9ca3af')}
-                    style={{ marginLeft: 'auto', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#9ca3af', display: 'inline-flex', alignItems: 'center', transition: 'color 0.15s ease' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      <line x1="10" y1="11" x2="10" y2="17" />
-                      <line x1="14" y1="11" x2="14" y2="17" />
-                    </svg>
-                  </button>
-                </>
-              ) : (
-                <button type="button" onClick={() => reportInputRef.current?.click()}
-                  style={{ border: '1px solid #ebebeb', borderRadius: 6, background: '#fff', color: '#6b7280', fontSize: 13, fontWeight: 600, padding: '7px 12px', cursor: 'pointer' }}>
-                  파일 선택
-                </button>
-              )}
-            </div>
-
-            <input
-              ref={reportInputRef}
-              type="file"
-              accept=".pdf,.png,.jpg,.jpeg"
-              onChange={(e) => setReportFile(e.target.files?.[0] ?? null)}
-              style={{ display: 'none' }}
-            />
-          </div>
+          <input
+            ref={reportInputRef}
+            type="file"
+            accept=".pdf,.png,.jpg,.jpeg"
+            onChange={(e) => setReportFile(e.target.files?.[0] ?? null)}
+            style={{ display: 'none' }}
+          />
         </div>
+
 
         {/* 푸터 — 고정 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', flexShrink: 0, borderTop: '1px solid #ebebeb' }}>

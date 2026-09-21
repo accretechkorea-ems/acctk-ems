@@ -3,7 +3,7 @@
 // 전체기록 탭 — 사용 기록 목록·필터·수정·삭제·복사·추가. 예전 /showroom/usage 화면을 탭으로 옮긴 것이다.
 //
 // 필터는 주소가 원본이다(usageQuery.ts). 받은 query 로 그리고, 바꿀 때는 onQueryChange 로 새 query 를 올린다.
-//   [기간] [장비 선택] [목적] [검색창] ........ [엑셀] [기록 추가]
+//   [기간] [장비 선택] [목적] [검색창] ........ [엑셀] [사용 신청]
 // 필터를 바꾸면 1쪽으로 돌아간다. [엑셀]은 걸러진 전체(쪽 나눔 무시)를 내보낸다(ShowroomExcelButton).
 //
 // 조회는 기간 단위로 한 번(loadPeriodUsages) 하고, 장비·목적·검색·쪽 나눔은 받은 행에서 화면이 거른다.
@@ -115,7 +115,7 @@ export default function UsageTab({
     open: boolean; initial: UsageInitial | null; preset: number | null; rewrite?: DemoRequestRow | null
   }>({ open: false, initial: null, preset: null })
   const cardRef = useRef<HTMLDivElement | null>(null)
-  // 신청·재작성 뒤 「내 데모 신청」을 다시 읽는다.
+  // 신청·재작성 뒤 「내 사용 신청」을 다시 읽는다.
   const [myRequestsKey, setMyRequestsKey] = useState(0)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -209,7 +209,7 @@ export default function UsageTab({
 
   // ── 쓰기 ──
   /**
-   * 모달 저장 — 사용 기록은 /api/showroom/usage, 고객 데모 신청은 /api/showroom/requests(saveSubmission 이 가른다).
+   * 모달 저장 — 새 작성은 목적과 무관하게 사용 신청(/api/showroom/requests), 기존 기록 수정만 /api/showroom/usage 다.
    * 사후 신청은 사용 기록이 바로 생기므로 목록도 다시 읽는다. 신청이었으면 「내 신청」도 다시 읽는다.
    */
   const submitUsage = async (sub: UsageSubmission): Promise<string | null> => {
@@ -242,7 +242,7 @@ export default function UsageTab({
       {error && <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 600, color: DANGER }}>{error}</div>}
       {notice && <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 600, color: DANGER }}>{notice}</div>}
 
-      {/* 내 데모 신청 — 대기중·반려가 있을 때만 보인다 */}
+      {/* 내 사용 신청 — 대기중·반려가 있을 때만 보인다 */}
       <MyRequests
         supabase={supabase}
         myId={myId}
@@ -250,7 +250,7 @@ export default function UsageTab({
         onRewrite={row => setModal({ open: true, initial: null, preset: null, rewrite: row })}
       />
 
-      {/* 필터 줄 — [기간] [장비] [목적] [검색] ...... [엑셀] [기록 추가] */}
+      {/* 필터 줄 — [기간] [장비] [목적] [검색] ...... [엑셀] [사용 신청] */}
       <div style={{ ...cardStyle, marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <PeriodNav
@@ -293,7 +293,7 @@ export default function UsageTab({
           <ShowroomExcelButton from={query.from} to={query.to} rows={filtered} ctx={excelCtx} disabled={loading || devicesLoading} />
           <button onClick={() => setModal({ open: true, initial: null, preset: query.devices.length === 1 ? query.devices[0] : null })}
             style={btnPrimary()}>
-            기록 추가
+            사용 신청
           </button>
         </div>
       </div>

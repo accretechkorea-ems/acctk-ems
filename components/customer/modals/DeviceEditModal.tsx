@@ -1,9 +1,15 @@
 'use client'
 
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Device, DeviceForm } from '../types'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
+import { useToast } from '@/components/common/Toast'
+import { getDefaultImageUrl } from '../utils'
+import { removeDeviceImage, uploadDeviceImage } from '@/hooks/customer/useDeviceCrud'
+
+/** 사진 삭제 확정 대기 시간. */
+const IMG_CONFIRM_MS = 3000
 
 type Props = {
   device: Device | null
@@ -12,6 +18,8 @@ type Props = {
   onSave: (form: DeviceForm, packingFile: File | null) => void
   onDelete: () => void
   onOpenPacking: () => void
+  /** 사진을 바꾸거나 지운 직후 목록을 다시 읽는다 — 카드 썸네일이 바로 따라오게. */
+  onImageChanged?: () => void
 }
 
 const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
@@ -21,10 +29,23 @@ const fieldStyle: CSSProperties = {
 }
 const dateStyle: CSSProperties = { ...fieldStyle, colorScheme: 'light' }
 
-export default function DeviceEditModal({ device, isSaving, onClose, onSave, onDelete, onOpenPacking }: Props) {
+export default function DeviceEditModal({ device, isSaving, onClose, onSave, onDelete, onOpenPacking, onImageChanged }: Props) {
   const [form, setForm] = useState<DeviceForm>({ device_name: '', device_name2: '', option: '', serial_number: '', program: 'ACCTee', install_date: '', category: '20' })
   const [packingFile, setPackingFile] = useState<File | null>(null)
   const { errors, setErrors, clearError, validate } = useFieldErrors<'device_name'>()
+
+  // 장비 사진 — 저장 버튼과 무관하게 즉시 반영된다.
+  // 목록(카드)은 이 모달을 저장하거나 화면을 다시 읽을 때 따라온다.
+  const toast = useToast()
+  const imageInputRef = useRef<HTMLInputElement | null>(null)
+  // 처음 그릴 때부터 실제 사진을 보여준다. 다른 장비로 바뀌는 것은 아래 effect 가 맞춘다
+  // (effect 로만 잡으면 첫 페인트에 기본 이미지가 잠깐 스친다).
+  const [imageUrl, setImageUrl] = useState<string | null>(device?.image_url ?? null)
+  const [imgBusy, setImgBusy] = useState(false)
+  const [imgRemoving, setImgRemoving] = useState(false)
+  const [confirmRemove, setConfirmRemove] = useState(false)
+  const removeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 
   useEffect(() => {
     if (device) {
@@ -38,11 +59,50 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
         category: device.category ?? '20',
       })
       setPackingFile(null)
+      setImageUrl(device.image_url)
+      setConfirmRemove(false)
       setErrors({})
     }
   }, [device])
 
+  useEffect(() => () => { if (removeTimer.current) clearTimeout(removeTimer.current) }, [])
+
   if (!device) return null
+
+  // 개별 사진 → 기본 이미지 → 없음 순으로 보여준다.
+  const defaultImg = getDefaultImageUrl(device, supabaseUrl)
+  const shownImage = imageUrl ?? defaultImg
+
+  /** 삭제는 두 번 눌러야 실행된다. 3초가 지나면 원래대로 돌아간다. */
+  const armRemove = () => {
+    if (removeTimer.current) clearTimeout(removeTimer.current)
+    setConfirmRemove(true)
+    removeTimer.current = setTimeout(() => { removeTimer.current = null; setConfirmRemove(false) }, IMG_CONFIRM_MS)
+  }
+
+  const handleImageFile = async (file: File | null) => {
+    if (!file) return
+    setImgBusy(true)
+    // 지금 보이는 개별 사진을 기준으로 올린다 — 연달아 바꿔도 직전 파일이 정리된다.
+    const r = await uploadDeviceImage({ ...device, image_url: imageUrl }, file)
+    setImgBusy(false)
+    if (!r.ok) { toast.error(r.error); return }
+    setImageUrl(r.url)
+    onImageChanged?.()
+    toast.success('장비 사진이 등록되었습니다')
+  }
+
+  const handleImageRemove = async () => {
+    if (removeTimer.current) { clearTimeout(removeTimer.current); removeTimer.current = null }
+    setConfirmRemove(false)
+    setImgRemoving(true)
+    const r = await removeDeviceImage({ ...device, image_url: imageUrl })
+    setImgRemoving(false)
+    if (!r.ok) { toast.error(r.error); return }
+    setImageUrl(null)
+    onImageChanged?.()
+    toast.success('장비 사진이 삭제되었습니다')
+  }
 
   const handleSave = () => {
     const ok = validate({ device_name: form.device_name.trim() ? null : '장비 라인업을 입력해주세요' })
@@ -155,6 +215,68 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
                 style={{ display: 'none' }}
               />
             </label>
+          </div>
+
+          {/* 장비 사진 — 카드 우측 위는 수정 아이콘 자리라 여기서 바꾼다.
+              고르는 즉시 올라가고 지우는 것도 즉시다(저장 버튼과 무관하다). */}
+          <div>
+            <label style={labelStyle}>장비 사진</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div
+                role="img"
+                aria-label={shownImage ? '장비 사진 미리보기' : '등록된 사진 없음'}
+                style={{
+                  width: 96, flexShrink: 0, aspectRatio: '4 / 3', borderRadius: 6, overflow: 'hidden',
+                  border: shownImage ? '1px solid #ebebeb' : '1px dashed #ebebeb',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff',
+                  backgroundImage: shownImage ? `url("${shownImage}")` : undefined,
+                  backgroundSize: '100% 100%', backgroundRepeat: 'no-repeat',
+                }}
+              >
+                {!shownImage && <span style={{ fontSize: 11, fontWeight: 600, color: '#d1d5db' }}>없음</span>}
+              </div>
+
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 8 }}>
+                  {imageUrl ? '등록된 사진' : shownImage ? '기본 이미지' : '등록된 사진이 없습니다'}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button
+                    type="button"
+                    disabled={imgBusy}
+                    onClick={() => imageInputRef.current?.click()}
+                    style={{
+                      border: '1px solid #ebebeb', borderRadius: 6, background: '#fff',
+                      color: imgBusy ? '#d1d5db' : '#6b7280', fontSize: 13, fontWeight: 600,
+                      padding: '7px 12px', cursor: imgBusy ? 'default' : 'pointer', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {imgBusy ? '올리는 중...' : '사진 변경'}
+                  </button>
+
+                  {imageUrl && (
+                    <button
+                      type="button"
+                      disabled={imgBusy || imgRemoving}
+                      onClick={() => { if (confirmRemove) void handleImageRemove(); else armRemove() }}
+                      style={confirmRemove || imgRemoving
+                        ? { border: 'none', borderRadius: 6, background: '#ef4444', color: '#fff', fontSize: 13, fontWeight: 700, padding: '8px 13px', cursor: imgRemoving ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: imgRemoving ? 0.6 : 1 }
+                        : { border: '1px solid #ebebeb', borderRadius: 6, background: '#fff', color: '#9ca3af', fontSize: 13, fontWeight: 600, padding: '7px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    >
+                      {imgRemoving ? '삭제 중...' : confirmRemove ? '삭제 확인' : '사진 삭제'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={(e) => { const f = e.target.files?.[0] ?? null; e.target.value = ''; void handleImageFile(f) }}
+              style={{ display: 'none' }}
+            />
           </div>
         </div>
 

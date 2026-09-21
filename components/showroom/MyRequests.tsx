@@ -1,6 +1,6 @@
 'use client'
 
-// 내 데모 신청 — 전체기록 탭 위쪽. 내가 낸 신청 중 대기중·반려만 보인다(없으면 카드 자체를 그리지 않는다).
+// 내 사용 신청 — 전체기록 탭 위쪽. 내가 낸 신청 중 대기중·반려만 보인다(없으면 카드 자체를 그리지 않는다).
 //   · 대기중 — 승인(사후 신청은 확인)을 기다리는 중
 //   · 반려   — 반려 사유와 [재작성]. 재작성하면 다시 대기중이 된다.
 // 읽기는 화면에서 직접 한다 — approval_requests 의 읽기 정책이 본인 신청을 허용한다.
@@ -68,7 +68,7 @@ export default function MyRequests({ supabase, myId, reloadKey, onRewrite }: Pro
   return (
     <div style={{ ...cardStyle, marginBottom: 12 }}>
       <div style={{ ...cardHeader, paddingBottom: 8, marginBottom: 4 }}>
-        <span style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>내 데모 신청</span>
+        <span style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>내 사용 신청</span>
         <span style={countBadge}>{rows.length}건</span>
       </div>
       {rows.map((r, i) => {
@@ -88,7 +88,7 @@ export default function MyRequests({ supabase, myId, reloadKey, onRewrite }: Pro
               <span style={{ color: FAINT }}>·</span>
               <span className="num" style={{ fontSize: 12, color: SUB }}>{p.request_no}</span>
               <span style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>{p.device_name}</span>
-              <span style={{ fontSize: 13, color: SUB }}>{p.customer_name}</span>
+              <span style={{ fontSize: 13, color: SUB }}>{p.customer_name ?? '-'}</span>
               <span className="num" style={{ fontSize: 12, color: MUTED }}>
                 {p.usage_date} {normTime(p.start_time)}~{normTime(p.end_time)}
               </span>

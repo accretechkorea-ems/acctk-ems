@@ -90,7 +90,9 @@ export function useCustomerDetail(customerId: number) {
       supabase.from('customers').select('*').is('deleted_at', null).eq('customer_id', customerId).maybeSingle(),
       supabase.from('devices').select('*').is('deleted_at', null).eq('customer_id', customerId).order('device_id', { ascending: true }),
       supabase.from('contacts').select('*').is('deleted_at', null).eq('customer_id', customerId).order('contact_id', { ascending: true }),
-      supabase.from('service_history').select('*, service_engineers(engineer_id, engineers(name, position))').eq('customer_id', customerId).order('service_id', { ascending: false }),
+      // 첨부파일도 함께 가져온다. service_attachments 에서 service_history 로 가는 FK 가 하나뿐이라
+      // 관계 이름을 적지 않아도 되고, 그 안의 engineers 임베딩(uploaded_by)도 마찬가지다.
+      supabase.from('service_history').select('*, service_engineers(engineer_id, engineers(name, position)), service_attachments(attachment_id, service_id, file_path, file_name, content_type, byte_size, sort_order, uploaded_by, created_at, engineers(name, position))').eq('customer_id', customerId).order('service_id', { ascending: false }),
       supabase.from('engineers').select('*, email').order('engineer_id', { ascending: true }),
       // 이 업체가 수요처(customer_id)인 견적과 대리점(dealer_id)으로 낀 견적을 함께 가져온다.
       // 거래 이력·요약·타임라인이 같은 배열을 쓰므로 세 곳 모두 대리점 건을 포함하게 된다.

@@ -27,9 +27,9 @@ import AccessGate from '@/components/common/AccessGate'
 import { canViewAdmin } from '@/lib/permissions'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import { numKR } from '@/components/customer/constants'
-import { SERVICE_TYPE_COLORS } from '@/lib/categoryColors'
+import { SERVICE_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import { normTime } from '@/lib/workHours'
-import { demoStatusLabel, type DemoRequestPayload } from '@/lib/showroom'
+import { demoStatusLabel, requestPurpose, USAGE_PURPOSE_COLORS, type DemoRequestPayload } from '@/lib/showroom'
 import { openApprovalPdf } from '@/components/showroom/openApprovalPdf'
 import {
   PAGE_BG, BORDER, TEXT, MUTED, SUB, DANGER, FAINT, BLUE, NEUTRAL_BG,
@@ -51,7 +51,7 @@ type RequestTypeDef = {
 }
 const REQUEST_TYPES: RequestTypeDef[] = [
   { key: 'quote_delete', label: '견적 삭제', dot: '#f43f5e', reasonLabel: '삭제 사유' },
-  { key: 'showroom_demo', label: '데모 신청', dot: SERVICE_TYPE_COLORS['신규설치'].dot, reasonLabel: '신청 사유' },
+  { key: 'showroom_demo', label: '사용 신청', dot: SERVICE_TYPE_COLORS['신규설치'].dot, reasonLabel: '신청 사유' },
 ]
 
 const ALL = '전체'
@@ -426,15 +426,25 @@ export default function RequestsPage() {
     )
   }
 
-  // ── 데모 신청 — 대기·처리완료 공통 본문 ──
+  // ── 사용 신청 — 대기·처리완료 공통 본문 ──
   const demoInfo = (d: DemoRequest) => {
     const p = d.payload
     const retro = p.is_retroactive
     const names = p.engineer_names.filter(Boolean).join(', ')
+    // 사용목적 — 2026-09-21 부터 5종 전부 신청을 거친다. 목적 칸이 없던 옛 신청은 고객 데모로 읽는다.
+    const purpose = requestPurpose(p)
+    const pc = getCategoryColor(USAGE_PURPOSE_COLORS, purpose)
     return (
       <div style={{ flex: 1, minWidth: 0 }}>
-        {headLine('showroom_demo', p.device_name, p.customer_name,
-          retro ? <span style={{ ...countBadge, padding: '2px 8px' }}>사후</span> : undefined)}
+        {headLine('showroom_demo', p.device_name, p.customer_name ?? '-', (
+          <>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              <span style={{ width: 9, height: 9, borderRadius: '50%', background: pc.dot ?? pc.text }} />
+              <span style={{ fontSize: 12, fontWeight: 500, color: TEXT }}>{purpose}</span>
+            </span>
+            {retro && <span style={{ ...countBadge, padding: '2px 8px' }}>사후</span>}
+          </>
+        ))}
         {/* 2줄 — 신청자 · 신청일시 · 계획(사용)일시 · 참여 엔지니어 · 신청번호 */}
         <div style={{ ...rowSub, marginTop: 3, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <span>신청자 {d.requester_name}</span>

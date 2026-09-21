@@ -171,8 +171,9 @@ export type SubmissionResult =
   | { ok: true; request: { requestNo: string; pdfOk: boolean; retroactive: boolean } | null }
 
 /**
- * 사용 기록 모달의 저장 — 고객 데모 신청은 /api/showroom/requests(새 신청 POST · 반려 건 재작성 PATCH),
- * 나머지(사용 기록 추가·수정)는 /api/showroom/usage. 장비 탭(page)과 전체기록 탭이 같이 쓴다.
+ * 사용 기록 모달의 저장 — 새 작성·재작성은 사용 신청(/api/showroom/requests, POST·PATCH),
+ * 기존 기록 수정만 /api/showroom/usage 다. 장비 탭(page)과 전체기록 탭이 같이 쓴다.
+ * 2026-09-21 부터 목적 5종이 전부 신청·승인을 거친다 — usage 라우트의 POST 는 막혀 있다.
  */
 export async function saveSubmission(sub: UsageSubmission): Promise<SubmissionResult> {
   if (sub.kind === 'usage') {
@@ -203,7 +204,7 @@ export async function saveSubmission(sub: UsageSubmission): Promise<SubmissionRe
 export function requestNotice(r: { requestNo: string; pdfOk: boolean; retroactive: boolean }): string {
   const head = r.retroactive
     ? `사후 신청을 보냈습니다 (${r.requestNo}). 사용 기록이 만들어졌고 관리자 확인을 기다립니다.`
-    : `데모 신청을 보냈습니다 (${r.requestNo}). 관리자가 승인하면 사용 기록이 만들어집니다.`
+    : `사용 신청을 보냈습니다 (${r.requestNo}). 관리자가 승인하면 사용 기록이 만들어집니다.`
   return r.pdfOk ? head : `${head} 다만 승인서 PDF 를 만들지 못했습니다 — 관리자에게 알려주세요.`
 }
 

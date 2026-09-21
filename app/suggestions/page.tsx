@@ -3,7 +3,7 @@
 // 건의사항 게시판 — 로그인 사용자 전원 열람/작성, superadmin 이 답변·상태 변경.
 // RLS 가 전원 허용이므로 본인 글 판정·삭제 제한은 이 화면에서 처리한다.
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
@@ -25,6 +25,39 @@ const MUTED = '#9ca3af'
 const STATUSES = ['접수', '검토중', '완료', '보류'] as const
 type Status = typeof STATUSES[number]
 const STATUS_TABS = ['전체', ...STATUSES]
+
+// 관리자가 직접 고를 수 있는 상태. 「접수」는 등록 시 자동으로 붙는 값이라 선택지에서 뺀다.
+const ADMIN_STATUSES = ['검토중', '완료', '보류'] as const
+
+/** 건의 1건에 붙일 수 있는 스크린샷 수. 라우트의 MAX_IMAGES 와 같아야 한다. */
+const MAX_IMAGES = 3
+const SHOT_ACCEPT = 'image/png,image/jpeg,image/webp'
+/** 스크린샷 축소 기준 — 글자가 많아 명함용(1600px·JPEG 0.8)보다 크고 덜 깎는다. */
+const SHOT_MAX_EDGE = 1920
+const SHOT_JPEG_QUALITY = 0.92
+
+/**
+ * 스크린샷을 올리기 좋은 크기로 줄인다. 긴 변 1920px, PNG 는 PNG 로 유지하고 그 밖은 JPEG 0.92.
+ * lib/leadCardImage 의 downsizeImage 는 사진용(1600px·JPEG 0.8)이라 글자가 번진다 —
+ * 같은 방식이되 값만 달리해 여기에 둔다.
+ */
+async function downsizeScreenshot(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  const scale = Math.min(1, SHOT_MAX_EDGE / Math.max(bitmap.width, bitmap.height))
+  const w = Math.max(1, Math.round(bitmap.width * scale))
+  const h = Math.max(1, Math.round(bitmap.height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  if (!ctx) { bitmap.close(); throw new Error('이미지를 줄이지 못했습니다') }
+  const keepPng = file.type === 'image/png'
+  // JPEG 는 투명을 못 담아 검게 나온다. 흰 바탕을 먼저 깐다.
+  if (!keepPng) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h) }
+  ctx.drawImage(bitmap, 0, 0, w, h)
+  bitmap.close()
+  return keepPng ? canvas.toDataURL('image/png') : canvas.toDataURL('image/jpeg', SHOT_JPEG_QUALITY)
+}
 
 // suggestions.category 의 CHECK 제약과 같은 값이어야 한다.
 const CATEGORIES = ['80', '20', '영업관리', '견적서', '기타'] as const
@@ -53,13 +86,13 @@ type Suggestion = {
   replied_at: string | null
   created_at: string
   updated_at: string
+  /** suggestion-images 버킷 안의 파일명들. 전체 URL 이 아니다. */
+  image_urls: string[] | null
   engineers?: { name: string; position: string | null } | null
 }
 
 const fmtDate = (s: string | null) => (s ? s.slice(0, 10) : '-')
 const fmtDateTime = (s: string | null) => (s ? s.slice(0, 16).replace('T', ' ') : '-')
-// created_at 과 updated_at 은 초 단위까지 같지 않을 수 있어 1초 이상 차이날 때만 수정으로 본다.
-const isEdited = (s: Suggestion) => new Date(s.updated_at).getTime() - new Date(s.created_at).getTime() > 1000
 
 export default function SuggestionsPage() {
   const supabase = createClient()
@@ -84,10 +117,21 @@ export default function SuggestionsPage() {
   const [saving, setSaving] = useState(false)
   const formErr = useFieldErrors<'title' | 'content'>()
 
+  // 스크린샷 — 새로 고른 것(formImages)은 저장할 때 올리고, 기존 것(existingImages)은 즉시 지운다.
+  const [formImages, setFormImages] = useState<{ name: string; dataUrl: string }[]>([])
+  const [existingImages, setExistingImages] = useState<string[]>([])
+  const [shotBusy, setShotBusy] = useState(false)
+  const [shotConfirm, setShotConfirm] = useState<string | null>(null)
+  const [shotRemoving, setShotRemoving] = useState<string | null>(null)
+  const shotTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const shotInputRef = useRef<HTMLInputElement | null>(null)
+  // 상세 모달에서 보여줄 서명 URL. 파일명 → URL.
+  const [shotUrls, setShotUrls] = useState<Record<string, string>>({})
+
   // 상세 모달
   const [detail, setDetail] = useState<Suggestion | null>(null)
   const [replyText, setReplyText] = useState('')
-  const [replyStatus, setReplyStatus] = useState<Status>('접수')
+  const [replyStatus, setReplyStatus] = useState<Status>('검토중')
   const [replySaving, setReplySaving] = useState(false)
   const replyErr = useFieldErrors<'reply'>()
 
@@ -127,6 +171,53 @@ export default function SuggestionsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows])
 
+  // 작성·수정 모달이 열려 있는 동안에는 어디서 붙여넣어도 스크린샷으로 받는다(캡처 후 Ctrl+V).
+  // 포커스가 모달 밖에 있을 수도 있어 window 에 건다.
+  useEffect(() => {
+    if (!formOpen) return
+    const onPaste = (e: ClipboardEvent) => {
+      const files = Array.from(e.clipboardData?.items ?? [])
+        .filter(it => it.kind === 'file' && it.type.startsWith('image/'))
+        .map(it => it.getAsFile())
+        .filter((f): f is File => f != null)
+      if (files.length === 0) return
+      e.preventDefault()
+      void addScreenshots(files)
+    }
+    window.addEventListener('paste', onPaste)
+    return () => window.removeEventListener('paste', onPaste)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formOpen, existingImages.length, formImages.length])
+
+  useEffect(() => () => { if (shotTimer.current) clearTimeout(shotTimer.current) }, [])
+
+  // 비공개 버킷이라 파일명만으로는 그릴 수 없다. 지금 보고 있는 쪽(상세 또는 수정 모달)의
+  // 스크린샷에 대해 서명 URL 을 받아 둔다.
+  const shotTargetId = detail?.suggestion_id ?? (formOpen && editing ? editing.suggestion_id : null)
+  const shotNames = detail ? (detail.image_urls ?? []) : (formOpen && editing ? existingImages : [])
+  const shotKey = shotNames.join(',')
+
+  useEffect(() => {
+    if (shotTargetId == null || !shotKey) { setShotUrls({}); return }
+    let alive = true
+    void (async () => {
+      const entries = await Promise.all(shotKey.split(',').map(async name => {
+        try {
+          const res = await fetch(`/api/suggestion-image?suggestionId=${shotTargetId}&fileName=${encodeURIComponent(name)}`)
+          if (!res.ok) return null
+          const body = await res.json() as { signedUrl?: string }
+          return body.signedUrl ? ([name, body.signedUrl] as [string, string]) : null
+        } catch (e) {
+          console.error('[건의] 스크린샷 서명 URL 실패', { name, error: e })
+          return null
+        }
+      }))
+      if (!alive) return
+      setShotUrls(Object.fromEntries(entries.filter((x): x is [string, string] => x != null)))
+    })()
+    return () => { alive = false }
+  }, [shotTargetId, shotKey])
+
   const filtered = rows.filter(r => {
     const matchStatus = statusFilter === '전체' || r.status === statusFilter
     const matchCategory = categoryFilter === '전체' || r.category === categoryFilter
@@ -143,18 +234,113 @@ export default function SuggestionsPage() {
 
   // ── 권한 판정 (RLS 가 전원 허용이라 여기서 막는다) ──
   const isMine = (s: Suggestion) => engineer?.engineer_id === s.engineer_id
-  const canEdit = (s: Suggestion) => isMine(s) || superAdmin
-  // 답변이 달린 글은 작성자가 지울 수 없다(관리자 답변까지 사라지므로). superadmin 은 항상 가능.
-  const canDelete = (s: Suggestion) => superAdmin || (isMine(s) && !s.admin_reply)
+  // 수정은 작성자 본인만 — superadmin 이라도 남이 쓴 건의 내용은 고치지 않는다.
+  // 답변이 달린 뒤에는 내용이 바뀌면 답변이 어긋나므로 숨긴다.
+  const canEdit = (s: Suggestion) => isMine(s) && !s.admin_reply
+  const canDelete = (s: Suggestion) => isMine(s) || superAdmin
 
   const asCategory = (v: string): Category =>
     (CATEGORIES as readonly string[]).includes(v) ? (v as Category) : '기타'
 
   const openNew = () => {
-    setEditing(null); setFormTitle(''); setFormContent(''); setFormCategory('기타'); setFormOpen(true)
+    setEditing(null); setFormTitle(''); setFormContent(''); setFormCategory('기타')
+    setFormImages([]); setExistingImages([]); setShotConfirm(null)
+    setFormOpen(true)
   }
   const openEdit = (s: Suggestion) => {
-    setEditing(s); setFormTitle(s.title); setFormContent(s.content); setFormCategory(asCategory(s.category)); setFormOpen(true)
+    setEditing(s); setFormTitle(s.title); setFormContent(s.content); setFormCategory(asCategory(s.category))
+    setFormImages([]); setExistingImages(s.image_urls ?? []); setShotConfirm(null)
+    setFormOpen(true)
+  }
+
+  // ── 스크린샷 ──
+  /** 고른 파일을 줄여 대기 목록에 넣는다. 파일 선택과 붙여넣기가 함께 쓴다. */
+  const addScreenshots = async (files: File[]) => {
+    if (files.length === 0) return
+    const room = MAX_IMAGES - existingImages.length - formImages.length
+    if (room <= 0) { toast.error(`스크린샷은 ${MAX_IMAGES}장까지 올릴 수 있습니다`); return }
+    setShotBusy(true)
+    const added: { name: string; dataUrl: string }[] = []
+    for (const file of files.slice(0, room)) {
+      try {
+        added.push({ name: file.name || '스크린샷.png', dataUrl: await downsizeScreenshot(file) })
+      } catch (e) {
+        console.error('[건의] 스크린샷을 읽지 못했다', { name: file.name, error: e })
+        toast.error('이미지를 읽지 못했습니다')
+      }
+    }
+    setShotBusy(false)
+    if (added.length > 0) setFormImages(prev => [...prev, ...added])
+    if (files.length > room) toast.error(`스크린샷은 ${MAX_IMAGES}장까지입니다`)
+  }
+
+  /** 기존 스크린샷 삭제는 두 번 눌러야 실행된다. 3초가 지나면 원래대로 돌아간다. */
+  const armShotRemove = (fileName: string) => {
+    if (shotTimer.current) clearTimeout(shotTimer.current)
+    setShotConfirm(fileName)
+    shotTimer.current = setTimeout(() => { shotTimer.current = null; setShotConfirm(null) }, 3000)
+  }
+
+  const removeExistingShot = async (fileName: string) => {
+    if (!editing) return
+    if (shotTimer.current) { clearTimeout(shotTimer.current); shotTimer.current = null }
+    setShotConfirm(null)
+    setShotRemoving(fileName)
+    try {
+      const res = await fetch('/api/suggestion-image', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ suggestionId: editing.suggestion_id, fileName }),
+      })
+      const body = await res.json().catch(() => null) as { error?: string; imageUrls?: string[] } | null
+      if (!res.ok) { toast.error(body?.error || '스크린샷을 지우지 못했습니다'); return }
+      setExistingImages(body?.imageUrls ?? existingImages.filter(n => n !== fileName))
+      await load()
+    } catch (e) {
+      console.error('[건의] 스크린샷 삭제 실패', { fileName, error: e })
+      toast.error('스크린샷을 지우지 못했습니다')
+    } finally {
+      setShotRemoving(null)
+    }
+  }
+
+  /** 대기 중인 스크린샷을 올린다. 성공 여부만 돌려준다 — 실패해도 건의 저장은 되돌리지 않는다. */
+  const uploadScreenshots = async (suggestionId: number): Promise<boolean> => {
+    if (formImages.length === 0) return true
+    try {
+      const res = await fetch('/api/suggestion-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ suggestionId, images: formImages.map(i => i.dataUrl) }),
+      })
+      if (!res.ok) {
+        console.error('[건의] 스크린샷 업로드 실패', { suggestionId, status: res.status, body: await res.text() })
+        return false
+      }
+      return true
+    } catch (e) {
+      console.error('[건의] 스크린샷 업로드 요청 실패', { suggestionId, error: e })
+      return false
+    }
+  }
+
+  /**
+   * 알림 라우트 호출. 부가 작업이라 실패해도 저장을 되돌리지 않고 로그만 남긴다.
+   * 알림 생성은 service role 라우트가 한다(남의 engineer_id 로 넣는 일이라 화면에서 못 한다).
+   * 무엇을 보낼지는 라우트가 DB 를 다시 읽어 정한다 — 여기서 보내는 값은 건 번호와
+   * 저장 직전의 상태(답변 유무·이전 상태)뿐이다.
+   */
+  const postNotify = async (body: Record<string, unknown>) => {
+    try {
+      const res = await fetch('/api/suggestion-notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) console.error('[건의] 알림 실패', { body, status: res.status, text: await res.text() })
+    } catch (e) {
+      console.error('[건의] 알림 요청 실패', { body, error: e })
+    }
   }
 
   const handleSave = async () => {
@@ -167,18 +353,33 @@ export default function SuggestionsPage() {
 
     setSaving(true)
     const nowIso = new Date().toISOString()
-    const { error } = editing
+    // 새로 등록한 건은 알림·스크린샷을 걸어야 해서 두 갈래 모두 suggestion_id 를 돌려받는다.
+    const saved = editing
       // 수정 — updated_at 자동 갱신 트리거 유무가 확인되지 않아 앱에서 명시적으로 넣는다.
       ? await supabase.from('suggestions')
           .update({ title: formTitle.trim(), content: formContent.trim(), category: formCategory, updated_at: nowIso })
           .eq('suggestion_id', editing.suggestion_id)
+          .select('suggestion_id').single()
+      // 상태는 등록과 동시에 「접수」로 시작한다.
       : await supabase.from('suggestions')
-          .insert({ engineer_id: engineer.engineer_id, title: formTitle.trim(), content: formContent.trim(), category: formCategory })
+          .insert({ engineer_id: engineer.engineer_id, title: formTitle.trim(), content: formContent.trim(), category: formCategory, status: '접수' })
+          .select('suggestion_id').single()
+    if (saved.error) { setSaving(false); toast.error(saved.error.message); return }
+
+    // 스크린샷은 건의가 저장된 뒤에 올린다(신규는 여기서 처음 suggestion_id 가 나온다).
+    const shotsOk = saved.data ? await uploadScreenshots(saved.data.suggestion_id) : true
     setSaving(false)
-    if (error) { toast.error(error.message); return }
+    if (!editing && saved.data) void postNotify({ action: 'created', suggestionId: saved.data.suggestion_id })
     setFormOpen(false)
     // 목록 갱신이 실패하면 load() 가 원인을 알리므로 성공 안내는 띄우지 않는다.
-    if (await load()) toast.success(editing ? '수정되었습니다' : '건의사항이 등록되었습니다')
+    const refreshed = await load()
+    if (!shotsOk) {
+      toast.error(editing
+        ? '건의는 저장되었습니다. 스크린샷 업로드에 실패했습니다'
+        : '건의는 등록되었습니다. 스크린샷 업로드에 실패했습니다')
+      return
+    }
+    if (refreshed) toast.success(editing ? '수정되었습니다' : '건의사항이 등록되었습니다')
   }
 
   const handleDelete = async (s: Suggestion) => {
@@ -188,6 +389,19 @@ export default function SuggestionsPage() {
       confirmText: '삭제', variant: 'danger',
     })
     if (!ok) return
+    // 스토리지 파일은 행과 함께 사라지지 않는다 — 먼저 치운다.
+    if ((s.image_urls ?? []).length > 0) {
+      try {
+        const res = await fetch('/api/suggestion-image', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ suggestionId: s.suggestion_id, all: true }),
+        })
+        if (!res.ok) console.error('[건의] 스크린샷 정리 실패 — 고아 파일이 남는다', { id: s.suggestion_id, status: res.status })
+      } catch (e) {
+        console.error('[건의] 스크린샷 정리 요청 실패', { id: s.suggestion_id, error: e })
+      }
+    }
     const { error } = await supabase.from('suggestions').delete().eq('suggestion_id', s.suggestion_id)
     if (error) { toast.error(error.message); return }
     setDetail(null)
@@ -197,13 +411,18 @@ export default function SuggestionsPage() {
   const openDetail = (s: Suggestion) => {
     setDetail(s)
     setReplyText(s.admin_reply ?? '')
-    setReplyStatus((STATUSES as readonly string[]).includes(s.status) ? (s.status as Status) : '접수')
+    // 「접수」는 선택지에 없다. 아직 접수면 답변과 함께 검토중으로 넘어간다.
+    setReplyStatus((ADMIN_STATUSES as readonly string[]).includes(s.status) ? (s.status as Status) : '검토중')
   }
 
+  /** 답변과 상태를 한 번에 저장한다. */
   const handleReplySave = async () => {
     if (!detail || !superAdmin) return
     if (!replyErr.validate({ reply: replyText.trim() ? null : '답변 내용을 입력해주세요' })) return
     setReplySaving(true)
+    // 무엇이 바뀌었는지는 저장하고 나면 알 수 없다 — 저장 직전 값을 남겨 라우트에 함께 보낸다.
+    const prevHadReply = !!detail.admin_reply
+    const prevStatus = detail.status
     const nowIso = new Date().toISOString()
     const { error } = await supabase.from('suggestions').update({
       admin_reply: replyText.trim(),
@@ -214,18 +433,8 @@ export default function SuggestionsPage() {
     }).eq('suggestion_id', detail.suggestion_id)
     setReplySaving(false)
     if (error) { toast.error(error.message); return }
-    if (await load()) toast.success('답변이 저장되었습니다')
-  }
-
-  // 답변 없이 상태만 바꾸는 경우(예: 검토중으로만 이동)
-  const handleStatusOnly = async (next: Status) => {
-    if (!detail || !superAdmin) return
-    setReplyStatus(next)
-    const { error } = await supabase.from('suggestions')
-      .update({ status: next, updated_at: new Date().toISOString() })
-      .eq('suggestion_id', detail.suggestion_id)
-    if (error) { toast.error(error.message); return }
-    await load()
+    void postNotify({ action: 'replied', suggestionId: detail.suggestion_id, prevHadReply, prevStatus })
+    if (await load()) toast.success(detail.admin_reply ? '답변이 저장되었습니다' : '답변이 등록되었습니다')
   }
 
   const inp: React.CSSProperties = {
@@ -313,7 +522,15 @@ export default function SuggestionsPage() {
                     onMouseLeave={e => (e.currentTarget.style.background = '')}>
                     <td style={{ padding: '10px 12px', color: TEXT, fontWeight: 600, maxWidth: 460, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {s.title}
-                      {isEdited(s) && <span style={{ marginLeft: 6, fontSize: 11, color: MUTED, fontWeight: 500 }}>(수정됨)</span>}
+                      {(s.image_urls ?? []).length > 0 && (
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                          style={{ marginLeft: 6, verticalAlign: 'text-bottom' }}>
+                          <title>스크린샷 첨부</title>
+                          <rect x="3" y="3" width="18" height="18" rx="2" />
+                          <circle cx="8.5" cy="8.5" r="1.5" />
+                          <polyline points="21 15 16 10 5 21" />
+                        </svg>
+                      )}
                     </td>
                     <td style={{ padding: '10px 12px', textAlign: 'center' }}>{badge(s.category)}</td>
                     <td style={{ padding: '10px 12px', color: GRAY, whiteSpace: 'nowrap', textAlign: 'center' }}>
@@ -372,6 +589,89 @@ export default function SuggestionsPage() {
               style={{ ...inp, width: '100%', resize: 'vertical', lineHeight: 1.7, border: formErr.errors.content ? errBorder : `1px solid ${BORDER}` }} />
             <FieldError message={formErr.errors.content} />
 
+            {/* 스크린샷 — 새로 고른 것은 저장할 때 올라가고, 기존 것은 누르는 즉시 지워진다 */}
+            <label style={{ fontSize: 12, fontWeight: 700, color: GRAY, display: 'block', margin: '14px 0 4px' }}>
+              스크린샷
+              <span style={{ marginLeft: 6, fontWeight: 500, color: MUTED }}>
+                {existingImages.length + formImages.length} / {MAX_IMAGES}
+              </span>
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => shotInputRef.current?.click()}
+                disabled={shotBusy || existingImages.length + formImages.length >= MAX_IMAGES}
+                style={{
+                  padding: '7px 12px', borderRadius: 6, border: `1px solid ${BORDER}`, background: CARD_BG,
+                  color: (shotBusy || existingImages.length + formImages.length >= MAX_IMAGES) ? MUTED : GRAY,
+                  fontWeight: 700, fontSize: 12,
+                  cursor: (shotBusy || existingImages.length + formImages.length >= MAX_IMAGES) ? 'not-allowed' : 'pointer',
+                }}>
+                {shotBusy ? '넣는 중...' : '이미지 선택'}
+              </button>
+              <span style={{ fontSize: 11, color: MUTED }}>캡처 후 Ctrl+V 로 붙여넣을 수 있습니다</span>
+            </div>
+
+            {(existingImages.length > 0 || formImages.length > 0) && (
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+                {existingImages.map(name => (
+                  <div key={name} style={{ width: 104 }}>
+                    <div
+                      role="img"
+                      aria-label="스크린샷"
+                      style={{
+                        width: '100%', aspectRatio: '4 / 3', borderRadius: 6, border: `1px solid ${BORDER}`,
+                        background: '#f8fafc', backgroundSize: 'cover', backgroundPosition: 'center',
+                        backgroundImage: shotUrls[name] ? `url("${shotUrls[name]}")` : undefined,
+                      }}
+                    />
+                    <button type="button" disabled={shotRemoving === name}
+                      onClick={() => { if (shotConfirm === name) void removeExistingShot(name); else armShotRemove(name) }}
+                      style={{
+                        width: '100%', marginTop: 4, padding: '4px 0', borderRadius: 6, border: 'none',
+                        cursor: shotRemoving === name ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 11,
+                        background: (shotConfirm === name || shotRemoving === name) ? '#dc2626' : '#f3f4f6',
+                        color: (shotConfirm === name || shotRemoving === name) ? '#fff' : GRAY,
+                      }}>
+                      {shotRemoving === name ? '삭제 중...' : shotConfirm === name ? '삭제 확인' : '삭제'}
+                    </button>
+                  </div>
+                ))}
+                {formImages.map((img, i) => (
+                  <div key={`${img.name}-${i}`} style={{ width: 104 }}>
+                    <div
+                      role="img"
+                      aria-label={img.name}
+                      title={img.name}
+                      style={{
+                        width: '100%', aspectRatio: '4 / 3', borderRadius: 6, border: `1px solid ${BORDER}`,
+                        background: '#f8fafc', backgroundSize: 'cover', backgroundPosition: 'center',
+                        backgroundImage: `url("${img.dataUrl}")`,
+                      }}
+                    />
+                    <button type="button" onClick={() => setFormImages(prev => prev.filter((_, idx) => idx !== i))}
+                      style={{
+                        width: '100%', marginTop: 4, padding: '4px 0', borderRadius: 6, border: 'none',
+                        cursor: 'pointer', fontWeight: 700, fontSize: 11, background: '#f3f4f6', color: GRAY,
+                      }}>
+                      제거
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <input
+              ref={shotInputRef}
+              type="file"
+              accept={SHOT_ACCEPT}
+              multiple
+              onChange={e => {
+                const files = Array.from(e.target.files ?? [])
+                e.target.value = ''
+                void addScreenshots(files)
+              }}
+              style={{ display: 'none' }}
+            />
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
               <button onClick={() => setFormOpen(false)}
                 style={{ padding: '9px 16px', background: '#f3f4f6', color: TEXT, border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>취소</button>
@@ -392,7 +692,6 @@ export default function SuggestionsPage() {
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, wordBreak: 'break-all' }}>
                   {detail.title}
-                  {isEdited(detail) && <span style={{ marginLeft: 6, fontSize: 11, color: MUTED, fontWeight: 500 }}>(수정됨)</span>}
                 </div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   {badge(detail.status)}
@@ -410,6 +709,29 @@ export default function SuggestionsPage() {
                 {detail.content}
               </div>
 
+              {/* 스크린샷 — 누르면 새 탭에서 원본(1시간 서명 URL) */}
+              {(detail.image_urls ?? []).length > 0 && (
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+                  {(detail.image_urls ?? []).map(name => (
+                    <button
+                      key={name}
+                      type="button"
+                      title="원본 열기"
+                      aria-label="스크린샷 원본 열기"
+                      disabled={!shotUrls[name]}
+                      onClick={() => { const u = shotUrls[name]; if (u) window.open(u, '_blank', 'noopener') }}
+                      style={{
+                        width: 132, aspectRatio: '4 / 3', padding: 0, borderRadius: 6,
+                        border: `1px solid ${BORDER}`, background: '#f8fafc',
+                        backgroundSize: 'cover', backgroundPosition: 'center',
+                        backgroundImage: shotUrls[name] ? `url("${shotUrls[name]}")` : undefined,
+                        cursor: shotUrls[name] ? 'pointer' : 'default',
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+
               {/* 관리자 답변 */}
               <div style={{ marginTop: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -422,8 +744,8 @@ export default function SuggestionsPage() {
                   <>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 12, color: GRAY, fontWeight: 700 }}>상태</span>
-                      {STATUSES.map(s => (
-                        <button key={s} onClick={() => handleStatusOnly(s)}
+                      {ADMIN_STATUSES.map(s => (
+                        <button key={s} onClick={() => setReplyStatus(s)}
                           style={{ padding: '4px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, background: replyStatus === s ? BLUE : '#f3f4f6', color: replyStatus === s ? '#fff' : TEXT }}>
                           {s}
                         </button>
@@ -436,7 +758,7 @@ export default function SuggestionsPage() {
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
                       <button onClick={handleReplySave} disabled={replySaving}
                         style={{ padding: '7px 16px', background: BLUE, color: '#fff', border: 'none', borderRadius: 6, cursor: replySaving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 12, opacity: replySaving ? 0.7 : 1 }}>
-                        {replySaving ? '저장 중...' : (detail.admin_reply ? '답변 수정' : '답변 등록')}
+                        {replySaving ? '저장 중...' : (detail.admin_reply ? '답변 저장' : '답변 등록')}
                       </button>
                     </div>
                   </>

@@ -72,18 +72,22 @@ export const PURPOSE_FIELDS: Record<UsagePurpose, readonly UsageField[]> = {
 }
 
 /**
- * 고객 데모 '신청'(사용 신청 모달·/api/showroom/requests)의 항목. 결과·견적 연결·비고는 없다 —
- * 승인된 뒤 만들어진 사용 기록을 수정할 때 DEMO_FIELDS 로 적는다.
- * 신청 사유 칸은 없다 — 상세 내용(content)이 곧 사유라 서버가 같은 값을 approval_requests.reason 에 넣는다.
+ * '신청'에 없는 항목 — 결과 4종과 견적 연결. 그 값들은 승인된 뒤 만들어진 사용 기록을 수정할 때 적는다.
+ * 신청 사유 칸도 없다 — 상세 내용(content)이 곧 사유라 서버가 같은 값을 approval_requests.reason 에 넣는다.
  */
-export const DEMO_REQUEST_FIELDS: readonly UsageField[] = [
-  'project_name', 'content', 'customer', 'customer_dept', 'nda_status', 'expected_result',
-  'sample_material', 'carried_out', 'expected_cost',
-]
+const REQUEST_EXCLUDED_FIELDS: readonly UsageField[] = ['result_category', 'result', 'issue', 'follow_up', 'quote']
 
 /** 이 목적에 그 항목이 있는지. 목적이 비었거나 5종이 아니면 false. */
 export const purposeHasField = (purpose: string, field: UsageField): boolean =>
   isUsagePurpose(purpose) && PURPOSE_FIELDS[purpose].includes(field)
+
+/**
+ * 사용 신청(모달·/api/showroom/requests)에서 다루는 항목.
+ * 2026-09-21 부터 5종 전부 신청·승인을 거친다 — 목적마다 보이는 칸은 종전 규칙 그대로이고,
+ * 결과·견적 연결만 뺀다(그 값은 승인 뒤 사용 기록을 수정할 때 적는다).
+ */
+export const requestHasField = (purpose: string, field: UsageField): boolean =>
+  purposeHasField(purpose, field) && !REQUEST_EXCLUDED_FIELDS.includes(field)
 
 // ── 선택 항목 (DB check 와 같은 값) ────────────────────────────────
 export const NDA_STATUSES = ['해당없음', '확인완료', '확인필요'] as const
@@ -556,22 +560,31 @@ export type DemoRequestPayload = {
   work_hours: number
   engineer_ids: number[]
   engineer_names: string[]
+  /** 사용목적 5종. 2026-09-21 이전 신청(고객 데모만 신청이던 때)에는 없다 — 그때 건은 고객 데모로 읽는다. */
+  purpose?: string
   project_name: string | null
   content: string | null
-  customer_id: number
-  customer_name: string
+  /** 대상 고객사 — 측정대행·고객 데모만 필수다(DB 제약과 같다). 나머지 목적은 null. */
+  customer_id: number | null
+  customer_name: string | null
   customer_dept: string | null
   nda_status: string | null
   expected_result: string | null
   sample_material: string | null
   carried_out: boolean
   expected_cost: number | null
+  /** 비고. 2026-09-21 이전 신청에는 없다. */
+  note?: string | null
   requester_name: string
   /** 사업부/팀 — 신청자 engineers.teams */
   requester_team: string | null
 }
 
 /** 화면(내 신청)이 읽는 신청 행. */
+/** 신청에 적힌 사용목적. 목적 칸이 없던 때의 신청은 고객 데모로 본다. */
+export const requestPurpose = (p: { purpose?: string } | null | undefined): string =>
+  p?.purpose && isUsagePurpose(p.purpose) ? p.purpose : DEMO_PURPOSE
+
 export type DemoRequestRow = {
   request_id: number
   status: string
