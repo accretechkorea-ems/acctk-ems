@@ -20,7 +20,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewCustomers, isSuperAdmin } from '@/lib/permissions'
+import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
 import { toMin, computeWorkHours, normTime, TIME_MIN, TIME_MAX } from '@/lib/workHours'
 import {
@@ -57,7 +57,7 @@ async function authorize() {
   if (!callerRow) return { error: bad('Forbidden', 403), caller: null }
 
   const caller = await withTeamPerm(callerRow as Caller, { fresh: true })
-  if (!caller || !canViewCustomers(caller)) return { error: bad('Forbidden', 403), caller: null }
+  if (!caller || !canViewMenu(caller, 'showroom')) return { error: bad('Forbidden', 403), caller: null }
 
   return { error: null, caller }
 }

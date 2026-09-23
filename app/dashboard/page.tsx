@@ -1,20 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { canViewCustomers, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPerms'
-import { useNotifications, type Notification } from '@/hooks/useNotifications'
-import NotificationList from '@/components/common/NotificationList'
 import { ACTIVITY_TYPES } from '@/lib/activity'
 import ActivityCard from '@/components/activity/ActivityCard'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
 import MyQuotesPanel from '@/components/dashboard/MyQuotesPanel'
 import { nowKSTParts } from '@/lib/date'
-
-// 대시보드는 훑어보는 화면이라 알림은 이만큼만 싣는다(전체는 헤더의 종 아이콘에서 본다).
-const NOTIF_LIMIT = 5
 
 type Me = {
   engineer_id: number
@@ -33,20 +27,12 @@ type SalesTypeRow = { activity_type: string | null }
 
 export default function DashboardPage() {
   const supabase = createClient()
-  const router = useRouter()
   const [me, setMe] = useState<Me | null>(null)
   const [loading, setLoading] = useState(true)
   const [activityYm, setActivityYm] = useState(() => { const n = nowKSTParts(); return { y: n.y, m: n.m } })
   // 활동 요약 건수. 아직 못 받았으면 null(카드를 그리지 않는다).
   const [actCounts, setActCounts] = useState<Record<string, number> | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
-  const { notifications, unreadCount, loading: notifLoading, markAsRead } = useNotifications(me?.engineer_id ?? null)
-
-  const handleNotifClick = (n: Notification) => {
-    markAsRead(n.id)
-    if (n.link) router.push(n.link)
-  }
-
   // 활동 조회 기간: 선택한 달의 1일 ~ 말일. 이번 달이면 1일 ~ 오늘.
   const pad2 = (n: number) => String(n).padStart(2, '0')
   const nowD = nowKSTParts()
@@ -143,21 +129,24 @@ export default function DashboardPage() {
   return (
     <div style={{ background: '#fafafa', minHeight: '100vh', padding: '24px 28px' }}>
       <style>{`
-        /* 견적이 남는 폭을 전부 가져가고, 왼쪽 열만 고정 폭을 쓴다(비율 분할이 아니다).
-           row-reverse 라 DOM 순서(견적 → 활동·알림)와 반대로 그려진다 — 화면에서는 활동·알림이 왼쪽,
-           견적이 오른쪽이고, 줄바꿈될 때는 DOM 에서 앞선 견적이 위로 온다. */
-        .dash-row { display: flex; flex-direction: row-reverse; flex-wrap: wrap; gap: 12px; align-items: stretch; margin-top: 16px; }
-        /* flex-basis 는 견적 표가 가로 스크롤 없이 들어가는 최소 폭이다(실측 약 1010px).
-           창이 좁아 둘을 나란히 두면 표가 잘리는 상황에서는 왼쪽 열이 아래로 내려가고
-           견적이 폭을 전부 가져간다 — 표에 가로 스크롤이 생기지 않게 하는 것이 우선이다. */
-        /* align-items: stretch 라 두 열의 바닥이 같은 위치에서 끝난다. 남는 높이는
-           견적 쪽에서는 목록 줄 수(fitToHeight)가, 왼쪽에서는 알림 카드가 받는다. */
-        .dash-quotes { flex: 1 1 1010px; min-width: 0; display: flex; flex-direction: column; }
-        .dash-side { width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px; }
-        .notif-scroll { scrollbar-width: thin; scrollbar-color: #d1d5db transparent; }
-        .notif-scroll::-webkit-scrollbar { width: 6px; }
-        .notif-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-        .notif-scroll::-webkit-scrollbar-track { background: transparent; }
+        /* 왼쪽 300px 고정(활동 요약) + 오른쪽이 남는 폭 전부(내 견적).
+           DOM 순서는 견적이 먼저다 — 1열로 내려가면 견적이 위로 온다. */
+        .dash-row {
+          display: grid;
+          grid-template-columns: 300px minmax(0, 1fr);
+          grid-template-areas: "side quotes";
+          gap: 12px; align-items: start; margin-top: 16px;
+        }
+        .dash-quotes { grid-area: quotes; min-width: 0; display: flex; flex-direction: column; }
+        .dash-side { grid-area: side; display: flex; flex-direction: column; gap: 12px; }
+        /* 본문이 900px 밑으로 좁아지면 1열. 사이드바가 232px 을 가져가므로 화면 기준 1132px 이 경계다. */
+        @media (max-width: 1131px) {
+          .dash-row {
+            grid-template-columns: minmax(0, 1fr);
+            grid-template-areas: "quotes" "side";
+          }
+        }
+
       `}</style>
       <div style={{ maxWidth: 1600, margin: '0 auto' }}>
         {/* 인사말 + 오늘 날짜 (한 줄) */}
@@ -196,30 +185,6 @@ export default function DashboardPage() {
               />
             )}
 
-            {/* 알림 — 최근 몇 건만. 남는 높이를 받아 왼쪽 열 바닥을 견적 카드에 맞춘다. */}
-            <div style={{ flex: 1, minHeight: 220, display: 'flex', flexDirection: 'column', background: '#fff', border: '1px solid #ebebeb', borderRadius: 8, overflow: 'hidden' }}>
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid #ebebeb', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>알림</span>
-                {unreadCount > 0 && (
-                  <span style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: '#dc2626', borderRadius: 99, minWidth: 18, height: 18, padding: '0 5px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </span>
-                )}
-              </div>
-              <div className="notif-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                {notifLoading ? (
-                  <div style={{ padding: '24px 0', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>불러오는 중...</div>
-                ) : (
-                  <NotificationList notifications={notifications.slice(0, NOTIF_LIMIT)} onItemClick={handleNotifClick} emptyText="새 알림이 없습니다" compact />
-                )}
-              </div>
-              {/* 잘라낸 건이 있으면 어디서 마저 보는지 알려준다 */}
-              {!notifLoading && notifications.length > NOTIF_LIMIT && (
-                <div style={{ padding: '9px 16px', borderTop: '1px solid #ebebeb', fontSize: 12, color: '#9ca3af' }}>
-                  외 {notifications.length - NOTIF_LIMIT}건 · 상단 알림에서 전체 보기
-                </div>
-              )}
-            </div>
           </div>
         </div>
       </div>

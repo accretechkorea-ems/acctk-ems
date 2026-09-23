@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewLeads, isSuperAdmin } from '@/lib/permissions'
+import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
 import { CARD_BUCKET } from '@/lib/leadOptions'
 
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
   const caller = await withTeamPerm(callerRow)
   if (!caller) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   // 리드 화면에 들어올 수 있는 사람만 — 관리자(전체) 또는 리드 권한이 있는 팀.
-  if (!canViewLeads(caller)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!canViewMenu(caller, 'leads')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   // 서명 대상이 실제 리드의 명함 경로인지 확인한다. 임의의 파일명에 서명해주지 않는다.
   const { data: lead } = await supabaseAdmin

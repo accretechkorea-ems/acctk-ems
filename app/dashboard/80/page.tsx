@@ -8,7 +8,6 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canViewDashboard } from '@/lib/permissions'
 import HoldingModal from '@/components/customer/modals/HoldingModal'
 import HoldingResolveModal from '@/components/customer/modals/HoldingResolveModal'
 import OpportunityModal from '@/components/customer/modals/OpportunityModal'
@@ -128,7 +127,7 @@ function Delta({ now, before, suffix }: { now: number; before: number; suffix: s
 }
 
 export default function Dashboard80Page() {
-  const { engineer: me, loading: guardLoading, authorized } = usePageGuard(canViewDashboard)
+  const { engineer: me, loading: guardLoading, authorized } = usePageGuard()
   const router = useRouter()
 
   const { holdings, loading: holdingLoading, engineerId, reload: reloadHoldings } = useHoldingList()

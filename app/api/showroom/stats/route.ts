@@ -34,7 +34,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewCustomers } from '@/lib/permissions'
+import { canViewMenu } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
 import { todayKST, daysBetween } from '@/lib/date'
 import { computeKoreanHolidays } from '@/lib/holidays'
@@ -78,7 +78,7 @@ async function authorize() {
   if (!callerRow) return { error: bad('Forbidden', 403) }
 
   const caller = await withTeamPerm(callerRow as Caller)
-  if (!caller || !canViewCustomers(caller)) return { error: bad('Forbidden', 403) }
+  if (!caller || !canViewMenu(caller, 'showroom')) return { error: bad('Forbidden', 403) }
   return { error: null }
 }
 

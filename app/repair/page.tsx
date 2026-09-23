@@ -1,12 +1,13 @@
 'use client'
 
+// 모바일 상단 바 높이 — 화면 높이를 계산하는 곳은 이 상수 하나를 본다(PC 는 상단 바가 없다).
+import { TOPBAR_HEIGHT } from '@/components/layout/Sidebar'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRepairs, type Repair, type RepairStatus, type RepairQuote } from '@/hooks/useRepairs'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canViewCustomers } from '@/lib/permissions'
 import RepairEditModal from '@/components/repair/RepairEditModal'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import AutocompleteInput from '@/components/common/AutocompleteInput'
@@ -113,7 +114,7 @@ export default function RepairPage() {
   const toast = useToast()
   const { errors, clearError, validate } = useFieldErrors<'customerName'>()
 
-  const { engineer: currentEngineer, loading: guardLoading, authorized } = usePageGuard(canViewCustomers)
+  const { engineer: currentEngineer, loading: guardLoading, authorized } = usePageGuard()
   const { repairs, loading, refetch } = useRepairs()
 
   // ── 접수 등록 폼 ──
@@ -655,8 +656,11 @@ export default function RepairPage() {
   )
 
   return (
-    <div style={{ background: PAGE_BG, minHeight: 'calc(100vh - 44px)', padding: 20, boxSizing: 'border-box' }}>
+    <div className="rp-page" style={{ background: PAGE_BG, padding: 20, boxSizing: 'border-box' }}>
       <style jsx global>{`
+        /* PC 는 상단 바가 없어 화면 높이를 그대로 쓴다. 모바일만 상단 바만큼 뺀다. */
+        .rp-page { min-height: 100vh; }
+        @media (max-width: 768px) { .rp-page { min-height: calc(100vh - ${TOPBAR_HEIGHT}px); } }
         select { appearance: none; -webkit-appearance: none; -moz-appearance: none; }
         @keyframes memo-pop { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
       `}</style>

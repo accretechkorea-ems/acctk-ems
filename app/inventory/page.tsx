@@ -110,7 +110,7 @@ const LOC_STYLE: Record<string, { bg: string; color: string }> = {
 
 function InventoryPage() {
   const supabase = createClient()
-  const { loading: guardLoading, authorized } = usePageGuard(canViewSalesMgmt)
+  const { loading: guardLoading, authorized } = usePageGuard()
   const confirmDialog = useConfirm()
   const toast = useToast()
   const searchParams = useSearchParams()

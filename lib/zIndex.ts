@@ -8,7 +8,9 @@
  *   thead      표 헤더 고정(sticky) — 스크롤되는 행 위
  *   decor      페이지 장식 — 워터마크처럼 내용 위에 얹히지만 조작할 수 없는 것
  *   inPage     페이지 안에서 뜨는 UI — 포털을 쓰지 않아 조상 밖으로 못 나가는 것
- *   header     상단 헤더(sticky)
+ *   sidebar    좌측 사이드바(고정) — 모바일에서 쓰는 상단 헤더(header)와 같은 층이다
+ *   sidebarPanel 사이드바에서 열리는 알림·프로필 패널(headerMenu 와 같은 층)
+ *   header     상단 헤더(sticky) — 지금은 모바일(768px 이하)에서만 쓴다
  *   headerMenu 헤더 안에서 열리는 메뉴 — 헤더가 자체 스택 컨텍스트라 이 값은
  *              '헤더 안에서의 순서'일 뿐, 헤더 밖(모달 등)으로는 못 올라간다.
  *   modal      모달 오버레이
@@ -25,7 +27,9 @@ export const Z = {
   thead: 1,
   decor: 10,
   inPage: 100,
+  sidebar: 9000,
   header: 9000,
+  sidebarPanel: 9010,
   headerMenu: 9010,
   modal: 10000,
   subModal: 10010,

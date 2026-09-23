@@ -7,7 +7,7 @@
 //         다시 쓴 사용일자가 오늘까지면 사후 신청이 되어 사용 기록을 바로 만든다 — 실패하면 반려 상태로 되돌린다.
 // 응답에 retroactive(사후 여부)를 실어 화면이 안내 문구를 고른다.
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewCustomers } from '@/lib/permissions'
+import { canViewMenu } from '@/lib/permissions'
 import { todayKST } from '@/lib/date'
 import { DEMO_REQUEST_TYPE, REQUEST_PENDING, REQUEST_REJECTED, type DemoRequestPayload } from '@/lib/showroom'
 import {
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   const auth = await loadCaller(TAG, { fresh: true })
   if (auth.error) return auth.error
   const caller = auth.caller
-  if (!canViewCustomers(caller)) return bad('Forbidden', 403)
+  if (!canViewMenu(caller, 'showroom')) return bad('Forbidden', 403)
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
   const today = todayKST()
@@ -108,7 +108,7 @@ export async function PATCH(req: NextRequest) {
   const auth = await loadCaller(TAG, { fresh: true })
   if (auth.error) return auth.error
   const caller = auth.caller
-  if (!canViewCustomers(caller)) return bad('Forbidden', 403)
+  if (!canViewMenu(caller, 'showroom')) return bad('Forbidden', 403)
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
   const requestId = Number(body.request_id)

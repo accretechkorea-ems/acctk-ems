@@ -4,6 +4,15 @@
 // 드래그앤드롭은 다음 단계이며, 지금은 카드의 단계 select 로 옮긴다.
 // 신규 등록은 업체 상세에서만 한다(어느 업체 건인지 정해야 하므로).
 
+// 모바일 상단 바 높이 — 화면 높이를 계산하는 곳은 이 상수 하나를 본다(PC 는 상단 바가 없다).
+import { TOPBAR_HEIGHT } from '@/components/layout/Sidebar'
+
+/**
+ * 칸반 한 열의 최소 폭. 이보다 좁아지면 카드의 담당자·견적·마감월 줄이 읽히지 않는다.
+ * 5열 × 220 + 간격 4 × 10 = 1140 — 1440 창(본문 1208, 좌우 여백 28×2 를 뺀 판 1152)에
+ * 가로 스크롤 없이 들어간다. 그보다 좁아지면 열을 더 줄이지 않고 판을 가로로 민다.
+ */
+const COL_MIN_W = 220
 import { useMemo, useState, type ReactNode } from 'react'
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
@@ -13,7 +22,7 @@ import {
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import SegmentedControl from '@/components/common/SegmentedControl'
-import { canViewPipeline, isSuperAdmin } from '@/lib/permissions'
+import { isSuperAdmin } from '@/lib/permissions'
 import OpportunityCard from '@/components/pipeline/OpportunityCard'
 import OpportunityModal from '@/components/customer/modals/OpportunityModal'
 import { useOpportunityCrud } from '@/hooks/customer/useOpportunityCrud'
@@ -91,7 +100,7 @@ function DroppableColumn({ stage, isOver, children }: { stage: string; isOver: b
 }
 
 export default function PipelinePage() {
-  const { loading: guardLoading, authorized } = usePageGuard(canViewPipeline)
+  const { loading: guardLoading, authorized } = usePageGuard()
   const data = usePipelineData()
   const { opportunities, activities, engineers, customers, loading, me, lastActivityByOpp, reload } = data
 
@@ -179,12 +188,15 @@ export default function PipelinePage() {
     // 판 높이를 px 로 계산하지 않고 남는 공간을 그대로 채우게 한다
     // (헤더 45px = minHeight 44 + 아래 테두리 1. 이것 말고 고정값을 쓰지 않는다).
     // main → 안쪽 래퍼 → 판까지 flex 열로 이어져야 판이 정확히 남은 만큼만 차지한다.
-    <main style={{
+    <main className="pl-page" style={{
       padding: '24px 28px', background: PAGE_BG,
-      minHeight: 'calc(100vh - 45px)', boxSizing: 'border-box',
+      boxSizing: 'border-box',
       display: 'flex', flexDirection: 'column',
     }}>
       <style jsx global>{`
+        /* PC 는 상단 바가 없어 화면 높이를 그대로 쓴다. 모바일만 상단 바만큼 뺀다. */
+        .pl-page { min-height: 100vh; }
+        @media (max-width: 768px) { .pl-page { min-height: calc(100vh - ${TOPBAR_HEIGHT}px); } }
         /* 카드의 단계 select·종료 버튼은 호버 때만 띄운다.
            hover 를 지원하지 않는 기기(터치)에서는 이 미디어 쿼리가 걸리지 않아 항상 보인다.
            visibility 로만 토글해 자리를 유지하므로 카드 높이는 호버 전후가 같다. */
@@ -250,19 +262,28 @@ export default function PipelinePage() {
             <div style={{
               display: 'flex', gap: 10, alignItems: 'stretch',
               flex: 1, minHeight: 420,
+              // 열이 COL_MIN_W 밑으로 눌리지 않는다. 1440 창까지는 5열이 그대로 들어가고,
+              // 그보다 좁아지면 열을 더 줄이는 대신 판을 가로로 민다.
+              overflowX: 'auto',
             }}>
               {columns.map(col => (
                 <div key={col.stage} style={{
-                  flex: '1 1 0', minWidth: 0, minHeight: 0,
+                  flex: `1 1 ${COL_MIN_W}px`, minWidth: COL_MIN_W, minHeight: 0,
                   display: 'flex', flexDirection: 'column',
                 }}>
                   <div style={{ padding: '0 2px 8px', flexShrink: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                    {/* 단계·건수·금액을 한 줄에 둔다 — 열이 좁아 두 줄을 쓰면 판이 그만큼 낮아진다 */}
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
                       <span style={{ fontSize: 13, fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>{col.stage}</span>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>{col.rows.length}</span>
-                    </div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', marginTop: 3, whiteSpace: 'nowrap' }}>
-                      {col.sum > 0 ? compactKRW(col.sum) : '-'}
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px', flexShrink: 0 }}>{col.rows.length}</span>
+                      {col.sum > 0 && (
+                        <>
+                          <span style={{ fontSize: 11, color: '#d1d5db', flexShrink: 0 }}>·</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {compactKRW(col.sum)}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <DroppableColumn stage={col.stage} isOver={overStage === col.stage}>

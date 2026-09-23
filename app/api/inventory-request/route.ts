@@ -8,7 +8,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { canViewSalesMgmt } from '@/lib/permissions'
+import { canViewMenu } from '@/lib/permissions'
 import { withTeamPerm, loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
 
 const supabaseAdmin = createClient(
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   if (callerErr) console.error('[inventory-request] caller lookup failed', { email: user.email, error: callerErr })
   // 권한을 거둔 직후에도 통과하면 곤란해 캐시를 건너뛴다(승인 라우트와 같은 기준).
   const caller = await withTeamPerm(callerRow, { fresh: true })
-  if (!caller || !canViewSalesMgmt(caller)) {
+  if (!caller || !canViewMenu(caller, 'inventory')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -87,7 +87,7 @@ export async function POST(req: Request) {
       .select('engineer_id, teams, permission_level, resigned_date')
     if (engErr) console.error('[inventory-request] engineers lookup failed', { requestId: saved.request_id, error: engErr })
     type Row = { engineer_id: number; teams: string | null; permission_level: string | null; resigned_date: string | null }
-    const managers = ((allEng ?? []) as Row[]).filter(e => canViewSalesMgmt(attachTeamPerm(teamPerms, e)) && !e.resigned_date)
+    const managers = ((allEng ?? []) as Row[]).filter(e => canViewMenu(attachTeamPerm(teamPerms, e), 'inventory') && !e.resigned_date)
     if (managers.length > 0) {
       const { error: notiErr } = await supabaseAdmin.from('notifications').insert(
         managers.map(m => ({

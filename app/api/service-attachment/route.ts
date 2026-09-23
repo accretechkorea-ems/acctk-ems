@@ -11,7 +11,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewCustomers, isSuperAdmin } from '@/lib/permissions'
+import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
 import { parseDataUrlImage } from '@/lib/imageUpload'
 
@@ -50,7 +50,7 @@ async function authorize(): Promise<{ error: NextResponse; caller: null } | { er
     .single()
   if (error) console.error('[service-attachment] caller lookup failed', { email: user.email, error })
   const caller = await withTeamPerm((row ?? null) as Caller | null)
-  if (!caller || !canViewCustomers(caller)) return { error: bad('Forbidden', 403), caller: null }
+  if (!caller || !canViewMenu(caller, 'customers')) return { error: bad('Forbidden', 403), caller: null }
   return { error: null, caller }
 }
 

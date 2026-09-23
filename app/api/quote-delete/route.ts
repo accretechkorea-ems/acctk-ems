@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewAdmin, isSuperAdmin } from '@/lib/permissions'
+import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
 
 // 견적 삭제 흐름의 알림을 만드는 라우트. 동작은 action 으로 나눈다(발주 라우트와 같은 방식).
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     // 견적서를 만들지 않은 쪽은 지워도 되는 건인지 판단할 수 없다.
     // created_by 가 빈 옛 데이터는 engineer_id 로 본다(대필 도입 전 건은 둘이 같다).
     const isOwner = caller?.engineer_id === (quote.created_by ?? quote.engineer_id)
-    if (!isOwner && !canViewAdmin(caller)) {
+    if (!isOwner && !canViewMenu(caller, 'approvals')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
   // ── 삭제 완료 알림 ──
   // 견적 행은 이미 사라져 다시 읽을 수 없다. 대신 quotes 에 걸린 감사 트리거가 남긴
   // audit_log 를 근거로 삼는다 — 견적번호·수신자를 여기서 읽으므로 클라이언트 값은 쓰지 않는다.
-  if (!canViewAdmin(caller)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!canViewMenu(caller, 'approvals')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { data: audit, error: auditErr } = await supabaseAdmin
     .from('audit_log')

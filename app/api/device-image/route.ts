@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewCustomers } from '@/lib/permissions'
+import { canViewMenu } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
 
 const supabaseAdmin = createClient(
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     .eq('email', user.email!)
     .single()
   const caller = await withTeamPerm(callerRow)
-  if (!canViewCustomers(caller)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!canViewMenu(caller, 'customers')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   // 서명 대상이 실제 장비 이미지 경로인지 service role 로 확인.
   const { count } = await supabaseAdmin

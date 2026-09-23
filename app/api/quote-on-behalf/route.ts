@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewQuote, canViewSalesMgmt } from '@/lib/permissions'
+import { canViewMenu, canViewSalesMgmt } from '@/lib/permissions'
 import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
 
 // 견적 대필(다른 사람의 실적으로 잡히는 견적)을 다루는 라우트. 동작은 action 으로 나눈다.
@@ -62,8 +62,8 @@ export async function POST(req: NextRequest) {
       .select('engineer_id, name, position, tel, teams, permission_level, resigned_date')
       .eq('engineer_id', engineerId)
       .maybeSingle()
-    // 실적을 받을 사람은 "견적 권한이 있는 재직자" 여야 한다(고를 때와 같은 조건).
-    if (!target || target.resigned_date || !canViewQuote(attachTeamPerm(teamPerms, target))) {
+    // 실적을 받을 사람은 "견적서 메뉴 권한이 있는 재직자" 여야 한다(고를 때와 같은 조건).
+    if (!target || target.resigned_date || !canViewMenu(attachTeamPerm(teamPerms, target), 'quote')) {
       return NextResponse.json({ error: '대필할 수 없는 담당자입니다.' }, { status: 400 })
     }
     // tel 까지 돌려주는 이유: 견적서 PDF 의 「담당자」 줄은 고객이 연락할 사람,

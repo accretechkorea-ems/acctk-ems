@@ -4,7 +4,7 @@ import { useRef, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { SALES_STATUS_COLORS, DELIVERY_METHOD_COLORS, getCategoryColor } from '@/lib/categoryColors'
-import { canViewSalesMgmt, type TeamPerm } from '@/lib/permissions'
+import { canViewMenu, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPerms'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
@@ -127,7 +127,7 @@ export default function PurchasePage() {
     ])
     if (qErr) console.error('[purchase] 발주 목록 조회 실패', qErr)
     setLoadError(!!qErr)
-    // 진입 판정(canViewSalesMgmt)에 팀 플래그가 필요하다.
+    // 진입 판정(발주 메뉴 권한)에 팀의 메뉴 목록이 필요하다.
     setMe(await withTeamPerm(meData as Engineer | null))
     const em: Record<string, string> = {}
     for (const e of engData || []) if (e.name && e.position) em[e.name] = e.position
@@ -141,7 +141,7 @@ export default function PurchasePage() {
 
   useEffect(() => { fetchAll() }, [])
 
-  const isAllowed = canViewSalesMgmt(me)
+  const isAllowed = canViewMenu(me, 'purchase')
 
   // 목록(검색·상태 필터)이 바뀌면 화면에서 사라진 견적의 선택은 자동으로 걷힌다.
   const filtered = quotes.filter(q => {

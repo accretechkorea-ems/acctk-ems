@@ -74,6 +74,47 @@ function Row({ label, value, muted, onClick }: { label: string; value: string; m
   )
 }
 
+// 요약 맨 위의 작은 박스 세 칸(견적·장비·최근 방문).
+// 줄로 늘어놓으면 왼쪽 열이 길어져, 한눈에 보는 숫자는 가로로 묶는다.
+// onClick 이 있으면 눌러지는 칸이 된다(동작은 예전 줄과 같다).
+function StatBox({ label, value, big, muted, onClick }: {
+  label: string
+  value: string
+  /** 건수·대수처럼 큰 숫자로 보여줄 것 */
+  big?: boolean
+  muted?: boolean
+  onClick?: () => void
+}) {
+  const inner = (
+    <>
+      <span style={{ fontSize: 12, color: '#6b7280' }}>{label}</span>
+      <span style={{
+        fontSize: big ? 17 : 13, fontWeight: big ? 800 : 700,
+        color: muted ? '#9ca3af' : '#111827',
+        letterSpacing: big ? '-0.3px' : undefined,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {value}
+      </span>
+    </>
+  )
+  const base: CSSProperties = {
+    display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0,
+    background: '#f3f4f6', borderRadius: 6, padding: 10, boxSizing: 'border-box',
+  }
+  if (!onClick) return <div style={base}>{inner}</div>
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={e => { e.currentTarget.style.background = '#eceef2' }}
+      onMouseLeave={e => { e.currentTarget.style.background = '#f3f4f6' }}
+      style={{ ...base, width: '100%', border: 'none', cursor: 'pointer', font: 'inherit', textAlign: 'left', transition: 'background 0.15s ease' }}
+    >
+      {inner}
+    </button>
+  )
+}
+
 // 좁은 열(280px)이라 한 줄에 단계·제목·금액을 넣고 제목만 줄인다.
 // 파이프라인 카드처럼 select 를 두면 폭이 모자라 제목이 거의 안 보이므로,
 // 단계 pill 자체를 눌러 작은 메뉴를 띄우는 방식으로 한다(줄 너비를 더 쓰지 않는다).
@@ -225,57 +266,54 @@ export default function SummaryPanel({
   return (
     <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, padding: '14px 16px' }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', marginBottom: 12, textAlign: 'center' }}>요약</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-        {/* 견적과 그 보조줄은 한 덩어리로 묶는다 — 바깥 gap(9)이 아니라 안쪽 gap(5)으로 붙여
-            보조줄이 견적에 딸린 것임이 간격에서도 드러나게 한다. */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-          {/* 견적이 있을 때만 눌러진다 — 0건이면 셰브론도 없는 표시 전용 줄 */}
-          <Row
-            label="견적"
-            value={quotes.length > 0 ? `${quotes.length}건` : NONE}
-            muted={quotes.length === 0}
-            onClick={quotes.length > 0 ? onQuoteHistoryOpen : undefined}
-          />
-          {(ch.dealer > 0 || (family && family.quoteCount > 0)) && (
-            // 라벨 자리만큼 들여쓰고 왼쪽에 선을 둔다 — 독립 항목이 아니라 견적의 딸림줄이라는 표시다.
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, marginLeft: 6, paddingLeft: 9, borderLeft: '1px solid #ebebeb' }}>
-              {/* 대리점 경유가 섞였을 때만 내역을 덧붙인다 */}
-              {ch.dealer > 0 && (
-                <span style={{ fontSize: 11, color: '#9ca3af' }}>직판 {ch.direct} · 대리점 {ch.dealer}</span>
-              )}
-              {/* 같은 회사의 다른 업체까지 합친 건수. 위의 「N건」은 이 업체 기준 그대로다. */}
-              {family && family.quoteCount > 0 && (
-                <button
-                  onClick={onFamilyQuoteHistoryOpen}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#fafafa' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 2, maxWidth: '100%',
-                    fontSize: 11, color: '#234ea2', fontWeight: 600,
-                    background: 'transparent', border: 'none', borderRadius: 6,
-                    margin: '-2px -4px', padding: '2px 4px',
-                    cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
-                    transition: 'background 0.15s ease',
-                  }}
-                >
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {family.name} 전체 {family.quoteCount}건
-                  </span>
-                  <Chevron size={12} />
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-        {/* 장비가 있을 때만 눌러진다 — 누르면 가운데 장비 탭으로 옮긴다 */}
-        <Row
+
+      {/* 숫자 세 칸 — 견적·장비는 눌러서 해당 화면으로, 최근 방문은 표시 전용 */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+        <StatBox
+          label="견적"
+          value={quotes.length > 0 ? `${quotes.length}건` : NONE}
+          big={quotes.length > 0}
+          muted={quotes.length === 0}
+          onClick={quotes.length > 0 ? onQuoteHistoryOpen : undefined}
+        />
+        <StatBox
           label="장비"
           value={deviceCount > 0 ? `${deviceCount}대` : NONE}
+          big={deviceCount > 0}
           muted={deviceCount === 0}
           onClick={deviceCount > 0 ? onDeviceOpen : undefined}
         />
-        <Row label="최근 방문" value={lastVisit ?? NONE} muted={!lastVisit} />
+        <StatBox label="최근 방문" value={lastVisit ?? NONE} muted={!lastVisit} />
       </div>
+
+      {/* 견적의 딸림줄 — 대리점 경유 내역과 같은 회사 합계. 박스 아래에 붙인다. */}
+      {(ch.dealer > 0 || (family && family.quoteCount > 0)) && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, marginTop: 8, paddingLeft: 10 }}>
+          {ch.dealer > 0 && (
+            <span style={{ fontSize: 11, color: '#9ca3af' }}>직판 {ch.direct} · 대리점 {ch.dealer}</span>
+          )}
+          {family && family.quoteCount > 0 && (
+            <button
+              onClick={onFamilyQuoteHistoryOpen}
+              onMouseEnter={e => { e.currentTarget.style.background = '#fafafa' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 2, maxWidth: '100%',
+                fontSize: 11, color: '#234ea2', fontWeight: 600,
+                background: 'transparent', border: 'none', borderRadius: 6,
+                margin: '-2px -4px', padding: '2px 4px',
+                cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                transition: 'background 0.15s ease',
+              }}
+            >
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {family.name} 전체 {family.quoteCount}건
+              </span>
+              <Chevron size={12} />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── 영업기회 ── */}
       <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #ebebeb' }}>

@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { canViewSalesMgmt } from '@/lib/permissions'
+import { canViewMenu } from '@/lib/permissions'
 import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
 import { josa } from '@/lib/josa'
 
@@ -40,10 +40,10 @@ export async function POST(req: Request) {
 
   if (!quoteId) return NextResponse.json({ error: '필수 값 누락' }, { status: 400 })
 
-  // 권한: superadmin/영업관리팀은 모든 견적. 그 외에는 본인 견적(소유자)만 허용.
+  // 권한: superadmin/발주 메뉴가 있는 팀은 모든 견적. 그 외에는 본인 견적(소유자)만 허용.
   // 모든 action 이 quoteId 를 필수로 받으므로(위 검증) 항상 소유자 판정이 가능하다.
   // service role(supabaseAdmin)로 조회해 RLS 를 우회하므로, 아래에서 engineer_id 를 명시적으로 비교한다.
-  const privileged = canViewSalesMgmt(attachTeamPerm(teamPerms, caller))
+  const privileged = canViewMenu(attachTeamPerm(teamPerms, caller), 'purchase')
   if (!privileged) {
     const { data: ownerQuote, error: ownerErr } = await supabaseAdmin
       .from('quotes')
@@ -107,7 +107,7 @@ export async function POST(req: Request) {
     if (engErr) console.error(' engineers lookup failed', { action, quoteId, error: engErr })
 
     const targets = (allEng || []).filter((e: { engineer_id: number; teams: string | null; permission_level: string; resigned_date: string | null }) =>
-      canViewSalesMgmt(attachTeamPerm(teamPerms, e)) && !e.resigned_date && e.engineer_id !== caller.engineer_id
+      canViewMenu(attachTeamPerm(teamPerms, e), 'purchase') && !e.resigned_date && e.engineer_id !== caller.engineer_id
     )
 
     if (targets.length > 0) {
@@ -181,7 +181,7 @@ export async function POST(req: Request) {
     if (taxEngErr) console.error(' engineers lookup failed', { action, quoteId, error: taxEngErr })
 
     const taxTargets = (taxAllEng || []).filter((e: { engineer_id: number; teams: string | null; permission_level: string; resigned_date: string | null }) =>
-      canViewSalesMgmt(attachTeamPerm(teamPerms, e)) && !e.resigned_date && e.engineer_id !== caller.engineer_id
+      canViewMenu(attachTeamPerm(teamPerms, e), 'purchase') && !e.resigned_date && e.engineer_id !== caller.engineer_id
     )
 
     const { data: quote, error: quoteErr } = await supabaseAdmin

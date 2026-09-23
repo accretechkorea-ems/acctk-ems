@@ -6,7 +6,7 @@
 // 대기중·반려 건은 지금처럼 신청자·관리자만.
 // 판정은 service role 로 신청 행을 직접 읽어 코드에서 한다(RLS 에 기대지 않는다).
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewAdmin, canViewCustomers, isSuperAdmin } from '@/lib/permissions'
+import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { APPROVAL_BUCKET, DEMO_REQUEST_TYPE, REQUEST_APPROVED } from '@/lib/showroom'
 import { admin, bad, loadCaller, approvalPdfName } from '../shared'
 
@@ -29,8 +29,8 @@ export async function GET(req: NextRequest) {
   }
   const r = row as { request_id: number; request_type: string; status: string; requester_id: number; pdf_url: string | null } | null
   if (!r || r.request_type !== DEMO_REQUEST_TYPE) return bad('신청을 찾을 수 없습니다.', 404)
-  const allowed = r.requester_id === caller.engineer_id || isSuperAdmin(caller) || canViewAdmin(caller)
-    || (r.status === REQUEST_APPROVED && canViewCustomers(caller))
+  const allowed = r.requester_id === caller.engineer_id || isSuperAdmin(caller) || canViewMenu(caller, 'approvals')
+    || (r.status === REQUEST_APPROVED && canViewMenu(caller, 'showroom'))
   if (!allowed) return bad('Forbidden', 403)
 
   const name = approvalPdfName(r.pdf_url)

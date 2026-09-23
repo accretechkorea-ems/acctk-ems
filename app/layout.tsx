@@ -19,10 +19,10 @@ export default function RootLayout({
     <html lang="ko">
       <body className={`antialiased bg-white text-black`}>
         <SessionManager />
-        <HeaderWrapper />
         <ToastProvider>
           <ConfirmProvider>
-            {children}
+            {/* 좌측 사이드바 + 본문. 공개 경로에서는 본문만 그대로 내보낸다. */}
+            <HeaderWrapper>{children}</HeaderWrapper>
           </ConfirmProvider>
         </ToastProvider>
       </body>

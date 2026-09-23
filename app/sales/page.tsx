@@ -9,7 +9,7 @@ import { isActiveInPeriod } from '@/lib/engineers'
 import { SALES_STATUS_COLORS, TEAM_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canViewAdmin, getViewScope, isFieldEngineerTeam, type TeamPerm } from '@/lib/permissions'
+import { getViewScope, isFieldEngineerTeam, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerm, withTeamPerms } from '@/lib/teamPerms'
 import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, notifyDeleteRequest, PO_MEMO_MAX } from '@/lib/quoteMutations'
 import { isAutoFailed, isOrdered, REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE } from '@/lib/quoteStatus'
@@ -1153,7 +1153,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
 // ── 메인 페이지 ───────────────────────────────────────────────────────────────
 export default function SalesPage() {
   const supabase = createClient()
-  const { loading: guardLoading, authorized } = usePageGuard(canViewAdmin)
+  const { loading: guardLoading, authorized } = usePageGuard()
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [engineers, setEngineers] = useState<Engineer[]>([])
   const [targets, setTargets] = useState<SalesTarget[]>([])

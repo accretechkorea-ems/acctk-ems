@@ -11,7 +11,7 @@ import { useFieldErrors, FieldError, errBorder } from '@/components/common/field
 import { josa } from '@/lib/josa'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canViewAll, isSuperAdmin } from '@/lib/permissions'
+import { isSuperAdmin } from '@/lib/permissions'
 import { Z } from '@/lib/zIndex'
 
 const BLUE = '#234ea2'
@@ -98,7 +98,7 @@ export default function SuggestionsPage() {
   const supabase = createClient()
   const toast = useToast()
   const confirmDialog = useConfirm()
-  const { engineer, loading: guardLoading, authorized } = usePageGuard(canViewAll)
+  const { engineer, loading: guardLoading, authorized } = usePageGuard()
   const superAdmin = isSuperAdmin(engineer)
 
   const [rows, setRows] = useState<Suggestion[]>([])

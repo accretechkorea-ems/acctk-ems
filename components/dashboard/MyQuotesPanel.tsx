@@ -470,10 +470,11 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
         <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="견적번호 / 고객사 / 내용" style={{ ...inp, flex: 1, minWidth: 140 }} />
       </div>
       {/* 상태 필터 바 */}
-      <div style={{ padding: '8px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      {/* 상태 칩 — 좁아지면 줄을 늘리지 않고 가로로 민다(표 높이가 들쭉날쭉해지지 않게) */}
+      <div style={{ padding: '8px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'thin' }}>
         {STATUS_TABS.map(s => (
           <button key={s} onClick={() => { setStatusFilter(s); setPage(1) }}
-            style={{ padding: '4px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: statusFilter === s ? (s === '전체' ? BLUE : getCategoryColor(SALES_STATUS_COLORS, s).text) : '#f3f4f6', color: statusFilter === s ? '#fff' : TEXT }}>
+            style={{ padding: '4px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0, background: statusFilter === s ? (s === '전체' ? BLUE : getCategoryColor(SALES_STATUS_COLORS, s).text) : '#f3f4f6', color: statusFilter === s ? '#fff' : TEXT }}>
             {salesStatusLabel(s)}
           </button>
         ))}
@@ -502,7 +503,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                   <input type="checkbox" checked={allPagedSelected} onChange={() => quoteSel.toggleAll(pagedIds)}
                     title="이 페이지 전체 선택/해제" style={{ cursor: 'pointer' }} />
                 </th>
-                {['견적번호', '날짜', '대리점', '고객사', '품목', '매출액', '순이익', '상태', '관리'].map(h => (
+                {['견적번호', '고객사', '품목', '매출액', '상태', '관리'].map(h => (
                   <th key={h} style={{ padding: '8px 10px', textAlign: 'center', fontSize: 11, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap', background: '#f8fafc' }}>{h}</th>
                 ))}
               </tr>
@@ -525,27 +526,45 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                     <td style={{ padding: '8px 6px', textAlign: 'center' }}>
                       <input type="checkbox" checked={quoteSel.isSelected(q.quote_id)} onChange={() => quoteSel.toggle(q.quote_id)} style={{ cursor: 'pointer' }} />
                     </td>
-                    <td style={{ padding: '8px 10px', fontWeight: 700, color: BLUE, whiteSpace: 'nowrap', textAlign: 'center' }}>
+                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                      {/* 견적번호 + 그 아래 날짜 */}
                       <span onClick={() => openPdf(q)} title={pdfBusyId === q.quote_id ? '여는 중…' : undefined}
-                        style={{ cursor: q.pdf_url && pdfBusyId === null ? 'pointer' : 'default', opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 700, color: BLUE, cursor: q.pdf_url && pdfBusyId === null ? 'pointer' : 'default', opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
                         {/* 대필 건 표시. 쓴 사람과 실적 담당자가 다른 견적에만 붙는다. */}
                         {isOnBehalf(q) && (
-                          <span title="대필 견적" style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: BLUE, marginRight: 5, verticalAlign: 'middle' }} />
+                          <span title="대필 견적" style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: BLUE, verticalAlign: 'middle' }} />
                         )}
-                        {q.quote_number}{q.pdf_url && <span style={{ marginLeft: 4, fontSize: 9, color: MUTED }}>PDF</span>}
+                        {q.quote_number}
+                        {q.pdf_url && (
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-label="PDF">
+                            <title>PDF 열기</title>
+                            <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                            <path d="M14 3v6h6" />
+                          </svg>
+                        )}
                       </span>
+                      <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>{q.quote_date}</div>
                     </td>
-                    <td style={{ padding: '8px 10px', color: MUTED, whiteSpace: 'nowrap', fontSize: 11, textAlign: 'center' }}>{q.quote_date}</td>
-                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                      {q.dealer_name
-                        ? <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#fff7ed', color: '#c2410c', fontWeight: 700, border: '1px solid #fed7aa' }}>{q.dealer_name}</span>
-                        : <span style={{ fontSize: 11, color: MUTED }}>직판</span>}
+                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', maxWidth: 150, textAlign: 'center' }}>
+                      {/* 고객사 + 그 아래 판매 경로(직판 / 대리점명) */}
+                      <div style={{ fontWeight: 600, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis' }}>{q.company_name || '-'}</div>
+                      <div style={{ fontSize: 12, color: MUTED, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {q.dealer_name || '직판'}
+                      </div>
                     </td>
-                    <td style={{ padding: '8px 10px', fontWeight: 600, whiteSpace: 'nowrap', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center', color: TEXT }}>{q.company_name || '-'}</td>
                     <td style={{ padding: '8px 10px', color: GRAY, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>{itemNames}</td>
-                    <td className="num" style={{ padding: '8px 10px', fontWeight: 700, whiteSpace: 'nowrap', color: TEXT, textAlign: 'center' }}>₩{numKR(q.total_supply)}</td>
                     <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                      {hasProfit ? <span className="num" style={{ fontWeight: 700, color: profitColor, fontSize: 11 }}>₩{numKR(q.total_profit!)}<span style={{ color: profitRateColor, marginLeft: 4 }}>{q.profit_rate?.toFixed(0)}%</span></span> : <span style={{ color: BORDER }}>—</span>}
+                      {/* 매출액 + 그 아래 순이익·이익률 */}
+                      <div className="num" style={{ fontWeight: 700, color: TEXT }}>₩{numKR(q.total_supply)}</div>
+                      {hasProfit ? (
+                        <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
+                          순이익 <span className="num" style={{ fontWeight: 700, color: profitColor }}>₩{numKR(q.total_profit!)}</span>
+                          <span style={{ color: BORDER, margin: '0 3px' }}>·</span>
+                          <span style={{ fontWeight: 700, color: profitRateColor }}>{q.profit_rate?.toFixed(0)}%</span>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: BORDER, marginTop: 2 }}>—</div>
+                      )}
                     </td>
                     <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>

@@ -1,23 +1,27 @@
 // 권한 규칙 단일 소스(single source of truth).
 // 메뉴 노출 · 페이지 진입 · 데이터 범위 판정을 이 모듈 한 곳에서 관리한다.
 //
-// 팀 이름은 이 파일에 없다. 권한은 teams 테이블의 플래그 6개로만 판정하며,
-// 새 팀이 생기면 유지보수 화면에서 체크박스만 켜면 코드 수정 없이 반영된다.
-// 플래그는 lib/teamPerms.ts 가 읽어와 engineer.perm 에 붙여준다.
+// 팀 이름은 이 파일에 없다. 판정 자료는 team_permissions(팀 × 메뉴 키)이며,
+// 로더(lib/teamPerms.ts · lib/teamPermsServer.ts)가 소속 팀이 켜 둔 메뉴 키 집합을
+// engineer.perm.menus 에 붙여준다. 새 팀이 생기면 유지보수 화면에서 메뉴만 켜면 된다.
+//
+// 영역 단위 함수(canViewCustomers 등)는 시그니처를 그대로 두고, 속만
+// lib/menuPerms.ts 의 파생 규칙(DERIVED_PERMS)으로 메뉴 집합에서 답을 만든다.
+//
+// ※ menuPerms.ts 와 서로를 import 한다(순환). 양쪽 다 상대를 함수 안에서만 부르고
+//   모듈 최상위에서는 쓰지 않으므로 초기화 순서에 영향받지 않는다.
+import { deriveArea, MENU_BY_KEY, type PermArea } from './menuPerms'
 
 // engineers.permission_level 의 값. 'manager'(팀장)는 폐지했다.
 // 남아 있는 옛 데이터를 만나도 member 와 똑같이 취급되어 깨지지 않는다.
 export type PermissionLevel = 'superadmin' | 'member'
 
-// teams 테이블의 권한 플래그. 컬럼명과 1:1로 대응한다.
+/**
+ * 소속 팀이 켜 둔 메뉴 키 집합. team_permissions 에서 그 팀의 행들을 모은 것이며,
+ * 키는 lib/menuPerms.ts 의 MENU_PERMS[].key 와 같다.
+ */
 export type TeamPerm = {
-  customers: boolean    // can_view_customers  — 20·80 (고객사 현황 · 20 수리등록)
-  dashboard: boolean    // can_view_dashboard  — 대시보드
-  quote: boolean        // can_view_quote      — 견적서
-  pipeline: boolean     // can_view_pipeline   — 영업 현황
-  salesMgmt: boolean    // can_view_sales_mgmt — 영업관리 (발주·재고)
-  admin: boolean        // can_view_admin      — 관리자 (실적 현황 · 유지보수)
-  leads: boolean        // can_view_leads       — 리드 (배정받은 리드 처리)
+  menus: Set<string>
 }
 
 // 판정 함수에 넘기는 최소 형태. 실제 engineer 객체(추가 필드 다수)를 그대로 넘길 수 있도록 느슨하게 둔다.
@@ -36,11 +40,26 @@ export function isSuperAdmin(engineer?: EngineerLike | null): boolean {
   return engineer?.permission_level === 'superadmin'
 }
 
-// 플래그 하나를 보는 공통 판정. engineer 미확정(로딩)이면 잠근다.
-function hasPerm(engineer: EngineerLike | null | undefined, key: keyof TeamPerm): boolean {
+// 영역 하나를 보는 공통 판정. engineer 미확정(로딩)이면 잠근다.
+// 답은 소속 팀이 켜 둔 메뉴 집합에서 파생 규칙으로 만든다.
+function hasPerm(engineer: EngineerLike | null | undefined, area: PermArea): boolean {
   if (!engineer) return false
   if (isSuperAdmin(engineer)) return true
-  return engineer.perm?.[key] === true
+  return engineer.perm ? deriveArea(engineer.perm.menus, area) : false
+}
+
+/**
+ * 메뉴 하나를 볼 수 있는가 — canViewMenu(engineer, 'quote') 형태.
+ * 사이드바가 이것으로 항목을 거르고, 페이지·API 가드도 5단계에서 이 함수로 옮겨온다.
+ * 공개 메뉴(홈·알림·건의사항)는 로그인만 확인하고, 목록에 없는 키는 거부한다.
+ */
+export function canViewMenu(engineer: EngineerLike | null | undefined, key: string): boolean {
+  if (!engineer) return false
+  if (isSuperAdmin(engineer)) return true
+  const item = MENU_BY_KEY[key]
+  if (!item) return false
+  if (item.public) return true      // 로그인 여부는 바로 위에서 이미 확인했다
+  return engineer.perm?.menus.has(key) === true
 }
 
 /** 20·80 — 고객사 현황 · 고객사 상세 · 20 수리등록 */
@@ -92,11 +111,13 @@ export function canManageEngineers(engineer?: EngineerLike | null): boolean {
 
 /**
  * 실적·활동 집계에 넣을 '현장 엔지니어' 여부.
- * 팀 이름 대신 플래그로 본다 — 고객사와 대시보드를 함께 보는 팀이 곧 현장 팀이다.
+ * 사람이 아니라 팀을 묻는 판정이라 superadmin 예외를 두지 않는다(hasPerm 을 쓰지 않는 이유).
+ * 고객사와 대시보드를 함께 보면서 관리자 메뉴가 없는 팀이 곧 현장 팀이다.
  * (임원·영업관리·Apps. 는 이 조건에서 자연히 빠진다)
  * perm 이 아직 안 붙은 상태(로딩 등)에서는 기존 동작대로 포함시킨다.
  */
 export function isFieldEngineerTeam(engineer?: EngineerLike | null): boolean {
   if (!engineer?.perm) return true
-  return engineer.perm.customers && engineer.perm.dashboard && !engineer.perm.admin
+  const menus = engineer.perm.menus
+  return deriveArea(menus, 'customers') && deriveArea(menus, 'dashboard') && !deriveArea(menus, 'admin')
 }

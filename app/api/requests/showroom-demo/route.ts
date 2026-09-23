@@ -9,7 +9,7 @@
 //        superadmin 만(permission_level 판정 — 팀 플래그가 아니다). 본인 신청은 처리할 수 없다(DB 제약 ar_no_self_approve).
 //        사전 신청은 approve/reject, 사후 신청(이미 끝난 사용)은 confirm 만 받는다. 대기중이 아니면 409.
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewAdmin, isSuperAdmin } from '@/lib/permissions'
+import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { DEMO_REQUEST_TYPE, REQUEST_PENDING, REQUEST_APPROVED, REQUEST_REJECTED } from '@/lib/showroom'
 import {
   admin, bad, loadCaller, findOverlap, createUsageFromRequest, refreshApprovalPdf,
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   const auth = await loadCaller(TAG)
   if (auth.error) return auth.error
   const caller = auth.caller
-  if (!canViewAdmin(caller)) return bad('Forbidden', 403)
+  if (!canViewMenu(caller, 'approvals')) return bad('Forbidden', 403)
 
   const done = req.nextUrl.searchParams.get('status') === 'done'
   const sb = admin()

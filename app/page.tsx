@@ -4,6 +4,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+// 모바일 상단 바 높이 — 화면 높이를 계산하는 곳은 이 상수 하나를 본다(PC 는 상단 바가 없다).
+import { TOPBAR_HEIGHT } from '@/components/layout/Sidebar'
 import Sidebar from '@/components/home/Sidebar'
 import MapView from '@/components/home/MapView'
 import AddCustomerModal from '@/components/home/AddCustomerModal'
@@ -13,7 +15,7 @@ import { CATEGORY_OPTIONS } from '@/lib/constants'
 import { useToast } from '@/components/common/Toast'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canViewCustomers, canViewQuote } from '@/lib/permissions'
+import { canViewQuote } from '@/lib/permissions'
 import { useQuotePdf } from '@/hooks/customer/useQuotePdf'
 
 
@@ -40,7 +42,7 @@ import {
 
 export default function HomePage() {
   const supabase = createClient()
-  const { engineer: me, loading: guardLoading, authorized } = usePageGuard(canViewCustomers)
+  const { engineer: me, loading: guardLoading, authorized } = usePageGuard()
   // 이 화면은 고객사 권한으로 들어오지만, 부품 검색은 견적 내용을 보여주므로 견적 권한을 따로 본다.
   const canSearchParts = canViewQuote(me)
   // 부품 결과의 PDF 아이콘 — 업체 상세와 같은 방식(서명 URL + 조회 기록)을 그대로 쓴다.
@@ -414,7 +416,8 @@ useEffect(() => {
       <div
         style={{
           padding: 20,
-          height: 'calc(100vh - 36px)',
+          // 높이는 .home-wrapper 규칙이 정한다 — PC 는 상단 바가 없고 모바일만 그만큼 뺀다.
+          height: '100vh',
           boxSizing: 'border-box',
           display: 'flex',
           flexDirection: 'column',
@@ -429,7 +432,7 @@ useEffect(() => {
   .home-grid { grid-template-columns: 1fr !important; grid-template-rows: 1fr !important; }
   .mobile-tab-bar { display: flex !important; }
   .mobile-hide { display: none !important; }
-  .home-wrapper { height: calc(100dvh - 44px) !important; padding: 12px !important; overflow: hidden !important; }
+  .home-wrapper { height: calc(100dvh - ${TOPBAR_HEIGHT}px) !important; padding: 12px !important; overflow: hidden !important; }
   .home-grid { height: 100% !important; overflow: hidden !important; }
   .home-grid > div { height: 100% !important; min-height: 0 !important; min-width: 0 !important; overflow: hidden !important; }
   .home-grid > div > div { height: 100% !important; }

@@ -1,5 +1,7 @@
 'use client'
 
+// 모바일 상단 바 높이 — 화면 높이를 계산하는 곳은 이 상수 하나를 본다(PC 는 상단 바가 없다).
+import { TOPBAR_HEIGHT } from '@/components/layout/Sidebar'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import SegmentedControl from '@/components/common/SegmentedControl'
@@ -9,7 +11,6 @@ import {
 } from 'recharts'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canViewDashboard } from '@/lib/permissions'
 import { useRepairs, type Repair } from '@/hooks/useRepairs'
 import { useCountUp } from '@/hooks/useCountUp'
 import { CHART_COLORS, REPAIR_STATUS_COLORS, REPAIR_MEANING_COLORS } from '@/lib/categoryColors'
@@ -447,7 +448,7 @@ function RevenueCard({ data, unlinkedCount, animate }: { data: { month: string; 
 
 
 export default function RepairDashboardPage() {
-  const { loading: guardLoading, authorized } = usePageGuard(canViewDashboard)
+  const { loading: guardLoading, authorized } = usePageGuard()
   const { repairs, loading } = useRepairs()
 
   // 접근성: reduced-motion 이면 recharts 애니메이션도 끔
@@ -573,9 +574,12 @@ export default function RepairDashboardPage() {
   const reintakePct = totalCount > 0 ? Math.round((reintakeCount / totalCount) * 100) : 0
 
   return (
-    <div style={{ background: PAGE_BG, minHeight: 'calc(100vh - 44px)', padding: 16, boxSizing: 'border-box' }}>
+    <div className="rd-page" style={{ background: PAGE_BG, padding: 16, boxSizing: 'border-box' }}>
       <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <style>{`
+        /* PC 는 상단 바가 없어 화면 높이를 그대로 쓴다. 모바일만 상단 바만큼 뺀다. */
+        .rd-page { min-height: 100vh; }
+        @media (max-width: 768px) { .rd-page { min-height: calc(100vh - ${TOPBAR_HEIGHT}px); } }
           /* KPI: 4열 × 3줄(12칸) 고정, 좁아지면 2열 → 1열 */
           .repair-kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
           @media (max-width: 900px) { .repair-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

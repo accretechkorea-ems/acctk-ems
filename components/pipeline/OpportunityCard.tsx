@@ -112,6 +112,19 @@ export default function OpportunityCard({ opp, lastActivity, canEdit, onOpen, on
             <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, flexShrink: 0 }}>견적 {quoteCount}건</span>
           </>
         )}
+        {/* 수주까지 갔지만 매출로 이어지지 않은(또는 견적을 안 붙인) 건을 직접 끝낼 수 있게.
+            줄을 따로 쓰면 수주 칸 카드만 28px 높아져, 이 줄 오른쪽 끝에 붙인다. */}
+        {onClose && canEdit && (
+          <button
+            className="pl-card-action"
+            onPointerDown={e => e.stopPropagation()}
+            onClick={onClose}
+            title="이 기회를 종료합니다"
+            style={{ marginLeft: 'auto', flexShrink: 0, padding: '1px 8px', background: '#f3f4f6', color: '#6b7280', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit' }}
+          >
+            종료
+          </button>
+        )}
       </div>
 
       {/* 방치 표시 — 색이 아니라 시계 아이콘 + 흐린 글자로 */}
@@ -124,20 +137,6 @@ export default function OpportunityCard({ opp, lastActivity, canEdit, onOpen, on
         </div>
       )}
 
-      {/* 수주까지 갔지만 매출로 이어지지 않은(또는 견적을 안 붙인) 건을 직접 끝낼 수 있게 */}
-      {onClose && canEdit && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
-          <button
-            className="pl-card-action"
-            onPointerDown={e => e.stopPropagation()}
-            onClick={onClose}
-            title="이 기회를 종료합니다"
-            style={{ padding: '3px 10px', background: '#f3f4f6', color: '#6b7280', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}
-          >
-            종료
-          </button>
-        </div>
-      )}
     </div>
   )
 }

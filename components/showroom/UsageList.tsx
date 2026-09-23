@@ -12,6 +12,8 @@
 // 액션은 행 hover·초점 때만 보인다(자리는 늘 잡아 둔다). 복사는 누구나, 수정·삭제는 권한 있는 행만.
 // 삭제는 두 번 눌러야 실행된다(요청함과 같은 방식).
 
+// 모바일 상단 바 높이 — 표 머리가 붙는 위치를 이 상수 하나로 맞춘다.
+import { TOPBAR_HEIGHT } from '@/components/layout/Sidebar'
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react'
 import { getCategoryColor } from '@/lib/categoryColors'
 import { Z } from '@/lib/zIndex'
@@ -24,10 +26,11 @@ import { openApprovalPdf } from './openApprovalPdf'
 
 /** 삭제는 두 번 눌러야 실행된다. 첫 클릭 뒤 이 시간이 지나면 원래대로 돌아간다(요청함과 같은 방식). */
 const CONFIRM_MS = 3000
-/** 전역 헤더 높이(components/home/Header.tsx 의 minHeight). 표 머리가 그 아래에 붙는다. */
-const GLOBAL_HEADER_H = 44
+// 표 머리가 붙는 높이는 CSS(.sr-ut-head)가 정한다 — PC 는 상단 바가 없어 0, 모바일만 상단 바만큼 내린다.
 
 const TABLE_CSS = `
+  .sr-ut-head { position: sticky; top: 0; }
+  @media (max-width: 768px) { .sr-ut-head { top: ${TOPBAR_HEIGHT}px; } }
   .sr-ut-row {
     display: grid; align-items: center; column-gap: 10px; padding: 0 12px;
     grid-template-columns: 92px 124px minmax(0, 1.4fr) minmax(0, 1.2fr) 148px minmax(0, 1fr) 88px 104px 76px;
@@ -168,9 +171,9 @@ export default function UsageList({
     <div>
       <style>{TABLE_CSS}</style>
 
-      {/* 표 머리 — 전역 헤더 아래에 붙는다 */}
-      <div className="sr-ut-row" style={{
-        position: 'sticky', top: GLOBAL_HEADER_H, zIndex: Z.thead,
+      {/* 표 머리 — PC 는 화면 맨 위, 모바일은 상단 바 아래에 붙는다(.sr-ut-head) */}
+      <div className="sr-ut-row sr-ut-head" style={{
+        zIndex: Z.thead,
         height: 32, background: NEUTRAL_BG, borderRadius: 6,
       }}>
         <span style={headCell}>날짜</span>

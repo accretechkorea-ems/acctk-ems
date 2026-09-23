@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewCustomers } from '@/lib/permissions'
+import { canViewMenu } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
 
 // 20팀 수리 업무용 견적 조회 API.
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
     .eq('email', user.email!)
     .single()
   const caller = await withTeamPerm(callerRow)
-  if (!canViewCustomers(caller)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!canViewMenu(caller, 'repair')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const sp = req.nextUrl.searchParams
   const pdfParam = sp.get('pdf')

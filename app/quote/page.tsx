@@ -9,7 +9,6 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import { useOutsideClick } from '@/hooks/useOutsideClick'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import AccessGate from '@/components/common/AccessGate'
-import { canViewQuote } from '@/lib/permissions'
 import { BlobProvider, pdf } from '@react-pdf/renderer'
 import type { CustomerResult, Engineer, ExpensePreset, ExpenseRow, PriceItem, QuoteRow, RowKind } from './types'
 import type { SalesOpportunity } from '@/components/customer/types'
@@ -108,7 +107,7 @@ function QuotePageInner() {
   const duplicateId = duplicateRaw && /^\d+$/.test(duplicateRaw) ? Number(duplicateRaw) : null
   // 주소로 들어온 프리필이 있으면 그쪽이 우선이다 — 임시저장분은 묻지 않고 버린다.
   const hasUrlPrefill = repairId != null || onBehalfId != null || duplicateId != null
-  const { loading: guardLoading, authorized } = usePageGuard(canViewQuote)
+  const { loading: guardLoading, authorized } = usePageGuard()
   const toast = useToast()
   const { errors, setErrors, clearError, validate } = useFieldErrors<'company' | 'eu' | 'items' | 'expenses'>()
   const [isClient, setIsClient] = useState(false)
@@ -1022,7 +1021,9 @@ const handleDownloadPDF = async (
         /* grid 자식은 기본이 min-width:auto 라 내용보다 작아지지 않는다.
            풀어주지 않으면 두 상자가 카드 밖으로 밀려난다. */
         .q-two > * { min-width: 0; }
-        @media (max-width: 1100px) {
+        /* 왼쪽 입력 열은 화면 폭과 상관없이 430px 고정이라, 예전 1100px 기준은 의미가 없어졌다.
+           상단 바로 바뀌는 모바일에서만 한 칸씩 내린다. */
+        @media (max-width: 768px) {
           .q-two { grid-template-columns: 1fr; }
         }
 
@@ -1109,13 +1110,16 @@ const handleDownloadPDF = async (
         }
       `}</style>
       {repairId != null && (
-        <div style={{ maxWidth: 1320, margin: '0 auto', padding: '16px 20px 0' }}>
+        <div style={{ padding: '16px 20px 0' }}>
           <div style={{ background: '#eff4ff', border: '1px solid #c7d7f8', borderRadius: 8, padding: '10px 14px', fontSize: 13, fontWeight: 700, color: '#234ea2' }}>
             수리 건 #{repairId} 의 견적서를 작성 중입니다
           </div>
         </div>
       )}
-      <div style={{ maxWidth: 1320, margin: '0 auto', padding: 20, display: 'flex', gap: 20 }}>
+      {/* 폭 상한을 두지 않는다 — 사이드바가 232px 을 가져가므로 남는 폭을 미리보기가 그대로 쓴다.
+          입력칸은 430px 고정, 미리보기는 남은 폭. 둘이 함께 들어갈 폭이 안 되면(약 930px 미만)
+          미리보기가 아래로 내려간다(flexWrap). */}
+      <div style={{ padding: 20, display: 'flex', flexWrap: 'wrap', gap: 20 }}>
 
         <div style={{ width: 430, flexShrink: 0 }}>
 
@@ -1507,8 +1511,8 @@ const handleDownloadPDF = async (
           </div>
         </div>
 
-        {/* PDF 미리보기 */}
-        <div style={{ flex: 1, minWidth: 0 }}>
+        {/* PDF 미리보기 — 480px 밑으로 눌리면 글자가 읽히지 않아 그 전에 아래로 내려간다 */}
+        <div style={{ flex: '1 1 480px', minWidth: 0 }}>
           <div style={{ background: '#f3f4f6', borderRadius: 8, overflow: 'hidden', border: '1px solid #ebebeb', height: 'calc(100vh - 40px)', position: 'sticky', top: 20, display: 'flex', flexDirection: 'column' }}>
 
             {/* 헤더 */}

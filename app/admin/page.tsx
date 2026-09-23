@@ -3,7 +3,7 @@
 import { Fragment, Suspense, useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { canViewAdmin, isSuperAdmin } from '@/lib/permissions'
+import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { INITIALS_TAKEN_MESSAGE, isInitialsTaken } from '@/lib/initials'
 import { invalidateParents } from '@/components/customer/ParentPicker'
 import { josa } from '@/lib/josa'
@@ -12,7 +12,9 @@ import {
   NOTICE_MAX_IMAGES, NOTICE_TITLE_MAX, NOTICE_BODY_MAX,
   clearDismiss, noticePhase, type Notice, type NoticePhase,
 } from '@/lib/notices'
-import { withTeamPerm, invalidateTeamPerms } from '@/lib/teamPerms'
+import { withTeamPerm, invalidateTeamPerms, loadTeamPerms } from '@/lib/teamPerms'
+// 팀 권한은 메뉴 단위다. 목록·묶음·파생 규칙은 모두 이 파일 한곳에서 온다.
+import { CHECKABLE_MENUS, checkableGroups, MENU_PERMS } from '@/lib/menuPerms'
 import AccessGate from '@/components/common/AccessGate'
 import { useOffices, selectableOffices, invalidateOffices, type Office } from '@/lib/offices'
 import { geocodeAddress } from '@/lib/geocode'
@@ -80,34 +82,21 @@ type Team = {
   name: string
   is_special: boolean
   display_order: number
-} & Record<TeamPermField, boolean | null>
-
-// teams 의 권한 플래그 7개. 라벨은 헤더 메뉴 이름과 같게 둔다.
-// RLS 함수 has_team_perm() 과 lib/permissions.ts 가 보는 컬럼이 바로 이것들이다.
-const TEAM_PERM_FIELDS = [
-  { key: 'can_view_customers',  label: '고객사',   desc: '고객사 현황 · 20 수리등록' },
-  { key: 'can_view_dashboard',  label: '대시보드', desc: '20·80 대시보드 · 활동 현황' },
-  { key: 'can_view_quote',      label: '견적서',   desc: '견적서 작성·조회' },
-  { key: 'can_view_pipeline',   label: '영업 현황', desc: '영업기회 파이프라인' },
-  { key: 'can_view_leads',      label: '리드',     desc: '배정받은 대리점 리드 처리' },
-  { key: 'can_view_sales_mgmt', label: '영업관리', desc: '발주관리 · 재고관리' },
-  { key: 'can_view_admin',      label: '관리자',   desc: '실적 현황 · 유지보수' },
-] as const
-type TeamPermField = typeof TEAM_PERM_FIELDS[number]['key']
-type TeamPermForm = Record<TeamPermField, boolean>
-
-const EMPTY_TEAM_PERM: TeamPermForm = {
-  can_view_customers: false, can_view_dashboard: false, can_view_quote: false,
-  can_view_pipeline: false, can_view_leads: false, can_view_sales_mgmt: false, can_view_admin: false,
 }
-// 팀 관리 표의 열 폭 — 팀 이름(남는 폭) · 권한 7칸(고정) · 삭제(고정).
-// 권한 칸이 고정이라 모든 행에서 같은 x 에 놓여 팀끼리 비교된다.
-const TEAM_GRID = 'minmax(120px, 1fr) repeat(7, 84px) 76px'
+
+// 팀 관리 표의 열 폭 — 팀 이름(남는 폭) · 권한 개수 · 묶음별 요약(남는 폭) · 버튼 두 개.
+// 메뉴 권한은 14개라 칸으로 나열하면 표가 넘친다. 표에는 요약만 두고 상세는 편집 모달에서 본다.
+const TEAM_GRID = 'minmax(110px, 1fr) 76px minmax(190px, 2fr) 136px'
 // 사무실 표 — 코드·이름·주소(남는 폭)·좌표·순서·사용·버튼.
 const OFFICE_GRID = '90px 80px minmax(160px, 1fr) 170px 48px 48px 150px'
 
-const teamPermOf = (t: Team): TeamPermForm =>
-  TEAM_PERM_FIELDS.reduce((acc, f) => ({ ...acc, [f.key]: t[f.key] === true }), {} as TeamPermForm)
+/** 표의 요약 열 — 묶음별로 켜진 개수(예: 고객 3 · 영업 2). 0인 묶음은 적지 않는다. */
+const permSummary = (keys: Set<string>): string =>
+  checkableGroups()
+    .map(g => ({ title: g.title, n: g.items.filter(i => keys.has(i.key)).length }))
+    .filter(g => g.n > 0)
+    .map(g => `${g.title} ${g.n}`)
+    .join(' · ')
 
 // 견적서 서비스비의 부대비용 표준 항목·단가. 견적서는 저장 시점 단가를 복사해 쓰므로
 // 여기서 값을 바꿔도 과거 견적의 금액은 변하지 않는다.
@@ -226,13 +215,19 @@ function AdminPageInner() {
   const [teamsList, setTeamsList] = useState<Team[]>([])
   const [teamLoading, setTeamLoading] = useState(false)
   const [newTeamName, setNewTeamName] = useState('')
-  const [newTeamPerm, setNewTeamPerm] = useState<TeamPermForm>(EMPTY_TEAM_PERM)
+  // 새 팀에 켤 메뉴 키. 저장은 라우트가 하고, 화면은 키 목록만 들고 있는다.
+  const [newTeamPerm, setNewTeamPerm] = useState<string[]>([])
   const [addTeamLoading, setAddTeamLoading] = useState(false)
   const [deletingTeam, setDeletingTeam] = useState<number | null>(null)
   // 새 팀 추가는 어쩌다 한 번 쓰므로 접어 두고, 목록이 모달의 본체가 되게 한다.
   const [addTeamOpen, setAddTeamOpen] = useState(false)
-  // 저장 중인 팀 — 그 행의 체크박스만 잠근다(권한은 누르는 즉시 저장된다).
+  // 저장 중인 팀 — 그 행과 편집 모달을 잠근다.
   const [savingTeamId, setSavingTeamId] = useState<number | null>(null)
+  // 팀 이름 → 켜져 있는 메뉴 키. 표의 요약과 편집 모달의 초기값이 여기서 나온다.
+  const [teamMenus, setTeamMenus] = useState<Map<string, Set<string>>>(new Map())
+  // 권한 편집 모달 — 팀 하나의 메뉴를 고르고 저장 버튼으로 한 번에 보낸다.
+  const [permEditTeam, setPermEditTeam] = useState<Team | null>(null)
+  const [permEditKeys, setPermEditKeys] = useState<string[]>([])
   const [logs, setLogs] = useState<any[]>([])
   const [logLoading, setLogLoading] = useState(false)
 
@@ -275,9 +270,9 @@ function AdminPageInner() {
         .eq('email', data.user.email)
         .single()
 
-      // 진입 판정은 팀 플래그(can_view_admin) 기준. currentEngineer 는 기존대로 유지.
+      // 진입 판정은 관리 메뉴 권한 기준. currentEngineer 는 기존대로 유지.
       const eng = await withTeamPerm(engData)
-      if (eng && canViewAdmin(eng)) {
+      if (eng && canViewMenu(eng, 'admin')) {
         setCurrentEngineer(eng)
         setAuthorized(true)
       }
@@ -804,8 +799,14 @@ function AdminPageInner() {
   // ── 팀 관리 ────────────────────────────────────────────────────────────────
   const fetchTeams = async () => {
     setTeamLoading(true)
-    const { data } = await supabase.from('teams').select('*').order('display_order')
+    // 팀 목록과 팀별 메뉴 권한을 함께 읽는다. 권한은 로더의 캐시를 그대로 쓰고,
+    // 저장 직후에는 캐시를 버린 뒤 부르므로 새 값이 온다.
+    const [{ data }, menuMap] = await Promise.all([
+      supabase.from('teams').select('*').order('display_order'),
+      loadTeamPerms(),
+    ])
     setTeamsList((data as Team[]) ?? [])
+    setTeamMenus(new Map([...menuMap].map(([name, p]) => [name, p.menus])))
     setTeamLoading(false)
   }
 
@@ -813,17 +814,27 @@ function AdminPageInner() {
     if (!teamErr.validate({ teamName: newTeamName.trim() ? null : '팀 이름을 입력해주세요' })) return
     setAddTeamLoading(true)
     const maxOrder = teamsList.length > 0 ? Math.max(...teamsList.map(t => t.display_order)) : 0
-    const { error } = await supabase.from('teams').insert({
+    // 팀 자체는 종전처럼 여기서 만들고, 권한은 만들어진 뒤 저장 라우트로 보낸다
+    // (권한은 team_permissions 와 teams 컬럼 두 곳을 함께 맞춰야 해서 라우트가 맡는다).
+    const { data: created, error } = await supabase.from('teams').insert({
       name: newTeamName.trim(),
       display_order: maxOrder + 1,
-      ...newTeamPerm,       // 체크한 권한. 기본값은 전부 꺼짐.
-    })
+    }).select('id').single()
+    if (error || !created) {
+      setAddTeamLoading(false)
+      toast.error(error?.message ?? '팀 추가에 실패했습니다')
+      return
+    }
+    const permErr = newTeamPerm.length > 0 ? await saveTeamPermKeys(created.id, newTeamPerm) : null
     setAddTeamLoading(false)
-    if (error) { toast.error(error.message); return }
+    if (permErr) {
+      // 팀은 만들어졌다 — 권한만 못 들어간 상태라 그대로 알리고 목록은 새로 읽는다.
+      toast.error(`'${newTeamName.trim()}' 팀은 만들었지만 권한 저장에 실패했습니다 (${permErr}). 편집에서 다시 설정해주세요`)
+    }
     setNewTeamName('')
-    setNewTeamPerm(EMPTY_TEAM_PERM)
+    setNewTeamPerm([])
     setAddTeamOpen(false)
-    dropTeamPermCache()
+    await dropTeamPermCache()
     fetchTeams()
   }
 
@@ -831,34 +842,64 @@ function AdminPageInner() {
     setShowTeamModal(false)
     setAddTeamOpen(false)
     setNewTeamName('')
-    setNewTeamPerm(EMPTY_TEAM_PERM)
+    setNewTeamPerm([])
   }
 
   // ── 팀 권한 편집 ──
-  // 추가 폼과 행 편집이 같은 체크박스 묶음을 쓴다(두 벌 만들지 않는다).
-  const permCheckboxes = (value: TeamPermForm, onChange: Dispatch<SetStateAction<TeamPermForm>>) => (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-      {TEAM_PERM_FIELDS.map(f => {
-        const checked = value[f.key]
-        return (
-          <label key={f.key}
-            style={{
-              display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer',
-              padding: '8px 10px', borderRadius: 6, border: `1px solid ${BORDER}`,
-              background: checked ? '#f3f4f6' : CARD_BG,
-            }}>
-            <input type="checkbox" checked={checked}
-              onChange={e => onChange(p => ({ ...p, [f.key]: e.target.checked }))}
-              style={{ width: 14, height: 14, accentColor: BLUE, cursor: 'pointer', marginTop: 2, flexShrink: 0 }} />
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: checked ? BLUE : TEXT }}>{f.label}</div>
-              <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{f.desc}</div>
+  // 추가 폼과 편집 모달이 같은 체크박스 묶음을 쓴다(두 벌 만들지 않는다).
+  // 전원 공개 메뉴(홈·알림·건의사항)는 체크 대상이 아니라 목록에 넣지 않는다.
+  const permCheckboxes = (value: string[], onChange: Dispatch<SetStateAction<string[]>>) => {
+    const picked = new Set(value)
+    const toggle = (key: string, on: boolean) =>
+      onChange(prev => (on ? [...new Set([...prev, key])] : prev.filter(k => k !== key)))
+    const toggleGroup = (keys: string[], on: boolean) =>
+      onChange(prev => (on ? [...new Set([...prev, ...keys])] : prev.filter(k => !keys.includes(k))))
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {checkableGroups().map(g => {
+          const keys = g.items.map(i => i.key)
+          const allOn = keys.every(k => picked.has(k))
+          return (
+            <div key={g.group}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>{g.title}</span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: GRAY }}>
+                  <input type="checkbox" checked={allOn}
+                    onChange={e => toggleGroup(keys, e.target.checked)}
+                    style={{ width: 13, height: 13, accentColor: BLUE, cursor: 'pointer' }} />
+                  전체
+                </label>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                {g.items.map(m => {
+                  const checked = picked.has(m.key)
+                  return (
+                    <label key={m.key}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                        padding: '8px 10px', borderRadius: 6, border: `1px solid ${BORDER}`,
+                        background: checked ? '#f3f4f6' : CARD_BG,
+                      }}>
+                      <input type="checkbox" checked={checked}
+                        onChange={e => toggle(m.key, e.target.checked)}
+                        style={{ width: 14, height: 14, accentColor: BLUE, cursor: 'pointer', flexShrink: 0 }} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: checked ? BLUE : TEXT }}>{m.label}</div>
+                        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{m.path}</div>
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
             </div>
-          </label>
-        )
-      })}
-    </div>
-  )
+          )
+        })}
+        <div style={{ fontSize: 11, color: '#9ca3af', lineHeight: 1.7 }}>
+          * {MENU_PERMS.filter(m => m.public).map(m => m.label).join(' · ')}은(는) 전원 공개라 체크 대상이 아닙니다
+        </div>
+      </div>
+    )
+  }
 
   // 훅이 읽어 온 목록을 화면 상태로 옮겨 둔다. 저장 뒤에는 fetchOffices 로 다시 읽는다.
   useEffect(() => { setOfficeList(offices) }, [offices])
@@ -980,24 +1021,42 @@ function AdminPageInner() {
     } catch (e) { console.error('[admin] 팀 권한 서버 캐시 무효화 실패', e) }
   }
 
-  // 체크박스 하나를 누르면 그 팀의 권한 7개를 통째로 다시 저장한다(저장 버튼 없음).
-  // 쿼리·에러 처리는 종전과 같고, 어떤 값을 보낼지만 호출부가 정한다.
-  const handleSaveTeamPerm = async (team: Team, perm: TeamPermForm) => {
-    setSavingTeamId(team.id)
-    const { error } = await supabase.from('teams').update(perm).eq('id', team.id)
-    setSavingTeamId(null)
-    if (error) {
-      console.error('[admin] update team perm failed', error)
-      toast.error(`권한 저장에 실패했습니다 (${error.code || error.message})`)
-      return
+  // 팀 권한 저장은 서버 라우트가 맡는다 — team_permissions 와 teams.can_view_* 두 곳을
+  // 파생 규칙으로 함께 맞춰야 하고, 실패하면 되돌려야 하기 때문이다.
+  /** 성공하면 null, 실패하면 화면에 보여줄 메시지를 돌려준다. */
+  const saveTeamPermKeys = async (teamId: number, permKeys: string[]): Promise<string | null> => {
+    try {
+      const res = await fetch('/api/team-permissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teamId, permKeys }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) return (json?.error as string | undefined) ?? `저장 실패 (${res.status})`
+      return null
+    } catch (e) {
+      console.error('[admin] save team permissions failed', e)
+      return '네트워크 오류로 저장하지 못했습니다'
     }
-    await fetchTeams()
-    await dropTeamPermCache()
-    toast.success(`'${team.name}' 팀 권한을 저장했습니다`)
   }
 
-  const handleTogglePerm = (team: Team, key: TeamPermField, checked: boolean) =>
-    handleSaveTeamPerm(team, { ...teamPermOf(team), [key]: checked })
+  const openPermEdit = (team: Team) => {
+    setPermEditTeam(team)
+    setPermEditKeys([...(teamMenus.get(team.name) ?? new Set<string>())])
+  }
+
+  const handleSaveTeamPerm = async () => {
+    if (!permEditTeam) return
+    setSavingTeamId(permEditTeam.id)
+    const err = await saveTeamPermKeys(permEditTeam.id, permEditKeys)
+    setSavingTeamId(null)
+    if (err) { toast.error(`권한 저장에 실패했습니다 (${err})`); return }
+    setPermEditTeam(null)
+    // 캐시를 먼저 버려야 다시 읽을 때 새 값이 온다.
+    await dropTeamPermCache()
+    await fetchTeams()
+    toast.success('권한이 변경되었습니다. 해당 팀 사용자는 새로고침 후 적용됩니다')
+  }
 
   const handleDeleteTeam = async (team: Team) => {
     // 퇴사자는 팀 소속이 남아 있어도(과거 실적 집계용) 인원으로 세지 않는다.
@@ -2198,9 +2257,12 @@ function AdminPageInner() {
                 </button>
               </div>
               <FieldError message={teamErr.errors.teamName} />
-              {permCheckboxes(newTeamPerm, setNewTeamPerm)}
+              {/* 메뉴가 14개라 그대로 펼치면 모달을 넘긴다 — 추가 폼에서는 이 안에서만 스크롤한다. */}
+              <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                {permCheckboxes(newTeamPerm, setNewTeamPerm)}
+              </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-                <button onClick={() => { setAddTeamOpen(false); setNewTeamName(''); setNewTeamPerm(EMPTY_TEAM_PERM); teamErr.clearError('teamName') }}
+                <button onClick={() => { setAddTeamOpen(false); setNewTeamName(''); setNewTeamPerm([]); teamErr.clearError('teamName') }}
                   style={{ padding: '6px 14px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
                   취소
                 </button>
@@ -2208,9 +2270,8 @@ function AdminPageInner() {
             </div>
             )}
 
-            {/* 팀 목록 — 한 행에 한 팀. 권한 6개가 모든 행에서 같은 열에 오도록 격자로 그린다.
-                체크박스는 누르는 즉시 저장된다(저장 버튼 없음).
-                각 권한이 어떤 화면을 여는지는 열 제목의 툴팁으로 뺐다 — 표를 좁게 유지하기 위해서다. */}
+            {/* 팀 목록 — 한 행에 한 팀. 권한은 개수와 묶음별 요약만 보이고, 상세는 편집 모달에서 고친다
+                (메뉴가 14개라 칸으로 나열하면 표가 넘친다). */}
             <div style={{ overflowY: 'auto', flex: 1 }}>
               {teamLoading ? (
                 <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>불러오는 중...</div>
@@ -2225,51 +2286,92 @@ function AdminPageInner() {
                     position: 'sticky', top: 0, background: CARD_BG, zIndex: Z.thead,
                   }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>팀</span>
-                    {TEAM_PERM_FIELDS.map(f => (
-                      <span key={f.key} title={f.desc}
-                        style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textAlign: 'center', cursor: 'help' }}>
-                        {f.label}
-                      </span>
-                    ))}
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textAlign: 'center' }}>권한</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>묶음별</span>
                     <span />
                   </div>
 
-                  {teamsList.map(team => (
-                    <div key={team.id} style={{
-                      display: 'grid', gridTemplateColumns: TEAM_GRID, alignItems: 'center',
-                      padding: '9px 4px', borderBottom: `1px solid ${BORDER}`,
-                    }}>
-                      <span style={{ fontWeight: 700, fontSize: 14, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {team.name}
-                      </span>
-                      {TEAM_PERM_FIELDS.map(f => (
-                        <span key={f.key} style={{ display: 'flex', justifyContent: 'center' }}>
-                          <input type="checkbox"
-                            checked={team[f.key] === true}
-                            disabled={!isSuperAdmin(currentEngineer) || savingTeamId === team.id}
-                            onChange={e => handleTogglePerm(team, f.key, e.target.checked)}
-                            style={{ width: 15, height: 15, accentColor: BLUE, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }} />
+                  {teamsList.map(team => {
+                    const keys = teamMenus.get(team.name) ?? new Set<string>()
+                    const summary = permSummary(keys)
+                    return (
+                      <div key={team.id} style={{
+                        display: 'grid', gridTemplateColumns: TEAM_GRID, alignItems: 'center',
+                        padding: '9px 4px', borderBottom: `1px solid ${BORDER}`,
+                      }}>
+                        <span style={{ fontWeight: 700, fontSize: 14, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {team.name}
                         </span>
-                      ))}
-                      <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <button onClick={() => handleDeleteTeam(team)} disabled={deletingTeam === team.id}
-                          style={{ padding: '4px 12px', background: DANGER, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, opacity: deletingTeam === team.id ? 0.6 : 1, whiteSpace: 'nowrap' }}>
-                          {deletingTeam === team.id ? '삭제 중...' : '삭제'}
-                        </button>
-                      </span>
-                    </div>
-                  ))}
+                        <span style={{ display: 'flex', justifyContent: 'center' }}>
+                          <span style={{
+                            background: '#f3f4f6', borderRadius: 99, padding: '2px 8px',
+                            fontSize: 11, fontWeight: 700, color: keys.size > 0 ? BLUE : '#9ca3af', whiteSpace: 'nowrap',
+                          }}>
+                            {keys.size}개
+                          </span>
+                        </span>
+                        <span style={{ fontSize: 12, color: summary ? GRAY : '#d1d5db', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {summary || '권한 없음'}
+                        </span>
+                        <span style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                          <button onClick={() => openPermEdit(team)} disabled={!isSuperAdmin(currentEngineer) || savingTeamId === team.id}
+                            style={{
+                              padding: '4px 12px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: 6,
+                              cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed', fontSize: 12, fontWeight: 700,
+                              opacity: isSuperAdmin(currentEngineer) ? 1 : 0.6, whiteSpace: 'nowrap',
+                            }}>
+                            편집
+                          </button>
+                          <button onClick={() => handleDeleteTeam(team)} disabled={deletingTeam === team.id}
+                            style={{ padding: '4px 12px', background: DANGER, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, opacity: deletingTeam === team.id ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+                            {deletingTeam === team.id ? '삭제 중...' : '삭제'}
+                          </button>
+                        </span>
+                      </div>
+                    )
+                  })}
                 </>
               )}
             </div>
             <div style={{ marginTop: 12, fontSize: 11, color: GRAY, lineHeight: 1.7 }}>
               * 재직 중인 직원이 배정된 팀은 삭제할 수 없습니다<br />
-              * 권한 변경은 서버(API·RLS)에 즉시 반영됩니다. 다만 화면 메뉴는 브라우저가 팀 권한을 세션당 한 번만 읽어 두므로, 해당 사용자가 새로고침해야 보입니다
+              * 권한 변경은 저장 즉시 서버(API·RLS)에 반영됩니다. 다만 화면 메뉴는 브라우저가 팀 권한을 세션당 한 번만 읽어 두므로, 해당 팀 사용자는 새로고침 후 적용됩니다
             </div>
           </div>
         </div>
       )}
 
+      {/* ── 팀 권한 편집 모달 ── */}
+      {permEditTeam && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, width: '100%', maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>{permEditTeam.name} 권한</div>
+              <span style={{ fontSize: 12, color: GRAY }}>{permEditKeys.length} / {CHECKABLE_MENUS.length}개 선택</span>
+            </div>
+            <div style={{ fontSize: 12, color: GRAY, marginBottom: 14 }}>
+              체크한 메뉴만 이 팀에 보입니다. 데이터 접근 권한은 메뉴에서 자동으로 정해집니다.
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1, paddingRight: 2 }}>
+              {permCheckboxes(permEditKeys, setPermEditKeys)}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <button onClick={() => setPermEditTeam(null)} disabled={savingTeamId === permEditTeam.id}
+                style={{ padding: '8px 18px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+                취소
+              </button>
+              <button onClick={handleSaveTeamPerm} disabled={savingTeamId === permEditTeam.id || !isSuperAdmin(currentEngineer)}
+                style={{
+                  padding: '8px 18px', background: BLUE, color: '#fff', border: 'none', borderRadius: 8,
+                  cursor: 'pointer', fontSize: 13, fontWeight: 700,
+                  opacity: (savingTeamId === permEditTeam.id || !isSuperAdmin(currentEngineer)) ? 0.6 : 1,
+                }}>
+                {savingTeamId === permEditTeam.id ? '저장 중...' : '저장'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ── 직원 삭제 모달 ── */}
       {deleteEngineer && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>

@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewSalesMgmt } from '@/lib/permissions'
+import { canViewMenu, canViewSalesMgmt } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
 
 const supabaseAdmin = createClient(
@@ -43,6 +43,10 @@ export async function GET(req: NextRequest) {
   if (!quoteRows || quoteRows.length === 0)
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
+  // 견적서 메뉴가 없는 팀은 남의 것도 자기 것도 열지 못한다(메뉴 단위 판정).
+  if (!canViewMenu(caller, 'quote')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  // 영업관리(발주·재고)는 남의 견적 PDF 도 연다 — 종전 자격 그대로다.
   const privileged = canViewSalesMgmt(caller)
   if (!privileged && !quoteRows.some(q => q.engineer_id === caller.engineer_id))
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

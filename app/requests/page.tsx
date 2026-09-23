@@ -24,7 +24,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canViewAdmin } from '@/lib/permissions'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import { numKR } from '@/components/customer/constants'
 import { SERVICE_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
@@ -178,7 +177,7 @@ const linkBtn = {
 } as const
 
 export default function RequestsPage() {
-  const { loading: guardLoading, authorized } = usePageGuard(canViewAdmin)
+  const { loading: guardLoading, authorized } = usePageGuard()
 
   // 대기 목록(처음 들어올 때)과 처리완료 목록(그 상태를 처음 볼 때)은 따로 들고 있다.
   const [pendingRows, setPendingRows] = useState<Row[]>([])

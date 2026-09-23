@@ -12,7 +12,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewAdmin } from '@/lib/permissions'
+import { canViewMenu } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
 
 const DELETE_REQUEST_STATUS = '취소요청'
@@ -74,7 +74,7 @@ async function authorize() {
   if (!callerRow) return { error: bad('Forbidden', 403), supabase, caller: null }
 
   const caller = await withTeamPerm(callerRow as Caller, { fresh: true })
-  if (!caller || !canViewAdmin(caller)) return { error: bad('Forbidden', 403), supabase, caller: null }
+  if (!caller || !canViewMenu(caller, 'approvals')) return { error: bad('Forbidden', 403), supabase, caller: null }
 
   return { error: null, supabase, caller }
 }

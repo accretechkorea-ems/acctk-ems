@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { canViewSalesMgmt } from '@/lib/permissions'
+import { canViewMenu } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
 
 const supabaseAdmin = createClient(
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // 영업관리 권한(can_view_sales_mgmt) 또는 superadmin만 허용
+  // 재고 메뉴 권한 또는 superadmin만 허용
   const { data: callerRow, error: callerErr } = await supabase
     .from('engineers')
     .select('engineer_id, teams, permission_level')
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   if (callerErr) console.error(' caller lookup failed', { email: user.email, error: callerErr })
   // 재고 요청을 승인·반려하는 라우트다. 권한 변경이 즉시 반영돼야 해 캐시를 건너뛴다.
   const caller = await withTeamPerm(callerRow, { fresh: true })
-  if (!caller || !canViewSalesMgmt(caller)) {
+  if (!caller || !canViewMenu(caller, 'inventory')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

@@ -6,7 +6,7 @@ import { isActiveInPeriod } from '@/lib/engineers'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canViewDashboard, isFieldEngineerTeam, type TeamPerm } from '@/lib/permissions'
+import { isFieldEngineerTeam, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerms } from '@/lib/teamPerms'
 import ActivityCard from '@/components/activity/ActivityCard'
 import { ACTIVITY_TYPES } from '@/lib/activity'
@@ -72,7 +72,7 @@ function SkeletonCard() {
 
 export default function ActivityPage() {
   const supabase = createClient()
-  const { loading: guardLoading, authorized } = usePageGuard(canViewDashboard)
+  const { loading: guardLoading, authorized } = usePageGuard()
 
   const now = nowKSTParts()
   const thisYear = now.y

@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import { Font } from '@react-pdf/renderer'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canViewCustomers, isSuperAdmin } from '@/lib/permissions'
+import { isSuperAdmin } from '@/lib/permissions'
 import { isMobileViewport } from '@/lib/viewport'
 
 import { useCustomerDetail } from '@/hooks/customer/useCustomerDetail'
@@ -20,6 +20,8 @@ import { useHoldingCrud } from '@/hooks/customer/useHoldingCrud'
 
 import type { Device, ServiceHistory } from '@/components/customer/types'
 import { PAGE_BG, TEXT_MUTED } from '@/components/customer/constants'
+// 목록으로 돌아갈 때 저장된 화면 상태를 지운다(사이드바의 고객사 항목과 같은 규칙).
+import { HOME_STATE_KEY } from '@/lib/home'
 
 import SegmentedControl from '@/components/common/SegmentedControl'
 import HorizontalScroller from '@/components/common/HorizontalScroller'
@@ -49,7 +51,7 @@ Font.register({
 })
 
 export default function CustomerDetailPage() {
-  const { loading: guardLoading, authorized } = usePageGuard(canViewCustomers)
+  const { loading: guardLoading, authorized } = usePageGuard()
   const params = useParams()
   const customerId = Number(params.id)
 
@@ -101,47 +103,38 @@ export default function CustomerDetailPage() {
     }
     @keyframes sk-pulse { 0%,100% { opacity:1 } 50% { opacity:0.45 } }
 
-    /* 3단 레이아웃 — 좌(업체·담당자) / 중앙(탭) / 우(요약).
-       좌우는 폭이 고정이고 가운데가 남는 공간을 전부 갖는다(화면이 넓을수록 장비가 더 보인다).
-       좌우는 sticky 로 붙여두고 페이지 스크롤 시 가운데만 흐르게 한다.
-       가운데 상한 1600px — 그 이상은 장비 카드(300px)가 다섯 장을 넘어 한눈에 안 들어오고,
+    /* 2단 레이아웃 — 좌(업체·담당자·요약) / 우(활동 이력·장비 탭).
+       왼쪽은 폭이 고정이고 오른쪽이 남는 공간을 전부 갖는다(화면이 넓을수록 장비가 더 보인다).
+       왼쪽만 sticky 로 붙여두고 페이지 스크롤 시 오른쪽이 흐른다.
+       오른쪽 상한 1600px — 그 이상은 장비 카드(300px)가 다섯 장을 넘어 한눈에 안 들어오고,
        초광폭에서 카드 하나가 화면을 가로지르게 되므로 거기서 멈추고 판 전체를 가운데 정렬한다. */
     .cust-grid {
       display: grid;
-      grid-template-columns: 320px minmax(0, 1600px) 280px;
-      grid-template-areas: "left center right";
+      grid-template-columns: 340px minmax(0, 1600px);
+      grid-template-areas: "left center";
       gap: 16px;
       align-items: start;
       justify-content: center;
     }
-    .cust-left { grid-area: left; }
+    .cust-left { grid-area: left; display: flex; flex-direction: column; gap: 12px; }
     .cust-center { grid-area: center; min-width: 0; }
-    .cust-right { grid-area: right; }
-    .cust-left, .cust-right {
+    .cust-left {
       position: sticky;
+      /* 헤더가 없어져 본문 위쪽 여백(20)만 비우면 된다 */
       top: 20px;
       max-height: calc(100vh - 40px);
       overflow-y: auto;
     }
-    /* 1180px 미만: 우측 요약을 좌측 열 아래로 내린다.
-       (좌 320 + 우 280 + gap 32 + 좌우 여백 48 = 680 이 고정이라,
-        이 아래로 내려가면 가운데가 500px 밑으로 좁아진다) */
-    @media (max-width: 1179px) {
-      .cust-grid {
-        grid-template-columns: 300px minmax(0, 1fr);
-        grid-template-areas: "left center" "right center";
-        align-content: start;
-      }
-      .cust-right { position: static; max-height: none; overflow-y: visible; }
-      .cust-left { max-height: calc(100vh - 160px); }
-    }
-    /* 900px 미만: 1단 — 좌측(300)까지 빼고 나면 가운데가 읽을 만한 폭이 안 나온다 */
-    @media (max-width: 899px) {
+    /* 본문이 900px 밑으로 좁아지면 1단으로 내린다(왼쪽 카드 → 활동 이력 순서).
+       사이드바가 232px 를 가져가므로 화면 기준으로는 900 + 232 = 1132px 이 경계다.
+       768px 이하에서는 사이드바가 숨어 본문이 화면 폭 그대로지만, 그 폭은 이미 900 미만이라
+       같은 규칙에 걸린다. */
+    @media (max-width: 1131px) {
       .cust-grid {
         grid-template-columns: minmax(0, 1fr);
-        grid-template-areas: "left" "center" "right";
+        grid-template-areas: "left" "center";
       }
-      .cust-left, .cust-right {
+      .cust-left {
         position: static;
         max-height: none;
         overflow-y: visible;
@@ -232,9 +225,27 @@ export default function CustomerDetailPage() {
 
       <main style={{ padding: '20px 24px', background: PAGE_BG, minHeight: '100vh' }}>
 
+        {/* 경로 — 지금 어디인지 한 줄로. 「고객사」는 목록으로 돌아간다
+            (목록 상태를 지우고 하드 내비게이션 — 사이드바의 고객사 항목과 같은 방식). */}
+        <div style={{ height: 48, display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: TEXT_MUTED, minWidth: 0 }}>
+          <button
+            type="button"
+            onClick={() => { sessionStorage.removeItem(HOME_STATE_KEY); window.location.href = '/' }}
+            onMouseEnter={e => (e.currentTarget.style.color = '#111827')}
+            onMouseLeave={e => (e.currentTarget.style.color = TEXT_MUTED)}
+            style={{ border: 'none', background: 'transparent', padding: 0, color: TEXT_MUTED, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer', flexShrink: 0, transition: 'color 0.15s ease' }}
+          >
+            고객사
+          </button>
+          <span style={{ color: '#d1d5db', flexShrink: 0 }}>/</span>
+          <span style={{ color: '#111827', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {customer?.company_name ?? '-'}
+          </span>
+        </div>
+
         <div className="cust-grid">
 
-          {/* ── 좌: 업체 정보 · 담당자 ── */}
+          {/* ── 좌: 업체 정보 · 담당자 · 요약 ── */}
           <div className="cust-left">
             <CustomerInfoPanel
               customer={customer}
@@ -246,10 +257,6 @@ export default function CustomerDetailPage() {
               onAdd={() => contact.setIsAddContactModalOpen(true)}
               onEdit={contact.setSelectedContact}
             />
-          </div>
-
-          {/* ── 우: 요약 ── */}
-          <div className="cust-right">
             <SummaryPanel
               quotes={quotes}
               deviceCount={devices.length}
@@ -269,7 +276,7 @@ export default function CustomerDetailPage() {
             />
           </div>
 
-          {/* ── 중앙: 탭 ── */}
+          {/* ── 우: 활동 이력 · 장비 탭 ── */}
           <div className="cust-center">
 
         {/* 활동 이력 · 장비 탭 — 같은 서비스 기록이 양쪽에 보이는 것은 의도된 동작이다

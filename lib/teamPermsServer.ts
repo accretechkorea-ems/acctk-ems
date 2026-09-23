@@ -1,10 +1,10 @@
-// teams 권한 플래그의 서버(API 라우트) 전용 로더.
+// team_permissions(팀 × 메뉴 키)의 서버(API 라우트) 전용 로더.
 //
 // lib/teamPerms.ts 는 'use client' 라 라우트 핸들러에서 쓸 수 없다.
 //
 // 캐시 —
-//   요청마다 teams 를 읽으면 왕복이 한 번 더 늘어난다(견적 PDF 열기 한 번에 Supabase 왕복 6회 중 1회).
-//   플래그는 거의 바뀌지 않으므로 30초만 들고 있는다. 오래 들고 있으면 권한을 바꿔도 반영이
+//   요청마다 다시 읽으면 왕복이 늘어난다(견적 PDF 열기 한 번에 Supabase 왕복 6회 중 1회).
+//   권한은 거의 바뀌지 않으므로 30초만 들고 있는다. 오래 들고 있으면 권한을 바꿔도 반영이
 //   늦어지고, 아예 안 들면 매번 왕복한다. 그 사이의 절충이다.
 //   · 관리자 화면에서 팀 권한을 바꾸면 /api/team-perms 로 캐시를 즉시 버린다.
 //   · 권한 변경이 늦게 반영되면 곤란한 라우트(상태를 바꾸는 쪽)는 loadTeamPerms({ fresh: true })
@@ -17,29 +17,8 @@
 import { createClient } from '@supabase/supabase-js'
 import type { EngineerLike, TeamPerm } from '@/lib/permissions'
 
-type TeamRow = {
-  name: string | null
-  can_view_customers: boolean | null
-  can_view_dashboard: boolean | null
-  can_view_quote: boolean | null
-  can_view_pipeline: boolean | null
-  can_view_sales_mgmt: boolean | null
-  can_view_admin: boolean | null
-  can_view_leads: boolean | null
-}
-
-const COLUMNS =
-  'name, can_view_customers, can_view_dashboard, can_view_quote, can_view_pipeline, can_view_sales_mgmt, can_view_admin, can_view_leads'
-
-const toPerm = (r: TeamRow): TeamPerm => ({
-  customers: r.can_view_customers === true,
-  dashboard: r.can_view_dashboard === true,
-  quote: r.can_view_quote === true,
-  pipeline: r.can_view_pipeline === true,
-  salesMgmt: r.can_view_sales_mgmt === true,
-  admin: r.can_view_admin === true,
-  leads: r.can_view_leads === true,
-})
+type TeamRow = { id: number | null; name: string | null }
+type PermRow = { team_id: number | null; perm_key: string | null }
 
 /** 캐시 유효 시간(ms). 짧게 잡아 권한 변경이 오래 묵지 않게 한다. */
 const TTL_MS = 30_000
@@ -50,8 +29,25 @@ export function invalidateTeamPerms(): void {
   cache = null
 }
 
+/** 팀 이름 → 켜 둔 메뉴 키 집합. 권한 행이 없는 팀도 빈 집합으로 넣는다. */
+function buildMap(teams: TeamRow[] | null, perms: PermRow[] | null): Map<string, TeamPerm> {
+  const nameOf = new Map<number, string>()
+  const map = new Map<string, TeamPerm>()
+  for (const t of teams ?? []) {
+    if (t.id == null || !t.name) continue
+    nameOf.set(t.id, t.name)
+    map.set(t.name, { menus: new Set<string>() })
+  }
+  for (const p of perms ?? []) {
+    if (p.team_id == null || !p.perm_key) continue
+    const name = nameOf.get(p.team_id)
+    if (name) map.get(name)?.menus.add(p.perm_key)
+  }
+  return map
+}
+
 /**
- * teams 전체를 읽어 팀 이름 → 플래그 맵으로 돌려준다. 실패하면 빈 맵(= 전원 권한 없음).
+ * 팀별 메뉴 권한을 읽어 팀 이름 → 키 집합 맵으로 돌려준다. 실패하면 빈 맵(= 전원 권한 없음).
  * fresh: true 면 캐시를 건너뛰고 반드시 다시 읽는다(권한 변경이 즉시 반영돼야 하는 라우트용).
  */
 export async function loadTeamPerms(opts?: { fresh?: boolean }): Promise<Map<string, TeamPerm>> {
@@ -60,26 +56,27 @@ export async function loadTeamPerms(opts?: { fresh?: boolean }): Promise<Map<str
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
-  const { data, error } = await supabaseAdmin.from('teams').select(COLUMNS)
-  const map = new Map<string, TeamPerm>()
+  const [teamsRes, permsRes] = await Promise.all([
+    supabaseAdmin.from('teams').select('id, name'),
+    supabaseAdmin.from('team_permissions').select('team_id, perm_key'),
+  ])
+  const error = teamsRes.error ?? permsRes.error
   if (error) {
     // 실패는 캐시하지 않는다 — 빈 맵을 30초 들고 있으면 그동안 전원이 권한 없음이 된다.
     console.error('[teamPerms/server] load failed', error)
-    return map
+    return new Map<string, TeamPerm>()
   }
-  for (const r of (data ?? []) as TeamRow[]) {
-    if (r.name) map.set(r.name, toPerm(r))
-  }
+  const map = buildMap(teamsRes.data as TeamRow[] | null, permsRes.data as PermRow[] | null)
   cache = { at: Date.now(), map }
   return map
 }
 
-/** 이미 읽어둔 맵으로 engineer 에 플래그를 붙인다. 목록을 통째로 판정할 때 쓴다. */
+/** 이미 읽어둔 맵으로 engineer 에 권한을 붙인다. 목록을 통째로 판정할 때 쓴다. */
 export function attachTeamPerm<T extends EngineerLike>(map: Map<string, TeamPerm>, engineer: T): T {
   return { ...engineer, perm: engineer.teams ? map.get(engineer.teams) ?? null : null }
 }
 
-/** engineer 한 명에 플래그를 붙여 돌려준다. */
+/** engineer 한 명에 권한을 붙여 돌려준다. */
 export async function withTeamPerm<T extends EngineerLike>(engineer: T | null | undefined, opts?: { fresh?: boolean }): Promise<T | null> {
   if (!engineer) return null
   return attachTeamPerm(await loadTeamPerms(opts), engineer)

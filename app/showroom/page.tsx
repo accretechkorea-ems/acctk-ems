@@ -24,7 +24,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canViewCustomers, isSuperAdmin } from '@/lib/permissions'
+import { isSuperAdmin } from '@/lib/permissions'
 import { nowKSTParts } from '@/lib/date'
 import { USAGE_PURPOSES, round1, type ShowroomDevice, type ShowroomSite, type ShowroomStats } from '@/lib/showroom'
 import { PAGE_BG, DANGER, BLUE, MUTED, PULSE_KEYFRAMES } from '@/components/common/ui'
@@ -86,7 +86,7 @@ function ShowroomPageInner() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
   const params = useSearchParams()
-  const { engineer: me, loading: guardLoading, authorized } = usePageGuard(canViewCustomers)
+  const { engineer: me, loading: guardLoading, authorized } = usePageGuard()
   const admin = isSuperAdmin(me)
   const myId = me?.engineer_id ?? null
 
@@ -246,7 +246,9 @@ function ShowroomPageInner() {
     <main style={{ padding: '24px 28px', background: PAGE_BG, minHeight: '100vh' }}>
       <style>{PULSE_KEYFRAMES}</style>
 
-      <div style={{ maxWidth: 1280, margin: '0 auto' }}>
+      {/* 폭 상한을 두지 않는다 — 장비 카드가 300px 고정이라, 남는 폭만큼 열이 늘어난다.
+          (상한 1280 이면 사이드바를 뺀 1440 창에서 4열이 아니라 3열로 떨어졌다) */}
+      <div style={{ width: '100%' }}>
         <ShowroomHeader
           tabs={TABS}
           active={tab}

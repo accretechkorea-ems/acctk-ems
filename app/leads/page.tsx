@@ -212,7 +212,7 @@ function LeadsPageInner() {
   const searchParams = useSearchParams()
   const toast = useToast()
   const confirm = useConfirm()
-  const { engineer: me, loading: guardLoading, authorized } = usePageGuard(canViewLeads)
+  const { engineer: me, loading: guardLoading, authorized } = usePageGuard()
   // 리드 관리자 = superadmin. 그 밖에는 자기에게 배정된 건만 다루는 담당자다.
   const isAdmin = isSuperAdmin(me)
   const myEngineerId = me?.engineer_id ?? null

@@ -12,7 +12,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { canViewAdmin } from '@/lib/permissions'
+import { canViewMenu } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
 
 const TAG = 'requests/quote-delete-history'
@@ -46,7 +46,7 @@ async function authorize() {
     .single()
   if (error) console.error(`[${TAG}] caller lookup failed`, { email: user.email, error })
   const caller = await withTeamPerm((row ?? null) as Caller | null)
-  if (!caller || !canViewAdmin(caller)) return { error: bad('Forbidden', 403) }
+  if (!caller || !canViewMenu(caller, 'approvals')) return { error: bad('Forbidden', 403) }
   return { error: null }
 }
 

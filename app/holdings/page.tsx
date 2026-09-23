@@ -7,7 +7,6 @@
 import { useMemo, useState } from 'react'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canViewCustomers } from '@/lib/permissions'
 import HoldingModal from '@/components/customer/modals/HoldingModal'
 import HoldingResolveModal from '@/components/customer/modals/HoldingResolveModal'
 import { useHoldingCrud } from '@/hooks/customer/useHoldingCrud'
@@ -106,7 +105,7 @@ function HoldingCard({ h, onOpen, onResolve }: { h: Holding; onOpen: () => void;
 }
 
 export default function HoldingsPage() {
-  const { engineer: me, loading: guardLoading, authorized } = usePageGuard(canViewCustomers)
+  const { engineer: me, loading: guardLoading, authorized } = usePageGuard()
   const { holdings, loading, engineerId, reload } = useHoldingList()
   // 등록은 이 화면에서 하지 않으므로 customerId 는 null
   const holding = useHoldingCrud({ customerId: null, holdings, engineerId, fetchDetail: reload, role: me?.permission_level ?? null })
