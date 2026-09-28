@@ -117,6 +117,25 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
   // 배지 숫자만 쓴다(목록은 /notifications 가 보여준다). 폴링 주기도 예전 그대로다.
   const { unreadCount } = useNotifications(engineerId)
 
+  // 결재 배지 — 내 차례인 문서 건수. 알림과 달리 폴링하지 않고 화면을 옮길 때마다 한 번 읽는다
+  // (결재는 내가 처리하면 곧바로 줄어드는 값이라, 이동할 때 맞춰 주면 충분하다).
+  const [approvalCount, setApprovalCount] = useState(0)
+  useEffect(() => {
+    if (!engineerId) return
+    let cancelled = false
+    const run = async () => {
+      try {
+        const res = await fetch('/api/approval?box=inbox')
+        const json = await res.json().catch(() => null)
+        if (!cancelled && res.ok) setApprovalCount((json?.documents ?? []).length)
+      } catch {
+        // 배지 숫자일 뿐이라 실패해도 조용히 둔다(메뉴는 그대로 동작한다).
+      }
+    }
+    run()
+    return () => { cancelled = true }
+  }, [engineerId, pathname])
+
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.auth.getUser()
@@ -216,8 +235,9 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
   /** 메뉴 한 줄. big 이면 모바일 드로어용(터치 크기). 접힌 PC 사이드바는 아이콘만 남는다. */
   const renderItem = (item: MenuPerm, big = false) => {
     const active = item.path === activePath
-    // 알림만 배지를 단다(숫자는 안 읽은 건수).
-    const isNotif = item.key === 'notifications'
+    // 배지가 붙는 메뉴 — 알림은 안 읽은 건수, 결재는 내 차례 건수.
+    const badge = item.key === 'notifications' ? unreadCount
+      : item.key === 'approvals' ? approvalCount : 0
     const mini = collapsed && !big
     return (
       <button
@@ -238,7 +258,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
       >
         {iconOf(item.icon, big ? 18 : 16)}
         {!mini && <span>{item.label}</span>}
-        {isNotif && unreadCount > 0 && (
+        {badge > 0 && (
           mini
             // 접히면 숫자가 들어갈 자리가 없다 — 아이콘 오른쪽 위에 점으로만 알린다.
             ? <span style={{ position: 'absolute', top: 5, right: 12, width: 7, height: 7, borderRadius: 99, background: BLUE }} />
@@ -248,7 +268,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
                 borderRadius: 99, background: BLUE, color: '#ffffff', fontSize: 11, fontWeight: 700,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                {unreadCount > 99 ? '99+' : unreadCount}
+                {badge > 99 ? '99+' : badge}
               </span>
             )
         )}

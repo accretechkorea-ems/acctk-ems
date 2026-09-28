@@ -27,7 +27,7 @@ const PAGE_SIZE = 30
 const TYPE_GROUPS: { label: string; prefixes: string[] }[] = [
   { label: '견적', prefixes: ['quote_'] },
   { label: '리드', prefixes: ['lead_'] },
-  { label: '요청/결재', prefixes: ['showroom_', 'request', 'stock_'] },
+  { label: '요청/결재', prefixes: ['approval_', 'showroom_', 'request', 'stock_'] },
   { label: '건의사항', prefixes: ['suggestion_'] },
 ]
 const TYPE_TABS = ['전체', ...TYPE_GROUPS.map(g => g.label), '기타']

@@ -36,6 +36,11 @@ export type MenuPerm = {
   data: DataArea[]
   /** 권한 없이 로그인 전원에게 열린 메뉴. 팀 관리 화면에서 체크 대상이 아니다. */
   public?: true
+  /**
+   * 다른 메뉴의 권한을 그대로 따르는 메뉴. 판정에 이 키를 대신 쓴다.
+   * 한 기능을 두 화면이 나눠 갖는 동안(이관 중)에만 쓰고, 팀 관리 화면의 체크 대상에서도 빠진다.
+   */
+  permKey?: string
 }
 
 /**
@@ -57,7 +62,10 @@ export const MENU_PERMS: MenuPerm[] = [
   // ── 주 메뉴 — 홈·알림은 전원 공개, 결재는 관리자 ──
   { key: 'home', label: '홈', group: '주 메뉴', path: '/dashboard', icon: 'home', order: 10, data: [], public: true },
   { key: 'notifications', label: '알림', group: '주 메뉴', path: '/notifications', icon: 'bell', order: 20, data: [], public: true },
-  { key: 'approvals', label: '결재', group: '주 메뉴', path: '/requests', icon: 'approval', order: 30, data: ['customers', 'quote'] },
+  { key: 'approvals', label: '결재', group: '주 메뉴', path: '/approval', icon: 'approval', order: 30, data: ['customers', 'quote'] },
+  // 옛 요청함. 전자결재로 옮기는 동안만 남긴다 — 4~5단계 이관이 끝나면 지운다.
+  // 권한은 결재(approvals)를 그대로 따른다(permKey) — 팀별로 따로 켤 것이 아니다.
+  { key: 'legacy_requests', label: '요청함(구)', group: '주 메뉴', path: '/requests', icon: 'approval', order: 40, data: ['customers', 'quote'], permKey: 'approvals' },
 
   // ── 대시보드 ──
   { key: 'repair_dashboard', label: '20 대시보드', group: '대시보드', path: '/repair/dashboard', icon: 'grid', order: 10, data: ['customers'] },
@@ -120,7 +128,7 @@ function matchesPattern(pattern: string, path: string): boolean {
 export function menuKeyForPath(pathname: string): string | null {
   const path = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname
   const menu = MENU_PERMS.find(m => m.path === path)
-  if (menu) return menu.public ? PUBLIC_MENU : menu.key
+  if (menu) return menu.public ? PUBLIC_MENU : (menu.permKey ?? menu.key)
   for (const [pattern, key] of Object.entries(PARENT_MENU)) {
     if (matchesPattern(pattern, path)) return key
   }
@@ -176,7 +184,7 @@ export function deriveTeamColumns(menus: Set<string>): Record<string, boolean> {
 }
 
 /** 팀별로 켤 수 있는 메뉴 — 전원 공개 항목은 체크 대상이 아니다. */
-export const CHECKABLE_MENUS: MenuPerm[] = MENU_PERMS.filter(m => !m.public)
+export const CHECKABLE_MENUS: MenuPerm[] = MENU_PERMS.filter(m => !m.public && !m.permKey)
 
 /** 체크 대상이 있는 묶음만, 묶음 순서대로. 팀 관리 화면이 이 순서로 그린다. */
 export function checkableGroups(): { group: MenuGroup; title: string; items: MenuPerm[] }[] {
@@ -192,7 +200,7 @@ export function checkableGroups(): { group: MenuGroup; title: string; items: Men
 /** 한 묶음에서 이 사람에게 보이는 항목. 순서(order)대로 돌려준다. */
 export function visibleMenus(group: MenuGroup, engineer?: EngineerLike | null): MenuPerm[] {
   return MENU_PERMS
-    .filter(m => m.group === group && canViewMenu(engineer, m.key))
+    .filter(m => m.group === group && canViewMenu(engineer, m.permKey ?? m.key))
     .sort((a, b) => a.order - b.order)
 }
 
