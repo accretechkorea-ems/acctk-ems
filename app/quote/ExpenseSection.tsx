@@ -5,6 +5,16 @@ import type { ExpensePreset, ExpenseRow, QuoteRow } from './types'
 import { numKR } from './format'
 import { inp } from './styles'
 
+/**
+ * 일수는 반일(0.5) 단위까지 받는다. 0.5 단위로 맞춰 두면 DB 의 CHECK(days * 2 = floor(days * 2))와
+ * 어긋나 저장이 실패하는 일이 없다. 빈 칸·문자·음수는 0 으로 본다(단가·인원과 같은 방식).
+ */
+const parseDays = (v: string): number => {
+  const n = Number(v)
+  if (!Number.isFinite(n) || n <= 0) return 0
+  return Math.round(n * 2) / 2
+}
+
 // 서비스비 행의 원가 내역. 화면 전용이며 PDF 로는 나가지 않는다.
 export type ExpenseSectionProps = {
   row: QuoteRow
@@ -70,8 +80,8 @@ export default function ExpenseSection({
             <input className="q-input" type="number" value={exp.headcount || ''}
               onChange={e => updateExpense(exp.id, { headcount: parseInt(e.target.value) || 0 })}
               placeholder="0" style={{ ...inp, width: '100%', minWidth: 0, textAlign: 'center' }} />
-            <input className="q-input" type="number" value={exp.days || ''}
-              onChange={e => updateExpense(exp.id, { days: parseInt(e.target.value) || 0 })}
+            <input className="q-input" type="number" step="0.5" min="0" value={exp.days || ''}
+              onChange={e => updateExpense(exp.id, { days: parseDays(e.target.value) })}
               placeholder="0" style={{ ...inp, width: '100%', minWidth: 0, textAlign: 'center' }} />
           </div>
 

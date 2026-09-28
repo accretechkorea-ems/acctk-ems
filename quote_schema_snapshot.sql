@@ -23,6 +23,17 @@
 -- FK: quote_id→quotes ON DELETE CASCADE
 -- NOT NULL 이고 기본값 없음: quote_id, item_name, unit_price, amount
 -- 기본값: headcount 0, days 0, created_at now()
+-- days: numeric(5,1)  ← 2026-09-28 integer 에서 변경(적용 완료). 인건비 반일(0.5) 단위 입력 때문이다.
+--   CHECK quote_expenses_days_half_step: days >= 0 and days * 2 = floor(days * 2)
+--   기존 행은 정수라 무손실 변환이었다. 금액(amount, numeric)은 화면에서 원 단위로 반올림해 넣는다
+--   (app/quote/calc.ts 의 calcExpense — 부가세와 같은 Math.round 규칙).
+--   create_quote() 는 jsonb_populate_recordset(null::quote_expenses, …) 로 이 테이블의 행 타입을
+--   쓰므로 함수는 고치지 않았다. 적용된 DDL:
+--     alter table public.quote_expenses
+--       alter column days type numeric(5,1) using days::numeric(5,1);
+--     alter table public.quote_expenses
+--       add constraint quote_expenses_days_half_step
+--       check (days >= 0 and days * 2 = floor(days * 2));
 
 -- ===== quote_sequence =====
 -- PK: id (serial)

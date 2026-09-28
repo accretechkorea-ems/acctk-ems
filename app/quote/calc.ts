@@ -165,8 +165,10 @@ export function createDiscountRow(): QuoteRow {
 }
 
 // 단가 × 인원 × 일수. 세 값 중 하나라도 바뀌면 이 함수를 통과시켜 재계산한다.
+// 일수가 반일(0.5) 단위라 곱이 소수로 떨어질 수 있다(예: 150,001 × 1 × 0.5 = 75,000.5).
+// 원 단위로 반올림한다 — 부가세(Math.round)와 같은 규칙이고, 엑셀 금액 서식(#,##0)과도 어긋나지 않는다.
 export function calcExpense(e: ExpenseRow): ExpenseRow {
-  return { ...e, amount: e.unit_price * e.headcount * e.days }
+  return { ...e, amount: Math.round(e.unit_price * e.headcount * e.days) }
 }
 
 export function createExpenseRow(): ExpenseRow {
