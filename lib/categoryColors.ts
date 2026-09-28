@@ -2,6 +2,8 @@
  * 카테고리/상태 색상 단일 소스 (확정본)
  */
 
+import type { QuoteStatus } from './quoteStatus';
+
 export type CategoryColor = { text: string; bg: string; dot?: string };
 
 export const SERVICE_TYPE_COLORS = {
@@ -84,10 +86,17 @@ export const SALES_STATUS_COLORS = {
   '취소요청':        { text: '#be123c', bg: '#fef2f2' },
   '실패':            { text: '#b91c1c', bg: '#fef2f2' },
   '보류':            { text: '#6b7280', bg: '#f3f4f6' },
-} as const satisfies Record<string, CategoryColor>;
+// 키는 lib/quoteStatus.ts 의 QUOTE_STATUSES 와 1:1 이다 — 한쪽에만 값이 생기면 tsc 가 잡는다.
+} as const satisfies Record<QuoteStatus, CategoryColor>;
 
-/** 견적 상태값 → 화면 표시 라벨. 저장값('취소요청' 등)은 그대로 두고 표기만 바꾼다. */
+/**
+ * 견적 상태값 → 화면 표시 라벨. 저장값은 그대로 두고 표기만 바꾼다.
+ *   실패     → 미수주  (2026-09-28. 값은 '실패' 그대로 두고 부르는 말만 바꿨다)
+ *   취소요청 → 삭제 요청
+ * 상태를 화면·엑셀에 찍는 모든 곳이 이 함수를 지나야 한다.
+ */
 export function salesStatusLabel(status: string): string {
+  if (status === '실패') return '미수주';
   return status === '취소요청' ? '삭제 요청' : status;
 }
 

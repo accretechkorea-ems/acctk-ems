@@ -8,10 +8,11 @@ import { useRef, useState, type CSSProperties } from 'react'
 import {
   INDUSTRY_GROUPS, INTEREST_PRODUCTS, COMPETITORS, COMPETITOR_OTHER,
   BUDGET_STATUSES, PURCHASE_PERIODS, MAX_LEN, MEETING_NOTE_MIN,
-  HONEYPOT_FIELD, EMAIL_RE, DEFAULT_COUNTRY, RESUBMIT_BLOCK_MS, CARD_MAX_BYTES,
+  HONEYPOT_FIELD, EMAIL_RE, RESUBMIT_BLOCK_MS, CARD_MAX_BYTES,
 } from '@/lib/leadOptions'
 import { downsizeImage } from '@/lib/leadCardImage'
 import { errText, errBorder, FieldError } from '@/components/common/fieldErrors'
+import AddressField from '@/components/customer/modals/AddressField'
 
 const ACCENT = '#234ea2'
 // 필수 표시(*)에 쓰는 색. 에러 문구·테두리는 공용 errText / errBorder 를 그대로 쓴다.
@@ -25,7 +26,8 @@ const PAGE_BG = '#fafafa'
 type Form = {
   partner_company: string; partner_name: string; partner_email: string; partner_contact: string
   customer_company: string; industry: string; products: string
-  address: string; city: string; country: string
+  // 시(city)·국가(country)는 화면에서 받지 않는다 — 서버가 주소에서 뽑고 국내로 고정한다.
+  address: string
   interest_product: string; request_note: string
   competitor: string[]; competitor_other: string
   budget_status: string; purchase_period: string; expected_purchase: string
@@ -38,7 +40,7 @@ type Form = {
 const emptyForm = (): Form => ({
   partner_company: '', partner_name: '', partner_email: '', partner_contact: '',
   customer_company: '', industry: '', products: '',
-  address: '', city: '', country: DEFAULT_COUNTRY,
+  address: '',
   interest_product: '', request_note: '',
   competitor: [], competitor_other: '',
   budget_status: '', purchase_period: '', expected_purchase: '',
@@ -158,7 +160,7 @@ export default function LeadPage() {
 
   /** 완료 화면에서 이어서 등록할 때 — 새로고침 없이 상태만 처음으로 되돌린다. */
   const resetForm = () => {
-    setForm(emptyForm())   // 국가는 emptyForm 이 기본값(South Korea)으로 채운다
+    setForm(emptyForm())
     setHoneypot('')
     setErrors({})
     setSubmitError('')
@@ -220,8 +222,7 @@ export default function LeadPage() {
       ['customer_company', '회사명을 입력해주세요.'],
       ['industry', '산업군을 선택해주세요.'],
       ['products', '생산품을 입력해주세요.'],
-      ['city', '시를 입력해주세요.'],
-      ['country', '국가를 입력해주세요.'],
+      ['address', '주소를 검색해 입력해주세요.'],
       ['interest_product', '관심 제품을 선택해주세요.'],
       ['budget_status', '예산을 선택해주세요.'],
       ['purchase_period', '예상 구매 기간을 선택해주세요.'],
@@ -375,32 +376,6 @@ export default function LeadPage() {
         </div>
 
         <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>고객사</div>
-          <div className="lead-grid">
-            <Field label="회사명" name="customer_company" value={form.customer_company} error={errors.customer_company} onChange={set} required />
-            <div>
-              <label style={labelStyle}>산업군<span style={{ color: DANGER }}> *</span></label>
-              <select value={form.industry} onChange={e => set('industry', e.target.value)}
-                style={errors.industry ? errorFieldStyle : fieldStyle}>
-                <option value="">선택해주세요</option>
-                {INDUSTRY_GROUPS.map(g => (
-                  g.items.length
-                    ? <optgroup key={g.group} label={g.group}>
-                        {g.items.map(i => <option key={i} value={`${g.group} - ${i}`}>{`${g.group} - ${i}`}</option>)}
-                      </optgroup>
-                    : <option key={g.group} value={g.group}>{g.group}</option>
-                ))}
-              </select>
-              <FieldError message={errors.industry} style={{ marginTop: 3, fontSize: 11 }} />
-            </div>
-            <Field label="생산품" name="products" value={form.products} error={errors.products} onChange={set} required />
-            <Field label="주소" name="address" value={form.address} error={errors.address} onChange={set} />
-            <Field label="시" name="city" value={form.city} error={errors.city} onChange={set} required />
-            <Field label="국가" name="country" value={form.country} error={errors.country} onChange={set} required />
-          </div>
-        </div>
-
-        <div style={sectionStyle}>
           <div style={sectionTitleStyle}>관심 제품</div>
           <div className="lead-grid">
             <div>
@@ -462,6 +437,49 @@ export default function LeadPage() {
             <textarea value={form.request_note} maxLength={MAX_LEN.request_note} rows={3}
               onChange={e => set('request_note', e.target.value)}
               style={{ ...fieldStyle, resize: 'vertical', lineHeight: 1.7 }} />
+          </div>
+        </div>
+
+        <div style={sectionStyle}>
+          <div style={sectionTitleStyle}>고객사</div>
+          <div className="lead-grid">
+            <Field label="회사명" name="customer_company" value={form.customer_company} error={errors.customer_company} onChange={set} required />
+            <div>
+              <label style={labelStyle}>산업군<span style={{ color: DANGER }}> *</span></label>
+              <select value={form.industry} onChange={e => set('industry', e.target.value)}
+                style={errors.industry ? errorFieldStyle : fieldStyle}>
+                <option value="">선택해주세요</option>
+                {INDUSTRY_GROUPS.map(g => (
+                  g.items.length
+                    ? <optgroup key={g.group} label={g.group}>
+                        {g.items.map(i => <option key={i} value={`${g.group} - ${i}`}>{`${g.group} - ${i}`}</option>)}
+                      </optgroup>
+                    : <option key={g.group} value={g.group}>{g.group}</option>
+                ))}
+              </select>
+              <FieldError message={errors.industry} style={{ marginTop: 3, fontSize: 11 }} />
+            </div>
+            <Field label="생산품" name="products" value={form.products} error={errors.products} onChange={set} required />
+            {/* 주소 — 고객사 모달과 같은 컴포넌트. 대리점이 자유 입력하면 오타가 나고, 나중에 이 주소로
+                고객사를 등록할 때 좌표 변환이 실패한다. 시·도(city)는 주소에서 자동으로 뽑고 국가는 국내 고정이라
+                따로 받지 않는다(국내 리드만 받는다). 칸은 격자 두 칸을 쓴다 — 두 줄짜리라 좁으면 눌린다. */}
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={labelStyle}>주소<span style={{ color: DANGER }}> *</span></label>
+              <AddressField
+                value={form.address}
+                onChange={next => {
+                  // 시·도(city)와 국가(country)는 보내지 않는다 — 서버가 주소에서 뽑고 국내로 고정한다.
+                  // 규칙을 두 곳에 두지 않기 위해서다(app/api/lead/route.ts).
+                  setForm(p => ({ ...p, address: next }))
+                  setErrors(p => (p.address ? { ...p, address: undefined } : p))
+                  setSubmitError('')
+                }}
+                error={errors.address}
+                inputStyle={fieldStyle}
+                errorBorder={errBorder}
+                disabled={submitting}
+              />
+            </div>
           </div>
         </div>
 

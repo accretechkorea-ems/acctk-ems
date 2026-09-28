@@ -13,9 +13,10 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { isSuperAdmin } from '@/lib/permissions'
+import { canViewMenu } from '@/lib/permissions'
 import { todayKST } from '@/lib/date'
-import { docTypeOf, type DocTypeDef } from '@/lib/approval/docTypes'
+import { canRejectDocument, docTypeOf, type DocTypeDef } from '@/lib/approval/docTypes'
+import { handlersOf } from '@/lib/approval/handlers'
 import {
   actorFor, applyApproval, ccApproverIds, delegatesOf, isComplete,
   nextPendingLine, skippedLineIds, toLineRows, untouched, validateLineInput,
@@ -25,6 +26,7 @@ import {
   type ApprovalDocument, type ApprovalLine, type Delegation,
   type HistoryAction, type LineInput,
 } from '@/lib/approval/types'
+import { createApprovalDocument } from '@/lib/approval/submit'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -190,56 +192,21 @@ async function submit(caller: Caller, body: Record<string, unknown>) {
   const { lines, error: lineErr } = await readLines(body.lines, caller.engineer_id)
   if (lineErr) return lineErr
 
-  const now = new Date().toISOString()
-  const { data: created, error: docErr } = await supabaseAdmin
-    .from('approval_documents')
-    .insert({
-      doc_type: def.key, doc_no: docNo, title, summary,
-      target_table: targetTable, target_id: targetId,
-      status: '진행중', requester_id: caller.engineer_id,
-      current_step: 1, submitted_at: now,
-    })
-    .select('document_id')
-    .single()
-  if (docErr || !created) {
-    console.error('[approval] document insert failed', docErr)
-    return bad('상신하지 못했습니다.', 500)
-  }
-  const documentId = (created as { document_id: number }).document_id
-
-  // 되돌리기 — 문서를 지우면 approval_lines 는 FK CASCADE 로 함께 사라진다.
-  // 이력은 아직 없지만(이력 insert 전에 실패한 경우뿐), 남아 있어도 지워지도록 먼저 치운다.
-  const rollback = async (why: string, detail: unknown) => {
-    console.error('[approval] submit rollback', { documentId, why, detail })
-    await supabaseAdmin.from('approval_history').delete().eq('document_id', documentId)
-    const { error } = await supabaseAdmin.from('approval_documents').delete().eq('document_id', documentId)
-    if (error) {
-      console.error('[approval] rollback failed — 문서가 남았다', { documentId, error })
-      return bad('상신에 실패했고 되돌리지도 못했습니다. 결재함에서 상태를 확인해주세요.', 500)
-    }
-    return bad('상신하지 못했습니다.', 500)
-  }
-
-  const { error: linesErr } = await supabaseAdmin.from('approval_lines').insert(toLineRows(documentId, lines))
-  if (linesErr) return rollback('lines', linesErr)
-
-  const { error: histErr } = await supabaseAdmin.from('approval_history').insert({
-    document_id: documentId, action: '상신' as HistoryAction, actor_id: caller.engineer_id, step: null, comment: null,
+  // 실제 상신은 lib/approval/submit.ts 가 한다 — 쇼룸 사용 신청처럼 다른 서버 코드가
+  // 같은 절차(문서·결재선·이력·첫 차례 알림, 실패 시 되돌리기)를 그대로 쓰기 때문이다.
+  const made = await createApprovalDocument(supabaseAdmin, {
+    docType: def.key, docNo, title, summary, targetTable, targetId,
+    lines, requesterId: caller.engineer_id, today: todayKST(),
   })
-  if (histErr) return rollback('history', histErr)
-
-  // 첫 차례에게 알린다.
-  const doc = await loadDocument(documentId)
-  const first = doc ? nextPendingLine(doc.approval_lines) : null
-  if (doc && first) await notifyTurn(doc, first, todayKST())
+  if (!made.ok) return bad(made.error, made.status)
 
   return NextResponse.json({
     ok: true,
-    documentId,
+    documentId: made.documentId,
     status: '진행중',
     currentStep: 1,
-    notified: first ? first.approver_id : null,
-    lines: doc?.approval_lines ?? [],
+    notified: made.notified,
+    lines: made.lines,
   })
 }
 
@@ -264,6 +231,21 @@ async function approve(caller: Caller, body: Record<string, unknown>) {
   if (!act.ok) return bad('지금은 결재할 차례가 아닙니다.', 403)
 
   const state = line.is_delegated_authority ? '전결' : (act.asDelegate ? '대결' : '승인')
+  // 전결이면 뒤의 결재·합의가 생략된다 — 이 승인으로 문서가 끝나는지 먼저 계산한다.
+  const skipped: number[] = line.is_delegated_authority ? skippedLineIds(doc.approval_lines, line.step ?? 0) : []
+  const after = applyApproval(doc.approval_lines, line.line_id, state, skipped)
+  const done = isComplete(after)
+
+  // 이 승인으로 끝난다면 유형별 점검을 먼저 받는다 — 막히면 줄도 건드리지 않고 409 로 돌려보낸다
+  // (쇼룸 사전 신청의 사용 시간 겹침처럼, 결재가 도는 동안 바깥 사정이 바뀌는 경우).
+  const hooks = handlersOf(doc.doc_type)
+  if (done && hooks.beforeComplete) {
+    const problem = await hooks.beforeComplete({
+      documentId, docNo: doc.doc_no, targetTable: doc.target_table, targetId: doc.target_id,
+      summary: doc.summary ?? {}, requesterId: doc.requester_id, actorId: caller.engineer_id, lines: after,
+    })
+    if (problem) return bad(problem, 409)
+  }
 
   // 조건부 UPDATE — 아직 '대기' 일 때만. 동시에 누르면 뒤에 누른 쪽은 여기서 0행이 된다.
   const { data: touched, error: lineErr } = await supabaseAdmin
@@ -279,21 +261,15 @@ async function approve(caller: Caller, body: Record<string, unknown>) {
   if (!touched || touched.length === 0) return bad('이미 처리된 결재입니다.', 409)
 
   // 전결이면 뒤의 결재·합의를 생략으로 남긴다(앞 순번은 손대지 않는다).
-  let skipped: number[] = []
-  if (line.is_delegated_authority) {
-    skipped = skippedLineIds(doc.approval_lines, line.step ?? 0)
-    if (skipped.length > 0) {
-      const { error } = await supabaseAdmin
-        .from('approval_lines')
-        .update({ state: '생략' })
-        .in('line_id', skipped)
-        .eq('state', '대기')
-      if (error) console.error('[approval] skip update failed', { documentId, skipped, error })
-    }
+  if (skipped.length > 0) {
+    const { error } = await supabaseAdmin
+      .from('approval_lines')
+      .update({ state: '생략' })
+      .in('line_id', skipped)
+      .eq('state', '대기')
+    if (error) console.error('[approval] skip update failed', { documentId, skipped, error })
   }
 
-  const after = applyApproval(doc.approval_lines, line.line_id, state, skipped)
-  const done = isComplete(after)
   const historyAction: HistoryAction = line.is_delegated_authority ? '전결' : (act.asDelegate ? '대결' : '승인')
   await addHistory(documentId, historyAction, caller.engineer_id, line.step ?? null, comment)
 
@@ -306,11 +282,11 @@ async function approve(caller: Caller, body: Record<string, unknown>) {
       .select('document_id')
     if (error) console.error('[approval] complete update failed', { documentId, error })
     if (closed && closed.length > 0) {
-      // 유형별 실행. 2단계에서는 빈 함수다. 실패해도 결재 자체는 이미 끝났으므로 기록만 남긴다.
+      // 유형별 실행. 실패해도 결재 자체는 이미 끝났으므로 되돌리지 않고 기록만 남긴다.
       try {
-        await def.onComplete({
+        await hooks.onComplete?.({
           documentId, docNo: doc.doc_no, targetTable: doc.target_table, targetId: doc.target_id,
-          summary: doc.summary ?? {}, requesterId: doc.requester_id, actorId: caller.engineer_id,
+          summary: doc.summary ?? {}, requesterId: doc.requester_id, actorId: caller.engineer_id, lines: after,
         })
       } catch (e) {
         console.error('[approval] onComplete failed', { documentId, docType: doc.doc_type, error: e })
@@ -351,7 +327,11 @@ async function reject(caller: Caller, body: Record<string, unknown>) {
   if (!doc) return bad('문서를 찾을 수 없습니다.', 404)
   const def: DocTypeDef | null = docTypeOf(doc.doc_type)
   if (!def) return bad('등록되지 않은 문서 유형입니다.')
-  if (!def.canReject) return bad(`${def.label}은(는) 반려할 수 없는 문서입니다.`)
+  // 유형 전체(canReject)와 문서 하나(canRejectDoc)를 함께 본다 — 쇼룸 사후 신청처럼
+  // 같은 유형 안에서 문서마다 갈리는 경우가 있다(이미 끝난 사용은 「확인」만 하므로 반려가 없다).
+  if (!canRejectDocument(def, doc.summary)) {
+    return bad(`${def.label}은(는) 반려할 수 없는 문서입니다.`)
+  }
   if (doc.status !== '진행중') return bad(`이미 ${doc.status} 상태인 문서입니다.`, 409)
 
   const line = nextPendingLine(doc.approval_lines)
@@ -496,7 +476,8 @@ export async function GET(req: Request) {
 
   const box = new URL(req.url).searchParams.get('box') ?? 'inbox'
   if (!['inbox', 'outbox', 'cc', 'all'].includes(box)) return bad('box 가 올바르지 않습니다.')
-  if (box === 'all' && !isSuperAdmin(caller)) return bad('Forbidden', 403)
+  // 결재 화면 자체는 전원 공개다(4단계). 남의 문서까지 보는 「전체」만 approvals 권한으로 잠근다.
+  if (box === 'all' && !canViewMenu(caller, 'approvals')) return bad('Forbidden', 403)
 
   const today = todayKST()
   const select = '*, approval_lines(*)'

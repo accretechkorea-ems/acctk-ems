@@ -26,7 +26,7 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import { numKR } from '@/components/customer/constants'
-import { SERVICE_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
+import { SERVICE_TYPE_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import { normTime } from '@/lib/workHours'
 import { demoStatusLabel, requestPurpose, USAGE_PURPOSE_COLORS, type DemoRequestPayload } from '@/lib/showroom'
 import { openApprovalPdf } from '@/components/showroom/openApprovalPdf'
@@ -412,7 +412,7 @@ export default function RequestsPage() {
             <span>공급가 ₩{numKR(h.total_supply ?? 0)}</span>
             {rejected && (<>
               <span style={dot}>·</span>
-              <span>복원 → {h.restored_status ?? '-'}</span>
+              <span>복원 → {h.restored_status ? salesStatusLabel(h.restored_status) : '-'}</span>
             </>)}
           </div>
           {h.delete_reason && <ReasonBox label={typeDef('quote_delete').reasonLabel} text={h.delete_reason} danger />}
@@ -519,6 +519,15 @@ export default function RequestsPage() {
       <style>{PULSE_KEYFRAMES}</style>
 
       <div style={{ maxWidth: 1280, margin: '0 auto' }}>
+
+        {/* 쇼룸 신청은 전자결재로 옮겼다(4단계). 옛 알림 링크로 들어온 사람을 결재함으로 보낸다.
+            이미 처리된 옛 신청은 아래 「처리완료」에 그대로 남아 있다. */}
+        <div style={{ ...cardStyle, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, color: TEXT }}>쇼룸 사용 신청은 결재함으로 옮겼습니다.</span>
+          <span style={{ fontSize: 12, color: MUTED }}>새 신청·승인은 결재함에서 합니다. 여기에는 지난 기록만 남습니다.</span>
+          <div style={{ flex: 1 }} />
+          <a href="/approval" style={{ ...btnGhost(), display: 'inline-block', textDecoration: 'none', lineHeight: '1.4' }}>결재함 열기</a>
+        </div>
 
         {/* 필터 — 상태 축(대기 · 처리완료 · 전체) × 유형 축(전체 · 견적 삭제 · 데모 신청 — REQUEST_TYPES 에서 자동) */}
         <div style={{ ...cardStyle, marginBottom: 12 }}>

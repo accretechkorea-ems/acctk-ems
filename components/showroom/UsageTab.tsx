@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import type { createClient } from '@/lib/supabase/client'
 import {
   USAGE_PURPOSES, deviceTitle, periodFromRange, periodRange, round1,
-  type DemoRequestRow, type ShowroomDevice, type ShowroomSite, type ShowroomUsageRow,
+  type ShowroomDevice, type ShowroomSite, type ShowroomUsageRow,
 } from '@/lib/showroom'
 import {
   BLUE, BORDER, CARD_BG, MUTED, SUB, DANGER, NEUTRAL_BG,
@@ -26,7 +26,7 @@ import {
 } from '@/components/common/ui'
 import UsageList from './UsageList'
 import UsageModal, { type UsageInitial, type UsageSubmission } from './UsageModal'
-import MyRequests from './MyRequests'
+import MyRequests, { type RewriteTarget } from './MyRequests'
 import PeriodNav from './PeriodNav'
 import DeviceMultiSelect from './DeviceMultiSelect'
 import ShowroomExcelButton from './ShowroomExcelButton'
@@ -112,7 +112,7 @@ export default function UsageTab({
   const [error, setError] = useState<string | null>(null)
   // 사용 기록·신청 모달 하나 — 추가(initial null)·수정·복사(initial)·반려 건 재작성(rewrite).
   const [modal, setModal] = useState<{
-    open: boolean; initial: UsageInitial | null; preset: number | null; rewrite?: DemoRequestRow | null
+    open: boolean; initial: UsageInitial | null; preset: number | null; rewrite?: RewriteTarget | null
   }>({ open: false, initial: null, preset: null })
   const cardRef = useRef<HTMLDivElement | null>(null)
   // 신청·재작성 뒤 「내 사용 신청」을 다시 읽는다.

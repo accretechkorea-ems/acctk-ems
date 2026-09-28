@@ -5,6 +5,7 @@
 // 컬럼명은 실제 테이블(quotes / quote_items / quote_expenses)에서 확인한 것과 일치한다.
 
 import { createClient } from '@/lib/supabase/client'
+import { salesStatusLabel } from '@/lib/categoryColors'
 // 타입만 가져온다(컴파일 시 사라짐). 런타임 exceljs 는 호출부에서 동적 import 한다.
 import type { Workbook, Worksheet, Cell } from 'exceljs'
 
@@ -215,7 +216,8 @@ export function buildQuoteSheet(workbook: Workbook, quote: QuoteExcelData): Work
     // 이 이름은 실적 귀속자(quotes.engineer_id)다. 대필이면 쓴 사람과 다르므로 「작성자」가 아니라 「담당자」다.
     // 다른 화면(실적 현황·발주관리·유지보수·고객사 상세)도 같은 값을 「담당자」로 부른다.
     ['담당자', [quote.engineers?.name, quote.engineers?.position].filter(Boolean).join(' ') || '-', '대리점', quote.dealer?.company_name ?? '(직판)'],
-    ['견적일자', quote.quote_date ?? '-', '상태', quote.status ?? '-'],
+    // 상태는 저장값이 아니라 화면과 같은 표시 이름으로 적는다('실패' → 「미수주」).
+    ['견적일자', quote.quote_date ?? '-', '상태', quote.status ? salesStatusLabel(quote.status) : '-'],
   ]
   for (const [l1, v1, l2, v2] of info) {
     labelValue(1, l1, v1)

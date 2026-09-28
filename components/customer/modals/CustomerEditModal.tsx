@@ -5,6 +5,7 @@ import type { Customer, CustomerEditFormData } from '../types'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import ParentPicker from '@/components/customer/ParentPicker'
+import AddressField from './AddressField'
 
 type Props = {
   customer: Customer | null
@@ -85,7 +86,17 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
           </div>
           <div>
             <label style={labelStyle}>주소</label>
-            <input value={form.address} onChange={(e) => { setForm(p => ({ ...p, address: e.target.value })); clearError('address') }} placeholder="주소" style={errors.address ? { ...fieldStyle, border: errBorder } : fieldStyle} />
+            {/* 주소 — [주소 검색]으로 정규 주소를 받고, 상세는 따로 입력한다(합쳐서 한 칸에 저장된다).
+                기존 업체의 예전 주소는 검색을 누를 때까지 지금처럼 한 칸에 그대로 보인다. */}
+            <AddressField
+              value={form.address}
+              onChange={next => setForm(p => ({ ...p, address: next }))}
+              onTouch={() => clearError('address')}
+              error={errors.address}
+              inputStyle={fieldStyle}
+              errorBorder={errBorder}
+              disabled={isSaving}
+            />
             <FieldError message={errors.address} />
           </div>
           <div>

@@ -29,7 +29,10 @@ import {
   isUsagePurpose, purposeNeedsCustomer, requestPurpose,
   type DemoRequestPayload,
 } from '@/lib/showroom'
-import { approvalPdfDocument, type ApprovalPdfData } from '@/components/showroom/ApprovalPdfDoc'
+import { approvalPdfDocument, type ApprovalPdfData, type ApprovalStamp } from '@/components/showroom/ApprovalPdfDoc'
+
+// 승인서 결재란 한 칸 — 쇼룸 결재 유형(lib/approval/showroomUsage.ts)도 같은 타입을 쓴다.
+export type { ApprovalStamp }
 
 export const admin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -282,7 +285,12 @@ export async function findOverlap(sb: SupabaseClient, deviceId: number, date: st
  * 결과 항목(결과분류·사용결과·문제·후속조치·견적)은 비워 둔다.
  * 작성자는 신청자 — 나중에 신청자가 실제 시간·결과를 고친다. 신청 1건당 사용 기록 1건(su_request_unique).
  */
-export async function createUsageFromRequest(sb: SupabaseClient, requestId: number, p: DemoRequestPayload, createdBy: number): Promise<{ error: string; status: number } | { usageId: number }> {
+/**
+ * 신청 내용으로 사용 기록을 만든다.
+ * requestId — 옛 요청함(approval_requests)의 신청 번호. 전자결재로 올린 건은 null 이다
+ *   (연결은 approval_documents.target_id 가 대신 잡는다 — showroom_usage.request_id 는 옛 표를 가리키는 FK 다).
+ */
+export async function createUsageFromRequest(sb: SupabaseClient, requestId: number | null, p: DemoRequestPayload, createdBy: number): Promise<{ error: string; status: number } | { usageId: number }> {
   const cfgErr = await ensureDeviceConfig(sb, p.device_id)
   if (cfgErr) return { error: cfgErr, status: 400 }
 
@@ -305,7 +313,7 @@ export async function createUsageFromRequest(sb: SupabaseClient, requestId: numb
       nda_status: p.nda_status,
       expected_result: p.expected_result,
       note: p.note ?? null,
-      request_id: requestId,
+      request_id: requestId,   // 전자결재 건은 null
       created_by: createdBy,
     })
     .select('usage_id')
@@ -392,6 +400,67 @@ export async function settleRequestNo(sb: SupabaseClient, requestId: number, pay
   throw new Error(`request number not settled: ${current.request_no}`)
 }
 
+// ── 결재 문서의 신청번호 ──────────────────────────────────────────
+// 전자결재로 옮긴 뒤에도 번호 규칙(SR-YYYYMMDD-001)은 그대로 쓴다 — 승인서·사용 기록이 이 번호로 이어진다.
+// 다른 점은 번호가 사는 자리다: 옛 신청은 payload 안, 결재 문서는 approval_documents.doc_no 컬럼이다.
+// 두 표를 함께 보고 비어 있는 번호를 고른다(이관 당일에 옛 번호와 겹치지 않게).
+
+const SHOWROOM_DOC_TYPE = 'showroom_usage'
+
+async function docNoTaken(sb: SupabaseClient, no: string, exceptId?: number): Promise<boolean> {
+  let q = sb.from('approval_documents').select('document_id')
+    .eq('doc_type', SHOWROOM_DOC_TYPE)
+    .eq('doc_no', no)
+    .limit(1)
+  if (exceptId != null) q = q.neq('document_id', exceptId)
+  const { data, error } = await q
+  if (error) throw error
+  if ((data ?? []).length > 0) return true
+  return numberTaken(sb, no)
+}
+
+async function nextFreeDocNo(sb: SupabaseClient, ymd: string, fromSeq: number, exceptId?: number): Promise<string> {
+  for (let i = 0; i < MAX_NO_TRIES; i++) {
+    const no = noOf(ymd, fromSeq + i)
+    if (!(await docNoTaken(sb, no, exceptId))) return no
+  }
+  throw new Error(`doc number exhausted from ${noOf(ymd, fromSeq)}`)
+}
+
+/** 그날 만든 쇼룸 결재 문서 수 + 1 에서 시작해 비어 있는 번호를 고른다. */
+export async function allocateDocNo(sb: SupabaseClient, ymd: string): Promise<string> {
+  const { count, error } = await sb
+    .from('approval_documents')
+    .select('document_id', { count: 'exact', head: true })
+    .eq('doc_type', SHOWROOM_DOC_TYPE)
+    .gte('created_at', `${ymd}T00:00:00+09:00`)
+    .lt('created_at', `${addDays(ymd, 1)}T00:00:00+09:00`)
+  if (error) throw error
+  return nextFreeDocNo(sb, ymd, (count ?? 0) + 1)
+}
+
+/**
+ * 저장한 뒤 같은 번호가 둘이면(동시 상신) 먼저 저장된 쪽이 번호를 갖고 나중 쪽이 다음 번호로 옮긴다.
+ * 옮겼으면 doc_no 와 summary 안의 번호를 함께 고친다. 끝내 못 맞추면 던진다.
+ */
+export async function settleDocNo(sb: SupabaseClient, documentId: number, no: string, ymd: string): Promise<string> {
+  let current = no
+  for (let i = 0; i < MAX_NO_TRIES; i++) {
+    const { data, error } = await sb.from('approval_documents').select('document_id')
+      .eq('doc_type', SHOWROOM_DOC_TYPE)
+      .eq('doc_no', current)
+      .order('document_id', { ascending: true })
+      .limit(2)
+    if (error) throw error
+    const ids = ((data ?? []) as { document_id: number }[]).map(r => r.document_id)
+    if (ids.length <= 1 || ids[0] === documentId) return current
+    current = await nextFreeDocNo(sb, ymd, seqOf(current) + 1, documentId)
+    const { error: updErr } = await sb.from('approval_documents').update({ doc_no: current }).eq('document_id', documentId)
+    if (updErr) throw updErr
+  }
+  throw new Error(`doc number settle failed for ${documentId}`)
+}
+
 // ── 승인서 PDF ────────────────────────────────────────────────────
 const PDF_NAME_TRIES = 5
 
@@ -441,17 +510,40 @@ async function pdfDataOf(sb: SupabaseClient, r: RequestRecord): Promise<Approval
     if (error) console.error('[showroom/requests] approver lookup failed', { approverId: r.approver_id, error })
     approverName = (data as { name: string | null } | null)?.name ?? ''
   }
-  // 도장은 승인(확인)된 뒤에만. 대기중·반려는 도장 자리를 비운다.
+  // 옛 요청함은 결재자가 한 명뿐이다 — 결재란도 한 칸이다.
+  // 도장은 승인(확인)된 뒤에만. 대기중·반려는 칸을 비운다.
   const stamped = r.status === REQUEST_APPROVED && r.approver_id != null && !!r.decided_at
+  return pdfDataFromPayload(p, {
+    requestDate: kstYmd(r.created_at),
+    statusLabel: demoStatusLabel(r.status, p.is_retroactive),
+    reason: r.reason ?? '',
+    stamps: [{
+      name: stamped ? (approverName || '-') : '',
+      position: '',
+      date: stamped ? kstYmd(r.decided_at as string) : '',
+      label: stamped ? '승인' : '',
+    }],
+    opinion: r.comment ?? '',
+  })
+}
+
+/**
+ * 승인서 PDF 의 본문 — 신청 내용(payload)에서만 만든다. 결재란(stamps)과 상태말은 부르는 쪽이 정한다.
+ * 옛 요청함(approval_requests)과 전자결재(approval_documents)가 같은 양식을 쓰도록 여기로 모았다.
+ */
+export function pdfDataFromPayload(
+  p: DemoRequestPayload,
+  o: { requestDate: string; statusLabel: string; stamps: ApprovalStamp[]; opinion: string; reason?: string },
+): ApprovalPdfData {
   return {
     requestNo: p.request_no,
-    requestDate: kstYmd(r.created_at),
+    requestDate: o.requestDate,
     requesterTeam: p.requester_team ?? '',
     requesterName: p.requester_name,
-    statusLabel: demoStatusLabel(r.status, p.is_retroactive),
+    statusLabel: o.statusLabel,
     isRetroactive: p.is_retroactive,
     purpose: requestPurpose(p),
-    reason: r.reason ?? '',
+    reason: o.reason ?? '',
     deviceName: p.device_name,
     siteName: p.site_name,
     projectName: p.project_name ?? '',
@@ -466,10 +558,28 @@ async function pdfDataOf(sb: SupabaseClient, r: RequestRecord): Promise<Approval
     customerDept: p.customer_dept ?? '',
     nda: p.nda_status ?? '',
     expectedResult: p.expected_result ?? '',
-    stamp: stamped ? { name: approverName || '-', date: kstYmd(r.decided_at as string) } : null,
-    opinion: r.comment ?? '',
+    stamps: o.stamps,
+    opinion: o.opinion,
   }
 }
+
+/**
+ * 승인서 PDF 를 만들어 버킷에 올린다. 성공하면 저장 경로, 실패하면 null.
+ * pdf_url 을 어디에 적을지는 부르는 쪽이 정한다(옛 신청 행 / 결재 문서의 summary).
+ */
+export async function renderApprovalPdf(sb: SupabaseClient, baseName: string, data: ApprovalPdfData): Promise<string | null> {
+  try {
+    const bytes = await renderToBuffer(approvalPdfDocument(data))
+    return await uploadPdf(sb, baseName, bytes)
+  } catch (e) {
+    console.error('[showroom/requests] pdf build failed', { baseName, error: e })
+    return null
+  }
+}
+
+/** 옛 파일 치우기 — 새 PDF 로 갈아탄 뒤 부른다. */
+export const dropApprovalPdf = removePdf
+
 
 /**
  * 승인서 PDF 를 지금 상태로 새로 만들어 올리고 pdf_url 을 바꾼 뒤 옛 파일을 지운다.
@@ -478,8 +588,7 @@ async function pdfDataOf(sb: SupabaseClient, r: RequestRecord): Promise<Approval
  */
 export async function refreshApprovalPdf(sb: SupabaseClient, r: RequestRecord, tag: string): Promise<boolean> {
   try {
-    const bytes = await renderToBuffer(approvalPdfDocument(await pdfDataOf(sb, r)))
-    const path = await uploadPdf(sb, tag ? `${r.payload.request_no}-${tag}` : r.payload.request_no, bytes)
+    const path = await renderApprovalPdf(sb, tag ? `${r.payload.request_no}-${tag}` : r.payload.request_no, await pdfDataOf(sb, r))
     if (!path) return false
     const { error } = await sb.from('approval_requests').update({ pdf_url: path }).eq('request_id', r.request_id)
     if (error) {

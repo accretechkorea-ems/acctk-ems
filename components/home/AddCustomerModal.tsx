@@ -18,6 +18,7 @@ import {
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useEffect } from 'react'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
+import AddressField from '@/components/customer/modals/AddressField'
 import ParentPicker from '@/components/customer/ParentPicker'
 
 type CustomerForm = {
@@ -177,11 +178,16 @@ export default function AddCustomerModal({
               allowCreate
             />
 
-            <input
+            {/* 주소 — [주소 검색]으로 정규 주소를 받고, 상세는 따로 입력한다(합쳐서 한 칸에 저장된다).
+                정규 주소를 쓰면 저장 때 도는 좌표 변환(지오코딩) 실패가 대부분 사라진다. */}
+            <AddressField
               value={customerForm.address}
-              onChange={(e) => { setCustomerForm((prev) => ({ ...prev, address: e.target.value })); clearError('address') }}
-              placeholder="주소(전체 주소를 입력 ex. 울산광역시 북구 명촌 7길 30)"
-              style={errors.address ? { ...inputStyle, border: errBorder } : inputStyle}
+              onChange={next => setCustomerForm(prev => ({ ...prev, address: next }))}
+              onTouch={() => clearError('address')}
+              error={errors.address}
+              inputStyle={inputStyle}
+              errorBorder={errBorder}
+              disabled={isSavingCustomer}
             />
             <FieldError message={errors.address} />
 

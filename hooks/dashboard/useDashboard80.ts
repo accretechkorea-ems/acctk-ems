@@ -15,6 +15,7 @@ import { deviceLabel, elapsedDays } from '@/components/customer/holding'
 import { todayKST, daysBetween, nowKSTParts, nowHmKST } from '@/lib/date'
 import { SERVICE_TYPES } from '@/components/activity/ActivityCard'
 import { SALES_TYPES } from '@/lib/activity'
+import { PENDING_STATUS, quoteExpiry } from '@/lib/quoteStatus'
 import type { Holding, SalesActivity, SalesOpportunity } from '@/components/customer/types'
 
 export const STALE_DAYS = 30
@@ -49,7 +50,8 @@ export type ExpiringQuote = {
 // 발주 이후(발주(주문 대기)·주문완료·세금계산서 요청·매출완료)는 이미 물건이 움직였고,
 // 수주는 고객이 받아들인 뒤, 수리중은 국내수리가 진행 중, 실패·취소요청·보류는 멈춘 건이라
 // 어느 쪽도 "1개월 안에 답을 받아야 하는" 상태가 아니다.
-const EXPIRY_TARGET_STATUS = '견적중'
+// 만료 판정은 lib/quoteStatus.ts 의 quoteExpiry 를 쓴다 — 자동 실주·홈 목록과 같은 기준이다.
+const EXPIRY_TARGET_STATUS = PENDING_STATUS
 
 /** 다가오는 일정 한 칸 — 오늘 이후의 방문 예정. */
 export type UpcomingVisit = {
@@ -93,20 +95,6 @@ const emptyActivity = (types: readonly string[]): ActivityStats => ({
   total: 0, byType: types.map(type => ({ type, count: 0 })),
 })
 
-/**
- * 견적 유효기간 만료일 = 작성일 + 1개월 - 1일 (견적서 PDF 의 "작성일로부터 1개월" 문구 기준).
- * 30일을 더하지 않고 월 단위로 옮긴다. 다음 달에 같은 날짜가 없으면(1/31 → 2/31)
- * 그 달 말일로 맞춘 뒤 하루를 뺀다.
- */
-export function quoteExpiry(quoteDate: string): string {
-  const [y, m, d] = quoteDate.split('-').map(Number)
-  const nextY = m === 12 ? y + 1 : y
-  const nextM = m === 12 ? 1 : m + 1
-  const lastDay = new Date(nextY, nextM, 0).getDate()   // 다음 달 말일
-  const dt = new Date(nextY, nextM - 1, Math.min(d, lastDay))
-  dt.setDate(dt.getDate() - 1)
-  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`
-}
 
 /**
  * 홀딩 · 정체 기회 · 마감 임박을 한 목록으로 합친다(순수 함수).

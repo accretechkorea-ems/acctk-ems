@@ -171,7 +171,7 @@ export type SubmissionResult =
   | { ok: true; request: { requestNo: string; pdfOk: boolean; retroactive: boolean } | null }
 
 /**
- * 사용 기록 모달의 저장 — 새 작성·재작성은 사용 신청(/api/showroom/requests, POST·PATCH),
+ * 사용 기록 모달의 저장 — 새 작성·재작성은 결재 상신(/api/showroom/requests, POST·PATCH — 결재선을 함께 보낸다),
  * 기존 기록 수정만 /api/showroom/usage 다. 장비 탭(page)과 전체기록 탭이 같이 쓴다.
  * 2026-09-21 부터 목적 5종이 전부 신청·승인을 거친다 — usage 라우트의 POST 는 막혀 있다.
  */
@@ -184,9 +184,9 @@ export async function saveSubmission(sub: UsageSubmission): Promise<SubmissionRe
   }
   try {
     const res = await fetch('/api/showroom/requests', {
-      method: sub.requestId ? 'PATCH' : 'POST',
+      method: sub.documentId ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sub.requestId ? { ...sub.body, request_id: sub.requestId } : sub.body),
+      body: JSON.stringify(sub.documentId ? { ...sub.body, document_id: sub.documentId } : sub.body),
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) return { ok: false, error: data?.error || '신청에 실패했습니다.' }

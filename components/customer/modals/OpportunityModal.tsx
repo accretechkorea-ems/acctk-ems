@@ -12,6 +12,7 @@ import { STAGES, LOST_REASONS, dateToMonth, compactKRW, isClosed } from '../oppo
 import { numKR } from '../constants'
 import type { Customer, Engineer, OpportunityForm, SalesActivity, SalesOpportunity } from '../types'
 import Popover from '@/components/common/Popover'
+import { salesStatusLabel } from '@/lib/categoryColors'
 import { todayKST } from '@/lib/date'
 
 type Props = {
@@ -304,7 +305,7 @@ export default function OpportunityModal({
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontSize: 12, fontWeight: 600, color: '#234ea2' }}>{q.quote_number}</span>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>{q.status}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>{salesStatusLabel(q.status)}</span>
                         <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9ca3af' }}>{q.quote_date}</span>
                       </div>
                       <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>₩{numKR(q.total_supply || 0)}</div>

@@ -26,11 +26,14 @@ import { useFieldErrors, FieldError, errBorder } from '@/components/common/field
 import { toMin, computeWorkHours, lunchOverlapHours } from '@/lib/workHours'
 import { getCategoryColor } from '@/lib/categoryColors'
 import { todayKST } from '@/lib/date'
+import LinePickerModal from '@/components/approval/LinePickerModal'
+import type { RewriteTarget } from './MyRequests'
+import type { LineInput } from '@/lib/approval/types'
 import { numKR } from '@/components/customer/constants'
 import {
   USAGE_PURPOSES, USAGE_PURPOSE_COLORS, NDA_STATUSES, RESULT_CATEGORIES, DEMO_PURPOSE,
   purposeNeedsCustomer, purposeHasField, requestHasField, requestPurpose, isRetroactiveDate, deviceTitle,
-  DEFAULT_START_TIME, DEFAULT_END_TIME, type DemoRequestRow, type ShowroomDevice, type UsageField,
+  DEFAULT_START_TIME, DEFAULT_END_TIME, type ShowroomDevice, type UsageField,
 } from '@/lib/showroom'
 import { BLUE, BLUE_HOVER, BORDER, CARD_BG, TEXT, SUB, MUTED, FAINT, DANGER, NEUTRAL_BG } from '@/components/common/ui'
 import TimeStepper from './TimeStepper'
@@ -131,7 +134,7 @@ export type DemoRequestBody = {
 /** 모달이 부모에게 넘기는 저장 요청 — 무엇을 어디로 보낼지 모달이 정한다(showroomData saveSubmission). */
 export type UsageSubmission =
   | { kind: 'usage'; usageId: number | null; payload: UsagePayload }
-  | { kind: 'request'; requestId: number | null; body: DemoRequestBody }
+  | { kind: 'request'; documentId: number | null; body: DemoRequestBody & { lines: LineInput[] } }
 
 export type UsageInitial = {
   /** 있으면 그 기록을 수정한다. null 이면 채워진 값으로 새로 쓴다(복사로 연 경우). */
@@ -164,8 +167,8 @@ export type UsageInitial = {
 type Props = {
   /** 사용 기록 수정·복사의 값. null 이면 신규 작성. */
   initial: UsageInitial | null
-  /** 반려된 데모 신청 재작성 — 주면 목적이 고객 데모로 고정되고 그 신청을 다시 보낸다(PATCH). */
-  rewrite?: DemoRequestRow | null
+  /** 반려·회수된 신청 재작성 — 주면 그 결재 문서를 다시 올린다(PATCH). */
+  rewrite?: RewriteTarget | null
   /** 미리 고를 장비(카드에서 열었을 때). initial·rewrite 가 있으면 무시된다. */
   presetDeviceId?: number | null
   devices: ShowroomDevice[]
@@ -184,7 +187,7 @@ export default function UsageModal({
 }: Props) {
   const today = todayKST()
   // 재작성이면 반려된 신청의 내용으로, 아니면 기록(수정·복사) 값으로 채운다. 둘 다 없으면 빈 값.
-  const rp = rewrite?.payload ?? null
+  const rp = rewrite?.summary?.payload ?? null
   const cost0 = rp ? rp.expected_cost : initial?.expected_cost ?? null
 
   // ── 공통: 사용 정보 ──
@@ -225,6 +228,9 @@ export default function UsageModal({
   const [note, setNote] = useState(initial?.note ?? '')
 
   const [saving, setSaving] = useState(false)
+  // 결재선을 받기 전까지 들고 있는 신청 본문. 결재선 지정 모달에서 확정하면 그때 보낸다.
+  const [pendingBody, setPendingBody] = useState<DemoRequestBody | null>(null)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const { errors, clearError, validate } = useFieldErrors<'device' | 'usage_date' | 'purpose' | 'customer' | 'engineers'>()
@@ -293,10 +299,8 @@ export default function UsageModal({
     if (asRequest) {
       // 목적에 없는 칸은 화면에 값이 남아 있어도 보내지 않는다(사용 기록 저장과 같은 규칙).
       const sent = (f: UsageField, v: string) => (has(f) ? v : '')
-      submission = {
-        kind: 'request',
-        requestId: rewrite?.request_id ?? null,
-        body: {
+      // 결재선은 아직 모른다 — 본문만 만들어 두고 결재선 지정 모달을 연다(확정하면 그때 보낸다).
+      setPendingBody({
           device_id: deviceId,
           usage_date: usageDate,
           start_time: startTime,
@@ -312,9 +316,10 @@ export default function UsageModal({
           sample_material: sent('sample_material', sampleMaterial),
           carried_out: has('carried_out') ? carriedOut : false,
           expected_cost: has('expected_cost') && cost ? Number(cost) : null,
-          note: sent('note', note),
-        },
-      }
+        note: sent('note', note),
+      })
+      setPickerOpen(true)
+      return
     } else {
       // 목적에 없는 칸은 화면에 값이 남아 있어도 보내지 않는다.
       const text = (f: UsageField, v: string) => (has(f) ? v : null)
@@ -352,6 +357,21 @@ export default function UsageModal({
     const message = await onSubmit(submission)
     setSaving(false)
     // 실패해도 모달을 닫지 않는다 — 입력을 다시 치게 하지 않기 위해서다.
+    if (message) setSubmitError(message)
+  }
+
+  /** 결재선을 확정하면 그때 상신한다. 실패하면 모달은 그대로 두고 오류만 보여 준다. */
+  const submitWithLines = async (lines: LineInput[]) => {
+    if (!pendingBody) return
+    setPickerOpen(false)
+    setSaving(true)
+    setSubmitError(null)
+    const message = await onSubmit({
+      kind: 'request',
+      documentId: rewrite?.document_id ?? null,
+      body: { ...pendingBody, lines },
+    })
+    setSaving(false)
     if (message) setSubmitError(message)
   }
 
@@ -697,6 +717,15 @@ export default function UsageModal({
           </div>
         </div>
       </div>
+
+      {/* 신청은 결재선을 정해야 올라간다 — 저장을 누르면 이 모달이 이어서 열린다. */}
+      <LinePickerModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onConfirm={submitWithLines}
+        myId={currentUserEngineerId}
+        docType="showroom_usage"
+      />
     </ModalOverlay>
   )
 }

@@ -9,7 +9,12 @@ import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, notifyDeleteRequest, PO_MEMO_MAX } from '@/lib/quoteMutations'
-import { isAutoFailed, isOrdered, REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE } from '@/lib/quoteStatus'
+import {
+  isAutoFailed, isOrdered, isExpired, validFromDate,
+  REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE,
+  STATUS_FILTER_TABS, EDIT_STATUSES, EDIT_STATUSES_WITH_REVERT, FAIL_STATUS, PENDING_STATUS,
+  type QuoteStatus,
+} from '@/lib/quoteStatus'
 import { achieveColorOf } from '@/lib/fiscal'
 import { Z } from '@/lib/zIndex'
 import Popover from '@/components/common/Popover'
@@ -27,7 +32,8 @@ const MAX_PAGE_SIZE = 40
 // 한 페이지가 다 안 차면 이 높이의 빈 줄로 채워, 페이지를 넘길 때 아래 요소가 튀지 않게 한다.
 const ROW_H = 33
 const TABLE_COLS = 10
-const STATUS_TABS = ['전체', '견적중', '수리중', '발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료', '취소요청', '실패']
+// 상태 목록은 lib/quoteStatus.ts 한 곳에서 온다. 「전체」만 화면이 앞에 붙인다.
+const STATUS_TABS: string[] = ['전체', ...STATUS_FILTER_TABS]
 
 const BLUE = '#234ea2', TEXT = '#111827', GRAY = '#6b7280', MUTED = '#9ca3af', BORDER = '#ebebeb'
 // 대필 견적 — 쓴 사람(created_by)과 실적 담당자(engineer_id)가 다른 건.
@@ -94,9 +100,7 @@ type Quote = {
 }
 
 // 상태 변경 창의 선택지. 되돌리기(견적중)는 실패한 건에만 붙는다.
-type EditStatus = '취소요청' | '실패' | '견적중'
-const EDIT_STATUSES: EditStatus[] = ['취소요청', '실패']
-const EDIT_STATUSES_WITH_REVERT: EditStatus[] = ['취소요청', '실패', '견적중']
+type EditStatus = QuoteStatus
 // fitToHeight: 카드가 (옆 열에 맞춰) 늘어난 높이를 목록 줄 수로 채운다.
 // 끄면 지금까지처럼 10줄 고정이다.
 export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { engineerId: number; fitToHeight?: boolean }) {
@@ -227,17 +231,20 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   }, [poQuote])
 
   // 선택 기간 → 날짜 범위. KPI·테이블 모두 이 범위 기준.
-  // 유효 견적: 견적 유효기간(작성일+1개월)이 아직 안 지난 견적 = (오늘-1개월+1일) ~ 오늘.
-  // 오늘에서 한 달 전 다음 날. 월 단위로 옮긴 뒤 하루를 더한다(기존과 같은 계산).
-  const validStart = () => {
-    const s = new Date(Date.UTC(nowParts.y, nowParts.m - 1, nowParts.d))
-    s.setUTCMonth(s.getUTCMonth() - 1); s.setUTCDate(s.getUTCDate() + 1)
-    return s.toISOString().slice(0, 10)
-  }
+  // 유효 견적: 견적 유효기간(작성일+1개월-1일)이 아직 안 지난 견적 = validFromDate(오늘) ~ 오늘.
+  // 만료일 계산은 lib/quoteStatus.ts 에 모여 있다(자동 실주·80 대시보드와 같은 함수).
+  const today = todayKST()
   const { start: rangeStart, end: rangeEnd } = unit === 'valid'
-    ? { start: validStart(), end: todayKST() }
+    ? { start: validFromDate(today), end: today }
     : periodRange(fy, unit, sel)
-  const dateFiltered = quotes.filter(q => q.quote_date >= rangeStart && q.quote_date <= rangeEnd)
+  /**
+   * 만료됐지만 아직 종결되지 않은 건('견적중') — 유효 견적 화면에서 빠지면 안 된다.
+   * 자동 실주가 돌기 전이거나 사람이 아직 판단하지 않은 건이라, 오히려 가장 먼저 봐야 한다.
+   */
+  const isOverdue = (q: Quote) => q.status === PENDING_STATUS && isExpired(q.quote_date, today)
+  const inRangeDate = (q: Quote) => q.quote_date >= rangeStart && q.quote_date <= rangeEnd
+  // 유효 견적 모드에서만 만료·미종결 건을 함께 남긴다(다른 기간은 그 기간의 성적을 보는 화면이다).
+  const dateFiltered = quotes.filter(q => (unit === 'valid' ? inRangeDate(q) || isOverdue(q) : inRangeDate(q)))
   // ── 실적 요약(아래 KPI·달성률)은 목록과 모수가 다르다. ──
   // 목록에는 내가 남 대신 쓴 견적도 실리지만, 그 실적은 원래 담당자의 것이다.
   // 그래서 집계는 engineer_id 가 나인 건만 쓴다 — 실적 현황(app/sales)과 같은 기준.
@@ -336,7 +343,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
     if (!editQuote || reasonMissing) return
     setSaving(true)
     try {
-      // 되돌릴 때는 실패 사유를 지운다(빈 문자열 → 공용 함수가 null 로 저장한다).
+      // 되돌릴 때는 미수주 사유를 지운다(빈 문자열 → 공용 함수가 null 로 저장한다).
       const reason = editStatus === '견적중' ? '' : editFailReason
       await updateQuoteStatus({ quoteId: editQuote.quote_id, status: editStatus, reason })
       // 삭제 요청은 관리자에게 알린다. 알림이 실패해도 요청 자체는 이미 저장됐으므로 흐름을 막지 않는다.
@@ -571,6 +578,13 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                         <span style={{ padding: '3px 7px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text, whiteSpace: 'nowrap', alignSelf: 'center' }}>
                           {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : salesStatusLabel(q.status)}
                         </span>
+                        {/* 유효기간이 지났는데 아직 견적중인 건 — 자동 실주 전이거나 판단이 남은 건이다.
+                            80 대시보드의 「만료」와 같은 색(실패 상태색)을 쓴다. */}
+                        {isOverdue(q) && (
+                          <span style={{ padding: '2px 6px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, FAIL_STATUS).bg, color: getCategoryColor(SALES_STATUS_COLORS, FAIL_STATUS).text, whiteSpace: 'nowrap' }}>
+                            만료
+                          </span>
+                        )}
                         {showOrderInfo && (q.shipping_date || q.order_memo || q.order_request_memo) && (
                           <div ref={hoveredMemoId === q.quote_id ? memoAnchorRef : null}
                             onMouseEnter={() => setHoveredMemoId(q.quote_id)}
@@ -649,7 +663,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                               style={{ width: '100%', textAlign: 'left', padding: '8px 10px', background: 'none', border: 'none', borderRadius: 6, cursor: canRequestDelete(q) ? 'pointer' : 'not-allowed', fontSize: 12, fontWeight: 700, color: canRequestDelete(q) ? TEXT : MUTED, fontFamily: 'inherit' }}
                             >다시쓰기</button>
                             <button
-                              onClick={() => { setMenuQuoteId(null); setEditQuote(q); setEditStatus(canRequestDelete(q) ? '취소요청' : '실패'); setEditFailReason(q.fail_reason || '') }}
+                              onClick={() => { setMenuQuoteId(null); setEditQuote(q); setEditStatus(canRequestDelete(q) ? '취소요청' : FAIL_STATUS); setEditFailReason(q.fail_reason || '') }}
                               style={{ width: '100%', textAlign: 'left', padding: '8px 10px', background: 'none', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: TEXT, fontFamily: 'inherit' }}
                             >상태 변경·삭제 요청</button>
                           </Popover>
@@ -813,7 +827,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                 자동 실주 건은 견적일이 이미 한 달을 넘겨, 되살리면 고객에게 나간 PDF 의
                 유효기간과 어긋나므로 선택지 자체를 만들지 않는다. */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-              {(editQuote.status === '실패' && !isAutoFailed(editQuote.status, editQuote.fail_reason)
+              {(editQuote.status === FAIL_STATUS && !isAutoFailed(editQuote.status, editQuote.fail_reason)
                 ? EDIT_STATUSES_WITH_REVERT
                 : EDIT_STATUSES)
                 // 남이 나 대신 쓴 견적은 삭제를 요청할 수 없다(실패 처리는 실적 담당자의 몫이라 남긴다).
@@ -821,7 +835,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                 .map(s => (
                 <button key={s} onClick={() => setEditStatus(s)}
                   style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: `1.5px solid ${editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).bg : '#f9fafb', color: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : GRAY, transition: 'all 0.12s' }}>
-                  {s === '취소요청' ? '삭제' : s}
+                  {s === '취소요청' ? '삭제' : salesStatusLabel(s)}
                 </button>
               ))}
             </div>
@@ -846,10 +860,10 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
               ) : (
                 <>
                   <div style={{ fontSize: 11, color: GRAY, marginBottom: 5, fontWeight: 600 }}>
-                    {editStatus === '취소요청' ? '삭제 사유' : '실패 사유'}
+                    {editStatus === '취소요청' ? '삭제 사유' : '미수주 사유'}
                   </div>
                   <textarea value={editFailReason} onChange={e => setEditFailReason(e.target.value)} rows={3}
-                    placeholder={editStatus === '취소요청' ? '삭제 요청 사유를 입력하세요' : '실패 사유를 입력하세요'}
+                    placeholder={editStatus === '취소요청' ? '삭제 요청 사유를 입력하세요' : '미수주 사유를 입력하세요'}
                     style={{ width: '100%', padding: '8px 10px', border: reasonMissing ? errBorder : `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
                   <FieldError message={reasonMissing ? '삭제 사유를 입력해주세요' : undefined} />
                 </>

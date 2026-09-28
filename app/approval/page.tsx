@@ -15,20 +15,17 @@ import { createClient } from '@/lib/supabase/client'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import SegmentedControl from '@/components/common/SegmentedControl'
-import { useToast } from '@/components/common/Toast'
-import { isSuperAdmin } from '@/lib/permissions'
+import { canViewMenu } from '@/lib/permissions'
 import { SERVICE_TYPE_COLORS, TIMELINE_KIND_COLORS, getCategoryColor, type CategoryColor } from '@/lib/categoryColors'
 import {
   FAINT, MUTED, NEUTRAL_BG, PAGE_BG, SUB, TEXT,
-  PULSE_KEYFRAMES, btnGhost, cardStyle, cardHeader, cardTitle, countBadge,
+  PULSE_KEYFRAMES, cardStyle, cardHeader, cardTitle, countBadge,
   rowStyle, rowSub, skeletonBlock,
 } from '@/components/common/ui'
-import LinePickerModal from '@/components/approval/LinePickerModal'
 import DocDetail, { type ApprovalDoc } from '@/components/approval/DocDetail'
 import type { ProgressPerson } from '@/components/approval/LineProgress'
 import { summaryLine } from '@/components/approval/summary'
 import { DOC_TYPES } from '@/lib/approval/docTypes'
-import type { LineInput } from '@/lib/approval/types'
 
 const APPROVAL_PATH = '/approval'
 
@@ -72,10 +69,10 @@ const dateText = (iso: string | null): string => {
 function ApprovalPageInner() {
   const router = useRouter()
   const params = useSearchParams()
-  const toast = useToast()
   const { engineer: me, loading: guardLoading, authorized } = usePageGuard()
-  const admin = isSuperAdmin(me)
-  const myId = me?.engineer_id ?? null
+  // 결재 화면은 전원 공개다(4단계). 남의 문서까지 보는 「전체」 탭만 approvals 권한으로 잠근다 —
+  // 라우트의 box=all 잠금과 같은 판정이다.
+  const canSeeAll = canViewMenu(me, 'approvals')
 
   const tab = parseTab(params.get('tab'))
   const doneSub = tab === 'inbox' && params.get('sub') === 'done'
@@ -153,45 +150,9 @@ function ApprovalPageInner() {
     return () => { cancelled = true }
   }, [authorized])
 
-  // ── 시험 문서 상신 ──
-  // TODO(4단계): 견적 결재가 붙으면 이 버튼과 아래 submitTest 를 통째로 지운다.
-  //             쇼룸 유형으로 임시 문서를 만들어 결재 흐름을 눈으로 확인하기 위한 것뿐이다.
-  const [pickerOpen, setPickerOpen] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const submitTest = async (lines: LineInput[]) => {
-    setPickerOpen(false)
-    setSubmitting(true)
-    try {
-      const now = new Date()
-      const res = await fetch('/api/approval', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'submit',
-          docType: 'showroom_usage',
-          docNo: `TEST-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours())}${String(now.getMinutes()).padStart(2, '0')}`,
-          title: '시험 상신 — 쇼룸 사용 신청',
-          summary: { device: '시험 장비', period: dateText(now.toISOString()), purpose: '결재 흐름 확인' },
-          targetTable: 'showroom_usage',
-          targetId: null,
-          lines,
-        }),
-      })
-      const json = await res.json().catch(() => null)
-      if (!res.ok) { toast.error(json?.error ?? '상신하지 못했습니다'); return }
-      toast.success('시험 문서를 상신했습니다')
-      setReloadKey(k => k + 1)
-    } catch (e) {
-      console.error('[approval] test submit failed', e)
-      toast.error('상신하지 못했습니다')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
   const tabOptions = useMemo(
-    () => (admin ? [...TABS, { value: 'all' as Box, label: '전체' }] : TABS),
-    [admin],
+    () => (canSeeAll ? [...TABS, { value: 'all' as Box, label: '전체' }] : TABS),
+    [canSeeAll],
   )
 
   if (!authorized) return <AccessGate loading={guardLoading} />
@@ -217,13 +178,6 @@ function ApprovalPageInner() {
             options={[{ label: '대기', value: 'pending' }, { label: '완료', value: 'done' }]}
             onChange={switchSub}
           />
-        )}
-        {/* TODO(4단계): 제거 대상 — 시험 상신 버튼 */}
-        {admin && (
-          <button type="button" onClick={() => setPickerOpen(true)} disabled={submitting}
-            style={{ ...btnGhost(submitting), marginLeft: 'auto' }}>
-            {submitting ? '상신 중...' : '시험 문서 상신'}
-          </button>
         )}
       </div>
 
@@ -309,14 +263,6 @@ function ApprovalPageInner() {
         )}
       </div>
 
-      {/* TODO(4단계): 시험 상신과 함께 제거. 그때는 견적 화면이 이 모달을 직접 연다. */}
-      <LinePickerModal
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onConfirm={submitTest}
-        myId={myId}
-        docType="showroom_usage"
-      />
     </main>
   )
 }

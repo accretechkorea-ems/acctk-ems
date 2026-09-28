@@ -18,7 +18,7 @@ import { CHECKABLE_MENUS, checkableGroups, MENU_PERMS } from '@/lib/menuPerms'
 import AccessGate from '@/components/common/AccessGate'
 import { useOffices, selectableOffices, invalidateOffices, type Office } from '@/lib/offices'
 import { geocodeAddress } from '@/lib/geocode'
-import { SALES_STATUS_COLORS, ROLE_COLORS, getCategoryColor } from '@/lib/categoryColors'
+import { SALES_STATUS_COLORS, ROLE_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import { useToast } from '@/components/common/Toast'
 import { notifyDeleteCompleted } from '@/lib/quoteMutations'
 import { useConfirm } from '@/components/common/ConfirmDialog'
@@ -1472,7 +1472,7 @@ function AdminPageInner() {
                         <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>{q.customers?.company_name || '-'}</td>
                         <td style={{ padding: '10px 12px', fontWeight: 700, whiteSpace: 'nowrap' }}>₩{numKR(q.total_supply)}</td>
                         <td style={{ padding: '10px 12px' }}>
-                          <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text }}>{q.status}</span>
+                          <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text }}>{salesStatusLabel(q.status)}</span>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
                           <button onClick={() => handleDeleteQuote(q)} disabled={deleting === q.quote_id}

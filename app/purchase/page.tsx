@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { SALES_STATUS_COLORS, DELIVERY_METHOD_COLORS, getCategoryColor } from '@/lib/categoryColors'
+import { SALES_STATUS_COLORS, DELIVERY_METHOD_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import { canViewMenu, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPerms'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
@@ -443,7 +443,7 @@ export default function PurchasePage() {
                       <td style={{ padding: '9px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'center' }}>
                           <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>
-                            {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : q.status}
+                            {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : salesStatusLabel(q.status)}
                           </span>
                           {q.status === '세금계산서 요청' && q.tax_invoice_date && (
                             <span style={{ fontSize: 10, color: '#b45309', fontWeight: 600, whiteSpace: 'nowrap' }}>{fmtTaxDate(q.tax_invoice_date)}</span>

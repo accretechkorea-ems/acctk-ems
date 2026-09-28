@@ -4,7 +4,7 @@ import type { Customer, Quote } from '../types'
 import { CARD_BG, INPUT_BORDER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY, WHITE_BUTTON_BG, numKR } from '../constants'
 import { isDealerQuote } from '../utils'
 import ModalOverlay from '@/components/common/ModalOverlay'
-import { SALES_STATUS_COLORS, getCategoryColor } from '@/lib/categoryColors'
+import { SALES_STATUS_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import { isOrdered, REVENUE_STATUS } from '@/lib/quoteStatus'
 
 type Props = {
@@ -106,7 +106,7 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, f
                       </td>
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                         <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text }}>
-                          {q.status}
+                          {salesStatusLabel(q.status)}
                         </span>
                       </td>
                     </tr>

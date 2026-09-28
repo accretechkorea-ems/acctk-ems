@@ -18,6 +18,7 @@ import {
 import LineProgress, { type ProgressPerson } from './LineProgress'
 import { summaryRows } from './summary'
 import { nextPendingLine } from '@/lib/approval/engine'
+import { canRejectDocument, DOC_TYPES } from '@/lib/approval/docTypes'
 import type { ApprovalLine, ApprovalDocument } from '@/lib/approval/types'
 
 export type ApprovalDoc = ApprovalDocument & {
@@ -90,6 +91,11 @@ export default function DocDetail({
 
   const nameOf = (id: number) => people[id]?.name ?? `#${id}`
   const current = nextPendingLine(doc.approval_lines)
+  // 반려할 수 없는 문서(쇼룸 사후 신청 — 이미 끝난 사용)는 반려 버튼을 감추고 승인을 「확인」이라 부른다.
+  // 판정은 서버 반려 라우트와 같은 함수를 쓴다 — 화면에 보이는 버튼과 서버가 받는 것이 어긋나지 않게.
+  const def = DOC_TYPES[doc.doc_type]
+  const rejectable = def ? canRejectDocument(def, doc.summary) : true
+  const approveLabel = rejectable ? '승인' : '확인'
   const rows = summaryRows(doc.doc_type, doc.summary)
 
   /** 라우트 호출 공통 — 409 는 「이미 처리되었습니다」로 알리고 목록을 다시 읽는다. */
@@ -118,7 +124,7 @@ export default function DocDetail({
     }
   }
 
-  const approve = () => call({ action: 'approve', documentId: doc.document_id, comment: comment.trim() || undefined }, '결재했습니다')
+  const approve = () => call({ action: 'approve', documentId: doc.document_id, comment: comment.trim() || undefined }, rejectable ? '결재했습니다' : '확인했습니다')
   const reject = () => {
     if (!comment.trim()) { toast.error('반려 사유를 입력해주세요'); return }
     call({ action: 'reject', documentId: doc.document_id, comment: comment.trim() }, '반려했습니다')
@@ -186,18 +192,20 @@ export default function DocDetail({
           <textarea
             value={comment}
             onChange={e => setComment(e.target.value)}
-            placeholder="의견 (반려는 사유 필수)"
+            placeholder={rejectable ? '의견 (반려는 사유 필수)' : '의견 (선택)'}
             rows={2}
             maxLength={500}
             style={{ ...inputStyle, width: '100%', resize: 'vertical', fontSize: 13 }}
           />
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" onClick={approve} disabled={busy} style={btnPrimary(busy)}>
-              {busy ? '처리 중...' : '승인'}
+              {busy ? '처리 중...' : approveLabel}
             </button>
-            <button type="button" onClick={reject} disabled={busy || !comment.trim()} style={btnDanger(busy || !comment.trim())}>
-              반려
-            </button>
+            {rejectable && (
+              <button type="button" onClick={reject} disabled={busy || !comment.trim()} style={btnDanger(busy || !comment.trim())}>
+                반려
+              </button>
+            )}
           </div>
         </div>
       )}

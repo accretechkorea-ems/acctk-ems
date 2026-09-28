@@ -27,7 +27,13 @@ const securityHeaders = [
       // 이미지: Supabase Storage, Kakao, data URI, blob
       "img-src 'self' data: blob: https://*.supabase.co https://*.daumcdn.net https://*.kakaocdn.net http://*.daumcdn.net http://*.kakaocdn.net",
       // @react-pdf/renderer PDFViewer는 blob: URL iframe으로 렌더링
-      "frame-src 'self' blob:",
+      // + 카카오 우편번호 검색(postcode.map.kakao.com)
+      //   우편번호 스크립트는 about:blank 프레임을 만들고 그 안에 postcode.map.kakao.com/search 를
+      //   iframe 으로 넣는다. about:blank 는 부모의 CSP 를 물려받으므로 이 호스트가 frame-src 에
+      //   없으면 「이 콘텐츠는 차단되었습니다」로 막힌다(팝업·embed 둘 다 같은 구조다).
+      //   로컬(http://localhost) 개발에서는 스크립트가 http 로 붙을 수 있어 http 스킴도 허용한다
+      //   (위 script-src 의 t1.daumcdn.net 을 http·https 둘 다 넣어둔 것과 같은 이유).
+      "frame-src 'self' blob: https://postcode.map.kakao.com http://postcode.map.kakao.com",
       // @react-pdf/renderer Web Worker (PDF 렌더링 스레드)
       "worker-src 'self' blob:",
       "frame-ancestors 'none'",

@@ -28,6 +28,28 @@ const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 const bad = (message: string) => NextResponse.json({ error: message }, { status: 400 })
 
 /**
+ * 시·도 17곳. 주소에서 시(city)를 뽑을 때 쓰는 유일한 기준이다.
+ * 값은 카카오 우편번호 검색이 돌려주는 sido 표기와 같다(정규 주소는 늘 이 이름으로 시작한다).
+ */
+const SIDO = [
+  '서울특별시', '부산광역시', '대구광역시', '인천광역시', '광주광역시', '대전광역시', '울산광역시',
+  '세종특별자치시', '경기도', '강원특별자치도', '충청북도', '충청남도', '전북특별자치도', '전라남도',
+  '경상북도', '경상남도', '제주특별자치도',
+] as const
+
+/**
+ * 주소 문자열에서 시·도를 뽑는다. 첫 낱말이 위 목록에 있으면 그 값, 아니면 빈 값이다.
+ *
+ * 화면(app/lead/page.tsx)은 주소 검색으로 받은 정규 주소를 보내므로 늘 시·도로 시작한다.
+ * 손으로 적은 주소는 「울산 북구…」처럼 줄여 쓰기 쉬운데, 그때는 빈 값으로 두어
+ * 틀린 지역명을 저장하지 않는다(city 는 목록·엑셀·PDF 에 보여 주기만 하는 값이다).
+ *
+ * 시·도를 화면에서 따로 받지 않으므로 규칙은 이 한 곳에만 둔다.
+ */
+const sidoOf = (address: string): string =>
+  SIDO.find(s => address.startsWith(s)) ?? ''
+
+/**
  * 그 해의 리드 번호 접두. 서버가 어느 시간대에 떠 있든 한국 기준 연도를 쓴다
  * (UTC 서버라면 1월 1일 오전에 전년도 번호가 나갈 수 있어서 명시한다).
  */
@@ -88,8 +110,9 @@ export async function POST(req: Request) {
 
   // ── 필수 텍스트 ──
   // 항목 이름은 FIELD_LABELS 한 곳에서만 온다(길이 초과 문구도 같은 것을 쓴다).
+  // 주소는 2026-09-28 부터 필수다(주소 검색으로 받는다). 시(city)는 주소에서 뽑으므로 받지 않는다.
   const required = [
-    'partner_company', 'partner_name', 'partner_email', 'customer_company', 'products', 'city',
+    'partner_company', 'partner_name', 'partner_email', 'customer_company', 'products', 'address',
     'contact_name', 'contact_dept', 'contact_mobile', 'meeting_note',
   ] as const
   const value: Record<string, string> = {}
@@ -99,11 +122,13 @@ export async function POST(req: Request) {
     value[key] = v
   }
 
-  // 국가는 필수이지만 기본값이 있어 비어 오면 기본값으로 채운다.
-  value.country = str(body.country) || DEFAULT_COUNTRY
+  // 국내 리드만 받는다 — 국가는 화면에서 받지 않고 여기서 고정한다.
+  value.country = DEFAULT_COUNTRY
+  // 시·도는 주소에서 뽑는다. 화면이 보낸 값은 쓰지 않는다(자유 입력 오타를 그대로 저장하지 않기 위해).
+  value.city = sidoOf(value.address)
 
   // ── 선택 텍스트 ──
-  for (const key of ['partner_contact', 'address', 'request_note', 'contact_title', 'contact_office_tel', 'contact_email'] as const) {
+  for (const key of ['partner_contact', 'request_note', 'contact_title', 'contact_office_tel', 'contact_email'] as const) {
     value[key] = str(body[key])
   }
 

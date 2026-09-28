@@ -3,8 +3,11 @@
 //
 // 서버 라우트가 renderToBuffer 로 만든다(app/api/showroom/requests/shared.ts). 브라우저에서 쓰지 않으므로
 // 'use client' 를 붙이지 않는다. 한글 폰트는 서버에 들어 있는 파일을 쓴다(아래 Font.register 설명).
-// 도장은 이미지 없이 그린다: 빨간 원(Svg Circle, 지름 60) 안에 승인자 이름, 원 아래 승인일.
-// 승인 전(대기중·반려)에는 도장 자리를 비워 둔다. 인쇄물이라 색은 화면 토큰이 아니라 인쇄용 값을 쓴다.
+// 도장은 이미지 없이 그린다: 빨간 원(Svg Circle) 안에 결재자 이름, 원 아래 결재일.
+// 결재자가 여럿이면 결재선 순서대로 칸을 나눠 나열한다(우리 회사 결재란과 같은 모양) — 4명까지는
+// 지름 60, 5~6명은 48 로 줄이고, 7명 이상이면 앞 6명만 칸으로 찍고 나머지는 결재란 아래 한 줄로 적어
+// 한 쪽을 넘기지 않는다. 처리 전인 칸은 비워 두고 상태말(전결·대결·생략)만 작게 남긴다.
+// 인쇄물이라 색은 화면 토큰이 아니라 인쇄용 값을 쓴다.
 
 import path from 'path'
 import { Document, Page, Text, View, StyleSheet, Font, Svg, Circle } from '@react-pdf/renderer'
@@ -27,7 +30,6 @@ const LABEL_BG = '#f3f4f6'
 /** 도장 빨강 — 앱의 위험 색과 같은 값. */
 const STAMP = '#dc2626'
 const LINE = 0.7
-const STAMP_D = 60
 
 export type ApprovalPdfData = {
   requestNo: string
@@ -60,8 +62,8 @@ export type ApprovalPdfData = {
   customerDept: string
   nda: string
   expectedResult: string
-  /** 승인(확인)된 뒤에만. 승인 전에는 null — 도장 자리를 비운다 */
-  stamp: { name: string; date: string } | null
+  /** 결재란 — 결재선 순서대로. 처리 전인 칸은 date 를 비워 둔다(도장 자리가 빈다). */
+  stamps: ApprovalStamp[]
   /** 승인 의견 또는 반려 사유 */
   opinion: string
 }
@@ -82,10 +84,6 @@ const S = StyleSheet.create({
     flex: 1, paddingVertical: 5, paddingHorizontal: 6,
     borderRightWidth: LINE, borderBottomWidth: LINE, borderColor: INK,
   },
-  stampCell: {
-    width: 130, height: 104, alignItems: 'center', justifyContent: 'center',
-    borderRightWidth: LINE, borderBottomWidth: LINE, borderColor: INK,
-  },
   footer: { position: 'absolute', bottom: 20, left: 40, right: 40, fontSize: 7, color: GREY, textAlign: 'center' },
 })
 
@@ -103,20 +101,80 @@ function Row({ cells, minHeight }: { cells: [string, string][]; minHeight?: numb
   )
 }
 
-function Stamp({ name, date }: { name: string; date: string }) {
+/**
+ * 결재란 한 칸. 결재선 순서대로 왼쪽부터 놓인다.
+ *   label — 승인 · 전결 · 대결 · 생략 · 반려. '승인' 이면 적지 않는다(기본값이라 칸이 좁아진다).
+ *   date  — 처리한 날. 아직 처리 전이면 빈 문자열 → 도장 자리를 비운다.
+ */
+export type ApprovalStamp = {
+  name: string
+  position: string
+  date: string
+  label: string
+}
+
+/** 결재자 수에 맞춘 도장 지름. 칸이 좁아지면 원도 줄인다. */
+const stampD = (n: number): number => (n <= 4 ? 60 : 48)
+/** 한 쪽에 칸으로 찍는 최대 인원. 이보다 많으면 나머지는 결재란 아래 한 줄로 적는다. */
+const STAMP_MAX = 6
+
+function Stamp({ name, date, d }: { name: string; date: string; d: number }) {
   // 이름이 길면(4자 이상) 글자를 줄여 원 안에 들어가게 한다.
-  const size = name.length >= 4 ? 10 : 13
+  const size = name.length >= 4 ? (d >= 60 ? 10 : 8) : (d >= 60 ? 13 : 11)
+  const box = d + 4
   return (
     <View style={{ alignItems: 'center' }}>
-      <View style={{ width: STAMP_D + 4, height: STAMP_D + 4, position: 'relative' }}>
-        <Svg width={STAMP_D + 4} height={STAMP_D + 4} viewBox={`0 0 ${STAMP_D + 4} ${STAMP_D + 4}`}>
-          <Circle cx={(STAMP_D + 4) / 2} cy={(STAMP_D + 4) / 2} r={STAMP_D / 2} stroke={STAMP} strokeWidth={2} fill="none" />
+      <View style={{ width: box, height: box, position: 'relative' }}>
+        <Svg width={box} height={box} viewBox={`0 0 ${box} ${box}`}>
+          <Circle cx={box / 2} cy={box / 2} r={d / 2} stroke={STAMP} strokeWidth={2} fill="none" />
         </Svg>
-        <View style={{ position: 'absolute', top: 0, left: 0, width: STAMP_D + 4, height: STAMP_D + 4, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ position: 'absolute', top: 0, left: 0, width: box, height: box, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ color: STAMP, fontSize: size }}>{name}</Text>
         </View>
       </View>
       <Text style={{ color: STAMP, fontSize: 7, marginTop: 2 }}>{date}</Text>
+    </View>
+  )
+}
+
+/**
+ * 결재란 — 결재자 한 명당 한 칸. 위에 직급·이름, 아래에 도장과 날짜.
+ * 결재자가 한 명이면 예전 모양(도장 칸 하나)과 같아 보인다.
+ */
+function ApprovalBox({ stamps, decider }: { stamps: ApprovalStamp[]; decider: string }) {
+  const shown = stamps.slice(0, STAMP_MAX)
+  const rest = stamps.slice(STAMP_MAX)
+  const d = stampD(shown.length)
+  return (
+    <View>
+      <View style={S.table}>
+        <View style={S.row}>
+          <Text style={[S.label, { width: 40, textAlign: 'center', justifyContent: 'center' }]}>{decider}</Text>
+          {shown.map((s, i) => (
+            <Text key={`h${i}`} style={[S.value, { backgroundColor: LABEL_BG, textAlign: 'center', fontSize: 8 }]}>
+              {[s.position, s.name].filter(Boolean).join(' ') || '-'}
+            </Text>
+          ))}
+        </View>
+        <View style={S.row}>
+          <Text style={[S.label, { width: 40 }]}> </Text>
+          {shown.map((s, i) => (
+            <View key={`s${i}`} style={[S.value, { height: d + 30, alignItems: 'center', justifyContent: 'center' }]}>
+              {s.date
+                ? <Stamp name={s.name || '-'} date={s.date} d={d} />
+                : <Text style={{ fontSize: 7, color: GREY }}>{s.label || ''}</Text>}
+              {s.date && s.label && s.label !== '승인' && (
+                <Text style={{ fontSize: 7, color: GREY, marginTop: 1 }}>{s.label}</Text>
+              )}
+            </View>
+          ))}
+        </View>
+      </View>
+      {rest.length > 0 && (
+        <Text style={{ fontSize: 7, color: GREY, marginTop: 3 }}>
+          외 {rest.map(s => [s.position, s.name].filter(Boolean).join(' ')).join(' · ')} 결재
+        </Text>
+      )}
     </View>
   )
 }
@@ -168,16 +226,11 @@ function ApprovalPdfDoc({ data }: { data: ApprovalPdfData }) {
         {/* 4. 승인 — 도장 + 의견 */}
         <View style={S.section} wrap={false}>
           <Text style={S.sectionTitle}>4. {decider}</Text>
-          <View style={S.table}>
+          <ApprovalBox stamps={data.stamps} decider={decider} />
+          <View style={[S.table, { marginTop: 6 }]}>
             <View style={S.row}>
-              <Text style={[S.label, { width: 130, textAlign: 'center' }]}>{decider}자</Text>
-              <Text style={[S.value, { backgroundColor: LABEL_BG }]}>의견</Text>
-            </View>
-            <View style={S.row}>
-              <View style={S.stampCell}>
-                {data.stamp && <Stamp name={data.stamp.name} date={data.stamp.date} />}
-              </View>
-              <Text style={[S.value, { minHeight: 104 }]}>{data.opinion.trim()}</Text>
+              <Text style={[S.label, { width: 40, textAlign: 'center' }]}>의견</Text>
+              <Text style={[S.value, { minHeight: 44 }]}>{data.opinion.trim()}</Text>
             </View>
           </View>
         </View>

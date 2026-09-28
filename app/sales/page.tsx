@@ -12,7 +12,10 @@ import AccessGate from '@/components/common/AccessGate'
 import { getViewScope, isFieldEngineerTeam, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerm, withTeamPerms } from '@/lib/teamPerms'
 import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, notifyDeleteRequest, PO_MEMO_MAX } from '@/lib/quoteMutations'
-import { isAutoFailed, isOrdered, REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE } from '@/lib/quoteStatus'
+import {
+  isAutoFailed, isOrdered, REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE,
+  STATUS_FILTER_TABS, EDIT_STATUSES, EDIT_STATUSES_WITH_REVERT, FAIL_STATUS,
+} from '@/lib/quoteStatus'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
@@ -549,9 +552,6 @@ function TeamCard({ teamId, engineers, filteredQuotes, orderQuotes, revenueQuote
 
 // ── 개인 견적 모달 ────────────────────────────────────────────────────────────
 // 상태 변경 창의 선택지. 되돌리기(견적중)는 실패한 건에만 붙는다.
-type EditStatus = '취소요청' | '실패' | '견적중'
-const EDIT_STATUSES: EditStatus[] = ['취소요청', '실패']
-const EDIT_STATUSES_WITH_REVERT: EditStatus[] = ['취소요청', '실패', '견적중']
 function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, onClose, onStatusSave }: {
   engineer: Engineer & { quotedAmt: number; orderedAmt: number; revenueAmt: number; profitAmt: number; profitRate: number | null; targetAmt: number; achieve: number | null; orderTargetAmt: number; orderAchieve: number | null }
   quotes: Quote[]
@@ -622,7 +622,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   const handleSave = async () => {
     if (!editQuote || reasonMissing) return
     setSaving(true)
-    // 되돌릴 때는 실패 사유를 지운다(빈 문자열 → 공용 함수가 null 로 저장한다).
+    // 되돌릴 때는 미수주 사유를 지운다(빈 문자열 → 공용 함수가 null 로 저장한다).
     const reason = editStatus === '견적중' ? '' : editFailReason
     await onStatusSave(editQuote, editStatus, reason)
     // 삭제 요청은 관리자에게 알린다. 알림이 실패해도 요청 자체는 저장됐으므로 흐름을 막지 않는다.
@@ -761,7 +761,8 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
           })()}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="견적번호 / 고객사 검색" style={{ ...inp, flex: 1, minWidth: 200 }} />
-            {['전체', '견적중', '수리중', '발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료', '취소요청', '실패'].map(s => (
+            {/* 상태 목록은 lib/quoteStatus.ts 한 곳에서 온다. 「전체」만 여기서 앞에 붙인다. */}
+            {['전체', ...STATUS_FILTER_TABS].map(s => (
               <button key={s} onClick={() => { setStatusFilter(s); setPage(1) }}
                 style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: statusFilter === s ? (s === '전체' ? BLUE : getCategoryColor(SALES_STATUS_COLORS, s).text) : '#f3f4f6', color: statusFilter === s ? '#fff' : TEXT }}>
                 {salesStatusLabel(s)}
@@ -1097,12 +1098,12 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                   자동 실주 건은 견적일이 이미 한 달을 넘겨, 되살리면 고객에게 나간 PDF 의
                   유효기간과 어긋나므로 선택지 자체를 만들지 않는다. */}
               <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-                {(editQuote.status === '실패' && !isAutoFailed(editQuote.status, editQuote.fail_reason)
+                {(editQuote.status === FAIL_STATUS && !isAutoFailed(editQuote.status, editQuote.fail_reason)
                   ? EDIT_STATUSES_WITH_REVERT
                   : EDIT_STATUSES).map(s => (
                   <button key={s} onClick={() => setEditStatus(s)}
                     style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: `1.5px solid ${editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).bg : '#f9fafb', color: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : GRAY, transition: 'all 0.12s' }}>
-                    {s === '취소요청' ? '삭제' : s}
+                    {s === '취소요청' ? '삭제' : salesStatusLabel(s)}
                   </button>
                 ))}
               </div>
@@ -1122,10 +1123,10 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                 ) : (
                   <>
                     <div style={{ fontSize: 11, color: GRAY, marginBottom: 5, fontWeight: 600 }}>
-                      {editStatus === '취소요청' ? '삭제 사유' : '실패 사유'}
+                      {editStatus === '취소요청' ? '삭제 사유' : '미수주 사유'}
                     </div>
                     <textarea value={editFailReason} onChange={e => setEditFailReason(e.target.value)} rows={3}
-                      placeholder={editStatus === '취소요청' ? '삭제 요청 사유를 입력하세요' : '실패 사유를 입력하세요'}
+                      placeholder={editStatus === '취소요청' ? '삭제 요청 사유를 입력하세요' : '미수주 사유를 입력하세요'}
                       style={{ width: '100%', padding: '8px 10px', border: reasonMissing ? errBorder : `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
                     <FieldError message={reasonMissing ? '삭제 사유를 입력해주세요' : undefined} />
                   </>
@@ -1175,6 +1176,9 @@ export default function SalesPage() {
 
   const fetchAll = async () => {
     setLoading(true)
+    // 자동 실주는 Vercel Cron(하루 한 번, KST 새벽 3시)이 돌린다. 이 호출은 그 보조다 —
+    // Cron 이 실패했거나 아직 안 돈 날에도 실적 현황이 맞는 상태를 보여 주기 위해 남긴다.
+    // 같은 건을 두 번 처리해도 안전하다(조건부 UPDATE). superadmin 이 아니면 403 이고 그냥 넘어간다.
     await fetch('/api/auto-fail', { method: 'POST' }).catch(() => {})
     const { data: userData } = await supabase.auth.getUser()
     const [{ data: qData, error: qErr }, { data: eData }, { data: tData }, { data: meData }, { data: custData }] = await Promise.all([

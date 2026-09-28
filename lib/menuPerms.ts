@@ -14,7 +14,7 @@
 //
 // ※ permissions.ts 와 서로를 import 한다(순환). 양쪽 다 상대를 함수 안에서만 부르고
 //   모듈 최상위에서는 쓰지 않으므로 초기화 순서에 영향받지 않는다.
-import { canViewMenu, type EngineerLike } from './permissions'
+import { canViewAll, canViewMenu, type EngineerLike } from './permissions'
 
 /** RLS 가 요구하는 데이터 영역. has_team_perm(perm) 의 인자와 같은 값이다. */
 export type DataArea = 'customers' | 'quote' | 'sales_mgmt'
@@ -41,6 +41,13 @@ export type MenuPerm = {
    * 한 기능을 두 화면이 나눠 갖는 동안(이관 중)에만 쓰고, 팀 관리 화면의 체크 대상에서도 빠진다.
    */
   permKey?: string
+  /**
+   * 메뉴는 로그인 전원에게 보이지만 권한 키는 따로 살아 있는 메뉴.
+   * public 과 다르다 — public 은 canViewMenu 가 무조건 통과시키므로 그 키로는 아무것도 잠글 수 없다.
+   * 결재가 이 경우다: 화면은 전원이 쓰고, approvals 권한은 「전체 결재 조회」를 잠그는 데만 남는다.
+   * 그래서 팀 관리 화면의 체크 대상에는 그대로 남는다(permKey 와 다른 점).
+   */
+  menuPublic?: true
 }
 
 /**
@@ -59,10 +66,13 @@ export const MENU_GROUPS: { group: MenuGroup; title: string | null; placement: '
 ]
 
 export const MENU_PERMS: MenuPerm[] = [
-  // ── 주 메뉴 — 홈·알림은 전원 공개, 결재는 관리자 ──
+  // ── 주 메뉴 — 홈·알림·결재는 전원 공개 ──
   { key: 'home', label: '홈', group: '주 메뉴', path: '/dashboard', icon: 'home', order: 10, data: [], public: true },
   { key: 'notifications', label: '알림', group: '주 메뉴', path: '/notifications', icon: 'bell', order: 20, data: [], public: true },
-  { key: 'approvals', label: '결재', group: '주 메뉴', path: '/approval', icon: 'approval', order: 30, data: ['customers', 'quote'] },
+  // 결재는 전원 공개다(4단계). 쇼룸 사용 신청을 전 직원이 올리고 자기 차례를 처리해야 하므로,
+  // 화면 진입을 팀 권한으로 잠글 수 없다. approvals 권한은 남지만 쓰임이 하나로 좁아졌다 —
+  // 결재함의 「전체」 탭(남의 문서까지 보는 권한)뿐이다. 내 결재·내 상신·참조는 권한과 무관하다.
+  { key: 'approvals', label: '결재', group: '주 메뉴', path: '/approval', icon: 'approval', order: 30, data: ['customers', 'quote'], menuPublic: true },
   // 옛 요청함. 전자결재로 옮기는 동안만 남긴다 — 4~5단계 이관이 끝나면 지운다.
   // 권한은 결재(approvals)를 그대로 따른다(permKey) — 팀별로 따로 켤 것이 아니다.
   { key: 'legacy_requests', label: '요청함(구)', group: '주 메뉴', path: '/requests', icon: 'approval', order: 40, data: ['customers', 'quote'], permKey: 'approvals' },
@@ -128,7 +138,7 @@ function matchesPattern(pattern: string, path: string): boolean {
 export function menuKeyForPath(pathname: string): string | null {
   const path = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname
   const menu = MENU_PERMS.find(m => m.path === path)
-  if (menu) return menu.public ? PUBLIC_MENU : (menu.permKey ?? menu.key)
+  if (menu) return (menu.public || menu.menuPublic) ? PUBLIC_MENU : (menu.permKey ?? menu.key)
   for (const [pattern, key] of Object.entries(PARENT_MENU)) {
     if (matchesPattern(pattern, path)) return key
   }
@@ -200,7 +210,7 @@ export function checkableGroups(): { group: MenuGroup; title: string; items: Men
 /** 한 묶음에서 이 사람에게 보이는 항목. 순서(order)대로 돌려준다. */
 export function visibleMenus(group: MenuGroup, engineer?: EngineerLike | null): MenuPerm[] {
   return MENU_PERMS
-    .filter(m => m.group === group && canViewMenu(engineer, m.permKey ?? m.key))
+    .filter(m => m.group === group && (m.menuPublic ? canViewAll(engineer) : canViewMenu(engineer, m.permKey ?? m.key)))
     .sort((a, b) => a.order - b.order)
 }
 

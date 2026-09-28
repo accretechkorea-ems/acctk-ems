@@ -9,7 +9,7 @@
 
 import { useMemo, useState } from 'react'
 import SegmentedControl from '@/components/common/SegmentedControl'
-import { SERVICE_TYPE_COLORS, TIMELINE_KIND_COLORS, getCategoryColor } from '@/lib/categoryColors'
+import { SERVICE_TYPE_COLORS, TIMELINE_KIND_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import { numKR } from './constants'
 import { isDealerQuote } from './utils'
 import { deviceLabel, elapsedLabel } from './holding'
@@ -283,7 +283,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
       label: '견적',
       dot: TIMELINE_KIND_COLORS['견적'].dot,
       title: q.quote_number,
-      body: `₩${numKR(q.total_supply || 0)} · ${q.status}`,
+      body: `₩${numKR(q.total_supply || 0)} · ${salesStatusLabel(q.status)}`,
       owner: withPosition(q.engineers),
       badge: isDealerQuote(q, customerId) ? '대리점' : undefined,
       onClick: q.pdf_url ? () => onOpenQuotePdf(q) : undefined,
