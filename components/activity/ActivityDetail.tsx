@@ -7,19 +7,31 @@ import SegmentedControl from '@/components/common/SegmentedControl'
 import HorizontalScroller from '@/components/common/HorizontalScroller'
 import { buildRoute, type RouteStop } from '@/lib/routeMap'
 import RouteMapView from '@/components/activity/RouteMapView'
-import { ACTIVITY_TYPES, byDateDesc, entryKey, type ActivityEntry } from '@/lib/activity'
+import { useRouter } from 'next/navigation'
+import { usePageGuard } from '@/hooks/usePageGuard'
+import { canViewMenu } from '@/lib/permissions'
+import { ACTIVITY_TYPES, activityHref, byDateDesc, entryKey, type ActivityEntry } from '@/lib/activity'
 
 // 활동 서비스 기록 상세 '본문'(헤더 + 타입 필터 + 목록 + 동선 지도). 상세 조회를 스스로 관리한다.
 // 두 곳에서 공유한다:
 //   - 활동 현황 페이지: ActivityDetailModal 이 오버레이/카드로 감싸 모달로 사용(variant="modal")
 //   - 개인 대시보드: 카드 안에 직접 인라인 렌더(variant="inline", 오버레이/닫기 없음)
 // 오버레이·닫기 버튼·카드 래퍼는 이 컴포넌트 밖(호출부)에 있다.
+//
+// 목록 한 줄을 누르면 그 고객사 상세의 활동 이력 탭으로 가서 그 기록을 찾아간다(lib/activity.ts
+// activityHref). 고객사가 없는 기록이거나 고객사 열람 권한이 없으면 누를 수 없는 줄로 둔다
+// — 막힌 화면으로 보내는 것보다 아예 누를 수 없는 편이 낫다.
 
 const BLUE = '#234ea2'
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
 const GRAY = '#6b7280'
 const MUTED = '#9ca3af'
+/** 목록 행 hover 배경 — 고객사 타임라인 행과 같은 값. */
+const ROW_HOVER = '#fafafa'
+
+type MouseEvent2 = React.MouseEvent<HTMLDivElement>
+type KeyboardEvent2 = React.KeyboardEvent<HTMLDivElement>
 
 // 조회 응답 모양(필요한 필드만). ActivityEntry 로 옮겨 담고 나면 쓰지 않는다.
 type Company = { company_name: string | null; latitude: number | null; longitude: number | null } | null
@@ -51,6 +63,11 @@ type Props = {
 }
 
 export default function ActivityDetail({ engineer, startDate, endDate, variant, onClose, headerRight }: Props) {
+  const router = useRouter()
+  // 로그인한 사람(engineer prop 은 «보고 있는 대상»이라 권한 판정에 쓸 수 없다).
+  // 고객사 상세는 customers 권한으로 잠겨 있다 — 없는 사람에게는 이동 자체를 만들지 않는다.
+  const { engineer: me } = usePageGuard()
+  const canOpenCustomer = canViewMenu(me, 'customers')
   const supabase = useMemo(() => createClient(), [])
   const [details, setDetails] = useState<ActivityEntry[]>([])
   const [detailLoading, setDetailLoading] = useState(false)
@@ -319,12 +336,28 @@ export default function ActivityDetail({ engineer, startDate, endDate, variant, 
         ) : (
           filteredDetails.map((d) => {
             const sc = getCategoryColor(ACTIVITY_TYPE_COLORS, d.type)
+            const href = canOpenCustomer ? activityHref(d) : null
+            const rowStyle: CSSProperties = {
+              display: 'flex', alignItems: 'flex-start', padding: '11px 12px', gap: 12,
+              borderBottom: `1px solid ${BORDER}`,
+            }
+            // 누를 수 있는 줄만 버튼으로. 커서·hover 배경은 고객사 타임라인 행과 같은 값이다.
+            const rowProps = href
+              ? {
+                  role: 'button' as const,
+                  tabIndex: 0,
+                  title: `${d.customerName} 기록으로 이동`,
+                  onClick: () => router.push(href),
+                  onKeyDown: (e: KeyboardEvent2) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(href) }
+                  },
+                  onMouseEnter: (e: MouseEvent2) => { e.currentTarget.style.background = ROW_HOVER },
+                  onMouseLeave: (e: MouseEvent2) => { e.currentTarget.style.background = '' },
+                  style: { ...rowStyle, cursor: 'pointer', transition: 'background 0.15s ease' },
+                }
+              : { style: rowStyle }
             return (
-              <div key={entryKey(d)}
-                style={{
-                  display: 'flex', alignItems: 'flex-start', padding: '11px 12px', gap: 12,
-                  borderBottom: `1px solid ${BORDER}`,
-                }}>
+              <div key={entryKey(d)} {...rowProps}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', lineHeight: '22px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {d.customerName}

@@ -3,16 +3,29 @@
 //
 // 사이드바 접힘 상태를 여기서 들고 있다 — 사이드바 폭과 본문 여백이 함께 움직여야 하고,
 // 저장·단축키도 한곳에 모아 두는 편이 낫기 때문이다.
+//
+// 접힘은 두 겹이다.
+//   collapsed     — 사용자가 고른 값. 계정별로 localStorage 에 저장한다.
+//   tempCollapsed — 화면별 임시 값(null 이면 저장값을 그대로 따른다). 결재 화면처럼 넓게 써야 하는
+//                   곳에서만 켜지고, 그 화면을 벗어나면 null 로 돌아가 저장값이 다시 드러난다.
+//                   임시 값은 절대 저장하지 않는다 — 다음 로그인·다른 화면에 영향을 주면 안 된다.
 'use client'
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
-import Sidebar, { SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from '@/components/layout/Sidebar'
+import Sidebar, { COLLAPSE_EASE, COLLAPSE_MS, SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from '@/components/layout/Sidebar'
 import NoticePopup from '@/components/common/NoticePopup'
 import { isPublicPath } from '@/lib/publicPaths'
 
 /** 폭 경계. 이 아래는 상단 바 + 드로어, 위는 고정 사이드바. */
 const MOBILE_MAX = 768
+
+/**
+ * 들어가면 사이드바를 접어 두는 화면. 결재는 문서 목록·결재표가 가로로 넓어 본문이 넓을수록 낫다.
+ * 저장된 설정은 건드리지 않는다 — 이 화면을 벗어나면 원래대로 돌아온다.
+ */
+const isWideScreenPath = (pathname: string): boolean =>
+  pathname === '/approval' || pathname.startsWith('/approval/')
 
 /**
  * 접힘 상태 저장.
@@ -52,6 +65,17 @@ export default function HeaderWrapper({ children }: { children: ReactNode }) {
   // 첫 렌더에서 바로 직전 값을 쓴다 — 펼침으로 그렸다가 접히는 깜빡임을 막는다.
   const [collapsed, setCollapsed] = useState(() => readFlag(LAST_KEY) ?? false)
   const [engineerId, setEngineerId] = useState<number | null>(null)
+  // 화면별 임시 접힘. null 이면 저장값(collapsed)을 그대로 쓴다.
+  // 첫 그림부터 맞춰 두어, 결재 화면을 바로 열었을 때 폈다가 접히는 움직임이 보이지 않게 한다.
+  const [tempCollapsed, setTempCollapsed] = useState<boolean | null>(() => (isWideScreenPath(pathname) ? true : null))
+  const wide = isWideScreenPath(pathname)
+  /** 실제로 그리는 값 — 임시 값이 있으면 그것이 이긴다. */
+  const shown = tempCollapsed ?? collapsed
+
+  // 결재 화면에 들어가면 접고, 벗어나면 임시 값을 버려 저장값으로 돌아간다.
+  // 그 화면 안에서 사용자가 직접 펼친 경우에는 경로가 그대로라 이 효과가 다시 돌지 않는다
+  // — 머무는 동안 펼친 채로 남고, 나갔다 다시 들어오면 wide 가 false→true 로 바뀌며 다시 접힌다.
+  useEffect(() => { setTempCollapsed(wide ? true : null) }, [wide])
 
   // 계정이 확인되면 그 계정의 저장값으로 맞춘다(저장된 적이 없으면 지금 값을 그 계정 값으로 둔다).
   useEffect(() => {
@@ -63,6 +87,9 @@ export default function HeaderWrapper({ children }: { children: ReactNode }) {
   }, [engineerId])
 
   const toggle = () => {
+    // 결재 화면에서는 임시 값만 움직인다. 저장된 설정은 읽지도 쓰지도 않는다 —
+    // 「이 화면에서만 잠깐 펼쳐 둔다」가 다음 로그인까지 따라가면 안 되기 때문이다.
+    if (wide) { setTempCollapsed(!shown); return }
     setCollapsed(prev => {
       const next = !prev
       writeFlag(LAST_KEY, next)
@@ -82,8 +109,10 @@ export default function HeaderWrapper({ children }: { children: ReactNode }) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
+    // toggle 이 보는 값(wide·shown)이 바뀌면 처리기를 다시 단다 — 옛 값을 쥔 처리기가 남으면
+    // 결재 화면에서 Ctrl+\ 를 눌렀을 때 저장값을 건드리게 된다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engineerId])
+  }, [engineerId, wide, shown])
 
   if (isPublicPath(pathname)) return <>{children}</>
 
@@ -92,10 +121,14 @@ export default function HeaderWrapper({ children }: { children: ReactNode }) {
   return (
     <>
       <style>{`
-        /* 사이드바 폭과 본문 여백은 늘 같이 움직인다 */
-        .ems-sidebar { width: ${SIDEBAR_WIDTH}px; padding: 12px 10px; transition: width 0.2s ease, padding 0.2s ease; }
+        /* 사이드바 폭과 본문 여백은 늘 같이 움직인다.
+           폭·여백은 transform 처럼 합성만으로 그릴 수 없어(움직일 때마다 배치를 다시 계산한다)
+           짧게 끊고 끝에서 부드럽게 멈추는 가속도를 쓴다.
+           ★ 이 시간은 Sidebar.tsx 의 COLLAPSE_MS 와 항상 같아야 한다 —
+             거기서 이 시간 동안에만 will-change 를 붙인다. 한쪽을 바꾸면 다른 쪽도 같이 바꾼다. */
+        .ems-sidebar { width: ${SIDEBAR_WIDTH}px; padding: 12px 10px; transition: width ${COLLAPSE_MS}ms ${COLLAPSE_EASE}, padding ${COLLAPSE_MS}ms ${COLLAPSE_EASE}; }
         .ems-sidebar.collapsed { width: ${SIDEBAR_COLLAPSED_WIDTH}px; padding: 12px 8px; }
-        .ems-main { margin-left: ${SIDEBAR_WIDTH}px; transition: margin-left 0.2s ease; }
+        .ems-main { margin-left: ${SIDEBAR_WIDTH}px; transition: margin-left ${COLLAPSE_MS}ms ${COLLAPSE_EASE}; }
         .ems-main.collapsed { margin-left: ${SIDEBAR_COLLAPSED_WIDTH}px; }
         /* 모바일 전용 껍데기는 PC 에서 자리를 차지하지 않는다.
            display 는 여기서만 정한다 — 컴포넌트에 인라인으로 두면 이 규칙을 이긴다. */
@@ -118,8 +151,8 @@ export default function HeaderWrapper({ children }: { children: ReactNode }) {
           .ems-notif { left: 8px; right: 8px; top: 60px; width: auto; }
         }
       `}</style>
-      <Sidebar collapsed={collapsed} onToggle={toggle} onEngineerId={setEngineerId} />
-      <div className={`ems-main${collapsed ? ' collapsed' : ''}`}>{children}</div>
+      <Sidebar collapsed={shown} onToggle={toggle} onEngineerId={setEngineerId} />
+      <div className={`ems-main${shown ? ' collapsed' : ''}`}>{children}</div>
       <NoticePopup />
     </>
   )

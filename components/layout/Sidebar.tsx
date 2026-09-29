@@ -28,6 +28,35 @@ export const TOPBAR_HEIGHT = 52
 /** 모바일 드로어 폭. */
 const DRAWER_WIDTH = 304
 
+/**
+ * 접힘 전환 시간(ms)과 가속도. ★ HeaderWrapper 의 .ems-sidebar / .ems-main transition 이 이 값을 그대로 쓴다.
+ * 두 곳이 항상 같아야 한다 — 전환이 도는 동안에만 will-change 를 붙이는 기준이 이 시간이라,
+ * 어긋나면 전환이 끝나기 전에 will-change 가 떨어지거나 끝난 뒤에도 남는다.
+ * 폭·여백은 transform 과 달리 배치를 다시 계산하므로, 길게 끌지 않고 끝에서 부드럽게 멈춘다.
+ */
+export const COLLAPSE_MS = 140
+export const COLLAPSE_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
+
+/**
+ * 모션 규칙. 폭·여백 전환 자체(HeaderWrapper 의 .ems-sidebar / .ems-main)는 여기서 정하지 않고,
+ * 이 파일이 할 수 있는 두 가지만 둔다.
+ *
+ *   1. will-change 는 전환이 도는 동안에만 붙인다(.moving). 상시로 두면 브라우저가 그 레이어를
+ *      계속 붙들고 있어 오히려 손해다.
+ *   2. 모션을 줄이길 원하는 사용자(prefers-reduced-motion)에게는 전환을 끈다. 드로어는 인라인
+ *      style 로 transition 을 갖고 있어 !important 가 있어야 덮인다.
+ *
+ * 이 style 태그는 HeaderWrapper 의 것보다 뒤에 붙는다 — 같은 우선순위면 나중 것이 이긴다.
+ */
+const MOTION_CSS = `
+  .ems-sidebar.moving { will-change: width, padding; }
+  @media (prefers-reduced-motion: reduce) {
+    .ems-sidebar, .ems-main { transition: none !important; }
+    .ems-sidebar.moving { will-change: auto; }
+    .ems-drawer-wrap nav, .ems-drawer-wrap div { transition: none !important; }
+  }
+`
+
 const BORDER = '#ebebeb'
 const BG = '#f5f6f8'
 const TEXT = '#111827'
@@ -106,6 +135,9 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
 
   const [meOpen, setMeOpen] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // 접힘이 바뀌는 동안만 true — 이때만 will-change 를 붙인다.
+  const [moving, setMoving] = useState(false)
+  const firstPaint = useRef(true)
 
   // 접힌 상태에서 아이콘 옆에 띄우는 이름표. title 속성은 느리고 모양을 정할 수 없어 직접 그린다.
   const [tip, setTip] = useState<{ label: string; top: number } | null>(null)
@@ -187,6 +219,14 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
 
   // 화면을 옮기면 드로어는 닫는다(항목을 눌러 이동한 경우 포함).
   useEffect(() => { setDrawerOpen(false) }, [pathname])
+
+  // 접힘이 바뀌면 전환이 도는 동안에만 will-change 를 켠다. 첫 그림에는 전환이 없으므로 건너뛴다.
+  useEffect(() => {
+    if (firstPaint.current) { firstPaint.current = false; return }
+    setMoving(true)
+    const t = setTimeout(() => setMoving(false), COLLAPSE_MS)
+    return () => clearTimeout(t)
+  }, [collapsed])
 
   const engineer: EngineerLike | null = email ? { permission_level: permissionLevel, teams, perm: teamPerm } : null
 
@@ -321,6 +361,8 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
 
   return (
     <>
+      <style>{MOTION_CSS}</style>
+
       {/* ── 모바일 상단 바 — 흐름 안의 sticky 라 본문이 아래로 밀린다(예전 헤더와 같은 방식).
           display 는 여기서 정하지 않는다 — 인라인이 클래스를 이겨서 PC 에서도 보였다.
           보이고 숨기는 것은 HeaderWrapper 의 .ems-topbar 규칙만 정한다. ── */}
@@ -346,7 +388,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
       </header>
 
       {/* ── PC 사이드바 ── */}
-      <nav className={`ems-sidebar${collapsed ? ' collapsed' : ''}`} aria-label="주 메뉴" style={{
+      <nav className={`ems-sidebar${collapsed ? ' collapsed' : ''}${moving ? ' moving' : ''}`} aria-label="주 메뉴" style={{
         position: 'fixed', top: 0, left: 0, zIndex: Z.sidebar,
         height: '100vh', boxSizing: 'border-box',
         background: BG, borderRight: `1px solid ${BORDER}`,

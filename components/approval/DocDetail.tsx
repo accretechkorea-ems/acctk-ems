@@ -2,8 +2,10 @@
 
 // 문서 상세 — 목록 행 아래에서 그대로 펼쳐진다(아코디언). 목록을 떠나지 않고 처리한다.
 //
-// 위에서부터 결재선 진행도 → 문서 내용(요약) → 이력 → 처리 버튼.
-// 처리 버튼은 결재함에서만 보이고, 상신함은 회수·재작성, 참조함은 아무 버튼도 두지 않는다.
+// 아마란스 문서 양식을 따른다. 위에서부터
+//   머리(왼쪽 문서 정보 표 · 오른쪽 결재표) → 문서 내용(요약) → 이력
+//   → 「상기와 같이 …를 제출합니다」 → 처리 버튼
+// 처리 버튼은 미결함에서만 보이고, 상신함은 회수·재작성, 참조함은 아무 버튼도 두지 않는다.
 //
 // 이력은 approval_history 를 화면에서 바로 읽는다 — 그 문서의 상신자·결재선 참여자만 읽히도록
 // RLS 가 이미 걸려 있어서(ah_select), 목록에 보이는 문서면 이력도 읽힌다.
@@ -15,7 +17,8 @@ import {
   BORDER, DANGER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT,
   btnDanger, btnGhost, btnPrimary, inputStyle,
 } from '@/components/common/ui'
-import LineProgress, { type ProgressPerson } from './LineProgress'
+import ApprovalTable, { type ProgressPerson } from './ApprovalTable'
+import DocInfo from './DocInfo'
 import { summaryRows } from './summary'
 import { nextPendingLine } from '@/lib/approval/engine'
 import { canRejectDocument, DOC_TYPES } from '@/lib/approval/docTypes'
@@ -39,6 +42,13 @@ type HistoryRow = {
 /** 「회수」는 두 번 눌러야 실행된다. 요청함·쇼룸·첨부와 같은 3초다. */
 const CONFIRM_MS = 3000
 
+/** 「…을/를」 — 마지막 글자의 받침으로 고른다. 문서 종류 이름이 유형마다 달라 규칙으로 둔다. */
+const objectParticle = (word: string): string => {
+  const code = word.charCodeAt(word.length - 1)
+  if (code < 0xac00 || code > 0xd7a3) return '를'
+  return (code - 0xac00) % 28 === 0 ? '를' : '을'
+}
+
 const when = (iso: string | null): string => {
   if (!iso) return ''
   const d = new Date(iso)
@@ -52,7 +62,7 @@ export default function DocDetail({
   doc: ApprovalDoc
   people: Record<number, ProgressPerson>
   /** 어느 함에서 펼쳤는가 — 버튼 구성이 갈린다. */
-  box: 'inbox' | 'outbox' | 'cc' | 'all' | 'done'
+  box: 'pending' | 'done' | 'outbox' | 'cc' | 'all'
   /** 처리 성공 — 목록을 다시 읽게 한다. */
   onChanged: () => void
 }) {
@@ -97,6 +107,7 @@ export default function DocDetail({
   const rejectable = def ? canRejectDocument(def, doc.summary) : true
   const approveLabel = rejectable ? '승인' : '확인'
   const rows = summaryRows(doc.doc_type, doc.summary)
+  const docLabel = def?.label ?? doc.doc_type
 
   /** 라우트 호출 공통 — 409 는 「이미 처리되었습니다」로 알리고 목록을 다시 읽는다. */
   const call = async (body: Record<string, unknown>, okText: string) => {
@@ -141,7 +152,27 @@ export default function DocDetail({
 
   return (
     <div style={{ padding: '12px 12px 14px', background: '#fafafa', borderTop: `1px solid ${BORDER}` }}>
-      <LineProgress lines={doc.approval_lines} people={people} currentLineId={current?.line_id ?? null} />
+      {/* 머리 — 왼쪽 문서 정보, 오른쪽 결재표. 좁으면 결재표가 아래로 내려간다. */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 300px', minWidth: 0 }}>
+          <DocInfo
+            docNo={doc.doc_no}
+            submittedAt={doc.submitted_at ?? doc.created_at}
+            requesterId={doc.requester_id}
+            title={doc.title}
+            lines={doc.approval_lines}
+            people={people}
+          />
+        </div>
+        {/* 맨 앞 기안자 칸은 결재선이 아니라 문서 값으로 그린다 — 판정이 기안자를 결재자로 세지 않는다. */}
+        <ApprovalTable
+          lines={doc.approval_lines}
+          people={people}
+          currentLineId={current?.line_id ?? null}
+          requesterId={doc.requester_id}
+          submittedAt={doc.submitted_at}
+        />
+      </div>
 
       {/* 문서 내용 — 유형별 항목은 summary.ts 가 뽑는다. 4~6단계에서 유형별 컴포넌트가 이 자리에 들어온다. */}
       {rows.length > 0 && (
@@ -186,8 +217,13 @@ export default function DocDetail({
         )}
       </div>
 
+      {/* 문서를 닫는 한 줄 — 아마란스 문서 맨 아래에 늘 붙는 문구다. */}
+      <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${BORDER}`, textAlign: 'center', fontSize: 12, color: SUB }}>
+        상기와 같이 {docLabel}{objectParticle(docLabel)} 제출합니다
+      </div>
+
       {/* 처리 */}
-      {box === 'inbox' && doc.status === '진행중' && (
+      {box === 'pending' && doc.status === '진행중' && (
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <textarea
             value={comment}

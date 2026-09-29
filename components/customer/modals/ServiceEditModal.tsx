@@ -10,6 +10,8 @@ import { isCurrentlyEmployed } from '@/lib/engineers'
 import Popover from '@/components/common/Popover'
 import { todayKST } from '@/lib/date'
 import { ServiceAttachmentEditor, type ReportSlot } from '../ServiceAttachments'
+import InstallPrepSection from '../InstallPrepSection'
+import { isInstallPrepReadOnly, isInstallPrepTarget } from '@/lib/installPrep'
 
 type Props = {
   service: ServiceHistory | null
@@ -56,6 +58,9 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
 
   // 작업시간 자동 계산 (점심 12:00~13:00 공제). 종료<=시작 또는 작업시간<=0 이면 무효.
   const orderValid = toMin(form.end_time) > toMin(form.start_time)
+  // 설치 준비 구역 — 화면의 유형·방문일을 기준으로 본다(고치는 즉시 나타나고 사라진다).
+  const prepTarget = isInstallPrepTarget(form.service_type, form.visit_date)
+  const prepReadOnly = isInstallPrepReadOnly(form.service_type, form.visit_date)
   const lunchHours = lunchOverlapHours(form.start_time, form.end_time)
   const workHours = computeWorkHours(form.start_time, form.end_time)
   const timeValid = orderValid && workHours > 0
@@ -278,6 +283,12 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
               )}
             </div>
           </div>
+
+          {/* 설치 준비 — 신규설치 예정 건에만. 방문일이 지나면 읽기 전용으로 남긴다.
+              저장은 이 구역이 자기 라우트로 바로 한다([저장] 과 무관 — 첨부와 같은 방식). */}
+          {(prepTarget || prepReadOnly) && (
+            <InstallPrepSection serviceId={service.service_id} readOnly={prepReadOnly} />
+          )}
 
           <div style={{ border: errors.engineers ? errBorder : '1px solid #ebebeb', borderRadius: 8, padding: 14, background: '#f8f9fb' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 7 }}>

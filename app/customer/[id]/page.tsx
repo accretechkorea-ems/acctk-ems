@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
-import { useParams } from 'next/navigation'
+import { Suspense, useState } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { Font } from '@react-pdf/renderer'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { isSuperAdmin } from '@/lib/permissions'
 import { isMobileViewport } from '@/lib/viewport'
+import { HISTORY_TAB_PARAM } from '@/lib/activity'
 
 import { useCustomerDetail } from '@/hooks/customer/useCustomerDetail'
 import { useServiceCrud } from '@/hooks/customer/useServiceCrud'
@@ -50,10 +51,15 @@ Font.register({
   src: 'https://fonts.gstatic.com/s/notosanskr/v36/PbyxFmXiEBPT4ITbgNA5Cgms3VYcOA-vvnIzzuoyeLTq8H4hfeE.ttf',
 })
 
-export default function CustomerDetailPage() {
+function CustomerDetailPageInner() {
   const { loading: guardLoading, authorized } = usePageGuard()
   const params = useParams()
+  const router = useRouter()
+  const search = useSearchParams()
   const customerId = Number(params.id)
+  // 활동 요약에서 넘어온 주소 — ?tab=history&focus=s-123
+  const wantHistoryTab = search.get('tab') === HISTORY_TAB_PARAM
+  const focusKey = search.get('focus')
 
   const detail = useCustomerDetail(customerId)
   const {
@@ -80,7 +86,11 @@ export default function CustomerDetailPage() {
   // 모바일(현장)에서는 장비를 먼저 본다. 데스크톱은 기존대로 활동 이력.
   // 첫 렌더는 서버에서도 도는데 그때는 false(데스크톱)라, 화면에 나오는 것은
   // 어차피 로딩 스켈레톤이므로 hydration 이 어긋나지 않는다.
-  const [tab, setTab] = useState<'활동 이력' | '장비'>(() => (isMobileViewport() ? '장비' : '활동 이력'))
+  // 주소로 들어온 탭이 있으면 그것을 따른다 — 휴대폰 기본값(장비)보다 우선한다.
+  // (첫 렌더는 서버에서도 도는데 그때 보이는 것은 로딩 스켈레톤이라 hydration 이 어긋나지 않는다)
+  const [tab, setTab] = useState<'활동 이력' | '장비'>(
+    () => (wantHistoryTab ? '활동 이력' : isMobileViewport() ? '장비' : '활동 이력'),
+  )
   // 거래 이력은 두 기준으로 열린다 — 이 업체만(site), 같은 회사 전체(family).
   const [quoteScope, setQuoteScope] = useState<'site' | 'family' | null>(null)
   const [isSignModalOpen, setIsSignModalOpen] = useState(false)
@@ -117,6 +127,10 @@ export default function CustomerDetailPage() {
       justify-content: center;
     }
     .cust-left { grid-area: left; display: flex; flex-direction: column; gap: 12px; }
+    /* 카드 사이 간격은 이 열의 gap(12) 하나로만 정한다.
+       카드 컴포넌트가 제 아래 여백을 들고 있으면(업체 정보 카드의 marginBottom: 16) 그 카드 밑만
+       28px 이 되어 줄이 어긋난다. 인라인 style 이라 !important 가 있어야 덮인다. */
+    .cust-left > * { margin-bottom: 0 !important; }
     .cust-center { grid-area: center; min-width: 0; }
     .cust-left {
       position: sticky;
@@ -298,6 +312,9 @@ export default function CustomerDetailPage() {
           // (탭이 카드 가운데에 있으므로 본문도 가운데 정렬)
           <div style={{ padding: '12px 14px', maxWidth: 1100, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
             <ActivityTimeline
+              focusKey={focusKey}
+              // 찾아가기가 끝나면 주소를 원래대로 — 새로고침·뒤로가기에 강조가 다시 뜨지 않게 한다.
+              onFocused={() => router.replace(`/customer/${customerId}`, { scroll: false })}
               history={history}
               devices={devices}
               quotes={quotes}
@@ -503,5 +520,14 @@ export default function CustomerDetailPage() {
 
       </main>
     </>
+  )
+}
+
+// useSearchParams 는 Suspense 경계가 필요하다(재고·유지보수·결재 화면과 같은 패턴).
+export default function CustomerDetailPage() {
+  return (
+    <Suspense fallback={null}>
+      <CustomerDetailPageInner />
+    </Suspense>
   )
 }

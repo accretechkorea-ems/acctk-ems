@@ -15,6 +15,7 @@ import { useHoldingCrud } from '@/hooks/customer/useHoldingCrud'
 import { useHoldingList } from '@/hooks/holding/useHoldingList'
 import { useOpportunityCrud } from '@/hooks/customer/useOpportunityCrud'
 import { useDashboard80, buildUrgentItems } from '@/hooks/dashboard/useDashboard80'
+import { prepSummaryShort } from '@/lib/installPrep'
 import { STAGES, compactKRW } from '@/components/customer/opportunity'
 import { numKR } from '@/components/customer/constants'
 import type { SalesOpportunity } from '@/components/customer/types'
@@ -214,6 +215,11 @@ export default function Dashboard80Page() {
            (세 줄: 13 + 12 + 11px + 줄 간격 + 안쪽 여백 ≈ 69px 이라 여유를 둬 72px). */
         .d80-hold { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 72px; gap: 8px; }
         .d80-hold > * { min-width: 0; box-sizing: border-box; }
+        /* 다가오는 일정 — 홀딩과 같은 3열이지만 신규설치 건에 준비 요약 한 줄이 더 붙는다.
+           .d80-hold 를 고치면 홀딩 카드까지 키가 커지므로 전용 클래스를 따로 둔다.
+           네 줄: 13 + 12 + 11 + 11px + 줄 간격 + 안쪽 여백 ≈ 88px 이라 여유를 둬 92px. */
+        .d80-up { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 92px; gap: 8px; }
+        .d80-up > * { min-width: 0; box-sizing: border-box; }
         /* 모바일 — 전부 한 칸씩 세로로 쌓는다 */
         @media (max-width: 899px) {
           .d80-strip { grid-template-columns: minmax(0, 1fr); }
@@ -402,7 +408,7 @@ export default function Dashboard80Page() {
                 <Empty text="예정된 일정이 없습니다" />
               ) : (
                 // 홀딩과 같은 규칙 — 3건 이하면 한 줄, 모자란 자리는 점선 칸.
-                <div className="d80-hold">
+                <div className="d80-up">
                   {Array.from({ length: gridSlots(upcomingVisits.length, TOP_UPCOMING) }).map((_, i) => {
                     const v = upcomingVisits[i]
                     if (!v) {
@@ -439,6 +445,22 @@ export default function Dashboard80Page() {
                             {v.daysLeft === 0 ? '오늘' : `D-${v.daysLeft}`}
                           </span>
                         </span>
+                        {/* 설치 준비 — 신규설치 예정 건에만 붙는다(그 밖의 유형에는 prep 이 없다).
+                            칸이 좁아(약 123px) 「준비 2/4 · 지게차」가 넘칠 수 있다.
+                            항목 이름만 줄여 ... 로 접고 「준비 n/4」는 폭을 지키게 한다
+                            — 위의 담당자 줄과 같은 규칙이다. 색은 dot 에만 준다. */}
+                        {v.prep && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#9ca3af', minWidth: 0 }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: v.prep.allDone ? '#16a34a' : '#d1d5db' }} />
+                            <span style={{ flexShrink: 0 }}>{prepSummaryShort(v.prep)}</span>
+                            {!v.prep.allDone && v.prep.firstPending && (
+                              <>
+                                <span style={{ color: '#d1d5db', flexShrink: 0 }}>·</span>
+                                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.prep.firstPending}</span>
+                              </>
+                            )}
+                          </span>
+                        )}
                       </div>
                     )
                   })}

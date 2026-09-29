@@ -28,9 +28,10 @@ export default function CustomerInfoPanel({ customer, onEdit }: Props) {
   }
 
   return (
+    // 카드 사이 간격은 이 카드가 아니라 왼쪽 열의 gap(app/customer/[id]/page.tsx .cust-left)이 정한다.
     <div style={{
       background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8,
-      padding: '14px 16px', marginBottom: 16, position: 'relative',
+      padding: '14px 16px', position: 'relative',
     }}>
       {/* 수정 — 아이콘만. 라벨 없이도 뜻이 통하고 좁은 열에서 회사명 자리를 덜 뺏는다 */}
       <button

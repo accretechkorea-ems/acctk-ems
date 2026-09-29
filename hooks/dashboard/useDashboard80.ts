@@ -12,11 +12,13 @@ import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { isClosed } from '@/components/customer/opportunity'
 import { deviceLabel, elapsedDays } from '@/components/customer/holding'
+import { INSTALL_SERVICE_TYPE, prepSummary, type PrepSummary } from '@/lib/installPrep'
+import { countedVisitEnd } from '@/lib/serviceVisit'
 import { todayKST, daysBetween, nowKSTParts, nowHmKST } from '@/lib/date'
 import { SERVICE_TYPES } from '@/components/activity/ActivityCard'
 import { SALES_TYPES } from '@/lib/activity'
 import { PENDING_STATUS, quoteExpiry } from '@/lib/quoteStatus'
-import type { Holding, SalesActivity, SalesOpportunity } from '@/components/customer/types'
+import type { Holding, InstallPrep, SalesActivity, SalesOpportunity } from '@/components/customer/types'
 
 export const STALE_DAYS = 30
 
@@ -62,6 +64,30 @@ export type UpcomingVisit = {
   serviceType: string    // 서비스 유형(없으면 유형 미정)
   owner: string          // 담당자(visitor 스냅샷)
   daysLeft: number       // 오늘로부터 남은 날 (0 이상 — 0 이면 오늘 방문)
+  /** 신규설치 예정 건의 설치 준비 상태. 그 밖의 유형에는 없다. */
+  prep?: PrepSummary
+}
+
+/**
+ * 예정 건의 설치 준비 상태를 한 번에 읽는다(service_id 목록 하나로).
+ * 실패해도 대시보드는 그대로 뜬다 — 요약 줄만 빠진다.
+ */
+async function loadInstallPrep(serviceIds: number[]): Promise<Map<number, InstallPrep[]>> {
+  const map = new Map<number, InstallPrep[]>()
+  if (serviceIds.length === 0) return map
+  try {
+    const res = await fetch(`/api/install-prep?serviceIds=${serviceIds.join(',')}`)
+    const json = await res.json().catch(() => null)
+    if (!res.ok) { console.error('[dashboard80] install prep failed', json); return map }
+    for (const row of (json?.items ?? []) as InstallPrep[]) {
+      const list = map.get(row.service_id) ?? []
+      list.push(row)
+      map.set(row.service_id, list)
+    }
+  } catch (e) {
+    console.error('[dashboard80] install prep failed', e)
+  }
+  return map
 }
 
 export type UrgentKind = '홀딩' | '정체' | '마감'
@@ -238,9 +264,12 @@ export function useDashboard80() {
         // 이번 달 영업 활동 — 유형만
         supabase.from('sales_activities').select('activity_type')
           .gte('activity_date', range.start).lt('activity_date', range.end),
-        // 이번 달 C/S 활동 — 유형만
+        // 이번 달 C/S 활동 — 유형만.
+        // 방문 예정으로 미리 써 둔 기록은 빼고 센다(오늘까지) — 신규 설치 준비 때문에
+        // 예정 등록이 늘면서, 상한이 없으면 이달 건수가 부풀어 오른다.
         supabase.from('service_history').select('service_type')
-          .gte('visit_date', range.start).lt('visit_date', range.end),
+          .gte('visit_date', range.start).lt('visit_date', range.end)
+          .lte('visit_date', countedVisitEnd(range.end)),
         // 유효기간이 걸리는 견적(견적중)만. 업체명은 두 FK 를 구분해 임베딩한다.
         supabase.from('quotes')
           .select('quote_id, quote_number, quote_date, customers!quotes_customer_id_fkey(company_name)')
@@ -324,20 +353,27 @@ export function useDashboard80() {
       //   · start_time 이 비어 있는 오늘 건은 남긴다 — 시각을 몰라 거를 근거가 없고,
       //     '잊지 않으려고 미리 쓴 건' 을 감추는 쪽이 더 손해다(2026-07 이전 기록에만 있다).
       const nowHm = nowHmKST()
+      const upcoming = ((upcomingRes.data ?? []) as unknown as VisitRow[])
+        .filter(v => !!v.visit_date)
+        .filter(v => v.visit_date !== upcomingFrom || !v.start_time || String(v.start_time).slice(0, 5) > nowHm)
+        .map(v => ({
+          serviceId: v.service_id,
+          visitDate: v.visit_date as string,
+          company: v.customers?.company_name ?? '-',
+          // 장비 두 컬럼을 공백으로 잇는다(홀딩의 deviceLabel 과 같은 규칙).
+          device: [v.devices?.device_name, v.devices?.device_name2].filter(Boolean).join(' ') || '장비 미지정',
+          serviceType: v.service_type?.trim() || '유형 미정',
+          owner: v.visitor?.trim() || '담당자 미정',
+          daysLeft: daysBetween(upcomingFrom, v.visit_date as string),
+        }))
+
+      // 설치 준비 요약 — 신규설치 예정 건에만 붙는다. 없는 항목은 미확인으로 센다.
+      const prepMap = await loadInstallPrep(upcoming.filter(v => v.serviceType === INSTALL_SERVICE_TYPE).map(v => v.serviceId))
+      if (!alive.current) return false
       setUpcomingVisits(
-        ((upcomingRes.data ?? []) as unknown as VisitRow[])
-          .filter(v => !!v.visit_date)
-          .filter(v => v.visit_date !== upcomingFrom || !v.start_time || String(v.start_time).slice(0, 5) > nowHm)
-          .map(v => ({
-            serviceId: v.service_id,
-            visitDate: v.visit_date as string,
-            company: v.customers?.company_name ?? '-',
-            // 장비 두 컬럼을 공백으로 잇는다(홀딩의 deviceLabel 과 같은 규칙).
-            device: [v.devices?.device_name, v.devices?.device_name2].filter(Boolean).join(' ') || '장비 미지정',
-            serviceType: v.service_type?.trim() || '유형 미정',
-            owner: v.visitor?.trim() || '담당자 미정',
-            daysLeft: daysBetween(upcomingFrom, v.visit_date as string),
-          })),
+        upcoming.map(v => (v.serviceType === INSTALL_SERVICE_TYPE
+          ? { ...v, prep: prepSummary(prepMap.get(v.serviceId) ?? []) }
+          : v)),
       )
 
       setThisMonth(cur)

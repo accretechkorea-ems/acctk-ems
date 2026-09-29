@@ -12,6 +12,7 @@ import ActivityCard from '@/components/activity/ActivityCard'
 import { ACTIVITY_TYPES } from '@/lib/activity'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
 import { nowKSTParts, addDays } from '@/lib/date'
+import { countedVisitEnd } from '@/lib/serviceVisit'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#fafafa'
@@ -126,7 +127,8 @@ export default function ActivityPage() {
       .from('service_history')
       .select('service_id, service_type, visit_date')
       .gte('visit_date', start)
-      .lte('visit_date', end)
+      // 방문 예정으로 미리 써 둔 기록은 빼고 센다(오늘까지) — 80 대시보드·개인 대시보드와 같은 기준.
+      .lte('visit_date', countedVisitEnd(end))
 
     // 영업 활동 — engineer_id 가 단일이라 이 한 줄이 곧 (기록, 사람) 이다.
     // 서비스처럼 다대다 표를 거칠 필요가 없어 그대로 사람별로 센다.

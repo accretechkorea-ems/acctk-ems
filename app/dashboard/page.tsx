@@ -9,6 +9,7 @@ import ActivityCard from '@/components/activity/ActivityCard'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
 import MyQuotesPanel from '@/components/dashboard/MyQuotesPanel'
 import { nowKSTParts } from '@/lib/date'
+import { countedVisitEnd } from '@/lib/serviceVisit'
 
 type Me = {
   engineer_id: number
@@ -93,7 +94,8 @@ export default function DashboardPage() {
               .select('service_type')
               .in('service_id', serviceIds)
               .gte('visit_date', activityStart)
-              .lte('visit_date', activityEnd),
+              // 방문 예정으로 미리 써 둔 기록은 빼고 센다(오늘까지) — 활동 현황과 같은 기준.
+              .lte('visit_date', countedVisitEnd(activityEnd)),
         supabase
           .from('sales_activities')
           .select('activity_type')

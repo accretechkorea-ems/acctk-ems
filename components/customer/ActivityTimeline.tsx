@@ -7,13 +7,15 @@
 // visit_date 가 없는 서비스 기록이 1000건 넘게 남아 있어, 날짜순 사이에 끼워 넣지 않고
 // 맨 아래 "날짜 미상"으로 접어둔다. 견적은 quote_date 가 항상 있어 여기 해당하지 않는다.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import { SERVICE_TYPE_COLORS, TIMELINE_KIND_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import { numKR } from './constants'
 import { isDealerQuote } from './utils'
 import { deviceLabel, elapsedLabel } from './holding'
 import type { Device, Holding, Quote, SalesActivity, ServiceHistory } from './types'
+import { isFutureVisit } from '@/lib/serviceVisit'
+import { timelineKey } from '@/lib/activity'
 
 type Props = {
   history: ServiceHistory[]
@@ -27,6 +29,10 @@ type Props = {
   onAddActivity: () => void
   onEditActivity: (a: SalesActivity) => void
   canEditActivity: (a: SalesActivity) => boolean
+  /** 활동 요약에서 넘어온 행 id(lib/activity.ts timelineKey). 그 줄로 스크롤하고 잠깐 밝힌다. */
+  focusKey?: string | null
+  /** 찾아가기가 끝났을 때(없는 행이어도) 한 번 부른다 — 부르는 쪽이 주소를 정리한다. */
+  onFocused?: () => void
 }
 
 type Kind = '서비스' | '견적' | '영업' | '홀딩'
@@ -127,7 +133,15 @@ function SizedCell({ sizer, style, children }: { sizer: string; style: React.CSS
 // 부가정보는 접힌 상태에서도 항상 보이도록 내용과 분리해 두고, 내용만 말줄임한다.
 // 수정 아이콘은 자리를 따로 잡지 않고, 호버 때 행 오른쪽 위에 겹쳐 띄운다(날짜를 가려도 된다).
 // first 는 그룹(월)의 첫 행. 위 구분선을 그리지 않는다 — 월 머리글 줄과 겹치기 때문.
-function TimelineRow({ item, first }: { item: Item; first: boolean }) {
+/**
+ * 활동 요약에서 넘어왔을 때 그 행을 잠깐 밝혀 둔다.
+ * 색은 새로 만들지 않고 서비스 유형 색표의 연한 파랑(신규설치 bg)을 그대로 쓴다.
+ * 1.5초 — 눈으로 찾기에는 넉넉하고, 계속 남아 「선택된 줄」로 오해되지는 않는 길이.
+ */
+const FOCUS_BG = SERVICE_TYPE_COLORS['신규설치'].bg
+const FOCUS_MS = 1500
+
+function TimelineRow({ item, first, focused }: { item: Item; first: boolean; focused?: boolean }) {
   const [expanded, setExpanded] = useState(false)
   const [hovered, setHovered] = useState(false)
   const body = item.body.trim()
@@ -136,14 +150,18 @@ function TimelineRow({ item, first }: { item: Item; first: boolean }) {
 
   return (
     <div
+      // 활동 요약에서 이 id 로 찾아온다(lib/activity.ts timelineKey — 보내는 쪽과 같은 규약).
+      id={item.key}
       onClick={item.onClick}
       style={{
         borderTop: first ? 'none' : '1px solid #ebebeb', padding: '9px 4px',
         position: 'relative',
+        background: focused ? FOCUS_BG : undefined,
         cursor: clickable ? 'pointer' : 'default', transition: 'background 0.15s ease',
       }}
       onMouseEnter={e => { setHovered(true); if (clickable) e.currentTarget.style.background = '#fafafa' }}
-      onMouseLeave={e => { setHovered(false); if (clickable) e.currentTarget.style.background = 'transparent' }}
+      // 빈 값으로 되돌린다 — 'transparent' 로 박아 두면 강조 배경까지 지워진다.
+      onMouseLeave={e => { setHovered(false); if (clickable) e.currentTarget.style.background = '' }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
 
@@ -250,9 +268,12 @@ function TimelineRow({ item, first }: { item: Item; first: boolean }) {
   )
 }
 
-export default function ActivityTimeline({ history, devices, quotes, activities, holdings, customerId, onOpenQuotePdf, onOpenHolding, onAddActivity, onEditActivity, canEditActivity }: Props) {
+export default function ActivityTimeline({ history, devices, quotes, activities, holdings, customerId, onOpenQuotePdf, onOpenHolding, onAddActivity, onEditActivity, canEditActivity, focusKey, onFocused }: Props) {
   const [filter, setFilter] = useState<Filter>('전체')
   const [showUndated, setShowUndated] = useState(false)
+  // 활동 요약에서 넘어온 행. 한 번 찾아가고 나면 다시 하지 않는다(필터를 바꿔도 되풀이되지 않게).
+  const [focusedKey, setFocusedKey] = useState<string | null>(null)
+  const focusDoneRef = useRef<string | null>(null)
 
   // 장비 표시는 모델명 전체(device_name + device_name2). 뒤 항목이 비면 앞만 쓴다.
   const deviceNameOf = useMemo(() => {
@@ -263,7 +284,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
 
   const items = useMemo<Item[]>(() => {
     const serviceItems: Item[] = history.map(h => ({
-      key: `s-${h.service_id}`,
+      key: timelineKey('service', h.service_id),
       kind: '서비스' as const,
       date: h.visit_date,
       label: h.service_type ?? '-',
@@ -271,6 +292,8 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
       title: deviceNameOf(h),
       body: h.service_notes ?? '',
       labelSuffix: h.is_paid !== null ? (h.is_paid ? '유상' : '무상') : undefined,
+      // 아직 오지 않은 방문 — 다녀온 기록과 섞이지 않게 표시한다(예정 건을 미리 등록한다).
+      badge: isFutureVisit(h.visit_date) ? '예정' : undefined,
       owner: engineerNames(h),
       sortAt: sortKey(null, h.visit_date),
       sortId: h.service_id,
@@ -292,7 +315,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
     }))
 
     const salesItems: Item[] = activities.map(a => ({
-      key: `a-${a.activity_id}`,
+      key: timelineKey('sales', a.activity_id),
       kind: '영업' as const,
       date: a.activity_date,
       label: a.activity_type,
@@ -366,6 +389,27 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
     return { months, undated }
   }, [items, filter])
 
+  // 활동 요약에서 넘어온 행 찾아가기 — 자료가 다 그려진 뒤 한 번만.
+  //   · 필터가 「전체」가 아니면 대상이 가려질 수 있어 먼저 되돌린다(다음 렌더에서 이어서 한다).
+  //   · 없는 행(지워진 기록 등)이면 아무 일도 하지 않는다 — 오류를 띄우지 않는다.
+  //   · 모션을 줄이길 원하는 사용자에게는 부드러운 스크롤 없이 자리만 옮긴다.
+  useEffect(() => {
+    if (!focusKey || focusDoneRef.current === focusKey) return
+    if (items.length === 0) return                       // 아직 불러오는 중
+    const done = () => { focusDoneRef.current = focusKey; onFocused?.() }
+    if (!items.some(i => i.key === focusKey)) { done(); return }
+    if (filter !== '전체') { setFilter('전체'); return }
+    const el = document.getElementById(focusKey)
+    if (!el) return                                      // 접힌 묶음 등 — 다음 렌더에서 다시 본다
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    el.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' })
+    setFocusedKey(focusKey)
+    done()
+    const t = setTimeout(() => setFocusedKey(null), FOCUS_MS)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusKey, items, filter])
+
   // 단일 선택 필터라 슬라이딩 인디케이터(SegmentedControl)로 둔다. 건수는 라벨 옆 suffix.
   const filterOptions = FILTERS.map(f => ({ label: f, value: f, suffix: String(counts[f]) }))
 
@@ -405,7 +449,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>{m.rows.length}건</span>
                 <span style={{ flex: 1, height: 1, background: '#ebebeb' }} />
               </div>
-              {m.rows.map((it, i) => <TimelineRow key={it.key} item={it} first={i === 0} />)}
+              {m.rows.map((it, i) => <TimelineRow key={it.key} item={it} first={i === 0} focused={it.key === focusedKey} />)}
             </div>
           ))}
 
@@ -422,7 +466,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
                 </button>
                 <span style={{ flex: 1, height: 1, background: '#ebebeb' }} />
               </div>
-              {showUndated && undated.map((it, i) => <TimelineRow key={it.key} item={it} first={i === 0} />)}
+              {showUndated && undated.map((it, i) => <TimelineRow key={it.key} item={it} first={i === 0} focused={it.key === focusedKey} />)}
             </div>
           )}
         </>

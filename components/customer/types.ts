@@ -51,6 +51,32 @@ export type ServiceAttachment = {
   engineers?: { name: string; position: string | null } | null
 }
 
+/**
+ * 신규 설치 준비 항목 한 줄(service_install_prep).
+ * 항목 4종은 lib/installPrep.ts 의 PREP_ITEMS 가 정하고, 쓰기는 /api/install-prep 만 한다.
+ */
+export type InstallPrep = {
+  prep_id: number
+  service_id: number
+  /** freight · site · waste · forklift */
+  item_key: string
+  /** 협의완료 · 미확인 */
+  status: string
+  /** 화물·지게차 — 업체명 / 기사 연락처 / 예정시각(HH:MM[:SS]) */
+  vendor: string | null
+  contact: string | null
+  planned_at: string | null
+  /** 설치 장소·폐기물 — 협의 상대 */
+  counterpart: string | null
+  note: string | null
+  /** 협의완료로 바꾼 사람. 서버가 세션에서 박는다. */
+  done_by: number | null
+  done_at: string | null
+  created_at: string
+  updated_at: string
+  engineers?: { name: string; position: string | null } | null
+}
+
 export type ServiceHistory = {
   service_id: number
   customer_id: number

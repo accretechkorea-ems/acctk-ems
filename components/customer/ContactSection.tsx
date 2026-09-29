@@ -3,9 +3,16 @@
 // 담당자 — 카드 하나 안에 목록으로 쌓는다.
 // 담당자마다 카드를 만들면 좌측 열이 사람 수만큼 길어지므로,
 // 카드는 하나로 두고 구분선으로 항목을 나눈다(추가 버튼도 같은 카드의 마지막 줄).
+//
+// 기본은 두 명까지만 편다. 왼쪽 열은 sticky 라 화면 높이만큼만 쓰고(.cust-left 의
+// max-height), 그 아래는 열 안에서 스크롤해야 나온다 — 세 명째부터 「잘린 것처럼」 보였다.
+// 더 있으면 [N명 더 보기] 로 펼친다. 추가 버튼은 접든 펴든 늘 맨 아래에 남는다.
 
 import { useState } from 'react'
 import type { Contact } from './types'
+
+/** 접었을 때 보이는 담당자 수. 이보다 많을 때만 더 보기 줄이 생긴다. */
+const VISIBLE = 2
 
 type Props = {
   contacts: Contact[]
@@ -104,6 +111,10 @@ function ContactRow({ contact, onEdit, first }: { contact: Contact; onEdit: () =
 }
 
 export default function ContactSection({ contacts, onAdd, onEdit }: Props) {
+  const [expanded, setExpanded] = useState(false)
+  const hidden = Math.max(0, contacts.length - VISIBLE)
+  const shown = expanded ? contacts : contacts.slice(0, VISIBLE)
+
   return (
     <div style={{ background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
 
@@ -114,9 +125,32 @@ export default function ContactSection({ contacts, onAdd, onEdit }: Props) {
         )}
       </div>
 
-      {contacts.map((c, i) => (
+      {shown.map((c, i) => (
         <ContactRow key={c.contact_id} contact={c} first={i === 0} onEdit={() => onEdit(c)} />
       ))}
+
+      {/* 더 보기 — 두 명 이하면 아예 두지 않는다(누를 것이 없는 줄을 만들지 않는다). */}
+      {hidden > 0 && (
+        <button
+          onClick={() => setExpanded(v => !v)}
+          aria-expanded={expanded}
+          style={{
+            width: '100%', padding: '9px 0', boxSizing: 'border-box',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+            background: 'transparent', border: 'none', borderTop: `1px solid ${BORDER}`,
+            cursor: 'pointer', color: '#6b7280', fontSize: 12, fontWeight: 700,
+            fontFamily: 'inherit', transition: 'background 0.15s ease',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = '#fafafa' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+        >
+          {expanded ? '접기' : `담당자 ${hidden}명 더 보기`}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            {expanded ? <polyline points="18 15 12 9 6 15" /> : <polyline points="6 9 12 15 18 9" />}
+          </svg>
+        </button>
+      )}
 
       {/* 추가 — 목록의 마지막 줄. 담당자가 없을 때도 이 줄만 남는다. */}
       <button

@@ -1,0 +1,308 @@
+// 결재 함 구성과 목록 표시 규칙 — 아마란스 양식에 맞춘 이름·분류·형식.
+//
+// 화면(app/approval/page.tsx)이 쓰는 순수 함수만 둔다. 판정·라우트는 건드리지 않는다 —
+// 함은 이름과 묶는 방식만 바뀌었고, 어떤 문서가 어느 함에 들어가는지는 지금까지와 같은 API 응답 그대로다.
+//
+// 보는 자리는 두 값으로 정해진다.
+//   source — 어디서 읽는가(라우트 그대로): inbox · outbox · done · cc · all
+//   scope  — 그 안에서 무엇만 보는가: 모든문서 · 진행문서 · 종결문서 (+ 미결 = 반려·회수)
+// 왼쪽 함 목록의 항목 하나가 곧 (source, scope) 한 쌍이고, 본문 오른쪽 위 라디오는 같은 값의
+// scope 만 바꾼다. 그래서 왼쪽으로 가든 라디오로 가든 같은 자리에 닿는다 — 상태가 하나뿐이다.
+//
+//   상신/보관함   상신문서       (outbox, 모든문서)
+//                 미결문서       (outbox, 미결 = 반려·회수)
+//   결재수신함    미결문서       (inbox,  모든문서) — 내 차례라 늘 진행 중이다
+//                 기결문서       (done,   모든문서)
+//                 기결문서(진행) (done,   진행문서)
+//                 기결문서(종결) (done,   종결문서)
+//                 수신참조문서   (cc,     모든문서)
+//   전체          (all, 모든문서) — approvals 권한자
+//
+// 아마란스의 결재분류함(예결·후결·반려·보류·전결)은 두지 않는다 — 우리 결재선 개념과 다르다.
+
+import type { ApprovalDoc } from './DocDetail'
+import type { ProgressPerson } from './ApprovalTable'
+
+/** 목록을 읽어 오는 곳. 라우트의 box 값과 같은 이름이다. */
+export type Source = 'inbox' | 'outbox' | 'done' | 'cc' | 'all'
+
+/** 그 안에서 무엇만 보는가. */
+export type Scope = 'all' | 'open' | 'closed' | 'unfinished'
+
+export type BoxItem = {
+  /** 항목 식별자(그리기·검사용). 주소에는 source·scope 를 싣는다. */
+  key: string
+  label: string
+  source: Source
+  scope: Scope
+  /** 비었을 때 안내 */
+  empty: string
+}
+
+export type BoxGroup = {
+  /** 그룹 제목. null 이면 제목 없이 항목만 둔다(전체). */
+  title: string | null
+  items: BoxItem[]
+}
+
+export const BOX_GROUPS: BoxGroup[] = [
+  {
+    title: '상신/보관함',
+    items: [
+      { key: 'outbox', label: '상신문서', source: 'outbox', scope: 'all', empty: '올린 문서가 없습니다' },
+      { key: 'outbox_unfinished', label: '미결문서', source: 'outbox', scope: 'unfinished', empty: '다시 손볼 문서가 없습니다' },
+    ],
+  },
+  {
+    title: '결재수신함',
+    items: [
+      { key: 'inbox', label: '미결문서', source: 'inbox', scope: 'all', empty: '결재할 문서가 없습니다' },
+      { key: 'done', label: '기결문서', source: 'done', scope: 'all', empty: '처리한 문서가 없습니다' },
+      { key: 'done_open', label: '기결문서(진행)', source: 'done', scope: 'open', empty: '진행 중인 문서가 없습니다' },
+      { key: 'done_closed', label: '기결문서(종결)', source: 'done', scope: 'closed', empty: '종결된 문서가 없습니다' },
+      { key: 'cc', label: '수신참조문서', source: 'cc', scope: 'all', empty: '참조된 문서가 없습니다' },
+    ],
+  },
+  {
+    title: null,
+    items: [
+      { key: 'all', label: '전체', source: 'all', scope: 'all', empty: '문서가 없습니다' },
+    ],
+  },
+]
+
+export const BOX_ITEMS: BoxItem[] = BOX_GROUPS.flatMap(g => g.items)
+
+/** 목록을 읽는 주소. 라우트는 지금 것 그대로다. */
+export const SOURCE_API: Record<Source, string> = {
+  inbox: '/api/approval?box=inbox',
+  outbox: '/api/approval?box=outbox',
+  done: '/api/approval/done',
+  cc: '/api/approval?box=cc',
+  all: '/api/approval?box=all',
+}
+
+/** 처음 열었을 때 보는 자리 — 내 차례(결재수신함 · 미결문서). */
+export const DEFAULT_VIEW: { source: Source; scope: Scope } = { source: 'inbox', scope: 'all' }
+
+/** 본문 오른쪽 위 라디오. 미결(반려·회수)은 함 자체가 뜻을 정하므로 여기 두지 않는다. */
+export const SCOPES: { value: Scope; label: string }[] = [
+  { value: 'all', label: '모든문서' },
+  { value: 'open', label: '진행문서' },
+  { value: 'closed', label: '종결문서' },
+]
+
+/**
+ * 라디오를 보여줄 자리인가.
+ *   · 미결문서(inbox) — 내 차례인 문서는 늘 진행 중이라 고를 것이 없다.
+ *   · 미결문서(outbox, 반려·회수) — 함 이름이 곧 상태다.
+ */
+export const showsScopeRadio = (source: Source, scope: Scope): boolean =>
+  source !== 'inbox' && scope !== 'unfinished'
+
+// ── 주소 ────────────────────────────────────────────────────────────
+
+const SOURCES: Source[] = ['inbox', 'outbox', 'done', 'cc', 'all']
+
+/** 옛 주소의 하위 구분 값 → 지금의 scope. */
+const LEGACY_SCOPE: Record<string, Scope> = {
+  progress: 'open', complete: 'closed', unfinished: 'unfinished',
+  open: 'open', closed: 'closed', all: 'all',
+}
+
+/**
+ * 주소 → 보는 자리. 옛 주소를 모두 받아 준다(알림·즐겨찾기가 들고 있을 수 있다).
+ *   ?tab=inbox            → 결재수신함 미결문서
+ *   ?tab=inbox&sub=done   → 기결문서
+ *   ?tab=outbox&sub=unfinished / ?box=outbox&view=unfinished → 상신함 미결문서
+ * 모르는 값은 기본 자리로 돌린다.
+ */
+export function parseView(params: {
+  box?: string | null; tab?: string | null; view?: string | null; sub?: string | null
+}): { source: Source; scope: Scope } {
+  const raw = params.box ?? params.tab ?? null
+  const sub = params.view ?? params.sub ?? null
+
+  // 옛 이름 — 결재함(inbox)의 「완료」 하위 탭은 지금의 기결문서다.
+  if (raw === 'inbox' || raw === 'pending' || raw === null) {
+    if (sub === 'done') return { source: 'done', scope: 'all' }
+    return { source: 'inbox', scope: 'all' }
+  }
+  if (raw === 'done') {
+    return { source: 'done', scope: LEGACY_SCOPE[sub ?? 'all'] ?? 'all' }
+  }
+  if ((SOURCES as string[]).includes(raw)) {
+    const source = raw as Source
+    const scope = LEGACY_SCOPE[sub ?? 'all'] ?? 'all'
+    // 미결(반려·회수)은 상신함에만 뜻이 있다.
+    if (scope === 'unfinished' && source !== 'outbox') return { source, scope: 'all' }
+    return { source, scope }
+  }
+  return { ...DEFAULT_VIEW }
+}
+
+/** 보는 자리 → 주소 뒷부분. 기본 자리는 빈 문자열(주소를 깨끗이 둔다). */
+export function viewQuery(source: Source, scope: Scope): string {
+  const q = new URLSearchParams()
+  if (source !== DEFAULT_VIEW.source) q.set('box', source)
+  if (scope !== 'all') q.set('view', scope)
+  return q.toString()
+}
+
+/** 왼쪽 목록에서 지금 자리로 표시할 항목. 딱 맞는 것이 없으면 같은 함의 「모든문서」를 짚는다. */
+export function activeItem(source: Source, scope: Scope): BoxItem {
+  return BOX_ITEMS.find(i => i.source === source && i.scope === scope)
+    ?? BOX_ITEMS.find(i => i.source === source)
+    ?? BOX_ITEMS[0]
+}
+
+// ── 분류 ────────────────────────────────────────────────────────────
+
+/** scope 에 맞는 문서인가. */
+export function matchesScope(scope: Scope, doc: ApprovalDoc): boolean {
+  if (scope === 'all') return true
+  if (scope === 'open') return doc.status === '진행중'
+  if (scope === 'closed') return doc.status !== '진행중'
+  // 미결 — 신청자가 다시 손봐야 하는 건.
+  return doc.status === '반려' || doc.status === '회수'
+}
+
+/** 상신함 「미결문서」 건수 — 왼쪽 목록에 그대로 쓰인다. */
+export const unfinishedCount = (docs: ApprovalDoc[]): number =>
+  docs.filter(d => matchesScope('unfinished', d)).length
+
+/** 문서 상세(DocDetail)가 아는 함 이름으로 바꾼다 — 버튼 구성이 이 값으로 갈린다. */
+export const detailBox = (source: Source): 'pending' | 'done' | 'outbox' | 'cc' | 'all' =>
+  source === 'inbox' ? 'pending' : source
+
+// ── 날짜 ────────────────────────────────────────────────────────────
+// 기결문서는 내가 처리한 날(결재일), 그 밖은 상신일(기안일)이 기준이다.
+
+/** 내가 처리한 줄 — 내 차례였던 것과 위임받아 대결한 것 둘 다. */
+export function myActedLine(doc: ApprovalDoc, myId: number | null) {
+  if (myId == null) return null
+  const mine = (doc.approval_lines ?? []).filter(
+    l => l.state !== '대기' && (l.approver_id === myId || l.acted_by === myId),
+  )
+  if (mine.length === 0) return null
+  return mine.reduce((a, b) => ((a.acted_at ?? '') >= (b.acted_at ?? '') ? a : b))
+}
+
+export function approvalDate(doc: ApprovalDoc, source: Source, myId: number | null): string | null {
+  if (source === 'done') return myActedLine(doc, myId)?.acted_at ?? doc.updated_at ?? null
+  return doc.submitted_at ?? doc.created_at ?? null
+}
+
+/** 첫 열 이름 — 기결문서만 「결재일」이다. */
+export const dateColumnLabel = (source: Source): string => (source === 'done' ? '결재일' : '기안일')
+
+// ── 결재상태 ────────────────────────────────────────────────────────
+
+const nameWithPosition = (p: ProgressPerson | undefined, id: number): string => {
+  if (!p) return `#${id}`
+  return [p.name ?? `#${id}`, p.position ?? ''].filter(Boolean).join(' ')
+}
+
+/** 마지막으로 처리한 사람 — 대결이면 실제로 누른 사람. */
+function lastActor(doc: ApprovalDoc, states: string[]): number | null {
+  const acted = (doc.approval_lines ?? [])
+    .filter(l => states.includes(l.state))
+    .sort((a, b) => (a.acted_at ?? '').localeCompare(b.acted_at ?? ''))
+  const last = acted[acted.length - 1]
+  if (!last) return null
+  return last.acted_by ?? last.approver_id
+}
+
+/**
+ * 「종결(이상철 사장)」 「반려(양정모 책임)」 「진행(3/5)」 처럼 한 덩어리로.
+ * 처리자 이름을 괄호에 넣고, 진행중이면 몇 번째인지 적는다.
+ */
+export function statusText(doc: ApprovalDoc, people: Record<number, ProgressPerson>): string {
+  if (doc.status === '진행중') {
+    const total = doc.progress?.total ?? (doc.approval_lines ?? []).filter(l => l.kind !== 'cc').length
+    const step = doc.progress?.currentStep ?? ((doc.progress?.done ?? 0) + 1)
+    return total > 0 ? `진행(${Math.min(step, total)}/${total})` : '진행'
+  }
+  if (doc.status === '완료') {
+    const id = lastActor(doc, ['승인', '전결', '대결'])
+    return id == null ? '종결' : `종결(${nameWithPosition(people[id], id)})`
+  }
+  if (doc.status === '반려') {
+    const id = lastActor(doc, ['반려'])
+    return id == null ? '반려' : `반려(${nameWithPosition(people[id], id)})`
+  }
+  if (doc.status === '회수') {
+    const id = doc.requester_id
+    return `회수(${nameWithPosition(people[id], id)})`
+  }
+  return doc.status
+}
+
+// ── 첨부 ────────────────────────────────────────────────────────────
+
+/**
+ * 첨부 개수. 지금 결재 문서에는 첨부 테이블이 따로 없고, summary 에 담긴 파일이 전부다
+ * (쇼룸 사용 신청의 승인서 PDF — pdf_url). 배열로 오는 유형이 생기면 그것도 센다.
+ */
+export function attachmentCount(summary: Record<string, unknown> | null | undefined): number {
+  if (!summary) return 0
+  const list = (summary as { attachments?: unknown }).attachments
+  if (Array.isArray(list)) return list.length
+  const pdf = (summary as { pdf_url?: unknown }).pdf_url
+  return typeof pdf === 'string' && pdf.trim() ? 1 : 0
+}
+
+// ── 검색 ────────────────────────────────────────────────────────────
+
+/** 문서번호·제목·상신자 이름. 빈 검색어는 전부 통과. */
+export function matchesSearch(doc: ApprovalDoc, query: string, people: Record<number, ProgressPerson>): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  const requester = people[doc.requester_id]?.name ?? ''
+  return [doc.doc_no, doc.title, requester].some(v => (v ?? '').toLowerCase().includes(q))
+}
+
+// ── 기간 ────────────────────────────────────────────────────────────
+
+/** 기준일이 from~to(양 끝 포함) 안인가. 날짜가 없는 문서는 거르지 않는다. */
+export function inPeriod(iso: string | null, from: string, to: string): boolean {
+  if (!iso) return true
+  const ymd = iso.slice(0, 10)
+  return ymd >= from && ymd <= to
+}
+
+// ── 목록 ────────────────────────────────────────────────────────────
+
+/** 기준일 순으로 세운다. 기본은 최신순(desc). */
+export function sortDocs(docs: ApprovalDoc[], source: Source, myId: number | null, desc: boolean): ApprovalDoc[] {
+  return [...docs].sort((a, b) => {
+    const av = approvalDate(a, source, myId) ?? ''
+    const bv = approvalDate(b, source, myId) ?? ''
+    if (av !== bv) return desc ? bv.localeCompare(av) : av.localeCompare(bv)
+    // 같은 시각이면 번호가 큰 쪽(나중 문서)이 먼저 — 순서가 흔들리지 않게 고정한다.
+    return b.document_id - a.document_id
+  })
+}
+
+/** 한 벌에 scope·기간·검색을 모두 걸고 세운다. */
+export function filterDocs(
+  docs: ApprovalDoc[],
+  opts: {
+    source: Source; scope: Scope; query: string; from: string; to: string
+    myId: number | null; people: Record<number, ProgressPerson>; desc: boolean
+  },
+): ApprovalDoc[] {
+  const kept = docs.filter(d =>
+    matchesScope(opts.scope, d)
+    && inPeriod(approvalDate(d, opts.source, opts.myId), opts.from, opts.to)
+    && matchesSearch(d, opts.query, opts.people),
+  )
+  return sortDocs(kept, opts.source, opts.myId, opts.desc)
+}
+
+/** 왼쪽 목록에 붙는 건수 — 기간·검색을 걸기 전, 그 함에 들어 있는 전부. */
+export function itemCount(item: BoxItem, docsBySource: Partial<Record<Source, ApprovalDoc[]>>): number | null {
+  const rows = docsBySource[item.source]
+  if (rows === undefined) return null
+  return rows.filter(d => matchesScope(item.scope, d)).length
+}

@@ -37,6 +37,27 @@ export type ActivityEntry = {
 /** 목록·키에 쓰는 유일 키. 두 테이블의 id 가 겹쳐도 충돌하지 않는다. */
 export const entryKey = (e: Pick<ActivityEntry, 'source' | 'id'>) => `${e.source}-${e.id}`
 
+// ── 고객사 상세로 보내기 ────────────────────────────────────────────
+// 활동 요약(모달)에서 항목을 누르면 그 고객사 상세의 활동 이력 탭을 열고 그 행을 찾아간다.
+// 타임라인 행 id 와 주소 규약을 여기 한 곳에 두고 보내는 쪽·받는 쪽이 같이 쓴다
+// — 문자열이 두 파일에 흩어지면 한쪽만 고쳐져 조용히 어긋난다.
+
+/** 고객사 상세 활동 이력의 행 id. entryKey(service-1) 와 달리 타임라인은 s-1 · a-1 을 쓴다. */
+export const timelineKey = (source: ActivitySource, id: number): string =>
+  `${source === 'service' ? 's' : 'a'}-${id}`
+
+export const timelineKeyOf = (e: Pick<ActivityEntry, 'source' | 'id'>): string =>
+  timelineKey(e.source, e.id)
+
+/** 고객사 상세에서 활동 이력 탭을 여는 주소 값(?tab=). 한글을 주소에 싣지 않는다. */
+export const HISTORY_TAB_PARAM = 'history'
+
+/** 활동 한 줄 → 고객사 상세 주소. 고객사가 없는 기록(customerId null)은 갈 곳이 없어 null. */
+export function activityHref(e: Pick<ActivityEntry, 'source' | 'id' | 'customerId'>): string | null {
+  if (e.customerId == null) return null
+  return `/customer/${e.customerId}?tab=${HISTORY_TAB_PARAM}&focus=${timelineKeyOf(e)}`
+}
+
 // 날짜에 시각이 없어 하루 안의 실제 순서는 알 수 없고, 두 테이블의 id 는 서로 비교할 의미가 없다.
 // 그래서 2차 기준은 (source, id) 로 못 박아 '뜻은 없지만 항상 같은' 순서를 만든다.
 // 이 기준이 없으면 서비스와 영업이 섞일 때 목록·동선 순서가 조회할 때마다 달라진다.

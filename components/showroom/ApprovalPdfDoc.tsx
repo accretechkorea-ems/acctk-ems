@@ -3,10 +3,13 @@
 //
 // 서버 라우트가 renderToBuffer 로 만든다(app/api/showroom/requests/shared.ts). 브라우저에서 쓰지 않으므로
 // 'use client' 를 붙이지 않는다. 한글 폰트는 서버에 들어 있는 파일을 쓴다(아래 Font.register 설명).
-// 도장은 이미지 없이 그린다: 빨간 원(Svg Circle) 안에 결재자 이름, 원 아래 결재일.
-// 결재자가 여럿이면 결재선 순서대로 칸을 나눠 나열한다(우리 회사 결재란과 같은 모양) — 4명까지는
-// 지름 60, 5~6명은 48 로 줄이고, 7명 이상이면 앞 6명만 칸으로 찍고 나머지는 결재란 아래 한 줄로 적어
-// 한 쪽을 넘기지 않는다. 처리 전인 칸은 비워 두고 상태말(전결·대결·생략)만 작게 남긴다.
+// 결재란은 아마란스 결재표와 같은 모양이다 — 직급을 가로 헤더로 두고, 그 아래 도장, 그 아래 처리일과 이름.
+// 맨 앞 칸은 기안자(신청자)다 — 아마란스처럼 상신한 순간 자기 칸에 도장이 찍혀 있다.
+// 화면(components/approval/ApprovalTable.tsx)과 같은 배치라 종이와 화면이 따로 놀지 않는다.
+// 도장은 이미지 없이 그린다: 빨간 원(Svg Circle) 안에 이름.
+// 기안자 칸까지 합쳐 4칸까지는 지름 60, 그 위로는 48 로 줄이고, 결재자가 7명 이상이면 앞 6명만
+// 칸으로 찍고 나머지는 결재란 아래 한 줄로 적어 한 쪽을 넘기지 않는다(기안자 + 결재자 6 = 7칸이 최대).
+// 처리 전인 칸은 비워 두고 상태말(전결·대결·생략)만 작게 남긴다.
 // 인쇄물이라 색은 화면 토큰이 아니라 인쇄용 값을 쓴다.
 
 import path from 'path'
@@ -113,58 +116,73 @@ export type ApprovalStamp = {
   label: string
 }
 
-/** 결재자 수에 맞춘 도장 지름. 칸이 좁아지면 원도 줄인다. */
-const stampD = (n: number): number => (n <= 4 ? 60 : 48)
-/** 한 쪽에 칸으로 찍는 최대 인원. 이보다 많으면 나머지는 결재란 아래 한 줄로 적는다. */
+/**
+ * 칸 수에 맞춘 도장 지름. 기안자 칸까지 함께 센다 — 칸이 좁아지면 원도 줄인다.
+ * 최대인 7칸(기안자 + 결재자 6)에서도 칸 폭이 약 68pt 라 지름 48 + 여백이 들어간다.
+ */
+const stampD = (cells: number): number => (cells <= 4 ? 60 : 48)
+/** 한 쪽에 칸으로 찍는 최대 결재자 수. 이보다 많으면 나머지는 결재란 아래 한 줄로 적는다. */
 const STAMP_MAX = 6
 
-function Stamp({ name, date, d }: { name: string; date: string; d: number }) {
+function Stamp({ name, d }: { name: string; d: number }) {
   // 이름이 길면(4자 이상) 글자를 줄여 원 안에 들어가게 한다.
   const size = name.length >= 4 ? (d >= 60 ? 10 : 8) : (d >= 60 ? 13 : 11)
   const box = d + 4
   return (
-    <View style={{ alignItems: 'center' }}>
-      <View style={{ width: box, height: box, position: 'relative' }}>
-        <Svg width={box} height={box} viewBox={`0 0 ${box} ${box}`}>
-          <Circle cx={box / 2} cy={box / 2} r={d / 2} stroke={STAMP} strokeWidth={2} fill="none" />
-        </Svg>
-        <View style={{ position: 'absolute', top: 0, left: 0, width: box, height: box, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ color: STAMP, fontSize: size }}>{name}</Text>
-        </View>
+    <View style={{ width: box, height: box, position: 'relative' }}>
+      <Svg width={box} height={box} viewBox={`0 0 ${box} ${box}`}>
+        <Circle cx={box / 2} cy={box / 2} r={d / 2} stroke={STAMP} strokeWidth={2} fill="none" />
+      </Svg>
+      <View style={{ position: 'absolute', top: 0, left: 0, width: box, height: box, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ color: STAMP, fontSize: size }}>{name}</Text>
       </View>
-      <Text style={{ color: STAMP, fontSize: 7, marginTop: 2 }}>{date}</Text>
     </View>
   )
 }
 
 /**
- * 결재란 — 결재자 한 명당 한 칸. 위에 직급·이름, 아래에 도장과 날짜.
- * 결재자가 한 명이면 예전 모양(도장 칸 하나)과 같아 보인다.
+ * 결재란 — 아마란스 결재표. 직급을 가로 헤더로 두고, 그 아래 도장, 그 아래 처리일과 이름.
+ * 맨 앞은 기안자 칸이다(결재선이 아니라 신청 정보에서 온다 — 판정에는 쓰이지 않는다).
+ *
+ * 기안자 직급은 승인서 데이터에 없어 헤더를 「기안」으로 둔다.
  */
-function ApprovalBox({ stamps, decider }: { stamps: ApprovalStamp[]; decider: string }) {
-  const shown = stamps.slice(0, STAMP_MAX)
+function ApprovalBox({ stamps, decider, drafter }: { stamps: ApprovalStamp[]; decider: string; drafter: ApprovalStamp }) {
+  const approvers = stamps.slice(0, STAMP_MAX)
   const rest = stamps.slice(STAMP_MAX)
+  const shown = [drafter, ...approvers]
   const d = stampD(shown.length)
   return (
     <View>
       <View style={S.table}>
+        {/* 직급 — 가로 헤더 */}
         <View style={S.row}>
           <Text style={[S.label, { width: 40, textAlign: 'center', justifyContent: 'center' }]}>{decider}</Text>
           {shown.map((s, i) => (
             <Text key={`h${i}`} style={[S.value, { backgroundColor: LABEL_BG, textAlign: 'center', fontSize: 8 }]}>
-              {[s.position, s.name].filter(Boolean).join(' ') || '-'}
+              {s.position || '-'}
             </Text>
           ))}
         </View>
+        {/* 도장 — 처리 전이면 빈칸(상태말만) */}
         <View style={S.row}>
           <Text style={[S.label, { width: 40 }]}> </Text>
           {shown.map((s, i) => (
-            <View key={`s${i}`} style={[S.value, { height: d + 30, alignItems: 'center', justifyContent: 'center' }]}>
-              {s.date
-                ? <Stamp name={s.name || '-'} date={s.date} d={d} />
+            <View key={`s${i}`} style={[S.value, { height: d + 14, alignItems: 'center', justifyContent: 'center' }]}>
+              {s.date && s.label !== '생략'
+                ? <Stamp name={s.name || '-'} d={d} />
                 : <Text style={{ fontSize: 7, color: GREY }}>{s.label || ''}</Text>}
+            </View>
+          ))}
+        </View>
+        {/* 처리일 · 이름 */}
+        <View style={S.row}>
+          <Text style={[S.label, { width: 40 }]}> </Text>
+          {shown.map((s, i) => (
+            <View key={`f${i}`} style={[S.value, { alignItems: 'center', paddingVertical: 3 }]}>
+              <Text style={{ fontSize: 7, color: GREY }}>{s.date || ' '}</Text>
+              <Text style={{ fontSize: 8 }}>{s.name || '-'}</Text>
               {s.date && s.label && s.label !== '승인' && (
-                <Text style={{ fontSize: 7, color: GREY, marginTop: 1 }}>{s.label}</Text>
+                <Text style={{ fontSize: 7, color: GREY }}>{s.label}</Text>
               )}
             </View>
           ))}
@@ -226,7 +244,11 @@ function ApprovalPdfDoc({ data }: { data: ApprovalPdfData }) {
         {/* 4. 승인 — 도장 + 의견 */}
         <View style={S.section} wrap={false}>
           <Text style={S.sectionTitle}>4. {decider}</Text>
-          <ApprovalBox stamps={data.stamps} decider={decider} />
+          <ApprovalBox
+            stamps={data.stamps}
+            decider={decider}
+            drafter={{ position: '기안', name: data.requesterName || '-', date: data.requestDate || '', label: '' }}
+          />
           <View style={[S.table, { marginTop: 6 }]}>
             <View style={S.row}>
               <Text style={[S.label, { width: 40, textAlign: 'center' }]}>의견</Text>

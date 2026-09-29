@@ -49,13 +49,13 @@ export default function OpportunityCard({ opp, lastActivity, canEdit, onOpen, on
           onClick={onOpen}
           style={{ flex: 1, minWidth: 0, textAlign: 'left', padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}
         >
-          {/* 업체명 — 이름 뒤의 구분 표기(측정실·공장 등)가 잘리지 않도록 2줄까지 허용 */}
+          {/* 업체명 — 한 줄 말줄임. 열이 좁아져도 카드 높이가 흔들리지 않는다.
+              잘린 뒷부분(측정실·공장 등 구분 표기)은 title 로 확인한다. */}
           <div
             title={opp.customers?.company_name ?? '-'}
             style={{
               fontSize: 15, fontWeight: 700, color: '#111827', lineHeight: '20px',
-              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-              overflow: 'hidden', wordBreak: 'break-all',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }}
           >
             {opp.customers?.company_name ?? '-'}
@@ -103,7 +103,9 @@ export default function OpportunityCard({ opp, lastActivity, canEdit, onOpen, on
         {closeMonth && (
           <>
             <span style={{ color: '#d1d5db' }}>·</span>
-            <span style={{ fontSize: 11, color: '#9ca3af', flexShrink: 0 }}>{closeMonth} 마감 예정</span>
+            {/* 열이 가장 좁을 때(판 하한 960 → 열 184) 이 줄이 카드 밖으로 밀려 나가던 유일한 조각이다.
+                줄지 않게 두는 대신 말줄임으로 접히게 한다 — 넓을 때는 지금과 똑같이 다 보인다. */}
+            <span style={{ fontSize: 11, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{closeMonth} 마감 예정</span>
           </>
         )}
         {quoteCount > 0 && (

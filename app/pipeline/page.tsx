@@ -8,11 +8,18 @@
 import { TOPBAR_HEIGHT } from '@/components/layout/Sidebar'
 
 /**
- * 칸반 한 열의 최소 폭. 이보다 좁아지면 카드의 담당자·견적·마감월 줄이 읽히지 않는다.
- * 5열 × 220 + 간격 4 × 10 = 1140 — 1440 창(본문 1208, 좌우 여백 28×2 를 뺀 판 1152)에
- * 가로 스크롤 없이 들어간다. 그보다 좁아지면 열을 더 줄이지 않고 판을 가로로 민다.
+ * 판 전체의 하한. 열에는 최소 폭을 두지 않고(남은 폭을 5등분한다) 판에만 하한을 둔다 —
+ * 열마다 최소 폭을 걸면 합이 조금만 넘쳐도 가로 스크롤이 생겼다.
+ *
+ * 960 = 5열 × 184 + 간격 4 × 10. 184 는 카드 한 장이 찌그러지지 않는 폭이다
+ * (가장 넓은 줄이 「담당자 · YYYY-MM 마감 예정 · 견적 N건」으로 11px 글자 기준 약 162px,
+ *  카드 좌우 여백 12×2 를 더해 186 — 열 안쪽 여백 4×2 를 감안해 184 로 잡는다).
+ *
+ * 하한을 더 높이면(예: 1100) 1280 창 + 사이드바 펼침에서 스크롤이 생긴다 —
+ * 그때 본문은 1280 − 232(사이드바) − 56(좌우 여백) = 992 뿐이다.
+ * 이보다 좁아지면 열을 더 줄이는 대신 판을 가로로 민다.
  */
-const COL_MIN_W = 220
+const BOARD_MIN_W = 960
 import { useMemo, useState, type ReactNode } from 'react'
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
@@ -87,7 +94,9 @@ function DroppableColumn({ stage, isOver, children }: { stage: string; isOver: b
       style={{
         flex: 1, minHeight: 0, overflowY: 'auto',
         display: 'flex', flexDirection: 'column', gap: 8,
-        borderRadius: 8, padding: 4, margin: '0 -4px',
+        // padding 을 음수 margin 으로 되돌리던 것을 없앴다 — 그 4px 이 판 오른쪽을 넘겨
+        // 1900 창에서도 가로 스크롤바를 만들고 있었다(카드가 8px 좁아지는 대신 스크롤이 사라진다).
+        borderRadius: 8, padding: 4,
         // 놓을 열 강조 — 새 색 없이 기존 중립 배경과 hover 테두리만 쓴다
         background: isOver ? '#f3f4f6' : 'transparent',
         outline: isOver ? '1px dashed #c7d7f8' : '1px dashed transparent',
@@ -254,47 +263,54 @@ export default function PipelinePage() {
             onDragEnd={handleDragEnd}
             onDragCancel={() => { setActiveId(null); setOverStage(null) }}
           >
-            {/* 칸반 — 가로 스크롤 없이 열 5개가 화면 폭을 항상 나눠 갖는다.
+            {/* 칸반 — 열 5개가 남은 폭을 언제나 5등분한다(minmax(0, 1fr) 이라 내용이 열을 밀지 못한다).
                 판은 화면에 남은 세로 공간을 전부 차지하고(flex: 1), 그걸 넘칠 때만
                 카드가 많은 열이 안에서 세로로 흐른다. 고정 높이를 쓰면 아래가 비었는데도
                 일찍 잘려 스크롤이 생기므로 px 계산을 하지 않는다.
-                (열 머리의 건수·합계는 늘 보이고, 열끼리 높이도 어긋나지 않는다) */}
+                (열 머리의 건수·합계는 늘 보이고, 열끼리 높이도 어긋나지 않는다)
+
+                바깥 칸이 스크롤을 맡고 안쪽 판에만 하한(BOARD_MIN_W)을 둔다 — 본문이 그보다
+                넓으면 판이 본문 폭에 딱 맞아 가로 스크롤이 아예 생기지 않고, 좁아지면 이 칸에서만
+                가로로 밀린다(페이지 전체가 밀리지 않는다). */}
             <div style={{
-              display: 'flex', gap: 10, alignItems: 'stretch',
-              flex: 1, minHeight: 420,
-              // 열이 COL_MIN_W 밑으로 눌리지 않는다. 1440 창까지는 5열이 그대로 들어가고,
-              // 그보다 좁아지면 열을 더 줄이는 대신 판을 가로로 민다.
-              overflowX: 'auto',
+              flex: 1, minHeight: 420, minWidth: 0,
+              display: 'flex', overflowX: 'auto',
             }}>
-              {columns.map(col => (
-                <div key={col.stage} style={{
-                  flex: `1 1 ${COL_MIN_W}px`, minWidth: COL_MIN_W, minHeight: 0,
-                  display: 'flex', flexDirection: 'column',
-                }}>
-                  <div style={{ padding: '0 2px 8px', flexShrink: 0 }}>
-                    {/* 단계·건수·금액을 한 줄에 둔다 — 열이 좁아 두 줄을 쓰면 판이 그만큼 낮아진다 */}
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>{col.stage}</span>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px', flexShrink: 0 }}>{col.rows.length}</span>
-                      {col.sum > 0 && (
-                        <>
-                          <span style={{ fontSize: 11, color: '#d1d5db', flexShrink: 0 }}>·</span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {compactKRW(col.sum)}
-                          </span>
-                        </>
-                      )}
+              <div style={{
+                display: 'grid', gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))`,
+                gap: 10, alignItems: 'stretch',
+                flex: 1, minWidth: BOARD_MIN_W,
+              }}>
+                {columns.map(col => (
+                  <div key={col.stage} style={{
+                    minWidth: 0, minHeight: 0,
+                    display: 'flex', flexDirection: 'column',
+                  }}>
+                    <div style={{ padding: '0 2px 8px', flexShrink: 0 }}>
+                      {/* 단계·건수·금액을 한 줄에 둔다 — 열이 좁아 두 줄을 쓰면 판이 그만큼 낮아진다 */}
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>{col.stage}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px', flexShrink: 0 }}>{col.rows.length}</span>
+                        {col.sum > 0 && (
+                          <>
+                            <span style={{ fontSize: 11, color: '#d1d5db', flexShrink: 0 }}>·</span>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {compactKRW(col.sum)}
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
+                    <DroppableColumn stage={col.stage} isOver={overStage === col.stage}>
+                      {col.rows.length === 0
+                        ? <div style={{ border: '1px dashed #ebebeb', borderRadius: 8, padding: '18px 0', textAlign: 'center', fontSize: 12, color: '#d1d5db', flexShrink: 0 }}>
+                            {overStage === col.stage ? '여기에 놓기' : '없음'}
+                          </div>
+                        : col.rows.map(cardOf)}
+                    </DroppableColumn>
                   </div>
-                  <DroppableColumn stage={col.stage} isOver={overStage === col.stage}>
-                    {col.rows.length === 0
-                      ? <div style={{ border: '1px dashed #ebebeb', borderRadius: 8, padding: '18px 0', textAlign: 'center', fontSize: 12, color: '#d1d5db', flexShrink: 0 }}>
-                          {overStage === col.stage ? '여기에 놓기' : '없음'}
-                        </div>
-                      : col.rows.map(cardOf)}
-                  </DroppableColumn>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
 
             {/* 끝난 건(실주 · 종료) — 판 아래에 함께 접어둔다.
