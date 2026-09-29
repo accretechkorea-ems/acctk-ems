@@ -4,8 +4,15 @@
 // 상태값은 설계서의 한글 값을 그대로 쓴다 — DB 에 들어가는 문자열이 곧 화면에 보이는 말이라
 // 중간에 번역표를 두지 않는다.
 
-/** 문서 상태. approval_documents.status */
-export type DocStatus = '임시저장' | '진행중' | '완료' | '반려' | '회수'
+/**
+ * 문서 상태. approval_documents.status (CHECK 와 같은 목록이다)
+ * 폐기 — 반려·회수된 문서를 상신자가 치운 상태. 효력이 없는 문서라 승인 절차를 두지 않는다.
+ *        완전 삭제가 아니라 상태다 — 반려한 사람의 판단이 기결함에서 사라지면 안 된다.
+ */
+export type DocStatus = '임시저장' | '진행중' | '완료' | '반려' | '회수' | '폐기'
+
+/** 상신자가 스스로 치울 수 있는 상태 — 다시 올리지 않기로 한 건. */
+export const DISCARDABLE_STATUSES: DocStatus[] = ['반려', '회수']
 
 /** 결재선 한 줄의 종류. approval_lines.kind */
 export type LineKind = 'approve' | 'agree' | 'cc'
@@ -13,8 +20,10 @@ export type LineKind = 'approve' | 'agree' | 'cc'
 /** 결재선 한 줄의 상태. approval_lines.state */
 export type LineState = '대기' | '승인' | '반려' | '전결' | '생략' | '대결'
 
-/** 이력에 남는 행위. approval_history.action */
-export type HistoryAction = '상신' | '승인' | '반려' | '전결' | '회수' | '재상신' | '대결'
+/** 이력에 남는 행위. approval_history.action 의 CHECK 와 같은 목록이다. */
+export type HistoryAction =
+  | '상신' | '승인' | '동의' | '반려' | '전결' | '회수' | '재상신'
+  | '확인' | '취소' | '폐기' | '대결'
 
 /** 순서를 갖는 줄의 종류 — 수신참조(cc)는 순서에서 빠진다. */
 export const SEQUENTIAL_KINDS: LineKind[] = ['approve', 'agree']

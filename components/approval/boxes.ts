@@ -40,13 +40,16 @@ export type BoxItem = {
 }
 
 export type BoxGroup = {
-  /** 그룹 제목. null 이면 제목 없이 항목만 둔다(전체). */
+  /** 접힘 상태를 저장할 때 쓰는 이름. 화면에 보이지 않는 값이라 한글을 쓰지 않는다. */
+  key: string
+  /** 그룹 제목. null 이면 제목 없이 항목만 둔다(전체) — 접을 제목이 없다. */
   title: string | null
   items: BoxItem[]
 }
 
 export const BOX_GROUPS: BoxGroup[] = [
   {
+    key: 'sent',
     title: '상신/보관함',
     items: [
       { key: 'outbox', label: '상신문서', source: 'outbox', scope: 'all', empty: '올린 문서가 없습니다' },
@@ -54,6 +57,7 @@ export const BOX_GROUPS: BoxGroup[] = [
     ],
   },
   {
+    key: 'received',
     title: '결재수신함',
     items: [
       { key: 'inbox', label: '미결문서', source: 'inbox', scope: 'all', empty: '결재할 문서가 없습니다' },
@@ -64,6 +68,8 @@ export const BOX_GROUPS: BoxGroup[] = [
     ],
   },
   {
+    // 제목이 없는 묶음이라 접을 것도 없다(누를 제목이 없다).
+    key: 'etc',
     title: null,
     items: [
       { key: 'all', label: '전체', source: 'all', scope: 'all', empty: '문서가 없습니다' },
@@ -72,6 +78,41 @@ export const BOX_GROUPS: BoxGroup[] = [
 ]
 
 export const BOX_ITEMS: BoxItem[] = BOX_GROUPS.flatMap(g => g.items)
+
+/** 그 함이 어느 묶음에 속하는지. 지금 고른 함을 감추지 않기 위해 쓴다. */
+export const groupKeyOfItem = (itemKey: string): string | null =>
+  BOX_GROUPS.find(g => g.items.some(i => i.key === itemKey))?.key ?? null
+
+// ── 묶음 접힘 저장 ───────────────────────────────────────────────────
+// 계정별로 저장한다 — 같은 컴퓨터를 여러 사람이 쓰는 현장이 있다.
+// 읽기·쓰기 모두 try/catch 로 감싼다(비공개 모드·저장소 차단). 실패하면 기본값(모두 펼침)으로
+// 두고 접기 자체는 그대로 동작한다 — 사이드바 접힘 저장과 같은 규칙이다.
+
+const GROUP_KEYS = BOX_GROUPS.map(g => g.key)
+
+export const boxGroupsStorageKey = (engineerId: number): string => `approval:boxgroups:${engineerId}`
+
+/** 접혀 있는 묶음 이름들. 저장된 적이 없거나 값이 깨졌으면 빈 목록(모두 펼침). */
+export function readCollapsedGroups(engineerId: number): string[] {
+  try {
+    const raw = localStorage.getItem(boxGroupsStorageKey(engineerId))
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    // 모르는 이름은 버린다 — 묶음 구성이 바뀌어도 옛 값에 걸려 이상하게 접히지 않는다.
+    return parsed.filter((k): k is string => typeof k === 'string' && GROUP_KEYS.includes(k))
+  } catch {
+    return []
+  }
+}
+
+export function writeCollapsedGroups(engineerId: number, keys: string[]): void {
+  try {
+    localStorage.setItem(boxGroupsStorageKey(engineerId), JSON.stringify(keys))
+  } catch {
+    /* 저장 못 해도 접기는 동작한다 */
+  }
+}
 
 /** 목록을 읽는 주소. 라우트는 지금 것 그대로다. */
 export const SOURCE_API: Record<Source, string> = {
@@ -163,7 +204,8 @@ export function matchesScope(scope: Scope, doc: ApprovalDoc): boolean {
   if (scope === 'all') return true
   if (scope === 'open') return doc.status === '진행중'
   if (scope === 'closed') return doc.status !== '진행중'
-  // 미결 — 신청자가 다시 손봐야 하는 건.
+  // 미결 — 신청자가 다시 손봐야 하는 건. 폐기한 문서는 손볼 일이 없어 여기서 빠진다
+  // (상신문서·기결함·전체함에는 그대로 남는다 — 감추지 않는다).
   return doc.status === '반려' || doc.status === '회수'
 }
 
@@ -234,6 +276,11 @@ export function statusText(doc: ApprovalDoc, people: Record<number, ProgressPers
   if (doc.status === '회수') {
     const id = doc.requester_id
     return `회수(${nameWithPosition(people[id], id)})`
+  }
+  if (doc.status === '폐기') {
+    // 폐기는 상신자 본인만 할 수 있다 — 괄호 안 이름이 곧 치운 사람이다.
+    const id = doc.requester_id
+    return `폐기(${nameWithPosition(people[id], id)})`
   }
   return doc.status
 }

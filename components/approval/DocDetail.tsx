@@ -22,7 +22,7 @@ import DocInfo from './DocInfo'
 import { summaryRows } from './summary'
 import { nextPendingLine } from '@/lib/approval/engine'
 import { canRejectDocument, DOC_TYPES } from '@/lib/approval/docTypes'
-import type { ApprovalLine, ApprovalDocument } from '@/lib/approval/types'
+import { DISCARDABLE_STATUSES, type ApprovalLine, type ApprovalDocument } from '@/lib/approval/types'
 
 export type ApprovalDoc = ApprovalDocument & {
   approval_lines: ApprovalLine[]
@@ -71,6 +71,7 @@ export default function DocDetail({
   const [comment, setComment] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirmWithdraw, setConfirmWithdraw] = useState(false)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -98,6 +99,12 @@ export default function DocDetail({
     const t = setTimeout(() => setConfirmWithdraw(false), CONFIRM_MS)
     return () => clearTimeout(t)
   }, [confirmWithdraw])
+
+  useEffect(() => {
+    if (!confirmDiscard) return
+    const t = setTimeout(() => setConfirmDiscard(false), CONFIRM_MS)
+    return () => clearTimeout(t)
+  }, [confirmDiscard])
 
   const nameOf = (id: number) => people[id]?.name ?? `#${id}`
   const current = nextPendingLine(doc.approval_lines)
@@ -146,8 +153,16 @@ export default function DocDetail({
     call({ action: 'withdraw', documentId: doc.document_id }, '회수했습니다')
   }
   const resubmit = () => call({ action: 'resubmit', documentId: doc.document_id }, '다시 올렸습니다')
+  // 폐기 — 되돌릴 수 없으니 회수와 같은 3초 2단 확인을 둔다.
+  const discard = () => {
+    if (!confirmDiscard) { setConfirmDiscard(true); return }
+    setConfirmDiscard(false)
+    call({ action: 'discard', documentId: doc.document_id }, '폐기했습니다')
+  }
 
   const untouched = doc.approval_lines.filter(l => l.kind !== 'cc').every(l => l.state === '대기')
+  // 반려·회수된 내 문서만 치울 수 있다(라우트와 같은 판정). 폐기한 문서는 여기서 빠진다.
+  const discardable = (DISCARDABLE_STATUSES as string[]).includes(doc.status)
   const rejectedLine = doc.approval_lines.find(l => l.state === '반려')
 
   return (
@@ -254,10 +269,23 @@ export default function DocDetail({
               {confirmWithdraw ? '한 번 더 누르면 회수' : '회수'}
             </button>
           )}
-          {(doc.status === '반려' || doc.status === '회수') && (
-            <button type="button" onClick={resubmit} disabled={busy} style={btnPrimary(busy)}>
-              {busy ? '처리 중...' : '재작성'}
-            </button>
+          {/* 재작성·폐기는 같은 조건에서 함께 나온다 — 다시 올리거나, 치우거나 둘 중 하나다.
+              폐기한 문서에는 둘 다 나오지 않는다(되살리려면 새로 상신한다). */}
+          {discardable && (
+            <>
+              <button type="button" onClick={resubmit} disabled={busy} style={btnPrimary(busy)}>
+                {busy ? '처리 중...' : '재작성'}
+              </button>
+              <button type="button" onClick={discard} disabled={busy}
+                style={confirmDiscard ? btnDanger(busy) : btnGhost(busy)}>
+                {confirmDiscard ? '한 번 더 누르면 폐기' : '폐기'}
+              </button>
+            </>
+          )}
+          {doc.status === '폐기' && (
+            <span style={{ fontSize: 12, color: MUTED, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>
+              폐기한 문서입니다. 다시 올리려면 새로 상신해주세요
+            </span>
           )}
           {doc.status === '진행중' && !untouched && (
             <span style={{ fontSize: 12, color: MUTED, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>

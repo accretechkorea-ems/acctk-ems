@@ -100,7 +100,9 @@ function CustomerDetailPageInner() {
   const globalCss = `
     html, body { background: ${PAGE_BG}; }
     input::placeholder, textarea::placeholder { color: ${TEXT_MUTED}; opacity: 1; }
-    select { appearance: none; -webkit-appearance: none; -moz-appearance: none; }
+    /* select { appearance: none } 은 지웠다 — 다크 테마 잔재인데 대신 그릴 화살표를
+       두지 않아 드롭다운이 그냥 텍스트 칸으로 보였다(고객사 수정·기기·활동 모달의 선택 칸).
+       app/page.tsx 에서도 같은 이유로 지웠다(2026-09-29). */
     input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     input:focus, textarea:focus, select:focus {
       border-color: #234ea2 !important;

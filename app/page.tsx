@@ -22,7 +22,6 @@ import { useQuotePdf } from '@/hooks/customer/useQuotePdf'
 import {
   HOME_STATE_KEY,
   PAGE_BG,
-  PANEL_BG,
   TEXT_MUTED,
   TEXT_PRIMARY,
   getDeviceLine,
@@ -391,8 +390,11 @@ useEffect(() => {
     <>
 
       <style jsx global>{`
+        /* filter: invert(1) 은 지웠다 — lib/home.ts 의 colorScheme: 'dark' 와 짝이던
+           다크 테마 잔재다. 그쪽이 아이콘을 흰색으로 그리면 여기서 검정으로 되뒤집는 식이라,
+           한쪽만 지우면 아이콘이 흰 배경에 묻혀 사라진다. 둘을 함께 지웠다(2026-09-29).
+           cursor 는 다크 테마와 무관해 남긴다(다른 화면도 같은 규칙을 둔다). */
         input[type="date"].white-date::-webkit-calendar-picker-indicator {
-          filter: invert(1);
           cursor: pointer;
         }
 
@@ -402,15 +404,17 @@ useEffect(() => {
           opacity: 1;
         }
 
-        select {
-          appearance: none;
-          -webkit-appearance: none;
-          -moz-appearance: none;
-        }
+        /* 여기에 있던 두 규칙은 지웠다. 둘 다 이 화면이 다크 테마였을 때(PANEL_BG #17181d)
+           쓰던 것이고, 라이트 테마로 바뀐 뒤로는 맞지 않는다(2026-09-29).
 
-        * {
-          scrollbar-color: #5b606b ${PANEL_BG};
-        }
+           1) scrollbar-color: #5b606b ... — 흰 패널 위 짙은 막대가 되어 어울리지 않았다.
+              게다가 선택자가 * 였던 동안에는 이 style 태그가 global 이라 문서 전체에 퍼졌고,
+              크로미움이 「표준 속성이 초기값이 아니다」로 보고 다른 화면의 ::-webkit-scrollbar
+              규칙까지 통째로 버렸다 — 사이드바 메뉴 목록 스크롤바가 짙은 막대와 위·아래
+              화살표로 되돌아가던 원인이다. 이제 홈의 스크롤 영역은 브라우저 기본을 쓴다.
+
+           2) select { appearance: none } — 다크 테마에서 밝은 기본 선택 상자를 가리려던 것인데,
+              대신 그릴 화살표를 두지 않아 드롭다운이라는 표시가 아예 없었다. 기본으로 되돌린다. */
       `}</style>
 
       <div

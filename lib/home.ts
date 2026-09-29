@@ -81,7 +81,10 @@ export const dateInputStyle: CSSProperties = {
   ...inputStyle,
   background: INPUT_BG,
   color: TEXT_PRIMARY,
-  colorScheme: 'dark',
+  // 이 화면이 다크 테마였을 때 'dark' 였다. 그때는 브라우저가 달력 아이콘을 흰색으로 그렸고,
+  // app/page.tsx 가 filter: invert(1) 로 되돌려 놓는 짝이 있었다. 라이트 테마로 바뀐 뒤로는
+  // 둘 다 필요 없어 함께 지웠다(2026-09-29). 날짜 칸은 이 프로젝트 전체가 'light' 로 맞춘다.
+  colorScheme: 'light',
 }
 
 export const sectionCardStyle: CSSProperties = {

@@ -133,13 +133,12 @@ export default function HeaderWrapper({ children }: { children: ReactNode }) {
         /* 모바일 전용 껍데기는 PC 에서 자리를 차지하지 않는다.
            display 는 여기서만 정한다 — 컴포넌트에 인라인으로 두면 이 규칙을 이긴다. */
         .ems-topbar, .ems-drawer-wrap { display: none; }
-        /* 사이드바 가운데 메뉴 영역 — 넘칠 때만 스크롤하고, 스크롤바는 평소 보이지 않는다 */
-        .ems-nav-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
-        .ems-nav-scroll:hover { scrollbar-color: #d1d5db transparent; }
-        .ems-nav-scroll::-webkit-scrollbar { width: 6px; }
-        .ems-nav-scroll::-webkit-scrollbar-track { background: transparent; }
-        .ems-nav-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 99px; }
-        .ems-nav-scroll:hover::-webkit-scrollbar-thumb { background: #d1d5db; }
+        /* 사이드바 가운데 메뉴 영역(.ems-nav-scroll)의 스크롤바 규칙은 여기에 두지 않는다.
+           ★ Sidebar.tsx 의 MOTION_CSS 한곳에서만 정한다 — 여기에 같은 규칙을 다시 쓰면 안 된다.
+           두 곳에 나뉘어 있으면 고칠 방법이 없어진다: 크로미움은 요소에 표준 속성
+           (scrollbar-width·scrollbar-color)이 선언되어 있기만 하면 ::-webkit-scrollbar 규칙을
+           통째로 무시하는데, 이 무시는 뒤에 오는 style 태그로 덮을 수 없다(캐스케이드 우선순위가
+           아니라 스크롤바를 어느 방식으로 그릴지 고르는 단계다). 선언을 지우는 것만이 방법이다. */
         /* 알림 패널 — PC 는 사이드바 오른쪽 */
         .ems-notif { left: ${SIDEBAR_WIDTH + 6}px; top: 72px; width: 340px; }
         @media (max-width: ${MOBILE_MAX}px) {

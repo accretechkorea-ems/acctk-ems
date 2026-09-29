@@ -22,7 +22,7 @@ import {
   nextPendingLine, skippedLineIds, toLineRows, untouched, validateLineInput,
 } from '@/lib/approval/engine'
 import {
-  APPROVAL_PATH,
+  APPROVAL_PATH, DISCARDABLE_STATUSES,
   type ApprovalDocument, type ApprovalLine, type Delegation,
   type HistoryAction, type LineInput,
 } from '@/lib/approval/types'
@@ -134,6 +134,7 @@ export async function POST(req: Request) {
     case 'reject': return reject(caller, body!)
     case 'withdraw': return withdraw(caller, body!)
     case 'resubmit': return resubmit(caller, body!)
+    case 'discard': return discard(caller, body!)
     default: return bad('action 이 올바르지 않습니다.')
   }
 }
@@ -403,6 +404,43 @@ async function withdraw(caller: Caller, body: Record<string, unknown>) {
   return NextResponse.json({ ok: true, documentId, status: '회수' })
 }
 
+// ── 폐기 ────────────────────────────────────────────────────────────────────
+// 반려·회수된 문서를 상신자가 치운다. 다시 올리지 않기로 한 건이 상신함 미결문서에 쌓이는 것을 막는다.
+//
+// 지우지 않고 상태로 두는 이유 — 반려한 사람의 판단이 기결함에서 사라지면 안 된다.
+// 결재선(approval_lines)도 그대로 둔다. 기결함은 「내가 처리한 줄」로 문서를 찾으므로,
+// 줄을 지우면 남의 기결함에서 문서가 통째로 사라진다.
+//
+// 승인 절차를 두지 않는다 — 효력이 없는 문서라 상신자 본인이 자율로 정리한다.
+async function discard(caller: Caller, body: Record<string, unknown>) {
+  const documentId = docIdOf(body.documentId)
+  if (!documentId) return bad('문서를 지정해주세요.')
+
+  const doc = await loadDocument(documentId)
+  if (!doc) return bad('문서를 찾을 수 없습니다.', 404)
+  if (doc.requester_id !== caller.engineer_id) return bad('상신한 사람만 폐기할 수 있습니다.', 403)
+  if (!(DISCARDABLE_STATUSES as string[]).includes(doc.status)) {
+    return bad('반려·회수된 문서만 폐기할 수 있습니다.', 409)
+  }
+
+  // 조건부 UPDATE — 그 사이에 재상신되었다면(진행중) 0행이 되어 아무 일도 일어나지 않는다.
+  const { data: dropped, error } = await supabaseAdmin
+    .from('approval_documents')
+    .update({ status: '폐기', updated_at: new Date().toISOString() })
+    .eq('document_id', documentId)
+    .in('status', DISCARDABLE_STATUSES)
+    .select('document_id')
+  if (error) {
+    console.error('[approval] discard failed', { documentId, error })
+    return bad('폐기하지 못했습니다.', 500)
+  }
+  if (!dropped || dropped.length === 0) return bad('이미 처리되어 폐기할 수 없습니다.', 409)
+
+  await addHistory(documentId, '폐기', caller.engineer_id, null, null)
+  console.log('[approval] 폐기', { documentId, by: caller.engineer_id })
+  return NextResponse.json({ ok: true, documentId, status: '폐기' })
+}
+
 // ── 재상신 ──────────────────────────────────────────────────────────────────
 async function resubmit(caller: Caller, body: Record<string, unknown>) {
   const documentId = docIdOf(body.documentId)
@@ -411,6 +449,7 @@ async function resubmit(caller: Caller, body: Record<string, unknown>) {
   const doc = await loadDocument(documentId)
   if (!doc) return bad('문서를 찾을 수 없습니다.', 404)
   if (doc.requester_id !== caller.engineer_id) return bad('상신한 사람만 다시 올릴 수 있습니다.', 403)
+  // 폐기한 문서도 여기서 걸린다 — 치운 문서를 되살리려면 새로 상신한다.
   if (doc.status !== '반려' && doc.status !== '회수') return bad('반려·회수된 문서만 다시 올릴 수 있습니다.', 409)
 
   // 결재선을 새로 주면 통째로 갈아끼우고, 주지 않으면 있던 결재선을 처음 상태로 되돌린다.

@@ -40,7 +40,8 @@ import { DOC_TYPES } from '@/lib/approval/docTypes'
 import {
   BOX_GROUPS, SCOPES, SOURCE_API,
   activeItem, approvalDate, attachmentCount, dateColumnLabel, detailBox, filterDocs,
-  itemCount, parseView, showsScopeRadio, statusText, viewQuery,
+  itemCount, parseView, readCollapsedGroups, showsScopeRadio, statusText,
+  viewQuery, writeCollapsedGroups,
   type Scope, type Source,
 } from '@/components/approval/boxes'
 
@@ -69,6 +70,8 @@ const STATUS_DOT: Record<string, string> = {
   '반려': '#ef4444',
   '회수': '#9ca3af',
   '임시저장': '#d1d5db',
+  // 폐기 — 더 볼 일이 없는 문서라 가장 흐린 회색(임시저장과 같은 층위).
+  '폐기': '#d1d5db',
 }
 
 /** 표 열 폭 — 머리와 행이 같은 값을 써야 줄이 맞는다. */
@@ -111,6 +114,12 @@ const SHELL_CSS = `
   .ap-main { flex: 1; min-width: 0; }
   .ap-boxbtn { transition: background ${MOTION_MS}ms ${MOTION_EASE}; }
   .ap-boxbtn:hover { background: ${NEUTRAL_BG}; }
+  .ap-grouptitle { transition: color ${MOTION_MS}ms ${MOTION_EASE}; }
+  .ap-grouptitle:hover { color: ${TEXT}; }
+  /* 펼칠 때만 움직인다 — 접을 때는 항목이 사라지므로 나갈 자리가 없다.
+     움직이는 것은 opacity 와 transform 뿐이라 배치를 다시 계산하지 않는다. */
+  .ap-railgroup > .ap-boxbtn { animation: ap-unfold ${MOTION_MS}ms ${MOTION_EASE}; }
+  @keyframes ap-unfold { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
   .ap-sortbtn { transition: color ${MOTION_MS}ms ${MOTION_EASE}; }
   .ap-sortbtn:hover { color: ${TEXT}; }
   @container (max-width: 900px) {
@@ -134,6 +143,17 @@ function Clip() {
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="2"
       strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
       <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
+  )
+}
+
+/** 묶음 접힘 표시 — 펼치면 아래, 접으면 오른쪽을 가리킨다(돌려서 쓴다 — transform 이라 가볍다). */
+function GroupCaret({ open }: { open: boolean }) {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round"
+      style={{ flexShrink: 0, transform: open ? 'none' : 'rotate(-90deg)', transition: `transform ${MOTION_MS}ms ${MOTION_EASE}` }}>
+      <polyline points="6 9 12 15 18 9" />
     </svg>
   )
 }
@@ -230,6 +250,25 @@ function ApprovalPageInner() {
   // 기본 최신순. 기안일(결재일) 머리를 누르면 뒤집는다.
   const [desc, setDesc] = useState(true)
 
+  // ── 왼쪽 묶음 접힘 ──
+  // 기본은 모두 펼침. 계정이 확인되면 그 계정의 저장값으로 맞춘다(사이드바 접힘과 같은 방식).
+  const [collapsedGroups, setCollapsedGroups] = useState<string[]>([])
+  useEffect(() => {
+    if (myId == null) return
+    // 저장값은 브라우저에만 있다. 렌더 중에 읽으면 서버가 그린 것과 달라지므로(수화 불일치)
+    // 첫 그림은 기본값(모두 펼침)으로 두고, 계정이 확인된 뒤에 입힌다 — 사이드바 접힘과 같은 순서다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCollapsedGroups(readCollapsedGroups(myId))
+  }, [myId])
+
+  const toggleGroup = (groupKey: string) => {
+    const next = collapsedGroups.includes(groupKey)
+      ? collapsedGroups.filter(k => k !== groupKey)
+      : [...collapsedGroups, groupKey]
+    setCollapsedGroups(next)
+    if (myId != null) writeCollapsedGroups(myId, next)
+  }
+
   // ── 목록 ── 읽어 온 곳마다 따로 담아 둔다(왼쪽 건수를 함께 보여주기 위해서다).
   const [docsBySource, setDocsBySource] = useState<Partial<Record<Source, ApprovalDoc[]>>>({})
   const [reloadKey, setReloadKey] = useState(0)
@@ -301,38 +340,38 @@ function ApprovalPageInner() {
       <style>{SHELL_CSS}</style>
 
       <div className="ap-shell">
-        {/* 기간 · 검색 — 자리는 그대로 왼쪽 위 */}
-        <div style={{ ...cardStyle, marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <PeriodNav period={period} onChange={setPeriod} />
-            <input
-              value={searchInput}
-              onChange={e => setSearchInput(e.target.value)}
-              placeholder="문서번호 · 제목 · 상신자 검색"
-              style={{ ...inputStyle, width: 240, fontSize: 13 }}
-            />
-            {query && (
-              <span style={{ fontSize: 12, color: MUTED }}>「{query}」 검색 결과</span>
-            )}
-          </div>
-        </div>
-
         <div className="ap-body">
           {/* 함 목록 — 그룹 제목(11px 회색, 사이드바와 같은 방식) 아래 하위 함 */}
           <nav className="ap-rail" aria-label="결재함">
-            {groups.map((g, gi) => (
-              <div key={g.title ?? `g${gi}`} className="ap-railgroup">
+            {groups.map((g, gi) => {
+              // 접힌 묶음은 제목만 남긴다. 다만 지금 고른 함은 남겨 둔다 —
+              // 어디를 보고 있는지 표시가 사라지면 길을 잃는다(아마란스도 선택 항목은 감추지 않는다).
+              const folded = g.title !== null && collapsedGroups.includes(g.key)
+              const shownItems = folded ? g.items.filter(i => i.key === here.key) : g.items
+              return (
+              <div key={g.key} className="ap-railgroup">
                 {g.title
                   ? (
-                    <div className="ap-railtitle" style={{
-                      fontSize: 11, fontWeight: 600, color: MUTED, letterSpacing: '0.2px',
-                      padding: gi === 0 ? '0 10px 6px' : '14px 10px 6px',
-                    }}>
+                    <button
+                      type="button"
+                      className="ap-railtitle ap-grouptitle"
+                      onClick={() => toggleGroup(g.key)}
+                      aria-expanded={!folded}
+                      title={folded ? `${g.title} 펼치기` : `${g.title} 접기`}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 4, width: '100%',
+                        border: 'none', background: 'transparent', cursor: 'pointer',
+                        fontFamily: 'inherit', textAlign: 'left',
+                        fontSize: 11, fontWeight: 600, color: MUTED, letterSpacing: '0.2px',
+                        padding: gi === 0 ? '0 10px 6px' : '14px 10px 6px',
+                      }}
+                    >
+                      <GroupCaret open={!folded} />
                       {g.title}
-                    </div>
+                    </button>
                   )
                   : <div style={{ height: 14 }} />}
-                {g.items.map(item => {
+                {shownItems.map(item => {
                   const n = itemCount(item, docsBySource)
                   const on = item.key === here.key
                   return (
@@ -363,13 +402,32 @@ function ApprovalPageInner() {
                   )
                 })}
               </div>
-            ))}
+              )
+            })}
           </nav>
 
           <div className="ap-main">
             <div style={cardStyle}>
+              {/* 기간 · 검색 — 카드 안 첫 줄. 예전에는 카드 밖에 띠로 떠 있어 자리를 버렸다.
+                  왼쪽이 기간, 오른쪽이 검색이다(아래 라디오 줄과 같은 좌우 배치). */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                <PeriodNav period={period} onChange={setPeriod} />
+                <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {query && (
+                    <span style={{ fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>「{query}」 검색 결과</span>
+                  )}
+                  <input
+                    value={searchInput}
+                    onChange={e => setSearchInput(e.target.value)}
+                    placeholder="문서번호 · 제목 · 상신자 검색"
+                    style={{ ...inputStyle, width: 240, fontSize: 13 }}
+                  />
+                </span>
+              </div>
+
               <div style={cardHeader}>
-                <span style={cardTitle}>{here.label}</span>
+                {/* 함 이름은 이 화면에서 가장 큰 글자다 — 카드 하나에 모아 두니 어디를 보고 있는지가 먼저 읽혀야 한다. */}
+                <span style={{ ...cardTitle, fontSize: 20 }}>{here.label}</span>
                 <span style={countBadge}>{listLoading ? '...' : `${docs.length}건`}</span>
                 {/* 하위 구분 — 아마란스처럼 오른쪽 위 라디오. 왼쪽 함과 같은 값을 움직인다. */}
                 {showsScopeRadio(source, scope) && (

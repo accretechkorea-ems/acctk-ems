@@ -14,7 +14,10 @@ import { HOME_STATE_KEY } from '@/lib/home'
 import { useOutsideClick } from '@/hooks/useOutsideClick'
 import { type EngineerLike, type TeamPerm } from '@/lib/permissions'
 // 메뉴 목록·권한 판정은 이 파일 한곳에서만 정한다(1단계).
-import { MENU_GROUPS, MENU_PATHS, MENU_PERMS, visibleMenus, type MenuPerm } from '@/lib/menuPerms'
+import {
+  MENU_GROUPS, MENU_PATHS, MENU_PERMS, readCollapsedMenuGroups, visibleMenus, writeCollapsedMenuGroups,
+  type MenuPerm,
+} from '@/lib/menuPerms'
 import { loadTeamPerms } from '@/lib/teamPerms'
 import { useNotifications } from '@/hooks/useNotifications'
 import { Z } from '@/lib/zIndex'
@@ -37,6 +40,19 @@ const DRAWER_WIDTH = 304
 export const COLLAPSE_MS = 140
 export const COLLAPSE_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
 
+/** 메뉴 묶음 접기·스크롤 흐림에 쓰는 전환. 결재 화면 함 목록과 같은 값이다. */
+const MOTION_MS = COLLAPSE_MS
+const MOTION_EASE = COLLAPSE_EASE
+
+
+const BORDER = '#ebebeb'
+const BG = '#f5f6f8'
+const TEXT = '#111827'
+const ITEM = '#374151'
+const MUTED = '#6b7280'
+const BLUE = '#234ea2'
+const ACTIVE_BG = '#e6ecf8'
+
 /**
  * 모션 규칙. 폭·여백 전환 자체(HeaderWrapper 의 .ems-sidebar / .ems-main)는 여기서 정하지 않고,
  * 이 파일이 할 수 있는 두 가지만 둔다.
@@ -50,6 +66,44 @@ export const COLLAPSE_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
  */
 const MOTION_CSS = `
   .ems-sidebar.moving { will-change: width, padding; }
+  /* 메뉴 목록 스크롤바 — 이 클래스의 규칙은 이 파일에서만 정한다.
+     HeaderWrapper 에 있던 같은 규칙은 지웠다. 다시 넣으면 아래가 전부 무효가 된다.
+
+     왜 webkit 경로여야 하나 — 윈도우 11 의 크로미움은 Fluent 스크롤바를 쓰는데,
+     scrollbar-width: thin 으로 얇게 만들어도 위·아래 화살표 버튼은 그대로 남는다(2026-09-29 확인).
+     webkit 경로로 넘어가면 크로미움이 "직접 그리는 스크롤바"로 바뀌어, 우리가 규칙을 준 부분만
+     그린다 — 그래서 화살표 버튼이 사라지고 6px 폭도 비로소 먹는다.
+
+     크로미움은 표준 속성의 "계산값"이 둘 다 auto 일 때만 webkit 경로로 간다.
+     그래서 아래 한 줄이 필요하다 — app/page.tsx 가 전체 선택자로 scrollbar-color 를
+     모든 요소에 걸고 있어 이 요소에도 닿는다. 그대로 두면 계산값이 auto 가 아니게 되어
+     webkit 규칙이 통째로 무시되고, 짙은 막대와 화살표 버튼이 늘 보인다(2026-09-29 재현 확인).
+     auto 로 되돌리면 계산값이 초기값이 되어 webkit 경로가 살아난다.
+     ※ 근본 해결은 app/page.tsx 의 전체 선택자를 좁히는 것이다. 그 전까지 이 한 줄이 막아 준다. */
+  .ems-nav-scroll { scrollbar-color: auto; }
+  .ems-nav-scroll::-webkit-scrollbar { width: 6px; }
+  /* 화살표 버튼 제거. 직접 그리는 스크롤바는 크기를 주지 않으면 버튼을 그리지 않지만,
+     기본값에 기대지 않고 못 박아 둔다. */
+  .ems-nav-scroll::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+  .ems-nav-scroll::-webkit-scrollbar-track { background: transparent; }
+  .ems-nav-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 99px; }
+  .ems-nav-scroll:hover::-webkit-scrollbar-thumb { background: #d1d5db; }
+  /* 파이어폭스 — ::-webkit-scrollbar 를 모르므로 표준 속성으로 같은 모양을 낸다.
+     (파이어폭스가 직접 그리는 thin 스크롤바에는 화살표 버튼이 없다.)
+
+     조건을 "@supports not selector(::-webkit-scrollbar)" 로 쓰지 않는다 —
+     크로미움이 그 선택자를 지원한다고 답하지 않으면 이 블록이 크로미움에도 적용되어
+     표준 속성이 선언되고, 위 webkit 규칙이 전부 죽어 화살표가 되돌아온다.
+     대신 파이어폭스만 참이 되는 조건을 쓴다. 이쪽이 틀리면 파이어폭스가 기본 스크롤바로
+     돌아갈 뿐(화살표는 여전히 없다), 크로미움은 영향을 받지 않는다. */
+  @supports (-moz-appearance: none) {
+    .ems-nav-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+    .ems-nav-scroll:hover { scrollbar-color: #d1d5db transparent; }
+  }
+  .ems-grouptitle { transition: color ${MOTION_MS}ms ${MOTION_EASE}; }
+  .ems-grouptitle:hover { color: ${TEXT}; }
+  .ems-caret { transition: transform ${MOTION_MS}ms ${MOTION_EASE}; }
+  .ems-navhint { transition: box-shadow ${MOTION_MS}ms ${MOTION_EASE}; }
   @media (prefers-reduced-motion: reduce) {
     .ems-sidebar, .ems-main { transition: none !important; }
     .ems-sidebar.moving { will-change: auto; }
@@ -57,13 +111,16 @@ const MOTION_CSS = `
   }
 `
 
-const BORDER = '#ebebeb'
-const BG = '#f5f6f8'
-const TEXT = '#111827'
-const ITEM = '#374151'
-const MUTED = '#6b7280'
-const BLUE = '#234ea2'
-const ACTIVE_BG = '#e6ecf8'
+/** 묶음 접힘 표시 — 펼치면 아래, 접으면 오른쪽을 가리킨다(같은 아이콘을 돌려 쓴다). */
+function Caret({ open }: { open: boolean }) {
+  return (
+    <svg className="ems-caret" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      style={{ flexShrink: 0, transform: open ? 'none' : 'rotate(-90deg)' }}>
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  )
+}
 
 /** 로고 마크. <img> 대신 배경으로 깐다(next/image 경고를 늘리지 않는다). */
 const logoMark = (size: number): CSSProperties => ({
@@ -138,6 +195,11 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
   // 접힘이 바뀌는 동안만 true — 이때만 will-change 를 붙인다.
   const [moving, setMoving] = useState(false)
   const firstPaint = useRef(true)
+  // 메뉴 묶음 접힘. 기본은 모두 펼침이고, 계정이 확인되면 그 계정의 저장값으로 맞춘다.
+  const [collapsedGroups, setCollapsedGroups] = useState<string[]>([])
+  // 메뉴 목록이 위·아래로 더 있는지 — 잘린 쪽에만 흐림을 얹는다.
+  const [navEdges, setNavEdges] = useState({ top: false, bottom: false })
+  const navScrollRef = useRef<HTMLDivElement>(null)
 
   // 접힌 상태에서 아이콘 옆에 띄우는 이름표. title 속성은 느리고 모양을 정할 수 없어 직접 그린다.
   const [tip, setTip] = useState<{ label: string; top: number } | null>(null)
@@ -219,6 +281,29 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
 
   // 화면을 옮기면 드로어는 닫는다(항목을 눌러 이동한 경우 포함).
   useEffect(() => { setDrawerOpen(false) }, [pathname])
+
+  // 묶음 접힘 — 저장값은 브라우저에만 있다. 렌더 중에 읽으면 서버가 그린 것과 달라지므로(수화 불일치)
+  // 첫 그림은 기본값(모두 펼침)으로 두고, 계정이 확인된 뒤에 입힌다.
+  useEffect(() => {
+    if (engineerId == null) return
+    setCollapsedGroups(readCollapsedMenuGroups(engineerId))
+  }, [engineerId])
+
+  // 스크롤 끝 추적 — 스크롤·크기 변화(묶음을 접거나 창을 줄일 때)를 함께 본다.
+  useEffect(() => {
+    const el = navScrollRef.current
+    if (!el) return
+    const update = () => {
+      const top = el.scrollTop > 1
+      const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 1
+      setNavEdges(prev => (prev.top === top && prev.bottom === bottom ? prev : { top, bottom }))
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    for (const child of Array.from(el.children)) ro.observe(child)
+    return () => ro.disconnect()
+  }, [collapsed, collapsedGroups, email])
 
   // 접힘이 바뀌면 전환이 도는 동안에만 will-change 를 켠다. 첫 그림에는 전환이 없으므로 건너뛴다.
   useEffect(() => {
@@ -316,6 +401,15 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
     )
   }
 
+  /** 묶음을 접었다 편다. 누른 즉시 그 계정 칸에 저장한다. */
+  const toggleGroup = (groupKey: string) => {
+    const next = collapsedGroups.includes(groupKey)
+      ? collapsedGroups.filter(k => k !== groupKey)
+      : [...collapsedGroups, groupKey]
+    setCollapsedGroups(next)
+    if (engineerId != null) writeCollapsedMenuGroups(engineerId, next)
+  }
+
   /** 그룹 전체. 보이는 항목이 없으면 제목까지 숨긴다. 접히면 제목 대신 얇은 구분선으로 나눈다. */
   const renderGroupList = (groups: typeof MENU_GROUPS, big: boolean) => {
     const mini = collapsed && !big
@@ -325,14 +419,37 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
       if (items.length === 0) return null
       const first = shown === 0
       shown += 1
+      // 아이콘만 남은 사이드바에는 제목이 없어 접을 것도 없다.
+      const folded = !mini && g.title !== null && collapsedGroups.includes(g.key)
+      // 접혀도 지금 보고 있는 메뉴 한 줄은 남긴다 — 어디에 있는지 표시가 사라지면 길을 잃는다
+      // (결재 화면 함 목록과 같은 규칙).
+      const shownItems = folded ? items.filter(i => i.path === activePath) : items
       return (
         <div key={g.group}>
           {mini
             ? <div style={{ height: 1, background: first ? 'transparent' : '#e6e8ec', margin: first ? '10px 0 0' : '8px 6px' }} />
             : g.title
-              ? <div style={{ fontSize: 11, fontWeight: 600, color: MUTED, padding: big ? '14px 12px 4px' : '14px 10px 6px', letterSpacing: '0.2px' }}>{g.title}</div>
+              ? (
+                <button
+                  type="button"
+                  className="ems-grouptitle"
+                  onClick={() => toggleGroup(g.key)}
+                  aria-expanded={!folded}
+                  title={folded ? `${g.title} 펼치기` : `${g.title} 접기`}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 4, width: '100%',
+                    border: 'none', background: 'transparent', cursor: 'pointer',
+                    fontFamily: 'inherit', textAlign: 'left',
+                    fontSize: 11, fontWeight: 600, color: MUTED, letterSpacing: '0.2px',
+                    padding: big ? '14px 12px 4px' : '14px 10px 6px',
+                  }}
+                >
+                  <Caret open={!folded} />
+                  {g.title}
+                </button>
+              )
               : <div style={{ height: big ? 8 : 10 }} />}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{items.map(i => renderItem(i, big))}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{shownItems.map(i => renderItem(i, big))}</div>
         </div>
       )
     })
@@ -441,8 +558,27 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
           )}
         </button>
 
-        {/* 넘칠 때만 이 안에서 스크롤한다. 브랜드·검색·프로필은 늘 제자리에 있다. */}
-        <div className="ems-nav-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', marginBottom: 8 }}>
+        {/* 넘칠 때만 이 안에서 스크롤한다. 브랜드·검색·프로필은 늘 제자리에 있다.
+            잘린 항목이 갑자기 끊겨 보이지 않게 위아래에 스크롤 힌트를 둔다 — 디자인 규칙대로
+            그라데이션이 아니라 inset shadow 이고, 값은 모달 목록(ActivityDetail)과 같다.
+            그 쪽 끝에 닿으면 그림자를 뺀다(더 볼 것이 없다는 뜻). */}
+        <div
+          ref={navScrollRef}
+          className="ems-nav-scroll ems-navhint"
+          onScroll={e => {
+            const el = e.currentTarget
+            const top = el.scrollTop > 1
+            const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 1
+            setNavEdges(prev => (prev.top === top && prev.bottom === bottom ? prev : { top, bottom }))
+          }}
+          style={{
+            flex: 1, minHeight: 0, overflowY: 'auto', marginBottom: 8,
+            boxShadow: [
+              navEdges.top ? 'inset 0 9px 7px -8px rgba(0,0,0,0.12)' : '',
+              navEdges.bottom ? 'inset 0 -9px 7px -8px rgba(0,0,0,0.12)' : '',
+            ].filter(Boolean).join(', ') || undefined,
+          }}
+        >
           {renderGroups(false)}
         </div>
 

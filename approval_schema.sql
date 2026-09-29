@@ -1,8 +1,10 @@
 -- 전자결재 테이블 (1단계에서 DB 적용 완료). 기록용, 다시 실행하지 마라.
 --
--- 아래 DDL 은 운영 DB 의 현재 스키마를 그대로 옮겨 적은 것이다(컬럼·타입·NOT NULL·기본값·FK
--- 모두 PostgREST 스키마에서 확인). 이 파일을 실행해서 만든 것이 아니라, 이미 있는 것을 적어 둔
--- 기록이다. 열이나 기본값을 바꿀 일이 생기면 여기에도 같이 반영한다.
+-- 아래 DDL 은 운영 DB 의 현재 스키마를 그대로 옮겨 적은 것이다. 열·타입·NOT NULL·기본값·FK 는
+-- PostgREST 스키마에서 확인했고, CHECK 제약은 pg_constraint 조회로 확인해 2026-09-29 에
+-- 이 파일에 채웠다(PostgREST 스키마에는 CHECK 가 드러나지 않아 처음에는 빠져 있었다).
+-- 이 파일을 실행해서 만든 것이 아니라, 이미 있는 것을 적어 둔 기록이다.
+-- 열·기본값·제약을 바꿀 일이 생기면 여기에도 같이 반영한다.
 --
 -- 설계 요점
 --   · 결재 엔진은 원 문서(견적·쇼룸 사용·견적 삭제)를 모른다. 필요한 것은 상신 시점에
@@ -15,20 +17,30 @@
 -- ── 문서 ────────────────────────────────────────────────────────────────────
 create table if not exists public.approval_documents (
   document_id   bigserial primary key,
-  doc_type      text        not null,          -- quote · showroom_usage · quote_delete
+  doc_type      text        not null
+    constraint approval_documents_doc_type_check
+    check (doc_type in ('quote', 'showroom_usage', 'quote_delete')),
   doc_no        text        not null,          -- 원 문서 번호(견적은 견적번호)
   title         text        not null,
   summary       jsonb       not null,          -- 목록·결재 화면에 보일 요약(유형별 항목)
   target_table  text        not null,          -- 원 문서 위치. FK 는 걸지 않는다
   target_id     bigint,
-  status        text        not null default '임시저장',   -- 임시저장·진행중·완료·반려·회수
+  -- 폐기: 반려·회수된 문서를 상신자가 치운 상태(2026-09-29 추가). 완전 삭제하지 않는 이유는
+  -- 반려한 사람의 판단이 기결함에서 사라지면 안 되기 때문이다 — 결재선·이력은 그대로 남는다.
+  status        text        not null default '임시저장'
+    constraint approval_documents_status_check
+    check (status in ('임시저장', '진행중', '완료', '반려', '회수', '폐기')),
   requester_id  integer     not null references public.engineers(engineer_id),
   division      text        not null default '계측',       -- 사업부. 지금은 계측 고정
   current_step  integer     not null default 0,
   submitted_at  timestamptz,
   completed_at  timestamptz,
   created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now()
+  updated_at    timestamptz not null default now(),
+  -- 상신한 문서에는 상신 시각이 있어야 한다(임시저장만 비어 있을 수 있다).
+  constraint ad_submitted_fields check (status = '임시저장' or submitted_at is not null),
+  -- 완료된 문서에는 완료 시각이 있어야 한다.
+  constraint ad_completed_fields check (status <> '완료' or completed_at is not null)
 );
 
 -- ── 결재선 ──────────────────────────────────────────────────────────────────
@@ -52,7 +64,11 @@ create table if not exists public.approval_lines (
 create table if not exists public.approval_history (
   history_id  bigserial primary key,
   document_id bigint      not null references public.approval_documents(document_id),
-  action      text        not null,   -- 상신·승인·반려·전결·회수·재상신·대결
+  -- 폐기·대결은 2026-09-29 추가(대결은 대리인이 남의 차례를 처리했을 때 라우트가 남긴다).
+  -- 동의·확인·취소는 뒤 단계에서 쓰려고 미리 열어 둔 값이다.
+  action      text        not null
+    constraint approval_history_action_check
+    check (action in ('상신', '승인', '동의', '반려', '전결', '회수', '재상신', '확인', '취소', '폐기', '대결')),
   actor_id    integer     not null references public.engineers(engineer_id),
   step        integer,
   comment     text,

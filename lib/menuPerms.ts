@@ -55,15 +55,53 @@ export type MenuPerm = {
  *   title    — null 이면 제목 없이 항목만 그린다.
  *   placement— main: 스크롤되는 가운데 영역 / bottom: 프로필 위에 붙는 영역
  */
-export const MENU_GROUPS: { group: MenuGroup; title: string | null; placement: 'main' | 'bottom' }[] = [
-  { group: '주 메뉴', title: null, placement: 'main' },
-  { group: '대시보드', title: '대시보드', placement: 'main' },
-  { group: '고객', title: '고객', placement: 'main' },
-  { group: '영업', title: '영업', placement: 'main' },
-  { group: '주문', title: '주문', placement: 'main' },
-  { group: '하단', title: null, placement: 'bottom' },
-  { group: '관리', title: '관리', placement: 'bottom' },
+export const MENU_GROUPS: {
+  group: MenuGroup
+  /** 접힘 상태를 저장할 때 쓰는 이름. 저장값이라 한글을 쓰지 않는다. */
+  key: string
+  /** 사이드바에 보이는 제목. null 이면 제목 없이 항목만 둔다 — 접을 제목도 없다. */
+  title: string | null
+  placement: 'main' | 'bottom'
+}[] = [
+  { group: '주 메뉴', key: 'main', title: null, placement: 'main' },
+  { group: '대시보드', key: 'dashboard', title: '대시보드', placement: 'main' },
+  { group: '고객', key: 'customer', title: '고객', placement: 'main' },
+  { group: '영업', key: 'sales', title: '영업', placement: 'main' },
+  { group: '주문', key: 'order', title: '주문', placement: 'main' },
+  { group: '하단', key: 'bottom', title: null, placement: 'bottom' },
+  { group: '관리', key: 'admin', title: '관리', placement: 'bottom' },
 ]
+
+// ── 사이드바 묶음 접힘 저장 ─────────────────────────────────────────
+// 계정별로 저장한다 — 같은 컴퓨터를 여러 사람이 쓰는 현장이 있다.
+// 읽기·쓰기 모두 try/catch(비공개 모드·저장소 차단). 실패하면 기본값(모두 펼침)으로 두고
+// 접기 자체는 그대로 동작한다 — 사이드바 접힘·결재 함 묶음과 같은 규칙이다.
+
+const MENU_GROUP_KEYS = MENU_GROUPS.map(g => g.key)
+
+export const menuGroupsStorageKey = (engineerId: number): string => `sidebar:menugroups:${engineerId}`
+
+/** 접혀 있는 묶음 이름들. 저장된 적이 없거나 값이 깨졌으면 빈 목록(모두 펼침). */
+export function readCollapsedMenuGroups(engineerId: number): string[] {
+  try {
+    const raw = localStorage.getItem(menuGroupsStorageKey(engineerId))
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    // 모르는 이름은 버린다 — 메뉴 구성이 바뀌어도 옛 값에 걸려 이상하게 접히지 않는다.
+    return parsed.filter((k): k is string => typeof k === 'string' && MENU_GROUP_KEYS.includes(k))
+  } catch {
+    return []
+  }
+}
+
+export function writeCollapsedMenuGroups(engineerId: number, keys: string[]): void {
+  try {
+    localStorage.setItem(menuGroupsStorageKey(engineerId), JSON.stringify(keys))
+  } catch {
+    /* 저장 못 해도 접기는 동작한다 */
+  }
+}
 
 export const MENU_PERMS: MenuPerm[] = [
   // ── 주 메뉴 — 홈·알림·결재는 전원 공개 ──
