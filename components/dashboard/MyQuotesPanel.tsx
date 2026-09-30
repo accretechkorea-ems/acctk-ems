@@ -8,7 +8,10 @@ import { useToast } from '@/components/common/Toast'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
-import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, notifyDeleteRequest, PO_MEMO_MAX } from '@/lib/quoteMutations'
+import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, submitQuoteDelete, deleteQuoteSelf, PO_MEMO_MAX } from '@/lib/quoteMutations'
+import { isSelfDeletable } from '@/lib/quoteDeletePolicy'
+import LinePickerModal from '@/components/approval/LinePickerModal'
+import type { LineInput } from '@/lib/approval/types'
 import {
   isAutoFailed, isOrdered, isExpired, validFromDate,
   REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE,
@@ -150,6 +153,10 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const [editStatus, setEditStatus] = useState<EditStatus>('취소요청')
   const [editFailReason, setEditFailReason] = useState('')
   const [saving, setSaving] = useState(false)
+  // 삭제 요청은 결재로 올라간다 — 사유를 받은 뒤 이 모달에서 결재선을 지정한다.
+  const [lineOpen, setLineOpen] = useState(false)
+  // 본인 삭제의 2단 확인. 한 번 누르면 켜지고 3초 뒤 저절로 꺼진다(결재 문서 폐기와 같은 방식).
+  const [confirmDelete, setConfirmDelete] = useState(false)
   // 발주서 등록
   const [poQuote, setPoQuote] = useState<Quote | null>(null)
   const [poFile, setPoFile] = useState<File | null>(null)
@@ -335,24 +342,87 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const canRequestDelete = (q: Quote) => (q.created_by ?? q.engineer_id) === engineerId
 
   // ── mutation 핸들러 (공용 함수 사용 + toast + refetch) ──
-  // 삭제 요청은 사유가 있어야 관리자가 판단할 수 있다. 다른 상태는 기존대로 선택 입력.
+  // 삭제는 사유가 있어야 한다 — 본인 삭제든 결재든 왜 지웠는지가 남아야 한다.
   const reasonRequired = editStatus === '취소요청'
   const reasonMissing = reasonRequired && !editFailReason.trim()
+  // 아직 실적에 잡히지 않은 견적은 결재 없이 바로 지운다. 판정 기준은 서버와 같은 파일을 읽는다.
+  const selfDelete = reasonRequired && isSelfDeletable(editQuote?.status)
+
+  // 2단 확인은 3초만 열어 둔다 — 창을 띄워 두고 잊었다가 무심코 두 번째를 누르는 일이 없게.
+  useEffect(() => {
+    if (!confirmDelete) return
+    const t = setTimeout(() => setConfirmDelete(false), 3000)
+    return () => clearTimeout(t)
+  }, [confirmDelete])
+
+  // 다른 견적을 열거나 상태를 바꾸면 확인을 처음으로 되돌린다.
+  useEffect(() => { setConfirmDelete(false) }, [editQuote, editStatus])
 
   const handleSave = async () => {
     if (!editQuote || reasonMissing) return
+    // 본인 삭제 — 한 번 더 눌러야 실행된다.
+    if (selfDelete) {
+      if (!confirmDelete) { setConfirmDelete(true); return }
+      setConfirmDelete(false)
+      await runSelfDelete()
+      return
+    }
+    // 그 밖의 상태는 결재로 올라간다 — 사유를 받은 다음 결재선을 지정한다.
+    if (reasonRequired) { setLineOpen(true); return }
     setSaving(true)
     try {
       // 되돌릴 때는 미수주 사유를 지운다(빈 문자열 → 공용 함수가 null 로 저장한다).
       const reason = editStatus === '견적중' ? '' : editFailReason
       await updateQuoteStatus({ quoteId: editQuote.quote_id, status: editStatus, reason })
-      // 삭제 요청은 관리자에게 알린다. 알림이 실패해도 요청 자체는 이미 저장됐으므로 흐름을 막지 않는다.
-      if (reasonRequired) await notifyDeleteRequest(editQuote.quote_id)
       toast.success(editStatus === '견적중' ? '견적중으로 되돌렸습니다' : `${editStatus} 처리되었습니다`)
       setEditQuote(null)
       await loadData()
     } catch (e: any) {
       toast.error(`처리 실패: ${e?.message ?? '오류'}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /** 본인 삭제 — 결재를 거치지 않고 바로 지운다. 되돌릴 수 없다. */
+  const runSelfDelete = async () => {
+    if (!editQuote) return
+    setSaving(true)
+    const res = await deleteQuoteSelf(editQuote.quote_id, editFailReason)
+    setSaving(false)
+    if (!res.ok) { toast.error(`삭제 실패: ${res.error}`); return }
+    toast.success(`${editQuote.quote_number} 견적을 삭제했습니다`)
+    setEditQuote(null)
+    await loadData()
+  }
+
+  /**
+   * 삭제 요청 상신. 상태를 '취소요청' 으로 바꾼 뒤 결재 문서를 만든다.
+   *
+   * 순서를 바꿀 수 없다 — 상신 라우트는 견적이 이미 '취소요청' 인지 보고 올린다. 대신 상신이
+   * 실패하면 상태를 되돌린다. 그러지 않으면 결재도 삭제도 되지 않은 채 '취소요청' 에 갇힌다.
+   * 상태 변경을 서버로 옮기지 않는 이유는 /api/quote-delete 머리말에 적혀 있다(감사 기록의 행위자).
+   */
+  const submitDelete = async (lines: LineInput[]) => {
+    if (!editQuote) return
+    const target = editQuote
+    setLineOpen(false)
+    setSaving(true)
+    try {
+      await updateQuoteStatus({ quoteId: target.quote_id, status: '취소요청', reason: editFailReason })
+      const res = await submitQuoteDelete(target.quote_id, lines)
+      if (!res.ok) {
+        // 원래 상태로 되돌린다. 미수주 사유도 있던 그대로 살린다.
+        await updateQuoteStatus({ quoteId: target.quote_id, status: target.status, reason: target.fail_reason ?? '' })
+          .catch(e => console.error('[quote] delete submit rollback failed', { quoteId: target.quote_id, error: e }))
+        toast.error(`삭제 요청 실패: ${res.error}`)
+        return
+      }
+      toast.success('삭제 요청을 결재로 올렸습니다')
+      setEditQuote(null)
+      await loadData()
+    } catch (e) {
+      toast.error(`처리 실패: ${e instanceof Error ? e.message : '오류'}`)
     } finally {
       setSaving(false)
     }
@@ -869,12 +939,25 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                 </>
               )}
             </div>
+            {/* 삭제는 견적 상태에 따라 갈린다. 어느 길로 가는지 버튼 위에 한 줄로 알린다 —
+                누르고 나서 알게 되면 늦다. */}
+            {reasonRequired && (
+              <div style={{ fontSize: 12, lineHeight: 1.6, borderRadius: 8, padding: '8px 10px', marginTop: 10,
+                border: `1px solid ${BORDER}`,
+                background: selfDelete ? getCategoryColor(SALES_STATUS_COLORS, '취소요청').bg : '#f8fafc',
+                color: selfDelete ? getCategoryColor(SALES_STATUS_COLORS, '취소요청').text : GRAY }}>
+                {selfDelete
+                  ? '결재 없이 바로 삭제됩니다. 되돌릴 수 없습니다.'
+                  : `수주 이후 상태(${editQuote.status})라 결재를 거칩니다. 결재가 끝나면 삭제됩니다.`}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
               <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
               <button onClick={handleSave} disabled={saving || reasonMissing}
                 style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: (saving || reasonMissing) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing) ? 0.7 : 1 }}>
                 {saving ? '처리 중...'
-                  : editStatus === '취소요청' ? '삭제 요청'
+                  : selfDelete ? (confirmDelete ? '한 번 더 누르면 삭제' : '삭제')
+                  : editStatus === '취소요청' ? '결재선 지정'
                   : editStatus === '견적중' ? '견적중으로 되돌리기'
                   : `${editStatus} 확정`}
               </button>
@@ -882,6 +965,15 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
           </div>
         </div>
       )}
+
+      {/* 삭제 요청 결재선. 확정하면 상태 변경과 상신이 이어진다. */}
+      <LinePickerModal
+        open={lineOpen}
+        onClose={() => setLineOpen(false)}
+        onConfirm={submitDelete}
+        myId={engineerId}
+        docType="quote_delete"
+      />
     </div>
   )
 }

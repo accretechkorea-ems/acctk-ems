@@ -110,10 +110,12 @@ export const MENU_PERMS: MenuPerm[] = [
   // 결재는 전원 공개다(4단계). 쇼룸 사용 신청을 전 직원이 올리고 자기 차례를 처리해야 하므로,
   // 화면 진입을 팀 권한으로 잠글 수 없다. approvals 권한은 남지만 쓰임이 하나로 좁아졌다 —
   // 결재함의 「전체」 탭(남의 문서까지 보는 권한)뿐이다. 내 결재·내 상신·참조는 권한과 무관하다.
-  { key: 'approvals', label: '결재', group: '주 메뉴', path: '/approval', icon: 'approval', order: 30, data: ['customers', 'quote'], menuPublic: true },
-  // 옛 요청함. 전자결재로 옮기는 동안만 남긴다 — 4~5단계 이관이 끝나면 지운다.
-  // 권한은 결재(approvals)를 그대로 따른다(permKey) — 팀별로 따로 켤 것이 아니다.
-  { key: 'legacy_requests', label: '요청함(구)', group: '주 메뉴', path: '/requests', icon: 'approval', order: 40, data: ['customers', 'quote'], permKey: 'approvals' },
+  // 보이는 이름만 「전자결재」다. key·path 는 그대로 둔다 — 저장된 권한 행(team_permissions.perm_key)과
+  // 주소가 그 값이라, 이름 때문에 바꾸면 기존 권한이 전부 끊긴다.
+  { key: 'approvals', label: '전자결재', group: '주 메뉴', path: '/approval', icon: 'approval', order: 30, data: ['customers', 'quote'], menuPublic: true },
+  // 옛 요청함(/requests)은 메뉴에서 뺐다 — 쇼룸 신청(4단계)과 견적 삭제 요청(5단계)이 모두
+  // 결재로 옮겨져 새로 들어올 건이 없다. 주소를 아는 사람은 아직 옛 기록을 볼 수 있고,
+  // 화면과 라우트는 8단계에서 지운다.
 
   // ── 대시보드 ──
   { key: 'repair_dashboard', label: '20 대시보드', group: '대시보드', path: '/repair/dashboard', icon: 'grid', order: 10, data: ['customers'] },
@@ -124,6 +126,7 @@ export const MENU_PERMS: MenuPerm[] = [
   { key: 'customers', label: '고객사', group: '고객', path: '/', icon: 'building', order: 10, data: ['customers'] },
   { key: 'repair', label: '20 수리', group: '고객', path: '/repair', icon: 'wrench', order: 20, data: ['customers'] },
   { key: 'showroom', label: '쇼룸', group: '고객', path: '/showroom', icon: 'monitor', order: 30, data: ['customers'] },
+  { key: 'inquiries', label: '의뢰서', group: '고객', path: '/inquiries', icon: 'fileText', order: 40, data: ['customers'] },
 
   // ── 영업 ──
   { key: 'leads', label: '리드', group: '영업', path: '/leads', icon: 'userPlus', order: 10, data: [] },
@@ -148,6 +151,7 @@ export const MENU_PERMS: MenuPerm[] = [
  */
 export const PARENT_MENU: Record<string, string> = {
   '/customer/[id]': 'customers',
+  '/inquiries/[id]': 'inquiries',
   '/holdings': 'dashboard_80',
   '/account': 'public',
 }
@@ -194,7 +198,10 @@ export type PermArea = 'customers' | 'dashboard' | 'quote' | 'pipeline' | 'sales
  * 규칙을 바꿀 일이 생기면 이 표 한 곳만 고친다.
  */
 export const DERIVED_PERMS: Record<PermArea, readonly string[]> = {
-  customers: ['repair_dashboard', 'dashboard_80', 'activity', 'customers', 'repair', 'showroom', 'pipeline', 'admin', 'approvals'],
+  // 'inquiries' 가 여기 있어야 한다. 의뢰서만 켠 팀도 teams.can_view_customers 가 켜져
+  // RLS(inquiries_select 의 has_team_perm('customers'))가 열린다 — 빠뜨리면 메뉴는 보이는데
+  // 목록이 0건으로 나온다. has_team_perm 은 메뉴 키가 아니라 teams 컬럼만 보기 때문이다.
+  customers: ['repair_dashboard', 'dashboard_80', 'activity', 'customers', 'repair', 'showroom', 'inquiries', 'pipeline', 'admin', 'approvals'],
   quote: ['dashboard_80', 'quote', 'purchase', 'sales', 'admin', 'approvals'],
   salesMgmt: ['purchase', 'inventory', 'admin'],
   dashboard: ['repair_dashboard', 'dashboard_80', 'activity'],

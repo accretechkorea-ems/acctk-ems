@@ -3,20 +3,31 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
+import { todayKST } from '@/lib/date'
+import { checkLines, createApprovalDocument } from '@/lib/approval/submit'
+import {
+  AUDIT_ACTION_SELF, buildQuoteDeleteSummary, DELETE_REQUEST_STATUS, executeQuoteDelete,
+  isSelfDeletable, notifyQuoteDeleted, QUOTE_DELETE_TARGET_TABLE, QUOTE_DELETE_TYPE,
+  SELF_DELETABLE_STATUSES, writeDeleteAudit,
+} from '@/lib/approval/quoteDelete'
+import type { LineInput } from '@/lib/approval/types'
 
-// 견적 삭제 흐름의 알림을 만드는 라우트. 동작은 action 으로 나눈다(발주 라우트와 같은 방식).
-//   · request   — 사용자가 삭제를 요청했다 → 관리자 전원에게
-//   · completed — 관리자가 실제로 삭제했다 → 그 견적을 쓴 사람에게
+// 견적 삭제 라우트. 견적 상태에 따라 두 갈래다.
+//   · self    — 아직 실적에 잡히지 않은 견적('견적중'·'실패')을 결재 없이 바로 지운다.
+//   · request — 그 밖의 상태는 결재로 올린다. 결재선을 함께 받는다.
 //
-// 라우트로 둔 이유:
-//   · 요청자는 일반 사용자다. 관리자 명단(engineers.permission_level)을 읽게 하지 않는다.
-//   · 남의 engineer_id 로 notifications 를 넣는 일은 서버(service role)에서만 하게 막는다.
-
-const TYPE_REQUEST = 'quote_delete_request'
-const TYPE_COMPLETED = 'quote_deleted'
-
-// 삭제 완료를 인정하는 감사 기록의 유효 시간(분). 지난 삭제 건으로 알림을 만들지 못하게 한다.
-const AUDIT_WINDOW_MIN = 5
+// 어느 쪽이든 지우는 절차는 lib/approval/quoteDelete.ts 의 executeQuoteDelete 한 벌이다.
+//
+// 예전에는 action 이 둘이었다. 'completed'(관리자가 /admin 에서 직접 지운 건의 알림)는 지웠다 —
+// 관리자 화면의 직접 삭제 경로를 닫으면서 부르는 곳이 없어졌고, 견적 삭제 완료 알림은
+// lib/approval/quoteDelete.ts 의 onCompleteQuoteDelete 가 보낸다.
+//
+// 상신은 결재 라우트를 HTTP 로 부르지 않고 lib/approval/submit 의 함수를 그대로 쓴다 —
+// 쇼룸 사용 신청(app/api/showroom/requests)과 같은 방식이다. 같은 프로세스 안에서 끝낸다.
+//
+// quotes.status 는 화면이 '취소요청' 으로 바꾼 뒤 이 라우트를 부른다. 상태를 여기서 바꾸지 않는
+// 이유는 quotes 에 걸린 감사 트리거가 행위자를 auth.jwt() 에서 읽기 때문이다 — service role 로
+// 쓰면 누가 요청했는지가 audit_log 에서 사라지고, 반려 시 되돌릴 이전 상태도 그 기록에서 읽는다.
 
 type Caller = { engineer_id: number; permission_level: string | null; teams: string | null }
 
@@ -24,6 +35,17 @@ const admin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+/** 화면이 보낸 결재선을 읽는다. 모양만 맞추고 내용 검증은 checkLines 가 한다(쇼룸과 같다). */
+function readLines(raw: unknown): LineInput[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null
+  return raw.map(r => ({
+    step: Number((r as LineInput)?.step),
+    kind: (r as LineInput)?.kind,
+    approverId: Number((r as LineInput)?.approverId),
+    isDelegatedAuthority: (r as LineInput)?.isDelegatedAuthority === true,
+  })) as LineInput[]
+}
 
 export async function POST(req: NextRequest) {
   const supabase = await createServerClient()
@@ -34,7 +56,7 @@ export async function POST(req: NextRequest) {
   const quoteId = Number(body?.quoteId)
   const action: string = body?.action ?? 'request'
   if (!quoteId) return NextResponse.json({ error: 'quoteId required' }, { status: 400 })
-  if (action !== 'request' && action !== 'completed') {
+  if (action !== 'request' && action !== 'self') {
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
   }
 
@@ -49,11 +71,59 @@ export async function POST(req: NextRequest) {
 
   const supabaseAdmin = admin()
 
-  // ── 삭제 요청 알림 ──
-  if (action === 'request') {
+  // ── 본인 삭제 — 결재를 거치지 않는다 ──
+  if (action === 'self') {
+    const reason = typeof body?.reason === 'string' ? body.reason.trim() : ''
+    if (!reason) return NextResponse.json({ error: '삭제 사유를 입력해주세요.' }, { status: 400 })
+
     const { data: quote, error: quoteErr } = await supabaseAdmin
       .from('quotes')
-      .select('quote_id, quote_number, status, delete_reason, engineer_id, created_by')
+      .select('quote_id, quote_number, status, engineer_id, created_by')
+      .eq('quote_id', quoteId)
+      .single()
+    if (quoteErr || !quote) return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
+
+    if (!isSelfDeletable(quote.status)) {
+      return NextResponse.json(
+        { error: `수주 이후 상태의 견적은 결재를 거쳐야 합니다 (${quote.status})` }, { status: 409 })
+    }
+
+    // 권한 판정을 quotes 의 RLS(quotes_delete)와 똑같이 맞춘다 —
+    // 「superadmin 이거나 quotes.engineer_id = 나」. 여기서만 넓게 열어 두면 아래 DELETE 가
+    // 조용히 0행이 되어(RLS 는 막아도 에러를 내지 않는다) 원인을 알 수 없는 실패가 된다.
+    // 대필 견적을 쓰기만 한 사람(created_by)은 실적 담당자가 아니라서 이 길로는 못 지운다.
+    const mine = quote.engineer_id != null && quote.engineer_id === caller?.engineer_id
+    if (!mine && !isSuperAdmin(caller)) {
+      return NextResponse.json({ error: '본인 견적만 삭제할 수 있습니다.' }, { status: 403 })
+    }
+
+    // quotes 행만 세션 클라이언트로 지운다 — 그래야 감사 트리거에 누가 지웠는지 남는다.
+    // 자식(quote_expenses)은 DELETE 정책이 superadmin 전용이라 service role 로 지운다.
+    const done = await executeQuoteDelete({
+      sb: supabaseAdmin, sbQuote: supabase, quoteId,
+      allowedStatuses: SELF_DELETABLE_STATUSES, via: '본인',
+    })
+    if (!done.ok) return NextResponse.json({ error: done.error }, { status: done.status })
+
+    await writeDeleteAudit(supabaseAdmin, done.quote, {
+      action: AUDIT_ACTION_SELF,
+      actorId: caller!.engineer_id,
+      detail: { reason, status_before: done.quote.status, approval: false },
+    })
+    // superadmin 이 남의 견적을 지운 경우에만 알림이 간다.
+    await notifyQuoteDeleted(supabaseAdmin, done.quote, [caller!.engineer_id])
+
+    return NextResponse.json({ success: true, quoteNumber: done.quote.quote_number })
+  }
+
+  // ── 삭제 요청 상신 ──
+  if (action === 'request') {
+    const lines = readLines(body?.lines)
+    if (!lines) return NextResponse.json({ error: '결재선을 지정해주세요.' }, { status: 400 })
+
+    const { data: quote, error: quoteErr } = await supabaseAdmin
+      .from('quotes')
+      .select('quote_id, quote_number, status, delete_reason, engineer_id, created_by, customer_id, total_supply')
       .eq('quote_id', quoteId)
       .single()
     if (quoteErr || !quote) return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
@@ -67,101 +137,51 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    // 실제로 삭제 요청 상태이고 사유가 있는 건만 알린다.
-    if (quote.status !== '취소요청' || !quote.delete_reason?.trim()) {
+    // 실제로 삭제 요청 상태이고 사유가 있는 건만 올린다.
+    if (quote.status !== DELETE_REQUEST_STATUS || !quote.delete_reason?.trim()) {
       return NextResponse.json({ error: 'Not a pending delete request' }, { status: 409 })
     }
 
-    // 중복 방지 — 같은 견적번호로 아직 읽지 않은 삭제 요청 알림이 있으면 새로 만들지 않는다.
-    // notifications 에 quote_id 컬럼이 없어(스키마 변경 금지) 메시지에 박힌 [견적번호]로 대조한다.
-    const { count: pending } = await supabaseAdmin
-      .from('notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('type', TYPE_REQUEST)
-      .eq('is_read', false)
-      .ilike('message', `%[${quote.quote_number}]%`)
-    if (pending && pending > 0) {
-      return NextResponse.json({ success: true, skipped: true })
+    // 중복 방지 — 같은 견적으로 아직 도는 문서가 있으면 새로 올리지 않는다.
+    // 옛 흐름은 알림 개수로 막았는데, 이제 문서 자체를 근거로 삼는다(더 정확하다).
+    const { data: live, error: liveErr } = await supabaseAdmin
+      .from('approval_documents')
+      .select('document_id')
+      .eq('doc_type', QUOTE_DELETE_TYPE)
+      .eq('target_table', QUOTE_DELETE_TARGET_TABLE)
+      .eq('target_id', quoteId)
+      .eq('status', '진행중')
+      .limit(1)
+    if (liveErr) {
+      console.error('[quote-delete] live document lookup failed', { quoteId, error: liveErr })
+      return NextResponse.json({ error: '진행 중인 결재를 확인하지 못했습니다.' }, { status: 500 })
+    }
+    if (live && live.length > 0) {
+      return NextResponse.json({ success: true, skipped: true, documentId: live[0].document_id })
     }
 
-    // 대상 — 재직 중인 관리자 전원(요청자 본인 제외).
-    const { data: allEng } = await supabaseAdmin
-      .from('engineers')
-      .select('engineer_id, permission_level, resigned_date')
-    const targets = (allEng ?? []).filter((e: { engineer_id: number; permission_level: string | null; resigned_date: string | null }) =>
-      isSuperAdmin(e) && !e.resigned_date && e.engineer_id !== caller?.engineer_id
-    )
-    if (targets.length === 0) return NextResponse.json({ success: true, notified: 0 })
+    // 결재선이 틀려서 막힐 건이면 문서를 만들기 전에 멈춘다.
+    const lineProblem = await checkLines(supabaseAdmin, lines, caller!.engineer_id)
+    if (lineProblem) return NextResponse.json({ error: lineProblem }, { status: 400 })
 
-    const { error: notiErr } = await supabaseAdmin.from('notifications').insert(
-      targets.map((t: { engineer_id: number }) => ({
-        engineer_id: t.engineer_id,
-        title: '견적 삭제 요청',
-        message: `[${quote.quote_number}] 견적 삭제가 요청되었습니다.`,
-        type: TYPE_REQUEST,
-        link: '/admin?tab=quotes',
-        is_read: false,
-      }))
-    )
-    if (notiErr) {
-      console.error('[quote-delete] request notification insert failed', { quoteId, targets: targets.length, error: notiErr })
-      return NextResponse.json({ error: '알림 생성에 실패했습니다.' }, { status: 500 })
-    }
-    return NextResponse.json({ success: true, notified: targets.length })
+    const summary = await buildQuoteDeleteSummary(supabaseAdmin, quote)
+    const made = await createApprovalDocument(supabaseAdmin, {
+      docType: QUOTE_DELETE_TYPE,
+      // 문서번호는 원 문서 번호를 따른다(설계서 — 견적은 견적번호).
+      docNo: quote.quote_number ?? String(quote.quote_id),
+      title: `견적 삭제 요청 — ${quote.quote_number ?? quote.quote_id}`,
+      summary: summary as unknown as Record<string, unknown>,
+      targetTable: QUOTE_DELETE_TARGET_TABLE,
+      targetId: quoteId,
+      lines,
+      requesterId: caller!.engineer_id,
+      today: todayKST(),
+    })
+    if (!made.ok) return NextResponse.json({ error: made.error }, { status: made.status })
+
+    return NextResponse.json({ success: true, documentId: made.documentId })
   }
 
-  // ── 삭제 완료 알림 ──
-  // 견적 행은 이미 사라져 다시 읽을 수 없다. 대신 quotes 에 걸린 감사 트리거가 남긴
-  // audit_log 를 근거로 삼는다 — 견적번호·수신자를 여기서 읽으므로 클라이언트 값은 쓰지 않는다.
-  if (!canViewMenu(caller, 'approvals')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-
-  const { data: audit, error: auditErr } = await supabaseAdmin
-    .from('audit_log')
-    .select('occurred_at, actor_email, old_data')
-    .eq('table_name', 'quotes')
-    .eq('action', 'DELETE')
-    .eq('row_id', String(quoteId))
-    .order('occurred_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (auditErr || !audit) {
-    console.error('[quote-delete] audit record not found', { quoteId, error: auditErr })
-    return NextResponse.json({ success: true, skipped: true })
-  }
-
-  // 지운 사람 본인이 부른 것이 맞는지, 방금 지운 것이 맞는지 확인한다.
-  const ageMin = (Date.now() - new Date(audit.occurred_at).getTime()) / 60000
-  if (audit.actor_email !== user.email || ageMin > AUDIT_WINDOW_MIN) {
-    console.error('[quote-delete] audit record mismatch', { quoteId, actor: audit.actor_email, ageMin })
-    return NextResponse.json({ success: true, skipped: true })
-  }
-
-  const old = (audit.old_data ?? {}) as { quote_number?: string; engineer_id?: number }
-  const quoteNumber = old.quote_number
-  const ownerId = old.engineer_id
-  if (!quoteNumber || !ownerId) {
-    console.error('[quote-delete] audit old_data incomplete', { quoteId })
-    return NextResponse.json({ success: true, skipped: true })
-  }
-
-  // 지운 사람이 그 견적의 작성자면 본인에게 알리지 않는다.
-  if (ownerId === caller?.engineer_id) {
-    return NextResponse.json({ success: true, notified: 0 })
-  }
-
-  const { error: notiErr } = await supabaseAdmin.from('notifications').insert({
-    engineer_id: ownerId,
-    title: '견적 삭제 완료',
-    message: `[${quoteNumber}] 견적이 삭제되었습니다.`,
-    type: TYPE_COMPLETED,
-    link: null,   // 견적이 사라져 이동할 곳이 없다
-    is_read: false,
-  })
-  if (notiErr) {
-    console.error('[quote-delete] completed notification insert failed', { quoteId, ownerId, error: notiErr })
-    return NextResponse.json({ error: '알림 생성에 실패했습니다.' }, { status: 500 })
-  }
-
-  return NextResponse.json({ success: true, notified: 1 })
+  // action 은 위에서 'self' 와 'request' 로 좁혔고 둘 다 위에서 끝난다 — 여기까지 오지 않는다.
+  return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
 }

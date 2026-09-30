@@ -4,6 +4,7 @@
 //   - 실패는 throw(상태 변경) 또는 반환값 { ok, error }(발주/세금)로 알린다.
 
 import { createClient } from '@/lib/supabase/client'
+import type { LineInput } from '@/lib/approval/types'
 
 export type MutationResult = { ok: boolean; error?: string }
 
@@ -88,22 +89,49 @@ export async function requestTaxInvoice(p: RequestTaxInvoiceParams): Promise<Mut
   return res.ok ? { ok: true } : { ok: false, error: json.error || String(res.status) }
 }
 
-// 견적 삭제 흐름의 알림(/api/quote-delete). 동작은 action 으로 나뉜다.
-// 알림은 부가 처리라 실패해도 화면 흐름을 막지 않고 콘솔에만 남긴다 —
-// 요청(quotes.status)이나 삭제 자체는 이미 끝나 있기 때문이다.
-async function notifyQuoteDelete(quoteId: number, action: 'request' | 'completed'): Promise<void> {
+/**
+ * 본인 삭제(/api/quote-delete, action=self) — 결재를 거치지 않고 바로 지운다.
+ *
+ * 아직 실적에 잡히지 않은 견적('견적중'·'실패')만 이 길로 간다. 그 판정은 서버가 다시 하므로
+ * 화면이 틀려도 수주 이후 견적이 지워지지는 않는다.
+ * 되돌릴 수 없는 일이라 실패를 삼키지 않는다 — 부르는 쪽이 결과를 보여 줘야 한다.
+ */
+export async function deleteQuoteSelf(quoteId: number, reason: string): Promise<MutationResult> {
   try {
     const res = await fetch('/api/quote-delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ quoteId, action }),
+      body: JSON.stringify({ quoteId, action: 'self', reason }),
     })
-    if (!res.ok) {
-      const json = await res.json().catch(() => ({}))
-      console.error('[quote] delete notify failed', { quoteId, action, status: res.status, json })
-    }
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: json.error || String(res.status) }
+    return { ok: true }
   } catch (e) {
-    console.error('[quote] delete notify failed', { quoteId, action, error: e })
+    console.error('[quote] self delete failed', { quoteId, error: e })
+    return { ok: false, error: '삭제에 실패했습니다.' }
+  }
+}
+
+/**
+ * 삭제 요청을 결재로 올린다(/api/quote-delete, action=request).
+ *
+ * 알림과 달리 실패를 삼키지 않는다 — 상신이 안 되면 그 견적은 결재도 삭제도 되지 않은 채
+ * '취소요청' 에 남는다. 부르는 쪽이 결과를 보고 상태를 되돌릴 수 있어야 한다.
+ * 결재선은 결재선 지정 모달(LinePickerModal)이 만든 값을 그대로 넘긴다.
+ */
+export async function submitQuoteDelete(quoteId: number, lines: LineInput[]): Promise<MutationResult> {
+  try {
+    const res = await fetch('/api/quote-delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quoteId, action: 'request', lines }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: json.error || String(res.status) }
+    return { ok: true }
+  } catch (e) {
+    console.error('[quote] delete submit failed', { quoteId, error: e })
+    return { ok: false, error: '상신에 실패했습니다.' }
   }
 }
 
@@ -149,9 +177,3 @@ export async function notifyOnBehalf(quoteId: number): Promise<void> {
     console.error('[quote] on-behalf notify failed', { quoteId, error: e })
   }
 }
-
-/** 삭제 요청을 관리자에게 알린다. 상태 변경이 끝난 뒤에 부른다. */
-export const notifyDeleteRequest = (quoteId: number) => notifyQuoteDelete(quoteId, 'request')
-
-/** 삭제가 끝났음을 요청자(견적 작성자)에게 알린다. 견적 행이 지워진 뒤에 부른다. */
-export const notifyDeleteCompleted = (quoteId: number) => notifyQuoteDelete(quoteId, 'completed')

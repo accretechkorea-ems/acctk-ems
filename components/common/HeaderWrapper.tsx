@@ -6,8 +6,9 @@
 //
 // 접힘은 두 겹이다.
 //   collapsed     — 사용자가 고른 값. 계정별로 localStorage 에 저장한다.
-//   tempCollapsed — 화면별 임시 값(null 이면 저장값을 그대로 따른다). 결재 화면처럼 넓게 써야 하는
-//                   곳에서만 켜지고, 그 화면을 벗어나면 null 로 돌아가 저장값이 다시 드러난다.
+//   tempCollapsed — 화면별 임시 값(null 이면 저장값을 그대로 따른다). 화면 안에 자체 레일이 있어
+//                   넓게 써야 하는 곳에서만 켜지고(lib/railPaths.ts), 그 화면을 벗어나면 null 로
+//                   돌아가 저장값이 다시 드러난다.
 //                   임시 값은 절대 저장하지 않는다 — 다음 로그인·다른 화면에 영향을 주면 안 된다.
 'use client'
 
@@ -16,16 +17,14 @@ import { usePathname } from 'next/navigation'
 import Sidebar, { COLLAPSE_EASE, COLLAPSE_MS, SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from '@/components/layout/Sidebar'
 import NoticePopup from '@/components/common/NoticePopup'
 import { isPublicPath } from '@/lib/publicPaths'
+import { hasInnerRail } from '@/lib/railPaths'
 
 /** 폭 경계. 이 아래는 상단 바 + 드로어, 위는 고정 사이드바. */
 const MOBILE_MAX = 768
 
-/**
- * 들어가면 사이드바를 접어 두는 화면. 결재는 문서 목록·결재표가 가로로 넓어 본문이 넓을수록 낫다.
- * 저장된 설정은 건드리지 않는다 — 이 화면을 벗어나면 원래대로 돌아온다.
- */
-const isWideScreenPath = (pathname: string): boolean =>
-  pathname === '/approval' || pathname.startsWith('/approval/')
+// 들어가면 사이드바를 접어 두는 화면 — 화면 안에 자체 레일이 있는 곳이다.
+// 목록과 판정은 lib/railPaths.ts 한 곳에 있다(전자결재·의뢰서가 같은 것을 쓴다).
+// 저장된 설정은 건드리지 않는다 — 이 화면을 벗어나면 원래대로 돌아온다.
 
 /**
  * 접힘 상태 저장.
@@ -66,13 +65,13 @@ export default function HeaderWrapper({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(() => readFlag(LAST_KEY) ?? false)
   const [engineerId, setEngineerId] = useState<number | null>(null)
   // 화면별 임시 접힘. null 이면 저장값(collapsed)을 그대로 쓴다.
-  // 첫 그림부터 맞춰 두어, 결재 화면을 바로 열었을 때 폈다가 접히는 움직임이 보이지 않게 한다.
-  const [tempCollapsed, setTempCollapsed] = useState<boolean | null>(() => (isWideScreenPath(pathname) ? true : null))
-  const wide = isWideScreenPath(pathname)
+  // 첫 그림부터 맞춰 두어, 그런 화면을 바로 열었을 때 폈다가 접히는 움직임이 보이지 않게 한다.
+  const [tempCollapsed, setTempCollapsed] = useState<boolean | null>(() => (hasInnerRail(pathname) ? true : null))
+  const wide = hasInnerRail(pathname)
   /** 실제로 그리는 값 — 임시 값이 있으면 그것이 이긴다. */
   const shown = tempCollapsed ?? collapsed
 
-  // 결재 화면에 들어가면 접고, 벗어나면 임시 값을 버려 저장값으로 돌아간다.
+  // 레일이 있는 화면에 들어가면 접고, 벗어나면 임시 값을 버려 저장값으로 돌아간다.
   // 그 화면 안에서 사용자가 직접 펼친 경우에는 경로가 그대로라 이 효과가 다시 돌지 않는다
   // — 머무는 동안 펼친 채로 남고, 나갔다 다시 들어오면 wide 가 false→true 로 바뀌며 다시 접힌다.
   useEffect(() => { setTempCollapsed(wide ? true : null) }, [wide])
@@ -87,7 +86,7 @@ export default function HeaderWrapper({ children }: { children: ReactNode }) {
   }, [engineerId])
 
   const toggle = () => {
-    // 결재 화면에서는 임시 값만 움직인다. 저장된 설정은 읽지도 쓰지도 않는다 —
+    // 레일이 있는 화면에서는 임시 값만 움직인다. 저장된 설정은 읽지도 쓰지도 않는다 —
     // 「이 화면에서만 잠깐 펼쳐 둔다」가 다음 로그인까지 따라가면 안 되기 때문이다.
     if (wide) { setTempCollapsed(!shown); return }
     setCollapsed(prev => {

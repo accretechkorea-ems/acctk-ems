@@ -17,12 +17,27 @@ const FIELDS: Record<string, { key: string; label: string; money?: boolean }[]> 
     { key: 'period', label: '기간' },
     { key: 'purpose', label: '목적' },
   ],
+  // 삭제는 되돌릴 수 없다 — 결재자가 무엇을 지우는지(번호·고객사·금액·실적 담당자),
+  // 왜 지우는지, 반려하면 어디로 돌아가는지를 한 화면에서 볼 수 있어야 한다.
   quote_delete: [
     { key: 'quoteNumber', label: '견적번호' },
     { key: 'customer', label: '고객사' },
-    { key: 'reason', label: '사유' },
+    { key: 'amount', label: '공급가', money: true },
+    { key: 'engineer', label: '실적 담당자' },
+    { key: 'reason', label: '삭제 사유' },
+    { key: 'restoreStatus', label: '반려 시 복원될 상태' },
   ],
 }
+
+/**
+ * 사람에게 보여 주지 않는 칸. 요약에는 화면용 값만 있는 게 아니라 되돌리기에 쓰는 값도 섞여 있다
+ * (견적 삭제의 restoreFailReason — '실패' 로 돌아갈 때만 살릴 미수주 사유).
+ * 이런 칸은 「모르는 칸은 그대로 보여 준다」 규칙에서 빼지 않으면 열쇠 이름이 날것으로 노출된다.
+ */
+const HIDDEN = new Set(['restoreFailReason'])
+
+/** 목록 한 줄에 넣을 칸 수 상한. 상세(summaryRows)는 등록된 칸을 모두 보여 준다. */
+const LINE_MAX = 3
 
 const won = (v: unknown): string => {
   const n = Number(v)
@@ -41,15 +56,17 @@ export function summaryLine(docType: string, summary: Summary | null | undefined
   if (!summary) return ''
   const fields = FIELDS[docType]
   if (fields) {
+    // 등록된 칸이 많아도 한 줄에는 앞에서 셋까지만 — 목록이 한 건으로 길어지지 않게 한다.
     return fields
       .map(f => text(summary[f.key], f.money))
       .filter(Boolean)
+      .slice(0, LINE_MAX)
       .join(' · ')
   }
   // 등록되지 않은 유형 — 값이 있는 칸을 앞에서 셋까지.
   return Object.entries(summary)
-    .filter(([, v]) => v != null && v !== '')
-    .slice(0, 3)
+    .filter(([k, v]) => !HIDDEN.has(k) && v != null && v !== '')
+    .slice(0, LINE_MAX)
     .map(([, v]) => text(v))
     .join(' · ')
 }
@@ -63,7 +80,7 @@ export function summaryRows(docType: string, summary: Summary | null | undefined
     .map(f => ({ label: f.label, value: text(summary[f.key], f.money) }))
     .filter(r => r.value !== '')
   const rest = Object.entries(summary)
-    .filter(([k, v]) => !used.has(k) && v != null && v !== '')
+    .filter(([k, v]) => !used.has(k) && !HIDDEN.has(k) && v != null && v !== '')
     .map(([k, v]) => ({ label: k, value: text(v) }))
   return [...known, ...rest]
 }

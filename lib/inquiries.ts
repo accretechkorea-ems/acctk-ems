@@ -1,0 +1,196 @@
+// 의뢰서 — 종류·상태의 단 하나뿐인 기준.
+//
+// 코드값(inquiry_type · status)은 DB 의 CHECK 제약과 글자 하나까지 같아야 한다
+// (inquiries_schema.sql 의 inquiries_inquiry_type_check · inquiries_status_check).
+// 화면 문구와 코드값을 두 벌로 들고 다니면 한쪽만 고쳐져 어긋나므로, 양쪽 짝을 여기 모은다.
+//
+// 이 파일에는 순수한 값과 판정만 둔다 — 화면(클라이언트)과 서버 라우트가 함께 읽는다.
+// supabase 클라이언트를 여기서 만들지 마라(서버 전용 코드가 화면 번들로 끌려간다).
+
+/** inquiries.inquiry_type 에 들어가는 값 전부. */
+export const INQUIRY_TYPES = [
+  'req80',
+  'req20',
+  'spare80',
+  'domestic_po',
+  'claim',
+  'hq_repair',
+] as const
+
+export type InquiryType = (typeof INQUIRY_TYPES)[number]
+
+/**
+ * 왼쪽 레일에 세우는 순서와 이름.
+ *
+ * 「전체」는 여기 넣지 않는다 — 종류가 아니라 「거르지 않음」이라서, 목록에 섞어 두면
+ * type 으로 거르는 코드가 전체만 따로 분기해야 한다. 화면이 앞에 한 줄 붙인다.
+ */
+export const INQUIRY_TYPE_ITEMS: { type: InquiryType; label: string }[] = [
+  { type: 'req80', label: '80 의뢰서' },
+  { type: 'req20', label: '20 의뢰서' },
+  { type: 'spare80', label: '80 스페어파츠' },
+  { type: 'domestic_po', label: '국내조달품' },
+  { type: 'claim', label: '클레임' },
+  { type: 'hq_repair', label: '본사수리 공번' },
+]
+
+/** 종류 코드 → 화면 이름. 목록 행에서 쓴다. */
+export const INQUIRY_TYPE_LABEL: Record<InquiryType, string> =
+  Object.fromEntries(INQUIRY_TYPE_ITEMS.map(i => [i.type, i.label])) as Record<InquiryType, string>
+
+/** 주소(?type=)로 들어온 값이 아는 종류인지. 모르는 값이면 null — 화면은 「전체」로 떨어뜨린다. */
+export function inquiryTypeOf(value: unknown): InquiryType | null {
+  return typeof value === 'string' && (INQUIRY_TYPES as readonly string[]).includes(value)
+    ? (value as InquiryType)
+    : null
+}
+
+/** inquiries.status 에 들어가는 값 전부. */
+export const INQUIRY_STATUSES = ['drafting', 'sent', 'waiting', 'done', 'cancelled'] as const
+
+export type InquiryStatus = (typeof INQUIRY_STATUSES)[number]
+
+/** 상태 코드 → 화면 문구. 저장값은 영문, 보이는 것은 한글이다(견적 상태와 같은 방식). */
+export const INQUIRY_STATUS_LABEL: Record<InquiryStatus, string> = {
+  drafting: '작성 중',
+  sent: '발송',
+  waiting: '회답 대기',
+  done: '완료',
+  cancelled: '취소',
+}
+
+/**
+ * 사람이 직접 고를 수 있는 상태. 'cancelled' 는 여기 없다 —
+ * 취소는 번호를 반환할지 버릴지 판정이 따르는 별도 동작이라, 상태 선택으로 만들 수 없다.
+ * 화면의 상태 컨트롤과 라우트의 update 검증이 같은 목록을 쓴다.
+ */
+export const EDITABLE_STATUSES: readonly InquiryStatus[] = ['drafting', 'sent', 'waiting', 'done']
+
+/** 모르는 상태값이 들어와도 화면이 비지 않게 — 저장값을 그대로 보여 준다. */
+export const inquiryStatusLabel = (status: string | null | undefined): string =>
+  (status && INQUIRY_STATUS_LABEL[status as InquiryStatus]) || status || ''
+
+// ── 번호 조립 ───────────────────────────────────────────────────────
+// 순수 함수다. 여기서 날짜를 직접 만들지 않고 부르는 쪽이 넘겨준다 —
+// 「오늘」은 반드시 KST 여야 하는데(lib/date.ts 의 todayKST), 그 판단을 이 파일에 두면
+// 서버·화면 어느 쪽에서 불렀는지에 따라 답이 갈릴 수 있다.
+
+/** 80 의뢰서(req80)에 쓸 수 있는 장비 계열. req20 은 '20' 고정이라 여기 없다. */
+export const REQ80_SERIES: readonly string[] = ['81', '83', '84']
+
+/** 20 의뢰서의 계열은 하나뿐이다. DB CHECK 에도 들어 있는 값이다. */
+export const REQ20_SERIES = '20'
+
+/**
+ * 채번 카운터의 기간 키.
+ * 본사수리 공번만 연도 리셋이 없어 'ALL' 한 줄을 계속 쓴다(inquiries_schema.sql 참고).
+ */
+export function periodKeyFor(type: InquiryType, year: number | string): string {
+  return type === 'hq_repair' ? 'ALL' : String(year)
+}
+
+const pad = (n: number | string, width: number): string => String(n).padStart(width, '0')
+
+/** 'YYYY-MM-DD' → 'YYMMDD'. 형식이 아니면 빈 문자열(부르는 쪽이 이미 검증했다는 뜻). */
+const yymmdd = (ymd: string): string => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd)
+  return m ? `${m[1].slice(2)}${m[2]}${m[3]}` : ''
+}
+
+export type BuildInquiryNoInput = {
+  /** claim_inquiry_seq 가 돌려준 순번. */
+  seq: number
+  /** 번호에 찍을 연도(4자리). 발행일의 연도다. hq_repair 는 쓰지 않는다. */
+  year: number | string
+  /** 장비 계열. req80 은 필수(81·83·84), req20 은 '20', 나머지는 쓰지 않는다. */
+  series?: string | null
+  /** 발행일 'YYYY-MM-DD'(KST). spare80 만 쓴다. */
+  issuedDate?: string
+}
+
+/**
+ * 종류별 의뢰서 번호를 만든다.
+ *
+ *   req80        BY26-81-001        계열별로 순번이 나뉘지 않는다 — 카운터는 종류 단위다
+ *   req20        BY26-20-001
+ *   hq_repair    239-0001           연도가 들어가지 않아 리셋도 없다
+ *   claim        ACCTK26-001
+ *   domestic_po  #PO-T4-2026-001    여기만 연도가 4자리다
+ *   spare80      001-K260929        번호가 앞, 날짜가 뒤. 발행일 기준이다
+ *
+ * 형식이 서로 전혀 닮지 않은 이유는 각 서류가 이미 바깥(본사·거래처)에서 그 모양으로
+ * 쓰이고 있기 때문이다. 하나로 통일하지 않는다.
+ */
+export function buildInquiryNo(type: InquiryType, input: BuildInquiryNoInput): string {
+  return assembleNo(type, input, false)
+}
+
+/**
+ * 안내판에 보여 줄 번호. buildInquiryNo 와 같은 형식이되, 아직 정해지지 않은 자리를 XX 로 둔다.
+ *
+ * 80 의뢰서의 계열(81·83·84)이 그 자리다 — 카운터는 종류 단위 하나라서 계열을 모른 채로도
+ * 다음 순번은 정해지지만, 번호 전체는 계열을 골라야 확정된다. 그 자리를 아무 값으로나 채워
+ * 보여 주면 「저 번호가 나온다」고 오해하게 된다.
+ *
+ * buildInquiryNo 와 달리 던지지 않는다 — 안내판은 값이 덜 찼을 때도 그려져야 한다.
+ */
+export function previewInquiryNo(
+  type: InquiryType,
+  input: { seq: number; year: number | string; issuedDate?: string },
+): string {
+  return assembleNo(type, input, true)
+}
+
+/**
+ * 두 함수의 공통 몸통. preview 가 true 면 계열 자리를 XX 로 두고, 없는 값에 너그럽다.
+ * 형식을 한 곳에만 두려고 합쳤다 — 두 벌이면 한쪽만 고쳐져 안내판과 실제 번호가 어긋난다.
+ */
+function assembleNo(
+  type: InquiryType,
+  input: { seq: number; year: number | string; series?: string | null; issuedDate?: string },
+  preview: boolean,
+): string {
+  const yy = String(input.year).slice(2)
+  const seq3 = pad(input.seq, 3)
+
+  switch (type) {
+    case 'req80': {
+      // 안내판에서는 계열이 아직 정해지지 않았다 — 그 자리를 비워 둔다.
+      if (preview) return `BY${yy}-XX-${seq3}`
+      const s = input.series ?? ''
+      if (!REQ80_SERIES.includes(s)) {
+        throw new Error(`80 의뢰서는 장비 계열(81·83·84)이 필요합니다 (받은 값: ${s || '없음'})`)
+      }
+      return `BY${yy}-${s}-${seq3}`
+    }
+    case 'req20':
+      return `BY${yy}-${REQ20_SERIES}-${seq3}`
+    case 'hq_repair':
+      return `239-${pad(input.seq, 4)}`
+    case 'claim':
+      return `ACCTK${yy}-${seq3}`
+    case 'domestic_po':
+      return `#PO-T4-${input.year}-${seq3}`
+    case 'spare80': {
+      const d = yymmdd(input.issuedDate ?? '')
+      if (!d) {
+        // 안내판은 날짜가 덜 찼어도 형식을 보여 준다. 실제 발급은 반드시 날짜를 받는다.
+        if (preview) return `${seq3}-K______`
+        throw new Error(`80 스페어파츠는 발행일(YYYY-MM-DD)이 필요합니다 (받은 값: ${input.issuedDate ?? '없음'})`)
+      }
+      return `${seq3}-K${d}`
+    }
+  }
+}
+
+/**
+ * 상태 dot 색. 글자는 중립으로 두고 색은 dot 에만 준다(디자인 규칙).
+ * 값은 전부 디자인 표에 있는 것이다 — 결재 화면의 STATUS_DOT 과 같은 층위로 골랐다.
+ */
+export const INQUIRY_STATUS_DOT: Record<InquiryStatus, string> = {
+  drafting: '#d1d5db',   // 아직 아무 일도 일어나지 않은 상태(결재의 '임시저장'과 같은 층위)
+  sent: '#234ea2',       // 진행 중 — 액센트
+  waiting: '#f59e0b',    // 상대의 답을 기다리는 중
+  done: '#16a34a',
+  cancelled: '#9ca3af',
+}

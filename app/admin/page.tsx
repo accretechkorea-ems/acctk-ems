@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, Suspense, useEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import { Suspense, useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
@@ -18,9 +18,9 @@ import { CHECKABLE_MENUS, checkableGroups, MENU_PERMS } from '@/lib/menuPerms'
 import AccessGate from '@/components/common/AccessGate'
 import { useOffices, selectableOffices, invalidateOffices, type Office } from '@/lib/offices'
 import { geocodeAddress } from '@/lib/geocode'
-import { SALES_STATUS_COLORS, ROLE_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
+import { ROLE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import { useToast } from '@/components/common/Toast'
-import { notifyDeleteCompleted } from '@/lib/quoteMutations'
+import { APPROVAL_PATH } from '@/lib/approval/types'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import AutocompleteInput from '@/components/common/AutocompleteInput'
@@ -34,19 +34,6 @@ const BORDER = '#e5e7eb'
 const TEXT = '#111113'
 const GRAY = '#6b7280'
 const DANGER = '#dc2626'
-
-type Quote = {
-  quote_id: number
-  quote_number: string
-  quote_date: string
-  total_supply: number
-  status: string
-  delete_reason?: string | null
-  pdf_url?: string | null
-  customer_id?: number | null
-  engineers?: { name: string } | null
-  customers?: { company_name: string } | null
-}
 
 type Engineer = {
   engineer_id: number
@@ -116,9 +103,6 @@ const POSITION_ORDER: Record<string, number> = {
 
 const POSITIONS = ['사장', '총괄', '수석', '책임', '선임', '사원']
 
-// 삭제 요청 상태값. 목록 정렬·건수 집계에서 함께 쓴다.
-const DELETE_REQUEST_STATUS = '취소요청'
-
 function AdminPageInner() {
   const supabase = createClient()
   const router = useRouter()
@@ -129,16 +113,8 @@ function AdminPageInner() {
   const [authorized, setAuthorized] = useState(false)
   const [currentEngineer, setCurrentEngineer] = useState<Engineer | null>(null)
 
-  // 견적서 삭제
+  // 견적서 삭제 안내 — 목록도 삭제 버튼도 없다(전자결재 5단계). 결재함으로 보내는 알림창만 남는다.
   const [showQuoteModal, setShowQuoteModal] = useState(false)
-  const [quotes, setQuotes] = useState<Quote[]>([])
-  const [quoteLoading, setQuoteLoading] = useState(false)
-  // 조회가 실패했는지. 빈 목록과 구분해서 알려주기 위한 것이다.
-  const [quoteLoadError, setQuoteLoadError] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [deleting, setDeleting] = useState<number | null>(null)
-  // 첫 화면 배지용 — 처리 대기 중인 삭제 요청 건수.
-  const [pendingDeleteCount, setPendingDeleteCount] = useState(0)
 
   // 목표 금액 관리
   const [showTargetModal, setShowTargetModal] = useState(false)
@@ -281,21 +257,12 @@ function AdminPageInner() {
     check()
   }, [])
 
-  // 첫 화면 배지 — 권한이 확인되면 대기 건수를 한 번 읽는다.
-  useEffect(() => {
-    if (authorized) fetchPendingDeleteCount()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authorized])
-
-  // 알림(link: '/admin?tab=quotes')으로 들어오면 견적서 삭제 목록을 바로 연다.
-  // 이미 이 화면에 있을 때 눌러도 열리도록 useState 초기값이 아니라 주소 변화를 본다.
+  // 옛 알림(link: '/admin?tab=quotes')으로 들어오면 안내창을 연다.
+  // 그 알림은 이제 만들지 않지만, 예전에 받은 것이 알림함에 남아 있어 길을 알려 줘야 한다.
   useEffect(() => {
     if (!authorized) return
     if (searchParams.get('tab') !== 'quotes') return
     setShowQuoteModal(true)
-    setSearchQuery('')
-    fetchQuotes()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authorized, searchParams])
 
   // 모달을 닫으면 주소의 tab 도 지운다(뒤로 가기 기록을 늘리지 않도록 replace).
@@ -318,113 +285,13 @@ function AdminPageInner() {
     setLogLoading(false)
   }
   // ── 견적서 ──────────────────────────────────────────────────────────────────
-  // 대기 중인 삭제 요청 건수(배지용). 목록을 새로 읽을 때마다 함께 갱신한다.
-  const fetchPendingDeleteCount = async () => {
-    const { count } = await supabase
-      .from('quotes')
-      .select('quote_id', { count: 'exact', head: true })
-      .eq('status', DELETE_REQUEST_STATUS)
-    setPendingDeleteCount(count ?? 0)
-  }
-
-  // 삭제 요청 건은 오래돼도 놓치면 안 되므로 limit 과 무관하게 따로 전부 읽어
-  // 최신 50건 앞에 붙인다(둘 다 견적일 내림차순, 중복은 제거).
-  const fetchQuotes = async (q?: string) => {
-    setQuoteLoading(true)
-    const term = q?.trim()
-    // quotes 는 engineers 를 engineer_id(실적 귀속자)·created_by(작성자) 두 번 참조한다.
-    // 관계를 지정하지 않으면 PGRST201(300 Multiple Choices)로 조회 전체가 실패한다.
-    // 이 목록의 「담당자」 열은 실적 귀속자다.
-    const QUOTE_SELECT = '*, engineers!quotes_engineer_id_fkey(name)'
-    let pendingQuery = supabase.from('quotes').select(QUOTE_SELECT)
-      .eq('status', DELETE_REQUEST_STATUS).order('quote_date', { ascending: false })
-    if (term) pendingQuery = pendingQuery.ilike('quote_number', `%${term}%`)
-    let query = supabase.from('quotes').select(QUOTE_SELECT).order('quote_date', { ascending: false }).limit(50)
-    if (term) query = query.ilike('quote_number', `%${term}%`)
-    const [{ data: pendingData, error: pendingErr }, { data: qData, error: qErr }] = await Promise.all([pendingQuery, query])
-    if (pendingErr || qErr) console.error('[admin] 견적 조회 실패', pendingErr ?? qErr)
-    setQuoteLoadError(!!(pendingErr || qErr))
-    const pendingRows = (pendingData || []) as Quote[]
-    const pendingIds = new Set(pendingRows.map(r => r.quote_id))
-    const rows = [...pendingRows, ...((qData || []) as Quote[]).filter(r => !pendingIds.has(r.quote_id))]
-    const customerIds = [...new Set(rows.map(r => r.customer_id).filter((id): id is number => id != null))]
-    const { data: custData } = customerIds.length > 0
-      ? await supabase.from('customers').select('customer_id, company_name').in('customer_id', customerIds)
-      : { data: [] }
-    const custMap: Record<number, string> = {}
-    for (const c of custData || []) custMap[c.customer_id] = c.company_name
-    const merged = rows.map(r => ({
-      ...r,
-      customers: r.customer_id ? { company_name: custMap[r.customer_id] ?? null } : null,
-    }))
-    setQuotes(merged)
-    setQuoteLoading(false)
-    fetchPendingDeleteCount()
-  }
-
-  const handleDeleteQuote = async (quote: Quote) => {
-    const ok = await confirmDialog({ title: '견적서 삭제', message: `견적서 ${quote.quote_number}을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`, confirmText: '삭제', variant: 'danger' })
-    if (!ok) return
-    setDeleting(quote.quote_id)
-
-    // 스토리지 PDF 를 먼저 지운다. 삭제 라우트가 quotes.pdf_url 로 대조해 파일을 찾으므로
-    // 견적 행이 남아 있는 동안에만 지울 수 있다(행을 먼저 지우면 늘 404 로 끝난다).
-    // 대조되는 행이 없으면(404) 지울 파일이 없다는 뜻이므로 견적 삭제는 그대로 이어간다.
-    if (quote.pdf_url) {
-      const filePath = quote.pdf_url.replace('quote-pdfs/', '')
-      try {
-        const res = await fetch('/api/delete-quote-pdf', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filePath }),
-        })
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}))
-          console.error('[admin] delete quote pdf failed', { filePath, status: res.status, body })
-          if (res.status !== 404) {
-            toast.error('PDF 파일 삭제에 실패했습니다. 견적은 삭제되지 않았습니다.')
-            setDeleting(null)
-            return
-          }
-        }
-      } catch (e) {
-        console.error('[admin] delete quote pdf request failed', { filePath, error: e })
-        toast.error('PDF 파일 삭제에 실패했습니다. 견적은 삭제되지 않았습니다.')
-        setDeleting(null)
-        return
-      }
-    }
-
-    // quote_expenses·quote_items 가 quotes 를 참조한다(FK 는 NO ACTION). 자식부터 지우고
-    // 매 단계 error 를 확인한다 — 중간에 실패하면 멈춰야 품목만 지워진 상태로 남지 않는다.
-    const { error: expErr } = await supabase.from('quote_expenses').delete().eq('quote_id', quote.quote_id)
-    if (expErr) {
-      console.error('[admin] delete quote_expenses failed', expErr)
-      toast.error(`부대비용 삭제에 실패했습니다 (${expErr.code || expErr.message})`)
-      setDeleting(null)
-      return
-    }
-    const { error: itemErr } = await supabase.from('quote_items').delete().eq('quote_id', quote.quote_id)
-    if (itemErr) {
-      console.error('[admin] delete quote_items failed', itemErr)
-      toast.error(`견적 품목 삭제에 실패했습니다 (${itemErr.code || itemErr.message})`)
-      setDeleting(null)
-      return
-    }
-    const { error: quoteErr } = await supabase.from('quotes').delete().eq('quote_id', quote.quote_id)
-    if (quoteErr) {
-      console.error('[admin] delete quote failed', quoteErr)
-      toast.error(`견적서 삭제에 실패했습니다. 품목·부대비용은 이미 지워졌을 수 있습니다 (${quoteErr.code || quoteErr.message})`)
-      setDeleting(null)
-      fetchQuotes(searchQuery)
-      return
-    }
-    // 삭제가 끝났음을 견적 작성자에게 알린다(견적 행이 사라진 뒤라 감사 기록을 근거로 만든다).
-    // 알림이 실패해도 삭제는 이미 끝났으므로 화면 흐름은 그대로 진행한다.
-    await notifyDeleteCompleted(quote.quote_id)
-    setDeleting(null)
-    fetchQuotes(searchQuery)
-  }
+  // 견적을 지우는 코드는 이 화면에서 없앴다(전자결재 5단계).
+  //
+  // 견적 삭제는 결재 완료 시점에 딱 한 곳에서만 실행된다 — lib/approval/quoteDelete.ts 의
+  // onCompleteQuoteDelete. 여기에 직접 지우는 길을 남겨 두면 결재선도 이력도 없이 지워지고,
+  // 실행 경로가 둘로 갈려 어느 쪽이 지웠는지 추적할 수 없다.
+  //
+  // 대기 중인 삭제 요청 목록도 뺐다 — 같은 목록을 결재함에서 결재선·이력과 함께 본다.
 
   // ── 목표 금액 ───────────────────────────────────────────────────────────────
   const fetchTargetData = async () => {
@@ -1203,18 +1070,12 @@ function AdminPageInner() {
             <div style={{ fontSize: 28, marginBottom: 12 }}>🗑️</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <div style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>견적서 삭제</div>
-              {/* 처리할 삭제 요청이 있을 때만 배지를 띄운다 */}
-              {pendingDeleteCount > 0 && (
-                <span style={{ fontSize: 11, fontWeight: 800, color: DANGER, background: '#fef2f2', border: `1px solid ${DANGER}`, borderRadius: 20, padding: '2px 8px', whiteSpace: 'nowrap' }}>
-                  삭제 요청 {pendingDeleteCount}건
-                </span>
-              )}
             </div>
-            <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>실수로 저장된 견적서를 조회하고 삭제합니다.</div>
+            <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>결재함으로 옮겼습니다. 삭제 요청은 결재선을 거쳐 처리됩니다.</div>
             {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
             <div style={{ flex: 1 }} />
             <button style={{ width: '100%', padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
-              onClick={() => { setShowQuoteModal(true); setSearchQuery(''); fetchQuotes() }}>관리하기</button>
+              onClick={() => setShowQuoteModal(true)}>어디서 처리하나요?</button>
           </div>
 
           <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
@@ -1421,85 +1282,29 @@ function AdminPageInner() {
         </div>
       )}
 
-      {/* ── 견적서 삭제 모달 ── */}
+      {/* 견적서 삭제 안내 — 이 화면에는 삭제 기능이 없다. 결재함으로 보내는 길만 알려 준다. */}
       {showQuoteModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 520, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🗑️ 견적서 삭제</div>
-                {pendingDeleteCount > 0 && (
-                  <span style={{ fontSize: 12, fontWeight: 800, color: DANGER, background: '#fef2f2', border: `1px solid ${DANGER}`, borderRadius: 20, padding: '2px 10px', whiteSpace: 'nowrap' }}>
-                    삭제 요청 {pendingDeleteCount}건
-                  </span>
-                )}
-              </div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🗑️ 견적서 삭제</div>
               <button onClick={closeQuoteModal} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
             </div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && fetchQuotes(searchQuery)}
-                placeholder="견적번호로 검색" style={inp} />
-              <button onClick={() => fetchQuotes(searchQuery)}
-                style={{ padding: '8px 16px', background: BLUE, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>검색</button>
+            <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.8, background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '14px 16px' }}>
+              견적서 삭제는 <b>결재함에서 처리합니다.</b><br />
+              삭제 요청이 올라오면 결재선을 따라 진행되고, 결재가 완료된 시점에 견적이 지워집니다.
+              반려·회수·폐기하면 요청 직전 상태로 돌아갑니다.
             </div>
-            <div style={{ overflowY: 'auto', overflowX: 'auto', flex: 1 }}>
-              {quoteLoading ? <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>불러오는 중...</div> : quoteLoadError ? (
-                // 빈 목록과 조회 실패는 구분해서 보여준다 — 둘 다 빈 화면이면 장애를 알아챌 수 없다.
-                <div style={{ textAlign: 'center', padding: 40, color: '#ef4444', fontWeight: 700 }}>데이터를 불러오지 못했습니다</div>
-              ) : quotes.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>견적서가 없습니다</div>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 800 }}>
-                  <thead style={{ position: 'sticky', top: 0, background: CARD_BG }}>
-                    <tr style={{ borderBottom: `2px solid ${BORDER}` }}>
-                      {['견적번호', '날짜', '담당자', '고객사', '금액', '상태', '삭제'].map(h => (
-                        <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: GRAY, fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {quotes.map(q => {
-                      const pending = q.status === DELETE_REQUEST_STATUS
-                      return (
-                      <Fragment key={q.quote_id}>
-                      <tr style={{ borderBottom: pending && q.delete_reason ? 'none' : `1px solid ${BORDER}` }}
-                        onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
-                        onMouseLeave={e => (e.currentTarget.style.background = '')}>
-                        <td style={{ padding: '10px 12px', fontWeight: 700, color: BLUE, whiteSpace: 'nowrap' }}>{q.quote_number}</td>
-                        <td style={{ padding: '10px 12px', color: GRAY, whiteSpace: 'nowrap' }}>{q.quote_date}</td>
-                        <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>{q.engineers?.name || '-'}</td>
-                        <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>{q.customers?.company_name || '-'}</td>
-                        <td style={{ padding: '10px 12px', fontWeight: 700, whiteSpace: 'nowrap' }}>₩{numKR(q.total_supply)}</td>
-                        <td style={{ padding: '10px 12px' }}>
-                          <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text }}>{salesStatusLabel(q.status)}</span>
-                        </td>
-                        <td style={{ padding: '10px 12px' }}>
-                          <button onClick={() => handleDeleteQuote(q)} disabled={deleting === q.quote_id}
-                            style={{ padding: '4px 12px', background: DANGER, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, opacity: deleting === q.quote_id ? 0.6 : 1 }}>
-                            {deleting === q.quote_id ? '삭제 중...' : '삭제'}
-                          </button>
-                        </td>
-                      </tr>
-                      {/* 삭제 요청 건은 사유를 아래 줄에 그대로 펼친다 — 표가 좁아 열을 늘리면 사유가 잘린다 */}
-                      {pending && q.delete_reason && (
-                        <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
-                          <td colSpan={7} style={{ padding: '0 12px 10px' }}>
-                            <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', background: '#fef2f2', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px' }}>
-                              <span style={{ fontSize: 11, fontWeight: 800, color: DANGER, whiteSpace: 'nowrap' }}>삭제 사유</span>
-                              <span style={{ fontSize: 12, color: TEXT, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>{q.delete_reason}</span>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                      </Fragment>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              )}
+            <div style={{ fontSize: 12, color: GRAY, lineHeight: 1.7, marginTop: 12 }}>
+              · 삭제 요청은 견적을 쓴 사람이 실적 현황이나 개인 대시보드에서 올립니다.<br />
+              · 누가 언제 결재했는지는 문서에 남습니다.
             </div>
-            <div style={{ marginTop: 12, fontSize: 12, color: GRAY }}>* 최근 50건 표시 / 검색으로 더 찾을 수 있습니다</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
+              <button onClick={closeQuoteModal}
+                style={{ flex: 1, padding: '10px', background: '#f3f4f6', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>닫기</button>
+              <button type="button" onClick={() => { closeQuoteModal(); router.push(APPROVAL_PATH) }}
+                style={{ flex: 1, padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>결재함 열기</button>
+            </div>
           </div>
         </div>
       )}

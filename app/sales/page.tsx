@@ -11,7 +11,10 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { getViewScope, isFieldEngineerTeam, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerm, withTeamPerms } from '@/lib/teamPerms'
-import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, notifyDeleteRequest, PO_MEMO_MAX } from '@/lib/quoteMutations'
+import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, submitQuoteDelete, deleteQuoteSelf, PO_MEMO_MAX } from '@/lib/quoteMutations'
+import { isSelfDeletable } from '@/lib/quoteDeletePolicy'
+import LinePickerModal from '@/components/approval/LinePickerModal'
+import type { LineInput } from '@/lib/approval/types'
 import {
   isAutoFailed, isOrdered, REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE,
   STATUS_FILTER_TABS, EDIT_STATUSES, EDIT_STATUSES_WITH_REVERT, FAIL_STATUS,
@@ -552,13 +555,15 @@ function TeamCard({ teamId, engineers, filteredQuotes, orderQuotes, revenueQuote
 
 // ── 개인 견적 모달 ────────────────────────────────────────────────────────────
 // 상태 변경 창의 선택지. 되돌리기(견적중)는 실패한 건에만 붙는다.
-function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, onClose, onStatusSave }: {
+function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, onClose, onStatusSave, onDeleted }: {
   engineer: Engineer & { quotedAmt: number; orderedAmt: number; revenueAmt: number; profitAmt: number; profitRate: number | null; targetAmt: number; achieve: number | null; orderTargetAmt: number; orderAchieve: number | null }
   quotes: Quote[]
   currentEngineerId: number | null
   engineers: Engineer[]
   onClose: () => void
   onStatusSave: (q: Quote, status: string, failReason: string) => Promise<void>
+  /** 본인 삭제로 견적이 사라진 뒤 목록을 다시 읽는다. */
+  onDeleted: () => Promise<void>
 })
  {
   const supabase = createClient()
@@ -574,6 +579,10 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
 
   const [editFailReason, setEditFailReason] = useState('')
   const [saving, setSaving] = useState(false)
+  // 삭제 요청은 결재로 올라간다 — 사유를 받은 뒤 이 모달에서 결재선을 지정한다.
+  const [lineOpen, setLineOpen] = useState(false)
+  // 본인 삭제의 2단 확인. 한 번 누르면 켜지고 3초 뒤 저절로 꺼진다(결재 문서 폐기와 같은 방식).
+  const [confirmDelete, setConfirmDelete] = useState(false)
   // 발주서 등록
   const [poQuote, setPoQuote] = useState<Quote | null>(null)
   const [poFile, setPoFile] = useState<File | null>(null)
@@ -615,18 +624,72 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   const pagedIds = paged.map(q => q.quote_id)
   const allPagedSelected = pagedIds.length > 0 && pagedIds.every(id => sel.isSelected(id))
   const inp: React.CSSProperties ={ padding: '6px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' }
-  // 삭제 요청은 사유가 있어야 관리자가 판단할 수 있다. 다른 상태는 기존대로 선택 입력.
+  // 삭제는 사유가 있어야 한다 — 본인 삭제든 결재든 왜 지웠는지가 남아야 한다.
   const reasonRequired = editStatus === '취소요청'
   const reasonMissing = reasonRequired && !editFailReason.trim()
+  // 아직 실적에 잡히지 않은 견적은 결재 없이 바로 지운다. 판정 기준은 서버와 같은 파일을 읽는다.
+  const selfDelete = reasonRequired && isSelfDeletable(editQuote?.status)
+
+  // 2단 확인은 3초만 열어 둔다 — 창을 띄워 두고 잊었다가 무심코 두 번째를 누르는 일이 없게.
+  useEffect(() => {
+    if (!confirmDelete) return
+    const t = setTimeout(() => setConfirmDelete(false), 3000)
+    return () => clearTimeout(t)
+  }, [confirmDelete])
+
+  // 다른 견적을 열거나 상태를 바꾸면 확인을 처음으로 되돌린다.
+  useEffect(() => { setConfirmDelete(false) }, [editQuote, editStatus])
+
+  /** 본인 삭제 — 결재를 거치지 않고 바로 지운다. 되돌릴 수 없다. */
+  const runSelfDelete = async () => {
+    if (!editQuote) return
+    setSaving(true)
+    const res = await deleteQuoteSelf(editQuote.quote_id, editFailReason)
+    setSaving(false)
+    if (!res.ok) { toast.error('삭제 실패: ' + res.error); return }
+    toast.success(editQuote.quote_number + ' 견적을 삭제했습니다')
+    setEditQuote(null)
+    await onDeleted()
+  }
 
   const handleSave = async () => {
     if (!editQuote || reasonMissing) return
+    // 본인 삭제 — 한 번 더 눌러야 실행된다.
+    if (selfDelete) {
+      if (!confirmDelete) { setConfirmDelete(true); return }
+      setConfirmDelete(false)
+      await runSelfDelete()
+      return
+    }
+    // 그 밖의 상태는 결재로 올라간다 — 사유를 받은 다음 결재선을 지정한다.
+    if (reasonRequired) { setLineOpen(true); return }
     setSaving(true)
     // 되돌릴 때는 미수주 사유를 지운다(빈 문자열 → 공용 함수가 null 로 저장한다).
     const reason = editStatus === '견적중' ? '' : editFailReason
     await onStatusSave(editQuote, editStatus, reason)
-    // 삭제 요청은 관리자에게 알린다. 알림이 실패해도 요청 자체는 저장됐으므로 흐름을 막지 않는다.
-    if (reasonRequired) await notifyDeleteRequest(editQuote.quote_id)
+    setSaving(false)
+    setEditQuote(null)
+  }
+
+  /**
+   * 삭제 요청 상신. 상태를 '취소요청' 으로 바꾼 뒤 결재 문서를 만든다.
+   * 상신이 실패하면 상태를 되돌린다 — 그러지 않으면 결재도 삭제도 되지 않은 채 갇힌다.
+   * (개인 대시보드 MyQuotesPanel 의 submitDelete 와 같은 절차다.)
+   */
+  const submitDelete = async (lines: LineInput[]) => {
+    if (!editQuote) return
+    const target = editQuote
+    setLineOpen(false)
+    setSaving(true)
+    await onStatusSave(target, '취소요청', editFailReason)
+    const res = await submitQuoteDelete(target.quote_id, lines)
+    if (!res.ok) {
+      await onStatusSave(target, target.status, target.fail_reason ?? '')
+      toast.error(`삭제 요청 실패: ${res.error}`)
+      setSaving(false)
+      return
+    }
+    toast.success('삭제 요청을 결재로 올렸습니다')
     setSaving(false)
     setEditQuote(null)
   }
@@ -1133,12 +1196,27 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                 )}
               </div>
 
+              {/* 삭제는 견적 상태에 따라 갈린다. 어느 길로 가는지 버튼 위에 한 줄로 알린다 —
+                  누르고 나서 알게 되면 늦다. 색은 기존 '취소요청' 토큰을 그대로 쓴다. */}
+              {reasonRequired && (
+                <div style={{
+                  fontSize: 12, lineHeight: 1.6, borderRadius: 8, padding: '8px 10px', marginTop: 10,
+                  border: `1px solid ${BORDER}`,
+                  background: selfDelete ? getCategoryColor(SALES_STATUS_COLORS, '취소요청').bg : '#f3f4f6',
+                  color: selfDelete ? getCategoryColor(SALES_STATUS_COLORS, '취소요청').text : GRAY,
+                }}>
+                  {selfDelete
+                    ? '결재 없이 바로 삭제됩니다. 되돌릴 수 없습니다.'
+                    : `수주 이후 상태(${editQuote.status})라 결재를 거칩니다. 결재가 끝나면 삭제됩니다.`}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
                 <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
                 <button onClick={handleSave} disabled={saving || reasonMissing}
                   style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: (saving || reasonMissing) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing) ? 0.7 : 1 }}>
                   {saving ? '처리 중...'
-                    : editStatus === '취소요청' ? '삭제 요청'
+                    : selfDelete ? (confirmDelete ? '한 번 더 누르면 삭제' : '삭제')
+                    : editStatus === '취소요청' ? '결재선 지정'
                     : editStatus === '견적중' ? '견적중으로 되돌리기'
                     : `${editStatus} 확정`}
                 </button>
@@ -1146,6 +1224,15 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
             </div>
           </div>
         )}
+
+        {/* 삭제 요청 결재선. 확정하면 상태 변경과 상신이 이어진다. */}
+        <LinePickerModal
+          open={lineOpen}
+          onClose={() => setLineOpen(false)}
+          onConfirm={submitDelete}
+          myId={currentEngineerId}
+          docType="quote_delete"
+        />
       </div>
     </div>
   )
@@ -1171,8 +1258,6 @@ export default function SalesPage() {
   const [chartEngineer, setChartEngineer] = useState<Engineer | null>(null)
   const [showChart, setShowChart] = useState(false)
   const [currentEngineer, setCurrentEngineer] = useState<Engineer | null>(null)
-
-  useEffect(() => { fetchAll() }, [])
 
   const fetchAll = async () => {
     setLoading(true)
@@ -1210,6 +1295,14 @@ export default function SalesPage() {
     setCurrentEngineer(await withTeamPerm(meData as Engineer | null))
     setLoading(false)
   }
+
+  // 첫 진입에 한 번 읽는다. fetchAll 선언 뒤에 둔다 — 위에 두면 선언 전 참조가 된다.
+  //
+  // fetchAll 첫 줄의 setLoading(true) 때문에 「효과 안에서 동기 setState」 경고가 뜬다.
+  // 여기서는 의도한 동작이다 — 첫 그림에서 곧바로 「불러오는 중...」으로 바꿔야 하고,
+  // 이어지는 렌더는 그 한 번뿐이다(뒤는 전부 await 뒤라 비동기다).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { fetchAll() }, [])
 
   // 팀 필터 목록 — 실적 집계 대상인 현장 팀만(팀 플래그로 판정).
   const teams = [...new Set(engineers.filter(e => isFieldEngineerTeam(e)).map(e => e.teams).filter(Boolean))].sort() as string[]
@@ -1578,6 +1671,10 @@ const visibleEngineers = sortedEngineers.filter(e => {
           onClose={() => setSelectedEngineer(null)}
           onStatusSave={async (q, status, failReason) => {
             await handleStatusSave(q, status, failReason)
+            setSelectedEngineer((prev: any) => prev ? { ...prev } : null)
+          }}
+          onDeleted={async () => {
+            await fetchAll()
             setSelectedEngineer((prev: any) => prev ? { ...prev } : null)
           }}
         />
