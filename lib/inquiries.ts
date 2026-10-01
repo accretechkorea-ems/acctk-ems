@@ -45,16 +45,21 @@ export function inquiryTypeOf(value: unknown): InquiryType | null {
     : null
 }
 
-/** inquiries.status 에 들어가는 값 전부. */
-export const INQUIRY_STATUSES = ['drafting', 'sent', 'waiting', 'done', 'cancelled'] as const
+/**
+ * 지금 쓰는 상태.
+ *
+ * 'sent'(발송)·'waiting'(회답 대기) 는 은퇴했다 — 쓰는 사람에게는 「아직 쓰는 중인가,
+ * 끝났는가」 두 갈래면 충분했고, 중간 상태는 고르는 부담만 늘렸다.
+ * DB 의 CHECK 제약은 그대로 둔다(그 두 값이 들어간 행이 없다는 것은 확인했다).
+ * 옛 값이 어딘가에 남아 있어도 화면이 깨지지 않게, 라벨·dot 은 모르는 값을 받아들인다.
+ */
+export const INQUIRY_STATUSES = ['drafting', 'done', 'cancelled'] as const
 
 export type InquiryStatus = (typeof INQUIRY_STATUSES)[number]
 
 /** 상태 코드 → 화면 문구. 저장값은 영문, 보이는 것은 한글이다(견적 상태와 같은 방식). */
 export const INQUIRY_STATUS_LABEL: Record<InquiryStatus, string> = {
   drafting: '작성 중',
-  sent: '발송',
-  waiting: '회답 대기',
   done: '완료',
   cancelled: '취소',
 }
@@ -62,9 +67,9 @@ export const INQUIRY_STATUS_LABEL: Record<InquiryStatus, string> = {
 /**
  * 사람이 직접 고를 수 있는 상태. 'cancelled' 는 여기 없다 —
  * 취소는 번호를 반환할지 버릴지 판정이 따르는 별도 동작이라, 상태 선택으로 만들 수 없다.
- * 화면의 상태 컨트롤과 라우트의 update 검증이 같은 목록을 쓴다.
+ * 화면의 상태 컨트롤과 라우트의 update·register 검증이 같은 목록을 쓴다.
  */
-export const EDITABLE_STATUSES: readonly InquiryStatus[] = ['drafting', 'sent', 'waiting', 'done']
+export const EDITABLE_STATUSES: readonly InquiryStatus[] = ['drafting', 'done']
 
 /** 모르는 상태값이 들어와도 화면이 비지 않게 — 저장값을 그대로 보여 준다. */
 export const inquiryStatusLabel = (status: string | null | undefined): string =>
@@ -186,11 +191,16 @@ function assembleNo(
 /**
  * 상태 dot 색. 글자는 중립으로 두고 색은 dot 에만 준다(디자인 규칙).
  * 값은 전부 디자인 표에 있는 것이다 — 결재 화면의 STATUS_DOT 과 같은 층위로 골랐다.
+ *
+ * 키를 InquiryStatus 로 묶지 않고 string 으로 둔다 — 은퇴한 값(sent·waiting)의 색을
+ * 남겨 두려는 것이다. 옛 행이 하나라도 있으면 dot 이 비지 않고 제 색으로 보인다.
+ * 새로 그 값을 고를 길은 없다(EDITABLE_STATUSES 에 없다).
  */
-export const INQUIRY_STATUS_DOT: Record<InquiryStatus, string> = {
+export const INQUIRY_STATUS_DOT: Record<string, string> = {
   drafting: '#d1d5db',   // 아직 아무 일도 일어나지 않은 상태(결재의 '임시저장'과 같은 층위)
-  sent: '#234ea2',       // 진행 중 — 액센트
-  waiting: '#f59e0b',    // 상대의 답을 기다리는 중
   done: '#16a34a',
   cancelled: '#9ca3af',
+  // 은퇴한 값 — 고를 수는 없지만 색은 남긴다.
+  sent: '#234ea2',
+  waiting: '#f59e0b',
 }

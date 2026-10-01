@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { errorInfo } from '@/lib/errorInfo'
 
 export type Notification = {
   id: number
@@ -70,7 +71,8 @@ export function useNotifications(engineerId: number | null, options: Notificatio
     const { data, error } = await q
       .order('created_at', { ascending: false })
       .range(0, (page + 1) * limit - 1)
-    if (error) console.error('[notifications] 조회 실패', error)
+    // supabase 오류를 그대로 넘기면 {} 로 보인다 — 네 칸을 이름 붙여 꺼낸다(lib/errorInfo.ts).
+    if (error) console.error('[notifications] 조회 실패', errorInfo(error))
     const rows = (data as Notification[]) ?? []
     setNotifications(rows)
     // 받은 수가 요청한 만큼이면 더 있을 수 있다고 본다(총 건수를 따로 세지 않는다).

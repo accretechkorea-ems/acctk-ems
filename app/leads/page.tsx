@@ -16,10 +16,11 @@ import { getCategoryColor, SALES_STATUS_COLORS, type CategoryColor } from '@/lib
 import SegmentedControl from '@/components/common/SegmentedControl'
 import Popover from '@/components/common/Popover'
 import { Z } from '@/lib/zIndex'
-import { josa } from '@/lib/josa'
 import { useLeadFilters, ALL, NONE } from '@/hooks/leads/useLeadFilters'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import LeadExcelButton from '@/components/leads/LeadExcelButton'
+import LeadStatusModal from './LeadStatusModal'
+import { kstStamp } from '@/lib/date'
 
 import {
   LEAD_STATUS_NEW, LEAD_STATUS_ACTIVE, LEAD_STATUS_CONVERTED, LEAD_STATUS_SKIPPED, LEAD_STATUS_BLOCKED,
@@ -37,9 +38,8 @@ const PAGE_BG = '#fafafa'
 const ROW_HOVER = PAGE_BG      // 마우스만 올린 행 — 기준 화면(활동 이력·요약 카드)의 행 hover 와 같은 값
 const HEAD_BG = '#f3f4f6'     // 헤더 · 열린 행 — 활동 현황의 중립 배경(뱃지·칩과 같은 값)
 const ACCENT_BAR = BLUE       // 열린 행 왼쪽 액센트 바
+// 위험 색 — 「상태 변경」 버튼과 「미배정」 표시에 쓴다.
 const DANGER = '#dc2626'
-// 경고 상자 배경 — 관리자 화면의 삭제 사유 상자와 같은 값.
-const DANGER_BG = '#fef2f2'
 
 // 리드 상태 배지 색. 새 색은 만들지 않고 SALES_STATUS_COLORS 안에서만 골라 쓴다.
 //   신규     ← '견적중'   아직 손대지 않은 건(amber)
@@ -77,6 +77,12 @@ type Lead = {
   status: string; assigned_to: number | null; admin_memo: string | null
   /** 미진행 사유(담당자) · 배정 불가 사유(관리자). 성격이 달라 칸을 나눠 둔다. */
   skip_reason: string | null; block_reason: string | null
+  /**
+   * 배정 불가를 실행한 사람과 시각. 해제하면 사유와 함께 셋 다 null 로 돌아간다
+   * (DB 의 CHECK leads_blocked_actor_check 가 그 짝을 강제한다).
+   * 칸이 생기기 전에 닫힌 건은 둘 다 null 이다 — 그때는 「처리자 기록 없음」으로 보여 준다.
+   */
+  blocked_by: number | null; blocked_at: string | null
   /** 배정한 사람. 배정 라우트가 실행자로 채운다(기존 건은 null). */
   assigned_by: number | null
   converted_opportunity_id: number | null
@@ -248,13 +254,9 @@ function LeadsPageInner() {
   // 고객사 검색 결과는 표 컨테이너 밖으로 나가야 해서 포털로 띄운다. 그 기준이 되는 입력칸.
   const custAnchorRef = useRef<HTMLDivElement>(null)
   const [pickedCustomer, setPickedCustomer] = useState<Customer | null>(null)
-  // 삭제는 「<고객사명> 삭제 확인」을 그대로 쳐야 한다. 어느 리드에서 확인 중인지와 입력값을 함께 들고 있는다.
-  const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; text: string } | null>(null)
-  // 「리드 처리」로 연 영역 — 배정 불가와 삭제 중 무엇을 고른 상태인지. 한 번에 한 리드만 연다.
-  const [proc, setProc] = useState<{ id: number; kind: 'block' | 'delete' } | null>(null)
-  // 배정 불가 사유 입력값. 미진행 사유와 같은 방식으로 리드 id 를 함께 들고 있는다.
-  const [blockDraft, setBlockDraft] = useState<{ id: number; text: string } | null>(null)
-  const [deleting, setDeleting] = useState<number | null>(null)
+  // 「상태 변경」 모달을 연 리드. 담당자 지정·변경과 배정 불가를 그 모달 한 곳에서 한다
+  // (예전에는 카드 안에서 붉은 영역이 펼쳐졌다 — 삭제와 한자리에 있어 헷갈린다는 제보가 있었다).
+  const [statusFor, setStatusFor] = useState<number | null>(null)
   const [pdfBusy, setPdfBusy] = useState<number | null>(null)
   // 명함 크게 보기. 썸네일이 이미 받아온 서명 URL 을 그대로 쓴다(다시 발급하지 않는다).
   const [cardViewer, setCardViewer] = useState<string | null>(null)
@@ -349,16 +351,12 @@ function LeadsPageInner() {
 
   const newCount = leads.filter(l => l.status === LEAD_STATUS_NEW).length
 
+  // 「상태 변경」 모달이 보고 있는 리드. 목록에서 찾으므로 저장 직후 갱신된 값이 그대로 반영된다.
+  const statusModalLead = statusFor === null ? null : leads.find(l => l.lead_id === statusFor) ?? null
+
   const custMatches = custQuery.trim()
     ? customers.filter(c => (c.company_name ?? '').toLowerCase().includes(custQuery.trim().toLowerCase())).slice(0, 8)
     : []
-
-  /** 「리드 처리」 영역을 닫고 그 안의 임시 입력값(사유·확인 문구)을 버린다. */
-  const closeProcess = () => {
-    setProc(null)
-    setBlockDraft(null)
-    setDeleteConfirm(null)
-  }
 
   /** 처리 줄의 입력 영역을 닫고 그 안의 임시 입력값을 버린다. */
   const closePanel = () => {
@@ -420,25 +418,62 @@ function LeadsPageInner() {
   }
 
   /**
-   * 담당자 배정. 상태는 손으로 고르지 않고 배정을 따라간다(배정하면 진행중, 풀면 신규).
-   * 서버가 같은 규칙으로 쓰므로 화면에 반영할 값도 여기서 같이 계산한다.
-   * 이미 종결된 건(전환완료·미진행)의 상태는 배정을 바꿔도 그대로 둔다.
+   * 「상태 변경」 모달용 호출.
+   *
+   * callManage 와 하는 일은 같지만 실패 사유를 **문자열로 돌려준다** — 모달이 열린 채로
+   * 그 사유를 제 안에 띄워야 하기 때문이다(토스트는 모달 뒤로 가려 읽기 어렵다).
+   * 성공했을 때의 토스트·목록 갱신은 여기서 그대로 한다.
    */
-  const assign = async (lead: Lead, assignedTo: number | null) => {
-    const res = await callManage(
+  const manageFromModal = async (
+    leadId: number,
+    payload: Record<string, unknown>,
+    patch: Record<string, unknown>,
+    okMsg: string,
+  ): Promise<{ error: string | null; json: Record<string, unknown> | null }> => {
+    setSaving(leadId)
+    try {
+      const res = await fetch('/api/lead-manage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId, ...payload }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) return { error: json?.error || `저장하지 못했습니다 (HTTP ${res.status})`, json: null }
+      setLeads(prev => prev.map(l => (l.lead_id === leadId ? { ...l, ...patch } as Lead : l)))
+      toast.success(okMsg)
+      return { error: null, json: (json ?? {}) as Record<string, unknown> }
+    } catch (e) {
+      console.error('[leads] 상태 변경 실패', e)
+      return { error: '저장하지 못했습니다. 잠시 뒤 다시 시도해주세요.', json: null }
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  /**
+   * 담당자 배정. 상태는 손으로 고르지 않고 배정을 따라간다(배정하면 진행중).
+   * 서버가 같은 규칙으로 쓰므로 화면에 반영할 값도 여기서 같이 계산한다.
+   * 이미 종결된 건의 상태는 배정을 바꿔도 그대로 두지만, 모달은 종결된 건을 아예 열지 않는다.
+   *
+   * 모달에서만 부른다 — 배정을 푸는 경로(assignedTo = null)는 화면에서 없앴다.
+   * 담당자를 빼고 싶으면 「배정 불가 처리」로 사유를 남기고 닫는 것이 맞다.
+   */
+  const assignFromModal = async (lead: Lead, assignedTo: number): Promise<string | null> => {
+    const { error, json } = await manageFromModal(
       lead.lead_id,
       { action: 'assign', assignedTo },
       isLeadClosed(lead.status)
         ? { assigned_to: assignedTo }
-        : { assigned_to: assignedTo, status: assignedTo === null ? LEAD_STATUS_NEW : LEAD_STATUS_ACTIVE },
+        : { assigned_to: assignedTo, status: LEAD_STATUS_ACTIVE },
       '담당자를 저장했습니다.',
     )
-    // 파트너사 메일은 담당자가 실제로 바뀐 건에만 나간다(해제·같은 사람 재저장은 보내지 않는다).
-    // 주소가 없는 리드도 애초에 보내지 않으므로 실패로 알리지 않는다.
-    if (res && assignedTo !== null && assignedTo !== lead.assigned_to && lead.partner_email && res.partnerMailSent === false) {
+    if (error) return error
+    // 파트너사 메일은 담당자가 실제로 바뀐 건에만 나간다(같은 사람 재저장은 보내지 않는다).
+    // 주소가 없는 리드도 애초에 보내지 않으므로 실패로 알리지 않는다(종전 규칙 그대로).
+    if (assignedTo !== lead.assigned_to && lead.partner_email && json?.partnerMailSent === false) {
       toast.error('배정되었습니다. 파트너사 메일 발송에 실패했습니다 — 직접 연락해주세요')
     }
-    return res
+    return null
   }
 
   /** 파트너사에 배정 통보 메일을 다시 보낸다. 리드 데이터는 바뀌지 않는다. */
@@ -560,46 +595,39 @@ function LeadsPageInner() {
   }
 
   /**
-   * 리드 삭제(하드 삭제). 권한과 확인 문구는 라우트에서 다시 본다 —
-   * 여기서 막는 것은 편의일 뿐이고 화면을 거치지 않는 호출은 서버만 막을 수 있다.
-   */
-  const removeLead = async (lead: Lead, confirmText?: string) => {
-    setDeleting(lead.lead_id)
-    try {
-      const res = await fetch('/api/lead-delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leadId: lead.lead_id, confirmText }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        toast.error(json?.error || '삭제하지 못했습니다.')
-        return
-      }
-      // 목록에서 빼면 상단 미처리 배지 건수도 함께 줄어든다(같은 배열에서 세므로).
-      setLeads(prev => prev.filter(l => l.lead_id !== lead.lead_id))
-      closeProcess()
-      if (clickedId === lead.lead_id) setClickedId(null)
-      toast.success('리드를 삭제했습니다.')
-    } finally {
-      setDeleting(null)
-    }
-  }
-
-  /**
    * 배정 불가 — 관리자가 사유를 남기고 리드를 닫는다. 담당자가 배정되어 있었다면 서버가 배정도 함께 푼다.
    * 미진행(담당자 판단)과 같은 최소 길이를 쓰고, 종결이라 되돌릴 수 없다.
+   *
+   * 삭제를 대신하는 자리이기도 하다 — 진행하지 않기로 한 리드도 지우지 않고 사유와 함께 남긴다.
+   * 어디서(파트너사) 들어온 리드를 왜 진행하지 않았는지가 기록으로 남아야 하기 때문이다.
    */
-  const blockLead = async (lead: Lead) => {
-    const reason = (blockDraft?.id === lead.lead_id ? blockDraft.text : '').trim()
-    if (reason.length < SKIP_REASON_MIN) { toast.error(`배정 불가 사유를 ${SKIP_REASON_MIN}자 이상 입력해주세요.`); return }
-    const res = await callManage(
+  const blockFromModal = async (lead: Lead, reason: string): Promise<string | null> => {
+    const { error } = await manageFromModal(
       lead.lead_id,
       { action: 'block', reason },
       { status: LEAD_STATUS_BLOCKED, block_reason: reason, assigned_to: null },
       '배정 불가로 처리했습니다.',
     )
-    if (res) closeProcess()
+    return error
+  }
+
+  /**
+   * 배정 불가 해제 — '신규'·미배정으로 되돌린다. 서버가 사유·처리자·시각을 함께 비운다.
+   *
+   * 화면 값도 같이 비워야 한다. 하나라도 남겨 두면 카드가 「신규인데 배정 불가 처리 기록이 있는」
+   * 모습으로 보인다 — DB 에는 그런 행이 존재할 수 없다(CHECK).
+   */
+  const unblockFromModal = async (lead: Lead): Promise<string | null> => {
+    const { error } = await manageFromModal(
+      lead.lead_id,
+      { action: 'unblock' },
+      {
+        status: LEAD_STATUS_NEW,
+        block_reason: null, blocked_by: null, blocked_at: null, assigned_to: null,
+      },
+      '배정 불가를 해제했습니다.',
+    )
+    return error
   }
 
   /** 영업기회 전환 — 기회 행을 만들고 리드를 전환완료로 닫는다. */
@@ -777,16 +805,10 @@ function LeadsPageInner() {
                   const closed = converted || isLeadClosed(lead.status)
                   // 사유가 최소 길이를 넘어야 미진행 버튼이 열린다(서버도 같은 길이를 다시 본다).
                   const skipReady = (skipDraft?.id === lead.lead_id ? skipDraft.text : '').trim().length >= SKIP_REASON_MIN
-                  // 배정 불가 사유 — 미진행과 같은 최소 길이를 쓴다.
-                  const blockText = blockDraft?.id === lead.lead_id ? blockDraft.text : ''
-                  const blockReady = blockText.trim().length >= SKIP_REASON_MIN
-                  // 삭제 확인 문구 — 「<고객사명> 삭제 확인」을 그대로 쳐야 버튼이 열린다(서버도 같은 문구를 본다).
-                  const deletePhrase = `${lead.customer_company} 삭제 확인`
-                  const deleteText = deleteConfirm?.id === lead.lead_id ? deleteConfirm.text : ''
-                  const deleteReady = deleteText.trim() === deletePhrase
-                  const deletingNow = deleting === lead.lead_id
-                  const procKind = proc?.id === lead.lead_id ? proc.kind : null
                   const busy = saving === lead.lead_id
+                  // 배정 불가는 해제할 수 있으므로 「잠긴 종결」이 아니다(해제는 관리자만 — 버튼 자체가
+                  // superadmin 에게만 보이므로 여기서 권한을 다시 보지 않는다).
+                  const lockedClosed = closed && lead.status !== LEAD_STATUS_BLOCKED
                   const isAssignee = lead.assigned_to === myEngineerId
                   // 처리 줄의 선택지 — 배정받은 담당자만 쓰는 두 가지.
                   // (메모는 관리 카드 안에서 바로 고치므로 여기 두지 않는다)
@@ -954,25 +976,17 @@ function LeadsPageInner() {
                                     </span>
                                   </div>
 
-                                  {/* 담당자 — 배정은 관리자만. 담당자에게는 이름만 보인다. */}
+                                  {/* 담당자 — 읽기 전용이다. 바꾸는 일은 「상태 변경」 모달 한 곳에서만 한다
+                                      (여기 드롭다운을 두면 고르는 순간 저장돼, 실수로 남의 리드를 가져간다). */}
                                   <div style={{ ...dlRow, alignItems: 'center' }}>
                                     <span style={dlKey}>담당자</span>
-                                    {isAdmin ? (
-                                      <select
-                                        value={lead.assigned_to ?? ''}
-                                        disabled={busy}
-                                        onChange={e => assign(lead, e.target.value ? Number(e.target.value) : null)}
-                                        style={{ ...inpStyle, flex: 1, minWidth: 0 }}
-                                      >
-                                        <option value="">배정 안 함</option>
-                                        {assigneeOptions(lead.assigned_to).map(o => (
-                                          <option key={o.id} value={o.id}>{o.label}</option>
-                                        ))}
-                                      </select>
-                                    ) : (
-                                      <span style={{ color: lead.assigned_to ? TEXT : FAINT, fontWeight: 500, minWidth: 0 }}>
+                                    {lead.assigned_to ? (
+                                      <span style={{ color: TEXT, fontWeight: 500, minWidth: 0 }}>
                                         {engName(lead.assigned_to)}
                                       </span>
+                                    ) : (
+                                      // 미배정은 할 일이 남았다는 뜻이라 눈에 띄어야 한다.
+                                      <span style={{ color: DANGER, fontWeight: 700, minWidth: 0 }}>미배정</span>
                                     )}
                                   </div>
 
@@ -1071,6 +1085,16 @@ function LeadsPageInner() {
                                       ? `영업기회 #${lead.converted_opportunity_id} 로 전환되었습니다.`
                                       : ((lead.status === LEAD_STATUS_BLOCKED ? lead.block_reason : lead.skip_reason)?.trim()
                                         || '사유가 남아 있지 않습니다.')}
+                                    {/* 배정 불가는 누가 언제 눌렀는지까지 밝힌다 — 되돌릴 수 있는 처리라
+                                        「누구에게 물어봐야 하는가」가 사유만큼 중요하다.
+                                        칸이 생기기 전에 닫힌 건은 알 방법이 없어 그 사실을 그대로 적는다. */}
+                                    {lead.status === LEAD_STATUS_BLOCKED && !converted && (
+                                      <span style={{ display: 'block', fontSize: 12, marginTop: 4 }}>
+                                        {lead.blocked_by
+                                          ? <span style={{ color: FAINT }}>처리: {engName(lead.blocked_by)} · {kstStamp(lead.blocked_at)}</span>
+                                          : <span style={{ color: FAINT }}>처리자 기록 없음</span>}
+                                      </span>
+                                    )}
                                   </span>
                                 </div>
                               )}
@@ -1171,108 +1195,30 @@ function LeadsPageInner() {
                                 </div>
                               )}
 
-                              {/* 삭제 — superadmin 에게만 보인다. 서버도 같은 권한을 다시 확인한다.
-                                  marginTop: auto 로 남는 높이를 전부 위에서 먹어 카드 맨 아래에 붙는다 —
-                                  메모가 길든 짧든, 편집 중이든 아니든 버튼 자리가 움직이지 않는다. */}
-                              {/* ── 리드 처리 ── superadmin 에게만. 되돌릴 수 없는 두 가지(배정 불가·삭제)를 한 자리에 모은다.
-                                  marginTop: auto 로 남는 높이를 위에서 먹어 카드 맨 아래에 붙는다 — 메모 길이와 무관하게 자리가 고정된다. */}
+                              {/* ── 상태 변경 ── superadmin 에게만. 담당자 지정·변경과 배정 불가를 모달 하나로 모은다.
+                                  marginTop: auto 로 남는 높이를 위에서 먹어 카드 맨 아래에 붙는다 — 메모 길이와 무관하게 자리가 고정된다.
+                                  삭제 버튼은 없앴다: 진행하지 않은 리드도 「배정 불가 + 사유」로 남겨야
+                                  어디서 들어온 리드를 왜 진행하지 않았는지가 기록으로 남는다. */}
                               {isSuperAdmin(me) && (
                                 <div style={{ ...dividerTop, marginTop: 'auto' }}>
-                                  {procKind ? (
-                                    <div style={{ background: DANGER_BG, border: `1px solid ${BORDER}`, borderRadius: 6, padding: 12 }}>
-                                      {/* 종결된 리드에는 배정 불가를 두지 않는다(이미 닫힌 건이다). 삭제는 그대로 둔다. */}
-                                      <SegmentedControl
-                                        value={procKind}
-                                        options={closed
-                                          ? [{ label: '삭제', value: 'delete' }]
-                                          : [{ label: '배정 불가로 변경', value: 'block' }, { label: '삭제', value: 'delete' }]}
-                                        onChange={v => setProc({ id: lead.lead_id, kind: v as 'block' | 'delete' })}
-                                      />
-
-                                      {procKind === 'block' && (
-                                        <div style={{ marginTop: 10 }}>
-                                          <div style={{ fontSize: 13, color: TEXT, lineHeight: '22px', marginBottom: 8 }}>
-                                            담당자를 붙이지 않고 이 리드를 닫습니다. 되돌릴 수 없습니다.
-                                            {lead.assigned_to != null && (
-                                              <><br />배정된 담당자({engName(lead.assigned_to)})는 해제되고 알림을 받습니다.</>
-                                            )}
-                                          </div>
-                                          <textarea
-                                            value={blockText}
-                                            rows={3}
-                                            maxLength={MAX_LEN.skip_reason}
-                                            onChange={e => setBlockDraft({ id: lead.lead_id, text: e.target.value })}
-                                            placeholder={`배정 불가 사유 (${SKIP_REASON_MIN}자 이상)`}
-                                            style={{ ...inpStyle, width: '100%', boxSizing: 'border-box', resize: 'vertical', lineHeight: '22px' }}
-                                          />
-                                          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-                                            <button onClick={closeProcess} disabled={busy} style={ghostBtn}>취소</button>
-                                            <button
-                                              disabled={busy || !blockReady}
-                                              onClick={() => blockLead(lead)}
-                                              style={{
-                                                ...primaryBtn(busy || !blockReady),
-                                                background: busy || !blockReady ? '#f3f4f6' : DANGER,
-                                              }}
-                                            >{busy ? '처리 중...' : '배정 불가 처리'}</button>
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {procKind === 'delete' && (
-                                        <div style={{ marginTop: 10 }}>
-                                          <div style={{ fontSize: 13, color: TEXT, lineHeight: '22px', marginBottom: 8 }}>
-                                            {converted ? (
-                                              <>
-                                                이 리드는 영업기회 #{lead.converted_opportunity_id} 으로 전환되었습니다.<br />
-                                                삭제하면 해당 영업기회의 출처 기록이 사라집니다.<br />
-                                                영업기회 자체는 삭제되지 않습니다.
-                                              </>
-                                            ) : (
-                                              <>{lead.partner_company}{josa(lead.partner_company, '이')} 등록한 리드를 지웁니다. 되돌릴 수 없습니다.</>
-                                            )}
-                                          </div>
-                                          <div style={{ fontSize: 12, color: FAINT, marginBottom: 6 }}>아래 문구를 그대로 입력하세요</div>
-                                          {/* 따라 칠 문구 — 표 헤더와 같은 중립 배경에 얹어 입력칸과 구분한다. */}
-                                          <div style={{
-                                            background: HEAD_BG, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '8px 10px',
-                                            marginBottom: 6, fontSize: 13, fontWeight: 700, color: TEXT, wordBreak: 'break-word',
-                                          }}>
-                                            {deletePhrase}
-                                          </div>
-                                          <input
-                                            value={deleteText}
-                                            onChange={e => setDeleteConfirm({ id: lead.lead_id, text: e.target.value })}
-                                            placeholder={deletePhrase}
-                                            style={{ ...inpStyle, width: '100%', boxSizing: 'border-box' }}
-                                          />
-                                          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-                                            <button onClick={closeProcess} disabled={deletingNow} style={ghostBtn}>취소</button>
-                                            <button
-                                              disabled={deletingNow || !deleteReady}
-                                              onClick={() => removeLead(lead, deleteText)}
-                                              style={{
-                                                ...primaryBtn(deletingNow || !deleteReady),
-                                                background: deletingNow || !deleteReady ? '#f3f4f6' : DANGER,
-                                              }}
-                                            >{deletingNow ? '삭제 중...' : '삭제'}</button>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    // 카드 오른쪽 아래. 되돌릴 수 없는 동작이라 다른 것과 붙지 않게 끝에 둔다.
-                                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                      <button
-                                        onClick={() => setProc({ id: lead.lead_id, kind: closed ? 'delete' : 'block' })}
-                                        disabled={deletingNow}
-                                        style={{
-                                          ...primaryBtn(deletingNow),
-                                          background: deletingNow ? '#f3f4f6' : DANGER,
-                                        }}
-                                      >리드 처리</button>
-                                    </div>
-                                  )}
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+                                    {/* 종결된 건은 더 바꿀 것이 없다 — 버튼을 잠그고 왜 잠겼는지 옆에 적는다.
+                                        배정 불가만 예외다: 관리자가 해제해 '신규' 로 되돌릴 수 있다.
+                                        전환완료는 영업기회가 이미 만들어졌고, 미진행은 담당자의 판단이라 잠긴 채 둔다. */}
+                                    {lockedClosed && (
+                                      <span style={{ fontSize: 12, color: FAINT, lineHeight: '20px' }}>
+                                        {lead.status} 상태라 바꿀 수 없습니다
+                                      </span>
+                                    )}
+                                    {/* 예전 「리드 처리」는 붉은 버튼이었다. 그때는 누르면 배정 불가·삭제뿐이었기 때문이다.
+                                        지금은 담당자 지정이 주된 길이라 붉게 두면 경고를 잘못 보내게 된다 —
+                                        붉은색은 모달 안의 「배정 불가 처리」 확정 버튼에만 남긴다. */}
+                                    <button
+                                      onClick={() => setStatusFor(lead.lead_id)}
+                                      disabled={busy || lockedClosed}
+                                      style={primaryBtn(busy || lockedClosed)}
+                                    >상태 변경</button>
+                                  </div>
                                 </div>
                               )}
                               </div>
@@ -1312,6 +1258,28 @@ function LeadsPageInner() {
         )}
 
       </div>
+
+      {/* 상태 변경 — 담당자 지정·변경과 배정 불가. 목록 바깥에 한 번만 그린다
+          (행마다 그리면 열린 행이 바뀔 때 모달이 다시 마운트된다). */}
+      {statusModalLead && (
+        <LeadStatusModal
+          lead={statusModalLead}
+          assigneeName={statusModalLead.assigned_to ? engName(statusModalLead.assigned_to) : ''}
+          options={assigneeOptions(statusModalLead.assigned_to)}
+          canAssign={isAdmin}
+          canBlock={isAdmin}
+          canUnblock={isAdmin}
+          blockReason={statusModalLead.block_reason}
+          blockedLabel={statusModalLead.blocked_by
+            ? `${engName(statusModalLead.blocked_by)} · ${kstStamp(statusModalLead.blocked_at)}`
+            : ''}
+          busy={saving === statusModalLead.lead_id}
+          onClose={() => setStatusFor(null)}
+          onAssign={id => assignFromModal(statusModalLead, id)}
+          onBlock={reason => blockFromModal(statusModalLead, reason)}
+          onUnblock={() => unblockFromModal(statusModalLead)}
+        />
+      )}
 
       {/* 명함 크게 보기. 화면에 이 용도의 기존 부품이 없어 새로 둔다 —
           겹칠 것이 없는 전체 화면 오버레이라 바깥 클릭·ESC 로만 닫는다. */}

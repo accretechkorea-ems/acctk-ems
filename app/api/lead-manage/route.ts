@@ -4,11 +4,16 @@
 // RLS 를 켜기 전이든 뒤든 이 라우트만으로 방어가 완결되어야 한다 — RLS 는 두 번째 방어선이다.
 //
 // 역할
-//   관리자(isSuperAdmin) : 전체 조회 / 배정 / 메모 / 배정불가 / 삭제    (전환·미진행 불가)
+//   관리자(isSuperAdmin) : 전체 조회 / 배정 / 메모 / 배정불가 / 해제 / 삭제  (전환·미진행 불가)
 //   담당자(assigned_to)  : 자기 배정 건 조회 / 메모 / 전환 / 미진행     (배정·배정불가·삭제 불가)
 //
 // 상태는 손으로 고르지 않는다. 배정하면 진행중, 전환하면 전환완료, 미진행 처리하면 미진행이 된다.
 // 그래서 status 를 직접 받는 action 이 없다 — 없어진 '확인중'·'보류' 는 어떤 경로로도 들어올 수 없다.
+//
+// 배정 불가는 되돌릴 수 있다(action 'unblock'). 해제하면 '신규'·미배정으로 돌아가고 사유·처리자·
+// 시각이 행에서 지워진다 — 그래서 block·unblock 둘 다 audit_log 에 한 줄씩 남긴다.
+// leads.blocked_by/blocked_at 은 CHECK(leads_blocked_actor_check)가 지킨다:
+// 상태가 '배정불가' 가 아니면 둘 다 null 이어야 한다. 상태를 되돌릴 때 반드시 함께 비운다.
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
@@ -42,8 +47,49 @@ type LeadRow = {
   request_note: string | null
   status: string
   assigned_to: number | null
+  /** 배정 불가 사유·처리자·시각. 해제하면 셋 다 null 로 돌아간다(CHECK 가 강제한다). */
+  block_reason: string | null
+  blocked_by: number | null
+  blocked_at: string | null
   converted_opportunity_id: number | null
   created_at: string
+}
+
+/**
+ * 리드 처리 기록을 audit_log 에 한 줄 남긴다.
+ *
+ * leads 에는 변경 트리거가 없고, 해제(unblock)는 사유·처리자·시각을 행에서 지운다 —
+ * 그러면 「누가 왜 닫았다가 풀었는지」는 이 기록에만 남는다. 그래서 부가 작업이 아니라
+ * 처리의 일부로 남긴다. 다만 **기록 실패가 처리 결과를 막지는 않는다** — 리드는 이미 바뀌었고,
+ * 여기서 실패로 응답하면 사람이 같은 처리를 다시 눌러 더 나빠진다(의뢰서 라우트와 같은 방침).
+ *
+ * 방식은 writeInquiryAudit(app/api/inquiry/route.ts) · writeDeleteAudit(lib/approval/quoteDelete.ts)
+ * 과 같다 — actor_email 은 engineers 에서 읽고, new_data 에 실행자 id·이름을 함께 넣는다.
+ * row_id 는 리드 번호를 쓴다(사람이 찾는 값이다). 번호 발급이 실패한 옛 건은 lead_id 로 떨어진다.
+ */
+async function writeLeadAudit(
+  lead: { lead_id: number; lead_no: string | null },
+  opts: {
+    action: 'LEAD_ASSIGN' | 'LEAD_BLOCK' | 'LEAD_UNBLOCK'
+    actorId: number
+    oldData?: Record<string, unknown> | null
+    newData?: Record<string, unknown> | null
+  },
+) {
+  const { data: actor, error: actorErr } = await supabaseAdmin
+    .from('engineers').select('email, name').eq('engineer_id', opts.actorId).maybeSingle()
+  if (actorErr) console.error('[lead-manage] actor lookup failed', { actorId: opts.actorId, error: actorErr })
+  const who = (actor ?? null) as { email: string | null; name: string | null } | null
+
+  const { error } = await supabaseAdmin.from('audit_log').insert({
+    actor_email: who?.email ?? null,
+    action: opts.action,
+    table_name: 'leads',
+    row_id: lead.lead_no ?? String(lead.lead_id),
+    old_data: opts.oldData ?? null,
+    new_data: { ...(opts.newData ?? {}), by: opts.actorId, by_name: who?.name ?? null },
+  })
+  if (error) console.error('[lead-manage] audit insert failed', { action: opts.action, leadId: lead.lead_id, error })
 }
 
 /**
@@ -101,7 +147,7 @@ export async function POST(req: Request) {
   // 권한 판정은 화면이 보낸 값이 아니라 DB 의 현재 값으로 한다.
   const { data: lead, error: leadErr } = await supabaseAdmin
     .from('leads')
-    .select('lead_id, lead_no, partner_name, partner_email, customer_company, interest_product, expected_purchase, meeting_note, request_note, status, assigned_to, converted_opportunity_id, created_at')
+    .select('lead_id, lead_no, partner_name, partner_email, customer_company, interest_product, expected_purchase, meeting_note, request_note, status, assigned_to, block_reason, blocked_by, blocked_at, converted_opportunity_id, created_at')
     .eq('lead_id', leadId)
     .single<LeadRow>()
   if (leadErr || !lead) return bad('리드를 찾을 수 없습니다.', 404)
@@ -150,6 +196,13 @@ export async function POST(req: Request) {
       .update({ assigned_to: assignedTo, assigned_by: caller.engineer_id, ...statusPatch, ...touch })
       .eq('lead_id', leadId)
     if (error) return fail('assign update failed', error)
+
+    // 누가 누구에게 넘겼는지. 리드 행에는 「지금 담당자」만 남아 이전 담당자는 여기서만 확인된다.
+    await writeLeadAudit(lead, {
+      action: 'LEAD_ASSIGN', actorId: caller.engineer_id,
+      oldData: { assigned_to: lead.assigned_to, status: lead.status },
+      newData: { assigned_to: assignedTo, status: statusPatch.status ?? lead.status },
+    })
 
     // 새 담당자가 생겼을 때만 그 사람에게 알린다.
     //   null → A : A 에게   /   A → B : B 에게만   /   A → null : 없음   /   A → A : 없음
@@ -212,10 +265,22 @@ export async function POST(req: Request) {
     // 배정 불가인데 담당자가 남아 있으면 모순이라 배정을 함께 푼다.
     // 배정자(assigned_by)는 남긴다 — 누가 배정했던 건인지는 기록으로 남아야 한다.
     const previousAssignee = lead.assigned_to
+    // 처리자는 세션에서 판정한 caller 만 쓴다(본문 값은 읽지 않는다 — 배정자와 같은 규칙).
+    // 시각은 updated_at 과 따로 둔다: updated_at 은 뒤에 메모만 고쳐도 바뀐다.
     const { error } = await supabaseAdmin.from('leads')
-      .update({ status: LEAD_STATUS_BLOCKED, block_reason: reason, assigned_to: null, ...touch })
+      .update({
+        status: LEAD_STATUS_BLOCKED, block_reason: reason, assigned_to: null,
+        blocked_by: caller.engineer_id, blocked_at: new Date().toISOString(),
+        ...touch,
+      })
       .eq('lead_id', leadId)
     if (error) return fail('block update failed', error)
+
+    await writeLeadAudit(lead, {
+      action: 'LEAD_BLOCK', actorId: caller.engineer_id,
+      oldData: { status: lead.status, assigned_to: previousAssignee },
+      newData: { status: LEAD_STATUS_BLOCKED, block_reason: reason, previous_assignee: previousAssignee },
+    })
 
     // 배정되어 있던 담당자에게만 알린다(배정 전 건이면 알릴 사람이 없다).
     // 사유는 길이가 제각각이라 메시지에 넣지 않는다 — 링크를 누르면 상세에서 전문을 본다(미진행과 같은 규칙).
@@ -229,6 +294,49 @@ export async function POST(req: Request) {
       })
     }
     return NextResponse.json({ success: true, status: LEAD_STATUS_BLOCKED, unassigned: previousAssignee != null })
+  }
+
+  // ── 배정 불가 해제 — 관리자만. '신규'·미배정으로 되돌린다. ──
+  //
+  // 되돌리는 것은 배정 불가 하나뿐이다. 전환완료·미진행은 여기로 오지 못한다(상태 검사에서 걸린다) —
+  // 전환은 영업기회가 이미 만들어졌고, 미진행은 담당자의 판단이라 관리자가 뒤집을 일이 아니다.
+  //
+  // 사유·처리자·시각을 **반드시 함께 비운다**. 상태만 되돌리면 CHECK(leads_blocked_actor_check)가
+  // 막는다 — 「배정불가가 아닌데 처리 기록이 남아 있는」 행을 DB 가 애초에 허용하지 않는다.
+  //
+  // 알림은 보내지 않는다. 이전 담당자는 배정 불가 때 이미 해제 알림을 받았고, 지금은 담당자가
+  // 없는 상태로 돌아가는 것뿐이라 알릴 사람이 없다. 파트너사 메일도 배정이 생길 때만 나간다.
+  if (action === 'unblock') {
+    if (!admin) return bad('배정 불가 해제는 관리자만 할 수 있습니다.', 403)
+    if (lead.status !== LEAD_STATUS_BLOCKED) return bad('배정 불가 상태가 아닙니다.', 409)
+
+    // 조건부 UPDATE — 읽은 뒤 누가 먼저 바꿨으면 0행이 되어 되살아나지 않는다.
+    const { data: done, error } = await supabaseAdmin.from('leads')
+      .update({
+        status: LEAD_STATUS_NEW,
+        block_reason: null, blocked_by: null, blocked_at: null,
+        assigned_to: null,
+        ...touch,
+      })
+      .eq('lead_id', leadId)
+      .eq('status', LEAD_STATUS_BLOCKED)
+      .select('lead_id')
+    if (error) return fail('unblock update failed', error)
+    if (!done || done.length === 0) return bad('이미 처리되었거나 없는 리드입니다.', 409)
+
+    // 지운 값을 old_data 에 남긴다 — 해제하고 나면 리드 행에는 아무 흔적도 없어
+    // 이 한 줄이 「무슨 사유로 누가 언제 닫았던 건인지」의 유일한 증거다.
+    await writeLeadAudit(lead, {
+      action: 'LEAD_UNBLOCK', actorId: caller.engineer_id,
+      oldData: {
+        status: LEAD_STATUS_BLOCKED,
+        block_reason: lead.block_reason,
+        blocked_by: lead.blocked_by,
+        blocked_at: lead.blocked_at,
+      },
+      newData: { status: LEAD_STATUS_NEW, assigned_to: null },
+    })
+    return NextResponse.json({ success: true, status: LEAD_STATUS_NEW })
   }
 
   // ── 파트너사 메일 재발송 — 관리자만. 배정 통보를 다시 보낸다(데이터는 건드리지 않는다). ──

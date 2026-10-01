@@ -10,7 +10,7 @@
 //   · 왼쪽: 종류 목록(180px). 좁아지면 가로 탭으로 떨어진다(@container).
 //   · 본문 위: 종류별 「다음 사용 번호」 카드. 작성·등록은 전부 이 카드에서 시작한다
 //     — 어느 종류로 시작하는지가 버튼 자리로 드러나, 모달에서 종류를 다시 고를 일이 없다.
-//   · 본문: 번호 · 제목 · 상태 · 담당자 · 발행일. 발행일 내림차순, 같으면 순번 내림차순.
+//   · 본문: 번호 · 업체명 · 상태 · 담당자 · 발행일. 발행일 내림차순, 같으면 순번 내림차순.
 // 그 패턴이 공용 컴포넌트가 아니라 그 파일 안의 인라인 CSS 라 복사밖에 방법이 없다.
 // 셋째 화면이 같은 배치를 쓰게 되면 그때 공용으로 뽑는 편이 낫다.
 //
@@ -30,22 +30,24 @@ import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, NEUTRAL_BG, BLUE, ROW_HOVER_BG,
-  cardStyle, cardHeader, cardTitle, countBadge, rowStyle, rowTitle, rowSub,
+  cardStyle, cardHeader, cardTitle, countBadge, rowStyle,
   btnPrimary, btnGhost,
 } from '@/components/common/ui'
 import {
   INQUIRY_TYPE_ITEMS, INQUIRY_TYPE_LABEL, inquiryTypeOf, inquiryStatusLabel,
-  INQUIRY_STATUS_DOT, EDITABLE_STATUSES, REQ80_SERIES, previewInquiryNo, buildInquiryNo,
+  INQUIRY_STATUS_DOT, REQ80_SERIES, previewInquiryNo, buildInquiryNo,
   type InquiryStatus, type InquiryType,
 } from '@/lib/inquiries'
-import { isCurrentlyEmployed } from '@/lib/engineers'
+import { engineerLabel, isCurrentlyEmployed } from '@/lib/engineers'
+import FilePicker, { failText, uploadFiles, type UploadFail } from '@/components/inquiry/files'
+import { errorInfo } from '@/lib/errorInfo'
 
 /** 결재 화면과 같은 전환 기준. 두 화면의 레일이 다르게 움직이면 어색하다. */
 const MOTION_MS = 140
 const MOTION_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
 
 /** 표 열 폭 — 머리와 행이 같은 값을 써야 줄이 맞는다(결재 화면과 같은 방식). */
-const COL = { status: 108, person: 96, date: 92, gap: 10 }
+const COL = { no: 156, status: 108, person: 112, date: 92, gap: 10 }
 /** 카드 좌우 여백(16) + 행 좌우 여백(12). 머리는 카드 끝까지 늘이고 글자만 행과 맞춘다. */
 const HEAD_PAD = 28
 
@@ -89,7 +91,7 @@ type InquiryRow = {
   inquiry_type: string
   seq: number
   issued_date: string
-  engineers: { name: string | null } | null
+  engineers: { name: string | null; position: string | null } | null
 }
 
 /**
@@ -99,7 +101,8 @@ type InquiryRow = {
  * quotes·suggestions 에서 이미 겪은 일이다(lib/partSearch.ts:10 참고).
  */
 const SELECT_COLUMNS =
-  'id, inquiry_no, title, status, inquiry_type, seq, issued_date, engineers!inquiries_created_by_fkey(name)'
+  'id, inquiry_no, title, status, inquiry_type, seq, issued_date,'
+  + ' engineers!inquiries_created_by_fkey(name, position)'
 
 const dateText = (ymd: string | null): string => (ymd ? ymd.replace(/-/g, '.') : '')
 
@@ -117,6 +120,9 @@ const STALE_DAYS = 7
 
 /** 발급된 의뢰서 — 라우트가 돌려주는 값 중 화면이 쓰는 것만. */
 type MadeInquiry = { inquiry_no: string }
+
+/** 등록된 의뢰서 — 첨부를 붙이려면 id 가, 알림 문구에는 번호가 필요하다. */
+type RegisteredInquiry = { id: string; inquiry_no: string }
 
 /** peek 이 돌려주는 종류별 카운터. */
 type Counter = { type: InquiryType; period_key: string; last_seq: number; next_seq: number }
@@ -144,6 +150,15 @@ const labelStyle: React.CSSProperties = {
  * 새로 작성하기와 결정적으로 다른 점: 번호를 **사람이 정한다**. 그래서 일련번호·발행일·담당자를
  * 직접 받고, 조립한 번호를 미리보기로 보여 준다. 저장되는 번호는 서버가 같은 함수로 다시 만든다.
  *
+ * 배치는 사람이 채우는 순서다 — 맨 위에 「등록될 번호」를 띠로 두고(무엇을 만드는지 먼저 보인다),
+ * 업체명 → 발행일·일련번호 → 담당자 → 파일 순으로 내려간다.
+ *
+ * 상태는 묻지 않는다. 이미 바깥에 나간 번호를 적는 자리라 언제나 완료다 —
+ * 골라야 할 것이 하나 줄면 그만큼 빨리 끝난다. 나중에 달라지면 상세에서 고친다.
+ *
+ * 파일은 보낸 것과 받은 것을 따로 받는다. 저장할 때 방향별로 내용 기록을 하나씩 만들고
+ * 그 아래에 붙인다 — 첨부는 내용 기록에 매달리는 구조이기 때문이다(inquiry_messages_schema.sql).
+ *
  * 카운터를 건너뛰게 되면(지금 다음 번호보다 큰 값) 먼저 확인을 받는다 — 한 번 올린 카운터는
  * 내릴 수 없어서, 사이에 낀 번호들이 「사용된 것」이 되어 버린다.
  */
@@ -165,10 +180,20 @@ function RegisterModal({
   const [series, setSeries] = useState('')
   const [seq, setSeq] = useState('')
   const [title, setTitle] = useState('')
-  const [status, setStatus] = useState<string>('done')
-  const [createdBy, setCreatedBy] = useState<number | ''>(myId ?? '')
+  const [ownerPick, setOwnerPick] = useState<number | ''>('')
+  const [sentFiles, setSentFiles] = useState<File[]>([])
+  const [recvFiles, setRecvFiles] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+
+  /**
+   * 담당자는 고르기 전까지 자기 자신이다.
+   *
+   * useState 초기값으로 myId 를 읽으면 안 된다 — myId 는 로그인 확인과 engineers 조회,
+   * 두 번의 비동기 뒤에 오므로 모달이 처음 그려지는 순간에는 거의 항상 null 이고,
+   * 초기값은 그 뒤로 다시 계산되지 않아 「고르기」로 굳는다. 파생값으로 두면 값이 늦게 와도 맞는다.
+   */
+  const createdBy: number | '' = ownerPick === '' ? (myId ?? '') : ownerPick
 
   // 신규 배정은 재직자만(기존 모달들과 같은 isCurrentlyEmployed 판정).
   const selectable = engineers.filter(e => isCurrentlyEmployed(e.resigned_date, today))
@@ -189,19 +214,26 @@ function RegisterModal({
     } catch { preview = '' }
   }
 
-  const send = async (confirmBump: boolean): Promise<void> => {
+  /**
+   * 번호를 등록한다. 성공하면 만들어진 건을, 사람이 물러섰거나 실패했으면 null 을 돌려준다.
+   *
+   * 번호를 건너뛰는 경우에는 확인을 받고 **같은 입력으로** 한 번 더 보낸다. 고른 파일은
+   * 화면 상태에 그대로 있으므로 확인을 거쳐도 사라지지 않는다.
+   */
+  const sendRegister = async (confirmBump: boolean): Promise<RegisteredInquiry | null> => {
     const res = await fetch('/api/inquiry', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'register', type, issued_date: issuedDate,
         equipment_series: needsSeries ? series : undefined,
-        seq: seqNum, title, status, created_by: createdBy,
+        // 이미 바깥에 나간 번호라 상태는 언제나 완료다.
+        seq: seqNum, title, status: 'done', created_by: createdBy,
         ...(confirmBump ? { confirm_bump: true } : {}),
       }),
     })
     const json = await res.json().catch(() => ({}))
-    if (!res.ok) { setError(json.error || `등록하지 못했습니다 (${res.status})`); return }
+    if (!res.ok) { setError(json.error || `등록하지 못했습니다 (${res.status})`); return null }
 
     // 건너뛰는 번호가 생긴다 — 사람에게 알리고 같은 요청을 다시 보낸다.
     if (json.needs_confirm) {
@@ -212,14 +244,46 @@ function RegisterModal({
         confirmText: '등록',
         variant: 'danger',
       })
-      if (!ok) return
-      await send(true)
-      return
+      if (!ok) return null
+      return sendRegister(true)
     }
+    return (json.inquiry ?? null) as RegisteredInquiry | null
+  }
 
-    toast.success(`${json.inquiry?.inquiry_no ?? ''} 등록했습니다`)
-    onDone()
-    onClose()
+  /**
+   * 고른 파일을 방향별 내용 기록에 붙인다. 올리지 못한 파일을 사유와 함께 돌려준다.
+   *
+   * 내용 기록의 날짜는 발행일로 둔다 — 소급 등록이라 「오늘」이 아니라 그 번호가 나간 날이 맞다.
+   * 한 방향이 막혀도 다른 방향은 계속 올린다. 번호는 이미 등록됐으므로 여기서 멈추면
+   * 파일만 빠진 채로 남고, 무엇이 빠졌는지도 알려 주지 못한다.
+   */
+  const attachFiles = async (inquiryId: string): Promise<UploadFail[]> => {
+    const groups: { direction: 'sent' | 'received'; list: File[] }[] = [
+      { direction: 'sent', list: sentFiles },
+      { direction: 'received', list: recvFiles },
+    ]
+    const failed: UploadFail[] = []
+    for (const g of groups) {
+      if (g.list.length === 0) continue
+      const res = await fetch('/api/inquiry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'message_add', inquiry_id: inquiryId,
+          direction: g.direction, entry_date: issuedDate, body: '',
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      const messageId = Number(json.message?.id)
+      if (!res.ok || !Number.isInteger(messageId)) {
+        const reason = json.error || `내용 기록을 만들지 못했습니다 (${res.status})`
+        console.error('[inquiries] 내용 기록 생성 실패', { direction: g.direction, status: res.status, error: json })
+        failed.push(...g.list.map(f => ({ name: f.name, reason })))
+        continue
+      }
+      failed.push(...await uploadFiles(messageId, g.list))
+    }
+    return failed
   }
 
   const submit = async () => {
@@ -227,7 +291,17 @@ function RegisterModal({
     setBusy(true)
     setError('')
     try {
-      await send(false)
+      const made = await sendRegister(false)
+      if (!made) return
+      const failed = await attachFiles(made.id)
+      if (failed.length > 0) {
+        // 번호는 등록됐다. 빠진 것은 파일뿐이라는 점을 분명히 한다 — 다시 등록하면 번호가 겹친다.
+        toast.error(`${made.inquiry_no} 등록했습니다. 올리지 못한 파일은 상세에서 다시 올려주세요\n${failText(failed)}`)
+      } else {
+        toast.success(`${made.inquiry_no} 등록했습니다`)
+      }
+      onDone()
+      onClose()
     } catch (e) {
       console.error('[inquiries] 등록 실패', e)
       setError('등록하지 못했습니다. 잠시 뒤 다시 시도해주세요.')
@@ -239,25 +313,43 @@ function RegisterModal({
   return (
     <ModalOverlay onClose={onClose}>
       <div style={{
-        background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 460,
+        background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 500,
         maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
       }}>
-        {/* 종류는 카드에서 정해져 들어온다 — 모달 안에서 고르지 않고 제목으로 보여 준다. */}
+        {/* 종류는 카드에서 정해져 들어온다 — 모달 안에서 고르지 않고 머리글로 보여 준다. */}
         <div style={cardHeader}>
           <span style={cardTitle}>기존 번호 등록 — {INQUIRY_TYPE_LABEL[type]}</span>
         </div>
 
-        <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.7, marginBottom: 12 }}>
-          이미 바깥으로 나간 번호를 기록에 남깁니다. 번호는 직접 정합니다.
+        {/* 등록될 번호 띠 — 맨 위다. 무엇을 만드는 중인지가 입력보다 먼저 보여야 한다. */}
+        <div style={{
+          background: NEUTRAL_BG, borderRadius: 8, padding: '12px 14px', marginBottom: 12,
+          textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 4 }}>등록될 번호</div>
+          <div style={{
+            fontSize: 17, fontWeight: 800, letterSpacing: '-0.3px', wordBreak: 'break-all',
+            color: preview ? BLUE : MUTED,
+          }}>
+            {preview || '아래를 채우면 번호가 보입니다'}
+          </div>
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <label style={labelStyle} htmlFor="rg-date">발행일</label>
-          <input id="rg-date" type="date" value={issuedDate} onChange={e => setIssuedDate(e.target.value)}
-            style={{ ...fieldStyle, colorScheme: 'light' }} />
+          <label style={labelStyle} htmlFor="rg-title">업체명 <span style={{ fontWeight: 500 }}>(선택)</span></label>
+          <input id="rg-title" value={title} maxLength={200} onChange={e => setTitle(e.target.value)} style={fieldStyle} />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: needsSeries ? '1fr 1fr' : '1fr', gap: 10, marginBottom: 12 }}>
+        {/* 발행일·일련번호는 번호를 만드는 값이라 한 줄에 둔다(80 의뢰서는 계열까지 세 칸). */}
+        <div style={{
+          display: 'grid', gap: 10, marginBottom: 12,
+          gridTemplateColumns: needsSeries ? '1.2fr 0.9fr 0.9fr' : '1fr 1fr',
+        }}>
+          <div>
+            <label style={labelStyle} htmlFor="rg-date">발행일</label>
+            <input id="rg-date" type="date" value={issuedDate} onChange={e => setIssuedDate(e.target.value)}
+              style={{ ...fieldStyle, colorScheme: 'light' }} />
+          </div>
           {needsSeries && (
             <div>
               <label style={labelStyle} htmlFor="rg-series">장비 계열</label>
@@ -275,42 +367,22 @@ function RegisterModal({
           </div>
         </div>
 
-        {/* 미리보기 — 형식을 눈으로 확인한다 */}
-        <div style={{
-          background: NEUTRAL_BG, borderRadius: 8, padding: '12px 14px', marginBottom: 12,
-          textAlign: 'center',
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 4 }}>등록될 번호</div>
-          <div style={{
-            fontSize: 17, fontWeight: 800, letterSpacing: '-0.3px', wordBreak: 'break-all',
-            color: preview ? BLUE : MUTED,
-          }}>
-            {preview || '입력을 채우면 번호가 보입니다'}
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-          <div>
-            <label style={labelStyle} htmlFor="rg-status">상태</label>
-            <select id="rg-status" value={status} onChange={e => setStatus(e.target.value)} style={fieldStyle}>
-              {EDITABLE_STATUSES.map(v => <option key={v} value={v}>{inquiryStatusLabel(v)}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={labelStyle} htmlFor="rg-owner">담당자</label>
-            <select id="rg-owner" value={createdBy} style={fieldStyle}
-              onChange={e => setCreatedBy(e.target.value ? Number(e.target.value) : '')}>
-              <option value="">고르기</option>
-              {selectable.map(e => (
-                <option key={e.engineer_id} value={e.engineer_id}>{`${e.name ?? ''} ${e.position ?? ''}`.trim()}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
         <div style={{ marginBottom: 12 }}>
-          <label style={labelStyle} htmlFor="rg-title">제목 <span style={{ fontWeight: 500 }}>(선택)</span></label>
-          <input id="rg-title" value={title} maxLength={200} onChange={e => setTitle(e.target.value)} style={fieldStyle} />
+          <label style={labelStyle} htmlFor="rg-owner">담당자</label>
+          <select id="rg-owner" value={createdBy} style={fieldStyle}
+            onChange={e => setOwnerPick(e.target.value ? Number(e.target.value) : '')}>
+            {/* 자기 자신이 들어간 뒤에는 빈 값을 고를 일이 없다 — 담당자 없는 의뢰서는 만들지 않는다. */}
+            {createdBy === '' && <option value="">고르기</option>}
+            {selectable.map(e => (
+              <option key={e.engineer_id} value={e.engineer_id}>{engineerLabel(e)}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* 보낸 파일·받은 파일 — 저장할 때 방향별 내용 기록으로 들어간다. */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+          <FilePicker label="보낸 파일" compact files={sentFiles} onChange={setSentFiles} disabled={busy} />
+          <FilePicker label="받은 파일" compact files={recvFiles} onChange={setRecvFiles} disabled={busy} />
         </div>
 
         {error && (
@@ -333,7 +405,6 @@ function RegisterModal({
     </ModalOverlay>
   )
 }
-
 /**
  * 새로 작성하기 — 번호를 발급한다.
  *
@@ -430,7 +501,7 @@ function CreateModal({
               {made.inquiry_no}
             </div>
             <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.7, marginTop: 10 }}>
-              목록에 「작성 중」으로 추가되었습니다. 제목과 상태는 그 건을 눌러 고칠 수 있습니다.
+              목록에 「작성 중」으로 추가되었습니다. 업체명과 상태는 그 건을 눌러 고칠 수 있습니다.
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
               <button type="button" onClick={copy} style={{ ...btnGhost(), flex: 1 }}>
@@ -453,7 +524,7 @@ function CreateModal({
             )}
 
             <div style={{ marginBottom: 12 }}>
-              <label style={label} htmlFor="iq-title">제목 <span style={{ fontWeight: 500 }}>(선택)</span></label>
+              <label style={label} htmlFor="iq-title">업체명 <span style={{ fontWeight: 500 }}>(선택)</span></label>
               <input
                 id="iq-title" value={title} maxLength={200} placeholder="나중에 넣어도 됩니다"
                 onChange={e => setTitle(e.target.value)} style={field}
@@ -652,12 +723,20 @@ function InquiriesPageInner() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'peek' }),
         })
-        const json = await res.json().catch(() => ({}))
+        const json = await res.json().catch(() => null)
         if (cancelled) return
-        if (res.ok && Array.isArray(json.counters)) setCounters(json.counters as Counter[])
-        else console.error('[inquiries] 다음 번호 조회 실패', json)
+        if (res.ok && Array.isArray(json?.counters)) setCounters(json.counters as Counter[])
+        // 예전에는 파싱 결과를 그대로 찍어 빈 {} 만 남았다 — 본문이 JSON 이 아니면
+        // 대체값이 빈 객체였기 때문이다. 상태 코드·본문 종류·사유를 나눠서 남긴다.
+        else console.error('[inquiries] 다음 번호 조회 실패', {
+          status: res.status,
+          contentType: res.headers.get('content-type'),
+          jsonBody: json !== null,
+          ...errorInfo(json?.error),
+        })
       } catch (e) {
-        if (!cancelled) console.error('[inquiries] 다음 번호 조회 실패', e)
+        // fetch 예외(중단·네트워크)는 Error 라서 그대로 찍으면 {} 가 된다.
+        if (!cancelled) console.error('[inquiries] 다음 번호 조회 실패', errorInfo(e))
       } finally {
         if (!cancelled) setPeeking(false)
       }
@@ -768,7 +847,8 @@ function InquiriesPageInner() {
                 borderBottom: `1px solid ${BORDER}`,
                 fontSize: 11, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap',
               }}>
-                <span style={{ flex: 1, minWidth: 0 }}>제목 / 번호</span>
+                <span style={{ width: COL.no, flexShrink: 0 }}>번호</span>
+                <span style={{ flex: 1, minWidth: 0 }}>업체명</span>
                 <span style={{ width: COL.status, flexShrink: 0 }}>상태</span>
                 <span style={{ width: COL.person, flexShrink: 0 }}>담당자</span>
                 <span style={{ width: COL.date, flexShrink: 0 }}>발행일</span>
@@ -799,22 +879,32 @@ function InquiriesPageInner() {
                       onMouseEnter={e => (e.currentTarget.style.background = ROW_HOVER_BG)}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       style={{
+                        // border 단축 속성은 쓰지 않는다 — rowStyle 이 borderTop(행 구분선)을
+                        // 주는데 한 객체에 둘이 섞이면 적용 순서에 따라 결과가 달라진다
+                        // (React 가 "conflicting property is set (border)" 로 경고하던 자리다).
+                        // 단축 대신 네 변을 개별 속성으로 못 박아 늘 같은 모양이 되게 한다.
                         ...rowStyle(i === 0), display: 'flex', alignItems: 'center', gap: COL.gap,
-                        width: '100%', border: 'none', background: 'transparent', cursor: 'pointer',
+                        width: '100%', borderRight: 'none', borderBottom: 'none', borderLeft: 'none',
+                        background: 'transparent', cursor: 'pointer',
                         fontFamily: 'inherit', textAlign: 'left',
                         opacity: dim ? 0.5 : 1,
                       }}
                     >
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ ...rowTitle, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {r.title?.trim() || '(제목 없음)'}
-                        </span>
-                        <span style={{
-                          ...rowSub, display: 'block',
-                          textDecoration: isCancelled ? 'line-through' : 'none',
-                        }}>
-                          {r.inquiry_no}
-                        </span>
+                      {/* 번호가 맨 앞이다 — 사람이 번호로 찾는다. 고정 폭이라 줄이 흔들리지 않고,
+                          줄바꿈을 막아 두 줄로 벌어지지 않는다. */}
+                      <span style={{
+                        width: COL.no, flexShrink: 0, fontSize: 13, fontWeight: 700, color: TEXT,
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        textDecoration: isCancelled ? 'line-through' : 'none',
+                      }}>
+                        {r.inquiry_no}
+                      </span>
+                      <span style={{
+                        flex: 1, minWidth: 0, fontSize: 13,
+                        color: r.title?.trim() ? TEXT : MUTED,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {r.title?.trim() || '(업체명 없음)'}
                       </span>
                       {/* 상태 — 색은 dot 에만 주고 글자는 중립으로 둔다(디자인 규칙).
                           작성 중이면 며칠째인지 함께 보인다. */}
@@ -829,7 +919,7 @@ function InquiriesPageInner() {
                         {days > 0 ? `작성 중 ${days}일째` : inquiryStatusLabel(r.status)}
                       </span>
                       <span style={{ width: COL.person, flexShrink: 0, fontSize: 12, color: SUB, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {r.engineers?.name ?? '-'}
+                        {engineerLabel(r.engineers) || '-'}
                       </span>
                       <span style={{ width: COL.date, flexShrink: 0, fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>
                         {dateText(r.issued_date)}

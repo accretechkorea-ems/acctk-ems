@@ -27,3 +27,21 @@ export function isCurrentlyEmployed(
 ): boolean {
   return isActiveInPeriod(resignedDate, today)
 }
+
+/**
+ * 화면에 보이는 직원 이름 — 「이름 직급」(한 칸 띄움). 직급이 없으면 이름만.
+ *
+ * 같은 식(`${name} ${position ?? ''}`.trim())이 화면 곳곳에 흩어져 있었다.
+ * 한 곳에서만 정해야 「권재원 선임」과 「권재원  선임」(두 칸)이 섞이지 않는다.
+ * 직급 컬럼은 engineers.position 이다.
+ *
+ * 이름이 비어 있으면 빈 문자열을 돌려준다 — 부르는 쪽이 '-' 같은 자리표시를 고른다.
+ */
+export function engineerLabel(
+  e: { name?: string | null; position?: string | null } | null | undefined,
+): string {
+  const name = (e?.name ?? '').trim()
+  if (!name) return ''
+  const position = (e?.position ?? '').trim()
+  return position ? `${name} ${position}` : name
+}

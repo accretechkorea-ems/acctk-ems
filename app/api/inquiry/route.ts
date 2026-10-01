@@ -1,8 +1,10 @@
 // 의뢰서 라우트. 동작은 action 으로 나눈다(견적 삭제·결재 라우트와 같은 방식).
 //   · create — 번호를 발급하고 의뢰서를 만든다.
-//   · update — 제목·상태를 고친다.
+//   · update — 업체명·상태·담당자·발행일을 고친다.
 //   · peek   — 종류별 「다음 사용 번호」를 읽기만 한다. 채번 함수를 부르지 않는다.
 //   · register — 이미 바깥에 나간 번호를 뒤늦게 등록한다(소급).
+//   · message_add / message_update / message_delete — 교신 기록(보냄·받음 + 날짜 + 내용).
+//              첨부 파일 자체는 /api/inquiry-attachment 가 다룬다(GET·DELETE 가 필요해 나눴다).
 //   · cancel — 취소한다. 마지막 번호면 반환(행 삭제 + 카운터 −1), 아니면 버림(cancelled 로 남김).
 //              판정과 실행은 DB 함수 cancel_inquiry 가 한 덩어리로 한다
 //              (inquiries_cancel_function.sql — 왜 함수인지 그 파일 머리말에 적혀 있다).
@@ -19,7 +21,7 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
-import { todayKST } from '@/lib/date'
+import { addDays, todayKST } from '@/lib/date'
 import {
   buildInquiryNo, inquiryTypeOf, periodKeyFor,
   EDITABLE_STATUSES, INQUIRY_TYPES, REQ20_SERIES, REQ80_SERIES, type InquiryType,
@@ -27,7 +29,7 @@ import {
 
 const TAG = 'inquiry'
 
-/** 제목 길이 상한. 화면도 같은 값으로 입력을 자른다. */
+/** 업체명(title 칸) 길이 상한. 화면도 같은 값으로 입력을 자른다. */
 const TITLE_MAX = 200
 
 /** 의뢰서 첨부 버킷. 취소로 행이 사라지기 전에 파일을 먼저 지운다. */
@@ -50,11 +52,42 @@ const admin = () => createClient(
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
+/**
+ * 오류에서 사람에게 보여줄 사유를 만든다 — message 와 code 만 쓴다.
+ *
+ * details·hint 는 넣지 않는다. SQL 문·컬럼 목록·경로가 섞여 나오는 자리라서
+ * 화면에 그대로 띄우면 안 된다(서버 콘솔에는 남으므로 조사할 때는 거기서 본다).
+ * 첨부 라우트(app/api/inquiry-attachment/route.ts:53)와 같은 방식이다.
+ */
+function reasonOf(e: unknown): string {
+  const o = (e ?? {}) as { message?: unknown; code?: unknown }
+  const msg = typeof o.message === 'string' && o.message ? o.message : '알 수 없는 오류'
+  const code = typeof o.code === 'string' && o.code ? ` (${o.code})` : ''
+  return `${msg}${code}`
+}
+
+/**
+ * 서버 설정이 갖춰졌는지. 없으면 admin() 안의 createClient 가 그 자리에서 던져
+ * 라우트가 JSON 이 아닌 500(개발 서버에서는 HTML 오류 페이지)을 내보낸다 —
+ * 그러면 화면은 응답을 파싱하지 못해 사유가 아예 남지 않는다(빈 {} 만 찍힌다).
+ * 부르는 쪽에서 먼저 확인해 사유가 실린 JSON 으로 돌려준다.
+ */
+const envReady = (): boolean =>
+  !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY
+
+/** rpc 가 「함수가 없다」고 답했는가. 배포 때 SQL 파일을 아직 돌리지 않은 경우다. */
+const isMissingFunction = (e: unknown): boolean => {
+  const o = (e ?? {}) as { code?: unknown; message?: unknown }
+  if (o.code === 'PGRST202') return true
+  // 코드가 비어 오는 경우도 있어 문구도 함께 본다(PostgREST 스키마 캐시 메시지).
+  return typeof o.message === 'string' && /could not find the function/i.test(o.message)
+}
+
 /** 로그인 + 의뢰서 메뉴 권한. 통과하면 caller 를 돌려준다. */
 async function authorize(): Promise<{ error: NextResponse; caller: null } | { error: null; caller: Caller }> {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user?.email) return { error: bad('Unauthorized', 401), caller: null }
+  if (!user?.email) return { error: bad('로그인이 필요합니다. 다시 로그인해 주세요.', 401), caller: null }
 
   const { data: row, error } = await supabase
     .from('engineers')
@@ -63,7 +96,9 @@ async function authorize(): Promise<{ error: NextResponse; caller: null } | { er
     .single()
   if (error) console.error(`[${TAG}] caller lookup failed`, { email: user.email, error })
   const caller = await withTeamPerm((row ?? null) as Caller | null)
-  if (!caller || !canViewMenu(caller, 'inquiries')) return { error: bad('Forbidden', 403), caller: null }
+  if (!caller || !canViewMenu(caller, 'inquiries')) {
+    return { error: bad('이 메뉴를 사용할 권한이 없습니다.', 403), caller: null }
+  }
   return { error: null, caller }
 }
 
@@ -99,6 +134,7 @@ async function writeInquiryAudit(
   sb: ReturnType<typeof admin>,
   opts: {
     action: 'INQUIRY_CREATE' | 'INQUIRY_REGISTER' | 'INQUIRY_UPDATE' | 'INQUIRY_CANCEL'
+      | 'INQUIRY_MSG_ADD' | 'INQUIRY_MSG_UPDATE' | 'INQUIRY_MSG_DELETE'
     inquiryNo: string
     actorId: number
     oldData?: Record<string, unknown> | null
@@ -121,7 +157,25 @@ async function writeInquiryAudit(
   if (error) console.error(`[${TAG}] audit insert failed`, { action: opts.action, inquiryNo: opts.inquiryNo, error })
 }
 
+/**
+ * 최상위 try/catch — 예외가 새어 나가면 Next 가 제 오류 페이지를 돌려주고,
+ * 그 응답에는 error 필드가 없어 화면에 「…하지 못했습니다」만 남는다.
+ * 여기서 잡아 사유가 실린 JSON 으로 바꾼다(첨부 라우트와 같은 방식).
+ */
 export async function POST(req: NextRequest) {
+  try {
+    return await handle(req)
+  } catch (e) {
+    console.error(`[${TAG}] POST 처리 중 예외`, e)
+    return bad(`의뢰서 처리 중 오류: ${reasonOf(e)}`, 500)
+  }
+}
+
+async function handle(req: NextRequest) {
+  if (!envReady()) {
+    console.error(`[${TAG}] 환경 변수 누락 — SUPABASE URL 또는 SERVICE_ROLE_KEY`)
+    return bad('서버 설정 오류 — 환경 변수가 없습니다. 관리자에게 알려주세요.', 500)
+  }
   const auth = await authorize()
   if (auth.error) return auth.error
   const caller = auth.caller
@@ -130,6 +184,9 @@ export async function POST(req: NextRequest) {
   const sbAdmin = admin()
   const action = typeof body.action === 'string' ? body.action : 'create'
   if (action === 'peek') return peek(sbAdmin)
+  if (action === 'message_add') return messageAdd(sbAdmin, caller, body)
+  if (action === 'message_update') return messageUpdate(sbAdmin, caller, body)
+  if (action === 'message_delete') return messageDelete(sbAdmin, caller, body)
   if (action === 'register') return register(sbAdmin, caller, body)
   if (action === 'update') return update(sbAdmin, caller, body)
   if (action === 'cancel') return cancel(sbAdmin, caller, body)
@@ -225,18 +282,38 @@ export async function POST(req: NextRequest) {
 const idOf = (v: unknown): string | null =>
   typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v) ? v : null
 
-// ── 수정 — 제목·상태 ────────────────────────────────────────────────
+// ── 수정 — 업체명·상태·담당자·발행일 ────────────────────────────────
 // 취소된 건은 손대지 않는다. 조건부 UPDATE(.neq)로 막아, 화면이 낡은 상태를 들고 있어도
 // 취소된 의뢰서가 되살아나지 않는다. 0행이면 그 사이에 취소됐거나 없는 건이다.
+//
+// 번호(inquiry_no)와 종류는 받지 않는다 — 번호는 채번의 결과라 고치면 카운터와 어긋난다.
+// 발행일을 고쳐도 번호는 그대로다(80 스페어파츠는 번호에 날짜가 박혀 있어 화면이 그 점을 알린다).
 async function update(sb: ReturnType<typeof admin>, caller: Caller, body: Record<string, unknown>) {
   const id = idOf(body.id)
   if (!id) return bad('의뢰서를 지정해주세요.')
+
+  // 바뀐 칸만 감사 기록에 남기려면 이전 값이 필요하다. 권한·상태도 여기서 함께 본다.
+  const { data: before, error: readErr } = await sb
+    .from('inquiries')
+    .select('inquiry_no, title, status, created_by, issued_date')
+    .eq('id', id)
+    .maybeSingle()
+  if (readErr) {
+    console.error(`[${TAG}] update lookup failed`, { id, error: readErr })
+    return bad('의뢰서를 확인하지 못했습니다.', 500)
+  }
+  if (!before) return bad('의뢰서를 찾을 수 없습니다.', 404)
+  const prev = before as {
+    inquiry_no: string; title: string | null; status: string
+    created_by: number | null; issued_date: string
+  }
+  if (prev.status === 'cancelled') return bad('이미 취소된 의뢰서입니다.', 409)
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
   let touched = false
 
   if (body.title !== undefined) {
-    if (typeof body.title !== 'string') return bad('제목이 올바르지 않습니다.')
+    if (typeof body.title !== 'string') return bad('업체명이 올바르지 않습니다.')
     patch.title = body.title.trim().slice(0, TITLE_MAX)
     touched = true
   }
@@ -247,6 +324,34 @@ async function update(sb: ReturnType<typeof admin>, caller: Caller, body: Record
     patch.status = st
     touched = true
   }
+  if (body.issued_date !== undefined) {
+    const d = validDate(body.issued_date)
+    if (!d) return bad('발행일을 올바르게 골라주세요.')
+    // 미래 날짜는 오타일 가능성이 높다. 하루까지만 봐준다(KST 기준) — 내용 기록과 같은 규칙.
+    if (d > addDays(todayKST(), FUTURE_DAYS)) return bad('앞으로의 날짜는 입력할 수 없습니다.')
+    patch.issued_date = d
+    touched = true
+  }
+  if (body.created_by !== undefined) {
+    const next = Number(body.created_by)
+    if (!Number.isInteger(next) || next < 1) return bad('담당자를 골라주세요.')
+    // 재직자만 새로 배정한다. 다만 이미 그 담당자면 퇴사했더라도 그대로 둘 수 있어야 한다
+    // — 지난 건의 담당자를 바꾸라고 강요하지 않는다.
+    if (next !== prev.created_by) {
+      const { data: who, error: whoErr } = await sb
+        .from('engineers').select('engineer_id, resigned_date').eq('engineer_id', next).maybeSingle()
+      if (whoErr) {
+        console.error(`[${TAG}] engineer lookup failed`, { next, error: whoErr })
+        return bad('담당자를 확인하지 못했습니다.', 500)
+      }
+      if (!who) return bad('담당자를 찾을 수 없습니다.')
+      if ((who as { resigned_date: string | null }).resigned_date) {
+        return bad('퇴사한 직원은 담당자로 지정할 수 없습니다.')
+      }
+    }
+    patch.created_by = next
+    touched = true
+  }
   if (!touched) return bad('바꿀 내용이 없습니다.')
 
   const { data: done, error } = await sb
@@ -254,17 +359,24 @@ async function update(sb: ReturnType<typeof admin>, caller: Caller, body: Record
     .update(patch)
     .eq('id', id)
     .neq('status', 'cancelled')
-    .select('inquiry_no, title, status')
+    .select('id, inquiry_no, title, status, created_by, issued_date')
   if (error) {
     console.error(`[${TAG}] update failed`, { id, error })
     return bad('수정하지 못했습니다.', 500)
   }
   if (!done || done.length === 0) return bad('이미 취소되었거나 없는 의뢰서입니다.', 409)
 
-  const row = done[0] as { inquiry_no: string; title: string | null; status: string }
+  const row = done[0] as typeof prev & { id: string }
+  // 바뀐 칸만 이전·이후로 남긴다. 손대지 않은 칸까지 적으면 무엇이 달라졌는지 읽기 어렵다.
+  const changed: Record<string, { from: unknown; to: unknown }> = {}
+  for (const key of ['title', 'status', 'created_by', 'issued_date'] as const) {
+    if (patch[key] !== undefined && patch[key] !== prev[key]) {
+      changed[key] = { from: prev[key], to: patch[key] }
+    }
+  }
   await writeInquiryAudit(sb, {
     action: 'INQUIRY_UPDATE', inquiryNo: row.inquiry_no, actorId: caller.engineer_id,
-    newData: { title: row.title, status: row.status },
+    newData: { changed },
   })
   return NextResponse.json({ inquiry: row })
 }
@@ -273,8 +385,14 @@ async function update(sb: ReturnType<typeof admin>, caller: Caller, body: Record
 // 권한은 담당자 본인 또는 superadmin 이다(첨부 개별 삭제와 같은 기준 —
 // app/api/service-attachment/route.ts:224). 남의 번호를 함부로 반환하지 못하게 한다.
 //
-// 스토리지 파일을 먼저 지운다. 반환이면 행이 사라지는데, 행이 없어지면 file_path 를 읽을 길이
-// 없어 파일이 고아로 남는다. 버림으로 판정되더라도 취소한 건의 파일은 어차피 필요 없다.
+// 스토리지 파일은 rpc 결과를 보고 지운다 — 경로는 rpc 전에 미리 읽어 둔다.
+//
+//   released  — 행이 통째로 사라진다. 파일을 남기면 가리키는 행이 없는 고아가 되므로 지운다.
+//   abandoned — 행이 status='cancelled' 로 남는다. 파일을 지우면 화면에는 첨부가 보이는데
+//               눌러도 열리지 않는 상태가 된다. 「기록은 남기되 번호만 재사용하지 않는다」가
+//               버림의 목적이므로 파일도 그대로 둔다(취소된 건은 읽기 전용으로 열람만 된다).
+//
+// 예전에는 rpc 전에 무조건 지웠다. 그러면 버림일 때 파일만 사라지고 행이 남아 어긋났다.
 async function cancel(sb: ReturnType<typeof admin>, caller: Caller, body: Record<string, unknown>) {
   const id = idOf(body.id)
   if (!id) return bad('의뢰서를 지정해주세요.')
@@ -286,7 +404,7 @@ async function cancel(sb: ReturnType<typeof admin>, caller: Caller, body: Record
     .maybeSingle()
   if (readErr) {
     console.error(`[${TAG}] cancel lookup failed`, { id, error: readErr })
-    return bad('의뢰서를 불러오지 못했습니다.', 500)
+    return bad(`의뢰서를 불러오지 못했습니다: ${reasonOf(readErr)}`, 500)
   }
   if (!found) return bad('의뢰서를 찾을 수 없습니다.', 404)
   const row = found as {
@@ -298,28 +416,43 @@ async function cancel(sb: ReturnType<typeof admin>, caller: Caller, body: Record
     return bad('담당자 본인 또는 관리자만 취소할 수 있습니다.', 403)
   }
 
-  // 첨부 파일 정리 — 행이 하나도 없으면 스토리지를 건드리지 않는다.
+  // 경로를 먼저 읽어 둔다. 반환(released)이면 행이 사라져 나중에는 읽을 길이 없다.
+  // 지우는 것은 rpc 결과를 본 뒤다.
   const { data: atts, error: attErr } = await sb
     .from('inquiry_attachments').select('file_path').eq('inquiry_id', id)
   if (attErr) {
     console.error(`[${TAG}] attachment lookup failed`, { id, error: attErr })
-    return bad('첨부파일을 확인하지 못했습니다.', 500)
+    return bad(`첨부파일을 확인하지 못했습니다: ${reasonOf(attErr)}`, 500)
   }
   const paths = ((atts ?? []) as { file_path: string }[]).map(a => a.file_path).filter(Boolean)
-  if (paths.length > 0) {
-    const { error: rmErr } = await sb.storage.from(ATTACHMENT_BUCKET).remove(paths)
-    // 파일을 못 지워도 취소는 진행한다 — 고아 파일이 남을 뿐이고, 취소를 막는 편이 더 나쁘다.
-    if (rmErr) console.error(`[${TAG}] attachment remove failed`, { id, paths, error: rmErr })
-  }
 
   const { data: result, error: rpcErr } = await sb.rpc('cancel_inquiry', { p_id: id })
   if (rpcErr) {
     console.error(`[${TAG}] cancel_inquiry failed`, { id, error: rpcErr })
-    return bad('취소하지 못했습니다.', 500)
+    // 함수가 아예 없는 것과 함수 안에서 난 오류는 사람이 할 일이 다르다.
+    // 전자는 마이그레이션(inquiries_cancel_function.sql)을 아직 돌리지 않은 것이므로 그렇게 말한다.
+    if (isMissingFunction(rpcErr)) {
+      return bad('취소 함수가 DB에 없습니다. 관리자에게 알려주세요.', 500)
+    }
+    return bad(`취소하지 못했습니다: ${reasonOf(rpcErr)}`, 500)
   }
   const outcome = String(result)
 
   if (outcome === 'not_found') return bad('의뢰서를 찾을 수 없습니다.', 404)
+
+  // 반환이면 행이 사라졌으므로 파일도 지운다. 버림이면 행이 남으므로 파일도 남긴다.
+  // 파일이 하나도 없으면 스토리지를 부르지 않는다.
+  let removed = 0
+  let storageWarning: string | null = null
+  if (outcome === 'released' && paths.length > 0) {
+    const { error: rmErr } = await sb.storage.from(ATTACHMENT_BUCKET).remove(paths)
+    // 파일을 못 지워도 취소는 이미 끝났다 — 고아 파일이 남을 뿐이고 되돌리지 않는다.
+    // 다만 조용히 넘기지 않는다. 화면이 알려 줘야 관리자가 버킷을 치울 수 있다.
+    if (rmErr) {
+      console.error(`[${TAG}] attachment remove failed`, { id, paths, error: rmErr })
+      storageWarning = `첨부파일 ${paths.length}개를 지우지 못했습니다: ${reasonOf(rmErr)}`
+    } else removed = paths.length
+  }
 
   if (outcome === 'released' || outcome === 'abandoned') {
     // 지워지기 전 행 내용을 old_data 에 남긴다 — 반환이면 이 기록이 유일한 흔적이다.
@@ -330,12 +463,12 @@ async function cancel(sb: ReturnType<typeof admin>, caller: Caller, body: Record
         status: row.status, title: row.title, issued_date: row.issued_date,
         created_by: row.created_by, is_backfill: row.is_backfill,
       },
-      newData: { outcome, attachments_removed: paths.length },
+      newData: { outcome, attachments_kept: outcome === 'abandoned' ? paths.length : 0, attachments_removed: removed },
     })
     console.log(`[${TAG}] 취소`, { inquiryNo: row.inquiry_no, outcome, by: caller.engineer_id })
   }
 
-  return NextResponse.json({ outcome, inquiryNo: row.inquiry_no })
+  return NextResponse.json({ outcome, inquiryNo: row.inquiry_no, storageWarning })
 }
 
 // ── 다음 사용 번호 조회 ─────────────────────────────────────────────
@@ -484,4 +617,206 @@ async function register(sb: ReturnType<typeof admin>, caller: Caller, body: Reco
   })
   console.log(`[${TAG}] 소급 등록`, { inquiryNo: row.inquiry_no, seq, lastSeq, by: caller.engineer_id })
   return NextResponse.json({ inquiry: made })
+}
+
+// ── 교신 기록 ───────────────────────────────────────────────────────
+// 한 의뢰서에 본사와의 문답이 여러 번 쌓인다. 한 건 = 방향 + 날짜 + 내용 + 첨부 여러 개.
+// 첨부는 /api/inquiry-attachment 가 맡는다(그쪽은 GET·DELETE 메서드가 필요하다).
+
+/** 교신 본문 상한. DB 의 inquiry_messages_body_check 와 같은 값이어야 한다. */
+const BODY_MAX = 20000
+
+/** 교신 날짜로 받을 수 있는 미래 여유(일). 시차·입력 시점 차이만 허용하고 그 이상은 막는다. */
+const FUTURE_DAYS = 1
+
+/** 'YYYY-MM-DD' 인지, 그리고 실제로 있는 날짜인지. '2026-02-31' 같은 값을 걸러낸다. */
+function validDate(v: unknown): string | null {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null
+  const d = new Date(v + 'T00:00:00Z')
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v ? null : v
+}
+
+/**
+ * 교신을 만들거나 고치기 전에, 그 의뢰서가 아직 살아 있는지 본다.
+ * 취소된 의뢰서는 읽기 전용이다 — update 액션이 .neq('status','cancelled') 로 막는 것과 같은 규칙.
+ */
+async function liveInquiry(
+  sb: ReturnType<typeof admin>, inquiryId: string,
+): Promise<{ ok: true; inquiryNo: string } | { ok: false; res: NextResponse }> {
+  const { data, error } = await sb
+    .from('inquiries').select('id, inquiry_no, status').eq('id', inquiryId).maybeSingle()
+  if (error) {
+    console.error(`[${TAG}] inquiry lookup failed`, { inquiryId, error })
+    return { ok: false, res: bad('의뢰서를 확인하지 못했습니다.', 500) }
+  }
+  if (!data) return { ok: false, res: bad('의뢰서를 찾을 수 없습니다.', 404) }
+  const row = data as { inquiry_no: string; status: string }
+  if (row.status === 'cancelled') {
+    return { ok: false, res: bad('취소된 의뢰서의 내용 기록은 고칠 수 없습니다.', 409) }
+  }
+  return { ok: true, inquiryNo: row.inquiry_no }
+}
+
+/** 교신 한 건 + 그 의뢰서. 수정·삭제가 권한과 상태를 함께 본다. */
+async function loadMessage(sb: ReturnType<typeof admin>, id: number) {
+  return sb
+    .from('inquiry_messages')
+    .select('id, inquiry_id, direction, entry_date, created_by, inquiries!inner(inquiry_no, status)')
+    .eq('id', id)
+    .maybeSingle()
+}
+
+type MessageRow = {
+  id: number; inquiry_id: string; direction: string; entry_date: string; created_by: number | null
+  inquiries: { inquiry_no: string; status: string } | { inquiry_no: string; status: string }[]
+}
+const inquiryOf = (r: MessageRow) => (Array.isArray(r.inquiries) ? r.inquiries[0] : r.inquiries)
+
+// ── 교신 추가 ───────────────────────────────────────────────────────
+async function messageAdd(sb: ReturnType<typeof admin>, caller: Caller, body: Record<string, unknown>) {
+  const inquiryId = idOf(body.inquiry_id)
+  if (!inquiryId) return bad('의뢰서를 지정해주세요.')
+
+  const direction = typeof body.direction === 'string' ? body.direction : ''
+  if (direction !== 'sent' && direction !== 'received') return bad('보냄·받음을 골라주세요.')
+
+  const entryDate = validDate(body.entry_date)
+  if (!entryDate) return bad('날짜를 올바르게 골라주세요.')
+  // 미래 날짜는 오타일 가능성이 높다. 하루까지만 봐준다(KST 기준).
+  const limit = addDays(todayKST(), FUTURE_DAYS)
+  if (entryDate > limit) return bad('앞으로의 날짜는 입력할 수 없습니다.')
+
+  const text = typeof body.body === 'string' ? body.body : ''
+  if (text.length > BODY_MAX) return bad(`내용은 ${BODY_MAX}자를 넘을 수 없습니다.`)
+
+  const live = await liveInquiry(sb, inquiryId)
+  if (!live.ok) return live.res
+
+  const { data: made, error } = await sb
+    .from('inquiry_messages')
+    .insert({
+      inquiry_id: inquiryId,
+      direction,
+      entry_date: entryDate,
+      body: text,
+      // 본문 값을 쓰지 않는다 — 적은 사람이 곧 작성자다.
+      created_by: caller.engineer_id,
+    })
+    .select('id, inquiry_id, direction, entry_date, body, created_by, created_at')
+    .single()
+  if (error) {
+    console.error(`[${TAG}] message insert failed`, { inquiryId, error })
+    return bad('내용 기록을 저장하지 못했습니다.', 500)
+  }
+
+  const row = made as { id: number }
+  // 본문은 감사 기록에 넣지 않는다 — 길고, 고객·본사 내용이 섞일 수 있다.
+  await writeInquiryAudit(sb, {
+    action: 'INQUIRY_MSG_ADD', inquiryNo: live.inquiryNo, actorId: caller.engineer_id,
+    newData: { message_id: row.id, direction, entry_date: entryDate, body_length: text.length },
+  })
+  return NextResponse.json({ message: made })
+}
+
+// ── 교신 수정 ───────────────────────────────────────────────────────
+// direction 은 고치지 않는다 — 잘못 골랐으면 지우고 다시 넣는다.
+// 방향이 바뀌면 그 교신에 딸린 첨부의 맥락까지 뒤집히는데, 그걸 되돌릴 방법이 없다.
+async function messageUpdate(sb: ReturnType<typeof admin>, caller: Caller, body: Record<string, unknown>) {
+  const id = Number(body.id)
+  if (!Number.isInteger(id) || id <= 0) return bad('내용 기록을 지정해주세요.')
+
+  const { data: found, error: readErr } = await loadMessage(sb, id)
+  if (readErr) {
+    console.error(`[${TAG}] message lookup failed`, { id, error: readErr })
+    return bad('내용 기록을 확인하지 못했습니다.', 500)
+  }
+  if (!found) return bad('내용 기록을 찾을 수 없습니다.', 404)
+  const row = found as unknown as MessageRow
+  const parent = inquiryOf(row)
+  if (parent?.status === 'cancelled') return bad('취소된 의뢰서의 내용 기록은 고칠 수 없습니다.', 409)
+  if (row.created_by !== caller.engineer_id && !isSuperAdmin(caller)) {
+    return bad('적은 사람 또는 관리자만 고칠 수 있습니다.', 403)
+  }
+
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  let touched = false
+  if (body.entry_date !== undefined) {
+    const d = validDate(body.entry_date)
+    if (!d) return bad('날짜를 올바르게 골라주세요.')
+    if (d > addDays(todayKST(), FUTURE_DAYS)) return bad('앞으로의 날짜는 입력할 수 없습니다.')
+    patch.entry_date = d
+    touched = true
+  }
+  if (body.body !== undefined) {
+    if (typeof body.body !== 'string') return bad('내용이 올바르지 않습니다.')
+    if (body.body.length > BODY_MAX) return bad(`내용은 ${BODY_MAX}자를 넘을 수 없습니다.`)
+    patch.body = body.body
+    touched = true
+  }
+  if (!touched) return bad('바꿀 내용이 없습니다.')
+
+  const { data: done, error } = await sb
+    .from('inquiry_messages').update(patch).eq('id', id)
+    .select('id, inquiry_id, direction, entry_date, body, created_by, created_at, updated_at')
+  if (error) {
+    console.error(`[${TAG}] message update failed`, { id, error })
+    return bad('내용 기록을 고치지 못했습니다.', 500)
+  }
+  if (!done || done.length === 0) return bad('이미 지워졌거나 없는 내용 기록입니다.', 409)
+
+  await writeInquiryAudit(sb, {
+    action: 'INQUIRY_MSG_UPDATE', inquiryNo: parent?.inquiry_no ?? '', actorId: caller.engineer_id,
+    newData: {
+      message_id: id,
+      entry_date: patch.entry_date ?? null,
+      body_length: typeof patch.body === 'string' ? patch.body.length : null,
+    },
+  })
+  return NextResponse.json({ message: done[0] })
+}
+
+// ── 교신 삭제 ───────────────────────────────────────────────────────
+// 첨부 행은 FK CASCADE 로 함께 지워진다. 스토리지 파일은 아니므로 먼저 지운다.
+async function messageDelete(sb: ReturnType<typeof admin>, caller: Caller, body: Record<string, unknown>) {
+  const id = Number(body.id)
+  if (!Number.isInteger(id) || id <= 0) return bad('내용 기록을 지정해주세요.')
+
+  const { data: found, error: readErr } = await loadMessage(sb, id)
+  if (readErr) {
+    console.error(`[${TAG}] message lookup failed`, { id, error: readErr })
+    return bad('내용 기록을 확인하지 못했습니다.', 500)
+  }
+  if (!found) return bad('내용 기록을 찾을 수 없습니다.', 404)
+  const row = found as unknown as MessageRow
+  const parent = inquiryOf(row)
+  if (parent?.status === 'cancelled') return bad('취소된 의뢰서의 내용 기록은 지울 수 없습니다.', 409)
+  if (row.created_by !== caller.engineer_id && !isSuperAdmin(caller)) {
+    return bad('적은 사람 또는 관리자만 지울 수 있습니다.', 403)
+  }
+
+  const { data: atts, error: attErr } = await sb
+    .from('inquiry_attachments').select('file_path').eq('message_id', id)
+  if (attErr) {
+    console.error(`[${TAG}] attachment lookup failed`, { id, error: attErr })
+    return bad(`첨부파일을 확인하지 못했습니다: ${reasonOf(attErr)}`, 500)
+  }
+  const paths = ((atts ?? []) as { file_path: string }[]).map(a => a.file_path).filter(Boolean)
+  if (paths.length > 0) {
+    const { error: rmErr } = await sb.storage.from(ATTACHMENT_BUCKET).remove(paths)
+    // 파일을 못 지워도 진행한다 — 고아 파일이 남을 뿐이고, 삭제를 막는 편이 더 나쁘다(cancel 과 같은 방침).
+    if (rmErr) console.error(`[${TAG}] attachment remove failed`, { id, paths, error: rmErr })
+  }
+
+  const { error: delErr } = await sb.from('inquiry_messages').delete().eq('id', id)
+  if (delErr) {
+    console.error(`[${TAG}] message delete failed`, { id, error: delErr })
+    return bad('내용 기록을 지우지 못했습니다.', 500)
+  }
+
+  await writeInquiryAudit(sb, {
+    action: 'INQUIRY_MSG_DELETE', inquiryNo: parent?.inquiry_no ?? '', actorId: caller.engineer_id,
+    oldData: { message_id: id, direction: row.direction, entry_date: row.entry_date, created_by: row.created_by },
+    newData: { attachments_removed: paths.length },
+  })
+  return NextResponse.json({ success: true })
 }

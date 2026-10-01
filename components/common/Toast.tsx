@@ -113,7 +113,9 @@ function ToastCard({ toast, onClose }: { toast: ToastItem; onClose: () => void }
             </svg>
           )}
         </span>
-        <div style={{ fontSize: 13, color: '#111827', lineHeight: 1.4, flex: 1, wordBreak: 'break-word' }}>{toast.message}</div>
+        {/* pre-line — 줄바꿈이 든 메시지는 줄마다 보여 준다(파일 여러 개가 실패한 경우 등).
+            줄바꿈이 없는 기존 메시지는 그대로다. */}
+        <div style={{ fontSize: 13, color: '#111827', lineHeight: 1.4, flex: 1, wordBreak: 'break-word', whiteSpace: 'pre-line' }}>{toast.message}</div>
         {/* 닫기 */}
         <button onClick={onClose} title="닫기"
           onMouseEnter={(e) => (e.currentTarget.style.color = '#111827')}

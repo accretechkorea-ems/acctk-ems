@@ -1,5 +1,13 @@
-// 리드 삭제(하드 삭제).
+// 리드 삭제(하드 삭제) — **더 이상 쓰지 않는다. 입구에서 막혀 있다.**
 //
+// 진행하지 않기로 한 리드도 지우지 않고 「배정 불가 + 사유」로 남기기로 했다
+// (/api/lead-manage 의 action === 'block'). 어디서(파트너사) 들어온 리드를 왜 진행하지
+// 않았는지가 기록으로 남아야 하기 때문이다. 화면(/leads)의 삭제 버튼도 함께 없앴다.
+//
+// 코드는 지우지 않고 남겨 둔다 — 아래 DISABLED 상수만 false 로 되돌리면 예전 동작이 그대로
+// 살아난다. 지워 버리면 되살릴 때 권한·확인 문구·명함 파일 정리 순서를 다시 짜야 한다.
+//
+// 아래는 막히기 전의 설명이다:
 // 화면(/leads)에서도 superadmin 에게만 버튼을 보이지만, 그것만으로는 막을 수 없어
 // 권한과 확인 문구를 여기서 다시 검증한다. 화면을 거치지 않고 이 라우트를 직접 부르는 경우가 방어 대상이다.
 // leads 를 참조하는 FK 는 없으므로 행 하나만 지우면 되고, 전환된 영업기회·활동 기록은 건드리지 않는다.
@@ -14,7 +22,22 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+/**
+ * 삭제를 막아 둔 스위치. false 로 바꾸면 아래 코드가 예전처럼 동작한다.
+ * 되살릴 일이 생기면 화면의 진입점(app/leads/page.tsx)도 함께 되돌려야 한다.
+ */
+const DISABLED = true
+
 export async function POST(req: Request) {
+  // 권한을 보기 전에 막는다 — 누가 부르든 답이 같아야 하고, 막힌 이유도 같아야 한다.
+  // 410 Gone: 있던 기능을 의도적으로 걷어냈다는 뜻이다(404 는 「원래 없다」로 읽혀 오해를 부른다).
+  if (DISABLED) {
+    return NextResponse.json(
+      { error: '삭제는 더 이상 지원하지 않습니다. 배정 불가로 처리해 주세요.' },
+      { status: 410 },
+    )
+  }
+
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

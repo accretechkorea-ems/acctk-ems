@@ -80,3 +80,29 @@ export function ymdParts(s: string): { y: number; m: number; d: number } {
  */
 export const nowHmKST = (): string =>
   new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false })
+
+/**
+ * timestamptz 를 화면에 보여줄 'YYYY.MM.DD HH:MM'(한국 기준).
+ *
+ * 이 파일의 다른 함수와 달리 **표시 전용**이다 — 계산이나 저장에 쓰지 마라(머리말 참고).
+ * 처리 시각처럼 「언제 눌렀나」를 분까지 보여 주는 자리에 쓴다. 초는 넣지 않는다.
+ *
+ * 시간대를 toLocaleString 에 못 박으므로 브라우저·서버(UTC)의 로컬 시간대와 무관하다.
+ * 손으로 +9시간을 더하지 않는 이유는 같은 파일의 todayKST·kstYmd·nowHmKST 와 방식을 맞추기
+ * 위해서다 — 「한국 시간」 규칙이 파일 안에서 두 갈래로 갈리면 나중에 한쪽만 고치게 된다.
+ * sv-SE 로케일이 'YYYY-MM-DD HH:MM:SS' 라 점 표기로 바꾸고 초만 떼면 된다.
+ *
+ * 값이 없거나 형식이 아니면 빈 문자열 — 부르는 쪽이 '기록 없음' 같은 자리표시를 고른다.
+ */
+export function kstStamp(at: Date | string | null | undefined): string {
+  if (at === null || at === undefined || at === '') return ''
+  const d = at instanceof Date ? at : new Date(at)
+  if (isNaN(d.getTime())) return ''
+  const s = d.toLocaleString('sv-SE', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+  // 'YYYY-MM-DD HH:MM' → 'YYYY.MM.DD HH:MM'. 날짜 쪽 하이픈만 바꾼다.
+  return s.replace(/^(\d{4})-(\d{2})-(\d{2})/, '$1.$2.$3')
+}

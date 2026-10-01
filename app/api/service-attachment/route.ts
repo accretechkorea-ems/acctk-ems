@@ -14,6 +14,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
 import { parseDataUrlImage } from '@/lib/imageUpload'
+// 앞머리 바이트 판정과 문서 형식 표는 의뢰서 교신 첨부와 함께 쓴다(lib/fileTypes.ts).
+// 값·동작은 여기 있던 것과 같다 — 옮기기만 했다.
+import { headOf, OFFICE_DOC_TYPES } from '@/lib/fileTypes'
 
 const BUCKET = 'service-attachments'
 /** 서비스 기록 1건당 첨부 상한. 화면도 같은 값으로 추가 버튼을 잠근다. */
@@ -60,22 +63,8 @@ async function authorize(): Promise<{ error: NextResponse; caller: null } | { er
 // 문서(pdf·office)는 그 모듈이 이미지 전용이라 아래에서 같은 방식으로 본다.
 type Parsed = { bytes: Buffer; ext: string; contentType: string }
 
-function isZip(b: Buffer): boolean {
-  return b[0] === 0x50 && b[1] === 0x4b && (b[2] === 0x03 || b[2] === 0x05 || b[2] === 0x07)
-}
-function isOle2(b: Buffer): boolean {
-  return b.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]))
-}
-
-const DOC_TYPES: Record<string, { ext: string; sniff: (b: Buffer) => boolean }> = {
-  'application/pdf': { ext: 'pdf', sniff: b => b.subarray(0, 4).toString('latin1') === '%PDF' },
-  // xlsx·docx 는 zip 컨테이너다(PK..). 안쪽까지 열어 보지는 않는다.
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': { ext: 'xlsx', sniff: isZip },
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': { ext: 'docx', sniff: isZip },
-  // 옛 xls·doc 은 OLE2 복합문서다.
-  'application/vnd.ms-excel': { ext: 'xls', sniff: isOle2 },
-  'application/msword': { ext: 'doc', sniff: isOle2 },
-}
+/** 이 화면이 받는 문서 형식. 목록은 lib/fileTypes.ts 에 있다(의뢰서 첨부와 공용). */
+const DOC_TYPES = OFFICE_DOC_TYPES
 
 /** data URL 하나를 검증해 바이트·확장자·형식을 돌려준다. 막히면 { error }. */
 function parseAttachment(raw: unknown): { error: string } | { value: Parsed } {
@@ -100,7 +89,9 @@ function parseAttachment(raw: unknown): { error: string } | { value: Parsed } {
   try { bytes = Buffer.from(m[1], 'base64') } catch { return { error: '첨부파일을 읽을 수 없습니다.' } }
   if (bytes.length === 0) return { error: '첨부파일을 읽을 수 없습니다.' }
   if (bytes.length > MAX_BYTES) return { error: `첨부파일은 ${MAX_BYTES / (1024 * 1024)}MB 를 넘을 수 없습니다.` }
-  if (!doc.sniff(bytes)) return { error: '파일 형식이 확장자와 다릅니다.' }
+  // 판정에는 앞머리만 넘긴다(lib/fileTypes.ts 의 SNIFF_HEAD_BYTES) — 의뢰서 첨부와 같은 규칙이다.
+  // 검사 내용은 그대로다: 아래 판정들은 원래도 8바이트 이하만 봤다.
+  if (!doc.sniff(headOf(bytes))) return { error: '파일 형식이 확장자와 다릅니다.' }
   return { value: { bytes, ext: doc.ext, contentType: mime } }
 }
 
