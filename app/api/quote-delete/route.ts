@@ -97,8 +97,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '본인 견적만 삭제할 수 있습니다.' }, { status: 403 })
     }
 
-    // quotes 행만 세션 클라이언트로 지운다 — 그래야 감사 트리거에 누가 지웠는지 남는다.
-    // 자식(quote_expenses)은 DELETE 정책이 superadmin 전용이라 service role 로 지운다.
+    // quotes 행은 세션 클라이언트로 지운다 — 그래야 감사 트리거에 누가 지웠는지 남는다.
+    // 자식(품목·부대비용)은 CASCADE 로 DB 가 함께 지운다(RLS 를 타지 않는다 — executeQuoteDelete 주석).
+    // service role 은 조회·감사·알림·스토리지에 쓴다.
     const done = await executeQuoteDelete({
       sb: supabaseAdmin, sbQuote: supabase, quoteId,
       allowedStatuses: SELF_DELETABLE_STATUSES, via: '본인',

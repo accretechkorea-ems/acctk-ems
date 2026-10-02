@@ -40,6 +40,7 @@ import {
 } from '@/lib/inquiries'
 import { engineerLabel, isCurrentlyEmployed } from '@/lib/engineers'
 import FilePicker, { failText, uploadFiles, type UploadFail } from '@/components/inquiry/files'
+import CompleteModal from '@/components/inquiry/CompleteModal'
 import { errorInfo } from '@/lib/errorInfo'
 
 /** 결재 화면과 같은 전환 기준. 두 화면의 레일이 다르게 움직이면 어색하다. */
@@ -47,7 +48,8 @@ const MOTION_MS = 140
 const MOTION_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
 
 /** 표 열 폭 — 머리와 행이 같은 값을 써야 줄이 맞는다(결재 화면과 같은 방식). */
-const COL = { no: 156, status: 108, person: 112, date: 92, gap: 10 }
+// 상태 칸은 「작성 중 N일째」 + 「작성 완료」 버튼이 한 줄에 들어갈 만큼 넓다.
+const COL = { no: 156, status: 176, person: 112, date: 92, gap: 10 }
 /** 카드 좌우 여백(16) + 행 좌우 여백(12). 머리는 카드 끝까지 늘이고 글자만 행과 맞춘다. */
 const HEAD_PAD = 28
 
@@ -156,8 +158,9 @@ const labelStyle: React.CSSProperties = {
  * 상태는 묻지 않는다. 이미 바깥에 나간 번호를 적는 자리라 언제나 완료다 —
  * 골라야 할 것이 하나 줄면 그만큼 빨리 끝난다. 나중에 달라지면 상세에서 고친다.
  *
- * 파일은 보낸 것과 받은 것을 따로 받는다. 저장할 때 방향별로 내용 기록을 하나씩 만들고
- * 그 아래에 붙인다 — 첨부는 내용 기록에 매달리는 구조이기 때문이다(inquiry_messages_schema.sql).
+ * 파일은 한 칸에 받는다. 저장할 때 내용 기록 한 건을 만들고 그 아래에 전부 붙인다
+ * — 첨부는 내용 기록에 매달리는 구조이기 때문이다(inquiry_messages_schema.sql).
+ * 보냄/받음은 나누지 않는다: 일본 본사가 보낸 파일에 답을 적어 돌려주므로 한 파일이 둘 다다.
  *
  * 카운터를 건너뛰게 되면(지금 다음 번호보다 큰 값) 먼저 확인을 받는다 — 한 번 올린 카운터는
  * 내릴 수 없어서, 사이에 낀 번호들이 「사용된 것」이 되어 버린다.
@@ -181,8 +184,7 @@ function RegisterModal({
   const [seq, setSeq] = useState('')
   const [title, setTitle] = useState('')
   const [ownerPick, setOwnerPick] = useState<number | ''>('')
-  const [sentFiles, setSentFiles] = useState<File[]>([])
-  const [recvFiles, setRecvFiles] = useState<File[]>([])
+  const [files, setFiles] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -251,39 +253,29 @@ function RegisterModal({
   }
 
   /**
-   * 고른 파일을 방향별 내용 기록에 붙인다. 올리지 못한 파일을 사유와 함께 돌려준다.
+   * 고른 파일을 내용 기록 한 건에 붙인다. 올리지 못한 파일을 사유와 함께 돌려준다.
+   * 파일이 없으면 기록을 만들지 않는다 — 빈 기록만 남으면 목록만 지저분해진다.
    *
    * 내용 기록의 날짜는 발행일로 둔다 — 소급 등록이라 「오늘」이 아니라 그 번호가 나간 날이 맞다.
-   * 한 방향이 막혀도 다른 방향은 계속 올린다. 번호는 이미 등록됐으므로 여기서 멈추면
-   * 파일만 빠진 채로 남고, 무엇이 빠졌는지도 알려 주지 못한다.
+   * 번호는 이미 등록됐으므로 여기서 실패해도 되돌리지 않는다. 무엇이 빠졌는지 알려 줄 뿐이다.
    */
   const attachFiles = async (inquiryId: string): Promise<UploadFail[]> => {
-    const groups: { direction: 'sent' | 'received'; list: File[] }[] = [
-      { direction: 'sent', list: sentFiles },
-      { direction: 'received', list: recvFiles },
-    ]
-    const failed: UploadFail[] = []
-    for (const g of groups) {
-      if (g.list.length === 0) continue
-      const res = await fetch('/api/inquiry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'message_add', inquiry_id: inquiryId,
-          direction: g.direction, entry_date: issuedDate, body: '',
-        }),
-      })
-      const json = await res.json().catch(() => ({}))
-      const messageId = Number(json.message?.id)
-      if (!res.ok || !Number.isInteger(messageId)) {
-        const reason = json.error || `내용 기록을 만들지 못했습니다 (${res.status})`
-        console.error('[inquiries] 내용 기록 생성 실패', { direction: g.direction, status: res.status, error: json })
-        failed.push(...g.list.map(f => ({ name: f.name, reason })))
-        continue
-      }
-      failed.push(...await uploadFiles(messageId, g.list))
+    if (files.length === 0) return []
+    const res = await fetch('/api/inquiry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'message_add', inquiry_id: inquiryId, entry_date: issuedDate, body: '',
+      }),
+    })
+    const json = await res.json().catch(() => ({}))
+    const messageId = Number(json.message?.id)
+    if (!res.ok || !Number.isInteger(messageId)) {
+      const reason = json.error || `내용 기록을 만들지 못했습니다 (${res.status})`
+      console.error('[inquiries] 내용 기록 생성 실패', { status: res.status, error: json })
+      return files.map(f => ({ name: f.name, reason }))
     }
-    return failed
+    return uploadFiles(messageId, files)
   }
 
   const submit = async () => {
@@ -379,10 +371,9 @@ function RegisterModal({
           </select>
         </div>
 
-        {/* 보낸 파일·받은 파일 — 저장할 때 방향별 내용 기록으로 들어간다. */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-          <FilePicker label="보낸 파일" compact files={sentFiles} onChange={setSentFiles} disabled={busy} />
-          <FilePicker label="받은 파일" compact files={recvFiles} onChange={setRecvFiles} disabled={busy} />
+        {/* 파일 — 저장할 때 내용 기록 한 건으로 들어간다(없으면 기록을 만들지 않는다). */}
+        <div style={{ marginBottom: 12 }}>
+          <FilePicker label="파일 등록" files={files} onChange={setFiles} disabled={busy} />
         </div>
 
         {error && (
@@ -676,6 +667,8 @@ function InquiriesPageInner() {
   // (따로 open 플래그를 두지 않는다 — 두 값이 어긋날 자리를 만들지 않으려고).
   const [createType, setCreateType] = useState<InquiryType | null>(null)
   const [registerType, setRegisterType] = useState<InquiryType | null>(null)
+  /** 「작성 완료」 모달을 연 행. 상세로 들어가지 않고 목록에서 바로 끝낸다. */
+  const [completeFor, setCompleteFor] = useState<InquiryRow | null>(null)
   const [counters, setCounters] = useState<Counter[] | null>(null)
   const [peeking, setPeeking] = useState(false)
   const [engineers, setEngineers] = useState<PickEngineer[]>([])
@@ -907,16 +900,39 @@ function InquiriesPageInner() {
                         {r.title?.trim() || '(업체명 없음)'}
                       </span>
                       {/* 상태 — 색은 dot 에만 주고 글자는 중립으로 둔다(디자인 규칙).
-                          작성 중이면 며칠째인지 함께 보인다. */}
+                          작성 중이면 며칠째인지 함께 보이고, 그 자리에서 바로 끝낼 수 있다. */}
                       <span style={{
                         width: COL.status, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6,
-                        fontSize: 13, color: SUB, whiteSpace: 'nowrap',
+                        fontSize: 13, color: SUB, whiteSpace: 'nowrap', minWidth: 0,
                       }}>
                         <span style={{
                           width: 9, height: 9, borderRadius: '50%', flexShrink: 0,
                           background: INQUIRY_STATUS_DOT[r.status as InquiryStatus] ?? '#d1d5db',
                         }} />
-                        {days > 0 ? `작성 중 ${days}일째` : inquiryStatusLabel(r.status)}
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {days > 0 ? `작성 중 ${days}일째` : inquiryStatusLabel(r.status)}
+                        </span>
+                        {/* 작성 중인 건만. 행 전체가 button 이라 안에 또 button 을 넣으면 HTML 파서가
+                            바깥 button 을 그 자리에서 닫아 행이 쪼개진다 — 그래서 span 에 role 을 준다.
+                            클릭·키보드 모두 전파를 막아 상세로 이동하지 않게 한다. */}
+                        {r.status === 'drafting' && (
+                          <span
+                            role="button" tabIndex={0}
+                            aria-label={`${r.inquiry_no} 작성 완료`}
+                            onClick={e => { e.stopPropagation(); setCompleteFor(r) }}
+                            onKeyDown={e => {
+                              if (e.key !== 'Enter' && e.key !== ' ') return
+                              e.preventDefault(); e.stopPropagation(); setCompleteFor(r)
+                            }}
+                            style={{
+                              marginLeft: 'auto', flexShrink: 0, cursor: 'pointer',
+                              background: BLUE, color: '#ffffff', borderRadius: 6,
+                              padding: '3px 8px', fontSize: 11, fontWeight: 700, lineHeight: '16px',
+                            }}
+                          >
+                            작성 완료
+                          </span>
+                        )}
                       </span>
                       <span style={{ width: COL.person, flexShrink: 0, fontSize: 12, color: SUB, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {engineerLabel(r.engineers) || '-'}
@@ -947,6 +963,17 @@ function InquiriesPageInner() {
           engineers={engineers}
           myId={myId}
           onClose={() => setRegisterType(null)}
+          onDone={() => setReloadKey(k => k + 1)}
+        />
+      )}
+
+      {/* 작성 완료 — 상세 화면과 같은 모달을 쓴다. 끝나면 목록을 다시 읽어 상태가 바로 바뀐다. */}
+      {completeFor && (
+        <CompleteModal
+          inquiryId={completeFor.id}
+          inquiryNo={completeFor.inquiry_no}
+          title={completeFor.title}
+          onClose={() => setCompleteFor(null)}
           onDone={() => setReloadKey(k => k + 1)}
         />
       )}

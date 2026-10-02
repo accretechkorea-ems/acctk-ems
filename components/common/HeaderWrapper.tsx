@@ -127,6 +127,15 @@ export default function HeaderWrapper({ children }: { children: ReactNode }) {
              거기서 이 시간 동안에만 will-change 를 붙인다. 한쪽을 바꾸면 다른 쪽도 같이 바꾼다. */
         .ems-sidebar { width: ${SIDEBAR_WIDTH}px; padding: 12px 10px; transition: width ${COLLAPSE_MS}ms ${COLLAPSE_EASE}, padding ${COLLAPSE_MS}ms ${COLLAPSE_EASE}; }
         .ems-sidebar.collapsed { width: ${SIDEBAR_COLLAPSED_WIDTH}px; padding: 12px 8px; }
+        /* 펼치는 동안 내용은 **펼쳐진 뒤의 폭**으로 미리 배치한다.
+           collapsed 가 풀리는 순간 글자가 전부 되살아나는데, 그때 폭은 아직 64px 라
+           좁은 폭에 맞춰 줄바꿈·말줄임이 일어났다가 폭이 커지면서 다시 펴진다
+           (「아크레텍코리아」가 한 글자씩 세로로 늘어섰다 펴지던 것이 이것이다).
+           내용 폭을 끝 모습으로 고정해 두면 배치가 처음부터 끝까지 그대로고,
+           사이드바(overflow: hidden)가 넓어지는 만큼 왼쪽부터 드러난다 — 커튼이 열리듯.
+           값은 펼친 폭에서 좌우 padding(10+10)을 뺀 내용 폭이다.
+           접을 때는 .collapsed 가 즉시 붙어 이 규칙이 빠지므로 종전 동작 그대로다. */
+        .ems-sidebar:not(.collapsed) > * { min-width: ${SIDEBAR_WIDTH - 20}px; }
         .ems-main { margin-left: ${SIDEBAR_WIDTH}px; transition: margin-left ${COLLAPSE_MS}ms ${COLLAPSE_EASE}; }
         .ems-main.collapsed { margin-left: ${SIDEBAR_COLLAPSED_WIDTH}px; }
         /* 모바일 전용 껍데기는 PC 에서 자리를 차지하지 않는다.

@@ -3,7 +3,7 @@
 //   · update — 업체명·상태·담당자·발행일을 고친다.
 //   · peek   — 종류별 「다음 사용 번호」를 읽기만 한다. 채번 함수를 부르지 않는다.
 //   · register — 이미 바깥에 나간 번호를 뒤늦게 등록한다(소급).
-//   · message_add / message_update / message_delete — 교신 기록(보냄·받음 + 날짜 + 내용).
+//   · message_add / message_update / message_delete — 내용 기록(날짜 + 내용 + 첨부).
 //              첨부 파일 자체는 /api/inquiry-attachment 가 다룬다(GET·DELETE 가 필요해 나눴다).
 //   · cancel — 취소한다. 마지막 번호면 반환(행 삭제 + 카운터 −1), 아니면 버림(cancelled 로 남김).
 //              판정과 실행은 DB 함수 cancel_inquiry 가 한 덩어리로 한다
@@ -619,14 +619,14 @@ async function register(sb: ReturnType<typeof admin>, caller: Caller, body: Reco
   return NextResponse.json({ inquiry: made })
 }
 
-// ── 교신 기록 ───────────────────────────────────────────────────────
+// ── 내용 기록 ───────────────────────────────────────────────────────
 // 한 의뢰서에 본사와의 문답이 여러 번 쌓인다. 한 건 = 방향 + 날짜 + 내용 + 첨부 여러 개.
 // 첨부는 /api/inquiry-attachment 가 맡는다(그쪽은 GET·DELETE 메서드가 필요하다).
 
-/** 교신 본문 상한. DB 의 inquiry_messages_body_check 와 같은 값이어야 한다. */
+/** 내용 기록 본문 상한. DB 의 inquiry_messages_body_check 와 같은 값이어야 한다. */
 const BODY_MAX = 20000
 
-/** 교신 날짜로 받을 수 있는 미래 여유(일). 시차·입력 시점 차이만 허용하고 그 이상은 막는다. */
+/** 내용 기록 날짜로 받을 수 있는 미래 여유(일). 시차·입력 시점 차이만 허용하고 그 이상은 막는다. */
 const FUTURE_DAYS = 1
 
 /** 'YYYY-MM-DD' 인지, 그리고 실제로 있는 날짜인지. '2026-02-31' 같은 값을 걸러낸다. */
@@ -637,7 +637,7 @@ function validDate(v: unknown): string | null {
 }
 
 /**
- * 교신을 만들거나 고치기 전에, 그 의뢰서가 아직 살아 있는지 본다.
+ * 내용 기록을 만들거나 고치기 전에, 그 의뢰서가 아직 살아 있는지 본다.
  * 취소된 의뢰서는 읽기 전용이다 — update 액션이 .neq('status','cancelled') 로 막는 것과 같은 규칙.
  */
 async function liveInquiry(
@@ -657,28 +657,25 @@ async function liveInquiry(
   return { ok: true, inquiryNo: row.inquiry_no }
 }
 
-/** 교신 한 건 + 그 의뢰서. 수정·삭제가 권한과 상태를 함께 본다. */
+/** 내용 기록 한 건 + 그 의뢰서. 수정·삭제가 권한과 상태를 함께 본다. */
 async function loadMessage(sb: ReturnType<typeof admin>, id: number) {
   return sb
     .from('inquiry_messages')
-    .select('id, inquiry_id, direction, entry_date, created_by, inquiries!inner(inquiry_no, status)')
+    .select('id, inquiry_id, entry_date, created_by, inquiries!inner(inquiry_no, status)')
     .eq('id', id)
     .maybeSingle()
 }
 
 type MessageRow = {
-  id: number; inquiry_id: string; direction: string; entry_date: string; created_by: number | null
+  id: number; inquiry_id: string; entry_date: string; created_by: number | null
   inquiries: { inquiry_no: string; status: string } | { inquiry_no: string; status: string }[]
 }
 const inquiryOf = (r: MessageRow) => (Array.isArray(r.inquiries) ? r.inquiries[0] : r.inquiries)
 
-// ── 교신 추가 ───────────────────────────────────────────────────────
+// ── 내용 기록 추가 ───────────────────────────────────────────────────────
 async function messageAdd(sb: ReturnType<typeof admin>, caller: Caller, body: Record<string, unknown>) {
   const inquiryId = idOf(body.inquiry_id)
   if (!inquiryId) return bad('의뢰서를 지정해주세요.')
-
-  const direction = typeof body.direction === 'string' ? body.direction : ''
-  if (direction !== 'sent' && direction !== 'received') return bad('보냄·받음을 골라주세요.')
 
   const entryDate = validDate(body.entry_date)
   if (!entryDate) return bad('날짜를 올바르게 골라주세요.')
@@ -696,13 +693,12 @@ async function messageAdd(sb: ReturnType<typeof admin>, caller: Caller, body: Re
     .from('inquiry_messages')
     .insert({
       inquiry_id: inquiryId,
-      direction,
       entry_date: entryDate,
       body: text,
       // 본문 값을 쓰지 않는다 — 적은 사람이 곧 작성자다.
       created_by: caller.engineer_id,
     })
-    .select('id, inquiry_id, direction, entry_date, body, created_by, created_at')
+    .select('id, inquiry_id, entry_date, body, created_by, created_at')
     .single()
   if (error) {
     console.error(`[${TAG}] message insert failed`, { inquiryId, error })
@@ -713,14 +709,14 @@ async function messageAdd(sb: ReturnType<typeof admin>, caller: Caller, body: Re
   // 본문은 감사 기록에 넣지 않는다 — 길고, 고객·본사 내용이 섞일 수 있다.
   await writeInquiryAudit(sb, {
     action: 'INQUIRY_MSG_ADD', inquiryNo: live.inquiryNo, actorId: caller.engineer_id,
-    newData: { message_id: row.id, direction, entry_date: entryDate, body_length: text.length },
+    newData: { message_id: row.id, entry_date: entryDate, body_length: text.length },
   })
   return NextResponse.json({ message: made })
 }
 
-// ── 교신 수정 ───────────────────────────────────────────────────────
-// direction 은 고치지 않는다 — 잘못 골랐으면 지우고 다시 넣는다.
-// 방향이 바뀌면 그 교신에 딸린 첨부의 맥락까지 뒤집히는데, 그걸 되돌릴 방법이 없다.
+// ── 내용 기록 수정 ───────────────────────────────────────────────────────
+// 고칠 수 있는 것은 날짜와 내용뿐이다. 첨부는 따로 올리고 지운다(/api/inquiry-attachment).
+// 방향이 바뀌면 그 내용 기록에 딸린 첨부의 맥락까지 뒤집히는데, 그걸 되돌릴 방법이 없다.
 async function messageUpdate(sb: ReturnType<typeof admin>, caller: Caller, body: Record<string, unknown>) {
   const id = Number(body.id)
   if (!Number.isInteger(id) || id <= 0) return bad('내용 기록을 지정해주세요.')
@@ -757,7 +753,7 @@ async function messageUpdate(sb: ReturnType<typeof admin>, caller: Caller, body:
 
   const { data: done, error } = await sb
     .from('inquiry_messages').update(patch).eq('id', id)
-    .select('id, inquiry_id, direction, entry_date, body, created_by, created_at, updated_at')
+    .select('id, inquiry_id, entry_date, body, created_by, created_at, updated_at')
   if (error) {
     console.error(`[${TAG}] message update failed`, { id, error })
     return bad('내용 기록을 고치지 못했습니다.', 500)
@@ -775,7 +771,7 @@ async function messageUpdate(sb: ReturnType<typeof admin>, caller: Caller, body:
   return NextResponse.json({ message: done[0] })
 }
 
-// ── 교신 삭제 ───────────────────────────────────────────────────────
+// ── 내용 기록 삭제 ───────────────────────────────────────────────────────
 // 첨부 행은 FK CASCADE 로 함께 지워진다. 스토리지 파일은 아니므로 먼저 지운다.
 async function messageDelete(sb: ReturnType<typeof admin>, caller: Caller, body: Record<string, unknown>) {
   const id = Number(body.id)
@@ -815,7 +811,7 @@ async function messageDelete(sb: ReturnType<typeof admin>, caller: Caller, body:
 
   await writeInquiryAudit(sb, {
     action: 'INQUIRY_MSG_DELETE', inquiryNo: parent?.inquiry_no ?? '', actorId: caller.engineer_id,
-    oldData: { message_id: id, direction: row.direction, entry_date: row.entry_date, created_by: row.created_by },
+    oldData: { message_id: id, entry_date: row.entry_date, created_by: row.created_by },
     newData: { attachments_removed: paths.length },
   })
   return NextResponse.json({ success: true })

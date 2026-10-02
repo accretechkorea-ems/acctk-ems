@@ -12,7 +12,7 @@
 // (docTypes.ts 머리말에 이유가 적혀 있다: 화면이 읽는 등록표에 서버 전용 코드를 두면 번들이 깨진다).
 //
 // 실행 로직은 옛 요청함(app/api/requests/quote-delete)에서 그대로 옮겨 왔다. 다시 짜지 않았다.
-//   · 삭제 — quote_expenses → quote_items → quotes 순서, 그 뒤에 스토리지 PDF.
+//   · 삭제 — quotes 행을 지우고(자식은 CASCADE 로 함께 사라진다) 그 뒤에 스토리지 PDF.
 //     자세한 근거는 executeQuoteDelete 주석에 적었다.
 //   · 복원 — 이전 상태는 quotes 어디에도 남지 않아 audit_log 의 '취소요청으로 전환된 마지막 UPDATE'
 //     기록에서 old_data.status 를 꺼내 쓴다.
@@ -185,17 +185,24 @@ export type DeleteResult =
  * 절차
  *   1. 지금 상태를 다시 읽는다. allowedStatuses 밖이면 지우지 않는다 — 결재가 도는 사이,
  *      또는 화면을 띄워 둔 사이에 상태가 바뀌었을 수 있다.
- *   2. 자식부터 지운다(quote_expenses → quote_items). 매 단계 error 를 확인하고 실패하면 멈춘다.
- *      ※ 레포 기록(quote_schema_snapshot.sql:44-49)은 두 FK 가 ON DELETE CASCADE 라고 적고 있어
- *        이 두 단계가 없어도 지워진다. 기존 코드 주석은 NO ACTION 이라고 적혀 있어 서로 어긋난다.
- *        어느 쪽이 맞든 탈이 없도록 지금은 그대로 지운다(CASCADE 면 0행이 될 뿐이다).
- *   3. quotes 행을 조건부로 지운다. 0행이면 그사이 누가 먼저 손댄 것이다.
- *   4. 행이 사라진 뒤에 스토리지 PDF 를 지운다. 순서를 뒤집으면 행 삭제가 실패했을 때
- *      PDF 만 사라진다.
+ *   2. quotes 행을 조건부로 지운다. 0행이면 그사이 누가 먼저 손댄 것이다.
+ *      자식(quote_items · quote_expenses)은 건드리지 않는다 — 아래 「자식은 CASCADE」 참고.
+ *   3. 행이 사라진 뒤에 스토리지 PDF 를 지운다. 순서를 뒤집으면 행 삭제가 실패했을 때
+ *      PDF 만 사라진다. 스토리지는 FK 가 없어 DB 가 치워 주지 않는다 — 이 단계는 꼭 있어야 한다.
+ *
+ * 자식은 CASCADE 다 (2026-10-02 실측 확인)
+ *   quote_items.quote_id · quote_expenses.quote_id 가 ON DELETE CASCADE 라, quotes 행을 지우면
+ *   DB 가 함께 지운다. 예전에는 이 함수가 그 둘을 먼저 수동으로 지웠다 — 레포 기록과 코드 주석이
+ *   CASCADE / NO ACTION 으로 엇갈려 있어 「어느 쪽이든 탈이 없게」 둔 코드였다. 확인이 끝났으므로
+ *   걷어냈다. 수동 삭제가 하던 일을 DB 가 하므로 결과는 같고, 실패할 수 있는 단계가 둘 줄었다.
+ *   ※ 참조 무결성 동작(CASCADE)은 자식 표의 RLS 를 거치지 않는다 — 세션 클라이언트로 부모를
+ *     지워도 자식이 함께 지워진다. 그래서 quote_expenses 의 superadmin 전용 DELETE 정책
+ *     (quote_schema_snapshot.sql:89-90)이 본인 삭제를 막지 않는다.
+ *   ※ download_logs.quote_id · showroom_usage.quote_id 는 SET NULL 이다 — 기록은 남고 번호만
+ *     비워진다. 이 함수는 그 둘을 건드리지 않으며, 건드려서도 안 된다.
  *
  * 클라이언트를 둘로 나눠 받는다
- *   sb      — service role. 조회·자식 삭제·스토리지에 쓴다. quote_expenses 의 DELETE 정책이
- *             superadmin 전용이라(quote_schema_snapshot.sql:89-90) 세션 클라이언트로는 자식을 못 지운다.
+ *   sb      — service role. 조회·감사·알림·스토리지에 쓴다.
  *   sbQuote — quotes 행을 지울 클라이언트. 본인 삭제는 세션 클라이언트를 넘긴다 —
  *             그래야 quotes 의 감사 트리거가 auth.jwt() 에서 행위자를 읽어 남긴다.
  *             생략하면 sb 를 그대로 쓴다(결재 삭제는 서버 훅이라 세션이 없다).
@@ -227,17 +234,8 @@ export async function executeQuoteDelete(opts: {
     return { ok: false, error: `지금은 삭제할 수 없는 상태입니다 (${quote.status})`, status: 409 }
   }
 
-  const { error: expErr } = await sb.from('quote_expenses').delete().eq('quote_id', quoteId)
-  if (expErr) {
-    console.error(`[${TAG}:${via}] delete quote_expenses failed`, { quoteId, error: expErr })
-    return { ok: false, error: '부대비용을 지우지 못했습니다.', status: 500 }
-  }
-  const { error: itemErr } = await sb.from('quote_items').delete().eq('quote_id', quoteId)
-  if (itemErr) {
-    console.error(`[${TAG}:${via}] delete quote_items failed — 부대비용은 이미 지워졌다`, { quoteId, error: itemErr })
-    return { ok: false, error: '견적 품목을 지우지 못했습니다.', status: 500 }
-  }
-
+  // 자식(quote_items · quote_expenses)을 수동으로 지우지 않는다 — 둘 다 ON DELETE CASCADE 라
+  // quotes 행을 지우면 DB 가 함께 지운다(실측 확인, 2026-10-02).
   // 조건부 DELETE — 그사이 상태가 바뀌었으면 0행이 되어 지우지 않는다.
   const { data: gone, error: delErr } = await sbQuote
     .from('quotes')
@@ -246,7 +244,7 @@ export async function executeQuoteDelete(opts: {
     .in('status', allowedStatuses as string[])
     .select('quote_id')
   if (delErr) {
-    console.error(`[${TAG}:${via}] delete quote failed — 품목·부대비용은 이미 지워졌다`, { quoteId, error: delErr })
+    console.error(`[${TAG}:${via}] delete quote failed`, { quoteId, error: delErr })
     return { ok: false, error: '견적을 지우지 못했습니다.', status: 500 }
   }
   if (!gone || gone.length === 0) {

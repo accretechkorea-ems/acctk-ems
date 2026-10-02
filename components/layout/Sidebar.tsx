@@ -382,7 +382,10 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
         style={{ ...itemStyle(active, big), ...(mini ? { justifyContent: 'center', padding: 0, position: 'relative' } : null) }}
       >
         {iconOf(item.icon, big ? 18 : 16)}
-        {!mini && <span>{item.label}</span>}
+        {/* nowrap 을 여기에도 못 박는다. 부모 버튼(itemStyle)에도 있어 상속되지만, 글자가 줄바꿈되면
+            안 되는 이유가 이 자리에 있다 — 펼치는 동안(64px → 224px) mini 가 먼저 false 가 되어
+            아직 좁은 폭에 긴 이름이 들어오고, 상속에만 맡겨 두면 부모 스타일을 고칠 때 조용히 깨진다. */}
+        {!mini && <span style={{ whiteSpace: 'nowrap' }}>{item.label}</span>}
         {badge > 0 && (
           mini
             // 접히면 숫자가 들어갈 자리가 없다 — 아이콘 오른쪽 위에 점으로만 알린다.
@@ -442,6 +445,9 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
                     fontFamily: 'inherit', textAlign: 'left',
                     fontSize: 11, fontWeight: 600, color: MUTED, letterSpacing: '0.2px',
                     padding: big ? '14px 12px 4px' : '14px 10px 6px',
+                    // 그룹 이름도 줄바꿈을 막는다 — 메뉴 이름과 달리 여기엔 nowrap 이 없어서
+                    // 펼치는 동안 「영업관리」 같은 이름이 두 줄로 벌어졌다 펴졌다.
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   <Caret open={!folded} />
@@ -526,8 +532,10 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 6px 12px' }}>
             <div style={logoMark(30)} role="img" aria-label="아크레텍코리아" />
             <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: TEXT, lineHeight: 1.2 }}>아크레텍코리아</span>
-              <span style={{ fontSize: 11, color: MUTED, display: 'flex', alignItems: 'center', gap: 2 }}>
+              {/* 회사·부서 이름은 줄바꿈하지 않는다. 좁은 폭에 들어가면 한 글자씩 세로로 늘어선다
+                  — 펼치는 전환 중에 실제로 그렇게 보였다(HeaderWrapper 의 min-width 규칙과 한 쌍이다). */}
+              <span style={{ fontSize: 13, fontWeight: 800, color: TEXT, lineHeight: 1.2, whiteSpace: 'nowrap' }}>아크레텍코리아</span>
+              <span style={{ fontSize: 11, color: MUTED, display: 'flex', alignItems: 'center', gap: 2, whiteSpace: 'nowrap' }}>
                 계측사업부
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
               </span>
@@ -572,7 +580,11 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
             setNavEdges(prev => (prev.top === top && prev.bottom === bottom ? prev : { top, bottom }))
           }}
           style={{
-            flex: 1, minHeight: 0, overflowY: 'auto', marginBottom: 8,
+            // overflowX 를 함께 못 박는다. overflowY 만 두면 CSS 규칙에 따라 overflow-x 가
+            // visible → auto 로 올라가, 펼치는 동안 nowrap 글자가 좁은 폭을 넘어서는 순간
+            // 가로 스크롤바가 깜빡 나타난다. 바깥 nav 는 overflow: hidden 이라 글자가
+            // 사이드바 밖으로 새지는 않는다 — 여기서는 스크롤바만 막는다.
+            flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', marginBottom: 8,
             boxShadow: [
               navEdges.top ? 'inset 0 9px 7px -8px rgba(0,0,0,0.12)' : '',
               navEdges.bottom ? 'inset 0 -9px 7px -8px rgba(0,0,0,0.12)' : '',

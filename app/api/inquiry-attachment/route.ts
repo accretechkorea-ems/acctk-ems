@@ -1,4 +1,4 @@
-// 의뢰서 교신 첨부파일 — 업로드(POST) · 삭제(DELETE) · 열기(GET 서명 URL).
+// 의뢰서 내용 기록 첨부파일 — 업로드(POST) · 삭제(DELETE) · 열기(GET 서명 URL).
 //
 // app/api/service-attachment/route.ts 를 그대로 본떴다. 앞머리 바이트 판정과 문서 형식 표는
 // lib/fileTypes.ts 로 함께 쓴다.
@@ -27,7 +27,7 @@ import { headOf, isOle2, isZip, OFFICE_DOC_TYPES, type DocType } from '@/lib/fil
 const TAG = 'inquiry-attachment'
 const BUCKET = 'inquiry-attachments'
 
-/** 교신 한 건당 첨부 상한. 화면도 같은 값으로 추가 버튼을 잠근다. */
+/** 내용 기록 한 건당 첨부 상한. 화면도 같은 값으로 추가 버튼을 잠근다. */
 const MAX_PER_MESSAGE = 10
 /** 파일 하나의 상한(디코딩 후). 서비스 레포트 첨부와 같은 20MB. */
 const MAX_BYTES = 20 * 1024 * 1024
@@ -192,8 +192,8 @@ async function upload(req: NextRequest) {
   const list = Array.isArray(body.files) ? body.files : []
   if (list.length === 0) return bad('올릴 파일이 없습니다.')
 
-  // inquiry_id 는 클라이언트 값을 믿지 않고 교신에서 읽는다.
-  // 그래야 첨부의 inquiry_id 와 교신의 inquiry_id 가 어긋나지 않는다(DB 복합 FK 도 같은 것을 본다).
+  // inquiry_id 는 클라이언트 값을 믿지 않고 내용 기록에서 읽는다.
+  // 그래야 첨부의 inquiry_id 와 내용 기록의 inquiry_id 가 어긋나지 않는다(DB 복합 FK 도 같은 것을 본다).
   const { data: msg, error: msgErr } = await supabaseAdmin
     .from('inquiry_messages')
     .select('id, inquiry_id, inquiries!inner(status)')
@@ -206,7 +206,7 @@ async function upload(req: NextRequest) {
   if (!msg) return bad('내용 기록을 찾을 수 없습니다.', 404)
   const row = msg as unknown as { inquiry_id: string; inquiries: { status: string } | { status: string }[] }
   const status = Array.isArray(row.inquiries) ? row.inquiries[0]?.status : row.inquiries?.status
-  // 취소된 의뢰서는 읽기 전용이다(교신 추가·수정·삭제와 같은 규칙).
+  // 취소된 의뢰서는 읽기 전용이다(내용 기록 추가·수정·삭제와 같은 규칙).
   if (status === 'cancelled') return bad('취소된 의뢰서에는 파일을 올릴 수 없습니다.', 409)
 
   const { count, error: cntErr } = await supabaseAdmin
@@ -219,7 +219,7 @@ async function upload(req: NextRequest) {
   }
   const already = count ?? 0
   if (already + list.length > MAX_PER_MESSAGE) {
-    return bad(`첨부파일은 교신 하나에 ${MAX_PER_MESSAGE}개까지 올릴 수 있습니다 (현재 ${already}개).`)
+    return bad(`첨부파일은 내용 기록 하나에 ${MAX_PER_MESSAGE}개까지 올릴 수 있습니다 (현재 ${already}개).`)
   }
 
   // 먼저 전부 검증한다 — 반쯤 올리고 막히는 것보다 시작 전에 막는 편이 낫다.

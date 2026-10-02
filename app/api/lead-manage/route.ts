@@ -170,6 +170,19 @@ export async function POST(req: Request) {
   // ── 담당자 배정 — 관리자만 ──
   if (action === 'assign') {
     if (!admin) return bad('담당자 배정은 관리자만 할 수 있습니다.', 403)
+    // 배정 불가인 건에는 담당자를 붙이지 않는다.
+    //
+    // 붙이면 「배정불가인데 담당자가 있는」 모순 상태가 된다 — block 이 일부러 배정을 푸는 것과
+    // 정면으로 어긋난다. DB 의 CHECK(leads_blocked_actor_check)는 blocked_by/blocked_at 만 보고
+    // assigned_to 는 보지 않으므로 여기서 막는 수밖에 없다.
+    //
+    // 전환완료·미진행은 막지 않는다(종전 동작 그대로 — 그 두 상태는 담당자가 이미 제 일을 한
+    // 뒤의 종결이라, 뒤늦게 담당자를 고치는 일이 있다). 그래서 isLeadClosed 로 뭉뚱그리지 않고
+    // 배정불가만 따로 본다. 회수(assignedTo = null)도 함께 막는다 — 배정불가 건은 이미
+    // 담당자가 없고, 그대로 통과시키면 assigned_by 만 이 사람으로 덮인다.
+    if (lead.status === LEAD_STATUS_BLOCKED) {
+      return bad('배정 불가 상태에서는 담당자를 지정할 수 없습니다. 먼저 배정 불가를 해제해 주세요.', 409)
+    }
     const raw = body.assignedTo
     const assignedTo = raw === null || raw === '' ? null : Number(raw)
     if (assignedTo !== null && !Number.isInteger(assignedTo)) return bad('담당자가 올바르지 않습니다.')
@@ -184,7 +197,8 @@ export async function POST(req: Request) {
       if (!target || target.resigned_date) return bad('배정할 수 없는 담당자입니다.')
     }
 
-    // 배정에 따라 상태가 자동으로 따라간다. 다만 종결된 건(전환완료·미진행)은 건드리지 않는다.
+    // 배정에 따라 상태가 자동으로 따라간다. 다만 종결된 건은 건드리지 않는다.
+    // 여기 올 수 있는 종결은 전환완료·미진행 둘뿐이다(배정불가는 위에서 돌려보냈다).
     const statusPatch = isLeadClosed(lead.status)
       ? {}
       : { status: assignedTo === null ? LEAD_STATUS_NEW : LEAD_STATUS_ACTIVE }

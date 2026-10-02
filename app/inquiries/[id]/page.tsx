@@ -8,9 +8,12 @@
 //   · 내용 기록 카드 — 날짜·본문·추가 파일. 모달을 띄우지 않는다(고칠 대상을 보면서 고친다).
 // 「내용 추가」만 모달이다 — 새로 만드는 일이라 고칠 대상이 화면에 없다.
 //
-// 교신 기록은 본사와 오간 문답을 날짜순으로 쌓아 보여 준다. 한 건 = 보냄/받음 + 날짜 +
-// 내용 + 첨부 여러 개. 읽기는 브라우저가 직접(RLS), 쓰기는 /api/inquiry(교신)와
-// /api/inquiry-attachment(파일)가 맡는다.
+// 내용 기록은 본사와 오간 문답을 날짜순으로 쌓아 보여 준다. 한 건 = 날짜 + 내용 + 첨부 여러 개.
+// 읽기는 브라우저가 직접(RLS), 쓰기는 /api/inquiry(내용 기록)와 /api/inquiry-attachment(파일)가 맡는다.
+//
+// 보냄/받음 구분은 두지 않는다 — 일본 본사가 우리가 보낸 파일에 답을 적어 그대로 돌려주는
+// 방식이라, 한 기록이 보낸 것이기도 받은 것이기도 하다. 굳이 고르게 하면 틀리게 고를 뿐이다.
+// (DB 의 inquiry_messages.direction 컬럼은 남아 있지만 코드는 읽지도 쓰지도 않는다.)
 //
 // 레일은 두지 않는다. 목록(/inquiries)이 레일을 갖고, 여기는 한 건만 보는 자리다.
 // 그래도 메인 사이드바는 접힌 채다 — lib/railPaths.ts 의 RAIL_PATHS 가 하위 경로까지 보기 때문이다.
@@ -33,9 +36,10 @@ import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useToast } from '@/components/common/Toast'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import FilePicker, { failText, sizeText, uploadFiles } from '@/components/inquiry/files'
+import CompleteModal from '@/components/inquiry/CompleteModal'
 import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, NEUTRAL_BG, BLUE,
-  cardStyle, cardHeader, cardTitle, btnPrimary, btnGhost, btnDanger,
+  cardStyle, cardHeader, cardTitle, countBadge, btnPrimary, btnGhost,
 } from '@/components/common/ui'
 import { todayKST } from '@/lib/date'
 import { engineerLabel, isCurrentlyEmployed } from '@/lib/engineers'
@@ -50,6 +54,73 @@ const TITLE_MAX = 200
 /** 내용 기록 본문 길이 상한. 서버(/api/inquiry 의 BODY_MAX)와 같은 값이어야 한다. */
 const BODY_MAX = 20000
 
+/** 왼쪽 정보 카드의 폭. 고객사 상세(340)보다 조금 좁다 — 담을 칸이 네 개뿐이다. */
+const INFO_COL = 320
+/** 판 전체 상한. 왼쪽(320) + 간격(16) + 오른쪽 904 = 1240. */
+const SHELL_MAX = 1240
+
+/**
+ * 2단 배치 — 왼쪽 정보 카드(고정 폭) + 오른쪽 내용 기록(남는 폭 전부).
+ *
+ * 고객사 상세(app/customer/[id]/page.tsx 의 .cust-grid)와 같은 방식이다:
+ * grid 두 칸 · align-items: start · 왼쪽만 sticky · 좁아지면 1단으로 떨어뜨린다.
+ *
+ * 다른 점 하나 — 분기를 @media 가 아니라 @container 로 둔다. 사이드바가 접히면 본문 폭이
+ * 168px 넓어지는데 화면 폭으로 재면 그 변화가 보이지 않아, 고객사 상세는 사이드바 232px 를
+ * 상수로 가정하고 1131px 라는 경계를 쓴다. 의뢰서 목록(.iq-shell)이 이미 @container 를
+ * 쓰고 있어 같은 방식으로 맞췄다 — 접힘·펼침 어느 쪽이든 「내용 폭 900」이 기준이다.
+ *
+ * sticky 는 container-type 조상 안에서도 동작한다(헤드리스 브라우저로 실측 확인:
+ * 폭 1400·1000 에서 top 20 에 고정, 860 에서 1단으로 풀리며 static 이 된다).
+ * 본문 스크롤은 문서(body)가 한다 — .ems-main 에 overflow 가 없어 뷰포트가 곧 스크롤 컨테이너다.
+ */
+const SHELL_CSS = `
+  .iqd-shell { container-type: inline-size; }
+  .iqd-grid {
+    display: grid;
+    grid-template-columns: ${INFO_COL}px minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+  }
+  /* 오른쪽이 길어도 정보 카드는 같은 자리에 남는다. main 의 위 여백(24)만큼 띄운다.
+     카드가 화면보다 길어지면(편집 모드) 카드 안에서 스크롤해 아래가 잘리지 않게 한다. */
+  .iqd-left { position: sticky; top: 24px; max-height: calc(100vh - 48px); overflow-y: auto; }
+  .iqd-right { min-width: 0; }
+  @container (max-width: 900px) {
+    .iqd-grid { grid-template-columns: minmax(0, 1fr); }
+    .iqd-left { position: static; max-height: none; overflow-y: visible; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .iqd-shell * { transition: none !important; animation: none !important; }
+  }
+`
+
+/**
+ * 두 카드의 머리 줄.
+ *
+ * 왼쪽(정보)과 오른쪽(내용 기록) 카드의 구분선이 **같은 y 에 와야** 두 판이 한 줄에서 시작한 것으로
+ * 보인다. 그런데 담는 것이 달라(왼쪽은 아이콘 버튼, 오른쪽은 「내용 추가」 버튼) 자연 높이가
+ * 2~3px 어긋난다. 그래서 높이를 숫자로 못 박는다 — 안쪽 것들은 가운데 정렬로 떠 있는다.
+ * 값 32 는 가장 큰 자식(btnPrimary: 글자 13 + 위아래 여백 7)이 들어가는 높이다.
+ */
+const CARD_HEAD: React.CSSProperties = { ...cardHeader, height: 32, boxSizing: 'content-box' }
+
+/**
+ * 큰 카드 안의 항목 한 줄(내용 기록 하나).
+ *
+ * 기록마다 테두리 있는 카드를 쌓으면 카드 안에 카드가 되어 선이 두 겹으로 보인다.
+ * 큰 카드 하나 안에서 1px 구분선으로만 나눈다(목록 행과 같은 방식).
+ * 좌우로 12 를 내밀고 같은 값만큼 안쪽 여백을 줘, 글자는 카드 안쪽 여백(16)에 그대로 맞고
+ * 구분선과 편집 중 배경만 카드 끝 가까이까지 간다.
+ */
+const msgItem = (first: boolean, editing: boolean): React.CSSProperties => ({
+  margin: '0 -12px',
+  padding: '12px',
+  borderTop: first ? 'none' : `1px solid ${BORDER}`,
+  background: editing ? NEUTRAL_BG : undefined,
+  borderRadius: editing ? 8 : undefined,
+})
+
 /** 내용 기록의 입력 칸 — 추가 모달과 카드 편집이 같은 모양을 쓴다. */
 const msgField: React.CSSProperties = {
   width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: 6,
@@ -60,9 +131,13 @@ const msgLabel: React.CSSProperties = {
   fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 5, display: 'block',
 }
 
-/** 상세에서 고치는 칸 — 목록 모달의 입력과 같은 모양이다. 폭을 묶어 줄이 흔들리지 않게 한다. */
+/**
+ * 상세에서 고치는 칸 — 목록 모달의 입력과 같은 모양이다.
+ * 폭 상한을 두지 않는다: 왼쪽 카드가 이미 320px 로 좁아, 상한을 또 걸면 카드 안에서 입력만
+ * 더 좁아져 글자가 안 보인다. 카드 폭을 그대로 채운다.
+ */
 const editStyle: React.CSSProperties = {
-  width: '100%', maxWidth: 320, padding: '8px 10px', border: `1px solid ${BORDER}`,
+  width: '100%', padding: '8px 10px', border: `1px solid ${BORDER}`,
   borderRadius: 6, fontSize: 13, color: TEXT, background: CARD_BG,
   outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
 }
@@ -105,7 +180,7 @@ const stampText = (iso: string | null): string => {
     + ` ${p(kst.getUTCHours())}:${p(kst.getUTCMinutes())}`
 }
 
-// ── 교신 기록 ───────────────────────────────────────────────────────
+// ── 내용 기록 ───────────────────────────────────────────────────────
 
 
 /** 본문이 이보다 길면 접어 둔다(글자 수). */
@@ -121,7 +196,6 @@ type Attachment = {
 
 type Message = {
   id: number
-  direction: string
   entry_date: string
   body: string
   created_by: number | null
@@ -130,13 +204,7 @@ type Message = {
 
 // 목록과 같은 이유로 제약 이름을 명시한다(engineers 를 여러 번 참조하게 될 표다).
 const MESSAGE_COLUMNS =
-  'id, direction, entry_date, body, created_by, engineers!inquiry_messages_created_by_fkey(name, position)'
-
-const DIRECTION_LABEL: Record<string, string> = { sent: '보냄', received: '받음' }
-
-/** 방향 뱃지 색 — 기존 토큰만 쓴다. 보냄은 액센트, 받음은 중립. */
-const directionTone = (d: string) =>
-  d === 'sent' ? { bg: '#eff4ff', fg: BLUE } : { bg: NEUTRAL_BG, fg: SUB }
+  'id, entry_date, body, created_by, engineers!inquiry_messages_created_by_fkey(name, position)'
 
 /**
  * 수정 아이콘 버튼.
@@ -190,7 +258,7 @@ type MsgEditBox = {
 }
 
 /**
- * 교신 한 건.
+ * 내용 기록 한 건.
  *
  * 보기 모드에서는 본문이 길면 접어 두고, 첨부는 눌러서 내려받는다. 머리 줄 오른쪽 끝의
  * 수정 아이콘 하나만 눌리며, 그것도 적은 사람과 superadmin 에게만 보인다(서버도 같은 기준).
@@ -200,12 +268,17 @@ type MsgEditBox = {
  *
  * 본문이 빈 기록(파일만 남긴 경우)은 컴팩트하게 그린다 — 본문 영역과 그 여백을 아예 없애
  * 첨부 줄이 머리 줄 바로 아래에 붙는다.
+ *
+ * 제 테두리를 갖지 않는다. 「내용 기록」 큰 카드 안의 한 항목이고, 위 항목과는 구분선으로만
+ * 갈린다(msgItem). 편집 중인 항목만 옅은 배경으로 떠 보인다.
  */
 function MessageCard({
-  msg, files, canEdit, readOnly, edit, onStartEdit, onOpenFile,
+  msg, files, first, canEdit, readOnly, edit, onStartEdit, onOpenFile,
 }: {
   msg: Message
   files: Attachment[]
+  /** 목록의 첫 항목이면 위 구분선을 긋지 않는다(머리 줄 아래 선과 겹친다). */
+  first: boolean
   canEdit: boolean
   /** 취소된 의뢰서 — 수정 아이콘을 감춘다. */
   readOnly: boolean
@@ -215,23 +288,17 @@ function MessageCard({
   onOpenFile: (a: Attachment) => void
 }) {
   const [open, setOpen] = useState(false)
-  const tone = directionTone(msg.direction)
   const long = msg.body.length > FOLD_AT
   const shown = long && !open ? msg.body.slice(0, FOLD_AT) : msg.body
   const editable = canEdit && !readOnly
   const hasBody = msg.body.trim().length > 0
 
   return (
-    <div style={{ ...cardStyle, marginBottom: 8 }}>
-      {/* 머리 줄 — 방향·날짜·작성자, 오른쪽 끝에 수정 아이콘 하나뿐이다. */}
+    <div style={msgItem(first, edit !== null)}>
+      {/* 머리 줄 — 날짜와 작성자, 오른쪽 끝에 수정 아이콘 하나뿐이다.
+          방향 뱃지가 빠진 자리를 비워 두지 않고 날짜를 앞으로 당겼다(날짜가 이 기록의 이름이다). */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{
-          fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99,
-          background: tone.bg, color: tone.fg, flexShrink: 0,
-        }}>
-          {DIRECTION_LABEL[msg.direction] ?? msg.direction}
-        </span>
-        <span style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>{dateText(msg.entry_date)}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: TEXT, flexShrink: 0 }}>{dateText(msg.entry_date)}</span>
         <span style={{ fontSize: 12, color: MUTED }}>{engineerLabel(msg.engineers) || '-'}</span>
         {editable && !edit && (
           <span style={{ marginLeft: 'auto', display: 'flex', flexShrink: 0 }}>
@@ -242,22 +309,13 @@ function MessageCard({
 
       {edit ? (
         <div style={{ marginTop: 10 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-            <div>
-              <label style={msgLabel} htmlFor={`me-date-${msg.id}`}>날짜</label>
-              <input
-                id={`me-date-${msg.id}`} type="date" value={edit.date} disabled={edit.busy}
-                onChange={e => edit.setDate(e.target.value)}
-                style={{ ...msgField, colorScheme: 'light' }}
-              />
-            </div>
-            <div>
-              {/* 방향은 고치지 않는다 — 바꾸면 첨부의 맥락까지 뒤집힌다(서버도 막는다). */}
-              <label style={msgLabel}>방향</label>
-              <div style={{ ...msgField, background: NEUTRAL_BG, color: SUB }}>
-                {DIRECTION_LABEL[msg.direction] ?? msg.direction}
-              </div>
-            </div>
+          <div style={{ marginBottom: 10 }}>
+            <label style={msgLabel} htmlFor={`me-date-${msg.id}`}>날짜</label>
+            <input
+              id={`me-date-${msg.id}`} type="date" value={edit.date} disabled={edit.busy}
+              onChange={e => edit.setDate(e.target.value)}
+              style={{ ...msgField, colorScheme: 'light' }}
+            />
           </div>
 
           <label style={msgLabel} htmlFor={`me-body-${msg.id}`}>내용</label>
@@ -381,10 +439,12 @@ function MessageCard({
  * 내용 추가 모달.
  *
  * 수정은 여기서 하지 않는다 — 카드 제자리에서 한다(MessageCard). 이 모달은 새로 남기는
- * 한 가지 일만 한다: 방향·날짜·내용·파일을 받아 교신을 만들고 파일을 이어 올린다.
+ * 한 가지 일만 한다: 날짜·내용·파일을 받아 내용 기록을 만들고 파일을 이어 올린다.
+ *
+ * 쓰이는 때는 주로 「작성 완료」 뒤다 — 일본에서 회신이 오면 그 파일과 내용을 여기에 쌓는다.
  *
  * 본문은 비워도 된다. 받은 파일만 붙여 두는 기록이 실제로 많다. 다만 본문도 파일도 없는
- * 빈 기록은 막는다 — 서버는 교신을 만드는 시점에 파일이 아직 없어 이 판정을 할 수 없으므로
+ * 빈 기록은 막는다 — 서버는 내용 기록을 만드는 시점에 파일이 아직 없어 이 판정을 할 수 없으므로
  * 화면에서만 막는다.
  */
 function MessageModal({
@@ -395,7 +455,6 @@ function MessageModal({
   onSaved: () => void
 }) {
   const toast = useToast()
-  const [direction, setDirection] = useState('sent')
   const [entryDate, setEntryDate] = useState(todayKST())
   const [text, setText] = useState('')
   const [files, setFiles] = useState<File[]>([])
@@ -414,13 +473,13 @@ function MessageModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'message_add', inquiry_id: inquiryId, direction, entry_date: entryDate, body: text,
+          action: 'message_add', inquiry_id: inquiryId, entry_date: entryDate, body: text,
         }),
       })
       const json = await res.json().catch(() => null)
       if (!res.ok) { setError(json?.error || `저장하지 못했습니다 (HTTP ${res.status})`); return }
 
-      // 교신은 이미 저장됐으므로 파일이 막혀도 되돌리지 않는다 — 어느 파일이 왜 막혔는지
+      // 내용 기록은 이미 저장됐으므로 파일이 막혀도 되돌리지 않는다 — 어느 파일이 왜 막혔는지
       // 알려 주고, 카드의 수정 아이콘으로 다시 올릴 수 있게 한다.
       if (files.length > 0) {
         const messageId = Number(json?.message?.id)
@@ -438,7 +497,7 @@ function MessageModal({
       onSaved()
       onClose()
     } catch (e) {
-      console.error('[inquiries] 교신 저장 실패', errorInfo(e))
+      console.error('[inquiries] 내용 기록 저장 실패', errorInfo(e))
       setError('저장하지 못했습니다. 잠시 뒤 다시 시도해주세요.')
     } finally {
       setBusy(false)
@@ -455,19 +514,10 @@ function MessageModal({
           <span style={cardTitle}>내용 추가</span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-          <div>
-            <label style={msgLabel} htmlFor="ms-dir">방향</label>
-            <select id="ms-dir" value={direction} onChange={e => setDirection(e.target.value)} style={msgField}>
-              <option value="sent">보냄</option>
-              <option value="received">받음</option>
-            </select>
-          </div>
-          <div>
-            <label style={msgLabel} htmlFor="ms-date">날짜</label>
-            <input id="ms-date" type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)}
-              style={{ ...msgField, colorScheme: 'light' }} />
-          </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={msgLabel} htmlFor="ms-date">날짜</label>
+          <input id="ms-date" type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)}
+            style={{ ...msgField, colorScheme: 'light' }} />
         </div>
 
         <div style={{ marginBottom: 12 }}>
@@ -483,7 +533,7 @@ function MessageModal({
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <label style={msgLabel}>첨부 파일</label>
+          <label style={msgLabel}>파일 등록</label>
           <FilePicker files={files} onChange={setFiles} disabled={busy} />
         </div>
 
@@ -507,12 +557,19 @@ function MessageModal({
     </ModalOverlay>
   )
 }
-/** 「이름 : 값」 한 줄. 값이 없으면 부르는 쪽이 아예 그리지 않는다. */
+/**
+ * 「라벨 위 / 값 아래」 한 칸. 값이 없으면 부르는 쪽이 아예 그리지 않는다.
+ *
+ * 예전에는 96px 라벨 열 + 값의 가로 2단이었다. 카드가 가로로 넓던 때는 읽혔지만,
+ * 320px 왼쪽 열로 들어오면서 값 자리가 190px 밖에 남지 않아 입력·드롭다운이 다 눌렸다.
+ * 세로로 쌓으면 값이 카드 폭을 그대로 쓴다.
+ */
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', gap: 12, padding: '9px 0', borderTop: `1px solid ${BORDER}` }}>
-      <span style={{ width: 96, flexShrink: 0, fontSize: 12, fontWeight: 700, color: MUTED }}>{label}</span>
-      <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: TEXT, lineHeight: 1.6 }}>{children}</span>
+    // 위아래 7 — 좁은 카드에 네댓 줄이 들어가므로 한 줄이라도 낮춰야 한 화면에 여유 있게 담긴다.
+    <div style={{ padding: '7px 0', borderTop: `1px solid ${BORDER}` }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: MUTED, marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.6, minWidth: 0 }}>{children}</div>
     </div>
   )
 }
@@ -543,6 +600,8 @@ export default function InquiryDetailPage() {
   const [files, setFiles] = useState<Attachment[]>([])
   /** 「내용 추가」 모달이 열려 있는가. */
   const [msgOpen, setMsgOpen] = useState(false)
+  /** 「작성 완료」 모달이 열려 있는가. */
+  const [completeOpen, setCompleteOpen] = useState(false)
   /**
    * 제자리 편집 — 한 번에 한 카드만이다. 초안을 부모가 들고 있어야
    * 다른 카드로 옮길 때 「버리겠는가」를 물을 수 있다(MsgEditBox 머리말 참고).
@@ -576,8 +635,8 @@ export default function InquiryDetailPage() {
   }, [id])
 
   /**
-   * 교신과 첨부를 함께 읽는다. 정렬은 entry_date · id 오름차순 — 오래된 것이 위,
-   * 새 교신이 아래에 쌓인다(메일 스레드와 같은 방향).
+   * 내용 기록과 첨부를 함께 읽는다. 정렬은 entry_date · id 오름차순 — 오래된 것이 위,
+   * 새 내용 기록이 아래에 쌓인다(메일 스레드와 같은 방향).
    */
   const loadThread = useCallback(async () => {
     if (!id) return
@@ -589,14 +648,14 @@ export default function InquiryDetailPage() {
         .eq('inquiry_id', id).order('sort_order', { ascending: true }),
     ])
     if (mErr || aErr) {
-      console.error('[inquiries] 교신 조회 실패', { id, mErr, aErr })
+      console.error('[inquiries] 내용 기록 조회 실패', { id, mErr, aErr })
       return
     }
     setMessages((msgs ?? []) as unknown as Message[])
     setFiles((atts ?? []) as Attachment[])
   }, [id])
 
-  // 나를 확인한다 — 교신 수정·삭제 버튼을 누구에게 보일지 정하는 데 쓴다.
+  // 나를 확인한다 — 내용 기록 수정·삭제 버튼을 누구에게 보일지 정하는 데 쓴다.
   // 서버도 같은 기준으로 다시 막으므로 이 값은 화면 표시용일 뿐이다.
   // 담당자 고르기에 쓸 직원 목록도 여기서 같이 읽는다(목록 화면과 같은 칸).
   useEffect(() => {
@@ -879,7 +938,7 @@ export default function InquiryDetailPage() {
     }
   }
 
-  /** 교신 삭제 — 되돌릴 수 없어 확인을 받는다. 첨부 파일도 함께 사라진다. */
+  /** 내용 기록 삭제 — 되돌릴 수 없어 확인을 받는다. 첨부 파일도 함께 사라진다. */
   const deleteMessage = async (m: Message) => {
     const n = files.filter(f => f.message_id === m.id).length
     const ok = await confirmDialog({
@@ -904,7 +963,7 @@ export default function InquiryDetailPage() {
       if (editId === m.id) closeMsgEdit()
       await loadThread()
     } catch (e) {
-      console.error('[inquiries] 교신 삭제 실패', e)
+      console.error('[inquiries] 내용 기록 삭제 실패', e)
       toast.error('지우지 못했습니다.')
     }
   }
@@ -950,8 +1009,14 @@ export default function InquiryDetailPage() {
 
   return (
     <main style={{ padding: '24px 28px', background: PAGE_BG, minHeight: '100vh' }}>
-      <div style={{ maxWidth: 680, margin: '0 auto' }}>
-        {back}
+      <style>{SHELL_CSS}</style>
+
+      {/* container-type 을 가진 바깥 상자. @container 분기가 이 상자의 폭을 본다 —
+          사이드바가 접히고 펼쳐져도 「내용 폭」 기준으로 같은 판단이 나온다. */}
+      <div className="iqd-shell" style={{ maxWidth: SHELL_MAX, margin: '0 auto' }}>
+        {/* 의뢰서를 못 읽은 두 경우(불러오는 중·찾을 수 없음)에는 카드 헤더가 없어
+            화살표도 없다 — 그때만 예전처럼 「← 목록」을 윗줄에 둔다. 돌아갈 길은 늘 있어야 한다. */}
+        {(state !== 'ready' || !row) && back}
 
         {state === 'loading' ? (
           <div style={{ ...cardStyle, textAlign: 'center', padding: 40, color: MUTED, fontSize: 13 }}>불러오는 중...</div>
@@ -961,189 +1026,256 @@ export default function InquiryDetailPage() {
             <span style={{ fontSize: 12 }}>취소되어 번호가 반환된 의뢰서일 수 있습니다.</span>
           </div>
         ) : (
-          <div style={cardStyle}>
-            <div style={cardHeader}>
-              <span style={cardTitle}>{INQUIRY_TYPE_LABEL[row.inquiry_type as InquiryType] ?? row.inquiry_type}</span>
-              {canCancel && (
-                <button
-                  type="button" onClick={cancelInquiry} disabled={busy}
-                  style={{ ...btnDanger(busy), marginLeft: 'auto' }}
-                >
-                  취소하기
-                </button>
-              )}
-            </div>
-
-            {/* 번호 — 사람이 받아 적는 값이라 크게. 취소된 건은 취소선을 긋는다. */}
-            <div style={{
-              background: NEUTRAL_BG, borderRadius: 8, padding: '16px', display: 'flex',
-              alignItems: 'center', gap: 12,
-            }}>
-              <span style={{
-                flex: 1, minWidth: 0, fontSize: 20, fontWeight: 800, letterSpacing: '-0.5px',
-                color: cancelled ? MUTED : BLUE, wordBreak: 'break-all',
-                textDecoration: cancelled ? 'line-through' : 'none',
-              }}>
-                {row.inquiry_no}
-              </span>
-              <button type="button" onClick={copy} style={{ ...btnGhost(), flexShrink: 0 }}>
-                {copied ? '복사했습니다' : '번호 복사'}
-              </button>
-            </div>
-
-            {cancelled && (
-              <div style={{
-                marginTop: 12, fontSize: 12, lineHeight: 1.7, color: MUTED,
-                background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px',
-              }}>
-                취소된 의뢰서입니다. 번호는 재사용되지 않으며 내용을 고칠 수 없습니다.
-              </div>
-            )}
-
-            <div style={{ marginTop: 14 }}>
-              {/* 수정 아이콘은 정보 영역의 오른쪽 위다. 헤더의 「취소하기」와 나란히 두지 않는다
-                  — 되돌릴 수 없는 동작과 일상적인 수정이 한 줄에 있으면 잘못 누른다. */}
-              {!cancelled && !infoEditing && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <EditIconButton label="의뢰서 정보 수정" onClick={() => setInfoEdit(true)} />
-                </div>
-              )}
-
-              {row.equipment_series && <Field label="장비 계열">{row.equipment_series}</Field>}
-
-              <Field label="업체명">
-                {infoEditing ? (
-                  <input
-                    value={title} maxLength={TITLE_MAX} placeholder="업체명을 입력하세요"
-                    onChange={e => setTitle(e.target.value)} style={editStyle}
-                  />
-                ) : (
-                  <span style={{ color: row.title?.trim() ? TEXT : MUTED }}>
-                    {row.title?.trim() || '(업체명 없음)'}
-                  </span>
-                )}
-              </Field>
-
-              <Field label="담당자">
-                {infoEditing ? (
-                  <select
-                    value={ownerId} style={editStyle}
-                    onChange={e => setOwnerId(e.target.value ? Number(e.target.value) : '')}
+          /* 2단 — 왼쪽 정보 카드(sticky) · 오른쪽 내용 기록(남는 폭 전부).
+             폭이 좁아지면 세로로 쌓이고 sticky 도 풀린다(SHELL_CSS). */
+          <div className="iqd-grid">
+            <div className="iqd-left">
+              <div style={cardStyle}>
+                {/* 머리 줄 — 종류 이름과 수정 아이콘 하나뿐이다.
+                    번호 취소는 여기 두지 않는다: 되돌릴 수 없는 동작이 카드를 열자마자 보이는 자리에
+                    있으면 잘못 누른다. 편집 모드 하단으로 내려, 고치려고 들어온 사람에게만 보인다
+                    (내용 기록 카드의 「이 내용 기록 삭제」와 같은 자리·같은 모양). */}
+                <div style={CARD_HEAD}>
+                  {/* 목록으로 돌아가는 화살표. 카드 밖에 따로 한 줄을 쓰던 「← 목록」을 여기로 들였다 —
+                      한 줄을 돌려받고, 1단으로 쌓이는 좁은 폭에서도 카드가 맨 위라 늘 보인다.
+                      테두리를 두지 않는다: 이 카드에 대한 동작이 아니라 화면을 떠나는 길이고,
+                      오른쪽 수정 아이콘(테두리 있음)과 역할이 달라 보여야 한다.
+                      marginLeft 음수는 버튼 안쪽 여백만큼 당겨 화살표를 카드 왼쪽 선에 맞춘다. */}
+                  <button
+                    type="button" onClick={() => router.push('/inquiries')}
+                    aria-label="의뢰서 목록으로" title="의뢰서 목록으로"
+                    onMouseEnter={e => { e.currentTarget.style.color = BLUE }}
+                    onMouseLeave={e => { e.currentTarget.style.color = MUTED }}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      padding: 6, marginLeft: -6, border: 'none', background: 'transparent',
+                      color: MUTED, cursor: 'pointer', flexShrink: 0,
+                      transition: 'color 0.15s ease',
+                    }}
                   >
-                    {/* 담당자 없는 의뢰서는 만들지 않는다 — 값이 들어간 뒤에는 빈 칸을 고를 수 없다. */}
-                    {ownerId === '' && <option value="">고르기</option>}
-                    {ownerOptions.map(e => (
-                      <option key={e.engineer_id} value={e.engineer_id}>{engineerLabel(e)}</option>
-                    ))}
-                  </select>
-                ) : (
-                  engineerLabel(row.engineers) || '-'
-                )}
-              </Field>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M19 12H5" />
+                      <path d="m12 19-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <span style={cardTitle}>{INQUIRY_TYPE_LABEL[row.inquiry_type as InquiryType] ?? row.inquiry_type}</span>
+                  {!cancelled && !infoEditing && (
+                    <span style={{ marginLeft: 'auto', display: 'flex', flexShrink: 0 }}>
+                      <EditIconButton label="의뢰서 정보 수정" onClick={() => setInfoEdit(true)} />
+                    </span>
+                  )}
+                </div>
 
-              <Field label="발행일">
-                {infoEditing ? (
-                  <>
-                    <input
-                      type="date" value={issuedDate} onChange={e => setIssuedDate(e.target.value)}
-                      style={{ ...editStyle, colorScheme: 'light' }}
-                    />
-                    {/* 80 스페어파츠만 번호에 발행일이 박혀 있다(001-K260929). 번호는 이미 바깥에
-                        나간 값이라 다시 만들지 않는다 — 날짜만 고치면 둘이 어긋나므로 미리 알린다. */}
-                    {row.inquiry_type === 'spare80' && (
-                      <span style={{ display: 'block', fontSize: 11, color: MUTED, lineHeight: 1.6, marginTop: 4 }}>
-                        번호의 날짜 부분은 바뀌지 않습니다.
+                {/* 번호 — 사람이 받아 적는 값이다. 취소된 건은 취소선을 긋는다.
+                    좁은 카드(320px)로 들어오면서 20 → 17 로 줄였다(목록 카드가 좁을 때 쓰는 크기와 같다).
+                    줄바꿈은 막는다 — 번호가 두 줄로 갈라지면 받아 적다 틀린다. 그래도 넘치면
+                    말줄임으로 자르고 title 로 전문을 남긴다(실제 번호 형식은 전부 이 폭에 들어온다). */}
+                <div style={{
+                  background: NEUTRAL_BG, borderRadius: 8, padding: '12px 14px', display: 'flex',
+                  alignItems: 'center', gap: 10,
+                }}>
+                  <span title={row.inquiry_no} style={{
+                    flex: 1, minWidth: 0, fontSize: 17, fontWeight: 800, letterSpacing: '-0.3px',
+                    color: cancelled ? MUTED : BLUE,
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    textDecoration: cancelled ? 'line-through' : 'none',
+                  }}>
+                    {row.inquiry_no}
+                  </span>
+                  <button type="button" onClick={copy}
+                    style={{ ...btnGhost(), padding: '5px 10px', fontSize: 12, flexShrink: 0 }}>
+                    {copied ? '복사했습니다' : '번호 복사'}
+                  </button>
+                </div>
+
+                {/* 작성 중인 건은 여기서 바로 끝낸다 — 편집 모드에 들어갈 필요가 없다.
+                    번호를 받아 서류를 만든 다음 할 일이 이것뿐이라 가장 눈에 띄는 자리에 둔다.
+                    완료·취소된 건에는 보이지 않는다(끝난 것을 다시 끝낼 수는 없다). */}
+                {!cancelled && row.status === 'drafting' && (
+                  <button
+                    type="button" onClick={() => setCompleteOpen(true)} disabled={busy}
+                    style={{ ...btnPrimary(busy), width: '100%', marginTop: 12 }}
+                  >
+                    작성 완료
+                  </button>
+                )}
+
+                {cancelled && (
+                  <div style={{
+                    marginTop: 12, fontSize: 12, lineHeight: 1.7, color: MUTED,
+                    background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px',
+                  }}>
+                    취소된 의뢰서입니다. 번호는 재사용되지 않으며 내용을 고칠 수 없습니다.
+                  </div>
+                )}
+
+                <div style={{ marginTop: 12 }}>
+                  {row.equipment_series && <Field label="장비 계열">{row.equipment_series}</Field>}
+
+                  <Field label="업체명">
+                    {infoEditing ? (
+                      <input
+                        value={title} maxLength={TITLE_MAX} placeholder="업체명을 입력하세요"
+                        onChange={e => setTitle(e.target.value)} style={editStyle}
+                      />
+                    ) : (
+                      <span style={{ color: row.title?.trim() ? TEXT : MUTED }}>
+                        {row.title?.trim() || '(업체명 없음)'}
                       </span>
                     )}
-                  </>
-                ) : dateText(row.issued_date)}
-              </Field>
+                  </Field>
 
-              {cancelled && row.cancelled_at && <Field label="취소 시각">{stampText(row.cancelled_at)}</Field>}
+                  <Field label="담당자">
+                    {infoEditing ? (
+                      <select
+                        value={ownerId} style={editStyle}
+                        onChange={e => setOwnerId(e.target.value ? Number(e.target.value) : '')}
+                      >
+                        {/* 담당자 없는 의뢰서는 만들지 않는다 — 값이 들어간 뒤에는 빈 칸을 고를 수 없다. */}
+                        {ownerId === '' && <option value="">고르기</option>}
+                        {ownerOptions.map(e => (
+                          <option key={e.engineer_id} value={e.engineer_id}>{engineerLabel(e)}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      engineerLabel(row.engineers) || '-'
+                    )}
+                  </Field>
 
-              <Field label="상태">
-                {infoEditing ? (
-                  <SegmentedControl
-                    options={EDITABLE_STATUSES.map(v => ({ label: inquiryStatusLabel(v), value: v }))}
-                    value={status}
-                    onChange={setStatus}
-                  />
-                ) : (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: SUB }}>
-                    <span style={{
-                      width: 9, height: 9, borderRadius: '50%',
-                      background: INQUIRY_STATUS_DOT[row.status] ?? '#d1d5db',
-                    }} />
-                    {inquiryStatusLabel(row.status)}
-                  </span>
-                )}
-              </Field>
+                  <Field label="발행일">
+                    {infoEditing ? (
+                      <>
+                        <input
+                          type="date" value={issuedDate} onChange={e => setIssuedDate(e.target.value)}
+                          style={{ ...editStyle, colorScheme: 'light' }}
+                        />
+                        {/* 80 스페어파츠만 번호에 발행일이 박혀 있다(001-K260929). 번호는 이미 바깥에
+                            나간 값이라 다시 만들지 않는다 — 날짜만 고치면 둘이 어긋나므로 미리 알린다. */}
+                        {row.inquiry_type === 'spare80' && (
+                          <span style={{ display: 'block', fontSize: 11, color: MUTED, lineHeight: 1.6, marginTop: 4 }}>
+                            번호의 날짜 부분은 바뀌지 않습니다.
+                          </span>
+                        )}
+                      </>
+                    ) : dateText(row.issued_date)}
+                  </Field>
 
-              {/* 저장 버튼은 하나다 — 업체명·담당자·발행일·상태를 한 번에 보낸다. */}
-              {infoEditing && (
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: 12 }}>
-                  <button type="button" onClick={cancelInfoEdit} disabled={busy} style={btnGhost(busy)}>
-                    취소
-                  </button>
-                  <button
-                    type="button" onClick={() => save(edited)} disabled={busy || !dirty}
-                    style={btnPrimary(busy || !dirty)}
-                  >
-                    {busy ? '저장 중...' : '저장'}
-                  </button>
+                  {cancelled && row.cancelled_at && <Field label="취소 시각">{stampText(row.cancelled_at)}</Field>}
+
+                  <Field label="상태">
+                    {infoEditing ? (
+                      <SegmentedControl
+                        options={EDITABLE_STATUSES.map(v => ({ label: inquiryStatusLabel(v), value: v }))}
+                        value={status}
+                        onChange={setStatus}
+                        equal
+                      />
+                    ) : (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: SUB }}>
+                        <span style={{
+                          width: 9, height: 9, borderRadius: '50%',
+                          background: INQUIRY_STATUS_DOT[row.status] ?? '#d1d5db',
+                        }} />
+                        {inquiryStatusLabel(row.status)}
+                      </span>
+                    )}
+                  </Field>
+
+                  {/* 하단 — 왼쪽은 번호 취소, 오른쪽은 편집 끝내기. 저장은 하나다
+                      (업체명·담당자·발행일·상태를 한 번에 보낸다).
+                      이름을 갈라 둔다: 편집 중단은 「취소」, 번호를 무르는 것은 「이 번호 취소」다.
+                      flexWrap 을 둬서 카드가 더 좁아져도 오른쪽 묶음이 아래로 내려갈 뿐 깨지지 않는다. */}
+                  {infoEditing && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', flexWrap: 'wrap',
+                      gap: 8, rowGap: 8, paddingTop: 12,
+                    }}>
+                      {/* 표시 조건은 종전 「취소하기」와 같다 — 담당자 본인 또는 superadmin,
+                          그리고 아직 취소되지 않은 건(canCancel 이 둘 다 본다). */}
+                      {canCancel && (
+                        <button
+                          type="button" onClick={cancelInquiry} disabled={busy}
+                          style={{
+                            border: 'none', background: 'transparent', padding: 0,
+                            color: '#be123c', fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
+                            cursor: busy ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          이 번호 취소
+                        </button>
+                      )}
+                      <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexShrink: 0 }}>
+                        <button type="button" onClick={cancelInfoEdit} disabled={busy} style={btnGhost(busy)}>
+                          취소
+                        </button>
+                        <button
+                          type="button" onClick={() => save(edited)} disabled={busy || !dirty}
+                          style={btnPrimary(busy || !dirty)}
+                        >
+                          {busy ? '저장 중...' : '저장'}
+                        </button>
+                      </span>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* 교신 기록 — 본사와 오간 문답. 취소된 의뢰서에서는 읽기 전용이다. */}
-        {state === 'ready' && row && (
-          <div style={{ marginTop: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ ...cardTitle, fontSize: 17 }}>내용 기록</span>
-              {messages.length > 0 && (
-                <span style={{ fontSize: 12, fontWeight: 600, color: MUTED }}>{messages.length}건</span>
-              )}
-              {!cancelled && (
-                <button
-                  type="button"
-                  onClick={() => setMsgOpen(true)}
-                  style={{ ...btnPrimary(), marginLeft: 'auto' }}
-                >
-                  내용 추가
-                </button>
-              )}
-            </div>
-
-            {messages.length === 0 ? (
-              <div style={{ ...cardStyle, textAlign: 'center', padding: 40, color: MUTED, fontSize: 13, lineHeight: 1.7 }}>
-                아직 내용 기록이 없습니다<br />
-                <span style={{ fontSize: 12 }}>본사와 주고받은 메일과 파일을 여기에 남깁니다.</span>
               </div>
-            ) : (
-              messages.map(m => (
-                <MessageCard
-                  key={m.id}
-                  msg={m}
-                  files={files.filter(f => f.message_id === m.id)}
-                  canEdit={amAdmin || (myId != null && m.created_by === myId)}
-                  readOnly={cancelled}
-                  edit={editId === m.id ? {
-                    date: draftDate, setDate: setDraftDate,
-                    body: draftBody, setBody: setDraftBody,
-                    files: draftFiles, setFiles: setDraftFiles,
-                    dirty: msgDirty, busy: msgBusy,
-                    onSave: saveMessage,
-                    onCancel: cancelEditMessage,
-                    onDelete: () => deleteMessage(m),
-                    onDeleteFile: deleteFile,
-                  } : null}
-                  onStartEdit={startEditMessage}
-                  onOpenFile={openFile}
-                />
-              ))
-            )}
+            </div>
+
+            {/* 내용 기록 — 본사와 오간 문답. 취소된 의뢰서에서는 읽기 전용이다.
+                이 가지는 state === 'ready' 이고 row 가 있을 때만 그려진다(위 삼항) —
+                예전에 따로 두었던 같은 조건의 가드를 지웠다. */}
+            <div className="iqd-right">
+              {/* 오른쪽도 카드 하나다. 제목 줄이 카드 밖에 떠 있으면 두 판의 시작점이 어긋나
+                  왼쪽 카드만 한 단 올라가 보인다. 머리 줄은 왼쪽과 같은 CARD_HEAD 를 쓴다. */}
+              <div style={cardStyle}>
+                <div style={CARD_HEAD}>
+                  <span style={cardTitle}>내용 기록</span>
+                  {messages.length > 0 && (
+                    <span style={countBadge}>{messages.length}건</span>
+                  )}
+                  {!cancelled && (
+                    <button
+                      type="button"
+                      onClick={() => setMsgOpen(true)}
+                      style={{ ...btnPrimary(), marginLeft: 'auto' }}
+                    >
+                      내용 추가
+                    </button>
+                  )}
+                </div>
+
+                {messages.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: 40, color: MUTED, fontSize: 13, lineHeight: 1.7 }}>
+                    아직 내용 기록이 없습니다<br />
+                    <span style={{ fontSize: 12 }}>본사와 주고받은 메일과 파일을 여기에 남깁니다.</span>
+                  </div>
+                ) : (
+                  messages.map((m, i) => (
+                    <MessageCard
+                      key={m.id}
+                      first={i === 0}
+                      msg={m}
+                      files={files.filter(f => f.message_id === m.id)}
+                      canEdit={amAdmin || (myId != null && m.created_by === myId)}
+                      readOnly={cancelled}
+                      edit={editId === m.id ? {
+                        date: draftDate, setDate: setDraftDate,
+                        body: draftBody, setBody: setDraftBody,
+                        files: draftFiles, setFiles: setDraftFiles,
+                        dirty: msgDirty, busy: msgBusy,
+                        onSave: saveMessage,
+                        onCancel: cancelEditMessage,
+                        onDelete: () => deleteMessage(m),
+                        onDeleteFile: deleteFile,
+                      } : null}
+                      onStartEdit={startEditMessage}
+                      onOpenFile={openFile}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -1153,6 +1285,17 @@ export default function InquiryDetailPage() {
           inquiryId={row.id}
           onClose={() => setMsgOpen(false)}
           onSaved={loadThread}
+        />
+      )}
+
+      {completeOpen && row && (
+        <CompleteModal
+          inquiryId={row.id}
+          inquiryNo={row.inquiry_no}
+          title={row.title}
+          onClose={() => setCompleteOpen(false)}
+          // 상태(완료)와 새 내용 기록을 둘 다 다시 읽는다.
+          onDone={() => { load(); loadThread() }}
         />
       )}
     </main>

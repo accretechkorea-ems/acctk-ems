@@ -10,7 +10,7 @@ import { useRef, useState } from 'react'
 import { BORDER, CARD_BG, TEXT, MUTED, NEUTRAL_BG, BLUE, FAINT } from '@/components/common/ui'
 import { errorInfo } from '@/lib/errorInfo'
 
-/** 교신 하나에 올릴 수 있는 파일 수. 서버(/api/inquiry-attachment)와 같은 값이어야 한다. */
+/** 내용 기록 하나에 올릴 수 있는 파일 수. 서버(/api/inquiry-attachment)와 같은 값이어야 한다. */
 const MAX_FILES = 10
 /** 파일 하나의 상한. 서버와 같은 20MB. */
 const MAX_BYTES = 20 * 1024 * 1024
@@ -84,14 +84,18 @@ export async function uploadFiles(messageId: number, files: File[]): Promise<Upl
 }
 
 /**
- * 파일 고르기 — 「교신 추가」와 「파일 추가」가 함께 쓴다.
+ * 파일 고르기 — 세 자리가 함께 쓴다.
+ *   · 「내용 추가」 모달(상세) — 내용 기록을 만든 뒤 그 아래에 올린다.
+ *   · 내용 기록 카드의 제자리 편집(상세) — 이미 있는 기록에 더 올린다. compact 로 쓴다.
+ *   · 「기존 번호 등록」 모달(목록) — 파일 한 칸.
+ * (「파일 추가」 전용 모달은 없앴다 — 카드 편집이 그 일을 대신한다.)
  *
  * 고르는 길이 셋이다. 상자를 누르거나, 안쪽 「고르기」를 누르거나, 끌어다 놓거나.
  * 상자 전체가 눌리지 않으면 점선 안을 눌러도 아무 일이 없어 「파일 선택이 없다」고 느낀다 —
  * 실제로 그런 제보가 있었다. 그래서 상자를 button 으로 두고 키보드로도 닿게 했다.
  *
  * 고른 파일 목록은 부모가 들고 있다(files·onChange). 이 컴포넌트는 고르는 일만 한다 —
- * 두 모달이 각자 저장 흐름이 달라(교신을 먼저 만드는가 아닌가) 목록의 주인은 부모여야 한다.
+ * 부르는 자리마다 저장 흐름이 달라(내용 기록을 먼저 만드는가 아닌가) 목록의 주인은 부모여야 한다.
  *
  * 크기·개수는 여기서 먼저 거른다. 서버도 같은 값으로 다시 막지만, 20MB 파일을 base64 로
  * 부풀려 보낸 뒤 거절당하는 것보다 고를 때 막는 편이 낫다.
