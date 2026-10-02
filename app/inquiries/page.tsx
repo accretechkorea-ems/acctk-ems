@@ -19,7 +19,7 @@
 // 목록은 브라우저 supabase 클라이언트로 직접 읽는다. RLS(inquiries_select)가
 // has_team_perm('customers') 로 걸러 주므로 화면이 따로 거르지 않는다.
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { daysBetween, todayKST } from '@/lib/date'
 import { createClient } from '@/lib/supabase/client'
@@ -30,17 +30,23 @@ import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, NEUTRAL_BG, BLUE, ROW_HOVER_BG,
-  cardStyle, cardHeader, cardTitle, countBadge, rowStyle,
+  cardStyle, cardHeader, cardTitle, countBadge, rowStyle, inputStyle, FAINT,
   btnPrimary, btnGhost,
 } from '@/components/common/ui'
 import {
-  INQUIRY_TYPE_ITEMS, INQUIRY_TYPE_LABEL, inquiryTypeOf, inquiryStatusLabel,
-  INQUIRY_STATUS_DOT, REQ80_SERIES, previewInquiryNo, buildInquiryNo, BULK_IMPORT_ENABLED,
+  INQUIRY_TYPE_ITEMS, INQUIRY_TYPE_LABEL, inquiryStatusLabel,
+  INQUIRY_STATUS_DOT, INQUIRY_STATUSES, REQ80_SERIES, previewInquiryNo, buildInquiryNo, BULK_IMPORT_ENABLED,
   type InquiryStatus, type InquiryType,
 } from '@/lib/inquiries'
 import { engineerLabel, isCurrentlyEmployed } from '@/lib/engineers'
+import {
+  PAGE_SIZE, YEAR_ALL, clampPage, isFiltered, pageRange, pageWindow, parseListQuery,
+  searchWords, splitHighlight, toListQueryString, totalPages, withFilter, yearOptions,
+  type ListQuery,
+} from '@/lib/inquirySearch'
 import FilePicker, { failText, uploadFiles, type UploadFail } from '@/components/inquiry/files'
 import CompleteModal from '@/components/inquiry/CompleteModal'
+import DeskGuideModal from '@/components/inquiry/DeskGuideModal'
 // TEMP-BULK-IMPORT ↓ (일괄 등록이 끝나면 이 줄과 아래 두 군데를 지운다)
 import BulkImportModal from '@/components/inquiry/bulk/BulkImportModal'
 // TEMP-BULK-IMPORT ↑
@@ -77,6 +83,15 @@ const SHELL_CSS = `
   .iq-cards.one { grid-template-columns: minmax(0, 1fr); }
   .iq-typebtn { transition: background ${MOTION_MS}ms ${MOTION_EASE}; }
   .iq-typebtn:hover { background: ${NEUTRAL_BG}; }
+  /* 접수 창구 안내 — 종류 필터가 아니라 모달을 여는 항목이다. 아래 「전체」와 가는 선으로 가른다.
+     라벨이 길어 한 줄에 안 들어가면 두 줄로 넘긴다(말줄임하면 무슨 항목인지 알 수 없다). */
+  .iq-desk { white-space: normal; text-align: left; line-height: 1.4; }
+  .iq-deskwrap { padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px solid ${BORDER}; }
+  @container (max-width: 900px) {
+    /* 가로 탭이 되면 선을 오른쪽으로 옮기고, 맨 앞에서 밀리지 않게 한다. */
+    .iq-deskwrap { padding: 0 6px 0 0; margin: 0 6px 0 0; border-bottom: none; border-right: 1px solid ${BORDER}; flex-shrink: 0; }
+    .iq-desk { white-space: nowrap; }
+  }
   @container (max-width: 900px) {
     .iq-body { flex-direction: column; }
     .iq-rail { width: 100%; flex-direction: row; overflow-x: auto; gap: 4px; align-items: center; }
@@ -88,7 +103,14 @@ const SHELL_CSS = `
 `
 
 /** 목록 한 줄. engineers 는 제약 이름을 명시해 가져온다(아래 SELECT 주석 참고). */
-type InquiryRow = {
+/**
+ * 목록 한 줄 — DB 함수 search_inquiries 가 돌려주는 모양 그대로다
+ * (inquiries_search_function.sql). 담당자 이름은 조인해서 평평하게 온다.
+ *
+ * 임베드(engineers!…)를 쓰지 않는다. 한 페이지만 받아 오는 일이라 함수 쪽에서 조인하는 편이
+ * 단순하고, 검색에 쓰는 발췌·맞은 파일명도 같은 함수가 함께 만들어 준다.
+ */
+type ListRow = {
   id: string
   inquiry_no: string
   title: string | null
@@ -96,20 +118,33 @@ type InquiryRow = {
   inquiry_type: string
   seq: number
   issued_date: string
-  engineers: { name: string | null; position: string | null } | null
+  created_by: number | null
+  owner_name: string | null
+  owner_position: string | null
+  /** 검색어가 내용 기록 본문에서 걸렸을 때의 발췌. 아니면 null. */
+  snippet: string | null
+  /** 검색어가 걸린 첨부 파일명(최대 3개). 검색어가 없으면 빈 배열. */
+  match_files: string[]
 }
 
-/**
- * inquiries 는 engineers 를 여러 번 참조하게 될 표다(지금은 created_by 하나지만
- * 담당자·완료자가 붙을 예정). 지금부터 제약 이름을 박아 두면 칸이 늘어도 조회가 깨지지 않는다.
- * 이름을 생략하면 PGRST201(300 Multiple Choices)로 조회 전체가 실패한다 —
- * quotes·suggestions 에서 이미 겪은 일이다(lib/partSearch.ts:10 참고).
- */
-const SELECT_COLUMNS =
-  'id, inquiry_no, title, status, inquiry_type, seq, issued_date,'
-  + ' engineers!inquiries_created_by_fkey(name, position)'
-
 const dateText = (ymd: string | null): string => (ymd ? ymd.replace(/-/g, '.') : '')
+
+/**
+ * 검색어가 맞은 조각을 굵게. 색을 새로 만들지 않고 굵기만 바꾼다(디자인 규칙).
+ * 자르는 규칙은 lib/inquirySearch.ts 의 splitHighlight 하나뿐이다 — 정규식 특수문자도 안전하다.
+ */
+function Hi({ text, words }: { text: string; words: string[] }) {
+  if (words.length === 0) return <>{text}</>
+  return (
+    <>
+      {splitHighlight(text, words).map((p, i) => (
+        p.hit
+          ? <b key={i} style={{ fontWeight: 800, color: TEXT }}>{p.text}</b>
+          : <span key={i}>{p.text}</span>
+      ))}
+    </>
+  )
+}
 
 /**
  * 작성 중인 건이 며칠째인지. 발행 당일이 1일째다.
@@ -668,18 +703,37 @@ function InquiriesPageInner() {
   const { loading: guardLoading, authorized } = usePageGuard()
   const router = useRouter()
   const params = useSearchParams()
+  const supabase = useMemo(() => createClient(), [])
 
-  // 고른 종류. 주소가 원본이라 새로고침·뒤로 가기에도 남는다. 모르는 값이면 「전체」.
-  const type: InquiryType | null = inquiryTypeOf(params.get('type'))
+  // ── 주소가 정본 ────────────────────────────────────────────────
+  // 화면이 들고 있는 조건은 전부 주소를 읽어 만든 것이다. 무엇을 바꾸든 주소를 다시 쓰는 것으로
+  // 끝난다 — 새로고침·뒤로 가기·링크 공유가 모두 같은 화면을 연다(lib/inquirySearch.ts).
+  const thisYear = Number(todayKST().slice(0, 4))
+  const query = parseListQuery(params, thisYear)
+  const { type, year, status, owner, q, page } = query
 
-  const [rows, setRows] = useState<InquiryRow[] | null>(null)
-  const [loadError, setLoadError] = useState(false)
+  const [rows, setRows] = useState<ListRow[] | null>(null)
+  const [typeCounts, setTypeCounts] = useState<Record<string, number> | null>(null)
+  const [loadError, setLoadError] = useState('')
+  /** 조회 중 — 이전 행을 지우지 않고 이것만 표시한다(깜빡임 방지). */
+  const [busy, setBusy] = useState(false)
+  /** 가장 오래된 발행 연도. 연도 선택지를 만든다. 한 번만 읽는다. */
+  const [oldestYear, setOldestYear] = useState<number | null>(null)
+  /** 검색 입력은 주소보다 앞서 움직인다(입력 중 300ms 는 주소를 안 건드린다). */
+  const [qInput, setQInput] = useState(q)
+  const composing = useRef(false)
+  /** 낡은 응답이 최신 결과를 덮지 않게 요청마다 번호를 매긴다. */
+  const reqNo = useRef(0)
+
   // 모달은 카드에서만 열린다. 값이 있으면 그 종류로 열려 있다는 뜻이다
   // (따로 open 플래그를 두지 않는다 — 두 값이 어긋날 자리를 만들지 않으려고).
   const [createType, setCreateType] = useState<InquiryType | null>(null)
   const [registerType, setRegisterType] = useState<InquiryType | null>(null)
   /** 「작성 완료」 모달을 연 행. 상세로 들어가지 않고 목록에서 바로 끝낸다. */
-  const [completeFor, setCompleteFor] = useState<InquiryRow | null>(null)
+  const [completeFor, setCompleteFor] = useState<ListRow | null>(null)
+  /** 접수 창구 안내 모달. 닫을 때 포커스를 레일 항목으로 되돌린다. */
+  const [deskOpen, setDeskOpen] = useState(false)
+  const deskBtnRef = useRef<HTMLButtonElement>(null)
   // TEMP-BULK-IMPORT ↓
   const [bulkOpen, setBulkOpen] = useState(false)
   // TEMP-BULK-IMPORT ↑
@@ -687,35 +741,92 @@ function InquiriesPageInner() {
   const [peeking, setPeeking] = useState(false)
   const [engineers, setEngineers] = useState<PickEngineer[]>([])
   const [myId, setMyId] = useState<number | null>(null)
-  // 발급 뒤 목록을 다시 읽는 방아쇠. 값이 바뀌면 아래 효과가 다시 돈다.
+  // 발급 뒤 목록을 다시 읽는 방아쇠. 값이 바뀌면 아래 효과가 다시 돈다(지금 조건은 그대로).
   const [reloadKey, setReloadKey] = useState(0)
 
+  /** 주소를 다시 쓴다. replace 라 필터를 바꿔도 뒤로 가기가 쌓이지 않는다. */
+  const push = (next: ListQuery) => {
+    router.replace(`/inquiries${toListQueryString(next, thisYear)}`, { scroll: false })
+  }
+  /** 조건 바꾸기 — 무엇을 바꾸든 페이지는 1로 돌아간다. */
+  const setFilter = (part: Partial<ListQuery>) => push(withFilter(query, part))
+
+  // 주소의 검색어가 밖에서 바뀌면(초기화·뒤로 가기) 입력칸도 맞춘다.
+  useEffect(() => { setQInput(q) }, [q])
+
+  // 검색어 — 입력이 멎고 300ms 뒤에 주소로 옮긴다. IME 조합 중에는 보내지 않는다
+  // (「ㄱ」·「가」 처럼 완성 전 글자로 조회하면 결과가 튄다).
+  useEffect(() => {
+    if (qInput.trim() === q) return
+    const t = setTimeout(() => { if (!composing.current) setFilter({ q: qInput.trim() }) }, 300)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qInput, q])
+
+  // 가장 오래된 발행 연도 — 연도 선택지를 만들려고 한 번만 읽는다.
   useEffect(() => {
     if (!authorized) return
     let cancelled = false
-    const load = async () => {
-      setRows(null)
-      setLoadError(false)
-      const supabase = createClient()
-      // 정렬은 DB 에서 한다 — 발행일 내림차순, 같은 날이면 순번 내림차순(그날 나중에 나간 것이 위).
-      const { data, error } = await supabase
-        .from('inquiries')
-        .select(SELECT_COLUMNS)
-        .order('issued_date', { ascending: false })
-        .order('seq', { ascending: false })
+    const run = async () => {
+      const { data } = await supabase
+        .from('inquiries').select('issued_date').order('issued_date', { ascending: true }).limit(1)
       if (cancelled) return
-      if (error) {
-        // 빈 목록과 조회 실패는 구분해서 보여준다 — 둘 다 빈 화면이면 장애를 알아챌 수 없다.
-        console.error('[inquiries] 목록 조회 실패', error)
-        setLoadError(true)
-        setRows([])
+      const d = (data ?? [])[0] as { issued_date: string } | undefined
+      if (d) setOldestYear(Number(d.issued_date.slice(0, 4)))
+    }
+    run()
+    return () => { cancelled = true }
+  }, [authorized, supabase])
+
+  // ── 목록·건수 조회 ─────────────────────────────────────────────
+  // 한 페이지 분량만 받는다. 종류별 건수는 종류 조건을 뺀 같은 기준으로 따로 받는다
+  // (레일에 6종을 모두 보여 줘야 하므로 — inquiries_search_function.sql 참고).
+  useEffect(() => {
+    if (!authorized) return
+    const mine = ++reqNo.current
+    const run = async () => {
+      setBusy(true)
+      const yearArg = year === YEAR_ALL ? null : year
+      const [list, counts] = await Promise.all([
+        supabase.rpc('search_inquiries', {
+          p_q: q || null, p_type: type, p_year: yearArg, p_status: status, p_owner: owner,
+          p_limit: PAGE_SIZE, p_offset: (page - 1) * PAGE_SIZE,
+        }),
+        supabase.rpc('count_inquiries_by_type', {
+          p_q: q || null, p_year: yearArg, p_status: status, p_owner: owner,
+        }),
+      ])
+      // 늦게 온 낡은 응답은 버린다 — 최신 결과를 덮으면 화면과 주소가 어긋난다.
+      if (mine !== reqNo.current) return
+      setBusy(false)
+      if (list.error || counts.error) {
+        console.error('[inquiries] 목록 조회 실패', errorInfo(list.error ?? counts.error))
+        setLoadError((list.error ?? counts.error)?.message ?? '목록을 불러오지 못했습니다.')
         return
       }
-      setRows((data ?? []) as unknown as InquiryRow[])
+      setLoadError('')
+      setRows((list.data ?? []) as ListRow[])
+      const map: Record<string, number> = {}
+      for (const c of (counts.data ?? []) as { inquiry_type: string; n: number }[]) {
+        map[c.inquiry_type] = Number(c.n)
+      }
+      setTypeCounts(map)
     }
-    load()
-    return () => { cancelled = true }
-  }, [authorized, reloadKey])
+    run()
+  }, [authorized, supabase, q, type, year, status, owner, page, reloadKey])
+
+  // 건수가 확정된 뒤 범위를 넘은 페이지면 조용히 마지막 페이지로 옮긴다.
+  const total = typeCounts === null
+    ? null
+    : type
+      ? (typeCounts[type] ?? 0)
+      : Object.values(typeCounts).reduce((a, b) => a + b, 0)
+  useEffect(() => {
+    if (total === null) return
+    const fixed = clampPage(page, total)
+    if (fixed !== page) push({ ...query, page: fixed })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total, page])
 
   // 다음 사용 번호 — 화면이 열릴 때, 발급·등록·취소 직후(reloadKey), 창이 다시 포커스를 받을 때.
   // 예약이 아니라서 남이 먼저 점유하면 달라진다. 보고 있는 동안 낡지 않게 다시 읽는다.
@@ -779,15 +890,26 @@ function InquiriesPageInner() {
   const startRegister = (t: InquiryType) => setRegisterType(t)
 
   /** 종류를 고른다. 「전체」는 ?type= 을 아예 뺀다. */
-  const go = (next: InquiryType | null) => {
-    router.replace(next ? `/inquiries?type=${next}` : '/inquiries')
-  }
+  // 종류만 바꾼다 — 연도·상태·담당자·검색어는 그대로 두고 페이지만 1로 돌린다.
+  const go = (next: InquiryType | null) => setFilter({ type: next })
 
-  // 거르기는 화면에서 한다 — 종류를 옮길 때마다 다시 읽지 않는다(건수가 많지 않다).
-  const all = rows ?? []
-  const shown = type ? all.filter(r => r.inquiry_type === type) : all
-  const countOf = (t: InquiryType | null) =>
-    rows === null ? null : (t ? all.filter(r => r.inquiry_type === t).length : all.length)
+  const list = rows ?? []
+  // 레일 건수 — 지금 조건(연도·상태·담당자·검색)에서 종류별로 몇 건인가.
+  // 종류 조건은 빼고 센다(count_inquiries_by_type). 값이 오기 전에는 빈칸이다.
+  const countOf = (t: InquiryType | null): number | null => {
+    if (typeCounts === null) return null
+    return t ? (typeCounts[t] ?? 0) : Object.values(typeCounts).reduce((a, b) => a + b, 0)
+  }
+  const words = searchWords(q)
+  const filtered = isFiltered(query, thisYear)
+  const years = yearOptions(oldestYear, thisYear)
+  // 담당자 선택지 — 재직자 + 지금 고른 사람(퇴사했어도 선택이 빈칸이 되지 않게).
+  const ownerOptions = engineers.filter(
+    e => isCurrentlyEmployed(e.resigned_date, todayKST()) || e.engineer_id === owner,
+  )
+  const range = total === null ? null : pageRange(page, total)
+  /** 상세에서 「목록으로」가 돌아올 주소 — 지금 보던 조건 그대로. */
+  const backTo = `/inquiries${toListQueryString(query, thisYear)}`
 
   // 「오늘」을 렌더마다 새로 만들지 않는다 — 행마다 부르면 같은 목록 안에서 값이 갈릴 수 있다.
   const today = todayKST()
@@ -804,6 +926,31 @@ function InquiriesPageInner() {
         <div className="iq-body">
           {/* 종류 목록 — 「전체」를 맨 위에 두고 그 아래 여섯 종류(lib/inquiries.ts 순서 그대로) */}
           <nav className="iq-rail" aria-label="의뢰서 종류">
+            {/* 종류 필터가 아니다 — 누르면 안내 모달만 열린다. 주소·선택 표시는 그대로 둔다.
+                그래서 aria-current 를 주지 않고, 모달이 열려 있어도 선택 스타일을 입히지 않는다. */}
+            <div className="iq-deskwrap">
+              <button
+                ref={deskBtnRef}
+                type="button"
+                className="iq-typebtn iq-desk"
+                onClick={() => setDeskOpen(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+                  padding: '8px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                  background: 'transparent', color: SUB,
+                  fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 16v-4" />
+                  <path d="M12 8h.01" />
+                </svg>
+                <span>의뢰서 접수 창구 안내</span>
+              </button>
+            </div>
+
             {[{ type: null as InquiryType | null, label: '전체' }, ...INQUIRY_TYPE_ITEMS].map(item => {
               const on = item.type === type
               const n = countOf(item.type)
@@ -858,13 +1005,85 @@ function InquiriesPageInner() {
             <div style={cardStyle}>
               <div style={cardHeader}>
                 <span style={{ ...cardTitle, fontSize: 20 }}>{title}</span>
-                {rows !== null && <span style={countBadge}>{shown.length}건</span>}
+                {total !== null && (
+                  <span style={countBadge}>
+                    {q ? `‘${q}’ 검색 결과 ${total}건` : `${total}건`}
+                  </span>
+                )}
+                {/* 조회 중에는 이전 행을 그대로 두고 이것만 띄운다 — 표가 비었다 차면 눈이 피로하다. */}
+                {busy && <span style={{ fontSize: 12, color: MUTED }}>불러오는 중...</span>}
+              </div>
+
+              {/* ── 필터 바 ── 리드 화면의 필터 카드와 같은 규칙(inputStyle, 한 줄 flex-wrap). */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                <span style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
+                  <input
+                    value={qInput}
+                    onChange={e => setQInput(e.target.value)}
+                    onCompositionStart={() => { composing.current = true }}
+                    onCompositionEnd={e => {
+                      composing.current = false
+                      setQInput((e.target as HTMLInputElement).value)
+                    }}
+                    onKeyDown={e => { if (e.key === 'Enter') setFilter({ q: qInput.trim() }) }}
+                    placeholder="번호, 업체명, 내용, 파일명 검색"
+                    style={{ ...inputStyle, width: '100%', paddingRight: qInput ? 30 : undefined }}
+                  />
+                  {qInput && (
+                    <button
+                      type="button" aria-label="검색어 지우기"
+                      onClick={() => { setQInput(''); setFilter({ q: '' }) }}
+                      style={{
+                        position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                        border: 'none', background: 'transparent', color: MUTED, cursor: 'pointer',
+                        fontSize: 12, padding: 0, lineHeight: 1, fontFamily: 'inherit',
+                      }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </span>
+
+                <select
+                  value={String(year)} aria-label="발행 연도"
+                  onChange={e => setFilter({ year: e.target.value === YEAR_ALL ? YEAR_ALL : Number(e.target.value) })}
+                  style={inputStyle}
+                >
+                  <option value={YEAR_ALL}>연도 전체</option>
+                  {years.map(y => <option key={y} value={String(y)}>{y}년</option>)}
+                </select>
+
+                <select
+                  value={status ?? ''} aria-label="상태"
+                  onChange={e => setFilter({ status: (e.target.value || null) as ListQuery['status'] })}
+                  style={inputStyle}
+                >
+                  <option value="">상태 전체</option>
+                  {INQUIRY_STATUSES.map(v => <option key={v} value={v}>{inquiryStatusLabel(v)}</option>)}
+                </select>
+
+                <select
+                  value={owner === null ? '' : String(owner)} aria-label="담당자"
+                  onChange={e => setFilter({ owner: e.target.value ? Number(e.target.value) : null })}
+                  style={inputStyle}
+                >
+                  <option value="">담당자 전체</option>
+                  {ownerOptions.map(e => (
+                    <option key={e.engineer_id} value={String(e.engineer_id)}>{engineerLabel(e)}</option>
+                  ))}
+                </select>
+
+                {/* 기본값에서 벗어난 것이 있을 때만 보인다 — 늘 떠 있으면 누를 이유를 알 수 없다. */}
+                {filtered && (
+                  <button type="button" onClick={() => router.replace('/inquiries', { scroll: false })}
+                    style={btnGhost()}>초기화</button>
+                )}
               </div>
 
               {/* 표 머리 — 카드 끝까지 늘이고 글자만 행과 맞춘다 */}
               <div style={{
                 display: 'flex', alignItems: 'center', gap: COL.gap,
-                margin: `-6px -16px 0`, padding: `0 ${HEAD_PAD}px 8px`,
+                margin: `0 -16px`, padding: `0 ${HEAD_PAD}px 8px`,
                 borderBottom: `1px solid ${BORDER}`,
                 fontSize: 11, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap',
               }}>
@@ -875,28 +1094,42 @@ function InquiriesPageInner() {
                 <span style={{ width: COL.date, flexShrink: 0 }}>발행일</span>
               </div>
 
-              {rows === null ? (
-                <div style={{ textAlign: 'center', padding: 40, color: MUTED, fontSize: 13 }}>불러오는 중...</div>
-              ) : loadError ? (
-                <div style={{ textAlign: 'center', padding: 40, color: '#ef4444', fontSize: 13, fontWeight: 700 }}>
-                  목록을 불러오지 못했습니다
+              {loadError ? (
+                <div style={{ textAlign: 'center', padding: 40, color: '#ef4444', fontSize: 13, fontWeight: 700, lineHeight: 1.7 }}>
+                  목록을 불러오지 못했습니다<br />
+                  <span style={{ fontSize: 12, fontWeight: 500 }}>{loadError}</span>
                 </div>
-              ) : shown.length === 0 ? (
+              ) : rows === null ? (
+                <div style={{ textAlign: 'center', padding: 40, color: MUTED, fontSize: 13 }}>불러오는 중...</div>
+              ) : list.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: 40, color: MUTED, fontSize: 13, lineHeight: 1.7 }}>
-                  {type ? `${title} 의뢰서가 없습니다` : '등록된 의뢰서가 없습니다'}
+                  {q ? '검색 결과가 없습니다' : type ? `${title} 의뢰서가 없습니다` : '등록된 의뢰서가 없습니다'}
+                  {filtered && (
+                    <><br />
+                      <button type="button" onClick={() => router.replace('/inquiries', { scroll: false })}
+                        style={{
+                          border: 'none', background: 'transparent', padding: 0, marginTop: 6,
+                          color: BLUE, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                        }}>
+                        필터 초기화
+                      </button>
+                    </>
+                  )}
                 </div>
               ) : (
-                shown.map((r, i) => {
+                list.map((r, i) => {
                   const isCancelled = r.status === 'cancelled'
                   const days = r.status === 'drafting' ? draftingDays(r.issued_date, today) : 0
                   // 흐리게 하는 두 경우 — 취소된 번호(버려진 것)와 오래 붙잡고 있는 작성 중 건.
                   // 목록에서 빼지는 않는다. 번호가 나간 사실 자체는 남아야 한다.
                   const dim = isCancelled || days >= STALE_DAYS
+                  const hasHint = Boolean(r.snippet) || r.match_files.length > 0
                   return (
                     <button
                       key={r.id}
                       type="button"
-                      onClick={() => router.push(`/inquiries/${r.id}`)}
+                      // 지금 보던 조건을 들고 간다 — 상세의 화살표가 이 주소로 돌아온다.
+                      onClick={() => router.push(`/inquiries/${r.id}?from=${encodeURIComponent(backTo)}`)}
                       onMouseEnter={e => (e.currentTarget.style.background = ROW_HOVER_BG)}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       style={{
@@ -904,13 +1137,16 @@ function InquiriesPageInner() {
                         // 주는데 한 객체에 둘이 섞이면 적용 순서에 따라 결과가 달라진다
                         // (React 가 "conflicting property is set (border)" 로 경고하던 자리다).
                         // 단축 대신 네 변을 개별 속성으로 못 박아 늘 같은 모양이 되게 한다.
-                        ...rowStyle(i === 0), display: 'flex', alignItems: 'center', gap: COL.gap,
+                        ...rowStyle(i === 0), display: 'flex',
+                        // 보조 줄이 붙으면 세로로 쌓는다. 한 줄일 때의 가운데 정렬은 안쪽 줄이 맡는다.
+                        flexDirection: 'column', alignItems: 'stretch', gap: 4,
                         width: '100%', borderRight: 'none', borderBottom: 'none', borderLeft: 'none',
                         background: 'transparent', cursor: 'pointer',
                         fontFamily: 'inherit', textAlign: 'left',
                         opacity: dim ? 0.5 : 1,
                       }}
                     >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: COL.gap, width: '100%' }}>
                       {/* 번호가 맨 앞이다 — 사람이 번호로 찾는다. 고정 폭이라 줄이 흔들리지 않고,
                           줄바꿈을 막아 두 줄로 벌어지지 않는다. */}
                       <span style={{
@@ -918,14 +1154,16 @@ function InquiriesPageInner() {
                         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                         textDecoration: isCancelled ? 'line-through' : 'none',
                       }}>
-                        {r.inquiry_no}
+                        <Hi text={r.inquiry_no} words={words} />
                       </span>
                       <span style={{
                         flex: 1, minWidth: 0, fontSize: 13,
                         color: r.title?.trim() ? TEXT : MUTED,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       }}>
-                        {r.title?.trim() || '(업체명 없음)'}
+                        {r.title?.trim()
+                          ? <Hi text={r.title} words={words} />
+                          : '(업체명 없음)'}
                       </span>
                       {/* 상태 — 색은 dot 에만 주고 글자는 중립으로 둔다(디자인 규칙).
                           작성 중이면 며칠째인지 함께 보이고, 그 자리에서 바로 끝낼 수 있다. */}
@@ -963,14 +1201,73 @@ function InquiriesPageInner() {
                         )}
                       </span>
                       <span style={{ width: COL.person, flexShrink: 0, fontSize: 12, color: SUB, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {engineerLabel(r.engineers) || '-'}
+                        {engineerLabel({ name: r.owner_name, position: r.owner_position }) || '-'}
                       </span>
                       <span style={{ width: COL.date, flexShrink: 0, fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>
                         {dateText(r.issued_date)}
                       </span>
+                      </span>
+
+                      {/* 검색어가 번호·업체명이 아닌 곳에서 걸렸을 때만 — 어디서 맞았는지 알려 준다. */}
+                      {hasHint && (
+                        <span style={{
+                          display: 'block', paddingLeft: COL.no + COL.gap,
+                          fontSize: 11, color: MUTED, lineHeight: 1.6,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {r.snippet && (
+                            <span>내용 · <Hi text={r.snippet} words={words} /></span>
+                          )}
+                          {r.snippet && r.match_files.length > 0 && <span style={{ color: FAINT }}> / </span>}
+                          {r.match_files.length > 0 && (
+                            <span>파일 · <Hi text={r.match_files.join(', ')} words={words} /></span>
+                          )}
+                        </span>
+                      )}
                     </button>
                   )
                 })
+              )}
+
+              {/* ── 페이지 ── 한 페이지뿐이면 버튼은 감추고 건수만 남긴다. */}
+              {total !== null && total > 0 && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                  paddingTop: 12, marginTop: 4, borderTop: `1px solid ${BORDER}`,
+                }}>
+                  <span style={{ fontSize: 12, color: MUTED }}>
+                    총 {total}건{range && ` 중 ${range.from}–${range.to}`}
+                  </span>
+                  {totalPages(total) > 1 && (
+                    <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                      <button type="button" disabled={page <= 1}
+                        onClick={() => push({ ...query, page: page - 1 })}
+                        style={{ ...btnGhost(page <= 1), padding: '5px 10px', fontSize: 12 }}>이전</button>
+                      {pageWindow(page, total).map((p, i) => (
+                        p === '…'
+                          ? <span key={`gap-${i}`} style={{ fontSize: 12, color: FAINT, padding: '0 2px' }}>…</span>
+                          : (
+                            <button
+                              key={p} type="button"
+                              aria-current={p === page ? 'page' : undefined}
+                              onClick={() => push({ ...query, page: p })}
+                              style={{
+                                border: 'none', borderRadius: 6, padding: '5px 10px', fontSize: 12,
+                                fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer',
+                                background: p === page ? BLUE : NEUTRAL_BG,
+                                color: p === page ? '#ffffff' : SUB,
+                              }}
+                            >
+                              {p}
+                            </button>
+                          )
+                      ))}
+                      <button type="button" disabled={page >= totalPages(total)}
+                        onClick={() => push({ ...query, page: page + 1 })}
+                        style={{ ...btnGhost(page >= totalPages(total)), padding: '5px 10px', fontSize: 12 }}>다음</button>
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -996,6 +1293,10 @@ function InquiriesPageInner() {
       )}
 
       {/* TEMP-BULK-IMPORT ↓ */}
+      {deskOpen && (
+        <DeskGuideModal onClose={() => { setDeskOpen(false); deskBtnRef.current?.focus() }} />
+      )}
+
       {bulkOpen && (
         <BulkImportModal
           engineers={engineers}

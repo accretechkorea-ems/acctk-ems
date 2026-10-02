@@ -27,13 +27,15 @@ import {
 import { engineerLabel, isCurrentlyEmployed } from '@/lib/engineers'
 import { todayKST } from '@/lib/date'
 import {
-  INQUIRY_TYPE_LABEL, REQ80_SERIES, INQUIRY_TYPE_ITEMS, type InquiryType,
+  INQUIRY_TYPE_LABEL, REQ80_SERIES, REQ20_SERIES, INQUIRY_TYPE_ITEMS, type InquiryType,
 } from '@/lib/inquiries'
 import { errorInfo } from '@/lib/errorInfo'
 import { failText, uploadFiles, sizeText, type UploadFail } from '../files'
 import { parseFiles, hitToNo, type Hit } from './parseFileNames'
 import {
-  buildRows, bumpSummary, checkFile, rowError, defaultIssuedDate, fileYmd, type Row,
+  buildRows, bumpSummary, checkFile, rowError, recalc, markDuplicates, applyTypeChange,
+  revertRow, moveFile, sortRows, touched, needsYear, chunk, fileYmd,
+  QUERY_CHUNK, type Row,
 } from './plan'
 
 /** 한 번에 받는 파일 수 상한. 미리보기 표가 읽을 수 있는 선. */
@@ -122,38 +124,45 @@ export default function BulkImportModal({
     await precheck(built)
   }
 
+  type Found = {
+    id: string; inquiry_no: string; inquiry_type: string; period_key: string
+    seq: number; equipment_series: string | null
+  }
+
   /**
    * 사전 검사 — 번호가 이미 있는지, 80 의뢰서의 계열이 다른지.
    * 브라우저 supabase 로 읽기만 한다(RLS 가 걸러 준다).
+   *
+   * 번호는 **100개씩 끊어** 조회한다. in 은 쿼리 문자열로 나가므로 한 번에 200개를 보내면
+   * URL 이 수천 자가 되고 응답 행도 기본 상한(1000)에 가까워진다(plan.ts 의 QUERY_CHUNK).
    */
   const precheck = async (list: Row[]) => {
-    if (list.length === 0) return
+    if (list.length === 0) { setRows(list); return }
     setChecking(true)
     try {
-      const nos = list.map(r => r.no)
-      const { data, error: qErr } = await supabase
-        .from('inquiries')
-        .select('id, inquiry_no, inquiry_type, period_key, seq, equipment_series')
-        .in('inquiry_no', nos)
-      if (qErr) { setError(`이미 등록된 번호를 확인하지 못했습니다: ${qErr.message}`); return }
-      const found = (data ?? []) as {
-        id: string; inquiry_no: string; inquiry_type: string; period_key: string
-        seq: number; equipment_series: string | null
-      }[]
+      const found: Found[] = []
+      for (const part of chunk(list.map(r => r.no).filter(Boolean), QUERY_CHUNK)) {
+        const { data, error: qErr } = await supabase
+          .from('inquiries')
+          .select('id, inquiry_no, inquiry_type, period_key, seq, equipment_series')
+          .in('inquiry_no', part)
+        if (qErr) { setError(`이미 등록된 번호를 확인하지 못했습니다: ${qErr.message}`); return }
+        found.push(...((data ?? []) as Found[]))
+      }
 
       // 80 의뢰서는 (연도, 일련번호)가 같고 계열만 다른 건이 이미 있으면 알린다.
       const years = [...new Set(list.filter(r => r.type === 'req80').map(r => String(r.year ?? '')))]
-      let sameSeq: typeof found = []
-      if (years.length > 0) {
+      const sameSeq: Found[] = []
+      for (const part of chunk(years.filter(Boolean), QUERY_CHUNK)) {
         const { data: d2 } = await supabase
           .from('inquiries')
           .select('id, inquiry_no, inquiry_type, period_key, seq, equipment_series')
           .eq('inquiry_type', 'req80')
-          .in('period_key', years)
-        sameSeq = (d2 ?? []) as typeof found
+          .in('period_key', part)
+        sameSeq.push(...((d2 ?? []) as Found[]))
       }
 
-      setRows(list.map(r => {
+      setRows(markDuplicates(list.map(r => {
         const hit = found.find(f => f.inquiry_no === r.no)
         const other = r.type === 'req80'
           ? sameSeq.find(f => f.seq === r.seq && String(f.period_key) === String(r.year) && f.inquiry_no !== r.no)
@@ -162,10 +171,10 @@ export default function BulkImportModal({
           ...r,
           existing: hit ? 'exists' : 'new',
           existingId: hit?.id,
-          warn: other ? `같은 순번이 다른 계열로 이미 있습니다 (${other.inquiry_no})` : r.warn,
+          warn: other ? `같은 순번이 다른 계열로 이미 있습니다 (${other.inquiry_no})` : null,
         }
         return { ...next, error: rowError(next) }
-      }))
+      })))
     } catch (e) {
       console.error('[bulk] 사전 검사 실패', errorInfo(e))
       setError('사전 검사를 하지 못했습니다.')
@@ -174,19 +183,57 @@ export default function BulkImportModal({
     }
   }
 
-  // ── 행 고치기 ───────────────────────────────────────────────────
-  const patch = (no: string, part: Partial<Row>) =>
-    setRows(prev => prev.map(r => {
-      if (r.no !== no) return r
-      const next = { ...r, ...part }
+  /** 번호를 고친 행 하나만 다시 확인한다(바뀐 번호만 추가 조회). */
+  const recheckOne = async (row: Row) => {
+    if (!row.no) return
+    const { data } = await supabase
+      .from('inquiries')
+      .select('id, inquiry_no')
+      .in('inquiry_no', [row.no])
+    const hit = ((data ?? []) as { id: string; inquiry_no: string }[])[0]
+    setRows(prev => markDuplicates(prev.map(r => {
+      if (r.id !== row.id) return r
+      const next: Row = { ...r, existing: hit ? 'exists' : 'new', existingId: hit?.id }
       return { ...next, error: rowError(next) }
-    }))
+    })))
+  }
 
-  const applyOwnerAll = (id: number) =>
-    setRows(prev => prev.map(r => {
-      const next = { ...r, createdBy: id }
-      return { ...next, error: rowError(next) }
-    }))
+  // ── 행 고치기 ───────────────────────────────────────────────────
+  // 모든 편집은 patch 하나를 지난다 — recalc(번호·발행일 다시 만들기)와 중복 검사를
+  // 빠뜨릴 자리를 만들지 않으려는 것이다.
+  const patch = (id: string, part: Partial<Row>) =>
+    setRows(prev => markDuplicates(prev.map(r => (r.id === id ? recalc({ ...r, ...part }) : r))))
+
+  /**
+   * 번호에 영향을 주는 편집(종류·계열·일련번호·연도·번호용 날짜).
+   * 고친 뒤 **그 행만** 다시 조회한다 — 전체를 다시 훑지 않는다.
+   */
+  const patchNo = (id: string, part: Partial<Row>) => {
+    const cur = rows.find(r => r.id === id)
+    if (!cur) return
+    const nextRow = recalc({ ...cur, ...part })
+    setRows(prev => markDuplicates(prev.map(r => (r.id === id ? nextRow : r))))
+    void recheckOne(nextRow)
+  }
+
+  /** 종류 변경 — 종류별 입력 기억을 오가며 복원한다(plan.applyTypeChange). */
+  const changeType = (id: string, next: InquiryType) => {
+    const cur = rows.find(r => r.id === id)
+    if (!cur) return
+    const nextRow = applyTypeChange(cur, next)
+    setRows(prev => markDuplicates(prev.map(r => (r.id === id ? nextRow : r))))
+    void recheckOne(nextRow)
+  }
+
+  const revert = (id: string) =>
+    setRows(prev => markDuplicates(prev.map(r => (r.id === id ? revertRow(r) : r))))
+
+  /** 파일을 다른 행으로 옮긴다. 비게 된 행은 사라지고 양쪽 다 다시 검사한다(plan.moveFile). */
+  const move = (fromId: string, index: number, toId: string) =>
+    setRows(prev => moveFile(prev, fromId, index, toId))
+
+  const applyOwnerAll = (ownerId: number) =>
+    setRows(prev => prev.map(r => recalc({ ...r, createdBy: ownerId })))
 
   /** 확인 필요·미분류 파일의 선택을 행에 반영한다. */
   const resolvePending = () => {
@@ -195,8 +242,8 @@ export default function BulkImportModal({
     for (const p of pending) {
       if (p.choice === 'skip' || p.choice === '') { if (p.choice === '') keep.push(p); continue }
       if (p.choice.startsWith('row:')) {
-        const no = p.choice.slice(4)
-        next = next.map(r => (r.no === no ? { ...r, files: [...r.files, p.file] } : r))
+        const id = p.choice.slice(4)
+        next = next.map(r => (r.id === id ? { ...r, files: [...r.files, p.file] } : r))
         continue
       }
       if (p.choice === 'new') {
@@ -211,30 +258,29 @@ export default function BulkImportModal({
           matched: '',
         }
         if (t === 'req80' && !REQ80_SERIES.includes(p.newSeries)) { keep.push(p); continue }
-        let no: string
-        try { no = hitToNo(hit) } catch { keep.push(p); continue }
-        const found = next.find(r => r.no === no)
+        // 행 만들기는 buildRows 한 곳에만 둔다 — 여기서 Row 를 손으로 조립하면
+        // 필드가 늘 때마다 두 곳을 고쳐야 한다.
+        const made = buildRows([{ file: p.file, hit }], myId ?? '')[0]
+        if (!made || !made.no) { keep.push(p); continue }
+        const found = next.find(r => r.no === made.no)
         if (found) {
-          next = next.map(r => (r.no === no ? { ...r, files: [...r.files, p.file] } : r))
+          next = next.map(r => (r.id === found.id ? { ...r, files: [...r.files, p.file] } : r))
         } else {
-          const { date, locked } = defaultIssuedDate(hit, fileYmd(p.file))
-          next = [...next, {
-            no, type: t, seq, year: hit.year, series: hit.series,
-            issuedDate: date, dateLocked: locked, title: '', createdBy: myId ?? '',
-            files: [p.file], include: true, existing: 'new', attachToExisting: false,
-            error: null, warn: null,
-          }]
+          next = [...next, made]
         }
       }
     }
-    next = next.map(r => ({ ...r, error: rowError(r) }))
+    next = sortRows(markDuplicates(next.map(recalc)))
     setRows(next)
     setPending(keep)
     precheck(next)
   }
 
   // ── 등록 ────────────────────────────────────────────────────────
-  const targets = rows.filter(r => r.include && !r.error && (r.existing === 'new' || r.attachToExisting))
+  // 등록 직전의 현재 상태로 고른다 — 번호를 고쳤으면 고친 값이 기준이다.
+  // (종류, 기간)별 일련번호 오름차순 규칙은 편집 뒤에도 유지한다.
+  const targets = sortRows(rows.filter(r => r.include && !r.error && (r.existing === 'new' || r.attachToExisting)))
+  const editedTargets = targets.filter(touched)
 
   const start = async () => {
     if (running || targets.length === 0) return
@@ -256,14 +302,22 @@ export default function BulkImportModal({
     const lines = bumps.map(b =>
       `· ${INQUIRY_TYPE_LABEL[b.type]} ${b.periodKey}: ${b.current}번 → ${b.max}번 (사이 ${b.skipped}개가 사용된 번호가 됩니다)`)
 
+    // 자동 인식과 다르게 고친 행을 함께 보여 준다 — 종류를 잘못 고른 채 큰 번호가 카운터를
+    // 올리는 실수를 여기서 한 번 더 거른다(카운터는 내릴 수 없다).
+    const editedLines = editedTargets.map(r =>
+      `· ${r.auto.no} → ${r.no} (${INQUIRY_TYPE_LABEL[r.auto.type]} → ${INQUIRY_TYPE_LABEL[r.type]})`)
+
     const ok = await confirmDialog({
       title: `${targets.length}건을 등록합니다`,
       message: [
+        ...(editedLines.length > 0
+          ? [`자동 인식과 다르게 고친 행이 ${editedLines.length}개 있습니다.`, ...editedLines, '']
+          : []),
         ...(lines.length > 0 ? ['번호가 건너뜁니다.', ...lines, ''] : []),
         '한 번 등록된 번호는 되돌릴 수 없습니다 — 취소해도 「취소」 상태로 남습니다.',
       ].join('\n'),
       confirmText: '등록 시작',
-      variant: lines.length > 0 ? 'danger' : undefined,
+      variant: lines.length > 0 || editedLines.length > 0 ? 'danger' : undefined,
     })
     if (!ok) return
 
@@ -274,9 +328,9 @@ export default function BulkImportModal({
     try {
       for (const row of targets) {
         if (stopRef.current) break
-        setRun(p => ({ ...p, [row.no]: { s: 'running' } }))
+        setRun(p => ({ ...p, [row.id]: { s: 'running' } }))
         const r = await runRow(row)
-        setRun(p => ({ ...p, [row.no]: r }))
+        setRun(p => ({ ...p, [row.id]: r }))
         if (r.s !== 'failed') made += 1
         setDoneCount(n => n + 1)
       }
@@ -329,26 +383,26 @@ export default function BulkImportModal({
 
   /** 파일만 다시 올린다 — 번호는 이미 등록됐으므로 새로 만들지 않는다. */
   const retryFiles = async (row: Row) => {
-    const st = run[row.no]
+    const st = run[row.id]
     if (!st || st.s !== 'partial' || st.messageId === 0) return
-    setRun(p => ({ ...p, [row.no]: { s: 'running' } }))
+    setRun(p => ({ ...p, [row.id]: { s: 'running' } }))
     const again = row.files.filter(f => st.fails.some(x => x.name === f.name))
     const fails = await uploadFiles(st.messageId, again)
-    setRun(p => ({ ...p, [row.no]: fails.length > 0 ? { s: 'partial', fails, messageId: st.messageId } : { s: 'done' } }))
+    setRun(p => ({ ...p, [row.id]: fails.length > 0 ? { s: 'partial', fails, messageId: st.messageId } : { s: 'done' } }))
   }
 
   const retryFailed = async () => {
-    const again = targets.filter(r => run[r.no]?.s === 'failed')
+    const again = targets.filter(r => run[r.id]?.s === 'failed')
     if (again.length === 0) return
     setRunning(true)
     stopRef.current = false
     try {
       for (const row of again) {
         if (stopRef.current) break
-        setRun(p => ({ ...p, [row.no]: { s: 'running' } }))
+        setRun(p => ({ ...p, [row.id]: { s: 'running' } }))
         // 결과를 먼저 받아 두고 넣는다 — setRun 의 콜백은 async 가 아니다.
         const r = await runRow(row)
-        setRun(p => ({ ...p, [row.no]: r }))
+        setRun(p => ({ ...p, [row.id]: r }))
       }
     } finally { setRunning(false); onDone() }
   }
@@ -435,80 +489,169 @@ export default function BulkImportModal({
               </select>
             </div>
 
-            {/* 미리보기 표 */}
+            {/* 미리보기 표 — 번호는 종류·계열·일련번호·연도로 조립한 파생값이라 읽기 전용이다.
+                고치는 것은 그 재료들이다(buildInquiryNo 를 거친다). */}
             <div style={{ overflowX: 'auto', border: `1px solid ${BORDER}`, borderRadius: 8, marginBottom: 12 }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1180 }}>
                 <thead>
                   <tr>
                     <th style={{ ...th, width: 34 }} />
+                    <th style={{ ...th, width: 120 }}>종류</th>
+                    <th style={{ ...th, width: 180 }}>번호 재료</th>
                     <th style={{ ...th, width: 150 }}>번호</th>
-                    <th style={{ ...th, width: 100 }}>종류</th>
-                    <th style={{ ...th, width: 180 }}>업체명</th>
-                    <th style={{ ...th, width: 130 }}>발행일</th>
-                    <th style={{ ...th, width: 140 }}>담당자</th>
+                    <th style={{ ...th, width: 170 }}>업체명</th>
+                    <th style={{ ...th, width: 120 }}>발행일</th>
+                    <th style={{ ...th, width: 130 }}>담당자</th>
                     <th style={th}>파일</th>
                     <th style={{ ...th, width: 150 }}>상태</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map(r => {
-                    const st = run[r.no]
+                    const st = run[r.id]
+                    const edited = touched(r)
                     return (
-                      <tr key={r.no} style={{ background: r.error ? '#fef2f2' : undefined }}>
+                      <tr key={r.id} style={{ background: r.error ? '#fef2f2' : undefined }}>
                         <td style={td}>
                           <input type="checkbox" checked={r.include} disabled={running}
-                            onChange={e => patch(r.no, { include: e.target.checked })} />
+                            onChange={e => patch(r.id, { include: e.target.checked })} />
                         </td>
-                        <td style={{ ...td, fontWeight: 700, whiteSpace: 'nowrap' }}>{r.no}</td>
-                        <td style={td}>{INQUIRY_TYPE_LABEL[r.type]}</td>
+
+                        {/* 종류 — 바꾸면 연도·계열·번호용 날짜가 그 종류의 기억에서 복원된다. */}
+                        <td style={td}>
+                          <select value={r.type} disabled={running} style={field}
+                            onChange={e => changeType(r.id, e.target.value as InquiryType)}>
+                            {INQUIRY_TYPE_ITEMS.map(t => (
+                              <option key={t.type} value={t.type}>{t.label}</option>
+                            ))}
+                          </select>
+                          {edited && (
+                            <div style={{ fontSize: 11, color: MUTED, marginTop: 3 }}>
+                              <span style={{
+                                background: NEUTRAL_BG, borderRadius: 99, padding: '1px 6px', fontWeight: 700,
+                              }} title={`자동 인식: ${INQUIRY_TYPE_LABEL[r.auto.type]} ${r.auto.no}`}>
+                                수정함
+                              </span>
+                              <button type="button" onClick={() => revert(r.id)} disabled={running}
+                                style={{
+                                  border: 'none', background: 'transparent', padding: '0 0 0 4px',
+                                  color: BLUE, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                                }}>
+                                되돌리기
+                              </button>
+                              <div style={{ color: FAINT, wordBreak: 'break-all' }}>자동 인식 {r.auto.no}</div>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* 번호 재료 — 계열 · 일련번호 · 연도(또는 번호용 날짜). */}
+                        <td style={td}>
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                            {r.type === 'req80' && (
+                              <select value={r.series ?? ''} disabled={running} style={{ ...field, width: 64 }}
+                                onChange={e => patchNo(r.id, { series: e.target.value })}>
+                                <option value="">계열</option>
+                                {REQ80_SERIES.map(v => <option key={v} value={v}>{v}</option>)}
+                              </select>
+                            )}
+                            {r.type === 'req20' && (
+                              <span style={{ ...field, width: 64, color: SUB, background: NEUTRAL_BG }}>{REQ20_SERIES}</span>
+                            )}
+                            <input
+                              value={String(r.seq || '')} inputMode="numeric" disabled={running}
+                              aria-label="일련번호" placeholder="일련번호"
+                              style={{ ...field, width: 72 }}
+                              onChange={e => patchNo(r.id, { seq: Number(e.target.value.replace(/[^0-9]/g, '').slice(0, 5)) })}
+                            />
+                            {needsYear(r.type) && (
+                              <input
+                                value={String(r.year ?? '')} inputMode="numeric" disabled={running}
+                                aria-label="연도" placeholder="연도"
+                                style={{ ...field, width: 64 }}
+                                onChange={e => patchNo(r.id, { year: Number(e.target.value.replace(/[^0-9]/g, '').slice(0, 4)) })}
+                              />
+                            )}
+                            {r.type === 'spare80' && (
+                              <input
+                                type="date" value={r.numDate ?? ''} disabled={running}
+                                aria-label="번호에 들어갈 날짜"
+                                style={{ ...field, width: 130, colorScheme: 'light' }}
+                                onChange={e => patchNo(r.id, { numDate: e.target.value })}
+                              />
+                            )}
+                          </div>
+                        </td>
+
+                        <td style={{ ...td, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          {r.no || <span style={{ color: MUTED, fontWeight: 500 }}>—</span>}
+                        </td>
+
                         <td style={td}>
                           <input value={r.title} maxLength={200} disabled={running} style={field}
-                            onChange={e => patch(r.no, { title: e.target.value })} />
+                            onChange={e => patch(r.id, { title: e.target.value })} />
                           {/* 업체명을 읽어 적을 수 있게 첫 파일의 원래 이름을 보여 준다. */}
                           <div style={{ fontSize: 11, color: FAINT, marginTop: 3, wordBreak: 'break-all' }}>
                             {r.files[0]?.name ?? ''}
                           </div>
                         </td>
+
                         <td style={td}>
                           {r.dateLocked ? (
-                            <span style={{ color: SUB }}>{r.issuedDate}<br />
+                            <span style={{ color: SUB }}>{r.issuedDate || '—'}<br />
                               <span style={{ fontSize: 11, color: FAINT }}>번호의 날짜</span></span>
                           ) : (
                             <input type="date" value={r.issuedDate} disabled={running}
                               style={{ ...field, colorScheme: 'light' }}
-                              onChange={e => patch(r.no, { issuedDate: e.target.value })} />
+                              onChange={e => patch(r.id, { issuedDate: e.target.value })} />
                           )}
                         </td>
+
                         <td style={td}>
                           <select value={r.createdBy} disabled={running} style={field}
-                            onChange={e => patch(r.no, { createdBy: e.target.value ? Number(e.target.value) : '' })}>
+                            onChange={e => patch(r.id, { createdBy: e.target.value ? Number(e.target.value) : '' })}>
                             <option value="">고르기</option>
                             {selectable.map(e => (
                               <option key={e.engineer_id} value={e.engineer_id}>{engineerLabel(e)}</option>
                             ))}
                           </select>
                         </td>
+
                         <td style={td}>
                           {r.files.map((f, i) => {
                             const c = checkFile(f)
                             return (
-                              <div key={`${f.name}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                              <div key={`${f.name}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
                                 <span style={{ flex: 1, minWidth: 0, wordBreak: 'break-all', color: c.error ? '#be123c' : TEXT }}>
                                   {f.name} <span style={{ color: MUTED }}>{sizeText(f.size)}</span>
                                   {c.error && <span style={{ color: '#be123c' }}> — {c.error}</span>}
                                   {!c.error && c.warn && <span style={{ color: MUTED }}> — {c.warn}</span>}
                                 </span>
                                 {!running && (
-                                  <button type="button" aria-label={`${f.name} 제외`}
-                                    onClick={() => patch(r.no, { files: r.files.filter((_, k) => k !== i) })}
-                                    style={{ border: 'none', background: 'transparent', color: MUTED, cursor: 'pointer', fontSize: 12, padding: 0 }}>
-                                    ✕
-                                  </button>
+                                  <>
+                                    {/* 다른 행으로 옮긴다. 파일이 0개가 된 행은 사라진다. */}
+                                    <select
+                                      value="" disabled={rows.length < 2}
+                                      aria-label={`${f.name} 다른 행으로 이동`}
+                                      style={{ ...field, width: 90, flexShrink: 0 }}
+                                      onChange={e => { if (e.target.value) move(r.id, i, e.target.value) }}
+                                    >
+                                      <option value="">이동</option>
+                                      {rows.filter(x => x.id !== r.id).map(x => (
+                                        <option key={x.id} value={x.id}>{x.no || x.auto.no}</option>
+                                      ))}
+                                    </select>
+                                    <button type="button" aria-label={`${f.name} 제외`}
+                                      onClick={() => patch(r.id, { files: r.files.filter((_, k) => k !== i) })}
+                                      style={{ border: 'none', background: 'transparent', color: MUTED, cursor: 'pointer', fontSize: 12, padding: 0, flexShrink: 0 }}>
+                                      ✕
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             )
                           })}
                         </td>
+
                         <td style={td}>
                           {r.error ? <span style={{ color: '#be123c' }}>{r.error}</span>
                             : st?.s === 'running' ? '처리 중...'
@@ -526,7 +669,7 @@ export default function BulkImportModal({
                             : r.existing === 'exists' ? (
                               <label style={{ display: 'flex', gap: 4, alignItems: 'flex-start', color: MUTED }}>
                                 <input type="checkbox" checked={r.attachToExisting} disabled={running}
-                                  onChange={e => patch(r.no, { attachToExisting: e.target.checked })} />
+                                  onChange={e => patch(r.id, { attachToExisting: e.target.checked })} />
                                 <span>이미 등록된 번호<br />
                                   <span style={{ fontSize: 11 }}>체크하면 파일만 추가</span></span>
                               </label>
@@ -561,7 +704,7 @@ export default function BulkImportModal({
                       <option value="">고르기</option>
                       <option value="skip">제외</option>
                       <optgroup label="이 번호에 붙이기">
-                        {rows.map(r => <option key={r.no} value={`row:${r.no}`}>{r.no}</option>)}
+                        {rows.map(r => <option key={r.id} value={`row:${r.id}`}>{r.no || r.auto.no}</option>)}
                       </optgroup>
                       <option value="new">새 번호로 등록</option>
                     </select>

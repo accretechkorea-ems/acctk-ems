@@ -27,7 +27,7 @@
 // 화면은 어느 쪽인지 미리 단정하지 않는다.
 
 import { useCallback, useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
@@ -44,6 +44,7 @@ import {
 import { todayKST } from '@/lib/date'
 import { engineerLabel, isCurrentlyEmployed } from '@/lib/engineers'
 import { errorInfo } from '@/lib/errorInfo'
+import { safeBackTo } from '@/lib/inquirySearch'
 import {
   EDITABLE_STATUSES, INQUIRY_STATUS_DOT, INQUIRY_TYPE_LABEL,
   inquiryStatusLabel, type InquiryType,
@@ -578,6 +579,12 @@ export default function InquiryDetailPage() {
   const { loading: guardLoading, authorized } = usePageGuard()
   const router = useRouter()
   const params = useParams<{ id: string }>()
+  const search = useSearchParams()
+  /**
+   * 목록으로 돌아갈 주소. 목록이 from 으로 실어 보낸 "보던 조건" 그대로다.
+   * 주소를 직접 열었으면 from 이 없어 /inquiries 로 간다. 바깥 주소는 safeBackTo 가 막는다.
+   */
+  const backTo = safeBackTo(search.get('from'))
   const id = typeof params?.id === 'string' ? params.id : ''
   const toast = useToast()
   const confirmDialog = useConfirm()
@@ -801,7 +808,7 @@ export default function InquiryDetailPage() {
       if (json.outcome === 'released') {
         toast.success(`번호 ${no}가 반환되었습니다. 다음 새 작성 때 다시 쓰입니다.${warn}`)
         // 행이 지워졌다 — 이 주소에는 더 볼 것이 없다.
-        router.replace('/inquiries')
+        router.replace(backTo)
         return
       }
       if (json.outcome === 'abandoned') {
@@ -997,7 +1004,7 @@ export default function InquiryDetailPage() {
   const back = (
     <button
       type="button"
-      onClick={() => router.push('/inquiries')}
+      onClick={() => router.push(backTo)}
       style={{
         border: 'none', background: 'transparent', cursor: 'pointer', padding: '0 0 12px',
         fontSize: 13, fontWeight: 700, color: SUB, fontFamily: 'inherit',
@@ -1042,7 +1049,7 @@ export default function InquiryDetailPage() {
                       오른쪽 수정 아이콘(테두리 있음)과 역할이 달라 보여야 한다.
                       marginLeft 음수는 버튼 안쪽 여백만큼 당겨 화살표를 카드 왼쪽 선에 맞춘다. */}
                   <button
-                    type="button" onClick={() => router.push('/inquiries')}
+                    type="button" onClick={() => router.push(backTo)}
                     aria-label="의뢰서 목록으로" title="의뢰서 목록으로"
                     onMouseEnter={e => { e.currentTarget.style.color = BLUE }}
                     onMouseLeave={e => { e.currentTarget.style.color = MUTED }}
