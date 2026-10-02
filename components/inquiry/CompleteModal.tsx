@@ -6,7 +6,7 @@
 // 번호를 받아 서류를 만든 뒤 상세로 들어가 다시 찾는 걸음을 없애려는 것이다.
 //
 // 흐름은 셋이고 순서가 중요하다.
-//   1. 내용 기록 한 건을 만든다(오늘 날짜 + 메모).
+//   1. 내용 기록 한 건을 만든다(오늘 날짜 + 입력한 내용).
 //   2. 고른 파일을 그 기록에 올린다.
 //   3. **파일이 전부 올라간 뒤에만** 상태를 '완료' 로 바꾼다.
 // 3번을 먼저 하면 「완료인데 보낼 파일이 빠진」 의뢰서가 생긴다. 사람은 끝났다고 믿고
@@ -16,7 +16,13 @@
 // 내용 기록의 id 를 들고 있다가** 다시 누르면 그 기록에 실패한 파일만 올린다 —
 // 다시 누를 때마다 빈 기록이 쌓이면 아무도 치울 수 없다.
 //
+// **내용은 필수고 파일은 선택이다.** 끝낸 번호에 「무엇을 보냈는지」가 한 줄도 없으면 나중에
+// 그 기록을 읽는 사람이 할 수 있는 일이 없다 — 파일 이름만으로는 맥락이 남지 않는다.
+// 그 판정은 아래 canSubmit 하나이고, 버튼의 disabled 와 submit 맨 앞 방어가 같은 함수를 본다.
+//
 // 서버는 기존 것을 그대로 쓴다(message_add · update · inquiry-attachment). 새 action 은 없다.
+// **서버에는 본문 필수를 걸지 않는다** — 일괄 등록·기존 번호 등록이 같은 action 을 빈 본문으로
+// 부르기 때문이다(그쪽은 「번호를 쓴 날」만 남긴다). 필수는 이 화면의 규칙이다.
 
 import { useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
@@ -29,8 +35,24 @@ import { todayKST } from '@/lib/date'
 import { errorInfo } from '@/lib/errorInfo'
 import FilePicker, { failText, uploadFiles } from './files'
 
-/** 메모 길이 상한. 내용 기록 본문과 같은 값이어야 한다(/api/inquiry 의 BODY_MAX). */
+/** 내용 길이 상한. 내용 기록 본문과 같은 값이어야 한다(/api/inquiry 의 BODY_MAX). */
 const BODY_MAX = 20000
+
+/**
+ * 확정할 수 있는가 — **내용이 있어야 한다.** 파일은 선택이다(파일만 있고 내용이 없으면 못 끝낸다).
+ *
+ * 공백·줄바꿈만 적은 것은 비어 있는 것으로 본다(trim). 전각 공백(U+3000)도 s 에 들어가므로
+ * String.prototype.trim 이 함께 떨어낸다 — 눈에 보이지 않는 글자로 필수를 빠져나가지 못한다.
+ *
+ * 상한도 함께 본다. 입력칸이 maxLength 로 막고 서버도 다시 보지만, 버튼 조건을 한 곳에 모아 두면
+ * 「누를 수 있는데 서버가 거절하는」 상태가 생기지 않는다.
+ *
+ * 순수 함수다 — 스크립트로 그대로 돌려 볼 수 있다.
+ */
+export function canSubmit(content: string): boolean {
+  const t = content.trim()
+  return t.length > 0 && content.length <= BODY_MAX
+}
 
 const field: React.CSSProperties = {
   width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: 6,
@@ -56,7 +78,7 @@ export default function CompleteModal({
   const today = todayKST()
 
   const [files, setFiles] = useState<File[]>([])
-  const [memo, setMemo] = useState('')
+  const [content, setContent] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   /**
@@ -65,8 +87,8 @@ export default function CompleteModal({
    */
   const [messageId, setMessageId] = useState<number | null>(null)
 
-  // 내용 기록과 같은 규칙 — 빈 기록은 만들지 않는다.
-  const ready = files.length > 0 || memo.trim().length > 0
+  // 내용 추가 모달과 같은 규칙 — 내용이 비면 기록을 만들지 않는다(파일만으로는 끝낼 수 없다).
+  const ready = canSubmit(content)
 
   const submit = async () => {
     if (busy || !ready) return
@@ -81,7 +103,7 @@ export default function CompleteModal({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             // 발신 고정 — 작성 완료는 내가 보낸 것을 끝내는 동작이라 방향을 고르지 않는다.
-            action: 'message_add', inquiry_id: inquiryId, entry_date: today, direction: 'sent', body: memo,
+            action: 'message_add', inquiry_id: inquiryId, entry_date: today, direction: 'sent', body: content,
           }),
         })
         const json = await res.json().catch(() => null)
@@ -159,13 +181,11 @@ export default function CompleteModal({
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <label style={label} htmlFor="cp-memo">
-            메모 <span style={{ fontWeight: 500 }}>(선택 · 파일만 올려도 됩니다)</span>
-          </label>
+          <label style={label} htmlFor="cp-content">내용 (필수)</label>
           <textarea
-            id="cp-memo" value={memo} rows={4} maxLength={BODY_MAX} disabled={busy}
-            placeholder="보내는 내용이나 남길 말을 적습니다"
-            onChange={e => setMemo(e.target.value)}
+            id="cp-content" value={content} rows={4} maxLength={BODY_MAX} disabled={busy}
+            placeholder="일본 본사로 보낸 내용을 적어 주세요"
+            onChange={e => setContent(e.target.value)}
             style={{ ...field, resize: 'vertical', lineHeight: 1.6 }}
           />
         </div>
