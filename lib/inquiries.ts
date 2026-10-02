@@ -204,3 +204,17 @@ export const INQUIRY_STATUS_DOT: Record<string, string> = {
   sent: '#234ea2',
   waiting: '#f59e0b',
 }
+
+// ───────────────────────── TEMP-BULK-IMPORT ─────────────────────────
+/**
+ * 일괄 등록(임시 기능) 스위치. false 면 목록 화면의 진입 버튼이 사라진다.
+ *
+ * 지난 파일을 넣는 동안만 쓰는 기능이다. 등록이 끝나면 이렇게 지운다:
+ *   1. 이 상수와 이 주석 블록을 지운다.
+ *   2. components/inquiry/bulk/ 폴더를 통째로 지운다.
+ *   3. app/inquiries/page.tsx 에서 TEMP-BULK-IMPORT 로 묶인 줄을 지운다(여섯 군데:
+ *      import · NextNoBoard 의 rightSlot prop · 안내 줄 · bulkOpen 상태 · 버튼 · 모달 마운트).
+ * 그 밖의 파일은 손대지 않았으므로 더 찾을 곳이 없다.
+ */
+export const BULK_IMPORT_ENABLED = true
+// ─────────────────────────────────────────────────────────────────────

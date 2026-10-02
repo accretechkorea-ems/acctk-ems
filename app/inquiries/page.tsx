@@ -35,12 +35,15 @@ import {
 } from '@/components/common/ui'
 import {
   INQUIRY_TYPE_ITEMS, INQUIRY_TYPE_LABEL, inquiryTypeOf, inquiryStatusLabel,
-  INQUIRY_STATUS_DOT, REQ80_SERIES, previewInquiryNo, buildInquiryNo,
+  INQUIRY_STATUS_DOT, REQ80_SERIES, previewInquiryNo, buildInquiryNo, BULK_IMPORT_ENABLED,
   type InquiryStatus, type InquiryType,
 } from '@/lib/inquiries'
 import { engineerLabel, isCurrentlyEmployed } from '@/lib/engineers'
 import FilePicker, { failText, uploadFiles, type UploadFail } from '@/components/inquiry/files'
 import CompleteModal from '@/components/inquiry/CompleteModal'
+// TEMP-BULK-IMPORT ↓ (일괄 등록이 끝나면 이 줄과 아래 두 군데를 지운다)
+import BulkImportModal from '@/components/inquiry/bulk/BulkImportModal'
+// TEMP-BULK-IMPORT ↑
 import { errorInfo } from '@/lib/errorInfo'
 
 /** 결재 화면과 같은 전환 기준. 두 화면의 레일이 다르게 움직이면 어색하다. */
@@ -608,7 +611,7 @@ function NextNoCard({
  * 카드는 한 컴포넌트(NextNoCard)를 그대로 쓰고 wide 만 다르다.
  */
 function NextNoBoard({
-  type, counters, loading, onCreate, onRegister,
+  type, counters, loading, onCreate, onRegister, rightSlot,
 }: {
   /** 한 종류만 볼 때. null 이면 6종 전부. */
   type: InquiryType | null
@@ -616,6 +619,9 @@ function NextNoBoard({
   loading: boolean
   onCreate: (t: InquiryType) => void
   onRegister: (t: InquiryType) => void
+  // TEMP-BULK-IMPORT ↓ (안내 문구 줄 오른쪽에 들어가는 것. 지울 때 이 prop 과 아래 쓰임을 함께 지운다)
+  rightSlot?: React.ReactNode
+  // TEMP-BULK-IMPORT ↑
 }) {
   const today = todayKST()
   const year = today.slice(0, 4)
@@ -648,7 +654,12 @@ function NextNoBoard({
         ))}
       </div>
       {/* 안내는 카드마다 반복하지 않고 묶음 아래 한 줄로만 둔다. */}
-      <div style={{ fontSize: 12, color: SUB, lineHeight: 1.7, marginTop: 8 }}>{PEEK_NOTICE}</div>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 8 }}>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: SUB, lineHeight: 1.7 }}>{PEEK_NOTICE}</span>
+        {/* TEMP-BULK-IMPORT ↓ */}
+        {rightSlot}
+        {/* TEMP-BULK-IMPORT ↑ */}
+      </div>
     </div>
   )
 }
@@ -669,6 +680,9 @@ function InquiriesPageInner() {
   const [registerType, setRegisterType] = useState<InquiryType | null>(null)
   /** 「작성 완료」 모달을 연 행. 상세로 들어가지 않고 목록에서 바로 끝낸다. */
   const [completeFor, setCompleteFor] = useState<InquiryRow | null>(null)
+  // TEMP-BULK-IMPORT ↓
+  const [bulkOpen, setBulkOpen] = useState(false)
+  // TEMP-BULK-IMPORT ↑
   const [counters, setCounters] = useState<Counter[] | null>(null)
   const [peeking, setPeeking] = useState(false)
   const [engineers, setEngineers] = useState<PickEngineer[]>([])
@@ -825,6 +839,20 @@ function InquiriesPageInner() {
               loading={peeking}
               onCreate={startCreate}
               onRegister={startRegister}
+              // TEMP-BULK-IMPORT ↓ (지난 파일을 한 번에 넣는 임시 기능. 스위치를 끄면 사라진다)
+              rightSlot={BULK_IMPORT_ENABLED ? (
+                <button
+                  type="button" onClick={() => setBulkOpen(true)}
+                  style={{
+                    flexShrink: 0, border: `1px solid ${BORDER}`, background: CARD_BG,
+                    borderRadius: 6, padding: '5px 10px', fontSize: 12, fontWeight: 700,
+                    color: MUTED, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                  }}
+                >
+                  일괄 등록(임시)
+                </button>
+              ) : undefined}
+              // TEMP-BULK-IMPORT ↑
             />
 
             <div style={cardStyle}>
@@ -966,6 +994,17 @@ function InquiriesPageInner() {
           onDone={() => setReloadKey(k => k + 1)}
         />
       )}
+
+      {/* TEMP-BULK-IMPORT ↓ */}
+      {bulkOpen && (
+        <BulkImportModal
+          engineers={engineers}
+          myId={myId}
+          onClose={() => setBulkOpen(false)}
+          onDone={() => setReloadKey(k => k + 1)}
+        />
+      )}
+      {/* TEMP-BULK-IMPORT ↑ */}
 
       {/* 작성 완료 — 상세 화면과 같은 모달을 쓴다. 끝나면 목록을 다시 읽어 상태가 바로 바뀐다. */}
       {completeFor && (
