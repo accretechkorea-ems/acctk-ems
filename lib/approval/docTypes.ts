@@ -27,6 +27,21 @@ export type OnCompleteContext = {
   lines: ApprovalLine[]
 }
 
+/**
+ * 그 종류가 요구하는 결재선. 검사는 lib/approval/lineRules.ts 의 checkLineRules 가 한다
+ * (엔진은 종류를 모르는 상태로 둔다 — 이 파일 머리 설명과 같은 이유다).
+ *
+ * **결재가 필요 없어지거나 규칙이 바뀌면 이 칸만 바꾼다.** 칸을 빼면 그 종류는 모양 검사
+ * (engine.ts 의 validateLineInput)만 받는다 — 상신 경로·화면은 고치지 않는다.
+ */
+export type LineRules = {
+  /**
+   * 결재자(kind='approve')에 'superadmin' 등급이 한 명 이상 있어야 한다.
+   * 합의·참조의 관리자는 세지 않고, 상신자 본인이 관리자면 면제된다(checkLineRules 설명 참고).
+   */
+  requireSuperadminApprover?: boolean
+}
+
 export type DocTypeDef = {
   /** approval_documents.doc_type 에 저장되는 값. */
   key: string
@@ -42,6 +57,11 @@ export type DocTypeDef = {
    * 반려할 것이 없다. 그 판정을 approval_documents 에 컬럼을 늘리지 않고 summary 로 한다.
    */
   canRejectDoc?: (summary: Record<string, unknown>) => boolean
+  /**
+   * 결재선 규칙. 없으면 종류별 요구가 없다는 뜻이다(모양 검사만 받는다).
+   * **결재가 필요 없어지거나 규칙이 바뀌면 이 칸만 바꾼다.**
+   */
+  lineRules?: LineRules
 }
 
 /**
@@ -60,6 +80,7 @@ export const DOC_TYPES: Record<string, DocTypeDef> = {
     label: '견적서',
     canReject: true,
     canCancelAfterComplete: false,   // 완료 시 PDF 가 만들어져 되돌릴 수 없다
+    lineRules: { requireSuperadminApprover: true },
   },
   // 쇼룸 사용 신청 — 실행 함수는 lib/approval/showroomUsage.ts (handlers.ts 가 묶는다).
   showroom_usage: {
@@ -67,6 +88,7 @@ export const DOC_TYPES: Record<string, DocTypeDef> = {
     label: '쇼룸 사용 신청',
     canReject: true,
     canCancelAfterComplete: true,    // 사용 기록은 취소할 수 있다
+    lineRules: { requireSuperadminApprover: true },
     // 사후 신청은 이미 끝난 사용을 「확인」만 한다 — 반려할 것이 없다.
     canRejectDoc: summary => {
       const s = summary as { is_retroactive?: unknown; payload?: { is_retroactive?: unknown } } | null
@@ -79,6 +101,7 @@ export const DOC_TYPES: Record<string, DocTypeDef> = {
     label: '견적 삭제 요청',
     canReject: true,
     canCancelAfterComplete: false,   // 지워진 견적은 되돌릴 수 없다
+    lineRules: { requireSuperadminApprover: true },
   },
 }
 

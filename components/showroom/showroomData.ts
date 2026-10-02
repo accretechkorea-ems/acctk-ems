@@ -9,10 +9,10 @@ import { normTime, toMin, toHHMM } from '@/lib/workHours'
 import {
   siteShortName, DEFAULT_DAILY_HOURS, DEFAULT_DEVICE_STATUS,
   type ShowroomDevice, type ShowroomDeviceBase, type ShowroomSite, type ShowroomUsageRow,
+  type UsageApprovalDoc,
 } from '@/lib/showroom'
 import type { UsageInitial, UsageSubmission } from './UsageModal'
 import type { PickerEngineer } from './EngineerPicker'
-import type { DeviceMonthSummary } from './DeviceGrid'
 import type { CustomerHit } from './CustomerSearch'
 
 type Browser = ReturnType<typeof createClient>
@@ -23,20 +23,17 @@ const DEVICE_COLUMNS =
 // showroom_usage → approval_requests 는 FK 가 request_id 하나라 이름 없이 임베딩한다.
 // approval_requests → engineers 는 FK 가 두 개(requester_id·approver_id)라 붙여 읽지 않고, 승인자 이름은
 // 화면이 이미 가진 엔지니어 목록으로 바꾼다. 읽기 정책 ar_select_showroom 이 쇼룸 권한자에게 데모 신청을 연다.
+//
+// **전자결재 건(document_id)은 임베딩하지 않는다.** approval_documents 의 읽기 정책(ad_select)은
+// 상신자·결재선 참여자·superadmin 에게만 열려 있어, 기록 목록을 보는 제3자에게는 null 만 온다.
+// 그래서 문서 id 목록을 /api/showroom/requests/approvals 에 넘겨 service role 로 받아 온다
+// (loadUsageApprovals). 옛 건과 새 건이 한 행에 섞이는 일은 없다 — 둘 중 하나만 채워진다.
 const USAGE_SELECT =
   'usage_id, device_id, usage_date, start_time, end_time, work_hours, purpose, customer_id,' +
   ' project_name, customer_dept, content, sample_material, carried_out, expected_cost, nda_status,' +
-  ' expected_result, result, result_category, issue, follow_up, quote_id, note, request_id, created_by,' +
+  ' expected_result, result, result_category, issue, follow_up, quote_id, note, request_id, document_id, created_by,' +
   ' customers(company_name), quotes(quote_number),' +
   ' approval_requests(approver_id, decided_at, status, retro:payload->is_retroactive)'
-
-const pad = (n: number) => String(n).padStart(2, '0')
-
-/** 그 달의 첫날·마지막날 'YYYY-MM-DD'. Date.UTC(y, m, 0) 이 그 달의 마지막 날이다. */
-export function monthRange(y: number, m: number) {
-  const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
-  return { from: `${y}-${pad(m)}-01`, to: `${y}-${pad(m)}-${pad(last)}` }
-}
 
 /**
  * 쇼룸 사무실(showroom_sites, created_at 순) → 그 사무실의 devices → showroom_devices 설정을 합친다.
@@ -91,6 +88,8 @@ export async function loadEngineers(sb: Browser): Promise<PickerEngineer[]> {
 const PAGE_ROWS = 1000
 /** 참여 엔지니어를 usage_id 로 묶어 읽을 때 한 번에 넣는 id 수 — 주소 길이와 응답 행 수(1,000)를 넘지 않게. */
 const ID_CHUNK = 100
+/** 승인 정보를 문서 id 로 묶어 읽을 때 한 번에 보내는 수. 라우트의 상한(MAX_IDS = 300)보다 작게 둔다. */
+const APPROVAL_ID_CHUNK = 200
 
 /**
  * 기간(from~to, 양 끝 포함)의 사용 기록과 기록별 참여 엔지니어. 날짜·시작시각 내림차순.
@@ -131,25 +130,33 @@ export async function loadPeriodUsages(sb: Browser, from: string, to: string): P
 }
 
 /**
- * 장비 카드의 이번 달 요약(KST) — 합계·건수만 필요해 두 컬럼만 읽는다.
- * 가동률 목록은 사용여부 N 장비를 빼므로, superadmin 에게 보이는 그 장비의 건수는 여기서 가져온다.
+ * 전자결재로 만든 기록의 승인 정보. 문서 id 가 하나도 없으면 아무것도 읽지 않는다.
+ *
+ * 라우트가 service role 로 읽어 내려 준다(위 USAGE_SELECT 설명 — 읽기 정책 때문에 임베딩이 안 된다).
+ * 실패하면 빈 표를 돌려준다 — 승인 칸만 비고 기록 목록 자체는 그려야 한다
+ * (lib/showroom.ts 의 usageApprovalView 가 doc 이 없을 때 상태를 꾸며 내지 않는다).
  */
-export async function loadMonthSummary(sb: Browser, y: number, m: number): Promise<Record<number, DeviceMonthSummary>> {
-  const { from, to } = monthRange(y, m)
-  const { data, error } = await sb
-    .from('showroom_usage').select('device_id, work_hours')
-    .is('deleted_at', null)
-    .gte('usage_date', from).lte('usage_date', to)
-  if (error) throw new Error(`summary: ${error.message}`)
-  const map: Record<number, DeviceMonthSummary> = {}
-  for (const r of (data ?? []) as { device_id: number; work_hours: number }[]) {
-    const s = (map[r.device_id] ??= { hours: 0, count: 0 })
-    s.hours += Number(r.work_hours) || 0
-    s.count += 1
+export async function loadUsageApprovals(rows: ShowroomUsageRow[]): Promise<Record<number, UsageApprovalDoc>> {
+  const ids = [...new Set(rows.map(r => r.document_id).filter((n): n is number => n != null))]
+  if (ids.length === 0) return {}
+  // 라우트에 한 번에 보낼 수 있는 수가 정해져 있어(MAX_IDS) 나눠 보낸다. 기간을 1년으로 잡으면
+  // 신청 건이 수백이 될 수 있는데, 그때 한 묶음으로 보내면 전부 400 이 되어 승인 칸이 통째로 빈다.
+  const out: Record<number, UsageApprovalDoc> = {}
+  for (let i = 0; i < ids.length; i += APPROVAL_ID_CHUNK) {
+    const chunk = ids.slice(i, i + APPROVAL_ID_CHUNK)
+    try {
+      const res = await fetch(`/api/showroom/requests/approvals?docs=${chunk.join(',')}`)
+      const json = await res.json().catch(() => null)
+      if (!res.ok) {
+        console.error('[showroom] usage approvals load failed', json)
+        continue
+      }
+      Object.assign(out, (json?.approvals ?? {}) as Record<number, UsageApprovalDoc>)
+    } catch (e) {
+      console.error('[showroom] usage approvals load failed', e)
+    }
   }
-  // 소수 합계라 부동소수 오차가 보일 수 있어 소수 첫째 자리에서 끊는다.
-  for (const s of Object.values(map)) s.hours = Math.round(s.hours * 10) / 10
-  return map
+  return out
 }
 
 /** 쓰기 라우트 호출. 성공이면 null, 실패면 화면에 띄울 메시지. */

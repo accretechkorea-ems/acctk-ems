@@ -16,7 +16,10 @@ import {
   BLUE, BORDER, CARD_BG, DANGER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT,
   btnGhost, btnPrimary, inputStyle,
 } from '@/components/common/ui'
+import { isSuperAdmin } from '@/lib/permissions'
 import { validateLineInput } from '@/lib/approval/engine'
+import { DOC_TYPES } from '@/lib/approval/docTypes'
+import { checkLineRules, lineRuleNotice, SUPERADMIN_LABEL } from '@/lib/approval/lineRules'
 import type { LineInput, LineKind } from '@/lib/approval/types'
 
 /** 직급 순서. 유지보수 화면과 같은 표를 쓴다(없는 직급은 맨 뒤). */
@@ -24,8 +27,22 @@ const POSITION_ORDER: Record<string, number> = {
   '사장': 0, '총괄': 1, '관리자': 2, '수석': 3, '책임': 4, '선임': 5, '사원': 6,
 }
 
-type Person = { engineer_id: number; name: string | null; position: string | null; teams: string | null }
+// permission_level 을 함께 읽는다 — 종류별 결재선 규칙(관리자 결재자 1명 이상)을 화면에서도 보려면
+// 누가 그 등급인지 알아야 한다. 판정은 서버와 같은 함수(lib/approval/lineRules.ts)로 한다.
+type Person = { engineer_id: number; name: string | null; position: string | null; teams: string | null; permission_level: string | null }
 type Preset = { preset_id: number; name: string; doc_type: string | null; lines: LineInput[] }
+
+/** 'superadmin' 등급 표시. 중립 pill — 색은 쓰지 않는다(디자인 규칙). */
+function SuperBadge() {
+  return (
+    <span style={{
+      flexShrink: 0, background: NEUTRAL_BG, borderRadius: 99, padding: '1px 7px',
+      fontSize: 11, fontWeight: 700, color: SUB, whiteSpace: 'nowrap',
+    }}>
+      {SUPERADMIN_LABEL}
+    </span>
+  )
+}
 
 const KINDS: { key: LineKind; label: string }[] = [
   { key: 'approve', label: '결재' },
@@ -70,7 +87,7 @@ export default function LinePickerModal({
       const supabase = createClient()
       const { data, error } = await supabase
         .from('engineers')
-        .select('engineer_id, name, position, teams')
+        .select('engineer_id, name, position, teams, permission_level')
         .is('resigned_date', null)
         .order('name')
       if (cancelled) return
@@ -147,11 +164,31 @@ export default function LinePickerModal({
   const toggleAuthority = (id: number) =>
     setPicked(prev => prev.map(l => (l.approverId === id ? { ...l, isDelegatedAuthority: !l.isDelegatedAuthority } : l)))
 
+  // ── 종류별 결재선 규칙 ──
+  // 정의표(DOC_TYPES.lineRules)를 읽어 서버와 **같은 함수**로 본다. 규칙이 바뀌면 정의표만 고치면
+  // 화면과 서버가 함께 따라온다.
+  const rules = docType ? DOC_TYPES[docType]?.lineRules : undefined
+  const isSuper = (id: number) => isSuperAdmin(people.find(p => p.engineer_id === id) ?? null)
+  // 상신자가 관리자면 면제된다 — 본인은 자기 결재선에 들어갈 수 없기 때문이다(lineRules.ts 설명).
+  const iAmSuper = myId != null && isSuper(myId)
+  const notice = lineRuleNotice(rules, iAmSuper)
+
   // 서버와 같은 검증. 재직 여부는 이미 목록에서 걸렀으므로 고른 사람 전부를 재직자로 넘긴다.
-  const problem = useMemo(
+  const shapeProblem = useMemo(
     () => validateLineInput(renumber(picked), myId ?? -1, new Set(picked.map(l => l.approverId))),
     [picked, myId],
   )
+  const ruleResult = checkLineRules({
+    lines: renumber(picked),
+    rules,
+    requesterIsSuperadmin: iAmSuper,
+    isSuperadmin: isSuper,
+  })
+  // 모양이 먼저다 — 결재자가 아예 없는 결재선에 「관리자를 넣으세요」라고 하면 순서가 뒤집힌다.
+  const problem = shapeProblem ?? (ruleResult.ok ? null : ruleResult.message)
+  // 안내 줄을 빨갛게 바꾸는 시점 — 결재자를 **고른 뒤에** 규칙에 어긋날 때다. 열자마자(아무도 고르지
+  // 않았을 때) 실패로 보이면 아직 하지 않은 일을 틀렸다고 말하는 셈이다.
+  const ruleFailing = !ruleResult.ok && picked.some(l => l.kind === 'approve')
 
   const loadPreset = (presetId: number) => {
     const p = presets.find(x => x.preset_id === presetId)
@@ -230,6 +267,18 @@ export default function LinePickerModal({
           </button>
         </div>
 
+        {/* 종류별 결재선 규칙 안내 — 짜기 전에 무엇이 필요한지 알린다. 규칙을 만족하지 않는 동안은
+            같은 자리에 실패 사유가 보이고 아래 [확인]이 잠긴다. 관리자가 올리는 문서에는 안 뜬다. */}
+        {notice && (
+          <div style={{
+            marginBottom: 12, padding: '8px 10px', borderRadius: 6,
+            background: NEUTRAL_BG, fontSize: 12, fontWeight: 600,
+            color: ruleFailing ? DANGER : SUB,
+          }}>
+            {ruleFailing && !ruleResult.ok ? ruleResult.message : notice}
+          </div>
+        )}
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 12, flex: 1, minHeight: 0 }}>
           {/* 왼쪽 — 팀 → 사람 */}
           <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, display: 'flex', minHeight: 0 }}>
@@ -263,6 +312,9 @@ export default function LinePickerModal({
                   }}>
                   <span style={{ fontWeight: 600 }}>{p.name}</span>
                   <span style={{ fontSize: 11, color: MUTED }}>{p.position}</span>
+                  {/* 등급 뱃지 — 직급에도 「관리자」가 있어 글자만으로는 구분되지 않는다.
+                      규칙이 요구하는 사람이 누구인지 보이게 pill 로 따로 세운다. */}
+                  {isSuperAdmin(p) && <SuperBadge />}
                   {chosen.has(p.engineer_id) && <span style={{ fontSize: 11, color: MUTED, marginLeft: 'auto' }}>추가됨</span>}
                 </button>
               ))}
@@ -283,6 +335,7 @@ export default function LinePickerModal({
                 </span>
                 <span style={{ fontSize: 13, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap' }}>{nameOf(l.approverId)}</span>
                 <span style={{ fontSize: 11, color: MUTED, whiteSpace: 'nowrap' }}>{posOf(l.approverId)}</span>
+                {isSuper(l.approverId) && <SuperBadge />}
                 <select value={l.kind} onChange={e => setKind(l.approverId, e.target.value as LineKind)}
                   style={{ ...inputStyle, padding: '4px 6px', fontSize: 12, marginLeft: 'auto', cursor: 'pointer' }}>
                   {KINDS.map(k => <option key={k.key} value={k.key}>{k.label}</option>)}

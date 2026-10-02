@@ -2,7 +2,9 @@
 
 // 쇼룸 화면 헤더 — 한 줄에
 //   [좌] 장비 탭: 첫 사무실 제목 + 대수 / 가동률 탭: 사무실 선택(동탄 | 구미 | 전체) / 전체기록 탭: 비움
-//   [중앙] 가동률 탭: ◀ 기간 ▶ — 기간을 누르면 기간 선택 모달
+//   [중앙] 장비·가동률 탭: ◀ 기간 ▶ — 기간을 누르면 기간 선택 모달. **두 탭이 같은 기간을 쓴다**
+//          (상태는 app/showroom/page.tsx 의 utilNav.period 한 곳 — 탭을 옮겨도 고른 기간이 남는다).
+//          전체기록 탭은 자기 기간을 주소에 들고 있어 여기에 끼지 않는다.
 //   [우] 탭(장비 | 가동률 | 전체기록) — 세 칸 같은 폭
 //
 // 탭은 모든 탭에서 같은 자리(우측 끝)에 한 번만 그린다 — 탭을 바꿔도 컨트롤이 다시 만들어지지 않아
@@ -19,7 +21,7 @@ import { useMemo, type CSSProperties } from 'react'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import { type Period, type ShowroomSite } from '@/lib/showroom'
 import { skeletonBlock } from '@/components/common/ui'
-import { siteTitleStyle, siteCountStyle, siteBasisStyle, monthBasisLabel } from './DeviceGrid'
+import { siteTitleStyle, siteCountStyle, siteBasisStyle, periodBasisLabel } from './DeviceGrid'
 import PeriodNav from './PeriodNav'
 import type { ShowroomTab } from './usageQuery'
 
@@ -42,7 +44,7 @@ const reveal = (shown: boolean): CSSProperties => ({
 })
 
 // 3칸 격자 — 좌우 칸이 같은 폭(1fr)이라 가운데 기간이 화면 가운데에 온다.
-// 899px 이하에서는 기간을 둘째 줄 가운데로 내린다(가동률 탭이 아니면 그 줄을 접는다).
+// 899px 이하에서는 기간을 둘째 줄 가운데로 내린다(기간을 쓰지 않는 탭 — 전체기록 — 에서는 그 줄을 접는다).
 const HEAD_CSS = `
   .sr-head { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; margin-bottom: 12px; }
   .sr-head-left { display: grid; align-items: center; min-width: 0; }
@@ -51,7 +53,7 @@ const HEAD_CSS = `
   @media (max-width: 899px) {
     .sr-head { grid-template-columns: minmax(0, 1fr) auto; }
     .sr-head-center { grid-column: 1 / -1; grid-row: 2; justify-self: center; }
-    .sr-head[data-util="0"] .sr-head-center { display: none; }
+    .sr-head[data-period="0"] .sr-head-center { display: none; }
   }
 `
 
@@ -66,7 +68,7 @@ type Props = {
   sites: ShowroomSite[]
   /** 가동률 사무실 — 첫 사무실로 풀어 둔 값 */
   site: number | 'all' | null
-  /** 가동률 기간 */
+  /** 장비·가동률 탭이 함께 쓰는 기간 */
   period: Period
   onSiteChange: (site: number | 'all') => void
   onPeriodChange: (period: Period) => void
@@ -78,6 +80,8 @@ export default function ShowroomHeader({
 }: Props) {
   const onDevices = active === 'devices'
   const onUtil = active === 'util'
+  // 기간 이동기를 쓰는 탭 — 장비와 가동률. 전체기록은 자기 기간 필터를 본문에 들고 있다.
+  const onPeriod = onDevices || onUtil
 
   // 사무실 선택지 — showroom_sites 순서대로, 마지막이 전체.
   const siteOptions = useMemo(() => [
@@ -89,7 +93,7 @@ export default function ShowroomHeader({
     <>
       <style>{HEAD_CSS}</style>
 
-      <div className="sr-head" data-util={onUtil ? '1' : '0'}>
+      <div className="sr-head" data-period={onPeriod ? '1' : '0'}>
         {/* 좌 — 사무실 제목(장비) / 사무실 선택(가동률) */}
         <div className="sr-head-left">
           <div aria-hidden={!onDevices} style={{ ...reveal(onDevices), display: 'flex', alignItems: 'baseline', gap: 8 }}>
@@ -99,7 +103,7 @@ export default function ShowroomHeader({
               <>
                 <span style={siteTitleStyle}>{siteTitle.name}</span>
                 <span style={siteCountStyle}>{siteTitle.count}대</span>
-                <span style={siteBasisStyle}>{monthBasisLabel()}</span>
+                <span style={siteBasisStyle}>{periodBasisLabel(period)}</span>
               </>
             )}
           </div>
@@ -114,8 +118,8 @@ export default function ShowroomHeader({
           </div>
         </div>
 
-        {/* 중앙 — ◀ 기간 ▶ (가동률) */}
-        <div className="sr-head-center" aria-hidden={!onUtil} style={reveal(onUtil)}>
+        {/* 중앙 — ◀ 기간 ▶ (장비·가동률 공용) */}
+        <div className="sr-head-center" aria-hidden={!onPeriod} style={reveal(onPeriod)}>
           <PeriodNav period={period} onChange={onPeriodChange} />
         </div>
 

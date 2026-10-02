@@ -199,6 +199,71 @@ export function splitHighlight(text: string, words: string[]): Piece[] {
   return out.length > 0 ? out : [{ text, hit: false }]
 }
 
+// ── 목록의 「내용」·「회신」 열 ──────────────────────────────────────
+// DB 함수 inquiry_list_extras 가 돌려주는 값을 화면 글자로 바꾼다(inquiry_list_extras_function.sql).
+// 함수가 아직 DB 에 없거나 호출이 실패하면 extras 가 undefined 로 들어온다 — 그때도 깨지지 않아야 한다.
+
+/** inquiry_list_extras 한 행. 내용 기록이 없는 의뢰서는 **행 자체가 오지 않는다**(함수 설계 ①). */
+export type InquiryExtras = {
+  inquiry_id: string
+  /** 본문이 공백이 아닌 가장 최근 기록의 본문(한 줄로 접혀 120자 + …). 없으면 null. */
+  last_body: string | null
+  /** 가장 최근 기록에 달린 첫 파일 이름. 없으면 null. */
+  last_file_name: string | null
+  reply_count: number
+  reply_file_count: number
+  /** 가장 최근 회신 날짜 'YYYY-MM-DD'. 회신이 없으면 null. */
+  last_reply_date: string | null
+}
+
+export type ReplyView = {
+  /** 「회신 3」 */
+  label: string
+  /** 그 회신들에 달린 첨부 수. 0 이면 클립을 그리지 않는다. */
+  fileCount: number
+  /** 마우스 올림 설명 — 「최근 회신 2026-10-01 · 파일 3개」 */
+  title: string
+}
+
+/**
+ * 회신 칸. 회신이 **한 건도 없으면 null** — 화면은 그때 흐린 「-」를 그린다.
+ * 「대기」처럼 상태를 짐작하는 말은 쓰지 않는다. 회신이 없는 것은 아직 안 온 것일 수도,
+ * 애초에 받을 것이 없는 것일 수도 있어서 둘을 구분할 근거가 목록에 없다.
+ */
+export function replyView(extras: InquiryExtras | undefined): ReplyView | null {
+  const n = extras?.reply_count ?? 0
+  if (n <= 0) return null
+  const files = extras?.reply_file_count ?? 0
+  const when = extras?.last_reply_date
+  return {
+    label: `회신 ${n}`,
+    fileCount: files,
+    title: [
+      when ? `최근 회신 ${when}` : `회신 ${n}건`,
+      files > 0 ? `파일 ${files}개` : null,
+    ].filter(Boolean).join(' · '),
+  }
+}
+
+export type ContentPreview = {
+  /** body = 본문 한 줄 · file = 파일 이름 · none = 보여 줄 것이 없다 */
+  kind: 'body' | 'file' | 'none'
+  /** none 이면 빈 문자열 — 화면이 「-」를 그린다. */
+  text: string
+}
+
+/**
+ * 내용 칸. **본문이 우선**이고, 본문이 없을 때만 파일 이름을 보여 준다.
+ * 둘 다 없으면 kind 'none' — 내용 기록이 아예 없는 의뢰서(extras 없음)도 여기로 떨어진다.
+ */
+export function contentPreview(extras: InquiryExtras | undefined): ContentPreview {
+  const body = extras?.last_body?.trim()
+  if (body) return { kind: 'body', text: body }
+  const file = extras?.last_file_name?.trim()
+  if (file) return { kind: 'file', text: file }
+  return { kind: 'none', text: '' }
+}
+
 /**
  * 상세로 갔다 돌아올 주소. 「/inquiries」로 시작하는 내부 경로만 받는다 —
  * 주소창에 외부 주소를 넣어 사용자를 바깥으로 보내는 길(open redirect)을 막는다.

@@ -134,7 +134,7 @@ async function refreshPdf(
 
 /**
  * 완료 직전 점검 — 사전 신청만 본다. 겹치는 사용 기록이 있으면 사람이 읽을 메시지를 돌려주고,
- * 그러면 마지막 승인이 막힌다(지금 요청함의 「기록을 정리한 뒤 승인해주세요」와 같은 동작).
+ * 그러면 마지막 승인이 막힌다 — 결재자에게 「기록을 정리한 뒤 결재해주세요」로 돌려준다.
  */
 export async function beforeCompleteShowroom(ctx: { documentId: number; summary: Record<string, unknown> }): Promise<string | null> {
   const s = readSummary(ctx.summary)
@@ -167,7 +167,8 @@ export async function onCompleteShowroom(ctx: {
 
   if (!s.is_retroactive && s.usage_id == null) {
     // 사전 신청 — 계획 시간을 실제 시간으로 넣는다(나중에 신청자가 고친다). 작성자는 신청자.
-    const made = await createUsageFromRequest(sb, null, s.payload, ctx.requesterId)
+    // 문서가 이미 있으므로 document_id 를 넣으면서 만든다(기록 → 문서 연결).
+    const made = await createUsageFromRequest(sb, null, s.payload, ctx.requesterId, ctx.documentId)
     if ('error' in made) {
       console.error(`[${TAG}] usage 생성 실패`, { documentId: ctx.documentId, error: made.error })
       // 기록 없이 완료로 남는다 — 결재를 되돌릴 수는 없으므로 상신자에게 알려 손으로 처리하게 한다.
@@ -197,6 +198,141 @@ export async function onCompleteShowroom(ctx: {
     tag: s.is_retroactive ? 'confirmed' : 'approved',
     opinion: lastComment(ctx.lines),
   })
+}
+
+/**
+ * 결재가 완료되지 않고 끝났을 때 — **사후 신청의 사용 기록을 치운다.**
+ *
+ * 반려·회수·폐기 세 경우에 모두 불린다(app/api/approval/route.ts 의 runRevert). 셋을 나누지 않는
+ * 이유는 handlers.ts 의 설명과 같다 — 원 기록 쪽에서 보면 「상신 때 만들어 둔 것을 되돌린다」 한 가지다.
+ *   · 사전 신청 — 기록이 아직 없다. 아무것도 하지 않는다.
+ *   · 사후 신청 — 상신 때 만든 기록을 지운다. 반려는 막혀 있으니(canRejectDoc) 실제로는 회수·폐기다.
+ *
+ * **여러 번 불려도 탈이 없어야 한다** — 폐기는 반려·회수된 문서에만 할 수 있어 이 훅이 두 번 불린다.
+ * 그래서 summary.usage_id 를 비우고 target_id 를 null 로 만든 뒤 지운다. 두 번째 호출은 읽을 id 가
+ * 없어 그대로 돌아간다.
+ *
+ * 실패해도 던지지 않는다 — 회수·폐기 전이는 이미 끝났고, runRevert 가 기록만 남긴다
+ * (quote_delete 의 onRevertQuoteDelete 와 같은 규칙).
+ */
+export async function onRevertShowroom(ctx: {
+  documentId: number
+  docNo: string
+  targetId: number | null
+  summary: Record<string, unknown>
+  actorId: number
+}): Promise<void> {
+  const s = readSummary(ctx.summary)
+  if (!s) {
+    console.error(`[${TAG}] summary 모양이 아니다 — 되돌릴 것을 알 수 없다`, { documentId: ctx.documentId })
+    return
+  }
+  // 사전 신청은 상신 때 기록을 만들지 않는다. 완료 뒤에 만들어진 기록은 회수·폐기 대상이 아니다
+  // (완료된 문서는 회수·폐기할 수 없다 — 라우트가 '진행중'·'반려'·'회수' 만 받는다).
+  if (!s.is_retroactive) return
+
+  const usageId = s.usage_id ?? ctx.targetId
+  if (usageId == null) return   // 이미 치웠다(두 번째 호출)
+
+  const sb = admin()
+
+  // 방어 — 이 기록이 **정말 이 문서의 것인가**. 옛 요청함 건(request_id)이거나 남의 문서에 묶인
+  // 기록이면 손대지 않는다. document_id 가 아직 null 인 과거 기록은 target_id 로만 이어져 있어
+  // 통과시킨다(그 경우에도 document 쪽이 이 기록을 가리키고 있는 것은 위에서 확인했다).
+  const { data: row, error: readErr } = await sb
+    .from('showroom_usage')
+    .select('usage_id, document_id, request_id, device_id, usage_date, start_time, end_time')
+    .eq('usage_id', usageId)
+    .maybeSingle()
+  if (readErr) {
+    console.error(`[${TAG}] usage lookup failed`, { documentId: ctx.documentId, usageId, error: readErr })
+    return
+  }
+  const usage = (row ?? null) as {
+    usage_id: number; document_id: number | null; request_id: number | null
+    device_id: number; usage_date: string; start_time: string; end_time: string
+  } | null
+  if (!usage) {
+    // 사람이 먼저 지웠다. summary 만 비워 두고 끝낸다.
+    await clearUsageLink(sb, ctx.documentId, s)
+    return
+  }
+  if (usage.request_id != null || (usage.document_id != null && usage.document_id !== ctx.documentId)) {
+    console.error(`[${TAG}] 이 문서의 기록이 아니다 — 지우지 않는다`, {
+      documentId: ctx.documentId, usageId, usageDocumentId: usage.document_id, requestId: usage.request_id,
+    })
+    return
+  }
+
+  // 지우기 전에 감사 기록. 무엇이 사라지는지(장비·사용일·시간)를 남긴다 — 사용 기록은 장비 가동률의
+  // 원본이라 「왜 줄었는지」를 나중에 설명할 수 있어야 한다. 실패해도 삭제는 막지 않는다.
+  await writeRevertAudit(sb, {
+    documentId: ctx.documentId, docNo: ctx.docNo, actorId: ctx.actorId,
+    usage: {
+      usage_id: usage.usage_id, device_id: usage.device_id,
+      usage_date: usage.usage_date, start_time: usage.start_time, end_time: usage.end_time,
+    },
+  })
+
+  // 문서 → 기록 연결을 먼저 끊는다. 지우기가 실패해도 문서가 없는 기록을 가리키지 않게.
+  await clearUsageLink(sb, ctx.documentId, s)
+
+  // 참여 엔지니어(showroom_usage_engineers)는 usage_id 가 ON DELETE CASCADE 라 함께 사라진다.
+  const { error: delErr } = await sb.from('showroom_usage').delete().eq('usage_id', usageId)
+  if (delErr) {
+    console.error(`[${TAG}] usage delete failed`, { documentId: ctx.documentId, usageId, error: delErr })
+    return
+  }
+
+  // 도장 없는 승인서 PDF 를 치운다. 재작성하면 새로 만들어지므로(makePdf, tag 'rev') 남길 이유가 없다.
+  // 실패해도 회수·폐기는 그대로다 — 파일 하나가 남는 것과 결재가 안 되는 것은 다른 일이다.
+  if (s.pdf_url) await dropApprovalPdf(sb, s.pdf_url)
+
+  console.log(`[${TAG}] 사후 신청 기록 정리`, { documentId: ctx.documentId, docNo: ctx.docNo, usageId })
+}
+
+/**
+ * summary.usage_id·pdf_url 과 문서의 target_id 를 비운다.
+ * 두 번째 호출(폐기)이 같은 기록을 또 지우려 하지 않게 하고, 재작성 때 기록을 다시 만들게 한다
+ * (PATCH 가 before.usage_id 가 null 인지로 그 판단을 한다).
+ */
+async function clearUsageLink(sb: SupabaseClient, documentId: number, s: ShowroomSummary) {
+  await patchSummary(sb, documentId, { ...s, usage_id: null, pdf_url: null })
+  const { error } = await sb.from('approval_documents').update({ target_id: null }).eq('document_id', documentId)
+  if (error) console.error(`[${TAG}] target_id clear failed`, { documentId, error })
+}
+
+/**
+ * 사용 기록 삭제 감사 기록. 방식은 lib/approval/quoteDelete.ts 의 writeDeleteAudit 과 같다 —
+ * 행위자 이메일·이름을 붙이고, 무엇을 어떤 절차로 지웠는지 new_data 에 남긴다.
+ * best-effort 다(실패해도 회수·폐기는 이미 끝났다).
+ */
+async function writeRevertAudit(sb: SupabaseClient, o: {
+  documentId: number
+  docNo: string
+  actorId: number
+  usage: { usage_id: number; device_id: number; usage_date: string; start_time: string; end_time: string }
+}) {
+  const { data: actor, error: actorErr } = await sb
+    .from('engineers').select('email, name').eq('engineer_id', o.actorId).maybeSingle()
+  if (actorErr) console.error(`[${TAG}] actor lookup failed`, { actorId: o.actorId, error: actorErr })
+  const who = (actor ?? null) as { email: string | null; name: string | null } | null
+
+  const { error } = await sb.from('audit_log').insert({
+    actor_email: who?.email ?? null,
+    action: 'SHOWROOM_USAGE_REVERT_DELETE',
+    table_name: 'showroom_usage',
+    row_id: String(o.usage.usage_id),
+    old_data: o.usage,
+    new_data: {
+      reason: '사후 신청 회수·폐기',
+      document_id: o.documentId,
+      doc_no: o.docNo,
+      deleted_by: o.actorId,
+      deleted_by_name: who?.name ?? null,
+    },
+  })
+  if (error) console.error(`[${TAG}] revert audit insert failed`, { documentId: o.documentId, error })
 }
 
 /** 결재란 아래 의견 — 마지막으로 처리한 사람의 의견을 싣는다. */

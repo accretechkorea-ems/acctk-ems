@@ -34,15 +34,15 @@ import {
   btnPrimary, btnGhost,
 } from '@/components/common/ui'
 import {
-  INQUIRY_TYPE_ITEMS, INQUIRY_TYPE_LABEL, inquiryStatusLabel,
+  INQUIRY_DIRECTION_COLOR, INQUIRY_TYPE_ITEMS, INQUIRY_TYPE_LABEL, inquiryStatusLabel,
   INQUIRY_STATUS_DOT, INQUIRY_STATUSES, REQ80_SERIES, previewInquiryNo, buildInquiryNo, BULK_IMPORT_ENABLED,
   type InquiryStatus, type InquiryType,
 } from '@/lib/inquiries'
 import { engineerLabel, isCurrentlyEmployed } from '@/lib/engineers'
 import {
-  PAGE_SIZE, YEAR_ALL, clampPage, isFiltered, pageRange, pageWindow, parseListQuery,
-  searchWords, splitHighlight, toListQueryString, totalPages, withFilter, yearOptions,
-  type ListQuery,
+  PAGE_SIZE, YEAR_ALL, clampPage, contentPreview, isFiltered, pageRange, pageWindow, parseListQuery,
+  replyView, searchWords, splitHighlight, toListQueryString, totalPages, withFilter, yearOptions,
+  type InquiryExtras, type ListQuery,
 } from '@/lib/inquirySearch'
 import FilePicker, { failText, uploadFiles, type UploadFail } from '@/components/inquiry/files'
 import CompleteModal from '@/components/inquiry/CompleteModal'
@@ -58,7 +58,18 @@ const MOTION_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
 
 /** 표 열 폭 — 머리와 행이 같은 값을 써야 줄이 맞는다(결재 화면과 같은 방식). */
 // 상태 칸은 「작성 중 N일째」 + 「작성 완료」 버튼이 한 줄에 들어갈 만큼 넓다.
-const COL = { no: 156, status: 176, person: 112, date: 92, gap: 10 }
+/**
+ * 열 폭. 머리 줄과 행이 **이 상수 하나**를 함께 쓴다 — 두 벌이면 한쪽만 고쳐져 줄이 어긋난다.
+ *   no·status·reply·person·date — 고정 폭(flexShrink: 0)
+ *   업체명·내용 — 남는 폭을 나눠 쓴다(flex). 내용이 더 넓다(title 1 : content 1.6).
+ * status 는 「작성 중 N일째」가 「작성 중」으로 짧아진 만큼 176 → 128 로 줄였다
+ * ([작성 완료] 버튼이 라벨 바로 뒤에 붙는 폭까지 계산한 값이다).
+ */
+const COL = { no: 156, status: 128, reply: 92, person: 112, date: 92, gap: 10 }
+
+/** 업체명 : 내용 의 폭 비율. 내용이 길어 더 넓게 준다. */
+const FLEX_TITLE = 1
+const FLEX_CONTENT = 1.6
 /** 카드 좌우 여백(16) + 행 좌우 여백(12). 머리는 카드 끝까지 늘이고 글자만 행과 맞춘다. */
 const HEAD_PAD = 28
 
@@ -96,6 +107,23 @@ const SHELL_CSS = `
     .iq-body { flex-direction: column; }
     .iq-rail { width: 100%; flex-direction: row; overflow-x: auto; gap: 4px; align-items: center; }
     .iq-typebtn { width: auto !important; flex: 0 0 auto; }
+    /* 「내용」과 「담당자」 열을 접는다 — 남는 폭을 업체명이 혼자 쓴다(flex 라 가로 스크롤이 없다).
+       담당자를 함께 접는 이유: 회신 열이 늘면서 고정 열 합이 커졌다. 두 열을 접으면 합이
+       468 + gap 40 = 508px 로, 회신 열이 없던 때(576px)보다 오히려 작아 더 좁은 폭까지 버틴다.
+       담당자를 고른 이유는 행을 누르면 상세에서 바로 보이는 값이기 때문이다(번호·업체명·상태·회신은 아니다).
+       !important — 칸에 안쪽 배치용 인라인 display 가 있어 그냥 두면 이 규칙을 이긴다
+       (쇼룸 사용 기록 표가 같은 이유로 !important 를 쓴다). */
+    .iq-content, .iq-person { display: none !important; }
+  }
+  /* 전화기 폭 — 고정 열 네 개(번호 156 · 상태 128 · 회신 92 · 발행일 92)와 gap 40 을 합치면
+     468 + 40 = 508px 이라(컨테이너 564px) 그보다 좁으면 칸이 삐져나가 가로 스크롤이 생긴다.
+     그래서 분기를 570px 에 둔다 — 위 단계가 버티는 564px 보다 커서 두 단계가 틈 없이 맞물린다.
+     발행일을 접고(번호가 날짜를 품고 있다 — BY26-81-007 의 26 이 연도다) 번호가 줄어들 수 있게 한다.
+     !important — 칸의 인라인 width·flexShrink 를 이겨야 한다(스타일시트의 !important 가 인라인을 이긴다).
+     이렇게 두면 번호가 말줄임으로 줄어들어 **어떤 폭에서도 넘치지 않는다**. */
+  @container (max-width: 570px) {
+    .iq-date { display: none !important; }
+    .iq-no { flex: 0 1 auto !important; min-width: 0 !important; }
   }
   @media (prefers-reduced-motion: reduce) {
     .iq-shell, .iq-shell * { transition: none !important; animation: none !important; }
@@ -128,6 +156,19 @@ type ListRow = {
 }
 
 const dateText = (ymd: string | null): string => (ymd ? ymd.replace(/-/g, '.') : '')
+
+/** 회신 뱃지 색 — 상세 카드의 회신 뱃지와 **같은 토큰**이다(lib/inquiries.ts). */
+const REPLY_COLOR = INQUIRY_DIRECTION_COLOR.received
+
+/** 첨부 클립 — lucide 모양의 인라인 SVG(패키지는 쓰지 않는다). 결재 목록의 것과 같은 모양이다. */
+function Clip() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
+  )
+}
 
 /**
  * 검색어가 맞은 조각을 굵게. 색을 새로 만들지 않고 굵기만 바꾼다(디자인 규칙).
@@ -303,7 +344,8 @@ function RegisterModal({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action: 'message_add', inquiry_id: inquiryId, entry_date: issuedDate, body: '',
+        // 발신 고정 — 번호를 쓴 날을 남기는 기록이다(사람이 고를 것이 없다).
+        action: 'message_add', inquiry_id: inquiryId, entry_date: issuedDate, direction: 'sent', body: '',
       }),
     })
     const json = await res.json().catch(() => ({}))
@@ -714,6 +756,12 @@ function InquiriesPageInner() {
 
   const [rows, setRows] = useState<ListRow[] | null>(null)
   const [typeCounts, setTypeCounts] = useState<Record<string, number> | null>(null)
+  /**
+   * 「내용」·「회신」 열의 값(의뢰서 id → extras). 목록과 **같은 요청 번호**로 묶어 받는다.
+   * 비어 있어도 목록은 그려진다 — DB 함수(inquiry_list_extras)를 아직 적용하지 않았거나
+   * 호출이 실패하면 두 열만 흐린 「-」로 남는다(오류 토스트를 띄우지 않는다).
+   */
+  const [extras, setExtras] = useState<Record<string, InquiryExtras>>({})
   const [loadError, setLoadError] = useState('')
   /** 조회 중 — 이전 행을 지우지 않고 이것만 표시한다(깜빡임 방지). */
   const [busy, setBusy] = useState(false)
@@ -805,12 +853,32 @@ function InquiriesPageInner() {
         return
       }
       setLoadError('')
-      setRows((list.data ?? []) as ListRow[])
+      const listRows = (list.data ?? []) as ListRow[]
+      setRows(listRows)
       const map: Record<string, number> = {}
       for (const c of (counts.data ?? []) as { inquiry_type: string; n: number }[]) {
         map[c.inquiry_type] = Number(c.n)
       }
       setTypeCounts(map)
+
+      // ── 「내용」·「회신」 ──
+      // 목록이 그려진 **뒤에** 이어서 받는다. 한 페이지(50건)의 id 를 한 번에 넘긴다.
+      // 목록 조회와 묶어 Promise.all 로 보내지 않는 이유 — 이 호출이 실패해도(함수 미적용 등)
+      // 목록은 보여야 하고, 두 요청을 묶으면 실패 처리가 한 덩어리가 된다.
+      // 앞 페이지의 값을 비워 두지 않는다 — 비우면 새 값이 올 때까지 「-」로 깜빡인다.
+      const ids = listRows.map(r => r.id)
+      if (ids.length === 0) { setExtras({}); return }
+      const ex = await supabase.rpc('inquiry_list_extras', { p_ids: ids })
+      if (mine !== reqNo.current) return
+      if (ex.error) {
+        // 함수가 아직 DB 에 없는 경우도 여기로 온다. 조용히 넘긴다 — 두 열만 「-」가 된다.
+        console.error('[inquiries] 내용·회신 조회 실패', errorInfo(ex.error))
+        setExtras({})
+        return
+      }
+      const byId: Record<string, InquiryExtras> = {}
+      for (const e of (ex.data ?? []) as InquiryExtras[]) byId[e.inquiry_id] = e
+      setExtras(byId)
     }
     run()
   }, [authorized, supabase, q, type, year, status, owner, page, reloadKey])
@@ -1087,11 +1155,13 @@ function InquiriesPageInner() {
                 borderBottom: `1px solid ${BORDER}`,
                 fontSize: 11, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap',
               }}>
-                <span style={{ width: COL.no, flexShrink: 0 }}>번호</span>
-                <span style={{ flex: 1, minWidth: 0 }}>업체명</span>
+                <span className="iq-no" style={{ width: COL.no, flexShrink: 0 }}>번호</span>
+                <span style={{ flex: FLEX_TITLE, minWidth: 0 }}>업체명</span>
+                <span className="iq-content" style={{ flex: FLEX_CONTENT, minWidth: 0 }}>내용</span>
                 <span style={{ width: COL.status, flexShrink: 0 }}>상태</span>
-                <span style={{ width: COL.person, flexShrink: 0 }}>담당자</span>
-                <span style={{ width: COL.date, flexShrink: 0 }}>발행일</span>
+                <span style={{ width: COL.reply, flexShrink: 0 }}>회신</span>
+                <span className="iq-person" style={{ width: COL.person, flexShrink: 0 }}>담당자</span>
+                <span className="iq-date" style={{ width: COL.date, flexShrink: 0 }}>발행일</span>
               </div>
 
               {loadError ? (
@@ -1124,6 +1194,10 @@ function InquiriesPageInner() {
                   // 목록에서 빼지는 않는다. 번호가 나간 사실 자체는 남아야 한다.
                   const dim = isCancelled || days >= STALE_DAYS
                   const hasHint = Boolean(r.snippet) || r.match_files.length > 0
+                  // 「내용」·「회신」 — extras 가 없으면(조회 전·실패·함수 미적용) 둘 다 흐린 「-」가 된다.
+                  const ex = extras[r.id]
+                  const preview = contentPreview(ex)
+                  const reply = replyView(ex)
                   return (
                     <button
                       key={r.id}
@@ -1149,7 +1223,7 @@ function InquiriesPageInner() {
                       <span style={{ display: 'flex', alignItems: 'center', gap: COL.gap, width: '100%' }}>
                       {/* 번호가 맨 앞이다 — 사람이 번호로 찾는다. 고정 폭이라 줄이 흔들리지 않고,
                           줄바꿈을 막아 두 줄로 벌어지지 않는다. */}
-                      <span style={{
+                      <span className="iq-no" style={{
                         width: COL.no, flexShrink: 0, fontSize: 13, fontWeight: 700, color: TEXT,
                         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                         textDecoration: isCancelled ? 'line-through' : 'none',
@@ -1157,7 +1231,7 @@ function InquiriesPageInner() {
                         <Hi text={r.inquiry_no} words={words} />
                       </span>
                       <span style={{
-                        flex: 1, minWidth: 0, fontSize: 13,
+                        flex: FLEX_TITLE, minWidth: 0, fontSize: 13,
                         color: r.title?.trim() ? TEXT : MUTED,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                       }}>
@@ -1165,9 +1239,31 @@ function InquiriesPageInner() {
                           ? <Hi text={r.title} words={words} />
                           : '(업체명 없음)'}
                       </span>
+                      {/* 내용 — 가장 최근 내용 기록 한 줄. 없으면 그 기록의 첫 파일 이름, 둘 다 없으면 「-」.
+                          extras 가 아직 없거나(조회 전·실패) 함수가 DB 에 없으면 preview.kind 가 'none' 이다. */}
+                      <span className="iq-content" style={{ flex: FLEX_CONTENT, minWidth: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        {preview.kind === 'none' ? (
+                          <span style={{ fontSize: 12, color: FAINT }}>-</span>
+                        ) : (<>
+                          {preview.kind === 'file' && <Clip />}
+                          <span
+                            title={preview.text}
+                            style={{
+                              minWidth: 0, fontSize: 12,
+                              color: preview.kind === 'body' ? SUB : MUTED,
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {preview.text}
+                          </span>
+                        </>)}
+                      </span>
                       {/* 상태 — 색은 dot 에만 주고 글자는 중립으로 둔다(디자인 규칙).
-                          작성 중이면 며칠째인지 함께 보이고, 그 자리에서 바로 끝낼 수 있다. */}
-                      <span style={{
+                          며칠째인지는 칸 전체의 title 로 옮겼다 — 목록에 숫자가 줄줄이 서면 읽을 것이 늘고,
+                          정작 필요한 때(오래 끌고 있는 건)는 행 흐림으로 이미 드러난다. */}
+                      <span
+                        title={days > 0 ? `작성 중 ${days}일째` : undefined}
+                        style={{
                         width: COL.status, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6,
                         fontSize: 13, color: SUB, whiteSpace: 'nowrap', minWidth: 0,
                       }}>
@@ -1176,7 +1272,7 @@ function InquiriesPageInner() {
                           background: INQUIRY_STATUS_DOT[r.status as InquiryStatus] ?? '#d1d5db',
                         }} />
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {days > 0 ? `작성 중 ${days}일째` : inquiryStatusLabel(r.status)}
+                          {inquiryStatusLabel(r.status)}
                         </span>
                         {/* 작성 중인 건만. 행 전체가 button 이라 안에 또 button 을 넣으면 HTML 파서가
                             바깥 button 을 그 자리에서 닫아 행이 쪼개진다 — 그래서 span 에 role 을 준다.
@@ -1191,7 +1287,9 @@ function InquiriesPageInner() {
                               e.preventDefault(); e.stopPropagation(); setCompleteFor(r)
                             }}
                             style={{
-                              marginLeft: 'auto', flexShrink: 0, cursor: 'pointer',
+                              // 라벨 바로 뒤다(오른쪽 끝으로 밀지 않는다) — 눈이 '작성 중' 을 읽은 자리에서
+                              // 바로 누를 수 있다. 칸 안 gap(6) 에 2 를 더해 8 로 띄운다.
+                              marginLeft: 2, flexShrink: 0, cursor: 'pointer',
                               background: BLUE, color: '#ffffff', borderRadius: 6,
                               padding: '3px 8px', fontSize: 11, fontWeight: 700, lineHeight: '16px',
                             }}
@@ -1200,10 +1298,32 @@ function InquiriesPageInner() {
                           </span>
                         )}
                       </span>
-                      <span style={{ width: COL.person, flexShrink: 0, fontSize: 12, color: SUB, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {/* 회신 — 회신 기록이 하나라도 있으면 뱃지, 없으면 「-」. 「대기」 같은 말은 쓰지 않는다
+                          (아직 안 온 것인지 받을 것이 없는 것인지 목록에서는 알 수 없다 — lib/inquirySearch replyView). */}
+                      <span
+                        title={reply?.title}
+                        style={{ width: COL.reply, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}
+                      >
+                        {reply === null ? (
+                          <span style={{ fontSize: 12, color: FAINT }}>-</span>
+                        ) : (<>
+                          <span style={{
+                            flexShrink: 0, borderRadius: 99, padding: '1px 8px',
+                            background: REPLY_COLOR.bg, color: REPLY_COLOR.text,
+                            fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
+                          }}>
+                            {reply.label}
+                          </span>
+                          {reply.fileCount > 0 && (<>
+                            <Clip />
+                            <span className="num" style={{ fontSize: 11, color: MUTED, flexShrink: 0 }}>{reply.fileCount}</span>
+                          </>)}
+                        </>)}
+                      </span>
+                      <span className="iq-person" style={{ width: COL.person, flexShrink: 0, fontSize: 12, color: SUB, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {engineerLabel({ name: r.owner_name, position: r.owner_position }) || '-'}
                       </span>
-                      <span style={{ width: COL.date, flexShrink: 0, fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>
+                      <span className="iq-date" style={{ width: COL.date, flexShrink: 0, fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>
                         {dateText(r.issued_date)}
                       </span>
                       </span>

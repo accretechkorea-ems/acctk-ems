@@ -1,17 +1,25 @@
 // 쇼룸 데모 사용 신청 — 서버 라우트 공용 코드. 라우트 파일은 GET/POST 같은 핸들러 말고는 내보낼 수 없어 여기 둔다.
 //   쓰는 곳: app/api/showroom/requests/route.ts(신청·재작성), app/api/showroom/requests/pdf/route.ts(승인서 열기),
-//            app/api/requests/showroom-demo/route.ts(요청함 목록·승인·반려·확인)
+//            app/api/showroom/requests/approvals/route.ts(사용 기록에 붙일 승인 정보),
+//            lib/approval/showroomUsage.ts(결재 완료·회수 때의 후처리)
 //
-// 흐름
-//   신청    → approval_requests '대기중' + 승인서 PDF → superadmin 전원(본인 제외)에게 알림
-//             사전·사후는 사용일자로 정한다(KST 오늘 뒤 = 사전, 오늘까지 = 사후 — 화면의 플래그는 보지 않는다).
-//             사후 신청(이미 끝난 사용)은 사용 기록도 바로 만든다. 상태는 사전 신청과 같이 '대기중'으로 두고, superadmin 이
-//             요청함에서 [확인]하면 그 사람을 승인자로 '승인'이 된다(표기는 「확인」). '승인'은 승인자·결정시각이
-//             있어야 하고(ar_decided_fields) 승인자가 신청자일 수 없어서(ar_no_self_approve) 신청하는 순간 넣을 수 없다.
-//   승인    → '승인' + 사용 기록(계획 시간을 실제 시간으로, 작성자는 신청자) + 도장 찍은 PDF 로 교체 → 신청자 알림
-//   반려    → '반려' + 사유 → 신청자 알림. PDF 는 그대로 둔다(재작성 때 바뀐다)
-//   확인    → (사후 신청) '승인' + 도장 찍은 PDF 로 교체. 요청 알림만 읽음으로 바꾼다
-//   재작성  → 반려 건만·신청자 본인만 → '대기중' 으로 되돌리고 PDF 교체 → superadmin 알림
+// 흐름 — 4단계(2026-09-28)부터 **전자결재**다. 「관리자 중 아무나 승인」은 없어졌다.
+//   신청    → 신청자가 결재선을 직접 짜서 상신한다(approval_documents, doc_type 'showroom_usage').
+//             사전·사후는 사용일자로 서버가 정한다(KST 오늘 뒤 = 사전, 오늘까지 = 사후 — 화면의 플래그는 보지 않는다).
+//             사후 신청(이미 끝난 사용)은 사용 기록을 상신 전에 만들고, 그 기록의 document_id 로 문서와 잇는다.
+//             사전 신청은 기록을 만들지 않는다 — 결재가 끝난 뒤 onCompleteShowroom 이 만든다.
+//             상신 때 도장 없는 승인서 PDF 를 만들어 approval_documents.summary.pdf_url 에 적는다.
+//             알림은 첫 차례 결재자(와 그 대리인)에게 간다 — lib/approval/submit.ts 의 notifyFirst.
+//   승인    → 결재선을 따라 돈다. 마지막 승인에서 lib/approval/showroomUsage.ts 가
+//             (사전이면) 사용 기록을 만들고, 두 경우 모두 승인서에 도장을 찍는다 → 상신자·참조자 알림
+//   반려    → 상신자 알림. 사후 신청은 반려가 없다(이미 끝난 사용이라 「확인」뿐 — docTypes.ts 의 canRejectDoc)
+//   회수·폐기 → onRevertShowroom 이 사후 신청의 사용 기록과 승인서 PDF 를 치운다
+//   재작성  → 반려·회수 건만·신청자 본인만. PATCH 로 내용을 다시 쓰고 결재선을 처음 상태로 돌린다
+//
+// 옛 통합 요청함 화면·라우트(app/requests, app/api/requests)는 8단계에서 지웠다. 이 파일에서 옛 표
+// (approval_requests)를 읽는 코드도 함께 걷어냈다 — 남은 것은 **옛 승인서를 여는 길 하나뿐**이고,
+// 그것은 여기가 아니라 pdf/route.ts 의 ?id= 가 직접 읽는다(옛 사용 기록의 [승인서 보기]).
+// 옛 표에 쓰는 경로는 없다. 표 자체는 남긴다 — showroom_usage.request_id 가 FK 로 가리킨다.
 //
 // 쓰기는 전부 service role 로 한다(approval_requests·showroom_usage 에는 읽기 정책만 있다).
 // 승인서 PDF 는 비공개 버킷 showroom-approvals 에 올린다. 파일 이름 규칙은 견적서와 같다 —
@@ -21,11 +29,11 @@ import { NextResponse } from 'next/server'
 import { renderToBuffer } from '@react-pdf/renderer'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { withTeamPerm } from '@/lib/teamPermsServer'
-import { addDays, kstYmd } from '@/lib/date'
+import { addDays } from '@/lib/date'
 import { toMin, computeWorkHours, normTime, TIME_MIN, TIME_MAX } from '@/lib/workHours'
 import {
-  DEMO_REQUEST_TYPE, REQUEST_APPROVED, APPROVAL_BUCKET, NDA_STATUSES,
-  optionalOneOf, deviceTitle, isValidYmd, isRetroactiveDate, assertShowroomDevice, ensureDeviceConfig, demoStatusLabel,
+  APPROVAL_BUCKET, NDA_STATUSES,
+  optionalOneOf, deviceTitle, isValidYmd, isRetroactiveDate, assertShowroomDevice, ensureDeviceConfig,
   isUsagePurpose, purposeNeedsCustomer, requestPurpose,
   type DemoRequestPayload,
 } from '@/lib/showroom'
@@ -41,12 +49,10 @@ export const admin = () => createClient(
 
 export const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
-// ── 알림 유형 ─────────────────────────────────────────────────────
-export const NOTICE_REQUEST = 'showroom_demo_request'
-export const NOTICE_APPROVED = 'showroom_demo_approved'
-export const NOTICE_REJECTED = 'showroom_demo_rejected'
-/** 신청자가 결과를 보러 가는 곳 — 전체기록 탭(「내 신청」 카드가 있다). */
-export const REQUESTER_LINK = '/showroom?tab=usage'
+// 알림은 이 파일에서 보내지 않는다. 결재 엔진이 보낸다 —
+// 첫 차례 결재자에게 lib/approval/submit.ts(notifyFirst), 완료·반려는 app/api/approval/route.ts.
+// 옛 요청함이 쓰던 알림 유형(showroom_demo_*)은 만드는 코드가 없어졌고, 쌓인 옛 알림은 그대로 남는다
+// (알림 화면의 「요청/결재」 묶음이 showroom_ 접두어로 계속 잡아 준다 — 그 분류는 건드리지 않았다).
 
 // ── 로그인한 사람 ─────────────────────────────────────────────────
 export type Caller = { engineer_id: number; name: string | null; permission_level: string | null; teams: string | null }
@@ -70,22 +76,6 @@ export async function loadCaller(tag: string, opts?: { fresh?: boolean }): Promi
   return { error: null, caller, email: user.email }
 }
 
-// ── 신청 행 ───────────────────────────────────────────────────────
-export type RequestRecord = {
-  request_id: number
-  request_type: string
-  status: string
-  requester_id: number
-  approver_id: number | null
-  payload: DemoRequestPayload
-  reason: string | null
-  comment: string | null
-  decided_at: string | null
-  created_at: string
-  pdf_url: string | null
-}
-export const REQUEST_COLUMNS =
-  'request_id, request_type, status, requester_id, approver_id, payload, reason, comment, decided_at, created_at, pdf_url'
 
 // ── 본문 검증 ─────────────────────────────────────────────────────
 const HHMM = /^\d{2}:\d{2}$/
@@ -180,7 +170,7 @@ export function parseDemoBody(body: Record<string, unknown>, today: string): { e
       expected_cost: expectedCost,
       note: text(body.note),
       // 신청 사유 칸은 없다 — 상세 내용이 곧 사유라 payload.content 와 같은 값을 approval_requests.reason 에 넣는다
-      // (요청함 3줄째·승인서의 「신청 사유」가 reason 을 읽는다). 신청(POST)·재작성(PATCH) 모두 이 값을 쓴다.
+      // (승인서의 「신청 사유」가 reason 을 읽는다). 신청(POST)·재작성(PATCH) 모두 이 값을 쓴다.
       reason: text(body.content),
     },
   }
@@ -188,7 +178,7 @@ export function parseDemoBody(body: Record<string, unknown>, today: string): { e
 
 type Snapshot = { device_name: string; site_name: string; customer_name: string | null; engineer_names: string[] }
 
-/** DB 를 보고 확인하고 표시용 이름을 모은다(승인서·요청함에 신청 시점 이름으로 남긴다). 막히면 { error, status }. */
+/** DB 를 보고 확인하고 표시용 이름을 모은다(승인서·결재함에 신청 시점 이름으로 남긴다). 막히면 { error, status }. */
 export async function resolveDemo(sb: SupabaseClient, input: DemoInput): Promise<{ error: string; status: number } | { snap: Snapshot }> {
   const notDevice = await assertShowroomDevice(sb, input.device_id)
   if (notDevice) return { error: notDevice, status: 404 }
@@ -287,10 +277,15 @@ export async function findOverlap(sb: SupabaseClient, deviceId: number, date: st
  */
 /**
  * 신청 내용으로 사용 기록을 만든다.
- * requestId — 옛 요청함(approval_requests)의 신청 번호. 전자결재로 올린 건은 null 이다
- *   (연결은 approval_documents.target_id 가 대신 잡는다 — showroom_usage.request_id 는 옛 표를 가리키는 FK 다).
+ *
+ * requestId  — 옛 요청함(approval_requests)의 신청 번호. 전자결재로 올린 건은 늘 null 이다
+ *              (showroom_usage.request_id 는 옛 표를 가리키는 FK 다).
+ * documentId — 전자결재 문서(approval_documents.document_id). 문서가 이미 있을 때 넘긴다
+ *              — 사전 신청의 결재 완료, 사후 재작성(PATCH)이 그렇다. 사후 **첫 상신**은 기록이 문서보다
+ *              먼저 만들어지므로 여기서 넣을 수 없고, 부르는 쪽이 문서를 만든 뒤 UPDATE 로 채운다.
+ *              두 칸이 함께 채워지는 일은 없다 — 옛 건은 requestId 만, 새 건은 documentId 만 갖는다.
  */
-export async function createUsageFromRequest(sb: SupabaseClient, requestId: number | null, p: DemoRequestPayload, createdBy: number): Promise<{ error: string; status: number } | { usageId: number }> {
+export async function createUsageFromRequest(sb: SupabaseClient, requestId: number | null, p: DemoRequestPayload, createdBy: number, documentId?: number | null): Promise<{ error: string; status: number } | { usageId: number }> {
   const cfgErr = await ensureDeviceConfig(sb, p.device_id)
   if (cfgErr) return { error: cfgErr, status: 400 }
 
@@ -313,7 +308,8 @@ export async function createUsageFromRequest(sb: SupabaseClient, requestId: numb
       nda_status: p.nda_status,
       expected_result: p.expected_result,
       note: p.note ?? null,
-      request_id: requestId,   // 전자결재 건은 null
+      request_id: requestId,            // 옛 요청함 건만. 전자결재 건은 null
+      document_id: documentId ?? null,  // 전자결재 건. 사후 첫 상신은 문서를 만든 뒤 채운다
       created_by: createdBy,
     })
     .select('usage_id')
@@ -338,72 +334,18 @@ export async function createUsageFromRequest(sb: SupabaseClient, requestId: numb
 }
 
 // ── 신청번호 ──────────────────────────────────────────────────────
+// 번호 규칙은 SR-YYYYMMDD-001 이다. 승인서 파일 이름과 사용 기록이 이 번호로 이어진다.
+// 번호가 사는 자리는 approval_documents.doc_no 컬럼이다(옛 신청은 payload 안에 있었다).
+//
+// **옛 요청함 표(approval_requests)는 더 보지 않는다.** 전자결재로 옮기던 무렵에는 두 표를 함께 보고
+// 빈 번호를 골랐는데(이관 당일에 옛 번호와 겹치지 않게), 그 뒤 옛 표에 행을 넣는 경로가 하나도 남지
+// 않았다 — 옛 POST(app/api/requests/showroom-demo)는 2026-09-28 부터 410 이고 INSERT 코드가 없다.
+// 옛 번호는 그 날짜까지로 굳었고 아래 채번은 늘 **오늘** 날짜로만 번호를 만들므로(allocateDocNo 를
+// 부르는 곳이 todayKST() 만 넘긴다) 날짜 부분이 달라 겹칠 수 없다. 그래서 옛 표를 읽던 부분을 끊었다 —
+// 옛 번호를 읽는 다른 코드(옛 승인서 열기 — pdf/route.ts 의 ?id=)는 그대로 둔다.
 const MAX_NO_TRIES = 5
 const noOf = (ymd: string, seq: number) => `SR-${ymd.replace(/-/g, '')}-${String(seq).padStart(3, '0')}`
 const seqOf = (no: string) => Number(no.split('-')[2]) || 0
-
-async function numberTaken(sb: SupabaseClient, no: string, exceptId?: number): Promise<boolean> {
-  let q = sb.from('approval_requests').select('request_id')
-    .eq('request_type', DEMO_REQUEST_TYPE)
-    .eq('payload->>request_no', no)
-    .limit(1)
-  if (exceptId != null) q = q.neq('request_id', exceptId)
-  const { data, error } = await q
-  if (error) throw error
-  return (data ?? []).length > 0
-}
-
-/** fromSeq 부터 비어 있는 번호를 찾는다(최대 MAX_NO_TRIES 번). 다 차 있으면 던진다. */
-async function nextFreeNo(sb: SupabaseClient, ymd: string, fromSeq: number, exceptId?: number): Promise<string> {
-  for (let i = 0; i < MAX_NO_TRIES; i++) {
-    const no = noOf(ymd, fromSeq + i)
-    if (!(await numberTaken(sb, no, exceptId))) return no
-  }
-  throw new Error(`request number exhausted from ${noOf(ymd, fromSeq)}`)
-}
-
-/**
- * 신청번호 SR-YYYYMMDD-001 — 그날(KST) 만든 데모 신청 수 + 1 에서 시작하고, 이미 쓰인 번호면 다음 번호로(최대 5회).
- * 번호에 유일 제약이 없어(payload 안의 값이다) 동시에 둘이 같은 번호를 받을 수 있다 — 저장한 뒤 settleRequestNo 로 한 번 더 맞춘다.
- */
-export async function allocateRequestNo(sb: SupabaseClient, ymd: string): Promise<string> {
-  const { count, error } = await sb
-    .from('approval_requests')
-    .select('request_id', { count: 'exact', head: true })
-    .eq('request_type', DEMO_REQUEST_TYPE)
-    .gte('created_at', `${ymd}T00:00:00+09:00`)
-    .lt('created_at', `${addDays(ymd, 1)}T00:00:00+09:00`)
-  if (error) throw error
-  return nextFreeNo(sb, ymd, (count ?? 0) + 1)
-}
-
-/**
- * 저장한 뒤 같은 번호가 둘 이상이면(동시 신청), 먼저 저장된 쪽(request_id 가 작은 쪽)이 번호를 갖고
- * 나중 쪽이 다음 빈 번호로 옮긴다(최대 5회). 옮겼으면 payload 를 고쳐 쓰고 새 payload 를 돌려준다. 끝내 못 맞추면 던진다.
- */
-export async function settleRequestNo(sb: SupabaseClient, requestId: number, payload: DemoRequestPayload, ymd: string): Promise<DemoRequestPayload> {
-  let current = payload
-  for (let i = 0; i < MAX_NO_TRIES; i++) {
-    const { data, error } = await sb.from('approval_requests').select('request_id')
-      .eq('request_type', DEMO_REQUEST_TYPE)
-      .eq('payload->>request_no', current.request_no)
-      .order('request_id', { ascending: true })
-      .limit(2)
-    if (error) throw error
-    const ids = ((data ?? []) as { request_id: number }[]).map(r => r.request_id)
-    if (ids.length <= 1 || ids[0] === requestId) return current
-    const next = await nextFreeNo(sb, ymd, seqOf(current.request_no) + 1, requestId)
-    current = { ...current, request_no: next }
-    const { error: updErr } = await sb.from('approval_requests').update({ payload: current }).eq('request_id', requestId)
-    if (updErr) throw updErr
-  }
-  throw new Error(`request number not settled: ${current.request_no}`)
-}
-
-// ── 결재 문서의 신청번호 ──────────────────────────────────────────
-// 전자결재로 옮긴 뒤에도 번호 규칙(SR-YYYYMMDD-001)은 그대로 쓴다 — 승인서·사용 기록이 이 번호로 이어진다.
-// 다른 점은 번호가 사는 자리다: 옛 신청은 payload 안, 결재 문서는 approval_documents.doc_no 컬럼이다.
-// 두 표를 함께 보고 비어 있는 번호를 고른다(이관 당일에 옛 번호와 겹치지 않게).
 
 const SHOWROOM_DOC_TYPE = 'showroom_usage'
 
@@ -415,8 +357,7 @@ async function docNoTaken(sb: SupabaseClient, no: string, exceptId?: number): Pr
   if (exceptId != null) q = q.neq('document_id', exceptId)
   const { data, error } = await q
   if (error) throw error
-  if ((data ?? []).length > 0) return true
-  return numberTaken(sb, no)
+  return (data ?? []).length > 0
 }
 
 async function nextFreeDocNo(sb: SupabaseClient, ymd: string, fromSeq: number, exceptId?: number): Promise<string> {
@@ -502,30 +443,6 @@ async function removePdf(sb: SupabaseClient, pdfUrl: string | null) {
 // 값이 없으면 빈 문자열 — 승인서의 Row 가 빈 값을 「해당없음」으로 채운다.
 const won = (n: number | null) => (n == null ? '' : `₩${n.toLocaleString('ko-KR')}`)
 
-async function pdfDataOf(sb: SupabaseClient, r: RequestRecord): Promise<ApprovalPdfData> {
-  const p = r.payload
-  let approverName = ''
-  if (r.approver_id != null) {
-    const { data, error } = await sb.from('engineers').select('name').eq('engineer_id', r.approver_id).maybeSingle()
-    if (error) console.error('[showroom/requests] approver lookup failed', { approverId: r.approver_id, error })
-    approverName = (data as { name: string | null } | null)?.name ?? ''
-  }
-  // 옛 요청함은 결재자가 한 명뿐이다 — 결재란도 한 칸이다.
-  // 도장은 승인(확인)된 뒤에만. 대기중·반려는 칸을 비운다.
-  const stamped = r.status === REQUEST_APPROVED && r.approver_id != null && !!r.decided_at
-  return pdfDataFromPayload(p, {
-    requestDate: kstYmd(r.created_at),
-    statusLabel: demoStatusLabel(r.status, p.is_retroactive),
-    reason: r.reason ?? '',
-    stamps: [{
-      name: stamped ? (approverName || '-') : '',
-      position: '',
-      date: stamped ? kstYmd(r.decided_at as string) : '',
-      label: stamped ? '승인' : '',
-    }],
-    opinion: r.comment ?? '',
-  })
-}
 
 /**
  * 승인서 PDF 의 본문 — 신청 내용(payload)에서만 만든다. 결재란(stamps)과 상태말은 부르는 쪽이 정한다.
@@ -579,68 +496,3 @@ export async function renderApprovalPdf(sb: SupabaseClient, baseName: string, da
 
 /** 옛 파일 치우기 — 새 PDF 로 갈아탄 뒤 부른다. */
 export const dropApprovalPdf = removePdf
-
-
-/**
- * 승인서 PDF 를 지금 상태로 새로 만들어 올리고 pdf_url 을 바꾼 뒤 옛 파일을 지운다.
- * tag 는 파일 이름 꼬리(approved·confirmed·rev) — 같은 번호의 이전 파일과 이름을 가른다.
- * 실패하면 false. 신청·승인 자체는 이미 끝났으므로 되돌리지 않고, 부른 쪽이 응답에 알린다.
- */
-export async function refreshApprovalPdf(sb: SupabaseClient, r: RequestRecord, tag: string): Promise<boolean> {
-  try {
-    const path = await renderApprovalPdf(sb, tag ? `${r.payload.request_no}-${tag}` : r.payload.request_no, await pdfDataOf(sb, r))
-    if (!path) return false
-    const { error } = await sb.from('approval_requests').update({ pdf_url: path }).eq('request_id', r.request_id)
-    if (error) {
-      console.error('[showroom/requests] pdf_url update failed', { requestId: r.request_id, path, error })
-      await removePdf(sb, path)   // 가리키는 행이 없는 파일을 남기지 않는다
-      return false
-    }
-    if (r.pdf_url && r.pdf_url !== path) await removePdf(sb, r.pdf_url)
-    return true
-  } catch (e) {
-    console.error('[showroom/requests] pdf build failed', { requestId: r.request_id, error: e })
-    return false
-  }
-}
-
-// ── 알림 ──────────────────────────────────────────────────────────
-type Notice = { title: string; message: string; type: string; link: string | null }
-
-/** 알림 문구 — [신청번호] 신청자 · 장비 · 고객사 · 날짜 시간. 번호는 읽음 처리 때 대조한다. */
-export const requestSummary = (p: DemoRequestPayload): string =>
-  `[${p.request_no}] ${p.requester_name} · ${p.device_name} · ${p.customer_name ?? requestPurpose(p)} · ${p.usage_date} ${normTime(p.start_time)}~${normTime(p.end_time)}`
-
-export async function notifyEngineer(sb: SupabaseClient, engineerId: number, n: Notice) {
-  const { error } = await sb.from('notifications').insert({ engineer_id: engineerId, ...n, is_read: false })
-  if (error) console.error('[showroom/requests] notification insert failed', { engineerId, type: n.type, error })
-}
-
-/** 재직 중인 superadmin 전원(본인 제외)에게 알린다. 실패해도 신청은 이미 끝났으므로 되돌리지 않는다. */
-export async function notifySuperadmins(sb: SupabaseClient, exceptId: number, n: Notice) {
-  const { data, error } = await sb.from('engineers').select('engineer_id')
-    .eq('permission_level', 'superadmin')
-    .is('resigned_date', null)
-  if (error) {
-    console.error('[showroom/requests] superadmin lookup failed', error)
-    return
-  }
-  const rows = ((data ?? []) as { engineer_id: number }[])
-    .filter(e => e.engineer_id !== exceptId)
-    .map(e => ({ engineer_id: e.engineer_id, ...n, is_read: false }))
-  if (rows.length === 0) return
-  const { error: insErr } = await sb.from('notifications').insert(rows)
-  if (insErr) console.error('[showroom/requests] superadmin notification insert failed', { type: n.type, error: insErr })
-}
-
-/**
- * 처리가 끝난 신청의 '신청' 알림 중 읽지 않은 것을 읽음으로 바꾼다. notifications 에 신청 id 칸이 없어
- * 문구에 박힌 [신청번호]로 대조한다(견적 삭제 요청과 같은 방식).
- */
-export async function markRequestNoticesRead(sb: SupabaseClient, requestNo: string) {
-  const { error } = await sb.from('notifications').update({ is_read: true })
-    .eq('type', NOTICE_REQUEST)
-    .eq('is_read', false)
-    .ilike('message', `%[${requestNo}]%`)
-  if (error) console.error('[showroom/requests] mark notices read failed', { requestNo, error })
-}

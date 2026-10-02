@@ -365,7 +365,8 @@ export default function BulkImportModal({
       const mRes = await fetch('/api/inquiry', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'message_add', inquiry_id: inquiryId, entry_date: row.issuedDate, body: '',
+          // 발신 고정 — 등록 모달과 같은 값이다(사람이 고를 것이 없다).
+          action: 'message_add', inquiry_id: inquiryId, entry_date: row.issuedDate, direction: 'sent', body: '',
         }),
       })
       const mJson = await mRes.json().catch(() => null)

@@ -52,6 +52,21 @@ const nextConfig: NextConfig = {
       },
     ]
   },
+  async redirects() {
+    return [
+      // 옛 통합 요청함(/requests) — 화면과 라우트를 지웠다(전자결재 8단계). 쇼룸 사용 신청(4단계)과
+      // 견적 삭제 요청(5단계)이 모두 결재로 옮겨져 새로 들어올 건이 없다.
+      //
+      // 주소는 받아 준다 — 옛 알림·즐겨찾기·북마크가 404 가 되지 않게 결재함으로 보낸다.
+      // permanent: false(307) 로 둔 이유는 /showroom/usage 리다이렉트와 같다 — 브라우저가 이 이동을
+      // 영구히 기억하면 나중에 /requests 를 다시 쓸 때 캐시에 갇힌다.
+      //
+      // 하위 경로도 함께 받는다. 실제로 있던 하위 화면은 없지만, 쿼리가 붙은 옛 링크
+      // (/requests?status=대기 등)와 혹시 손으로 더 붙인 주소를 한곳에서 흡수한다.
+      { source: '/requests', destination: '/approval', permanent: false },
+      { source: '/requests/:path*', destination: '/approval', permanent: false },
+    ]
+  },
 }
 
 export default nextConfig

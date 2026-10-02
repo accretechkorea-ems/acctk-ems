@@ -162,7 +162,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 결재선이 틀려서 막힐 건이면 문서를 만들기 전에 멈춘다.
-    const lineProblem = await checkLines(supabaseAdmin, lines, caller!.engineer_id)
+    const lineProblem = await checkLines(supabaseAdmin, lines, caller!.engineer_id, QUOTE_DELETE_TYPE)
     if (lineProblem) return NextResponse.json({ error: lineProblem }, { status: 400 })
 
     const summary = await buildQuoteDeleteSummary(supabaseAdmin, quote)

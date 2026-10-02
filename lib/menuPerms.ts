@@ -113,9 +113,12 @@ export const MENU_PERMS: MenuPerm[] = [
   // 보이는 이름만 「전자결재」다. key·path 는 그대로 둔다 — 저장된 권한 행(team_permissions.perm_key)과
   // 주소가 그 값이라, 이름 때문에 바꾸면 기존 권한이 전부 끊긴다.
   { key: 'approvals', label: '전자결재', group: '주 메뉴', path: '/approval', icon: 'approval', order: 30, data: ['customers', 'quote'], menuPublic: true },
-  // 옛 요청함(/requests)은 메뉴에서 뺐다 — 쇼룸 신청(4단계)과 견적 삭제 요청(5단계)이 모두
-  // 결재로 옮겨져 새로 들어올 건이 없다. 주소를 아는 사람은 아직 옛 기록을 볼 수 있고,
-  // 화면과 라우트는 8단계에서 지운다.
+  // 옛 통합 요청함(/requests)은 **8단계에서 화면·라우트까지 지웠다** — 쇼룸 신청(4단계)과
+  // 견적 삭제 요청(5단계)이 모두 결재로 옮겨져 새로 들어올 건이 없다. 옛 주소는 next.config 의
+  // redirects 가 /approval 로 보낸다(옛 알림·즐겨찾기가 404 가 되지 않게).
+  // 이 표에는 'requests' 키가 남아 있지 않다. team_permissions 에 옛 행이 남아 있어도 무해하다 —
+  // MENU_BY_KEY 에 없는 키는 canViewMenu 가 false 로 떨어뜨리고 DERIVED_PERMS 에도 걸리지 않으며,
+  // 팀 관리 화면이 그 팀을 한 번 저장하면 조용히 사라진다(저장은 체크된 키만 다시 넣는다).
 
   // ── 대시보드 ──
   { key: 'repair_dashboard', label: '20 대시보드', group: '대시보드', path: '/repair/dashboard', icon: 'grid', order: 10, data: ['customers'] },

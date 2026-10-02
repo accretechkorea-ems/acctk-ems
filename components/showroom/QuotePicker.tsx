@@ -3,7 +3,7 @@
 // 견적 연결 — 고른 대상 고객사의 견적을 최근순 20건 보여주고 하나를 고른다.
 // 고객사를 고르지 않으면 아무것도 하지 않는다(어느 업체의 견적인지 정해지지 않기 때문).
 //
-// 조회 컬럼 이름은 app/api/requests/quote-delete/route.ts 의 GET 과 같게 맞췄다
+// 조회 컬럼 이름은 견적 삭제 결재의 요약(lib/approval/quoteDelete.ts)과 같게 맞췄다
 // (quote_id / quote_number / quote_date / total_supply). 상태는 표시용으로 하나 더 읽는다.
 
 import { useEffect, useState } from 'react'

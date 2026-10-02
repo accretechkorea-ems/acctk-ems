@@ -28,13 +28,14 @@ import AccessGate from '@/components/common/AccessGate'
 import PeriodNav from '@/components/showroom/PeriodNav'
 import { periodRange, type Period } from '@/lib/showroom'
 import { todayKST } from '@/lib/date'
-import { canViewMenu } from '@/lib/permissions'
+import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import {
-  BLUE, DANGER, FAINT, MUTED, NEUTRAL_BG, PAGE_BG, SUB, TEXT,
+  BLUE, BORDER, DANGER, FAINT, MUTED, NEUTRAL_BG, PAGE_BG, SUB, TEXT,
   PULSE_KEYFRAMES, cardStyle, cardHeader, cardTitle, countBadge,
   inputStyle, rowStyle, skeletonBlock,
 } from '@/components/common/ui'
 import DocDetail, { type ApprovalDoc } from '@/components/approval/DocDetail'
+import DelegationModal from '@/components/approval/DelegationModal'
 import type { ProgressPerson } from '@/components/approval/ApprovalTable'
 import { DOC_TYPES } from '@/lib/approval/docTypes'
 import {
@@ -122,12 +123,16 @@ const SHELL_CSS = `
   @keyframes ap-unfold { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
   .ap-sortbtn { transition: color ${MOTION_MS}ms ${MOTION_EASE}; }
   .ap-sortbtn:hover { color: ${TEXT}; }
+  /* 함 목록 아래 붙는 자리 — 함이 아니라 설정이라 구분선을 두고 떼어 놓는다.
+     좁아져 가로 탭이 되면 줄 맨 오른쪽으로 밀어 붙인다(함 목록 뒤에 그대로 이어지지 않게). */
+  .ap-railfoot { margin-top: 14px; padding: 10px 10px 0; border-top: 1px solid ${BORDER}; }
   @container (max-width: 900px) {
     .ap-body { flex-direction: column; }
     .ap-rail { width: 100%; flex-direction: row; overflow-x: auto; gap: 4px; align-items: center; }
     .ap-railgroup { flex-direction: row; align-items: center; }
     .ap-railtitle { padding: 0 2px 0 8px !important; }
     .ap-boxbtn { width: auto !important; flex: 0 0 auto; }
+    .ap-railfoot { margin: 0 0 0 auto; padding: 0 0 0 8px; border-top: none; flex: 0 0 auto; }
   }
   @media (prefers-reduced-motion: reduce) {
     .ap-shell, .ap-shell * {
@@ -143,6 +148,18 @@ function Clip() {
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="2"
       strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
       <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
+  )
+}
+
+/** 위임 — 사람에게서 사람으로 넘기는 모양. lucide 스타일 인라인 SVG(패키지는 쓰지 않는다). */
+function Delegate() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <polyline points="16 11 18 13 22 9" />
     </svg>
   )
 }
@@ -223,6 +240,9 @@ function ApprovalPageInner() {
   // 라우트의 box=all 잠금과 같은 판정이다.
   const canSeeAll = canViewMenu(me, 'approvals')
   const myId = me?.engineer_id ?? null
+  // 위임 설정 — 누구나 자기 위임을 걸고, superadmin 은 남의 위임도 다룬다(라우트가 다시 판정한다).
+  const isSuper = isSuperAdmin(me)
+  const [delegationOpen, setDelegationOpen] = useState(false)
 
   const { source, scope } = parseView({
     box: params.get('box'), tab: params.get('tab'),
@@ -404,6 +424,25 @@ function ApprovalPageInner() {
               </div>
               )
             })}
+
+            {/* 위임 설정 — 함이 아니라 내 설정이라 목록 끝에 구분선을 두고 둔다. */}
+            <div className="ap-railfoot">
+              <button
+                type="button"
+                className="ap-boxbtn"
+                onClick={() => setDelegationOpen(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+                  padding: '8px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                  background: 'transparent', color: SUB,
+                  fontSize: 13, fontWeight: 600, fontFamily: 'inherit', textAlign: 'left',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <Delegate />
+                <span>위임 설정</span>
+              </button>
+            </div>
           </nav>
 
           <div className="ap-main">
@@ -482,6 +521,8 @@ function ApprovalPageInner() {
                   const open = openId === d.document_id
                   const files = attachmentCount(d.summary)
                   const requester = people[d.requester_id]
+                  // 위임으로 들어온 건 — 지금 차례의 결재자가 내가 아닌 경우다(라우트가 delegated 로 알려 준다).
+                  const owner = d.delegated ? people[d.progress?.currentApproverId ?? -1] : undefined
                   return (
                     <div key={d.document_id} style={rowStyle(i === 0)}>
                       <button
@@ -509,7 +550,9 @@ function ApprovalPageInner() {
                               </span>
                             )}
                             {d.delegated && (
-                              <span style={{ fontSize: 11, fontWeight: 700, color: SUB, background: NEUTRAL_BG, borderRadius: 99, padding: '1px 7px', flexShrink: 0 }}>
+                              <span
+                                title={owner?.name ? `${owner.name}님을 대신하여 결재` : '위임받아 대신 결재'}
+                                style={{ fontSize: 11, fontWeight: 700, color: SUB, background: NEUTRAL_BG, borderRadius: 99, padding: '1px 7px', flexShrink: 0 }}>
                                 대결
                               </span>
                             )}
@@ -556,6 +599,15 @@ function ApprovalPageInner() {
           </div>
         </div>
       </div>
+
+      {/* 위임 설정 — 결재 목록과 상태를 나누지 않는다. 닫을 때 목록을 다시 읽어, 위임을 걸거나 풀면
+          미결함(내 차례 + 위임받은 건)이 바로 맞는다. */}
+      <DelegationModal
+        open={delegationOpen}
+        onClose={() => { setDelegationOpen(false); setReloadKey(k => k + 1) }}
+        myId={myId}
+        isSuper={isSuper}
+      />
     </main>
   )
 }

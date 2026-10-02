@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import type { createClient } from '@/lib/supabase/client'
 import {
   USAGE_PURPOSES, deviceTitle, periodFromRange, periodRange, round1,
-  type ShowroomDevice, type ShowroomSite, type ShowroomUsageRow,
+  type ShowroomDevice, type ShowroomSite, type ShowroomUsageRow, type UsageApprovalDoc,
 } from '@/lib/showroom'
 import {
   BLUE, BORDER, CARD_BG, MUTED, SUB, DANGER, NEUTRAL_BG,
@@ -32,7 +32,7 @@ import DeviceMultiSelect from './DeviceMultiSelect'
 import ShowroomExcelButton from './ShowroomExcelButton'
 import type { UsageSheetContext } from '@/lib/showroomExcel'
 import type { PickerEngineer } from './EngineerPicker'
-import { loadPeriodUsages, callShowroomApi, saveSubmission, editInitial, copyInitial } from './showroomData'
+import { loadPeriodUsages, loadUsageApprovals, callShowroomApi, saveSubmission, editInitial, copyInitial } from './showroomData'
 import { SEARCH_MAX, type UsageQuery } from './usageQuery'
 
 const PAGE_SIZE = 30
@@ -109,6 +109,8 @@ export default function UsageTab({
   const [loadedKey, setLoadedKey] = useState<string | null>(null)
   const [rows, setRows] = useState<ShowroomUsageRow[]>([])
   const [usageEngineers, setUsageEngineers] = useState<Record<number, number[]>>({})
+  // 전자결재로 만든 기록의 승인 정보(문서 id → 상태·처리자·처리 시각). 옛 건은 행에 임베딩돼 와서 여기 없다.
+  const [approvals, setApprovals] = useState<Record<number, UsageApprovalDoc>>({})
   const [error, setError] = useState<string | null>(null)
   // 사용 기록·신청 모달 하나 — 추가(initial null)·수정·복사(initial)·반려 건 재작성(rewrite).
   const [modal, setModal] = useState<{
@@ -126,12 +128,20 @@ export default function UsageTab({
     if (loadedKey === key) return
     let cancelled = false
     loadPeriodUsages(supabase, query.from, query.to)
-      .then(r => { if (cancelled) return; setRows(r.rows); setUsageEngineers(r.usageEngineers); setError(null); setLoadedKey(key) })
+      // 승인 정보는 기록을 받은 뒤 문서 id 로 한 번 더 읽는다(읽기 정책 때문에 임베딩이 안 된다 —
+      // showroomData.ts 의 USAGE_SELECT 설명). 실패해도 빈 표로 와서 기록 목록은 그대로 그려진다.
+      .then(async r => ({ ...r, approvals: await loadUsageApprovals(r.rows) }))
+      .then(r => {
+        if (cancelled) return
+        setRows(r.rows); setUsageEngineers(r.usageEngineers); setApprovals(r.approvals)
+        setError(null); setLoadedKey(key)
+      })
       .catch(e => {
         if (cancelled) return
         console.error('[showroom] usage load failed', e)
         setRows([])
         setUsageEngineers({})
+        setApprovals({})
         setError('사용 기록을 불러오지 못했습니다.')
         setLoadedKey(key)
       })
@@ -182,7 +192,8 @@ export default function UsageTab({
     },
     engineerName,
     usageEngineers,
-  }), [deviceName, deviceById, siteShort, engineerName, usageEngineers])
+    approvals,
+  }), [deviceName, deviceById, siteShort, engineerName, usageEngineers, approvals])
   const canEdit = useCallback(
     (row: ShowroomUsageRow) => isAdmin || (myId != null && row.created_by === myId),
     [isAdmin, myId],
@@ -311,6 +322,7 @@ export default function UsageTab({
           rows={pageRows}
           deviceName={deviceName}
           usageEngineers={usageEngineers}
+          approvals={approvals}
           engineerName={engineerName}
           loading={loading || devicesLoading}
           emptyText={filtering ? '조건에 맞는 사용 기록이 없습니다' : '이 기간의 사용 기록이 없습니다'}

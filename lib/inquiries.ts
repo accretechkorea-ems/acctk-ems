@@ -75,6 +75,57 @@ export const EDITABLE_STATUSES: readonly InquiryStatus[] = ['drafting', 'done']
 export const inquiryStatusLabel = (status: string | null | undefined): string =>
   (status && INQUIRY_STATUS_LABEL[status as InquiryStatus]) || status || ''
 
+// ── 내용 기록의 방향 ────────────────────────────────────────────────
+// inquiry_messages.direction — 'sent'(발신) · 'received'(회신). **NOT NULL 이 풀려 null 을 허용한다**
+// (제약 inquiry_messages_direction_check 는 그대로 있다 — 두 값만 들어간다).
+//
+// 세 가지 값이 섞여 있다.
+//   · 'sent'·'received' — 방향을 쓰던 때 저장된 기록, 그리고 지금 새로 만드는 기록
+//   · null              — 방향을 쓰지 않던 동안 만들어진 기록
+// 화면은 null 과 모르는 값을 **발신으로 읽는다**(directionOf). 그 기록은 대부분 본사로 보낸 것이고,
+// 「방향 없음」이라는 세 번째 칸을 만들면 뱃지·목록·필터가 전부 세 갈래가 된다.
+// 되돌릴 수 있는 쪽으로 기울였다 — 사람이 편집 모드에서 회신으로 고치면 그때부터 제 값이 된다.
+
+export const INQUIRY_DIRECTIONS = ['sent', 'received'] as const
+
+export type InquiryDirection = (typeof INQUIRY_DIRECTIONS)[number]
+
+/** 화면 문구. 저장값은 영문, 보이는 것은 한글이다(상태와 같은 방식). */
+export const INQUIRY_DIRECTION_LABEL: Record<InquiryDirection, string> = {
+  sent: '발신',
+  received: '회신',
+}
+
+/**
+ * 뱃지 색 — **새 값을 만들지 않고** 기존 서비스 유형 색 쌍을 그대로 쓴다.
+ *   발신 = 「신규설치」 쌍(연한 파랑 + 액센트 글자)
+ *   회신 = 「교육」 쌍(연한 녹색)
+ * 값을 복사하지 않고 lib/categoryColors.ts 를 참조만 한다 — 한쪽만 바뀌는 일이 없게.
+ * dot 색은 상세 카드의 왼쪽 세로 막대가 쓴다.
+ */
+export const INQUIRY_DIRECTION_COLOR: Record<InquiryDirection, { text: string; bg: string; dot: string }> = {
+  sent: { text: '#234ea2', bg: '#eff4ff', dot: '#3b82f6' },
+  received: { text: '#15803d', bg: '#f0fdf4', dot: '#22c55e' },
+}
+
+/**
+ * 저장값 → 표시용 방향. 'received' 만 회신이고 **그 밖은 전부 발신**이다
+ * (null·undefined·빈 문자열·모르는 값 포함 — 위 설명 참고).
+ * 순수 함수다 — 화면과 스크립트가 같은 답을 본다.
+ */
+export function directionOf(value: unknown): InquiryDirection {
+  return value === 'received' ? 'received' : 'sent'
+}
+
+/** 보낼 값이 올바른 방향인지. 서버가 본문 값을 검증할 때 쓴다(화면도 같은 목록을 본다). */
+export function isInquiryDirection(value: unknown): value is InquiryDirection {
+  return typeof value === 'string' && (INQUIRY_DIRECTIONS as readonly string[]).includes(value)
+}
+
+/** 「발신 / 회신」 분할 선택에 그대로 넘기는 선택지. 순서가 곧 화면 순서다. */
+export const INQUIRY_DIRECTION_OPTIONS: { label: string; value: InquiryDirection }[] =
+  INQUIRY_DIRECTIONS.map(d => ({ label: INQUIRY_DIRECTION_LABEL[d], value: d }))
+
 // ── 번호 조립 ───────────────────────────────────────────────────────
 // 순수 함수다. 여기서 날짜를 직접 만들지 않고 부르는 쪽이 넘겨준다 —
 // 「오늘」은 반드시 KST 여야 하는데(lib/date.ts 의 todayKST), 그 판단을 이 파일에 두면

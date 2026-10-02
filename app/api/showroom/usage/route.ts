@@ -42,7 +42,7 @@ const DEMO_VIA_REQUEST = '고객 데모는 사용 신청으로 등록해주세�
 /** 2026-09-21 — 목적 5종이 전부 신청·승인을 거친다. 이 라우트로는 새 기록을 만들 수 없다. */
 const USAGE_VIA_REQUEST = '사용 기록은 사용 신청으로 등록해주세요(관리자 승인을 거칩니다).'
 
-/** 로그인 + 고객사 권한 확인. app/api/requests/quote-delete/route.ts 의 authorize() 와 같은 모양이다. */
+/** 로그인 + 고객사 권한 확인. 다른 쇼룸 라우트(app/api/showroom/devices)의 authorize() 와 같은 모양이다. */
 async function authorize() {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()

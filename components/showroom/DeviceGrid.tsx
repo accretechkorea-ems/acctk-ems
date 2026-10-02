@@ -7,18 +7,17 @@
 // 여기서는 둘째 사무실부터 제목을 단다.
 
 import { type CSSProperties } from 'react'
-import { nowKSTParts } from '@/lib/date'
-import { compareDevices, type PurposeStat, type ShowroomDevice } from '@/lib/showroom'
+import { compareDevices, periodLabel, periodShortLabel, type Period, type PurposeStat, type ShowroomDevice } from '@/lib/showroom'
 import { BORDER, TEXT, MUTED, SUB, skeletonBlock, cardStyle } from '@/components/common/ui'
 import ShowroomDeviceCard, { BOX_H } from './ShowroomDeviceCard'
 
 const CARD_W = 300
 
-/** 장비 한 대의 이번 달 요약. 실사용 합계(h)는 소수 첫째 자리까지. */
-export type DeviceMonthSummary = { hours: number; count: number }
+/** 장비 한 대의 **고른 기간** 요약. 실사용 합계(h)는 소수 첫째 자리까지. */
+export type DevicePeriodSummary = { hours: number; count: number }
 
-/** 장비 카드용 이번 달 요약 — 합계에 사용목적별 건수·시간(도넛·범례)을 더한 것. */
-export type DeviceMonthBreakdown = DeviceMonthSummary & { byPurpose: PurposeStat[] }
+/** 장비 카드용 기간 요약 — 합계에 사용목적별 건수·시간(도넛·범례)을 더한 것. */
+export type DevicePeriodBreakdown = DevicePeriodSummary & { byPurpose: PurposeStat[] }
 
 /** 사무실 한 곳의 카드 묶음. */
 export type DeviceGroup = { site: string; devices: ShowroomDevice[] }
@@ -29,13 +28,16 @@ export const siteTitleStyle: CSSProperties = {
   minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
 }
 export const siteCountStyle: CSSProperties = { fontSize: 12, color: MUTED, flexShrink: 0 }
-/** 대수 옆 기준 기간 — 카드 도넛(가동률·목적)이 이번 달 기준이라 사무실 제목마다 한 번 적는다(카드마다 반복하지 않는다). */
+/** 대수 옆 기준 기간 — 카드 도넛·합계가 헤더에서 고른 기간 기준이라 사무실 제목마다 한 번 적는다. */
 export const siteBasisStyle: CSSProperties = { fontSize: 12, fontWeight: 500, color: MUTED, flexShrink: 0 }
 
-/** 「2026년 9월 기준」 — 카드 요약·가동률을 계산하는 이번 달(KST)과 같은 달이다. */
-export function monthBasisLabel(): string {
-  const { y, m } = nowKSTParts()
-  return `${y}년 ${m}월 기준`
+/**
+ * 「2026년 10월 기준」 — 카드 요약·가동률을 계산한 기간이다. 헤더의 기간 이동기(PeriodNav)가 고른 값을
+ * 그대로 보여 준다. 장비 탭과 가동률 탭이 같은 기간을 쓰므로(app/showroom/page.tsx 의 utilNav.period)
+ * 탭을 옮겨도 이 문구가 가리키는 기간이 바뀌지 않는다.
+ */
+export function periodBasisLabel(period: Period): string {
+  return `${periodLabel(period)} 기준`
 }
 
 /**
@@ -59,10 +61,12 @@ export function groupDevices(devices: ShowroomDevice[], isAdmin: boolean): Devic
 type Props = {
   /** groupDevices 결과. 첫 묶음의 제목은 헤더가 그린다. */
   groups: DeviceGroup[]
-  /** device_id → 이번 달 요약. 없는 장비는 기록 0건이다. */
-  summary: Record<number, DeviceMonthBreakdown>
+  /** 헤더에서 고른 기간. 카드 숫자가 어느 기간의 것인지 적는 데 쓴다(조회는 부모가 한다). */
+  period: Period
+  /** device_id → 그 기간 요약. 없는 장비는 기록 0건이다. */
+  summary: Record<number, DevicePeriodBreakdown>
   /**
-   * device_id → 이번 달 가동률. 장비 탭에 들어올 때 stats 를 한 번 불러 모든 카드가 함께 쓴다.
+   * device_id → 그 기간 가동률. 장비 탭에 들어올 때 stats 를 한 번 불러 모든 카드가 함께 쓴다.
    * 아직 받지 못했으면 undefined, 목록에 없는 장비(사용여부 N)는 가동률 줄을 그리지 않는다.
    */
   utilization?: Record<number, number | null>
@@ -74,7 +78,7 @@ type Props = {
 }
 
 export default function DeviceGrid({
-  groups, summary, utilization, loading, isAdmin, onAddUsage, onConfigure, onOpenUsages,
+  groups, period, summary, utilization, loading, isAdmin, onAddUsage, onConfigure, onOpenUsages,
 }: Props) {
   if (loading) {
     return (
@@ -116,7 +120,7 @@ export default function DeviceGrid({
             }}>
               <span style={siteTitleStyle}>{g.site}</span>
               <span style={siteCountStyle}>{g.devices.length}대</span>
-              <span style={siteBasisStyle}>{monthBasisLabel()}</span>
+              <span style={siteBasisStyle}>{periodBasisLabel(period)}</span>
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, ${CARD_W}px)`, gap: 14 }}>
@@ -126,9 +130,10 @@ export default function DeviceGrid({
                 <ShowroomDeviceCard
                   key={d.device_id}
                   device={d}
-                  monthHours={s?.hours ?? 0}
-                  monthCount={s?.count ?? 0}
-                  monthByPurpose={s?.byPurpose ?? []}
+                  hours={s?.hours ?? 0}
+                  count={s?.count ?? 0}
+                  byPurpose={s?.byPurpose ?? []}
+                  periodShort={periodShortLabel(period)}
                   utilization={utilization && d.device_id in utilization ? utilization[d.device_id] : undefined}
                   canConfigure={isAdmin}
                   onAddUsage={() => onAddUsage(d)}

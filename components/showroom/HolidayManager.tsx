@@ -12,7 +12,7 @@ import {
 } from '@/components/common/ui'
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
-/** 삭제는 두 번 눌러야 실행된다(요청함·사용 기록과 같은 방식). */
+/** 삭제는 두 번 눌러야 실행된다(사용 기록과 같은 방식). */
 const CONFIRM_MS = 3000
 
 type HolidayRow = { holiday_date: string; name: string; is_manual: boolean }

@@ -39,7 +39,7 @@ type HistoryRow = {
   created_at: string
 }
 
-/** 「회수」는 두 번 눌러야 실행된다. 요청함·쇼룸·첨부와 같은 3초다. */
+/** 「회수」는 두 번 눌러야 실행된다. 쇼룸·첨부와 같은 3초다. */
 const CONFIRM_MS = 3000
 
 /** 「…을/를」 — 마지막 글자의 받침으로 고른다. 문서 종류 이름이 유형마다 달라 규칙으로 둔다. */
@@ -240,6 +240,13 @@ export default function DocDetail({
       {/* 처리 */}
       {box === 'pending' && doc.status === '진행중' && (
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* 위임받아 들어온 건 — 누구를 대신해 누르는지 먼저 알린다. 기록에는 「대결」로 남고
+              결재란에는 원래 결재자의 칸에 내 이름이 찍힌다. */}
+          {doc.delegated && current && (
+            <div style={{ fontSize: 12, color: SUB, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>
+              {nameOf(current.approver_id)}님을 대신하여 결재합니다
+            </div>
+          )}
           <textarea
             value={comment}
             onChange={e => setComment(e.target.value)}

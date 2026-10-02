@@ -24,7 +24,7 @@ const admin = () => createClient(
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
 /**
- * 로그인 + superadmin 확인. app/api/requests/quote-delete/route.ts 의 authorize() 와 같은 모양이다.
+ * 로그인 + superadmin 확인. 다른 쇼룸 라우트(app/api/showroom/usage)의 authorize() 와 같은 모양이다.
  * 판정이 permission_level 하나로 끝나므로 팀 플래그(withTeamPerm)는 붙이지 않는다.
  */
 async function authorize() {

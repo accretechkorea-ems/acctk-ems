@@ -6,7 +6,7 @@
 // 결재 라우트는 doc_type 으로 이 표를 찾아 부르기만 한다 — if (doc_type === …) 분기는 두지 않는다.
 // 새 유형은 docTypes.ts 에 등록 정보를, 이 표에 실행 함수를 더하면 끝이다.
 
-import { beforeCompleteShowroom, onCompleteShowroom } from './showroomUsage'
+import { beforeCompleteShowroom, onCompleteShowroom, onRevertShowroom } from './showroomUsage'
 import { onCompleteQuoteDelete, onRevertQuoteDelete } from './quoteDelete'
 import type { OnCompleteContext } from './docTypes'
 
@@ -35,9 +35,11 @@ const HANDLERS: Record<string, DocTypeHandlers> = {
   // 견적서 — 4단계 범위 밖. 6단계에서 채운다.
   quote: {},
   // 쇼룸 사용 신청 — 사전이면 완료 시 사용 기록 생성, 두 경우 모두 승인서에 도장.
+  // 회수·폐기로 끝나면 사후 신청이 상신 때 만들어 둔 사용 기록과 승인서 PDF 를 치운다.
   showroom_usage: {
     beforeComplete: beforeCompleteShowroom,
     onComplete: onCompleteShowroom,
+    onRevert: onRevertShowroom,
   },
   // 견적 삭제 요청 — 완료 시 실제 삭제, 끝나지 않고 돌아가면 견적 상태를 되돌린다.
   quote_delete: {

@@ -13,8 +13,8 @@ import type { Workbook, Worksheet, Cell, CellValue, PaperSize } from 'exceljs'
 import { addDays } from '@/lib/date'
 import { normTime } from '@/lib/workHours'
 import {
-  USAGE_PURPOSES, UTIL_BAND_LABEL, purposeHasField, utilBand, round1, weekdayOfDate,
-  type DeviceUtilStat, type ShowroomStats, type ShowroomUsageRow, type UtilBand,
+  USAGE_PURPOSES, UTIL_BAND_LABEL, purposeHasField, usageApprovalView, utilBand, round1, weekdayOfDate,
+  type DeviceUtilStat, type ShowroomStats, type ShowroomUsageRow, type UsageApprovalDoc, type UtilBand,
 } from '@/lib/showroom'
 
 // ── 조회 ─────────────────────────────────────────────────────────────────────
@@ -315,6 +315,8 @@ export type UsageSheetContext = {
   engineerName: (id: number | null) => string
   /** usage_id → 참여 엔지니어 id */
   usageEngineers: Record<number, number[]>
+  /** 전자결재로 만든 기록의 승인 정보(문서 id 기준). 옛 건은 행에 임베딩돼 와서 여기 없다. */
+  approvals: Record<number, UsageApprovalDoc>
 }
 
 /**
@@ -346,12 +348,20 @@ type UsageCol = {
 }
 
 /** 열 정의 — 라벨·서식·값 추출을 한곳에 둬서 헤더와 본문이 어긋나지 않게 한다. */
+/**
+ * 그 행의 승인 표시. 화면(components/showroom/UsageList.tsx)과 **같은 함수**를 쓴다 —
+ * 옛 건(request_id)·전자결재 건(document_id) 분기를 두 곳에 적지 않기 위해서다.
+ * 순수 계산이라 열마다 다시 불러도 비용이 없다.
+ */
+const viewOf = (ctx: UsageSheetContext, r: ShowroomUsageRow) =>
+  usageApprovalView(r, r.document_id != null ? ctx.approvals[r.document_id] : undefined, ctx.engineerName)
+
 const usageColumns = (ctx: UsageSheetContext): UsageCol[] => [
   { label: '날짜', kind: 'center', get: r => r.usage_date },
   { label: '사무실', get: r => text(ctx.siteName(r.device_id)) },
   { label: '장비명', get: r => text(ctx.deviceName(r.device_id)) },
   { label: '사용목적', get: r => r.purpose },
-  { label: '신청여부', kind: 'center', get: r => (r.request_id != null ? '신청' : null) },
+  { label: '신청여부', kind: 'center', get: r => (viewOf(ctx, r).isRequest ? '신청' : null) },
   { label: '대상 고객사', get: r => text(r.customers?.company_name) },
   { label: '고객부서', get: r => text(r.customer_dept) },
   { label: '시작', kind: 'center', get: r => text(normTime(r.start_time)) },
@@ -376,16 +386,18 @@ const usageColumns = (ctx: UsageSheetContext): UsageCol[] => [
   },
   { label: '작성자', get: r => text(ctx.engineerName(r.created_by)) },
   // 사후 신청은 「확인」으로 처리된다 — 이름 뒤에 (확인)을 붙여 승인과 구분한다. 확인 전(대기중)은 빈 칸.
+  // 대결(위임받아 대신 처리)이면 이름 뒤에 (대결)이 함께 붙는다 — usageApprovalView 가 만든 값이다.
   {
     label: '승인자',
     get: r => {
-      const ar = r.approval_requests
-      if (ar?.approver_id == null) return null
-      const name = ctx.engineerName(ar.approver_id)
-      return name ? `${name}${ar.retro === true ? '(확인)' : ''}` : null
+      const v = viewOf(ctx, r)
+      // actorName 은 이름을 못 찾으면 null 이다 — 엑셀은 「-」를 넣지 않고 빈 칸으로 둔다.
+      if (!v.actorName) return null
+      return v.verb === '확인' ? `${v.actorName}(확인)` : v.actorName
     },
   },
-  { label: '승인일시', kind: 'center', get: r => (r.approval_requests?.approver_id != null ? kstDateTime(r.approval_requests.decided_at) : null) },
+  // 일시는 **처리됐는가**(verb)로 가른다 — 승인자 이름을 못 찾아도(지워진 계정) 처리한 시각은 남긴다.
+  { label: '승인일시', kind: 'center', get: r => { const v = viewOf(ctx, r); return v.verb ? kstDateTime(v.decidedAt) : null } },
   { label: '비고', kind: 'long', get: r => text(r.note) },
 ]
 

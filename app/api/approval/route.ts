@@ -9,6 +9,9 @@
 //   · doc_type 분기를 두지 않는다. 유형별 차이는 lib/approval/docTypes.ts 의 등록 정보로만 본다.
 //   · 결재는 전원 공개다(설계서). 로그인한 재직자면 누구나 이 라우트를 쓸 수 있고,
 //     무엇을 할 수 있는지는 그 문서의 결재선이 정한다.
+//   · 그래서 **상신만은 이 라우트로 하지 않는다.** action 'submit' 은 막혀 있다
+//     (GENERIC_SUBMIT_DISABLED — 이유는 그 상수 설명에 있다). 상신은 업무별 라우트가
+//     원 문서를 검증한 뒤 lib/approval/submit.ts 를 직접 부른다.
 
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
@@ -19,14 +22,14 @@ import { canRejectDocument, docTypeOf, type DocTypeDef } from '@/lib/approval/do
 import { handlersOf } from '@/lib/approval/handlers'
 import {
   actorFor, applyApproval, ccApproverIds, delegatesOf, isComplete,
-  nextPendingLine, skippedLineIds, toLineRows, untouched, validateLineInput,
+  nextPendingLine, skippedLineIds, toLineRows, untouched,
 } from '@/lib/approval/engine'
 import {
   APPROVAL_PATH, DISCARDABLE_STATUSES,
   type ApprovalDocument, type ApprovalLine, type Delegation,
   type HistoryAction, type LineInput,
 } from '@/lib/approval/types'
-import { createApprovalDocument } from '@/lib/approval/submit'
+import { checkLines, createApprovalDocument } from '@/lib/approval/submit'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,6 +37,22 @@ const supabaseAdmin = createClient(
 )
 
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status })
+
+/**
+ * 범용 상신(action === 'submit')을 막아 둔 스위치. false 로 바꾸면 아래 submit() 이 예전처럼 동작한다.
+ * 방식은 /api/lead-delete 와 같다 — 코드를 지우지 않고 입구에서만 막는다.
+ *
+ * 왜 막는가 — 이 액션은 docType·docNo·targetTable·targetId·summary 를 본문에서 그대로 받고,
+ * **그 원 문서가 부르는 사람의 것인지 보지 않는다.** 결재는 전원 공개라 로그인한 재직자면 누구나
+ * 부를 수 있으므로, quote_delete 를 이 길로 올리면 남의 견적을 지우는 결재 문서가 만들어진다
+ * (onCompleteQuoteDelete 가 target_id 를 그대로 지운다). 전용 라우트는 그 검증을 한다 —
+ * app/api/quote-delete 는 견적이 '취소요청' 인지·사유가 있는지·같은 견적으로 도는 문서가 없는지 보고,
+ * app/api/showroom/requests 는 쇼룸 메뉴 권한과 신청 내용을 본다.
+ *
+ * 화면·스크립트에서 이 액션을 부르는 곳은 없다(조사 결과 0건). 문서 종류별 상신 경로는
+ * lib/approval/submit.ts 의 createApprovalDocument 를 직접 부르므로 이 스위치와 무관하다.
+ */
+const GENERIC_SUBMIT_DISABLED = true
 
 type Caller = {
   engineer_id: number
@@ -145,8 +164,12 @@ const docIdOf = (v: unknown) => {
   return Number.isInteger(n) && n > 0 ? n : null
 }
 
-/** 결재선 입력을 받아 검증까지. 문제가 있으면 응답을 돌려준다. */
-async function readLines(raw: unknown, requesterId: number): Promise<{ lines: LineInput[]; error: null } | { lines: null; error: NextResponse }> {
+/**
+ * 결재선 입력을 모양만 읽은 뒤 검증은 lib/approval/submit.ts 의 checkLines 에 넘긴다.
+ * 쇼룸·견적 삭제와 **같은 함수**를 쓴다 — 종류별 결재선 규칙이 경로마다 갈리지 않게 하기 위해서다
+ * (예전에는 이 안에서 engineers 를 따로 읽고 validateLineInput 만 불렀다).
+ */
+async function readLines(raw: unknown, requesterId: number, docType: string): Promise<{ lines: LineInput[]; error: null } | { lines: null; error: NextResponse }> {
   if (!Array.isArray(raw)) return { lines: null, error: bad('결재선을 지정해주세요.') }
   const lines = raw.map(r => ({
     step: Number((r as LineInput)?.step),
@@ -155,27 +178,19 @@ async function readLines(raw: unknown, requesterId: number): Promise<{ lines: Li
     isDelegatedAuthority: (r as LineInput)?.isDelegatedAuthority === true,
   })) as LineInput[]
 
-  const ids = [...new Set(lines.map(l => l.approverId).filter(n => Number.isInteger(n) && n > 0))]
-  const { data: engs, error } = await supabaseAdmin
-    .from('engineers')
-    .select('engineer_id, resigned_date')
-    .in('engineer_id', ids.length > 0 ? ids : [0])
-  if (error) {
-    console.error('[approval] approver lookup failed', error)
-    return { lines: null, error: bad('결재자를 확인하지 못했습니다.', 500) }
-  }
-  const active = new Set(
-    ((engs ?? []) as { engineer_id: number; resigned_date: string | null }[])
-      .filter(e => !e.resigned_date)
-      .map(e => e.engineer_id),
-  )
-  const msg = validateLineInput(lines, requesterId, active)
+  const msg = await checkLines(supabaseAdmin, lines, requesterId, docType)
   if (msg) return { lines: null, error: bad(msg) }
   return { lines, error: null }
 }
 
 // ── 상신 ────────────────────────────────────────────────────────────────────
 async function submit(caller: Caller, body: Record<string, unknown>) {
+  // 권한·내용을 보기 전에 막는다 — 누가 부르든 답이 같아야 한다.
+  // 410 Gone: 있던 경로를 의도적으로 걷어냈다는 뜻이다(404 는 「원래 없다」로 읽힌다).
+  if (GENERIC_SUBMIT_DISABLED) {
+    return bad('범용 상신은 지원하지 않습니다. 각 업무 화면의 상신 기능을 사용해 주세요.', 410)
+  }
+
   const def = docTypeOf(body.docType)
   if (!def) return bad('등록되지 않은 문서 유형입니다.')
 
@@ -190,7 +205,7 @@ async function submit(caller: Caller, body: Record<string, unknown>) {
   const targetId = body.targetId == null ? null : docIdOf(body.targetId)
   if (body.targetId != null && targetId === null) return bad('targetId 가 올바르지 않습니다.')
 
-  const { lines, error: lineErr } = await readLines(body.lines, caller.engineer_id)
+  const { lines, error: lineErr } = await readLines(body.lines, caller.engineer_id, def.key)
   if (lineErr) return lineErr
 
   // 실제 상신은 lib/approval/submit.ts 가 한다 — 쇼룸 사용 신청처럼 다른 서버 코드가
@@ -478,9 +493,13 @@ async function resubmit(caller: Caller, body: Record<string, unknown>) {
   if (doc.status !== '반려' && doc.status !== '회수') return bad('반려·회수된 문서만 다시 올릴 수 있습니다.', 409)
 
   // 결재선을 새로 주면 통째로 갈아끼우고, 주지 않으면 있던 결재선을 처음 상태로 되돌린다.
+  //
+  // 종류별 결재선 규칙(lib/approval/lineRules.ts)은 **갈아끼우는 쪽에만** 걸린다. 결재선을 그대로
+  // 다시 돌리는 쪽은 이미 상신된 문서의 결재선이라, 규칙이 뒤에 생겼다는 이유로 재상신을 막으면
+  // 반려된 문서가 상신함에 갇힌다(「이미 진행 중이거나 완료된 문서에는 적용하지 않는다」).
   let replaced = false
   if (body.lines !== undefined) {
-    const { lines, error: lineErr } = await readLines(body.lines, caller.engineer_id)
+    const { lines, error: lineErr } = await readLines(body.lines, caller.engineer_id, doc.doc_type)
     if (lineErr) return lineErr
     const { error: delErr } = await supabaseAdmin.from('approval_lines').delete().eq('document_id', documentId)
     if (delErr) {

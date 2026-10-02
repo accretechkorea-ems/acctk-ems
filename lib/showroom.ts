@@ -297,6 +297,21 @@ export function periodLabel(p: Period): string {
   }
 }
 
+/**
+ * 짧은 표시 — 「10월」「3분기」「하반기」「2026년」「기간」.
+ * 장비 카드처럼 폭이 좁은 자리에서 「이 숫자가 어느 기간의 것인가」만 밝힐 때 쓴다
+ * (연도까지 적을 자리가 없다 — 연도는 헤더의 periodBasisLabel 이 보여 준다).
+ */
+export function periodShortLabel(p: Period): string {
+  switch (p.mode) {
+    case 'month': return `${p.month}월`
+    case 'quarter': return `${p.quarter}분기`
+    case 'half': return p.half === 1 ? '상반기' : '하반기'
+    case 'year': return `${p.year}년`
+    case 'custom': return '기간'
+  }
+}
+
 /** ◀ ▶ — 그 모드의 한 단위만큼 옮긴다. 지정 기간은 같은 일수만큼 통째로 옮긴다. */
 export function shiftPeriod(p: Period, delta: number): Period {
   switch (p.mode) {
@@ -518,8 +533,15 @@ export type ShowroomUsageRow = {
   follow_up: string | null
   quote_id: number | null
   note: string | null
-  /** 데모 신청으로 만든 기록이면 그 신청(approval_requests.request_id) */
+  /** 데모 신청으로 만든 기록이면 그 신청(approval_requests.request_id) — **옛 요청함 건만**. */
   request_id: number | null
+  /**
+   * 전자결재로 만든 기록이면 그 문서(approval_documents.document_id). 4단계 이후 신청이 전부 이쪽이다.
+   * 옛 건과 둘이 함께 채워지는 일은 없다 — 옛 건은 request_id, 새 건은 document_id 하나다.
+   * 승인 정보는 임베딩하지 않는다(approval_documents 의 읽기 정책이 참여자만 열어 주므로
+   * /api/showroom/requests/approvals 가 service role 로 내려 준다 — showroomData.ts 참고).
+   */
+  document_id: number | null
   /**
    * 연결된 데모 신청의 처리 정보(showroom_usage.request_id 로 임베딩). 신청이 아닌 기록은 null.
    * 승인자는 id 만 온다 — 이름은 화면이 가진 엔지니어 목록으로 바꾼다. retro 는 payload.is_retroactive(사후 신청).
@@ -543,7 +565,7 @@ export const REQUEST_REJECTED = '반려'
 /** 승인서 PDF 버킷(비공개). approval_requests.pdf_url 은 '<버킷>/<파일명>' 꼴로 저장한다. */
 export const APPROVAL_BUCKET = 'showroom-approvals'
 
-/** 신청 한 건의 내용(approval_requests.payload). 이름들은 신청 시점 값을 적어 둔다(승인서·요청함 표시용). */
+/** 신청 한 건의 내용. 이름들은 신청 시점 값을 적어 둔다(승인서·결재함 표시용). */
 export type DemoRequestPayload = {
   /** SR-YYYYMMDD-001 — 신청일(KST) 기준 일련번호 */
   request_no: string
@@ -605,6 +627,128 @@ export const isRetroactiveDate = (usageDate: string, today: string): boolean => 
 /** 상태 표기 — 사후 신청의 승인은 「확인」이다. */
 export const demoStatusLabel = (status: string, retroactive: boolean): string =>
   status === REQUEST_APPROVED && retroactive ? '확인' : status
+
+// ── 사용 기록의 승인 표시 ────────────────────────────────────────
+// 신청으로 만든 기록이 「누가 언제 승인했는가」를 보여 주는 값을 한곳에서 만든다. 옛 건과 새 건이
+// 전혀 다른 표에서 오므로(옛 = approval_requests 임베딩, 새 = 결재 문서) 분기를 화면·엑셀에 두 번
+// 적지 않기 위해 여기 모았다. 네트워크·DOM 을 쓰지 않아 스크립트로 그대로 돌려 볼 수 있다.
+
+/** 전자결재 문서 한 건의 승인 정보 — /api/showroom/requests/approvals 가 내려 주는 모양. */
+export type UsageApprovalDoc = {
+  document_id: number
+  /** approval_documents.status — 진행중·완료·반려·회수·폐기 */
+  status: string
+  /** 사후 신청인가(summary.is_retroactive) — 「승인」 대신 「확인」이라 부른다. */
+  retroactive: boolean
+  /** 마지막으로 승인 처리한 줄의 실제 처리자(acted_by). 아직 없으면 null. */
+  actedById: number | null
+  /** 그 처리 시각(acted_at). */
+  actedAt: string | null
+  /** 그 줄이 대결이었나 — 위임받은 사람이 대신 눌렀다. */
+  byDelegate: boolean
+  /** 승인서 PDF 가 있는가(summary.pdf_url). */
+  hasPdf: boolean
+}
+
+/** 승인 칸·엑셀·승인서 버튼이 쓰는 값. 전부 미리 만들어 둔다. */
+export type UsageApprovalView = {
+  /** 신청으로 만든 기록인가 — 「신청」 배지. */
+  isRequest: boolean
+  /** 「승인」 또는 「확인」. 아직 확정되지 않았으면 null. */
+  verb: '승인' | '확인' | null
+  /**
+   * 화면에 쓰는 처리자(대결이면 「홍길동(대결)」). verb 가 null 이면 null.
+   * **이름을 못 찾으면 「-」다** — 지워진 계정이 결재선에 남아 있어도 칸이 비지 않게.
+   */
+  actor: string | null
+  /**
+   * 엑셀에 쓰는 처리자. 이름을 못 찾으면 **null**(빈 칸)이다 — 「-」를 넣지 않는 엑셀 규칙을 따른다.
+   * actor 와 따로 두는 이유는 그 하나뿐이다(화면은 「-」, 엑셀은 빈 칸).
+   */
+  actorName: string | null
+  /** 처리 시각 iso. verb 가 null 이면 null. 형식은 부르는 쪽이 정한다. */
+  decidedAt: string | null
+  /** 아직 확정 전이거나 끝나지 않은 문서의 상태말 — 「확인 대기」 「결재 중」 「반려」 … 없으면 null. */
+  pendingLabel: string | null
+  /** 승인서 열기 — openApprovalPdf(id, kind) 에 그대로 넘긴다. 없으면 null. */
+  pdf: { id: number; kind: 'request' | 'doc' } | null
+}
+
+const EMPTY_VIEW: UsageApprovalView = {
+  isRequest: false, verb: null, actor: null, actorName: null, decidedAt: null, pendingLabel: null, pdf: null,
+}
+
+/**
+ * 사용 기록 한 줄의 승인 표시를 만든다.
+ *
+ * 세 갈래다.
+ *   · request_id 가 있다 — **옛 요청함 건.** 지금까지와 한 글자도 다르지 않게 임베딩된 값만 본다.
+ *   · document_id 가 있다 — **전자결재 건.** doc(라우트가 내려 준 문서 정보)을 본다.
+ *   · 둘 다 없다 — 신청이 아닌 기록. 표시할 것이 없다.
+ *
+ * doc 이 undefined 인 경우(조회 실패·아직 안 읽음)에는 상태를 꾸며 내지 않는다 — 승인서 버튼만
+ * 남겨 두어, 눌렀을 때 서버가 알려 주게 한다(옛 건이 늘 그렇게 동작했다).
+ */
+export function usageApprovalView(
+  row: {
+    request_id: number | null
+    document_id: number | null
+    approval_requests: { approver_id: number | null; decided_at: string | null; status: string; retro: boolean | null } | null
+  },
+  doc: UsageApprovalDoc | undefined,
+  engineerName: (id: number | null) => string,
+): UsageApprovalView {
+  // ── 옛 요청함 건 ──
+  if (row.request_id != null) {
+    const ar = row.approval_requests
+    const retro = ar?.retro === true
+    const raw = ar?.approver_id != null ? engineerName(ar.approver_id) : ''
+    const approver = ar?.approver_id != null ? raw || '-' : null
+    return {
+      isRequest: true,
+      verb: approver ? (retro ? '확인' : '승인') : null,
+      actor: approver,
+      actorName: raw || null,
+      decidedAt: approver ? (ar?.decided_at ?? null) : null,
+      // 옛 건은 확인 전에 「확인 대기」만 보였다(사전 건은 아무것도 보이지 않았다).
+      pendingLabel: approver ? null : (retro ? '확인 대기' : null),
+      pdf: { id: row.request_id, kind: 'request' },
+    }
+  }
+
+  // ── 전자결재 건 ──
+  if (row.document_id != null) {
+    const id = row.document_id
+    if (!doc) return { ...EMPTY_VIEW, isRequest: true, pdf: { id, kind: 'doc' } }
+    const pdf = doc.hasPdf ? { id, kind: 'doc' as const } : null
+    if (doc.status === '완료' && doc.actedById != null) {
+      const raw = engineerName(doc.actedById)
+      const suffix = doc.byDelegate ? '(대결)' : ''
+      return {
+        isRequest: true,
+        verb: doc.retroactive ? '확인' : '승인',
+        actor: `${raw || '-'}${suffix}`,
+        actorName: raw ? `${raw}${suffix}` : null,
+        decidedAt: doc.actedAt,
+        pendingLabel: null,
+        pdf,
+      }
+    }
+    return {
+      isRequest: true,
+      verb: null,
+      actor: null,
+      actorName: null,
+      decidedAt: null,
+      // 진행 중 — 사후는 「확인 대기」(옛 건과 같은 말), 사전은 「결재 중」.
+      // 그 밖(반려·회수·폐기)은 상태를 그대로 보여 준다.
+      pendingLabel: doc.status === '진행중' ? (doc.retroactive ? '확인 대기' : '결재 중') : doc.status,
+      pdf,
+    }
+  }
+
+  return EMPTY_VIEW
+}
 
 /**
  * showroom_devices 설정 행을 확인하고, 없으면 기본값으로 만든다 — showroom_usage.device_id 가

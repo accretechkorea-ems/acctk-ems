@@ -1,5 +1,5 @@
 // 승인서 PDF 열기 — 비공개 버킷(showroom-approvals)이라 서명 URL 을 받아 새 창으로 연다.
-// 전체기록 탭 「내 신청」과 요청함이 같이 쓴다. JSX 없음.
+// 전체기록 탭의 「내 신청」과 사용 기록 목록이 같이 쓴다. JSX 없음.
 //
 // kind — 'request' 는 옛 요청함 신청(approval_requests), 'doc' 는 전자결재 문서(approval_documents, 4단계).
 //

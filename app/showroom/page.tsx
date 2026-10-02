@@ -4,7 +4,9 @@
 //   매일 쓰는 화면은 장비이고, 가동률·전체기록은 확인용이다.
 //   사용 신청과 사용 기록 수정은 같은 모달(UsageModal)로 들어온다 — 새로 쓰면 신청, 기존 기록을 고치면 수정이다.
 //   헤더 한 줄(ShowroomHeader)을 세 탭이 함께 쓴다 — 탭은 늘 우측 끝이고, 장비 탭이면 좌측에 첫 사무실 제목,
-//   가동률 탭이면 사무실 선택 · 기간(◀ ▶ + 기간 선택 모달)이 나타난다.
+//   가동률 탭이면 사무실 선택이 나타난다. 가운데 기간(◀ ▶ + 기간 선택 모달)은 **장비·가동률 두 탭이 함께** 쓴다
+//   — 상태가 아래 utilNav.period 한 곳이라 탭을 옮겨도 고른 기간이 남는다. 전체기록 탭은 자기 기간을
+//   주소에 들고 있어(usageQuery) 이 기간과 섞이지 않는다.
 //
 // 탭과 전체기록 필터는 주소(쿼리스트링)가 원본이다(components/showroom/usageQuery.ts).
 //   /showroom?tab=usage&devices=3,7&purpose=측정대행&q=기아&from=2026-09-01&to=2026-09-30&page=2
@@ -26,9 +28,9 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { isSuperAdmin } from '@/lib/permissions'
 import { nowKSTParts } from '@/lib/date'
-import { USAGE_PURPOSES, round1, type ShowroomDevice, type ShowroomSite, type ShowroomStats } from '@/lib/showroom'
+import { USAGE_PURPOSES, periodRange, round1, type Period, type ShowroomDevice, type ShowroomSite, type ShowroomStats } from '@/lib/showroom'
 import { PAGE_BG, DANGER, BLUE, MUTED, PULSE_KEYFRAMES } from '@/components/common/ui'
-import DeviceGrid, { groupDevices, type DeviceMonthBreakdown } from '@/components/showroom/DeviceGrid'
+import DeviceGrid, { groupDevices, type DevicePeriodBreakdown } from '@/components/showroom/DeviceGrid'
 import ShowroomHeader from '@/components/showroom/ShowroomHeader'
 import UsageModal, { type UsageSubmission } from '@/components/showroom/UsageModal'
 import DeviceSettingsModal, { type DevicePatch } from '@/components/showroom/DeviceSettingsModal'
@@ -36,7 +38,7 @@ import UtilizationTab, { type UtilNav } from '@/components/showroom/UtilizationT
 import UsageTab from '@/components/showroom/UsageTab'
 import type { PickerEngineer } from '@/components/showroom/EngineerPicker'
 import {
-  loadShowroomDevices, loadEngineers, monthRange, callShowroomApi, saveSubmission, requestNotice,
+  loadShowroomDevices, loadEngineers, callShowroomApi, saveSubmission, requestNotice,
 } from '@/components/showroom/showroomData'
 import {
   SHOWROOM_PATH, parseTab, parseUsageQuery, usageHref, type ShowroomTab, type UsageQuery,
@@ -52,18 +54,17 @@ const TABS: { label: string; value: ShowroomTab }[] = [
 type Browser = ReturnType<typeof createClient>
 
 /**
- * 장비 카드의 이번 달 요약(KST) — 합계·건수에 사용목적별 건수·시간(도넛·범례)을 더한다.
- * showroomData 의 loadMonthSummary 와 같은 조건(삭제 제외, 그 달 전체)에 purpose 한 컬럼만 더 읽는다.
+ * 장비 카드의 기간 요약 — 합계·건수에 사용목적별 건수·시간(도넛·범례)을 더한다.
+ * 헤더에서 고른 기간(from~to, 양 끝 포함)을 그대로 받는다 — 예전에는 이번 달 고정이었다.
  * 카드용 조회는 여전히 이 한 번이다. 목적은 USAGE_PURPOSES 5종을 모두 담는다(0건 포함).
  */
-async function loadMonthBreakdown(sb: Browser, y: number, m: number): Promise<Record<number, DeviceMonthBreakdown>> {
-  const { from, to } = monthRange(y, m)
+async function loadPeriodBreakdown(sb: Browser, from: string, to: string): Promise<Record<number, DevicePeriodBreakdown>> {
   const { data, error } = await sb
     .from('showroom_usage').select('device_id, work_hours, purpose')
     .is('deleted_at', null)
     .gte('usage_date', from).lte('usage_date', to)
   if (error) throw new Error(`summary: ${error.message}`)
-  const map: Record<number, DeviceMonthBreakdown> = {}
+  const map: Record<number, DevicePeriodBreakdown> = {}
   for (const r of (data ?? []) as { device_id: number; work_hours: number; purpose: string }[]) {
     const s = (map[r.device_id] ??= {
       hours: 0, count: 0, byPurpose: USAGE_PURPOSES.map(p => ({ purpose: p, count: 0, hours: 0 })),
@@ -114,8 +115,17 @@ function ShowroomPageInner() {
   }, [router])
 
   const now = nowKSTParts()
-  // 가동률 탭의 기간·사무실. 기본은 이번 달, 사무실은 고르기 전까지 첫 사무실.
+  /**
+   * 헤더의 기간·사무실.
+   *   period — **장비 탭과 가동률 탭이 함께 쓴다.** 기본은 이번 달(KST). 주소가 아니라 부모 상태에 두었다
+   *            — 사무실 구분(site)과 같은 자리·같은 방식이고, 탭을 오가도 고른 기간이 남는다.
+   *            전체기록 탭은 자기 기간을 주소에 들고 있어(usageQuery) 여기에 끼지 않는다.
+   *   site   — 가동률 탭 전용. 고르기 전까지 첫 사무실.
+   */
   const [utilNav, setUtilNav] = useState<UtilNav>({ period: { mode: 'month', year: now.y, month: now.m }, site: null })
+  const period: Period = utilNav.period
+  // 장비 탭의 두 조회(카드 요약·카드 가동률)가 같은 기간을 본다. 가동률 탭과 같은 periodRange 를 쓴다.
+  const { from: periodFrom, to: periodTo } = periodRange(period)
 
   // ── 장비·사무실 ── 쓰기 뒤에는 devicesKey 를 올려 다시 읽는다.
   const [devicesKey, setDevicesKey] = useState(0)
@@ -125,15 +135,17 @@ function ShowroomPageInner() {
   // ── 엔지니어(기록 추가 모달·전체기록 표) ──
   const [engineers, setEngineers] = useState<PickerEngineer[]>([])
   const [engineersLoaded, setEngineersLoaded] = useState(false)
-  // ── 장비 카드의 이번 달 요약 ──
-  const [summaryKey, setSummaryKey] = useState(0)
-  const [summaryLoadedKey, setSummaryLoadedKey] = useState<number | null>(null)
-  const [monthSummary, setMonthSummary] = useState<Record<number, DeviceMonthBreakdown>>({})
+  // ── 장비 카드의 기간 요약 ──
+  // 다시 읽을 방아쇠(쓰기 뒤에 올린다)와 「어느 요청의 결과를 들고 있는가」를 나눠 둔다 —
+  // 기간이 바뀌어도 같은 길로 다시 읽히게 하려고 키에 기간을 섞는다(가동률 탭 UtilizationTab 과 같은 방식).
+  const [summaryRefresh, setSummaryRefresh] = useState(0)
+  const [summaryLoadedKey, setSummaryLoadedKey] = useState<string | null>(null)
+  const [periodSummary, setPeriodSummary] = useState<Record<number, DevicePeriodBreakdown>>({})
   // 가동률은 사용 기록·장비 설정·공휴일이 바뀌면 달라진다. 그때마다 이 값을 올려 다시 계산하게 한다.
   const [statsRefresh, setStatsRefresh] = useState(0)
-  // 장비 카드의 이번 달 가동률(device_id → 가동률). 장비 탭에 들어올 때 stats 를 한 번 부른다.
+  // 장비 카드의 기간 가동률(device_id → 가동률). 장비 탭에 들어올 때·기간이 바뀔 때 stats 를 부른다.
   const [deviceUtil, setDeviceUtil] = useState<Record<number, number | null> | undefined>(undefined)
-  const [deviceUtilKey, setDeviceUtilKey] = useState<number | null>(null)
+  const [deviceUtilKey, setDeviceUtilKey] = useState<string | null>(null)
 
   const [pageError, setPageError] = useState<string | null>(null)
   // 장비·가동률 탭에서 사용 신청을 보낸 뒤 안내(이 탭에는 「내 사용 신청」 카드가 없다).
@@ -142,7 +154,17 @@ function ShowroomPageInner() {
   const [settingsDevice, setSettingsDevice] = useState<ShowroomDevice | null>(null)
 
   const devicesLoading = devicesLoadedKey !== devicesKey
+  // 요청 키 — 기간과 방아쇠를 함께 담는다. 「불러오는 중」은 들고 있는 키와 비교해 파생시킨다.
+  const summaryKey = `${periodFrom}~${periodTo}-${summaryRefresh}`
   const summaryLoading = summaryLoadedKey !== summaryKey
+  const utilKey = `${periodFrom}~${periodTo}-${statsRefresh}`
+  const utilLoading = tab === 'devices' && deviceUtilKey !== utilKey
+  /**
+   * 스켈레톤은 **처음 한 번만** 보인다. 기간을 옮기는 동안에는 직전 카드를 흐리게 그대로 둔다 —
+   * 가동률 탭과 같은 규칙이다(스켈레톤으로 바꾸면 ◀ ▶ 를 누를 때마다 화면이 튄다).
+   */
+  const firstLoad = devicesLoading || summaryLoadedKey === null
+  const refreshing = summaryLoading || utilLoading
 
   // 장비 카드 묶음 — 첫 사무실 제목은 헤더가, 나머지는 그리드가 그린다.
   const deviceGroups = useMemo(() => groupDevices(devices, admin), [devices, admin])
@@ -172,22 +194,19 @@ function ShowroomPageInner() {
   useEffect(() => {
     if (!authorized || summaryLoadedKey === summaryKey) return
     let cancelled = false
-    // 카드의 '이번 달'은 늘 오늘(KST)이 속한 달이다.
-    const { y, m } = nowKSTParts()
-    loadMonthBreakdown(supabase, y, m)
-      .then(map => { if (cancelled) return; setMonthSummary(map); setSummaryLoadedKey(summaryKey) })
-      .catch(e => { if (cancelled) return; console.error('[showroom] month summary load failed', e); setMonthSummary({}); setSummaryLoadedKey(summaryKey) })
+    // 헤더에서 고른 기간. 실패해도 직전 값을 지우지 않는다 — 빈 카드로 깜빡이지 않게.
+    loadPeriodBreakdown(supabase, periodFrom, periodTo)
+      .then(map => { if (cancelled) return; setPeriodSummary(map); setSummaryLoadedKey(summaryKey) })
+      .catch(e => { if (cancelled) return; console.error('[showroom] period summary load failed', e); setSummaryLoadedKey(summaryKey) })
     return () => { cancelled = true }
-  }, [authorized, supabase, summaryKey, summaryLoadedKey])
+  }, [authorized, supabase, summaryKey, summaryLoadedKey, periodFrom, periodTo])
 
-  // 장비 탭의 카드 가동률 — 탭에 들어왔을 때 한 번, 그 뒤로는 데이터가 바뀌었을 때만 다시 부른다.
-  // 모든 사무실의 장비가 카드로 나오므로 site=all, 기간은 이번 달 1일~말일(서버가 오늘까지만 센다).
+  // 장비 탭의 카드 가동률 — 탭에 들어왔을 때, 기간을 옮겼을 때, 데이터가 바뀌었을 때 부른다.
+  // 모든 사무실의 장비가 카드로 나오므로 site=all. 기간은 헤더에서 고른 것이다(서버가 오늘까지만 센다).
   useEffect(() => {
-    if (!authorized || tab !== 'devices' || deviceUtilKey === statsRefresh) return
+    if (!authorized || tab !== 'devices' || deviceUtilKey === utilKey) return
     let cancelled = false
-    const { y, m } = nowKSTParts()
-    const { from, to } = monthRange(y, m)
-    fetch(`/api/showroom/stats?from=${from}&to=${to}&site=all`)
+    fetch(`/api/showroom/stats?from=${periodFrom}&to=${periodTo}&site=all`)
       .then(async res => {
         const body = await res.json().catch(() => null)
         if (cancelled) return
@@ -197,22 +216,22 @@ function ShowroomPageInner() {
         } else {
           setDeviceUtil(Object.fromEntries((body as ShowroomStats).devices.map(d => [d.device_id, d.utilization])))
         }
-        setDeviceUtilKey(statsRefresh)
+        setDeviceUtilKey(utilKey)
       })
       .catch(e => {
         if (cancelled) return
         console.error('[showroom] device utilization load failed', e)
         setDeviceUtil({})
-        setDeviceUtilKey(statsRefresh)
+        setDeviceUtilKey(utilKey)
       })
     return () => { cancelled = true }
-  }, [authorized, tab, statsRefresh, deviceUtilKey])
+  }, [authorized, tab, utilKey, deviceUtilKey, periodFrom, periodTo])
 
   const bumpStats = useCallback(() => setStatsRefresh(n => n + 1), [])
   /** 전체기록 탭에서 기록을 쓰거나 지웠을 때 — 장비 카드 요약·가동률도 맞춘다. */
   const onUsageChanged = useCallback(() => {
     setDevicesKey(k => k + 1)
-    setSummaryKey(k => k + 1)
+    setSummaryRefresh(n => n + 1)
     bumpStats()
   }, [bumpStats])
 
@@ -257,7 +276,7 @@ function ShowroomPageInner() {
           siteTitleLoading={devicesLoading}
           sites={sites}
           site={utilSite}
-          period={utilNav.period}
+          period={period}
           onSiteChange={s => setUtilNav(n => ({ ...n, site: s }))}
           onPeriodChange={p => setUtilNav(n => ({ ...n, period: p }))}
         />
@@ -276,20 +295,24 @@ function ShowroomPageInner() {
         )}
 
         {tab === 'devices' && (
+          // 기간을 옮기는 동안에는 직전 카드를 흐리게 그대로 둔다(가동률 탭과 같은 규칙).
+          <div style={{ opacity: !firstLoad && refreshing ? 0.55 : 1, transition: 'opacity 0.15s ease' }} aria-busy={refreshing}>
           <DeviceGrid
             groups={deviceGroups}
-            summary={monthSummary}
+            period={period}
+            summary={periodSummary}
             utilization={deviceUtil}
-            loading={devicesLoading || summaryLoading}
+            loading={firstLoad}
             isAdmin={admin}
             onAddUsage={d => setAddModal({ open: true, preset: d.device_id })}
             onConfigure={d => setSettingsDevice(d)}
-            onOpenUsages={d => openUsage(d.device_id)}
+            onOpenUsages={d => openUsage(d.device_id, { from: periodFrom, to: periodTo })}
           />
+          </div>
         )}
         {tab === 'util' && (
           <UtilizationTab
-            period={utilNav.period}
+            period={period}
             site={utilSite}
             sitesLoading={devicesLoading}
             isAdmin={admin}

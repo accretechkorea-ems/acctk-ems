@@ -6,7 +6,10 @@
 // 이 파일은 서버 전용이다(service role 클라이언트를 받는다). 화면에서 import 하지 마라.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { isSuperAdmin } from '../permissions'
 import { nextPendingLine, toLineRows, validateLineInput, delegatesOf } from './engine'
+import { DOC_TYPES } from './docTypes'
+import { checkLineRules } from './lineRules'
 import { APPROVAL_PATH, type ApprovalLine, type Delegation, type LineInput } from './types'
 
 export type SubmitResult =
@@ -26,23 +29,79 @@ export type SubmitInput = {
   today: string
 }
 
-/** 결재선에 들어갈 사람이 모두 재직 중인지 확인하고 상신 검증까지 한다. 문제가 있으면 메시지. */
-export async function checkLines(sb: SupabaseClient, lines: LineInput[], requesterId: number): Promise<string | null> {
+/**
+ * 결재선 검증의 **단 한 곳**. 모든 상신·재상신 경로가 여기를 지난다
+ * (쇼룸 POST·PATCH, 견적 삭제, 범용 submit, 결재 라우트의 재상신). 문제가 있으면 메시지.
+ *
+ * 두 단계다.
+ *   ① 모양 — validateLineInput(engine.ts). 문서 종류를 모르는 검사다.
+ *   ② 종류별 요구 — checkLineRules(lineRules.ts). docType 을 주지 않으면 건너뛴다.
+ *
+ * **순서가 중요하다.** 부르는 쪽은 이 검증을 원 기록을 만들기 **전에** 해야 한다 —
+ * 쇼룸 사후 신청처럼 상신 전에 사용 기록을 만드는 흐름이 결재선 때문에 막히면, 기록만 남고
+ * 문서가 없는 상태가 된다(그래서 쇼룸 라우트가 checkLines 를 createUsageFromRequest 앞에 둔다).
+ *
+ * 직원 조회는 한 번이다 — 결재자들과 상신자를 함께 읽어 재직 여부와 등급을 같은 결과에서 본다.
+ */
+export async function checkLines(
+  sb: SupabaseClient,
+  lines: LineInput[],
+  requesterId: number,
+  /** 종류별 결재선 규칙을 함께 볼 때 넘긴다. 없으면 모양 검사만 한다. */
+  docType?: string,
+): Promise<string | null> {
   const ids = [...new Set(lines.map(l => l.approverId).filter(n => Number.isInteger(n) && n > 0))]
+  // 상신자를 함께 읽는다 — 등급 면제(관리자가 올린 문서) 판정에 필요하다. 결재자 수가 적어 한 번에 끝난다.
+  const lookup = [...new Set([...ids, requesterId])].filter(n => Number.isInteger(n) && n > 0)
   const { data, error } = await sb
     .from('engineers')
-    .select('engineer_id, resigned_date')
-    .in('engineer_id', ids.length > 0 ? ids : [0])
+    .select('engineer_id, resigned_date, permission_level')
+    .in('engineer_id', lookup.length > 0 ? lookup : [0])
   if (error) {
     console.error('[approval/submit] approver lookup failed', error)
     return '결재자를 확인하지 못했습니다.'
   }
+  type Row = { engineer_id: number; resigned_date: string | null; permission_level: string | null }
+  const rows = (data ?? []) as Row[]
+
+  // 재직 판정에서 상신자는 뺀다 — 결재선에 본인이 들어가는 것은 validateLineInput 이 따로 막는다.
   const active = new Set(
-    ((data ?? []) as { engineer_id: number; resigned_date: string | null }[])
-      .filter(e => !e.resigned_date)
-      .map(e => e.engineer_id),
+    rows.filter(e => !e.resigned_date && e.engineer_id !== requesterId).map(e => e.engineer_id),
   )
-  return validateLineInput(lines, requesterId, active)
+  const shaped = validateLineInput(lines, requesterId, active)
+  if (shaped) return shaped
+
+  if (docType === undefined) return null
+  const supers = new Set(
+    rows.filter(e => isSuperAdmin({ permission_level: e.permission_level })).map(e => e.engineer_id),
+  )
+  const ruled = checkLineRules({
+    lines,
+    rules: DOC_TYPES[docType]?.lineRules,
+    requesterIsSuperadmin: supers.has(requesterId),
+    isSuperadmin: id => supers.has(id),
+  })
+  return ruled.ok ? null : ruled.message
+}
+
+/**
+ * 방금 만든 문서를 지운다 — 상신 절차가 중간에 깨졌을 때만 쓴다. 성공하면 true.
+ *
+ * 순서가 있다: 이력을 먼저 지우고 문서를 지운다. 결재선(approval_lines)은 document_id 가
+ * ON DELETE CASCADE 라 함께 사라진다(approval_schema.sql).
+ *
+ * **이미 돌기 시작한 문서에는 쓰지 마라.** 결재 이력을 지우는 것이라, 상신 직후의 되돌리기
+ * (또는 그 직후에 딸린 처리가 실패해 상신 자체를 없던 일로 만드는 경우)에만 쓴다.
+ * 반려·회수된 문서를 치우는 길은 지우기가 아니라 '폐기' 상태다.
+ */
+export async function rollbackApprovalDocument(sb: SupabaseClient, documentId: number): Promise<boolean> {
+  await sb.from('approval_history').delete().eq('document_id', documentId)
+  const { error } = await sb.from('approval_documents').delete().eq('document_id', documentId)
+  if (error) {
+    console.error('[approval/submit] rollback failed — 문서가 남았다', { documentId, error })
+    return false
+  }
+  return true
 }
 
 /** 첫 차례 결재자와 그 대리인에게 「결재할 문서가 있습니다」. 실패해도 상신은 되돌리지 않는다. */
@@ -100,10 +159,8 @@ export async function createApprovalDocument(sb: SupabaseClient, input: SubmitIn
 
   const rollback = async (why: string, detail: unknown): Promise<SubmitResult> => {
     console.error('[approval/submit] rollback', { documentId, why, detail })
-    await sb.from('approval_history').delete().eq('document_id', documentId)
-    const { error } = await sb.from('approval_documents').delete().eq('document_id', documentId)
-    if (error) {
-      console.error('[approval/submit] rollback failed — 문서가 남았다', { documentId, error })
+    const ok = await rollbackApprovalDocument(sb, documentId)
+    if (!ok) {
       return { ok: false, error: '상신에 실패했고 되돌리지도 못했습니다. 결재함에서 상태를 확인해주세요.', status: 500 }
     }
     return { ok: false, error: '상신하지 못했습니다.', status: 500 }

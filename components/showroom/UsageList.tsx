@@ -10,7 +10,7 @@
 // 바로 아래에 붙인다. 가로 스크롤 상자를 두면 sticky 가 그 상자 기준이 되어 버려서 두지 않는다 —
 // 대신 좁은 화면에서는 열을 줄인다(1023px 이하 참여 엔지니어·승인, 767px 이하 목적·시간·결과까지 뺀다).
 // 액션은 행 hover·초점 때만 보인다(자리는 늘 잡아 둔다). 복사는 누구나, 수정·삭제는 권한 있는 행만.
-// 삭제는 두 번 눌러야 실행된다(요청함과 같은 방식).
+// 삭제는 두 번 눌러야 실행된다(결재 회수와 같은 방식).
 
 // 모바일 상단 바 높이 — 표 머리가 붙는 위치를 이 상수 하나로 맞춘다.
 import { TOPBAR_HEIGHT } from '@/components/layout/Sidebar'
@@ -18,13 +18,13 @@ import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, ty
 import { getCategoryColor } from '@/lib/categoryColors'
 import { Z } from '@/lib/zIndex'
 import { normTime } from '@/lib/workHours'
-import { USAGE_PURPOSE_COLORS, type ShowroomUsageRow } from '@/lib/showroom'
+import { USAGE_PURPOSE_COLORS, usageApprovalView, type ShowroomUsageRow, type UsageApprovalDoc } from '@/lib/showroom'
 import {
   TEXT, MUTED, SUB, DANGER, FAINT, BLUE, BORDER, CARD_BG, NEUTRAL_BG, ROW_HOVER_BG, skeletonBlock, countBadge,
 } from '@/components/common/ui'
 import { openApprovalPdf } from './openApprovalPdf'
 
-/** 삭제는 두 번 눌러야 실행된다. 첫 클릭 뒤 이 시간이 지나면 원래대로 돌아간다(요청함과 같은 방식). */
+/** 삭제는 두 번 눌러야 실행된다. 첫 클릭 뒤 이 시간이 지나면 원래대로 돌아간다(결재 회수와 같은 방식). */
 const CONFIRM_MS = 3000
 // 표 머리가 붙는 높이는 CSS(.sr-ut-head)가 정한다 — PC 는 상단 바가 없어 0, 모바일만 상단 바만큼 내린다.
 
@@ -64,6 +64,8 @@ type Props = {
   rows: ShowroomUsageRow[]
   deviceName: (id: number) => string
   usageEngineers: Record<number, number[]>
+  /** 전자결재로 만든 기록의 승인 정보(문서 id 기준). 옛 건은 행에 임베딩돼 와서 여기 없다. */
+  approvals: Record<number, UsageApprovalDoc>
   engineerName: (id: number | null) => string
   loading: boolean
   /** 걸러진 결과가 없을 때 문구 */
@@ -76,11 +78,13 @@ type Props = {
 }
 
 /** 상세(아코디언) — 값이 있는 항목만. 데모 신청으로 만든 기록이면 맨 아래에 승인자·승인일시와 [승인서 보기]. */
-function Detail({ row, author, approval, onOpenPdf }: {
+function Detail({ row, author, approval, canOpenPdf, onOpenPdf }: {
   row: ShowroomUsageRow
   author: string
   /** 「승인 홍길동 · 2026-09-15 14:30」 — 신청이 아니거나 아직 확인 전이면 null */
   approval: string | null
+  /** 승인서를 열 수 있는가. 옛 건은 신청 번호가 있으면, 새 건은 승인서 PDF 가 있으면 참이다. */
+  canOpenPdf: boolean
   onOpenPdf: () => void
 }) {
   const items: { label: string; value: string; accent?: boolean }[] = [
@@ -111,7 +115,7 @@ function Detail({ row, author, approval, onOpenPdf }: {
       <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={{ fontSize: 11, color: MUTED }}>작성 {author || '-'}</span>
         {approval && <span style={{ fontSize: 11, color: MUTED }}>{approval}</span>}
-        {row.request_id != null && (
+        {canOpenPdf && (
           <button type="button" onClick={onOpenPdf}
             style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: BLUE, fontFamily: 'inherit' }}>
             승인서 보기
@@ -123,7 +127,7 @@ function Detail({ row, author, approval, onOpenPdf }: {
 }
 
 export default function UsageList({
-  rows, deviceName, usageEngineers, engineerName, loading, emptyText, canEdit, onEdit, onCopy, onDelete,
+  rows, deviceName, usageEngineers, approvals, engineerName, loading, emptyText, canEdit, onEdit, onCopy, onDelete,
 }: Props) {
   const [openId, setOpenId] = useState<number | null>(null)
   const [confirmId, setConfirmId] = useState<number | null>(null)
@@ -155,11 +159,15 @@ export default function UsageList({
     if (message) setRowError(prev => ({ ...prev, [row.usage_id]: message }))
   }
 
-  /** 승인서 열기 — 요청함·「내 신청」과 같은 경로(openApprovalPdf → /api/showroom/requests/pdf). 실패는 그 행 아래에. */
-  const openPdf = async (row: ShowroomUsageRow) => {
-    if (row.request_id == null) return
+  /**
+   * 승인서 열기 — 「내 신청」과 같은 경로(openApprovalPdf → /api/showroom/requests/pdf).
+   * 옛 건은 ?id=신청번호, 전자결재 건은 ?doc=문서번호다(어느 쪽인지는 usageApprovalView 가 정한다).
+   * 실패는 그 행 아래에.
+   */
+  const openPdf = async (row: ShowroomUsageRow, pdf: { id: number; kind: 'request' | 'doc' } | null) => {
+    if (!pdf) return
     setRowError(prev => ({ ...prev, [row.usage_id]: '' }))
-    const message = await openApprovalPdf(row.request_id)
+    const message = await openApprovalPdf(pdf.id, pdf.kind)
     if (message) setRowError(prev => ({ ...prev, [row.usage_id]: message }))
   }
 
@@ -205,11 +213,10 @@ export default function UsageList({
           const open = openId === r.usage_id
           const names = (usageEngineers[r.usage_id] ?? []).map(id => engineerName(id)).filter(Boolean).join(', ')
           const err = rowError[r.usage_id]
-          // 승인 — 신청으로 만든 기록만. 사후 신청은 「확인」(확인 전이면 승인자가 비어 「확인 대기」).
-          const ar = r.approval_requests
-          const retro = ar?.retro === true
-          const approver = ar?.approver_id != null ? engineerName(ar.approver_id) || '-' : null
-          const approval = approver && ar ? `${retro ? '확인' : '승인'} ${approver} · ${fmtKst(ar.decided_at)}` : null
+          // 승인 — 신청으로 만든 기록만. 옛 건(request_id)과 전자결재 건(document_id)의 분기는
+          // lib/showroom.ts 의 usageApprovalView 한 곳에 있다(엑셀도 같은 함수를 쓴다).
+          const view = usageApprovalView(r, r.document_id != null ? approvals[r.document_id] : undefined, engineerName)
+          const approval = view.verb ? `${view.verb} ${view.actor} · ${fmtKst(view.decidedAt)}` : null
           const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
             if (e.target !== e.currentTarget) return
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(r.usage_id) }
@@ -223,7 +230,7 @@ export default function UsageList({
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: color.dot ?? color.text, flexShrink: 0 }} />
                   <span style={{ fontSize: 12, fontWeight: 500, color: TEXT, ...ellipsis }}>{r.purpose}</span>
                   {/* 데모 신청(승인·확인)을 거쳐 만들어진 기록 */}
-                  {r.request_id != null && (
+                  {view.isRequest && (
                     <span title="데모 신청으로 만든 기록" style={{ ...countBadge, padding: '1px 6px' }}>신청</span>
                   )}
                 </span>
@@ -240,15 +247,15 @@ export default function UsageList({
                   {names || '-'}
                 </span>
                 <span className="sr-ut-appr" style={{ display: 'flex', alignItems: 'baseline', gap: 4, minWidth: 0 }}>
-                  {r.request_id == null ? (
+                  {!view.isRequest ? (
                     <span style={{ fontSize: 12, color: MUTED }}>-</span>
-                  ) : approver ? (
+                  ) : view.actor ? (
                     <>
-                      <span style={{ fontSize: 12, color: SUB, ...ellipsis }} title={approval ?? undefined}>{approver}</span>
-                      {retro && <span style={{ fontSize: 11, color: MUTED, flexShrink: 0 }}>확인</span>}
+                      <span style={{ fontSize: 12, color: SUB, ...ellipsis }} title={approval ?? undefined}>{view.actor}</span>
+                      {view.verb === '확인' && <span style={{ fontSize: 11, color: MUTED, flexShrink: 0 }}>확인</span>}
                     </>
                   ) : (
-                    <span style={{ fontSize: 11, color: MUTED, ...ellipsis }}>{retro ? '확인 대기' : '-'}</span>
+                    <span style={{ fontSize: 11, color: MUTED, ...ellipsis }}>{view.pendingLabel ?? '-'}</span>
                   )}
                 </span>
                 <span className="sr-ut-result" style={{ minWidth: 0, display: 'flex' }}>
@@ -307,7 +314,7 @@ export default function UsageList({
                 </span>
               </div>
               {err && <div style={{ padding: '0 12px 8px', fontSize: 12, fontWeight: 600, color: DANGER }}>{err}</div>}
-              {open && <Detail row={r} author={engineerName(r.created_by)} approval={approval} onOpenPdf={() => openPdf(r)} />}
+              {open && <Detail row={r} author={engineerName(r.created_by)} approval={approval} canOpenPdf={view.pdf != null} onOpenPdf={() => openPdf(r, view.pdf)} />}
             </div>
           )
         })

@@ -80,7 +80,8 @@ export default function CompleteModal({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            action: 'message_add', inquiry_id: inquiryId, entry_date: today, body: memo,
+            // 발신 고정 — 작성 완료는 내가 보낸 것을 끝내는 동작이라 방향을 고르지 않는다.
+            action: 'message_add', inquiry_id: inquiryId, entry_date: today, direction: 'sent', body: memo,
           }),
         })
         const json = await res.json().catch(() => null)

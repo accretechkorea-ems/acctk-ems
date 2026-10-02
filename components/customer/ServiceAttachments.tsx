@@ -12,7 +12,7 @@ import {
   deleteAttachment, openAttachment, uploadAttachments,
 } from './attachments'
 
-/** 「삭제」는 두 번 눌러야 실행된다. 요청함·쇼룸과 같은 3초다. */
+/** 「삭제」는 두 번 눌러야 실행된다. 쇼룸·결재 회수와 같은 3초다. */
 const CONFIRM_MS = 3000
 /** 목록이 길어져도 모달이 밀리지 않도록 여기서 끊고 안에서 스크롤한다. */
 const LIST_MAX_HEIGHT = 200
@@ -118,7 +118,7 @@ const rowBtn: CSSProperties = {
   border: '1px solid #ebebeb', borderRadius: 6, background: '#fff', color: '#6b7280',
   fontSize: 12, fontWeight: 600, padding: '4px 9px', cursor: 'pointer', whiteSpace: 'nowrap',
 }
-/** 확정 대기 상태의 삭제 버튼 — 요청함·쇼룸과 같은 채운 danger 버튼이다. */
+/** 확정 대기 상태의 삭제 버튼 — 쇼룸과 같은 채운 danger 버튼이다. */
 const dangerBtn: CSSProperties = {
   border: 'none', borderRadius: 6, background: '#ef4444', color: '#fff',
   fontSize: 12, fontWeight: 700, padding: '5px 10px', cursor: 'pointer', whiteSpace: 'nowrap',
@@ -166,7 +166,7 @@ export function ServiceAttachmentEditor({ serviceId, initial, report, onPickRepo
   }
 
   // 다른 곳을 클릭하면 확정 대기를 푼다. 버튼 자신의 클릭은 다음 틱부터 듣게 해 빠뜨리지 않는다.
-  // (요청함 app/requests/page.tsx·쇼룸 UsageList 와 같은 방식이다.)
+  // (쇼룸 UsageList 와 같은 방식이다.)
   useEffect(() => {
     if (confirmId == null) return
     const off = () => { if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null } setConfirmId(null) }

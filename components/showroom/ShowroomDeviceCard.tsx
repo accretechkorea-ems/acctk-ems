@@ -9,7 +9,10 @@
 //                    이미지 4:3, 장비명 15·700 가운데, S/N 줄 12, 주 버튼 8px 12px·13·600,
 //                    하단 박스 #f8f9fb / radius 10 / border INPUT_BORDER
 //   다른 점 — 사진 등록 없음(쇼룸에서는 올리지 않는다), 패킹리스트 없음,
-//            하단 박스가 이번 달 가동률 도넛 + 합계·사용목적 범례로 바뀌고 클릭하면 사용 기록 화면으로 간다.
+//            하단 박스가 가동률 도넛 + 합계·사용목적 범례로 바뀌고 클릭하면 사용 기록 화면으로 간다.
+//
+// 숫자는 **헤더에서 고른 기간**의 것이다(예전에는 이번 달 고정이었다). 어느 기간인지는 사무실 제목 옆
+// (periodBasisLabel)에 한 번, 카드 합계 줄 앞(periodShort)에 짧게 적는다.
 
 import { getInstallDisplay, getDefaultImageUrl } from '@/components/customer/utils'
 import { getCategoryColor } from '@/lib/categoryColors'
@@ -46,13 +49,15 @@ const purposeColor = (purpose: string): string => {
 
 type Props = {
   device: ShowroomDevice
-  /** 이번 달 실사용 합계(h)와 건수. */
-  monthHours: number
-  monthCount: number
-  /** 이번 달 사용목적별 건수·시간. 순서는 상관없다(카드가 USAGE_PURPOSES 순으로 그린다). */
-  monthByPurpose: PurposeStat[]
+  /** 고른 기간의 실사용 합계(h)와 건수. */
+  hours: number
+  count: number
+  /** 고른 기간의 사용목적별 건수·시간. 순서는 상관없다(카드가 USAGE_PURPOSES 순으로 그린다). */
+  byPurpose: PurposeStat[]
+  /** 「10월」「3분기」 — 숫자가 어느 기간의 것인지 합계 줄 앞에 붙인다(lib/showroom periodShortLabel). */
+  periodShort: string
   /**
-   * 이번 달 가동률(/api/showroom/stats 가 계산한 값). null = 계산할 수 없음(기록 없는 달 등).
+   * 그 기간 가동률(/api/showroom/stats 가 계산한 값). null = 계산할 수 없음(기록 없는 기간 등).
    * undefined = 가동률 대상이 아니거나(사용여부 N) 아직 받지 못함. 둘 다 도넛은 트랙만, 가운데는 '—'.
    */
   utilization?: number | null
@@ -123,7 +128,7 @@ function PurposeLegend({ slices }: { slices: PurposeStat[] }) {
 }
 
 export default function ShowroomDeviceCard({
-  device, monthHours, monthCount, monthByPurpose, utilization, canConfigure, onAddUsage, onConfigure, onOpenUsages,
+  device, hours, count, byPurpose, periodShort, utilization, canConfigure, onAddUsage, onConfigure, onOpenUsages,
 }: Props) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const title = deviceTitle(device)
@@ -131,7 +136,7 @@ export default function ShowroomDeviceCard({
   const inactive = !device.is_active
   // 목적 5종 순서로, 0건 목적은 뺀다.
   const slices = USAGE_PURPOSES
-    .map(p => monthByPurpose.find(s => s.purpose === p))
+    .map(p => byPurpose.find(s => s.purpose === p))
     .filter((s): s is PurposeStat => !!s && s.count > 0)
 
   return (
@@ -230,7 +235,7 @@ export default function ShowroomDeviceCard({
         사용 신청
       </button>
 
-      {/* 이번 달 가동률 도넛 + 합계·사용목적 범례 — 누르면 사용 기록 화면으로 가서 이 장비만 남긴다.
+      {/* 가동률 도넛 + 합계·사용목적 범례(고른 기간) — 누르면 사용 기록 화면으로 가서 이 장비만 남긴다.
           높이를 고정해 기록·가동률 유무와 상관없이 카드 높이가 같다. */}
       <div onClick={onOpenUsages} title="사용 기록 보기"
         style={{
@@ -241,12 +246,14 @@ export default function ShowroomDeviceCard({
         }}>
         <UtilDonut rate={utilization ?? null} />
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {monthCount === 0 ? (
-            <span style={{ fontSize: 11, color: MUTED }}>기록 없음</span>
+          {count === 0 ? (
+            <span style={{ fontSize: 11, color: MUTED }}>{periodShort} 기록 없음</span>
           ) : (
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-              <span className="num" style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>{fmtHours(monthHours)}</span>
-              <span className="num" style={{ fontSize: 11, color: MUTED }}>{monthCount}건</span>
+              {/* 기간 꼬리표 — 숫자 앞에 작게. 헤더에서 월을 옮기면 이 글자도 함께 바뀐다. */}
+              <span style={{ fontSize: 11, fontWeight: 600, color: MUTED }}>{periodShort}</span>
+              <span className="num" style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>{fmtHours(hours)}</span>
+              <span className="num" style={{ fontSize: 11, color: MUTED }}>{count}건</span>
             </div>
           )}
           <PurposeLegend slices={slices} />

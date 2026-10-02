@@ -11,7 +11,7 @@
 // 서버 전용이다 — service role 로 쓴다. 화면에서 import 하지 마라
 // (docTypes.ts 머리말에 이유가 적혀 있다: 화면이 읽는 등록표에 서버 전용 코드를 두면 번들이 깨진다).
 //
-// 실행 로직은 옛 요청함(app/api/requests/quote-delete)에서 그대로 옮겨 왔다. 다시 짜지 않았다.
+// 실행 로직은 옛 통합 요청함의 견적 삭제 처리에서 그대로 옮겨 왔다(그 화면·라우트는 8단계에서 지웠다).
 //   · 삭제 — quotes 행을 지우고(자식은 CASCADE 로 함께 사라진다) 그 뒤에 스토리지 PDF.
 //     자세한 근거는 executeQuoteDelete 주석에 적었다.
 //   · 복원 — 이전 상태는 quotes 어디에도 남지 않아 audit_log 의 '취소요청으로 전환된 마지막 UPDATE'

@@ -23,8 +23,9 @@ import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
 import { addDays, todayKST } from '@/lib/date'
 import {
-  buildInquiryNo, inquiryTypeOf, periodKeyFor,
-  EDITABLE_STATUSES, INQUIRY_TYPES, REQ20_SERIES, REQ80_SERIES, type InquiryType,
+  buildInquiryNo, inquiryTypeOf, isInquiryDirection, periodKeyFor,
+  EDITABLE_STATUSES, INQUIRY_TYPES, REQ20_SERIES, REQ80_SERIES,
+  type InquiryDirection, type InquiryType,
 } from '@/lib/inquiries'
 
 const TAG = 'inquiry'
@@ -672,6 +673,21 @@ type MessageRow = {
 }
 const inquiryOf = (r: MessageRow) => (Array.isArray(r.inquiries) ? r.inquiries[0] : r.inquiries)
 
+/**
+ * 본문의 direction 을 읽는다.
+ *   없음(undefined·null)  → 'sent'. **옛 클라이언트 호환**이다 — 방향을 보내지 않던 화면이
+ *                           부르면 발신으로 저장된다(그쪽이 본사로 보내는 기록이었다).
+ *   'sent'·'received'     → 그 값
+ *   그 밖                  → null(부르는 쪽이 400 으로 돌려준다)
+ *
+ * DB 제약(inquiry_messages_direction_check)이 두 값만 받으므로, 여기서 걸러 두면
+ * 23514 로 터지는 대신 사람이 읽을 사유가 간다.
+ */
+function readDirection(raw: unknown): InquiryDirection | null {
+  if (raw === undefined || raw === null) return 'sent'
+  return isInquiryDirection(raw) ? raw : null
+}
+
 // ── 내용 기록 추가 ───────────────────────────────────────────────────────
 async function messageAdd(sb: ReturnType<typeof admin>, caller: Caller, body: Record<string, unknown>) {
   const inquiryId = idOf(body.inquiry_id)
@@ -686,6 +702,12 @@ async function messageAdd(sb: ReturnType<typeof admin>, caller: Caller, body: Re
   const text = typeof body.body === 'string' ? body.body : ''
   if (text.length > BODY_MAX) return bad(`내용은 ${BODY_MAX}자를 넘을 수 없습니다.`)
 
+  // 본문을 필수로 두지 않는다 — 작성 완료·일괄 등록·기존 번호 등록이 빈 본문으로 부른다
+  // (그 세 곳은 「번호를 쓴 날」을 기록으로 남기려고 부르는 것이다). 「내용 추가」 모달만 화면에서 막는다.
+
+  const dir = readDirection(body.direction)
+  if (dir === null) return bad('구분이 올바르지 않습니다.')
+
   const live = await liveInquiry(sb, inquiryId)
   if (!live.ok) return live.res
 
@@ -695,10 +717,11 @@ async function messageAdd(sb: ReturnType<typeof admin>, caller: Caller, body: Re
       inquiry_id: inquiryId,
       entry_date: entryDate,
       body: text,
+      direction: dir,
       // 본문 값을 쓰지 않는다 — 적은 사람이 곧 작성자다.
       created_by: caller.engineer_id,
     })
-    .select('id, inquiry_id, entry_date, body, created_by, created_at')
+    .select('id, inquiry_id, entry_date, body, direction, created_by, created_at')
     .single()
   if (error) {
     console.error(`[${TAG}] message insert failed`, { inquiryId, error })
@@ -709,14 +732,15 @@ async function messageAdd(sb: ReturnType<typeof admin>, caller: Caller, body: Re
   // 본문은 감사 기록에 넣지 않는다 — 길고, 고객·본사 내용이 섞일 수 있다.
   await writeInquiryAudit(sb, {
     action: 'INQUIRY_MSG_ADD', inquiryNo: live.inquiryNo, actorId: caller.engineer_id,
-    newData: { message_id: row.id, entry_date: entryDate, body_length: text.length },
+    newData: { message_id: row.id, entry_date: entryDate, direction: dir, body_length: text.length },
   })
   return NextResponse.json({ message: made })
 }
 
 // ── 내용 기록 수정 ───────────────────────────────────────────────────────
-// 고칠 수 있는 것은 날짜와 내용뿐이다. 첨부는 따로 올리고 지운다(/api/inquiry-attachment).
-// 방향이 바뀌면 그 내용 기록에 딸린 첨부의 맥락까지 뒤집히는데, 그걸 되돌릴 방법이 없다.
+// 고칠 수 있는 것은 날짜·내용·구분(발신/회신)이다. 첨부는 따로 올리고 지운다(/api/inquiry-attachment).
+// 구분을 고치면 그 기록에 딸린 첨부의 맥락도 함께 뒤집힌다 — 첨부가 기록에 매달려 있어(message_id)
+// 따로 손댈 것이 없다. 되돌리는 것도 같은 자리에서 한 번 더 고치면 된다.
 async function messageUpdate(sb: ReturnType<typeof admin>, caller: Caller, body: Record<string, unknown>) {
   const id = Number(body.id)
   if (!Number.isInteger(id) || id <= 0) return bad('내용 기록을 지정해주세요.')
@@ -749,11 +773,18 @@ async function messageUpdate(sb: ReturnType<typeof admin>, caller: Caller, body:
     patch.body = body.body
     touched = true
   }
+  // 구분 — 보내지 않으면 손대지 않는다(messageAdd 와 달리 기본값을 끼워 넣지 않는다.
+  // 여기서 'sent' 로 떨어뜨리면 날짜만 고쳐도 회신 기록이 발신으로 뒤집힌다).
+  if (body.direction !== undefined) {
+    if (!isInquiryDirection(body.direction)) return bad('구분이 올바르지 않습니다.')
+    patch.direction = body.direction
+    touched = true
+  }
   if (!touched) return bad('바꿀 내용이 없습니다.')
 
   const { data: done, error } = await sb
     .from('inquiry_messages').update(patch).eq('id', id)
-    .select('id, inquiry_id, entry_date, body, created_by, created_at, updated_at')
+    .select('id, inquiry_id, entry_date, body, direction, created_by, created_at, updated_at')
   if (error) {
     console.error(`[${TAG}] message update failed`, { id, error })
     return bad('내용 기록을 고치지 못했습니다.', 500)
@@ -765,6 +796,7 @@ async function messageUpdate(sb: ReturnType<typeof admin>, caller: Caller, body:
     newData: {
       message_id: id,
       entry_date: patch.entry_date ?? null,
+      direction: patch.direction ?? null,
       body_length: typeof patch.body === 'string' ? patch.body.length : null,
     },
   })

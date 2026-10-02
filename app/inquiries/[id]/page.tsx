@@ -46,8 +46,9 @@ import { engineerLabel, isCurrentlyEmployed } from '@/lib/engineers'
 import { errorInfo } from '@/lib/errorInfo'
 import { safeBackTo } from '@/lib/inquirySearch'
 import {
-  EDITABLE_STATUSES, INQUIRY_STATUS_DOT, INQUIRY_TYPE_LABEL,
-  inquiryStatusLabel, type InquiryType,
+  EDITABLE_STATUSES, INQUIRY_DIRECTION_COLOR, INQUIRY_DIRECTION_LABEL, INQUIRY_DIRECTION_OPTIONS,
+  INQUIRY_STATUS_DOT, INQUIRY_TYPE_LABEL,
+  directionOf, inquiryStatusLabel, type InquiryDirection, type InquiryType,
 } from '@/lib/inquiries'
 
 const TITLE_MAX = 200
@@ -114,13 +115,43 @@ const CARD_HEAD: React.CSSProperties = { ...cardHeader, height: 32, boxSizing: '
  * 좌우로 12 를 내밀고 같은 값만큼 안쪽 여백을 줘, 글자는 카드 안쪽 여백(16)에 그대로 맞고
  * 구분선과 편집 중 배경만 카드 끝 가까이까지 간다.
  */
-const msgItem = (first: boolean, editing: boolean): React.CSSProperties => ({
+/**
+ * 내용 기록 한 항목.
+ *
+ * 방향은 **왼쪽 세로 막대**로 구분한다 — 항목 배경을 칠하지 않는 이유가 두 가지다.
+ *   · 편집 중 강조(NEUTRAL_BG)와 겹쳐 둘 중 하나가 묻힌다. 막대는 배경과 따로 보인다.
+ *   · 긴 본문이 쌓이는 자리라 넓은 색 면이 글을 읽기 어렵게 만든다.
+ * 막대 색은 기존 토큰의 dot 값이다(lib/inquiries.ts INQUIRY_DIRECTION_COLOR — 새 색 아님).
+ */
+const msgItem = (first: boolean, editing: boolean, dir: InquiryDirection): React.CSSProperties => ({
   margin: '0 -12px',
   padding: '12px',
   borderTop: first ? 'none' : `1px solid ${BORDER}`,
   background: editing ? NEUTRAL_BG : undefined,
   borderRadius: editing ? 8 : undefined,
+  borderLeft: `3px solid ${INQUIRY_DIRECTION_COLOR[dir].dot}`,
+  // 막대가 3px 를 먹으므로 왼쪽 여백에서 그만큼 뺀다 — 글자 왼쪽 선이 흔들리지 않게.
+  paddingLeft: 9,
 })
+
+/** 방향 뱃지 — 기존 pill 모양(radius 99 · 11/700)에 토큰 쌍만 방향별로 바꾼다. */
+function DirectionBadge({ dir }: { dir: InquiryDirection }) {
+  const c = INQUIRY_DIRECTION_COLOR[dir]
+  return (
+    <span style={{
+      flexShrink: 0, background: c.bg, color: c.text, borderRadius: 99,
+      padding: '1px 8px', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
+    }}>
+      {INQUIRY_DIRECTION_LABEL[dir]}
+    </span>
+  )
+}
+
+/**
+ * 「발신 / 회신」 분할 선택 한 칸의 폭. 두 라벨이 같은 두 글자(13px, 약 26px)라
+ * SegmentedControl 기본 좌우 여백 12px 씩을 더한 값이다. 추가 모달과 카드 편집이 같은 폭을 쓴다.
+ */
+const DIR_TAB_W = 50
 
 /** 내용 기록의 입력 칸 — 추가 모달과 카드 편집이 같은 모양을 쓴다. */
 const msgField: React.CSSProperties = {
@@ -199,13 +230,15 @@ type Message = {
   id: number
   entry_date: string
   body: string
+  /** 'sent'·'received'·null. 표시는 directionOf 로 정규화한다(null 은 발신으로 읽는다). */
+  direction: string | null
   created_by: number | null
   engineers: { name: string | null; position: string | null } | null
 }
 
 // 목록과 같은 이유로 제약 이름을 명시한다(engineers 를 여러 번 참조하게 될 표다).
 const MESSAGE_COLUMNS =
-  'id, entry_date, body, created_by, engineers!inquiry_messages_created_by_fkey(name, position)'
+  'id, entry_date, body, direction, created_by, engineers!inquiry_messages_created_by_fkey(name, position)'
 
 /**
  * 수정 아이콘 버튼.
@@ -244,6 +277,9 @@ function EditIconButton({ label, onClick }: { label: string; onClick: () => void
 type MsgEditBox = {
   date: string
   setDate: (v: string) => void
+  /** 고르고 있는 구분. 저장된 값이 null 이면 directionOf 로 'sent' 가 들어온다. */
+  direction: InquiryDirection
+  setDirection: (v: InquiryDirection) => void
   body: string
   setBody: (v: string) => void
   /** 새로 올릴 파일(아직 서버에 없다). 이미 올라간 첨부는 msg 쪽 files 로 온다. */
@@ -293,12 +329,15 @@ function MessageCard({
   const shown = long && !open ? msg.body.slice(0, FOLD_AT) : msg.body
   const editable = canEdit && !readOnly
   const hasBody = msg.body.trim().length > 0
+  // 편집 중이면 고르고 있는 값으로, 아니면 저장된 값으로 뱃지·막대를 그린다 —
+  // 구분을 바꾸면 저장 전에도 바로 보여야 어떤 쪽으로 바꾸는지 알 수 있다.
+  const dir = edit ? edit.direction : directionOf(msg.direction)
 
   return (
-    <div style={msgItem(first, edit !== null)}>
-      {/* 머리 줄 — 날짜와 작성자, 오른쪽 끝에 수정 아이콘 하나뿐이다.
-          방향 뱃지가 빠진 자리를 비워 두지 않고 날짜를 앞으로 당겼다(날짜가 이 기록의 이름이다). */}
+    <div style={msgItem(first, edit !== null, dir)}>
+      {/* 머리 줄 — 구분 뱃지 · 날짜 · 작성자, 오른쪽 끝에 수정 아이콘. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <DirectionBadge dir={dir} />
         <span style={{ fontSize: 13, fontWeight: 700, color: TEXT, flexShrink: 0 }}>{dateText(msg.entry_date)}</span>
         <span style={{ fontSize: 12, color: MUTED }}>{engineerLabel(msg.engineers) || '-'}</span>
         {editable && !edit && (
@@ -310,13 +349,25 @@ function MessageCard({
 
       {edit ? (
         <div style={{ marginTop: 10 }}>
-          <div style={{ marginBottom: 10 }}>
+          {/* 구분과 날짜를 한 줄에 — 추가 모달과 같은 배치다(구분 고정 폭 + 날짜 남는 폭). */}
+          <div style={{ display: 'flex', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+            <div style={{ flexShrink: 0 }}>
+              <span style={msgLabel}>구분</span>
+              <SegmentedControl
+                equal minItemWidth={DIR_TAB_W}
+                value={edit.direction}
+                options={INQUIRY_DIRECTION_OPTIONS}
+                onChange={v => edit.setDirection(v as InquiryDirection)}
+              />
+            </div>
+            <div style={{ flex: 1, minWidth: 140 }}>
             <label style={msgLabel} htmlFor={`me-date-${msg.id}`}>날짜</label>
             <input
               id={`me-date-${msg.id}`} type="date" value={edit.date} disabled={edit.busy}
               onChange={e => edit.setDate(e.target.value)}
               style={{ ...msgField, colorScheme: 'light' }}
             />
+            </div>
           </div>
 
           <label style={msgLabel} htmlFor={`me-body-${msg.id}`}>내용</label>
@@ -457,16 +508,22 @@ function MessageModal({
 }) {
   const toast = useToast()
   const [entryDate, setEntryDate] = useState(todayKST())
+  /**
+   * 기본값은 **회신**이다. 손으로 내용을 남기는 일은 대개 본사에서 온 답을 붙여 넣는 것이고,
+   * 발신 기록은 작성 완료·번호 등록이 자동으로 남긴다(그쪽은 'sent' 고정이다).
+   */
+  const [dir, setDir] = useState<InquiryDirection>('received')
   const [text, setText] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  const ready = text.trim().length > 0 || files.length > 0
+  // 내용이 필수다 — 공백만 있는 입력은 비어 있는 것으로 본다. 파일은 선택이다.
+  const ready = text.trim().length > 0
 
   const submit = async () => {
     if (busy) return
-    if (!ready) { setError('내용이나 파일 중 하나는 있어야 합니다.'); return }
+    if (!ready) { setError('내용을 입력해주세요.'); return }
     setBusy(true)
     setError('')
     try {
@@ -474,7 +531,8 @@ function MessageModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'message_add', inquiry_id: inquiryId, entry_date: entryDate, body: text,
+          action: 'message_add', inquiry_id: inquiryId, entry_date: entryDate,
+          direction: dir, body: text,
         }),
       })
       const json = await res.json().catch(() => null)
@@ -515,16 +573,26 @@ function MessageModal({
           <span style={cardTitle}>내용 추가</span>
         </div>
 
-        <div style={{ marginBottom: 12 }}>
-          <label style={msgLabel} htmlFor="ms-date">날짜</label>
-          <input id="ms-date" type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)}
-            style={{ ...msgField, colorScheme: 'light' }} />
+        {/* 맨 윗줄 — 왼쪽 구분(고정 폭), 오른쪽 날짜(남는 폭). 둘 다 위에 작은 라벨을 둔다. */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+          <div style={{ flexShrink: 0 }}>
+            <span style={msgLabel}>구분</span>
+            <SegmentedControl
+              equal minItemWidth={DIR_TAB_W}
+              value={dir}
+              options={INQUIRY_DIRECTION_OPTIONS}
+              onChange={v => setDir(v as InquiryDirection)}
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 140 }}>
+            <label style={msgLabel} htmlFor="ms-date">날짜</label>
+            <input id="ms-date" type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)}
+              style={{ ...msgField, colorScheme: 'light' }} />
+          </div>
         </div>
 
         <div style={{ marginBottom: 12 }}>
-          <label style={msgLabel} htmlFor="ms-body">
-            내용 <span style={{ fontWeight: 500 }}>(파일만 올려도 됩니다)</span>
-          </label>
+          <label style={msgLabel} htmlFor="ms-body">내용 (필수)</label>
           <textarea
             id="ms-body" value={text} rows={7} maxLength={BODY_MAX}
             placeholder="메일 본문이나 메모를 붙여 넣으세요"
@@ -615,6 +683,7 @@ export default function InquiryDetailPage() {
    */
   const [editId, setEditId] = useState<number | null>(null)
   const [draftDate, setDraftDate] = useState('')
+  const [draftDir, setDraftDir] = useState<InquiryDirection>('sent')
   const [draftBody, setDraftBody] = useState('')
   const [draftFiles, setDraftFiles] = useState<File[]>([])
   const [msgBusy, setMsgBusy] = useState(false)
@@ -731,6 +800,9 @@ export default function InquiryDetailPage() {
    */
   const msgDirty = editingMsg !== null && (
     draftDate !== editingMsg.entry_date
+    // 저장된 값이 null 인 기록은 화면에서 'sent' 로 보인다. 그 상태에서 저장을 눌러도
+    // 변경으로 보지 않는다(비교 양쪽을 directionOf 로 정규화한다) — 뜻이 같은 값을 다시 쓰지 않는다.
+    || draftDir !== directionOf(editingMsg.direction)
     || draftBody !== editingMsg.body
     || draftFiles.length > 0
   )
@@ -863,6 +935,7 @@ export default function InquiryDetailPage() {
     }
     setEditId(m.id)
     setDraftDate(m.entry_date)
+    setDraftDir(directionOf(m.direction))
     setDraftBody(m.body)
     setDraftFiles([])
   }
@@ -891,8 +964,9 @@ export default function InquiryDetailPage() {
     if (!m || msgBusy || !msgDirty) return
     setMsgBusy(true)
     try {
-      const patch: { entry_date?: string; body?: string } = {}
+      const patch: { entry_date?: string; direction?: InquiryDirection; body?: string } = {}
       if (draftDate !== m.entry_date) patch.entry_date = draftDate
+      if (draftDir !== directionOf(m.direction)) patch.direction = draftDir
       if (draftBody !== m.body) patch.body = draftBody
       if (Object.keys(patch).length > 0) {
         const res = await fetch('/api/inquiry', {
@@ -1268,6 +1342,7 @@ export default function InquiryDetailPage() {
                       readOnly={cancelled}
                       edit={editId === m.id ? {
                         date: draftDate, setDate: setDraftDate,
+                        direction: draftDir, setDirection: setDraftDir,
                         body: draftBody, setBody: setDraftBody,
                         files: draftFiles, setFiles: setDraftFiles,
                         dirty: msgDirty, busy: msgBusy,
