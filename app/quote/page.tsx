@@ -80,6 +80,7 @@ function isNameTakenError(err: unknown): boolean {
   return /already exists|duplicate/i.test(`${e.message ?? ''} ${e.error ?? ''}`)
 }
 import { parentCompanyName } from '@/components/customer/ParentPicker'
+import { euDisplayName } from '@/lib/quoteEuName'
 import { loadDraft, saveDraft, clearDraft, isDraftMeaningful, draftSavedLabel, type QuoteDraft } from '@/lib/quoteDraft'
 import { resolveOnBehalf, notifyOnBehalf, type OnBehalfAssignee } from '@/lib/quoteMutations'
 import { todayKST } from '@/lib/date'
@@ -156,6 +157,11 @@ function QuotePageInner() {
   const [euResults, setEuResults] = useState<CustomerResult[]>([])
   const [euSearchOpen, setEuSearchOpen] = useState(false)
   const [selectedEU, setSelectedEU] = useState<CustomerResult | null>(null)
+  // 고른 E.U 사업장을 묶는 **회사 이름**. 견적서에는 이 이름이 찍힌다(lib/quoteEuName.ts).
+  // 입력칸(euQuery)은 고른 사업장 이름 그대로 두고, 문서 표기만 갈아탄다.
+  const [euParentName, setEuParentName] = useState<string | null>(null)
+  // 마지막으로 회사 이름을 물어본 사업장 id. 연달아 고를 때 늦게 온 답을 버리는 데 쓴다.
+  const euParentReqRef = useRef<number | null>(null)
 
   const [rows, setRows] = useState<QuoteRow[]>([createRow()])
   const [expensePresets, setExpensePresets] = useState<ExpensePreset[]>([])
@@ -212,7 +218,8 @@ function QuotePageInner() {
   const finalRemarksForPDF = (() => {
     const parts: string[] = []
     if (delivery.trim()) parts.push(`* 납기 : 발주 후 ${delivery.trim()}`)
-    if (isDealer && euQuery.trim()) parts.push(`* E.U  : ${euQuery.trim()}`)
+    // 줄을 낼지는 종전과 같이 고른 값(euQuery)으로 가르고, **찍는 이름만** 회사 이름을 우선한다.
+    if (isDealer && euQuery.trim()) parts.push(`* E.U  : ${euDisplayName({ siteName: euQuery, parentName: euParentName })}`)
     if (remarks.trim()) parts.push(remarks.trim())
     return parts.join('\n')
   })()
@@ -339,6 +346,8 @@ function QuotePageInner() {
       if (eu) { setSelectedEU(eu); setEuQuery(eu.company_name) }
       // 수신처는 소속회사 이름이 우선이다(작성 화면의 고객사 선택과 같은 규칙).
       if (mainId != null) parentCompanyName(mainId).then(name => { if (name) setCompany(name) }).catch(() => {})
+      // E.U 도 같은 규칙으로 다시 구한다 — 원본 비고의 E.U 줄은 아래에서 떼어 내고 새로 조립한다.
+      resolveEuParent(euId)
     }
 
     setReceiver(quote.recipient ?? '')
@@ -399,6 +408,23 @@ function QuotePageInner() {
     setEuSearchOpen(true)
   }
 
+  /**
+   * E.U 사업장을 묶는 회사 이름을 구해 둔다 — 견적서에 찍을 이름이다.
+   * 수신처(handleCustomerSelect)와 **같은 조회**를 쓴다. 선택할 때 한 번만 부른다.
+   *
+   * 뒤늦게 와도 된다(미리보기·저장 모두 그때 값을 읽는다). 다만 연달아 고르면 먼저 보낸 답이
+   * 나중에 올 수 있어, 지금 고른 사업장의 답만 받는다 — 다른 업체의 회사 이름이 문서에 찍히면
+   * 고객이 받는 종이가 틀린다. `null` 을 넘기면 지운다(해제·초기화).
+   */
+  const resolveEuParent = (customerId: number | null) => {
+    euParentReqRef.current = customerId
+    setEuParentName(null)
+    if (customerId == null) return
+    parentCompanyName(customerId)
+      .then(name => { if (euParentReqRef.current === customerId) setEuParentName(name) })
+      .catch(e => console.error('[quote] E.U 소속 회사 조회 실패', { customerId, error: e }))
+  }
+
   const handleEUSelect = (c: CustomerResult) => {
     setSelectedEU(c)
     setEuCustomerId(c.customer_id)
@@ -406,6 +432,7 @@ function QuotePageInner() {
     setEuSearchOpen(false)
     setEuResults([])
     loadOpportunities(c.customer_id)
+    resolveEuParent(c.customer_id)
   }
 
   const handleEUClear = () => {
@@ -413,6 +440,7 @@ function QuotePageInner() {
     setEuCustomerId(null)
     setEuQuery('')
     loadOpportunities(null)
+    resolveEuParent(null)
   }
 
 const handleDownloadPDF = async (
@@ -566,6 +594,7 @@ const handleDownloadPDF = async (
     setCustomerSearchOpen(false); setSelectedCustomer(null); setPrefillNotice(null)
     setIsDealer(false)
     setEuCustomerId(null); setEuQuery(''); setEuResults([]); setEuSearchOpen(false); setSelectedEU(null)
+    resolveEuParent(null)
     setOpportunities([]); setOpportunityId(null)
     setReceiver(''); setDelivery(''); setRemarks(DEFAULT_REMARKS); setRemarksOpen(false); setShowSignature(false)
     setRows([createRow()])
@@ -746,6 +775,8 @@ const handleDownloadPDF = async (
     setCompany(d.company); setCustomerId(d.customerId); setSelectedCustomer(d.selectedCustomer)
     setCustomerQuery(d.customerQuery); setIsDealer(d.isDealer)
     setEuCustomerId(d.euCustomerId); setSelectedEU(d.selectedEU); setEuQuery(d.euQuery)
+    // 회사 이름은 저장분에 담지 않는다(초안 형식을 바꾸지 않는다) — 되살릴 때 다시 구한다.
+    resolveEuParent(d.euCustomerId)
     setReceiver(d.receiver); setDelivery(d.delivery); setRemarks(d.remarks); setShowSignature(d.showSignature)
     setRows(d.rows.map(r => calcRow(r, rateRef.current)))
     // 영업기회 목록은 고객사에 딸린 값이라 다시 불러온 뒤 저장분의 선택을 되돌린다.
@@ -1248,6 +1279,13 @@ const handleDownloadPDF = async (
                       </div>
                     )}
                 </div>
+                {/* 고른 사업장이 회사 아래 묶여 있으면 견적서에는 **회사 이름**이 찍힌다.
+                    입력칸에는 고른 사업장이 그대로 보이므로, 무엇이 나가는지 여기서 알린다. */}
+                {selectedEU && euParentName && (
+                  <div style={{ marginLeft: 10, marginTop: 4, fontSize: 11, color: '#9ca3af', lineHeight: 1.6 }}>
+                    견적서 표기: {euDisplayName({ siteName: euQuery, parentName: euParentName })}
+                  </div>
+                )}
                 {/* 미선택 안내는 두지 않는다 — 사전 등록이 필요하다는 사실은 placeholder 가 말하고,
                     안 고른 채 저장하면 아래 검증이 붉게 막는다(사명 칸과 같은 규칙). */}
                 <FieldError message={errors.eu} style={{ marginLeft: 10 }} />
