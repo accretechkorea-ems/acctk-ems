@@ -9,8 +9,8 @@
 // 직접 읽지 않는 이유 — 결재선에 들어온 다른 팀 사람은 그 견적의 RLS(quotes_select)를 통과하지
 // 못할 수 있고, 그러면 결재할 문서의 내용을 못 본다.
 //
-// **납기·비고는 그리지 않는다.** 응답에는 담겨 있지만(다음 작업인 결재 완료 PDF 가 같은 응답을
-// 쓴다) 검토표에는 내지 않는다.
+// **비고(note)는 그리지 않는다.** 응답에는 담겨 있지만(다음 작업인 결재 완료 PDF 가 같은 응답을
+// 쓴다) 검토표에는 내지 않는다. 납기(delivery)는 거래 정보에 낸다.
 //
 // 실패해도 결재 승인·반려 버튼은 그대로 동작해야 한다 — 이 패널은 자기 영역에서만 오류를 알린다.
 
@@ -46,6 +46,24 @@ function StatCard({ label, value, muted }: { label: string; value: string; muted
       <div className="num" style={{ fontSize: 14, fontWeight: 800, color: muted ? MUTED : TEXT, whiteSpace: 'nowrap' }}>
         {value}
       </div>
+    </div>
+  )
+}
+
+/**
+ * 못 읽었을 때 그 자리에 두는 줄 — 사유와 「다시 시도」.
+ * 패널 전체·품목 표·부대비용 표가 **같은 모양**을 쓴다(세 자리에 따로 짜면 모양이 갈린다).
+ */
+function LoadFailed({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+      border: `1px solid ${BORDER}`, borderRadius: 8, padding: '10px 12px',
+    }}>
+      <span style={{ fontSize: 12, color: DANGER, fontWeight: 600 }}>{message}</span>
+      <button type="button" onClick={onRetry} style={{ ...btnGhost(), padding: '4px 10px', fontSize: 12 }}>
+        다시 시도
+      </button>
     </div>
   )
 }
@@ -110,15 +128,7 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
     return (
       <div style={{ marginTop: 12 }}>
         <div style={sectionTitle}>견적 검토</div>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-          border: `1px solid ${BORDER}`, borderRadius: 8, padding: '10px 12px',
-        }}>
-          <span style={{ fontSize: 12, color: DANGER, fontWeight: 600 }}>검토 정보를 불러오지 못했습니다</span>
-          <button type="button" onClick={load} style={{ ...btnGhost(), padding: '4px 10px', fontSize: 12 }}>
-            다시 시도
-          </button>
-        </div>
+        <LoadFailed message="검토 정보를 불러오지 못했습니다" onRetry={load} />
       </div>
     )
   }
@@ -145,7 +155,7 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
         <StatCard label="이익률" value={rateText(t.profitRate)} muted={t.profitRate === null} />
       </div>
 
-      {/* ③ 거래 정보 — 납기·비고는 내지 않는다(이 파일 머리말). */}
+      {/* ③ 거래 정보 — 비고(note)는 내지 않는다(이 파일 머리말). */}
       <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '4px 12px', marginBottom: 12 }}>
         <InfoRow label="거래 구분">
           {ch.kind === 'direct' ? (
@@ -173,9 +183,14 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
         <InfoRow label="수신">{data.recipient?.trim() || '-'}</InfoRow>
         <InfoRow label="실적 담당">{data.engineer?.trim() || '-'}</InfoRow>
         <InfoRow label="작성자">{data.createdBy?.trim() || '-'}</InfoRow>
+        <InfoRow label="납기">{data.delivery?.trim() || '-'}</InfoRow>
       </div>
 
-      {/* ④ 품목 표 */}
+      {/* ④ 품목 표 — 못 읽었으면 **빈 표를 그리지 않는다.**
+          빈 표로 두면 「품목 없는 견적」으로 읽혀 결재자가 잘못 판단한다. */}
+      {!data.itemsOk ? (
+        <LoadFailed message="품목을 불러오지 못했습니다. 다시 시도해 주세요" onRetry={load} />
+      ) : (
       <div style={scrollBox}>
         <table style={table}>
           <thead>
@@ -224,9 +239,16 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
           </tbody>
         </table>
       </div>
+      )}
 
-      {/* ⑤ 부대비용 — 있을 때만. 견적 합계·원가와 무관한 내부 기록이다(lib/quoteExcel.ts 와 같은 취급). */}
-      {data.expenses.length > 0 && (
+      {/* ⑤ 부대비용 — **있을 때만**. 견적 합계·원가와 무관한 내부 기록이다(lib/quoteExcel.ts 와 같은 취급).
+          못 읽었으면 「없다」고 말할 수 없으므로 그때도 자리를 내어 오류를 알린다. */}
+      {!data.expensesOk ? (
+        <div style={{ marginTop: 10 }}>
+          <div style={sectionTitle}>부대비용</div>
+          <LoadFailed message="부대비용을 불러오지 못했습니다. 다시 시도해 주세요" onRetry={load} />
+        </div>
+      ) : data.expenses.length > 0 && (
         <div style={{ marginTop: 10 }}>
           <div style={sectionTitle}>부대비용</div>
           <div style={scrollBox}>

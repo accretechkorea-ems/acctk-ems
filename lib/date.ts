@@ -41,6 +41,30 @@ export function addDays(date: string, delta: number): string {
   return new Date(t + delta * 86400000).toISOString().slice(0, 10)
 }
 
+/**
+ * 시각 문자열 → epoch ms. 해석할 수 없으면 null.
+ *
+ * 이 파일의 다른 함수와 달리 **업무 날짜가 아니라 시각**을 읽는다. 시각 비교가 필요한 곳
+ * (결재 도입 경계 — lib/quoteStatus.ts 의 isApprovalTarget)이 날짜 파싱을 따로 짜지 않도록
+ * 여기 하나만 둔다. 머리말의 「시각 기록은 여기 함수를 쓰지 않는다」는 **저장** 이야기다 —
+ * 읽어서 비교하는 것은 kstYmd·kstStamp 도 이미 하고 있다.
+ *
+ * 받아 주는 모양(전부 new Date 가 읽는다)
+ *   ISO 오프셋   '2026-10-06T18:00:00+09:00'
+ *   ISO UTC      '2026-10-06T09:00:00Z'
+ *   PG 표기      '2026-10-06 09:00:00+00'   ← Supabase 가 돌려주는 꼴
+ *   날짜만       '2026-10-06'               ← **UTC 자정**으로 읽힌다(= KST 09:00). 아래 주의
+ *
+ * 날짜만 들어오면 시간대 정보가 없어 UTC 자정으로 해석된다. timestamptz 칸에서 온 값은 늘
+ * 시각이 붙어 있으므로 실무에서는 생기지 않지만, 옛 데이터·수동 입력이 섞일 수 있어 적어 둔다.
+ */
+export function instantMs(at: Date | string | null | undefined): number | null {
+  if (at === null || at === undefined || at === '') return null
+  const d = at instanceof Date ? at : new Date(at)
+  const t = d.getTime()
+  return Number.isFinite(t) ? t : null
+}
+
 /** 'YYYY-MM-DD' → UTC 자정의 epoch ms. 형식이 아니면 null. */
 function parseYmd(s: string): number | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s ?? '').trim())

@@ -90,6 +90,13 @@ export type ReviewInput = {
   engineer: string | null
   /** 작성자(quotes.created_by) 이름. 대필이면 실적 담당자와 다르다. */
   createdBy: string | null
+  /**
+   * 품목·부대비용 조회가 성공했는가. 적지 않으면 **성공으로 본다**(부르는 쪽이 실패를 알릴
+   * 때만 넘긴다). 실패를 빈 배열과 가르기 위한 값이다 — 「품목이 없는 견적」과
+   * 「품목을 못 읽은 견적」은 결재자에게 전혀 다른 정보다.
+   */
+  itemsOk?: boolean
+  expensesOk?: boolean
 }
 
 // ── 나가는 모양(화면이 그대로 그린다) ────────────────────────────────
@@ -155,6 +162,12 @@ export type QuoteReview = {
   note: string | null
   items: ReviewItem[]
   expenses: ReviewExpense[]
+  /**
+   * 품목·부대비용을 읽었는가. false 면 그 표 자리에 **빈 표가 아니라 오류**를 그려야 한다
+   * (빈 배열로 그리면 「품목 없는 견적」으로 읽혀 결재자가 잘못 판단한다).
+   */
+  itemsOk: boolean
+  expensesOk: boolean
 }
 
 /** 한 업체의 표기와, 표기와 다를 때의 등록 사업장명. */
@@ -222,6 +235,8 @@ export function buildQuoteReview(input: ReviewInput): QuoteReview {
     createdBy: input.createdBy,
     delivery: q.delivery_info,
     note: q.note,
+    itemsOk: input.itemsOk !== false,
+    expensesOk: input.expensesOk !== false,
     items: [...input.items]
       // 화면·엑셀과 같은 순서(item_id)다 — 임베딩된 행은 순서가 보장되지 않는다.
       .sort((a, b) => a.item_id - b.item_id)

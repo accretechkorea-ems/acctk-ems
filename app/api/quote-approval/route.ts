@@ -235,6 +235,11 @@ async function review(sb: SupabaseClient, caller: Caller, body: Record<string, u
     dealer: dealerName,
     engineer: quote.engineer_id != null ? (people.get(quote.engineer_id) ?? null) : null,
     createdBy: quote.created_by != null ? (people.get(quote.created_by) ?? null) : null,
+    // 조회가 실패했으면 화면이 「빈 표」가 아니라 「못 읽었다」를 그리게 알린다.
+    // 검토 전체를 500 으로 막지 않는 이유 — 합계·거래 구분만으로도 판단에 쓸 값이 있고,
+    // 품목만 다시 불러오면 되므로 그 자리에 「다시 시도」를 둔다.
+    itemsOk: !itemsRes.error,
+    expensesOk: !expRes.error,
   })
 
   return NextResponse.json({ review: reviewData })

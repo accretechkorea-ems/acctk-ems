@@ -8,8 +8,8 @@
 // (lib/categoryColors.ts 의 salesStatusLabel — '실패' → 「미수주」, '취소요청' → 「삭제 요청」).
 
 // lib/date.ts 하나만 읽는다 — 순수 모듈이라 화면 번들·서버 라우트가 똑같이 들고 갈 수 있다.
-// (결재 도입 경계를 생성 시각의 **한국 날짜**로 재기 때문에 필요하다. 아래 isApprovalTarget 참고.)
-import { kstYmd } from '@/lib/date'
+// (결재 도입 경계를 생성 **시각**으로 재기 때문에 필요하다. 아래 isApprovalTarget 참고.)
+import { instantMs } from '@/lib/date'
 
 /** quotes.status 에 들어가는 값 전부. 필터 칩·색 표의 기준이다. */
 export const QUOTE_STATUSES = [
@@ -55,22 +55,45 @@ export const STATUS_FILTER_TABS: readonly QuoteStatus[] = [
 //   「상신자·결재선 참여자·관리자」라 남의 견적은 브라우저가 못 읽는다.
 
 /**
- * 결재를 거치기 시작하는 첫 생성일(KST, YYYY-MM-DD).
- * **실제 배포일에 맞춰 조정한다.** 이 날짜보다 앞서 만들어진 견적은 결재 대상이 아니다.
+ * 결재를 거치기 시작하는 **시각**(ISO, 오프셋 포함). 이 시각 **이후**에 만들어진 견적이 대상이다.
+ *
+ * 날짜가 아니라 시각인 이유 — 배포한 날 안에 시험까지 하려면 「오늘 만든 견적」을 둘로 갈라야 한다.
+ * 날짜 기준이면 배포 전에 옛 코드로 만든 그날의 견적까지 결재 대상이 되어 PDF·발주가 막힌다.
+ *
+ * ⚠ **임시값이다. 배포 직전에 실제 시각(배포 완료가 확인된 뒤의 시각)으로 교체한다.**
+ *    이 값 이후에 **옛 코드로** 만든 견적은 결재 대상으로 판정돼 PDF·발주가 막힌다
+ *    — 결재 문서가 없으니 게이트가 'unapproved' 로 떨어진다(lib/approval/quoteApprovalKeys.ts).
+ *    그래서 미래 시각으로 두었다: 교체를 잊어도 **아무 견적도 잠기지 않는다**(전부 'exempt').
  */
-export const QUOTE_APPROVAL_START_DATE = '2026-10-07'
+export const QUOTE_APPROVAL_START_AT = '2099-01-01T00:00:00+09:00'
 
 /**
- * 그 견적이 결재 대상인가 — **생성 시각(quotes.created_at)** 의 한국 날짜가 도입일 당일이거나 그 뒤면 참.
+ * 생성 시각이 기준 시각 이후인가 — 기준을 **인자로** 받는 쪽. 밀리초로 비교한다.
  *
- * 입력은 timestamptz 문자열이다('2026-10-07T00:00:00+09:00' · '2026-10-06T15:00:00Z' 둘 다 받는다).
- * 값이 없거나 해석할 수 없으면 **거짓** — 옛 데이터는 대상이 아니라는 쪽으로 떨어뜨린다.
+ * 상수와 떼어 둔 이유는 검증이다. 위 상수는 배포 직전에 바뀌는 값이라, 그 값에 묶어 두면
+ * 경계 시험을 상수와 함께 고쳐야 한다. 판정 규칙은 여기 하나다.
+ *
+ * 둘 중 하나라도 해석할 수 없으면 **거짓** — 옛 데이터·깨진 값은 대상이 아니라는 쪽으로 떨어뜨린다
+ * (대상으로 떨어뜨리면 결재 문서가 없는 견적이 잠긴다).
  */
-export const isApprovalTarget = (createdAt: string | null | undefined): boolean => {
-  if (!createdAt) return false
-  const ymd = kstYmd(createdAt)
-  return !!ymd && ymd >= QUOTE_APPROVAL_START_DATE
+export function isAfterApprovalStart(
+  createdAt: string | null | undefined,
+  startAt: string,
+): boolean {
+  const t = instantMs(createdAt)
+  const base = instantMs(startAt)
+  if (t === null || base === null) return false
+  return t >= base
 }
+
+/**
+ * 그 견적이 결재 대상인가 — **생성 시각(quotes.created_at)이 도입 시각 이후면 참.**
+ *
+ * 입력은 timestamptz 문자열이다. ISO 오프셋·ISO UTC(Z)·PG 표기(공백 + `+00`)를 모두 받는다
+ * (lib/date.ts 의 instantMs). 값이 없거나 해석할 수 없으면 **거짓**.
+ */
+export const isApprovalTarget = (createdAt: string | null | undefined): boolean =>
+  isAfterApprovalStart(createdAt, QUOTE_APPROVAL_START_AT)
 
 /** 결재가 도는 동안의 견적 상태. 화면·라우트가 같은 값을 쓰도록 여기 둔다. */
 export const APPROVAL_STATUS = '결재중'
