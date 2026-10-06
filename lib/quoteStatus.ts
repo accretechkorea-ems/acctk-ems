@@ -65,7 +65,7 @@ export const STATUS_FILTER_TABS: readonly QuoteStatus[] = [
  *    — 결재 문서가 없으니 게이트가 'unapproved' 로 떨어진다(lib/approval/quoteApprovalKeys.ts).
  *    그래서 미래 시각으로 두었다: 교체를 잊어도 **아무 견적도 잠기지 않는다**(전부 'exempt').
  */
-export const QUOTE_APPROVAL_START_AT = '2099-01-01T00:00:00+09:00'
+export const QUOTE_APPROVAL_START_AT = '2026-10-06T16:21:00+09:00'
 
 /**
  * 생성 시각이 기준 시각 이후인가 — 기준을 **인자로** 받는 쪽. 밀리초로 비교한다.
