@@ -126,6 +126,27 @@ export function isInquiryDirection(value: unknown): value is InquiryDirection {
 export const INQUIRY_DIRECTION_OPTIONS: { label: string; value: InquiryDirection }[] =
   INQUIRY_DIRECTIONS.map(d => ({ label: INQUIRY_DIRECTION_LABEL[d], value: d }))
 
+// ── 내용(내용 기록 본문) ────────────────────────────────────────────
+
+/**
+ * 내용 기록 본문 길이 상한. DB 제약 inquiry_messages_body_check(≤ 20000)와 같은 값이어야 한다.
+ * 서버 라우트(app/api/inquiry/route.ts 의 BODY_MAX)가 이 값을 그대로 쓴다 — 두 벌로 두지 않는다.
+ */
+export const INQUIRY_BODY_MAX = 20000
+
+/**
+ * 본문을 한 줄로 — 줄바꿈·연속 공백을 한 칸으로 접고, 길면 끝에 「…」를 붙여 자른다.
+ * 상세 정보 카드의 「내용」 칸이 쓴다(전체 글은 그 칸의 title 로 보여 준다).
+ *
+ * 목록의 「내용」 열은 DB 함수(inquiry_list_extras)가 같은 일을 SQL 로 한다 — 그쪽은 50건을
+ * 한 번에 접어야 해서 서버가 하고, 여기는 이미 읽어 둔 본문 하나라 화면에서 한다.
+ */
+export function inquiryOneLine(body: string | null | undefined, max = 120): string {
+  const one = (body ?? '').replace(/\s+/g, ' ').trim()
+  if (one.length <= max) return one
+  return `${one.slice(0, max)}…`
+}
+
 // ── 번호 조립 ───────────────────────────────────────────────────────
 // 순수 함수다. 여기서 날짜를 직접 만들지 않고 부르는 쪽이 넘겨준다 —
 // 「오늘」은 반드시 KST 여야 하는데(lib/date.ts 의 todayKST), 그 판단을 이 파일에 두면

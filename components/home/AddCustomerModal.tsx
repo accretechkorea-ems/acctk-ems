@@ -20,6 +20,7 @@ import { useEffect } from 'react'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import AddressField from '@/components/customer/modals/AddressField'
 import ParentPicker from '@/components/customer/ParentPicker'
+import { FieldHint, SITE_NAME_HINT } from '@/components/customer/siteFormHints'
 
 type CustomerForm = {
   company_name: string
@@ -82,7 +83,7 @@ export default function AddCustomerModal({
   // 다만 뭔가 입력했다면 그 안의 필수 칸은 그대로 검증한다.
   const handleSave = () => {
     const rules: Partial<Record<ErrKey, string | null>> = {
-      company_name: customerForm.company_name.trim() ? null : '업체명을 입력해주세요',
+      company_name: customerForm.company_name.trim() ? null : '사업장명을 입력해주세요',
       address: customerForm.address.trim() ? null : '주소를 입력해주세요',
       contact_name: isEmptyContactForm(contactForm) || contactForm.name.trim()
         ? null
@@ -134,7 +135,7 @@ export default function AddCustomerModal({
               color: TEXT_PRIMARY,
             }}
           >
-            업체 정보
+            사업장 정보
           </div>
 
           <div style={{ display: 'grid', gap: 12 }}>
@@ -143,16 +144,20 @@ export default function AddCustomerModal({
                 display: 'grid',
                 gridTemplateColumns: '1fr 130px',
                 gap: 10,
+                // 왼쪽 칸 아래 안내·오류 줄이 늘어도 상태 선택 상자가 함께 늘어나지 않게 위로 붙인다
+                // (grid 의 기본 stretch 로는 오른쪽 칸이 왼쪽 높이를 따라간다).
+                alignItems: 'start',
               }}
             >
               <div>
                 <input
                   value={customerForm.company_name}
                   onChange={(e) => { setCustomerForm((prev) => ({ ...prev, company_name: e.target.value })); clearError('company_name') }}
-                  placeholder="업체명(company_name)"
+                  placeholder="사업장명"
                   style={errors.company_name ? { ...inputStyle, border: errBorder } : inputStyle}
                 />
                 <FieldError message={errors.company_name} />
+                <FieldHint text={SITE_NAME_HINT} />
               </div>
 
               <select
@@ -219,7 +224,7 @@ export default function AddCustomerModal({
                 장비 정보
               </div>
               <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
-                선택 사항입니다. 비워두면 등록되지 않고, 나중에 업체 상세에서 추가할 수 있습니다
+                선택 사항입니다. 비워두면 등록되지 않고, 나중에 사업장 상세에서 추가할 수 있습니다
               </div>
             </div>
 
@@ -446,7 +451,7 @@ export default function AddCustomerModal({
               고객 담당자 정보
             </div>
             <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
-              선택 사항입니다. 나중에 업체 상세에서 추가할 수 있습니다
+              선택 사항입니다. 나중에 사업장 상세에서 추가할 수 있습니다
             </div>
           </div>
 

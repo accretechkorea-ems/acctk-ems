@@ -18,7 +18,7 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { canViewMenu } from '@/lib/permissions'
 import { todayKST } from '@/lib/date'
-import { canRejectDocument, docTypeOf, type DocTypeDef } from '@/lib/approval/docTypes'
+import { canRejectDocument, canResubmitDocument, docTypeOf, type DocTypeDef } from '@/lib/approval/docTypes'
 import { handlersOf } from '@/lib/approval/handlers'
 import {
   actorFor, applyApproval, ccApproverIds, delegatesOf, isComplete,
@@ -489,6 +489,12 @@ async function resubmit(caller: Caller, body: Record<string, unknown>) {
   const doc = await loadDocument(documentId)
   if (!doc) return bad('문서를 찾을 수 없습니다.', 404)
   if (doc.requester_id !== caller.engineer_id) return bad('상신한 사람만 다시 올릴 수 있습니다.', 403)
+  // 유형이 재상신을 허용하는지 — 분기를 두지 않고 등록표의 칸으로만 본다(docTypes.ts).
+  // 견적서는 내용을 고쳐야 다시 올릴 수 있어 같은 문서를 되돌리는 길을 막아 둔다.
+  const resubDef = docTypeOf(doc.doc_type)
+  if (resubDef && !canResubmitDocument(resubDef)) {
+    return bad('견적서는 재상신할 수 없습니다. 고쳐 쓰기로 새로 작성해 주세요.')
+  }
   // 폐기한 문서도 여기서 걸린다 — 치운 문서를 되살리려면 새로 상신한다.
   if (doc.status !== '반려' && doc.status !== '회수') return bad('반려·회수된 문서만 다시 올릴 수 있습니다.', 409)
 

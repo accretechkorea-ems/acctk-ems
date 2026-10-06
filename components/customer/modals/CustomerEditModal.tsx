@@ -5,6 +5,7 @@ import type { Customer, CustomerEditFormData } from '../types'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import ParentPicker from '@/components/customer/ParentPicker'
+import { FieldHint, SITE_NAME_HINT } from '@/components/customer/siteFormHints'
 import AddressField from './AddressField'
 
 type Props = {
@@ -44,7 +45,7 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
   // 검증은 여기(모달)에서 인라인으로 수집 → 통과 시에만 onSave(form)
   const handleSave = () => {
     const ok = validate({
-      company_name: form.company_name.trim() ? null : '업체명을 입력해주세요',
+      company_name: form.company_name.trim() ? null : '사업장명을 입력해주세요',
       address: form.address.trim() ? null : '주소를 입력해주세요',
     })
     if (!ok) return
@@ -63,7 +64,7 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
       >
         {/* 헤더 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>업체 정보 수정</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>사업장 정보 수정</div>
           <button
             onClick={onClose}
             title="닫기"
@@ -80,9 +81,10 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
 
         <div style={{ display: 'grid', gap: 14 }}>
           <div>
-            <label style={labelStyle}>업체명</label>
-            <input value={form.company_name} onChange={(e) => { setForm(p => ({ ...p, company_name: e.target.value })); clearError('company_name') }} placeholder="업체명" style={errors.company_name ? { ...fieldStyle, border: errBorder } : fieldStyle} />
+            <label style={labelStyle}>사업장명</label>
+            <input value={form.company_name} onChange={(e) => { setForm(p => ({ ...p, company_name: e.target.value })); clearError('company_name') }} placeholder="사업장명" style={errors.company_name ? { ...fieldStyle, border: errBorder } : fieldStyle} />
             <FieldError message={errors.company_name} />
+            <FieldHint text={SITE_NAME_HINT} />
           </div>
           <div>
             <label style={labelStyle}>주소</label>
@@ -105,7 +107,7 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
           </div>
 
           <div>
-            <label style={labelStyle}>소속</label>
+            <label style={labelStyle}>회사명</label>
             {/* 같은 회사의 업체들을 묶는 행. 바꾸거나 해제해도 견적·장비는 이 업체에 그대로 남는다. */}
             <ParentPicker
               value={form.parent_customer_id}

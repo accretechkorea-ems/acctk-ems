@@ -20,6 +20,9 @@ import { isSuperAdmin } from '@/lib/permissions'
 import { validateLineInput } from '@/lib/approval/engine'
 import { DOC_TYPES } from '@/lib/approval/docTypes'
 import { checkLineRules, lineRuleNotice, SUPERADMIN_LABEL } from '@/lib/approval/lineRules'
+import {
+  expandTeamCc, summarizeTeamCc, TEAM_CC_MAX, TEAM_CC_OVER_MESSAGE, TEAM_CC_PRESET_NOTICE,
+} from '@/lib/approval/teamCc'
 import type { LineInput, LineKind } from '@/lib/approval/types'
 
 /** 직급 순서. 유지보수 화면과 같은 표를 쓴다(없는 직급은 맨 뒤). */
@@ -51,7 +54,7 @@ const KINDS: { key: LineKind; label: string }[] = [
 ]
 
 export default function LinePickerModal({
-  open, onClose, onConfirm, myId, docType, initial = [],
+  open, onClose, onConfirm, myId, docType, initial = [], serverError = null, busy = false,
 }: {
   open: boolean
   onClose: () => void
@@ -62,6 +65,14 @@ export default function LinePickerModal({
   /** 개인 결재선 저장·불러오기에 함께 쓸 유형(없으면 모든 유형용으로 저장). */
   docType?: string
   initial?: LineInput[]
+  /**
+   * 서버가 돌려준 사유. 모달을 닫지 않고 그 자리에 보여 준다 —
+   * 견적서 상신은 결재선을 확정전에 서버로 한 번 확인하므로(번호가 소진되지 않게),
+   * 막혔을 때 사용자가 같은 창에서 바로 고칠 수 있어야 한다.
+   */
+  serverError?: string | null
+  /** 서버에 묻는 중 — [확인]을 잠근다. */
+  busy?: boolean
 }) {
   const toast = useToast()
   const [people, setPeople] = useState<Person[]>([])
@@ -71,12 +82,15 @@ export default function LinePickerModal({
   const [presets, setPresets] = useState<Preset[]>([])
   const [presetName, setPresetName] = useState('')
   const [saving, setSaving] = useState(false)
+  // 「팀으로 참조 추가」의 결과 한 줄(추가·제외 인원 또는 상한 안내). 다음 추가 때 갈아끼운다.
+  const [teamCcResult, setTeamCcResult] = useState<string | null>(null)
 
   // 열릴 때마다 처음 상태로 — 닫았다 다시 열면 지난 선택이 남아 있지 않게 한다.
   useEffect(() => {
     if (!open) return
     setPicked(initial)
     setPresetName('')
+    setTeamCcResult(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -126,6 +140,14 @@ export default function LinePickerModal({
     return names.sort((a, b) => a.localeCompare(b, 'ko'))
   }, [people])
 
+  // 팀별 재직 인원 수. people 은 이미 `resigned_date is null` 로 걸러 읽으므로 그대로 센다.
+  // 팀 목록(teams)이 people 에서 나오므로 **인원 0명인 팀은 애초에 들어오지 않는다.**
+  const teamCounts = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const p of people) if (p.teams) m.set(p.teams, (m.get(p.teams) ?? 0) + 1)
+    return m
+  }, [people])
+
   const members = useMemo(() => {
     const rank = (p: Person) => POSITION_ORDER[p.position ?? ''] ?? 99
     return people
@@ -148,6 +170,31 @@ export default function LinePickerModal({
     setPicked(prev => renumber([...prev, { step: 0, kind: 'approve', approverId: p.engineer_id, isDelegatedAuthority: false }]))
   }
   const remove = (id: number) => setPicked(prev => renumber(prev.filter(l => l.approverId !== id)))
+
+  /**
+   * 팀 하나를 참조(cc)로 펼친다 — **그 시점의 재직 인원이 개별 참조로 들어간다.**
+   * 팀은 저장되지 않는다(lib/approval/teamCc.ts 머리말). 들어간 사람은 오른쪽 목록에서
+   * 하나씩 뺄 수 있고, 같은 팀을 다시 골라도 taken 에 걸려 빠진 사람만 채워진다.
+   */
+  const addTeamCc = (teamName: string) => {
+    const roster = people.filter(p => p.teams === teamName)
+    const res = expandTeamCc({
+      // people 은 재직자만이라 resigned_date 를 넘기지 않는다 — 'resigned' 는 여기서 나오지 않는다.
+      members: roster.map(p => ({ engineer_id: p.engineer_id })),
+      requesterId: myId,
+      // 종류를 가리지 않는다 — 결재·합의로 이미 고른 사람도 중복이라 건너뛴다(engine 의 중복 금지).
+      taken: new Set(picked.map(l => l.approverId)),
+      max: TEAM_CC_MAX,
+    })
+    if (res.overLimit) { setTeamCcResult(TEAM_CC_OVER_MESSAGE); return }
+    if (res.added.length > 0) {
+      setPicked(prev => renumber([
+        ...prev,
+        ...res.added.map(id => ({ step: 0, kind: 'cc' as LineKind, approverId: id, isDelegatedAuthority: false })),
+      ]))
+    }
+    setTeamCcResult(summarizeTeamCc(res) ?? '추가할 사람이 없습니다')
+  }
   const move = (idx: number, dir: -1 | 1) => {
     setPicked(prev => {
       const next = [...prev]
@@ -265,6 +312,28 @@ export default function LinePickerModal({
             style={btnGhost(saving || picked.length === 0)}>
             {saving ? '저장 중...' : '현재 구성 저장'}
           </button>
+          {/* 저장되는 것은 **지금 펼쳐진 개별 참조자**다(팀이 아니다 — lib/approval/teamCc.ts). */}
+          <span style={{ fontSize: 11, color: MUTED, lineHeight: 1.6 }}>{TEAM_CC_PRESET_NOTICE}</span>
+        </div>
+
+        {/* 팀으로 참조 추가 — 고른 팀의 재직 인원이 개별 참조로 펼쳐진다. */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+          <select
+            defaultValue=""
+            disabled={loading || teams.length === 0}
+            onChange={e => { const v = e.target.value; if (v) addTeamCc(v); e.currentTarget.value = '' }}
+            style={{ ...inputStyle, minWidth: 200, cursor: loading ? 'default' : 'pointer' }}
+          >
+            <option value="">팀으로 참조 추가</option>
+            {teams.map(t => (
+              <option key={t} value={t}>{t} ({teamCounts.get(t) ?? 0}명)</option>
+            ))}
+          </select>
+          {teamCcResult && (
+            <span style={{ fontSize: 11, color: teamCcResult === TEAM_CC_OVER_MESSAGE ? DANGER : SUB, lineHeight: 1.6 }}>
+              {teamCcResult}
+            </span>
+          )}
         </div>
 
         {/* 종류별 결재선 규칙 안내 — 짜기 전에 무엇이 필요한지 알린다. 규칙을 만족하지 않는 동안은
@@ -276,6 +345,17 @@ export default function LinePickerModal({
             color: ruleFailing ? DANGER : SUB,
           }}>
             {ruleFailing && !ruleResult.ok ? ruleResult.message : notice}
+          </div>
+        )}
+
+        {/* 서버가 돌려준 사유 — 화면 검증이 통과했는데도 막힌 경우다(퇴사·등급 변경 등
+            화면이 모르는 사정). 같은 자리에 두면 아래 [확인]과 가까워 바로 고칠 수 있다. */}
+        {serverError && (
+          <div style={{
+            marginBottom: 12, padding: '8px 10px', borderRadius: 6,
+            background: NEUTRAL_BG, fontSize: 12, fontWeight: 600, color: DANGER,
+          }}>
+            {serverError}
           </div>
         )}
 
@@ -365,8 +445,10 @@ export default function LinePickerModal({
             {problem ?? `결재 ${picked.filter(l => l.kind === 'approve').length}명 · 합의 ${picked.filter(l => l.kind === 'agree').length}명 · 참조 ${picked.filter(l => l.kind === 'cc').length}명`}
           </span>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            <button type="button" onClick={onClose} style={btnGhost()}>취소</button>
-            <button type="button" onClick={confirm} disabled={!!problem} style={btnPrimary(!!problem)}>확인</button>
+            <button type="button" onClick={onClose} disabled={busy} style={btnGhost(busy)}>취소</button>
+            <button type="button" onClick={confirm} disabled={!!problem || busy} style={btnPrimary(!!problem || busy)}>
+              {busy ? '확인 중...' : '확인'}
+            </button>
           </div>
         </div>
       </div>

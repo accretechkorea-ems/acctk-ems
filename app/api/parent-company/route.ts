@@ -44,7 +44,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}))
   const action: string = body?.action ?? ''
   const parentId = Number(body?.parentId)
-  if (!Number.isInteger(parentId) || parentId <= 0) return bad('소속회사를 지정해주세요.')
+  if (!Number.isInteger(parentId) || parentId <= 0) return bad('회사를 지정해주세요.')
 
   // 대상이 실제로 소속회사인지 확인한다 — 일반 업체 행이 이 라우트로 지워지면 안 된다.
   const { data: target } = await supabaseAdmin
@@ -52,13 +52,13 @@ export async function POST(req: Request) {
     .select('customer_id, company_name, is_parent, deleted_at')
     .eq('customer_id', parentId)
     .maybeSingle()
-  if (!target || target.deleted_at) return bad('소속회사를 찾을 수 없습니다.', 404)
-  if (!target.is_parent) return bad('소속회사가 아닙니다.')
+  if (!target || target.deleted_at) return bad('회사를 찾을 수 없습니다.', 404)
+  if (!target.is_parent) return bad('회사가 아닙니다.')
 
   // ── 이름 수정 ──
   if (action === 'rename') {
     const name = typeof body?.name === 'string' ? body.name.trim() : ''
-    if (!name) return bad('소속회사명을 입력해주세요.')
+    if (!name) return bad('회사명을 입력해주세요.')
 
     // 같은 이름의 소속회사가 이미 있으면 막는다(자기 자신은 제외).
     const { data: dup } = await supabaseAdmin
@@ -68,7 +68,7 @@ export async function POST(req: Request) {
       .is('deleted_at', null)
       .eq('company_name', name)
       .neq('customer_id', parentId)
-    if (dup && dup.length > 0) return bad('같은 이름의 소속회사가 이미 있습니다.')
+    if (dup && dup.length > 0) return bad('같은 이름의 회사가 이미 있습니다.')
 
     const { error } = await supabaseAdmin
       .from('customers').update({ company_name: name }).eq('customer_id', parentId)

@@ -2,6 +2,9 @@
 
 // 의뢰서 상세 — 보기 + 업체명·담당자·발행일·상태 수정 + 취소 + 내용 기록.
 //
+// 정보 카드 항목 순서 — 발행일 · 업체명 · 내용 · 담당자 · 상태. 「내용」은 가장 최근 내용 기록의
+// 본문 한 줄을 **읽기 전용**으로 보여 준다(고치는 자리는 오른쪽 내용 기록 카드 하나뿐이다).
+//
 // 고치는 자리는 두 곳이고 방식이 같다: 평소에는 읽기 전용으로 보여 주고, 오른쪽 위의
 // 수정 아이콘을 누르면 그 자리에서 입력으로 바뀌며, 바뀐 칸이 있을 때만 저장이 켜진다.
 //   · 정보 카드 — 업체명·담당자·발행일·상태를 한 번에 저장한다.
@@ -48,7 +51,7 @@ import { safeBackTo } from '@/lib/inquirySearch'
 import {
   EDITABLE_STATUSES, INQUIRY_DIRECTION_COLOR, INQUIRY_DIRECTION_LABEL, INQUIRY_DIRECTION_OPTIONS,
   INQUIRY_STATUS_DOT, INQUIRY_TYPE_LABEL,
-  directionOf, inquiryStatusLabel, type InquiryDirection, type InquiryType,
+  directionOf, inquiryOneLine, inquiryStatusLabel, type InquiryDirection, type InquiryType,
 } from '@/lib/inquiries'
 
 const TITLE_MAX = 200
@@ -791,6 +794,14 @@ export default function InquiryDetailPage() {
    */
   const canCancel = !cancelled && (amAdmin || (myId != null && row?.created_by === myId))
 
+  /**
+   * 정보 카드의 「내용」 칸에 보일 값 — **가장 최근 내용 기록의 본문**.
+   * messages 는 날짜·id 오름차순으로 읽어 두었으므로 마지막 것이 가장 최근이다(추가 조회 없음).
+   * 본문이 비어 있는 기록(파일만 올린 건 등)은 건너뛴다 — 목록의 「내용」 열과 같은 규칙이다.
+   */
+  const latestBody = [...messages].reverse().find(m => m.body.trim().length > 0)?.body ?? ''
+  const latestLine = inquiryOneLine(latestBody)
+
   /** 편집 중인 카드. 목록을 다시 읽어도 같은 id 를 따라간다. */
   const editingMsg = editId === null ? null : messages.find(m => m.id === editId) ?? null
 
@@ -1194,6 +1205,24 @@ export default function InquiryDetailPage() {
                 <div style={{ marginTop: 12 }}>
                   {row.equipment_series && <Field label="장비 계열">{row.equipment_series}</Field>}
 
+                  <Field label="발행일">
+                    {infoEditing ? (
+                      <>
+                        <input
+                          type="date" value={issuedDate} onChange={e => setIssuedDate(e.target.value)}
+                          style={{ ...editStyle, colorScheme: 'light' }}
+                        />
+                        {/* 80 스페어파츠만 번호에 발행일이 박혀 있다(001-K260929). 번호는 이미 바깥에
+                            나간 값이라 다시 만들지 않는다 — 날짜만 고치면 둘이 어긋나므로 미리 알린다. */}
+                        {row.inquiry_type === 'spare80' && (
+                          <span style={{ display: 'block', fontSize: 11, color: MUTED, lineHeight: 1.6, marginTop: 4 }}>
+                            번호의 날짜 부분은 바뀌지 않습니다.
+                          </span>
+                        )}
+                      </>
+                    ) : dateText(row.issued_date)}
+                  </Field>
+
                   <Field label="업체명">
                     {infoEditing ? (
                       <input
@@ -1203,6 +1232,27 @@ export default function InquiryDetailPage() {
                     ) : (
                       <span style={{ color: row.title?.trim() ? TEXT : MUTED }}>
                         {row.title?.trim() || '(업체명 없음)'}
+                      </span>
+                    )}
+                  </Field>
+
+                  {/* 내용 — 가장 최근 내용 기록의 본문 한 줄. **읽기 전용이다**(편집 모드에서도).
+                      고치는 자리는 오른쪽 「내용 기록」 카드 하나뿐이다 — 같은 값을 두 자리에서 고치면
+                      어느 쪽이 맞는지 알 수 없고, 기록은 날짜·구분·첨부가 함께 붙은 한 덩어리라
+                      본문만 떼어 고치는 칸을 만들 수 없다. 이미 읽어 둔 messages 를 쓴다(추가 조회 없음). */}
+                  <Field label="내용">
+                    <span
+                      title={latestBody || undefined}
+                      style={{
+                        display: 'block', color: latestLine ? TEXT : MUTED,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {latestLine || '(내용 없음)'}
+                    </span>
+                    {infoEditing && (
+                      <span style={{ display: 'block', fontSize: 11, color: MUTED, lineHeight: 1.6, marginTop: 4 }}>
+                        내용은 오른쪽 「내용 기록」에서 고칩니다.
                       </span>
                     )}
                   </Field>
@@ -1222,24 +1272,6 @@ export default function InquiryDetailPage() {
                     ) : (
                       engineerLabel(row.engineers) || '-'
                     )}
-                  </Field>
-
-                  <Field label="발행일">
-                    {infoEditing ? (
-                      <>
-                        <input
-                          type="date" value={issuedDate} onChange={e => setIssuedDate(e.target.value)}
-                          style={{ ...editStyle, colorScheme: 'light' }}
-                        />
-                        {/* 80 스페어파츠만 번호에 발행일이 박혀 있다(001-K260929). 번호는 이미 바깥에
-                            나간 값이라 다시 만들지 않는다 — 날짜만 고치면 둘이 어긋나므로 미리 알린다. */}
-                        {row.inquiry_type === 'spare80' && (
-                          <span style={{ display: 'block', fontSize: 11, color: MUTED, lineHeight: 1.6, marginTop: 4 }}>
-                            번호의 날짜 부분은 바뀌지 않습니다.
-                          </span>
-                        )}
-                      </>
-                    ) : dateText(row.issued_date)}
                   </Field>
 
                   {cancelled && row.cancelled_at && <Field label="취소 시각">{stampText(row.cancelled_at)}</Field>}

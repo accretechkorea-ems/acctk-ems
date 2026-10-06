@@ -3,6 +3,7 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { canViewMenu, canViewSalesMgmt } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
+import { gateAllows, GATE_PDF_MESSAGE, loadQuoteGates } from '@/lib/approval/quoteApproval'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,7 +36,8 @@ export async function GET(req: NextRequest) {
       .single(),
     supabaseAdmin
       .from('quotes')
-      .select('engineer_id')
+      // quote_id 를 함께 읽는다 — 아래 승인 게이트 판정에 쓴다(전자결재 6단계 B).
+      .select('quote_id, engineer_id')
       .eq('pdf_url', `quote-pdfs/${safePath}`),
   ])
   const caller = await withTeamPerm(callerRow)
@@ -50,6 +52,26 @@ export async function GET(req: NextRequest) {
   const privileged = canViewSalesMgmt(caller)
   if (!privileged && !quoteRows.some(q => q.engineer_id === caller.engineer_id))
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  // ── 승인 게이트 (전자결재 6단계 B) ──
+  // 결재가 끝나기 전에는 고객에게 나갈 파일을 열지 못한다.
+  // 결재 도입 전에 만든 견적은 'exempt' 라 영향이 없다 — 지금까지처럼 그대로 열린다.
+  // 한 파일이 여러 견적에 걸려 있으면(파일명이 견적번호라 보통 1:1 이지만 유니크가 아니다)
+  // **하나라도 허용이면** 연다 — 그 파일은 그 견적의 정본이기도 하다.
+  const gateRes = await loadQuoteGates(supabaseAdmin, quoteRows.map(q => q.quote_id))
+  if (!gateRes.ok) {
+    console.error('[quote-pdf] 게이트 조회 실패', { safePath, error: gateRes.error })
+    return NextResponse.json({ error: gateRes.error }, { status: 500 })
+  }
+  const anyOpen = quoteRows.some(q => gateAllows(gateRes.gates.get(q.quote_id)?.gate))
+  if (!anyOpen) {
+    console.warn('[quote-pdf] 게이트 차단', {
+      safePath,
+      gates: quoteRows.map(q => ({ quoteId: q.quote_id, gate: gateRes.gates.get(q.quote_id)?.gate })),
+    })
+    // 감사 기록(READ)은 아래 허용된 열람에서만 남는다 — 열지 못한 것을 열람으로 남기지 않는다.
+    return NextResponse.json({ error: GATE_PDF_MESSAGE }, { status: 409 })
+  }
 
   const { data, error } = await supabaseAdmin.storage
     .from('quote-pdfs')

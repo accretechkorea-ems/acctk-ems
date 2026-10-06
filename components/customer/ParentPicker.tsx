@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Popover from '@/components/common/Popover'
+import { FieldHint, PARENT_COMPANY_HINT } from '@/components/customer/siteFormHints'
 
 /**
  * 소속회사(부모) 선택 칸.
@@ -70,13 +71,13 @@ export function invalidateParents(): void {
 export async function createParent(companyName: string): Promise<ParentOption> {
   const supabase = createClient()
   const name = companyName.trim()
-  if (!name) throw new Error('소속회사명을 입력해주세요')
+  if (!name) throw new Error('회사명을 입력해주세요')
   const { data, error } = await supabase
     .from('customers')
     .insert([{ company_name: name, is_parent: true }])
     .select('customer_id, company_name')
     .single()
-  if (error || !data) throw error || new Error('소속회사를 만들지 못했습니다')
+  if (error || !data) throw error || new Error('회사를 만들지 못했습니다')
   invalidateParents()
   return { customer_id: data.customer_id, company_name: data.company_name ?? name }
 }
@@ -137,20 +138,24 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, o
       onChange(made.customer_id)
       setQuery(''); setOpen(false)
     } catch (e) {
-      onError?.((e as Error).message || '소속회사를 만들지 못했습니다')
+      onError?.((e as Error).message || '회사를 만들지 못했습니다')
     } finally {
       setCreating(false)
     }
   }, [query, onChange, onError])
 
   // 이미 고른 상태 — 이름과 해제 버튼만 보여준다.
+  // 안내 문구는 고른 뒤에도 남긴다 — 사업장이 한 곳뿐인데 잘못 묶었을 때 해제하면 된다는 것을 알려야 한다.
   if (value != null) {
     return (
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <div style={{ ...fieldStyle, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: '#f9fafb' }}>
-          {picked ? picked.company_name : `소속회사 #${value}`}
+      <div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ ...fieldStyle, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: '#f9fafb' }}>
+            {picked ? picked.company_name : `회사 #${value}`}
+          </div>
+          <button type="button" disabled={disabled} onClick={() => { onChange(null); setQuery('') }} style={ghostBtn}>해제</button>
         </div>
-        <button type="button" disabled={disabled} onClick={() => { onChange(null); setQuery('') }} style={ghostBtn}>해제</button>
+        <FieldHint text={PARENT_COMPANY_HINT} />
       </div>
     )
   }
@@ -162,7 +167,7 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, o
         disabled={disabled || creating}
         onChange={e => { setQuery(e.target.value); setOpen(true) }}
         onFocus={() => setOpen(true)}
-        placeholder="소속회사 검색 (선택)"
+        placeholder="회사명 검색 (선택)"
         style={fieldStyle}
       />
       {/* 모달 안에서 열려도 잘리지 않도록 포털로 띄운다 */}
@@ -191,10 +196,12 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, o
             onMouseEnter={e => { e.currentTarget.style.background = '#f5f5f5' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
           >
-            {creating ? '만드는 중...' : `「${query.trim()}」 새 소속회사로 만들기`}
+            {creating ? '만드는 중...' : `「${query.trim()}」 새 회사로 만들기`}
           </div>
         )}
       </Popover>
+      {/* 안내는 두 모달이 함께 쓰는 이 부품에 둔다 — 한 곳에 넣으면 등록·수정 양쪽에 모두 나온다. */}
+      <FieldHint text={PARENT_COMPANY_HINT} />
     </div>
   )
 }

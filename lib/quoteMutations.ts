@@ -4,6 +4,7 @@
 //   - 실패는 throw(상태 변경) 또는 반환값 { ok, error }(발주/세금)로 알린다.
 
 import { createClient } from '@/lib/supabase/client'
+import { APPROVAL_STATUS } from '@/lib/quoteStatus'
 import type { LineInput } from '@/lib/approval/types'
 
 export type MutationResult = { ok: boolean; error?: string }
@@ -28,7 +29,7 @@ const reasonPatch = (status: string, reason?: string) =>
 // 실패 시 throw. (빈 문자열은 null 로 저장 — 실적 현황 기존 동작과 동일.)
 export async function updateQuoteStatus(params: UpdateQuoteStatusParams): Promise<void> {
   const supabase = createClient()
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('quotes')
     // order_date · revenue_date 는 더 이상 쓰지 않는다. 수주·매출 시점은
     // 발주 라우트가 남기는 purchase_order_at · tax_invoice_completed_at 이 정본이다.
@@ -37,10 +38,21 @@ export async function updateQuoteStatus(params: UpdateQuoteStatusParams): Promis
       ...reasonPatch(params.status, params.reason),
     })
     .eq('quote_id', params.quoteId)
+    // 결재가 도는 동안은 사람이 상태를 못 바꾼다(전자결재 6단계 B).
+    // 조건부 UPDATE 로 둔다 — 화면이 버튼을 숨기지만 그것만으로는 서버 쪽 보장이 없다.
+    // 결재 엔진의 되돌리기(onCompleteQuote·onRevertQuote)는 service role 이라 이 조건과 무관하다.
+    .neq('status', APPROVAL_STATUS)
+    .select('quote_id')
   if (error) {
     // RLS 로 막히면 화면에는 메시지만 남아 원인을 알기 어렵다. 원본 객체(code·details·hint)를 콘솔에 남긴다.
     console.error('[quote] status update failed', { quoteId: params.quoteId, status: params.status, error })
     throw new Error(error.message)
+  }
+  if (!data || data.length === 0) {
+    // 0행이 되는 길은 둘이다 — 지금 '결재중' 이거나, RLS 가 막았거나(남의 견적).
+    // 어느 쪽이든 사용자가 할 일은 같아 한 문구로 알린다.
+    console.error('[quote] status update 0행', { quoteId: params.quoteId, status: params.status })
+    throw new Error('결재 중인 견적은 상태를 바꿀 수 없습니다')
   }
 }
 
@@ -132,6 +144,45 @@ export async function submitQuoteDelete(quoteId: number, lines: LineInput[]): Pr
   } catch (e) {
     console.error('[quote] delete submit failed', { quoteId, error: e })
     return { ok: false, error: '상신에 실패했습니다.' }
+  }
+}
+
+// ── 견적서 결재 상신 ────────────────────────────────────────────────
+// 두 단계로 나눠 부른다. 'check' 는 부작용이 없어 **확정(번호 발급) 전에** 결재선 오류를 걸러 내고,
+// 'submit' 은 저장이 끝난 뒤 문서를 만든다. 번호는 되돌릴 수 없으므로 순서를 바꾸지 마라.
+// 두 함수 모두 실패를 삼키지 않는다 — 부르는 쪽이 사유를 그대로 보여 준다.
+
+/** 결재선만 검사한다(부작용 없음). 통과하면 ok. */
+export async function checkQuoteApprovalLines(lines: LineInput[]): Promise<MutationResult> {
+  try {
+    const res = await fetch('/api/quote-approval', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'check', lines }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: json.error || String(res.status) }
+    return { ok: true }
+  } catch (e) {
+    console.error('[quote] approval line check failed', e)
+    return { ok: false, error: '결재선을 확인하지 못했습니다.' }
+  }
+}
+
+/** 저장된 견적을 결재로 올린다. 서버가 상태를 '결재중' 으로 바꾸고 문서를 만든다. */
+export async function submitQuoteApproval(quoteId: number, lines: LineInput[]): Promise<MutationResult> {
+  try {
+    const res = await fetch('/api/quote-approval', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'submit', quote_id: quoteId, lines }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: json.error || String(res.status) }
+    return { ok: true }
+  } catch (e) {
+    console.error('[quote] approval submit failed', { quoteId, error: e })
+    return { ok: false, error: '결재 상신에 실패했습니다.' }
   }
 }
 

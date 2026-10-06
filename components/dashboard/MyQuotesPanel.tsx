@@ -8,9 +8,14 @@ import { useToast } from '@/components/common/Toast'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
-import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, submitQuoteDelete, deleteQuoteSelf, PO_MEMO_MAX } from '@/lib/quoteMutations'
+import {
+  updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, submitQuoteDelete, deleteQuoteSelf,
+  checkQuoteApprovalLines, submitQuoteApproval, PO_MEMO_MAX,
+} from '@/lib/quoteMutations'
 import { isSelfDeletable } from '@/lib/quoteDeletePolicy'
 import LinePickerModal from '@/components/approval/LinePickerModal'
+import { canSubmitApproval, loadQuoteApprovalDocIds, fetchQuoteGates, gateFor } from '@/lib/quoteApprovalDocs'
+import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice, type QuoteGate } from '@/lib/approval/quoteApprovalKeys'
 import type { LineInput } from '@/lib/approval/types'
 import {
   isAutoFailed, isOrdered, isExpired, validFromDate,
@@ -76,6 +81,8 @@ type Quote = {
   quote_id: number
   quote_number: string
   quote_date: string
+  /** 생성 시각. 결재 도입 경계를 가르는 값이다(견적일이 아니다 — lib/quoteStatus.ts 설명). */
+  created_at: string | null
   total_supply: number
   total_profit: number | null
   profit_rate: number | null
@@ -110,6 +117,16 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const supabase = useMemo(() => createClient(), [])
   const toast = useToast()
   const [quotes, setQuotes] = useState<Quote[]>([])
+  // 결재 문서가 이미 있는 견적 id. null 이면 아직 못 읽었다(또는 실패) — 그때는 「결재 올리기」를
+  // 보여 주지 않는다(이미 올린 건에 버튼이 다시 나타나는 쪽이 더 나쁘다. canSubmitApproval 설명).
+  const [approvalDocIds, setApprovalDocIds] = useState<Set<number> | null>(null)
+  // 행별 승인 게이트. null 이면 아직 못 읽었다(또는 실패) — 그 행은 「확인 중」으로 두고
+  // 발주서 등록·계산서 요청·PDF 링크를 **보이지 않게** 한다(lib/quoteApprovalDocs.ts 의 gateFor).
+  const [gates, setGates] = useState<Map<number, QuoteGate> | null>(null)
+  // 결재 올리기 — 결재선을 받을 대상 견적. null 이면 모달이 닫혀 있다.
+  const [approvalQuote, setApprovalQuote] = useState<Quote | null>(null)
+  const [approvalChecking, setApprovalChecking] = useState(false)
+  const [approvalError, setApprovalError] = useState<string | null>(null)
   const [targetsByYear, setTargetsByYear] = useState<Record<number, { target: number; orderTarget: number }>>({})
   const [loading, setLoading] = useState(true)
   // 조회가 실패했는지. 빈 목록과 구분해서 알려주기 위한 것이다.
@@ -189,7 +206,8 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const loadData = async () => {
     const { data: qs, error } = await supabase
       .from('quotes')
-      .select('quote_id, quote_number, quote_date, total_supply, total_profit, profit_rate, status, quote_type, customer_id, dealer_id, pdf_url, shipping_date, order_memo, order_request_memo, order_completed_by, tax_completed_by, tax_invoice_date, fail_reason, purchase_order_at, tax_invoice_completed_at, engineer_id, created_by, quote_items(product_name, row_kind, price_list(model_jp))')
+      // created_at — 결재 도입 경계를 가르는 값이다(견적일이 아니다. lib/quoteStatus.ts 설명).
+      .select('quote_id, quote_number, quote_date, created_at, total_supply, total_profit, profit_rate, status, quote_type, customer_id, dealer_id, pdf_url, shipping_date, order_memo, order_request_memo, order_completed_by, tax_completed_by, tax_invoice_date, fail_reason, purchase_order_at, tax_invoice_completed_at, engineer_id, created_by, quote_items(product_name, row_kind, price_list(model_jp))')
       // 내 실적으로 잡히는 견적(engineer_id) + 내가 남 대신 쓴 견적(created_by).
       // 목록에는 둘 다 실리지만, 아래 실적 요약은 engineer_id 가 나인 것만 센다.
       .or(`engineer_id.eq.${engineerId},created_by.eq.${engineerId}`)
@@ -215,6 +233,15 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
       dealer_name: (q.dealer_id != null && custMap[q.dealer_id]) || null,
     })) as Quote[])
     setTargetsByYear(tmap)
+
+    // 「결재 올리기」 판정용 — 내가 쓴 견적만 물어본다(남의 견적에는 버튼이 나오지 않는다).
+    // 결재 문서 조회는 RLS 가 「상신자 본인」을 열어 주므로 이 범위에서 전부 읽힌다.
+    const mine = list.filter(q => q.created_by === engineerId).map(q => q.quote_id as number)
+    setApprovalDocIds(await loadQuoteApprovalDocIds(mine))
+
+    // 승인 게이트는 **목록 전체**를 물어본다 — 내 실적에 잡힌 남의 대필 견적도 발주서 등록·PDF 가
+    // 나오는 행이라 게이트가 필요하다. 브라우저는 못 세므로 서버에 묻는다(fetchQuoteGates).
+    setGates(await fetchQuoteGates(list.map(q => q.quote_id as number)))
   }
 
   useEffect(() => {
@@ -340,6 +367,46 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   // — 실적을 받은 쪽은 견적서를 만들지 않았으므로 지워도 되는 건인지 판단할 수 없다.
   // (대필이 아니면 두 값이 같아 종전과 똑같이 동작한다. created_by 가 빈 옛 데이터는 engineer_id 로 본다.)
   const canRequestDelete = (q: Quote) => (q.created_by ?? q.engineer_id) === engineerId
+
+  // ── 결재 올리기(나중 상신) ──
+  // 확정 때 상신이 실패한 건을 구제하는 길이다. 판정은 lib/quoteApprovalDocs.ts 하나에 있다
+  // (실적 현황 목록도 같은 함수를 쓴다 — 두 곳에 짜면 버튼이 어긋난다).
+  const canSubmitFor = (q: Quote) => canSubmitApproval(q, engineerId, approvalDocIds)
+
+  // ── 승인 게이트 (전자결재 6단계 B) ──
+  // allows=false 면 발주서 등록·계산서 요청·PDF 열기를 내지 않는다. 게이트를 못 읽었으면(null)
+  // 「확인 중」이라 역시 내지 않는다 — 승인되지 않은 견적이 빠져나가는 쪽이 더 나쁘다.
+  const gateOfRow = (q: Quote) => gateFor(q.quote_id, gates)
+  const allowsFor = (q: Quote) => gateAllows(gateOfRow(q))
+  /** 버튼을 숨긴 이유. 「확인 중」도 알려 준다 — 버튼이 왜 없는지 모르면 새로고침만 반복한다. */
+  const gateTitleFor = (q: Quote) =>
+    gates == null ? '결재 상태를 확인하는 중입니다' : (gateNotice(gateOfRow(q)) ?? undefined)
+  /** 결재가 도는 중인 행 — 상태 변경·삭제 요청을 아예 내지 않는다. */
+  const isPendingRow = (q: Quote) => q.status === SUBMITTED_STATUS
+
+  /** 결재선 모달의 [확인] — 'check' 로 먼저 걸러 내고, 통과하면 상신한다. */
+  const submitApproval = async (lines: LineInput[]) => {
+    const target = approvalQuote
+    if (!target || approvalChecking) return
+    setApprovalChecking(true)
+    const chk = await checkQuoteApprovalLines(lines)
+    if (!chk.ok) {
+      setApprovalChecking(false)
+      setApprovalError(chk.error ?? '결재선을 쓸 수 없습니다')
+      return
+    }
+    const res = await submitQuoteApproval(target.quote_id, lines)
+    setApprovalChecking(false)
+    if (!res.ok) {
+      // 서버가 상태를 되돌렸다. 모달을 닫지 않고 사유를 보여 준다.
+      setApprovalError(res.error ?? '결재 상신에 실패했습니다')
+      return
+    }
+    setApprovalQuote(null)
+    setApprovalError(null)
+    toast.success(`${target.quote_number} 결재를 올렸습니다`)
+    await loadData()
+  }
 
   // ── mutation 핸들러 (공용 함수 사용 + toast + refetch) ──
   // 삭제는 사유가 있어야 한다 — 본인 삭제든 결재든 왜 지웠는지가 남아야 한다.
@@ -604,22 +671,31 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                       <input type="checkbox" checked={quoteSel.isSelected(q.quote_id)} onChange={() => quoteSel.toggle(q.quote_id)} style={{ cursor: 'pointer' }} />
                     </td>
                     <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                      {/* 견적번호 + 그 아래 날짜 */}
-                      <span onClick={() => openPdf(q)} title={pdfBusyId === q.quote_id ? '여는 중…' : undefined}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 700, color: BLUE, cursor: q.pdf_url && pdfBusyId === null ? 'pointer' : 'default', opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
-                        {/* 대필 건 표시. 쓴 사람과 실적 담당자가 다른 견적에만 붙는다. */}
-                        {isOnBehalf(q) && (
-                          <span title="대필 견적" style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: BLUE, verticalAlign: 'middle' }} />
-                        )}
-                        {q.quote_number}
-                        {q.pdf_url && (
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-label="PDF">
-                            <title>PDF 열기</title>
-                            <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
-                            <path d="M14 3v6h6" />
-                          </svg>
-                        )}
-                      </span>
+                      {/* 견적번호 + 그 아래 날짜.
+                          PDF 는 승인 게이트가 허용할 때만 열린다(전자결재 6단계 B) — 막힌 행은
+                          아이콘·클릭을 모두 거두고 이유를 title 로 알린다(서버도 409 로 막는다). */}
+                      {(() => {
+                        const pdfOpen = !!q.pdf_url && allowsFor(q)
+                        return (
+                          <span
+                            onClick={() => { if (pdfOpen) openPdf(q) }}
+                            title={pdfBusyId === q.quote_id ? '여는 중…' : (q.pdf_url && !pdfOpen ? gateTitleFor(q) : undefined)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 700, color: pdfOpen ? BLUE : TEXT, cursor: pdfOpen && pdfBusyId === null ? 'pointer' : 'default', opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
+                            {/* 대필 건 표시. 쓴 사람과 실적 담당자가 다른 견적에만 붙는다. */}
+                            {isOnBehalf(q) && (
+                              <span title="대필 견적" style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: BLUE, verticalAlign: 'middle' }} />
+                            )}
+                            {q.quote_number}
+                            {pdfOpen && (
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-label="PDF">
+                                <title>PDF 열기</title>
+                                <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                                <path d="M14 3v6h6" />
+                              </svg>
+                            )}
+                          </span>
+                        )
+                      })()}
                       <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>{q.quote_date}</div>
                     </td>
                     <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', maxWidth: 150, textAlign: 'center' }}>
@@ -697,17 +773,36 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                     <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'right' }}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
                         {/* 국내수리(repair_domestic)는 발주 없이 수리중→세금계산서 요청으로 바로 간다 → 발주서 등록 숨김 */}
-                        {q.status === '견적중' && q.quote_type !== 'repair_domestic' && (
+                        {/* 결재 올리기 — 확정 때 상신이 실패한 건을 다시 올린다.
+                            결재 도입 전 견적과 이미 결재 문서가 있는 견적에는 나오지 않는다. */}
+                        {canSubmitFor(q) && (
+                          <button onClick={() => { setApprovalError(null); setApprovalQuote(q) }}
+                            title="결재선을 지정해 이 견적을 결재로 올립니다"
+                            style={{ padding: '3px 7px', background: '#eff6ff', border: '1px solid #c7d7f8', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#0369a1' }}>
+                            결재 올리기
+                          </button>
+                        )}
+                        {/* 수주 전환·계산서 요청은 승인 게이트가 허용할 때만 낸다(서버도 409 로 막는다).
+                            '주문완료' 에서 넘어가는 계산서 요청은 이미 수주된 건이라 게이트가 허용이다
+                            — 발주 이후 상태는 라우트가 막지 않으므로 화면도 같은 기준으로 둔다. */}
+                        {q.status === '견적중' && q.quote_type !== 'repair_domestic' && allowsFor(q) && (
                           <button onClick={() => { setPoQuote(q); setPoFile(null); setPoMemo('') }}
                             style={{ padding: '3px 7px', background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#7c3aed' }}>
                             발주서 등록
                           </button>
                         )}
-                        {(q.status === '주문완료' || (q.quote_type === 'repair_domestic' && q.status === '수리중')) && (
+                        {(q.status === '주문완료' || (q.quote_type === 'repair_domestic' && q.status === '수리중' && allowsFor(q))) && (
                           <button onClick={() => { setTaxQuote(q); setTaxDate(q.tax_invoice_date || '') }}
                             style={{ padding: '3px 7px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#b45309' }}>
                             계산서 요청
                           </button>
+                        )}
+                        {/* 왜 버튼이 없는지 — 결재 중·미승인·확인 중을 짧게 알린다. */}
+                        {(q.status === '견적중' || q.status === SUBMITTED_STATUS
+                          || (q.quote_type === 'repair_domestic' && q.status === '수리중')) && !allowsFor(q) && (
+                          <span title={gateTitleFor(q)} style={{ fontSize: 10, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap' }}>
+                            {gates == null ? '확인 중' : q.status === SUBMITTED_STATUS ? '결재 중' : '결재 전'}
+                          </span>
                         )}
                         <div ref={menuQuoteId === q.quote_id ? menuAnchorRef : null} style={{ display: 'flex' }}>
                           <button
@@ -732,10 +827,20 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                               title={canRequestDelete(q) ? '같은 내용으로 새 견적을 씁니다(원본은 그대로)' : '본인이 작성한 견적만 다시 쓸 수 있습니다'}
                               style={{ width: '100%', textAlign: 'left', padding: '8px 10px', background: 'none', border: 'none', borderRadius: 6, cursor: canRequestDelete(q) ? 'pointer' : 'not-allowed', fontSize: 12, fontWeight: 700, color: canRequestDelete(q) ? TEXT : MUTED, fontFamily: 'inherit' }}
                             >다시쓰기</button>
-                            <button
-                              onClick={() => { setMenuQuoteId(null); setEditQuote(q); setEditStatus(canRequestDelete(q) ? '취소요청' : FAIL_STATUS); setEditFailReason(q.fail_reason || '') }}
-                              style={{ width: '100%', textAlign: 'left', padding: '8px 10px', background: 'none', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: TEXT, fontFamily: 'inherit' }}
-                            >상태 변경·삭제 요청</button>
+                            {/* 결재가 도는 중이면 상태 변경·삭제 요청·본인 삭제를 아예 내지 않는다
+                                — 그 창의 모든 동작이 updateQuoteStatus 를 지나고, 그 함수는
+                                '결재중' 에서 0행이 된다(lib/quoteMutations.ts). 눌러서 실패하게
+                                두는 대신 「다시쓰기」만 남기고 안내를 띄운다. */}
+                            {isPendingRow(q) ? (
+                              <div style={{ padding: '8px 10px', fontSize: 11, color: MUTED, lineHeight: 1.6 }}>
+                                {gateNotice('pending')}
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { setMenuQuoteId(null); setEditQuote(q); setEditStatus(canRequestDelete(q) ? '취소요청' : FAIL_STATUS); setEditFailReason(q.fail_reason || '') }}
+                                style={{ width: '100%', textAlign: 'left', padding: '8px 10px', background: 'none', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: TEXT, fontFamily: 'inherit' }}
+                              >상태 변경·삭제 요청</button>
+                            )}
                           </Popover>
                         </div>
                       </div>
@@ -973,6 +1078,17 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
         onConfirm={submitDelete}
         myId={engineerId}
         docType="quote_delete"
+      />
+
+      {/* 견적서 결재 올리기 — 삭제 요청과 다른 유형이라 모달을 따로 둔다(결재선 규칙·개인 결재선이 갈린다). */}
+      <LinePickerModal
+        open={approvalQuote !== null}
+        onClose={() => { setApprovalQuote(null); setApprovalError(null) }}
+        onConfirm={submitApproval}
+        myId={engineerId}
+        docType={QUOTE_TYPE}
+        serverError={approvalError}
+        busy={approvalChecking}
       />
     </div>
   )

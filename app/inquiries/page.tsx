@@ -482,6 +482,24 @@ function RegisterModal({
  * 두 단계다. 발급 전에는 입력, 발급 뒤에는 번호와 복사 버튼만 남긴다 —
  * 같은 창에서 계속 누를 수 있게 두면 번호를 연달아 소진한다.
  */
+/**
+ * 번호를 발급할 수 있는가 — **두 가지가 있어야 한다.**
+ *   · 장비 계열 — 80 의뢰서만(번호에 들어가는 값이라 고르지 않으면 번호를 만들 수 없다)
+ *   · 업체명    — 번호를 점유하는 그 순간이 업체를 아는 유일한 시점이다
+ *
+ * **내용은 받지 않는다.** 번호 발급은 번호만 내주고, 무엇을 보냈는지는 「작성 완료」 때
+ * 파일과 함께 발신 내용 기록 한 건으로 남는다(components/inquiry/CompleteModal.tsx).
+ *
+ * 공백만 적은 것은 비어 있는 것으로 본다 — 서버가 trim 해서 저장하므로 같은 기준이다
+ * (app/api/inquiry/route.ts 의 create — title.trim().slice(0, TITLE_MAX)).
+ *
+ * 순수 함수다 — 버튼의 disabled 와 submit 맨 앞 방어가 같은 함수를 보고, 스크립트로 돌려 볼 수 있다.
+ */
+export function canIssue(v: { type: InquiryType; series: string; title: string }): boolean {
+  const seriesOk = v.type !== 'req80' || REQ80_SERIES.includes(v.series)
+  return seriesOk && v.title.trim().length > 0
+}
+
 function CreateModal({
   type, onClose, onCreated,
 }: {
@@ -501,17 +519,7 @@ function CreateModal({
   // 장비 계열은 80 의뢰서에서만 고른다. 20 의뢰서는 '20' 하나뿐이라 서버가 강제하고,
   // 나머지 종류는 번호에 쓰이지 않아 서버가 null 로 지운다.
   const needsSeries = type === 'req80'
-  /**
-   * 발급 조건 — 계열(80 의뢰서만)과 **업체명**.
-   *
-   * 업체명을 필수로 둔다. 번호는 한 번 나가면 되돌리기가 번거롭고(마지막 번호일 때만 반환된다),
-   * 업체명 없는 번호가 목록에 쌓이면 어느 건인지 아무도 알아보지 못한다 — 번호를 점유하는
-   * 그 순간이 업체를 아는 유일한 시점이다.
-   *
-   * 공백만 적은 것은 비어 있는 것으로 본다 — 서버가 trim 해서 저장하므로 같은 기준이다
-   * (app/api/inquiry/route.ts 의 create — title.trim().slice(0, TITLE_MAX)).
-   */
-  const ready = (!needsSeries || REQ80_SERIES.includes(series)) && title.trim().length > 0
+  const ready = canIssue({ type, series, title })
 
   const submit = async () => {
     // busy 를 먼저 본다 — 한 번 누를 때 번호가 정확히 한 번만 나가야 한다.
@@ -611,6 +619,7 @@ function CreateModal({
                 onChange={e => setTitle(e.target.value)} style={field}
               />
             </div>
+
 
             {error && (
               <div style={{

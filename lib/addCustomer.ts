@@ -15,7 +15,7 @@ export const addCustomer = async ({
 
   // 사용자 검증은 호출 컴포넌트(AddCustomerModal)에서 인라인으로 처리한다.
   // 여기서는 방어용 최소 가드만 둔다 (throw → 호출부 catch 에서 toast.error 로 표면화).
-  if (!customerForm.company_name?.trim()) throw new Error('업체명을 입력해주세요')
+  if (!customerForm.company_name?.trim()) throw new Error('사업장명을 입력해주세요')
 
   setIsSavingCustomer(true)
 

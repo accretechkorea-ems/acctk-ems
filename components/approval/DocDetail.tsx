@@ -21,7 +21,7 @@ import ApprovalTable, { type ProgressPerson } from './ApprovalTable'
 import DocInfo from './DocInfo'
 import { summaryRows } from './summary'
 import { nextPendingLine } from '@/lib/approval/engine'
-import { canRejectDocument, DOC_TYPES } from '@/lib/approval/docTypes'
+import { canRejectDocument, canResubmitDocument, DOC_TYPES } from '@/lib/approval/docTypes'
 import { DISCARDABLE_STATUSES, type ApprovalLine, type ApprovalDocument } from '@/lib/approval/types'
 
 export type ApprovalDoc = ApprovalDocument & {
@@ -163,6 +163,9 @@ export default function DocDetail({
   const untouched = doc.approval_lines.filter(l => l.kind !== 'cc').every(l => l.state === '대기')
   // 반려·회수된 내 문서만 치울 수 있다(라우트와 같은 판정). 폐기한 문서는 여기서 빠진다.
   const discardable = (DISCARDABLE_STATUSES as string[]).includes(doc.status)
+  // 같은 문서로 다시 올릴 수 있는 유형인가(라우트와 같은 판정). 견적서는 내용을 고쳐야 하므로 false 다
+  // — 버튼을 그려 두면 눌러서 400 을 받는다. 폐기는 그대로 둔다(치우는 길은 막지 않는다).
+  const resubmittable = def ? canResubmitDocument(def) : true
   const rejectedLine = doc.approval_lines.find(l => l.state === '반려')
 
   return (
@@ -280,9 +283,11 @@ export default function DocDetail({
               폐기한 문서에는 둘 다 나오지 않는다(되살리려면 새로 상신한다). */}
           {discardable && (
             <>
-              <button type="button" onClick={resubmit} disabled={busy} style={btnPrimary(busy)}>
-                {busy ? '처리 중...' : '재작성'}
-              </button>
+              {resubmittable && (
+                <button type="button" onClick={resubmit} disabled={busy} style={btnPrimary(busy)}>
+                  {busy ? '처리 중...' : '재작성'}
+                </button>
+              )}
               <button type="button" onClick={discard} disabled={busy}
                 style={confirmDiscard ? btnDanger(busy) : btnGhost(busy)}>
                 {confirmDiscard ? '한 번 더 누르면 폐기' : '폐기'}

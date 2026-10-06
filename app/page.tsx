@@ -589,7 +589,7 @@ onAddClick={() => setIsAddCustomerModalOpen(true)}
       setIsAddCustomerModalOpen,
       setQuery,
     })
-    if (ok) toast.success('업체가 추가되었습니다')
+    if (ok) toast.success('사업장이 추가되었습니다')
   } catch (e: any) {
     toast.error(e?.message || '에러 발생')
   }

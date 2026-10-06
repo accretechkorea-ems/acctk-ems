@@ -34,7 +34,15 @@ const FIELDS: Record<string, { key: string; label: string; money?: boolean }[]> 
  * (견적 삭제의 restoreFailReason — '실패' 로 돌아갈 때만 살릴 미수주 사유).
  * 이런 칸은 「모르는 칸은 그대로 보여 준다」 규칙에서 빼지 않으면 열쇠 이름이 날것으로 노출된다.
  */
-const HIDDEN = new Set(['restoreFailReason'])
+const HIDDEN = new Set([
+  // 견적 삭제 — '실패' 로 돌아갈 때만 살릴 미수주 사유.
+  'restoreFailReason',
+  // 견적서 — 후처리가 읽는 값이다(lib/approval/quoteApproval.ts).
+  //   restore_status 는 결재가 끝난 뒤 돌아갈 상태이고, 결재자가 판단할 재료가 아니다
+  //   (견적 삭제의 「반려 시 복원될 상태」와 달리 상신 전 상태로 되돌아가는 것이 전부다).
+  //   quote_type·quote_number 는 각각 국내수리 판정과 알림 문구용이고, 번호는 문서번호로 이미 보인다.
+  'restore_status', 'quote_type', 'quote_number',
+])
 
 /** 목록 한 줄에 넣을 칸 수 상한. 상세(summaryRows)는 등록된 칸을 모두 보여 준다. */
 const LINE_MAX = 3

@@ -8,6 +8,7 @@
 
 import { beforeCompleteShowroom, onCompleteShowroom, onRevertShowroom } from './showroomUsage'
 import { onCompleteQuoteDelete, onRevertQuoteDelete } from './quoteDelete'
+import { onCompleteQuote, onRevertQuote } from './quoteApproval'
 import type { OnCompleteContext } from './docTypes'
 
 export type DocTypeHandlers = {
@@ -32,8 +33,13 @@ export type DocTypeHandlers = {
 }
 
 const HANDLERS: Record<string, DocTypeHandlers> = {
-  // 견적서 — 4단계 범위 밖. 6단계에서 채운다.
-  quote: {},
+  // 견적서 — 어느 쪽으로 끝나든 견적을 '결재중' 에서 풀어 상신 직전 상태로 되돌린다.
+  // beforeComplete 는 두지 않는다 — 쇼룸의 사용 시간 겹침처럼 결재가 도는 동안 바깥 사정이
+  // 바뀌어 완료를 막아야 하는 조건이 견적에는 없다(상태는 '결재중' 에 잠겨 있다).
+  quote: {
+    onComplete: onCompleteQuote,
+    onRevert: onRevertQuote,
+  },
   // 쇼룸 사용 신청 — 사전이면 완료 시 사용 기록 생성, 두 경우 모두 승인서에 도장.
   // 회수·폐기로 끝나면 사후 신청이 상신 때 만들어 둔 사용 기록과 승인서 PDF 를 치운다.
   showroom_usage: {

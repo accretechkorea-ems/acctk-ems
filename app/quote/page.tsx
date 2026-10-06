@@ -81,7 +81,13 @@ function isNameTakenError(err: unknown): boolean {
 }
 import { parentCompanyName } from '@/components/customer/ParentPicker'
 import { loadDraft, saveDraft, clearDraft, isDraftMeaningful, draftSavedLabel, type QuoteDraft } from '@/lib/quoteDraft'
-import { resolveOnBehalf, notifyOnBehalf, type OnBehalfAssignee } from '@/lib/quoteMutations'
+import {
+  resolveOnBehalf, notifyOnBehalf, checkQuoteApprovalLines, submitQuoteApproval,
+  type OnBehalfAssignee,
+} from '@/lib/quoteMutations'
+import LinePickerModal from '@/components/approval/LinePickerModal'
+import { QUOTE_TYPE } from '@/lib/approval/quoteApprovalKeys'
+import type { LineInput } from '@/lib/approval/types'
 import { todayKST } from '@/lib/date'
 import { nowKSTParts } from '@/lib/date'
 
@@ -113,6 +119,11 @@ function QuotePageInner() {
   const [isClient, setIsClient] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
+  // 결재선 지정 — 확인 모달 위에 겹쳐 열린다(Z.subModal). 취소하면 저장하지 않고 확정을 멈춘다.
+  const [lineOpen, setLineOpen] = useState(false)
+  // 'check' 가 돌아오기를 기다리는 중 / 서버가 돌려준 사유. 둘 다 결재선 모달 안에 쓴다.
+  const [lineChecking, setLineChecking] = useState(false)
+  const [lineError, setLineError] = useState<string | null>(null)
   // 확정 모달의 확인 버튼 중복 클릭 방지. 저장 → PDF 가 끝날 때까지 잠근다.
   const [isSubmitting, setIsSubmitting] = useState(false)
   // 임시저장 — 저장분이 있으면 이어쓸지 먼저 묻는다. 답하기 전에는 자동 저장을 시작하지 않는다
@@ -423,7 +434,17 @@ const handleDownloadPDF = async (
     overrideQuoteNo?: string,
     /** 확정 직후 저장된 견적 id. 업로드가 끝나면 이 행의 pdf_url 을 실제 이름으로 채운다. */
     quoteId?: number,
+    /**
+     * 만든 PDF 를 그 자리에서 내려받을지. 기본은 받는다.
+     *
+     * 확정 흐름은 false 로 부른다 — 모든 견적이 결재를 거치므로(6단계) 결재가 끝나기 전에
+     * 고객에게 나갈 파일을 손에 들고 있어서는 안 된다. 파일 자체는 지금처럼 만들어
+     * 스토리지에 올리고 pdf_url 을 채운다(정본은 확정 시점의 내용이어야 한다).
+     * 내려받기는 결재 완료 뒤에 열린다(D단계). 열람 기록('view')은 그때 남는다.
+     */
+    opts?: { download?: boolean },
   ) => {
+    const download = opts?.download !== false
     const finalCompany = overrideCompany ?? company
     const finalReceiver = overrideReceiver ?? receiver
     const finalRows = overrideRows ?? rows
@@ -490,6 +511,9 @@ const handleDownloadPDF = async (
       // pdf_url 은 비워 둔 채로 남는다 — 없는 파일을 가리키지 않게 하는 것이 중요하다.
       toast.error('견적은 저장되었으나 PDF 생성에 실패했습니다. 관리자에게 알려주세요.')
     }
+
+    // 내려받기와 그 기록은 한 덩어리다 — 받지 않았으면 받은 것으로 남겨서는 안 된다.
+    if (!download) return
 
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -710,6 +734,87 @@ const handleDownloadPDF = async (
     }
     setIsSaving(false)
     return { ok: true, linked: linkedRepair, quoteId: savedQuoteId, quoteNo: issuedNo, seq: issuedSeq }
+  }
+
+  /**
+   * 결재선이 정해진 뒤의 확정 — 저장 → 결재 상신 → PDF 저장.
+   *
+   * 순서를 바꿀 수 없다.
+   *   · 결재선 검사('check')는 **이 함수에 들어오기 전에** 끝낸다 — 번호를 발급한 뒤에 결재선이
+   *     막히면 그 번호는 되돌릴 수 없다(create_quote 의 채번은 롤백되지 않는다).
+   *   · 상신은 저장 뒤다 — 결재 문서는 target_id 로 견적 행을 가리키므로 행이 먼저 있어야 한다.
+   *   · 상신이 실패해도 견적은 지우지 않는다(번호가 이미 나갔다). 원래 상태 그대로 두고
+   *     목록의 「결재 올리기」로 다시 올리게 안내한다 — 서버도 실패 시 상태를 되돌린다.
+   *   · PDF 는 지금처럼 만들어 스토리지에 올리지만 **내려받지 않는다**(download: false).
+   *     결재가 끝나기 전에 고객에게 나갈 파일을 손에 들고 있어서는 안 된다.
+   */
+  const runConfirm = async (lines: LineInput[]) => {
+    if (isSubmitting) return
+    setIsSubmitting(true)
+    // 저장이 끝난 뒤의 실패(PDF 생성 등)를 저장 실패와 가르는 근거. 저장 성공 시에만 채워진다.
+    let saved: Extract<SaveResult, { ok: true }> | null = null
+    try {
+      const snapshotCompany = company
+      const snapshotReceiver = receiver
+      const snapshotRows = [...rows]
+      const snapshotRemarks = finalRemarksForPDF
+      const result = await handleSaveQuote()
+      // 저장이 막히면 여기서 끝낸다 — PDF 도 만들지 않고 미리보기 번호도 그대로 둔다.
+      if (!result.ok) return
+      saved = result
+
+      // 결재 상신. 실패해도 견적은 저장된 채로 둔다(아래 안내가 다시 올리는 길을 알려 준다).
+      const sub = await submitQuoteApproval(result.quoteId, lines)
+      if (sub.ok) {
+        toast.success('결재를 올렸습니다. 결재가 완료되면 견적서를 내려받을 수 있습니다')
+      } else {
+        toast.error(`견적은 저장되었습니다. 결재 상신에 실패했습니다(${sub.error ?? '사유 없음'}). 내 견적 목록에서 「결재 올리기」를 눌러 주세요`)
+      }
+
+      // PDF 는 실제로 발급·저장된 번호로 만든다(화면에 보이던 미리보기 번호가 아니다).
+      await handleDownloadPDF(
+        snapshotCompany, snapshotReceiver, snapshotRows, snapshotRemarks,
+        result.quoteNo, result.quoteId, { download: false },
+      )
+      // 다음 미리보기는 방금 발급된 순번의 다음이다.
+      setPreviewSeq(result.seq + 1)
+      setShowConfirmModal(false)
+      // 수리 건 연결이 됐으면 PDF 생성 후 수리 목록으로 이동
+      if (result.linked) { router.push('/repair'); return }
+      // 이어서 다음 견적을 쓸 수 있게 화면을 비운다(번호는 위에서 이미 다음 것으로 올렸다).
+      resetForm()
+    } catch (e) {
+      console.error('[quote] 확정 처리 실패', { saved, error: e })
+      if (!saved) {
+        // 저장 전에 난 예외 — 아무것도 저장되지 않았다. 모달을 열어 둔 채 다시 시도할 수 있게 한다.
+        toast.error('저장 중 오류가 발생했습니다')
+        return
+      }
+      // 견적은 이미 저장됐다. 모달을 그대로 두면 사용자가 다시 눌러 같은 내용이 새 번호로 또 저장되므로,
+      // 성공했을 때와 똑같이 번호를 올리고 모달을 닫고 화면을 비운다(PDF 만 없는 상태로 남는다).
+      toast.error(`견적 ${saved.quoteNo} 은 저장되었습니다. PDF 생성에 실패했습니다 — 다시 확정하지 마시고 관리자에게 알려주세요.`)
+      setPreviewSeq(saved.seq + 1)
+      setShowConfirmModal(false)
+      if (saved.linked) { router.push('/repair'); return }
+      resetForm()
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  /**
+   * 결재선 모달의 [확인] — 서버에 결재선만 먼저 물어본다(부작용 없음).
+   * 막히면 모달을 닫지 않고 그 자리에 사유를 보여 준다. **번호는 발급되지 않는다.**
+   */
+  const confirmLines = async (lines: LineInput[]) => {
+    if (lineChecking || isSubmitting) return
+    setLineChecking(true)
+    const chk = await checkQuoteApprovalLines(lines)
+    setLineChecking(false)
+    if (!chk.ok) { setLineError(chk.error ?? '결재선을 쓸 수 없습니다'); return }
+    setLineError(null)
+    setLineOpen(false)
+    await runConfirm(lines)
   }
 
   useEffect(() => { setIsClient(true) }, [])
@@ -1641,6 +1746,7 @@ const handleDownloadPDF = async (
             <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: '12px 14px', marginBottom: 20 }}>
               <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.8 }}>
                 견적 확정 시 실적으로 기록되며, <b>관리자의 승인 없이는 삭제가 불가능합니다.</b>
+                <br />확정하면 결재선을 지정해 결재를 상신합니다.
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 24 }}>
@@ -1678,47 +1784,13 @@ const handleDownloadPDF = async (
                 style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: isSubmitting ? 'not-allowed' : 'pointer', color: '#111827', opacity: isSubmitting ? 0.6 : 1 }}>
                 취소
               </button>
-              <button onClick={async () => {
+              {/* 여기서 바로 저장하지 않는다 — 결재선을 먼저 받는다. 결재선이 서버 검사를 통과한
+                  뒤에야 번호가 발급된다(runConfirm · confirmLines 설명). */}
+              <button onClick={() => {
                 if (isSubmitting) return
-                setIsSubmitting(true)
-                // 저장이 끝난 뒤의 실패(PDF 생성 등)를 저장 실패와 가르는 근거. 저장 성공 시에만 채워진다.
-                let saved: Extract<SaveResult, { ok: true }> | null = null
-                try {
-                  const snapshotCompany = company
-                  const snapshotReceiver = receiver
-                  const snapshotRows = [...rows]
-                  const snapshotRemarks = finalRemarksForPDF
-                  const result = await handleSaveQuote()
-                  // 저장이 막히면 여기서 끝낸다 — PDF 도 만들지 않고 미리보기 번호도 그대로 둔다.
-                  if (!result.ok) return
-                  saved = result
-
-                  // PDF 는 실제로 발급·저장된 번호로 만든다(화면에 보이던 미리보기 번호가 아니다).
-                  await handleDownloadPDF(snapshotCompany, snapshotReceiver, snapshotRows, snapshotRemarks, result.quoteNo, result.quoteId)
-                  // 다음 미리보기는 방금 발급된 순번의 다음이다.
-                  setPreviewSeq(result.seq + 1)
-                  setShowConfirmModal(false)
-                  // 수리 건 연결이 됐으면 PDF 생성 후 수리 목록으로 이동
-                  if (result.linked) { router.push('/repair'); return }
-                  // 이어서 다음 견적을 쓸 수 있게 화면을 비운다(번호는 위에서 이미 다음 것으로 올렸다).
-                  resetForm()
-                } catch (e) {
-                  console.error('[quote] 확정 처리 실패', { saved, error: e })
-                  if (!saved) {
-                    // 저장 전에 난 예외 — 아무것도 저장되지 않았다. 모달을 열어 둔 채 다시 시도할 수 있게 한다.
-                    toast.error('저장 중 오류가 발생했습니다')
-                    return
-                  }
-                  // 견적은 이미 저장됐다. 모달을 그대로 두면 사용자가 다시 눌러 같은 내용이 새 번호로 또 저장되므로,
-                  // 성공했을 때와 똑같이 번호를 올리고 모달을 닫고 화면을 비운다(PDF 만 없는 상태로 남는다).
-                  toast.error(`견적 ${saved.quoteNo} 은 저장되었습니다. PDF 생성에 실패했습니다 — 다시 확정하지 마시고 관리자에게 알려주세요.`)
-                  setPreviewSeq(saved.seq + 1)
-                  setShowConfirmModal(false)
-                  if (saved.linked) { router.push('/repair'); return }
-                  resetForm()
-                } finally {
-                  setIsSubmitting(false)
-                }
+                // 결재선은 상신자(본인)를 빼고 짜야 하므로 로그인 정보가 먼저 있어야 한다.
+                if (!engineer) { toast.error('엔지니어 정보를 불러오는 중입니다'); return }
+                setLineError(null); setLineOpen(true)
               }}
                 disabled={isSubmitting}
                 style={{ flex: 1, padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.6 : 1 }}>
@@ -1728,6 +1800,18 @@ const handleDownloadPDF = async (
           </div>
         </div>
       )}
+
+      {/* 결재선 지정 — 확인 모달 위에 겹쳐 열린다(Z.subModal). 취소하면 아무것도 저장되지 않고
+          확인 모달이 그대로 남는다(금액을 다시 보고 결재선을 고쳐 잡을 수 있다). */}
+      <LinePickerModal
+        open={lineOpen}
+        onClose={() => { setLineOpen(false); setLineError(null) }}
+        onConfirm={confirmLines}
+        myId={engineer?.engineer_id ?? null}
+        docType={QUOTE_TYPE}
+        serverError={lineError}
+        busy={lineChecking}
+      />
     </div>
   )
 }

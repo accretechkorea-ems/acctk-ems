@@ -11,9 +11,14 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { getViewScope, isFieldEngineerTeam, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerm, withTeamPerms } from '@/lib/teamPerms'
-import { updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, submitQuoteDelete, deleteQuoteSelf, PO_MEMO_MAX } from '@/lib/quoteMutations'
+import {
+  updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, submitQuoteDelete, deleteQuoteSelf,
+  checkQuoteApprovalLines, submitQuoteApproval, PO_MEMO_MAX,
+} from '@/lib/quoteMutations'
 import { isSelfDeletable } from '@/lib/quoteDeletePolicy'
 import LinePickerModal from '@/components/approval/LinePickerModal'
+import { canSubmitApproval, loadQuoteApprovalDocIds, fetchQuoteGates, gateFor } from '@/lib/quoteApprovalDocs'
+import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice, type QuoteGate } from '@/lib/approval/quoteApprovalKeys'
 import type { LineInput } from '@/lib/approval/types'
 import {
   isAutoFailed, isOrdered, REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE,
@@ -58,6 +63,10 @@ type Quote = {
   fail_reason: string | null
   recipient: string | null
   engineer_id: number
+  /** 실제로 쓴 사람. 대필이면 engineer_id 와 다르다(결재 상신은 이 사람만 한다). */
+  created_by?: number | null
+  /** 생성 시각. 결재 도입 경계를 가르는 값이다(견적일이 아니다 — lib/quoteStatus.ts 설명). */
+  created_at?: string | null
   customer_id: number | null
   dealer_id: number | null
   delivery_info: string | null
@@ -608,6 +617,47 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   const [hoveredMemoId, setHoveredMemoId] = useState<number | null>(null)
   // 표 상자가 overflow 로 잘라서 툴팁을 포털로 띄운다. 앵커는 지금 가리키고 있는 줄.
   const memoAnchorRef = useRef<HTMLDivElement>(null)
+
+  // ── 결재 올리기(나중 상신) ──
+  // 이 모달은 한 사람의 견적만 보여 주므로, 「내가 쓴 건」은 보통 내 모달에서만 나온다
+  // (남의 실적에 잡힌 내 대필 견적도 그 사람 모달에 나오므로 거기서도 올릴 수 있다).
+  const [approvalDocIds, setApprovalDocIds] = useState<Set<number> | null>(null)
+  const [approvalQuote, setApprovalQuote] = useState<Quote | null>(null)
+  const [approvalChecking, setApprovalChecking] = useState(false)
+  const [approvalError, setApprovalError] = useState<string | null>(null)
+
+  // 내가 쓴 견적에 결재 문서가 있는지 한 번 읽는다. 결재 문서 조회는 RLS 가 「상신자 본인」을
+  // 열어 주므로 이 범위에서 전부 읽힌다(lib/quoteApprovalDocs.ts 설명).
+  // 목록이 바뀔 때마다 다시 읽지 않으려고 id 목록을 문자열로 묶어 비교한다.
+  const myQuoteIds = quotes.filter(q => q.created_by === currentEngineerId).map(q => q.quote_id)
+  const myQuoteKey = myQuoteIds.join(',')
+  useEffect(() => {
+    let cancelled = false
+    const ids = myQuoteKey ? myQuoteKey.split(',').map(Number) : []
+    loadQuoteApprovalDocIds(ids).then(found => { if (!cancelled) setApprovalDocIds(found) })
+    return () => { cancelled = true }
+  }, [myQuoteKey])
+
+  // ── 승인 게이트 (전자결재 6단계 B) ──
+  // **이 목록은 남의 견적을 보여 준다.** approval_documents 의 읽기 정책이 「상신자·결재선
+  // 참여자·관리자」라 브라우저는 남의 결재 문서를 못 읽는다 — 그래서 서버에 묻는다.
+  // 모달에 뜬 견적 전부를 한 번에 물어보고(200개씩 끊어 보낸다) 행마다 꺼내 쓴다.
+  const [gates, setGates] = useState<Map<number, QuoteGate> | null>(null)
+  const allQuoteKey = quotes.map(q => q.quote_id).join(',')
+  useEffect(() => {
+    let cancelled = false
+    const ids = allQuoteKey ? allQuoteKey.split(',').map(Number) : []
+    fetchQuoteGates(ids).then(found => { if (!cancelled) setGates(found) })
+    return () => { cancelled = true }
+  }, [allQuoteKey])
+
+  const gateOfRow = (q: Quote) => gateFor(q.quote_id, gates)
+  const allowsFor = (q: Quote) => gateAllows(gateOfRow(q))
+  /** 버튼을 숨긴 이유. 「확인 중」도 알려 준다 — 왜 없는지 모르면 새로고침만 반복한다. */
+  const gateTitleFor = (q: Quote) =>
+    gates == null ? '결재 상태를 확인하는 중입니다' : (gateNotice(gateOfRow(q)) ?? undefined)
+  /** 결재가 도는 중인 행 — 상태 변경·삭제 요청을 아예 내지 않는다. */
+  const isPendingRow = (q: Quote) => q.status === SUBMITTED_STATUS
   const tc = getCategoryColor(TEAM_COLORS, engineer.teams)
   const achieveColor = achieveColorOf(engineer.achieve)
   const orderAchieveColor = achieveColorOf(engineer.orderAchieve)
@@ -639,6 +689,37 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
 
   // 다른 견적을 열거나 상태를 바꾸면 확인을 처음으로 되돌린다.
   useEffect(() => { setConfirmDelete(false) }, [editQuote, editStatus])
+
+  // 「결재 올리기」 표시 판정. 내 견적 목록과 **같은 함수**를 쓴다(lib/quoteApprovalDocs.ts).
+  const canSubmitFor = (q: Quote) => canSubmitApproval(
+    { quote_id: q.quote_id, created_at: q.created_at ?? null, status: q.status, created_by: q.created_by ?? null },
+    currentEngineerId, approvalDocIds,
+  )
+
+  /** 결재선 모달의 [확인] — 'check' 로 먼저 걸러 내고, 통과하면 상신한다. */
+  const submitApproval = async (lines: LineInput[]) => {
+    const target = approvalQuote
+    if (!target || approvalChecking) return
+    setApprovalChecking(true)
+    const chk = await checkQuoteApprovalLines(lines)
+    if (!chk.ok) {
+      setApprovalChecking(false)
+      setApprovalError(chk.error ?? '결재선을 쓸 수 없습니다')
+      return
+    }
+    const res = await submitQuoteApproval(target.quote_id, lines)
+    setApprovalChecking(false)
+    if (!res.ok) {
+      // 서버가 상태를 되돌렸다. 모달을 닫지 않고 사유를 보여 준다.
+      setApprovalError(res.error ?? '결재 상신에 실패했습니다')
+      return
+    }
+    setApprovalQuote(null)
+    setApprovalError(null)
+    toast.success(`${target.quote_number} 결재를 올렸습니다`)
+    // onDeleted 는 「목록을 다시 읽는다」는 뜻으로 쓴다(삭제 전용이 아니다 — 부모가 fetchAll 을 건다).
+    await onDeleted()
+  }
 
   /** 본인 삭제 — 결재를 거치지 않고 바로 지운다. 되돌릴 수 없다. */
   const runSelfDelete = async () => {
@@ -880,6 +961,8 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                             // state 는 다음 렌더에야 반영돼 같은 틱의 연타를 못 막는다 — 판정은 ref 로 한다.
                             if (pdfBusyRef.current) return
                             if (!q.pdf_url) return
+                            // 승인 게이트가 허용할 때만 연다(서버도 409 로 막는다 — 전자결재 6단계 B).
+                            if (!allowsFor(q)) return
                             if (q.pdf_url.includes('synology')) { window.open(q.pdf_url, '_blank'); return }
                             const path = q.pdf_url.startsWith('quote-pdfs/') ? q.pdf_url.replace('quote-pdfs/', '') : q.pdf_url.split('/quote-pdfs/')[1]
                             if (!path) return
@@ -897,10 +980,11 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                               setPdfBusyId(null)   // 실패해도 원래대로 돌아온다
                             }
                           }}
-                          title={pdfBusyId === q.quote_id ? '여는 중…' : undefined}
-                          style={{ cursor: q.pdf_url && pdfBusyId === null ? 'pointer' : 'default', opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
+                          title={pdfBusyId === q.quote_id ? '여는 중…' : (q.pdf_url && !allowsFor(q) ? gateTitleFor(q) : undefined)}
+                          style={{ cursor: q.pdf_url && allowsFor(q) && pdfBusyId === null ? 'pointer' : 'default', color: q.pdf_url && allowsFor(q) ? BLUE : TEXT, opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
                           {q.quote_number}
-                          {q.pdf_url && <span style={{ marginLeft: 4, fontSize: 9, color: MUTED }}>PDF</span>}
+                          {/* 결재가 끝나기 전에는 PDF 표시를 내지 않는다 — 열리지 않는 링크로 보이지 않게. */}
+                          {q.pdf_url && allowsFor(q) && <span style={{ marginLeft: 4, fontSize: 9, color: MUTED }}>PDF</span>}
                         </span>
                       </td>
                       <td style={{ padding: '8px 10px', color: MUTED, whiteSpace: 'nowrap', fontSize: 11, textAlign: 'center' }}>{q.quote_date}</td>
@@ -975,25 +1059,43 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                       </td>
                       <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'right' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-                          {/* 국내수리(repair_domestic)는 발주 없이 수리중→세금계산서 요청으로 바로 간다 → 발주서 등록 숨김 */}
-                          {q.status === '견적중' && q.quote_type !== 'repair_domestic' && (
+                          {/* 결재 올리기 — 확정 때 상신이 실패한 건을 다시 올린다.
+                              결재 도입 전 견적과 이미 결재 문서가 있는 견적에는 나오지 않는다. */}
+                          {canSubmitFor(q) && (
+                            <button onClick={() => { setApprovalError(null); setApprovalQuote(q) }}
+                              title="결재선을 지정해 이 견적을 결재로 올립니다"
+                              style={{ padding: '3px 7px', background: '#eff6ff', border: '1px solid #c7d7f8', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#0369a1' }}>
+                              결재 올리기
+                            </button>
+                          )}
+                          {/* 국내수리(repair_domestic)는 발주 없이 수리중→세금계산서 요청으로 바로 간다 → 발주서 등록 숨김.
+                              수주 전환·계산서 요청은 승인 게이트가 허용할 때만 낸다(서버도 409 로 막는다). */}
+                          {q.status === '견적중' && q.quote_type !== 'repair_domestic' && allowsFor(q) && (
                             <button onClick={() => { setPoQuote(q); setPoFile(null); setPoMemo('') }}
                               style={{ padding: '3px 7px', background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#7c3aed' }}>
                               발주서 등록
                             </button>
                           )}
-                          {(q.status === '주문완료' || (q.quote_type === 'repair_domestic' && q.status === '수리중')) && (
+                          {(q.status === '주문완료' || (q.quote_type === 'repair_domestic' && q.status === '수리중' && allowsFor(q))) && (
                             <button onClick={() => { setTaxQuote(q); setTaxDate(q.tax_invoice_date || '') }}
                               style={{ padding: '3px 7px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#b45309' }}>
                               계산서 요청
                             </button>
                           )}
-                          <button
-                            onClick={() => { setEditQuote(q); setEditStatus('취소요청'); setEditFailReason(q.fail_reason || '') }}
-                            style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 13, color: MUTED, lineHeight: 1, flexShrink: 0 }}
-                            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fef2f2'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#fecdd3'; (e.currentTarget as HTMLButtonElement).style.color = '#be123c' }}
-                            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.borderColor = BORDER; (e.currentTarget as HTMLButtonElement).style.color = MUTED }}
-                          >⋮</button>
+                          {/* 「⋮」 는 상태 변경·삭제 요청 창을 여는 유일한 입구다. 결재가 도는 중이면
+                              그 창의 모든 동작이 updateQuoteStatus 에서 0행이 되므로 버튼을 내지 않고
+                              이유만 적는다(lib/quoteMutations.ts · 전자결재 6단계 B). */}
+                          {isPendingRow(q) ? (
+                            <span title={gateNotice('pending') ?? undefined}
+                              style={{ fontSize: 10, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap' }}>결재 중</span>
+                          ) : (
+                            <button
+                              onClick={() => { setEditQuote(q); setEditStatus('취소요청'); setEditFailReason(q.fail_reason || '') }}
+                              style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 13, color: MUTED, lineHeight: 1, flexShrink: 0 }}
+                              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fef2f2'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#fecdd3'; (e.currentTarget as HTMLButtonElement).style.color = '#be123c' }}
+                              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.borderColor = BORDER; (e.currentTarget as HTMLButtonElement).style.color = MUTED }}
+                            >⋮</button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1232,6 +1334,17 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
           onConfirm={submitDelete}
           myId={currentEngineerId}
           docType="quote_delete"
+        />
+
+        {/* 견적서 결재 올리기 — 삭제 요청과 다른 유형이라 모달을 따로 둔다. */}
+        <LinePickerModal
+          open={approvalQuote !== null}
+          onClose={() => { setApprovalQuote(null); setApprovalError(null) }}
+          onConfirm={submitApproval}
+          myId={currentEngineerId}
+          docType={QUOTE_TYPE}
+          serverError={approvalError}
+          busy={approvalChecking}
         />
       </div>
     </div>

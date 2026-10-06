@@ -78,6 +78,7 @@ export const REPAIR_STATUS_COLORS = {
 export const SALES_STATUS_COLORS = {
   '견적중':          { text: '#b45309', bg: '#fffbeb' },
   '수리중':          { text: '#92400e', bg: '#fef3c7' },  // 국내수리 견적 전용. 견적중(밝은 amber)과 톤 구분되는 진한 amber.
+  '결재중':          { text: '#0369a1', bg: '#eff6ff' },  // 주문완료와 같은 토큰 — 새 색을 만들지 않는다(「처리를 기다리는 중」 뜻이 같다).
   '수주':            { text: '#2563eb', bg: '#eff6ff' },
   '발주(주문 대기)':  { text: '#7c3aed', bg: '#f5f3ff' },
   '주문완료':        { text: '#0369a1', bg: '#eff6ff' },

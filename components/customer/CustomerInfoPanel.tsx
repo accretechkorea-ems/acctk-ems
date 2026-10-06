@@ -36,8 +36,8 @@ export default function CustomerInfoPanel({ customer, onEdit }: Props) {
       {/* 수정 — 아이콘만. 라벨 없이도 뜻이 통하고 좁은 열에서 회사명 자리를 덜 뺏는다 */}
       <button
         onClick={onEdit}
-        title="업체 정보 수정"
-        aria-label="업체 정보 수정"
+        title="사업장 정보 수정"
+        aria-label="사업장 정보 수정"
         onMouseEnter={e => { e.currentTarget.style.borderColor = '#234ea2'; e.currentTarget.style.color = '#234ea2' }}
         onMouseLeave={e => { e.currentTarget.style.borderColor = '#ebebeb'; e.currentTarget.style.color = '#6b7280' }}
         style={{
@@ -57,7 +57,7 @@ export default function CustomerInfoPanel({ customer, onEdit }: Props) {
       {/* 회사명 + 상태 배지 — 좁은 열에서 수정 버튼과 겹치지 않도록 오른쪽을 비워둔다 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap', paddingRight: 34 }}>
         <h1 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#111827', lineHeight: 1.3, letterSpacing: '-0.3px', wordBreak: 'break-all' }}>
-          {customer?.company_name ?? '업체 정보 없음'}
+          {customer?.company_name ?? '사업장 정보 없음'}
         </h1>
         {customer?.status && (
           <span style={{

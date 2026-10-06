@@ -626,12 +626,12 @@ function AdminPageInner() {
   const handleParentRename = async () => {
     if (!parentEditing) return
     const name = parentEditing.name.trim()
-    if (!name) { toast.error('소속회사명을 입력해주세요'); return }
+    if (!name) { toast.error('회사명을 입력해주세요'); return }
     setParentBusy(parentEditing.id)
     const r = await callParentRoute('rename', parentEditing.id, name)
     setParentBusy(null)
     if (!r.ok) { toast.error(r.error); return }
-    toast.success('소속회사명을 수정했습니다')
+    toast.success('회사명을 수정했습니다')
     setParentEditing(null)
     // 이름이 바뀌면 ParentPicker 의 캐시도 옛 이름을 들고 있다.
     invalidateParents()
@@ -641,7 +641,7 @@ function AdminPageInner() {
   const handleParentDelete = async (row: ParentRow) => {
     // 화면에서 이미 0곳인 것만 버튼이 열리지만, 최종 판정은 라우트가 다시 센다.
     const ok = await confirmDialog({
-      title: '소속회사 삭제',
+      title: '회사 삭제',
       message: `'${row.company_name}'${josa(row.company_name, '을')} 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`,
       confirmText: '삭제', variant: 'danger',
     })
@@ -650,7 +650,7 @@ function AdminPageInner() {
     const r = await callParentRoute('delete', row.customer_id)
     setParentBusy(null)
     if (!r.ok) { toast.error(r.error); fetchParents(); return }
-    toast.success(`${row.company_name} 소속회사를 삭제했습니다`)
+    toast.success(`${row.company_name} 회사를 삭제했습니다`)
     invalidateParents()
     fetchParents()
   }
@@ -1136,8 +1136,8 @@ function AdminPageInner() {
 
           <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>🏬</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>소속회사 관리</div>
-            <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>여러 업체를 묶는 회사 단위를 관리합니다. 이름을 고치거나, 사업장이 없는 회사를 정리합니다.</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>회사 관리</div>
+            <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>여러 사업장을 묶는 회사를 관리합니다. 이름을 고치거나, 사업장이 없는 회사를 정리합니다.</div>
             {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
             <div style={{ flex: 1 }} />
             <button
@@ -1810,14 +1810,14 @@ function AdminPageInner() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 720, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🏬 소속회사 관리</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🏬 회사 관리</div>
               <button onClick={() => { setShowParentModal(false); setParentEditing(null) }}
                 style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
             </div>
 
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
               <input value={parentSearch} onChange={e => setParentSearch(e.target.value)}
-                placeholder="소속회사명 검색" style={{ ...inp, width: 220 }} />
+                placeholder="회사명 검색" style={{ ...inp, width: 220 }} />
               <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
                 <input type="checkbox" checked={parentOnlyEmpty} onChange={e => setParentOnlyEmpty(e.target.checked)}
                   style={{ width: 14, height: 14, cursor: 'pointer', accentColor: BLUE }} />
@@ -1832,12 +1832,12 @@ function AdminPageInner() {
               {parentLoading ? (
                 <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>불러오는 중...</div>
               ) : visibleParents.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>소속회사가 없습니다</div>
+                <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>회사가 없습니다</div>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead style={{ position: 'sticky', top: 0, background: CARD_BG, zIndex: Z.thead }}>
                     <tr style={{ borderBottom: `2px solid ${BORDER}` }}>
-                      {['소속회사', '사업장', '등록일', '관리'].map(h => (
+                      {['회사명', '사업장', '등록일', '관리'].map(h => (
                         <th key={h} style={{ padding: '9px 12px', textAlign: 'left', color: GRAY, fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -1910,7 +1910,7 @@ function AdminPageInner() {
               )}
             </div>
             <div style={{ fontSize: 11, color: GRAY, marginTop: 10, lineHeight: 1.6 }}>
-              사업장이 연결된 회사는 삭제할 수 없습니다. 사업장 쪽에서 소속회사를 해제한 뒤 지워주세요.
+              사업장이 연결된 회사는 삭제할 수 없습니다. 사업장 쪽에서 회사를 해제한 뒤 지워주세요.
             </div>
           </div>
         </div>

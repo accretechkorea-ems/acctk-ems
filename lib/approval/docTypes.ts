@@ -62,7 +62,18 @@ export type DocTypeDef = {
    * **결재가 필요 없어지거나 규칙이 바뀌면 이 칸만 바꾼다.**
    */
   lineRules?: LineRules
+  /**
+   * 반려·회수된 문서를 같은 문서로 다시 올릴 수 있는가. 적지 않으면 true(지금까지의 동작).
+   *
+   * 견적서만 false 다 — 반려된 견적은 내용을 고쳐야 다시 올릴 수 있는데, 견적에는 같은 행을
+   * 고치는 경로가 없고(「다시쓰기」가 새 번호로 새 견적을 만든다) 문서번호는 견적번호를 따른다.
+   * 같은 문서를 다시 돌리면 고쳐지지 않은 내용이 그대로 올라가고 번호도 어긋난다.
+   */
+  canResubmit?: boolean
 }
+
+/** 같은 문서로 다시 올릴 수 있는 유형인가. 칸이 없으면 지금까지처럼 허용이다. */
+export const canResubmitDocument = (def: DocTypeDef): boolean => def.canResubmit !== false
 
 /**
  * 이 문서를 반려할 수 있는가 — 유형의 canReject 와 문서 단위 판정(canRejectDoc)을 함께 본다.
@@ -81,6 +92,8 @@ export const DOC_TYPES: Record<string, DocTypeDef> = {
     canReject: true,
     canCancelAfterComplete: false,   // 완료 시 PDF 가 만들어져 되돌릴 수 없다
     lineRules: { requireSuperadminApprover: true },
+    // 반려된 견적은 「다시쓰기」로 새 번호의 새 견적을 써서 새로 상신한다(위 canResubmit 설명).
+    canResubmit: false,
   },
   // 쇼룸 사용 신청 — 실행 함수는 lib/approval/showroomUsage.ts (handlers.ts 가 묶는다).
   showroom_usage: {

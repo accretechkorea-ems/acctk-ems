@@ -44,13 +44,13 @@ export function useCustomerCrud({ customer, fetchDetail }: Args) {
         ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : null),
       }).eq('customer_id', customer.customer_id)
       setIsSavingCustomerEdit(false)
-      if (error) { toast.error(error.message || '업체 정보 수정 중 오류가 발생했습니다'); return }
-      toast.success('업체 정보가 수정되었습니다')
+      if (error) { toast.error(error.message || '사업장 정보 수정 중 오류가 발생했습니다'); return }
+      toast.success('사업장 정보가 수정되었습니다')
       setIsEditCustomerModalOpen(false)
       await fetchDetail()
     } catch (error: any) {
       setIsSavingCustomerEdit(false)
-      toast.error(error?.message || '업체 정보 수정 중 오류가 발생했습니다')
+      toast.error(error?.message || '사업장 정보 수정 중 오류가 발생했습니다')
     }
   }
 
@@ -87,7 +87,7 @@ export function useCustomerCrud({ customer, fetchDetail }: Args) {
       // ── 견적이 있으면 숨김만 ──
       if (quoteCount > 0) {
         const ok = await confirmDialog({
-          title: '업체 숨김',
+          title: '사업장 숨김',
           message: `견적 ${quoteCount}건이 연결되어 있어 기록은 보존되며 목록에서만 숨겨집니다.\n계속하시겠습니까?`,
           confirmText: '숨기기', variant: 'danger',
         })
@@ -96,10 +96,10 @@ export function useCustomerCrud({ customer, fetchDetail }: Args) {
           .update({ deleted_at: new Date().toISOString() }).eq('customer_id', cid)
         if (error) {
           console.error('[customer] soft delete failed', error)
-          toast.error(error.message || '업체 숨김 처리 중 오류가 발생했습니다')
+          toast.error(error.message || '사업장 숨김 처리 중 오류가 발생했습니다')
           return
         }
-        toast.success('업체가 목록에서 숨겨졌습니다')
+        toast.success('사업장이 목록에서 숨겨졌습니다')
         setIsEditCustomerModalOpen(false)
         router.push('/')
         return
@@ -107,7 +107,7 @@ export function useCustomerCrud({ customer, fetchDetail }: Args) {
 
       // ── 견적이 없으면 완전 삭제 ──
       const ok = await confirmDialog({
-        title: '업체 완전 삭제',
+        title: '사업장 완전 삭제',
         message: `고객 담당자 ${contactCount}명, 장비 ${deviceCount}대, 서비스 기록 ${historyCount}건이 함께 삭제되며 되돌릴 수 없습니다.\n계속하시겠습니까?`,
         confirmText: '완전 삭제', variant: 'danger',
       })
@@ -150,9 +150,9 @@ export function useCustomerCrud({ customer, fetchDetail }: Args) {
       if (e4) { console.error('[customer] delete devices failed', e4); await abort('장비', e4.message); return }
 
       const { error: e5 } = await supabase.from('customers').delete().eq('customer_id', cid)
-      if (e5) { console.error('[customer] delete customer failed', e5); await abort('업체', e5.message); return }
+      if (e5) { console.error('[customer] delete customer failed', e5); await abort('사업장', e5.message); return }
 
-      toast.success('업체가 완전히 삭제되었습니다')
+      toast.success('사업장이 완전히 삭제되었습니다')
       setIsEditCustomerModalOpen(false)
       router.push('/')
     } finally {

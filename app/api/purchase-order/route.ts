@@ -4,6 +4,8 @@ import { NextResponse } from 'next/server'
 import { canViewMenu } from '@/lib/permissions'
 import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
 import { josa } from '@/lib/josa'
+import { gateAllows, GATE_BLOCK_MESSAGE, loadQuoteGates, SUBMITTED_STATUS } from '@/lib/approval/quoteApproval'
+import { APPROVABLE_STATUSES } from '@/lib/quoteStatus'
 
 /** 요청 메모 길이 상한. 화면도 같은 값으로 입력을 막는다. */
 const REQUEST_MEMO_MAX = 500
@@ -56,8 +58,33 @@ export async function POST(req: Request) {
     }
   }
 
+  // ── 승인 게이트 (전자결재 6단계 B) ──
+  //
+  // 승인되지 않은 견적이 수주·회계 단계로 빠져나가지 못하게 막는다. 상태만 보면 안 된다 —
+  // 반려·회수된 견적은 '견적중' 으로 돌아오지만 승인된 적이 없다(quoteApprovalKeys.ts 의 gateOf).
+  //
+  // 막는 범위를 **첫 전이에만** 둔다.
+  //   · '결재중'           — 모든 action 을 막는다. 결재가 도는 동안은 아무것도 진행하지 않는다.
+  //   · '견적중'·'수리중'  — 여기서 발주·세금계산서로 넘어가는 것이 첫 전이다. 게이트를 본다.
+  //   · 발주 이후 상태     — **막지 않는다.** 이미 수주된 건의 주문완료·세금계산서·매출완료·일정
+  //                          수정을 막으면, 배포 시점에 진행 중이던 견적이 중간에 끊긴다.
+  //                          (발주서 재등록도 이 갈래라 그대로 된다.)
+  const qid = Number(quoteId)
+  const gateRes = await loadQuoteGates(supabaseAdmin, [qid])
+  if (!gateRes.ok) {
+    console.error('[purchase-order] 게이트 조회 실패', { action, quoteId, error: gateRes.error })
+    return NextResponse.json({ error: gateRes.error }, { status: 500 })
+  }
+  const gateRow = gateRes.gates.get(qid)
+  if (!gateRow) return NextResponse.json({ error: '견적을 찾을 수 없습니다.' }, { status: 404 })
+  const firstTransition = (APPROVABLE_STATUSES as readonly string[]).includes(gateRow.status)
+  if (gateRow.status === SUBMITTED_STATUS || (firstTransition && !gateAllows(gateRow.gate))) {
+    console.warn('[purchase-order] 게이트 차단', { action, quoteId, status: gateRow.status, gate: gateRow.gate })
+    return NextResponse.json({ error: GATE_BLOCK_MESSAGE }, { status: 409 })
+  }
+
   // 로그: 누가 어떤 action 을 어떤 견적에 했는지 추적
-  console.log('[purchase-order]', { action, quoteId, callerId: caller.engineer_id, callerEmail: user.email, privileged })
+  console.log('[purchase-order]', { action, quoteId, callerId: caller.engineer_id, callerEmail: user.email, privileged, gate: gateRow.gate })
 
   const sender = caller
   const senderLabel = [sender.name, sender.position].filter(Boolean).join(' ') || (user.email ?? '')

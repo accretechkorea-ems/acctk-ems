@@ -3,6 +3,7 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { canViewMenu } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
+import { gateAllows, GATE_PDF_MESSAGE, loadQuoteGates } from '@/lib/approval/quoteApproval'
 
 // 20팀 수리 업무용 견적 조회 API.
 // quotes RLS 는 개인 소유 모델이라, 동료·superadmin·타팀이 20팀 수리 건의 견적을 대신 작성하면 20팀이 못 읽는다.
@@ -111,6 +112,17 @@ export async function GET(req: NextRequest) {
       .from('quotes').select('quote_id, pdf_url').eq('quote_id', qid).single()
     if (!quote) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     if (!quote.pdf_url) return NextResponse.json({ error: 'No PDF' }, { status: 404 })
+    // 승인 게이트 (전자결재 6단계 B) — 수리 화면에서도 결재 전 견적서는 열 수 없다.
+    // 도입 전 견적은 'exempt' 라 그대로 열린다. 화면은 이 문구를 그대로 보여 주면 된다.
+    {
+      const gateRes = await loadQuoteGates(supabaseAdmin, [quote.quote_id])
+      if (!gateRes.ok) return NextResponse.json({ error: gateRes.error }, { status: 500 })
+      const gate = gateRes.gates.get(quote.quote_id)?.gate
+      if (!gateAllows(gate)) {
+        console.warn('[repair-quotes] 게이트 차단', { quoteId: quote.quote_id, gate })
+        return NextResponse.json({ error: GATE_PDF_MESSAGE }, { status: 409 })
+      }
+    }
     // 외부(synology 등) URL 은 그대로, 스토리지 경로는 서명 URL 발급.
     if (quote.pdf_url.startsWith('http') || quote.pdf_url.includes('synology'))
       return NextResponse.json({ url: quote.pdf_url })

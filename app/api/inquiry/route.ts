@@ -24,7 +24,7 @@ import { withTeamPerm } from '@/lib/teamPermsServer'
 import { addDays, todayKST } from '@/lib/date'
 import {
   buildInquiryNo, inquiryTypeOf, isInquiryDirection, periodKeyFor,
-  EDITABLE_STATUSES, INQUIRY_TYPES, REQ20_SERIES, REQ80_SERIES,
+  EDITABLE_STATUSES, INQUIRY_BODY_MAX, INQUIRY_TYPES, REQ20_SERIES, REQ80_SERIES,
   type InquiryDirection, type InquiryType,
 } from '@/lib/inquiries'
 
@@ -278,6 +278,7 @@ async function handle(req: NextRequest) {
   console.error(`[${TAG}] 번호 발급을 ${MAX_TRIES}회 시도했지만 계속 겹쳤다`, { type, periodKey })
   return bad(`${lastError} 잠시 뒤 다시 시도해주세요.`.trim(), 409)
 }
+
 
 /** uuid 모양인지만 본다. 값 자체의 존재는 DB 가 판단한다. */
 const idOf = (v: unknown): string | null =>
@@ -625,7 +626,7 @@ async function register(sb: ReturnType<typeof admin>, caller: Caller, body: Reco
 // 첨부는 /api/inquiry-attachment 가 맡는다(그쪽은 GET·DELETE 메서드가 필요하다).
 
 /** 내용 기록 본문 상한. DB 의 inquiry_messages_body_check 와 같은 값이어야 한다. */
-const BODY_MAX = 20000
+const BODY_MAX = INQUIRY_BODY_MAX
 
 /** 내용 기록 날짜로 받을 수 있는 미래 여유(일). 시차·입력 시점 차이만 허용하고 그 이상은 막는다. */
 const FUTURE_DAYS = 1

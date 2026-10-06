@@ -191,13 +191,13 @@ function CustomerDetailPageInner() {
                 {customer.company_name}
               </div>
               <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.7 }}>
-                이 업체는 사업장을 묶는 회사 단위입니다.
+                사업장을 묶는 회사입니다.
               </div>
             </div>
 
             <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, padding: '14px 16px', marginTop: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>소속 사업장</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>사업장</span>
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>
                   {childSites.length}곳
                 </span>
