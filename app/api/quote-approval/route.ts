@@ -21,10 +21,10 @@
 //   감사 기록에 의존하지 않고, 상태 변경과 문서 생성이 한 요청 안에서 붙어 있어야 중간 상태
 //   ('결재중' 인데 문서가 없는 견적)가 남지 않는다. 행위자는 아래 audit_log 한 줄로 따로 남긴다.
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewMenu } from '@/lib/permissions'
+import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
 import { todayKST } from '@/lib/date'
 import { checkLines, createApprovalDocument } from '@/lib/approval/submit'
@@ -32,6 +32,10 @@ import {
   buildQuoteSummary, loadQuoteGates, QUOTE_TARGET_TABLE, QUOTE_TYPE, SUBMITTED_STATUS,
   type QuoteRowForSummary,
 } from '@/lib/approval/quoteApproval'
+import {
+  buildQuoteReview,
+  type PartyName, type RawExpense, type RawItem, type RawQuote,
+} from '@/lib/approval/quoteReview'
 import { APPROVABLE_STATUSES, isApprovalTarget } from '@/lib/quoteStatus'
 import type { LineInput } from '@/lib/approval/types'
 
@@ -90,6 +94,152 @@ function readQuoteIds(raw: unknown): number[] | null {
   return [...out]
 }
 
+// ── 결재 문서 열람 권한 ─────────────────────────────────────────────
+//
+// 재사용할 helper 가 없어 여기서 만든다 — 지금 이 판정은 두 곳에 흩어져 있다.
+//   ① RLS 정책 `ad_select` (approval_schema.sql:122-128)
+//        requester_id = 나  또는  superadmin  또는  그 문서의 approval_lines 에 내가 있다
+//   ② 결재함 GET 의 「전체」함 (app/api/approval/route.ts:569)
+//        box='all' 은 approvals 메뉴 권한자에게만 열린다 — 남의 문서까지 보는 자리다
+// 둘을 합친 것이 「그 문서를 볼 수 있는 사람」이다. lib/approval/engine.ts 는 건드리지 않는다
+// (그 파일은 문서를 모르는 순수 판정만 둔다).
+//
+// 결재선은 **종류를 가리지 않는다** — 참조(cc)로 들어간 사람도 문서를 본다(팀 참조 포함).
+
+type DocRef = { document_id: number; requester_id: number }
+
+async function canViewApprovalDocument(
+  sb: SupabaseClient,
+  doc: DocRef,
+  caller: Caller,
+): Promise<boolean> {
+  if (doc.requester_id === caller.engineer_id) return true
+  if (isSuperAdmin(caller)) return true
+  if (canViewMenu(caller, 'approvals')) return true
+  const { data, error } = await sb
+    .from('approval_lines')
+    .select('line_id')
+    .eq('document_id', doc.document_id)
+    .eq('approver_id', caller.engineer_id)
+    .limit(1)
+  if (error) {
+    // 못 읽었으면 막는다 — 열람 판정이 실패를 허용으로 떨어뜨리면 남의 문서가 새어 나간다.
+    console.error(`[${TAG}] line lookup failed`, { documentId: doc.document_id, error })
+    return false
+  }
+  return !!data && data.length > 0
+}
+
+/** 검토표가 읽는 칸. 저장값을 그대로 돌려준다 — 다시 계산하지 않는다. */
+const REVIEW_QUOTE_SELECT = `
+  quote_id, quote_number, quote_date, status, quote_type, recipient, note, delivery_info,
+  total_supply, total_tax, total_amount, total_cost, total_profit, profit_rate,
+  customer_id, dealer_id, engineer_id, created_by
+`
+
+/** 업체 한 곳의 이름 — 사업장명과 그것을 묶는 회사명. 못 읽으면 null. */
+async function partyNameOf(sb: SupabaseClient, customerId: number | null): Promise<PartyName | null> {
+  if (customerId == null) return null
+  const { data, error } = await sb
+    .from('customers')
+    .select('company_name, parent_customer_id')
+    .eq('customer_id', customerId)
+    .maybeSingle()
+  if (error) {
+    console.error(`[${TAG}] customer lookup failed`, { customerId, error })
+    return null
+  }
+  const row = (data ?? null) as { company_name: string | null; parent_customer_id: number | null } | null
+  if (!row) return null
+  if (row.parent_customer_id == null) return { site: row.company_name, parent: null }
+  const { data: p, error: pErr } = await sb
+    .from('customers')
+    .select('company_name')
+    .eq('customer_id', row.parent_customer_id)
+    .maybeSingle()
+  if (pErr) console.error(`[${TAG}] parent lookup failed`, { customerId, error: pErr })
+  return { site: row.company_name, parent: (p as { company_name: string | null } | null)?.company_name ?? null }
+}
+
+/**
+ * 견적 검토표 — 결재자가 금액뿐 아니라 품목·원가·이익까지 보고 판단하게 한다.
+ *
+ * 가리는 것이 없다. 이 문서를 볼 수 있는 사람이면 원가·이익까지 전부 본다(설계 결정).
+ * 쓰기는 없다 — DB 를 바꾸지 않는다.
+ */
+async function review(sb: SupabaseClient, caller: Caller, body: Record<string, unknown>) {
+  const documentId = Number(body?.document_id)
+  if (!Number.isSafeInteger(documentId) || documentId <= 0) return bad('문서를 지정해주세요.')
+
+  const { data: docRow, error: docErr } = await sb
+    .from('approval_documents')
+    .select('document_id, doc_type, target_table, target_id, requester_id')
+    .eq('document_id', documentId)
+    .maybeSingle()
+  if (docErr) {
+    console.error(`[${TAG}] document lookup failed`, { documentId, error: docErr })
+    return bad('문서를 불러오지 못했습니다.', 500)
+  }
+  const doc = (docRow ?? null) as (DocRef & { doc_type: string; target_table: string; target_id: number | null }) | null
+  if (!doc) return bad('문서를 찾을 수 없습니다.', 404)
+
+  // 권한을 **종류보다 먼저** 본다 — 볼 수 없는 사람에게 「그 문서는 견적서가 아니다」를 알려
+  // 주지 않는다(문서 종류도 정보다).
+  if (!(await canViewApprovalDocument(sb, doc, caller))) {
+    console.warn(`[${TAG}] review 권한 없음`, { documentId, callerId: caller.engineer_id })
+    return bad('이 문서를 볼 권한이 없습니다.', 403)
+  }
+
+  if (doc.doc_type !== QUOTE_TYPE || doc.target_table !== QUOTE_TARGET_TABLE) {
+    return bad('견적서 문서가 아닙니다.')
+  }
+  if (doc.target_id == null) return bad('견적을 찾을 수 없습니다.', 404)
+
+  const { data: qRow, error: qErr } = await sb
+    .from('quotes').select(REVIEW_QUOTE_SELECT).eq('quote_id', doc.target_id).maybeSingle()
+  if (qErr) {
+    console.error(`[${TAG}] quote lookup failed`, { documentId, quoteId: doc.target_id, error: qErr })
+    return bad('견적을 불러오지 못했습니다.', 500)
+  }
+  const quote = (qRow ?? null) as (RawQuote & { engineer_id: number | null; created_by: number | null }) | null
+  if (!quote) return bad('견적을 찾을 수 없습니다.', 404)
+
+  // 품목·부대비용·업체 이름·사람 이름을 나란히 읽는다(서로의 결과가 필요 없다).
+  const [itemsRes, expRes, custName, dealerName, people] = await Promise.all([
+    sb.from('quote_items')
+      .select('item_id, row_kind, part_code, product_name, quantity, unit_price_jpy, unit_price_krw, supply_amount, cost_amount, profit_amount, profit_rate, exchange_rate, tariff_rate')
+      .eq('quote_id', quote.quote_id),
+    sb.from('quote_expenses')
+      .select('expense_id, item_name, unit_price, headcount, days, amount')
+      .eq('quote_id', quote.quote_id),
+    partyNameOf(sb, quote.customer_id),
+    partyNameOf(sb, quote.dealer_id),
+    (async () => {
+      const ids = [quote.engineer_id, quote.created_by].filter((n): n is number => n != null)
+      if (ids.length === 0) return new Map<number, string | null>()
+      const { data, error } = await sb.from('engineers').select('engineer_id, name').in('engineer_id', ids)
+      if (error) console.error(`[${TAG}] engineer lookup failed`, { quoteId: quote.quote_id, error })
+      const m = new Map<number, string | null>()
+      for (const e of (data ?? []) as { engineer_id: number; name: string | null }[]) m.set(e.engineer_id, e.name)
+      return m
+    })(),
+  ])
+  if (itemsRes.error) console.error(`[${TAG}] items lookup failed`, { quoteId: quote.quote_id, error: itemsRes.error })
+  if (expRes.error) console.error(`[${TAG}] expenses lookup failed`, { quoteId: quote.quote_id, error: expRes.error })
+
+  const reviewData = buildQuoteReview({
+    quote,
+    items: (itemsRes.data ?? []) as RawItem[],
+    expenses: (expRes.data ?? []) as RawExpense[],
+    customer: custName,
+    dealer: dealerName,
+    engineer: quote.engineer_id != null ? (people.get(quote.engineer_id) ?? null) : null,
+    createdBy: quote.created_by != null ? (people.get(quote.created_by) ?? null) : null,
+  })
+
+  return NextResponse.json({ review: reviewData })
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -97,7 +247,9 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}))
   const action: string = typeof body?.action === 'string' ? body.action : ''
-  if (action !== 'check' && action !== 'submit' && action !== 'gates') return bad('Invalid action')
+  if (action !== 'check' && action !== 'submit' && action !== 'gates' && action !== 'review') {
+    return bad('Invalid action')
+  }
 
   // 세션 → engineers. 퇴사자는 막는다(결재 라우트의 loadCaller 와 같은 기준).
   const { data: callerRow, error: callerErr } = await supabase
@@ -131,7 +283,17 @@ export async function POST(req: NextRequest) {
   // 견적을 상신하는 라우트다. 권한을 거둔 직후에도 통과하면 곤란해 캐시를 건너뛴다
   // (견적 삭제 요청 라우트와 같은 판단).
   const caller = await withTeamPerm(row as Caller, { fresh: true })
-  if (!caller || !canViewMenu(caller, 'quote')) return bad('견적 작성 권한이 없습니다.', 403)
+  if (!caller) return bad('Forbidden', 403)
+
+  // ── 견적 검토표 — 읽기 전용 ──
+  // **견적 작성 권한을 요구하지 않는다.** 다른 팀 결재자·참조자가 결재선에 들어올 수 있고,
+  // 그 사람에게 견적 메뉴가 없어도 자기가 결재할 문서는 봐야 한다. 대신 **그 문서를 볼 수 있는
+  // 사람인지**를 아래에서 따로 본다(canViewApprovalDocument).
+  if (action === 'review') {
+    return review(sb, caller, body)
+  }
+
+  if (!canViewMenu(caller, 'quote')) return bad('견적 작성 권한이 없습니다.', 403)
 
   const lines = readLines(body?.lines)
   if (!lines) return bad('결재선을 지정해주세요.')

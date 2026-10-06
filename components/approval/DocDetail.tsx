@@ -20,6 +20,7 @@ import {
 import ApprovalTable, { type ProgressPerson } from './ApprovalTable'
 import DocInfo from './DocInfo'
 import { summaryRows } from './summary'
+import { panelOf } from './panels'
 import { nextPendingLine } from '@/lib/approval/engine'
 import { canRejectDocument, canResubmitDocument, DOC_TYPES } from '@/lib/approval/docTypes'
 import { DISCARDABLE_STATUSES, type ApprovalLine, type ApprovalDocument } from '@/lib/approval/types'
@@ -115,6 +116,8 @@ export default function DocDetail({
   const approveLabel = rejectable ? '승인' : '확인'
   const rows = summaryRows(doc.doc_type, doc.summary)
   const docLabel = def?.label ?? doc.doc_type
+  // 유형별 추가 패널(견적서 검토표 등). 등록표가 고른다 — 여기에 유형 이름을 적지 않는다.
+  const Panel = panelOf(doc.doc_type)
 
   /** 라우트 호출 공통 — 409 는 「이미 처리되었습니다」로 알리고 목록을 다시 읽는다. */
   const call = async (body: Record<string, unknown>, okText: string) => {
@@ -192,7 +195,7 @@ export default function DocDetail({
         />
       </div>
 
-      {/* 문서 내용 — 유형별 항목은 summary.ts 가 뽑는다. 4~6단계에서 유형별 컴포넌트가 이 자리에 들어온다. */}
+      {/* 문서 내용 — 유형별 항목은 summary.ts 가 뽑는다. */}
       {rows.length > 0 && (
         <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '4px 12px' }}>
           {rows.map(r => (
@@ -203,6 +206,11 @@ export default function DocDetail({
           ))}
         </div>
       )}
+
+      {/* 유형별 추가 패널 — 등록표(panels.ts)가 고른다. `if (doc_type === …)` 분기를 두지 않는다
+          (summary.ts 와 같은 방식). 등록되지 않은 유형은 Panel 이 null 이라 아무것도 그리지 않는다.
+          패널이 실패해도 아래 처리 버튼은 그대로 동작한다 — 자기 영역에서만 오류를 알린다. */}
+      {Panel && <Panel documentId={doc.document_id} />}
 
       {/* 반려 사유는 눈에 띄게 따로 */}
       {doc.status === '반려' && rejectedLine?.comment && (

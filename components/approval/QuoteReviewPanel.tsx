@@ -1,0 +1,258 @@
+'use client'
+
+// 견적 검토표 — 견적서 문서의 상세에 붙는 유형별 패널.
+//
+// 결재자가 금액만 보고 판단하지 않도록 품목·원가·이익·이익률·거래 구분을 한 화면에 모은다.
+// 이 문서를 볼 수 있는 사람이면 **전부** 본다(원가·이익을 가리지 않는다 — 설계 결정).
+//
+// 데이터는 /api/quote-approval 의 'review' 가 service role 로 읽어 준다. 브라우저가 quotes 를
+// 직접 읽지 않는 이유 — 결재선에 들어온 다른 팀 사람은 그 견적의 RLS(quotes_select)를 통과하지
+// 못할 수 있고, 그러면 결재할 문서의 내용을 못 본다.
+//
+// **납기·비고는 그리지 않는다.** 응답에는 담겨 있지만(다음 작업인 결재 완료 PDF 가 같은 응답을
+// 쓴다) 검토표에는 내지 않는다.
+//
+// 실패해도 결재 승인·반려 버튼은 그대로 동작해야 한다 — 이 패널은 자기 영역에서만 오류를 알린다.
+
+import { useCallback, useEffect, useState, type CSSProperties } from 'react'
+import { BORDER, CARD_BG, DANGER, FAINT, MUTED, NEUTRAL_BG, SKELETON, SUB, TEXT, btnGhost } from '@/components/common/ui'
+import { comma, rateText, type QuoteReview } from '@/lib/approval/quoteReview'
+
+/** 표가 좁은 화면에서 **자기 상자 안에서만** 가로로 스크롤되게 한다(페이지가 옆으로 밀리지 않게). */
+const scrollBox: CSSProperties = {
+  border: `1px solid ${BORDER}`, borderRadius: 8, overflowX: 'auto', maxWidth: '100%',
+}
+
+const table: CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 560 }
+const th: CSSProperties = {
+  padding: '7px 9px', textAlign: 'left', color: SUB, fontWeight: 700,
+  whiteSpace: 'nowrap', borderBottom: `1px solid ${BORDER}`, background: NEUTRAL_BG,
+}
+const thNum: CSSProperties = { ...th, textAlign: 'right' }
+const td: CSSProperties = { padding: '7px 9px', color: TEXT, borderBottom: `1px solid ${BORDER}`, verticalAlign: 'top' }
+/** 금액 칸 — 오른쪽 정렬 + 숫자 폭 고정(.num 은 globals.css 의 tabular-nums). */
+const tdNum: CSSProperties = { ...td, textAlign: 'right', whiteSpace: 'nowrap' }
+
+const sectionTitle: CSSProperties = { fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 5 }
+
+/** 요약 카드 — 그림자 없이 테두리로만 구분한다(디자인 규칙). */
+function StatCard({ label, value, muted }: { label: string; value: string; muted?: boolean }) {
+  return (
+    <div style={{
+      flex: '1 1 110px', minWidth: 104, background: CARD_BG,
+      border: `1px solid ${BORDER}`, borderRadius: 8, padding: '9px 11px',
+    }}>
+      <div style={{ fontSize: 11, color: MUTED, fontWeight: 600, marginBottom: 3 }}>{label}</div>
+      <div className="num" style={{ fontSize: 14, fontWeight: 800, color: muted ? MUTED : TEXT, whiteSpace: 'nowrap' }}>
+        {value}
+      </div>
+    </div>
+  )
+}
+
+/** 「이름 값」 한 줄. 문서 상세의 요약 줄과 같은 꼴이다. */
+function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: 'contents' }}>
+      <span style={{ fontSize: 12, color: MUTED }}>{label}</span>
+      <span style={{ fontSize: 13, color: TEXT, wordBreak: 'break-word' }}>{children}</span>
+    </div>
+  )
+}
+
+export default function QuoteReviewPanel({ documentId }: { documentId: number }) {
+  const [data, setData] = useState<QuoteReview | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setFailed(false)
+    try {
+      const res = await fetch('/api/quote-approval', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'review', document_id: documentId }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.review) {
+        console.error('[approval/review] 검토 정보 조회 실패', { documentId, status: res.status, error: json?.error })
+        setFailed(true)
+        return
+      }
+      setData(json.review as QuoteReview)
+    } catch (e) {
+      console.error('[approval/review] 검토 정보 조회 실패', { documentId, error: e })
+      setFailed(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [documentId])
+
+  useEffect(() => { load() }, [load])
+
+  if (loading) {
+    return (
+      <div style={{ marginTop: 12 }}>
+        <div style={sectionTitle}>견적 검토</div>
+        {/* 자리표시 — 높이를 미리 잡아 두어 내용이 들어올 때 아래 버튼이 튀지 않게 한다. */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+          {[0, 1, 2, 3, 4].map(i => (
+            <div key={i} style={{ flex: '1 1 110px', minWidth: 104, height: 52, background: SKELETON, borderRadius: 8 }} />
+          ))}
+        </div>
+        <div style={{ height: 80, background: SKELETON, borderRadius: 8 }} />
+      </div>
+    )
+  }
+
+  if (failed || !data) {
+    return (
+      <div style={{ marginTop: 12 }}>
+        <div style={sectionTitle}>견적 검토</div>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          border: `1px solid ${BORDER}`, borderRadius: 8, padding: '10px 12px',
+        }}>
+          <span style={{ fontSize: 12, color: DANGER, fontWeight: 600 }}>검토 정보를 불러오지 못했습니다</span>
+          <button type="button" onClick={load} style={{ ...btnGhost(), padding: '4px 10px', fontSize: 12 }}>
+            다시 시도
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  const t = data.totals
+  const ch = data.channel
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      {/* ① 머리줄 */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 7 }}>
+        <span style={sectionTitle}>견적 검토</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>{data.quoteNumber ?? '-'}</span>
+        <span style={{ color: FAINT }}>·</span>
+        <span style={{ fontSize: 12, color: SUB }}>{data.quoteDate ?? '-'}</span>
+      </div>
+
+      {/* ② 요약 카드 다섯 개 */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+        <StatCard label="공급가" value={comma(t.supply)} />
+        <StatCard label="총액(VAT 포함)" value={comma(t.amount)} />
+        <StatCard label="원가" value={comma(t.cost)} muted={t.cost === null} />
+        <StatCard label="이익" value={comma(t.profit)} muted={t.profit === null} />
+        <StatCard label="이익률" value={rateText(t.profitRate)} muted={t.profitRate === null} />
+      </div>
+
+      {/* ③ 거래 정보 — 납기·비고는 내지 않는다(이 파일 머리말). */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '4px 12px', marginBottom: 12 }}>
+        <InfoRow label="거래 구분">
+          {ch.kind === 'direct' ? (
+            <>
+              <span style={{ fontWeight: 700 }}>{ch.label}</span>
+              <span style={{ color: FAINT }}> · </span>
+              <span>{ch.customer}</span>
+              {ch.customerSite && (
+                <span style={{ fontSize: 11, color: MUTED }}> (등록: {ch.customerSite})</span>
+              )}
+            </>
+          ) : (
+            <>
+              <span style={{ fontWeight: 700 }}>{ch.label}</span>
+              <span style={{ color: FAINT }}> </span>
+              <span>{ch.dealer ?? '-'}</span>
+              {ch.dealerSite && <span style={{ fontSize: 11, color: MUTED }}> (등록: {ch.dealerSite})</span>}
+              <span style={{ color: FAINT }}> · </span>
+              <span style={{ fontWeight: 700 }}>E.U</span>
+              <span> {ch.customer}</span>
+              {ch.customerSite && <span style={{ fontSize: 11, color: MUTED }}> (등록: {ch.customerSite})</span>}
+            </>
+          )}
+        </InfoRow>
+        <InfoRow label="수신">{data.recipient?.trim() || '-'}</InfoRow>
+        <InfoRow label="실적 담당">{data.engineer?.trim() || '-'}</InfoRow>
+        <InfoRow label="작성자">{data.createdBy?.trim() || '-'}</InfoRow>
+      </div>
+
+      {/* ④ 품목 표 */}
+      <div style={scrollBox}>
+        <table style={table}>
+          <thead>
+            <tr>
+              <th style={th}>품목</th>
+              <th style={thNum}>수량</th>
+              <th style={thNum}>단가</th>
+              <th style={thNum}>공급가</th>
+              <th style={thNum}>원가</th>
+              <th style={thNum}>이익</th>
+              <th style={thNum}>이익률</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.items.length === 0 ? (
+              <tr><td style={{ ...td, color: MUTED }} colSpan={7}>품목이 없습니다</td></tr>
+            ) : data.items.map(it => (
+              <tr key={it.itemId}>
+                <td style={td}>
+                  <div style={{ fontWeight: 600 }}>{it.name}</div>
+                  {it.subParts.length > 0 && (
+                    <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
+                      {it.subParts.map(p => `${p.label} ${p.value}`).join(' · ')}
+                    </div>
+                  )}
+                </td>
+                <td className="num" style={tdNum}>{comma(it.quantity)}</td>
+                <td className="num" style={tdNum}>{comma(it.unitPrice)}</td>
+                <td className="num" style={tdNum}>{comma(it.supply)}</td>
+                <td className="num" style={tdNum}>{comma(it.cost)}</td>
+                <td className="num" style={tdNum}>{comma(it.profit)}</td>
+                <td className="num" style={tdNum}>{rateText(it.profitRate)}</td>
+              </tr>
+            ))}
+            {/* 합계 — 품목을 더하지 않고 **저장된 합계**를 그대로 쓴다(lib/approval/quoteReview.ts).
+                국내조달품은 공급가 합계에서 빠지므로 더하면 값이 달라진다. */}
+            <tr style={{ background: NEUTRAL_BG }}>
+              <td style={{ ...td, fontWeight: 700, borderBottom: 'none' }}>합계</td>
+              <td style={{ ...tdNum, borderBottom: 'none' }} />
+              <td style={{ ...tdNum, borderBottom: 'none' }} />
+              <td className="num" style={{ ...tdNum, fontWeight: 700, borderBottom: 'none' }}>{comma(t.supply)}</td>
+              <td className="num" style={{ ...tdNum, fontWeight: 700, borderBottom: 'none' }}>{comma(t.cost)}</td>
+              <td className="num" style={{ ...tdNum, fontWeight: 700, borderBottom: 'none' }}>{comma(t.profit)}</td>
+              <td className="num" style={{ ...tdNum, fontWeight: 700, borderBottom: 'none' }}>{rateText(t.profitRate)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* ⑤ 부대비용 — 있을 때만. 견적 합계·원가와 무관한 내부 기록이다(lib/quoteExcel.ts 와 같은 취급). */}
+      {data.expenses.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div style={sectionTitle}>부대비용</div>
+          <div style={scrollBox}>
+            <table style={{ ...table, minWidth: 360 }}>
+              <thead>
+                <tr>
+                  <th style={th}>항목</th>
+                  <th style={thNum}>단가</th>
+                  <th style={thNum}>일수</th>
+                  <th style={thNum}>금액</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.expenses.map(e => (
+                  <tr key={e.expenseId}>
+                    <td style={td}>{e.name}</td>
+                    <td className="num" style={tdNum}>{comma(e.unitPrice)}</td>
+                    <td className="num" style={tdNum}>{comma(e.days)}</td>
+                    <td className="num" style={tdNum}>{comma(e.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
