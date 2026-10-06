@@ -282,17 +282,25 @@ export default function LinePickerModal({
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
     }}>
+      {/* 외곽 크기를 **고정**한다 — 예전에는 높이가 내용에 따라 정해져(maxHeight 만 있었다)
+          고른 팀의 인원 수에 따라 창이 커졌다 작아졌다 했다. 사람을 고르는 동안 창이 움직이면
+          다음에 누를 자리가 매번 달라진다.
+          작은 화면에서는 vw·vh 상한으로만 줄어든다(그때도 가운데 칸이 줄어들 뿐 줄 구성은 같다). */}
       <div style={{
-        background: CARD_BG, borderRadius: 8, padding: 20, width: '100%', maxWidth: 760,
-        maxHeight: '86vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
+        background: CARD_BG, borderRadius: 8, padding: 20,
+        width: 1000, maxWidth: '94vw',
+        height: 720, maxHeight: '92vh',
+        display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        {/* 위쪽 줄들과 아래 줄은 **크기 고정**(flexShrink: 0) — 가운데가 남는 높이를 가져간다.
+            고정하지 않으면 높이가 정해진 상자 안에서 flex 가 이 줄들을 눌러 글자가 잘린다. */}
+        <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>결재선 지정</div>
           <button type="button" onClick={onClose} style={{ ...btnGhost(), padding: '5px 12px' }}>닫기</button>
         </div>
 
         {/* 개인 결재선 */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+        <div style={{ flexShrink: 0, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
           <select
             defaultValue=""
             onChange={e => { const v = Number(e.target.value); if (v) loadPreset(v); e.currentTarget.value = '' }}
@@ -317,7 +325,7 @@ export default function LinePickerModal({
         </div>
 
         {/* 팀으로 참조 추가 — 고른 팀의 재직 인원이 개별 참조로 펼쳐진다. */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+        <div style={{ flexShrink: 0, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
           <select
             defaultValue=""
             disabled={loading || teams.length === 0}
@@ -340,6 +348,7 @@ export default function LinePickerModal({
             같은 자리에 실패 사유가 보이고 아래 [확인]이 잠긴다. 관리자가 올리는 문서에는 안 뜬다. */}
         {notice && (
           <div style={{
+            flexShrink: 0,
             marginBottom: 12, padding: '8px 10px', borderRadius: 6,
             background: NEUTRAL_BG, fontSize: 12, fontWeight: 600,
             color: ruleFailing ? DANGER : SUB,
@@ -352,6 +361,7 @@ export default function LinePickerModal({
             화면이 모르는 사정). 같은 자리에 두면 아래 [확인]과 가까워 바로 고칠 수 있다. */}
         {serverError && (
           <div style={{
+            flexShrink: 0,
             marginBottom: 12, padding: '8px 10px', borderRadius: 6,
             background: NEUTRAL_BG, fontSize: 12, fontWeight: 600, color: DANGER,
           }}>
@@ -359,7 +369,14 @@ export default function LinePickerModal({
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 12, flex: 1, minHeight: 0 }}>
+        {/* 가운데 — **남는 높이를 전부 가져간다**(flex 1 + minHeight 0).
+            gridTemplateRows 를 적는 이유: 줄 높이를 적지 않으면 grid 의 한 줄이 auto 로 잡혀
+            내용만큼 늘어나고, 그러면 안쪽 칸이 아니라 모달 바깥이 밀린다.
+            minmax(0, 1fr) 은 '남는 높이까지만, 그 이상은 안쪽에서 스크롤' 을 뜻한다. */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 1.2fr', gridTemplateRows: 'minmax(0, 1fr)',
+          gap: 12, flex: 1, minHeight: 0,
+        }}>
           {/* 왼쪽 — 팀 → 사람 */}
           <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, display: 'flex', minHeight: 0 }}>
             <div style={{ width: 110, borderRight: `1px solid ${BORDER}`, overflowY: 'auto' }}>
@@ -376,7 +393,7 @@ export default function LinePickerModal({
                 </button>
               ))}
             </div>
-            <div style={{ flex: 1, overflowY: 'auto', minWidth: 0 }}>
+            <div style={{ flex: 1, overflowY: 'auto', minWidth: 0, minHeight: 0 }}>
               {!team ? (
                 <div style={{ padding: 12, fontSize: 12, color: MUTED }}>팀을 고르세요</div>
               ) : members.length === 0 ? (
@@ -440,7 +457,7 @@ export default function LinePickerModal({
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 }}>
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 }}>
           <span style={{ fontSize: 12, color: problem ? DANGER : MUTED }}>
             {problem ?? `결재 ${picked.filter(l => l.kind === 'approve').length}명 · 합의 ${picked.filter(l => l.kind === 'agree').length}명 · 참조 ${picked.filter(l => l.kind === 'cc').length}명`}
           </span>
