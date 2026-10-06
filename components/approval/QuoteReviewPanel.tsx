@@ -17,6 +17,8 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import { BORDER, CARD_BG, DANGER, FAINT, MUTED, NEUTRAL_BG, SKELETON, SUB, TEXT, btnGhost } from '@/components/common/ui'
 import { comma, rateText, type QuoteReview } from '@/lib/approval/quoteReview'
+import { useToast } from '@/components/common/Toast'
+import { openGeneratedQuotePdf } from '@/lib/openQuotePdf'
 
 /** 표가 좁은 화면에서 **자기 상자 안에서만** 가로로 스크롤되게 한다(페이지가 옆으로 밀리지 않게). */
 const scrollBox: CSSProperties = {
@@ -79,7 +81,11 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
 }
 
 export default function QuoteReviewPanel({ documentId }: { documentId: number }) {
+  const toast = useToast()
   const [data, setData] = useState<QuoteReview | null>(null)
+  // PDF 를 만들 대상 견적. 검토 응답이 함께 준다(문서 → 견적 연결은 서버가 안다).
+  const [quoteId, setQuoteId] = useState<number | null>(null)
+  const [pdfBusy, setPdfBusy] = useState(false)
   const [failed, setFailed] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -99,6 +105,7 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
         return
       }
       setData(json.review as QuoteReview)
+      setQuoteId(typeof json.quoteId === 'number' ? json.quoteId : null)
     } catch (e) {
       console.error('[approval/review] 검토 정보 조회 실패', { documentId, error: e })
       setFailed(true)
@@ -108,6 +115,21 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
   }, [documentId])
 
   useEffect(() => { load() }, [load])
+
+  /**
+   * 견적서 PDF 보기 — **저장값으로 그 자리에서 만든다.**
+   * 결재 문서가 있는 견적은 결재 대상이므로(상신 라우트가 도입 전 견적을 막는다) 늘 생성 경로다.
+   */
+  const openPdf = async () => {
+    if (pdfBusy || quoteId == null) return
+    setPdfBusy(true)
+    try {
+      const res = await openGeneratedQuotePdf(quoteId)
+      if (!res.ok) toast.error(res.error)
+    } finally {
+      setPdfBusy(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -138,12 +160,23 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
 
   return (
     <div style={{ marginTop: 12 }}>
-      {/* ① 머리줄 */}
+      {/* ① 머리줄 — 오른쪽 끝에 「견적서 PDF 보기」.
+          결재 문서를 볼 수 있는 사람이면 결재 전에도 열 수 있다. 저장된 파일이 아니라
+          저장값으로 그 자리에서 만들며, 완료 전이면 날짜 자리에 빨간 안내가 들어간다
+          (lib/openQuotePdf.tsx). */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 7 }}>
         <span style={sectionTitle}>견적 검토</span>
         <span style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>{data.quoteNumber ?? '-'}</span>
         <span style={{ color: FAINT }}>·</span>
         <span style={{ fontSize: 12, color: SUB }}>{data.quoteDate ?? '-'}</span>
+        <button
+          type="button"
+          onClick={openPdf}
+          disabled={pdfBusy}
+          style={{ ...btnGhost(pdfBusy), marginLeft: 'auto', padding: '4px 10px', fontSize: 12 }}
+        >
+          {pdfBusy ? '만드는 중...' : '견적서 PDF 보기'}
+        </button>
       </div>
 
       {/* ② 요약 카드 다섯 개 */}

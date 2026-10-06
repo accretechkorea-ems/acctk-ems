@@ -18,6 +18,7 @@ import { REPAIR_STATUS_COLORS, REPAIR_MEANING_COLORS } from '@/lib/categoryColor
 import { isAtHq } from '@/lib/repairStats'
 import { Z } from '@/lib/zIndex'
 import { todayKST, nowKSTParts } from '@/lib/date'
+import { openGeneratedQuotePdf } from '@/lib/openQuotePdf'
 
 // ── 색상 (기존 페이지 컨벤션과 동일) ──
 const BLUE = '#234ea2'
@@ -277,6 +278,12 @@ export default function RepairPage() {
       const res = await fetch(`/api/repair-quotes?pdf=${quoteId}`)
       const json = await res.json().catch(() => ({}))
       if (res.ok && json.url) window.open(json.url, '_blank')
+      // 결재 대상 견적은 저장 파일을 내주지 않는다 — 저장값으로 그 자리에서 만든다
+      // (전자결재 6단계 PDF. 서버가 needsGenerate 로 알려 준다).
+      else if (json.needsGenerate) {
+        const made = await openGeneratedQuotePdf(quoteId)
+        if (!made.ok) toast.error(made.error)
+      }
       else toast.error(json.error === 'No PDF' ? '견적서 PDF가 없습니다' : json.error === 'Forbidden' ? '견적서 열람 권한이 없습니다' : '견적서를 열 수 없습니다')
     } finally {
       pdfBusyRef.current = false

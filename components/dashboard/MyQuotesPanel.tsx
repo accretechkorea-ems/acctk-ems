@@ -16,6 +16,7 @@ import { isSelfDeletable } from '@/lib/quoteDeletePolicy'
 import LinePickerModal from '@/components/approval/LinePickerModal'
 import { canSubmitApproval, loadQuoteApprovalDocIds, fetchQuoteGates, gateFor } from '@/lib/quoteApprovalDocs'
 import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice, type QuoteGate } from '@/lib/approval/quoteApprovalKeys'
+import { openQuotePdf } from '@/lib/openQuotePdf'
 import type { LineInput } from '@/lib/approval/types'
 import {
   isAutoFailed, isOrdered, isExpired, validFromDate,
@@ -341,22 +342,25 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const pagedIds = paged.map(q => q.quote_id)
   const allPagedSelected = pagedIds.length > 0 && pagedIds.every(id => quoteSel.isSelected(id))
 
+  /**
+   * 견적서 PDF 열기 — 게이트가 길을 가른다(lib/openQuotePdf.tsx).
+   *   exempt — 저장된 파일(종전 그대로). 파일이 없으면 열 것이 없다.
+   *   그 밖   — 저장값으로 그 자리에서 만든다(승인일이 박힌다. 완료 전이면 빨간 안내).
+   * 게이트를 아직 못 읽었으면(null) 아무것도 하지 않는다 — 버튼도 보이지 않는다.
+   */
   const openPdf = async (q: Quote) => {
     // state 는 다음 렌더에야 반영돼 같은 틱의 연타를 못 막는다 — 판정은 ref 로 한다.
     if (pdfBusyRef.current) return
-    if (!q.pdf_url) return
-    if (q.pdf_url.includes('synology')) { window.open(q.pdf_url, '_blank'); return }
-    const path = q.pdf_url.startsWith('quote-pdfs/') ? q.pdf_url.replace('quote-pdfs/', '') : q.pdf_url.split('/quote-pdfs/')[1]
-    if (!path) return
+    const gate = gateOfRow(q)
+    if (gate === null) return
+    if (gate === 'exempt' && !q.pdf_url) return
     pdfBusyRef.current = true
     setPdfBusyId(q.quote_id)
     try {
-      const res = await fetch(`/api/quote-pdf?path=${encodeURIComponent(path)}`)
-      const json = await res.json()
-      if (json.signedUrl) {
-        window.open(json.signedUrl, '_blank')
-        await supabase.from('download_logs').insert({ engineer_id: engineerId, quote_id: q.quote_id, quote_number: q.quote_number, company_name: q.company_name === '-' ? null : q.company_name, action: 'view' })
-      }
+      const res = await openQuotePdf({
+        quoteId: q.quote_id, gate, pdfUrl: q.pdf_url, engineerId,
+      })
+      if (!res.ok) toast.error(res.error)
     } finally {
       pdfBusyRef.current = false
       setPdfBusyId(null)   // 실패해도 원래대로 돌아온다
@@ -381,6 +385,17 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   /** 버튼을 숨긴 이유. 「확인 중」도 알려 준다 — 버튼이 왜 없는지 모르면 새로고침만 반복한다. */
   const gateTitleFor = (q: Quote) =>
     gates == null ? '결재 상태를 확인하는 중입니다' : (gateNotice(gateOfRow(q)) ?? undefined)
+  /**
+   * PDF 를 열 수 있는가 — **게이트로 막지 않는다**(전자결재 6단계 PDF).
+   * 결재 대상 견적서는 저장값으로 그 자리에서 만들어 열리므로, 결재 전에도 볼 수 있다
+   * (날짜 자리에 「결재 완료 시 날짜 자동 입력 예정」이 빨갛게 들어간다).
+   * 게이트를 못 읽은 행만 막는다 — 어느 길로 갈지 모르기 때문이다.
+   */
+  const pdfOpenableFor = (q: Quote) => {
+    const gate = gateOfRow(q)
+    if (gate === null) return false
+    return gate === 'exempt' ? !!q.pdf_url : true
+  }
   /** 결재가 도는 중인 행 — 상태 변경·삭제 요청을 아예 내지 않는다. */
   const isPendingRow = (q: Quote) => q.status === SUBMITTED_STATUS
 
@@ -675,11 +690,11 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                           PDF 는 승인 게이트가 허용할 때만 열린다(전자결재 6단계 B) — 막힌 행은
                           아이콘·클릭을 모두 거두고 이유를 title 로 알린다(서버도 409 로 막는다). */}
                       {(() => {
-                        const pdfOpen = !!q.pdf_url && allowsFor(q)
+                        const pdfOpen = pdfOpenableFor(q)
                         return (
                           <span
                             onClick={() => { if (pdfOpen) openPdf(q) }}
-                            title={pdfBusyId === q.quote_id ? '여는 중…' : (q.pdf_url && !pdfOpen ? gateTitleFor(q) : undefined)}
+                            title={pdfBusyId === q.quote_id ? '여는 중…' : (!pdfOpen ? gateTitleFor(q) : undefined)}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 700, color: pdfOpen ? BLUE : TEXT, cursor: pdfOpen && pdfBusyId === null ? 'pointer' : 'default', opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
                             {/* 대필 건 표시. 쓴 사람과 실적 담당자가 다른 견적에만 붙는다. */}
                             {isOnBehalf(q) && (

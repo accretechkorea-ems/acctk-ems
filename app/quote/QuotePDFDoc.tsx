@@ -90,9 +90,20 @@ export type PDFDocProps = {
   showWatermark?: boolean
   // 화면에서 체크했을 때만 표 아래 서명란을 낸다. DB 에 저장하지 않는 표시 전용 값.
   showSignature?: boolean
+  // ── 결재 완료일(전자결재 6단계 PDF) ──
+  // 결재 대상 견적서는 저장된 파일을 열지 않고 저장값으로 다시 그린다(lib/quotePdfData.ts).
+  // 그때 날짜 자리에 **결재 완료일**을 넣는다. 둘 중 하나만 준다.
+  //   approvalDate    — 완료일(dateDisplay 와 같은 서식). 이 값이 있으면 날짜 자리에 그대로 들어간다.
+  //   approvalPending — 아직 완료되지 않았다(결재중·반려·회수·폐기·미상신). 빨간 안내를 낸다.
+  // **둘 다 없으면 지금까지와 똑같이 dateDisplay 가 그려진다** — 확정 흐름·미리보기는 손대지 않는다.
+  approvalDate?: string
+  approvalPending?: boolean
 }
 
-export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, quoteNo, dateDisplay, rows, remarks, engineerName, engineerTel, totalSupply, totalTax, totalAmount, showWatermark, showSignature }: PDFDocProps) {
+/** 결재가 끝나기 전 날짜 자리에 넣는 문구. lib/quotePdfData.ts 의 상수와 같은 값이다. */
+const APPROVAL_PENDING_TEXT = '결재 완료 시 날짜 자동 입력 예정'
+
+export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, quoteNo, dateDisplay, rows, remarks, engineerName, engineerTel, totalSupply, totalTax, totalAmount, showWatermark, showSignature, approvalDate, approvalPending }: PDFDocProps) {
   const EMPTY_ROWS = Math.max(0, 10 - rows.length)
   // 할인은 품목 목록의 맨 끝(합계 바로 위)에 고정한다 — 입력 순서와 무관하게.
   const orderedRows = [...rows.filter(r => r.row_kind !== 'discount'), ...rows.filter(r => r.row_kind === 'discount')]
@@ -118,7 +129,13 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, 
             {receiver ? <Text style={{ fontSize: 9, textAlign: 'right' }}>수신인 : {receiver}</Text> : null}
           </View>
         </View>
-        <Text style={S.dateRow}>{dateDisplay}</Text>
+        {/* 날짜 줄 — 자리와 서식은 하나다. 결재 완료일이 오면 그 값을, 아직 아니면 빨간 안내를,
+            둘 다 없으면 종전대로 dateDisplay 를 그린다(확정 흐름·미리보기가 이 길이다). */}
+        {approvalPending ? (
+          <Text style={[S.dateRow, { color: DANGER }]}>{APPROVAL_PENDING_TEXT}</Text>
+        ) : (
+          <Text style={S.dateRow}>{approvalDate ?? dateDisplay}</Text>
+        )}
         <View style={S.headerRow}>
           <View style={S.headerLeft}>
             <Text style={S.companyName}>{company || '　'} 귀하</Text>

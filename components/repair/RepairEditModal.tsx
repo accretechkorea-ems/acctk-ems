@@ -8,6 +8,7 @@ import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useToast } from '@/components/common/Toast'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { todayKST } from '@/lib/date'
+import { openGeneratedQuotePdf } from '@/lib/openQuotePdf'
 
 /**
  * 수리품 수정 모달.
@@ -225,6 +226,12 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
       const res = await fetch(`/api/repair-quotes?pdf=${quoteId}`)
       const json = await res.json().catch(() => ({}))
       if (res.ok && json.url) window.open(json.url, '_blank')
+      // 결재 대상 견적은 저장 파일을 내주지 않는다 — 저장값으로 그 자리에서 만든다
+      // (전자결재 6단계 PDF. 서버가 needsGenerate 로 알려 준다).
+      else if (json.needsGenerate) {
+        const made = await openGeneratedQuotePdf(quoteId)
+        if (!made.ok) toast.error(made.error)
+      }
       else toast.error(json.error === 'No PDF' ? '견적서 PDF가 없습니다' : json.error === 'Forbidden' ? '견적서 열람 권한이 없습니다' : '견적서를 열 수 없습니다')
     } finally {
       pdfBusyRef.current = false

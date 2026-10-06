@@ -19,6 +19,7 @@ import { isSelfDeletable } from '@/lib/quoteDeletePolicy'
 import LinePickerModal from '@/components/approval/LinePickerModal'
 import { canSubmitApproval, loadQuoteApprovalDocIds, fetchQuoteGates, gateFor } from '@/lib/quoteApprovalDocs'
 import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice, type QuoteGate } from '@/lib/approval/quoteApprovalKeys'
+import { openQuotePdf } from '@/lib/openQuotePdf'
 import type { LineInput } from '@/lib/approval/types'
 import {
   isAutoFailed, isOrdered, REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE,
@@ -656,6 +657,15 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   /** 버튼을 숨긴 이유. 「확인 중」도 알려 준다 — 왜 없는지 모르면 새로고침만 반복한다. */
   const gateTitleFor = (q: Quote) =>
     gates == null ? '결재 상태를 확인하는 중입니다' : (gateNotice(gateOfRow(q)) ?? undefined)
+  /**
+   * PDF 를 열 수 있는가 — **게이트로 막지 않는다**(전자결재 6단계 PDF).
+   * 결재 대상 견적서는 저장값으로 그 자리에서 만들어 열린다. 게이트를 못 읽은 행만 막는다.
+   */
+  const pdfOpenableFor = (q: Quote) => {
+    const gate = gateOfRow(q)
+    if (gate === null) return false
+    return gate === 'exempt' ? !!q.pdf_url : true
+  }
   /** 결재가 도는 중인 행 — 상태 변경·삭제 요청을 아예 내지 않는다. */
   const isPendingRow = (q: Quote) => q.status === SUBMITTED_STATUS
   const tc = getCategoryColor(TEAM_COLORS, engineer.teams)
@@ -956,35 +966,32 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                         <input type="checkbox" checked={sel.isSelected(q.quote_id)} onChange={() => sel.toggle(q.quote_id)} style={{ cursor: 'pointer' }} />
                       </td>
                       <td style={{ padding: '8px 10px', fontWeight: 700, color: BLUE, whiteSpace: 'nowrap', textAlign: 'center' }}>
+                        {/* PDF — **게이트로 막지 않는다**(전자결재 6단계 PDF). 결재 대상 견적서는
+                            저장값으로 그 자리에서 만들어 열리므로 결재 전에도 볼 수 있다(날짜 자리에
+                            빨간 안내가 들어간다). 게이트를 아직 못 읽은 행만 막는다. */}
                         <span
                           onClick={async () => {
                             // state 는 다음 렌더에야 반영돼 같은 틱의 연타를 못 막는다 — 판정은 ref 로 한다.
                             if (pdfBusyRef.current) return
-                            if (!q.pdf_url) return
-                            // 승인 게이트가 허용할 때만 연다(서버도 409 로 막는다 — 전자결재 6단계 B).
-                            if (!allowsFor(q)) return
-                            if (q.pdf_url.includes('synology')) { window.open(q.pdf_url, '_blank'); return }
-                            const path = q.pdf_url.startsWith('quote-pdfs/') ? q.pdf_url.replace('quote-pdfs/', '') : q.pdf_url.split('/quote-pdfs/')[1]
-                            if (!path) return
+                            const gate = gateOfRow(q)
+                            if (gate === null) return
+                            if (gate === 'exempt' && !q.pdf_url) return
                             pdfBusyRef.current = true
                             setPdfBusyId(q.quote_id)
                             try {
-                              const res = await fetch(`/api/quote-pdf?path=${encodeURIComponent(path)}`)
-                              const json = await res.json()
-                              if (json.signedUrl) {
-                                window.open(json.signedUrl, '_blank')
-                                await supabase.from('download_logs').insert({ engineer_id: currentEngineerId, quote_id: q.quote_id, quote_number: q.quote_number, company_name: q.customers?.company_name ?? null, action: 'view' })
-                              }
+                              const res = await openQuotePdf({
+                                quoteId: q.quote_id, gate, pdfUrl: q.pdf_url, engineerId: currentEngineerId,
+                              })
+                              if (!res.ok) toast.error(res.error)
                             } finally {
                               pdfBusyRef.current = false
                               setPdfBusyId(null)   // 실패해도 원래대로 돌아온다
                             }
                           }}
-                          title={pdfBusyId === q.quote_id ? '여는 중…' : (q.pdf_url && !allowsFor(q) ? gateTitleFor(q) : undefined)}
-                          style={{ cursor: q.pdf_url && allowsFor(q) && pdfBusyId === null ? 'pointer' : 'default', color: q.pdf_url && allowsFor(q) ? BLUE : TEXT, opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
+                          title={pdfBusyId === q.quote_id ? '여는 중…' : (!pdfOpenableFor(q) ? gateTitleFor(q) : undefined)}
+                          style={{ cursor: pdfOpenableFor(q) && pdfBusyId === null ? 'pointer' : 'default', color: pdfOpenableFor(q) ? BLUE : TEXT, opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
                           {q.quote_number}
-                          {/* 결재가 끝나기 전에는 PDF 표시를 내지 않는다 — 열리지 않는 링크로 보이지 않게. */}
-                          {q.pdf_url && allowsFor(q) && <span style={{ marginLeft: 4, fontSize: 9, color: MUTED }}>PDF</span>}
+                          {pdfOpenableFor(q) && <span style={{ marginLeft: 4, fontSize: 9, color: MUTED }}>PDF</span>}
                         </span>
                       </td>
                       <td style={{ padding: '8px 10px', color: MUTED, whiteSpace: 'nowrap', fontSize: 11, textAlign: 'center' }}>{q.quote_date}</td>
