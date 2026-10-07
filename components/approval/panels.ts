@@ -13,15 +13,37 @@
 
 import type { ComponentType } from 'react'
 import QuoteReviewPanel from './QuoteReviewPanel'
+import { reviewCache } from '@/lib/quoteReviewCache'
 
 export type DocPanelProps = { documentId: number }
 
-const PANELS: Record<string, ComponentType<DocPanelProps>> = {
-  // 견적서 — 품목·원가·이익·거래 구분을 보여 주는 검토표.
-  quote: QuoteReviewPanel,
+export type DocPanel = {
+  Component: ComponentType<DocPanelProps>
+  /**
+   * 선택 — 패널이 마운트되기 **전에** 데이터를 미리 불러 둘 수 있으면 여기 적는다.
+   * 목록이 문서 행을 펼치는 순간 불린다. 결과를 기다리지 않고, 실패해도 아무 일도 하지 않는다
+   * (패널이 마운트되면 평소대로 자기가 다시 부른다).
+   */
+  prefetch?: (documentId: number) => void
 }
+
+const PANELS: Record<string, DocPanel> = {
+  // 견적서 — 품목·원가·이익·거래 구분을 보여 주는 검토표.
+  quote: { Component: QuoteReviewPanel, prefetch: id => reviewCache.prefetch(id) },
+}
+
+const entryOf = (docType: string): DocPanel | null =>
+  Object.prototype.hasOwnProperty.call(PANELS, docType) ? PANELS[docType] : null
 
 /** 그 유형의 추가 패널. 없으면 null — 상세 화면이 아무것도 그리지 않는다. */
 export function panelOf(docType: string): ComponentType<DocPanelProps> | null {
-  return Object.prototype.hasOwnProperty.call(PANELS, docType) ? PANELS[docType] : null
+  return entryOf(docType)?.Component ?? null
+}
+
+/**
+ * 그 유형의 패널 데이터를 미리 부른다. 등록되지 않은 유형이나 미리 부를 것이 없는 유형은
+ * **아무 일도 하지 않는다** — 그래서 부르는 쪽(결재함 목록)에 `doc_type === 'quote'` 같은 분기가 없다.
+ */
+export function prefetchPanel(docType: string, documentId: number): void {
+  entryOf(docType)?.prefetch?.(documentId)
 }

@@ -19,6 +19,7 @@ import { BORDER, CARD_BG, DANGER, FAINT, MUTED, NEUTRAL_BG, SKELETON, SUB, TEXT,
 import { comma, rateText, type QuoteReview } from '@/lib/approval/quoteReview'
 import { useToast } from '@/components/common/Toast'
 import { openGeneratedQuotePdf } from '@/lib/openQuotePdf'
+import { reviewCache } from '@/lib/quoteReviewCache'
 
 /** 표가 좁은 화면에서 **자기 상자 안에서만** 가로로 스크롤되게 한다(페이지가 옆으로 밀리지 않게). */
 const scrollBox: CSSProperties = {
@@ -82,37 +83,43 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
 
 export default function QuoteReviewPanel({ documentId }: { documentId: number }) {
   const toast = useToast()
-  const [data, setData] = useState<QuoteReview | null>(null)
+  // 이미 읽어 둔 것이 있으면 **첫 그림부터 내용을 그린다.** useState 의 초기값으로 꺼내는 이유 —
+  // useEffect 는 한 번 그린 뒤에 돌아서, 거기서 채우면 자리표시가 한 번 번쩍인다.
+  const cached = reviewCache.peek(documentId)
+  const [data, setData] = useState<QuoteReview | null>(cached?.review ?? null)
   // PDF 를 만들 대상 견적. 검토 응답이 함께 준다(문서 → 견적 연결은 서버가 안다).
-  const [quoteId, setQuoteId] = useState<number | null>(null)
+  const [quoteId, setQuoteId] = useState<number | null>(cached?.quoteId ?? null)
   const [pdfBusy, setPdfBusy] = useState(false)
   const [failed, setFailed] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(cached == null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setFailed(false)
-    try {
-      const res = await fetch('/api/quote-approval', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'review', document_id: documentId }),
-      })
-      const json = await res.json().catch(() => null)
-      if (!res.ok || !json?.review) {
-        console.error('[approval/review] 검토 정보 조회 실패', { documentId, status: res.status, error: json?.error })
-        setFailed(true)
+  /** force 면 캐시를 건너뛰고 새로 부른다 — 「다시 시도」가 그렇게 부른다. */
+  const load = useCallback(async (opts?: { force?: boolean }) => {
+    if (!opts?.force) {
+      const hit = reviewCache.peek(documentId)
+      if (hit) {
+        setData(hit.review)
+        setQuoteId(hit.quoteId)
+        setFailed(false)
+        setLoading(false)
         return
       }
-      setData(json.review as QuoteReview)
-      setQuoteId(typeof json.quoteId === 'number' ? json.quoteId : null)
-    } catch (e) {
-      console.error('[approval/review] 검토 정보 조회 실패', { documentId, error: e })
-      setFailed(true)
-    } finally {
-      setLoading(false)
     }
+    setLoading(true)
+    setFailed(false)
+    const res = await reviewCache.load(documentId, { force: opts?.force })
+    if (!res) {
+      setFailed(true)
+      setLoading(false)
+      return
+    }
+    setData(res.review)
+    setQuoteId(res.quoteId)
+    setLoading(false)
   }, [documentId])
+
+  /** 「다시 시도」 — 버튼의 click 이벤트가 opts 로 들어가지 않게 감싼다. */
+  const retry = useCallback(() => { void load({ force: true }) }, [load])
 
   useEffect(() => { load() }, [load])
 
@@ -150,7 +157,7 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
     return (
       <div style={{ marginTop: 12 }}>
         <div style={sectionTitle}>견적 검토</div>
-        <LoadFailed message="검토 정보를 불러오지 못했습니다" onRetry={load} />
+        <LoadFailed message="검토 정보를 불러오지 못했습니다" onRetry={retry} />
       </div>
     )
   }
@@ -222,7 +229,7 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
       {/* ④ 품목 표 — 못 읽었으면 **빈 표를 그리지 않는다.**
           빈 표로 두면 「품목 없는 견적」으로 읽혀 결재자가 잘못 판단한다. */}
       {!data.itemsOk ? (
-        <LoadFailed message="품목을 불러오지 못했습니다. 다시 시도해 주세요" onRetry={load} />
+        <LoadFailed message="품목을 불러오지 못했습니다. 다시 시도해 주세요" onRetry={retry} />
       ) : (
       <div style={scrollBox}>
         <table style={table}>
@@ -279,7 +286,7 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
       {!data.expensesOk ? (
         <div style={{ marginTop: 10 }}>
           <div style={sectionTitle}>부대비용</div>
-          <LoadFailed message="부대비용을 불러오지 못했습니다. 다시 시도해 주세요" onRetry={load} />
+          <LoadFailed message="부대비용을 불러오지 못했습니다. 다시 시도해 주세요" onRetry={retry} />
         </div>
       ) : data.expenses.length > 0 && (
         <div style={{ marginTop: 10 }}>

@@ -35,6 +35,7 @@ import {
   inputStyle, rowStyle, skeletonBlock,
 } from '@/components/common/ui'
 import DocDetail, { type ApprovalDoc } from '@/components/approval/DocDetail'
+import { prefetchPanel } from '@/components/approval/panels'
 import DelegationModal from '@/components/approval/DelegationModal'
 import type { ProgressPerson } from '@/components/approval/ApprovalTable'
 import { DOC_TYPES } from '@/lib/approval/docTypes'
@@ -527,7 +528,15 @@ function ApprovalPageInner() {
                     <div key={d.document_id} style={rowStyle(i === 0)}>
                       <button
                         type="button"
-                        onClick={() => setOpenId(open ? null : d.document_id)}
+                        onClick={() => {
+                          const opening = !open
+                          setOpenId(opening ? d.document_id : null)
+                          // 펼치는 순간 유형별 패널의 데이터를 미리 부른다. 패널은 상세가 그려진
+                          // **뒤에** 자기 요청을 띄우므로, 그리기를 기다리는 만큼 먼저 출발한다.
+                          // 어느 유형이 무엇을 미리 부를지는 등록표(panels.ts)가 안다 —
+                          // 여기에 문서 종류 이름을 적지 않는다.
+                          if (opening) prefetchPanel(d.doc_type, d.document_id)
+                        }}
                         style={{
                           display: 'flex', alignItems: 'flex-start', gap: COL.gap, width: '100%', textAlign: 'left',
                           border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: 'inherit',

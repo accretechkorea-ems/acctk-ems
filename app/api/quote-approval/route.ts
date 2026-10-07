@@ -25,7 +25,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { canViewMenu, canViewSalesMgmt, isSuperAdmin } from '@/lib/permissions'
-import { withTeamPerm } from '@/lib/teamPermsServer'
+import { attachTeamPerm, loadTeamPerms } from '@/lib/teamPermsServer'
+import type { TeamPerm } from '@/lib/permissions'
 import { todayKST } from '@/lib/date'
 import { checkLines, createApprovalDocument } from '@/lib/approval/submit'
 import {
@@ -54,6 +55,41 @@ const admin = () => createClient(
 )
 
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status })
+
+// ── 단계별 소요 시간 ────────────────────────────────────────────────
+//
+// 「검토표가 회색 자리표시로 오래 머문다」를 눈대중이 아니라 숫자로 보기 위한 것이다.
+// 브라우저 Network 탭의 해당 요청 → Timing 에 단계가 그대로 뜬다(Server-Timing 표준).
+//
+// **값은 ms 뿐이다** — 문서 내용·id·사람·행 수 같은 것은 절대 담지 않는다. 헤더는 권한 판정을
+// 통과한 응답에만 붙인다(막힌 요청에 시간을 돌려주면 그것도 알려 주는 정보가 된다).
+//
+// 겹쳐 실행되는 단계(Promise.all 안의 items·parties·engineers)도 각자의 시간이 따로 잡힌다 —
+// 그래서 합이 total 보다 클 수 있고, 그 차이가 곧 「동시에 돌았다」는 뜻이다.
+type Timer = {
+  /** PromiseLike 를 받는다 — supabase 질의 빌더는 Promise 가 아니라 then 만 가진 객체다. */
+  step<T>(name: string, fn: () => PromiseLike<T>): Promise<T>
+  header(): string
+}
+
+function makeTimer(): Timer {
+  const t0 = performance.now()
+  const marks: [string, number][] = []
+  return {
+    async step<T>(name: string, fn: () => PromiseLike<T>): Promise<T> {
+      const s = performance.now()
+      try {
+        return await fn()
+      } finally {
+        marks.push([name, performance.now() - s])
+      }
+    },
+    header() {
+      const all: [string, number][] = [...marks, ['total', performance.now() - t0]]
+      return all.map(([n, ms]) => `${n};dur=${ms.toFixed(1)}`).join(', ')
+    },
+  }
+}
 
 /** 화면이 보낸 결재선을 읽는다. 모양만 맞추고 내용 검증은 checkLines 가 한다(쇼룸·견적 삭제와 같다). */
 function readLines(raw: unknown): LineInput[] | null {
@@ -139,29 +175,59 @@ const REVIEW_QUOTE_SELECT = `
   customer_id, dealer_id, engineer_id, created_by
 `
 
-/** 업체 한 곳의 이름 — 사업장명과 그것을 묶는 회사명. 못 읽으면 null. */
-async function partyNameOf(sb: SupabaseClient, customerId: number | null): Promise<PartyName | null> {
-  if (customerId == null) return null
+/**
+ * 업체 **여럿**의 이름 — 사업장명과 그것을 묶는 회사명. 못 읽은 id 는 맵에 없다(= null 로 본다).
+ *
+ * 왜 한 번에 읽는가 — 고객사와 대리점을 따로 부르면 각자 「자기 행 → 부모 행」 두 겹이라 왕복이
+ * 최대 4번이었다. 여기서는 **두 번**이다: ① 넘어온 id 전부를 `.in` 으로 한 번 ② 그 결과에서 나온
+ * 부모 id 전부를 `.in` 으로 한 번. 부모가 없으면 ②는 아예 보내지 않는다.
+ *
+ * 규칙과 결과는 한 곳씩 읽던 때와 같다:
+ *   · id 가 null 이면 부르는 쪽이 애초에 넣지 않는다 → 맵에 없다 → null
+ *   · 행이 없으면 맵에 없다 → null
+ *   · 조회 실패는 **빈 맵**(fail-closed 가 아니라 「이름을 모른다」다 — 검토표는 '-' 를 그린다)
+ *   · 부모 조회만 실패하면 사업장명은 그대로 두고 parent 만 null 이다(종전과 같다)
+ */
+async function partyNamesOf(sb: SupabaseClient, ids: (number | null)[]): Promise<Map<number, PartyName>> {
+  const out = new Map<number, PartyName>()
+  const want = [...new Set(ids.filter((n): n is number => n != null))]
+  if (want.length === 0) return out
+
   const { data, error } = await sb
     .from('customers')
-    .select('company_name, parent_customer_id')
-    .eq('customer_id', customerId)
-    .maybeSingle()
+    .select('customer_id, company_name, parent_customer_id')
+    .in('customer_id', want)
   if (error) {
-    console.error(`[${TAG}] customer lookup failed`, { customerId, error })
-    return null
+    console.error(`[${TAG}] customer lookup failed`, { customerIds: want, error })
+    return out
   }
-  const row = (data ?? null) as { company_name: string | null; parent_customer_id: number | null } | null
-  if (!row) return null
-  if (row.parent_customer_id == null) return { site: row.company_name, parent: null }
-  const { data: p, error: pErr } = await sb
-    .from('customers')
-    .select('company_name')
-    .eq('customer_id', row.parent_customer_id)
-    .maybeSingle()
-  if (pErr) console.error(`[${TAG}] parent lookup failed`, { customerId, error: pErr })
-  return { site: row.company_name, parent: (p as { company_name: string | null } | null)?.company_name ?? null }
+  const rows = (data ?? []) as { customer_id: number; company_name: string | null; parent_customer_id: number | null }[]
+
+  const parentIds = [...new Set(rows.map(r => r.parent_customer_id).filter((n): n is number => n != null))]
+  const parentName = new Map<number, string | null>()
+  if (parentIds.length > 0) {
+    const { data: ps, error: pErr } = await sb
+      .from('customers')
+      .select('customer_id, company_name')
+      .in('customer_id', parentIds)
+    if (pErr) console.error(`[${TAG}] parent lookup failed`, { parentIds, error: pErr })
+    for (const p of (ps ?? []) as { customer_id: number; company_name: string | null }[]) {
+      parentName.set(p.customer_id, p.company_name)
+    }
+  }
+
+  for (const r of rows) {
+    out.set(r.customer_id, {
+      site: r.company_name,
+      parent: r.parent_customer_id == null ? null : (parentName.get(r.parent_customer_id) ?? null),
+    })
+  }
+  return out
 }
+
+/** 맵에서 한 곳을 꺼낸다 — id 가 없거나 못 읽었으면 null(종전 partyNameOf 와 같은 값). */
+const partyOf = (m: Map<number, PartyName>, id: number | null): PartyName | null =>
+  id == null ? null : (m.get(id) ?? null)
 
 /**
  * 견적 검토표 — 결재자가 금액뿐 아니라 품목·원가·이익까지 보고 판단하게 한다.
@@ -169,15 +235,15 @@ async function partyNameOf(sb: SupabaseClient, customerId: number | null): Promi
  * 가리는 것이 없다. 이 문서를 볼 수 있는 사람이면 원가·이익까지 전부 본다(설계 결정).
  * 쓰기는 없다 — DB 를 바꾸지 않는다.
  */
-async function review(sb: SupabaseClient, caller: Caller, body: Record<string, unknown>) {
+async function review(sb: SupabaseClient, caller: Caller, body: Record<string, unknown>, timer: Timer) {
   const documentId = Number(body?.document_id)
   if (!Number.isSafeInteger(documentId) || documentId <= 0) return bad('문서를 지정해주세요.')
 
-  const { data: docRow, error: docErr } = await sb
+  const { data: docRow, error: docErr } = await timer.step('doc', () => sb
     .from('approval_documents')
     .select('document_id, doc_type, target_table, target_id, requester_id')
     .eq('document_id', documentId)
-    .maybeSingle()
+    .maybeSingle())
   if (docErr) {
     console.error(`[${TAG}] document lookup failed`, { documentId, error: docErr })
     return bad('문서를 불러오지 못했습니다.', 500)
@@ -187,7 +253,11 @@ async function review(sb: SupabaseClient, caller: Caller, body: Record<string, u
 
   // 권한을 **종류보다 먼저** 본다 — 볼 수 없는 사람에게 「그 문서는 견적서가 아니다」를 알려
   // 주지 않는다(문서 종류도 정보다).
-  if (!(await canViewApprovalDocument(sb, doc, caller))) {
+  //
+  // 이 판정은 **아래 조회들과 겹쳐 돌리지 않는다.** 겹치면 볼 권한이 없는 사람의 요청에도 견적·품목
+  // 조회가 한 번은 나간다(응답에 담지는 않더라도). 읽을 자격을 확인한 다음 읽는다.
+  const allowed = await timer.step('access', () => canViewApprovalDocument(sb, doc, caller))
+  if (!allowed) {
     console.warn(`[${TAG}] review 권한 없음`, { documentId, callerId: caller.engineer_id })
     return bad('이 문서를 볼 권한이 없습니다.', 403)
   }
@@ -197,8 +267,8 @@ async function review(sb: SupabaseClient, caller: Caller, body: Record<string, u
   }
   if (doc.target_id == null) return bad('견적을 찾을 수 없습니다.', 404)
 
-  const { data: qRow, error: qErr } = await sb
-    .from('quotes').select(REVIEW_QUOTE_SELECT).eq('quote_id', doc.target_id).maybeSingle()
+  const { data: qRow, error: qErr } = await timer.step('quote', () => sb
+    .from('quotes').select(REVIEW_QUOTE_SELECT).eq('quote_id', doc.target_id).maybeSingle())
   if (qErr) {
     console.error(`[${TAG}] quote lookup failed`, { documentId, quoteId: doc.target_id, error: qErr })
     return bad('견적을 불러오지 못했습니다.', 500)
@@ -207,16 +277,17 @@ async function review(sb: SupabaseClient, caller: Caller, body: Record<string, u
   if (!quote) return bad('견적을 찾을 수 없습니다.', 404)
 
   // 품목·부대비용·업체 이름·사람 이름을 나란히 읽는다(서로의 결과가 필요 없다).
-  const [itemsRes, expRes, custName, dealerName, people] = await Promise.all([
-    sb.from('quote_items')
+  // 업체는 고객사·대리점을 **한 번의 .in 조회**로 묶어 읽는다(partyNamesOf) — 따로 부르면
+  // 「자기 행 → 부모 행」이 두 벌이라 왕복이 그만큼 늘어난다.
+  const [itemsRes, expRes, parties, people] = await Promise.all([
+    timer.step('items', () => sb.from('quote_items')
       .select('item_id, row_kind, part_code, product_name, quantity, unit_price_jpy, unit_price_krw, supply_amount, cost_amount, profit_amount, profit_rate, exchange_rate, tariff_rate')
-      .eq('quote_id', quote.quote_id),
-    sb.from('quote_expenses')
+      .eq('quote_id', quote.quote_id)),
+    timer.step('expenses', () => sb.from('quote_expenses')
       .select('expense_id, item_name, unit_price, headcount, days, amount')
-      .eq('quote_id', quote.quote_id),
-    partyNameOf(sb, quote.customer_id),
-    partyNameOf(sb, quote.dealer_id),
-    (async () => {
+      .eq('quote_id', quote.quote_id)),
+    timer.step('parties', () => partyNamesOf(sb, [quote.customer_id, quote.dealer_id])),
+    timer.step('engineers', async () => {
       const ids = [quote.engineer_id, quote.created_by].filter((n): n is number => n != null)
       if (ids.length === 0) return new Map<number, string | null>()
       const { data, error } = await sb.from('engineers').select('engineer_id, name').in('engineer_id', ids)
@@ -224,8 +295,10 @@ async function review(sb: SupabaseClient, caller: Caller, body: Record<string, u
       const m = new Map<number, string | null>()
       for (const e of (data ?? []) as { engineer_id: number; name: string | null }[]) m.set(e.engineer_id, e.name)
       return m
-    })(),
+    }),
   ])
+  const custName = partyOf(parties, quote.customer_id)
+  const dealerName = partyOf(parties, quote.dealer_id)
   if (itemsRes.error) console.error(`[${TAG}] items lookup failed`, { quoteId: quote.quote_id, error: itemsRes.error })
   if (expRes.error) console.error(`[${TAG}] expenses lookup failed`, { quoteId: quote.quote_id, error: expRes.error })
 
@@ -245,7 +318,11 @@ async function review(sb: SupabaseClient, caller: Caller, body: Record<string, u
   })
 
   // quoteId 를 함께 준다 — 검토표의 「견적서 PDF 보기」가 그 견적으로 PDF 를 만든다.
-  return NextResponse.json({ review: reviewData, quoteId: quote.quote_id })
+  // Server-Timing 은 **본문을 바꾸지 않는다** — 헤더에만 단계별 ms 가 실린다.
+  return NextResponse.json(
+    { review: reviewData, quoteId: quote.quote_id },
+    { headers: { 'Server-Timing': timer.header() } },
+  )
 }
 
 // ── 견적서 PDF 생성용 저장값 ────────────────────────────────────────
@@ -325,30 +402,23 @@ async function pdfData(sb: SupabaseClient, caller: Caller, body: Record<string, 
     return bad('결재 도입 전 견적은 저장된 PDF 를 사용합니다')
   }
 
-  // 완료된 결재 문서의 완료 시각. 없으면 null → 날짜 자리에 「결재 완료 시 …」가 들어간다.
-  // completed_at 은 '완료' 인 문서에 반드시 있다(approval_schema.sql 의 ad_completed_fields).
-  const { data: doneDocs, error: dErr } = await sb
-    .from('approval_documents')
-    .select('completed_at')
-    .eq('doc_type', QUOTE_TYPE)
-    .eq('target_table', QUOTE_TARGET_TABLE)
-    .eq('target_id', quoteId)
-    .eq('status', '완료')
-    .order('completed_at', { ascending: false })
-    .limit(1)
-  if (dErr) {
-    console.error(`[${TAG}] pdf 완료 문서 조회 실패`, { quoteId, error: dErr })
-    return bad('결재 상태를 확인하지 못했습니다.', 500)
-  }
-  const approvedAt = (doneDocs?.[0] as { completed_at: string | null } | undefined)?.completed_at ?? null
-
-  // 품목·수신처·담당자. 서로의 결과가 필요 없어 나란히 보낸다.
-  const [itemsRes, custName, dealerName, people] = await Promise.all([
+  // 완료 시각·품목·수신처·담당자. 서로의 결과가 필요 없어 **전부** 나란히 보낸다.
+  // 업체는 'review' 와 같은 함수로 고객사·대리점을 한 번의 .in 조회에 묶는다(partyNamesOf).
+  const [doneRes, itemsRes, parties, people] = await Promise.all([
+    // 완료된 결재 문서의 완료 시각. 없으면 null → 날짜 자리에 「결재 완료 시 …」가 들어간다.
+    // completed_at 은 '완료' 인 문서에 반드시 있다(approval_schema.sql 의 ad_completed_fields).
+    sb.from('approval_documents')
+      .select('completed_at')
+      .eq('doc_type', QUOTE_TYPE)
+      .eq('target_table', QUOTE_TARGET_TABLE)
+      .eq('target_id', quoteId)
+      .eq('status', '완료')
+      .order('completed_at', { ascending: false })
+      .limit(1),
     sb.from('quote_items')
       .select('item_id, row_kind, part_code, product_name, quantity, unit_price_krw, supply_amount, tax_amount')
       .eq('quote_id', quoteId),
-    partyNameOf(sb, quote.customer_id),
-    partyNameOf(sb, quote.dealer_id),
+    partyNamesOf(sb, [quote.customer_id, quote.dealer_id]),
     (async () => {
       const ids = [quote.engineer_id].filter((n): n is number => n != null)
       if (ids.length === 0) return null
@@ -358,6 +428,14 @@ async function pdfData(sb: SupabaseClient, caller: Caller, body: Record<string, 
       return ((data ?? [])[0] ?? null) as { name: string | null; position: string | null; tel: string | null } | null
     })(),
   ])
+  // 오류를 보는 순서는 종전과 같다 — 결재 상태를 못 읽은 쪽이 먼저다.
+  if (doneRes.error) {
+    console.error(`[${TAG}] pdf 완료 문서 조회 실패`, { quoteId, error: doneRes.error })
+    return bad('결재 상태를 확인하지 못했습니다.', 500)
+  }
+  const approvedAt = (doneRes.data?.[0] as { completed_at: string | null } | undefined)?.completed_at ?? null
+  const custName = partyOf(parties, quote.customer_id)
+  const dealerName = partyOf(parties, quote.dealer_id)
   if (itemsRes.error) {
     // 품목이 빠진 견적서를 내보내지 않는다 — 금액은 맞는데 품목이 비면 문서가 틀린 것이다.
     console.error(`[${TAG}] pdf items lookup failed`, { quoteId, error: itemsRes.error })
@@ -399,6 +477,7 @@ async function pdfData(sb: SupabaseClient, caller: Caller, body: Record<string, 
 }
 
 export async function POST(req: NextRequest) {
+  const timer = makeTimer()
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return bad('Unauthorized', 401)
@@ -410,12 +489,24 @@ export async function POST(req: NextRequest) {
     return bad('Invalid action')
   }
 
+  // 팀 권한은 engineers 조회와 **서로의 결과가 필요하지 않다**(팀 × 메뉴 표를 통째로 읽는다).
+  // 그래서 engineers 를 기다리지 않고 먼저 띄워 둔다 — 왕복 한 겹이 줄어든다.
+  // 'gates' 는 팀 권한을 보지 않으므로 그 액션에서는 띄우지 않는다(그 액션이 괜히 느려지지 않게).
+  // 실패는 loadTeamPerms 가 이미 「빈 맵」으로 돌려준다(= 전원 권한 없음). catch 는 그 자리에서
+  // 띄워 둔 promise 가 처리되지 않은 거부로 남지 않게 하는 것이고, 값은 같다.
+  const permsPromise = action === 'gates'
+    ? null
+    : timer.step('perm', () => loadTeamPerms({ fresh: true }).catch(e => {
+      console.error(`[${TAG}] team perms load failed`, e)
+      return new Map<string, TeamPerm>()
+    }))
+
   // 세션 → engineers. 퇴사자는 막는다(결재 라우트의 loadCaller 와 같은 기준).
-  const { data: callerRow, error: callerErr } = await supabase
+  const { data: callerRow, error: callerErr } = await timer.step('auth', () => supabase
     .from('engineers')
     .select('engineer_id, name, permission_level, teams, resigned_date')
     .eq('email', user.email!)
-    .single()
+    .single())
   if (callerErr) console.error(`[${TAG}] caller lookup failed`, { email: user.email, error: callerErr })
   const row = (callerRow ?? null) as (Caller & { resigned_date: string | null }) | null
   if (!row || row.resigned_date) return bad('Forbidden', 403)
@@ -440,8 +531,8 @@ export async function POST(req: NextRequest) {
   }
 
   // 견적을 상신하는 라우트다. 권한을 거둔 직후에도 통과하면 곤란해 캐시를 건너뛴다
-  // (견적 삭제 요청 라우트와 같은 판단).
-  const caller = await withTeamPerm(row as Caller, { fresh: true })
+  // (견적 삭제 요청 라우트와 같은 판단 — 위에서 fresh: true 로 띄워 둔 그 promise 다).
+  const caller = permsPromise ? attachTeamPerm(await permsPromise, row as Caller) : null
   if (!caller) return bad('Forbidden', 403)
 
   // ── 견적 검토표 — 읽기 전용 ──
@@ -449,7 +540,7 @@ export async function POST(req: NextRequest) {
   // 그 사람에게 견적 메뉴가 없어도 자기가 결재할 문서는 봐야 한다. 대신 **그 문서를 볼 수 있는
   // 사람인지**를 아래에서 따로 본다(canViewApprovalDocument).
   if (action === 'review') {
-    return review(sb, caller, body)
+    return review(sb, caller, body, timer)
   }
 
   // ── 견적서 PDF 생성용 저장값 — 읽기 전용 ──
