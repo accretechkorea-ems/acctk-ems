@@ -13,6 +13,7 @@
 
 import type { ComponentType } from 'react'
 import QuoteReviewPanel from './QuoteReviewPanel'
+import QuoteFormBody from './QuoteFormBody'
 import type { FormDoc } from '@/lib/approval/formDoc'
 import { reviewCache } from '@/lib/quoteReviewCache'
 
@@ -46,6 +47,8 @@ const PANELS: Record<string, DocPanel> = {
   quote: {
     Component: QuoteReviewPanel,
     prefetch: id => reviewCache.prefetch(id),
+    formTitle: '견적품의서',
+    FormBody: QuoteFormBody,
   },
 }
 
