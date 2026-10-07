@@ -48,6 +48,7 @@ import {
 } from '@/components/approval/boxes'
 import { PAGE_SIZE, clampPage, pageRange, pageWindow, totalPages } from '@/lib/paging'
 import { openApprovalDoc } from '@/lib/approval/docWindow'
+import { listenDocSignal } from '@/lib/approval/docSignal'
 import { isMobileViewport } from '@/lib/viewport'
 
 const APPROVAL_PATH = '/approval'
@@ -363,6 +364,17 @@ function ApprovalPageInner() {
     run()
     return () => { cancelled = true }
   }, [authorized, source, canSeeAll, reloadKey])
+
+  // 문서 창에서 처리한 결과를 받는다 — 같은 출처의 다른 탭·창이 보낸 한 줄이다
+  // (lib/approval/docSignal.ts). 목록이 열려 있지 않으면 듣는 쪽이 없을 뿐 아무 일도 없다.
+  useEffect(() => {
+    if (!authorized) return
+    return listenDocSignal(sig => {
+      setReloadKey(k => k + 1)
+      // 처리된 문서를 펼쳐 두고 있었으면 접는다 — 그 안의 버튼은 이미 뜻이 달라졌다.
+      setOpenId(prev => (prev === sig.documentId ? null : prev))
+    })
+  }, [authorized])
 
   // ── 직원 이름·직급·부서 ── 결재표·문서 정보에서 번호를 사람으로 바꾼다. 한 번만 읽는다.
   const [people, setPeople] = useState<Record<number, ProgressPerson>>({})

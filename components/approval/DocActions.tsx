@@ -20,6 +20,7 @@ import { useToast } from '@/components/common/Toast'
 import { MUTED, NEUTRAL_BG, SUB, btnDanger, btnGhost, btnPrimary, inputStyle } from '@/components/common/ui'
 import { APPROVE_LABEL, approveLabelOf, canRejectDocument, DOC_TYPES } from '@/lib/approval/docTypes'
 import { ownerActions, type ActionDoc } from '@/lib/approval/docActions'
+import { sendDocSignal, type DocAction } from '@/lib/approval/docSignal'
 
 /** 「회수」는 두 번 눌러야 실행된다. 쇼룸·첨부와 같은 3초다. */
 const CONFIRM_MS = 3000
@@ -73,7 +74,13 @@ export default function DocActions({
   const rejectable = def ? canRejectDocument(def, summary) : true
   const approveLabel = def ? approveLabelOf(def, summary) : APPROVE_LABEL
 
-  /** 라우트 호출 공통 — 409 는 「이미 처리되었습니다」로 알리고 목록을 다시 읽는다. */
+  /**
+   * 라우트 호출 공통 — 409 는 「이미 처리되었습니다」로 알리고 목록을 다시 읽는다.
+   *
+   * 성공하면 같은 출처의 다른 탭·창에 한 줄을 보낸다(lib/approval/docSignal.ts) — 문서 창에서
+   * 처리했을 때 뒤에 열려 있는 결재함 목록이 묵은 상태로 남지 않게 한다. 듣는 쪽이 없으면
+   * 아무 일도 일어나지 않는다. 보내는 것은 문서 id 와 동작 이름뿐이다.
+   */
   const call = async (body: Record<string, unknown>, okText: string) => {
     setBusy(true)
     try {
@@ -90,6 +97,7 @@ export default function DocActions({
       }
       if (!res.ok) { toast.error(json?.error ?? '처리하지 못했습니다'); return }
       toast.success(okText)
+      sendDocSignal(doc.document_id, body.action as DocAction)
       onChanged()
     } catch (e) {
       console.error('[approval/detail] action failed', e)
