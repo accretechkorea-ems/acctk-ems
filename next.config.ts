@@ -24,7 +24,7 @@ const securityHeaders = [
       // *.kakaocdn.net — 카카오가 지도 리소스를 이 도메인으로도 내주기 시작했다
       // (t1.kakaocdn.net/mapjsapi/js/main/<버전>/kakao.js). 버전·호스트가 카카오 쪽에서 바뀌므로
       // 특정 호스트를 적지 않고 카카오 공지가 권장하는 와일드카드로 둔다 — 적지 않으면 지도가 빈 칸이 된다.
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://dapi.kakao.com https://t1.daumcdn.net https://*.kakaocdn.net http://t1.daumcdn.net http://dapi.kakao.com",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://dapi.kakao.com https://t1.daumcdn.net https://*.kakaocdn.net http://*.kakaocdn.net http://t1.daumcdn.net http://dapi.kakao.com",
       // Google Fonts
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' data: https://fonts.gstatic.com",
