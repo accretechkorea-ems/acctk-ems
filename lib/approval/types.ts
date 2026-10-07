@@ -31,6 +31,13 @@ export const SEQUENTIAL_KINDS: LineKind[] = ['approve', 'agree']
 /** 결재 화면 경로. 알림 링크가 여기를 가리킨다(화면은 3단계). */
 export const APPROVAL_PATH = '/approval'
 
+/**
+ * 문서 한 건의 화면 주소 — 알림이 가리키는 곳이다.
+ * 서버(알림 생성)와 화면이 같은 식을 써야 하므로 여기 둔다. popup 은 붙이지 않는다
+ * (알림은 같은 창에서 연다 — lib/approval/docWindow.ts 의 docUrl 이 팝업용 주소를 만든다).
+ */
+export const approvalDocPath = (documentId: number): string => `${APPROVAL_PATH}/doc/${documentId}`
+
 /** approval_lines 한 행. */
 export type ApprovalLine = {
   line_id: number

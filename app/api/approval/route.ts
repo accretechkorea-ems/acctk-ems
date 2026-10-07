@@ -25,7 +25,7 @@ import {
   nextPendingLine, skippedLineIds, toLineRows, untouched,
 } from '@/lib/approval/engine'
 import {
-  APPROVAL_PATH, DISCARDABLE_STATUSES,
+  APPROVAL_PATH, DISCARDABLE_STATUSES, approvalDocPath,
   type ApprovalDocument, type ApprovalLine, type Delegation,
   type HistoryAction, type LineInput,
 } from '@/lib/approval/types'
@@ -119,10 +119,11 @@ async function addHistory(documentId: number, action: HistoryAction, actorId: nu
  * 알림. 상태 전이는 이미 끝났으므로 실패해도 500 을 내지 않는다 —
  * 알림이 하나 빠진 것과 결재가 안 된 것은 사용자에게 전혀 다른 일이다.
  */
-async function notify(rows: { engineer_id: number; title: string; message: string; type: string }[]) {
+async function notify(rows: { engineer_id: number; title: string; message: string; type: string; link?: string }[]) {
   if (rows.length === 0) return
   const { error } = await supabaseAdmin.from('notifications').insert(
-    rows.map(r => ({ ...r, link: APPROVAL_PATH, is_read: false })),
+    // link 를 주지 않은 줄은 종전처럼 결재함으로 간다(문서와 무관한 알림이 그렇다).
+    rows.map(r => ({ ...r, link: r.link ?? APPROVAL_PATH, is_read: false })),
   )
   if (error) console.error('[approval] notification insert failed', error)
 }
@@ -136,6 +137,8 @@ async function notifyTurn(doc: { document_id: number; doc_type: string; title: s
     title: '결재할 문서가 있습니다',
     message: doc.title,
     type: 'approval_pending',
+    // 누르면 그 문서를 바로 연다(예전에는 결재함 목록으로만 보냈다).
+    link: approvalDocPath(doc.document_id),
   })))
 }
 
@@ -312,6 +315,7 @@ async function approve(caller: Caller, body: Record<string, unknown>) {
         title: '결재가 완료되었습니다',
         message: doc.title,
         type: 'approval_completed',
+        link: approvalDocPath(documentId),
       })))
     }
     return NextResponse.json({ ok: true, documentId, lineState: state, status: '완료', completed: true, skipped })
@@ -407,6 +411,7 @@ async function reject(caller: Caller, body: Record<string, unknown>) {
       title: '결재가 반려되었습니다',
       message: `${doc.title} — ${comment}`,
       type: 'approval_rejected',
+      link: approvalDocPath(documentId),
     }])
   }
   return NextResponse.json({ ok: true, documentId, status: '반려', rejectedLine: line.line_id })

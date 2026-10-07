@@ -10,7 +10,7 @@ import { isSuperAdmin } from '../permissions'
 import { nextPendingLine, toLineRows, validateLineInput, delegatesOf } from './engine'
 import { DOC_TYPES } from './docTypes'
 import { checkLineRules } from './lineRules'
-import { APPROVAL_PATH, type ApprovalLine, type Delegation, type LineInput } from './types'
+import { approvalDocPath, type ApprovalLine, type Delegation, type LineInput } from './types'
 
 export type SubmitResult =
   | { ok: true; documentId: number; lines: ApprovalLine[]; notified: number | null; linesReplaced?: boolean }
@@ -105,7 +105,7 @@ export async function rollbackApprovalDocument(sb: SupabaseClient, documentId: n
 }
 
 /** 첫 차례 결재자와 그 대리인에게 「결재할 문서가 있습니다」. 실패해도 상신은 되돌리지 않는다. */
-async function notifyFirst(sb: SupabaseClient, docType: string, title: string, line: ApprovalLine, today: string) {
+async function notifyFirst(sb: SupabaseClient, documentId: number, docType: string, title: string, line: ApprovalLine, today: string) {
   const { data, error } = await sb
     .from('approval_delegations')
     .select('owner_id, delegate_id, start_date, end_date, doc_type')
@@ -123,7 +123,8 @@ async function notifyFirst(sb: SupabaseClient, docType: string, title: string, l
       title: '결재할 문서가 있습니다',
       message: title,
       type: 'approval_pending',
-      link: APPROVAL_PATH,
+      // 누르면 그 문서를 바로 연다(예전에는 결재함 목록으로만 보냈다).
+      link: approvalDocPath(documentId),
       is_read: false,
     })),
   )
@@ -179,7 +180,7 @@ export async function createApprovalDocument(sb: SupabaseClient, input: SubmitIn
 
   const lines = ((madeLines ?? []) as ApprovalLine[])
   const first = nextPendingLine(lines)
-  if (first) await notifyFirst(sb, input.docType, input.title, first, input.today)
+  if (first) await notifyFirst(sb, documentId, input.docType, input.title, first, input.today)
 
   return { ok: true, documentId, lines, notified: first ? first.approver_id : null }
 }
@@ -271,7 +272,7 @@ export async function resubmitApprovalDocument(sb: SupabaseClient, input: Resubm
   if (lineErr) console.error('[approval/submit] resubmit line reload failed', { documentId, error: lineErr })
   const lines = ((fresh ?? []) as ApprovalLine[])
   const first = nextPendingLine(lines)
-  if (first) await notifyFirst(sb, doc.doc_type, input.title ?? doc.title, first, input.today)
+  if (first) await notifyFirst(sb, documentId, doc.doc_type, input.title ?? doc.title, first, input.today)
 
   return { ok: true, documentId, lines, notified: first ? first.approver_id : null, linesReplaced: replaced }
 }
