@@ -266,15 +266,18 @@ export default function DocDetail({
             maxLength={500}
             style={{ ...inputStyle, width: '100%', resize: 'vertical', fontSize: 13 }}
           />
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" onClick={approve} disabled={busy} style={btnPrimary(busy)}>
-              {busy ? '처리 중...' : approveLabel}
-            </button>
+          {/* 처리 버튼은 **오른쪽 아래**다 — 의견을 적고 눈이 내려오는 끝자리에 둔다.
+              순서는 왼쪽 [반려] · 오른쪽 [승인] — 되돌릴 수 없는 쪽(승인)을 커서가 마지막에 닿는 자리에 둔다.
+              반려를 그리지 않는 유형(쇼룸 사후 신청)에서는 [확인] 하나만 오른쪽 끝에 남는다. */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             {rejectable && (
               <button type="button" onClick={reject} disabled={busy || !comment.trim()} style={btnDanger(busy || !comment.trim())}>
                 반려
               </button>
             )}
+            <button type="button" onClick={approve} disabled={busy} style={btnPrimary(busy)}>
+              {busy ? '처리 중...' : approveLabel}
+            </button>
           </div>
         </div>
       )}
