@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
   const { data: quote, error } = await supabaseAdmin
     .from('quotes')
-    .select('quote_id, quote_number, customer_id, dealer_id, opportunity_id, recipient, delivery_info, note, quote_type, engineer_id, created_by')
+    .select('quote_id, quote_number, customer_id, dealer_id, opportunity_id, recipient, delivery_info, note, quote_type, engineer_id, created_by, terms')
     .eq('quote_id', quoteId)
     .maybeSingle()
   if (error) {

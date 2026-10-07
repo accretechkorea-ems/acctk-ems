@@ -11,6 +11,7 @@
 //    남의 실적으로 견적을 만들 수 있다. 복원할 때 서버(resolveOnBehalf)에 다시 물어본다.
 
 import type { CustomerResult, QuoteRow } from '@/app/quote/types'
+import type { Terms } from '@/lib/quoteTerms'
 
 /** 저장 형식 버전. QuoteRow 필드가 바뀌면 올린다 — 옛 저장분은 조용히 버려진다. */
 export const DRAFT_VERSION = 1
@@ -34,6 +35,14 @@ export type QuoteDraft = {
   delivery: string
   remarks: string
   showSignature: boolean
+  /**
+   * 조건 네 줄 — **선택 필드**다. 옛 초안에는 없으므로 복원하는 쪽이 없으면 기본으로 둔다
+   * (버전을 올리지 않는 이유 — 올리면 작성 중이던 옛 초안이 통째로 버려진다).
+   *   termsOpen  — 「조건 변경」 체크 상태
+   *   terms      — 그때 적어 둔 네 값(접힌 상태로 저장돼도 값은 남는다)
+   */
+  termsOpen?: boolean
+  terms?: Terms
   rows: QuoteRow[]
 }
 
@@ -45,6 +54,8 @@ export function isDraftMeaningful(d: Omit<QuoteDraft, 'v' | 'savedAt'>): boolean
   if (d.company.trim() || d.customerQuery.trim() || d.receiver.trim() || d.delivery.trim()) return true
   if (d.customerId != null || d.euCustomerId != null || d.opportunityId != null) return true
   if (d.showSignature || d.isDealer) return true
+  // 조건을 손댔으면 「작성 중이던 내용」이다.
+  if (d.termsOpen) return true
   return d.rows.some(r =>
     r.itemText.trim() || r.partCode.trim() || r.selectedItem
     || r.manual_cost_jpy > 0 || r.manual_unit_price > 0

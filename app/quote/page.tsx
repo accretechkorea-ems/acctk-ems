@@ -20,6 +20,10 @@ import { QuotePDFDoc } from './QuotePDFDoc'
 import ProfitPanel from './ProfitPanel'
 import QuoteItemRow from './QuoteItemRow'
 import { Z } from '@/lib/zIndex'
+import {
+  DEFAULT_TERMS, TERM_KEYS, TERM_LABELS, TERM_MAX_LEN,
+  changedTerms, normalizeTerms, termsOf, type TermKey, type Terms,
+} from '@/lib/quoteTerms'
 
 /**
  * 비고 기본 문구. 내용은 그대로 두고, 사용자가 손댔는지 비교하려고 상수로 뺐다.
@@ -30,6 +34,8 @@ type DuplicatePayload = {
     quote_number: string
     customer_id: number | null; dealer_id: number | null; opportunity_id: number | null
     recipient: string | null; delivery_info: string | null; note: string | null; quote_type: string | null
+    /** 조건 네 줄(quotes.terms). null 이면 모두 기본값이다. */
+    terms: unknown
   }
   items: {
     price_list_id: number | null; part_code: string | null; row_kind: string | null
@@ -42,6 +48,14 @@ type DuplicatePayload = {
 }
 
 const DEFAULT_REMARKS = '* 발주 진행 시 팩스 또는 메일로 발주서 회신 요망\n   (FAX : 031-786-4090)'
+
+/** 조건 네 줄의 입력칸 설명 — 라벨은 등록표(lib/quoteTerms.ts)에서 읽는다. */
+const TERM_PLACEHOLDERS: Record<TermKey, string> = {
+  delivery_schedule: DEFAULT_TERMS.delivery_schedule,
+  payment_terms: DEFAULT_TERMS.payment_terms,
+  delivery_terms: DEFAULT_TERMS.delivery_terms,
+  validity: DEFAULT_TERMS.validity,
+}
 
 /**
  * 견적번호 끝의 순번 글자. seq 는 1부터다(next_quote_seq 가 그날 첫 호출에 1 을 준다).
@@ -149,6 +163,11 @@ function QuotePageInner() {
   const [remarksOpen, setRemarksOpen] = useState(false)
   // 견적서 PDF 하단 서명란 표시 여부. 저장하지 않는 화면 상태라 견적을 다시 열면 항상 꺼진 상태로 시작한다.
   const [showSignature, setShowSignature] = useState(false)
+  // ── 조건 네 줄 ──
+  // termsOpen 이 꺼져 있으면 **기본값으로 그린다**(아래 pdfTerms). 체크를 풀면 적어 둔 값도 버린다
+  // — 「닫아 두었는데 저장은 바뀐 값으로 됐다」가 되지 않게 한다.
+  const [termsOpen, setTermsOpen] = useState(false)
+  const [terms, setTerms] = useState<Terms>({ ...DEFAULT_TERMS })
   const [delivery, setDelivery] = useState('')
   const [isDealer, setIsDealer] = useState(false)
 
@@ -225,6 +244,9 @@ function QuotePageInner() {
   const debouncedCompany = useDebounce(company, 600)
   const debouncedReceiver = useDebounce(receiver, 600)
   const debouncedRows = useDebounce(rows, 600)
+  // 조건 네 줄 — 미리보기도 다른 칸과 같은 600ms 디바운스를 쓴다(글자마다 PDF 를 다시 그리지 않게).
+  const debouncedTerms = useDebounce(terms, 600)
+  const debouncedTermsOpen = useDebounce(termsOpen, 600)
 
   const finalRemarksForPDF = (() => {
     const parts: string[] = []
@@ -273,6 +295,17 @@ function QuotePageInner() {
   const creditedPosition = onBehalf ? onBehalf.position : (engineer?.position ?? null)
   const engineerName = creditedName ? `${creditedName} ${creditedPosition || ''}`.trim() : ''
   const engineerTel = (onBehalf ? onBehalf.tel : engineer?.tel)?.trim() || ''   // 담당자란에 병기하는 전화번호
+
+  /**
+   * 확정·저장에 쓸 조건. 체크가 꺼져 있으면 **적지 않은 것으로 본다**(기본값·저장 안 함).
+   * ok 가 false 면 40자를 넘긴 칸이 있다 — 확정 전에 안내하고 막는다.
+   */
+  const termsResult = normalizeTerms(termsOpen ? terms : null)
+  /** 미리보기에 넘길 값 — 길이 초과 중이면 그 칸만 기본값으로 그린다(미리보기를 멈추지 않는다). */
+  const previewTerms = (() => {
+    const r = normalizeTerms(debouncedTermsOpen ? debouncedTerms : null)
+    return r.ok ? r.terms : { ...DEFAULT_TERMS }
+  })()
 
   // PDF용 합계 (debounced rows 기준)
   const { totalSupply: pdfTotalSupply, totalTax: pdfTotalTax, totalAmount: pdfTotalAmount } = calcTotals(debouncedRows)
@@ -363,6 +396,13 @@ function QuotePageInner() {
 
     setReceiver(quote.recipient ?? '')
     setDelivery(quote.delivery_info ?? '')
+    // 조건 네 줄 — 원본에 바꾼 값이 있으면 체크를 켜고 채운다. 없으면 **닫힌 기본 상태**다.
+    {
+      const restored = termsOf(quote.terms)
+      const changed = changedTerms(quote.terms).length > 0
+      setTermsOpen(changed)
+      setTerms(changed ? restored : { ...DEFAULT_TERMS })
+    }
     // note 에는 납기·E.U 줄이 합쳐져 저장된다. 그 둘은 각자 칸에서 다시 만들어지므로 본문만 남긴다.
     setRemarks((quote.note ?? '').split('\n')
       .filter(line => !/^\*\s*납기\s*:/.test(line) && !/^\*\s*E\.U/.test(line))
@@ -505,6 +545,7 @@ const handleDownloadPDF = async (
         totalTax={finalTotalTax}
         totalAmount={finalTotalAmount}
         showSignature={showSignature}
+        terms={termsResult.ok ? termsResult.terms : DEFAULT_TERMS}
       />
     ).toBlob()
 
@@ -642,6 +683,9 @@ const handleDownloadPDF = async (
     if (!initials) { toast.error(NO_INITIALS_MESSAGE); return { ok: false } }
     const ok = runValidation()
     if (!ok) return { ok: false }
+    // 조건 네 줄의 길이 — **확정 전에** 막는다. 자르지 않고 어느 칸인지 알린다
+    // (잘라서 저장하면 반 토막 문구가 고객에게 나간다).
+    if (!termsResult.ok) { toast.error(termsResult.message); return { ok: false } }
 
     setIsSaving(true)
     let linkedRepair = false
@@ -720,6 +764,8 @@ const handleDownloadPDF = async (
           total_cost: totalCost,
           total_profit: totalProfit,
           profit_rate: parseFloat(totalProfitRate.toFixed(2)),
+          // 조건 네 줄 — **모두 기본이면 null**(저장하지 않는다 = 기본). 확정 때 PDF 와 같은 값이다.
+          terms: termsResult.ok ? termsResult.stored : null,
         },
         p_items: items,
         p_expenses: expenseRows,
@@ -883,6 +929,9 @@ const handleDownloadPDF = async (
     // 회사 이름은 저장분에 담지 않는다(초안 형식을 바꾸지 않는다) — 되살릴 때 다시 구한다.
     resolveEuParent(d.euCustomerId)
     setReceiver(d.receiver); setDelivery(d.delivery); setRemarks(d.remarks); setShowSignature(d.showSignature)
+    // 조건은 **선택 필드**다 — 옛 초안에는 없으므로 없으면 닫힌 기본 상태로 둔다.
+    setTermsOpen(d.termsOpen === true)
+    setTerms(d.terms ? { ...DEFAULT_TERMS, ...d.terms } : { ...DEFAULT_TERMS })
     setRows(d.rows.map(r => calcRow(r, rateRef.current)))
     // 영업기회 목록은 고객사에 딸린 값이라 다시 불러온 뒤 저장분의 선택을 되돌린다.
     if (d.customerId != null && !d.isDealer) {
@@ -906,13 +955,14 @@ const handleDownloadPDF = async (
       onBehalfId: onBehalf?.engineer_id ?? null,
       company, customerId, selectedCustomer, customerQuery, isDealer,
       euCustomerId, selectedEU, euQuery, opportunityId,
-      receiver, delivery, remarks, showSignature, rows,
+      receiver, delivery, remarks, showSignature, termsOpen, terms, rows,
     }
     if (isDraftMeaningful(draft)) saveDraft(engineer.engineer_id, draft)
     else clearDraft(engineer.engineer_id)   // 다 지운 뒤에는 저장분도 없애 안내가 뜨지 않게 한다
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engineer, draftReady, debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks,
-      onBehalf, customerId, selectedCustomer, isDealer, euCustomerId, selectedEU, opportunityId, showSignature])
+      onBehalf, customerId, selectedCustomer, isDealer, euCustomerId, selectedEU, opportunityId, showSignature,
+      termsOpen, terms])
 
   // ── 다시쓰기 (1회) ──
   // 원본은 그대로 두고 내용만 가져온다. 확정하면 새 번호가 발급된다(번호 규칙은 손대지 않는다).
@@ -1230,6 +1280,30 @@ const handleDownloadPDF = async (
           font-family: inherit;
           text-align: left;
         }
+        /* 조건 편집 영역 — grid 0fr↔1fr 로 높이를 연다(비고 접기와 같은 방식).
+           내용은 늘 마운트돼 있어 접었다 펴도 입력이 남는다. */
+        .q-terms-wrap {
+          display: grid;
+          transition: grid-template-rows 0.25s ease, opacity 0.25s ease;
+        }
+        .q-terms-inner { overflow: hidden; min-height: 0; }
+        @media (prefers-reduced-motion: reduce) {
+          .q-terms-wrap { transition: none; }
+        }
+        .q-term-input {
+          flex: 1;
+          min-width: 0;
+          box-sizing: border-box;
+          padding: 6px 9px;
+          border: 1px solid #ebebeb;
+          border-radius: 6px;
+          outline: none;
+          background: #ffffff;
+          font-family: inherit;
+          font-size: 12px;
+          color: #111827;
+        }
+        .q-term-input:focus { border-color: #c7d7f8; }
         .q-box-area {
           width: 100%;
           box-sizing: border-box;
@@ -1464,8 +1538,23 @@ const handleDownloadPDF = async (
               </div>
             </div>
 
-            {/* 서명란은 비고와 별개 항목이라 상자 밖 독립된 줄로 뺀다. 줄 오른쪽 끝에 붙인다. */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+            {/* 서명란·조건은 비고와 별개 항목이라 상자 밖 독립된 줄로 뺀다. 줄 오른쪽 끝에 붙인다.
+                왼쪽이 「조건 변경」, 오른쪽이 「고객사 서명란 추가」다(같은 스타일). */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, marginTop: 8 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={termsOpen}
+                  onChange={e => {
+                    const on = e.target.checked
+                    setTermsOpen(on)
+                    // 체크를 풀면 적어 둔 값도 **기본값으로 돌린다** — 닫아 둔 값이 조용히 저장되지 않게.
+                    if (!on) setTerms({ ...DEFAULT_TERMS })
+                  }}
+                  style={{ width: 14, height: 14, cursor: 'pointer', accentColor: '#234ea2' }}
+                />
+                <span style={{ fontSize: 11, fontWeight: 700, color: termsOpen ? '#234ea2' : '#6b7280' }}>조건 변경</span>
+              </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
                 <input
                   type="checkbox"
@@ -1475,6 +1564,40 @@ const handleDownloadPDF = async (
                 />
                 <span style={{ fontSize: 11, fontWeight: 700, color: showSignature ? '#234ea2' : '#6b7280' }}>고객사 서명란 추가</span>
               </label>
+            </div>
+
+            {/* 조건 편집 — 체크했을 때만 열린다. 네 줄의 라벨·순서는 PDF 와 같다(등록표에서 읽는다). */}
+            <div
+              className="q-terms-wrap"
+              style={{ gridTemplateRows: termsOpen ? '1fr' : '0fr', opacity: termsOpen ? 1 : 0 }}
+              aria-hidden={!termsOpen}
+            >
+              <div className="q-terms-inner">
+                <div style={{
+                  marginTop: 8, border: '1px solid #ebebeb', borderRadius: 8, padding: '10px 12px',
+                  display: 'flex', flexDirection: 'column', gap: 6,
+                }}>
+                  {TERM_KEYS.map(key => (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ width: 56, flexShrink: 0, fontSize: 11, fontWeight: 700, color: '#6b7280' }}>
+                        {TERM_LABELS[key]}
+                      </span>
+                      <input
+                        className="q-term-input"
+                        value={terms[key]}
+                        maxLength={TERM_MAX_LEN}
+                        placeholder={TERM_PLACEHOLDERS[key]}
+                        tabIndex={termsOpen ? 0 : -1}
+                        onChange={e => setTerms(prev => ({ ...prev, [key]: e.target.value }))}
+                      />
+                    </div>
+                  ))}
+                  {/* 견적유효 아래 보조 글씨 — 문구를 고쳐도 만료 판정은 바뀌지 않는다. */}
+                  <span style={{ fontSize: 11, color: '#9ca3af', lineHeight: 1.6, paddingLeft: 64 }}>
+                    문구만 바뀝니다. 자동 만료 판정은 작성일로부터 1개월 기준입니다.
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1730,6 +1853,7 @@ const handleDownloadPDF = async (
                     totalAmount={pdfTotalAmount}
                     showWatermark={true}
                     showSignature={showSignature}
+                    terms={previewTerms}
                   />
                 }>
                   {({ url }) => url ? (
