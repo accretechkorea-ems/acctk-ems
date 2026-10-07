@@ -41,7 +41,7 @@ const HANDLERS: Record<string, DocTypeHandlers> = {
     onRevert: onRevertQuote,
   },
   // 쇼룸 사용 신청 — 사전이면 완료 시 사용 기록 생성, 두 경우 모두 승인서에 도장.
-  // 회수·폐기로 끝나면 사후 신청이 상신 때 만들어 둔 사용 기록과 승인서 PDF 를 치운다.
+  // 반려·회수·폐기로 끝나면 사후 신청이 상신 때 만들어 둔 사용 기록과 승인서 PDF 를 치운다.
   showroom_usage: {
     beforeComplete: beforeCompleteShowroom,
     onComplete: onCompleteShowroom,

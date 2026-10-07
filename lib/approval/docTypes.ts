@@ -53,10 +53,18 @@ export type DocTypeDef = {
   canCancelAfterComplete: boolean
   /**
    * 문서 하나만 놓고 반려 가능 여부를 다시 본다. canReject 가 true 인 유형에서만 불린다.
-   * 유형은 같은데 문서마다 갈리는 경우가 있다 — 쇼룸 사후 신청은 이미 끝난 사용을 「확인」만 하므로
-   * 반려할 것이 없다. 그 판정을 approval_documents 에 컬럼을 늘리지 않고 summary 로 한다.
+   * 유형은 같은데 문서마다 갈려야 하는 경우를 위한 칸이다 — approval_documents 에 컬럼을 늘리지
+   * 않고 summary 로 판정한다. 지금 이 칸을 쓰는 유형은 없다.
    */
   canRejectDoc?: (summary: Record<string, unknown>) => boolean
+  /**
+   * 승인 버튼에 쓸 말. 적지 않으면 「승인」이다.
+   * 쇼룸 사후 신청은 **이미 끝난 사용**을 승인하는 것이 아니라 맞는지 「확인」하는 자리다.
+   * 반려는 할 수 있다(내용이 틀렸으면 상신자가 고쳐 다시 올려야 한다) — 그래서 반려 가능 여부와
+   * 버튼 이름은 **따로** 둔다. 예전에는 둘을 canRejectDoc 하나로 묶어, 이름을 「확인」으로 두려면
+   * 반려까지 막혔다.
+   */
+  approveLabel?: (summary: Record<string, unknown>) => string
   /**
    * 결재선 규칙. 없으면 종류별 요구가 없다는 뜻이다(모양 검사만 받는다).
    * **결재가 필요 없어지거나 규칙이 바뀌면 이 칸만 바꾼다.**
@@ -84,6 +92,20 @@ export function canRejectDocument(def: DocTypeDef, summary: Record<string, unkno
   return def.canRejectDoc ? def.canRejectDoc(summary ?? {}) : true
 }
 
+/** 기본 승인 버튼 이름. */
+export const APPROVE_LABEL = '승인'
+
+/** 이 문서의 승인 버튼에 쓸 말. 유형이 적어 두지 않으면 「승인」이다. */
+export function approveLabelOf(def: DocTypeDef, summary: Record<string, unknown> | null | undefined): string {
+  return def.approveLabel ? def.approveLabel(summary ?? {}) : APPROVE_LABEL
+}
+
+/** 쇼룸 요약에서 사후 신청인지 읽는다. 위 칸과 payload 둘 다 본다(옛 문서는 한쪽만 있다). */
+const showroomRetroactive = (summary: Record<string, unknown>): boolean => {
+  const s = summary as { is_retroactive?: unknown; payload?: { is_retroactive?: unknown } } | null
+  return s?.is_retroactive === true || s?.payload?.is_retroactive === true
+}
+
 export const DOC_TYPES: Record<string, DocTypeDef> = {
   // 견적서 — 완료 시 견적 확정·PDF 생성 (4단계)
   quote: {
@@ -102,11 +124,12 @@ export const DOC_TYPES: Record<string, DocTypeDef> = {
     canReject: true,
     canCancelAfterComplete: true,    // 사용 기록은 취소할 수 있다
     lineRules: { requireSuperadminApprover: true },
-    // 사후 신청은 이미 끝난 사용을 「확인」만 한다 — 반려할 것이 없다.
-    canRejectDoc: summary => {
-      const s = summary as { is_retroactive?: unknown; payload?: { is_retroactive?: unknown } } | null
-      return !(s?.is_retroactive === true || s?.payload?.is_retroactive === true)
-    },
+    // 사후 신청도 **반려할 수 있다**(canRejectDoc 을 두지 않는다). 이미 끝난 사용이라 「없던 일」로
+    // 만들 수는 없지만, 적힌 내용이 틀렸으면 결재자가 돌려보내야 한다. 반려되면 상신 때 만들어 둔
+    // 사용 기록을 치우고(lib/approval/showroomUsage.ts 의 onRevertShowroom — 회수·폐기와 같은 길),
+    // 상신자가 「재작성」으로 고쳐 다시 올린다(기록은 그때 다시 만들어진다).
+    // 버튼 이름만 「확인」으로 둔다 — 승인이 아니라 사실 확인이기 때문이다.
+    approveLabel: summary => (showroomRetroactive(summary) ? '확인' : APPROVE_LABEL),
   },
   // 견적 삭제 요청 — 완료 시 실제 삭제 (6단계)
   quote_delete: {

@@ -206,7 +206,9 @@ export async function onCompleteShowroom(ctx: {
  * 반려·회수·폐기 세 경우에 모두 불린다(app/api/approval/route.ts 의 runRevert). 셋을 나누지 않는
  * 이유는 handlers.ts 의 설명과 같다 — 원 기록 쪽에서 보면 「상신 때 만들어 둔 것을 되돌린다」 한 가지다.
  *   · 사전 신청 — 기록이 아직 없다. 아무것도 하지 않는다.
- *   · 사후 신청 — 상신 때 만든 기록을 지운다. 반려는 막혀 있으니(canRejectDoc) 실제로는 회수·폐기다.
+ *   · 사후 신청 — 상신 때 만든 기록을 지운다. **반려·회수·폐기 모두 같은 길로 온다**
+ *     (사후 신청의 반려는 docTypes.ts 에서 열려 있다). 상신자는 「재작성」으로 고쳐 다시 올리고,
+ *     그때 사용 기록이 다시 만들어진다(app/api/showroom/requests PATCH).
  *
  * **여러 번 불려도 탈이 없어야 한다** — 폐기는 반려·회수된 문서에만 할 수 있어 이 훅이 두 번 불린다.
  * 그래서 summary.usage_id 를 비우고 target_id 를 null 로 만든 뒤 지운다. 두 번째 호출은 읽을 id 가
@@ -220,6 +222,9 @@ export async function onRevertShowroom(ctx: {
   docNo: string
   targetId: number | null
   summary: Record<string, unknown>
+  /** 상신자 — 기록이 지워졌다는 보조 알림을 받는 사람. */
+  requesterId: number
+  /** 이 되돌리기를 일으킨 사람. 상신자와 다르면 반려다(회수·폐기는 본인만 할 수 있다). */
   actorId: number
 }): Promise<void> {
   const s = readSummary(ctx.summary)
@@ -289,6 +294,40 @@ export async function onRevertShowroom(ctx: {
   if (s.pdf_url) await dropApprovalPdf(sb, s.pdf_url)
 
   console.log(`[${TAG}] 사후 신청 기록 정리`, { documentId: ctx.documentId, docNo: ctx.docNo, usageId })
+
+  await notifyUsageRemoved(sb, ctx, s)
+}
+
+/**
+ * 「사용 기록도 지워졌다」 보조 알림 — **남이 끝낸 경우에만** 보낸다.
+ *
+ * 왜 여기서 보내는가. 결재 라우트의 반려 알림은 「제목 — 사유」 한 줄이고 문서 유형을 모른다
+ * (app/api/approval/route.ts 의 reject). 그 문구에 쇼룸 사정을 넣으려면 라우트에 유형 분기가
+ * 생긴다 — 그러지 않기로 한 구조라서, 쇼룸 훅이 자기 몫을 한 줄 더 보낸다.
+ *
+ * 왜 actorId !== requesterId 로 가르는가. **회수·폐기는 상신자 본인만 할 수 있다**(라우트가
+ * 403 으로 막는다). 그래서 남이 끝낸 경우는 반려뿐이고, 자기가 치운 것을 자기에게 알리지 않는다.
+ * 훅은 여러 번 불릴 수 있지만 이 함수는 **기록을 실제로 지운 호출에서만** 지나간다(두 번째 호출은
+ * 읽을 usage_id 가 없어 그 전에 돌아간다).
+ *
+ * best-effort 다 — 실패해도 결재 상태와 기록 정리는 이미 끝났다.
+ */
+async function notifyUsageRemoved(
+  sb: SupabaseClient,
+  ctx: { documentId: number; docNo: string; requesterId: number; actorId: number },
+  s: ShowroomSummary,
+): Promise<void> {
+  if (ctx.actorId === ctx.requesterId) return
+  const { error } = await sb.from('notifications').insert({
+    engineer_id: ctx.requesterId,
+    title: '쇼룸 사용 기록이 정리되었습니다',
+    message: `[${s.payload.request_no}] 사후 신청이 반려되어 사용 기록을 지웠습니다. `
+      + '내용을 고쳐 「재작성」으로 다시 올리면 기록이 다시 만들어집니다.',
+    type: 'approval_rejected',
+    link: '/showroom?tab=usage',
+    is_read: false,
+  })
+  if (error) console.error(`[${TAG}] 기록 정리 알림 insert failed`, { documentId: ctx.documentId, error })
 }
 
 /**

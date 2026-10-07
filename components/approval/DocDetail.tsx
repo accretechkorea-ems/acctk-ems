@@ -22,7 +22,9 @@ import DocInfo from './DocInfo'
 import { summaryRows } from './summary'
 import { panelOf } from './panels'
 import { nextPendingLine } from '@/lib/approval/engine'
-import { canRejectDocument, canResubmitDocument, DOC_TYPES } from '@/lib/approval/docTypes'
+import {
+  APPROVE_LABEL, approveLabelOf, canRejectDocument, canResubmitDocument, DOC_TYPES,
+} from '@/lib/approval/docTypes'
 import { DISCARDABLE_STATUSES, type ApprovalLine, type ApprovalDocument } from '@/lib/approval/types'
 
 export type ApprovalDoc = ApprovalDocument & {
@@ -109,11 +111,14 @@ export default function DocDetail({
 
   const nameOf = (id: number) => people[id]?.name ?? `#${id}`
   const current = nextPendingLine(doc.approval_lines)
-  // 반려할 수 없는 문서(쇼룸 사후 신청 — 이미 끝난 사용)는 반려 버튼을 감추고 승인을 「확인」이라 부른다.
-  // 판정은 서버 반려 라우트와 같은 함수를 쓴다 — 화면에 보이는 버튼과 서버가 받는 것이 어긋나지 않게.
+  // 반려 가능 여부와 승인 버튼 이름은 **따로** 본다.
+  //   · rejectable — 반려 버튼을 그릴지. 판정은 서버 반려 라우트와 **같은 함수**다
+  //     (화면에 보이는 버튼과 서버가 받는 것이 어긋나지 않게).
+  //   · approveLabel — 쇼룸 사후 신청은 이미 끝난 사용이라 「확인」이다. 그래도 반려는 할 수 있다.
+  // 어느 유형이 무엇인지는 등록표(lib/approval/docTypes.ts)가 안다 — 여기에 유형 이름을 적지 않는다.
   const def = DOC_TYPES[doc.doc_type]
   const rejectable = def ? canRejectDocument(def, doc.summary) : true
-  const approveLabel = rejectable ? '승인' : '확인'
+  const approveLabel = def ? approveLabelOf(def, doc.summary) : APPROVE_LABEL
   const rows = summaryRows(doc.doc_type, doc.summary)
   const docLabel = def?.label ?? doc.doc_type
   // 유형별 추가 패널(견적서 검토표 등). 등록표가 고른다 — 여기에 유형 이름을 적지 않는다.
@@ -145,7 +150,9 @@ export default function DocDetail({
     }
   }
 
-  const approve = () => call({ action: 'approve', documentId: doc.document_id, comment: comment.trim() || undefined }, rejectable ? '결재했습니다' : '확인했습니다')
+  // 성공 토스트도 버튼 이름을 따라간다 — 「확인」을 눌렀는데 「결재했습니다」가 뜨면 말이 어긋난다.
+  const approvedText = approveLabel === APPROVE_LABEL ? '결재했습니다' : `${approveLabel}했습니다`
+  const approve = () => call({ action: 'approve', documentId: doc.document_id, comment: comment.trim() || undefined }, approvedText)
   const reject = () => {
     if (!comment.trim()) { toast.error('반려 사유를 입력해주세요'); return }
     call({ action: 'reject', documentId: doc.document_id, comment: comment.trim() }, '반려했습니다')
