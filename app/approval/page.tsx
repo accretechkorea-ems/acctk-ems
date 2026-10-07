@@ -47,6 +47,8 @@ import {
   type DoneCounts, type Scope, type Source,
 } from '@/components/approval/boxes'
 import { PAGE_SIZE, clampPage, pageRange, pageWindow, totalPages } from '@/lib/paging'
+import { openApprovalDoc } from '@/lib/approval/docWindow'
+import { isMobileViewport } from '@/lib/viewport'
 
 const APPROVAL_PATH = '/approval'
 
@@ -173,6 +175,18 @@ function GroupCaret({ open }: { open: boolean }) {
       strokeLinecap="round" strokeLinejoin="round"
       style={{ flexShrink: 0, transform: open ? 'none' : 'rotate(-90deg)', transition: `transform ${MOTION_MS}ms ${MOTION_EASE}` }}>
       <polyline points="6 9 12 15 18 9" />
+    </svg>
+  )
+}
+
+/** 새 창 — 바깥을 가리키는 화살표. lucide 스타일 인라인 SVG(패키지는 쓰지 않는다). */
+function ExternalLink() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M15 3h6v6" />
+      <path d="M10 14 21 3" />
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
     </svg>
   )
 }
@@ -601,6 +615,9 @@ function ApprovalPageInner() {
                   const owner = d.delegated ? people[d.progress?.currentApproverId ?? -1] : undefined
                   return (
                     <div key={d.document_id} style={rowStyle(i === 0)}>
+                      {/* 행 전체를 누르면 지금까지처럼 그 자리에서 펼쳐진다. 오른쪽 끝의 「새 창」만
+                          문서 양식 화면을 띄운다 — 버튼 안에 버튼을 둘 수 없어 형제로 나란히 둔다. */}
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
                       <button
                         type="button"
                         onClick={() => {
@@ -664,6 +681,23 @@ function ApprovalPageInner() {
                           </span>
                         </span>
                       </button>
+                      <button
+                        type="button"
+                        title="새 창으로 열기"
+                        aria-label="새 창으로 열기"
+                        onClick={() => openApprovalDoc(d.document_id, {
+                          mobile: isMobileViewport(),
+                          navigate: url => router.push(url),
+                        })}
+                        style={{
+                          flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          width: 24, height: 24, marginTop: 1, padding: 0, border: 'none', borderRadius: 6,
+                          background: 'transparent', color: MUTED, cursor: 'pointer', fontFamily: 'inherit',
+                        }}
+                      >
+                        <ExternalLink />
+                      </button>
+                      </div>
 
                       {open && (
                         <div style={{ marginTop: 10, marginLeft: -12, marginRight: -12 }}>
