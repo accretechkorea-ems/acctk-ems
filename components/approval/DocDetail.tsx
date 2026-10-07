@@ -7,11 +7,11 @@
 //   → 「상기와 같이 …를 제출합니다」 → 처리 버튼
 // 처리 버튼은 미결함에서만 보이고, 상신함은 회수·재작성, 참조함은 아무 버튼도 두지 않는다.
 //
-// 이력은 approval_history 를 화면에서 바로 읽는다 — 그 문서의 상신자·결재선 참여자만 읽히도록
-// RLS 가 이미 걸려 있어서(ah_select), 목록에 보이는 문서면 이력도 읽힌다.
+// 이력은 **서버가 읽어 준다**(/api/approval/history) — 열람 권한을 그 라우트가 코드로 보고
+// service role 로 읽는다. 브라우저로 직접 읽던 때는 approval_history 의 RLS·테이블 권한에 막히면
+// 빈 배열이 되어, 막힌 것과 정말 0건인 것을 가를 수 없었다(상신 직후에도 「기록이 없습니다」).
 
-import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useCallback, useEffect, useState } from 'react'
 import { useToast } from '@/components/common/Toast'
 import {
   BORDER, DANGER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT,
@@ -70,32 +70,49 @@ export default function DocDetail({
   onChanged: () => void
 }) {
   const toast = useToast()
+  // null = 불러오는 중, [] = 정말 0건. 실패는 따로 둔다 — 셋이 전혀 다른 말이다.
   const [history, setHistory] = useState<HistoryRow[] | null>(null)
+  const [historyFailed, setHistoryFailed] = useState(false)
   const [comment, setComment] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirmWithdraw, setConfirmWithdraw] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    const run = async () => {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('approval_history')
-        .select('history_id, action, actor_id, step, comment, created_at')
-        .eq('document_id', doc.document_id)
-        .order('created_at', { ascending: true })
-      if (cancelled) return
-      if (error) {
-        console.error('[approval/detail] history load failed', error)
-        setHistory([])
+  /**
+   * 이력을 읽는다. **서버가 읽어 준다**(/api/approval/history) — 브라우저로 직접 읽던 때는
+   * approval_history 의 RLS·테이블 권한에 걸리면 빈 배열이 되어, 막힌 것인지 정말 없는 것인지
+   * 가를 수 없었다(상신 직후에도 「기록이 없습니다」로 보였다).
+   *
+   * 캐시는 두지 않는다 — 승인·반려·회수를 누르면 이력이 바로 늘어나는 값이라, 묵은 것을 보여 주면
+   * 방금 한 일이 빠져 보인다.
+   */
+  const loadHistory = useCallback(async (signal?: AbortSignal) => {
+    setHistory(null)
+    setHistoryFailed(false)
+    try {
+      const res = await fetch(`/api/approval/history?document_id=${doc.document_id}`, { signal })
+      const json = await res.json().catch(() => null)
+      if (signal?.aborted) return
+      if (!res.ok || !Array.isArray(json?.history)) {
+        console.error('[approval/detail] history load failed', { documentId: doc.document_id, status: res.status, error: json?.error })
+        setHistoryFailed(true)
         return
       }
-      setHistory((data ?? []) as HistoryRow[])
+      setHistory(json.history as HistoryRow[])
+    } catch (e) {
+      // 문서를 바꿔 펼치면 앞 요청이 취소된다 — 그것은 실패가 아니다(늦은 응답을 버리는 길이다).
+      if (signal?.aborted || (e instanceof DOMException && e.name === 'AbortError')) return
+      console.error('[approval/detail] history load failed', { documentId: doc.document_id, error: e })
+      setHistoryFailed(true)
     }
-    run()
-    return () => { cancelled = true }
   }, [doc.document_id])
+
+  useEffect(() => {
+    // 문서가 바뀌면 앞 요청을 끊는다 — 늦게 온 남의 문서 이력이 화면에 들어오지 않게.
+    const ac = new AbortController()
+    loadHistory(ac.signal)
+    return () => ac.abort()
+  }, [loadHistory])
 
   useEffect(() => {
     if (!confirmWithdraw) return
@@ -230,7 +247,16 @@ export default function DocDetail({
       {/* 이력 */}
       <div style={{ marginTop: 12 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 5 }}>이력</div>
-        {history === null ? (
+        {/* 세 상태를 가른다 — 못 읽은 것을 「기록이 없습니다」로 적지 않는다. */}
+        {historyFailed ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: DANGER, fontWeight: 600 }}>이력을 불러오지 못했습니다</span>
+            <button type="button" onClick={() => { void loadHistory() }}
+              style={{ ...btnGhost(), padding: '4px 10px', fontSize: 12 }}>
+              다시 시도
+            </button>
+          </div>
+        ) : history === null ? (
           <div style={{ fontSize: 12, color: MUTED }}>불러오는 중...</div>
         ) : history.length === 0 ? (
           <div style={{ fontSize: 12, color: MUTED }}>기록이 없습니다</div>

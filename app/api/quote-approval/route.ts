@@ -24,7 +24,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewMenu, canViewSalesMgmt, isSuperAdmin } from '@/lib/permissions'
+import { canViewMenu, canViewSalesMgmt } from '@/lib/permissions'
+import { canViewApprovalDocument, type DocAccessRef } from '@/lib/approval/docAccess'
 import { attachTeamPerm, loadTeamPerms } from '@/lib/teamPermsServer'
 import type { TeamPerm } from '@/lib/permissions'
 import { todayKST } from '@/lib/date'
@@ -132,41 +133,10 @@ function readQuoteIds(raw: unknown): number[] | null {
   return [...out]
 }
 
-// ── 결재 문서 열람 권한 ─────────────────────────────────────────────
-//
-// 재사용할 helper 가 없어 여기서 만든다 — 지금 이 판정은 두 곳에 흩어져 있다.
-//   ① RLS 정책 `ad_select` (approval_schema.sql:122-128)
-//        requester_id = 나  또는  superadmin  또는  그 문서의 approval_lines 에 내가 있다
-//   ② 결재함 GET 의 「전체」함 (app/api/approval/route.ts:569)
-//        box='all' 은 approvals 메뉴 권한자에게만 열린다 — 남의 문서까지 보는 자리다
-// 둘을 합친 것이 「그 문서를 볼 수 있는 사람」이다. lib/approval/engine.ts 는 건드리지 않는다
-// (그 파일은 문서를 모르는 순수 판정만 둔다).
-//
-// 결재선은 **종류를 가리지 않는다** — 참조(cc)로 들어간 사람도 문서를 본다(팀 참조 포함).
+// 결재 문서 열람 권한 판정(canViewApprovalDocument)은 lib/approval/docAccess.ts 로 옮겼다 —
+// 결재 이력 조회(app/api/approval/history)가 같은 판정을 쓴다. 판정 내용은 그대로다.
 
-type DocRef = { document_id: number; requester_id: number }
-
-async function canViewApprovalDocument(
-  sb: SupabaseClient,
-  doc: DocRef,
-  caller: Caller,
-): Promise<boolean> {
-  if (doc.requester_id === caller.engineer_id) return true
-  if (isSuperAdmin(caller)) return true
-  if (canViewMenu(caller, 'approvals')) return true
-  const { data, error } = await sb
-    .from('approval_lines')
-    .select('line_id')
-    .eq('document_id', doc.document_id)
-    .eq('approver_id', caller.engineer_id)
-    .limit(1)
-  if (error) {
-    // 못 읽었으면 막는다 — 열람 판정이 실패를 허용으로 떨어뜨리면 남의 문서가 새어 나간다.
-    console.error(`[${TAG}] line lookup failed`, { documentId: doc.document_id, error })
-    return false
-  }
-  return !!data && data.length > 0
-}
+type DocRef = DocAccessRef
 
 /** 검토표가 읽는 칸. 저장값을 그대로 돌려준다 — 다시 계산하지 않는다. */
 const REVIEW_QUOTE_SELECT = `
