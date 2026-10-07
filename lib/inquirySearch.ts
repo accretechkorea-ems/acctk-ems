@@ -8,8 +8,13 @@
 
 import { INQUIRY_STATUSES, inquiryTypeOf, type InquiryStatus, type InquiryType } from './inquiries'
 
-/** 한 페이지 건수. 연 300건 미만이라 여섯 페이지면 한 해가 다 담긴다. */
-export const PAGE_SIZE = 50
+// 페이지 계산은 중립 모듈(lib/paging.ts)로 뺐다 — 결재함 기결문서(종결)가 같은 방식을 쓴다.
+// 여기서 **그대로 재수출**하므로 이 화면의 import 는 바뀌지 않는다.
+// 한 페이지 건수는 PAGE_SIZE(50) — 의뢰서는 연 300건 미만이라 여섯 페이지면 한 해가 다 담긴다.
+export {
+  PAGE_SIZE, clampPage, pageRange, pageWindow, totalPages,
+  type PageItem,
+} from './paging'
 
 /** 연도 선택에서 「전체」를 뜻하는 값. 숫자와 섞이지 않게 문자열로 둔다. */
 export const YEAR_ALL = 'all'
@@ -107,49 +112,6 @@ export function isFiltered(s: ListQuery, thisYear: number): boolean {
 /** 조건을 바꾸면 페이지는 늘 1로 돌아간다 — 3페이지를 보다 좁히면 빈 화면이 된다. */
 export function withFilter(s: ListQuery, part: Partial<ListQuery>): ListQuery {
   return { ...s, ...part, page: 1 }
-}
-
-export const totalPages = (total: number): number => Math.max(1, Math.ceil(total / PAGE_SIZE))
-
-/** 건수가 확정된 뒤 범위를 넘은 페이지를 끌어내린다(조용히 마지막 페이지로). */
-export const clampPage = (page: number, total: number): number =>
-  Math.min(Math.max(1, page), totalPages(total))
-
-/** 지금 페이지가 보여 주는 번째 범위. 0건이면 null. */
-export function pageRange(page: number, total: number): { from: number; to: number } | null {
-  if (total <= 0) return null
-  const p = clampPage(page, total)
-  const from = (p - 1) * PAGE_SIZE + 1
-  return { from, to: Math.min(p * PAGE_SIZE, total) }
-}
-
-/** 페이지 버튼에 쓸 번호. 사이가 끊기는 자리에는 '…' 를 넣는다. */
-export type PageItem = number | '…'
-
-/**
- * 처음·끝과 현재 주변만 보여 준다.
- * 가장자리(1~4, 끝에서 4개)에서는 '…' 가 한쪽에만 생겨 버튼 수가 들쭉날쭉하지 않게 한다.
- */
-export function pageWindow(page: number, total: number, around = 1): PageItem[] {
-  const last = totalPages(total)
-  const cur = clampPage(page, total)
-  if (last <= 7) return Array.from({ length: last }, (_, i) => i + 1)
-
-  const set = new Set<number>([1, last, cur])
-  for (let d = 1; d <= around; d++) { set.add(cur - d); set.add(cur + d) }
-  // 가장자리에서는 반대쪽을 한 칸 더 보여 준다(버튼 수를 비슷하게 유지).
-  if (cur <= 3) { set.add(2); set.add(3); set.add(4) }
-  if (cur >= last - 2) { set.add(last - 1); set.add(last - 2); set.add(last - 3) }
-
-  const nums = [...set].filter(n => n >= 1 && n <= last).sort((a, b) => a - b)
-  const out: PageItem[] = []
-  let prev = 0
-  for (const n of nums) {
-    if (prev && n - prev > 1) out.push('…')
-    out.push(n)
-    prev = n
-  }
-  return out
 }
 
 /** 연도 선택지 — 전체 + 올해부터 가장 오래된 해까지 내림차순. */

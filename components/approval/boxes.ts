@@ -23,6 +23,10 @@
 import type { ApprovalDoc } from './DocDetail'
 import type { ProgressPerson } from './ApprovalTable'
 import { progressCount } from '@/lib/approval/tableCells'
+import { closedAtOf } from '@/lib/approval/doneBox'
+
+/** 기결함 세 항목의 건수 — 서버(app/api/approval/done)가 세어 준다. 못 센 항목은 null. */
+export type DoneCounts = { all: number | null; open: number | null; closed: number | null }
 
 /** 목록을 읽어 오는 곳. 라우트의 box 값과 같은 이름이다. */
 export type Source = 'inbox' | 'outbox' | 'done' | 'cc' | 'all'
@@ -115,13 +119,44 @@ export function writeCollapsedGroups(engineerId: number, keys: string[]): void {
   }
 }
 
-/** 목록을 읽는 주소. 라우트는 지금 것 그대로다. */
+/** 목록을 읽는 주소. */
 export const SOURCE_API: Record<Source, string> = {
   inbox: '/api/approval?box=inbox',
   outbox: '/api/approval?box=outbox',
   done: '/api/approval/done',
   cc: '/api/approval?box=cc',
   all: '/api/approval?box=all',
+}
+
+/** 서버가 기간·종류·페이지를 걸어 주는 함. 그 밖은 한 벌을 받아 화면에서 거른다. */
+export const SERVER_FILTERED: { source: Source; scope: Scope } = { source: 'done', scope: 'closed' }
+
+export const isServerFiltered = (source: Source, scope: Scope): boolean =>
+  source === SERVER_FILTERED.source && scope === SERVER_FILTERED.scope
+
+/**
+ * 목록 주소를 만든다.
+ *
+ * 기결문서(종결)만 서버가 **기간·종류를 limit 보다 먼저** 걸고 페이지로 끊어 준다 — 그 함은
+ * 「종결된 내 문서」 전부라서 한 벌로 받으면 상한에 걸린다(app/api/approval/done/route.ts 머리말).
+ * 나머지 함은 지금까지처럼 한 벌을 받아 화면에서 거른다 — 주소도 지금 것 그대로다.
+ */
+export function listUrl(
+  source: Source,
+  scope: Scope,
+  opts?: { from?: string; to?: string; docType?: string | null; page?: number; size?: number },
+): string {
+  const base = SOURCE_API[source]
+  if (source !== 'done') return base
+  const q = new URLSearchParams({ scope })
+  if (isServerFiltered(source, scope)) {
+    if (opts?.from) q.set('from', opts.from)
+    if (opts?.to) q.set('to', opts.to)
+    if (opts?.docType) q.set('doc_type', opts.docType)
+    if (opts?.page) q.set('page', String(opts.page))
+    if (opts?.size) q.set('size', String(opts.size))
+  }
+  return `${base}?${q.toString()}`
 }
 
 /** 처음 열었을 때 보는 자리 — 내 차례(결재수신함 · 미결문서). */
@@ -231,7 +266,12 @@ export function myActedLine(doc: ApprovalDoc, myId: number | null) {
   return mine.reduce((a, b) => ((a.acted_at ?? '') >= (b.acted_at ?? '') ? a : b))
 }
 
-export function approvalDate(doc: ApprovalDoc, source: Source, myId: number | null): string | null {
+export function approvalDate(
+  doc: ApprovalDoc, source: Source, myId: number | null, scope?: Scope,
+): string | null {
+  // 기결문서(종결)는 **종결 시각**이 기준이다 — 정렬도 그 값이고, 내 줄이 '대기' 인 채 끝난 문서는
+  // 애초에 내가 처리한 날이 없다(내 차례 전에 반려된 건).
+  if (source === 'done' && scope === 'closed') return closedAtOf(doc)
   if (source === 'done') return myActedLine(doc, myId)?.acted_at ?? doc.updated_at ?? null
   return doc.submitted_at ?? doc.created_at ?? null
 }
@@ -324,17 +364,26 @@ export function inPeriod(iso: string | null, from: string, to: string): boolean 
 // ── 목록 ────────────────────────────────────────────────────────────
 
 /** 기준일 순으로 세운다. 기본은 최신순(desc). */
-export function sortDocs(docs: ApprovalDoc[], source: Source, myId: number | null, desc: boolean): ApprovalDoc[] {
+export function sortDocs(
+  docs: ApprovalDoc[], source: Source, myId: number | null, desc: boolean, scope?: Scope,
+): ApprovalDoc[] {
   return [...docs].sort((a, b) => {
-    const av = approvalDate(a, source, myId) ?? ''
-    const bv = approvalDate(b, source, myId) ?? ''
+    const av = approvalDate(a, source, myId, scope) ?? ''
+    const bv = approvalDate(b, source, myId, scope) ?? ''
     if (av !== bv) return desc ? bv.localeCompare(av) : av.localeCompare(bv)
     // 같은 시각이면 번호가 큰 쪽(나중 문서)이 먼저 — 순서가 흔들리지 않게 고정한다.
     return b.document_id - a.document_id
   })
 }
 
-/** 한 벌에 scope·기간·검색을 모두 걸고 세운다. */
+/**
+ * 한 벌에 scope·종류·기간·검색을 모두 걸고 세운다.
+ *
+ * **서버가 이미 걸러 준 함(기결문서(종결))에서는 scope·종류·기간을 다시 걸지 않는다.**
+ * 그 함은 서버가 종결 시각으로 기간을 걸었고 페이지로 끊어 주었다 — 여기서 다시 걸면
+ * 기준일이 다른 값(내가 처리한 날)이라 내 줄이 '대기' 인 채 끝난 문서가 떨어져 나간다.
+ * 검색만 화면에서 거른다(검색은 지금 페이지 안에서 찾는 일이다).
+ */
 export function filterDocs(
   docs: ApprovalDoc[],
   opts: {
@@ -342,16 +391,33 @@ export function filterDocs(
     myId: number | null; people: Record<number, ProgressPerson>; desc: boolean
   },
 ): ApprovalDoc[] {
+  if (isServerFiltered(opts.source, opts.scope)) {
+    const found = docs.filter(d => matchesSearch(d, opts.query, opts.people))
+    return opts.desc ? found : sortDocs(found, opts.source, opts.myId, false, opts.scope)
+  }
   const kept = docs.filter(d =>
     matchesScope(opts.scope, d)
-    && inPeriod(approvalDate(d, opts.source, opts.myId), opts.from, opts.to)
+    && inPeriod(approvalDate(d, opts.source, opts.myId, opts.scope), opts.from, opts.to)
     && matchesSearch(d, opts.query, opts.people),
   )
-  return sortDocs(kept, opts.source, opts.myId, opts.desc)
+  return sortDocs(kept, opts.source, opts.myId, opts.desc, opts.scope)
 }
 
-/** 왼쪽 목록에 붙는 건수 — 기간·검색을 걸기 전, 그 함에 들어 있는 전부. */
-export function itemCount(item: BoxItem, docsBySource: Partial<Record<Source, ApprovalDoc[]>>): number | null {
+/**
+ * 왼쪽 목록에 붙는 건수 — 기간·검색·종류를 걸기 전, 그 함에 들어 있는 전부.
+ *
+ * 기결함 세 항목은 **서버가 센 숫자**를 쓴다. 화면이 받은 한 벌로 세면 상한(50건·한 페이지)에
+ * 걸려 숫자가 작게 나온다 — 세는 일과 자르는 일을 떼어 놓은 이유다.
+ */
+export function itemCount(
+  item: BoxItem,
+  docsBySource: Partial<Record<Source, ApprovalDoc[]>>,
+  doneCounts?: DoneCounts | null,
+): number | null {
+  if (item.source === 'done') {
+    if (!doneCounts) return null
+    return doneCounts[item.scope as 'all' | 'open' | 'closed'] ?? null
+  }
   const rows = docsBySource[item.source]
   if (rows === undefined) return null
   return rows.filter(d => matchesScope(item.scope, d)).length

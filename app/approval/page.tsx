@@ -32,7 +32,7 @@ import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import {
   BLUE, BORDER, DANGER, FAINT, MUTED, NEUTRAL_BG, PAGE_BG, SUB, TEXT,
   PULSE_KEYFRAMES, cardStyle, cardHeader, cardTitle, countBadge,
-  inputStyle, rowStyle, skeletonBlock,
+  btnGhost, inputStyle, rowStyle, skeletonBlock,
 } from '@/components/common/ui'
 import DocDetail, { type ApprovalDoc } from '@/components/approval/DocDetail'
 import { prefetchPanel } from '@/components/approval/panels'
@@ -40,12 +40,13 @@ import DelegationModal from '@/components/approval/DelegationModal'
 import type { ProgressPerson } from '@/components/approval/ApprovalTable'
 import { DOC_TYPES } from '@/lib/approval/docTypes'
 import {
-  BOX_GROUPS, SCOPES, SOURCE_API,
-  activeItem, approvalDate, attachmentCount, dateColumnLabel, detailBox, filterDocs,
-  itemCount, parseView, readCollapsedGroups, showsScopeRadio, statusText,
-  viewQuery, writeCollapsedGroups,
-  type Scope, type Source,
+  BOX_GROUPS, SCOPES,
+  activeItem, approvalDate, attachmentCount, dateColumnLabel, detailBox,
+  filterDocs, isServerFiltered, itemCount, listUrl, parseView,
+  readCollapsedGroups, showsScopeRadio, statusText, viewQuery, writeCollapsedGroups,
+  type DoneCounts, type Scope, type Source,
 } from '@/components/approval/boxes'
+import { PAGE_SIZE, clampPage, pageRange, pageWindow, totalPages } from '@/lib/paging'
 
 const APPROVAL_PATH = '/approval'
 
@@ -220,16 +221,25 @@ function ScopeRadio({ value, onChange }: { value: Scope; onChange: (next: Scope)
   )
 }
 
+/** 목록 응답 — 문서와, 기결함이 함께 주는 총 건수·함 건수. */
+type ListResult = { documents: ApprovalDoc[]; total: number | null; counts: DoneCounts | null }
+
+const EMPTY_RESULT: ListResult = { documents: [], total: null, counts: null }
+
 /** 함 하나를 읽는다. 상태를 쓰지 않으므로 컴포넌트 밖에 둔다(효과 의존성이 늘지 않는다). */
-async function fetchSource(s: Source): Promise<ApprovalDoc[]> {
+async function fetchList(url: string): Promise<ListResult> {
   try {
-    const res = await fetch(SOURCE_API[s])
+    const res = await fetch(url)
     const json = await res.json().catch(() => null)
-    if (!res.ok) { console.error('[approval] list failed', { source: s, json }); return [] }
-    return (json?.documents ?? []) as ApprovalDoc[]
+    if (!res.ok) { console.error('[approval] list failed', { url, json }); return EMPTY_RESULT }
+    return {
+      documents: (json?.documents ?? []) as ApprovalDoc[],
+      total: typeof json?.total === 'number' ? json.total : null,
+      counts: (json?.counts ?? null) as DoneCounts | null,
+    }
   } catch (e) {
-    console.error('[approval] list failed', { source: s, error: e })
-    return []
+    console.error('[approval] list failed', { url, error: e })
+    return EMPTY_RESULT
   }
 }
 
@@ -252,6 +262,8 @@ function ApprovalPageInner() {
   const here = activeItem(source, scope)
 
   const go = (nextSource: Source, nextScope: Scope) => {
+    // 함·구분을 옮기면 페이지는 늘 처음으로 — 3페이지를 보다 좁히면 빈 화면이 된다.
+    setPage(1)
     const q = viewQuery(nextSource, nextScope)
     router.replace(q ? `${APPROVAL_PATH}?${q}` : APPROVAL_PATH, { scroll: false })
   }
@@ -294,15 +306,28 @@ function ApprovalPageInner() {
   const [docsBySource, setDocsBySource] = useState<Partial<Record<Source, ApprovalDoc[]>>>({})
   const [reloadKey, setReloadKey] = useState(0)
   const [openId, setOpenId] = useState<number | null>(null)
+  // 서버가 끊어 주는 함(기결문서(종결))의 페이지와 총 건수.
+  const [page, setPage] = useState(1)
+  // 왼쪽 함 목록의 기결 세 숫자 — 서버가 센 값이다(상한과 무관하다).
+  const [doneCounts, setDoneCounts] = useState<DoneCounts | null>(null)
 
   // 기본 네 곳 — 화면에 들어오면 한 번에 읽고, 처리 뒤에는 다시 읽는다.
   useEffect(() => {
     if (!authorized) return
     let cancelled = false
     const run = async () => {
-      const pairs = await Promise.all(BASE_SOURCES.map(async s => [s, await fetchSource(s)] as const))
+      // 기결함은 서버가 끊어 주는 쪽(종결)이 아니라 **옛 규칙 쪽**을 읽어 둔다 — 왼쪽 건수와
+      // 기결문서·기결문서(진행)이 쓰는 한 벌이다. 종결은 아래 효과가 따로 읽는다.
+      const pairs = await Promise.all(
+        BASE_SOURCES.map(async s => [s, await fetchList(listUrl(s, 'all'))] as const),
+      )
       if (cancelled) return
-      setDocsBySource(prev => ({ ...prev, ...Object.fromEntries(pairs) }))
+      setDocsBySource(prev => ({
+        ...prev,
+        ...Object.fromEntries(pairs.map(([s, r]) => [s, r.documents])),
+      }))
+      const counts = pairs.find(([s]) => s === 'done')?.[1].counts
+      if (counts) setDoneCounts(counts)
       setOpenId(null)
     }
     run()
@@ -314,9 +339,9 @@ function ApprovalPageInner() {
     if (!authorized || source !== 'all' || !canSeeAll) return
     let cancelled = false
     const run = async () => {
-      const rows = await fetchSource('all')
+      const r = await fetchList(listUrl('all', 'all'))
       if (cancelled) return
-      setDocsBySource(prev => ({ ...prev, all: rows }))
+      setDocsBySource(prev => ({ ...prev, all: r.documents }))
     }
     run()
     return () => { cancelled = true }
@@ -345,9 +370,41 @@ function ApprovalPageInner() {
     return () => { cancelled = true }
   }, [authorized])
 
-  const raw = docsBySource[source]
+  // 기결문서(종결) — 서버가 기간·종류를 limit 보다 먼저 걸고 페이지로 끊어 준다.
+  // 그 함을 보고 있을 때만 읽고, 기간·종류·페이지가 바뀌면 다시 읽는다.
+  const serverSide = isServerFiltered(source, scope)
+  // 요청 조건을 열쇠 하나로 묶는다 — 받아 둔 열쇠가 지금 열쇠와 다르면 「불러오는 중」이다.
+  // 효과 안에서 미리 비우지 않아도 되므로 쓸데없는 그림이 한 번 줄어든다(의뢰서 목록의 loadedKey 와 같은 방식).
+  const closedKey = serverSide
+    ? [range.from, range.to, '', page, reloadKey].join('|')
+    : ''
+  const [closed, setClosed] = useState<{ key: string; rows: ApprovalDoc[]; total: number | null } | null>(null)
+  useEffect(() => {
+    if (!authorized || !serverSide) return
+    let cancelled = false
+    const run = async () => {
+      const r = await fetchList(listUrl('done', 'closed', {
+        from: range.from, to: range.to, page, size: PAGE_SIZE,
+      }))
+      if (cancelled) return
+      setClosed({ key: closedKey, rows: r.documents, total: r.total })
+      if (r.counts) setDoneCounts(r.counts)
+    }
+    run()
+    return () => { cancelled = true }
+  }, [authorized, serverSide, closedKey, range.from, range.to, page])
+
+  const closedReady = serverSide && closed !== null && closed.key === closedKey
+  const serverTotal = closedReady ? closed.total : null
+  // 건수가 확정된 뒤 범위를 넘은 페이지는 **보여 줄 때** 끌어내린다(상태를 고치지 않는다).
+  // 서버도 같은 식으로 자르므로(pageSlice → clampPage) 돌아온 목록과 번호가 어긋나지 않는다.
+  const pageNo = serverTotal === null ? page : clampPage(page, serverTotal, PAGE_SIZE)
+
+  const raw = serverSide ? (closedReady ? closed.rows : undefined) : docsBySource[source]
   const listLoading = authorized && raw === undefined
-  const docs = filterDocs(raw ?? [], { source, scope, query, from: range.from, to: range.to, myId, people, desc })
+  const docs = filterDocs(raw ?? [], {
+    source, scope, query, from: range.from, to: range.to, myId, people, desc,
+  })
   // 「전체」는 권한자에게만 보인다 — 라우트의 box=all 잠금과 같은 판정이다.
   const groups = BOX_GROUPS
     .map(g => ({ ...g, items: g.items.filter(i => i.source !== 'all' || canSeeAll) }))
@@ -393,7 +450,7 @@ function ApprovalPageInner() {
                   )
                   : <div style={{ height: 14 }} />}
                 {shownItems.map(item => {
-                  const n = itemCount(item, docsBySource)
+                  const n = itemCount(item, docsBySource, doneCounts)
                   const on = item.key === here.key
                   return (
                     <button
@@ -451,7 +508,7 @@ function ApprovalPageInner() {
               {/* 기간 · 검색 — 카드 안 첫 줄. 예전에는 카드 밖에 띠로 떠 있어 자리를 버렸다.
                   왼쪽이 기간, 오른쪽이 검색이다(아래 라디오 줄과 같은 좌우 배치). */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-                <PeriodNav period={period} onChange={setPeriod} />
+                <PeriodNav period={period} onChange={next => { setPeriod(next); setPage(1) }} />
                 <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
                   {query && (
                     <span style={{ fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>「{query}」 검색 결과</span>
@@ -468,7 +525,11 @@ function ApprovalPageInner() {
               <div style={cardHeader}>
                 {/* 함 이름은 이 화면에서 가장 큰 글자다 — 카드 하나에 모아 두니 어디를 보고 있는지가 먼저 읽혀야 한다. */}
                 <span style={{ ...cardTitle, fontSize: 20 }}>{here.label}</span>
-                <span style={countBadge}>{listLoading ? '...' : `${docs.length}건`}</span>
+                <span style={countBadge}>
+                  {listLoading ? '...'
+                    : serverSide && serverTotal !== null ? `${serverTotal}건`
+                      : `${docs.length}건`}
+                </span>
                 {/* 하위 구분 — 아마란스처럼 오른쪽 위 라디오. 왼쪽 함과 같은 값을 움직인다. */}
                 {showsScopeRadio(source, scope) && (
                   <span style={{ marginLeft: 'auto' }}>
@@ -543,7 +604,7 @@ function ApprovalPageInner() {
                         }}>
                         {/* 기안일 — 기결문서에서는 내가 처리한 날(결재일) */}
                         <span style={{ width: COL.date, flexShrink: 0, fontSize: 12, color: MUTED, paddingTop: 2 }}>
-                          {dateText(approvalDate(d, source, myId))}
+                          {dateText(approvalDate(d, source, myId, scope))}
                         </span>
 
                         {/* 제목 / 문서 종류 · 문서번호 */}
@@ -604,6 +665,50 @@ function ApprovalPageInner() {
                   )
                 })
               )}
+              {/* 페이지 나누기 — 서버가 끊어 주는 함(기결문서(종결))에만 나온다.
+                  방식은 의뢰서 목록과 같다(lib/paging.ts 를 둘이 함께 쓴다). */}
+              {serverSide && !listLoading && serverTotal !== null && (() => {
+                const shownRange = pageRange(pageNo, serverTotal, PAGE_SIZE)
+                const lastPage = totalPages(serverTotal, PAGE_SIZE)
+                return (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                  padding: '10px 12px 2px', borderTop: `1px solid ${BORDER}`,
+                }}>
+                  <span style={{ fontSize: 12, color: MUTED }}>
+                    총 {serverTotal}건
+                    {shownRange && ` 중 ${shownRange.from}–${shownRange.to}`}
+                  </span>
+                  {lastPage > 1 && (
+                    <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                      <button type="button" disabled={pageNo <= 1} onClick={() => setPage(pageNo - 1)}
+                        style={{ ...btnGhost(pageNo <= 1), padding: '5px 10px', fontSize: 12 }}>이전</button>
+                      {pageWindow(pageNo, serverTotal, 1, PAGE_SIZE).map((pg, i) => (
+                        pg === '…'
+                          ? <span key={`gap-${i}`} style={{ fontSize: 12, color: FAINT, padding: '0 2px' }}>…</span>
+                          : (
+                            <button
+                              key={pg} type="button"
+                              aria-current={pg === pageNo ? 'page' : undefined}
+                              onClick={() => setPage(pg)}
+                              style={{
+                                border: 'none', borderRadius: 6, padding: '5px 10px', fontSize: 12,
+                                fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer',
+                                background: pg === pageNo ? BLUE : NEUTRAL_BG,
+                                color: pg === pageNo ? '#ffffff' : SUB,
+                              }}
+                            >
+                              {pg}
+                            </button>
+                          )
+                      ))}
+                      <button type="button" disabled={pageNo >= lastPage} onClick={() => setPage(pageNo + 1)}
+                        style={{ ...btnGhost(pageNo >= lastPage), padding: '5px 10px', fontSize: 12 }}>다음</button>
+                    </span>
+                  )}
+                </div>
+                )
+              })()}
             </div>
           </div>
         </div>
