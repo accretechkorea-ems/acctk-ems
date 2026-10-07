@@ -142,7 +142,7 @@ type DocRef = DocAccessRef
 const REVIEW_QUOTE_SELECT = `
   quote_id, quote_number, quote_date, status, quote_type, recipient, note, delivery_info,
   total_supply, total_tax, total_amount, total_cost, total_profit, profit_rate,
-  customer_id, dealer_id, engineer_id, created_by
+  customer_id, dealer_id, engineer_id, created_by, terms
 `
 
 /**
@@ -306,7 +306,7 @@ async function review(sb: SupabaseClient, caller: Caller, body: Record<string, u
 /** PDF 가 읽는 칸만. 원가·이익(total_cost·total_profit·cost_amount …)은 넣지 않는다. */
 const PDF_QUOTE_SELECT = `
   quote_id, quote_number, quote_date, created_at, status, recipient, note, delivery_info,
-  total_supply, total_tax, total_amount,
+  total_supply, total_tax, total_amount, terms,
   customer_id, dealer_id, engineer_id, created_by
 `
 
@@ -429,6 +429,8 @@ async function pdfData(sb: SupabaseClient, caller: Caller, body: Record<string, 
         total_supply: quote.total_supply,
         total_tax: quote.total_tax,
         total_amount: quote.total_amount,
+        // 조건 네 줄 — buildQuotePdfProps 가 termsOf 로 풀어 기본값을 메운다.
+        terms: quote.terms ?? null,
       },
       items: itemsRes.data ?? [],
       company,

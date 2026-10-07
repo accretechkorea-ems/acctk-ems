@@ -20,6 +20,7 @@
 import type { PDFDocProps } from '@/app/quote/QuotePDFDoc'
 import type { QuoteRow, RowKind } from '@/app/quote/types'
 import { kstYmd } from '@/lib/date'
+import { termsOf } from '@/lib/quoteTerms'
 
 /**
  * 저장값으로 되살릴 수 없는 PDF 요소. 보고·주석에서 한 곳을 가리키도록 적어 둔다.
@@ -56,6 +57,11 @@ export type PdfQuoteRow = {
   total_supply: unknown
   total_tax: unknown
   total_amount: unknown
+  /**
+   * 조건 네 줄(quotes.terms jsonb). null·없음·깨진 값이면 termsOf 가 기본값으로 풀어 준다
+   * — 그래서 terms 가 없던 옛 견적의 PDF 는 한 글자도 달라지지 않는다.
+   */
+  terms?: unknown
 }
 
 export type PdfItemRow = {
@@ -156,6 +162,8 @@ export function buildQuotePdfProps(input: PdfDataInput): PDFDocProps {
     totalSupply: num(q.total_supply),
     totalTax: num(q.total_tax),
     totalAmount: num(q.total_amount),
+    // 저장된 조건 네 줄. 없으면 기본값 — 확정 때 PDF 와 같은 줄이 나온다.
+    terms: termsOf(q.terms),
     ...approvalDateProps(input.approvedAt),
   }
 }

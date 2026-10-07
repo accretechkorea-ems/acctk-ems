@@ -4,6 +4,7 @@ import React from 'react'
 import { Document, Page, Text, View, StyleSheet, Image, Font } from '@react-pdf/renderer'
 import type { QuoteRow } from './types'
 import { numKR, amountToKorean } from './format'
+import { DEFAULT_TERMS, TERM_KEYS, TERM_PDF_LABELS, type Terms } from '@/lib/quoteTerms'
 
 // 한글 폰트 — 예전에는 구글(fonts.gstatic.com)에서 매번 받았다. 외부가 느리거나 막히면 PDF 렌더가
 // 예외로 끝나는데, 그 예외는 견적이 이미 저장된 뒤에 나므로 같은 파일을 public 에 두고 같은 출처에서 받는다.
@@ -90,6 +91,12 @@ export type PDFDocProps = {
   showWatermark?: boolean
   // 화면에서 체크했을 때만 표 아래 서명란을 낸다. DB 에 저장하지 않는 표시 전용 값.
   showSignature?: boolean
+  /**
+   * 조건 네 줄(납품일정·지불조건·인도조건·견적유효).
+   * **주지 않으면 기본값으로 그린다** — 지금까지와 한 글자도 다르지 않다(lib/quoteTerms.ts 의 DEFAULT_TERMS).
+   * 미리보기·확정 때 PDF·저장값으로 다시 만드는 PDF 가 모두 이 prop 하나로 같은 줄을 그린다.
+   */
+  terms?: Terms
   // ── 결재 완료일(전자결재 6단계 PDF) ──
   // 결재 대상 견적서는 저장된 파일을 열지 않고 저장값으로 다시 그린다(lib/quotePdfData.ts).
   // 그때 날짜 자리에 **결재 완료일**을 넣는다. 둘 중 하나만 준다.
@@ -103,7 +110,7 @@ export type PDFDocProps = {
 /** 결재가 끝나기 전 날짜 자리에 넣는 문구. lib/quotePdfData.ts 의 상수와 같은 값이다. */
 const APPROVAL_PENDING_TEXT = '결재 완료 시 날짜 자동 입력 예정'
 
-export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, quoteNo, dateDisplay, rows, remarks, engineerName, engineerTel, totalSupply, totalTax, totalAmount, showWatermark, showSignature, approvalDate, approvalPending }: PDFDocProps) {
+export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, quoteNo, dateDisplay, rows, remarks, engineerName, engineerTel, totalSupply, totalTax, totalAmount, showWatermark, showSignature, approvalDate, approvalPending, terms }: PDFDocProps) {
   const EMPTY_ROWS = Math.max(0, 10 - rows.length)
   // 할인은 품목 목록의 맨 끝(합계 바로 위)에 고정한다 — 입력 순서와 무관하게.
   const orderedRows = [...rows.filter(r => r.row_kind !== 'discount'), ...rows.filter(r => r.row_kind === 'discount')]
@@ -140,10 +147,11 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, 
           <View style={S.headerLeft}>
             <Text style={S.companyName}>{company || '　'} 귀하</Text>
             <Text style={S.headerSubText}>아래와 같이 견적합니다</Text>
-            {[['1.납품일정 :', '담당자와 협의'], ['2.지불조건 :', '익월말 현금 결제'], ['3.인도조건 :', '지정장소'], ['4.견적유효 :', '작성일로부터 1개월']].map(([label, val]) => (
-              <View key={label} style={S.conditionRow}>
-                <Text style={S.conditionLabel}>{label}</Text>
-                <Text style={S.conditionValue}>{val}</Text>
+            {/* 조건 네 줄 — 값은 prop 이 있으면 그것, 없으면 기본값이다(라벨·순서·서식은 늘 같다). */}
+            {TERM_KEYS.map(key => (
+              <View key={key} style={S.conditionRow}>
+                <Text style={S.conditionLabel}>{TERM_PDF_LABELS[key]}</Text>
+                <Text style={S.conditionValue}>{terms?.[key] || DEFAULT_TERMS[key]}</Text>
               </View>
             ))}
           </View>

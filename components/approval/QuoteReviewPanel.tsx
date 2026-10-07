@@ -226,6 +226,27 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
         <InfoRow label="납기">{data.delivery?.trim() || '-'}</InfoRow>
       </div>
 
+      {/* ③-1 조건 변경 — **기본과 다를 때만** 나온다. 모두 기본이면 이 줄 자체가 없다.
+          결재자가 「평소와 다른 조건으로 나가는 건인가」를 한 줄로 알아야 하는 자리라,
+          거래 정보보다 눈에 띄게 테두리를 두르고 바뀐 항목만 적는다(기본값은 적지 않는다). */}
+      {data.termsChanged.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap',
+          border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px', marginBottom: 12,
+        }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: DANGER, whiteSpace: 'nowrap' }}>조건 변경</span>
+          <span style={{ fontSize: 12, color: TEXT, wordBreak: 'break-word' }}>
+            {data.termsChanged.map((c, i) => (
+              <span key={c.key}>
+                {i > 0 && <span style={{ color: FAINT }}> · </span>}
+                <span style={{ color: MUTED }}>{c.label}: </span>
+                <span style={{ fontWeight: 700 }}>{c.value}</span>
+              </span>
+            ))}
+          </span>
+        </div>
+      )}
+
       {/* ④ 품목 표 — 못 읽었으면 **빈 표를 그리지 않는다.**
           빈 표로 두면 「품목 없는 견적」으로 읽혀 결재자가 잘못 판단한다. */}
       {!data.itemsOk ? (

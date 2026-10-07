@@ -13,6 +13,7 @@
 // (lib/quoteEuName.ts 의 euDisplayName). 대리점·E.U 양쪽에 같은 규칙을 쓴다.
 
 import { euDisplayName } from '@/lib/quoteEuName'
+import { changedTerms } from '@/lib/quoteTerms'
 
 /** 숫자로 읽는다. null·빈 값·숫자가 아닌 값은 null — 0 으로 바꾸지 않는다(「없음」과 0 은 다르다). */
 const num = (v: unknown): number | null => {
@@ -48,6 +49,8 @@ export type RawQuote = {
   profit_rate: unknown
   customer_id: number | null
   dealer_id: number | null
+  /** 조건 네 줄(quotes.terms jsonb). 없거나 null 이면 네 줄 모두 기본값이다. */
+  terms?: unknown
 }
 
 export type RawItem = {
@@ -160,6 +163,11 @@ export type QuoteReview = {
    */
   delivery: string | null
   note: string | null
+  /**
+   * 조건 네 줄의 **기본값과 다른 항목만**. 모두 기본이면 빈 배열 —
+   * 검토표가 「조건 변경」 줄을 아예 그리지 않는다. 규칙은 lib/quoteTerms.ts 의 changedTerms.
+   */
+  termsChanged: { key: string; label: string; value: string }[]
   items: ReviewItem[]
   expenses: ReviewExpense[]
   /**
@@ -235,6 +243,8 @@ export function buildQuoteReview(input: ReviewInput): QuoteReview {
     createdBy: input.createdBy,
     delivery: q.delivery_info,
     note: q.note,
+    // 조건 네 줄 — 기본과 다른 것만. 결재자가 「평소와 다른 조건인가」를 한 줄로 본다.
+    termsChanged: changedTerms(input.quote.terms),
     itemsOk: input.itemsOk !== false,
     expensesOk: input.expensesOk !== false,
     items: [...input.items]
