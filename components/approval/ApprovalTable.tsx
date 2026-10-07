@@ -23,7 +23,10 @@
 
 import type { CSSProperties } from 'react'
 import { BORDER, CARD_BG, DANGER, MUTED, NEUTRAL_BG, PAGE_BG, SUB, TEXT } from '@/components/common/ui'
-import type { ApprovalLine, LineState } from '@/lib/approval/types'
+import type { ApprovalLine } from '@/lib/approval/types'
+// 칸 규칙(어느 줄이 칸이 되는가 · 어느 칸에 도장이 찍히는가)은 순수 모듈 하나에 모여 있다.
+// 진행 표기(boxes.ts 의 statusText)가 같은 함수를 봐야 「결재란 3칸 · 도장 2개」와 「진행(2/3)」이 어긋나지 않는다.
+import { isStamped, requesterStamped, tableLines } from '@/lib/approval/tableCells'
 
 export type ProgressPerson = { name: string | null; position: string | null; teams?: string | null }
 
@@ -51,9 +54,6 @@ const noteOf = (l: ApprovalLine, nameOf: (id: number) => string): string | null 
   if (l.state === '대결') return l.acted_by != null ? `대결 ${nameOf(l.acted_by)}` : '대결'
   return null
 }
-
-/** 도장을 찍는 상태인가 — 대기는 빈칸, 생략은 말만 남긴다. */
-const isStamped = (state: LineState): boolean => state !== '대기' && state !== '생략'
 
 const dayText = (iso: string | null): string => {
   if (!iso) return ''
@@ -159,7 +159,6 @@ export default function ApprovalTable({
   const nameOf = (id: number) => people[id]?.name ?? `#${id}`
   const posOf = (id: number) => people[id]?.position ?? '-'
 
-  const bySeq = (a: ApprovalLine, b: ApprovalLine) => (a.step ?? 0) - (b.step ?? 0) || a.line_id - b.line_id
   const toCell = (l: ApprovalLine): Cell => ({
     key: `l${l.line_id}`,
     position: posOf(l.approver_id),
@@ -176,13 +175,15 @@ export default function ApprovalTable({
     position: posOf(requesterId),
     name: nameOf(requesterId),
     date: dayText(submittedAt ?? null),
-    stamped: !!submittedAt,
+    stamped: requesterStamped(requesterId, submittedAt),
     note: null,
     current: false,
   }]
 
-  const approve = [...requester, ...lines.filter(l => l.kind === 'approve').sort(bySeq).map(toCell)]
-  const agree = lines.filter(l => l.kind === 'agree').sort(bySeq).map(toCell)
+  // 어느 줄이 칸이 되고 어떤 순서인가 — tableCells.ts 가 정한다(여기서 다시 거르지 않는다).
+  const cells = tableLines(lines)
+  const approve = [...requester, ...cells.approve.map(toCell)]
+  const agree = cells.agree.map(toCell)
   if (approve.length === 0 && agree.length === 0) return null
 
   return (

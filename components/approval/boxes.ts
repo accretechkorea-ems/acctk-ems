@@ -22,6 +22,7 @@
 
 import type { ApprovalDoc } from './DocDetail'
 import type { ProgressPerson } from './ApprovalTable'
+import { progressCount } from '@/lib/approval/tableCells'
 
 /** 목록을 읽어 오는 곳. 라우트의 box 값과 같은 이름이다. */
 export type Source = 'inbox' | 'outbox' | 'done' | 'cc' | 'all'
@@ -257,13 +258,15 @@ function lastActor(doc: ApprovalDoc, states: string[]): number | null {
 
 /**
  * 「종결(이상철 사장)」 「반려(양정모 책임)」 「진행(3/5)」 처럼 한 덩어리로.
- * 처리자 이름을 괄호에 넣고, 진행중이면 몇 번째인지 적는다.
+ * 처리자 이름을 괄호에 넣고, 진행중이면 **결재란에 도장이 찍힌 칸 / 결재란의 칸 수**를 적는다.
  */
 export function statusText(doc: ApprovalDoc, people: Record<number, ProgressPerson>): string {
   if (doc.status === '진행중') {
-    const total = doc.progress?.total ?? (doc.approval_lines ?? []).filter(l => l.kind !== 'cc').length
-    const step = doc.progress?.currentStep ?? ((doc.progress?.done ?? 0) + 1)
-    return total > 0 ? `진행(${Math.min(step, total)}/${total})` : '진행'
+    // **결재란(결재표)의 칸을 그대로 센다.** 예전에는 결재선 줄만 세서, 결재란이 기안자·수석·총괄
+    // 3칸에 도장 2개인 문서가 「진행(2/2)」로 적혔다 — 표와 글자가 서로 다른 말을 했다.
+    // 칸 규칙은 lib/approval/tableCells.ts 한 곳에 있고 결재표도 같은 함수를 쓴다.
+    const { done, total } = progressCount(doc)
+    return total > 0 ? `진행(${done}/${total})` : '진행'
   }
   if (doc.status === '완료') {
     const id = lastActor(doc, ['승인', '전결', '대결'])
