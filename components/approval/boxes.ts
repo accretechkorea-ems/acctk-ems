@@ -24,6 +24,7 @@ import type { ApprovalDoc } from './DocDetail'
 import type { ProgressPerson } from './ApprovalTable'
 import { progressCount } from '@/lib/approval/tableCells'
 import { closedAtOf } from '@/lib/approval/doneBox'
+import { DOC_TYPES, DOC_TYPE_KEYS } from '@/lib/approval/docTypes'
 
 /** 기결함 세 항목의 건수 — 서버(app/api/approval/done)가 세어 준다. 못 센 항목은 null. */
 export type DoneCounts = { all: number | null; open: number | null; closed: number | null }
@@ -158,6 +159,24 @@ export function listUrl(
   }
   return `${base}?${q.toString()}`
 }
+
+// ── 문서 종류 선택 ──────────────────────────────────────────────────
+//
+// 목록은 **등록표(lib/approval/docTypes.ts)에서 읽는다** — 화면에 유형 이름을 적지 않는다.
+// 새 유형을 등록표에 더하면 이 선택지에도 자동으로 나온다.
+
+/** 종류 선택에서 「전체」를 뜻하는 값. 등록표의 key 와 섞이지 않는 문자열이다. */
+export const DOC_TYPE_ALL = 'all'
+
+/** 선택지 — 「전체」 + 등록된 종류. */
+export const docTypeOptions = (): { value: string; label: string }[] => [
+  { value: DOC_TYPE_ALL, label: '전체' },
+  ...DOC_TYPE_KEYS.map(k => ({ value: k, label: DOC_TYPES[k].label })),
+]
+
+/** 선택값을 서버·필터에 넘길 모양으로. 「전체」와 모르는 값은 null(= 거르지 않는다). */
+export const docTypeFilter = (value: string): string | null =>
+  value && value !== DOC_TYPE_ALL && Object.prototype.hasOwnProperty.call(DOC_TYPES, value) ? value : null
 
 /** 처음 열었을 때 보는 자리 — 내 차례(결재수신함 · 미결문서). */
 export const DEFAULT_VIEW: { source: Source; scope: Scope } = { source: 'inbox', scope: 'all' }
@@ -389,6 +408,8 @@ export function filterDocs(
   opts: {
     source: Source; scope: Scope; query: string; from: string; to: string
     myId: number | null; people: Record<number, ProgressPerson>; desc: boolean
+    /** null = 전체 종류. */
+    docType?: string | null
   },
 ): ApprovalDoc[] {
   if (isServerFiltered(opts.source, opts.scope)) {
@@ -397,6 +418,7 @@ export function filterDocs(
   }
   const kept = docs.filter(d =>
     matchesScope(opts.scope, d)
+    && (!opts.docType || d.doc_type === opts.docType)
     && inPeriod(approvalDate(d, opts.source, opts.myId, opts.scope), opts.from, opts.to)
     && matchesSearch(d, opts.query, opts.people),
   )

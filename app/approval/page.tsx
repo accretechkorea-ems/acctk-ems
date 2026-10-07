@@ -40,9 +40,9 @@ import DelegationModal from '@/components/approval/DelegationModal'
 import type { ProgressPerson } from '@/components/approval/ApprovalTable'
 import { DOC_TYPES } from '@/lib/approval/docTypes'
 import {
-  BOX_GROUPS, SCOPES,
-  activeItem, approvalDate, attachmentCount, dateColumnLabel, detailBox,
-  filterDocs, isServerFiltered, itemCount, listUrl, parseView,
+  BOX_GROUPS, DOC_TYPE_ALL, SCOPES,
+  activeItem, approvalDate, attachmentCount, dateColumnLabel, detailBox, docTypeFilter,
+  docTypeOptions, filterDocs, isServerFiltered, itemCount, listUrl, parseView,
   readCollapsedGroups, showsScopeRadio, statusText, viewQuery, writeCollapsedGroups,
   type DoneCounts, type Scope, type Source,
 } from '@/components/approval/boxes'
@@ -306,6 +306,9 @@ function ApprovalPageInner() {
   const [docsBySource, setDocsBySource] = useState<Partial<Record<Source, ApprovalDoc[]>>>({})
   const [reloadKey, setReloadKey] = useState(0)
   const [openId, setOpenId] = useState<number | null>(null)
+  // 문서 종류 — 등록표에서 읽은 값 하나다(화면에 유형 이름을 적지 않는다).
+  const [docTypeSel, setDocTypeSel] = useState<string>(DOC_TYPE_ALL)
+  const docType = docTypeFilter(docTypeSel)
   // 서버가 끊어 주는 함(기결문서(종결))의 페이지와 총 건수.
   const [page, setPage] = useState(1)
   // 왼쪽 함 목록의 기결 세 숫자 — 서버가 센 값이다(상한과 무관하다).
@@ -376,7 +379,7 @@ function ApprovalPageInner() {
   // 요청 조건을 열쇠 하나로 묶는다 — 받아 둔 열쇠가 지금 열쇠와 다르면 「불러오는 중」이다.
   // 효과 안에서 미리 비우지 않아도 되므로 쓸데없는 그림이 한 번 줄어든다(의뢰서 목록의 loadedKey 와 같은 방식).
   const closedKey = serverSide
-    ? [range.from, range.to, '', page, reloadKey].join('|')
+    ? [range.from, range.to, docType ?? '', page, reloadKey].join('|')
     : ''
   const [closed, setClosed] = useState<{ key: string; rows: ApprovalDoc[]; total: number | null } | null>(null)
   useEffect(() => {
@@ -384,7 +387,7 @@ function ApprovalPageInner() {
     let cancelled = false
     const run = async () => {
       const r = await fetchList(listUrl('done', 'closed', {
-        from: range.from, to: range.to, page, size: PAGE_SIZE,
+        from: range.from, to: range.to, docType, page, size: PAGE_SIZE,
       }))
       if (cancelled) return
       setClosed({ key: closedKey, rows: r.documents, total: r.total })
@@ -392,7 +395,7 @@ function ApprovalPageInner() {
     }
     run()
     return () => { cancelled = true }
-  }, [authorized, serverSide, closedKey, range.from, range.to, page])
+  }, [authorized, serverSide, closedKey, range.from, range.to, docType, page])
 
   const closedReady = serverSide && closed !== null && closed.key === closedKey
   const serverTotal = closedReady ? closed.total : null
@@ -403,7 +406,7 @@ function ApprovalPageInner() {
   const raw = serverSide ? (closedReady ? closed.rows : undefined) : docsBySource[source]
   const listLoading = authorized && raw === undefined
   const docs = filterDocs(raw ?? [], {
-    source, scope, query, from: range.from, to: range.to, myId, people, desc,
+    source, scope, query, from: range.from, to: range.to, myId, people, desc, docType,
   })
   // 「전체」는 권한자에게만 보인다 — 라우트의 box=all 잠금과 같은 판정이다.
   const groups = BOX_GROUPS
@@ -509,6 +512,17 @@ function ApprovalPageInner() {
                   왼쪽이 기간, 오른쪽이 검색이다(아래 라디오 줄과 같은 좌우 배치). */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
                 <PeriodNav period={period} onChange={next => { setPeriod(next); setPage(1) }} />
+                {/* 문서 종류 — 선택지는 등록표(lib/approval/docTypes.ts)에서 온다. */}
+                <select
+                  value={docTypeSel}
+                  onChange={e => { setDocTypeSel(e.target.value); setPage(1) }}
+                  title="문서 종류"
+                  style={{ ...inputStyle, fontSize: 13, cursor: 'pointer' }}
+                >
+                  {docTypeOptions().map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
                 <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
                   {query && (
                     <span style={{ fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>「{query}」 검색 결과</span>
