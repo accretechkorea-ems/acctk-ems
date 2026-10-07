@@ -173,6 +173,10 @@ export function showroomRows(summary: Summary | null | undefined): SummaryRow[] 
   put('내용', str(p?.content))
   put('비고', str(p?.note))
   put('샘플 자재', str(p?.sample_material))
+  // 외부 반출은 **그렇다고 할 때만** 알린다 — 「아니오」는 평소 상태라 줄만 늘린다.
+  // 반출이 걸린 건은 결재자가 따로 볼 것이 있어 한 줄을 쓸 값이 있다.
+  if (p?.carried_out === true) put('외부 반출', '예')
+  put('NDA', str(p?.nda_status))
   put('예상 결과', str(p?.expected_result))
   // 금액만 천 단위 쉼표와 「원」을 붙인다.
   if (p?.expected_cost != null && p.expected_cost !== '') put('예상 비용', won(p.expected_cost))
