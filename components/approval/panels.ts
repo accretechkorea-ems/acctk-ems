@@ -14,6 +14,8 @@
 import type { ComponentType } from 'react'
 import QuoteReviewPanel from './QuoteReviewPanel'
 import QuoteFormBody from './QuoteFormBody'
+import ShowroomFormBody from './ShowroomFormBody'
+import QuoteDeleteFormBody from './QuoteDeleteFormBody'
 import type { FormDoc } from '@/lib/approval/formDoc'
 import { reviewCache } from '@/lib/quoteReviewCache'
 
@@ -23,7 +25,11 @@ export type DocPanelProps = { documentId: number }
 export type DocFormBodyProps = { doc: FormDoc }
 
 export type DocPanel = {
-  Component: ComponentType<DocPanelProps>
+  /**
+   * 선택 — 결재함 상세(DocDetail)에 붙는 추가 패널. 적지 않으면 그 유형은 추가 패널이 없다
+   * (쇼룸·견적 삭제는 요약 표로 충분해 양식 본문만 등록한다).
+   */
+  Component?: ComponentType<DocPanelProps>
   /**
    * 선택 — 패널이 마운트되기 **전에** 데이터를 미리 불러 둘 수 있으면 여기 적는다.
    * 목록이 문서 행을 펼치는 순간 불린다. 결과를 기다리지 않고, 실패해도 아무 일도 하지 않는다
@@ -49,6 +55,16 @@ const PANELS: Record<string, DocPanel> = {
     prefetch: id => reviewCache.prefetch(id),
     formTitle: '견적품의서',
     FormBody: QuoteFormBody,
+  },
+  // 쇼룸 사용 신청·견적 삭제 요청 — 결재함 상세에는 추가 패널을 두지 않는다(요약 표로 충분하다).
+  // 양식 본문만 등록한다 — Component 가 없으면 panelOf 가 null 을 내므로 결재함 상세는 그대로다.
+  showroom_usage: {
+    formTitle: '쇼룸 사용 품의서',
+    FormBody: ShowroomFormBody,
+  },
+  quote_delete: {
+    formTitle: '견적 삭제 품의서',
+    FormBody: QuoteDeleteFormBody,
   },
 }
 
