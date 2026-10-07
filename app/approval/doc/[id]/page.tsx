@@ -101,6 +101,10 @@ const PRINT_CSS = `
     /* 표가 화면에서 가로로 밀리던 상자 — 종이에서는 밀 곳이 없다. */
     .ad-scroll { overflow: visible !important; }
   }
+  /* 머리 표 — 네 줄이 결재란 높이에 맞춰 남는 높이를 나눠 갖는다(합의자가 있으면 결재란이 더 높다).
+     인쇄에서도 같은 모양이다(이 규칙은 @media print 밖에 있다). */
+  .ad-head-rows { display: flex; flex-direction: column; }
+  .ad-head-rows > .ad-row { flex: 1; align-items: stretch; }
 `
 
 /** 상태 dot 색 — 결재함 목록과 같은 값이다. */
@@ -265,7 +269,6 @@ function DocPageInner() {
   const FormBody = formBodyOf(doc.doc_type)
 
   const lines = doc.approval_lines
-  const agree = lines.filter(l => l.kind === 'agree')
   const cc = lines.filter(l => l.kind === 'cc')
   const ccNames = cc.map(l => withPos(l.approver_id))
   const current = nextPendingLine(lines)
@@ -317,32 +320,44 @@ function DocPageInner() {
       )}
 
       <div className="ad-card" style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '16px 18px' }}>
-        {/* ── 머리 ── 왼쪽 문서 정보 표, 오른쪽 결재란. 좁으면 결재란이 아래로 내려간다. */}
-        <div className="ad-block" style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-          <div style={{ flex: '1 1 300px', minWidth: 0, border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden' }}>
+        {/* ── 머리 ── 왼쪽 문서 정보 표, 오른쪽 결재란. 좁으면 결재란이 아래로 내려간다.
+            **두 쪽의 높이를 맞춘다** — 합의자가 있으면 결재란이 두 칸으로 높아지는데, 예전에는
+            왼쪽 표가 네 줄 높이에 그대로 멈춰 아래가 휑하게 비었다. grid 두 열 + stretch 로
+            두 쪽을 같은 높이에 두고, 왼쪽 네 줄이 남는 높이를 나눠 갖는다(.ad-head-rows).
+            합의자가 없으면 결재란이 한 칸이라 네 줄과 거의 같은 높이다 — 지금 모양과 다르지 않다. */}
+        <div
+          className="ad-block"
+          style={{
+            display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) max-content',
+            gap: 12, alignItems: 'stretch',
+          }}
+        >
+          <div className="ad-head-rows" style={{ minWidth: 0, border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden' }}>
             <FormRow label="문서번호" first>{doc.doc_no}</FormRow>
             <FormRow label="작성일시">{when(doc.submitted_at ?? doc.created_at)}</FormRow>
             <FormRow label="기안부서">{people[doc.requester_id]?.teams?.trim() || '-'}</FormRow>
             <FormRow label="기안자">{withPos(doc.requester_id)}</FormRow>
           </div>
-          {/* 맨 앞 기안자 칸은 결재선이 아니라 문서 값으로 그린다 — 결재함 상세와 같은 결재란이다. */}
+          {/* 맨 앞 기안자 칸은 결재선이 아니라 문서 값으로 그린다 — 결재함 상세와 같은 결재란이다.
+              fillBlanks — 결재 줄과 합의 줄의 칸 수가 다르면 빈 칸으로 채워 표를 닫는다.
+              결재함 상세는 이 prop 을 넘기지 않아 그 화면의 모양은 그대로다. */}
           <ApprovalTable
             lines={lines}
             people={people as Record<number, ProgressPerson>}
             currentLineId={current?.line_id ?? null}
             requesterId={doc.requester_id}
             submittedAt={doc.submitted_at}
+            fillBlanks
           />
         </div>
 
-        {/* ── 합의 · 수신및참조 · 제목 ── 합의는 있을 때만 줄을 만든다. */}
-        <div style={{ marginTop: 12, border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden' }}>
-          {agree.length > 0 && (
-            <FormRow label="합　　의" first>{agree.map(l => withPos(l.approver_id)).join(' · ')}</FormRow>
-          )}
+        {/* ── 수신및참조 · 제목 ──
+            합의자는 **결재란의 합의 줄에만** 나온다. 예전에는 여기에도 이름을 글자로 나열해
+            같은 정보가 두 번 보였다(결재란의 도장 + 이 줄). 수신및참조가 늘 첫 줄이다. */}
+        <div className="ad-block" style={{ marginTop: 12, border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden' }}>
           <FormRow
             label="수신및참조"
-            first={agree.length === 0}
+            first
             title={ccNames.length > 0 ? ccNames.join(' · ') : undefined}
           >
             {ccSummary(ccNames)}

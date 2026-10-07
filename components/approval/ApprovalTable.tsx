@@ -44,6 +44,11 @@ type Cell = {
   note: string | null
   /** 지금 차례인 칸 */
   current: boolean
+  /**
+   * 사람이 없는 **자리 맞추기 칸**. 결재 줄과 합의 줄의 칸 수가 다를 때 적은 쪽을 채워
+   * 표가 직사각형으로 닫히게 한다. 테두리만 있고 직급·도장·이름이 모두 비어 있다.
+   */
+  filler?: boolean
 }
 
 /** 칸 안에 작게 붙는 말 — 승인은 적지 않는다(도장이 곧 승인이다). */
@@ -113,13 +118,13 @@ function CellRow({ label, cells }: { label: string; cells: Cell[] }) {
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {/* 직급 — 가로 헤더 */}
         <div style={{ display: 'flex' }}>
-          {cells.map(c => <div key={`h${c.key}`} style={headCell}>{c.position}</div>)}
+          {cells.map(c => <div key={`h${c.key}`} style={headCell}>{c.filler ? '' : c.position}</div>)}
         </div>
         {/* 도장 — 처리 전이면 빈칸 */}
         <div style={{ display: 'flex' }}>
           {cells.map(c => (
             <div key={`s${c.key}`} style={stampCell(c.current)}>
-              {c.stamped && <Stamp name={c.name} />}
+              {!c.filler && c.stamped && <Stamp name={c.name} />}
               {c.note && <span style={{ fontSize: 10, color: SUB, whiteSpace: 'nowrap' }}>{c.note}</span>}
             </div>
           ))}
@@ -128,9 +133,9 @@ function CellRow({ label, cells }: { label: string; cells: Cell[] }) {
         <div style={{ display: 'flex' }}>
           {cells.map(c => (
             <div key={`f${c.key}`} style={footCell}>
-              <span style={{ fontSize: 10, color: MUTED, whiteSpace: 'nowrap' }}>{c.date}</span>
+              <span style={{ fontSize: 10, color: MUTED, whiteSpace: 'nowrap' }}>{c.filler ? '' : c.date}</span>
               <span style={{ fontSize: 11, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: CELL_W - 6 }}>
-                {c.name}
+                {c.filler ? '' : c.name}
               </span>
             </div>
           ))}
@@ -140,8 +145,18 @@ function CellRow({ label, cells }: { label: string; cells: Cell[] }) {
   )
 }
 
+/** 칸 수를 width 에 맞춘다 — 뒤에 빈 칸을 붙인다(앞쪽 순서는 건드리지 않는다). */
+function padCells(cells: Cell[], width: number): Cell[] {
+  if (cells.length >= width) return cells
+  const pad: Cell[] = []
+  for (let i = cells.length; i < width; i++) {
+    pad.push({ key: `filler${i}`, position: '', name: '', date: '', stamped: false, note: null, current: false, filler: true })
+  }
+  return [...cells, ...pad]
+}
+
 export default function ApprovalTable({
-  lines, people, currentLineId, requesterId, submittedAt,
+  lines, people, currentLineId, requesterId, submittedAt, fillBlanks = false,
 }: {
   lines: ApprovalLine[]
   /** engineer_id → 이름·직급·부서. 없으면 「#12」처럼 번호로 보여준다. */
@@ -155,6 +170,14 @@ export default function ApprovalTable({
   requesterId?: number | null
   /** 상신일 — approval_documents.submitted_at. 없으면(임시저장) 기안자 칸의 도장을 비운다. */
   submittedAt?: string | null
+  /**
+   * 결재 줄과 합의 줄의 칸 수가 다를 때 **적은 쪽을 빈 칸으로 채워** 표를 직사각형으로 닫는다.
+   *
+   * **기본값은 false — 지금까지의 모양 그대로다.** 결재함 상세(DocDetail)는 넘기지 않으므로
+   * 그 화면은 한 픽셀도 바뀌지 않는다. 문서 양식 화면만 켠다 — 그쪽은 한 장의 문서라
+   * 표 오른쪽이 테두리 없이 비어 있으면 표가 끊겨 보인다.
+   */
+  fillBlanks?: boolean
 }) {
   const nameOf = (id: number) => people[id]?.name ?? `#${id}`
   const posOf = (id: number) => people[id]?.position ?? '-'
@@ -182,9 +205,16 @@ export default function ApprovalTable({
 
   // 어느 줄이 칸이 되고 어떤 순서인가 — tableCells.ts 가 정한다(여기서 다시 거르지 않는다).
   const cells = tableLines(lines)
-  const approve = [...requester, ...cells.approve.map(toCell)]
-  const agree = cells.agree.map(toCell)
+  let approve = [...requester, ...cells.approve.map(toCell)]
+  let agree = cells.agree.map(toCell)
   if (approve.length === 0 && agree.length === 0) return null
+
+  // 자리 맞추기 — 두 줄이 다 있고 칸 수가 다를 때만. 한 줄뿐이면 채울 상대가 없다.
+  if (fillBlanks && approve.length > 0 && agree.length > 0) {
+    const width = Math.max(approve.length, agree.length)
+    approve = padCells(approve, width)
+    agree = padCells(agree, width)
+  }
 
   return (
     // 칸이 많으면(기안자 + 결재자 여섯 이상) 표가 상세 폭을 넘을 수 있다 — 그때만 가로로 민다.
