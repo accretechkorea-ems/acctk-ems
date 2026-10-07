@@ -12,20 +12,15 @@
 // 빈 배열이 되어, 막힌 것과 정말 0건인 것을 가를 수 없었다(상신 직후에도 「기록이 없습니다」).
 
 import { useCallback, useEffect, useState } from 'react'
-import { useToast } from '@/components/common/Toast'
-import {
-  BORDER, DANGER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT,
-  btnDanger, btnGhost, btnPrimary, inputStyle,
-} from '@/components/common/ui'
+import { BORDER, DANGER, FAINT, MUTED, SUB, TEXT, btnGhost } from '@/components/common/ui'
 import ApprovalTable, { type ProgressPerson } from './ApprovalTable'
+import DocActions from './DocActions'
 import DocInfo from './DocInfo'
 import { summaryRows } from './summary'
 import { panelOf } from './panels'
 import { nextPendingLine } from '@/lib/approval/engine'
-import {
-  APPROVE_LABEL, approveLabelOf, canRejectDocument, canResubmitDocument, DOC_TYPES,
-} from '@/lib/approval/docTypes'
-import { DISCARDABLE_STATUSES, type ApprovalLine, type ApprovalDocument } from '@/lib/approval/types'
+import { DOC_TYPES } from '@/lib/approval/docTypes'
+import type { ApprovalLine, ApprovalDocument } from '@/lib/approval/types'
 
 export type ApprovalDoc = ApprovalDocument & {
   approval_lines: ApprovalLine[]
@@ -41,9 +36,6 @@ type HistoryRow = {
   comment: string | null
   created_at: string
 }
-
-/** 「회수」는 두 번 눌러야 실행된다. 쇼룸·첨부와 같은 3초다. */
-const CONFIRM_MS = 3000
 
 /** 「…을/를」 — 마지막 글자의 받침으로 고른다. 문서 종류 이름이 유형마다 달라 규칙으로 둔다. */
 const objectParticle = (word: string): string => {
@@ -69,14 +61,9 @@ export default function DocDetail({
   /** 처리 성공 — 목록을 다시 읽게 한다. */
   onChanged: () => void
 }) {
-  const toast = useToast()
   // null = 불러오는 중, [] = 정말 0건. 실패는 따로 둔다 — 셋이 전혀 다른 말이다.
   const [history, setHistory] = useState<HistoryRow[] | null>(null)
   const [historyFailed, setHistoryFailed] = useState(false)
-  const [comment, setComment] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [confirmWithdraw, setConfirmWithdraw] = useState(false)
-  const [confirmDiscard, setConfirmDiscard] = useState(false)
 
   /**
    * 이력을 읽는다. **서버가 읽어 준다**(/api/approval/history) — 브라우저로 직접 읽던 때는
@@ -109,90 +96,25 @@ export default function DocDetail({
 
   useEffect(() => {
     // 문서가 바뀌면 앞 요청을 끊는다 — 늦게 온 남의 문서 이력이 화면에 들어오지 않게.
+    //
+    // loadHistory 는 시작하면서 history 를 null(= 불러오는 중)로 되돌린다. 그 자리를 효과 밖으로
+    // 옮길 수 없다 — 문서를 바꾸는 순간 앞 문서의 이력을 **먼저** 지워야 남의 기록이 한 프레임
+    // 보이지 않는다. 저장소의 같은 규칙 선례(app/approval/page.tsx·app/activity/page.tsx)와 같다.
     const ac = new AbortController()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadHistory(ac.signal)
     return () => ac.abort()
   }, [loadHistory])
 
-  useEffect(() => {
-    if (!confirmWithdraw) return
-    const t = setTimeout(() => setConfirmWithdraw(false), CONFIRM_MS)
-    return () => clearTimeout(t)
-  }, [confirmWithdraw])
-
-  useEffect(() => {
-    if (!confirmDiscard) return
-    const t = setTimeout(() => setConfirmDiscard(false), CONFIRM_MS)
-    return () => clearTimeout(t)
-  }, [confirmDiscard])
-
   const nameOf = (id: number) => people[id]?.name ?? `#${id}`
   const current = nextPendingLine(doc.approval_lines)
-  // 반려 가능 여부와 승인 버튼 이름은 **따로** 본다.
-  //   · rejectable — 반려 버튼을 그릴지. 판정은 서버 반려 라우트와 **같은 함수**다
-  //     (화면에 보이는 버튼과 서버가 받는 것이 어긋나지 않게).
-  //   · approveLabel — 쇼룸 사후 신청은 이미 끝난 사용이라 「확인」이다. 그래도 반려는 할 수 있다.
-  // 어느 유형이 무엇인지는 등록표(lib/approval/docTypes.ts)가 안다 — 여기에 유형 이름을 적지 않는다.
+  // 요약·유형 이름에 쓰는 등록표. 반려 가능 여부·버튼 이름은 DocActions 가 같은 등록표로 본다.
   const def = DOC_TYPES[doc.doc_type]
-  const rejectable = def ? canRejectDocument(def, doc.summary) : true
-  const approveLabel = def ? approveLabelOf(def, doc.summary) : APPROVE_LABEL
   const rows = summaryRows(doc.doc_type, doc.summary)
   const docLabel = def?.label ?? doc.doc_type
   // 유형별 추가 패널(견적서 검토표 등). 등록표가 고른다 — 여기에 유형 이름을 적지 않는다.
   const Panel = panelOf(doc.doc_type)
 
-  /** 라우트 호출 공통 — 409 는 「이미 처리되었습니다」로 알리고 목록을 다시 읽는다. */
-  const call = async (body: Record<string, unknown>, okText: string) => {
-    setBusy(true)
-    try {
-      const res = await fetch('/api/approval', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      const json = await res.json().catch(() => null)
-      if (res.status === 409) {
-        toast.error('이미 처리된 결재입니다')
-        onChanged()
-        return
-      }
-      if (!res.ok) { toast.error(json?.error ?? '처리하지 못했습니다'); return }
-      toast.success(okText)
-      onChanged()
-    } catch (e) {
-      console.error('[approval/detail] action failed', e)
-      toast.error('처리하지 못했습니다')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  // 성공 토스트도 버튼 이름을 따라간다 — 「확인」을 눌렀는데 「결재했습니다」가 뜨면 말이 어긋난다.
-  const approvedText = approveLabel === APPROVE_LABEL ? '결재했습니다' : `${approveLabel}했습니다`
-  const approve = () => call({ action: 'approve', documentId: doc.document_id, comment: comment.trim() || undefined }, approvedText)
-  const reject = () => {
-    if (!comment.trim()) { toast.error('반려 사유를 입력해주세요'); return }
-    call({ action: 'reject', documentId: doc.document_id, comment: comment.trim() }, '반려했습니다')
-  }
-  const withdraw = () => {
-    if (!confirmWithdraw) { setConfirmWithdraw(true); return }
-    setConfirmWithdraw(false)
-    call({ action: 'withdraw', documentId: doc.document_id }, '회수했습니다')
-  }
-  const resubmit = () => call({ action: 'resubmit', documentId: doc.document_id }, '다시 올렸습니다')
-  // 폐기 — 되돌릴 수 없으니 회수와 같은 3초 2단 확인을 둔다.
-  const discard = () => {
-    if (!confirmDiscard) { setConfirmDiscard(true); return }
-    setConfirmDiscard(false)
-    call({ action: 'discard', documentId: doc.document_id }, '폐기했습니다')
-  }
-
-  const untouched = doc.approval_lines.filter(l => l.kind !== 'cc').every(l => l.state === '대기')
-  // 반려·회수된 내 문서만 치울 수 있다(라우트와 같은 판정). 폐기한 문서는 여기서 빠진다.
-  const discardable = (DISCARDABLE_STATUSES as string[]).includes(doc.status)
-  // 같은 문서로 다시 올릴 수 있는 유형인가(라우트와 같은 판정). 견적서는 내용을 고쳐야 하므로 false 다
-  // — 버튼을 그려 두면 눌러서 400 을 받는다. 폐기는 그대로 둔다(치우는 길은 막지 않는다).
-  const resubmittable = def ? canResubmitDocument(def) : true
   const rejectedLine = doc.approval_lines.find(l => l.state === '반려')
 
   return (
@@ -234,6 +156,9 @@ export default function DocDetail({
       {/* 유형별 추가 패널 — 등록표(panels.ts)가 고른다. `if (doc_type === …)` 분기를 두지 않는다
           (summary.ts 와 같은 방식). 등록되지 않은 유형은 Panel 이 null 이라 아무것도 그리지 않는다.
           패널이 실패해도 아래 처리 버튼은 그대로 동작한다 — 자기 영역에서만 오류를 알린다. */}
+      {/* Panel 은 panelOf 가 등록표에서 꺼내 온 **모듈 수준 컴포넌트**다 — 렌더마다 새로 만들지
+          않으므로 상태가 초기화되지 않는다. 규칙이 panelOf 안을 들여다볼 수 없어 경고만 남는다. */}
+      {/* eslint-disable-next-line react-hooks/static-components */}
       {Panel && <Panel documentId={doc.document_id} />}
 
       {/* 반려 사유는 눈에 띄게 따로 */}
@@ -281,75 +206,19 @@ export default function DocDetail({
         상기와 같이 {docLabel}{objectParticle(docLabel)} 제출합니다
       </div>
 
-      {/* 처리 */}
-      {box === 'pending' && doc.status === '진행중' && (
-        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {/* 위임받아 들어온 건 — 누구를 대신해 누르는지 먼저 알린다. 기록에는 「대결」로 남고
-              결재란에는 원래 결재자의 칸에 내 이름이 찍힌다. */}
-          {doc.delegated && current && (
-            <div style={{ fontSize: 12, color: SUB, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>
-              {nameOf(current.approver_id)}님을 대신하여 결재합니다
-            </div>
-          )}
-          <textarea
-            value={comment}
-            onChange={e => setComment(e.target.value)}
-            placeholder={rejectable ? '의견 (반려는 사유 필수)' : '의견 (선택)'}
-            rows={2}
-            maxLength={500}
-            style={{ ...inputStyle, width: '100%', resize: 'vertical', fontSize: 13 }}
-          />
-          {/* 처리 버튼은 **오른쪽 아래**다 — 의견을 적고 눈이 내려오는 끝자리에 둔다.
-              순서는 왼쪽 [반려] · 오른쪽 [승인] — 되돌릴 수 없는 쪽(승인)을 커서가 마지막에 닿는 자리에 둔다.
-              반려를 그리지 않는 유형(쇼룸 사후 신청)에서는 [확인] 하나만 오른쪽 끝에 남는다. */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            {rejectable && (
-              <button type="button" onClick={reject} disabled={busy || !comment.trim()} style={btnDanger(busy || !comment.trim())}>
-                반려
-              </button>
-            )}
-            <button type="button" onClick={approve} disabled={busy} style={btnPrimary(busy)}>
-              {busy ? '처리 중...' : approveLabel}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {box === 'outbox' && (
-        <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-          {doc.status === '진행중' && untouched && (
-            <button type="button" onClick={withdraw} disabled={busy}
-              style={confirmWithdraw ? btnDanger(busy) : btnGhost(busy)}>
-              {confirmWithdraw ? '한 번 더 누르면 회수' : '회수'}
-            </button>
-          )}
-          {/* 재작성·폐기는 같은 조건에서 함께 나온다 — 다시 올리거나, 치우거나 둘 중 하나다.
-              폐기한 문서에는 둘 다 나오지 않는다(되살리려면 새로 상신한다). */}
-          {discardable && (
-            <>
-              {resubmittable && (
-                <button type="button" onClick={resubmit} disabled={busy} style={btnPrimary(busy)}>
-                  {busy ? '처리 중...' : '재작성'}
-                </button>
-              )}
-              <button type="button" onClick={discard} disabled={busy}
-                style={confirmDiscard ? btnDanger(busy) : btnGhost(busy)}>
-                {confirmDiscard ? '한 번 더 누르면 폐기' : '폐기'}
-              </button>
-            </>
-          )}
-          {doc.status === '폐기' && (
-            <span style={{ fontSize: 12, color: MUTED, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>
-              폐기한 문서입니다. 다시 올리려면 새로 상신해주세요
-            </span>
-          )}
-          {doc.status === '진행중' && !untouched && (
-            <span style={{ fontSize: 12, color: MUTED, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>
-              이미 결재가 시작되어 회수할 수 없습니다
-            </span>
-          )}
-        </div>
-      )}
+      {/* 처리 — 의견·승인·반려와 회수·재작성·폐기. **문서 양식 화면과 같은 컴포넌트다**
+          (components/approval/DocActions.tsx). 어느 줄을 그릴지만 여기서 정한다:
+          미결함에 들어온 진행중 문서면 승인·반려, 상신함이면 회수·재작성·폐기.
+          그 함에 들어왔다는 사실이 곧 「내 차례다 / 내가 올린 문서다」다(라우트가 걸러 준다). */}
+      <DocActions
+        doc={doc}
+        summary={doc.summary}
+        scope={{ approve: box === 'pending' && doc.status === '진행중', owner: box === 'outbox' }}
+        delegated={doc.delegated}
+        currentApproverId={current?.approver_id ?? null}
+        nameOf={nameOf}
+        onChanged={onChanged}
+      />
     </div>
   )
 }

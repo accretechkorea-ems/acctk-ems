@@ -13,9 +13,13 @@
 
 import type { ComponentType } from 'react'
 import QuoteReviewPanel from './QuoteReviewPanel'
+import type { FormDoc } from '@/lib/approval/formDoc'
 import { reviewCache } from '@/lib/quoteReviewCache'
 
 export type DocPanelProps = { documentId: number }
+
+/** 문서 양식 화면의 본문. 문서 한 건을 통째로 받는다(요약·결재선·대상 id 가 다 들어 있다). */
+export type DocFormBodyProps = { doc: FormDoc }
 
 export type DocPanel = {
   Component: ComponentType<DocPanelProps>
@@ -25,11 +29,24 @@ export type DocPanel = {
    * (패널이 마운트되면 평소대로 자기가 다시 부른다).
    */
   prefetch?: (documentId: number) => void
+  /**
+   * 선택 — 문서 양식 화면(app/approval/doc/[id])의 **양식 제목**.
+   * 적지 않으면 「<종류 이름> 결재서」가 된다(formTitleOf).
+   */
+  formTitle?: string
+  /**
+   * 선택 — 문서 양식 화면의 **본문**. 적지 않은 유형은 그 화면이 기존 요약 표(summaryRows)를
+   * 본문 자리에 그린다. 그래서 그 화면에도 유형 이름을 적는 분기가 없다.
+   */
+  FormBody?: ComponentType<DocFormBodyProps>
 }
 
 const PANELS: Record<string, DocPanel> = {
   // 견적서 — 품목·원가·이익·거래 구분을 보여 주는 검토표.
-  quote: { Component: QuoteReviewPanel, prefetch: id => reviewCache.prefetch(id) },
+  quote: {
+    Component: QuoteReviewPanel,
+    prefetch: id => reviewCache.prefetch(id),
+  },
 }
 
 const entryOf = (docType: string): DocPanel | null =>
@@ -46,4 +63,17 @@ export function panelOf(docType: string): ComponentType<DocPanelProps> | null {
  */
 export function prefetchPanel(docType: string, documentId: number): void {
   entryOf(docType)?.prefetch?.(documentId)
+}
+
+/**
+ * 문서 양식 화면의 제목. 등록된 유형은 그 이름(견적서 → 「견적품의서」),
+ * 등록이 없는 유형은 「<종류 이름> 결재서」다 — 화면에 유형 이름을 적지 않는다.
+ */
+export function formTitleOf(docType: string, typeLabel: string): string {
+  return entryOf(docType)?.formTitle ?? `${typeLabel} 결재서`
+}
+
+/** 그 유형의 양식 본문. 없으면 null — 화면이 기존 요약 표를 본문 자리에 그린다. */
+export function formBodyOf(docType: string): ComponentType<DocFormBodyProps> | null {
+  return entryOf(docType)?.FormBody ?? null
 }
