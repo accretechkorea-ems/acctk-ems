@@ -28,7 +28,7 @@ import {
 } from '@/components/common/ui'
 import ApprovalTable, { type ProgressPerson } from '@/components/approval/ApprovalTable'
 import DocActions from '@/components/approval/DocActions'
-import { FormRow, formTable, formTd, formTh, scrollBox } from '@/components/approval/formStyles'
+import { FormRow, SCROLL_CLASS, formTable, formTd, formTh, scrollBox } from '@/components/approval/formStyles'
 import { formBodyOf, formTitleOf } from '@/components/approval/panels'
 import { summaryRows } from '@/components/approval/summary'
 import { attachmentCount, statusText } from '@/components/approval/boxes'
@@ -64,6 +64,45 @@ const when = (iso: string | null): string => {
   return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
+/**
+ * 인쇄 스타일. 저장소에 인쇄 선례가 없어 이 화면 안에 둔다(결재함의 SHELL_CSS 와 같은 방식).
+ *
+ * 규칙
+ *   · 조작 요소(버튼·의견 입력·처리 영역·「다시 시도」)는 .ad-noprint 로 묶어 숨긴다.
+ *   · 앱 틀(사이드바·상단 바)도 숨긴다 — 이 화면은 틀 안에 들어갈 수도 있다.
+ *   · 흑백에서도 읽히게 표 테두리는 남기고 배경색만 옅게 바꾼다(테두리를 지우면 칸이 사라진다).
+ *   · 표·줄이 페이지 사이에서 끊기지 않게 break-inside: avoid.
+ *   · A4 세로 한 장 폭 — 양식의 최대 폭(900)을 100% 로 풀고 여백은 12mm.
+ * 상태 줄(진행중·반려 등)은 **숨기지 않는다** — 승인 전 문서를 인쇄해도 그 사실이 종이에 남아야 한다.
+ */
+const PRINT_CSS = `
+  @media print {
+    @page { size: A4 portrait; margin: 12mm; }
+    /* 앱 틀 — 사이드바·상단 바·공지 팝업. 이 화면이 틀 안에 있을 때만 있다. */
+    nav, aside, header { display: none !important; }
+    .ad-noprint { display: none !important; }
+    .ad-shell {
+      position: static !important;
+      padding: 0 !important;
+      background: #ffffff !important;
+      min-height: 0 !important;
+    }
+    .ad-page { max-width: none !important; }
+    .ad-card {
+      border: none !important;
+      border-radius: 0 !important;
+      padding: 0 !important;
+      background: #ffffff !important;
+    }
+    /* 라벨 칸의 중립 배경은 흑백 인쇄에서 글자를 먹는다 — 옅게 둔다. */
+    .ad-shell th, .ad-shell [data-label] { background: #f6f6f6 !important; }
+    .ad-shell table, .ad-shell tr, .ad-shell td, .ad-shell th { break-inside: avoid; }
+    .ad-row, .ad-block { break-inside: avoid; }
+    /* 표가 화면에서 가로로 밀리던 상자 — 종이에서는 밀 곳이 없다. */
+    .ad-scroll { overflow: visible !important; }
+  }
+`
+
 /** 상태 dot 색 — 결재함 목록과 같은 값이다. */
 const STATUS_DOT: Record<string, string> = {
   '진행중': '#234ea2',
@@ -80,8 +119,9 @@ function Shell({ popup, children }: { popup: boolean; children: React.ReactNode 
     ? { position: 'fixed', inset: 0, overflowY: 'auto', background: PAGE_BG, zIndex: 100 }
     : { background: PAGE_BG, minHeight: '100vh' }
   return (
-    <main style={{ ...base, padding: '20px 16px' }}>
-      <div style={{ maxWidth: 900, margin: '0 auto' }}>{children}</div>
+    <main className="ad-shell" style={{ ...base, padding: '20px 16px' }}>
+      <style>{PRINT_CSS}</style>
+      <div className="ad-page" style={{ maxWidth: 900, margin: '0 auto' }}>{children}</div>
     </main>
   )
 }
@@ -250,7 +290,12 @@ function DocPageInner() {
             {settled ? statusLine : `진행(${progress.done}/${progress.total})`}
           </span>
         </span>
-        <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+        {/* 조작 묶음 — 인쇄에서는 빠진다(종이에서 누를 수 없다). */}
+        <span className="ad-noprint" style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <button type="button" onClick={() => window.print()}
+            style={{ ...btnGhost(), padding: '5px 12px', fontSize: 12 }}>
+            인쇄
+          </button>
           {!popup && backLink}
           {popup && (
             <button type="button" onClick={closeWindow} style={{ ...btnGhost(), padding: '5px 12px', fontSize: 12 }}>
@@ -271,9 +316,9 @@ function DocPageInner() {
         </div>
       )}
 
-      <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '16px 18px' }}>
+      <div className="ad-card" style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '16px 18px' }}>
         {/* ── 머리 ── 왼쪽 문서 정보 표, 오른쪽 결재란. 좁으면 결재란이 아래로 내려간다. */}
-        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div className="ad-block" style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 300px', minWidth: 0, border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden' }}>
             <FormRow label="문서번호" first>{doc.doc_no}</FormRow>
             <FormRow label="작성일시">{when(doc.submitted_at ?? doc.created_at)}</FormRow>
@@ -317,7 +362,7 @@ function DocPageInner() {
           ) : rows.length === 0 ? (
             <div style={{ fontSize: 12, color: MUTED }}>내용이 없습니다</div>
           ) : (
-            <div style={scrollBox}>
+            <div className={SCROLL_CLASS} style={scrollBox}>
               <table style={formTable}>
                 <tbody>
                   {rows.map((r, i) => (
@@ -345,7 +390,7 @@ function DocPageInner() {
         <div style={{ marginTop: 14 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 5 }}>이력</div>
           {historyFailed ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <div className="ad-noprint" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12, color: DANGER, fontWeight: 600 }}>이력을 불러오지 못했습니다</span>
               <button type="button" onClick={() => { void loadHistory() }}
                 style={{ ...btnGhost(), padding: '4px 10px', fontSize: 12 }}>
@@ -372,7 +417,9 @@ function DocPageInner() {
           )}
         </div>
 
-        {/* ── 처리 ── 결재함 상세와 **같은 컴포넌트**다. 어느 줄을 그릴지는 라우트가 준 플래그로 정한다. */}
+        {/* ── 처리 ── 결재함 상세와 **같은 컴포넌트**다. 어느 줄을 그릴지는 라우트가 준 플래그로 정한다.
+            의견 입력·버튼이라 인쇄에서는 통째로 빠진다. */}
+        <div className="ad-noprint">
         <DocActions
           doc={doc}
           summary={doc.summary}
@@ -382,10 +429,11 @@ function DocPageInner() {
           nameOf={nameOf}
           onChanged={() => setReloadKey(k => k + 1)}
         />
+        </div>
       </div>
 
       {/* 결재함 목록의 강조 색과 같은 토큰을 쓴다(링크 한 곳) */}
-      <div style={{ marginTop: 12, fontSize: 11, color: FAINT }}>
+      <div className="ad-noprint" style={{ marginTop: 12, fontSize: 11, color: FAINT }}>
         <Link href={APPROVAL_PATH} style={{ color: BLUE, textDecoration: 'none' }}>결재함</Link>
       </div>
     </Shell>

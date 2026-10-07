@@ -18,7 +18,7 @@ import { comma, rateText, type QuoteReview } from '@/lib/approval/quoteReview'
 import { reviewCache } from '@/lib/quoteReviewCache'
 import { openGeneratedQuotePdf } from '@/lib/openQuotePdf'
 import type { DocFormBodyProps } from './panels'
-import { FormRow, formTable, formTd, formTh, scrollBox } from './formStyles'
+import { FormRow, SCROLL_CLASS, formTable, formTd, formTh, scrollBox } from './formStyles'
 
 /** 금액 한 줄 — 「12,345,678원」. 값이 없으면 '-'(comma 가 '-' 를 낸다). */
 const won = (v: number | null): string => (v === null ? '-' : `${comma(v)}원`)
@@ -51,7 +51,7 @@ function sellerText(review: QuoteReview): string {
 /** 못 읽었을 때 그 자리에 두는 줄 — 검토표와 같은 모양이다. */
 function LoadFailed({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div style={{
+    <div className="ad-noprint" style={{
       display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
       border: `1px solid ${BORDER}`, borderRadius: 8, padding: '10px 12px',
     }}>
@@ -157,6 +157,8 @@ export default function QuoteFormBody({ doc }: DocFormBodyProps) {
           </FormRow>
         )}
         <FormRow label="첨　　부">
+          {/* 버튼은 인쇄에서 빠진다 — 종이에서 링크는 뜻이 없다. 견적번호·일자는 남는다. */}
+          <span className="ad-noprint">
           <button
             type="button"
             onClick={openPdf}
@@ -165,6 +167,7 @@ export default function QuoteFormBody({ doc }: DocFormBodyProps) {
           >
             {pdfBusy ? '만드는 중...' : '견적서 PDF 보기'}
           </button>
+          </span>
           <span style={{ fontSize: 11, color: MUTED, marginLeft: 8 }}>
             {data.quoteNumber ?? '-'}
             <span style={{ color: FAINT }}> · </span>
@@ -177,7 +180,7 @@ export default function QuoteFormBody({ doc }: DocFormBodyProps) {
       {!data.itemsOk ? (
         <LoadFailed message="품목을 불러오지 못했습니다. 다시 시도해 주세요" onRetry={retry} />
       ) : (
-        <div style={scrollBox}>
+        <div className={SCROLL_CLASS} style={scrollBox}>
           <table style={formTable}>
             <thead>
               <tr>
@@ -224,7 +227,7 @@ export default function QuoteFormBody({ doc }: DocFormBodyProps) {
       {!data.expensesOk ? (
         <LoadFailed message="부대비용을 불러오지 못했습니다. 다시 시도해 주세요" onRetry={retry} />
       ) : data.expenses.length > 0 && (
-        <div style={scrollBox}>
+        <div className={SCROLL_CLASS} style={scrollBox}>
           <table style={formTable}>
             <thead>
               <tr>
