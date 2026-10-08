@@ -4,7 +4,7 @@
 //   ① 결재함 목록 — 어느 함에 들어왔는지로 갈랐다. 미결함(inbox)에 들어온 문서면 내 차례이고
 //      (라우트가 actorFor 로 걸러 준다), 상신함(outbox)이면 내가 올린 문서다.
 //      components/approval/DocDetail.tsx 가 그 `box` 값으로 버튼을 그렸다.
-//   ② 결재 라우트의 가드 — withdraw·discard·resubmit 이 각자 requester_id·상태·유형을 다시 본다
+//   ② 결재 라우트의 가드 — withdraw·resubmit·delete 가 각자 requester_id·상태·유형을 다시 본다
 //      (app/api/approval/route.ts). 그쪽이 최종 권한이고, 이 파일은 그 판정을 **복제하지 않는다** —
 //      같은 조각(DISCARDABLE_STATUSES·canResubmitDocument)을 불러 쓴다.
 //   ③ 새 문서 화면 — 함이 없다. 주소로 바로 들어오므로 「내 차례인가」를 스스로 알아야 한다.
@@ -49,17 +49,17 @@ export type OwnerActions = {
   /** 재작성 — 반려·회수된 문서, 그리고 같은 문서로 다시 올릴 수 있는 유형만. */
   resubmit: boolean
   /**
-   * 폐기 — 반려·회수된 문서.
-   * **완전 삭제를 켠 유형에서는 나오지 않는다** — 회수 문서는 「삭제」가 그 자리를 대신하고,
-   * 반려 문서는 기록으로 남겨야 하므로 치우는 버튼을 두지 않는다.
-   */
-  discard: boolean
-  /**
-   * 완전 삭제 — 원 문서와 결재 문서를 함께 지운다. 켜진 유형의 **회수·폐기** 문서에만 나온다.
+   * 삭제 — **회수·폐기된 문서**에만 나온다(모든 문서 종류 공통. 그 종류가 등록표에
+   * deleteWhenClosed 를 켜 두었을 때).
+   *
    * 값이 있으면 그것이 「어디로 무엇을 보낼지」다(등록표가 준다). 없으면 버튼을 그리지 않는다.
+   * 반려·완료 문서에는 **어느 종류에서도** 나오지 않는다 — 그 판단은 기결함에 남아야 한다.
+   *
+   * ('폐기' 는 더 이상 만들어지지 않는 상태다. 옛 문서가 그 상태로 남아 있고, 회수와 같이
+   *  다룬다 — 지울 수 있고 재작성은 열지 않는다.)
    */
   deleteClosed: ClosedDelete | null
-  /** 반려 문서에서 버튼이 없는 이유. 완전 삭제를 켠 유형에서만 채워진다. */
+  /** 반려 문서에서 버튼이 없는 이유. 등록표가 적어 둔 종류에서만 채워진다. */
   rejectedNotice: string | null
 }
 
@@ -72,21 +72,22 @@ export type OwnerActions = {
  * 보던 것과 **같은 조건**이다.
  */
 export function ownerActions(doc: ActionDoc): OwnerActions {
-  const discardable = (DISCARDABLE_STATUSES as string[]).includes(doc.status)
+  // 재작성이 열리는 상태 — 반려·회수. ('폐기' 는 들어 있지 않다: 옛 문서를 되살리지 않는다.)
+  const resubmittable = (DISCARDABLE_STATUSES as string[]).includes(doc.status)
   const def = docTypeOf(doc.doc_type)
-  // 완전 삭제를 켠 유형인가(등록표 칸). 켜져 있으면 종결된 문서의 버튼 구성이 달라진다.
+  // 삭제를 켠 종류인가(등록표 칸).
   const closed = def?.deleteWhenClosed ?? null
-  // 회수·폐기된 문서만 지울 수 있다. 반려·완료는 어느 유형에서도 지우지 않는다.
+  // **회수·폐기된 문서만** 지운다. 반려·완료는 어느 종류에서도 지우지 않는다.
   const deletable = closed != null && (doc.status === '회수' || doc.status === '폐기')
   return {
     withdraw: doc.status === '진행중',
     // 유형이 재상신을 허용하지 않으면(견적서) 버튼을 그리지 않는다 — 그려 두면 눌러서 400 을 받는다.
-    resubmit: discardable && (def ? canResubmitDocument(def) : true),
-    // 완전 삭제를 켠 유형에서는 폐기를 내지 않는다 — 회수 문서는 「삭제」가 그 자리이고,
-    // 반려 문서는 폐기로 치워 버리면 기록이 사라진다.
-    discard: discardable && closed == null,
+    resubmit: resubmittable && (def ? canResubmitDocument(def) : true),
     deleteClosed: deletable ? closed : null,
-    rejectedNotice: closed != null && doc.status === '반려' ? closed.rejectedNotice : null,
+    // 반려 문서에서 **아무 버튼도 남지 않는** 종류에만 안내를 띄운다(재작성이 있으면 할 일이 있다).
+    rejectedNotice: doc.status === '반려' && !(def ? canResubmitDocument(def) : true)
+      ? (closed?.rejectedNotice ?? null)
+      : null,
   }
 }
 

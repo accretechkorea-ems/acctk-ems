@@ -1,6 +1,6 @@
 'use client'
 
-// 결재 문서의 **처리 영역** — 의견·승인·반려와 회수·재작성·폐기.
+// 결재 문서의 **처리 영역** — 의견·승인·반려와 회수·재작성·삭제.
 //
 // 목록에서 펼치는 상세(DocDetail)와 문서 양식 화면(app/approval/doc/[id])이 **이것을 함께 쓴다.**
 // 승인·반려 로직을 두 벌로 두면 한쪽만 고쳐져 어긋난다 — 라우트 호출·2단 확인·토스트 문구·
@@ -15,10 +15,10 @@
 // 처리 자체는 지금까지와 똑같이 /api/approval 이 한다 — 최종 권한은 그쪽이고, 여기 버튼은
 // 「누를 수 있게 보이는가」만 정한다.
 //
-// 예외가 하나 있다. **완전 삭제**(회수·폐기된 문서를 원 문서와 함께 지운다)는 /api/approval 이
-// 아니라 업무별 라우트가 한다 — 원 문서의 참조·스토리지·감사까지 함께 치워야 하기 때문이다.
-// 어디로 무엇을 보낼지는 **등록표**(lib/approval/docTypes.ts 의 deleteWhenClosed)가 말해 준다.
-// 여기에 유형 이름을 적지 않는다.
+// **삭제**(회수·폐기된 문서를 치운다)는 종류에 따라 가는 곳이 다르다 — 결재 문서만 지우는
+// 종류는 /api/approval 의 delete 로, 원 문서까지 치워야 하는 종류는 업무별 라우트로 간다
+// (원 문서의 참조·스토리지·감사를 함께 치워야 한다). 어디로 무엇을 보낼지는 **등록표**
+// (lib/approval/docTypes.ts 의 deleteWhenClosed)가 말해 준다 — 여기에 유형 이름을 적지 않는다.
 
 import { useEffect, useState } from 'react'
 import { useToast } from '@/components/common/Toast'
@@ -33,7 +33,7 @@ const CONFIRM_MS = 3000
 export type DocActionScope = {
   /** 의견·승인·반려 줄을 그릴지. */
   approve: boolean
-  /** 회수·재작성·폐기 줄을 그릴지(「폐기한 문서입니다」 같은 안내 문구도 이 줄에 있다). */
+  /** 회수·재작성·삭제 줄을 그릴지(버튼이 없을 때의 안내 문구도 이 줄에 있다). */
   owner: boolean
 }
 
@@ -62,7 +62,6 @@ export default function DocActions({
   const [comment, setComment] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirmWithdraw, setConfirmWithdraw] = useState(false)
-  const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   useEffect(() => {
@@ -70,12 +69,6 @@ export default function DocActions({
     const t = setTimeout(() => setConfirmWithdraw(false), CONFIRM_MS)
     return () => clearTimeout(t)
   }, [confirmWithdraw])
-
-  useEffect(() => {
-    if (!confirmDiscard) return
-    const t = setTimeout(() => setConfirmDiscard(false), CONFIRM_MS)
-    return () => clearTimeout(t)
-  }, [confirmDiscard])
 
   useEffect(() => {
     if (!confirmDelete) return
@@ -138,35 +131,36 @@ export default function DocActions({
     call({ action: 'withdraw', documentId: doc.document_id }, '회수했습니다')
   }
   const resubmit = () => call({ action: 'resubmit', documentId: doc.document_id }, '다시 올렸습니다')
-  // 폐기 — 되돌릴 수 없으니 회수와 같은 3초 2단 확인을 둔다.
-  const discard = () => {
-    if (!confirmDiscard) { setConfirmDiscard(true); return }
-    setConfirmDiscard(false)
-    call({ action: 'discard', documentId: doc.document_id }, '폐기했습니다')
-  }
 
   /**
-   * 완전 삭제 — 원 문서와 결재 문서를 함께 지운다. 되돌릴 수 없어 3초 2단 확인을 둔다.
+   * 삭제 — 회수·폐기된 문서를 치운다. 되돌릴 수 없어 3초 2단 확인을 둔다.
    *
-   * 라우트·본문 열쇠·사유는 등록표가 준다(cd). 성공하면 **다시 읽지 않는다** — 문서가 없다.
+   * 라우트·본문 열쇠·사유는 등록표가 준다(cd) — 종류에 따라 결재 문서만 지우거나 원 문서까지
+   * 함께 지운다. 성공하면 **다시 읽지 않는다** — 문서가 없다.
    * 409·403 은 라우트의 문구를 그대로 보여 준다(판정은 그쪽이 최종이다).
    */
   const removeAll = async (cd: NonNullable<OwnerActions['deleteClosed']>) => {
     if (!confirmDelete) { setConfirmDelete(true); return }
     setConfirmDelete(false)
-    if (doc.target_id == null) { toast.error('지울 대상을 알 수 없습니다'); return }
+    // 보낼 id — 원 문서까지 지우는 종류는 target_id, 문서만 지우는 종류는 document_id.
+    const id = cd.idFrom === 'target' ? doc.target_id : doc.document_id
+    if (id == null) { toast.error('지울 대상을 알 수 없습니다'); return }
     setBusy(true)
     try {
       const res = await fetch(cd.endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [cd.targetKey]: doc.target_id, action: cd.action, reason: cd.reason }),
+        body: JSON.stringify({
+          [cd.idKey]: id,
+          action: cd.action,
+          ...(cd.reason ? { reason: cd.reason } : {}),
+        }),
       })
       const json = await res.json().catch(() => null)
       if (!res.ok) { toast.error(json?.error ?? '삭제하지 못했습니다'); return }
       toast.success('삭제했습니다')
-      // 목록·다른 창에도 알린다 — 지워진 문서가 묵은 목록에 남지 않게(폐기와 같은 신호를 쓴다).
-      sendDocSignal(doc.document_id, 'discard')
+      // 목록·다른 창에도 알린다 — 지워진 문서가 묵은 목록에 남지 않게.
+      sendDocSignal(doc.document_id, 'delete')
       ;(onDeleted ?? onChanged)()
     } catch (e) {
       console.error('[approval/detail] delete failed', e)
@@ -233,23 +227,14 @@ export default function DocActions({
               {confirmWithdraw ? '한 번 더 누르면 회수' : '회수'}
             </button>
           )}
-          {/* 재작성·폐기는 같은 조건에서 함께 나온다 — 다시 올리거나, 치우거나 둘 중 하나다.
-              폐기한 문서에는 둘 다 나오지 않는다(되살리려면 새로 상신한다). */}
-          {owner.discard && (
-            <>
-              {owner.resubmit && (
-                <button type="button" onClick={resubmit} disabled={busy} style={btnPrimary(busy)}>
-                  {busy ? '처리 중...' : '재작성'}
-                </button>
-              )}
-              <button type="button" onClick={discard} disabled={busy}
-                style={confirmDiscard ? btnDanger(busy) : btnGhost(busy)}>
-                {confirmDiscard ? '한 번 더 누르면 폐기' : '폐기'}
-              </button>
-            </>
+          {/* 재작성 — 반려·회수된 문서를 같은 문서로 다시 올린다(허용한 종류만). */}
+          {owner.resubmit && (
+            <button type="button" onClick={resubmit} disabled={busy} style={btnPrimary(busy)}>
+              {busy ? '처리 중...' : '재작성'}
+            </button>
           )}
-          {/* 완전 삭제 — 회수 문서에서는 「폐기」가 있던 자리를, 폐기 문서에서는 안내 자리를 대신한다.
-              어느 유형이 이 버튼을 갖는지는 등록표가 정한다(owner.deleteClosed 가 null 이면 없다). */}
+          {/* 삭제 — 회수·폐기된 문서를 치운다. 어느 종류가 이 버튼을 갖는지는 등록표가 정한다
+              (owner.deleteClosed 가 null 이면 없다). 반려·완료 문서에는 나오지 않는다. */}
           {owner.deleteClosed && (
             <>
               {confirmDelete && (
@@ -269,11 +254,7 @@ export default function DocActions({
               {owner.rejectedNotice}
             </span>
           )}
-          {doc.status === '폐기' && !owner.deleteClosed && (
-            <span style={{ fontSize: 12, color: MUTED, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>
-              폐기한 문서입니다. 다시 올리려면 새로 상신해주세요
-            </span>
-          )}
+
         </div>
       )}
     </>

@@ -35,8 +35,7 @@ export type FormCan = {
   isOwner: boolean
   withdraw: boolean
   resubmit: boolean
-  discard: boolean
-  /** 원 문서와 함께 완전히 지울 수 있는가(회수·폐기된 문서, 그것을 켠 유형만). */
+  /** 지울 수 있는가(회수·폐기된 문서, 그것을 켠 종류만). */
   deleteClosed: boolean
 }
 

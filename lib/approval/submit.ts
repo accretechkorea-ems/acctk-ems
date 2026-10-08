@@ -92,7 +92,8 @@ export async function checkLines(
  *
  * **이미 돌기 시작한 문서에는 쓰지 마라.** 결재 이력을 지우는 것이라, 상신 직후의 되돌리기
  * (또는 그 직후에 딸린 처리가 실패해 상신 자체를 없던 일로 만드는 경우)에만 쓴다.
- * 반려·회수된 문서를 치우는 길은 지우기가 아니라 '폐기' 상태다.
+ * 반려된 문서는 치우지 않는다(판단이 기결함에 남아야 한다). 회수된 문서를 치우는 길은
+ * /api/approval 의 delete 또는 업무별 라우트다(docTypes.ts 의 deleteWhenClosed).
  */
 export async function rollbackApprovalDocument(sb: SupabaseClient, documentId: number): Promise<boolean> {
   await sb.from('approval_history').delete().eq('document_id', documentId)
