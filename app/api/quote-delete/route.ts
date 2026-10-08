@@ -8,7 +8,7 @@ import { checkLines, createApprovalDocument } from '@/lib/approval/submit'
 import {
   AUDIT_ACTION_SELF, AUDIT_ACTION_SELF_WITH_DOC, buildQuoteDeleteSummary,
   CLOSED_DELETABLE_STATUSES, deleteApprovalDocuments, DELETE_REQUEST_STATUS, docHistoryOf,
-  executeQuoteDelete, loadQuoteDocs, notifyQuoteDeleted,
+  executeQuoteDelete, loadQuoteDocs, notifyQuoteDeleted, unlinkRepairs,
   QUOTE_DELETE_TARGET_TABLE, QUOTE_DELETE_TYPE, requestDeleteVerdict, selfDeleteVerdict,
   SELF_DELETABLE_STATUSES, writeClosedDeleteAudit, writeDeleteAudit, writeResidueAudit,
 } from '@/lib/approval/quoteDelete'
@@ -23,6 +23,7 @@ import type { LineInput } from '@/lib/approval/types'
 //                 · 진행중  → 409. 먼저 회수한다.
 //                 · 반려·완료 → 409. 기록을 보존한다 — 삭제 요청(관리자 승인)으로만.
 //                 · 회수·폐기만 → **견적과 결재 문서를 함께 지운다**(아래 「문서까지 지우는 길」).
+//                   순서: 감사 → 결재 이력 → 결재 문서 → 수리 연결 해제 → 견적 → PDF.
 //   · request — 결재로 올린다. 결재선을 함께 받는다.
 //               **반려된 견적은 이 길도 막힌다**(requestDeleteVerdict) — 반려 사유를 이해할 근거가
 //               견적 쪽에만 있어, 견적을 지우면 읽을 수 없는 기록만 남는다. 관리자도 같다.
@@ -147,12 +148,18 @@ export async function POST(req: NextRequest) {
       //    견적은 그대로 남고, 다시 눌러 보면 같은 자리에서 다시 시작한다.
       const gone = await deleteApprovalDocuments(supabaseAdmin, docs.map(d => d.documentId))
       if (!gone.ok) return NextResponse.json({ error: gone.error }, { status: 500 })
+
+      // ④ 수리 건과의 연결을 끊는다 — 견적을 지우기 전에. 이 경로는 '수리중' 견적까지 지울 수 있어
+      //    연결이 남아 있을 수 있다(repairs.quote_id 의 FK 규칙은 저장소 기록에 없다 — unlinkRepairs).
+      if (!(await unlinkRepairs(supabaseAdmin, quoteId))) {
+        return NextResponse.json({ error: '수리 건 연결을 해제하지 못했습니다.' }, { status: 500 })
+      }
     }
 
     // quotes 행은 세션 클라이언트로 지운다 — 그래야 감사 트리거에 누가 지웠는지 남는다.
     // 자식(품목·부대비용)은 CASCADE 로 DB 가 함께 지운다(RLS 를 타지 않는다 — executeQuoteDelete 주석).
     // service role 은 조회·감사·알림·스토리지에 쓴다.
-    // 허용 상태는 판정과 같은 목록을 쓴다 — 회수·폐기 문서를 지운 길은 견적중·수리중만 허용한다.
+    // 허용 상태는 판정과 같은 목록을 쓴다(CLOSED_DELETABLE_STATUSES — 견적중·수리중·실패).
     const done = await executeQuoteDelete({
       sb: supabaseAdmin, sbQuote: supabase, quoteId,
       allowedStatuses: verdict.withDocuments ? CLOSED_DELETABLE_STATUSES : SELF_DELETABLE_STATUSES,

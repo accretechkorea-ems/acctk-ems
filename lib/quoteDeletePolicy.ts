@@ -37,10 +37,12 @@ export const isSelfDeletable = (status: string | null | undefined): boolean =>
  * 결재 문서를 함께 지우면서 견적을 지울 수 있는 상태.
  *
  * 회수·폐기된 문서만 있는 견적이 여기 해당한다. 상신 전과 사실상 같은 자리이므로
- * 상신할 수 있는 상태(견적중·수리중)와 같은 목록을 쓴다 — 그 뒤 단계로 넘어간 견적은
- * 실적·회계와 얽혀 결재를 거쳐야 한다.
+ * 상신할 수 있는 상태(견적중·수리중)를 넣고, 여기에 '실패'(미수주)를 더한다 —
+ * 상신했다가 회수한 견적이 유효기간이 지나 자동 실주되면 '실패' 가 되는데, 그때까지
+ * 실적에 금액이 잡힌 적이 없으므로 문서 없는 견적의 규칙(SELF_DELETABLE_STATUSES)과 같다.
+ * 그 뒤 단계(발주 이후)로 넘어간 견적은 실적·회계와 얽혀 결재를 거쳐야 한다.
  */
-export const CLOSED_DELETABLE_STATUSES: readonly string[] = ['견적중', '수리중']
+export const CLOSED_DELETABLE_STATUSES: readonly string[] = ['견적중', '수리중', '실패']
 
 // ── 결재 문서 이력 분류 ──────────────────────────────────────────────
 //

@@ -562,3 +562,32 @@ export async function writeResidueAudit(
   })
   if (error) console.error(`[${TAG}] residue audit insert failed`, { quoteId: quote.quote_id, error })
 }
+
+
+/**
+ * 수리 건과의 연결을 끊는다 — **견적을 지우기 바로 전에** 부른다.
+ *
+ * repairs.quote_id 는 create_quote 가 채운다(quotes_terms_schema.sql 의 10단계). 그런데
+ * **그 칸의 FK 규칙이 저장소 기록에 없다** — quote_schema_snapshot.sql 의 「quotes 를 참조하는 FK」
+ * 목록(quote_items·quote_expenses·download_logs·showroom_usage)에 repairs 가 들어 있지 않다.
+ * 둘 중 하나인데 어느 쪽이든 그냥 지우면 곤란하다.
+ *   · FK 가 없다        → 견적이 사라진 뒤 repairs.quote_id 가 **없는 견적을 가리킨다.**
+ *                         수리 화면이 「연결된 견적서」를 그리고(app/repair/page.tsx) PDF 발급
+ *                         권한도 그 칸으로 판정한다(app/api/repair-quotes) — 깨진 연결이 남는다.
+ *   · FK 가 NO ACTION 이다 → quotes 삭제가 **FK 오류로 실패한다.**
+ * 먼저 null 로 풀어 두면 두 경우 모두 안전하다(SET NULL·CASCADE 라면 한 번 더 비우는 것뿐이다).
+ *
+ * **기존 삭제 경로(executeQuoteDelete)는 건드리지 않았다.** 결재 삭제와 옛 본인 삭제는 지금까지
+ * 그대로 돈다 — 그 동작을 바꾸지 않는 것이 이번 작업의 전제다. 이 단계는 회수 문서와 견적을
+ * 함께 지우는 **새 경로에서만** 부른다(그 경로는 '수리중' 견적까지 지울 수 있어 연결이 있을 확률이 높다).
+ *
+ * best-effort 가 아니다 — 실패하면 false 를 돌려 부르는 쪽이 멈춘다(견적을 지우지 않는다).
+ */
+export async function unlinkRepairs(sb: SupabaseClient, quoteId: number): Promise<boolean> {
+  const { error } = await sb.from('repairs').update({ quote_id: null }).eq('quote_id', quoteId)
+  if (error) {
+    console.error(`[${TAG}] 수리 연결 해제 실패`, { quoteId, error })
+    return false
+  }
+  return true
+}

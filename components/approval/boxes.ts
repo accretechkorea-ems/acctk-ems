@@ -5,12 +5,12 @@
 //
 // 보는 자리는 두 값으로 정해진다.
 //   source — 어디서 읽는가(라우트 그대로): inbox · outbox · done · cc · all
-//   scope  — 그 안에서 무엇만 보는가: 모든문서 · 진행문서 · 종결문서 (+ 미결 = 반려·회수)
+//   scope  — 그 안에서 무엇만 보는가: 모든문서 · 진행문서 · 종결문서 (+ 미결 = 손볼 일이 남은 건)
 // 왼쪽 함 목록의 항목 하나가 곧 (source, scope) 한 쌍이고, 본문 오른쪽 위 라디오는 같은 값의
 // scope 만 바꾼다. 그래서 왼쪽으로 가든 라디오로 가든 같은 자리에 닿는다 — 상태가 하나뿐이다.
 //
 //   상신/보관함   상신문서       (outbox, 모든문서)
-//                 미결문서       (outbox, 미결 = 반려·회수)
+//                 미결문서       (outbox, 미결 = 손볼 일이 남은 건)
 //   결재수신함    미결문서       (inbox,  모든문서) — 내 차례라 늘 진행 중이다
 //                 기결문서       (done,   모든문서)
 //                 기결문서(진행) (done,   진행문서)
@@ -24,7 +24,7 @@ import type { ApprovalDoc } from './DocDetail'
 import type { ProgressPerson } from './ApprovalTable'
 import { progressCount } from '@/lib/approval/tableCells'
 import { closedAtOf } from '@/lib/approval/doneBox'
-import { DOC_TYPES, DOC_TYPE_KEYS } from '@/lib/approval/docTypes'
+import { DOC_TYPES, DOC_TYPE_KEYS, canResubmitDocument, docTypeOf } from '@/lib/approval/docTypes'
 
 /** 기결함 세 항목의 건수 — 서버(app/api/approval/done)가 세어 준다. 못 센 항목은 null. */
 export type DoneCounts = { all: number | null; open: number | null; closed: number | null }
@@ -259,9 +259,17 @@ export function matchesScope(scope: Scope, doc: ApprovalDoc): boolean {
   if (scope === 'all') return true
   if (scope === 'open') return doc.status === '진행중'
   if (scope === 'closed') return doc.status !== '진행중'
-  // 미결 — 신청자가 다시 손봐야 하는 건. 폐기한 문서는 손볼 일이 없어 여기서 빠진다
-  // (상신문서·기결함·전체함에는 그대로 남는다 — 감추지 않는다).
-  return doc.status === '반려' || doc.status === '회수'
+  // 미결 — **손볼 일이 남은 문서만.** 상신문서·기결함·전체함에는 전부 그대로 남는다(감추지 않는다).
+  //   · 진행중 — 회수할 수 있다.
+  //   · 회수   — 삭제하거나, 허용한 종류는 다시 올린다.
+  //   · 반려   — **다시 올릴 수 있는 종류만.** 견적서는 재상신이 막혀 있고(내용을 고쳐 새로 써야
+  //              한다) 삭제도 못 하므로 손볼 일이 없다 — 상신문서·기결문서(종결)에서 본다.
+  //   · 폐기   — 옛 문서. 지금까지처럼 들어오지 않는다.
+  // 어느 종류가 다시 올릴 수 있는지는 등록표가 안다(canResubmitDocument) — 여기에 유형 이름을 적지 않는다.
+  if (doc.status === '진행중' || doc.status === '회수') return true
+  if (doc.status !== '반려') return false
+  const def = docTypeOf(doc.doc_type)
+  return def ? canResubmitDocument(def) : true
 }
 
 /** 상신함 「미결문서」 건수 — 왼쪽 목록에 그대로 쓰인다. */
