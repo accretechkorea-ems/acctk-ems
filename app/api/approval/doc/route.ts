@@ -145,6 +145,12 @@ export async function GET(req: NextRequest) {
       withdraw: isOwner && owner.withdraw,
       resubmit: isOwner && owner.resubmit,
       discard: isOwner && owner.discard,
+      /**
+       * 원 문서와 함께 완전히 지울 수 있는가(회수·폐기된 문서, 그것을 켠 유형만).
+       * 화면은 등록표에서 같은 값을 직접 읽어 버튼을 그리므로 이 칸을 **쓰지는 않는다** —
+       * 라우트가 돌려주는 동작 플래그를 한 벌로 맞춰 두려고 함께 담는다.
+       */
+      deleteClosed: isOwner && owner.deleteClosed != null,
     },
   })
 }

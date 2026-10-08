@@ -443,6 +443,9 @@ function DocPageInner() {
           currentApproverId={can.currentApproverId}
           nameOf={nameOf}
           onChanged={() => setReloadKey(k => k + 1)}
+          // 문서가 없어졌으면 다시 읽을 것이 없다(읽으면 404 → 「문서를 찾을 수 없습니다」).
+          // 새 창으로 열렸으면 창을 닫고, 아니면 결재함으로 보낸다.
+          onDeleted={() => { if (popup) closeWindow(); else router.push(APPROVAL_PATH) }}
         />
         </div>
       </div>

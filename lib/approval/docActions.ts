@@ -14,7 +14,7 @@
 // 목록 라우트(/api/approval)의 동작은 손대지 않았다 — 그쪽은 이미 같은 결론을 낸다.
 
 import { actorFor, nextPendingLine, sequentialLines } from './engine'
-import { canResubmitDocument, docTypeOf } from './docTypes'
+import { canResubmitDocument, docTypeOf, type ClosedDelete } from './docTypes'
 import { DISCARDABLE_STATUSES, type ApprovalLine, type Delegation } from './types'
 
 /** 판정에 필요한 문서 값만. 목록·라우트의 문서 객체를 그대로 넘기면 된다. */
@@ -48,8 +48,19 @@ export type OwnerActions = {
   withdraw: boolean
   /** 재작성 — 반려·회수된 문서, 그리고 같은 문서로 다시 올릴 수 있는 유형만. */
   resubmit: boolean
-  /** 폐기 — 반려·회수된 문서. */
+  /**
+   * 폐기 — 반려·회수된 문서.
+   * **완전 삭제를 켠 유형에서는 나오지 않는다** — 회수 문서는 「삭제」가 그 자리를 대신하고,
+   * 반려 문서는 기록으로 남겨야 하므로 치우는 버튼을 두지 않는다.
+   */
   discard: boolean
+  /**
+   * 완전 삭제 — 원 문서와 결재 문서를 함께 지운다. 켜진 유형의 **회수·폐기** 문서에만 나온다.
+   * 값이 있으면 그것이 「어디로 무엇을 보낼지」다(등록표가 준다). 없으면 버튼을 그리지 않는다.
+   */
+  deleteClosed: ClosedDelete | null
+  /** 반려 문서에서 버튼이 없는 이유. 완전 삭제를 켠 유형에서만 채워진다. */
+  rejectedNotice: string | null
 }
 
 /**
@@ -63,11 +74,19 @@ export type OwnerActions = {
 export function ownerActions(doc: ActionDoc): OwnerActions {
   const discardable = (DISCARDABLE_STATUSES as string[]).includes(doc.status)
   const def = docTypeOf(doc.doc_type)
+  // 완전 삭제를 켠 유형인가(등록표 칸). 켜져 있으면 종결된 문서의 버튼 구성이 달라진다.
+  const closed = def?.deleteWhenClosed ?? null
+  // 회수·폐기된 문서만 지울 수 있다. 반려·완료는 어느 유형에서도 지우지 않는다.
+  const deletable = closed != null && (doc.status === '회수' || doc.status === '폐기')
   return {
     withdraw: doc.status === '진행중',
     // 유형이 재상신을 허용하지 않으면(견적서) 버튼을 그리지 않는다 — 그려 두면 눌러서 400 을 받는다.
     resubmit: discardable && (def ? canResubmitDocument(def) : true),
-    discard: discardable,
+    // 완전 삭제를 켠 유형에서는 폐기를 내지 않는다 — 회수 문서는 「삭제」가 그 자리이고,
+    // 반려 문서는 폐기로 치워 버리면 기록이 사라진다.
+    discard: discardable && closed == null,
+    deleteClosed: deletable ? closed : null,
+    rejectedNotice: closed != null && doc.status === '반려' ? closed.rejectedNotice : null,
   }
 }
 

@@ -54,6 +54,33 @@ export type LineRules = {
   requireSuperadminApprover?: boolean
 }
 
+/**
+ * **종결된 문서를 원 문서와 함께 완전히 지울 수 있는 유형**의 설정. 칸이 없으면 못 지운다
+ * (지금까지의 동작 — 결재 문서는 상태로만 치운다).
+ *
+ * 왜 유형마다 다른가 — 회수·폐기된 문서는 효력이 없고 아무 판단도 담고 있지 않다. 그런데 그
+ * 문서만 남기고 원 문서를 지우면 결재함에 가리킬 곳 없는 문서가 쌓인다. 견적서가 그 경우다.
+ * 쇼룸·견적 삭제 요청은 지금처럼 폐기 상태로 둔다(그쪽 동작을 바꾸지 않는다).
+ *
+ * 호출 경로를 여기 적어 두는 이유 — 지우는 일은 업무별 라우트가 한다(원 문서의 참조·스토리지·
+ * 감사까지 함께 치워야 한다). 처리 버튼(components/approval/DocActions.tsx)에 유형 이름을
+ * 적지 않으려면, 어디로 무엇을 보낼지는 **등록표가** 말해야 한다.
+ */
+export type ClosedDelete = {
+  /** 원 문서와 결재 문서를 함께 지우는 업무별 라우트. */
+  endpoint: string
+  /** 그 라우트에 보낼 action 값. */
+  action: string
+  /** target_id 를 담을 본문 열쇠 이름. */
+  targetKey: string
+  /** 본문에 함께 보낼 사유 — 삭제에는 늘 사유가 남는다(라우트가 요구한다). */
+  reason: string
+  /** 2단 확인에서 보여 줄 문구. */
+  confirmText: string
+  /** 반려 문서에는 버튼이 없다 — 그 이유를 한 줄로. */
+  rejectedNotice: string
+}
+
 export type DocTypeDef = {
   /** approval_documents.doc_type 에 저장되는 값. */
   key: string
@@ -90,6 +117,11 @@ export type DocTypeDef = {
    * 같은 문서를 다시 돌리면 고쳐지지 않은 내용이 그대로 올라가고 번호도 어긋난다.
    */
   canResubmit?: boolean
+  /**
+   * 종결된 문서(회수·폐기)를 원 문서와 함께 지울 수 있는가. 적지 않으면 못 지운다.
+   * **반려·완료 문서는 어느 유형에서도 지우지 않는다** — 그 판단은 기결함에 남아야 한다.
+   */
+  deleteWhenClosed?: ClosedDelete
 }
 
 /** 같은 문서로 다시 올릴 수 있는 유형인가. 칸이 없으면 지금까지처럼 허용이다. */
@@ -128,6 +160,17 @@ export const DOC_TYPES: Record<string, DocTypeDef> = {
     lineRules: { requireSuperadminApprover: true },
     // 반려된 견적은 「다시쓰기」로 새 번호의 새 견적을 써서 새로 상신한다(위 canResubmit 설명).
     canResubmit: false,
+    // 회수·폐기된 견적서 문서는 견적과 함께 지운다. 그 문서만 남으면 가리킬 견적이 없는
+    // 문서가 결재함에 쌓이고, 견적 쪽에서는 「결재 문서가 있다」는 이유로 다시 올릴 수도 없다.
+    // 반려·완료 문서는 지우지 않는다 — 라우트의 selfDeleteVerdict 가 409 로 막는다.
+    deleteWhenClosed: {
+      endpoint: '/api/quote-delete',
+      action: 'self',
+      targetKey: 'quoteId',
+      reason: '결재 회수·폐기 후 작성자 삭제',
+      confirmText: '견적과 결재 문서가 모두 삭제되며 되돌릴 수 없습니다',
+      rejectedNotice: '반려된 문서는 기록으로 남습니다. 견적을 지우려면 삭제 요청(관리자 승인)을 올려 주세요',
+    },
   },
   // 쇼룸 사용 신청 — 실행 함수는 lib/approval/showroomUsage.ts (handlers.ts 가 묶는다).
   showroom_usage: {
