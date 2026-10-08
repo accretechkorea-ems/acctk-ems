@@ -15,9 +15,9 @@ import {
   updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, submitQuoteDelete, deleteQuoteSelf,
   checkQuoteApprovalLines, submitQuoteApproval, PO_MEMO_MAX,
 } from '@/lib/quoteMutations'
-import { isSelfDeletable } from '@/lib/quoteDeletePolicy'
+import { selfDeleteVerdict, SELF_DELETE_MESSAGES } from '@/lib/quoteDeletePolicy'
 import LinePickerModal from '@/components/approval/LinePickerModal'
-import { canSubmitApproval, loadQuoteApprovalDocIds, fetchQuoteGates, gateFor, docIdFor, type QuoteGateTable } from '@/lib/quoteApprovalDocs'
+import { canSubmitApproval, loadQuoteApprovalDocIds, fetchQuoteGates, gateFor, docIdFor, docHistoryFor, type QuoteGateTable } from '@/lib/quoteApprovalDocs'
 import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice } from '@/lib/approval/quoteApprovalKeys'
 import { openQuotePdf } from '@/lib/openQuotePdf'
 import { approvalDocPath, type LineInput } from '@/lib/approval/types'
@@ -687,8 +687,24 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   // 삭제는 사유가 있어야 한다 — 본인 삭제든 결재든 왜 지웠는지가 남아야 한다.
   const reasonRequired = editStatus === '취소요청'
   const reasonMissing = reasonRequired && !editFailReason.trim()
-  // 아직 실적에 잡히지 않은 견적은 결재 없이 바로 지운다. 판정 기준은 서버와 같은 파일을 읽는다.
-  const selfDelete = reasonRequired && isSelfDeletable(editQuote?.status)
+  /**
+   * 본인 삭제 판정 — **서버(/api/quote-delete 의 self)와 같은 함수**다(lib/quoteDeletePolicy.ts).
+   * 상태만으로는 가를 수 없다: 승인 뒤 '견적중' 으로 돌아온 견적도, 반려로 끝난 견적도
+   * 상태만 보면 삭제가 열린다. 결재 문서 이력은 게이트 응답으로 받는다(작성자 건에만 담겨 온다).
+   */
+  const deleteVerdict = editQuote
+    ? selfDeleteVerdict({
+      status: editQuote.status,
+      gate: gateFor(editQuote.quote_id, gates),
+      docs: docHistoryFor(editQuote.quote_id, gates),
+    })
+    : null
+  /** 결재 문서 이력을 아직 모른다 — 어느 길로 갈지 정할 수 없으니 버튼을 잠근다. */
+  const deleteWaiting = deleteVerdict != null && !deleteVerdict.ok && deleteVerdict.block === 'unknown'
+  /** 회수·폐기된 결재 문서까지 함께 지우는 길인가. 확인 문구가 달라진다. */
+  const selfDeleteWithDocs = deleteVerdict?.ok === true && deleteVerdict.withDocuments
+  /** 결재 없이 바로 지울 수 있는 건인가. 판정은 서버와 같은 함수다. */
+  const selfDelete = reasonRequired && deleteVerdict?.ok === true
 
   // 2단 확인은 3초만 열어 둔다 — 창을 띄워 두고 잊었다가 무심코 두 번째를 누르는 일이 없게.
   useEffect(() => {
@@ -1322,16 +1338,21 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                   background: selfDelete ? getCategoryColor(SALES_STATUS_COLORS, '취소요청').bg : '#f3f4f6',
                   color: selfDelete ? getCategoryColor(SALES_STATUS_COLORS, '취소요청').text : GRAY,
                 }}>
-                  {selfDelete
-                    ? '결재 없이 바로 삭제됩니다. 되돌릴 수 없습니다.'
-                    : `수주 이후 상태(${editQuote.status})라 결재를 거칩니다. 결재가 끝나면 삭제됩니다.`}
+                  {deleteWaiting
+                    ? SELF_DELETE_MESSAGES.unknown
+                    : selfDelete
+                      ? (selfDeleteWithDocs
+                        ? '견적과 회수·폐기된 결재 문서가 함께 삭제됩니다. 되돌릴 수 없습니다.'
+                        : '결재 없이 바로 삭제됩니다. 되돌릴 수 없습니다.')
+                      : `${deleteVerdict && !deleteVerdict.ok ? deleteVerdict.message + ' ' : ''}결재선을 지정하면 삭제 요청이 결재로 올라갑니다.`}
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
                 <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
-                <button onClick={handleSave} disabled={saving || reasonMissing}
-                  style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: (saving || reasonMissing) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing) ? 0.7 : 1 }}>
+                <button onClick={handleSave} disabled={saving || reasonMissing || deleteWaiting}
+                  style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: (saving || reasonMissing || deleteWaiting) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing || deleteWaiting) ? 0.7 : 1 }}>
                   {saving ? '처리 중...'
+                    : deleteWaiting ? '확인 중...'
                     : selfDelete ? (confirmDelete ? '한 번 더 누르면 삭제' : '삭제')
                     : editStatus === '취소요청' ? '결재선 지정'
                     : editStatus === '견적중' ? '견적중으로 되돌리기'

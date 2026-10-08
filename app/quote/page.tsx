@@ -1943,8 +1943,9 @@ const handleDownloadPDF = async (
             <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, fontWeight: 500 }}>{quoteNo} <span style={{ color: '#9ca3af' }}>(예상 번호 — 확정할 때 발급)</span></div>
             <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: '12px 14px', marginBottom: 20 }}>
               <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.8 }}>
-                견적 확정 시 실적으로 기록되며, <b>관리자의 승인 없이는 삭제가 불가능합니다.</b>
-                <br />확정하면 결재선을 지정해 결재를 상신합니다.
+                확정하면 결재선을 지정해 결재를 상신합니다.
+                <br />결재를 <b>회수·폐기</b>한 견적은 직접 삭제할 수 있고, <b>반려·승인</b>된 견적은
+                관리자 승인(삭제 요청) 후 삭제됩니다.
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 24 }}>

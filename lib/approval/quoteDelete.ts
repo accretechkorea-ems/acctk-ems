@@ -31,9 +31,12 @@ export const QUOTE_DELETE_TARGET_TABLE = 'quotes'
 /** 삭제를 기다리는 동안의 견적 상태. 목록에서 구분되어야 해서 그대로 둔다. */
 export const DELETE_REQUEST_STATUS = '취소요청'
 
-// 결재 없이 지울 수 있는 상태의 기준은 lib/quoteDeletePolicy.ts 하나다(화면도 같은 것을 읽는다).
+// 결재 없이 지울 수 있는 기준은 lib/quoteDeletePolicy.ts 하나다(화면도 같은 것을 읽는다).
 // 여기서는 다시 내보내기만 한다 — 부르는 쪽이 어느 파일을 읽을지 고민하지 않게.
-export { SELF_DELETABLE_STATUSES, isSelfDeletable } from '@/lib/quoteDeletePolicy'
+export {
+  SELF_DELETABLE_STATUSES, CLOSED_DELETABLE_STATUSES, isSelfDeletable,
+  docHistoryOf, selfDeleteVerdict,
+} from '@/lib/quoteDeletePolicy'
 
 /** 감사 기록이 없을 때 되돌릴 기본 상태. 트리거는 fail-open 이라 기록이 빌 수 있다. */
 const DEFAULT_RESTORE_STATUS = '견적중'
@@ -386,4 +389,176 @@ export async function buildQuoteDeleteSummary(
     restoreStatus: restore.status,
     restoreFailReason: restore.failReason,
   }
+}
+
+
+// ════════════════════════════════════════════════════════════════════
+// 회수·폐기된 결재 문서와 견적을 함께 지우는 길
+//
+// **결재 문서는 지우지 않는 설계다.** 반려한 사람의 판단이 기결함에서 사라지면 안 되고,
+// 결재선을 지우면 남의 기결함에서 문서가 통째로 사라진다(app/api/approval/route.ts 의 discard).
+// 여기 하나만 예외다 — 회수·폐기된 문서는 **효력이 없고 아무 판단도 담고 있지 않다.**
+// 그 문서만 남기고 견적을 지우면 결재함에 가리킬 곳 없는 문서가 쌓인다.
+// 반려·완료 문서는 **절대 지우지 않는다**(부르는 쪽이 selfDeleteVerdict 로 먼저 막는다).
+// ════════════════════════════════════════════════════════════════════
+
+/** 지울 대상이 되는 결재 문서 한 건. */
+export type ClosedDoc = { documentId: number; docNo: string; status: string }
+
+/** 감사 기록에 남길 이력 한 줄. 본문은 길이를 제한한다(기록이 비대해지지 않게). */
+type HistoryNote = { action: string; actorId: number; at: string | null; comment: string | null }
+
+/** 감사 기록에 담는 이력 줄 수와 의견 길이 상한. */
+const AUDIT_HISTORY_MAX = 50
+const AUDIT_COMMENT_MAX = 200
+
+/** 감사 기록의 action — 견적과 결재 문서를 함께 지운 경우. */
+export const AUDIT_ACTION_SELF_WITH_DOC = 'SELF_DELETE_WITH_DOC'
+/** 문서는 지워졌는데 견적이 남은 경우(사람이 손봐야 한다). */
+export const AUDIT_ACTION_RESIDUE = 'SELF_DELETE_RESIDUE'
+
+/**
+ * 그 견적의 결재 문서(doc_type 'quote') 전부. 상태를 가리지 않는다.
+ *
+ * 읽기가 실패하면 **ok: false** 다 — 못 읽은 것을 「문서가 없다」로 보면 반려·완료 문서가
+ * 있는 견적이 그냥 지워진다(fail-closed).
+ */
+export async function loadQuoteDocs(
+  sb: SupabaseClient, quoteId: number,
+): Promise<{ ok: true; docs: ClosedDoc[]; requesterIds: number[] } | { ok: false }> {
+  const { data, error } = await sb
+    .from('approval_documents')
+    .select('document_id, doc_no, status, requester_id')
+    .eq('doc_type', 'quote')
+    .eq('target_table', QUOTE_DELETE_TARGET_TABLE)
+    .eq('target_id', quoteId)
+  if (error) {
+    console.error(`[${TAG}] quote document lookup failed`, { quoteId, error })
+    return { ok: false }
+  }
+  const rows = (data ?? []) as { document_id: number; doc_no: string | null; status: string | null; requester_id: number | null }[]
+  return {
+    ok: true,
+    docs: rows.map(r => ({ documentId: r.document_id, docNo: r.doc_no ?? '', status: r.status ?? '' })),
+    requesterIds: rows.map(r => r.requester_id).filter((n): n is number => n != null),
+  }
+}
+
+/** 그 문서들의 이력 — 감사 기록에 요약으로 옮긴다(지우기 전에 읽는다). */
+async function loadHistoryNotes(sb: SupabaseClient, documentIds: number[]): Promise<HistoryNote[]> {
+  if (documentIds.length === 0) return []
+  const { data, error } = await sb
+    .from('approval_history')
+    .select('action, actor_id, created_at, comment')
+    .in('document_id', documentIds)
+    .order('history_id', { ascending: true })
+    .limit(AUDIT_HISTORY_MAX)
+  if (error) {
+    console.error(`[${TAG}] history lookup failed`, { documentIds, error })
+    return []
+  }
+  return ((data ?? []) as { action: string | null; actor_id: number | null; created_at: string | null; comment: string | null }[])
+    .map(h => ({
+      action: h.action ?? '',
+      actorId: h.actor_id ?? 0,
+      at: h.created_at,
+      comment: h.comment == null ? null : h.comment.slice(0, AUDIT_COMMENT_MAX),
+    }))
+}
+
+/**
+ * 지우기 **전에** 감사 기록을 남긴다. 이 한 줄이 지워진 결재 문서의 유일한 기록이다.
+ *
+ * **best-effort 가 아니다** — 실패하면 아무것도 지우지 않는다(돌려주는 false 로 부르는 쪽이 멈춘다).
+ * 다른 삭제 기록(writeDeleteAudit)은 삭제가 끝난 뒤에 남겨도 행 전체가 트리거 기록에 남아 있지만,
+ * 결재 문서에는 그런 트리거가 없다.
+ */
+export async function writeClosedDeleteAudit(
+  sb: SupabaseClient,
+  quote: { quote_id: number; quote_number: string | null; status: string },
+  opts: { docs: ClosedDoc[]; actorId: number; reason: string },
+): Promise<boolean> {
+  const history = await loadHistoryNotes(sb, opts.docs.map(d => d.documentId))
+  const { data: actor } = await sb
+    .from('engineers').select('email, name').eq('engineer_id', opts.actorId).maybeSingle()
+  const who = (actor ?? null) as { email: string | null; name: string | null } | null
+
+  const { error } = await sb.from('audit_log').insert({
+    actor_email: who?.email ?? null,
+    action: AUDIT_ACTION_SELF_WITH_DOC,
+    table_name: QUOTE_DELETE_TARGET_TABLE,
+    row_id: String(quote.quote_id),
+    old_data: {
+      quote_id: quote.quote_id,
+      quote_number: quote.quote_number,
+      quote_status: quote.status,
+      // 지워질 결재 문서 — 번호와 상태. 본문(summary)은 담지 않는다(견적번호·금액은 견적 쪽 기록에 있다).
+      documents: opts.docs.map(d => ({ document_id: d.documentId, doc_no: d.docNo, status: d.status })),
+      history,
+    },
+    new_data: {
+      // 'withdrawn' — 회수·폐기된 결재 문서만 있어서 작성자가 직접 지웠다는 뜻이다.
+      reason: 'withdrawn',
+      note: opts.reason,
+      approval: false,
+      deleted_by: opts.actorId,
+      deleted_by_name: who?.name ?? null,
+    },
+  })
+  if (error) {
+    console.error(`[${TAG}] closed-delete audit insert failed — 아무것도 지우지 않는다`, { quoteId: quote.quote_id, error })
+    return false
+  }
+  return true
+}
+
+/**
+ * 결재 문서를 지운다 — **이력 먼저, 문서 다음.**
+ *
+ * approval_history.document_id 에는 ON DELETE 절이 없어(approval_schema.sql) 이력이 남아 있으면
+ * 문서 삭제가 FK 로 막힌다. 결재선(approval_lines)은 ON DELETE CASCADE 라 DB 가 함께 지운다.
+ * 순서는 상신 되돌리기(lib/approval/submit.ts 의 rollbackApprovalDocument)와 같다.
+ */
+export async function deleteApprovalDocuments(
+  sb: SupabaseClient, documentIds: number[],
+): Promise<{ ok: true } | { ok: false; error: string; stage: 'history' | 'document' }> {
+  if (documentIds.length === 0) return { ok: true }
+  const { error: hErr } = await sb.from('approval_history').delete().in('document_id', documentIds)
+  if (hErr) {
+    console.error(`[${TAG}] history delete failed`, { documentIds, error: hErr })
+    return { ok: false, error: '결재 이력을 지우지 못했습니다.', stage: 'history' }
+  }
+  const { error: dErr } = await sb.from('approval_documents').delete().in('document_id', documentIds)
+  if (dErr) {
+    console.error(`[${TAG}] document delete failed`, { documentIds, error: dErr })
+    return { ok: false, error: '결재 문서를 지우지 못했습니다.', stage: 'document' }
+  }
+  return { ok: true }
+}
+
+/**
+ * 「문서는 지워졌는데 견적이 남았다」를 기록해 둔다.
+ *
+ * 이 상태는 **다시 눌러 보면 사라진다** — 문서가 없어졌으므로 다음 시도는 결재 문서가 없는
+ * 평범한 본인 삭제가 되고, 막혔던 이유(상태·권한)를 고치면 그대로 지워진다. 그래도 왜
+ * 결재 문서가 없어졌는지는 남아 있어야 하므로 한 줄 적는다. best-effort 다.
+ */
+export async function writeResidueAudit(
+  sb: SupabaseClient,
+  quote: { quote_id: number; quote_number: string | null },
+  opts: { docs: ClosedDoc[]; actorId: number; detail: string },
+): Promise<void> {
+  const { error } = await sb.from('audit_log').insert({
+    actor_email: null,
+    action: AUDIT_ACTION_RESIDUE,
+    table_name: QUOTE_DELETE_TARGET_TABLE,
+    row_id: String(quote.quote_id),
+    old_data: {
+      quote_id: quote.quote_id,
+      quote_number: quote.quote_number,
+      documents: opts.docs.map(d => ({ document_id: d.documentId, doc_no: d.docNo, status: d.status })),
+    },
+    new_data: { detail: opts.detail, deleted_by: opts.actorId },
+  })
+  if (error) console.error(`[${TAG}] residue audit insert failed`, { quoteId: quote.quote_id, error })
 }

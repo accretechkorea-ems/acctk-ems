@@ -9,6 +9,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { APPROVABLE_STATUSES, isApprovalTarget } from '@/lib/quoteStatus'
 import { QUOTE_TARGET_TABLE, QUOTE_TYPE, type QuoteGate } from '@/lib/approval/quoteApprovalKeys'
+import type { DocHistory } from '@/lib/quoteDeletePolicy'
 
 /**
  * 한 번에 물어보는 견적 id 수. `.in()` 은 쿼리 문자열로 나가므로 길면 URL 이 막힌다
@@ -98,6 +99,8 @@ const GATE_REQUEST_CHUNK = 200
  */
 export type QuoteGateTable = {
   gate: Map<number, QuoteGate>
+  /** 결재 문서 이력 분류. **내가 쓴 견적만** 담겨 온다 — 삭제 노출 판정에 쓴다. */
+  docs: Map<number, DocHistory>
   docId: Map<number, number>
 }
 
@@ -107,7 +110,7 @@ export type QuoteGateTable = {
  */
 export async function fetchQuoteGates(quoteIds: number[]): Promise<QuoteGateTable | null> {
   const ids = [...new Set(quoteIds.filter(n => Number.isSafeInteger(n) && n > 0))]
-  const out: QuoteGateTable = { gate: new Map(), docId: new Map() }
+  const out: QuoteGateTable = { gate: new Map(), docs: new Map(), docId: new Map() }
   if (ids.length === 0) return out
   for (let i = 0; i < ids.length; i += GATE_REQUEST_CHUNK) {
     const slice = ids.slice(i, i + GATE_REQUEST_CHUNK)
@@ -126,6 +129,11 @@ export async function fetchQuoteGates(quoteIds: number[]): Promise<QuoteGateTabl
       for (const [k, v] of Object.entries(gates)) {
         const id = Number(k)
         if (Number.isSafeInteger(id)) out.gate.set(id, v)
+      }
+      const docs = (json?.docs ?? {}) as Record<string, DocHistory>
+      for (const [k, v] of Object.entries(docs)) {
+        const id = Number(k)
+        if (Number.isSafeInteger(id)) out.docs.set(id, v)
       }
       const docIds = (json?.docIds ?? {}) as Record<string, number>
       for (const [k, v] of Object.entries(docIds)) {
@@ -153,3 +161,11 @@ export const gateFor = (quoteId: number, table: QuoteGateTable | null): QuoteGat
  */
 export const docIdFor = (quoteId: number, table: QuoteGateTable | null): number | null =>
   table == null ? null : (table.docId.get(quoteId) ?? null)
+
+/**
+ * 그 행의 결재 문서 이력 분류. **null 은 「모른다」**다 —
+ * 표를 못 읽었거나, 내가 쓴 견적이 아니라 담겨 오지 않았다는 뜻이다.
+ * 삭제 판정(selfDeleteVerdict)은 null 을 'unknown' 으로 막는다.
+ */
+export const docHistoryFor = (quoteId: number, table: QuoteGateTable | null): DocHistory | null =>
+  table == null ? null : (table.docs.get(quoteId) ?? null)
