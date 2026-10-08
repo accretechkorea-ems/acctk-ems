@@ -91,12 +91,6 @@ export const gateAllows = (gate: QuoteGate | null | undefined): boolean =>
 export const GATE_BLOCK_MESSAGE =
   '결재가 완료되지 않은 견적입니다. (결재중이면 결재 완료 후, 반려·회수된 견적은 고쳐 쓰기로 새로 작성해 주세요)'
 
-/**
- * 저장된 PDF 파일을 내주지 않을 때. 「막혔다」가 아니라 **다른 길로 가라**는 뜻이다 —
- * 결재 대상 견적서는 화면이 저장값으로 그 자리에서 만든다(lib/openQuotePdf.tsx).
- */
-export const GATE_PDF_MESSAGE = '이 견적서는 화면의 PDF 버튼으로 생성해서 열어 주세요'
-
 /** 반려된 견적에서 할 일 — 같은 행을 고치는 길이 없으므로 새로 쓴다. */
 export const REJECTED_NOTICE = '반려된 견적입니다. 다시쓰기로 새로 작성해 주세요'
 

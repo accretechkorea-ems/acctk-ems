@@ -30,7 +30,7 @@ const TAG = 'approval/quoteApproval'
 // 여기서는 다시 내보내기만 한다 — 부르는 쪽이 어느 파일을 읽을지 고민하지 않게.
 export {
   QUOTE_TYPE, QUOTE_TARGET_TABLE, SUBMITTED_STATUS, REJECTED_QUOTE_STATUS, restoreStatusOf,
-  gateOf, gateAllows, GATE_BLOCK_MESSAGE, GATE_PDF_MESSAGE,
+  gateOf, gateAllows, GATE_BLOCK_MESSAGE,
 } from './quoteApprovalKeys'
 export type { QuoteGate } from './quoteApprovalKeys'
 

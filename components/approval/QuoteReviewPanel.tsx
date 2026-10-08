@@ -124,8 +124,9 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
   useEffect(() => { load() }, [load])
 
   /**
-   * 견적서 PDF 보기 — **저장값으로 그 자리에서 만든다.**
-   * 결재 문서가 있는 견적은 결재 대상이므로(상신 라우트가 도입 전 견적을 막는다) 늘 생성 경로다.
+   * 견적서 PDF 보기 — **확정 때 저장된 그 파일**을 연다. 확정일이 찍힌 고객 발송용 문서이고
+   * 결재 중·반려·승인 뒤 모두 같다. 열람 자격은 서버가 본다(lib/approval/quotePdfAccess.ts —
+   * 이 문서를 볼 수 있는 사람이면 열린다).
    */
   const openPdf = async () => {
     if (pdfBusy || quoteId == null) return
