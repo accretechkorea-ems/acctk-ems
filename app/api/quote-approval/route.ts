@@ -498,8 +498,16 @@ export async function POST(req: NextRequest) {
     if (!res.ok) return bad(res.error, 500)
     // 상태·생성 시각은 내보내지 않는다 — 화면이 쓸 것은 게이트 하나다.
     const gates: Record<string, string> = {}
-    for (const [id, row] of res.gates) gates[String(id)] = row.gate
-    return NextResponse.json({ gates })
+    // 반려 사유를 열 결재 문서 id. **그 견적을 쓴 사람에게만** 담는다 — 실적 현황은 남의 견적도
+    // 보여 주므로, 결재 문서에 관한 것은 본인 건에만 나가야 한다. 사유 문자열은 담지 않는다
+    // (문서 화면이 열람 권한을 다시 보고 보여 준다 — lib/approval/docAccess.ts).
+    const docIds: Record<string, number> = {}
+    for (const [id, g] of res.gates) {
+      gates[String(id)] = g.gate
+      const mine = g.createdBy != null && g.createdBy === row.engineer_id
+      if (mine && g.docId != null) docIds[String(id)] = g.docId
+    }
+    return NextResponse.json({ gates, docIds })
   }
 
   // 견적을 상신하는 라우트다. 권한을 거둔 직후에도 통과하면 곤란해 캐시를 건너뛴다

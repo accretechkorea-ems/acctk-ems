@@ -8,7 +8,7 @@
 // 화면 번들과 서버 라우트가 똑같이 들고 갈 수 있어야 한다.
 // (그 파일이 lib/date.ts 를 읽지만 그쪽도 순수 모듈이라 같은 조건을 지킨다.)
 
-import { APPROVAL_STATUS, isApprovalTarget } from '@/lib/quoteStatus'
+import { APPROVAL_STATUS, REJECTED_STATUS, isApprovalTarget } from '@/lib/quoteStatus'
 
 /** approval_documents.doc_type. 등록표(docTypes.ts)의 열쇠와 같은 값이다. */
 export const QUOTE_TYPE = 'quote'
@@ -18,6 +18,9 @@ export const QUOTE_TARGET_TABLE = 'quotes'
 
 /** 결재가 도는 동안의 견적 상태. 값 자체는 lib/quoteStatus.ts 가 들고 있다. */
 export const SUBMITTED_STATUS = APPROVAL_STATUS
+
+/** 결재가 반려로 끝난 견적의 상태. 값 자체는 lib/quoteStatus.ts 가 들고 있다. */
+export const REJECTED_QUOTE_STATUS = REJECTED_STATUS
 
 /** 되돌릴 값을 읽지 못했을 때의 기본 상태. */
 export const DEFAULT_RESTORE_STATUS = '견적중'
@@ -51,6 +54,8 @@ export function restoreStatusOf(raw: unknown): string {
 //   pending    — 결재가 도는 중('결재중'). 막힘. 고치려면 전자결재에서 회수한다.
 //   unapproved — 결재 대상인데 완료 문서가 없고 결재중도 아니다. 막힘.
 //                반려·회수·폐기된 뒤이거나, 상신에 실패해 아직 올리지 않은 견적이다.
+//                견적 상태가 '반려' 인 건도 여기로 떨어진다 — 완료 문서가 없으므로 식을 바꿀 것이
+//                없다. 다만 할 일이 다르므로(다시쓰기) 안내 문구만 gateNotice 가 가른다.
 
 export type QuoteGate = 'exempt' | 'approved' | 'pending' | 'unapproved'
 
@@ -92,9 +97,22 @@ export const GATE_BLOCK_MESSAGE =
  */
 export const GATE_PDF_MESSAGE = '이 견적서는 화면의 PDF 버튼으로 생성해서 열어 주세요'
 
-/** 화면 보조 안내 — 게이트별로 무엇을 해야 하는지. 허용·미확인은 안내할 것이 없다. */
-export function gateNotice(gate: QuoteGate | null | undefined): string | null {
-  if (gate === 'pending') return '결재 중입니다. 수정하려면 전자결재에서 회수하세요(아무도 결재하기 전에만 가능)'
+/** 반려된 견적에서 할 일 — 같은 행을 고치는 길이 없으므로 새로 쓴다. */
+export const REJECTED_NOTICE = '반려된 견적입니다. 다시쓰기로 새로 작성해 주세요'
+
+/**
+ * 화면 보조 안내 — 게이트별로 무엇을 해야 하는지. 허용·미확인은 안내할 것이 없다.
+ *
+ * 상태를 함께 받는다(선택) — '반려' 는 게이트로는 unapproved 와 구분되지 않지만 할 일이 다르다.
+ * 넘기지 않으면 지금까지와 같은 문구가 나온다.
+ */
+export function gateNotice(
+  gate: QuoteGate | null | undefined,
+  status?: string | null,
+): string | null {
+  if (status === REJECTED_QUOTE_STATUS) return REJECTED_NOTICE
+  // 종결 전이면 이미 결재가 시작된 문서도 상신자가 회수할 수 있다(전자결재 — 회수 규칙).
+  if (gate === 'pending') return '결재 중입니다. 수정하려면 전자결재에서 회수하세요'
   if (gate === 'unapproved') return '결재가 완료되지 않았습니다. 「결재 올리기」 또는 고쳐 쓰기를 사용하세요'
   return null
 }

@@ -19,7 +19,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { OnCompleteContext } from './docTypes'
 import {
-  gateOf, restoreStatusOf, SUBMITTED_STATUS, QUOTE_TARGET_TABLE, QUOTE_TYPE,
+  gateOf, restoreStatusOf, REJECTED_QUOTE_STATUS, SUBMITTED_STATUS,
+  QUOTE_TARGET_TABLE, QUOTE_TYPE,
   type QuoteGate,
 } from './quoteApprovalKeys'
 
@@ -28,7 +29,7 @@ const TAG = 'approval/quoteApproval'
 // 식별자·순수 판정은 lib/approval/quoteApprovalKeys.ts 하나다(화면도 그 파일을 읽는다).
 // 여기서는 다시 내보내기만 한다 — 부르는 쪽이 어느 파일을 읽을지 고민하지 않게.
 export {
-  QUOTE_TYPE, QUOTE_TARGET_TABLE, SUBMITTED_STATUS, restoreStatusOf,
+  QUOTE_TYPE, QUOTE_TARGET_TABLE, SUBMITTED_STATUS, REJECTED_QUOTE_STATUS, restoreStatusOf,
   gateOf, gateAllows, GATE_BLOCK_MESSAGE, GATE_PDF_MESSAGE,
 } from './quoteApprovalKeys'
 export type { QuoteGate } from './quoteApprovalKeys'
@@ -117,7 +118,23 @@ export async function buildQuoteSummary(
 const GATE_CHUNK = 100
 
 /** 게이트와, 그 판정에 쓰인 지금 상태. 부르는 쪽이 상태별 분기를 함께 해야 한다. */
-export type QuoteGateRow = { gate: QuoteGate; status: string; createdAt: string | null }
+export type QuoteGateRow = {
+  gate: QuoteGate
+  status: string
+  createdAt: string | null
+  /**
+   * 작성자(quotes.created_by). **작성자에게만 내보낼 값을 가리는 데 쓴다** —
+   * 실적 현황은 남의 견적도 보여 주므로, 결재 문서에 관한 것은 본인 건에만 담아야 한다.
+   */
+  createdBy: number | null
+  /** 이 견적의 결재 문서 상태 전부(doc_type 'quote'). 없으면 빈 배열이다. */
+  docStatuses: string[]
+  /**
+   * 이 견적의 결재 문서 id — 반려 사유를 열 문서다. 견적서 문서는 견적당 하나이고
+   * (상신 라우트가 어떤 상태로든 기존 문서가 있으면 409), 혹시 여러 건이면 가장 최근 것이다.
+   */
+  docId: number | null
+}
 
 export type GateResult =
   | { ok: true; gates: Map<number, QuoteGateRow> }
@@ -138,36 +155,52 @@ export async function loadQuoteGates(sb: SupabaseClient, quoteIds: number[]): Pr
 
     const { data: rows, error: qErr } = await sb
       .from('quotes')
-      .select('quote_id, created_at, status')
+      .select('quote_id, created_at, status, created_by')
       .in('quote_id', slice)
     if (qErr) {
       console.error(`[${TAG}] gate quote lookup failed`, { count: slice.length, error: qErr })
       return { ok: false, error: '견적을 불러오지 못했습니다.' }
     }
 
-    // 완료된 결재 문서가 있는 견적 id. '완료' 만 본다 — 진행중·반려·회수·폐기는 승인이 아니다.
+    // 이 견적들의 결재 문서 — **상태를 가리지 않고** 읽는다.
+    //   · 게이트는 '완료' 가 있는지만 본다(지금까지와 같다).
+    //   · 삭제 판정과 반려 사유 링크는 「진행중·반려·완료·회수·폐기」를 구분해야 한다
+    //     (lib/quoteDeletePolicy.ts). 조회를 한 번 더 늘리지 않고 같은 결과에서 함께 뽑는다.
     const { data: docs, error: dErr } = await sb
       .from('approval_documents')
-      .select('target_id')
+      .select('document_id, target_id, status')
       .eq('doc_type', QUOTE_TYPE)
       .eq('target_table', QUOTE_TARGET_TABLE)
-      .eq('status', '완료')
       .in('target_id', slice)
     if (dErr) {
       console.error(`[${TAG}] gate document lookup failed`, { count: slice.length, error: dErr })
       return { ok: false, error: '결재 상태를 확인하지 못했습니다.' }
     }
-    const approved = new Set<number>()
-    for (const d of (docs ?? []) as { target_id: number | null }[]) {
-      if (d.target_id != null) approved.add(d.target_id)
+    const byQuote = new Map<number, { documentId: number; status: string }[]>()
+    for (const d of (docs ?? []) as { document_id: number; target_id: number | null; status: string | null }[]) {
+      if (d.target_id == null) continue
+      const list = byQuote.get(d.target_id) ?? []
+      list.push({ documentId: d.document_id, status: d.status ?? '' })
+      byQuote.set(d.target_id, list)
     }
 
-    for (const r of (rows ?? []) as { quote_id: number; created_at: string | null; status: string | null }[]) {
+    for (const r of (rows ?? []) as {
+      quote_id: number; created_at: string | null; status: string | null; created_by: number | null
+    }[]) {
       const status = r.status ?? ''
+      const mine = byQuote.get(r.quote_id) ?? []
       gates.set(r.quote_id, {
-        gate: gateOf({ createdAt: r.created_at, status, hasCompletedDoc: approved.has(r.quote_id) }),
+        gate: gateOf({
+          createdAt: r.created_at,
+          status,
+          hasCompletedDoc: mine.some(d => d.status === '완료'),
+        }),
         status,
         createdAt: r.created_at,
+        createdBy: r.created_by,
+        docStatuses: mine.map(d => d.status),
+        // 여러 건이면 가장 최근(번호가 큰) 것 — 반려 사유는 마지막 판단이다.
+        docId: mine.length === 0 ? null : Math.max(...mine.map(d => d.documentId)),
       })
     }
   }
@@ -276,9 +309,19 @@ export async function onCompleteQuote(ctx: OnCompleteContext): Promise<void> {
 /**
  * 결재가 완료되지 않고 끝났을 때 — 반려·회수·폐기 세 경우에 모두 불린다.
  *
- * 하는 일은 완료와 같다(견적을 '결재중' 에서 풀어 준다). 폐기는 반려·회수된 문서에만 할 수 있어
- * 이 훅이 두 번 불리는데, 조건부 UPDATE 라 두 번째 호출은 0행이 되어 조용히 지나간다.
- * 그래서 「바꿀 것이 없었다」를 오류로 보지 않는다.
+ * **반려와 회수·폐기가 갈린다**(ctx.outcome).
+ *   · 반려     → 견적을 '반려' 로 남긴다. 결재자의 판단이 견적 쪽에도 남아야 한다
+ *                (상신 직전 상태로 돌리면 새 견적과 구분되지 않고 본인 삭제가 열린다).
+ *   · 회수·폐기 → 지금까지처럼 상신 직전 상태(summary.restore_status)로 되돌린다.
+ *   · outcome 이 없으면(알 수 없음) **회수·폐기 쪽**으로 떨어뜨린다 — 견적이 '결재중' 에
+ *     갇히는 것만은 어떤 경우에도 피해야 한다.
+ *
+ * 어느 쪽이든 조건부 UPDATE(.eq('status','결재중'))다. 폐기는 반려·회수된 문서에만 할 수 있어
+ * 이 훅이 두 번 불리는데, 두 번째 호출은 0행이 되어 조용히 지나간다. 그래서 「바꿀 것이 없었다」를
+ * 오류로 보지 않는다. 반려 뒤의 폐기도 같은 이유로 '반려' 를 덮지 않는다(이미 '결재중' 이 아니다).
+ *
+ * summary.restore_status 는 반려 견적에도 그대로 남는다 — 삭제 요청이 반려될 때 그 값으로
+ * 되돌아가야 한다(lib/approval/quoteDelete.ts 는 별도 문서의 복원 규칙을 따로 갖는다).
  */
 export async function onRevertQuote(ctx: OnCompleteContext): Promise<void> {
   const quoteId = ctx.targetId
@@ -287,10 +330,11 @@ export async function onRevertQuote(ctx: OnCompleteContext): Promise<void> {
     return
   }
   const sb = admin()
-  const target = restoreFrom(ctx.summary)
-  const changed = await releaseQuote(sb, quoteId, target, '되돌리기')
+  const rejected = ctx.outcome === '반려'
+  const target = rejected ? REJECTED_QUOTE_STATUS : restoreFrom(ctx.summary)
+  const changed = await releaseQuote(sb, quoteId, target, rejected ? '반려' : '되돌리기')
   if (changed) {
-    console.log(`[${TAG}] 되돌림`, { quoteId, documentId: ctx.documentId, status: target })
+    console.log(`[${TAG}] ${rejected ? '반려' : '되돌림'}`, { quoteId, documentId: ctx.documentId, status: target })
   }
   // 0행이면 이미 풀렸다(두 번째 호출이거나 완료 훅이 먼저 돌았다). 정상이라 알리지 않는다.
 }

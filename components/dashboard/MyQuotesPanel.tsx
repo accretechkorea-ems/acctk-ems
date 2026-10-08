@@ -14,14 +14,14 @@ import {
 } from '@/lib/quoteMutations'
 import { isSelfDeletable } from '@/lib/quoteDeletePolicy'
 import LinePickerModal from '@/components/approval/LinePickerModal'
-import { canSubmitApproval, loadQuoteApprovalDocIds, fetchQuoteGates, gateFor } from '@/lib/quoteApprovalDocs'
-import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice, type QuoteGate } from '@/lib/approval/quoteApprovalKeys'
+import { canSubmitApproval, loadQuoteApprovalDocIds, fetchQuoteGates, gateFor, docIdFor, type QuoteGateTable } from '@/lib/quoteApprovalDocs'
+import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice } from '@/lib/approval/quoteApprovalKeys'
 import { openQuotePdf } from '@/lib/openQuotePdf'
-import type { LineInput } from '@/lib/approval/types'
+import { approvalDocPath, type LineInput } from '@/lib/approval/types'
 import {
   isAutoFailed, isOrdered, isExpired, validFromDate,
   REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE,
-  STATUS_FILTER_TABS, EDIT_STATUSES, EDIT_STATUSES_WITH_REVERT, FAIL_STATUS, PENDING_STATUS,
+  STATUS_FILTER_TABS, editStatusesFor, REJECTED_STATUS, FAIL_STATUS, PENDING_STATUS,
   type QuoteStatus,
 } from '@/lib/quoteStatus'
 import { achieveColorOf } from '@/lib/fiscal'
@@ -123,7 +123,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const [approvalDocIds, setApprovalDocIds] = useState<Set<number> | null>(null)
   // 행별 승인 게이트. null 이면 아직 못 읽었다(또는 실패) — 그 행은 「확인 중」으로 두고
   // 발주서 등록·계산서 요청·PDF 링크를 **보이지 않게** 한다(lib/quoteApprovalDocs.ts 의 gateFor).
-  const [gates, setGates] = useState<Map<number, QuoteGate> | null>(null)
+  const [gates, setGates] = useState<QuoteGateTable | null>(null)
   // 결재 올리기 — 결재선을 받을 대상 견적. null 이면 모달이 닫혀 있다.
   const [approvalQuote, setApprovalQuote] = useState<Quote | null>(null)
   const [approvalChecking, setApprovalChecking] = useState(false)
@@ -384,7 +384,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const allowsFor = (q: Quote) => gateAllows(gateOfRow(q))
   /** 버튼을 숨긴 이유. 「확인 중」도 알려 준다 — 버튼이 왜 없는지 모르면 새로고침만 반복한다. */
   const gateTitleFor = (q: Quote) =>
-    gates == null ? '결재 상태를 확인하는 중입니다' : (gateNotice(gateOfRow(q)) ?? undefined)
+    gates == null ? '결재 상태를 확인하는 중입니다' : (gateNotice(gateOfRow(q), q.status) ?? undefined)
   /**
    * PDF 를 열 수 있는가 — **게이트로 막지 않는다**(전자결재 6단계 PDF).
    * 결재 대상 견적서는 저장값으로 그 자리에서 만들어 열리므로, 결재 전에도 볼 수 있다
@@ -739,6 +739,15 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                         <span style={{ padding: '3px 7px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text, whiteSpace: 'nowrap', alignSelf: 'center' }}>
                           {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : salesStatusLabel(q.status)}
                         </span>
+                        {/* 반려 사유는 **결재 문서**에 있다 — 목록에 사유 문자열을 내려받지 않는다(게이트 응답에
+                            담기는 것은 문서 id 하나다). 내가 쓴 견적에만 링크가 나온다. */}
+                        {q.status === REJECTED_STATUS && docIdFor(q.quote_id, gates) != null && (
+                          <a href={approvalDocPath(docIdFor(q.quote_id, gates)!)} target="_blank" rel="noopener noreferrer"
+                            title="반려 사유를 결재 문서에서 확인합니다"
+                            style={{ fontSize: 10, fontWeight: 700, color: BLUE, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                            반려 사유 보기
+                          </a>
+                        )}
                         {/* 유효기간이 지났는데 아직 견적중인 건 — 자동 실주 전이거나 판단이 남은 건이다.
                             80 대시보드의 「만료」와 같은 색(실패 상태색)을 쓴다. */}
                         {isOverdue(q) && (
@@ -1017,9 +1026,9 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                 자동 실주 건은 견적일이 이미 한 달을 넘겨, 되살리면 고객에게 나간 PDF 의
                 유효기간과 어긋나므로 선택지 자체를 만들지 않는다. */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-              {(editQuote.status === FAIL_STATUS && !isAutoFailed(editQuote.status, editQuote.fail_reason)
-                ? EDIT_STATUSES_WITH_REVERT
-                : EDIT_STATUSES)
+              {/* 선택지는 lib/quoteStatus.ts 의 editStatusesFor 하나가 정한다(실적 현황과 같은 함수).
+                  반려 견적은 삭제 요청만 남는다 — 기록을 남겨야 한다. */}
+              {editStatusesFor(editQuote.status, isAutoFailed(editQuote.status, editQuote.fail_reason))
                 // 남이 나 대신 쓴 견적은 삭제를 요청할 수 없다(실패 처리는 실적 담당자의 몫이라 남긴다).
                 .filter(s => s !== '취소요청' || canRequestDelete(editQuote))
                 .map(s => (

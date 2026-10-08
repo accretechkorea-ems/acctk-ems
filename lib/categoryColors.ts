@@ -79,6 +79,10 @@ export const SALES_STATUS_COLORS = {
   '견적중':          { text: '#b45309', bg: '#fffbeb' },
   '수리중':          { text: '#92400e', bg: '#fef3c7' },  // 국내수리 견적 전용. 견적중(밝은 amber)과 톤 구분되는 진한 amber.
   '결재중':          { text: '#0369a1', bg: '#eff6ff' },  // 주문완료와 같은 토큰 — 새 색을 만들지 않는다(「처리를 기다리는 중」 뜻이 같다).
+  // 반려 — 새 색을 만들지 않는다. 글자는 components/common/ui.ts 의 DANGER(#dc2626), 바탕은
+  // 이 표의 '실패'·'취소요청' 과 같은 #fef2f2 다. 결재 화면이 반려를 DANGER 로 그리므로
+  // 같은 말이 두 화면에서 같은 색으로 보인다.
+  '반려':            { text: '#dc2626', bg: '#fef2f2' },
   '수주':            { text: '#2563eb', bg: '#eff6ff' },
   '발주(주문 대기)':  { text: '#7c3aed', bg: '#f5f3ff' },
   '주문완료':        { text: '#0369a1', bg: '#eff6ff' },

@@ -342,13 +342,16 @@ async function approve(caller: Caller, body: Record<string, unknown>) {
  * 유형 분기는 두지 않는다. 훅이 없는 유형이면 아무 일도 일어나지 않는다.
  * 실패해도 결재 상태 변경은 이미 끝났으므로 되돌리지 않고 기록만 남긴다(onComplete 와 같은 규칙).
  */
-async function runRevert(doc: DocWithLines, actorId: number) {
+async function runRevert(doc: DocWithLines, actorId: number, outcome: '반려' | '회수' | '폐기') {
   const hooks = handlersOf(doc.doc_type)
   if (!hooks.onRevert) return
   try {
     await hooks.onRevert({
       documentId: doc.document_id, docNo: doc.doc_no, targetTable: doc.target_table, targetId: doc.target_id,
       summary: doc.summary ?? {}, requesterId: doc.requester_id, actorId, lines: doc.approval_lines,
+      // **어떻게 끝났는지를 적어 넘긴다.** doc 은 상태를 바꾸기 전에 읽은 값이라 여기서
+      // doc.status 를 보면 reject·withdraw 에서 '진행중' 이 나온다(docTypes.ts 의 outcome 설명).
+      outcome,
     })
   } catch (e) {
     console.error('[approval] onRevert failed', { documentId: doc.document_id, docType: doc.doc_type, error: e })
@@ -405,7 +408,7 @@ async function reject(caller: Caller, body: Record<string, unknown>) {
   await addHistory(documentId, '반려', caller.engineer_id, line.step ?? null, comment)
   if (closed && closed.length > 0) {
     // 원 문서를 결재 전 상태로 되돌린다(견적 삭제 요청이면 '취소요청' 에서 풀어 준다).
-    await runRevert(doc, caller.engineer_id)
+    await runRevert(doc, caller.engineer_id, '반려')
     await notify([{
       engineer_id: doc.requester_id,
       title: '결재가 반려되었습니다',
@@ -442,7 +445,7 @@ async function withdraw(caller: Caller, body: Record<string, unknown>) {
   if (!closed || closed.length === 0) return bad('이미 처리되어 회수할 수 없습니다.', 409)
 
   await addHistory(documentId, '회수', caller.engineer_id, null, null)
-  await runRevert(doc, caller.engineer_id)
+  await runRevert(doc, caller.engineer_id, '회수')
   return NextResponse.json({ ok: true, documentId, status: '회수' })
 }
 
@@ -481,7 +484,7 @@ async function discard(caller: Caller, body: Record<string, unknown>) {
   await addHistory(documentId, '폐기', caller.engineer_id, null, null)
   // 반려·회수 때 이미 한 번 불렸지만 다시 부른다 — 훅은 여러 번 불려도 안전하게 짠다.
   // 되돌리기가 그때 실패했더라도 여기서 만회된다.
-  await runRevert(doc, caller.engineer_id)
+  await runRevert(doc, caller.engineer_id, '폐기')
   console.log('[approval] 폐기', { documentId, by: caller.engineer_id })
   return NextResponse.json({ ok: true, documentId, status: '폐기' })
 }

@@ -90,12 +90,24 @@ export function canSubmitApproval(
 const GATE_REQUEST_CHUNK = 200
 
 /**
+ * 서버가 돌려준 게이트 표.
+ *   gate   — 모든 행(남의 견적 포함).
+ *   docId  — 반려 사유를 열 결재 문서. **내가 쓴 견적만** 담겨 온다(라우트가 가린다).
+ * 한 덩어리로 들고 다니는 이유 — 화면이 상태 두 개를 따로 관리하면 한쪽만 늦게 채워져
+ * 「게이트는 있는데 문서 id 는 없는」 중간 상태가 생긴다.
+ */
+export type QuoteGateTable = {
+  gate: Map<number, QuoteGate>
+  docId: Map<number, number>
+}
+
+/**
  * 게이트 표. 못 읽으면 **null** — 부르는 쪽은 그 행을 「확인 중」으로 두고 허용 동작을 감춘다
  * (못 읽은 것을 허용으로 떨어뜨리면 승인되지 않은 견적이 빠져나간다).
  */
-export async function fetchQuoteGates(quoteIds: number[]): Promise<Map<number, QuoteGate> | null> {
+export async function fetchQuoteGates(quoteIds: number[]): Promise<QuoteGateTable | null> {
   const ids = [...new Set(quoteIds.filter(n => Number.isSafeInteger(n) && n > 0))]
-  const out = new Map<number, QuoteGate>()
+  const out: QuoteGateTable = { gate: new Map(), docId: new Map() }
   if (ids.length === 0) return out
   for (let i = 0; i < ids.length; i += GATE_REQUEST_CHUNK) {
     const slice = ids.slice(i, i + GATE_REQUEST_CHUNK)
@@ -113,7 +125,12 @@ export async function fetchQuoteGates(quoteIds: number[]): Promise<Map<number, Q
       const gates = (json?.gates ?? {}) as Record<string, QuoteGate>
       for (const [k, v] of Object.entries(gates)) {
         const id = Number(k)
-        if (Number.isSafeInteger(id)) out.set(id, v)
+        if (Number.isSafeInteger(id)) out.gate.set(id, v)
+      }
+      const docIds = (json?.docIds ?? {}) as Record<string, number>
+      for (const [k, v] of Object.entries(docIds)) {
+        const id = Number(k)
+        if (Number.isSafeInteger(id) && Number.isSafeInteger(v)) out.docId.set(id, v)
       }
     } catch (e) {
       console.error('[quoteApproval] 게이트 조회 실패', { count: slice.length, error: e })
@@ -127,5 +144,12 @@ export async function fetchQuoteGates(quoteIds: number[]): Promise<Map<number, Q
  * 그 행의 게이트. 표를 못 읽었으면(null) **null** 을 돌려 「확인 중」으로 둔다.
  * 표는 읽었는데 그 견적이 없으면(그사이 지워졌다) 역시 null 이다 — 허용으로 떨어뜨리지 않는다.
  */
-export const gateFor = (quoteId: number, gates: Map<number, QuoteGate> | null): QuoteGate | null =>
-  gates == null ? null : (gates.get(quoteId) ?? null)
+export const gateFor = (quoteId: number, table: QuoteGateTable | null): QuoteGate | null =>
+  table == null ? null : (table.gate.get(quoteId) ?? null)
+
+/**
+ * 그 행의 결재 문서 id — 반려 사유를 열 주소를 만드는 데 쓴다.
+ * 내가 쓴 견적이 아니면(또는 문서가 없으면) null 이다.
+ */
+export const docIdFor = (quoteId: number, table: QuoteGateTable | null): number | null =>
+  table == null ? null : (table.docId.get(quoteId) ?? null)
