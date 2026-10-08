@@ -24,6 +24,7 @@ import {
   DEFAULT_TERMS, TERM_KEYS, TERM_LABELS, TERM_MAX_LEN,
   changedTerms, normalizeTerms, termsOf, type TermKey, type Terms,
 } from '@/lib/quoteTerms'
+import { normalizeSubLines, subLinesOf } from '@/lib/quoteSubLines'
 
 /**
  * 비고 기본 문구. 내용은 그대로 두고, 사용자가 손댔는지 비교하려고 상수로 뺐다.
@@ -42,6 +43,8 @@ type DuplicatePayload = {
     product_name: string | null; quantity: number | null; unit_price_jpy: number | null
     unit_price_krw: number | null; supply_amount: number | null
     profit_rate: number | null; tariff_rate: number | null
+    /** 품명 아래 설명 줄(quote_items.sub_lines). null 이면 줄이 없다. */
+    sub_lines: unknown
     price_list: PriceItem | null
   }[]
   expenses: { item_name: string | null; unit_price: number | null; headcount: number | null; days: number | null }[]
@@ -307,6 +310,31 @@ function QuotePageInner() {
     return r.ok ? r.terms : { ...DEFAULT_TERMS }
   })()
 
+  /**
+   * 품목 설명 줄의 정규화 — **확정과 PDF 가 같은 결과를 쓴다.**
+   * 한 품목이라도 상한을 넘으면 ok: false 이고, 그때 확정이 막힌다(자르지 않는다).
+   */
+  const subLinesResult = (() => {
+    for (const r of rows) {
+      const res = normalizeSubLines(r.subLines)
+      if (!res.ok) return res
+    }
+    return { ok: true as const }
+  })()
+
+  /** 그 품목의 저장 모양 — 줄이 없으면 null. 상한을 넘은 상태면 저장하지 않는다(확정이 막힌다). */
+  const normalizedSubLines = (r: QuoteRow): string[] | null => {
+    const res = normalizeSubLines(r.subLines)
+    return res.ok ? res.stored : null
+  }
+
+  /** PDF 에 넘길 rows — 설명 줄만 정규화한다(금액·환율은 손대지 않는다). */
+  const withNormalizedSubLines = (list: QuoteRow[]): QuoteRow[] =>
+    list.map(r => {
+      const res = normalizeSubLines(r.subLines)
+      return res.ok ? { ...r, subLines: res.lines } : r
+    })
+
   // PDF용 합계 (debounced rows 기준)
   const { totalSupply: pdfTotalSupply, totalTax: pdfTotalTax, totalAmount: pdfTotalAmount } = calcTotals(debouncedRows)
 
@@ -369,6 +397,8 @@ function QuotePageInner() {
         // price_mode 는 저장되지 않는다. 이익률 모드는 반드시 1,000원 올림을 하므로
         // 단가가 1,000원 배수가 아니면 판매가 모드였던 것이 확실하다. 배수면 기본값(rate)으로 둔다.
         price_mode: (kind === 'price_list' || kind === 'manual_jpy') && unitKrw % 1000 !== 0 ? 'price' : 'rate',
+        // 품명 아래 설명 줄 — 저장값을 그대로 되살린다. 없거나 깨졌으면 빈 배열이다(subLinesOf).
+        subLines: subLinesOf(it.sub_lines),
         expenses: kind === 'service' ? expenseRows : [],
       }, rateRef.current)
     })
@@ -686,6 +716,8 @@ const handleDownloadPDF = async (
     // 조건 네 줄의 길이 — **확정 전에** 막는다. 자르지 않고 어느 칸인지 알린다
     // (잘라서 저장하면 반 토막 문구가 고객에게 나간다).
     if (!termsResult.ok) { toast.error(termsResult.message); return { ok: false } }
+    // 품목 설명 줄의 줄 수·길이 — 같은 이유로 확정 전에 막는다(자르지 않는다).
+    if (!subLinesResult.ok) { toast.error(subLinesResult.message); return { ok: false } }
 
     setIsSaving(true)
     let linkedRepair = false
@@ -728,6 +760,9 @@ const handleDownloadPDF = async (
         profit_rate: r.realized_profit_rate,
         exchange_rate: r.exchange_rate || exchangeRate,
         tariff_rate: r.tariff_rate,
+        // 품명 아래 설명 줄 — **줄이 없으면 null**(저장하지 않는다 = 줄 없음).
+        // 확정 때 PDF 가 그리는 값과 같은 정규화 결과다(normalizedSubLines).
+        sub_lines: normalizedSubLines(r),
       }))
 
       // 부대비용(내부 관리용). 견적 합계·PDF 와 무관하게 quote_expenses 에만 기록한다.
@@ -831,7 +866,8 @@ const handleDownloadPDF = async (
     try {
       const snapshotCompany = company
       const snapshotReceiver = receiver
-      const snapshotRows = [...rows]
+      // 설명 줄은 확정 저장과 **같은 정규화 결과**를 쓴다 — 빈 줄이 PDF 에만 남지 않게.
+      const snapshotRows = withNormalizedSubLines(rows)
       const snapshotRemarks = finalRemarksForPDF
       const result = await handleSaveQuote()
       // 저장이 막히면 여기서 끝낸다 — PDF 도 만들지 않고 미리보기 번호도 그대로 둔다.
