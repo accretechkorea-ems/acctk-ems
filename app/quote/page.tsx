@@ -532,17 +532,7 @@ const handleDownloadPDF = async (
     overrideQuoteNo?: string,
     /** 확정 직후 저장된 견적 id. 업로드가 끝나면 이 행의 pdf_url 을 실제 이름으로 채운다. */
     quoteId?: number,
-    /**
-     * 만든 PDF 를 그 자리에서 내려받을지. 기본은 받는다.
-     *
-     * 확정 흐름은 false 로 부른다 — 모든 견적이 결재를 거치므로(6단계) 결재가 끝나기 전에
-     * 고객에게 나갈 파일을 손에 들고 있어서는 안 된다. 파일 자체는 지금처럼 만들어
-     * 스토리지에 올리고 pdf_url 을 채운다(정본은 확정 시점의 내용이어야 한다).
-     * 내려받기는 결재 완료 뒤에 열린다(D단계). 열람 기록('view')은 그때 남는다.
-     */
-    opts?: { download?: boolean },
   ) => {
-    const download = opts?.download !== false
     const finalCompany = overrideCompany ?? company
     const finalReceiver = overrideReceiver ?? receiver
     const finalRows = overrideRows ?? rows
@@ -611,9 +601,10 @@ const handleDownloadPDF = async (
       toast.error('견적은 저장되었으나 PDF 생성에 실패했습니다. 관리자에게 알려주세요.')
     }
 
-    // 내려받기와 그 기록은 한 덩어리다 — 받지 않았으면 받은 것으로 남겨서는 안 된다.
-    if (!download) return
-
+    // 확정과 동시에 내려받는다. **날짜(확정일)가 찍힌 고객 발송용 문서다** —
+    // 날짜 자리는 dateDisplay(확정일, KST)로 그려진다. 결재 완료를 기다리지 않는다:
+    // 급한 건을 고객에게 바로 보낼 수 있어야 한다는 것이 확정된 방침이다.
+    // 결재는 그대로 돈다(상신·승인·반려, '결재중' 잠금, 발주·계산서·상태 변경의 승인 게이트).
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -847,7 +838,7 @@ const handleDownloadPDF = async (
   }
 
   /**
-   * 결재선이 정해진 뒤의 확정 — 저장 → 결재 상신 → PDF 저장.
+   * 결재선이 정해진 뒤의 확정 — 저장 → 결재 상신 → PDF 저장·내려받기.
    *
    * 순서를 바꿀 수 없다.
    *   · 결재선 검사('check')는 **이 함수에 들어오기 전에** 끝낸다 — 번호를 발급한 뒤에 결재선이
@@ -855,8 +846,9 @@ const handleDownloadPDF = async (
    *   · 상신은 저장 뒤다 — 결재 문서는 target_id 로 견적 행을 가리키므로 행이 먼저 있어야 한다.
    *   · 상신이 실패해도 견적은 지우지 않는다(번호가 이미 나갔다). 원래 상태 그대로 두고
    *     목록의 「결재 올리기」로 다시 올리게 안내한다 — 서버도 실패 시 상태를 되돌린다.
-   *   · PDF 는 지금처럼 만들어 스토리지에 올리지만 **내려받지 않는다**(download: false).
-   *     결재가 끝나기 전에 고객에게 나갈 파일을 손에 들고 있어서는 안 된다.
+   *   · PDF 는 만들어 스토리지에 올리고 **그 자리에서 내려받는다.** 날짜 자리에 확정일(KST)이
+   *     찍힌 고객 발송용 문서다 — 급한 건을 바로 보낼 수 있어야 한다는 것이 확정된 방침이다.
+   *     상신이 실패했더라도 견적이 저장됐으면 내려받는다(문서와 결재는 따로 돈다).
    */
   const runConfirm = async (lines: LineInput[]) => {
     if (isSubmitting) return
@@ -875,9 +867,11 @@ const handleDownloadPDF = async (
       saved = result
 
       // 결재 상신. 실패해도 견적은 저장된 채로 둔다(아래 안내가 다시 올리는 길을 알려 준다).
+      // **상신 성공 여부와 무관하게 PDF 는 아래에서 만들어 내려받는다** — 견적이 저장됐으면
+      // 고객에게 보낼 문서는 나와야 한다.
       const sub = await submitQuoteApproval(result.quoteId, lines)
       if (sub.ok) {
-        toast.success('결재를 올렸습니다. 결재가 완료되면 견적서를 내려받을 수 있습니다')
+        toast.success('결재를 올렸습니다')
       } else {
         toast.error(`견적은 저장되었습니다. 결재 상신에 실패했습니다(${sub.error ?? '사유 없음'}). 내 견적 목록에서 「결재 올리기」를 눌러 주세요`)
       }
@@ -885,7 +879,7 @@ const handleDownloadPDF = async (
       // PDF 는 실제로 발급·저장된 번호로 만든다(화면에 보이던 미리보기 번호가 아니다).
       await handleDownloadPDF(
         snapshotCompany, snapshotReceiver, snapshotRows, snapshotRemarks,
-        result.quoteNo, result.quoteId, { download: false },
+        result.quoteNo, result.quoteId,
       )
       // 다음 미리보기는 방금 발급된 순번의 다음이다.
       setPreviewSeq(result.seq + 1)
