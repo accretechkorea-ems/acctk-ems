@@ -343,22 +343,18 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const allPagedSelected = pagedIds.length > 0 && pagedIds.every(id => quoteSel.isSelected(id))
 
   /**
-   * 견적서 PDF 열기 — 게이트가 길을 가른다(lib/openQuotePdf.tsx).
-   *   exempt — 저장된 파일(종전 그대로). 파일이 없으면 열 것이 없다.
-   *   그 밖   — 저장값으로 그 자리에서 만든다(승인일이 박힌다. 완료 전이면 빨간 안내).
-   * 게이트를 아직 못 읽었으면(null) 아무것도 하지 않는다 — 버튼도 보이지 않는다.
+   * 견적서 PDF 열기 — **확정 때 저장된 파일**을 연다. 확정일이 찍힌 고객 발송용 문서이고
+   * 결재 중·반려·승인 뒤 모두 같다(lib/openQuotePdf.tsx). 게이트를 보지 않는다.
    */
   const openPdf = async (q: Quote) => {
     // state 는 다음 렌더에야 반영돼 같은 틱의 연타를 못 막는다 — 판정은 ref 로 한다.
     if (pdfBusyRef.current) return
-    const gate = gateOfRow(q)
-    if (gate === null) return
-    if (gate === 'exempt' && !q.pdf_url) return
+    if (!q.pdf_url) return
     pdfBusyRef.current = true
     setPdfBusyId(q.quote_id)
     try {
       const res = await openQuotePdf({
-        quoteId: q.quote_id, gate, pdfUrl: q.pdf_url, engineerId,
+        quoteId: q.quote_id, pdfUrl: q.pdf_url, engineerId,
       })
       if (!res.ok) toast.error(res.error)
     } finally {
@@ -385,17 +381,8 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   /** 버튼을 숨긴 이유. 「확인 중」도 알려 준다 — 버튼이 왜 없는지 모르면 새로고침만 반복한다. */
   const gateTitleFor = (q: Quote) =>
     gates == null ? '결재 상태를 확인하는 중입니다' : (gateNotice(gateOfRow(q), q.status) ?? undefined)
-  /**
-   * PDF 를 열 수 있는가 — **게이트로 막지 않는다**(전자결재 6단계 PDF).
-   * 결재 대상 견적서는 저장값으로 그 자리에서 만들어 열리므로, 결재 전에도 볼 수 있다
-   * (날짜 자리에 「결재 완료 시 날짜 자동 입력 예정」이 빨갛게 들어간다).
-   * 게이트를 못 읽은 행만 막는다 — 어느 길로 갈지 모르기 때문이다.
-   */
-  const pdfOpenableFor = (q: Quote) => {
-    const gate = gateOfRow(q)
-    if (gate === null) return false
-    return gate === 'exempt' ? !!q.pdf_url : true
-  }
+  /** PDF 를 열 수 있는가 — 저장된 파일이 있으면 열 수 있다(게이트를 보지 않는다). */
+  const pdfOpenableFor = (q: Quote) => !!q.pdf_url
   /** 결재가 도는 중인 행 — 상태 변경·삭제 요청을 아예 내지 않는다. */
   const isPendingRow = (q: Quote) => q.status === SUBMITTED_STATUS
 

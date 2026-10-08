@@ -1,14 +1,34 @@
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewMenu, canViewSalesMgmt } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
-import { GATE_PDF_MESSAGE, loadQuoteGates } from '@/lib/approval/quoteApproval'
+import { canOpenAnyQuotePdf } from '@/lib/approval/quotePdfAccess'
+
+// 견적서 PDF 서명 URL 발급.
+//
+// 찾는 길이 둘이다 — 어느 쪽이든 **같은 파일**(확정 때 만들어 올린 그 문서)을 내준다.
+//   · ?path=…     — 저장된 경로를 아는 화면(목록·고객사 상세·영업기회)이 쓴다. 종전 그대로다.
+//   · ?quoteId=…  — 견적 id 만 아는 화면(결재 문서의 품의서 본문·검토표)이 쓴다.
+//
+// **승인 게이트로 막지 않는다.** 확정 PDF 에는 확정일이 찍혀 있어 그 자체로 고객 발송용
+// 문서다(app/quote/page.tsx 의 handleDownloadPDF — dateDisplay 가 확정일이다). 결재 중·반려·
+// 승인 뒤 모두 같은 파일을 연다. 결재는 발주·계산서·상태 변경을 막을 뿐 문서 열람을 막지 않는다.
+//
+// 열람 범위는 lib/approval/quotePdfAccess.ts 한 곳이다 — 견적 열람 권한(작성자·영업관리)
+// **또는** 그 견적의 결재 문서 열람 권한(결재자·참조자·관리자). 판정이 실패하면 거절한다.
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+/** 저장값에서 버킷 안의 파일명만 뽑는다. 경로 순회·하위 폴더는 받지 않는다. */
+function safeNameOf(raw: string): string | null {
+  const stripped = raw.startsWith('quote-pdfs/') ? raw.slice('quote-pdfs/'.length) : raw
+  const name = stripped.replace(/\.\./g, '').replace(/^\/+/, '')
+  if (!name || name.includes('/')) return null
+  return name
+}
 
 export async function GET(req: NextRequest) {
   // 인증 확인 — 로그인한 직원만 견적 PDF 서명 URL 발급 가능
@@ -17,70 +37,67 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const path = req.nextUrl.searchParams.get('path')
-  if (!path) return NextResponse.json({ error: 'path required' }, { status: 400 })
+  const pathParam = req.nextUrl.searchParams.get('path')
+  const quoteIdParam = req.nextUrl.searchParams.get('quoteId')
+  if (!pathParam && !quoteIdParam) {
+    return NextResponse.json({ error: 'path required' }, { status: 400 })
+  }
 
-  // 경로 순회 방지 — 버킷 루트의 단일 파일명만 허용
-  const safePath = path.replace(/\.\./g, '').replace(/^\/+/, '')
-  if (!safePath || safePath.includes('/'))
-    return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
-
-  // 권한: 견적 소유자 또는 superadmin/영업관리만 열람 가능.
-  // RLS 에 의존하지 않도록 service role 로 caller 와 대상 견적을 직접 조회해 코드에서 판정한다.
-  // 두 조회는 서로의 결과가 필요 없어 나란히 보낸다(순차로 보내면 왕복 시간이 그대로 더해진다).
-  const [{ data: callerRow }, { data: quoteRows }] = await Promise.all([
-    supabaseAdmin
-      .from('engineers')
-      .select('engineer_id, permission_level, teams')
-      .eq('email', user.email!)
-      .single(),
-    supabaseAdmin
-      .from('quotes')
-      // quote_id 를 함께 읽는다 — 아래 승인 게이트 판정에 쓴다(전자결재 6단계 B).
-      .select('quote_id, engineer_id')
-      .eq('pdf_url', `quote-pdfs/${safePath}`),
-  ])
+  const { data: callerRow } = await supabaseAdmin
+    .from('engineers')
+    .select('engineer_id, permission_level, teams')
+    .eq('email', user.email!)
+    .single()
   const caller = await withTeamPerm(callerRow)
   if (!caller) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  if (!quoteRows || quoteRows.length === 0)
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // 견적서 메뉴가 없는 팀은 남의 것도 자기 것도 열지 못한다(메뉴 단위 판정).
-  if (!canViewMenu(caller, 'quote')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // 대상 견적과 파일명을 찾는다. 두 입구가 여기서 하나로 합쳐진다.
+  let quotes: { quote_id: number; engineer_id: number | null }[] = []
+  let safePath: string | null = null
 
-  // 영업관리(발주·재고)는 남의 견적 PDF 도 연다 — 종전 자격 그대로다.
-  const privileged = canViewSalesMgmt(caller)
-  if (!privileged && !quoteRows.some(q => q.engineer_id === caller.engineer_id))
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-
-  // ── 승인 게이트 ──
-  // **결재 도입 이후 견적의 저장 파일은 절대 내주지 않는다.** 확정 때 만든 그 파일에는 승인일이
-  // 없어 고객에게 나갈 문서가 아니다. 그 견적은 화면이 저장값으로 **그 자리에서** 만들어 연다
-  // (lib/openQuotePdf.tsx → /api/quote-approval 의 'pdf-data').
-  //
-  // 'exempt'(도입 전)만 지금까지처럼 그대로 연다 — 그 견적은 저장 파일이 정본이다.
-  // 완료된 결재 건('approved')도 저장 파일로는 내주지 않는다. 그 파일에 승인일이 없기 때문이다.
-  //
-  // 한 파일이 여러 견적에 걸려 있으면(파일명이 견적번호라 보통 1:1 이지만 유니크가 아니다)
-  // **전부 exempt 여야** 내준다 — 하나라도 결재 대상이면 그 파일은 정본이 아니다.
-  const gateRes = await loadQuoteGates(supabaseAdmin, quoteRows.map(q => q.quote_id))
-  if (!gateRes.ok) {
-    console.error('[quote-pdf] 게이트 조회 실패', { safePath, error: gateRes.error })
-    return NextResponse.json({ error: gateRes.error }, { status: 500 })
-  }
-  const allExempt = quoteRows.every(q => gateRes.gates.get(q.quote_id)?.gate === 'exempt')
-  if (!allExempt) {
-    console.warn('[quote-pdf] 저장 파일 차단 — 화면에서 생성해야 한다', {
-      safePath,
-      gates: quoteRows.map(q => ({ quoteId: q.quote_id, gate: gateRes.gates.get(q.quote_id)?.gate })),
-    })
-    // 감사 기록(READ)은 아래 허용된 열람에서만 남는다 — 열지 못한 것을 열람으로 남기지 않는다.
-    // needsGenerate — 화면이 생성 경로로 넘어가게 하는 깃발이다(quoteId 를 함께 준다).
-    return NextResponse.json({
-      error: GATE_PDF_MESSAGE,
-      needsGenerate: true,
-      quoteId: quoteRows[0]?.quote_id ?? null,
-    }, { status: 409 })
+  if (quoteIdParam) {
+    const quoteId = Number(quoteIdParam)
+    if (!Number.isSafeInteger(quoteId) || quoteId <= 0) {
+      return NextResponse.json({ error: 'Invalid quoteId' }, { status: 400 })
+    }
+    const { data, error } = await supabaseAdmin
+      .from('quotes')
+      .select('quote_id, engineer_id, pdf_url')
+      .eq('quote_id', quoteId)
+      .maybeSingle()
+    if (error) {
+      console.error('[quote-pdf] 견적 조회 실패', { quoteId, error })
+      return NextResponse.json({ error: '견적을 불러오지 못했습니다.' }, { status: 500 })
+    }
+    const row = (data ?? null) as { quote_id: number; engineer_id: number | null; pdf_url: string | null } | null
+    if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    quotes = [{ quote_id: row.quote_id, engineer_id: row.engineer_id }]
+    // 권한을 먼저 보고, 파일이 없는 것은 그 뒤에 알린다 — 없는 파일로 남의 견적 존재를 알리지 않는다.
+    if (!(await canOpenAnyQuotePdf(supabaseAdmin, caller, quotes))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    // 외부(synology 등) URL 은 그대로 돌려준다 — 옛 데이터에 그 꼴이 있다.
+    if (row.pdf_url && (row.pdf_url.startsWith('http') || row.pdf_url.includes('synology'))) {
+      return NextResponse.json({ signedUrl: row.pdf_url })
+    }
+    if (!row.pdf_url?.trim()) return NextResponse.json({ error: '견적서 PDF가 없습니다' }, { status: 404 })
+    safePath = safeNameOf(row.pdf_url)
+    if (!safePath) return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
+  } else {
+    safePath = safeNameOf(pathParam!)
+    if (!safePath) return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
+    const { data: quoteRows } = await supabaseAdmin
+      .from('quotes')
+      .select('quote_id, engineer_id')
+      .eq('pdf_url', `quote-pdfs/${safePath}`)
+    if (!quoteRows || quoteRows.length === 0) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+    quotes = quoteRows as { quote_id: number; engineer_id: number | null }[]
+    // 한 파일이 여러 견적에 걸려 있으면 **하나라도** 볼 수 있으면 내준다(quotePdfAccess 설명).
+    if (!(await canOpenAnyQuotePdf(supabaseAdmin, caller, quotes))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
   }
 
   const { data, error } = await supabaseAdmin.storage

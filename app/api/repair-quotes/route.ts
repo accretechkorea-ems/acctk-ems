@@ -3,7 +3,6 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { canViewMenu } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPermsServer'
-import { GATE_PDF_MESSAGE, loadQuoteGates } from '@/lib/approval/quoteApproval'
 
 // 20팀 수리 업무용 견적 조회 API.
 // quotes RLS 는 개인 소유 모델이라, 동료·superadmin·타팀이 20팀 수리 건의 견적을 대신 작성하면 20팀이 못 읽는다.
@@ -111,24 +110,9 @@ export async function GET(req: NextRequest) {
     const { data: quote } = await supabaseAdmin
       .from('quotes').select('quote_id, pdf_url').eq('quote_id', qid).single()
     if (!quote) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    // 승인 게이트 — **결재 도입 이후 견적의 저장 파일은 내주지 않는다**(승인일이 없는 파일이다).
-    // 그 견적은 화면이 저장값으로 만들어 연다. needsGenerate 로 그 길을 알려 준다
-    // (화면: lib/openQuotePdf.tsx 의 openGeneratedQuotePdf). 'exempt' 만 그대로 연다.
-    //
-    // **게이트를 pdf_url 검사보다 먼저 본다** — 결재 대상 견적은 파일이 없어도 생성으로 갈 수 있다.
-    {
-      const gateRes = await loadQuoteGates(supabaseAdmin, [quote.quote_id])
-      if (!gateRes.ok) return NextResponse.json({ error: gateRes.error }, { status: 500 })
-      const gate = gateRes.gates.get(quote.quote_id)?.gate
-      if (gate !== 'exempt') {
-        console.warn('[repair-quotes] 저장 파일 차단 — 화면에서 생성해야 한다', { quoteId: quote.quote_id, gate })
-        return NextResponse.json({
-          error: GATE_PDF_MESSAGE,
-          needsGenerate: true,
-          quoteId: quote.quote_id,
-        }, { status: 409 })
-      }
-    }
+    // 승인 게이트로 막지 않는다 — 확정 PDF 에는 확정일이 찍혀 있어 그 자체로 고객 발송용
+    // 문서다(app/quote/page.tsx 의 handleDownloadPDF). 결재 중·반려·승인 뒤 모두 같은 파일이다.
+    // 열람 자격은 위의 「repairs 에 연결된 견적인가」 하나로 본다(종전 그대로).
     if (!quote.pdf_url) return NextResponse.json({ error: 'No PDF' }, { status: 404 })
     // 외부(synology 등) URL 은 그대로, 스토리지 경로는 서명 URL 발급.
     if (quote.pdf_url.startsWith('http') || quote.pdf_url.includes('synology'))

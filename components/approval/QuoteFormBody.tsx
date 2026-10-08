@@ -16,7 +16,7 @@ import { BORDER, CARD_BG, DANGER, FAINT, MUTED, SKELETON, btnGhost } from '@/com
 import { useToast } from '@/components/common/Toast'
 import { comma, rateText, type QuoteReview } from '@/lib/approval/quoteReview'
 import { reviewCache } from '@/lib/quoteReviewCache'
-import { openGeneratedQuotePdf } from '@/lib/openQuotePdf'
+import { openQuotePdfById } from '@/lib/openQuotePdf'
 import type { DocFormBodyProps } from './panels'
 import { FormRow, SCROLL_CLASS, formTable, formTd, formTh, scrollBox } from './formStyles'
 
@@ -101,12 +101,16 @@ export default function QuoteFormBody({ doc }: DocFormBodyProps) {
 
   useEffect(() => { load() }, [load])
 
-  /** 견적서 PDF — 저장값으로 그 자리에서 만든다(기존 헬퍼. 결재 상태별 동작도 그대로다). */
+  /**
+   * 견적서 PDF — **확정 때 저장된 파일**을 연다. 확정일이 찍힌 고객 발송용 문서이고
+   * 결재 중·반려·승인 뒤 모두 같은 파일이다. 열람 자격은 서버가 본다
+   * (lib/approval/quotePdfAccess.ts — 결재 문서를 볼 수 있는 사람이면 열린다).
+   */
   const openPdf = async () => {
     if (pdfBusy || quoteId == null) return
     setPdfBusy(true)
     try {
-      const res = await openGeneratedQuotePdf(quoteId)
+      const res = await openQuotePdfById(quoteId)
       if (!res.ok) toast.error(res.error)
     } finally {
       setPdfBusy(false)

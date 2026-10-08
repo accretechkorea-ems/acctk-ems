@@ -18,7 +18,7 @@ import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import { BORDER, CARD_BG, DANGER, FAINT, MUTED, NEUTRAL_BG, SKELETON, SUB, TEXT, btnGhost } from '@/components/common/ui'
 import { comma, rateText, type QuoteReview } from '@/lib/approval/quoteReview'
 import { useToast } from '@/components/common/Toast'
-import { openGeneratedQuotePdf } from '@/lib/openQuotePdf'
+import { openQuotePdfById } from '@/lib/openQuotePdf'
 import { reviewCache } from '@/lib/quoteReviewCache'
 
 /** 표가 좁은 화면에서 **자기 상자 안에서만** 가로로 스크롤되게 한다(페이지가 옆으로 밀리지 않게). */
@@ -131,7 +131,7 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
     if (pdfBusy || quoteId == null) return
     setPdfBusy(true)
     try {
-      const res = await openGeneratedQuotePdf(quoteId)
+      const res = await openQuotePdfById(quoteId)
       if (!res.ok) toast.error(res.error)
     } finally {
       setPdfBusy(false)
@@ -168,9 +168,8 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
   return (
     <div style={{ marginTop: 12 }}>
       {/* ① 머리줄 — 오른쪽 끝에 「견적서 PDF 보기」.
-          결재 문서를 볼 수 있는 사람이면 결재 전에도 열 수 있다. 저장된 파일이 아니라
-          저장값으로 그 자리에서 만들며, 완료 전이면 날짜 자리에 빨간 안내가 들어간다
-          (lib/openQuotePdf.tsx). */}
+          결재 문서를 볼 수 있는 사람이면 결재 전에도 열 수 있다. **확정 때 저장된 그 파일**이고
+          확정일이 찍혀 있다 — 결재 중·반려·승인 뒤 모두 같다(lib/openQuotePdf.tsx). */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 7 }}>
         <span style={sectionTitle}>견적 검토</span>
         <span style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>{data.quoteNumber ?? '-'}</span>
