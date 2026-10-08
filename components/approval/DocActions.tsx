@@ -19,7 +19,7 @@ import { useEffect, useState } from 'react'
 import { useToast } from '@/components/common/Toast'
 import { MUTED, NEUTRAL_BG, SUB, btnDanger, btnGhost, btnPrimary, inputStyle } from '@/components/common/ui'
 import { APPROVE_LABEL, approveLabelOf, canRejectDocument, DOC_TYPES } from '@/lib/approval/docTypes'
-import { ownerActions, type ActionDoc } from '@/lib/approval/docActions'
+import { ownerActions, processedCount, type ActionDoc } from '@/lib/approval/docActions'
 import { sendDocSignal, type DocAction } from '@/lib/approval/docSignal'
 
 /** 「회수」는 두 번 눌러야 실행된다. 쇼룸·첨부와 같은 3초다. */
@@ -129,6 +129,9 @@ export default function DocActions({
 
   // 상신자가 할 수 있는 일 — 상태·결재선·유형만 보는 순수 판정(lib/approval/docActions.ts).
   const owner = ownerActions(doc)
+  // 이미 결재한 사람 수. 종결 전이면 결재가 시작된 뒤에도 회수할 수 있으므로,
+  // 「무엇이 무효가 되는지」를 누르기 전에 알린다(0 이면 지금까지와 같은 확인 문구만 나온다).
+  const processed = processedCount(doc.approval_lines)
 
   return (
     <>
@@ -167,7 +170,14 @@ export default function DocActions({
       )}
 
       {scope.owner && (
-        <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+        <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+          {/* 결재가 이미 시작된 문서를 회수하려 할 때 — 무엇이 무효가 되는지 먼저 말한다.
+              시작 전(처리 0명) 회수는 지금까지와 같이 버튼의 2단 확인만 둔다. */}
+          {owner.withdraw && confirmWithdraw && processed > 0 && (
+            <span style={{ width: '100%', fontSize: 12, color: SUB, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>
+              이미 {processed}명이 결재했습니다. 회수하면 결재자에게 알림이 가고 결재가 중단됩니다
+            </span>
+          )}
           {owner.withdraw && (
             <button type="button" onClick={withdraw} disabled={busy}
               style={confirmWithdraw ? btnDanger(busy) : btnGhost(busy)}>
@@ -192,11 +202,6 @@ export default function DocActions({
           {doc.status === '폐기' && (
             <span style={{ fontSize: 12, color: MUTED, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>
               폐기한 문서입니다. 다시 올리려면 새로 상신해주세요
-            </span>
-          )}
-          {doc.status === '진행중' && !owner.withdraw && (
-            <span style={{ fontSize: 12, color: MUTED, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>
-              이미 결재가 시작되어 회수할 수 없습니다
             </span>
           )}
         </div>

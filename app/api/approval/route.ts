@@ -22,7 +22,7 @@ import { canRejectDocument, canResubmitDocument, docTypeOf, type DocTypeDef } fr
 import { handlersOf } from '@/lib/approval/handlers'
 import {
   actorFor, applyApproval, ccApproverIds, delegatesOf, isComplete,
-  nextPendingLine, skippedLineIds, toLineRows, untouched,
+  nextPendingLine, sequentialLines, skippedLineIds, toLineRows,
 } from '@/lib/approval/engine'
 import {
   APPROVAL_PATH, DISCARDABLE_STATUSES, approvalDocPath,
@@ -421,6 +421,15 @@ async function reject(caller: Caller, body: Record<string, unknown>) {
 }
 
 // ── 회수 ────────────────────────────────────────────────────────────────────
+//
+// **종결 전('진행중')이면 상신자가 언제든 회수한다** — 이미 결재가 시작되었어도 멈출 수 있다.
+// 예전에는 아무도 손대지 않은 문서만 회수할 수 있어서, 올린 뒤 내용이 틀린 것을 알아채면
+// 상신자가 할 수 있는 일이 없었다(결재자에게 반려를 부탁하는 수밖에 없었다).
+//
+// 경합은 조건부 UPDATE 하나로 막는다. 결재자가 같은 순간에 **마지막** 승인을 눌러 문서가 '완료'
+// 가 되었다면 여기서 0행이 되어 409 가 나간다 — 완료된 결재를 회수가 뒤집는 일은 없다.
+// (마지막이 아닌 승인은 문서를 '진행중' 에 두므로 회수가 이긴다. 그 승인은 결재선에 남고,
+//  아래 알림이 그 사람에게 「회수되었습니다」를 보낸다.)
 async function withdraw(caller: Caller, body: Record<string, unknown>) {
   const documentId = docIdOf(body.documentId)
   if (!documentId) return bad('문서를 지정해주세요.')
@@ -429,7 +438,6 @@ async function withdraw(caller: Caller, body: Record<string, unknown>) {
   if (!doc) return bad('문서를 찾을 수 없습니다.', 404)
   if (doc.requester_id !== caller.engineer_id) return bad('상신한 사람만 회수할 수 있습니다.', 403)
   if (doc.status !== '진행중') return bad(`이미 ${doc.status} 상태인 문서입니다.`, 409)
-  if (!untouched(doc.approval_lines)) return bad('이미 결재가 시작되어 회수할 수 없습니다.', 409)
 
   const { data: closed, error } = await supabaseAdmin
     .from('approval_documents')
@@ -441,12 +449,43 @@ async function withdraw(caller: Caller, body: Record<string, unknown>) {
     console.error('[approval] withdraw failed', { documentId, error })
     return bad('회수하지 못했습니다.', 500)
   }
-  // 조건부 UPDATE 가 0행이면 그 사이에 누가 결재했다는 뜻이다.
-  if (!closed || closed.length === 0) return bad('이미 처리되어 회수할 수 없습니다.', 409)
+  // 조건부 UPDATE 가 0행이면 그 사이에 문서가 종결됐다(마지막 승인·반려가 먼저 들어왔다).
+  if (!closed || closed.length === 0) return bad('이미 처리되었습니다.', 409)
 
   await addHistory(documentId, '회수', caller.engineer_id, null, null)
   await runRevert(doc, caller.engineer_id, '회수')
+  await notifyWithdrawn(doc, caller.engineer_id)
   return NextResponse.json({ ok: true, documentId, status: '회수' })
+}
+
+/**
+ * 회수 알림 — **이미 처리한 사람과 지금 차례 결재자**에게.
+ *
+ * 왜 필요한가: 이제 결재가 돌기 시작한 뒤에도 회수된다. 승인을 눌러 둔 사람은 자기 결재가
+ * 무효가 된 것을 알아야 하고, 지금 차례인 사람은 더 볼 필요가 없다는 것을 알아야 한다
+ * (미결함에서 조용히 사라지면 「내가 놓쳤나」가 된다).
+ *
+ * 받는 사람
+ *   · 처리한 사람 — 승인·전결·대결 줄의 **실제 처리자**(대결이면 대리인, acted_by).
+ *   · 지금 차례 결재자 — 그 줄의 approver_id.
+ *   · 상신자 본인은 뺀다(자기가 누른 일이다).
+ * 알림 실패는 삼킨다 — 회수는 이미 끝났다(notify 설명).
+ */
+async function notifyWithdrawn(doc: DocWithLines, requesterId: number) {
+  const lines = sequentialLines(doc.approval_lines)
+  const acted = lines
+    .filter(l => l.state === '승인' || l.state === '전결' || l.state === '대결')
+    .map(l => l.acted_by ?? l.approver_id)
+  const pending = nextPendingLine(doc.approval_lines)
+  const targets = [...new Set([...acted, ...(pending ? [pending.approver_id] : [])])]
+    .filter(id => id !== requesterId)
+  await notify(targets.map(engineer_id => ({
+    engineer_id,
+    title: '결재가 회수되었습니다',
+    message: doc.title,
+    type: 'approval_withdrawn',
+    link: approvalDocPath(doc.document_id),
+  })))
 }
 
 // ── 폐기 ────────────────────────────────────────────────────────────────────

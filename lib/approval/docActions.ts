@@ -6,14 +6,14 @@
 //      components/approval/DocDetail.tsx 가 그 `box` 값으로 버튼을 그렸다.
 //   ② 결재 라우트의 가드 — withdraw·discard·resubmit 이 각자 requester_id·상태·유형을 다시 본다
 //      (app/api/approval/route.ts). 그쪽이 최종 권한이고, 이 파일은 그 판정을 **복제하지 않는다** —
-//      같은 조각(untouched·DISCARDABLE_STATUSES·canResubmitDocument)을 불러 쓴다.
+//      같은 조각(DISCARDABLE_STATUSES·canResubmitDocument)을 불러 쓴다.
 //   ③ 새 문서 화면 — 함이 없다. 주소로 바로 들어오므로 「내 차례인가」를 스스로 알아야 한다.
 //
 // 그래서 ③ 을 위해 조각을 묶은 함수를 여기 두고, 처리 버튼을 그리는 컴포넌트
 // (components/approval/DocActions.tsx)가 목록·새 화면에서 **같은 함수**를 쓴다.
 // 목록 라우트(/api/approval)의 동작은 손대지 않았다 — 그쪽은 이미 같은 결론을 낸다.
 
-import { actorFor, nextPendingLine, untouched } from './engine'
+import { actorFor, nextPendingLine, sequentialLines } from './engine'
 import { canResubmitDocument, docTypeOf } from './docTypes'
 import { DISCARDABLE_STATUSES, type ApprovalLine, type Delegation } from './types'
 
@@ -25,9 +25,26 @@ export type ActionDoc = {
   approval_lines: ApprovalLine[]
 }
 
+/**
+ * 결재선에서 **이미 처리된 줄의 수** — 승인·전결·대결을 센다.
+ *
+ * '생략'(전결로 건너뛴 줄)은 사람이 판단한 것이 아니라 세지 않고, '반려' 는 그 문서가 '진행중' 이
+ * 아니므로 회수 화면에 오지 않는다. 수신참조는 순서에 없어 애초에 빠진다(sequentialLines).
+ *
+ * 회수 확인 문구가 「이미 N명이 결재했습니다」를 말하는 데 쓴다.
+ */
+export function processedCount(lines: ApprovalLine[]): number {
+  return sequentialLines(lines).filter(l => l.state === '승인' || l.state === '전결' || l.state === '대결').length
+}
+
 /** 상신자가 할 수 있는 일. */
 export type OwnerActions = {
-  /** 회수 — 아직 아무도 손대지 않은 진행중 문서만. */
+  /**
+   * 회수 — **종결 전('진행중')이면 언제든** 된다. 이미 결재가 시작되었어도 상신자가 멈출 수 있다.
+   * (예전에는 아무도 손대지 않은 문서만 회수할 수 있었다. 중간에 내용이 틀린 것을 발견하면
+   *  상신자가 할 수 있는 일이 없어, 결재자에게 「반려해 달라」고 따로 부탁해야 했다.)
+   * 완료·반려·회수·폐기된 문서는 이미 종결이라 회수할 수 없다.
+   */
   withdraw: boolean
   /** 재작성 — 반려·회수된 문서, 그리고 같은 문서로 다시 올릴 수 있는 유형만. */
   resubmit: boolean
@@ -47,7 +64,7 @@ export function ownerActions(doc: ActionDoc): OwnerActions {
   const discardable = (DISCARDABLE_STATUSES as string[]).includes(doc.status)
   const def = docTypeOf(doc.doc_type)
   return {
-    withdraw: doc.status === '진행중' && untouched(doc.approval_lines),
+    withdraw: doc.status === '진행중',
     // 유형이 재상신을 허용하지 않으면(견적서) 버튼을 그리지 않는다 — 그려 두면 눌러서 400 을 받는다.
     resubmit: discardable && (def ? canResubmitDocument(def) : true),
     discard: discardable,
