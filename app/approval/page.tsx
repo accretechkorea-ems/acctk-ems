@@ -115,7 +115,26 @@ const dateText = (iso: string | null): string => {
 const SHELL_CSS = `
   .ap-shell { container-type: inline-size; }
   .ap-body { display: flex; gap: 12px; align-items: flex-start; }
-  .ap-rail { width: 180px; flex-shrink: 0; display: flex; flex-direction: column; }
+  /* 함 목록은 본문이 길어도 **화면에 붙어 있는다** — 목록을 내리는 동안에도 함을 바꿀 수 있어야 한다.
+     스크롤은 문서(body)가 한다: .ems-main · main · .ap-shell · .ap-body 어디에도 overflow 가 없어
+     뷰포트가 곧 스크롤 컨테이너다. container-type 조상(.ap-shell) 안에서도 sticky 는 동작한다
+     — 의뢰서 상세(.iqd-left)·고객사 상세(.cust-left)와 같은 방식이고 그쪽에서 실측 확인한 선례다.
+     붙는 자리는 main 의 위 여백(24)이다. 데스크톱에는 상단 헤더가 없고(HeaderWrapper 의
+     .ems-topbar 는 768px 이하에서만 보인다) 앱 사이드바는 fixed 라 세로 위치에 관여하지 않는다.
+     메뉴가 화면보다 길면(함이 많거나 창이 낮을 때) **메뉴 안에서만** 스크롤해 아래가 잘리지 않게 한다.
+     flex 에서 sticky 가 들으려면 줄이 늘어나 있지 않아야 한다 — .ap-body 의 align-items: flex-start 가 그것이다. */
+  .ap-rail {
+    width: 180px; flex-shrink: 0; display: flex; flex-direction: column;
+    position: sticky; top: 24px; max-height: calc(100vh - 48px); overflow-y: auto;
+  }
+  /* 스크롤바는 눈에 띄지 않게 — 활동 카드(.ac-list)·리드 메모(.ld-note)와 같은 방식이고 값도 같다.
+     선택자를 클래스로 좁혀 둔다: 표준 속성(scrollbar-*)이 선언된 요소에서는 크로미움이
+     ::-webkit-scrollbar 규칙을 버리므로, 전역(*)으로 쓰면 다른 화면의 스크롤바까지 바뀐다
+     (components/common/HeaderWrapper.tsx 의 주석에 그 사고 기록이 있다). */
+  .ap-rail { scrollbar-width: thin; scrollbar-color: ${FAINT} transparent; }
+  .ap-rail::-webkit-scrollbar { width: 5px; }
+  .ap-rail::-webkit-scrollbar-thumb { background: ${FAINT}; border-radius: 3px; }
+  .ap-rail::-webkit-scrollbar-track { background: transparent; }
   .ap-railgroup { display: flex; flex-direction: column; gap: 2px; }
   .ap-main { flex: 1; min-width: 0; }
   .ap-boxbtn { transition: background ${MOTION_MS}ms ${MOTION_EASE}; }
@@ -133,7 +152,13 @@ const SHELL_CSS = `
   .ap-railfoot { margin-top: 14px; padding: 10px 10px 0; border-top: 1px solid ${BORDER}; }
   @container (max-width: 900px) {
     .ap-body { flex-direction: column; }
-    .ap-rail { width: 100%; flex-direction: row; overflow-x: auto; gap: 4px; align-items: center; }
+    /* 가로 탭으로 떨어지면 고정을 푼다 — 모바일·좁은 본문의 동작은 지금까지와 같다.
+       overflow-y 를 visible 로 되돌려도 overflow-x: auto 와 함께면 브라우저가 auto 로 계산한다
+       — 규칙을 더하기 전과 **똑같은** 상태다(그 전에도 선언이 없어 초기값 visible 이었다). */
+    .ap-rail {
+      width: 100%; flex-direction: row; overflow-x: auto; gap: 4px; align-items: center;
+      position: static; top: auto; max-height: none; overflow-y: visible;
+    }
     .ap-railgroup { flex-direction: row; align-items: center; }
     .ap-railtitle { padding: 0 2px 0 8px !important; }
     .ap-boxbtn { width: auto !important; flex: 0 0 auto; }
