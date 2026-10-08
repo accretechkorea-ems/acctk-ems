@@ -106,7 +106,11 @@ export type SelfDeleteBlock =
   | 'approval'
   /** 그 상태에서는 본인이 지울 수 없다(수주 이후 등). 삭제 요청으로 간다. */
   | 'status'
-  /** 결재 문서 이력을 아직 모른다 — 판정할 수 없다(화면 전용). */
+  /**
+   * 결재 문서 이력을 모른다 — 판정할 수 없다(화면 전용).
+   * 표를 아직 못 읽었거나, 남의 견적이라 이력이 담겨 오지 않은 경우다.
+   * 어느 쪽이든 **직접 삭제는 열지 않는다** — 화면은 삭제 요청 경로로 흘린다.
+   */
   | 'unknown'
 
 export type SelfDeleteVerdict =
@@ -118,7 +122,7 @@ export const SELF_DELETE_MESSAGES: Record<SelfDeleteBlock, string> = {
   pending: '결재가 진행 중입니다. 전자결재에서 회수한 뒤 삭제할 수 있습니다',
   approval: '반려·승인된 견적은 삭제 요청으로 지울 수 있습니다',
   status: '지금 상태에서는 직접 삭제할 수 없습니다. 삭제 요청으로 지워 주세요',
-  unknown: '결재 상태를 확인하는 중입니다',
+  unknown: '결재 상태를 확인할 수 없습니다.',
 }
 
 /**

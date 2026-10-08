@@ -15,7 +15,7 @@ import {
   updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, submitQuoteDelete, deleteQuoteSelf,
   checkQuoteApprovalLines, submitQuoteApproval, PO_MEMO_MAX,
 } from '@/lib/quoteMutations'
-import { selfDeleteVerdict, SELF_DELETE_MESSAGES } from '@/lib/quoteDeletePolicy'
+import { selfDeleteVerdict } from '@/lib/quoteDeletePolicy'
 import LinePickerModal from '@/components/approval/LinePickerModal'
 import { canSubmitApproval, loadQuoteApprovalDocIds, fetchQuoteGates, gateFor, docIdFor, docHistoryFor, type QuoteGateTable } from '@/lib/quoteApprovalDocs'
 import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice } from '@/lib/approval/quoteApprovalKeys'
@@ -699,8 +699,12 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
       docs: docHistoryFor(editQuote.quote_id, gates),
     })
     : null
-  /** 결재 문서 이력을 아직 모른다 — 어느 길로 갈지 정할 수 없으니 버튼을 잠근다. */
-  const deleteWaiting = deleteVerdict != null && !deleteVerdict.ok && deleteVerdict.block === 'unknown'
+  /**
+   * 게이트 표를 아직 못 읽었다 — 어느 길로 갈지 정할 수 없으니 버튼을 잠근다.
+   * **표는 읽었는데 이력이 없는 경우(남의 견적)는 잠그지 않는다** — 그때도 삭제 요청은
+   * 올릴 수 있어야 한다(라우트가 작성자·관리자 권한을 다시 본다).
+   */
+  const deleteWaiting = gates == null
   /** 회수·폐기된 결재 문서까지 함께 지우는 길인가. 확인 문구가 달라진다. */
   const selfDeleteWithDocs = deleteVerdict?.ok === true && deleteVerdict.withDocuments
   /** 결재 없이 바로 지울 수 있는 건인가. 판정은 서버와 같은 함수다. */
@@ -1339,7 +1343,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                   color: selfDelete ? getCategoryColor(SALES_STATUS_COLORS, '취소요청').text : GRAY,
                 }}>
                   {deleteWaiting
-                    ? SELF_DELETE_MESSAGES.unknown
+                    ? '결재 상태를 확인하는 중입니다'
                     : selfDelete
                       ? (selfDeleteWithDocs
                         ? '견적과 회수·폐기된 결재 문서가 함께 삭제됩니다. 되돌릴 수 없습니다.'

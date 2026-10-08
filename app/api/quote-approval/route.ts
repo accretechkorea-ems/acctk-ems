@@ -40,6 +40,7 @@ import {
 } from '@/lib/approval/quoteReview'
 import { APPROVABLE_STATUSES, isApprovalTarget } from '@/lib/quoteStatus'
 import { docHistoryOf } from '@/lib/quoteDeletePolicy'
+import { isSuperAdmin } from '@/lib/permissions'
 import { euDisplayName } from '@/lib/quoteEuName'
 import type { PdfQuoteRow } from '@/lib/quotePdfData'
 import type { LineInput } from '@/lib/approval/types'
@@ -499,17 +500,20 @@ export async function POST(req: NextRequest) {
     if (!res.ok) return bad(res.error, 500)
     // 상태·생성 시각은 내보내지 않는다 — 화면이 쓸 것은 게이트 하나다.
     const gates: Record<string, string> = {}
-    // 아래 둘은 **그 견적을 쓴 사람에게만** 담는다 — 실적 현황은 남의 견적도 보여 주므로,
-    // 결재 문서에 관한 것은 본인 건에만 나가야 한다. 문서 내용·반려 사유는 담지 않는다
-    // (문서 화면이 열람 권한을 다시 보고 보여 준다 — lib/approval/docAccess.ts).
+    // 아래 둘은 **그 견적을 쓴 사람(과 superadmin)에게만** 담는다 — 실적 현황은 남의 견적도
+    // 보여 주므로, 결재 문서에 관한 것은 지울 수 있는 사람에게만 나가야 한다.
+    // superadmin 을 넣는 이유: 그 사람은 남의 견적도 지울 수 있으므로(/api/quote-delete 의 self),
+    // 이력을 모르면 화면과 서버의 답이 갈린다. 등급은 이미 읽어 둔 값이라 왕복이 늘지 않는다.
+    // 문서 내용·반려 사유는 담지 않는다(문서 화면이 열람 권한을 다시 보고 보여 준다 — docAccess.ts).
     //   docs   — 결재 문서 이력 분류. 목록이 「⋮ 삭제」를 보여 줄지 정하는 데 쓴다.
     //   docIds — 반려 사유를 열 결재 문서 id.
     const docs: Record<string, string> = {}
     const docIds: Record<string, number> = {}
+    const admin = isSuperAdmin(row)
     for (const [id, g] of res.gates) {
       gates[String(id)] = g.gate
       const mine = g.createdBy != null && g.createdBy === row.engineer_id
-      if (!mine) continue
+      if (!mine && !admin) continue
       docs[String(id)] = docHistoryOf(g.docStatuses)
       if (g.docId != null) docIds[String(id)] = g.docId
     }
