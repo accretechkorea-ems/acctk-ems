@@ -35,7 +35,7 @@ export const DELETE_REQUEST_STATUS = '취소요청'
 // 여기서는 다시 내보내기만 한다 — 부르는 쪽이 어느 파일을 읽을지 고민하지 않게.
 export {
   SELF_DELETABLE_STATUSES, CLOSED_DELETABLE_STATUSES, isSelfDeletable,
-  docHistoryOf, selfDeleteVerdict,
+  docHistoryOf, requestDeleteVerdict, selfDeleteVerdict,
 } from '@/lib/quoteDeletePolicy'
 
 /** 감사 기록이 없을 때 되돌릴 기본 상태. 트리거는 fail-open 이라 기록이 빌 수 있다. */

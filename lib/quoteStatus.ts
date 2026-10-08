@@ -119,13 +119,18 @@ export const APPROVABLE_STATUSES: readonly QuoteStatus[] = ['견적중', '수리
 export const FAIL_STATUS = '실패'
 export const EDIT_STATUSES: readonly QuoteStatus[] = ['취소요청', FAIL_STATUS]
 export const EDIT_STATUSES_WITH_REVERT: readonly QuoteStatus[] = ['취소요청', FAIL_STATUS, '견적중']
-/** 반려 견적에서 고를 수 있는 값 — 삭제 요청 하나다(미수주 처리도 되돌리기도 뜻이 없다). */
-export const EDIT_STATUSES_REJECTED: readonly QuoteStatus[] = ['취소요청']
+/**
+ * 반려 견적에서 고를 수 있는 값 — **없다.**
+ * 삭제 요청도 막혀 있고(반려 기록 보존 — lib/quoteDeletePolicy.ts), 미수주 처리·되돌리기는
+ * 결재 결과를 사람이 덮는 일이라 두지 않는다. 반려 견적에서 할 수 있는 일은 「다시쓰기」뿐이다.
+ * 목록은 이 상태에서 창 자체를 열지 않는다 — 이 빈 목록은 혹시 열렸을 때의 방어다.
+ */
+export const EDIT_STATUSES_REJECTED: readonly QuoteStatus[] = []
 
 /**
  * 상태 변경 창의 선택지 — 목록 둘(실적 현황·내 견적)이 **같은 답**을 쓰도록 여기 하나만 둔다.
  * 예전에는 두 화면이 각자 삼항식을 들고 있어, 상태를 하나 더하면 두 곳을 같이 고쳐야 했다.
- *   · 반려        — 삭제 요청만. 기록을 남겨야 하므로 되돌리기·미수주 처리를 열지 않는다.
+ *   · 반려        — 고를 것이 없다. 삭제 요청까지 막혀 있다(반려 기록 보존).
  *   · 실패(수동)  — 되돌리기까지.
  *   · 실패(자동)  — 되돌리기 없음(견적일이 이미 한 달을 넘겼다 — AUTO_FAIL_NOTICE).
  *   · 그 밖       — 삭제 요청·미수주.

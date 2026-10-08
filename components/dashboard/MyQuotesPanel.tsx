@@ -12,7 +12,7 @@ import {
   updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, submitQuoteDelete, deleteQuoteSelf,
   checkQuoteApprovalLines, submitQuoteApproval, PO_MEMO_MAX,
 } from '@/lib/quoteMutations'
-import { selfDeleteVerdict } from '@/lib/quoteDeletePolicy'
+import { requestDeleteVerdict, selfDeleteVerdict, REJECTED_DELETE_MESSAGE } from '@/lib/quoteDeletePolicy'
 import LinePickerModal from '@/components/approval/LinePickerModal'
 import { canSubmitApproval, loadQuoteApprovalDocIds, fetchQuoteGates, gateFor, docIdFor, docHistoryFor, type QuoteGateTable } from '@/lib/quoteApprovalDocs'
 import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice } from '@/lib/approval/quoteApprovalKeys'
@@ -448,6 +448,19 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const deleteWaiting = gates == null
   /** 회수·폐기된 결재 문서까지 함께 지우는 길인가. 확인 문구가 달라진다. */
   const selfDeleteWithDocs = deleteVerdict?.ok === true && deleteVerdict.withDocuments
+  /**
+   * 삭제 요청(결재)을 올릴 수 있는가 — **서버와 같은 함수**다(lib/quoteDeletePolicy.ts).
+   * 반려 견적은 어떤 경로로도 지울 수 없다. 남의 견적은 이력이 담겨 오지 않아 막지 않는다
+   * (서버가 자기가 읽은 값으로 다시 본다).
+   */
+  const requestVerdict = editQuote
+    ? requestDeleteVerdict({
+      status: editQuote.status,
+      docs: docHistoryFor(editQuote.quote_id, gates),
+    })
+    : null
+  /** 삭제 요청마저 막혔다 — 창에서 할 수 있는 일이 없으니 확인을 잠근다. */
+  const requestBlocked = requestVerdict != null && !requestVerdict.ok
   /** 결재 없이 바로 지울 수 있는 건인가. 판정은 서버와 같은 함수다. */
   const selfDelete = reasonRequired && deleteVerdict?.ok === true
 
@@ -876,7 +889,12 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                                 — 그 창의 모든 동작이 updateQuoteStatus 를 지나고, 그 함수는
                                 '결재중' 에서 0행이 된다(lib/quoteMutations.ts). 눌러서 실패하게
                                 두는 대신 「다시쓰기」만 남기고 안내를 띄운다. */}
-                            {isPendingRow(q) ? (
+                            {/* 반려 견적은 상태 변경도 삭제 요청도 막혀 있다 — 「다시쓰기」만 남는다. */}
+                            {q.status === REJECTED_STATUS ? (
+                              <div style={{ padding: '8px 10px', fontSize: 11, color: MUTED, lineHeight: 1.6 }}>
+                                {REJECTED_DELETE_MESSAGE}
+                              </div>
+                            ) : isPendingRow(q) ? (
                               <div style={{ padding: '8px 10px', fontSize: 11, color: MUTED, lineHeight: 1.6 }}>
                                 {gateNotice('pending')}
                               </div>
@@ -1096,7 +1114,9 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                 border: `1px solid ${BORDER}`,
                 background: selfDelete ? getCategoryColor(SALES_STATUS_COLORS, '취소요청').bg : '#f8fafc',
                 color: selfDelete ? getCategoryColor(SALES_STATUS_COLORS, '취소요청').text : GRAY }}>
-                {deleteWaiting
+                {requestBlocked
+                  ? requestVerdict!.message
+                  : deleteWaiting
                   ? '결재 상태를 확인하는 중입니다'
                   : selfDelete
                     ? (selfDeleteWithDocs
@@ -1107,9 +1127,10 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
             )}
             <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
               <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
-              <button onClick={handleSave} disabled={saving || reasonMissing || deleteWaiting}
-                style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: (saving || reasonMissing || deleteWaiting) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing || deleteWaiting) ? 0.7 : 1 }}>
+              <button onClick={handleSave} disabled={saving || reasonMissing || deleteWaiting || requestBlocked}
+                style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 0.7 : 1 }}>
                 {saving ? '처리 중...'
+                  : requestBlocked ? '삭제 불가'
                   : deleteWaiting ? '확인 중...'
                   : selfDelete ? (confirmDelete ? '한 번 더 누르면 삭제' : '삭제')
                   : editStatus === '취소요청' ? '결재선 지정'

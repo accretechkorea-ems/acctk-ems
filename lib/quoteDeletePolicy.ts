@@ -25,7 +25,7 @@ import { REJECTED_STATUS } from '@/lib/quoteStatus'
  *   · 수리중·보류·수주(옛 값) — 목록에 없으므로 결재로 간다. 실적·회계와 얽혔는지
  *     한눈에 판단하기 어려운 값이라 엄격한 쪽을 기본으로 둔다.
  *   · 취소요청 — 이미 결재가 도는 중이라 어느 쪽으로도 새로 시작할 수 없다.
- *   · 반려 — 결재자의 판단이 남아야 한다. 아래 docHistoryOf 가 'rejected' 로 잡는다.
+ *   · 반려 — **어느 경로로도 지울 수 없다**(아래 requestDeleteVerdict).
  */
 export const SELF_DELETABLE_STATUSES: readonly string[] = ['견적중', '실패']
 
@@ -84,6 +84,49 @@ export function docHistoryOf(statuses: readonly (string | null | undefined)[]): 
   return STRICT_ORDER.find(v => found.has(v)) ?? 'in_progress'
 }
 
+// ── 삭제 요청(결재) 판정 ─────────────────────────────────────────────
+//
+// **반려된 견적은 어떤 경로로도 지울 수 없다.** 본인 삭제도, 삭제 요청도, 관리자도 같다.
+//
+// 왜 — 견적서 품의서의 반려 사유는 「무엇을 왜 돌려보냈는가」인데, 그 사유를 이해할 근거
+// (품목·이익률·대리점·금액)는 견적 쪽에만 있다. 견적을 지우면 반려 기록이 남아 있어도
+// 읽을 수 없는 기록이 된다. 반려 견적에서 할 수 있는 일은 「다시쓰기」와 PDF 열람뿐이다.
+//
+// 승인(완료)된 견적은 지금처럼 삭제 요청(관리자 승인)으로 지운다 — 그쪽은 승인 기록이
+// 결재 문서만으로 뜻이 통한다(무엇을 승인했는지는 결재 문서의 요약·검토표에 복사돼 있다).
+
+/** 반려 견적을 지우려 할 때의 안내 — 서버 응답과 화면이 같은 문구를 쓴다. */
+export const REJECTED_DELETE_MESSAGE =
+  '반려된 견적은 반려 기록 보존을 위해 삭제할 수 없습니다. 다시쓰기로 새로 작성해 주세요'
+
+export type RequestDeleteVerdict =
+  | { ok: true }
+  | { ok: false; block: 'rejected'; message: string }
+
+/**
+ * 삭제 요청(결재)을 올릴 수 있는가 — 화면과 서버가 함께 쓴다.
+ *
+ * 막는 것은 **반려 하나**다. 그 밖의 제약(결재 중·권한·사유)은 지금까지처럼 다른 곳이 본다
+ * (화면의 isPendingRow·updateQuoteStatus 의 조건부 UPDATE·라우트의 소유자 판정).
+ *
+ * docs 가 null 이면 **막지 않는다** — 남의 견적이라 이력이 담겨 오지 않은 경우이고,
+ * 관리자는 그 견적의 삭제 요청을 올릴 수 있어야 한다. 서버가 자기가 읽은 값으로 다시 본다.
+ *
+ * 상태와 문서 이력을 **둘 다** 보는 이유: 새 코드는 반려를 quotes.status 에 남기지만,
+ * 그 전에 반려된 견적은 상태가 '견적중' 으로 돌아가 있고 문서만 '반려' 다. 또 화면이 상태를
+ * '취소요청' 으로 바꾼 뒤 라우트를 부르므로(견적 삭제 요청 흐름) 서버에는 상태가 이미 '취소요청' 이다
+ * — 그때 반려를 알아볼 수 있는 것은 문서 이력뿐이다.
+ */
+export function requestDeleteVerdict(input: {
+  status: string | null | undefined
+  docs: DocHistory | null | undefined
+}): RequestDeleteVerdict {
+  if (input.status === REJECTED_STATUS || input.docs === 'rejected') {
+    return { ok: false, block: 'rejected', message: REJECTED_DELETE_MESSAGE }
+  }
+  return { ok: true }
+}
+
 // ── 본인 삭제 판정 ───────────────────────────────────────────────────
 
 export type SelfDeleteInput = {
@@ -102,8 +145,10 @@ export type SelfDeleteInput = {
 export type SelfDeleteBlock =
   /** 결재가 도는 중이다. 먼저 회수한다. */
   | 'pending'
-  /** 반려·승인된 견적이다. 삭제 요청으로만 지운다. */
+  /** 승인(완료)된 견적이다. 삭제 요청으로만 지운다. */
   | 'approval'
+  /** 반려된 견적이다. **어떤 경로로도 지울 수 없다**(requestDeleteVerdict 와 같은 뜻). */
+  | 'rejected'
   /** 그 상태에서는 본인이 지울 수 없다(수주 이후 등). 삭제 요청으로 간다. */
   | 'status'
   /**
@@ -120,7 +165,8 @@ export type SelfDeleteVerdict =
 /** 막힌 이유별 안내 — 화면과 서버가 같은 문구를 쓴다. */
 export const SELF_DELETE_MESSAGES: Record<SelfDeleteBlock, string> = {
   pending: '결재가 진행 중입니다. 전자결재에서 회수한 뒤 삭제할 수 있습니다',
-  approval: '반려·승인된 견적은 삭제 요청으로 지울 수 있습니다',
+  approval: '승인된 견적은 삭제 요청으로 지울 수 있습니다',
+  rejected: REJECTED_DELETE_MESSAGE,
   status: '지금 상태에서는 직접 삭제할 수 없습니다. 삭제 요청으로 지워 주세요',
   unknown: '결재 상태를 확인할 수 없습니다.',
 }
@@ -130,7 +176,8 @@ export const SELF_DELETE_MESSAGES: Record<SelfDeleteBlock, string> = {
  *
  * 순서가 규칙이다.
  *   ① 결재 중      — 상태가 '결재중' 이거나 진행중 문서가 있으면 막는다. 먼저 회수한다.
- *   ② 반려·완료    — 기록을 보존한다. 삭제 요청(관리자 승인)으로만 지운다.
+ *   ②-1 반려      — **어떤 경로로도 지울 수 없다**(block 'rejected'). 기록을 읽을 수 있게 남긴다.
+ *   ②-2 완료      — 삭제 요청(관리자 승인)으로만 지운다.
  *                    승인 뒤 상태가 '견적중' 으로 돌아와도 여기서 막힌다(옛 구멍).
  *   ③ 회수·폐기    — 지울 수 있다. 견적과 결재 문서를 함께 지운다(withDocuments).
  *                    단 상신할 수 있던 자리(견적중·수리중)에 있을 때만 — 그 뒤로 넘어갔으면
@@ -153,9 +200,10 @@ export function selfDeleteVerdict(input: SelfDeleteInput): SelfDeleteVerdict {
   if (input.docs == null) return block('unknown')
 
   if (input.gate === 'pending' || input.docs === 'in_progress') return block('pending')
-  if (input.docs === 'rejected' || input.docs === 'completed') return block('approval')
-  // 견적 상태가 '반려' 면 문서가 뒤에 폐기됐더라도 막는다 — 기록을 남긴다.
-  if (input.status === REJECTED_STATUS) return block('approval')
+  // 반려는 완료보다 **먼저** 본다 — 둘은 막는 이유와 안내가 다르다(반려는 삭제 요청도 못 한다).
+  // 견적 상태가 '반려' 면 문서가 뒤에 폐기됐더라도 막는다.
+  if (input.docs === 'rejected' || input.status === REJECTED_STATUS) return block('rejected')
+  if (input.docs === 'completed') return block('approval')
 
   if (input.docs === 'withdrawn_or_discarded') {
     return input.status != null && CLOSED_DELETABLE_STATUSES.includes(input.status)

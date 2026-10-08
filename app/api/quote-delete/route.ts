@@ -9,7 +9,7 @@ import {
   AUDIT_ACTION_SELF, AUDIT_ACTION_SELF_WITH_DOC, buildQuoteDeleteSummary,
   CLOSED_DELETABLE_STATUSES, deleteApprovalDocuments, DELETE_REQUEST_STATUS, docHistoryOf,
   executeQuoteDelete, loadQuoteDocs, notifyQuoteDeleted,
-  QUOTE_DELETE_TARGET_TABLE, QUOTE_DELETE_TYPE, selfDeleteVerdict,
+  QUOTE_DELETE_TARGET_TABLE, QUOTE_DELETE_TYPE, requestDeleteVerdict, selfDeleteVerdict,
   SELF_DELETABLE_STATUSES, writeClosedDeleteAudit, writeDeleteAudit, writeResidueAudit,
 } from '@/lib/approval/quoteDelete'
 import { gateOf } from '@/lib/approval/quoteApprovalKeys'
@@ -24,6 +24,8 @@ import type { LineInput } from '@/lib/approval/types'
 //                 · 반려·완료 → 409. 기록을 보존한다 — 삭제 요청(관리자 승인)으로만.
 //                 · 회수·폐기만 → **견적과 결재 문서를 함께 지운다**(아래 「문서까지 지우는 길」).
 //   · request — 결재로 올린다. 결재선을 함께 받는다.
+//               **반려된 견적은 이 길도 막힌다**(requestDeleteVerdict) — 반려 사유를 이해할 근거가
+//               견적 쪽에만 있어, 견적을 지우면 읽을 수 없는 기록만 남는다. 관리자도 같다.
 //
 // 어느 쪽이든 견적을 지우는 절차는 lib/approval/quoteDelete.ts 의 executeQuoteDelete 한 벌이다.
 //
@@ -217,6 +219,22 @@ export async function POST(req: NextRequest) {
     // 실제로 삭제 요청 상태이고 사유가 있는 건만 올린다.
     if (quote.status !== DELETE_REQUEST_STATUS || !quote.delete_reason?.trim()) {
       return NextResponse.json({ error: 'Not a pending delete request' }, { status: 409 })
+    }
+
+    // **반려된 견적은 삭제 요청도 못 올린다.**
+    // 상태로는 알 수 없다 — 화면이 '취소요청' 으로 바꾼 뒤 이 라우트를 부르므로 여기서는 이미
+    // '취소요청' 이다. 그래서 **결재 문서 이력**으로 본다. 못 읽으면 올리지 않는다(fail-closed:
+    // 반려 견적의 삭제 결재가 한 번 만들어지면 승인으로 지워질 수 있다).
+    const quoteDocs = await loadQuoteDocs(supabaseAdmin, quoteId)
+    if (!quoteDocs.ok) {
+      return NextResponse.json({ error: '결재 상태를 확인하지 못했습니다.' }, { status: 500 })
+    }
+    const requestOk = requestDeleteVerdict({
+      status: quote.status,
+      docs: docHistoryOf(quoteDocs.docs.map(d => d.status)),
+    })
+    if (!requestOk.ok) {
+      return NextResponse.json({ error: requestOk.message }, { status: 409 })
     }
 
     // 중복 방지 — 같은 견적으로 아직 도는 문서가 있으면 새로 올리지 않는다.
