@@ -251,7 +251,7 @@ async function review(sb: SupabaseClient, caller: Caller, body: Record<string, u
   // 「자기 행 → 부모 행」이 두 벌이라 왕복이 그만큼 늘어난다.
   const [itemsRes, expRes, parties, people] = await Promise.all([
     timer.step('items', () => sb.from('quote_items')
-      .select('item_id, row_kind, part_code, product_name, quantity, unit_price_jpy, unit_price_krw, supply_amount, cost_amount, profit_amount, profit_rate, exchange_rate, tariff_rate')
+      .select('item_id, row_kind, part_code, product_name, quantity, unit_price_jpy, unit_price_krw, supply_amount, cost_amount, profit_amount, profit_rate, exchange_rate, tariff_rate, sub_lines')
       .eq('quote_id', quote.quote_id)),
     timer.step('expenses', () => sb.from('quote_expenses')
       .select('expense_id, item_name, unit_price, headcount, days, amount')
@@ -386,7 +386,7 @@ async function pdfData(sb: SupabaseClient, caller: Caller, body: Record<string, 
       .order('completed_at', { ascending: false })
       .limit(1),
     sb.from('quote_items')
-      .select('item_id, row_kind, part_code, product_name, quantity, unit_price_krw, supply_amount, tax_amount')
+      .select('item_id, row_kind, part_code, product_name, quantity, unit_price_krw, supply_amount, tax_amount, sub_lines')
       .eq('quote_id', quoteId),
     partyNamesOf(sb, [quote.customer_id, quote.dealer_id]),
     (async () => {

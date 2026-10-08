@@ -211,6 +211,10 @@ export default function QuoteFormBody({ doc }: DocFormBodyProps) {
                         ))}
                       </span>
                     )}
+                    {/* 품명 아래 설명 줄 — 견적서 PDF 에 나가는 글자다. PDF 와 같이 **줄마다 한 행**으로 둔다. */}
+                    {it.subLines.map((line, i) => (
+                      <span key={i} style={{ display: 'block', fontSize: 11, color: MUTED, marginTop: 2 }}>{line}</span>
+                    ))}
                   </td>
                   <td className="num" style={{ ...formTd, textAlign: 'right' }}>{it.quantity ?? '-'}</td>
                   <td className="num" style={{ ...formTd, textAlign: 'right' }}>{comma(it.unitPrice)}</td>

@@ -13,6 +13,7 @@
 // (lib/quoteEuName.ts 의 euDisplayName). 대리점·E.U 양쪽에 같은 규칙을 쓴다.
 
 import { euDisplayName } from '@/lib/quoteEuName'
+import { subLinesOf } from '@/lib/quoteSubLines'
 import { changedTerms } from '@/lib/quoteTerms'
 
 /** 숫자로 읽는다. null·빈 값·숫자가 아닌 값은 null — 0 으로 바꾸지 않는다(「없음」과 0 은 다르다). */
@@ -67,6 +68,8 @@ export type RawItem = {
   profit_rate: unknown
   exchange_rate: unknown
   tariff_rate: unknown
+  /** 품명 아래 설명 줄(quote_items.sub_lines). 그 칸이 생기기 전의 견적은 null 이다. */
+  sub_lines?: unknown
 }
 
 export type RawExpense = {
@@ -118,6 +121,12 @@ export type ReviewItem = {
   profitRate: number | null
   /** 품번·구입가(엔)·환율·관세. 값이 없는 것은 빠진다. */
   subParts: SubPart[]
+  /**
+   * 품명 아래 설명 줄 — **견적서 PDF 에 그대로 나가는 글자**다(시리얼 번호·옵션 등).
+   * 결재자가 PDF 를 열지 않고도 무엇이 적혀 나가는지 보려면 검토표에 있어야 한다.
+   * 줄이 없으면 빈 배열이다(옛 견적은 전부 그렇다).
+   */
+  subLines: string[]
 }
 
 export type ReviewExpense = {
@@ -261,6 +270,7 @@ export function buildQuoteReview(input: ReviewInput): QuoteReview {
         profit: num(it.profit_amount),
         profitRate: num(it.profit_rate),
         subParts: subPartsOf(it),
+        subLines: subLinesOf(it.sub_lines),
       })),
     expenses: [...input.expenses]
       .sort((a, b) => a.expense_id - b.expense_id)

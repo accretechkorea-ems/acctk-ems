@@ -11,23 +11,25 @@
 //   이쪽은 **이미 확정된 견적을 그대로 다시 그리는** 길이라 규칙이 반대다.
 //
 // 복원할 수 없는 값
-//   · subLines (품목 아래 보조 줄 — 시리얼 번호 등) — **DB 에 저장되지 않는다.**
-//     create_quote 가 넣는 quote_items 칸에 그 자리가 없다(quote_create_function.sql:125-134).
-//     빈 배열로 둔다. 확정 때 만든 파일과 **그 줄만** 달라진다(아래 PDF_UNRESTORABLE 참고).
 //   · showSignature (발주 확인 서명란) — 화면 체크박스이고 저장하지 않는다. 넣지 않는다(= 없음).
 //   · showWatermark (미리보기 워터마크) — 미리보기 전용이다. 넣지 않는다.
+//
+// subLines (품명 아래 설명 줄 — 시리얼 번호 등)는 **이제 복원된다.** quote_items.sub_lines 에
+// 저장되고 subLinesOf 가 풀어 준다. sub_lines 가 null 인 옛 견적은 빈 배열이 되어
+// 지금까지와 똑같이 그려진다 — 이 변경으로 옛 견적의 PDF 는 한 글자도 달라지지 않는다.
 
 import type { PDFDocProps } from '@/app/quote/QuotePDFDoc'
 import type { QuoteRow, RowKind } from '@/app/quote/types'
 import { kstYmd } from '@/lib/date'
 import { termsOf } from '@/lib/quoteTerms'
+import { subLinesOf } from '@/lib/quoteSubLines'
 
 /**
  * 저장값으로 되살릴 수 없는 PDF 요소. 보고·주석에서 한 곳을 가리키도록 적어 둔다.
- * 금액·품명·품번·수량은 전부 저장되므로 되살아난다 — 아래 둘만 다르다.
+ * 금액·품명·품번·수량·설명 줄은 전부 저장되므로 되살아난다 — 아래 하나만 다르다.
+ * (subLines 는 quote_items.sub_lines 가 생기면서 빠졌다.)
  */
 export const PDF_UNRESTORABLE = [
-  'subLines (품목 보조 줄) — quote_items 에 저장되지 않는다',
   'showSignature (서명란) — 화면 체크박스이고 저장되지 않는다',
 ] as const
 
@@ -73,6 +75,11 @@ export type PdfItemRow = {
   unit_price_krw: unknown
   supply_amount: unknown
   tax_amount: unknown
+  /**
+   * 품명 아래 설명 줄(quote_items.sub_lines jsonb). null·없음이면 줄이 없다는 뜻이고,
+   * 그 칸이 생기기 전의 견적은 전부 null 이다(backfill 하지 않았다).
+   */
+  sub_lines?: unknown
 }
 
 export type PdfDataInput = {
@@ -106,8 +113,8 @@ function toPdfRow(it: PdfItemRow): QuoteRow {
     id: String(it.item_id),
     itemText: it.product_name ?? '',
     selectedItem: null,
-    // 저장되지 않는 값. 확정 때 PDF 와 이 줄만 달라진다(PDF_UNRESTORABLE).
-    subLines: [],
+    // 저장된 설명 줄. null(= 줄 없음)·깨진 값이면 빈 배열이라 지금까지와 같이 그려진다.
+    subLines: subLinesOf(it.sub_lines),
     quantity: num(it.quantity),
     unit_price: num(it.unit_price_krw),
     supply_price: num(it.supply_amount),

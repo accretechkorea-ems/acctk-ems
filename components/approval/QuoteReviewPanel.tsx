@@ -277,6 +277,10 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
                       {it.subParts.map(p => `${p.label} ${p.value}`).join(' · ')}
                     </div>
                   )}
+                  {/* 품명 아래 설명 줄 — 견적서 PDF 에 나가는 글자다. PDF 와 같이 **줄마다 한 행**으로 둔다. */}
+                  {it.subLines.map((line, i) => (
+                    <div key={i} style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{line}</div>
+                  ))}
                 </td>
                 <td className="num" style={tdNum}>{comma(it.quantity)}</td>
                 <td className="num" style={tdNum}>{comma(it.unitPrice)}</td>
