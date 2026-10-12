@@ -514,8 +514,6 @@ function SemiProjectDetailInner() {
                   statusCell={statusSelect}
                   buttons={(
                     <>
-                      <ExcelButton title="이 접촉 보고서 Excel 출력" busy={exporting === selected.id} disabled={exporting !== null}
-                        onClick={() => downloadExcel(selected.id)} />
                       {canManageReport(selected) && (
                         <Link href={`${writeHref}?report_id=${selected.id}`} title="이 접촉 보고서 수정" aria-label="이 접촉 보고서 수정" style={iconBtn}>
                           <PencilIcon />
