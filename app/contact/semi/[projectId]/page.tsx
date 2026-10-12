@@ -2,7 +2,7 @@
 
 // 반도체 고객 접촉 보고 — Project 상세(/contact/semi/<projectId>[?report=<reportId>]).
 //
-// 위에서 아래로: 헤더(← 목록 아이콘·Project/구매안건·번호 배지 / 고객사·사업장·생성자·생성일 / 정보 수정·Excel·+ 새 접촉 보고) → 요약 카드 4개
+// 위에서 아래로: 헤더(← 목록 아이콘·Project/구매안건·번호 배지 / 고객사·사업장·생성자 / 정보 수정·Excel·+ 새 접촉 보고) → 요약 카드 4개
 // → 「미완료 Action」(전체 폭, 0건이면 한 줄) → 2단: 좌 「접촉 이력」 타임라인 / 우 선택한 보고서 상세.
 // 2단은 요약 카드와 같은 4칸 격자에 맞춘다 — 좌 1칸, 우 3칸. 좌 이력 상자는 우 상세의 아래 끝까지 늘고, 길면 상자 안에서 스크롤.
 // 좁은 화면에서는 위아래로 쌓는다(이력 상자는 최대 높이 + 스크롤).
@@ -33,7 +33,7 @@ import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, FAINT, BLUE, NEUTRAL_BG, ROW_HOVER_BG,
   cardStyle, cardHeader, cardTitle, countBadge, btnPrimary, btnGhost, btnDanger,
 } from '@/components/common/ui'
-import { daysBetween, kstYmd, todayKST } from '@/lib/date'
+import { daysBetween, todayKST } from '@/lib/date'
 import { errorInfo } from '@/lib/errorInfo'
 import {
   ACTION_LABELS, ACTION_STATUSES, AUTHOR_FIELD, FIELDS, FIELD_BY_KEY, SECTIONS,
@@ -395,7 +395,7 @@ function SemiProjectDetailInner() {
       <style>{SHELL_CSS}</style>
       <div className="sp-shell" style={{ maxWidth: 1280, margin: '0 auto' }}>
 
-        {/* ── 헤더 — 목록 화살표 · 안건 · 번호 배지 / 고객사 · 사업장/부서 · 생성자 · 생성일 / 오른쪽 아이콘·버튼 ── */}
+        {/* ── 헤더 — 목록 화살표 · 안건 · 번호 배지 / 고객사 · 사업장/부서 · 생성자 / 오른쪽 아이콘·버튼 ── */}
         <div style={boxStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Link href="/contact/semi" aria-label="목록으로" title="목록으로" style={{ ...iconBtn, background: 'transparent' }}>
@@ -422,8 +422,6 @@ function SemiProjectDetailInner() {
             <span>{project.site_dept?.trim() || '-'}</span>
             <span style={{ color: FAINT }}>·</span>
             <span style={{ fontSize: 11, color: MUTED }}>{project.creator?.name ?? '-'}</span>
-            <span style={{ color: FAINT }}>·</span>
-            <span className="num" style={{ color: MUTED }}>{kstYmd(project.created_at)}</span>
           </div>
         </div>
 

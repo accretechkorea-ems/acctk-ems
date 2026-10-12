@@ -25,7 +25,6 @@ import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, FAINT, ROW_HOVER_BG, NEUTRAL_BG, BLUE,
   cardStyle, cardHeader, cardTitle, countBadge, rowStyle, btnPrimary, btnGhost, inputStyle,
 } from '@/components/common/ui'
-import { kstYmd } from '@/lib/date'
 import { errorInfo } from '@/lib/errorInfo'
 import { FIELD_BY_KEY, emptyInput, validateReport, type FieldKey } from '@/lib/semiContact'
 import {
@@ -34,20 +33,21 @@ import {
 
 /**
  * 열 폭. 머리 줄과 행이 이 상수 하나를 함께 쓴다(의뢰서 목록과 같은 방식).
- *   번호·최근 접촉·횟수·생성일·작성 버튼 — 고정 폭 / 고객사·사업장·안건 — 남는 폭을 나눠 쓴다.
+ *   번호·최근 접촉·횟수·작성 버튼 — 고정 폭 / 고객사·사업장·안건 — 남는 폭을 나눠 쓴다.
+ * 생성일은 화면에 보이지 않는다(정렬 기준으로만 서버가 쓴다).
  */
-const COL = { no: 140, last: 168, count: 64, created: 88, write: 84, gap: 10 }
+const COL = { no: 156, last: 188, count: 64, write: 84, gap: 10 }
 const FLEX_CUSTOMER = 1
 const FLEX_SITE = 0.8
 const FLEX_TITLE = 1.4
 /** 카드 좌우 여백(16) + 행 좌우 여백(12). 머리는 카드 끝까지 늘이고 글자만 행과 맞춘다. */
 const HEAD_PAD = 28
 
-/** 좁은 화면에서는 사업장·생성일 칸을 숨긴다. container-type 이 있어야 @container 가 동작한다. */
+/** 좁은 화면에서는 사업장 칸을 숨긴다. container-type 이 있어야 @container 가 동작한다. */
 const SHELL_CSS = `
   .cs-shell { container-type: inline-size; }
   @container (max-width: 820px) {
-    .cs-site, .cs-created { display: none !important; }
+    .cs-site { display: none !important; }
   }
 `
 
@@ -182,7 +182,6 @@ export default function ContactSemiPage() {
           <span style={{ flex: FLEX_TITLE, minWidth: 0 }}>{FIELD_BY_KEY.title.label}</span>
           <span style={{ width: COL.last, flexShrink: 0 }}>최근 접촉</span>
           <span style={{ width: COL.count, flexShrink: 0, textAlign: 'right' }}>접촉 횟수</span>
-          <span className="cs-created" style={{ width: COL.created, flexShrink: 0 }}>생성일</span>
           <span style={{ width: COL.write, flexShrink: 0 }} />
         </div>
 
@@ -237,9 +236,6 @@ export default function ContactSemiPage() {
               </span>
               <span className="num" style={{ width: COL.count, flexShrink: 0, fontSize: 13, color: r.report_count ? TEXT : FAINT, textAlign: 'right' }}>
                 {r.report_count}
-              </span>
-              <span className="cs-created num" style={{ width: COL.created, flexShrink: 0, fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>
-                {kstYmd(r.created_at)}
               </span>
               <span style={{ width: COL.write, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
                 <Link
