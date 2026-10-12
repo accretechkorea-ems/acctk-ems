@@ -135,6 +135,11 @@ export const MENU_PERMS: MenuPerm[] = [
   { key: 'leads', label: '리드', group: '영업', path: '/leads', icon: 'userPlus', order: 10, data: [] },
   { key: 'pipeline', label: '파이프라인', group: '영업', path: '/pipeline', icon: 'kanban', order: 20, data: ['customers'] },
   { key: 'quote', label: '견적서', group: '영업', path: '/quote', icon: 'fileText', order: 30, data: ['quote'] },
+  // 반도체사업부 고객 접촉 보고. data 는 비워 둔다 — 아래 DERIVED_PERMS 에도 넣지 않는다.
+  // 이 메뉴만 켠 팀(반도체)은 teams.can_view_* 가 모두 false 로 남아야 계측 데이터가 열리지 않는다.
+  // semi_* 표의 RLS 는 teams 컬럼이 아니라 team_permissions 를 직접 보는 has_menu_perm('contact_semi') 로 판정한다
+  // (menu_perm_function.sql · semi_contact_schema.sql).
+  { key: 'contact_semi', label: '접촉 보고서', group: '영업', path: '/contact/semi', icon: 'clipboard', order: 40, data: [] },
 
   // ── 주문 ──
   { key: 'purchase', label: '발주', group: '주문', path: '/purchase', icon: 'package', order: 10, data: ['quote', 'sales_mgmt'] },
