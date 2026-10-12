@@ -1,57 +1,59 @@
 'use client'
 
-// 반도체 고객 접촉 보고 — Project 목록(껍데기).
+// 반도체 고객 접촉 보고 — Project 목록(/contact/semi).
 //
-// 지금 있는 것: 목록 + 「새 Project」(모달 → POST /api/semi-contact/project 가 번호 발급과 저장을 한다).
-// 행을 눌러 들어갈 Project 상세·보고서 작성·엑셀은 다음 단계에서 붙인다. 검색·필터·페이지 나누기도 그때
-// 의뢰서 목록(app/inquiries/page.tsx, lib/paging.ts)의 방식을 따라 넣는다.
+// 위에서 아래로: 제목 「접촉 보고서」 + Project 건수 + 「+ 새 Project」 → 필터 줄(전체 / 내 팀 · 검색 · 결과 건수) → 목록.
+// 디자인은 components/common/ui.ts 토큰(cardStyle·cardTitle·countBadge·rowStyle·btn*·inputStyle)을 따른다.
 //
-// 진입 — 메뉴 키 contact_semi(lib/menuPerms.ts). usePageGuard 가 경로로 키를 찾아 판정하고,
-// 권한이 없으면 AccessGate 를 그린다(주소로 직접 들어와도 같다).
+// 데이터 — GET /api/semi-contact/projects?scope=all|team 하나로 읽는다. 「내 팀」 판정(만든 사람 또는 보고서 작성자 중
+// 내 팀 소속이 있는가)은 서버가 하고, 화면은 결과만 받는다. 최근 접촉·접촉 횟수·정렬(최근 접촉 내림차순, 없으면
+// 생성일)도 서버가 계산한다. 검색은 받은 목록을 화면에서 거른다(번호·고객사·사업장/부서·안건, 대소문자 무시).
 //
-// 목록은 브라우저 supabase 클라이언트(로그인 세션)로 직접 읽는다. RLS(semi_projects_select)가
-// has_menu_perm('contact_semi') 로 걸러 주므로 화면이 따로 거르지 않는다(semi_contact_schema.sql).
-// 칸 이름(고객사·사업장/부서·Project/구매안건)은 필드 등록표(lib/semiContact)에서 읽는다 — 엑셀·작성 화면과 같은 이름.
+// 행을 누르면 Project 상세로, 행 끝의 「보고서 작성」은 작성 화면으로 간다(클릭이 행으로 번지지 않게 막는다).
+// 진입 — 메뉴 키 contact_semi(lib/menuPerms.ts). usePageGuard 가 판정하고 권한이 없으면 AccessGate 를 그린다.
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import SegmentedControl from '@/components/common/SegmentedControl'
 import { useToast } from '@/components/common/Toast'
 import { FieldError, errBorder, useFieldErrors } from '@/components/common/fieldErrors'
 import {
-  PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, FAINT,
-  cardStyle, cardHeader, cardTitle, countBadge, rowStyle, btnPrimary, btnGhost,
+  PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, FAINT, ROW_HOVER_BG,
+  cardStyle, cardHeader, cardTitle, countBadge, rowStyle, btnPrimary, btnGhost, inputStyle,
 } from '@/components/common/ui'
 import { kstYmd } from '@/lib/date'
 import { errorInfo } from '@/lib/errorInfo'
 import { FIELD_BY_KEY, emptyInput, validateReport, type FieldKey } from '@/lib/semiContact'
-import { PROJECT_KEYS, PROJECT_TEXT_MAX } from '@/lib/semiContact/project'
-
-/** 한 번에 읽는 최대 행 수. 페이지 나누기를 붙이기 전까지의 안전 상한이다. */
-const LIST_LIMIT = 200
+import {
+  PROJECT_KEYS, PROJECT_NO_KEY, PROJECT_NO_LABEL, PROJECT_NO_MAX, PROJECT_TEXT_MAX, validateProjectNo,
+} from '@/lib/semiContact/project'
 
 /**
  * 열 폭. 머리 줄과 행이 이 상수 하나를 함께 쓴다(의뢰서 목록과 같은 방식).
- *   번호·작성자·등록일 — 고정 폭 / 고객사·사업장·안건 — 남는 폭을 나눠 쓴다.
+ *   번호·최근 접촉·횟수·생성일·작성 버튼 — 고정 폭 / 고객사·사업장·안건 — 남는 폭을 나눠 쓴다.
  */
-const COL = { no: 128, author: 96, date: 92, write: 92, gap: 10 }
+const COL = { no: 140, last: 168, count: 64, created: 88, write: 84, gap: 10 }
 const FLEX_CUSTOMER = 1
 const FLEX_SITE = 0.8
-const FLEX_TITLE = 1.6
+const FLEX_TITLE = 1.4
 /** 카드 좌우 여백(16) + 행 좌우 여백(12). 머리는 카드 끝까지 늘이고 글자만 행과 맞춘다. */
 const HEAD_PAD = 28
 
-/** 좁은 화면에서는 사업장·작성자 칸을 숨긴다. container-type 이 있어야 @container 가 동작한다. */
+/** 좁은 화면에서는 사업장·생성일 칸을 숨긴다. container-type 이 있어야 @container 가 동작한다. */
 const SHELL_CSS = `
   .cs-shell { container-type: inline-size; }
-  @container (max-width: 720px) {
-    .cs-site, .cs-author { display: none !important; }
+  @container (max-width: 820px) {
+    .cs-site, .cs-created { display: none !important; }
   }
 `
 
+type Scope = 'all' | 'team'
+
+/** GET /api/semi-contact/projects 가 돌려주는 한 행. */
 type ProjectRow = {
   project_id: number
   project_no: string
@@ -59,18 +61,21 @@ type ProjectRow = {
   site_dept: string | null
   title: string
   created_at: string
-  engineers: { name: string | null } | null
+  report_count: number
+  last_contact_date: string | null
+  last_contact_author: string | null
 }
 
-const SELECT = 'project_id, project_no, customer_name, site_dept, title, created_at, engineers(name)'
-
 export default function ContactSemiPage() {
-  const supabase = useMemo(() => createClient(), [])
+  const router = useRouter()
   const { loading: guardLoading, authorized } = usePageGuard()
 
+  const [scope, setScope] = useState<Scope>('all')
   const [rows, setRows] = useState<ProjectRow[] | null>(null)
-  const [total, setTotal] = useState<number | null>(null)
+  const [myTeam, setMyTeam] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [q, setQ] = useState('')
   const [creating, setCreating] = useState(false)
   /** 올리면 목록을 다시 읽는다(새 Project 를 만든 뒤). */
   const [reloadKey, setReloadKey] = useState(0)
@@ -79,33 +84,51 @@ export default function ContactSemiPage() {
     if (!authorized) return
     let cancelled = false
     const load = async () => {
-      // 최근 번호가 위로. 순번이 1000 을 넘으면 문자열 정렬이 어긋나므로 project_no 가 아니라
-      // (period_year, seq) 숫자 칸으로 정렬한다(semi_contact_schema.sql 의 설명).
-      const { data, error, count } = await supabase
-        .from('semi_projects')
-        .select(SELECT, { count: 'exact' })
-        .order('period_year', { ascending: false })
-        .order('seq', { ascending: false })
-        .limit(LIST_LIMIT)
-      if (cancelled) return
-      if (error) {
-        console.error('[contact/semi] Project 목록 조회 실패', errorInfo(error))
-        setLoadError(error.message || '알 수 없는 오류')
+      setBusy(true)
+      try {
+        const res = await fetch(`/api/semi-contact/projects?scope=${scope}`)
+        const json = await res.json().catch(() => ({}))
+        if (cancelled) return
+        if (!res.ok) {
+          console.error('[contact/semi] Project 목록 조회 실패', { status: res.status, error: json })
+          setLoadError(json.error || `목록을 불러오지 못했습니다 (${res.status})`)
+          setRows([])
+          return
+        }
+        setLoadError(null)
+        setRows((json.projects ?? []) as ProjectRow[])
+        setMyTeam(typeof json.my_team === 'string' ? json.my_team : null)
+      } catch (e) {
+        if (cancelled) return
+        console.error('[contact/semi] Project 목록 조회 실패', errorInfo(e))
+        setLoadError('목록을 불러오지 못했습니다. 잠시 뒤 다시 시도해주세요.')
         setRows([])
-        return
+      } finally {
+        if (!cancelled) setBusy(false)
       }
-      setLoadError(null)
-      setRows((data ?? []) as unknown as ProjectRow[])
-      setTotal(count ?? null)
     }
     load()
     return () => { cancelled = true }
-  }, [authorized, supabase, reloadKey])
+  }, [authorized, scope, reloadKey])
+
+  // 검색 — 번호·고객사·사업장/부서·안건 부분 일치, 대소문자 무시. 서버가 정한 순서는 그대로 둔다.
+  const words = q.trim().toLowerCase()
+  const shown = useMemo(() => {
+    if (!rows) return []
+    if (!words) return rows
+    return rows.filter(r =>
+      [r.project_no, r.customer_name, r.site_dept ?? '', r.title].some(v => v.toLowerCase().includes(words)))
+  }, [rows, words])
+
+  const scopeOptions = useMemo(() => [
+    { label: '전체', value: 'all' },
+    { label: myTeam ? `내 팀(${myTeam})` : '내 팀', value: 'team' },
+  ], [myTeam])
 
   if (!authorized) return <AccessGate loading={guardLoading} />
 
-  const shown = rows?.length ?? 0
-  const truncated = total !== null && total > shown
+  const total = rows?.length ?? null
+  const openProject = (id: number) => router.push(`/contact/semi/${id}`)
 
   return (
     <main style={{ padding: '24px 28px', background: PAGE_BG, minHeight: '100vh' }}>
@@ -115,16 +138,39 @@ export default function ContactSemiPage() {
         <div style={cardHeader}>
           <span style={{ ...cardTitle, fontSize: 20 }}>접촉 보고서</span>
           {total !== null && <span style={countBadge}>Project {total}건</span>}
-          {truncated && (
-            <span style={{ fontSize: 12, color: MUTED }}>최근 {shown}건만 보입니다</span>
-          )}
-          <button
-            type="button"
-            onClick={() => setCreating(true)}
-            style={{ ...btnPrimary(), marginLeft: 'auto' }}
-          >
-            새 Project
+          {busy && rows !== null && <span style={{ fontSize: 12, color: MUTED }}>불러오는 중...</span>}
+          <button type="button" onClick={() => setCreating(true)} style={{ ...btnPrimary(), marginLeft: 'auto' }}>
+            + 새 Project
           </button>
+        </div>
+
+        {/* ── 필터 줄 — 전체 / 내 팀 · 검색 · 결과 건수 ── */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+          <SegmentedControl options={scopeOptions} value={scope} onChange={v => setScope(v === 'team' ? 'team' : 'all')} />
+          <span style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
+            <input
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              placeholder="Project 번호, 고객사, 사업장/부서, 안건 검색"
+              aria-label="검색"
+              style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', paddingRight: q ? 30 : undefined }}
+            />
+            {q && (
+              <button type="button" aria-label="검색어 지우기" onClick={() => setQ('')}
+                style={{
+                  position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                  border: 'none', background: 'transparent', color: MUTED, cursor: 'pointer', padding: 0,
+                  display: 'flex', alignItems: 'center',
+                }}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+              </button>
+            )}
+          </span>
+          {rows !== null && (
+            <span className="num" style={{ marginLeft: 'auto', fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>
+              결과 {shown.length}건
+            </span>
+          )}
         </div>
 
         {/* 표 머리 — 카드 끝까지 늘이고 글자만 행과 맞춘다 */}
@@ -134,12 +180,13 @@ export default function ContactSemiPage() {
           borderBottom: `1px solid ${BORDER}`,
           fontSize: 11, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap',
         }}>
-          <span style={{ width: COL.no, flexShrink: 0 }}>Project 번호</span>
+          <span style={{ width: COL.no, flexShrink: 0 }}>{PROJECT_NO_LABEL}</span>
           <span style={{ flex: FLEX_CUSTOMER, minWidth: 0 }}>{FIELD_BY_KEY.customer_name.label}</span>
           <span className="cs-site" style={{ flex: FLEX_SITE, minWidth: 0 }}>{FIELD_BY_KEY.site_dept.label}</span>
           <span style={{ flex: FLEX_TITLE, minWidth: 0 }}>{FIELD_BY_KEY.title.label}</span>
-          <span className="cs-author" style={{ width: COL.author, flexShrink: 0 }}>작성자</span>
-          <span style={{ width: COL.date, flexShrink: 0 }}>등록일</span>
+          <span style={{ width: COL.last, flexShrink: 0 }}>최근 접촉</span>
+          <span style={{ width: COL.count, flexShrink: 0, textAlign: 'right' }}>접촉 횟수</span>
+          <span className="cs-created" style={{ width: COL.created, flexShrink: 0 }}>생성일</span>
           <span style={{ width: COL.write, flexShrink: 0 }} />
         </div>
 
@@ -150,44 +197,59 @@ export default function ContactSemiPage() {
           </div>
         ) : rows === null ? (
           <div style={{ textAlign: 'center', padding: 40, color: MUTED, fontSize: 13 }}>불러오는 중...</div>
-        ) : rows.length === 0 ? (
+        ) : shown.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 40, color: MUTED, fontSize: 13, lineHeight: 1.7 }}>
-            등록된 Project가 없습니다
+            {words
+              ? '검색 결과가 없습니다'
+              : scope === 'team'
+                ? (myTeam ? `${myTeam} 팀의 Project가 없습니다` : '소속 팀이 없어 내 팀 Project를 볼 수 없습니다')
+                : '등록된 Project가 없습니다'}
           </div>
         ) : (
-          rows.map((r, i) => (
-            // 번호·고객사·Project명은 Project 상세로, 끝의 「보고서 작성」은 작성 화면으로 간다.
+          shown.map((r, i) => (
             <div
               key={r.project_id}
-              style={{ ...rowStyle(i === 0), display: 'flex', alignItems: 'center', gap: COL.gap }}
+              role="link"
+              tabIndex={0}
+              onClick={() => openProject(r.project_id)}
+              onKeyDown={e => { if (e.key === 'Enter') openProject(r.project_id) }}
+              onMouseEnter={e => (e.currentTarget.style.background = ROW_HOVER_BG)}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+              style={{ ...rowStyle(i === 0), display: 'flex', alignItems: 'center', gap: COL.gap, cursor: 'pointer' }}
             >
-              <Link href={`/contact/semi/${r.project_id}`} className="num" style={{
-                width: COL.no, flexShrink: 0, fontSize: 13, fontWeight: 700, color: TEXT, textDecoration: 'none',
+              <span className="num" style={{
+                width: COL.no, flexShrink: 0, fontSize: 13, fontWeight: 700, color: TEXT,
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>
+              }} title={r.project_no}>
                 {r.project_no}
-              </Link>
-              <Link href={`/contact/semi/${r.project_id}`} style={{ ...cellText(FLEX_CUSTOMER, TEXT), textDecoration: 'none' }} title={r.customer_name}>
-                {r.customer_name}
-              </Link>
+              </span>
+              <span style={cellText(FLEX_CUSTOMER, TEXT)} title={r.customer_name}>{r.customer_name}</span>
               <span className="cs-site" style={cellText(FLEX_SITE, r.site_dept?.trim() ? SUB : FAINT)} title={r.site_dept ?? undefined}>
                 {r.site_dept?.trim() || '-'}
               </span>
-              <Link href={`/contact/semi/${r.project_id}`} style={{ ...cellText(FLEX_TITLE, TEXT), textDecoration: 'none' }} title={r.title}>
-                {r.title}
-              </Link>
-              <span className="cs-author" style={{
-                width: COL.author, flexShrink: 0, fontSize: 12, color: SUB,
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              <span style={cellText(FLEX_TITLE, TEXT)} title={r.title}>{r.title}</span>
+              <span style={{
+                width: COL.last, flexShrink: 0, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}>
-                {r.engineers?.name ?? '-'}
+                {r.last_contact_date ? (
+                  <>
+                    <span className="num" style={{ color: TEXT }}>{r.last_contact_date}</span>
+                    <span style={{ color: FAINT }}> · </span>
+                    <span style={{ color: SUB }}>{r.last_contact_author ?? '-'}</span>
+                  </>
+                ) : <span style={{ color: FAINT }}>-</span>}
               </span>
-              <span className="num" style={{ width: COL.date, flexShrink: 0, fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>
+              <span className="num" style={{ width: COL.count, flexShrink: 0, fontSize: 13, color: r.report_count ? TEXT : FAINT, textAlign: 'right' }}>
+                {r.report_count}
+              </span>
+              <span className="cs-created num" style={{ width: COL.created, flexShrink: 0, fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>
                 {kstYmd(r.created_at)}
               </span>
               <span style={{ width: COL.write, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
                 <Link
                   href={`/contact/semi/${r.project_id}/write`}
+                  onClick={e => e.stopPropagation()}
+                  onKeyDown={e => e.stopPropagation()}
                   style={{ ...btnGhost(), padding: '5px 10px', fontSize: 12, textDecoration: 'none' }}
                 >
                   보고서 작성
@@ -208,32 +270,40 @@ export default function ContactSemiPage() {
   )
 }
 
+/** 남는 폭을 나눠 쓰는 글자 칸. 한 줄로 자르고 넘치면 말줄임. */
+function cellText(flex: number, color: string) {
+  return {
+    flex, minWidth: 0, fontSize: 13, color,
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  } as const
+}
+
 // ── 새 Project 모달 ─────────────────────────────────────────────────
 // 의뢰서의 「기존 번호 등록」 모달(app/inquiries/page.tsx)과 같은 틀이다.
-// 받는 칸은 등록표에서 storage 가 'project' 인 것뿐(고객사·사업장/부서·Project/구매안건).
-// 번호는 화면이 미리 보여 주지 않는다 — 저장할 때 서버가 발급한다(미리 보여 준 번호는 다른 사람이 먼저 가져갈 수 있다).
+// 받는 칸: Project 번호(직접 입력, 필수) + 등록표에서 storage 가 'project' 인 칸(고객사·사업장/부서·Project/구매안건).
+// 번호 형식은 보지 않는다. 겹치면(대소문자 무시) 서버가 번호 칸 오류로 돌려준다.
 
-const fieldStyle: React.CSSProperties = {
-  width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: 6,
-  fontSize: 13, color: TEXT, background: CARD_BG, outline: 'none', boxSizing: 'border-box',
-  fontFamily: 'inherit',
-}
+type ModalKey = FieldKey | typeof PROJECT_NO_KEY
+
 const labelStyle: React.CSSProperties = {
   fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 5, display: 'block',
 }
 
-/** 등록표 검증에서 Project 칸의 오류만 골라낸다(라우트와 같은 규칙). */
-function projectErrors(values: Record<FieldKey, string>): Partial<Record<FieldKey, string>> {
+/** 번호 + 등록표 검증에서 Project 칸 오류만 골라낸다(라우트와 같은 규칙). */
+function projectErrors(projectNo: string, values: Record<FieldKey, string>): Partial<Record<ModalKey, string>> {
+  const out: Partial<Record<ModalKey, string>> = {}
+  const noErr = validateProjectNo(projectNo)
+  if (noErr) out[PROJECT_NO_KEY] = noErr
   const checked = validateReport(values, [], { noAction: true })
-  const out: Partial<Record<FieldKey, string>> = {}
   for (const k of PROJECT_KEYS) if (checked.errors[k]) out[k] = checked.errors[k]
   return out
 }
 
 function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const toast = useToast()
+  const [projectNo, setProjectNo] = useState('')
   const [values, setValues] = useState<Record<FieldKey, string>>(() => emptyInput())
-  const { errors, setErrors, clearError, validate } = useFieldErrors<FieldKey>()
+  const { errors, setErrors, clearError, validate } = useFieldErrors<ModalKey>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -244,11 +314,11 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
 
   const submit = async () => {
     if (busy) return
-    if (!validate(projectErrors(values))) return
+    if (!validate(projectErrors(projectNo, values))) return
     setBusy(true)
     setError('')
     try {
-      const body: Record<string, string> = {}
+      const body: Record<string, string> = { [PROJECT_NO_KEY]: projectNo }
       for (const k of PROJECT_KEYS) body[k] = values[k]
       const res = await fetch('/api/semi-contact/project', {
         method: 'POST',
@@ -257,9 +327,10 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        // 칸별 오류는 그 칸 아래에, 나머지는 모달 아래 상자에 보인다.
-        if (json.fieldErrors && typeof json.fieldErrors === 'object') setErrors(json.fieldErrors)
-        setError(json.error || `Project 를 만들지 못했습니다 (${res.status})`)
+        // 칸별 오류는 그 칸 아래에, 나머지는 모달 아래 상자에 보인다. 번호 중복은 번호 칸 아래에만 보인다.
+        const fe = json.fieldErrors && typeof json.fieldErrors === 'object' ? json.fieldErrors : null
+        if (fe) setErrors(fe)
+        if (!fe) setError(json.error || `Project 를 만들지 못했습니다 (${res.status})`)
         console.error('[contact/semi] Project 만들기 실패', { status: res.status, error: json })
         return
       }
@@ -274,6 +345,19 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
     }
   }
 
+  const input = (id: string, value: string, onChange: (v: string) => void, max: number, err?: string, autoFocus?: boolean) => (
+    <input
+      id={id}
+      value={value}
+      maxLength={max}
+      autoFocus={autoFocus}
+      onChange={e => onChange(e.target.value)}
+      onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit() }}
+      disabled={busy}
+      style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', ...(err ? { border: errBorder } : null) }}
+    />
+  )
+
   return (
     <ModalOverlay onClose={busy ? () => {} : onClose}>
       <div style={{
@@ -284,8 +368,10 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
           <span style={cardTitle}>새 Project</span>
         </div>
 
-        <div style={{ fontSize: 12, color: SUB, lineHeight: 1.6, marginBottom: 12 }}>
-          Project 번호(PRJ-연도-순번)는 저장할 때 발급됩니다.
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle} htmlFor="np-project_no">{PROJECT_NO_LABEL}</label>
+          {input('np-project_no', projectNo, v => { setProjectNo(v); clearError(PROJECT_NO_KEY) }, PROJECT_NO_MAX, errors[PROJECT_NO_KEY], true)}
+          <FieldError message={errors[PROJECT_NO_KEY]} />
         </div>
 
         {PROJECT_KEYS.map(k => {
@@ -297,15 +383,7 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
                 {f.label}
                 {!f.required && <span style={{ fontWeight: 500 }}> (선택)</span>}
               </label>
-              <input
-                id={id}
-                value={values[k]}
-                maxLength={PROJECT_TEXT_MAX}
-                onChange={e => change(k, e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit() }}
-                disabled={busy}
-                style={{ ...fieldStyle, border: errors[k] ? errBorder : fieldStyle.border }}
-              />
+              {input(id, values[k], v => change(k, v), PROJECT_TEXT_MAX, errors[k])}
               <FieldError message={errors[k]} />
             </div>
           )
@@ -329,12 +407,4 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
       </div>
     </ModalOverlay>
   )
-}
-
-/** 남는 폭을 나눠 쓰는 글자 칸. 한 줄로 자르고 넘치면 말줄임. */
-function cellText(flex: number, color: string) {
-  return {
-    flex, minWidth: 0, fontSize: 13, color,
-    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-  } as const
 }

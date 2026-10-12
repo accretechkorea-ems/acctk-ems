@@ -73,6 +73,15 @@ function colWidthOf(def: FieldDef): number {
   return 18
 }
 
+/**
+ * 엑셀 시트 이름 — 31자, : \ / ? * [ ] 금지, 앞뒤 작은따옴표 금지(어기면 exceljs 가 예외를 던진다).
+ * Project 번호는 사람이 적는 자유 형식이라 무엇이든 올 수 있어 여기서 다듬는다. 남는 것이 없으면 '보고서'.
+ */
+function sheetNameOf(raw: string): string {
+  const s = raw.replace(/[:\\/?*[\]]/g, '-').replace(/^'+|'+$/g, '').trim().slice(0, 31).trim()
+  return s || '보고서'
+}
+
 /** 빈 값은 칸을 비워 둔다(가공 금지). */
 const put = (cell: Cell, v: string) => { if (v !== '') cell.value = v }
 
@@ -105,7 +114,7 @@ export function buildReportSheet(
 ): Worksheet {
   const { project, report } = data
   const input = fromStorage(report.row, projectInput(project))
-  const ws = wb.addWorksheet(`${project.project_no} ${input.contact_date}`.slice(0, 31))
+  const ws = wb.addWorksheet(sheetNameOf(`${project.project_no} ${input.contact_date}`))
   ws.columns = A_COLS.map(width => ({ width }))
 
   /** 섹션 제목 줄(A~G 병합). */

@@ -40,7 +40,9 @@ import {
   actionFromStorage, changedFields, emptyInput, fromStorage, validateReport,
   type ActionInput, type FieldDef, type FieldKey, type ReportInput,
 } from '@/lib/semiContact'
-import { PROJECT_KEYS, PROJECT_TEXT_MAX } from '@/lib/semiContact/project'
+import {
+  PROJECT_KEYS, PROJECT_NO_KEY, PROJECT_NO_LABEL, PROJECT_NO_MAX, PROJECT_TEXT_MAX, validateProjectNo,
+} from '@/lib/semiContact/project'
 import { contactSequence, seqLabel } from '@/lib/semiContact/sequence'
 
 // ── 배치(작성 화면과 같다) ──────────────────────────────────────────────
@@ -800,8 +802,8 @@ function ReadField({ def, value, changed, prevValue, big }: {
 }
 
 // ── Project 정보 수정 모달 ─────────────────────────────────────────────
-// 목록의 「새 Project」 모달과 같은 틀·같은 검증(등록표 검증에서 Project 칸 오류만, 길이 상한 PROJECT_TEXT_MAX).
-// Project 번호는 고칠 수 없어 머리에 보여 주기만 한다.
+// 목록의 「새 Project」 모달과 같은 틀·같은 검증(번호: validateProjectNo, 나머지: 등록표 검증에서 Project 칸 오류만,
+// 길이 상한 PROJECT_TEXT_MAX). 번호도 고칠 수 있다 — 겹치면(대소문자 무시, 자기 자신 제외) 서버가 번호 칸 오류로 돌려준다.
 
 const fieldStyle: CSSProperties = {
   width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: 6,
@@ -809,9 +811,13 @@ const fieldStyle: CSSProperties = {
   fontFamily: 'inherit',
 }
 
-function projectErrors(values: Record<FieldKey, string>): Partial<Record<FieldKey, string>> {
+type ModalKey = FieldKey | typeof PROJECT_NO_KEY
+
+function projectErrors(projectNo: string, values: Record<FieldKey, string>): Partial<Record<ModalKey, string>> {
+  const out: Partial<Record<ModalKey, string>> = {}
+  const noErr = validateProjectNo(projectNo)
+  if (noErr) out[PROJECT_NO_KEY] = noErr
   const checked = validateReport(values, [], { noAction: true })
-  const out: Partial<Record<FieldKey, string>> = {}
   for (const k of PROJECT_KEYS) if (checked.errors[k]) out[k] = checked.errors[k]
   return out
 }
@@ -819,13 +825,14 @@ function projectErrors(values: Record<FieldKey, string>): Partial<Record<FieldKe
 function ProjectEditModal({ project, onClose, onSaved }: {
   project: Project
   onClose: () => void
-  onSaved: (p: Pick<Project, 'customer_name' | 'site_dept' | 'title'>) => void
+  onSaved: (p: Pick<Project, 'project_no' | 'customer_name' | 'site_dept' | 'title'>) => void
 }) {
   const toast = useToast()
+  const [projectNo, setProjectNo] = useState(project.project_no)
   const [values, setValues] = useState<Record<FieldKey, string>>(() => ({
     ...emptyInput(), customer_name: project.customer_name, site_dept: project.site_dept ?? '', title: project.title,
   }))
-  const { errors, setErrors, clearError, validate } = useFieldErrors<FieldKey>()
+  const { errors, setErrors, clearError, validate } = useFieldErrors<ModalKey>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -836,7 +843,7 @@ function ProjectEditModal({ project, onClose, onSaved }: {
 
   const submit = async () => {
     if (busy) return
-    if (!validate(projectErrors(values))) return
+    if (!validate(projectErrors(projectNo, values))) return
     setBusy(true)
     setError('')
     try {
@@ -845,18 +852,21 @@ function ProjectEditModal({ project, onClose, onSaved }: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project_id: project.project_id,
+          [PROJECT_NO_KEY]: projectNo,
           customer_name: values.customer_name, site_dept: values.site_dept, title: values.title,
         }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        if (json.fieldErrors && typeof json.fieldErrors === 'object') setErrors(json.fieldErrors)
-        setError(json.error || `Project 정보를 수정하지 못했습니다 (${res.status})`)
+        // 칸별 오류(번호 중복 포함)는 그 칸 아래에만, 그 밖의 오류는 모달 아래 상자에 보인다.
+        const fe = json.fieldErrors && typeof json.fieldErrors === 'object' ? json.fieldErrors : null
+        if (fe) setErrors(fe)
+        if (!fe) setError(json.error || `Project 정보를 수정하지 못했습니다 (${res.status})`)
         console.error('[contact/semi/detail] Project 정보 수정 실패', { status: res.status, error: json })
         return
       }
       const p = json.project ?? {}
-      onSaved({ customer_name: p.customer_name, site_dept: p.site_dept ?? null, title: p.title })
+      onSaved({ project_no: p.project_no, customer_name: p.customer_name, site_dept: p.site_dept ?? null, title: p.title })
       toast.success('Project 정보를 수정했습니다')
       onClose()
     } catch (e) {
@@ -875,7 +885,14 @@ function ProjectEditModal({ project, onClose, onSaved }: {
       }}>
         <div style={cardHeader}>
           <span style={cardTitle}>Project 정보 수정</span>
-          <span className="num" style={{ ...countBadge, color: BLUE, marginLeft: 'auto' }}>{project.project_no}</span>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle} htmlFor="pe-project_no">{PROJECT_NO_LABEL}</label>
+          <input id="pe-project_no" value={projectNo} maxLength={PROJECT_NO_MAX} disabled={busy}
+            onChange={e => { setProjectNo(e.target.value); clearError(PROJECT_NO_KEY) }}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit() }}
+            style={{ ...fieldStyle, border: errors[PROJECT_NO_KEY] ? errBorder : fieldStyle.border }} />
+          <FieldError message={errors[PROJECT_NO_KEY]} />
         </div>
         {PROJECT_KEYS.map(k => {
           const f = FIELD_BY_KEY[k]

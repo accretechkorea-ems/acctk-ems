@@ -1,6 +1,6 @@
 // 반도체 고객 접촉 보고 — 엑셀 내려받기.
 //   GET /api/semi-contact/export?project_id=<id>              → 전체 이력(시트: 이력 · Action · 요약)
-//   GET /api/semi-contact/export?project_id=<id>&report_id=<id> → 보고서 한 장(파일명 PRJ-…_#n_접촉일.xlsx)
+//   GET /api/semi-contact/export?project_id=<id>&report_id=<id> → 보고서 한 장(파일명 <Project 번호>_#n_접촉일.xlsx)
 //
 // 접근 검사는 다른 접촉 보고서 라우트와 같은 authorizeSemiContact(lib/semiContactServer.ts) — 401·403 형식도 같다.
 // 데이터는 service role 로 읽는다(Project 상세 화면과 같은 세 표, 작성자 이름은 author FK 임베드).
@@ -36,7 +36,20 @@ function disposition(name: string): string {
 }
 
 /** 파일명에 쓸 수 없는 글자만 바꾼다. */
-const safeName = (s: string) => s.replace(/[\\/:*?"<>|]/g, '-')
+/**
+ * 파일명에 쓸 수 있게 다듬는다. Project 번호는 사람이 적는 자유 형식이라 무엇이든 올 수 있다 —
+ * 금지 문자(\\ / : * ? " < > |)·제어 문자는 '-' 로, 끝의 점·공백은 지우고(Windows 가 거부), 너무 길면 자른다.
+ * 남는 것이 없으면 'project'.
+ */
+const safeName = (s: string) => {
+  const cleaned = s
+    .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80)
+    .replace(/[. ]+$/, '')
+  return cleaned || 'project'
+}
 
 type ReportRow = Record<string, unknown> & { report_id: number; author: { name: string | null } | null }
 type ActionRow = Record<string, unknown> & { action_id: number; report_id: number }
