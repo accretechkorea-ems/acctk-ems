@@ -15,6 +15,7 @@
 // ※ permissions.ts 와 서로를 import 한다(순환). 양쪽 다 상대를 함수 안에서만 부르고
 //   모듈 최상위에서는 쓰지 않으므로 초기화 순서에 영향받지 않는다.
 import { canViewAll, canViewMenu, type EngineerLike } from './permissions'
+import type { Division } from './division'
 
 /** RLS 가 요구하는 데이터 영역. has_team_perm(perm) 의 인자와 같은 값이다. */
 export type DataArea = 'customers' | 'quote' | 'sales_mgmt'
@@ -48,7 +49,16 @@ export type MenuPerm = {
    * 그래서 팀 관리 화면의 체크 대상에는 그대로 남는다(permKey 와 다른 점).
    */
   menuPublic?: true
+  /**
+   * 이 메뉴가 속한 사업부(lib/division.ts). 사이드바는 현재 사업부의 메뉴와 공통 메뉴만 보여 준다.
+   * 비워 두면 menuDivision 이 정한다 — 공개 메뉴(public·menuPublic)는 공통, 나머지는 계측.
+   * 그래서 지금은 반도체 메뉴에만 적는다.
+   */
+  division?: Division
 }
+
+/** 메뉴의 사업부. 공통 메뉴는 어느 사업부에서나 보인다. */
+export type MenuDivision = Division | '공통'
 
 /**
  * 묶음 정의.
@@ -139,7 +149,7 @@ export const MENU_PERMS: MenuPerm[] = [
   // 이 메뉴만 켠 팀(반도체)은 teams.can_view_* 가 모두 false 로 남아야 계측 데이터가 열리지 않는다.
   // semi_* 표의 RLS 는 teams 컬럼이 아니라 team_permissions 를 직접 보는 has_menu_perm('contact_semi') 로 판정한다
   // (menu_perm_function.sql · semi_contact_schema.sql).
-  { key: 'contact_semi', label: '접촉 보고서', group: '영업', path: '/contact/semi', icon: 'clipboard', order: 40, data: [] },
+  { key: 'contact_semi', label: '접촉 보고서', group: '영업', path: '/contact/semi', icon: 'clipboard', order: 40, data: [], division: '반도체' },
 
   // ── 주문 ──
   { key: 'purchase', label: '발주', group: '주문', path: '/purchase', icon: 'package', order: 10, data: ['quote', 'sales_mgmt'] },
@@ -263,10 +273,28 @@ export function checkableGroups(): { group: MenuGroup; title: string; items: Men
     .filter(g => g.items.length > 0)
 }
 
-/** 한 묶음에서 이 사람에게 보이는 항목. 순서(order)대로 돌려준다. */
-export function visibleMenus(group: MenuGroup, engineer?: EngineerLike | null): MenuPerm[] {
+/**
+ * 메뉴의 사업부. division 을 적었으면 그 값, 아니면 공개 메뉴(홈·알림·전자결재·건의사항)는 공통,
+ * 나머지는 계측이다 — 반도체 메뉴가 생기기 전의 메뉴는 전부 계측 것이라 하나하나 적지 않는다.
+ */
+export function menuDivision(m: MenuPerm): MenuDivision {
+  if (m.division) return m.division
+  return (m.public || m.menuPublic) ? '공통' : '계측'
+}
+
+/**
+ * 한 묶음에서 이 사람에게 보이는 항목. 순서(order)대로 돌려준다.
+ * division 을 주면 그 사업부 메뉴와 공통 메뉴만 남긴다(사이드바가 현재 사업부를 넘긴다).
+ * 주지 않으면 사업부로 거르지 않는다 — 권한만 본다(예전 동작).
+ */
+export function visibleMenus(group: MenuGroup, engineer?: EngineerLike | null, division?: Division): MenuPerm[] {
   return MENU_PERMS
     .filter(m => m.group === group && (m.menuPublic ? canViewAll(engineer) : canViewMenu(engineer, m.permKey ?? m.key)))
+    .filter(m => {
+      if (!division) return true
+      const d = menuDivision(m)
+      return d === '공통' || d === division
+    })
     .sort((a, b) => a.order - b.order)
 }
 

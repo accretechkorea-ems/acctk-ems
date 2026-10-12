@@ -11,6 +11,7 @@
 // ※ menuPerms.ts 와 서로를 import 한다(순환). 양쪽 다 상대를 함수 안에서만 부르고
 //   모듈 최상위에서는 쓰지 않으므로 초기화 순서에 영향받지 않는다.
 import { deriveArea, MENU_BY_KEY, type PermArea } from './menuPerms'
+import type { Division } from './division'
 
 // engineers.permission_level 의 값. 'manager'(팀장)는 폐지했다.
 // 남아 있는 옛 데이터를 만나도 member 와 똑같이 취급되어 깨지지 않는다.
@@ -22,6 +23,8 @@ export type PermissionLevel = 'superadmin' | 'member'
  */
 export type TeamPerm = {
   menus: Set<string>
+  /** 팀의 사업부(teams.division). 값이 없으면 로더가 '계측'으로 채운다. 화면 표시용 — 권한 판정에는 쓰지 않는다. */
+  division: Division
 }
 
 // 판정 함수에 넘기는 최소 형태. 실제 engineer 객체(추가 필드 다수)를 그대로 넘길 수 있도록 느슨하게 둔다.

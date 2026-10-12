@@ -12,8 +12,10 @@
 
 import { createClient } from '@/lib/supabase/client'
 import type { EngineerLike, TeamPerm } from '@/lib/permissions'
+import { toDivision } from '@/lib/division'
 
-type TeamRow = { id: number | null; name: string | null }
+// division — 팀의 사업부(teams.division). 사이드바가 현재 사업부를 정하는 데 쓴다. 비면 '계측'.
+type TeamRow = { id: number | null; name: string | null; division: string | null }
 type PermRow = { team_id: number | null; perm_key: string | null }
 
 // 진행 중인 요청을 공유해, 여러 화면이 동시에 떠도 조회는 한 번만 나간다.
@@ -29,7 +31,7 @@ export function loadTeamPerms(): Promise<Map<string, TeamPerm>> {
   cache = (async () => {
     const supabase = createClient()
     const [teamsRes, permsRes] = await Promise.all([
-      supabase.from('teams').select('id, name'),
+      supabase.from('teams').select('id, name, division'),
       supabase.from('team_permissions').select('team_id, perm_key'),
     ])
     const error = teamsRes.error ?? permsRes.error
@@ -51,7 +53,7 @@ function buildMap(teams: TeamRow[] | null, perms: PermRow[] | null): Map<string,
   for (const t of teams ?? []) {
     if (t.id == null || !t.name) continue
     nameOf.set(t.id, t.name)
-    map.set(t.name, { menus: new Set<string>() })
+    map.set(t.name, { menus: new Set<string>(), division: toDivision(t.division) })
   }
   for (const p of perms ?? []) {
     if (p.team_id == null || !p.perm_key) continue
