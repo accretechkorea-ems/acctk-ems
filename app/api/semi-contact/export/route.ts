@@ -1,6 +1,6 @@
 // 반도체 고객 접촉 보고 — 엑셀 내려받기.
 //   GET /api/semi-contact/export?project_id=<id>              → 전체 이력(시트: 이력 · Action · 요약)
-//   GET /api/semi-contact/export?project_id=<id>&report_id=<id> → 보고서 한 장
+//   GET /api/semi-contact/export?project_id=<id>&report_id=<id> → 보고서 한 장(파일명 PRJ-…_#n_접촉일.xlsx)
 //
 // 접근 검사는 다른 접촉 보고서 라우트와 같은 authorizeSemiContact(lib/semiContactServer.ts) — 401·403 형식도 같다.
 // 데이터는 service role 로 읽는다(Project 상세 화면과 같은 세 표, 작성자 이름은 author FK 임베드).
@@ -16,6 +16,7 @@ import {
   buildHistoryWorkbook, buildReportSheet,
   type ExportAction, type ExportProject, type ExportReport,
 } from '@/lib/semiContact/excel'
+import { contactSequence } from '@/lib/semiContact/sequence'
 
 const TAG = 'semi-contact/export'
 
@@ -103,9 +104,16 @@ async function handle(req: NextRequest) {
   if (reportId !== null) {
     const report = reports.find(x => x.report_id === reportId)
     if (!report) return bad('보고서를 찾을 수 없습니다.', 404)
-    buildReportSheet(wb, { project, report, actions })
     const date = typeof report.row.contact_date === 'string' ? report.row.contact_date : ''
-    fileName = `${safeName(project.project_no)}_${date}.xlsx`
+    // 접촉 차수 — 화면과 같은 계산(이 Project 의 보고서 전체를 접촉일·report_id 오름차순으로 센다).
+    const seq = contactSequence(reports.map(x => ({
+      report_id: x.report_id,
+      contact_date: typeof x.row.contact_date === 'string' ? x.row.contact_date : '',
+    }))).get(report.report_id)
+    buildReportSheet(wb, { project, report, actions, seq })
+    fileName = seq
+      ? `${safeName(project.project_no)}_#${seq}_${date}.xlsx`
+      : `${safeName(project.project_no)}_${date}.xlsx`
   } else {
     buildHistoryWorkbook(wb, { project, reports, actions, today: todayKST() })
     fileName = `${safeName(project.project_no)}_이력.xlsx`

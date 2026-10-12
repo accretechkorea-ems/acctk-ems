@@ -10,6 +10,7 @@
 //      「Action」(미완료 + 기한 지남은 빨간 글씨) · 「요약」.
 //
 // 값은 가공하지 않는다 — 날짜는 'YYYY-MM-DD' 문자열 그대로, 빈 값은 빈 칸. 칸 이름·섹션·순서는 등록표(fields.ts)를 따른다.
+// 접촉 차수(#n)는 화면과 같은 contactSequence(sequence.ts)로 매긴다 — A 맨 위, B 「이력」 맨 앞 열, 「Action」 접촉 열.
 
 import type { Cell, Workbook, Worksheet } from 'exceljs'
 import {
@@ -19,6 +20,7 @@ import {
 import { changedFields } from './prefill'
 import { actionFromStorage, fromStorage } from './storage'
 import { PROJECT_KEYS } from './project'
+import { contactSequence, seqLabel } from './sequence'
 
 // ── 입력 모양 ────────────────────────────────────────────────────────
 export type ExportProject = { project_no: string; customer_name: string; site_dept: string | null; title: string }
@@ -99,7 +101,7 @@ const A_VALUE_WIDTH = A_COLS.slice(1).reduce((a, b) => a + b, 0)
 
 export function buildReportSheet(
   wb: Workbook,
-  data: { project: ExportProject; report: ExportReport; actions: ExportAction[] },
+  data: { project: ExportProject; report: ExportReport; actions: ExportAction[]; /** 접촉 차수(#n). 모르면 비워 둔다. */ seq?: number },
 ): Worksheet {
   const { project, report } = data
   const input = fromStorage(report.row, projectInput(project))
@@ -130,7 +132,7 @@ export function buildReportSheet(
   const field = (k: FieldKey) => pair(FIELD_BY_KEY[k].label, input[k])
 
   // 제목
-  const t = ws.addRow([`${project.project_no}  ${project.title}`])
+  const t = ws.addRow([[seqLabel(data.seq), project.project_no, project.title].filter(Boolean).join('  ')])
   ws.mergeCells(t.number, 1, t.number, 7)
   t.getCell(1).font = { bold: true, size: 14 }
   ws.addRow([])
@@ -203,22 +205,24 @@ export function buildHistoryWorkbook(
 
   // ── 이력 ──
   const hs = wb.addWorksheet('이력')
+  const seqOf = contactSequence(asc.map(x => ({ report_id: x.r.report_id, contact_date: x.input.contact_date })))
   const headers = [
+    '차수',
     FIELD_BY_KEY.contact_date.label, FIELD_BY_KEY.contact_method.label, AUTHOR_FIELD.label,
     ...HISTORY_FIELD_ORDER.slice(2).map(k => FIELD_BY_KEY[k].label),
   ]
-  const widths = [12, 12, 10, ...HISTORY_FIELD_ORDER.slice(2).map(k => colWidthOf(FIELD_BY_KEY[k]))]
+  const widths = [7, 12, 12, 10, ...HISTORY_FIELD_ORDER.slice(2).map(k => colWidthOf(FIELD_BY_KEY[k]))]
   hs.columns = widths.map(width => ({ width }))
   const hh = hs.addRow(headers)
   hh.eachCell(c => { c.font = { bold: true }; fill(c, HEAD_BG); thin(c); c.alignment = { wrapText: true, vertical: 'middle' } })
   hh.height = 30
-  hs.views = [{ state: 'frozen', xSplit: 3, ySplit: 1 }]
+  hs.views = [{ state: 'frozen', xSplit: 4, ySplit: 1 }]
   hs.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } }
 
   let before: ReportInput | null = null
   for (const { r, input } of asc) {
     const changed = new Set(changedFields(before, input))
-    const values = [input.contact_date, input.contact_method, r.authorName, ...HISTORY_FIELD_ORDER.slice(2).map(k => input[k])]
+    const values = [seqLabel(seqOf.get(r.report_id)), input.contact_date, input.contact_method, r.authorName, ...HISTORY_FIELD_ORDER.slice(2).map(k => input[k])]
     const row = hs.addRow([])
     let height = LINE_HEIGHT
     values.forEach((v, i) => {
@@ -226,7 +230,8 @@ export function buildHistoryWorkbook(
       put(cell, v)
       thin(cell); wrapTop(cell)
       height = Math.max(height, heightFor(v, widths[i]))
-      const key = i === 0 ? 'contact_date' : i === 1 ? 'contact_method' : i === 2 ? null : HISTORY_FIELD_ORDER[i - 1]
+      // 칸 i → 등록표 키: 0 차수 · 1 접촉일 · 2 접촉방법 · 3 작성자 · 4~ 나머지 34칸
+      const key = i === 1 ? 'contact_date' : i === 2 ? 'contact_method' : i <= 3 ? null : HISTORY_FIELD_ORDER[i - 2]
       if (key && changed.has(key as FieldKey)) fill(cell, CHANGED_BG)
     })
     row.height = height
@@ -236,7 +241,7 @@ export function buildHistoryWorkbook(
   // ── Action ──
   const as = wb.addWorksheet('Action')
   const aHead = [FIELD_BY_KEY.contact_date.label, ACTION_LABELS.what, ACTION_LABELS.owner, ACTION_LABELS.due_date, ACTION_LABELS.status, ACTION_LABELS.priority, ACTION_LABELS.note]
-  const aWidths = [12, 40, 16, 12, 12, 10, 30]
+  const aWidths = [18, 40, 16, 12, 12, 10, 30]
   as.columns = aWidths.map(width => ({ width }))
   const ah = as.addRow(aHead)
   ah.eachCell(c => { c.font = { bold: true }; fill(c, HEAD_BG); thin(c) })
@@ -244,15 +249,21 @@ export function buildHistoryWorkbook(
   as.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: aHead.length } }
 
   const dateOf = new Map(asc.map(x => [x.r.report_id, x.input.contact_date]))
+  /** 접촉 열 표시 「#3 (2026-10-12)」. 정렬은 날짜로 한다. */
+  const contactOf = (reportId: number) => {
+    const d = dateOf.get(reportId) ?? ''
+    const n = seqLabel(seqOf.get(reportId))
+    return n ? `${n} (${d})` : d
+  }
   const actions = data.actions
-    .map(a => ({ a, x: actionFromStorage(a.row), date: dateOf.get(a.report_id) ?? '' }))
+    .map(a => ({ a, x: actionFromStorage(a.row), date: dateOf.get(a.report_id) ?? '', contact: contactOf(a.report_id) }))
     .sort((p, q) => p.date.localeCompare(q.date) || p.x.due_date.localeCompare(q.x.due_date) || p.a.action_id - q.a.action_id)
   let open = 0
-  for (const { x, date } of actions) {
+  for (const { x, contact } of actions) {
     const isOpen = x.status !== DONE_STATUS
     if (isOpen) open++
     const overdue = isOpen && !!x.due_date && x.due_date < today
-    const vals = [date, x.what, x.owner, x.due_date, x.status, x.priority, x.note]
+    const vals = [contact, x.what, x.owner, x.due_date, x.status, x.priority, x.note]
     const row = as.addRow([])
     vals.forEach((v, i) => {
       const cell = row.getCell(i + 1)

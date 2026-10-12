@@ -242,3 +242,83 @@ async function handleDelete(req: NextRequest) {
   console.log(`[${TAG}] 삭제`, { projectId, projectNo: row.project_no, reports, actions, by: caller.engineer_id })
   return NextResponse.json({ deleted: { reports, actions } })
 }
+
+// ════════════════════════════════════════════════════════════════════
+// 정보 수정 — PATCH /api/semi-contact/project
+//   body {project_id, customer_name, site_dept, title}. Project 번호(project_no)는 고칠 수 없다.
+//
+// 허용: 접근 검사(authorize) 통과 + (Project 를 만든 본인 또는 superadmin). 아니면 403, 없으면 404.
+// 검증은 만들 때(POST)와 같다 — 등록표 검증(validateReport)에서 Project 칸 오류만 골라내고, 길이 상한은 PROJECT_TEXT_MAX.
+// ════════════════════════════════════════════════════════════════════
+export async function PATCH(req: NextRequest) {
+  try {
+    return await handlePatch(req)
+  } catch (e) {
+    console.error(`[${TAG}] PATCH 처리 중 예외`, e)
+    return bad(`Project 를 수정하는 중 오류: ${reasonOf(e)}`, 500)
+  }
+}
+
+async function handlePatch(req: NextRequest) {
+  if (!envReady()) {
+    console.error(`[${TAG}] 환경 변수 누락 — SUPABASE URL 또는 SERVICE_ROLE_KEY`)
+    return bad('서버 설정 오류 — 환경 변수가 없습니다. 관리자에게 알려주세요.', 500)
+  }
+  const auth = await authorize()
+  if (auth.error) return auth.error
+  const caller = auth.caller
+
+  const body = await req.json().catch(() => ({})) as Record<string, unknown>
+  const projectId = Number(body.project_id)
+  if (!Number.isInteger(projectId) || projectId <= 0) return bad('Project 가 지정되지 않았습니다.')
+
+  const sb = admin()
+  const { data: found, error: findErr } = await sb
+    .from('semi_projects')
+    .select('project_id, created_by')
+    .eq('project_id', projectId)
+    .maybeSingle()
+  if (findErr) {
+    console.error(`[${TAG}] project lookup failed`, { projectId, error: findErr })
+    return bad('Project 를 확인하지 못했습니다.', 500)
+  }
+  if (!found) return bad('Project 를 찾을 수 없습니다.', 404)
+  if ((found as { created_by: number }).created_by !== caller.engineer_id && !isSuperAdmin(caller)) {
+    return bad('Project 를 만든 본인이나 관리자만 수정할 수 있습니다.', 403)
+  }
+
+  // Project 칸만 꺼낸다 — project_no 등 다른 키는 무시한다.
+  const input = emptyInput()
+  for (const k of PROJECT_KEYS) {
+    const v = body[k]
+    input[k] = typeof v === 'string' ? v : ''
+  }
+  const checked = validateReport(input, [], { noAction: true })
+  const fieldErrors: Partial<Record<FieldKey, string>> = {}
+  for (const k of PROJECT_KEYS) {
+    const msg = checked.errors[k]
+    if (msg) fieldErrors[k] = msg
+    else if (input[k].trim().length > PROJECT_TEXT_MAX) fieldErrors[k] = `${PROJECT_TEXT_MAX}자까지 입력할 수 있습니다`
+  }
+  if (Object.keys(fieldErrors).length > 0) return bad('입력값을 확인해주세요.', 400, { fieldErrors })
+
+  const project = toStorage(input).project
+  const { data: saved, error: upErr } = await sb
+    .from('semi_projects')
+    .update({
+      customer_name: project.customer_name,
+      site_dept: project.site_dept,
+      title: project.title,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('project_id', projectId)
+    .select('project_id, project_no, customer_name, site_dept, title')
+    .single()
+  if (upErr || !saved) {
+    console.error(`[${TAG}] project update failed`, { projectId, error: upErr })
+    return bad(`Project 를 수정하지 못했습니다: ${reasonOf(upErr)}`, 500)
+  }
+
+  console.log(`[${TAG}] 정보 수정`, { projectId, by: caller.engineer_id })
+  return NextResponse.json({ project: saved })
+}

@@ -15,12 +15,20 @@
 // 서버가 돌려준 fieldErrors·actionErrors 도 같은 자리에 붙인다.
 //
 // 진입은 usePageGuard 가 판정한다(경로 → contact_semi → canAccessSemiContact).
+//
+// 수정 모드 — 주소에 ?report_id=<id> 가 있으면 그 보고서를 고친다(같은 화면을 쓴다).
+//   · 미리 채우기 대신 그 보고서의 저장된 값과 Action(action_id 포함)을 브라우저 세션으로 읽는다.
+//   · 「변경됨」은 그 보고서의 직전 보고서((contact_date, report_id) 가 더 앞인 것 중 마지막) 대비로 계산한다.
+//   · 작성자 본인이나 superadmin 만 연다(서버 PATCH 와 같은 규칙). 임시저장 키는 semi-draft-edit:<engineerId>:<reportId>.
+//   · 저장은 PATCH /api/semi-contact/report, 성공하면 Project 상세로 돌아가 그 보고서를 고른 채 연다.
+// 헤더의 접촉 차수(#n) — 새 보고서는 기존 건수 + 1, 수정은 그 보고서보다 앞선 건수 + 1(head count 한 번).
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import Link from 'next/link'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { usePageGuard } from '@/hooks/usePageGuard'
+import { isSuperAdmin } from '@/lib/permissions'
 import AccessGate from '@/components/common/AccessGate'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
@@ -34,11 +42,12 @@ import { errorInfo } from '@/lib/errorInfo'
 import { loadTeamPerms } from '@/lib/teamPerms'
 import {
   ACTION_LABELS, ACTION_PRIORITIES, ACTION_STATUSES, FIELDS, FIELD_BY_KEY, FIELD_KEYS, SECTIONS,
-  changedFields, emptyAction, emptyInput, fromStorage, meaningfulActions, prefillFromPrevious, validateReport,
+  actionFromStorage, changedFields, emptyAction, emptyInput, fromStorage, meaningfulActions, prefillFromPrevious, validateReport,
   type ActionField, type ActionInput, type FieldDef, type FieldKey, type ReportInput,
 } from '@/lib/semiContact'
 import { PROJECT_KEYS } from '@/lib/semiContact/project'
-import { clearSemiDraft, loadSemiDraft, saveSemiDraft } from '@/lib/semiContact/draft'
+import { clearDraftAt, loadDraftAt, saveDraftAt, semiDraftKey, semiEditDraftKey } from '@/lib/semiContact/draft'
+import { seqLabel } from '@/lib/semiContact/sequence'
 
 // ── 배치 ─────────────────────────────────────────────────────────────
 /** 「이번 접촉」 상자. */
@@ -58,8 +67,8 @@ const INHERITED_GROUPS = SECTIONS
 const DRAFT_DELAY = 1000
 
 type Project = { project_id: number; project_no: string; customer_name: string; site_dept: string | null; title: string }
-/** 화면 안의 Action 줄. rid 는 React key·오류 자리용(저장하지 않는다). */
-type ActionRow = ActionInput & { rid: number }
+/** 화면 안의 Action 줄. rid 는 React key·오류 자리용(저장하지 않는다). action_id 는 수정 모드에서 기존 줄에만 있다. */
+type ActionRow = ActionInput & { rid: number; action_id?: number }
 type ActionErrors = Record<number, Partial<Record<ActionField, string>>>
 
 const fieldStyle: CSSProperties = {
@@ -76,15 +85,23 @@ function snapshotOf(values: ReportInput, actions: ActionRow[], noAction: boolean
   return JSON.stringify({ values, actions: actions.map(({ rid: _rid, ...a }) => a), noAction })
 }
 
-export default function SemiReportWritePage() {
+function SemiReportWriteInner() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
   const toast = useToast()
   const confirm = useConfirm()
   const params = useParams<{ projectId: string }>()
   const projectId = Number(params?.projectId)
+  const searchParams = useSearchParams()
+  const editParam = searchParams.get('report_id')
+  /** 수정 모드면 고칠 보고서 id, 새 보고서면 null. 주소의 값이 숫자가 아니면 아래 첫 읽기에서 안내한다. */
+  const editId = editParam !== null && Number.isInteger(Number(editParam)) && Number(editParam) > 0 ? Number(editParam) : null
   const { engineer, loading: guardLoading, authorized } = usePageGuard()
   const engineerId = engineer?.engineer_id ?? null
+  /** 임시저장 키 — 새 보고서는 Project 별, 수정은 보고서 별. */
+  const draftKey = engineerId == null ? null : editId !== null ? semiEditDraftKey(engineerId, editId) : semiDraftKey(engineerId, projectId)
+  /** 나가기·저장 뒤 돌아갈 곳 — 수정은 그 보고서를 고른 Project 상세, 새 보고서는 목록(종전 그대로). */
+  const backHref = editId !== null ? `/contact/semi/${projectId}?report=${editId}` : '/contact/semi'
 
   const [project, setProject] = useState<Project | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -102,9 +119,11 @@ export default function SemiReportWritePage() {
   const [draftLabel, setDraftLabel] = useState('')
   const [openGroups, setOpenGroups] = useState<Set<number>>(() => new Set())
   const [teamNames, setTeamNames] = useState<string[]>([])
+  /** 접촉 차수(#n). 세지 못했으면 null(표시하지 않는다). */
+  const [seqNo, setSeqNo] = useState<number | null>(null)
 
   const nextRid = useRef(1)
-  const newRow = (a?: Partial<ActionInput>): ActionRow => ({ ...emptyAction(), ...a, owner_id: null, rid: nextRid.current++ })
+  const newRow = (a?: Partial<ActionInput> & { action_id?: number }): ActionRow => ({ ...emptyAction(), ...a, owner_id: null, rid: nextRid.current++ })
   /** 저장 성공·확인 뒤 나가는 중 — 이탈 확인을 다시 띄우지 않는다. */
   const leaving = useRef(false)
   const scrollToError = useRef(false)
@@ -113,6 +132,7 @@ export default function SemiReportWritePage() {
   useEffect(() => {
     if (!authorized || engineerId == null) return
     if (!Number.isInteger(projectId) || projectId <= 0) { setLoadError('Project 주소가 올바르지 않습니다.'); return }
+    if (editParam !== null && editId === null) { setLoadError('보고서 주소가 올바르지 않습니다.'); return }
     let cancelled = false
     const load = async () => {
       const { data: p, error: pErr } = await supabase
@@ -129,31 +149,92 @@ export default function SemiReportWritePage() {
       const proj = p as Project
       const projInput = { customer_name: proj.customer_name, site_dept: proj.site_dept ?? '', title: proj.title }
 
-      // 직전 보고 = 같은 Project 에서 (contact_date desc, report_id desc) 첫 건(lib/semiContact/prefill.ts 의 규칙).
-      const { data: last, error: lErr } = await supabase
-        .from('semi_contact_reports')
-        .select('*')
-        .eq('project_id', projectId)
-        .order('contact_date', { ascending: false })
-        .order('report_id', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      if (cancelled) return
-      // 직전 보고를 못 읽으면 빈 값으로 시작한다(작성은 막지 않는다).
-      if (lErr) console.error('[contact/semi/write] 직전 보고서 조회 실패', errorInfo(lErr))
-      const prevInput = last ? fromStorage(last as Record<string, unknown>, projInput) : null
+      let base: ReportInput
+      let baseActions: ActionRow[]
+      let baseNoAction = false
+      let prevInput: ReportInput | null = null
+      let seq: number | null = null
 
-      const base = prefillFromPrevious(prevInput, projInput)
-      base.contact_date = todayKST()
-      const baseActions = [newRow()]
-      let v = base, a = baseActions, n = false
+      if (editId !== null) {
+        // ── 수정: 그 보고서의 저장된 값·Action, 그 보고서의 직전 보고서, 앞선 건수 ──
+        const { data: row, error: rErr } = await supabase
+          .from('semi_contact_reports').select('*')
+          .eq('report_id', editId).eq('project_id', projectId)
+          .maybeSingle()
+        if (cancelled) return
+        if (rErr || !row) {
+          if (rErr) console.error('[contact/semi/write] 보고서 조회 실패', errorInfo(rErr))
+          setLoadError(rErr ? `보고서를 불러오지 못했습니다: ${rErr.message}` : '보고서를 찾을 수 없습니다.')
+          return
+        }
+        const rep = row as Record<string, unknown>
+        // 화면 가드는 메뉴 권한만 본다 — 수정은 작성자 본인이나 superadmin 만(서버 PATCH 와 같은 규칙).
+        if (rep.author_id !== engineerId && !isSuperAdmin(engineer)) {
+          setLoadError('이 보고서는 작성자 본인이나 관리자만 수정할 수 있습니다.')
+          return
+        }
+        // 「앞선 보고서」 = (contact_date, report_id) 가 이 보고서보다 앞인 것. 직전 보고서와 차수 계산이 같은 기준을 쓴다.
+        const date = String(rep.contact_date ?? '')
+        const before = `contact_date.lt.${date},and(contact_date.eq.${date},report_id.lt.${editId})`
+        const [acts, last, cnt] = await Promise.all([
+          supabase.from('semi_actions').select('*').eq('report_id', editId).order('action_id', { ascending: true }),
+          supabase.from('semi_contact_reports').select('*').eq('project_id', projectId).or(before)
+            .order('contact_date', { ascending: false }).order('report_id', { ascending: false })
+            .limit(1).maybeSingle(),
+          supabase.from('semi_contact_reports').select('report_id', { count: 'exact', head: true })
+            .eq('project_id', projectId).or(before),
+        ])
+        if (cancelled) return
+        if (acts.error) {
+          console.error('[contact/semi/write] Action 조회 실패', errorInfo(acts.error))
+          setLoadError(`Action 을 불러오지 못했습니다: ${acts.error.message}`)
+          return
+        }
+        // 직전 보고서·건수를 못 읽어도 수정은 막지 않는다(변경 표시·차수만 빠진다).
+        if (last.error) console.error('[contact/semi/write] 직전 보고서 조회 실패', errorInfo(last.error))
+        if (cnt.error) console.error('[contact/semi/write] 차수 조회 실패', errorInfo(cnt.error))
+        base = fromStorage(rep, projInput)
+        const loaded = ((acts.data ?? []) as Record<string, unknown>[])
+          .map(x => newRow({ ...actionFromStorage(x), action_id: Number(x.action_id) }))
+        baseActions = loaded.length > 0 ? loaded : [newRow()]
+        const det = rep.detail
+        baseNoAction = !!det && typeof det === 'object' && (det as Record<string, unknown>).no_action === true
+        prevInput = last.data ? fromStorage(last.data as Record<string, unknown>, projInput) : null
+        seq = cnt.error ? null : (cnt.count ?? 0) + 1
+      } else {
+        // ── 새 보고서: 직전 보고 = 같은 Project 에서 (contact_date desc, report_id desc) 첫 건(prefill.ts 의 규칙) ──
+        const [lastRes, cnt] = await Promise.all([
+          supabase
+            .from('semi_contact_reports')
+            .select('*')
+            .eq('project_id', projectId)
+            .order('contact_date', { ascending: false })
+            .order('report_id', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase.from('semi_contact_reports').select('report_id', { count: 'exact', head: true }).eq('project_id', projectId),
+        ])
+        if (cancelled) return
+        // 직전 보고를 못 읽으면 빈 값으로 시작한다(작성은 막지 않는다).
+        if (lastRes.error) console.error('[contact/semi/write] 직전 보고서 조회 실패', errorInfo(lastRes.error))
+        if (cnt.error) console.error('[contact/semi/write] 차수 조회 실패', errorInfo(cnt.error))
+        prevInput = lastRes.data ? fromStorage(lastRes.data as Record<string, unknown>, projInput) : null
+        base = prefillFromPrevious(prevInput, projInput)
+        base.contact_date = todayKST()
+        baseActions = [newRow()]
+        seq = cnt.error ? null : (cnt.count ?? 0) + 1
+      }
 
-      const draft = loadSemiDraft(engineerId, projectId)
-      if (draft) {
+      let v = base, a = baseActions, n = baseNoAction
+
+      const draft = draftKey ? loadDraftAt(draftKey) : null
+      if (draft && draftKey) {
         const when = kstStamp(draft.savedAt)
         const resume = await confirm({
           title: '이어서 작성할까요?',
-          message: `임시저장된 보고서가 있습니다${when ? `(${when})` : ''}. 「버리기」를 누르면 지우고 새로 씁니다.`,
+          message: editId !== null
+            ? `이 보고서를 고치던 임시저장본이 있습니다${when ? `(${when})` : ''}. 「버리기」를 누르면 지우고 저장된 내용으로 시작합니다.`
+            : `임시저장된 보고서가 있습니다${when ? `(${when})` : ''}. 「버리기」를 누르면 지우고 새로 씁니다.`,
           confirmText: '이어서 작성',
           cancelText: '버리기',
         })
@@ -170,7 +251,7 @@ export default function SemiReportWritePage() {
           a = draft.actions.length > 0 ? draft.actions.map(x => newRow(x)) : baseActions
           n = draft.noAction
         } else {
-          clearSemiDraft(engineerId, projectId)
+          clearDraftAt(draftKey)
         }
       }
 
@@ -179,8 +260,10 @@ export default function SemiReportWritePage() {
       setValues(v)
       setActions(a)
       setNoAction(n)
-      // 비교 기준은 「미리 채운 새 보고서」다 — 임시저장본을 이어서 쓰면 처음부터 변경이 있는 상태다.
-      setBaseline(snapshotOf(base, baseActions, false))
+      setSeqNo(seq)
+      // 비교 기준은 「처음 불러온 상태」다(새 보고서는 미리 채운 값, 수정은 저장된 값) —
+      // 임시저장본을 이어서 쓰면 처음부터 변경이 있는 상태다.
+      setBaseline(snapshotOf(base, baseActions, baseNoAction))
       setReady(true)
     }
     load()
@@ -211,13 +294,13 @@ export default function SemiReportWritePage() {
   useEffect(() => {
     if (!ready || engineerId == null || !dirty || leaving.current) return
     const t = setTimeout(() => {
-      const ok = saveSemiDraft(engineerId, projectId, {
+      const ok = draftKey !== null && saveDraftAt(draftKey, {
         values, actions: actions.map(({ rid: _rid, ...a }) => a), noAction, savedAt: new Date().toISOString(),
       })
       setDraftLabel(ok ? `임시저장됨 ${nowHmKST()}` : '임시저장하지 못했습니다')
     }, DRAFT_DELAY)
     return () => clearTimeout(t)
-  }, [snapshot, ready, dirty, engineerId, projectId, values, actions, noAction])
+  }, [snapshot, ready, dirty, engineerId, draftKey, values, actions, noAction])
 
   // ── 이탈 확인: 새로고침·탭 닫기 ──
   useEffect(() => {
@@ -304,8 +387,8 @@ export default function SemiReportWritePage() {
   const leave = async () => {
     if (dirty) {
       // 마지막 입력이 디바운스에 걸려 있을 수 있으니 지금 한 번 남겨 둔다.
-      if (engineerId != null) {
-        saveSemiDraft(engineerId, projectId, {
+      if (draftKey !== null) {
+        saveDraftAt(draftKey, {
           values, actions: actions.map(({ rid: _rid, ...a }) => a), noAction, savedAt: new Date().toISOString(),
         })
       }
@@ -318,7 +401,7 @@ export default function SemiReportWritePage() {
       if (!ok) return
     }
     leaving.current = true
-    router.push('/contact/semi')
+    router.push(backHref)
   }
 
   // ── 저장 ──
@@ -351,11 +434,13 @@ export default function SemiReportWritePage() {
 
     setSaving(true)
     try {
+      const isEdit = editId !== null
       const res = await fetch('/api/semi-contact/report', {
-        method: 'POST',
+        // 수정은 PATCH — 기존 줄은 action_id 를 함께 보내 서버가 수정·추가·삭제를 가른다.
+        method: isEdit ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          project_id: projectId,
+          ...(isEdit ? { report_id: editId } : { project_id: projectId }),
           fields: values,
           actions: sendRows.map(({ rid: _rid, ...a }) => ({ ...a, owner_id: null })),
           no_action: noAction,
@@ -374,10 +459,10 @@ export default function SemiReportWritePage() {
         toast.error(json.error || `보고서를 저장하지 못했습니다 (${res.status})`)
         return
       }
-      if (engineerId != null) clearSemiDraft(engineerId, projectId)
+      if (draftKey !== null) clearDraftAt(draftKey)
       leaving.current = true
-      toast.success('보고서를 저장했습니다')
-      router.push('/contact/semi')
+      toast.success(isEdit ? '보고서를 수정했습니다' : '보고서를 저장했습니다')
+      router.push(isEdit ? backHref : '/contact/semi')
     } catch (e) {
       console.error('[contact/semi/write] 저장 실패', errorInfo(e))
       toast.error('보고서를 저장하지 못했습니다. 잠시 뒤 다시 시도해주세요.')
@@ -434,8 +519,13 @@ export default function SemiReportWritePage() {
         {/* ── 헤더 — Project(읽기 전용) ── */}
         <div style={boxStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" onClick={leave} style={{ ...btnGhost(), padding: '5px 10px', fontSize: 12 }}>← 목록</button>
+            <button type="button" onClick={leave} style={{ ...btnGhost(), padding: '5px 10px', fontSize: 12 }}>
+              {editId !== null ? '← 상세' : '← 목록'}
+            </button>
             <span className="num" style={{ ...countBadge, color: BLUE }}>{project.project_no}</span>
+            <span className="num" style={{ fontSize: 13, fontWeight: 700, color: TEXT, whiteSpace: 'nowrap' }}>
+              {editId !== null ? `${seqLabel(seqNo)} 수정`.trim() : `새 보고서 ${seqLabel(seqNo)}`.trim()}
+            </span>
             <span style={{ ...cardTitle, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {project.title}
             </span>
@@ -595,6 +685,14 @@ export default function SemiReportWritePage() {
         </div>
       </div>
     </main>
+  )
+}
+
+export default function SemiReportWritePage() {
+  return (
+    <Suspense fallback={<main style={{ padding: '24px 28px', background: PAGE_BG, minHeight: '100vh' }} />}>
+      <SemiReportWriteInner />
+    </Suspense>
   )
 }
 

@@ -275,3 +275,179 @@ async function handleDelete(req: NextRequest) {
   console.log(`[${TAG}] 삭제`, { reportId, projectId: row.project_id, actions: actionCount ?? null, by: caller.engineer_id })
   return NextResponse.json({ deleted: { reports, actions: actionCount ?? 0 } })
 }
+
+// ════════════════════════════════════════════════════════════════════
+// 수정 — PATCH /api/semi-contact/report
+//   body {report_id, fields, actions, no_action}. actions 각 줄은 선택적 action_id 를 갖는다.
+//
+// 허용: 접근 검사(authorize) 통과 + (작성자 본인 또는 superadmin). 아니면 403, 없으면 404.
+// 검증은 POST 와 같다(validateReport, Project 칸은 저장된 Project 값으로 채움, 400 형식 동일).
+// 이 보고서만 고친다 — 이후 보고서의 값은 건드리지 않는다(각 보고서는 그 시점의 기록).
+//
+// Action 반영 — 보낸 줄 기준으로 맞춘다.
+//   · action_id 가 있는 줄 → 그 줄 수정(이 보고서의 Action 이어야 한다. 아니면 400, 아무것도 쓰지 않는다)
+//   · action_id 가 없는 줄 → 추가
+//   · 보내지 않은 기존 줄 → 삭제(「Action 없음」이면 기존 줄 전부 삭제)
+// 일관성 — 여러 표·여러 줄을 고치는데 DB 함수(SQL) 없이는 한 트랜잭션으로 묶을 수 없다. 그래서
+//   ① 검증과 소속 확인을 쓰기 전에 모두 끝내고, ② 보고서 → Action 삭제 → 수정 → 추가 순으로 쓰며,
+//   ③ 중간에 실패하면 어디까지 반영됐는지(applied)를 오류에 담아 돌려준다. 다시 저장하면 남은 차이가 맞춰진다.
+// ════════════════════════════════════════════════════════════════════
+export async function PATCH(req: NextRequest) {
+  try {
+    return await handlePatch(req)
+  } catch (e) {
+    console.error(`[${TAG}] PATCH 처리 중 예외`, e)
+    return bad(`접촉 보고서를 수정하는 중 오류: ${reasonOf(e)}`, 500)
+  }
+}
+
+async function handlePatch(req: NextRequest) {
+  if (!envReady()) {
+    console.error(`[${TAG}] 환경 변수 누락 — SUPABASE URL 또는 SERVICE_ROLE_KEY`)
+    return bad('서버 설정 오류 — 환경 변수가 없습니다. 관리자에게 알려주세요.', 500)
+  }
+  const auth = await authorize()
+  if (auth.error) return auth.error
+  const caller = auth.caller
+
+  const body = await req.json().catch(() => ({})) as Record<string, unknown>
+  const reportId = Number(body.report_id)
+  if (!Number.isInteger(reportId) || reportId <= 0) return bad('보고서가 지정되지 않았습니다.')
+
+  const sb = admin()
+  const { data: found, error: findErr } = await sb
+    .from('semi_contact_reports')
+    .select('report_id, project_id, author_id')
+    .eq('report_id', reportId)
+    .maybeSingle()
+  if (findErr) {
+    console.error(`[${TAG}] report lookup failed`, { reportId, error: findErr })
+    return bad('보고서를 확인하지 못했습니다.', 500)
+  }
+  if (!found) return bad('보고서를 찾을 수 없습니다.', 404)
+  const report = found as { report_id: number; project_id: number; author_id: number }
+  if (report.author_id !== caller.engineer_id && !isSuperAdmin(caller)) {
+    return bad('작성자 본인이나 관리자만 수정할 수 있습니다.', 403)
+  }
+  const projectId = report.project_id
+
+  const { data: project, error: projErr } = await sb
+    .from('semi_projects')
+    .select('project_id, customer_name, site_dept, title')
+    .eq('project_id', projectId)
+    .maybeSingle()
+  if (projErr || !project) {
+    console.error(`[${TAG}] project lookup failed`, { projectId, error: projErr })
+    return bad('Project 를 확인하지 못했습니다.', 500)
+  }
+
+  // ── 필드 — POST 와 같은 규칙(등록표 키·문자열만, Project 칸은 저장된 값) ──
+  const rawFields = (body.fields && typeof body.fields === 'object' ? body.fields : {}) as Record<string, unknown>
+  const input = emptyInput()
+  for (const k of FIELD_KEYS) input[k] = str(rawFields[k])
+  const projectRow = project as Record<string, unknown>
+  for (const k of PROJECT_KEYS) input[k] = str(projectRow[k])
+
+  // ── Action 줄 — 선택적 action_id 를 함께 받는다 ──
+  if (body.actions != null && !Array.isArray(body.actions)) return bad('Action 목록 형식이 올바르지 않습니다.')
+  const rawList: unknown[] = Array.isArray(body.actions) ? body.actions : []
+  if (rawList.length > ACTIONS_MAX) return bad(`Action 은 ${ACTIONS_MAX}줄까지 넣을 수 있습니다.`)
+  const rows = rawList.map(v => {
+    const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
+    const id = Number(o.action_id)
+    return { input: actionOf(v), actionId: Number.isInteger(id) && id > 0 ? id : null }
+  })
+  const noAction = body.no_action === true
+
+  // ── 검증(POST 와 같은 400 형식) ──
+  const rawActions = rows.map(r => r.input)
+  const checked = validateReport(input, rawActions, { noAction })
+  const fieldErrors: Partial<Record<FieldKey | 'actions', string>> = { ...checked.errors }
+  for (const k of FIELD_KEYS) {
+    if (!fieldErrors[k] && input[k].length > FIELD_TEXT_MAX) fieldErrors[k] = `${FIELD_TEXT_MAX.toLocaleString()}자까지 입력할 수 있습니다`
+  }
+  const keptIndexes = rawActions.map((a, i) => ({ a, i })).filter(({ a }) => meaningfulActions([a]).length > 0).map(({ i }) => i)
+  const actionErrors: { index: number; errors: Partial<Record<ActionField, string>> }[] = []
+  checked.actionErrors.forEach((errs, j) => {
+    if (Object.keys(errs).length > 0) actionErrors.push({ index: keptIndexes[j], errors: errs })
+  })
+  if (Object.keys(fieldErrors).length > 0 || actionErrors.length > 0) {
+    return bad('입력값을 확인해주세요.', 400, { fieldErrors, actionErrors })
+  }
+
+  // ── 기존 Action 과 맞추기 — 쓰기 전에 소속을 확인한다 ──
+  const { data: existing, error: exErr } = await sb
+    .from('semi_actions').select('action_id').eq('report_id', reportId)
+  if (exErr) {
+    console.error(`[${TAG}] existing actions lookup failed`, { reportId, error: exErr })
+    return bad('기존 Action 을 확인하지 못했습니다.', 500)
+  }
+  const existingIds = new Set(((existing ?? []) as { action_id: number }[]).map(r => r.action_id))
+  const kept = noAction ? [] : keptIndexes.map(i => rows[i])
+  const foreign = kept.filter(r => r.actionId !== null && !existingIds.has(r.actionId))
+  if (foreign.length > 0) return bad('이 보고서의 Action 이 아닌 줄이 있습니다. 화면을 새로고침한 뒤 다시 시도해주세요.')
+  const keepIds = new Set(kept.filter(r => r.actionId !== null).map(r => r.actionId as number))
+  const toDelete = [...existingIds].filter(id => !keepIds.has(id))
+  const toUpdate = kept.filter(r => r.actionId !== null)
+  const toInsert = kept.filter(r => r.actionId === null)
+
+  const now = new Date().toISOString()
+  const applied = { report: false, deleted: 0, updated: 0, inserted: 0 }
+  const partial = (what: string, e: unknown) => {
+    const done = [
+      applied.report ? '보고서 수정' : null,
+      applied.deleted ? `Action 삭제 ${applied.deleted}건` : null,
+      applied.updated ? `Action 수정 ${applied.updated}/${toUpdate.length}건` : null,
+      applied.inserted ? `Action 추가 ${applied.inserted}건` : null,
+    ].filter(Boolean).join(', ')
+    console.error(`[${TAG}] ${what} 실패`, { reportId, applied, error: e })
+    return bad(`${what}하지 못했습니다${done ? `(이미 반영됨: ${done})` : ''}: ${reasonOf(e)}`, 500, { applied })
+  }
+
+  // 1) 보고서
+  const parts = toStorage(input)
+  const detail: Record<string, unknown> = { ...parts.detail }
+  if (noAction) detail.no_action = true
+  const { error: upErr } = await sb
+    .from('semi_contact_reports')
+    .update({ ...parts.report, detail, updated_by: caller.engineer_id, updated_at: now })
+    .eq('report_id', reportId)
+  if (upErr) return partial('보고서를 수정', upErr)
+  applied.report = true
+
+  // 2) 빠진 기존 줄 삭제
+  if (toDelete.length > 0) {
+    const { data: del, error: delErr } = await sb
+      .from('semi_actions').delete().in('action_id', toDelete).eq('report_id', reportId).select('action_id')
+    if (delErr) return partial('Action 을 삭제', delErr)
+    applied.deleted = (del ?? []).length
+  }
+
+  // 3) 기존 줄 수정 — 줄마다 한 번(이 보고서의 줄만)
+  for (const r of toUpdate) {
+    const { error: e } = await sb
+      .from('semi_actions')
+      .update({ ...actionToStorage(r.input), owner_id: null, updated_at: now })
+      .eq('action_id', r.actionId as number)
+      .eq('report_id', reportId)
+    if (e) return partial('Action 을 수정', e)
+    applied.updated += 1
+  }
+
+  // 4) 새 줄 추가 — 한 번에
+  if (toInsert.length > 0) {
+    const { data: ins, error: insErr } = await sb
+      .from('semi_actions')
+      .insert(toInsert.map(r => ({ ...actionToStorage(r.input), owner_id: null, report_id: reportId, project_id: projectId })))
+      .select('action_id')
+    if (insErr) return partial('Action 을 추가', insErr)
+    applied.inserted = (ins ?? []).length
+  }
+
+  // Project 의 마지막 변경 시각 — 실패해도 되돌리지 않는다(POST 와 같다).
+  const { error: touchErr } = await sb.from('semi_projects').update({ updated_at: now }).eq('project_id', projectId)
+  if (touchErr) console.error(`[${TAG}] project updated_at 갱신 실패(보고서는 수정됨)`, { projectId, reportId, error: touchErr })
+
+  console.log(`[${TAG}] 수정`, { reportId, projectId, ...applied, by: caller.engineer_id })
+  return NextResponse.json({ report_id: reportId, actions: { updated: applied.updated, inserted: applied.inserted, deleted: applied.deleted } })
+}
