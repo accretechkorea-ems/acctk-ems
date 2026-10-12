@@ -2,9 +2,9 @@
 
 // 반도체 고객 접촉 보고 — Project 목록(껍데기).
 //
-// 이번 단계는 메뉴 등록 + 목록만이다. 「새 Project」는 자리만 두고 막아 두었고, 행을 눌러 들어갈
-// Project 상세·보고서 작성·엑셀은 다음 단계에서 붙인다. 검색·필터·페이지 나누기도 그때 의뢰서 목록
-// (app/inquiries/page.tsx, lib/paging.ts)의 방식을 따라 넣는다.
+// 지금 있는 것: 목록 + 「새 Project」(모달 → POST /api/semi-contact/project 가 번호 발급과 저장을 한다).
+// 행을 눌러 들어갈 Project 상세·보고서 작성·엑셀은 다음 단계에서 붙인다. 검색·필터·페이지 나누기도 그때
+// 의뢰서 목록(app/inquiries/page.tsx, lib/paging.ts)의 방식을 따라 넣는다.
 //
 // 진입 — 메뉴 키 contact_semi(lib/menuPerms.ts). usePageGuard 가 경로로 키를 찾아 판정하고,
 // 권한이 없으면 AccessGate 를 그린다(주소로 직접 들어와도 같다).
@@ -17,13 +17,17 @@ import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
+import ModalOverlay from '@/components/common/ModalOverlay'
+import { useToast } from '@/components/common/Toast'
+import { FieldError, errBorder, useFieldErrors } from '@/components/common/fieldErrors'
 import {
-  PAGE_BG, BORDER, TEXT, MUTED, SUB, FAINT,
-  cardStyle, cardHeader, cardTitle, countBadge, rowStyle, btnPrimary,
+  PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, FAINT,
+  cardStyle, cardHeader, cardTitle, countBadge, rowStyle, btnPrimary, btnGhost,
 } from '@/components/common/ui'
 import { kstYmd } from '@/lib/date'
 import { errorInfo } from '@/lib/errorInfo'
-import { FIELD_BY_KEY } from '@/lib/semiContact'
+import { FIELD_BY_KEY, emptyInput, validateReport, type FieldKey } from '@/lib/semiContact'
+import { PROJECT_KEYS, PROJECT_TEXT_MAX } from '@/lib/semiContact/project'
 
 /** 한 번에 읽는 최대 행 수. 페이지 나누기를 붙이기 전까지의 안전 상한이다. */
 const LIST_LIMIT = 200
@@ -66,6 +70,9 @@ export default function ContactSemiPage() {
   const [rows, setRows] = useState<ProjectRow[] | null>(null)
   const [total, setTotal] = useState<number | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+  /** 올리면 목록을 다시 읽는다(새 Project 를 만든 뒤). */
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     if (!authorized) return
@@ -92,7 +99,7 @@ export default function ContactSemiPage() {
     }
     load()
     return () => { cancelled = true }
-  }, [authorized, supabase])
+  }, [authorized, supabase, reloadKey])
 
   if (!authorized) return <AccessGate loading={guardLoading} />
 
@@ -110,12 +117,10 @@ export default function ContactSemiPage() {
           {truncated && (
             <span style={{ fontSize: 12, color: MUTED }}>최근 {shown}건만 보입니다</span>
           )}
-          {/* 작성 화면은 다음 단계다. 자리만 두고 막아 둔다. */}
           <button
             type="button"
-            disabled
-            title="준비 중입니다"
-            style={{ ...btnPrimary(true), marginLeft: 'auto' }}
+            onClick={() => setCreating(true)}
+            style={{ ...btnPrimary(), marginLeft: 'auto' }}
           >
             새 Project
           </button>
@@ -182,7 +187,137 @@ export default function ContactSemiPage() {
           ))
         )}
       </div>
+
+      {creating && (
+        <NewProjectModal
+          onClose={() => setCreating(false)}
+          onCreated={() => setReloadKey(k => k + 1)}
+        />
+      )}
     </main>
+  )
+}
+
+// ── 새 Project 모달 ─────────────────────────────────────────────────
+// 의뢰서의 「기존 번호 등록」 모달(app/inquiries/page.tsx)과 같은 틀이다.
+// 받는 칸은 등록표에서 storage 가 'project' 인 것뿐(고객사·사업장/부서·Project/구매안건).
+// 번호는 화면이 미리 보여 주지 않는다 — 저장할 때 서버가 발급한다(미리 보여 준 번호는 다른 사람이 먼저 가져갈 수 있다).
+
+const fieldStyle: React.CSSProperties = {
+  width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  fontSize: 13, color: TEXT, background: CARD_BG, outline: 'none', boxSizing: 'border-box',
+  fontFamily: 'inherit',
+}
+const labelStyle: React.CSSProperties = {
+  fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 5, display: 'block',
+}
+
+/** 등록표 검증에서 Project 칸의 오류만 골라낸다(라우트와 같은 규칙). */
+function projectErrors(values: Record<FieldKey, string>): Partial<Record<FieldKey, string>> {
+  const checked = validateReport(values, [], { noAction: true })
+  const out: Partial<Record<FieldKey, string>> = {}
+  for (const k of PROJECT_KEYS) if (checked.errors[k]) out[k] = checked.errors[k]
+  return out
+}
+
+function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const toast = useToast()
+  const [values, setValues] = useState<Record<FieldKey, string>>(() => emptyInput())
+  const { errors, setErrors, clearError, validate } = useFieldErrors<FieldKey>()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const change = (k: FieldKey, v: string) => {
+    setValues(prev => ({ ...prev, [k]: v.slice(0, PROJECT_TEXT_MAX) }))
+    clearError(k)
+  }
+
+  const submit = async () => {
+    if (busy) return
+    if (!validate(projectErrors(values))) return
+    setBusy(true)
+    setError('')
+    try {
+      const body: Record<string, string> = {}
+      for (const k of PROJECT_KEYS) body[k] = values[k]
+      const res = await fetch('/api/semi-contact/project', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        // 칸별 오류는 그 칸 아래에, 나머지는 모달 아래 상자에 보인다.
+        if (json.fieldErrors && typeof json.fieldErrors === 'object') setErrors(json.fieldErrors)
+        setError(json.error || `Project 를 만들지 못했습니다 (${res.status})`)
+        console.error('[contact/semi] Project 만들기 실패', { status: res.status, error: json })
+        return
+      }
+      toast.success(`${json.project?.project_no ?? 'Project'} 만들었습니다`)
+      onCreated()
+      onClose()
+    } catch (e) {
+      console.error('[contact/semi] Project 만들기 실패', errorInfo(e))
+      setError('Project 를 만들지 못했습니다. 잠시 뒤 다시 시도해주세요.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <ModalOverlay onClose={busy ? () => {} : onClose}>
+      <div style={{
+        background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 500,
+        maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
+      }}>
+        <div style={cardHeader}>
+          <span style={cardTitle}>새 Project</span>
+        </div>
+
+        <div style={{ fontSize: 12, color: SUB, lineHeight: 1.6, marginBottom: 12 }}>
+          Project 번호(PRJ-연도-순번)는 저장할 때 발급됩니다.
+        </div>
+
+        {PROJECT_KEYS.map(k => {
+          const f = FIELD_BY_KEY[k]
+          const id = `np-${k}`
+          return (
+            <div key={k} style={{ marginBottom: 12 }}>
+              <label style={labelStyle} htmlFor={id}>
+                {f.label}
+                {!f.required && <span style={{ fontWeight: 500 }}> (선택)</span>}
+              </label>
+              <input
+                id={id}
+                value={values[k]}
+                maxLength={PROJECT_TEXT_MAX}
+                onChange={e => change(k, e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit() }}
+                disabled={busy}
+                style={{ ...fieldStyle, border: errors[k] ? errBorder : fieldStyle.border }}
+              />
+              <FieldError message={errors[k]} />
+            </div>
+          )
+        })}
+
+        {error && (
+          <div style={{
+            fontSize: 12, lineHeight: 1.6, color: '#be123c', background: '#fef2f2',
+            border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px', marginBottom: 12,
+          }}>
+            {error}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" onClick={onClose} disabled={busy} style={{ ...btnGhost(busy), flex: 1 }}>닫기</button>
+          <button type="button" onClick={submit} disabled={busy} style={{ ...btnPrimary(busy), flex: 1 }}>
+            {busy ? '저장 중...' : '저장'}
+          </button>
+        </div>
+      </div>
+    </ModalOverlay>
   )
 }
 
