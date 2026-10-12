@@ -49,7 +49,8 @@ import { layoutOf } from '@/lib/semiContact/layout'
 
 // ── 배치(작성 화면과 같다) ──────────────────────────────────────────────
 const CONTACT_KEYS: FieldKey[] = ['contact_date', 'contact_method', 'customer_contact', 'purpose']
-const NOTE_KEYS: FieldKey[] = ['fact', 'meeting_content']
+/** 「새롭게 확인된 내용」 — 작성 화면과 같이 회의 내용이 위, FACT 가 아래. */
+const NOTE_KEYS: FieldKey[] = ['meeting_content', 'fact']
 const NEXT_KEYS: FieldKey[] = ['next_contact_date']
 const PLACED = new Set<FieldKey>([...PROJECT_KEYS, ...CONTACT_KEYS, ...NOTE_KEYS, ...NEXT_KEYS])
 const REST_GROUPS = SECTIONS
