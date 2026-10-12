@@ -18,6 +18,8 @@ export type SemiDraft = {
   /** Action 줄. 수정 모드에서는 기존 줄의 action_id 가 함께 들어 있다. */
   actions: (ActionInput & { action_id?: number })[]
   noAction: boolean
+  /** 다음 Contact 예정일 「미정」. 이 칸이 생기기 전 임시저장본에는 없다 — 없으면 false. */
+  nextTbd: boolean
   /** 저장한 시각(ISO). 「이어서 작성할까요?」 안내와 상태 표시에 쓴다. */
   savedAt: string
 }
@@ -54,6 +56,7 @@ export function loadDraftAt(key: string): SemiDraft | null {
       values: o.values ?? {},
       actions: o.actions as SemiDraft['actions'],
       noAction: o.noAction === true,
+      nextTbd: o.nextTbd === true,
       savedAt: typeof o.savedAt === 'string' ? o.savedAt : '',
     }
   } catch {

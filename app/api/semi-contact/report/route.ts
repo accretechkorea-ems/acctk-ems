@@ -9,6 +9,7 @@
 //   4. toStorage 로 칸(column)·detail jsonb 를 나눠 semi_contact_reports 에 넣는다.
 //      author_id·updated_by 는 본문이 아니라 로그인한 사람으로 강제한다.
 //      「Action 없음」은 detail.no_action = true 로 넣는다(false 면 키를 넣지 않는다 — detail 은 빈 값을 키째 뺀다).
+//      「다음 Contact 예정일 미정」(본문 next_contact_tbd)도 같은 방식 — detail.next_contact_tbd = true + next_contact_date = null.
 //   5. 빈 줄을 뺀 Action 을 actionToStorage 로 바꿔 semi_actions 에 한 번에 넣는다.
 //      owner_name 은 담당 팀 이름 문자열이다(담당은 사람이 아니라 팀). owner_id 는 이번 단계에서 null 로 강제한다.
 //   6. semi_projects.updated_at 을 지금으로 갱신한다(트리거가 아니라 라우트가 직접 넣는 레포 관례).
@@ -25,7 +26,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authorizeSemiContact } from '@/lib/semiContactServer'
 import { isSuperAdmin } from '@/lib/permissions'
 import {
-  FIELD_KEYS, emptyInput, meaningfulActions, toStorage, actionToStorage, validateReport,
+  FIELD_KEYS, NEXT_CONTACT_TBD_KEY, emptyInput, meaningfulActions, toStorage, actionToStorage, validateReport,
   type ActionField, type ActionInput, type FieldKey,
 } from '@/lib/semiContact'
 import { PROJECT_KEYS } from '@/lib/semiContact/project'
@@ -133,6 +134,9 @@ async function handle(req: NextRequest) {
   const rawActions = (Array.isArray(body.actions) ? body.actions : []).map(actionOf)
   if (rawActions.length > ACTIONS_MAX) return bad(`Action 은 ${ACTIONS_MAX}줄까지 넣을 수 있습니다.`)
   const noAction = body.no_action === true
+  // 「미정」이면 날짜는 버리고 플래그만 남긴다.
+  const nextTbd = body.next_contact_tbd === true
+  if (nextTbd) input.next_contact_date = ''
 
   // ── 검증 ──
   const checked = validateReport(input, rawActions, { noAction })
@@ -154,6 +158,7 @@ async function handle(req: NextRequest) {
   const parts = toStorage(input)
   const detail: Record<string, unknown> = { ...parts.detail }
   if (noAction) detail.no_action = true
+  if (nextTbd) detail[NEXT_CONTACT_TBD_KEY] = true
 
   const { data: made, error: repErr } = await sb
     .from('semi_contact_reports')
@@ -278,7 +283,7 @@ async function handleDelete(req: NextRequest) {
 
 // ════════════════════════════════════════════════════════════════════
 // 수정 — PATCH /api/semi-contact/report
-//   body {report_id, fields, actions, no_action}. actions 각 줄은 선택적 action_id 를 갖는다.
+//   body {report_id, fields, actions, no_action, next_contact_tbd}. actions 각 줄은 선택적 action_id 를 갖는다.
 //
 // 허용: 접근 검사(authorize) 통과 + (작성자 본인 또는 superadmin). 아니면 403, 없으면 404.
 // 검증은 POST 와 같다(validateReport, Project 칸은 저장된 Project 값으로 채움, 400 형식 동일).
@@ -358,6 +363,9 @@ async function handlePatch(req: NextRequest) {
     return { input: actionOf(v), actionId: Number.isInteger(id) && id > 0 ? id : null }
   })
   const noAction = body.no_action === true
+  // 「미정」이면 날짜는 버리고 플래그만 남긴다.
+  const nextTbd = body.next_contact_tbd === true
+  if (nextTbd) input.next_contact_date = ''
 
   // ── 검증(POST 와 같은 400 형식) ──
   const rawActions = rows.map(r => r.input)
@@ -408,6 +416,7 @@ async function handlePatch(req: NextRequest) {
   const parts = toStorage(input)
   const detail: Record<string, unknown> = { ...parts.detail }
   if (noAction) detail.no_action = true
+  if (nextTbd) detail[NEXT_CONTACT_TBD_KEY] = true
   const { error: upErr } = await sb
     .from('semi_contact_reports')
     .update({ ...parts.report, detail, updated_by: caller.engineer_id, updated_at: now })

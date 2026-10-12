@@ -44,6 +44,8 @@ import {
   PROJECT_KEYS, PROJECT_NO_KEY, PROJECT_NO_LABEL, PROJECT_NO_MAX, PROJECT_TEXT_MAX, validateProjectNo,
 } from '@/lib/semiContact/project'
 import { contactSequence, seqLabel } from '@/lib/semiContact/sequence'
+import { nextContactShown, nextContactTbdOf } from '@/lib/semiContact/storage'
+import { layoutOf } from '@/lib/semiContact/layout'
 
 // ── 배치(작성 화면과 같다) ──────────────────────────────────────────────
 const CONTACT_KEYS: FieldKey[] = ['contact_date', 'contact_method', 'customer_contact', 'purpose']
@@ -89,6 +91,8 @@ type ReportView = {
   prevInput: ReportInput | null
   changed: Set<FieldKey>
   noAction: boolean
+  /** 다음 Contact 예정일 「미정」(detail.next_contact_tbd). */
+  nextTbd: boolean
   authorName: string
   /** 접촉 차수(#n). */
   seq: number
@@ -219,6 +223,7 @@ function SemiProjectDetailInner() {
         prevInput: before,
         changed: new Set(changedFields(before, input)),
         noAction: !!detail && typeof detail === 'object' && detail.no_action === true,
+        nextTbd: nextContactTbdOf(row),
         authorName: row.author?.name ?? '-',
         seq: seqOf.get(row.report_id) ?? 0,
       })
@@ -430,7 +435,7 @@ function SemiProjectDetailInner() {
           <StatCard label="접촉 횟수" value={`${views.length}회`} />
           <StatCard label="최근 접촉일" value={latest?.input.contact_date || '-'} sub={latest ? relDay(latest.input.contact_date, today) : ''} />
           <StatCard label={FIELD_BY_KEY.next_contact_date.label}
-            value={latest?.input.next_contact_date || '-'}
+            value={(latest ? nextContactShown(latest.input.next_contact_date, latest.nextTbd) : '') || '-'}
             sub={latest?.input.next_contact_date ? relDay(latest.input.next_contact_date, today) : ''} />
           <StatCard label="미완료 Action" value={`${openActions.length}건`} />
         </div>
@@ -629,7 +634,8 @@ function ReportDetail({ view, actions, statusCell, buttons }: {
   // 이어받은 항목은 처음에 모두 펼쳐 둔다(접기는 그대로 쓸 수 있다).
   const [open, setOpen] = useState<Set<number>>(() => new Set(REST_GROUPS.map(g => g.section.no)))
   const value = (k: FieldKey, opts?: { big?: boolean }) => (
-    <ReadField key={k} def={FIELD_BY_KEY[k]} value={view.input[k]}
+    <ReadField key={k} def={FIELD_BY_KEY[k]}
+      value={k === 'next_contact_date' ? nextContactShown(view.input[k], view.nextTbd) : view.input[k]}
       changed={view.changed.has(k)} prevValue={view.prevInput ? view.prevInput[k] : ''} big={opts?.big} />
   )
   return (
@@ -721,7 +727,7 @@ function ReportDetail({ view, actions, statusCell, buttons }: {
                 </button>
                 {isOpen && (
                   <div style={{ borderTop: `1px solid ${BORDER}` }}>
-                    {g.fields.map((f, i) => (
+                    {layoutOf(g.section.no, g.fields).map(({ def: f }, i) => (
                       <InheritRow key={f.key} first={i === 0} def={f} value={view.input[f.key as FieldKey]}
                         changed={view.changed.has(f.key as FieldKey)}
                         prevValue={view.prevInput ? view.prevInput[f.key as FieldKey] : ''} />

@@ -65,6 +65,25 @@ export function fromStorage(
   return out
 }
 
+// ── 다음 Contact 예정일 「미정」 ──────────────────────────────────────────────
+// 「미정」은 등록표 칸이 아니라 no_action 처럼 detail 의 플래그다: 미정이면 next_contact_date = null +
+// detail.next_contact_tbd = true, 아니면 키를 넣지 않는다(라우트가 detail 을 매번 새로 만들므로 저절로 빠진다).
+
+/** detail jsonb 의 「다음 Contact 예정일 미정」 플래그 키. */
+export const NEXT_CONTACT_TBD_KEY = 'next_contact_tbd'
+/** 날짜 대신 보이는 글자. */
+export const NEXT_CONTACT_TBD_LABEL = '미정'
+
+/** 보고서 행(detail 포함)이 「미정」으로 저장됐는지. */
+export function nextContactTbdOf(row: Record<string, unknown> | null | undefined): boolean {
+  return asObject(row?.detail)[NEXT_CONTACT_TBD_KEY] === true
+}
+
+/** 화면·엑셀에 보일 다음 Contact 예정일 — 날짜가 있으면 날짜, 없고 「미정」이면 「미정」, 둘 다 아니면 ''. */
+export function nextContactShown(date: string, tbd: boolean): string {
+  return date.trim() ? date : tbd ? NEXT_CONTACT_TBD_LABEL : ''
+}
+
 // ── Action 줄 ───────────────────────────────────────────────────────────────
 
 /** semi_actions 에 넣을 칸(report_id·project_id 는 라우트가 붙인다). */

@@ -2,8 +2,10 @@
 
 // 반도체 고객 접촉 보고 — 보고서 작성 화면(/contact/semi/<projectId>/write).
 //
-// 위에서 아래로: 헤더(Project, 읽기 전용) → 이번 접촉 → 새롭게 확인된 내용(FACT·회의 내용, 가장 크게)
-// → Action Items → 다음 접촉 예정일 → 이어받은 항목(나머지 칸, 섹션별·기본 펼침) → 하단 고정 바(임시저장 상태·취소·저장).
+// 위에서 아래로: 헤더(Project, 읽기 전용) → 이번 접촉 → 새롭게 확인된 내용(회의 내용 위·FACT 아래)
+// → Action Items → 다음 접촉 예정일(+「미정」) → 이어받은 항목(나머지 칸, 섹션별·기본 펼침) → 하단 고정 바(임시저장 상태·취소·저장).
+// 「미정」 — 체크하면 날짜를 비우고 막는다. 저장은 next_contact_date = null + detail.next_contact_tbd = true(no_action 과 같은 방식).
+// 이어받은 항목의 그룹 안 순서·전체 폭 칸은 lib/semiContact/layout.ts(화면 전용 — 등록표 순서는 엑셀이 쓰므로 그대로).
 // 칸 이름·섹션·선택지는 전부 필드 등록표(lib/semiContact/fields.ts)에서 읽는다 — 이 화면은 배치만 정한다.
 //
 // 이어쓰기 — 같은 Project 의 직전 보고서(contact_date desc, report_id desc 첫 건)를 브라우저 세션으로 읽어
@@ -46,14 +48,16 @@ import {
   type ActionField, type ActionInput, type FieldDef, type FieldKey, type ReportInput,
 } from '@/lib/semiContact'
 import { PROJECT_KEYS } from '@/lib/semiContact/project'
+import { NEXT_CONTACT_TBD_LABEL, nextContactTbdOf } from '@/lib/semiContact/storage'
+import { layoutOf } from '@/lib/semiContact/layout'
 import { clearDraftAt, loadDraftAt, saveDraftAt, semiDraftKey, semiEditDraftKey } from '@/lib/semiContact/draft'
 import { seqLabel } from '@/lib/semiContact/sequence'
 
 // ── 배치 ─────────────────────────────────────────────────────────────
 /** 「이번 접촉」 상자. */
 const CONTACT_KEYS: FieldKey[] = ['contact_date', 'contact_method', 'customer_contact', 'purpose']
-/** 「새롭게 확인된 내용」 상자 — 이 화면의 핵심. FACT 를 맨 위에 둔다. */
-const NOTE_KEYS: FieldKey[] = ['fact', 'meeting_content']
+/** 「새롭게 확인된 내용」 상자 — 회의 내용이 위, FACT 가 아래. */
+const NOTE_KEYS: FieldKey[] = ['meeting_content', 'fact']
 /** 「다음 접촉 예정일」 상자. */
 const NEXT_KEYS: FieldKey[] = ['next_contact_date']
 /** 위 상자·헤더에 놓인 칸. 나머지는 전부 「이어받은 항목」으로 간다. */
@@ -119,8 +123,8 @@ const FOCUS_CSS = `
 `
 
 /** 입력 상태를 비교·저장할 모양으로(rid 는 뺀다). */
-function snapshotOf(values: ReportInput, actions: ActionRow[], noAction: boolean): string {
-  return JSON.stringify({ values, actions: actions.map(({ rid: _rid, ...a }) => a), noAction })
+function snapshotOf(values: ReportInput, actions: ActionRow[], noAction: boolean, nextTbd: boolean): string {
+  return JSON.stringify({ values, actions: actions.map(({ rid: _rid, ...a }) => a), noAction, nextTbd })
 }
 
 function SemiReportWriteInner() {
@@ -148,6 +152,8 @@ function SemiReportWriteInner() {
   const [values, setValues] = useState<ReportInput>(() => emptyInput())
   const [actions, setActions] = useState<ActionRow[]>([])
   const [noAction, setNoAction] = useState(false)
+  /** 다음 Contact 예정일 「미정」. */
+  const [nextTbd, setNextTbd] = useState(false)
   /** 첫 읽기와 「이어서 작성」 결정이 끝났는지. 그 전에는 임시저장·이탈 확인을 하지 않는다. */
   const [ready, setReady] = useState(false)
   const [baseline, setBaseline] = useState('')
@@ -195,6 +201,7 @@ function SemiReportWriteInner() {
       let base: ReportInput
       let baseActions: ActionRow[]
       let baseNoAction = false
+      let baseNextTbd = false
       let prevInput: ReportInput | null = null
       let seq: number | null = null
 
@@ -243,6 +250,7 @@ function SemiReportWriteInner() {
         setSavedActionCount(loaded.length)
         const det = rep.detail
         baseNoAction = !!det && typeof det === 'object' && (det as Record<string, unknown>).no_action === true
+        baseNextTbd = nextContactTbdOf(rep)
         prevInput = last.data ? fromStorage(last.data as Record<string, unknown>, projInput) : null
         seq = cnt.error ? null : (cnt.count ?? 0) + 1
       } else {
@@ -269,7 +277,8 @@ function SemiReportWriteInner() {
         seq = cnt.error ? null : (cnt.count ?? 0) + 1
       }
 
-      let v = base, a = baseActions, n = baseNoAction
+      // 새 보고서는 「미정」을 이어받지 않는다(baseNextTbd = false, next_contact_date 도 carry 가 아니라 빈 값).
+      let v = base, a = baseActions, n = baseNoAction, t = baseNextTbd
 
       const draft = draftKey ? loadDraftAt(draftKey) : null
       if (draft && draftKey) {
@@ -294,6 +303,7 @@ function SemiReportWriteInner() {
           v = restored
           a = draft.actions.length > 0 ? draft.actions.map(x => newRow(x)) : baseActions
           n = draft.noAction
+          t = draft.nextTbd
         } else {
           clearDraftAt(draftKey)
         }
@@ -304,10 +314,11 @@ function SemiReportWriteInner() {
       setValues(v)
       setActions(a)
       setNoAction(n)
+      setNextTbd(t)
       setSeqNo(seq)
       // 비교 기준은 「처음 불러온 상태」다(새 보고서는 미리 채운 값, 수정은 저장된 값) —
       // 임시저장본을 이어서 쓰면 처음부터 변경이 있는 상태다.
-      setBaseline(snapshotOf(base, baseActions, baseNoAction))
+      setBaseline(snapshotOf(base, baseActions, baseNoAction, baseNextTbd))
       setReady(true)
     }
     load()
@@ -329,7 +340,7 @@ function SemiReportWriteInner() {
     return () => { cancelled = true }
   }, [authorized])
 
-  const snapshot = useMemo(() => snapshotOf(values, actions, noAction), [values, actions, noAction])
+  const snapshot = useMemo(() => snapshotOf(values, actions, noAction, nextTbd), [values, actions, noAction, nextTbd])
   const dirty = ready && snapshot !== baseline
   const dirtyRef = useRef(false)
   dirtyRef.current = dirty
@@ -339,12 +350,12 @@ function SemiReportWriteInner() {
     if (!ready || engineerId == null || !dirty || leaving.current) return
     const t = setTimeout(() => {
       const ok = draftKey !== null && saveDraftAt(draftKey, {
-        values, actions: actions.map(({ rid: _rid, ...a }) => a), noAction, savedAt: new Date().toISOString(),
+        values, actions: actions.map(({ rid: _rid, ...a }) => a), noAction, nextTbd, savedAt: new Date().toISOString(),
       })
       setDraftLabel(ok ? `임시저장됨 ${nowHmKST()}` : '임시저장하지 못했습니다')
     }, DRAFT_DELAY)
     return () => clearTimeout(t)
-  }, [snapshot, ready, dirty, engineerId, draftKey, values, actions, noAction])
+  }, [snapshot, ready, dirty, engineerId, draftKey, values, actions, noAction, nextTbd])
 
   // ── 이탈 확인: 새로고침·탭 닫기 ──
   useEffect(() => {
@@ -438,7 +449,7 @@ function SemiReportWriteInner() {
       // 마지막 입력이 디바운스에 걸려 있을 수 있으니 지금 한 번 남겨 둔다.
       if (draftKey !== null) {
         saveDraftAt(draftKey, {
-          values, actions: actions.map(({ rid: _rid, ...a }) => a), noAction, savedAt: new Date().toISOString(),
+          values, actions: actions.map(({ rid: _rid, ...a }) => a), noAction, nextTbd, savedAt: new Date().toISOString(),
         })
       }
       const ok = await confirm({
@@ -523,9 +534,10 @@ function SemiReportWriteInner() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...(isEdit ? { report_id: editId } : { project_id: projectId }),
-          fields: values,
+          fields: nextTbd ? { ...values, next_contact_date: '' } : values,
           actions: sendRows.map(({ rid: _rid, ...a }) => ({ ...a, owner_id: null })),
           no_action: noAction,
+          next_contact_tbd: nextTbd,
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -577,7 +589,7 @@ function SemiReportWriteInner() {
     )
   }
 
-  const field = (k: FieldKey, opts?: { rows?: number; autoFocus?: boolean; big?: boolean }) => (
+  const field = (k: FieldKey, opts?: { rows?: number; minHeight?: number; autoFocus?: boolean; inactive?: boolean }) => (
     <FieldControl
       key={k}
       def={FIELD_BY_KEY[k]}
@@ -587,9 +599,10 @@ function SemiReportWriteInner() {
       changed={changed.has(k)}
       prevValue={prev ? prev[k] : ''}
       rows={opts?.rows}
-      big={opts?.big}
+      minHeight={opts?.minHeight}
       autoFocus={opts?.autoFocus}
-      disabled={saving}
+      disabled={saving || !!opts?.inactive}
+      inactive={opts?.inactive}
     />
   )
 
@@ -629,8 +642,8 @@ function SemiReportWriteInner() {
         {/* ── 새롭게 확인된 내용 — 이 화면의 핵심. 첫 화면에서 바로 쓰도록 FACT 에 커서를 둔다 ── */}
         <Box title={SECTIONS.find(s => s.no === 2)?.label ?? ''}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {field('fact', { rows: 10, autoFocus: true, big: true })}
-            {field('meeting_content', { rows: 10, big: true })}
+            {field('meeting_content', { rows: 10, minHeight: 240 })}
+            {field('fact', { rows: 5, minHeight: 120, autoFocus: true })}
           </div>
         </Box>
 
@@ -718,7 +731,19 @@ function SemiReportWriteInner() {
 
         {/* ── 다음 접촉 예정일 ── */}
         <Box title={FIELD_BY_KEY.next_contact_date.label}>
-          <div style={{ maxWidth: 260 }}>{NEXT_KEYS.map(k => field(k))}</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ width: 260, maxWidth: '100%' }}>{NEXT_KEYS.map(k => field(k, { inactive: nextTbd }))}</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: SUB, cursor: 'pointer', paddingBottom: 19 }}>
+              <input type="checkbox" checked={nextTbd} disabled={saving}
+                onChange={e => {
+                  const on = e.target.checked
+                  setNextTbd(on)
+                  // 체크하면 날짜를 비운다(해제하면 빈 칸에서 다시 고른다).
+                  if (on) setField('next_contact_date', '')
+                }} />
+              {NEXT_CONTACT_TBD_LABEL}
+            </label>
+          </div>
         </Box>
 
         {/* ── 이어받은 항목 — 나머지 칸, 섹션별(기본 펼침) ── */}
@@ -758,7 +783,11 @@ function SemiReportWriteInner() {
                   </button>
                   {open && (
                     <div style={{ ...grid2Style, padding: '0 8px 8px' }}>
-                      {g.fields.map(f => field(f.key as FieldKey, f.kind === 'longtext' ? { rows: 4 } : undefined))}
+                      {layoutOf(g.section.no, g.fields).map(({ def: f, full }) => (
+                        <div key={f.key} style={{ gridColumn: full ? '1 / -1' : undefined, minWidth: 0 }}>
+                          {field(f.key as FieldKey, f.kind === 'longtext' ? { rows: 4 } : undefined)}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -817,9 +846,9 @@ function Box({ title, right, children }: { title: string; right?: ReactNode; chi
  * changed(직전 보고서 값과 다름)면 칸 전체를 표시한다 — 래퍼(왼쪽 파란 막대·연한 배경), 라벨 옆 「변경」 pill +
  * 「직전: <취소선 이전 값>」, 입력칸 배경·테두리. 안 바뀐 칸은 같은 자리를 투명하게 비워 정렬만 맞춘다.
  * 오류가 있으면 입력칸 테두리는 오류 색이 우선이다(포커스 때도 — .sw-err).
- * big 이면 큰 textarea(rows 10, 최소 240px) — 회의 내용·FACT.
+ * rows·minHeight 는 textarea 크기(회의 내용 10줄·240px, FACT 5줄·120px). inactive 면 회색으로 막힌 칸(「미정」의 날짜).
  */
-function FieldControl({ def, value, onChange, error, changed, prevValue, rows, big, autoFocus, disabled }: {
+function FieldControl({ def, value, onChange, error, changed, prevValue, rows, minHeight, autoFocus, disabled, inactive }: {
   def: FieldDef
   value: string
   onChange: (v: string) => void
@@ -827,15 +856,17 @@ function FieldControl({ def, value, onChange, error, changed, prevValue, rows, b
   changed: boolean
   prevValue: string
   rows?: number
-  big?: boolean
+  minHeight?: number
   autoFocus?: boolean
   disabled?: boolean
+  inactive?: boolean
 }) {
   const id = `sf-${def.key}`
   const style: CSSProperties = {
     ...fieldStyle,
     ...(changed ? { background: CHANGED_INPUT_BG, border: `1px solid ${CHANGED_LINE}` } : null),
     ...(error ? { border: errBorder } : null),
+    ...(inactive ? { background: NEUTRAL_BG, color: MUTED, cursor: 'not-allowed' } : null),
   }
   const cls = error ? 'sw-err' : undefined
   let control: ReactNode
@@ -850,9 +881,9 @@ function FieldControl({ def, value, onChange, error, changed, prevValue, rows, b
     control = <input id={id} className={cls} type="date" value={value} disabled={disabled} onChange={e => onChange(e.target.value)} style={style} />
   } else if (def.kind === 'longtext') {
     control = (
-      <textarea id={id} className={cls} value={value} disabled={disabled} autoFocus={autoFocus} rows={big ? 10 : rows ?? 4}
+      <textarea id={id} className={cls} value={value} disabled={disabled} autoFocus={autoFocus} rows={rows ?? 4}
         onChange={e => onChange(e.target.value)}
-        style={{ ...style, resize: 'vertical', lineHeight: 1.6, ...(big ? { minHeight: 240 } : null) }} />
+        style={{ ...style, resize: 'vertical', lineHeight: 1.6, ...(minHeight ? { minHeight } : null) }} />
     )
   } else {
     control = <input id={id} className={cls} value={value} disabled={disabled} autoFocus={autoFocus} onChange={e => onChange(e.target.value)} style={style} />

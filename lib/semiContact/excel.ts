@@ -18,7 +18,7 @@ import {
   type FieldDef, type FieldKey, type ReportInput,
 } from './fields'
 import { changedFields } from './prefill'
-import { actionFromStorage, fromStorage } from './storage'
+import { actionFromStorage, fromStorage, nextContactShown, nextContactTbdOf } from './storage'
 import { PROJECT_KEYS } from './project'
 import { contactSequence, seqLabel } from './sequence'
 
@@ -138,7 +138,9 @@ export function buildReportSheet(
     thin(v); wrapTop(v)
     r.height = heightFor(value, A_VALUE_WIDTH)
   }
-  const field = (k: FieldKey) => pair(FIELD_BY_KEY[k].label, input[k])
+  // 다음 Contact 예정일은 날짜가 비고 「미정」 플래그가 있으면 「미정」으로 쓴다.
+  const nextTbd = nextContactTbdOf(report.row)
+  const field = (k: FieldKey) => pair(FIELD_BY_KEY[k].label, k === 'next_contact_date' ? nextContactShown(input[k], nextTbd) : input[k])
 
   // 제목
   const t = ws.addRow([[seqLabel(data.seq), project.project_no, project.title].filter(Boolean).join('  ')])
@@ -231,7 +233,7 @@ export function buildHistoryWorkbook(
   let before: ReportInput | null = null
   for (const { r, input } of asc) {
     const changed = new Set(changedFields(before, input))
-    const values = [seqLabel(seqOf.get(r.report_id)), input.contact_date, input.contact_method, r.authorName, ...HISTORY_FIELD_ORDER.slice(2).map(k => input[k])]
+    const values = [seqLabel(seqOf.get(r.report_id)), input.contact_date, input.contact_method, r.authorName, ...HISTORY_FIELD_ORDER.slice(2).map(k => k === 'next_contact_date' ? nextContactShown(input[k], nextContactTbdOf(r.row)) : input[k])]
     const row = hs.addRow([])
     let height = LINE_HEIGHT
     values.forEach((v, i) => {
@@ -286,7 +288,8 @@ export function buildHistoryWorkbook(
   // ── 요약 ──
   const ss = wb.addWorksheet('요약')
   ss.columns = [{ width: 22 }, { width: 50 }]
-  const latest = asc[asc.length - 1]?.input ?? null
+  const latestRow = asc[asc.length - 1] ?? null
+  const latest = latestRow?.input ?? null
   const summary: [string, string][] = [
     ['Project 번호', project.project_no],
     [FIELD_BY_KEY.customer_name.label, project.customer_name],
@@ -294,7 +297,7 @@ export function buildHistoryWorkbook(
     [FIELD_BY_KEY.title.label, project.title],
     ['접촉 횟수', String(asc.length)],
     ['최근 접촉일', latest?.contact_date ?? ''],
-    [FIELD_BY_KEY.next_contact_date.label, latest?.next_contact_date ?? ''],
+    [FIELD_BY_KEY.next_contact_date.label, latestRow ? nextContactShown(latestRow.input.next_contact_date, nextContactTbdOf(latestRow.r.row)) : ''],
     ['미완료 Action', String(open)],
   ]
   for (const [label, value] of summary) {
