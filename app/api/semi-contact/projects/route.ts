@@ -10,7 +10,7 @@
 // 접근 검사는 다른 접촉 보고서 라우트와 같은 authorizeSemiContact(401·403 형식 동일). 읽기는 service role.
 //
 // 행마다 돌려주는 값: 번호·고객사·사업장/부서·안건·생성일, 접촉 횟수, 최근 접촉(가장 늦은 contact_date,
-// 같은 날이면 report_id 가 큰 보고서)의 날짜·작성자 이름. 정렬은 최근 접촉 내림차순, 보고서가 없으면 생성일로 견준다.
+// 같은 날이면 report_id 가 큰 보고서)의 날짜·작성자 이름·직책(engineers.position). 정렬은 최근 접촉 내림차순, 보고서가 없으면 생성일로 견준다.
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { authorizeSemiContact } from '@/lib/semiContactServer'
@@ -38,7 +38,7 @@ type ReportRow = {
   report_id: number
   project_id: number
   contact_date: string
-  author: { name: string | null; teams: string | null } | null
+  author: { name: string | null; position: string | null; teams: string | null } | null
 }
 
 type ProjectListItem = {
@@ -51,6 +51,7 @@ type ProjectListItem = {
   report_count: number
   last_contact_date: string | null
   last_contact_author: string | null
+  last_contact_author_position: string | null
 }
 
 export async function GET(req: NextRequest) {
@@ -92,7 +93,7 @@ async function handle(req: NextRequest) {
     sb.from('semi_projects')
       .select('project_id, project_no, customer_name, site_dept, title, created_at, creator:engineers!semi_projects_created_by_fkey(teams)'),
     sb.from('semi_contact_reports')
-      .select('report_id, project_id, contact_date, author:engineers!semi_contact_reports_author_fkey(name, teams)'),
+      .select('report_id, project_id, contact_date, author:engineers!semi_contact_reports_author_fkey(name, position, teams)'),
   ])
   if (p.error || r.error) {
     console.error(`[${TAG}] lookup failed`, { error: p.error ?? r.error })
@@ -130,6 +131,7 @@ async function handle(req: NextRequest) {
       report_count: agg?.count ?? 0,
       last_contact_date: last?.contact_date ?? null,
       last_contact_author: last ? (last.author?.name ?? null) : null,
+      last_contact_author_position: last ? (last.author?.position?.trim() || null) : null,
       // 최근 접촉일, 보고서가 없으면 생성일(한국 날짜)로 견준다.
       sortKey: last?.contact_date ?? kstYmd(pr.created_at),
     }

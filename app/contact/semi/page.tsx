@@ -32,21 +32,31 @@ import {
 } from '@/lib/semiContact/project'
 
 /**
- * 열 폭. 머리 줄과 행이 이 상수 하나를 함께 쓴다(의뢰서 목록과 같은 방식).
- *   번호·최근 접촉·횟수·작성 버튼 — 고정 폭 / 고객사·사업장·안건 — 남는 폭을 나눠 쓴다.
+ * 열 폭. 머리 줄과 행이 같은 grid-template-columns(.cs-grid)를 쓴다 — 머리/행이 어긋나지 않게.
+ *   번호·최근 접촉·횟수·작성 버튼 — 고정 폭 / 고객사·사업장·안건 — 남는 폭을 나눠 쓴다(안건이 가장 많이).
+ *   최근 접촉 — 가장 긴 「YYYY-MM-DD · 이름 직책」(네 글자 이름 + 「관리자」)이 들어가는 폭.
+ *   접촉 횟수 — 최근 접촉 칸 끝과 버튼 왼쪽 끝 사이 전체. 양옆 간격이 같아 숫자가 정확히 그 가운데에 온다.
+ *   작성 버튼 — 버튼이 칸을 꽉 채워, 칸의 왼쪽 끝이 곧 버튼의 왼쪽 끝이다.
  * 생성일은 화면에 보이지 않는다(정렬 기준으로만 서버가 쓴다).
  */
-const COL = { no: 156, last: 188, count: 64, write: 84, gap: 10 }
-const FLEX_CUSTOMER = 1
-const FLEX_SITE = 0.8
-const FLEX_TITLE = 1.4
+const COL = { no: 156, last: 168, count: 72, write: 84, gap: 10 }
+const FR_CUSTOMER = 1
+const FR_SITE = 0.8
+const FR_TITLE = 1.4
 /** 카드 좌우 여백(16) + 행 좌우 여백(12). 머리는 카드 끝까지 늘이고 글자만 행과 맞춘다. */
 const HEAD_PAD = 28
 
-/** 좁은 화면에서는 사업장 칸을 숨긴다. container-type 이 있어야 @container 가 동작한다. */
+const gridCols = (site: boolean) => [
+  `${COL.no}px`, `minmax(0, ${FR_CUSTOMER}fr)`, ...(site ? [`minmax(0, ${FR_SITE}fr)`] : []), `minmax(0, ${FR_TITLE}fr)`,
+  `${COL.last}px`, `${COL.count}px`, `${COL.write}px`,
+].join(' ')
+
+/** 머리·행 공용 grid. 좁은 화면에서는 사업장 칸을 숨기고 그 칸을 뺀 열 정의로 바꾼다. container-type 이 있어야 @container 가 동작한다. */
 const SHELL_CSS = `
   .cs-shell { container-type: inline-size; }
+  .cs-grid { display: grid; grid-template-columns: ${gridCols(true)}; column-gap: ${COL.gap}px; align-items: center; }
   @container (max-width: 820px) {
+    .cs-grid { grid-template-columns: ${gridCols(false)}; }
     .cs-site { display: none !important; }
   }
 `
@@ -62,6 +72,7 @@ type ProjectRow = {
   report_count: number
   last_contact_date: string | null
   last_contact_author: string | null
+  last_contact_author_position: string | null
 }
 
 export default function ContactSemiPage() {
@@ -170,19 +181,18 @@ export default function ContactSemiPage() {
         </div>
 
         {/* 표 머리 — 카드 끝까지 늘이고 글자만 행과 맞춘다 */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: COL.gap,
+        <div className="cs-grid" style={{
           margin: '0 -16px', padding: `0 ${HEAD_PAD}px 8px`,
           borderBottom: `1px solid ${BORDER}`,
           fontSize: 11, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap',
         }}>
-          <span style={{ width: COL.no, flexShrink: 0 }}>{PROJECT_NO_LABEL}</span>
-          <span style={{ flex: FLEX_CUSTOMER, minWidth: 0 }}>{FIELD_BY_KEY.customer_name.label}</span>
-          <span className="cs-site" style={{ flex: FLEX_SITE, minWidth: 0 }}>{FIELD_BY_KEY.site_dept.label}</span>
-          <span style={{ flex: FLEX_TITLE, minWidth: 0 }}>{FIELD_BY_KEY.title.label}</span>
-          <span style={{ width: COL.last, flexShrink: 0 }}>최근 접촉</span>
-          <span style={{ width: COL.count, flexShrink: 0, textAlign: 'right' }}>접촉 횟수</span>
-          <span style={{ width: COL.write, flexShrink: 0 }} />
+          <span>{PROJECT_NO_LABEL}</span>
+          <span style={{ minWidth: 0 }}>{FIELD_BY_KEY.customer_name.label}</span>
+          <span className="cs-site" style={{ minWidth: 0 }}>{FIELD_BY_KEY.site_dept.label}</span>
+          <span style={{ minWidth: 0 }}>{FIELD_BY_KEY.title.label}</span>
+          <span style={{ textAlign: 'center' }}>최근 접촉</span>
+          <span style={{ textAlign: 'center' }}>접촉 횟수</span>
+          <span />
         </div>
 
         {loadError ? (
@@ -210,39 +220,44 @@ export default function ContactSemiPage() {
               onKeyDown={e => { if (e.key === 'Enter') openProject(r.project_id) }}
               onMouseEnter={e => (e.currentTarget.style.background = ROW_HOVER_BG)}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-              style={{ ...rowStyle(i === 0), display: 'flex', alignItems: 'center', gap: COL.gap, cursor: 'pointer' }}
+              className="cs-grid"
+              style={{ ...rowStyle(i === 0), cursor: 'pointer' }}
             >
               <span className="num" style={{
-                width: COL.no, flexShrink: 0, fontSize: 13, fontWeight: 700, color: TEXT,
+                minWidth: 0, fontSize: 13, fontWeight: 700, color: TEXT,
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }} title={r.project_no}>
                 {r.project_no}
               </span>
-              <span style={cellText(FLEX_CUSTOMER, TEXT)} title={r.customer_name}>{r.customer_name}</span>
-              <span className="cs-site" style={cellText(FLEX_SITE, r.site_dept?.trim() ? SUB : FAINT)} title={r.site_dept ?? undefined}>
+              <span style={cellText(TEXT)} title={r.customer_name}>{r.customer_name}</span>
+              <span className="cs-site" style={cellText(r.site_dept?.trim() ? SUB : FAINT)} title={r.site_dept ?? undefined}>
                 {r.site_dept?.trim() || '-'}
               </span>
-              <span style={cellText(FLEX_TITLE, TEXT)} title={r.title}>{r.title}</span>
+              <span style={cellText(TEXT)} title={r.title}>{r.title}</span>
               <span style={{
-                width: COL.last, flexShrink: 0, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                minWidth: 0, fontSize: 12, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}>
                 {r.last_contact_date ? (
                   <>
                     <span className="num" style={{ color: TEXT }}>{r.last_contact_date}</span>
                     <span style={{ color: FAINT }}> · </span>
-                    <span style={{ color: SUB }}>{r.last_contact_author ?? '-'}</span>
+                    <span style={{ color: SUB }}>
+                      {r.last_contact_author
+                        ? (r.last_contact_author_position ? `${r.last_contact_author} ${r.last_contact_author_position}` : r.last_contact_author)
+                        : '-'}
+                    </span>
                   </>
                 ) : <span style={{ color: FAINT }}>-</span>}
               </span>
-              <span className="num" style={{ width: COL.count, flexShrink: 0, fontSize: 13, color: r.report_count ? TEXT : FAINT, textAlign: 'right' }}>
+              <span className="num" style={{ fontSize: 13, color: r.report_count ? TEXT : FAINT, textAlign: 'center' }}>
                 {r.report_count}
               </span>
-              <span style={{ width: COL.write, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
+              <span style={{ display: 'flex' }}>
                 <Link
                   href={`/contact/semi/${r.project_id}/write`}
                   onClick={e => e.stopPropagation()}
                   onKeyDown={e => e.stopPropagation()}
-                  style={{ ...btnGhost(), padding: '5px 10px', fontSize: 12, textDecoration: 'none' }}
+                  style={{ ...btnGhost(), flex: 1, padding: '5px 0', fontSize: 12, textAlign: 'center', whiteSpace: 'nowrap', textDecoration: 'none' }}
                 >
                   보고서 작성
                 </Link>
@@ -318,9 +333,9 @@ function TeamToggle({ teams, value, onChange }: {
 }
 
 /** 남는 폭을 나눠 쓰는 글자 칸. 한 줄로 자르고 넘치면 말줄임. */
-function cellText(flex: number, color: string) {
+function cellText(color: string) {
   return {
-    flex, minWidth: 0, fontSize: 13, color,
+    minWidth: 0, fontSize: 13, color,
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   } as const
 }
