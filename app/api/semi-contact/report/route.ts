@@ -23,6 +23,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { authorizeSemiContact } from '@/lib/semiContactServer'
+import { isSuperAdmin } from '@/lib/permissions'
 import {
   FIELD_KEYS, emptyInput, meaningfulActions, toStorage, actionToStorage, validateReport,
   type ActionField, type ActionInput, type FieldKey,
@@ -204,4 +205,73 @@ async function handle(req: NextRequest) {
 
   console.log(`[${TAG}] 저장`, { reportId, projectId, actions: actionRows.length, by: caller.engineer_id })
   return NextResponse.json({ report_id: reportId })
+}
+
+// ════════════════════════════════════════════════════════════════════
+// 삭제 — DELETE /api/semi-contact/report?report_id=<id>
+//
+// 허용: 접근 검사(authorizeSemiContact) 통과 + (작성자 본인 또는 superadmin). 아니면 403, 없으면 404.
+// 삭제 순서: semi_actions 의 보고서 FK 가 on delete cascade 라(semi_contact_schema.sql 의 semi_actions_report_fkey)
+//   보고서 한 줄만 지우면 그 Action 도 같은 문장 안에서 함께 지워진다 — 따로 지우지 않아 반만 지워지는 일이 없다.
+//   응답의 Action 건수는 지우기 직전에 센 값이다.
+// 번호(Project 번호 등)는 되돌리지 않는다.
+// ════════════════════════════════════════════════════════════════════
+export async function DELETE(req: NextRequest) {
+  try {
+    return await handleDelete(req)
+  } catch (e) {
+    console.error(`[${TAG}] DELETE 처리 중 예외`, e)
+    return bad(`접촉 보고서를 삭제하는 중 오류: ${reasonOf(e)}`, 500)
+  }
+}
+
+async function handleDelete(req: NextRequest) {
+  if (!envReady()) {
+    console.error(`[${TAG}] 환경 변수 누락 — SUPABASE URL 또는 SERVICE_ROLE_KEY`)
+    return bad('서버 설정 오류 — 환경 변수가 없습니다. 관리자에게 알려주세요.', 500)
+  }
+  const auth = await authorize()
+  if (auth.error) return auth.error
+  const caller = auth.caller
+
+  const reportId = Number(new URL(req.url).searchParams.get('report_id'))
+  if (!Number.isInteger(reportId) || reportId <= 0) return bad('보고서가 지정되지 않았습니다.')
+
+  const sb = admin()
+  const { data: report, error: findErr } = await sb
+    .from('semi_contact_reports')
+    .select('report_id, project_id, author_id')
+    .eq('report_id', reportId)
+    .maybeSingle()
+  if (findErr) {
+    console.error(`[${TAG}] report lookup failed`, { reportId, error: findErr })
+    return bad('보고서를 확인하지 못했습니다.', 500)
+  }
+  if (!report) return bad('보고서를 찾을 수 없습니다.', 404)
+
+  const row = report as { report_id: number; project_id: number; author_id: number }
+  if (row.author_id !== caller.engineer_id && !isSuperAdmin(caller)) {
+    return bad('작성자 본인이나 관리자만 삭제할 수 있습니다.', 403)
+  }
+
+  const { count: actionCount, error: countErr } = await sb
+    .from('semi_actions')
+    .select('action_id', { count: 'exact', head: true })
+    .eq('report_id', reportId)
+  if (countErr) console.error(`[${TAG}] action count failed`, { reportId, error: countErr })
+
+  const { data: gone, error: delErr } = await sb
+    .from('semi_contact_reports')
+    .delete()
+    .eq('report_id', reportId)
+    .select('report_id')
+  if (delErr) {
+    console.error(`[${TAG}] report delete failed`, { reportId, error: delErr })
+    return bad(`보고서를 삭제하지 못했습니다: ${reasonOf(delErr)}`, 500)
+  }
+  const reports = (gone ?? []).length
+  if (reports === 0) return bad('보고서를 찾을 수 없습니다.', 404)
+
+  console.log(`[${TAG}] 삭제`, { reportId, projectId: row.project_id, actions: actionCount ?? null, by: caller.engineer_id })
+  return NextResponse.json({ deleted: { reports, actions: actionCount ?? 0 } })
 }

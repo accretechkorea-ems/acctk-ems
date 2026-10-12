@@ -21,6 +21,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { authorizeSemiContact } from '@/lib/semiContactServer'
+import { isSuperAdmin } from '@/lib/permissions'
 import { todayKST } from '@/lib/date'
 import { emptyInput, toStorage, validateReport, type FieldKey } from '@/lib/semiContact'
 import { PROJECT_KEYS, PROJECT_TEXT_MAX, buildProjectNo } from '@/lib/semiContact/project'
@@ -163,4 +164,81 @@ async function handle(req: NextRequest) {
 
   console.error(`[${TAG}] 번호 발급을 ${MAX_TRIES}회 시도했지만 계속 겹쳤다`, { year })
   return bad('번호가 계속 겹칩니다. 잠시 뒤 다시 시도해주세요.', 409)
+}
+
+// ════════════════════════════════════════════════════════════════════
+// 삭제 — DELETE /api/semi-contact/project?project_id=<id>
+//
+// 허용: 접근 검사(authorizeSemiContact) 통과 + (Project 를 만든 본인 또는 superadmin). 아니면 403, 없으면 404.
+// 삭제 순서: Action → 보고서 → Project.
+//   semi_contact_reports·semi_actions 의 Project FK 가 on delete restrict 라(semi_contact_schema.sql)
+//   Project 만 지우면 막힌다. 그래서 딸린 것을 먼저 지운다. 세 번의 호출이라 DB 트랜잭션으로 묶이지 않는다 —
+//   중간에 실패하면 앞 단계까지만 지워진 채 오류를 돌려준다(FK 를 어기는 상태는 생기지 않고, 다시 누르면 남은 것을 지운다).
+// Project 번호는 되돌리지 않는다(semi_project_sequence 는 건드리지 않는다 — 번호 재사용 금지).
+// ════════════════════════════════════════════════════════════════════
+export async function DELETE(req: NextRequest) {
+  try {
+    return await handleDelete(req)
+  } catch (e) {
+    console.error(`[${TAG}] DELETE 처리 중 예외`, e)
+    return bad(`Project 를 삭제하는 중 오류: ${reasonOf(e)}`, 500)
+  }
+}
+
+async function handleDelete(req: NextRequest) {
+  if (!envReady()) {
+    console.error(`[${TAG}] 환경 변수 누락 — SUPABASE URL 또는 SERVICE_ROLE_KEY`)
+    return bad('서버 설정 오류 — 환경 변수가 없습니다. 관리자에게 알려주세요.', 500)
+  }
+  const auth = await authorize()
+  if (auth.error) return auth.error
+  const caller = auth.caller
+
+  const projectId = Number(new URL(req.url).searchParams.get('project_id'))
+  if (!Number.isInteger(projectId) || projectId <= 0) return bad('Project 가 지정되지 않았습니다.')
+
+  const sb = admin()
+  const { data: project, error: findErr } = await sb
+    .from('semi_projects')
+    .select('project_id, project_no, created_by')
+    .eq('project_id', projectId)
+    .maybeSingle()
+  if (findErr) {
+    console.error(`[${TAG}] project lookup failed`, { projectId, error: findErr })
+    return bad('Project 를 확인하지 못했습니다.', 500)
+  }
+  if (!project) return bad('Project 를 찾을 수 없습니다.', 404)
+
+  const row = project as { project_id: number; project_no: string; created_by: number }
+  if (row.created_by !== caller.engineer_id && !isSuperAdmin(caller)) {
+    return bad('Project 를 만든 본인이나 관리자만 삭제할 수 있습니다.', 403)
+  }
+
+  // 1) Action
+  const { data: delActions, error: aErr } = await sb
+    .from('semi_actions').delete().eq('project_id', projectId).select('action_id')
+  if (aErr) {
+    console.error(`[${TAG}] actions delete failed`, { projectId, error: aErr })
+    return bad(`Action 을 삭제하지 못했습니다: ${reasonOf(aErr)}`, 500)
+  }
+  const actions = (delActions ?? []).length
+
+  // 2) 보고서
+  const { data: delReports, error: rErr } = await sb
+    .from('semi_contact_reports').delete().eq('project_id', projectId).select('report_id')
+  if (rErr) {
+    console.error(`[${TAG}] reports delete failed — Action 은 이미 지워졌다`, { projectId, actions, error: rErr })
+    return bad(`보고서를 삭제하지 못했습니다(Action ${actions}건은 이미 삭제됨): ${reasonOf(rErr)}`, 500)
+  }
+  const reports = (delReports ?? []).length
+
+  // 3) Project
+  const { error: pErr } = await sb.from('semi_projects').delete().eq('project_id', projectId)
+  if (pErr) {
+    console.error(`[${TAG}] project delete failed — 보고서·Action 은 이미 지워졌다`, { projectId, reports, actions, error: pErr })
+    return bad(`Project 를 삭제하지 못했습니다(보고서 ${reports}건·Action ${actions}건은 이미 삭제됨): ${reasonOf(pErr)}`, 500)
+  }
+
+  console.log(`[${TAG}] 삭제`, { projectId, projectNo: row.project_no, reports, actions, by: caller.engineer_id })
+  return NextResponse.json({ deleted: { reports, actions } })
 }

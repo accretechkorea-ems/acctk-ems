@@ -15,14 +15,16 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { useToast } from '@/components/common/Toast'
+import { useConfirm } from '@/components/common/ConfirmDialog'
+import { isSuperAdmin } from '@/lib/permissions'
 import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, FAINT, BLUE, NEUTRAL_BG, ROW_HOVER_BG,
-  cardStyle, cardHeader, cardTitle, countBadge, btnPrimary, btnGhost,
+  cardStyle, cardHeader, cardTitle, countBadge, btnPrimary, btnGhost, btnDanger,
 } from '@/components/common/ui'
 import { daysBetween, todayKST } from '@/lib/date'
 import { errorInfo } from '@/lib/errorInfo'
@@ -48,7 +50,7 @@ const DONE_STATUS = 'Done'
 /** 위험(기한 지남) 글자색 — 디자인 표의 「위험」 값. */
 const DANGER_TEXT = '#ef4444'
 
-type Project = { project_id: number; project_no: string; customer_name: string; site_dept: string | null; title: string }
+type Project = { project_id: number; project_no: string; customer_name: string; site_dept: string | null; title: string; created_by: number }
 type ReportRow = Record<string, unknown> & {
   report_id: number
   contact_date: string
@@ -94,7 +96,9 @@ export default function SemiProjectDetailPage() {
   const supabase = useMemo(() => createClient(), [])
   const params = useParams<{ projectId: string }>()
   const projectId = Number(params?.projectId)
-  const { loading: guardLoading, authorized } = usePageGuard()
+  const { engineer, loading: guardLoading, authorized } = usePageGuard()
+  const router = useRouter()
+  const confirm = useConfirm()
 
   const [project, setProject] = useState<Project | null>(null)
   const [reportRows, setReportRows] = useState<ReportRow[] | null>(null)
@@ -105,6 +109,10 @@ export default function SemiProjectDetailPage() {
   const toast = useToast()
   /** 내려받는 중인 엑셀('history' 또는 보고서 id). 그동안 두 버튼을 모두 막는다(중복 클릭 방지). */
   const [exporting, setExporting] = useState<'history' | number | null>(null)
+  /** 지우는 중('project' 또는 보고서 id). 그동안 삭제 버튼을 모두 막는다(중복 방지). */
+  const [deleting, setDeleting] = useState<'project' | number | null>(null)
+  /** 올리면 세 표를 다시 읽는다(보고서를 지운 뒤 타임라인·요약·미완료 Action 을 새로 그리려고). */
+  const [reloadKey, setReloadKey] = useState(0)
 
   /**
    * 엑셀 내려받기 — 서버(/api/semi-contact/export)가 만든 파일을 blob 으로 받아 저장한다.
@@ -142,6 +150,66 @@ export default function SemiProjectDetailPage() {
     }
   }
 
+  // ── 삭제 — 서버(DELETE /api/semi-contact/project·report)가 권한(만든 사람·작성자 본인 또는 superadmin)을 다시 본다 ──
+
+  /** Project 를 통째로 지운다. 지우면 목록으로 간다. */
+  const deleteProject = async (counts: { reports: number; actions: number }) => {
+    if (deleting !== null) return
+    const ok = await confirm({
+      title: 'Project 삭제',
+      message: `보고서 ${counts.reports}건, Action ${counts.actions}건이 함께 삭제되며 복구할 수 없습니다.`,
+      confirmText: '삭제',
+      variant: 'danger',
+    })
+    if (!ok) return
+    setDeleting('project')
+    try {
+      const res = await fetch(`/api/semi-contact/project?project_id=${projectId}`, { method: 'DELETE' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        console.error('[contact/semi/detail] Project 삭제 실패', { status: res.status, error: json })
+        toast.error(json.error || `Project 를 삭제하지 못했습니다 (${res.status})`)
+        return
+      }
+      toast.success(`Project 를 삭제했습니다 (보고서 ${json.deleted?.reports ?? 0}건, Action ${json.deleted?.actions ?? 0}건)`)
+      router.push('/contact/semi')
+    } catch (e) {
+      console.error('[contact/semi/detail] Project 삭제 실패', errorInfo(e))
+      toast.error('Project 를 삭제하지 못했습니다. 잠시 뒤 다시 시도해주세요.')
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  /** 보고서 한 장을 지운다. 이 화면에 남아 세 표를 다시 읽는다(마지막 보고서였으면 빈 상태가 된다). */
+  const deleteReport = async (reportId: number, actionCount: number) => {
+    if (deleting !== null) return
+    const ok = await confirm({
+      title: '보고서 삭제',
+      message: `이 보고서와 Action ${actionCount}건이 삭제됩니다. 복구할 수 없습니다.`,
+      confirmText: '삭제',
+      variant: 'danger',
+    })
+    if (!ok) return
+    setDeleting(reportId)
+    try {
+      const res = await fetch(`/api/semi-contact/report?report_id=${reportId}`, { method: 'DELETE' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        console.error('[contact/semi/detail] 보고서 삭제 실패', { status: res.status, error: json })
+        toast.error(json.error || `보고서를 삭제하지 못했습니다 (${res.status})`)
+        return
+      }
+      toast.success('보고서를 삭제했습니다')
+      setReloadKey(k => k + 1)
+    } catch (e) {
+      console.error('[contact/semi/detail] 보고서 삭제 실패', errorInfo(e))
+      toast.error('보고서를 삭제하지 못했습니다. 잠시 뒤 다시 시도해주세요.')
+    } finally {
+      setDeleting(null)
+    }
+  }
+
   useEffect(() => {
     if (!authorized) return
     if (!Number.isInteger(projectId) || projectId <= 0) { setLoadError('Project 주소가 올바르지 않습니다.'); return }
@@ -149,7 +217,7 @@ export default function SemiProjectDetailPage() {
     const load = async () => {
       const [p, r, a] = await Promise.all([
         supabase.from('semi_projects')
-          .select('project_id, project_no, customer_name, site_dept, title')
+          .select('project_id, project_no, customer_name, site_dept, title, created_by')
           .eq('project_id', projectId).maybeSingle(),
         // 작성자 이름은 목록과 같이 engineers 를 임베드한다. 이 표는 engineers 를 두 번 가리키므로(작성자·수정자)
         // 어느 FK 인지 이름으로 짚는다.
@@ -184,7 +252,7 @@ export default function SemiProjectDetailPage() {
     }
     load()
     return () => { cancelled = true }
-  }, [authorized, projectId, supabase])
+  }, [authorized, projectId, supabase, reloadKey])
 
   // 보고서마다 입력 모양 + 바로 앞 보고서 대비 변경(접촉일 오름차순 기준).
   const views = useMemo<ReportView[]>(() => {
@@ -252,6 +320,11 @@ export default function SemiProjectDetailPage() {
   const writeHref = `/contact/semi/${project.project_id}/write`
   const latest = views[0] ?? null
   const selected = views.find(v => v.id === selectedId) ?? latest
+  // 삭제 버튼은 권한이 있는 사람에게만 보인다(서버가 같은 규칙으로 다시 막는다).
+  const isSuper = isSuperAdmin(engineer)
+  const myId = engineer?.engineer_id ?? null
+  const canDeleteProject = isSuper || (myId !== null && project.created_by === myId)
+  const canDeleteReport = (v: ReportView) => isSuper || (myId !== null && v.row.author_id === myId)
 
   const select = (id: number) => {
     setSelectedId(id)
@@ -278,6 +351,13 @@ export default function SemiProjectDetailPage() {
                 </button>
               )}
               <Link href={writeHref} style={{ ...btnPrimary(), textDecoration: 'none' }}>보고서 작성</Link>
+              {canDeleteProject && (
+                <button type="button" disabled={deleting !== null}
+                  onClick={() => deleteProject({ reports: views.length, actions: actionRows.length })}
+                  style={btnDanger(deleting !== null)}>
+                  {deleting === 'project' ? '삭제 중...' : 'Project 삭제'}
+                </button>
+              )}
             </span>
           </div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 10, fontSize: 12, color: SUB }}>
@@ -327,6 +407,13 @@ export default function SemiProjectDetailPage() {
                         {exporting === selected.id ? '만드는 중...' : '이 보고서 엑셀'}
                       </button>
                     )}
+                    deleteButton={canDeleteReport(selected) ? (
+                      <button type="button" disabled={deleting !== null}
+                        onClick={() => deleteReport(selected.id, (actionsByReport.get(selected.id) ?? []).length)}
+                        style={{ ...btnDanger(deleting !== null), padding: '5px 10px', fontSize: 12 }}>
+                        {deleting === selected.id ? '삭제 중...' : '이 보고서 삭제'}
+                      </button>
+                    ) : undefined}
                   />
                 )}
               </div>
@@ -453,11 +540,13 @@ function Timeline({ views, selectedId, onSelect }: { views: ReportView[]; select
 }
 
 /** 선택한 보고서 한 장 — 읽기 전용. */
-function ReportDetail({ view, actions, exportButton }: {
+function ReportDetail({ view, actions, exportButton, deleteButton }: {
   view: ReportView
   actions: (ActionInput & { id: number })[]
   /** 「이 보고서 엑셀」 버튼 — 내려받기 상태는 부모가 들고 있다. */
   exportButton?: ReactNode
+  /** 「이 보고서 삭제」 버튼 — 권한이 있을 때만 부모가 넘긴다. */
+  deleteButton?: ReactNode
 }) {
   // 바뀐 칸이 있는 그룹은 처음부터 편다.
   const [open, setOpen] = useState<Set<number>>(
@@ -473,6 +562,7 @@ function ReportDetail({ view, actions, exportButton }: {
         <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 12, color: MUTED }}>{AUTHOR_FIELD.label} {view.authorName}</span>
           {exportButton}
+          {deleteButton}
         </span>
       )}>
         <div style={gridStyle}>{CONTACT_KEYS.map(k => value(k))}</div>
