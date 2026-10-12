@@ -1,7 +1,7 @@
 // 반도체 고객 접촉 보고 — 접촉 보고서 한 장 저장(새로 쓰기만. 수정 PATCH 는 다음 단계).
 //
 // 흐름(로그인·권한·클라이언트 구분은 app/api/semi-contact/project/route.ts 와 같다)
-//   1. 세션 클라이언트로 로그인 확인 → engineers → 팀 메뉴 권한(contact_semi). 없으면 403(superadmin 은 통과).
+//   1. 접근 검사(lib/semiContactServer.ts) — 반도체 팀 + contact_semi 권한 또는 사업부 전환 권한자만. 없으면 403.
 //   2. project_id 가 실제로 있는지 service role 로 확인한다. 없으면 404.
 //   3. 본문의 필드 값(등록표 36칸)·Action 줄·「Action 없음」을 lib/semiContact 의 validateReport 로 검증한다.
 //      Project 칸(고객사·사업장/부서·Project/구매안건)은 본문 값을 쓰지 않고 방금 읽은 Project 값으로 채운다 —
@@ -21,10 +21,8 @@
 //   사람이 지울 수 있게 한다.
 //   Project updated_at 갱신은 보고서가 이미 저장된 뒤라 실패해도 되돌리지 않는다(로그만 남긴다 — 목록 정렬용 시각이다).
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewMenu } from '@/lib/permissions'
-import { withTeamPerm } from '@/lib/teamPermsServer'
+import { authorizeSemiContact } from '@/lib/semiContactServer'
 import {
   FIELD_KEYS, emptyInput, meaningfulActions, toStorage, actionToStorage, validateReport,
   type ActionField, type ActionInput, type FieldKey,
@@ -32,9 +30,6 @@ import {
 import { PROJECT_KEYS } from '@/lib/semiContact/project'
 
 const TAG = 'semi-contact/report'
-
-/** 이 메뉴의 권한 키(lib/menuPerms.ts). */
-const MENU_KEY = 'contact_semi'
 
 /** 한 보고서에 받는 Action 줄 상한. 화면이 이보다 많이 보낼 일은 없다 — 잘못된 요청을 막는 안전 상한이다. */
 const ACTIONS_MAX = 50
@@ -64,25 +59,11 @@ const envReady = (): boolean =>
   !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY
 
 /**
- * 로그인 + 접촉 보고서 메뉴 권한(superadmin 은 canViewMenu 가 통과시킨다).
- * 상태를 바꾸는 라우트라 팀 권한은 캐시를 건너뛰고 새로 읽는다(lib/teamPermsServer.ts 의 fresh 설명).
+ * 로그인 + 접촉 보고서 접근 권한. 판정은 공용 함수 authorizeSemiContact(lib/semiContactServer.ts)가 한다 —
+ * 화면 가드와 같은 규칙(반도체 팀 + contact_semi 권한, 또는 사업부 전환 권한자). 메시지·상태 코드는 종전과 같다.
  */
 async function authorize(): Promise<{ error: NextResponse; caller: null } | { error: null; caller: Caller }> {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user?.email) return { error: bad('로그인이 필요합니다. 다시 로그인해 주세요.', 401), caller: null }
-
-  const { data: row, error } = await supabase
-    .from('engineers')
-    .select('engineer_id, permission_level, teams')
-    .eq('email', user.email)
-    .single()
-  if (error) console.error(`[${TAG}] caller lookup failed`, { email: user.email, error })
-  const caller = await withTeamPerm((row ?? null) as Caller | null, { fresh: true })
-  if (!caller || !canViewMenu(caller, MENU_KEY)) {
-    return { error: bad('이 메뉴를 사용할 권한이 없습니다.', 403), caller: null }
-  }
-  return { error: null, caller }
+  return authorizeSemiContact(TAG)
 }
 
 /** 문자열만 받는다(그 밖은 빈 값). */

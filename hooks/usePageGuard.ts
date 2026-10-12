@@ -6,20 +6,27 @@ import { createClient } from '@/lib/supabase/client'
 import { withTeamPerm } from '@/lib/teamPerms'
 import { canViewAll, canViewMenu, type EngineerLike, type TeamPerm } from '@/lib/permissions'
 import { menuKeyForPath, PUBLIC_MENU } from '@/lib/menuPerms'
+import { canAccessSemiContact, SEMI_CONTACT_KEY } from '@/lib/division'
 
 export type GuardEngineer = {
   engineer_id: number
   name: string | null
   teams: string | null
   permission_level: string | null
+  /** 사업부 전환 권한(superadmin 과 함께일 때만 뜻이 있다). 못 읽었으면 비어 있다 = false. */
+  can_switch_division?: boolean | null
   perm?: TeamPerm | null      // 소속 팀이 켜 둔 메뉴 키 (team_permissions 에서 붙여준다)
 }
 
-/** 지금 경로에 걸린 메뉴 권한으로 판정한다. 목록에 없는 경로는 막는다. */
-function allowsPath(pathname: string, engineer: EngineerLike | null): boolean {
+/**
+ * 지금 경로에 걸린 메뉴 권한으로 판정한다. 목록에 없는 경로는 막는다.
+ * 접촉 보고서만 사업부도 본다 — 서버 라우트(/api/semi-contact/*)와 같은 함수(canAccessSemiContact)로 판정한다.
+ */
+function allowsPath(pathname: string, engineer: (EngineerLike & { can_switch_division?: boolean | null }) | null): boolean {
   const key = menuKeyForPath(pathname)
   if (key === null) return false
   if (key === PUBLIC_MENU) return canViewAll(engineer)
+  if (key === SEMI_CONTACT_KEY) return canAccessSemiContact(engineer)
   return canViewMenu(engineer, key)
 }
 
@@ -56,7 +63,7 @@ export function usePageGuard() {
       }
       const { data: eng } = await supabase
         .from('engineers')
-        .select('engineer_id, name, teams, permission_level')
+        .select('engineer_id, name, teams, permission_level, can_switch_division')
         .eq('email', data.user.email)
         .single()
       // 권한 판정에 팀의 메뉴 목록이 필요하므로 붙인 뒤에 판정한다.

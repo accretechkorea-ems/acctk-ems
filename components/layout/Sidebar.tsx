@@ -21,7 +21,7 @@ import {
 } from '@/lib/menuPerms'
 import { loadTeamPerms } from '@/lib/teamPerms'
 import {
-  DIVISIONS, DIVISION_HOME, DIVISION_LABEL, readSavedDivision, writeSavedDivision, type Division,
+  DIVISIONS, DIVISION_HOME, DIVISION_LABEL, canSwitchDivision, readSavedDivision, writeSavedDivision, type Division,
 } from '@/lib/division'
 import Popover from '@/components/common/Popover'
 import { useNotifications } from '@/hooks/useNotifications'
@@ -197,14 +197,16 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
   const [teamPerm, setTeamPerm] = useState<TeamPerm | null>(null)
   /** 팀 권한(과 팀 사업부)을 다 읽었는지. 팀이 없는 사람은 teamPerm 이 null 로 끝나므로 따로 둔다. */
   const [permsReady, setPermsReady] = useState(false)
-  /** superadmin 이 고른 사업부(계정별 저장값). 고른 적이 없으면 null — 본인 팀의 사업부를 쓴다. */
+  /** 사업부를 바꿀 수 있는 사람인지(superadmin + engineers.can_switch_division). 못 읽었으면 false. */
+  const [canSwitch, setCanSwitch] = useState(false)
+  /** 전환 권한자가 고른 사업부(계정별 저장값). 고른 적이 없으면 null — 본인 팀의 사업부를 쓴다. */
   const [savedDivision, setSavedDivision] = useState<Division | null>(null)
   /** 사업부 고르기 패널이 열린 곳. PC 사이드바와 모바일 드로어가 앵커를 따로 갖는다. */
   const [divisionOpen, setDivisionOpen] = useState<'pc' | 'mobile' | null>(null)
   const divisionAnchorPc = useRef<HTMLButtonElement | null>(null)
   const divisionAnchorMobile = useRef<HTMLButtonElement | null>(null)
   /**
-   * superadmin 이 고르기로 사업부를 바꾼 순간의 주소. 시작 화면으로 옮겨 가는 동안 아직 그 주소에 머무는데,
+   * 전환 권한자가 고르기로 사업부를 바꾼 순간의 주소. 시작 화면으로 옮겨 가는 동안 아직 그 주소에 머무는데,
    * 그때 「주소 → 사업부 자동 전환」이 돌면 방금 고른 사업부를 도로 되돌린다. 주소가 바뀔 때까지 건너뛴다.
    */
   const switchedAtPath = useRef<string | null>(null)
@@ -256,7 +258,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
       if (!data.user?.email) return
       const { data: eng } = await supabase
         .from('engineers')
-        .select('engineer_id, name, position, teams, permission_level')
+        .select('engineer_id, name, position, teams, permission_level, can_switch_division')
         .eq('email', data.user.email)
         .single()
       if (!eng) return
@@ -266,8 +268,10 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
       setPosition(eng.position ?? null)
       setTeams(eng.teams ?? null)
       setPermissionLevel(eng.permission_level ?? null)
-      // superadmin 만 사업부를 고른다. 저장값은 브라우저에만 있으므로 여기(계정 확인 뒤)서 읽는다.
-      if (eng.permission_level === 'superadmin') setSavedDivision(readSavedDivision(eng.engineer_id))
+      setCanSwitch(canSwitchDivision(eng))
+      // 전환 권한자만 사업부를 고른다. 저장값은 브라우저에만 있으므로 여기(계정 확인 뒤)서 읽는다.
+      // 그 밖의 사람은 저장값이 남아 있어도 읽지 않는다(팀 사업부로 고정).
+      if (canSwitchDivision(eng)) setSavedDivision(readSavedDivision(eng.engineer_id))
       // 메뉴 노출은 팀 플래그로 판정한다(팀 이름을 코드에 두지 않기 위해).
       const map = await loadTeamPerms()
       setTeamPerm(eng.teams ? map.get(eng.teams) ?? null : null)
@@ -338,13 +342,13 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
   const engineer: EngineerLike | null = email ? { permission_level: permissionLevel, teams, perm: teamPerm } : null
 
   // ── 현재 사업부 ──
-  //   일반 직원 — 본인 팀의 사업부(팀이 없거나 비었으면 계측). 고를 수 없다.
-  //   superadmin — 고른 값, 고른 적이 없으면 본인 팀의 사업부.
+  //   전환 권한자(superadmin + can_switch_division, lib/division.ts 의 canSwitchDivision) — 고른 값,
+  //     고른 적이 없으면 본인 팀의 사업부.
+  //   그 밖의 모든 사람(전환 권한이 없는 superadmin 포함) — 본인 팀의 사업부(팀이 없거나 비었으면 계측). 고를 수 없다.
   //   팀 권한을 다 읽기 전에는 null — 그동안은 공통 메뉴(건의사항)만 보인다.
   //   superadmin 은 권한 없이도 모든 메뉴를 통과하므로, 이 대기가 없으면 두 사업부 메뉴가 잠깐 섞여 보인다.
-  const isSuper = permissionLevel === 'superadmin'
   const teamDivision: Division = teamPerm?.division ?? '계측'
-  const currentDivision: Division | null = !permsReady ? null : isSuper ? (savedDivision ?? teamDivision) : teamDivision
+  const currentDivision: Division | null = !permsReady ? null : canSwitch ? (savedDivision ?? teamDivision) : teamDivision
 
   /** 한 묶음의 보이는 메뉴. 사업부가 정해지기 전에는 공통 메뉴만. */
   const menusOf = (group: MenuGroup): MenuPerm[] =>
@@ -352,7 +356,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
       ? visibleMenus(group, engineer, currentDivision)
       : visibleMenus(group, engineer).filter(m => menuDivision(m) === '공통')
 
-  /** superadmin 이 사업부를 고른다 — 저장하고, 그 사업부의 시작 화면으로 옮겨 간다. */
+  /** 전환 권한자가 사업부를 고른다 — 저장하고, 그 사업부의 시작 화면으로 옮겨 간다. */
   const chooseDivision = (d: Division) => {
     setDivisionOpen(null)
     if (engineerId == null || d === currentDivision) return
@@ -362,11 +366,11 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
     navigate(DIVISION_HOME[d])
   }
 
-  // superadmin 이 주소로 다른 사업부의 메뉴 화면에 들어오면 그 사업부로 맞춘다(화면은 옮기지 않는다).
+  // 전환 권한자가 주소로 다른 사업부의 메뉴 화면에 들어오면 그 사업부로 맞춘다(화면은 옮기지 않는다).
   // 메뉴가 섞여 보이지 않게 하려는 것이다. 공통 화면(건의사항)·메뉴에 없는 경로(/account 등)는 그대로 둔다.
   // 홈(/dashboard)도 계측 메뉴라 반도체를 보다가 홈에 들어오면 계측으로 바뀐다.
   useEffect(() => {
-    if (!isSuper || !currentDivision || engineerId == null) return
+    if (!canSwitch || !currentDivision || engineerId == null) return
     if (switchedAtPath.current !== null) {
       if (switchedAtPath.current === pathname) return   // 고르기 직후, 아직 옮겨 가는 중
       switchedAtPath.current = null
@@ -377,26 +381,26 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
     if (d === '공통' || d === currentDivision) return
     writeSavedDivision(engineerId, d)
     setSavedDivision(d)
-  }, [pathname, isSuper, currentDivision, engineerId])
+  }, [pathname, canSwitch, currentDivision, engineerId])
 
   // 반도체 직원은 계측 홈(/·/dashboard)을 쓰지 않는다 — 들어오면 반도체 시작 화면으로 보낸다.
   // 로그인 직후의 이동은 app/login/page.tsx 가 먼저 그쪽으로 보내고, 이것은 주소로 직접 들어온 경우를 받는다.
-  // 그 밖의 경로(건의사항 등)는 막지 않는다. superadmin 은 위의 자동 전환을 따른다(보내지 않는다).
+  // 그 밖의 경로(건의사항 등)는 막지 않는다. 전환 권한자는 위의 자동 전환을 따른다(보내지 않는다). 전환 권한이 없는 superadmin 은 팀 사업부로 고정이라 직원과 같다.
   useEffect(() => {
-    if (isSuper || currentDivision !== '반도체') return
+    if (canSwitch || currentDivision !== '반도체') return
     if (pathname === '/' || pathname === '/dashboard') router.replace(DIVISION_HOME['반도체'])
-  }, [pathname, isSuper, currentDivision, router])
+  }, [pathname, canSwitch, currentDivision, router])
 
   /**
-   * 브랜드 아래 사업부 이름. superadmin 은 화살표가 붙은 버튼이고 누르면 고르기 패널이 뜬다.
-   * 일반 직원은 이름만(고를 수 없다). 사업부가 정해지기 전에는 자리만 둔다(줄 높이가 출렁이지 않게).
+   * 브랜드 아래 사업부 이름. 전환 권한자는 화살표가 붙은 버튼이고 누르면 고르기 패널이 뜬다.
+   * 그 밖의 사람은 이름만(고를 수 없다). 사업부가 정해지기 전에는 자리만 둔다(줄 높이가 출렁이지 않게).
    * 패널은 Popover 로 body 에 띄운다 — 사이드바가 overflow: hidden 이라 안에 두면 잘린다.
    */
   const renderDivision = (where: 'pc' | 'mobile') => {
     const big = where === 'mobile'
     const label = currentDivision ? DIVISION_LABEL[currentDivision] : ' '
     const textStyle: CSSProperties = { fontSize: big ? 12 : 11, color: MUTED, whiteSpace: 'nowrap' }
-    if (!isSuper || !currentDivision) return <span style={textStyle}>{label}</span>
+    if (!canSwitch || !currentDivision) return <span style={textStyle}>{label}</span>
     const anchor = big ? divisionAnchorMobile : divisionAnchorPc
     const open = divisionOpen === where
     return (

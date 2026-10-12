@@ -1,13 +1,14 @@
 // 반도체 고객 접촉 보고 — 새 Project 만들기(번호 발급 포함).
 //
 // 흐름은 의뢰서 발급(app/api/inquiry/route.ts 의 create)을 그대로 따른다.
-//   1. 세션 클라이언트로 로그인 확인 → engineers 조회 → 팀 메뉴 권한(contact_semi) 판정. 없으면 403.
+//   1. 접근 검사(lib/semiContactServer.ts) — 세션으로 로그인 확인, service role 로 engineers·팀 사업부를 읽어
+//      반도체 팀 + contact_semi 권한 또는 사업부 전환 권한자만 통과. 없으면 403.
 //   2. 본문에서 Project 칸(등록표의 storage 'project')만 꺼내 lib/semiContact 의 검증으로 확인한다.
 //   3. service role 로 claim_semi_project_seq(연도) 를 불러 순번을 받고 PRJ-연도-순번 을 만든다.
 //   4. service role 로 semi_projects 에 넣는다.
 //
 // 클라이언트를 둘로 나눠 쓴다. 섞으면 안 된다.
-//   세션 클라이언트 — 로그인 확인과 engineers 조회(권한 판정 자료).
+//   세션 클라이언트 — 로그인 확인(접근 검사 안에서).
 //   service role   — 채번 함수와 insert. semi_projects 에는 읽기 정책만 있고(쓰기는 막혀 있다),
 //                    claim_semi_project_seq 의 EXECUTE 도 service_role 에만 있다(semi_contact_schema.sql).
 //
@@ -18,18 +19,13 @@
 //   그 사이에 받은 번호와 겹치면 더 위험하다(의뢰서와 같은 원칙: 구멍보다 중복이 훨씬 위험하다).
 //   번호가 겹친 경우(23505)만 새 번호로 다시 시도하고, 그 밖의 실패는 오류로 돌려준다.
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewMenu } from '@/lib/permissions'
-import { withTeamPerm } from '@/lib/teamPermsServer'
+import { authorizeSemiContact } from '@/lib/semiContactServer'
 import { todayKST } from '@/lib/date'
 import { emptyInput, toStorage, validateReport, type FieldKey } from '@/lib/semiContact'
 import { PROJECT_KEYS, PROJECT_TEXT_MAX, buildProjectNo } from '@/lib/semiContact/project'
 
 const TAG = 'semi-contact/project'
-
-/** 이 메뉴의 권한 키(lib/menuPerms.ts). */
-const MENU_KEY = 'contact_semi'
 
 /** 번호가 겹쳤을 때 다시 발급해 보는 횟수(의뢰서와 같은 값). 채번이 원자적이라 정상 흐름에서는 겹치지 않는다. */
 const MAX_TRIES = 5
@@ -63,25 +59,11 @@ const isMissingFunction = (e: unknown): boolean => {
 }
 
 /**
- * 로그인 + 접촉 보고서 메뉴 권한(superadmin 은 canViewMenu 가 통과시킨다).
- * 상태를 바꾸는 라우트라 팀 권한은 캐시를 건너뛰고 새로 읽는다(lib/teamPermsServer.ts 의 fresh 설명).
+ * 로그인 + 접촉 보고서 접근 권한. 판정은 공용 함수 authorizeSemiContact(lib/semiContactServer.ts)가 한다 —
+ * 화면 가드와 같은 규칙(반도체 팀 + contact_semi 권한, 또는 사업부 전환 권한자). 메시지·상태 코드는 종전과 같다.
  */
 async function authorize(): Promise<{ error: NextResponse; caller: null } | { error: null; caller: Caller }> {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user?.email) return { error: bad('로그인이 필요합니다. 다시 로그인해 주세요.', 401), caller: null }
-
-  const { data: row, error } = await supabase
-    .from('engineers')
-    .select('engineer_id, permission_level, teams')
-    .eq('email', user.email)
-    .single()
-  if (error) console.error(`[${TAG}] caller lookup failed`, { email: user.email, error })
-  const caller = await withTeamPerm((row ?? null) as Caller | null, { fresh: true })
-  if (!caller || !canViewMenu(caller, MENU_KEY)) {
-    return { error: bad('이 메뉴를 사용할 권한이 없습니다.', 403), caller: null }
-  }
-  return { error: null, caller }
+  return authorizeSemiContact(TAG)
 }
 
 export async function POST(req: NextRequest) {

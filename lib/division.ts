@@ -7,14 +7,49 @@
 // 사업부를 바꿔도 볼 수 있는 데이터는 달라지지 않고, 사이드바에 섞여 보이던 메뉴만 갈린다.
 //
 // 현재 사업부(사이드바가 정한다)
-//   · 일반 직원 — 본인 팀의 사업부로 고정. 전환 버튼이 없다.
-//   · superadmin — 사이드바에서 고른 값(계정별로 이 브라우저에 저장). 고른 적이 없으면 본인 팀의 사업부.
+//   · 전환 권한자(superadmin + engineers.can_switch_division) — 사이드바에서 고른 값(계정별로 이 브라우저에 저장).
+//     고른 적이 없으면 본인 팀의 사업부.
+//   · 그 밖의 모든 사람 — 본인 팀의 사업부로 고정. 전환 버튼이 없다.
 // 메뉴의 사업부는 lib/menuPerms.ts 의 menuDivision 이 정한다. 공통 메뉴는 건의사항뿐이다.
 // 로그인 직후 첫 화면은 사업부의 시작 화면(DIVISION_HOME)이다(app/login/page.tsx).
 //
 // 값은 한글 그대로 둔다 — 결재 문서의 사업부 칸(approval_documents.division default '계측')과 같다.
 
+import { canViewMenu, isSuperAdmin, type EngineerLike } from './permissions'
+
 export type Division = '계측' | '반도체'
+
+/** 판정에 쓰는 직원 값 — engineers.can_switch_division 을 함께 읽어 넘긴다(못 읽었으면 비워 둔다 = false). */
+export type DivisionUser = EngineerLike & { can_switch_division?: boolean | null }
+
+/**
+ * 사업부를 자유롭게 바꿀 수 있는가 — superadmin 이면서 engineers.can_switch_division = true 인 사람만.
+ * 그 밖의 모든 사람(전환 권한이 없는 superadmin 포함)은 본인 팀의 사업부로 고정된다:
+ * 고르기 버튼이 없고, 저장된 선택값을 읽지 않고, 주소로 들어와도 사업부가 바뀌지 않는다.
+ */
+export function canSwitchDivision(u?: DivisionUser | null): boolean {
+  return !!u && isSuperAdmin(u) && u.can_switch_division === true
+}
+
+/** 본인 팀의 사업부. 팀이 없거나 비었으면 계측. */
+export function teamDivisionOf(u?: DivisionUser | null): Division {
+  return u?.perm?.division ?? '계측'
+}
+
+/** 접촉 보고서의 메뉴 권한 키(lib/menuPerms.ts). */
+export const SEMI_CONTACT_KEY = 'contact_semi'
+
+/**
+ * 접촉 보고서(화면 /contact/semi, 라우트 /api/semi-contact/*)를 쓸 수 있는가. 화면 가드와 서버가 함께 쓴다.
+ *   (a) 본인 팀의 사업부가 반도체이고 contact_semi 메뉴 권한이 있다(superadmin 은 메뉴 권한이 늘 통과한다), 또는
+ *   (b) 사업부를 바꿀 수 있는 superadmin(canSwitchDivision).
+ * 그래서 전환 권한이 없는 superadmin 이 계측 팀 소속이면 막힌다.
+ */
+export function canAccessSemiContact(u?: DivisionUser | null): boolean {
+  if (!u) return false
+  if (canSwitchDivision(u)) return true
+  return teamDivisionOf(u) === '반도체' && canViewMenu(u, SEMI_CONTACT_KEY)
+}
 
 /** 고르는 순서. */
 export const DIVISIONS: readonly Division[] = ['계측', '반도체']
