@@ -156,26 +156,26 @@ export default function ContactSemiPage() {
           </div>
         ) : (
           rows.map((r, i) => (
-            // Project 상세 화면은 아직 없다 — 행 자체는 누를 곳이 없고, 끝의 「보고서 작성」만 작성 화면으로 간다.
+            // 번호·고객사·Project명은 Project 상세로, 끝의 「보고서 작성」은 작성 화면으로 간다.
             <div
               key={r.project_id}
               style={{ ...rowStyle(i === 0), display: 'flex', alignItems: 'center', gap: COL.gap }}
             >
-              <span className="num" style={{
-                width: COL.no, flexShrink: 0, fontSize: 13, fontWeight: 700, color: TEXT,
+              <Link href={`/contact/semi/${r.project_id}`} className="num" style={{
+                width: COL.no, flexShrink: 0, fontSize: 13, fontWeight: 700, color: TEXT, textDecoration: 'none',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
               }}>
                 {r.project_no}
-              </span>
-              <span style={cellText(FLEX_CUSTOMER, TEXT)} title={r.customer_name}>
+              </Link>
+              <Link href={`/contact/semi/${r.project_id}`} style={{ ...cellText(FLEX_CUSTOMER, TEXT), textDecoration: 'none' }} title={r.customer_name}>
                 {r.customer_name}
-              </span>
+              </Link>
               <span className="cs-site" style={cellText(FLEX_SITE, r.site_dept?.trim() ? SUB : FAINT)} title={r.site_dept ?? undefined}>
                 {r.site_dept?.trim() || '-'}
               </span>
-              <span style={cellText(FLEX_TITLE, TEXT)} title={r.title}>
+              <Link href={`/contact/semi/${r.project_id}`} style={{ ...cellText(FLEX_TITLE, TEXT), textDecoration: 'none' }} title={r.title}>
                 {r.title}
-              </span>
+              </Link>
               <span className="cs-author" style={{
                 width: COL.author, flexShrink: 0, fontSize: 12, color: SUB,
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',

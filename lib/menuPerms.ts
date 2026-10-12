@@ -170,7 +170,8 @@ export const MENU_PERMS: MenuPerm[] = [
 export const PARENT_MENU: Record<string, string> = {
   '/customer/[id]': 'customers',
   '/inquiries/[id]': 'inquiries',
-  // 접촉 보고서 작성 — 목록과 같은 메뉴 권한. 가드는 contact_semi 를 canAccessSemiContact 로 판정한다.
+  // 접촉 보고서 Project 상세·작성 — 목록과 같은 메뉴 권한. 가드는 contact_semi 를 canAccessSemiContact 로 판정한다.
+  '/contact/semi/[projectId]': 'contact_semi',
   '/contact/semi/[projectId]/write': 'contact_semi',
   '/holdings': 'dashboard_80',
   '/account': 'public',
