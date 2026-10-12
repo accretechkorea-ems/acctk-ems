@@ -14,6 +14,7 @@
 // 칸 이름(고객사·사업장/부서·Project/구매안건)은 필드 등록표(lib/semiContact)에서 읽는다 — 엑셀·작성 화면과 같은 이름.
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
@@ -36,7 +37,7 @@ const LIST_LIMIT = 200
  * 열 폭. 머리 줄과 행이 이 상수 하나를 함께 쓴다(의뢰서 목록과 같은 방식).
  *   번호·작성자·등록일 — 고정 폭 / 고객사·사업장·안건 — 남는 폭을 나눠 쓴다.
  */
-const COL = { no: 128, author: 96, date: 92, gap: 10 }
+const COL = { no: 128, author: 96, date: 92, write: 92, gap: 10 }
 const FLEX_CUSTOMER = 1
 const FLEX_SITE = 0.8
 const FLEX_TITLE = 1.6
@@ -139,6 +140,7 @@ export default function ContactSemiPage() {
           <span style={{ flex: FLEX_TITLE, minWidth: 0 }}>{FIELD_BY_KEY.title.label}</span>
           <span className="cs-author" style={{ width: COL.author, flexShrink: 0 }}>작성자</span>
           <span style={{ width: COL.date, flexShrink: 0 }}>등록일</span>
+          <span style={{ width: COL.write, flexShrink: 0 }} />
         </div>
 
         {loadError ? (
@@ -154,7 +156,7 @@ export default function ContactSemiPage() {
           </div>
         ) : (
           rows.map((r, i) => (
-            // 상세 화면은 다음 단계라 아직 누를 곳이 없다 — 행은 버튼이 아니라 읽기 전용 줄이다.
+            // Project 상세 화면은 아직 없다 — 행 자체는 누를 곳이 없고, 끝의 「보고서 작성」만 작성 화면으로 간다.
             <div
               key={r.project_id}
               style={{ ...rowStyle(i === 0), display: 'flex', alignItems: 'center', gap: COL.gap }}
@@ -182,6 +184,14 @@ export default function ContactSemiPage() {
               </span>
               <span className="num" style={{ width: COL.date, flexShrink: 0, fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>
                 {kstYmd(r.created_at)}
+              </span>
+              <span style={{ width: COL.write, flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
+                <Link
+                  href={`/contact/semi/${r.project_id}/write`}
+                  style={{ ...btnGhost(), padding: '5px 10px', fontSize: 12, textDecoration: 'none' }}
+                >
+                  보고서 작성
+                </Link>
               </span>
             </div>
           ))

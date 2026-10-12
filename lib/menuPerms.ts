@@ -170,6 +170,8 @@ export const MENU_PERMS: MenuPerm[] = [
 export const PARENT_MENU: Record<string, string> = {
   '/customer/[id]': 'customers',
   '/inquiries/[id]': 'inquiries',
+  // 접촉 보고서 작성 — 목록과 같은 메뉴 권한. 가드는 contact_semi 를 canAccessSemiContact 로 판정한다.
+  '/contact/semi/[projectId]/write': 'contact_semi',
   '/holdings': 'dashboard_80',
   '/account': 'public',
   // 결재 문서 전용 화면 — 결재 화면 자체가 전원 공개이므로(approvals 의 menuPublic) 같은 자격이다.
