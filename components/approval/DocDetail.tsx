@@ -218,6 +218,8 @@ export default function DocDetail({
         currentApproverId={current?.approver_id ?? null}
         nameOf={nameOf}
         onChanged={onChanged}
+        // 지워진 문서는 다시 읽을 것이 없다 — 목록을 새로 읽으면 그 행이 사라진다(같은 동작이다).
+        onDeleted={onChanged}
       />
     </div>
   )

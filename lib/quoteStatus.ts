@@ -19,6 +19,10 @@ export const QUOTE_STATUSES = [
   // — 완료 뒤에 새 값에 머무르면 발주서 등록·자동 실주·유효기간 경고가 모두 멈춘다.
   // 되돌릴 값은 결재 문서의 summary.restore_status 에 담아 둔다(lib/approval/quoteApproval.ts).
   '결재중',
+  // 결재가 **반려로** 끝난 견적. 기록을 남기려고 상신 직전 상태로 돌리지 않는다
+  // — 돌려놓으면 반려된 견적이 목록에서 새 견적과 구분되지 않고, 본인이 바로 지울 수 있게 된다.
+  // 이 상태에서 할 수 있는 일은 「다시쓰기」와 「삭제 요청」뿐이다(lib/approval/quoteApproval.ts).
+  '반려',
   '수주',
   '발주(주문 대기)',
   '주문완료',
@@ -37,7 +41,7 @@ export type QuoteStatus = (typeof QUOTE_STATUSES)[number]
  * 「전체」에서 보이고, 색 표에는 남아 있어 배지가 회색으로 떨어지지 않는다).
  */
 export const STATUS_FILTER_TABS: readonly QuoteStatus[] = [
-  '견적중', '수리중', '결재중', '발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료', '취소요청', '실패',
+  '견적중', '수리중', '결재중', '반려', '발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료', '취소요청', '실패',
 ]
 
 // ── 결재 도입 경계 ──────────────────────────────────────────────────
@@ -98,6 +102,16 @@ export const isApprovalTarget = (createdAt: string | null | undefined): boolean 
 /** 결재가 도는 동안의 견적 상태. 화면·라우트가 같은 값을 쓰도록 여기 둔다. */
 export const APPROVAL_STATUS = '결재중'
 
+/**
+ * 결재가 반려로 끝난 견적의 상태.
+ *
+ * 회수·폐기와 다르게 상신 직전 상태로 **돌리지 않는다.** 반려는 결재자의 판단이고 그 판단이
+ * 견적 쪽에도 남아야 한다 — 돌려놓으면 (ⅰ) 목록에서 새 견적과 구분되지 않고 (ⅱ) '견적중' 이
+ * 되어 본인 삭제가 열린다(lib/quoteDeletePolicy.ts). 반려 견적은 「다시쓰기」로 새로 쓰고,
+ * 지우려면 삭제 요청(관리자 승인)을 거친다.
+ */
+export const REJECTED_STATUS = '반려'
+
 /** 결재를 올릴 수 있는 상태 — 아직 아무 결정이 없는 견적과 국내수리 견적. */
 export const APPROVABLE_STATUSES: readonly QuoteStatus[] = ['견적중', '수리중']
 
@@ -105,6 +119,30 @@ export const APPROVABLE_STATUSES: readonly QuoteStatus[] = ['견적중', '수리
 export const FAIL_STATUS = '실패'
 export const EDIT_STATUSES: readonly QuoteStatus[] = ['취소요청', FAIL_STATUS]
 export const EDIT_STATUSES_WITH_REVERT: readonly QuoteStatus[] = ['취소요청', FAIL_STATUS, '견적중']
+/**
+ * 반려 견적에서 고를 수 있는 값 — **없다.**
+ * 삭제 요청도 막혀 있고(반려 기록 보존 — lib/quoteDeletePolicy.ts), 미수주 처리·되돌리기는
+ * 결재 결과를 사람이 덮는 일이라 두지 않는다. 반려 견적에서 할 수 있는 일은 「다시쓰기」뿐이다.
+ * 목록은 이 상태에서 창 자체를 열지 않는다 — 이 빈 목록은 혹시 열렸을 때의 방어다.
+ */
+export const EDIT_STATUSES_REJECTED: readonly QuoteStatus[] = []
+
+/**
+ * 상태 변경 창의 선택지 — 목록 둘(실적 현황·내 견적)이 **같은 답**을 쓰도록 여기 하나만 둔다.
+ * 예전에는 두 화면이 각자 삼항식을 들고 있어, 상태를 하나 더하면 두 곳을 같이 고쳐야 했다.
+ *   · 반려        — 고를 것이 없다. 삭제 요청까지 막혀 있다(반려 기록 보존).
+ *   · 실패(수동)  — 되돌리기까지.
+ *   · 실패(자동)  — 되돌리기 없음(견적일이 이미 한 달을 넘겼다 — AUTO_FAIL_NOTICE).
+ *   · 그 밖       — 삭제 요청·미수주.
+ */
+export function editStatusesFor(
+  status: string | null | undefined,
+  autoFailed: boolean,
+): readonly QuoteStatus[] {
+  if (status === REJECTED_STATUS) return EDIT_STATUSES_REJECTED
+  if (status === FAIL_STATUS && !autoFailed) return EDIT_STATUSES_WITH_REVERT
+  return EDIT_STATUSES
+}
 
 /** 자동 실주의 대상이 되는 상태 — 아직 아무 결정이 없는 건. */
 export const PENDING_STATUS = '견적중'

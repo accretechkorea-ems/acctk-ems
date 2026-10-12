@@ -15,15 +15,15 @@ import {
   updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, submitQuoteDelete, deleteQuoteSelf,
   checkQuoteApprovalLines, submitQuoteApproval, PO_MEMO_MAX,
 } from '@/lib/quoteMutations'
-import { isSelfDeletable } from '@/lib/quoteDeletePolicy'
+import { requestDeleteVerdict, selfDeleteVerdict, REJECTED_DELETE_MESSAGE } from '@/lib/quoteDeletePolicy'
 import LinePickerModal from '@/components/approval/LinePickerModal'
-import { canSubmitApproval, loadQuoteApprovalDocIds, fetchQuoteGates, gateFor } from '@/lib/quoteApprovalDocs'
-import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice, type QuoteGate } from '@/lib/approval/quoteApprovalKeys'
+import { canSubmitApproval, loadQuoteApprovalDocIds, fetchQuoteGates, gateFor, docIdFor, docHistoryFor, type QuoteGateTable } from '@/lib/quoteApprovalDocs'
+import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice } from '@/lib/approval/quoteApprovalKeys'
 import { openQuotePdf } from '@/lib/openQuotePdf'
-import type { LineInput } from '@/lib/approval/types'
+import { approvalDocPath, type LineInput } from '@/lib/approval/types'
 import {
   isAutoFailed, isOrdered, REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE,
-  STATUS_FILTER_TABS, EDIT_STATUSES, EDIT_STATUSES_WITH_REVERT, FAIL_STATUS,
+  STATUS_FILTER_TABS, editStatusesFor, REJECTED_STATUS,
 } from '@/lib/quoteStatus'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
@@ -643,7 +643,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   // **이 목록은 남의 견적을 보여 준다.** approval_documents 의 읽기 정책이 「상신자·결재선
   // 참여자·관리자」라 브라우저는 남의 결재 문서를 못 읽는다 — 그래서 서버에 묻는다.
   // 모달에 뜬 견적 전부를 한 번에 물어보고(200개씩 끊어 보낸다) 행마다 꺼내 쓴다.
-  const [gates, setGates] = useState<Map<number, QuoteGate> | null>(null)
+  const [gates, setGates] = useState<QuoteGateTable | null>(null)
   const allQuoteKey = quotes.map(q => q.quote_id).join(',')
   useEffect(() => {
     let cancelled = false
@@ -654,18 +654,6 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
 
   const gateOfRow = (q: Quote) => gateFor(q.quote_id, gates)
   const allowsFor = (q: Quote) => gateAllows(gateOfRow(q))
-  /** 버튼을 숨긴 이유. 「확인 중」도 알려 준다 — 왜 없는지 모르면 새로고침만 반복한다. */
-  const gateTitleFor = (q: Quote) =>
-    gates == null ? '결재 상태를 확인하는 중입니다' : (gateNotice(gateOfRow(q)) ?? undefined)
-  /**
-   * PDF 를 열 수 있는가 — **게이트로 막지 않는다**(전자결재 6단계 PDF).
-   * 결재 대상 견적서는 저장값으로 그 자리에서 만들어 열린다. 게이트를 못 읽은 행만 막는다.
-   */
-  const pdfOpenableFor = (q: Quote) => {
-    const gate = gateOfRow(q)
-    if (gate === null) return false
-    return gate === 'exempt' ? !!q.pdf_url : true
-  }
   /** 결재가 도는 중인 행 — 상태 변경·삭제 요청을 아예 내지 않는다. */
   const isPendingRow = (q: Quote) => q.status === SUBMITTED_STATUS
   const tc = getCategoryColor(TEAM_COLORS, engineer.teams)
@@ -687,8 +675,41 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   // 삭제는 사유가 있어야 한다 — 본인 삭제든 결재든 왜 지웠는지가 남아야 한다.
   const reasonRequired = editStatus === '취소요청'
   const reasonMissing = reasonRequired && !editFailReason.trim()
-  // 아직 실적에 잡히지 않은 견적은 결재 없이 바로 지운다. 판정 기준은 서버와 같은 파일을 읽는다.
-  const selfDelete = reasonRequired && isSelfDeletable(editQuote?.status)
+  /**
+   * 본인 삭제 판정 — **서버(/api/quote-delete 의 self)와 같은 함수**다(lib/quoteDeletePolicy.ts).
+   * 상태만으로는 가를 수 없다: 승인 뒤 '견적중' 으로 돌아온 견적도, 반려로 끝난 견적도
+   * 상태만 보면 삭제가 열린다. 결재 문서 이력은 게이트 응답으로 받는다(작성자 건에만 담겨 온다).
+   */
+  const deleteVerdict = editQuote
+    ? selfDeleteVerdict({
+      status: editQuote.status,
+      gate: gateFor(editQuote.quote_id, gates),
+      docs: docHistoryFor(editQuote.quote_id, gates),
+    })
+    : null
+  /**
+   * 게이트 표를 아직 못 읽었다 — 어느 길로 갈지 정할 수 없으니 버튼을 잠근다.
+   * **표는 읽었는데 이력이 없는 경우(남의 견적)는 잠그지 않는다** — 그때도 삭제 요청은
+   * 올릴 수 있어야 한다(라우트가 작성자·관리자 권한을 다시 본다).
+   */
+  const deleteWaiting = gates == null
+  /** 회수·폐기된 결재 문서까지 함께 지우는 길인가. 확인 문구가 달라진다. */
+  const selfDeleteWithDocs = deleteVerdict?.ok === true && deleteVerdict.withDocuments
+  /**
+   * 삭제 요청(결재)을 올릴 수 있는가 — **서버와 같은 함수**다(lib/quoteDeletePolicy.ts).
+   * 반려 견적은 어떤 경로로도 지울 수 없다. 남의 견적은 이력이 담겨 오지 않아 막지 않는다
+   * (서버가 자기가 읽은 값으로 다시 본다).
+   */
+  const requestVerdict = editQuote
+    ? requestDeleteVerdict({
+      status: editQuote.status,
+      docs: docHistoryFor(editQuote.quote_id, gates),
+    })
+    : null
+  /** 삭제 요청마저 막혔다 — 창에서 할 수 있는 일이 없으니 확인을 잠근다. */
+  const requestBlocked = requestVerdict != null && !requestVerdict.ok
+  /** 결재 없이 바로 지울 수 있는 건인가. 판정은 서버와 같은 함수다. */
+  const selfDelete = reasonRequired && deleteVerdict?.ok === true
 
   // 2단 확인은 3초만 열어 둔다 — 창을 띄워 두고 잊었다가 무심코 두 번째를 누르는 일이 없게.
   useEffect(() => {
@@ -966,21 +987,18 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                         <input type="checkbox" checked={sel.isSelected(q.quote_id)} onChange={() => sel.toggle(q.quote_id)} style={{ cursor: 'pointer' }} />
                       </td>
                       <td style={{ padding: '8px 10px', fontWeight: 700, color: BLUE, whiteSpace: 'nowrap', textAlign: 'center' }}>
-                        {/* PDF — **게이트로 막지 않는다**(전자결재 6단계 PDF). 결재 대상 견적서는
-                            저장값으로 그 자리에서 만들어 열리므로 결재 전에도 볼 수 있다(날짜 자리에
-                            빨간 안내가 들어간다). 게이트를 아직 못 읽은 행만 막는다. */}
+                        {/* PDF — **확정 때 저장된 파일**을 연다. 확정일이 찍힌 고객 발송용
+                            문서이고 결재 중·반려·승인 뒤 모두 같다. 게이트를 보지 않는다. */}
                         <span
                           onClick={async () => {
                             // state 는 다음 렌더에야 반영돼 같은 틱의 연타를 못 막는다 — 판정은 ref 로 한다.
                             if (pdfBusyRef.current) return
-                            const gate = gateOfRow(q)
-                            if (gate === null) return
-                            if (gate === 'exempt' && !q.pdf_url) return
+                            if (!q.pdf_url) return
                             pdfBusyRef.current = true
                             setPdfBusyId(q.quote_id)
                             try {
                               const res = await openQuotePdf({
-                                quoteId: q.quote_id, gate, pdfUrl: q.pdf_url, engineerId: currentEngineerId,
+                                quoteId: q.quote_id, pdfUrl: q.pdf_url, engineerId: currentEngineerId,
                               })
                               if (!res.ok) toast.error(res.error)
                             } finally {
@@ -988,10 +1006,10 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                               setPdfBusyId(null)   // 실패해도 원래대로 돌아온다
                             }
                           }}
-                          title={pdfBusyId === q.quote_id ? '여는 중…' : (!pdfOpenableFor(q) ? gateTitleFor(q) : undefined)}
-                          style={{ cursor: pdfOpenableFor(q) && pdfBusyId === null ? 'pointer' : 'default', color: pdfOpenableFor(q) ? BLUE : TEXT, opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
+                          title={pdfBusyId === q.quote_id ? '여는 중…' : (!q.pdf_url ? '저장된 견적서 PDF가 없습니다' : undefined)}
+                          style={{ cursor: q.pdf_url && pdfBusyId === null ? 'pointer' : 'default', color: q.pdf_url ? BLUE : TEXT, opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
                           {q.quote_number}
-                          {pdfOpenableFor(q) && <span style={{ marginLeft: 4, fontSize: 9, color: MUTED }}>PDF</span>}
+                          {q.pdf_url && <span style={{ marginLeft: 4, fontSize: 9, color: MUTED }}>PDF</span>}
                         </span>
                       </td>
                       <td style={{ padding: '8px 10px', color: MUTED, whiteSpace: 'nowrap', fontSize: 11, textAlign: 'center' }}>{q.quote_date}</td>
@@ -1011,6 +1029,15 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                           <span style={{ padding: '3px 7px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text, whiteSpace: 'nowrap', alignSelf: 'center' }}>
                             {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : salesStatusLabel(q.status)}
                           </span>
+                          {/* 반려 사유는 **결재 문서**에 있다 — 목록에 사유 문자열을 내려받지 않는다(게이트 응답에
+                              담기는 것은 문서 id 하나다). 내가 쓴 견적에만 링크가 나온다. */}
+                          {q.status === REJECTED_STATUS && docIdFor(q.quote_id, gates) != null && (
+                            <a href={approvalDocPath(docIdFor(q.quote_id, gates)!)} target="_blank" rel="noopener noreferrer"
+                              title="반려 사유를 결재 문서에서 확인합니다"
+                              style={{ fontSize: 10, fontWeight: 700, color: BLUE, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                              반려 사유 보기
+                            </a>
+                          )}
                           {showOrderInfo && (q.shipping_date || q.order_memo || q.order_request_memo) && (
                             <div ref={hoveredMemoId === q.quote_id ? memoAnchorRef : null}
                               onMouseEnter={() => setHoveredMemoId(q.quote_id)}
@@ -1092,7 +1119,12 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                           {/* 「⋮」 는 상태 변경·삭제 요청 창을 여는 유일한 입구다. 결재가 도는 중이면
                               그 창의 모든 동작이 updateQuoteStatus 에서 0행이 되므로 버튼을 내지 않고
                               이유만 적는다(lib/quoteMutations.ts · 전자결재 6단계 B). */}
-                          {isPendingRow(q) ? (
+                          {/* 반려 견적은 ⋮ 안의 모든 동작(상태 변경·삭제 요청)이 막혀 있다 —
+                              버튼을 내지 않고 이유만 적는다(눌러서 막히는 것보다 낫다). */}
+                          {q.status === REJECTED_STATUS ? (
+                            <span title={REJECTED_DELETE_MESSAGE}
+                              style={{ fontSize: 10, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap' }}>삭제 불가</span>
+                          ) : isPendingRow(q) ? (
                             <span title={gateNotice('pending') ?? undefined}
                               style={{ fontSize: 10, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap' }}>결재 중</span>
                           ) : (
@@ -1266,13 +1298,12 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
               <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 4 }}>삭제 / 실패 처리</div>
               <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{editQuote.quote_number} · {editQuote.customers?.company_name || ''}</div>
 
-              {/* 되돌리기(견적중)는 사람이 손으로 실패시킨 건에만 연다.
-                  자동 실주 건은 견적일이 이미 한 달을 넘겨, 되살리면 고객에게 나간 PDF 의
-                  유효기간과 어긋나므로 선택지 자체를 만들지 않는다. */}
+              {/* 선택지는 lib/quoteStatus.ts 의 editStatusesFor 하나가 정한다(내 견적 목록과 같은 함수).
+                  되돌리기(견적중)는 사람이 손으로 실패시킨 건에만 열리고, 자동 실주 건은 견적일이 이미
+                  한 달을 넘겨 되살리면 PDF 의 유효기간과 어긋나므로 선택지 자체가 없다.
+                  반려 견적은 삭제 요청만 남는다 — 기록을 남겨야 한다. */}
               <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-                {(editQuote.status === FAIL_STATUS && !isAutoFailed(editQuote.status, editQuote.fail_reason)
-                  ? EDIT_STATUSES_WITH_REVERT
-                  : EDIT_STATUSES).map(s => (
+                {editStatusesFor(editQuote.status, isAutoFailed(editQuote.status, editQuote.fail_reason)).map(s => (
                   <button key={s} onClick={() => setEditStatus(s)}
                     style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: `1.5px solid ${editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).bg : '#f9fafb', color: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : GRAY, transition: 'all 0.12s' }}>
                     {s === '취소요청' ? '삭제' : salesStatusLabel(s)}
@@ -1314,16 +1345,24 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                   background: selfDelete ? getCategoryColor(SALES_STATUS_COLORS, '취소요청').bg : '#f3f4f6',
                   color: selfDelete ? getCategoryColor(SALES_STATUS_COLORS, '취소요청').text : GRAY,
                 }}>
-                  {selfDelete
-                    ? '결재 없이 바로 삭제됩니다. 되돌릴 수 없습니다.'
-                    : `수주 이후 상태(${editQuote.status})라 결재를 거칩니다. 결재가 끝나면 삭제됩니다.`}
+                  {requestBlocked
+                    ? requestVerdict!.message
+                    : deleteWaiting
+                    ? '결재 상태를 확인하는 중입니다'
+                    : selfDelete
+                      ? (selfDeleteWithDocs
+                        ? '견적과 회수·폐기된 결재 문서가 함께 삭제됩니다. 되돌릴 수 없습니다.'
+                        : '결재 없이 바로 삭제됩니다. 되돌릴 수 없습니다.')
+                      : `${deleteVerdict && !deleteVerdict.ok ? deleteVerdict.message + ' ' : ''}결재선을 지정하면 삭제 요청이 결재로 올라갑니다.`}
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
                 <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
-                <button onClick={handleSave} disabled={saving || reasonMissing}
-                  style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: (saving || reasonMissing) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing) ? 0.7 : 1 }}>
+                <button onClick={handleSave} disabled={saving || reasonMissing || deleteWaiting || requestBlocked}
+                  style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 0.7 : 1 }}>
                   {saving ? '처리 중...'
+                    : requestBlocked ? '삭제 불가'
+                    : deleteWaiting ? '확인 중...'
                     : selfDelete ? (confirmDelete ? '한 번 더 누르면 삭제' : '삭제')
                     : editStatus === '취소요청' ? '결재선 지정'
                     : editStatus === '견적중' ? '견적중으로 되돌리기'

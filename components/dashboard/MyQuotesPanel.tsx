@@ -12,16 +12,16 @@ import {
   updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, submitQuoteDelete, deleteQuoteSelf,
   checkQuoteApprovalLines, submitQuoteApproval, PO_MEMO_MAX,
 } from '@/lib/quoteMutations'
-import { isSelfDeletable } from '@/lib/quoteDeletePolicy'
+import { requestDeleteVerdict, selfDeleteVerdict, REJECTED_DELETE_MESSAGE } from '@/lib/quoteDeletePolicy'
 import LinePickerModal from '@/components/approval/LinePickerModal'
-import { canSubmitApproval, loadQuoteApprovalDocIds, fetchQuoteGates, gateFor } from '@/lib/quoteApprovalDocs'
-import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice, type QuoteGate } from '@/lib/approval/quoteApprovalKeys'
+import { canSubmitApproval, loadQuoteApprovalDocIds, fetchQuoteGates, gateFor, docIdFor, docHistoryFor, type QuoteGateTable } from '@/lib/quoteApprovalDocs'
+import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice } from '@/lib/approval/quoteApprovalKeys'
 import { openQuotePdf } from '@/lib/openQuotePdf'
-import type { LineInput } from '@/lib/approval/types'
+import { approvalDocPath, type LineInput } from '@/lib/approval/types'
 import {
   isAutoFailed, isOrdered, isExpired, validFromDate,
   REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE,
-  STATUS_FILTER_TABS, EDIT_STATUSES, EDIT_STATUSES_WITH_REVERT, FAIL_STATUS, PENDING_STATUS,
+  STATUS_FILTER_TABS, editStatusesFor, REJECTED_STATUS, FAIL_STATUS, PENDING_STATUS,
   type QuoteStatus,
 } from '@/lib/quoteStatus'
 import { achieveColorOf } from '@/lib/fiscal'
@@ -123,7 +123,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const [approvalDocIds, setApprovalDocIds] = useState<Set<number> | null>(null)
   // 행별 승인 게이트. null 이면 아직 못 읽었다(또는 실패) — 그 행은 「확인 중」으로 두고
   // 발주서 등록·계산서 요청·PDF 링크를 **보이지 않게** 한다(lib/quoteApprovalDocs.ts 의 gateFor).
-  const [gates, setGates] = useState<Map<number, QuoteGate> | null>(null)
+  const [gates, setGates] = useState<QuoteGateTable | null>(null)
   // 결재 올리기 — 결재선을 받을 대상 견적. null 이면 모달이 닫혀 있다.
   const [approvalQuote, setApprovalQuote] = useState<Quote | null>(null)
   const [approvalChecking, setApprovalChecking] = useState(false)
@@ -343,22 +343,18 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const allPagedSelected = pagedIds.length > 0 && pagedIds.every(id => quoteSel.isSelected(id))
 
   /**
-   * 견적서 PDF 열기 — 게이트가 길을 가른다(lib/openQuotePdf.tsx).
-   *   exempt — 저장된 파일(종전 그대로). 파일이 없으면 열 것이 없다.
-   *   그 밖   — 저장값으로 그 자리에서 만든다(승인일이 박힌다. 완료 전이면 빨간 안내).
-   * 게이트를 아직 못 읽었으면(null) 아무것도 하지 않는다 — 버튼도 보이지 않는다.
+   * 견적서 PDF 열기 — **확정 때 저장된 파일**을 연다. 확정일이 찍힌 고객 발송용 문서이고
+   * 결재 중·반려·승인 뒤 모두 같다(lib/openQuotePdf.tsx). 게이트를 보지 않는다.
    */
   const openPdf = async (q: Quote) => {
     // state 는 다음 렌더에야 반영돼 같은 틱의 연타를 못 막는다 — 판정은 ref 로 한다.
     if (pdfBusyRef.current) return
-    const gate = gateOfRow(q)
-    if (gate === null) return
-    if (gate === 'exempt' && !q.pdf_url) return
+    if (!q.pdf_url) return
     pdfBusyRef.current = true
     setPdfBusyId(q.quote_id)
     try {
       const res = await openQuotePdf({
-        quoteId: q.quote_id, gate, pdfUrl: q.pdf_url, engineerId,
+        quoteId: q.quote_id, pdfUrl: q.pdf_url, engineerId,
       })
       if (!res.ok) toast.error(res.error)
     } finally {
@@ -384,18 +380,9 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const allowsFor = (q: Quote) => gateAllows(gateOfRow(q))
   /** 버튼을 숨긴 이유. 「확인 중」도 알려 준다 — 버튼이 왜 없는지 모르면 새로고침만 반복한다. */
   const gateTitleFor = (q: Quote) =>
-    gates == null ? '결재 상태를 확인하는 중입니다' : (gateNotice(gateOfRow(q)) ?? undefined)
-  /**
-   * PDF 를 열 수 있는가 — **게이트로 막지 않는다**(전자결재 6단계 PDF).
-   * 결재 대상 견적서는 저장값으로 그 자리에서 만들어 열리므로, 결재 전에도 볼 수 있다
-   * (날짜 자리에 「결재 완료 시 날짜 자동 입력 예정」이 빨갛게 들어간다).
-   * 게이트를 못 읽은 행만 막는다 — 어느 길로 갈지 모르기 때문이다.
-   */
-  const pdfOpenableFor = (q: Quote) => {
-    const gate = gateOfRow(q)
-    if (gate === null) return false
-    return gate === 'exempt' ? !!q.pdf_url : true
-  }
+    gates == null ? '결재 상태를 확인하는 중입니다' : (gateNotice(gateOfRow(q), q.status) ?? undefined)
+  /** PDF 를 열 수 있는가 — 저장된 파일이 있으면 열 수 있다(게이트를 보지 않는다). */
+  const pdfOpenableFor = (q: Quote) => !!q.pdf_url
   /** 결재가 도는 중인 행 — 상태 변경·삭제 요청을 아예 내지 않는다. */
   const isPendingRow = (q: Quote) => q.status === SUBMITTED_STATUS
 
@@ -428,7 +415,41 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const reasonRequired = editStatus === '취소요청'
   const reasonMissing = reasonRequired && !editFailReason.trim()
   // 아직 실적에 잡히지 않은 견적은 결재 없이 바로 지운다. 판정 기준은 서버와 같은 파일을 읽는다.
-  const selfDelete = reasonRequired && isSelfDeletable(editQuote?.status)
+  /**
+   * 본인 삭제 판정 — **서버(/api/quote-delete 의 self)와 같은 함수**다(lib/quoteDeletePolicy.ts).
+   * 상태만으로는 가를 수 없다: 승인 뒤 '견적중' 으로 돌아온 견적도, 반려로 끝난 견적도
+   * 상태만 보면 삭제가 열린다. 결재 문서 이력은 게이트 응답으로 받는다(작성자 건에만 담겨 온다).
+   */
+  const deleteVerdict = editQuote
+    ? selfDeleteVerdict({
+      status: editQuote.status,
+      gate: gateFor(editQuote.quote_id, gates),
+      docs: docHistoryFor(editQuote.quote_id, gates),
+    })
+    : null
+  /**
+   * 게이트 표를 아직 못 읽었다 — 어느 길로 갈지 정할 수 없으니 버튼을 잠근다.
+   * **표는 읽었는데 이력이 없는 경우(남의 견적)는 잠그지 않는다** — 그때도 삭제 요청은
+   * 올릴 수 있어야 한다(라우트가 작성자·관리자 권한을 다시 본다).
+   */
+  const deleteWaiting = gates == null
+  /** 회수·폐기된 결재 문서까지 함께 지우는 길인가. 확인 문구가 달라진다. */
+  const selfDeleteWithDocs = deleteVerdict?.ok === true && deleteVerdict.withDocuments
+  /**
+   * 삭제 요청(결재)을 올릴 수 있는가 — **서버와 같은 함수**다(lib/quoteDeletePolicy.ts).
+   * 반려 견적은 어떤 경로로도 지울 수 없다. 남의 견적은 이력이 담겨 오지 않아 막지 않는다
+   * (서버가 자기가 읽은 값으로 다시 본다).
+   */
+  const requestVerdict = editQuote
+    ? requestDeleteVerdict({
+      status: editQuote.status,
+      docs: docHistoryFor(editQuote.quote_id, gates),
+    })
+    : null
+  /** 삭제 요청마저 막혔다 — 창에서 할 수 있는 일이 없으니 확인을 잠근다. */
+  const requestBlocked = requestVerdict != null && !requestVerdict.ok
+  /** 결재 없이 바로 지울 수 있는 건인가. 판정은 서버와 같은 함수다. */
+  const selfDelete = reasonRequired && deleteVerdict?.ok === true
 
   // 2단 확인은 3초만 열어 둔다 — 창을 띄워 두고 잊었다가 무심코 두 번째를 누르는 일이 없게.
   useEffect(() => {
@@ -739,6 +760,15 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                         <span style={{ padding: '3px 7px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text, whiteSpace: 'nowrap', alignSelf: 'center' }}>
                           {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : salesStatusLabel(q.status)}
                         </span>
+                        {/* 반려 사유는 **결재 문서**에 있다 — 목록에 사유 문자열을 내려받지 않는다(게이트 응답에
+                            담기는 것은 문서 id 하나다). 내가 쓴 견적에만 링크가 나온다. */}
+                        {q.status === REJECTED_STATUS && docIdFor(q.quote_id, gates) != null && (
+                          <a href={approvalDocPath(docIdFor(q.quote_id, gates)!)} target="_blank" rel="noopener noreferrer"
+                            title="반려 사유를 결재 문서에서 확인합니다"
+                            style={{ fontSize: 10, fontWeight: 700, color: BLUE, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                            반려 사유 보기
+                          </a>
+                        )}
                         {/* 유효기간이 지났는데 아직 견적중인 건 — 자동 실주 전이거나 판단이 남은 건이다.
                             80 대시보드의 「만료」와 같은 색(실패 상태색)을 쓴다. */}
                         {isOverdue(q) && (
@@ -846,7 +876,12 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                                 — 그 창의 모든 동작이 updateQuoteStatus 를 지나고, 그 함수는
                                 '결재중' 에서 0행이 된다(lib/quoteMutations.ts). 눌러서 실패하게
                                 두는 대신 「다시쓰기」만 남기고 안내를 띄운다. */}
-                            {isPendingRow(q) ? (
+                            {/* 반려 견적은 상태 변경도 삭제 요청도 막혀 있다 — 「다시쓰기」만 남는다. */}
+                            {q.status === REJECTED_STATUS ? (
+                              <div style={{ padding: '8px 10px', fontSize: 11, color: MUTED, lineHeight: 1.6 }}>
+                                {REJECTED_DELETE_MESSAGE}
+                              </div>
+                            ) : isPendingRow(q) ? (
                               <div style={{ padding: '8px 10px', fontSize: 11, color: MUTED, lineHeight: 1.6 }}>
                                 {gateNotice('pending')}
                               </div>
@@ -1017,9 +1052,9 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                 자동 실주 건은 견적일이 이미 한 달을 넘겨, 되살리면 고객에게 나간 PDF 의
                 유효기간과 어긋나므로 선택지 자체를 만들지 않는다. */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-              {(editQuote.status === FAIL_STATUS && !isAutoFailed(editQuote.status, editQuote.fail_reason)
-                ? EDIT_STATUSES_WITH_REVERT
-                : EDIT_STATUSES)
+              {/* 선택지는 lib/quoteStatus.ts 의 editStatusesFor 하나가 정한다(실적 현황과 같은 함수).
+                  반려 견적은 삭제 요청만 남는다 — 기록을 남겨야 한다. */}
+              {editStatusesFor(editQuote.status, isAutoFailed(editQuote.status, editQuote.fail_reason))
                 // 남이 나 대신 쓴 견적은 삭제를 요청할 수 없다(실패 처리는 실적 담당자의 몫이라 남긴다).
                 .filter(s => s !== '취소요청' || canRequestDelete(editQuote))
                 .map(s => (
@@ -1066,16 +1101,24 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                 border: `1px solid ${BORDER}`,
                 background: selfDelete ? getCategoryColor(SALES_STATUS_COLORS, '취소요청').bg : '#f8fafc',
                 color: selfDelete ? getCategoryColor(SALES_STATUS_COLORS, '취소요청').text : GRAY }}>
-                {selfDelete
-                  ? '결재 없이 바로 삭제됩니다. 되돌릴 수 없습니다.'
-                  : `수주 이후 상태(${editQuote.status})라 결재를 거칩니다. 결재가 끝나면 삭제됩니다.`}
+                {requestBlocked
+                  ? requestVerdict!.message
+                  : deleteWaiting
+                  ? '결재 상태를 확인하는 중입니다'
+                  : selfDelete
+                    ? (selfDeleteWithDocs
+                      ? '견적과 회수·폐기된 결재 문서가 함께 삭제됩니다. 되돌릴 수 없습니다.'
+                      : '결재 없이 바로 삭제됩니다. 되돌릴 수 없습니다.')
+                    : `${deleteVerdict && !deleteVerdict.ok ? deleteVerdict.message + ' ' : ''}결재선을 지정하면 삭제 요청이 결재로 올라갑니다.`}
               </div>
             )}
             <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
               <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
-              <button onClick={handleSave} disabled={saving || reasonMissing}
-                style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: (saving || reasonMissing) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing) ? 0.7 : 1 }}>
+              <button onClick={handleSave} disabled={saving || reasonMissing || deleteWaiting || requestBlocked}
+                style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 0.7 : 1 }}>
                 {saving ? '처리 중...'
+                  : requestBlocked ? '삭제 불가'
+                  : deleteWaiting ? '확인 중...'
                   : selfDelete ? (confirmDelete ? '한 번 더 누르면 삭제' : '삭제')
                   : editStatus === '취소요청' ? '결재선 지정'
                   : editStatus === '견적중' ? '견적중으로 되돌리기'

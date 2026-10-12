@@ -40,6 +40,166 @@ const COL_LABEL_SPAN = '53.4%'  // 요약행 라벨 셀 = seq(5)+code(12)+name(3
 // 선두 수동 번호(1. / 2) / 3.) 제거 — 자동 순번과 중복 방지. 데이터는 안 바꾸고 표시 직전에만 적용.
 const stripLeadNo = (s: string) => (s || '').replace(/^\s*\d+[.)]\s*/, '')
 
+// ── 긴 품번을 칸 안에서 끊기 ────────────────────────────────────────
+//
+// 왜 손으로 끊는가. react-pdf(@react-pdf/textkit)는 줄을 끊을 자리를 **공백에서만** 찾는다.
+// 공백 없는 품번은 통째로 한 낱말이 되어, 칸보다 넓어도 줄이 바뀌지 않고 **옆 품명 칸 위로
+// 삐져나간다**(「EE60573G622ZK4」가 품명 글자에 겹친 것이 그것이다).
+//
+// 공식 수단인 하이픈 콜백(Font.registerHyphenationCallback 또는 <Text hyphenationCallback>)은
+// 쓸 수 없다 — **끊은 자리에 하이픈을 찍는다.** textkit 의 breakLines 가 끊는 자리가 penalty
+// 노드이면 insertGlyph(…, 0x002d, …) 로 '-' 를 **글자로 넣는다**(끄는 설정이 없다).
+// 실측 확인: 좁은 칸에서 콜백으로 끊으면 「EE60573G6-22ZK4」로 뽑히고, 같은 자리를 손으로
+// 끊으면 「EE60573G6 / 22ZK4」로 뽑힌다. 품번에 없는 '-' 가 들어가면 고객이 다른 품번으로 읽는다.
+// (전역 콜백은 비고·인사말·품명의 줄바꿈까지 바꾸므로 애초에 범위가 너무 넓다.)
+//
+// 그래서 **폭을 재서 직접 끊고 줄 사이에 '\n' 을 넣는다.** 한 Text 안의 줄바꿈이라
+// 줄 간격·가운데 정렬이 그대로고, 줄이 늘어나면 행 높이도 같이 늘어난다
+// (품목 행에는 고정 높이가 없고 minHeight(16) 만 있다).
+
+/**
+ * 그 글자의 가로폭 **상한** (1em = 1000). NotoSansKR-Regular 를 fontkit 으로 실측한 값이다.
+ *
+ * 한 글자씩 표를 두지 않고 몇 갈래로 묶되 **각 갈래의 최대값**을 쓴다 — 실제보다 작게 잡으면
+ * 계산이 「들어간다」고 보고 칸을 넘기므로, 틀릴 때 넘치지 않는 쪽으로 틀리게 한다.
+ *
+ * 실측값(1em=1000): 숫자 0~9 는 전부 555 로 같다. 대문자는 J(535)~W(878) 인데 M(812)·W(878)만
+ * 유별나게 넓고 나머지는 O·Q(742) 가 최대다. 소문자는 m(926)·w(802) 를 빼면 d·p·q(620) 가 최대,
+ * 그 밖 ASCII 기호는 &(680) 가 최대다. 한글은 **전부 920 으로 같고**(전각 고정폭) 한자·가나는 1000.
+ */
+function charWidth1000(ch: string): number {
+  if (ch >= '0' && ch <= '9') return 555
+  if (ch === 'M' || ch === 'W') return 878
+  if (ch >= 'A' && ch <= 'Z') return 742
+  if (ch === 'm' || ch === 'w') return 926
+  if (ch >= 'a' && ch <= 'z') return 620
+  // 그 밖의 ASCII·라틴 기호. 가장 넓은 것이 &(680) 라 742 로 넉넉히 잡는다.
+  if (ch.charCodeAt(0) < 0x1100) return 742
+  // 한글 음절 — **전부 920 으로 같다**(실측). 한자(1000)와 묶으면 품명이 한두 자 일찍 끊긴다.
+  if (ch >= '\uAC00' && ch <= '\uD7A3') return 920
+  // 그 밖의 전각(한자·가나 1000).
+  return 1000
+}
+
+/** 그 글자열의 가로폭(pt) 상한. 위 표를 더한 값이다. */
+function widthPt(text: string, sizePt: number): number {
+  let sum = 0
+  for (const ch of text) sum += charWidth1000(ch)
+  return (sum / 1000) * sizePt
+}
+
+/**
+ * 주어진 폭 안에 들어가도록 **글자 단위로** 끊는다. 하이픈을 넣지 않는다.
+ *
+ * 한 글자가 칸보다 넓으면 그 글자만 한 줄에 둔다 — 더 할 수 있는 것이 없다.
+ * 빈 글자열은 한 조각으로 돌려준다(그려지는 모양이 지금과 같아야 한다).
+ */
+export function wrapByWidth(text: string, boxPt: number, sizePt: number): string[] {
+  if (text === '' || sizePt <= 0) return [text]
+  // 폭 비교를 1em=1000 단위로 한다 — 글자 폭 표가 그 단위다.
+  const limit = (boxPt / sizePt) * 1000
+  const out: string[] = []
+  let line = ''
+  let used = 0
+  for (const ch of text) {
+    const w = charWidth1000(ch)
+    if (line !== '' && used + w > limit) {
+      out.push(line)
+      line = ch
+      used = w
+    } else {
+      line += ch
+      used += w
+    }
+  }
+  out.push(line)
+  return out
+}
+
+/** 한글·한자·가나 등 — 영어 하이픈 사전이 끊을 수 없는 글자. */
+const CJK_RE = /[\u1100-\u11FF\u3000-\u303F\u3130-\u318F\u4E00-\u9FFF\uAC00-\uD7A3]/
+/** 라틴 소문자 — 하이픈 사전의 패턴이 걸리는 조건이다. */
+const LOWER_RE = /[a-z]/
+
+/**
+ * 그 낱말을 **엔진이 스스로 끊을 수 있는가.**
+ *
+ * react-pdf 는 영어 하이픈 사전(hyphen/patterns/en-us)으로만 낱말 안을 끊는다. 그 패턴은
+ * 라틴 알파벳에 걸리므로, 한글·한자가 섞였거나 라틴 소문자가 없는 덩어리(대문자+숫자로 된
+ * 품번 같은 것)는 **끊지 못해 칸을 넘친다.** 끊을 수 있는 낱말은 지금처럼 엔진에 맡긴다 —
+ * 그 품명의 줄바꿈이 한 글자도 달라지지 않게.
+ */
+const engineCanBreak = (word: string): boolean => !CJK_RE.test(word) && LOWER_RE.test(word)
+
+/**
+ * **엔진이 끊을 수 없고 칸보다 넓은 낱말만** 미리 끊는다(그 자리에 '\n' 을 넣는다).
+ * 그 밖의 낱말은 한 글자도 건드리지 않으므로 지금 품명의 줄바꿈은 그대로다.
+ *
+ * 왜 필요한가: 품명도 공백 없는 덩어리가 길면 칸을 넘친다. 실측으로 공백 없는 한글 23자부터
+ * 수량 칸을, 30자가 넘으면 단가 칸까지 침범한다(금액 글자와 뒤섞인다).
+ * 하이픈 콜백을 쓸 수 없는 이유는 위 품번 설명과 같다 — 품명에 없는 '-' 가 찍힌다.
+ */
+export function wrapLongWords(text: string, boxPt: number, sizePt: number): string {
+  if (text === '') return text
+  return text
+    .split('\n')
+    .map(para => para
+      .split(' ')
+      .map(word => (word === '' || engineCanBreak(word) || widthPt(word, sizePt) <= boxPt
+        ? word
+        : wrapByWidth(word, boxPt, sizePt).join('\n')))
+      .join(' '))
+    .join('\n')
+}
+
+// ── 품번 칸의 기준값 ───────────────────────────────────────────────
+
+/** 품번 열의 폭 비율. 아래 COL.code 와 **같은 값이어야 한다**(한쪽만 바꾸면 계산이 어긋난다). */
+const CODE_PCT = 0.12
+
+/**
+ * 품번 칸에서 글자가 쓸 수 있는 폭(pt).
+ *   A4 폭(595.28) − 페이지 좌우 여백(30×2) − 표 테두리(THICK×2) = 표 안쪽 폭
+ *   × 열 비율 − 칸 오른쪽 테두리(THICK) − 칸 좌우 안쪽 여백(4×2)
+ * 값은 54.62pt 다. 9pt 에서 숫자 10자·대문자 6자가 한 줄이다(실측).
+ */
+const CODE_BOX_PT = (595.28 - 30 * 2 - THICK * 2) * CODE_PCT - THICK - 4 * 2
+
+/**
+ * 품번 글자를 한 단계 줄이는 길이.
+ *
+ * 품번 칸은 9pt 에서 한 줄에 숫자 10자(대문자 6자)다. 보고된 실제 사례(14자)는 두 줄에 들어가지만
+ * 그보다 길어지면 세 줄로 넘어가 행이 높아진다. 8pt 에서는 숫자 12자·대문자 7자가 한 줄이라
+ * 두 줄에 24자까지 담긴다 — 흔한 길이(15~24자)를 두 줄 안에 머물게 하려고 15자부터 줄인다.
+ */
+const CODE_SHRINK_LEN = 14
+
+/** 줄인 크기. 9 → 8 은 88.9% 로 가독성 하한(85%)보다 높다. 이 문서에 이미 8.5 가 쓰이고 있다. */
+const CODE_SMALL_SIZE = 8
+
+/** 품목 표의 기본 글자 크기(S.td 의 fontSize 와 같아야 한다). */
+const CODE_BASE_SIZE = 9
+
+/** 품명 열의 폭 비율. 아래 COL.name 과 **같은 값이어야 한다**. */
+const NAME_PCT = 0.364
+
+/**
+ * 품명 칸에서 글자가 쓸 수 있는 폭(pt) — 185.90pt.
+ * 이 칸은 오른쪽 테두리를 그리지 않으므로(borderRightWidth: 0) 테두리를 빼지 않는다.
+ * 9pt 에서 공백 없는 한글 22자·영문 소문자 36자가 한 줄이다(실측).
+ */
+const NAME_BOX_PT = (595.28 - 30 * 2 - THICK * 2) * NAME_PCT - 4 * 2
+
+/** 설명 줄(subLines)의 글자 크기. 아래 JSX 의 값과 같아야 한다. */
+const SUBLINE_SIZE = 8.5
+
+/** 그 품번을 그릴 글자 크기와, 칸 안에서 끊은 줄들. */
+export function codeLayout(code: string): { size: number; text: string } {
+  const size = [...code].length > CODE_SHRINK_LEN ? CODE_SMALL_SIZE : CODE_BASE_SIZE
+  // 한 Text 안의 '\n' 으로 넘긴다 — 줄 간격·가운데 정렬이 그대로고 하이픈이 붙지 않는다.
+  return { size, text: wrapByWidth(code, CODE_BOX_PT, size).join('\n') }
+}
+
 const S = StyleSheet.create({
   page: {
     fontFamily: 'NotoSansCJK', fontSize: 9,
@@ -97,20 +257,9 @@ export type PDFDocProps = {
    * 미리보기·확정 때 PDF·저장값으로 다시 만드는 PDF 가 모두 이 prop 하나로 같은 줄을 그린다.
    */
   terms?: Terms
-  // ── 결재 완료일(전자결재 6단계 PDF) ──
-  // 결재 대상 견적서는 저장된 파일을 열지 않고 저장값으로 다시 그린다(lib/quotePdfData.ts).
-  // 그때 날짜 자리에 **결재 완료일**을 넣는다. 둘 중 하나만 준다.
-  //   approvalDate    — 완료일(dateDisplay 와 같은 서식). 이 값이 있으면 날짜 자리에 그대로 들어간다.
-  //   approvalPending — 아직 완료되지 않았다(결재중·반려·회수·폐기·미상신). 빨간 안내를 낸다.
-  // **둘 다 없으면 지금까지와 똑같이 dateDisplay 가 그려진다** — 확정 흐름·미리보기는 손대지 않는다.
-  approvalDate?: string
-  approvalPending?: boolean
 }
 
-/** 결재가 끝나기 전 날짜 자리에 넣는 문구. lib/quotePdfData.ts 의 상수와 같은 값이다. */
-const APPROVAL_PENDING_TEXT = '결재 완료 시 날짜 자동 입력 예정'
-
-export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, quoteNo, dateDisplay, rows, remarks, engineerName, engineerTel, totalSupply, totalTax, totalAmount, showWatermark, showSignature, approvalDate, approvalPending, terms }: PDFDocProps) {
+export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, quoteNo, dateDisplay, rows, remarks, engineerName, engineerTel, totalSupply, totalTax, totalAmount, showWatermark, showSignature, terms }: PDFDocProps) {
   const EMPTY_ROWS = Math.max(0, 10 - rows.length)
   // 할인은 품목 목록의 맨 끝(합계 바로 위)에 고정한다 — 입력 순서와 무관하게.
   const orderedRows = [...rows.filter(r => r.row_kind !== 'discount'), ...rows.filter(r => r.row_kind === 'discount')]
@@ -136,13 +285,9 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, 
             {receiver ? <Text style={{ fontSize: 9, textAlign: 'right' }}>수신인 : {receiver}</Text> : null}
           </View>
         </View>
-        {/* 날짜 줄 — 자리와 서식은 하나다. 결재 완료일이 오면 그 값을, 아직 아니면 빨간 안내를,
-            둘 다 없으면 종전대로 dateDisplay 를 그린다(확정 흐름·미리보기가 이 길이다). */}
-        {approvalPending ? (
-          <Text style={[S.dateRow, { color: DANGER }]}>{APPROVAL_PENDING_TEXT}</Text>
-        ) : (
-          <Text style={S.dateRow}>{approvalDate ?? dateDisplay}</Text>
-        )}
+        {/* 날짜 줄 — **늘 확정 때의 날짜**다(미리보기는 그날 날짜). 결재 완료를 기다려 날짜를
+            채워 넣던 체계는 걷어냈다 — 확정과 동시에 고객 발송용 문서가 나간다. */}
+        <Text style={S.dateRow}>{dateDisplay}</Text>
         <View style={S.headerRow}>
           <View style={S.headerLeft}>
             <Text style={S.companyName}>{company || '　'} 귀하</Text>
@@ -185,6 +330,11 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, 
             // 할인 — 라벨·금액을 빨간색으로 내고 수량·단가·부가세 칸은 비운다(부가세는 합계에만 반영).
             // 순번·품번도 붙이지 않고 행 안의 세로선을 전부 지워, 라벨과 금액만 놓인 한 줄로 보이게 한다.
             const isDiscount = row.row_kind === 'discount'
+            // 품번 — 그리는 값과 글자 크기·줄바꿈 판정이 같아야 해서 한 번만 만든다.
+            const code = isDiscount
+              ? ''
+              : (row.partCode.trim() || ((row.itemText.trim() || row.supply_price > 0) ? '-' : ''))
+            const codeDraw = codeLayout(code)
             const noRule = isDiscount ? { borderRightWidth: 0 } : {}
             // 할인 줄 아래에는 선을 두지 않는다 — 할인은 늘 마지막 줄이고, 그 아래(빈 영역·비고)가
             // 칸 없는 한 덩어리라 여기서 선을 그으면 열린 공간이 도로 잘려 보인다.
@@ -196,14 +346,24 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({ company, receiver, 
               </View>
               <View style={[S.td, { width: COL.code, justifyContent: 'center', alignItems: 'center' }, noRule]}>
                 {/* 품번 — 가격표 선택값이든 직접 입력값이든 행의 partCode 를 쓴다.
-                    내용이 있는 행인데 품번이 없으면(서비스비 등) '-' 로 채운다. 할인은 품번 자체가 없어 비운다. */}
-                <Text style={{ textAlign: 'center' }}>
-                  {isDiscount ? '' : (row.partCode.trim() || ((row.itemText.trim() || row.supply_price > 0) ? '-' : ''))}
+                    내용이 있는 행인데 품번이 없으면(서비스비 등) '-' 로 채운다. 할인은 품번 자체가 없어 비운다.
+                    긴 품번은 칸 폭을 재서 글자 단위로 끊고(codeLayout), 아주 길면 글자를 한 단계 줄인다.
+                    가격표 품번(2글자 + 숫자 5자리)은 40.8pt 라 지금까지처럼 한 줄이다. */}
+                <Text style={{ textAlign: 'center', fontSize: codeDraw.size }}>
+                  {codeDraw.text}
                 </Text>
               </View>
               <View style={[S.td, { width: COL.name, borderRightWidth: 0, alignItems: isDiscount ? 'flex-end' : undefined, justifyContent: 'center' }]}>
-                <Text style={isDiscount ? { color: DANGER, textAlign: 'right' } : undefined}>{stripLeadNo(row.itemText)}</Text>
-                {row.subLines.map((line, i) => line ? <Text key={i} style={{ fontSize: 8.5, marginTop: 1 }}>{line}</Text> : null)}
+                {/* 품명·설명 줄 — 칸보다 넓은 낱말만 미리 끊는다(wrapLongWords).
+                    칸에 들어가는 품명은 손대지 않으므로 줄바꿈이 지금과 같다. */}
+                <Text style={isDiscount ? { color: DANGER, textAlign: 'right' } : undefined}>
+                  {wrapLongWords(stripLeadNo(row.itemText), NAME_BOX_PT, CODE_BASE_SIZE)}
+                </Text>
+                {row.subLines.map((line, i) => line ? (
+                  <Text key={i} style={{ fontSize: SUBLINE_SIZE, marginTop: 1 }}>
+                    {wrapLongWords(line, NAME_BOX_PT, SUBLINE_SIZE)}
+                  </Text>
+                ) : null)}
               </View>
               <View style={[S.td, { width: COL.qty, borderLeftWidth: isDiscount ? 0 : THICK, borderLeftColor: '#000', justifyContent: 'center', alignItems: 'center' }, noRule]}>
                 <Text style={{ textAlign: 'center' }}>{row.quantity > 0 ? String(row.quantity) : ''}</Text>

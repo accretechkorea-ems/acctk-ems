@@ -1293,7 +1293,7 @@ function AdminPageInner() {
             <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.8, background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '14px 16px' }}>
               견적서 삭제는 <b>결재함에서 처리합니다.</b><br />
               삭제 요청이 올라오면 결재선을 따라 진행되고, 결재가 완료된 시점에 견적이 지워집니다.
-              반려·회수·폐기하면 요청 직전 상태로 돌아갑니다.
+              반려·회수하면 요청 직전 상태로 돌아갑니다.
             </div>
             <div style={{ fontSize: 12, color: GRAY, lineHeight: 1.7, marginTop: 12 }}>
               · 삭제 요청은 견적을 쓴 사람이 실적 현황이나 개인 대시보드에서 올립니다.<br />

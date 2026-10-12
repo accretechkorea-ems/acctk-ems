@@ -1,6 +1,6 @@
 'use client'
 
-// 결재 문서의 **처리 영역** — 의견·승인·반려와 회수·재작성·폐기.
+// 결재 문서의 **처리 영역** — 의견·승인·반려와 회수·재작성·삭제.
 //
 // 목록에서 펼치는 상세(DocDetail)와 문서 양식 화면(app/approval/doc/[id])이 **이것을 함께 쓴다.**
 // 승인·반려 로직을 두 벌로 두면 한쪽만 고쳐져 어긋난다 — 라우트 호출·2단 확인·토스트 문구·
@@ -14,12 +14,17 @@
 //
 // 처리 자체는 지금까지와 똑같이 /api/approval 이 한다 — 최종 권한은 그쪽이고, 여기 버튼은
 // 「누를 수 있게 보이는가」만 정한다.
+//
+// **삭제**(회수·폐기된 문서를 치운다)는 종류에 따라 가는 곳이 다르다 — 결재 문서만 지우는
+// 종류는 /api/approval 의 delete 로, 원 문서까지 치워야 하는 종류는 업무별 라우트로 간다
+// (원 문서의 참조·스토리지·감사를 함께 치워야 한다). 어디로 무엇을 보낼지는 **등록표**
+// (lib/approval/docTypes.ts 의 deleteWhenClosed)가 말해 준다 — 여기에 유형 이름을 적지 않는다.
 
 import { useEffect, useState } from 'react'
 import { useToast } from '@/components/common/Toast'
 import { MUTED, NEUTRAL_BG, SUB, btnDanger, btnGhost, btnPrimary, inputStyle } from '@/components/common/ui'
 import { APPROVE_LABEL, approveLabelOf, canRejectDocument, DOC_TYPES } from '@/lib/approval/docTypes'
-import { ownerActions, type ActionDoc } from '@/lib/approval/docActions'
+import { ownerActions, processedCount, type ActionDoc, type OwnerActions } from '@/lib/approval/docActions'
 import { sendDocSignal, type DocAction } from '@/lib/approval/docSignal'
 
 /** 「회수」는 두 번 눌러야 실행된다. 쇼룸·첨부와 같은 3초다. */
@@ -28,14 +33,14 @@ const CONFIRM_MS = 3000
 export type DocActionScope = {
   /** 의견·승인·반려 줄을 그릴지. */
   approve: boolean
-  /** 회수·재작성·폐기 줄을 그릴지(「폐기한 문서입니다」 같은 안내 문구도 이 줄에 있다). */
+  /** 회수·재작성·삭제 줄을 그릴지(버튼이 없을 때의 안내 문구도 이 줄에 있다). */
   owner: boolean
 }
 
 export default function DocActions({
-  doc, summary, scope, delegated, currentApproverId, nameOf, onChanged,
+  doc, summary, scope, delegated, currentApproverId, nameOf, onChanged, onDeleted,
 }: {
-  doc: ActionDoc & { document_id: number }
+  doc: ActionDoc & { document_id: number; target_id?: number | null }
   /** 유형별 반려 가능 여부·버튼 이름 판정에 쓴다(등록표가 읽는다). */
   summary: Record<string, unknown> | null | undefined
   scope: DocActionScope
@@ -46,12 +51,18 @@ export default function DocActions({
   nameOf: (id: number) => string
   /** 처리 성공 — 부르는 쪽이 다시 읽는다. */
   onChanged: () => void
+  /**
+   * 문서가 **없어졌을 때** — 다시 읽을 것이 없으므로 부르는 쪽이 자리를 떠야 한다.
+   * (목록은 목록을 다시 읽고, 문서 창은 창을 닫거나 결재함으로 간다.)
+   * 주지 않으면 onChanged 를 부른다.
+   */
+  onDeleted?: () => void
 }) {
   const toast = useToast()
   const [comment, setComment] = useState('')
   const [busy, setBusy] = useState(false)
   const [confirmWithdraw, setConfirmWithdraw] = useState(false)
-  const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   useEffect(() => {
     if (!confirmWithdraw) return
@@ -60,10 +71,10 @@ export default function DocActions({
   }, [confirmWithdraw])
 
   useEffect(() => {
-    if (!confirmDiscard) return
-    const t = setTimeout(() => setConfirmDiscard(false), CONFIRM_MS)
+    if (!confirmDelete) return
+    const t = setTimeout(() => setConfirmDelete(false), CONFIRM_MS)
     return () => clearTimeout(t)
-  }, [confirmDiscard])
+  }, [confirmDelete])
 
   // 반려 가능 여부와 승인 버튼 이름은 **따로** 본다.
   //   · rejectable — 반려 버튼을 그릴지. 판정은 서버 반려 라우트와 **같은 함수**다
@@ -120,15 +131,50 @@ export default function DocActions({
     call({ action: 'withdraw', documentId: doc.document_id }, '회수했습니다')
   }
   const resubmit = () => call({ action: 'resubmit', documentId: doc.document_id }, '다시 올렸습니다')
-  // 폐기 — 되돌릴 수 없으니 회수와 같은 3초 2단 확인을 둔다.
-  const discard = () => {
-    if (!confirmDiscard) { setConfirmDiscard(true); return }
-    setConfirmDiscard(false)
-    call({ action: 'discard', documentId: doc.document_id }, '폐기했습니다')
+
+  /**
+   * 삭제 — 회수·폐기된 문서를 치운다. 되돌릴 수 없어 3초 2단 확인을 둔다.
+   *
+   * 라우트·본문 열쇠·사유는 등록표가 준다(cd) — 종류에 따라 결재 문서만 지우거나 원 문서까지
+   * 함께 지운다. 성공하면 **다시 읽지 않는다** — 문서가 없다.
+   * 409·403 은 라우트의 문구를 그대로 보여 준다(판정은 그쪽이 최종이다).
+   */
+  const removeAll = async (cd: NonNullable<OwnerActions['deleteClosed']>) => {
+    if (!confirmDelete) { setConfirmDelete(true); return }
+    setConfirmDelete(false)
+    // 보낼 id — 원 문서까지 지우는 종류는 target_id, 문서만 지우는 종류는 document_id.
+    const id = cd.idFrom === 'target' ? doc.target_id : doc.document_id
+    if (id == null) { toast.error('지울 대상을 알 수 없습니다'); return }
+    setBusy(true)
+    try {
+      const res = await fetch(cd.endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          [cd.idKey]: id,
+          action: cd.action,
+          ...(cd.reason ? { reason: cd.reason } : {}),
+        }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) { toast.error(json?.error ?? '삭제하지 못했습니다'); return }
+      toast.success('삭제했습니다')
+      // 목록·다른 창에도 알린다 — 지워진 문서가 묵은 목록에 남지 않게.
+      sendDocSignal(doc.document_id, 'delete')
+      ;(onDeleted ?? onChanged)()
+    } catch (e) {
+      console.error('[approval/detail] delete failed', e)
+      toast.error('삭제하지 못했습니다')
+    } finally {
+      setBusy(false)
+    }
   }
 
   // 상신자가 할 수 있는 일 — 상태·결재선·유형만 보는 순수 판정(lib/approval/docActions.ts).
   const owner = ownerActions(doc)
+  // 이미 결재한 사람 수. 종결 전이면 결재가 시작된 뒤에도 회수할 수 있으므로,
+  // 「무엇이 무효가 되는지」를 누르기 전에 알린다(0 이면 지금까지와 같은 확인 문구만 나온다).
+  const processed = processedCount(doc.approval_lines)
 
   return (
     <>
@@ -167,38 +213,48 @@ export default function DocActions({
       )}
 
       {scope.owner && (
-        <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+        <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+          {/* 결재가 이미 시작된 문서를 회수하려 할 때 — 무엇이 무효가 되는지 먼저 말한다.
+              시작 전(처리 0명) 회수는 지금까지와 같이 버튼의 2단 확인만 둔다. */}
+          {owner.withdraw && confirmWithdraw && processed > 0 && (
+            <span style={{ width: '100%', fontSize: 12, color: SUB, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>
+              이미 {processed}명이 결재했습니다. 회수하면 결재자에게 알림이 가고 결재가 중단됩니다
+            </span>
+          )}
           {owner.withdraw && (
             <button type="button" onClick={withdraw} disabled={busy}
               style={confirmWithdraw ? btnDanger(busy) : btnGhost(busy)}>
               {confirmWithdraw ? '한 번 더 누르면 회수' : '회수'}
             </button>
           )}
-          {/* 재작성·폐기는 같은 조건에서 함께 나온다 — 다시 올리거나, 치우거나 둘 중 하나다.
-              폐기한 문서에는 둘 다 나오지 않는다(되살리려면 새로 상신한다). */}
-          {owner.discard && (
+          {/* 재작성 — 반려·회수된 문서를 같은 문서로 다시 올린다(허용한 종류만). */}
+          {owner.resubmit && (
+            <button type="button" onClick={resubmit} disabled={busy} style={btnPrimary(busy)}>
+              {busy ? '처리 중...' : '재작성'}
+            </button>
+          )}
+          {/* 삭제 — 회수·폐기된 문서를 치운다. 어느 종류가 이 버튼을 갖는지는 등록표가 정한다
+              (owner.deleteClosed 가 null 이면 없다). 반려·완료 문서에는 나오지 않는다. */}
+          {owner.deleteClosed && (
             <>
-              {owner.resubmit && (
-                <button type="button" onClick={resubmit} disabled={busy} style={btnPrimary(busy)}>
-                  {busy ? '처리 중...' : '재작성'}
-                </button>
+              {confirmDelete && (
+                <span style={{ width: '100%', fontSize: 12, color: SUB, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>
+                  {owner.deleteClosed.confirmText}
+                </span>
               )}
-              <button type="button" onClick={discard} disabled={busy}
-                style={confirmDiscard ? btnDanger(busy) : btnGhost(busy)}>
-                {confirmDiscard ? '한 번 더 누르면 폐기' : '폐기'}
+              <button type="button" onClick={() => removeAll(owner.deleteClosed!)} disabled={busy}
+                style={confirmDelete ? btnDanger(busy) : btnGhost(busy)}>
+                {busy ? '처리 중...' : confirmDelete ? '한 번 더 누르면 삭제' : '삭제'}
               </button>
             </>
           )}
-          {doc.status === '폐기' && (
+          {/* 반려 문서는 기록으로 남는다 — 치우는 버튼도, 지우는 버튼도 두지 않는다. */}
+          {owner.rejectedNotice && (
             <span style={{ fontSize: 12, color: MUTED, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>
-              폐기한 문서입니다. 다시 올리려면 새로 상신해주세요
+              {owner.rejectedNotice}
             </span>
           )}
-          {doc.status === '진행중' && !owner.withdraw && (
-            <span style={{ fontSize: 12, color: MUTED, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>
-              이미 결재가 시작되어 회수할 수 없습니다
-            </span>
-          )}
+
         </div>
       )}
     </>

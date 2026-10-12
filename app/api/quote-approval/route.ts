@@ -24,7 +24,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewMenu, canViewSalesMgmt } from '@/lib/permissions'
+import { canViewMenu } from '@/lib/permissions'
 import { canViewApprovalDocument, type DocAccessRef } from '@/lib/approval/docAccess'
 import { attachTeamPerm, loadTeamPerms } from '@/lib/teamPermsServer'
 import type { TeamPerm } from '@/lib/permissions'
@@ -39,8 +39,8 @@ import {
   type PartyName, type RawExpense, type RawItem, type RawQuote,
 } from '@/lib/approval/quoteReview'
 import { APPROVABLE_STATUSES, isApprovalTarget } from '@/lib/quoteStatus'
-import { euDisplayName } from '@/lib/quoteEuName'
-import type { PdfQuoteRow } from '@/lib/quotePdfData'
+import { docHistoryOf } from '@/lib/quoteDeletePolicy'
+import { isSuperAdmin } from '@/lib/permissions'
 import type { LineInput } from '@/lib/approval/types'
 
 const TAG = 'quote-approval'
@@ -295,159 +295,6 @@ async function review(sb: SupabaseClient, caller: Caller, body: Record<string, u
   )
 }
 
-// ── 견적서 PDF 생성용 저장값 ────────────────────────────────────────
-//
-// 결재 대상 견적서는 **저장된 파일을 열지 않는다**(확정 때 만든 파일에는 승인일이 없다).
-// 화면이 이 액션으로 저장값을 받아 그 자리에서 PDF 를 만든다(lib/quotePdfData.ts).
-//
-// 돌려주는 것은 **PDF 에 찍히는 값만**이다 — 원가·이익은 PDF 에 나가지 않으므로 담지 않는다
-// (검토표 'review' 와 다른 점이다. 그쪽은 결재자가 판단할 재료라 원가·이익을 담는다).
-
-/** PDF 가 읽는 칸만. 원가·이익(total_cost·total_profit·cost_amount …)은 넣지 않는다. */
-const PDF_QUOTE_SELECT = `
-  quote_id, quote_number, quote_date, created_at, status, recipient, note, delivery_info,
-  total_supply, total_tax, total_amount, terms,
-  customer_id, dealer_id, engineer_id, created_by
-`
-
-/**
- * 그 견적의 PDF 를 열 수 있는가 — **두 길 가운데 하나**면 된다.
- *   ① 견적 열람 권한 — /api/quote-pdf 와 같은 기준(견적 메뉴 + 영업관리이거나 실적 담당자 본인)
- *   ② 결재 문서 열람 권한 — 그 견적의 결재 문서를 볼 수 있는 사람(상신자·결재선 전원·관리자)
- * 결재선에 들어온 다른 팀 사람은 ① 을 통과하지 못하므로 ② 가 필요하다.
- * 조회가 실패하면 **거짓**(fail-closed).
- */
-async function canOpenQuotePdf(
-  sb: SupabaseClient,
-  caller: Caller,
-  quote: { quote_id: number; engineer_id: number | null },
-): Promise<boolean> {
-  // ① 견적 열람 권한. canViewSalesMgmt 는 /api/quote-pdf 와 같은 함수를 쓴다.
-  if (canViewMenu(caller, 'quote') && (canViewSalesMgmt(caller) || quote.engineer_id === caller.engineer_id)) {
-    return true
-  }
-  // ② 그 견적의 결재 문서를 볼 수 있는가.
-  const { data, error } = await sb
-    .from('approval_documents')
-    .select('document_id, requester_id')
-    .eq('doc_type', QUOTE_TYPE)
-    .eq('target_table', QUOTE_TARGET_TABLE)
-    .eq('target_id', quote.quote_id)
-  if (error) {
-    console.error(`[${TAG}] pdf 권한용 문서 조회 실패`, { quoteId: quote.quote_id, error })
-    return false
-  }
-  for (const d of (data ?? []) as { document_id: number; requester_id: number }[]) {
-    if (await canViewApprovalDocument(sb, d, caller)) return true
-  }
-  return false
-}
-
-async function pdfData(sb: SupabaseClient, caller: Caller, body: Record<string, unknown>) {
-  const quoteId = Number(body?.quote_id)
-  if (!Number.isSafeInteger(quoteId) || quoteId <= 0) return bad('견적을 지정해주세요.')
-
-  const { data: qRow, error: qErr } = await sb
-    .from('quotes').select(PDF_QUOTE_SELECT).eq('quote_id', quoteId).maybeSingle()
-  if (qErr) {
-    console.error(`[${TAG}] pdf quote lookup failed`, { quoteId, error: qErr })
-    return bad('견적을 불러오지 못했습니다.', 500)
-  }
-  const quote = (qRow ?? null) as (PdfQuoteRow & {
-    quote_id: number; created_at: string | null; status: string | null
-    customer_id: number | null; dealer_id: number | null
-    engineer_id: number | null; created_by: number | null
-    delivery_info: string | null
-  }) | null
-  if (!quote) return bad('견적을 찾을 수 없습니다.', 404)
-
-  if (!(await canOpenQuotePdf(sb, caller, quote))) {
-    console.warn(`[${TAG}] pdf-data 권한 없음`, { quoteId, callerId: caller.engineer_id })
-    return bad('이 견적서를 볼 권한이 없습니다.', 403)
-  }
-
-  // 결재 도입 전 견적은 **저장된 파일이 정본**이다 — 여기서 만들지 않는다.
-  // 화면은 이 400 을 보고 저장 PDF 경로로 간다(gate 를 이미 알면 애초에 부르지 않는다).
-  if (!isApprovalTarget(quote.created_at)) {
-    return bad('결재 도입 전 견적은 저장된 PDF 를 사용합니다')
-  }
-
-  // 완료 시각·품목·수신처·담당자. 서로의 결과가 필요 없어 **전부** 나란히 보낸다.
-  // 업체는 'review' 와 같은 함수로 고객사·대리점을 한 번의 .in 조회에 묶는다(partyNamesOf).
-  const [doneRes, itemsRes, parties, people] = await Promise.all([
-    // 완료된 결재 문서의 완료 시각. 없으면 null → 날짜 자리에 「결재 완료 시 …」가 들어간다.
-    // completed_at 은 '완료' 인 문서에 반드시 있다(approval_schema.sql 의 ad_completed_fields).
-    sb.from('approval_documents')
-      .select('completed_at')
-      .eq('doc_type', QUOTE_TYPE)
-      .eq('target_table', QUOTE_TARGET_TABLE)
-      .eq('target_id', quoteId)
-      .eq('status', '완료')
-      .order('completed_at', { ascending: false })
-      .limit(1),
-    sb.from('quote_items')
-      .select('item_id, row_kind, part_code, product_name, quantity, unit_price_krw, supply_amount, tax_amount, sub_lines')
-      .eq('quote_id', quoteId),
-    partyNamesOf(sb, [quote.customer_id, quote.dealer_id]),
-    (async () => {
-      const ids = [quote.engineer_id].filter((n): n is number => n != null)
-      if (ids.length === 0) return null
-      const { data, error } = await sb
-        .from('engineers').select('engineer_id, name, position, tel').in('engineer_id', ids)
-      if (error) console.error(`[${TAG}] pdf engineer lookup failed`, { quoteId, error })
-      return ((data ?? [])[0] ?? null) as { name: string | null; position: string | null; tel: string | null } | null
-    })(),
-  ])
-  // 오류를 보는 순서는 종전과 같다 — 결재 상태를 못 읽은 쪽이 먼저다.
-  if (doneRes.error) {
-    console.error(`[${TAG}] pdf 완료 문서 조회 실패`, { quoteId, error: doneRes.error })
-    return bad('결재 상태를 확인하지 못했습니다.', 500)
-  }
-  const approvedAt = (doneRes.data?.[0] as { completed_at: string | null } | undefined)?.completed_at ?? null
-  const custName = partyOf(parties, quote.customer_id)
-  const dealerName = partyOf(parties, quote.dealer_id)
-  if (itemsRes.error) {
-    // 품목이 빠진 견적서를 내보내지 않는다 — 금액은 맞는데 품목이 비면 문서가 틀린 것이다.
-    console.error(`[${TAG}] pdf items lookup failed`, { quoteId, error: itemsRes.error })
-    return bad('품목을 불러오지 못했습니다.', 500)
-  }
-
-  // 수신처 「○○ 귀하」 — 확정 때와 같은 규칙이다. 대리점 건이면 대리점(청구처)이 수신처이고,
-  // 회사 아래 사업장이면 회사 이름이 찍힌다(lib/quoteEuName.ts).
-  const billTo = quote.dealer_id != null ? dealerName : custName
-  const company = euDisplayName({ siteName: billTo?.site ?? null, parentName: billTo?.parent ?? null })
-
-  // 담당자 줄 — 실적 담당자의 「이름 직급」과 전화번호(확정 흐름의 engineerName·engineerTel 과 같다).
-  const engineerName = [people?.name, people?.position].filter(Boolean).join(' ')
-
-  return NextResponse.json({
-    pdf: {
-      quote: {
-        quote_number: quote.quote_number,
-        recipient: quote.recipient,
-        note: quote.note,
-        total_supply: quote.total_supply,
-        total_tax: quote.total_tax,
-        total_amount: quote.total_amount,
-        // 조건 네 줄 — buildQuotePdfProps 가 termsOf 로 풀어 기본값을 메운다.
-        terms: quote.terms ?? null,
-      },
-      items: itemsRes.data ?? [],
-      company,
-      engineerName,
-      engineerTel: people?.tel ?? null,
-      approvedAt,
-    },
-    // 열람 기록·파일 이름에 쓰는 값(화면이 download_logs 에 남긴다).
-    meta: {
-      quoteId: quote.quote_id,
-      quoteNumber: quote.quote_number,
-      customerName: euDisplayName({ siteName: custName?.site ?? null, parentName: custName?.parent ?? null }) || null,
-      deliveryInfo: quote.delivery_info,
-    },
-  })
-}
-
 export async function POST(req: NextRequest) {
   const timer = makeTimer()
   const supabase = await createServerClient()
@@ -456,8 +303,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}))
   const action: string = typeof body?.action === 'string' ? body.action : ''
-  if (action !== 'check' && action !== 'submit' && action !== 'gates'
-    && action !== 'review' && action !== 'pdf-data') {
+  if (action !== 'check' && action !== 'submit' && action !== 'gates' && action !== 'review') {
     return bad('Invalid action')
   }
 
@@ -498,8 +344,24 @@ export async function POST(req: NextRequest) {
     if (!res.ok) return bad(res.error, 500)
     // 상태·생성 시각은 내보내지 않는다 — 화면이 쓸 것은 게이트 하나다.
     const gates: Record<string, string> = {}
-    for (const [id, row] of res.gates) gates[String(id)] = row.gate
-    return NextResponse.json({ gates })
+    // 아래 둘은 **그 견적을 쓴 사람(과 superadmin)에게만** 담는다 — 실적 현황은 남의 견적도
+    // 보여 주므로, 결재 문서에 관한 것은 지울 수 있는 사람에게만 나가야 한다.
+    // superadmin 을 넣는 이유: 그 사람은 남의 견적도 지울 수 있으므로(/api/quote-delete 의 self),
+    // 이력을 모르면 화면과 서버의 답이 갈린다. 등급은 이미 읽어 둔 값이라 왕복이 늘지 않는다.
+    // 문서 내용·반려 사유는 담지 않는다(문서 화면이 열람 권한을 다시 보고 보여 준다 — docAccess.ts).
+    //   docs   — 결재 문서 이력 분류. 목록이 「⋮ 삭제」를 보여 줄지 정하는 데 쓴다.
+    //   docIds — 반려 사유를 열 결재 문서 id.
+    const docs: Record<string, string> = {}
+    const docIds: Record<string, number> = {}
+    const admin = isSuperAdmin(row)
+    for (const [id, g] of res.gates) {
+      gates[String(id)] = g.gate
+      const mine = g.createdBy != null && g.createdBy === row.engineer_id
+      if (!mine && !admin) continue
+      docs[String(id)] = docHistoryOf(g.docStatuses)
+      if (g.docId != null) docIds[String(id)] = g.docId
+    }
+    return NextResponse.json({ gates, docs, docIds })
   }
 
   // 견적을 상신하는 라우트다. 권한을 거둔 직후에도 통과하면 곤란해 캐시를 건너뛴다
@@ -513,13 +375,6 @@ export async function POST(req: NextRequest) {
   // 사람인지**를 아래에서 따로 본다(canViewApprovalDocument).
   if (action === 'review') {
     return review(sb, caller, body, timer)
-  }
-
-  // ── 견적서 PDF 생성용 저장값 — 읽기 전용 ──
-  // 여기도 견적 작성 권한을 요구하지 않는다. 권한은 pdfData 안에서 **두 길 가운데 하나**로 본다
-  // (견적 열람 권한 또는 그 견적의 결재 문서 열람 권한 — canOpenQuotePdf).
-  if (action === 'pdf-data') {
-    return pdfData(sb, caller, body)
   }
 
   if (!canViewMenu(caller, 'quote')) return bad('견적 작성 권한이 없습니다.', 403)

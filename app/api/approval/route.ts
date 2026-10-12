@@ -22,10 +22,10 @@ import { canRejectDocument, canResubmitDocument, docTypeOf, type DocTypeDef } fr
 import { handlersOf } from '@/lib/approval/handlers'
 import {
   actorFor, applyApproval, ccApproverIds, delegatesOf, isComplete,
-  nextPendingLine, skippedLineIds, toLineRows, untouched,
+  nextPendingLine, sequentialLines, skippedLineIds, toLineRows,
 } from '@/lib/approval/engine'
 import {
-  APPROVAL_PATH, DISCARDABLE_STATUSES, approvalDocPath,
+  APPROVAL_PATH, approvalDocPath,
   type ApprovalDocument, type ApprovalLine, type Delegation,
   type HistoryAction, type LineInput,
 } from '@/lib/approval/types'
@@ -156,7 +156,8 @@ export async function POST(req: Request) {
     case 'reject': return reject(caller, body!)
     case 'withdraw': return withdraw(caller, body!)
     case 'resubmit': return resubmit(caller, body!)
-    case 'discard': return discard(caller, body!)
+    case 'discard': return bad('폐기는 더 이상 지원하지 않습니다. 회수한 문서는 그대로 두거나 삭제해 주세요.')
+    case 'delete': return deleteDoc(caller, body!)
     default: return bad('action 이 올바르지 않습니다.')
   }
 }
@@ -342,13 +343,16 @@ async function approve(caller: Caller, body: Record<string, unknown>) {
  * 유형 분기는 두지 않는다. 훅이 없는 유형이면 아무 일도 일어나지 않는다.
  * 실패해도 결재 상태 변경은 이미 끝났으므로 되돌리지 않고 기록만 남긴다(onComplete 와 같은 규칙).
  */
-async function runRevert(doc: DocWithLines, actorId: number) {
+async function runRevert(doc: DocWithLines, actorId: number, outcome: '반려' | '회수' | '폐기') {
   const hooks = handlersOf(doc.doc_type)
   if (!hooks.onRevert) return
   try {
     await hooks.onRevert({
       documentId: doc.document_id, docNo: doc.doc_no, targetTable: doc.target_table, targetId: doc.target_id,
       summary: doc.summary ?? {}, requesterId: doc.requester_id, actorId, lines: doc.approval_lines,
+      // **어떻게 끝났는지를 적어 넘긴다.** doc 은 상태를 바꾸기 전에 읽은 값이라 여기서
+      // doc.status 를 보면 reject·withdraw 에서 '진행중' 이 나온다(docTypes.ts 의 outcome 설명).
+      outcome,
     })
   } catch (e) {
     console.error('[approval] onRevert failed', { documentId: doc.document_id, docType: doc.doc_type, error: e })
@@ -405,7 +409,7 @@ async function reject(caller: Caller, body: Record<string, unknown>) {
   await addHistory(documentId, '반려', caller.engineer_id, line.step ?? null, comment)
   if (closed && closed.length > 0) {
     // 원 문서를 결재 전 상태로 되돌린다(견적 삭제 요청이면 '취소요청' 에서 풀어 준다).
-    await runRevert(doc, caller.engineer_id)
+    await runRevert(doc, caller.engineer_id, '반려')
     await notify([{
       engineer_id: doc.requester_id,
       title: '결재가 반려되었습니다',
@@ -418,6 +422,15 @@ async function reject(caller: Caller, body: Record<string, unknown>) {
 }
 
 // ── 회수 ────────────────────────────────────────────────────────────────────
+//
+// **종결 전('진행중')이면 상신자가 언제든 회수한다** — 이미 결재가 시작되었어도 멈출 수 있다.
+// 예전에는 아무도 손대지 않은 문서만 회수할 수 있어서, 올린 뒤 내용이 틀린 것을 알아채면
+// 상신자가 할 수 있는 일이 없었다(결재자에게 반려를 부탁하는 수밖에 없었다).
+//
+// 경합은 조건부 UPDATE 하나로 막는다. 결재자가 같은 순간에 **마지막** 승인을 눌러 문서가 '완료'
+// 가 되었다면 여기서 0행이 되어 409 가 나간다 — 완료된 결재를 회수가 뒤집는 일은 없다.
+// (마지막이 아닌 승인은 문서를 '진행중' 에 두므로 회수가 이긴다. 그 승인은 결재선에 남고,
+//  아래 알림이 그 사람에게 「회수되었습니다」를 보낸다.)
 async function withdraw(caller: Caller, body: Record<string, unknown>) {
   const documentId = docIdOf(body.documentId)
   if (!documentId) return bad('문서를 지정해주세요.')
@@ -426,7 +439,6 @@ async function withdraw(caller: Caller, body: Record<string, unknown>) {
   if (!doc) return bad('문서를 찾을 수 없습니다.', 404)
   if (doc.requester_id !== caller.engineer_id) return bad('상신한 사람만 회수할 수 있습니다.', 403)
   if (doc.status !== '진행중') return bad(`이미 ${doc.status} 상태인 문서입니다.`, 409)
-  if (!untouched(doc.approval_lines)) return bad('이미 결재가 시작되어 회수할 수 없습니다.', 409)
 
   const { data: closed, error } = await supabaseAdmin
     .from('approval_documents')
@@ -438,52 +450,159 @@ async function withdraw(caller: Caller, body: Record<string, unknown>) {
     console.error('[approval] withdraw failed', { documentId, error })
     return bad('회수하지 못했습니다.', 500)
   }
-  // 조건부 UPDATE 가 0행이면 그 사이에 누가 결재했다는 뜻이다.
-  if (!closed || closed.length === 0) return bad('이미 처리되어 회수할 수 없습니다.', 409)
+  // 조건부 UPDATE 가 0행이면 그 사이에 문서가 종결됐다(마지막 승인·반려가 먼저 들어왔다).
+  if (!closed || closed.length === 0) return bad('이미 처리되었습니다.', 409)
 
   await addHistory(documentId, '회수', caller.engineer_id, null, null)
-  await runRevert(doc, caller.engineer_id)
+  await runRevert(doc, caller.engineer_id, '회수')
+  await notifyWithdrawn(doc, caller.engineer_id)
   return NextResponse.json({ ok: true, documentId, status: '회수' })
 }
 
-// ── 폐기 ────────────────────────────────────────────────────────────────────
-// 반려·회수된 문서를 상신자가 치운다. 다시 올리지 않기로 한 건이 상신함 미결문서에 쌓이는 것을 막는다.
+/**
+ * 회수 알림 — **이미 처리한 사람과 지금 차례 결재자**에게.
+ *
+ * 왜 필요한가: 이제 결재가 돌기 시작한 뒤에도 회수된다. 승인을 눌러 둔 사람은 자기 결재가
+ * 무효가 된 것을 알아야 하고, 지금 차례인 사람은 더 볼 필요가 없다는 것을 알아야 한다
+ * (미결함에서 조용히 사라지면 「내가 놓쳤나」가 된다).
+ *
+ * 받는 사람
+ *   · 처리한 사람 — 승인·전결·대결 줄의 **실제 처리자**(대결이면 대리인, acted_by).
+ *   · 지금 차례 결재자 — 그 줄의 approver_id.
+ *   · 상신자 본인은 뺀다(자기가 누른 일이다).
+ * 알림 실패는 삼킨다 — 회수는 이미 끝났다(notify 설명).
+ */
+async function notifyWithdrawn(doc: DocWithLines, requesterId: number) {
+  const lines = sequentialLines(doc.approval_lines)
+  const acted = lines
+    .filter(l => l.state === '승인' || l.state === '전결' || l.state === '대결')
+    .map(l => l.acted_by ?? l.approver_id)
+  const pending = nextPendingLine(doc.approval_lines)
+  const targets = [...new Set([...acted, ...(pending ? [pending.approver_id] : [])])]
+    .filter(id => id !== requesterId)
+  await notify(targets.map(engineer_id => ({
+    engineer_id,
+    title: '결재가 회수되었습니다',
+    message: doc.title,
+    type: 'approval_withdrawn',
+    link: approvalDocPath(doc.document_id),
+  })))
+}
+
+// ── 삭제 ────────────────────────────────────────────────────────────────────
 //
-// 지우지 않고 상태로 두는 이유 — 반려한 사람의 판단이 기결함에서 사라지면 안 된다.
-// 결재선(approval_lines)도 그대로 둔다. 기결함은 「내가 처리한 줄」로 문서를 찾으므로,
-// 줄을 지우면 남의 기결함에서 문서가 통째로 사라진다.
+// **회수·폐기된 결재 문서를 상신자가 지운다.** 「폐기」 상태는 없앴다 — 효력도 판단도 없는
+// 문서를 상태로만 치워 두면 결재함에 가리킬 곳 없는 문서가 쌓일 뿐이다. 회수한 문서는
+// 그대로 두거나 지운다. ('폐기' 로 남은 옛 문서는 회수와 같이 다뤄 지울 수 있다.)
 //
-// 승인 절차를 두지 않는다 — 효력이 없는 문서라 상신자 본인이 자율로 정리한다.
-async function discard(caller: Caller, body: Record<string, unknown>) {
+// **반려·완료 문서는 지우지 않는다.** 반려한 사람의 판단과 승인 기록은 기결함에 남아야 한다.
+//
+// 여기는 **결재 문서만** 지우는 길이다. 원 문서까지 치워야 하는 종류(견적서)는 업무별 라우트가
+// 맡는다 — 등록표(docTypes.ts 의 deleteWhenClosed)가 종류마다 어디로 보낼지 들고 있다.
+// 그래서 이 액션은 **그 종류가 「문서만 삭제」로 등록돼 있는지**를 확인하고 돈다
+// (doc_type 분기를 두지 않는다 — 등록표 칸으로만 본다).
+//
+// 대상 데이터는 회수 시점에 훅(onRevert)이 이미 정리했다 — 쇼룸의 사용 기록·승인서 PDF,
+// 견적 삭제 요청의 견적 상태 복원. 그래서 여기서 더 할 일이 없다.
+async function deleteDoc(caller: Caller, body: Record<string, unknown>) {
   const documentId = docIdOf(body.documentId)
   if (!documentId) return bad('문서를 지정해주세요.')
 
   const doc = await loadDocument(documentId)
   if (!doc) return bad('문서를 찾을 수 없습니다.', 404)
-  if (doc.requester_id !== caller.engineer_id) return bad('상신한 사람만 폐기할 수 있습니다.', 403)
-  if (!(DISCARDABLE_STATUSES as string[]).includes(doc.status)) {
-    return bad('반려·회수된 문서만 폐기할 수 있습니다.', 409)
+  if (doc.requester_id !== caller.engineer_id) return bad('상신한 사람만 삭제할 수 있습니다.', 403)
+  if (doc.status !== '회수' && doc.status !== '폐기') {
+    return bad('회수한 문서만 삭제할 수 있습니다.', 409)
   }
 
-  // 조건부 UPDATE — 그 사이에 재상신되었다면(진행중) 0행이 되어 아무 일도 일어나지 않는다.
-  const { data: dropped, error } = await supabaseAdmin
+  // 그 종류가 이 길로 지우도록 등록돼 있는가. 원 문서까지 치워야 하는 종류는 여기로 오면 안 된다
+  // (그 라우트가 참조·스토리지·감사를 함께 치운다).
+  const def = docTypeOf(doc.doc_type)
+  const closed = def?.deleteWhenClosed ?? null
+  if (!closed || closed.idFrom !== 'document') {
+    return bad('이 문서는 여기서 삭제할 수 없습니다.', 400)
+  }
+
+  // ① 감사 기록이 **먼저**다. 지워진 결재 문서의 유일한 기록이라, 실패하면 아무것도 지우지 않는다.
+  const logged = await writeDocDeleteAudit(doc, caller.engineer_id)
+  if (!logged) return bad('삭제 기록을 남기지 못해 중단했습니다.', 500)
+
+  // ② 이력 → ③ 문서(결재선은 ON DELETE CASCADE — approval_schema.sql).
+  //    approval_history.document_id 에는 ON DELETE 절이 없어 이력을 먼저 지워야 한다.
+  //    앞 단계가 실패하면 **거기서 멈춘다** — 문서는 그대로 남고, 다시 누르면 같은 자리에서
+  //    다시 시작한다(재시도가 수렴한다). 견적서 삭제와 같은 원칙이다.
+  const { error: hErr } = await supabaseAdmin.from('approval_history').delete().eq('document_id', documentId)
+  if (hErr) {
+    console.error('[approval] delete history failed', { documentId, error: hErr })
+    return bad('결재 이력을 지우지 못했습니다.', 500)
+  }
+  // 조건부 DELETE — 그 사이에 재상신되었다면(진행중) 0행이 되어 지우지 않는다.
+  const { data: gone, error: dErr } = await supabaseAdmin
     .from('approval_documents')
-    .update({ status: '폐기', updated_at: new Date().toISOString() })
+    .delete()
     .eq('document_id', documentId)
-    .in('status', DISCARDABLE_STATUSES)
+    .in('status', ['회수', '폐기'])
     .select('document_id')
-  if (error) {
-    console.error('[approval] discard failed', { documentId, error })
-    return bad('폐기하지 못했습니다.', 500)
+  if (dErr) {
+    console.error('[approval] delete document failed', { documentId, error: dErr })
+    return bad('결재 문서를 지우지 못했습니다.', 500)
   }
-  if (!dropped || dropped.length === 0) return bad('이미 처리되어 폐기할 수 없습니다.', 409)
+  if (!gone || gone.length === 0) return bad('이미 처리되어 삭제할 수 없습니다.', 409)
 
-  await addHistory(documentId, '폐기', caller.engineer_id, null, null)
-  // 반려·회수 때 이미 한 번 불렸지만 다시 부른다 — 훅은 여러 번 불려도 안전하게 짠다.
-  // 되돌리기가 그때 실패했더라도 여기서 만회된다.
-  await runRevert(doc, caller.engineer_id)
-  console.log('[approval] 폐기', { documentId, by: caller.engineer_id })
-  return NextResponse.json({ ok: true, documentId, status: '폐기' })
+  console.log('[approval] 문서 삭제', { documentId, docType: doc.doc_type, by: caller.engineer_id })
+  return NextResponse.json({ ok: true, documentId, deleted: true })
+}
+
+/** 감사 기록에 담는 이력 줄 수와 의견 길이 상한 — 기록이 비대해지지 않게. */
+const AUDIT_HISTORY_MAX = 50
+const AUDIT_COMMENT_MAX = 200
+
+/**
+ * 지우기 **전에** 감사 기록을 남긴다. 이 한 줄이 지워진 결재 문서의 유일한 기록이다.
+ * best-effort 가 아니다 — 실패하면 부르는 쪽이 멈춘다(돌려주는 false).
+ */
+async function writeDocDeleteAudit(doc: DocWithLines, actorId: number): Promise<boolean> {
+  const [{ data: hist }, { data: actor }] = await Promise.all([
+    supabaseAdmin
+      .from('approval_history')
+      .select('action, actor_id, created_at, comment')
+      .eq('document_id', doc.document_id)
+      .order('history_id', { ascending: true })
+      .limit(AUDIT_HISTORY_MAX),
+    supabaseAdmin.from('engineers').select('email, name').eq('engineer_id', actorId).maybeSingle(),
+  ])
+  const who = (actor ?? null) as { email: string | null; name: string | null } | null
+  const history = ((hist ?? []) as { action: string | null; actor_id: number | null; created_at: string | null; comment: string | null }[])
+    .map(h => ({
+      action: h.action ?? '',
+      actorId: h.actor_id ?? 0,
+      at: h.created_at,
+      comment: h.comment == null ? null : h.comment.slice(0, AUDIT_COMMENT_MAX),
+    }))
+
+  const { error } = await supabaseAdmin.from('audit_log').insert({
+    actor_email: who?.email ?? null,
+    action: 'APPROVAL_DOC_DELETE',
+    table_name: 'approval_documents',
+    row_id: String(doc.document_id),
+    old_data: {
+      document_id: doc.document_id,
+      doc_type: doc.doc_type,
+      doc_no: doc.doc_no,
+      status: doc.status,
+      target_table: doc.target_table,
+      target_id: doc.target_id,
+      requester_id: doc.requester_id,
+      history,
+    },
+    // 'withdrawn' — 회수(또는 옛 폐기)된 문서를 상신자가 지웠다는 뜻이다.
+    new_data: { reason: 'withdrawn', deleted_by: actorId, deleted_by_name: who?.name ?? null },
+  })
+  if (error) {
+    console.error('[approval] doc delete audit insert failed — 아무것도 지우지 않는다', { documentId: doc.document_id, error })
+    return false
+  }
+  return true
 }
 
 // ── 재상신 ──────────────────────────────────────────────────────────────────

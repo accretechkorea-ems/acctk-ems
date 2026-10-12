@@ -1,6 +1,6 @@
 // 문서 창 ↔ 결재함 목록 사이의 **새로고침 신호**.
 //
-// 새 창에서 승인·반려·회수·재작성·폐기를 하면 뒤에 열려 있는 결재함 목록은 그 사실을 모른다.
+// 새 창에서 승인·반려·회수·재작성·삭제를 하면 뒤에 열려 있는 결재함 목록은 그 사실을 모른다.
 // 사용자가 새로고침할 때까지 「아직 내 차례인」 문서가 목록에 남아 있다 — 눌러 보면 409 다.
 // 그래서 처리에 성공한 창이 같은 출처의 다른 탭·창에 한 줄을 보낸다.
 //
@@ -22,7 +22,7 @@ export const DOC_SIGNAL_CHANNEL = 'acctk:approval:doc'
 const STORAGE_KEY = DOC_SIGNAL_CHANNEL
 
 /** 보낼 수 있는 동작 — 결재 라우트의 action 이름과 같다. */
-export const DOC_ACTIONS = ['approve', 'reject', 'withdraw', 'resubmit', 'discard'] as const
+export const DOC_ACTIONS = ['approve', 'reject', 'withdraw', 'resubmit', 'delete'] as const
 export type DocAction = typeof DOC_ACTIONS[number]
 
 export type DocSignal = {

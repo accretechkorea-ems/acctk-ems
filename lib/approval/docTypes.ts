@@ -25,6 +25,18 @@ export type OnCompleteContext = {
   actorId: number
   /** 결재선의 지금 상태. 승인서 도장처럼 누가 어떤 순서로 처리했는지 필요한 유형이 쓴다. */
   lines: ApprovalLine[]
+  /**
+   * 결재가 **어떻게 끝났는가** — onRevert 에만 들어온다(onComplete·beforeComplete 는 없다).
+   *
+   * 왜 필요한가: onRevert 는 반려·회수·폐기 세 경우에 모두 불리는데, 유형에 따라 셋이 같은 일이
+   * 아니다(견적서는 반려만 '반려' 상태로 남기고 회수·폐기는 상신 직전 상태로 돌린다).
+   * 훅이 문서를 다시 읽어 상태를 보게 하지 않는 이유 — runRevert 가 넘기는 문서 값은 **상태를
+   * 바꾸기 전에** 읽은 것이라 reject·withdraw 에서는 아직 '진행중' 이다. 라우트가 그 자리에서
+   * 아는 사실을 그대로 적어 내려보내는 것이 가장 짧다(왕복도 늘지 않는다).
+   *
+   * 값이 없으면(옛 호출·알 수 없음) 유형은 **지금까지의 동작**(상태 복원)으로 떨어뜨려야 한다.
+   */
+  outcome?: '반려' | '회수' | '폐기'
 }
 
 /**
@@ -40,6 +52,41 @@ export type LineRules = {
    * 합의·참조의 관리자는 세지 않고, 상신자 본인이 관리자면 면제된다(checkLineRules 설명 참고).
    */
   requireSuperadminApprover?: boolean
+}
+
+/**
+ * **종결된 문서(회수·폐기)를 지울 때 어디로 무엇을 보낼지.**
+ *
+ * 모든 문서 종류에 같은 원칙을 쓴다 — 회수·폐기 문서는 효력이 없고 아무 판단도 담고 있지
+ * 않으므로 상신자가 치운다. 반려·완료 문서는 **어느 종류에서도 지우지 않는다**(판단이 남아야 한다).
+ *
+ * 갈리는 것은 「무엇까지 지우는가」 하나다.
+ *   · 견적서 — 원 문서(견적)와 결재 문서를 **함께** 지운다. 업무별 라우트가 견적의 참조·
+ *     스토리지·감사까지 치운다.
+ *   · 그 밖   — **결재 문서만** 지운다. 대상 데이터는 회수 시점에 훅(onRevert)이 이미 치웠다
+ *     (쇼룸의 사용 기록·승인서 PDF, 견적 삭제 요청의 견적 상태 복원).
+ *
+ * 호출 경로를 여기 적어 두는 이유 — 처리 버튼(components/approval/DocActions.tsx)에 유형 이름을
+ * 적지 않으려면 어디로 무엇을 보낼지는 **등록표가** 말해야 한다.
+ */
+export type ClosedDelete = {
+  /** 삭제를 처리할 라우트. */
+  endpoint: string
+  /** 그 라우트에 보낼 action 값. */
+  action: string
+  /**
+   * 본문에 담을 열쇠 이름과 값의 출처.
+   *   'target'   — 문서의 target_id(원 문서 id). 원 문서까지 지우는 종류가 쓴다.
+   *   'document' — 문서의 document_id. 결재 문서만 지우는 종류가 쓴다.
+   */
+  idKey: string
+  idFrom: 'target' | 'document'
+  /** 본문에 함께 보낼 사유. 적지 않으면 보내지 않는다(범용 삭제는 사유를 받지 않는다). */
+  reason?: string
+  /** 2단 확인에서 보여 줄 문구. */
+  confirmText: string
+  /** 반려 문서에 버튼이 없는 이유. 적지 않으면 안내를 띄우지 않는다(재작성이 남아 있는 종류). */
+  rejectedNotice?: string
 }
 
 export type DocTypeDef = {
@@ -78,6 +125,11 @@ export type DocTypeDef = {
    * 같은 문서를 다시 돌리면 고쳐지지 않은 내용이 그대로 올라가고 번호도 어긋난다.
    */
   canResubmit?: boolean
+/**
+   * 종결된 문서(회수·폐기)를 어떻게 지우는가. 적지 않으면 못 지운다.
+   * **반려·완료 문서는 어느 유형에서도 지우지 않는다** — 그 판단은 기결함에 남아야 한다.
+   */
+  deleteWhenClosed?: ClosedDelete
 }
 
 /** 같은 문서로 다시 올릴 수 있는 유형인가. 칸이 없으면 지금까지처럼 허용이다. */
@@ -116,6 +168,19 @@ export const DOC_TYPES: Record<string, DocTypeDef> = {
     lineRules: { requireSuperadminApprover: true },
     // 반려된 견적은 「다시쓰기」로 새 번호의 새 견적을 써서 새로 상신한다(위 canResubmit 설명).
     canResubmit: false,
+    // 회수·폐기된 견적서 문서는 **견적과 함께** 지운다. 그 문서만 남으면 가리킬 견적이 없는
+    // 문서가 결재함에 쌓이고, 견적 쪽에서는 「결재 문서가 있다」는 이유로 다시 올릴 수도 없다.
+    // 반려·완료 문서는 지우지 않는다 — 라우트의 selfDeleteVerdict 가 409 로 막는다.
+    deleteWhenClosed: {
+      endpoint: '/api/quote-delete',
+      action: 'self',
+      idKey: 'quoteId',
+      idFrom: 'target',
+      reason: '결재 회수 후 작성자 삭제',
+      confirmText: '견적과 결재 문서가 모두 삭제되며 되돌릴 수 없습니다',
+      // 견적서는 재작성도 없어 반려 문서에 버튼이 하나도 남지 않는다 — 왜 없는지 적어 준다.
+      rejectedNotice: '반려된 문서는 기록으로 남습니다. 반려된 견적은 지울 수 없고 「다시쓰기」로 새로 작성합니다',
+    },
   },
   // 쇼룸 사용 신청 — 실행 함수는 lib/approval/showroomUsage.ts (handlers.ts 가 묶는다).
   showroom_usage: {
@@ -130,6 +195,15 @@ export const DOC_TYPES: Record<string, DocTypeDef> = {
     // 상신자가 「재작성」으로 고쳐 다시 올린다(기록은 그때 다시 만들어진다).
     // 버튼 이름만 「확인」으로 둔다 — 승인이 아니라 사실 확인이기 때문이다.
     approveLabel: summary => (showroomRetroactive(summary) ? '확인' : APPROVE_LABEL),
+    // 회수·폐기된 문서는 **문서만** 지운다. 사용 기록·승인서 PDF 는 회수 시점에
+    // onRevertShowroom 이 이미 치웠으므로 여기서 더 할 일이 없다.
+    deleteWhenClosed: {
+      endpoint: '/api/approval',
+      action: 'delete',
+      idKey: 'documentId',
+      idFrom: 'document',
+      confirmText: '결재 문서가 삭제되며 되돌릴 수 없습니다',
+    },
   },
   // 견적 삭제 요청 — 완료 시 실제 삭제 (6단계)
   quote_delete: {
@@ -138,6 +212,15 @@ export const DOC_TYPES: Record<string, DocTypeDef> = {
     canReject: true,
     canCancelAfterComplete: false,   // 지워진 견적은 되돌릴 수 없다
     lineRules: { requireSuperadminApprover: true },
+    // 회수·폐기된 문서는 **문서만** 지운다. 견적 상태는 회수 시점에 onRevertQuoteDelete 가
+    // 이미 '취소요청' 에서 풀어 놓았다.
+    deleteWhenClosed: {
+      endpoint: '/api/approval',
+      action: 'delete',
+      idKey: 'documentId',
+      idFrom: 'document',
+      confirmText: '결재 문서가 삭제되며 되돌릴 수 없습니다',
+    },
   },
 }
 
