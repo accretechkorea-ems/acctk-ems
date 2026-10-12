@@ -110,8 +110,11 @@ const pillStyle = (filled: boolean): CSSProperties => ({
 })
 
 /**
- * 이 화면의 입력칸 포커스 — 견적·고객 상세와 같은 값. 입력칸 테두리가 인라인 스타일이라 !important 로 덮는다.
- * 오류 칸(.sw-err)은 포커스 때도 오류 테두리를 지킨다.
+ * 이 화면의 입력칸 테두리 — 인라인 스타일을 !important 로 덮는다. 우선순위는 선택자 구체성으로 정한다(높은 것부터):
+ *   1. 오류 칸(.sw-err) 포커스 — 오류 테두리 유지(0,3,1 · 포커스 규칙과 같고 뒤에 있어 이긴다)
+ *   2. 포커스 — 파란 테두리 + 링(input 0,3,1 / textarea·select 0,2,1)
+ *   3. 빈칸(.sw-empty) — 빨간 테두리. :where 로 구체성을 0,2,0 으로 낮춰 포커스에 진다. 비활성 칸은 빼고,
+ *      변경 표식 칸(인라인 #c7d7f8)보다는 이긴다. 저장을 막지 않는 표시일 뿐이다.
  */
 const FOCUS_CSS = `
   .sw-root input:not([type="checkbox"]):focus, .sw-root textarea:focus, .sw-root select:focus {
@@ -119,7 +122,8 @@ const FOCUS_CSS = `
     box-shadow: 0 0 0 3px rgba(35,78,162,0.10) !important;
     outline: none;
   }
-  .sw-root .sw-err:focus { border-color: #dc2626 !important; }
+  .sw-root :is(input, textarea, select).sw-err:focus { border-color: #dc2626 !important; }
+  :where(.sw-root) .sw-empty:not(:disabled) { border: ${errBorder} !important; }
 `
 
 /** 입력 상태를 비교·저장할 모양으로(rid 는 뺀다). */
@@ -868,7 +872,8 @@ function FieldControl({ def, value, onChange, error, changed, prevValue, rows, m
     ...(error ? { border: errBorder } : null),
     ...(inactive ? { background: NEUTRAL_BG, color: MUTED, cursor: 'not-allowed' } : null),
   }
-  const cls = error ? 'sw-err' : undefined
+  // 빈칸(공백만 포함) 표시 — 이 컴포넌트를 쓰는 칸만(Action 표는 FieldControl 을 쓰지 않아 빠진다).
+  const cls = [error ? 'sw-err' : '', value.trim() ? '' : 'sw-empty'].filter(Boolean).join(' ') || undefined
   let control: ReactNode
   if (def.kind === 'select') {
     control = (
