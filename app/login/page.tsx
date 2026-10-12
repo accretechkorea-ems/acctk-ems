@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { isMobileViewport } from '@/lib/viewport'
 import { withTeamPerm } from '@/lib/teamPerms'
-import { canViewCustomers } from '@/lib/permissions'
+import { canViewCustomers, isSuperAdmin, type EngineerLike } from '@/lib/permissions'
+import { DIVISION_HOME, readSavedDivision } from '@/lib/division'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -31,18 +32,26 @@ export default function LoginPage() {
       return
     }
 
-    // 모바일은 현장 서비스 인원만 쓰므로 첫 화면을 고객사 현황으로 연다.
-    // 단, 고객사 열람 권한이 없는 팀(영업관리 등)이 모바일로 들어오면 막힌 화면을
-    // 마주치게 되므로 그때는 기존대로 본인 페이지로 보낸다.
+    // 첫 화면은 사업부로 먼저 가른다(lib/division.ts).
+    //   반도체 — 반도체 시작 화면(/contact/semi). 계측 홈(/dashboard)은 반도체 메뉴가 아니다.
+    //            superadmin 은 사이드바에서 마지막으로 고른 사업부, 고른 적이 없으면 본인 팀의 사업부를 본다.
+    //   계측   — 종전 그대로. 모바일은 현장 서비스 인원만 쓰므로 첫 화면을 고객사 현황으로 연다.
+    //            단, 고객사 열람 권한이 없는 팀(영업관리 등)이 모바일로 들어오면 막힌 화면을
+    //            마주치게 되므로 그때는 기존대로 본인 페이지로 보낸다.
     let target = '/dashboard'
-    if (isMobileViewport() && data.user?.email) {
+    if (data.user?.email) {
       const { data: eng } = await supabase
         .from('engineers')
-        .select('permission_level, teams')
+        .select('engineer_id, permission_level, teams')
         .eq('email', data.user.email)
         .single()
-      const me = await withTeamPerm(eng)
-      if (canViewCustomers(me)) target = '/'
+      const me = await withTeamPerm(eng as (EngineerLike & { engineer_id: number }) | null)
+      const teamDivision = me?.perm?.division ?? '계측'
+      const division = me && isSuperAdmin(me)
+        ? (readSavedDivision(me.engineer_id) ?? teamDivision)
+        : teamDivision
+      if (division === '반도체') target = DIVISION_HOME['반도체']
+      else if (isMobileViewport() && canViewCustomers(me)) target = '/'
     }
 
     setLoading(false)

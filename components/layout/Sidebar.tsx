@@ -15,7 +15,7 @@ import { useOutsideClick } from '@/hooks/useOutsideClick'
 import { type EngineerLike, type TeamPerm } from '@/lib/permissions'
 // 메뉴 목록·권한 판정은 이 파일 한곳에서만 정한다(1단계).
 import {
-  MENU_BY_KEY, MENU_GROUPS, MENU_PATHS, MENU_PERMS, PUBLIC_MENU, menuDivision, menuKeyForPath,
+  MENU_GROUPS, MENU_PATHS, MENU_PERMS, menuDivision, menuForPath,
   readCollapsedMenuGroups, visibleMenus, writeCollapsedMenuGroups,
   type MenuGroup, type MenuPerm,
 } from '@/lib/menuPerms'
@@ -340,7 +340,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
   // ── 현재 사업부 ──
   //   일반 직원 — 본인 팀의 사업부(팀이 없거나 비었으면 계측). 고를 수 없다.
   //   superadmin — 고른 값, 고른 적이 없으면 본인 팀의 사업부.
-  //   팀 권한을 다 읽기 전에는 null — 그동안은 공통 메뉴(홈·알림·전자결재·건의사항)만 보인다.
+  //   팀 권한을 다 읽기 전에는 null — 그동안은 공통 메뉴(건의사항)만 보인다.
   //   superadmin 은 권한 없이도 모든 메뉴를 통과하므로, 이 대기가 없으면 두 사업부 메뉴가 잠깐 섞여 보인다.
   const isSuper = permissionLevel === 'superadmin'
   const teamDivision: Division = teamPerm?.division ?? '계측'
@@ -363,22 +363,29 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
   }
 
   // superadmin 이 주소로 다른 사업부의 메뉴 화면에 들어오면 그 사업부로 맞춘다(화면은 옮기지 않는다).
-  // 메뉴가 섞여 보이지 않게 하려는 것이다. 공통 화면·목록에 없는 경로는 그대로 둔다.
+  // 메뉴가 섞여 보이지 않게 하려는 것이다. 공통 화면(건의사항)·메뉴에 없는 경로(/account 등)는 그대로 둔다.
+  // 홈(/dashboard)도 계측 메뉴라 반도체를 보다가 홈에 들어오면 계측으로 바뀐다.
   useEffect(() => {
     if (!isSuper || !currentDivision || engineerId == null) return
     if (switchedAtPath.current !== null) {
       if (switchedAtPath.current === pathname) return   // 고르기 직후, 아직 옮겨 가는 중
       switchedAtPath.current = null
     }
-    const key = menuKeyForPath(pathname)
-    if (!key || key === PUBLIC_MENU) return
-    const menu = MENU_BY_KEY[key]
+    const menu = menuForPath(pathname)
     if (!menu) return
     const d = menuDivision(menu)
     if (d === '공통' || d === currentDivision) return
     writeSavedDivision(engineerId, d)
     setSavedDivision(d)
   }, [pathname, isSuper, currentDivision, engineerId])
+
+  // 반도체 직원은 계측 홈(/·/dashboard)을 쓰지 않는다 — 들어오면 반도체 시작 화면으로 보낸다.
+  // 로그인 직후의 이동은 app/login/page.tsx 가 먼저 그쪽으로 보내고, 이것은 주소로 직접 들어온 경우를 받는다.
+  // 그 밖의 경로(건의사항 등)는 막지 않는다. superadmin 은 위의 자동 전환을 따른다(보내지 않는다).
+  useEffect(() => {
+    if (isSuper || currentDivision !== '반도체') return
+    if (pathname === '/' || pathname === '/dashboard') router.replace(DIVISION_HOME['반도체'])
+  }, [pathname, isSuper, currentDivision, router])
 
   /**
    * 브랜드 아래 사업부 이름. superadmin 은 화살표가 붙은 버튼이고 누르면 고르기 패널이 뜬다.

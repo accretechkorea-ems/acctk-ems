@@ -9,6 +9,8 @@
 // 현재 사업부(사이드바가 정한다)
 //   · 일반 직원 — 본인 팀의 사업부로 고정. 전환 버튼이 없다.
 //   · superadmin — 사이드바에서 고른 값(계정별로 이 브라우저에 저장). 고른 적이 없으면 본인 팀의 사업부.
+// 메뉴의 사업부는 lib/menuPerms.ts 의 menuDivision 이 정한다. 공통 메뉴는 건의사항뿐이다.
+// 로그인 직후 첫 화면은 사업부의 시작 화면(DIVISION_HOME)이다(app/login/page.tsx).
 //
 // 값은 한글 그대로 둔다 — 결재 문서의 사업부 칸(approval_documents.division default '계측')과 같다.
 
@@ -23,7 +25,7 @@ export const DIVISION_LABEL: Readonly<Record<Division, string>> = {
   '반도체': '반도체사업부',
 }
 
-/** superadmin 이 사업부를 바꿨을 때 옮겨 가는 시작 화면. */
+/** 사업부의 시작 화면. superadmin 이 사업부를 바꿨을 때, 반도체 직원이 로그인했을 때 옮겨 간다. */
 export const DIVISION_HOME: Readonly<Record<Division, string>> = {
   '계측': '/dashboard',
   '반도체': '/contact/semi',

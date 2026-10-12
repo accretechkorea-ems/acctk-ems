@@ -51,13 +51,13 @@ export type MenuPerm = {
   menuPublic?: true
   /**
    * 이 메뉴가 속한 사업부(lib/division.ts). 사이드바는 현재 사업부의 메뉴와 공통 메뉴만 보여 준다.
-   * 비워 두면 menuDivision 이 정한다 — 공개 메뉴(public·menuPublic)는 공통, 나머지는 계측.
-   * 그래서 지금은 반도체 메뉴에만 적는다.
+   * 비워 두면 계측이다(menuDivision) — 반도체 메뉴와 공통 메뉴에만 적는다.
+   * 권한 판정(public·menuPublic)과는 따로 논다: 홈·알림·전자결재는 로그인 전원에게 열려 있지만 사업부로는 계측이다.
    */
-  division?: Division
+  division?: MenuDivision
 }
 
-/** 메뉴의 사업부. 공통 메뉴는 어느 사업부에서나 보인다. */
+/** 메뉴의 사업부. 공통 메뉴는 어느 사업부에서나 보인다(지금은 건의사항 하나). */
 export type MenuDivision = Division | '공통'
 
 /**
@@ -156,7 +156,7 @@ export const MENU_PERMS: MenuPerm[] = [
   { key: 'inventory', label: '재고', group: '주문', path: '/inventory', icon: 'archive', order: 20, data: ['sales_mgmt'] },
 
   // ── 하단 — 전원 공개 ──
-  { key: 'suggestions', label: '건의사항', group: '하단', path: '/suggestions', icon: 'message', order: 10, data: [], public: true },
+  { key: 'suggestions', label: '건의사항', group: '하단', path: '/suggestions', icon: 'message', order: 10, data: [], public: true, division: '공통' },
 
   // ── 관리 ──
   { key: 'sales', label: '실적 현황', group: '관리', path: '/sales', icon: 'barChart', order: 10, data: ['quote'] },
@@ -274,12 +274,24 @@ export function checkableGroups(): { group: MenuGroup; title: string; items: Men
 }
 
 /**
- * 메뉴의 사업부. division 을 적었으면 그 값, 아니면 공개 메뉴(홈·알림·전자결재·건의사항)는 공통,
- * 나머지는 계측이다 — 반도체 메뉴가 생기기 전의 메뉴는 전부 계측 것이라 하나하나 적지 않는다.
+ * 메뉴의 사업부. division 을 적었으면 그 값, 아니면 계측이다 — 반도체 메뉴가 생기기 전의 메뉴는
+ * 전부 계측 것이라 하나하나 적지 않는다. 공통은 건의사항뿐이다(홈·알림·전자결재도 사업부로는 계측).
  */
 export function menuDivision(m: MenuPerm): MenuDivision {
-  if (m.division) return m.division
-  return (m.public || m.menuPublic) ? '공통' : '계측'
+  return m.division ?? '계측'
+}
+
+/**
+ * 경로가 속한 메뉴. 메뉴 경로와 정확히 같으면 그 메뉴(공개 메뉴 포함), 아니면 하위 화면이 딸린 메뉴
+ * (PARENT_MENU). 어느 쪽도 아니면 null. 사이드바가 「이 화면은 어느 사업부인가」를 볼 때 쓴다 —
+ * menuKeyForPath 는 공개 메뉴를 PUBLIC_MENU 로 바꿔 돌려주므로 홈(/dashboard)이 어느 메뉴인지 알 수 없다.
+ */
+export function menuForPath(pathname: string): MenuPerm | null {
+  const path = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname
+  const exact = MENU_PERMS.find(m => m.path === path)
+  if (exact) return exact
+  const key = menuKeyForPath(path)
+  return key && key !== PUBLIC_MENU ? MENU_BY_KEY[key] ?? null : null
 }
 
 /**
