@@ -2,27 +2,27 @@
 
 // 반도체 고객 접촉 보고 — Project 목록(/contact/semi).
 //
-// 위에서 아래로: 제목 「접촉 보고서」 + Project 건수 + 「+ 새 Project」 → 필터 줄(전체 / 내 팀 · 검색 · 결과 건수) → 목록.
+// 위에서 아래로: 제목 「접촉 보고서」 + Project 건수 + 「+ 새 Project」 → 필터 줄(팀 토글 · 검색 · 결과 건수) → 목록.
 // 디자인은 components/common/ui.ts 토큰(cardStyle·cardTitle·countBadge·rowStyle·btn*·inputStyle)을 따른다.
 //
-// 데이터 — GET /api/semi-contact/projects?scope=all|team 하나로 읽는다. 「내 팀」 판정(만든 사람 또는 보고서 작성자 중
-// 내 팀 소속이 있는가)은 서버가 하고, 화면은 결과만 받는다. 최근 접촉·접촉 횟수·정렬(최근 접촉 내림차순, 없으면
-// 생성일)도 서버가 계산한다. 검색은 받은 목록을 화면에서 거른다(번호·고객사·사업장/부서·안건, 대소문자 무시).
+// 데이터 — GET /api/semi-contact/projects[?team=<팀 이름>] 하나로 읽는다. 팀 판정(만든 사람 또는 보고서 작성자 중
+// 그 팀 소속이 있는가)은 서버가 하고, 화면은 결과만 받는다. 토글 칸(「전체」 + 사업부가 반도체인 팀, display_order 순)도
+// 같은 응답의 teams 로 만든다 — 팀이 늘면 칸도 저절로 는다. 최근 접촉·접촉 횟수·정렬(최근 접촉 내림차순, 없으면
+// 생성일)도 서버가 계산한다. 검색은 받은 목록(토글로 거른 뒤)을 화면에서 거른다(번호·고객사·사업장/부서·안건, 대소문자 무시).
 //
 // 행을 누르면 Project 상세로, 행 끝의 「보고서 작성」은 작성 화면으로 간다(클릭이 행으로 번지지 않게 막는다).
 // 진입 — 메뉴 키 contact_semi(lib/menuPerms.ts). usePageGuard 가 판정하고 권한이 없으면 AccessGate 를 그린다.
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import ModalOverlay from '@/components/common/ModalOverlay'
-import SegmentedControl from '@/components/common/SegmentedControl'
 import { useToast } from '@/components/common/Toast'
 import { FieldError, errBorder, useFieldErrors } from '@/components/common/fieldErrors'
 import {
-  PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, FAINT, ROW_HOVER_BG,
+  PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, FAINT, ROW_HOVER_BG, NEUTRAL_BG, BLUE,
   cardStyle, cardHeader, cardTitle, countBadge, rowStyle, btnPrimary, btnGhost, inputStyle,
 } from '@/components/common/ui'
 import { kstYmd } from '@/lib/date'
@@ -51,8 +51,6 @@ const SHELL_CSS = `
   }
 `
 
-type Scope = 'all' | 'team'
-
 /** GET /api/semi-contact/projects 가 돌려주는 한 행. */
 type ProjectRow = {
   project_id: number
@@ -70,9 +68,11 @@ export default function ContactSemiPage() {
   const router = useRouter()
   const { loading: guardLoading, authorized } = usePageGuard()
 
-  const [scope, setScope] = useState<Scope>('all')
+  /** 고른 팀. null 이면 「전체」. */
+  const [team, setTeam] = useState<string | null>(null)
   const [rows, setRows] = useState<ProjectRow[] | null>(null)
-  const [myTeam, setMyTeam] = useState<string | null>(null)
+  /** 토글 칸 — 사업부가 반도체인 팀 이름(display_order 순). 못 읽으면 빈 목록이라 「전체」만 보인다. */
+  const [teams, setTeams] = useState<string[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [q, setQ] = useState('')
@@ -86,7 +86,7 @@ export default function ContactSemiPage() {
     const load = async () => {
       setBusy(true)
       try {
-        const res = await fetch(`/api/semi-contact/projects?scope=${scope}`)
+        const res = await fetch(`/api/semi-contact/projects${team ? `?team=${encodeURIComponent(team)}` : ''}`)
         const json = await res.json().catch(() => ({}))
         if (cancelled) return
         if (!res.ok) {
@@ -97,7 +97,7 @@ export default function ContactSemiPage() {
         }
         setLoadError(null)
         setRows((json.projects ?? []) as ProjectRow[])
-        setMyTeam(typeof json.my_team === 'string' ? json.my_team : null)
+        setTeams(Array.isArray(json.teams) ? (json.teams as unknown[]).filter((t): t is string => typeof t === 'string') : [])
       } catch (e) {
         if (cancelled) return
         console.error('[contact/semi] Project 목록 조회 실패', errorInfo(e))
@@ -109,7 +109,7 @@ export default function ContactSemiPage() {
     }
     load()
     return () => { cancelled = true }
-  }, [authorized, scope, reloadKey])
+  }, [authorized, team, reloadKey])
 
   // 검색 — 번호·고객사·사업장/부서·안건 부분 일치, 대소문자 무시. 서버가 정한 순서는 그대로 둔다.
   const words = q.trim().toLowerCase()
@@ -120,10 +120,6 @@ export default function ContactSemiPage() {
       [r.project_no, r.customer_name, r.site_dept ?? '', r.title].some(v => v.toLowerCase().includes(words)))
   }, [rows, words])
 
-  const scopeOptions = useMemo(() => [
-    { label: '전체', value: 'all' },
-    { label: myTeam ? `내 팀(${myTeam})` : '내 팀', value: 'team' },
-  ], [myTeam])
 
   if (!authorized) return <AccessGate loading={guardLoading} />
 
@@ -144,9 +140,9 @@ export default function ContactSemiPage() {
           </button>
         </div>
 
-        {/* ── 필터 줄 — 전체 / 내 팀 · 검색 · 결과 건수 ── */}
+        {/* ── 필터 줄 — 팀 토글 · 검색 · 결과 건수 ── */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-          <SegmentedControl options={scopeOptions} value={scope} onChange={v => setScope(v === 'team' ? 'team' : 'all')} />
+          <TeamToggle teams={teams} value={team} onChange={setTeam} />
           <span style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
             <input
               value={q}
@@ -201,8 +197,8 @@ export default function ContactSemiPage() {
           <div style={{ textAlign: 'center', padding: 40, color: MUTED, fontSize: 13, lineHeight: 1.7 }}>
             {words
               ? '검색 결과가 없습니다'
-              : scope === 'team'
-                ? (myTeam ? `${myTeam} 팀의 Project가 없습니다` : '소속 팀이 없어 내 팀 Project를 볼 수 없습니다')
+              : team
+                ? `${team} 팀의 Project가 없습니다`
                 : '등록된 Project가 없습니다'}
           </div>
         ) : (
@@ -267,6 +263,61 @@ export default function ContactSemiPage() {
         />
       )}
     </main>
+  )
+}
+
+// ── 팀 토글 ─────────────────────────────────────────────────────────
+// 회색 트랙(#f3f4f6, 반지름 6, 안쪽 3) 안에 같은 폭의 칸을 grid 로 늘어놓고, 고른 칸 뒤의 흰 인디케이터
+// (반지름 5, 1px #ebebeb)가 transform 으로 미끄러진다. 글자 12/700, 고른 칸 #234ea2 · 나머지 #9ca3af.
+// 칸 폭은 그려진 이름들의 폭을 재서 가장 긴 것(최소 96px)으로 모두 맞춘다 — 칸 폭이 같아야 인디케이터 이동량이 일정하다.
+
+/** 칸의 최소 폭(px). */
+const TOGGLE_MIN = 96
+/** 칸 안 좌우 여백(px) — 가장 긴 이름에 더해 칸 폭을 정한다. */
+const TOGGLE_PAD = 24
+
+function TeamToggle({ teams, value, onChange }: {
+  teams: string[]
+  value: string | null
+  onChange: (team: string | null) => void
+}) {
+  const items: { label: string; team: string | null }[] = [{ label: '전체', team: null }, ...teams.map(t => ({ label: t, team: t }))]
+  const labelRefs = useRef<(HTMLSpanElement | null)[]>([])
+  const [cell, setCell] = useState(TOGGLE_MIN)
+  const labelsKey = items.map(i => i.label).join('\u0001')
+
+  // 이름 폭을 재서 칸 폭을 정한다(팀 목록이 바뀔 때마다).
+  useLayoutEffect(() => {
+    const widest = Math.max(0, ...labelRefs.current.map(el => (el ? el.scrollWidth : 0)))
+    setCell(Math.max(TOGGLE_MIN, Math.ceil(widest) + TOGGLE_PAD))
+  }, [labelsKey])
+
+  const idx = Math.max(0, items.findIndex(i => i.team === value))
+  return (
+    <div role="tablist" aria-label="팀" style={{
+      position: 'relative', display: 'inline-grid', gridTemplateColumns: `repeat(${items.length}, ${cell}px)`,
+      background: NEUTRAL_BG, borderRadius: 6, padding: 3, flexShrink: 0,
+    }}>
+      <span aria-hidden style={{
+        position: 'absolute', top: 3, bottom: 3, left: 3, width: cell,
+        background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 5, boxSizing: 'border-box',
+        transform: `translateX(${idx * cell}px)`, transition: 'transform 0.2s ease',
+      }} />
+      {items.map((it, i) => {
+        const on = i === idx
+        return (
+          <button key={it.team ?? '__all'} type="button" role="tab" aria-selected={on}
+            onClick={() => onChange(it.team)}
+            style={{
+              position: 'relative', zIndex: 1, height: 28, padding: '0 6px', border: 'none', background: 'transparent',
+              fontSize: 12, fontWeight: 700, color: on ? BLUE : MUTED, cursor: 'pointer', fontFamily: 'inherit',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', transition: 'color 0.15s ease',
+            }}>
+            <span ref={el => { labelRefs.current[i] = el }}>{it.label}</span>
+          </button>
+        )
+      })}
+    </div>
   )
 }
 

@@ -1,10 +1,12 @@
-// 반도체 고객 접촉 보고 — Project 목록(GET /api/semi-contact/projects?scope=all|team).
+// 반도체 고객 접촉 보고 — Project 목록(GET /api/semi-contact/projects[?team=<팀 이름>]).
 //
-// 목록 화면이 이 라우트 하나로 읽는다. 「내 팀」 판정을 서버에서 하려는 것이다(클라이언트는 결과만 받는다).
-//   scope=all  — 전부
-//   scope=team — 내 팀 Project 만: Project 를 만든 사람의 팀이 내 팀이거나, 그 Project 보고서 작성자 중
-//                내 팀 소속이 한 명이라도 있는 것. 팀은 engineers.teams(팀 이름 문자열)로 맞춘다 — 새 컬럼 없이 계산한다.
-//                사업부 전환 권한이 있는 superadmin 도 본인 소속 팀 기준이다. 소속 팀이 없으면 빈 목록.
+// 목록 화면이 이 라우트 하나로 읽는다. 팀 판정을 서버에서 하려는 것이다(클라이언트는 결과만 받는다).
+//   team 없음 — 전부
+//   team=<이름> — 그 팀의 Project 만: Project 를 만든 사람의 팀이 그 팀이거나, 그 Project 보고서 작성자 중
+//                 그 팀 소속이 한 명이라도 있는 것. 팀은 engineers.teams(팀 이름 문자열)로 맞춘다 — 새 컬럼 없이 계산한다.
+//                 사업부가 반도체인 팀(teams.division = '반도체')만 받는다. 그 밖의 값은 400.
+// 응답에 반도체 팀 이름 목록(teams.display_order 순)도 함께 담는다 — 화면의 팀 토글이 이것으로 칸을 만든다
+// (팀이 늘면 칸도 저절로 는다). 팀 목록을 못 읽으면 빈 목록으로 두고 Project 목록은 그대로 돌려준다.
 // 접근 검사는 다른 접촉 보고서 라우트와 같은 authorizeSemiContact(401·403 형식 동일). 읽기는 service role.
 //
 // 행마다 돌려주는 값: 번호·고객사·사업장/부서·안건·생성일, 접촉 횟수, 최근 접촉(가장 늦은 contact_date,
@@ -67,11 +69,23 @@ async function handle(req: NextRequest) {
   }
   const auth = await authorizeSemiContact(TAG)
   if (auth.error) return auth.error
-  const myTeam = auth.caller.teams?.trim() || null
-
-  const scope = new URL(req.url).searchParams.get('scope') === 'team' ? 'team' : 'all'
+  const teamParam = new URL(req.url).searchParams.get('team')
+  const team = teamParam === null ? null : teamParam.trim()
 
   const sb = admin()
+
+  // 반도체 팀 목록 — 토글 칸과 team 값 검사에 쓴다. 실패하면 빈 목록(전체만 보이게).
+  const { data: teamRows, error: teamErr } = await sb
+    .from('teams')
+    .select('name, display_order')
+    .eq('division', '반도체')
+    .order('display_order', { ascending: true })
+  if (teamErr) console.error(`[${TAG}] teams lookup failed`, { error: teamErr })
+  const semiTeams = teamErr ? [] : ((teamRows ?? []) as { name: string | null }[])
+    .map(t => (t.name ?? '').trim()).filter(Boolean)
+  if (team !== null && !semiTeams.includes(team)) {
+    return bad(teamErr ? '팀 목록을 확인하지 못했습니다.' : '알 수 없는 팀입니다.', teamErr ? 500 : 400)
+  }
   // 만든 사람과 보고서 작성자의 팀은 engineers 를 임베드해 읽는다. 두 표 모두 engineers 를 여러 번 가리킬 수 있어
   // 어느 FK 인지 이름으로 짚는다(semi_contact_schema.sql).
   const [p, r] = await Promise.all([
@@ -87,21 +101,20 @@ async function handle(req: NextRequest) {
   const projects = (p.data ?? []) as unknown as ProjectRow[]
   const reports = (r.data ?? []) as unknown as ReportRow[]
 
-  // Project 별 접촉 횟수·최근 접촉·내 팀 작성자 여부
+  // Project 별 접촉 횟수·최근 접촉·고른 팀 작성자 여부
   const byProject = new Map<number, { count: number; last: ReportRow | null; teamAuthor: boolean }>()
   for (const rep of reports) {
     const cur = byProject.get(rep.project_id) ?? { count: 0, last: null, teamAuthor: false }
     cur.count += 1
     if (!cur.last || rep.contact_date > cur.last.contact_date
       || (rep.contact_date === cur.last.contact_date && rep.report_id > cur.last.report_id)) cur.last = rep
-    if (myTeam && rep.author?.teams?.trim() === myTeam) cur.teamAuthor = true
+    if (team && rep.author?.teams?.trim() === team) cur.teamAuthor = true
     byProject.set(rep.project_id, cur)
   }
 
   const inScope = (pr: ProjectRow) => {
-    if (scope === 'all') return true
-    if (!myTeam) return false
-    return pr.creator?.teams?.trim() === myTeam || byProject.get(pr.project_id)?.teamAuthor === true
+    if (team === null) return true
+    return pr.creator?.teams?.trim() === team || byProject.get(pr.project_id)?.teamAuthor === true
   }
 
   const items: (ProjectListItem & { sortKey: string })[] = projects.filter(inScope).map(pr => {
@@ -127,8 +140,8 @@ async function handle(req: NextRequest) {
     || b.project_id - a.project_id)
 
   return NextResponse.json({
-    scope,
-    my_team: myTeam,
+    team,
+    teams: semiTeams,
     projects: items.map(({ sortKey: _sortKey, ...rest }) => rest),
   })
 }
