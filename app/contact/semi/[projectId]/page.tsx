@@ -19,6 +19,7 @@ import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
+import { useToast } from '@/components/common/Toast'
 import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, FAINT, BLUE, NEUTRAL_BG, ROW_HOVER_BG,
   cardStyle, cardHeader, cardTitle, countBadge, btnPrimary, btnGhost,
@@ -101,6 +102,45 @@ export default function SemiProjectDetailPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const detailRef = useRef<HTMLDivElement | null>(null)
+  const toast = useToast()
+  /** 내려받는 중인 엑셀('history' 또는 보고서 id). 그동안 두 버튼을 모두 막는다(중복 클릭 방지). */
+  const [exporting, setExporting] = useState<'history' | number | null>(null)
+
+  /**
+   * 엑셀 내려받기 — 서버(/api/semi-contact/export)가 만든 파일을 blob 으로 받아 저장한다.
+   * 파일명은 응답의 filename*(UTF-8)을 그대로 쓴다. 실패하면 서버가 준 사유를 알린다.
+   */
+  const downloadExcel = async (which: 'history' | number) => {
+    if (exporting !== null) return
+    setExporting(which)
+    try {
+      const qs = `project_id=${projectId}${which === 'history' ? '' : `&report_id=${which}`}`
+      const res = await fetch(`/api/semi-contact/export?${qs}`)
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        console.error('[contact/semi/detail] 엑셀 실패', { status: res.status, error: json })
+        toast.error(json.error || `엑셀을 내려받지 못했습니다 (${res.status})`)
+        return
+      }
+      const blob = await res.blob()
+      const cd = res.headers.get('Content-Disposition') ?? ''
+      const m = /filename\*=UTF-8''([^;]+)/i.exec(cd)
+      const name = m ? decodeURIComponent(m[1]) : 'export.xlsx'
+      const href = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = href
+      link.download = name
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(href)
+    } catch (e) {
+      console.error('[contact/semi/detail] 엑셀 실패', errorInfo(e))
+      toast.error('엑셀을 내려받지 못했습니다. 잠시 뒤 다시 시도해주세요.')
+    } finally {
+      setExporting(null)
+    }
+  }
 
   useEffect(() => {
     if (!authorized) return
@@ -230,7 +270,15 @@ export default function SemiProjectDetailPage() {
             <Link href="/contact/semi" style={{ ...btnGhost(), padding: '5px 10px', fontSize: 12, textDecoration: 'none' }}>← 목록</Link>
             <span className="num" style={{ ...countBadge, color: BLUE }}>{project.project_no}</span>
             <span style={{ ...cardTitle, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.title}</span>
-            <Link href={writeHref} style={{ ...btnPrimary(), marginLeft: 'auto', textDecoration: 'none' }}>보고서 작성</Link>
+            <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+              {views.length > 0 && (
+                <button type="button" onClick={() => downloadExcel('history')} disabled={exporting !== null}
+                  style={btnGhost(exporting !== null)}>
+                  {exporting === 'history' ? '만드는 중...' : '전체 이력 엑셀'}
+                </button>
+              )}
+              <Link href={writeHref} style={{ ...btnPrimary(), textDecoration: 'none' }}>보고서 작성</Link>
+            </span>
           </div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 10, fontSize: 12, color: SUB }}>
             <span><span style={{ color: MUTED }}>{FIELD_BY_KEY.customer_name.label}</span> {project.customer_name}</span>
@@ -269,7 +317,17 @@ export default function SemiProjectDetailPage() {
               {/* ── 우: 선택한 보고서 ── */}
               <div ref={detailRef} style={{ minWidth: 0 }}>
                 {selected && (
-                  <ReportDetail key={selected.id} view={selected} actions={actionsByReport.get(selected.id) ?? []} />
+                  <ReportDetail
+                    key={selected.id}
+                    view={selected}
+                    actions={actionsByReport.get(selected.id) ?? []}
+                    exportButton={(
+                      <button type="button" onClick={() => downloadExcel(selected.id)} disabled={exporting !== null}
+                        style={{ ...btnGhost(exporting !== null), padding: '5px 10px', fontSize: 12 }}>
+                        {exporting === selected.id ? '만드는 중...' : '이 보고서 엑셀'}
+                      </button>
+                    )}
+                  />
                 )}
               </div>
             </div>
@@ -395,7 +453,12 @@ function Timeline({ views, selectedId, onSelect }: { views: ReportView[]; select
 }
 
 /** 선택한 보고서 한 장 — 읽기 전용. */
-function ReportDetail({ view, actions }: { view: ReportView; actions: (ActionInput & { id: number })[] }) {
+function ReportDetail({ view, actions, exportButton }: {
+  view: ReportView
+  actions: (ActionInput & { id: number })[]
+  /** 「이 보고서 엑셀」 버튼 — 내려받기 상태는 부모가 들고 있다. */
+  exportButton?: ReactNode
+}) {
   // 바뀐 칸이 있는 그룹은 처음부터 편다.
   const [open, setOpen] = useState<Set<number>>(
     () => new Set(REST_GROUPS.filter(g => g.fields.some(f => view.changed.has(f.key as FieldKey))).map(g => g.section.no)),
@@ -406,7 +469,12 @@ function ReportDetail({ view, actions }: { view: ReportView; actions: (ActionInp
   )
   return (
     <div>
-      <Box title="이번 접촉" right={<span style={{ fontSize: 12, color: MUTED }}>{AUTHOR_FIELD.label} {view.authorName}</span>}>
+      <Box title="이번 접촉" right={(
+        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 12, color: MUTED }}>{AUTHOR_FIELD.label} {view.authorName}</span>
+          {exportButton}
+        </span>
+      )}>
         <div style={gridStyle}>{CONTACT_KEYS.map(k => value(k))}</div>
       </Box>
 
