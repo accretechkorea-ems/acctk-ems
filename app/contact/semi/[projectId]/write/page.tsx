@@ -3,12 +3,12 @@
 // 반도체 고객 접촉 보고 — 보고서 작성 화면(/contact/semi/<projectId>/write).
 //
 // 위에서 아래로: 헤더(Project, 읽기 전용) → 이번 접촉 → 새롭게 확인된 내용(FACT·회의 내용, 가장 크게)
-// → Action Items → 다음 접촉 예정일 → 이어받은 항목(나머지 칸, 섹션별로 접힘) → 하단 고정 바(임시저장 상태·취소·저장).
+// → Action Items → 다음 접촉 예정일 → 이어받은 항목(나머지 칸, 섹션별·기본 펼침) → 하단 고정 바(임시저장 상태·취소·저장).
 // 칸 이름·섹션·선택지는 전부 필드 등록표(lib/semiContact/fields.ts)에서 읽는다 — 이 화면은 배치만 정한다.
 //
 // 이어쓰기 — 같은 Project 의 직전 보고서(contact_date desc, report_id desc 첫 건)를 브라우저 세션으로 읽어
 // fromStorage 로 입력 모양으로 되돌린 뒤 prefillFromPrevious 로 가져오기(carry) 칸만 채운다. 직전 보고가 없으면 빈 값.
-// 가져온 값을 바꾸면 changedFields 가 그 칸을 「변경됨」으로 잡는다(되돌리면 풀린다).
+// 가져온 값을 바꾸면 changedFields 가 그 칸을 「변경」으로 잡아 칸 전체를 표시한다(되돌리면 풀린다).
 //
 // 임시저장 — 입력이 바뀌면 1초 뒤 이 브라우저에 저장한다(lib/semiContact/draft.ts). DB 에는 저장하지 않는다.
 // 저장 — POST /api/semi-contact/report. 검증은 저장 전에 같은 규칙(validateReport)으로 한 번 보고,
@@ -62,6 +62,10 @@ const PLACED = new Set<FieldKey>([...PROJECT_KEYS, ...CONTACT_KEYS, ...NOTE_KEYS
 const INHERITED_GROUPS = SECTIONS
   .map(s => ({ section: s, fields: (FIELDS as readonly FieldDef[]).filter(f => f.section === s.no && !PLACED.has(f.key as FieldKey)) }))
   .filter(g => g.fields.length > 0)
+/** 직전 보고서에서 가져오는 칸(carry) — Project 칸은 늘 지금 Project 값이라 뺀다. */
+const CARRY_KEYS: FieldKey[] = (FIELDS as readonly FieldDef[])
+  .filter(f => f.carry && !(PROJECT_KEYS as readonly string[]).includes(f.key))
+  .map(f => f.key as FieldKey)
 
 /** 임시저장 디바운스(ms). */
 const DRAFT_DELAY = 1000
@@ -78,7 +82,41 @@ const fieldStyle: CSSProperties = {
 }
 const labelStyle: CSSProperties = { fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 5, display: 'block' }
 const gridStyle: CSSProperties = { display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }
+/** 이어받은 항목 그룹 안 — 2열. */
+const grid2Style: CSSProperties = { display: 'grid', gap: 12, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }
 const boxStyle: CSSProperties = { ...cardStyle, marginBottom: 12 }
+
+// ── 「변경한 칸」 표시(직전 보고서 값과 다른 칸) ──
+/** 칸 래퍼 배경. */
+const CHANGED_WRAP_BG = '#e6ecf8'
+/** 칸 래퍼·입력칸 테두리. */
+const CHANGED_LINE = '#c7d7f8'
+/** 입력칸 배경(상세 화면의 변경 행 배경과 같은 값). */
+const CHANGED_INPUT_BG = '#f4f7fd'
+/** 칸 래퍼 — 바뀐 칸은 왼쪽 4px 파란 막대 + 연한 배경·테두리, 안 바뀐 칸은 같은 자리를 투명하게 비워 정렬을 맞춘다. */
+const wrapStyle = (changed: boolean): CSSProperties => ({
+  padding: '8px 10px', borderRadius: '0 6px 6px 0', minWidth: 0,
+  border: `1px solid ${changed ? CHANGED_LINE : 'transparent'}`,
+  borderLeft: `4px solid ${changed ? BLUE : 'transparent'}`,
+  background: changed ? CHANGED_WRAP_BG : 'transparent',
+})
+const pillStyle = (filled: boolean): CSSProperties => ({
+  fontSize: 11, fontWeight: 700, borderRadius: 99, padding: '1px 8px', whiteSpace: 'nowrap',
+  background: filled ? BLUE : NEUTRAL_BG, color: filled ? '#ffffff' : SUB,
+})
+
+/**
+ * 이 화면의 입력칸 포커스 — 견적·고객 상세와 같은 값. 입력칸 테두리가 인라인 스타일이라 !important 로 덮는다.
+ * 오류 칸(.sw-err)은 포커스 때도 오류 테두리를 지킨다.
+ */
+const FOCUS_CSS = `
+  .sw-root input:not([type="checkbox"]):focus, .sw-root textarea:focus, .sw-root select:focus {
+    border-color: ${BLUE} !important;
+    box-shadow: 0 0 0 3px rgba(35,78,162,0.10) !important;
+    outline: none;
+  }
+  .sw-root .sw-err:focus { border-color: #dc2626 !important; }
+`
 
 /** 입력 상태를 비교·저장할 모양으로(rid 는 뺀다). */
 function snapshotOf(values: ReportInput, actions: ActionRow[], noAction: boolean): string {
@@ -117,7 +155,8 @@ function SemiReportWriteInner() {
   const [actionErrors, setActionErrors] = useState<ActionErrors>({})
   const [saving, setSaving] = useState(false)
   const [draftLabel, setDraftLabel] = useState('')
-  const [openGroups, setOpenGroups] = useState<Set<number>>(() => new Set())
+  /** 펼친 그룹 — 기본은 모두 펼침(접기는 사람이 한다). */
+  const [openGroups, setOpenGroups] = useState<Set<number>>(() => new Set(INHERITED_GROUPS.map(g => g.section.no)))
   const [teamNames, setTeamNames] = useState<string[]>([])
   /** 접촉 차수(#n). 세지 못했으면 null(표시하지 않는다). */
   const [seqNo, setSeqNo] = useState<number | null>(null)
@@ -343,10 +382,15 @@ function SemiReportWriteInner() {
   }, [ready, confirm])
 
   // ── 「변경됨」 — 직전 보고에서 가져온 칸 중 바뀐 것 ──
+  // 비교 기준 prev — 새 보고서는 미리 채운 출처인 직전 보고서, 수정은 그 보고서의 바로 앞 보고서(#n-1).
+  // changedFields(prefill.ts)는 상세 화면과 같은 함수다 — carry 칸만, 공백을 접어 비교하므로 되돌리면 표시가 풀린다.
   const changed = useMemo(() => new Set(changedFields(prev, values)), [prev, values])
   const groupChangeCount = (fields: FieldDef[]) => fields.filter(f => changed.has(f.key as FieldKey)).length
+  /** 「수정함 N / 그대로 M」 — 직전에서 가져오는 칸(carry, Project 칸 제외) 전체 기준. */
+  const carryCount = CARRY_KEYS.length
+  const changedCount = CARRY_KEYS.filter(k => changed.has(k)).length
 
-  // 변경이 있는 그룹은 자동으로 편다(접는 것은 사람이 한다).
+  // 변경이 있는 그룹은 접혀 있어도 다시 편다(접는 것은 사람이 한다).
   useEffect(() => {
     const need = INHERITED_GROUPS.filter(g => groupChangeCount(g.fields) > 0).map(g => g.section.no)
     if (need.length === 0) return
@@ -533,7 +577,7 @@ function SemiReportWriteInner() {
     )
   }
 
-  const field = (k: FieldKey, opts?: { rows?: number; autoFocus?: boolean }) => (
+  const field = (k: FieldKey, opts?: { rows?: number; autoFocus?: boolean; big?: boolean }) => (
     <FieldControl
       key={k}
       def={FIELD_BY_KEY[k]}
@@ -543,6 +587,7 @@ function SemiReportWriteInner() {
       changed={changed.has(k)}
       prevValue={prev ? prev[k] : ''}
       rows={opts?.rows}
+      big={opts?.big}
       autoFocus={opts?.autoFocus}
       disabled={saving}
     />
@@ -551,7 +596,8 @@ function SemiReportWriteInner() {
   const disabledActions = noAction || saving
 
   return (
-    <main style={{ padding: '24px 28px 0', background: PAGE_BG, minHeight: '100vh', boxSizing: 'border-box' }}>
+    <main className="sw-root" style={{ padding: '24px 28px 0', background: PAGE_BG, minHeight: '100vh', boxSizing: 'border-box' }}>
+      <style>{FOCUS_CSS}</style>
       <div style={{ maxWidth: 1080, margin: '0 auto' }}>
 
         {/* ── 헤더 — Project(읽기 전용) ── */}
@@ -583,8 +629,8 @@ function SemiReportWriteInner() {
         {/* ── 새롭게 확인된 내용 — 이 화면의 핵심. 첫 화면에서 바로 쓰도록 FACT 에 커서를 둔다 ── */}
         <Box title={SECTIONS.find(s => s.no === 2)?.label ?? ''}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {field('fact', { rows: 10, autoFocus: true })}
-            {field('meeting_content', { rows: 8 })}
+            {field('fact', { rows: 10, autoFocus: true, big: true })}
+            {field('meeting_content', { rows: 10, big: true })}
           </div>
         </Box>
 
@@ -606,15 +652,15 @@ function SemiReportWriteInner() {
             {teamNames.map(n => <option key={n} value={n} />)}
           </datalist>
           <div style={{ overflowX: 'auto', opacity: noAction ? 0.5 : 1 }} aria-disabled={noAction}>
-            <table style={{ width: '100%', minWidth: 760, borderCollapse: 'collapse' }}>
+            {/* 열: Action / 담당(팀) / 기한 / 상태 / 우선순위. 비고(note)는 화면에서 뺐지만 값은 줄에 그대로 남아 저장된다. */}
+            <table style={{ width: '100%', minWidth: 680, borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ fontSize: 11, fontWeight: 700, color: MUTED, textAlign: 'left' }}>
-                  <th style={{ padding: '0 6px 8px 0', width: '30%' }}>{ACTION_LABELS.what}</th>
-                  <th style={{ padding: '0 6px 8px', width: '16%' }}>{ACTION_LABELS.owner}</th>
+                  <th style={{ padding: '0 6px 8px 0' }}>Action</th>
+                  <th style={{ padding: '0 6px 8px', width: '20%' }}>{ACTION_LABELS.owner}(팀)</th>
                   <th style={{ padding: '0 6px 8px', width: 140 }}>{ACTION_LABELS.due_date}</th>
-                  <th style={{ padding: '0 6px 8px', width: 110 }}>{ACTION_LABELS.status}</th>
+                  <th style={{ padding: '0 6px 8px', width: 120 }}>{ACTION_LABELS.status}</th>
                   <th style={{ padding: '0 6px 8px', width: 100 }}>{ACTION_LABELS.priority}</th>
-                  <th style={{ padding: '0 6px 8px' }}>{ACTION_LABELS.note}</th>
                   <th style={{ width: 32 }} />
                 </tr>
               </thead>
@@ -631,6 +677,7 @@ function SemiReportWriteInner() {
                     value: r[k],
                     disabled: disabledActions,
                     onChange: (ev: { target: { value: string } }) => setAction(r.rid, k, ev.target.value),
+                    className: e[k] ? 'sw-err' : undefined,
                     style: { ...fieldStyle, ...(e[k] ? { border: errBorder } : null) },
                   })
                   return (
@@ -648,7 +695,6 @@ function SemiReportWriteInner() {
                           {ACTION_PRIORITIES.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                       ))}
-                      {cell('note', <input {...inputProps('note')} />)}
                       <td style={{ padding: '4px 0', verticalAlign: 'top' }}>
                         <button type="button" aria-label="줄 삭제" disabled={disabledActions} onClick={() => removeAction(r.rid)}
                           style={{
@@ -665,7 +711,7 @@ function SemiReportWriteInner() {
             </table>
           </div>
           <div style={{ marginTop: 8 }} data-has-error={errors.actions ? 'true' : undefined}>
-            <button type="button" onClick={addAction} disabled={disabledActions} style={btnGhost(disabledActions)}>+ 줄 추가</button>
+            <button type="button" onClick={addAction} disabled={disabledActions} style={btnGhost(disabledActions)}>+ Action 추가</button>
             <FieldError message={errors.actions} />
           </div>
         </Box>
@@ -675,8 +721,22 @@ function SemiReportWriteInner() {
           <div style={{ maxWidth: 260 }}>{NEXT_KEYS.map(k => field(k))}</div>
         </Box>
 
-        {/* ── 이어받은 항목 — 나머지 칸, 섹션별로 접힘 ── */}
-        <Box title="이어받은 항목" right={prev ? undefined : <span style={{ fontSize: 12, color: MUTED }}>직전 보고서 없음</span>}>
+        {/* ── 이어받은 항목 — 나머지 칸, 섹션별(기본 펼침) ── */}
+        <Box
+          title="이어받은 항목"
+          right={prev ? (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <span style={{ fontSize: 12, color: MUTED }}>
+                {(() => {
+                  const ref = seqNo !== null && seqNo > 1 ? `직전(#${seqNo - 1})` : '직전'
+                  return editId !== null ? `${ref} 대비` : `${ref}에서 가져옴`
+                })()}
+              </span>
+              <span className="num" style={pillStyle(true)}>수정함 {changedCount}</span>
+              <span className="num" style={pillStyle(false)}>그대로 {carryCount - changedCount}</span>
+            </span>
+          ) : <span style={{ fontSize: 12, color: MUTED }}>직전 보고서 없음</span>}
+        >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {INHERITED_GROUPS.map(g => {
               const open = openGroups.has(g.section.no)
@@ -686,19 +746,18 @@ function SemiReportWriteInner() {
                   <button type="button" aria-expanded={open}
                     onClick={() => setOpenGroups(o => { const s = new Set(o); if (s.has(g.section.no)) s.delete(g.section.no); else s.add(g.section.no); return s })}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 12px',
+                      display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '10px 12px',
                       border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
                     }}>
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke={MUTED} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke={MUTED} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
                       style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease', flexShrink: 0 }}>
                       <path d="m9 6 6 6-6 6" />
                     </svg>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>{g.section.label}</span>
-                    <span style={{ fontSize: 12, color: MUTED }}>{g.fields.length}개</span>
-                    {n > 0 && <span style={{ ...countBadge, color: BLUE }}>변경 {n}건</span>}
+                    <span style={{ fontSize: 11, fontWeight: 700, color: SUB }}>{g.section.label}</span>
+                    {n > 0 && <span className="num" style={pillStyle(true)}>수정함 {n}</span>}
                   </button>
                   {open && (
-                    <div style={{ ...gridStyle, padding: '4px 12px 12px' }}>
+                    <div style={{ ...grid2Style, padding: '0 8px 8px' }}>
                       {g.fields.map(f => field(f.key as FieldKey, f.kind === 'longtext' ? { rows: 4 } : undefined))}
                     </div>
                   )}
@@ -755,9 +814,12 @@ function Box({ title, right, children }: { title: string; right?: ReactNode; chi
 
 /**
  * 등록표 칸 하나. kind 에 따라 입력·여러 줄·날짜·선택을 그린다.
- * changed 면 「변경됨」과 직전 보고의 값을 작게 보여 준다(직전 값이 비었으면 「(비어 있음)」).
+ * changed(직전 보고서 값과 다름)면 칸 전체를 표시한다 — 래퍼(왼쪽 파란 막대·연한 배경), 라벨 옆 「변경」 pill +
+ * 「직전: <취소선 이전 값>」, 입력칸 배경·테두리. 안 바뀐 칸은 같은 자리를 투명하게 비워 정렬만 맞춘다.
+ * 오류가 있으면 입력칸 테두리는 오류 색이 우선이다(포커스 때도 — .sw-err).
+ * big 이면 큰 textarea(rows 10, 최소 240px) — 회의 내용·FACT.
  */
-function FieldControl({ def, value, onChange, error, changed, prevValue, rows, autoFocus, disabled }: {
+function FieldControl({ def, value, onChange, error, changed, prevValue, rows, big, autoFocus, disabled }: {
   def: FieldDef
   value: string
   onChange: (v: string) => void
@@ -765,42 +827,54 @@ function FieldControl({ def, value, onChange, error, changed, prevValue, rows, a
   changed: boolean
   prevValue: string
   rows?: number
+  big?: boolean
   autoFocus?: boolean
   disabled?: boolean
 }) {
   const id = `sf-${def.key}`
-  const style: CSSProperties = { ...fieldStyle, ...(error ? { border: errBorder } : null) }
+  const style: CSSProperties = {
+    ...fieldStyle,
+    ...(changed ? { background: CHANGED_INPUT_BG, border: `1px solid ${CHANGED_LINE}` } : null),
+    ...(error ? { border: errBorder } : null),
+  }
+  const cls = error ? 'sw-err' : undefined
   let control: ReactNode
   if (def.kind === 'select') {
     control = (
-      <select id={id} value={value} disabled={disabled} onChange={e => onChange(e.target.value)} style={style}>
+      <select id={id} className={cls} value={value} disabled={disabled} onChange={e => onChange(e.target.value)} style={style}>
         <option value="">선택</option>
         {(def.options ?? []).map(o => <option key={o} value={o}>{o}</option>)}
       </select>
     )
   } else if (def.kind === 'date') {
-    control = <input id={id} type="date" value={value} disabled={disabled} onChange={e => onChange(e.target.value)} style={style} />
+    control = <input id={id} className={cls} type="date" value={value} disabled={disabled} onChange={e => onChange(e.target.value)} style={style} />
   } else if (def.kind === 'longtext') {
     control = (
-      <textarea id={id} value={value} disabled={disabled} autoFocus={autoFocus} rows={rows ?? 4}
-        onChange={e => onChange(e.target.value)} style={{ ...style, resize: 'vertical', lineHeight: 1.6 }} />
+      <textarea id={id} className={cls} value={value} disabled={disabled} autoFocus={autoFocus} rows={big ? 10 : rows ?? 4}
+        onChange={e => onChange(e.target.value)}
+        style={{ ...style, resize: 'vertical', lineHeight: 1.6, ...(big ? { minHeight: 240 } : null) }} />
     )
   } else {
-    control = <input id={id} value={value} disabled={disabled} autoFocus={autoFocus} onChange={e => onChange(e.target.value)} style={style} />
+    control = <input id={id} className={cls} value={value} disabled={disabled} autoFocus={autoFocus} onChange={e => onChange(e.target.value)} style={style} />
   }
+  const prevShown = prevValue.trim() ? prevValue : '(비어 있음)'
   return (
-    <div data-has-error={error ? 'true' : undefined}>
-      <label htmlFor={id} style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span>{def.label}{def.required && <span style={{ color: '#dc2626' }}> *</span>}</span>
-        {changed && <span style={{ fontSize: 11, fontWeight: 700, color: BLUE, background: NEUTRAL_BG, borderRadius: 99, padding: '1px 7px' }}>변경됨</span>}
+    <div data-has-error={error ? 'true' : undefined} style={wrapStyle(changed)}>
+      <label htmlFor={id} style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <span style={{ flexShrink: 0 }}>{def.label}{def.required && <span style={{ color: '#dc2626' }}> *</span>}</span>
+        {changed && (
+          <>
+            <span style={{ ...pillStyle(true), flexShrink: 0 }}>변경</span>
+            <span title={prevValue} style={{
+              fontSize: 12, fontWeight: 400, color: MUTED, minWidth: 0,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              직전: <s>{prevShown}</s>
+            </span>
+          </>
+        )}
       </label>
       {control}
-      {changed && (
-        <div style={{ marginTop: 4, fontSize: 11, color: MUTED, lineHeight: 1.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-          title={prevValue}>
-          이전: {prevValue.trim() ? prevValue : '(비어 있음)'}
-        </div>
-      )}
       <FieldError message={error} />
     </div>
   )
