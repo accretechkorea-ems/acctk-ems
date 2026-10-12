@@ -35,7 +35,7 @@ import { useConfirm } from '@/components/common/ConfirmDialog'
 import { FieldError, errBorder } from '@/components/common/fieldErrors'
 import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, BLUE, NEUTRAL_BG,
-  cardStyle, cardHeader, cardTitle, countBadge, btnPrimary, btnGhost,
+  cardStyle, cardHeader, cardTitle, countBadge, btnPrimary, btnGhost, btnDanger,
 } from '@/components/common/ui'
 import { kstStamp, nowHmKST, todayKST } from '@/lib/date'
 import { errorInfo } from '@/lib/errorInfo'
@@ -121,6 +121,10 @@ function SemiReportWriteInner() {
   const [teamNames, setTeamNames] = useState<string[]>([])
   /** 접촉 차수(#n). 세지 못했으면 null(표시하지 않는다). */
   const [seqNo, setSeqNo] = useState<number | null>(null)
+  /** 수정 모드에서 이 보고서에 저장돼 있던 Action 수(삭제 확인창 문구용). */
+  const [savedActionCount, setSavedActionCount] = useState(0)
+  /** 보고서를 지우는 중(수정 모드). 그동안 하단 버튼을 모두 막는다. */
+  const [deleting, setDeleting] = useState(false)
 
   const nextRid = useRef(1)
   const newRow = (a?: Partial<ActionInput> & { action_id?: number }): ActionRow => ({ ...emptyAction(), ...a, owner_id: null, rid: nextRid.current++ })
@@ -197,6 +201,7 @@ function SemiReportWriteInner() {
         const loaded = ((acts.data ?? []) as Record<string, unknown>[])
           .map(x => newRow({ ...actionFromStorage(x), action_id: Number(x.action_id) }))
         baseActions = loaded.length > 0 ? loaded : [newRow()]
+        setSavedActionCount(loaded.length)
         const det = rep.detail
         baseNoAction = !!det && typeof det === 'object' && (det as Record<string, unknown>).no_action === true
         prevInput = last.data ? fromStorage(last.data as Record<string, unknown>, projInput) : null
@@ -402,6 +407,39 @@ function SemiReportWriteInner() {
     }
     leaving.current = true
     router.push(backHref)
+  }
+
+  // ── 삭제(수정 모드에서만) — Project 상세에 있던 확인창·DELETE 로직을 옮겼다 ──
+  // 서버(DELETE /api/semi-contact/report)가 권한(작성자 본인 또는 superadmin)을 다시 본다.
+  // 지우면 이 보고서의 수정용 임시저장본도 지우고 Project 상세로 간다.
+  const deleteReport = async () => {
+    if (editId === null || deleting || saving) return
+    const ok = await confirm({
+      title: '보고서 삭제',
+      message: `이 보고서와 Action ${savedActionCount}건이 삭제됩니다. 복구할 수 없습니다.`,
+      confirmText: '삭제',
+      variant: 'danger',
+    })
+    if (!ok) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/semi-contact/report?report_id=${editId}`, { method: 'DELETE' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        console.error('[contact/semi/write] 보고서 삭제 실패', { status: res.status, error: json })
+        toast.error(json.error || `보고서를 삭제하지 못했습니다 (${res.status})`)
+        return
+      }
+      if (draftKey !== null) clearDraftAt(draftKey)
+      leaving.current = true
+      toast.success('보고서를 삭제했습니다')
+      router.push(`/contact/semi/${projectId}`)
+    } catch (e) {
+      console.error('[contact/semi/write] 보고서 삭제 실패', errorInfo(e))
+      toast.error('보고서를 삭제하지 못했습니다. 잠시 뒤 다시 시도해주세요.')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   // ── 저장 ──
@@ -675,11 +713,17 @@ function SemiReportWriteInner() {
           position: 'sticky', bottom: 0, zIndex: 5, background: CARD_BG, borderTop: `1px solid ${BORDER}`,
           margin: '0 -28px', padding: '10px 28px', display: 'flex', alignItems: 'center', gap: 8,
         }}>
+          {/* 삭제 — 수정 모드에서만(새 보고서에는 지울 것이 없다) */}
+          {editId !== null && (
+            <button type="button" onClick={deleteReport} disabled={saving || deleting} style={btnDanger(saving || deleting)}>
+              {deleting ? '삭제 중...' : '삭제'}
+            </button>
+          )}
           <span style={{ fontSize: 12, color: MUTED, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {draftLabel || (dirty ? '변경 사항이 있습니다' : '')}
           </span>
-          <button type="button" onClick={leave} disabled={saving} style={{ ...btnGhost(saving), marginLeft: 'auto' }}>취소</button>
-          <button type="button" onClick={submit} disabled={saving} style={btnPrimary(saving)}>
+          <button type="button" onClick={leave} disabled={saving || deleting} style={{ ...btnGhost(saving || deleting), marginLeft: 'auto' }}>취소</button>
+          <button type="button" onClick={submit} disabled={saving || deleting} style={btnPrimary(saving || deleting)}>
             {saving ? '저장 중...' : '저장'}
           </button>
         </div>

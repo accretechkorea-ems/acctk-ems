@@ -2,7 +2,7 @@
 
 // 반도체 고객 접촉 보고 — Project 상세(/contact/semi/<projectId>[?report=<reportId>]).
 //
-// 위에서 아래로: 헤더(Project·← 목록·전체 이력 엑셀·보고서 작성·정보 수정·Project 삭제) → 요약 카드 4개
+// 위에서 아래로: 헤더(← 목록 아이콘·Project/구매안건·번호 배지 / 고객사·사업장·생성자·생성일 / 정보 수정·Excel·+ 새 접촉 보고) → 요약 카드 4개
 // → 「미완료 Action」(전체 폭, 0건이면 한 줄) → 2단: 좌 「접촉 이력」 타임라인 / 우 선택한 보고서 상세.
 // 2단은 요약 카드와 같은 4칸 격자에 맞춘다 — 좌 1칸, 우 3칸. 좌 이력 상자는 우 상세의 아래 끝까지 늘고, 길면 상자 안에서 스크롤.
 // 좁은 화면에서는 위아래로 쌓는다(이력 상자는 최대 높이 + 스크롤).
@@ -13,8 +13,8 @@
 // 접촉 차수(#n) — lib/semiContact/sequence.ts 의 contactSequence(엑셀과 같은 계산, DB 에 없는 표시 전용 값).
 //
 // 쓰기는 모두 서버 라우트가 권한을 다시 본다.
-//   · 보고서 수정 → 작성 화면의 수정 모드(write?report_id=), 삭제 → DELETE /api/semi-contact/report (작성자 본인·superadmin)
-//   · Project 정보 수정 → PATCH /api/semi-contact/project, 삭제 → DELETE (만든 본인·superadmin)
+//   · 보고서 수정·삭제 → 작성 화면의 수정 모드(write?report_id=) — 삭제 버튼도 그 화면 하단에 있다(작성자 본인·superadmin)
+//   · Project 정보 수정·삭제 → 「Project 정보 수정」 모달(PATCH·DELETE /api/semi-contact/project, 만든 본인·superadmin)
 //   · Action 상태 → PATCH /api/semi-contact/action (접근 권한만 있으면 누구나 — 담당이 팀이다)
 // 주소의 ?report= 가 있으면 그 보고서를 고른 채 연다(수정 화면에서 돌아올 때).
 
@@ -33,7 +33,7 @@ import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, FAINT, BLUE, NEUTRAL_BG, ROW_HOVER_BG,
   cardStyle, cardHeader, cardTitle, countBadge, btnPrimary, btnGhost, btnDanger,
 } from '@/components/common/ui'
-import { daysBetween, todayKST } from '@/lib/date'
+import { daysBetween, kstYmd, todayKST } from '@/lib/date'
 import { errorInfo } from '@/lib/errorInfo'
 import {
   ACTION_LABELS, ACTION_STATUSES, AUTHOR_FIELD, FIELDS, FIELD_BY_KEY, SECTIONS,
@@ -57,10 +57,20 @@ const REST_GROUPS = SECTIONS
 /** 완료 상태. 등록표의 Action 상태(Open · In Progress · Done) 중 이것만 완료로 본다 — DB 부분 인덱스와 같은 기준. */
 const DONE_STATUS = 'Done'
 
+/** 직전 보고서와 값이 다른 칸의 행 배경(왼쪽 막대는 액센트 #234ea2). */
+const CHANGED_BG = '#f4f7fd'
+/** Excel 아이콘 색 — 디자인 표의 상태색 「활성」 초록. */
+const EXCEL_GREEN = '#16a34a'
+
 /** 위험(기한 지남) 글자색 — 디자인 표의 「위험」 값. */
 const DANGER_TEXT = '#ef4444'
 
-type Project = { project_id: number; project_no: string; customer_name: string; site_dept: string | null; title: string; created_by: number }
+type Project = {
+  project_id: number; project_no: string; customer_name: string; site_dept: string | null; title: string
+  created_by: number; created_at: string
+  /** 만든 사람(engineers 임베드). */
+  creator: { name: string | null } | null
+}
 type ReportRow = Record<string, unknown> & {
   report_id: number
   contact_date: string
@@ -107,7 +117,6 @@ const SHELL_CSS = `
 const labelStyle: CSSProperties = { fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 5, display: 'block' }
 const gridStyle: CSSProperties = { display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }
 const boxStyle: CSSProperties = { ...cardStyle, marginBottom: 12 }
-const smallBtn: CSSProperties = { padding: '5px 10px', fontSize: 12 }
 
 /** 'YYYY-MM-DD' 를 오늘과 견줘 「오늘」·「N일 전」·「N일 후」. 날짜가 아니면 빈 문자열. */
 function relDay(ymd: string, today: string): string {
@@ -137,10 +146,8 @@ function SemiProjectDetailInner() {
   const detailRef = useRef<HTMLDivElement | null>(null)
   /** 내려받는 중인 엑셀('history' 또는 보고서 id). 그동안 두 버튼을 모두 막는다(중복 클릭 방지). */
   const [exporting, setExporting] = useState<'history' | number | null>(null)
-  /** 지우는 중('project' 또는 보고서 id). 그동안 삭제 버튼을 모두 막는다(중복 방지). */
-  const [deleting, setDeleting] = useState<'project' | number | null>(null)
-  /** 올리면 세 표를 다시 읽는다(보고서를 지운 뒤 타임라인·요약·미완료 Action 을 새로 그리려고). */
-  const [reloadKey, setReloadKey] = useState(0)
+  /** Project 를 지우는 중. 그동안 삭제 버튼을 막는다(중복 방지). */
+  const [deletingProject, setDeletingProject] = useState(false)
   /** 상태를 저장 중인 Action id — 그 셀렉트만 막는다. */
   const [savingStatus, setSavingStatus] = useState<Set<number>>(() => new Set())
   const [editingProject, setEditingProject] = useState(false)
@@ -152,7 +159,7 @@ function SemiProjectDetailInner() {
     const load = async () => {
       const [p, r, a] = await Promise.all([
         supabase.from('semi_projects')
-          .select('project_id, project_no, customer_name, site_dept, title, created_by')
+          .select('project_id, project_no, customer_name, site_dept, title, created_by, created_at, creator:engineers!semi_projects_created_by_fkey(name)')
           .eq('project_id', projectId).maybeSingle(),
         // 작성자 이름은 목록과 같이 engineers 를 임베드한다. 이 표는 engineers 를 두 번 가리키므로(작성자·수정자)
         // 어느 FK 인지 이름으로 짚는다.
@@ -179,7 +186,7 @@ function SemiProjectDetailInner() {
         return
       }
       const reports = (r.data ?? []) as unknown as ReportRow[]
-      setProject(p.data as Project)
+      setProject(p.data as unknown as Project)
       setReportRows(reports)
       setActionRows((a.data ?? []) as unknown as ActionRow[])
       // 고른 보고서가 남아 있으면 그대로, 없으면 주소의 ?report=, 그것도 없으면 가장 최근 보고서.
@@ -192,7 +199,7 @@ function SemiProjectDetailInner() {
     }
     load()
     return () => { cancelled = true }
-  }, [authorized, projectId, supabase, reloadKey])
+  }, [authorized, projectId, supabase])
 
   // 보고서마다 입력 모양 + 바로 앞 보고서 대비 변경(접촉일 오름차순 기준) + 차수.
   const views = useMemo<ReportView[]>(() => {
@@ -274,11 +281,12 @@ function SemiProjectDetailInner() {
     }
   }
 
-  // ── 삭제 — 서버(DELETE /api/semi-contact/project·report)가 권한(만든 사람·작성자 본인 또는 superadmin)을 다시 본다 ──
+  // ── Project 삭제 — 「Project 정보 수정」 모달에서 부른다. 서버(DELETE /api/semi-contact/project)가 권한을 다시 본다 ──
+  // 보고서 한 장의 삭제는 작성 화면의 수정 모드(write?report_id=) 하단으로 옮겼다.
 
   /** Project 를 통째로 지운다. 지우면 목록으로 간다. */
   const deleteProject = async (counts: { reports: number; actions: number }) => {
-    if (deleting !== null) return
+    if (deletingProject) return
     const ok = await confirm({
       title: 'Project 삭제',
       message: `보고서 ${counts.reports}건, Action ${counts.actions}건이 함께 삭제되며 복구할 수 없습니다.`,
@@ -286,7 +294,7 @@ function SemiProjectDetailInner() {
       variant: 'danger',
     })
     if (!ok) return
-    setDeleting('project')
+    setDeletingProject(true)
     try {
       const res = await fetch(`/api/semi-contact/project?project_id=${projectId}`, { method: 'DELETE' })
       const json = await res.json().catch(() => ({}))
@@ -301,36 +309,7 @@ function SemiProjectDetailInner() {
       console.error('[contact/semi/detail] Project 삭제 실패', errorInfo(e))
       toast.error('Project 를 삭제하지 못했습니다. 잠시 뒤 다시 시도해주세요.')
     } finally {
-      setDeleting(null)
-    }
-  }
-
-  /** 보고서 한 장을 지운다. 이 화면에 남아 세 표를 다시 읽는다(마지막 보고서였으면 빈 상태가 된다). */
-  const deleteReport = async (reportId: number, actionCount: number) => {
-    if (deleting !== null) return
-    const ok = await confirm({
-      title: '보고서 삭제',
-      message: `이 보고서와 Action ${actionCount}건이 삭제됩니다. 복구할 수 없습니다.`,
-      confirmText: '삭제',
-      variant: 'danger',
-    })
-    if (!ok) return
-    setDeleting(reportId)
-    try {
-      const res = await fetch(`/api/semi-contact/report?report_id=${reportId}`, { method: 'DELETE' })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        console.error('[contact/semi/detail] 보고서 삭제 실패', { status: res.status, error: json })
-        toast.error(json.error || `보고서를 삭제하지 못했습니다 (${res.status})`)
-        return
-      }
-      toast.success('보고서를 삭제했습니다')
-      setReloadKey(k => k + 1)
-    } catch (e) {
-      console.error('[contact/semi/detail] 보고서 삭제 실패', errorInfo(e))
-      toast.error('보고서를 삭제하지 못했습니다. 잠시 뒤 다시 시도해주세요.')
-    } finally {
-      setDeleting(null)
+      setDeletingProject(false)
     }
   }
 
@@ -416,36 +395,35 @@ function SemiProjectDetailInner() {
       <style>{SHELL_CSS}</style>
       <div className="sp-shell" style={{ maxWidth: 1280, margin: '0 auto' }}>
 
-        {/* ── 헤더 ── */}
+        {/* ── 헤더 — 목록 화살표 · 안건 · 번호 배지 / 고객사 · 사업장/부서 · 생성자 · 생성일 / 오른쪽 아이콘·버튼 ── */}
         <div style={boxStyle}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <Link href="/contact/semi" style={{ ...btnGhost(), ...smallBtn, textDecoration: 'none' }}>← 목록</Link>
-            <span className="num" style={{ ...countBadge, color: BLUE }}>{project.project_no}</span>
+            <Link href="/contact/semi" aria-label="목록으로" title="목록으로" style={{ ...iconBtn, background: 'transparent' }}>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5" /><path d="m12 19-7-7 7-7" /></svg>
+            </Link>
             <span style={{ ...cardTitle, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.title}</span>
-            <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <span className="num" style={countBadge}>{project.project_no}</span>
+            <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+              {canManageProject && (
+                <button type="button" onClick={() => setEditingProject(true)} title="Project 정보 수정" aria-label="Project 정보 수정" style={iconBtn}>
+                  <PencilIcon />
+                </button>
+              )}
               {views.length > 0 && (
-                <button type="button" onClick={() => downloadExcel('history')} disabled={exporting !== null}
-                  style={btnGhost(exporting !== null)}>
-                  {exporting === 'history' ? '만드는 중...' : '전체 이력 엑셀'}
-                </button>
+                <ExcelButton title="Excel 출력" busy={exporting === 'history'} disabled={exporting !== null}
+                  onClick={() => downloadExcel('history')} />
               )}
-              {canManageProject && (
-                <button type="button" onClick={() => setEditingProject(true)} style={btnGhost()}>정보 수정</button>
-              )}
-              <Link href={writeHref} style={{ ...btnPrimary(), textDecoration: 'none' }}>보고서 작성</Link>
-              {canManageProject && (
-                <button type="button" disabled={deleting !== null}
-                  onClick={() => deleteProject({ reports: views.length, actions: actionRows.length })}
-                  style={btnDanger(deleting !== null)}>
-                  {deleting === 'project' ? '삭제 중...' : 'Project 삭제'}
-                </button>
-              )}
+              <Link href={writeHref} style={{ ...btnPrimary(), textDecoration: 'none' }}>+ 새 접촉 보고</Link>
             </span>
           </div>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 10, fontSize: 12, color: SUB }}>
-            <span><span style={{ color: MUTED }}>{FIELD_BY_KEY.customer_name.label}</span> {project.customer_name}</span>
-            <span><span style={{ color: MUTED }}>{FIELD_BY_KEY.site_dept.label}</span> {project.site_dept?.trim() || '-'}</span>
-            <span><span style={{ color: MUTED }}>{FIELD_BY_KEY.title.label}</span> {project.title}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 6, marginLeft: 38, fontSize: 12, color: SUB }}>
+            <span>{project.customer_name}</span>
+            <span style={{ color: FAINT }}>·</span>
+            <span>{project.site_dept?.trim() || '-'}</span>
+            <span style={{ color: FAINT }}>·</span>
+            <span style={{ fontSize: 11, color: MUTED }}>{project.creator?.name ?? '-'}</span>
+            <span style={{ color: FAINT }}>·</span>
+            <span className="num" style={{ color: MUTED }}>{kstYmd(project.created_at)}</span>
           </div>
         </div>
 
@@ -536,21 +514,12 @@ function SemiProjectDetailInner() {
                   statusCell={statusSelect}
                   buttons={(
                     <>
-                      <button type="button" onClick={() => downloadExcel(selected.id)} disabled={exporting !== null}
-                        style={{ ...btnGhost(exporting !== null), ...smallBtn }}>
-                        {exporting === selected.id ? '만드는 중...' : '이 보고서 엑셀'}
-                      </button>
+                      <ExcelButton title="이 접촉 보고서 Excel 출력" busy={exporting === selected.id} disabled={exporting !== null}
+                        onClick={() => downloadExcel(selected.id)} />
                       {canManageReport(selected) && (
-                        <Link href={`${writeHref}?report_id=${selected.id}`} style={{ ...btnGhost(), ...smallBtn, textDecoration: 'none' }}>
-                          이 보고서 수정
+                        <Link href={`${writeHref}?report_id=${selected.id}`} title="이 접촉 보고서 수정" aria-label="이 접촉 보고서 수정" style={iconBtn}>
+                          <PencilIcon />
                         </Link>
-                      )}
-                      {canManageReport(selected) && (
-                        <button type="button" disabled={deleting !== null}
-                          onClick={() => deleteReport(selected.id, (actionsByReport.get(selected.id) ?? []).length)}
-                          style={{ ...btnDanger(deleting !== null), ...smallBtn }}>
-                          {deleting === selected.id ? '삭제 중...' : '이 보고서 삭제'}
-                        </button>
                       )}
                     </>
                   )}
@@ -566,6 +535,8 @@ function SemiProjectDetailInner() {
           project={project}
           onClose={() => setEditingProject(false)}
           onSaved={saved => setProject(p => (p ? { ...p, ...saved } : p))}
+          deleting={deletingProject}
+          onDelete={() => deleteProject({ reports: views.length, actions: actionRows.length })}
         />
       )}
     </main>
@@ -656,13 +627,11 @@ function ReportDetail({ view, actions, statusCell, buttons }: {
   actions: ActionView[]
   /** Action 상태 칸 — 바로 바꾸는 셀렉트(저장은 부모가 한다). */
   statusCell: (a: ActionView) => ReactNode
-  /** 엑셀·수정·삭제 버튼 — 권한·진행 상태는 부모가 들고 있다. */
+  /** 엑셀·수정 아이콘 — 권한·진행 상태는 부모가 들고 있다. */
   buttons?: ReactNode
 }) {
-  // 바뀐 칸이 있는 그룹은 처음부터 편다.
-  const [open, setOpen] = useState<Set<number>>(
-    () => new Set(REST_GROUPS.filter(g => g.fields.some(f => view.changed.has(f.key as FieldKey))).map(g => g.section.no)),
-  )
+  // 이어받은 항목은 처음에 모두 펼쳐 둔다(접기는 그대로 쓸 수 있다).
+  const [open, setOpen] = useState<Set<number>>(() => new Set(REST_GROUPS.map(g => g.section.no)))
   const value = (k: FieldKey, opts?: { big?: boolean }) => (
     <ReadField key={k} def={FIELD_BY_KEY[k]} value={view.input[k]}
       changed={view.changed.has(k)} prevValue={view.prevInput ? view.prevInput[k] : ''} big={opts?.big} />
@@ -674,7 +643,7 @@ function ReportDetail({ view, actions, statusCell, buttons }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span className="num" style={cardTitle}>{`${seqLabel(view.seq)} · ${view.input.contact_date}`}</span>
           <span style={{ fontSize: 12, color: MUTED }}>{AUTHOR_FIELD.label} {view.authorName}</span>
-          <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>{buttons}</span>
+          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>{buttons}</span>
         </div>
       </section>
 
@@ -727,7 +696,13 @@ function ReportDetail({ view, actions, statusCell, buttons }: {
         {NEXT_KEYS.map(k => value(k))}
       </Box>
 
-      <Box title="이어받은 항목" right={view.prevInput ? undefined : <span style={{ fontSize: 12, color: MUTED }}>첫 보고서</span>}>
+      <Box
+        title="이어받은 항목"
+        badge={view.prevInput && view.changed.size > 0
+          ? <span className="num" style={{ ...countBadge, color: BLUE }}>{`직전(${seqLabel(view.seq - 1)}) 대비 변경 ${view.changed.size}건`}</span>
+          : undefined}
+        right={view.prevInput ? undefined : <span style={{ fontSize: 12, color: MUTED }}>첫 보고서</span>}
+      >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {REST_GROUPS.map(g => {
             const isOpen = open.has(g.section.no)
@@ -749,8 +724,12 @@ function ReportDetail({ view, actions, statusCell, buttons }: {
                   {n > 0 && <span style={{ ...countBadge, color: BLUE }}>변경 {n}건</span>}
                 </button>
                 {isOpen && (
-                  <div style={{ ...gridStyle, padding: '4px 12px 12px' }}>
-                    {g.fields.map(f => value(f.key as FieldKey))}
+                  <div style={{ borderTop: `1px solid ${BORDER}` }}>
+                    {g.fields.map((f, i) => (
+                      <InheritRow key={f.key} first={i === 0} def={f} value={view.input[f.key as FieldKey]}
+                        changed={view.changed.has(f.key as FieldKey)}
+                        prevValue={view.prevInput ? view.prevInput[f.key as FieldKey] : ''} />
+                    ))}
                   </div>
                 )}
               </div>
@@ -762,11 +741,12 @@ function ReportDetail({ view, actions, statusCell, buttons }: {
   )
 }
 
-function Box({ title, right, children }: { title: string; right?: ReactNode; children: ReactNode }) {
+function Box({ title, badge, right, children }: { title: string; badge?: ReactNode; right?: ReactNode; children: ReactNode }) {
   return (
     <section style={cardStyle}>
       <div style={cardHeader}>
         <span style={cardTitle}>{title}</span>
+        {badge}
         {right && <span style={{ marginLeft: 'auto' }}>{right}</span>}
       </div>
       {children}
@@ -774,30 +754,119 @@ function Box({ title, right, children }: { title: string; right?: ReactNode; chi
   )
 }
 
-/** 읽기 전용 칸 하나. 바뀐 칸은 「변경됨」과 직전 보고서의 값을 작게 붙인다. */
+// ── 직전 보고서 대비 바뀐 칸 표시 ─────────────────────────────────────
+// 판정은 views 를 만들 때 changedFields(직전 보고서 → 이 보고서, 가져오기 칸만, 공백 접기·빈 값 = null)로 이미 했다.
+// 여기서는 모양만: 왼쪽 4px 막대(#234ea2) + 행 배경 + 항목명 액센트 700 + 「변경」 pill + 「직전: ~~값~~」.
+// 바뀌지 않은 칸도 같은 폭의 투명 막대를 두어 글자 줄이 흔들리지 않게 한다.
+
+/** 「변경」 pill — 채운 액센트, 흰 글자. */
+function ChangedPill() {
+  return (
+    <span style={{ fontSize: 11, fontWeight: 700, color: CARD_BG, background: BLUE, borderRadius: 99, padding: '1px 7px', lineHeight: 1.6, flexShrink: 0 }}>
+      변경
+    </span>
+  )
+}
+
+/** 「직전: ~~값~~」. 직전 값이 비었으면 취소선 없이 (비어 있음). */
+function PrevLine({ value }: { value: string }) {
+  return (
+    <div style={{ marginTop: 2, fontSize: 12, color: MUTED, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+      직전: {value.trim() ? <s>{value}</s> : '(비어 있음)'}
+    </div>
+  )
+}
+
+/** 바뀐 칸의 바깥 모양(막대·배경). */
+const changedFrame = (changed: boolean): CSSProperties => ({
+  borderLeft: `4px solid ${changed ? BLUE : 'transparent'}`,
+  background: changed ? CHANGED_BG : 'transparent',
+})
+
+/** 읽기 전용 칸 하나(이번 접촉·새롭게 확인된 내용·다음 Contact 예정일). */
 function ReadField({ def, value, changed, prevValue, big }: {
   def: FieldDef; value: string; changed: boolean; prevValue: string; big?: boolean
 }) {
   const empty = !value.trim()
   return (
-    <div>
-      <span style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span>{def.label}</span>
-        {changed && <span style={{ fontSize: 11, fontWeight: 700, color: BLUE, background: NEUTRAL_BG, borderRadius: 99, padding: '1px 7px' }}>변경됨</span>}
-      </span>
-      <div style={{
-        fontSize: big ? 14 : 13, color: empty ? FAINT : TEXT, lineHeight: 1.7,
-        whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-        ...(big ? { background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '10px 12px', minHeight: 60 } : null),
-      }}>
-        {empty ? '-' : value}
-      </div>
-      {changed && (
-        <div style={{ marginTop: 4, fontSize: 11, color: MUTED, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-          이전: {prevValue.trim() ? prevValue : '(비어 있음)'}
+    <div style={{ ...changedFrame(changed), padding: '4px 8px', borderRadius: changed ? 0 : undefined }}>
+      <span style={{ ...labelStyle, ...(changed ? { color: BLUE } : null) }}>{def.label}</span>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{
+          flex: 1, minWidth: 0,
+          fontSize: big ? 14 : 13, color: empty ? FAINT : TEXT, lineHeight: 1.7,
+          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          ...(big ? { background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '10px 12px', minHeight: 60 } : null),
+        }}>
+          {empty ? '-' : value}
         </div>
-      )}
+        {changed && <ChangedPill />}
+      </div>
+      {changed && <PrevLine value={prevValue} />}
     </div>
+  )
+}
+
+/** 이어받은 항목 한 줄 — 「항목명 | 값」. 좁으면 값이 아래로 내려간다. */
+function InheritRow({ def, value, changed, prevValue, first }: {
+  def: FieldDef; value: string; changed: boolean; prevValue: string; first: boolean
+}) {
+  const empty = !value.trim()
+  return (
+    <div style={{
+      ...changedFrame(changed),
+      display: 'flex', flexWrap: 'wrap', gap: '2px 12px', padding: '8px 12px 8px 8px',
+      borderTop: first ? 'none' : `1px solid ${BORDER}`,
+    }}>
+      <span style={{ flex: '0 0 160px', fontSize: 12, fontWeight: changed ? 700 : 600, color: changed ? BLUE : SUB, lineHeight: 1.7 }}>
+        {def.label}
+      </span>
+      <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <span style={{ minWidth: 0, fontSize: 13, color: empty ? FAINT : TEXT, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            {empty ? '-' : value}
+          </span>
+          {changed && <ChangedPill />}
+        </div>
+        {changed && <PrevLine value={prevValue} />}
+      </div>
+    </div>
+  )
+}
+
+// ── 아이콘 버튼 ───────────────────────────────────────────────────────
+
+/** 30×30 아이콘 버튼(연필 등) — 중립 배경 #f3f4f6, 글자 #6b7280, 반지름 6. */
+const iconBtn: CSSProperties = {
+  width: 30, height: 30, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  border: 'none', borderRadius: 6, background: NEUTRAL_BG, color: SUB, cursor: 'pointer', padding: 0,
+  textDecoration: 'none',
+}
+
+function PencilIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  )
+}
+
+/** Excel 출력 — 배경·테두리 없는 초록 문서(접힌 모서리) 아이콘에 흰 글자 XLS. */
+function ExcelButton({ title, onClick, disabled, busy }: { title: string; onClick: () => void; disabled?: boolean; busy?: boolean }) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} title={busy ? '만드는 중...' : title} aria-label={title}
+      style={{
+        width: 30, height: 30, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        border: 'none', background: 'transparent', padding: 0,
+        cursor: disabled ? (busy ? 'wait' : 'not-allowed') : 'pointer', opacity: disabled ? 0.5 : 1,
+      }}>
+      <svg viewBox="0 0 24 28" width="22" height="26" aria-hidden="true">
+        <path d="M3 1h12l7 7v17a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2z" fill={EXCEL_GREEN} />
+        <path d="M15 1v5a2 2 0 0 0 2 2h5z" fill={CARD_BG} fillOpacity="0.45" />
+        <text x="11.5" y="21" textAnchor="middle" fontSize="7" fontWeight="700" fill={CARD_BG} fontFamily="inherit">XLS</text>
+      </svg>
+    </button>
   )
 }
 
@@ -822,10 +891,13 @@ function projectErrors(projectNo: string, values: Record<FieldKey, string>): Par
   return out
 }
 
-function ProjectEditModal({ project, onClose, onSaved }: {
+function ProjectEditModal({ project, onClose, onSaved, onDelete, deleting }: {
   project: Project
   onClose: () => void
   onSaved: (p: Pick<Project, 'project_no' | 'customer_name' | 'site_dept' | 'title'>) => void
+  /** Project 삭제 — 확인창과 이동은 부모가 한다. 이 모달은 정보 수정 권한이 있는 사람에게만 열린다. */
+  onDelete: () => void
+  deleting: boolean
 }) {
   const toast = useToast()
   const [projectNo, setProjectNo] = useState(project.project_no)
@@ -920,8 +992,11 @@ function ProjectEditModal({ project, onClose, onSaved }: {
           </div>
         )}
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={onClose} disabled={busy} style={{ ...btnGhost(busy), flex: 1 }}>닫기</button>
-          <button type="button" onClick={submit} disabled={busy} style={{ ...btnPrimary(busy), flex: 1 }}>
+          <button type="button" onClick={onDelete} disabled={busy || deleting} style={btnDanger(busy || deleting)}>
+            {deleting ? '삭제 중...' : 'Project 삭제'}
+          </button>
+          <button type="button" onClick={onClose} disabled={busy || deleting} style={{ ...btnGhost(busy || deleting), flex: 1 }}>닫기</button>
+          <button type="button" onClick={submit} disabled={busy || deleting} style={{ ...btnPrimary(busy || deleting), flex: 1 }}>
             {busy ? '저장 중...' : '저장'}
           </button>
         </div>
