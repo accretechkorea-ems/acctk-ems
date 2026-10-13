@@ -100,12 +100,9 @@ import { parentCompanyName } from '@/components/customer/ParentPicker'
 import { euDisplayName } from '@/lib/quoteEuName'
 import { loadDraft, saveDraft, clearDraft, isDraftMeaningful, draftSavedLabel, type QuoteDraft } from '@/lib/quoteDraft'
 import {
-  resolveOnBehalf, notifyOnBehalf, checkQuoteApprovalLines, submitQuoteApproval,
+  resolveOnBehalf, notifyOnBehalf,
   type OnBehalfAssignee,
 } from '@/lib/quoteMutations'
-import LinePickerModal from '@/components/approval/LinePickerModal'
-import { QUOTE_TYPE } from '@/lib/approval/quoteApprovalKeys'
-import type { LineInput } from '@/lib/approval/types'
 import { todayKST } from '@/lib/date'
 import { nowKSTParts } from '@/lib/date'
 
@@ -137,11 +134,6 @@ function QuotePageInner() {
   const [isClient, setIsClient] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
-  // 결재선 지정 — 확인 모달 위에 겹쳐 열린다(Z.subModal). 취소하면 저장하지 않고 확정을 멈춘다.
-  const [lineOpen, setLineOpen] = useState(false)
-  // 'check' 가 돌아오기를 기다리는 중 / 서버가 돌려준 사유. 둘 다 결재선 모달 안에 쓴다.
-  const [lineChecking, setLineChecking] = useState(false)
-  const [lineError, setLineError] = useState<string | null>(null)
   // 확정 모달의 확인 버튼 중복 클릭 방지. 저장 → PDF 가 끝날 때까지 잠근다.
   const [isSubmitting, setIsSubmitting] = useState(false)
   // 임시저장 — 저장분이 있으면 이어쓸지 먼저 묻는다. 답하기 전에는 자동 저장을 시작하지 않는다
@@ -838,19 +830,15 @@ const handleDownloadPDF = async (
   }
 
   /**
-   * 결재선이 정해진 뒤의 확정 — 저장 → 결재 상신 → PDF 저장·내려받기.
+   * 확정 — 저장 → PDF 저장·내려받기.
    *
-   * 순서를 바꿀 수 없다.
-   *   · 결재선 검사('check')는 **이 함수에 들어오기 전에** 끝낸다 — 번호를 발급한 뒤에 결재선이
-   *     막히면 그 번호는 되돌릴 수 없다(create_quote 의 채번은 롤백되지 않는다).
-   *   · 상신은 저장 뒤다 — 결재 문서는 target_id 로 견적 행을 가리키므로 행이 먼저 있어야 한다.
-   *   · 상신이 실패해도 견적은 지우지 않는다(번호가 이미 나갔다). 원래 상태 그대로 두고
-   *     목록의 「결재 올리기」로 다시 올리게 안내한다 — 서버도 실패 시 상태를 되돌린다.
+   * **전자결재 기안을 만들지 않는다.** 확정과 동시에 결재를 올리던 단계는 걷어냈다(결재 자체는
+   * 그대로 돈다 — 결재함·승인·반려·삭제 요청 결재는 손대지 않았다).
+   *   · 번호는 create_quote 가 발급한다. 채번은 롤백되지 않으므로 저장이 성공하면 끝이다.
    *   · PDF 는 만들어 스토리지에 올리고 **그 자리에서 내려받는다.** 날짜 자리에 확정일(KST)이
    *     찍힌 고객 발송용 문서다 — 급한 건을 바로 보낼 수 있어야 한다는 것이 확정된 방침이다.
-   *     상신이 실패했더라도 견적이 저장됐으면 내려받는다(문서와 결재는 따로 돈다).
    */
-  const runConfirm = async (lines: LineInput[]) => {
+  const runConfirm = async () => {
     if (isSubmitting) return
     setIsSubmitting(true)
     // 저장이 끝난 뒤의 실패(PDF 생성 등)를 저장 실패와 가르는 근거. 저장 성공 시에만 채워진다.
@@ -865,16 +853,6 @@ const handleDownloadPDF = async (
       // 저장이 막히면 여기서 끝낸다 — PDF 도 만들지 않고 미리보기 번호도 그대로 둔다.
       if (!result.ok) return
       saved = result
-
-      // 결재 상신. 실패해도 견적은 저장된 채로 둔다(아래 안내가 다시 올리는 길을 알려 준다).
-      // **상신 성공 여부와 무관하게 PDF 는 아래에서 만들어 내려받는다** — 견적이 저장됐으면
-      // 고객에게 보낼 문서는 나와야 한다.
-      const sub = await submitQuoteApproval(result.quoteId, lines)
-      if (sub.ok) {
-        toast.success('결재를 올렸습니다')
-      } else {
-        toast.error(`견적은 저장되었습니다. 결재 상신에 실패했습니다(${sub.error ?? '사유 없음'}). 내 견적 목록에서 「결재 올리기」를 눌러 주세요`)
-      }
 
       // PDF 는 실제로 발급·저장된 번호로 만든다(화면에 보이던 미리보기 번호가 아니다).
       await handleDownloadPDF(
@@ -905,21 +883,6 @@ const handleDownloadPDF = async (
     } finally {
       setIsSubmitting(false)
     }
-  }
-
-  /**
-   * 결재선 모달의 [확인] — 서버에 결재선만 먼저 물어본다(부작용 없음).
-   * 막히면 모달을 닫지 않고 그 자리에 사유를 보여 준다. **번호는 발급되지 않는다.**
-   */
-  const confirmLines = async (lines: LineInput[]) => {
-    if (lineChecking || isSubmitting) return
-    setLineChecking(true)
-    const chk = await checkQuoteApprovalLines(lines)
-    setLineChecking(false)
-    if (!chk.ok) { setLineError(chk.error ?? '결재선을 쓸 수 없습니다'); return }
-    setLineError(null)
-    setLineOpen(false)
-    await runConfirm(lines)
   }
 
   useEffect(() => { setIsClient(true) }, [])
@@ -1937,9 +1900,8 @@ const handleDownloadPDF = async (
             <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, fontWeight: 500 }}>{quoteNo} <span style={{ color: '#9ca3af' }}>(예상 번호 — 확정할 때 발급)</span></div>
             <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: '12px 14px', marginBottom: 20 }}>
               <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.8 }}>
-                확정하면 결재선을 지정해 결재를 상신합니다.
-                <br />결재를 <b>회수·폐기</b>한 견적은 직접 삭제할 수 있고, <b>반려·승인</b>된 견적은
-                관리자 승인(삭제 요청) 후 삭제됩니다.
+                확정하면 <b>견적번호가 발급되고 실적으로 기록됩니다.</b>
+                <br />견적서 PDF 가 바로 만들어져 내려받아집니다.
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 24 }}>
@@ -1977,13 +1939,12 @@ const handleDownloadPDF = async (
                 style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: isSubmitting ? 'not-allowed' : 'pointer', color: '#111827', opacity: isSubmitting ? 0.6 : 1 }}>
                 취소
               </button>
-              {/* 여기서 바로 저장하지 않는다 — 결재선을 먼저 받는다. 결재선이 서버 검사를 통과한
-                  뒤에야 번호가 발급된다(runConfirm · confirmLines 설명). */}
+              {/* 여기서 바로 확정한다 — 결재선을 받는 단계는 없앴다(runConfirm 설명). */}
               <button onClick={() => {
                 if (isSubmitting) return
-                // 결재선은 상신자(본인)를 빼고 짜야 하므로 로그인 정보가 먼저 있어야 한다.
+                // 작성자 정보(담당자 줄·대필 판정)가 PDF 에 들어가므로 먼저 있어야 한다.
                 if (!engineer) { toast.error('엔지니어 정보를 불러오는 중입니다'); return }
-                setLineError(null); setLineOpen(true)
+                void runConfirm()
               }}
                 disabled={isSubmitting}
                 style={{ flex: 1, padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.6 : 1 }}>
@@ -1993,18 +1954,6 @@ const handleDownloadPDF = async (
           </div>
         </div>
       )}
-
-      {/* 결재선 지정 — 확인 모달 위에 겹쳐 열린다(Z.subModal). 취소하면 아무것도 저장되지 않고
-          확인 모달이 그대로 남는다(금액을 다시 보고 결재선을 고쳐 잡을 수 있다). */}
-      <LinePickerModal
-        open={lineOpen}
-        onClose={() => { setLineOpen(false); setLineError(null) }}
-        onConfirm={confirmLines}
-        myId={engineer?.engineer_id ?? null}
-        docType={QUOTE_TYPE}
-        serverError={lineError}
-        busy={lineChecking}
-      />
     </div>
   )
 }
