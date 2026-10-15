@@ -189,13 +189,19 @@ export const SELF_DELETE_MESSAGES: Record<SelfDeleteBlock, string> = {
  *
  * docs 가 null 이면 'unknown' 으로 막는다 — 모르는 상태에서 삭제를 열면 반려·승인된 견적이
  * 빠져나간다. 서버는 늘 자기가 읽은 값을 넣으므로 null 이 오지 않는다.
+ *
+ * gate 가 'exempt' 여도 **문서 이력을 건너뛰지 않는다.** 견적 자동 기안을 멈추면서
+ * QUOTE_APPROVAL_START_AT 이 먼 미래로 갔고(lib/quoteStatus.ts) 그래서 지금은 모든 견적이
+ * 'exempt' 다. 옛 자동 기안으로 만들어진 완료·진행중·반려·회수 문서가 그대로 남아 있으므로
+ * exempt 는 「문서가 없을 때(none·이력 미확인)만」 옛 규칙으로 바로 판정하고, 문서가 있으면
+ * 아래 ①~③ 을 그대로 지난다(상수 변경 전과 같은 판정).
  */
 export function selfDeleteVerdict(input: SelfDeleteInput): SelfDeleteVerdict {
   const block = (b: SelfDeleteBlock): SelfDeleteVerdict =>
     ({ ok: false, block: b, message: SELF_DELETE_MESSAGES[b] })
 
-  // 결재 도입 전 견적 — 결재 문서가 있을 수 없다. 이력을 못 읽었더라도 옛 규칙으로 판정한다.
-  if (input.gate === 'exempt') {
+  // 결재 문서 이력이 있으면 exempt 라도 먼저 본다 — 옛 자동 기안으로 만들어진 문서가 남아 있다.
+  if (input.gate === 'exempt' && (input.docs == null || input.docs === 'none')) {
     return isSelfDeletable(input.status) ? { ok: true, withDocuments: false } : block('status')
   }
 
