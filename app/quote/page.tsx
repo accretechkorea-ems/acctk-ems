@@ -10,18 +10,17 @@ import { useQuoteCustomer } from '@/hooks/quote/useQuoteCustomer'
 import { useQuoteRows } from '@/hooks/quote/useQuoteRows'
 import { useQuotePrefill } from '@/hooks/quote/useQuotePrefill'
 import { useQuoteDraftSync } from '@/hooks/quote/useQuoteDraftSync'
-import { useQuoteSubmit, NO_INITIALS_MESSAGE } from '@/hooks/quote/useQuoteSubmit'
+import { useQuoteSubmit } from '@/hooks/quote/useQuoteSubmit'
 import AccessGate from '@/components/common/AccessGate'
-import { BlobProvider } from '@react-pdf/renderer'
 import type { Engineer, QuoteRow } from './types'
 import { calcRow, calcTotals } from './calc'
 import { numKR } from './format'
 import { useDebounce } from './useDebounce'
-import { QuotePDFDoc } from './QuotePDFDoc'
 import ProfitPanel from './ProfitPanel'
 import CustomerCard from '@/components/quote/CustomerCard'
 import PriceGuidePopup from '@/components/quote/PriceGuidePopup'
 import RowAddButtons from '@/components/quote/RowAddButtons'
+import QuotePreviewPane from '@/components/quote/QuotePreviewPane'
 import QuoteItemRow from './QuoteItemRow'
 import { Z } from '@/lib/zIndex'
 import { DEFAULT_TERMS, normalizeTerms, type Terms } from '@/lib/quoteTerms'
@@ -720,97 +719,29 @@ function QuotePageInner() {
           </div>
         </div>
 
-        {/* PDF 미리보기 — 480px 밑으로 눌리면 글자가 읽히지 않아 그 전에 아래로 내려간다 */}
-        <div style={{ flex: '1 1 480px', minWidth: 0 }}>
-          <div style={{ background: '#f3f4f6', borderRadius: 8, overflow: 'hidden', border: '1px solid #ebebeb', height: 'calc(100vh - 40px)', position: 'sticky', top: 20, display: 'flex', flexDirection: 'column' }}>
-
-            {/* 헤더 */}
-            <div style={{ background: '#234ea2', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: 500, marginBottom: 2 }}>예상 견적 번호</div>
-                {/* 조회가 실패했으면 번호 대신 그 사실을 낸다 — 잘못된 번호를 그럴듯하게 보여주지 않는다.
-                    파란 헤더 위라 붉은 글씨는 읽히지 않으므로, 흰 글씨에 반투명 테두리로 구분한다(기존 대필 배지와 같은 방식). */}
-                {missingInitials || seqLoadError ? (
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.5)' }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                    <span style={{ fontSize: 12, color: '#ffffff', fontWeight: 700 }}>
-                      {missingInitials ? '이니셜 미등록 — 견적번호를 만들 수 없습니다' : `예상 번호 조회 실패 (${seqLoadError}) — 번호는 확정할 때 발급됩니다`}
-                    </span>
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 14, color: '#ffffff', fontWeight: 600 }}>{quoteNo}</div>
-                )}
-              </div>
-              {/* 대필 중임을 작성하는 내내 보이게 둔다 — 남의 실적으로 저장되는 화면이라 헷갈리면 안 된다. */}
-              {onBehalf && (
-                <span style={{ padding: '4px 10px', borderRadius: 99, background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.5)', color: '#ffffff', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                  {`${onBehalf.name} ${onBehalf.position || ''}`.trim()} 대신 작성 중
-                </span>
-              )}
-              {/* 번호는 확정할 때 DB 가 발급하므로, 예상 번호를 못 읽었다고 확정을 막지 않는다.
-                  이니셜이 없으면 번호를 만들 수 없어 누르는 즉시 안내하고 멈춘다. */}
-              {(() => {
-                const locked = isSaving
-                return (
-                  <button
-                    onClick={() => {
-                      if (missingInitials) { toast.error(NO_INITIALS_MESSAGE); return }
-                      if (!runValidation()) return
-                      setShowConfirmModal(true)
-                    }}
-                    disabled={locked}
-                    style={{
-                      padding: '6px 14px', boxSizing: 'border-box',
-                      background: locked ? 'transparent' : '#ffffff',
-                      color: locked ? '#ffffff' : '#234ea2',
-                      border: locked ? '1px solid #ffffff' : 'none',
-                      borderRadius: 6, fontWeight: 600, fontSize: 13,
-                      cursor: locked ? 'not-allowed' : 'pointer',
-                      transition: 'background 0.15s ease',
-                    }}
-                    onMouseEnter={e => { if (!locked) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6' }}
-                    onMouseLeave={e => { if (!locked) (e.currentTarget as HTMLButtonElement).style.background = '#ffffff' }}>
-                    {isSaving ? '저장 중...' : '견적 확정'}
-                  </button>
-                )
-              })()}
-            </div>
-
-            {/* PDF — debounced 값 사용으로 깜빡임 방지 */}
-            {isClient && (
-              <div style={{ flex: 1, minWidth: 0, padding: 0, overflow: 'hidden' }}>
-                <BlobProvider document={
-                  <QuotePDFDoc
-                    company={debouncedCompany}
-                    receiver={debouncedReceiver}
-                    quoteNo={quoteNo}
-                    dateDisplay={dateDisplay}
-                    rows={debouncedRows}
-                    remarks={debouncedFinalRemarks}
-                    engineerName={engineerName}
-                    engineerTel={engineerTel}
-                    totalSupply={pdfTotalSupply}
-                    totalTax={pdfTotalTax}
-                    totalAmount={pdfTotalAmount}
-                    showWatermark={true}
-                    showSignature={showSignature}
-                    terms={previewTerms}
-                  />
-                }>
-                  {({ url }) => url ? (
-                    <iframe
-                      title="견적서 미리보기"
-                      src={`${url}#view=FitH&toolbar=0&navpanes=0&scrollbar=0`}
-                      style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
-                    />
-                  ) : null}
-                </BlobProvider>
-              </div>
-            )}
-          </div>
-        </div>
+        <QuotePreviewPane
+          isClient={isClient}
+          missingInitials={missingInitials}
+          seqLoadError={seqLoadError}
+          quoteNo={quoteNo}
+          onBehalf={onBehalf}
+          isSaving={isSaving}
+          toast={toast}
+          runValidation={runValidation}
+          setShowConfirmModal={setShowConfirmModal}
+          dateDisplay={dateDisplay}
+          engineerName={engineerName}
+          engineerTel={engineerTel}
+          showSignature={showSignature}
+          previewTerms={previewTerms}
+          debouncedCompany={debouncedCompany}
+          debouncedReceiver={debouncedReceiver}
+          debouncedRows={debouncedRows}
+          debouncedFinalRemarks={debouncedFinalRemarks}
+          pdfTotalSupply={pdfTotalSupply}
+          pdfTotalTax={pdfTotalTax}
+          pdfTotalAmount={pdfTotalAmount}
+        />
       </div>
 
       {/* 견적 확정 확인 모달 */}
