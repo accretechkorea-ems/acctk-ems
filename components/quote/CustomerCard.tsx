@@ -19,6 +19,7 @@ import { DEFAULT_TERMS, type Terms } from '@/lib/quoteTerms'
 import RemarksEditor from '@/components/quote/RemarksEditor'
 import TermsEditor from '@/components/quote/TermsEditor'
 import type { CustomerResult } from '@/app/quote/types'
+import type { QuoteCategory } from '@/lib/quoteCategories'
 import type { SalesOpportunity } from '@/components/customer/types'
 
 
@@ -93,19 +94,43 @@ export type CustomerCardDoc = {
   setTerms: React.Dispatch<React.SetStateAction<Terms>>
 }
 
-// prop 은 여섯 개다(3b 정리 전에는 52개였다).
-// errors·clearError 는 사명·E.U 두 묶음이 함께 쓰는 검증 통로라 묶지 않고 그대로 둔다.
+/**
+ * 견적 분류 — **작성 첫 화면의 가장 위**다. 활성 분류만 고를 수 있고, 고르기 전에는 확정이
+ * 막힌다(품목 입력은 막지 않는다 — 금액을 먼저 잡아 보는 흐름을 끊지 않으려고).
+ * 「분류 나누기」를 켜면 각 품목 줄에 분류 선택칸이 생긴다(QuoteItemRow).
+ */
+export type CustomerCardCategory = {
+  value: string
+  setValue: (v: string) => void
+  /** 고를 수 있는 분류(활성만). */
+  categories: QuoteCategory[]
+  loading: boolean
+  lineSplitOn: boolean
+  /** 켜고 끄기. 끌 때 줄에 값이 남아 있으면 부르는 쪽이 확인창을 띄운다. */
+  onToggleLineSplit: () => void
+  /** 지금 줄별 분류가 들어간 줄 수. 「분류 나누기」 버튼 옆에 보여 준다. */
+  splitRowCount: number
+}
+
+// prop 은 일곱 개다(3b 정리 전에는 52개였다).
+// errors·clearError 는 분류·사명·E.U 세 묶음이 함께 쓰는 검증 통로라 묶지 않고 그대로 둔다.
 export type CustomerCardProps = {
-  errors: { company?: string; eu?: string; items?: string; expenses?: string }
-  clearError: (key: 'company' | 'eu' | 'items' | 'expenses') => void
+  errors: { category?: string; company?: string; eu?: string; items?: string; expenses?: string }
+  clearError: (key: 'category' | 'company' | 'eu' | 'items' | 'expenses') => void
+  category: CustomerCardCategory
   customer: CustomerCardCustomer
   eu: CustomerCardEu
   opportunity: CustomerCardOpportunity
   doc: CustomerCardDoc
 }
 
-export default function CustomerCard({ errors, clearError, customer, eu, opportunity, doc }: CustomerCardProps) {
+export default function CustomerCard({ errors, clearError, category, customer, eu, opportunity, doc }: CustomerCardProps) {
   // 묶음을 풀어 **종전과 같은 이름**으로 둔다 — 아래 JSX 는 한 줄도 바뀌지 않았다.
+  const {
+    value: categoryValue, setValue: setCategoryValue,
+    categories, loading: categoriesLoading,
+    lineSplitOn, onToggleLineSplit, splitRowCount,
+  } = category
   const {
     selectedCustomer, customerQuery, customerResults, customerSearchOpen, setCustomerSearchOpen,
     customerKeys, customerSearchRef, customerListRef,
@@ -143,6 +168,55 @@ export default function CustomerCard({ errors, clearError, customer, eu, opportu
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
       <div style={{ width: 3, height: 14, background: '#234ea2', borderRadius: 6, flexShrink: 0 }} />
       <span style={{ fontWeight: 800, fontSize: 13, color: '#111827' }}>기본 정보</span>
+    </div>
+
+    {/* 견적 분류 — **가장 먼저 고른다.** 고르기 전에는 확정이 막힌다(품목 입력은 막지 않는다).
+        비활성 분류는 목록에 없다 — 새 견적은 쓰는 분류만 고른다. */}
+    <div style={{ marginBottom: errors.category ? 8 + 18 : 8 }}>
+      <div className="q-box" style={{ border: errors.category ? errBorder : undefined }}>
+        <span className="q-box-label">분류</span>
+        <select
+          className="q-box-field"
+          value={categoryValue}
+          disabled={categoriesLoading}
+          onChange={e => { setCategoryValue(e.target.value); clearError('category') }}
+          style={{ color: categoryValue ? '#111827' : '#9ca3af' }}
+        >
+          <option value="">{categoriesLoading ? '불러오는 중...' : '견적 분류 선택 (필수)'}</option>
+          {categories.map(c => (
+            <option key={c.code} value={c.code}>{c.label}</option>
+          ))}
+        </select>
+        <FieldError message={errors.category} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 2, whiteSpace: 'nowrap' }} />
+      </div>
+      {/* 분류 나누기 — 평소에는 줄별 분류 칸을 숨긴다(한 견적에 여러 분류가 섞이는 일이 드물다).
+          켜면 매출 줄(가격표·수동입력·서비스비)에 분류 선택칸이 생긴다. */}
+      <div style={{ marginTop: 4, marginLeft: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={onToggleLineSplit}
+          disabled={!categoryValue && !lineSplitOn}
+          title={!categoryValue && !lineSplitOn ? '견적 분류를 먼저 고르세요' : undefined}
+          style={{
+            padding: '3px 9px', borderRadius: 6, fontSize: 11, fontWeight: 700,
+            background: lineSplitOn ? '#234ea2' : '#f3f4f6',
+            color: lineSplitOn ? '#ffffff' : (!categoryValue ? '#d1d5db' : '#6b7280'),
+            border: 'none', cursor: (!categoryValue && !lineSplitOn) ? 'not-allowed' : 'pointer',
+            whiteSpace: 'nowrap', transition: 'background 0.15s ease',
+          }}>
+          {lineSplitOn ? '분류 나누기 끄기' : '분류 나누기'}
+        </button>
+        <span style={{ fontSize: 11, color: '#9ca3af' }}>
+          {/* 목록을 못 읽었으면 그 사실을 알린다 — 빈 드롭다운만 두면 「왜 확정이 안 되나」가 된다. */}
+          {!categoriesLoading && categories.length === 0
+            ? '분류 목록을 불러오지 못했습니다. 새로고침하거나 관리자에게 문의해주세요'
+            : lineSplitOn
+              ? (splitRowCount > 0
+                  ? `${splitRowCount}개 줄에 다른 분류를 지정했습니다`
+                  : '줄마다 다른 분류를 고를 수 있습니다. 비워 두면 견적 분류를 따릅니다')
+              : '줄마다 분류가 다를 때만 켜세요'}
+        </span>
+      </div>
     </div>
 
     {/* 사명 + 대리점 체크박스 */}

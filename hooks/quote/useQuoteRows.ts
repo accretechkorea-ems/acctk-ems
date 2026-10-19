@@ -27,12 +27,17 @@ import { useCallback, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ExpensePreset, ExpenseRow, PriceItem, QuoteRow } from '@/app/quote/types'
 import { calcExpense, calcRow, createExpenseRow, createRow } from '@/app/quote/calc'
+import { canSplitRowKind, type QuoteCategory } from '@/lib/quoteCategories'
 
 export type UseQuoteRowsArgs = {
   supabase: SupabaseClient
   exchangeRate: number
   delivery: string
   setDelivery: (v: string) => void
+  /** 고를 수 있는 견적 분류(활성만). 줄별 분류 선택칸이 쓴다. */
+  categories: QuoteCategory[]
+  /** 「분류 나누기」가 켜져 있는가. 꺼져 있으면 줄별 분류 선택칸을 그리지 않는다. */
+  lineSplitOn: boolean
 }
 
 /** 여러 행이 함께 **읽는** 값. 행 카드 하나하나가 따로 받을 이유가 없는 것만 모았다. */
@@ -48,6 +53,10 @@ export type QuoteRowsCtx = {
   presetError: boolean
   invalidExpenseIds: Set<string>
   totalExpense: number
+  /** 「분류 나누기」가 켜져 있는가. 꺼져 있으면 행 카드가 분류 선택칸을 그리지 않는다. */
+  lineSplitOn: boolean
+  /** 줄별 분류 선택칸의 후보(활성 분류만). */
+  categories: QuoteCategory[]
 }
 
 /** 여러 행이 함께 **쓰는** 콜백. 전부 useCallback 으로 정체가 유지된다. */
@@ -60,6 +69,8 @@ export type QuoteRowsActions = {
   handleSelect: (rowId: string, item: PriceItem) => void
   clearItem: (rowId: string) => void
   removeRow: (rowId: string) => void
+  /** 줄별 분류를 바꾼다. 빈 글자를 주면 null(= 견적 분류를 따른다)로 돌아간다. */
+  setRowCategory: (rowId: string, code: string) => void
   setSearchOpen: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   setEditingProfitRate: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   setProfitRateInput: React.Dispatch<React.SetStateAction<Record<string, string>>>
@@ -69,7 +80,9 @@ export type QuoteRowsActions = {
   selectExpensePreset: (expenseId: string, itemName: string) => void
 }
 
-export function useQuoteRows({ supabase, exchangeRate, delivery, setDelivery }: UseQuoteRowsArgs) {
+export function useQuoteRows({
+  supabase, exchangeRate, delivery, setDelivery, categories, lineSplitOn,
+}: UseQuoteRowsArgs) {
   const [rows, setRows] = useState<QuoteRow[]>([createRow()])
   const [expensePresets, setExpensePresets] = useState<ExpensePreset[]>([])
   const [presetError, setPresetError] = useState(false)
@@ -132,6 +145,16 @@ export function useQuoteRows({ supabase, exchangeRate, delivery, setDelivery }: 
   const removeRow = useCallback((rowId: string) =>
     setRows(prev => prev.filter(r => r.id !== rowId)), [])
 
+  // 줄별 분류 — 빈 글자는 null 로 눕힌다(「견적 분류를 따른다」가 그 뜻이다).
+  // 매출 줄이 아니면 값을 넣지 않는다(domestic·discount 는 통계에서 쓸 자리가 없다).
+  const setRowCategory = useCallback((rowId: string, code: string) =>
+    setRows(prev => prev.map(r =>
+      r.id !== rowId ? r : { ...r, category: canSplitRowKind(r.row_kind) ? (code || null) : null })), [])
+
+  /** 모든 줄의 분류를 지운다. 「분류 나누기」를 끌 때 쓴다. */
+  const clearAllRowCategories = useCallback(() =>
+    setRows(prev => prev.map(r => r.category == null ? r : { ...r, category: null })), [])
+
   // 부대비용은 서비스비 행(견적당 1건)에 속한다. 별도 state 없이 rows 에서 파생시킨다.
   const serviceRow = rows.find(r => r.row_kind === 'service') ?? null
   // 할인도 서비스비와 같이 견적당 1건이다(총액에서 한 번만 뺀다).
@@ -172,18 +195,19 @@ export function useQuoteRows({ supabase, exchangeRate, delivery, setDelivery }: 
     editingProfitRate, profitRateInput,
     expensePresets, presetError,
     invalidExpenseIds, totalExpense,
+    lineSplitOn, categories,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [rows.length, searchQuery, searchResults, searchOpen,
        editingProfitRate, profitRateInput, expensePresets, presetError,
-       invalidExpenseKey, totalExpense])
+       invalidExpenseKey, totalExpense, lineSplitOn, categories])
 
   const actions = useMemo<QuoteRowsActions>(() => ({
     updateRow, addSubLine, updateSubLine, removeSubLine,
-    handleSearch, handleSelect, clearItem, removeRow,
+    handleSearch, handleSelect, clearItem, removeRow, setRowCategory,
     setSearchOpen, setEditingProfitRate, setProfitRateInput,
     addExpense, removeExpense, updateExpense, selectExpensePreset,
   }), [updateRow, addSubLine, updateSubLine, removeSubLine,
-       handleSearch, handleSelect, clearItem, removeRow,
+       handleSearch, handleSelect, clearItem, removeRow, setRowCategory,
        addExpense, removeExpense, updateExpense, selectExpensePreset])
 
   return {
@@ -203,6 +227,8 @@ export function useQuoteRows({ supabase, exchangeRate, delivery, setDelivery }: 
     addSubLine,
     removeSubLine,
     removeRow,
+    setRowCategory,
+    clearAllRowCategories,
     serviceRow,
     discountRow,
     expenses,

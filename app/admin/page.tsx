@@ -16,6 +16,7 @@ import { withTeamPerm, invalidateTeamPerms, loadTeamPerms } from '@/lib/teamPerm
 // 팀 권한은 메뉴 단위다. 목록·묶음·파생 규칙은 모두 이 파일 한곳에서 온다.
 import { CHECKABLE_MENUS, checkableGroups, MENU_PERMS } from '@/lib/menuPerms'
 import AccessGate from '@/components/common/AccessGate'
+import QuoteCategoryManager from '@/components/admin/QuoteCategoryManager'
 import { useOffices, selectableOffices, invalidateOffices, type Office } from '@/lib/offices'
 import { geocodeAddress } from '@/lib/geocode'
 import { ROLE_COLORS, getCategoryColor } from '@/lib/categoryColors'
@@ -208,6 +209,8 @@ function AdminPageInner() {
   const [logLoading, setLogLoading] = useState(false)
 
   const [showPresetModal, setShowPresetModal] = useState(false)
+  // ── 견적 분류 관리 ── 목록·쓰기는 모달 컴포넌트가 들고 있다(RLS 가 권한을 본다).
+  const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [presets, setPresets] = useState<ExpensePreset[]>([])
   const [presetLoading, setPresetLoading] = useState(false)
   const [editingPreset, setEditingPreset] = useState<{ presetId: number; itemName: string; unitPrice: string } | null>(null)
@@ -1162,6 +1165,26 @@ function AdminPageInner() {
             </button>
           </div>
 
+          {/* 견적 분류 — 아이콘은 이모지 대신 선 아이콘을 쓴다(디자인 규칙).
+              주변 카드는 이모지를 쓰던 옛 모양이라 이 카드만 다르다. */}
+          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ height: 28, marginBottom: 12, display: 'flex', alignItems: 'center', color: BLUE }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 7V5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v2" /><path d="M3 7h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              </svg>
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>견적 분류 관리</div>
+            <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>견적 작성 시 고르는 분류(BCT · CMM · KOLAS 등)를 추가하거나 이름·순서·사용 여부를 바꿉니다.</div>
+            {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
+            <div style={{ flex: 1 }} />
+            <button
+              onClick={() => setShowCategoryModal(true)}
+              disabled={!isSuperAdmin(currentEngineer)}
+              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
+              관리하기
+            </button>
+          </div>
+
           <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>📊</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>가격표 업로드</div>
@@ -1573,6 +1596,14 @@ function AdminPageInner() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── 견적 분류 관리 모달 ── 목록·쓰기는 컴포넌트가 들고 있다. */}
+      {showCategoryModal && (
+        <QuoteCategoryManager
+          onClose={() => setShowCategoryModal(false)}
+          canEdit={isSuperAdmin(currentEngineer)}
+        />
       )}
 
       {/* ── 부대비용 단가 모달 ── */}

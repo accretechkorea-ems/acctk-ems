@@ -43,6 +43,15 @@ export type QuoteDraft = {
    */
   termsOpen?: boolean
   terms?: Terms
+  /**
+   * 견적 분류(quotes.category) — **선택 필드**다. 옛 초안에는 없으므로 복원하는 쪽이 없으면
+   * 빈 글자(미선택)로 둔다(버전을 올리지 않는 이유는 위 terms 와 같다).
+   * 줄별 분류는 rows 안에 들어 있어 따로 담지 않는다.
+   *
+   * isDraftMeaningful 에는 **넣지 않는다** — 분류는 화면을 열고 가장 먼저 고르는 값이라,
+   * 이것만으로 「작성 중이던 내용」을 만들면 들어왔다 나가기만 해도 다음 방문에 안내가 뜬다.
+   */
+  category?: string
   rows: QuoteRow[]
 }
 

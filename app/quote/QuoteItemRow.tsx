@@ -6,6 +6,7 @@ import { useListKeyboard } from '@/hooks/useListKeyboard'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import type { PriceItem, QuoteRow, RowKind } from './types'
 import type { QuoteRowsActions, QuoteRowsCtx } from '@/hooks/quote/useQuoteRows'
+import { canSplitRowKind } from '@/lib/quoteCategories'
 import { numKR } from './format'
 import { DISCOUNT_LABELS } from './types'
 import { inp } from './styles'
@@ -45,11 +46,11 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
   const {
     rowCount, searchQuery, searchResults, searchOpen,
     editingProfitRate, profitRateInput, expensePresets, presetError,
-    invalidExpenseIds, totalExpense,
+    invalidExpenseIds, totalExpense, lineSplitOn, categories,
   } = ctx
   const {
     updateRow, addSubLine, updateSubLine, removeSubLine,
-    handleSearch, handleSelect, clearItem, removeRow,
+    handleSearch, handleSelect, clearItem, removeRow, setRowCategory,
     setSearchOpen, setEditingProfitRate, setProfitRateInput,
     addExpense, removeExpense, updateExpense, selectExpensePreset,
   } = actions
@@ -256,6 +257,25 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
           </button>
           )}
         </div>
+      </div>
+      )}
+
+      {/* 줄별 분류 — 「분류 나누기」를 켰을 때만, 그리고 매출 줄에만 나온다.
+          비워 두면 견적 분류를 따른다(= quote_items.category 가 null 로 저장된다). */}
+      {lineSplitOn && canSplitRowKind(row.row_kind) && (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', width: 44, flexShrink: 0 }}>분류</label>
+        <select
+          className="q-input"
+          value={row.category ?? ''}
+          onChange={e => setRowCategory(row.id, e.target.value)}
+          style={{ ...inp, flex: 1, minWidth: 0, cursor: 'pointer', color: row.category ? '#111827' : '#9ca3af' }}
+        >
+          <option value="">견적 분류 그대로</option>
+          {categories.map(c => (
+            <option key={c.code} value={c.code}>{c.label}</option>
+          ))}
+        </select>
       </div>
       )}
 

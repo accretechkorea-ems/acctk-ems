@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
   const { data: quote, error } = await supabaseAdmin
     .from('quotes')
-    .select('quote_id, quote_number, customer_id, dealer_id, opportunity_id, recipient, delivery_info, note, quote_type, engineer_id, created_by, terms')
+    .select('quote_id, quote_number, customer_id, dealer_id, opportunity_id, recipient, delivery_info, note, quote_type, engineer_id, created_by, terms, category')
     .eq('quote_id', quoteId)
     .maybeSingle()
   if (error) {
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
   // 품목 — 가격표 품목은 selectedItem 복원을 위해 price_list 전체를 함께 가져온다.
   const { data: items } = await supabaseAdmin
     .from('quote_items')
-    .select('item_id, price_list_id, part_code, row_kind, product_name, quantity, unit_price_jpy, unit_price_krw, supply_amount, profit_rate, tariff_rate, sub_lines, price_list(*)')
+    .select('item_id, price_list_id, part_code, row_kind, product_name, quantity, unit_price_jpy, unit_price_krw, supply_amount, profit_rate, tariff_rate, sub_lines, category, price_list(*)')
     .eq('quote_id', quoteId)
     .order('item_id', { ascending: true })
 
@@ -76,6 +76,8 @@ export async function POST(req: Request) {
       delivery_info: quote.delivery_info,
       note: quote.note,
       quote_type: quote.quote_type,
+      // 견적 분류 — 화면이 활성 분류인지 다시 보고, 아니면 비워 다시 고르게 한다.
+      category: quote.category,
     },
     items: items ?? [],
     expenses: expenses ?? [],

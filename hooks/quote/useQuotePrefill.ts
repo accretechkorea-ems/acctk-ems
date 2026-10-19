@@ -20,6 +20,7 @@ import type { CustomerResult, ExpenseRow, PriceItem, QuoteRow, RowKind } from '@
 import { calcExpense, calcRow, createExpenseRow, createRow } from '@/app/quote/calc'
 import { DEFAULT_TERMS, changedTerms, termsOf, type Terms } from '@/lib/quoteTerms'
 import { subLinesOf } from '@/lib/quoteSubLines'
+import { activeQuoteCategories, canSplitRowKind, loadQuoteCategories } from '@/lib/quoteCategories'
 import { parentCompanyName } from '@/components/customer/ParentPicker'
 import { resolveOnBehalf, type OnBehalfAssignee } from '@/lib/quoteMutations'
 import type { useToast } from '@/components/common/Toast'
@@ -32,6 +33,8 @@ export type DuplicatePayload = {
     recipient: string | null; delivery_info: string | null; note: string | null; quote_type: string | null
     /** 조건 네 줄(quotes.terms). null 이면 모두 기본값이다. */
     terms: unknown
+    /** 견적 분류(quotes.category). null 이면 미분류(개편 전 견적)다. */
+    category: string | null
   }
   items: {
     price_list_id: number | null; part_code: string | null; row_kind: string | null
@@ -40,6 +43,8 @@ export type DuplicatePayload = {
     profit_rate: number | null; tariff_rate: number | null
     /** 품명 아래 설명 줄(quote_items.sub_lines). null 이면 줄이 없다. */
     sub_lines: unknown
+    /** 줄별 분류(quote_items.category). null 이면 견적 분류를 따랐다. */
+    category: string | null
     price_list: PriceItem | null
   }[]
   expenses: { item_name: string | null; unit_price: number | null; headcount: number | null; days: number | null }[]
@@ -71,6 +76,8 @@ export type UseQuotePrefillArgs = {
   setTermsOpen: React.Dispatch<React.SetStateAction<boolean>>
   setTerms: React.Dispatch<React.SetStateAction<Terms>>
   setRemarks: React.Dispatch<React.SetStateAction<string>>
+  setCategory: React.Dispatch<React.SetStateAction<string>>
+  setLineSplitOn: React.Dispatch<React.SetStateAction<boolean>>
   loadOpportunities: (cid: number | null) => Promise<void>
   setOpportunityId: React.Dispatch<React.SetStateAction<number | null>>
   handleCustomerSelect: (c: CustomerResult) => void
@@ -85,6 +92,7 @@ export function useQuotePrefill({
   setOnBehalf, setRows, setIsDealer, setCustomerId, setEuCustomerId,
   setSelectedCustomer, setCustomerQuery, setCompany, setSelectedEU, setEuQuery,
   resolveEuParent, setReceiver, setDelivery, setTermsOpen, setTerms, setRemarks,
+  setCategory, setLineSplitOn,
   loadOpportunities, setOpportunityId, handleCustomerSelect,
   setCustomerResults, setCustomerSearchOpen, setPrefillNotice,
 }: UseQuotePrefillArgs) {
@@ -93,6 +101,10 @@ export function useQuotePrefill({
   // — 과거 환율이 남으면 단가가 그때 값으로 굳어 버린다.
   const applyDuplicate = async (payload: DuplicatePayload) => {
     const { quote, items, expenses } = payload
+    // 분류 목록을 **여기서 기다린다.** prop 으로 받으면 목록이 늦게 오는 경우 멀쩡한 분류를
+    // 「비활성」으로 잘못 보고 비워 버린다(둘 다 마운트 때 띄우는 조회라 도착 순서가 갈린다).
+    // loadQuoteCategories 는 모듈 캐시라 이미 읽었으면 그 자리에서 돌아온다.
+    const activeList = activeQuoteCategories(await loadQuoteCategories())
     // 부대비용은 서비스비 행 하나에 통째로 붙는다(견적당 1건).
     const expenseRows: ExpenseRow[] = expenses.map(e => calcExpense({
       ...createExpenseRow(),
@@ -122,10 +134,24 @@ export function useQuotePrefill({
         price_mode: (kind === 'price_list' || kind === 'manual_jpy') && unitKrw % 1000 !== 0 ? 'price' : 'rate',
         // 품명 아래 설명 줄 — 저장값을 그대로 되살린다. 없거나 깨졌으면 빈 배열이다(subLinesOf).
         subLines: subLinesOf(it.sub_lines),
+        // 줄별 분류 — **살아 있는 분류이고 매출 줄일 때만** 되살린다.
+        // 비활성이 된 분류를 그대로 들고 오면 선택칸에 없는 값이 남아 고칠 수 없다.
+        category: (canSplitRowKind(kind) && it.category != null
+          && activeList.some(c => c.code === it.category)) ? it.category : null,
         expenses: kind === 'service' ? expenseRows : [],
       }, rateRef.current)
     })
     setRows(built.length > 0 ? built : [createRow()])
+
+    // 견적 분류 — 원본 값을 그대로 가져온다. 다만 **미분류(null)거나 비활성이 된 분류**면
+    // 비워 둬서 다시 고르게 한다(없는 값을 고른 것처럼 보이면 그대로 확정될 수 있다).
+    const dupCategory = quote.category != null && activeList.some(c => c.code === quote.category)
+      ? quote.category
+      : ''
+    setCategory(dupCategory)
+    // 되살린 줄 중에 분류가 들어간 것이 있으면 「분류 나누기」를 켜 둔다 — 그러지 않으면
+    // 값이 있는데 화면에 선택칸이 없어 보이지 않는다.
+    setLineSplitOn(built.some(r => r.category != null))
 
     // 대리점 견적이면 청구처가 대리점(dealer_id), 최종 사용 업체가 customer_id 다.
     const dealer = quote.dealer_id != null

@@ -81,6 +81,10 @@ export type QuoteRow = {
   price_mode: PriceMode
   // 서비스비의 원가 내역(부대비용). 일반 품목은 빈 배열.
   expenses: ExpenseRow[]
+  // 줄별 견적 분류(quote_categories.code). **null 이 기본**이고 그 뜻은 「견적 분류를 따른다」다.
+  // 「분류 나누기」를 켜고 **다른 분류로 바꾼 줄만** 값이 들어간다(lib/quoteCategories.ts).
+  // 매출 줄(price_list·manual_jpy·service)에만 넣는다 — domestic·discount 는 늘 null 이다.
+  category: string | null
 }
 
 // ── 부대비용(내부 관리용) ─────────────────────────────────────────────────────

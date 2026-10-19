@@ -1,17 +1,19 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { useFieldErrors, FieldError } from '@/components/common/fieldErrors'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import { useQuoteCustomer } from '@/hooks/quote/useQuoteCustomer'
+import { useQuoteCategories, activeQuoteCategories } from '@/lib/quoteCategories'
 import { useQuoteRows } from '@/hooks/quote/useQuoteRows'
 import { useQuotePrefill } from '@/hooks/quote/useQuotePrefill'
 import { useQuoteDraftSync } from '@/hooks/quote/useQuoteDraftSync'
 import { useQuoteSubmit } from '@/hooks/quote/useQuoteSubmit'
 import AccessGate from '@/components/common/AccessGate'
+import { useConfirm } from '@/components/common/ConfirmDialog'
 import type { Engineer, QuoteRow } from './types'
 import { calcRow, calcTotals } from './calc'
 import { useDebounce } from './useDebounce'
@@ -80,8 +82,21 @@ function QuotePageInner() {
   const hasUrlPrefill = repairId != null || onBehalfId != null || duplicateId != null
   const { loading: guardLoading, authorized } = usePageGuard()
   const toast = useToast()
-  const { errors, setErrors, clearError, validate } = useFieldErrors<'company' | 'eu' | 'items' | 'expenses'>()
+  const { errors, setErrors, clearError, validate } = useFieldErrors<'category' | 'company' | 'eu' | 'items' | 'expenses'>()
+  // 줄별 분류를 끌 때 확인창을 띄운다(alert·confirm 대신 공용 다이얼로그).
+  const confirmDialog = useConfirm()
   const [isClient, setIsClient] = useState(false)
+
+  // ── 견적 분류 ──
+  // 목록을 **가장 먼저** 읽는다. 아래 useQuoteRows 가 줄별 선택칸의 후보로 받아 쓰기 때문이다.
+  // 이 훅의 effect 가 맨 앞에 끼지만, 기존 effect 들의 **상대 순서**는 그대로다.
+  const { categories: allCategories, loading: categoriesLoading } = useQuoteCategories()
+  // 새 견적은 활성 분류만 고른다(비활성은 이미 쓴 견적의 표기로만 남는다).
+  const activeCategories = useMemo(() => activeQuoteCategories(allCategories), [allCategories])
+  // 고른 견적 분류(quotes.category). 빈 글자는 미선택이고, 그때는 확정이 막힌다.
+  const [category, setCategory] = useState('')
+  // 「분류 나누기」 — 켜면 각 품목 줄에 분류 선택칸이 생긴다. 저장되지 않는 화면 상태다.
+  const [lineSplitOn, setLineSplitOn] = useState(false)
 
   const [engineer, setEngineer] = useState<Engineer | null>(null)
   // 대필 대상. 서버가 승인한 뒤에만 채워진다(null 이면 평소대로 본인 견적).
@@ -114,8 +129,9 @@ function QuotePageInner() {
     setSearchQuery, setSearchResults, setSearchOpen,
     setEditingProfitRate, setProfitRateInput,
     serviceRow, discountRow, expenses,
+    clearAllRowCategories,
     ctx: rowsCtx, actions: rowsActions,
-  } = useQuoteRows({ supabase, exchangeRate, delivery, setDelivery })
+  } = useQuoteRows({ supabase, exchangeRate, delivery, setDelivery, categories: activeCategories, lineSplitOn })
   const [showPriceGuide, setShowPriceGuide] = useState(false)
   const priceGuideRef = useRef<HTMLDivElement | null>(null)
 
@@ -275,7 +291,34 @@ function QuotePageInner() {
   //              (저장 시 customer_id 에는 E.U 가 들어간다 — 거래 이력이 붙는 곳이 최종 사용 업체이므로)
   // 품목 금액은 배열이지만 "적어도 한 품목에 금액" 이라는 집계 규칙이라 단일 key(items) 로 처리한다.
   // 부대비용은 빈 행(항목명 미선택)은 조용히 무시하고, 항목명만 고른 채 금액이 0 인 행만 막는다.
+  // 분류를 안 골랐으면 확정을 막는다. 품목 입력은 막지 않는다 — 금액을 먼저 잡아 보는
+  // 흐름을 끊지 않으려고 **확정 버튼 한 곳에서만** 막는다.
+  const categoryMissing = category.trim() === ''
+  // 줄별 분류가 들어간 줄 수 — 「분류 나누기」 옆에 보여 주고, 끌 때 확인창 여부를 가른다.
+  const splitRowCount = rows.filter(r => r.category != null).length
+
+  /**
+   * 「분류 나누기」 켜고 끄기.
+   * 끌 때 이미 지정한 줄이 있으면 확인을 받는다 — 끄면 그 값들이 전부 사라지기 때문이다
+   * (저장은 null 로 들어가고, 통계는 견적 분류로 떨어진다).
+   */
+  const toggleLineSplit = async () => {
+    if (!lineSplitOn) { setLineSplitOn(true); return }
+    if (splitRowCount > 0) {
+      const ok = await confirmDialog({
+        title: '줄별 분류 지우기',
+        message: `${splitRowCount}개 줄에 지정한 분류가 사라집니다. 모든 줄이 견적 분류를 따릅니다.`,
+        confirmText: '끄고 지우기',
+        variant: 'danger',
+      })
+      if (!ok) return
+    }
+    clearAllRowCategories()
+    setLineSplitOn(false)
+  }
+
   const runValidation = () => validate({
+    category: categoryMissing ? '견적 분류를 선택해주세요' : null,
     company: customerId
       ? null
       : (isDealer ? '등록된 대리점을 검색해서 선택해주세요' : '등록된 고객사를 검색해서 선택해주세요'),
@@ -295,6 +338,7 @@ function QuotePageInner() {
     supabase, toast, router, engineer, initials, onBehalf,
     dateStr, dateDisplay, quoteNo, engineerName, engineerTel,
     company, receiver, delivery, finalRemarksForPDF, showSignature,
+    category, setCategory, setLineSplitOn,
     rows, expenses, exchangeRate,
     customerId, euCustomerId, isDealer, opportunityId,
     totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate,
@@ -332,6 +376,7 @@ function QuotePageInner() {
     onBehalf, company, customerId, selectedCustomer, customerQuery, isDealer,
     euCustomerId, selectedEU, euQuery, opportunityId,
     receiver, delivery, remarks, showSignature, termsOpen, terms, rows,
+    category, setCategory,
     debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks,
     setCompany, setCustomerId, setSelectedCustomer, setCustomerQuery, setIsDealer,
     setEuCustomerId, setSelectedEU, setEuQuery, resolveEuParent,
@@ -347,6 +392,7 @@ function QuotePageInner() {
     setOnBehalf, setRows, setIsDealer, setCustomerId, setEuCustomerId,
     setSelectedCustomer, setCustomerQuery, setCompany, setSelectedEU, setEuQuery,
     resolveEuParent, setReceiver, setDelivery, setTermsOpen, setTerms, setRemarks,
+    setCategory, setLineSplitOn,
     loadOpportunities, setOpportunityId, handleCustomerSelect,
     setCustomerResults, setCustomerSearchOpen, setPrefillNotice,
   })
@@ -588,6 +634,11 @@ function QuotePageInner() {
           <CustomerCard
             errors={errors}
             clearError={clearError}
+            category={{
+              value: category, setValue: setCategory,
+              categories: activeCategories, loading: categoriesLoading,
+              lineSplitOn, onToggleLineSplit: () => { void toggleLineSplit() }, splitRowCount,
+            }}
             customer={{
               selectedCustomer, customerQuery, customerResults, customerSearchOpen, setCustomerSearchOpen,
               customerKeys, customerSearchRef, customerListRef,
@@ -670,6 +721,7 @@ function QuotePageInner() {
           isSaving={isSaving}
           toast={toast}
           runValidation={runValidation}
+          categoryMissing={categoryMissing}
           setShowConfirmModal={setShowConfirmModal}
           dateDisplay={dateDisplay}
           engineerName={engineerName}

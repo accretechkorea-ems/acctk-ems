@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { CustomerResult, QuoteRow } from '@/app/quote/types'
 import { calcRow } from '@/app/quote/calc'
 import { DEFAULT_TERMS, type Terms } from '@/lib/quoteTerms'
+import { activeQuoteCategories, loadQuoteCategories } from '@/lib/quoteCategories'
 import { loadDraft, saveDraft, clearDraft, isDraftMeaningful, type QuoteDraft } from '@/lib/quoteDraft'
 import { resolveOnBehalf, type OnBehalfAssignee } from '@/lib/quoteMutations'
 import type { useToast } from '@/components/common/Toast'
@@ -45,6 +46,9 @@ export type UseQuoteDraftSyncArgs = {
   termsOpen: boolean
   terms: Terms
   rows: QuoteRow[]
+  /** 견적 분류. 옛 초안에는 없으므로 되살릴 때 없으면 빈 글자로 둔다. */
+  category: string
+  setCategory: React.Dispatch<React.SetStateAction<string>>
 
   // 자동 저장의 트리거 — PDF 미리보기가 쓰는 600ms debounce 값을 그대로 쓴다
   debouncedRows: QuoteRow[]
@@ -79,6 +83,7 @@ export function useQuoteDraftSync({
   onBehalf, company, customerId, selectedCustomer, customerQuery, isDealer,
   euCustomerId, selectedEU, euQuery, opportunityId,
   receiver, delivery, remarks, showSignature, termsOpen, terms, rows,
+  category, setCategory,
   debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks,
   setCompany, setCustomerId, setSelectedCustomer, setCustomerQuery, setIsDealer,
   setEuCustomerId, setSelectedEU, setEuQuery, resolveEuParent,
@@ -116,6 +121,12 @@ export function useQuoteDraftSync({
     // 조건은 **선택 필드**다 — 옛 초안에는 없으므로 없으면 닫힌 기본 상태로 둔다.
     setTermsOpen(d.termsOpen === true)
     setTerms(d.terms ? { ...DEFAULT_TERMS, ...d.terms } : { ...DEFAULT_TERMS })
+    // 분류는 **선택 필드**다 — 옛 초안에는 없으므로 없으면 빈 글자(미선택)로 둔다.
+    // 그 사이에 비활성이 된 분류도 비운다 — 선택칸에 없는 값이 남으면 칸은 비어 보이는데
+    // 확정은 통과해 버린다(목록은 모듈 캐시라 기다려도 비용이 없다).
+    const draftCategory = typeof d.category === 'string' ? d.category : ''
+    const activeList = activeQuoteCategories(await loadQuoteCategories())
+    setCategory(activeList.some(c => c.code === draftCategory) ? draftCategory : '')
     setRows(d.rows.map(r => calcRow(r, rateRef.current)))
     // 영업기회 목록은 고객사에 딸린 값이라 다시 불러온 뒤 저장분의 선택을 되돌린다.
     if (d.customerId != null && !d.isDealer) {
@@ -140,6 +151,7 @@ export function useQuoteDraftSync({
       company, customerId, selectedCustomer, customerQuery, isDealer,
       euCustomerId, selectedEU, euQuery, opportunityId,
       receiver, delivery, remarks, showSignature, termsOpen, terms, rows,
+      category,
     }
     if (isDraftMeaningful(draft)) saveDraft(engineer.engineer_id, draft)
     else clearDraft(engineer.engineer_id)   // 다 지운 뒤에는 저장분도 없애 안내가 뜨지 않게 한다

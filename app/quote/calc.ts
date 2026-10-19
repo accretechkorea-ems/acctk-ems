@@ -138,6 +138,8 @@ export function createRow(): QuoteRow {
     unit_price: 0, supply_price: 0, tax: 0,
     cost_price_jpy: 0, product_price: 0, profit: 0,
     partCode: '', row_kind: 'price_list', manual_cost_jpy: 0, price_mode: 'rate', expenses: [],
+    // 줄별 분류 — 기본은 비움(= 견적 분류를 따른다). 「분류 나누기」로 바꾼 줄만 값이 들어간다.
+    category: null,
   }
 }
 

@@ -21,13 +21,14 @@ import { calcTotals, createRow } from '@/app/quote/calc'
 import { QuotePDFDoc } from '@/app/quote/QuotePDFDoc'
 import { DEFAULT_TERMS, type Terms } from '@/lib/quoteTerms'
 import { clearDraft } from '@/lib/quoteDraft'
+import { canSplitRowKind } from '@/lib/quoteCategories'
 import { notifyOnBehalf, type OnBehalfAssignee } from '@/lib/quoteMutations'
 import type { CustomerResult } from '@/app/quote/types'
 import type { SalesOpportunity } from '@/components/customer/types'
 import type { useToast } from '@/components/common/Toast'
 
 /** 검증 대상 입력 칸 — useFieldErrors 에 넘기는 키와 같다(page.tsx 의 useFieldErrors). */
-export type QuoteFieldKey = 'company' | 'eu' | 'items' | 'expenses'
+export type QuoteFieldKey = 'category' | 'company' | 'eu' | 'items' | 'expenses'
 
 /** 조건 네 줄 정규화 결과 — 화면이 이미 만들어 둔 값을 그대로 받는다(normalizeTerms). */
 type TermsResult = { ok: true; terms: Terms; stored: Terms | null } | { ok: false; message: string }
@@ -53,6 +54,10 @@ export type UseQuoteSubmitArgs = {
   delivery: string
   finalRemarksForPDF: string
   showSignature: boolean
+  /** 견적 분류(quotes.category). 빈 글자면 저장하지 않는다 — runValidation 이 먼저 막는다. */
+  category: string
+  setCategory: React.Dispatch<React.SetStateAction<string>>
+  setLineSplitOn: React.Dispatch<React.SetStateAction<boolean>>
 
   rows: QuoteRow[]
   expenses: ExpenseRow[]
@@ -140,6 +145,7 @@ export function useQuoteSubmit({
   supabase, toast, router, engineer, initials, onBehalf,
   dateStr, dateDisplay, quoteNo, engineerName, engineerTel,
   company, receiver, delivery, finalRemarksForPDF, showSignature,
+  category, setCategory, setLineSplitOn,
   rows, expenses, exchangeRate,
   customerId, euCustomerId, isDealer, opportunityId,
   totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate,
@@ -287,6 +293,8 @@ export function useQuoteSubmit({
     setRows([createRow()])
     setSearchQuery({}); setSearchResults({}); setSearchOpen({})
     setEditingProfitRate({}); setProfitRateInput({})
+    // 분류도 처음 상태로. 이어서 다음 견적을 쓸 때 다시 고르게 한다(다른 건일 수 있다).
+    setCategory(''); setLineSplitOn(false)
     setOnBehalf(null)
     setErrors({})
     // 주소창의 프리필 파라미터를 지운다. 라우터를 거치지 않아 이 컴포넌트가 다시 마운트되지 않는다.
@@ -344,7 +352,8 @@ export function useQuoteSubmit({
         unit_price_krw: r.unit_price,
         supply_amount: r.supply_price,
         tax_amount: r.tax,
-        category: null,
+        // 줄별 분류 — 매출 줄만. 비웠으면 null 이고 그 뜻은 「견적 분류를 따른다」다.
+        category: canSplitRowKind(r.row_kind) ? (r.category || null) : null,
         cost_amount: r.product_price,
         profit_amount: r.profit,
         // 목표값이 아니라 실현 이익률을 남긴다 — 1,000원 올림·판매단가 직접 입력이 반영된 값이라
@@ -384,6 +393,8 @@ export function useQuoteSubmit({
           recipient: receiver,
           note: finalRemarksForPDF,
           quote_type: quoteType,
+          // 견적 분류 — 빈 글자는 null 로 눕힌다(확정 전 검증이 비어 있는 채로는 못 오게 막는다).
+          category: category || null,
           status: initialStatus,
           total_supply: totalSupply,
           total_tax: totalTax,
