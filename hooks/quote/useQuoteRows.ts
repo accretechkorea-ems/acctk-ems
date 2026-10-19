@@ -29,6 +29,7 @@ import type { ExpensePreset, ExpenseRow, PriceItem, QuoteRow } from '@/app/quote
 import { calcExpense, calcRow, createExpenseRow, createRow } from '@/app/quote/calc'
 import { canSplitRowKind, type QuoteCategory } from '@/lib/quoteCategories'
 import { canGroupRowKind, isEquipForm } from '@/lib/quoteForms'
+import { searchPriceList } from '@/lib/priceSearch'
 
 export type UseQuoteRowsArgs = {
   supabase: SupabaseClient
@@ -104,8 +105,9 @@ export function useQuoteRows({
     // 품번은 검색창 내용을 그대로 따라간다 — 가격표에서 고르지 않고 직접 친 값도 PDF 품번 칸에 나간다.
     setRows(prev => prev.map(r => r.id !== rowId ? r : { ...r, partCode: q }))
     if (!q.trim()) { setSearchResults(prev => ({ ...prev, [rowId]: [] })); return }
-    const { data } = await supabase.from('price_list').select('*').or(`item_code.ilike.%${q}%,model_jp.ilike.%${q}%`).limit(20)
-    setSearchResults(prev => ({ ...prev, [rowId]: data || [] }))
+    // 가격표 검색은 lib/priceSearch.ts 한 곳에서 한다 — 장비 구성 모달도 같은 함수를 쓴다.
+    const found = await searchPriceList(supabase, q)
+    setSearchResults(prev => ({ ...prev, [rowId]: found }))
     setSearchOpen(prev => ({ ...prev, [rowId]: true }))
   }, [supabase])
 
