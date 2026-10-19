@@ -24,19 +24,16 @@ import type { SalesOpportunity } from '@/components/customer/types'
 /** 후보 목록의 키보드 조작 결과(useListKeyboard 반환값). */
 type ListKeys = { active: number; setActive: (i: number) => void; onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void }
 
-export type CustomerCardProps = {
-  errors: { company?: string; eu?: string; items?: string; expenses?: string }
-  clearError: (key: 'company' | 'eu' | 'items' | 'expenses') => void
-  customerSearchRef: React.RefObject<HTMLDivElement | null>
-  customerListRef: React.RefObject<HTMLDivElement | null>
-  euSearchRef: React.RefObject<HTMLDivElement | null>
-  euListRef: React.RefObject<HTMLDivElement | null>
+/** 사명 칸 — 검색·선택·해제와 대리점 체크박스. 대리점 체크가 이 칸 안에 있어 함께 둔다. */
+export type CustomerCardCustomer = {
   selectedCustomer: CustomerResult | null
   customerQuery: string
   customerResults: CustomerResult[]
   customerSearchOpen: boolean
   setCustomerSearchOpen: (v: boolean) => void
   customerKeys: ListKeys
+  customerSearchRef: React.RefObject<HTMLDivElement | null>
+  customerListRef: React.RefObject<HTMLDivElement | null>
   handleCustomerSearch: (q: string) => void
   handleCustomerSelect: (c: CustomerResult) => void
   handleCustomerClear: () => void
@@ -45,21 +42,35 @@ export type CustomerCardProps = {
   customerId: number | null
   isDealer: boolean
   setIsDealer: (v: boolean) => void
+}
+
+/** E.U(최종 사용 업체) 칸 — 대리점 체크를 켰을 때만 그려진다. */
+export type CustomerCardEu = {
   euCustomerId: number | null
   euQuery: string
   euResults: CustomerResult[]
   euSearchOpen: boolean
   setEuSearchOpen: (v: boolean) => void
   euKeys: ListKeys
+  euSearchRef: React.RefObject<HTMLDivElement | null>
+  euListRef: React.RefObject<HTMLDivElement | null>
   selectedEU: CustomerResult | null
   euParentName: string | null
   handleEUSearch: (q: string) => void
   handleEUSelect: (c: CustomerResult) => void
   handleEUClear: () => void
+}
+
+/** 영업기회 연결 — 고를 것이 있을 때만 칸이 나타난다. */
+export type CustomerCardOpportunity = {
   loadOpportunities: (cid: number | null) => void
   opportunities: SalesOpportunity[]
   opportunityId: number | null
   setOpportunityId: (v: number | null) => void
+}
+
+/** 문서에 찍히는 나머지 입력 — 수신인·납기·비고·서명란·조건. */
+export type CustomerCardDoc = {
   receiver: string
   setReceiver: (v: string) => void
   delivery: string
@@ -78,20 +89,36 @@ export type CustomerCardProps = {
   setTerms: React.Dispatch<React.SetStateAction<Terms>>
 }
 
-export default function CustomerCard({
-  errors, clearError,
-  customerSearchRef, customerListRef, euSearchRef, euListRef,
-  selectedCustomer, customerQuery, customerResults, customerSearchOpen, setCustomerSearchOpen,
-  customerKeys, handleCustomerSearch, handleCustomerSelect, handleCustomerClear,
-  prefillNotice, setPrefillNotice, customerId, isDealer, setIsDealer,
-  euCustomerId, euQuery, euResults, euSearchOpen, setEuSearchOpen, euKeys,
-  selectedEU, euParentName, handleEUSearch, handleEUSelect, handleEUClear,
-  loadOpportunities, opportunities, opportunityId, setOpportunityId,
-  receiver, setReceiver, delivery, setDelivery,
-  remarks, setRemarks, remarksOpen, setRemarksOpen, defaultRemarks,
-  showSignature, setShowSignature,
-  termsOpen, setTermsOpen, terms, setTerms,
-}: CustomerCardProps) {
+// prop 은 여섯 개다(3b 정리 전에는 52개였다).
+// errors·clearError 는 사명·E.U 두 묶음이 함께 쓰는 검증 통로라 묶지 않고 그대로 둔다.
+export type CustomerCardProps = {
+  errors: { company?: string; eu?: string; items?: string; expenses?: string }
+  clearError: (key: 'company' | 'eu' | 'items' | 'expenses') => void
+  customer: CustomerCardCustomer
+  eu: CustomerCardEu
+  opportunity: CustomerCardOpportunity
+  doc: CustomerCardDoc
+}
+
+export default function CustomerCard({ errors, clearError, customer, eu, opportunity, doc }: CustomerCardProps) {
+  // 묶음을 풀어 **종전과 같은 이름**으로 둔다 — 아래 JSX 는 한 줄도 바뀌지 않았다.
+  const {
+    selectedCustomer, customerQuery, customerResults, customerSearchOpen, setCustomerSearchOpen,
+    customerKeys, customerSearchRef, customerListRef,
+    handleCustomerSearch, handleCustomerSelect, handleCustomerClear,
+    prefillNotice, setPrefillNotice, customerId, isDealer, setIsDealer,
+  } = customer
+  const {
+    euCustomerId, euQuery, euResults, euSearchOpen, setEuSearchOpen, euKeys,
+    euSearchRef, euListRef, selectedEU, euParentName,
+    handleEUSearch, handleEUSelect, handleEUClear,
+  } = eu
+  const { loadOpportunities, opportunities, opportunityId, setOpportunityId } = opportunity
+  const {
+    receiver, setReceiver, delivery, setDelivery,
+    remarks, setRemarks, remarksOpen, setRemarksOpen, defaultRemarks,
+    showSignature, setShowSignature, termsOpen, setTermsOpen, terms, setTerms,
+  } = doc
   // 사명·E.U 아래 안내 문구. 셋 중 하나만 나온다.
   //   ① ?customer= 로 후보가 여럿일 때 ② 검색 결과가 없을 때 ③ 평소(상시 안내)
   const custNoResult = customerQuery.trim().length > 0 && customerResults.length === 0

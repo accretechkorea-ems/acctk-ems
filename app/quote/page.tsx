@@ -582,57 +582,29 @@ function QuotePageInner() {
 
         <div style={{ width: 430, flexShrink: 0 }}>
 
+          {/* 묶음 네 개는 여기서 만든다. CustomerCard 는 하나뿐이고 React.memo 를 씌우지
+              않았으므로 정체를 유지해도 렌더 횟수가 달라지지 않는다 — useMemo 를 두지 않는다
+              (행 카드는 수십 개가 되므로 그쪽만 useQuoteRows 에서 안정화했다). */}
           <CustomerCard
             errors={errors}
             clearError={clearError}
-            customerSearchRef={customerSearchRef}
-            customerListRef={customerListRef}
-            euSearchRef={euSearchRef}
-            euListRef={euListRef}
-            selectedCustomer={selectedCustomer}
-            customerQuery={customerQuery}
-            customerResults={customerResults}
-            customerSearchOpen={customerSearchOpen}
-            setCustomerSearchOpen={setCustomerSearchOpen}
-            customerKeys={customerKeys}
-            handleCustomerSearch={handleCustomerSearch}
-            handleCustomerSelect={handleCustomerSelect}
-            handleCustomerClear={handleCustomerClear}
-            prefillNotice={prefillNotice}
-            setPrefillNotice={setPrefillNotice}
-            customerId={customerId}
-            isDealer={isDealer}
-            setIsDealer={setIsDealer}
-            euCustomerId={euCustomerId}
-            euQuery={euQuery}
-            euResults={euResults}
-            euSearchOpen={euSearchOpen}
-            setEuSearchOpen={setEuSearchOpen}
-            euKeys={euKeys}
-            selectedEU={selectedEU}
-            euParentName={euParentName}
-            handleEUSearch={handleEUSearch}
-            handleEUSelect={handleEUSelect}
-            handleEUClear={handleEUClear}
-            loadOpportunities={loadOpportunities}
-            opportunities={opportunities}
-            opportunityId={opportunityId}
-            setOpportunityId={setOpportunityId}
-            receiver={receiver}
-            setReceiver={setReceiver}
-            delivery={delivery}
-            setDelivery={setDelivery}
-            remarks={remarks}
-            setRemarks={setRemarks}
-            remarksOpen={remarksOpen}
-            setRemarksOpen={setRemarksOpen}
-            defaultRemarks={DEFAULT_REMARKS}
-            showSignature={showSignature}
-            setShowSignature={setShowSignature}
-            termsOpen={termsOpen}
-            setTermsOpen={setTermsOpen}
-            terms={terms}
-            setTerms={setTerms}
+            customer={{
+              selectedCustomer, customerQuery, customerResults, customerSearchOpen, setCustomerSearchOpen,
+              customerKeys, customerSearchRef, customerListRef,
+              handleCustomerSearch, handleCustomerSelect, handleCustomerClear,
+              prefillNotice, setPrefillNotice, customerId, isDealer, setIsDealer,
+            }}
+            eu={{
+              euCustomerId, euQuery, euResults, euSearchOpen, setEuSearchOpen, euKeys,
+              euSearchRef, euListRef, selectedEU, euParentName,
+              handleEUSearch, handleEUSelect, handleEUClear,
+            }}
+            opportunity={{ loadOpportunities, opportunities, opportunityId, setOpportunityId }}
+            doc={{
+              receiver, setReceiver, delivery, setDelivery,
+              remarks, setRemarks, remarksOpen, setRemarksOpen, defaultRemarks: DEFAULT_REMARKS,
+              showSignature, setShowSignature, termsOpen, setTermsOpen, terms, setTerms,
+            }}
           />
 
 
