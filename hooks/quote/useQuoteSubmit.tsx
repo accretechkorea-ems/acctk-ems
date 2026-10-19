@@ -1,0 +1,499 @@
+'use client'
+
+// 견적 작성 화면의 **저장·확정·PDF·초기화** — 네 함수를 한곳에 모았다.
+//
+// app/quote/page.tsx 에서 **그대로 옮겨 온 것**이다(분리 리팩터 3a). 함수 본문·주석·메시지·
+// 호출 순서를 한 글자도 바꾸지 않았다. 아래 네 가지만 옮기면서 생긴 차이이고 동작은 같다.
+//   · 파일 확장자가 .tsx 다 — handleDownloadPDF 가 <QuotePDFDoc …> 를 직접 그린다(JSX).
+//   · 화면이 들고 있는 값·setter 를 전부 인자로 받는다(상태를 옮기지 않는다 — resetForm 이
+//     화면 전체를 되돌려야 하기 때문이다).
+//   · NO_INITIALS_MESSAGE 를 여기서 내보낸다 — 저장(이 훅)과 확정 버튼(화면)이 같은 문구를 쓴다.
+//   · MAX_PDF_NAME_TRIES · isNameTakenError 는 PDF 업로드에만 쓰여 이 파일 안에 둔다.
+//
+// **effect 를 하나도 두지 않는다** — 네 함수 모두 사용자가 눌렀을 때만 돈다. 그래서 이 훅을
+// 어디서 부르든 page.tsx 의 effect 순서는 변하지 않는다.
+
+import { useState } from 'react'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { pdf } from '@react-pdf/renderer'
+import type { ExpenseRow, QuoteRow } from '@/app/quote/types'
+import { calcTotals, createRow } from '@/app/quote/calc'
+import { QuotePDFDoc } from '@/app/quote/QuotePDFDoc'
+import { DEFAULT_TERMS, type Terms } from '@/lib/quoteTerms'
+import { clearDraft } from '@/lib/quoteDraft'
+import { notifyOnBehalf, type OnBehalfAssignee } from '@/lib/quoteMutations'
+import type { CustomerResult } from '@/app/quote/types'
+import type { SalesOpportunity } from '@/components/customer/types'
+import type { useToast } from '@/components/common/Toast'
+
+/** 조건 네 줄 정규화 결과 — 화면이 이미 만들어 둔 값을 그대로 받는다(normalizeTerms). */
+type TermsResult = { ok: true; terms: Terms; stored: Terms | null } | { ok: false; message: string }
+/** 품목 설명 줄 정규화 결과 — 한 품목이라도 상한을 넘으면 ok: false 다. */
+type SubLinesResult = { ok: true } | { ok: false; message: string }
+
+export type UseQuoteSubmitArgs = {
+  supabase: SupabaseClient
+  toast: ReturnType<typeof useToast>
+  router: { push: (href: string) => void }
+  engineer: { engineer_id: number } | null
+  initials: string | null
+  onBehalf: OnBehalfAssignee | null
+
+  dateStr: string
+  dateDisplay: string
+  quoteNo: string
+  engineerName: string
+  engineerTel: string
+
+  company: string
+  receiver: string
+  delivery: string
+  finalRemarksForPDF: string
+  showSignature: boolean
+
+  rows: QuoteRow[]
+  expenses: ExpenseRow[]
+  exchangeRate: number
+
+  customerId: number | null
+  euCustomerId: number | null
+  isDealer: boolean
+  opportunityId: number | null
+
+  totalSupply: number
+  totalTax: number
+  totalAmount: number
+  totalCost: number
+  totalProfit: number
+  totalProfitRate: number
+
+  termsResult: TermsResult
+  subLinesResult: SubLinesResult
+  normalizedSubLines: (r: QuoteRow) => string[] | null
+  withNormalizedSubLines: (list: QuoteRow[]) => QuoteRow[]
+
+  runValidation: () => boolean
+  setErrors: (v: Record<string, string | undefined>) => void
+
+  repairId: number | null
+  hasUrlPrefill: boolean
+  setParamsCleared: (v: boolean) => void
+  setPreviewSeq: (v: number) => void
+  /** 비고 기본 문구(page.tsx 의 DEFAULT_REMARKS). resetForm 이 이 값으로 되돌린다. */
+  defaultRemarks: string
+
+  setCompany: (v: string) => void
+  setCustomerId: (v: number | null) => void
+  setCustomerQuery: (v: string) => void
+  setCustomerResults: (v: CustomerResult[]) => void
+  setCustomerSearchOpen: (v: boolean) => void
+  setSelectedCustomer: (v: CustomerResult | null) => void
+  setPrefillNotice: (v: string | null) => void
+  setIsDealer: (v: boolean) => void
+  setEuCustomerId: (v: number | null) => void
+  setEuQuery: (v: string) => void
+  setEuResults: (v: CustomerResult[]) => void
+  setEuSearchOpen: (v: boolean) => void
+  setSelectedEU: (v: CustomerResult | null) => void
+  resolveEuParent: (customerId: number | null) => void
+  setOpportunities: (v: SalesOpportunity[]) => void
+  setOpportunityId: (v: number | null) => void
+  setReceiver: (v: string) => void
+  setDelivery: (v: string) => void
+  setRemarks: (v: string) => void
+  setRemarksOpen: (v: boolean) => void
+  setShowSignature: (v: boolean) => void
+  setRows: React.Dispatch<React.SetStateAction<QuoteRow[]>>
+  setSearchQuery: (v: Record<string, string>) => void
+  setSearchResults: (v: Record<string, never[]>) => void
+  setSearchOpen: (v: Record<string, boolean>) => void
+  setEditingProfitRate: (v: Record<string, boolean>) => void
+  setProfitRateInput: (v: Record<string, string>) => void
+  setOnBehalf: (v: OnBehalfAssignee | null) => void
+}
+
+/** 이니셜이 없는 사람은 번호를 만들 수 없다 — 다른 사람 이니셜로 대신하면 번호가 겹친다. */
+export const NO_INITIALS_MESSAGE = '이니셜이 등록되지 않았습니다. 관리자에게 문의해주세요'
+
+/**
+ * 견적서 PDF 파일명이 겹쳤을 때 접미사를 붙여 시도하는 최대 횟수.
+ * 같은 이니셜·같은 날·같은 순번이 다섯 번 겹치는 일은 실제로 없다 — 무한 루프를 막는 상한이다.
+ */
+const MAX_PDF_NAME_TRIES = 5
+
+/**
+ * 스토리지 업로드 오류가 "이름이 이미 있다" 인지. 이때만 다른 이름으로 다시 시도한다.
+ * supabase-js 는 이 경우 409 를 주는데, 버전에 따라 statusCode 가 문자열/숫자로 오고
+ * 메시지도 조금씩 달라 둘 다 본다.
+ */
+function isNameTakenError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const e = err as { statusCode?: string | number; message?: string; error?: string }
+  if (String(e.statusCode ?? '') === '409') return true
+  return /already exists|duplicate/i.test(`${e.message ?? ''} ${e.error ?? ''}`)
+}
+
+export function useQuoteSubmit({
+  supabase, toast, router, engineer, initials, onBehalf,
+  dateStr, dateDisplay, quoteNo, engineerName, engineerTel,
+  company, receiver, delivery, finalRemarksForPDF, showSignature,
+  rows, expenses, exchangeRate,
+  customerId, euCustomerId, isDealer, opportunityId,
+  totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate,
+  termsResult, subLinesResult, normalizedSubLines, withNormalizedSubLines,
+  runValidation, setErrors,
+  repairId, hasUrlPrefill, setParamsCleared, setPreviewSeq, defaultRemarks,
+  setCompany, setCustomerId, setCustomerQuery, setCustomerResults, setCustomerSearchOpen,
+  setSelectedCustomer, setPrefillNotice, setIsDealer,
+  setEuCustomerId, setEuQuery, setEuResults, setEuSearchOpen, setSelectedEU, resolveEuParent,
+  setOpportunities, setOpportunityId,
+  setReceiver, setDelivery, setRemarks, setRemarksOpen, setShowSignature,
+  setRows, setSearchQuery, setSearchResults, setSearchOpen,
+  setEditingProfitRate, setProfitRateInput, setOnBehalf,
+}: UseQuoteSubmitArgs) {
+  const [isSaving, setIsSaving] = useState(false)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
+  // 확정 모달의 확인 버튼 중복 클릭 방지. 저장 → PDF 가 끝날 때까지 잠근다.
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const handleDownloadPDF = async (
+    overrideCompany?: string,
+    overrideReceiver?: string,
+    overrideRows?: QuoteRow[],
+    overrideRemarks?: string,
+    overrideQuoteNo?: string,
+    /** 확정 직후 저장된 견적 id. 업로드가 끝나면 이 행의 pdf_url 을 실제 이름으로 채운다. */
+    quoteId?: number,
+  ) => {
+    const finalCompany = overrideCompany ?? company
+    const finalReceiver = overrideReceiver ?? receiver
+    const finalRows = overrideRows ?? rows
+    const finalRemarks = overrideRemarks ?? finalRemarksForPDF
+    const finalQuoteNo = overrideQuoteNo ?? quoteNo
+
+    const firstItem = finalRows.find(r => r.supply_price > 0)
+    const itemName = firstItem
+      ? (firstItem.selectedItem?.model_jp || firstItem.itemText || '').trim()
+      : ''
+    const companyName = finalCompany.trim()
+    const fileName = [finalQuoteNo, companyName, '견적서', itemName]
+      .filter(Boolean)
+      .join('_')
+      .replace(/[\\/:*?"<>|]/g, '') + '.pdf'
+
+    const { totalSupply: finalTotalSupply, totalTax: finalTotalTax, totalAmount: finalTotalAmount } = calcTotals(finalRows)
+
+    const blob = await pdf(
+      <QuotePDFDoc
+        company={finalCompany}
+        receiver={finalReceiver}
+        quoteNo={finalQuoteNo}
+        dateDisplay={dateDisplay}
+        rows={finalRows}
+        remarks={finalRemarks}
+        engineerName={engineerName}
+        engineerTel={engineerTel}
+        totalSupply={finalTotalSupply}
+        totalTax={finalTotalTax}
+        totalAmount={finalTotalAmount}
+        showSignature={showSignature}
+        terms={termsResult.ok ? termsResult.terms : DEFAULT_TERMS}
+      />
+    ).toBlob()
+
+    // 스토리지 저장. upsert 를 쓰지 않는다 — 파일명이 견적번호라, 이니셜이 겹치는 두 사람이
+    // 같은 날 같은 순번을 받으면 남의 견적서를 조용히 덮어썼다.
+    // 이름이 이미 있으면 접미사를 붙여 새 이름으로 올린다(둘 다 남긴다).
+    let storedName: string | null = null
+    for (let attempt = 1; attempt <= MAX_PDF_NAME_TRIES; attempt++) {
+      const candidate = attempt === 1 ? `${finalQuoteNo}.pdf` : `${finalQuoteNo}_${attempt}.pdf`
+      const { error } = await supabase.storage.from('quote-pdfs').upload(candidate, blob, {
+        contentType: 'application/pdf',
+        upsert: false,
+      })
+      if (!error) { storedName = candidate; break }
+      if (!isNameTakenError(error)) {
+        // 이름 충돌이 아니면 다시 시도해도 같은 결과다(권한·용량 등).
+        console.error('[quote] PDF 업로드 실패', { candidate, error })
+        break
+      }
+      console.error('[quote] PDF 파일명이 이미 있어 다른 이름으로 시도한다', { candidate })
+    }
+
+    if (storedName && quoteId) {
+      // 실제로 저장된 이름을 그대로 넣는다. 접미사가 붙었으면 그 이름이 들어간다.
+      const { error: urlErr } = await supabase
+        .from('quotes').update({ pdf_url: `quote-pdfs/${storedName}` }).eq('quote_id', quoteId)
+      if (urlErr) {
+        console.error('[quote] pdf_url 갱신 실패', { quoteId, storedName, error: urlErr })
+        toast.error('견적은 저장되었으나 PDF 연결에 실패했습니다. 관리자에게 알려주세요.')
+      }
+    } else if (!storedName) {
+      // pdf_url 은 비워 둔 채로 남는다 — 없는 파일을 가리키지 않게 하는 것이 중요하다.
+      toast.error('견적은 저장되었으나 PDF 생성에 실패했습니다. 관리자에게 알려주세요.')
+    }
+
+    // 확정과 동시에 내려받는다. **날짜(확정일)가 찍힌 고객 발송용 문서다** —
+    // 날짜 자리는 dateDisplay(확정일, KST)로 그려진다. 결재 완료를 기다리지 않는다:
+    // 급한 건을 고객에게 바로 보낼 수 있어야 한다는 것이 확정된 방침이다.
+    // 결재는 그대로 돈다(상신·승인·반려, '결재중' 잠금, 발주·계산서·상태 변경의 승인 게이트).
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName
+    a.click()
+    URL.revokeObjectURL(url)
+
+    await supabase.from('download_logs').insert({
+      engineer_id: engineer?.engineer_id ?? null,
+      quote_id: null,
+      quote_number: finalQuoteNo,
+      company_name: companyName,
+      action: 'download',
+    })
+  }
+
+  // 저장 결과 — 검증·저장 실패({ ok: false })와 저장 성공을 호출부가 구분할 수 있게 한다.
+  // 성공일 때만 PDF 생성·견적번호 증가로 넘어간다.
+  // quoteId 는 PDF 를 올린 뒤 pdf_url 을 실제 파일 이름으로 채우는 데 쓴다.
+  // quoteNo·seq 는 실제로 발급·저장된 번호다(미리보기 번호와 다를 수 있다) — PDF·다음 미리보기가 이 값을 쓴다.
+  type SaveResult = { ok: false } | { ok: true; linked: boolean; quoteId: number; quoteNo: string; seq: number }
+
+  // create_quote(RPC) 가 돌려주는 행. returns table 이라 배열로 온다.
+  //   repair_linked — true 연결됨 / false 대상 수리 건이 없었음 / null 연결 시도 자체가 없었음
+  type CreateQuoteRow = { quote_id: number; quote_number: string; seq: number; repair_linked: boolean | null }
+
+  /**
+   * 확정 후 화면을 처음 들어왔을 때 상태로 되돌린다.
+   *
+   * 라우터 이동·새로고침 대신 state 만 되돌린다 — useSearchParams 를 감싼 Suspense 경계가
+   * 다시 걸리면 화면이 한 번 비었다가 그려지고(깜빡임), 환율·부대비용 프리셋을 다시 받아오며,
+   * 스크롤도 맨 위로 튄다. state 리셋은 그 셋 다 없다.
+   *
+   * 건드리지 않는 것: 견적번호(previewSeq — 호출부에서 실제 발급 번호의 다음으로 맞춘다), 환율, 로그인 정보,
+   * 부대비용 프리셋. 부대비용·DISCOUNT 는 rows 안에 들어 있어 rows 를 비우면 함께 사라진다.
+   */
+  const resetForm = () => {
+    setCompany(''); setCustomerId(null); setCustomerQuery(''); setCustomerResults([])
+    setCustomerSearchOpen(false); setSelectedCustomer(null); setPrefillNotice(null)
+    setIsDealer(false)
+    setEuCustomerId(null); setEuQuery(''); setEuResults([]); setEuSearchOpen(false); setSelectedEU(null)
+    resolveEuParent(null)
+    setOpportunities([]); setOpportunityId(null)
+    setReceiver(''); setDelivery(''); setRemarks(defaultRemarks); setRemarksOpen(false); setShowSignature(false)
+    setRows([createRow()])
+    setSearchQuery({}); setSearchResults({}); setSearchOpen({})
+    setEditingProfitRate({}); setProfitRateInput({})
+    setOnBehalf(null)
+    setErrors({})
+    // 주소창의 프리필 파라미터를 지운다. 라우터를 거치지 않아 이 컴포넌트가 다시 마운트되지 않는다.
+    // 값 자체는 paramsCleared 로 무효화하므로 useSearchParams 의 갱신 시점과 무관하게 안전하다.
+    if (hasUrlPrefill) {
+      setParamsCleared(true)
+      window.history.replaceState(null, '', '/quote')
+    }
+    // 자동 저장 effect 도 빈 상태를 보고 지우지만, 확정 직후 저장분이 남는 순간이 없도록 여기서 먼저 지운다.
+    if (engineer) clearDraft(engineer.engineer_id)
+  }
+
+  const handleSaveQuote = async (): Promise<SaveResult> => {
+    if (!engineer) { toast.error('엔지니어 정보를 불러오는 중입니다'); return { ok: false } }
+    // 이니셜이 없으면 번호를 만들 수 없다. 함수도 같은 검사를 하지만 왕복 전에 먼저 막는다.
+    if (!initials) { toast.error(NO_INITIALS_MESSAGE); return { ok: false } }
+    const ok = runValidation()
+    if (!ok) return { ok: false }
+    // 조건 네 줄의 길이 — **확정 전에** 막는다. 자르지 않고 어느 칸인지 알린다
+    // (잘라서 저장하면 반 토막 문구가 고객에게 나간다).
+    if (!termsResult.ok) { toast.error(termsResult.message); return { ok: false } }
+    // 품목 설명 줄의 줄 수·길이 — 같은 이유로 확정 전에 막는다(자르지 않는다).
+    if (!subLinesResult.ok) { toast.error(subLinesResult.message); return { ok: false } }
+
+    setIsSaving(true)
+    let linkedRepair = false
+    // 저장된 견적 id — PDF 업로드 뒤 pdf_url 을 채우는 데 쓴다.
+    let savedQuoteId = 0
+    // 실제로 발급된 순번과 번호 — 화면에 보이던 미리보기 번호가 아니라 이것이 저장된다.
+    let issuedSeq = 0
+    let issuedNo = ''
+    try {
+      // 수리 건에서 온 견적이면 그 수리의 special_type 으로 견적 유형(quote_type)을 결정한다.
+      //   본사수리 → 'repair_hq'(기존 흐름), 그 외(국내수리) → 'repair_domestic'(단축 흐름), 수리 건 없음 → null(일반).
+      // 국내수리는 견적중을 거치지 않고 '수리중' 상태로 시작한다(수리가 이미 진행 중이므로).
+      let quoteType: string | null = null
+      let initialStatus = '견적중'
+      if (repairId != null) {
+        const { data: repairRow } = await supabase
+          .from('repairs').select('special_type').eq('repair_id', repairId).single()
+        quoteType = repairRow?.special_type === '본사수리' ? 'repair_hq' : 'repair_domestic'
+        if (quoteType === 'repair_domestic') initialStatus = '수리중'
+      }
+
+      // 금액이 있는 행만 저장한다. 할인은 공급가가 음수라 별도로 통과시킨다
+      // (금액 0 인 채로 남은 할인 행은 기록할 것이 없어 저장하지 않는다).
+      // quote_id 는 넣지 않는다 — 함수가 방금 만든 견적의 id 로 채운다(클라이언트 값은 믿지 않는다).
+      const items = rows.filter(r => r.supply_price > 0 || (r.row_kind === 'discount' && r.supply_price < 0)).map(r => ({
+        price_list_id: r.selectedItem?.id ?? null,
+        part_code: r.partCode.trim() || null,   // 품번 스냅샷(가격표 변경돼도 과거 견적 유지). 직접 입력한 품번도 그대로 저장, 빈 값은 null.
+        row_kind: r.row_kind,
+        product_name: r.itemText || r.selectedItem?.model_jp || '',
+        quantity: r.quantity,
+        unit_price_jpy: r.row_kind === 'manual_jpy' ? r.manual_cost_jpy : (r.selectedItem?.cost_jpy ?? null),
+        unit_price_krw: r.unit_price,
+        supply_amount: r.supply_price,
+        tax_amount: r.tax,
+        category: null,
+        cost_amount: r.product_price,
+        profit_amount: r.profit,
+        // 목표값이 아니라 실현 이익률을 남긴다 — 1,000원 올림·판매단가 직접 입력이 반영된 값이라
+        // profit_amount / supply_amount 와 앞뒤가 맞는다(엑셀 분석표가 이 값을 그대로 쓴다).
+        profit_rate: r.realized_profit_rate,
+        exchange_rate: r.exchange_rate || exchangeRate,
+        tariff_rate: r.tariff_rate,
+        // 품명 아래 설명 줄 — **줄이 없으면 null**(저장하지 않는다 = 줄 없음).
+        // 확정 때 PDF 가 그리는 값과 같은 정규화 결과다(normalizedSubLines).
+        sub_lines: normalizedSubLines(r),
+      }))
+
+      // 부대비용(내부 관리용). 견적 합계·PDF 와 무관하게 quote_expenses 에만 기록한다.
+      // unit_price 는 저장 시점 스냅샷이므로 프리셋 재조회 없이 화면 값을 그대로 넣는다.
+      const expenseRows = expenses
+        .filter(e => e.item_name.trim() && e.amount > 0)
+        .map(e => ({
+          item_name: e.item_name.trim(),
+          unit_price: e.unit_price,
+          headcount: e.headcount,
+          days: e.days,
+          amount: e.amount,
+        }))
+
+      // 견적·품목·부대비용·수리 연결을 DB 함수 하나로 묶는다(전부 한 트랜잭션).
+      // 예전에는 여기서 세 번 나눠 insert 해, 중간에 실패하면 품목 없는 견적이 남았다.
+      // 번호 채번·조립과 created_by, 자식 행의 quote_id 는 함수가 정한다 — 보내지 않는다.
+      const { data, error } = await supabase.rpc('create_quote', {
+        p_date: dateStr,
+        p_quote: {
+          customer_id: isDealer ? euCustomerId : customerId,
+          dealer_id: isDealer ? customerId : null,
+          opportunity_id: opportunityId,
+          delivery_info: delivery.trim() || null,
+          // 실적 귀속자. 대필이 아니면 작성자와 같다(대필 자격은 함수가 다시 본다).
+          engineer_id: onBehalf ? onBehalf.engineer_id : engineer.engineer_id,
+          recipient: receiver,
+          note: finalRemarksForPDF,
+          quote_type: quoteType,
+          status: initialStatus,
+          total_supply: totalSupply,
+          total_tax: totalTax,
+          total_amount: totalAmount,
+          total_cost: totalCost,
+          total_profit: totalProfit,
+          profit_rate: parseFloat(totalProfitRate.toFixed(2)),
+          // 조건 네 줄 — **모두 기본이면 null**(저장하지 않는다 = 기본). 확정 때 PDF 와 같은 값이다.
+          terms: termsResult.ok ? termsResult.stored : null,
+        },
+        p_items: items,
+        p_expenses: expenseRows,
+        p_repair_id: repairId ?? null,
+      })
+      if (error) throw error
+      const saved = (data as CreateQuoteRow[] | null)?.[0]
+      if (!saved?.quote_id) throw new Error('견적을 저장하지 못했습니다')
+      savedQuoteId = Number(saved.quote_id)
+      issuedNo = saved.quote_number
+      issuedSeq = saved.seq
+
+      // 저장이 전부 끝난 뒤에 지운다. 실패하면 아무것도 저장되지 않으므로 초안을 남겨 이어 쓰게 한다.
+      clearDraft(engineer.engineer_id)
+      // 동시 확정으로 미리보기와 다른 번호가 나왔으면 그 사실을 함께 알린다.
+      toast.success(issuedNo === quoteNo
+        ? `견적서 ${issuedNo} 확정 완료`
+        : `견적서 ${issuedNo} 확정 완료 · 견적번호가 ${issuedNo} 로 발급되었습니다`)
+
+      // 대필이면 실적 담당자에게 알린다. 자기가 쓰지 않은 견적이 자기 실적에 잡히기 때문이다.
+      // 대필 여부·수신자는 서버가 견적 행을 보고 다시 판정하므로 여기서는 부르기만 한다.
+      // 알림이 실패해도 견적 확정은 성공이다(라우트 안에서 콘솔에만 남는다).
+      if (onBehalf) await notifyOnBehalf(savedQuoteId)
+
+      // 수리 건 연결은 함수가 같은 트랜잭션에서 끝냈다. 결과만 안내한다.
+      //   false = 그 수리 건이 없어 연결하지 못함 / null = 수리 건에서 온 견적이 아님(안내 없음)
+      if (saved.repair_linked === false) {
+        toast.error('견적서는 저장됐지만 수리 건 연결에 실패했습니다. 수리 목록에서 수동으로 연결해주세요.')
+      } else if (saved.repair_linked === true) {
+        toast.success(`수리 건 #${repairId} 에 견적서가 연결되었습니다`)
+        linkedRepair = true
+      }
+    } catch (e) {
+      // 함수가 던지는 예외 메시지는 사용자에게 그대로 보여도 되는 한국어다
+      // ('견적 작성 권한이 없습니다' 등). 코드가 있으면 괄호로 덧붙인다.
+      const err = e as { code?: string; message?: string } | null
+      console.error('[quote] 저장 실패', { dateStr, engineerId: engineer.engineer_id, error: e })
+      toast.error(`${err?.message || '저장 중 오류가 발생했습니다'}${err?.code ? ` (${err.code})` : ''}`)
+      setIsSaving(false)
+      return { ok: false }
+    }
+    setIsSaving(false)
+    return { ok: true, linked: linkedRepair, quoteId: savedQuoteId, quoteNo: issuedNo, seq: issuedSeq }
+  }
+
+  /**
+   * 확정 — 저장 → PDF 저장·내려받기.
+   *
+   * **전자결재 기안을 만들지 않는다.** 확정과 동시에 결재를 올리던 단계는 걷어냈다(결재 자체는
+   * 그대로 돈다 — 결재함·승인·반려·삭제 요청 결재는 손대지 않았다).
+   *   · 번호는 create_quote 가 발급한다. 채번은 롤백되지 않으므로 저장이 성공하면 끝이다.
+   *   · PDF 는 만들어 스토리지에 올리고 **그 자리에서 내려받는다.** 날짜 자리에 확정일(KST)이
+   *     찍힌 고객 발송용 문서다 — 급한 건을 바로 보낼 수 있어야 한다는 것이 확정된 방침이다.
+   */
+  const runConfirm = async () => {
+    if (isSubmitting) return
+    setIsSubmitting(true)
+    // 저장이 끝난 뒤의 실패(PDF 생성 등)를 저장 실패와 가르는 근거. 저장 성공 시에만 채워진다.
+    let saved: Extract<SaveResult, { ok: true }> | null = null
+    try {
+      const snapshotCompany = company
+      const snapshotReceiver = receiver
+      // 설명 줄은 확정 저장과 **같은 정규화 결과**를 쓴다 — 빈 줄이 PDF 에만 남지 않게.
+      const snapshotRows = withNormalizedSubLines(rows)
+      const snapshotRemarks = finalRemarksForPDF
+      const result = await handleSaveQuote()
+      // 저장이 막히면 여기서 끝낸다 — PDF 도 만들지 않고 미리보기 번호도 그대로 둔다.
+      if (!result.ok) return
+      saved = result
+
+      // PDF 는 실제로 발급·저장된 번호로 만든다(화면에 보이던 미리보기 번호가 아니다).
+      await handleDownloadPDF(
+        snapshotCompany, snapshotReceiver, snapshotRows, snapshotRemarks,
+        result.quoteNo, result.quoteId,
+      )
+      // 다음 미리보기는 방금 발급된 순번의 다음이다.
+      setPreviewSeq(result.seq + 1)
+      setShowConfirmModal(false)
+      // 수리 건 연결이 됐으면 PDF 생성 후 수리 목록으로 이동
+      if (result.linked) { router.push('/repair'); return }
+      // 이어서 다음 견적을 쓸 수 있게 화면을 비운다(번호는 위에서 이미 다음 것으로 올렸다).
+      resetForm()
+    } catch (e) {
+      console.error('[quote] 확정 처리 실패', { saved, error: e })
+      if (!saved) {
+        // 저장 전에 난 예외 — 아무것도 저장되지 않았다. 모달을 열어 둔 채 다시 시도할 수 있게 한다.
+        toast.error('저장 중 오류가 발생했습니다')
+        return
+      }
+      // 견적은 이미 저장됐다. 모달을 그대로 두면 사용자가 다시 눌러 같은 내용이 새 번호로 또 저장되므로,
+      // 성공했을 때와 똑같이 번호를 올리고 모달을 닫고 화면을 비운다(PDF 만 없는 상태로 남는다).
+      toast.error(`견적 ${saved.quoteNo} 은 저장되었습니다. PDF 생성에 실패했습니다 — 다시 확정하지 마시고 관리자에게 알려주세요.`)
+      setPreviewSeq(saved.seq + 1)
+      setShowConfirmModal(false)
+      if (saved.linked) { router.push('/repair'); return }
+      resetForm()
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+
+  return {
+    isSaving, showConfirmModal, setShowConfirmModal, isSubmitting,
+    handleDownloadPDF, resetForm, handleSaveQuote, runConfirm,
+  }
+}
