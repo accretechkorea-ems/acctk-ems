@@ -28,6 +28,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ExpensePreset, ExpenseRow, PriceItem, QuoteRow } from '@/app/quote/types'
 import { calcExpense, calcRow, createExpenseRow, createRow } from '@/app/quote/calc'
 import { canSplitRowKind, type QuoteCategory } from '@/lib/quoteCategories'
+import { canGroupRowKind, isEquipForm } from '@/lib/quoteForms'
 
 export type UseQuoteRowsArgs = {
   supabase: SupabaseClient
@@ -38,6 +39,8 @@ export type UseQuoteRowsArgs = {
   categories: QuoteCategory[]
   /** 「분류 나누기」가 켜져 있는가. 꺼져 있으면 줄별 분류 선택칸을 그리지 않는다. */
   lineSplitOn: boolean
+  /** 고른 견적 양식. 장비(equip80)일 때만 줄 묶음 선택칸이 나온다. */
+  formKind: string
 }
 
 /** 여러 행이 함께 **읽는** 값. 행 카드 하나하나가 따로 받을 이유가 없는 것만 모았다. */
@@ -57,6 +60,8 @@ export type QuoteRowsCtx = {
   lineSplitOn: boolean
   /** 줄별 분류 선택칸의 후보(활성 분류만). */
   categories: QuoteCategory[]
+  /** 장비 양식인가. 줄 묶음 선택칸을 낼지 가른다. */
+  equipForm: boolean
 }
 
 /** 여러 행이 함께 **쓰는** 콜백. 전부 useCallback 으로 정체가 유지된다. */
@@ -71,6 +76,8 @@ export type QuoteRowsActions = {
   removeRow: (rowId: string) => void
   /** 줄별 분류를 바꾼다. 빈 글자를 주면 null(= 견적 분류를 따른다)로 돌아간다. */
   setRowCategory: (rowId: string, code: string) => void
+  /** 장비 구성 묶음을 바꾼다. 빈 글자를 주면 null(= 묶음 없음)로 돌아간다. */
+  setRowGroupKind: (rowId: string, kind: string) => void
   setSearchOpen: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   setEditingProfitRate: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   setProfitRateInput: React.Dispatch<React.SetStateAction<Record<string, string>>>
@@ -81,7 +88,7 @@ export type QuoteRowsActions = {
 }
 
 export function useQuoteRows({
-  supabase, exchangeRate, delivery, setDelivery, categories, lineSplitOn,
+  supabase, exchangeRate, delivery, setDelivery, categories, lineSplitOn, formKind,
 }: UseQuoteRowsArgs) {
   const [rows, setRows] = useState<QuoteRow[]>([createRow()])
   const [expensePresets, setExpensePresets] = useState<ExpensePreset[]>([])
@@ -155,6 +162,12 @@ export function useQuoteRows({
   const clearAllRowCategories = useCallback(() =>
     setRows(prev => prev.map(r => r.category == null ? r : { ...r, category: null })), [])
 
+  // 장비 구성 묶음 — 빈 글자는 null 로 눕힌다(「묶음 없음」이 그 뜻이다).
+  // 묶음을 둘 수 없는 줄(국내조달품·할인)에는 값을 넣지 않는다.
+  const setRowGroupKind = useCallback((rowId: string, kind: string) =>
+    setRows(prev => prev.map(r =>
+      r.id !== rowId ? r : { ...r, group_kind: canGroupRowKind(r.row_kind) ? (kind || null) : null })), [])
+
   // 부대비용은 서비스비 행(견적당 1건)에 속한다. 별도 state 없이 rows 에서 파생시킨다.
   const serviceRow = rows.find(r => r.row_kind === 'service') ?? null
   // 할인도 서비스비와 같이 견적당 1건이다(총액에서 한 번만 뺀다).
@@ -195,19 +208,19 @@ export function useQuoteRows({
     editingProfitRate, profitRateInput,
     expensePresets, presetError,
     invalidExpenseIds, totalExpense,
-    lineSplitOn, categories,
+    lineSplitOn, categories, equipForm: isEquipForm(formKind),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [rows.length, searchQuery, searchResults, searchOpen,
        editingProfitRate, profitRateInput, expensePresets, presetError,
-       invalidExpenseKey, totalExpense, lineSplitOn, categories])
+       invalidExpenseKey, totalExpense, lineSplitOn, categories, formKind])
 
   const actions = useMemo<QuoteRowsActions>(() => ({
     updateRow, addSubLine, updateSubLine, removeSubLine,
-    handleSearch, handleSelect, clearItem, removeRow, setRowCategory,
+    handleSearch, handleSelect, clearItem, removeRow, setRowCategory, setRowGroupKind,
     setSearchOpen, setEditingProfitRate, setProfitRateInput,
     addExpense, removeExpense, updateExpense, selectExpensePreset,
   }), [updateRow, addSubLine, updateSubLine, removeSubLine,
-       handleSearch, handleSelect, clearItem, removeRow, setRowCategory,
+       handleSearch, handleSelect, clearItem, removeRow, setRowCategory, setRowGroupKind,
        addExpense, removeExpense, updateExpense, selectExpensePreset])
 
   return {
@@ -228,6 +241,7 @@ export function useQuoteRows({
     removeSubLine,
     removeRow,
     setRowCategory,
+    setRowGroupKind,
     clearAllRowCategories,
     serviceRow,
     discountRow,

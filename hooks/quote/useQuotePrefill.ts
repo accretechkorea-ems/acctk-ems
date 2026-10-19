@@ -21,6 +21,7 @@ import { calcExpense, calcRow, createExpenseRow, createRow } from '@/app/quote/c
 import { DEFAULT_TERMS, changedTerms, termsOf, type Terms } from '@/lib/quoteTerms'
 import { subLinesOf } from '@/lib/quoteSubLines'
 import { activeQuoteCategories, canSplitRowKind, loadQuoteCategories } from '@/lib/quoteCategories'
+import { canGroupRowKind, isFormKind, isGroupKind } from '@/lib/quoteForms'
 import { parentCompanyName } from '@/components/customer/ParentPicker'
 import { resolveOnBehalf, type OnBehalfAssignee } from '@/lib/quoteMutations'
 import type { useToast } from '@/components/common/Toast'
@@ -35,6 +36,8 @@ export type DuplicatePayload = {
     terms: unknown
     /** 견적 분류(quotes.category). null 이면 미분류(개편 전 견적)다. */
     category: string | null
+    /** 견적서 양식(quotes.form_kind). null 이면 기존 양식(개편 전 견적)이다. */
+    form_kind: string | null
   }
   items: {
     price_list_id: number | null; part_code: string | null; row_kind: string | null
@@ -45,6 +48,8 @@ export type DuplicatePayload = {
     sub_lines: unknown
     /** 줄별 분류(quote_items.category). null 이면 견적 분류를 따랐다. */
     category: string | null
+    /** 장비 구성 묶음(quote_items.group_kind). null 이면 묶음이 없었다. */
+    group_kind: string | null
     price_list: PriceItem | null
   }[]
   expenses: { item_name: string | null; unit_price: number | null; headcount: number | null; days: number | null }[]
@@ -77,6 +82,7 @@ export type UseQuotePrefillArgs = {
   setTerms: React.Dispatch<React.SetStateAction<Terms>>
   setRemarks: React.Dispatch<React.SetStateAction<string>>
   setCategory: React.Dispatch<React.SetStateAction<string>>
+  setFormKind: React.Dispatch<React.SetStateAction<string>>
   setLineSplitOn: React.Dispatch<React.SetStateAction<boolean>>
   loadOpportunities: (cid: number | null) => Promise<void>
   setOpportunityId: React.Dispatch<React.SetStateAction<number | null>>
@@ -92,7 +98,7 @@ export function useQuotePrefill({
   setOnBehalf, setRows, setIsDealer, setCustomerId, setEuCustomerId,
   setSelectedCustomer, setCustomerQuery, setCompany, setSelectedEU, setEuQuery,
   resolveEuParent, setReceiver, setDelivery, setTermsOpen, setTerms, setRemarks,
-  setCategory, setLineSplitOn,
+  setCategory, setFormKind, setLineSplitOn,
   loadOpportunities, setOpportunityId, handleCustomerSelect,
   setCustomerResults, setCustomerSearchOpen, setPrefillNotice,
 }: UseQuotePrefillArgs) {
@@ -138,6 +144,8 @@ export function useQuotePrefill({
         // 비활성이 된 분류를 그대로 들고 오면 선택칸에 없는 값이 남아 고칠 수 없다.
         category: (canSplitRowKind(kind) && it.category != null
           && activeList.some(c => c.code === it.category)) ? it.category : null,
+        // 구성 묶음 — 아는 값이고 묶음을 둘 수 있는 줄일 때만 되살린다.
+        group_kind: (canGroupRowKind(kind) && isGroupKind(it.group_kind)) ? it.group_kind : null,
         expenses: kind === 'service' ? expenseRows : [],
       }, rateRef.current)
     })
@@ -152,6 +160,8 @@ export function useQuotePrefill({
     // 되살린 줄 중에 분류가 들어간 것이 있으면 「분류 나누기」를 켜 둔다 — 그러지 않으면
     // 값이 있는데 화면에 선택칸이 없어 보이지 않는다.
     setLineSplitOn(built.some(r => r.category != null))
+    // 양식 — 원본 값을 그대로. null(기존 양식)이거나 모르는 값이면 비워 다시 고르게 한다.
+    setFormKind(isFormKind(quote.form_kind) ? quote.form_kind : '')
 
     // 대리점 견적이면 청구처가 대리점(dealer_id), 최종 사용 업체가 customer_id 다.
     const dealer = quote.dealer_id != null

@@ -52,6 +52,8 @@ export type QuoteDraft = {
    * 이것만으로 「작성 중이던 내용」을 만들면 들어왔다 나가기만 해도 다음 방문에 안내가 뜬다.
    */
   category?: string
+  /** 견적서 양식 — 분류와 같은 **선택 필드**다. 줄 묶음은 rows 안에 들어 있다. */
+  formKind?: string
   rows: QuoteRow[]
 }
 

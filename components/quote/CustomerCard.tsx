@@ -20,6 +20,7 @@ import RemarksEditor from '@/components/quote/RemarksEditor'
 import TermsEditor from '@/components/quote/TermsEditor'
 import type { CustomerResult } from '@/app/quote/types'
 import type { QuoteCategory } from '@/lib/quoteCategories'
+import { FORM_KINDS, FORM_LABELS } from '@/lib/quoteForms'
 import type { SalesOpportunity } from '@/components/customer/types'
 
 
@@ -110,13 +111,16 @@ export type CustomerCardCategory = {
   onToggleLineSplit: () => void
   /** 지금 줄별 분류가 들어간 줄 수. 「분류 나누기」 버튼 옆에 보여 준다. */
   splitRowCount: number
+  /** 견적서 양식(quotes.form_kind). 분류와 같은 규칙으로 고르기 전에는 확정이 막힌다. */
+  formKind: string
+  setFormKind: (v: string) => void
 }
 
 // prop 은 일곱 개다(3b 정리 전에는 52개였다).
 // errors·clearError 는 분류·사명·E.U 세 묶음이 함께 쓰는 검증 통로라 묶지 않고 그대로 둔다.
 export type CustomerCardProps = {
-  errors: { category?: string; company?: string; eu?: string; items?: string; expenses?: string }
-  clearError: (key: 'category' | 'company' | 'eu' | 'items' | 'expenses') => void
+  errors: { category?: string; form?: string; company?: string; eu?: string; items?: string; expenses?: string }
+  clearError: (key: 'category' | 'form' | 'company' | 'eu' | 'items' | 'expenses') => void
   category: CustomerCardCategory
   customer: CustomerCardCustomer
   eu: CustomerCardEu
@@ -130,6 +134,7 @@ export default function CustomerCard({ errors, clearError, category, customer, e
     value: categoryValue, setValue: setCategoryValue,
     categories, loading: categoriesLoading,
     lineSplitOn, onToggleLineSplit, splitRowCount,
+    formKind, setFormKind,
   } = category
   const {
     selectedCustomer, customerQuery, customerResults, customerSearchOpen, setCustomerSearchOpen,
@@ -172,22 +177,41 @@ export default function CustomerCard({ errors, clearError, category, customer, e
 
     {/* 견적 분류 — **가장 먼저 고른다.** 고르기 전에는 확정이 막힌다(품목 입력은 막지 않는다).
         비활성 분류는 목록에 없다 — 새 견적은 쓰는 분류만 고른다. */}
-    <div style={{ marginBottom: errors.category ? 8 + 18 : 8 }}>
-      <div className="q-box" style={{ border: errors.category ? errBorder : undefined }}>
-        <span className="q-box-label">분류</span>
-        <select
-          className="q-box-field"
-          value={categoryValue}
-          disabled={categoriesLoading}
-          onChange={e => { setCategoryValue(e.target.value); clearError('category') }}
-          style={{ color: categoryValue ? '#111827' : '#9ca3af' }}
-        >
-          <option value="">{categoriesLoading ? '불러오는 중...' : '견적 분류 선택 (필수)'}</option>
-          {categories.map(c => (
-            <option key={c.code} value={c.code}>{c.label}</option>
-          ))}
-        </select>
-        <FieldError message={errors.category} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 2, whiteSpace: 'nowrap' }} />
+    <div style={{ marginBottom: (errors.category || errors.form) ? 8 + 18 : 8 }}>
+      {/* 분류와 양식을 한 줄에 둔다. 좁아지면 .q-two 가 1열로 접힌다. */}
+      <div className="q-two">
+        <div className="q-box" style={{ border: errors.category ? errBorder : undefined }}>
+          <span className="q-box-label">분류</span>
+          <select
+            className="q-box-field"
+            value={categoryValue}
+            disabled={categoriesLoading}
+            onChange={e => { setCategoryValue(e.target.value); clearError('category') }}
+            style={{ color: categoryValue ? '#111827' : '#9ca3af', cursor: 'pointer' }}
+          >
+            <option value="">{categoriesLoading ? '불러오는 중...' : '분류 선택 (필수)'}</option>
+            {categories.map(c => (
+              <option key={c.code} value={c.code}>{c.label}</option>
+            ))}
+          </select>
+          <FieldError message={errors.category} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 2, whiteSpace: 'nowrap' }} />
+        </div>
+        {/* 견적서 양식 — 이 값 하나가 PDF 의 열·그룹·조건·합계 모양을 모두 가른다. */}
+        <div className="q-box" style={{ border: errors.form ? errBorder : undefined }}>
+          <span className="q-box-label">양식</span>
+          <select
+            className="q-box-field"
+            value={formKind}
+            onChange={e => { setFormKind(e.target.value); clearError('form') }}
+            style={{ color: formKind ? '#111827' : '#9ca3af', cursor: 'pointer' }}
+          >
+            <option value="">양식 선택 (필수)</option>
+            {FORM_KINDS.map(k => (
+              <option key={k} value={k}>{FORM_LABELS[k]}</option>
+            ))}
+          </select>
+          <FieldError message={errors.form} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 2, whiteSpace: 'nowrap' }} />
+        </div>
       </div>
       {/* 분류 나누기 — 평소에는 줄별 분류 칸을 숨긴다(한 견적에 여러 분류가 섞이는 일이 드물다).
           켜면 매출 줄(가격표·수동입력·서비스비)에 분류 선택칸이 생긴다. */}

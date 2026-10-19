@@ -82,7 +82,7 @@ function QuotePageInner() {
   const hasUrlPrefill = repairId != null || onBehalfId != null || duplicateId != null
   const { loading: guardLoading, authorized } = usePageGuard()
   const toast = useToast()
-  const { errors, setErrors, clearError, validate } = useFieldErrors<'category' | 'company' | 'eu' | 'items' | 'expenses'>()
+  const { errors, setErrors, clearError, validate } = useFieldErrors<'category' | 'form' | 'company' | 'eu' | 'items' | 'expenses'>()
   // 줄별 분류를 끌 때 확인창을 띄운다(alert·confirm 대신 공용 다이얼로그).
   const confirmDialog = useConfirm()
   const [isClient, setIsClient] = useState(false)
@@ -97,6 +97,11 @@ function QuotePageInner() {
   const [category, setCategory] = useState('')
   // 「분류 나누기」 — 켜면 각 품목 줄에 분류 선택칸이 생긴다. 저장되지 않는 화면 상태다.
   const [lineSplitOn, setLineSplitOn] = useState(false)
+
+  // ── 견적서 양식(quotes.form_kind) ──
+  // 이 값 하나가 PDF 의 열·그룹 행·조건(보증)·합계 모양을 모두 가른다(lib/quoteForms.ts).
+  // 빈 글자는 미선택이고, 그때는 분류와 같이 확정이 막힌다.
+  const [formKind, setFormKind] = useState('')
 
   const [engineer, setEngineer] = useState<Engineer | null>(null)
   // 대필 대상. 서버가 승인한 뒤에만 채워진다(null 이면 평소대로 본인 견적).
@@ -131,7 +136,7 @@ function QuotePageInner() {
     serviceRow, discountRow, expenses,
     clearAllRowCategories,
     ctx: rowsCtx, actions: rowsActions,
-  } = useQuoteRows({ supabase, exchangeRate, delivery, setDelivery, categories: activeCategories, lineSplitOn })
+  } = useQuoteRows({ supabase, exchangeRate, delivery, setDelivery, categories: activeCategories, lineSplitOn, formKind })
   const [showPriceGuide, setShowPriceGuide] = useState(false)
   const priceGuideRef = useRef<HTMLDivElement | null>(null)
 
@@ -294,6 +299,8 @@ function QuotePageInner() {
   // 분류를 안 골랐으면 확정을 막는다. 품목 입력은 막지 않는다 — 금액을 먼저 잡아 보는
   // 흐름을 끊지 않으려고 **확정 버튼 한 곳에서만** 막는다.
   const categoryMissing = category.trim() === ''
+  // 양식도 같은 규칙이다 — 고르기 전에는 확정만 막는다.
+  const formMissing = formKind.trim() === ''
   // 줄별 분류가 들어간 줄 수 — 「분류 나누기」 옆에 보여 주고, 끌 때 확인창 여부를 가른다.
   const splitRowCount = rows.filter(r => r.category != null).length
 
@@ -319,6 +326,7 @@ function QuotePageInner() {
 
   const runValidation = () => validate({
     category: categoryMissing ? '견적 분류를 선택해주세요' : null,
+    form: formMissing ? '견적서 양식을 선택해주세요' : null,
     company: customerId
       ? null
       : (isDealer ? '등록된 대리점을 검색해서 선택해주세요' : '등록된 고객사를 검색해서 선택해주세요'),
@@ -338,7 +346,7 @@ function QuotePageInner() {
     supabase, toast, router, engineer, initials, onBehalf,
     dateStr, dateDisplay, quoteNo, engineerName, engineerTel,
     company, receiver, delivery, finalRemarksForPDF, showSignature,
-    category, setCategory, setLineSplitOn,
+    category, formKind, setCategory, setFormKind, setLineSplitOn,
     rows, expenses, exchangeRate,
     customerId, euCustomerId, isDealer, opportunityId,
     totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate,
@@ -376,7 +384,7 @@ function QuotePageInner() {
     onBehalf, company, customerId, selectedCustomer, customerQuery, isDealer,
     euCustomerId, selectedEU, euQuery, opportunityId,
     receiver, delivery, remarks, showSignature, termsOpen, terms, rows,
-    category, setCategory,
+    category, formKind, setCategory, setFormKind,
     debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks,
     setCompany, setCustomerId, setSelectedCustomer, setCustomerQuery, setIsDealer,
     setEuCustomerId, setSelectedEU, setEuQuery, resolveEuParent,
@@ -392,7 +400,7 @@ function QuotePageInner() {
     setOnBehalf, setRows, setIsDealer, setCustomerId, setEuCustomerId,
     setSelectedCustomer, setCustomerQuery, setCompany, setSelectedEU, setEuQuery,
     resolveEuParent, setReceiver, setDelivery, setTermsOpen, setTerms, setRemarks,
-    setCategory, setLineSplitOn,
+    setCategory, setFormKind, setLineSplitOn,
     loadOpportunities, setOpportunityId, handleCustomerSelect,
     setCustomerResults, setCustomerSearchOpen, setPrefillNotice,
   })
@@ -638,6 +646,7 @@ function QuotePageInner() {
               value: category, setValue: setCategory,
               categories: activeCategories, loading: categoriesLoading,
               lineSplitOn, onToggleLineSplit: () => { void toggleLineSplit() }, splitRowCount,
+              formKind, setFormKind,
             }}
             customer={{
               selectedCustomer, customerQuery, customerResults, customerSearchOpen, setCustomerSearchOpen,
@@ -721,7 +730,7 @@ function QuotePageInner() {
           isSaving={isSaving}
           toast={toast}
           runValidation={runValidation}
-          categoryMissing={categoryMissing}
+          categoryMissing={categoryMissing || formMissing}
           setShowConfirmModal={setShowConfirmModal}
           dateDisplay={dateDisplay}
           engineerName={engineerName}

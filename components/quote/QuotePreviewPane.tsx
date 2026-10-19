@@ -30,7 +30,7 @@ export type QuotePreviewPaneProps = {
   toast: ReturnType<typeof useToast>
   runValidation: () => boolean
   setShowConfirmModal: (v: boolean) => void
-  /** 견적 분류를 아직 안 골랐는가. true 면 확정 버튼을 잠그고 이유를 보여 준다. */
+  /** 견적 분류·양식을 아직 안 골랐는가. true 면 확정 버튼을 잠그고 이유를 보여 준다. */
   categoryMissing: boolean
   dateDisplay: string
   engineerName: string
@@ -83,14 +83,14 @@ export default function QuotePreviewPane({
           {`${onBehalf.name} ${onBehalf.position || ''}`.trim()} 대신 작성 중
         </span>
       )}
-      {/* 견적 분류를 안 골랐으면 확정을 **막고 그 자리에서 이유를 알린다.**
+      {/* 견적 분류·양식을 안 골랐으면 확정을 **막고 그 자리에서 이유를 알린다.**
           품목 입력은 막지 않는다 — 금액을 먼저 잡아 보는 흐름을 끊지 않으려고 여기 한 곳에서만 막는다. */}
       {categoryMissing && (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.5)', color: '#ffffff', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          견적 분류를 먼저 선택해주세요
+          견적 분류·양식을 먼저 선택해주세요
         </span>
       )}
       {/* 번호는 확정할 때 DB 가 발급하므로, 예상 번호를 못 읽었다고 확정을 막지 않는다.
@@ -105,7 +105,7 @@ export default function QuotePreviewPane({
               setShowConfirmModal(true)
             }}
             disabled={locked}
-            title={categoryMissing ? '견적 분류를 먼저 선택해주세요' : undefined}
+            title={categoryMissing ? '견적 분류·양식을 먼저 선택해주세요' : undefined}
             style={{
               padding: '6px 14px', boxSizing: 'border-box',
               background: locked ? 'transparent' : '#ffffff',

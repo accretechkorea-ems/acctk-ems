@@ -85,6 +85,10 @@ export type QuoteRow = {
   // 「분류 나누기」를 켜고 **다른 분류로 바꾼 줄만** 값이 들어간다(lib/quoteCategories.ts).
   // 매출 줄(price_list·manual_jpy·service)에만 넣는다 — domestic·discount 는 늘 null 이다.
   category: string | null
+  // 장비 양식의 구성 묶음(quote_items.group_kind): base(본체+기본) / option(옵션) / include(포함사항).
+  // **null 이 기본**이고 그 뜻은 「묶음 없음」이다 — PDF 에서 그룹 없이 마지막에 붙는다.
+  // equip80 일 때만 화면에 선택칸이 나오고 저장된다(lib/quoteForms.ts).
+  group_kind: string | null
 }
 
 // ── 부대비용(내부 관리용) ─────────────────────────────────────────────────────

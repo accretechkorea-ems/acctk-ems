@@ -7,6 +7,7 @@ import SegmentedControl from '@/components/common/SegmentedControl'
 import type { PriceItem, QuoteRow, RowKind } from './types'
 import type { QuoteRowsActions, QuoteRowsCtx } from '@/hooks/quote/useQuoteRows'
 import { canSplitRowKind } from '@/lib/quoteCategories'
+import { GROUP_KINDS, GROUP_LABELS, canGroupRowKind } from '@/lib/quoteForms'
 import { numKR } from './format'
 import { DISCOUNT_LABELS } from './types'
 import { inp } from './styles'
@@ -46,11 +47,11 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
   const {
     rowCount, searchQuery, searchResults, searchOpen,
     editingProfitRate, profitRateInput, expensePresets, presetError,
-    invalidExpenseIds, totalExpense, lineSplitOn, categories,
+    invalidExpenseIds, totalExpense, lineSplitOn, categories, equipForm,
   } = ctx
   const {
     updateRow, addSubLine, updateSubLine, removeSubLine,
-    handleSearch, handleSelect, clearItem, removeRow, setRowCategory,
+    handleSearch, handleSelect, clearItem, removeRow, setRowCategory, setRowGroupKind,
     setSearchOpen, setEditingProfitRate, setProfitRateInput,
     addExpense, removeExpense, updateExpense, selectExpensePreset,
   } = actions
@@ -274,6 +275,25 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
           <option value="">견적 분류 그대로</option>
           {categories.map(c => (
             <option key={c.code} value={c.code}>{c.label}</option>
+          ))}
+        </select>
+      </div>
+      )}
+
+      {/* 장비 구성 묶음 — 장비 양식일 때만, 그리고 묶음을 둘 수 있는 줄에만 나온다.
+          비워 두면 그룹 없이 PDF 맨 뒤에 붙는다. 7단계 구성 모달이 이 값을 대신 채운다. */}
+      {equipForm && canGroupRowKind(row.row_kind) && (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', width: 44, flexShrink: 0 }}>묶음</label>
+        <select
+          className="q-input"
+          value={row.group_kind ?? ''}
+          onChange={e => setRowGroupKind(row.id, e.target.value)}
+          style={{ ...inp, flex: 1, minWidth: 0, cursor: 'pointer', color: row.group_kind ? '#111827' : '#9ca3af' }}
+        >
+          <option value="">묶음 없음</option>
+          {GROUP_KINDS.map(k => (
+            <option key={k} value={k}>{GROUP_LABELS[k]}</option>
           ))}
         </select>
       </div>

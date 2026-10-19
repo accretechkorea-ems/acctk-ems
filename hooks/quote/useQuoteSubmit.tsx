@@ -22,6 +22,7 @@ import { QuotePDFDoc } from '@/app/quote/QuotePDFDoc'
 import { DEFAULT_TERMS, type Terms } from '@/lib/quoteTerms'
 import { clearDraft } from '@/lib/quoteDraft'
 import { canSplitRowKind } from '@/lib/quoteCategories'
+import { canGroupRowKind, isEquipForm } from '@/lib/quoteForms'
 import { notifyOnBehalf, type OnBehalfAssignee } from '@/lib/quoteMutations'
 import type { CustomerResult } from '@/app/quote/types'
 import type { SalesOpportunity } from '@/components/customer/types'
@@ -56,7 +57,10 @@ export type UseQuoteSubmitArgs = {
   showSignature: boolean
   /** 견적 분류(quotes.category). 빈 글자면 저장하지 않는다 — runValidation 이 먼저 막는다. */
   category: string
+  /** 견적서 양식(quotes.form_kind). 같은 규칙으로 빈 글자면 저장되지 않는다. */
+  formKind: string
   setCategory: React.Dispatch<React.SetStateAction<string>>
+  setFormKind: React.Dispatch<React.SetStateAction<string>>
   setLineSplitOn: React.Dispatch<React.SetStateAction<boolean>>
 
   rows: QuoteRow[]
@@ -145,7 +149,7 @@ export function useQuoteSubmit({
   supabase, toast, router, engineer, initials, onBehalf,
   dateStr, dateDisplay, quoteNo, engineerName, engineerTel,
   company, receiver, delivery, finalRemarksForPDF, showSignature,
-  category, setCategory, setLineSplitOn,
+  category, formKind, setCategory, setFormKind, setLineSplitOn,
   rows, expenses, exchangeRate,
   customerId, euCustomerId, isDealer, opportunityId,
   totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate,
@@ -293,8 +297,8 @@ export function useQuoteSubmit({
     setRows([createRow()])
     setSearchQuery({}); setSearchResults({}); setSearchOpen({})
     setEditingProfitRate({}); setProfitRateInput({})
-    // 분류도 처음 상태로. 이어서 다음 견적을 쓸 때 다시 고르게 한다(다른 건일 수 있다).
-    setCategory(''); setLineSplitOn(false)
+    // 분류·양식도 처음 상태로. 이어서 다음 견적을 쓸 때 다시 고르게 한다(다른 건일 수 있다).
+    setCategory(''); setFormKind(''); setLineSplitOn(false)
     setOnBehalf(null)
     setErrors({})
     // 주소창의 프리필 파라미터를 지운다. 라우터를 거치지 않아 이 컴포넌트가 다시 마운트되지 않는다.
@@ -354,6 +358,9 @@ export function useQuoteSubmit({
         tax_amount: r.tax,
         // 줄별 분류 — 매출 줄만. 비웠으면 null 이고 그 뜻은 「견적 분류를 따른다」다.
         category: canSplitRowKind(r.row_kind) ? (r.category || null) : null,
+        // 장비 구성 묶음 — **장비 양식일 때만** 저장한다. 양식을 바꿨다가 되돌린 경우
+        // 화면에 안 보이는 값이 조용히 저장되는 것을 막는다.
+        group_kind: (isEquipForm(formKind) && canGroupRowKind(r.row_kind)) ? (r.group_kind || null) : null,
         cost_amount: r.product_price,
         profit_amount: r.profit,
         // 목표값이 아니라 실현 이익률을 남긴다 — 1,000원 올림·판매단가 직접 입력이 반영된 값이라
@@ -395,6 +402,8 @@ export function useQuoteSubmit({
           quote_type: quoteType,
           // 견적 분류 — 빈 글자는 null 로 눕힌다(확정 전 검증이 비어 있는 채로는 못 오게 막는다).
           category: category || null,
+          // 견적서 양식 — 같은 규칙. null 은 「기존 양식」이라는 뜻이 되므로 비워 저장하지 않는다.
+          form_kind: formKind || null,
           status: initialStatus,
           total_supply: totalSupply,
           total_tax: totalTax,

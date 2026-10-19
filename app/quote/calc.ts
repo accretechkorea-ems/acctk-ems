@@ -140,6 +140,8 @@ export function createRow(): QuoteRow {
     partCode: '', row_kind: 'price_list', manual_cost_jpy: 0, price_mode: 'rate', expenses: [],
     // 줄별 분류 — 기본은 비움(= 견적 분류를 따른다). 「분류 나누기」로 바꾼 줄만 값이 들어간다.
     category: null,
+    // 장비 구성 묶음 — 기본은 비움. 장비 양식에서 고르거나 7단계 구성 모달이 채운다.
+    group_kind: null,
   }
 }
 

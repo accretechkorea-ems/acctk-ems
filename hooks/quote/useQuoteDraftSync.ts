@@ -16,6 +16,7 @@ import type { CustomerResult, QuoteRow } from '@/app/quote/types'
 import { calcRow } from '@/app/quote/calc'
 import { DEFAULT_TERMS, type Terms } from '@/lib/quoteTerms'
 import { activeQuoteCategories, loadQuoteCategories } from '@/lib/quoteCategories'
+import { isFormKind } from '@/lib/quoteForms'
 import { loadDraft, saveDraft, clearDraft, isDraftMeaningful, type QuoteDraft } from '@/lib/quoteDraft'
 import { resolveOnBehalf, type OnBehalfAssignee } from '@/lib/quoteMutations'
 import type { useToast } from '@/components/common/Toast'
@@ -48,7 +49,10 @@ export type UseQuoteDraftSyncArgs = {
   rows: QuoteRow[]
   /** 견적 분류. 옛 초안에는 없으므로 되살릴 때 없으면 빈 글자로 둔다. */
   category: string
+  /** 견적서 양식. 분류와 같은 규칙(옛 초안에는 없다). */
+  formKind: string
   setCategory: React.Dispatch<React.SetStateAction<string>>
+  setFormKind: React.Dispatch<React.SetStateAction<string>>
 
   // 자동 저장의 트리거 — PDF 미리보기가 쓰는 600ms debounce 값을 그대로 쓴다
   debouncedRows: QuoteRow[]
@@ -83,7 +87,7 @@ export function useQuoteDraftSync({
   onBehalf, company, customerId, selectedCustomer, customerQuery, isDealer,
   euCustomerId, selectedEU, euQuery, opportunityId,
   receiver, delivery, remarks, showSignature, termsOpen, terms, rows,
-  category, setCategory,
+  category, formKind, setCategory, setFormKind,
   debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks,
   setCompany, setCustomerId, setSelectedCustomer, setCustomerQuery, setIsDealer,
   setEuCustomerId, setSelectedEU, setEuQuery, resolveEuParent,
@@ -127,6 +131,8 @@ export function useQuoteDraftSync({
     const draftCategory = typeof d.category === 'string' ? d.category : ''
     const activeList = activeQuoteCategories(await loadQuoteCategories())
     setCategory(activeList.some(c => c.code === draftCategory) ? draftCategory : '')
+    // 양식도 **선택 필드**다. 모르는 값이면 비워 다시 고르게 한다.
+    setFormKind(isFormKind(d.formKind) ? d.formKind : '')
     setRows(d.rows.map(r => calcRow(r, rateRef.current)))
     // 영업기회 목록은 고객사에 딸린 값이라 다시 불러온 뒤 저장분의 선택을 되돌린다.
     if (d.customerId != null && !d.isDealer) {
@@ -151,7 +157,7 @@ export function useQuoteDraftSync({
       company, customerId, selectedCustomer, customerQuery, isDealer,
       euCustomerId, selectedEU, euQuery, opportunityId,
       receiver, delivery, remarks, showSignature, termsOpen, terms, rows,
-      category,
+      category, formKind,
     }
     if (isDraftMeaningful(draft)) saveDraft(engineer.engineer_id, draft)
     else clearDraft(engineer.engineer_id)   // 다 지운 뒤에는 저장분도 없애 안내가 뜨지 않게 한다
