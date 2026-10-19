@@ -21,6 +21,7 @@ import ProfitPanel from './ProfitPanel'
 import CustomerCard from '@/components/quote/CustomerCard'
 import PriceGuidePopup from '@/components/quote/PriceGuidePopup'
 import RowAddButtons from '@/components/quote/RowAddButtons'
+import EquipConfigLauncher from '@/components/quote/equip/EquipConfigLauncher'
 import QuotePreviewPane from '@/components/quote/QuotePreviewPane'
 import ConfirmQuoteModal from '@/components/quote/ConfirmQuoteModal'
 import QuoteItemRow from './QuoteItemRow'
@@ -696,6 +697,17 @@ function QuotePageInner() {
               {rows.length > 0 && (
                 <span style={{ fontSize: 12, color: '#9ca3af' }}>총 {rows.length}개</span>
               )}
+              {/* 장비 구성 선택 — 장비 양식에서만 나온다(그 밖의 양식에서는 아무것도 그리지 않는다) */}
+              <EquipConfigLauncher
+                formKind={formKind}
+                category={category}
+                exchangeRate={exchangeRate}
+                setExchangeRate={setExchangeRate}
+                rows={rows}
+                setRows={setRows}
+                myId={engineer?.engineer_id ?? null}
+                myName={[engineer?.name, engineer?.position].filter(Boolean).join(' ')}
+              />
               {/* 마진/정도검사 가이드 버튼 — 오른쪽 끝 */}
               <PriceGuidePopup
                 open={showPriceGuide}
