@@ -8,11 +8,12 @@ import { useFieldErrors, FieldError, errBorder } from '@/components/common/field
 import { usePageGuard } from '@/hooks/usePageGuard'
 import { useQuoteCustomer } from '@/hooks/quote/useQuoteCustomer'
 import { useQuoteRows } from '@/hooks/quote/useQuoteRows'
+import { useQuotePrefill } from '@/hooks/quote/useQuotePrefill'
 import AccessGate from '@/components/common/AccessGate'
 import { BlobProvider, pdf } from '@react-pdf/renderer'
-import type { Engineer, ExpenseRow, PriceItem, QuoteRow, RowKind } from './types'
+import type { Engineer, QuoteRow } from './types'
 import { isClosed } from '@/components/customer/opportunity'
-import { calcExpense, calcRow, calcTotals, createDiscountRow, createDomesticRow, createExpenseRow, createManualJpyRow, createRow, createServiceRow } from './calc'
+import { calcRow, calcTotals, createDiscountRow, createDomesticRow, createManualJpyRow, createRow, createServiceRow } from './calc'
 import { numKR } from './format'
 import { useDebounce } from './useDebounce'
 import { QuotePDFDoc } from './QuotePDFDoc'
@@ -21,33 +22,13 @@ import QuoteItemRow from './QuoteItemRow'
 import { Z } from '@/lib/zIndex'
 import {
   DEFAULT_TERMS, TERM_KEYS, TERM_LABELS, TERM_MAX_LEN,
-  changedTerms, normalizeTerms, termsOf, type TermKey, type Terms,
+  normalizeTerms, type TermKey, type Terms,
 } from '@/lib/quoteTerms'
-import { normalizeSubLines, subLinesOf } from '@/lib/quoteSubLines'
+import { normalizeSubLines } from '@/lib/quoteSubLines'
 
 /**
  * 비고 기본 문구. 내용은 그대로 두고, 사용자가 손댔는지 비교하려고 상수로 뺐다.
  */
-// /api/quote-duplicate 응답. 원본 견적의 '입력값' 만 담는다(금액은 새 환율로 다시 계산한다).
-type DuplicatePayload = {
-  quote: {
-    quote_number: string
-    customer_id: number | null; dealer_id: number | null; opportunity_id: number | null
-    recipient: string | null; delivery_info: string | null; note: string | null; quote_type: string | null
-    /** 조건 네 줄(quotes.terms). null 이면 모두 기본값이다. */
-    terms: unknown
-  }
-  items: {
-    price_list_id: number | null; part_code: string | null; row_kind: string | null
-    product_name: string | null; quantity: number | null; unit_price_jpy: number | null
-    unit_price_krw: number | null; supply_amount: number | null
-    profit_rate: number | null; tariff_rate: number | null
-    /** 품명 아래 설명 줄(quote_items.sub_lines). null 이면 줄이 없다. */
-    sub_lines: unknown
-    price_list: PriceItem | null
-  }[]
-  expenses: { item_name: string | null; unit_price: number | null; headcount: number | null; days: number | null }[]
-}
 
 const DEFAULT_REMARKS = '* 발주 진행 시 팩스 또는 메일로 발주서 회신 요망\n   (FAX : 031-786-4090)'
 
@@ -95,7 +76,6 @@ function isNameTakenError(err: unknown): boolean {
   if (String(e.statusCode ?? '') === '409') return true
   return /already exists|duplicate/i.test(`${e.message ?? ''} ${e.error ?? ''}`)
 }
-import { parentCompanyName } from '@/components/customer/ParentPicker'
 import { euDisplayName } from '@/lib/quoteEuName'
 import { loadDraft, saveDraft, clearDraft, isDraftMeaningful, draftSavedLabel, type QuoteDraft } from '@/lib/quoteDraft'
 import {
@@ -328,89 +308,6 @@ function QuotePageInner() {
   const { totalSupply: pdfTotalSupply, totalTax: pdfTotalTax, totalAmount: pdfTotalAmount } = calcTotals(debouncedRows)
 
 
-  // ── 다시쓰기: 서버가 돌려준 원본 내용을 화면 상태로 되돌린다 ──
-  // 환율만 오늘 것을 쓴다. 각 행의 exchange_rate 를 0 으로 비워 두면 calcRow 가 현재 환율을 잡는다
-  // — 과거 환율이 남으면 단가가 그때 값으로 굳어 버린다.
-  const applyDuplicate = async (payload: DuplicatePayload) => {
-    const { quote, items, expenses } = payload
-    // 부대비용은 서비스비 행 하나에 통째로 붙는다(견적당 1건).
-    const expenseRows: ExpenseRow[] = expenses.map(e => calcExpense({
-      ...createExpenseRow(),
-      item_name: e.item_name ?? '', unit_price: Number(e.unit_price) || 0,
-      headcount: Number(e.headcount) || 0, days: Number(e.days) || 0,
-    }))
-    const built: QuoteRow[] = items.map(it => {
-      const kind = (it.row_kind as RowKind) || 'price_list'
-      const unitKrw = Number(it.unit_price_krw) || 0
-      const base = createRow()
-      return calcRow({
-        ...base,
-        row_kind: kind,
-        itemText: it.product_name ?? '',
-        partCode: it.part_code ?? '',
-        quantity: Number(it.quantity) || base.quantity,
-        tariff_rate: it.tariff_rate == null ? base.tariff_rate : Number(it.tariff_rate),
-        // 저장된 값은 목표값이 아니라 실현 이익률이다. 그대로 목표값 자리에 넣고 새 환율로 다시 계산한다.
-        profit_rate: Number(it.profit_rate) || 0,
-        exchange_rate: 0,
-        selectedItem: it.price_list ?? null,
-        manual_cost_jpy: kind === 'manual_jpy' ? Number(it.unit_price_jpy) || 0 : 0,
-        // 할인은 사용자가 양수로 넣는 값이라 음수 공급가를 되돌린다.
-        manual_unit_price: kind === 'discount' ? Math.abs(Number(it.supply_amount) || 0) : unitKrw,
-        // price_mode 는 저장되지 않는다. 이익률 모드는 반드시 1,000원 올림을 하므로
-        // 단가가 1,000원 배수가 아니면 판매가 모드였던 것이 확실하다. 배수면 기본값(rate)으로 둔다.
-        price_mode: (kind === 'price_list' || kind === 'manual_jpy') && unitKrw % 1000 !== 0 ? 'price' : 'rate',
-        // 품명 아래 설명 줄 — 저장값을 그대로 되살린다. 없거나 깨졌으면 빈 배열이다(subLinesOf).
-        subLines: subLinesOf(it.sub_lines),
-        expenses: kind === 'service' ? expenseRows : [],
-      }, rateRef.current)
-    })
-    setRows(built.length > 0 ? built : [createRow()])
-
-    // 대리점 견적이면 청구처가 대리점(dealer_id), 최종 사용 업체가 customer_id 다.
-    const dealer = quote.dealer_id != null
-    const mainId = dealer ? quote.dealer_id : quote.customer_id
-    const euId = dealer ? quote.customer_id : null
-    setIsDealer(dealer)
-    setCustomerId(mainId); setEuCustomerId(euId)
-    const ids = [mainId, euId].filter((v): v is number => v != null)
-    if (ids.length > 0) {
-      const { data } = await supabase.from('customers')
-        .select('customer_id, company_name, address, status').in('customer_id', ids)
-      const find = (id: number | null) => (data ?? []).find(c => c.customer_id === id) ?? null
-      const main = find(mainId), eu = find(euId)
-      if (main) { setSelectedCustomer(main); setCustomerQuery(main.company_name); setCompany(main.company_name) }
-      if (eu) { setSelectedEU(eu); setEuQuery(eu.company_name) }
-      // 수신처는 소속회사 이름이 우선이다(작성 화면의 고객사 선택과 같은 규칙).
-      if (mainId != null) parentCompanyName(mainId).then(name => { if (name) setCompany(name) }).catch(() => {})
-      // E.U 도 같은 규칙으로 다시 구한다 — 원본 비고의 E.U 줄은 아래에서 떼어 내고 새로 조립한다.
-      resolveEuParent(euId)
-    }
-
-    setReceiver(quote.recipient ?? '')
-    setDelivery(quote.delivery_info ?? '')
-    // 조건 네 줄 — 원본에 바꾼 값이 있으면 체크를 켜고 채운다. 없으면 **닫힌 기본 상태**다.
-    {
-      const restored = termsOf(quote.terms)
-      const changed = changedTerms(quote.terms).length > 0
-      setTermsOpen(changed)
-      setTerms(changed ? restored : { ...DEFAULT_TERMS })
-    }
-    // note 에는 납기·E.U 줄이 합쳐져 저장된다. 그 둘은 각자 칸에서 다시 만들어지므로 본문만 남긴다.
-    setRemarks((quote.note ?? '').split('\n')
-      .filter(line => !/^\*\s*납기\s*:/.test(line) && !/^\*\s*E\.U/.test(line))
-      .join('\n').trim())
-
-    // 영업기회는 아직 살아 있을 때만 잇는다(수주·종료된 기회에 새 견적을 달지 않는다).
-    if (!dealer && mainId != null) {
-      await loadOpportunities(mainId)
-      const { data: opps } = await supabase.from('sales_opportunities')
-        .select('opportunity_id').eq('customer_id', mainId)
-      const alive = (opps ?? []).some(o => o.opportunity_id === quote.opportunity_id)
-      setOpportunityId(alive ? quote.opportunity_id : null)
-    }
-    toast.success(`${quote.quote_number} 의 내용을 불러왔습니다. 확정하면 새 번호로 발급됩니다`)
-  }
 
 
 const handleDownloadPDF = async (
@@ -854,24 +751,17 @@ const handleDownloadPDF = async (
       onBehalf, customerId, selectedCustomer, isDealer, euCustomerId, selectedEU, opportunityId, showSignature,
       termsOpen, terms])
 
-  // ── 다시쓰기 (1회) ──
-  // 원본은 그대로 두고 내용만 가져온다. 확정하면 새 번호가 발급된다(번호 규칙은 손대지 않는다).
-  const duplicateDone = useRef(false)
-  useEffect(() => {
-    if (duplicateDone.current || duplicateId == null || !engineer) return
-    duplicateDone.current = true
-    const run = async () => {
-      const res = await fetch('/api/quote-duplicate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quoteId: duplicateId }),
-      })
-      const json = await res.json().catch(() => ({}))
-      if (!res.ok) { toast.error(json.error || '견적을 불러오지 못했습니다'); return }
-      applyDuplicate(json)
-    }
-    run()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [duplicateId, engineer])
+  // 주소 파라미터 프리필 — ?duplicate / ?on_behalf / ?repair_id. effect 셋을 그대로 옮긴 훅이다.
+  // 원본에서는 다시쓰기와 대필 사이에 아래 「부대비용 프리셋」 effect 가 끼어 있었다(그것만 뒤로 밀렸다).
+  useQuotePrefill({
+    supabase, toast, searchParams, rateRef,
+    duplicateId, onBehalfId, repairId, engineer,
+    setOnBehalf, setRows, setIsDealer, setCustomerId, setEuCustomerId,
+    setSelectedCustomer, setCustomerQuery, setCompany, setSelectedEU, setEuQuery,
+    resolveEuParent, setReceiver, setDelivery, setTermsOpen, setTerms, setRemarks,
+    loadOpportunities, setOpportunityId, handleCustomerSelect,
+    setCustomerResults, setCustomerSearchOpen, setPrefillNotice,
+  })
 
   // 부대비용 표준 항목·단가(expense_presets) 1회 로드.
   // 실패 시 presetError → 카드에 안내 + 추가 버튼 비활성(단가 0 스냅샷 방지).
@@ -892,51 +782,6 @@ const handleDownloadPDF = async (
     f()
   }, [])
 
-  // 대필 승인 (1회). 서버가 거절하면 대필 모드로 들어가지 않고 평소대로 본인 견적을 쓴다
-  // — 거절 사유는 "영업관리가 아니다" 또는 "대필할 수 없는 담당자다" 둘 중 하나다.
-  const onBehalfDone = useRef(false)
-  useEffect(() => {
-    if (onBehalfDone.current || onBehalfId == null) return
-    onBehalfDone.current = true
-    resolveOnBehalf(onBehalfId).then(r => {
-      if (r.ok) { setOnBehalf(r.assignee); return }
-      toast.error(r.error || '대필할 수 없습니다')
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onBehalfId])
-
-  // 수리 건 → 견적서 prefill (1회). repair_id 가 유효할 때만. 없으면 일반 견적서로 동작.
-  const prefillDone = useRef(false)
-  useEffect(() => {
-    if (prefillDone.current || repairId == null) return
-    prefillDone.current = true
-    const product = (searchParams.get('product') ?? '').trim()
-    const serial = (searchParams.get('serial') ?? '').trim()
-    const customer = (searchParams.get('customer') ?? '').trim()
-    // product → 첫 품목 itemText, serial → 첫 품목 subLines
-    if (product || serial) {
-      setRows(prev => {
-        if (prev.length === 0) return prev
-        const first = { ...prev[0], itemText: product || prev[0].itemText, subLines: serial ? [serial] : prev[0].subLines }
-        return [first, ...prev.slice(1)]
-      })
-    }
-    // customer → customers ilike. 정확히 1건이면 자동선택.
-    // 여러 건이면 고객사를 고르지 않으면 저장이 막히므로, 후보 목록을 바로 펼쳐 두고 안내한다.
-    if (customer) {
-      setCustomerQuery(customer)
-      supabase.from('customers').select('customer_id, company_name, address, status')
-        .is('deleted_at', null).eq('is_parent', false).ilike('company_name', `%${customer}%`).limit(10)
-        .then(({ data }) => {
-          if (!data || data.length === 0) return
-          if (data.length === 1) { handleCustomerSelect(data[0]); return }
-          setCustomerResults(data)
-          setCustomerSearchOpen(true)
-          setPrefillNotice('여러 업체가 검색되었습니다. 하나를 선택해주세요')
-        })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repairId])
 
   const fetchRate = useCallback(async () => {
     setRateLoading(true)
