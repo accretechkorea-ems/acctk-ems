@@ -10,6 +10,9 @@
 //
 // 내용은 접어도 **늘 마운트돼 있다** — grid 0fr↔1fr 로 높이만 닫으므로 접었다 펴도 값이 남는다.
 
+/** 이 줄 수를 넘으면 「표가 줄어듭니다」를 알린다. PDF 하단 블록이 그때부터 표를 눌러 온다. */
+const REMARKS_HINT_LINES = 6
+
 export type RemarksEditorProps = {
   remarks: string
   setRemarks: (v: string) => void
@@ -25,6 +28,9 @@ export default function RemarksEditor({
   // 비고 — 접힌 줄에 보여줄 첫 줄과, 기본 문구에서 손댔는지 여부.
   const remarksPreview = remarks.trim().split('\n')[0] ?? ''
   const remarksEdited = remarks.trim() !== defaultRemarks.trim()
+  // 비고가 길면 PDF 하단 블록이 커져 그만큼 품목 표가 줄어든다(표와 같은 칸을 나눠 쓴다).
+  // **막지는 않는다** — 꼭 길게 써야 하는 건이 있다. 그 사실만 알린다.
+  const remarksLineCount = remarks.split('\n').length
 
   // 비고 — 기본 문구가 채워져 있고 고칠 일이 드물어 접어 둔다.
   // 접힌 줄에 첫 줄을 회색으로 보여주고, 기본 문구에서 손댔으면 「수정됨」을 붙인다.
@@ -54,6 +60,12 @@ export default function RemarksEditor({
     <div style={{ display: 'grid', gridTemplateRows: remarksOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.15s ease' }}>
       <div style={{ overflow: 'hidden', minHeight: 0 }}>
         <textarea className="q-box-area" value={remarks} onChange={e => setRemarks(e.target.value)} rows={3} />
+        {/* 길이 안내 — 막지 않는다. PDF 하단 블록이 품목 표와 같은 칸을 나눠 쓰기 때문이다. */}
+        {remarksLineCount > REMARKS_HINT_LINES && (
+          <div style={{ padding: '0 11px 8px', fontSize: 11, color: '#9ca3af', lineHeight: 1.6 }}>
+            비고가 {remarksLineCount}줄입니다. 비고가 길면 표가 줄어듭니다
+          </div>
+        )}
       </div>
     </div>
   </div>
