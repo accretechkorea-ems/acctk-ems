@@ -9,6 +9,7 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import { useQuoteCustomer } from '@/hooks/quote/useQuoteCustomer'
 import { useQuoteRows } from '@/hooks/quote/useQuoteRows'
 import { useQuotePrefill } from '@/hooks/quote/useQuotePrefill'
+import { useQuoteDraftSync } from '@/hooks/quote/useQuoteDraftSync'
 import AccessGate from '@/components/common/AccessGate'
 import { BlobProvider, pdf } from '@react-pdf/renderer'
 import type { Engineer, QuoteRow } from './types'
@@ -77,9 +78,9 @@ function isNameTakenError(err: unknown): boolean {
   return /already exists|duplicate/i.test(`${e.message ?? ''} ${e.error ?? ''}`)
 }
 import { euDisplayName } from '@/lib/quoteEuName'
-import { loadDraft, saveDraft, clearDraft, isDraftMeaningful, draftSavedLabel, type QuoteDraft } from '@/lib/quoteDraft'
+import { clearDraft, draftSavedLabel } from '@/lib/quoteDraft'
 import {
-  resolveOnBehalf, notifyOnBehalf,
+  notifyOnBehalf,
   type OnBehalfAssignee,
 } from '@/lib/quoteMutations'
 import { todayKST } from '@/lib/date'
@@ -115,10 +116,6 @@ function QuotePageInner() {
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   // 확정 모달의 확인 버튼 중복 클릭 방지. 저장 → PDF 가 끝날 때까지 잠근다.
   const [isSubmitting, setIsSubmitting] = useState(false)
-  // 임시저장 — 저장분이 있으면 이어쓸지 먼저 묻는다. 답하기 전에는 자동 저장을 시작하지 않는다
-  // (빈 화면이 저장분을 덮어써 버리기 때문).
-  const [draftAsk, setDraftAsk] = useState<QuoteDraft | null>(null)
-  const [draftReady, setDraftReady] = useState(false)
 
   const [engineer, setEngineer] = useState<Engineer | null>(null)
   // 대필 대상. 서버가 승인한 뒤에만 채워진다(null 이면 평소대로 본인 견적).
@@ -693,63 +690,19 @@ const handleDownloadPDF = async (
 
   useEffect(() => { rateRef.current = exchangeRate }, [exchangeRate])
 
-  // ── 임시저장: 저장분 확인 (1회) ──
-  // 계정이 정해진 뒤에 본다 — 키가 engineer_id 라 남의 저장분은 애초에 읽히지 않는다.
-  const draftCheckDone = useRef(false)
-  useEffect(() => {
-    if (draftCheckDone.current || !engineer) return
-    draftCheckDone.current = true
-    if (hasUrlPrefill) { clearDraft(engineer.engineer_id); setDraftReady(true); return }
-    const d = loadDraft(engineer.engineer_id)
-    if (d) setDraftAsk(d)
-    else setDraftReady(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engineer])
-
-  // 저장분을 화면에 되돌린다.
-  // 대필만 저장된 값을 쓰지 않고 서버에 다시 물어본다 — localStorage 를 고쳐
-  // 남의 실적으로 견적을 만드는 길을 막기 위해서다(id 만 저장하는 이유).
-  const applyDraft = async (d: QuoteDraft) => {
-    setCompany(d.company); setCustomerId(d.customerId); setSelectedCustomer(d.selectedCustomer)
-    setCustomerQuery(d.customerQuery); setIsDealer(d.isDealer)
-    setEuCustomerId(d.euCustomerId); setSelectedEU(d.selectedEU); setEuQuery(d.euQuery)
-    // 회사 이름은 저장분에 담지 않는다(초안 형식을 바꾸지 않는다) — 되살릴 때 다시 구한다.
-    resolveEuParent(d.euCustomerId)
-    setReceiver(d.receiver); setDelivery(d.delivery); setRemarks(d.remarks); setShowSignature(d.showSignature)
-    // 조건은 **선택 필드**다 — 옛 초안에는 없으므로 없으면 닫힌 기본 상태로 둔다.
-    setTermsOpen(d.termsOpen === true)
-    setTerms(d.terms ? { ...DEFAULT_TERMS, ...d.terms } : { ...DEFAULT_TERMS })
-    setRows(d.rows.map(r => calcRow(r, rateRef.current)))
-    // 영업기회 목록은 고객사에 딸린 값이라 다시 불러온 뒤 저장분의 선택을 되돌린다.
-    if (d.customerId != null && !d.isDealer) {
-      await loadOpportunities(d.customerId)
-      setOpportunityId(d.opportunityId)
-    }
-    setDraftAsk(null); setDraftReady(true)
-    if (d.onBehalfId != null) {
-      const r = await resolveOnBehalf(d.onBehalfId)
-      if (r.ok) setOnBehalf(r.assignee)
-      else toast.error(r.error || '대필 상태를 되살리지 못했습니다')
-    }
-  }
-
-  // ── 임시저장: 자동 저장 ──
-  // PDF 미리보기가 쓰는 600ms debounce 값을 그대로 트리거로 삼는다(타이핑마다 쓰지 않는다).
-  // 저장하는 값은 그 순간의 최신 상태다.
-  useEffect(() => {
-    if (!engineer || !draftReady) return
-    const draft = {
-      onBehalfId: onBehalf?.engineer_id ?? null,
-      company, customerId, selectedCustomer, customerQuery, isDealer,
-      euCustomerId, selectedEU, euQuery, opportunityId,
-      receiver, delivery, remarks, showSignature, termsOpen, terms, rows,
-    }
-    if (isDraftMeaningful(draft)) saveDraft(engineer.engineer_id, draft)
-    else clearDraft(engineer.engineer_id)   // 다 지운 뒤에는 저장분도 없애 안내가 뜨지 않게 한다
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engineer, draftReady, debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks,
-      onBehalf, customerId, selectedCustomer, isDealer, euCustomerId, selectedEU, opportunityId, showSignature,
-      termsOpen, terms])
+  // 임시저장 — 저장분 확인 · 되돌리기 · 자동 저장. effect 둘을 그대로 옮긴 훅이다.
+  // 모달에 답하기 전에는 자동 저장이 시작되지 않는다(draftReady). 순서가 규칙이라 여기서 부른다.
+  const { draftAsk, setDraftAsk, setDraftReady, applyDraft } = useQuoteDraftSync({
+    toast, rateRef, engineer, hasUrlPrefill,
+    onBehalf, company, customerId, selectedCustomer, customerQuery, isDealer,
+    euCustomerId, selectedEU, euQuery, opportunityId,
+    receiver, delivery, remarks, showSignature, termsOpen, terms, rows,
+    debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks,
+    setCompany, setCustomerId, setSelectedCustomer, setCustomerQuery, setIsDealer,
+    setEuCustomerId, setSelectedEU, setEuQuery, resolveEuParent,
+    setReceiver, setDelivery, setRemarks, setShowSignature, setTermsOpen, setTerms, setRows,
+    loadOpportunities, setOpportunityId, setOnBehalf,
+  })
 
   // 주소 파라미터 프리필 — ?duplicate / ?on_behalf / ?repair_id. effect 셋을 그대로 옮긴 훅이다.
   // 원본에서는 다시쓰기와 대필 사이에 아래 「부대비용 프리셋」 effect 가 끼어 있었다(그것만 뒤로 밀렸다).
