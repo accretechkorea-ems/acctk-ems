@@ -190,3 +190,29 @@ export const deleteTemplate = (id: string) =>
  */
 export const markTemplateUsed = (id: string) =>
   callTemplateApi<{ id: string }>({ action: 'use', id })
+
+/**
+ * 템플릿별 줄 수 — 목록에 「N항목」을 보여 주려고 센다.
+ *
+ * 관계 임베딩(`quote_template_items(count)`)을 쓰지 않고 template_id 만 받아 세는 이유는,
+ * 임베딩이 PostgREST 의 관계 노출에 기대고 그게 어긋나면 **목록 자체가 비기** 때문이다.
+ * 받는 값은 id 한 칸뿐이라 양도 작다(템플릿당 최대 TEMPLATE_ITEM_MAX 줄).
+ */
+export async function loadTemplateItemCounts(
+  supabase: SupabaseClient, ids: string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>()
+  if (ids.length === 0) return counts
+  const { data, error } = await supabase
+    .from('quote_template_items')
+    .select('template_id')
+    .in('template_id', ids)
+  if (error) {
+    console.error('[quoteTemplates] 줄 수 조회 실패', error)
+    return counts
+  }
+  for (const r of (data ?? []) as { template_id: string }[]) {
+    counts.set(r.template_id, (counts.get(r.template_id) ?? 0) + 1)
+  }
+  return counts
+}
