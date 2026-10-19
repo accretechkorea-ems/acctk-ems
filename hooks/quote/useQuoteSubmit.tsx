@@ -16,7 +16,7 @@
 import { useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { pdf } from '@react-pdf/renderer'
-import type { ExpenseRow, QuoteRow } from '@/app/quote/types'
+import type { ExpenseRow, PriceItem, QuoteRow } from '@/app/quote/types'
 import { calcTotals, createRow } from '@/app/quote/calc'
 import { QuotePDFDoc } from '@/app/quote/QuotePDFDoc'
 import { DEFAULT_TERMS, type Terms } from '@/lib/quoteTerms'
@@ -25,6 +25,9 @@ import { notifyOnBehalf, type OnBehalfAssignee } from '@/lib/quoteMutations'
 import type { CustomerResult } from '@/app/quote/types'
 import type { SalesOpportunity } from '@/components/customer/types'
 import type { useToast } from '@/components/common/Toast'
+
+/** 검증 대상 입력 칸 — useFieldErrors 에 넘기는 키와 같다(page.tsx 의 useFieldErrors). */
+export type QuoteFieldKey = 'company' | 'eu' | 'items' | 'expenses'
 
 /** 조건 네 줄 정규화 결과 — 화면이 이미 만들어 둔 값을 그대로 받는다(normalizeTerms). */
 type TermsResult = { ok: true; terms: Terms; stored: Terms | null } | { ok: false; message: string }
@@ -73,43 +76,43 @@ export type UseQuoteSubmitArgs = {
   withNormalizedSubLines: (list: QuoteRow[]) => QuoteRow[]
 
   runValidation: () => boolean
-  setErrors: (v: Record<string, string | undefined>) => void
+  setErrors: React.Dispatch<React.SetStateAction<Partial<Record<QuoteFieldKey, string>>>>
 
   repairId: number | null
   hasUrlPrefill: boolean
-  setParamsCleared: (v: boolean) => void
-  setPreviewSeq: (v: number) => void
+  setParamsCleared: React.Dispatch<React.SetStateAction<boolean>>
+  setPreviewSeq: React.Dispatch<React.SetStateAction<number>>
   /** 비고 기본 문구(page.tsx 의 DEFAULT_REMARKS). resetForm 이 이 값으로 되돌린다. */
   defaultRemarks: string
 
-  setCompany: (v: string) => void
-  setCustomerId: (v: number | null) => void
-  setCustomerQuery: (v: string) => void
-  setCustomerResults: (v: CustomerResult[]) => void
-  setCustomerSearchOpen: (v: boolean) => void
-  setSelectedCustomer: (v: CustomerResult | null) => void
-  setPrefillNotice: (v: string | null) => void
-  setIsDealer: (v: boolean) => void
-  setEuCustomerId: (v: number | null) => void
-  setEuQuery: (v: string) => void
-  setEuResults: (v: CustomerResult[]) => void
-  setEuSearchOpen: (v: boolean) => void
-  setSelectedEU: (v: CustomerResult | null) => void
+  setCompany: React.Dispatch<React.SetStateAction<string>>
+  setCustomerId: React.Dispatch<React.SetStateAction<number | null>>
+  setCustomerQuery: React.Dispatch<React.SetStateAction<string>>
+  setCustomerResults: React.Dispatch<React.SetStateAction<CustomerResult[]>>
+  setCustomerSearchOpen: React.Dispatch<React.SetStateAction<boolean>>
+  setSelectedCustomer: React.Dispatch<React.SetStateAction<CustomerResult | null>>
+  setPrefillNotice: React.Dispatch<React.SetStateAction<string | null>>
+  setIsDealer: React.Dispatch<React.SetStateAction<boolean>>
+  setEuCustomerId: React.Dispatch<React.SetStateAction<number | null>>
+  setEuQuery: React.Dispatch<React.SetStateAction<string>>
+  setEuResults: React.Dispatch<React.SetStateAction<CustomerResult[]>>
+  setEuSearchOpen: React.Dispatch<React.SetStateAction<boolean>>
+  setSelectedEU: React.Dispatch<React.SetStateAction<CustomerResult | null>>
   resolveEuParent: (customerId: number | null) => void
-  setOpportunities: (v: SalesOpportunity[]) => void
-  setOpportunityId: (v: number | null) => void
-  setReceiver: (v: string) => void
-  setDelivery: (v: string) => void
-  setRemarks: (v: string) => void
-  setRemarksOpen: (v: boolean) => void
-  setShowSignature: (v: boolean) => void
+  setOpportunities: React.Dispatch<React.SetStateAction<SalesOpportunity[]>>
+  setOpportunityId: React.Dispatch<React.SetStateAction<number | null>>
+  setReceiver: React.Dispatch<React.SetStateAction<string>>
+  setDelivery: React.Dispatch<React.SetStateAction<string>>
+  setRemarks: React.Dispatch<React.SetStateAction<string>>
+  setRemarksOpen: React.Dispatch<React.SetStateAction<boolean>>
+  setShowSignature: React.Dispatch<React.SetStateAction<boolean>>
   setRows: React.Dispatch<React.SetStateAction<QuoteRow[]>>
-  setSearchQuery: (v: Record<string, string>) => void
-  setSearchResults: (v: Record<string, never[]>) => void
-  setSearchOpen: (v: Record<string, boolean>) => void
-  setEditingProfitRate: (v: Record<string, boolean>) => void
-  setProfitRateInput: (v: Record<string, string>) => void
-  setOnBehalf: (v: OnBehalfAssignee | null) => void
+  setSearchQuery: React.Dispatch<React.SetStateAction<Record<string, string>>>
+  setSearchResults: React.Dispatch<React.SetStateAction<Record<string, PriceItem[]>>>
+  setSearchOpen: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  setEditingProfitRate: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  setProfitRateInput: React.Dispatch<React.SetStateAction<Record<string, string>>>
+  setOnBehalf: React.Dispatch<React.SetStateAction<OnBehalfAssignee | null>>
 }
 
 /** 이니셜이 없는 사람은 번호를 만들 수 없다 — 다른 사람 이니셜로 대신하면 번호가 겹친다. */

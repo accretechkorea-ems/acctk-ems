@@ -53,25 +53,25 @@ export type UseQuoteDraftSyncArgs = {
   debouncedFinalRemarks: string
 
   // 저장분을 되돌릴 때 쓰는 화면 setter 들
-  setCompany: (v: string) => void
-  setCustomerId: (v: number | null) => void
-  setSelectedCustomer: (v: CustomerResult | null) => void
-  setCustomerQuery: (v: string) => void
-  setIsDealer: (v: boolean) => void
-  setEuCustomerId: (v: number | null) => void
-  setSelectedEU: (v: CustomerResult | null) => void
-  setEuQuery: (v: string) => void
+  setCompany: React.Dispatch<React.SetStateAction<string>>
+  setCustomerId: React.Dispatch<React.SetStateAction<number | null>>
+  setSelectedCustomer: React.Dispatch<React.SetStateAction<CustomerResult | null>>
+  setCustomerQuery: React.Dispatch<React.SetStateAction<string>>
+  setIsDealer: React.Dispatch<React.SetStateAction<boolean>>
+  setEuCustomerId: React.Dispatch<React.SetStateAction<number | null>>
+  setSelectedEU: React.Dispatch<React.SetStateAction<CustomerResult | null>>
+  setEuQuery: React.Dispatch<React.SetStateAction<string>>
   resolveEuParent: (customerId: number | null) => void
-  setReceiver: (v: string) => void
-  setDelivery: (v: string) => void
-  setRemarks: (v: string) => void
-  setShowSignature: (v: boolean) => void
-  setTermsOpen: (v: boolean) => void
-  setTerms: (v: Terms) => void
+  setReceiver: React.Dispatch<React.SetStateAction<string>>
+  setDelivery: React.Dispatch<React.SetStateAction<string>>
+  setRemarks: React.Dispatch<React.SetStateAction<string>>
+  setShowSignature: React.Dispatch<React.SetStateAction<boolean>>
+  setTermsOpen: React.Dispatch<React.SetStateAction<boolean>>
+  setTerms: React.Dispatch<React.SetStateAction<Terms>>
   setRows: React.Dispatch<React.SetStateAction<QuoteRow[]>>
   loadOpportunities: (cid: number | null) => Promise<void>
-  setOpportunityId: (v: number | null) => void
-  setOnBehalf: (v: OnBehalfAssignee | null) => void
+  setOpportunityId: React.Dispatch<React.SetStateAction<number | null>>
+  setOnBehalf: React.Dispatch<React.SetStateAction<OnBehalfAssignee | null>>
 }
 
 export function useQuoteDraftSync({

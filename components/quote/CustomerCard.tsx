@@ -11,6 +11,7 @@
 // 비고·조건 묶음은 다음 단계(3a-7·3a-8)에서 다시 RemarksEditor·TermsEditor 로 나눈다.
 
 import { FieldError, errBorder } from '@/components/common/fieldErrors'
+import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { isClosed } from '@/components/customer/opportunity'
 import { euDisplayName } from '@/lib/quoteEuName'
 import { Z } from '@/lib/zIndex'
@@ -21,8 +22,11 @@ import type { CustomerResult } from '@/app/quote/types'
 import type { SalesOpportunity } from '@/components/customer/types'
 
 
-/** 후보 목록의 키보드 조작 결과(useListKeyboard 반환값). */
-type ListKeys = { active: number; setActive: (i: number) => void; onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void }
+/**
+ * 후보 목록의 키보드 조작 결과 — **훅의 반환 타입을 그대로** 쓴다.
+ * 손으로 베껴 적었을 때는 setActive 가 (i: number) => void 였는데 실제로는 Dispatch 다.
+ */
+type ListKeys = ReturnType<typeof useListKeyboard<CustomerResult>>
 
 /** 사명 칸 — 검색·선택·해제와 대리점 체크박스. 대리점 체크가 이 칸 안에 있어 함께 둔다. */
 export type CustomerCardCustomer = {

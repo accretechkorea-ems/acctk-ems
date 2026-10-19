@@ -55,28 +55,28 @@ export type UseQuotePrefillArgs = {
   onBehalfId: number | null
   repairId: number | null
   engineer: { engineer_id: number } | null
-  setOnBehalf: (v: OnBehalfAssignee | null) => void
+  setOnBehalf: React.Dispatch<React.SetStateAction<OnBehalfAssignee | null>>
   setRows: React.Dispatch<React.SetStateAction<QuoteRow[]>>
-  setIsDealer: (v: boolean) => void
-  setCustomerId: (v: number | null) => void
-  setEuCustomerId: (v: number | null) => void
-  setSelectedCustomer: (v: CustomerResult | null) => void
-  setCustomerQuery: (v: string) => void
-  setCompany: (v: string) => void
-  setSelectedEU: (v: CustomerResult | null) => void
-  setEuQuery: (v: string) => void
+  setIsDealer: React.Dispatch<React.SetStateAction<boolean>>
+  setCustomerId: React.Dispatch<React.SetStateAction<number | null>>
+  setEuCustomerId: React.Dispatch<React.SetStateAction<number | null>>
+  setSelectedCustomer: React.Dispatch<React.SetStateAction<CustomerResult | null>>
+  setCustomerQuery: React.Dispatch<React.SetStateAction<string>>
+  setCompany: React.Dispatch<React.SetStateAction<string>>
+  setSelectedEU: React.Dispatch<React.SetStateAction<CustomerResult | null>>
+  setEuQuery: React.Dispatch<React.SetStateAction<string>>
   resolveEuParent: (customerId: number | null) => void
-  setReceiver: (v: string) => void
-  setDelivery: (v: string) => void
-  setTermsOpen: (v: boolean) => void
-  setTerms: (v: Terms) => void
-  setRemarks: (v: string) => void
+  setReceiver: React.Dispatch<React.SetStateAction<string>>
+  setDelivery: React.Dispatch<React.SetStateAction<string>>
+  setTermsOpen: React.Dispatch<React.SetStateAction<boolean>>
+  setTerms: React.Dispatch<React.SetStateAction<Terms>>
+  setRemarks: React.Dispatch<React.SetStateAction<string>>
   loadOpportunities: (cid: number | null) => Promise<void>
-  setOpportunityId: (v: number | null) => void
+  setOpportunityId: React.Dispatch<React.SetStateAction<number | null>>
   handleCustomerSelect: (c: CustomerResult) => void
-  setCustomerResults: (v: CustomerResult[]) => void
-  setCustomerSearchOpen: (v: boolean) => void
-  setPrefillNotice: (v: string | null) => void
+  setCustomerResults: React.Dispatch<React.SetStateAction<CustomerResult[]>>
+  setCustomerSearchOpen: React.Dispatch<React.SetStateAction<boolean>>
+  setPrefillNotice: React.Dispatch<React.SetStateAction<string | null>>
 }
 
 export function useQuotePrefill({
