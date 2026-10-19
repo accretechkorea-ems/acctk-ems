@@ -446,7 +446,7 @@ export default function CustomerCard({ errors, clearError, category, customer, e
       </label>
     </div>
 
-    <TermsEditor termsOpen={termsOpen} terms={terms} setTerms={setTerms} />
+    <TermsEditor termsOpen={termsOpen} terms={terms} setTerms={setTerms} formKind={formKind} />
   </div>
   )
 }

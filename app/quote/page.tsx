@@ -25,7 +25,7 @@ import QuotePreviewPane from '@/components/quote/QuotePreviewPane'
 import ConfirmQuoteModal from '@/components/quote/ConfirmQuoteModal'
 import QuoteItemRow from './QuoteItemRow'
 import { Z } from '@/lib/zIndex'
-import { DEFAULT_TERMS, normalizeTerms, type Terms } from '@/lib/quoteTerms'
+import { DEFAULT_TERMS, normalizeTerms, termKeysFor, type Terms } from '@/lib/quoteTerms'
 import { normalizeSubLines } from '@/lib/quoteSubLines'
 
 /**
@@ -197,9 +197,11 @@ function QuotePageInner() {
   const debouncedTerms = useDebounce(terms, 600)
   const debouncedTermsOpen = useDebounce(termsOpen, 600)
 
+  // 비고 본문 — **납기 줄을 넣지 않는다.** 납기는 조건 1번 「납품일정」 한 곳에서만 나간다
+  // (6단계에서 통일했다). 납기 칸의 값은 quotes.delivery_info 로 그대로 저장되어 발주·결재
+  // 검토표가 쓴다 — 고객 문서에만 두 번 나오던 것을 없앴다.
   const finalRemarksForPDF = (() => {
     const parts: string[] = []
-    if (delivery.trim()) parts.push(`* 납기 : 발주 후 ${delivery.trim()}`)
     // 줄을 낼지는 종전과 같이 고른 값(euQuery)으로 가르고, **찍는 이름만** 회사 이름을 우선한다.
     if (isDealer && euQuery.trim()) parts.push(`* E.U  : ${euDisplayName({ siteName: euQuery, parentName: euParentName })}`)
     if (remarks.trim()) parts.push(remarks.trim())
@@ -249,10 +251,11 @@ function QuotePageInner() {
    * 확정·저장에 쓸 조건. 체크가 꺼져 있으면 **적지 않은 것으로 본다**(기본값·저장 안 함).
    * ok 가 false 면 40자를 넘긴 칸이 있다 — 확정 전에 안내하고 막는다.
    */
-  const termsResult = normalizeTerms(termsOpen ? terms : null)
+  // 양식별로 **보이는 칸만** 본다 — 장비가 아니면 보증을 저장하지 않는다.
+  const termsResult = normalizeTerms(termsOpen ? terms : null, termKeysFor(formKind))
   /** 미리보기에 넘길 값 — 길이 초과 중이면 그 칸만 기본값으로 그린다(미리보기를 멈추지 않는다). */
   const previewTerms = (() => {
-    const r = normalizeTerms(debouncedTermsOpen ? debouncedTerms : null)
+    const r = normalizeTerms(debouncedTermsOpen ? debouncedTerms : null, termKeysFor(formKind))
     return r.ok ? r.terms : { ...DEFAULT_TERMS }
   })()
 
@@ -731,6 +734,7 @@ function QuotePageInner() {
           toast={toast}
           runValidation={runValidation}
           categoryMissing={categoryMissing || formMissing}
+          formKind={formKind}
           setShowConfirmModal={setShowConfirmModal}
           dateDisplay={dateDisplay}
           engineerName={engineerName}

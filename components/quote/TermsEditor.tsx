@@ -9,8 +9,8 @@
 // 열고 닫는 체크박스는 카드에 남아 있다(서명란 체크와 한 줄이라 함께 두는 편이 맞다).
 
 import {
-  DEFAULT_TERMS, TERM_KEYS, TERM_LABELS, TERM_MAX_LEN,
-  type TermKey, type Terms,
+  DEFAULT_TERMS, TERM_LABELS, TERM_MAX_LEN,
+  termKeysFor, type TermKey, type Terms,
 } from '@/lib/quoteTerms'
 
 /** 조건 네 줄의 입력칸 설명 — 라벨은 등록표(lib/quoteTerms.ts)에서 읽는다. */
@@ -19,15 +19,18 @@ const TERM_PLACEHOLDERS: Record<TermKey, string> = {
   payment_terms: DEFAULT_TERMS.payment_terms,
   delivery_terms: DEFAULT_TERMS.delivery_terms,
   validity: DEFAULT_TERMS.validity,
+  warranty: DEFAULT_TERMS.warranty,
 }
 
 export type TermsEditorProps = {
   termsOpen: boolean
   terms: Terms
   setTerms: React.Dispatch<React.SetStateAction<Terms>>
+  /** 견적서 양식. 「보증」은 장비(equip80)에서만 보인다. */
+  formKind: string
 }
 
-export default function TermsEditor({ termsOpen, terms, setTerms }: TermsEditorProps) {
+export default function TermsEditor({ termsOpen, terms, setTerms, formKind }: TermsEditorProps) {
   // 조건 편집 — 체크했을 때만 열린다. 네 줄의 라벨·순서는 PDF 와 같다(등록표에서 읽는다).
   return (
   <div
@@ -40,7 +43,7 @@ export default function TermsEditor({ termsOpen, terms, setTerms }: TermsEditorP
         marginTop: 8, border: '1px solid #ebebeb', borderRadius: 8, padding: '10px 12px',
         display: 'flex', flexDirection: 'column', gap: 6,
       }}>
-        {TERM_KEYS.map(key => (
+        {termKeysFor(formKind).map(key => (
           <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ width: 56, flexShrink: 0, fontSize: 11, fontWeight: 700, color: '#6b7280' }}>
               {TERM_LABELS[key]}

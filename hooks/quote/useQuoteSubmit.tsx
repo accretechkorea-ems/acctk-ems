@@ -32,7 +32,7 @@ import type { useToast } from '@/components/common/Toast'
 export type QuoteFieldKey = 'category' | 'company' | 'eu' | 'items' | 'expenses'
 
 /** 조건 네 줄 정규화 결과 — 화면이 이미 만들어 둔 값을 그대로 받는다(normalizeTerms). */
-type TermsResult = { ok: true; terms: Terms; stored: Terms | null } | { ok: false; message: string }
+type TermsResult = { ok: true; terms: Terms; stored: Partial<Terms> | null } | { ok: false; message: string }
 /** 품목 설명 줄 정규화 결과 — 한 품목이라도 상한을 넘으면 ok: false 다. */
 type SubLinesResult = { ok: true } | { ok: false; message: string }
 
@@ -211,6 +211,7 @@ export function useQuoteSubmit({
         totalAmount={finalTotalAmount}
         showSignature={showSignature}
         terms={termsResult.ok ? termsResult.terms : DEFAULT_TERMS}
+        formKind={formKind}
       />
     ).toBlob()
 

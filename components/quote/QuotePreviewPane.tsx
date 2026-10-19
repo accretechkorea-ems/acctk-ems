@@ -37,6 +37,8 @@ export type QuotePreviewPaneProps = {
   engineerTel: string
   showSignature: boolean
   previewTerms: Terms
+  /** 고른 견적서 양식. 미리보기도 확정 PDF 와 같은 뼈대로 그린다. */
+  formKind: string
   debouncedCompany: string
   debouncedReceiver: string
   debouncedRows: QuoteRow[]
@@ -49,7 +51,7 @@ export type QuotePreviewPaneProps = {
 export default function QuotePreviewPane({
   isClient, missingInitials, seqLoadError, quoteNo, onBehalf, isSaving,
   toast, runValidation, setShowConfirmModal, categoryMissing,
-  dateDisplay, engineerName, engineerTel, showSignature, previewTerms,
+  dateDisplay, engineerName, engineerTel, showSignature, previewTerms, formKind,
   debouncedCompany, debouncedReceiver, debouncedRows, debouncedFinalRemarks,
   pdfTotalSupply, pdfTotalTax, pdfTotalAmount,
 }: QuotePreviewPaneProps) {
@@ -142,6 +144,7 @@ export default function QuotePreviewPane({
             showWatermark={true}
             showSignature={showSignature}
             terms={previewTerms}
+            formKind={formKind}
           />
         }>
           {({ url }) => url ? (

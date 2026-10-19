@@ -16,8 +16,11 @@
 //
 // DB·화면에 의존하지 않는다(import 가 없다) — 스크립트로 그대로 돌려 볼 수 있다.
 
-/** 저장·전달에 쓰는 네 칸의 열쇠. 순서가 곧 PDF 의 1~4번 순서다. */
-export const TERM_KEYS = ['delivery_schedule', 'payment_terms', 'delivery_terms', 'validity'] as const
+/**
+ * 저장·전달에 쓰는 칸의 열쇠. 순서가 곧 PDF 의 1~5번 순서다.
+ * **보증(warranty)은 장비 양식에서만** 쓴다 — termKeysFor 가 양식별로 걸러낸다.
+ */
+export const TERM_KEYS = ['delivery_schedule', 'payment_terms', 'delivery_terms', 'validity', 'warranty'] as const
 
 export type TermKey = typeof TERM_KEYS[number]
 export type Terms = Record<TermKey, string>
@@ -28,22 +31,34 @@ export const DEFAULT_TERMS: Terms = {
   payment_terms: '익월말 현금 결제',
   delivery_terms: '지정장소',
   validity: '작성일로부터 1개월',
+  warranty: '설치 후 1년',
 }
 
-/** PDF 의 왼쪽 라벨. 번호까지 포함한 글자 그대로다. */
-export const TERM_PDF_LABELS: Record<TermKey, string> = {
-  delivery_schedule: '1.납품일정 :',
-  payment_terms: '2.지불조건 :',
-  delivery_terms: '3.인도조건 :',
-  validity: '4.견적유효 :',
-}
-
-/** 화면·검토표에서 쓰는 짧은 이름(번호 없이). */
+/**
+ * 화면·검토표·PDF 에서 쓰는 이름(번호 없이).
+ * 번호와 콜론은 PDF 가 따로 그린다 — 항목명을 **글자별 상자**로 4글자 폭에 고르게 펴서
+ * 「보  증」의 증이 「효」 밑에 오게 하고 콜론 좌우 간격을 같게 하기 때문이다.
+ */
 export const TERM_LABELS: Record<TermKey, string> = {
   delivery_schedule: '납품일정',
   payment_terms: '지불조건',
   delivery_terms: '인도조건',
   validity: '견적유효',
+  // 두 글자다 — PDF 는 4글자 폭에 고르게 펴서 「보  증」으로 그린다(증이 「효」 밑에 온다).
+  warranty: '보증',
+}
+
+/** 장비 양식에서만 쓰는 칸. 다른 양식에서는 화면·PDF 에 보이지 않고 **저장도 하지 않는다**. */
+export const EQUIP_ONLY_TERM_KEYS: readonly TermKey[] = ['warranty']
+
+/**
+ * 그 양식에서 **보이고 저장되는** 조건 칸.
+ * 장비(equip80)는 다섯 줄, 나머지 양식은 네 줄이다. 양식을 모르면(개편 전 견적·옛 초안)
+ * 네 줄로 떨어진다 — 보증은 장비에만 뜻이 있는 문구다.
+ */
+export function termKeysFor(formKind: string | null | undefined): readonly TermKey[] {
+  if (formKind === 'equip80') return TERM_KEYS
+  return TERM_KEYS.filter(k => !EQUIP_ONLY_TERM_KEYS.includes(k))
 }
 
 /**
@@ -57,17 +72,23 @@ export const TERM_MAX_LEN = 40
  *   · 앞뒤 공백을 지우고, 줄바꿈·탭·연속 공백을 **한 칸으로 접는다**(PDF 의 그 줄은 한 행이다).
  *   · 빈 값은 **기본값으로 둔다**(지우면 줄이 사라지는 것이 아니라 기본 문구로 돌아간다).
  *   · 한 칸이라도 40자를 넘으면 `{ ok: false }` — 어느 칸인지 라벨로 알린다.
- *   · 네 값이 모두 기본값과 같으면 `terms: null` — **저장하지 않는다**(= 기본).
+ *   · 보는 값이 모두 기본값과 같으면 `terms: null` — **저장하지 않는다**(= 기본).
+ *
+ * keys 를 주면 **그 칸만** 보고 그 칸만 저장한다(termKeysFor). 장비가 아닌 양식에서
+ * 보증을 저장하지 않으려고 둔 인자다 — 주지 않으면 지금까지처럼 모든 칸을 본다.
  */
 export type NormalizeResult =
-  | { ok: true; terms: Terms; stored: Terms | null }
+  | { ok: true; terms: Terms; stored: Partial<Terms> | null }
   | { ok: false; message: string }
 
-export function normalizeTerms(input: Partial<Record<TermKey, unknown>> | null | undefined): NormalizeResult {
+export function normalizeTerms(
+  input: Partial<Record<TermKey, unknown>> | null | undefined,
+  keys: readonly TermKey[] = TERM_KEYS,
+): NormalizeResult {
   const out = { ...DEFAULT_TERMS }
   const over: string[] = []
 
-  for (const key of TERM_KEYS) {
+  for (const key of keys) {
     const raw = input?.[key]
     const text = typeof raw === 'string' ? raw : raw == null ? '' : String(raw)
     // 줄바꿈·탭·연속 공백을 한 칸으로. 전각 공백(U+3000)도 눈에는 공백이라 함께 접는다.
@@ -80,12 +101,15 @@ export function normalizeTerms(input: Partial<Record<TermKey, unknown>> | null |
   if (over.length > 0) {
     return { ok: false, message: `${over.join('·')}은 ${TERM_MAX_LEN}자까지 적을 수 있습니다` }
   }
-  return { ok: true, terms: out, stored: isAllDefault(out) ? null : out }
+  // 저장값에는 **보는 칸만** 담는다. 담지 않은 칸은 읽을 때 기본값으로 채워진다(termsOf).
+  const stored: Partial<Terms> = {}
+  for (const key of keys) stored[key] = out[key]
+  return { ok: true, terms: out, stored: isAllDefault(out, keys) ? null : stored }
 }
 
-/** 네 값이 모두 기본값과 같은가. */
-export const isAllDefault = (t: Terms): boolean =>
-  TERM_KEYS.every(k => t[k] === DEFAULT_TERMS[k])
+/** 보는 칸이 모두 기본값과 같은가. */
+export const isAllDefault = (t: Terms, keys: readonly TermKey[] = TERM_KEYS): boolean =>
+  keys.every(k => t[k] === DEFAULT_TERMS[k])
 
 /**
  * 저장값을 **늘 네 값으로** 풀어 준다. 무엇이 와도 깨지지 않는다.
