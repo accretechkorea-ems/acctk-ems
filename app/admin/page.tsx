@@ -17,6 +17,7 @@ import { withTeamPerm, invalidateTeamPerms, loadTeamPerms } from '@/lib/teamPerm
 import { CHECKABLE_MENUS, checkableGroups, MENU_PERMS } from '@/lib/menuPerms'
 import AccessGate from '@/components/common/AccessGate'
 import QuoteCategoryManager from '@/components/admin/QuoteCategoryManager'
+import PriceListImportModal from '@/components/admin/priceList/PriceListImportModal'
 import { useOffices, selectableOffices, invalidateOffices, type Office } from '@/lib/offices'
 import { geocodeAddress } from '@/lib/geocode'
 import { ROLE_COLORS, getCategoryColor } from '@/lib/categoryColors'
@@ -211,6 +212,8 @@ function AdminPageInner() {
   const [showPresetModal, setShowPresetModal] = useState(false)
   // ── 견적 분류 관리 ── 목록·쓰기는 모달 컴포넌트가 들고 있다(RLS 가 권한을 본다).
   const [showCategoryModal, setShowCategoryModal] = useState(false)
+  // 가격표 등록 — 종류·엑셀 읽기·서버 호출은 모달 컴포넌트가 들고 있다.
+  const [showPriceListModal, setShowPriceListModal] = useState(false)
   const [presets, setPresets] = useState<ExpensePreset[]>([])
   const [presetLoading, setPresetLoading] = useState(false)
   const [editingPreset, setEditingPreset] = useState<{ presetId: number; itemName: string; unitPrice: string } | null>(null)
@@ -1187,12 +1190,16 @@ function AdminPageInner() {
 
           <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>📊</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>가격표 업로드</div>
-            <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>엑셀 파일을 업로드해서 견적서 가격표를 최신 버전으로 업데이트합니다.</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>가격표 등록</div>
+            <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>본사 가격표 엑셀을 종류별로 올려 가격표를 갱신합니다. 같은 품번은 덮어쓰고, 파일에 없는 품목과 지난 견적의 금액은 그대로 둡니다.</div>
             {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
             <div style={{ flex: 1 }} />
-            <button disabled style={{ width: '100%', padding: '10px', background: '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'not-allowed' }}>업로드하기</button>
-            <div style={{ fontSize: 11, color: GRAY, marginTop: 6, textAlign: 'center' }}>준비 중</div>
+            <button
+              onClick={() => setShowPriceListModal(true)}
+              disabled={!isSuperAdmin(currentEngineer)}
+              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
+              등록하기
+            </button>
           </div>
 
  <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
@@ -1602,6 +1609,14 @@ function AdminPageInner() {
       {showCategoryModal && (
         <QuoteCategoryManager
           onClose={() => setShowCategoryModal(false)}
+          canEdit={isSuperAdmin(currentEngineer)}
+        />
+      )}
+
+      {/* ── 가격표 등록 모달 ── 엑셀은 브라우저가 읽고, 쓰기는 서버 라우트(service role)가 한다. */}
+      {showPriceListModal && (
+        <PriceListImportModal
+          onClose={() => setShowPriceListModal(false)}
           canEdit={isSuperAdmin(currentEngineer)}
         />
       )}
