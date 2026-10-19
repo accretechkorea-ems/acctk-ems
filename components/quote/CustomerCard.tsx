@@ -15,6 +15,7 @@ import { isClosed } from '@/components/customer/opportunity'
 import { euDisplayName } from '@/lib/quoteEuName'
 import { Z } from '@/lib/zIndex'
 import { DEFAULT_TERMS, type Terms } from '@/lib/quoteTerms'
+import RemarksEditor from '@/components/quote/RemarksEditor'
 import TermsEditor from '@/components/quote/TermsEditor'
 import type { CustomerResult } from '@/app/quote/types'
 import type { SalesOpportunity } from '@/components/customer/types'
@@ -104,9 +105,6 @@ export default function CustomerCard({
   // 이 목록이 비면 영업기회 칸 자체를 그리지 않는다.
   const selectableOpportunities = opportunities.filter(o => !isClosed(o) || o.opportunity_id === opportunityId)
 
-  // 비고 — 접힌 줄에 보여줄 첫 줄과, 기본 문구에서 손댔는지 여부.
-  const remarksPreview = remarks.trim().split('\n')[0] ?? ''
-  const remarksEdited = remarks.trim() !== defaultRemarks.trim()
 
   // 기본 정보
   return (
@@ -283,36 +281,13 @@ export default function CustomerCard({
       </div>
     </div>
 
-    {/* 비고 — 기본 문구가 채워져 있고 고칠 일이 드물어 접어 둔다.
-        접힌 줄에 첫 줄을 회색으로 보여주고, 기본 문구에서 손댔으면 「수정됨」을 붙인다. */}
-    <div className="q-box q-box-col">
-      {/* 머리줄 — [비고 │ 미리보기 … ›]. 펼치기 화살표는 상자 오른쪽 끝. */}
-      <button type="button" className="q-box-head" onClick={() => setRemarksOpen(o => !o)}>
-        <span className="q-box-label">비고</span>
-        <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 11px' }}>
-          {remarksEdited && (
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#234ea2', flexShrink: 0 }}>수정됨</span>
-          )}
-          {!remarksOpen && (
-            <span style={{ fontSize: 11, color: '#9ca3af', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {remarksPreview}
-            </span>
-          )}
-        </span>
-        <span className="q-box-tail">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="3"
-            style={{ transition: 'transform 0.15s ease', transform: remarksOpen ? 'rotate(90deg)' : 'none' }}>
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-        </span>
-      </button>
-      {/* grid 1fr↔0fr 로 높이를 애니메이션한다. 내용은 늘 마운트돼 있어 접었다 펴도 값이 남는다. */}
-      <div style={{ display: 'grid', gridTemplateRows: remarksOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.15s ease' }}>
-        <div style={{ overflow: 'hidden', minHeight: 0 }}>
-          <textarea className="q-box-area" value={remarks} onChange={e => setRemarks(e.target.value)} rows={3} />
-        </div>
-      </div>
-    </div>
+    <RemarksEditor
+      remarks={remarks}
+      setRemarks={setRemarks}
+      remarksOpen={remarksOpen}
+      setRemarksOpen={setRemarksOpen}
+      defaultRemarks={defaultRemarks}
+    />
 
     {/* 서명란·조건은 비고와 별개 항목이라 상자 밖 독립된 줄로 뺀다. 줄 오른쪽 끝에 붙인다.
         왼쪽이 「조건 변경」, 오른쪽이 「고객사 서명란 추가」다(같은 스타일). */}
