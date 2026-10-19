@@ -344,10 +344,18 @@ export function useQuoteSubmit({
         if (quoteType === 'repair_domestic') initialStatus = '수리중'
       }
 
-      // 금액이 있는 행만 저장한다. 할인은 공급가가 음수라 별도로 통과시킨다
-      // (금액 0 인 채로 남은 할인 행은 기록할 것이 없어 저장하지 않는다).
+      // 금액이 있는 행만 저장한다. 예외가 둘 있다.
+      //   할인     — 공급가가 음수다(금액 0 인 채로 남은 할인 행은 기록할 것이 없어 저장하지 않는다).
+      //   포함사항 — 장비 양식의 「포함사항」은 **금액이 없는 것이 정의**다(견적서에 「-」로 찍힌다).
+      //              금액으로만 걸러 내면 견적서에는 나오는데 quote_items 에는 남지 않아
+      //              다시쓰기·통계에서 그 줄이 사라진다. 그래서 글자가 있는 포함사항 줄은 통과시킨다.
+      //              group_kind 는 장비 양식에서만 채워지므로 다른 두 양식은 종전과 같다.
       // quote_id 는 넣지 않는다 — 함수가 방금 만든 견적의 id 로 채운다(클라이언트 값은 믿지 않는다).
-      const items = rows.filter(r => r.supply_price > 0 || (r.row_kind === 'discount' && r.supply_price < 0)).map(r => ({
+      const keepItem = (r: QuoteRow) =>
+        r.supply_price > 0
+        || (r.row_kind === 'discount' && r.supply_price < 0)
+        || (isEquipForm(formKind) && r.group_kind === 'include' && !!(r.partCode.trim() || r.itemText.trim()))
+      const items = rows.filter(keepItem).map(r => ({
         price_list_id: r.selectedItem?.id ?? null,
         part_code: r.partCode.trim() || null,   // 품번 스냅샷(가격표 변경돼도 과거 견적 유지). 직접 입력한 품번도 그대로 저장, 빈 값은 null.
         row_kind: r.row_kind,
