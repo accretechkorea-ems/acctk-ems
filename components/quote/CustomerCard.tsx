@@ -14,20 +14,11 @@ import { FieldError, errBorder } from '@/components/common/fieldErrors'
 import { isClosed } from '@/components/customer/opportunity'
 import { euDisplayName } from '@/lib/quoteEuName'
 import { Z } from '@/lib/zIndex'
-import {
-  DEFAULT_TERMS, TERM_KEYS, TERM_LABELS, TERM_MAX_LEN,
-  type TermKey, type Terms,
-} from '@/lib/quoteTerms'
+import { DEFAULT_TERMS, type Terms } from '@/lib/quoteTerms'
+import TermsEditor from '@/components/quote/TermsEditor'
 import type { CustomerResult } from '@/app/quote/types'
 import type { SalesOpportunity } from '@/components/customer/types'
 
-/** 조건 네 줄의 입력칸 설명 — 라벨은 등록표(lib/quoteTerms.ts)에서 읽는다. */
-const TERM_PLACEHOLDERS: Record<TermKey, string> = {
-  delivery_schedule: DEFAULT_TERMS.delivery_schedule,
-  payment_terms: DEFAULT_TERMS.payment_terms,
-  delivery_terms: DEFAULT_TERMS.delivery_terms,
-  validity: DEFAULT_TERMS.validity,
-}
 
 /** 후보 목록의 키보드 조작 결과(useListKeyboard 반환값). */
 type ListKeys = { active: number; setActive: (i: number) => void; onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void }
@@ -351,39 +342,7 @@ export default function CustomerCard({
       </label>
     </div>
 
-    {/* 조건 편집 — 체크했을 때만 열린다. 네 줄의 라벨·순서는 PDF 와 같다(등록표에서 읽는다). */}
-    <div
-      className="q-terms-wrap"
-      style={{ gridTemplateRows: termsOpen ? '1fr' : '0fr', opacity: termsOpen ? 1 : 0 }}
-      aria-hidden={!termsOpen}
-    >
-      <div className="q-terms-inner">
-        <div style={{
-          marginTop: 8, border: '1px solid #ebebeb', borderRadius: 8, padding: '10px 12px',
-          display: 'flex', flexDirection: 'column', gap: 6,
-        }}>
-          {TERM_KEYS.map(key => (
-            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 56, flexShrink: 0, fontSize: 11, fontWeight: 700, color: '#6b7280' }}>
-                {TERM_LABELS[key]}
-              </span>
-              <input
-                className="q-term-input"
-                value={terms[key]}
-                maxLength={TERM_MAX_LEN}
-                placeholder={TERM_PLACEHOLDERS[key]}
-                tabIndex={termsOpen ? 0 : -1}
-                onChange={e => setTerms(prev => ({ ...prev, [key]: e.target.value }))}
-              />
-            </div>
-          ))}
-          {/* 견적유효 아래 보조 글씨 — 문구를 고쳐도 만료 판정은 바뀌지 않는다. */}
-          <span style={{ fontSize: 11, color: '#9ca3af', lineHeight: 1.6, paddingLeft: 64 }}>
-            문구만 바뀝니다. 자동 만료 판정은 작성일로부터 1개월 기준입니다.
-          </span>
-        </div>
-      </div>
-    </div>
+    <TermsEditor termsOpen={termsOpen} terms={terms} setTerms={setTerms} />
   </div>
   )
 }
