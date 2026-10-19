@@ -4,7 +4,8 @@ import React, { useCallback, useRef } from 'react'
 import { useOutsideClick } from '@/hooks/useOutsideClick'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import SegmentedControl from '@/components/common/SegmentedControl'
-import type { ExpensePreset, ExpenseRow, PriceItem, QuoteRow, RowKind } from './types'
+import type { PriceItem, QuoteRow, RowKind } from './types'
+import type { QuoteRowsActions, QuoteRowsCtx } from '@/hooks/quote/useQuoteRows'
 import { numKR } from './format'
 import { DISCOUNT_LABELS } from './types'
 import { inp } from './styles'
@@ -24,45 +25,34 @@ const KIND_LABEL: Record<RowKind, string> = {
 }
 
 // 품목 행 카드 1개(일반 품목 / 서비스비 공용). page.tsx 의 rows.map 본문을 그대로 옮긴 것.
+//
+// prop 은 다섯 개다(3b 정리 전에는 28개였다).
+//   row · rowIdx · errors — 이 행 하나에 딸린 값
+//   ctx                   — 여러 행이 함께 **읽는** 값(검색 결과·프리셋·행 수 …)
+//   actions               — 여러 행이 함께 **쓰는** 콜백
+// 두 묶음은 useQuoteRows 가 useMemo·useCallback 으로 만들어 정체를 유지한다. 그래서 행이
+// 수십 개로 늘어도 넘기는 값이 늘지 않고, 앞으로 React.memo 를 씌울 때도 그대로 먹는다.
+// 본문에서 쓰는 이름은 분해해서 **종전과 같게** 둔다 — 아래 코드는 한 줄도 바뀌지 않았다.
 export type QuoteItemRowProps = {
   row: QuoteRow
   rowIdx: number
-  rows: QuoteRow[]
-  setRows: React.Dispatch<React.SetStateAction<QuoteRow[]>>
-  updateRow: (rowId: string, field: keyof QuoteRow, value: unknown) => void
-  addSubLine: (rowId: string) => void
-  updateSubLine: (rowId: string, idx: number, val: string) => void
-  removeSubLine: (rowId: string, idx: number) => void
-  handleSearch: (rowId: string, q: string) => void
-  handleSelect: (rowId: string, item: PriceItem) => void
-  clearItem: (rowId: string) => void
-  searchQuery: Record<string, string>
-  searchResults: Record<string, PriceItem[]>
-  searchOpen: Record<string, boolean>
-  setSearchOpen: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
-  editingProfitRate: Record<string, boolean>
-  setEditingProfitRate: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
-  profitRateInput: Record<string, string>
-  setProfitRateInput: React.Dispatch<React.SetStateAction<Record<string, string>>>
-  expensePresets: ExpensePreset[]
-  presetError: boolean
   errors: { expenses?: string }
-  invalidExpenseIds: Set<string>
-  totalExpense: number
-  addExpense: () => void
-  removeExpense: (expenseId: string) => void
-  updateExpense: (expenseId: string, patch: Partial<ExpenseRow>) => void
-  selectExpensePreset: (expenseId: string, itemName: string) => void
+  ctx: QuoteRowsCtx
+  actions: QuoteRowsActions
 }
 
-export default function QuoteItemRow({
-  row, rowIdx, rows, setRows, updateRow, addSubLine, updateSubLine, removeSubLine,
-  handleSearch, handleSelect, clearItem, searchQuery, searchResults, searchOpen, setSearchOpen,
-  editingProfitRate, setEditingProfitRate,
-  profitRateInput, setProfitRateInput,
-  expensePresets, presetError, errors, invalidExpenseIds, totalExpense,
-  addExpense, removeExpense, updateExpense, selectExpensePreset,
-}: QuoteItemRowProps) {
+export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: QuoteItemRowProps) {
+  const {
+    rowCount, searchQuery, searchResults, searchOpen,
+    editingProfitRate, profitRateInput, expensePresets, presetError,
+    invalidExpenseIds, totalExpense,
+  } = ctx
+  const {
+    updateRow, addSubLine, updateSubLine, removeSubLine,
+    handleSearch, handleSelect, clearItem, removeRow,
+    setSearchOpen, setEditingProfitRate, setProfitRateInput,
+    addExpense, removeExpense, updateExpense, selectExpensePreset,
+  } = actions
   // 가격표 검색 드롭다운 — 바깥 클릭(및 ESC)으로 닫는다. 항목을 반드시 골라야 빠져나올 수 있던 문제 해결.
   // 드롭다운은 searchRef 안에 있으므로 항목 클릭은 '바깥'으로 판정되지 않아 선택 동작에 영향이 없다.
   const searchRef = useRef<HTMLDivElement>(null)
@@ -137,13 +127,13 @@ export default function QuoteItemRow({
     <div style={{ background: '#ffffff', borderRadius: 8, padding: '14px', marginBottom: 10, border: '1px solid #ebebeb' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {rows.length > 1 && (
+            {rowCount > 1 && (
               <span style={{ width: 20, height: 20, borderRadius: 999, background: '#234ea2', color: '#fff', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}>{rowIdx + 1}</span>
             )}
             <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px', whiteSpace: 'nowrap' }}>{KIND_LABEL[row.row_kind]}</span>
           </div>
-          {rows.length > 1 && (
-          <button onClick={() => setRows(prev => prev.filter(r => r.id !== row.id))}
+          {rowCount > 1 && (
+          <button onClick={() => removeRow(row.id)}
             title="삭제"
             style={{ width: 24, height: 24, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'color 0.15s ease' }}
             onMouseEnter={e => (e.currentTarget.style.color = '#dc2626')}

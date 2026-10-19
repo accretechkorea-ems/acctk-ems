@@ -2,8 +2,16 @@
 
 // 견적 작성 화면의 **품목 행**(rows) 부분 — 가격표 검색·선택, 행 수정, 설명 줄, 부대비용 헬퍼.
 //
-// app/quote/page.tsx 에서 **그대로 옮겨 온 것**이다(분리 리팩터 3a). 상태 이름·초기값·본문·
-// 주석을 한 글자도 바꾸지 않았다.
+// app/quote/page.tsx 에서 옮겨 온 것이다(분리 리팩터 3a). 함수 본문·주석은 한 글자도 바뀌지
+// 않았고, 3b 에서 **감싸는 방식만** 달라졌다.
+//   · 함수마다 useCallback 을 두른다 — 의존성이 그대로일 때 같은 함수를 돌려주어 행 카드에
+//     넘기는 묶음(actions)의 정체가 유지된다. 의존성 배열에는 함수가 실제로 읽는 값을 전부 적는다.
+//   · 행 카드가 쓰는 것을 두 묶음으로 미리 만들어 둔다(useMemo).
+//       ctx     — 여러 행이 함께 읽는 값(검색 결과·프리셋·행 수 …)
+//       actions — 여러 행이 함께 쓰는 콜백
+//     행 카드의 prop 이 28개에서 5개로 줄고, 앞으로 행이 수십 개가 되어도 넘기는 값이 늘지 않는다.
+//   · removeRow 를 더했다 — 행 카드가 setRows 를 통째로 받아 직접 지우던 것을 동작 하나로 바꿨다.
+//     판정식(prev.filter(r => r.id !== rowId))은 그대로다.
 //
 // **이 훅은 useEffect 를 하나도 두지 않는다.** 원본에서 rows 와 얽힌 effect 는 셋인데
 // (부대비용 프리셋 1회 로드, 금액 생기면 items 에러 해제, 부대비용 에러 해제) 그 셋은
@@ -15,7 +23,7 @@
 // 하나 더 생긴다. exchangeRate·delivery 도 화면이 들고 있는 값이라 그대로 받는다
 // (handleSelect 가 납기 칸이 비었을 때만 채우는 규칙을 유지한다).
 
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ExpensePreset, ExpenseRow, PriceItem, QuoteRow } from '@/app/quote/types'
 import { calcExpense, calcRow, createExpenseRow, createRow } from '@/app/quote/calc'
@@ -25,6 +33,40 @@ export type UseQuoteRowsArgs = {
   exchangeRate: number
   delivery: string
   setDelivery: (v: string) => void
+}
+
+/** 여러 행이 함께 **읽는** 값. 행 카드 하나하나가 따로 받을 이유가 없는 것만 모았다. */
+export type QuoteRowsCtx = {
+  /** 품목 행 수. 「행이 둘 이상일 때만」 순번 배지와 삭제 버튼을 낸다(종전 rows.length). */
+  rowCount: number
+  searchQuery: Record<string, string>
+  searchResults: Record<string, PriceItem[]>
+  searchOpen: Record<string, boolean>
+  editingProfitRate: Record<string, boolean>
+  profitRateInput: Record<string, string>
+  expensePresets: ExpensePreset[]
+  presetError: boolean
+  invalidExpenseIds: Set<string>
+  totalExpense: number
+}
+
+/** 여러 행이 함께 **쓰는** 콜백. 전부 useCallback 으로 정체가 유지된다. */
+export type QuoteRowsActions = {
+  updateRow: (rowId: string, field: keyof QuoteRow, value: unknown) => void
+  addSubLine: (rowId: string) => void
+  updateSubLine: (rowId: string, idx: number, val: string) => void
+  removeSubLine: (rowId: string, idx: number) => void
+  handleSearch: (rowId: string, q: string) => void
+  handleSelect: (rowId: string, item: PriceItem) => void
+  clearItem: (rowId: string) => void
+  removeRow: (rowId: string) => void
+  setSearchOpen: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  setEditingProfitRate: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  setProfitRateInput: React.Dispatch<React.SetStateAction<Record<string, string>>>
+  addExpense: () => void
+  removeExpense: (expenseId: string) => void
+  updateExpense: (expenseId: string, patch: Partial<ExpenseRow>) => void
+  selectExpensePreset: (expenseId: string, itemName: string) => void
 }
 
 export function useQuoteRows({ supabase, exchangeRate, delivery, setDelivery }: UseQuoteRowsArgs) {
@@ -37,7 +79,7 @@ export function useQuoteRows({ supabase, exchangeRate, delivery, setDelivery }: 
   const [editingProfitRate, setEditingProfitRate] = useState<Record<string, boolean>>({})
   const [profitRateInput, setProfitRateInput] = useState<Record<string, string>>({})
 
-  const handleSearch = async (rowId: string, q: string) => {
+  const handleSearch = useCallback(async (rowId: string, q: string) => {
     setSearchQuery(prev => ({ ...prev, [rowId]: q }))
     // 품번은 검색창 내용을 그대로 따라간다 — 가격표에서 고르지 않고 직접 친 값도 PDF 품번 칸에 나간다.
     setRows(prev => prev.map(r => r.id !== rowId ? r : { ...r, partCode: q }))
@@ -45,9 +87,9 @@ export function useQuoteRows({ supabase, exchangeRate, delivery, setDelivery }: 
     const { data } = await supabase.from('price_list').select('*').or(`item_code.ilike.%${q}%,model_jp.ilike.%${q}%`).limit(20)
     setSearchResults(prev => ({ ...prev, [rowId]: data || [] }))
     setSearchOpen(prev => ({ ...prev, [rowId]: true }))
-  }
+  }, [supabase])
 
-  const handleSelect = (rowId: string, item: PriceItem) => {
+  const handleSelect = useCallback((rowId: string, item: PriceItem) => {
     setRows(prev => prev.map(r => {
       if (r.id !== rowId) return r
       // 품목 선택 시점에 품명에 모델명을 1회 넣는다(이후 itemText 는 순수 사용자 입력).
@@ -66,24 +108,29 @@ export function useQuoteRows({ supabase, exchangeRate, delivery, setDelivery }: 
     if (item.delivery_time && delivery === '') {
       setDelivery(item.delivery_time + '주')
     }
-  }
+  }, [exchangeRate, delivery, setDelivery])
 
-  const updateRow = (rowId: string, field: keyof QuoteRow, value: any) =>
-    setRows(prev => prev.map(r => r.id !== rowId ? r : calcRow({ ...r, [field]: value }, exchangeRate)))
+  const updateRow = useCallback((rowId: string, field: keyof QuoteRow, value: any) =>
+    setRows(prev => prev.map(r => r.id !== rowId ? r : calcRow({ ...r, [field]: value }, exchangeRate))),
+    [exchangeRate])
 
-  const clearItem = (rowId: string) => {
+  const clearItem = useCallback((rowId: string) => {
     // 품목 해제(× 버튼) — 종류는 price_list 그대로 두고 선택만 비운다.
     setRows(prev => prev.map(r => r.id !== rowId ? r : calcRow({ ...r, selectedItem: null, manual_unit_price: 0, partCode: '' }, exchangeRate)))
     setSearchQuery(prev => ({ ...prev, [rowId]: '' }))
     setSearchResults(prev => ({ ...prev, [rowId]: [] }))
-  }
+  }, [exchangeRate])
 
-  const updateSubLine = (rowId: string, idx: number, val: string) =>
-    setRows(prev => prev.map(r => { if (r.id !== rowId) return r; const lines = [...r.subLines]; lines[idx] = val; return { ...r, subLines: lines } }))
-  const addSubLine = (rowId: string) =>
-    setRows(prev => prev.map(r => r.id !== rowId ? r : { ...r, subLines: [...r.subLines, ''] }))
-  const removeSubLine = (rowId: string, idx: number) =>
-    setRows(prev => prev.map(r => r.id !== rowId ? r : { ...r, subLines: r.subLines.filter((_, i) => i !== idx) }))
+  const updateSubLine = useCallback((rowId: string, idx: number, val: string) =>
+    setRows(prev => prev.map(r => { if (r.id !== rowId) return r; const lines = [...r.subLines]; lines[idx] = val; return { ...r, subLines: lines } })), [])
+  const addSubLine = useCallback((rowId: string) =>
+    setRows(prev => prev.map(r => r.id !== rowId ? r : { ...r, subLines: [...r.subLines, ''] })), [])
+  const removeSubLine = useCallback((rowId: string, idx: number) =>
+    setRows(prev => prev.map(r => r.id !== rowId ? r : { ...r, subLines: r.subLines.filter((_, i) => i !== idx) })), [])
+
+  // 행 삭제 — 행 카드가 setRows 를 통째로 받아 직접 지우던 자리다(판정식은 그대로).
+  const removeRow = useCallback((rowId: string) =>
+    setRows(prev => prev.filter(r => r.id !== rowId)), [])
 
   // 부대비용은 서비스비 행(견적당 1건)에 속한다. 별도 state 없이 rows 에서 파생시킨다.
   const serviceRow = rows.find(r => r.row_kind === 'service') ?? null
@@ -93,24 +140,51 @@ export function useQuoteRows({ supabase, exchangeRate, delivery, setDelivery }: 
 
   // 부대비용 내역 갱신 — 서비스비 행의 expenses 를 바꾼 뒤 calcRow 로 원가·이익을 재계산한다.
   // (calcExpense 로 amount 재계산 → calcRow 로 행 원가 반영, 두 단계 모두 map 안에서 처리)
-  const updateServiceExpenses = (fn: (list: ExpenseRow[]) => ExpenseRow[]) =>
-    setRows(prev => prev.map(r => r.row_kind !== 'service' ? r : calcRow({ ...r, expenses: fn(r.expenses) }, exchangeRate)))
+  const updateServiceExpenses = useCallback((fn: (list: ExpenseRow[]) => ExpenseRow[]) =>
+    setRows(prev => prev.map(r => r.row_kind !== 'service' ? r : calcRow({ ...r, expenses: fn(r.expenses) }, exchangeRate))),
+    [exchangeRate])
 
   // 항목명 선택은 unit_price 도 함께 바꾸므로 patch 객체로 받는다.
-  const updateExpense = (expenseId: string, patch: Partial<ExpenseRow>) =>
-    updateServiceExpenses(list => list.map(e => e.id !== expenseId ? e : calcExpense({ ...e, ...patch })))
+  const updateExpense = useCallback((expenseId: string, patch: Partial<ExpenseRow>) =>
+    updateServiceExpenses(list => list.map(e => e.id !== expenseId ? e : calcExpense({ ...e, ...patch }))),
+    [updateServiceExpenses])
 
-  const addExpense = () => updateServiceExpenses(list => [...list, createExpenseRow()])
-  const removeExpense = (expenseId: string) => updateServiceExpenses(list => list.filter(e => e.id !== expenseId))
+  const addExpense = useCallback(() => updateServiceExpenses(list => [...list, createExpenseRow()]), [updateServiceExpenses])
+  const removeExpense = useCallback((expenseId: string) => updateServiceExpenses(list => list.filter(e => e.id !== expenseId)), [updateServiceExpenses])
 
-  const selectExpensePreset = (expenseId: string, itemName: string) => {
+  const selectExpensePreset = useCallback((expenseId: string, itemName: string) => {
     const preset = expensePresets.find(p => p.item_name === itemName)
     updateExpense(expenseId, { item_name: itemName, unit_price: preset?.unit_price ?? 0 })
-  }
+  }, [expensePresets, updateExpense])
 
   const totalExpense = expenses.reduce((s, e) => s + e.amount, 0)
   // 항목명은 골랐는데 금액이 0 인 행(= 단가·인원·일수 중 0). 저장 시 에러 표시 대상.
   const invalidExpenseIds = new Set(expenses.filter(e => e.item_name.trim() && e.amount <= 0).map(e => e.id))
+
+  // ── 행 카드에 넘기는 두 묶음 ───────────────────────────────────────────────
+  // invalidExpenseIds 는 렌더마다 새 Set 이라 그 내용이 같아도 ctx 가 새로 만들어진다.
+  // 그래서 **품목 id 를 이어붙인 글자**를 의존성으로 쓴다 — 내용이 그대로면 같은 ctx 를 돌려준다.
+  // (Set 자체를 의존성에 넣으면 useMemo 가 매번 다시 돌아 묶음의 뜻이 없어진다)
+  const invalidExpenseKey = [...invalidExpenseIds].join(',')
+  const ctx = useMemo<QuoteRowsCtx>(() => ({
+    rowCount: rows.length,
+    searchQuery, searchResults, searchOpen,
+    editingProfitRate, profitRateInput,
+    expensePresets, presetError,
+    invalidExpenseIds, totalExpense,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [rows.length, searchQuery, searchResults, searchOpen,
+       editingProfitRate, profitRateInput, expensePresets, presetError,
+       invalidExpenseKey, totalExpense])
+
+  const actions = useMemo<QuoteRowsActions>(() => ({
+    updateRow, addSubLine, updateSubLine, removeSubLine,
+    handleSearch, handleSelect, clearItem, removeRow,
+    setSearchOpen, setEditingProfitRate, setProfitRateInput,
+    addExpense, removeExpense, updateExpense, selectExpensePreset,
+  }), [updateRow, addSubLine, updateSubLine, removeSubLine,
+       handleSearch, handleSelect, clearItem, removeRow,
+       addExpense, removeExpense, updateExpense, selectExpensePreset])
 
   return {
     rows, setRows,
@@ -128,6 +202,7 @@ export function useQuoteRows({ supabase, exchangeRate, delivery, setDelivery }: 
     updateSubLine,
     addSubLine,
     removeSubLine,
+    removeRow,
     serviceRow,
     discountRow,
     expenses,
@@ -138,5 +213,7 @@ export function useQuoteRows({ supabase, exchangeRate, delivery, setDelivery }: 
     selectExpensePreset,
     totalExpense,
     invalidExpenseIds,
+    ctx,
+    actions,
   }
 }

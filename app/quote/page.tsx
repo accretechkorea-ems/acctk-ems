@@ -110,18 +110,11 @@ function QuotePageInner() {
   // 이 훅은 effect 를 두지 않는다 — rows 와 얽힌 effect 셋은 순서 때문에 아래에 그대로 남겼다.
   const {
     rows, setRows,
-    expensePresets, setExpensePresets,
-    presetError, setPresetError,
-    searchQuery, setSearchQuery,
-    searchResults, setSearchResults,
-    searchOpen, setSearchOpen,
-    editingProfitRate, setEditingProfitRate,
-    profitRateInput, setProfitRateInput,
-    handleSearch, handleSelect, updateRow, clearItem,
-    updateSubLine, addSubLine, removeSubLine,
+    setExpensePresets, setPresetError,
+    setSearchQuery, setSearchResults, setSearchOpen,
+    setEditingProfitRate, setProfitRateInput,
     serviceRow, discountRow, expenses,
-    updateExpense, addExpense, removeExpense, selectExpensePreset,
-    totalExpense, invalidExpenseIds,
+    ctx: rowsCtx, actions: rowsActions,
   } = useQuoteRows({ supabase, exchangeRate, delivery, setDelivery })
   const [showPriceGuide, setShowPriceGuide] = useState(false)
   const priceGuideRef = useRef<HTMLDivElement | null>(null)
@@ -681,32 +674,9 @@ function QuotePageInner() {
                 key={row.id}
                 row={row}
                 rowIdx={rowIdx}
-                rows={rows}
-                setRows={setRows}
-                updateRow={updateRow}
-                addSubLine={addSubLine}
-                updateSubLine={updateSubLine}
-                removeSubLine={removeSubLine}
-                handleSearch={handleSearch}
-                handleSelect={handleSelect}
-                clearItem={clearItem}
-                searchQuery={searchQuery}
-                searchResults={searchResults}
-                searchOpen={searchOpen}
-                setSearchOpen={setSearchOpen}
-                editingProfitRate={editingProfitRate}
-                setEditingProfitRate={setEditingProfitRate}
-                profitRateInput={profitRateInput}
-                setProfitRateInput={setProfitRateInput}
-                expensePresets={expensePresets}
-                presetError={presetError}
                 errors={errors}
-                invalidExpenseIds={invalidExpenseIds}
-                totalExpense={totalExpense}
-                addExpense={addExpense}
-                removeExpense={removeExpense}
-                updateExpense={updateExpense}
-                selectExpensePreset={selectExpensePreset}
+                ctx={rowsCtx}
+                actions={rowsActions}
               />
             ))}
 
