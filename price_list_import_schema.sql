@@ -68,6 +68,8 @@
 --   단계 3 (함수)         — 단계 1 뒤.
 --   단계 4 (템플릿 칸)     — 장비 템플릿이 Jig 구분을 잃지 않게. 아무 때나.
 --   단계 5 (코드 배포)    — 가격표 2단계의 화면·API. **단계 1~4 뒤에** 올린다.
+--   단계 6 (함수 교체)     — 납기·묶음 저장과 where true. **파일 맨 아래 블록이 정본이다** —
+--                           단계 3 의 함수 정의는 지난 판이다.
 --
 --   순서를 어기면:
 --     단계 1 없이 단계 3 → 함수가 variant 를 몰라 **생성에서 실패한다**(오류가 나니 안전하다).
@@ -638,43 +640,48 @@ comment on column public.quote_template_items.variant is
 --       from public.price_list where variant <> '' order by sheet_name, item_code;
 --   alter table public.price_list drop column if exists variant;
 
-
 -- ════════════════════════════════════════════════════════════════════════════
 -- ════════════════════════════════════════════════════════════════════════════
--- 단계 5 [**아직 적용하지 않았다** · 2026-10-20 작성]. 납기 저장용 함수 교체
+-- 단계 6 [적용 완료 · 2026-10-20]. apply_price_list_import — 납기·묶음 저장 + where true
 --
---   ⚠ 위의 단계 0~4 는 **이미 적용됐다(2026-10-20).** 이 구간만 남아 있다.
---     여기부터 끝까지를 SQL Editor 에 **한 번에** 붙여 실행하면 된다(한 문장씩 나누지 않아도
---     되는 구간이다 — 함수 하나와 설명·권한 셋이다).
+--   ⚠ 이 구간이 **지금 DB 에 올라간 판**이다. 위의 단계 3 정의는 지난 판이고,
+--     읽을 때는 **이 블록을 정본으로 보라.** 아래 전체를 한 번에 붙여 실행할 수 있다
+--     (함수 하나와 설명·권한 셋, 그리고 그 앞의 칸 추가 한 줄).
 --
---   ── 무엇이 달라지는가 ────────────────────────────────────────────────────
---     apply_price_list_import 가 받은 행의 **delivery_time(납기)을 저장한다.**
---     20 가격표(Transaction Price list)에는 「Standard lead time」 열이 있고 화면이 그 값을
---     주(週)로 환산해 보낸다(lib/priceListParse.ts 의 cleanLeadTime — 개월 × 4).
---     지금 함수는 그 값을 받아 임시표에 담기만 하고 쓰지 않는다.
---
---   ── ⚠ 80 가격표의 납기를 지우지 않는다 ───────────────────────────────────
---     80 종류(본사 Price list)는 엑셀에 납기 열이 없어서 화면이 이 칸을 **보내지 않는다.**
---     그래서 함수 안에서 t.delivery_time 은 null 이다. 그걸 그대로 대입하면
---     사람이 손으로 채워 둔 80 납기(delivery_time_update.sql 이 품번 450여 개에 넣은 값)가
---     **통째로 지워진다.** 그래서 아래 세 자리 모두 「값이 있을 때만」으로 막았다 —
---       update : delivery_time = coalesce(nullif(btrim(t.delivery_time), ''), p.delivery_time)
---       where  : 값이 왔고 기존과 다를 때만 「변경」으로 센다(80 줄은 늘 unchanged)
---       insert : nullif(btrim(t.delivery_time), '') — 새 줄은 받은 값(없으면 null)
---     빈 글자('')도 「값 없음」으로 본다.
+--   ── 단계 3 에서 달라진 것 셋 ─────────────────────────────────────────────
+--     ⓐ WHERE 없는 UPDATE 에 `where true` 를 붙였다.
+--        Supabase 의 supautils 확장이 **WHERE 없는 UPDATE·DELETE 를 거부한다**
+--        (사고로 표 전체를 바꾸는 것을 막는 장치다). 임시표 전체를 고치는 것이 맞는
+--        자리라서, 막으려는 사고가 아니라는 뜻으로 「전부」라고 적어 준다.
+--        해당되는 자리는 임시표의 종류·품번·구분을 다듬는 UPDATE 하나뿐이다.
+--     ⓑ 납기(delivery_time)를 저장한다. **값이 온 줄만** 덮는다.
+--        80 종류는 엑셀에 납기 열이 없어 화면이 이 칸을 보내지 않는다(null 로 온다).
+--        그대로 대입하면 사람이 손으로 채운 80 납기(delivery_time_update.sql 이 품번
+--        450여 개에 넣은 값)가 **통째로 지워진다.** 그래서 세 자리 모두 막아 두었다 —
+--          update : coalesce(nullif(btrim(t.delivery_time), ''), p.delivery_time)
+--          where  : 값이 왔고 기존과 다를 때만 「변경」으로 센다
+--          insert : nullif(btrim(t.delivery_time), '')
+--        빈 글자('')도 「값 없음」으로 본다.
+--     ⓒ 묶음(line '20'/'80')을 update·insert·변경 판정에 넣었다. **납기와 같은 규칙**으로
+--        값이 온 줄만 덮는다 — 옛 화면이 보내지 않던 칸이라 null 로 올 수 있고, 지우면
+--        어느 가격표에서 온 줄인지 다시 알아내기 어렵다.
 --
 --   ── 바뀌지 않는 것 ──────────────────────────────────────────────────────
 --     시그니처(인자 다섯·순서·타입) · 반환 jsonb 의 열쇠 여덟 개 · security definer ·
 --     search_path · 권한(revoke/grant) · 지우지 않는다는 원칙 · 건수 세는 방식.
 --     create or replace 라서 **다시 실행해도 안전하다**(같은 정의로 덮어쓴다).
---     권한 문장도 다시 넣어 두었다 — 함수를 교체해도 권한은 남지만, 한 번에 붙여 실행할 때
---     빠뜨리지 않게 함께 둔다(같은 값을 다시 주는 것이라 무해하다).
 --
 --   ── 되돌리기 ────────────────────────────────────────────────────────────
---     위의 「단계 3」 함수 정의를 **그대로 다시 실행**하면 납기를 저장하지 않는 판으로 돌아간다.
---     (데이터는 그대로다. 이미 들어간 납기 값이 지워지지는 않는다.)
+--     위의 「단계 3」 함수 정의를 그대로 다시 실행하면 납기·묶음을 저장하지 않는 판으로
+--     돌아간다. 데이터는 그대로다(이미 들어간 값이 지워지지는 않는다).
+--     price_list.line 칸을 되돌리려면 — alter table public.price_list drop column if exists line;
 -- ════════════════════════════════════════════════════════════════════════════
 -- ════════════════════════════════════════════════════════════════════════════
+
+-- 묶음 칸 — 그 줄이 20 가격표에서 왔는지 80 에서 왔는지 남긴다.
+-- 종류(sheet_name)로도 알 수 있지만, 종류가 늘어날 때마다 코드 표를 보지 않고도
+-- 가를 수 있게 값으로 둔다. 없으면 만든다(이미 있으면 아무 일도 하지 않는다).
+alter table public.price_list add column if not exists line text;
 
 create or replace function public.apply_price_list_import(
   p_sheet_name text,
@@ -763,10 +770,14 @@ begin
   -- 종류는 서버가 정한다 — 본문에 다른 종류가 섞여 와도 이 한 줄이 덮는다
   -- (확정 정책 4: 다른 종류의 행은 건드리지 않는다).
   -- 품번·구분은 앞뒤 공백을 털고, 구분이 비면 빈 문자열로 맞춘다.
+  --    ⚠ where true 가 붙어 있는 이유 — Supabase 의 supautils 확장이 **WHERE 없는
+  --      UPDATE·DELETE 를 거부한다**(사고로 표 전체를 바꾸는 것을 막는 장치다).
+  --      여기서는 임시표 전체를 고치는 것이 맞으므로 「전부」라고 명시해 준다.
   update tmp_price_import
      set sheet_name = p_sheet_name,
          item_code  = btrim(item_code),
-         variant    = coalesce(btrim(variant), '');
+         variant    = coalesce(btrim(variant), '')
+   where true;
 
   -- 4. 등록하지 않을 줄을 버린다(확정 정책 3) --------------------------------
   --    구입가(cost_jpy)가 없는 줄과 품번이 빈 줄. 미리보기에서 이미 사람에게 보여 준 줄이다.
@@ -833,6 +844,10 @@ begin
          --   그대로 대입하면 사람이 손으로 채운 80 납기(delivery_time_update.sql)가 **지워진다.**
          --   그래서 coalesce 로 막는다 — 빈 글자도 「값 없음」으로 본다.
          delivery_time = coalesce(nullif(btrim(t.delivery_time), ''), p.delivery_time),
+         -- 묶음(line '20'/'80') — 납기와 **같은 규칙**이다. 값이 온 줄만 덮는다.
+         --   옛 화면이 보내지 않던 칸이라 null 로 올 수 있고, 그대로 대입하면 이미 채워 둔
+         --   묶음 값이 지워진다. 어느 가격표에서 온 줄인지는 지우면 다시 알아내기 어렵다.
+         line          = coalesce(nullif(btrim(t.line), ''), p.line),
          updated_at   = v_today
   from tmp_price_import t
   where p.sheet_name = t.sheet_name
@@ -847,22 +862,25 @@ begin
       or p.note3_jp     is distinct from t.note3_jp
       or p.price_jpy    is distinct from t.price_jpy
       or p.cost_jpy     is distinct from t.cost_jpy
-      -- 납기는 **값이 왔고 기존과 다를 때만** 변경으로 센다.
-      -- (값이 오지 않은 80 줄은 여기서 늘 거짓이라 unchanged 로 남는다.)
+      -- 납기·묶음은 **값이 왔고 기존과 다를 때만** 변경으로 센다.
+      -- (값이 오지 않은 줄은 여기서 늘 거짓이라 unchanged 로 남는다.)
       or (nullif(btrim(t.delivery_time), '') is not null
-          and p.delivery_time is distinct from nullif(btrim(t.delivery_time), '')));
+          and p.delivery_time is distinct from nullif(btrim(t.delivery_time), ''))
+      or (nullif(btrim(t.line), '') is not null
+          and p.line is distinct from nullif(btrim(t.line), '')));
   get diagnostics v_updated = row_count;
 
   --    없는 줄을 넣는다. stock_quantity·*_en 은 목록에 없다 — 기본값으로 남는다.
-  --    납기는 받은 값을 넣는다(80 줄은 오지 않으므로 null — 종전과 같다).
+  --    납기·묶음은 받은 값을 넣는다(오지 않은 칸은 null — 종전과 같다).
   insert into public.price_list (
     sheet_name, item_code, variant, plnt, grp,
     item_name_jp, model_jp, note1_jp, note2_jp, note3_jp,
-    price_jpy, cost_jpy, delivery_time, updated_at
+    price_jpy, cost_jpy, delivery_time, line, updated_at
   )
   select t.sheet_name, t.item_code, t.variant, t.plnt, t.grp,
          t.item_name_jp, t.model_jp, t.note1_jp, t.note2_jp, t.note3_jp,
-         t.price_jpy, t.cost_jpy, nullif(btrim(t.delivery_time), ''), v_today
+         t.price_jpy, t.cost_jpy, nullif(btrim(t.delivery_time), ''),
+         nullif(btrim(t.line), ''), v_today
   from tmp_price_import t
   where not exists (
     select 1 from public.price_list p
@@ -900,7 +918,7 @@ $$;
 comment on function public.apply_price_list_import(text, text, text, integer, jsonb) is
   '가격표 엑셀 한 시트를 한 트랜잭션으로 반영한다. 지우지 않고 덮어쓰거나 새로 넣는다. '
   '호출자 검증(superadmin)과 applied_by 는 서버 라우트가 세션으로 정해 넘긴다. '
-  '납기(delivery_time)는 값이 온 줄만 덮는다 — 2026-10-20 교체판.';
+  '납기(delivery_time)·묶음(line)은 값이 온 줄만 덮는다 — 2026-10-20 단계 6.';
 
 -- 권한 — service_role 에만 준다.
 -- Supabase 에서 함수를 만들면 public 에 execute 가 기본으로 붙는다. 그래서 먼저 뗀다.
