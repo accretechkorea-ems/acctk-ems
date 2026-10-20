@@ -19,8 +19,8 @@ import {
   BLUE, BORDER, CARD_BG, DANGER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT,
   btnGhost, btnPrimary,
 } from '@/components/common/ui'
-import { PRICE_LIST_KINDS } from '@/lib/priceListKinds'
-import type { PriceListKind } from '@/lib/priceListKinds'
+import { kindsForLine } from '@/lib/priceListKinds'
+import type { PriceLine, PriceListKind } from '@/lib/priceListKinds'
 import PriceListPreview from './PriceListPreview'
 import PriceListHistory from './PriceListHistory'
 import { usePriceListImport } from './usePriceListImport'
@@ -33,6 +33,12 @@ export type PriceListImportModalProps = {
 
 const num = (n: number) => n.toLocaleString('ko-KR')
 const sectionTitle: React.CSSProperties = { fontSize: 13, fontWeight: 800, color: TEXT, marginBottom: 8 }
+
+/** 종류 묶음 — 어느 견적 양식이 쓰는 가격표인지 제목에 적어 둔다. */
+const LINE_GROUPS: readonly { line: PriceLine; title: string; note: string }[] = [
+  { line: '80', title: '80 가격표', note: '80 파츠·80 장비 견적서가 쓴다 (본사 Price list)' },
+  { line: '20', title: '20 가격표', note: '20 견적서가 쓴다 (Transaction Price list)' },
+]
 
 export default function PriceListImportModal({ onClose, canEdit }: PriceListImportModalProps) {
   const toast = useToast()
@@ -90,36 +96,45 @@ export default function PriceListImportModal({ onClose, canEdit }: PriceListImpo
           <br />· <b style={{ color: TEXT }}>필수는 품번과 구입가(Net price)</b>입니다. 정가(List price)는 없어도 등록됩니다.
           <br />· 구입가가 없는 줄은 <b style={{ color: TEXT }}>등록하지 않고</b> 미리보기에 건수로 보여 줍니다.
           <br />· 같은 종류의 같은 품번은 <b style={{ color: TEXT }}>덮어씁니다.</b> 파일에 없는 기존 품목은 <b style={{ color: TEXT }}>그대로 남습니다</b>(지우지 않습니다).
-          <br />· 다른 종류의 품목은 건드리지 않습니다. 납기·재고처럼 손으로 넣은 값도 그대로 둡니다.
+          <br />· 다른 종류의 품목은 건드리지 않습니다. 80 가격표의 납기·재고처럼 손으로 넣은 값도 그대로 둡니다.
+          <br />· <b style={{ color: TEXT }}>20 가격표</b>는 거래가격표(TRANSACTION PRICE)를 읽습니다. 묶음 제목 줄(「[이름]」)은 품목이 아니라 묶음으로 읽고, 납기(「1.0 month」)는 주로 환산합니다.
           <br />· <b style={{ color: TEXT }}>이미 저장된 견적의 금액은 바뀌지 않습니다</b> — 견적은 저장할 때의 가격을 자기 안에 복사해 둡니다.
           <br />· 미리보기에서 <b style={{ color: TEXT }}>무엇이 바뀌는지 확인한 뒤</b> 등록하세요. 등록은 한 번에 전부 적용되거나 전부 취소됩니다.
         </div>
 
         <div style={{ overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* ── ① 종류 ── */}
+          {/* ── ① 종류 ── 80 가격표와 20 가격표를 나눠 보여 준다(쓰는 견적 양식이 다르다) */}
           <div>
             <div style={sectionTitle}>① 종류 고르기</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {PRICE_LIST_KINDS.map(k => {
-                const on = c.kind?.sheet === k.sheet
-                return (
-                  <button
-                    key={k.sheet}
-                    onClick={() => pick(k)}
-                    disabled={locked}
-                    title={lockMsg ?? k.hint}
-                    style={{
-                      padding: '8px 12px', borderRadius: 8, cursor: locked ? 'not-allowed' : 'pointer',
-                      border: `1px solid ${on ? '#c7d7f8' : BORDER}`,
-                      background: on ? NEUTRAL_BG : CARD_BG, textAlign: 'left',
-                    }}
-                  >
-                    <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: on ? BLUE : TEXT }}>{k.sheet}</span>
-                    <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: MUTED, marginTop: 2 }}>{k.hint}</span>
-                  </button>
-                )
-              })}
-            </div>
+            {LINE_GROUPS.map(g => (
+              <div key={g.line} style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 6 }}>
+                  {g.title}
+                  <span style={{ fontWeight: 500, color: FAINT }}>{` · ${g.note}`}</span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {kindsForLine(g.line).map(k => {
+                    const on = c.kind?.sheet === k.sheet
+                    return (
+                      <button
+                        key={k.sheet}
+                        onClick={() => pick(k)}
+                        disabled={locked}
+                        title={lockMsg ?? k.hint}
+                        style={{
+                          padding: '8px 12px', borderRadius: 8, cursor: locked ? 'not-allowed' : 'pointer',
+                          border: `1px solid ${on ? '#c7d7f8' : BORDER}`,
+                          background: on ? NEUTRAL_BG : CARD_BG, textAlign: 'left',
+                        }}
+                      >
+                        <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: on ? BLUE : TEXT }}>{k.sheet}</span>
+                        <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: MUTED, marginTop: 2 }}>{k.hint}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* ── ② 파일 ── */}

@@ -62,7 +62,10 @@ export default function PriceListPreview({ parse, sheetNote, counts, changes, by
 
         <div style={{ ...label, marginTop: 10 }}>파일 맨 위 문구 (참고 · 기능 없음)</div>
         <div style={{ fontSize: 12, color: parse.validText ? SUB : FAINT, lineHeight: 1.6 }}>
-          {parse.validText ?? '없음'}
+          {parse.validText
+            ?? (parse.topDate
+              ? `Valid date 문구가 없습니다 · 파일 맨 위 날짜 ${parse.topDate} (등록 이력에는 남지 않습니다)`
+              : '없음')}
         </div>
       </div>
 
@@ -72,7 +75,18 @@ export default function PriceListPreview({ parse, sheetNote, counts, changes, by
         <div><div style={label}>등록 대상</div><div style={{ ...value, color: '#234ea2' }}>{num(parse.rows.length)}</div></div>
         <div><div style={label}>구입가 없어 제외</div><div style={value}>{num(parse.skippedNoCost.length)}</div></div>
         <div><div style={label}>합친 중복</div><div style={value}>{num(parse.merged)}</div></div>
-        <div><div style={label}>품목 아닌 줄</div><div style={value}>{num(parse.skippedNonItem)}</div></div>
+        <div>
+          <div style={label}>품목 아닌 줄</div>
+          <div style={value}>
+            {num(parse.skippedNonItem)}
+            {parse.sectionRows > 0 && (
+              <span style={{ fontSize: 11, fontWeight: 500, color: MUTED }}>{` (묶음 제목 ${num(parse.sectionRows)})`}</span>
+            )}
+          </div>
+        </div>
+        {parse.deliveryConverted > 0 && (
+          <div><div style={label}>납기 환산</div><div style={value}>{num(parse.deliveryConverted)}건</div></div>
+        )}
       </div>
 
       {/* ── DB 와 비교 ── */}
