@@ -6,7 +6,7 @@
 // xlsx 는 **쓸 때 불러온다**(동적 import) — 관리자가 파일을 고르기 전에는 내려받지 않는다.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { parsePriceSheet, pickSheetName } from '@/lib/priceListParse'
+import { parseSheet, pickSheetName } from '@/lib/priceListParse'
 import type { ParseResult } from '@/lib/priceListParse'
 import type { PriceListKind } from '@/lib/priceListKinds'
 
@@ -97,11 +97,9 @@ export async function readPriceWorkbook(file: File, kind: PriceListKind): Promis
   const picked = pickSheetName(wb.SheetNames, kind)
   if (!picked.name) return { ...empty, error: picked.error }
 
-  // 시트 → 2차원 배열. **시험 스크립트와 같은 옵션**이다(읽는 길이 갈리면 시험이 뜻을 잃는다).
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[picked.name], {
-    header: 1, defval: null, blankrows: true,
-  })
-  const parse = parsePriceSheet(rows, kind, picked.name)
+  // 워크시트를 **그대로** 넘긴다 — 파서가 자기 방식으로 칸을 읽는다(xlsx 에 기대지 않는다).
+  // 시험 스크립트도 같은 길을 지난다(가짜 시트를 만들어 parseSheet 에 넘긴다).
+  const parse = parseSheet(wb.Sheets[picked.name], kind.line, picked.name)
   const bytes = new TextEncoder().encode(JSON.stringify(parse.rows)).length
   if (bytes > BODY_BYTE_MAX) {
     parse.errors.push(

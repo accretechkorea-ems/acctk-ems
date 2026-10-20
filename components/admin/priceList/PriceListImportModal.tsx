@@ -142,7 +142,6 @@ export default function PriceListImportModal({ onClose, canEdit }: PriceListImpo
           {c.kind && (
             <PriceListHeaderGuide
               key={c.kind.sheet + (c.headerFailed ? ':open' : '')}
-              kind={c.kind}
               defaultOpen={c.headerFailed}
             />
           )}

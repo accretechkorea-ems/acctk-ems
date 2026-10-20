@@ -45,11 +45,14 @@ const VARIANTS: readonly string[] = ['', 'jig_in', 'jig_out']
 const TEXT_FIELDS = ['plnt', 'grp', 'item_name_jp', 'model_jp', 'note1_jp', 'note2_jp', 'note3_jp'] as const
 
 /**
- * 납기 — **주 숫자 문자열**이다('10' = 10주). 20 가격표 줄에만 온다.
- * 화면이 뒤에 「주」를 붙여 보여 주므로(QuoteItemRow) 숫자만 받는다.
- * 세 자리를 넘을 납기는 없다(999주 = 19년).
+ * 납기 — 주 숫자 글자('10' = 10주)이거나, 개월이 아닌 표기는 **적힌 그대로** 온다
+ * (lib/priceListParse.ts 의 cleanLeadTime). 그래서 숫자만 받지 않고 짧은 글자를 받는다.
+ * 숫자가 아닌 납기는 화면에서 「발주 후 ○○주」로 보이므로, 파일 표기가 그대로 드러난다.
  */
-const DELIVERY_RE = /^\d{1,3}$/
+const DELIVERY_MAX = 20
+
+/** 묶음 — 파서가 행마다 담아 보낸다. 두 값뿐이다. */
+const LINES: readonly string[] = ['80', '20']
 
 type TextField = typeof TEXT_FIELDS[number]
 type CleanRow = {
@@ -63,6 +66,8 @@ type CleanRow = {
    * 없어서 쓰이지 않는다(오류도 나지 않는다). 함수를 교체하면 그때부터 저장된다.
    */
   delivery_time?: string | null
+  /** '80' | '20' — 어느 가격표에서 온 줄인가(파서가 담아 보낸다). */
+  line?: string
 } & Record<TextField, string | null>
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
@@ -121,16 +126,23 @@ function readRows(raw: unknown): { ok: true; rows: CleanRow[] } | { ok: false; e
 
     const row = { item_code: code, variant, price_jpy: price, cost_jpy: cost } as CleanRow
 
-    // 납기 — 보내오지 않는 줄(80 가격표)은 칸 자체가 없다. 보냈다면 주 숫자여야 한다.
+    // 납기 — 열이 없으면 칸 자체가 오지 않는다. 보냈다면 짧은 글자여야 한다.
     if (r.delivery_time !== undefined && r.delivery_time !== null && r.delivery_time !== '') {
       const d = str(r.delivery_time)
-      if (!DELIVERY_RE.test(d)) {
-        return { ok: false, error: `${code} 의 납기 값이 올바르지 않습니다: ${d.slice(0, 20)}` }
+      if (d.length > DELIVERY_MAX) {
+        return { ok: false, error: `${code} 의 납기 값이 너무 깁니다: ${d.slice(0, 20)}…` }
       }
       row.delivery_time = d
     } else if (r.delivery_time === null) {
       // 납기를 모른다는 뜻으로 명시해 보낸 경우. 그대로 담는다.
       row.delivery_time = null
+    }
+
+    // 묶음 — 어느 가격표에서 온 줄인지. DB 함수가 값이 온 줄만 덮는다.
+    if (r.line !== undefined && r.line !== null && r.line !== '') {
+      const l = str(r.line)
+      if (!LINES.includes(l)) return { ok: false, error: `${code} 의 묶음 값이 올바르지 않습니다: ${l}` }
+      row.line = l
     }
     for (const f of TEXT_FIELDS) {
       const v = nullableStr(r[f], f === 'plnt' || f === 'grp' ? MAX.short : MAX.long)

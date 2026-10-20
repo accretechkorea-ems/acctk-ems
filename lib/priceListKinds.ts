@@ -113,112 +113,12 @@ export const lineOfSheet = (sheet: string | null | undefined): PriceLine | null 
 export const isTwentySheet = (sheet: string | null | undefined): boolean =>
   lineOfSheet(sheet) === '20'
 
-// ── 머리글 후보 ─────────────────────────────────────────────────────────────
+// ── 머리글 비교 ────────────────────────────────────────────────────────────
+//
+// 머리글 이름 후보 표(영문·한글 변형 수십 개)는 **없앴다.** 이제 머리글은 한글 일곱 개로
+// 고정이고 그 목록은 파서(lib/priceListParse.ts)가 들고 있다 — 읽는 쪽 한 곳에만 둔다.
+// 여기 남은 것은 글자 비교 한 가지뿐이다(시트 이름 대조에도 쓴다).
 
-/** 파서가 찾는 열. 값은 price_list 의 칸 이름을 그대로 쓴다(jig 두 개만 예외). */
-export type HeaderTarget =
-  | 'item_code' | 'cost_jpy' | 'cost_jig_in' | 'cost_jig_out' | 'price_jpy'
-  | 'item_name_jp' | 'model_jp' | 'note1_jp' | 'note2_jp' | 'plnt' | 'grp'
-  | 'delivery_time'
-
-/** 오류·미리보기 문구에 쓰는 한글 이름. */
-export const TARGET_LABELS: Record<HeaderTarget, string> = {
-  item_code: '품번',
-  cost_jpy: '구입가',
-  cost_jig_in: '구입가(Jig 포함)',
-  cost_jig_out: '구입가(Jig 제외)',
-  price_jpy: '정가',
-  item_name_jp: '모델',
-  model_jp: '설명·규격',
-  note1_jp: '비고1',
-  note2_jp: '비고2',
-  plnt: '플랜트',
-  grp: '그룹',
-  delivery_time: '납기',
-}
-
-/**
- * 머리글 이름 후보. 비교는 normHeader 로 공백·대소문자·줄바꿈을 지운 뒤 **완전히 같은지**로 본다.
- * 부분일치로 보지 않는 이유 — 'Model' 과 'Model (EN)', 'Net price' 와
- * 'Net price with Jig' 가 서로를 잡아먹는다.
- *
- * ⚠ 仕切価格(Calibration G열)은 **일부러 후보에 넣지 않았다.** 그 열은 #REF! 오류가 많아
- *   읽으면 안 된다(가격표 1단계 조사). 교정 시트의 구입가는 Net Price 열이다.
- */
-export const HEADER_CANDIDATES: Record<HeaderTarget, readonly string[]> = {
-  item_code: [
-    'Item code', 'Item Code', 'Code', 'Product code', 'Product Code', '品目コード',
-    '아이템코드', '품번', '코드', '제품코드', '상품코드',
-  ],
-  cost_jpy: [
-    'Net price', 'Net Price', 'NetPrice', 'Net price (JPY)', '仕切り', '現法 仕切り',
-    '넷프라이스', '구입가', '매입가',
-    // 20 가격표 — 구입가 칸이 「거래가」다(TRANSACTION PRICE).
-    'Transaction price (JPY)', 'Transaction price', '거래가', '거래가격', '거래단가',
-  ],
-  cost_jig_in: [
-    'Net price with Jig', 'Net Price with Jig', 'Net price (with Jig)', 'with Jig',
-    '넷프라이스(지그포함)', '구입가(지그포함)', '구입가(Jig 포함)',
-  ],
-  cost_jig_out: [
-    'Net price without Jig', 'Net Price without Jig', 'Net price (without Jig)', 'without Jig',
-    '넷프라이스(지그제외)', '구입가(지그제외)', '구입가(Jig 제외)',
-  ],
-  price_jpy: [
-    'List price', 'List Price', 'ListPrice', 'List price (JPY)', '販売定価',
-    '리스트프라이스', '정가',
-  ],
-  item_name_jp: [
-    'Model', 'Item name', 'Item Name', 'Product name', 'Product Name', '品名',
-    '모델', '모델명', '품명', '상품명', '제품명',
-  ],
-  model_jp: [
-    'Description', 'Specification', 'Model (JP)', '仕様', '規格',
-    '디스크립션', '설명', '규격',
-    // 20 가격표 — 규격 칸 이름이 SPEC 이다.
-    'Spec', '스펙',
-  ],
-  note1_jp: [
-    'Model (EN)', 'Model(EN)', 'Calibration items', 'Calibration Items',
-    '모델(영문)', '교정항목',
-    // 20 가격표 — 비고 칸이 Comments 다.
-    'Comments', 'Comment', '비고', '코멘트',
-  ],
-  note2_jp: [
-    'Description (EN)', 'Description(EN)', '디스크립션(영문)', '설명(영문)',
-  ],
-  plnt: ['Plnt', 'Plant', '플랜트'],
-  grp: ['Group', 'Grp', '그룹'],
-  // 20 가격표에만 있는 납기 칸. 「1.0 month」 같은 글자가 들어 있어 주(週)로 환산해 쓴다.
-  delivery_time: ['Standard lead time', 'Lead time', 'Leadtime', '납기', '표준납기'],
-}
-
-/** 머리글 비교용 정규화 — 공백(전각 포함)·줄바꿈을 지우고 소문자로. */
+/** 비교용 정규화 — 공백(전각 포함)·줄바꿈을 지우고 소문자로. */
 export const normHeader = (v: unknown): string =>
   String(v ?? '').replace(/[\s　​]+/g, '').toLowerCase()
-
-/** 그 글자가 어떤 열 이름인가(머리글 반복 행을 걸러낼 때도 쓴다). */
-export function targetOfHeader(v: unknown): HeaderTarget | null {
-  const n = normHeader(v)
-  if (!n) return null
-  for (const [target, list] of Object.entries(HEADER_CANDIDATES)) {
-    if (list.some(c => normHeader(c) === n)) return target as HeaderTarget
-  }
-  return null
-}
-
-/** 못 찾은 열을 알릴 때 쓰는 후보 목록 문구(앞에서 다섯 개만). */
-export const candidateHint = (target: HeaderTarget): string =>
-  HEADER_CANDIDATES[target].slice(0, 5).join(' / ')
-
-// ── Jig 표기 ────────────────────────────────────────────────────────────────
-
-/**
- * CMM Main body 의 두 줄을 사람이 구별하는 **글자**.
- * variant('jig_in'/'jig_out')는 기계가 덮어쓸 줄을 찾는 열쇠이고, 이 글자는 눈으로 보는 표시다.
- * 설명(model_jp) 끝에 붙어 검색 결과·견적 품명·PDF 에 그대로 나간다.
- */
-export const JIG_VARIANTS = {
-  jig_in: { variant: 'jig_in', mark: '(Jig 포함)' },
-  jig_out: { variant: 'jig_out', mark: '(Jig 제외)' },
-} as const

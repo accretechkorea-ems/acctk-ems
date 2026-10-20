@@ -1,6 +1,7 @@
 'use client'
 
 // 「엑셀 머리글 규칙」 안내 — 기본은 접혀 있고 한 줄 요약만 보인다.
+// 규칙이 종류와 무관해져서(파서에 시트별 분기가 없다) 안내도 한 벌이다.
 //
 // 글자는 **전부 lib/priceListParse.ts 의 headerGuide() 가 만든다.** 여기서 문구를 적지 않는다 —
 // 머리글 후보(lib/priceListKinds.ts)를 고치면 이 안내도 같이 바뀌어야 한다. 따로 적어 두면
@@ -10,26 +11,24 @@ import { useState } from 'react'
 import { BORDER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT } from '@/components/common/ui'
 import { headerGuide } from '@/lib/priceListParse'
 import type { HeaderGuideItem } from '@/lib/priceListParse'
-import type { PriceListKind } from '@/lib/priceListKinds'
 
 export type PriceListHeaderGuideProps = {
-  kind: PriceListKind
   /** 열을 못 찾았을 때는 펼친 채로 보여 준다(그때 가장 필요한 안내다). */
   defaultOpen?: boolean
 }
 
-const row = (it: HeaderGuideItem, strong: boolean) => (
+const row = (it: HeaderGuideItem) => (
   <div key={it.label} style={{ display: 'flex', gap: 8, padding: '3px 0', fontSize: 11, lineHeight: 1.7 }}>
-    <span style={{ width: 92, flexShrink: 0, fontWeight: strong ? 700 : 500, color: strong ? TEXT : SUB }}>
-      {it.label}
+    <span style={{ width: 92, flexShrink: 0, fontWeight: it.required ? 700 : 500, color: it.required ? TEXT : SUB }}>
+      {it.label}{it.required ? ' (필수)' : ''}
     </span>
-    <span style={{ color: MUTED, wordBreak: 'break-word' }}>{it.names.join(' / ')}</span>
+    <span style={{ color: MUTED, wordBreak: 'break-word' }}>{it.column}</span>
   </div>
 )
 
-export default function PriceListHeaderGuide({ kind, defaultOpen = false }: PriceListHeaderGuideProps) {
+export default function PriceListHeaderGuide({ defaultOpen = false }: PriceListHeaderGuideProps) {
   const [open, setOpen] = useState(defaultOpen)
-  const g = headerGuide(kind)
+  const g = headerGuide()
 
   return (
     <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, background: NEUTRAL_BG, padding: '8px 12px' }}>
@@ -48,11 +47,10 @@ export default function PriceListHeaderGuide({ kind, defaultOpen = false }: Pric
 
       {open && (
         <div style={{ marginTop: 10, borderTop: `1px solid ${BORDER}`, paddingTop: 10 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: TEXT, marginBottom: 2 }}>반드시 있어야 하는 열</div>
-          {g.required.map(it => row(it, true))}
-
-          <div style={{ fontSize: 11, fontWeight: 700, color: TEXT, margin: '8px 0 2px' }}>있으면 읽는 열</div>
-          {g.optional.map(it => row(it, false))}
+          <div style={{ fontSize: 11, fontWeight: 700, color: TEXT, marginBottom: 2 }}>
+            머리글 일곱 개 · 들어가는 칸
+          </div>
+          {g.items.map(it => row(it))}
 
           <div style={{ fontSize: 11, fontWeight: 700, color: TEXT, margin: '10px 0 2px' }}>규칙</div>
           {g.notes.map((n, i) => (

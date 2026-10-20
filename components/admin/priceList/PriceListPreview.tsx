@@ -54,8 +54,8 @@ export default function PriceListPreview({ parse, sheetNote, counts, changes, by
         <div style={{ ...label, marginBottom: 4 }}>어느 열을 무엇으로 읽었나</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {parse.columns.map(c => (
-            <span key={c.target} style={{ fontSize: 11, fontWeight: 600, color: SUB, background: NEUTRAL_BG, borderRadius: 99, padding: '2px 8px' }}>
-              {c.label} ← {c.header}
+            <span key={c.name} style={{ fontSize: 11, fontWeight: 600, color: SUB, background: NEUTRAL_BG, borderRadius: 99, padding: '2px 8px' }}>
+              {c.name} · {c.index + 1}번째 열
             </span>
           ))}
         </div>
@@ -71,21 +71,19 @@ export default function PriceListPreview({ parse, sheetNote, counts, changes, by
 
       {/* ── 파일에서 읽은 숫자 ── */}
       <div style={{ ...box, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10 }}>
-        <div><div style={label}>읽은 줄</div><div style={value}>{num(parse.readRows)}</div></div>
-        <div><div style={label}>등록 대상</div><div style={{ ...value, color: '#234ea2' }}>{num(parse.rows.length)}</div></div>
-        <div><div style={label}>구입가 없어 제외</div><div style={value}>{num(parse.skippedNoCost.length)}</div></div>
-        <div><div style={label}>합친 중복</div><div style={value}>{num(parse.merged)}</div></div>
-        <div>
-          <div style={label}>품목 아닌 줄</div>
-          <div style={value}>
-            {num(parse.skippedNonItem)}
-            {parse.sectionRows > 0 && (
-              <span style={{ fontSize: 11, fontWeight: 500, color: MUTED }}>{` (묶음 제목 ${num(parse.sectionRows)})`}</span>
-            )}
-          </div>
-        </div>
-        {parse.deliveryConverted > 0 && (
-          <div><div style={label}>납기 환산</div><div style={value}>{num(parse.deliveryConverted)}건</div></div>
+        <div><div style={label}>품목 줄</div><div style={value}>{num(parse.counts.itemRows)}</div></div>
+        <div><div style={label}>등록 대상</div><div style={{ ...value, color: '#234ea2' }}>{num(parse.counts.registered)}</div></div>
+        <div><div style={label}>구입가 없어 제외</div><div style={value}>{num(parse.counts.noCost)}</div></div>
+        <div><div style={label}>품목 아닌 줄</div><div style={value}>{num(parse.counts.nonItem)}</div></div>
+        <div><div style={label}>묶음 제목</div><div style={value}>{num(parse.counts.sections)}</div></div>
+        {parse.counts.headerRepeats > 0 && (
+          <div><div style={label}>머리글 반복</div><div style={value}>{num(parse.counts.headerRepeats)}</div></div>
+        )}
+        {parse.counts.deliveryConverted > 0 && (
+          <div><div style={label}>납기 환산</div><div style={value}>{num(parse.counts.deliveryConverted)}건</div></div>
+        )}
+        {parse.counts.variantTagged > 0 && (
+          <div><div style={label}>구분 붙임</div><div style={value}>{num(parse.counts.variantTagged)}줄</div></div>
         )}
       </div>
 
