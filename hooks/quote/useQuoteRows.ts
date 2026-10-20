@@ -31,6 +31,7 @@ import { canSplitRowKind, type QuoteCategory } from '@/lib/quoteCategories'
 import { canGroupRowKind, isEquipForm } from '@/lib/quoteForms'
 import { searchPriceList } from '@/lib/priceSearch'
 import { priceScopeLabel, sheetsForForm } from '@/lib/priceListKinds'
+import { itemTextOnSelect } from '@/lib/priceItemText'
 
 export type UseQuoteRowsArgs = {
   supabase: SupabaseClient
@@ -133,15 +134,9 @@ export function useQuoteRows({
   const handleSelect = useCallback((rowId: string, item: PriceItem) => {
     setRows(prev => prev.map(r => {
       if (r.id !== rowId) return r
-      // 품목 선택 시점에 품명에 모델명을 1회 넣는다(이후 itemText 는 순수 사용자 입력).
-      //  - 처음 선택   : 사용자가 적어 둔 품명 뒤에 덧붙인다
-      //  - 다른 품목으로 교체 : 품명을 비우고 새 모델명만 넣는다
-      const model = item.model_jp ? `(${item.model_jp})` : ''
-      const base = r.itemText.trimEnd()
-      // 이미 다른 가격표 품목이 선택돼 있었으면 품명을 비우고 새 모델명만 넣는다.
-      const itemText = r.selectedItem
-        ? model
-        : (model ? (base ? `${base} ${model}` : model) : r.itemText)
+      // 품목 선택 시점에 품명 칸을 1회 채운다(이후 itemText 는 순수 사용자 입력).
+      // 무엇을 채우는지는 가격표(20/80)에 따라 다르다 — lib/priceItemText.ts 가 정한다.
+      const itemText = itemTextOnSelect(r.itemText, !!r.selectedItem, item)
       return calcRow({ ...r, selectedItem: item, itemText, partCode: item.item_code }, exchangeRate)
     }))
     setSearchOpen(prev => ({ ...prev, [rowId]: false }))

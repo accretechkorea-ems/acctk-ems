@@ -100,6 +100,19 @@ export function priceScopeLabel(formKind: string | null | undefined, all: boolea
 export const kindOf = (sheet: string): PriceListKind | null =>
   PRICE_LIST_KINDS.find(k => k.sheet === sheet) ?? null
 
+/**
+ * 그 가격표 줄이 어느 묶음인가 — **sheet_name 으로만** 가른다.
+ * 견적 양식으로 가르지 않는 이유: 「전체 가격표에서 검색」을 켜면 80 양식에서도 20 품목을
+ * 고를 수 있다. 그때도 품명·모델은 **그 줄이 온 가격표의 규칙**을 따라야 한다.
+ * 목록에 없는 sheet_name(옛 데이터·시험 데이터)은 null 이고, 부르는 쪽은 80 으로 다룬다.
+ */
+export const lineOfSheet = (sheet: string | null | undefined): PriceLine | null =>
+  (sheet ? kindOf(sheet)?.line ?? null : null)
+
+/** 20 가격표에서 온 줄인가(품명·모델 규칙이 80 과 다르다). */
+export const isTwentySheet = (sheet: string | null | undefined): boolean =>
+  lineOfSheet(sheet) === '20'
+
 // ── 머리글 후보 ─────────────────────────────────────────────────────────────
 
 /** 파서가 찾는 열. 값은 price_list 의 칸 이름을 그대로 쓴다(jig 두 개만 예외). */

@@ -38,7 +38,8 @@ Module._resolveFilename = function (req, ...rest) {
 }
 
 const { parsePriceSheet, pickSheetName, cleanNumber, cleanLeadTime } = load(path.join(ROOT, 'lib/priceListParse.ts'))
-const { kindOf } = load(path.join(ROOT, 'lib/priceListKinds.ts'))
+const { kindOf, isTwentySheet } = load(path.join(ROOT, 'lib/priceListKinds.ts'))
+const { itemTextOnSelect } = load(path.join(ROOT, 'lib/priceItemText.ts'))
 
 let fails = 0
 const eq = (name, got, want) => {
@@ -291,6 +292,29 @@ eq('하이픈', cleanLeadTime('-'), { weeks: null, converted: false })
 eq('빈 값', cleanLeadTime(null), { weeks: null, converted: false })
 eq('단위 없는 숫자는 부풀리지 않는다', cleanLeadTime('3'), { weeks: '3', converted: false })
 eq('글자만', cleanLeadTime('문의'), { weeks: null, converted: false })
+
+// ════════════════════════════════════════════════════════════════════════════
+console.log('\n── 10. 품목을 고를 때 품명 칸에 채우는 글자 ──')
+// 80 은 「(설명)」을 붙이고, 20 은 PRODUCT NAME 을 넣는다. 판별은 sheet_name 으로 한다.
+const pick80 = { sheet_name: 'SFG Main', item_code: 'TEST-A001', item_name_jp: 'TESTSURF 10', model_jp: '1um,TEST' }
+const pick20 = { sheet_name: 'W10', item_code: 'TEST-G001', item_name_jp: 'TEST BOX LE', model_jp: 'E-TEST001' }
+
+eq('80 · 빈 품명 → (설명)', itemTextOnSelect('', false, pick80), '(1um,TEST)')
+eq('80 · 적어 둔 품명 뒤에 덧붙인다', itemTextOnSelect('스타일러스', false, pick80), '스타일러스 (1um,TEST)')
+eq('80 · 품목 교체 → 새 (설명)만', itemTextOnSelect('예전 글자', true, pick80), '(1um,TEST)')
+eq('80 · 설명이 없으면 손대지 않는다',
+  itemTextOnSelect('내가 쓴 품명', false, { ...pick80, model_jp: null }), '내가 쓴 품명')
+
+eq('20 · 빈 품명 → PRODUCT NAME', itemTextOnSelect('', false, pick20), 'TEST BOX LE')
+eq('20 · 품목 교체 → 새 PRODUCT NAME', itemTextOnSelect('예전 글자', true, pick20), 'TEST BOX LE')
+eq('20 · 규격(SPEC)은 품명에 붙지 않는다',
+  itemTextOnSelect('', false, pick20).includes('E-TEST001'), false)
+eq('20 · PRODUCT NAME 이 비면 손대지 않는다',
+  itemTextOnSelect('내가 쓴 품명', false, { ...pick20, item_name_jp: null }), '내가 쓴 품명')
+
+eq('묶음 판별은 sheet_name 으로', [isTwentySheet('W10'), isTwentySheet('SFG Main'), isTwentySheet(null)],
+  [true, false, false])
+eq('모르는 sheet_name 은 80 으로 다룬다', itemTextOnSelect('', false, { ...pick80, sheet_name: 'ZZ Test' }), '(1um,TEST)')
 
 // ════════════════════════════════════════════════════════════════════════════
 // 선택: 실제 구조 파일로 **머리글 탐색만** 확인한다. 내용·가격은 찍지 않는다.
