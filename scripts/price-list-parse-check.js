@@ -37,7 +37,7 @@ Module._resolveFilename = function (req, ...rest) {
   return origResolve.call(this, req, ...rest)
 }
 
-const { parsePriceSheet, pickSheetName, cleanNumber } = load(path.join(ROOT, 'lib/priceListParse.ts'))
+const { parsePriceSheet, pickSheetName, cleanNumber, cleanLeadTime } = load(path.join(ROOT, 'lib/priceListParse.ts'))
 const { kindOf } = load(path.join(ROOT, 'lib/priceListKinds.ts'))
 
 let fails = 0
@@ -207,6 +207,90 @@ eq('빈 값', [cleanNumber(''), cleanNumber(null), cleanNumber(undefined)], [nul
 eq('엑셀 오류값', [cleanNumber('#REF!'), cleanNumber('#N/A')], [null, null])
 eq('하이픈', cleanNumber('-'), null)
 eq('글자', cleanNumber('문의'), null)
+
+// ════════════════════════════════════════════════════════════════════════════
+console.log('\n── 9. 20 가격표 · 머리글 행 6 · 묶음 제목 · 개월 납기 ──')
+// 20 파일은 머리글 위 줄 수가 시트마다 다르다(실측 3~5행). 자동 탐색이 잡아야 한다.
+// 묶음 제목은 품번 칸이 비고 품명 칸에 「[이름]」만 있는 줄이다.
+const twentyW10 = [
+  [null, 'Transaction Price list', null, null, null, null, null, 46000],
+  [null, null, null, null, null, null, null, null],
+  [null, 'Effective from the purchase order', null, null, null, null, null, null],
+  [null, 'The manager has overall responsibility', null, null, null, null, null, null],
+  [null, null, null, null, null, null, null, null],
+  [null, 'PRODUCT CODE', 'PRODUCT NAME', 'SPEC', 'LIST PRICE (JPY)', 'TRANSACTION PRICE (JPY)', 'Standard lead time', 'Comments'],
+  [null, null, '[TEST BOX]', null, null, '', null, null],
+  [null, 'TEST-G001', 'TEST BOX LE', 'E-TEST001', 500000, 250000, '2.5 month', '시험'],
+  [null, 'TEST-G002', 'TEST BOX', 'E-TEST002', 700000, 350000, '1.0 month', null],
+  [null, null, '[TEST UNIT]', null, null, null, null, null],
+  [null, 'TEST-G003', 'TEST UNIT', 'E-TEST003', 300000, 150000, '-', null],
+  [null, 'TEST-G004', 'TEST UNIT 2', 'E-TEST004', 300000, null, '1.0 month', null],
+]
+const r9 = parse(twentyW10, 'W10')
+eq('머리글 행 6', r9.headerRow, 6)
+eq('오류 없음', r9.errors, [])
+eq('등록 대상', r9.rows.length, 3)
+eq('묶음 제목 줄', r9.sectionRows, 2)
+eq('품목 아닌 줄에 묶음 제목이 들어간다', r9.skippedNonItem >= 2, true)
+eq('구입가 없는 줄 제외', r9.skippedNoCost.map(x => x.item_code), ['TEST-G004'])
+eq('PRODUCT NAME → item_name_jp', r9.rows[0].item_name_jp, 'TEST BOX LE')
+eq('SPEC → model_jp', r9.rows[0].model_jp, 'E-TEST001')
+eq('TRANSACTION PRICE → cost_jpy', r9.rows[0].cost_jpy, 250000)
+eq('LIST PRICE → price_jpy', r9.rows[0].price_jpy, 500000)
+eq('Comments → note1_jp', r9.rows[0].note1_jp, '시험')
+eq('Plnt 없음', r9.rows[0].plnt, null)
+eq('묶음 제목이 grp 로 내려온다', r9.rows.map(x => x.grp), ['TEST BOX', 'TEST BOX', 'TEST UNIT'])
+eq('개월 → 주 (2.5 → 10)', r9.rows[0].delivery_time, '10')
+eq('개월 → 주 (1.0 → 4)', r9.rows[1].delivery_time, '4')
+eq('「-」 는 납기 없음', r9.rows[2].delivery_time, null)
+eq('납기 환산 건수', r9.deliveryConverted, 2)
+eq('Valid date 문구 없음', r9.validText, null)
+eq('맨 위 날짜를 참고로 읽는다', r9.topDate, '2025-12-09')
+
+console.log('\n── 9b. 20 가격표 · 머리글 행 4 · 다른 시트의 같은 품번 ──')
+const twentyGauge = [
+  [null, null, null, null, null, null, null, null],
+  [null, 'Transaction Price list', null, null, null, null, null, null],
+  [null, null, null, null, null, null, null, null],
+  [null, 'PRODUCT CODE', 'PRODUCT NAME', 'SPEC', 'LIST PRICE (JPY)', 'TRANSACTION PRICE (JPY)', 'Standard lead time', 'Comments'],
+  [null, null, '[Gauge system]', null, null, null, null, null],
+  // W10 시트에도 있는 품번이다 — **시트가 다르면 따로 저장되므로 막지 않는다.**
+  [null, 'TEST-G001', 'TEST GAUGE', 'E-TEST900', 120000, 60000, '1.5 month', null],
+  [null, 'TEST-G900', 'TEST GAUGE 2', 'E-TEST901', '240,000', '¥ 120,000', '3.0 month', null],
+]
+const r9b = parse(twentyGauge, 'Gauge')
+eq('머리글 행 4', r9b.headerRow, 4)
+eq('오류 없음', r9b.errors, [])
+eq('등록 대상', r9b.rows.length, 2)
+eq('다른 시트의 같은 품번은 그대로 등록', r9b.rows[0].item_code, 'TEST-G001')
+eq('묶음 제목', r9b.rows[0].grp, 'Gauge system')
+eq('1.5 month → 6주', r9b.rows[0].delivery_time, '6')
+eq('쉼표·¥ 섞인 숫자', [r9b.rows[1].price_jpy, r9b.rows[1].cost_jpy], [240000, 120000])
+
+console.log('\n── 9c. 같은 시트 안에서 값이 다른 중복은 20 에서도 막는다 ──')
+const twentyDup = [
+  ['PRODUCT CODE', 'PRODUCT NAME', 'SPEC', 'LIST PRICE (JPY)', 'TRANSACTION PRICE (JPY)'],
+  ['TEST-G800', 'TEST AMP', 'E-TEST800', 100000, 50000],
+  ['TEST-G800', 'TEST AMP', 'E-TEST800', 100000, 55000],
+]
+has('20 충돌 차단', parse(twentyDup, 'Amp').errors.join(' '), '같은 품번이 서로 다른 값으로')
+
+console.log('\n── 9d. 80 종류는 납기를 보내지 않는다 ──')
+// 80 가격표의 delivery_time 은 사람이 손으로 채운 값이라 엑셀로 덮지 않는다.
+const eighty = parse(sfgMain, 'SFG Main')
+eq('80 줄에 delivery_time 키가 없다', 'delivery_time' in eighty.rows[0], false)
+eq('80 납기 환산 0', eighty.deliveryConverted, 0)
+eq('20 줄에는 delivery_time 키가 있다', 'delivery_time' in r9.rows[0], true)
+
+console.log('\n── 9e. 납기 글자 다루기 ──')
+eq('2.5 month', cleanLeadTime('2.5 month'), { weeks: '10', converted: true })
+eq('1.0 month', cleanLeadTime('1.0 month'), { weeks: '4', converted: true })
+eq('3 months', cleanLeadTime('3 months'), { weeks: '12', converted: true })
+eq('2 weeks 는 그대로', cleanLeadTime('2 weeks'), { weeks: '2', converted: false })
+eq('하이픈', cleanLeadTime('-'), { weeks: null, converted: false })
+eq('빈 값', cleanLeadTime(null), { weeks: null, converted: false })
+eq('단위 없는 숫자는 부풀리지 않는다', cleanLeadTime('3'), { weeks: '3', converted: false })
+eq('글자만', cleanLeadTime('문의'), { weeks: null, converted: false })
 
 // ════════════════════════════════════════════════════════════════════════════
 // 선택: 실제 구조 파일로 **머리글 탐색만** 확인한다. 내용·가격은 찍지 않는다.

@@ -23,6 +23,11 @@ export type ParsedPriceRow = {
   item_code: string
   variant: string
   plnt: string | null
+  /**
+   * 80 가격표는 엑셀의 Group 열, 20 가격표는 **섹션 제목**(「[Gauge system]」)이 들어온다.
+   * 20 파일에는 Group 열이 없고 대신 품목 묶음이 섹션 줄로 나뉘어 있다 —
+   * 그 이름을 여기 담아 두면 어느 묶음의 품목인지 남는다.
+   */
   grp: string | null
   item_name_jp: string | null
   model_jp: string | null
@@ -31,6 +36,15 @@ export type ParsedPriceRow = {
   note3_jp: string | null
   price_jpy: number | null
   cost_jpy: number | null
+  /**
+   * 납기 — **주(週) 숫자 문자열**이다('10' = 10주). 20 가격표에만 담는다.
+   *
+   * ⚠ 80 종류에는 **넣지 않는다.** 그 값은 사람이 손으로 채운 운영값이고
+   *   (delivery_time_update.sql 이 품번 450여 개에 직접 넣었다) 엑셀에 없다.
+   * ⚠ 지금 DB 함수(apply_price_list_import)는 이 칸을 **저장하지 않는다.**
+   *   보내도 조용히 쓰이지 않을 뿐 오류가 나지 않는다(함수 주석 참조).
+   */
+  delivery_time?: string | null
 }
 
 export type FoundColumn = { target: HeaderTarget; label: string; index: number; header: string }
@@ -45,8 +59,14 @@ export type ParseResult = {
   rows: ParsedPriceRow[]
   /** 머리글 아래에서 품번이 있던 줄 수(건너뛴 섹션·빈 줄은 뺀 수). */
   readRows: number
-  /** 섹션 제목(■)·머리글 반복·빈 줄처럼 품목이 아닌 줄. */
+  /** 섹션 제목(■·[이름])·머리글 반복·빈 줄처럼 품목이 아닌 줄. */
   skippedNonItem: number
+  /** 그중 묶음 제목 줄의 수(20 가격표의 「[이름]」 · 80 교정의 「■…」). */
+  sectionRows: number
+  /** 납기를 개월에서 주로 환산한 줄 수. */
+  deliveryConverted: number
+  /** 「Valid date」 문구가 없을 때, 머리글 위에서 찾은 날짜(참고용. 저장하지 않는다). */
+  topDate: string | null
   /** 구입가가 없어 등록에서 뺀 줄. */
   skippedNoCost: { item_code: string; name: string }[]
   /** 값까지 같아 하나로 합친 중복 줄 수. */
@@ -82,6 +102,42 @@ export function cleanNumber(v: unknown): number | null {
   if (s === '' || s === '-' || s.startsWith('#')) return null
   const n = Number(s)
   return Number.isFinite(n) ? Math.round(n) : null
+}
+
+/**
+ * 납기 — 엑셀의 「1.0 month」·「2.5 month」를 **주 숫자 문자열**로 바꾼다.
+ *
+ * 왜 주인가 — DB 의 delivery_time 에는 주 숫자만 들어 있고(delivery_time_update.sql 이
+ * '2'·'3'·'4' 를 넣었다) 화면이 뒤에 「주」를 붙여 보여 준다
+ * (app/quote/QuoteItemRow.tsx 의 「발주 후 {delivery_time}주」,
+ *  hooks/quote/useQuoteRows.ts 의 `item.delivery_time + '주'`).
+ * 그래서 개월을 **그대로 넣으면 1개월이 1주로 읽힌다.** 한 달을 4주로 보고 환산한다.
+ *
+ * 「-」·빈칸·알 수 없는 글자는 null 이다(납기 없음 — 화면이 「담당자 납기 문의」로 보여 준다).
+ * 「2 weeks」처럼 주로 적혀 있으면 환산하지 않고 그 숫자를 쓴다.
+ */
+export function cleanLeadTime(v: unknown): { weeks: string | null; converted: boolean } {
+  const s = v === null || v === undefined ? '' : String(v).trim()
+  if (s === '' || s === '-') return { weeks: null, converted: false }
+  const m = s.match(/(\d+(?:\.\d+)?)/)
+  if (!m) return { weeks: null, converted: false }
+  const n = Number(m[1])
+  if (!Number.isFinite(n) || n <= 0) return { weeks: null, converted: false }
+  const low = s.toLowerCase()
+  if (low.includes('week') || s.includes('주')) return { weeks: String(Math.round(n)), converted: false }
+  if (low.includes('month') || s.includes('개월') || s.includes('月')) {
+    return { weeks: String(Math.round(n * 4)), converted: true }
+  }
+  // 단위가 없으면 손대지 않는다 — 주인지 개월인지 모르는 값을 네 배로 부풀리면 안 된다.
+  return { weeks: String(Math.round(n)), converted: false }
+}
+
+/** 엑셀 날짜 일련번호 → 'YYYY-MM-DD'. 범위를 벗어나면 null(그냥 숫자였다는 뜻). */
+function excelSerialDate(v: unknown): string | null {
+  const n = typeof v === 'number' ? v : Number(String(v ?? '').trim())
+  if (!Number.isFinite(n) || n < 30000 || n > 60000) return null
+  const ms = Date.UTC(1899, 11, 30) + Math.round(n) * 86400000
+  return new Date(ms).toISOString().slice(0, 10)
 }
 
 // ── 시트 고르기 ─────────────────────────────────────────────────────────────
@@ -150,17 +206,44 @@ function findValidText(rows: unknown[][], headerRow: number): string | null {
   return null
 }
 
+/**
+ * 「Valid date」 문구가 없는 파일(20 가격표)에서 **머리글 위의 날짜 셀**을 찾는다.
+ * 보여 주기만 한다 — 이력(valid_text)에는 넣지 않는다. 파일이 스스로 「유효기간」이라고
+ * 말한 글자가 아니라 우리가 추측한 날짜라서, 기록으로 남기면 뜻이 섞인다.
+ */
+function findTopDate(rows: unknown[][], headerRow: number): string | null {
+  for (let r = 0; r < Math.min(headerRow, rows.length); r++) {
+    for (const cell of rows[r] ?? []) {
+      if (cell instanceof Date) return cell.toISOString().slice(0, 10)
+      const d = excelSerialDate(cell)
+      if (d) return d
+    }
+  }
+  return null
+}
+
 // ── 본체 ────────────────────────────────────────────────────────────────────
 
 /** 섹션 제목 행인가 — Calibration 시트는 「■ …」 로 묶음을 나눈다. */
 const isSectionLabel = (s: string): boolean => /^[■◆▶■◆]/.test(s)
+
+/**
+ * 20 가격표의 묶음 제목 — 품번 칸이 비고 품명 칸에 「[Gauge system]」처럼 대괄호 이름만 있다.
+ * 품목이 아니라 묶음 머리다. 이름(대괄호 벗긴 글자)을 뒤따르는 품목들의 grp 에 넣는다.
+ */
+const bracketSection = (s: string | null): string | null => {
+  if (!s) return null
+  const m = s.trim().match(/^\[(.+)\]$/)
+  return m ? m[1].trim() : null
+}
 
 export function parsePriceSheet(
   rows: unknown[][], kind: PriceListKind, sheetName: string,
 ): ParseResult {
   const out: ParseResult = {
     sheetName, headerRow: 0, columns: [], validText: null, rows: [],
-    readRows: 0, skippedNonItem: 0, skippedNoCost: [], merged: 0,
+    readRows: 0, skippedNonItem: 0, sectionRows: 0, deliveryConverted: 0, topDate: null,
+    skippedNoCost: [], merged: 0,
     conflicts: [], errors: [], warnings: [],
   }
 
@@ -180,6 +263,7 @@ export function parsePriceSheet(
 
   out.headerRow = hit.row + 1
   out.validText = findValidText(rows, hit.row)
+  if (!out.validText) out.topDate = findTopDate(rows, hit.row)
   out.columns = [...hit.map.entries()]
     .map(([target, index]) => ({ target, label: TARGET_LABELS[target], index, header: hit.headers.get(target) ?? '' }))
     .sort((a, b) => a.index - b.index)
@@ -201,26 +285,40 @@ export function parsePriceSheet(
   // ── 줄 읽기 ──
   type Draft = ParsedPriceRow & { rowNo: number }
   const drafts: Draft[] = []
+  // 지금까지 지나온 묶음 제목(20 가격표). 뒤따르는 품목 줄의 grp 가 된다.
+  let section: string | null = null
 
   for (let r = hit.row + 1; r < rows.length; r++) {
     const row = rows[r] ?? []
     const rawCode = text(cell(row, 'item_code'))
     if (!rawCode) {
-      // 품번이 없는 줄 — 빈 줄, 섹션 제목, 합계 줄. 조용히 건너뛴다.
+      // 품번이 없는 줄 — 빈 줄, 묶음 제목, 합계 줄. 품목은 아니다.
+      const named = bracketSection(text(cell(row, 'item_name_jp')))
+      if (named) {
+        section = named
+        out.sectionRows++
+        out.skippedNonItem++
+        continue
+      }
       if ((row ?? []).some(c => text(c) !== null)) out.skippedNonItem++
       continue
     }
     // 섹션 제목이 품번 열에 들어 있는 경우(Calibration) · 머리글 반복 행.
     if (isSectionLabel(rawCode) || targetOfHeader(rawCode) !== null) {
+      if (isSectionLabel(rawCode)) out.sectionRows++
       out.skippedNonItem++
       continue
     }
 
     out.readRows++
+    // 납기는 20 가격표에서만 담는다(80 은 사람이 손으로 채운 값이라 덮지 않는다).
+    const lead = kind.line === '20' ? cleanLeadTime(cell(row, 'delivery_time')) : null
     const base = {
       item_code: rawCode,
       plnt: text(cell(row, 'plnt')),
-      grp: text(cell(row, 'grp')),
+      // Group 열이 있으면 그 값, 없으면 지나온 묶음 제목(20 가격표).
+      grp: text(cell(row, 'grp')) ?? section,
+      ...(lead ? { delivery_time: lead.weeks } : {}),
       item_name_jp: text(cell(row, 'item_name_jp')),
       model_jp: text(cell(row, 'model_jp')),
       note1_jp: text(cell(row, 'note1_jp')),
@@ -258,6 +356,8 @@ export function parsePriceSheet(
       continue
     }
     drafts.push({ ...base, rowNo: r + 1, variant: '', cost_jpy: cost })
+    // 환산 건수는 **등록되는 줄만** 센다 — 미리보기의 「등록 대상」과 앞뒤가 맞아야 한다.
+    if (lead?.converted) out.deliveryConverted++
   }
 
   // ── 같은 (품번, 구분) 정리 ──
@@ -283,6 +383,8 @@ export function parsePriceSheet(
     item_name_jp: d.item_name_jp, model_jp: d.model_jp,
     note1_jp: d.note1_jp, note2_jp: d.note2_jp, note3_jp: d.note3_jp,
     price_jpy: d.price_jpy, cost_jpy: d.cost_jpy,
+    // 납기는 20 가격표 줄에만 있다(80 줄에는 이 칸이 아예 없다).
+    ...(d.delivery_time !== undefined ? { delivery_time: d.delivery_time } : {}),
   }))
 
   // ── 오류·경고 ──
@@ -320,6 +422,8 @@ export const parseSummary = (r: ParseResult) => ({
   구입가없어제외: r.skippedNoCost.length,
   합친중복: r.merged,
   품목아닌줄: r.skippedNonItem,
+  묶음제목줄: r.sectionRows,
+  납기환산: r.deliveryConverted,
 })
 
 /** 모든 열 후보를 한 번에 보여 줄 때 쓴다(화면 도움말). */

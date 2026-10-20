@@ -44,12 +44,25 @@ const VARIANTS: readonly string[] = ['', 'jig_in', 'jig_out']
 /** 비교·저장에 쓰는 글자 칸. */
 const TEXT_FIELDS = ['plnt', 'grp', 'item_name_jp', 'model_jp', 'note1_jp', 'note2_jp', 'note3_jp'] as const
 
+/**
+ * 납기 — **주 숫자 문자열**이다('10' = 10주). 20 가격표 줄에만 온다.
+ * 화면이 뒤에 「주」를 붙여 보여 주므로(QuoteItemRow) 숫자만 받는다.
+ * 세 자리를 넘을 납기는 없다(999주 = 19년).
+ */
+const DELIVERY_RE = /^\d{1,3}$/
+
 type TextField = typeof TEXT_FIELDS[number]
 type CleanRow = {
   item_code: string
   variant: string
   price_jpy: number | null
   cost_jpy: number | null
+  /**
+   * 20 가격표 줄에만 담긴다. **지금 DB 함수는 이 칸을 저장하지 않는다** —
+   * jsonb_populate_recordset 이 임시표에 담아 두기만 하고, 함수의 update·insert 목록에
+   * 없어서 쓰이지 않는다(오류도 나지 않는다). 함수를 교체하면 그때부터 저장된다.
+   */
+  delivery_time?: string | null
 } & Record<TextField, string | null>
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
@@ -107,6 +120,18 @@ function readRows(raw: unknown): { ok: true; rows: CleanRow[] } | { ok: false; e
     if (cost === null) return { ok: false, error: `${code} 에 구입가가 없습니다 — 구입가 없는 줄은 보낼 수 없습니다.` }
 
     const row = { item_code: code, variant, price_jpy: price, cost_jpy: cost } as CleanRow
+
+    // 납기 — 보내오지 않는 줄(80 가격표)은 칸 자체가 없다. 보냈다면 주 숫자여야 한다.
+    if (r.delivery_time !== undefined && r.delivery_time !== null && r.delivery_time !== '') {
+      const d = str(r.delivery_time)
+      if (!DELIVERY_RE.test(d)) {
+        return { ok: false, error: `${code} 의 납기 값이 올바르지 않습니다: ${d.slice(0, 20)}` }
+      }
+      row.delivery_time = d
+    } else if (r.delivery_time === null) {
+      // 납기를 모른다는 뜻으로 명시해 보낸 경우. 그대로 담는다.
+      row.delivery_time = null
+    }
     for (const f of TEXT_FIELDS) {
       const v = nullableStr(r[f], f === 'plnt' || f === 'grp' ? MAX.short : MAX.long)
       if (v && typeof v === 'object') return { ok: false, error: `${code} 의 ${f}: ${v.error}` }
