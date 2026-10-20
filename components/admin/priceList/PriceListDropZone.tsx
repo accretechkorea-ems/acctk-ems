@@ -10,7 +10,7 @@
 //    상태를 바꾸게 된다).
 
 import { useRef, useState } from 'react'
-import { BORDER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT } from '@/components/common/ui'
+import { BLUE, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT } from '@/components/common/ui'
 import { HEADER_NAMES, REQUIRED_HEADERS } from '@/lib/priceListParse'
 
 export type PriceListDropZoneProps = {
@@ -27,6 +27,13 @@ export type PriceListDropZoneProps = {
 
 /** 열렸을 때의 최대 높이 — 내용(안내 두 줄 + 파일 줄)보다 넉넉하게. */
 const OPEN_MAX = 260
+
+// 드롭존 색 — 둘 다 이미 쓰는 값이다(app/inventory/page.tsx 의 엑셀 드롭 영역과 같은 톤).
+//   기본   #eff4ff — 연한 파랑. 영역이 여기부터라는 것만 알려 준다.
+//   끌어 올림 #dce9ff — 한 단계 진하게. 파일이 들어오면 다시 기본 톤이다.
+// 테두리는 두 상태 모두 점선으로 둔다 — 「여기에 놓으라」는 표시다.
+const BG = '#eff4ff'
+const BG_OVER = '#dce9ff'
 
 const kb = (n: number) => `${Math.max(1, Math.round(n / 1024)).toLocaleString('ko-KR')}KB`
 
@@ -67,11 +74,12 @@ export default function PriceListDropZone(props: PriceListDropZoneProps) {
           onClick={() => { if (!disabled) inputRef.current?.click() }}
           style={{
             marginTop: 10,
-            border: `1px ${over ? 'solid' : 'dashed'} ${over ? '#c7d7f8' : BORDER}`,
+            border: `1px dashed ${over ? BLUE : '#c7d7f8'}`,
             borderRadius: 8,
-            background: over ? NEUTRAL_BG : '#fff',
+            background: over ? BG_OVER : BG,
             padding: '14px 16px',
             cursor: disabled ? 'not-allowed' : 'pointer',
+            transition: 'background 0.15s ease, border-color 0.15s ease',
           }}
         >
           <input

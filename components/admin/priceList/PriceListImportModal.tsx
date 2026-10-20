@@ -144,8 +144,12 @@ export default function PriceListImportModal({ onClose, canEdit }: PriceListImpo
           )}
         </div>
 
-        {/* ══ 가운데(여기만 스크롤) ══ */}
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 24px' }}>
+        {/* ══ 가운데(여기만 스크롤) ══
+            flex column 으로 두고 아래 「지금 등록된 파일·이력」에 margin-top:auto 를 줘서
+            **바닥에 붙인다.** 표가 없을 때도 가운데가 비고 그 둘은 아래에 있다.
+            표가 길어지면 빈 공간이 사라지고 자연히 표 아래로 밀려 내려간다. */}
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 24px', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flexShrink: 0 }}>
           {c.sheets.length === 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ fontSize: 12, color: FAINT, padding: '18px 0', textAlign: 'center' }}>
@@ -179,9 +183,10 @@ export default function PriceListImportModal({ onClose, canEdit }: PriceListImpo
               </div>
             </>
           )}
+          </div>
 
-          {/* 지금 등록된 파일 — 이력 버튼 바로 위. */}
-          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* 지금 등록된 파일 — 이력 버튼 바로 위. 둘이 함께 가운데 영역 바닥에 붙는다. */}
+          <div style={{ marginTop: 'auto', paddingTop: 14, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <PriceListLatest latest={c.latest} loading={c.historyLoading} />
             <div>
               <button
