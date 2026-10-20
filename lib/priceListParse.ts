@@ -14,7 +14,7 @@
 //   반올림하는 이유는 **미리보기에 보여 준 숫자와 저장되는 숫자가 같아야** 하기 때문이다.
 
 import {
-  HEADER_CANDIDATES, JIG_VARIANTS, TARGET_LABELS, normHeader, targetOfHeader,
+  HEADER_CANDIDATES, TARGET_LABELS, normHeader, targetOfHeader,
 } from './priceListKinds'
 import type { HeaderTarget, PriceListKind } from './priceListKinds'
 
@@ -277,14 +277,6 @@ export function parsePriceSheet(
     return i == null ? null : row[i]
   }
 
-  // Jig 두 열 — CMM Main body 에서만 본다. 한 열만 있어도 그 열로 두 줄 중 하나를 만든다.
-  const jigIn = kind.profile === 'cmm_main' ? col('cost_jig_in') : null
-  const jigOut = kind.profile === 'cmm_main' ? col('cost_jig_out') : null
-  const useJig = jigIn != null || jigOut != null
-  if (kind.profile === 'cmm_main' && !useJig) {
-    out.warnings.push('구입가 열이 Jig 포함/제외로 나뉘어 있지 않습니다 — 한 품번을 한 줄로 등록합니다.')
-  }
-
   // ── 줄 읽기 ──
   type Draft = ParsedPriceRow & { rowNo: number }
   const drafts: Draft[] = []
@@ -314,8 +306,9 @@ export function parsePriceSheet(
     }
 
     out.readRows++
-    // 납기는 20 가격표에서만 담는다(80 은 사람이 손으로 채운 값이라 덮지 않는다).
-    const lead = kind.line === '20' ? cleanLeadTime(cell(row, 'delivery_time')) : null
+    // 납기는 종류를 가리지 않고 읽는다 — 열이 있으면 담고, 없으면 담지 않는다.
+    // (DB 함수가 「값이 온 줄만」 덮으므로, 열이 없는 파일로 기존 납기가 지워지지 않는다.)
+    const lead = hit.map.has('delivery_time') ? cleanLeadTime(cell(row, 'delivery_time')) : null
     const base = {
       item_code: rawCode,
       plnt: text(cell(row, 'plnt')),
@@ -329,28 +322,6 @@ export function parsePriceSheet(
       // note3_jp 는 읽지 않는다 — 예전 스크립트가 열 위치를 세다 실수로 정가 값을 넣던 칸이다.
       note3_jp: null,
       price_jpy: cleanNumber(cell(row, 'price_jpy')),
-    }
-
-    if (useJig) {
-      // 한 행 → 두 줄. 품번은 그대로 두고 variant 와 설명 끝 표기로 가른다.
-      const pairs = [
-        { c: jigIn, v: JIG_VARIANTS.jig_in },
-        { c: jigOut, v: JIG_VARIANTS.jig_out },
-      ]
-      let made = 0
-      for (const { c, v } of pairs) {
-        if (c == null) continue
-        const cost = cleanNumber(row[c])
-        if (cost == null) continue
-        drafts.push({
-          ...base, rowNo: r + 1, variant: v.variant, cost_jpy: cost,
-          model_jp: [base.model_jp, v.mark].filter(Boolean).join(' '),
-        })
-        made++
-      }
-      // 두 열이 모두 비면 등록할 수 없는 줄이다.
-      if (made === 0) out.skippedNoCost.push({ item_code: rawCode, name: base.item_name_jp ?? '' })
-      continue
     }
 
     const cost = cleanNumber(cell(row, 'cost_jpy'))
@@ -458,9 +429,7 @@ const guideItem = (t: HeaderTarget): HeaderGuideItem => ({
 /** 그 종류에서 읽는 열과 규칙 — 전부 상수에서 만들어진다. */
 export function headerGuide(kind: PriceListKind): HeaderGuide {
   const required: HeaderTarget[] = ['item_code', 'cost_jpy']
-  const optional: HeaderTarget[] = ['price_jpy', 'item_name_jp', 'model_jp', 'note1_jp', 'note2_jp', 'plnt', 'grp']
-  if (kind.profile === 'cmm_main') optional.unshift('cost_jig_in', 'cost_jig_out')
-  if (kind.line === '20') optional.unshift('delivery_time')
+  const optional: HeaderTarget[] = ['delivery_time', 'price_jpy', 'item_name_jp', 'model_jp', 'note1_jp', 'note2_jp', 'plnt', 'grp']
 
   const notes = [
     `머리글 행은 위에서 ${HEADER_SCAN_ROWS}행 안에서 자동으로 찾습니다. 열 순서는 상관없고, 머리글 위의 제목·날짜 줄은 건너뜁니다.`,
@@ -469,20 +438,12 @@ export function headerGuide(kind: PriceListKind): HeaderGuide {
     '구입가가 없는 줄은 등록하지 않고 건수만 보여 줍니다. 정가는 없어도 등록됩니다.',
     '같은 품번이 한 시트 안에서 값이 다르게 두 번 나오면 등록을 막습니다(값까지 같으면 하나로 합칩니다).',
   ]
-  if (kind.profile === 'cmm_main') {
-    notes.push(
-      `구입가 열이 「${HEADER_CANDIDATES.cost_jig_in[0]}」·「${HEADER_CANDIDATES.cost_jig_out[0]}」 두 개면 한 품번을 두 줄로 등록합니다(설명 끝에 「${JIG_VARIANTS.jig_in.mark}」·「${JIG_VARIANTS.jig_out.mark}」를 붙입니다). 한쪽이 비면 있는 쪽만 등록합니다.`,
-    )
-  }
-  if (kind.profile === 'calibration') {
-    notes.push('「■ …」 같은 묶음 제목 줄과 중간에 다시 나오는 머리글 줄은 품목이 아니라 건너뜁니다.')
-  }
-  if (kind.line === '20') {
-    notes.push(
-      '품번이 비고 품명 칸에 「[이름]」만 있는 줄은 묶음 제목으로 읽어 뒤따르는 품목의 그룹에 담습니다(품목으로 등록하지 않습니다).',
-      `납기는 「1.0 month」처럼 개월로 적혀 있어 주로 환산해 둡니다(개월 × 4 · 「-」와 빈칸은 납기 없음).`,
-    )
-  }
+  // 종류별 분기를 두지 않는다 — 모든 시트가 같은 규칙으로 읽힌다.
+  notes.push(
+    '「■ …」 로 시작하는 줄과 품번 없이 「[이름]」만 있는 줄은 묶음 제목으로 읽어 뒤따르는 품목의 그룹에 담습니다(품목으로 등록하지 않습니다).',
+    '중간에 다시 나오는 머리글 줄은 조용히 건너뜁니다.',
+    '납기가 「1.0 month」처럼 개월로 적혀 있으면 주로 환산합니다(개월 × 4).',
+  )
 
   return {
     summary: `필수 열은 ${required.map(t => `「${TARGET_LABELS[t]}」`).join('·')} 두 개입니다 — 머리글 이름은 아래 목록에서 자동으로 찾습니다.`,

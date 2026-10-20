@@ -103,26 +103,6 @@ eq('공백 섞인 숫자', [r2.rows[1].price_jpy, r2.rows[1].cost_jpy], [60000, 
 eq('한글 머리글도 모델 → item_name_jp', r2.rows[0].item_name_jp, 'TESTVICE')
 
 // ════════════════════════════════════════════════════════════════════════════
-console.log('\n── 3. CMM Main body · 구입가 두 열(Jig 포함/제외) ──')
-const cmmMain = [
-  ['Valid date : From 1 April 2026 to 30 September 2026.'],
-  ['Plnt', 'Group', 'Item code', 'Model', 'Description', 'List Price', 'Net price with Jig', 'Net price without Jig'],
-  ['3000', '841C', 'TEST-C001', 'TESTZAX 1', '400x400', 9000000, 5000000, 4500000],
-  ['3000', '841C', 'TEST-C002', 'TESTZAX 2', '600x600', 9500000, null, 4800000],
-  ['3000', '841C', 'TEST-C003', 'TESTZAX 3', '800x800', 9900000, null, null],
-]
-const r3 = parse(cmmMain, 'CMM Main body')
-eq('오류 없음', r3.errors, [])
-eq('읽은 줄', r3.readRows, 3)
-eq('두 줄로 갈라진 결과 수', r3.rows.length, 3)
-eq('품번은 그대로', r3.rows.map(x => x.item_code), ['TEST-C001', 'TEST-C001', 'TEST-C002'])
-eq('variant', r3.rows.map(x => x.variant), ['jig_in', 'jig_out', 'jig_out'])
-eq('설명 끝 표기', r3.rows.map(x => x.model_jp),
-  ['400x400 (Jig 포함)', '400x400 (Jig 제외)', '600x600 (Jig 제외)'])
-eq('구입가', r3.rows.map(x => x.cost_jpy), [5000000, 4500000, 4800000])
-eq('양쪽 다 빈 줄은 제외', r3.skippedNoCost.map(s => s.item_code), ['TEST-C003'])
-
-// ════════════════════════════════════════════════════════════════════════════
 console.log('\n── 4. Calibration · 섹션·머리글 반복·충돌 품번 ──')
 const calibration = [
   ['Valid date : From 1 April 2026 to 30 September 2026.'],
