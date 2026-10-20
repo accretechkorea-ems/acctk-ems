@@ -637,3 +637,272 @@ comment on column public.quote_template_items.variant is
 --       select sheet_name, item_code, variant, cost_jpy
 --       from public.price_list where variant <> '' order by sheet_name, item_code;
 --   alter table public.price_list drop column if exists variant;
+
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- ════════════════════════════════════════════════════════════════════════════
+-- 단계 5 [**아직 적용하지 않았다** · 2026-10-20 작성]. 납기 저장용 함수 교체
+--
+--   ⚠ 위의 단계 0~4 는 **이미 적용됐다(2026-10-20).** 이 구간만 남아 있다.
+--     여기부터 끝까지를 SQL Editor 에 **한 번에** 붙여 실행하면 된다(한 문장씩 나누지 않아도
+--     되는 구간이다 — 함수 하나와 설명·권한 셋이다).
+--
+--   ── 무엇이 달라지는가 ────────────────────────────────────────────────────
+--     apply_price_list_import 가 받은 행의 **delivery_time(납기)을 저장한다.**
+--     20 가격표(Transaction Price list)에는 「Standard lead time」 열이 있고 화면이 그 값을
+--     주(週)로 환산해 보낸다(lib/priceListParse.ts 의 cleanLeadTime — 개월 × 4).
+--     지금 함수는 그 값을 받아 임시표에 담기만 하고 쓰지 않는다.
+--
+--   ── ⚠ 80 가격표의 납기를 지우지 않는다 ───────────────────────────────────
+--     80 종류(본사 Price list)는 엑셀에 납기 열이 없어서 화면이 이 칸을 **보내지 않는다.**
+--     그래서 함수 안에서 t.delivery_time 은 null 이다. 그걸 그대로 대입하면
+--     사람이 손으로 채워 둔 80 납기(delivery_time_update.sql 이 품번 450여 개에 넣은 값)가
+--     **통째로 지워진다.** 그래서 아래 세 자리 모두 「값이 있을 때만」으로 막았다 —
+--       update : delivery_time = coalesce(nullif(btrim(t.delivery_time), ''), p.delivery_time)
+--       where  : 값이 왔고 기존과 다를 때만 「변경」으로 센다(80 줄은 늘 unchanged)
+--       insert : nullif(btrim(t.delivery_time), '') — 새 줄은 받은 값(없으면 null)
+--     빈 글자('')도 「값 없음」으로 본다.
+--
+--   ── 바뀌지 않는 것 ──────────────────────────────────────────────────────
+--     시그니처(인자 다섯·순서·타입) · 반환 jsonb 의 열쇠 여덟 개 · security definer ·
+--     search_path · 권한(revoke/grant) · 지우지 않는다는 원칙 · 건수 세는 방식.
+--     create or replace 라서 **다시 실행해도 안전하다**(같은 정의로 덮어쓴다).
+--     권한 문장도 다시 넣어 두었다 — 함수를 교체해도 권한은 남지만, 한 번에 붙여 실행할 때
+--     빠뜨리지 않게 함께 둔다(같은 값을 다시 주는 것이라 무해하다).
+--
+--   ── 되돌리기 ────────────────────────────────────────────────────────────
+--     위의 「단계 3」 함수 정의를 **그대로 다시 실행**하면 납기를 저장하지 않는 판으로 돌아간다.
+--     (데이터는 그대로다. 이미 들어간 납기 값이 지워지지는 않는다.)
+-- ════════════════════════════════════════════════════════════════════════════
+-- ════════════════════════════════════════════════════════════════════════════
+
+create or replace function public.apply_price_list_import(
+  p_sheet_name text,
+  p_file_name  text,
+  p_valid_text text,
+  p_applied_by integer,
+  p_rows       jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_total     integer;
+  v_skipped   integer := 0;
+  v_dedup     integer := 0;
+  v_matched   integer := 0;
+  v_updated   integer := 0;
+  v_inserted  integer := 0;
+  v_unchanged integer := 0;
+  v_conflict  text;
+  v_import_id bigint;
+  -- updated_at 은 **text 칸**이고 'YYYY-MM-DD' 글자가 들어 있다(단계 0 ① 에서 확인).
+  -- now() 를 그대로 넣으면 '2026-10-20 14:03:11.123+09' 같은 글자가 섞여 기존 값과 모양이 달라진다.
+  -- 그래서 한국 날짜 글자를 한 번 만들어 두고 그 값을 넣는다(한 번의 적용은 한 날짜다).
+  v_today     text := to_char(now() at time zone 'Asia/Seoul', 'YYYY-MM-DD');
+  -- 소수가 섞인 가격을 반올림한 행 배열(아래 1-b).
+  v_rows      jsonb;
+begin
+  -- 1. 입력 검사 ------------------------------------------------------------
+  if p_sheet_name is null or btrim(p_sheet_name) = '' then
+    raise exception '종류가 비어 있습니다.';
+  end if;
+  if p_file_name is null or btrim(p_file_name) = '' then
+    raise exception '파일 이름이 비어 있습니다.';
+  end if;
+  if jsonb_typeof(coalesce(p_rows, 'null'::jsonb)) <> 'array' then
+    raise exception '행 목록이 배열이 아닙니다.';
+  end if;
+  v_total := jsonb_array_length(p_rows);
+  if v_total = 0 then
+    raise exception '등록할 행이 없습니다.';
+  end if;
+  -- 한 시트가 1,000행 안팎이다. 20,000 은 사고(같은 파일을 여러 번 붙여 보낸 경우)를 막는 선이다.
+  if v_total > 20000 then
+    raise exception '한 번에 등록할 수 있는 행은 20,000개까지입니다 (받은 행 %).', v_total;
+  end if;
+
+  -- 1-b. 소수 반올림 ---------------------------------------------------------
+  --    price_jpy·cost_jpy 는 integer 칸이다. 엑셀에 소수가 섞여 있으면(환산값·수식 결과)
+  --    integer 대입에서 PostgreSQL 이 알아서 반올림하지만, **여기서 먼저 반올림한다.**
+  --    화면 미리보기가 보여 준 숫자와 저장된 숫자가 어긋나면 안 되기 때문이다
+  --    (화면도 같은 규칙으로 반올림한다 — lib/priceListParse.ts).
+  --    ⚠ 숫자가 아닌 값("1,000" 같은 문자열)은 **그대로 둔다.** 조용히 고쳐 주면 잘못 읽은
+  --      열을 그대로 저장하게 된다. 아래 jsonb_populate_recordset 에서 오류가 나고 전체가 롤백된다.
+  select jsonb_agg(
+           case when jsonb_typeof(r) <> 'object' then r
+                else r
+                  || case when jsonb_typeof(r -> 'price_jpy') = 'number'
+                          then jsonb_build_object('price_jpy', round((r ->> 'price_jpy')::numeric))
+                          else '{}'::jsonb end
+                  || case when jsonb_typeof(r -> 'cost_jpy') = 'number'
+                          then jsonb_build_object('cost_jpy', round((r ->> 'cost_jpy')::numeric))
+                          else '{}'::jsonb end
+           end
+         )
+    into v_rows
+  from jsonb_array_elements(p_rows) r;
+
+  -- 2. 같은 종류에 대한 동시 적용 방지 --------------------------------------
+  --    트랜잭션이 끝나면(성공이든 실패든) 저절로 풀린다.
+  perform pg_advisory_xact_lock(hashtext('price_list_import:' || p_sheet_name));
+
+  -- 3. 받은 행을 임시표로 ----------------------------------------------------
+  --    **price_list 의 행 타입을 그대로 쓴다.** 칸 타입을 여기서 다시 적지 않아야
+  --    표의 타입이 바뀌어도 이 함수가 어긋나지 않는다(create_quote 와 같은 방식).
+  --    모르는 키는 버려지고, 없는 키는 null 이 된다.
+  --    ⚠ 숫자 칸(price_jpy·cost_jpy)은 **숫자로** 보내야 한다. "1,000" 처럼 쉼표가 섞인
+  --      문자열은 여기서 타입 변환 오류가 나고 전체가 롤백된다(서버에서 쉼표를 털어 보낸다).
+  --    같은 트랜잭션에서 두 번 불리는 경우를 대비해 먼저 떨어낸다.
+  drop table if exists tmp_price_import;
+  create temporary table tmp_price_import on commit drop as
+    select * from jsonb_populate_recordset(null::public.price_list, coalesce(v_rows, p_rows));
+
+  -- 종류는 서버가 정한다 — 본문에 다른 종류가 섞여 와도 이 한 줄이 덮는다
+  -- (확정 정책 4: 다른 종류의 행은 건드리지 않는다).
+  -- 품번·구분은 앞뒤 공백을 털고, 구분이 비면 빈 문자열로 맞춘다.
+  update tmp_price_import
+     set sheet_name = p_sheet_name,
+         item_code  = btrim(item_code),
+         variant    = coalesce(btrim(variant), '');
+
+  -- 4. 등록하지 않을 줄을 버린다(확정 정책 3) --------------------------------
+  --    구입가(cost_jpy)가 없는 줄과 품번이 빈 줄. 미리보기에서 이미 사람에게 보여 준 줄이다.
+  delete from tmp_price_import
+   where item_code is null or item_code = '' or cost_jpy is null;
+  get diagnostics v_skipped = row_count;
+
+  if (select count(*) from tmp_price_import) = 0 then
+    raise exception '등록할 수 있는 행이 없습니다 (구입가가 있는 줄이 하나도 없습니다).';
+  end if;
+
+  -- 5. 한 파일 안의 같은 품번 처리 -------------------------------------------
+  --    ⓐ 값까지 같은 중복 → 하나로 합친다.
+  --    ⓑ 값이 다른 중복   → 어느 쪽이 맞는지 기계가 고를 수 없다. **중단한다.**
+  --       (Calibration 시트는 섹션이 나뉘어 있어 같은 품번이 두 번 나오는 일이 있다.)
+  select string_agg(item_code || case when variant <> '' then ' / ' || variant else '' end, ', ')
+    into v_conflict
+  from (
+    select item_code, variant
+    from tmp_price_import
+    group by item_code, variant
+    having count(distinct
+      coalesce(cost_jpy::text, '') || '|' || coalesce(price_jpy::text, '') || '|' ||
+      coalesce(item_name_jp, '')   || '|' || coalesce(model_jp, '')) > 1
+    order by item_code
+    limit 20
+  ) d;
+  if v_conflict is not null then
+    raise exception '같은 품번이 서로 다른 값으로 여러 번 들어 있습니다: % — 파일을 고친 뒤 다시 올려 주세요.', v_conflict;
+  end if;
+
+  -- 값이 같은 중복만 남았다. 한 줄만 남긴다.
+  delete from tmp_price_import t
+   using tmp_price_import u
+   where t.ctid > u.ctid
+     and t.item_code = u.item_code
+     and t.variant   = u.variant;
+  get diagnostics v_dedup = row_count;
+
+  -- 6. 반영 ------------------------------------------------------------------
+  --    먼저 「이미 있는 줄」이 몇 개인지 센다. 덮어쓴 수를 빼면 「그대로인 수」가 나온다.
+  select count(*) into v_matched
+  from tmp_price_import t
+  join public.price_list p
+    on p.sheet_name = t.sheet_name
+   and p.item_code  = t.item_code
+   and p.variant    = t.variant;
+
+  --    달라진 줄만 덮어쓴다. 값이 같으면 updated_at 도 그대로 둔다
+  --    (언제 실제로 바뀌었는지를 남기기 위해서다).
+  --    updated_at 은 text 칸이라 v_today('YYYY-MM-DD')를 넣는다 — 기존 값과 같은 모양이다.
+  update public.price_list p
+     set plnt         = t.plnt,
+         grp          = t.grp,
+         item_name_jp = t.item_name_jp,
+         model_jp     = t.model_jp,
+         note1_jp     = t.note1_jp,
+         note2_jp     = t.note2_jp,
+         note3_jp     = t.note3_jp,
+         price_jpy    = t.price_jpy,
+         cost_jpy     = t.cost_jpy,
+         -- 납기 — **값이 있을 때만** 덮는다.
+         --   80 가격표 줄에는 이 칸이 아예 오지 않아 t.delivery_time 이 null 이다.
+         --   그대로 대입하면 사람이 손으로 채운 80 납기(delivery_time_update.sql)가 **지워진다.**
+         --   그래서 coalesce 로 막는다 — 빈 글자도 「값 없음」으로 본다.
+         delivery_time = coalesce(nullif(btrim(t.delivery_time), ''), p.delivery_time),
+         updated_at   = v_today
+  from tmp_price_import t
+  where p.sheet_name = t.sheet_name
+    and p.item_code  = t.item_code
+    and p.variant    = t.variant
+    and (p.plnt         is distinct from t.plnt
+      or p.grp          is distinct from t.grp
+      or p.item_name_jp is distinct from t.item_name_jp
+      or p.model_jp     is distinct from t.model_jp
+      or p.note1_jp     is distinct from t.note1_jp
+      or p.note2_jp     is distinct from t.note2_jp
+      or p.note3_jp     is distinct from t.note3_jp
+      or p.price_jpy    is distinct from t.price_jpy
+      or p.cost_jpy     is distinct from t.cost_jpy
+      -- 납기는 **값이 왔고 기존과 다를 때만** 변경으로 센다.
+      -- (값이 오지 않은 80 줄은 여기서 늘 거짓이라 unchanged 로 남는다.)
+      or (nullif(btrim(t.delivery_time), '') is not null
+          and p.delivery_time is distinct from nullif(btrim(t.delivery_time), '')));
+  get diagnostics v_updated = row_count;
+
+  --    없는 줄을 넣는다. stock_quantity·*_en 은 목록에 없다 — 기본값으로 남는다.
+  --    납기는 받은 값을 넣는다(80 줄은 오지 않으므로 null — 종전과 같다).
+  insert into public.price_list (
+    sheet_name, item_code, variant, plnt, grp,
+    item_name_jp, model_jp, note1_jp, note2_jp, note3_jp,
+    price_jpy, cost_jpy, delivery_time, updated_at
+  )
+  select t.sheet_name, t.item_code, t.variant, t.plnt, t.grp,
+         t.item_name_jp, t.model_jp, t.note1_jp, t.note2_jp, t.note3_jp,
+         t.price_jpy, t.cost_jpy, nullif(btrim(t.delivery_time), ''), v_today
+  from tmp_price_import t
+  where not exists (
+    select 1 from public.price_list p
+     where p.sheet_name = t.sheet_name
+       and p.item_code  = t.item_code
+       and p.variant    = t.variant
+  );
+  get diagnostics v_inserted = row_count;
+
+  v_unchanged := v_matched - v_updated;
+
+  -- 7. 이력 ------------------------------------------------------------------
+  insert into public.price_list_imports (
+    sheet_name, file_name, valid_text,
+    inserted_count, updated_count, unchanged_count, skipped_count, applied_by
+  ) values (
+    p_sheet_name, p_file_name, p_valid_text,
+    v_inserted, v_updated, v_unchanged, v_skipped, p_applied_by
+  )
+  returning import_id into v_import_id;
+
+  return jsonb_build_object(
+    'import_id', v_import_id,
+    'sheet_name', p_sheet_name,
+    'received',  v_total,      -- 받은 줄
+    'skipped',   v_skipped,    -- 구입가 없음·품번 없음으로 제외한 줄
+    'merged',    v_dedup,      -- 값이 같아 하나로 합친 중복 줄
+    'inserted',  v_inserted,   -- 새로 넣은 줄
+    'updated',   v_updated,    -- 덮어쓴 줄
+    'unchanged', v_unchanged   -- 이미 같아서 그대로 둔 줄
+  );
+end;
+$$;
+
+comment on function public.apply_price_list_import(text, text, text, integer, jsonb) is
+  '가격표 엑셀 한 시트를 한 트랜잭션으로 반영한다. 지우지 않고 덮어쓰거나 새로 넣는다. '
+  '호출자 검증(superadmin)과 applied_by 는 서버 라우트가 세션으로 정해 넘긴다. '
+  '납기(delivery_time)는 값이 온 줄만 덮는다 — 2026-10-20 교체판.';
+
+-- 권한 — service_role 에만 준다.
+-- Supabase 에서 함수를 만들면 public 에 execute 가 기본으로 붙는다. 그래서 먼저 뗀다.
+revoke execute on function public.apply_price_list_import(text, text, text, integer, jsonb) from public, anon, authenticated;
+grant  execute on function public.apply_price_list_import(text, text, text, integer, jsonb) to service_role;
