@@ -25,7 +25,6 @@ import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { isSuperAdmin } from '@/lib/permissions'
-import { PRICE_LIST_SHEETS } from '@/lib/priceListKinds'
 import { PARSE_ROW_MAX } from '@/lib/priceListParse'
 
 const supabaseAdmin = createClient(
@@ -36,7 +35,7 @@ const supabaseAdmin = createClient(
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
 /** 칸 길이 상한. 전부 text 칸이라 서버에서 막지 않으면 무제한으로 들어온다. */
-const MAX = { item_code: 100, variant: 20, short: 100, long: 500, file_name: 200, valid_text: 500 }
+const MAX = { item_code: 100, variant: 20, short: 100, long: 500, file_name: 200, valid_text: 500, sheet_name: 100 }
 /** cost_jpy·price_jpy 는 **integer 칸**이다. int4 한도(2,147,483,647)를 넘으면 저장에서 터진다. */
 const PRICE_MAX = 2_000_000_000
 /** variant 는 파서가 만드는 세 값뿐이다. */
@@ -196,9 +195,16 @@ export async function POST(req: Request) {
 
   const action = str(body.action)
   const sheetName = str(body.sheet_name)
-  // 종류는 일곱 개 중 하나만. 다른 글자를 받으면 같은 종류가 둘로 갈린다.
-  if (!PRICE_LIST_SHEETS.includes(sheetName)) {
-    return bad(`종류가 올바르지 않습니다: ${sheetName || '(비어 있음)'}`)
+  // 시트 이름은 **엑셀이 정한다.** 화면이 파일을 통째로 올리고 시트마다 이 라우트를 부르므로,
+  // 고정 목록으로 막으면 목록에 없는 이름(「Calibration (JPY)」 같은 것)이 등록되지 않는다.
+  // 대신 길이와 공백만 본다 — 이 값이 price_list.sheet_name 에 그대로 들어간다.
+  //
+  // ⚠ 아는 이름이 아니면 **견적 검색의 20/80 필터에 걸리지 않는다**
+  //   (lib/priceListKinds.ts 의 목록으로 거른다). 그래서 화면이 미리보기에서 그 사실을
+  //   한 줄로 알려 준다. 막지는 않는다 — 등록 자체는 되는 게 맞다.
+  if (!sheetName) return bad('시트 이름이 비어 있습니다.')
+  if (sheetName.length > MAX.sheet_name) {
+    return bad(`시트 이름이 너무 깁니다: ${sheetName.slice(0, 30)}…`)
   }
 
   const parsed = readRows(body.rows)

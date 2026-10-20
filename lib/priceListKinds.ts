@@ -42,7 +42,9 @@ export const PRICE_LIST_KINDS: readonly PriceListKind[] = [
   { sheet: 'CMM Accessory',  hint: '3차원 부속품',     profile: 'standard',    line: '80' },
   { sheet: 'SFG Spare part', hint: '표면·윤곽 부품',   profile: 'standard',    line: '80' },
   { sheet: 'CMM Spare',      hint: '3차원 부품',       profile: 'standard',    line: '80' },
-  { sheet: 'Calibration',    hint: '교정 · 섹션으로 나뉜 시트', profile: 'calibration', line: '80' },
+  // 실파일 시트 이름이 「Calibration (JPY)」다(2026-10-20 실측). 이 글자가 price_list.sheet_name
+  // 에 그대로 들어가므로 목록도 같아야 한다 — 다르면 견적 검색의 80 필터에서 빠진다.
+  { sheet: 'Calibration (JPY)', hint: '교정 · 섹션으로 나뉜 시트', profile: 'calibration', line: '80' },
   // ── 20 가격표 (Transaction Price list) ──
   //    머리글이 한 벌이라 아홉 종류가 같은 프로필을 쓴다. 시트 이름만 다르다.
   { sheet: 'W10',                   hint: 'W10',          profile: 'twenty', line: '20' },

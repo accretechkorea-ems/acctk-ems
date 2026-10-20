@@ -10,6 +10,7 @@
 
 import { useState } from 'react'
 import { BORDER, DANGER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT } from '@/components/common/ui'
+import { kindOf } from '@/lib/priceListKinds'
 import type { SheetPlan } from './priceListImport'
 import type { SheetOutcome } from './usePriceListImport'
 
@@ -70,6 +71,12 @@ export default function PriceListSheetTable({ sheets, outcomes }: PriceListSheet
                   {p.headerRow > 0 ? `머리글 ${p.headerRow}행` : '머리글 없음'}
                   {s.bytes > 0 ? ` · ${num(Math.round(s.bytes / 1024))}KB` : ''}
                 </div>
+                {/* 아는 시트 이름이 아니면 견적 검색의 20/80 필터에 걸리지 않는다 — 등록은 되지만 알려 준다. */}
+                {s.willImport && kindOf(p.sheetName) === null && (
+                  <div style={{ fontSize: 11, fontWeight: 500, color: SUB, marginTop: 2 }}>
+                    처음 보는 시트 이름 — 견적 검색의 20/80 구분에는 걸리지 않습니다
+                  </div>
+                )}
               </div>
               <div style={{ ...cell, color: dim ? MUTED : TEXT }}>{num(c.itemRows)}</div>
               <div style={{ ...cell, color: dim ? MUTED : '#234ea2', fontWeight: 600 }}>{num(c.registered)}</div>
