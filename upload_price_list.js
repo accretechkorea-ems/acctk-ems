@@ -1,4 +1,20 @@
 // upload_price_list.js
+//
+// ⚠⚠ 사용 금지 (2026-10-20) ⚠⚠
+//   이 스크립트는 price_list 를 **통째로 지우고** 다시 넣는다(아래 DELETE price_list?id=gte.0).
+//   지금 DB 에서는 그래서는 안 된다 —
+//     · quote_items.price_list_id 가 price_list 를 참조한다(ON DELETE 없음 = NO ACTION).
+//       참조된 행을 지우려 하면 오류가 나고, 지워진다면 그만큼 지난 견적과의 연결이 끊어진다.
+//     · price_list 의 anon 쓰기는 막혀 있다(쓰기는 서버 service role 만).
+//     · variant(Jig 포함/제외) 칸을 모른다 — 두 줄로 저장된 품목이 뭉개진다.
+//
+//   대신 **화면의 「가격표 등록」을 쓴다** (/admin → 가격표 등록).
+//   종류(시트)별로 덮어쓰고, 파일에 없는 품목은 그대로 두며, 한 트랜잭션으로 적용된다.
+//   관련 코드: components/admin/priceList/ · app/api/price-list-import/route.ts ·
+//             lib/priceListParse.ts · price_list_import_schema.sql
+//
+//   지우지 않고 남겨 둔 이유는 **예전 가져오기 방식의 기록**이기 때문이다 —
+//   지금 DB 의 item_name_jp·model_jp 가 어느 엑셀 열에서 왔는지가 이 파일의 열 계산에 적혀 있다.
 const XLSX = require('xlsx');
 const https = require('https');
 const fs = require('fs');
