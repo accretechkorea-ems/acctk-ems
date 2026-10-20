@@ -289,6 +289,34 @@ function findTopDate(rows: unknown[][], headerRow: number): string | null {
   return null
 }
 
+/**
+ * 머리글 **위쪽**의 묶음 제목을 거꾸로 찾는다(없으면 null).
+ *
+ * 왜 필요한가 — 실제 Calibration (JPY) 시트는 「■Calibration Price (JCSS calibration)」가
+ * 7행, 머리글이 8행이다. 머리글 아래부터만 읽으면 **첫 블록 열 줄의 묶음이 비어** 버린다.
+ * 그 줄들은 눈으로 보면 분명히 그 묶음 안에 있다.
+ *
+ * 보는 범위는 findValidText·findTopDate 와 같다(머리글 위 전부). 가까운 쪽부터 거꾸로 올라가
+ * **처음 만나는** 제목을 쓴다 — 머리글 바로 위의 제목이 그 블록의 것이다.
+ * 「Calibration Price List」·「SURFCOM & CONTOURECORD series」 처럼 ■·[…] 가 아닌 제목 줄은
+ * 잡지 않는다(그건 시트 제목이나 계열 이름이고 묶음이 아니다).
+ *
+ * 이 줄은 counts.sections 에 세지 않는다 — 그 셈은 **머리글 아래**에서 만난 제목 줄 수다.
+ */
+function findInitialSection(
+  rows: unknown[][], headerRow: number, codeCol?: number, nameCol?: number,
+): string | null {
+  for (let r = Math.min(headerRow, rows.length) - 1; r >= 0; r--) {
+    const row = rows[r] ?? []
+    // 줄 안을 보는 규칙은 아래 본문 고리와 같다 — 품번 칸, 품번이 비면 품명 칸.
+    const code = codeCol == null ? null : text(row[codeCol])
+    const title = sectionTitle(code)
+      ?? (code ? null : sectionTitle(nameCol == null ? null : text(row[nameCol])))
+    if (title) return title
+  }
+  return null
+}
+
 // ── 줄 분류 ─────────────────────────────────────────────────────────────────
 
 /** 「■…」·「◆…」 처럼 묶음 제목으로 시작하는가. */
@@ -360,7 +388,9 @@ export function parseSheet(ws: SheetLike, line: PriceLine, sheetName = ''): Pars
 
   // ── 1-pass: 줄을 분류하며 품목을 모은다 ──
   //   묶음 제목은 다음 제목이 나올 때까지 아래 품목들의 grp 가 된다.
-  let grp: string | null = null
+  //   시작 값은 **머리글 위에 있는 제목**이다(있으면). 그 제목이 머리글보다 위에 적힌
+  //   파일이 있어서, 없다고 보면 첫 블록의 묶음이 통째로 빈다.
+  let grp: string | null = findInitialSection(rows, hit.row, hit.map.get('품번'), hit.map.get('품명'))
   const kept: ParsedPriceRow[] = []
 
   for (let r = hit.row + 1; r < rows.length; r++) {

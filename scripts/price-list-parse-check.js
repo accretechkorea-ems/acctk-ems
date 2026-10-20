@@ -137,6 +137,46 @@ eq('묶음 제목이 grp 로 내려온다', r2.rows.map(x => x.grp), ['첫 묶�
 eq('grp 에 Profit Center 가 들어가지 않는다', r2.rows.some(x => x.grp === '831M'), false)
 
 // ════════════════════════════════════════════════════════════════════════════
+console.log('\n── 2b. 머리글 위에 있는 묶음 제목 ──')
+// 실제 Calibration (JPY) 는 「■…」 제목이 7행, 머리글이 8행이다. 머리글 아래부터만 읽으면
+// 첫 블록 품목의 묶음이 통째로 빈다. 머리글 위를 거꾸로 훑어 처음 만나는 제목을 시작 값으로 쓴다.
+const titleAbove = [
+  ['Calibration Price List 2026'],                                   // ■ 가 아니라 시트 제목 — 잡지 않는다
+  [],
+  ['SURFCOM & CONTOURECORD series'],                                 // 계열 이름 — 잡지 않는다
+  ['■첫 묶음', 'Remarks : ○・・・Standard', null, null, null, null, null],  // 머리글 바로 위의 묶음 제목
+  HEAD.slice(0, 7),                                                  // 머리글 (5행)
+  ['TEST-K001', '첫 블록 하나', 'E-K1', 1000, 500, null, null],
+  ['TEST-K002', '첫 블록 둘', 'E-K2', 2000, 1000, null, null],
+  ['■둘째 묶음', null, null, null, null, null, null],
+  ['TEST-K003', '둘째 블록 하나', 'E-K3', 3000, 1500, null, null],
+]
+const r2b = parse(titleAbove, '80', 'Calibration (JPY)')
+eq('머리글 행', r2b.headerRow, 5)
+eq('오류 없음', r2b.errors, [])
+eq('첫 블록이 머리글 위 제목을 받는다', r2b.rows.slice(0, 2).map(x => x.grp), ['첫 묶음', '첫 묶음'])
+eq('아래 제목부터 바뀐다', r2b.rows[2].grp, '둘째 묶음')
+eq('■ 아닌 제목 줄은 잡지 않는다', r2b.rows.some(x => String(x.grp).includes('Price List')), false)
+eq('계열 이름도 잡지 않는다', r2b.rows.some(x => String(x.grp).includes('series')), false)
+// 머리글 위의 제목은 「머리글 아래에서 만난 제목 줄」 셈에 넣지 않는다.
+eq('묶음 제목 줄 수는 머리글 아래만 센다', r2b.counts.sections, 1)
+
+console.log('\n── 2c. 머리글 위에 묶음 제목이 없으면 그대로 null ──')
+const noTitleAbove = [
+  ['Transaction Price list'],
+  HEAD.slice(0, 7),
+  ['TEST-L001', '묶음 없는 품목', 'E-L1', 1000, 500, null, null],
+]
+eq('grp 는 null', parse(noTitleAbove, '80', 'SFG Main').rows[0].grp, null)
+
+console.log('\n── 2d. 20 형식의 [이름] 제목이 머리글 위에 있어도 잡는다 ──')
+const bracketAbove = [
+  [null, '[TEST GROUP]', null, null, null, null, null],
+  HEAD.slice(0, 7),
+  ['TEST-M001', '품목', 'E-M1', 1000, 500, '1.0 month', null],
+]
+eq('대괄호 제목도 시작 값이 된다', parse(bracketAbove, '20', 'W10').rows[0].grp, 'TEST GROUP')
+
 console.log('\n── 3. 숫자·납기·오류 칸 ──')
 eq('쉼표', cleanNumber('1,234,567'), 1234567)
 eq('통화기호 ¥ ￥ 역슬래시', [cleanNumber('¥ 1,000'), cleanNumber('￥2,000'), cleanNumber('\\3,000')], [1000, 2000, 3000])
