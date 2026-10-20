@@ -116,6 +116,12 @@ export function usePriceListImport() {
     return ''
   }, [kind, parse, fileName, reloadHistory])
 
+  /**
+   * 머리글을 아예 찾지 못했는가(headerRow 0). 그때는 머리글 규칙 안내를 펼쳐 보여 준다 —
+   * 사람이 할 수 있는 일이 「엑셀 머리글 고치기」뿐이라서다.
+   */
+  const headerFailed = parse !== null && parse.headerRow === 0
+
   /** 적용을 막는 이유(없으면 빈 문자열). 경고는 막지 않는다. */
   const blockReason = (() => {
     if (!kind) return '종류를 먼저 고르세요.'
@@ -129,7 +135,7 @@ export function usePriceListImport() {
 
   return {
     kind, chooseKind,
-    fileName, parse, sheetNote, bytes, clearFile, chooseFile,
+    fileName, parse, sheetNote, bytes, clearFile, chooseFile, headerFailed,
     counts, changes,
     busy, error, result, apply, blockReason,
     history, historyLoading,

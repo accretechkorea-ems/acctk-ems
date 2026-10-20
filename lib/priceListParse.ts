@@ -14,7 +14,7 @@
 //   반올림하는 이유는 **미리보기에 보여 준 숫자와 저장되는 숫자가 같아야** 하기 때문이다.
 
 import {
-  HEADER_CANDIDATES, JIG_VARIANTS, TARGET_LABELS, candidateHint, normHeader, targetOfHeader,
+  HEADER_CANDIDATES, JIG_VARIANTS, TARGET_LABELS, normHeader, targetOfHeader,
 } from './priceListKinds'
 import type { HeaderTarget, PriceListKind } from './priceListKinds'
 
@@ -253,11 +253,14 @@ export function parsePriceSheet(
     const head = rows.slice(0, HEADER_SCAN_ROWS)
     const hasCode = head.some(r => (r ?? []).some(c => targetOfHeader(c) === 'item_code'))
     const missing: HeaderTarget[] = hasCode ? ['cost_jpy'] : ['item_code']
-    out.errors.push(
-      missing.map(m =>
-        `머리글에서 「${TARGET_LABELS[m]}」 열을 찾지 못했습니다. 후보: ${candidateHint(m)}`).join(' / ')
-      + ` (위에서 ${HEADER_SCAN_ROWS}행까지 찾았습니다)`,
-    )
+    for (const m of missing) {
+      out.errors.push(
+        `머리글에서 「${TARGET_LABELS[m]}」 열을 찾지 못했습니다 `
+        + `(위에서 ${HEADER_SCAN_ROWS}행까지 찾았습니다). `
+        // 기대하는 이름을 **전부** 보여 준다 — 사람이 엑셀 머리글을 고칠 수 있어야 한다.
+        + `기대하는 머리글: ${HEADER_CANDIDATES[m].join(' / ')}`,
+      )
+    }
     return out
   }
 
@@ -430,3 +433,61 @@ export const parseSummary = (r: ParseResult) => ({
 export const allCandidates = (): { label: string; list: string }[] =>
   (Object.keys(HEADER_CANDIDATES) as HeaderTarget[])
     .map(t => ({ label: TARGET_LABELS[t], list: HEADER_CANDIDATES[t].join(' / ') }))
+
+// ── 엑셀 머리글 규칙 안내 ───────────────────────────────────────────────────
+//
+// 화면에 보여 줄 글자를 **후보 목록에서 만든다.** 따로 적어 두면 후보를 고칠 때 안내가
+// 옛 이름을 가리키게 되고, 그 안내를 보고 엑셀을 고친 사람이 등록에 실패한다.
+
+export type HeaderGuideItem = { label: string; names: readonly string[] }
+export type HeaderGuide = {
+  /** 한 줄 요약(접힌 상태에 보인다). */
+  summary: string
+  /** 없으면 등록되지 않는 열. */
+  required: HeaderGuideItem[]
+  /** 있으면 읽고 없으면 비워 두는 열. */
+  optional: HeaderGuideItem[]
+  /** 종류별 규칙 설명. */
+  notes: string[]
+}
+
+const guideItem = (t: HeaderTarget): HeaderGuideItem => ({
+  label: TARGET_LABELS[t], names: HEADER_CANDIDATES[t],
+})
+
+/** 그 종류에서 읽는 열과 규칙 — 전부 상수에서 만들어진다. */
+export function headerGuide(kind: PriceListKind): HeaderGuide {
+  const required: HeaderTarget[] = ['item_code', 'cost_jpy']
+  const optional: HeaderTarget[] = ['price_jpy', 'item_name_jp', 'model_jp', 'note1_jp', 'note2_jp', 'plnt', 'grp']
+  if (kind.profile === 'cmm_main') optional.unshift('cost_jig_in', 'cost_jig_out')
+  if (kind.line === '20') optional.unshift('delivery_time')
+
+  const notes = [
+    `머리글 행은 위에서 ${HEADER_SCAN_ROWS}행 안에서 자동으로 찾습니다. 열 순서는 상관없고, 머리글 위의 제목·날짜 줄은 건너뜁니다.`,
+    '이름은 대소문자·공백·줄바꿈을 지운 뒤 아래 목록과 똑같은지로 봅니다 — 비슷한 이름은 잡지 않습니다.',
+    `필수 열(${required.map(t => TARGET_LABELS[t]).join(' · ')})을 찾지 못하면 「○○ 열을 찾지 못했습니다」가 뜨고 등록되지 않습니다. 엑셀 머리글을 아래 이름 중 하나로 고쳐 주세요.`,
+    '구입가가 없는 줄은 등록하지 않고 건수만 보여 줍니다. 정가는 없어도 등록됩니다.',
+    '같은 품번이 한 시트 안에서 값이 다르게 두 번 나오면 등록을 막습니다(값까지 같으면 하나로 합칩니다).',
+  ]
+  if (kind.profile === 'cmm_main') {
+    notes.push(
+      `구입가 열이 「${HEADER_CANDIDATES.cost_jig_in[0]}」·「${HEADER_CANDIDATES.cost_jig_out[0]}」 두 개면 한 품번을 두 줄로 등록합니다(설명 끝에 「${JIG_VARIANTS.jig_in.mark}」·「${JIG_VARIANTS.jig_out.mark}」를 붙입니다). 한쪽이 비면 있는 쪽만 등록합니다.`,
+    )
+  }
+  if (kind.profile === 'calibration') {
+    notes.push('「■ …」 같은 묶음 제목 줄과 중간에 다시 나오는 머리글 줄은 품목이 아니라 건너뜁니다.')
+  }
+  if (kind.line === '20') {
+    notes.push(
+      '품번이 비고 품명 칸에 「[이름]」만 있는 줄은 묶음 제목으로 읽어 뒤따르는 품목의 그룹에 담습니다(품목으로 등록하지 않습니다).',
+      `납기는 「1.0 month」처럼 개월로 적혀 있어 주로 환산해 둡니다(개월 × 4 · 「-」와 빈칸은 납기 없음).`,
+    )
+  }
+
+  return {
+    summary: `필수 열은 ${required.map(t => `「${TARGET_LABELS[t]}」`).join('·')} 두 개입니다 — 머리글 이름은 아래 목록에서 자동으로 찾습니다.`,
+    required: required.map(guideItem),
+    optional: optional.map(guideItem),
+    notes,
+  }
+}

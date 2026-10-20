@@ -22,6 +22,7 @@ import {
 import { kindsForLine } from '@/lib/priceListKinds'
 import type { PriceLine, PriceListKind } from '@/lib/priceListKinds'
 import PriceListPreview from './PriceListPreview'
+import PriceListHeaderGuide from './PriceListHeaderGuide'
 import PriceListHistory from './PriceListHistory'
 import { usePriceListImport } from './usePriceListImport'
 
@@ -136,6 +137,15 @@ export default function PriceListImportModal({ onClose, canEdit }: PriceListImpo
               </div>
             ))}
           </div>
+
+          {/* ── 머리글 규칙 안내 ── 종류를 고른 뒤에 보인다. 열을 못 찾았으면 펼친 채로. */}
+          {c.kind && (
+            <PriceListHeaderGuide
+              key={c.kind.sheet + (c.headerFailed ? ':open' : '')}
+              kind={c.kind}
+              defaultOpen={c.headerFailed}
+            />
+          )}
 
           {/* ── ② 파일 ── */}
           <div>
