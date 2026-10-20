@@ -1,34 +1,36 @@
 'use client'
 
-// 가격표 등록 모달의 상태 — 종류 고르기 → 파일 읽기 → 미리보기 → 적용 → 결과.
+// 가격표 등록 모달의 상태 — 80/20 고르기 → 파일 읽기 → 시트별 미리보기 → 시트 순회 등록.
 //
-// 단계를 따로 두지 않고 **가진 값으로 단계를 판정한다**(kind 없으면 1단계, parse 없으면 2단계…).
+// 단계를 따로 두지 않고 **가진 값으로 단계를 판정한다**(line 없으면 1단계, sheets 없으면 2단계…).
 // 단계 변수를 따로 들면 값과 단계가 어긋나는 순간이 생긴다.
 
 import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { ParseResult } from '@/lib/priceListParse'
-import type { PriceListKind } from '@/lib/priceListKinds'
-import {
-  loadImportHistory, readPriceWorkbook, requestApply, requestPreview,
-} from './priceListImport'
-import type { ApplyResult, ImportHistoryRow, PreviewChange, PreviewCounts } from './priceListImport'
+import type { PriceLine } from '@/lib/priceListKinds'
+import { loadImportHistory, readWorkbook, requestApply } from './priceListImport'
+import type { ApplyResult, ImportHistoryRow, SheetPlan } from './priceListImport'
+
+/** 시트 하나의 등록 결과. 실패해도 줄로 남는다 — 무엇이 들어가고 무엇이 안 들어갔는지 봐야 한다. */
+export type SheetOutcome = {
+  sheetName: string
+  ok: boolean
+  result: ApplyResult | null
+  error: string
+}
 
 export function usePriceListImport() {
   const [supabase] = useState(() => createClient())
 
-  const [kind, setKind] = useState<PriceListKind | null>(null)
+  const [line, setLine] = useState<PriceLine | null>(null)
   const [fileName, setFileName] = useState('')
-  const [parse, setParse] = useState<ParseResult | null>(null)
-  const [sheetNote, setSheetNote] = useState('')
-  const [bytes, setBytes] = useState(0)
-
-  const [counts, setCounts] = useState<PreviewCounts | null>(null)
-  const [changes, setChanges] = useState<PreviewChange[]>([])
+  const [sheets, setSheets] = useState<SheetPlan[]>([])
+  const [error, setError] = useState('')
 
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [result, setResult] = useState<ApplyResult | null>(null)
+  /** 등록 중 어디까지 왔는가 — 「3/9 CMM Accessory 등록 중…」. */
+  const [progress, setProgress] = useState<{ done: number; total: number; sheetName: string } | null>(null)
+  const [outcomes, setOutcomes] = useState<SheetOutcome[]>([])
 
   const [history, setHistory] = useState<ImportHistoryRow[]>([])
   const [historyLoading, setHistoryLoading] = useState(true)
@@ -50,94 +52,96 @@ export function usePriceListImport() {
     return () => { cancelled = true }
   }, [supabase])
 
-  /** 고른 파일을 지운다(종류를 바꿀 때도 지운다 — 다른 종류의 미리보기가 남으면 안 된다). */
+  /** 고른 파일을 지운다(80/20 을 바꿀 때도 지운다 — 다른 묶음의 미리보기가 남으면 안 된다). */
   const clearFile = useCallback(() => {
     setFileName('')
-    setParse(null)
-    setSheetNote('')
-    setBytes(0)
-    setCounts(null)
-    setChanges([])
-    setResult(null)
+    setSheets([])
+    setOutcomes([])
+    setProgress(null)
     setError('')
   }, [])
 
-  const chooseKind = useCallback((next: PriceListKind | null) => {
-    setKind(next)
+  const chooseLine = useCallback((next: PriceLine | null) => {
+    setLine(next)
     clearFile()
   }, [clearFile])
 
-  /**
-   * 파일 하나를 읽고 바로 미리보기까지 간다.
-   * 파싱에서 오류가 났으면 서버를 부르지 않는다 — 보낼 수 없는 내용이다.
-   */
+  /** 파일 하나를 읽어 **모든 시트**를 파싱한다. 서버는 부르지 않는다(등록할 때만 부른다). */
   const chooseFile = useCallback(async (file: File) => {
-    if (!kind) return
+    if (!line) return
     clearFile()
     setFileName(file.name)
     setBusy(true)
-
-    const read = await readPriceWorkbook(file, kind)
-    setSheetNote(read.sheetNote)
-    setBytes(read.bytes)
-    if (read.error || !read.parse) {
-      setError(read.error || '파일을 읽지 못했습니다.')
-      setBusy(false)
-      return
-    }
-    setParse(read.parse)
-    if (read.parse.errors.length > 0 || read.parse.rows.length === 0) {
-      setBusy(false)
-      return
-    }
-
-    const res = await requestPreview(kind.sheet, read.parse.rows)
-    if (!res.ok) setError(res.error)
-    else {
-      setCounts(res.data.counts)
-      setChanges(res.data.changes)
-    }
+    const read = await readWorkbook(file, line)
+    if (read.error) setError(read.error)
+    else setSheets(read.sheets)
     setBusy(false)
-  }, [kind, clearFile])
+  }, [line, clearFile])
 
-  /** 적용 — 성공하면 결과를 남기고 이력을 다시 읽는다. */
-  const apply = useCallback(async (): Promise<string> => {
-    if (!kind || !parse || parse.rows.length === 0) return '등록할 내용이 없습니다.'
-    setBusy(true)
-    setError('')
-    const res = await requestApply(kind.sheet, fileName, parse.validText, parse.rows)
-    setBusy(false)
-    if (!res.ok) {
-      setError(res.error)
-      return res.error
-    }
-    setResult(res.data.result)
-    await reloadHistory()
-    return ''
-  }, [kind, parse, fileName, reloadHistory])
+  const planned = sheets.filter(s => s.willImport)
 
   /**
-   * 머리글을 아예 찾지 못했는가(headerRow 0). 그때는 머리글 규칙 안내를 펼쳐 보여 준다 —
-   * 사람이 할 수 있는 일이 「엑셀 머리글 고치기」뿐이라서다.
+   * 등록 — 등록 예정 시트를 **순서대로** 돌며 시트마다 서버를 부른다.
+   * 한 시트가 실패해도 멈추지 않는다. 시트마다 트랜잭션이 따로라서, 멈추면 이미 들어간 시트와
+   * 남은 시트가 섞인 채로 끝난다 — 끝까지 돌고 **무엇이 실패했는지 표로 보여 주는** 쪽이 낫다.
    */
-  const headerFailed = parse !== null && parse.headerRow === 0
+  const apply = useCallback(async (): Promise<SheetOutcome[]> => {
+    if (planned.length === 0) return []
+    setBusy(true)
+    setError('')
+    setOutcomes([])
 
-  /** 적용을 막는 이유(없으면 빈 문자열). 경고는 막지 않는다. */
+    const done: SheetOutcome[] = []
+    for (let i = 0; i < planned.length; i++) {
+      const s = planned[i]
+      const name = s.parse.sheetName
+      setProgress({ done: i, total: planned.length, sheetName: name })
+      const res = await requestApply(name, fileName, s.parse.validText, s.parse.rows)
+      done.push(res.ok
+        ? { sheetName: name, ok: true, result: res.data.result, error: '' }
+        : { sheetName: name, ok: false, result: null, error: res.error })
+      // 한 시트가 끝날 때마다 표를 채운다 — 긴 파일에서 진행이 보인다.
+      setOutcomes([...done])
+    }
+
+    setProgress(null)
+    setBusy(false)
+    await reloadHistory()
+    return done
+  }, [planned, fileName, reloadHistory])
+
+  /** 등록을 막는 이유(없으면 빈 문자열). 건너뛰는 시트는 막지 않는다. */
   const blockReason = (() => {
-    if (!kind) return '종류를 먼저 고르세요.'
-    if (!parse) return '엑셀 파일을 고르세요.'
-    if (parse.errors.length > 0) return parse.errors[0]
-    if (parse.rows.length === 0) return '등록 대상이 0건입니다.'
-    if (error) return error
-    if (!counts) return '미리보기를 기다리는 중입니다.'
+    if (!line) return '80 가격표와 20 가격표 중 하나를 고르세요.'
+    if (sheets.length === 0) return '엑셀 파일을 고르세요.'
+    if (planned.length === 0) return '등록할 시트가 없습니다 — 머리글을 일곱 글자로 맞춰 주세요.'
     return ''
   })()
 
+  /** 미리보기·결과 맨 위에 올리는 합계. */
+  const totals = {
+    sheets: sheets.length,
+    planned: planned.length,
+    skipped: sheets.length - planned.length,
+    itemRows: planned.reduce((n, s) => n + s.parse.counts.itemRows, 0),
+    registered: planned.reduce((n, s) => n + s.parse.counts.registered, 0),
+    noCost: planned.reduce((n, s) => n + s.parse.counts.noCost, 0),
+    sections: planned.reduce((n, s) => n + s.parse.counts.sections, 0),
+  }
+
+  /** 등록을 마친 뒤의 합계(실패한 시트는 0 으로 센다). */
+  const resultTotals = outcomes.reduce((acc, o) => ({
+    inserted: acc.inserted + (o.result?.inserted ?? 0),
+    updated: acc.updated + (o.result?.updated ?? 0),
+    unchanged: acc.unchanged + (o.result?.unchanged ?? 0),
+    skipped: acc.skipped + (o.result?.skipped ?? 0),
+    failed: acc.failed + (o.ok ? 0 : 1),
+  }), { inserted: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0 })
+
   return {
-    kind, chooseKind,
-    fileName, parse, sheetNote, bytes, clearFile, chooseFile, headerFailed,
-    counts, changes,
-    busy, error, result, apply, blockReason,
+    line, chooseLine,
+    fileName, sheets, planned, clearFile, chooseFile,
+    busy, error, progress, outcomes, apply, blockReason, totals, resultTotals,
     history, historyLoading,
   }
 }

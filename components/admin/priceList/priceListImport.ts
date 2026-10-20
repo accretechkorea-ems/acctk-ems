@@ -1,35 +1,19 @@
 'use client'
 
-// 가격표 등록의 **브라우저 쪽 일** — 엑셀 읽기, 서버 호출, 이력 조회.
+// 가격표 등록의 **브라우저 쪽 일** — 엑셀 읽기, 시트별 서버 호출, 이력 조회.
 //
-// 엑셀은 여기서 읽는다. 파일은 서버로 보내지 않고, DB 에 들어갈 칸만 담은 행 배열을 보낸다.
-// xlsx 는 **쓸 때 불러온다**(동적 import) — 관리자가 파일을 고르기 전에는 내려받지 않는다.
+// ── 파일 하나를 통째로 읽는다 ───────────────────────────────────────────────
+//   예전에는 종류(시트)를 먼저 고르고 그 시트 하나만 올렸다. 종류가 열넷으로 늘자
+//   고르는 일이 곧 실수였다 — 어느 종류가 어느 시트인지 사람이 기억해야 했다.
+//   지금은 **80/20 만 고르고 파일을 통째로** 올린다. 시트 이름은 엑셀이 들고 있다.
+//
+// 엑셀은 여기서 읽는다(xlsx 는 파일을 고를 때 동적으로 불러온다). 파일 자체는 서버로
+// 보내지 않고, 시트마다 DB 에 들어갈 칸만 담은 행 배열을 보낸다.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { parseSheet, pickSheetName } from '@/lib/priceListParse'
+import { parseWorkbook } from '@/lib/priceListParse'
 import type { ParseResult } from '@/lib/priceListParse'
-import type { PriceListKind } from '@/lib/priceListKinds'
-
-export type PreviewCounts = {
-  incoming: number
-  isNew: number
-  priceChanged: number
-  otherChanged: number
-  same: number
-  kept: number
-  current: number
-}
-
-export type PreviewChange = {
-  item_code: string
-  variant: string
-  old_cost: number | null
-  new_cost: number | null
-  old_price: number | null
-  new_price: number | null
-}
-
-export type ServerPreview = { counts: PreviewCounts; changes: PreviewChange[] }
+import type { PriceLine } from '@/lib/priceListKinds'
 
 /** 서버 함수가 돌려주는 건수. */
 export type ApplyResult = {
@@ -59,55 +43,60 @@ export type ImportHistoryRow = {
 
 /**
  * 요청 본문 상한. Vercel 은 약 4.5MB 까지 받는다.
- * 한 줄이 JSON 으로 200바이트 안쪽이라 1,000줄이면 200KB 정도다(가장 큰 시트도 1,000줄 안팎).
- * 그래도 사고(여러 시트를 한 배열로 붙여 보내는 등)를 대비해 **보내기 전에** 크기를 잰다.
+ * 시트 하나씩 보내므로 가장 큰 시트가 기준이다(실측 최대 1.1MB — SFG Spare part 4,909줄).
  */
 export const BODY_BYTE_MAX = 3_500_000
 
-export type ReadResult = {
-  parse: ParseResult | null
-  /** 시트 고르기 안내(이름이 달랐다·하나뿐이었다). 오류가 아니다. */
-  sheetNote: string
-  /** 파일을 아예 읽지 못했거나 시트를 못 찾은 경우. */
-  error: string
-  /** 보낼 본문의 바이트 수(미리보기에 숫자로 보여 준다). */
+/** 시트 하나의 상태 — 등록할 것인가, 건너뛸 것인가. */
+export type SheetPlan = {
+  parse: ParseResult
+  /** 등록 예정이면 true. */
+  willImport: boolean
+  /** 건너뛰는 이유(등록 예정이면 빈 글자). */
+  skipReason: string
+  /** 보낼 본문 크기(바이트). */
   bytes: number
 }
 
-/** 엑셀 한 개를 읽어 고른 종류의 시트를 파싱한다. */
-export async function readPriceWorkbook(file: File, kind: PriceListKind): Promise<ReadResult> {
-  const empty: ReadResult = { parse: null, sheetNote: '', error: '', bytes: 0 }
+export type ReadResult = {
+  sheets: SheetPlan[]
+  /** 파일을 아예 읽지 못한 경우. */
+  error: string
+}
+
+/** 왜 건너뛰는가 — 사람이 읽을 한 줄. 머리글이 없는 시트는 오류가 아니라 건너뜀이다. */
+function skipReasonOf(parse: ParseResult, bytes: number): string {
+  // 머리글을 못 찾았다 = 가격표 시트가 아니다(개정 이력·판촉 시트 등). 흔한 일이다.
+  if (parse.headerRow === 0) return '머리글 없음'
+  if (parse.counts.registered === 0) return '등록 대상 0건'
+  if (bytes > BODY_BYTE_MAX) return `내용이 너무 큼(${Math.round(bytes / 1024).toLocaleString('ko-KR')}KB)`
+  return ''
+}
+
+/** 엑셀 한 개를 읽어 **모든 시트**를 파싱한다. */
+export async function readWorkbook(file: File, line: PriceLine): Promise<ReadResult> {
   let XLSX: typeof import('xlsx')
   try {
     XLSX = await import('xlsx')
   } catch {
-    return { ...empty, error: '엑셀을 읽는 모듈을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.' }
+    return { sheets: [], error: '엑셀을 읽는 모듈을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.' }
   }
 
   let wb: import('xlsx').WorkBook
   try {
-    const buf = await file.arrayBuffer()
-    wb = XLSX.read(buf, { type: 'array' })
+    wb = XLSX.read(await file.arrayBuffer(), { type: 'array' })
   } catch (e) {
     console.error('[priceListImport] 엑셀 읽기 실패', e)
-    return { ...empty, error: '엑셀 파일을 읽지 못했습니다. .xlsx 파일인지 확인해 주세요.' }
+    return { sheets: [], error: '엑셀 파일을 읽지 못했습니다. .xlsx 파일인지 확인해 주세요.' }
   }
-  if (wb.SheetNames.length === 0) return { ...empty, error: '시트가 없는 파일입니다.' }
+  if (wb.SheetNames.length === 0) return { sheets: [], error: '시트가 없는 파일입니다.' }
 
-  const picked = pickSheetName(wb.SheetNames, kind)
-  if (!picked.name) return { ...empty, error: picked.error }
-
-  // 워크시트를 **그대로** 넘긴다 — 파서가 자기 방식으로 칸을 읽는다(xlsx 에 기대지 않는다).
-  // 시험 스크립트도 같은 길을 지난다(가짜 시트를 만들어 parseSheet 에 넘긴다).
-  const parse = parseSheet(wb.Sheets[picked.name], kind.line, picked.name)
-  const bytes = new TextEncoder().encode(JSON.stringify(parse.rows)).length
-  if (bytes > BODY_BYTE_MAX) {
-    parse.errors.push(
-      `보낼 내용이 너무 큽니다(${Math.round(bytes / 1024).toLocaleString('ko-KR')}KB). `
-      + '시트를 나눠서 올려 주세요.',
-    )
-  }
-  return { parse, sheetNote: picked.note, error: '', bytes }
+  const sheets = parseWorkbook(wb, line).map(parse => {
+    const bytes = new TextEncoder().encode(JSON.stringify(parse.rows)).length
+    const skipReason = skipReasonOf(parse, bytes)
+    return { parse, bytes, skipReason, willImport: skipReason === '' }
+  })
+  return { sheets, error: '' }
 }
 
 type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string }
@@ -128,11 +117,11 @@ async function callApi<T>(body: unknown): Promise<ApiResult<T>> {
   }
 }
 
-/** 미리보기 — DB 와 비교한 건수를 받는다(읽기만 한다). */
-export const requestPreview = (sheetName: string, rows: unknown[]) =>
-  callApi<{ counts: PreviewCounts; changes: PreviewChange[] }>({ action: 'preview', sheet_name: sheetName, rows })
-
-/** 적용 — 서버가 RPC 를 한 번 부른다(한 트랜잭션). */
+/**
+ * 시트 하나를 적용한다 — 서버가 RPC 를 한 번 부른다(한 트랜잭션).
+ * **시트마다 따로 부른다.** DB 함수가 시트 하나씩만 받고, 그래야 한 시트가 실패해도
+ * 다른 시트는 그대로 들어간다.
+ */
 export const requestApply = (
   sheetName: string, fileName: string, validText: string | null, rows: unknown[],
 ) => callApi<{ result: ApplyResult }>({
@@ -142,6 +131,7 @@ export const requestApply = (
 /**
  * 최근 등록 이력. 읽기는 **세션 클라이언트**로 한다 —
  * price_list_imports 의 select 정책이 superadmin 만 허용하므로 권한은 DB 가 본다.
+ * 시트마다 한 줄씩 남으므로, 파일 한 번 올리면 여러 줄이 생긴다.
  */
 export async function loadImportHistory(
   supabase: SupabaseClient, limit = 20,
