@@ -170,7 +170,13 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
                 <div key={item.id} onClick={() => { handleSelect(row.id, item); focusItemName() }}
                   style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 11, transition: 'background 0.15s ease', background: itemKeys.active === i ? '#f0f4ff' : '#fff' }}
                   onMouseEnter={() => itemKeys.setActive(i)}>
-                  <div><span style={{ fontWeight: 700, color: '#234ea2' }}>{item.item_code}</span><span style={{ marginLeft: 6, color: '#111827' }}>{item.item_name_jp}</span><span style={{ marginLeft: 6, color: '#6b7280' }}>({item.model_jp})</span></div>
+                  <div>
+                    <span style={{ fontWeight: 700, color: '#234ea2' }}>{item.item_code}</span>
+                    {/* 종류 배지 — 같은 품번이 SFG/CMM 양쪽에 있거나 Jig 두 줄로 나뉠 때 어느 줄인지 보인다. */}
+                    <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '1px 6px' }}>{item.sheet_name}</span>
+                    <span style={{ marginLeft: 6, color: '#111827' }}>{item.item_name_jp}</span>
+                    <span style={{ marginLeft: 6, color: '#6b7280' }}>({item.model_jp})</span>
+                  </div>
                   <div style={{ color: '#9ca3af', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span>정가: ¥{item.price_jpy?.toLocaleString()} / 구입가: ¥{item.cost_jpy?.toLocaleString()}</span>
                     {(() => {

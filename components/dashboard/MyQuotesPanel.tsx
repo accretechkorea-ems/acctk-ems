@@ -694,9 +694,12 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                 const profitConfirmed = ['발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료'].includes(q.status)
                 const profitColor = profitConfirmed ? '#15803d' : TEXT
                 const profitRateColor = profitConfirmed ? ((q.profit_rate || 0) >= 40 ? '#15803d' : ORANGE) : GRAY
+                // 품목명은 **저장된 값(product_name)이 먼저**다. 가격표(price_list)는 비었을 때만 쓴다 —
+                // 가격표를 다시 등록하면 설명이 덮어쓰이는데, 그 글자를 먼저 쓰면 지난 견적의 품목명이
+                // 따라 바뀌어 버린다(가격표 2단계에서 뒤집었다).
                 const itemNames = q.quote_items && q.quote_items.length > 0
                   // 할인은 품목이 아니라 총액 차감이라 목록에서 뺀다.
-                  ? q.quote_items.filter(i => i.row_kind !== 'discount').map(i => i.price_list?.model_jp || i.product_name).filter(Boolean).join(', ')
+                  ? q.quote_items.filter(i => i.row_kind !== 'discount').map(i => i.product_name || i.price_list?.model_jp).filter(Boolean).join(', ')
                   : '-'
                 const showOrderInfo = ['주문완료', '세금계산서 요청', '매출완료'].includes(q.status)
                 return (

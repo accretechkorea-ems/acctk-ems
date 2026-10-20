@@ -6,8 +6,10 @@
 // 모달이 같은 검색을 하려면 질의를 한 벌 더 써야 했다. 질의가 둘이 되면 찾는 범위가 조용히
 // 갈라진다(한쪽만 모델명을 보고 다른 쪽은 품번만 보는 식으로). 그래서 함수로 뽑았다.
 //
-// 찾는 범위와 건수 상한은 **종전과 한 글자도 같다** — item_code 또는 model_jp 에 부분 일치,
-// 최대 20건. 옮기면서 바꾼 것은 없다.
+// 찾는 범위: item_code(품번) · model_jp(설명·규격) · item_name_jp(모델명) 부분 일치, 최대 20건.
+// item_name_jp 는 **가격표 2단계에서 더했다.** 그전에는 품번과 설명만 봤는데, 모델명이
+// item_name_jp 칸에 들어 있어서 「코드 또는 모델명 검색」이라는 안내와 달리 모델명으로는
+// 찾히지 않았다(가격표 1단계 조사 A-3).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { PriceItem } from '@/app/quote/types'
@@ -22,10 +24,14 @@ export const PRICE_SEARCH_LIMIT = 20
  */
 export async function searchPriceList(supabase: SupabaseClient, q: string): Promise<PriceItem[]> {
   if (!q.trim()) return []
+  // PostgREST 의 or=(…) 는 **쉼표로 조건을 나눈다.** 검색어에 쉼표·괄호가 섞이면 필터가
+  // 깨져 조회가 통째로 실패한다(품번 두 개를 붙여 치는 일이 있다). 그런 글자는 털어낸다.
+  const safe = q.replace(/[,()%]/g, ' ').trim()
+  if (!safe) return []
   const { data, error } = await supabase
     .from('price_list')
     .select('*')
-    .or(`item_code.ilike.%${q}%,model_jp.ilike.%${q}%`)
+    .or(`item_code.ilike.%${safe}%,model_jp.ilike.%${safe}%,item_name_jp.ilike.%${safe}%`)
     .limit(PRICE_SEARCH_LIMIT)
   if (error) {
     console.error('[priceSearch] 조회 실패', { q, error })

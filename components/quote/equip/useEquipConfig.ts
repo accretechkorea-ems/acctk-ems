@@ -18,7 +18,7 @@ import {
 } from '@/lib/quoteTemplates'
 import type { QuoteTemplate } from '@/lib/quoteTemplates'
 import {
-  lineFromManual, lineFromPriceItem, lineFromTemplateItem, linesOf, recalcLines,
+  lineFromManual, lineFromPriceItem, lineFromTemplateItem, linesOf, priceKey, recalcLines,
   toDiscountRow, toQuoteRows, toTemplateItems,
 } from './equipLines'
 import type { EquipGroup, EquipLine } from './equipLines'
@@ -124,9 +124,19 @@ export function useEquipConfig(args: EquipConfigArgs) {
     const codes = Array.from(new Set(full.items.map(i => (i.part_code ?? '').trim()).filter(Boolean)))
     const byCode = new Map<string, PriceItem>()
     if (codes.length > 0) {
-      const { data, error: qErr } = await supabase.from('price_list').select('*').in('item_code', codes)
+      const { data, error: qErr } = await supabase
+        .from('price_list').select('*').in('item_code', codes).order('sheet_name')
       if (qErr) console.error('[equip] 가격표 조회 실패', qErr)
-      for (const p of (data ?? []) as PriceItem[]) byCode.set(p.item_code, p)
+      // 열쇠는 **(품번, 구분)** 이다 — 품번만 쓰면 Jig 포함/제외가 서로를 덮어쓴다.
+      //
+      // 같은 (품번, 구분)이 **여러 종류에 있을 때**(SFG Spare 와 CMM Spare 에 313건이 겹친다)
+      // 어느 쪽을 쓸지는 정해 두어야 한다. 이름·모델이 같은 같은 부품이라 값이 같으므로
+      // **sheet_name 오름차순의 첫 줄**을 쓴다 — 아무 쪽이나 쓰더라도 **늘 같은 쪽**이 골라져야
+      // 불러올 때마다 원가가 흔들리지 않는다(위 order('sheet_name') 가 그 순서를 만든다).
+      for (const p of (data ?? []) as PriceItem[]) {
+        const key = priceKey(p.item_code, p.variant)
+        if (!byCode.has(key)) byCode.set(key, p)
+      }
     }
     setPicked(full)
     setModelKey(full.model_key ?? '')

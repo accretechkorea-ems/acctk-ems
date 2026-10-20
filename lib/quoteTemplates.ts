@@ -52,6 +52,12 @@ export type QuoteTemplateItem = {
   group_kind: string
   row_kind: string
   part_code: string | null
+  /**
+   * 가격표 줄의 구분값('' = 구분 없음).
+   * 품번만으로는 **Jig 포함/제외 두 줄**을 가릴 수 없어 함께 저장한다(가격표 2단계).
+   * 이 칸이 없던 때 저장된 템플릿은 DB 기본값 '' 로 읽히고, 종전처럼 동작한다.
+   */
+  variant: string
   item_name: string | null
   qty_per_unit: number
   default_checked: boolean
@@ -75,7 +81,7 @@ export const TEMPLATE_PRICE_MAX = 100_000_000_000
 const HEAD_COLUMNS =
   'id, name, owner_id, owner_name, form_kind, category, model_key, used_count, last_used_at, updated_at'
 const ITEM_COLUMNS =
-  'id, template_id, group_kind, row_kind, part_code, item_name, qty_per_unit, default_checked, default_sell_price, sort_order'
+  'id, template_id, group_kind, row_kind, part_code, variant, item_name, qty_per_unit, default_checked, default_sell_price, sort_order'
 
 // ── 읽기 ────────────────────────────────────────────────────────────────────
 
@@ -142,6 +148,8 @@ export type TemplateItemInput = {
   group_kind: string
   row_kind: string
   part_code: string | null
+  /** 가격표 줄의 구분값('' = 구분 없음). 품번과 짝으로 가격표를 다시 찾는 열쇠다. */
+  variant: string
   item_name: string | null
   qty_per_unit: number
   default_checked: boolean

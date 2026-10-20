@@ -60,6 +60,14 @@ let seq = 0
 /** 줄 id — 화면 안에서만 쓰는 값이다(QuoteRow.id 와 같은 방식). */
 const nextId = () => `eq${++seq}${Math.random().toString(36).slice(2, 7)}`
 
+/**
+ * 가격표 줄을 찾는 열쇠 — **품번과 구분을 함께** 쓴다.
+ * CMM 본체는 같은 품번이 Jig 포함·제외 두 줄이라 품번만으로는 어느 줄인지 가릴 수 없다.
+ * 템플릿을 저장·복원하는 쪽과 useEquipConfig 의 조회가 같은 함수를 쓴다.
+ */
+export const priceKey = (itemCode: string, variant: string | null | undefined): string =>
+  `${itemCode}\u0000${variant ?? ''}`
+
 /** 그 줄 종류에 맞는 빈 QuoteRow. */
 function baseRow(group: EquipGroup): QuoteRow {
   return group === 'domestic' ? createDomesticRow() : createRow()
@@ -155,7 +163,8 @@ export function lineFromTemplateItem(
     ? it.group_kind as EquipGroup
     : 'option'
   const code = (it.part_code ?? '').trim()
-  const found = code ? priceByCode.get(code) : undefined
+  // **(품번, 구분) 짝**으로 찾는다. 품번만으로 찾으면 Jig 포함/제외 중 아무 줄이나 걸린다.
+  const found = code ? priceByCode.get(priceKey(code, it.variant)) : undefined
 
   if (group === 'domestic') {
     // 국내조달품 — default_sell_price 를 **기본 금액(원가)** 으로 쓴다(겸용. lib/quoteTemplates.ts 참조).
@@ -198,6 +207,9 @@ export function toTemplateItems(lines: EquipLine[], machineQty: number): Templat
     group_kind: l.group,
     row_kind: l.row.row_kind,
     part_code: l.row.partCode.trim() || null,
+    // 가격표에서 고른 줄이면 그 줄의 구분(Jig 포함/제외)을 함께 남긴다.
+    // 직접 적은 줄은 가격표에 없으니 '' 다. (옛 임시저장에는 이 칸이 없을 수 있다 → ?? '')
+    variant: l.row.selectedItem?.variant ?? '',
     item_name: l.row.itemText.trim() || null,
     // 장비 1대당 수량으로 되돌린다. 나누어떨어지지 않으면 소수로 남는다(numeric 칸이다).
     qty_per_unit: Math.round((l.row.quantity / qtyBase) * 1000) / 1000,

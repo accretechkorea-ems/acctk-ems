@@ -13,6 +13,11 @@ export type PriceItem = {
   id: number
   sheet_name: string
   item_code: string
+  // 같은 종류·같은 품번을 여러 줄로 둘 때의 구분값('' = 구분 없음).
+  // CMM 본체의 Net price 두 열이 jig_in(Jig 포함)·jig_out(Jig 제외)으로 들어온다.
+  // DB 칸은 not null default '' 지만, 가격표 2단계 **이전에 저장된 임시저장**에는 이 칸이
+  // 없을 수 있다 — 읽는 쪽에서 `?? ''` 로 받는다.
+  variant: string
   item_name_jp: string | null
   model_jp: string | null
   item_name_en: string | null

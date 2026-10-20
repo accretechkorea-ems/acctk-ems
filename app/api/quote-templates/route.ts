@@ -36,10 +36,17 @@ const ITEM_GROUP_KINDS: readonly string[] = [...GROUP_KINDS, 'domestic']
 /** 줄 종류 — app/quote/types.ts 의 RowKind 와 같은 목록. */
 const ITEM_ROW_KINDS: readonly string[] = ['price_list', 'manual_jpy', 'domestic', 'service', 'discount']
 
+/**
+ * 가격표 줄의 구분값. 파서가 만드는 세 값뿐이다(lib/priceListKinds.ts).
+ * 품번만 저장하면 Jig 포함/제외 두 줄을 가릴 수 없어 이 값을 함께 받는다.
+ */
+const ITEM_VARIANTS: readonly string[] = ['', 'jig_in', 'jig_out']
+
 type ItemInput = {
   group_kind: string
   row_kind: string
   part_code: string | null
+  variant: string
   item_name: string | null
   qty_per_unit: number
   default_checked: boolean
@@ -85,6 +92,11 @@ function readItems(raw: unknown): { ok: true; items: ItemInput[] } | { ok: false
     if (!ITEM_ROW_KINDS.includes(rowKind)) {
       return { ok: false, error: `${i + 1}번째 줄의 종류 값이 올바르지 않습니다.` }
     }
+    // 구분값은 세 값만. 없으면 '' (구분 없음)으로 본다.
+    const variant = typeof r?.variant === 'string' ? r.variant.trim() : ''
+    if (!ITEM_VARIANTS.includes(variant)) {
+      return { ok: false, error: `${i + 1}번째 줄의 구분 값이 올바르지 않습니다.` }
+    }
     const qty = num(r?.qty_per_unit, 0, TEMPLATE_QTY_MAX)
     if (qty === null) return { ok: false, error: `${i + 1}번째 줄의 수량이 올바르지 않습니다.` }
     // 판매단가는 비어 있어도 된다(이익률로 역산하는 줄). 값이 있으면 범위를 본다.
@@ -103,6 +115,7 @@ function readItems(raw: unknown): { ok: true; items: ItemInput[] } | { ok: false
       group_kind: group,
       row_kind: rowKind,
       part_code: partCode,
+      variant,
       item_name: itemName,
       qty_per_unit: qty,
       default_checked: r?.default_checked !== false,
