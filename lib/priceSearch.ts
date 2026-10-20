@@ -18,21 +18,31 @@ import type { PriceItem } from '@/app/quote/types'
 export const PRICE_SEARCH_LIMIT = 20
 
 /**
- * 품번·모델명으로 가격표를 찾는다.
+ * 품번·모델명·설명으로 가격표를 찾는다.
+ *
+ * sheets — 찾을 **종류(sheet_name) 허용 목록**이다. 견적 양식이 20 이면 20 가격표만,
+ *   80 이면 80 가격표만 본다(lib/priceListKinds.ts 의 sheetsForForm 이 그 목록을 만든다).
+ *   null·빈 배열이면 **전체**에서 찾는다 — 양식을 아직 고르지 않았거나 사람이
+ *   「전체 가격표에서 검색」을 켠 경우다.
+ *
  * 빈 글자면 조회하지 않고 빈 배열을 돌려준다 — 한두 글자로 표 전체를 긁지 않게.
  * 실패해도 던지지 않는다(빈 배열) — 검색이 안 된다고 견적 작성을 멈출 이유가 없다.
  */
-export async function searchPriceList(supabase: SupabaseClient, q: string): Promise<PriceItem[]> {
+export async function searchPriceList(
+  supabase: SupabaseClient, q: string, sheets?: readonly string[] | null,
+): Promise<PriceItem[]> {
   if (!q.trim()) return []
   // PostgREST 의 or=(…) 는 **쉼표로 조건을 나눈다.** 검색어에 쉼표·괄호가 섞이면 필터가
   // 깨져 조회가 통째로 실패한다(품번 두 개를 붙여 치는 일이 있다). 그런 글자는 털어낸다.
   const safe = q.replace(/[,()%]/g, ' ').trim()
   if (!safe) return []
-  const { data, error } = await supabase
+  let query = supabase
     .from('price_list')
     .select('*')
     .or(`item_code.ilike.%${safe}%,model_jp.ilike.%${safe}%,item_name_jp.ilike.%${safe}%`)
-    .limit(PRICE_SEARCH_LIMIT)
+  // 허용 목록이 있으면 그 종류 안에서만 찾는다.
+  if (sheets && sheets.length > 0) query = query.in('sheet_name', sheets)
+  const { data, error } = await query.limit(PRICE_SEARCH_LIMIT)
   if (error) {
     console.error('[priceSearch] 조회 실패', { q, error })
     return []

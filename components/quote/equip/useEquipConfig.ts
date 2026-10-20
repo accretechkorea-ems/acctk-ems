@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { calcTotals } from '@/app/quote/calc'
+import { sheetsForLine } from '@/lib/priceListKinds'
 import type { PriceItem, QuoteRow } from '@/app/quote/types'
 import {
   TEMPLATE_ITEM_MAX, createTemplate, deleteTemplate, loadQuoteTemplate, loadQuoteTemplates,
@@ -22,6 +23,9 @@ import {
   toDiscountRow, toQuoteRows, toTemplateItems,
 } from './equipLines'
 import type { EquipGroup, EquipLine } from './equipLines'
+
+/** 장비 구성이 보는 가격표 — 80 만. 한 번 만들어 두고 같은 배열을 쓴다. */
+const EQUIP_SHEETS = sheetsForLine('80')
 
 /** 관세율 기본값 — calc.ts 의 createRow() 와 같은 값이다(출처를 하나로 둔다). */
 export const DEFAULT_TARIFF = 1.13
@@ -125,7 +129,11 @@ export function useEquipConfig(args: EquipConfigArgs) {
     const byCode = new Map<string, PriceItem>()
     if (codes.length > 0) {
       const { data, error: qErr } = await supabase
-        .from('price_list').select('*').in('item_code', codes).order('sheet_name')
+        .from('price_list').select('*')
+        .in('item_code', codes)
+        // 장비 구성은 80 가격표만 쓴다 — 20 가격표 품목이 섞여 들어오지 않게 한다.
+        .in('sheet_name', EQUIP_SHEETS)
+        .order('sheet_name')
       if (qErr) console.error('[equip] 가격표 조회 실패', qErr)
       // 열쇠는 **(품번, 구분)** 이다 — 품번만 쓰면 Jig 포함/제외가 서로를 덮어쓴다.
       //

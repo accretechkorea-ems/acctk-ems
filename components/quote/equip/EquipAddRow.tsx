@@ -5,16 +5,23 @@
 // 검색은 lib/priceSearch.ts 의 searchPriceList 를 쓴다 — 견적 화면의 품목 검색과 **같은 함수**다.
 // 결과에는 시트(계열) 이름을 함께 보여 준다(같은 품번이 계열마다 다른 값을 갖는 일이 있다).
 //
+// 찾는 범위는 **80 가격표뿐**이다 — 이 모달은 장비 양식(equip80) 전용이고, 20 가격표
+// 품목이 장비 구성에 섞이면 단가 기준이 달라진다(lib/priceListKinds.ts 의 sheetsForLine).
+//
 // 「직접 추가」는 가격표에 없는 항목이다. 국내조달품에서는 금액칸이 **원가**이고
 // 그 밖의 묶음에서는 **판매단가**다 — 칸 이름을 묶음에 따라 바꿔 적는다.
 
 import { useCallback, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { searchPriceList } from '@/lib/priceSearch'
+import { sheetsForLine } from '@/lib/priceListKinds'
 import type { PriceItem } from '@/app/quote/types'
 import { C, S, num, parseNum } from './equipStyles'
 import { isPriceless } from './equipLines'
 import type { EquipGroup } from './equipLines'
+
+/** 장비 구성은 80 가격표만 쓴다. 한 번 만들어 두고 같은 배열을 넘긴다. */
+const EQUIP_SHEETS = sheetsForLine('80')
 
 export type EquipAddRowProps = {
   group: EquipGroup
@@ -40,7 +47,7 @@ export default function EquipAddRow({ group, onAddPriceItem, onAddManual, full }
       setOpen(false)
       return
     }
-    const list = await searchPriceList(supabase, text)
+    const list = await searchPriceList(supabase, text, EQUIP_SHEETS)
     setFound(list)
     setOpen(true)
   }, [supabase])

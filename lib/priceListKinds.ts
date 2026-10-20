@@ -58,9 +58,18 @@ export const PRICE_LIST_KINDS: readonly PriceListKind[] = [
 
 export const PRICE_LIST_SHEETS: readonly string[] = PRICE_LIST_KINDS.map(k => k.sheet)
 
-/** 그 묶음(20/80)에 속한 시트 이름들. 검색 필터와 등록 화면의 묶음 나누기가 함께 쓴다. */
-export const sheetsForLine = (line: PriceLine): readonly string[] =>
-  PRICE_LIST_KINDS.filter(k => k.line === line).map(k => k.sheet)
+/**
+ * 그 묶음(20/80)에 속한 시트 이름들. 검색 필터와 등록 화면의 묶음 나누기가 함께 쓴다.
+ *
+ * **한 번 만들어 두고 같은 배열을 돌려준다.** 호출마다 새 배열을 만들면 이 값을 받는
+ * 훅의 의존성이 매번 달라져(useCallback·useMemo) 검색 콜백이 렌더마다 새로 만들어진다.
+ */
+const SHEETS_BY_LINE: Record<PriceLine, readonly string[]> = {
+  '80': PRICE_LIST_KINDS.filter(k => k.line === '80').map(k => k.sheet),
+  '20': PRICE_LIST_KINDS.filter(k => k.line === '20').map(k => k.sheet),
+}
+
+export const sheetsForLine = (line: PriceLine): readonly string[] => SHEETS_BY_LINE[line]
 
 export const kindsForLine = (line: PriceLine): readonly PriceListKind[] =>
   PRICE_LIST_KINDS.filter(k => k.line === line)

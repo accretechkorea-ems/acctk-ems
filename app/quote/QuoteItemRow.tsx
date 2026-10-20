@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useRef } from 'react'
+import React, { useCallback, useMemo, useRef } from 'react'
 import { useOutsideClick } from '@/hooks/useOutsideClick'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import SegmentedControl from '@/components/common/SegmentedControl'
@@ -45,14 +45,14 @@ export type QuoteItemRowProps = {
 
 export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: QuoteItemRowProps) {
   const {
-    rowCount, searchQuery, searchResults, searchOpen,
+    rowCount, searchQuery, searchResults, searchOpen, priceSheets, searchAllSheets, priceScope,
     editingProfitRate, profitRateInput, expensePresets, presetError,
     invalidExpenseIds, totalExpense, lineSplitOn, categories, equipForm,
   } = ctx
   const {
     updateRow, addSubLine, updateSubLine, removeSubLine,
     handleSearch, handleSelect, clearItem, removeRow, setRowCategory, setRowGroupKind,
-    setSearchOpen, setEditingProfitRate, setProfitRateInput,
+    setSearchOpen, setEditingProfitRate, setProfitRateInput, setSearchAllSheets,
     addExpense, removeExpense, updateExpense, selectExpensePreset,
   } = actions
   // 가격표 검색 드롭다운 — 바깥 클릭(및 ESC)으로 닫는다. 항목을 반드시 골라야 빠져나올 수 있던 문제 해결.
@@ -86,7 +86,17 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
 
   // 가격표 후보 목록의 ↓/↑·Enter. 닫기(Esc·바깥 클릭)는 위 useOutsideClick 이 이미 맡고 있다.
   // 후보가 없을 때 매번 새 배열을 만들면 훅 안의 effect 가 계속 다시 도므로 고정된 빈 배열을 쓴다.
-  const itemResults = searchResults[row.id] ?? EMPTY_ITEMS
+  // 검색 결과 — **지금 양식이 보는 가격표만** 남긴다.
+  //
+  // 서버 질의에도 같은 조건이 걸려 있다(lib/priceSearch.ts). 여기서 한 번 더 거르는 이유는
+  // **양식을 바꾼 순간** 이미 떠 있던 지난 결과가 그대로 남기 때문이다 — 20 으로 바꿨는데
+  // 80 품목이 목록에 남아 있으면 그걸 고를 수 있다. 거르면 목록이 저절로 비므로
+  // 효과(effect)로 결과를 지우지 않아도 된다. 이미 견적에 넣은 줄은 건드리지 않는다.
+  const allResults = searchResults[row.id] ?? EMPTY_ITEMS
+  const itemResults = useMemo(
+    () => (priceSheets ? allResults.filter(r => priceSheets.includes(r.sheet_name)) : allResults),
+    [allResults, priceSheets],
+  )
   const itemListRef = useRef<HTMLDivElement | null>(null)
   const itemKeys = useListKeyboard(itemResults, !!searchOpen[row.id], itemListRef, (item: PriceItem) => {
     handleSelect(row.id, item)
@@ -206,6 +216,24 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
         </div>
         </div>
       </div>
+      )}
+
+      {/* 어느 가격표에서 찾는지 알리고, 필요하면 전체로 넓힌다.
+          토글은 **견적 하나에 하나**다(ctx 에 있다) — 모든 품목 줄이 같은 값을 쓴다.
+          저장되지 않는 화면 상태라 임시저장·다시쓰기에 들어가지 않는다. */}
+      {row.row_kind === 'price_list' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <span style={{ width: 44, flexShrink: 0 }} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600, color: '#6b7280' }}>
+            <input
+              type="checkbox"
+              checked={searchAllSheets}
+              onChange={e => setSearchAllSheets(e.target.checked)}
+            />
+            전체 가격표에서 검색
+          </label>
+          <span style={{ fontSize: 11, fontWeight: 500, color: '#9ca3af' }}>{priceScope}</span>
+        </div>
       )}
 
       {/* 품번 직접 입력 — 수동입력 품목 · 국내조달품 공용 */}
