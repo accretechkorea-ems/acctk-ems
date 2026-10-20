@@ -37,7 +37,7 @@ Module._resolveFilename = function (req, ...rest) {
 }
 
 const {
-  parseSheet, parseWorkbook, pickSheetName, cleanNumber, cleanLeadTime, sheetToRows,
+  parseSheet, parseWorkbook, cleanNumber, cleanLeadTime, sheetToRows,
   HEADER_NAMES, REQUIRED_HEADERS,
 } = load(path.join(ROOT, 'lib/priceListParse.ts'))
 const { kindOf, isTwentySheet } = load(path.join(ROOT, 'lib/priceListKinds.ts'))
@@ -348,15 +348,6 @@ has('그 오류 문구', all[0].errors.join(' '), '열을 찾지 못했습니다
 eq('나머지 시트는 읽힌다', [all[1].counts.registered, all[2].counts.registered], [2, 3])
 eq('인자로 받은 line 이 모든 시트에 붙는다',
   [...new Set(all.flatMap(x => x.rows.map(r => r.line)))], ['80'])
-
-console.log('\n── 6b. 시트 고르기 ──')
-const kMain = kindOf('SFG Main')
-eq('이름이 같은 시트', pickSheetName(['Revision history', 'SFG Main', 'W10'], kMain).name, 'SFG Main')
-eq('시트가 하나뿐이면 이름이 달라도', pickSheetName(['내가 고친 이름'], kMain).name, '내가 고친 이름')
-eq('공백·대소문자만 다른 시트', pickSheetName(['sfg  main', 'HS+ promo'], kMain).name, 'sfg  main')
-const miss = pickSheetName(['Revision history', 'CMM Spare'], kMain)
-eq('못 찾으면 고르지 않는다', miss.name, null)
-has('못 찾았을 때 안내', miss.error, '「SFG Main」 시트를 찾지 못했습니다')
 
 // ════════════════════════════════════════════════════════════════════════════
 console.log('\n── 7. 품목을 고를 때 품명 칸에 채우는 글자 ──')

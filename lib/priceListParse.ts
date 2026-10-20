@@ -12,6 +12,11 @@
 //   후보 목록을 따라다니는 쪽이 늘 뒤처졌다. **올리기 전에 일곱 글자로 고쳐 쓴다**는
 //   한 가지 규칙이 그보다 분명하다(못 찾으면 어느 열이 없는지 한글로 알려 준다).
 //
+// ── 시트를 고르지 않는다 ───────────────────────────────────────────────────
+//   화면이 파일을 통째로 올리고 parseWorkbook 이 **모든 시트**를 읽는다. 어느 시트가
+//   가격표인지는 머리글이 있는지로 알 수 있어서, 시트 이름을 종류 목록과 맞춰 보던 일
+//   (pickSheetName)은 없앴다 — 사람이 종류를 고르는 단계가 사라졌다.
+//
 // ── 엑셀을 직접 읽지 않는다 ────────────────────────────────────────────────
 //   xlsx 를 import 하지 않고 **워크시트 모양만** 받는다(`{ '!ref': …, A1: { v }, … }`).
 //   그래서 브라우저·서버·시험 스크립트 어디서나 돌고, 가짜 시트로 시험할 수 있다.
@@ -21,7 +26,7 @@
 //   값이 다른 중복을 막는 일은 DB 함수(apply_price_list_import)가 한다. 파서가 먼저
 //   골라 버리면 사람이 올린 파일과 저장된 결과가 어긋나고, 그 차이를 아무도 못 본다.
 
-import type { PriceLine, PriceListKind } from './priceListKinds'
+import type { PriceLine } from './priceListKinds'
 import { normHeader } from './priceListKinds'
 
 // ── 머리글 ──────────────────────────────────────────────────────────────────
@@ -210,31 +215,6 @@ function excelSerialDate(v: unknown): string | null {
   const n = typeof v === 'number' ? v : Number(String(v ?? '').trim())
   if (!Number.isFinite(n) || n < 30000 || n > 60000) return null
   return new Date(Date.UTC(1899, 11, 30) + Math.round(n) * 86400000).toISOString().slice(0, 10)
-}
-
-// ── 시트 고르기 ─────────────────────────────────────────────────────────────
-
-/**
- * 통파일에서 쓸 시트를 고른다.
- *   ① 고른 종류와 이름이 같은 시트 ② 공백·대소문자만 다른 시트
- *   ③ 시트가 하나뿐이면 이름이 달라도 그 시트 ④ 그 밖에는 고르지 않고 한글로 알린다
- */
-export function pickSheetName(
-  sheetNames: string[], kind: PriceListKind,
-): { name: string | null; note: string; error: string } {
-  const exact = sheetNames.find(n => n.trim() === kind.sheet)
-  if (exact) return { name: exact, note: '', error: '' }
-  const loose = sheetNames.find(n => normHeader(n) === normHeader(kind.sheet))
-  if (loose) {
-    return { name: loose, note: `시트 이름이 「${loose}」입니다 — 「${kind.sheet}」와 같은 시트로 보고 읽습니다.`, error: '' }
-  }
-  if (sheetNames.length === 1) {
-    return { name: sheetNames[0], note: `시트가 하나뿐이라 「${sheetNames[0]}」을 읽습니다.`, error: '' }
-  }
-  return {
-    name: null, note: '',
-    error: `「${kind.sheet}」 시트를 찾지 못했습니다. 이 파일의 시트: ${sheetNames.join(' / ')}`,
-  }
 }
 
 // ── 머리글 찾기 ─────────────────────────────────────────────────────────────

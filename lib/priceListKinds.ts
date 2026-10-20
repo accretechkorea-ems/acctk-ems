@@ -13,9 +13,6 @@
 //   위치를 고정하면 그런 파일에서 **엉뚱한 열을 가격으로 읽는다** — 조용히 틀리는 쪽이
 //   제일 나쁘다. 그래서 이름 후보로 찾고, 못 찾으면 한글로 어느 열이 없는지 알린다.
 
-/** 시트 구조가 갈리는 네 가지. 파서가 이 값으로 분기한다. */
-export type KindProfile = 'standard' | 'cmm_main' | 'calibration' | 'twenty'
-
 /**
  * 어느 견적 양식의 가격표인가.
  *   '80' — 80 파츠·80 장비 견적서가 쓰는 본사 가격표(기존 7개)
@@ -25,40 +22,42 @@ export type KindProfile = 'standard' | 'cmm_main' | 'calibration' | 'twenty'
  */
 export type PriceLine = '80' | '20'
 
+/**
+ * 아는 시트 하나.
+ *
+ * 파서는 이 목록을 **보지 않는다**(시트 이름으로 갈라지는 읽기 규칙이 없다).
+ * 이 목록이 하는 일은 하나뿐이다 — **그 시트가 20 가격표인지 80 가격표인지** 아는 것.
+ * 견적 품목 검색이 양식에 따라 sheet_name 을 거를 때 쓴다(sheetsForForm).
+ */
 export type PriceListKind = {
   /** price_list.sheet_name 에 그대로 들어가는 글자. 바꾸지 마라. */
   sheet: string
-  /** 화면에 보이는 짧은 설명. 저장되지 않는다. */
-  hint: string
-  profile: KindProfile
   line: PriceLine
 }
 
 export const PRICE_LIST_KINDS: readonly PriceListKind[] = [
   // ── 80 가격표 (본사 Price list) ──
-  { sheet: 'SFG Main',       hint: '표면·윤곽 본체',   profile: 'standard',    line: '80' },
-  { sheet: 'CMM Main body',  hint: '3차원 본체 · 구입가 두 열(Jig 포함/제외)', profile: 'cmm_main', line: '80' },
-  { sheet: 'SFG Accessory',  hint: '표면·윤곽 부속품', profile: 'standard',    line: '80' },
-  { sheet: 'CMM Accessory',  hint: '3차원 부속품',     profile: 'standard',    line: '80' },
-  { sheet: 'SFG Spare part', hint: '표면·윤곽 부품',   profile: 'standard',    line: '80' },
-  { sheet: 'CMM Spare',      hint: '3차원 부품',       profile: 'standard',    line: '80' },
+  { sheet: 'SFG Main', line: '80' },
+  { sheet: 'CMM Main body', line: '80' },
+  { sheet: 'SFG Accessory', line: '80' },
+  { sheet: 'CMM Accessory', line: '80' },
+  { sheet: 'SFG Spare part', line: '80' },
+  { sheet: 'CMM Spare', line: '80' },
   // 실파일 시트 이름이 「Calibration (JPY)」다(2026-10-20 실측). 이 글자가 price_list.sheet_name
   // 에 그대로 들어가므로 목록도 같아야 한다 — 다르면 견적 검색의 80 필터에서 빠진다.
-  { sheet: 'Calibration (JPY)', hint: '교정 · 섹션으로 나뉜 시트', profile: 'calibration', line: '80' },
+  { sheet: 'Calibration (JPY)', line: '80' },
   // ── 20 가격표 (Transaction Price list) ──
-  //    머리글이 한 벌이라 아홉 종류가 같은 프로필을 쓴다. 시트 이름만 다르다.
-  { sheet: 'W10',                   hint: 'W10',          profile: 'twenty', line: '20' },
-  { sheet: 'Unit_Other',            hint: '유닛·기타',    profile: 'twenty', line: '20' },
-  { sheet: 'ATC',                   hint: 'ATC',          profile: 'twenty', line: '20' },
-  { sheet: 'SBS',                   hint: 'SBS',          profile: 'twenty', line: '20' },
-  { sheet: 'Amp',                   hint: '앰프',         profile: 'twenty', line: '20' },
-  { sheet: 'Airmicrometer',         hint: '에어마이크로미터', profile: 'twenty', line: '20' },
-  { sheet: 'Gauge',                 hint: '게이지',       profile: 'twenty', line: '20' },
-  { sheet: 'GE_AB',                 hint: 'GE·AB',        profile: 'twenty', line: '20' },
-  { sheet: 'Finger_Contact_Other',  hint: '핑거·접촉·기타', profile: 'twenty', line: '20' },
+  //    머리글이 한 벌이라 아홉 시트를 같은 규칙으로 읽는다. 이름만 다르다.
+  { sheet: 'W10', line: '20' },
+  { sheet: 'Unit_Other', line: '20' },
+  { sheet: 'ATC', line: '20' },
+  { sheet: 'SBS', line: '20' },
+  { sheet: 'Amp', line: '20' },
+  { sheet: 'Airmicrometer', line: '20' },
+  { sheet: 'Gauge', line: '20' },
+  { sheet: 'GE_AB', line: '20' },
+  { sheet: 'Finger_Contact_Other', line: '20' },
 ]
-
-export const PRICE_LIST_SHEETS: readonly string[] = PRICE_LIST_KINDS.map(k => k.sheet)
 
 /**
  * 그 묶음(20/80)에 속한 시트 이름들. 검색 필터와 등록 화면의 묶음 나누기가 함께 쓴다.
@@ -72,9 +71,6 @@ const SHEETS_BY_LINE: Record<PriceLine, readonly string[]> = {
 }
 
 export const sheetsForLine = (line: PriceLine): readonly string[] => SHEETS_BY_LINE[line]
-
-export const kindsForLine = (line: PriceLine): readonly PriceListKind[] =>
-  PRICE_LIST_KINDS.filter(k => k.line === line)
 
 /**
  * 견적 양식이 쓰는 가격표 시트 목록 — **이 판정은 여기 한 곳에만 둔다.**
