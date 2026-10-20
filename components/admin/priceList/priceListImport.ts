@@ -13,7 +13,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { parseWorkbook } from '@/lib/priceListParse'
 import type { ParseResult } from '@/lib/priceListParse'
+import { isTwentySheet } from '@/lib/priceListKinds'
 import type { PriceLine } from '@/lib/priceListKinds'
+import { kstYmd } from '@/lib/date'
 
 /** 서버 함수가 돌려주는 건수. */
 export type ApplyResult = {
@@ -127,6 +129,41 @@ export const requestApply = (
 ) => callApi<{ result: ApplyResult }>({
   action: 'apply', sheet_name: sheetName, file_name: fileName, valid_text: validText, rows,
 })
+
+/** 그 묶음에서 가장 최근에 올린 파일. */
+export type LatestFile = { fileName: string; appliedDate: string }
+
+/**
+ * 80·20 **각각** 가장 최근에 올린 파일명과 날짜.
+ *
+ * 이력 표에는 **line 칸이 없다**(시트 이름만 있다). 그래서 sheet_name 으로 가른다 —
+ * lib/priceListKinds.ts 의 목록에 20 으로 적힌 시트면 20, 그 밖은 80 이다.
+ * 목록에 없는 시트 이름(처음 보는 시트)은 80 으로 셈한다.
+ *
+ * 한 번 올리면 시트마다 한 줄씩 남으므로(아홉 시트면 아홉 줄) 최근 200줄을 보고 고른다 —
+ * 두 묶음의 최근 등록이 그 안에 들어온다.
+ */
+export async function loadLatestFiles(
+  supabase: SupabaseClient,
+): Promise<Record<PriceLine, LatestFile | null>> {
+  const out: Record<PriceLine, LatestFile | null> = { 80: null, 20: null }
+  const { data, error } = await supabase
+    .from('price_list_imports')
+    .select('sheet_name, file_name, applied_at')
+    .order('applied_at', { ascending: false })
+    .limit(200)
+  if (error) {
+    console.error('[priceListImport] 최근 파일 조회 실패', error)
+    return out
+  }
+  for (const r of (data ?? []) as { sheet_name: string; file_name: string; applied_at: string }[]) {
+    const line: PriceLine = isTwentySheet(r.sheet_name) ? '20' : '80'
+    // 내림차순이라 **처음 만난 줄**이 그 묶음의 최근 등록이다.
+    if (!out[line]) out[line] = { fileName: r.file_name, appliedDate: kstYmd(r.applied_at) }
+    if (out['80'] && out['20']) break
+  }
+  return out
+}
 
 /**
  * 최근 등록 이력. 읽기는 **세션 클라이언트**로 한다 —

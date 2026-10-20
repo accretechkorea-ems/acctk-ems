@@ -8,8 +8,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { PriceLine } from '@/lib/priceListKinds'
-import { loadImportHistory, readWorkbook, requestApply } from './priceListImport'
-import type { ApplyResult, ImportHistoryRow, SheetPlan } from './priceListImport'
+import { loadImportHistory, loadLatestFiles, readWorkbook, requestApply } from './priceListImport'
+import type { ApplyResult, ImportHistoryRow, LatestFile, SheetPlan } from './priceListImport'
 
 /** 시트 하나의 등록 결과. 실패해도 줄로 남는다 — 무엇이 들어가고 무엇이 안 들어갔는지 봐야 한다. */
 export type SheetOutcome = {
@@ -24,6 +24,7 @@ export function usePriceListImport() {
 
   const [line, setLine] = useState<PriceLine | null>(null)
   const [fileName, setFileName] = useState('')
+  const [fileSize, setFileSize] = useState(0)
   const [sheets, setSheets] = useState<SheetPlan[]>([])
   const [error, setError] = useState('')
 
@@ -34,19 +35,23 @@ export function usePriceListImport() {
 
   const [history, setHistory] = useState<ImportHistoryRow[]>([])
   const [historyLoading, setHistoryLoading] = useState(true)
+  /** 80·20 각각 지금 등록된 파일(이력에서 읽는다). */
+  const [latest, setLatest] = useState<Record<PriceLine, LatestFile | null>>({ 80: null, 20: null })
 
   const reloadHistory = useCallback(async () => {
     setHistoryLoading(true)
-    const rows = await loadImportHistory(supabase)
+    const [rows, files] = await Promise.all([loadImportHistory(supabase), loadLatestFiles(supabase)])
     setHistory(rows)
+    setLatest(files)
     setHistoryLoading(false)
   }, [supabase])
 
   useEffect(() => {
     let cancelled = false
-    loadImportHistory(supabase).then(rows => {
+    Promise.all([loadImportHistory(supabase), loadLatestFiles(supabase)]).then(([rows, files]) => {
       if (cancelled) return
       setHistory(rows)
+      setLatest(files)
       setHistoryLoading(false)
     })
     return () => { cancelled = true }
@@ -55,6 +60,7 @@ export function usePriceListImport() {
   /** 고른 파일을 지운다(80/20 을 바꿀 때도 지운다 — 다른 묶음의 미리보기가 남으면 안 된다). */
   const clearFile = useCallback(() => {
     setFileName('')
+    setFileSize(0)
     setSheets([])
     setOutcomes([])
     setProgress(null)
@@ -71,6 +77,7 @@ export function usePriceListImport() {
     if (!line) return
     clearFile()
     setFileName(file.name)
+    setFileSize(file.size)
     setBusy(true)
     const read = await readWorkbook(file, line)
     if (read.error) setError(read.error)
@@ -140,9 +147,9 @@ export function usePriceListImport() {
 
   return {
     line, chooseLine,
-    fileName, sheets, planned, clearFile, chooseFile,
+    fileName, fileSize, sheets, planned, clearFile, chooseFile,
     busy, error, progress, outcomes, apply, blockReason, totals, resultTotals,
-    history, historyLoading,
+    history, historyLoading, latest,
   }
 }
 
