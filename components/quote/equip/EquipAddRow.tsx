@@ -71,7 +71,8 @@ export default function EquipAddRow({ group, onAddPriceItem, onAddManual, full }
   const priceLabel = group === 'domestic' ? '금액(원가)' : '판매단가'
 
   return (
-    <div style={S.addRow}>
+    <div style={S.addWrap}>
+      <div style={S.addRow}>
       {!manual && (
         <>
           <input
@@ -80,31 +81,12 @@ export default function EquipAddRow({ group, onAddPriceItem, onAddManual, full }
             onBlur={() => window.setTimeout(() => setOpen(false), 150)}
             onFocus={() => { if (found.length > 0) setOpen(true) }}
             disabled={full}
-            placeholder={full ? '줄 수 상한에 닿았습니다' : '+ 가격표에서 검색해 이 묶음에 추가 (품번 · 모델명)'}
+            placeholder={full ? '줄 수 상한에 닿았습니다' : '+ 가격표에서 검색해 이 묶음에 추가 (품번 · 품명 · 모델)'}
             style={{ ...S.input, flex: 1, minWidth: 0, background: full ? '#f3f4f6' : '#fff' }}
           />
           <button type="button" onClick={() => setManual(true)} disabled={full} style={full ? S.btnOff : S.miniBtn}>
             직접 추가
           </button>
-          {open && found.length > 0 && (
-            <div style={S.dropdown}>
-              {found.map(item => (
-                <button key={item.id} type="button" onMouseDown={() => pick(item)} style={S.dropItem}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: C.INK }}>{item.item_code}</span>
-                  <span style={{ fontSize: 11, fontWeight: 500, color: C.DIM, marginLeft: 6 }}>{item.sheet_name}</span>
-                  <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: C.MUT, marginTop: 2 }}>
-                    {[item.item_name_jp, item.model_jp].filter(Boolean).join(' · ') || '품명 없음'}
-                    {item.cost_jpy ? ` · 구입가 ¥${num(item.cost_jpy)}` : ' · 구입가 없음'}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-          {open && found.length === 0 && q.trim() && (
-            <div style={{ ...S.dropdown, padding: '10px 12px', fontSize: 12, color: C.MUT }}>
-              가격표에서 찾지 못했습니다 — 「직접 추가」로 넣을 수 있습니다
-            </div>
-          )}
         </>
       )}
 
@@ -132,6 +114,28 @@ export default function EquipAddRow({ group, onAddPriceItem, onAddManual, full }
       )}
 
       {!manual && <span style={S.hint}>검색 결과에 시트(계열) 표시</span>}
+      </div>
+
+      {/* 검색 결과 — 흐름 안에 쌓는다(절대 위치로 띄우면 묶음 칸에 잘린다. equipStyles 참조). */}
+      {!manual && open && found.length > 0 && (
+        <div style={S.dropdown}>
+          {found.map(item => (
+            <button key={item.id} type="button" onMouseDown={() => pick(item)} style={S.dropItem}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: C.INK }}>{item.item_code}</span>
+              <span style={{ fontSize: 11, fontWeight: 500, color: C.DIM, marginLeft: 6 }}>{item.sheet_name}</span>
+              <span style={{ display: 'block', fontSize: 11, fontWeight: 500, color: C.MUT, marginTop: 2 }}>
+                {[item.item_name_jp, item.model_jp].filter(Boolean).join(' · ') || '품명 없음'}
+                {item.cost_jpy ? ` · 구입가 ¥${num(item.cost_jpy)}` : ' · 구입가 없음'}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      {!manual && open && found.length === 0 && q.trim() !== '' && (
+        <div style={{ ...S.dropdown, padding: '10px 12px', fontSize: 12, color: C.MUT }}>
+          가격표에서 찾지 못했습니다 — 「직접 추가」로 넣을 수 있습니다
+        </div>
+      )}
     </div>
   )
 }

@@ -10,6 +10,7 @@
 import type { CSSProperties } from 'react'
 import { Z } from '@/lib/zIndex'
 
+
 const LINE = '#ebebeb'
 const INK = '#111827'
 const MUT = '#6b7280'
@@ -98,15 +99,20 @@ export const S: Record<string, CSSProperties> = {
   },
   td: { padding: '4px 8px', borderBottom: `1px solid ${LINE}`, verticalAlign: 'middle', fontSize: 12, color: INK },
   tdOff: { padding: '4px 8px', borderBottom: `1px solid ${LINE}`, verticalAlign: 'middle', fontSize: 12, color: DIM },
-  addRow: {
-    display: 'flex', gap: 8, alignItems: 'center', padding: '8px 12px',
-    background: '#fafafa', borderTop: `1px dashed ${LINE}`, position: 'relative',
+  // 추가 줄 — 입력 줄과 검색 결과를 **세로로** 담는다.
+  //
+  // ⚠ 결과를 절대 위치로 띄우면 **보이지 않는다.** 이 줄이 묶음 칸(sec) 의 마지막 자식이고
+  //   그 칸에 overflow: hidden 이 걸려 있어서, top: 100% 로 띄운 상자는 칸 바깥이라 전부
+  //   잘려 나간다. 그래서 흐름 안에 그대로 쌓는다 — 가운데 칸이 스크롤되므로 길어져도 된다.
+  addWrap: {
+    display: 'flex', flexDirection: 'column', padding: '8px 12px',
+    background: '#fafafa', borderTop: `1px dashed ${LINE}`,
   },
+  addRow: { display: 'flex', gap: 8, alignItems: 'center' },
   hint: { fontSize: 11, fontWeight: 500, color: DIM, whiteSpace: 'nowrap' },
   dropdown: {
-    position: 'absolute', left: 12, right: 12, top: '100%', zIndex: Z.popover,
-    background: '#fff', border: `1px solid ${LINE}`, borderRadius: 8, maxHeight: 260,
-    overflow: 'auto', boxShadow: '0 16px 40px rgba(0,0,0,0.18)',
+    marginTop: 8, background: '#fff', border: `1px solid ${LINE}`, borderRadius: 8,
+    maxHeight: 260, overflowY: 'auto',
   },
   dropItem: {
     display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px',
