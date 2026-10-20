@@ -35,11 +35,9 @@ const supabaseAdmin = createClient(
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
 /** 칸 길이 상한. 전부 text 칸이라 서버에서 막지 않으면 무제한으로 들어온다. */
-const MAX = { item_code: 100, variant: 20, short: 100, long: 500, file_name: 200, valid_text: 500, sheet_name: 100 }
+const MAX = { item_code: 100, variant: 200, short: 100, long: 500, file_name: 200, valid_text: 500, sheet_name: 100 }
 /** cost_jpy·price_jpy 는 **integer 칸**이다. int4 한도(2,147,483,647)를 넘으면 저장에서 터진다. */
 const PRICE_MAX = 2_000_000_000
-/** variant 는 파서가 만드는 세 값뿐이다. */
-const VARIANTS: readonly string[] = ['', 'jig_in', 'jig_out']
 /** 비교·저장에 쓰는 글자 칸. */
 const TEXT_FIELDS = ['plnt', 'grp', 'item_name_jp', 'model_jp', 'note1_jp', 'note2_jp', 'note3_jp'] as const
 
@@ -113,8 +111,14 @@ function readRows(raw: unknown): { ok: true; rows: CleanRow[] } | { ok: false; e
     if (!code) return { ok: false, error: `${i + 1}번째 행에 품번이 없습니다.` }
     if (code.length > MAX.item_code) return { ok: false, error: `품번이 너무 깁니다: ${code.slice(0, 20)}…` }
 
+    // 구분(variant) — **임의의 글자**다. 빈 글자이거나, 같은 품번이 값이 다르게 여러 줄일 때
+    // 파서가 넣는 **묶음 제목**(「Additional calibration documents (JCSS calibration)」 같은 것)이다.
+    // 예전에는 'jig_in'·'jig_out' 세 값만 받는 목록 검사가 있었는데, 그건 CMM 본체의 Net price
+    // 두 열을 쪼개던 시절 것이다. 그 분기는 없어졌으므로 **길이만** 본다.
     const variant = str(r.variant)
-    if (!VARIANTS.includes(variant)) return { ok: false, error: `${code} 의 구분값이 올바르지 않습니다: ${variant}` }
+    if (variant.length > MAX.variant) {
+      return { ok: false, error: `${code} 의 구분값이 너무 깁니다: ${variant.slice(0, 30)}…` }
+    }
 
     const price = readPrice(r.price_jpy, '정가', code)
     if (price && typeof price === 'object') return { ok: false, error: price.error }

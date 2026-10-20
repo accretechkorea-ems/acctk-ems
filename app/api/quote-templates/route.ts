@@ -37,10 +37,13 @@ const ITEM_GROUP_KINDS: readonly string[] = [...GROUP_KINDS, 'domestic']
 const ITEM_ROW_KINDS: readonly string[] = ['price_list', 'manual_jpy', 'domestic', 'service', 'discount']
 
 /**
- * 가격표 줄의 구분값. 파서가 만드는 세 값뿐이다(lib/priceListKinds.ts).
- * 품번만 저장하면 Jig 포함/제외 두 줄을 가릴 수 없어 이 값을 함께 받는다.
+ * 가격표 줄의 구분값(price_list.variant) 길이 상한.
+ *
+ * **허용 목록을 두지 않는다.** 예전에는 'jig_in'·'jig_out' 세 값만 받았는데, 그건 CMM 본체의
+ * Net price 두 열을 쪼개던 시절 것이다. 지금 구분값은 빈 글자이거나 **묶음 제목**(가격표
+ * 엑셀의 「■…」 줄)이라 임의의 글자다. 목록으로 막으면 그런 품목이 든 구성을 저장할 수 없다.
  */
-const ITEM_VARIANTS: readonly string[] = ['', 'jig_in', 'jig_out']
+const VARIANT_MAX = 200
 
 type ItemInput = {
   group_kind: string
@@ -92,10 +95,10 @@ function readItems(raw: unknown): { ok: true; items: ItemInput[] } | { ok: false
     if (!ITEM_ROW_KINDS.includes(rowKind)) {
       return { ok: false, error: `${i + 1}번째 줄의 종류 값이 올바르지 않습니다.` }
     }
-    // 구분값은 세 값만. 없으면 '' (구분 없음)으로 본다.
+    // 구분값은 임의의 글자다(길이만 본다). 없으면 '' (구분 없음)으로 본다.
     const variant = typeof r?.variant === 'string' ? r.variant.trim() : ''
-    if (!ITEM_VARIANTS.includes(variant)) {
-      return { ok: false, error: `${i + 1}번째 줄의 구분 값이 올바르지 않습니다.` }
+    if (variant.length > VARIANT_MAX) {
+      return { ok: false, error: `${i + 1}번째 줄의 구분 값이 너무 깁니다.` }
     }
     const qty = num(r?.qty_per_unit, 0, TEMPLATE_QTY_MAX)
     if (qty === null) return { ok: false, error: `${i + 1}번째 줄의 수량이 올바르지 않습니다.` }

@@ -14,7 +14,8 @@ export type PriceItem = {
   sheet_name: string
   item_code: string
   // 같은 종류·같은 품번을 여러 줄로 둘 때의 구분값('' = 구분 없음).
-  // CMM 본체의 Net price 두 열이 jig_in(Jig 포함)·jig_out(Jig 제외)으로 들어온다.
+  // 값은 **가격표 엑셀의 묶음 제목**이다(「■Additional calibration documents (JCSS …)」 같은 것).
+  // 같은 품번이 값이 다르게 여러 줄일 때만 채워진다(lib/priceListParse.ts 의 2-pass).
   // DB 칸은 not null default '' 지만, 가격표 2단계 **이전에 저장된 임시저장**에는 이 칸이
   // 없을 수 있다 — 읽는 쪽에서 `?? ''` 로 받는다.
   variant: string
