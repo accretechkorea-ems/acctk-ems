@@ -74,7 +74,7 @@ export default function EquipSummary(props: EquipSummaryProps) {
         </div>
         {totals.domesticCost > 0 && (
           <div style={{ ...S.kv, padding: '2px 0' }}>
-            <span style={{ color: C.MUT }}>그중 국내조달품</span>
+            <span style={{ color: C.MUT }}>그중 원화 원가</span>
             <span className="num" style={{ color: C.MUT }}>{won(totals.domesticCost)}</span>
           </div>
         )}

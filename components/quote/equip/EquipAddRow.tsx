@@ -15,8 +15,8 @@
 //   줄이 **바로** 생겨서, 검색하려다 줄이 생기는 일이 있었다.
 //   취소(ESC 또는 「취소」)하면 칸이 닫힌다. 품번은 비워도 된다(표·견적서에 「-」로 나간다).
 //
-//   금액 칸은 묶음에 따라 뜻이 다르다 — 본체·옵션은 **구입가(엔)**, 국내조달품은
-//   **금액(원)**, 포함사항은 금액이 없어 칸을 두지 않는다(lib 쪽 lineFromManual 참조).
+//   금액 칸은 묶음에 따라 뜻이 다르다 — 본체·옵션은 **구입가(엔)**, 포함사항은 **원가(원)**.
+//   포함사항의 원가는 매출에 들어가지 않고 총 구입원가·이익률에만 들어간다(lineFromManual 참조).
 
 import { useCallback, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
@@ -96,8 +96,8 @@ export default function EquipAddRow({ group, onAddPriceItem, onAddManual, full }
     if (e.key === 'Escape') { e.preventDefault(); closeManual() }
   }
 
-  // 금액 칸 — 묶음에 따라 뜻이 다르다. 포함사항은 칸을 두지 않는다.
-  const amountLabel = group === 'domestic' ? '금액(원)' : '구입가(엔)'
+  // 금액 칸 — 묶음에 따라 뜻이 다르다. 넷 다 비워 둘 수 있다(비우면 0).
+  const amountLabel = isPriceless(group) ? '원가(원)' : '구입가(엔)'
 
   return (
     <div style={S.addWrap}>
@@ -146,16 +146,14 @@ export default function EquipAddRow({ group, onAddPriceItem, onAddManual, full }
             aria-label="수량"
             style={{ ...S.qty, flexShrink: 0 }}
           />
-          {!isPriceless(group) && (
-            <input
-              value={mAmount}
-              onChange={e => setMAmount(e.target.value)}
-              onKeyDown={onManualKey}
-              placeholder={amountLabel}
-              aria-label={amountLabel}
-              style={{ ...S.num, flexShrink: 0 }}
-            />
-          )}
+          <input
+            value={mAmount}
+            onChange={e => setMAmount(e.target.value)}
+            onKeyDown={onManualKey}
+            placeholder={amountLabel}
+            aria-label={amountLabel}
+            style={{ ...S.num, flexShrink: 0 }}
+          />
           <button type="button" onClick={addManual} disabled={!mName.trim()} style={mName.trim() ? S.miniBtn : S.btnOff}>
             추가
           </button>

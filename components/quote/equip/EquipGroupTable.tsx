@@ -7,8 +7,10 @@
 //   구입가  = row.product_price  (원가 JPY × 환율 × 관세 × 수량. 근거가 없으면 「-」)
 //   이익률  = row.realized_profit_rate (올림·직접입력이 반영된 실현 이익률)
 //
-// 국내조달품은 **판매단가 칸이 없다.** 그 줄의 입력값은 자사 부담 원가라서 구입가 칸에
-// 그대로 적는다(calc.ts 의 domestic 분기가 manual_unit_price 를 원가로 쓴다).
+// 원가 칸은 **줄 종류**로 가른다(묶음이 아니라).
+//   원화 원가 줄(domestic) — 입력칸이다. 적은 값이 그대로 원가가 된다(원).
+//                            포함사항에서 직접 추가한 줄이 이 모양이다. 판매단가 칸은 「-」.
+//   그 밖              — 계산값을 보여 준다(원가 엔 × 환율 × 관세 × 수량).
 
 import type { PriceItem } from '@/app/quote/types'
 import { C, S, num, parseNum } from './equipStyles'
@@ -34,7 +36,6 @@ export type EquipGroupTableProps = {
 export default function EquipGroupTable(props: EquipGroupTableProps) {
   const { group, lines, full, onToggle, onToggleGroup, onQty, onPrice, onText, onRemove } = props
   const allOn = lines.length > 0 && lines.every(l => l.checked)
-  const domestic = group === 'domestic'
 
   return (
     <div style={S.sec}>
@@ -59,7 +60,7 @@ export default function EquipGroupTable(props: EquipGroupTableProps) {
             <th style={{ ...S.th, width: 118 }}>품번</th>
             <th style={S.th}>품명 / 규격</th>
             <th style={{ ...S.th, width: 56, textAlign: 'center' }}>수량</th>
-            <th style={{ ...S.th, width: 104, textAlign: 'right' }}>{domestic ? '금액(원가)' : '구입가(원)'}</th>
+            <th style={{ ...S.th, width: 104, textAlign: 'right' }}>{isPriceless(group) ? '원가(원)' : '구입가(원)'}</th>
             <th style={{ ...S.th, width: 112, textAlign: 'right' }}>판매단가</th>
             <th style={{ ...S.th, width: 56, textAlign: 'right' }}>이익률</th>
             <th style={{ ...S.th, width: 30 }} />
@@ -131,17 +132,17 @@ export default function EquipGroupTable(props: EquipGroupTableProps) {
                   )}
                 </td>
                 <td style={{ ...td, textAlign: 'right', color: C.MUT }}>
-                  {domestic ? (
+                  {line.row.row_kind === 'domestic' ? (
                     <input
                       value={line.row.manual_unit_price || ''}
                       onChange={e => onPrice(line.row.id, parseNum(e.target.value))}
-                      aria-label="금액(원가)"
+                      aria-label="원가(원)"
                       style={S.num}
                     />
                   ) : cost}
                 </td>
                 <td style={{ ...td, textAlign: 'right' }}>
-                  {domestic || isPriceless(group) ? (
+                  {isPriceless(group) ? (
                     <span style={{ color: C.FAINT }}>-</span>
                   ) : (
                     <input

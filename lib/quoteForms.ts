@@ -83,10 +83,16 @@ export function isGroupKind(v: string | null | undefined): v is GroupKind {
 
 /**
  * 묶음을 고를 수 있는 품목 종류.
- * 국내조달품(domestic)은 PDF 에 나오지 않고, 할인(discount)은 합계 블록으로 올라가므로
- * 둘에는 묶음이 없다. 서비스비는 장비 견적에도 줄로 들어갈 수 있어 넣어 둔다.
+ *
+ * 할인(discount)은 합계 블록으로 올라가므로 묶음이 없다. 서비스비는 장비 견적에도 줄로
+ * 들어갈 수 있어 넣어 둔다.
+ *
+ * domestic(원화 원가만 있는 줄)도 넣는다 — 장비 구성의 **포함사항**이 곧 국내 구매품이라
+ * (PC세트·측정 테이블 등) 그 줄이 포함사항 묶음에 든다. 묶음을 못 담으면 저장할 때
+ * group_kind 가 null 로 지워져 견적서에서 포함사항으로 묶이지 않는다.
+ * 묶음이 include 인 domestic 줄만 견적서에 나간다(app/quote/QuotePDFDoc.tsx 의 visible).
  */
-export const GROUPABLE_ROW_KINDS: readonly string[] = ['price_list', 'manual_jpy', 'service']
+export const GROUPABLE_ROW_KINDS: readonly string[] = ['price_list', 'manual_jpy', 'domestic', 'service']
 
 /** 이 줄에 묶음 선택칸을 낼 것인가. */
 export const canGroupRowKind = (rowKind: string | null | undefined): boolean =>

@@ -49,7 +49,7 @@ export type ManualInput = {
   partCode: string
   name: string
   qty: number
-  /** 본체·옵션은 구입가(엔), 국내조달품은 금액(원), 포함사항은 쓰지 않는다. */
+  /** 본체·옵션은 구입가(엔), 포함사항은 원가(원). 비우면 0. */
   amount: number
 }
 
@@ -219,9 +219,9 @@ export function useEquipConfig(args: EquipConfigArgs) {
         partCode: input.partCode,
         name,
         qtyPerUnit: qty,
-        // 본체·옵션은 구입가(엔), 국내조달품은 금액(원)이다. 포함사항은 금액이 없다.
+        // 본체·옵션은 구입가(엔), 포함사항은 원가(원)다.
         costJpy: group === 'base' || group === 'option' ? input.amount : null,
-        price: group === 'domestic' ? input.amount : null,
+        price: group === 'include' ? input.amount : null,
       })]))
   }, [applyLines])
 

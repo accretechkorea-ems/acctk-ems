@@ -81,16 +81,21 @@ export function recalcLine(line: EquipLine, machineQty: number, exRate: number, 
   const qty = isQtyLocked(line.group)
     ? Math.max(0, Math.round(line.qtyPerUnit * machineQty))
     : line.row.quantity
+  // 금액이 없는 묶음(포함사항)인데 **원가 줄이 아닌** 경우에만 판매단가를 눕힌다.
+  const priceless = isPriceless(line.group) && line.row.row_kind !== 'domestic'
   const next: QuoteRow = {
     ...line.row,
     quantity: qty,
     tariff_rate: tariff,
-    // 포함사항은 금액이 없다 — 판매단가 0 · price 모드로 눕힌다. rate 모드로 두면 calcRow 가
-    // 이익률로 단가를 **역산해 버린다**(가격표 품목이면 구입가가 있으니 금액이 생긴다).
-    manual_unit_price: isPriceless(line.group) ? 0 : line.row.manual_unit_price,
-    price_mode: isPriceless(line.group) ? 'price' : line.row.price_mode,
-    // 구성 묶음은 그대로 저장된다(국내조달품은 묶음을 쓰지 않는다 — PDF 에 나오지 않는다).
-    group_kind: line.group === 'domestic' ? null : line.group,
+    // 포함사항은 **판매 금액이 없다** — 판매단가 0 · price 모드로 눕힌다. rate 모드로 두면
+    // calcRow 가 이익률로 단가를 역산해 버린다(가격표 품목이면 구입가가 있으니 금액이 생긴다).
+    //
+    // ⚠ 원가(원)를 적은 줄(domestic)은 **눕히지 않는다.** 그 줄은 manual_unit_price 가
+    //   판매단가가 아니라 **원가**다(calc.ts 의 domestic 분기). 0 으로 눕히면 원가가 사라진다.
+    manual_unit_price: priceless ? 0 : line.row.manual_unit_price,
+    price_mode: priceless ? 'price' : line.row.price_mode,
+    // 구성 묶음은 그대로 저장된다 — 원화 원가 줄도 포함사항으로 묶인다.
+    group_kind: line.group,
   }
   return { ...line, row: calcRow(next, exRate) }
 }
@@ -128,8 +133,10 @@ export function lineFromPriceItem(
 /**
  * 가격표에 없는 항목을 직접 넣는다.
  *
- *   국내조달품 — row_kind = domestic. 입력한 **금액(원)** 이 원가가 된다(calc.ts 의 domestic 분기).
- *   포함사항   — 금액이 없는 것이 정의다. 가격칸을 받지 않는다.
+ *   포함사항   — row_kind = domestic. 입력한 **원가(원)** 가 그대로 원가가 된다
+ *                (calc.ts 의 domestic 분기). 고객에게 청구하지 않으므로 매출·부가세는 0 이고
+ *                총 구입원가·이익률에만 들어간다. 견적서에는 금액 칸이 「-」로 나간다.
+ *   국내조달품 — 묶음에서 없앴다. 포함사항이 같은 일을 한다(아래 EQUIP_GROUPS 참조).
  *   본체·옵션  — row_kind = manual_jpy. 입력한 **구입가(엔)** 로 원가를 계산하고
  *                판매단가는 이익률로 역산한다(calc.ts 의 manual_jpy 분기).
  *                가격표 품목과 같은 모양(price_list)으로 두면 구입가를 담을 칸이 없어
@@ -149,7 +156,8 @@ export function lineFromManual(
   },
 ): EquipLine {
   const manualJpy = group === 'base' || group === 'option'
-  const base = manualJpy ? createManualJpyRow() : baseRow(group)
+  // 포함사항의 직접 추가 줄은 **원화 원가 줄**이다(domestic). 그 칸이 원가를 담는 유일한 칸이다.
+  const base = manualJpy ? createManualJpyRow() : createDomesticRow()
   const row: QuoteRow = {
     ...base,
     id: nextId(),
@@ -231,8 +239,11 @@ export function toTemplateItems(lines: EquipLine[], machineQty: number): Templat
     // 장비 1대당 수량으로 되돌린다. 나누어떨어지지 않으면 소수로 남는다(numeric 칸이다).
     qty_per_unit: Math.round((l.row.quantity / qtyBase) * 1000) / 1000,
     default_checked: l.checked,
-    // 포함사항은 금액이 없다. 국내조달품은 이 칸이 「기본 금액」이다(겸용).
-    default_sell_price: isPriceless(l.group) ? null : (l.row.manual_unit_price || null),
+    // 이 칸의 뜻은 줄 종류에 따라 다르다(lib/quoteTemplates.ts 의 주석 참조).
+    //   가격표·수동 줄 — 판매단가
+    //   원화 원가 줄(domestic, 포함사항) — **원가(원)**. 품번으로 되찾을 수 없는 값이라 저장한다.
+    // 금액이 없는 포함사항 줄(가격표에서 고른 줄)은 null 이다.
+    default_sell_price: l.row.manual_unit_price || null,
     sort_order: i,
   }))
 }
@@ -267,7 +278,8 @@ export const linesOf = (lines: EquipLine[], group: EquipGroup): EquipLine[] =>
  * 0 원으로 보여 주면 「원가가 없다」와 「원가가 0 이다」가 구별되지 않는다.
  */
 export function hasCost(line: EquipLine): boolean {
-  if (line.group === 'domestic') return true
+  // 줄 종류로 가른다 — 묶음이 아니다(포함사항에도 원화 원가 줄이 들어온다).
+  if (line.row.row_kind === 'domestic') return true
   if (line.row.row_kind === 'price_list') return !!line.row.selectedItem?.cost_jpy
   if (line.row.row_kind === 'manual_jpy') return line.row.manual_cost_jpy > 0
   return false
