@@ -139,29 +139,6 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
     return true
   }
 
-  /**
-   * 포캐스트 화면의 **줄 안에서** 예상월·금액만 고친다.
-   * 단계·사유는 건드리지 않는다(그 둘은 모달과 changeStage 가 맡는다) — 여기서 같이 손대면
-   * 숫자만 고치려던 사람이 모르는 사이에 단계를 옮기게 된다.
-   * 권한 판정·되읽기(fetchDetail)는 다른 경로와 같다.
-   */
-  const updateOppFields = async (
-    o: SalesOpportunity,
-    patch: { expected_close?: string; expected_amount?: number },
-  ): Promise<boolean> => {
-    if (!canEditOpp(o)) { toast.error('담당자 본인만 고칠 수 있습니다'); return false }
-    const { error } = await supabase.from('sales_opportunities').update({
-      ...patch, updated_at: new Date().toISOString(),
-    }).eq('opportunity_id', o.opportunity_id)
-    if (error) {
-      console.error('[opportunity] update fields failed', error)
-      toast.error(error.message || '저장 중 오류가 발생했습니다')
-      return false
-    }
-    if (await fetchDetail()) toast.success('저장되었습니다')
-    return true
-  }
-
   // 수동 종료 / 종료 해제. 종료 여부는 stage 가 아니라 closed_at 하나로 표현한다.
   const setClosed = async (o: SalesOpportunity, close: boolean) => {
     if (!canEditOpp(o)) { toast.error('담당자 본인만 바꿀 수 있습니다'); return false }
@@ -184,7 +161,7 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
 
   return {
     isOppModalOpen, editingOpp, isSavingOpp,
-    canEditOpp, changeStage, setClosed, updateOppFields,
+    canEditOpp, changeStage, setClosed,
     openNewOpp, openEditOpp, closeOppModal,
     handleSaveOpp, handleDeleteOpp,
   }

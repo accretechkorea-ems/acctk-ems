@@ -1,289 +1,364 @@
 'use client'
 
-// 포캐스트 — 회계연도 열두 달의 목표·예상·확정을 한 화면에서 본다.
-//
-// 예전에는 영업기회 칸반(단계별 열)이었다. 본사 보고가 「담당자 × 월 × 상태 금액」이라
-// 단계 보드로는 그 숫자가 나오지 않아 표로 바꿨다. 주소(/pipeline)와 메뉴 키·권한은 그대로다.
-//
-// ── 줄은 어디서 오는가 ──────────────────────────────────────────────────────
-//   lib/forecast.ts 가 견적과 영업기회를 **한 줄 모양**으로 바꾼다(판정 규칙은 전부 거기 있다).
-//   이 화면은 거르고·더하고·그리기만 한다 — 여기서 상태를 다시 판정하지 않는다.
-//
-// ── 영업기회 입력은 남는다 ──────────────────────────────────────────────────
-//   견적 전 안건을 넣는 입구는 영업기회 모달 하나뿐이다. 그래서 등록·수정 모달은 그대로 두고,
-//   자주 고치는 두 값(예상월·금액)만 줄에서 바로 고치게 했다.
+// 영업기회 파이프라인(칸반). 단계별 열로 늘어놓고 한눈에 본다.
+// 드래그앤드롭은 다음 단계이며, 지금은 카드의 단계 select 로 옮긴다.
+// 신규 등록은 업체 상세에서만 한다(어느 업체 건인지 정해야 하므로).
 
-import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+// 모바일 상단 바 높이 — 화면 높이를 계산하는 곳은 이 상수 하나를 본다(PC 는 상단 바가 없다).
+import { TOPBAR_HEIGHT } from '@/components/layout/Sidebar'
+
+/**
+ * 판 전체의 하한. 열에는 최소 폭을 두지 않고(남은 폭을 5등분한다) 판에만 하한을 둔다 —
+ * 열마다 최소 폭을 걸면 합이 조금만 넘쳐도 가로 스크롤이 생겼다.
+ *
+ * 960 = 5열 × 184 + 간격 4 × 10. 184 는 카드 한 장이 찌그러지지 않는 폭이다
+ * (가장 넓은 줄이 「담당자 · YYYY-MM 마감 예정 · 견적 N건」으로 11px 글자 기준 약 162px,
+ *  카드 좌우 여백 12×2 를 더해 186 — 열 안쪽 여백 4×2 를 감안해 184 로 잡는다).
+ *
+ * 하한을 더 높이면(예: 1100) 1280 창 + 사이드바 펼침에서 스크롤이 생긴다 —
+ * 그때 본문은 1280 − 232(사이드바) − 56(좌우 여백) = 992 뿐이다.
+ * 이보다 좁아지면 열을 더 줄이는 대신 판을 가로로 민다.
+ */
+const BOARD_MIN_W = 960
+import { useMemo, useState, type ReactNode } from 'react'
+import {
+  DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
+  useDraggable, useDroppable, pointerWithin,
+  type DragEndEvent, type DragStartEvent,
+} from '@dnd-kit/core'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
+import SegmentedControl from '@/components/common/SegmentedControl'
 import { isSuperAdmin } from '@/lib/permissions'
-import { todayKST } from '@/lib/date'
-import { FORM_LABELS, isFormKind } from '@/lib/quoteForms'
-import { useQuoteCategories } from '@/lib/quoteCategories'
-import {
-  FORECAST_STATUSES, bucketOf, emptyBucket, fiscalMonths, fiscalYearOfMonth,
-  type Bucket, type ForecastRow, type ForecastStatus,
-} from '@/lib/forecast'
-import { exportForecastXlsx } from '@/lib/forecastExcel'
-import { useForecast } from '@/hooks/forecast/useForecast'
-import { usePipelineData } from '@/hooks/pipeline/usePipelineData'
+import OpportunityCard from '@/components/pipeline/OpportunityCard'
+import OpportunityModal from '@/components/customer/modals/OpportunityModal'
 import { useOpportunityCrud } from '@/hooks/customer/useOpportunityCrud'
 import { useQuotePdf } from '@/hooks/customer/useQuotePdf'
-import OpportunityModal from '@/components/customer/modals/OpportunityModal'
-import ForecastMonthTable from '@/components/forecast/ForecastMonthTable'
-import ForecastRowList from '@/components/forecast/ForecastRowList'
+import { usePipelineData } from '@/hooks/pipeline/usePipelineData'
+import { STAGES, compactKRW, isClosed } from '@/components/customer/opportunity'
 import type { SalesOpportunity } from '@/components/customer/types'
 
-const PAGE_BG = '#fafafa'
-const BORDER = '#ebebeb'
-const TEXT = '#111827'
-const GRAY = '#6b7280'
-const MUTED = '#9ca3af'
-const BLUE = '#234ea2'
+// 실주는 열로 두지 않고 판 아래에 접어둔다 (평소엔 시야에서 빼고, 필요할 때만 펼쳐 본다)
+const BOARD_STAGES = STAGES.filter(s => s !== '실주')
 
-type SourceFilter = 'all' | 'quote' | 'opportunity'
+type Owner = '내 기회' | '전체'
 
-const sel: React.CSSProperties = {
-  padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: 6,
-  background: '#fff', color: TEXT, fontSize: 12, fontWeight: 600,
-  fontFamily: 'inherit', cursor: 'pointer', outline: 'none',
+const PAGE_BG = '#f4f5f7'
+
+// 열 안 정렬 — 마감이 임박한 것부터. 마감일 없는 건은 맨 아래.
+// 같은 날짜(또는 둘 다 마감일 없음)면 등록 순(오래된 것 먼저)으로 고정해 순서가 흔들리지 않게 한다.
+// 기간 필터를 두지 않으므로(종료된 건은 판에서 빠지고, 마감일 없는 건이 통째로 사라지면 안 되므로)
+// 정렬이 곧 우선순위 표시다.
+function byDueDate(a: SalesOpportunity, b: SalesOpportunity): number {
+  const ac = a.expected_close, bc = b.expected_close
+  if (ac !== bc) {
+    if (!ac) return 1
+    if (!bc) return -1
+    return ac < bc ? -1 : 1
+  }
+  if (a.created_at !== b.created_at) return a.created_at < b.created_at ? -1 : 1
+  return a.opportunity_id - b.opportunity_id
 }
 
-export default function ForecastPage() {
+// 카드 하나를 끌 수 있게 감싼다. 권한이 없으면 disabled 라 아예 잡히지 않는다.
+function DraggableCard({ id, disabled, children }: { id: number; disabled: boolean; children: ReactNode }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id, disabled })
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      style={{
+        // 끄는 동안 원래 자리는 흐리게 남겨둔다(어디서 왔는지 보이도록)
+        opacity: isDragging ? 0.4 : 1,
+        cursor: disabled ? 'default' : 'grab',
+        touchAction: 'manipulation',
+        outline: 'none',
+        // 열이 세로 스크롤이라 카드가 눌려 찌그러지지 않게 고정
+        flexShrink: 0,
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+// 열 하나 = 놓을 수 있는 자리. id 가 곧 단계 이름이다.
+// 카드 목록 아래 빈 공간까지 이 요소 안이라, 열 어디에 놓아도 같은 단계로 떨어진다.
+// 열 안 순서는 의미가 없어 카드 사이를 따로 나누지 않는다(열 전체가 하나의 드롭 지점).
+function DroppableColumn({ stage, isOver, children }: { stage: string; isOver: boolean; children: ReactNode }) {
+  const { setNodeRef } = useDroppable({ id: stage })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        flex: 1, minHeight: 0, overflowY: 'auto',
+        display: 'flex', flexDirection: 'column', gap: 8,
+        // padding 을 음수 margin 으로 되돌리던 것을 없앴다 — 그 4px 이 판 오른쪽을 넘겨
+        // 1900 창에서도 가로 스크롤바를 만들고 있었다(카드가 8px 좁아지는 대신 스크롤이 사라진다).
+        borderRadius: 8, padding: 4,
+        // 놓을 열 강조 — 새 색 없이 기존 중립 배경과 hover 테두리만 쓴다
+        background: isOver ? '#f3f4f6' : 'transparent',
+        outline: isOver ? '1px dashed #c7d7f8' : '1px dashed transparent',
+        transition: 'background 0.15s ease',
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+export default function PipelinePage() {
   const { loading: guardLoading, authorized } = usePageGuard()
-  const router = useRouter()
-  const today = todayKST()
+  const data = usePipelineData()
+  const { opportunities, activities, engineers, customers, loading, me, lastActivityByOpp, reload } = data
 
-  // 영업기회 쪽(모달·권한)은 종전 조회를 그대로 쓴다. 집계는 별도 훅이 읽는다 —
-  // 둘 다 영업기회를 읽지만(22건 안팎) 고친 뒤에는 **양쪽 다** 다시 읽어야 숫자가 맞는다.
-  const pipeline = usePipelineData()
-  const { opportunities, activities, engineers, customers, me, reload } = pipeline
-  const fc = useForecast(today)
-  const { categories } = useQuoteCategories()
-
-  const reloadAll = async () => {
-    const ok = await reload()
-    await fc.reload()
-    return ok
-  }
-  const opp = useOpportunityCrud({ customerId: null, engineerId: me.engineer_id, role: me.role, fetchDetail: reloadAll })
+  const opp = useOpportunityCrud({ customerId: null, engineerId: me.engineer_id, role: me.role, fetchDetail: reload })
+  // 연결된 견적 PDF 열기. 업체명은 견적별로 달라 로그에는 남기지 않는다.
   const quotePdf = useQuotePdf({ customer: null, engineerId: me.engineer_id })
 
-  // ── 필터 ──
-  const thisFY = fiscalYearOfMonth(today.slice(0, 7))
-  const [fy, setFy] = useState(thisFY)
-  const [team, setTeam] = useState<string>('')
-  const [engineerId, setEngineerId] = useState<number | null>(null)
-  const [category, setCategory] = useState<string>('')
-  const [source, setSource] = useState<SourceFilter>('all')
-  const [statuses, setStatuses] = useState<Set<ForecastStatus>>(() => new Set(FORECAST_STATUSES))
-  const [picked, setPicked] = useState<string | null>(null)
+  // 처음에는 회사 전체 기회를 보여준다. '내 기회'는 사용자가 직접 고른다.
+  const [owner, setOwner] = useState<Owner>('전체')
+  const [search, setSearch] = useState('')
+  const [showLost, setShowLost] = useState(false)
 
-  // 볼 수 있는 사람 — /sales 와 같은 규칙이다(superadmin 은 전체, 그 밖은 본인만).
-  const scopeAll = isSuperAdmin({ permission_level: me.role })
-  const visibleEngineers = useMemo(() => {
-    const list = scopeAll ? engineers : engineers.filter(e => e.engineer_id === me.engineer_id)
-    return team ? list.filter(e => (e.teams ?? '') === team) : list
-  }, [engineers, scopeAll, me.engineer_id, team])
+  // 드래그 상태. 5px 이상 움직여야 끌기로 보므로 카드 클릭·select 조작과 겹치지 않는다.
+  const [activeId, setActiveId] = useState<number | null>(null)
+  const [overStage, setOverStage] = useState<string | null>(null)
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
-  const pickedEngineerIds = useMemo(() => {
-    const ids = visibleEngineers.map(e => e.engineer_id)
-    return engineerId == null ? ids : ids.filter(id => id === engineerId)
-  }, [visibleEngineers, engineerId])
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return opportunities.filter(o => {
+      if (owner === '내 기회' && o.engineer_id !== me.engineer_id) return false
+      if (!q) return true
+      return o.title.toLowerCase().includes(q)
+        || (o.customers?.company_name ?? '').toLowerCase().includes(q)
+    })
+  }, [opportunities, owner, search, me.engineer_id])
 
-  const teamNames = useMemo(
-    () => [...new Set(engineers.map(e => e.teams).filter((t): t is string => !!t))].sort(),
-    [engineers],
+  // 낙관적 업데이트 — 저장이 끝나기 전에 화면에서 먼저 옮긴다.
+  // 실패하면 이 값만 지우면 원래 단계로 되돌아간다(서버 데이터는 그대로이므로).
+  const [pendingStage, setPendingStage] = useState<Map<number, string>>(new Map())
+  const stageOf = (o: SalesOpportunity) => pendingStage.get(o.opportunity_id) ?? o.stage
+
+  const columns = useMemo(
+    () => BOARD_STAGES.map(stage => {
+      const rows = filtered
+        .filter(o => !isClosed(o) && (pendingStage.get(o.opportunity_id) ?? o.stage) === stage)
+        .sort(byDueDate)
+      return { stage, rows, sum: rows.reduce((s, o) => s + (o.expected_amount ?? 0), 0) }
+    }),
+    [filtered, pendingStage]
+  )
+  // 끝난 건 = 실주 + 매출 확정 등으로 종료된 것. 판에서 빼고 아래에 접어둔다.
+  const done = useMemo(() => filtered.filter(o => isClosed(o)), [filtered])
+
+  const moveTo = async (o: SalesOpportunity, next: string) => {
+    if (next === stageOf(o)) return
+    setPendingStage(m => new Map(m).set(o.opportunity_id, next))
+    const ok = await opp.changeStage(o, next)
+    // 성공이면 reload 된 데이터에 반영돼 있고, 실패면 되돌아간다. 어느 쪽이든 임시값은 지운다.
+    if (!ok) console.error('[pipeline] stage move reverted', o.opportunity_id, next)
+    setPendingStage(m => { const n = new Map(m); n.delete(o.opportunity_id); return n })
+  }
+
+  const cardOf = (o: SalesOpportunity) => (
+    <DraggableCard key={o.opportunity_id} id={o.opportunity_id} disabled={!opp.canEditOpp(o) || isClosed(o)}>
+      <OpportunityCard
+        opp={o}
+        lastActivity={lastActivityByOpp.get(o.opportunity_id) ?? null}
+        canEdit={opp.canEditOpp(o)}
+        onOpen={() => opp.openEditOpp(o)}
+        onChangeStage={next => moveTo(o, next)}
+        onPickLost={() => opp.openEditOpp(o)}
+        onClose={!isClosed(o) && o.stage === '수주' ? () => opp.setClosed(o, true) : undefined}
+      />
+    </DraggableCard>
   )
 
-  const months = useMemo(() => fiscalMonths(fy), [fy])
-  const monthSet = useMemo(() => new Set(months), [months])
-  const idSet = useMemo(() => new Set(pickedEngineerIds), [pickedEngineerIds])
+  const activeOpp = activeId === null ? null : filtered.find(o => o.opportunity_id === activeId) ?? null
 
-  /** 요약에 쓰는 줄 — 달(회계연도)·사람·분류·출처·상태까지 걸러 낸다. */
-  const scopedRows = useMemo(() => fc.result.rows.filter(r => {
-    if (!monthSet.has(r.month)) return false
-    if (r.engineerId == null || !idSet.has(r.engineerId)) return false
-    if (category && (r.category ?? '') !== category) return false
-    if (source !== 'all' && r.source !== source) return false
-    if (!statuses.has(r.status)) return false
-    return true
-  }), [fc.result.rows, monthSet, idSet, category, source, statuses])
+  const handleDragStart = (e: DragStartEvent) => setActiveId(Number(e.active.id))
 
-  /** 월별 요약. 목표는 **줄이 아니라 sales_targets** 에서 오므로 상태·분류 필터와 무관하다. */
-  const summary = useMemo(() => {
-    const byMonth = new Map<string, Bucket>(months.map(m => [m, emptyBucket()]))
-    for (const r of scopedRows) {
-      const b = byMonth.get(r.month)
-      if (b) b[bucketOf(r.status)] += r.amount
-    }
-    for (const m of months) {
-      const b = byMonth.get(m)
-      if (b) b.목표 = fc.targetOf(m, pickedEngineerIds)
-    }
-    return months.map(m => ({ month: m, bucket: byMonth.get(m) ?? emptyBucket() }))
-  }, [months, scopedRows, fc, pickedEngineerIds])
-
-  /** 목록에 그릴 줄 — 달을 골랐으면 그 달만. */
-  const listRows = useMemo(() => {
-    const rows = picked ? scopedRows.filter(r => r.month === picked) : scopedRows
-    return [...rows].sort((a, b) => (a.month === b.month
-      ? b.amount - a.amount
-      : (a.month < b.month ? -1 : 1)))
-  }, [scopedRows, picked])
-
-  // ── 이름 ──
-  const engineerName = useMemo(() => {
-    const m = new Map(engineers.map(e => [e.engineer_id, `${e.name} ${e.position ?? ''}`.trim()]))
-    return (id: number | null) => (id == null ? '' : m.get(id) ?? `#${id}`)
-  }, [engineers])
-  const customerName = (id: number | null) => (id == null ? '' : fc.customerNames.get(id) ?? `#${id}`)
-  const categoryLabel = (code: string | null) =>
-    (code ? categories.find(c => c.code === code)?.label ?? code : '-')
-  const formLabel = (code: string | null) => (isFormKind(code) ? FORM_LABELS[code] : '-')
-  const oppById = useMemo(() => new Map(opportunities.map(o => [o.opportunity_id, o])), [opportunities])
-
-  const toggleStatus = (s: ForecastStatus) => setStatuses(prev => {
-    const next = new Set(prev)
-    if (next.has(s)) next.delete(s); else next.add(s)
-    // 전부 끄면 아무것도 안 보이므로 마지막 하나는 끄지 않는다.
-    return next.size === 0 ? prev : next
-  })
-
-  const openQuote = (row: ForecastRow) =>
-    quotePdf.openQuotePdfByUrl(row.pdfUrl, row.no ?? '')
-
-  // 안건에서 견적으로 — opportunity_id 를 주소에 실어 보낸다(견적 화면이 그 값을 읽어 고객·기회를 채운다).
-  const writeQuote = (o: SalesOpportunity) => router.push(`/quote?opportunity=${o.opportunity_id}`)
-
-  const exportXlsx = () => void exportForecastXlsx({
-    months: summary, rows: listRows,
-    engineerName, customerName, categoryLabel, formLabel,
-    titleOf: r => (r.source === 'quote' ? (r.no ?? `#${r.id}`) : (oppById.get(r.id)?.title ?? `#${r.id}`)),
-    label: `FY${fy}${team ? `_${team}` : ''}${picked ? `_${picked}` : ''}`,
-  })
+  const handleDragEnd = (e: DragEndEvent) => {
+    setActiveId(null)
+    setOverStage(null)
+    const target = e.over?.id
+    if (typeof target !== 'string') return           // 열 밖에 놓으면 아무 일도 없다
+    const dragged = opportunities.find(o => o.opportunity_id === e.active.id)
+    if (!dragged) return
+    moveTo(dragged, target)                          // 같은 열이면 moveTo 가 걸러낸다
+  }
 
   if (!authorized) return <AccessGate loading={guardLoading} />
 
-  const loading = pipeline.loading || fc.loading
-
   return (
-    <main style={{ padding: '24px 28px', background: PAGE_BG, minHeight: '100vh', boxSizing: 'border-box' }}>
-      <div style={{ maxWidth: 1600, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+    // 판 높이를 px 로 계산하지 않고 남는 공간을 그대로 채우게 한다
+    // (헤더 45px = minHeight 44 + 아래 테두리 1. 이것 말고 고정값을 쓰지 않는다).
+    // main → 안쪽 래퍼 → 판까지 flex 열로 이어져야 판이 정확히 남은 만큼만 차지한다.
+    <main className="pl-page" style={{
+      padding: '24px 28px', background: PAGE_BG,
+      boxSizing: 'border-box',
+      display: 'flex', flexDirection: 'column',
+    }}>
+      <style jsx global>{`
+        /* PC 는 상단 바가 없어 화면 높이를 그대로 쓴다. 모바일만 상단 바만큼 뺀다. */
+        .pl-page { min-height: 100vh; }
+        @media (max-width: 768px) { .pl-page { min-height: calc(100vh - ${TOPBAR_HEIGHT}px); } }
+        /* 카드의 단계 select·종료 버튼은 호버 때만 띄운다.
+           hover 를 지원하지 않는 기기(터치)에서는 이 미디어 쿼리가 걸리지 않아 항상 보인다.
+           visibility 로만 토글해 자리를 유지하므로 카드 높이는 호버 전후가 같다. */
+        @media (hover: hover) {
+          .pl-card .pl-card-action { visibility: hidden; }
+          .pl-card:hover .pl-card-action { visibility: visible; }
+        }
+      `}</style>
 
-        {/* ── 필터 ── */}
-        <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '14px 16px' }}>
+      <div style={{ maxWidth: 1600, width: '100%', margin: '0 auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+
+        {/* 필터 — 소유자 · 검색 · 등록 버튼을 한 줄에 둔다(제목 없이 바로 판으로 이어진다) */}
+        <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, padding: '14px 16px', marginBottom: 12, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <select value={fy} onChange={e => setFy(Number(e.target.value))} style={sel} aria-label="회계연도">
-              {[thisFY + 1, thisFY, thisFY - 1, thisFY - 2].map(y => (
-                <option key={y} value={y}>FY{y} ({y}.04 ~ {y + 1}.03)</option>
-              ))}
-            </select>
-
-            <select value={team} onChange={e => { setTeam(e.target.value); setEngineerId(null) }} style={sel} aria-label="팀" disabled={!scopeAll}>
-              <option value="">전체 팀</option>
-              {teamNames.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-
-            <select
-              value={engineerId ?? ''}
-              onChange={e => setEngineerId(e.target.value ? Number(e.target.value) : null)}
-              style={sel} aria-label="담당자" disabled={!scopeAll}
-            >
-              <option value="">{scopeAll ? '전체 담당자' : engineerName(me.engineer_id)}</option>
-              {visibleEngineers.map(e => (
-                <option key={e.engineer_id} value={e.engineer_id}>{`${e.name} ${e.position ?? ''}`.trim()}</option>
-              ))}
-            </select>
-
-            <select value={category} onChange={e => setCategory(e.target.value)} style={sel} aria-label="분류">
-              <option value="">전체 분류</option>
-              {categories.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
-            </select>
-
-            <select value={source} onChange={e => setSource(e.target.value as SourceFilter)} style={sel} aria-label="출처">
-              <option value="all">견적 + 영업기회</option>
-              <option value="quote">견적만</option>
-              <option value="opportunity">영업기회만</option>
-            </select>
-
-            {/* 상태 — 여러 개를 켜고 끈다. 전부 끄지는 못한다(빈 화면이 된다). */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-              {FORECAST_STATUSES.filter(s => s === '포캐스트' || !s.startsWith('포캐스트')).map(s => {
-                const on = statuses.has(s)
-                return (
-                  <button key={s} type="button" onClick={() => toggleStatus(s)}
-                    style={{
-                      padding: '6px 10px', borderRadius: 6, cursor: 'pointer',
-                      border: `1px solid ${on ? '#c7d7f8' : BORDER}`,
-                      background: on ? '#f3f4f6' : '#fff',
-                      color: on ? TEXT : MUTED, fontSize: 12, fontWeight: 700,
-                      transition: 'background 0.15s ease',
-                    }}>
-                    {s}
-                  </button>
-                )
-              })}
+            {/* 두 항목 폭을 같게(equal) 두고, 폭은 긴 쪽인 '내 기회' 기준으로 잡는다 */}
+            <div style={{ flexShrink: 0 }}>
+              <SegmentedControl
+                options={['내 기회', '전체']}
+                value={owner}
+                onChange={v => setOwner(v as Owner)}
+                equal
+                minItemWidth={64}
+                height={34}
+              />
             </div>
-
-            <span style={{ flex: 1 }} />
-
-            <button type="button" onClick={opp.openNewOpp}
-              style={{ padding: '7px 14px', background: BLUE, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', transition: 'background 0.15s ease' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#1c3e87')}
-              onMouseLeave={e => (e.currentTarget.style.background = BLUE)}>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="업체명 / 제목 검색"
+              style={{
+                width: 220, padding: '8px 11px', border: '1px solid #ebebeb',
+                borderRadius: 6, background: '#fff', color: '#111827', fontSize: 13,
+                outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+              }}
+            />
+            <button onClick={opp.openNewOpp}
+              onMouseEnter={e => { e.currentTarget.style.background = '#1c3e87' }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#234ea2' }}
+              style={{ marginLeft: 'auto', padding: '8px 16px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, transition: 'background 0.15s ease' }}>
               + 영업기회
             </button>
-            <button type="button" onClick={exportXlsx}
-              style={{ padding: '7px 14px', background: '#fff', color: BLUE, border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', transition: 'background 0.15s ease' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#f3f4f6')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
-              엑셀 내보내기
-            </button>
           </div>
-          {!scopeAll && (
-            <div style={{ marginTop: 8, fontSize: 11, color: MUTED }}>
-              본인 담당 안건만 보입니다.
-            </div>
-          )}
         </div>
 
         {loading ? (
-          <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, padding: 40, textAlign: 'center', color: MUTED, fontSize: 13 }}>
+          <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 8, padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
             불러오는 중...
           </div>
         ) : (
-          <>
-            <ForecastMonthTable months={summary} picked={picked} onPick={setPicked} />
+          <DndContext
+            sensors={sensors}
+            collisionDetection={pointerWithin}
+            onDragStart={handleDragStart}
+            onDragOver={e => setOverStage(typeof e.over?.id === 'string' ? e.over.id : null)}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => { setActiveId(null); setOverStage(null) }}
+          >
+            {/* 칸반 — 열 5개가 남은 폭을 언제나 5등분한다(minmax(0, 1fr) 이라 내용이 열을 밀지 못한다).
+                판은 화면에 남은 세로 공간을 전부 차지하고(flex: 1), 그걸 넘칠 때만
+                카드가 많은 열이 안에서 세로로 흐른다. 고정 높이를 쓰면 아래가 비었는데도
+                일찍 잘려 스크롤이 생기므로 px 계산을 하지 않는다.
+                (열 머리의 건수·합계는 늘 보이고, 열끼리 높이도 어긋나지 않는다)
 
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '0 2px' }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>안건</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: GRAY, background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>
-                {listRows.length}건
-              </span>
-              {picked && (
-                <button type="button" onClick={() => setPicked(null)}
-                  style={{ padding: 0, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: BLUE }}>
-                  {picked} 만 보는 중 · 전체 보기
-                </button>
-              )}
+                바깥 칸이 스크롤을 맡고 안쪽 판에만 하한(BOARD_MIN_W)을 둔다 — 본문이 그보다
+                넓으면 판이 본문 폭에 딱 맞아 가로 스크롤이 아예 생기지 않고, 좁아지면 이 칸에서만
+                가로로 밀린다(페이지 전체가 밀리지 않는다). */}
+            <div style={{
+              flex: 1, minHeight: 420, minWidth: 0,
+              display: 'flex', overflowX: 'auto',
+            }}>
+              <div style={{
+                display: 'grid', gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))`,
+                gap: 10, alignItems: 'stretch',
+                flex: 1, minWidth: BOARD_MIN_W,
+              }}>
+                {columns.map(col => (
+                  <div key={col.stage} style={{
+                    minWidth: 0, minHeight: 0,
+                    display: 'flex', flexDirection: 'column',
+                  }}>
+                    <div style={{ padding: '0 2px 8px', flexShrink: 0 }}>
+                      {/* 단계·건수·금액을 한 줄에 둔다 — 열이 좁아 두 줄을 쓰면 판이 그만큼 낮아진다 */}
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>{col.stage}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px', flexShrink: 0 }}>{col.rows.length}</span>
+                        {col.sum > 0 && (
+                          <>
+                            <span style={{ fontSize: 11, color: '#d1d5db', flexShrink: 0 }}>·</span>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {compactKRW(col.sum)}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <DroppableColumn stage={col.stage} isOver={overStage === col.stage}>
+                      {col.rows.length === 0
+                        ? <div style={{ border: '1px dashed #ebebeb', borderRadius: 8, padding: '18px 0', textAlign: 'center', fontSize: 12, color: '#d1d5db', flexShrink: 0 }}>
+                            {overStage === col.stage ? '여기에 놓기' : '없음'}
+                          </div>
+                        : col.rows.map(cardOf)}
+                    </DroppableColumn>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <ForecastRowList
-              rows={listRows}
-              engineerName={engineerName}
-              customerName={customerName}
-              categoryLabel={categoryLabel}
-              formLabel={formLabel}
-              oppById={oppById}
-              canEditOpp={opp.canEditOpp}
-              onSaveOpp={opp.updateOppFields}
-              onOpenOpp={opp.openEditOpp}
-              onOpenQuote={openQuote}
-              onWriteQuote={writeQuote}
-            />
-          </>
+            {/* 끝난 건(실주 · 종료) — 판 아래에 함께 접어둔다.
+                판이 남은 높이를 다 쓰므로 이 블록만큼은 화면을 넘겨 페이지가 스크롤된다(펼쳤을 때). */}
+            {done.length > 0 && (
+              <div style={{ marginTop: 16, flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <button onClick={() => setShowLost(v => !v)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#6b7280' }}>끝난 건</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>{done.length}건</span>
+                    <span style={{ fontSize: 11, color: '#9ca3af' }}>
+                      실주 {done.filter(o => o.stage === '실주').length} · 종료 {done.filter(o => o.stage !== '실주').length}
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#234ea2' }}>{showLost ? '접기' : '펼치기'}</span>
+                  </button>
+                  <span style={{ flex: 1, height: 1, background: '#ebebeb' }} />
+                </div>
+                {showLost && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
+                    {done.map(cardOf)}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {filtered.length === 0 && (
+              <div style={{ marginTop: 12, background: '#fff', border: '1px solid #ebebeb', borderRadius: 8, padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+                조건에 맞는 영업기회가 없습니다
+              </div>
+            )}
+
+            {/* 끌고 다니는 동안 커서를 따라다니는 미리보기 */}
+            <DragOverlay dropAnimation={null}>
+              {activeOpp && (
+                <div style={{ width: 260, cursor: 'grabbing', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', borderRadius: 8 }}>
+                  <OpportunityCard
+                    opp={activeOpp}
+                    lastActivity={lastActivityByOpp.get(activeOpp.opportunity_id) ?? null}
+                    canEdit={false}
+                    onOpen={() => {}}
+                    onChangeStage={() => {}}
+                    onPickLost={() => {}}
+                  />
+                </div>
+              )}
+            </DragOverlay>
+          </DndContext>
         )}
       </div>
 
