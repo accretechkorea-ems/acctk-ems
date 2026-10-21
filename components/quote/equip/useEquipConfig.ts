@@ -36,8 +36,6 @@ export type EquipConfigArgs = {
   open: boolean
   /** 내 engineer_id — 「내가 만든 것 먼저」와 「복사 저장이 기본」 판정에 쓴다. */
   myId: number | null
-  /** 내 표시 이름 — 저장 이름 기본값에 들어간다(저장되는 owner_name 은 서버가 세션에서 채운다). */
-  myName: string
   /** 지금 견적의 분류 — 템플릿에 함께 저장한다. */
   category: string | null
   /** 견적 화면의 환율. 모달 안에서만 고칠 수 있다. */
@@ -47,7 +45,7 @@ export type EquipConfigArgs = {
 }
 
 export function useEquipConfig(args: EquipConfigArgs) {
-  const { supabase, open, myId, myName, category, defaultExchangeRate, defaultTariff } = args
+  const { supabase, open, myId, category, defaultExchangeRate, defaultTariff } = args
 
   // ── 머리 입력 ──
   // 환율은 **파생값**이다. 모달 안에서 손대기 전에는 견적 화면의 환율을 그대로 따라가고
@@ -235,11 +233,6 @@ export function useEquipConfig(args: EquipConfigArgs) {
 
   // ── 템플릿 저장·삭제 ──
 
-  /** 저장 이름 기본값 — 「만든 사람 · 기종 · N항목」. */
-  const defaultName = useCallback((who: string) => {
-    const parts = [who || myName, modelKey.trim() || '기종 미지정', `${lines.length}항목`]
-    return parts.filter(Boolean).join(' · ')
-  }, [myName, modelKey, lines.length])
 
   /**
    * 템플릿 저장. mode 가 'copy' 면 새로 만들고 'overwrite' 면 고른 템플릿을 고친다.
@@ -293,7 +286,7 @@ export function useEquipConfig(args: EquipConfigArgs) {
     addPriceItem, addManualItem,
     // 템플릿
     templates, counts, listLoading, picked, modelKey, setModelKey,
-    selectTemplate, startEmpty, saveTemplate, removeTemplate, defaultName, myId,
+    selectTemplate, startEmpty, saveTemplate, removeTemplate, myId,
     // 결과
     totals, checkedCount, missingCount, busy, error, takeRows,
   }

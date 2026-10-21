@@ -25,12 +25,23 @@ const panel = {
 const head = { fontSize: 17, fontWeight: 800, color: C.INK, letterSpacing: '-0.3px', marginBottom: 4 }
 const sub = { fontSize: 12, fontWeight: 500, color: C.MUT, marginBottom: 16 }
 
+/**
+ * 구성 이름 기본값 — 「만든 사람 · 기종 · N항목」.
+ *
+ * **placeholder 가 아니라 실제 입력값**으로 넣는다. 안내문으로만 띄우면 사람이 그대로
+ * 저장을 눌렀을 때 이름이 빈 채로 서버에 가고 「템플릿 이름을 입력해주세요」로 막힌다 —
+ * 화면에는 글자가 보이는데 막히니 이유를 알 수 없다.
+ */
+export const buildTemplateName = (who: string, modelKey: string, count: number): string =>
+  [who.trim(), modelKey.trim(), `${count}항목`].filter(Boolean).join(' · ')
+
 export type SaveTemplateDialogProps = {
   /** 지금 고른 템플릿(없으면 새 구성이다). */
   picked: QuoteTemplate | null
   /** 내가 만든 것인가 — 「원본 수정」을 앞에 둘지 정한다. */
   mine: boolean
-  defaultName: string
+  /** 만든 사람 이름·직급. 이름 기본값의 앞머리가 된다. */
+  who: string
   modelKey: string
   setModelKey: (v: string) => void
   itemCount: number
@@ -41,13 +52,22 @@ export type SaveTemplateDialogProps = {
 }
 
 export function SaveTemplateDialog(props: SaveTemplateDialogProps) {
-  const { picked, mine, defaultName, modelKey, setModelKey, itemCount, busy, onSave, onClose } = props
-  const [name, setName] = useState(defaultName)
+  const { picked, mine, who, modelKey, setModelKey, itemCount, busy, onSave, onClose } = props
+  // 이름은 **파생값**이다 — 사람이 손대기 전에는 기종·항목 수를 따라 바뀌고,
+  // 한 번 고치면 그 글자를 그대로 둔다(기종을 바꿔도 덮지 않는다).
+  const [typed, setTyped] = useState('')
+  const [touched, setTouched] = useState(false)
   const [err, setErr] = useState('')
+  const name = touched ? typed : buildTemplateName(who, modelKey, itemCount)
 
   const run = async (mode: 'copy' | 'overwrite') => {
+    // 기종은 왼쪽 목록을 묶는 열쇠다 — 비면 어느 기종 구성인지 알 수 없다.
+    if (!modelKey.trim()) {
+      setErr('기종을 입력해주세요')
+      return
+    }
     if (!name.trim()) {
-      setErr('이름을 적어 주세요')
+      setErr('구성 이름을 입력해주세요')
       return
     }
     const msg = await onSave(name, mode)
@@ -64,7 +84,7 @@ export function SaveTemplateDialog(props: SaveTemplateDialogProps) {
         </div>
 
         <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: C.DIM, marginBottom: 4 }}>
-          기종
+          기종 (필수)
         </label>
         <input
           value={modelKey}
@@ -78,9 +98,12 @@ export function SaveTemplateDialog(props: SaveTemplateDialogProps) {
         </label>
         <input
           value={name}
-          onChange={e => setName(e.target.value.slice(0, TEMPLATE_NAME_MAX))}
+          onChange={e => { setTouched(true); setTyped(e.target.value.slice(0, TEMPLATE_NAME_MAX)) }}
           style={S.input}
         />
+        <div style={{ fontSize: 11, fontWeight: 500, color: C.DIM, marginTop: 4 }}>
+          기종을 적으면 이름도 따라 바뀝니다. 직접 고치면 그대로 둡니다.
+        </div>
 
         {err && <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: C.RED }}>{err}</div>}
 

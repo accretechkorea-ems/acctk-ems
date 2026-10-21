@@ -55,7 +55,7 @@ export default function EquipConfigModal(props: EquipConfigModalProps) {
 
   const [supabase] = useState(() => createClient())
   const cfg = useEquipConfig({
-    supabase, open: true, myId, myName, category,
+    supabase, open: true, myId, category,
     defaultExchangeRate: exchangeRate, defaultTariff: tariffRate,
   })
 
@@ -66,7 +66,6 @@ export default function EquipConfigModal(props: EquipConfigModalProps) {
   const full = cfg.lines.length >= TEMPLATE_ITEM_MAX
   const rateChanged = cfg.exRate > 0 && cfg.exRate !== exchangeRate
   const mine = cfg.picked ? isMyTemplate(cfg.picked, myId) : true
-  const defaultName = cfg.defaultName(myName)
 
   /** 실제로 붙이는 일 — 환율을 맞춘 뒤 줄을 넘기고 모달을 닫는다. */
   const commit = () => {
@@ -206,7 +205,7 @@ export default function EquipConfigModal(props: EquipConfigModalProps) {
         <SaveTemplateDialog
           picked={cfg.picked}
           mine={mine}
-          defaultName={defaultName}
+          who={myName}
           modelKey={cfg.modelKey}
           setModelKey={cfg.setModelKey}
           itemCount={cfg.lines.length}
