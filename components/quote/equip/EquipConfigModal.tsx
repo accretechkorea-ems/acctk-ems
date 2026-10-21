@@ -176,7 +176,7 @@ export default function EquipConfigModal(props: EquipConfigModalProps) {
         {/* ── 바닥 ── */}
         <div style={S.foot}>
           <span style={{ fontSize: 12, fontWeight: 500, color: C.MUT }}>
-            체크한 항목이 묶음(1 본체+기본 / 2 옵션 / 3 포함사항)으로 견적서에 들어갑니다. 추가한 뒤에도 줄 단위로 고칠 수 있습니다.
+            체크한 항목이 묶음(1 본체+기본 / 2 옵션 / 3 포함사항)으로 견적서에 들어갑니다. 포함사항의 원가(원)는 이익률에만 들어가고 견적서 금액은 「-」입니다. 추가한 뒤에도 줄 단위로 고칠 수 있습니다.
             {rateChanged && ' · 환율을 고쳤으므로 견적 전체 환율도 이 값으로 맞춰집니다.'}
             {hasDiscountRow && cfg.discount > 0 && ' · 견적에 이미 할인 줄이 있어 이번 할인은 붙지 않습니다.'}
           </span>

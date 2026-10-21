@@ -18,8 +18,18 @@ import type { PriceItem, QuoteRow } from '@/app/quote/types'
 import { calcRow, createDiscountRow, createDomesticRow, createManualJpyRow, createRow } from '@/app/quote/calc'
 import type { QuoteTemplateItem, TemplateItemInput } from '@/lib/quoteTemplates'
 
-/** 모달의 네 묶음. base·option·include 는 quote_items.group_kind 로 그대로 저장된다. */
-export const EQUIP_GROUPS = ['base', 'option', 'include', 'domestic'] as const
+/**
+ * 모달의 세 묶음. 셋 다 quote_items.group_kind 로 그대로 저장된다
+ * (lib/quoteForms.ts 의 GROUP_KINDS 와 같은 값이다).
+ *
+ * ── 국내조달품 묶음은 없앴다 ────────────────────────────────────────────────
+ *   따로 둔 이유는 원화 원가를 이익률에 넣는 것 하나였는데, 실무에서 포함사항
+ *   (PC세트·측정 테이블 등)이 곧 국내 구매품이라 두 묶음이 같은 것이었다.
+ *   지금은 포함사항 줄에 **원가(원)** 를 적는다(lineFromManual 참조).
+ *   줄 종류(row_kind 'domestic')는 코드에 그대로 남아 있다 — 지난 견적에 그 줄이 있고,
+ *   포함사항의 원가 줄도 그 종류를 쓴다. 모달에서 **새 묶음으로 만들지만 않는다.**
+ */
+export const EQUIP_GROUPS = ['base', 'option', 'include'] as const
 export type EquipGroup = typeof EQUIP_GROUPS[number]
 
 /** 묶음 제목과 설명 — 시안의 문구를 그대로 쓴다. */
@@ -27,13 +37,11 @@ export const GROUP_TITLES: Record<EquipGroup, string> = {
   base: '1. 본체 + 기본 구성',
   option: '2. 옵션',
   include: '3. 포함사항',
-  domestic: '4. 국내조달품',
 }
 export const GROUP_HINTS: Record<EquipGroup, string> = {
   base: '기본 체크 · 수량은 장비 수량에 연동',
   option: '체크하면 포함 · 수량·판매단가 입력',
-  include: '가격 없는 구성품 · 견적서에 「-」로 표시',
-  domestic: '원화 금액 입력 · 원가 계산에만 들어가고 견적서에는 금액이 나오지 않는다',
+  include: '국내 구매품 · 원가(원)만 적는다 · 견적서 금액은 「-」',
 }
 
 /** 포함사항은 금액이 없다 — 판매단가 입력칸을 두지 않는다. */
@@ -68,9 +76,9 @@ const nextId = () => `eq${++seq}${Math.random().toString(36).slice(2, 7)}`
 export const priceKey = (itemCode: string, variant: string | null | undefined): string =>
   `${itemCode}\u0000${variant ?? ''}`
 
-/** 그 줄 종류에 맞는 빈 QuoteRow. */
-function baseRow(group: EquipGroup): QuoteRow {
-  return group === 'domestic' ? createDomesticRow() : createRow()
+/** 가격표에서 고른 줄의 빈 QuoteRow. 묶음과 무관하게 가격표 품목이다. */
+function baseRow(): QuoteRow {
+  return createRow()
 }
 
 /**
@@ -116,7 +124,7 @@ export function lineFromPriceItem(
   const model = item.model_jp ? `(${item.model_jp})` : ''
   const name = [item.item_name_jp ?? '', model].filter(Boolean).join(' ').trim()
   const row: QuoteRow = {
-    ...baseRow(group),
+    ...baseRow(),
     id: nextId(),
     selectedItem: item,
     partCode: item.item_code,
@@ -184,16 +192,19 @@ export function lineFromTemplateItem(
   it: QuoteTemplateItem, priceByCode: Map<string, PriceItem>, machineQty: number,
 ): EquipLine {
   const qty = it.qty_per_unit * (machineQty > 0 ? machineQty : 1)
-  const group = (EQUIP_GROUPS as readonly string[]).includes(it.group_kind)
+  // 옛 템플릿의 국내조달품 줄은 **포함사항으로 옮긴다**(원가는 그대로 default_sell_price 에 있다).
+  // DB 는 건드리지 않는다 — 읽을 때 옮기기만 한다. 모르는 묶음은 옵션으로 둔다.
+  const group: EquipGroup = (EQUIP_GROUPS as readonly string[]).includes(it.group_kind)
     ? it.group_kind as EquipGroup
-    : 'option'
+    : it.group_kind === 'domestic' ? 'include' : 'option'
   const code = (it.part_code ?? '').trim()
   // **(품번, 구분) 짝**으로 찾는다. 품번만으로 찾으면 Jig 포함/제외 중 아무 줄이나 걸린다.
   const found = code ? priceByCode.get(priceKey(code, it.variant)) : undefined
 
-  if (group === 'domestic') {
-    // 국내조달품 — default_sell_price 를 **기본 금액(원가)** 으로 쓴다(겸용. lib/quoteTemplates.ts 참조).
-    return lineFromManual('domestic', {
+  // 원화 원가 줄(옛 국내조달품 · 포함사항에서 직접 적은 줄) — 품번으로 되찾을 값이 없다.
+  // default_sell_price 가 **원가(원)** 다(겸용. lib/quoteTemplates.ts 참조).
+  if (it.row_kind === 'domestic') {
+    return lineFromManual('include', {
       partCode: code,
       name: it.item_name ?? code,
       qtyPerUnit: it.qty_per_unit,
