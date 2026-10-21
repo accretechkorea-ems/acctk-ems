@@ -14,7 +14,7 @@ import {
 /** 읽는 칸을 글자로 못박는다 — select('*') 는 새 칸이 생길 때마다 화면으로 끌려 들어온다. */
 const QUOTE_COLUMNS =
   'quote_id, quote_number, status, quote_date, purchase_order_at, fail_reason, total_supply, '
-  + 'category, form_kind, engineer_id, customer_id, dealer_id, opportunity_id, created_at'
+  + 'category, form_kind, engineer_id, customer_id, dealer_id, opportunity_id, created_at, pdf_url'
 
 const OPP_COLUMNS =
   'opportunity_id, stage, expected_close, expected_amount, engineer_id, customer_id, '

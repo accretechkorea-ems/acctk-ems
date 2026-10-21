@@ -189,6 +189,8 @@ export type Engineer = {
   name: string
   position: string | null
   resigned_date?: string | null
+  /** 소속 팀 이름(engineers.teams). 포캐스트 화면의 팀 필터가 읽는다 — 조회가 select(*) 라 늘 들어온다. */
+  teams?: string | null
 }
 
 export type Quote = {

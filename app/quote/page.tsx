@@ -82,8 +82,11 @@ function QuotePageInner() {
   // 서버(/api/quote-duplicate)가 본인 견적인지 확인한 뒤 돌려주는 내용만 화면에 채운다.
   const duplicateRaw = paramsCleared ? null : searchParams.get('duplicate')
   const duplicateId = duplicateRaw && /^\d+$/.test(duplicateRaw) ? Number(duplicateRaw) : null
+  // 포캐스트 화면의 「견적 쓰기」가 보내는 값 — 그 안건의 고객·영업기회를 미리 채운다.
+  const oppRaw = paramsCleared ? null : searchParams.get('opportunity')
+  const prefillOpportunityId = oppRaw && /^\d+$/.test(oppRaw) ? Number(oppRaw) : null
   // 주소로 들어온 프리필이 있으면 그쪽이 우선이다 — 임시저장분은 묻지 않고 버린다.
-  const hasUrlPrefill = repairId != null || onBehalfId != null || duplicateId != null
+  const hasUrlPrefill = repairId != null || onBehalfId != null || duplicateId != null || prefillOpportunityId != null
   const { loading: guardLoading, authorized } = usePageGuard()
   const toast = useToast()
   const { errors, setErrors, clearError, validate } = useFieldErrors<'category' | 'form' | 'company' | 'eu' | 'items' | 'expenses'>()
@@ -425,7 +428,7 @@ function QuotePageInner() {
   // 원본에서는 다시쓰기와 대필 사이에 아래 「부대비용 프리셋」 effect 가 끼어 있었다(그것만 뒤로 밀렸다).
   useQuotePrefill({
     supabase, toast, searchParams, rateRef,
-    duplicateId, onBehalfId, repairId, engineer,
+    duplicateId, onBehalfId, repairId, prefillOpportunityId, engineer,
     setOnBehalf, setRows, setIsDealer, setCustomerId, setEuCustomerId,
     setSelectedCustomer, setCustomerQuery, setCompany, setSelectedEU, setEuQuery,
     resolveEuParent, setReceiver, setTermsOpen, setTerms, setRemarks,

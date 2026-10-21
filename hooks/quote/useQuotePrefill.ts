@@ -62,6 +62,8 @@ export type UseQuotePrefillArgs = {
   /** 값을 넣는 시점의 최신 환율(page.tsx 의 rateRef). */
   rateRef: { current: number }
   duplicateId: number | null
+  /** 포캐스트의 「견적 쓰기」로 넘어왔을 때의 영업기회 id. 고객과 기회를 미리 고른다. */
+  prefillOpportunityId: number | null
   onBehalfId: number | null
   repairId: number | null
   engineer: { engineer_id: number } | null
@@ -93,7 +95,7 @@ export type UseQuotePrefillArgs = {
 
 export function useQuotePrefill({
   supabase, toast, searchParams, rateRef,
-  duplicateId, onBehalfId, repairId, engineer,
+  duplicateId, onBehalfId, repairId, prefillOpportunityId, engineer,
   setOnBehalf, setRows, setIsDealer, setCustomerId, setEuCustomerId,
   setSelectedCustomer, setCustomerQuery, setCompany, setSelectedEU, setEuQuery,
   resolveEuParent, setReceiver, setTermsOpen, setTerms, setRemarks,
@@ -244,6 +246,35 @@ export function useQuotePrefill({
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onBehalfId])
+
+  // 영업기회 → 견적서 prefill (1회). 포캐스트 화면의 「견적 쓰기」가 ?opportunity= 로 보낸다.
+  //
+  // 이 길이 **안건과 견적을 잇는 유일한 자리**다. 지금 quotes.opportunity_id 는 한 건도 채워져
+  // 있지 않은데(2026-10-21 실측 0/97), 연결이 없으면 수주확정을 견적에서 자동으로 끌어올 수
+  // 없고 같은 건이 두 줄로 세어진다(docs/forecast-gap-analysis.md D-3).
+  const oppPrefillDone = useRef(false)
+  useEffect(() => {
+    if (oppPrefillDone.current || prefillOpportunityId == null || !engineer) return
+    oppPrefillDone.current = true
+    const run = async () => {
+      const { data: o, error } = await supabase.from('sales_opportunities')
+        .select('opportunity_id, customer_id, title')
+        .eq('opportunity_id', prefillOpportunityId).maybeSingle()
+      if (error || !o) { toast.error('영업기회를 불러오지 못했습니다'); return }
+      if (o.customer_id != null) {
+        const { data: c } = await supabase.from('customers')
+          .select('customer_id, company_name, address, status')
+          .eq('customer_id', o.customer_id).maybeSingle()
+        if (c) handleCustomerSelect(c)
+        await loadOpportunities(o.customer_id)
+      }
+      // 고객을 고르면 기회 목록이 다시 채워진다 — 그 **뒤에** 고른다(순서가 바뀌면 선택이 지워진다).
+      setOpportunityId(o.opportunity_id)
+      setPrefillNotice(`영업기회 「${o.title}」의 견적서를 작성합니다`)
+    }
+    void run()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillOpportunityId, engineer])
 
   // 수리 건 → 견적서 prefill (1회). repair_id 가 유효할 때만. 없으면 일반 견적서로 동작.
   const prefillDone = useRef(false)

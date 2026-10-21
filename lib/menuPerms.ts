@@ -143,7 +143,9 @@ export const MENU_PERMS: MenuPerm[] = [
 
   // ── 영업 ──
   { key: 'leads', label: '리드', group: '영업', path: '/leads', icon: 'userPlus', order: 10, data: [] },
-  { key: 'pipeline', label: '파이프라인', group: '영업', path: '/pipeline', icon: 'kanban', order: 20, data: ['customers'] },
+  // 이름은 2026-10-21 에 「파이프라인」에서 바뀌었다. **키·경로·권한 플래그는 그대로다** —
+  // 팀 권한(team_permissions)에 저장된 값이 키라서, 키를 바꾸면 팀마다 다시 켜 줘야 한다.
+  { key: 'pipeline', label: '포캐스트', group: '영업', path: '/pipeline', icon: 'kanban', order: 20, data: ['customers'] },
   { key: 'quote', label: '견적서', group: '영업', path: '/quote', icon: 'fileText', order: 30, data: ['quote'] },
   // 반도체사업부 고객 접촉 보고. data 는 비워 둔다 — 아래 DERIVED_PERMS 에도 넣지 않는다.
   // 이 메뉴만 켠 팀(반도체)은 teams.can_view_* 가 모두 false 로 남아야 계측 데이터가 열리지 않는다.

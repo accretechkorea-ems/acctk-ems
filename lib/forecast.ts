@@ -69,6 +69,8 @@ export type ForecastQuote = {
   dealer_id: number | null
   opportunity_id: number | null
   created_at: string | null
+  /** 저장된 견적서 PDF 경로. 화면이 번호를 눌렀을 때 연다(집계에는 쓰지 않는다). */
+  pdf_url: string | null
 }
 
 /** sales_opportunities 에서 읽는 칸만. **분류 칸이 없다**(그래서 category 는 늘 null 이다). */
@@ -110,6 +112,8 @@ export type ForecastRow = {
   createdAt: string | null
   /** quotes 에는 updated_at 칸이 없어 **견적 줄은 늘 null** 이다(영업기회만 값이 있다). */
   updatedAt: string | null
+  /** 저장된 견적서 PDF 경로(견적 줄만). 집계에는 쓰지 않고 화면이 열 때만 쓴다. */
+  pdfUrl: string | null
 }
 
 // ── 날짜 ────────────────────────────────────────────────────────────────────
@@ -208,6 +212,7 @@ export function toForecastRow(
       rawStatus: q.status, createdAt: q.created_at,
       // quotes 에 updated_at 칸이 없다. 있는 척하지 않는다.
       updatedAt: null,
+      pdfUrl: q.pdf_url ?? null,
     }
   }
 
@@ -229,6 +234,7 @@ export function toForecastRow(
     category: null, formKind: null,
     month, status, amount: o.expected_amount ?? 0,
     rawStatus: o.stage, createdAt: o.created_at, updatedAt: o.updated_at,
+    pdfUrl: null,
   }
 }
 
