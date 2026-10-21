@@ -160,6 +160,10 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => null) as Record<string, unknown> | null
+  // 본문을 못 읽은 경우를 **이름 탓으로 돌리지 않는다.** 예전에는 body 가 null 이면
+  // body?.name 이 undefined 라서 「템플릿 이름을 입력해주세요」가 떴다 — 화면에는 이름이
+  // 보이는데 그 문구가 뜨면 어디를 고쳐야 하는지 알 수 없다.
+  if (!body) return bad('요청을 읽을 수 없습니다.')
   const action = typeof body?.action === 'string' ? body.action : ''
   const now = new Date().toISOString()
 

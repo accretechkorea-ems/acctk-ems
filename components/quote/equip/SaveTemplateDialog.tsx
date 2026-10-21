@@ -53,12 +53,19 @@ export type SaveTemplateDialogProps = {
 
 export function SaveTemplateDialog(props: SaveTemplateDialogProps) {
   const { picked, mine, who, modelKey, setModelKey, itemCount, busy, onSave, onClose } = props
-  // 이름은 **파생값**이다 — 사람이 손대기 전에는 기종·항목 수를 따라 바뀌고,
-  // 한 번 고치면 그 글자를 그대로 둔다(기종을 바꿔도 덮지 않는다).
-  const [typed, setTyped] = useState('')
+  // 이름은 **상태 하나**다. 화면에 그리는 값과 보내는 값이 같은 변수여야 한다 —
+  // 「화면용 파생값 + 전송용 상태」로 나누면 사람이 손대기 전에는 둘이 다른 값이 되고,
+  // 눈에는 이름이 보이는데 서버는 빈 이름을 받는다(「템플릿 이름을 입력해주세요」).
+  const [name, setName] = useState(() => buildTemplateName(who, modelKey, itemCount))
+  // 사람이 이름을 손댔는가 — 손댄 뒤에는 기종을 바꿔도 그 글자를 덮지 않는다.
   const [touched, setTouched] = useState(false)
   const [err, setErr] = useState('')
-  const name = touched ? typed : buildTemplateName(who, modelKey, itemCount)
+
+  /** 기종을 치면 이름도 **같은 변수**를 고쳐 따라가게 한다(손대기 전까지만). */
+  const changeModelKey = (v: string) => {
+    setModelKey(v)
+    if (!touched) setName(buildTemplateName(who, v, itemCount))
+  }
 
   const run = async (mode: 'copy' | 'overwrite') => {
     // 기종은 왼쪽 목록을 묶는 열쇠다 — 비면 어느 기종 구성인지 알 수 없다.
@@ -80,7 +87,7 @@ export function SaveTemplateDialog(props: SaveTemplateDialogProps) {
       <div style={panel} onClick={e => e.stopPropagation()}>
         <div style={head}>구성을 템플릿으로 저장</div>
         <div style={sub}>
-          체크 여부·수량·판매단가가 함께 저장됩니다. 구입가는 저장하지 않고 열 때 가격표에서 다시 계산합니다.
+          체크 여부·수량·판매단가가 함께 저장됩니다. 가격표 품목의 구입가는 열 때 다시 계산하고, 직접 적은 줄의 구입가·원가는 그대로 저장합니다.
         </div>
 
         <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: C.DIM, marginBottom: 4 }}>
@@ -88,7 +95,7 @@ export function SaveTemplateDialog(props: SaveTemplateDialogProps) {
         </label>
         <input
           value={modelKey}
-          onChange={e => setModelKey(e.target.value)}
+          onChange={e => changeModelKey(e.target.value)}
           placeholder="예) SURFCOM NEX 200"
           style={{ ...S.input, marginBottom: 12 }}
         />
@@ -98,7 +105,7 @@ export function SaveTemplateDialog(props: SaveTemplateDialogProps) {
         </label>
         <input
           value={name}
-          onChange={e => { setTouched(true); setTyped(e.target.value.slice(0, TEMPLATE_NAME_MAX)) }}
+          onChange={e => { setTouched(true); setName(e.target.value.slice(0, TEMPLATE_NAME_MAX)) }}
           style={S.input}
         />
         <div style={{ fontSize: 11, fontWeight: 500, color: C.DIM, marginTop: 4 }}>
