@@ -2,8 +2,9 @@
 
 // 장비 구성 선택 모달 — 껍데기와 연결만 한다(상태는 useEquipConfig, 숫자는 calc.ts).
 //
-// 장비 양식(equip80)에서만 열린다. 이미 적어 둔 품목은 **건드리지 않는다** —
-// 「견적에 추가」는 기존 줄 **뒤에 붙이기**이고, 줄이 있을 때는 한 번 물어본다.
+// 장비 양식(equip80)에서만 열린다. 이미 적어 둔 품목이 있으면 「견적에 추가」가 한 번
+// 물어본다 — 「아니오」는 기존 줄 뒤에 붙이고, 「예」는 기존 품목 줄을 지우고 새 구성만
+// 남긴다(할인·서비스비·국내조달품 수동 줄은 남는다. equipLines 의 isEquipReplaceable).
 //
 // ── 환율·관세율을 어떻게 다루는가 ───────────────────────────────────────────
 //   관세율은 **줄마다** 저장되는 값이라(QuoteRow.tariff_rate) 모달에서 고른 값이 그 줄에
@@ -21,6 +22,7 @@ import { TEMPLATE_ITEM_MAX, isMyTemplate } from '@/lib/quoteTemplates'
 import type { QuoteTemplate } from '@/lib/quoteTemplates'
 import { C, S, parseNum } from './equipStyles'
 import { EQUIP_GROUPS } from './equipLines'
+import type { EquipAddMode } from './equipLines'
 import { useEquipConfig } from './useEquipConfig'
 import EquipTemplateList from './EquipTemplateList'
 import EquipGroupTable from './EquipGroupTable'
@@ -37,12 +39,12 @@ export type EquipConfigModalProps = {
   /** 견적 화면의 환율과 줄 관세율. 모달 안에서만 고칠 수 있다. */
   exchangeRate: number
   tariffRate: number
-  /** 이미 적어 둔 품목 수 — 0 이 아니면 추가 전에 한 번 묻는다. */
-  existingRowCount: number
+  /** 이미 적어 둔 **품목 줄** 수(지워질 줄의 수) — 0 이 아니면 추가 전에 한 번 묻는다. */
+  existingItemCount: number
   /** 이미 할인 줄이 있는가 — 할인은 견적당 1건이라 겹치면 알려 준다. */
   hasDiscountRow: boolean
   /** 체크한 줄을 견적에 붙인다. discount 는 있으면 할인 줄 하나다. */
-  onAdd: (rows: QuoteRow[], discount: QuoteRow | null) => void
+  onAdd: (rows: QuoteRow[], discount: QuoteRow | null, mode: EquipAddMode) => void
   /** 모달에서 환율을 고쳤을 때 견적 전체 환율을 맞춘다. */
   onExchangeRate: (rate: number) => void
 }
@@ -50,7 +52,7 @@ export type EquipConfigModalProps = {
 export default function EquipConfigModal(props: EquipConfigModalProps) {
   const {
     onClose, myId, myName, category, exchangeRate, tariffRate,
-    existingRowCount, hasDiscountRow, onAdd, onExchangeRate,
+    existingItemCount, hasDiscountRow, onAdd, onExchangeRate,
   } = props
 
   const [supabase] = useState(() => createClient())
@@ -61,24 +63,25 @@ export default function EquipConfigModal(props: EquipConfigModalProps) {
 
   const [saveOpen, setSaveOpen] = useState(false)
   const [delTarget, setDelTarget] = useState<QuoteTemplate | null>(null)
-  const [askAppend, setAskAppend] = useState(false)
+  const [ask, setAsk] = useState(false)
 
   const full = cfg.lines.length >= TEMPLATE_ITEM_MAX
   const rateChanged = cfg.exRate > 0 && cfg.exRate !== exchangeRate
   const mine = cfg.picked ? isMyTemplate(cfg.picked, myId) : true
 
   /** 실제로 붙이는 일 — 환율을 맞춘 뒤 줄을 넘기고 모달을 닫는다. */
-  const commit = () => {
+  const commit = (mode: EquipAddMode) => {
     const { rows, discount } = cfg.takeRows()
     if (rateChanged) onExchangeRate(cfg.exRate)
-    onAdd(rows, discount)
+    onAdd(rows, discount, mode)
     onClose()
   }
 
   const addToQuote = () => {
     if (cfg.checkedCount === 0) return
-    if (existingRowCount > 0) setAskAppend(true)
-    else commit()
+    // 지울 품목 줄이 없으면 「예·아니오」가 같은 뜻이다 — 묻지 않고 바로 붙인다.
+    if (existingItemCount > 0) setAsk(true)
+    else commit('append')
   }
 
   return (
@@ -225,24 +228,26 @@ export default function EquipConfigModal(props: EquipConfigModalProps) {
         />
       )}
 
-      {askAppend && (
-        <div style={{ ...S.backdrop, zIndex: Z.subModal }} onClick={() => setAskAppend(false)}>
+      {ask && (
+        <div style={{ ...S.backdrop, zIndex: Z.subModal }} onClick={() => setAsk(false)}>
           <div
             onClick={e => e.stopPropagation()}
             style={{
-              background: '#fff', borderRadius: 8, padding: 24, width: '100%', maxWidth: 420,
+              background: '#fff', borderRadius: 8, padding: 24, width: '100%', maxWidth: 440,
               boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease',
             }}
           >
             <div style={{ fontSize: 17, fontWeight: 800, color: C.INK, letterSpacing: '-0.3px', marginBottom: 4 }}>
-              기존 품목 뒤에 추가합니다
+              기존 입력 품목은 지우고 새로운 구성이 입력됩니다
             </div>
-            <div style={{ fontSize: 12, fontWeight: 500, color: C.MUT }}>
-              이미 적어 둔 품목 {existingRowCount}줄은 그대로 두고, 고른 {cfg.checkedCount}줄을 그 뒤에 붙입니다.
+            <div style={{ fontSize: 12, fontWeight: 500, color: C.MUT, lineHeight: 1.6 }}>
+              이미 적어 둔 품목 {existingItemCount}줄을 지우고, 고른 {cfg.checkedCount}줄만 남깁니다.
+              기존 품목을 남기고 뒤에 붙이려면 「아니오」를 누르세요.
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
-              <button type="button" onClick={() => setAskAppend(false)} style={{ ...S.btn, color: C.MUT }}>취소</button>
-              <button type="button" onClick={() => { setAskAppend(false); commit() }} style={S.btnPri}>추가</button>
+              <button type="button" onClick={() => setAsk(false)} style={{ ...S.btn, color: C.MUT }}>취소</button>
+              <button type="button" onClick={() => { setAsk(false); commit('append') }} style={S.btn}>아니오</button>
+              <button type="button" onClick={() => { setAsk(false); commit('replace') }} style={S.btnPri}>예</button>
             </div>
           </div>
         </div>

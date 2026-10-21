@@ -6,7 +6,9 @@
 // 화면 파일로 흘러들지 않게 한다. 장비 양식(equip80)이 아니면 **아무것도 그리지 않는다.**
 //
 // ── 줄을 합치는 규칙 ────────────────────────────────────────────────────────
-//   · 고른 줄은 **기존 줄 뒤에** 붙는다. 이미 적어 둔 줄은 손대지 않는다.
+//   · 「아니오」(append) — 고른 줄을 **기존 줄 뒤에** 붙인다. 적어 둔 줄은 손대지 않는다.
+//   · 「예」(replace) — 기존 **품목 줄**을 지우고 고른 줄만 남긴다. 할인·서비스비·국내조달품
+//     수동 줄은 남는다(무엇을 지우는지는 equipLines 의 isEquipReplaceable 한곳에서 정한다).
 //   · 할인은 견적당 1건이다(RowAddButtons 와 같은 규칙). 이미 할인 줄이 있으면
 //     모달의 특별 할인은 붙이지 않는다 — 두 줄이 되면 총액에서 두 번 빠진다.
 //   · 환율은 견적당 하나다. 모달에서 고쳤다면 견적 전체 환율을 그 값으로 맞춘다
@@ -15,6 +17,8 @@
 import { useState } from 'react'
 import { isEquipForm } from '@/lib/quoteForms'
 import type { QuoteRow } from '@/app/quote/types'
+import { isEquipReplaceable } from './equipLines'
+import type { EquipAddMode } from './equipLines'
 import EquipConfigModal from './EquipConfigModal'
 
 export type EquipConfigLauncherProps = {
@@ -39,11 +43,14 @@ export default function EquipConfigLauncher(props: EquipConfigLauncherProps) {
   // 모달 안에서 쓰인다(useEquipConfig 의 DEFAULT_TARIFF).
   const tariffRate = rows.find(r => r.tariff_rate > 0)?.tariff_rate ?? 0
 
-  const handleAdd = (added: QuoteRow[], discount: QuoteRow | null) => {
+  const handleAdd = (added: QuoteRow[], discount: QuoteRow | null, mode: EquipAddMode) => {
     setRows(prev => {
-      const next = [...prev, ...added]
+      // replace — 품목 줄만 걷어낸다. 할인·서비스비·국내조달품 수동 줄은 그대로 둔다.
+      const kept = mode === 'replace' ? prev.filter(r => !isEquipReplaceable(r)) : prev
+      const next = [...kept, ...added]
       // 할인 줄은 이미 있으면 더하지 않는다(모달 바닥글이 그 사실을 미리 알린다).
-      return discount && !prev.some(r => r.row_kind === 'discount') ? [...next, discount] : next
+      // 「예」로도 할인 줄은 남으므로 남은 줄을 기준으로 본다.
+      return discount && !kept.some(r => r.row_kind === 'discount') ? [...next, discount] : next
     })
   }
 
@@ -72,7 +79,7 @@ export default function EquipConfigLauncher(props: EquipConfigLauncherProps) {
           category={category}
           exchangeRate={exchangeRate}
           tariffRate={tariffRate}
-          existingRowCount={rows.length}
+          existingItemCount={rows.filter(isEquipReplaceable).length}
           hasDiscountRow={hasDiscountRow}
           onAdd={handleAdd}
           onExchangeRate={setExchangeRate}

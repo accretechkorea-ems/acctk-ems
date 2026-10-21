@@ -14,6 +14,7 @@
 //   옵션·포함사항·국내조달품은 줄 수량을 직접 적는다.
 //   저장할 때는 모든 묶음이 qty_per_unit = 줄 수량 ÷ 장비 수량으로 돌아간다.
 
+import { isGroupKind } from '@/lib/quoteForms'
 import type { PriceItem, QuoteRow } from '@/app/quote/types'
 import { calcRow, createDiscountRow, createDomesticRow, createManualJpyRow, createRow } from '@/app/quote/calc'
 import type { QuoteTemplateItem, TemplateItemInput } from '@/lib/quoteTemplates'
@@ -305,3 +306,24 @@ export function hasCost(line: EquipLine): boolean {
 
 /** 가격표에서 온 줄인가(품번을 고쳐 쓰지 않는다). */
 export const isFromPriceList = (line: EquipLine): boolean => line.row.selectedItem != null
+
+// ── 「견적에 추가」가 기존 줄을 어떻게 하는가 ───────────────────────────────
+
+/** append — 기존 줄 뒤에 붙인다 / replace — 기존 **품목 줄**을 지우고 새 구성만 남긴다. */
+export type EquipAddMode = 'append' | 'replace'
+
+/**
+ * 「예」(기존 품목 지우고 새 구성)로 **지울 줄**인가.
+ *
+ * 장비 구성에서 온 것을 새 구성으로 **바꾸는** 일이다 — 견적 전체를 비우는 것이 아니다.
+ *   지운다  품목 줄(price_list·manual_jpy)과, 구성 묶음에 든 원화 원가 줄
+ *           (domestic + group_kind base/option/include — 모달의 포함사항 원가 줄이다.
+ *           이것을 남기면 다시 추가할 때마다 원가 줄이 쌓여 이익률이 틀어진다).
+ *   남긴다  할인(견적당 1건)·서비스비, 그리고 묶음이 없는 국내조달품 수동 줄
+ *           (모달이 만들지 않는 줄이라 새 구성과 겹치지 않는다).
+ */
+export const isEquipReplaceable = (row: QuoteRow): boolean => (
+  row.row_kind === 'price_list'
+  || row.row_kind === 'manual_jpy'
+  || (row.row_kind === 'domestic' && isGroupKind(row.group_kind))
+)
