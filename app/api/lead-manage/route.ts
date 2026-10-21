@@ -1,4 +1,13 @@
-// 리드 처리(배정·상태·메모·영업기회 전환).
+// 리드 처리(배정·상태·메모).
+//
+// ── 배정이 곧 전환이다 ──────────────────────────────────────────────────────
+//   관리자가 담당자를 지정하면 한 번에 셋이 만들어진다 — 고객사(없으면) · 포캐스트 ·
+//   첫 활동 기록. 예전에는 담당자가 나중에 「전환」을 따로 눌러야 했는데, 그 버튼을 누른 건이
+//   한 건도 없었다(2026-10-22 실측: 배정 19건 / 전환 0건). 들어온 리드가 영업 화면에
+//   나타나지 않으니 포캐스트에서 빠진 채로 잊혔다.
+//
+//   ⚠ leads.customer_id 칸이 **있어야 한다.** 아래 select 가 그 칸을 읽는다 —
+//     없으면 이 라우트의 모든 동작이 PostgREST 오류로 떨어진다(배포 전에 ALTER 를 먼저 실행한다).
 //
 // 화면에서도 역할에 따라 UI 를 감추지만 그것만으로는 막을 수 없어 여기서 다시 판정한다.
 // RLS 를 켜기 전이든 뒤든 이 라우트만으로 방어가 완결되어야 한다 — RLS 는 두 번째 방어선이다.
@@ -19,11 +28,15 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
-import { monthToDate } from '@/components/customer/opportunity'
+import { todayKST } from '@/lib/date'
+import {
+  findCustomerCandidates, leadForecastTitle, leadSourceLine, nextMonthEnd,
+  type CustomerLike,
+} from '@/lib/leadCustomer'
 import { adminEngineerIds, notifyLead } from '@/lib/leadNotify'
 import { sendPartnerAssignMail } from '@/lib/leadMail'
 import {
-  LEAD_STATUS_NEW, LEAD_STATUS_ACTIVE, LEAD_STATUS_CONVERTED, LEAD_STATUS_SKIPPED, LEAD_STATUS_BLOCKED,
+  LEAD_STATUS_NEW, LEAD_STATUS_ACTIVE, LEAD_STATUS_SKIPPED, LEAD_STATUS_BLOCKED,
   LEAD_CONVERT_ACTIVITY_TYPE, MAX_LEN, SKIP_REASON_MIN, isLeadClosed, leadNoTag,
 } from '@/lib/leadOptions'
 
@@ -52,7 +65,18 @@ type LeadRow = {
   blocked_by: number | null
   blocked_at: string | null
   converted_opportunity_id: number | null
+  /** 배정 때 찾거나 만든 고객사. **칸이 없으면 이 라우트 전체가 멈춘다**(머리말 참조). */
+  customer_id: number | null
   created_at: string
+  /** 고객사·담당자를 만들 때 쓰는 값들. 리드에 있는 것만 옮긴다. */
+  address: string | null
+  city: string | null
+  contact_name: string | null
+  contact_dept: string | null
+  contact_title: string | null
+  contact_email: string | null
+  contact_office_tel: string | null
+  contact_mobile: string | null
 }
 
 /**
@@ -147,7 +171,7 @@ export async function POST(req: Request) {
   // 권한 판정은 화면이 보낸 값이 아니라 DB 의 현재 값으로 한다.
   const { data: lead, error: leadErr } = await supabaseAdmin
     .from('leads')
-    .select('lead_id, lead_no, partner_name, partner_email, customer_company, interest_product, expected_purchase, meeting_note, request_note, status, assigned_to, block_reason, blocked_by, blocked_at, converted_opportunity_id, created_at')
+    .select('lead_id, lead_no, partner_name, partner_email, customer_company, interest_product, expected_purchase, meeting_note, request_note, status, assigned_to, block_reason, blocked_by, blocked_at, converted_opportunity_id, customer_id, created_at, address, city, contact_name, contact_dept, contact_title, contact_email, contact_office_tel, contact_mobile')
     .eq('lead_id', leadId)
     .single<LeadRow>()
   if (leadErr || !lead) return bad('리드를 찾을 수 없습니다.', 404)
@@ -203,13 +227,128 @@ export async function POST(req: Request) {
       ? {}
       : { status: assignedTo === null ? LEAD_STATUS_NEW : LEAD_STATUS_ACTIVE }
 
+    // ── 배정이 곧 전환 ──────────────────────────────────────────────────
+    // 담당자가 붙는 순간 고객사와 포캐스트가 생긴다. 회수(null)일 때는 아무것도 만들지 않는다.
+    //
+    // 이미 만들어진 건(재배정)은 **지우거나 다시 만들지 않는다** — 포캐스트의 담당자만 옮긴다.
+    // 담당자를 바꿨다고 그동안 쌓인 안건과 금액이 사라지면 안 된다.
+    let customerId = lead.customer_id
+    let opportunityId = lead.converted_opportunity_id
+    let madeCustomer = false
+    let madeForecast = false
+
+    if (assignedTo !== null && opportunityId != null) {
+      // 포캐스트는 그대로 두고 담당자만 넘긴다.
+      const { error: moveErr } = await supabaseAdmin.from('sales_opportunities')
+        .update({ engineer_id: assignedTo, updated_at: new Date().toISOString() })
+        .eq('opportunity_id', opportunityId)
+      if (moveErr) console.error('[lead-manage] forecast owner move failed', { leadId, opportunityId, error: moveErr })
+    }
+
+    if (assignedTo !== null && opportunityId == null) {
+      // ① 고객사 — 고른 것이 있으면 그것, 없으면 이름으로 찾아본다.
+      const pickedId = Number(body.customerId)
+      if (Number.isInteger(pickedId) && pickedId > 0) {
+        const { data: picked } = await supabaseAdmin.from('customers')
+          .select('customer_id, deleted_at').eq('customer_id', pickedId).single()
+        if (!picked || picked.deleted_at) return bad('고른 고객사를 찾을 수 없습니다.')
+        customerId = picked.customer_id
+      } else {
+        const { data: all, error: custErr } = await supabaseAdmin.from('customers')
+          .select('customer_id, company_name, address, deleted_at')
+        if (custErr) return fail('customer lookup failed', custErr)
+        const candidates = findCustomerCandidates(lead.customer_company, (all ?? []) as CustomerLike[])
+        // 후보가 있으면 **사람이 고른다.** 관리자가 「연결」 또는 「새로 등록」을 정하기 전에는
+        // 아무것도 만들지 않는다 — 같은 회사를 둘로 늘리는 가장 흔한 길이 여기다.
+        if (candidates.length > 0 && body.createCustomer !== true) {
+          return NextResponse.json({
+            error: `이미 등록된 고객사가 ${candidates.length}건 있습니다. 연결할지 새로 등록할지 골라주세요.`,
+            needsCustomerChoice: true,
+            candidates: candidates.map(c => ({ customer_id: c.customer_id, company_name: c.company_name, address: c.address ?? null })),
+          }, { status: 409 })
+        }
+        // 새 고객사 — 리드에 있는 값만 옮긴다. 상태는 「잠재」(아직 거래가 없다),
+        // 사업부는 '80'(리드에 사업부 칸이 없다. 지금 고객사 대부분이 이 값이다).
+        const { data: made, error: makeErr } = await supabaseAdmin.from('customers')
+          .insert({
+            company_name: lead.customer_company,
+            address: lead.address ?? null,
+            region1: lead.city ?? null,
+            status: '잠재',
+            division: '80',
+            is_parent: false,
+          })
+          .select('customer_id')
+          .single()
+        if (makeErr || !made) return fail('customer insert failed', makeErr)
+        customerId = made.customer_id
+        madeCustomer = true
+
+        // 고객사 담당자 — 이름이 있을 때만. 실패해도 배정을 되돌리지 않는다(이름만 비는 일이다).
+        if ((lead.contact_name ?? '').trim()) {
+          const { error: ctErr } = await supabaseAdmin.from('contacts').insert({
+            customer_id: customerId,
+            name: lead.contact_name,
+            department: lead.contact_dept ?? null,
+            position: lead.contact_title ?? null,
+            phone: lead.contact_mobile ?? lead.contact_office_tel ?? null,
+            email: lead.contact_email ?? null,
+          })
+          if (ctErr) console.error('[lead-manage] contact insert failed', { leadId, customerId, error: ctErr })
+        }
+      }
+
+      // ② 포캐스트 — 단계는 상담, 금액은 0(담당자가 채운다), 예상월은 다음 달.
+      const title = leadForecastTitle(lead.customer_company, lead.interest_product)
+      if (!title) return bad('리드에 회사명·관심제품이 없어 포캐스트를 만들 수 없습니다.')
+      const { data: opp, error: oppErr } = await supabaseAdmin.from('sales_opportunities')
+        .insert({
+          customer_id: customerId,
+          engineer_id: assignedTo,
+          stage: '상담',
+          title,
+          expected_amount: 0,
+          expected_close: nextMonthEnd(todayKST()),
+        })
+        .select('opportunity_id')
+        .single()
+      if (oppErr || !opp) return fail('forecast insert failed', oppErr)
+      opportunityId = opp.opportunity_id
+      madeForecast = true
+
+      // ③ 첫 활동 — 회의록·요청사항을 그대로 남긴다. 맨 앞 줄이 **출처(리드 번호)** 다
+      //    (sales_opportunities 에 메모 칸이 없어 이 기록이 그 자리를 대신한다).
+      const content = [leadSourceLine(lead.lead_no), lead.meeting_note, lead.request_note]
+        .filter(t => t && String(t).trim()).join('\n\n')
+      const { error: actErr } = await supabaseAdmin.from('sales_activities').insert({
+        opportunity_id: opportunityId,
+        customer_id: customerId,
+        engineer_id: assignedTo,
+        activity_date: lead.created_at.slice(0, 10),
+        activity_type: LEAD_CONVERT_ACTIVITY_TYPE,
+        content,
+      })
+      if (actErr) console.error('[lead-manage] activity insert failed', { leadId, opportunityId, error: actErr })
+    }
+
     // 배정자 = 이 배정을 실행한 사람. 세션에서 판정한 caller 만 쓴다(요청 본문의 값은 읽지 않는다).
     // 재배정하면 그때의 실행자로 갱신된다 — 최초 배정자를 고정해 두지 않는다.
     // 회수(assignedTo === null)도 실행 기록이므로 같이 남긴다.
     const { error } = await supabaseAdmin.from('leads')
-      .update({ assigned_to: assignedTo, assigned_by: caller.engineer_id, ...statusPatch, ...touch })
+      .update({
+        assigned_to: assignedTo, assigned_by: caller.engineer_id,
+        customer_id: customerId, converted_opportunity_id: opportunityId,
+        ...statusPatch, ...touch,
+      })
       .eq('lead_id', leadId)
-    if (error) return fail('assign update failed', error)
+    if (error) {
+      // 42703 = 없는 칸. leads.customer_id 를 아직 만들지 않은 경우다(머리말의 ALTER).
+      if ((error as { code?: string }).code === '42703') {
+        console.error('[lead-manage] leads.customer_id 칸이 없다 — ALTER 를 먼저 실행해야 한다', { leadId, error })
+        return bad('leads.customer_id 칸이 없습니다. 관리자에게 알려주세요(스키마 적용 필요).', 500)
+      }
+      return fail('assign update failed', error)
+    }
 
     // 누가 누구에게 넘겼는지. 리드 행에는 「지금 담당자」만 남아 이전 담당자는 여기서만 확인된다.
     await writeLeadAudit(lead, {
@@ -226,9 +365,13 @@ export async function POST(req: Request) {
       await notifyLead({
         engineerIds: [assignedTo],
         title: '리드 배정',
-        message: `${leadNoTag(lead.lead_no)}리드가 배정되었습니다.`,
+        message: madeForecast
+          ? `${leadNoTag(lead.lead_no)}리드가 배정되었습니다.\n포캐스트가 생성되었습니다 → 금액·예상월을 채워 주세요.`
+          : `${leadNoTag(lead.lead_no)}리드가 배정되었습니다.`,
         type: 'lead_assigned',
         leadId,
+        // 포캐스트를 새로 만든 배정은 **그 화면으로** 보낸다 — 받는 사람이 할 일이 거기 있다.
+        link: madeForecast ? '/pipeline' : undefined,
       })
     }
     // 파트너사에 담당자를 알린다. 배정을 푸는 경우(null)와 같은 사람으로 다시 저장한 경우는 보내지 않는다.
@@ -236,7 +379,10 @@ export async function POST(req: Request) {
     const partnerMailSent = assignedTo !== null && assignedTo !== lead.assigned_to
       ? await notifyPartnerAssigned(lead, assignedTo, lead.assigned_to != null)
       : false
-    return NextResponse.json({ success: true, assignedTo, status: statusPatch.status ?? lead.status, partnerMailSent })
+    return NextResponse.json({
+      success: true, assignedTo, status: statusPatch.status ?? lead.status, partnerMailSent,
+      customerId, opportunityId, madeCustomer, madeForecast,
+    })
   }
 
   // ── 미진행 처리 — 담당자만. 되돌릴 수 없는 종결이라 사유를 반드시 받는다. ──
@@ -371,63 +517,6 @@ export async function POST(req: Request) {
     const { error } = await supabaseAdmin.from('leads').update({ admin_memo: memo || null, ...touch }).eq('lead_id', leadId)
     if (error) return fail('memo update failed', error)
     return NextResponse.json({ success: true })
-  }
-
-  // ── 영업기회 전환 — 담당자만 ──
-  // 관리자는 전환하지 않는다. 자기 자신을 담당자로 배정한 경우에만 담당자 자격으로 가능하다.
-  if (action === 'convert') {
-    if (!assignee) return bad('배정받은 담당자만 포캐스트로 전환할 수 있습니다.', 403)
-    if (isLeadClosed(lead.status) || lead.converted_opportunity_id) return bad('이미 종결된 리드입니다.')
-
-    const customerId = Number(body.customerId)
-    if (!Number.isInteger(customerId) || customerId <= 0) return bad('고객사를 선택해주세요.')
-    const { data: customer } = await supabaseAdmin
-      .from('customers')
-      .select('customer_id, company_name, deleted_at')
-      .eq('customer_id', customerId)
-      .single()
-    if (!customer || customer.deleted_at) return bad('선택한 고객사를 찾을 수 없습니다.')
-
-    // 리드에는 고객사명 문자열만 있어 업체는 화면에서 고른 것을 쓴다.
-    // expected_close 는 date 컬럼이라 예상 구매 시기가 있으면 그 달의 말일로 맞춘다(영업기회 규칙과 동일).
-    const { data: opp, error: oppErr } = await supabaseAdmin
-      .from('sales_opportunities')
-      .insert({
-        customer_id: customerId,
-        engineer_id: lead.assigned_to,
-        title: `${lead.customer_company} ${lead.interest_product}`.trim(),
-        expected_close: lead.expected_purchase ? monthToDate(lead.expected_purchase.slice(0, 7)) : null,
-      })
-      .select('opportunity_id')
-      .single()
-    if (oppErr || !opp) {
-      console.error('[lead-manage] opportunity insert failed', { leadId, error: oppErr })
-      return bad('포캐스트를 만들지 못했습니다.', 500)
-    }
-
-    // 회의록·요청사항을 영업활동으로 남긴다. 실패해도 전환 자체는 되돌리지 않는다.
-    const content = [lead.meeting_note, lead.request_note].filter(t => t && t.trim()).join('\n\n')
-    const { error: actErr } = await supabaseAdmin.from('sales_activities').insert({
-      opportunity_id: opp.opportunity_id,
-      customer_id: customerId,
-      engineer_id: lead.assigned_to,
-      activity_date: lead.created_at.slice(0, 10),
-      activity_type: LEAD_CONVERT_ACTIVITY_TYPE,
-      content,
-    })
-    if (actErr) console.error('[lead-manage] activity insert failed', { leadId, opportunityId: opp.opportunity_id, error: actErr })
-
-    const { error: updErr } = await supabaseAdmin
-      .from('leads')
-      .update({ status: LEAD_STATUS_CONVERTED, converted_opportunity_id: opp.opportunity_id, ...touch })
-      .eq('lead_id', leadId)
-    if (updErr) {
-      // 기회는 만들어졌는데 리드를 닫지 못한 상태 — 사람이 알아야 하므로 로그를 남기고 실패로 답한다.
-      console.error('[lead-manage] lead close failed after convert', { leadId, opportunityId: opp.opportunity_id, error: updErr })
-      return bad('포캐스트는 만들어졌지만 리드 상태를 바꾸지 못했습니다. 관리자에게 알려주세요.', 500)
-    }
-
-    return NextResponse.json({ success: true, opportunityId: opp.opportunity_id, activityLogged: !actErr })
   }
 
   return bad('알 수 없는 요청입니다.')

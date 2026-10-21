@@ -6,6 +6,12 @@
 // 섞여, 지금 무엇을 하는 중인지가 흐려졌다(「리드 처리」를 눌렀는데 삭제 확인 문구가 나와
 // 놀라는 제보가 있었다). 한 번에 한 가지만 묻는 자리로 떼어 낸다.
 //
+// ── 담당자 지정 = 전환 ──────────────────────────────────────────────────────
+//   담당자를 지정하면 서버가 **고객사(없으면 새로)와 포캐스트를 함께 만든다.** 그래서 이 모달은
+//   확정 전에 「이 회사가 이미 우리 고객사인가」를 묻는다. 같은 이름의 고객사가 있으면 연결할지
+//   새로 등록할지 고르기 전에는 확정 버튼이 켜지지 않는다 — 같은 회사가 둘로 늘어나는 가장
+//   흔한 길이 여기다. 판정 규칙은 lib/leadCustomer.ts(화면·서버가 같은 함수를 본다).
+//
 // 이 모달이 하는 일은 셋뿐이다: 담당자 지정·변경, 배정 불가 처리, 배정 불가 해제. **삭제는 없다** —
 // 진행하지 않은 리드도 「배정 불가 + 사유」로 남겨야 어디서 들어온 리드를 왜 안 했는지가 남는다.
 //
@@ -24,6 +30,7 @@ import {
   cardHeader, cardTitle, btnPrimary, btnGhost, btnDanger,
 } from '@/components/common/ui'
 import { LEAD_STATUS_BLOCKED, MAX_LEN, SKIP_REASON_MIN } from '@/lib/leadOptions'
+import { findCustomerCandidates, type CustomerLike } from '@/lib/leadCustomer'
 
 /** 경고 상자 배경 — 리드 화면·관리자 화면이 쓰던 값과 같다(새로 만든 색이 아니다). */
 const DANGER_BG = '#fef2f2'
@@ -34,7 +41,14 @@ export type StatusModalLead = {
   customer_company: string
   status: string
   assigned_to: number | null
+  /** 이미 포캐스트가 만들어진 리드인가 — 재배정이면 담당자만 옮긴다. */
+  converted_opportunity_id: number | null
 }
+
+/** 담당자를 지정할 때 고객사를 어떻게 할지. 고르기 전에는 null 이다. */
+export type CustomerChoice =
+  | { kind: 'link'; customerId: number }
+  | { kind: 'new' }
 
 const field: React.CSSProperties = {
   width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: 6,
@@ -47,7 +61,7 @@ const label: React.CSSProperties = {
 
 export default function LeadStatusModal({
   lead, assigneeName, options, canAssign, canBlock, canUnblock,
-  blockReason, blockedLabel, busy, onClose, onAssign, onBlock, onUnblock,
+  blockReason, blockedLabel, busy, customers, onClose, onAssign, onBlock, onUnblock,
 }: {
   lead: StatusModalLead
   /** 현재 담당자 「이름 직급」. 미배정이면 빈 문자열. */
@@ -64,7 +78,9 @@ export default function LeadStatusModal({
   busy: boolean
   onClose: () => void
   /** 성공하면 null, 실패하면 모달 안에 띄울 사유를 돌려준다. */
-  onAssign: (assignedTo: number) => Promise<string | null>
+  /** 고객사 후보를 찾을 목록(화면이 이미 들고 있는 것). */
+  customers: readonly CustomerLike[]
+  onAssign: (assignedTo: number, choice: CustomerChoice | null) => Promise<string | null>
   onBlock: (reason: string) => Promise<string | null>
   onUnblock: () => Promise<string | null>
 }) {
@@ -84,9 +100,23 @@ export default function LeadStatusModal({
   const [pick, setPick] = useState<number | ''>('')
   const [reason, setReason] = useState('')
   const [error, setError] = useState('')
+  // 고객사 — 'new' 이거나 기존 고객사 id. 후보가 있을 때는 고르기 전까지 null 이다.
+  const [custPick, setCustPick] = useState<'new' | number | null>(null)
+
+  // 이미 포캐스트가 있는 리드(재배정)는 고객사를 다시 묻지 않는다 — 담당자만 옮긴다.
+  const alreadyMade = lead.converted_opportunity_id != null
+  const candidates = alreadyMade ? [] : findCustomerCandidates(lead.customer_company, customers)
+  const needsChoice = !alreadyMade && candidates.length > 0
+  // 후보가 없으면 새로 등록하는 길뿐이라 따로 고르게 하지 않는다.
+  const choice: CustomerChoice | null = alreadyMade
+    ? null
+    : needsChoice
+      ? (custPick === null ? null : (custPick === 'new' ? { kind: 'new' } : { kind: 'link', customerId: custPick }))
+      : { kind: 'new' }
 
   // 같은 사람을 다시 고르는 것은 변경이 아니다 — 서버도 그 경우 파트너사 메일을 보내지 않는다.
-  const assignReady = pick !== '' && pick !== lead.assigned_to
+  // 고객사를 고르기 전에는 확정할 수 없다(후보가 있을 때만 해당).
+  const assignReady = pick !== '' && pick !== lead.assigned_to && (!needsChoice || custPick !== null)
   const blockReady = reason.trim().length >= SKIP_REASON_MIN
   // 해제는 더 받을 값이 없다 — 누르면 바로 실행이라 늘 준비된 상태다.
   const ready = kind === 'assign' ? assignReady : kind === 'block' ? blockReady : true
@@ -95,7 +125,7 @@ export default function LeadStatusModal({
     if (busy || !ready) return
     setError('')
     const err = kind === 'assign'
-      ? await onAssign(Number(pick))
+      ? await onAssign(Number(pick), choice)
       : kind === 'block'
         ? await onBlock(reason.trim())
         : await onUnblock()
@@ -169,6 +199,43 @@ export default function LeadStatusModal({
               배정하면 상태가 「진행중」이 되고, 새 담당자에게 알림이 갑니다.
               파트너사 이메일이 있으면 담당자 안내 메일도 나갑니다.
             </div>
+
+            {/* ── 고객사 — 배정이 곧 전환이라 여기서 함께 정한다 ── */}
+            {alreadyMade ? (
+              <div style={{ marginTop: 10, background: NEUTRAL_BG, borderRadius: 8, padding: '10px 12px', fontSize: 12, color: SUB, lineHeight: 1.7 }}>
+                이미 포캐스트가 만들어진 리드입니다. 고객사는 그대로 두고 **담당자만** 바뀝니다.
+              </div>
+            ) : needsChoice ? (
+              <div style={{ marginTop: 10 }}>
+                <label style={label}>고객사 — 같은 이름이 {candidates.length}건 있습니다</label>
+                <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
+                  {candidates.map(c => (
+                    <label key={c.customer_id}
+                      style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '9px 10px', cursor: 'pointer', borderBottom: `1px solid ${BORDER}` }}>
+                      <input type="radio" name="lsm-cust" checked={custPick === c.customer_id}
+                        onChange={() => setCustPick(c.customer_id)} style={{ marginTop: 2, accentColor: '#234ea2' }} />
+                      <span style={{ minWidth: 0 }}>
+                        <span style={{ display: 'block', fontSize: 13, color: TEXT, fontWeight: 600 }}>{c.company_name ?? '-'}</span>
+                        <span style={{ display: 'block', fontSize: 12, color: MUTED }}>{c.address || '주소 없음'}</span>
+                      </span>
+                    </label>
+                  ))}
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '9px 10px', cursor: 'pointer' }}>
+                    <input type="radio" name="lsm-cust" checked={custPick === 'new'}
+                      onChange={() => setCustPick('new')} style={{ accentColor: '#234ea2' }} />
+                    <span style={{ fontSize: 13, color: TEXT, fontWeight: 600 }}>새 고객사로 등록</span>
+                  </label>
+                </div>
+                <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.6, marginTop: 6 }}>
+                  고르기 전에는 확정할 수 없습니다. 연결하면 그 고객사에, 새로 등록하면 새 고객사에 포캐스트가 붙습니다.
+                </div>
+              </div>
+            ) : (
+              <div style={{ marginTop: 10, background: NEUTRAL_BG, borderRadius: 8, padding: '10px 12px', fontSize: 12, color: SUB, lineHeight: 1.7 }}>
+                같은 이름의 고객사가 없습니다 — <span style={{ color: TEXT, fontWeight: 700 }}>{lead.customer_company}</span> 를 새 고객사로 등록하고
+                포캐스트(단계 상담 · 금액 0 · 예상월 다음 달)를 만듭니다.
+              </div>
+            )}
           </div>
         )}
 

@@ -3,7 +3,7 @@
 // 리드 관리 — /lead 공개 폼으로 들어온 리드를 확인하고 처리한다.
 // 영업관리 메뉴 안에 있지만 영업 업무라 접근 권한은 영업 현황과 같은 canViewPipeline 을 쓴다.
 
-import { useEffect, useMemo, useRef, useState, Suspense, Fragment, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, Suspense, Fragment, type CSSProperties } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { usePageGuard } from '@/hooks/usePageGuard'
@@ -14,12 +14,11 @@ import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { getCategoryColor, SALES_STATUS_COLORS, type CategoryColor } from '@/lib/categoryColors'
 import SegmentedControl from '@/components/common/SegmentedControl'
-import Popover from '@/components/common/Popover'
 import { Z } from '@/lib/zIndex'
 import { useLeadFilters, ALL, NONE } from '@/hooks/leads/useLeadFilters'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import LeadExcelButton from '@/components/leads/LeadExcelButton'
-import LeadStatusModal from './LeadStatusModal'
+import LeadStatusModal, { type CustomerChoice } from './LeadStatusModal'
 import { kstStamp } from '@/lib/date'
 
 import {
@@ -245,15 +244,10 @@ function LeadsPageInner() {
   // 미진행 사유 입력값. 메모와 같은 방식으로 리드 id 를 함께 들고 있는다.
   const [skipDraft, setSkipDraft] = useState<{ id: number; text: string } | null>(null)
   // 처리 줄에서 펼친 입력 영역. 한 번에 하나만 열리므로 리드 id + 종류 한 쌍이면 충분하다.
-  const [panel, setPanel] = useState<{ id: number; kind: 'convert' | 'skip' } | null>(null)
+  const [panel, setPanel] = useState<{ id: number; kind: 'skip' } | null>(null)
   // 메모를 고치고 있는 리드. 평소에는 내용만 보이고, 여기에 id 가 들어왔을 때만 입력칸과 저장·취소가 나온다
   // (메모 칸 오른쪽 위의 연필로 들어간다).
   const [memoEditing, setMemoEditing] = useState<number | null>(null)
-  const [custQuery, setCustQuery] = useState('')
-  const [custOpen, setCustOpen] = useState(false)
-  // 고객사 검색 결과는 표 컨테이너 밖으로 나가야 해서 포털로 띄운다. 그 기준이 되는 입력칸.
-  const custAnchorRef = useRef<HTMLDivElement>(null)
-  const [pickedCustomer, setPickedCustomer] = useState<Customer | null>(null)
   // 「상태 변경」 모달을 연 리드. 담당자 지정·변경과 배정 불가를 그 모달 한 곳에서 한다
   // (예전에는 카드 안에서 붉은 영역이 펼쳐졌다 — 삭제와 한자리에 있어 헷갈린다는 제보가 있었다).
   const [statusFor, setStatusFor] = useState<number | null>(null)
@@ -354,22 +348,17 @@ function LeadsPageInner() {
   // 「상태 변경」 모달이 보고 있는 리드. 목록에서 찾으므로 저장 직후 갱신된 값이 그대로 반영된다.
   const statusModalLead = statusFor === null ? null : leads.find(l => l.lead_id === statusFor) ?? null
 
-  const custMatches = custQuery.trim()
-    ? customers.filter(c => (c.company_name ?? '').toLowerCase().includes(custQuery.trim().toLowerCase())).slice(0, 8)
-    : []
-
   /** 처리 줄의 입력 영역을 닫고 그 안의 임시 입력값을 버린다. */
   const closePanel = () => {
     setPanel(null)
     setMemoDraft(null); setSkipDraft(null)
-    setPickedCustomer(null); setCustQuery(''); setCustOpen(false)
   }
 
   /** 같은 것을 다시 누르면 닫히고, 다른 것을 누르면 그쪽으로 바뀐다(한 번에 하나만 열린다). */
   const togglePanel = (leadId: number, kind: string) => {
     const same = panel?.id === leadId && panel.kind === kind
     closePanel()
-    if (!same) setPanel({ id: leadId, kind: kind as 'convert' | 'skip' })
+    if (!same) setPanel({ id: leadId, kind: kind as 'skip' })
   }
 
   /** 펼친 리드의 메모 입력값. 아직 손대지 않았으면 저장된 값을 그대로 보여준다. */
@@ -458,16 +447,34 @@ function LeadsPageInner() {
    * 모달에서만 부른다 — 배정을 푸는 경로(assignedTo = null)는 화면에서 없앴다.
    * 담당자를 빼고 싶으면 「배정 불가 처리」로 사유를 남기고 닫는 것이 맞다.
    */
-  const assignFromModal = async (lead: Lead, assignedTo: number): Promise<string | null> => {
+  const assignFromModal = async (
+    lead: Lead, assignedTo: number, choice: CustomerChoice | null,
+  ): Promise<string | null> => {
+    // 배정이 곧 전환이다 — 고객사를 어떻게 할지 함께 보낸다(모달이 고르게 한다).
+    // 서버도 같은 판정을 다시 해서, 고르지 않고 보내면 409 로 되돌려 보낸다.
+    const customerPayload = choice?.kind === 'link'
+      ? { customerId: choice.customerId }
+      : choice?.kind === 'new' ? { createCustomer: true } : {}
     const { error, json } = await manageFromModal(
       lead.lead_id,
-      { action: 'assign', assignedTo },
+      { action: 'assign', assignedTo, ...customerPayload },
       isLeadClosed(lead.status)
         ? { assigned_to: assignedTo }
         : { assigned_to: assignedTo, status: LEAD_STATUS_ACTIVE },
       '담당자를 저장했습니다.',
     )
     if (error) return error
+    // 서버가 만든 고객사·포캐스트를 화면에도 반영한다(다시 열었을 때 또 묻지 않게).
+    const customerId = json?.customerId == null ? null : Number(json.customerId)
+    const oppId = json?.opportunityId == null ? null : Number(json.opportunityId)
+    setLeads(prev => prev.map(l => (l.lead_id === lead.lead_id
+      ? { ...l, customer_id: customerId, converted_opportunity_id: oppId }
+      : l)))
+    if (json?.madeForecast) {
+      toast.success(json?.madeCustomer
+        ? '고객사와 포캐스트를 만들었습니다. 담당자가 금액·예상월을 채웁니다.'
+        : '포캐스트를 만들었습니다. 담당자가 금액·예상월을 채웁니다.')
+    }
     // 파트너사 메일은 담당자가 실제로 바뀐 건에만 나간다(같은 사람 재저장은 보내지 않는다).
     // 주소가 없는 리드도 애초에 보내지 않으므로 실패로 알리지 않는다(종전 규칙 그대로).
     if (assignedTo !== lead.assigned_to && lead.partner_email && json?.partnerMailSent === false) {
@@ -630,32 +637,6 @@ function LeadsPageInner() {
     return error
   }
 
-  /** 영업기회 전환 — 기회 행을 만들고 리드를 전환완료로 닫는다. */
-  const convert = async (lead: Lead) => {
-    if (!pickedCustomer) { toast.error('고객사를 선택해주세요.'); return }
-    if (lead.assigned_to !== myEngineerId) { toast.error('배정받은 담당자만 전환할 수 있습니다.'); return }
-    const ok = await confirm({
-      title: '포캐스트로 전환',
-      message: `${pickedCustomer.company_name} 로 포캐스트를 만듭니다. 전환한 뒤에는 되돌릴 수 없습니다.`,
-      confirmText: '전환',
-    })
-    if (!ok) return
-
-    // 영업기회 생성·활동 기록·리드 마감은 전부 라우트가 한다(담당자 여부를 서버가 판정해야 하므로).
-    const res = await callManage(
-      lead.lead_id,
-      { action: 'convert', customerId: pickedCustomer.customer_id },
-      { status: LEAD_STATUS_CONVERTED },
-      '포캐스트로 전환했습니다.',
-    )
-    if (!res) return
-    // 서버가 만든 기회 번호로 화면을 맞춘다.
-    const oppId = Number(res.opportunityId)
-    setLeads(prev => prev.map(l => (l.lead_id === lead.lead_id ? { ...l, converted_opportunity_id: oppId } : l)))
-    if (res.activityLogged === false) toast.error('활동 기록은 남기지 못했습니다.')
-    closePanel()
-  }
-
   // 접근은 세 갈래다.
   //   superadmin           → 통과(전체)
   //   리드 권한 + 배정 있음 → 통과(자기 건)
@@ -800,7 +781,11 @@ function LeadsPageInner() {
                 {paged.map(lead => {
                   const open = openId === lead.lead_id
                   const sc = leadStatusColor(lead.status)
-                  const converted = lead.status === LEAD_STATUS_CONVERTED || !!lead.converted_opportunity_id
+                  // 「전환완료」는 **상태로만** 판정한다. 배정하는 순간 포캐스트가 만들어져
+                  // converted_opportunity_id 는 진행중인 리드에도 들어 있기 때문이다 —
+                  // 그 값으로 가르면 배정한 리드가 곧바로 종결로 잠겨 미진행 처리를 할 수 없다.
+                  // (그 상태로 닫힌 리드는 옛 전환 버튼으로 닫힌 건뿐이다.)
+                  const converted = lead.status === LEAD_STATUS_CONVERTED
                   // 종결 = 더 손댈 수 없는 상태. 전환완료·미진행이면 두 버튼을 모두 잠근다.
                   const closed = converted || isLeadClosed(lead.status)
                   // 사유가 최소 길이를 넘어야 미진행 버튼이 열린다(서버도 같은 길이를 다시 본다).
@@ -812,11 +797,10 @@ function LeadsPageInner() {
                   const isAssignee = lead.assigned_to === myEngineerId
                   // 처리 줄의 선택지 — 배정받은 담당자만 쓰는 두 가지.
                   // (메모는 관리 카드 안에서 바로 고치므로 여기 두지 않는다)
+                  // 전환 버튼은 없앴다 — 배정하는 순간 서버가 고객사·포캐스트를 만든다
+                  // (담당자가 따로 누를 일이 없다. 실제로 누른 건도 한 건도 없었다).
                   const actions = isAssignee
-                    ? [
-                        { label: '포캐스트 전환', value: 'convert', disabled: closed },
-                        { label: '미진행 처리', value: 'skip', disabled: closed },
-                      ]
+                    ? [{ label: '미진행 처리', value: 'skip', disabled: closed }]
                     : []
                   const canMemo = isAdmin || isAssignee
                   const editingMemo = memoEditing === lead.lead_id
@@ -1110,70 +1094,6 @@ function LeadsPageInner() {
                                 </div>
                               )}
 
-                              {/* ── 영업기회 전환 — 배정받은 담당자만 열 수 있다. ── */}
-                              {openPanel === 'convert' && (
-                                <div style={dividerTop}>
-                                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                                    <div ref={custAnchorRef} style={{ flex: '1 1 260px', minWidth: 0 }}>
-                                      {pickedCustomer ? (
-                                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                          <div style={{ ...inpStyle, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            {pickedCustomer.company_name ?? '-'}
-                                            {pickedCustomer.address && <span style={{ marginLeft: 6, fontSize: 12, color: FAINT }}>{pickedCustomer.address}</span>}
-                                          </div>
-                                          <button
-                                            onClick={() => { setPickedCustomer(null); setCustQuery(''); setCustOpen(true) }}
-                                            style={ghostBtn}
-                                          >변경</button>
-                                        </div>
-                                      ) : (
-                                        <input
-                                          value={custQuery}
-                                          onChange={e => { setCustQuery(e.target.value); setCustOpen(true) }}
-                                          onFocus={() => setCustOpen(true)}
-                                          placeholder="업체명으로 검색"
-                                          style={{ ...inpStyle, width: '100%' }}
-                                        />
-                                      )}
-                                      {/* 표 컨테이너가 자르지 못하도록 포털로 띄운다(위치만 입력칸을 따라간다) */}
-                                      <Popover
-                                        anchorRef={custAnchorRef}
-                                        open={custOpen && !pickedCustomer && custMatches.length > 0}
-                                        onClose={() => setCustOpen(false)}
-                                        matchAnchorWidth
-                                        maxHeight={240}
-                                        style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                                      >
-                                          {custMatches.map(c => (
-                                            <div key={c.customer_id}
-                                              onMouseDown={ev => { ev.preventDefault(); setPickedCustomer(c); setCustOpen(false) }}
-                                              style={{ padding: '8px 11px', cursor: 'pointer' }}
-                                              onMouseEnter={ev => { ev.currentTarget.style.background = '#f5f5f5' }}
-                                              onMouseLeave={ev => { ev.currentTarget.style.background = 'transparent' }}
-                                            >
-                                              <div style={{ fontSize: 13, fontWeight: 500, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.company_name ?? '-'}</div>
-                                              <div style={{ fontSize: 12, color: FAINT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.address ?? '주소 없음'}</div>
-                                            </div>
-                                          ))}
-                                      </Popover>
-                                    </div>
-                                    <button
-                                      disabled={busy || !pickedCustomer}
-                                      onClick={() => convert(lead)}
-                                      style={primaryBtn(busy || !pickedCustomer)}
-                                    >
-                                      {busy ? '전환 중...' : '포캐스트로 전환'}
-                                    </button>
-                                    <button onClick={closePanel} style={ghostBtn}>취소</button>
-                                  </div>
-                                  {custQuery.trim() && custMatches.length === 0 && !pickedCustomer && (
-                                    <div style={{ fontSize: 12, color: FAINT, marginTop: 6, lineHeight: '20px' }}>
-                                      검색 결과가 없습니다. 고객사가 등록되어 있지 않다면 고객사를 먼저 등록해주세요.
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-
                               {/* ── 미진행 처리 — 되돌릴 수 없어 사유를 받는다. ── */}
                               {openPanel === 'skip' && (
                                 <div style={dividerTop}>
@@ -1275,7 +1195,8 @@ function LeadsPageInner() {
             : ''}
           busy={saving === statusModalLead.lead_id}
           onClose={() => setStatusFor(null)}
-          onAssign={id => assignFromModal(statusModalLead, id)}
+          customers={customers}
+          onAssign={(id, choice) => assignFromModal(statusModalLead, id, choice)}
           onBlock={reason => blockFromModal(statusModalLead, reason)}
           onUnblock={() => unblockFromModal(statusModalLead)}
         />

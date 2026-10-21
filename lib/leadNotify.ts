@@ -34,8 +34,13 @@ export async function notifyLead(args: {
   message: string
   type: string
   leadId: number
+  /**
+   * 눌렀을 때 갈 곳. 기본은 그 리드다(leadLink).
+   * 배정이 포캐스트를 함께 만들었을 때처럼 **할 일이 다른 화면에 있는** 경우에만 바꾼다.
+   */
+  link?: string
 }): Promise<void> {
-  const { engineerIds, title, message, type, leadId } = args
+  const { engineerIds, title, message, type, leadId, link } = args
   if (!engineerIds.length) {
     console.error('[leadNotify] 알림 대상이 없습니다', { type, leadId })
     return
@@ -46,7 +51,7 @@ export async function notifyLead(args: {
       title,
       message,
       type,
-      link: leadLink(leadId),
+      link: link ?? leadLink(leadId),
       is_read: false,
     }))
   )
