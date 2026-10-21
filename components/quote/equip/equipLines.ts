@@ -15,7 +15,7 @@
 //   저장할 때는 모든 묶음이 qty_per_unit = 줄 수량 ÷ 장비 수량으로 돌아간다.
 
 import type { PriceItem, QuoteRow } from '@/app/quote/types'
-import { calcRow, createDiscountRow, createDomesticRow, createRow } from '@/app/quote/calc'
+import { calcRow, createDiscountRow, createDomesticRow, createManualJpyRow, createRow } from '@/app/quote/calc'
 import type { QuoteTemplateItem, TemplateItemInput } from '@/lib/quoteTemplates'
 
 /** 모달의 네 묶음. base·option·include 는 quote_items.group_kind 로 그대로 저장된다. */
@@ -127,22 +127,39 @@ export function lineFromPriceItem(
 
 /**
  * 가격표에 없는 항목을 직접 넣는다.
- *   국내조달품 — row_kind = domestic. 입력한 금액이 **원가**가 된다(calc.ts 의 domestic 분기).
- *   그 밖      — 가격표 품목과 같은 모양이되 selectedItem 이 없다(구입가를 모른다).
- *                판매단가를 직접 넣으면 그 값이 쓰인다.
+ *
+ *   국내조달품 — row_kind = domestic. 입력한 **금액(원)** 이 원가가 된다(calc.ts 의 domestic 분기).
+ *   포함사항   — 금액이 없는 것이 정의다. 가격칸을 받지 않는다.
+ *   본체·옵션  — row_kind = manual_jpy. 입력한 **구입가(엔)** 로 원가를 계산하고
+ *                판매단가는 이익률로 역산한다(calc.ts 의 manual_jpy 분기).
+ *                가격표 품목과 같은 모양(price_list)으로 두면 구입가를 담을 칸이 없어
+ *                원가 0 · 이익률 100% 로 보인다.
+ *
+ * ⚠ 템플릿에는 **구입가가 저장되지 않는다**(품번이 없어 가격표에서 되찾을 수 없다).
+ *   직접 추가한 줄은 템플릿으로 저장한 뒤 다시 불러오면 금액이 비어 있다 — 그때 다시 적는다.
  */
 export function lineFromManual(
   group: EquipGroup,
-  opts: { partCode?: string; name: string; qtyPerUnit: number; price?: number | null; checked?: boolean; quantity?: number },
+  opts: {
+    partCode?: string; name: string; qtyPerUnit: number; checked?: boolean; quantity?: number
+    /** 국내조달품의 금액(원). 불러오기(템플릿)에서도 이 칸을 쓴다. */
+    price?: number | null
+    /** 본체·옵션의 구입가(엔). */
+    costJpy?: number | null
+  },
 ): EquipLine {
+  const manualJpy = group === 'base' || group === 'option'
+  const base = manualJpy ? createManualJpyRow() : baseRow(group)
   const row: QuoteRow = {
-    ...baseRow(group),
+    ...base,
     id: nextId(),
     partCode: (opts.partCode ?? '').trim(),
     itemText: opts.name.trim(),
     quantity: Math.max(0, Math.round(opts.quantity ?? opts.qtyPerUnit)),
-    price_mode: 'price',
-    manual_unit_price: opts.price ?? 0,
+    // 구입가를 받은 줄은 이익률로 단가를 역산한다(rate). 그 밖은 적은 금액을 그대로 쓴다.
+    price_mode: manualJpy ? 'rate' : 'price',
+    manual_cost_jpy: manualJpy ? (opts.costJpy ?? 0) : 0,
+    manual_unit_price: manualJpy ? 0 : (opts.price ?? 0),
   }
   return { row, checked: opts.checked !== false, group, qtyPerUnit: opts.qtyPerUnit }
 }

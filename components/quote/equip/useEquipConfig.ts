@@ -44,6 +44,15 @@ export type EquipConfigArgs = {
   defaultTariff: number
 }
 
+/** 「직접 추가」가 받는 네 칸. 금액은 묶음에 따라 뜻이 다르다(아래 주석). */
+export type ManualInput = {
+  partCode: string
+  name: string
+  qty: number
+  /** 본체·옵션은 구입가(엔), 국내조달품은 금액(원), 포함사항은 쓰지 않는다. */
+  amount: number
+}
+
 export function useEquipConfig(args: EquipConfigArgs) {
   const { supabase, open, myId, category, defaultExchangeRate, defaultTariff } = args
 
@@ -198,13 +207,22 @@ export function useEquipConfig(args: EquipConfigArgs) {
       : [...prev, lineFromPriceItem(item, group, { checked: true, qtyPerUnit: 1, sellPrice: null })]))
   }, [applyLines])
 
-  /** 가격표에 없는 항목을 직접 붙인다(국내조달품은 금액이 원가다). */
-  const addManualItem = useCallback((group: EquipGroup, name: string, price: number) => {
-    const text = name.trim()
-    if (!text) return
+
+  /** 가격표에 없는 항목을 직접 붙인다. 품명이 없으면 아무 일도 하지 않는다. */
+  const addManualItem = useCallback((group: EquipGroup, input: ManualInput) => {
+    const name = input.name.trim()
+    if (!name) return
+    const qty = Math.max(1, Math.round(input.qty) || 1)
     applyLines(prev => (prev.length >= TEMPLATE_ITEM_MAX
       ? prev
-      : [...prev, lineFromManual(group, { name: text, qtyPerUnit: 1, price })]))
+      : [...prev, lineFromManual(group, {
+        partCode: input.partCode,
+        name,
+        qtyPerUnit: qty,
+        // 본체·옵션은 구입가(엔), 국내조달품은 금액(원)이다. 포함사항은 금액이 없다.
+        costJpy: group === 'base' || group === 'option' ? input.amount : null,
+        price: group === 'domestic' ? input.amount : null,
+      })]))
   }, [applyLines])
 
   // ── 합계 (견적 화면과 같은 함수) ──

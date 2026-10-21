@@ -9,8 +9,14 @@
 // 찾는 범위는 **80 가격표뿐**이다 — 이 모달은 장비 양식(equip80) 전용이고, 20 가격표
 // 품목이 장비 구성에 섞이면 단가 기준이 달라진다(lib/priceListKinds.ts 의 sheetsForLine).
 //
-// 「직접 추가」는 가격표에 없는 항목이다. 국내조달품에서는 금액칸이 **원가**이고
-// 그 밖의 묶음에서는 **판매단가**다 — 칸 이름을 묶음에 따라 바꿔 적는다.
+// ── 「직접 추가」 ───────────────────────────────────────────────────────────
+//   가격표에 없는 항목이다. 누르면 검색창 자리에 **품번 · 품명 · 수량**(+ 금액) 칸이 나오고,
+//   확인(엔터 또는 「추가」)해야 줄이 생긴다. 예전에는 검색창에 친 글자가 그대로 품명이 된
+//   줄이 **바로** 생겨서, 검색하려다 줄이 생기는 일이 있었다.
+//   취소(ESC 또는 「취소」)하면 칸이 닫힌다. 품번은 비워도 된다(표·견적서에 「-」로 나간다).
+//
+//   금액 칸은 묶음에 따라 뜻이 다르다 — 본체·옵션은 **구입가(엔)**, 국내조달품은
+//   **금액(원)**, 포함사항은 금액이 없어 칸을 두지 않는다(lib 쪽 lineFromManual 참조).
 
 import { useCallback, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
@@ -20,6 +26,7 @@ import type { PriceItem } from '@/app/quote/types'
 import { C, S, num, parseNum } from './equipStyles'
 import { isPriceless } from './equipLines'
 import type { EquipGroup } from './equipLines'
+import type { ManualInput } from './useEquipConfig'
 
 /** 장비 구성은 80 가격표만 쓴다. 한 번 만들어 두고 같은 배열을 넘긴다. */
 const EQUIP_SHEETS = sheetsForLine('80')
@@ -27,7 +34,7 @@ const EQUIP_SHEETS = sheetsForLine('80')
 export type EquipAddRowProps = {
   group: EquipGroup
   onAddPriceItem: (item: PriceItem) => void
-  onAddManual: (name: string, price: number) => void
+  onAddManual: (input: ManualInput) => void
   /** 줄 수 상한에 닿았다 — 더 넣지 못한다. */
   full: boolean
 }
@@ -38,8 +45,10 @@ export default function EquipAddRow({ group, onAddPriceItem, onAddManual, full }
   const [found, setFound] = useState<PriceItem[]>([])
   const [open, setOpen] = useState(false)
   const [manual, setManual] = useState(false)
+  const [mCode, setMCode] = useState('')
   const [mName, setMName] = useState('')
-  const [mPrice, setMPrice] = useState('')
+  const [mQty, setMQty] = useState('1')
+  const [mAmount, setMAmount] = useState('')
 
   const run = useCallback(async (text: string) => {
     setQ(text)
@@ -60,15 +69,35 @@ export default function EquipAddRow({ group, onAddPriceItem, onAddManual, full }
     setOpen(false)
   }
 
-  const addManual = () => {
-    if (!mName.trim()) return
-    onAddManual(mName, parseNum(mPrice))
-    setMName('')
-    setMPrice('')
+  /** 칸을 비우고 폼을 닫는다. */
+  const closeManual = () => {
     setManual(false)
+    setMCode('')
+    setMName('')
+    setMQty('1')
+    setMAmount('')
   }
 
-  const priceLabel = group === 'domestic' ? '금액(원가)' : '판매단가'
+  /** 확인 — 품명이 있어야 줄이 생긴다. 나머지는 비어도 된다. */
+  const addManual = () => {
+    if (!mName.trim()) return
+    onAddManual({
+      partCode: mCode,
+      name: mName,
+      qty: parseNum(mQty) || 1,
+      amount: parseNum(mAmount),
+    })
+    closeManual()
+  }
+
+  /** 엔터로 확인, ESC 로 취소. 칸마다 걸지 않고 폼 전체에 한 번 건다. */
+  const onManualKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); addManual() }
+    if (e.key === 'Escape') { e.preventDefault(); closeManual() }
+  }
+
+  // 금액 칸 — 묶음에 따라 뜻이 다르다. 포함사항은 칸을 두지 않는다.
+  const amountLabel = group === 'domestic' ? '금액(원)' : '구입가(엔)'
 
   return (
     <div style={S.addWrap}>
@@ -93,27 +122,51 @@ export default function EquipAddRow({ group, onAddPriceItem, onAddManual, full }
       {manual && (
         <>
           <input
+            value={mCode}
+            onChange={e => setMCode(e.target.value)}
+            onKeyDown={onManualKey}
+            placeholder="품번 (없으면 비움)"
+            aria-label="품번"
+            style={{ ...S.input, width: 110, flexShrink: 0 }}
+          />
+          <input
             value={mName}
             onChange={e => setMName(e.target.value)}
-            placeholder="품명 (가격표에 없는 항목)"
+            onKeyDown={onManualKey}
+            placeholder="품명"
+            aria-label="품명"
+            autoFocus
             style={{ ...S.input, flex: 1, minWidth: 0 }}
+          />
+          <input
+            value={mQty}
+            onChange={e => setMQty(e.target.value)}
+            onKeyDown={onManualKey}
+            placeholder="수량"
+            aria-label="수량"
+            style={{ ...S.qty, flexShrink: 0 }}
           />
           {!isPriceless(group) && (
             <input
-              value={mPrice}
-              onChange={e => setMPrice(e.target.value)}
-              placeholder={priceLabel}
-              style={S.num}
+              value={mAmount}
+              onChange={e => setMAmount(e.target.value)}
+              onKeyDown={onManualKey}
+              placeholder={amountLabel}
+              aria-label={amountLabel}
+              style={{ ...S.num, flexShrink: 0 }}
             />
           )}
-          <button type="button" onClick={addManual} style={S.miniBtn}>추가</button>
-          <button type="button" onClick={() => { setManual(false); setMName(''); setMPrice('') }} style={{ ...S.miniBtn, color: C.MUT }}>
+          <button type="button" onClick={addManual} disabled={!mName.trim()} style={mName.trim() ? S.miniBtn : S.btnOff}>
+            추가
+          </button>
+          <button type="button" onClick={closeManual} style={{ ...S.miniBtn, color: C.MUT }}>
             취소
           </button>
         </>
       )}
 
       {!manual && <span style={S.hint}>검색 결과에 시트(계열) 표시</span>}
+      {manual && <span style={S.hint}>엔터로 추가 · ESC 로 취소</span>}
       </div>
 
       {/* 검색 결과 — 흐름 안에 쌓는다(절대 위치로 띄우면 묶음 칸에 잘린다. equipStyles 참조). */}

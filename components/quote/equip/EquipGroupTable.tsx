@@ -15,6 +15,7 @@ import { C, S, num, parseNum } from './equipStyles'
 import EquipAddRow from './EquipAddRow'
 import { GROUP_HINTS, GROUP_TITLES, hasCost, isFromPriceList, isPriceless, isQtyLocked } from './equipLines'
 import type { EquipGroup, EquipLine } from './equipLines'
+import type { ManualInput } from './useEquipConfig'
 
 export type EquipGroupTableProps = {
   group: EquipGroup
@@ -27,7 +28,7 @@ export type EquipGroupTableProps = {
   onText: (id: string, field: 'itemText' | 'partCode', value: string) => void
   onRemove: (id: string) => void
   onAddPriceItem: (group: EquipGroup, item: PriceItem) => void
-  onAddManual: (group: EquipGroup, name: string, price: number) => void
+  onAddManual: (group: EquipGroup, input: ManualInput) => void
 }
 
 export default function EquipGroupTable(props: EquipGroupTableProps) {
@@ -172,7 +173,7 @@ export default function EquipGroupTable(props: EquipGroupTableProps) {
         group={group}
         full={full}
         onAddPriceItem={item => props.onAddPriceItem(group, item)}
-        onAddManual={(name, price) => props.onAddManual(group, name, price)}
+        onAddManual={input => props.onAddManual(group, input)}
       />
     </div>
   )
