@@ -371,6 +371,27 @@ export function stripModelSuffix(name: string, model: string): string {
   return t.endsWith(tail) ? t.slice(0, -tail.length).trimEnd() : name
 }
 
+/** 금액 표기 — 음수는 빼는 금액이라는 뜻이므로 부호를 붙인다. */
+export const won = (v: number) => (v < 0 ? `− ₩ ${numKR(Math.abs(v))}` : `₩ ${numKR(v)}`)
+
+/**
+ * 한 줄의 **금액 칸** — 단가와 공급가액에 무엇을 찍는가.
+ *
+ * 세 가지가 섞여 있어 규칙을 한곳에 모았다(세 양식이 이 함수를 함께 쓴다).
+ *   할인 줄        — **음수 금액**을 찍는다(「− ₩ 30,000」). 단가 칸은 비운다.
+ *                    ⚠ 할인은 calcRow 에서 단가가 0 이다. 그래서 「단가 0 이면 금액 없음」
+ *                      규칙에 같이 걸려 **공급가액이 「-」로만 찍히던 버그**가 있었다
+ *                      (합계에는 빠지는데 줄에는 금액이 안 보였다. 6단계 5e3549f 부터).
+ *   포함사항·원가 줄 — 금액 칸이 「-」다. 가격 없는 구성품이고, 원화 원가 줄은 고객에게
+ *                    청구하지 않는다(단가가 0 이 아니어도 묶음이 포함사항이면 「-」다).
+ *   그 밖          — 단가와 공급가액을 그대로 찍는다(공급가 0 이면 빈 칸).
+ */
+export function rowAmountCells(row: QuoteRow, include: boolean): { unit: string; supply: string } {
+  if (row.row_kind === 'discount') return { unit: '', supply: won(row.supply_price) }
+  if (include || row.unit_price === 0) return { unit: '', supply: '-' }
+  return { unit: won(row.unit_price), supply: row.supply_price !== 0 ? won(row.supply_price) : '' }
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // 줄 묶기 — 장비 양식의 그룹·계층 번호
 // ════════════════════════════════════════════════════════════════════════════
@@ -613,8 +634,6 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({
   const fitsOnePage = estimateLines(drawRows, nameBoxPt, size) <= availableRows(size, sumRows, noteLines.length)
   const subSize = Math.max(MIN_SIZE, size - 1)   // 품명 아래 설명 줄은 한 단계 작게
 
-  // 금액 표기 — 음수는 빼는 금액이라는 뜻이므로 부호를 붙인다.
-  const won = (v: number) => (v < 0 ? `− ₩ ${numKR(Math.abs(v))}` : `₩ ${numKR(v)}`)
   const nameCol = colOf('name')!
   const codeCol = colOf('code')!
   const modelCol = colOf('model')
@@ -751,8 +770,10 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({
 
             const row = dr.row
             const isDiscount = row.row_kind === 'discount'
-            // 포함사항 줄은 수량만 있고 금액이 없다. 할인은 붉은 글씨.
-            const noAmount = dr.include || row.unit_price === 0
+            // 금액 칸은 규칙이 셋이라 함수에 모아 뒀다(위 rowAmountCells).
+            const money = rowAmountCells(row, dr.include)
+            // 「-」는 칸 가운데에 놓는다(금액은 오른쪽).
+            const dash = money.supply === '-'
             const textColor = isDiscount ? C_DISCOUNT : (dr.include ? C_INCLUDE : undefined)
 
             // 품번 — 칸 폭을 재서 글자 단위로 끊고, 아주 길면 한 단계 줄인다.
@@ -821,20 +842,20 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({
                     )
                   }
                   if (c.key === 'unit') {
-                    // 금액이 없는 줄은 단가 칸을 **비운다**(「포함」 글자를 쓰지 않는다).
+                    // 금액이 없는 줄·할인 줄은 단가 칸을 **비운다**(「포함」 글자를 쓰지 않는다).
                     return (
                       <View key={c.key} style={[...base, { alignItems: 'flex-end' }]}>
                         <Text style={{ fontSize: size, textAlign: 'right', color: textColor }}>
-                          {noAmount ? '' : won(row.unit_price)}
+                          {money.unit}
                         </Text>
                       </View>
                     )
                   }
-                  // 공급가액 — 금액이 없는 줄은 「-」를 칸 가운데에.
+                  // 공급가액 — 「-」는 칸 가운데에, 금액은 오른쪽에.
                   return (
-                    <View key={c.key} style={[...base, { alignItems: noAmount ? 'center' : 'flex-end' }]}>
-                      <Text style={{ fontSize: size, textAlign: noAmount ? 'center' : 'right', color: textColor }}>
-                        {noAmount ? '-' : (row.supply_price !== 0 ? won(row.supply_price) : '')}
+                    <View key={c.key} style={[...base, { alignItems: dash ? 'center' : 'flex-end' }]}>
+                      <Text style={{ fontSize: size, textAlign: dash ? 'center' : 'right', color: textColor }}>
+                        {money.supply}
                       </Text>
                     </View>
                   )
