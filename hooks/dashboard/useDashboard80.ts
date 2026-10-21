@@ -286,7 +286,7 @@ export function useDashboard80() {
       if (!alive.current) return false
       if (oppRes.error) {
         console.error('[dashboard80] opportunities failed', oppRes.error)
-        toast.error(`영업기회를 불러오지 못했습니다 (${oppRes.error.code || oppRes.error.message})`)
+        toast.error(`포캐스트를 불러오지 못했습니다 (${oppRes.error.code || oppRes.error.message})`)
       }
       const opps = (oppRes.data as SalesOpportunity[]) ?? []
 

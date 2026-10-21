@@ -260,7 +260,7 @@ export default function Dashboard80Page() {
           {/* ── 왼쪽: 영업기회 ── */}
           <div style={cardStyle}>
             <CardHead
-              title="영업기회"
+              title="포캐스트"
               right={
                 <>
                   <Count>{opportunities.length}건</Count>
@@ -273,7 +273,7 @@ export default function Dashboard80Page() {
             {loading ? (
               <Empty text="불러오는 중..." />
             ) : opportunities.length === 0 ? (
-              <Empty text="진행 중인 영업기회가 없습니다" />
+              <Empty text="진행 중인 포캐스트가 없습니다" />
             ) : (
               <>
                 {/* 단계별 분포 — 가운뎃점으로 이어 한 문장처럼 읽히게 한다.

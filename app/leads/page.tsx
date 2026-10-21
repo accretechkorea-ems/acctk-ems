@@ -635,8 +635,8 @@ function LeadsPageInner() {
     if (!pickedCustomer) { toast.error('고객사를 선택해주세요.'); return }
     if (lead.assigned_to !== myEngineerId) { toast.error('배정받은 담당자만 전환할 수 있습니다.'); return }
     const ok = await confirm({
-      title: '영업기회로 전환',
-      message: `${pickedCustomer.company_name} 로 영업기회를 만듭니다. 전환한 뒤에는 되돌릴 수 없습니다.`,
+      title: '포캐스트로 전환',
+      message: `${pickedCustomer.company_name} 로 포캐스트를 만듭니다. 전환한 뒤에는 되돌릴 수 없습니다.`,
       confirmText: '전환',
     })
     if (!ok) return
@@ -646,7 +646,7 @@ function LeadsPageInner() {
       lead.lead_id,
       { action: 'convert', customerId: pickedCustomer.customer_id },
       { status: LEAD_STATUS_CONVERTED },
-      '영업기회로 전환했습니다.',
+      '포캐스트로 전환했습니다.',
     )
     if (!res) return
     // 서버가 만든 기회 번호로 화면을 맞춘다.
@@ -814,7 +814,7 @@ function LeadsPageInner() {
                   // (메모는 관리 카드 안에서 바로 고치므로 여기 두지 않는다)
                   const actions = isAssignee
                     ? [
-                        { label: '영업기회 전환', value: 'convert', disabled: closed },
+                        { label: '포캐스트 전환', value: 'convert', disabled: closed },
                         { label: '미진행 처리', value: 'skip', disabled: closed },
                       ]
                     : []
@@ -1082,7 +1082,7 @@ function LeadsPageInner() {
                                   </span>
                                   <span style={{ flex: '1 1 240px', minWidth: 0, fontSize: 13, color: MUTED, lineHeight: '20px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                                     {converted
-                                      ? `영업기회 #${lead.converted_opportunity_id} 로 전환되었습니다.`
+                                      ? `포캐스트 #${lead.converted_opportunity_id} 로 전환되었습니다.`
                                       : ((lead.status === LEAD_STATUS_BLOCKED ? lead.block_reason : lead.skip_reason)?.trim()
                                         || '사유가 남아 있지 않습니다.')}
                                     {/* 배정 불가는 누가 언제 눌렀는지까지 밝힌다 — 되돌릴 수 있는 처리라
@@ -1162,7 +1162,7 @@ function LeadsPageInner() {
                                       onClick={() => convert(lead)}
                                       style={primaryBtn(busy || !pickedCustomer)}
                                     >
-                                      {busy ? '전환 중...' : '영업기회로 전환'}
+                                      {busy ? '전환 중...' : '포캐스트로 전환'}
                                     </button>
                                     <button onClick={closePanel} style={ghostBtn}>취소</button>
                                   </div>

@@ -106,7 +106,7 @@ export default function OpportunityCard({ opp, lastActivity, canEdit, onOpen, on
             className="pl-card-action"
             onPointerDown={e => e.stopPropagation()}
             onClick={onWriteQuote}
-            title="이 기회로 견적서를 작성합니다"
+            title="이 포캐스트로 견적서를 작성합니다"
             style={{ flexShrink: 0, padding: '1px 8px', background: 'none', color: '#234ea2', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
           >
             견적 쓰기
@@ -140,7 +140,7 @@ export default function OpportunityCard({ opp, lastActivity, canEdit, onOpen, on
             className="pl-card-action"
             onPointerDown={e => e.stopPropagation()}
             onClick={onClose}
-            title="이 기회를 종료합니다"
+            title="이 포캐스트를 종료합니다"
             style={{ marginLeft: 'auto', flexShrink: 0, padding: '1px 8px', background: '#f3f4f6', color: '#6b7280', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit' }}
           >
             종료

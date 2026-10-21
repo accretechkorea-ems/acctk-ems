@@ -46,7 +46,7 @@ export function rowsAoA(a: ForecastExcelArgs): (string | number)[][] {
   const body = a.rows.map(r => [
     r.month,
     r.status,
-    r.source === 'quote' ? '견적' : '영업기회',
+    r.source === 'quote' ? '견적' : '포캐스트',
     a.engineerName(r.engineerId),
     a.customerName(r.customerId),
     r.dealerId ? a.customerName(r.dealerId) : '직판',

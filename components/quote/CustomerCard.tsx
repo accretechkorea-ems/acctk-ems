@@ -377,7 +377,7 @@ export default function CustomerCard({ errors, clearError, category, customer, e
         (업체 미선택·기회 없음 상태에서는 안내만 남고 늘 비어 있던 칸이다) */}
     {selectableOpportunities.length > 0 && (
       <div className="q-box" style={{ marginBottom: 8, animation: 'modal-in 0.15s ease' }}>
-        <span className="q-box-label">영업기회</span>
+        <span className="q-box-label">포캐스트</span>
         <select
           className="q-box-field"
           value={opportunityId ?? ''}

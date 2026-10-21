@@ -75,21 +75,21 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
 
     if (error) {
       console.error('[customer] save sales_opportunity failed', error)
-      toast.error(error.message || '영업기회 저장 중 오류가 발생했습니다')
+      toast.error(error.message || '포캐스트 저장 중 오류가 발생했습니다')
       return
     }
     const wasEditing = !!editingOpp
     closeOppModal()
     // 목록 갱신이 실패하면 fetchDetail 쪽에서 알리므로 성공 안내는 띄우지 않는다.
-    if (await fetchDetail()) toast.success(wasEditing ? '영업기회가 수정되었습니다' : '영업기회가 등록되었습니다')
+    if (await fetchDetail()) toast.success(wasEditing ? '포캐스트가 수정되었습니다' : '포캐스트가 등록되었습니다')
   }
 
   const handleDeleteOpp = async () => {
     if (!editingOpp) return
     if (!canEditOpp(editingOpp)) { toast.error('담당자 본인만 삭제할 수 있습니다'); return }
     const ok = await confirmDialog({
-      title: '영업기회 삭제',
-      message: `'${editingOpp.title}'${josa(editingOpp.title, '을')} 삭제하시겠습니까?\n연결된 활동 기록은 남고 기회 연결만 풀립니다.`,
+      title: '포캐스트 삭제',
+      message: `'${editingOpp.title}'${josa(editingOpp.title, '을')} 삭제하시겠습니까?\n연결된 활동 기록은 남고 포캐스트 연결만 풀립니다.`,
       confirmText: '삭제', variant: 'danger',
     })
     if (!ok) return
@@ -108,11 +108,11 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
     setIsSavingOpp(false)
     if (error) {
       console.error('[customer] delete sales_opportunity failed', error)
-      toast.error(error.message || '영업기회 삭제 중 오류가 발생했습니다')
+      toast.error(error.message || '포캐스트 삭제 중 오류가 발생했습니다')
       return
     }
     closeOppModal()
-    if (await fetchDetail()) toast.success('영업기회가 삭제되었습니다')
+    if (await fetchDetail()) toast.success('포캐스트가 삭제되었습니다')
   }
 
   // 단계만 바꾸는 경로. 업체 상세(요약 패널)와 파이프라인(카드)이 같이 쓴다.

@@ -260,7 +260,7 @@ export function useQuotePrefill({
       const { data: o, error } = await supabase.from('sales_opportunities')
         .select('opportunity_id, customer_id, title')
         .eq('opportunity_id', prefillOpportunityId).maybeSingle()
-      if (error || !o) { toast.error('영업기회를 불러오지 못했습니다'); return }
+      if (error || !o) { toast.error('포캐스트를 불러오지 못했습니다'); return }
       if (o.customer_id != null) {
         const { data: c } = await supabase.from('customers')
           .select('customer_id, company_name, address, status')
@@ -270,7 +270,7 @@ export function useQuotePrefill({
       }
       // 고객을 고르면 기회 목록이 다시 채워진다 — 그 **뒤에** 고른다(순서가 바뀌면 선택이 지워진다).
       setOpportunityId(o.opportunity_id)
-      setPrefillNotice(`영업기회 「${o.title}」의 견적서를 작성합니다`)
+      setPrefillNotice(`포캐스트 「${o.title}」의 견적서를 작성합니다`)
     }
     void run()
     // eslint-disable-next-line react-hooks/exhaustive-deps

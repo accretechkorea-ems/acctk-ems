@@ -52,7 +52,7 @@ import type { SalesOpportunity } from '@/components/customer/types'
 // 실주는 열로 두지 않고 판 아래에 접어둔다 (평소엔 시야에서 빼고, 필요할 때만 펼쳐 본다)
 const BOARD_STAGES = STAGES.filter(s => s !== '실주')
 
-type Owner = '내 기회' | '전체'
+type Owner = '내 포캐스트' | '전체'
 
 /** 내보내기 팝오버의 선택칸 — 화면 다른 곳의 입력칸과 같은 모양이다. */
 const popSel: React.CSSProperties = {
@@ -160,7 +160,7 @@ export default function PipelinePage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return opportunities.filter(o => {
-      if (owner === '내 기회' && o.engineer_id !== me.engineer_id) return false
+      if (owner === '내 포캐스트' && o.engineer_id !== me.engineer_id) return false
       if (!q) return true
       return o.title.toLowerCase().includes(q)
         || (o.customers?.company_name ?? '').toLowerCase().includes(q)
@@ -305,7 +305,7 @@ export default function PipelinePage() {
             {/* 두 항목 폭을 같게(equal) 두고, 폭은 긴 쪽인 '내 기회' 기준으로 잡는다 */}
             <div style={{ flexShrink: 0 }}>
               <SegmentedControl
-                options={['내 기회', '전체']}
+                options={['내 포캐스트', '전체']}
                 value={owner}
                 onChange={v => setOwner(v as Owner)}
                 equal
@@ -333,7 +333,7 @@ export default function PipelinePage() {
               onMouseEnter={e => { e.currentTarget.style.background = '#1c3e87' }}
               onMouseLeave={e => { e.currentTarget.style.background = '#234ea2' }}
               style={{ padding: '8px 16px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, transition: 'background 0.15s ease' }}>
-              + 영업기회
+              + 포캐스트
             </button>
           </div>
         </div>
@@ -427,7 +427,7 @@ export default function PipelinePage() {
 
             {filtered.length === 0 && (
               <div style={{ marginTop: 12, background: '#fff', border: '1px solid #ebebeb', borderRadius: 8, padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
-                조건에 맞는 영업기회가 없습니다
+                조건에 맞는 포캐스트가 없습니다
               </div>
             )}
 

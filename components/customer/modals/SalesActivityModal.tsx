@@ -122,7 +122,7 @@ export default function SalesActivityModal({ isOpen, activity, contacts, opportu
           </div>
 
           <div>
-            <label style={labelStyle}>영업기회</label>
+            <label style={labelStyle}>포캐스트</label>
             <select value={form.opportunity_id ?? ''}
               onChange={(e) => setForm(p => ({ ...p, opportunity_id: e.target.value ? Number(e.target.value) : null }))}
               style={fieldStyle}>
@@ -131,7 +131,7 @@ export default function SalesActivityModal({ isOpen, activity, contacts, opportu
                 <option key={o.opportunity_id} value={o.opportunity_id}>{o.title}</option>
               ))}
             </select>
-            <div style={{ marginTop: 5, fontSize: 11, color: '#9ca3af' }}>진행 중인 기회만 고를 수 있습니다</div>
+            <div style={{ marginTop: 5, fontSize: 11, color: '#9ca3af' }}>진행 중인 포캐스트만 고를 수 있습니다</div>
           </div>
 
           <div>

@@ -376,7 +376,7 @@ export async function POST(req: Request) {
   // ── 영업기회 전환 — 담당자만 ──
   // 관리자는 전환하지 않는다. 자기 자신을 담당자로 배정한 경우에만 담당자 자격으로 가능하다.
   if (action === 'convert') {
-    if (!assignee) return bad('배정받은 담당자만 영업기회로 전환할 수 있습니다.', 403)
+    if (!assignee) return bad('배정받은 담당자만 포캐스트로 전환할 수 있습니다.', 403)
     if (isLeadClosed(lead.status) || lead.converted_opportunity_id) return bad('이미 종결된 리드입니다.')
 
     const customerId = Number(body.customerId)
@@ -402,7 +402,7 @@ export async function POST(req: Request) {
       .single()
     if (oppErr || !opp) {
       console.error('[lead-manage] opportunity insert failed', { leadId, error: oppErr })
-      return bad('영업기회를 만들지 못했습니다.', 500)
+      return bad('포캐스트를 만들지 못했습니다.', 500)
     }
 
     // 회의록·요청사항을 영업활동으로 남긴다. 실패해도 전환 자체는 되돌리지 않는다.
@@ -424,7 +424,7 @@ export async function POST(req: Request) {
     if (updErr) {
       // 기회는 만들어졌는데 리드를 닫지 못한 상태 — 사람이 알아야 하므로 로그를 남기고 실패로 답한다.
       console.error('[lead-manage] lead close failed after convert', { leadId, opportunityId: opp.opportunity_id, error: updErr })
-      return bad('영업기회는 만들어졌지만 리드 상태를 바꾸지 못했습니다. 관리자에게 알려주세요.', 500)
+      return bad('포캐스트는 만들어졌지만 리드 상태를 바꾸지 못했습니다. 관리자에게 알려주세요.', 500)
     }
 
     return NextResponse.json({ success: true, opportunityId: opp.opportunity_id, activityLogged: !actErr })

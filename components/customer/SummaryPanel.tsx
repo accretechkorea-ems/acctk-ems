@@ -318,7 +318,7 @@ export default function SummaryPanel({
       {/* ── 영업기회 ── */}
       <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #ebebeb' }}>
         {/* 위 요약 줄과 같은 형태(라벨—값)를 쓴다. 아래 목록이 곧 내용이라 셰브론은 두지 않는다. */}
-        <Row label="영업기회" value={open.length > 0 ? `${open.length}건` : NONE} muted={open.length === 0} />
+        <Row label="포캐스트" value={open.length > 0 ? `${open.length}건` : NONE} muted={open.length === 0} />
 
         {open.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, margin: '8px -8px 0' }}>
@@ -399,7 +399,7 @@ export default function SummaryPanel({
             transition: 'border-color 0.15s ease',
           }}
         >
-          + 영업기회
+          + 포캐스트
         </button>
       </div>
     </div>

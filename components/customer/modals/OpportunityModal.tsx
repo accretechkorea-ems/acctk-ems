@@ -120,7 +120,7 @@ export default function OpportunityModal({
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexShrink: 0 }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>
-            {opportunity ? (canEdit ? '영업기회 수정' : '영업기회') : '영업기회 등록'}
+            {opportunity ? (canEdit ? '포캐스트 수정' : '포캐스트') : '포캐스트 등록'}
             {opportunity && isClosed(opportunity) && (
               <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '3px 9px', verticalAlign: 'middle' }}>
                 {opportunity.stage === '실주' ? '실주' : '종료'}
@@ -290,7 +290,7 @@ export default function OpportunityModal({
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>{linkedQuotes.length}건</span>
               </div>
               {linkedQuotes.length === 0 ? (
-                <div style={{ fontSize: 12, color: '#9ca3af' }}>연결된 견적이 없습니다. 견적서를 쓸 때 이 기회를 고르면 여기 모입니다.</div>
+                <div style={{ fontSize: 12, color: '#9ca3af' }}>연결된 견적이 없습니다. 견적서를 쓸 때 이 포캐스트를 고르면 여기 모입니다.</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {linkedQuotes.map(q => (
@@ -324,7 +324,7 @@ export default function OpportunityModal({
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>{linked.length}건</span>
               </div>
               {linked.length === 0 ? (
-                <div style={{ fontSize: 12, color: '#9ca3af' }}>연결된 활동이 없습니다. 활동 기록에서 이 기회를 고르면 여기 모입니다.</div>
+                <div style={{ fontSize: 12, color: '#9ca3af' }}>연결된 활동이 없습니다. 활동 기록에서 이 포캐스트를 고르면 여기 모입니다.</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {linked.map(a => (
