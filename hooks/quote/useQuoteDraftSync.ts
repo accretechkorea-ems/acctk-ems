@@ -70,7 +70,7 @@ export type UseQuoteDraftSyncArgs = {
   setEuQuery: React.Dispatch<React.SetStateAction<string>>
   resolveEuParent: (customerId: number | null) => void
   setReceiver: React.Dispatch<React.SetStateAction<string>>
-  setRemarks: React.Dispatch<React.SetStateAction<string>>
+  setRemarks: (v: string | null) => void
   setShowSignature: React.Dispatch<React.SetStateAction<boolean>>
   setTermsOpen: React.Dispatch<React.SetStateAction<boolean>>
   setTerms: React.Dispatch<React.SetStateAction<Terms>>

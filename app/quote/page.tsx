@@ -27,13 +27,14 @@ import ConfirmQuoteModal from '@/components/quote/ConfirmQuoteModal'
 import QuoteItemRow from './QuoteItemRow'
 import { Z } from '@/lib/zIndex'
 import { DEFAULT_TERMS, normalizeTerms, termKeysFor, type Terms } from '@/lib/quoteTerms'
+import { defaultRemarksFor } from '@/lib/quoteRemarks'
 import { normalizeSubLines } from '@/lib/quoteSubLines'
 
 /**
  * 비고 기본 문구. 내용은 그대로 두고, 사용자가 손댔는지 비교하려고 상수로 뺐다.
  */
 
-const DEFAULT_REMARKS = '* 발주 진행 시 팩스 또는 메일로 발주서 회신 요망\n   (FAX : 031-786-4090)'
+// 양식별 기본 문구는 lib/quoteRemarks.ts 에 있다(아래 defaultRemarks).
 
 
 /**
@@ -115,7 +116,10 @@ function QuotePageInner() {
   const [rateLoading, setRateLoading] = useState(false)
 
   const [receiver, setReceiver] = useState('')
-  const [remarks, setRemarks] = useState(DEFAULT_REMARKS)
+  // 비고 — **손댄 글자만** 상태로 들고, 손대지 않았으면 양식의 기본 문구를 그대로 보여 준다.
+  // null = 아직 손대지 않았다. 이렇게 두면 양식을 바꿀 때 기본 문구가 **저절로** 따라오고,
+  // effect 로 상태를 덮어쓰지 않아도 된다(덮어쓰면 사람이 적던 글자를 지울 위험이 생긴다).
+  const [remarksDraft, setRemarksDraft] = useState<string | null>(null)
   // 비고는 기본 문구가 채워져 있고 고칠 일이 드물어 접어서 시작한다(내용은 계속 마운트돼 있다).
   const [remarksOpen, setRemarksOpen] = useState(false)
   // 견적서 PDF 하단 서명란 표시 여부. 저장하지 않는 화면 상태라 견적을 다시 열면 항상 꺼진 상태로 시작한다.
@@ -196,6 +200,12 @@ function QuotePageInner() {
   // 조건 네 줄 — 미리보기도 다른 칸과 같은 600ms 디바운스를 쓴다(글자마다 PDF 를 다시 그리지 않게).
   const debouncedTerms = useDebounce(terms, 600)
   const debouncedTermsOpen = useDebounce(termsOpen, 600)
+
+  // 비고 — 고른 양식의 기본 문구. 손댔으면(remarksDraft) 그 글자가 이긴다.
+  const defaultRemarks = defaultRemarksFor(formKind)
+  const remarks = remarksDraft ?? defaultRemarks
+  /** 비고를 **기본 문구로 되돌린다**(확정 뒤 초기화에서 쓴다). */
+  const setRemarks = (v: string | null) => setRemarksDraft(v)
 
   // 비고 본문 — **납기 줄을 넣지 않는다.** 납기는 조건 1번 「납품일정」 한 곳에서만 적고,
   // 그 값이 quotes.delivery_info 로 저장되어 발주·결재 검토표가 쓴다(납기 칸은 없앴다).
@@ -355,7 +365,6 @@ function QuotePageInner() {
     termsResult, subLinesResult, normalizedSubLines, withNormalizedSubLines,
     runValidation, setErrors,
     repairId, hasUrlPrefill, setParamsCleared, setPreviewSeq,
-    defaultRemarks: DEFAULT_REMARKS,
     setCompany, setCustomerId, setCustomerQuery, setCustomerResults, setCustomerSearchOpen,
     setSelectedCustomer, setPrefillNotice, setIsDealer,
     setEuCustomerId, setEuQuery, setEuResults, setEuSearchOpen, setSelectedEU, resolveEuParent,
@@ -664,7 +673,7 @@ function QuotePageInner() {
             opportunity={{ loadOpportunities, opportunities, opportunityId, setOpportunityId }}
             doc={{
               receiver, setReceiver,
-              remarks, setRemarks, remarksOpen, setRemarksOpen, defaultRemarks: DEFAULT_REMARKS,
+              remarks, setRemarks, remarksOpen, setRemarksOpen, defaultRemarks,
               showSignature, setShowSignature, termsOpen, setTermsOpen, terms, setTerms,
             }}
           />

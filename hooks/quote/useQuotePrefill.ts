@@ -79,7 +79,7 @@ export type UseQuotePrefillArgs = {
   setReceiver: React.Dispatch<React.SetStateAction<string>>
   setTermsOpen: React.Dispatch<React.SetStateAction<boolean>>
   setTerms: React.Dispatch<React.SetStateAction<Terms>>
-  setRemarks: React.Dispatch<React.SetStateAction<string>>
+  setRemarks: (v: string | null) => void
   setCategory: React.Dispatch<React.SetStateAction<string>>
   setFormKind: React.Dispatch<React.SetStateAction<string>>
   setLineSplitOn: React.Dispatch<React.SetStateAction<boolean>>

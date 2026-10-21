@@ -91,7 +91,6 @@ export type UseQuoteSubmitArgs = {
   setParamsCleared: React.Dispatch<React.SetStateAction<boolean>>
   setPreviewSeq: React.Dispatch<React.SetStateAction<number>>
   /** 비고 기본 문구(page.tsx 의 DEFAULT_REMARKS). resetForm 이 이 값으로 되돌린다. */
-  defaultRemarks: string
 
   setCompany: React.Dispatch<React.SetStateAction<string>>
   setCustomerId: React.Dispatch<React.SetStateAction<number | null>>
@@ -110,7 +109,8 @@ export type UseQuoteSubmitArgs = {
   setOpportunities: React.Dispatch<React.SetStateAction<SalesOpportunity[]>>
   setOpportunityId: React.Dispatch<React.SetStateAction<number | null>>
   setReceiver: React.Dispatch<React.SetStateAction<string>>
-  setRemarks: React.Dispatch<React.SetStateAction<string>>
+  /** null = 손댄 글자를 버린다(양식의 기본 문구로 돌아간다). */
+  setRemarks: (v: string | null) => void
   setRemarksOpen: React.Dispatch<React.SetStateAction<boolean>>
   setShowSignature: React.Dispatch<React.SetStateAction<boolean>>
   setRows: React.Dispatch<React.SetStateAction<QuoteRow[]>>
@@ -153,7 +153,7 @@ export function useQuoteSubmit({
   totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate,
   termsResult, subLinesResult, normalizedSubLines, withNormalizedSubLines,
   runValidation, setErrors,
-  repairId, hasUrlPrefill, setParamsCleared, setPreviewSeq, defaultRemarks,
+  repairId, hasUrlPrefill, setParamsCleared, setPreviewSeq,
   setCompany, setCustomerId, setCustomerQuery, setCustomerResults, setCustomerSearchOpen,
   setSelectedCustomer, setPrefillNotice, setIsDealer,
   setEuCustomerId, setEuQuery, setEuResults, setEuSearchOpen, setSelectedEU, resolveEuParent,
@@ -292,7 +292,8 @@ export function useQuoteSubmit({
     setEuCustomerId(null); setEuQuery(''); setEuResults([]); setEuSearchOpen(false); setSelectedEU(null)
     resolveEuParent(null)
     setOpportunities([]); setOpportunityId(null)
-    setReceiver(''); setRemarks(defaultRemarks); setRemarksOpen(false); setShowSignature(false)
+    // 비고는 **손댄 글자를 버린다**(null) — 그러면 다음 견적의 양식에 맞는 기본 문구가 보인다.
+    setReceiver(''); setRemarks(null); setRemarksOpen(false); setShowSignature(false)
     setRows([createRow()])
     setSearchQuery({}); setSearchResults({}); setSearchOpen({})
     setEditingProfitRate({}); setProfitRateInput({})

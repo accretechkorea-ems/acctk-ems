@@ -5,6 +5,7 @@
 // 왜 따로 두는가 — 이 블록의 글자는 **고객에게 그대로 나간다.** 규칙이 조용히 틀어지면
 // 엉뚱한 문구가 찍힌 견적서가 나간 뒤에 알게 된다. 화면을 그리지 않고 순수 함수만 돌린다.
 //   promoteLegacyDelivery — 없앤 「납기」 칸의 옛 값을 납품일정으로 올리는 규칙
+//   defaultRemarksFor     — 양식별 비고 기본 문구
 
 // eslint 의 no-require-imports 는 맨 require() 를 센다. 이 파일은 node 로 직접 돌리는
 // CJS 스크립트라 모듈을 그렇게 불러올 수밖에 없다 — 한 번만 묶어 두고 그것만 쓴다.
@@ -36,6 +37,9 @@ Module._resolveFilename = function (req, ...rest) {
 const {
   DEFAULT_TERMS, TERM_MAX_LEN, promoteLegacyDelivery,
 } = load(path.join(ROOT, 'lib/quoteTerms.ts'))
+const {
+  DEFAULT_REMARKS_BY_FORM, defaultRemarksFor, isDefaultRemarks,
+} = load(path.join(ROOT, 'lib/quoteRemarks.ts'))
 
 let fails = 0
 const eq = (name, got, want) => {
@@ -68,6 +72,43 @@ eq(`${TERM_MAX_LEN}자를 넘는 값은 올리지 않는다(그 줄은 PDF 에�
   schedule(promoteLegacyDelivery(base, '가'.repeat(TERM_MAX_LEN + 1))), DEFAULT_TERMS.delivery_schedule)
 eq(`${TERM_MAX_LEN}자까지는 올린다`,
   schedule(promoteLegacyDelivery(base, '가'.repeat(TERM_MAX_LEN))), '가'.repeat(TERM_MAX_LEN))
+
+const has = (name, hay, needle) => {
+  const ok = String(hay).includes(needle)
+  if (!ok) fails++
+  console.log(`${ok ? 'OK  ' : 'FAIL'} ${name}  「${needle}」 ${ok ? '있음' : '없음 — 실제: ' + hay}`)
+}
+
+// ── 양식별 비고 기본 문구 ──────────────────────────────────────────────────
+console.log('\n── 비고 기본 문구는 양식마다 다르다 ──')
+const r20 = defaultRemarksFor('general20')
+const r80p = defaultRemarksFor('parts80')
+const r80e = defaultRemarksFor('equip80')
+
+has('20 · 취소 위약금', r20, '발주 후 주문 취소 시 발주 금액의 30%의 위약금이 발생합니다.')
+has('20 · 당사 외 수리 금지', r20, '당사 외 수리를 일체 금지함을 알려드립니다.')
+eq('20 · 세 줄이다(긴 문구를 접어 두 줄로 적는다)', r20.split('\n').length, 3)
+eq('20 · 이어지는 줄은 「*」로 시작하지 않고 공백 둘로 시작한다',
+  [r20.split('\n')[2].startsWith('  '), r20.split('\n')[2].trimStart().startsWith('*')], [true, false])
+
+has('80 장비 · 취소 위약금', r80e, '발주 금액의 30%의 위약금')
+has('80 장비 · 설치·KOLAS 교정 일정', r80e, '설치 및 KOLAS 교정 일정은 담당자와 협의합니다.')
+eq('80 장비 · 두 줄이다', r80e.split('\n').length, 2)
+
+eq('80 파츠 · 지금 문구를 그대로 둔다(한 줄)',
+  r80p, '* 발주 진행 시 팩스 또는 메일로 발주서 회신 요망 (FAX : 031-786-4090)')
+
+eq('양식을 아직 고르지 않았으면 파츠 문구', defaultRemarksFor(''), r80p)
+eq('모르는 값도 파츠 문구', defaultRemarksFor('무엇인가'), r80p)
+eq('null 도 파츠 문구', defaultRemarksFor(null), r80p)
+
+// 담당자 줄은 **비고 본문에 없다** — PDF 가 그릴 때 붙인다(다시쓰기로 남의 이름이 따라붙지 않게).
+eq('어느 양식에도 담당자 줄이 없다',
+  Object.values(DEFAULT_REMARKS_BY_FORM).some(v => /담당\s*:/.test(v)), false)
+
+eq('손댔는지 판정 — 기본 문구 그대로', isDefaultRemarks(r20, 'general20'), true)
+eq('손댔는지 판정 — 다른 양식의 문구는 「손댔다」', isDefaultRemarks(r80p, 'general20'), false)
+eq('손댔는지 판정 — 한 글자 더하면 「손댔다」', isDefaultRemarks(r20 + ' 추가', 'general20'), false)
 
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
 process.exit(fails === 0 ? 0 : 1)
