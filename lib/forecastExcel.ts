@@ -46,7 +46,8 @@ export function rowsAoA(a: ForecastExcelArgs): (string | number)[][] {
   const body = a.rows.map(r => [
     r.month,
     r.status,
-    r.source === 'quote' ? '견적' : '포캐스트',
+    // 출처 — 견적서가 있는 줄인가, 아직 견적 전인 안건인가.
+    r.source === 'quote' ? '견적' : '견적 전',
     a.engineerName(r.engineerId),
     a.customerName(r.customerId),
     r.dealerId ? a.customerName(r.dealerId) : '직판',
