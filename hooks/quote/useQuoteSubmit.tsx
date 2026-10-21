@@ -21,6 +21,7 @@ import { calcTotals, createRow } from '@/app/quote/calc'
 import { QuotePDFDoc } from '@/app/quote/QuotePDFDoc'
 import { DEFAULT_TERMS, defaultTermsFor, type Terms } from '@/lib/quoteTerms'
 import { clearDraft } from '@/lib/quoteDraft'
+import { todayKST } from '@/lib/date'
 import { canSplitRowKind } from '@/lib/quoteCategories'
 import { canGroupRowKind, isEquipForm } from '@/lib/quoteForms'
 import { notifyOnBehalf, type OnBehalfAssignee } from '@/lib/quoteMutations'
@@ -111,6 +112,8 @@ export type UseQuoteSubmitArgs = {
   setReceiver: React.Dispatch<React.SetStateAction<string>>
   /** null = 손댄 글자를 버린다(양식의 기본 문구로 돌아간다). */
   setRemarks: (v: string | null) => void
+  /** 견적 날짜를 오늘로 되돌린다(확정 뒤 초기화). */
+  setQuoteDate: (v: string) => void
   setRemarksOpen: React.Dispatch<React.SetStateAction<boolean>>
   setShowSignature: React.Dispatch<React.SetStateAction<boolean>>
   setRows: React.Dispatch<React.SetStateAction<QuoteRow[]>>
@@ -158,7 +161,7 @@ export function useQuoteSubmit({
   setSelectedCustomer, setPrefillNotice, setIsDealer,
   setEuCustomerId, setEuQuery, setEuResults, setEuSearchOpen, setSelectedEU, resolveEuParent,
   setOpportunities, setOpportunityId,
-  setReceiver, setRemarks, setRemarksOpen, setShowSignature,
+  setReceiver, setRemarks, setRemarksOpen, setShowSignature, setQuoteDate,
   setRows, setSearchQuery, setSearchResults, setSearchOpen,
   setEditingProfitRate, setProfitRateInput, setOnBehalf,
 }: UseQuoteSubmitArgs) {
@@ -294,6 +297,8 @@ export function useQuoteSubmit({
     setOpportunities([]); setOpportunityId(null)
     // 비고는 **손댄 글자를 버린다**(null) — 그러면 다음 견적의 양식에 맞는 기본 문구가 보인다.
     setReceiver(''); setRemarks(null); setRemarksOpen(false); setShowSignature(false)
+    // 견적 날짜도 오늘로 되돌린다 — 지난 날짜로 한 건 쓴 뒤 다음 건이 그 날짜로 이어지지 않게.
+    setQuoteDate(todayKST())
     setRows([createRow()])
     setSearchQuery({}); setSearchResults({}); setSearchOpen({})
     setEditingProfitRate({}); setProfitRateInput({})
@@ -317,6 +322,12 @@ export function useQuoteSubmit({
     if (!initials) { toast.error(NO_INITIALS_MESSAGE); return { ok: false } }
     const ok = runValidation()
     if (!ok) return { ok: false }
+    // 견적 날짜는 **오늘을 넘길 수 없다.** 화면이 이미 막지만(달력 max·safeQuoteDate),
+    // 번호에 박히는 값이라 저장 직전에 한 번 더 본다. 'YYYYMMDD' 는 글자 비교가 곧 날짜 비교다.
+    if (!dateStr || dateStr > todayKST().replace(/-/g, '')) {
+      toast.error('견적 날짜는 오늘까지만 고를 수 있습니다')
+      return { ok: false }
+    }
     // 조건 네 줄의 길이 — **확정 전에** 막는다. 자르지 않고 어느 칸인지 알린다
     // (잘라서 저장하면 반 토막 문구가 고객에게 나간다).
     if (!termsResult.ok) { toast.error(termsResult.message); return { ok: false } }

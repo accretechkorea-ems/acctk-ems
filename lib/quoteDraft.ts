@@ -58,6 +58,12 @@ export type QuoteDraft = {
   category?: string
   /** 견적서 양식 — 분류와 같은 **선택 필드**다. 줄 묶음은 rows 안에 들어 있다. */
   formKind?: string
+  /**
+   * 견적 날짜 'YYYY-MM-DD' — **선택 필드**다(2026-10-21 추가). 옛 초안에는 없으므로
+   * 되살리는 쪽이 없으면 오늘로 둔다(lib/quoteDate.ts 의 safeQuoteDate).
+   * isDraftMeaningful 에는 **넣지 않는다** — 날짜만 바꾼 빈 화면은 「작성 중」이 아니다.
+   */
+  quoteDate?: string
   rows: QuoteRow[]
 }
 

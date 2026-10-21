@@ -25,6 +25,16 @@ export type QuotePreviewPaneProps = {
   missingInitials: boolean
   seqLoadError: string | null
   quoteNo: string
+  /** 견적 날짜 'YYYY-MM-DD'(한국). 번호·작성일이 이 날짜를 따른다. */
+  quoteDate: string
+  /** 날짜 칸을 고쳤을 때. 미래·망가진 값은 화면이 오늘로 떨어뜨린다. */
+  onQuoteDate: (v: string) => void
+  /** 달력에서 고를 수 있는 마지막 날 — 오늘(한국)이다. */
+  maxQuoteDate: string
+  /** 지난 날짜로 쓰고 있는가. */
+  backdated: boolean
+  /** 실적이 잡히는 달이 이번 달과 다르면 그 달(1~12), 같으면 0. */
+  otherMonth: number
   onBehalf: OnBehalfAssignee | null
   isSaving: boolean
   toast: ReturnType<typeof useToast>
@@ -49,7 +59,8 @@ export type QuotePreviewPaneProps = {
 }
 
 export default function QuotePreviewPane({
-  isClient, missingInitials, seqLoadError, quoteNo, onBehalf, isSaving,
+  isClient, missingInitials, seqLoadError, quoteNo,
+  quoteDate, onQuoteDate, maxQuoteDate, backdated, otherMonth, onBehalf, isSaving,
   toast, runValidation, setShowConfirmModal, categoryMissing,
   dateDisplay, engineerName, engineerTel, showSignature, previewTerms, formKind,
   debouncedCompany, debouncedReceiver, debouncedRows, debouncedFinalRemarks,
@@ -62,7 +73,8 @@ export default function QuotePreviewPane({
 
     {/* 헤더 */}
     <div style={{ background: '#234ea2', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+      <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: 500, marginBottom: 2 }}>예상 견적 번호</div>
         {/* 조회가 실패했으면 번호 대신 그 사실을 낸다 — 잘못된 번호를 그럴듯하게 보여주지 않는다.
             파란 헤더 위라 붉은 글씨는 읽히지 않으므로, 흰 글씨에 반투명 테두리로 구분한다(기존 대필 배지와 같은 방식). */}
@@ -78,6 +90,34 @@ export default function QuotePreviewPane({
         ) : (
           <div style={{ fontSize: 14, color: '#ffffff', fontWeight: 600 }}>{quoteNo}</div>
         )}
+      </div>
+
+      {/* 견적 날짜 — 기본은 오늘이고 **지난 날짜로도 쓸 수 있다**(달력의 max 가 오늘이다).
+          날짜를 바꾸면 예상 번호가 그 날짜 기준으로 다시 뜬다(그날의 다음 순번).
+          확정 뒤에는 번호에 날짜가 박히므로 고칠 수 없다 — 그래서 이 칸은 작성 화면에만 있다. */}
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: 500, marginBottom: 2 }}>견적 날짜</div>
+        <input
+          type="date"
+          value={quoteDate}
+          max={maxQuoteDate}
+          onChange={e => onQuoteDate(e.target.value)}
+          aria-label="견적 날짜"
+          style={{
+            padding: '2px 8px', borderRadius: 6, fontSize: 12, fontWeight: 700,
+            background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.5)',
+            color: '#ffffff', colorScheme: 'dark', cursor: 'pointer',
+          }}
+        />
+        {backdated && (
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>
+            지난 날짜로 작성
+            {otherMonth > 0 && (
+              <span style={{ display: 'block', fontWeight: 500 }}>{otherMonth}월 실적에 들어갑니다</span>
+            )}
+          </div>
+        )}
+      </div>
       </div>
       {/* 대필 중임을 작성하는 내내 보이게 둔다 — 남의 실적으로 저장되는 화면이라 헷갈리면 안 된다. */}
       {onBehalf && (

@@ -58,7 +58,9 @@ import { euDisplayName } from '@/lib/quoteEuName'
 import { clearDraft, draftSavedLabel } from '@/lib/quoteDraft'
 import type { OnBehalfAssignee } from '@/lib/quoteMutations'
 import { todayKST } from '@/lib/date'
-import { nowKSTParts } from '@/lib/date'
+import {
+  compactYmd, differsInMonth, displayYmd, isBackdated, monthOf, safeQuoteDate,
+} from '@/lib/quoteDate'
 
 function QuotePageInner() {
   const supabase = createClient()
@@ -189,10 +191,16 @@ function QuotePageInner() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showPriceGuide])
 
-  // 견적번호와 작성일은 한국 날짜로 쓴다 — 해외에서 열어도 번호·표시가 어긋나지 않게.
-  const { y: yyyy, m: mm, d: dd } = nowKSTParts()
-  const dateStr = `${yyyy}${String(mm).padStart(2, '0')}${String(dd).padStart(2, '0')}`
-  const dateDisplay = `${yyyy}년　${String(mm).padStart(2, '0')}월　${String(dd).padStart(2, '0')}일`
+  // 견적 날짜 — 기본은 오늘(한국)이고 **지난 날짜로도 쓸 수 있다**(미래는 못 고른다).
+  // 번호·작성일·실적 달이 모두 이 날짜를 따른다 — create_quote(p_date) 가 그 날짜의 다음
+  // 순번을 주고(next_quote_seq), 실제로 넣은 시각은 quotes.created_at 에 남는다.
+  // 날짜는 한국 기준으로만 다룬다 — 해외에서 열어도 번호·표시가 어긋나지 않게(lib/quoteDate.ts).
+  const todayYmd = todayKST()
+  const [quoteDate, setQuoteDate] = useState(() => todayKST())
+  /** 날짜 칸 — 미래·망가진 값은 **오늘로 떨어뜨린다**(달력 max 와 같은 규칙을 값으로도 막는다). */
+  const changeQuoteDate = (v: string) => setQuoteDate(safeQuoteDate(v, todayYmd))
+  const dateStr = compactYmd(quoteDate)
+  const dateDisplay = displayYmd(quoteDate)
 
   // 미리보기용 예상 순번(1부터). 실제 번호는 확정할 때 create_quote 함수가 정한다 —
   // 두 사람이 거의 동시에 확정하면 여기 보이는 번호와 실제 번호가 다를 수 있다.
@@ -378,7 +386,7 @@ function QuotePageInner() {
     setSelectedCustomer, setPrefillNotice, setIsDealer,
     setEuCustomerId, setEuQuery, setEuResults, setEuSearchOpen, setSelectedEU, resolveEuParent,
     setOpportunities, setOpportunityId,
-    setReceiver, setRemarks, setRemarksOpen, setShowSignature,
+    setReceiver, setRemarks, setRemarksOpen, setShowSignature, setQuoteDate,
     setRows, setSearchQuery, setSearchResults, setSearchOpen,
     setEditingProfitRate, setProfitRateInput, setOnBehalf,
   })
@@ -404,6 +412,7 @@ function QuotePageInner() {
     onBehalf, company, customerId, selectedCustomer, customerQuery, isDealer,
     euCustomerId, selectedEU, euQuery, opportunityId,
     receiver, remarks, showSignature, termsOpen, terms, rows,
+    quoteDate, setQuoteDate,
     category, formKind, setCategory, setFormKind,
     debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks,
     setCompany, setCustomerId, setSelectedCustomer, setCustomerQuery, setIsDealer,
@@ -757,6 +766,11 @@ function QuotePageInner() {
           missingInitials={missingInitials}
           seqLoadError={seqLoadError}
           quoteNo={quoteNo}
+          quoteDate={quoteDate}
+          onQuoteDate={changeQuoteDate}
+          maxQuoteDate={todayYmd}
+          backdated={isBackdated(quoteDate, todayYmd)}
+          otherMonth={differsInMonth(quoteDate, todayYmd) ? monthOf(quoteDate) : 0}
           onBehalf={onBehalf}
           isSaving={isSaving}
           toast={toast}

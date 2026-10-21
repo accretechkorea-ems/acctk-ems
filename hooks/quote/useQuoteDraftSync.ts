@@ -15,6 +15,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { CustomerResult, QuoteRow } from '@/app/quote/types'
 import { calcRow } from '@/app/quote/calc'
 import { defaultTermsFor, isAllDefault, promoteLegacyDelivery, type SetTerms, type Terms } from '@/lib/quoteTerms'
+import { safeQuoteDate } from '@/lib/quoteDate'
 import { activeQuoteCategories, loadQuoteCategories } from '@/lib/quoteCategories'
 import { isFormKind } from '@/lib/quoteForms'
 import { loadDraft, saveDraft, clearDraft, isDraftMeaningful, type QuoteDraft } from '@/lib/quoteDraft'
@@ -41,6 +42,9 @@ export type UseQuoteDraftSyncArgs = {
   euQuery: string
   opportunityId: number | null
   receiver: string
+  /** 견적 날짜 'YYYY-MM-DD'. 초안에 함께 담는다. */
+  quoteDate: string
+  setQuoteDate: (v: string) => void
   remarks: string
   showSignature: boolean
   termsOpen: boolean
@@ -85,6 +89,7 @@ export function useQuoteDraftSync({
   onBehalf, company, customerId, selectedCustomer, customerQuery, isDealer,
   euCustomerId, selectedEU, euQuery, opportunityId,
   receiver, remarks, showSignature, termsOpen, terms, rows,
+  quoteDate, setQuoteDate,
   category, formKind, setCategory, setFormKind,
   debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks,
   setCompany, setCustomerId, setSelectedCustomer, setCustomerQuery, setIsDealer,
@@ -120,6 +125,8 @@ export function useQuoteDraftSync({
     // 회사 이름은 저장분에 담지 않는다(초안 형식을 바꾸지 않는다) — 되살릴 때 다시 구한다.
     resolveEuParent(d.euCustomerId)
     setReceiver(d.receiver); setRemarks(d.remarks); setShowSignature(d.showSignature)
+    // 견적 날짜 — 옛 초안에는 없다. 없거나 미래면 오늘로 떨어진다.
+    setQuoteDate(safeQuoteDate(d.quoteDate))
     // 조건은 **선택 필드**다 — 옛 초안에는 없으므로 없으면 닫힌 기본 상태로 둔다.
     // 기본값은 **초안에 담긴 양식**을 따른다(20 견적서는 지불조건이 다르다).
     // 옛 초안은 납기를 따로 담고 있다(delivery) — 납품일정이 기본값이면 그 값을 올린다.
@@ -161,6 +168,7 @@ export function useQuoteDraftSync({
       company, customerId, selectedCustomer, customerQuery, isDealer,
       euCustomerId, selectedEU, euQuery, opportunityId,
       receiver, remarks, showSignature, termsOpen, terms, rows,
+      quoteDate,
       category, formKind,
     }
     if (isDraftMeaningful(draft)) saveDraft(engineer.engineer_id, draft)
