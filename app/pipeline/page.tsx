@@ -1,6 +1,10 @@
 'use client'
 
-// 영업기회 파이프라인(칸반). 단계별 열로 늘어놓고 한눈에 본다.
+// 포캐스트(영업기회 칸반). 단계별 열로 늘어놓고 한눈에 본다.
+//
+// 본사 보고용 숫자(담당자 × 월 × 상태 금액)는 이 화면에서 그리지 않고 **엑셀로 내보낸다** —
+// 집계 규칙은 lib/forecast.ts 한 곳에 있고, 여기서는 누를 때만 읽어(useForecast 의 enabled)
+// 시트 둘로 떨어뜨린다. 칸반 자체는 그 버튼과 무관하게 종전 그대로다.
 // 드래그앤드롭은 다음 단계이며, 지금은 카드의 단계 select 로 옮긴다.
 // 신규 등록은 업체 상세에서만 한다(어느 업체 건인지 정해야 하므로).
 
@@ -20,7 +24,7 @@ import { TOPBAR_HEIGHT } from '@/components/layout/Sidebar'
  * 이보다 좁아지면 열을 더 줄이는 대신 판을 가로로 민다.
  */
 const BOARD_MIN_W = 960
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
   useDraggable, useDroppable, pointerWithin,
@@ -35,6 +39,13 @@ import OpportunityModal from '@/components/customer/modals/OpportunityModal'
 import { useOpportunityCrud } from '@/hooks/customer/useOpportunityCrud'
 import { useQuotePdf } from '@/hooks/customer/useQuotePdf'
 import { usePipelineData } from '@/hooks/pipeline/usePipelineData'
+import { useForecast } from '@/hooks/forecast/useForecast'
+import Popover from '@/components/common/Popover'
+import { useQuoteCategories } from '@/lib/quoteCategories'
+import { todayKST } from '@/lib/date'
+import { FORM_LABELS, isFormKind } from '@/lib/quoteForms'
+import { bucketOf, emptyBucket, fiscalMonths, fiscalYearOfMonth, type Bucket } from '@/lib/forecast'
+import { exportForecastXlsx } from '@/lib/forecastExcel'
 import { STAGES, compactKRW, isClosed } from '@/components/customer/opportunity'
 import type { SalesOpportunity } from '@/components/customer/types'
 
@@ -42,6 +53,13 @@ import type { SalesOpportunity } from '@/components/customer/types'
 const BOARD_STAGES = STAGES.filter(s => s !== '실주')
 
 type Owner = '내 기회' | '전체'
+
+/** 내보내기 팝오버의 선택칸 — 화면 다른 곳의 입력칸과 같은 모양이다. */
+const popSel: React.CSSProperties = {
+  padding: '7px 10px', border: '1px solid #ebebeb', borderRadius: 6,
+  background: '#fff', color: '#111827', fontSize: 12, fontWeight: 600,
+  fontFamily: 'inherit', cursor: 'pointer', outline: 'none', width: '100%', boxSizing: 'border-box',
+}
 
 const PAGE_BG = '#f4f5f7'
 
@@ -123,6 +141,18 @@ export default function PipelinePage() {
   const [showLost, setShowLost] = useState(false)
 
   // 드래그 상태. 5px 이상 움직여야 끌기로 보므로 카드 클릭·select 조작과 겹치지 않는다.
+  // ── 엑셀 내보내기 ──
+  // 팝오버를 열 때 비로소 자료를 읽는다(enabled). 칸반만 볼 사람에게는 조회가 늘지 않는다.
+  const exportRef = useRef<HTMLButtonElement | null>(null)
+  const [exportOpen, setExportOpen] = useState(false)
+  const today = todayKST()
+  const thisFY = fiscalYearOfMonth(today.slice(0, 7))
+  const [xFy, setXFy] = useState(thisFY)
+  const [xTeam, setXTeam] = useState('')
+  const [xEng, setXEng] = useState<number | null>(null)
+  const fc = useForecast(today, exportOpen)
+  const { categories } = useQuoteCategories()
+
   const [activeId, setActiveId] = useState<number | null>(null)
   const [overStage, setOverStage] = useState<string | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
@@ -173,9 +203,57 @@ export default function PipelinePage() {
         onChangeStage={next => moveTo(o, next)}
         onPickLost={() => opp.openEditOpp(o)}
         onClose={!isClosed(o) && o.stage === '수주' ? () => opp.setClosed(o, true) : undefined}
+        // 이 기회로 견적을 쓰러 간다 — 견적 화면이 ?opportunity= 를 읽어 고객·기회를 미리 고른다.
+        onWriteQuote={() => { window.location.href = `/quote?opportunity=${o.opportunity_id}` }}
       />
     </DraggableCard>
   )
+
+  // 내보낼 사람 — 팀·담당자를 고르면 좁힌다(아무것도 안 고르면 전체).
+  const exportEngineerIds = useMemo(() => {
+    const list = xTeam ? engineers.filter(e => (e.teams ?? '') === xTeam) : engineers
+    const ids = list.map(e => e.engineer_id)
+    return xEng == null ? ids : ids.filter(id => id === xEng)
+  }, [engineers, xTeam, xEng])
+
+  const teamNames = useMemo(
+    () => [...new Set(engineers.map(e => e.teams).filter((t): t is string => !!t))].sort(),
+    [engineers],
+  )
+
+  const runExport = async () => {
+    const months = fiscalMonths(xFy)
+    const monthSet = new Set(months)
+    const idSet = new Set(exportEngineerIds)
+    const rows = fc.result.rows
+      .filter(r => monthSet.has(r.month) && r.engineerId != null && idSet.has(r.engineerId))
+      .sort((a, b) => (a.month === b.month ? b.amount - a.amount : (a.month < b.month ? -1 : 1)))
+
+    const byMonth = new Map<string, Bucket>(months.map(m => [m, emptyBucket()]))
+    for (const r of rows) {
+      const b = byMonth.get(r.month)
+      if (b) b[bucketOf(r.status)] += r.amount
+    }
+    for (const m of months) {
+      const b = byMonth.get(m)
+      if (b) b.목표 = fc.targetOf(m, exportEngineerIds)
+    }
+
+    const engName = new Map(engineers.map(e => [e.engineer_id, `${e.name} ${e.position ?? ''}`.trim()]))
+    await exportForecastXlsx({
+      months: months.map(m => ({ month: m, bucket: byMonth.get(m) ?? emptyBucket() })),
+      rows,
+      engineerName: id => (id == null ? '' : engName.get(id) ?? `#${id}`),
+      customerName: id => (id == null ? '' : fc.customerNames.get(id) ?? `#${id}`),
+      categoryLabel: code => (code ? categories.find(c => c.code === code)?.label ?? code : '-'),
+      formLabel: code => (isFormKind(code) ? FORM_LABELS[code] : '-'),
+      titleOf: r => (r.source === 'quote'
+        ? (r.no ?? `#${r.id}`)
+        : (opportunities.find(o => o.opportunity_id === r.id)?.title ?? `#${r.id}`)),
+      label: `FY${xFy}${xTeam ? `_${xTeam}` : ''}${xEng != null ? `_${engName.get(xEng) ?? xEng}` : ''}`,
+    })
+    setExportOpen(false)
+  }
 
   const activeOpp = activeId === null ? null : filtered.find(o => o.opportunity_id === activeId) ?? null
 
@@ -217,7 +295,11 @@ export default function PipelinePage() {
 
       <div style={{ maxWidth: 1600, width: '100%', margin: '0 auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
 
-        {/* 필터 — 소유자 · 검색 · 등록 버튼을 한 줄에 둔다(제목 없이 바로 판으로 이어진다) */}
+        <h1 style={{ fontSize: 20, fontWeight: 800, color: '#111827', letterSpacing: '-0.3px', margin: '0 0 12px' }}>
+          포캐스트
+        </h1>
+
+        {/* 필터 — 소유자 · 검색 · 등록/내보내기 버튼을 한 줄에 둔다 */}
         <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, padding: '14px 16px', marginBottom: 12, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {/* 두 항목 폭을 같게(equal) 두고, 폭은 긴 쪽인 '내 기회' 기준으로 잡는다 */}
@@ -241,10 +323,16 @@ export default function PipelinePage() {
                 outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
               }}
             />
+            <button ref={exportRef} onClick={() => setExportOpen(v => !v)}
+              onMouseEnter={e => { e.currentTarget.style.background = '#f3f4f6' }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#fff' }}
+              style={{ marginLeft: 'auto', padding: '8px 14px', background: '#fff', color: '#234ea2', border: '1px solid #ebebeb', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, transition: 'background 0.15s ease' }}>
+              엑셀 내보내기
+            </button>
             <button onClick={opp.openNewOpp}
               onMouseEnter={e => { e.currentTarget.style.background = '#1c3e87' }}
               onMouseLeave={e => { e.currentTarget.style.background = '#234ea2' }}
-              style={{ marginLeft: 'auto', padding: '8px 16px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, transition: 'background 0.15s ease' }}>
+              style={{ padding: '8px 16px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, transition: 'background 0.15s ease' }}>
               + 영업기회
             </button>
           </div>
@@ -361,6 +449,41 @@ export default function PipelinePage() {
           </DndContext>
         )}
       </div>
+
+      {/* 내보내기 — 회계연도·팀·담당자만 고른다. 칸반의 필터(내 기회·검색)와는 **따로다**
+          (보고용 숫자는 화면에 보이는 카드가 아니라 집계 규칙이 정한 줄에서 나온다). */}
+      <Popover anchorRef={exportRef} open={exportOpen} onClose={() => setExportOpen(false)} align="end" width={260}
+        style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 8, boxShadow: '0 16px 40px rgba(0,0,0,0.18)', padding: 14 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: '#111827', letterSpacing: '-0.3px' }}>엑셀 내보내기</span>
+          <span style={{ fontSize: 11, color: '#9ca3af', lineHeight: 1.6 }}>
+            월별 요약과 안건 목록을 시트 두 장으로 내려받습니다.
+          </span>
+          <select value={xFy} onChange={e => setXFy(Number(e.target.value))} aria-label="회계연도" style={popSel}>
+            {[thisFY + 1, thisFY, thisFY - 1, thisFY - 2].map(y => (
+              <option key={y} value={y}>FY{y} ({y}.04 ~ {y + 1}.03)</option>
+            ))}
+          </select>
+          <select value={xTeam} onChange={e => { setXTeam(e.target.value); setXEng(null) }} aria-label="팀" style={popSel}>
+            <option value="">전체 팀</option>
+            {teamNames.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select value={xEng ?? ''} onChange={e => setXEng(e.target.value ? Number(e.target.value) : null)} aria-label="담당자" style={popSel}>
+            <option value="">전체 담당자</option>
+            {(xTeam ? engineers.filter(e => (e.teams ?? '') === xTeam) : engineers).map(e => (
+              <option key={e.engineer_id} value={e.engineer_id}>{`${e.name} ${e.position ?? ''}`.trim()}</option>
+            ))}
+          </select>
+          <button type="button" onClick={() => void runExport()} disabled={fc.loading}
+            style={{
+              marginTop: 2, padding: '8px 14px', borderRadius: 6, border: 'none', cursor: fc.loading ? 'default' : 'pointer',
+              background: fc.loading ? '#f3f4f6' : '#234ea2', color: fc.loading ? '#9ca3af' : '#fff',
+              fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
+            }}>
+            {fc.loading ? '자료 읽는 중...' : '내려받기'}
+          </button>
+        </div>
+      </Popover>
 
       <OpportunityModal
         isOpen={opp.isOppModalOpen}

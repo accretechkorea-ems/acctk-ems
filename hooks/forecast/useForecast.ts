@@ -14,14 +14,20 @@ import { emptyBucket, type ForecastResult } from '@/lib/forecast'
 
 const EMPTY: ForecastResult = { rows: [], byPersonMonth: {}, byCategoryMonth: {} }
 
-export function useForecast(today: string) {
+/**
+ * @param enabled 거짓이면 **아무것도 읽지 않는다.** 칸반 화면은 내보내기를 누를 때만 켠다 —
+ *   이 훅이 읽는 네 표(견적·영업기회·목표·담당자)와 고객 목록은 칸반에 필요 없는 자료다.
+ */
+export function useForecast(today: string, enabled = true) {
   const [supabase] = useState(() => createClient())
   const toast = useToast()
   const [result, setResult] = useState<ForecastResult>(EMPTY)
   const [customerNames, setCustomerNames] = useState<Map<number, string>>(new Map())
-  const [loading, setLoading] = useState(true)
+  // 꺼진 채로 시작하면 아무것도 읽지 않으므로 「불러오는 중」도 아니다.
+  const [loading, setLoading] = useState(enabled)
 
   const reload = useCallback(async () => {
+    if (!enabled) return
     setLoading(true)
     const [fc, custRes] = await Promise.all([
       loadForecast(supabase, { today }),
@@ -37,7 +43,7 @@ export function useForecast(today: string) {
     setCustomerNames(new Map(((custRes.data ?? []) as { customer_id: number; company_name: string | null }[])
       .map(c => [c.customer_id, c.company_name ?? ''])))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase, today])
+  }, [supabase, today, enabled])
 
   useEffect(() => { void reload() }, [reload])
 

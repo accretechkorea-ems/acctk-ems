@@ -19,6 +19,8 @@ type Props = {
   onChangeStage: (next: string) => void
   onPickLost: () => void
   onClose?: () => void      // 수주 단계에서만 — 매출 없이 끝난 건을 직접 종료
+  /** 이 기회로 견적서를 쓰러 간다(/quote?opportunity=). 주지 않으면 링크를 내지 않는다. */
+  onWriteQuote?: () => void
 }
 
 // 마지막 활동(없으면 등록일)로부터 며칠 지났는지 — 오늘은 한국 기준.
@@ -27,7 +29,7 @@ function staleDays(lastActivity: string | null, createdAt: string): number {
   return daysBetween(base, todayKST())
 }
 
-export default function OpportunityCard({ opp, lastActivity, canEdit, onOpen, onChangeStage, onPickLost, onClose }: Props) {
+export default function OpportunityCard({ opp, lastActivity, canEdit, onOpen, onChangeStage, onPickLost, onClose, onWriteQuote }: Props) {
   const days = staleDays(lastActivity, opp.created_at)
   const stale = days >= STALE_DAYS
   const closeMonth = dateToMonth(opp.expected_close)
@@ -91,8 +93,25 @@ export default function OpportunityCard({ opp, lastActivity, canEdit, onOpen, on
         </select>
       </div>
 
-      <div style={{ fontSize: 16, fontWeight: 700, color: '#234ea2', marginTop: 8 }}>
-        {compactKRW(opp.expected_amount)}
+      {/* 금액 줄 — 오른쪽 빈자리에 「견적 쓰기」를 넣는다. 줄을 따로 쓰지 않으므로
+          카드 높이는 그대로다(11px 글자 + 1px 여백이라 16px 금액보다 낮다).
+          단계 select·종료 버튼과 같이 호버 때만 보인다(.pl-card-action). */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 8, minWidth: 0 }}>
+        <span style={{ fontSize: 16, fontWeight: 700, color: '#234ea2' }}>
+          {compactKRW(opp.expected_amount)}
+        </span>
+        <span style={{ flex: 1 }} />
+        {onWriteQuote && (
+          <button
+            className="pl-card-action"
+            onPointerDown={e => e.stopPropagation()}
+            onClick={onWriteQuote}
+            title="이 기회로 견적서를 작성합니다"
+            style={{ flexShrink: 0, padding: '1px 8px', background: 'none', color: '#234ea2', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+          >
+            견적 쓰기
+          </button>
+        )}
       </div>
 
       {/* 담당자 · 마감 예정 — 한 줄 유지 */}
