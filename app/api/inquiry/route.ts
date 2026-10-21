@@ -480,7 +480,7 @@ async function cancel(sb: ReturnType<typeof admin>, caller: Caller, body: Record
 // 화면도 그렇게 안내하고, 실제 번호는 발급 응답이 정본이다.
 async function peek(sb: ReturnType<typeof admin>) {
   const year = todayKST().slice(0, 4)
-  // 종류마다 기간 키가 다르다(본사수리만 'ALL'). 한 번에 읽고 코드에서 짝지어 준다.
+  // 종류마다 기간 키가 다르다(20 TSE 공번만 'ALL'). 한 번에 읽고 코드에서 짝지어 준다.
   const wanted = INQUIRY_TYPES.map(type => ({ type, periodKey: periodKeyFor(type, year) }))
 
   const { data, error } = await sb

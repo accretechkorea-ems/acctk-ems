@@ -31,7 +31,9 @@ export const INQUIRY_TYPE_ITEMS: { type: InquiryType; label: string }[] = [
   { type: 'spare80', label: '80 스페어파츠' },
   { type: 'domestic_po', label: '국내조달품' },
   { type: 'claim', label: '클레임' },
-  { type: 'hq_repair', label: '본사수리 공번' },
+  // 코드값 hq_repair 는 그대로 둔다(DB CHECK·카운터 키·파일명 인식이 그 글자를 쓴다).
+  // 보이는 이름만 2026-10-21 에 「본사수리 공번」에서 바뀌었다.
+  { type: 'hq_repair', label: '20 TSE 공번' },
 ]
 
 /** 종류 코드 → 화면 이름. 목록 행에서 쓴다. */
@@ -160,7 +162,7 @@ export const REQ20_SERIES = '20'
 
 /**
  * 채번 카운터의 기간 키.
- * 본사수리 공번만 연도 리셋이 없어 'ALL' 한 줄을 계속 쓴다(inquiries_schema.sql 참고).
+ * 20 TSE 공번(hq_repair)만 연도 리셋이 없어 'ALL' 한 줄을 계속 쓴다(inquiries_schema.sql 참고).
  */
 export function periodKeyFor(type: InquiryType, year: number | string): string {
   return type === 'hq_repair' ? 'ALL' : String(year)
@@ -190,7 +192,7 @@ export type BuildInquiryNoInput = {
  *
  *   req80        BY26-81-001        계열별로 순번이 나뉘지 않는다 — 카운터는 종류 단위다
  *   req20        BY26-20-001
- *   hq_repair    239-0001           연도가 들어가지 않아 리셋도 없다
+ *   hq_repair    239-0001           20 TSE 공번. 연도가 들어가지 않아 리셋도 없다
  *   claim        ACCTK26-001
  *   domestic_po  #PO-T4-2026-001    여기만 연도가 4자리다
  *   spare80      001-K260929        번호가 앞, 날짜가 뒤. 발행일 기준이다
