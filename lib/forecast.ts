@@ -158,6 +158,22 @@ const OPEN_STAGES = new Set(['상담', '사양검토', '견적제출', '협상']
 export const isCancelReason = (reason: string | null | undefined): boolean =>
   !!reason && reason.includes('취소')
 
+/**
+ * 포캐스트에서 **빼는 줄**인가.
+ *
+ * 반려된 견적(quotes.status = '반려')이 그것이다. 반려는 그 견적을 다시 올리는 길이 없고
+ * 새 견적서를 쓴다(lib/quoteStatus.ts 의 EDIT_STATUSES_REJECTED 가 비어 있는 이유).
+ * 그래서 남겨 두면 **같은 건이 두 줄**이 되어 합계가 부풀어 오른다.
+ *
+ * 보류·취소요청·수리중은 뺀다는 뜻이 아니다 — 그 셋은 아직 살아 있는 건이라 포캐스트에 든다.
+ */
+export const isExcludedFromForecast = (item: ForecastQuote | ForecastOpportunity): boolean =>
+  'quote_id' in item && item.status === '반려'
+
+/**
+ * 한 줄 만들기. **빼는 줄인지 먼저 보고 부른다**(isExcludedFromForecast) —
+ * buildForecast 가 그렇게 한다. 혼자 부르면 반려 견적도 줄이 된다.
+ */
 export function toForecastRow(
   item: ForecastQuote | ForecastOpportunity,
   today: string,
@@ -178,7 +194,8 @@ export function toForecastRow(
       status = isCancelReason(q.fail_reason) ? '구매취소' : '실주'
       month = monthOf(quoteExpiry(q.quote_date ?? '')) || monthOf(q.quote_date)
     } else {
-      // 견적중·수리중·결재중·반려·취소요청·보류 — **아직 살아 있는 건**으로 보고 포캐스트에 넣는다.
+      // 견적중·수리중·결재중·취소요청·보류 — **아직 살아 있는 건**으로 보고 포캐스트에 넣는다.
+      // (반려는 여기 오지 않는다 — buildForecast 가 줄 자체를 만들지 않는다.)
       status = '포캐스트'
       month = monthOf(quoteExpiry(q.quote_date ?? '')) || monthOf(q.quote_date)
     }
@@ -274,6 +291,8 @@ export function buildForecast(input: BuildForecastInput): ForecastResult {
 
   const rows: ForecastRow[] = []
   for (const q of quotes) {
+    // 반려 견적은 줄을 만들지 않는다(위 isExcludedFromForecast).
+    if (isExcludedFromForecast(q)) continue
     const r = toForecastRow(q, today)
     if (!inRange(r.month)) continue
     rows.push({ ...r, teamId: r.engineerId != null ? teamOf.get(r.engineerId) ?? null : null })

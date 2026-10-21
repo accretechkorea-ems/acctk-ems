@@ -36,7 +36,7 @@ Module._resolveFilename = function (req, ...rest) {
 
 const {
   toForecastRow, buildForecast, fiscalYearOfMonth, fiscalMonths,
-  bucketTotal, emptyBucket, isCancelReason, UNCATEGORIZED,
+  bucketTotal, emptyBucket, isCancelReason, isExcludedFromForecast, UNCATEGORIZED,
 } = load(path.join(ROOT, 'lib/forecast.ts'))
 
 let fails = 0
@@ -96,8 +96,23 @@ eq('실패 + 사유에 「취소」 → 구매취소',
 eq('사유가 없으면 실주', toForecastRow(quote({ status: '실패', fail_reason: null }), TODAY).status, '실주')
 eq('취소 판정은 글자로 본다', [isCancelReason('발주 취소'), isCancelReason('유효기간 만료'), isCancelReason(null)], [true, false, false])
 // 그 밖의 상태 — 아직 살아 있는 건으로 보고 포캐스트에 넣는다.
-for (const s of ['수리중', '결재중', '반려', '취소요청', '보류']) {
+for (const s of ['수리중', '결재중', '취소요청', '보류']) {
   eq(`${s} → 포캐스트`, toForecastRow(quote({ status: s }), TODAY).status, '포캐스트')
+}
+// 반려는 **줄 자체를 만들지 않는다** — 다시 올리는 길이 없고 새 견적서를 쓰므로,
+// 남겨 두면 같은 건이 두 줄이 되어 합계가 부풀어 오른다.
+eq('반려는 빼는 줄', isExcludedFromForecast(quote({ status: '반려' })), true)
+eq('견적중은 빼지 않는다', isExcludedFromForecast(quote({ status: '견적중' })), false)
+eq('보류·취소요청·수리중도 빼지 않는다',
+  ['보류', '취소요청', '수리중'].map(s => isExcludedFromForecast(quote({ status: s }))), [false, false, false])
+eq('영업기회는 빼지 않는다', isExcludedFromForecast(opp()), false)
+{
+  const built = buildForecast({
+    quotes: [quote({ quote_id: 1, status: '견적중', total_supply: 100 }), quote({ quote_id: 2, status: '반려', total_supply: 900 })],
+    opportunities: [], targets: [], today: TODAY,
+  })
+  eq('반려 견적은 줄에 없다', built.rows.map(r => r.id), [1])
+  eq('합계에도 들어가지 않는다', built.byPersonMonth['7']['2026-10'].포캐스트, 100)
 }
 
 // ── ② 영업기회 ────────────────────────────────────────────────────────────
