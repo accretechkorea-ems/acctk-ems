@@ -86,22 +86,14 @@ export function sheetsForForm(formKind: string | null | undefined): readonly str
   return null
 }
 
-/** 지금 어느 가격표에서 찾는지 알리는 문구. */
-export function priceScopeLabel(formKind: string | null | undefined, all: boolean): string {
-  if (all) return '전체 가격표에서 검색'
-  if (formKind === 'general20') return '20 가격표에서 검색'
-  if (formKind === 'parts80' || formKind === 'equip80') return '80 가격표에서 검색'
-  return '전체 가격표에서 검색'
-}
-
 /** 종류 글자로 찾는다. 목록에 없는 글자는 받지 않는다(서버도 같은 함수로 검사한다). */
 export const kindOf = (sheet: string): PriceListKind | null =>
   PRICE_LIST_KINDS.find(k => k.sheet === sheet) ?? null
 
 /**
  * 그 가격표 줄이 어느 묶음인가 — **sheet_name 으로만** 가른다.
- * 견적 양식으로 가르지 않는 이유: 「전체 가격표에서 검색」을 켜면 80 양식에서도 20 품목을
- * 고를 수 있다. 그때도 품명·모델은 **그 줄이 온 가격표의 규칙**을 따라야 한다.
+ * 견적 양식으로 가르지 않는 이유: 다시쓰기·구성 템플릿으로 들어온 줄은 지금 고른 양식과
+ * 다른 가격표에서 왔을 수 있다. 그때도 품명·모델은 **그 줄이 온 가격표의 규칙**을 따라야 한다.
  * 목록에 없는 sheet_name(옛 데이터·시험 데이터)은 null 이고, 부르는 쪽은 80 으로 다룬다.
  */
 export const lineOfSheet = (sheet: string | null | undefined): PriceLine | null =>

@@ -45,14 +45,14 @@ export type QuoteItemRowProps = {
 
 export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: QuoteItemRowProps) {
   const {
-    rowCount, searchQuery, searchResults, searchOpen, priceSheets, searchAllSheets, priceScope,
+    rowCount, searchQuery, searchResults, searchOpen, priceSheets,
     editingProfitRate, profitRateInput, expensePresets, presetError,
     invalidExpenseIds, totalExpense, lineSplitOn, categories, equipForm,
   } = ctx
   const {
     updateRow, addSubLine, updateSubLine, removeSubLine,
     handleSearch, handleSelect, clearItem, removeRow, setRowCategory, setRowGroupKind,
-    setSearchOpen, setEditingProfitRate, setProfitRateInput, setSearchAllSheets,
+    setSearchOpen, setEditingProfitRate, setProfitRateInput,
     addExpense, removeExpense, updateExpense, selectExpensePreset,
   } = actions
   // 가격표 검색 드롭다운 — 바깥 클릭(및 ESC)으로 닫는다. 항목을 반드시 골라야 빠져나올 수 있던 문제 해결.
@@ -164,7 +164,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
           <input className="q-input" value={searchQuery[row.id] || ''} onChange={e => handleSearch(row.id, e.target.value)}
             onFocus={() => setSearchOpen(prev => ({ ...prev, [row.id]: true }))}
             onKeyDown={itemKeys.onKeyDown}
-            placeholder="코드 또는 모델명 검색" style={{ ...inp, width: '100%', paddingRight: row.selectedItem ? 28 : 11 }} />
+            placeholder="품번 · 품명 · 모델 검색" style={{ ...inp, width: '100%', paddingRight: row.selectedItem ? 28 : 11 }} />
           {row.selectedItem && (
             <button onClick={() => clearItem(row.id)}
               title="품목 해제"
@@ -216,24 +216,6 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
         </div>
         </div>
       </div>
-      )}
-
-      {/* 어느 가격표에서 찾는지 알리고, 필요하면 전체로 넓힌다.
-          토글은 **견적 하나에 하나**다(ctx 에 있다) — 모든 품목 줄이 같은 값을 쓴다.
-          저장되지 않는 화면 상태라 임시저장·다시쓰기에 들어가지 않는다. */}
-      {row.row_kind === 'price_list' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <span style={{ width: 44, flexShrink: 0 }} />
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600, color: '#6b7280' }}>
-            <input
-              type="checkbox"
-              checked={searchAllSheets}
-              onChange={e => setSearchAllSheets(e.target.checked)}
-            />
-            전체 가격표에서 검색
-          </label>
-          <span style={{ fontSize: 11, fontWeight: 500, color: '#9ca3af' }}>{priceScope}</span>
-        </div>
       )}
 
       {/* 품번 직접 입력 — 수동입력 품목 · 국내조달품 공용 */}

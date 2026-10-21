@@ -31,7 +31,7 @@ import { calcExpense, calcRow, createExpenseRow, createRow } from '@/app/quote/c
 import { canSplitRowKind, type QuoteCategory } from '@/lib/quoteCategories'
 import { canGroupRowKind, isEquipForm } from '@/lib/quoteForms'
 import { searchPriceList } from '@/lib/priceSearch'
-import { priceScopeLabel, sheetsForForm } from '@/lib/priceListKinds'
+import { sheetsForForm } from '@/lib/priceListKinds'
 import { itemTextOnSelect } from '@/lib/priceItemText'
 import { DEFAULT_TERMS, type Terms } from '@/lib/quoteTerms'
 
@@ -70,14 +70,10 @@ export type QuoteRowsCtx = {
   /** 장비 양식인가. 줄 묶음 선택칸을 낼지 가른다. */
   equipForm: boolean
   /**
-   * 지금 검색이 보는 가격표 종류. null 이면 전체다.
-   * 한 견적 안의 **모든 검색칸이 같은 값을 쓴다** — 줄마다 다른 가격표를 보면 헷갈린다.
+   * 지금 검색이 보는 가격표 종류 — **양식이 정한다**(20 견적은 20 가격표, 80 은 80 가격표).
+   * 양식을 아직 고르지 않았으면 null(전체)이다. 한 견적의 모든 검색칸이 같은 값을 쓴다.
    */
   priceSheets: readonly string[] | null
-  /** 「전체 가격표에서 검색」이 켜져 있는가(저장하지 않는 화면 상태). */
-  searchAllSheets: boolean
-  /** 검색칸 옆에 적는 문구 — 「20 가격표에서 검색」 같은 글자. */
-  priceScope: string
 }
 
 /** 여러 행이 함께 **쓰는** 콜백. 전부 useCallback 으로 정체가 유지된다. */
@@ -95,8 +91,6 @@ export type QuoteRowsActions = {
   /** 장비 구성 묶음을 바꾼다. 빈 글자를 주면 null(= 묶음 없음)로 돌아간다. */
   setRowGroupKind: (rowId: string, kind: string) => void
   setSearchOpen: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
-  /** 「전체 가격표에서 검색」 토글. */
-  setSearchAllSheets: (v: boolean) => void
   setEditingProfitRate: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   setProfitRateInput: React.Dispatch<React.SetStateAction<Record<string, string>>>
   addExpense: () => void
@@ -117,11 +111,9 @@ export function useQuoteRows({
   const [editingProfitRate, setEditingProfitRate] = useState<Record<string, boolean>>({})
   const [profitRateInput, setProfitRateInput] = useState<Record<string, string>>({})
 
-  // 「전체 가격표에서 검색」 — 기본은 꺼짐(양식에 맞는 가격표만 본다).
-  // 저장하지 않는다(임시저장·다시쓰기에 들어가지 않는 화면 상태다).
-  const [searchAllSheets, setSearchAllSheets] = useState(false)
-  // 양식이 정한 허용 목록. 토글을 켜면 null(전체)이 된다.
-  const priceSheets = searchAllSheets ? null : sheetsForForm(formKind)
+  // 양식이 정한 가격표 허용 목록 — **넓히는 길은 없다.** 20 견적에 80 품목이 들어가면
+  // 단가 기준이 달라진다(두 가격표는 품번도 겹치지 않는다. lib/priceListKinds.ts).
+  const priceSheets = sheetsForForm(formKind)
 
   const handleSearch = useCallback(async (rowId: string, q: string) => {
     setSearchQuery(prev => ({ ...prev, [rowId]: q }))
@@ -129,7 +121,7 @@ export function useQuoteRows({
     setRows(prev => prev.map(r => r.id !== rowId ? r : { ...r, partCode: q }))
     if (!q.trim()) { setSearchResults(prev => ({ ...prev, [rowId]: [] })); return }
     // 가격표 검색은 lib/priceSearch.ts 한 곳에서 한다 — 장비 구성 모달도 같은 함수를 쓴다.
-    // 양식이 정한 가격표 안에서만 찾는다(토글을 켜면 전체).
+    // 양식이 정한 가격표 안에서만 찾는다.
     const found = await searchPriceList(supabase, q, priceSheets)
     setSearchResults(prev => ({ ...prev, [rowId]: found }))
     setSearchOpen(prev => ({ ...prev, [rowId]: true }))
@@ -233,17 +225,17 @@ export function useQuoteRows({
     expensePresets, presetError,
     invalidExpenseIds, totalExpense,
     lineSplitOn, categories, equipForm: isEquipForm(formKind),
-    priceSheets, searchAllSheets, priceScope: priceScopeLabel(formKind, searchAllSheets),
+    priceSheets,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [rows.length, searchQuery, searchResults, searchOpen,
        editingProfitRate, profitRateInput, expensePresets, presetError,
        invalidExpenseKey, totalExpense, lineSplitOn, categories, formKind,
-       priceSheets, searchAllSheets])
+       priceSheets])
 
   const actions = useMemo<QuoteRowsActions>(() => ({
     updateRow, addSubLine, updateSubLine, removeSubLine,
     handleSearch, handleSelect, clearItem, removeRow, setRowCategory, setRowGroupKind,
-    setSearchOpen, setEditingProfitRate, setProfitRateInput, setSearchAllSheets,
+    setSearchOpen, setEditingProfitRate, setProfitRateInput,
     addExpense, removeExpense, updateExpense, selectExpensePreset,
   }), [updateRow, addSubLine, updateSubLine, removeSubLine,
        handleSearch, handleSelect, clearItem, removeRow, setRowCategory, setRowGroupKind,
