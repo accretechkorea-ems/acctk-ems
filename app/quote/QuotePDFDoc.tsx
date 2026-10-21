@@ -182,23 +182,26 @@ type Align = 'left' | 'center' | 'right'
 type Col = { key: ColKey; title: string; width: number; align: Align }
 
 /**
- * 양식별 열. 폭은 레퍼런스 CSS 의 mm 값 그대로이고, 「품명」만 남는 폭을 모두 먹는다.
+ * 양식별 열. 폭은 레퍼런스 CSS 의 mm 값 그대로이고, 남는 폭은 「품명」이 먹는다
+ * (20 견적서만 「품명」과 「모델」이 **반씩** 나눠 폭이 같다 — withNameModelWidth).
  * **부가세 열은 세 양식 모두 없다**(레퍼런스에서 빠졌다).
  */
 function columnsFor(formKind: FormKind): Col[] {
   if (formKind === 'general20') {
     // c20=[("순번","11mm"),("품번(상품코드)","28mm"),("품명",None),("모델","32mm"),
     //      ("수량","12mm"),("단가","24mm"),("공급가액","26mm")] / a20=["c","c","l","l","c","r","r"]
+    // 품명·모델은 폭을 **같게** 둔다 — 레퍼런스의 모델 32mm 를 쓰지 않고 남는 폭을 반씩
+    // 나눈다(둘 다 42.29mm). 다른 열은 레퍼런스 값 그대로다.
     const fixed: Col[] = [
       { key: 'seq', title: '순번', width: 11 * MM, align: 'center' },
       { key: 'code', title: '품번(상품코드)', width: 28 * MM, align: 'center' },
       { key: 'name', title: '품명', width: 0, align: 'left' },
-      { key: 'model', title: '모델', width: 32 * MM, align: 'left' },
+      { key: 'model', title: '모델', width: 0, align: 'left' },
       { key: 'qty', title: '수량', width: 12 * MM, align: 'center' },
       { key: 'unit', title: '단가', width: 24 * MM, align: 'right' },
       { key: 'supply', title: '공급가액', width: 26 * MM, align: 'right' },
     ]
-    return withNameWidth(fixed)
+    return withNameModelWidth(fixed)
   }
   if (formKind === 'equip80') {
     // ecols=[("순번","11mm"),("품번","31mm"),("품명",None),("수량","13mm"),
@@ -222,6 +225,17 @@ function columnsFor(formKind: FormKind): Col[] {
     { key: 'unit', title: '단가', width: 24 * MM, align: 'right' },
     { key: 'supply', title: '공급가액', width: 30 * MM, align: 'right' },
   ])
+}
+
+/**
+ * 20 견적서 — 「품명」과 「모델」이 남는 폭을 **반씩** 나눈다(두 칸의 폭이 같다).
+ * 반으로 나눈 값을 둘에 그대로 주므로 **합은 남는 폭과 정확히 같다** — 표 전체 폭과
+ * 합계 블록의 칸 합(noteSpan)이 종전과 한 치도 다르지 않다.
+ */
+function withNameModelWidth(cols: Col[]): Col[] {
+  const fixed = cols.reduce((s, c) => s + (c.key === 'name' || c.key === 'model' ? 0 : c.width), 0)
+  const half = Math.max(40, (CONTENT_W - fixed - W_CELL * 2) / 2)   // 표 좌우 바깥선을 뺀다
+  return cols.map(c => (c.key === 'name' || c.key === 'model' ? { ...c, width: half } : c))
 }
 
 /** 「품명」 열에 남는 폭을 모두 준다. 폭을 숫자로 못박아 합계 블록의 칸 합과 정확히 맞춘다. */
