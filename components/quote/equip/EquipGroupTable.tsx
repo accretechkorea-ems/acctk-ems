@@ -10,7 +10,8 @@
 // 원가 칸은 **줄 종류**로 가른다(묶음이 아니라).
 //   원화 원가 줄(domestic) — 입력칸이다. 적은 값이 그대로 원가가 된다(원).
 //                            포함사항에서 직접 추가한 줄이 이 모양이다. 판매단가 칸은 「-」.
-//   그 밖              — 계산값을 보여 준다(원가 엔 × 환율 × 관세 × 수량).
+//   직접 적은 줄(manual_jpy) — 입력칸이다. **엔**으로 적고 환율·관세로 원가를 계산한다.
+//   가격표에서 온 줄      — 계산값을 보여 준다(가격표가 구입가를 정한다).
 
 import type { PriceItem } from '@/app/quote/types'
 import { C, S, num, parseNum } from './equipStyles'
@@ -27,6 +28,7 @@ export type EquipGroupTableProps = {
   onToggleGroup: (group: EquipGroup, checked: boolean) => void
   onQty: (id: string, qty: number) => void
   onPrice: (id: string, price: number) => void
+  onCost: (id: string, costJpy: number) => void
   onText: (id: string, field: 'itemText' | 'partCode', value: string) => void
   onRemove: (id: string) => void
   onAddPriceItem: (group: EquipGroup, item: PriceItem) => void
@@ -34,7 +36,7 @@ export type EquipGroupTableProps = {
 }
 
 export default function EquipGroupTable(props: EquipGroupTableProps) {
-  const { group, lines, full, onToggle, onToggleGroup, onQty, onPrice, onText, onRemove } = props
+  const { group, lines, full, onToggle, onToggleGroup, onQty, onPrice, onCost, onText, onRemove } = props
   const allOn = lines.length > 0 && lines.every(l => l.checked)
 
   return (
@@ -132,14 +134,27 @@ export default function EquipGroupTable(props: EquipGroupTableProps) {
                   )}
                 </td>
                 <td style={{ ...td, textAlign: 'right', color: C.MUT }}>
-                  {line.row.row_kind === 'domestic' ? (
+                  {line.row.row_kind === 'domestic' && (
                     <input
                       value={line.row.manual_unit_price || ''}
                       onChange={e => onPrice(line.row.id, parseNum(e.target.value))}
                       aria-label="원가(원)"
                       style={S.num}
                     />
-                  ) : cost}
+                  )}
+                  {/* 직접 적은 줄은 **엔**으로 고친다. 옆에 원화 환산값을 작게 보여 준다. */}
+                  {line.row.row_kind === 'manual_jpy' && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                      <span style={{ fontSize: 11, color: C.DIM }}>¥</span>
+                      <input
+                        value={line.row.manual_cost_jpy || ''}
+                        onChange={e => onCost(line.row.id, parseNum(e.target.value))}
+                        aria-label="구입가(엔)"
+                        style={{ ...S.num, width: 72 }}
+                      />
+                    </span>
+                  )}
+                  {line.row.row_kind !== 'domestic' && line.row.row_kind !== 'manual_jpy' && cost}
                 </td>
                 <td style={{ ...td, textAlign: 'right' }}>
                   {isPriceless(group) ? (

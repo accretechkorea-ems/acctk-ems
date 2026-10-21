@@ -185,6 +185,16 @@ export function useEquipConfig(args: EquipConfigArgs) {
       : l)))
   }, [applyLines])
 
+  /**
+   * 구입가(엔) — **직접 적은 줄(manual_jpy)만** 고칠 수 있다.
+   * 가격표에서 온 줄의 구입가는 가격표가 정하므로 화면에서 고치지 않는다.
+   */
+  const setLineCost = useCallback((id: string, costJpy: number) => {
+    applyLines(prev => prev.map(l => (l.row.id === id && l.row.row_kind === 'manual_jpy'
+      ? { ...l, row: { ...l.row, manual_cost_jpy: Math.max(0, costJpy) } }
+      : l)))
+  }, [applyLines])
+
   /** 판매단가 — 사람이 친 값이라 price 모드로 고정한다(이익률로 역산하지 않는다). */
   const setLinePrice = useCallback((id: string, price: number) => {
     applyLines(prev => prev.map(l => (l.row.id === id
@@ -300,7 +310,7 @@ export function useEquipConfig(args: EquipConfigArgs) {
     setExRate: (v: number) => { setRateTouched(true); setOwnRate(v) },
     tariff, setTariff, machineQty, setMachineQty, discount, setDiscount,
     // 줄
-    lines, linesOf, toggleLine, toggleGroup, setLineQty, setLinePrice, setLineText, removeLine,
+    lines, linesOf, toggleLine, toggleGroup, setLineQty, setLinePrice, setLineCost, setLineText, removeLine,
     addPriceItem, addManualItem,
     // 템플릿
     templates, counts, listLoading, picked, modelKey, setModelKey,

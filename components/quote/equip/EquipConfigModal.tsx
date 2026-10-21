@@ -148,6 +148,7 @@ export default function EquipConfigModal(props: EquipConfigModalProps) {
                 onToggleGroup={cfg.toggleGroup}
                 onQty={cfg.setLineQty}
                 onPrice={cfg.setLinePrice}
+                onCost={cfg.setLineCost}
                 onText={cfg.setLineText}
                 onRemove={cfg.removeLine}
                 onAddPriceItem={cfg.addPriceItem}

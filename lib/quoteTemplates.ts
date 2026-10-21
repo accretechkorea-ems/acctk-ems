@@ -62,6 +62,17 @@ export type QuoteTemplateItem = {
   qty_per_unit: number
   default_checked: boolean
   default_sell_price: number | null
+  /**
+   * 직접 적은 줄(row_kind manual_jpy)의 **구입가(엔)**.
+   *
+   * 품번이 가격표에 없으니 열 때 되찾을 수 없어 저장한다. default_sell_price 에 섞지 않는
+   * 이유 — 그 칸은 이미 뜻이 둘(판매단가 · 원화 원가)이고, 직접 적은 줄도 판매단가를 손으로
+   * 넣을 수 있어 세 번째 뜻을 더하면 읽는 쪽이 갈린다.
+   *
+   * ⚠ 이 칸은 **DB 에 아직 없을 수 있다**(quote_template_items.default_cost_jpy).
+   *   그래서 읽기는 select('*') 로 하고(없으면 undefined), 쓰기는 값이 있을 때만 보낸다.
+   */
+  default_cost_jpy?: number | null
   sort_order: number
 }
 
@@ -80,8 +91,9 @@ export const TEMPLATE_PRICE_MAX = 100_000_000_000
 
 const HEAD_COLUMNS =
   'id, name, owner_id, owner_name, form_kind, category, model_key, used_count, last_used_at, updated_at'
-const ITEM_COLUMNS =
-  'id, template_id, group_kind, row_kind, part_code, variant, item_name, qty_per_unit, default_checked, default_sell_price, sort_order'
+// 줄은 칸을 **모두** 받는다. 칸 이름을 적어 두면 아직 없는 칸(default_cost_jpy)을 적는 순간
+// 조회가 통째로 실패한다 — 표가 작아서 전부 받아도 부담이 없다.
+const ITEM_COLUMNS = '*'
 
 // ── 읽기 ────────────────────────────────────────────────────────────────────
 
@@ -147,6 +159,8 @@ export type TemplateResult<T = void> = { ok: true; data: T } | { ok: false; erro
 export type TemplateItemInput = {
   group_kind: string
   row_kind: string
+  /** 직접 적은 줄의 구입가(엔). 없으면 보내지 않는다(위 주석 참조). */
+  default_cost_jpy?: number | null
   part_code: string | null
   /** 가격표 줄의 구분값('' = 구분 없음). 품번과 짝으로 가격표를 다시 찾는 열쇠다. */
   variant: string

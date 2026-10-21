@@ -230,6 +230,8 @@ export function lineFromTemplateItem(
     qtyPerUnit: it.qty_per_unit,
     quantity: qty,
     price: it.default_sell_price,
+    // 직접 적은 줄의 구입가(엔). 옛 템플릿·DB 에 칸이 없으면 undefined 로 와서 0 이 된다.
+    costJpy: it.default_cost_jpy ?? null,
     checked: it.default_checked,
   })
   if (!code) return manual
@@ -255,6 +257,11 @@ export function toTemplateItems(lines: EquipLine[], machineQty: number): Templat
     //   원화 원가 줄(domestic, 포함사항) — **원가(원)**. 품번으로 되찾을 수 없는 값이라 저장한다.
     // 금액이 없는 포함사항 줄(가격표에서 고른 줄)은 null 이다.
     default_sell_price: l.row.manual_unit_price || null,
+    // 직접 적은 줄의 구입가(엔) — 가격표에서 되찾을 수 없는 값이라 저장한다.
+    // 값이 없으면 **칸을 보내지 않는다**(DB 에 칸이 없을 수도 있다. lib/quoteTemplates.ts 참조).
+    ...(l.row.row_kind === 'manual_jpy' && l.row.manual_cost_jpy > 0
+      ? { default_cost_jpy: l.row.manual_cost_jpy }
+      : {}),
     sort_order: i,
   }))
 }

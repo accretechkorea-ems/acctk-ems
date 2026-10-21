@@ -49,6 +49,8 @@ type ItemInput = {
   group_kind: string
   row_kind: string
   part_code: string | null
+  /** 직접 적은 줄의 구입가(엔). 값이 있을 때만 담는다(DB 에 칸이 없을 수 있다). */
+  default_cost_jpy?: number
   variant: string
   item_name: string | null
   qty_per_unit: number
@@ -114,10 +116,19 @@ function readItems(raw: unknown): { ok: true; items: ItemInput[] } | { ok: false
     if (partCode === null && itemName === null) {
       return { ok: false, error: `${i + 1}번째 줄에 품번이나 품명이 있어야 합니다.` }
     }
+    // 구입가(엔) — 직접 적은 줄만 보낸다. 범위는 판매단가와 같게 본다.
+    let cost: number | null = null
+    if (r?.default_cost_jpy != null && r.default_cost_jpy !== '') {
+      cost = num(r.default_cost_jpy, 0, TEMPLATE_PRICE_MAX)
+      if (cost === null) return { ok: false, error: `${i + 1}번째 줄의 구입가가 올바르지 않습니다.` }
+    }
+
     items.push({
       group_kind: group,
       row_kind: rowKind,
       part_code: partCode,
+      // 값이 없으면 **칸을 넣지 않는다** — 아직 칸이 없는 DB 에서도 저장이 된다.
+      ...(cost !== null && cost > 0 ? { default_cost_jpy: cost } : {}),
       variant,
       item_name: itemName,
       qty_per_unit: qty,
@@ -267,5 +278,13 @@ async function insertItems(templateId: string, items: ItemInput[]) {
   const { error } = await supabaseAdmin
     .from('quote_template_items')
     .insert(items.map(it => ({ ...it, template_id: templateId })))
+  // 칸이 아직 없는 DB — 무엇을 해야 하는지 한글로 알린다(42703 = undefined_column).
+  if (error?.code === '42703' && error.message.includes('default_cost_jpy')) {
+    return {
+      ...error,
+      message: '직접 적은 줄의 구입가를 저장할 칸이 없습니다 — 관리자에게 '
+        + 'quote_template_items.default_cost_jpy 추가를 요청해 주세요.',
+    }
+  }
   return error
 }
