@@ -79,15 +79,14 @@ export type QuoteTemplateItem = {
 /** 머리 + 줄. 모달이 한 덩어리로 들고 다닌다. */
 export type QuoteTemplateFull = QuoteTemplate & { items: QuoteTemplateItem[] }
 
-// ── 입력 상한 (라우트도 같은 값을 본다) ─────────────────────────────────────
-
-/** 템플릿 이름 길이. 목록 한 줄에 들어가는 선이다. */
-export const TEMPLATE_NAME_MAX = 60
-/** 한 템플릿의 줄 수 상한. 장비 한 대 구성이 200줄을 넘는 일은 없다. */
-export const TEMPLATE_ITEM_MAX = 200
-/** 수량·금액의 범위. 음수와 터무니없는 값을 막는다. */
-export const TEMPLATE_QTY_MAX = 9999
-export const TEMPLATE_PRICE_MAX = 100_000_000_000
+// ── 입력 상한 ───────────────────────────────────────────────────────────────
+//
+// 값은 lib/quoteTemplateLimits.ts 에 있다 — 이 파일은 `'use client'` 라서 서버(API 라우트)가
+// 여기서 상수를 가져가면 Next 가 **client reference proxy** 로 바꿔 끼운다(숫자가 아니게 된다).
+// 화면 쪽이 import 경로를 바꾸지 않아도 되게 여기서 다시 내보낸다.
+export {
+  TEMPLATE_NAME_MAX, TEMPLATE_ITEM_MAX, TEMPLATE_QTY_MAX, TEMPLATE_PRICE_MAX,
+} from './quoteTemplateLimits'
 
 const HEAD_COLUMNS =
   'id, name, owner_id, owner_name, form_kind, category, model_key, used_count, last_used_at, updated_at'

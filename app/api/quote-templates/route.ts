@@ -22,9 +22,12 @@ import { NextResponse } from 'next/server'
 import { canViewMenu } from '@/lib/permissions'
 import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
 import { GROUP_KINDS } from '@/lib/quoteForms'
+// ⚠ 상한은 **lib/quoteTemplateLimits.ts** 에서 가져온다. lib/quoteTemplates.ts 는
+//   `'use client'` 라서 거기서 가져오면 Next 가 client reference proxy 로 바꿔 끼우고,
+//   서버에서는 숫자가 아니게 된다(그 탓에 이름 검사가 늘 실패했다. 그 파일 머리말 참조).
 import {
   TEMPLATE_ITEM_MAX, TEMPLATE_NAME_MAX, TEMPLATE_PRICE_MAX, TEMPLATE_QTY_MAX,
-} from '@/lib/quoteTemplates'
+} from '@/lib/quoteTemplateLimits'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -66,13 +69,27 @@ const text = (v: unknown, max: number): string | null => {
   if (typeof v !== 'string') return null
   const t = v.trim()
   if (t === '') return null
+  // ⚠ max 가 숫자가 아니면 **자르지 않는다.** 예전에 상한이 숫자가 아닌 값으로 들어와
+  //   slice(0, NaN) 이 빈 글자를 만들고, 그게 「이름을 입력해주세요」로 둔갑했다.
+  //   값이 틀렸으면 길이 검사를 건너뛰는 쪽이, 글자를 지워 버리는 쪽보다 낫다.
+  if (!Number.isFinite(max) || max <= 0) {
+    console.error('[quote-templates] 길이 상한이 숫자가 아니다', { max })
+    return t
+  }
   return t.slice(0, max)
 }
 
 /** 숫자 칸 — 유한한 값이고 범위 안이어야 한다. 아니면 null. */
 const num = (v: unknown, min: number, max: number): number | null => {
   const n = Number(v)
-  if (!Number.isFinite(n) || n < min || n > max) return null
+  if (!Number.isFinite(n)) return null
+  // 상한이 숫자가 아니면 **범위 검사를 건너뛴다**(그 사실을 로그로 남긴다).
+  // 그냥 비교하면 NaN 과의 비교가 늘 거짓이라 검사가 **조용히 없어진다.**
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    console.error('[quote-templates] 숫자 범위가 숫자가 아니다', { min, max })
+    return n
+  }
+  if (n < min || n > max) return null
   return n
 }
 
