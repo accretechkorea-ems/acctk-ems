@@ -4,6 +4,7 @@ import React from 'react'
 import { Document, Page, Text, View, StyleSheet, Image, Font } from '@react-pdf/renderer'
 import type { QuoteRow } from './types'
 import { numKR, amountToKorean } from './format'
+import { withModelSuffix } from '@/lib/priceItemText'
 import { DEFAULT_TERMS, TERM_LABELS, termKeysFor, type Terms } from '@/lib/quoteTerms'
 import {
   GENERAL20_SUBTITLE, GROUP_KINDS, GROUP_PDF_LABELS,
@@ -782,12 +783,14 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({
               : (row.partCode.trim() || ((row.itemText.trim() || row.supply_price > 0) ? '-' : ''))
             const codeDraw = codeLayout(codeRaw, codeCol, size)
 
-            // 모델 — 20 견적서만. 가격표의 model_jp 가 출처다.
-            const modelText = modelCol ? (row.selectedItem?.model_jp ?? '') : ''
+            // 모델 — 20 견적서만. 가격표 품목은 model_jp, 직접 적은 줄은 사람이 적은 모델이다.
+            const modelText = modelCol ? (row.selectedItem?.model_jp || row.manual_model || '') : ''
             // 20 은 모델 열이 따로 있어 품명 끝의 「(모델)」을 뗀다(같은 글자가 두 번 나오지 않게).
+            // 80 은 모델 열이 없으므로 **반대로** 품명 뒤에 붙인다 — 가격표 품목이 품명에
+            // 「(model_jp)」를 담는 것과 같은 모양이다(직접 적은 줄만 해당. 그 밖은 빈 글자).
             const nameRaw = modelCol
               ? stripModelSuffix(stripLeadNo(row.itemText), modelText)
-              : stripLeadNo(row.itemText)
+              : withModelSuffix(stripLeadNo(row.itemText), row.manual_model || '')
 
             return (
               <View key={row.id} style={S.itemRow} wrap={false}>

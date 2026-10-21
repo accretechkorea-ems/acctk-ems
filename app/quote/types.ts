@@ -83,6 +83,13 @@ export type QuoteRow = {
   row_kind: RowKind
   // 수동입력 품목 전용 — 구입가 JPY(가격표의 cost_jpy 자리). 다른 종류는 0.
   manual_cost_jpy: number
+  // 수동입력 품목 전용 — **모델**(가격표의 model_jp 자리). 다른 종류는 빈 글자.
+  // 20 견적서는 모델 열이 따로 있고, 가격표 품목은 그 열을 price_list.model_jp 로 채운다.
+  // 직접 적은 줄은 채울 값이 없어 칸이 비어 있었다 — 그 자리를 사람이 적는다.
+  // 80 양식은 모델 열이 없어 PDF 품명 뒤에 「(모델)」로 붙는다(lib/priceItemText.ts).
+  // ⚠ 아직 quote_items 에 칸이 없다 — 임시저장에는 남고, 확정 저장·다시쓰기에는 남지 않는다
+  //   (quote_items_model_schema.sql 의 단계 1·2 를 실행하면 그때부터 남는다).
+  manual_model: string
   // 수동입력 품목 전용 — 판매가 산출 방식. 다른 종류는 기본값 'rate' 로 두고 쓰지 않는다.
   price_mode: PriceMode
   // 서비스비의 원가 내역(부대비용). 일반 품목은 빈 배열.

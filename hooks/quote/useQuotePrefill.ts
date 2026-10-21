@@ -133,6 +133,8 @@ export function useQuotePrefill({
         exchange_rate: 0,
         selectedItem: it.price_list ?? null,
         manual_cost_jpy: kind === 'manual_jpy' ? Number(it.unit_price_jpy) || 0 : 0,
+        // 모델은 아직 quote_items 에 칸이 없어 되살릴 값이 없다(createRow 의 빈 글자를 쓴다).
+        // 칸이 생기면 /api/quote-duplicate 의 select 에 model_name 을 더하고 여기서 받는다.
         // 할인은 사용자가 양수로 넣는 값이라 음수 공급가를 되돌린다.
         manual_unit_price: kind === 'discount' ? Math.abs(Number(it.supply_amount) || 0) : unitKrw,
         // price_mode 는 저장되지 않는다. 이익률 모드는 반드시 1,000원 올림을 하므로

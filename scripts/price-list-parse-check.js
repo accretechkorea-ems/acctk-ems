@@ -24,7 +24,11 @@ for (const ext of ['.ts', '.tsx']) {
   Module._extensions[ext] = (mod, filename) => {
     const src = load('fs').readFileSync(filename, 'utf8')
     const out = ts.transpileModule(src, {
-      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
+      // jsx — 모델 칸 시험이 PDF 파일의 stripModelSuffix 를 그대로 불러온다(.tsx 라서 필요하다).
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
+        esModuleInterop: true, jsx: ts.JsxEmit.React,
+      },
       fileName: filename,
     }).outputText
     mod._compile(out, filename)
@@ -41,7 +45,8 @@ const {
   HEADER_NAMES, REQUIRED_HEADERS,
 } = load(path.join(ROOT, 'lib/priceListParse.ts'))
 const { kindOf, isTwentySheet } = load(path.join(ROOT, 'lib/priceListKinds.ts'))
-const { itemTextOnSelect } = load(path.join(ROOT, 'lib/priceItemText.ts'))
+const { itemTextOnSelect, withModelSuffix } = load(path.join(ROOT, 'lib/priceItemText.ts'))
+const { stripModelSuffix } = load(path.join(ROOT, 'app/quote/QuotePDFDoc.ts' + 'x'))
 
 let fails = 0
 const eq = (name, got, want) => {
@@ -361,6 +366,24 @@ eq('20 · 빈 품명 → 품명', itemTextOnSelect('', false, pick20), 'W10 시�
 eq('20 · 모델(SPEC)은 품명에 붙지 않는다', itemTextOnSelect('', false, pick20).includes('E-PW1001'), false)
 eq('묶음 판별은 sheet_name 으로', [isTwentySheet('W10'), isTwentySheet('SFG Main'), isTwentySheet(null)],
   [true, false, false])
+
+// ════════════════════════════════════════════════════════════════════════════
+console.log('\n── 7b. 직접 적은 줄의 모델 ──')
+// 가격표에 없는 줄은 모델 칸(QuoteRow.manual_model)에 사람이 적는다. 20 은 모델 열이
+// 그 값을 받고(품명은 그대로), 80 은 모델 열이 없어 품명 뒤에 「(모델)」로 붙는다.
+eq('80 · 품명 뒤에 붙는다', withModelSuffix('스타일러스', 'NEX 200'), '스타일러스 (NEX 200)')
+eq('80 · 모델이 비면 품명 그대로', withModelSuffix('스타일러스', ''), '스타일러스')
+eq('80 · 공백만 적어도 붙이지 않는다', withModelSuffix('스타일러스', '   '), '스타일러스')
+eq('80 · 품명이 비면 모델만', withModelSuffix('', 'NEX 200'), '(NEX 200)')
+eq('80 · 사람이 품명에 이미 적었으면 두 번 붙이지 않는다',
+  withModelSuffix('스타일러스 (NEX 200)', 'NEX 200'), '스타일러스 (NEX 200)')
+eq('80 · 다른 괄호 설명은 그대로 두고 뒤에 붙인다',
+  withModelSuffix('스타일러스 (교체품)', 'NEX 200'), '스타일러스 (교체품) (NEX 200)')
+// 20 — 모델 열이 받고, 품명 끝의 같은 괄호만 뗀다(두 함수가 서로의 역이다).
+eq('20 · 품명에 적어 둔 「(모델)」은 모델 열로 옮겨 가고 품명에서 빠진다',
+  stripModelSuffix(withModelSuffix('스타일러스', 'NEX 200'), 'NEX 200'), '스타일러스')
+eq('20 · 모델이 다르면 품명을 건드리지 않는다',
+  stripModelSuffix('스타일러스 (교체품)', 'NEX 200'), '스타일러스 (교체품)')
 
 // ════════════════════════════════════════════════════════════════════════════
 // 선택: 실제 구조 파일로 **머리글 탐색만** 확인한다. 내용·가격은 찍지 않는다.

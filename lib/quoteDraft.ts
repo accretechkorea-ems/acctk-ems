@@ -88,7 +88,10 @@ export function loadDraft(engineerId: number): QuoteDraft | null {
     if (!raw) return null
     const d = JSON.parse(raw) as QuoteDraft
     if (!d || d.v !== DRAFT_VERSION || !Array.isArray(d.rows)) { clearDraft(engineerId); return null }
-    return d
+    // 뒤에 더한 줄 칸은 **없으면 기본값으로 채운다.** 버전을 올리면 작성 중이던 옛 초안이
+    // 통째로 버려지고, 그대로 두면 undefined 가 입력칸에 들어가 React 가 제어를 놓친다.
+    //   manual_model — 수동입력 줄의 모델(2026-10-21 추가).
+    return { ...d, rows: d.rows.map(r => ({ ...r, manual_model: typeof r.manual_model === 'string' ? r.manual_model : '' })) }
   } catch { clearDraft(engineerId); return null }
 }
 

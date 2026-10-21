@@ -246,6 +246,17 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
         </div>
       )}
 
+      {/* 모델 직접 입력 — 수동입력 품목만(국내조달품은 견적서에 모델이 나가지 않는다).
+          20 견적서의 모델 열과 80 견적서 품명의 「(모델)」이 이 값을 읽는다. */}
+      {row.row_kind === 'manual_jpy' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', width: 44, flexShrink: 0 }}>모델</label>
+          <input className="q-input" value={row.manual_model}
+            onChange={e => updateRow(row.id, 'manual_model', e.target.value)}
+            placeholder="예: NEX 200" style={{ ...inp, flex: 1, minWidth: 0 }} />
+        </div>
+      )}
+
       {/* 할인 — 견적서에 찍히는 문구만 고른다(로직은 동일) */}
       {isDiscount && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>

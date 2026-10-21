@@ -380,6 +380,11 @@ export function useQuoteSubmit({
         // 품명 아래 설명 줄 — **줄이 없으면 null**(저장하지 않는다 = 줄 없음).
         // 확정 때 PDF 가 그리는 값과 같은 정규화 결과다(normalizedSubLines).
         sub_lines: normalizedSubLines(r),
+        // 수동입력 줄의 모델 — 적지 않았으면 null.
+        // ⚠ quote_items 에 아직 이 칸이 없다. create_quote 가 품목을
+        //   jsonb_populate_recordset 으로 받으므로 **지금은 조용히 버려진다**(예외는 나지 않는다).
+        //   quote_items_model_schema.sql 의 단계 1·2 를 실행하면 그때부터 그대로 저장된다.
+        model_name: r.row_kind === 'manual_jpy' ? (r.manual_model.trim() || null) : null,
       }))
 
       // 부대비용(내부 관리용). 견적 합계·PDF 와 무관하게 quote_expenses 에만 기록한다.
