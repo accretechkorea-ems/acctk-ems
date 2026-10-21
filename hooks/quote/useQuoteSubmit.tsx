@@ -52,7 +52,6 @@ export type UseQuoteSubmitArgs = {
 
   company: string
   receiver: string
-  delivery: string
   finalRemarksForPDF: string
   showSignature: boolean
   /** 견적 분류(quotes.category). 빈 글자면 저장하지 않는다 — runValidation 이 먼저 막는다. */
@@ -111,7 +110,6 @@ export type UseQuoteSubmitArgs = {
   setOpportunities: React.Dispatch<React.SetStateAction<SalesOpportunity[]>>
   setOpportunityId: React.Dispatch<React.SetStateAction<number | null>>
   setReceiver: React.Dispatch<React.SetStateAction<string>>
-  setDelivery: React.Dispatch<React.SetStateAction<string>>
   setRemarks: React.Dispatch<React.SetStateAction<string>>
   setRemarksOpen: React.Dispatch<React.SetStateAction<boolean>>
   setShowSignature: React.Dispatch<React.SetStateAction<boolean>>
@@ -148,7 +146,7 @@ function isNameTakenError(err: unknown): boolean {
 export function useQuoteSubmit({
   supabase, toast, router, engineer, initials, onBehalf,
   dateStr, dateDisplay, quoteNo, engineerName, engineerTel,
-  company, receiver, delivery, finalRemarksForPDF, showSignature,
+  company, receiver, finalRemarksForPDF, showSignature,
   category, formKind, setCategory, setFormKind, setLineSplitOn,
   rows, expenses, exchangeRate,
   customerId, euCustomerId, isDealer, opportunityId,
@@ -160,7 +158,7 @@ export function useQuoteSubmit({
   setSelectedCustomer, setPrefillNotice, setIsDealer,
   setEuCustomerId, setEuQuery, setEuResults, setEuSearchOpen, setSelectedEU, resolveEuParent,
   setOpportunities, setOpportunityId,
-  setReceiver, setDelivery, setRemarks, setRemarksOpen, setShowSignature,
+  setReceiver, setRemarks, setRemarksOpen, setShowSignature,
   setRows, setSearchQuery, setSearchResults, setSearchOpen,
   setEditingProfitRate, setProfitRateInput, setOnBehalf,
 }: UseQuoteSubmitArgs) {
@@ -294,7 +292,7 @@ export function useQuoteSubmit({
     setEuCustomerId(null); setEuQuery(''); setEuResults([]); setEuSearchOpen(false); setSelectedEU(null)
     resolveEuParent(null)
     setOpportunities([]); setOpportunityId(null)
-    setReceiver(''); setDelivery(''); setRemarks(defaultRemarks); setRemarksOpen(false); setShowSignature(false)
+    setReceiver(''); setRemarks(defaultRemarks); setRemarksOpen(false); setShowSignature(false)
     setRows([createRow()])
     setSearchQuery({}); setSearchResults({}); setSearchOpen({})
     setEditingProfitRate({}); setProfitRateInput({})
@@ -408,7 +406,9 @@ export function useQuoteSubmit({
           customer_id: isDealer ? euCustomerId : customerId,
           dealer_id: isDealer ? customerId : null,
           opportunity_id: opportunityId,
-          delivery_info: delivery.trim() || null,
+          // 납기 칸이 있던 자리 — 조건 1번 「납품일정」 값을 담는다(발주·결재 검토표가 읽는다).
+          // termsResult 는 조건 블록이 꺼져 있으면 기본값(「담당자와 협의」)을 돌려준다.
+          delivery_info: termsResult.ok ? termsResult.terms.delivery_schedule : DEFAULT_TERMS.delivery_schedule,
           // 실적 귀속자. 대필이 아니면 작성자와 같다(대필 자격은 함수가 다시 본다).
           engineer_id: onBehalf ? onBehalf.engineer_id : engineer.engineer_id,
           recipient: receiver,

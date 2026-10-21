@@ -20,8 +20,9 @@
 // 채우게 한다.
 //
 // supabase 클라이언트는 **화면에서 받는다** — 훅이 createClient() 를 다시 부르면 인스턴스가
-// 하나 더 생긴다. exchangeRate·delivery 도 화면이 들고 있는 값이라 그대로 받는다
-// (handleSelect 가 납기 칸이 비었을 때만 채우는 규칙을 유지한다).
+// 하나 더 생긴다. exchangeRate·terms 도 화면이 들고 있는 값이라 그대로 받는다
+// (handleSelect 가 가격표 납기를 **납품일정이 기본값일 때만** 채우는 규칙을 유지한다 —
+//  납기 칸이 있던 자리다).
 
 import { useCallback, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -32,12 +33,15 @@ import { canGroupRowKind, isEquipForm } from '@/lib/quoteForms'
 import { searchPriceList } from '@/lib/priceSearch'
 import { priceScopeLabel, sheetsForForm } from '@/lib/priceListKinds'
 import { itemTextOnSelect } from '@/lib/priceItemText'
+import { DEFAULT_TERMS, type Terms } from '@/lib/quoteTerms'
 
 export type UseQuoteRowsArgs = {
   supabase: SupabaseClient
   exchangeRate: number
-  delivery: string
-  setDelivery: (v: string) => void
+  /** 조건 네(다섯) 줄. 가격표 납기를 「납품일정」에 채울지 보는 데만 쓴다. */
+  terms: Terms
+  setTerms: React.Dispatch<React.SetStateAction<Terms>>
+  setTermsOpen: React.Dispatch<React.SetStateAction<boolean>>
   /** 고를 수 있는 견적 분류(활성만). 줄별 분류 선택칸이 쓴다. */
   categories: QuoteCategory[]
   /** 「분류 나누기」가 켜져 있는가. 꺼져 있으면 줄별 분류 선택칸을 그리지 않는다. */
@@ -102,7 +106,7 @@ export type QuoteRowsActions = {
 }
 
 export function useQuoteRows({
-  supabase, exchangeRate, delivery, setDelivery, categories, lineSplitOn, formKind,
+  supabase, exchangeRate, terms, setTerms, setTermsOpen, categories, lineSplitOn, formKind,
 }: UseQuoteRowsArgs) {
   const [rows, setRows] = useState<QuoteRow[]>([createRow()])
   const [expensePresets, setExpensePresets] = useState<ExpensePreset[]>([])
@@ -141,10 +145,14 @@ export function useQuoteRows({
     }))
     setSearchOpen(prev => ({ ...prev, [rowId]: false }))
     setSearchQuery(prev => ({ ...prev, [rowId]: item.item_code }))
-    if (item.delivery_time && delivery === '') {
-      setDelivery(item.delivery_time + '주')
+    // 가격표 납기 → 조건 1번 「납품일정」. **아직 기본값일 때만** 채운다(사람이 적어 둔 값을
+    // 덮지 않는다). 조건 블록은 꺼져 있으면 저장·PDF 가 기본값을 쓰므로 함께 켠다 —
+    // 켜지 않으면 채운 값이 조용히 버려진다(app/quote/page.tsx 의 termsResult).
+    if (item.delivery_time && terms.delivery_schedule === DEFAULT_TERMS.delivery_schedule) {
+      setTerms(prev => ({ ...prev, delivery_schedule: `발주 후 ${item.delivery_time}주` }))
+      setTermsOpen(true)
     }
-  }, [exchangeRate, delivery, setDelivery])
+  }, [exchangeRate, terms, setTerms, setTermsOpen])
 
   const updateRow = useCallback((rowId: string, field: keyof QuoteRow, value: any) =>
     setRows(prev => prev.map(r => r.id !== rowId ? r : calcRow({ ...r, [field]: value }, exchangeRate))),

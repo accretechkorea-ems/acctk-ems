@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CustomerResult, QuoteRow } from '@/app/quote/types'
 import { calcRow } from '@/app/quote/calc'
-import { DEFAULT_TERMS, type Terms } from '@/lib/quoteTerms'
+import { DEFAULT_TERMS, isAllDefault, promoteLegacyDelivery, type Terms } from '@/lib/quoteTerms'
 import { activeQuoteCategories, loadQuoteCategories } from '@/lib/quoteCategories'
 import { isFormKind } from '@/lib/quoteForms'
 import { loadDraft, saveDraft, clearDraft, isDraftMeaningful, type QuoteDraft } from '@/lib/quoteDraft'
@@ -41,7 +41,6 @@ export type UseQuoteDraftSyncArgs = {
   euQuery: string
   opportunityId: number | null
   receiver: string
-  delivery: string
   remarks: string
   showSignature: boolean
   termsOpen: boolean
@@ -71,7 +70,6 @@ export type UseQuoteDraftSyncArgs = {
   setEuQuery: React.Dispatch<React.SetStateAction<string>>
   resolveEuParent: (customerId: number | null) => void
   setReceiver: React.Dispatch<React.SetStateAction<string>>
-  setDelivery: React.Dispatch<React.SetStateAction<string>>
   setRemarks: React.Dispatch<React.SetStateAction<string>>
   setShowSignature: React.Dispatch<React.SetStateAction<boolean>>
   setTermsOpen: React.Dispatch<React.SetStateAction<boolean>>
@@ -86,12 +84,12 @@ export function useQuoteDraftSync({
   toast, rateRef, engineer, hasUrlPrefill,
   onBehalf, company, customerId, selectedCustomer, customerQuery, isDealer,
   euCustomerId, selectedEU, euQuery, opportunityId,
-  receiver, delivery, remarks, showSignature, termsOpen, terms, rows,
+  receiver, remarks, showSignature, termsOpen, terms, rows,
   category, formKind, setCategory, setFormKind,
   debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks,
   setCompany, setCustomerId, setSelectedCustomer, setCustomerQuery, setIsDealer,
   setEuCustomerId, setSelectedEU, setEuQuery, resolveEuParent,
-  setReceiver, setDelivery, setRemarks, setShowSignature, setTermsOpen, setTerms, setRows,
+  setReceiver, setRemarks, setShowSignature, setTermsOpen, setTerms, setRows,
   loadOpportunities, setOpportunityId, setOnBehalf,
 }: UseQuoteDraftSyncArgs) {
   // 임시저장 — 저장분이 있으면 이어쓸지 먼저 묻는다. 답하기 전에는 자동 저장을 시작하지 않는다
@@ -121,10 +119,13 @@ export function useQuoteDraftSync({
     setEuCustomerId(d.euCustomerId); setSelectedEU(d.selectedEU); setEuQuery(d.euQuery)
     // 회사 이름은 저장분에 담지 않는다(초안 형식을 바꾸지 않는다) — 되살릴 때 다시 구한다.
     resolveEuParent(d.euCustomerId)
-    setReceiver(d.receiver); setDelivery(d.delivery); setRemarks(d.remarks); setShowSignature(d.showSignature)
+    setReceiver(d.receiver); setRemarks(d.remarks); setShowSignature(d.showSignature)
     // 조건은 **선택 필드**다 — 옛 초안에는 없으므로 없으면 닫힌 기본 상태로 둔다.
-    setTermsOpen(d.termsOpen === true)
-    setTerms(d.terms ? { ...DEFAULT_TERMS, ...d.terms } : { ...DEFAULT_TERMS })
+    // 옛 초안은 납기를 따로 담고 있다(delivery) — 납품일정이 기본값이면 그 값을 올린다.
+    const draftTerms = promoteLegacyDelivery(
+      d.terms ? { ...DEFAULT_TERMS, ...d.terms } : { ...DEFAULT_TERMS }, d.delivery)
+    setTermsOpen(d.termsOpen === true || !isAllDefault(draftTerms))
+    setTerms(draftTerms)
     // 분류는 **선택 필드**다 — 옛 초안에는 없으므로 없으면 빈 글자(미선택)로 둔다.
     // 그 사이에 비활성이 된 분류도 비운다 — 선택칸에 없는 값이 남으면 칸은 비어 보이는데
     // 확정은 통과해 버린다(목록은 모듈 캐시라 기다려도 비용이 없다).
@@ -156,7 +157,7 @@ export function useQuoteDraftSync({
       onBehalfId: onBehalf?.engineer_id ?? null,
       company, customerId, selectedCustomer, customerQuery, isDealer,
       euCustomerId, selectedEU, euQuery, opportunityId,
-      receiver, delivery, remarks, showSignature, termsOpen, terms, rows,
+      receiver, remarks, showSignature, termsOpen, terms, rows,
       category, formKind,
     }
     if (isDraftMeaningful(draft)) saveDraft(engineer.engineer_id, draft)

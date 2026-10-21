@@ -1,6 +1,6 @@
 'use client'
 
-// 견적 작성 화면의 **기본 정보 카드** — 사명·대리점·E.U·영업기회·수신인·납기·비고·서명란·조건.
+// 견적 작성 화면의 **기본 정보 카드** — 사명·대리점·E.U·영업기회·수신인·비고·서명란·조건.
 //
 // app/quote/page.tsx 에서 **그대로 옮겨 온 것**이다(분리 리팩터 3a). JSX·스타일·문구·주석을
 // 한 글자도 바꾸지 않았다(들여쓰기 8칸만 덜어냈다). 카드 안에서만 쓰던 파생값
@@ -75,12 +75,10 @@ export type CustomerCardOpportunity = {
   setOpportunityId: (v: number | null) => void
 }
 
-/** 문서에 찍히는 나머지 입력 — 수신인·납기·비고·서명란·조건. */
+/** 문서에 찍히는 나머지 입력 — 수신인·비고·서명란·조건. */
 export type CustomerCardDoc = {
   receiver: string
   setReceiver: (v: string) => void
-  delivery: string
-  setDelivery: (v: string) => void
   remarks: string
   setRemarks: (v: string) => void
   remarksOpen: boolean
@@ -149,7 +147,7 @@ export default function CustomerCard({ errors, clearError, category, customer, e
   } = eu
   const { loadOpportunities, opportunities, opportunityId, setOpportunityId } = opportunity
   const {
-    receiver, setReceiver, delivery, setDelivery,
+    receiver, setReceiver,
     remarks, setRemarks, remarksOpen, setRemarksOpen, defaultRemarks,
     showSignature, setShowSignature, termsOpen, setTermsOpen, terms, setTerms,
   } = doc
@@ -393,20 +391,13 @@ export default function CustomerCard({ errors, clearError, category, customer, e
       </div>
     )}
 
-    {/* 수신인 · 납기 — 한 줄. 좁아지면 .q-two 가 1열로 접힌다. */}
-    <div className="q-two" style={{ marginBottom: 8 }}>
+    {/* 수신인 — 한 줄.
+        납기 칸은 없앴다. 납기는 조건 1번 「납품일정」 한 곳에서 적고, 그 값이
+        quotes.delivery_info 로 저장된다(발주·결재 검토표가 읽던 칸 그대로다). */}
+    <div style={{ marginBottom: 8 }}>
       <div className="q-box">
         <span className="q-box-label">수신인</span>
         <input className="q-box-field" value={receiver} onChange={e => setReceiver(e.target.value)} placeholder="예: 홍길동 부장님" />
-      </div>
-      <div className="q-box">
-        <span className="q-box-label">납기</span>
-        <input
-          className="q-box-field"
-          value={delivery}
-          onChange={e => setDelivery(e.target.value)}
-          placeholder="없을 시 입력 (N주)"
-        />
       </div>
     </div>
 

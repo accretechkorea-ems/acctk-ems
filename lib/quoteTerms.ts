@@ -107,6 +107,29 @@ export function normalizeTerms(
   return { ok: true, terms: out, stored: isAllDefault(out, keys) ? null : stored }
 }
 
+/**
+ * 옛 **납기** 값을 「납품일정」으로 올린다 — 납기 칸을 없앤 뒤의 호환 규칙.
+ *
+ * 납기는 quotes.delivery_info 에 따로 저장되던 값이다(화면의 「납기」 칸). 그 칸을 없애고
+ * 조건 1번 납품일정 한 곳으로 모았으므로, 옛 견적·옛 초안을 되살릴 때 **납기 값만 있고
+ * 납품일정은 기본값인 경우** 납기 값을 납품일정으로 올린다. 둘 다 값이 있으면 조건 쪽이 정본이다.
+ *
+ * 올리지 않는 경우 — 조용히 엉뚱한 글자가 고객 문서에 들어가지 않게 셋을 막는다.
+ *   · 빈 값
+ *   · **줄바꿈이 있는 값** — 발주 요청이 같은 칸(delivery_info)을 배송 주소로 덮어쓴다
+ *     (app/api/purchase-order/route.ts). 그 주소가 납품일정 줄로 올라가면 안 된다.
+ *   · 40자(TERM_MAX_LEN)를 넘는 값 — 그 줄은 PDF 에서 한 행이다.
+ */
+export function promoteLegacyDelivery(terms: Terms, legacy: string | null | undefined): Terms {
+  const raw = legacy ?? ''
+  if (raw.includes('\n')) return terms
+  const v = raw.replace(/[\s　]+/g, ' ').trim()
+  if (v === '' || v.length > TERM_MAX_LEN) return terms
+  // 납품일정을 이미 적어 둔 견적은 그 값을 그대로 둔다.
+  if (terms.delivery_schedule !== DEFAULT_TERMS.delivery_schedule) return terms
+  return { ...terms, delivery_schedule: v }
+}
+
 /** 보는 칸이 모두 기본값과 같은가. */
 export const isAllDefault = (t: Terms, keys: readonly TermKey[] = TERM_KEYS): boolean =>
   keys.every(k => t[k] === DEFAULT_TERMS[k])

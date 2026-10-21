@@ -18,7 +18,7 @@ import type { ReadonlyURLSearchParams } from 'next/navigation'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CustomerResult, ExpenseRow, PriceItem, QuoteRow, RowKind } from '@/app/quote/types'
 import { calcExpense, calcRow, createExpenseRow, createRow } from '@/app/quote/calc'
-import { DEFAULT_TERMS, changedTerms, termsOf, type Terms } from '@/lib/quoteTerms'
+import { DEFAULT_TERMS, isAllDefault, promoteLegacyDelivery, termsOf, type Terms } from '@/lib/quoteTerms'
 import { subLinesOf } from '@/lib/quoteSubLines'
 import { activeQuoteCategories, canSplitRowKind, loadQuoteCategories } from '@/lib/quoteCategories'
 import { canGroupRowKind, isFormKind, isGroupKind } from '@/lib/quoteForms'
@@ -77,7 +77,6 @@ export type UseQuotePrefillArgs = {
   setEuQuery: React.Dispatch<React.SetStateAction<string>>
   resolveEuParent: (customerId: number | null) => void
   setReceiver: React.Dispatch<React.SetStateAction<string>>
-  setDelivery: React.Dispatch<React.SetStateAction<string>>
   setTermsOpen: React.Dispatch<React.SetStateAction<boolean>>
   setTerms: React.Dispatch<React.SetStateAction<Terms>>
   setRemarks: React.Dispatch<React.SetStateAction<string>>
@@ -97,7 +96,7 @@ export function useQuotePrefill({
   duplicateId, onBehalfId, repairId, engineer,
   setOnBehalf, setRows, setIsDealer, setCustomerId, setEuCustomerId,
   setSelectedCustomer, setCustomerQuery, setCompany, setSelectedEU, setEuQuery,
-  resolveEuParent, setReceiver, setDelivery, setTermsOpen, setTerms, setRemarks,
+  resolveEuParent, setReceiver, setTermsOpen, setTerms, setRemarks,
   setCategory, setFormKind, setLineSplitOn,
   loadOpportunities, setOpportunityId, handleCustomerSelect,
   setCustomerResults, setCustomerSearchOpen, setPrefillNotice,
@@ -186,11 +185,12 @@ export function useQuotePrefill({
     }
 
     setReceiver(quote.recipient ?? '')
-    setDelivery(quote.delivery_info ?? '')
     // 조건 네 줄 — 원본에 바꾼 값이 있으면 체크를 켜고 채운다. 없으면 **닫힌 기본 상태**다.
+    // 옛 견적은 납기를 delivery_info 에만 담고 있다(납기 칸이 있던 시절) — 납품일정이
+    // 기본값이면 그 값을 올린다(규칙·예외는 promoteLegacyDelivery 에 있다).
     {
-      const restored = termsOf(quote.terms)
-      const changed = changedTerms(quote.terms).length > 0
+      const restored = promoteLegacyDelivery(termsOf(quote.terms), quote.delivery_info)
+      const changed = !isAllDefault(restored)
       setTermsOpen(changed)
       setTerms(changed ? restored : { ...DEFAULT_TERMS })
     }

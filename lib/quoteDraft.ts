@@ -32,7 +32,11 @@ export type QuoteDraft = {
   euQuery: string
   opportunityId: number | null
   receiver: string
-  delivery: string
+  /**
+   * 옛 초안의 **납기** — 더 이상 저장하지 않는다(화면에 칸이 없다). 읽을 때만 쓴다:
+   * 값이 있고 납품일정이 기본값이면 납품일정으로 올린다(promoteLegacyDelivery).
+   */
+  delivery?: string
   remarks: string
   showSignature: boolean
   /**
@@ -62,7 +66,7 @@ export type QuoteDraft = {
  * (그러지 않으면 견적 화면을 열기만 해도 "작성 중이던 내용이 있습니다" 가 뜬다).
  */
 export function isDraftMeaningful(d: Omit<QuoteDraft, 'v' | 'savedAt'>): boolean {
-  if (d.company.trim() || d.customerQuery.trim() || d.receiver.trim() || d.delivery.trim()) return true
+  if (d.company.trim() || d.customerQuery.trim() || d.receiver.trim()) return true
   if (d.customerId != null || d.euCustomerId != null || d.opportunityId != null) return true
   if (d.showSignature || d.isDealer) return true
   // 조건을 손댔으면 「작성 중이던 내용」이다.

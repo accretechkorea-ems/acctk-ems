@@ -125,7 +125,6 @@ function QuotePageInner() {
   // — 「닫아 두었는데 저장은 바뀐 값으로 됐다」가 되지 않게 한다.
   const [termsOpen, setTermsOpen] = useState(false)
   const [terms, setTerms] = useState<Terms>({ ...DEFAULT_TERMS })
-  const [delivery, setDelivery] = useState('')
 
   // 품목 행 — 가격표 검색·선택, 행 수정, 설명 줄, 부대비용 헬퍼. 상태·함수를 그대로 옮긴 훅이다.
   // 이 훅은 effect 를 두지 않는다 — rows 와 얽힌 effect 셋은 순서 때문에 아래에 그대로 남겼다.
@@ -137,7 +136,7 @@ function QuotePageInner() {
     serviceRow, discountRow, expenses,
     clearAllRowCategories,
     ctx: rowsCtx, actions: rowsActions,
-  } = useQuoteRows({ supabase, exchangeRate, delivery, setDelivery, categories: activeCategories, lineSplitOn, formKind })
+  } = useQuoteRows({ supabase, exchangeRate, terms, setTerms, setTermsOpen, categories: activeCategories, lineSplitOn, formKind })
   const [showPriceGuide, setShowPriceGuide] = useState(false)
   const priceGuideRef = useRef<HTMLDivElement | null>(null)
 
@@ -198,9 +197,8 @@ function QuotePageInner() {
   const debouncedTerms = useDebounce(terms, 600)
   const debouncedTermsOpen = useDebounce(termsOpen, 600)
 
-  // 비고 본문 — **납기 줄을 넣지 않는다.** 납기는 조건 1번 「납품일정」 한 곳에서만 나간다
-  // (6단계에서 통일했다). 납기 칸의 값은 quotes.delivery_info 로 그대로 저장되어 발주·결재
-  // 검토표가 쓴다 — 고객 문서에만 두 번 나오던 것을 없앴다.
+  // 비고 본문 — **납기 줄을 넣지 않는다.** 납기는 조건 1번 「납품일정」 한 곳에서만 적고,
+  // 그 값이 quotes.delivery_info 로 저장되어 발주·결재 검토표가 쓴다(납기 칸은 없앴다).
   const finalRemarksForPDF = (() => {
     const parts: string[] = []
     // 줄을 낼지는 종전과 같이 고른 값(euQuery)으로 가르고, **찍는 이름만** 회사 이름을 우선한다.
@@ -349,7 +347,7 @@ function QuotePageInner() {
   } = useQuoteSubmit({
     supabase, toast, router, engineer, initials, onBehalf,
     dateStr, dateDisplay, quoteNo, engineerName, engineerTel,
-    company, receiver, delivery, finalRemarksForPDF, showSignature,
+    company, receiver, finalRemarksForPDF, showSignature,
     category, formKind, setCategory, setFormKind, setLineSplitOn,
     rows, expenses, exchangeRate,
     customerId, euCustomerId, isDealer, opportunityId,
@@ -362,7 +360,7 @@ function QuotePageInner() {
     setSelectedCustomer, setPrefillNotice, setIsDealer,
     setEuCustomerId, setEuQuery, setEuResults, setEuSearchOpen, setSelectedEU, resolveEuParent,
     setOpportunities, setOpportunityId,
-    setReceiver, setDelivery, setRemarks, setRemarksOpen, setShowSignature,
+    setReceiver, setRemarks, setRemarksOpen, setShowSignature,
     setRows, setSearchQuery, setSearchResults, setSearchOpen,
     setEditingProfitRate, setProfitRateInput, setOnBehalf,
   })
@@ -387,12 +385,12 @@ function QuotePageInner() {
     toast, rateRef, engineer, hasUrlPrefill,
     onBehalf, company, customerId, selectedCustomer, customerQuery, isDealer,
     euCustomerId, selectedEU, euQuery, opportunityId,
-    receiver, delivery, remarks, showSignature, termsOpen, terms, rows,
+    receiver, remarks, showSignature, termsOpen, terms, rows,
     category, formKind, setCategory, setFormKind,
     debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks,
     setCompany, setCustomerId, setSelectedCustomer, setCustomerQuery, setIsDealer,
     setEuCustomerId, setSelectedEU, setEuQuery, resolveEuParent,
-    setReceiver, setDelivery, setRemarks, setShowSignature, setTermsOpen, setTerms, setRows,
+    setReceiver, setRemarks, setShowSignature, setTermsOpen, setTerms, setRows,
     loadOpportunities, setOpportunityId, setOnBehalf,
   })
 
@@ -403,7 +401,7 @@ function QuotePageInner() {
     duplicateId, onBehalfId, repairId, engineer,
     setOnBehalf, setRows, setIsDealer, setCustomerId, setEuCustomerId,
     setSelectedCustomer, setCustomerQuery, setCompany, setSelectedEU, setEuQuery,
-    resolveEuParent, setReceiver, setDelivery, setTermsOpen, setTerms, setRemarks,
+    resolveEuParent, setReceiver, setTermsOpen, setTerms, setRemarks,
     setCategory, setFormKind, setLineSplitOn,
     loadOpportunities, setOpportunityId, handleCustomerSelect,
     setCustomerResults, setCustomerSearchOpen, setPrefillNotice,
@@ -665,7 +663,7 @@ function QuotePageInner() {
             }}
             opportunity={{ loadOpportunities, opportunities, opportunityId, setOpportunityId }}
             doc={{
-              receiver, setReceiver, delivery, setDelivery,
+              receiver, setReceiver,
               remarks, setRemarks, remarksOpen, setRemarksOpen, defaultRemarks: DEFAULT_REMARKS,
               showSignature, setShowSignature, termsOpen, setTermsOpen, terms, setTerms,
             }}

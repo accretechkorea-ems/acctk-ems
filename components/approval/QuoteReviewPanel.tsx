@@ -10,7 +10,7 @@
 // 못할 수 있고, 그러면 결재할 문서의 내용을 못 본다.
 //
 // **비고(note)는 그리지 않는다.** 응답에는 담겨 있지만(다음 작업인 결재 완료 PDF 가 같은 응답을
-// 쓴다) 검토표에는 내지 않는다. 납기(delivery)는 거래 정보에 낸다.
+// 쓴다) 검토표에는 내지 않는다. 납품일정(delivery = quotes.delivery_info)은 거래 정보에 낸다.
 //
 // 실패해도 결재 승인·반려 버튼은 그대로 동작해야 한다 — 이 패널은 자기 영역에서만 오류를 알린다.
 
@@ -223,7 +223,7 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
         <InfoRow label="수신">{data.recipient?.trim() || '-'}</InfoRow>
         <InfoRow label="실적 담당">{data.engineer?.trim() || '-'}</InfoRow>
         <InfoRow label="작성자">{data.createdBy?.trim() || '-'}</InfoRow>
-        <InfoRow label="납기">{data.delivery?.trim() || '-'}</InfoRow>
+        <InfoRow label="납품일정">{data.delivery?.trim() || '-'}</InfoRow>
       </div>
 
       {/* ③-1 조건 변경 — **기본과 다를 때만** 나온다. 모두 기본이면 이 줄 자체가 없다.
