@@ -27,6 +27,7 @@ import {
 import { achieveColorOf } from '@/lib/fiscal'
 import { Z } from '@/lib/zIndex'
 import Popover from '@/components/common/Popover'
+import BackdatedMark from '@/components/quote/BackdatedMark'
 import { nowKSTParts, todayKST } from '@/lib/date'
 
 // 대시보드 '내 견적' 패널. 실적 현황 EngineerQuoteModal 의 표시 + 관리 기능을 동일하게 구현한다.
@@ -725,6 +726,8 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
                               <span title="대필 견적" style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: BLUE, verticalAlign: 'middle' }} />
                             )}
                             {q.quote_number}
+                            {/* 견적 날짜와 실제로 넣은 날이 다르면 작은 표시(지난 날짜로 넣은 건). */}
+                            <BackdatedMark quoteDate={q.quote_date} createdAt={q.created_at} color={MUTED} />
                             {pdfOpen && (
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-label="PDF">
                                 <title>PDF 열기</title>

@@ -30,6 +30,7 @@ import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import { Z } from '@/lib/zIndex'
 import Popover from '@/components/common/Popover'
+import BackdatedMark from '@/components/quote/BackdatedMark'
 import { todayKST, nowKSTParts, daysBetween, kstYmd, ymdParts } from '@/lib/date'
 
 // 기간 필터 모드 — 회계연도(4월 시작) 기준. h1=상반기(4~9월), h2=하반기(10~다음해 3월)
@@ -1012,6 +1013,8 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                           title={pdfBusyId === q.quote_id ? '여는 중…' : (!q.pdf_url ? '저장된 견적서 PDF가 없습니다' : undefined)}
                           style={{ cursor: q.pdf_url && pdfBusyId === null ? 'pointer' : 'default', color: q.pdf_url ? BLUE : TEXT, opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
                           {q.quote_number}
+                          {/* 견적 날짜와 실제로 넣은 날이 다르면 작은 표시(지난 날짜로 넣은 건). */}
+                          <BackdatedMark quoteDate={q.quote_date} createdAt={q.created_at} color={MUTED} />
                           {q.pdf_url && <span style={{ marginLeft: 4, fontSize: 9, color: MUTED }}>PDF</span>}
                         </span>
                       </td>
