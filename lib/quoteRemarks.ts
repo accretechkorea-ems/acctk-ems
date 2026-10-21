@@ -41,6 +41,27 @@ export function defaultRemarksFor(formKind: string | null | undefined): string {
   return DEFAULT_REMARKS_BY_FORM[isFormKind(formKind) ? formKind : FALLBACK_FORM_KIND]
 }
 
+/**
+ * PDF 비고의 **담당자 줄**. 이름이 없으면 빈 글자(줄을 내지 않는다).
+ *
+ * 「이름 직급」은 부르는 쪽이 이미 한 글자로 합쳐 준다(app/quote/page.tsx 의 engineerName —
+ * 대필이면 **실적 귀속자**의 이름이다). 전화번호가 없으면 괄호도 내지 않는다.
+ */
+export function managerNoteLine(nameWithPosition: string, tel: string): string {
+  const who = (nameWithPosition ?? '').trim()
+  if (who === '') return ''
+  const phone = (tel ?? '').trim()
+  return phone ? `* 담당 : ${who} (${phone})` : `* 담당 : ${who}`
+}
+
+/**
+ * PDF 비고 칸의 **문구 줄들**(제목 「비고」는 뺀 나머지). 담당자 줄이 **맨 위**다.
+ * 이 줄들은 칸 바닥에서부터 쌓인다(QuotePDFDoc 의 noteBody 스타일) — 「비고」만 칸 맨 위에 남는다.
+ */
+export function noteBodyLines(manager: string, remarks: string): string[] {
+  return [...(manager ? [manager] : []), ...remarks.split('\n')]
+}
+
 /** 지금 비고가 **그 양식의 기본 문구 그대로**인가(손댔는지 판정). */
 export const isDefaultRemarks = (remarks: string, formKind: string | null | undefined): boolean =>
   remarks.trim() === defaultRemarksFor(formKind).trim()

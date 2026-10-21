@@ -5,6 +5,7 @@ import { Document, Page, Text, View, StyleSheet, Image, Font } from '@react-pdf/
 import type { QuoteRow } from './types'
 import { numKR, amountToKorean } from './format'
 import { withModelSuffix } from '@/lib/priceItemText'
+import { managerNoteLine, noteBodyLines } from '@/lib/quoteRemarks'
 import { DEFAULT_TERMS, TERM_LABELS, termKeysFor, type Terms } from '@/lib/quoteTerms'
 import {
   GENERAL20_SUBTITLE, GROUP_KINDS, GROUP_PDF_LABELS,
@@ -538,6 +539,8 @@ const S = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   noteLine: { fontSize: S_NOTE, lineHeight: 1.5 },
+  // 문구 묶음 — 남는 높이를 가져가고(flexGrow) 내용을 **바닥에 붙인다**.
+  noteBody: { flexGrow: 1, justifyContent: 'flex-end' },
   sumRow: {
     flexDirection: 'row', minHeight: 6.6 * MM, alignItems: 'center',
     borderBottomWidth: W_ROW, borderBottomColor: C_SUM_LINE,
@@ -621,12 +624,11 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({
         isGeneral20Form(form) ? GENERAL20_SUBTITLE : null,
       )
 
-  // 비고 — 담당자 줄을 늘 맨 아래에 붙인다(종전과 같다).
-  const noteLines = [
-    '비고',
-    ...remarks.split('\n'),
-    `* 담당자 : ${engineerName}${engineerTel ? ` (TEL : ${engineerTel})` : ''}`,
-  ]
+  // 비고 — 담당자 줄이 **문구 맨 위**다. 문구는 칸 바닥에서부터 쌓이고(S.noteBody)
+  // 제목 「비고」만 칸 맨 위에 남는다. 담당자 줄을 그릴 때 붙이는 이유는 lib/quoteRemarks.ts 참조.
+  const noteBody = noteBodyLines(managerNoteLine(engineerName, engineerTel), remarks)
+  // 글자 크기·쪽 나눔 계산은 **제목까지 센다**(종전과 같은 줄 수다).
+  const noteLines = ['비고', ...noteBody]
   const sumRows = liftDiscount ? 5 : 3
   const nameBoxPt = innerWidth(colOf('name')!)
   const size = pickSize(form, drawRows, nameBoxPt, sumRows, noteLines.length)
@@ -870,13 +872,19 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({
           {/* 남는 세로 공간을 흡수한다 — 품목이 적어도 합계 블록이 아래에 놓인다. */}
           <View style={fitsOnePage ? S.filler : S.fillerOff} />
 
-          {/* 하단 블록 — 비고(왼쪽, 상단 정렬)와 합계(오른쪽)가 같은 높이를 나눠 쓴다.
-              한 덩어리로 묶어 쪽이 갈릴 때 쪼개지지 않게 한다(wrap={false}). */}
+          {/* 하단 블록 — 비고(왼쪽)와 합계(오른쪽)가 같은 높이를 나눠 쓴다.
+              한 덩어리로 묶어 쪽이 갈릴 때 쪼개지지 않게 한다(wrap={false}).
+              비고 칸: 제목 「비고」는 맨 위에 두고 **문구는 바닥에서부터** 올린다 —
+              합계 블록이 더 높을 때 생기는 빈 자리를 문구 위쪽에 둔다. 문구가 많아
+              칸을 넘치면 빈 자리가 없어 지금처럼 위로 밀린다. */}
           <View style={S.sumBlock} wrap={false}>
             <View style={[S.noteCell, { width: noteSpan }]}>
-              {noteLines.map((line, i) => (
-                <Text key={i} style={S.noteLine}>{line}</Text>
-              ))}
+              <Text style={S.noteLine}>비고</Text>
+              <View style={S.noteBody}>
+                {noteBody.map((line, i) => (
+                  <Text key={i} style={S.noteLine}>{line}</Text>
+                ))}
+              </View>
             </View>
             <View style={{ width: labelSpan + valueSpan }}>
               {liftDiscount && sumLine('소 계', subtotal)}

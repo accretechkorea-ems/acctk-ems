@@ -6,6 +6,7 @@
 // 엉뚱한 문구가 찍힌 견적서가 나간 뒤에 알게 된다. 화면을 그리지 않고 순수 함수만 돌린다.
 //   promoteLegacyDelivery — 없앤 「납기」 칸의 옛 값을 납품일정으로 올리는 규칙
 //   defaultRemarksFor     — 양식별 비고 기본 문구
+//   managerNoteLine/noteBodyLines — PDF 비고 칸의 줄 순서(담당자 줄이 맨 위)
 
 // eslint 의 no-require-imports 는 맨 require() 를 센다. 이 파일은 node 로 직접 돌리는
 // CJS 스크립트라 모듈을 그렇게 불러올 수밖에 없다 — 한 번만 묶어 두고 그것만 쓴다.
@@ -39,6 +40,7 @@ const {
 } = load(path.join(ROOT, 'lib/quoteTerms.ts'))
 const {
   DEFAULT_REMARKS_BY_FORM, defaultRemarksFor, isDefaultRemarks,
+  managerNoteLine, noteBodyLines,
 } = load(path.join(ROOT, 'lib/quoteRemarks.ts'))
 
 let fails = 0
@@ -109,6 +111,23 @@ eq('어느 양식에도 담당자 줄이 없다',
 eq('손댔는지 판정 — 기본 문구 그대로', isDefaultRemarks(r20, 'general20'), true)
 eq('손댔는지 판정 — 다른 양식의 문구는 「손댔다」', isDefaultRemarks(r80p, 'general20'), false)
 eq('손댔는지 판정 — 한 글자 더하면 「손댔다」', isDefaultRemarks(r20 + ' 추가', 'general20'), false)
+
+// ── PDF 비고 칸의 줄 ──────────────────────────────────────────────────────
+console.log('\n── PDF 비고 — 담당자 줄이 문구 맨 위 ──')
+eq('담당자 줄 모양', managerNoteLine('권재원 선임', '031-786-4080'), '* 담당 : 권재원 선임 (031-786-4080)')
+eq('전화번호가 없으면 괄호도 없다', managerNoteLine('권재원 선임', ''), '* 담당 : 권재원 선임')
+eq('앞뒤 공백은 지운다', managerNoteLine(' 권재원 선임 ', ' 031-786-4080 '), '* 담당 : 권재원 선임 (031-786-4080)')
+eq('이름이 없으면 줄을 내지 않는다', managerNoteLine('', '031-786-4080'), '')
+
+const who = managerNoteLine('권재원 선임', '031-786-4080')
+eq('담당자 줄이 맨 위, 그 뒤에 비고 문구',
+  noteBodyLines(who, defaultRemarksFor('equip80')),
+  [who, ...DEFAULT_REMARKS_BY_FORM.equip80.split('\n')])
+eq('이름이 없으면 비고 문구만', noteBodyLines('', '* 가'), ['* 가'])
+eq('대리점 줄(E.U)은 비고 본문에 들어와 담당자 줄 **아래**에 온다',
+  noteBodyLines(who, '* E.U  : 어떤 회사\n* 가')[1], '* E.U  : 어떤 회사')
+// 제목 「비고」는 이 줄들에 들어 있지 않다 — 칸 맨 위에 따로 그린다(문구만 바닥에서 올라온다).
+eq('제목은 문구 줄에 없다', noteBodyLines(who, '* 가').includes('비고'), false)
 
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
 process.exit(fails === 0 ? 0 : 1)
