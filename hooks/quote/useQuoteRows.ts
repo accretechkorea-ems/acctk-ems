@@ -33,14 +33,14 @@ import { canGroupRowKind, isEquipForm } from '@/lib/quoteForms'
 import { searchPriceList } from '@/lib/priceSearch'
 import { sheetsForForm } from '@/lib/priceListKinds'
 import { itemTextOnSelect } from '@/lib/priceItemText'
-import { DEFAULT_TERMS, type Terms } from '@/lib/quoteTerms'
+import { DEFAULT_TERMS, type SetTerms, type Terms } from '@/lib/quoteTerms'
 
 export type UseQuoteRowsArgs = {
   supabase: SupabaseClient
   exchangeRate: number
   /** 조건 네(다섯) 줄. 가격표 납기를 「납품일정」에 채울지 보는 데만 쓴다. */
   terms: Terms
-  setTerms: React.Dispatch<React.SetStateAction<Terms>>
+  setTerms: SetTerms
   setTermsOpen: React.Dispatch<React.SetStateAction<boolean>>
   /** 고를 수 있는 견적 분류(활성만). 줄별 분류 선택칸이 쓴다. */
   categories: QuoteCategory[]

@@ -35,6 +35,36 @@ export const DEFAULT_TERMS: Terms = {
 }
 
 /**
+ * **양식마다 다른** 기본 문구. 적어 두지 않은 칸은 위 DEFAULT_TERMS 그대로다.
+ *
+ * 왜 DEFAULT_TERMS 를 직접 고치지 않는가 — 그 값은 **옛 견적을 그리는 값**이다
+ * (조건을 바꾸지 않은 견적은 quotes.terms 가 null 이라, 그릴 때 기본값을 채워 넣는다).
+ * 한 벌뿐인 기본값을 고치면 80 견적의 지난 문서까지 함께 바뀐다.
+ */
+const TERMS_BY_FORM: Record<string, Partial<Terms>> = {
+  // 20 견적서(예비품) — 지불조건이 다르다(2026-10-21).
+  general20: { payment_terms: '납입 후 익월 말 현금 결제' },
+}
+
+/**
+ * 그 양식의 기본 문구 한 벌. 양식을 모르면 DEFAULT_TERMS 그대로다.
+ *
+ * **읽는 쪽도 같은 값을 써야 한다.** 조건을 바꾸지 않은 견적은 terms 가 null 로 저장되므로,
+ * 나중에 그 견적을 그리거나 되살릴 때 양식을 모르면 다른 문구가 나온다
+ * (다시쓰기·검토표·PDF 가 모두 이 함수를 거친다).
+ */
+export function defaultTermsFor(formKind: string | null | undefined): Terms {
+  const over = formKind ? TERMS_BY_FORM[formKind] : undefined
+  return over ? { ...DEFAULT_TERMS, ...over } : { ...DEFAULT_TERMS }
+}
+
+/**
+ * 조건을 바꾸는 손잡이 — 화면이 훅·카드에 넘긴다.
+ * **null 을 주면 그 양식의 기본값으로 되돌린다**(손대지 않은 상태로 돌아간다).
+ */
+export type SetTerms = (v: Terms | null | ((prev: Terms) => Terms)) => void
+
+/**
  * 화면·검토표·PDF 에서 쓰는 이름(번호 없이).
  * 번호와 콜론은 PDF 가 따로 그린다 — 항목명을 **글자별 상자**로 4글자 폭에 고르게 펴서
  * 「보  증」의 증이 「효」 밑에 오게 하고 콜론 좌우 간격을 같게 하기 때문이다.
@@ -84,8 +114,9 @@ export type NormalizeResult =
 export function normalizeTerms(
   input: Partial<Record<TermKey, unknown>> | null | undefined,
   keys: readonly TermKey[] = TERM_KEYS,
+  base: Terms = DEFAULT_TERMS,
 ): NormalizeResult {
-  const out = { ...DEFAULT_TERMS }
+  const out = { ...base }
   const over: string[] = []
 
   for (const key of keys) {
@@ -104,7 +135,7 @@ export function normalizeTerms(
   // 저장값에는 **보는 칸만** 담는다. 담지 않은 칸은 읽을 때 기본값으로 채워진다(termsOf).
   const stored: Partial<Terms> = {}
   for (const key of keys) stored[key] = out[key]
-  return { ok: true, terms: out, stored: isAllDefault(out, keys) ? null : stored }
+  return { ok: true, terms: out, stored: isAllDefault(out, keys, base) ? null : stored }
 }
 
 /**
@@ -130,9 +161,10 @@ export function promoteLegacyDelivery(terms: Terms, legacy: string | null | unde
   return { ...terms, delivery_schedule: v }
 }
 
-/** 보는 칸이 모두 기본값과 같은가. */
-export const isAllDefault = (t: Terms, keys: readonly TermKey[] = TERM_KEYS): boolean =>
-  keys.every(k => t[k] === DEFAULT_TERMS[k])
+/** 보는 칸이 모두 기본값과 같은가(기본값은 양식마다 다를 수 있다 — defaultTermsFor). */
+export const isAllDefault = (
+  t: Terms, keys: readonly TermKey[] = TERM_KEYS, base: Terms = DEFAULT_TERMS,
+): boolean => keys.every(k => t[k] === base[k])
 
 /**
  * 저장값을 **늘 네 값으로** 풀어 준다. 무엇이 와도 깨지지 않는다.
@@ -140,10 +172,10 @@ export const isAllDefault = (t: Terms, keys: readonly TermKey[] = TERM_KEYS): bo
  *
  * jsonb 칸은 보통 객체로 오지만, 문자열로 오는 경로(옛 데이터·수동 입력)도 받아 둔다.
  */
-export function termsOf(stored: unknown): Terms {
+export function termsOf(stored: unknown, base: Terms = DEFAULT_TERMS): Terms {
   const obj = readObject(stored)
-  if (!obj) return { ...DEFAULT_TERMS }
-  const out = { ...DEFAULT_TERMS }
+  if (!obj) return { ...base }
+  const out = { ...base }
   for (const key of TERM_KEYS) {
     const v = obj[key]
     if (typeof v !== 'string') continue
@@ -171,9 +203,11 @@ function readObject(v: unknown): Record<string, unknown> | null {
  * 기본값과 **다른** 항목만. 검토표가 「조건 변경」 줄에 쓴다.
  * 모두 기본이면 빈 배열 — 부르는 쪽이 아무것도 그리지 않는다.
  */
-export function changedTerms(stored: unknown): { key: TermKey; label: string; value: string }[] {
-  const t = termsOf(stored)
+export function changedTerms(
+  stored: unknown, base: Terms = DEFAULT_TERMS,
+): { key: TermKey; label: string; value: string }[] {
+  const t = termsOf(stored, base)
   return TERM_KEYS
-    .filter(k => t[k] !== DEFAULT_TERMS[k])
+    .filter(k => t[k] !== base[k])
     .map(k => ({ key: k, label: TERM_LABELS[k], value: t[k] }))
 }

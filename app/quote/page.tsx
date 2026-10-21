@@ -26,7 +26,7 @@ import QuotePreviewPane from '@/components/quote/QuotePreviewPane'
 import ConfirmQuoteModal from '@/components/quote/ConfirmQuoteModal'
 import QuoteItemRow from './QuoteItemRow'
 import { Z } from '@/lib/zIndex'
-import { DEFAULT_TERMS, normalizeTerms, termKeysFor, type Terms } from '@/lib/quoteTerms'
+import { defaultTermsFor, normalizeTerms, termKeysFor, type SetTerms, type Terms } from '@/lib/quoteTerms'
 import { defaultRemarksFor } from '@/lib/quoteRemarks'
 import { normalizeSubLines } from '@/lib/quoteSubLines'
 
@@ -128,7 +128,16 @@ function QuotePageInner() {
   // termsOpen 이 꺼져 있으면 **기본값으로 그린다**(아래 pdfTerms). 체크를 풀면 적어 둔 값도 버린다
   // — 「닫아 두었는데 저장은 바뀐 값으로 됐다」가 되지 않게 한다.
   const [termsOpen, setTermsOpen] = useState(false)
-  const [terms, setTerms] = useState<Terms>({ ...DEFAULT_TERMS })
+  // 비고와 같은 규칙이다 — **손댄 값만** 상태로 들고(null = 손대지 않음), 손대지 않았으면
+  // 고른 양식의 기본 문구를 그대로 본다. 그래서 양식을 바꾸면 기본값이 저절로 따라온다.
+  const [termsDraft, setTermsDraft] = useState<Terms | null>(null)
+  // useMemo 로 **정체를 유지한다** — 렌더마다 새 객체를 만들면 미리보기 디바운스(useDebounce)가
+  // 매 렌더 다시 걸리고, 이 값을 의존성으로 쓰는 콜백도 매번 새로 만들어진다.
+  const defaultTerms = useMemo(() => defaultTermsFor(formKind), [formKind])
+  const terms = termsDraft ?? defaultTerms
+  const setTerms = useCallback<SetTerms>(v => {
+    setTermsDraft(prev => (typeof v === 'function' ? v(prev ?? defaultTerms) : v))
+  }, [defaultTerms])
 
   // 품목 행 — 가격표 검색·선택, 행 수정, 설명 줄, 부대비용 헬퍼. 상태·함수를 그대로 옮긴 훅이다.
   // 이 훅은 effect 를 두지 않는다 — rows 와 얽힌 effect 셋은 순서 때문에 아래에 그대로 남겼다.
@@ -261,11 +270,11 @@ function QuotePageInner() {
    * ok 가 false 면 40자를 넘긴 칸이 있다 — 확정 전에 안내하고 막는다.
    */
   // 양식별로 **보이는 칸만** 본다 — 장비가 아니면 보증을 저장하지 않는다.
-  const termsResult = normalizeTerms(termsOpen ? terms : null, termKeysFor(formKind))
+  const termsResult = normalizeTerms(termsOpen ? terms : null, termKeysFor(formKind), defaultTerms)
   /** 미리보기에 넘길 값 — 길이 초과 중이면 그 칸만 기본값으로 그린다(미리보기를 멈추지 않는다). */
   const previewTerms = (() => {
-    const r = normalizeTerms(debouncedTermsOpen ? debouncedTerms : null, termKeysFor(formKind))
-    return r.ok ? r.terms : { ...DEFAULT_TERMS }
+    const r = normalizeTerms(debouncedTermsOpen ? debouncedTerms : null, termKeysFor(formKind), defaultTerms)
+    return r.ok ? r.terms : defaultTerms
   })()
 
   /**

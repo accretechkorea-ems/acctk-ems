@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CustomerResult, QuoteRow } from '@/app/quote/types'
 import { calcRow } from '@/app/quote/calc'
-import { DEFAULT_TERMS, isAllDefault, promoteLegacyDelivery, type Terms } from '@/lib/quoteTerms'
+import { defaultTermsFor, isAllDefault, promoteLegacyDelivery, type SetTerms, type Terms } from '@/lib/quoteTerms'
 import { activeQuoteCategories, loadQuoteCategories } from '@/lib/quoteCategories'
 import { isFormKind } from '@/lib/quoteForms'
 import { loadDraft, saveDraft, clearDraft, isDraftMeaningful, type QuoteDraft } from '@/lib/quoteDraft'
@@ -73,7 +73,7 @@ export type UseQuoteDraftSyncArgs = {
   setRemarks: (v: string | null) => void
   setShowSignature: React.Dispatch<React.SetStateAction<boolean>>
   setTermsOpen: React.Dispatch<React.SetStateAction<boolean>>
-  setTerms: React.Dispatch<React.SetStateAction<Terms>>
+  setTerms: SetTerms
   setRows: React.Dispatch<React.SetStateAction<QuoteRow[]>>
   loadOpportunities: (cid: number | null) => Promise<void>
   setOpportunityId: React.Dispatch<React.SetStateAction<number | null>>
@@ -121,11 +121,14 @@ export function useQuoteDraftSync({
     resolveEuParent(d.euCustomerId)
     setReceiver(d.receiver); setRemarks(d.remarks); setShowSignature(d.showSignature)
     // 조건은 **선택 필드**다 — 옛 초안에는 없으므로 없으면 닫힌 기본 상태로 둔다.
+    // 기본값은 **초안에 담긴 양식**을 따른다(20 견적서는 지불조건이 다르다).
     // 옛 초안은 납기를 따로 담고 있다(delivery) — 납품일정이 기본값이면 그 값을 올린다.
+    const termsBase = defaultTermsFor(d.formKind)
     const draftTerms = promoteLegacyDelivery(
-      d.terms ? { ...DEFAULT_TERMS, ...d.terms } : { ...DEFAULT_TERMS }, d.delivery)
-    setTermsOpen(d.termsOpen === true || !isAllDefault(draftTerms))
-    setTerms(draftTerms)
+      d.terms ? { ...termsBase, ...d.terms } : { ...termsBase }, d.delivery)
+    const draftChanged = !isAllDefault(draftTerms, undefined, termsBase)
+    setTermsOpen(d.termsOpen === true || draftChanged)
+    setTerms(draftChanged ? draftTerms : null)
     // 분류는 **선택 필드**다 — 옛 초안에는 없으므로 없으면 빈 글자(미선택)로 둔다.
     // 그 사이에 비활성이 된 분류도 비운다 — 선택칸에 없는 값이 남으면 칸은 비어 보이는데
     // 확정은 통과해 버린다(목록은 모듈 캐시라 기다려도 비용이 없다).

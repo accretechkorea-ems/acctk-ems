@@ -6,7 +6,7 @@ import type { QuoteRow } from './types'
 import { numKR, amountToKorean } from './format'
 import { withModelSuffix } from '@/lib/priceItemText'
 import { managerNoteLine, noteBodyLines } from '@/lib/quoteRemarks'
-import { DEFAULT_TERMS, TERM_LABELS, termKeysFor, type Terms } from '@/lib/quoteTerms'
+import { TERM_LABELS, defaultTermsFor, termKeysFor, type Terms } from '@/lib/quoteTerms'
 import {
   GENERAL20_SUBTITLE, GROUP_KINDS, GROUP_PDF_LABELS,
   formKindOf, isEquipForm, isGeneral20Form, type FormKind, type GroupKind,
@@ -598,7 +598,7 @@ export type PDFDocProps = {
   showSignature?: boolean
   /**
    * 조건 줄(납품일정·지불조건·인도조건·견적유효, 장비는 보증까지).
-   * **주지 않으면 기본값으로 그린다**(lib/quoteTerms.ts 의 DEFAULT_TERMS).
+   * **주지 않으면 그 양식의 기본값으로 그린다**(lib/quoteTerms.ts 의 defaultTermsFor).
    */
   terms?: Terms
   /**
@@ -614,6 +614,8 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({
 }: PDFDocProps) {
   const form = formKindOf(formKind)
   const equip = isEquipForm(form)
+  // 조건 칸이 비어 있을 때 메우는 값 — **그 양식의** 기본 문구다(20 은 지불조건이 다르다).
+  const condFallback = defaultTermsFor(form)
   const cols = columnsFor(form)
   const colOf = (key: ColKey) => cols.find(c => c.key === key)
 
@@ -719,7 +721,7 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({
                     ))}
                   </View>
                   <Text style={S.condColon}>:</Text>
-                  <Text style={S.condValue}>{terms?.[key] || DEFAULT_TERMS[key]}</Text>
+                  <Text style={S.condValue}>{terms?.[key] || condFallback[key]}</Text>
                 </View>
               ))}
             </View>

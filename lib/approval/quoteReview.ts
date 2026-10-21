@@ -14,7 +14,7 @@
 
 import { euDisplayName } from '@/lib/quoteEuName'
 import { subLinesOf } from '@/lib/quoteSubLines'
-import { changedTerms } from '@/lib/quoteTerms'
+import { changedTerms, defaultTermsFor } from '@/lib/quoteTerms'
 
 /** 숫자로 읽는다. null·빈 값·숫자가 아닌 값은 null — 0 으로 바꾸지 않는다(「없음」과 0 은 다르다). */
 const num = (v: unknown): number | null => {
@@ -52,6 +52,8 @@ export type RawQuote = {
   dealer_id: number | null
   /** 조건 네 줄(quotes.terms jsonb). 없거나 null 이면 네 줄 모두 기본값이다. */
   terms?: unknown
+  /** 견적서 양식(quotes.form_kind). 기본 문구가 양식마다 다르다 — 없으면 기존 양식으로 본다. */
+  form_kind?: string | null
 }
 
 export type RawItem = {
@@ -253,7 +255,9 @@ export function buildQuoteReview(input: ReviewInput): QuoteReview {
     delivery: q.delivery_info,
     note: q.note,
     // 조건 네 줄 — 기본과 다른 것만. 결재자가 「평소와 다른 조건인가」를 한 줄로 본다.
-    termsChanged: changedTerms(input.quote.terms),
+    // 기본값은 **그 견적의 양식**을 따른다 — 20 견적서의 지불조건처럼 양식마다 다른 칸이 있다.
+    // (양식을 모르면 기본 문구를 「바뀐 조건」으로 잘못 올린다.)
+    termsChanged: changedTerms(input.quote.terms, defaultTermsFor(q.form_kind)),
     itemsOk: input.itemsOk !== false,
     expensesOk: input.expensesOk !== false,
     items: [...input.items]

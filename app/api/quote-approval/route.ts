@@ -142,7 +142,7 @@ type DocRef = DocAccessRef
 const REVIEW_QUOTE_SELECT = `
   quote_id, quote_number, quote_date, status, quote_type, recipient, note, delivery_info,
   total_supply, total_tax, total_amount, total_cost, total_profit, profit_rate,
-  customer_id, dealer_id, engineer_id, created_by, terms
+  customer_id, dealer_id, engineer_id, created_by, terms, form_kind
 `
 
 /**

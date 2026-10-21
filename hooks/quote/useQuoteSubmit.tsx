@@ -19,7 +19,7 @@ import { pdf } from '@react-pdf/renderer'
 import type { ExpenseRow, PriceItem, QuoteRow } from '@/app/quote/types'
 import { calcTotals, createRow } from '@/app/quote/calc'
 import { QuotePDFDoc } from '@/app/quote/QuotePDFDoc'
-import { DEFAULT_TERMS, type Terms } from '@/lib/quoteTerms'
+import { DEFAULT_TERMS, defaultTermsFor, type Terms } from '@/lib/quoteTerms'
 import { clearDraft } from '@/lib/quoteDraft'
 import { canSplitRowKind } from '@/lib/quoteCategories'
 import { canGroupRowKind, isEquipForm } from '@/lib/quoteForms'
@@ -208,7 +208,7 @@ export function useQuoteSubmit({
         totalTax={finalTotalTax}
         totalAmount={finalTotalAmount}
         showSignature={showSignature}
-        terms={termsResult.ok ? termsResult.terms : DEFAULT_TERMS}
+        terms={termsResult.ok ? termsResult.terms : defaultTermsFor(formKind)}
         formKind={formKind}
       />
     ).toBlob()

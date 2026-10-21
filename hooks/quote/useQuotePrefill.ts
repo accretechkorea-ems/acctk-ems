@@ -18,7 +18,7 @@ import type { ReadonlyURLSearchParams } from 'next/navigation'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CustomerResult, ExpenseRow, PriceItem, QuoteRow, RowKind } from '@/app/quote/types'
 import { calcExpense, calcRow, createExpenseRow, createRow } from '@/app/quote/calc'
-import { DEFAULT_TERMS, isAllDefault, promoteLegacyDelivery, termsOf, type Terms } from '@/lib/quoteTerms'
+import { defaultTermsFor, isAllDefault, promoteLegacyDelivery, termsOf, type SetTerms } from '@/lib/quoteTerms'
 import { subLinesOf } from '@/lib/quoteSubLines'
 import { activeQuoteCategories, canSplitRowKind, loadQuoteCategories } from '@/lib/quoteCategories'
 import { canGroupRowKind, isFormKind, isGroupKind } from '@/lib/quoteForms'
@@ -78,7 +78,7 @@ export type UseQuotePrefillArgs = {
   resolveEuParent: (customerId: number | null) => void
   setReceiver: React.Dispatch<React.SetStateAction<string>>
   setTermsOpen: React.Dispatch<React.SetStateAction<boolean>>
-  setTerms: React.Dispatch<React.SetStateAction<Terms>>
+  setTerms: SetTerms
   setRemarks: (v: string | null) => void
   setCategory: React.Dispatch<React.SetStateAction<string>>
   setFormKind: React.Dispatch<React.SetStateAction<string>>
@@ -189,10 +189,13 @@ export function useQuotePrefill({
     // 옛 견적은 납기를 delivery_info 에만 담고 있다(납기 칸이 있던 시절) — 납품일정이
     // 기본값이면 그 값을 올린다(규칙·예외는 promoteLegacyDelivery 에 있다).
     {
-      const restored = promoteLegacyDelivery(termsOf(quote.terms), quote.delivery_info)
-      const changed = !isAllDefault(restored)
+      // 기본값은 **그 견적의 양식**을 따른다 — 조건을 바꾸지 않은 견적은 terms 가 null 이라,
+      // 양식을 모르면 다른 문구로 되살아난다(20 견적서는 지불조건이 다르다).
+      const base = defaultTermsFor(quote.form_kind)
+      const restored = promoteLegacyDelivery(termsOf(quote.terms, base), quote.delivery_info)
+      const changed = !isAllDefault(restored, undefined, base)
       setTermsOpen(changed)
-      setTerms(changed ? restored : { ...DEFAULT_TERMS })
+      setTerms(changed ? restored : null)
     }
     // note 에는 납기·E.U 줄이 합쳐져 저장된다. 그 둘은 각자 칸에서 다시 만들어지므로 본문만 남긴다.
     setRemarks((quote.note ?? '').split('\n')

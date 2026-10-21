@@ -4,6 +4,7 @@
 //
 // 왜 따로 두는가 — 이 블록의 글자는 **고객에게 그대로 나간다.** 규칙이 조용히 틀어지면
 // 엉뚱한 문구가 찍힌 견적서가 나간 뒤에 알게 된다. 화면을 그리지 않고 순수 함수만 돌린다.
+//   defaultTermsFor       — 양식별 조건 기본 문구(20 견적서는 지불조건이 다르다)
 //   promoteLegacyDelivery — 없앤 「납기」 칸의 옛 값을 납품일정으로 올리는 규칙
 //   defaultRemarksFor     — 양식별 비고 기본 문구
 //   managerNoteLine/noteBodyLines — PDF 비고 칸의 줄 순서(담당자 줄이 맨 위)
@@ -37,6 +38,7 @@ Module._resolveFilename = function (req, ...rest) {
 
 const {
   DEFAULT_TERMS, TERM_MAX_LEN, promoteLegacyDelivery,
+  defaultTermsFor, normalizeTerms, termsOf, changedTerms, termKeysFor,
 } = load(path.join(ROOT, 'lib/quoteTerms.ts'))
 const {
   DEFAULT_REMARKS_BY_FORM, defaultRemarksFor, isDefaultRemarks,
@@ -50,8 +52,42 @@ const eq = (name, got, want) => {
   console.log(`${ok ? 'OK  ' : 'FAIL'} ${name}  got=${JSON.stringify(got)} want=${JSON.stringify(want)}`)
 }
 
+// ── 양식별 조건 기본값 ────────────────────────────────────────────────────
+console.log('── 20 견적서는 지불조건 기본 문구가 다르다 ──')
+const base20 = defaultTermsFor('general20')
+const keys20 = termKeysFor('general20')
+eq('20 · 지불조건', base20.payment_terms, '납입 후 익월 말 현금 결제')
+eq('20 · 나머지 세 줄은 공통값 그대로',
+  [base20.delivery_schedule, base20.delivery_terms, base20.validity],
+  [DEFAULT_TERMS.delivery_schedule, DEFAULT_TERMS.delivery_terms, DEFAULT_TERMS.validity])
+eq('80 파츠는 공통값', defaultTermsFor('parts80').payment_terms, DEFAULT_TERMS.payment_terms)
+eq('80 장비도 공통값', defaultTermsFor('equip80').payment_terms, DEFAULT_TERMS.payment_terms)
+eq('양식을 모르면 공통값', defaultTermsFor('').payment_terms, DEFAULT_TERMS.payment_terms)
+eq('공통 기본값은 그대로 둔다(옛 견적이 이 값으로 그려진다)',
+  DEFAULT_TERMS.payment_terms, '익월말 현금 결제')
+
+// 「조건 변경」을 켜지 않은 20 견적 — 기본 문구로 그리고, **저장은 하지 않는다**(stored null).
+{
+  const r = normalizeTerms(null, keys20, base20)
+  eq('20 · 조건을 안 건드리면 그려지는 값', r.ok && r.terms.payment_terms, '납입 후 익월 말 현금 결제')
+  eq('20 · 그래도 저장하지는 않는다(= 기본값)', r.ok && r.stored, null)
+}
+// 20 기본값을 그대로 적어 두어도 「바뀐 조건」이 아니다.
+{
+  const r = normalizeTerms({ ...base20 }, keys20, base20)
+  eq('20 · 기본 문구를 적어도 저장하지 않는다', r.ok && r.stored, null)
+}
+// 80 문구를 20 견적에 적으면 **바꾼 것**이다.
+{
+  const r = normalizeTerms({ ...base20, payment_terms: DEFAULT_TERMS.payment_terms }, keys20, base20)
+  eq('20 · 공통 문구로 고치면 저장한다', r.ok && r.stored !== null, true)
+  eq('그 경우에만 검토표의 「조건 변경」에 오른다',
+    changedTerms(r.ok ? r.stored : null, base20).map(c => c.key), ['payment_terms'])
+}
+eq('저장값이 없으면 양식의 기본값으로 푼다', termsOf(null, base20).payment_terms, '납입 후 익월 말 현금 결제')
+
 // ── 옛 납기 값 올리기 ──────────────────────────────────────────────────────
-console.log('── 없앤 납기 칸의 값을 납품일정으로 올린다 ──')
+console.log('\n── 없앤 납기 칸의 값을 납품일정으로 올린다 ──')
 const base = { ...DEFAULT_TERMS }
 const schedule = t => t.delivery_schedule
 

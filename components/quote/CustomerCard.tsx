@@ -15,7 +15,7 @@ import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { isClosed } from '@/components/customer/opportunity'
 import { euDisplayName } from '@/lib/quoteEuName'
 import { Z } from '@/lib/zIndex'
-import { DEFAULT_TERMS, type Terms } from '@/lib/quoteTerms'
+import { type SetTerms, type Terms } from '@/lib/quoteTerms'
 import RemarksEditor from '@/components/quote/RemarksEditor'
 import TermsEditor from '@/components/quote/TermsEditor'
 import type { CustomerResult } from '@/app/quote/types'
@@ -90,7 +90,7 @@ export type CustomerCardDoc = {
   termsOpen: boolean
   setTermsOpen: (v: boolean) => void
   terms: Terms
-  setTerms: React.Dispatch<React.SetStateAction<Terms>>
+  setTerms: SetTerms
 }
 
 /**
@@ -420,7 +420,8 @@ export default function CustomerCard({ errors, clearError, category, customer, e
             const on = e.target.checked
             setTermsOpen(on)
             // 체크를 풀면 적어 둔 값도 **기본값으로 돌린다** — 닫아 둔 값이 조용히 저장되지 않게.
-            if (!on) setTerms({ ...DEFAULT_TERMS })
+            // null 이 「손대지 않음」이다(양식의 기본 문구로 돌아간다. lib/quoteTerms.ts).
+            if (!on) setTerms(null)
           }}
           style={{ width: 14, height: 14, cursor: 'pointer', accentColor: '#234ea2' }}
         />
