@@ -54,6 +54,37 @@ export const CHART_COLORS = {
   teal:   '#14b8a6',
 } as const;
 
+/* 홈 카드 목록의 dot 색 — 새 색을 만들지 않고 위 CHART_COLORS(활동 현황 dot 과 같은 값)에서
+   고른다. 값이 아니라 **순서**가 뜻이다: 포캐스트는 단계가 진행될수록, 알림·결재는 묶음별로
+   서로 구분되기만 하면 된다. 목록에 없는 열쇠는 중립 회색으로 떨어진다. */
+export const STAGE_DOT_COLORS: Record<string, string> = {
+  '상담':     CHART_COLORS.blue,
+  '사양검토': CHART_COLORS.violet,
+  '견적제출': CHART_COLORS.amber,
+  '협상':     CHART_COLORS.teal,
+  '수주':     CHART_COLORS.green,
+};
+
+/* 결재 문서 종류 — 열쇠는 lib/approval/docTypes.ts 의 DOC_TYPES 키다. */
+export const DOC_TYPE_DOT_COLORS: Record<string, string> = {
+  quote:        CHART_COLORS.blue,
+  showroom:     CHART_COLORS.violet,
+  quote_delete: CHART_COLORS.rose,
+};
+
+/* 알림 묶음 — 열쇠는 lib/notificationGroups.ts 의 라벨이다. */
+export const NOTI_GROUP_DOT_COLORS: Record<string, string> = {
+  '견적':      CHART_COLORS.blue,
+  '리드':      CHART_COLORS.violet,
+  '요청/결재': CHART_COLORS.amber,
+  '건의사항':  CHART_COLORS.teal,
+  '기타':      '#6b7280',
+};
+
+/** 위 세 표의 공통 조회 — 모르는 열쇠는 중립 회색. */
+export const dotColorOf = (map: Record<string, string>, key: string | null | undefined): string =>
+  (key && map[key]) || '#6b7280';
+
 /* 20 수리 의미색 단일 소스 — 상태 4종 + 본사 + 잔량.
    목록 dot·대시보드 도넛/KPI/그래프가 모두 이 상수를 참조해 의미↔색을 통일한다.
    (잔량은 여러 상태의 합이라 중립 회색.) */

@@ -8,31 +8,17 @@
 
 import { useState } from 'react'
 import DashCard from './DashCard'
+import { CountList, CountTotal, type CountRow } from '@/components/common/CountList'
 import EngineerStatCard, { type StatCardEngineer } from '@/components/sales/EngineerStatCard'
 import EngineerChartModal from '@/components/sales/EngineerChartModal'
 import { engineerStat, type StatQuote, type StatTarget } from '@/lib/salesStats'
-import { stageBars, type CardOpportunity } from '@/lib/homeCards'
+import { countByKey, stageBars, type CardOpportunity } from '@/lib/homeCards'
+import { DOC_TYPE_DOT_COLORS, NOTI_GROUP_DOT_COLORS, STAGE_DOT_COLORS, dotColorOf } from '@/lib/categoryColors'
+import { DOC_TYPE_KEYS, docTypeOf } from '@/lib/approval/docTypes'
+import { NOTI_GROUPS, notiGroupOf } from '@/lib/notificationGroups'
 import type { ApprovalRow, NotificationRow, Slot } from '@/hooks/dashboard/useDashboardCards'
 
 const TEXT = '#111827'
-const GRAY = '#6b7280'
-const MUTED = '#9ca3af'
-const FADE = '#d1d5db'
-const BLUE = '#234ea2'
-
-const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
-/** 금액을 줄여 쓴다 — 카드 한 줄에 들어가야 한다. */
-const compact = (n: number): string => {
-  if (!n) return '-'
-  if (n >= 1e8) return `${(Math.round((n / 1e8) * 10) / 10)}억`
-  if (n >= 1e7) return `${Math.round(n / 1e7)}천만`
-  if (n >= 1e4) return `${numKR(Math.round(n / 1e4))}만`
-  return numKR(n)
-}
-
-const empty = (text: string) => (
-  <div style={{ fontSize: 12, color: MUTED, paddingTop: 8 }}>{text}</div>
-)
 
 // ── 내 실적 ─────────────────────────────────────────────────────────────────
 
@@ -87,28 +73,21 @@ export function MyStatCard({ engineer, quotes, targets, fy, loading, error }: {
 
 // ── 포캐스트 ────────────────────────────────────────────────────────────────
 
-/** 내 포캐스트를 단계별 가로막대 다섯 줄로. 카드를 누르면 포캐스트 화면으로 간다. */
+/**
+ * 내 포캐스트를 **단계별 건수**로. 줄·카드 모두 포캐스트 화면으로 간다.
+ *
+ * 금액 막대는 뺐다 — 다섯 카드가 같은 틀(점·이름·건수·합계)을 쓰기로 했고, 금액은
+ * 포캐스트 화면과 엑셀이 제대로 보여 준다. 카드에서 알고 싶은 것은 「몇 건이 떠 있는가」다.
+ */
 export function ForecastCard({ slot, onOpen }: { slot: Slot<CardOpportunity[]>; onOpen: () => void }) {
   const bars = stageBars(slot.data)
-  const max = Math.max(1, ...bars.map(b => b.amount))
-  const total = bars.reduce((s, b) => s + b.count, 0)
+  const rows: CountRow[] = bars
+    .filter(b => b.count > 0)
+    .map(b => ({ key: b.stage, label: b.stage, count: b.count, color: dotColorOf(STAGE_DOT_COLORS, b.stage), onClick: onOpen }))
   return (
     <DashCard title="포캐스트" onClick={onOpen} loading={slot.loading} error={slot.error} errorMessage={slot.message}>
-      {total === 0 ? empty('진행 중인 포캐스트가 없습니다') : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {bars.map(b => (
-            <div key={b.stage} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-              <span style={{ width: 52, flexShrink: 0, fontSize: 11, fontWeight: 600, color: b.count ? TEXT : FADE }}>{b.stage}</span>
-              {/* 막대는 금액 비율이다. 0 원이어도 건수가 있으면 가느다란 자국을 남긴다. */}
-              <span style={{ flex: 1, minWidth: 0, height: 8, background: '#f3f4f6', borderRadius: 4, overflow: 'hidden' }}>
-                <span style={{ display: 'block', height: '100%', width: `${b.amount > 0 ? Math.max(4, (b.amount / max) * 100) : (b.count ? 2 : 0)}%`, background: BLUE, borderRadius: 4 }} />
-              </span>
-              <span className="num" style={{ width: 34, flexShrink: 0, textAlign: 'right', fontSize: 11, fontWeight: 700, color: b.count ? TEXT : FADE }}>{b.count}건</span>
-              <span className="num" style={{ width: 54, flexShrink: 0, textAlign: 'right', fontSize: 11, color: b.amount ? GRAY : FADE }}>{compact(b.amount)}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      <CountList rows={rows} emptyText="진행 중인 포캐스트가 없습니다" fitHeight />
+      <CountTotal total={bars.reduce((s, b) => s + b.count, 0)} />
     </DashCard>
   )
 }
@@ -116,29 +95,22 @@ export function ForecastCard({ slot, onOpen }: { slot: Slot<CardOpportunity[]>; 
 // ── 알림 ────────────────────────────────────────────────────────────────────
 
 /**
- * 안 읽은 알림 최근 다섯. 한 줄을 누르면 그 알림이 가리키는 곳으로 가고,
- * 줄 밖(카드)을 누르면 알림 화면으로 간다. 줄은 전파를 막는다 — 두 곳으로 갈 수는 없다.
+ * 안 읽은 알림을 **종류별 건수**로. 묶음은 알림 화면과 같은 규칙이다(lib/notificationGroups.ts).
+ *
+ * 예전에는 최근 다섯 건의 제목을 늘어놓았다. 제목은 카드 폭에서 거의 잘리고, 어차피 눌러
+ * 알림 화면으로 가야 읽을 수 있었다 — 카드에서 알고 싶은 것은 「어떤 알림이 몇 건 밀렸는가」다.
+ * 줄·카드 모두 알림 화면으로 간다.
  */
-export function NotificationCard({ slot, onOpenAll, onOpen }: {
+export function NotificationCard({ slot, onOpenAll }: {
   slot: Slot<NotificationRow[]>
   onOpenAll: () => void
-  onOpen: (n: NotificationRow) => void
 }) {
+  const rows: CountRow[] = countByKey(slot.data, n => notiGroupOf(n.type ?? ''), NOTI_GROUPS)
+    .map(c => ({ key: c.key, label: c.key, count: c.count, color: dotColorOf(NOTI_GROUP_DOT_COLORS, c.key), onClick: onOpenAll }))
   return (
     <DashCard title="알림" onClick={onOpenAll} loading={slot.loading} error={slot.error} errorMessage={slot.message}>
-      {slot.data.length === 0 ? empty('읽지 않은 알림이 없습니다') : (
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {slot.data.map(n => (
-            <button key={n.id} type="button" onClick={e => { e.stopPropagation(); onOpen(n) }}
-              style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '7px 0', background: 'none', border: 'none', borderBottom: '1px solid #ebebeb', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
-              <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {n.title || n.message || '알림'}
-              </span>
-              <span style={{ flexShrink: 0, fontSize: 11, color: MUTED }}>{(n.created_at ?? '').slice(5, 10).replace('-', '.')}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      <CountList rows={rows} emptyText="읽지 않은 알림이 없습니다" fitHeight />
+      <CountTotal total={slot.data.length} />
     </DashCard>
   )
 }
@@ -146,40 +118,31 @@ export function NotificationCard({ slot, onOpenAll, onOpen }: {
 // ── 결재 대기 ───────────────────────────────────────────────────────────────
 
 /**
- * 내가 결재할 문서.
+ * 내가 결재할 문서를 **종류별 건수**로(견적서·쇼룸 사용 신청·견적 삭제 요청…).
+ * 이름은 등록표의 label 을 그대로 쓴다(lib/approval/docTypes.ts) — 결재함과 같은 말이다.
  *
  * **0 건이어도 카드는 그대로 있는다.** 예전에는 부르는 쪽이 `data.length > 0` 일 때만 그려서,
  * 결재할 것이 없는 사람에게는 카드가 아예 없었다 — 그러면 「없다」와 「조회가 깨졌다」를
  * 구분할 수 없다. 못 읽었을 때는 그 이유(errorMessage)까지 카드에 적는다.
+ *
+ * 줄·카드 모두 결재함으로 간다(문서 하나로 바로 가는 길은 결재함이 더 잘 보여 준다).
  */
-export function ApprovalCard({ slot, onOpenAll, onOpen }: {
+export function ApprovalCard({ slot, onOpenAll }: {
   slot: Slot<ApprovalRow[]>
   onOpenAll: () => void
-  onOpen: (d: ApprovalRow) => void
 }) {
+  const rows: CountRow[] = countByKey(slot.data, d => d.doc_type ?? '기타', DOC_TYPE_KEYS)
+    .map(c => ({
+      key: c.key,
+      label: docTypeOf(c.key)?.label ?? c.key,
+      count: c.count,
+      color: dotColorOf(DOC_TYPE_DOT_COLORS, c.key),
+      onClick: onOpenAll,
+    }))
   return (
     <DashCard title="결재 대기" onClick={onOpenAll} loading={slot.loading} error={slot.error} errorMessage={slot.message}>
-      {slot.data.length === 0 ? empty('대기 중인 문서가 없습니다') : (
-        <>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 8 }}>
-        <span className="num" style={{ fontSize: 24, fontWeight: 800, color: BLUE, letterSpacing: '-0.5px' }}>
-          {slot.data.length}
-        </span>
-        <span style={{ fontSize: 12, color: GRAY }}>건이 내 차례입니다</span>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {slot.data.slice(0, 3).map(d => (
-          <button key={d.document_id} type="button" onClick={e => { e.stopPropagation(); onOpen(d) }}
-            style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '6px 0', background: 'none', border: 'none', borderBottom: '1px solid #ebebeb', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
-            <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: MUTED }}>{d.doc_type ?? '문서'}</span>
-            <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {d.title || d.doc_no || `#${d.document_id}`}
-            </span>
-          </button>
-        ))}
-      </div>
-        </>
-      )}
+      <CountList rows={rows} emptyText="대기 중인 문서가 없습니다" fitHeight />
+      <CountTotal total={slot.data.length} />
     </DashCard>
   )
 }

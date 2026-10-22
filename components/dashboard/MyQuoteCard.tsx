@@ -17,13 +17,13 @@ import { useEffect, useRef, useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import MyQuotesPanel from '@/components/dashboard/MyQuotesPanel'
 import DashCard from './DashCard'
+import { CountList, CountTotal, type CountRow } from '@/components/common/CountList'
 import { quoteStatusCounts, type CardQuote } from '@/lib/homeCards'
 import { SALES_STATUS_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import type { Slot } from '@/hooks/dashboard/useDashboardCards'
 
 const TEXT = '#111827'
 const GRAY = '#6b7280'
-const MUTED = '#9ca3af'
 
 export type MyQuoteCardProps = {
   engineerId: number
@@ -42,6 +42,10 @@ export default function MyQuoteCard({ engineerId, slot, initialTab, onReload }: 
   // 주소로 들어온 값은 **처음 상태**로 넣는다(effect 로 열면 화면이 한 번 깜빡인다).
   const [openTab, setOpenTab] = useState<string | null>(initialTab ?? null)
   const counts = quoteStatusCounts(slot.data, engineerId)
+  const rows: CountRow[] = counts.map(({ status, count }) => {
+    const sc = getCategoryColor(SALES_STATUS_COLORS, status)
+    return { key: status, label: status, count, color: sc.dot ?? sc.text, onClick: () => setOpenTab(status) }
+  })
 
   const close = () => { setOpenTab(null); onReload() }
 
@@ -75,42 +79,11 @@ export default function MyQuoteCard({ engineerId, slot, initialTab, onReload }: 
         error={slot.error}
         errorMessage={slot.message}
       >
-        {/* 활동 기록 카드와 같은 모양 — 점 · 이름 · 오른쪽 건수 뱃지.
-            매출완료는 세지 않는다(끝난 건이라 쌓이기만 한다. lib/homeCards.ts 참조). */}
-        <div style={{ display: 'grid', gap: 7 }}>
-          {counts.map(({ status, count }) => {
-            const sc = getCategoryColor(SALES_STATUS_COLORS, status)
-            return (
-              <button key={status} type="button"
-                onClick={e => { e.stopPropagation(); setOpenTab(status) }}
-                title={`${status} 견적을 모달에서 봅니다`}
-                onMouseEnter={e => { e.currentTarget.style.background = '#f3f4f6' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
-                style={{
-                  height: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6,
-                  // 바탕색이 글자에 붙지 않게 좌우로 조금 넓히고, 그만큼 바깥으로 당긴다.
-                  padding: '0 6px', margin: '0 -6px', borderRadius: 6,
-                  background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                  transition: 'background 0.15s ease',
-                }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: sc.dot ?? sc.text, flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, color: TEXT, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{status}</span>
-                </span>
-                <span className="num" style={{
-                  fontSize: 12, fontWeight: 600, flexShrink: 0,
-                  color: count ? (sc.dot ?? sc.text) : MUTED,
-                  background: '#f3f4f6', borderRadius: 6, padding: '2px 8px',
-                }}>
-                  {count}<span style={{ color: MUTED }}>건</span>
-                </span>
-              </button>
-            )
-          })}
-        </div>
-        <div style={{ marginTop: 8, fontSize: 11, color: MUTED }}>
-          기간과 무관하게 지금 진행 중인 건입니다
-        </div>
+        {/* 활동 기록 카드와 같은 틀 — 점 · 이름 · 건수 뱃지 · 바닥 합계.
+            매출완료는 세지 않는다(끝난 건이라 쌓이기만 한다. lib/homeCards.ts 참조).
+            0 건인 상태도 **보여 준다** — 네 상태가 늘 같은 자리에 있어야 읽기 쉽다. */}
+        <CountList rows={rows} emptyText="진행 중인 견적이 없습니다" fitHeight />
+        <CountTotal total={counts.reduce((s, c) => s + c.count, 0)} />
       </DashCard>
 
       {/* 큰 모달 — **머리(고정) + 본문(스크롤)** 두 단이다. 표가 본래 쓰던 폭이 필요하다

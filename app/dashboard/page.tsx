@@ -21,7 +21,7 @@ import ActivityCard from '@/components/activity/ActivityCard'
 import DashCard from '@/components/dashboard/DashCard'
 import { ApprovalCard, ForecastCard, MyStatCard, NotificationCard } from '@/components/dashboard/HomeCards'
 import MyQuoteCard from '@/components/dashboard/MyQuoteCard'
-import { useDashboardCards, type ApprovalRow, type NotificationRow } from '@/hooks/dashboard/useDashboardCards'
+import { useDashboardCards } from '@/hooks/dashboard/useDashboardCards'
 import { nowKSTParts } from '@/lib/date'
 import { countedVisitEnd } from '@/lib/serviceVisit'
 
@@ -149,10 +149,6 @@ function DashboardPageInner() {
     color: disabled ? '#d1d5db' : '#111827', flexShrink: 0, padding: 0,
   })
 
-  /** 알림을 누르면 그 알림이 가리키는 곳으로 간다(링크가 없으면 알림 화면). */
-  const openNotification = (n: NotificationRow) => router.push(n.link || '/notifications')
-  const openApproval = (d: ApprovalRow) => router.push(`/approval/doc/${d.document_id}`)
-
   return (
     <div style={{ background: '#fafafa', minHeight: '100vh', padding: '24px 28px' }}>
       <style>{`
@@ -243,11 +239,7 @@ function DashboardPageInner() {
           {/* 결재 대기 — **0 건이어도 자리를 지킨다.** 예전에는 내 차례가 없으면 카드를
               아예 내지 않아, 결재함이 깨진 것과 할 일이 없는 것이 똑같이 보였다. */}
           <div className="home-cell">
-            <ApprovalCard
-              slot={cards.approvals}
-              onOpenAll={() => router.push('/approval')}
-              onOpen={openApproval}
-            />
+            <ApprovalCard slot={cards.approvals} onOpenAll={() => router.push('/approval')} />
           </div>
 
           {/* 2행 — 포캐스트 · 알림 · (빈 자리 둘) */}
@@ -256,11 +248,7 @@ function DashboardPageInner() {
           </div>
 
           <div className="home-cell">
-            <NotificationCard
-              slot={cards.notifications}
-              onOpenAll={() => router.push('/notifications')}
-              onOpen={openNotification}
-            />
+            <NotificationCard slot={cards.notifications} onOpenAll={() => router.push('/notifications')} />
           </div>
 
           {/* 빈 자리 둘 — 카드 없이 칸만 둔다(격자 정렬). */}

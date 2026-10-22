@@ -10,6 +10,7 @@ import AccessGate from '@/components/common/AccessGate'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import NotificationList from '@/components/common/NotificationList'
 import { useNotifications, type Notification } from '@/hooks/useNotifications'
+import { NOTI_GROUPS, notiGroupOf } from '@/lib/notificationGroups'
 import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, BLUE, NEUTRAL_BG, inputStyle,
 } from '@/components/common/ui'
@@ -19,24 +20,8 @@ const POLL_MS = 30000
 /** [더 보기] 한 번에 받는 건수. */
 const PAGE_SIZE = 30
 
-/**
- * 유형 묶음 — notifications.type 의 접두어로 가른다.
- * 어디에도 걸리지 않는 것은 「기타」로 모인다(발주·세금계산서·일정 등).
- * 새 type 이 생겨도 화면이 깨지지 않고 기타로 떨어진다.
- */
-const TYPE_GROUPS: { label: string; prefixes: string[] }[] = [
-  { label: '견적', prefixes: ['quote_'] },
-  { label: '리드', prefixes: ['lead_'] },
-  { label: '요청/결재', prefixes: ['approval_', 'showroom_', 'request', 'stock_'] },
-  { label: '건의사항', prefixes: ['suggestion_'] },
-]
-const TYPE_TABS = ['전체', ...TYPE_GROUPS.map(g => g.label), '기타']
-
-/** 알림 하나가 어느 묶음인지. */
-function groupOf(type: string): string {
-  const hit = TYPE_GROUPS.find(g => g.prefixes.some(p => type.startsWith(p)))
-  return hit ? hit.label : '기타'
-}
+// 유형 묶음 규칙은 lib/notificationGroups.ts 에 있다 — 홈의 알림 카드가 같은 규칙으로 센다.
+const TYPE_TABS = ['전체', ...NOTI_GROUPS]
 
 /** 날짜 묶음 — 오늘 / 어제 / 이번 주 / 그 이전. */
 function dateBucket(iso: string): string {
@@ -67,7 +52,7 @@ export default function NotificationsPage() {
 
   // 유형은 받아 온 목록에서 거른다(조회 조건이 아니라 표시 필터다).
   const filtered = useMemo(
-    () => (typeTab === '전체' ? notifications : notifications.filter(n => groupOf(n.type) === typeTab)),
+    () => (typeTab === '전체' ? notifications : notifications.filter(n => notiGroupOf(n.type) === typeTab)),
     [notifications, typeTab],
   )
 

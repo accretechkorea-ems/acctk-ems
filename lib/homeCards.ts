@@ -102,6 +102,32 @@ export function quoteStatusCounts(
   }))
 }
 
+// ── 열쇠별 건수 ─────────────────────────────────────────────────────────────
+
+export type KeyCount = { key: string; count: number }
+
+/**
+ * 같은 열쇠끼리 센다 — 결재 문서 종류별·알림 묶음별 건수가 이걸로 만들어진다.
+ *
+ * order 에 있는 열쇠는 **그 순서로 먼저**, 없는 열쇠는 처음 나온 순서로 뒤에 붙는다
+ * (등록표에 없는 doc_type 이나 새로 생긴 알림 종류가 조용히 사라지지 않게).
+ * 0 건인 열쇠는 내지 않는다 — 활동 기록 카드가 0건 유형을 숨기는 것과 같은 규칙이다.
+ */
+export function countByKey<T>(
+  rows: readonly T[],
+  keyOf: (row: T) => string,
+  order: readonly string[] = [],
+): KeyCount[] {
+  const counts = new Map<string, number>()
+  for (const row of rows) {
+    const key = keyOf(row)
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+  const known = order.filter(k => (counts.get(k) ?? 0) > 0).map(k => ({ key: k, count: counts.get(k) as number }))
+  const rest = [...counts.keys()].filter(k => !order.includes(k)).map(k => ({ key: k, count: counts.get(k) as number }))
+  return [...known, ...rest]
+}
+
 // ── 포캐스트 단계 막대 ──────────────────────────────────────────────────────
 
 /** 보드에 세우는 단계(실주는 빼고 — 끝난 건이다). components/customer/opportunity.ts 와 같은 순서다. */

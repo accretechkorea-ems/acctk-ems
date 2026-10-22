@@ -31,8 +31,9 @@ Module._resolveFilename = function (req, ...rest) {
 }
 
 const {
-  monthKpi, stageBars, CARD_STAGES, quoteStatusCounts, CARD_QUOTE_STATUSES,
+  monthKpi, stageBars, CARD_STAGES, quoteStatusCounts, CARD_QUOTE_STATUSES, countByKey,
 } = load(path.join(ROOT, 'lib/homeCards.ts'))
+const { NOTI_GROUPS, notiGroupOf } = load(path.join(ROOT, 'lib/notificationGroups.ts'))
 
 let fails = 0
 const eq = (name, got, want) => {
@@ -108,6 +109,33 @@ console.log('\n── 단계별 막대 ──')
   eq('상담 2건 300', [bars[0].count, bars[0].amount], [2, 300])
   eq('협상 1건 500', [bars[3].count, bars[3].amount], [1, 500])
   eq('종료된 건은 빠진다', [bars[4].count, bars[4].amount], [0, 0])
+}
+
+// ── 열쇠별 건수 ───────────────────────────────────────────────────────────
+console.log('\n── 열쇠별 건수(결재 종류·알림 묶음) ──')
+{
+  const docs = [
+    { doc_type: 'quote' }, { doc_type: 'quote' },
+    { doc_type: 'quote_delete' },
+    { doc_type: 'showroom' },
+    { doc_type: 'unknown_kind' },   // 등록표에 없는 종류
+    { doc_type: null },             // 값이 없는 문서
+  ]
+  const rows = countByKey(docs, d => d.doc_type ?? '기타', ['quote', 'showroom', 'quote_delete'])
+  eq('등록 순서대로 먼저 — quote·showroom·quote_delete', rows.slice(0, 3).map(r => r.key), ['quote', 'showroom', 'quote_delete'])
+  eq('quote 2건', rows[0].count, 2)
+  eq('모르는 종류도 사라지지 않고 뒤에 붙는다', rows.slice(3).map(r => r.key).sort(), ['unknown_kind', '기타'])
+  eq('합계는 넘긴 건수와 같다', rows.reduce((a, r) => a + r.count, 0), docs.length)
+  eq('0 건인 열쇠는 줄을 내지 않는다', countByKey([], d => d.doc_type, ['quote']).length, 0)
+}
+{
+  const n = t => ({ type: t })
+  const rows = countByKey([n('quote_new'), n('quote_won'), n('lead_assigned'), n('approval_turn'), n('tax_invoice_done')],
+    x => notiGroupOf(x.type), NOTI_GROUPS)
+  eq('알림 묶음 순서는 화면 탭과 같다', rows.map(r => r.key), ['견적', '리드', '요청/결재', '기타'])
+  eq('견적 2건', rows[0].count, 2)
+  eq('접두어에 안 걸리면 기타', notiGroupOf('tax_invoice_done'), '기타')
+  eq('기타가 마지막 묶음이다', NOTI_GROUPS[NOTI_GROUPS.length - 1], '기타')
 }
 
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)

@@ -39,6 +39,8 @@ export type NotificationRow = {
   message: string | null
   link: string | null
   created_at: string
+  /** 알림 종류(quote_*·lead_* 식). 카드가 묶음별로 세는 데 쓴다 — lib/notificationGroups.ts. */
+  type: string | null
 }
 
 export type ApprovalRow = { document_id: number; doc_no: string | null; title: string | null; doc_type: string | null }
@@ -122,10 +124,12 @@ export function useDashboardCards(engineerId: number | null, fiscalYear: number)
     })
 
     void run<NotificationRow[]>('notifications', setNotifications, [], async () => {
+      // **미읽음 전체**를 읽는다(limit 5 를 걷어냈다) — 카드가 종류별 건수와 합계를 세므로
+      // 최근 다섯 건만 보면 합계가 거짓이 된다. 한 사람 미읽음은 많아야 수십 줄이다.
       const { data, error } = await supabase.from('notifications')
-        .select('id, title, message, link, created_at')
+        .select('id, title, message, link, created_at, type')
         .eq('engineer_id', engineerId).eq('is_read', false)
-        .order('created_at', { ascending: false }).limit(5)
+        .order('created_at', { ascending: false })
       return { data: (data ?? []) as NotificationRow[], error }
     })
 
