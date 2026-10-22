@@ -60,6 +60,23 @@ const XLSX = await import('xlsx')
 
 - `xlsx` · `exceljs` · `@react-pdf/renderer` · 카카오맵 SDK.
 - 타입만 쓰는 import 는 정적이어도 된다(`import type { … } from 'exceljs'`).
-- **남은 숙제**: `@react-pdf/renderer` 정적 import 4곳 — app/customer/[id]/page.tsx:5 ·
-  hooks/customer/useServiceCrud.tsx:10 · hooks/quote/useQuoteSubmit.tsx:18 ·
-  components/quote/QuotePreviewPane.tsx:15. /quote·/customer 첫 번들에 PDF 엔진이 들어간다.
+- `@react-pdf/renderer` 정적 import 4곳은 **치웠다**(2단계). 그림 부분을 파일로 떼어
+  next/dynamic 으로 부르거나(components/quote/QuotePreviewCanvas.tsx), 누를 때 import() 한다
+  (hooks/quote/useQuoteSubmit.tsx · hooks/customer/useServiceCrud.tsx). 글꼴 등록도 그때 한다
+  (lib/pdf/reportFont.ts) — 모듈 수준 Font.register 한 줄이 1.4MB 를 첫 번들로 끌어왔다.
+  **측정: /quote 첫 로드 2,483KB → 1,062KB.**
+
+## 7. 번들 크기는 이렇게 잰다
+
+개발 서버의 .next 와 섞이지 않게 따로 빌드한다(next.config.ts 의 distDir 이 NEXT_DIST_DIR 을 본다).
+
+```
+NEXT_DIST_DIR=.next-perf npx next build
+```
+
+미리 그려진(○) 라우트는 그 HTML 이 불러오는 script 를 더하면 첫 로드 JS 다
+(.next-perf/server/app/<라우트>.html). 동적(ƒ) 라우트는 HTML 이 없으므로, 무거운 덩어리의
+파일 이름이 그 라우트의 서버 산출물에 적혀 있는지로 본다.
+
+빌드가 tsconfig.json 에 줄을 더하므로 측정 뒤 `git checkout tsconfig.json` 을 한다.
+측정 폴더(.next-perf*/)는 .gitignore 에 있다 — 두고 있으면 lint 가 빌드 산출물까지 읽는다.

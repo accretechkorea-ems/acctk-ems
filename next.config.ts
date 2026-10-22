@@ -49,6 +49,9 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
+  // 번들 크기를 재려고 개발 서버와 **다른 폴더**에 빌드할 때 쓴다(NEXT_DIST_DIR=.next-perf).
+  // 값을 주지 않으면 평소와 같다.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   async headers() {
     return [
       {

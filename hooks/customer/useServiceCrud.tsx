@@ -7,13 +7,14 @@
 // 레포트 PDF 를 만들 때 JSX 를 쓰므로 이 파일만 .tsx 다.
 
 import { useCallback, useRef, useState } from 'react'
-import { pdf } from '@react-pdf/renderer'
+
 import { createClient } from '@/lib/supabase/client'
+import { registerReportFont } from '@/lib/pdf/reportFont'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { deleteServiceAttachments, uploadAttachments } from '@/components/customer/attachments'
 import { reportDownloadName } from '@/components/customer/ServiceAttachments'
-import ServiceReportDoc from '@/components/customer/ServiceReportDoc'
+
 import type { Customer, Device, Contact, ServiceHistory, Engineer, ServiceForm, Holding } from '@/components/customer/types'
 
 type Args = {
@@ -173,6 +174,11 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
       const engineers = service.service_engineers ?? []
       const engineerNames = engineers.map(se => `${se.engineers.name} ${se.engineers.position ?? ''}`.trim()).join(', ')
       const firstEngineerName = engineers[0]?.engineers.name ?? ''
+      // PDF 엔진·서식·글꼴을 **여기서** 불러온다(고객사 상세 첫 로드에 얹지 않는다).
+      const [{ pdf }, { default: ServiceReportDoc }] = await Promise.all([
+        import('@react-pdf/renderer').then(async m => { await registerReportFont(m.Font); return m }),
+        import('@/components/customer/ServiceReportDoc'),
+      ])
       const blob = await pdf(
         <ServiceReportDoc
           service={service} device={device} customer={customer!} contact={contact}

@@ -2,7 +2,6 @@
 
 import { Suspense, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import { Font } from '@react-pdf/renderer'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { isSuperAdmin } from '@/lib/permissions'
@@ -45,11 +44,6 @@ import ServiceAddModal from '@/components/customer/modals/ServiceAddModal'
 import ServiceEditModal from '@/components/customer/modals/ServiceEditModal'
 import SignModal from '@/components/customer/modals/SignModal'
 import DeviceImageModal from '@/components/customer/modals/DeviceImageModal'
-
-Font.register({
-  family: 'NotoSansCJK',
-  src: 'https://fonts.gstatic.com/s/notosanskr/v36/PbyxFmXiEBPT4ITbgNA5Cgms3VYcOA-vvnIzzuoyeLTq8H4hfeE.ttf',
-})
 
 function CustomerDetailPageInner() {
   const { loading: guardLoading, authorized } = usePageGuard()

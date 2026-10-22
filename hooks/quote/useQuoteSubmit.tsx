@@ -15,10 +15,10 @@
 
 import { useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { pdf } from '@react-pdf/renderer'
+
 import type { ExpenseRow, PriceItem, QuoteRow } from '@/app/quote/types'
 import { calcTotals, createRow } from '@/app/quote/calc'
-import { QuotePDFDoc } from '@/app/quote/QuotePDFDoc'
+
 import { DEFAULT_TERMS, defaultTermsFor, type Terms } from '@/lib/quoteTerms'
 import { clearDraft } from '@/lib/quoteDraft'
 import { todayKST } from '@/lib/date'
@@ -197,6 +197,11 @@ export function useQuoteSubmit({
 
     const { totalSupply: finalTotalSupply, totalTax: finalTotalTax, totalAmount: finalTotalAmount } = calcTotals(finalRows)
 
+    // PDF 엔진과 서식은 **여기서** 불러온다(약 1.4MB — 견적 작성 첫 로드에 얹지 않는다).
+    const [{ pdf }, { QuotePDFDoc }] = await Promise.all([
+      import('@react-pdf/renderer'),
+      import('@/app/quote/QuotePDFDoc'),
+    ])
     const blob = await pdf(
       <QuotePDFDoc
         company={finalCompany}

@@ -11,14 +11,27 @@
 //
 // 확정 버튼은 번호를 발급하지 않는다 — 검증만 하고 확정 모달을 연다. 이니셜이 없으면 그 자리에서
 // 안내하고 멈춘다(번호를 만들 수 없기 때문이다).
+//
+// **그림 부분만 따로 불러온다**(QuotePreviewCanvas). PDF 엔진이 1.4MB 라 정적으로 묶으면
+// 머리줄·버튼을 그리기 전에 그것까지 내려받아야 했다. 지금은 화면이 먼저 뜨고, 미리보기 칸에는
+// 「PDF 준비 중…」이 한 번 지나간다.
 
-import { BlobProvider } from '@react-pdf/renderer'
-import { QuotePDFDoc } from '@/app/quote/QuotePDFDoc'
+import dynamic from 'next/dynamic'
 import type { QuoteRow } from '@/app/quote/types'
 import type { Terms } from '@/lib/quoteTerms'
 import type { OnBehalfAssignee } from '@/lib/quoteMutations'
 import { NO_INITIALS_MESSAGE } from '@/hooks/quote/useQuoteSubmit'
 import type { useToast } from '@/components/common/Toast'
+
+/** PDF 엔진(약 1.4MB)은 이 칸을 그릴 때 받아 온다 — /quote 첫 로드에 얹지 않는다. */
+const QuotePreviewCanvas = dynamic(() => import('./QuotePreviewCanvas'), {
+  ssr: false,
+  loading: () => (
+    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#9ca3af' }}>
+      PDF 준비 중...
+    </div>
+  ),
+})
 
 export type QuotePreviewPaneProps = {
   isClient: boolean
@@ -168,33 +181,22 @@ export default function QuotePreviewPane({
     {/* PDF — debounced 값 사용으로 깜빡임 방지 */}
     {isClient && (
       <div style={{ flex: 1, minWidth: 0, padding: 0, overflow: 'hidden' }}>
-        <BlobProvider document={
-          <QuotePDFDoc
-            company={debouncedCompany}
-            receiver={debouncedReceiver}
-            quoteNo={quoteNo}
-            dateDisplay={dateDisplay}
-            rows={debouncedRows}
-            remarks={debouncedFinalRemarks}
-            engineerName={engineerName}
-            engineerTel={engineerTel}
-            totalSupply={pdfTotalSupply}
-            totalTax={pdfTotalTax}
-            totalAmount={pdfTotalAmount}
-            showWatermark={true}
-            showSignature={showSignature}
-            terms={previewTerms}
-            formKind={formKind}
-          />
-        }>
-          {({ url }) => url ? (
-            <iframe
-              title="견적서 미리보기"
-              src={`${url}#view=FitH&toolbar=0&navpanes=0&scrollbar=0`}
-              style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
-            />
-          ) : null}
-        </BlobProvider>
+        <QuotePreviewCanvas
+          company={debouncedCompany}
+          receiver={debouncedReceiver}
+          quoteNo={quoteNo}
+          dateDisplay={dateDisplay}
+          rows={debouncedRows}
+          remarks={debouncedFinalRemarks}
+          engineerName={engineerName}
+          engineerTel={engineerTel}
+          totalSupply={pdfTotalSupply}
+          totalTax={pdfTotalTax}
+          totalAmount={pdfTotalAmount}
+          showSignature={showSignature}
+          terms={previewTerms}
+          formKind={formKind}
+        />
       </div>
     )}
   </div>
