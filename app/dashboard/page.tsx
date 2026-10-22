@@ -1,13 +1,27 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+// 개인 대시보드 — **4열 격자**다. 카드 하나가 한 가지를 말한다.
+//
+// 예전에는 왼쪽에 활동 요약, 오른쪽에 「내 견적」 표가 화면을 가득 채웠다. 표가 커서 다른 것을
+// 둘 자리가 없었고, 그래서 알림·결재·포캐스트는 각 화면까지 가야 보였다. 표는 모달로 옮기고
+// 자리를 카드에 나눠 준다 — 홈은 「무엇을 할 차례인가」를 보는 곳이다.
+//
+// ── 조회 ────────────────────────────────────────────────────────────────────
+//   카드마다 따로 읽되 **동시에** 시작한다(hooks/dashboard/useDashboardCards.ts).
+//   하나가 실패해도 그 카드만 「불러오지 못했습니다」가 되고 나머지는 그대로 뜬다.
+//   「내 견적」 표의 전체 자료는 **모달을 열 때** 읽는다 — 카드는 숫자만 본다.
+
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { canViewCustomers, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPerms'
 import { ACTIVITY_TYPES } from '@/lib/activity'
 import ActivityCard from '@/components/activity/ActivityCard'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
-import MyQuotesPanel from '@/components/dashboard/MyQuotesPanel'
+import DashCard from '@/components/dashboard/DashCard'
+import { ApprovalCard, ForecastCard, NotificationCard } from '@/components/dashboard/HomeCards'
+import { useDashboardCards, type ApprovalRow, type NotificationRow } from '@/hooks/dashboard/useDashboardCards'
 import { nowKSTParts } from '@/lib/date'
 import { countedVisitEnd } from '@/lib/serviceVisit'
 
@@ -27,7 +41,8 @@ type ServiceTypeRow = { service_type: string | null }
 type SalesTypeRow = { activity_type: string | null }
 
 export default function DashboardPage() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
+  const router = useRouter()
   const [me, setMe] = useState<Me | null>(null)
   const [loading, setLoading] = useState(true)
   const [activityYm, setActivityYm] = useState(() => { const n = nowKSTParts(); return { y: n.y, m: n.m } })
@@ -72,6 +87,10 @@ export default function DashboardPage() {
   const todayLabel = `${nowD.y}년 ${nowD.m}월 ${nowD.d}일`
   const showActivity = canViewCustomers(me) // customers 를 읽을 수 있는 팀에만 노출
   const engineerId = me?.engineer_id ?? null
+
+  // 회계연도는 4월 시작 — 실적 현황·포캐스트와 같은 규칙이다.
+  const fiscalYear = nowD.m >= 4 ? nowD.y : nowD.y - 1
+  const cards = useDashboardCards(engineerId, fiscalYear)
 
   // 본인 활동 건수 집계 — 활동 현황 화면과 같은 규칙이다.
   // 서비스는 참여자 표(service_engineers)를 거쳐 세고, 영업 활동은 engineer_id 로 바로 걸러진다.
@@ -121,34 +140,40 @@ export default function DashboardPage() {
   }, [engineerId, showActivity, activityStart, activityEnd])
 
   const actTotal = actCounts ? Object.values(actCounts).reduce((a, b) => a + b, 0) : 0
-  // 월 이동 버튼 — 활동 현황 카드 위 줄에 놓는다(카드 안에는 넣지 않는다).
+  // 월 이동 버튼 — 활동 카드의 머리 오른쪽에 놓는다(카드 안에는 넣지 않는다).
   const stepBtn = (disabled: boolean) => ({
     width: 24, height: 24, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6',
     cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 700,
     color: disabled ? '#d1d5db' : '#111827', flexShrink: 0, padding: 0,
   })
 
+  /** 알림을 누르면 그 알림이 가리키는 곳으로 간다(링크가 없으면 알림 화면). */
+  const openNotification = (n: NotificationRow) => router.push(n.link || '/notifications')
+  const openApproval = (d: ApprovalRow) => router.push(`/approval/doc/${d.document_id}`)
+
+  // 결재 대기는 **내 차례인 문서가 있을 때만** 자리를 차지한다.
+  // 결재 화면 자체가 전원 공개라(menuPerms 의 approvals.menuPublic) 권한으로는 가를 수 없어,
+  // 「받은 것이 있는가」로 가른다. 없는 사람에게는 빈 자리로 둔다.
+  const showApproval = cards.approvals.loading || cards.approvals.error || cards.approvals.data.length > 0
+
   return (
     <div style={{ background: '#fafafa', minHeight: '100vh', padding: '24px 28px' }}>
       <style>{`
-        /* 왼쪽 300px 고정(활동 요약) + 오른쪽이 남는 폭 전부(내 견적).
-           DOM 순서는 견적이 먼저다 — 1열로 내려가면 견적이 위로 온다. */
-        .dash-row {
+        /* 4열 격자. 카드 높이는 줄마다 같다(260px) — 높이가 들쭉날쭉하면 격자가 어긋난다.
+           빈 자리는 카드 없이 둔다(격자 정렬만 맞춘다). */
+        .home-grid {
           display: grid;
-          grid-template-columns: 300px minmax(0, 1fr);
-          grid-template-areas: "side quotes";
-          gap: 12px; align-items: start; margin-top: 16px;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-auto-rows: 260px;
+          gap: 12px; margin-top: 16px;
         }
-        .dash-quotes { grid-area: quotes; min-width: 0; display: flex; flex-direction: column; }
-        .dash-side { grid-area: side; display: flex; flex-direction: column; gap: 12px; }
-        /* 본문이 900px 밑으로 좁아지면 1열. 사이드바가 232px 을 가져가므로 화면 기준 1132px 이 경계다. */
-        @media (max-width: 1131px) {
-          .dash-row {
-            grid-template-columns: minmax(0, 1fr);
-            grid-template-areas: "quotes" "side";
-          }
-        }
-
+        /* 본문이 좁아지면 2열 → 1열. 사이드바가 232px 을 가져가므로 화면 기준 1280/768 을
+           그대로 쓰면 한 칸 늦게 접힌다 — 본문 폭으로 재는 값을 쓴다. */
+        @media (max-width: 1280px) { .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 768px)  { .home-grid { grid-template-columns: minmax(0, 1fr); } }
+        /* 활동 카드는 원래 제 높이를 쓰던 부품이라 격자 칸에 맞춰 넘치는 만큼만 감춘다. */
+        .home-grid > .home-cell { min-width: 0; min-height: 0; overflow: hidden; display: flex; }
+        .home-grid > .home-cell > * { flex: 1; min-width: 0; }
       `}</style>
       <div style={{ maxWidth: 1600, margin: '0 auto' }}>
         {/* 인사말 + 오늘 날짜 (한 줄) */}
@@ -159,17 +184,10 @@ export default function DashboardPage() {
           <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>{todayLabel}</span>
         </div>
 
-        <div className="dash-row">
-          {/* 내 견적 (읽기 전용: 실적 요약 · 필터 · 검색 · 목록 · 엑셀) — 이 화면의 본체 */}
-          <div className="dash-quotes">
-            {me && <MyQuotesPanel engineerId={me.engineer_id} fitToHeight />}
-          </div>
-
-          <div className="dash-side">
-            {/* 활동 요약 — 활동 현황 화면의 카드를 그대로 쓰되 본인 것 하나만.
-                월 이동은 카드의 headerRight 슬롯(원래 팀 뱃지 자리)에 넣는다 — 팀은 인사말에 이미 있다.
-                카드 전체가 상세 모달을 여는 클릭 대상이라, 월 버튼은 클릭이 위로 번지지 않게 막는다. */}
-            {showActivity && me && actCounts && (
+        <div className="home-grid">
+          {/* 1행 — 활동 기록 · 내 견적 · 포캐스트 · 알림 */}
+          <div className="home-cell">
+            {showActivity && me && actCounts ? (
               <ActivityCard
                 engineer={me}
                 counts={actCounts}
@@ -185,9 +203,41 @@ export default function DashboardPage() {
                   </div>
                 }
               />
-            )}
-
+            ) : showActivity ? (
+              <DashCard title="활동 기록" loading>{null}</DashCard>
+            ) : null}
           </div>
+
+          {/* 내 견적 — 다음 커밋에서 카드와 모달이 들어온다. */}
+          <div className="home-cell" />
+
+          <div className="home-cell">
+            <ForecastCard slot={cards.opportunities} onOpen={() => router.push('/pipeline')} />
+          </div>
+
+          <div className="home-cell">
+            <NotificationCard
+              slot={cards.notifications}
+              onMore={() => router.push('/notifications')}
+              onOpen={openNotification}
+            />
+          </div>
+
+          {/* 2행 — 결재 대기 · 할 일 · (빈 자리 둘) */}
+          <div className="home-cell">
+            {showApproval && (
+              <ApprovalCard
+                slot={cards.approvals}
+                onMore={() => router.push('/approval')}
+                onOpen={openApproval}
+              />
+            )}
+          </div>
+
+          {/* 할 일 — 다음 커밋. */}
+          <div className="home-cell" />
+          <div className="home-cell" />
+          <div className="home-cell" />
         </div>
       </div>
 
