@@ -6,7 +6,11 @@
 // 카드는 **자기 자료만** 본다. 숫자 규칙은 lib/homeCards.ts, 조회는 useDashboardCards 가 맡고
 // 여기서는 그리기만 한다 — 그래야 한 카드가 실패해도 다른 카드가 멀쩡히 뜬다.
 
+import { useState } from 'react'
 import DashCard from './DashCard'
+import EngineerStatCard, { type StatCardEngineer } from '@/components/sales/EngineerStatCard'
+import EngineerChartModal from '@/components/sales/EngineerChartModal'
+import { engineerStat, type StatQuote, type StatTarget } from '@/lib/salesStats'
 import { stageBars, type CardOpportunity } from '@/lib/homeCards'
 import type { ApprovalRow, NotificationRow, Slot } from '@/hooks/dashboard/useDashboardCards'
 
@@ -29,6 +33,52 @@ const compact = (n: number): string => {
 const empty = (text: string) => (
   <div style={{ fontSize: 12, color: MUTED, paddingTop: 8 }}>{text}</div>
 )
+
+// ── 내 실적 ─────────────────────────────────────────────────────────────────
+
+/**
+ * 본인 한 명분 실적 — **실적 현황의 개인 카드 그대로**다(부품을 함께 쓴다).
+ * 다른 것은 누를 때뿐이다: 실적 현황은 견적 목록으로 가지만, 홈은 카드 어디를 눌러도
+ * **월별 매출 그래프**가 바로 열린다(견적 목록은 옆의 「내 견적」 카드가 맡는다).
+ *
+ * 회계연도 전체(mode: 'year')를 본다 — 홈에서 먼저 보고 싶은 것은 올해 성적이다.
+ * 기간 선택은 실적 현황에서 한다.
+ */
+export function MyStatCard({ engineer, quotes, targets, fy, loading, error }: {
+  engineer: StatCardEngineer
+  quotes: StatQuote[]
+  targets: StatTarget[]
+  fy: number
+  loading: boolean
+  error: boolean
+}) {
+  const [chartOpen, setChartOpen] = useState(false)
+  const stat = engineerStat(quotes, targets, { engineerId: engineer.engineer_id, fy, mode: 'year', month: 1 })
+  return (
+    <>
+      <DashCard title={`내 실적 · FY${fy}`} onMore={() => setChartOpen(true)} moreLabel="월별 그래프" loading={loading} error={error}>
+        {/* 카드 자체가 /sales 의 그 카드다. 머리줄(이름·팀·달성률)이 겹치지 않게 여기서는
+            DashCard 의 제목만 쓰고, 카드는 여백을 줄인 모양(compact)으로 넣는다. */}
+        <EngineerStatCard
+          engineer={engineer}
+          stat={stat}
+          compact
+          delay={80}
+          onClick={() => setChartOpen(true)}
+        />
+      </DashCard>
+      {chartOpen && (
+        <EngineerChartModal
+          engineer={engineer}
+          quotes={quotes}
+          targets={targets}
+          fy={fy}
+          onClose={() => setChartOpen(false)}
+        />
+      )}
+    </>
+  )
+}
 
 // ── 포캐스트 ────────────────────────────────────────────────────────────────
 

@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { todayKST } from '@/lib/date'
 import type { CardOpportunity, CardQuote } from '@/lib/homeCards'
+import type { StatTarget } from '@/lib/salesStats'
 
 /** 한 카드의 자료 — 못 읽었으면 error 가 참이고, 그 카드만 그 사실을 말한다. */
 export type Slot<T> = { data: T; loading: boolean; error: boolean }
@@ -29,6 +30,8 @@ export type ApprovalRow = { document_id: number; doc_no: string | null; title: s
 
 export type DashboardCards = {
   quotes: Slot<CardQuote[]>
+  /** 연간 목표 — 「내 실적」 카드의 달성률이 쓴다(실적 현황과 같은 행을 본다). */
+  targets: Slot<StatTarget[]>
   opportunities: Slot<CardOpportunity[]>
   notifications: Slot<NotificationRow[]>
   approvals: Slot<ApprovalRow[]>
@@ -42,6 +45,7 @@ export function useDashboardCards(engineerId: number | null, fiscalYear: number)
   const today = todayKST()
 
   const [quotes, setQuotes] = useState<Slot<CardQuote[]>>(() => idle<CardQuote[]>([]))
+  const [targets, setTargets] = useState<Slot<StatTarget[]>>(() => idle<StatTarget[]>([]))
   const [opportunities, setOpportunities] = useState<Slot<CardOpportunity[]>>(() => idle<CardOpportunity[]>([]))
   const [notifications, setNotifications] = useState<Slot<NotificationRow[]>>(() => idle<NotificationRow[]>([]))
   const [approvals, setApprovals] = useState<Slot<ApprovalRow[]>>(() => idle<ApprovalRow[]>([]))
@@ -88,6 +92,13 @@ export function useDashboardCards(engineerId: number | null, fiscalYear: number)
     // **동시에** 시작한다. await 로 줄줄이 엮지 않는다.
     void reloadQuotes()
 
+    void run<StatTarget[]>('targets', setTargets, [], async () => {
+      const { data, error } = await supabase.from('sales_targets')
+        .select('engineer_id, year, quarter, target_amount, order_target_amount')
+        .eq('engineer_id', engineerId)
+      return { data: (data ?? []) as StatTarget[], error }
+    })
+
     void run<CardOpportunity[]>('opportunities', setOpportunities, [], async () => {
       const { data, error } = await supabase.from('sales_opportunities')
         .select('opportunity_id, stage, expected_amount, closed_at, created_at, engineer_id')
@@ -115,5 +126,5 @@ export function useDashboardCards(engineerId: number | null, fiscalYear: number)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engineerId, fiscalYear])
 
-  return { quotes, opportunities, notifications, approvals, today, reloadQuotes }
+  return { quotes, targets, opportunities, notifications, approvals, today, reloadQuotes }
 }

@@ -20,7 +20,7 @@ import { ACTIVITY_TYPES } from '@/lib/activity'
 import ActivityCard from '@/components/activity/ActivityCard'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
 import DashCard from '@/components/dashboard/DashCard'
-import { ApprovalCard, ForecastCard, NotificationCard } from '@/components/dashboard/HomeCards'
+import { ApprovalCard, ForecastCard, MyStatCard, NotificationCard } from '@/components/dashboard/HomeCards'
 import MyQuoteCard from '@/components/dashboard/MyQuoteCard'
 import { useDashboardCards, type ApprovalRow, type NotificationRow } from '@/hooks/dashboard/useDashboardCards'
 import { nowKSTParts } from '@/lib/date'
@@ -239,7 +239,7 @@ function DashboardPageInner() {
             />
           </div>
 
-          {/* 2행 — 결재 대기 · (빈 자리 셋) */}
+          {/* 2행 — 결재 대기 · 내 실적 · (빈 자리 둘) */}
           <div className="home-cell">
             {showApproval && (
               <ApprovalCard
@@ -250,8 +250,21 @@ function DashboardPageInner() {
             )}
           </div>
 
-          {/* 빈 자리 셋 — 카드 없이 칸만 둔다(격자 정렬). */}
-          <div className="home-cell" />
+          {/* 내 실적 — 결재 카드가 숨어도 **제자리**다(위 칸이 비어 있을 뿐 당겨지지 않는다). */}
+          <div className="home-cell">
+            {me && (
+              <MyStatCard
+                engineer={me}
+                quotes={cards.quotes.data}
+                targets={cards.targets.data}
+                fy={fiscalYear}
+                loading={cards.quotes.loading || cards.targets.loading}
+                error={cards.quotes.error || cards.targets.error}
+              />
+            )}
+          </div>
+
+          {/* 빈 자리 둘 — 카드 없이 칸만 둔다(격자 정렬). */}
           <div className="home-cell" />
           <div className="home-cell" />
         </div>

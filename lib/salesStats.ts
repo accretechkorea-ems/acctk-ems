@@ -20,8 +20,10 @@ export type PeriodMode = 'year' | 'month' | 'q1' | 'q2' | 'q3' | 'q4' | 'h1' | '
 
 /** 집계에 필요한 견적의 최소 모양. */
 export type StatQuote = {
-  engineer_id: number
-  quote_date: string
+  /** 실적 귀속자. 옛 행에는 비어 있을 수 있다 — 어느 담당자에게도 잡히지 않는다. */
+  engineer_id: number | null
+  /** 견적일 'YYYY-MM-DD'. 없으면 「견적 제출」 어느 기간에도 들지 않는다. */
+  quote_date: string | null
   status: string | null
   purchase_order_at?: string | null
   tax_invoice_completed_at?: string | null
@@ -111,7 +113,7 @@ export function engineerStat(
 ): EngineerStat {
   const { engineerId, fy, mode, month } = opts
   const mine = quotes.filter(q => q.engineer_id === engineerId)
-  const quoted = mine.filter(q => matchPeriod(q.quote_date, fy, mode, month))
+  const quoted = mine.filter(q => !!q.quote_date && matchPeriod(q.quote_date, fy, mode, month))
   const ordered = mine.filter(q => inOrderPeriod(q, fy, mode, month))
   const revenue = mine.filter(q => inRevenuePeriod(q, fy, mode, month))
 
