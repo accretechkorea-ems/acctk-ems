@@ -20,7 +20,7 @@ import { ACTIVITY_TYPES } from '@/lib/activity'
 import ActivityCard from '@/components/activity/ActivityCard'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
 import DashCard from '@/components/dashboard/DashCard'
-import { ApprovalCard, ForecastCard, NotificationCard } from '@/components/dashboard/HomeCards'
+import { ApprovalCard, ForecastCard, NotificationCard, TodoCard } from '@/components/dashboard/HomeCards'
 import MyQuoteCard from '@/components/dashboard/MyQuoteCard'
 import { useDashboardCards, type ApprovalRow, type NotificationRow } from '@/hooks/dashboard/useDashboardCards'
 import { nowKSTParts } from '@/lib/date'
@@ -245,8 +245,26 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* 할 일 — 다음 커밋. */}
-          <div className="home-cell" />
+          <div className="home-cell">
+            {me && (
+              <TodoCard
+                input={{
+                  opportunities: cards.opportunities.data,
+                  quotes: cards.quotes.data,
+                  leads: cards.leads.data,
+                  lastActivity: cards.lastActivity.data,
+                  engineerId: me.engineer_id,
+                  today: cards.today,
+                }}
+                // 네 재료가 **다 와야** 센다. 하나만 읽히고 나머지가 비면 할 일이 없는 것처럼 보인다.
+                ready={!cards.opportunities.loading && !cards.quotes.loading && !cards.leads.loading && !cards.lastActivity.loading}
+                error={cards.opportunities.error || cards.quotes.error || cards.leads.error}
+                onOpen={t => router.push(t.href)}
+              />
+            )}
+          </div>
+
+          {/* 빈 자리 둘 — 카드 없이 칸만 둔다(격자 정렬). */}
           <div className="home-cell" />
           <div className="home-cell" />
         </div>

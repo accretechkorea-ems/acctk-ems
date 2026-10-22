@@ -7,7 +7,7 @@
 // 여기서는 그리기만 한다 — 그래야 한 카드가 실패해도 다른 카드가 멀쩡히 뜬다.
 
 import DashCard from './DashCard'
-import { stageBars, type CardOpportunity } from '@/lib/homeCards'
+import { buildTodos, stageBars, type CardOpportunity, type TodoInput, type TodoItem } from '@/lib/homeCards'
 import type { ApprovalRow, NotificationRow, Slot } from '@/hooks/dashboard/useDashboardCards'
 
 const TEXT = '#111827'
@@ -77,6 +77,44 @@ export function NotificationCard({ slot, onMore, onOpen }: {
                 {n.title || n.message || '알림'}
               </span>
               <span style={{ flexShrink: 0, fontSize: 11, color: MUTED }}>{(n.created_at ?? '').slice(5, 10).replace('-', '.')}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </DashCard>
+  )
+}
+
+// ── 할 일 ───────────────────────────────────────────────────────────────────
+
+/**
+ * 손이 가야 하는 것만 모아 보여 준다. **규칙은 lib/homeCards.ts 가 정하고 여기서는 그린다.**
+ * 0건인 줄은 애초에 오지 않는다(buildTodos 가 걸러 낸다) — 「0건」이 네 줄 늘어서 있으면
+ * 할 일이 없다는 사실이 오히려 안 읽힌다.
+ *
+ * 네 재료(포캐스트·견적·활동·리드)를 다 못 읽었으면 **숫자를 만들지 않는다** — 한 가지만
+ * 읽히고 나머지가 비면 「할 일이 없습니다」로 보이는데, 그것은 사실이 아니다.
+ */
+export function TodoCard({ input, ready, error, onOpen }: {
+  input: TodoInput
+  ready: boolean
+  error: boolean
+  onOpen: (t: TodoItem) => void
+}) {
+  const todos = ready ? buildTodos(input) : []
+  return (
+    <DashCard title="할 일" loading={!ready && !error} error={error}>
+      {todos.length === 0 ? empty('할 일이 없습니다') : (
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {todos.map(t => (
+            <button key={t.key} type="button" onClick={() => onOpen(t)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', background: 'none', border: 'none', borderBottom: '1px solid #ebebeb', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
+              {/* 숫자가 먼저 읽혀야 한다 — 몇 건인지로 무엇부터 할지 정한다. */}
+              <span className="num" style={{ flexShrink: 0, minWidth: 22, fontSize: 15, fontWeight: 800, color: BLUE, textAlign: 'right' }}>{t.count}</span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {t.label.replace(` ${t.count}건`, '')}
+              </span>
+              <span style={{ flexShrink: 0, fontSize: 11, color: MUTED }}>→</span>
             </button>
           ))}
         </div>
