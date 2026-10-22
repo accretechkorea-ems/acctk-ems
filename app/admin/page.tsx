@@ -20,7 +20,7 @@ import { CHECKABLE_MENUS, checkableGroups, MENU_PERMS } from '@/lib/menuPerms'
 import AccessGate from '@/components/common/AccessGate'
 import QuoteCategoryManager from '@/components/admin/QuoteCategoryManager'
 import PriceListImportModal from '@/components/admin/priceList/PriceListImportModal'
-import { useOffices, selectableOffices, invalidateOffices, type Office } from '@/lib/offices'
+import { selectableOffices, invalidateOffices, type Office } from '@/lib/offices'
 import { geocodeAddress } from '@/lib/geocode'
 import { ROLE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import { useToast } from '@/components/common/Toast'
@@ -175,7 +175,8 @@ function AdminPageInner() {
 
   // ── 사무실 관리 ──
   // 값은 offices 테이블이 정본이다. 직원 등록·수정의 사무실 드롭다운도 같은 목록을 쓴다.
-  const { offices, loading: officesLoading } = useOffices()
+  // 사무실도 모달에서만 쓴다 — 훅으로 늘 읽지 않고, 사무실·직원 모달을 열 때 fetchOffices() 가 읽는다.
+  const [officesLoading, setOfficesLoading] = useState(false)
   const [officeList, setOfficeList] = useState<Office[]>([])
   const [showOfficeModal, setShowOfficeModal] = useState(false)
   const [officeSaving, setOfficeSaving] = useState(false)
@@ -787,17 +788,19 @@ function AdminPageInner() {
     )
   }
 
-  // 훅이 읽어 온 목록을 화면 상태로 옮겨 둔다. 저장 뒤에는 fetchOffices 로 다시 읽는다.
-  useEffect(() => { setOfficeList(offices) }, [offices])
-
-  /** 저장 뒤 캐시를 버리고 다시 읽는다 — 다른 화면(동선·업체 카드)도 새로고침하면 새 값을 본다. */
+  /**
+   * 사무실 목록을 읽는다 — 모달을 열 때와 저장한 뒤다.
+   * 캐시를 버리고 읽으므로 다른 화면(동선·업체 카드)도 새로고침하면 새 값을 본다.
+   */
   const fetchOffices = async () => {
+    setOfficesLoading(true)
     invalidateOffices()
     const { data } = await supabase
       .from('offices')
       .select('office_id, code, label, address, latitude, longitude, sort_order, is_active')
       .order('sort_order').order('code')
     setOfficeList((data ?? []) as Office[])
+    setOfficesLoading(false)
   }
 
   const openOfficeAdd = () => {
@@ -971,8 +974,9 @@ function AdminPageInner() {
     fetchTeams()
   }
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchTeams() }, [])
+  // 팀 목록을 **들어올 때 읽지 않는다.** 쓰는 곳은 팀 관리 모달과 직원 모달의 팀 선택칸뿐이고,
+  // 두 모달이 열 때 fetchTeams() 를 부른다. 게다가 이 조회는 loadTeamPerms 가 읽는 teams 와
+  // 겹쳐, 관리 화면에 들어오기만 해도 같은 표를 두 번 읽었다(docs/perf/baseline-browser.md ③).
 
   // ── 부대비용 단가 ───────────────────────────────────────────────────────────
   const fetchPresets = async () => {
@@ -1106,7 +1110,7 @@ function AdminPageInner() {
             {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
             <div style={{ flex: 1 }} />
             <button
-              onClick={() => { setShowEngineerModal(true); fetchEngineers(); fetchTeams() }}
+              onClick={() => { setShowEngineerModal(true); fetchEngineers(); fetchTeams(); fetchOffices() }}
               disabled={!isSuperAdmin(currentEngineer)}
               style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
               관리하기
