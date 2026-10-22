@@ -170,8 +170,11 @@ function DashboardPageInner() {
            그대로 쓰면 한 칸 늦게 접힌다 — 본문 폭으로 재는 값을 쓴다. */
         @media (max-width: 1280px) { .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
         @media (max-width: 768px)  { .home-grid { grid-template-columns: minmax(0, 1fr); } }
-        /* 활동 카드는 원래 제 높이를 쓰던 부품이라 격자 칸에 맞춰 넘치는 만큼만 감춘다. */
-        .home-grid > .home-cell { min-width: 0; min-height: 0; overflow: hidden; display: flex; }
+        /* 칸은 **자르지 않는다**(overflow 를 두지 않는다). 카드는 hover 때 2px 떠오르는데,
+           칸이 자르고 있으면 그 2px 이 그대로 깎여 위 테두리가 끊겨 보였다. 넘칠 걱정은
+           없다 — 카드마다 height:100% 로 칸에 맞고(DashCard·활동 카드·실적 카드),
+           길어지는 본문은 카드가 제 안에서 감추거나 스크롤한다. */
+        .home-grid > .home-cell { min-width: 0; min-height: 0; display: flex; }
         .home-grid > .home-cell > * { flex: 1; min-width: 0; }
       `}</style>
       <div style={{ maxWidth: 1600, margin: '0 auto' }}>
