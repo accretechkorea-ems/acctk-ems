@@ -46,7 +46,7 @@ sales_targets·notifications 각 2회 · 타임라인 12초)과 맞춰 읽는다
 | 18 | `service_history` | app/dashboard/page.tsx:116 | 17 이 끝나야 시작(직렬) |
 | 19 | `sales_activities` | app/dashboard/page.tsx:122 | 18 과 동시 |
 
-**합계 17 (브라우저) + API 라우트 2 (각자 서버에서 4~5 조회).**
+**합계 18 — Supabase·auth 16 + /api/approval 2** (그 라우트는 각자 서버에서 4~5 조회를 더 한다).
 dev 의 Strict Mode 이중 실행을 얹으면 ~30 — 관찰값과 맞는다.
 
 `customers` 는 **/dashboard 초기 경로에 없다.** 「내 견적」 모달을 열면
@@ -153,7 +153,7 @@ app/purchase/page.tsx:125 · app/sales/page.tsx:1334 (`customer_id, company_name
 | `getClaims` · `notices` | 2 | 2 | NoticePopup |
 | `quotes` · `sales_targets` · `sales_opportunities` | 3 | 3 | 카드(동시) |
 | `service_engineers` → `service_history` ‖ `sales_activities` | 3 | 3 | 활동 카드 |
-| **브라우저 조회 합계** | **17** | **15** | |
+| **브라우저 요청 합계** | **18** | **16** | 2단계에서 **14** (아래) |
 
 개발 모드의 Strict Mode 이중 실행도 **본인 확인에는 더 이상 걸리지 않는다** —
 모듈 수준에 약속을 캐시하므로 두 번째 실행이 같은 약속을 받는다(조회 1회).
@@ -183,3 +183,58 @@ app/purchase/page.tsx:125 · app/sales/page.tsx:1334 (`customer_id, company_name
    (배지의 폴링 10초도 함께 — `useNotifications` 의 `pollMs` 를 자리마다 정한다)
 2. `@react-pdf/renderer` 정적 import 4곳 → 동적으로(/quote·/customer 첫 번들).
 3. `select('*')` 큰 표부터 열 지정(`quotes`·`price_list`·`customers`·`notifications`).
+
+---
+
+## 2단계 — 알림·결재 스토어와 PDF 동적 로드 (2026-10-22)
+
+### /dashboard 요청 수
+
+| 조회 | 처음 | 1단계 뒤 | **2단계 뒤** |
+|---|---|---|---|
+| `auth/user` | 2 | 1 | 1 |
+| `engineers`(본인) | 2 | 1 | 1 |
+| `teams` · `team_permissions` | 2 | 2 | 2 |
+| `notifications` | 2 | 2 | **1** (배지·카드 공용 스토어) |
+| `GET /api/approval?box=inbox` | 2 | 2 | **1** (배지·카드 공용 스토어) |
+| `getClaims` · `notices` | 2 | 2 | 2 |
+| `quotes` · `sales_targets` · `sales_opportunities` | 3 | 3 | 3 |
+| 활동 3(`service_engineers`→`service_history`‖`sales_activities`) | 3 | 3 | 3 |
+| **합계** | **18** | **16** | **14** |
+
+### 켜 둔 동안 반복되는 조회 (더 큰 차이)
+
+| | 처음 | 2단계 뒤 |
+|---|---|---|
+| 알림 폴링 | **10초**마다 `select('*')` (사이드바가 모든 화면에서) | **60초**마다 열 지정 |
+| 결재 미결함 | 화면을 옮길 때마다 라우트 1회(배지) + 홈에서 1회(카드) | **60초**마다 1회(공용) |
+| 탭을 숨겼을 때 | 그대로 돈다 | **멈춘다**. 다시 보이면 즉시 1회 |
+
+10분을 켜 두고 보고 있으면: 알림 60회 → 10회, 미결함(홈에 머무를 때) 1회 → 10회가 아니라
+**60초에 한 번씩 10회**로 **예측 가능**해진다(예전에는 화면을 옮길 때마다 불규칙하게 나갔다).
+다른 탭을 보고 있으면 둘 다 0회다.
+
+### 번들
+
+| 라우트 | 전 | 후 |
+|---|---|---|
+| /quote 첫 로드 JS | **2,483 KB** (PDF 엔진 1,411 KB 포함) | **1,062 KB** |
+| /customer/[id] | PDF 엔진 포함(모듈 수준 Font.register) | 참조 0건 — 누를 때 받아 온다 |
+| /dashboard · /sales · /notifications · /leads · /approval · /inventory | 1,011 · 1,005 · 903 · 945 · 994 · 954 KB | 같음 |
+
+PDF 엔진은 1,411 KB 짜리 **지연 덩어리 하나**가 되었다. 재는 방법은 docs/perf-rules.md 7 에 있다.
+
+### 눈으로 확인하는 방법 (Kevin)
+
+1. **배지가 60초 안에 따라오는가** — 다른 사람 계정으로 알림이 생기는 일을 하나 만들고
+   (또는 결재를 올리고), 홈을 **그대로 두고** 1분 안에 사이드바 숫자와 홈 카드 숫자가
+   **같이** 올라가는지 본다. 둘이 다르면 스토어를 둘로 보고 있다는 뜻이다.
+2. **탭 전환 후 복귀** — 다른 탭에서 1~2분 있다가 돌아오면 **돌아온 순간** 숫자가 맞는다
+   (1분을 더 기다리지 않는다). 개발자도구 Network 를 열어 두면, 숨어 있는 동안
+   notifications·/api/approval 요청이 **한 건도** 없어야 한다.
+3. **읽음·결재 처리** — 알림을 읽거나 결재를 처리하면 폴링을 기다리지 않고 **즉시** 줄어든다.
+
+### 로그인·로그아웃
+
+로그아웃(또는 다른 계정으로 로그인)하면 MeProvider 가 본인·직원 목록·알림·미결함 네 캐시를
+함께 버린다. 남의 알림이 잠깐 보이는 일이 없고, 타이머는 보는 사람이 없어지면 멈춘다.
