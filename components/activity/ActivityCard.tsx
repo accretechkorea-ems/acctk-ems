@@ -58,18 +58,14 @@ export default function ActivityCard({ engineer, counts, total, onClick, headerR
       onMouseLeave={clickable ? (e => { const el = e.currentTarget as HTMLDivElement; el.style.transform = ''; el.style.borderColor = BORDER }) : undefined}
     >
       {/* 머리 — 홈(fitHeight)에서는 **DashCard 와 같은 한 줄**이다(치수도 같은 상수다).
+          제목은 다른 카드처럼 「활동 기록」이다 — 내 카드라 이름·직급은 군더더기다.
           이름 두 줄짜리 머리를 홈에 그대로 쓰면 구분선이 옆 카드보다 아래로 내려가 격자가
           어긋난다. 활동 현황 화면은 종전 모습(이름 17px + 아래 직급) 그대로다. */}
       {fitHeight ? (
         <div style={CARD_HEAD_STYLE}>
-          <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>{engineer.name}</span>
-          {engineer.position && <span style={{ fontSize: 11, fontWeight: 500, color: MUTED }}>{engineer.position}</span>}
+          <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>활동 기록</span>
           <span style={{ flex: 1 }} />
-          {headerRight ?? (engineer.teams && (
-            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, flexShrink: 0, background: '#f3f4f6', color: '#6b7280' }}>
-              {engineer.teams}
-            </span>
-          ))}
+          {headerRight}
         </div>
       ) : (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, paddingBottom: 12, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
