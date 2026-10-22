@@ -24,7 +24,8 @@ import {
   DIVISIONS, DIVISION_HOME, DIVISION_LABEL, canSwitchDivision, readSavedDivision, writeSavedDivision, type Division,
 } from '@/lib/division'
 import Popover from '@/components/common/Popover'
-import { useNotifications } from '@/hooks/useNotifications'
+import { useNotificationStore } from '@/lib/appData/notifications'
+import { useApprovalInbox } from '@/lib/appData/approvalInbox'
 import { Z } from '@/lib/zIndex'
 
 /** 사이드바 폭. 본문 margin-left 와 같아야 한다(HeaderWrapper 가 같은 값을 쓴다). */
@@ -236,28 +237,11 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
 
   useOutsideClick(meRef, () => setMeOpen(false), meOpen)
 
-  // 알림 로직은 공용 훅 그대로(대시보드와 같은 것을 쓴다).
-  // 배지 숫자만 쓴다(목록은 /notifications 가 보여준다). 폴링 주기도 예전 그대로다.
-  const { unreadCount } = useNotifications(engineerId)
-
-  // 결재 배지 — 내 차례인 문서 건수. 알림과 달리 폴링하지 않고 화면을 옮길 때마다 한 번 읽는다
-  // (결재는 내가 처리하면 곧바로 줄어드는 값이라, 이동할 때 맞춰 주면 충분하다).
-  const [approvalCount, setApprovalCount] = useState(0)
-  useEffect(() => {
-    if (!engineerId) return
-    let cancelled = false
-    const run = async () => {
-      try {
-        const res = await fetch('/api/approval?box=inbox')
-        const json = await res.json().catch(() => null)
-        if (!cancelled && res.ok) setApprovalCount((json?.documents ?? []).length)
-      } catch {
-        // 배지 숫자일 뿐이라 실패해도 조용히 둔다(메뉴는 그대로 동작한다).
-      }
-    }
-    run()
-    return () => { cancelled = true }
-  }, [engineerId, pathname])
+  // 알림·결재 배지는 **앱 당 한 벌인 스토어**에서 받는다(lib/appData/) — 홈 카드와 같은
+  // 자료를 보고, 조회는 60초에 한 번이며 탭이 숨으면 멈춘다. 예전에는 배지가 알림을 10초마다
+  // 따로 읽고 결재함도 화면을 옮길 때마다 따로 불러, 홈에서는 같은 것이 두 번씩 나갔다.
+  const { unreadCount } = useNotificationStore(engineerId)
+  const { count: approvalCount } = useApprovalInbox(engineerId)
 
   // 접힘 상태를 계정별로 저장하는 쪽(HeaderWrapper)에 본인 번호를 알려준다.
   useEffect(() => {

@@ -161,7 +161,6 @@ export default function DelegationModal({
     }
     run()
     return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   const load = useCallback(async (owner: number | null) => {

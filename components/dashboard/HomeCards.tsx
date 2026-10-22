@@ -5,6 +5,9 @@
 //
 // 카드는 **자기 자료만** 본다. 숫자 규칙은 lib/homeCards.ts, 조회는 useDashboardCards 가 맡고
 // 여기서는 그리기만 한다 — 그래야 한 카드가 실패해도 다른 카드가 멀쩡히 뜬다.
+//
+// 알림·결재 둘만 예외다. 사이드바 배지가 **같은 자료**를 쓰므로 조회를 앱 당 한 벌로 모았고
+// (lib/appData/notifications.ts·approvalInbox.ts), 두 카드는 그 스토어를 직접 본다.
 
 import { useState } from 'react'
 import DashCard from './DashCard'
@@ -16,7 +19,9 @@ import { countByKey, stageBars, type CardOpportunity } from '@/lib/homeCards'
 import { DOC_TYPE_DOT_COLORS, NOTI_GROUP_DOT_COLORS, STAGE_DOT_COLORS, dotColorOf } from '@/lib/categoryColors'
 import { DOC_TYPE_KEYS, docTypeOf } from '@/lib/approval/docTypes'
 import { NOTI_GROUPS, notiGroupOf } from '@/lib/notificationGroups'
-import type { ApprovalRow, NotificationRow, Slot } from '@/hooks/dashboard/useDashboardCards'
+import { useNotificationStore } from '@/lib/appData/notifications'
+import { useApprovalInbox } from '@/lib/appData/approvalInbox'
+import type { Slot } from '@/hooks/dashboard/useDashboardCards'
 
 const TEXT = '#111827'
 
@@ -101,16 +106,19 @@ export function ForecastCard({ slot, onOpen }: { slot: Slot<CardOpportunity[]>; 
  * 알림 화면으로 가야 읽을 수 있었다 — 카드에서 알고 싶은 것은 「어떤 알림이 몇 건 밀렸는가」다.
  * 줄·카드 모두 알림 화면으로 간다.
  */
-export function NotificationCard({ slot, onOpenAll }: {
-  slot: Slot<NotificationRow[]>
+export function NotificationCard({ engineerId, onOpenAll }: {
+  engineerId: number | null
   onOpenAll: () => void
 }) {
-  const rows: CountRow[] = countByKey(slot.data, n => notiGroupOf(n.type ?? ''), NOTI_GROUPS)
+  // 사이드바 배지와 **같은 스토어**다(조회는 둘이 합쳐 한 번).
+  const { notifications, unreadCount, loading, error } = useNotificationStore(engineerId)
+  const unread = notifications.filter(n => !n.is_read)
+  const rows: CountRow[] = countByKey(unread, n => notiGroupOf(n.type ?? ''), NOTI_GROUPS)
     .map(c => ({ key: c.key, label: c.key, count: c.count, color: dotColorOf(NOTI_GROUP_DOT_COLORS, c.key), onClick: onOpenAll }))
   return (
-    <DashCard title="알림" onClick={onOpenAll} loading={slot.loading} error={slot.error} errorMessage={slot.message}>
+    <DashCard title="알림" onClick={onOpenAll} loading={loading} error={!!error} errorMessage={error ?? undefined}>
       <CountList rows={rows} emptyText="읽지 않은 알림이 없습니다" fitHeight />
-      <CountTotal total={slot.data.length} />
+      <CountTotal total={unreadCount} />
     </DashCard>
   )
 }
@@ -127,11 +135,13 @@ export function NotificationCard({ slot, onOpenAll }: {
  *
  * 줄·카드 모두 결재함으로 간다(문서 하나로 바로 가는 길은 결재함이 더 잘 보여 준다).
  */
-export function ApprovalCard({ slot, onOpenAll }: {
-  slot: Slot<ApprovalRow[]>
+export function ApprovalCard({ engineerId, onOpenAll }: {
+  engineerId: number | null
   onOpenAll: () => void
 }) {
-  const rows: CountRow[] = countByKey(slot.data, d => d.doc_type ?? '기타', DOC_TYPE_KEYS)
+  // 사이드바 배지와 **같은 스토어**다 — /api/approval?box=inbox 가 한 화면에서 한 번만 돈다.
+  const { docs, count, loading, error } = useApprovalInbox(engineerId)
+  const rows: CountRow[] = countByKey(docs, d => d.doc_type ?? '기타', DOC_TYPE_KEYS)
     .map(c => ({
       key: c.key,
       label: docTypeOf(c.key)?.label ?? c.key,
@@ -140,9 +150,9 @@ export function ApprovalCard({ slot, onOpenAll }: {
       onClick: onOpenAll,
     }))
   return (
-    <DashCard title="결재 대기" onClick={onOpenAll} loading={slot.loading} error={slot.error} errorMessage={slot.message}>
+    <DashCard title="결재 대기" onClick={onOpenAll} loading={loading} error={!!error} errorMessage={error ?? undefined}>
       <CountList rows={rows} emptyText="대기 중인 문서가 없습니다" fitHeight />
-      <CountTotal total={slot.data.length} />
+      <CountTotal total={count} />
     </DashCard>
   )
 }

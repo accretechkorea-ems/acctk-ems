@@ -208,7 +208,7 @@ function DashboardPageInner() {
           {/* 결재 대기 — **0 건이어도 자리를 지킨다.** 예전에는 내 차례가 없으면 카드를
               아예 내지 않아, 결재함이 깨진 것과 할 일이 없는 것이 똑같이 보였다. */}
           <div className="home-cell">
-            <ApprovalCard slot={cards.approvals} onOpenAll={() => router.push('/approval')} />
+            <ApprovalCard engineerId={engineerId} onOpenAll={() => router.push('/approval')} />
           </div>
 
           {/* 2행 — 포캐스트 · 알림 · (빈 자리 둘) */}
@@ -217,7 +217,7 @@ function DashboardPageInner() {
           </div>
 
           <div className="home-cell">
-            <NotificationCard slot={cards.notifications} onOpenAll={() => router.push('/notifications')} />
+            <NotificationCard engineerId={engineerId} onOpenAll={() => router.push('/notifications')} />
           </div>
 
           {/* 빈 자리 둘 — 카드 없이 칸만 둔다(격자 정렬). */}

@@ -22,6 +22,7 @@
 
 import { useEffect, useState } from 'react'
 import { useToast } from '@/components/common/Toast'
+import { refreshApprovalInbox } from '@/lib/appData/approvalInbox'
 import { MUTED, NEUTRAL_BG, SUB, btnDanger, btnGhost, btnPrimary, inputStyle } from '@/components/common/ui'
 import { APPROVE_LABEL, approveLabelOf, canRejectDocument, DOC_TYPES } from '@/lib/approval/docTypes'
 import { ownerActions, processedCount, type ActionDoc, type OwnerActions } from '@/lib/approval/docActions'
@@ -103,12 +104,15 @@ export default function DocActions({
       const json = await res.json().catch(() => null)
       if (res.status === 409) {
         toast.error('이미 처리된 결재입니다')
+        void refreshApprovalInbox()
         onChanged()
         return
       }
       if (!res.ok) { toast.error(json?.error ?? '처리하지 못했습니다'); return }
       toast.success(okText)
       sendDocSignal(doc.document_id, body.action as DocAction)
+      // 사이드바 배지·홈 카드가 보는 미결함을 **즉시** 다시 읽는다(폴링을 기다리지 않는다).
+      void refreshApprovalInbox()
       onChanged()
     } catch (e) {
       console.error('[approval/detail] action failed', e)

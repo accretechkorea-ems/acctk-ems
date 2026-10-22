@@ -9,16 +9,12 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import NotificationList from '@/components/common/NotificationList'
-import { useNotifications, type Notification } from '@/hooks/useNotifications'
+import { type Notification } from '@/hooks/useNotifications'
+import { useNotificationStore } from '@/lib/appData/notifications'
 import { NOTI_GROUPS, notiGroupOf } from '@/lib/notificationGroups'
 import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, BLUE, NEUTRAL_BG, inputStyle,
 } from '@/components/common/ui'
-
-/** 전용 화면은 배지만큼 자주 볼 필요가 없다(사이드바는 10초 유지). */
-const POLL_MS = 30000
-/** [더 보기] 한 번에 받는 건수. */
-const PAGE_SIZE = 30
 
 // 유형 묶음 규칙은 lib/notificationGroups.ts 에 있다 — 홈의 알림 카드가 같은 규칙으로 센다.
 const TYPE_TABS = ['전체', ...NOTI_GROUPS]
@@ -43,18 +39,16 @@ export default function NotificationsPage() {
   const [readTab, setReadTab] = useState('전체')
   const [typeTab, setTypeTab] = useState('전체')
 
+  // 조회는 **앱 당 한 벌인 스토어**가 한다(사이드바 배지·홈 카드와 같은 자료).
   const { notifications, unreadCount, loading, hasMore, loadMore, markAsRead, markAllAsRead } =
-    useNotifications(engineer?.engineer_id ?? null, {
-      limit: PAGE_SIZE,
-      unreadOnly: readTab === '안 읽음',
-      pollMs: POLL_MS,
-    })
+    useNotificationStore(engineer?.engineer_id ?? null)
 
-  // 유형은 받아 온 목록에서 거른다(조회 조건이 아니라 표시 필터다).
-  const filtered = useMemo(
-    () => (typeTab === '전체' ? notifications : notifications.filter(n => notiGroupOf(n.type) === typeTab)),
-    [notifications, typeTab],
-  )
+  // 읽음·유형 둘 다 **받아 온 목록에서** 거른다(예전에는 읽음이 조회 조건이었다 —
+  // 조회를 한 벌로 모으면서 표시 필터로 옮겼다. 모자라면 [더 보기]로 더 받는다).
+  const filtered = useMemo(() => notifications
+    .filter(n => (readTab === '안 읽음' ? !n.is_read : true))
+    .filter(n => (typeTab === '전체' ? true : notiGroupOf(n.type) === typeTab)),
+  [notifications, readTab, typeTab])
 
   // 날짜 묶음으로 나눈다. 목록은 이미 최신순이라 순서를 다시 잡지 않는다.
   const buckets = useMemo(() => {

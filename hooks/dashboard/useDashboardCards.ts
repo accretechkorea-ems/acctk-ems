@@ -33,25 +33,11 @@ const messageOf = (error: unknown): string => {
   return '알 수 없는 오류'
 }
 
-export type NotificationRow = {
-  id: number
-  title: string | null
-  message: string | null
-  link: string | null
-  created_at: string
-  /** 알림 종류(quote_*·lead_* 식). 카드가 묶음별로 세는 데 쓴다 — lib/notificationGroups.ts. */
-  type: string | null
-}
-
-export type ApprovalRow = { document_id: number; doc_no: string | null; title: string | null; doc_type: string | null }
-
 export type DashboardCards = {
   quotes: Slot<CardQuote[]>
   /** 연간 목표 — 「내 실적」 카드의 달성률이 쓴다(실적 현황과 같은 행을 본다). */
   targets: Slot<StatTarget[]>
   opportunities: Slot<CardOpportunity[]>
-  notifications: Slot<NotificationRow[]>
-  approvals: Slot<ApprovalRow[]>
   today: string
   /** 「내 견적」 모달을 닫았을 때처럼 숫자만 다시 맞추고 싶을 때. */
   reloadQuotes: () => Promise<void>
@@ -64,8 +50,6 @@ export function useDashboardCards(engineerId: number | null, fiscalYear: number)
   const [quotes, setQuotes] = useState<Slot<CardQuote[]>>(() => idle<CardQuote[]>([]))
   const [targets, setTargets] = useState<Slot<StatTarget[]>>(() => idle<StatTarget[]>([]))
   const [opportunities, setOpportunities] = useState<Slot<CardOpportunity[]>>(() => idle<CardOpportunity[]>([]))
-  const [notifications, setNotifications] = useState<Slot<NotificationRow[]>>(() => idle<NotificationRow[]>([]))
-  const [approvals, setApprovals] = useState<Slot<ApprovalRow[]>>(() => idle<ApprovalRow[]>([]))
 
   /**
    * 견적 — 카드의 상태별 건수가 쓴다.
@@ -123,27 +107,12 @@ export function useDashboardCards(engineerId: number | null, fiscalYear: number)
       return { data: (data ?? []) as CardOpportunity[], error }
     })
 
-    void run<NotificationRow[]>('notifications', setNotifications, [], async () => {
-      // **미읽음 전체**를 읽는다(limit 5 를 걷어냈다) — 카드가 종류별 건수와 합계를 세므로
-      // 최근 다섯 건만 보면 합계가 거짓이 된다. 한 사람 미읽음은 많아야 수십 줄이다.
-      const { data, error } = await supabase.from('notifications')
-        .select('id, title, message, link, created_at, type')
-        .eq('engineer_id', engineerId).eq('is_read', false)
-        .order('created_at', { ascending: false })
-      return { data: (data ?? []) as NotificationRow[], error }
-    })
-
-    // 결재 미결함 — 「지금 내 차례인가」 판정이 서버에만 있어 라우트를 그대로 쓴다.
-    void run<ApprovalRow[]>('approvals', setApprovals, [], async () => {
-      const res = await fetch('/api/approval?box=inbox')
-      const json = await res.json().catch(() => null)
-      if (!res.ok) return { data: [], error: json?.error ?? `HTTP ${res.status}` }
-      return { data: (json?.documents ?? []) as ApprovalRow[], error: null }
-    })
+    // 알림·결재 미결함은 여기서 읽지 않는다 — 사이드바 배지와 같은 자료라 **앱 당 한 벌인
+    // 스토어**로 옮겼다(lib/appData/notifications.ts·approvalInbox.ts). 카드가 직접 본다.
 
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engineerId, fiscalYear])
 
-  return { quotes, targets, opportunities, notifications, approvals, today, reloadQuotes }
+  return { quotes, targets, opportunities, today, reloadQuotes }
 }

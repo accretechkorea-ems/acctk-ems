@@ -16,6 +16,8 @@ import { createClient } from '@/lib/supabase/client'
 import { isPublicPath } from '@/lib/publicPaths'
 import { invalidateMe, loadMe, type Me } from './me'
 import { invalidateEngineers } from './engineers'
+import { resetNotifications } from './notifications'
+import { resetApprovalInbox } from './approvalInbox'
 
 export type MeState = {
   /** 로그인한 본인. 미로그인·조회 실패면 null. */
@@ -46,6 +48,8 @@ export function MeProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     invalidateMe()
     invalidateEngineers()
+    resetNotifications()
+    resetApprovalInbox()
     setData(d => ({ ...d, loading: true }))
     await read()
   }, [read])
@@ -68,6 +72,9 @@ export function MeProvider({ children }: { children: ReactNode }) {
       if (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT' && event !== 'USER_UPDATED') return
       invalidateMe()
       invalidateEngineers()
+      // 알림·미결함도 사람이 바뀌면 남의 것이 된다 — 함께 버린다.
+      resetNotifications()
+      resetApprovalInbox()
       if (isPublicPath(window.location.pathname)) setData({ me: null, email: null, error: null, loading: false })
       else void read()
     })
