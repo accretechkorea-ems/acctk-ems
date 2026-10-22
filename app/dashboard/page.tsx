@@ -164,11 +164,13 @@ function DashboardPageInner() {
     <div style={{ background: '#fafafa', minHeight: '100vh', padding: '24px 28px' }}>
       <style>{`
         /* 4열 격자. 카드 높이는 줄마다 같다(260px) — 높이가 들쭉날쭉하면 격자가 어긋난다.
-           빈 자리는 카드 없이 둔다(격자 정렬만 맞춘다). */
+           빈 자리는 카드 없이 둔다(격자 정렬만 맞춘다).
+           330px 인 이유 — 「내 실적」 카드(4칸 + 달성률 바 둘)가 잘리지 않는 가장 낮은 높이다.
+           다른 카드는 그만큼 줄이 더 보인다. */
         .home-grid {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
-          grid-auto-rows: 260px;
+          grid-auto-rows: 330px;
           gap: 12px; margin-top: 16px;
         }
         /* 본문이 좁아지면 2열 → 1열. 사이드바가 232px 을 가져가므로 화면 기준 1280/768 을
