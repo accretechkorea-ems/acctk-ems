@@ -4,6 +4,10 @@ import { useRef, useState } from 'react'
 import type { Device, Holding, ServiceHistory } from './types'
 import { INPUT_BORDER, TEXT_MUTED } from './constants'
 import { getInstallDisplay, getDefaultImageUrl } from './utils'
+import { thumbUrl } from '@/lib/storageImage'
+
+/** 카드 사진을 받을 폭(px) — 장비 카드 폭에 맞춘다. */
+const CARD_IMG_W = 240
 import { elapsedLabel } from './holding'
 import { SERVICE_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import { ServiceFilesButton, reportDownloadName } from './ServiceAttachments'
@@ -198,10 +202,16 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
         overflow: 'hidden',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
+        {/* 카드 폭만큼 줄여 받고(lib/storageImage.ts), 화면 밖 카드는 늦게 받는다.
+            원본은 확대·수정 모달이 쓴다. */}
         {d.image_url ? (
-          <img src={d.image_url} alt={deviceTitle || 'device'} style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
+          <img src={thumbUrl(d.image_url, CARD_IMG_W) ?? d.image_url} alt={deviceTitle || 'device'}
+            loading="lazy" decoding="async"
+            style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
         ) : defaultImg ? (
-          <img src={defaultImg} alt={deviceTitle || 'device'} style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
+          <img src={thumbUrl(defaultImg, CARD_IMG_W) ?? defaultImg} alt={deviceTitle || 'device'}
+            loading="lazy" decoding="async"
+            style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
         ) : (
           <button
             onClick={onImageUpload}

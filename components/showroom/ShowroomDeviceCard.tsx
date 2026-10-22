@@ -15,6 +15,7 @@
 // (periodBasisLabel)에 한 번, 카드 합계 줄 앞(periodShort)에 짧게 적는다.
 
 import { getInstallDisplay, getDefaultImageUrl } from '@/components/customer/utils'
+import { thumbUrl } from '@/lib/storageImage'
 import { getCategoryColor } from '@/lib/categoryColors'
 import {
   deviceTitle, USAGE_PURPOSES, USAGE_PURPOSE_COLORS, UTIL_BAND_COLORS, utilBand,
@@ -22,6 +23,9 @@ import {
 } from '@/lib/showroom'
 import { BLUE, BORDER, CARD_BG, TEXT, MUTED, SUB, FAINT, NEUTRAL_BG } from '@/components/common/ui'
 import { fmtPct, fmtHours } from './utilParts'
+
+/** 카드 사진을 받을 폭(px). 카드가 240px 대라 그 이상은 화면에서 쓰이지 않는다. */
+const CARD_IMG_W = 240
 
 // 하단 박스 — 고객사 상세의 서비스 기록 박스와 같은 값(components/customer/constants.ts).
 const BOX_BORDER = '#e2e4e9'
@@ -170,13 +174,19 @@ export default function ShowroomDeviceCard({
         overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         {/* next/image 를 쓰려면 remotePatterns 설정(next.config)이 필요한데 이번 범위에서
-            건드릴 수 없는 파일이다. 고객사 상세의 장비 카드도 같은 이유로 <img> 를 쓴다. */}
+            건드릴 수 없는 파일이다. 고객사 상세의 장비 카드도 같은 이유로 <img> 를 쓴다.
+            대신 **카드 폭만큼** 줄여 받는다(lib/storageImage.ts) — 원본은 319KB 짜리도 있고
+            카드는 240px 다. 화면 밖 카드는 loading="lazy" 로 미룬다. */}
         {device.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={device.image_url} alt={title} style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
+          <img src={thumbUrl(device.image_url, CARD_IMG_W) ?? device.image_url} alt={title}
+            loading="lazy" decoding="async"
+            style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
         ) : defaultImg ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={defaultImg} alt={title} style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
+          <img src={thumbUrl(defaultImg, CARD_IMG_W) ?? defaultImg} alt={title}
+            loading="lazy" decoding="async"
+            style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={FAINT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
