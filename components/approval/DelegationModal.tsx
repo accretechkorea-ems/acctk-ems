@@ -14,7 +14,7 @@
 // 겹침·사슬 같은 판정은 서버 메시지를 그대로 보여 준다 — 같은 규칙을 두 곳에 적어 두지 않기 위해서다.
 
 import { useCallback, useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { loadEngineers } from '@/lib/appData/engineers'
 import { useToast } from '@/components/common/Toast'
 import { Z } from '@/lib/zIndex'
 import { todayKST } from '@/lib/date'
@@ -152,19 +152,12 @@ export default function DelegationModal({
     if (!open) return
     let cancelled = false
     const run = async () => {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('engineers')
-        .select('engineer_id, name, position')
-        .is('resigned_date', null)
-        .order('name')
+      // 직원 목록은 공통 층에서(조회 0회). 재직자만·이름 순은 여기서 고른다.
+      const rows = await loadEngineers()
       if (cancelled) return
-      if (error) {
-        console.error('[approval/delegation] engineers load failed', error)
-        toast.error('직원 목록을 불러오지 못했습니다')
-        return
-      }
-      setPeople((data ?? []) as Person[])
+      setPeople(rows
+        .filter(e => !e.resigned_date)
+        .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'ko')) as unknown as Person[])
     }
     run()
     return () => { cancelled = true }

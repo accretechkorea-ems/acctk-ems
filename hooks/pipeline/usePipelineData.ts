@@ -5,6 +5,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { loadMe } from '@/lib/appData/me'
+import { loadEngineers } from '@/lib/appData/engineers'
 import { useToast } from '@/components/common/Toast'
 
 import type { Customer, Engineer, SalesActivity, SalesOpportunity } from '@/components/customer/types'
@@ -32,7 +34,7 @@ export function usePipelineData() {
         .select('*')
         .not('opportunity_id', 'is', null)
         .order('activity_date', { ascending: false }),
-      supabase.from('engineers').select('*, email').order('engineer_id', { ascending: true }),
+      loadEngineers(),
       // 신규 등록 시 업체를 고르기 위한 목록 (숨김 처리된 업체는 제외)
       supabase.from('customers').select('customer_id, company_name, address, status, agency').is('deleted_at', null).eq('is_parent', false).order('company_name'),
     ])
@@ -47,16 +49,13 @@ export function usePipelineData() {
 
     setOpportunities((oppRes.data as SalesOpportunity[]) ?? [])
     setActivities((actRes.data as SalesActivity[]) ?? [])
-    setEngineers((engRes.data as Engineer[]) ?? [])
+    setEngineers((engRes as unknown as Engineer[]) ?? [])
     if (custRes.error) console.error('[pipeline] load customers failed', custRes.error)
     setCustomers((custRes.data as Customer[]) ?? [])
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user && engRes.data) {
-      const found = (engRes.data as { engineer_id: number; email: string; permission_level: string | null }[])
-        .find(e => e.email === user.email)
-      if (found) setMe({ engineer_id: found.engineer_id, role: found.permission_level ?? null })
-    }
+    // 본인은 공통 층에서(조회 0회). 목록에서 다시 찾지 않는다.
+    const { me: self } = await loadMe()
+    if (self) setMe({ engineer_id: self.engineer_id, role: self.permission_level ?? null })
     return true
   }
 

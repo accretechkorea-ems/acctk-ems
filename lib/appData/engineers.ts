@@ -23,11 +23,12 @@ export type EngineerRow = {
   office: string | null
   email: string | null
   tel: string | null
+  initials: string | null
   can_switch_division: boolean | null
   resigned_date: string | null
 }
 
-const COLUMNS = 'engineer_id, name, position, teams, permission_level, office, email, tel, can_switch_division, resigned_date'
+const COLUMNS = 'engineer_id, name, position, teams, permission_level, office, email, tel, initials, can_switch_division, resigned_date'
 
 let cache: Promise<EngineerRow[]> | null = null
 

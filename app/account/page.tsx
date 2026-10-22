@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { loadMe, invalidateMe } from '@/lib/appData/me'
+import { invalidateEngineers } from '@/lib/appData/engineers'
 import { useRouter } from 'next/navigation'
 import { INITIALS_TAKEN_MESSAGE, isInitialsTaken, isInitialsUniqueViolation, normalizeInitials } from '@/lib/initials'
 
@@ -56,15 +58,16 @@ export default function AccountPage() {
 
   useEffect(() => {
     const fetchProfile = async () => {
-      const { data: userData } = await supabase.auth.getUser()
-      const userEmail = userData.user?.email ?? ''
-      setEmail(userEmail)
+      // 세션은 공통 층에서(조회 0회). 자기 행은 편집 칸(이니셜·프로필 사진)까지 필요해
+      // 여기서 그대로 읽는다 — 저장 직후 다시 읽어야 하는 화면이다.
+      const { email: userEmail } = await loadMe()
+      setEmail(userEmail ?? '')
 
       const { data: engineerData } = await supabase
         .from('engineers')
         .select('*')
-        .eq('email', userEmail)
-        .single()
+        .eq('email', userEmail ?? '')
+        .maybeSingle()
 
       if (engineerData) {
         setEngineer(engineerData)
@@ -159,6 +162,9 @@ export default function AccountPage() {
 
     setProfileImageUrl(imageUrl)
     setProfileImageFile(null)
+    // 이름·이니셜·사진이 바뀌었다 — 공통 캐시를 버려 사이드바와 다른 화면이 새 값을 읽게 한다.
+    invalidateMe()
+    invalidateEngineers()
     setProfileMessage({ type: 'success', text: '프로필이 저장되었습니다.' })
   }
 

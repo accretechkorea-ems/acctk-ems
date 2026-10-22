@@ -8,6 +8,8 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { isFieldEngineerTeam, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerms } from '@/lib/teamPerms'
+import { loadMe } from '@/lib/appData/me'
+import { loadEngineers } from '@/lib/appData/engineers'
 import ActivityCard from '@/components/activity/ActivityCard'
 import { ACTIVITY_TYPES } from '@/lib/activity'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
@@ -100,18 +102,14 @@ export default function ActivityPage() {
   const fetchActivity = async (start: string, end: string) => {
     setLoading(true)
 
-    const { data: { user } } = await supabase.auth.getUser()
-
-    const { data: engineerRows } = await supabase
-      .from('engineers')
-      .select('*')
-      .order('engineer_id', { ascending: true })
+    // 본인·직원 목록은 공통 층에서 받는다(앱 당 한 번 — docs/perf-rules.md 1·2).
+    const [{ me: self }, engineerRows] = await Promise.all([loadMe(), loadEngineers()])
 
     // 집계 대상(현장 팀) 판정에 팀 플래그가 필요하므로 목록에 붙여둔다.
-    const engineers = await withTeamPerms(engineerRows as Engineer[] | null)
+    const engineers = await withTeamPerms(engineerRows as unknown as Engineer[])
 
-    if (user) {
-      const me = engineers.find(e => e.email === user.email)
+    if (self) {
+      const me = engineers.find(e => e.engineer_id === self.engineer_id)
       if (me && !currentUser) {
         setCurrentUser(me)
         // 본인 팀이 집계 대상이면 그 팀으로 시작하고, 아니면(임원·영업관리 등) 전체로 시작한다.

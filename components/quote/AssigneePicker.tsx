@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { loadEngineers } from '@/lib/appData/engineers'
 import { canViewQuote } from '@/lib/permissions'
 import { withTeamPerms } from '@/lib/teamPerms'
 import { Z } from '@/lib/zIndex'
@@ -43,18 +43,11 @@ function Panel({ onClose, onPick }: Omit<Props, 'open'>) {
   useEffect(() => {
     let cancelled = false
     const run = async () => {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from('engineers')
-        .select('engineer_id, name, position, teams, permission_level, resigned_date')
-        .is('resigned_date', null)
-        .order('name')
-      if (error) {
-        console.error('[assignee] load failed', error)
-        if (!cancelled) { setList([]); setLoading(false) }
-        return
-      }
-      const withPerm = await withTeamPerms((data ?? []) as Row[])
+      // 직원 목록은 공통 층에서(조회 0회). 재직자만·이름 순은 여기서 고른다.
+      const rows = (await loadEngineers())
+        .filter(e => !e.resigned_date)
+        .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'ko'))
+      const withPerm = await withTeamPerms(rows as unknown as Row[])
       if (cancelled) return
       setList(withPerm.filter(e => canViewQuote(e)).map(e => ({
         engineer_id: e.engineer_id, name: e.name, position: e.position, teams: e.teams,

@@ -10,6 +10,8 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { canViewSalesMgmt, isSuperAdmin, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerms } from '@/lib/teamPerms'
+import { loadMe } from '@/lib/appData/me'
+import { loadEngineers } from '@/lib/appData/engineers'
 import { Z } from '@/lib/zIndex'
 
 const BLUE = '#234ea2'
@@ -173,13 +175,16 @@ function InventoryPage() {
 
   const fetchAll = async () => {
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
+    // 본인·직원 목록은 공통 층에서(조회 0회). 나머지는 종전처럼 동시에 쏜다.
     const [
+      { me: self },
+      engData,
       { data: itemsData },
       { data: logsData },
       { data: requestsData },
-      { data: engData },
     ] = await Promise.all([
+      loadMe(),
+      loadEngineers(),
       supabase.from('inventory_items').select('*').order('item_id', { ascending: true }),
       supabase.from('inventory_logs')
         .select('*, inventory_items(item_name, part_code)')
@@ -187,9 +192,6 @@ function InventoryPage() {
       supabase.from('inventory_requests')
         .select('*, inventory_items(item_name, part_code, location)')
         .order('requested_at', { ascending: false }),
-      supabase.from('engineers')
-        .select('engineer_id, name, position, teams, email, permission_level, resigned_date')
-        .order('engineer_id'),
     ])
     setItems((itemsData as InventoryItem[]) ?? [])
     setLogs((logsData as InventoryLog[]) ?? [])
@@ -197,8 +199,8 @@ function InventoryPage() {
     // 재고 승인 권한·알림 대상 판정에 팀 플래그가 필요하므로 목록 전체에 붙여둔다.
     const engs = await withTeamPerms(engData as Engineer[] | null)
     setAllEngineers(engs)
-    if (user?.email) {
-      const me = engs.find(e => e.email === user.email)
+    if (self) {
+      const me = engs.find(e => e.engineer_id === self.engineer_id)
       if (me) setCurrentEngineer(me)
     }
     setLoading(false)

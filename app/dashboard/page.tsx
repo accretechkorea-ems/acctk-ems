@@ -14,8 +14,8 @@
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { canViewCustomers, type TeamPerm } from '@/lib/permissions'
-import { withTeamPerm } from '@/lib/teamPerms'
+import { canViewCustomers } from '@/lib/permissions'
+import { useMe } from '@/lib/appData/MeProvider'
 import { ACTIVITY_TYPES } from '@/lib/activity'
 import ActivityCard from '@/components/activity/ActivityCard'
 import DashCard from '@/components/dashboard/DashCard'
@@ -24,16 +24,6 @@ import MyQuoteCard from '@/components/dashboard/MyQuoteCard'
 import { useDashboardCards } from '@/hooks/dashboard/useDashboardCards'
 import { nowKSTParts } from '@/lib/date'
 import { countedVisitEnd } from '@/lib/serviceVisit'
-
-type Me = {
-  engineer_id: number
-  name: string | null
-  position: string | null
-  teams: string | null
-  permission_level: string | null
-  office: string | null
-  perm?: TeamPerm | null
-}
 
 // 활동 요약에 필요한 최소 필드.
 type ServiceLink = { service_id: number }
@@ -46,8 +36,8 @@ function DashboardPageInner() {
   // ?quoteTab=견적중 — 「내 견적」 모달을 그 상태 탭으로 연다.
   // 카드의 상태 줄이 이 주소로 보낸다(다른 화면에서 보낼 때도 같은 열쇠를 쓴다).
   const quoteTab = useSearchParams().get('quoteTab')
-  const [me, setMe] = useState<Me | null>(null)
-  const [loading, setLoading] = useState(true)
+  // 본인 정보는 MeProvider 가 앱 당 한 번 읽은 것이다(여기서 다시 조회하지 않는다).
+  const { me, loading } = useMe()
   const [activityYm, setActivityYm] = useState(() => { const n = nowKSTParts(); return { y: n.y, m: n.m } })
   // 활동 요약 건수. 아직 못 받았으면 null(카드를 그리지 않는다).
   const [actCounts, setActCounts] = useState<Record<string, number> | null>(null)
@@ -60,27 +50,6 @@ function DashboardPageInner() {
     ? `${nowD.y}-${pad2(nowD.m)}-${pad2(nowD.d)}`
     : `${activityYm.y}-${pad2(activityYm.m)}-${pad2(new Date(activityYm.y, activityYm.m, 0).getDate())}` // 월마다 다른 말일
   const stepMonth = (delta: number) => setActivityYm(({ y, m }) => { const d = new Date(y, m - 1 + delta, 1); return { y: d.getFullYear(), m: d.getMonth() + 1 } })
-
-  useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      const { data } = await supabase.auth.getUser()
-      if (data.user?.email) {
-        const { data: eng } = await supabase
-          .from('engineers')
-          .select('engineer_id, name, position, teams, permission_level, office')
-          .eq('email', data.user.email)
-          .single()
-        // 활동 위젯 노출 판정에 팀 플래그가 필요해 붙여서 담는다.
-        const withPerm = await withTeamPerm((eng as Me | null) ?? null)
-        if (!cancelled) setMe(withPerm)
-      }
-      if (!cancelled) setLoading(false)
-    }
-    load()
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const greeting = me
     ? `${me.teams ? me.teams + ' ' : ''}${me.name ?? ''}${me.position ? ` ${me.position}` : ''}님, 안녕하세요`

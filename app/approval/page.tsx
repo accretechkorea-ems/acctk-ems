@@ -22,7 +22,7 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { loadEngineers } from '@/lib/appData/engineers'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import PeriodNav from '@/components/showroom/PeriodNav'
@@ -407,15 +407,11 @@ function ApprovalPageInner() {
     if (!authorized) return
     let cancelled = false
     const run = async () => {
-      const supabase = createClient()
-      const { data, error } = await supabase.from('engineers').select('engineer_id, name, position, teams')
+      // 직원 목록은 공통 층에서(조회 0회 — 결재선 이름표가 쓴다).
+      const data = await loadEngineers()
       if (cancelled) return
-      if (error) {
-        console.error('[approval] engineers load failed', error)
-        return
-      }
       const map: Record<number, ProgressPerson> = {}
-      for (const e of (data ?? []) as { engineer_id: number; name: string | null; position: string | null; teams: string | null }[]) {
+      for (const e of data) {
         map[e.engineer_id] = { name: e.name, position: e.position, teams: e.teams }
       }
       setPeople(map)

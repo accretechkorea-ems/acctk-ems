@@ -7,6 +7,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { loadMe } from '@/lib/appData/me'
+import { loadEngineers } from '@/lib/appData/engineers'
 import { useToast } from '@/components/common/Toast'
 import type { Customer, Device, Contact, ServiceHistory, Engineer, Quote, SalesActivity, SalesOpportunity, Holding } from '@/components/customer/types'
 
@@ -82,7 +84,7 @@ export function useCustomerDetail(customerId: number) {
     setLoading(true)
     const [
       { data: customerData }, { data: devicesData }, { data: contactsData },
-      { data: historyData }, { data: engineersData }, { data: quotesData },
+      { data: historyData }, engineersData, { data: quotesData },
       { data: activitiesData, error: activitiesErr },
       { data: oppsData, error: oppsErr },
       { data: holdingsData, error: holdingsErr },
@@ -93,7 +95,7 @@ export function useCustomerDetail(customerId: number) {
       // 첨부파일도 함께 가져온다. service_attachments 에서 service_history 로 가는 FK 가 하나뿐이라
       // 관계 이름을 적지 않아도 되고, 그 안의 engineers 임베딩(uploaded_by)도 마찬가지다.
       supabase.from('service_history').select('*, service_engineers(engineer_id, engineers(name, position)), service_attachments(attachment_id, service_id, file_path, file_name, content_type, byte_size, sort_order, uploaded_by, created_at, engineers(name, position))').eq('customer_id', customerId).order('service_id', { ascending: false }),
-      supabase.from('engineers').select('*, email').order('engineer_id', { ascending: true }),
+      loadEngineers(),
       // 이 업체가 수요처(customer_id)인 견적과 대리점(dealer_id)으로 낀 견적을 함께 가져온다.
       // 거래 이력·요약·타임라인이 같은 배열을 쓰므로 세 곳 모두 대리점 건을 포함하게 된다.
       supabase.from('quotes').select(QUOTE_SELECT).or(`customer_id.eq.${customerId},dealer_id.eq.${customerId}`).order('quote_date', { ascending: false }),
@@ -125,7 +127,7 @@ export function useCustomerDetail(customerId: number) {
     setDevices(devicesData ?? [])
     setContacts(contactsData ?? [])
     setHistory(historyData ?? [])
-    setEngineers(engineersData ?? [])
+    setEngineers((engineersData as unknown as Engineer[]) ?? [])
     setQuotes((quotesData as Quote[]) ?? [])
     await loadFamily(customerData as Customer)
     // 영업 활동은 다른 영역과 독립적이라, 실패해도 화면 전체를 막지 않고 로그만 남긴다.
@@ -135,13 +137,11 @@ export function useCustomerDetail(customerId: number) {
     setOpportunities((oppsData as SalesOpportunity[]) ?? [])
     if (holdingsErr) console.error('[customer] holdings load failed', holdingsErr)
     setHoldings((holdingsData as Holding[]) ?? [])
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user && engineersData) {
-      const me = (engineersData as any[]).find(e => e.email === user.email)
-      if (me) {
-        setCurrentUserEngineerId(me.engineer_id)
-        setCurrentUserRole(me.permission_level ?? null)
-      }
+    // 본인은 공통 층에서(조회 0회). 목록에서 메일로 찾지 않는다.
+    const { me } = await loadMe()
+    if (me) {
+      setCurrentUserEngineerId(me.engineer_id)
+      setCurrentUserRole(me.permission_level ?? null)
     }
 
     setLoading(false)

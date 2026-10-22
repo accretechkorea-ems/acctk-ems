@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { loadMe } from '@/lib/appData/me'
 import { useToast } from '@/components/common/Toast'
 import type { Holding } from '@/components/customer/types'
 
@@ -32,11 +33,9 @@ export function useHoldingList() {
     }
     setHoldings((data as Holding[]) ?? [])
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user?.email) {
-      const { data: me } = await supabase.from('engineers').select('engineer_id').eq('email', user.email).maybeSingle()
-      if (me) setEngineerId(me.engineer_id)
-    }
+    // 본인은 공통 층에서(조회 0회 — docs/perf-rules.md 1).
+    const { me } = await loadMe()
+    if (me) setEngineerId(me.engineer_id)
     return true
   }
 

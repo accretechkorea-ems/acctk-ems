@@ -138,3 +138,48 @@ app/purchase/page.tsx:125 · app/sales/page.tsx:1334 (`customer_id, company_name
   규칙(「alert()/confirm() 금지」)에 어긋난다.
 - 클라이언트 경로의 `select('*')` 33곳. 큰 표만 추려도 `quotes`(5곳)·`price_list`(2곳)·
   `customers`(1곳)·`notifications`(1곳)이다 — 2단계 규칙(docs/perf-rules.md)에 따라 화면별로 줄인다.
+
+---
+
+## /dashboard — 공통 층 적용 뒤 (코드 경로로 다시 셈)
+
+| 조회 | 전 | 후 | 어디서 |
+|---|---|---|---|
+| `auth/user` (getUser) | 2 | **1** | lib/appData/me.ts — 사이드바·홈이 같은 약속을 받는다 |
+| `engineers` (본인) | 2 | **1** | lib/appData/me.ts |
+| `teams` · `team_permissions` | 2 | 2 | lib/teamPerms.ts (종전부터 세션 1회) |
+| `notifications` | 2 | 2 | 사이드바 배지(10초 폴링) + 알림 카드 — **남은 중복** |
+| `GET /api/approval?box=inbox` | 2 | 2 | 사이드바 배지 + 결재 카드 — **남은 중복** |
+| `getClaims` · `notices` | 2 | 2 | NoticePopup |
+| `quotes` · `sales_targets` · `sales_opportunities` | 3 | 3 | 카드(동시) |
+| `service_engineers` → `service_history` ‖ `sales_activities` | 3 | 3 | 활동 카드 |
+| **브라우저 조회 합계** | **17** | **15** | |
+
+개발 모드의 Strict Mode 이중 실행도 **본인 확인에는 더 이상 걸리지 않는다** —
+모듈 수준에 약속을 캐시하므로 두 번째 실행이 같은 약속을 받는다(조회 1회).
+
+다른 화면에서 줄어든 조회(같은 이유):
+/sales·/purchase `engineers` 2 → 0 · /inquiries(목록·상세) 2 → 0 ·
+/activity·/inventory·/leads·/approval·결재선 모달·담당자 고르기 1 → 0 ·
+/quote·/pipeline·고객사 상세·홀딩 목록의 본인 확인 2 → 0.
+(0 은 「공통 층이 이미 읽어 둔 값을 받는다」는 뜻이다. 첫 화면에서 한 번 읽은 뒤
+앱이 살아 있는 동안 다시 읽지 않는다.)
+
+## 공통 층으로 바꾸지 않은 곳 (이유)
+
+| 자리 | 이유 |
+|---|---|
+| app/login/page.tsx:45 | 로그인 **전**이다 — 세션이 생기기 전에 engineers 를 읽어 사업부 시작 화면을 고른다 |
+| components/common/NoticePopup.tsx:44 | `getClaims()` 로 **세션 id** 를 쓴다(공지를 로그인 1회당 한 번만 띄우는 열쇠). 공통 층은 메일·직원 행만 들고 있다 |
+| app/account/page.tsx:67,99,143 | 본인 **편집** 화면이다 — 이니셜·프로필 사진까지 읽고 저장 직후 다시 읽어야 한다. 세션은 공통 층에서 받고, 저장 성공 시 `invalidateMe()`·`invalidateEngineers()` 를 부른다 |
+| app/admin/page.tsx:313,366,952 | 직원 **편집** 화면이다(목록 `*` + 재직자 수 count). `fetchEngineers()` 가 읽을 때마다 `invalidateEngineers()` 를 불러 다른 화면이 옛 값을 쓰지 않게 한다. 팀 권한을 고치면 `invalidateTeamPerms()` + `invalidateMe()` |
+| components/showroom/showroomData.ts:82 · components/admin/priceList/priceListImport.ts:192 | **클라이언트를 매개변수로 받는** 공용 모듈이다(`sb: Browser` / `SupabaseClient`). 브라우저 전용 캐시를 안에 박으면 서버 호출부에서 쓸 수 없게 된다 |
+| lib/forecastData.ts:50 | `engineer_id, team_id` 를 읽는다 — 공통 캐시가 들고 있지 않은 열(team_id)이다. 서버에서도 쓴다 |
+| app/api/** · lib/approval/* · lib/*Server.ts · lib/leadMail.ts · lib/leadNotify.ts | **서버 코드**다. React context 가 없고, 세션은 각 라우트의 `loadCaller()` 가 본다 |
+
+## 다음 단계에서 먼저 할 것
+
+1. 사이드바 배지와 홈 카드가 겹쳐 읽는 둘 — `notifications`, `/api/approval?box=inbox`.
+   (배지의 폴링 10초도 함께 — `useNotifications` 의 `pollMs` 를 자리마다 정한다)
+2. `@react-pdf/renderer` 정적 import 4곳 → 동적으로(/quote·/customer 첫 번들).
+3. `select('*')` 큰 표부터 열 지정(`quotes`·`price_list`·`customers`·`notifications`).

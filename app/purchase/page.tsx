@@ -3,9 +3,10 @@
 import { useRef, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { loadMe } from '@/lib/appData/me'
+import { loadEngineers } from '@/lib/appData/engineers'
 import { SALES_STATUS_COLORS, DELIVERY_METHOD_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import { canViewMenu, type TeamPerm } from '@/lib/permissions'
-import { withTeamPerm } from '@/lib/teamPerms'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import AccessGate from '@/components/common/AccessGate'
@@ -112,9 +113,10 @@ export default function PurchasePage() {
 
   const fetchAll = async () => {
     setLoading(true)
-    const { data: userData } = await supabase.auth.getUser()
-    const [{ data: meData }, { data: qData, error: qErr }, { data: custData }, { data: engData }] = await Promise.all([
-      supabase.from('engineers').select('*').eq('email', userData.user?.email || '').single(),
+    // 본인·직원 목록은 공통 층에서(조회 0회) — 예전에는 engineers 를 두 번 읽었다.
+    const [{ me: meData }, engData, { data: qData, error: qErr }, { data: custData }] = await Promise.all([
+      loadMe(),
+      loadEngineers(),
       supabase.from('quotes')
         // quotes 는 engineers 를 engineer_id(실적 귀속자)·created_by(작성자) 두 번 참조한다.
         // 관계를 지정하지 않으면 PGRST201(300 Multiple Choices)로 조회 전체가 실패한다.
@@ -123,12 +125,11 @@ export default function PurchasePage() {
         .in('status', ['발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료'])
         .order('purchase_order_at', { ascending: false }),
       supabase.from('customers').select('customer_id, company_name'),
-      supabase.from('engineers').select('name, position'),
     ])
     if (qErr) console.error('[purchase] 발주 목록 조회 실패', qErr)
     setLoadError(!!qErr)
     // 진입 판정(발주 메뉴 권한)에 팀의 메뉴 목록이 필요하다.
-    setMe(await withTeamPerm(meData as Engineer | null))
+    setMe(meData as unknown as Engineer | null)   // perm 은 loadMe 가 이미 붙여 왔다
     const em: Record<string, string> = {}
     for (const e of engData || []) if (e.name && e.position) em[e.name] = e.position
     setEngMap(em)

@@ -7,7 +7,7 @@
 //   PC(769px 이상)  — 왼쪽 고정 사이드바
 //   모바일(768 이하) — 상단 얇은 바 + 왼쪽에서 밀려 나오는 드로어
 // 어느 쪽을 보여줄지는 HeaderWrapper 의 미디어 쿼리가 정한다.
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { HOME_STATE_KEY } from '@/lib/home'
@@ -19,7 +19,7 @@ import {
   readCollapsedMenuGroups, visibleMenus, writeCollapsedMenuGroups,
   type MenuGroup, type MenuPerm,
 } from '@/lib/menuPerms'
-import { loadTeamPerms } from '@/lib/teamPerms'
+import { useMe } from '@/lib/appData/MeProvider'
 import {
   DIVISIONS, DIVISION_HOME, DIVISION_LABEL, canSwitchDivision, readSavedDivision, writeSavedDivision, type Division,
 } from '@/lib/division'
@@ -188,19 +188,27 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
   const pathname = usePathname()
   const supabase = createClient()
 
-  const [email, setEmail] = useState<string | null>(null)
-  const [engineerId, setEngineerId] = useState<number | null>(null)
-  const [name, setName] = useState<string | null>(null)
-  const [position, setPosition] = useState<string | null>(null)
-  const [teams, setTeams] = useState<string | null>(null)
-  const [permissionLevel, setPermissionLevel] = useState<string | null>(null)
-  const [teamPerm, setTeamPerm] = useState<TeamPerm | null>(null)
+  // 본인 정보는 **조회하지 않는다** — MeProvider 가 앱 당 한 번 읽은 것을 받는다
+  // (예전에는 여기서 getUser → engineers → teamPerms 를 부르고, 각 화면이 또 한 벌 불렀다).
+  const { me, email, loading: meLoading } = useMe()
+  const engineerId = me?.engineer_id ?? null
+  const name = me?.name ?? null
+  const position = me?.position ?? null
+  const teams = me?.teams ?? null
+  const permissionLevel = me?.permission_level ?? null
+  const teamPerm: TeamPerm | null = me?.perm ?? null
   /** 팀 권한(과 팀 사업부)을 다 읽었는지. 팀이 없는 사람은 teamPerm 이 null 로 끝나므로 따로 둔다. */
-  const [permsReady, setPermsReady] = useState(false)
+  const permsReady = !meLoading
   /** 사업부를 바꿀 수 있는 사람인지(superadmin + engineers.can_switch_division). 못 읽었으면 false. */
-  const [canSwitch, setCanSwitch] = useState(false)
+  const canSwitch = canSwitchDivision(me)
   /** 전환 권한자가 고른 사업부(계정별 저장값). 고른 적이 없으면 null — 본인 팀의 사업부를 쓴다. */
-  const [savedDivision, setSavedDivision] = useState<Division | null>(null)
+  // 사람이 고른 값이 있으면 그것, 없으면 브라우저에 저장된 값. 저장값은 렌더 중에 읽어도
+  // 안전하다 — 본인이 확인되기 전(canSwitch=false)에는 읽지 않으므로 수화 시점에는 null 이다.
+  const [pickedDivision, setPickedDivision] = useState<Division | null>(null)
+  const savedDivision = useMemo<Division | null>(
+    () => pickedDivision ?? (canSwitch && engineerId != null ? readSavedDivision(engineerId) : null),
+    [pickedDivision, canSwitch, engineerId],
+  )
   /** 사업부 고르기 패널이 열린 곳. PC 사이드바와 모바일 드로어가 앵커를 따로 갖는다. */
   const [divisionOpen, setDivisionOpen] = useState<'pc' | 'mobile' | null>(null)
   const divisionAnchorPc = useRef<HTMLButtonElement | null>(null)
@@ -251,39 +259,11 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
     return () => { cancelled = true }
   }, [engineerId, pathname])
 
+  // 접힘 상태를 계정별로 저장하는 쪽(HeaderWrapper)에 본인 번호를 알려준다.
   useEffect(() => {
-    const load = async () => {
-      const { data } = await supabase.auth.getUser()
-      setEmail(data.user?.email ?? null)
-      if (!data.user?.email) return
-      const { data: eng } = await supabase
-        .from('engineers')
-        .select('engineer_id, name, position, teams, permission_level, can_switch_division')
-        .eq('email', data.user.email)
-        .single()
-      if (!eng) return
-      setEngineerId(eng.engineer_id)
-      onEngineerId?.(eng.engineer_id)
-      setName(eng.name ?? null)
-      setPosition(eng.position ?? null)
-      setTeams(eng.teams ?? null)
-      setPermissionLevel(eng.permission_level ?? null)
-      setCanSwitch(canSwitchDivision(eng))
-      // 전환 권한자만 사업부를 고른다. 저장값은 브라우저에만 있으므로 여기(계정 확인 뒤)서 읽는다.
-      // 그 밖의 사람은 저장값이 남아 있어도 읽지 않는다(팀 사업부로 고정).
-      if (canSwitchDivision(eng)) setSavedDivision(readSavedDivision(eng.engineer_id))
-      // 메뉴 노출은 팀 플래그로 판정한다(팀 이름을 코드에 두지 않기 위해).
-      const map = await loadTeamPerms()
-      setTeamPerm(eng.teams ? map.get(eng.teams) ?? null : null)
-      setPermsReady(true)
-    }
-    load()
-    const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
-      setEmail(session?.user?.email ?? null)
-    })
-    return () => { listener.subscription.unsubscribe() }
+    if (engineerId != null) onEngineerId?.(engineerId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [engineerId])
 
 
   // ESC — 드로어·알림·프로필을 함께 닫는다.
@@ -361,7 +341,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
     setDivisionOpen(null)
     if (engineerId == null || d === currentDivision) return
     writeSavedDivision(engineerId, d)
-    setSavedDivision(d)
+    setPickedDivision(d)
     switchedAtPath.current = pathname
     navigate(DIVISION_HOME[d])
   }
@@ -380,7 +360,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
     const d = menuDivision(menu)
     if (d === '공통' || d === currentDivision) return
     writeSavedDivision(engineerId, d)
-    setSavedDivision(d)
+    setPickedDivision(d)
   }, [pathname, canSwitch, currentDivision, engineerId])
 
   // 반도체 직원은 계측 홈(/·/dashboard)을 쓰지 않는다 — 들어오면 반도체 시작 화면으로 보낸다.

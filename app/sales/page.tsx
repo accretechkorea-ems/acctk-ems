@@ -3,6 +3,8 @@
 
 import React, { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { loadMe } from '@/lib/appData/me'
+import { loadEngineers } from '@/lib/appData/engineers'
 import { useToast } from '@/components/common/Toast'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { isActiveInPeriod } from '@/lib/engineers'
@@ -1320,17 +1322,17 @@ export default function SalesPage() {
     // Cron 이 실패했거나 아직 안 돈 날에도 실적 현황이 맞는 상태를 보여 주기 위해 남긴다.
     // 같은 건을 두 번 처리해도 안전하다(조건부 UPDATE). superadmin 이 아니면 403 이고 그냥 넘어간다.
     await fetch('/api/auto-fail', { method: 'POST' }).catch(() => {})
-    const { data: userData } = await supabase.auth.getUser()
-    const [{ data: qData, error: qErr }, { data: eData }, { data: tData }, { data: meData }, { data: custData }] = await Promise.all([
+    // 본인·직원 목록은 공통 층에서(조회 0회) — 예전에는 engineers 를 두 번 읽었다.
+    const [{ me: meData }, eData, { data: qData, error: qErr }, { data: tData }, { data: custData }] = await Promise.all([
+      loadMe(),
+      loadEngineers(),
       supabase.from('quotes')
         // quotes 는 engineers 를 engineer_id(실적 귀속자)·created_by(작성자) 두 번 참조한다.
         // 관계를 지정하지 않으면 PGRST201(300 Multiple Choices)로 조회 전체가 실패한다.
         // 실적 현황은 실적 귀속자 기준이므로 engineer_id 쪽을 쓴다.
         .select('*, engineers!quotes_engineer_id_fkey(name, position), quote_items(product_name, row_kind, price_list(model_jp))')
         .order('quote_date', { ascending: false }).order('quote_number', { ascending: false }),
-      supabase.from('engineers').select('engineer_id, name, position, teams, permission_level, resigned_date').order('engineer_id'),
       supabase.from('sales_targets').select('*'),
-      supabase.from('engineers').select('*').eq('email', userData.user?.email || '').single(),
       supabase.from('customers').select('customer_id, company_name'),
     ])
     // 조회가 실패해도 빈 배열이 되던 자리다. 실적이 0 인 것과 못 읽은 것은 다르므로 구분해 알린다.

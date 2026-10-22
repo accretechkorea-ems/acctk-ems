@@ -1,9 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { withTeamPerm } from '@/lib/teamPerms'
+import { useMe } from '@/lib/appData/MeProvider'
 import { canViewAll, canViewMenu, type EngineerLike, type TeamPerm } from '@/lib/permissions'
 import { menuKeyForPath, PUBLIC_MENU } from '@/lib/menuPerms'
 import { canAccessSemiContact, SEMI_CONTACT_KEY } from '@/lib/division'
@@ -44,39 +42,19 @@ function allowsPath(pathname: string, engineer: (EngineerLike & { can_switch_div
  *
  * 리다이렉트는 하지 않는다. '/' 가 80 전용이 될 예정이라 무한 리다이렉트를 피하려
  * 미허가 시에는 호출부에서 '접근 권한이 없습니다' 화면(AccessGate)을 렌더한다.
+ *
+ * **조회하지 않는다.** 본인 정보는 MeProvider 가 앱 당 한 번 읽어 둔 것을 받는다
+ * (docs/perf-rules.md 1). 예전에는 이 훅이 화면마다 getUser → engineers → teamPerms
+ * 세 단계를 다시 불러, 사이드바가 읽은 것과 똑같은 조회가 한 벌 더 나갔다.
+ * 미로그인은 me 가 null 이므로 종전처럼 미허가로 떨어진다(미들웨어가 /login 으로 보낸다).
  */
 export function usePageGuard() {
-  const supabase = useMemo(() => createClient(), [])
   const pathname = usePathname()
-  const [engineer, setEngineer] = useState<GuardEngineer | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [authorized, setAuthorized] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-    const check = async () => {
-      const { data } = await supabase.auth.getUser()
-      // 미로그인은 미들웨어가 이미 /login 으로 보낸다. 여기선 방어적으로 미허가 처리.
-      if (!data.user?.email) {
-        if (!cancelled) { setAuthorized(false); setLoading(false) }
-        return
-      }
-      const { data: eng } = await supabase
-        .from('engineers')
-        .select('engineer_id, name, teams, permission_level, can_switch_division')
-        .eq('email', data.user.email)
-        .single()
-      // 권한 판정에 팀의 메뉴 목록이 필요하므로 붙인 뒤에 판정한다.
-      const e = await withTeamPerm((eng as GuardEngineer | null) ?? null)
-      if (cancelled) return
-      setEngineer(e)
-      setAuthorized(allowsPath(pathname, e))
-      setLoading(false)
-    }
-    check()
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  return { engineer, loading, authorized }
+  const { me, loading } = useMe()
+  return {
+    engineer: me as GuardEngineer | null,
+    loading,
+    // 판정 전에는 항상 false — 그 동안 화면이 본문을 그리지 않는다.
+    authorized: loading ? false : allowsPath(pathname, me),
+  }
 }

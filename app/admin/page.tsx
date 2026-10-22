@@ -12,7 +12,9 @@ import {
   NOTICE_MAX_IMAGES, NOTICE_TITLE_MAX, NOTICE_BODY_MAX,
   clearDismiss, noticePhase, type Notice, type NoticePhase,
 } from '@/lib/notices'
-import { withTeamPerm, invalidateTeamPerms, loadTeamPerms } from '@/lib/teamPerms'
+import { invalidateTeamPerms, loadTeamPerms } from '@/lib/teamPerms'
+import { loadMe, invalidateMe } from '@/lib/appData/me'
+import { invalidateEngineers } from '@/lib/appData/engineers'
 // 팀 권한은 메뉴 단위다. 목록·묶음·파생 규칙은 모두 이 파일 한곳에서 온다.
 import { CHECKABLE_MENUS, checkableGroups, MENU_PERMS } from '@/lib/menuPerms'
 import AccessGate from '@/components/common/AccessGate'
@@ -242,20 +244,25 @@ function AdminPageInner() {
 
   useEffect(() => {
     const check = async () => {
-      const { data } = await supabase.auth.getUser()
+      // 본인은 공통 층에서(조회 0회 — docs/perf-rules.md 1).
       // 미로그인은 미들웨어가 /login 으로 보낸다. 리다이렉트 대신 미허가 처리(AccessGate).
-      if (!data.user?.email) { setLoading(false); return }
-
-      const { data: engData } = await supabase
-        .from('engineers')
-        .select('*')
-        .eq('email', data.user.email)
-        .single()
+      const { me: eng } = await loadMe()
+      if (!eng) { setLoading(false); return }
 
       // 진입 판정은 관리 메뉴 권한 기준. currentEngineer 는 기존대로 유지.
-      const eng = await withTeamPerm(engData)
-      if (eng && canViewMenu(eng, 'admin')) {
-        setCurrentEngineer(eng)
+      if (canViewMenu(eng, 'admin')) {
+        // 화면의 Engineer 모양으로 옮긴다(이 화면은 이름·권한을 빈 값 없는 글자로 다룬다).
+        setCurrentEngineer({
+          engineer_id: eng.engineer_id,
+          name: eng.name ?? '',
+          position: eng.position,
+          teams: eng.teams,
+          email: eng.email,
+          initials: eng.initials,
+          permission_level: eng.permission_level ?? '',
+          resigned_date: eng.resigned_date,
+          office: eng.office,
+        })
         setAuthorized(true)
       }
       setLoading(false)
@@ -348,8 +355,14 @@ function AdminPageInner() {
   }
 
   // ── 직원 관리 ───────────────────────────────────────────────────────────────
+  /**
+   * 직원 목록 — **여기서는 공통 캐시를 쓰지 않는다.** 이 화면이 직원을 고치는 자리이고,
+   * 편집 칸(이니셜·프로필 등)까지 전부 필요하며 저장 직후 다시 읽어야 한다.
+   * 대신 읽을 때마다 공통 캐시를 버려, 다른 화면이 옛 이름을 계속 쓰지 않게 한다.
+   */
   const fetchEngineers = async () => {
     setEngineerLoading(true)
+    invalidateEngineers()
     const { data } = await supabase.from('engineers').select('*').order('engineer_id')
     const sorted = (data || []).sort((a: Engineer, b: Engineer) =>
       (POSITION_ORDER[a.position ?? ''] ?? 99) - (POSITION_ORDER[b.position ?? ''] ?? 99)
@@ -888,6 +901,8 @@ function AdminPageInner() {
   // 실패해도 30초 뒤 스스로 만료되므로 흐름을 막지 않고 로그만 남긴다.
   const dropTeamPermCache = async () => {
     invalidateTeamPerms()
+    // 본인의 perm 도 팀 권한에서 온다 — 함께 버린다(그러지 않으면 내 메뉴만 옛 권한으로 남는다).
+    invalidateMe()
     try {
       const res = await fetch('/api/team-perms', { method: 'POST' })
       if (!res.ok) console.error('[admin] 팀 권한 서버 캐시 무효화 실패', res.status)

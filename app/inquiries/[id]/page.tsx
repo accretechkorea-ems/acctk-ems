@@ -32,6 +32,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { loadMe } from '@/lib/appData/me'
+import { loadEngineers } from '@/lib/appData/engineers'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import SegmentedControl from '@/components/common/SegmentedControl'
@@ -740,24 +742,15 @@ export default function InquiryDetailPage() {
   useEffect(() => {
     if (!authorized) return
     let cancelled = false
-    const loadMe = async () => {
-      const supabase = createClient()
-      const [{ data: auth }, { data: engs }] = await Promise.all([
-        supabase.auth.getUser(),
-        supabase.from('engineers').select('engineer_id, name, position, resigned_date').order('engineer_id'),
-      ])
-      if (cancelled) return
-      setEngineerList((engs ?? []) as PickEngineer[])
-      const email = auth?.user?.email
-      if (!email) return
-      const { data: me } = await supabase
-        .from('engineers').select('engineer_id, permission_level').eq('email', email).maybeSingle()
+    const run = async () => {
+      // 직원 목록·본인 모두 공통 층에서(조회 0회).
+      const [engs, { me }] = await Promise.all([loadEngineers(), loadMe()])
       if (cancelled || !me) return
-      const m = me as { engineer_id: number; permission_level: string | null }
-      setMyId(m.engineer_id)
-      setAmAdmin(m.permission_level === 'superadmin')
+      setEngineerList(engs as unknown as PickEngineer[])
+      setMyId(me.engineer_id)
+      setAmAdmin(me.permission_level === 'superadmin')
     }
-    loadMe()
+    run()
     return () => { cancelled = true }
   }, [authorized])
 

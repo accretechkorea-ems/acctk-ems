@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState, Suspense, Fragment, type CSSProperties } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { loadEngineers } from '@/lib/appData/engineers'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import { canViewLeads, isSuperAdmin } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPerms'
@@ -269,14 +270,15 @@ function LeadsPageInner() {
       // 여기서 거르는 것은 화면이 남의 리드를 그리지 않게 하기 위해서다.
       let leadQuery = supabase.from('leads').select('*').order('created_at', { ascending: false })
       if (!isAdmin && myEngineerId != null) leadQuery = leadQuery.eq('assigned_to', myEngineerId)
-      const [{ data: ld }, { data: eng }, { data: cus }] = await Promise.all([
+      const [{ data: ld }, eng, { data: cus }] = await Promise.all([
         leadQuery,
-        supabase.from('engineers').select('engineer_id, name, position, tel, email, teams, permission_level, resigned_date'),
+        // 직원 목록은 공통 층에서(조회 0회).
+        loadEngineers(),
         supabase.from('customers').select('customer_id, company_name, address').is('deleted_at', null).eq('is_parent', false),
       ])
       if (cancelled) return
       setLeads((ld ?? []) as Lead[])
-      setEngineers((eng ?? []) as Engineer[])
+      setEngineers(eng as unknown as Engineer[])
       setCustomers((cus ?? []) as Customer[])
       setLoading(false)
     }

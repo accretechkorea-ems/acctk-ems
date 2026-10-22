@@ -29,6 +29,8 @@ export type Me = {
   office: string | null
   email: string | null
   tel: string | null
+  /** 견적번호·보고서에 쓰는 담당자 이니셜. */
+  initials: string | null
   /** 사업부 전환 권한(superadmin 과 함께일 때만 뜻이 있다). */
   can_switch_division: boolean | null
   resigned_date: string | null
@@ -36,7 +38,7 @@ export type Me = {
   perm: TeamPerm | null
 }
 
-const COLUMNS = 'engineer_id, name, position, teams, permission_level, office, email, tel, can_switch_division, resigned_date'
+const COLUMNS = 'engineer_id, name, position, teams, permission_level, office, email, tel, initials, can_switch_division, resigned_date'
 
 /** 세션과 본인 행. 로그인하지 않았으면 둘 다 비어 있다. */
 export type MeResult = {

@@ -23,6 +23,8 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { daysBetween, todayKST } from '@/lib/date'
 import { createClient } from '@/lib/supabase/client'
+import { loadMe } from '@/lib/appData/me'
+import { loadEngineers } from '@/lib/appData/engineers'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import ModalOverlay from '@/components/common/ModalOverlay'
@@ -956,17 +958,12 @@ function InquiriesPageInner() {
     if (!authorized) return
     let cancelled = false
     const load = async () => {
-      const supabase = createClient()
-      const [{ data: engs }, { data: auth }] = await Promise.all([
-        supabase.from('engineers').select('engineer_id, name, position, resigned_date').order('engineer_id'),
-        supabase.auth.getUser(),
-      ])
+      // 직원 목록·본인 모두 공통 층에서(조회 0회 — docs/perf-rules.md 1·2).
+      // 예전에는 목록과 본인을 따로 두 번 읽었다.
+      const [engs, { me }] = await Promise.all([loadEngineers(), loadMe()])
       if (cancelled) return
-      setEngineers((engs ?? []) as PickEngineer[])
-      const email = auth?.user?.email
-      if (!email) return
-      const { data: me } = await supabase.from('engineers').select('engineer_id').eq('email', email).maybeSingle()
-      if (!cancelled && me) setMyId((me as { engineer_id: number }).engineer_id)
+      setEngineers(engs as unknown as PickEngineer[])
+      if (me) setMyId(me.engineer_id)
     }
     load()
     return () => { cancelled = true }

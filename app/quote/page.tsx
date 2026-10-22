@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { loadMe } from '@/lib/appData/me'
 import { useToast } from '@/components/common/Toast'
 import { useFieldErrors, FieldError } from '@/components/common/fieldErrors'
 import { usePageGuard } from '@/hooks/usePageGuard'
@@ -398,10 +399,16 @@ function QuotePageInner() {
 
   useEffect(() => {
     const f = async () => {
-      const { data: u } = await supabase.auth.getUser()
-      if (!u.user?.email) return
-      const { data } = await supabase.from('engineers').select('*').eq('email', u.user.email).single()
-      if (data) setEngineer(data)
+      // 본인은 공통 층에서 받는다 — 사이드바가 읽은 그 값이다(조회 0회).
+      const { me } = await loadMe()
+      if (me) setEngineer({
+        engineer_id: me.engineer_id,
+        name: me.name ?? '',
+        position: me.position,
+        email: me.email,
+        initials: me.initials,
+        tel: me.tel,
+      })
     }
     f()
   }, [])
