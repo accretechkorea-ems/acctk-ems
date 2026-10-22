@@ -30,7 +30,9 @@ Module._resolveFilename = function (req, ...rest) {
   return origResolve.call(this, req, ...rest)
 }
 
-const { monthKpi, stageBars, buildTodos, CARD_STAGES } = load(path.join(ROOT, 'lib/homeCards.ts'))
+const {
+  monthKpi, stageBars, buildTodos, CARD_STAGES, quoteStatusCounts, CARD_QUOTE_STATUSES,
+} = load(path.join(ROOT, 'lib/homeCards.ts'))
 
 let fails = 0
 const eq = (name, got, want) => {
@@ -73,6 +75,26 @@ eq('목표가 없으면 달성률은 null',
   monthKpi([], { month: MONTH, engineerId: ME, yearTarget: { sales: 0, order: 0 } }).salesAchieve, null)
 eq('매출이 0이면 이익률도 null',
   monthKpi([], { month: MONTH, engineerId: ME, yearTarget: { sales: 1, order: 1 } }).profitRate, null)
+
+// ── 상태별 건수(카드 본문) ────────────────────────────────────────────────
+console.log('\n── 내 견적 상태별 건수 ──')
+{
+  const rows = quoteStatusCounts([
+    q({ status: '견적중' }), q({ status: '견적중', quote_date: '2024-01-01' }), // 기간을 보지 않는다
+    q({ status: '발주(주문 대기)' }),
+    q({ status: '주문완료' }), q({ status: '주문완료' }), q({ status: '주문완료' }),
+    q({ status: '매출완료' }),                       // 세지 않는다
+    q({ status: '실패' }), q({ status: '반려' }),     // 목록에 없는 상태
+    q({ status: '견적중', engineer_id: 99 }),         // 남의 건
+  ], ME)
+  eq('네 줄이 늘 같은 순서로 나온다', rows.map(r => r.status), [...CARD_QUOTE_STATUSES])
+  eq('견적중 2건 — 오래된 것도 센다', rows[0].count, 2)
+  eq('발주 1건', rows[1].count, 1)
+  eq('주문완료 3건', rows[2].count, 3)
+  eq('세금계산서 요청 0건도 줄은 남는다', rows[3].count, 0)
+  eq('매출완료는 어느 줄에도 없다', rows.some(r => r.status === '매출완료'), false)
+  eq('남의 건·그 밖 상태는 세지 않는다', rows.reduce((s2, r) => s2 + r.count, 0), 6)
+}
 
 // ── 포캐스트 막대 ─────────────────────────────────────────────────────────
 console.log('\n── 단계별 막대 ──')

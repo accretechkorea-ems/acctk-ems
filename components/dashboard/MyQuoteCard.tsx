@@ -2,8 +2,12 @@
 
 // 「내 견적」 카드와 그 **큰 모달**.
 //
-// 카드는 이번 달 숫자만 본다(lib/homeCards.ts 의 monthKpi). 표 전체는 모달이 열릴 때 비로소
-// 읽는다 — 홈에 들어올 때마다 견적 목록·결재 문서·승인 게이트까지 읽으면 첫 화면이 느려진다.
+// 카드는 **아직 손이 가야 하는 건수**만 본다(상태별 — lib/homeCards.ts 의 quoteStatusCounts).
+// 금액과 달성률은 모달 안 표의 머리에 그대로 있다. 카드에서 뺀 이유는, 홈에서 먼저 읽혀야 하는
+// 것이 「얼마를 했는가」가 아니라 「무엇이 내 차례인가」이기 때문이다.
+//
+// 표 전체는 모달이 열릴 때 비로소 읽는다 — 홈에 들어올 때마다 견적 목록·결재 문서·승인
+// 게이트까지 읽으면 첫 화면이 느려진다.
 //
 // 모달 안은 **지금 쓰던 MyQuotesPanel 그대로**다. 필터·탭·검색·발주서 등록·계산서 요청·결재
 // 올리기·삭제 요청·엑셀 내보내기가 전부 그 부품 안에 있어, 옮기지 않고 통째로 띄운다.
@@ -13,94 +17,73 @@ import { useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import MyQuotesPanel from '@/components/dashboard/MyQuotesPanel'
 import DashCard from './DashCard'
-import { monthKpi, type CardQuote } from '@/lib/homeCards'
+import { quoteStatusCounts, type CardQuote } from '@/lib/homeCards'
+import { SALES_STATUS_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import type { Slot } from '@/hooks/dashboard/useDashboardCards'
 
 const TEXT = '#111827'
 const GRAY = '#6b7280'
 const MUTED = '#9ca3af'
-const FADE = '#d1d5db'
-const BLUE = '#234ea2'
-const GREEN = '#16a34a'
-
-const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
-/** 카드 한 줄에 들어가게 줄여 쓴다. 0 은 「-」로 — 없는 것과 0원은 같은 뜻이다. */
-const compact = (n: number): string => {
-  if (!n) return '-'
-  if (n >= 1e8) return `₩${Math.round((n / 1e8) * 10) / 10}억`
-  if (n >= 1e7) return `₩${Math.round(n / 1e7)}천만`
-  if (n >= 1e4) return `₩${numKR(Math.round(n / 1e4))}만`
-  return `₩${numKR(n)}`
-}
-
-/** 숫자 한 칸. **컴포넌트 밖에** 둔다 — 렌더마다 새로 만들면 React 가 상태를 버린다. */
-function Num({ label, value, color }: { label: string; value: number; color?: string }) {
-  return (
-    <div style={{ minWidth: 0 }}>
-      <div style={{ fontSize: 11, color: GRAY }}>{label}</div>
-      <div className="num" style={{ fontSize: 15, fontWeight: 800, color: value ? (color ?? TEXT) : FADE, whiteSpace: 'nowrap' }}>
-        {compact(value)}
-      </div>
-    </div>
-  )
-}
-
-/** 달성률 한 줄 — 막대 없이 숫자와 목표만. 목표가 없으면 그 사실을 적는다. */
-function Rate({ label, rate, target }: { label: string; rate: number | null; target: number }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
-      <span style={{ fontSize: 11, color: GRAY, width: 52, flexShrink: 0 }}>{label}</span>
-      <span className="num" style={{ fontSize: 13, fontWeight: 800, color: rate === null ? FADE : (rate >= 100 ? GREEN : TEXT) }}>
-        {rate === null ? '목표 없음' : `${rate.toFixed(1)}%`}
-      </span>
-      {target > 0 && (
-        <span className="num" style={{ fontSize: 11, color: MUTED, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          목표 {compact(target)}
-        </span>
-      )}
-    </div>
-  )
-}
 
 export type MyQuoteCardProps = {
   engineerId: number
   slot: Slot<CardQuote[]>
-  targets: Slot<{ sales: number; order: number }>
-  /** 'YYYY-MM' — 이번 달. */
-  month: string
-  /** 모달을 닫은 뒤 카드 숫자를 다시 읽는다. */
+  /**
+   * 주소(?quoteTab=)로 들어온 상태 탭. 있으면 **처음부터 모달이 그 탭으로 열린다.**
+   * 할 일 카드의 「유효기간이 끝나는 견적」과 이 카드의 상태 줄이 같은 길을 쓴다.
+   */
+  initialTab?: string | null
+  /** 모달을 닫은 뒤 카드 건수를 다시 읽는다. */
   onReload: () => void
 }
 
-export default function MyQuoteCard({ engineerId, slot, targets, month, onReload }: MyQuoteCardProps) {
-  const [open, setOpen] = useState(false)
-  const k = monthKpi(slot.data, { month, engineerId, yearTarget: targets.data })
+export default function MyQuoteCard({ engineerId, slot, initialTab, onReload }: MyQuoteCardProps) {
+  // 열린 모달이 보고 있는 상태 탭. null 이면 닫혀 있다.
+  // 주소로 들어온 값은 **처음 상태**로 넣는다(effect 로 열면 화면이 한 번 깜빡인다).
+  const [openTab, setOpenTab] = useState<string | null>(initialTab ?? null)
+  const counts = quoteStatusCounts(slot.data, engineerId)
 
-  const close = () => { setOpen(false); onReload() }
+  const close = () => { setOpenTab(null); onReload() }
 
   return (
     <>
       <DashCard
         title="내 견적"
-        onMore={() => setOpen(true)}
-        loading={slot.loading || targets.loading}
+        onMore={() => setOpenTab('전체')}
+        loading={slot.loading}
         error={slot.error}
       >
-        <div style={{ fontSize: 11, color: MUTED, marginBottom: 6 }}>{month.replace('-', '년 ')}월</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px 12px', marginBottom: 10 }}>
-          <Num label="견적 제출" value={k.quoted} />
-          <Num label="수주" value={k.ordered} />
-          <Num label="매출" value={k.revenue} color={BLUE} />
-          <Num label="순이익" value={k.profit} color={GREEN} />
+        {/* 활동 기록 카드와 같은 모양 — 점 · 이름 · 오른쪽 건수 뱃지.
+            매출완료는 세지 않는다(끝난 건이라 쌓이기만 한다. lib/homeCards.ts 참조). */}
+        <div style={{ display: 'grid', gap: 7 }}>
+          {counts.map(({ status, count }) => {
+            const sc = getCategoryColor(SALES_STATUS_COLORS, status)
+            return (
+              <button key={status} type="button" onClick={() => setOpenTab(status)}
+                title={`${status} 견적을 모달에서 봅니다`}
+                style={{ height: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, padding: 0, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: sc.dot ?? sc.text, flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, color: TEXT, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{status}</span>
+                </span>
+                <span className="num" style={{
+                  fontSize: 12, fontWeight: 600, flexShrink: 0,
+                  color: count ? (sc.dot ?? sc.text) : MUTED,
+                  background: '#f3f4f6', borderRadius: 6, padding: '2px 8px',
+                }}>
+                  {count}<span style={{ color: MUTED }}>건</span>
+                </span>
+              </button>
+            )
+          })}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid #ebebeb', paddingTop: 8 }}>
-          <Rate label="수주 달성" rate={k.orderAchieve} target={k.orderTarget} />
-          <Rate label="매출 달성" rate={k.salesAchieve} target={k.salesTarget} />
+        <div style={{ marginTop: 8, fontSize: 11, color: MUTED }}>
+          기간과 무관하게 지금 진행 중인 건입니다
         </div>
       </DashCard>
 
       {/* 큰 모달 — 표가 본래 쓰던 폭이 필요하다(필터 줄·10열 표·페이지). */}
-      {open && (
+      {openTab !== null && (
         <ModalOverlay onClose={close}>
           <div
             onClick={e => e.stopPropagation()}
@@ -120,7 +103,7 @@ export default function MyQuoteCard({ engineerId, slot, targets, month, onReload
             </div>
             {/* 패널이 남는 높이를 다 쓰게 한다(fitToHeight) — 목록 줄 수가 모달 높이에 맞춰 늘어난다. */}
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 12, overflow: 'auto' }}>
-              <MyQuotesPanel engineerId={engineerId} fitToHeight />
+              <MyQuotesPanel engineerId={engineerId} fitToHeight initialStatus={openTab} />
             </div>
           </div>
         </ModalOverlay>

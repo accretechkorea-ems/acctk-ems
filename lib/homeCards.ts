@@ -78,6 +78,31 @@ export function monthKpi(
   }
 }
 
+/**
+ * 「내 견적」 카드가 세는 상태 — **아직 손이 가야 하는 것들**이다.
+ *
+ * 매출완료는 넣지 않는다. 끝난 건이라 해마다 쌓이기만 해서, 세어 두면 숫자가 커지는 것 말고는
+ * 아무 뜻이 없다(그 숫자는 실적 화면과 「내 견적」 모달이 기간과 함께 보여 준다).
+ * 순서는 진행 순서다 — 견적을 내고, 발주를 받고, 주문이 끝나고, 계산서를 요청한다.
+ */
+export const CARD_QUOTE_STATUSES = ['견적중', '발주(주문 대기)', '주문완료', '세금계산서 요청'] as const
+
+export type QuoteStatusCount = { status: string; count: number }
+
+/**
+ * 상태별 건수. **기간을 보지 않는다** — 진행 중인 건은 언제 쓴 것이든 끝날 때까지 내 일이다.
+ * 실적 귀속자가 본인인 건만 센다(대필해 준 남의 건은 그 사람 목록에 뜬다).
+ */
+export function quoteStatusCounts(
+  quotes: readonly CardQuote[], engineerId: number,
+): QuoteStatusCount[] {
+  const mine = quotes.filter(q => q.engineer_id === engineerId)
+  return CARD_QUOTE_STATUSES.map(status => ({
+    status,
+    count: mine.filter(q => q.status === status).length,
+  }))
+}
+
 // ── 포캐스트 단계 막대 ──────────────────────────────────────────────────────
 
 /** 보드에 세우는 단계(실주는 빼고 — 끝난 건이다). components/customer/opportunity.ts 와 같은 순서다. */

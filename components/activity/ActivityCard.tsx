@@ -27,9 +27,15 @@ type Props = {
   onClick?: () => void       // 있으면 클릭 가능 카드(hover). 클릭 시 상세 모달 오픈은 부모가 처리.
   headerRight?: ReactNode    // 헤더 우측 슬롯. 주면 팀 뱃지 대신 렌더(대시보드 월 스테퍼용).
   types?: string[]           // 표시 후보 유형과 그 순서. 미지정 시 서비스 6종.
+  /**
+   * 주어진 칸 높이에 맞춘다(홈 격자). 유형 목록이 남는 높이를 갖고 **합계는 바닥에 남는다** —
+   * 고정 높이(6줄)를 그대로 쓰면 260px 칸에서 합계가 잘려 나간다.
+   * 활동 현황 화면은 이 값을 주지 않아 종전 그대로 6줄 고정이다.
+   */
+  fitHeight?: boolean
 }
 
-export default function ActivityCard({ engineer, counts, total, onClick, headerRight, types = SERVICE_TYPES }: Props) {
+export default function ActivityCard({ engineer, counts, total, onClick, headerRight, types = SERVICE_TYPES, fitHeight = false }: Props) {
   const clickable = !!onClick
   // 0건 유형은 숨긴다. 순서는 넘겨받은 목록(서비스 6종 → 영업 4종) 그대로.
   const shownTypes = types.filter(t => (counts[t] ?? 0) > 0)
@@ -40,12 +46,14 @@ export default function ActivityCard({ engineer, counts, total, onClick, headerR
         background: CARD_BG, borderRadius: 8, padding: '14px 16px',
         border: `1px solid ${BORDER}`, cursor: clickable ? 'pointer' : 'default',
         transition: 'transform 0.15s ease, border-color 0.15s ease',
+        // 칸 높이에 맞출 때만 세로 flex — 목록이 남는 높이를 갖고 합계가 바닥에 남는다.
+        ...(fitHeight ? { height: '100%', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' as const } : null),
       }}
       onMouseEnter={clickable ? (e => { const el = e.currentTarget as HTMLDivElement; el.style.transform = 'translateY(-2px)'; el.style.borderColor = '#c7d7f8' }) : undefined}
       onMouseLeave={clickable ? (e => { const el = e.currentTarget as HTMLDivElement; el.style.transform = ''; el.style.borderColor = BORDER }) : undefined}
     >
       {/* 이름 + 팀 뱃지 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, paddingBottom: 12, borderBottom: `1px solid ${BORDER}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, paddingBottom: 12, borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px', lineHeight: 1.2, marginBottom: 3 }}>
             {engineer.name}
@@ -72,7 +80,10 @@ export default function ActivityCard({ engineer, counts, total, onClick, headerR
         .ac-list::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
         .ac-list::-webkit-scrollbar-track { background: transparent; }
       `}</style>
-      <div className="ac-list" style={{ height: LIST_H, overflowY: 'auto', marginBottom: 12 }}>
+      <div className="ac-list" style={{
+        ...(fitHeight ? { flex: 1, minHeight: 0 } : { height: LIST_H }),
+        overflowY: 'auto', marginBottom: 12,
+      }}>
         {shownTypes.length === 0 ? (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#d1d5db' }}>
             활동 기록 없음
@@ -105,7 +116,7 @@ export default function ActivityCard({ engineer, counts, total, onClick, headerR
       {/* 합계 */}
       <div style={{
         padding: '5px 0', borderTop: `1px solid ${BORDER}`,
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0,
       }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: MUTED }}>합계</span>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>

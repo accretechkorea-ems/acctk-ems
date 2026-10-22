@@ -11,8 +11,8 @@
 //   하나가 실패해도 그 카드만 「불러오지 못했습니다」가 되고 나머지는 그대로 뜬다.
 //   「내 견적」 표의 전체 자료는 **모달을 열 때** 읽는다 — 카드는 숫자만 본다.
 
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useMemo, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { canViewCustomers, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPerms'
@@ -41,9 +41,12 @@ type ServiceLink = { service_id: number }
 type ServiceTypeRow = { service_type: string | null }
 type SalesTypeRow = { activity_type: string | null }
 
-export default function DashboardPage() {
+function DashboardPageInner() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
+  // ?quoteTab=견적중 — 「내 견적」 모달을 그 상태 탭으로 연다.
+  // 할 일 카드의 「유효기간이 끝나는 견적」 줄이 이 주소로 보낸다.
+  const quoteTab = useSearchParams().get('quoteTab')
   const [me, setMe] = useState<Me | null>(null)
   const [loading, setLoading] = useState(true)
   const [activityYm, setActivityYm] = useState(() => { const n = nowKSTParts(); return { y: n.y, m: n.m } })
@@ -91,7 +94,6 @@ export default function DashboardPage() {
 
   // 회계연도는 4월 시작 — 실적 현황·포캐스트와 같은 규칙이다.
   const fiscalYear = nowD.m >= 4 ? nowD.y : nowD.y - 1
-  const thisMonth = `${nowD.y}-${pad2(nowD.m)}`
   const cards = useDashboardCards(engineerId, fiscalYear)
 
   // 본인 활동 건수 집계 — 활동 현황 화면과 같은 규칙이다.
@@ -195,6 +197,7 @@ export default function DashboardPage() {
                 counts={actCounts}
                 total={actTotal}
                 types={ACTIVITY_TYPES}
+                fitHeight
                 onClick={() => setDetailOpen(true)}
                 headerRight={
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
@@ -213,10 +216,12 @@ export default function DashboardPage() {
           <div className="home-cell">
             {me && (
               <MyQuoteCard
+                // 주소의 탭이 바뀌면 카드를 새로 만든다 — 처음 상태로 모달을 여는 구조라
+                // 같은 화면에 머문 채 주소만 바뀌는 경우(할 일 줄 클릭)를 이렇게 받는다.
+                key={quoteTab ?? ''}
                 engineerId={me.engineer_id}
                 slot={cards.quotes}
-                targets={cards.targets}
-                month={thisMonth}
+                initialTab={quoteTab}
                 onReload={() => { void cards.reloadQuotes() }}
               />
             )}
@@ -280,5 +285,14 @@ export default function DashboardPage() {
         />
       )}
     </div>
+  )
+}
+
+// useSearchParams 는 Suspense 경계 안에서만 쓸 수 있다(리드·견적 화면과 같은 방식).
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div style={{ background: '#fafafa', minHeight: '100vh' }} />}>
+      <DashboardPageInner />
+    </Suspense>
   )
 }

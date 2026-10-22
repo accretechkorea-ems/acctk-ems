@@ -203,7 +203,7 @@ export default function LeadStatusModal({
             {/* ── 고객사 — 배정이 곧 전환이라 여기서 함께 정한다 ── */}
             {alreadyMade ? (
               <div style={{ marginTop: 10, background: NEUTRAL_BG, borderRadius: 8, padding: '10px 12px', fontSize: 12, color: SUB, lineHeight: 1.7 }}>
-                이미 포캐스트가 만들어진 리드입니다. 고객사는 그대로 두고 **담당자만** 바뀝니다.
+                이미 포캐스트가 만들어진 리드입니다. 고객사는 그대로 두고 담당자만 바뀝니다.
               </div>
             ) : needsChoice ? (
               <div style={{ marginTop: 10 }}>

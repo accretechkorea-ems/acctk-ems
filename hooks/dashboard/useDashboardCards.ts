@@ -54,18 +54,22 @@ export function useDashboardCards(engineerId: number | null, fiscalYear: number)
   const [approvals, setApprovals] = useState<Slot<ApprovalRow[]>>(() => idle<ApprovalRow[]>([]))
   const [leads, setLeads] = useState<Slot<LeadRow[]>>(() => idle<LeadRow[]>([]))
 
-  /** 견적 — 카드 숫자(이번 달)와 할 일(유효기간)이 함께 쓴다. 올해 회계연도 치만 읽는다. */
+  /**
+   * 견적 — 카드의 상태별 건수·이번 달 숫자·할 일(유효기간)이 함께 쓴다.
+   *
+   * **기간으로 거르지 않는다.** 진행 중인 건(견적중·발주·주문완료·계산서 요청)은 회계연도를
+   * 넘겨서까지 남아 있고, 그것이 곧 아직 손이 가야 하는 일이다. 본인 건만 읽으므로
+   * 한 사람치는 많아야 수백 줄이다.
+   */
   const reloadQuotes = useCallback(async () => {
     if (engineerId == null) return
     setQuotes(s => ({ ...s, loading: true }))
     const { data, error } = await supabase.from('quotes')
       .select('status, quote_date, purchase_order_at, tax_invoice_completed_at, total_supply, total_profit, engineer_id')
       .eq('engineer_id', engineerId)
-      .gte('quote_date', `${fiscalYear}-04-01`)
-      .lte('quote_date', `${fiscalYear + 1}-03-31`)
     if (error) console.error('[dashboard] quotes load failed', error)
     setQuotes({ data: (data ?? []) as CardQuote[], loading: false, error: !!error })
-  }, [supabase, engineerId, fiscalYear])
+  }, [supabase, engineerId])
 
   useEffect(() => {
     if (engineerId == null) return

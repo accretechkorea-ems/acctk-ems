@@ -115,7 +115,12 @@ type Quote = {
 type EditStatus = QuoteStatus
 // fitToHeight: 카드가 (옆 열에 맞춰) 늘어난 높이를 목록 줄 수로 채운다.
 // 끄면 지금까지처럼 10줄 고정이다.
-export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { engineerId: number; fitToHeight?: boolean }) {
+export default function MyQuotesPanel({ engineerId, fitToHeight = false, initialStatus }: {
+  engineerId: number
+  fitToHeight?: boolean
+  /** 처음에 걸어 둘 상태 탭. 홈의 「내 견적」 카드가 상태 줄을 눌러 열 때 쓴다. */
+  initialStatus?: string
+}) {
   const supabase = useMemo(() => createClient(), [])
   const toast = useToast()
   const [quotes, setQuotes] = useState<Quote[]>([])
@@ -147,7 +152,9 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false }: { eng
   const [fy, setFy] = useState(curFy)
   const [unit, setUnit] = useState<Unit>('valid')   // 기본값: 유효 견적(작성일+1개월 이내)
   const [sel, setSel] = useState(cm)
-  const [statusFilter, setStatusFilter] = useState('전체')
+  // 모르는 값이 오면 「전체」로 떨어뜨린다(주소로 들어오는 값이라 무엇이든 올 수 있다).
+  const [statusFilter, setStatusFilter] = useState(
+    initialStatus && STATUS_TABS.includes(initialStatus) ? initialStatus : '전체')
   // 대필 알림(/dashboard?quote=견적번호)으로 들어오면 그 견적이 바로 보이도록 검색어로 시작한다.
   // 이 패널은 me 를 받은 뒤에야 붙어 서버 렌더에는 존재하지 않으므로 window 를 읽어도 안전하다.
   const [search, setSearch] = useState(() => {
