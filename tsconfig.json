@@ -4,6 +4,9 @@
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
+    // scripts/perf/*.ts 는 node 가 타입만 떼어 내고 바로 돌린다(빌드하지 않는다).
+    // 그 방식은 import 에 .ts 확장자를 그대로 써야 하므로 허용한다.
+    "allowImportingTsExtensions": true,
     "strict": true,
     "noEmit": true,
     "esModuleInterop": true,

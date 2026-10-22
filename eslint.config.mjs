@@ -9,6 +9,8 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // 번들 크기·브라우저 실측용 빌드(NEXT_DIST_DIR=.next-perf) — 빌드 산출물이라 검사 대상이 아니다.
+    ".next-perf*/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
