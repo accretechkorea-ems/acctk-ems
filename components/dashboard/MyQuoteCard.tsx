@@ -69,7 +69,8 @@ export default function MyQuoteCard({ engineerId, slot, initialTab, onReload }: 
     <>
       <DashCard
         title="내 견적"
-        onMore={() => setOpenTab('전체')}
+        // 줄 밖을 누르면 전체 탭. 줄을 누르면 그 상태 탭이다(줄이 전파를 막는다).
+        onClick={() => setOpenTab('전체')}
         loading={slot.loading}
         error={slot.error}
         errorMessage={slot.message}
@@ -80,9 +81,18 @@ export default function MyQuoteCard({ engineerId, slot, initialTab, onReload }: 
           {counts.map(({ status, count }) => {
             const sc = getCategoryColor(SALES_STATUS_COLORS, status)
             return (
-              <button key={status} type="button" onClick={() => setOpenTab(status)}
+              <button key={status} type="button"
+                onClick={e => { e.stopPropagation(); setOpenTab(status) }}
                 title={`${status} 견적을 모달에서 봅니다`}
-                style={{ height: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, padding: 0, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+                onMouseEnter={e => { e.currentTarget.style.background = '#f3f4f6' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
+                style={{
+                  height: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6,
+                  // 바탕색이 글자에 붙지 않게 좌우로 조금 넓히고, 그만큼 바깥으로 당긴다.
+                  padding: '0 6px', margin: '0 -6px', borderRadius: 6,
+                  background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                  transition: 'background 0.15s ease',
+                }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                   <span style={{ width: 9, height: 9, borderRadius: '50%', background: sc.dot ?? sc.text, flexShrink: 0 }} />
                   <span style={{ fontSize: 12, color: TEXT, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{status}</span>

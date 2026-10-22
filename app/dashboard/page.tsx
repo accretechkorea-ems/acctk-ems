@@ -18,7 +18,6 @@ import { canViewCustomers, type TeamPerm } from '@/lib/permissions'
 import { withTeamPerm } from '@/lib/teamPerms'
 import { ACTIVITY_TYPES } from '@/lib/activity'
 import ActivityCard from '@/components/activity/ActivityCard'
-import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
 import DashCard from '@/components/dashboard/DashCard'
 import { ApprovalCard, ForecastCard, MyStatCard, NotificationCard } from '@/components/dashboard/HomeCards'
 import MyQuoteCard from '@/components/dashboard/MyQuoteCard'
@@ -52,7 +51,6 @@ function DashboardPageInner() {
   const [activityYm, setActivityYm] = useState(() => { const n = nowKSTParts(); return { y: n.y, m: n.m } })
   // 활동 요약 건수. 아직 못 받았으면 null(카드를 그리지 않는다).
   const [actCounts, setActCounts] = useState<Record<string, number> | null>(null)
-  const [detailOpen, setDetailOpen] = useState(false)
   // 활동 조회 기간: 선택한 달의 1일 ~ 말일. 이번 달이면 1일 ~ 오늘.
   const pad2 = (n: number) => String(n).padStart(2, '0')
   const nowD = nowKSTParts()
@@ -223,7 +221,8 @@ function DashboardPageInner() {
                 total={actTotal}
                 types={ACTIVITY_TYPES}
                 fitHeight
-                onClick={() => setDetailOpen(true)}
+                // 카드를 누르면 활동 현황 화면으로 간다(월 이동 화살표는 전파를 막는다).
+                onClick={() => router.push('/activity')}
                 headerRight={
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
                     onClick={e => e.stopPropagation()}>
@@ -243,7 +242,7 @@ function DashboardPageInner() {
           <div className="home-cell">
             <ApprovalCard
               slot={cards.approvals}
-              onMore={() => router.push('/approval')}
+              onOpenAll={() => router.push('/approval')}
               onOpen={openApproval}
             />
           </div>
@@ -256,7 +255,7 @@ function DashboardPageInner() {
           <div className="home-cell">
             <NotificationCard
               slot={cards.notifications}
-              onMore={() => router.push('/notifications')}
+              onOpenAll={() => router.push('/notifications')}
               onOpen={openNotification}
             />
           </div>
@@ -267,15 +266,6 @@ function DashboardPageInner() {
         </div>
       </div>
 
-      {/* 활동 상세 — 활동 현황 화면과 같은 모달. 기간도 카드에 보이는 달과 같다. */}
-      {detailOpen && me && (
-        <ActivityDetailModal
-          engineer={me}
-          startDate={activityStart}
-          endDate={activityEnd}
-          onClose={() => setDetailOpen(false)}
-        />
-      )}
     </div>
   )
 }

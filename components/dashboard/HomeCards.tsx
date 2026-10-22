@@ -56,7 +56,8 @@ export function MyStatCard({ engineer, quotes, targets, fy, loading, error }: {
   const stat = engineerStat(quotes, targets, { engineerId: engineer.engineer_id, fy, mode: 'year', month: 1 })
   return (
     <>
-      <DashCard title={`내 실적 · FY${fy}`} onMore={() => setChartOpen(true)} moreLabel="월별 그래프" loading={loading} error={error}>
+      {/* 카드 어디를 눌러도 월별 그래프다. hoverLift 를 끄는 이유는 안쪽 카드가 이미 떠오르기 때문이다. */}
+      <DashCard title={`내 실적 · FY${fy}`} onClick={() => setChartOpen(true)} hoverLift={false} loading={loading} error={error}>
         {/* 카드 자체가 /sales 의 그 카드다. 머리줄(이름·팀·달성률)이 겹치지 않게 여기서는
             DashCard 의 제목만 쓰고, 카드는 여백을 줄인 모양(compact)으로 넣는다. */}
         <EngineerStatCard
@@ -88,7 +89,7 @@ export function ForecastCard({ slot, onOpen }: { slot: Slot<CardOpportunity[]>; 
   const max = Math.max(1, ...bars.map(b => b.amount))
   const total = bars.reduce((s, b) => s + b.count, 0)
   return (
-    <DashCard title="포캐스트" onMore={onOpen} onClick={onOpen} loading={slot.loading} error={slot.error} errorMessage={slot.message}>
+    <DashCard title="포캐스트" onClick={onOpen} loading={slot.loading} error={slot.error} errorMessage={slot.message}>
       {total === 0 ? empty('진행 중인 포캐스트가 없습니다') : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {bars.map(b => (
@@ -110,18 +111,21 @@ export function ForecastCard({ slot, onOpen }: { slot: Slot<CardOpportunity[]>; 
 
 // ── 알림 ────────────────────────────────────────────────────────────────────
 
-/** 안 읽은 알림 최근 다섯. 누르면 알림이 가리키는 곳으로 간다(기존 링크 규칙 그대로). */
-export function NotificationCard({ slot, onMore, onOpen }: {
+/**
+ * 안 읽은 알림 최근 다섯. 한 줄을 누르면 그 알림이 가리키는 곳으로 가고,
+ * 줄 밖(카드)을 누르면 알림 화면으로 간다. 줄은 전파를 막는다 — 두 곳으로 갈 수는 없다.
+ */
+export function NotificationCard({ slot, onOpenAll, onOpen }: {
   slot: Slot<NotificationRow[]>
-  onMore: () => void
+  onOpenAll: () => void
   onOpen: (n: NotificationRow) => void
 }) {
   return (
-    <DashCard title="알림" onMore={onMore} loading={slot.loading} error={slot.error} errorMessage={slot.message}>
+    <DashCard title="알림" onClick={onOpenAll} loading={slot.loading} error={slot.error} errorMessage={slot.message}>
       {slot.data.length === 0 ? empty('읽지 않은 알림이 없습니다') : (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {slot.data.map(n => (
-            <button key={n.id} type="button" onClick={() => onOpen(n)}
+            <button key={n.id} type="button" onClick={e => { e.stopPropagation(); onOpen(n) }}
               style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '7px 0', background: 'none', border: 'none', borderBottom: '1px solid #ebebeb', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
               <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {n.title || n.message || '알림'}
@@ -144,13 +148,13 @@ export function NotificationCard({ slot, onMore, onOpen }: {
  * 결재할 것이 없는 사람에게는 카드가 아예 없었다 — 그러면 「없다」와 「조회가 깨졌다」를
  * 구분할 수 없다. 못 읽었을 때는 그 이유(errorMessage)까지 카드에 적는다.
  */
-export function ApprovalCard({ slot, onMore, onOpen }: {
+export function ApprovalCard({ slot, onOpenAll, onOpen }: {
   slot: Slot<ApprovalRow[]>
-  onMore: () => void
+  onOpenAll: () => void
   onOpen: (d: ApprovalRow) => void
 }) {
   return (
-    <DashCard title="결재 대기" onMore={onMore} loading={slot.loading} error={slot.error} errorMessage={slot.message}>
+    <DashCard title="결재 대기" onClick={onOpenAll} loading={slot.loading} error={slot.error} errorMessage={slot.message}>
       {slot.data.length === 0 ? empty('대기 중인 문서가 없습니다') : (
         <>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 8 }}>
@@ -161,7 +165,7 @@ export function ApprovalCard({ slot, onMore, onOpen }: {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {slot.data.slice(0, 3).map(d => (
-          <button key={d.document_id} type="button" onClick={() => onOpen(d)}
+          <button key={d.document_id} type="button" onClick={e => { e.stopPropagation(); onOpen(d) }}
             style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '6px 0', background: 'none', border: 'none', borderBottom: '1px solid #ebebeb', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
             <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: MUTED }}>{d.doc_type ?? '문서'}</span>
             <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

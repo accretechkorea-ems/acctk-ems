@@ -1,25 +1,31 @@
 'use client'
 
-// 개인 대시보드의 **카드 껍데기** — 제목 한 줄 + 오른쪽 「전체 보기 →」 + 본문.
+// 개인 대시보드의 **카드 껍데기** — 제목 한 줄 + 본문.
 //
-// 격자가 카드 높이를 정하므로(약 260px) 본문은 그 안에서만 흐른다. 넘치면 카드가 늘어나는
-// 대신 본문이 잘린다 — 카드마다 높이가 달라지면 격자가 어긋나 읽기 어려워진다.
-// 숫자와 짧은 목록만 둔다. 긴 표는 「전체 보기」가 데려가는 곳의 몫이다.
+// 격자가 카드 높이를 정하므로 본문은 그 안에서만 흐른다. 넘치면 카드가 늘어나는 대신
+// 본문이 잘린다 — 카드마다 높이가 달라지면 격자가 어긋나 읽기 어려워진다.
+// 숫자와 짧은 목록만 둔다. 긴 표는 카드를 눌러 가는 곳의 몫이다.
+//
+// **「전체 보기 →」 글자는 없다.** 카드마다 작은 글자 단추가 하나씩 달려 있으면, 정작
+// 누르고 싶은 곳(카드 전체)은 아무 반응이 없고 과녁만 작아진다. 그래서 그 일을
+// 카드 전체 클릭으로 옮기고, 눌릴 수 있다는 신호는 hover(살짝 떠오름 + 파란 테두리)로
+// 준다 — 활동 기록 카드가 쓰던 그 동작 그대로다.
 
 import type { ReactNode } from 'react'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
-const BLUE = '#234ea2'
 const MUTED = '#9ca3af'
 
 export type DashCardProps = {
   title: string
-  /** 「전체 보기 →」를 누르면 할 일. 주지 않으면 그 자리를 비운다. */
-  onMore?: () => void
-  moreLabel?: string
-  /** 카드 전체가 누를 수 있는가(포캐스트 카드처럼 화면 하나로 가는 경우). */
+  /** 카드를 누르면 할 일(모달·화면 이동). 주지 않으면 누를 수 없는 카드다. */
   onClick?: () => void
+  /**
+   * 떠오르는 hover 를 끌 때. 안에 **또 카드가 들어 있는** 「내 실적」만 쓴다 —
+   * 두 겹이 같이 떠오르면 4px 이 들썩여 글자가 흔들린다(안쪽 카드가 제 몫을 한다).
+   */
+  hoverLift?: boolean
   /** 조회가 실패했는가 — 카드 하나가 못 읽어도 다른 카드는 그대로 뜬다. */
   error?: boolean
   /** 실패한 이유 한 마디. 콘솔만 보고 원인을 찾게 두지 않는다. */
@@ -28,7 +34,8 @@ export type DashCardProps = {
   children: ReactNode
 }
 
-export default function DashCard({ title, onMore, moreLabel = '전체 보기', onClick, error, errorMessage, loading, children }: DashCardProps) {
+export default function DashCard({ title, onClick, hoverLift = true, error, errorMessage, loading, children }: DashCardProps) {
+  const lift = !!onClick && hoverLift
   return (
     <section
       onClick={onClick}
@@ -36,23 +43,22 @@ export default function DashCard({ title, onMore, moreLabel = '전체 보기', o
         background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8,
         display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, overflow: 'hidden',
         cursor: onClick ? 'pointer' : 'default',
-        transition: 'border-color 0.15s ease',
+        transition: 'transform 0.15s ease, border-color 0.15s ease',
       }}
-      onMouseEnter={e => { if (onClick) e.currentTarget.style.borderColor = '#c7d7f8' }}
-      onMouseLeave={e => { if (onClick) e.currentTarget.style.borderColor = BORDER }}
+      onMouseEnter={e => {
+        if (!onClick) return
+        e.currentTarget.style.borderColor = '#c7d7f8'
+        if (lift) e.currentTarget.style.transform = 'translateY(-2px)'
+      }}
+      onMouseLeave={e => {
+        if (!onClick) return
+        e.currentTarget.style.borderColor = BORDER
+        e.currentTarget.style.transform = ''
+      }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px 8px', flexShrink: 0 }}>
         <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>{title}</span>
         <span style={{ flex: 1 }} />
-        {onMore && (
-          <button
-            type="button"
-            onClick={e => { e.stopPropagation(); onMore() }}
-            style={{ padding: 0, background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: BLUE, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
-          >
-            {moreLabel} →
-          </button>
-        )}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: '0 16px 14px' }}>
         {loading
