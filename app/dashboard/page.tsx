@@ -21,6 +21,7 @@ import ActivityCard from '@/components/activity/ActivityCard'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
 import DashCard from '@/components/dashboard/DashCard'
 import { ApprovalCard, ForecastCard, NotificationCard } from '@/components/dashboard/HomeCards'
+import MyQuoteCard from '@/components/dashboard/MyQuoteCard'
 import { useDashboardCards, type ApprovalRow, type NotificationRow } from '@/hooks/dashboard/useDashboardCards'
 import { nowKSTParts } from '@/lib/date'
 import { countedVisitEnd } from '@/lib/serviceVisit'
@@ -90,6 +91,7 @@ export default function DashboardPage() {
 
   // 회계연도는 4월 시작 — 실적 현황·포캐스트와 같은 규칙이다.
   const fiscalYear = nowD.m >= 4 ? nowD.y : nowD.y - 1
+  const thisMonth = `${nowD.y}-${pad2(nowD.m)}`
   const cards = useDashboardCards(engineerId, fiscalYear)
 
   // 본인 활동 건수 집계 — 활동 현황 화면과 같은 규칙이다.
@@ -208,8 +210,17 @@ export default function DashboardPage() {
             ) : null}
           </div>
 
-          {/* 내 견적 — 다음 커밋에서 카드와 모달이 들어온다. */}
-          <div className="home-cell" />
+          <div className="home-cell">
+            {me && (
+              <MyQuoteCard
+                engineerId={me.engineer_id}
+                slot={cards.quotes}
+                targets={cards.targets}
+                month={thisMonth}
+                onReload={() => { void cards.reloadQuotes() }}
+              />
+            )}
+          </div>
 
           <div className="home-cell">
             <ForecastCard slot={cards.opportunities} onOpen={() => router.push('/pipeline')} />
