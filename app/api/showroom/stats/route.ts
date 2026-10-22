@@ -305,8 +305,14 @@ function customerBreakdown(rows: UsageRow[], limit: number | null): { top: Custo
 
 // ── GET ─────────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
-  const auth = await authorize()
-  if (auth.error) return auth.error
+  // 권한 확인(getUser → engineers → 팀 권한)과 자료 조회를 **겹쳐서** 보낸다.
+  // 자료 조회는 service role 로 돌고 부르는 사람과 무관한 조건이라 기다릴 이유가 없다.
+  // 권한이 없으면 아래에서 받아 둔 것을 **쓰지 않고** 그대로 거절한다.
+  // 아래 유효성 검사에서 먼저 돌아갈 수도 있으므로 거절을 여기서 받아 둔다(미처리 거절 방지).
+  const authPromise = authorize().catch(e => {
+    console.error('[showroom/stats] authorize failed', e)
+    return { error: bad('권한을 확인하지 못했습니다.', 500) }
+  })
 
   const sp = req.nextUrl.searchParams
   const from = sp.get('from') ?? ''
@@ -331,13 +337,15 @@ export async function GET(req: NextRequest) {
   const prevYear = Number(prev.from.slice(0, 4))
 
   const sb = admin()
-  const [sitesRes, usageRes, holRes] = await Promise.all([
+  const [auth, sitesRes, usageRes, holRes] = await Promise.all([
+    authPromise,
     sb.from('showroom_sites').select('customer_id, created_at, customers(company_name)')
       .order('created_at', { ascending: true }).order('customer_id', { ascending: true }),
     fetchUsage(sb, prev.from, to),
     sb.from('company_holidays').select('holiday_date, is_manual')
       .gte('holiday_date', `${prevYear}-01-01`).lte('holiday_date', `${toYear}-12-31`),
   ])
+  if (auth.error) return auth.error
   if (sitesRes.error || usageRes.error || holRes.error) {
     console.error('[showroom/stats] load failed', { sites: sitesRes.error, usage: usageRes.error, holidays: holRes.error })
     return bad('통계를 불러오지 못했습니다.', 500)

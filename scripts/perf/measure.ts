@@ -22,6 +22,17 @@ import { DETAIL_FROM_LIST, SCREENS, SKIPPED_MODALS } from './screens.ts'
 
 const ROOT = process.cwd()
 const DEV = process.argv.includes('--dev')
+/**
+ * 한 화면만 재기 — npm run perf -- --only showroom
+ * 라벨이나 경로에 이 글자가 들어가는 화면만 돈다. 전체 보고서(latest.md)는 **덮지 않고**
+ * docs/perf/latest-only.md 에 따로 쓴다(기준선 비교용 표를 지우지 않게).
+ */
+const ONLY = (() => {
+  const i = process.argv.indexOf('--only')
+  return i > -1 ? (process.argv[i + 1] ?? '').toLowerCase() : ''
+})()
+const picked = <T extends { label: string; path?: string; from?: string }>(list: T[]): T[] =>
+  ONLY === '' ? list : list.filter(x => (x.label + ' ' + (x.path ?? x.from ?? '')).toLowerCase().includes(ONLY))
 const BASE = DEV ? 'http://localhost:3000' : (process.env.PERF_URL ?? 'http://localhost:3100')
 
 /** 누르면 자료가 바뀔 수 있는 글자 — 하나라도 걸리면 누르지 않는다. */
@@ -463,7 +474,7 @@ async function main() {
     await collector.quiet()
 
     const results: ScreenResult[] = []
-    for (const s of SCREENS) {
+    for (const s of picked(SCREENS)) {
       process.stdout.write(`· ${s.label} (${s.path}) … `)
       const r = await measureScreen(page, collector, s).catch(err => {
         console.log('실패')
@@ -474,7 +485,7 @@ async function main() {
     }
 
     // 목록에서 눌러 들어가는 상세 화면
-    for (const d of DETAIL_FROM_LIST) {
+    for (const d of picked(DETAIL_FROM_LIST)) {
       process.stdout.write(`· ${d.label} … `)
       await page.goto(BASE + d.from, { waitUntil: 'domcontentloaded' }).catch(() => {})
       await collector.quiet()
@@ -505,9 +516,12 @@ async function main() {
     mkdirSync(dir, { recursive: true })
     const pw = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).devDependencies.playwright
     const meta = { when: stamp.replace(/-(\d{2})(\d{2})$/, ' $1:$2'), mode: DEV ? 'dev (next dev)' : 'start (next start)', base: BASE, pw }
-    writeFileSync(join(dir, `${stamp}.json`), JSON.stringify({ meta, results }, null, 1))
-    writeFileSync(join(dir, 'latest.md'), markdown(results, meta))
-    console.log(`\n보고서: docs/perf/latest.md · 원자료: docs/perf/${stamp}.json`)
+    // --only 로 한 화면만 재면 전체 보고서를 덮지 않는다(기준선 비교표가 지워지지 않게).
+    const tag = ONLY ? '-only-' + ONLY.replace(/[^a-z0-9가-힣]+/g, '') : ''
+    const report = ONLY ? 'latest-only.md' : 'latest.md'
+    writeFileSync(join(dir, stamp + tag + '.json'), JSON.stringify({ meta, results }, null, 1))
+    writeFileSync(join(dir, report), markdown(results, meta))
+    console.log('\n보고서: docs/perf/' + report + ' · 원자료: docs/perf/' + stamp + tag + '.json')
   } finally {
     await ctx?.close().catch(() => {})
     await browser?.close().catch(() => {})

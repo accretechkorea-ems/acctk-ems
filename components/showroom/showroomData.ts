@@ -52,16 +52,20 @@ export async function loadShowroomDevices(sb: Browser): Promise<{ sites: Showroo
   if (sites.length === 0) return { sites, devices: [] }
 
   const siteName = new Map(sites.map(s => [s.customer_id, s.name]))
-  const [{ data: devRows, error: devErr }, { data: cfgRows, error: cfgErr }] = await Promise.all([
-    sb.from('devices').select(DEVICE_COLUMNS).in('customer_id', sites.map(s => s.customer_id)).is('deleted_at', null),
-    sb.from('showroom_devices').select('device_id, daily_hours, device_status, is_active, sort_order, note'),
-  ])
-  if (devErr || cfgErr) throw new Error(`devices: ${(devErr ?? cfgErr)?.message}`)
+  // 장비와 쇼룸 설정(showroom_devices)을 **한 번에** 읽는다 — 설정은 device_id 로 걸린 1:1 이라
+  // 임베딩으로 따라온다(통계 라우트가 쓰는 것과 같은 모양이다). 예전에는 두 번 읽었다.
+  const { data: devRows, error: devErr } = await sb
+    .from('devices')
+    .select(`${DEVICE_COLUMNS}, showroom_devices(daily_hours, device_status, is_active, sort_order, note)`)
+    .in('customer_id', sites.map(s => s.customer_id)).is('deleted_at', null)
+  if (devErr) throw new Error(`devices: ${devErr.message}`)
 
-  type CfgRow = { device_id: number; daily_hours: number; device_status: string; is_active: boolean; sort_order: number; note: string | null }
-  const cfgById = new Map((cfgRows ?? []).map((c: CfgRow) => [c.device_id, c]))
-  const devices: ShowroomDevice[] = ((devRows ?? []) as unknown as ShowroomDeviceBase[]).map(d => {
-    const cfg = cfgById.get(d.device_id)
+  type CfgRow = { daily_hours: number; device_status: string; is_active: boolean; sort_order: number; note: string | null }
+  type Row = ShowroomDeviceBase & { showroom_devices: CfgRow | CfgRow[] | null }
+  const devices: ShowroomDevice[] = ((devRows ?? []) as unknown as Row[]).map(row => {
+    // 임베딩 결과는 관계에 따라 객체 하나 또는 배열로 온다 — 둘 다 받는다.
+    const { showroom_devices: embedded, ...d } = row
+    const cfg = Array.isArray(embedded) ? embedded[0] : embedded
     return {
       ...d,
       site_name: siteName.get(d.customer_id) ?? '-',
