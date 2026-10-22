@@ -23,10 +23,14 @@ const SELECT = 'quote_id, quote_number, total_supply, customer_id, engineer_id'
 type RawQuote = { quote_id: number; quote_number: string; total_supply: number | null; customer_id: number | null; engineer_id: number }
 type QuoteSummary = { quote_id: number; quote_number: string; total_supply: number | null; company_name: string | null }
 
-export async function GET(req: NextRequest) {
+/**
+ * 로그인 + 20 수리 메뉴 권한. 세션 → engineers → 팀 권한 세 단계라 **먼저 띄워 두고**
+ * 자료 조회와 겹친다(권한이 없으면 받아 둔 것을 쓰지 않고 거절한다).
+ */
+async function authorize(): Promise<{ error: NextResponse | null; email: string | null }> {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }), email: null }
 
   const { data: callerRow } = await supabaseAdmin
     .from('engineers')
@@ -34,7 +38,16 @@ export async function GET(req: NextRequest) {
     .eq('email', user.email!)
     .single()
   const caller = await withTeamPerm(callerRow)
-  if (!canViewMenu(caller, 'repair')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!canViewMenu(caller, 'repair')) return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }), email: null }
+  return { error: null, email: user.email ?? null }
+}
+
+export async function GET(req: NextRequest) {
+  // 아래 분기에서 먼저 돌아갈 수도 있으므로 거절을 받아 둔다(미처리 거절 방지).
+  const authPromise = authorize().catch(e => {
+    console.error('[repair-quotes] authorize failed', e)
+    return { error: NextResponse.json({ error: '권한을 확인하지 못했습니다.' }, { status: 500 }), email: null }
+  })
 
   const sp = req.nextUrl.searchParams
   const pdfParam = sp.get('pdf')
@@ -58,31 +71,44 @@ export async function GET(req: NextRequest) {
     const [ly, lm] = months[5].split('-').map(Number)
     const endDate = `${months[5]}-${String(new Date(Date.UTC(ly, lm, 0)).getUTCDate()).padStart(2, '0')}`
 
-    const { data: reps } = await supabaseAdmin.from('repairs')
-      .select('quote_id, shipped_date, special_type')
-      .not('shipped_date', 'is', null)
-      .gte('shipped_date', startDate)
-      .lte('shipped_date', endDate)
-    const rows = (reps ?? []) as { quote_id: number | null; shipped_date: string; special_type: string | null }[]
+    // 출고 건과 **연결된 견적 금액을 임베딩으로 함께** 읽는다(repairs.quote_id → quotes).
+    // 예전에는 출고를 읽고 그 id 로 견적을 또 읽어, 권한 확인까지 네 단계가 줄줄이 이어졌다.
+    const [auth, repsRes] = await Promise.all([
+      authPromise,
+      supabaseAdmin.from('repairs')
+        .select('quote_id, shipped_date, special_type, quotes(total_supply)')
+        .not('shipped_date', 'is', null)
+        .gte('shipped_date', startDate)
+        .lte('shipped_date', endDate),
+    ])
+    if (auth.error) return auth.error
+    type Linked = { total_supply: number | null }
+    const rows = (repsRes.data ?? []) as unknown as {
+      quote_id: number | null; shipped_date: string; special_type: string | null
+      quotes: Linked | Linked[] | null
+    }[]
     // 매출은 '실제로 일어난 사실' — 본사수리·일반(null)은 포함하고, 수리 종료 특이사항(수리불가·수리진행안함)만 제외.
     const eligible = rows.filter(r => r.special_type !== '수리불가' && r.special_type !== '수리진행안함')
     const linked = eligible.filter(r => r.quote_id != null)
     const unlinkedCount = eligible.length - linked.length        // 견적 미연결 출고 건(금액 미상 → 매출 제외분)
 
-    const amountById: Record<number, number> = {}
-    const qids = [...new Set(linked.map(r => r.quote_id as number))]
-    if (qids.length) {
-      const { data: qs } = await supabaseAdmin.from('quotes').select('quote_id, total_supply').in('quote_id', qids)
-      for (const q2 of (qs ?? []) as { quote_id: number; total_supply: number | null }[]) amountById[q2.quote_id] = q2.total_supply ?? 0
+    /** 임베딩 결과는 관계에 따라 객체 하나 또는 배열로 온다 — 둘 다 받는다. */
+    const amountOf = (r: { quotes: Linked | Linked[] | null }): number => {
+      const q2 = Array.isArray(r.quotes) ? r.quotes[0] : r.quotes
+      return q2?.total_supply ?? 0
     }
     const sumByMonth: Record<string, number> = {}
     for (const m of months) sumByMonth[m] = 0
     for (const r of linked) {
       const m = r.shipped_date.slice(0, 7)
-      if (m in sumByMonth) sumByMonth[m] += (amountById[r.quote_id as number] ?? 0)
+      if (m in sumByMonth) sumByMonth[m] += amountOf(r)
     }
     return NextResponse.json({ months: months.map(m => ({ month: m, amount: sumByMonth[m] })), unlinkedCount })
   }
+
+  const auth = await authPromise
+  if (auth.error) return auth.error
+  const email = auth.email
 
   // 최소 필드 + 고객사명(customers.company_name)만 붙여 반환.
   const attach = async (rows: RawQuote[]): Promise<QuoteSummary[]> => {
@@ -122,7 +148,7 @@ export async function GET(req: NextRequest) {
     const { data: signed, error } = await supabaseAdmin.storage.from('quote-pdfs').createSignedUrl(fileName, 60 * 60)
     if (error || !signed) return NextResponse.json({ error: '파일을 불러오지 못했습니다.' }, { status: 500 })
     try {
-      await supabaseAdmin.from('audit_log').insert({ actor_email: user.email, action: 'READ', table_name: 'quote-pdfs', row_id: fileName })
+      await supabaseAdmin.from('audit_log').insert({ actor_email: email, action: 'READ', table_name: 'quote-pdfs', row_id: fileName })
     } catch { /* best-effort */ }
     return NextResponse.json({ url: signed.signedUrl })
   }
