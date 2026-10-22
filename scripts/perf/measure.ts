@@ -185,15 +185,17 @@ class Collector {
     const rows: ReqRow[] = []
     for (const r of this.pending) {
       const t = r.timing()
-      if (t.startTime <= 0) continue
+      // 타이밍이 없는 요청(HEAD 건수 조회 등)도 **센다** — 빠뜨리면 요청 수가 실제보다 적게 나온다.
+      const noTiming = t.startTime <= 0
       let bytes = 0
       try { const s = await r.sizes(); bytes = s.responseBodySize + s.responseHeadersSize } catch { bytes = 0 }
       const res = await r.response().catch(() => null)
-      const end = t.responseEnd >= 0 ? t.startTime + t.responseEnd : t.startTime
+      const start = noTiming ? 0 : t.startTime
+      const end = noTiming ? 0 : (t.responseEnd >= 0 ? t.startTime + t.responseEnd : t.startTime)
       rows.push({
         url: r.url(), short: this.shortOf(r.url()), method: r.method(), type: r.resourceType(),
         kind: this.kindOf(r.url()), status: res?.status() ?? 0,
-        start: t.startTime, end, ms: Math.max(0, Math.round(t.responseEnd >= 0 ? t.responseEnd : 0)), bytes,
+        start, end, ms: noTiming ? 0 : Math.max(0, Math.round(t.responseEnd >= 0 ? t.responseEnd : 0)), bytes,
       })
     }
 
@@ -209,8 +211,10 @@ class Collector {
     }
     const dups = [...counts.values()].filter(d => d.count > 1).sort((a, b) => b.count - a.count)
 
+    // 시간 계산은 타이밍이 있는 것만 본다(HEAD 건수 조회처럼 타이밍이 없는 것은 세기만 한다).
+    const timed = data.filter(r => r.start > 0)
     let serial = 0
-    for (let i = 1; i < data.length; i++) if (data[i].start >= data[i - 1].end) serial += 1
+    for (let i = 1; i < timed.length; i++) if (timed[i].start >= timed[i - 1].end) serial += 1
 
     const doc = rows.find(r => r.type === 'document')
     const docTiming = doc ? this.pending.find(p => p.url() === doc.url)?.timing() : undefined
@@ -223,8 +227,8 @@ class Collector {
       jsKB: Math.round(rows.filter(r => r.type === 'script').reduce((s, r) => s + r.bytes, 0) / 1024),
       dataReqs: data.length,
       dups,
-      networkMs: data.length ? Math.round(Math.max(...data.map(r => r.end)) - Math.min(...data.map(r => r.start))) : 0,
-      slowest: data.length ? data.map(r => ({ short: r.short, ms: r.ms })).sort((a, b) => b.ms - a.ms)[0] : null,
+      networkMs: timed.length ? Math.round(Math.max(...timed.map(r => r.end)) - Math.min(...timed.map(r => r.start))) : 0,
+      slowest: timed.length ? timed.map(r => ({ short: r.short, ms: r.ms })).sort((a, b) => b.ms - a.ms)[0] : null,
       serial,
       openMs: opts.openMs,
       requests: rows,

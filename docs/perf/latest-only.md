@@ -1,4 +1,4 @@
-# 브라우저 실측 — 2026-10-23 08:39
+# 브라우저 실측 — 2026-10-23 08:52
 
 모드 **start (next start)** · 주소 http://localhost:3100 · 브라우저 Chromium(playwright ^1.64.1)
 
@@ -13,7 +13,8 @@
 
 | 묶음 | 화면 | 경로 | TTFB | 새 JS | 자료 요청 | 중복 | 네트워크 완료 | 직렬 | 가장 느린 요청 |
 |---|---|---|---|---|---|---|---|---|---|
-| 고객 | 쇼룸 | `/showroom` | 71ms | 50KB | 20 | — | 704ms | 4 | /api/showroom/stats ?from&site&to 485ms |
+| 대시보드 | 20 대시보드 | `/repair/dashboard` | 133ms | 148KB | 9 | — | 811ms | 2 | /api/repair-quotes ?revenue 653ms |
+| 대시보드 | 80 대시보드 | `/dashboard/80` | 118ms | 26KB | 15 | — | 982ms | 2 | /api/approval ?box 488ms |
 
 ## 중복 요청 (같은 URL·메서드가 한 화면에서 두 번 이상)
 
@@ -23,16 +24,16 @@
 
 | 화면 | 요청 | 시간 | 종류 |
 |---|---|---|---|
-| 쇼룸 | /api/showroom/stats ?from&site&to | 485ms | api |
-| 쇼룸 | /api/approval ?box | 313ms | api |
-| 쇼룸 | /storage/v1/render/image/public/device-images/default_SNEX040.png ?quality&resize&width | 234ms | supabase |
-| 쇼룸 | devices(device_id,customer_id,de…) ?customer_id&deleted_at | 132ms | supabase |
-| 쇼룸 | showroom_usage(device_id,work_hours,pur…) ?deleted_at&usage_date&usage_date | 95ms | supabase |
-| 쇼룸 | engineers(engineer_id,name,positio…) ?order | 91ms | supabase |
-| 쇼룸 | showroom_sites(customer_id,created_at,c…) ?order | 84ms | supabase |
-| 쇼룸 | teams(id,name,division) | 76ms | supabase |
-| 쇼룸 | auth:user | 67ms | supabase |
-| 쇼룸 | notifications(id,engineer_id,title,mes…) ?engineer_id&limit&offset&order | 61ms | supabase |
+| 20 대시보드 | /api/repair-quotes ?revenue | 653ms | api |
+| 80 대시보드 | /api/approval ?box | 488ms | api |
+| 20 대시보드 | /api/approval ?box | 315ms | api |
+| 80 대시보드 | holdings(*,customers(company_name…) ?order | 298ms | supabase |
+| 80 대시보드 | quotes(total_supply) ?status&tax_invoice_completed_at&tax_invoice_completed_at | 294ms | supabase |
+| 80 대시보드 | sales_opportunities(*,customers(company_name…) ?closed_at&stage | 293ms | supabase |
+| 80 대시보드 | sales_activities(activity_type) ?activity_date&activity_date | 293ms | supabase |
+| 80 대시보드 | quotes(quote_id,quote_number,qu…) ?status | 292ms | supabase |
+| 80 대시보드 | service_history(service_type) ?visit_date&visit_date&visit_date | 291ms | supabase |
+| 80 대시보드 | service_history(service_id,visit_date,st…) ?order&visit_date | 291ms | supabase |
 
 ## 일부러 열지 않은 모달 (읽기 전용 규칙)
 

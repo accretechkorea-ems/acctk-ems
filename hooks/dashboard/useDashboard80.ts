@@ -257,9 +257,11 @@ export function useDashboard80() {
       const [cur, before, oppRes, salesRes, serviceRes, expiryRes, upcomingRes] = await Promise.all([
         loadMonth(range),
         loadMonth(monthRange(prev.getUTCFullYear(), prev.getUTCMonth() + 1)),
-        // 진행 중인 기회만 (종료·실주 제외). 담당자 이름은 여기서 함께 받는다.
+        // 진행 중인 기회만 (종료·실주 제외). 담당자 이름과 **묶인 활동의 날짜**를 함께 받는다 —
+        // 정체 판정(마지막 활동일)에 쓴다. 예전에는 기회를 받은 **뒤에** 그 id 로 활동을 다시
+        // 읽어, 이 화면의 유일한 직렬 조회였다(사슬 한 단 + 요청 하나).
         supabase.from('sales_opportunities')
-          .select('*, customers(company_name), engineers(name, position)')
+          .select('*, customers(company_name), engineers(name, position), sales_activities(activity_date)')
           .is('closed_at', null).neq('stage', '실주'),
         // 이번 달 영업 활동 — 유형만
         supabase.from('sales_activities').select('activity_type')
@@ -290,19 +292,14 @@ export function useDashboard80() {
       }
       const opps = (oppRes.data as SalesOpportunity[]) ?? []
 
-      // 정체 판정용 — 위 기회들에 묶인 활동의 날짜만 읽는다
-      const ids = opps.map(o => o.opportunity_id)
+      // 정체 판정용 — 위 조회가 함께 받아 온 활동 날짜에서 **가장 늦은 것**을 고른다.
+      type WithActs = SalesOpportunity & { sales_activities?: { activity_date: string | null }[] | null }
       const map = new Map<number, string>()
-      if (ids.length > 0) {
-        const { data: acts, error: actErr } = await supabase
-          .from('sales_activities')
-          .select('opportunity_id, activity_date')
-          .in('opportunity_id', ids)
-        if (actErr) console.error('[dashboard80] activities failed', actErr)
-        for (const a of acts ?? []) {
-          if (a.opportunity_id == null || !a.activity_date) continue
-          const prevDate = map.get(a.opportunity_id)
-          if (!prevDate || a.activity_date > prevDate) map.set(a.opportunity_id, a.activity_date)
+      for (const o of opps as WithActs[]) {
+        for (const a of o.sales_activities ?? []) {
+          if (!a.activity_date) continue
+          const prevDate = map.get(o.opportunity_id)
+          if (!prevDate || a.activity_date > prevDate) map.set(o.opportunity_id, a.activity_date)
         }
       }
       if (!alive.current) return false
