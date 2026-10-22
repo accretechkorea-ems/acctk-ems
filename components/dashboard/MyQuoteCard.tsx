@@ -13,7 +13,7 @@
 // 올리기·삭제 요청·엑셀 내보내기가 전부 그 부품 안에 있어, 옮기지 않고 통째로 띄운다.
 // 닫을 때 카드 숫자를 다시 맞춘다(모달 안에서 상태를 바꿨을 수 있다).
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import MyQuotesPanel from '@/components/dashboard/MyQuotesPanel'
 import DashCard from './DashCard'
@@ -44,6 +44,26 @@ export default function MyQuoteCard({ engineerId, slot, initialTab, onReload }: 
   const counts = quoteStatusCounts(slot.data, engineerId)
 
   const close = () => { setOpenTab(null); onReload() }
+
+  // 닫는 일을 ref 로 들고 있는다 — 아래 effect 가 렌더마다 다시 걸리지 않게 한다
+  // (onReload 는 부모가 렌더마다 새로 만들어 넘기는 함수다).
+  const closeRef = useRef(close)
+  useEffect(() => { closeRef.current = close })
+
+  // 모달이 열려 있는 동안 **뒤 화면을 잠그고** ESC 로 닫는다.
+  // ModalOverlay 는 바깥 클릭만 맡는다 — 잠금·ESC 를 거기 넣으면 저장 중인 입력이 있는
+  // 다른 모달까지 ESC 로 닫히므로, 이 모달에서만 건다.
+  useEffect(() => {
+    if (openTab === null) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeRef.current() }
+    document.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [openTab])
 
   return (
     <>
@@ -82,7 +102,8 @@ export default function MyQuoteCard({ engineerId, slot, initialTab, onReload }: 
         </div>
       </DashCard>
 
-      {/* 큰 모달 — 표가 본래 쓰던 폭이 필요하다(필터 줄·10열 표·페이지). */}
+      {/* 큰 모달 — **머리(고정) + 본문(스크롤)** 두 단이다. 표가 본래 쓰던 폭이 필요하다
+          (필터 줄·10열 표·페이지). 본문만 내려가고 뒤 화면은 잠긴다. */}
       {openTab !== null && (
         <ModalOverlay onClose={close}>
           <div
@@ -101,9 +122,15 @@ export default function MyQuoteCard({ engineerId, slot, initialTab, onReload }: 
                 ×
               </button>
             </div>
-            {/* 패널이 남는 높이를 다 쓰게 한다(fitToHeight) — 목록 줄 수가 모달 높이에 맞춰 늘어난다. */}
-            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 12, overflow: 'auto' }}>
-              <MyQuotesPanel engineerId={engineerId} fitToHeight initialStatus={openTab} />
+            {/* 본문 — 여기서만 스크롤한다.
+                ⚠ fitToHeight 를 주지 않는다. 그 모드는 **표 상자를 모달 높이에 맞춰 잘라 내고**
+                  (overflowY: hidden) 줄 수를 그 높이에 맞추는 방식이라, 필터 줄이 접히거나 줄이
+                  높아지면 남은 줄이 잘린 채 스크롤도 되지 않았다. 모달에서는 패널을 제 높이대로
+                  두고 넘치는 만큼 이 상자가 내려간다.
+                바깥 상자에 display:flex 를 쓰지 않는 것도 같은 이유다 — flex 자식은 늘어나는
+                  대신 눌려서, 넘칠 일이 생기지 않는다(= 스크롤이 생기지 않는다). */}
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: 12 }}>
+              <MyQuotesPanel engineerId={engineerId} initialStatus={openTab} />
             </div>
           </div>
         </ModalOverlay>
