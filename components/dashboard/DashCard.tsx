@@ -22,11 +22,13 @@ export type DashCardProps = {
   onClick?: () => void
   /** 조회가 실패했는가 — 카드 하나가 못 읽어도 다른 카드는 그대로 뜬다. */
   error?: boolean
+  /** 실패한 이유 한 마디. 콘솔만 보고 원인을 찾게 두지 않는다. */
+  errorMessage?: string
   loading?: boolean
   children: ReactNode
 }
 
-export default function DashCard({ title, onMore, moreLabel = '전체 보기', onClick, error, loading, children }: DashCardProps) {
+export default function DashCard({ title, onMore, moreLabel = '전체 보기', onClick, error, errorMessage, loading, children }: DashCardProps) {
   return (
     <section
       onClick={onClick}
@@ -57,7 +59,12 @@ export default function DashCard({ title, onMore, moreLabel = '전체 보기', o
           ? <div style={{ fontSize: 12, color: MUTED }}>불러오는 중...</div>
           : error
             // 못 읽은 것과 0 건은 전혀 다르다 — 숫자를 0 으로 보여 주지 않는다.
-            ? <div style={{ fontSize: 12, color: '#ef4444', fontWeight: 700 }}>불러오지 못했습니다</div>
+            ? (
+              <div>
+                <div style={{ fontSize: 12, color: '#ef4444', fontWeight: 700 }}>불러오지 못했습니다</div>
+                {errorMessage && <div style={{ fontSize: 11, color: MUTED, marginTop: 4, wordBreak: 'break-all' }}>{errorMessage}</div>}
+              </div>
+            )
             : children}
       </div>
     </section>

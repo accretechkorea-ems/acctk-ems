@@ -72,6 +72,7 @@ export default function MyQuoteCard({ engineerId, slot, initialTab, onReload }: 
         onMore={() => setOpenTab('전체')}
         loading={slot.loading}
         error={slot.error}
+        errorMessage={slot.message}
       >
         {/* 활동 기록 카드와 같은 모양 — 점 · 이름 · 오른쪽 건수 뱃지.
             매출완료는 세지 않는다(끝난 건이라 쌓이기만 한다. lib/homeCards.ts 참조). */}

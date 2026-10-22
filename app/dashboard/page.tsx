@@ -155,11 +155,6 @@ function DashboardPageInner() {
   const openNotification = (n: NotificationRow) => router.push(n.link || '/notifications')
   const openApproval = (d: ApprovalRow) => router.push(`/approval/doc/${d.document_id}`)
 
-  // 결재 대기는 **내 차례인 문서가 있을 때만** 자리를 차지한다.
-  // 결재 화면 자체가 전원 공개라(menuPerms 의 approvals.menuPublic) 권한으로는 가를 수 없어,
-  // 「받은 것이 있는가」로 가른다. 없는 사람에게는 빈 자리로 둔다.
-  const showApproval = cards.approvals.loading || cards.approvals.error || cards.approvals.data.length > 0
-
   return (
     <div style={{ background: '#fafafa', minHeight: '100vh', padding: '24px 28px' }}>
       <style>{`
@@ -191,7 +186,35 @@ function DashboardPageInner() {
         </div>
 
         <div className="home-grid">
-          {/* 1행 — 활동 기록 · 내 견적 · 포캐스트 · 알림 */}
+          {/* 1행 — 내 실적 · 내 견적 · 활동 기록 · 결재 대기
+              먼저 보는 줄에 「내 성적」과 「내 차례」를 둔다. 포캐스트·알림은 둘째 줄이다. */}
+          <div className="home-cell">
+            {me && (
+              <MyStatCard
+                engineer={me}
+                quotes={cards.quotes.data}
+                targets={cards.targets.data}
+                fy={fiscalYear}
+                loading={cards.quotes.loading || cards.targets.loading}
+                error={cards.quotes.error || cards.targets.error}
+              />
+            )}
+          </div>
+
+          <div className="home-cell">
+            {me && (
+              <MyQuoteCard
+                // 주소의 탭이 바뀌면 카드를 새로 만든다 — 처음 상태로 모달을 여는 구조라
+                // 같은 화면에 머문 채 주소만 바뀌는 경우를 이렇게 받는다.
+                key={quoteTab ?? ''}
+                engineerId={me.engineer_id}
+                slot={cards.quotes}
+                initialTab={quoteTab}
+                onReload={() => { void cards.reloadQuotes() }}
+              />
+            )}
+          </div>
+
           <div className="home-cell">
             {showActivity && me && actCounts ? (
               <ActivityCard
@@ -215,20 +238,17 @@ function DashboardPageInner() {
             ) : null}
           </div>
 
+          {/* 결재 대기 — **0 건이어도 자리를 지킨다.** 예전에는 내 차례가 없으면 카드를
+              아예 내지 않아, 결재함이 깨진 것과 할 일이 없는 것이 똑같이 보였다. */}
           <div className="home-cell">
-            {me && (
-              <MyQuoteCard
-                // 주소의 탭이 바뀌면 카드를 새로 만든다 — 처음 상태로 모달을 여는 구조라
-                // 같은 화면에 머문 채 주소만 바뀌는 경우를 이렇게 받는다.
-                key={quoteTab ?? ''}
-                engineerId={me.engineer_id}
-                slot={cards.quotes}
-                initialTab={quoteTab}
-                onReload={() => { void cards.reloadQuotes() }}
-              />
-            )}
+            <ApprovalCard
+              slot={cards.approvals}
+              onMore={() => router.push('/approval')}
+              onOpen={openApproval}
+            />
           </div>
 
+          {/* 2행 — 포캐스트 · 알림 · (빈 자리 둘) */}
           <div className="home-cell">
             <ForecastCard slot={cards.opportunities} onOpen={() => router.push('/pipeline')} />
           </div>
@@ -239,31 +259,6 @@ function DashboardPageInner() {
               onMore={() => router.push('/notifications')}
               onOpen={openNotification}
             />
-          </div>
-
-          {/* 2행 — 결재 대기 · 내 실적 · (빈 자리 둘) */}
-          <div className="home-cell">
-            {showApproval && (
-              <ApprovalCard
-                slot={cards.approvals}
-                onMore={() => router.push('/approval')}
-                onOpen={openApproval}
-              />
-            )}
-          </div>
-
-          {/* 내 실적 — 결재 카드가 숨어도 **제자리**다(위 칸이 비어 있을 뿐 당겨지지 않는다). */}
-          <div className="home-cell">
-            {me && (
-              <MyStatCard
-                engineer={me}
-                quotes={cards.quotes.data}
-                targets={cards.targets.data}
-                fy={fiscalYear}
-                loading={cards.quotes.loading || cards.targets.loading}
-                error={cards.quotes.error || cards.targets.error}
-              />
-            )}
           </div>
 
           {/* 빈 자리 둘 — 카드 없이 칸만 둔다(격자 정렬). */}

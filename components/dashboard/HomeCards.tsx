@@ -88,7 +88,7 @@ export function ForecastCard({ slot, onOpen }: { slot: Slot<CardOpportunity[]>; 
   const max = Math.max(1, ...bars.map(b => b.amount))
   const total = bars.reduce((s, b) => s + b.count, 0)
   return (
-    <DashCard title="포캐스트" onMore={onOpen} onClick={onOpen} loading={slot.loading} error={slot.error}>
+    <DashCard title="포캐스트" onMore={onOpen} onClick={onOpen} loading={slot.loading} error={slot.error} errorMessage={slot.message}>
       {total === 0 ? empty('진행 중인 포캐스트가 없습니다') : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {bars.map(b => (
@@ -117,7 +117,7 @@ export function NotificationCard({ slot, onMore, onOpen }: {
   onOpen: (n: NotificationRow) => void
 }) {
   return (
-    <DashCard title="알림" onMore={onMore} loading={slot.loading} error={slot.error}>
+    <DashCard title="알림" onMore={onMore} loading={slot.loading} error={slot.error} errorMessage={slot.message}>
       {slot.data.length === 0 ? empty('읽지 않은 알림이 없습니다') : (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {slot.data.map(n => (
@@ -137,16 +137,24 @@ export function NotificationCard({ slot, onMore, onOpen }: {
 
 // ── 결재 대기 ───────────────────────────────────────────────────────────────
 
-/** 내가 결재할 문서. **한 건도 없으면 카드를 내지 않는다**(부르는 쪽이 자리를 비운다). */
+/**
+ * 내가 결재할 문서.
+ *
+ * **0 건이어도 카드는 그대로 있는다.** 예전에는 부르는 쪽이 `data.length > 0` 일 때만 그려서,
+ * 결재할 것이 없는 사람에게는 카드가 아예 없었다 — 그러면 「없다」와 「조회가 깨졌다」를
+ * 구분할 수 없다. 못 읽었을 때는 그 이유(errorMessage)까지 카드에 적는다.
+ */
 export function ApprovalCard({ slot, onMore, onOpen }: {
   slot: Slot<ApprovalRow[]>
   onMore: () => void
   onOpen: (d: ApprovalRow) => void
 }) {
   return (
-    <DashCard title="결재 대기" onMore={onMore} loading={slot.loading} error={slot.error}>
+    <DashCard title="결재 대기" onMore={onMore} loading={slot.loading} error={slot.error} errorMessage={slot.message}>
+      {slot.data.length === 0 ? empty('대기 중인 문서가 없습니다') : (
+        <>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 8 }}>
-        <span className="num" style={{ fontSize: 24, fontWeight: 800, color: slot.data.length ? BLUE : FADE, letterSpacing: '-0.5px' }}>
+        <span className="num" style={{ fontSize: 24, fontWeight: 800, color: BLUE, letterSpacing: '-0.5px' }}>
           {slot.data.length}
         </span>
         <span style={{ fontSize: 12, color: GRAY }}>건이 내 차례입니다</span>
@@ -162,6 +170,8 @@ export function ApprovalCard({ slot, onMore, onOpen }: {
           </button>
         ))}
       </div>
+        </>
+      )}
     </DashCard>
   )
 }

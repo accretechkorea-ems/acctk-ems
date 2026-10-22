@@ -13,10 +13,25 @@ import { todayKST } from '@/lib/date'
 import type { CardOpportunity, CardQuote } from '@/lib/homeCards'
 import type { StatTarget } from '@/lib/salesStats'
 
-/** 한 카드의 자료 — 못 읽었으면 error 가 참이고, 그 카드만 그 사실을 말한다. */
-export type Slot<T> = { data: T; loading: boolean; error: boolean }
+/**
+ * 한 카드의 자료 — 못 읽었으면 error 가 참이고, 그 카드만 그 사실을 말한다.
+ * message 는 **실패한 이유 한 마디**다. 콘솔에만 남기면 사용자는 빈 카드를 보고
+ * 「0 건이구나」로 읽는다 — 못 읽은 것과 0 건은 전혀 다른 일이다.
+ */
+export type Slot<T> = { data: T; loading: boolean; error: boolean; message?: string }
 
 const idle = <T, >(empty: T): Slot<T> => ({ data: empty, loading: true, error: false })
+
+/** 조회가 던진 것에서 사람이 읽을 한 줄을 뽑는다(문자열·Error·PostgrestError 전부 온다). */
+const messageOf = (error: unknown): string => {
+  if (typeof error === 'string') return error
+  if (error && typeof error === 'object') {
+    const o = error as { message?: unknown; code?: unknown }
+    if (typeof o.message === 'string' && o.message) return typeof o.code === 'string' ? `${o.message} (${o.code})` : o.message
+    if (typeof o.code === 'string') return o.code
+  }
+  return '알 수 없는 오류'
+}
 
 export type NotificationRow = {
   id: number
@@ -64,7 +79,7 @@ export function useDashboardCards(engineerId: number | null, fiscalYear: number)
       .select('status, quote_date, purchase_order_at, tax_invoice_completed_at, total_supply, total_profit, engineer_id')
       .eq('engineer_id', engineerId)
     if (error) console.error('[dashboard] quotes load failed', error)
-    setQuotes({ data: (data ?? []) as CardQuote[], loading: false, error: !!error })
+    setQuotes({ data: (data ?? []) as CardQuote[], loading: false, error: !!error, message: error ? messageOf(error) : undefined })
   }, [supabase, engineerId])
 
   useEffect(() => {
@@ -81,11 +96,11 @@ export function useDashboardCards(engineerId: number | null, fiscalYear: number)
         const { data, error } = await fn()
         if (cancelled) return
         if (error) console.error(`[dashboard] ${what} load failed`, error)
-        set({ data: error ? empty : data, loading: false, error: !!error })
+        set({ data: error ? empty : data, loading: false, error: !!error, message: error ? messageOf(error) : undefined })
       } catch (e) {
         if (cancelled) return
         console.error(`[dashboard] ${what} load threw`, e)
-        set({ data: empty, loading: false, error: true })
+        set({ data: empty, loading: false, error: true, message: messageOf(e) })
       }
     }
 
