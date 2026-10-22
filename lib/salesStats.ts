@@ -136,6 +136,130 @@ export function engineerStat(
   }
 }
 
+/** 그 달의 **수주·매출과 각 목표** — 월별 그래프의 막대 넷이다. */
+export type MonthBars = {
+  label: string
+  month: number
+  year: number
+  orderedAmt: number
+  revenueAmt: number
+  profitAmt: number
+  /** 월 목표 = 연간 목표 ÷ 12. 수주·매출 각각 따로다. */
+  orderTarget: number
+  salesTarget: number
+  orderAchieve: number | null
+  salesAchieve: number | null
+}
+
+/**
+ * 회계연도 열두 달의 막대 자료.
+ *
+ * 기간 판정은 카드와 **같은 함수**를 쓴다(inOrderPeriod·inRevenuePeriod) — 수주는 발주일,
+ * 매출은 세금계산서 완료일이다. 예전에는 이 그래프만 new Date() 로 달을 갈라, 브라우저
+ * 시간대에 따라 한국 새벽에 찍힌 건이 전달로 밀렸다.
+ */
+export function monthlyBars(
+  quotes: readonly StatQuote[],
+  targets: readonly StatTarget[],
+  opts: { engineerId: number; fy: number },
+): MonthBars[] {
+  const { engineerId, fy } = opts
+  const mine = quotes.filter(q => q.engineer_id === engineerId)
+  const t = targets.find(x => x.engineer_id === engineerId && x.year === fy && x.quarter === null)
+  const orderTarget = Math.round((t?.order_target_amount || 0) / 12)
+  const salesTarget = Math.round((t?.target_amount || 0) / 12)
+
+  return getFYMonths(fy).map(({ label, month, year }) => {
+    const ordered = mine.filter(q => inOrderPeriod(q, fy, 'month', month))
+    const revenue = mine.filter(q => inRevenuePeriod(q, fy, 'month', month))
+    const orderedAmt = ordered.reduce((s2, q) => s2 + (q.total_supply || 0), 0)
+    const revenueAmt = revenue.reduce((s2, q) => s2 + (q.total_supply || 0), 0)
+    return {
+      label, month, year, orderedAmt, revenueAmt,
+      profitAmt: revenue.reduce((s2, q) => s2 + (q.total_profit || 0), 0),
+      orderTarget, salesTarget,
+      orderAchieve: orderTarget > 0 ? (orderedAmt / orderTarget) * 100 : null,
+      salesAchieve: salesTarget > 0 ? (revenueAmt / salesTarget) * 100 : null,
+    }
+  })
+}
+
+/**
+ * 그 회계연도에 **남은 개월(이번 달 포함)**.
+ *   지난 회계연도 → 0   다음 회계연도 → 12   이번 회계연도 → 이번 달부터 3월까지
+ * 3월에 열면 1, 4월에 열면 12 다.
+ */
+export function remainingMonths(fy: number, today: string): number {
+  const now = fiscalYearOf(today)
+  if (fy > now) return 12
+  if (fy < now) return 0
+  const m = ymdParts(today).m
+  return m >= 4 ? 16 - m : 4 - m
+}
+
+/**
+ * 한 달에 얼마씩 더 해야 하는가 — (연간 목표 − 누적) ÷ 남은 개월.
+ *   이미 넘겼으면 'done'  ·  목표가 없거나 남은 달이 없으면 null(칸을 비운다)
+ * 0 으로 나누지 않는다.
+ */
+export function neededPerMonth(target: number, done: number, remaining: number): number | 'done' | null {
+  if (target <= 0) return null
+  if (done >= target) return 'done'
+  if (remaining <= 0) return null
+  return Math.ceil((target - done) / remaining)
+}
+
+/** 그래프 아래 보조 지표 다섯 칸. */
+export type YearSummary = {
+  orderedAmt: number
+  revenueAmt: number
+  profitAmt: number
+  profitRate: number | null
+  orderTarget: number
+  salesTarget: number
+  orderAchieve: number | null
+  salesAchieve: number | null
+  remaining: number
+  needOrder: number | 'done' | null
+  needSales: number | 'done' | null
+  /** 아직 결과가 안 난 견적(상태 「견적중」) — 기간을 보지 않는다. */
+  pendingAmt: number
+  pendingCnt: number
+}
+
+/** 그 회계연도 한 해치 요약. 막대 자료를 다시 받아 쓰므로 그래프와 숫자가 어긋날 수 없다. */
+export function yearSummary(
+  quotes: readonly StatQuote[],
+  targets: readonly StatTarget[],
+  opts: { engineerId: number; fy: number; today: string },
+): YearSummary {
+  const { engineerId, fy, today } = opts
+  const bars = monthlyBars(quotes, targets, { engineerId, fy })
+  const orderedAmt = bars.reduce((s2, b) => s2 + b.orderedAmt, 0)
+  const revenueAmt = bars.reduce((s2, b) => s2 + b.revenueAmt, 0)
+  const profitAmt = bars.reduce((s2, b) => s2 + b.profitAmt, 0)
+
+  const t = targets.find(x => x.engineer_id === engineerId && x.year === fy && x.quarter === null)
+  const orderTarget = t?.order_target_amount || 0
+  const salesTarget = t?.target_amount || 0
+  const remaining = remainingMonths(fy, today)
+
+  const pending = quotes.filter(q => q.engineer_id === engineerId && q.status === '견적중')
+
+  return {
+    orderedAmt, revenueAmt, profitAmt,
+    profitRate: revenueAmt > 0 ? (profitAmt / revenueAmt) * 100 : null,
+    orderTarget, salesTarget,
+    orderAchieve: orderTarget > 0 ? (orderedAmt / orderTarget) * 100 : null,
+    salesAchieve: salesTarget > 0 ? (revenueAmt / salesTarget) * 100 : null,
+    remaining,
+    needOrder: neededPerMonth(orderTarget, orderedAmt, remaining),
+    needSales: neededPerMonth(salesTarget, revenueAmt, remaining),
+    pendingAmt: pending.reduce((s2, q) => s2 + (q.total_supply || 0), 0),
+    pendingCnt: pending.length,
+  }
+}
+
 /** 회계연도의 열두 달 — 4월부터 다음해 3월까지. 월별 그래프의 가로축이다. */
 export function getFYMonths(fy: number): { label: string; month: number; year: number }[] {
   const out: { label: string; month: number; year: number }[] = []
