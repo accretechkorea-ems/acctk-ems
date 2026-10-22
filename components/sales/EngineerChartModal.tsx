@@ -13,8 +13,9 @@
 //   작은 노트북이 기준이다. 그래서 높이가 고정값으로 쌓인다 —
 //   머리 71 + 본문 여백 26 + 패널 220×2 + 지표 70 + 간격 10 = 617 ≤ 90vh(691).
 //   패널마다 제목 줄을 두거나 범례를 본문에 두면 이 합이 넘쳐 스크롤이 생긴다.
-//   그래서 패널 이름은 Y축 왼쪽 **세로 글자**, 범례는 **머리 오른쪽**,
-//   월 목표 금액은 **목표선 끝**이다. 줄 하나하나가 패널 높이를 깎는다.
+//   그래서 패널 이름은 Y축 **왼쪽 여백**(비어 있던 자리), 범례는 **머리 오른쪽**이다.
+//   줄 하나하나가 패널 높이를 깎는다. 이름을 세로로 눕혀 봤지만 읽기 어려워 가로로
+//   되돌리고, 그 아래 월 목표 금액을 적었다 — 목표선 끝에 또 적으면 같은 수가 둘이다.
 //
 // ── 숫자는 전부 lib/salesStats.ts 가 만든다 ────────────────────────────────
 //   여기서 다시 더하지 않는다(그리기만 한다) — 그래프와 아래 요약이 같은 함수를 본다.
@@ -49,13 +50,6 @@ const numM = (n: number) => {
   if (n >= 1000000) return `₩${(n / 1000000).toFixed(0)}백만`
   return `₩${Math.round(n / 10000)}만`
 }
-/** 목표선 끝에 붙는 금액 — 눈금 라벨과 달리 소수 한 자리까지 적는다(₩4.6백만). */
-const numM1 = (n: number) => {
-  if (n >= 100000000) return `₩${(n / 100000000).toFixed(1)}억`
-  if (n >= 10000000) return `₩${(n / 10000000).toFixed(1)}천만`
-  if (n >= 1000000) return `₩${(n / 1000000).toFixed(1)}백만`
-  return `₩${Math.round(n / 10000)}만`
-}
 // 달성률 색 — 달성 여부만 구분(100%+ 초록 / 미만 검정).
 const achieveColorOf = (v: number | null): string => v === null ? GRAY : v >= 100 ? GREEN : '#111827'
 
@@ -63,8 +57,8 @@ const achieveColorOf = (v: number | null): string => v === null ? GRAY : v >= 10
 // 뷰박스로 그린다. 본문이 1180 보다 넓으면 그림은 1180 그대로 가운데 놓인다.
 const W = 1180
 const H = 220              // 패널 하나의 높이. 두 장 + 지표 줄이 760 안에 들어가는 값이다.
-const PAD_L = 86           // 세로 제목 + 눈금 라벨 자리
-const PAD_R = 58           // 목표선 끝 금액 자리
+const PAD_L = 150          // 가로 제목(수주/매출 + 월 목표) + 눈금 라벨 자리
+const PAD_R = 14
 const PAD_T = 20           // 막대 위 금액 자리
 const PAD_B = 30           // 달 이름 + 달성률 자리
 const PLOT_W = W - PAD_L - PAD_R
@@ -126,11 +120,11 @@ function ChartPanel({ title, bars, color, valueOf, targetOf, achieveOf, axisMax,
       width="100%" height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}
       role="img" aria-label={`${title} 월별 막대그래프`}
     >
-      {/* 패널 이름 — Y축 바깥, 세로로. 제목 줄 하나를 아끼려고 이 자리로 왔다. */}
-      <text
-        x={15} y={PAD_T + PLOT_H / 2} transform={`rotate(-90 15 ${PAD_T + PLOT_H / 2})`}
-        textAnchor="middle" fontSize={14} fontWeight={800} fill={TEXT} letterSpacing="-0.3"
-      >{title}</text>
+      {/* 패널 이름 — Y축 바깥 여백, 그래프 세로 중앙. 제목 줄 하나를 아끼려고 이 자리다. */}
+      <text x={2} y={PAD_T + PLOT_H / 2 - 2} fontSize={14} fontWeight={800} fill={TEXT} letterSpacing="-0.3">{title}</text>
+      <text x={2} y={PAD_T + PLOT_H / 2 + 13} className="num" fontSize={10} fontWeight={600} fill={MUTED}>
+        월 목표 {target > 0 ? `₩${numKR(target)}` : '미설정'}
+      </text>
 
       {/* 눈금선 — 가장 연한 선으로 깔고 왼쪽에 값을 적는다. */}
       {ticks.map(v => (
@@ -172,12 +166,9 @@ function ChartPanel({ title, bars, color, valueOf, targetOf, achieveOf, axisMax,
         )
       })}
 
-      {/* 월 목표 — 주황 가로선 하나 + 선 끝에 금액. 목표가 없으면 긋지 않는다. */}
+      {/* 월 목표 — 주황 가로선 하나. 금액은 왼쪽 제목 아래에 있다(선 끝에 또 적지 않는다). */}
       {target > 0 && target <= axisMax && (
-        <>
-          <line x1={PAD_L} x2={W - PAD_R} y1={y(target)} y2={y(target)} stroke={ORANGE} strokeWidth={2} strokeDasharray="6 4" />
-          <text x={W - PAD_R + 6} y={y(target) + 4} fontSize={10} fontWeight={700} fill={ORANGE}>{numM1(target)}</text>
-        </>
+        <line x1={PAD_L} x2={W - PAD_R} y1={y(target)} y2={y(target)} stroke={ORANGE} strokeWidth={2} strokeDasharray="6 4" />
       )}
     </svg>
   )
