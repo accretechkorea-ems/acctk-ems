@@ -12,6 +12,7 @@
 // 준다 — 활동 기록 카드가 쓰던 그 동작 그대로다.
 
 import type { ReactNode } from 'react'
+import { CARD_BODY_STYLE, CARD_HEAD_STYLE } from '@/components/common/CountList'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
@@ -50,19 +51,13 @@ export default function DashCard({ title, onClick, error, errorMessage, loading,
         e.currentTarget.style.transform = ''
       }}
     >
-      {/* 제목 줄 — 아래 구분선. 활동 기록 카드와 같은 틀이다. */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px 10px',
-        borderBottom: `1px solid ${BORDER}`, flexShrink: 0,
-      }}>
+      {/* 제목 줄 — 아래 구분선. 치수는 활동 기록 카드와 **같은 상수**를 쓴다. */}
+      <div style={CARD_HEAD_STYLE}>
         <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>{title}</span>
         <span style={{ flex: 1 }} />
       </div>
       {/* 본문 — 세로 flex 다. 목록이 남는 높이를 갖고 합계가 바닥에 남는다(CountList fitHeight). */}
-      <div style={{
-        flex: 1, minHeight: 0, overflow: 'hidden', padding: '12px 16px 10px',
-        display: 'flex', flexDirection: 'column',
-      }}>
+      <div style={CARD_BODY_STYLE}>
         {loading
           ? <div style={{ fontSize: 12, color: MUTED }}>불러오는 중...</div>
           : error

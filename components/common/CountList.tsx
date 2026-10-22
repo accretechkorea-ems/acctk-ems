@@ -8,6 +8,10 @@
 //
 // 값(줄 높이 20·간격 7·점 9px·글자 12·뱃지 radius 6)은 활동 기록 카드에서 **그대로** 옮겼다 —
 // 그 카드가 이 부품을 쓰도록 바꿨으므로 모양이 바뀌면 활동 현황 화면에서 바로 보인다.
+//
+// 카드의 **머리·본문 치수**(CARD_HEAD_STYLE·CARD_BODY_STYLE)도 여기 둔다. 머리 높이를
+// 카드마다 내용으로 정하면(이름 두 줄이냐, 월 이동 단추가 있느냐) 구분선 y 가 칸마다 달라져
+// 격자가 어긋난다. 그래서 **높이를 못 박고** 내용은 그 안에서 가운데 정렬한다.
 
 import { type CSSProperties } from 'react'
 
@@ -22,6 +26,25 @@ const FADE = '#d1d5db'
 const ROW_H = 20
 const ROW_GAP = 7
 const LIST_H = ROW_H * 6 + ROW_GAP * 5
+
+/**
+ * 카드 머리 — 제목 줄 + 아래 구분선. 높이를 못 박았다(24px 월 이동 단추도 들어간다).
+ * DashCard 와 활동 기록 카드(홈)가 **같은 값**을 쓰므로 구분선이 한 줄로 맞는다.
+ */
+export const CARD_HEAD_STYLE: CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 8, height: 42, padding: '0 16px',
+  borderBottom: `1px solid ${BORDER}`, flexShrink: 0, boxSizing: 'border-box',
+}
+
+/**
+ * 카드 본문 — 목록이 남는 높이를 갖고 합계가 바닥에 남는다(세로 flex).
+ * **가로는 자른다.** 세로만 auto 로 두면 CSS 규칙에 따라 가로가 visible → auto 로 승격되어,
+ * 줄이 한 픽셀만 넘쳐도 가로 스크롤바가 생긴다.
+ */
+export const CARD_BODY_STYLE: CSSProperties = {
+  flex: 1, minHeight: 0, overflow: 'hidden', padding: '12px 16px 10px',
+  display: 'flex', flexDirection: 'column',
+}
 
 /** 목록 한 줄. onClick 을 주면 누를 수 있는 줄이 된다(바탕이 살짝 들어온다). */
 export type CountRow = {
@@ -61,7 +84,10 @@ export function CountList({ rows, emptyText, fitHeight = false }: {
    */
   fitHeight?: boolean
 }) {
-  const rowStyle: CSSProperties = { height: ROW_H, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }
+  const rowStyle: CSSProperties = {
+    height: ROW_H, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    gap: 6, minWidth: 0, boxSizing: 'border-box',
+  }
   return (
     <>
       <style>{`
@@ -72,7 +98,8 @@ export function CountList({ rows, emptyText, fitHeight = false }: {
       `}</style>
       <div className="count-list" style={{
         ...(fitHeight ? { flex: 1, minHeight: 0 } : { height: LIST_H }),
-        overflowY: 'auto', marginBottom: 12,
+        // 세로만 auto 로 두면 가로가 auto 로 승격된다 — 가로는 못 박아 자른다.
+        overflowY: 'auto', overflowX: 'hidden', marginBottom: 12,
       }}>
         {rows.length === 0 ? (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: FADE }}>
@@ -82,8 +109,10 @@ export function CountList({ rows, emptyText, fitHeight = false }: {
           <div style={{ display: 'grid', gap: ROW_GAP }}>
             {rows.map(row => row.onClick
               ? (
-                // 누를 수 있는 줄 — 바탕이 글자에 붙지 않게 좌우로 넓히고 그만큼 바깥으로 당긴다
-                // (점·뱃지의 자리는 안 누르는 줄과 같다).
+                // 누를 수 있는 줄 — **줄 폭은 그대로**다. 예전에는 바탕을 글자에서 떼려고
+                // padding 0 6px + margin 0 -6px 을 줬는데, 그러면 줄이 상자보다 12px 넓어져
+                // 목록에 가로 스크롤바가 생겼다(세로 auto 가 가로를 auto 로 승격시킨다).
+                // 바탕은 줄 전체에 깔고 점·뱃지 자리는 안 누르는 줄과 똑같이 둔다.
                 <button
                   key={row.key} type="button"
                   onClick={e => { e.stopPropagation(); row.onClick?.() }}
@@ -91,7 +120,7 @@ export function CountList({ rows, emptyText, fitHeight = false }: {
                   onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
                   style={{
                     ...rowStyle,
-                    padding: '0 6px', margin: '0 -6px', borderRadius: 6,
+                    padding: 0, borderRadius: 6, width: '100%',
                     background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                     transition: 'background 0.15s ease',
                   }}
