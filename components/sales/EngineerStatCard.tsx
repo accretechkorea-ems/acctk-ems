@@ -5,12 +5,14 @@
 // 실적 현황(app/sales/page.tsx)에 인라인으로 있던 것을 그대로 옮겼다. 모양·색·문구를 바꾸지
 // 않았다 — 개인 대시보드의 「내 실적」 카드가 같은 것을 쓴다.
 //
-// 두 화면이 다른 것은 **누르면 무슨 일이 생기는가**뿐이다.
-//   실적 현황 — 카드를 누르면 견적 목록, 오른쪽 위 막대 아이콘이 월별 그래프
-//   홈        — 카드 아무 데나 누르면 바로 월별 그래프(목록은 「내 견적」 카드가 맡는다)
-// 그래서 동작은 전부 prop 으로 받는다. compact 는 홈 격자(260px)에 맞춰 **여백만** 줄인다.
+// 두 화면이 다른 것은 **머리줄과 누르면 무슨 일이 생기는가**뿐이다.
+//   실적 현황 — 머리에 이름·직급·팀 뱃지. 카드를 누르면 견적 목록, 오른쪽 위 막대 아이콘이 그래프
+//   홈        — 머리에 「내 실적 · FY2026」(남의 카드가 아니라 내 카드라 이름이 군더더기다).
+//               카드 아무 데나 누르면 바로 월별 그래프(목록은 「내 견적」 카드가 맡는다)
+// 그래서 머리줄은 title 로, 동작은 onClick·onChart 로 받는다 — 복제하지 않는다.
+// compact 는 홈 격자 칸에 맞춘 **여백**이다(숫자·문구·줄 간격은 두 곳이 같다).
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { TEAM_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import type { EngineerStat } from '@/lib/salesStats'
 
@@ -52,6 +54,11 @@ export type StatCardEngineer = {
 export type EngineerStatCardProps = {
   engineer: StatCardEngineer
   stat: EngineerStat
+  /**
+   * 머리줄 왼쪽을 바꿔 끼운다. 주지 않으면 이름·직급·팀 뱃지(실적 현황의 모습)다.
+   * 홈은 「내 실적 · FY2026」을 넘긴다 — 오른쪽 달성률 % 는 어느 쪽이든 그대로다.
+   */
+  title?: ReactNode
   /** 매출 순위(0=1위). 3위까지만 메달이 붙는다. 주지 않으면 붙지 않는다. */
   rank?: number
   /** 막대가 자라기 시작하는 시점 — 카드가 여럿일 때 차례로 보이게 한다. */
@@ -65,13 +72,14 @@ export type EngineerStatCardProps = {
 }
 
 export default function EngineerStatCard({
-  engineer, stat, rank, delay = 0, onClick, onChart, compact = false,
+  engineer, stat, title, rank, delay = 0, onClick, onChart, compact = false,
 }: EngineerStatCardProps) {
   const tc = getCategoryColor(TEAM_COLORS, engineer.teams)
   const achieveColor = achieveColorOf(stat.achieve)
   const orderAchieveColor = achieveColorOf(stat.orderAchieve)
-  const pad = compact ? '12px 14px' : '16px 18px'
-  const boxPad = compact ? '6px 9px' : '8px 10px'
+  // 홈에서는 이 카드가 **격자 칸 자체**다 — 다른 카드(DashCard)와 같은 여백을 쓴다.
+  const pad = compact ? '12px 16px 14px' : '16px 18px'
+  const boxPad = '8px 10px'
 
   return (
     <div
@@ -94,21 +102,25 @@ export default function EngineerStatCard({
         </button>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: compact ? 8 : 12, paddingRight: onChart ? 36 : 0, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, paddingRight: onChart ? 36 : 0, flexShrink: 0 }}>
         {rank !== undefined && rank < 3 && (
           <div style={{ width: 22, height: 22, borderRadius: '50%', background: RANK_MEDAL_BG[rank], border: `1.5px solid ${RANK_MEDAL[rank]}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 11, fontWeight: 800, color: RANK_MEDAL[rank] }}>
             {rank + 1}
           </div>
         )}
-        <div>
-          <span style={{ fontSize: 15, fontWeight: 800, color: TEXT }}>{engineer.name}</span>
-          <span style={{ fontSize: 12, color: GRAY, marginLeft: 6 }}>{engineer.position}</span>
-        </div>
-        {engineer.teams && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: tc.bg, color: tc.text }}>{engineer.teams}</span>}
+        {title ?? (
+          <>
+            <div>
+              <span style={{ fontSize: 15, fontWeight: 800, color: TEXT }}>{engineer.name}</span>
+              <span style={{ fontSize: 12, color: GRAY, marginLeft: 6 }}>{engineer.position}</span>
+            </div>
+            {engineer.teams && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: tc.bg, color: tc.text }}>{engineer.teams}</span>}
+          </>
+        )}
         {stat.achieve !== null && <span className="num" style={{ fontSize: 13, fontWeight: 800, color: achieveColor, marginLeft: 'auto' }}>{stat.achieve.toFixed(0)}%</span>}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: compact ? 6 : 8, marginBottom: compact ? 8 : 10, flexShrink: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10, flexShrink: 0 }}>
         <div style={{ background: '#f8fafc', borderRadius: 8, padding: boxPad }}>
           <div style={{ fontSize: 10, color: MUTED, marginBottom: 2, fontWeight: 500 }}>견적 제출</div>
           <div className="num" style={{ fontSize: 13, fontWeight: 700, color: stat.quotedAmt > 0 ? TEXT : MUTED }}>₩{numKR(stat.quotedAmt)}</div>
@@ -131,7 +143,7 @@ export default function EngineerStatCard({
       </div>
 
       {(stat.orderTargetAmt > 0 || stat.targetAmt > 0) && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? 5 : 7 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
           {stat.orderTargetAmt > 0 && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 11 }}>

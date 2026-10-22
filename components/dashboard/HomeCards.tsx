@@ -38,6 +38,11 @@ const empty = (text: string) => (
 
 /**
  * 본인 한 명분 실적 — **실적 현황의 개인 카드 그대로**다(부품을 함께 쓴다).
+ *
+ * 카드 껍데기(DashCard)를 두르지 않는다. 두르면 테두리 안에 테두리, 제목 아래 또 제목이
+ * 들어가 카드가 두 겹이 됐다. 이 부품이 곧 격자 카드다 — 머리줄만 title 로 갈아 끼운다
+ * (실적 현황은 이름·직급·팀, 홈은 「내 실적 · FY2026」). 껍데기는 **못 읽었을 때만** 쓴다.
+ *
  * 다른 것은 누를 때뿐이다: 실적 현황은 견적 목록으로 가지만, 홈은 카드 어디를 눌러도
  * **월별 매출 그래프**가 바로 열린다(견적 목록은 옆의 「내 견적」 카드가 맡는다).
  *
@@ -54,20 +59,19 @@ export function MyStatCard({ engineer, quotes, targets, fy, loading, error }: {
 }) {
   const [chartOpen, setChartOpen] = useState(false)
   const stat = engineerStat(quotes, targets, { engineerId: engineer.engineer_id, fy, mode: 'year', month: 1 })
+  // 숫자를 못 읽었을 때만 껍데기를 쓴다 — 0 원과 「못 읽었다」는 전혀 다른 일이다.
+  if (loading || error) return <DashCard title={`내 실적 · FY${fy}`} loading={loading} error={error}>{null}</DashCard>
   return (
     <>
-      {/* 카드 어디를 눌러도 월별 그래프다. hoverLift 를 끄는 이유는 안쪽 카드가 이미 떠오르기 때문이다. */}
-      <DashCard title={`내 실적 · FY${fy}`} onClick={() => setChartOpen(true)} hoverLift={false} loading={loading} error={error}>
-        {/* 카드 자체가 /sales 의 그 카드다. 머리줄(이름·팀·달성률)이 겹치지 않게 여기서는
-            DashCard 의 제목만 쓰고, 카드는 여백을 줄인 모양(compact)으로 넣는다. */}
-        <EngineerStatCard
-          engineer={engineer}
-          stat={stat}
-          compact
-          delay={80}
-          onClick={() => setChartOpen(true)}
-        />
-      </DashCard>
+      <EngineerStatCard
+        engineer={engineer}
+        stat={stat}
+        // 내 카드라 이름은 군더더기다. 자리에 카드 제목을 넣는다(오른쪽 달성률 % 는 그대로).
+        title={<span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>내 실적 · FY{fy}</span>}
+        compact
+        delay={80}
+        onClick={() => setChartOpen(true)}
+      />
       {chartOpen && (
         <EngineerChartModal
           engineer={engineer}

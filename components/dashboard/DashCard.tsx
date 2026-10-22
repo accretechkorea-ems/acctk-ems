@@ -21,11 +21,6 @@ export type DashCardProps = {
   title: string
   /** 카드를 누르면 할 일(모달·화면 이동). 주지 않으면 누를 수 없는 카드다. */
   onClick?: () => void
-  /**
-   * 떠오르는 hover 를 끌 때. 안에 **또 카드가 들어 있는** 「내 실적」만 쓴다 —
-   * 두 겹이 같이 떠오르면 4px 이 들썩여 글자가 흔들린다(안쪽 카드가 제 몫을 한다).
-   */
-  hoverLift?: boolean
   /** 조회가 실패했는가 — 카드 하나가 못 읽어도 다른 카드는 그대로 뜬다. */
   error?: boolean
   /** 실패한 이유 한 마디. 콘솔만 보고 원인을 찾게 두지 않는다. */
@@ -34,8 +29,7 @@ export type DashCardProps = {
   children: ReactNode
 }
 
-export default function DashCard({ title, onClick, hoverLift = true, error, errorMessage, loading, children }: DashCardProps) {
-  const lift = !!onClick && hoverLift
+export default function DashCard({ title, onClick, error, errorMessage, loading, children }: DashCardProps) {
   return (
     <section
       onClick={onClick}
@@ -48,7 +42,7 @@ export default function DashCard({ title, onClick, hoverLift = true, error, erro
       onMouseEnter={e => {
         if (!onClick) return
         e.currentTarget.style.borderColor = '#c7d7f8'
-        if (lift) e.currentTarget.style.transform = 'translateY(-2px)'
+        e.currentTarget.style.transform = 'translateY(-2px)'
       }}
       onMouseLeave={e => {
         if (!onClick) return
