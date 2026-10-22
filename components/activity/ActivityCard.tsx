@@ -1,6 +1,7 @@
 'use client'
 
 import { type ReactNode } from 'react'
+import { CountList, CountTotal, type CountRow } from '@/components/common/CountList'
 import { ACTIVITY_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 
 // 서비스 유형(단일 소스). 영업 4종까지 합친 전체 목록은 lib/activity.ts 의 ACTIVITY_TYPES.
@@ -8,17 +9,13 @@ import { ACTIVITY_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 // 순서는 성격순이다 — 계획된 현장 작업(설치·교정) → 고장 대응(A/S·B/S) → 그 밖(교육·원격).
 export const SERVICE_TYPES = ['신규설치', '이전설치', '장비교정', 'A/S', 'B/S', '교육', '유선기술지원']
 
-// 카드의 유형 목록은 6줄 높이로 고정한다 — 사람마다 유형 수가 달라도 카드 높이가 들쭉날쭉하지 않게.
-// 유형이 6개를 넘으면(서비스+영업이 섞인 사람) 이 영역 안에서만 세로로 스크롤된다.
-const ROW_H = 20
-const ROW_GAP = 7
-const LIST_H = ROW_H * 6 + ROW_GAP * 5
+// 목록과 합계의 모양은 components/common/CountList.tsx 에 있다(홈 카드 다섯이 같이 쓴다).
+// 6줄 고정·줄 높이 20·간격 7·점 9px 전부 그 파일로 옮겼다 — 여기서 쓰는 값과 같다.
 
 const CARD_BG = '#ffffff'
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
 const MUTED = '#9ca3af'
-const BLUE = '#234ea2'
 
 type Props = {
   engineer: { name: string | null; position: string | null; teams: string | null }
@@ -38,7 +35,12 @@ type Props = {
 export default function ActivityCard({ engineer, counts, total, onClick, headerRight, types = SERVICE_TYPES, fitHeight = false }: Props) {
   const clickable = !!onClick
   // 0건 유형은 숨긴다. 순서는 넘겨받은 목록(서비스 6종 → 영업 4종) 그대로.
-  const shownTypes = types.filter(t => (counts[t] ?? 0) > 0)
+  const rows: CountRow[] = types
+    .filter(t => (counts[t] ?? 0) > 0)
+    .map(t => {
+      const sc = getCategoryColor(ACTIVITY_TYPE_COLORS, t)
+      return { key: t, label: t, count: counts[t] ?? 0, color: sc.dot ?? sc.text }
+    })
   return (
     <div
       onClick={onClick}
@@ -73,59 +75,9 @@ export default function ActivityCard({ engineer, counts, total, onClick, headerR
         ))}
       </div>
 
-      {/* 유형별 건수 — 6줄 높이 고정, 넘치면 이 안에서 스크롤 */}
-      <style>{`
-        .ac-list { scrollbar-width: thin; scrollbar-color: #d1d5db transparent; }
-        .ac-list::-webkit-scrollbar { width: 5px; }
-        .ac-list::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
-        .ac-list::-webkit-scrollbar-track { background: transparent; }
-      `}</style>
-      <div className="ac-list" style={{
-        ...(fitHeight ? { flex: 1, minHeight: 0 } : { height: LIST_H }),
-        overflowY: 'auto', marginBottom: 12,
-      }}>
-        {shownTypes.length === 0 ? (
-          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#d1d5db' }}>
-            활동 기록 없음
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gap: ROW_GAP }}>
-            {shownTypes.map((type) => {
-              const sc = getCategoryColor(ACTIVITY_TYPE_COLORS, type)
-              const cnt = counts[type] ?? 0
-              return (
-                <div key={type} style={{ height: ROW_H, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                    <div style={{ width: 9, height: 9, borderRadius: '50%', background: sc.dot ?? sc.text, flexShrink: 0 }} />
-                    <span style={{ fontSize: 12, color: '#111827', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{type}</span>
-                  </div>
-                  <span style={{
-                    fontSize: 12, fontWeight: 600, flexShrink: 0,
-                    color: sc.dot ?? sc.text,
-                    background: '#f3f4f6', borderRadius: 6, padding: '2px 8px',
-                  }}>
-                    {cnt}<span style={{ color: '#9ca3af' }}>건</span>
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* 합계 */}
-      <div style={{
-        padding: '5px 0', borderTop: `1px solid ${BORDER}`,
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0,
-      }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: MUTED }}>합계</span>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
-          <span style={{ fontSize: 20, fontWeight: 600, color: BLUE, letterSpacing: '-0.5px' }}>
-            {total}
-          </span>
-          <span style={{ fontSize: 11, fontWeight: 600, color: MUTED }}>건</span>
-        </div>
-      </div>
+      {/* 유형별 건수 — 6줄 높이 고정(홈에서는 칸에 맞춤), 넘치면 이 안에서 스크롤 */}
+      <CountList rows={rows} emptyText="활동 기록 없음" fitHeight={fitHeight} />
+      <CountTotal total={total} />
     </div>
   )
 }
