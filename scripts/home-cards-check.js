@@ -31,7 +31,7 @@ Module._resolveFilename = function (req, ...rest) {
 }
 
 const {
-  monthKpi, stageBars, buildTodos, CARD_STAGES, quoteStatusCounts, CARD_QUOTE_STATUSES,
+  monthKpi, stageBars, CARD_STAGES, quoteStatusCounts, CARD_QUOTE_STATUSES,
 } = load(path.join(ROOT, 'lib/homeCards.ts'))
 
 let fails = 0
@@ -43,7 +43,6 @@ const eq = (name, got, want) => {
 
 const ME = 7
 const MONTH = '2026-10'
-const TODAY = '2026-10-22'
 const q = over => ({
   status: '견적중', quote_date: '2026-10-05', purchase_order_at: null,
   tax_invoice_completed_at: null, total_supply: 1000, total_profit: 0, engineer_id: ME, ...over,
@@ -110,48 +109,6 @@ console.log('\n── 단계별 막대 ──')
   eq('협상 1건 500', [bars[3].count, bars[3].amount], [1, 500])
   eq('종료된 건은 빠진다', [bars[4].count, bars[4].amount], [0, 0])
 }
-
-// ── 할 일 ─────────────────────────────────────────────────────────────────
-console.log('\n── 할 일 ──')
-{
-  const o = over => ({ opportunity_id: 1, stage: '상담', expected_amount: 100, closed_at: null, created_at: '2026-10-20T00:00:00Z', engineer_id: ME, ...over })
-  const todos = buildTodos({
-    opportunities: [
-      o({ opportunity_id: 1, expected_amount: 0 }),            // 금액 0
-      o({ opportunity_id: 2, expected_amount: null }),          // 금액 없음
-      o({ opportunity_id: 3, created_at: '2026-08-01T00:00:00Z' }), // 활동 없음 83일
-      o({ opportunity_id: 4, engineer_id: 99, expected_amount: 0 }), // 남의 건
-      o({ opportunity_id: 5, expected_amount: 0, closed_at: '2026-10-01T00:00:00Z' }), // 종료
-    ],
-    quotes: [
-      { status: '견적중', quote_date: '2026-09-25', engineer_id: ME },   // 10/24 만료 — 2일 뒤
-      { status: '견적중', quote_date: '2026-10-20', engineer_id: ME },   // 11/19 만료 — 멀다
-      { status: '실패', quote_date: '2026-09-25', engineer_id: ME },     // 상태가 아니다
-      { status: '견적중', quote_date: '2026-09-25', engineer_id: 99 },   // 남의 건
-    ],
-    leads: [
-      { status: '진행중', converted_opportunity_id: null },              // 포캐스트 없음
-      { status: '진행중', converted_opportunity_id: 10 },                // 이미 있다
-      { status: '미진행', converted_opportunity_id: null },              // 종결
-    ],
-    lastActivity: {},
-    engineerId: ME, today: TODAY,
-  })
-  const byKey = Object.fromEntries(todos.map(t => [t.key, t.count]))
-  eq('금액이 빈 포캐스트 2건(내 것·진행 중만)', byKey.amount0, 2)
-  eq('7일 안에 만료되는 견적 1건', byKey.expiring, 1)
-  eq('30일 넘게 활동 없는 포캐스트 1건', byKey.stale, 1)
-  eq('포캐스트가 없는 내 리드 1건', byKey.leadNoForecast, 1)
-  eq('각 줄은 갈 곳이 있다', todos.every(t => t.href.startsWith('/')), true)
-}
-eq('할 일이 없으면 빈 배열', buildTodos({
-  opportunities: [], quotes: [], leads: [], lastActivity: {}, engineerId: ME, today: TODAY,
-}), [])
-// 마지막 활동이 있으면 등록일이 아니라 그것으로 잰다.
-eq('최근 활동이 있으면 방치가 아니다', buildTodos({
-  opportunities: [{ opportunity_id: 3, stage: '상담', expected_amount: 100, closed_at: null, created_at: '2026-08-01T00:00:00Z', engineer_id: ME }],
-  quotes: [], leads: [], lastActivity: { 3: '2026-10-20' }, engineerId: ME, today: TODAY,
-}).length, 0)
 
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
 process.exit(fails === 0 ? 0 : 1)

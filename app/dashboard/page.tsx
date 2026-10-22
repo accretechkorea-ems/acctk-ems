@@ -20,7 +20,7 @@ import { ACTIVITY_TYPES } from '@/lib/activity'
 import ActivityCard from '@/components/activity/ActivityCard'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
 import DashCard from '@/components/dashboard/DashCard'
-import { ApprovalCard, ForecastCard, NotificationCard, TodoCard } from '@/components/dashboard/HomeCards'
+import { ApprovalCard, ForecastCard, NotificationCard } from '@/components/dashboard/HomeCards'
 import MyQuoteCard from '@/components/dashboard/MyQuoteCard'
 import { useDashboardCards, type ApprovalRow, type NotificationRow } from '@/hooks/dashboard/useDashboardCards'
 import { nowKSTParts } from '@/lib/date'
@@ -45,7 +45,7 @@ function DashboardPageInner() {
   const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
   // ?quoteTab=견적중 — 「내 견적」 모달을 그 상태 탭으로 연다.
-  // 할 일 카드의 「유효기간이 끝나는 견적」 줄이 이 주소로 보낸다.
+  // 카드의 상태 줄이 이 주소로 보낸다(다른 화면에서 보낼 때도 같은 열쇠를 쓴다).
   const quoteTab = useSearchParams().get('quoteTab')
   const [me, setMe] = useState<Me | null>(null)
   const [loading, setLoading] = useState(true)
@@ -217,7 +217,7 @@ function DashboardPageInner() {
             {me && (
               <MyQuoteCard
                 // 주소의 탭이 바뀌면 카드를 새로 만든다 — 처음 상태로 모달을 여는 구조라
-                // 같은 화면에 머문 채 주소만 바뀌는 경우(할 일 줄 클릭)를 이렇게 받는다.
+                // 같은 화면에 머문 채 주소만 바뀌는 경우를 이렇게 받는다.
                 key={quoteTab ?? ''}
                 engineerId={me.engineer_id}
                 slot={cards.quotes}
@@ -239,7 +239,7 @@ function DashboardPageInner() {
             />
           </div>
 
-          {/* 2행 — 결재 대기 · 할 일 · (빈 자리 둘) */}
+          {/* 2행 — 결재 대기 · (빈 자리 셋) */}
           <div className="home-cell">
             {showApproval && (
               <ApprovalCard
@@ -250,26 +250,8 @@ function DashboardPageInner() {
             )}
           </div>
 
-          <div className="home-cell">
-            {me && (
-              <TodoCard
-                input={{
-                  opportunities: cards.opportunities.data,
-                  quotes: cards.quotes.data,
-                  leads: cards.leads.data,
-                  lastActivity: cards.lastActivity.data,
-                  engineerId: me.engineer_id,
-                  today: cards.today,
-                }}
-                // 네 재료가 **다 와야** 센다. 하나만 읽히고 나머지가 비면 할 일이 없는 것처럼 보인다.
-                ready={!cards.opportunities.loading && !cards.quotes.loading && !cards.leads.loading && !cards.lastActivity.loading}
-                error={cards.opportunities.error || cards.quotes.error || cards.leads.error}
-                onOpen={t => router.push(t.href)}
-              />
-            )}
-          </div>
-
-          {/* 빈 자리 둘 — 카드 없이 칸만 둔다(격자 정렬). */}
+          {/* 빈 자리 셋 — 카드 없이 칸만 둔다(격자 정렬). */}
+          <div className="home-cell" />
           <div className="home-cell" />
           <div className="home-cell" />
         </div>

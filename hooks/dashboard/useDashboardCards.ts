@@ -27,16 +27,11 @@ export type NotificationRow = {
 
 export type ApprovalRow = { document_id: number; doc_no: string | null; title: string | null; doc_type: string | null }
 
-export type LeadRow = { status: string | null; converted_opportunity_id: number | null }
-
 export type DashboardCards = {
   quotes: Slot<CardQuote[]>
-  targets: Slot<{ sales: number; order: number }>
   opportunities: Slot<CardOpportunity[]>
-  lastActivity: Slot<Record<number, string>>
   notifications: Slot<NotificationRow[]>
   approvals: Slot<ApprovalRow[]>
-  leads: Slot<LeadRow[]>
   today: string
   /** 「내 견적」 모달을 닫았을 때처럼 숫자만 다시 맞추고 싶을 때. */
   reloadQuotes: () => Promise<void>
@@ -47,15 +42,12 @@ export function useDashboardCards(engineerId: number | null, fiscalYear: number)
   const today = todayKST()
 
   const [quotes, setQuotes] = useState<Slot<CardQuote[]>>(() => idle<CardQuote[]>([]))
-  const [targets, setTargets] = useState<Slot<{ sales: number; order: number }>>(() => idle({ sales: 0, order: 0 }))
   const [opportunities, setOpportunities] = useState<Slot<CardOpportunity[]>>(() => idle<CardOpportunity[]>([]))
-  const [lastActivity, setLastActivity] = useState<Slot<Record<number, string>>>(() => idle<Record<number, string>>({}))
   const [notifications, setNotifications] = useState<Slot<NotificationRow[]>>(() => idle<NotificationRow[]>([]))
   const [approvals, setApprovals] = useState<Slot<ApprovalRow[]>>(() => idle<ApprovalRow[]>([]))
-  const [leads, setLeads] = useState<Slot<LeadRow[]>>(() => idle<LeadRow[]>([]))
 
   /**
-   * 견적 — 카드의 상태별 건수·이번 달 숫자·할 일(유효기간)이 함께 쓴다.
+   * 견적 — 카드의 상태별 건수가 쓴다.
    *
    * **기간으로 거르지 않는다.** 진행 중인 건(견적중·발주·주문완료·계산서 요청)은 회계연도를
    * 넘겨서까지 남아 있고, 그것이 곧 아직 손이 가야 하는 일이다. 본인 건만 읽으므로
@@ -96,31 +88,11 @@ export function useDashboardCards(engineerId: number | null, fiscalYear: number)
     // **동시에** 시작한다. await 로 줄줄이 엮지 않는다.
     void reloadQuotes()
 
-    void run<{ sales: number; order: number }>('targets', setTargets, { sales: 0, order: 0 }, async () => {
-      const { data, error } = await supabase.from('sales_targets')
-        .select('target_amount, order_target_amount')
-        .eq('engineer_id', engineerId).eq('year', fiscalYear).is('quarter', null).maybeSingle()
-      return { data: { sales: data?.target_amount ?? 0, order: data?.order_target_amount ?? 0 }, error }
-    })
-
     void run<CardOpportunity[]>('opportunities', setOpportunities, [], async () => {
       const { data, error } = await supabase.from('sales_opportunities')
         .select('opportunity_id, stage, expected_amount, closed_at, created_at, engineer_id')
         .eq('engineer_id', engineerId)
       return { data: (data ?? []) as CardOpportunity[], error }
-    })
-
-    // 방치 판정에 쓰는 마지막 활동일. 기회에 묶인 활동만 읽어 기회별 최근 날짜로 접는다.
-    void run<Record<number, string>>('activities', setLastActivity, {}, async () => {
-      const { data, error } = await supabase.from('sales_activities')
-        .select('opportunity_id, activity_date')
-        .eq('engineer_id', engineerId).not('opportunity_id', 'is', null)
-      const map: Record<number, string> = {}
-      for (const r of (data ?? []) as { opportunity_id: number; activity_date: string | null }[]) {
-        const d = r.activity_date ?? ''
-        if (d && (!map[r.opportunity_id] || map[r.opportunity_id] < d)) map[r.opportunity_id] = d
-      }
-      return { data: map, error }
     })
 
     void run<NotificationRow[]>('notifications', setNotifications, [], async () => {
@@ -139,16 +111,9 @@ export function useDashboardCards(engineerId: number | null, fiscalYear: number)
       return { data: (json?.documents ?? []) as ApprovalRow[], error: null }
     })
 
-    void run<LeadRow[]>('leads', setLeads, [], async () => {
-      const { data, error } = await supabase.from('leads')
-        .select('status, converted_opportunity_id')
-        .eq('assigned_to', engineerId)
-      return { data: (data ?? []) as LeadRow[], error }
-    })
-
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engineerId, fiscalYear])
 
-  return { quotes, targets, opportunities, lastActivity, notifications, approvals, leads, today, reloadQuotes }
+  return { quotes, opportunities, notifications, approvals, today, reloadQuotes }
 }

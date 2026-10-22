@@ -5,7 +5,6 @@
 // 둘 중 어느 쪽이 맞는지 알 길이 없다. DB·화면을 모른다(날짜 유틸 하나만 쓴다).
 
 import { kstYmd } from './date'
-import { quoteExpiry } from './quoteStatus'
 
 // ── 이번 달 실적 ────────────────────────────────────────────────────────────
 
@@ -126,70 +125,4 @@ export function stageBars(opps: readonly CardOpportunity[]): StageBar[] {
     const rows = open.filter(o => o.stage === stage)
     return { stage, count: rows.length, amount: rows.reduce((s, o) => s + (o.expected_amount ?? 0), 0) }
   })
-}
-
-// ── 할 일 ───────────────────────────────────────────────────────────────────
-
-export type TodoKey = 'amount0' | 'expiring' | 'stale' | 'leadNoForecast'
-
-export type TodoItem = {
-  key: TodoKey
-  label: string
-  count: number
-  /** 누르면 갈 곳. 그 화면에서 바로 손댈 수 있는 자리여야 한다. */
-  href: string
-}
-
-export type TodoInput = {
-  opportunities: readonly CardOpportunity[]
-  quotes: readonly { status: string | null; quote_date: string | null; engineer_id: number | null }[]
-  /** 내 리드 — 진행중이면서 포캐스트가 아직 없는 건을 센다. */
-  leads: readonly { status: string | null; converted_opportunity_id: number | null }[]
-  /** [opportunity_id] = 마지막 활동일 'YYYY-MM-DD'. 없으면 등록일로 잰다. */
-  lastActivity: Record<number, string>
-  engineerId: number
-  today: string
-}
-
-/** 며칠 지났는가 — 'YYYY-MM-DD' 두 개를 뺀다(시간대가 끼어들지 않는다). */
-const daysSince = (from: string, today: string): number => {
-  const a = Date.parse(`${from}T00:00:00Z`)
-  const b = Date.parse(`${today}T00:00:00Z`)
-  return Number.isNaN(a) || Number.isNaN(b) ? 0 : Math.round((b - a) / 86400000)
-}
-
-/** 활동이 없는 것으로 보는 일수. 파이프라인 카드의 「방치」와 같은 기준이다. */
-export const STALE_DAYS = 30
-/** 만료가 코앞이라고 보는 일수. */
-export const EXPIRING_DAYS = 7
-
-/**
- * 자동으로 만드는 할 일. **0건인 줄은 돌려주지 않는다**(할 일이 없으면 빈 배열이다).
- *
- * 리드 줄(leadNoForecast)은 **포캐스트가 아직 없는** 리드만 센다. 금액이 0인 것은 이미
- * 첫 줄(amount0)이 세고 있어, 같은 건을 두 줄로 알리지 않는다.
- */
-export function buildTodos(input: TodoInput): TodoItem[] {
-  const { opportunities, quotes, leads, lastActivity, engineerId, today } = input
-  const mineOpen = opportunities.filter(o => o.engineer_id === engineerId && !o.closed_at)
-
-  const amount0 = mineOpen.filter(o => !o.expected_amount).length
-  const stale = mineOpen.filter(o => {
-    const base = lastActivity[o.opportunity_id] ?? (o.created_at ?? '').slice(0, 10)
-    return base !== '' && daysSince(base, today) >= STALE_DAYS
-  }).length
-  const expiring = quotes.filter(q => {
-    if (q.engineer_id !== engineerId || q.status !== '견적중' || !q.quote_date) return false
-    const end = quoteExpiry(q.quote_date)
-    return end >= today && daysSince(today, end) <= EXPIRING_DAYS
-  }).length
-  const leadNoForecast = leads.filter(l => l.status === '진행중' && l.converted_opportunity_id == null).length
-
-  const all: TodoItem[] = [
-    { key: 'amount0', label: `금액이 비어 있는 포캐스트 ${amount0}건`, count: amount0, href: '/pipeline' },
-    { key: 'expiring', label: `${EXPIRING_DAYS}일 안에 유효기간이 끝나는 견적 ${expiring}건`, count: expiring, href: '/dashboard?quoteTab=견적중' },
-    { key: 'stale', label: `${STALE_DAYS}일 넘게 활동이 없는 포캐스트 ${stale}건`, count: stale, href: '/pipeline' },
-    { key: 'leadNoForecast', label: `포캐스트가 만들어지지 않은 내 리드 ${leadNoForecast}건`, count: leadNoForecast, href: '/leads' },
-  ]
-  return all.filter(t => t.count > 0)
 }
