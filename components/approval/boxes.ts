@@ -439,16 +439,30 @@ export function filterDocs(
  * 기결함 세 항목은 **서버가 센 숫자**를 쓴다. 화면이 받은 한 벌로 세면 상한(50건·한 페이지)에
  * 걸려 숫자가 작게 나온다 — 세는 일과 자르는 일을 떼어 놓은 이유다.
  */
+/**
+ * 왼쪽 함 목록의 숫자 — 서버가 한 번에 세어 준 것(/api/approval?box=counts).
+ * 목록을 아직 받지 않은 함도 숫자는 보여 주려고 둔다.
+ */
+export type BoxCounts = { inbox: number; outbox: number; outboxUnfinished: number; cc: number }
+
 export function itemCount(
   item: BoxItem,
   docsBySource: Partial<Record<Source, ApprovalDoc[]>>,
   doneCounts?: DoneCounts | null,
+  boxCounts?: BoxCounts | null,
 ): number | null {
   if (item.source === 'done') {
     if (!doneCounts) return null
     return doneCounts[item.scope as 'all' | 'open' | 'closed'] ?? null
   }
+  // 받아 둔 목록이 있으면 그것으로 센다(방금 처리한 결과가 바로 반영된다).
   const rows = docsBySource[item.source]
-  if (rows === undefined) return null
-  return rows.filter(d => matchesScope(item.scope, d)).length
+  if (rows !== undefined) return rows.filter(d => matchesScope(item.scope, d)).length
+  // 없으면 서버가 센 숫자를 쓴다 — 그래야 함마다 목록을 미리 받지 않아도 된다.
+  if (!boxCounts) return null
+  if (item.source === 'inbox' && item.scope === 'all') return boxCounts.inbox
+  if (item.source === 'outbox' && item.scope === 'all') return boxCounts.outbox
+  if (item.source === 'outbox' && item.scope === 'unfinished') return boxCounts.outboxUnfinished
+  if (item.source === 'cc' && item.scope === 'all') return boxCounts.cc
+  return null
 }

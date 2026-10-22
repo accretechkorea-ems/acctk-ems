@@ -44,8 +44,9 @@ import {
   activeItem, approvalDate, attachmentCount, dateColumnLabel, detailBox, docTypeFilter,
   docTypeOptions, filterDocs, isServerFiltered, itemCount, listUrl, parseView,
   readCollapsedGroups, showsScopeRadio, statusText, viewQuery, writeCollapsedGroups,
-  type DoneCounts, type Scope, type Source,
+  type BoxCounts, type DoneCounts, type Scope, type Source,
 } from '@/components/approval/boxes'
+import { useApprovalInbox } from '@/lib/appData/approvalInbox'
 import { PAGE_SIZE, clampPage, pageRange, pageWindow, totalPages } from '@/lib/paging'
 import { openApprovalDoc } from '@/lib/approval/docWindow'
 import { listenDocSignal } from '@/lib/approval/docSignal'
@@ -65,9 +66,6 @@ const MOTION_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
 
 /** 검색 디바운스. 글자를 칠 때마다 목록을 다시 거르지 않는다. */
 const SEARCH_DEBOUNCE_MS = 300
-
-/** 함 목록을 처음에 함께 읽어 건수를 채운다. 「전체」는 고를 때만 읽는다(문서가 많다). */
-const BASE_SOURCES: Source[] = ['inbox', 'outbox', 'done', 'cc']
 
 /** 문서 상태 dot — 글자는 중립으로 두고 색은 dot 에만 준다(디자인 규칙). */
 const STATUS_DOT: Record<string, string> = {
@@ -330,7 +328,6 @@ function ApprovalPageInner() {
     if (myId == null) return
     // 저장값은 브라우저에만 있다. 렌더 중에 읽으면 서버가 그린 것과 달라지므로(수화 불일치)
     // 첫 그림은 기본값(모두 펼침)으로 두고, 계정이 확인된 뒤에 입힌다 — 사이드바 접힘과 같은 순서다.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCollapsedGroups(readCollapsedGroups(myId))
   }, [myId])
 
@@ -354,40 +351,54 @@ function ApprovalPageInner() {
   // 왼쪽 함 목록의 기결 세 숫자 — 서버가 센 값이다(상한과 무관하다).
   const [doneCounts, setDoneCounts] = useState<DoneCounts | null>(null)
 
-  // 기본 네 곳 — 화면에 들어오면 한 번에 읽고, 처리 뒤에는 다시 읽는다.
+  /**
+   * 들어올 때 읽는 것은 **둘**이다.
+   *   · 기결함 한 벌 — 왼쪽의 기결 세 숫자와 기결문서·기결문서(진행)이 쓴다(서버가 세어 준다).
+   *   · 함별 건수 한 번 — 미결·상신·참조의 왼쪽 숫자다(/api/approval?box=counts).
+   * 미결함 목록은 **사이드바 배지와 같은 스토어**에서 받고(아래 inbox), 상신·참조·전체 목록은
+   * 그 함을 고를 때 읽는다. 예전에는 넷을 미리 다 읽어서, 결재함에 들어오기만 해도
+   * /api/approval 이 네 번(배지까지 세면 다섯 번) 돌았다.
+   */
+  const [boxCounts, setBoxCounts] = useState<BoxCounts | null>(null)
   useEffect(() => {
     if (!authorized) return
     let cancelled = false
     const run = async () => {
-      // 기결함은 서버가 끊어 주는 쪽(종결)이 아니라 **옛 규칙 쪽**을 읽어 둔다 — 왼쪽 건수와
-      // 기결문서·기결문서(진행)이 쓰는 한 벌이다. 종결은 아래 효과가 따로 읽는다.
-      const pairs = await Promise.all(
-        BASE_SOURCES.map(async s => [s, await fetchList(listUrl(s, 'all'))] as const),
-      )
+      const [doneRes, countsRes] = await Promise.all([
+        fetchList(listUrl('done', 'all')),
+        fetch('/api/approval?box=counts').then(r => r.json()).catch(() => null),
+      ])
       if (cancelled) return
-      setDocsBySource(prev => ({
-        ...prev,
-        ...Object.fromEntries(pairs.map(([s, r]) => [s, r.documents])),
-      }))
-      const counts = pairs.find(([s]) => s === 'done')?.[1].counts
-      if (counts) setDoneCounts(counts)
+      setDocsBySource(prev => ({ ...prev, done: doneRes.documents }))
+      if (doneRes.counts) setDoneCounts(doneRes.counts)
+      if (countsRes?.counts) setBoxCounts(countsRes.counts as BoxCounts)
       setOpenId(null)
     }
     run()
     return () => { cancelled = true }
   }, [authorized, reloadKey])
 
-  // 전체 — 고른 동안에만 읽는다.
+  // 미결함 — 앱 당 한 벌인 스토어(사이드바 배지·홈 카드와 같은 자료). 처리 뒤에는 그쪽이 다시 읽는다.
+  const inbox = useApprovalInbox(myId)
   useEffect(() => {
-    if (!authorized || source !== 'all' || !canSeeAll) return
+    if (inbox.loading) return
+    setDocsBySource(prev => (prev.inbox === inbox.docs ? prev : { ...prev, inbox: inbox.docs }))
+  }, [inbox.loading, inbox.docs])
+
+  // 고른 함의 목록이 없으면 그때 읽는다(상신·참조·전체). 한 번 읽은 함은 그대로 둔다.
+  useEffect(() => {
+    if (!authorized || source === 'inbox' || source === 'done') return
+    if (source === 'all' && !canSeeAll) return
+    if (docsBySource[source] !== undefined) return
     let cancelled = false
     const run = async () => {
-      const r = await fetchList(listUrl('all', 'all'))
+      const r = await fetchList(listUrl(source, 'all'))
       if (cancelled) return
-      setDocsBySource(prev => ({ ...prev, all: r.documents }))
+      setDocsBySource(prev => ({ ...prev, [source]: r.documents }))
     }
     run()
     return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authorized, source, canSeeAll, reloadKey])
 
   // 문서 창에서 처리한 결과를 받는다 — 같은 출처의 다른 탭·창이 보낸 한 줄이다
@@ -500,7 +511,7 @@ function ApprovalPageInner() {
                   )
                   : <div style={{ height: 14 }} />}
                 {shownItems.map(item => {
-                  const n = itemCount(item, docsBySource, doneCounts)
+                  const n = itemCount(item, docsBySource, doneCounts, boxCounts)
                   const on = item.key === here.key
                   return (
                     <button

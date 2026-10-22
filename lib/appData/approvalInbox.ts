@@ -10,14 +10,17 @@
 // 결재를 처리한 직후에는 refreshApprovalInbox() 로 즉시 다시 읽는다(배지가 바로 줄어든다).
 
 import { useEffect, useSyncExternalStore } from 'react'
+import type { ApprovalDocument, ApprovalLine } from '@/lib/approval/types'
 import { createPolledStore } from './polledStore'
 
-/** 배지·카드가 쓰는 만큼 — 라우트는 더 많은 칸을 주지만 여기서 들고 있을 이유가 없다. */
-export type ApprovalDoc = {
-  document_id: number
-  doc_no: string | null
-  title: string | null
-  doc_type: string | null
+/**
+ * 라우트가 주는 **그대로**다. 배지는 건수만, 홈 카드는 doc_type 만 쓰지만, 결재함 화면의
+ * 미결 탭이 같은 한 벌을 쓰기 때문에 칸을 줄이지 않는다 — 줄이면 그 화면이 다시 읽어야 한다.
+ */
+export type ApprovalDoc = ApprovalDocument & {
+  approval_lines: ApprovalLine[]
+  progress?: { total: number; done: number; currentStep: number | null; currentApproverId: number | null }
+  delegated?: boolean
 }
 
 const store = createPolledStore<ApprovalDoc[]>('approvalInbox', [], async () => {

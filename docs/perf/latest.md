@@ -1,4 +1,4 @@
-# 브라우저 실측 — 2026-10-22 15:28
+# 브라우저 실측 — 2026-10-22 16:19
 
 모드 **start (next start)** · 주소 http://localhost:3100 · 브라우저 Chromium(playwright ^1.64.1)
 
@@ -13,27 +13,27 @@
 
 | 묶음 | 화면 | 경로 | TTFB | 새 JS | 자료 요청 | 중복 | 네트워크 완료 | 직렬 | 가장 느린 요청 |
 |---|---|---|---|---|---|---|---|---|---|
-| 주 메뉴 | 홈 | `/dashboard` | 66ms | 0KB | 14 | 2 | 1,670ms | 5 | /api/approval ?box 1157ms |
-| 주 메뉴 | 알림 | `/notifications` | 259ms | 6KB | 9 | 2 | 1,264ms | 4 | /api/approval ?box 469ms |
-| 주 메뉴 | 전자결재 | `/approval` | 90ms | 37KB | 12 | 3 | 1,244ms | 3 | /api/approval ?box 910ms |
-| 대시보드 | 20 대시보드 | `/repair/dashboard` | 103ms | 148KB | 9 | — | 820ms | 2 | /api/repair-quotes ?revenue 820ms |
-| 대시보드 | 80 대시보드 | `/dashboard/80` | 102ms | 26KB | 18 | 3 | 887ms | 1 | /api/approval ?box 398ms |
-| 대시보드 | 활동 현황 | `/activity` | 66ms | 21KB | 13 | 2 | 560ms | 4 | /api/approval ?box 275ms |
-| 고객 | 고객사 목록 | `/` | 71ms | 26KB | 12 | 2 | 877ms | 2 | /api/approval ?box 273ms |
-| 고객 | 20 수리 | `/repair` | 71ms | 0KB | 11 | 2 | 595ms | 3 | /api/repair-quotes ?quote_ids 401ms |
-| 고객 | 쇼룸 | `/showroom` | 69ms | 50KB | 21 | — | 1,005ms | 4 | /storage/v1/object/public/device-images/default_AXCEL.jpg 495ms |
-| 고객 | 의뢰서 | `/inquiries` | 66ms | 33KB | 15 | 2 | 597ms | 4 | /api/inquiry 339ms |
-| 영업 | 리드 | `/leads` | 67ms | 21KB | 12 | 2 | 564ms | 4 | /api/approval ?box 282ms |
-| 영업 | 포캐스트 | `/pipeline` | 59ms | 37KB | 14 | 2 | 553ms | 3 | /api/approval ?box 271ms |
-| 영업 | 견적서 | `/quote` | 67ms | 528KB | 13 | 2 | 585ms | 4 | /api/approval ?box 296ms |
-| 영업 | 접촉 보고서 ⚠ | `/contact/semi` | 63ms | 12KB | 9 | 2 | 1,265ms | 3 | auth:user 466ms |
-| 주문 | 발주 | `/purchase` | 65ms | 12KB | 12 | 2 | 539ms | 3 | /api/approval ?box 251ms |
-| 주문 | 재고 | `/inventory` | 67ms | 15KB | 13 | 2 | 531ms | 3 | /api/approval ?box 255ms |
-| 하단 | 건의사항 | `/suggestions` | 65ms | 9KB | 10 | 2 | 542ms | 3 | /api/approval ?box 275ms |
-| 관리 | 실적 현황 | `/sales` | 62ms | 24KB | 14 | 2 | 544ms | 4 | /api/auto-fail 297ms |
-| 관리 | 관리 | `/admin` | 655ms | 41KB | 8 | — | 4,059ms | 2 | offices(office_id,code,label,add…) ?order 1827ms |
-| 고객 | 고객사 상세 (목록 첫 줄) | `/customer/159` | 136ms | 67KB | 16 | — | 546ms | 3 | /api/approval ?box 261ms |
-| 고객 | 의뢰서 상세 (목록 첫 줄) | `/inquiries/e1786945-bf78-4716-8a4f-bb109a7dc637` | —ms | 18KB | 3 | — | 85ms | 0 | inquiry_messages(id,entry_date,body,direc…) ?inquiry_id&order 84ms |
+| 주 메뉴 | 홈 | `/dashboard` | 5408ms | 0KB | 2 | — | 1,987ms | 0 | auth:user 1986ms |
+| 주 메뉴 | 알림 | `/notifications` | 82ms | 6KB | 7 | — | 1,190ms | 3 | /api/approval ?box 604ms |
+| 주 메뉴 | 전자결재 | `/approval` | 195ms | 37KB | 12 | 3 | 1,704ms | 3 | /api/approval/done ?scope 1108ms |
+| 대시보드 | 20 대시보드 | `/repair/dashboard` | 120ms | 148KB | 9 | — | 966ms | 3 | /api/repair-quotes ?revenue 763ms |
+| 대시보드 | 80 대시보드 | `/dashboard/80` | 68ms | 26KB | 16 | 1 | 2,280ms | 2 | sales_activities(activity_type) ?activity_date&activity_date 1858ms |
+| 대시보드 | 활동 현황 | `/activity` | 244ms | 21KB | 11 | — | 687ms | 5 | /api/approval ?box 394ms |
+| 고객 | 고객사 목록 | `/` | 70ms | 26KB | 10 | — | 552ms | 3 | customers(customer_id,company_name…) ?deleted_at&is_parent&limit&offset&order 273ms |
+| 고객 | 20 수리 | `/repair` | 62ms | 0KB | 9 | — | 639ms | 2 | /api/repair-quotes ?quote_ids 446ms |
+| 고객 | 쇼룸 | `/showroom` | 69ms | 50KB | 21 | — | 783ms | 4 | /api/showroom/stats ?from&site&to 362ms |
+| 고객 | 의뢰서 | `/inquiries` | 71ms | 33KB | 13 | — | 604ms | 4 | /api/approval ?box 377ms |
+| 영업 | 리드 | `/leads` | 69ms | 21KB | 10 | — | 457ms | 4 | /api/approval ?box 256ms |
+| 영업 | 포캐스트 | `/pipeline` | 66ms | 37KB | 12 | — | 443ms | 2 | /api/approval ?box 230ms |
+| 영업 | 견적서 | `/quote` | 65ms | 528KB | 11 | — | 476ms | 2 | /api/approval ?box 264ms |
+| 영업 | 접촉 보고서 ⚠ | `/contact/semi` | 65ms | 12KB | 7 | — | 439ms | 3 | /api/approval ?box 236ms |
+| 주문 | 발주 | `/purchase` | 160ms | 12KB | 9 | — | 383ms | 3 | customers(customer_id,company_name) 141ms |
+| 주문 | 재고 | `/inventory` | 175ms | 15KB | 2 | — | 271ms | 1 | auth:user 269ms |
+| 하단 | 건의사항 | `/suggestions` | 145ms | 9KB | 4 | 1 | 2,862ms | 2 | engineers(engineer_id,name,positio…) ?email 1431ms |
+| 관리 | 실적 현황 | `/sales` | 227ms | 24KB | 12 | — | 2,099ms | 5 | /api/auto-fail 1063ms |
+| 관리 | 관리 | `/admin` | 156ms | 41KB | 9 | — | 672ms | 2 | /api/approval ?box 484ms |
+| 고객 | 고객사 상세 (목록 첫 줄) | `/customer/159` | 72ms | 67KB | 16 | — | 534ms | 2 | /api/approval ?box 292ms |
+| 고객 | 의뢰서 상세 (목록 첫 줄) | `/inquiries/e1786945-bf78-4716-8a4f-bb109a7dc637` | —ms | 18KB | 3 | — | 107ms | 0 | inquiries(id,inquiry_no,inquiry_ty…) ?id 107ms |
 
 ## 탭 전환
 
@@ -50,61 +50,32 @@
 
 | 화면 | 모달 | 열리기까지 | 자료 요청 | 중복 | 네트워크 | 비고 |
 |---|---|---|---|---|---|---|
-| 홈 | 내 견적 (전체 탭) | 66ms | 2 | — | 1,002ms |  |
-| 홈 | 내 실적 → 월별 그래프 | 8034ms | 1 | — | 423ms | 「월별 실적」가 보이지 않았다(열리지 않음) |
-| 실적 현황 | 담당자 → 월별 그래프 | 104ms | 0 | — | 0ms |  |
+| 홈 | 내 견적 (전체 탭) | 1ms | 3 | — | 2,512ms | 화면에 없다 |
+| 홈 | 내 실적 → 월별 그래프 | 8029ms | 7 | — | 7,227ms | 「월별 실적」가 보이지 않았다(열리지 않음) |
+| 실적 현황 | 담당자 → 월별 그래프 | 81ms | 0 | — | 0ms |  |
 
 ## 중복 요청 (같은 URL·메서드가 한 화면에서 두 번 이상)
 
 | 화면 | 요청 | 횟수 |
 |---|---|---|
 | 전자결재 | GET /api/approval ?box | 4 |
-| 홈 | GET auth:user | 2 |
-| 홈 | GET engineers(engineer_id,name,positio…) ?email | 2 |
-| 알림 | GET auth:user | 2 |
-| 알림 | GET engineers(engineer_id,name,positio…) ?email | 2 |
-| 80 대시보드 | GET auth:user | 2 |
 | 80 대시보드 | GET quotes(total_supply) ?status&tax_invoice_completed_at&tax_invoice_completed_at | 2 |
-| 80 대시보드 | GET engineers(engineer_id,name,positio…) ?email | 2 |
-| 활동 현황 | GET auth:user | 2 |
-| 활동 현황 | GET engineers(engineer_id,name,positio…) ?email | 2 |
-| 고객사 목록 | GET auth:user | 2 |
-| 고객사 목록 | GET engineers(engineer_id,name,positio…) ?email | 2 |
-| 20 수리 | GET auth:user | 2 |
-| 20 수리 | GET engineers(engineer_id,name,positio…) ?email | 2 |
-| 의뢰서 | GET auth:user | 2 |
-| 의뢰서 | GET engineers(engineer_id,name,positio…) ?email | 2 |
-| 리드 | GET auth:user | 2 |
-| 리드 | GET engineers(engineer_id,name,positio…) ?email | 2 |
-| 포캐스트 | GET auth:user | 2 |
-| 포캐스트 | GET engineers(engineer_id,name,positio…) ?email | 2 |
-| 견적서 | GET auth:user | 2 |
-| 견적서 | GET engineers(engineer_id,name,positio…) ?email | 2 |
-| 접촉 보고서 | GET auth:user | 2 |
-| 접촉 보고서 | GET engineers(engineer_id,name,positio…) ?email | 2 |
-| 발주 | GET auth:user | 2 |
-| 발주 | GET engineers(engineer_id,name,positio…) ?email | 2 |
-| 재고 | GET auth:user | 2 |
-| 재고 | GET engineers(engineer_id,name,positio…) ?email | 2 |
-| 건의사항 | GET auth:user | 2 |
 | 건의사항 | GET engineers(engineer_id,name,positio…) ?email | 2 |
-| 실적 현황 | GET auth:user | 2 |
-| 실적 현황 | GET engineers(engineer_id,name,positio…) ?email | 2 |
 
 ## 가장 느린 요청 10개
 
 | 화면 | 요청 | 시간 | 종류 |
 |---|---|---|---|
-| 관리 | offices(office_id,code,label,add…) ?order | 1827ms | supabase |
-| 관리 | team_permissions(team_id,perm_key) | 1786ms | supabase |
-| 관리 | teams(*) ?order | 1749ms | supabase |
-| 관리 | teams(id,name,division) | 1743ms | supabase |
-| 관리 | engineers(engineer_id,name,positio…) ?email | 1741ms | supabase |
-| 관리 | auth:user | 1177ms | supabase |
-| 홈 | /api/approval ?box | 1157ms | api |
-| 관리 | notifications(id,engineer_id,title,mes…) ?engineer_id&limit&offset&order | 1065ms | supabase |
-| 전자결재 | /api/approval ?box | 910ms | api |
-| 20 대시보드 | /api/repair-quotes ?revenue | 820ms | api |
+| 홈 | auth:user | 1986ms | supabase |
+| 80 대시보드 | sales_activities(activity_type) ?activity_date&activity_date | 1858ms | supabase |
+| 80 대시보드 | team_permissions(team_id,perm_key) | 1708ms | supabase |
+| 건의사항 | engineers(engineer_id,name,positio…) ?email | 1431ms | supabase |
+| 건의사항 | engineers(engineer_id,name,positio…) ?email | 1223ms | supabase |
+| 전자결재 | /api/approval/done ?scope | 1108ms | api |
+| 실적 현황 | /api/auto-fail | 1063ms | api |
+| 실적 현황 | /api/approval ?box | 1022ms | api |
+| 실적 현황 | quotes(*,engineers!quotes_engin…) ?order | 1019ms | supabase |
+| 전자결재 | /api/approval ?box | 1008ms | api |
 
 ## 일부러 열지 않은 모달 (읽기 전용 규칙)
 

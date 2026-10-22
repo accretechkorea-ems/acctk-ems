@@ -682,18 +682,77 @@ async function resubmit(caller: Caller, body: Record<string, unknown>) {
   })
 }
 
+/** 진행중 문서와 결재선 — 미결함·건수가 같이 쓴다(누가 부르는지와 무관한 조회다). */
+function inProgressDocs() {
+  return supabaseAdmin
+    .from('approval_documents').select('*, approval_lines(*)')
+    .eq('status', '진행중')
+    .order('submitted_at', { ascending: true })
+}
+
+/** 그 사람 차례인 문서만 — 위임까지 본다. */
+async function myTurn(docs: DocWithLines[], callerId: number, today: string): Promise<DocWithLines[]> {
+  const ownerIds = [...new Set(docs.map(d => nextPendingLine(d.approval_lines)?.approver_id).filter((n): n is number => !!n))]
+  const delegations = await loadDelegations(ownerIds, '', today)   // 유형은 문서마다 따로 본다
+  return docs.filter(d => {
+    const line = nextPendingLine(d.approval_lines)
+    if (!line) return false
+    const forDoc = delegations.filter(x => x.doc_type === null || x.doc_type === d.doc_type)
+    return actorFor(line, callerId, forDoc, today, d.doc_type).ok
+  })
+}
+
 // ── GET — 결재함 ────────────────────────────────────────────────────────────
 export async function GET(req: Request) {
-  const { caller, error: authErr } = await loadCaller()
-  if (authErr) return authErr
-
   const box = new URL(req.url).searchParams.get('box') ?? 'inbox'
-  if (!['inbox', 'outbox', 'cc', 'all'].includes(box)) return bad('box 가 올바르지 않습니다.')
+  if (!['inbox', 'outbox', 'cc', 'all', 'counts'].includes(box)) return bad('box 가 올바르지 않습니다.')
+
+  // 미결함·건수는 **세션 확인과 문서 조회를 나란히** 보낸다 — 문서 조회는 부르는 사람과
+  // 무관한 조건(진행중 전체)이라 기다릴 이유가 없다. 예전에는 getUser → engineers →
+  // 문서 → 위임 넷이 줄줄이 이어져 이 라우트가 모든 화면에서 가장 느린 요청이었다.
+  const needsDocs = box === 'inbox' || box === 'counts'
+  const [callerRes, docsRes] = await Promise.all([
+    loadCaller(),
+    needsDocs ? inProgressDocs() : Promise.resolve(null),
+  ])
+  const { caller, error: authErr } = callerRes
+  if (authErr) return authErr
   // 결재 화면 자체는 전원 공개다(4단계). 남의 문서까지 보는 「전체」만 approvals 권한으로 잠근다.
   if (box === 'all' && !canViewMenu(caller, 'approvals')) return bad('Forbidden', 403)
 
   const today = todayKST()
   const select = '*, approval_lines(*)'
+
+  // 함별 건수만 — 왼쪽 함 목록의 숫자다. 목록 세 벌을 받아 세는 대신 여기서 센다
+  // (미결함은 위에서 이미 읽은 행을 다시 쓰고, 나머지 둘은 건수 조회만 한다).
+  if (box === 'counts') {
+    if (docsRes?.error) return listFailed(docsRes.error)
+    const [mine, outRes, ccLinesRes] = await Promise.all([
+      myTurn((docsRes?.data ?? []) as DocWithLines[], caller.engineer_id, today),
+      // 상신함은 **상태와 종류만** 읽는다 — 「미결문서(손볼 일이 남은 것)」를 세는 데 그 둘이면 된다.
+      supabaseAdmin.from('approval_documents').select('document_id, status, doc_type')
+        .eq('requester_id', caller.engineer_id),
+      supabaseAdmin.from('approval_lines').select('document_id')
+        .eq('kind', 'cc').eq('approver_id', caller.engineer_id),
+    ])
+    const out = (outRes.data ?? []) as { status: string | null; doc_type: string | null }[]
+    // components/approval/boxes.ts 의 matchesScope('unfinished') 와 **같은 규칙**이다.
+    const unfinished = out.filter(d => {
+      if (d.status === '진행중' || d.status === '회수') return true
+      if (d.status !== '반려') return false
+      const def = docTypeOf(d.doc_type)
+      return def ? canResubmitDocument(def) : true
+    }).length
+    const ccIds = [...new Set(((ccLinesRes.data ?? []) as { document_id: number }[]).map(l => l.document_id))]
+    // 참조함은 임시저장을 뺀다(목록 조회와 같은 규칙).
+    const ccCount = ccIds.length === 0 ? 0 : (await supabaseAdmin
+      .from('approval_documents').select('document_id', { count: 'exact', head: true })
+      .in('document_id', ccIds).neq('status', '임시저장')).count ?? 0
+    return NextResponse.json({
+      box,
+      counts: { inbox: mine.length, outbox: out.length, outboxUnfinished: unfinished, cc: ccCount },
+    })
+  }
 
   if (box === 'outbox') {
     const { data, error } = await supabaseAdmin
@@ -730,22 +789,9 @@ export async function GET(req: Request) {
   }
 
   // inbox — 진행중 문서 가운데 지금 차례가 나(또는 내가 위임받은 사람)인 것.
-  const { data, error } = await supabaseAdmin
-    .from('approval_documents').select(select)
-    .eq('status', '진행중')
-    .order('submitted_at', { ascending: true })
-  if (error) return listFailed(error)
-
-  const docs = (data ?? []) as DocWithLines[]
-  const ownerIds = [...new Set(docs.map(d => nextPendingLine(d.approval_lines)?.approver_id).filter((n): n is number => !!n))]
-  const delegations = await loadDelegations(ownerIds, '', today)   // 유형은 문서마다 따로 본다
-
-  const mine = docs.filter(d => {
-    const line = nextPendingLine(d.approval_lines)
-    if (!line) return false
-    const forDoc = delegations.filter(x => x.doc_type === null || x.doc_type === d.doc_type)
-    return actorFor(line, caller.engineer_id, forDoc, today, d.doc_type).ok
-  })
+  // 문서 조회는 위에서 세션 확인과 나란히 이미 나갔다.
+  if (docsRes?.error) return listFailed(docsRes.error)
+  const mine = await myTurn((docsRes?.data ?? []) as DocWithLines[], caller.engineer_id, today)
 
   return NextResponse.json({
     box,
