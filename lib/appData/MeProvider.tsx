@@ -14,7 +14,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { isPublicPath } from '@/lib/publicPaths'
-import { invalidateMe, loadMe, type Me } from './me'
+import { invalidateMe, isLoadedFor, loadMe, type Me } from './me'
 import { invalidateEngineers } from './engineers'
 import { resetNotifications } from './notifications'
 import { resetApprovalInbox } from './approvalInbox'
@@ -65,11 +65,17 @@ export function MeProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true }
   }, [isPublic])
 
-  // 로그인·로그아웃 때만 다시 읽는다. INITIAL_SESSION·TOKEN_REFRESHED 는 무시한다 —
-  // 토큰 갱신은 사람이 바뀐 일이 아니고, 그때마다 읽으면 조용히 조회가 늘어난다.
+  // **사람이 바뀐 때만** 다시 읽는다.
+  //   SIGNED_IN   — 세션 **복원**에도 온다. 이미 그 메일로 읽어 두었으면 아무것도 하지 않는다.
+  //   SIGNED_OUT  — 버린다.
+  //   USER_UPDATED— 계정 정보가 바뀐 것이므로 다시 읽는다.
+  //   INITIAL_SESSION·TOKEN_REFRESHED — 무시한다(사람이 바뀐 일이 아니다).
   useEffect(() => {
-    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT' && event !== 'USER_UPDATED') return
+      // 같은 사람의 세션 복원이면 그냥 둔다 — 여기서 캐시를 버리면 같은 조회가 두 번 나가고
+      // me 가 바뀌며 하위 effect 가 전부 다시 돈다.
+      if (event === 'SIGNED_IN' && isLoadedFor(session?.user?.email ?? null)) return
       invalidateMe()
       invalidateEngineers()
       // 알림·미결함도 사람이 바뀌면 남의 것이 된다 — 함께 버린다.

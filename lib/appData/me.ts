@@ -50,10 +50,28 @@ export type MeResult = {
 }
 
 let cache: Promise<MeResult> | null = null
+/** 지금 읽어 둔(또는 읽는 중인) 세션 메일. 읽는 중이면 아직 null 이다. */
+let loadedEmail: string | null = null
 
 /** 로그인·로그아웃·권한 변경 뒤에 부른다. 다음 호출에서 다시 읽는다. */
 export function invalidateMe(): void {
   cache = null
+  loadedEmail = null
+}
+
+/**
+ * **이미 그 사람으로 읽어 두었는가.**
+ *
+ * supabase-js 는 페이지를 열 때 저장된 세션을 복원하며 SIGNED_IN 을 한 번 더 쏜다. 그것을
+ * 「로그인했다」로 받아 캐시를 버리면 같은 조회가 두 번 나가고(auth/user·engineers), me 가
+ * 다시 바뀌면서 그 값을 보는 effect 들까지 전부 다시 돈다 — 홈의 자료 요청이 14~21 로
+ * 흔들린 이유다(docs/perf/baseline-browser.md ①).
+ *
+ * 읽는 중(loadedEmail === null)이면 **같은 사람으로 본다** — 페이지를 열 때 세션은 하나다.
+ */
+export function isLoadedFor(email: string | null): boolean {
+  if (cache === null || email === null) return false
+  return loadedEmail === null || loadedEmail === email
 }
 
 /** 본인 정보. 몇 번 불러도 조회는 앱 당 한 번이다. */
@@ -63,6 +81,7 @@ export function loadMe(): Promise<MeResult> {
     const supabase = createClient()
     const { data: userData, error: userErr } = await supabase.auth.getUser()
     const email = userData?.user?.email ?? null
+    loadedEmail = email
     if (userErr || !email) {
       // 미로그인은 오류가 아니다 — 미들웨어가 /login 으로 보낸다. 캐시도 비워 둔다
       // (로그인하고 돌아오면 다시 읽어야 한다).
