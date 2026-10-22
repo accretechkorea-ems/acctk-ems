@@ -32,8 +32,16 @@ const DENY = [
 ]
 
 /** 네트워크가 이만큼 조용하면 「다 받았다」로 본다. */
-const QUIET_MS = 1200
-const MAX_WAIT_MS = 20000
+const QUIET_MS = 2000
+const MAX_WAIT_MS = 25000
+/**
+ * 한 화면을 **적어도** 이만큼 지켜본다.
+ *
+ * 「조용하면 끝」만으로는 느린 날에 측정이 모자란다 — 본인 확인(auth → engineers →
+ * teams·team_permissions)이 4초 걸리면 그 사이 2초 침묵이 생기고, 카드 조회가 시작되기도
+ * 전에 창이 닫혔다(홈이 5건으로 잡힌 실행). 그래서 침묵 조건과 **함께** 이 시간을 채운다.
+ */
+const MIN_WATCH_MS = 4000
 
 type ReqRow = {
   url: string
@@ -98,6 +106,8 @@ function envLocal(): Record<string, string> {
 class Collector {
   private pending: Request[] = []
   private lastActivity = Date.now()
+  /** 이번 측정을 시작한 시각 — 최소 관찰 시간을 재는 기준이다. */
+  private watchFrom = Date.now()
   private supabaseHost: string
   private page: Page
 
@@ -110,13 +120,15 @@ class Collector {
     page.on('requestfailed', () => { this.lastActivity = Date.now() })
   }
 
-  clear() { this.pending = []; this.lastActivity = Date.now() }
+  clear() { this.pending = []; this.lastActivity = Date.now(); this.watchFrom = Date.now() }
 
-  /** 네트워크가 조용해질 때까지 기다린다(최대 MAX_WAIT_MS). */
+/** 네트워크가 조용해지고 **최소 시간**이 지날 때까지 기다린다(최대 MAX_WAIT_MS). */
   async quiet(): Promise<void> {
-    const deadline = Date.now() + MAX_WAIT_MS
+    const deadline = this.watchFrom + MAX_WAIT_MS
     for (;;) {
-      if (Date.now() - this.lastActivity > QUIET_MS) return
+      const quietEnough = Date.now() - this.lastActivity > QUIET_MS
+      const watchedEnough = Date.now() - this.watchFrom > MIN_WATCH_MS
+      if (quietEnough && watchedEnough) return
       if (Date.now() > deadline) return
       await this.page.waitForTimeout(150)
     }
@@ -175,13 +187,16 @@ class Collector {
     }
 
     const data = rows.filter(r => r.kind === 'supabase' || r.kind === 'api').sort((a, b) => a.start - b.start)
-    const counts = new Map<string, number>()
+    // 세는 것은 **URL 전체**다(보여 주는 이름은 짧게 줄이지만, 그 이름으로 세면 조건만 다른
+    // 두 조회가 한 줄로 묶여 중복으로 잘못 잡힌다 — ?box=inbox 와 ?box=counts 처럼).
+    const counts = new Map<string, { short: string; count: number }>()
     for (const r of data) {
-      const key = `${r.method} ${r.short}`
-      counts.set(key, (counts.get(key) ?? 0) + 1)
+      const key = `${r.method} ${r.url}`
+      const hit = counts.get(key)
+      if (hit) hit.count += 1
+      else counts.set(key, { short: `${r.method} ${r.short}`, count: 1 })
     }
-    const dups = [...counts.entries()].filter(([, n]) => n > 1)
-      .map(([short, count]) => ({ short, count })).sort((a, b) => b.count - a.count)
+    const dups = [...counts.values()].filter(d => d.count > 1).sort((a, b) => b.count - a.count)
 
     let serial = 0
     for (let i = 1; i < data.length; i++) if (data[i].start >= data[i - 1].end) serial += 1
@@ -274,7 +289,8 @@ async function measureScreen(page: Page, c: Collector, s: ScreenSpec): Promise<S
   for (const m of s.modals ?? []) {
     const sample = await measureModal(page, c, m)
     out.modals.push(sample)
-    // 다음 모달을 위해 화면을 되돌린다(열린 채로 두지 않는다).
+    // 다음 모달을 위해 화면을 되돌린다(열린 채로 두지 않는다). measureModal 이 이미
+    // 닫고 사라짐까지 확인했으므로 여기서는 한 번 더 ESC 를 눌러 두는 정도다.
     await page.keyboard.press('Escape').catch(() => {})
     await page.waitForTimeout(300)
   }
@@ -302,6 +318,11 @@ async function measureModal(page: Page, c: Collector, m: ModalSpec): Promise<Sam
     if (step.kind === 'escape') await page.keyboard.press('Escape').catch(() => {})
     else await safeClick(page, step)
   }
+  // **사라질 때까지** 기다린다. 덮개가 남아 있으면 다음 모달을 여는 클릭이 그것에 먹힌다
+  // (홈의 월별 그래프가 8초를 기다리다 「열리지 않음」으로 적힌 이유다).
+  await page.getByText(m.expect, { exact: false }).first()
+    .waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {})
+  await page.waitForTimeout(400)
   return { ...sample, modal: m.label }
 }
 
@@ -380,8 +401,19 @@ function markdown(all: ScreenResult[], meta: Record<string, string>): string {
   return L.join('\n')
 }
 
+// ── 저장해 둔 원자료로 보고서만 다시 쓰기 ──────────────────────────────────
+//   node scripts/perf/measure.ts --from docs/perf/2026-10-22-1651.json
+// 측정은 운영 DB 에 붙어 돌아가므로 함부로 다시 돌리지 않는다 — 표의 말만 고칠 때 쓴다.
+function rewriteFrom(file: string): void {
+  const saved = JSON.parse(readFileSync(file, 'utf8')) as { meta: Record<string, string>; results: ScreenResult[] }
+  writeFileSync(join(ROOT, 'docs', 'perf', 'latest.md'), markdown(saved.results, saved.meta))
+  console.log(`보고서를 다시 썼다: docs/perf/latest.md (원자료 ${file})`)
+}
+
 // ── 실행 ────────────────────────────────────────────────────────────────────
 async function main() {
+  const fromIdx = process.argv.indexOf('--from')
+  if (fromIdx > -1 && process.argv[fromIdx + 1]) { rewriteFrom(process.argv[fromIdx + 1]); return }
   const env = envLocal()
   const email = env.E2E_EMAIL
   const password = env.E2E_PASSWORD
@@ -409,13 +441,24 @@ async function main() {
     const collector = new Collector(page, env.NEXT_PUBLIC_SUPABASE_URL ?? '')
 
     // 로그인 — 글자를 넣는 **유일한** 자리다. 값은 찍지 않는다.
-    await page.goto(BASE + '/login', { waitUntil: 'domcontentloaded' })
-    await page.getByPlaceholder('아이디').fill(email)
-    await page.getByPlaceholder('비밀번호').fill(password)
-    await page.getByRole('button', { name: /로그인/ }).click()
-    const loggedIn = await page.waitForURL(u => !u.pathname.startsWith('/login'), { timeout: 20000 })
-      .then(() => true).catch(() => false)
-    if (!loggedIn) throw new Error('로그인하지 못했다(아이디·비밀번호 또는 서버 상태를 확인하라 — 값은 찍지 않는다)')
+    //
+    // 수화(hydration)가 끝나기 전에 넣으면 값이 DOM 에만 남고 React 상태는 비어 있다 —
+    // 그 상태로 누르면 아무 일도 일어나지 않는다(요청조차 나가지 않는다). 그래서 넣은 뒤
+    // **값이 남아 있는지 확인하고**, 비면 다시 넣는다. 세 번까지 해 본다.
+    let loggedIn = false
+    for (let attempt = 1; attempt <= 3 && !loggedIn; attempt++) {
+      await page.goto(BASE + '/login', { waitUntil: 'load' })
+      await page.waitForTimeout(800 * attempt)   // 수화를 기다린다(갈수록 넉넉히)
+      const id = page.getByPlaceholder('아이디')
+      const pw = page.getByPlaceholder('비밀번호')
+      await id.fill(email)
+      await pw.fill(password)
+      if (!(await id.inputValue()) || !(await pw.inputValue())) continue
+      await page.getByRole('button', { name: /로그인/ }).click()
+      loggedIn = await page.waitForURL(u => !u.pathname.startsWith('/login'), { timeout: 20000 })
+        .then(() => true).catch(() => false)
+    }
+    if (!loggedIn) throw new Error('로그인하지 못했다(서버 상태·계정을 확인하라 — 값은 찍지 않는다). 빌드를 새로 했다면 측정 서버를 다시 띄워라')
     console.log('로그인 성공')
     await collector.quiet()
 

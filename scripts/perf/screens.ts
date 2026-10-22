@@ -91,7 +91,9 @@ export const SCREENS: ScreenSpec[] = [
   },
 
   // ── 대시보드 ──────────────────────────────────────────────────────────────
+  // 20 대시보드에는 모달이 없다(숫자·그래프만 있는 화면이다 — 코드에 모달 상태가 없다).
   { label: '20 대시보드', group: '대시보드', path: '/repair/dashboard' },
+  // 80 대시보드의 모달은 둘 다 **고치는 폼**이다(포캐스트·홀딩) — 아래 SKIPPED_MODALS 에 적었다.
   { label: '80 대시보드', group: '대시보드', path: '/dashboard/80' },
   { label: '활동 현황', group: '대시보드', path: '/activity' },
 
@@ -140,4 +142,6 @@ export const SKIPPED_MODALS: { screen: string; modal: string; why: string }[] = 
   { screen: '관리', modal: '가격표 등록', why: '파일 업로드 모달이다' },
   { screen: '의뢰서', modal: '의뢰서 작성', why: '등록 폼이다' },
   { screen: '포캐스트', modal: '포캐스트 추가', why: '등록 폼이다' },
+  { screen: '80 대시보드', modal: '포캐스트 수정 · 홀딩 처리', why: '줄을 누르면 고치는 폼이 열린다(OpportunityModal·HoldingModal)' },
+  { screen: '20 대시보드', modal: '(없음)', why: '모달이 없는 화면이다 — 숫자와 그래프만 있다' },
 ]
