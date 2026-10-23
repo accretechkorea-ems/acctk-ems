@@ -6,6 +6,7 @@ import { useListKeyboard } from '@/hooks/useListKeyboard'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import type { PriceItem, QuoteRow, RowKind } from './types'
 import type { QuoteRowsActions, QuoteRowsCtx } from '@/hooks/quote/useQuoteRows'
+import type { RecentSaleLookup } from '@/hooks/quote/useRecentSales'
 import { canSplitRowKind } from '@/lib/quoteCategories'
 import { GROUP_KINDS, GROUP_LABELS, canGroupRowKind, isGeneral20Form } from '@/lib/quoteForms'
 import { numKR } from './format'
@@ -41,9 +42,11 @@ export type QuoteItemRowProps = {
   errors: { expenses?: string }
   ctx: QuoteRowsCtx
   actions: QuoteRowsActions
+  /** 「최근 판매」 찾기 — 화면이 한 번에 받아 온 것을 넘겨 준다(lib/recentSalePrice.ts). */
+  recentSale: RecentSaleLookup
 }
 
-export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: QuoteItemRowProps) {
+export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recentSale }: QuoteItemRowProps) {
   const {
     rowCount, searchQuery, searchResults, searchOpen, priceSheets,
     editingProfitRate, profitRateInput, expensePresets, presetError,
@@ -109,6 +112,10 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
   // 80 품목이 목록에 남아 있으면 그걸 고를 수 있다. 거르면 목록이 저절로 비므로
   // 효과(effect)로 결과를 지우지 않아도 된다. 이미 견적에 넣은 줄은 건드리지 않는다.
   const allResults = searchResults[row.id] ?? EMPTY_ITEMS
+  // 「최근 판매」 — 같은 고객사에 같은 품번을 마지막으로 판 단가. 조회는 **화면이 한 번에**
+  // 하고(app/quote/page.tsx 의 useRecentSales) 줄은 찾아 쓰기만 한다. 줄마다 묻게 하면
+  // 품목이 열 줄이면 조회가 열 번 나간다.
+  const mySale = recentSale(row.selectedItem?.id ?? null, row.partCode || null)
   const itemResults = useMemo(
     () => (priceSheets ? allResults.filter(r => priceSheets.includes(r.sheet_name)) : allResults),
     [allResults, priceSheets],
@@ -121,6 +128,12 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
 
   // 행 하단 요약 — 한 줄에 몰아넣으면 억 단위에서 넘치므로 항목별로 줄을 나눈다.
   const summaryLines: React.ReactNode[] = []
+  // 최근 판매 — 맨 위에 둔다(단가를 정할 때 가장 먼저 보는 값이다).
+  if (mySale) {
+    summaryLines.push(
+      <>최근 판매 <b style={{ color: '#234ea2' }}>₩{numKR(mySale.unitPrice)}</b>
+        <span style={{ color: '#9ca3af' }}> · {mySale.quoteDate} {mySale.quoteNumber}</span></>)
+  }
   if (row.row_kind === 'manual_jpy' && row.product_price > 0) {
     summaryLines.push(<>구입가 ¥{numKR(row.cost_price_jpy)} × 환율 {row.exchange_rate.toFixed(2)} × 관세 ×{row.tariff_rate.toFixed(2)} = 원가 <b>₩{numKR(row.product_price)}</b></>)
   }
@@ -212,6 +225,17 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
                   </div>
                   <div style={{ color: '#9ca3af', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span>정가: ¥{item.price_jpy?.toLocaleString()} / 구입가: ¥{item.cost_jpy?.toLocaleString()}</span>
+                    {/* 최근 판매 — 같은 고객사에 마지막으로 판 단가. 없으면 아무것도 내지 않는다. */}
+                    {(() => {
+                      const sale = recentSale(item.id, item.item_code)
+                      if (!sale) return null
+                      return (
+                        <span title={`${sale.quoteNumber} · ${sale.quoteDate}`}
+                          style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: '#e6ecf8', color: '#234ea2' }}>
+                          최근 판매 ₩{numKR(sale.unitPrice)}
+                        </span>
+                      )
+                    })()}
                     {(() => {
                       const hasStock = item.stock_quantity != null && item.stock_quantity > 0
                       const hasDelivery = item.delivery_time != null

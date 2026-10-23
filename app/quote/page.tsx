@@ -26,6 +26,7 @@ import EquipConfigLauncher from '@/components/quote/equip/EquipConfigLauncher'
 import QuotePreviewPane from '@/components/quote/QuotePreviewPane'
 import ConfirmQuoteModal from '@/components/quote/ConfirmQuoteModal'
 import QuoteItemRow from './QuoteItemRow'
+import { useRecentSales } from '@/hooks/quote/useRecentSales'
 import { Z } from '@/lib/zIndex'
 import { defaultTermsFor, normalizeTerms, termKeysFor, type SetTerms, type Terms } from '@/lib/quoteTerms'
 import { defaultRemarksFor } from '@/lib/quoteRemarks'
@@ -230,6 +231,14 @@ function QuotePageInner() {
 
   // 비고 본문 — **납기 줄을 넣지 않는다.** 납기는 조건 1번 「납품일정」 한 곳에서만 적고,
   // 그 값이 quotes.delivery_info 로 저장되어 발주·결재 검토표가 쓴다(납기 칸은 없앴다).
+  // 「최근 판매」 — 같은 고객사에 같은 품번을 마지막으로 판 단가(본사 엑셀의 판매실적가).
+  // 품목 줄의 고른 품목과 지금 떠 있는 검색 후보를 **한 번에** 묻는다.
+  const saleKeys = useMemo(() => [
+    ...rows.map(r => ({ priceListId: r.selectedItem?.id ?? null, partCode: r.partCode || null })),
+    ...Object.values(rowsCtx.searchResults).flat().map(it => ({ priceListId: it.id, partCode: it.item_code })),
+  ], [rows, rowsCtx.searchResults])
+  const recentSale = useRecentSales(supabase, customerId, saleKeys)
+
   // 영업이익 하한 미만일 때 적는 사유 — quotes.note 끝에 한 줄로 저장된다.
   // **PDF 비고에는 넣지 않는다**(lib/quoteOperatingNote.ts).
   const [operatingReason, setOperatingReason] = useState('')
@@ -773,6 +782,7 @@ function QuotePageInner() {
                 errors={errors}
                 ctx={rowsCtx}
                 actions={rowsActions}
+                recentSale={recentSale}
               />
             ))}
 
