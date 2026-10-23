@@ -5,6 +5,7 @@ import type { QuoteRow } from './types'
 import { calcTotals } from './calc'
 import { numKR } from './format'
 import {
+  TSE_INTERNAL_RATE,
   belowMinOperatingMessage, isBelowMinOperating, minOperatingMarginOf, profitBreakdown,
 } from '@/lib/quoteProfit'
 
@@ -107,6 +108,20 @@ export default function ProfitPanel({
               </span>
             )}
             {rateUpdatedAt && !editingRate && <span style={{ fontSize: 10, color: '#9ca3af' }}>({rateUpdatedAt})</span>}
+            {/* 본사 양식과 같은 숫자로 맞출 때 쓰는 단추. 기본 환율은 API 값이고(날마다 바뀐다)
+                이 값은 엑셀이 쓰는 고정 환율이다. 이미 그 값이면 내지 않는다. */}
+            {!editingRate && exchangeRate !== TSE_INTERNAL_RATE && (
+              <button
+                onClick={() => onRateChange(TSE_INTERNAL_RATE)}
+                title={`TSE 내부 환율 ${TSE_INTERNAL_RATE} 로 맞춘다(본사 엑셀과 같은 값)`}
+                style={{
+                  fontSize: 10, fontWeight: 700, color: '#6b7280', background: '#f3f4f6',
+                  border: 'none', borderRadius: 6, padding: '2px 6px', cursor: 'pointer', whiteSpace: 'nowrap',
+                }}
+              >
+                내부 {TSE_INTERNAL_RATE}
+              </button>
+            )}
             <button
               onClick={onFetchRate}
               disabled={rateLoading}

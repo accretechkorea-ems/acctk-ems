@@ -47,6 +47,15 @@ export type CategoryProfitRule = {
   minOperatingMargin?: number
 }
 
+/**
+ * TSE 내부 환율 — 본사 엑셀이 쓰는 **고정값**이다(참고 엑셀의 환율 칸 10).
+ *
+ * 화면의 기본 환율은 이것이 아니다 — 한국수출입은행 API 의 JPY 매매기준율(100엔당 원)을
+ * 100 으로 나눈 값이고 날마다 바뀐다(app/quote/page.tsx 의 fetchRate). 20 견적을 본사
+ * 양식과 같은 숫자로 맞춰야 할 때 한 번에 넣을 수 있게 값만 여기 둔다.
+ */
+export const TSE_INTERNAL_RATE = 10
+
 /** 규칙이 없는 분류의 값 — 지금까지의 동작이다. */
 export const DEFAULT_SGA_RATE = 0
 export const DEFAULT_MARGIN = 40
