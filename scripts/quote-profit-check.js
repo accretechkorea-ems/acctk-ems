@@ -33,6 +33,9 @@ Module._resolveFilename = function (req, ...rest) {
 const {
   CATEGORY_PROFIT_RULES, DEFAULT_MARGIN, defaultMarginOf, sgaRateOf, profitBreakdown,
 } = load(path.join(ROOT, 'lib/quoteProfit.ts'))
+const {
+  inValidQuoteView, EXPIRY_TRACKED_STATUSES, quoteExpiry, isExpired,
+} = load(path.join(ROOT, 'lib/quoteStatus.ts'))
 
 let fails = 0
 const eq = (name, got, want) => {
@@ -86,6 +89,29 @@ console.log('\n── 경계 ──')
   eq('적자율 −20%', Math.round(loss.operatingRate * 10) / 10, -20)
   const odd = profitBreakdown(1000001, 0, 'TSE')
   eq('판관비는 원 단위로 반올림', odd.sga, 300000)
+}
+
+console.log('\n── 유효 견적 목록 판정 ──')
+{
+  const today = '2026-10-23'
+  // 만료일 = 작성일 + 1개월 − 1일. 9/1 작성 → 9/30 만료(오늘 10/23 에는 이미 지났다).
+  eq('만료일 계산', quoteExpiry('2026-09-01'), '2026-09-30')
+  eq('그 건은 오늘 만료 상태다', isExpired('2026-09-01', today), true)
+
+  // 진행 중인 상태 — 기간 안이면 남고, 만료됐어도(미종결) 남는다.
+  eq('견적중·기간 안', inValidQuoteView('견적중', '2026-10-20', today, true), true)
+  eq('견적중·만료(미종결) — 남긴다', inValidQuoteView('견적중', '2026-09-01', today, false), true)
+  eq('결재중·만료 — 남긴다', inValidQuoteView('결재중', '2026-09-01', today, false), true)
+  eq('보류·만료 — 남긴다', inValidQuoteView('보류', '2026-09-01', today, false), true)
+  eq('발주 대기·만료 — 남긴다', inValidQuoteView('발주(주문 대기)', '2026-09-01', today, false), true)
+
+  // 결과가 난 상태 — 기간과 무관하게 늘 보인다(예전에는 기간 밖이면 사라졌다).
+  for (const st of ['주문완료', '세금계산서 요청', '매출완료', '실패']) {
+    eq(st + ' — 기간 밖·오래된 건도 보인다', inValidQuoteView(st, '2024-01-01', today, false), true)
+  }
+  eq('반려도 보인다', inValidQuoteView('반려', '2024-01-01', today, false), true)
+  eq('추적 상태 목록은 넷', [...EXPIRY_TRACKED_STATUSES], ['견적중', '결재중', '보류', '발주(주문 대기)'])
+  eq('상태가 비어도 막지 않는다', inValidQuoteView(null, '2024-01-01', today, false), true)
 }
 
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)

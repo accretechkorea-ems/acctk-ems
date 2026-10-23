@@ -19,7 +19,7 @@ import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice } from '@/lib/appr
 import { openQuotePdf } from '@/lib/openQuotePdf'
 import { approvalDocPath, type LineInput } from '@/lib/approval/types'
 import {
-  isAutoFailed, isOrdered, isExpired, validFromDate,
+  isAutoFailed, isOrdered, isExpired, validFromDate, inValidQuoteView,
   REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE,
   STATUS_FILTER_TABS, editStatusesFor, REJECTED_STATUS, FAIL_STATUS, PENDING_STATUS,
   type QuoteStatus,
@@ -280,14 +280,18 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
   const { start: rangeStart, end: rangeEnd } = unit === 'valid'
     ? { start: validFromDate(today), end: today }
     : periodRange(fy, unit, sel)
-  /**
-   * 만료됐지만 아직 종결되지 않은 건('견적중') — 유효 견적 화면에서 빠지면 안 된다.
-   * 자동 실주가 돌기 전이거나 사람이 아직 판단하지 않은 건이라, 오히려 가장 먼저 봐야 한다.
-   */
-  const isOverdue = (q: Quote) => q.status === PENDING_STATUS && isExpired(q.quote_date, today)
   const inRangeDate = (q: Quote) => q.quote_date >= rangeStart && q.quote_date <= rangeEnd
-  // 유효 견적 모드에서만 만료·미종결 건을 함께 남긴다(다른 기간은 그 기간의 성적을 보는 화면이다).
-  const dateFiltered = quotes.filter(q => (unit === 'valid' ? inRangeDate(q) || isOverdue(q) : inRangeDate(q)))
+  /** 만료됐지만 아직 견적중인 건 — 줄에 「만료」 표를 붙인다(자동 실주 전이거나 판단이 남은 건이다). */
+  const isOverdue = (q: Quote) => q.status === PENDING_STATUS && isExpired(q.quote_date, today)
+  /**
+   * 유효 견적 모드의 판정은 lib/quoteStatus.ts 의 inValidQuoteView 다 —
+   * 유효기간은 **진행 중인 건에만** 적용하고(견적중·결재중·보류·발주 대기),
+   * 주문완료·세금계산서 요청·매출완료·실패 같은 결과가 난 건은 기간과 무관하게 남는다.
+   * 다른 기간 선택은 그 기간의 성적을 보는 화면이라 날짜로만 거른다.
+   */
+  const dateFiltered = quotes.filter(q => (unit === 'valid'
+    ? inValidQuoteView(q.status, q.quote_date, today, inRangeDate(q))
+    : inRangeDate(q)))
   // ── 실적 요약(아래 KPI·달성률)은 목록과 모수가 다르다. ──
   // 목록에는 내가 남 대신 쓴 견적도 실리지만, 그 실적은 원래 담당자의 것이다.
   // 그래서 집계는 engineer_id 가 나인 건만 쓴다 — 실적 현황(app/sales)과 같은 기준.

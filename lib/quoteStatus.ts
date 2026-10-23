@@ -192,6 +192,40 @@ export const isExpired = (quoteDate: string | null | undefined, today: string): 
   !!quoteDate && quoteExpiry(quoteDate) < today
 
 /**
+ * 유효기간을 **따지는** 상태 — 아직 결과가 안 난 건들이다.
+ *
+ * 주문완료·세금계산서 요청·매출완료·실패는 이미 결과가 난 건이라 작성일이 오래되었다고
+ * 목록에서 빠지면 안 된다(「유효 견적」을 보는 사람은 지금 살아 있는 일을 보려는 것이지만,
+ * 끝난 건을 숨기면 그 달의 결과가 사라진 것처럼 보인다). 반려·취소요청·수리중도 같다.
+ */
+export const EXPIRY_TRACKED_STATUSES: readonly QuoteStatus[] = [
+  '견적중', '결재중', '보류', '발주(주문 대기)',
+]
+
+/**
+ * 「유효 견적」 목록에 남는가.
+ *
+ *   · 진행 중인 건(위 네 상태) — 유효기간 안이거나, **만료됐지만 아직 종결되지 않은** 건.
+ *     만료·미종결은 오히려 가장 먼저 봐야 하는 것이라 남긴다.
+ *   · 그 밖의 상태 — 기간과 무관하게 늘 보여 준다.
+ *
+ * inRange 는 부르는 쪽이 「그 기간에 쓴 견적인가」를 넣는다(기간 계산은 화면의 몫이다).
+ */
+export function inValidQuoteView(
+  status: string | null | undefined,
+  quoteDate: string | null | undefined,
+  today: string,
+  inRange: boolean,
+): boolean {
+  const tracked = !!status && (EXPIRY_TRACKED_STATUSES as readonly string[]).includes(status)
+  if (!tracked) return true
+  // 유효기간 안이거나(inRange), 만료됐지만 아직 종결되지 않은 건이다.
+  // 둘을 합치면 진행 건은 사실상 모두 남는다 — 그래서 이 모드가 거르는 것은 **결과가 난 건의
+  // 기간**이 아니라, 날짜가 비었거나 앞날짜인 이상한 행뿐이다.
+  return inRange || isExpired(quoteDate, today)
+}
+
+/**
  * 오늘 기준으로 유효기간이 살아 있는 견적의 가장 이른 작성일 — quoteExpiry 의 정확한 역이다.
  * 「유효 견적」 기간의 시작점으로 쓴다.
  *
