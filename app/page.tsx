@@ -12,6 +12,11 @@ import AddCustomerModal from '@/components/home/AddCustomerModal'
 import { useHomeData } from '@/hooks/useHomeData'
 import { addCustomer } from '@/lib/addCustomer'
 import { CATEGORY_OPTIONS } from '@/lib/constants'
+import {
+  CUSTOMER_EXCEL_SELECT, exportCustomerXlsx, toExcelCustomer,
+  type CustomerExcelRow, type ExcelCustomer,
+} from '@/lib/customerExcel'
+import { todayKST } from '@/lib/date'
 import { useToast } from '@/components/common/Toast'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
@@ -90,6 +95,7 @@ const toggleCategory = (category: string) => {
   )
 }
   const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const [isSavingCustomer, setIsSavingCustomer] = useState(false)
 
   const [customerForm, setCustomerForm] = useState({
@@ -325,6 +331,59 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
     })
   }, [customers, query, selectedStatuses, selectedCategories, deviceMap, latestServiceDateMap])
 
+/**
+   * 지금 목록을 엑셀로 내려받는다 — **화면이 거른 범위·순서 그대로** 쓴다.
+   *
+   * 목록 상태(customers·deviceMap)를 그대로 쓰지 않는 이유 — 양식에 들어가는 지역·
+   * 소속회사·고객 담당자를 목록 조회가 읽지 않는다(목록이 가벼워야 해서 뺀 열들이다).
+   * 그래서 누를 때 양식에 쓰는 열만 한 번 더 읽고, 장비·담당자는 임베딩으로 같이 받는다.
+   * 1,354행 · 529KB · 1.7초(2026-10-23 실측)라 한 번에 받는다.
+   */
+  const handleExportExcel = async () => {
+    if (isExporting) return
+    if (filteredCustomers.length === 0) { toast.error('내보낼 고객사가 없습니다'); return }
+    setIsExporting(true)
+    try {
+      const [listRes, parentRes] = await Promise.all([
+        supabase.from('customers').select(CUSTOMER_EXCEL_SELECT)
+          .is('deleted_at', null).eq('is_parent', false).range(0, 5000),
+        // 소속회사 이름 — 부모 행은 목록·지도에 안 나오므로 따로 읽는다(273행).
+        supabase.from('customers').select('customer_id, company_name')
+          .eq('is_parent', true).is('deleted_at', null).range(0, 2000),
+      ])
+      if (listRes.error || parentRes.error) {
+        console.warn('엑셀 조회 오류:', listRes.error ?? parentRes.error)
+        toast.error('목록을 읽지 못했습니다')
+        return
+      }
+      // select 문자열이 변수라 supabase 가 줄 모양을 추론하지 못한다 — 양식이 읽는
+      // 열만 들어 있는 타입(CustomerExcelRow)으로 한 번 못 박고 쓴다.
+      const rawRows = (listRes.data ?? []) as unknown as CustomerExcelRow[]
+      const parentRows = (parentRes.data ?? []) as { customer_id: number; company_name: string | null }[]
+      const byId = new Map<number, ExcelCustomer>(
+        rawRows.map(r => [Number(r.customer_id), toExcelCustomer(r)]),
+      )
+      const parentNames = new Map<number, string>(
+        parentRows.map(r => [Number(r.customer_id), r.company_name ?? '']),
+      )
+      // 화면 순서대로 꺼낸다. 그 사이에 지워진 업체는 조회에서 빠지므로 건너뛴다.
+      const rows = filteredCustomers
+        .map((c) => byId.get(Number(c.customer_id)))
+        .filter((r): r is ExcelCustomer => !!r)
+      const lines = await exportCustomerXlsx({
+        customers: rows,
+        parentName: (id) => (id == null ? '' : parentNames.get(id) ?? ''),
+        today: todayKST(),
+      })
+      toast.success(`고객사 ${rows.length}개 · ${lines}줄을 내려받았습니다`)
+    } catch (e) {
+      console.warn('엑셀 내보내기 실패:', e)
+      toast.error(e instanceof Error ? e.message : '엑셀을 만들지 못했습니다')
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
 useEffect(() => {
   if (pendingListScrollTopRef.current == null) return
   if (!listScrollRef.current) return
@@ -535,6 +594,8 @@ useEffect(() => {
             listScrollRef={listScrollRef}
             onScrollSave={saveHomeState}
             isLoading={isLoading}
+            onExport={handleExportExcel}
+            exporting={isExporting}
           />
           </div>
 

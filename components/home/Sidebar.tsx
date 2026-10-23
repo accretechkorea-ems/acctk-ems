@@ -32,6 +32,9 @@ type Props = {
   setSearchMode: (v: '업체' | '부품') => void
   partQuery: string
   setPartQuery: (v: string) => void
+  /** 지금 목록(필터·검색이 걸린 범위)을 엑셀로 내려받는다. */
+  onExport: () => void
+  exporting: boolean
 }
 
 export default function Sidebar({
@@ -53,6 +56,8 @@ export default function Sidebar({
   setSearchMode,
   partQuery,
   setPartQuery,
+  onExport,
+  exporting,
 }: Props) {
   const [searchFocused, setSearchFocused] = useState(false)
   // 기본값 꺼짐 = 전체(견적만 낸 건 포함). 아직 발주 이상이 거의 없어 조이면 늘 0건이 된다.
@@ -167,6 +172,38 @@ export default function Sidebar({
           onToggleDelivered={setDeliveredOnly}
           onOpenPdf={onOpenQuotePdf}
         />
+      )}
+
+      {/* 목록 상단 — 지금 걸린 필터·검색 범위를 그대로 엑셀로 내보낸다.
+          부품 모드에서는 아래가 고객 목록이 아니므로 내보내기를 숨긴다. */}
+      {!partMode && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: -4 }}>
+          <button
+            onClick={onExport}
+            disabled={exporting || isLoading || customers.length === 0}
+            title={customers.length > 0
+              ? `지금 목록 ${customers.length}개를 고객사 × 장비 한 줄로 내려받습니다`
+              : '내보낼 고객사가 없습니다'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '5px 10px', borderRadius: 6,
+              border: '1px solid #ebebeb', background: '#ffffff',
+              color: TEXT_MUTED, fontSize: 12, fontWeight: 700,
+              cursor: exporting || isLoading || customers.length === 0 ? 'default' : 'pointer',
+              opacity: exporting || isLoading || customers.length === 0 ? 0.5 : 1,
+              whiteSpace: 'nowrap',
+              transition: 'opacity 0.15s ease',
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            {exporting ? '내보내는 중...' : '엑셀 내보내기'}
+          </button>
+        </div>
       )}
 
       {/* 고객 리스트 */}
