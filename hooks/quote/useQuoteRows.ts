@@ -70,6 +70,8 @@ export type QuoteRowsCtx = {
   categories: QuoteCategory[]
   /** 장비 양식인가. 줄 묶음 선택칸을 낼지 가른다. */
   equipForm: boolean
+  /** 고른 견적 양식(general20·parts80·equip80). 수동 입력 칸 순서가 이 값을 본다. */
+  formKind: string
   /**
    * 지금 검색이 보는 가격표 종류 — **양식이 정한다**(20 견적은 20 가격표, 80 은 80 가격표).
    * 양식을 아직 고르지 않았으면 null(전체)이다. 한 견적의 모든 검색칸이 같은 값을 쓴다.
@@ -245,7 +247,7 @@ export function useQuoteRows({
     editingProfitRate, profitRateInput,
     expensePresets, presetError,
     invalidExpenseIds, totalExpense,
-    lineSplitOn, categories, equipForm: isEquipForm(formKind),
+    lineSplitOn, categories, equipForm: isEquipForm(formKind), formKind,
     priceSheets,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [rows.length, searchQuery, searchResults, searchOpen,

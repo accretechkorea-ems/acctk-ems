@@ -7,7 +7,7 @@ import SegmentedControl from '@/components/common/SegmentedControl'
 import type { PriceItem, QuoteRow, RowKind } from './types'
 import type { QuoteRowsActions, QuoteRowsCtx } from '@/hooks/quote/useQuoteRows'
 import { canSplitRowKind } from '@/lib/quoteCategories'
-import { GROUP_KINDS, GROUP_LABELS, canGroupRowKind } from '@/lib/quoteForms'
+import { GROUP_KINDS, GROUP_LABELS, canGroupRowKind, isGeneral20Form } from '@/lib/quoteForms'
 import { numKR } from './format'
 import { DISCOUNT_LABELS } from './types'
 import { inp } from './styles'
@@ -47,7 +47,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
   const {
     rowCount, searchQuery, searchResults, searchOpen, priceSheets,
     editingProfitRate, profitRateInput, expensePresets, presetError,
-    invalidExpenseIds, totalExpense, lineSplitOn, categories, equipForm,
+    invalidExpenseIds, totalExpense, lineSplitOn, categories, equipForm, formKind,
   } = ctx
   const {
     updateRow, addSubLine, updateSubLine, removeSubLine,
@@ -73,6 +73,21 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
   const isDomestic = row.row_kind === 'domestic'
   // 할인 — 라벨과 금액만 받는다. 품번·상세줄·수량·이익률·관세는 쓰지 않는다.
   const isDiscount = row.row_kind === 'discount'
+  /** 20 견적서인가 — 수동 입력 칸 순서(품번 → 품명 → 모델)가 그 양식의 열 순서를 따른다. */
+  const is20 = isGeneral20Form(formKind)
+  /**
+   * 모델 직접 입력 — 수동입력 품목만(국내조달품은 견적서에 모델이 나가지 않는다).
+   * 20 견적서의 모델 열과 80 견적서 품명의 「(모델)」이 이 값을 읽는다.
+   * 두는 자리만 양식에 따라 다르다(아래 두 군데 중 하나).
+   */
+  const modelField = row.row_kind === 'manual_jpy' ? (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+      <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', width: 44, flexShrink: 0 }}>모델</label>
+      <input className="q-input" value={row.manual_model}
+        onChange={e => updateRow(row.id, 'manual_model', e.target.value)}
+        placeholder="예: NEX 200" style={{ ...inp, flex: 1, minWidth: 0 }} />
+    </div>
+  ) : null
 
   // 품목을 고르면 품명 칸으로 커서를 옮긴다. 위치는 맨 앞(자동으로 들어간 모델명 앞에 이어 적도록).
   // 품명 값이 갱신된 뒤에 커서를 잡아야 해서 다음 프레임에서 실행한다.
@@ -219,6 +234,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
       )}
 
       {/* 품번 직접 입력 — 수동입력 품목 · 국내조달품 공용 */}
+      {/* (모델 칸은 양식에 따라 품명 앞·뒤로 간다 — 위의 modelField) */}
       {(row.row_kind === 'manual_jpy' || isDomestic) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', width: 44, flexShrink: 0 }}>품번</label>
@@ -228,16 +244,9 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
         </div>
       )}
 
-      {/* 모델 직접 입력 — 수동입력 품목만(국내조달품은 견적서에 모델이 나가지 않는다).
-          20 견적서의 모델 열과 80 견적서 품명의 「(모델)」이 이 값을 읽는다. */}
-      {row.row_kind === 'manual_jpy' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', width: 44, flexShrink: 0 }}>모델</label>
-          <input className="q-input" value={row.manual_model}
-            onChange={e => updateRow(row.id, 'manual_model', e.target.value)}
-            placeholder="예: NEX 200" style={{ ...inp, flex: 1, minWidth: 0 }} />
-        </div>
-      )}
+      {/* 모델 — 80 양식은 품명에 「(모델)」로 들어가므로 지금처럼 품명 **앞**이다.
+          20 견적서는 열 순서가 품번·품명·모델이라 **품명 뒤**에 둔다(아래). */}
+      {!is20 && modelField}
 
       {/* 할인 — 견적서에 찍히는 문구만 고른다(로직은 동일) */}
       {isDiscount && (
@@ -287,6 +296,9 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
         </div>
       </div>
       )}
+
+      {/* 20 견적서의 모델 칸 — 품번 → 품명 → 모델 순서다(그 양식의 열 순서와 같다). */}
+      {is20 && modelField}
 
       {/* 줄별 분류 — 「분류 나누기」를 켰을 때만, 그리고 매출 줄에만 나온다.
           비워 두면 견적 분류를 따른다(= quote_items.category 가 null 로 저장된다). */}
