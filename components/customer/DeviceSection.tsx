@@ -4,7 +4,8 @@ import { useRef, useState } from 'react'
 import type { Device, Holding, ServiceHistory } from './types'
 import { INPUT_BORDER, TEXT_MUTED } from './constants'
 import { getInstallDisplay, getDefaultImageUrl } from './utils'
-import { thumbUrl } from '@/lib/storageImage'
+import { deviceImageWidthFor } from '@/lib/deviceImage'
+import { useDeviceImageUrls, type StorageImageLookup } from '@/hooks/useStorageImageUrls'
 
 /** 카드 사진을 받을 폭(px) — 장비 카드 폭에 맞춘다. */
 const CARD_IMG_W = 240
@@ -148,7 +149,7 @@ function ServiceCard({ h, d, companyName, onEdit, onPrint, onOpenReport, reportB
   )
 }
 
-function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, reportBusyId, onUploadPacking, onOpenPacking, supabaseUrl, activeHolding, holdingByService, onAddHolding, onOpenHolding }: {
+function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, reportBusyId, onUploadPacking, onOpenPacking, supabaseUrl, imageUrl, activeHolding, holdingByService, onAddHolding, onOpenHolding }: {
   d: Device
   companyName: string | null
   deviceHistory: ServiceHistory[]
@@ -166,9 +167,14 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
   onUploadPacking: (file: File) => void
   onOpenPacking: () => void
   supabaseUrl: string
+  imageUrl: StorageImageLookup
 }) {
   const deviceTitle = `${d.device_name ?? ''} ${d.device_name2 ?? ''} ${d.option ?? ''}`.replace(/\s+/g, ' ').trim()
   const defaultImg = getDefaultImageUrl(d, supabaseUrl)
+  // 버킷이 비공개라 주소를 직접 못 만든다 — 부모가 묶음으로 받아 둔 서명 주소를 찾아 쓴다.
+  const shownSrc = imageUrl(d.image_url) ?? imageUrl(defaultImg)
+  // 사진이 있을 **예정**인가(주소를 아직 못 받았어도 자리를 잡아 둔다 — 테두리가 깜빡이지 않게).
+  const hasPhoto = !!(d.image_url || defaultImg)
   const packingInputRef = useRef<HTMLInputElement | null>(null)
 
   return (
@@ -198,20 +204,18 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
       {/* 이미지 영역 — 사진 변경·삭제는 장비 수정 모달에서 한다(카드 우측 위는 수정 아이콘 자리다) */}
       <div style={{
         aspectRatio: '4 / 3', borderRadius: 6, background: 'transparent',
-        border: (d.image_url || defaultImg) ? 'none' : '1px dashed #ebebeb',
+        border: hasPhoto ? 'none' : '1px dashed #ebebeb',
         overflow: 'hidden',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        {/* 카드 폭만큼 줄여 받고(lib/storageImage.ts), 화면 밖 카드는 늦게 받는다.
-            원본은 확대·수정 모달이 쓴다. */}
-        {d.image_url ? (
-          <img src={thumbUrl(d.image_url, CARD_IMG_W) ?? d.image_url} alt={deviceTitle || 'device'}
-            loading="lazy" decoding="async"
-            style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
-        ) : defaultImg ? (
-          <img src={thumbUrl(defaultImg, CARD_IMG_W) ?? defaultImg} alt={deviceTitle || 'device'}
-            loading="lazy" decoding="async"
-            style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
+        {/* 카드 폭만큼 줄여 받는다 — 서명 주소에 변환(width)을 붙여서(lib/deviceImage.ts).
+            원본은 수정 모달이 쓴다. 주소를 받기 전에는 빈 칸으로 둔다. */}
+        {hasPhoto ? (
+          shownSrc ? (
+            <img src={shownSrc} alt={deviceTitle || 'device'}
+              loading="lazy" decoding="async"
+              style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
+          ) : null
         ) : (
           <button
             onClick={onImageUpload}
@@ -344,6 +348,12 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
 
 export default function DeviceSection({ devices, companyName, historyByDevice, onAddDevice, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, reportBusyId, onUploadPacking, onOpenPacking, activeHoldingByDevice, holdingByService, onAddHolding, onOpenHolding }: Props) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  // 장비 사진 — 카드마다 서명을 받으면 요청이 장비 수만큼 늘어난다. 여기서 **한 번에** 받는다
+  // (올린 사진 + 기종 카탈로그 사진 둘 다).
+  const imageUrl = useDeviceImageUrls(
+    devices.flatMap(d => [d.image_url, getDefaultImageUrl(d, supabaseUrl)]),
+    deviceImageWidthFor(CARD_IMG_W),
+  )
 
   // 섹션 제목도, 바깥 여백도 두지 않는다 — 업체 상세의 탭 라벨('장비 N')과 중복이고,
   // 감싸는 카드가 안쪽 여백을 갖기 때문이다.
@@ -362,6 +372,7 @@ export default function DeviceSection({ devices, companyName, historyByDevice, o
             onEditService={onEditService}
             reportBusyId={reportBusyId}
             onImageUpload={() => onImageUpload(d)}
+            imageUrl={imageUrl}
             onPrintReport={(s) => onPrintReport(s, d)}
             onOpenReport={(s) => onOpenReport(s)}
             onUploadPacking={(file) => onUploadPacking(d, file)}

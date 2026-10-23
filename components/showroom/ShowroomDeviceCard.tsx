@@ -15,7 +15,7 @@
 // (periodBasisLabel)에 한 번, 카드 합계 줄 앞(periodShort)에 짧게 적는다.
 
 import { getInstallDisplay, getDefaultImageUrl } from '@/components/customer/utils'
-import { thumbUrl } from '@/lib/storageImage'
+import type { StorageImageLookup } from '@/hooks/useStorageImageUrls'
 import { getCategoryColor } from '@/lib/categoryColors'
 import {
   deviceTitle, USAGE_PURPOSES, USAGE_PURPOSE_COLORS, UTIL_BAND_COLORS, utilBand,
@@ -23,9 +23,6 @@ import {
 } from '@/lib/showroom'
 import { BLUE, BORDER, CARD_BG, TEXT, MUTED, SUB, FAINT, NEUTRAL_BG } from '@/components/common/ui'
 import { fmtPct, fmtHours } from './utilParts'
-
-/** 카드 사진을 받을 폭(px). 카드가 240px 대라 그 이상은 화면에서 쓰이지 않는다. */
-const CARD_IMG_W = 240
 
 // 하단 박스 — 고객사 상세의 서비스 기록 박스와 같은 값(components/customer/constants.ts).
 const BOX_BORDER = '#e2e4e9'
@@ -65,6 +62,8 @@ type Props = {
    * undefined = 가동률 대상이 아니거나(사용여부 N) 아직 받지 못함. 둘 다 도넛은 트랙만, 가운데는 '—'.
    */
   utilization?: number | null
+  /** 사진 주소 찾기 — 그리드가 묶음으로 받아 둔 서명 주소다(hooks/useStorageImageUrls.ts). */
+  imageUrl: StorageImageLookup
   /** 설정 연필 노출 여부(superadmin). */
   canConfigure: boolean
   onAddUsage: () => void
@@ -133,10 +132,14 @@ function PurposeLegend({ slices }: { slices: PurposeStat[] }) {
 
 export default function ShowroomDeviceCard({
   device, hours, count, byPurpose, periodShort, utilization, canConfigure, onAddUsage, onConfigure, onOpenUsages,
+  imageUrl,
 }: Props) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const title = deviceTitle(device)
   const defaultImg = getDefaultImageUrl(device, supabaseUrl)
+  // 버킷이 비공개라 주소를 직접 못 만든다 — 그리드가 묶음으로 받아 둔 서명 주소를 찾아 쓴다.
+  const shownSrc = imageUrl(device.image_url) ?? imageUrl(defaultImg)
+  const hasPhoto = !!(device.image_url || defaultImg)
   const inactive = !device.is_active
   // 목적 5종 순서로, 0건 목적은 뺀다.
   const slices = USAGE_PURPOSES
@@ -170,23 +173,21 @@ export default function ShowroomDeviceCard({
       {/* 이미지 — 쇼룸에서는 사진을 올리지 않는다(빈 자리는 고객사 상세와 같은 모양) */}
       <div style={{
         aspectRatio: '4 / 3', borderRadius: 6, background: 'transparent',
-        border: (device.image_url || defaultImg) ? 'none' : `1px dashed ${BORDER}`,
+        border: hasPhoto ? 'none' : `1px dashed ${BORDER}`,
         overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         {/* next/image 를 쓰려면 remotePatterns 설정(next.config)이 필요한데 이번 범위에서
             건드릴 수 없는 파일이다. 고객사 상세의 장비 카드도 같은 이유로 <img> 를 쓴다.
-            대신 **카드 폭만큼** 줄여 받는다(lib/storageImage.ts) — 원본은 319KB 짜리도 있고
-            카드는 240px 다. 화면 밖 카드는 loading="lazy" 로 미룬다. */}
-        {device.image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={thumbUrl(device.image_url, CARD_IMG_W) ?? device.image_url} alt={title}
-            loading="lazy" decoding="async"
-            style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
-        ) : defaultImg ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={thumbUrl(defaultImg, CARD_IMG_W) ?? defaultImg} alt={title}
-            loading="lazy" decoding="async"
-            style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
+            대신 **카드 폭만큼** 줄여 받는다 — 서명 주소에 변환(width)을 붙인다
+            (lib/deviceImage.ts). 원본은 319KB 짜리도 있고 카드는 240px 다.
+            주소는 그리드가 한 번에 받아 둔다 — 카드마다 서명을 받으면 요청이 장비 수만큼 늘어난다. */}
+        {hasPhoto ? (
+          shownSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={shownSrc} alt={title}
+              loading="lazy" decoding="async"
+              style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
+          ) : null
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={FAINT} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

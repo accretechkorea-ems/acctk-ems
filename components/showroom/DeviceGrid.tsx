@@ -10,6 +10,9 @@ import { type CSSProperties } from 'react'
 import { compareDevices, periodLabel, periodShortLabel, type Period, type PurposeStat, type ShowroomDevice } from '@/lib/showroom'
 import { BORDER, TEXT, MUTED, SUB, skeletonBlock, cardStyle } from '@/components/common/ui'
 import ShowroomDeviceCard, { BOX_H } from './ShowroomDeviceCard'
+import { getDefaultImageUrl } from '@/components/customer/utils'
+import { deviceImageWidthFor } from '@/lib/deviceImage'
+import { useDeviceImageUrls } from '@/hooks/useStorageImageUrls'
 
 const CARD_W = 300
 
@@ -80,6 +83,13 @@ type Props = {
 export default function DeviceGrid({
   groups, period, summary, utilization, loading, isAdmin, onAddUsage, onConfigure, onOpenUsages,
 }: Props) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  // 장비 사진 — 카드가 여덟 장이면 서명 조회도 여덟 번이 된다. 여기서 **한 번에** 받는다
+  // (올린 사진 + 기종 카탈로그 사진 둘 다). 훅은 조건부로 부를 수 없어 loading 보다 앞에 둔다.
+  const imageUrl = useDeviceImageUrls(
+    groups.flatMap(g => g.devices.flatMap(d => [d.image_url, getDefaultImageUrl(d, supabaseUrl)])),
+    deviceImageWidthFor(CARD_W),
+  )
   if (loading) {
     return (
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, ${CARD_W}px)`, gap: 14 }}>
@@ -139,6 +149,7 @@ export default function DeviceGrid({
                   onAddUsage={() => onAddUsage(d)}
                   onConfigure={() => onConfigure(d)}
                   onOpenUsages={() => onOpenUsages(d)}
+                  imageUrl={imageUrl}
                 />
               )
             })}

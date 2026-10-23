@@ -6,6 +6,7 @@ import ModalOverlay from '@/components/common/ModalOverlay'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { useToast } from '@/components/common/Toast'
 import { getDefaultImageUrl } from '../utils'
+import { useDeviceImageUrls } from '@/hooks/useStorageImageUrls'
 import { removeDeviceImage, uploadDeviceImage } from '@/hooks/customer/useDeviceCrud'
 
 /** 사진 삭제 확정 대기 시간. */
@@ -67,11 +68,16 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
 
   useEffect(() => () => { if (removeTimer.current) clearTimeout(removeTimer.current) }, [])
 
-  if (!device) return null
-
   // 개별 사진 → 기본 이미지 → 없음 순으로 보여준다.
-  const defaultImg = getDefaultImageUrl(device, supabaseUrl)
-  const shownImage = imageUrl ?? defaultImg
+  //
+  // 버킷이 비공개라 주소를 직접 못 만든다 — 서명 주소를 받아 쓴다(hooks/useStorageImageUrls.ts).
+  // 모달은 한 장이고 **원본**이 필요하다(변환 폭을 주지 않는다). 훅은 조건부로 부를 수 없어
+  // device 가 없을 때의 이른 반환보다 **앞에** 둔다.
+  const defaultImg = device ? getDefaultImageUrl(device, supabaseUrl) : null
+  const lookup = useDeviceImageUrls([imageUrl, defaultImg])
+  const shownImage = lookup(imageUrl) ?? lookup(defaultImg)
+
+  if (!device) return null
 
   /** 삭제는 두 번 눌러야 실행된다. 3초가 지나면 원래대로 돌아간다. */
   const armRemove = () => {

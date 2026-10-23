@@ -7,13 +7,18 @@
 import { useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
+import { DEVICE_BUCKET, deviceImagePath, isDefaultDeviceImage } from '@/lib/deviceImage'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { downsizeImage } from '@/lib/leadCardImage'
 import type { Device, DeviceForm } from '@/components/customer/types'
 
 // ── 장비 사진 ──
 // 카드의 사진 아이콘과 「사진 등록」 모달이 같은 경로를 쓰도록 훅 바깥에 둔다.
-const DEVICE_IMAGE_BUCKET = 'device-images'
+//
+// 저장하는 값은 **버킷 안의 경로**다(2026-10-23 — 버킷을 비공개로 돌린다). 예전에는
+// getPublicUrl() 로 만든 공개 주소를 넣었는데 비공개 버킷에서는 열리지 않는다.
+// 보여 줄 때는 /api/device-image 가 서명 주소를 준다(lib/deviceImage.ts).
+const DEVICE_IMAGE_BUCKET = DEVICE_BUCKET
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const DEVICE_IMAGE_MAX_BYTES = 10 * 1024 * 1024
 
@@ -35,12 +40,11 @@ function errText(e: unknown, fallback: string): string {
  * 기본 이미지(default_*)면 null 을 돌려준다 — 여러 장비가 함께 쓰는 파일이라 절대 지우면 안 된다.
  */
 export function deviceImageFileName(url: string | null | undefined): string | null {
-  if (!url) return null
-  const marker = `/${DEVICE_IMAGE_BUCKET}/`
-  const i = url.indexOf(marker)
-  const name = (i >= 0 ? url.slice(i + marker.length) : url).split('?')[0]
-  if (!name || name.includes('/')) return null
-  if (/^default[_-]/i.test(name)) return null
+  // 경로 뽑기는 공통 함수가 한다(옛 공개 주소·서명 주소·경로를 다 받아들인다).
+  const name = deviceImagePath(url)
+  if (!name) return null
+  // 기본 이미지는 여러 장비가 함께 쓰는 파일이라 절대 지우면 안 된다.
+  if (isDefaultDeviceImage(name)) return null
   return name
 }
 
@@ -93,9 +97,9 @@ export async function uploadDeviceImage(
     if (uploadError) throw uploadError
 
     step = 'DB 갱신'
-    const { data } = supabase.storage.from(DEVICE_IMAGE_BUCKET).getPublicUrl(fileName)
+    // **경로만** 저장한다 — 공개 주소를 넣으면 비공개 버킷에서 깨진다.
     const { error: updateError } = await supabase
-      .from('devices').update({ image_url: data.publicUrl }).eq('device_id', device.device_id)
+      .from('devices').update({ image_url: fileName }).eq('device_id', device.device_id)
     if (updateError) throw updateError
 
     // 옛 파일 정리. 여기서 실패해도 교체 자체는 끝난 것이라 되돌리지 않고 로그만 남긴다.
@@ -104,7 +108,7 @@ export async function uploadDeviceImage(
       const { error } = await supabase.storage.from(DEVICE_IMAGE_BUCKET).remove([old])
       if (error) console.error('[장비사진] 옛 파일 삭제 실패 — 고아 파일이 남는다', { old, error })
     }
-    return { ok: true, url: data.publicUrl }
+    return { ok: true, url: fileName }
   } catch (error) {
     console.error('[장비사진] 업로드 실패', {
       step, deviceId: device.device_id, fileName: file.name, fileType: file.type, fileSize: file.size, error,
