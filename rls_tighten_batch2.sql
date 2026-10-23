@@ -1,5 +1,17 @@
--- RLS 좁히기 묶음 2 (2026-10-08 작성). **아직 DB 에 적용하지 않았다.**
--- 이 파일은 적용 대기 상태다 — 아래 「적용 순서와 시험 메모」를 읽고 **한 문장씩 따로** 실행한다.
+-- ⚠ 정책을 갈아 끼우는 파일이다(drop policy → create policy). 두 번 돌리면 중간에
+--   「정책이 없는 순간」이 생긴다 — 돌리기 전에 아래를 다 읽어라.
+--
+-- RLS 좁히기 묶음 2 (2026-10-08 작성). **적용 여부를 확인하지 못했다(2026-10-23).**
+--   왜 — RLS 정책은 PostgREST 로 읽을 수 없다(pg_policies 가 노출돼 있지 않다).
+--   이 파일이 만드는 함수 mark_log_restocked 는 DB 에 있지만 **그것은 증거가 아니다** —
+--   같은 함수가 db_functions_snapshot.sql(2026-09-11)과 rls_backup_20261008.sql
+--   (적용 직전 상태)에도 있어 이 파일보다 먼저 존재했다.
+--   확인하려면 Supabase SQL Editor 에서 한 줄 읽으면 된다:
+--     select tablename, policyname, cmd, qual from pg_policies
+--      where schemaname='public' and tablename in ('price_list','download_logs','quote_sequence');
+--   참고로 미로그인(anon) 은 어떤 표도 읽지 못한다(2026-10-23 확인 — 표 단위 권한부터 없다.
+--   42501 permission denied). 그래서 지금 당장 새는 곳은 없다.
+-- 적용 대기 상태로 둔다 — 아래 「적용 순서와 시험 메모」를 읽고 **한 문장씩 따로** 실행한다.
 -- begin/commit 으로 묶지 않았다. 문장 하나를 실행하고, 그 문장의 시험을 하고, 다음으로 넘어간다.
 --
 -- 왜 하는가

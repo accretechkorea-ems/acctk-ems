@@ -1,5 +1,13 @@
--- RLS 좁히기 묶음 3 (2026-10-08 작성). **아직 DB 에 적용하지 않았다.**
--- 이 파일은 적용 대기 상태다 — 아래 「적용 순서와 시험 메모」를 읽고 **한 문장씩 따로** 실행한다.
+-- ⚠ 정책을 갈아 끼우는 파일이다(drop policy → create policy). 두 번 돌리면 중간에
+--   「정책이 없는 순간」이 생긴다 — 돌리기 전에 아래를 다 읽어라.
+--
+-- RLS 좁히기 묶음 3 (2026-10-08 작성). **적용 여부를 확인하지 못했다(2026-10-23).**
+--   왜 — RLS 정책은 PostgREST 로 읽을 수 없다(batch2 의 머리말과 같은 이유).
+--   확인하려면 Supabase SQL Editor 에서:
+--     select tablename, policyname, cmd from pg_policies
+--      where schemaname='public' and tablename like 'inventory%';
+--   미로그인(anon) 이 어떤 표도 읽지 못하는 것은 2026-10-23 확인했다(42501).
+-- 적용 대기 상태로 둔다 — 아래 「적용 순서와 시험 메모」를 읽고 **한 문장씩 따로** 실행한다.
 -- begin/commit 으로 묶지 않았다. 문장 하나를 실행하고, 그 문장의 시험을 하고, 다음으로 넘어간다.
 -- rls_tighten_batch2.sql 을 먼저 끝낸 뒤에 한다.
 --

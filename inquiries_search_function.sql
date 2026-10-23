@@ -1,4 +1,7 @@
--- 의뢰서 검색·페이지 함수 (아직 DB 에 적용하지 않았다 — 이 파일은 적용 전 마이그레이션이다).
+-- 의뢰서 검색·페이지 함수. **2026-10-23 적용 확인 완료** — 기록용, 다시 실행하지 마라.
+--   확인 방법: search_inquiries · count_inquiries_by_type · inquiry_search_base ·
+--   inquiry_search_words · inquiry_snippet 다섯 함수가 DB 에 있다(PostgREST OpenAPI).
+--   적용일은 모른다(머리말이 「미적용」으로 남아 있었다) — 적용일 미상, 확인일만 적는다.
 --
 -- 지금 목록 화면은 inquiries 를 통째로 읽어 브라우저에서 거른다. 건수가 늘면 PostgREST 기본
 -- 상한(1,000행)에서 **조용히 잘리고**, 내용 기록·첨부 파일명은 아예 검색할 수 없다.
