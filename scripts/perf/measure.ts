@@ -31,8 +31,15 @@ const ONLY = (() => {
   const i = process.argv.indexOf('--only')
   return i > -1 ? (process.argv[i + 1] ?? '').toLowerCase() : ''
 })()
+/** 쉼표로 여럿 — --only dashboard,approval 처럼 쓴다. */
+const ONLY_PARTS = ONLY.split(',').map(x => x.trim()).filter(Boolean)
 const picked = <T extends { label: string; path?: string; from?: string }>(list: T[]): T[] =>
-  ONLY === '' ? list : list.filter(x => (x.label + ' ' + (x.path ?? x.from ?? '')).toLowerCase().includes(ONLY))
+  ONLY_PARTS.length === 0
+    ? list
+    : list.filter(x => {
+      const hay = (x.label + ' ' + (x.path ?? x.from ?? '')).toLowerCase()
+      return ONLY_PARTS.some(p => hay.includes(p))
+    })
 const BASE = DEV ? 'http://localhost:3000' : (process.env.PERF_URL ?? 'http://localhost:3100')
 
 /** 누르면 자료가 바뀔 수 있는 글자 — 하나라도 걸리면 누르지 않는다. */
