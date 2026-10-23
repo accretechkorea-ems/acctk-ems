@@ -12,6 +12,8 @@
 // 밖에서 열리는 상태가 된다(지금 device-images 가 그런 상태이고 docs/audit-2026-10.md 에
 // 위험으로 적혀 있다). 같은 자리를 하나 더 만들 이유가 없다.
 
+import { isSafeStorageName, storageObjectPath } from '@/lib/storagePath'
+
 /** 사진이 사는 버킷. */
 export const PROFILE_BUCKET = 'profile-images'
 
@@ -48,26 +50,11 @@ export function avatarWidthFor(cssSize: number): AvatarWidth {
  * 경로에 `/` 가 섞여 들어오면(폴더를 쓰게 되면) 마지막 조각만 남긴다 — 지금 업로드는
  * 버킷 루트에 평평하게 올리고, 라우트도 `/` 없는 이름만 받는다.
  */
-export function profileImagePath(stored: string | null | undefined): string | null {
-  const s = (stored ?? '').trim()
-  if (!s) return null
-  // 버킷 이름이 보이면 그 뒤가 경로다(공개·서명 어느 꼴이든).
-  const marker = `/${PROFILE_BUCKET}/`
-  const at = s.indexOf(marker)
-  let rest = at >= 0 ? s.slice(at + marker.length) : s
-  // 질의 문자열(서명 토큰 등)과 조각 식별자는 떼어 낸다.
-  rest = rest.split('?')[0].split('#')[0]
-  // 주소가 아닌데 http 로 시작하면 우리 버킷이 아니다 — 쓸 수 없다.
-  if (at < 0 && /^https?:\/\//i.test(rest)) return null
-  const name = rest.split('/').filter(Boolean).pop() ?? ''
-  if (!name) return null
-  try { return decodeURIComponent(name) } catch { return name }
-}
+export const profileImagePath = (stored: string | null | undefined): string | null =>
+  storageObjectPath(stored, PROFILE_BUCKET)
 
 /** 라우트가 받아도 되는 이름인가 — 글자·숫자·점·밑줄·붙임표만. */
-export function isSafeProfileImageName(name: string): boolean {
-  return /^[A-Za-z0-9._-]+$/.test(name) && !name.includes('..')
-}
+export const isSafeProfileImageName = isSafeStorageName
 
 /**
  * 올릴 파일 이름. 사람마다 한 장이지만 이름에 시각을 넣는다 —
