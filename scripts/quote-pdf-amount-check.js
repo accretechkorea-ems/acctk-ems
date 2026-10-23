@@ -68,8 +68,12 @@ const incFree = calc.calcRow({ ...calc.createRow(), itemText: 'PC세트', price_
 eq('가격 없는 구성품 — 「-」', rowAmountCells(incFree, true).supply, '-')
 eq('단가 칸은 비운다', rowAmountCells(incFree, true).unit, '')
 
-// 원화 원가 줄(포함사항 묶음) — 단가가 0 이 아니어도 「-」여야 한다.
-const incCost = calc.calcRow({ ...calc.createDomesticRow(), itemText: '측정 테이블', manual_unit_price: 1500000, quantity: 1, group_kind: 'include' }, RATE)
+// 국내조달품 줄(포함사항 묶음) — 단가가 0 이 아니어도 「-」여야 한다.
+//
+// 2026-10-23 부터 국내조달품은 일반 품목이다 — manual_cost_jpy 가 원화 원가,
+// manual_unit_price 가 판매단가다(lib/quoteDomestic.ts). 그래서 판매단가를 넣으려면
+// price_mode 를 'price' 로 둔다. 포함사항은 그 값이 있어도 「-」로 나가야 한다.
+const incCost = calc.calcRow({ ...calc.createDomesticRow(), itemText: '측정 테이블', price_mode: 'price', manual_cost_jpy: 900000, manual_unit_price: 1500000, quantity: 1, group_kind: 'include' }, RATE)
 eq('원가 줄의 단가는 0 이 아니다', incCost.unit_price, 1500000)
 eq('그래도 공급가액은 「-」', rowAmountCells(incCost, true).supply, '-')
 eq('단가 칸도 비운다', rowAmountCells(incCost, true).unit, '')
