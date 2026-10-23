@@ -71,6 +71,10 @@ export default function Sidebar({
   const partMode = mode === '부품'
   // 부품 조회는 부품 모드에서만 나간다(업체 검색 중에는 요청이 아예 없다).
   const part = usePartSearch(partQuery, partMode, deliveredOnly)
+  // 엑셀 내보내기 아이콘을 검색줄에 둘지. 입력칸 여백 계산과 버튼이 같은 값을 봐야
+  // 긴 검색어가 아이콘 밑으로 흘러들어가지 않는다.
+  const showExport = canExport && !partMode
+  const exportOff = exporting || isLoading || customers.length === 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%', gap: 12 }}>
@@ -97,8 +101,8 @@ export default function Sidebar({
           placeholder={partMode ? "품번, 품명 검색" : "회사명, 주소, 대리점 검색"}
           style={{
             width: '100%',
-            // 오른쪽 여백은 [지우기/건수] + [토글] 이 차지하는 만큼 확보한다.
-            padding: canSearchParts ? '11px 96px 11px 34px' : '11px 36px 11px 34px',
+            // 오른쪽 여백은 [지우기/건수] + [토글] + [엑셀] 이 차지하는 만큼 확보한다.
+            padding: `11px ${36 + (canSearchParts ? 60 : 0) + (showExport ? 34 : 0)}px 11px 34px`,
             border: `1px solid ${searchFocused ? '#234ea2' : '#ebebeb'}`,
             borderRadius: 6,
             background: '#ffffff',
@@ -109,7 +113,7 @@ export default function Sidebar({
             transition: 'border-color 0.15s ease',
           }}
         />
-        {/* 입력칸 오른쪽 묶음 — 지우기(또는 건수) + 모드 토글. 절대 배치라 줄 높이를 늘리지 않는다. */}
+        {/* 입력칸 오른쪽 묶음 — 지우기(또는 건수) + 모드 토글 + 엑셀. 절대 배치라 줄 높이를 늘리지 않는다. */}
         <div style={{
           position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
           display: 'flex', alignItems: 'center', gap: 6,
@@ -130,7 +134,8 @@ export default function Sidebar({
           ) : partMode ? null : (
             <span style={{
               fontSize: 12, color: '#9ca3af', fontWeight: 600, pointerEvents: 'none',
-              whiteSpace: 'nowrap', paddingRight: canSearchParts ? 0 : 6,
+              // 오른쪽은 토글·엑셀 아이콘이 쓰므로 건수는 그 왼쪽에 붙어 한 줄을 지킨다.
+              whiteSpace: 'nowrap', paddingRight: canSearchParts || showExport ? 0 : 6,
             }}>
               {isLoading ? '-' : `${customers.length}개`}
             </span>
@@ -161,6 +166,39 @@ export default function Sidebar({
               })}
             </div>
           )}
+
+          {/* 엑셀 내보내기 — 토글과 같은 줄, 세로 가운데. superadmin 전용(canExport)이고
+              부품 모드에서는 아래가 고객 목록이 아니라 숨긴다. 조회가 화면에서 나가므로
+              서버 가드는 없다 — 버튼을 숨기는 것일 뿐, 목록을 볼 수 있는 사람이 같은
+              조회를 하는 것까지 막지는 않는다. */}
+          {showExport && (
+            <button
+              onClick={onExport}
+              disabled={exportOff}
+              aria-label="엑셀 내보내기"
+              title={exporting
+                ? '내보내는 중...'
+                : customers.length > 0
+                  ? `엑셀 내보내기 — 지금 목록 ${customers.length}개를 고객사 × 장비 한 줄로`
+                  : '엑셀 내보내기 — 내보낼 고객사가 없습니다'}
+              style={{
+                width: 28, height: 28, flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                border: '1px solid #ebebeb', borderRadius: 6, background: '#ffffff',
+                color: TEXT_MUTED, padding: 0,
+                cursor: exportOff ? 'default' : 'pointer',
+                opacity: exportOff ? 0.5 : 1,
+                transition: 'opacity 0.15s ease',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
@@ -175,40 +213,6 @@ export default function Sidebar({
           onToggleDelivered={setDeliveredOnly}
           onOpenPdf={onOpenQuotePdf}
         />
-      )}
-
-      {/* 목록 상단 — 지금 걸린 필터·검색 범위를 그대로 엑셀로 내보낸다.
-          부품 모드에서는 아래가 고객 목록이 아니므로 내보내기를 숨긴다.
-          superadmin 전용(canExport). 조회가 화면에서 나가므로 서버 가드는 없다 — 버튼을 숨기는
-          것일 뿐, 목록을 볼 수 있는 사람이 같은 조회를 하는 것까지 막지는 않는다. */}
-      {canExport && !partMode && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: -4 }}>
-          <button
-            onClick={onExport}
-            disabled={exporting || isLoading || customers.length === 0}
-            title={customers.length > 0
-              ? `지금 목록 ${customers.length}개를 고객사 × 장비 한 줄로 내려받습니다`
-              : '내보낼 고객사가 없습니다'}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 5,
-              padding: '5px 10px', borderRadius: 6,
-              border: '1px solid #ebebeb', background: '#ffffff',
-              color: TEXT_MUTED, fontSize: 12, fontWeight: 700,
-              cursor: exporting || isLoading || customers.length === 0 ? 'default' : 'pointer',
-              opacity: exporting || isLoading || customers.length === 0 ? 0.5 : 1,
-              whiteSpace: 'nowrap',
-              transition: 'opacity 0.15s ease',
-            }}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            {exporting ? '내보내는 중...' : '엑셀 내보내기'}
-          </button>
-        </div>
       )}
 
       {/* 고객 리스트 */}
