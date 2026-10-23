@@ -4,10 +4,13 @@
 // 목록을 그대로 받아 적는다(포캐스트 엑셀과 같은 원칙 — 화면과 다른 줄이 나오는 것이
 // 가장 나쁜 사고다). 집계·재계산은 하지 않는다.
 //
-// 열에서 뺀 것 ─ 「담당자(우리 쪽)」.
-//   유일한 후보가 devices.install_engineer 인데 살아있는 1,447행 전부 비어 있어
-//   (2026-10-23 확인) 넣으면 통째로 빈 열이 된다. 그 칸을 채우기 시작하면
-//   DEVICE_COLUMNS 에 install_engineer 를 더하고 아래 두 곳(머리글·줄)만 고치면 된다.
+// 열에서 뺀 것 둘 ─
+//   · 「담당자(우리 쪽)」 … 유일한 후보가 devices.install_engineer 인데 살아있는
+//     1,447행이 전부 비어 있다(2026-10-23 확인). 넣으면 통째로 빈 열이 된다.
+//   · 「고객 담당자(이름·전화)」 … 양식에서 뺐다(2026-10-23). contacts 는 조회에서도
+//     읽지 않는다 — 임베딩을 지웠으므로 응답도 그만큼 가볍다.
+//   되살릴 때 고칠 곳은 세 군데다 — CUSTOMER_EXCEL_SELECT(조회), CUSTOMER_EXCEL_HEADER
+//   (머리글), customerRowsAoA(줄). 열 폭과 자동 필터 범위는 머리글 길이에서 따라온다.
 //
 // xlsx 는 누를 때 동적으로 불러온다(초기 번들에 넣지 않는다 — 포캐스트·리드 엑셀과 같은 방식).
 
@@ -21,12 +24,6 @@ export type ExcelDevice = {
   install_date: string | null
 }
 
-/** 고객 쪽 담당자 — 이름·전화만 쓴다. */
-export type ExcelContact = {
-  name: string | null
-  phone: string | null
-}
-
 export type ExcelCustomer = {
   customer_id: number
   status: string | null
@@ -37,31 +34,27 @@ export type ExcelCustomer = {
   agency: string | null
   parent_customer_id: number | null
   devices?: ExcelDevice[] | null
-  contacts?: ExcelContact[] | null
 }
 
-/** 조회할 때 쓰는 select 문자열. 쓰는 열만 읽고, 장비·담당자는 임베딩으로 한 번에 받는다. */
+/** 조회할 때 쓰는 select 문자열. 쓰는 열만 읽고, 장비는 임베딩으로 한 번에 받는다. */
 export const CUSTOMER_EXCEL_SELECT =
   'customer_id, status, company_name, region1, region2, address, agency, parent_customer_id,' +
-  ' devices(device_name, device_name2, option, serial_number, install_year, install_date, deleted_at),' +
-  ' contacts(name, phone, deleted_at)'
+  ' devices(device_name, device_name2, option, serial_number, install_year, install_date, deleted_at)'
 
 /** 조회 결과 한 줄(임베딩 포함). deleted_at 은 걸러내는 데만 쓴다. */
-export type CustomerExcelRow = Omit<ExcelCustomer, 'devices' | 'contacts'> & {
+export type CustomerExcelRow = Omit<ExcelCustomer, 'devices'> & {
   devices?: (ExcelDevice & { deleted_at?: string | null })[] | null
-  contacts?: (ExcelContact & { deleted_at?: string | null })[] | null
 }
 
 /**
  * 조회 결과 → 엑셀이 읽는 꼴.
- * 지워진 장비·담당자를 여기서 걸러낸다 — 임베딩은 부모의 deleted_at 조건을 물려받지
- * 않으므로, 지운 장비가 그대로 줄이 되어 따라 들어온다.
+ * 지워진 장비를 여기서 걸러낸다 — 임베딩은 부모의 deleted_at 조건을 물려받지 않으므로,
+ * 지운 장비가 그대로 줄이 되어 따라 들어온다.
  */
 export function toExcelCustomer(row: CustomerExcelRow): ExcelCustomer {
   return {
     ...row,
     devices: (row.devices ?? []).filter(d => !d.deleted_at),
-    contacts: (row.contacts ?? []).filter(c => !c.deleted_at),
   }
 }
 
@@ -69,7 +62,7 @@ export function toExcelCustomer(row: CustomerExcelRow): ExcelCustomer {
 export const CUSTOMER_EXCEL_HEADER = [
   '상태', '회사명', '지역1', '지역2',
   '장비명', '장비명2(모델)', '옵션', '납입년', '납입월', 'S/N',
-  '대리점', '회사(소속)', '주소', '고객 담당자',
+  '대리점', '회사(소속)', '주소',
 ] as const
 
 /**
@@ -143,14 +136,6 @@ export function installYearMonth(
   return { year: outYear, month: outMonth }
 }
 
-/** 고객사 한 곳의 담당자 — 「이름 전화」를 사람마다 ' / ' 로 잇는다. */
-export function contactCell(contacts: ExcelContact[] | null | undefined): string {
-  return (contacts ?? [])
-    .map(c => [(c.name ?? '').trim(), (c.phone ?? '').trim()].filter(Boolean).join(' '))
-    .filter(Boolean)
-    .join(' / ')
-}
-
 /**
  * 장비 줄 순서 — 임베딩으로 받은 배열 순서는 보장되지 않으므로 여기서 정한다.
  * 납입년·월이 이른 것부터, 값이 없는 것은 뒤로.
@@ -182,7 +167,6 @@ export function customerRowsAoA(
       c.agency ?? '',
       parentName(c.parent_customer_id ?? null),
       c.address ?? '',
-      contactCell(c.contacts),
     ]
     const devices = sortDevices(c.devices ?? [])
     if (devices.length === 0) {

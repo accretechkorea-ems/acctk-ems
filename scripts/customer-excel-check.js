@@ -32,7 +32,7 @@ Module._resolveFilename = function (req, ...rest) {
 
 const {
   CUSTOMER_EXCEL_HEADER, customerRowsAoA, installYearMonth, regionsOf,
-  contactCell, columnWidths, customerExcelFileName, toExcelCustomer,
+  columnWidths, customerExcelFileName, toExcelCustomer,
 } = load(path.join(ROOT, 'lib/customerExcel.ts'))
 
 let fails = 0
@@ -44,12 +44,13 @@ const eq = (name, got, want) => {
 }
 
 console.log('── 양식(열 순서) ──')
-eq('열 14개', CUSTOMER_EXCEL_HEADER.length, 14)
+eq('열 13개', CUSTOMER_EXCEL_HEADER.length, 13)
 eq('열 이름·순서', [...CUSTOMER_EXCEL_HEADER], [
   '상태', '회사명', '지역1', '지역2',
   '장비명', '장비명2(모델)', '옵션', '납입년', '납입월', 'S/N',
-  '대리점', '회사(소속)', '주소', '고객 담당자',
+  '대리점', '회사(소속)', '주소',
 ])
+eq('고객 담당자 열은 없다', CUSTOMER_EXCEL_HEADER.includes('고객 담당자'), false)
 
 console.log('\n── 납입년·월 (옛 자료가 섞여 있다) ──')
 eq('연도 칸 + 월만 들어간 날짜 칸', installYearMonth('2016', '3'), { year: 2016, month: 3 })
@@ -73,13 +74,6 @@ eq('표에 없는 꼴은 꼬리만 뗀다', regionsOf({ region1: '', region2: ''
 eq('한쪽만 비면 그쪽만 채운다', regionsOf({ region1: '남부', region2: '', address: '경남 김해시 주촌' }), ['남부', '김해'])
 eq('주소가 없으면 빈칸', regionsOf({ region1: null, region2: null, address: null }), ['', ''])
 
-console.log('\n── 고객 담당자 ──')
-eq('이름과 전화를 붙이고 사람마다 /', contactCell([
-  { name: '홍길동', phone: '010-1111-2222' }, { name: '김철수', phone: null },
-]), '홍길동 010-1111-2222 / 김철수')
-eq('없으면 빈칸', contactCell(null), '')
-eq('이름 없이 전화만', contactCell([{ name: null, phone: '031-000-0000' }]), '031-000-0000')
-
 console.log('\n── 줄 펼치기 ──')
 const sample = [
   {
@@ -89,11 +83,10 @@ const sample = [
       { device_name: 'WAFER', device_name2: 'W-200', option: 'A', serial_number: 'SN2', install_year: '2020', install_date: '5' },
       { device_name: 'PROBER', device_name2: 'P-8', option: null, serial_number: 'SN1', install_year: '2016', install_date: '3' },
     ],
-    contacts: [{ name: '홍길동', phone: '010-1' }],
   },
   {
     customer_id: 2, status: '잠재', company_name: '라마바', region1: null, region2: null,
-    address: null, agency: null, parent_customer_id: null, devices: [], contacts: null,
+    address: null, agency: null, parent_customer_id: null, devices: [],
   },
 ]
 const aoa = customerRowsAoA(sample, id => (id === 9 ? '가나다홀딩스' : ''))
@@ -101,12 +94,12 @@ eq('머리글 + 장비 2대 + 장비 없는 고객사 1줄 = 4줄', aoa.length, 
 eq('첫 줄은 머리글', aoa[0], [...CUSTOMER_EXCEL_HEADER])
 eq('장비는 납입년·월 이른 것부터', [aoa[1][4], aoa[2][4]], ['PROBER', 'WAFER'])
 eq('장비 줄 전체', aoa[1],
-  ['활성', '가나다전자', '경기', '화성', 'PROBER', 'P-8', '', 2016, 3, 'SN1', '한빛', '가나다홀딩스', '경기도 화성시 1', '홍길동 010-1'])
+  ['활성', '가나다전자', '경기', '화성', 'PROBER', 'P-8', '', 2016, 3, 'SN1', '한빛', '가나다홀딩스', '경기도 화성시 1'])
 eq('장비 없는 고객사는 장비 칸 6개가 비고 뒤는 그대로', aoa[3],
-  ['잠재', '라마바', '', '', '', '', '', '', '', '', '', '', '', ''])
-eq('모든 줄의 칸 수가 열 수와 같다', [...new Set(aoa.map(r => r.length))], [14])
+  ['잠재', '라마바', '', '', '', '', '', '', '', '', '', '', ''])
+eq('모든 줄의 칸 수가 열 수와 같다', [...new Set(aoa.map(r => r.length))], [13])
 
-console.log('\n── 지워진 장비·담당자는 줄이 되지 않는다 ──')
+console.log('\n── 지워진 장비는 줄이 되지 않는다 ──')
 {
   const raw = {
     customer_id: 3, status: '활성', company_name: '사아자', region1: '충남', region2: '천안',
@@ -115,21 +108,16 @@ console.log('\n── 지워진 장비·담당자는 줄이 되지 않는다 ─
       { device_name: '산 장비', device_name2: null, option: null, serial_number: 'A', install_year: '2020', install_date: '1', deleted_at: null },
       { device_name: '지운 장비', device_name2: null, option: null, serial_number: 'B', install_year: '2021', install_date: '2', deleted_at: '2026-01-01' },
     ],
-    contacts: [
-      { name: '산 담당', phone: '010-1', deleted_at: null },
-      { name: '지운 담당', phone: '010-2', deleted_at: '2026-01-01' },
-    ],
   }
   const one = toExcelCustomer(raw)
   eq('살아있는 장비만 남는다', one.devices.map(d => d.device_name), ['산 장비'])
-  eq('살아있는 담당자만 남는다', contactCell(one.contacts), '산 담당 010-1')
   const rows = customerRowsAoA([one], () => '')
   eq('지운 장비가 줄을 늘리지 않는다', rows.length, 2)
 }
 
 console.log('\n── 열 폭·파일 이름 ──')
 const w = columnWidths(aoa)
-eq('열 폭이 열 수만큼', w.length, 14)
+eq('열 폭이 열 수만큼', w.length, 13)
 eq('한글을 두 칸으로 세어 회사명 칸이 넓다', w[1].wch >= 10, true)
 eq('최소 6 · 최대 40', w.every(x => x.wch >= 6 && x.wch <= 40), true)
 eq('파일 이름', customerExcelFileName('2026-10-23'), '고객사목록_20261023.xlsx')
