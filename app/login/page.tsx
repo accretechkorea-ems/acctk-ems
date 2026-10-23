@@ -4,9 +4,9 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { isMobileViewport } from '@/lib/viewport'
-import { withTeamPerm } from '@/lib/teamPerms'
+import { invalidateMe, loadMe } from '@/lib/appData/me'
 import { canViewCustomers } from '@/lib/permissions'
-import { DIVISION_HOME, canSwitchDivision, readSavedDivision, teamDivisionOf, type DivisionUser } from '@/lib/division'
+import { DIVISION_HOME, canSwitchDivision, readSavedDivision, teamDivisionOf } from '@/lib/division'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -39,14 +39,16 @@ export default function LoginPage() {
     //   계측   — 종전 그대로. 모바일은 현장 서비스 인원만 쓰므로 첫 화면을 고객사 현황으로 연다.
     //            단, 고객사 열람 권한이 없는 팀(영업관리 등)이 모바일로 들어오면 막힌 화면을
     //            마주치게 되므로 그때는 기존대로 본인 페이지로 보낸다.
+    // 본인 정보는 **공통 층**에서 읽는다(lib/appData/me.ts). 여기서 따로 조회하지 않는
+    // 이유 — 다음 화면의 MeProvider 가 같은 약속(Promise)을 받아 **조회를 한 번도 하지
+    // 않는다**. 예전에는 이 화면이 engineers·teams 를 읽고, 홈에 가서 MeProvider 가
+    // auth/user·engineers 를 또 읽어 사슬이 두 벌이었다(docs/perf/login-flow.md).
+    //
+    // invalidateMe() 가 먼저다 — 캐시를 버리는 때 셋 중 하나가 「로그인」이다.
+    invalidateMe()
     let target = '/dashboard'
     if (data.user?.email) {
-      const { data: eng } = await supabase
-        .from('engineers')
-        .select('engineer_id, permission_level, teams, can_switch_division')
-        .eq('email', data.user.email)
-        .single()
-      const me = await withTeamPerm(eng as (DivisionUser & { engineer_id: number }) | null)
+      const { me } = await loadMe()
       const teamDivision = teamDivisionOf(me)
       const division = me && canSwitchDivision(me)
         ? (readSavedDivision(me.engineer_id) ?? teamDivision)
@@ -56,8 +58,10 @@ export default function LoginPage() {
     }
 
     setLoading(false)
+    // router.refresh() 는 부르지 않는다 — push 가 이미 새 쿠키로 그 경로의 RSC 를 받아
+    // 오는데, refresh 가 같은 것을 한 번 더 받아 왔다(측정에서 /dashboard?_rsc 두 번).
+    // 화면들은 모두 'use client' 이고 자료는 브라우저가 읽으므로 다시 받을 것이 없다.
     router.push(target)
-    router.refresh()
   }
 
   return (

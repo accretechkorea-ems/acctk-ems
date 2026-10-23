@@ -434,8 +434,19 @@ function markdown(all: ScreenResult[], meta: Record<string, string>): string {
 //   node scripts/perf/measure.ts --from docs/perf/2026-10-22-1651.json
 // 측정은 운영 DB 에 붙어 돌아가므로 함부로 다시 돌리지 않는다 — 표의 말만 고칠 때 쓴다.
 function rewriteFrom(file: string): void {
-  const saved = JSON.parse(readFileSync(file, 'utf8')) as { meta: Record<string, string>; results: ScreenResult[] }
-  writeFileSync(join(ROOT, 'docs', 'perf', 'latest.md'), markdown(saved.results, saved.meta))
+  const saved = JSON.parse(readFileSync(file, 'utf8')) as {
+    meta: Record<string, string>
+    results?: ScreenResult[]
+    cold?: LoginSample[]
+    warm?: LoginSample[]
+  }
+  // 로그인 흐름 원자료(cold·warm)와 화면 원자료(results)는 보고서가 다르다.
+  if (saved.cold && saved.warm) {
+    writeFileSync(join(ROOT, 'docs', 'perf', 'login-flow.md'), loginMarkdown(saved.cold, saved.warm, saved.meta))
+    console.log(`보고서를 다시 썼다: docs/perf/login-flow.md (원자료 ${file})`)
+    return
+  }
+  writeFileSync(join(ROOT, 'docs', 'perf', 'latest.md'), markdown(saved.results ?? [], saved.meta))
   console.log(`보고서를 다시 썼다: docs/perf/latest.md (원자료 ${file})`)
 }
 

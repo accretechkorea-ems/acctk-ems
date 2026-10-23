@@ -13,7 +13,7 @@
 // 캐시를 버리는 때는 셋뿐이다: 로그인 · 로그아웃 · 권한 변경(invalidateMe).
 
 import { createClient } from '@/lib/supabase/client'
-import { withTeamPerm } from '@/lib/teamPerms'
+import { attachTeamPerm, loadTeamPerms } from '@/lib/teamPerms'
 import type { TeamPerm } from '@/lib/permissions'
 
 /**
@@ -76,15 +76,41 @@ export function isLoadedFor(email: string | null): boolean {
   return loadedEmail === null || loadedEmail === email
 }
 
+/**
+ * 세션의 메일.
+ *
+ * getUser() 를 쓰지 않는 이유 — 그것은 Auth 서버에 **왕복**해 토큰을 확인한다.
+ * 로그인 직후 첫 로딩을 재어 보니 이 왕복 하나가 85~262ms 였고, 그것이 끝나야
+ * engineers 조회가 시작됐다(docs/perf/login-flow.md ④-a).
+ *
+ * 브라우저에서는 확인할 것이 없다 — 여기서 얻은 메일은 **어느 행을 달라고 할지**
+ * 고르는 데만 쓰고, 무엇이 돌아오는지는 서버의 RLS 가 정한다. 토큰을 스스로 위조해도
+ * 남의 자료가 열리지 않는다. 그래서 그 자리에서 읽을 수 있는 getSession() 을 쓴다
+ * (만료됐으면 supabase-js 가 알아서 토큰을 새로 받는다).
+ *
+ * **서버**(app/api/**)는 사정이 다르다 — 그쪽은 lib/sessionEmail.ts 가 서명을 검증한다.
+ */
+async function sessionEmail(supabase: ReturnType<typeof createClient>): Promise<string | null> {
+  const { data } = await supabase.auth.getSession()
+  const email = data.session?.user?.email ?? null
+  if (email) return email
+  // 세션이 비어 있을 때만 서버에 물어본다(쿠키가 갓 심긴 경우 등).
+  const { data: userData } = await supabase.auth.getUser()
+  return userData.user?.email ?? null
+}
+
 /** 본인 정보. 몇 번 불러도 조회는 앱 당 한 번이다. */
 export function loadMe(): Promise<MeResult> {
   if (cache) return cache
   cache = (async (): Promise<MeResult> => {
     const supabase = createClient()
-    const { data: userData, error: userErr } = await supabase.auth.getUser()
-    const email = userData?.user?.email ?? null
+    // 팀 권한은 **내가 누구인지와 무관하다**(팀 전체를 읽는다). 그래서 메일을 알아내는
+    // 일과 **나란히** 띄운다 — 예전에는 engineers 가 끝난 뒤에 시작해 사슬이 한 칸 길었다
+    // (docs/perf/login-flow.md ④-c, 191ms).
+    const permsPromise = loadTeamPerms()
+    const email = await sessionEmail(supabase)
     loadedEmail = email
-    if (userErr || !email) {
+    if (!email) {
       // 미로그인은 오류가 아니다 — 미들웨어가 /login 으로 보낸다. 캐시도 비워 둔다
       // (로그인하고 돌아오면 다시 읽어야 한다).
       cache = null
@@ -104,8 +130,8 @@ export function loadMe(): Promise<MeResult> {
     if (!data) return { email, me: null, error: null }
     // 메뉴 권한은 팀 플래그로 판정한다(팀 이름을 코드에 두지 않기 위해).
     // loadTeamPerms 도 모듈 캐시라 여기서 한 번 읽으면 앱 전체가 그 값을 쓴다.
-    const withPerm = await withTeamPerm(data as unknown as Me)
-    return { email, me: (withPerm as Me | null) ?? null, error: null }
+    const map = await permsPromise
+    return { email, me: attachTeamPerm(map, data as unknown as Me), error: null }
   })()
   return cache
 }

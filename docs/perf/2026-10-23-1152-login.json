@@ -1,0 +1,720 @@
+{
+ "meta": {
+  "when": "2026-10-23 11:52",
+  "mode": "start (next start)",
+  "base": "http://localhost:3100",
+  "pw": "^1.64.1"
+ },
+ "cold": [
+  {
+   "ok": true,
+   "cold": true,
+   "tokenStart": 119,
+   "tokenEnd": 627,
+   "docChain": [],
+   "redirects": 0,
+   "docTtfb": null,
+   "jsKB": 38,
+   "jsDoneAt": 1071,
+   "authUser": null,
+   "engineers": {
+    "start": 603,
+    "end": 790,
+    "ms": 187
+   },
+   "teams": {
+    "start": 603,
+    "end": 792,
+    "ms": 189
+   },
+   "teamPerms": null,
+   "chainStart": 603,
+   "chainEnd": 792,
+   "firstCard": {
+    "start": 1145,
+    "end": 1437,
+    "ms": 291,
+    "short": "/api/approval"
+   },
+   "cardCount": 8,
+   "fcp": 80,
+   "navAt": 1096,
+   "shellAt": 1139,
+   "quietAt": 3008,
+   "dataReqs": 12,
+   "dups": [],
+   "timeline": [
+    {
+     "short": "auth:token ?grant_type",
+     "start": 119,
+     "end": 627,
+     "status": 200
+    },
+    {
+     "short": "teams",
+     "start": 603,
+     "end": 792,
+     "status": 200
+    },
+    {
+     "short": "engineers ?email",
+     "start": 603,
+     "end": 790,
+     "status": 200
+    },
+    {
+     "short": "/dashboard ?_rsc",
+     "start": 781,
+     "end": 1016,
+     "status": 200
+    },
+    {
+     "short": "/api/approval",
+     "start": 1145,
+     "end": 1437,
+     "status": 200
+    },
+    {
+     "short": "auth:.well-known/jwks.json",
+     "start": 1180,
+     "end": 1310,
+     "status": 200
+    },
+    {
+     "short": "sales_targets ?engineer_id",
+     "start": 1183,
+     "end": 1306,
+     "status": 200
+    },
+    {
+     "short": "quotes ?engineer_id",
+     "start": 1184,
+     "end": 1308,
+     "status": 200
+    },
+    {
+     "short": "notifications ?engineer_id&limit&offset&order",
+     "start": 1185,
+     "end": 1309,
+     "status": 200
+    },
+    {
+     "short": "service_engineers ?engineer_id",
+     "start": 1188,
+     "end": 1309,
+     "status": 200
+    },
+    {
+     "short": "sales_opportunities ?engineer_id",
+     "start": 1193,
+     "end": 1315,
+     "status": 200
+    },
+    {
+     "short": "notices ?ends_at&order&starts_at",
+     "start": 1331,
+     "end": 1424,
+     "status": 200
+    },
+    {
+     "short": "sales_activities ?activity_date&activity_date&engineer_id",
+     "start": 1334,
+     "end": 1418,
+     "status": 200
+    }
+   ]
+  },
+  {
+   "ok": true,
+   "cold": true,
+   "tokenStart": 71,
+   "tokenEnd": 270,
+   "docChain": [],
+   "redirects": 0,
+   "docTtfb": null,
+   "jsKB": 38,
+   "jsDoneAt": 528,
+   "authUser": null,
+   "engineers": {
+    "start": 280,
+    "end": 453,
+    "ms": 173
+   },
+   "teams": {
+    "start": 260,
+    "end": 433,
+    "ms": 174
+   },
+   "teamPerms": null,
+   "chainStart": 260,
+   "chainEnd": 453,
+   "firstCard": {
+    "start": 575,
+    "end": 717,
+    "ms": 142,
+    "short": "/api/approval"
+   },
+   "cardCount": 8,
+   "fcp": 68,
+   "navAt": 545,
+   "shellAt": 569,
+   "quietAt": 2325,
+   "dataReqs": 12,
+   "dups": [],
+   "timeline": [
+    {
+     "short": "auth:token ?grant_type",
+     "start": 71,
+     "end": 270,
+     "status": 200
+    },
+    {
+     "short": "teams",
+     "start": 260,
+     "end": 433,
+     "status": 200
+    },
+    {
+     "short": "engineers ?email",
+     "start": 280,
+     "end": 453,
+     "status": 200
+    },
+    {
+     "short": "/dashboard ?_rsc",
+     "start": 418,
+     "end": 522,
+     "status": 200
+    },
+    {
+     "short": "/api/approval",
+     "start": 575,
+     "end": 717,
+     "status": 200
+    },
+    {
+     "short": "quotes ?engineer_id",
+     "start": 606,
+     "end": 687,
+     "status": 200
+    },
+    {
+     "short": "sales_opportunities ?engineer_id",
+     "start": 607,
+     "end": 693,
+     "status": 200
+    },
+    {
+     "short": "service_engineers ?engineer_id",
+     "start": 608,
+     "end": 682,
+     "status": 200
+    },
+    {
+     "short": "notifications ?engineer_id&limit&offset&order",
+     "start": 610,
+     "end": 690,
+     "status": 200
+    },
+    {
+     "short": "sales_targets ?engineer_id",
+     "start": 612,
+     "end": 691,
+     "status": 200
+    },
+    {
+     "short": "auth:.well-known/jwks.json",
+     "start": 651,
+     "end": 729,
+     "status": 200
+    },
+    {
+     "short": "sales_activities ?activity_date&activity_date&engineer_id",
+     "start": 685,
+     "end": 777,
+     "status": 200
+    },
+    {
+     "short": "notices ?ends_at&order&starts_at",
+     "start": 695,
+     "end": 789,
+     "status": 200
+    }
+   ]
+  },
+  {
+   "ok": true,
+   "cold": true,
+   "tokenStart": 68,
+   "tokenEnd": 275,
+   "docChain": [],
+   "redirects": 0,
+   "docTtfb": null,
+   "jsKB": 38,
+   "jsDoneAt": 492,
+   "authUser": null,
+   "engineers": {
+    "start": 285,
+    "end": 390,
+    "ms": 105
+   },
+   "teams": {
+    "start": 258,
+    "end": 352,
+    "ms": 94
+   },
+   "teamPerms": null,
+   "chainStart": 258,
+   "chainEnd": 390,
+   "firstCard": {
+    "start": 549,
+    "end": 681,
+    "ms": 132,
+    "short": "/api/approval"
+   },
+   "cardCount": 8,
+   "fcp": 60,
+   "navAt": 509,
+   "shellAt": 537,
+   "quietAt": 2282,
+   "dataReqs": 12,
+   "dups": [],
+   "timeline": [
+    {
+     "short": "auth:token ?grant_type",
+     "start": 68,
+     "end": 275,
+     "status": 200
+    },
+    {
+     "short": "teams",
+     "start": 258,
+     "end": 352,
+     "status": 200
+    },
+    {
+     "short": "engineers ?email",
+     "start": 285,
+     "end": 390,
+     "status": 200
+    },
+    {
+     "short": "/dashboard ?_rsc",
+     "start": 351,
+     "end": 484,
+     "status": 200
+    },
+    {
+     "short": "/api/approval",
+     "start": 549,
+     "end": 681,
+     "status": 200
+    },
+    {
+     "short": "quotes ?engineer_id",
+     "start": 577,
+     "end": 653,
+     "status": 200
+    },
+    {
+     "short": "service_engineers ?engineer_id",
+     "start": 578,
+     "end": 660,
+     "status": 200
+    },
+    {
+     "short": "sales_opportunities ?engineer_id",
+     "start": 582,
+     "end": 694,
+     "status": 200
+    },
+    {
+     "short": "notifications ?engineer_id&limit&offset&order",
+     "start": 584,
+     "end": 674,
+     "status": 200
+    },
+    {
+     "short": "sales_targets ?engineer_id",
+     "start": 589,
+     "end": 700,
+     "status": 200
+    },
+    {
+     "short": "sales_activities ?activity_date&activity_date&engineer_id",
+     "start": 663,
+     "end": 751,
+     "status": 200
+    },
+    {
+     "short": "auth:.well-known/jwks.json",
+     "start": 673,
+     "end": 807,
+     "status": 200
+    },
+    {
+     "short": "notices ?ends_at&order&starts_at",
+     "start": 710,
+     "end": 782,
+     "status": 200
+    }
+   ]
+  }
+ ],
+ "warm": [
+  {
+   "ok": true,
+   "cold": false,
+   "tokenStart": 30,
+   "tokenEnd": 235,
+   "docChain": [],
+   "redirects": 0,
+   "docTtfb": null,
+   "jsKB": -4,
+   "jsDoneAt": 489,
+   "authUser": null,
+   "engineers": {
+    "start": 241,
+    "end": 379,
+    "ms": 138
+   },
+   "teams": {
+    "start": 240,
+    "end": 379,
+    "ms": 138
+   },
+   "teamPerms": null,
+   "chainStart": 240,
+   "chainEnd": 379,
+   "firstCard": {
+    "start": 540,
+    "end": 948,
+    "ms": 408,
+    "short": "/api/approval"
+   },
+   "cardCount": 8,
+   "fcp": 48,
+   "navAt": 508,
+   "shellAt": 534,
+   "quietAt": 2505,
+   "dataReqs": 12,
+   "dups": [],
+   "timeline": [
+    {
+     "short": "auth:token ?grant_type",
+     "start": 30,
+     "end": 235,
+     "status": 200
+    },
+    {
+     "short": "teams",
+     "start": 240,
+     "end": 379,
+     "status": 200
+    },
+    {
+     "short": "engineers ?email",
+     "start": 241,
+     "end": 379,
+     "status": 200
+    },
+    {
+     "short": "/dashboard ?_rsc",
+     "start": 381,
+     "end": 486,
+     "status": 200
+    },
+    {
+     "short": "/api/approval",
+     "start": 540,
+     "end": 948,
+     "status": 200
+    },
+    {
+     "short": "auth:.well-known/jwks.json",
+     "start": 550,
+     "end": 551,
+     "status": 200
+    },
+    {
+     "short": "notifications ?engineer_id&limit&offset&order",
+     "start": 554,
+     "end": 687,
+     "status": 200
+    },
+    {
+     "short": "quotes ?engineer_id",
+     "start": 559,
+     "end": 687,
+     "status": 200
+    },
+    {
+     "short": "sales_targets ?engineer_id",
+     "start": 561,
+     "end": 687,
+     "status": 200
+    },
+    {
+     "short": "sales_opportunities ?engineer_id",
+     "start": 561,
+     "end": 687,
+     "status": 200
+    },
+    {
+     "short": "service_engineers ?engineer_id",
+     "start": 562,
+     "end": 687,
+     "status": 200
+    },
+    {
+     "short": "notices ?ends_at&order&starts_at",
+     "start": 562,
+     "end": 687,
+     "status": 200
+    },
+    {
+     "short": "sales_activities ?activity_date&activity_date&engineer_id",
+     "start": 697,
+     "end": 788,
+     "status": 200
+    }
+   ]
+  },
+  {
+   "ok": true,
+   "cold": false,
+   "tokenStart": 45,
+   "tokenEnd": 187,
+   "docChain": [],
+   "redirects": 0,
+   "docTtfb": null,
+   "jsKB": -4,
+   "jsDoneAt": 322,
+   "authUser": null,
+   "engineers": {
+    "start": 191,
+    "end": 257,
+    "ms": 65
+   },
+   "teams": {
+    "start": 191,
+    "end": 253,
+    "ms": 63
+   },
+   "teamPerms": null,
+   "chainStart": 191,
+   "chainEnd": 257,
+   "firstCard": {
+    "start": 378,
+    "end": 510,
+    "ms": 132,
+    "short": "/api/approval"
+   },
+   "cardCount": 8,
+   "fcp": 44,
+   "navAt": 340,
+   "shellAt": 365,
+   "quietAt": 2110,
+   "dataReqs": 12,
+   "dups": [],
+   "timeline": [
+    {
+     "short": "auth:token ?grant_type",
+     "start": 45,
+     "end": 187,
+     "status": 200
+    },
+    {
+     "short": "teams",
+     "start": 191,
+     "end": 253,
+     "status": 200
+    },
+    {
+     "short": "engineers ?email",
+     "start": 191,
+     "end": 257,
+     "status": 200
+    },
+    {
+     "short": "/dashboard ?_rsc",
+     "start": 259,
+     "end": 318,
+     "status": 200
+    },
+    {
+     "short": "/api/approval",
+     "start": 378,
+     "end": 510,
+     "status": 200
+    },
+    {
+     "short": "auth:.well-known/jwks.json",
+     "start": 383,
+     "end": 383,
+     "status": 200
+    },
+    {
+     "short": "notifications ?engineer_id&limit&offset&order",
+     "start": 385,
+     "end": 452,
+     "status": 200
+    },
+    {
+     "short": "quotes ?engineer_id",
+     "start": 387,
+     "end": 446,
+     "status": 200
+    },
+    {
+     "short": "sales_targets ?engineer_id",
+     "start": 387,
+     "end": 452,
+     "status": 200
+    },
+    {
+     "short": "sales_opportunities ?engineer_id",
+     "start": 387,
+     "end": 458,
+     "status": 200
+    },
+    {
+     "short": "service_engineers ?engineer_id",
+     "start": 389,
+     "end": 450,
+     "status": 200
+    },
+    {
+     "short": "notices ?ends_at&order&starts_at",
+     "start": 389,
+     "end": 461,
+     "status": 200
+    },
+    {
+     "short": "sales_activities ?activity_date&activity_date&engineer_id",
+     "start": 452,
+     "end": 511,
+     "status": 200
+    }
+   ]
+  },
+  {
+   "ok": true,
+   "cold": false,
+   "tokenStart": 48,
+   "tokenEnd": 202,
+   "docChain": [],
+   "redirects": 0,
+   "docTtfb": null,
+   "jsKB": -4,
+   "jsDoneAt": 424,
+   "authUser": null,
+   "engineers": {
+    "start": 211,
+    "end": 348,
+    "ms": 138
+   },
+   "teams": {
+    "start": 210,
+    "end": 286,
+    "ms": 76
+   },
+   "teamPerms": null,
+   "chainStart": 210,
+   "chainEnd": 348,
+   "firstCard": {
+    "start": 471,
+    "end": 612,
+    "ms": 141,
+    "short": "/api/approval"
+   },
+   "cardCount": 8,
+   "fcp": 56,
+   "navAt": 440,
+   "shellAt": 465,
+   "quietAt": 2305,
+   "dataReqs": 12,
+   "dups": [],
+   "timeline": [
+    {
+     "short": "auth:token ?grant_type",
+     "start": 48,
+     "end": 202,
+     "status": 200
+    },
+    {
+     "short": "teams",
+     "start": 210,
+     "end": 286,
+     "status": 200
+    },
+    {
+     "short": "engineers ?email",
+     "start": 211,
+     "end": 348,
+     "status": 200
+    },
+    {
+     "short": "/dashboard ?_rsc",
+     "start": 353,
+     "end": 420,
+     "status": 200
+    },
+    {
+     "short": "/api/approval",
+     "start": 471,
+     "end": 612,
+     "status": 200
+    },
+    {
+     "short": "auth:.well-known/jwks.json",
+     "start": 486,
+     "end": 487,
+     "status": 200
+    },
+    {
+     "short": "notifications ?engineer_id&limit&offset&order",
+     "start": 489,
+     "end": 552,
+     "status": 200
+    },
+    {
+     "short": "quotes ?engineer_id",
+     "start": 492,
+     "end": 566,
+     "status": 200
+    },
+    {
+     "short": "sales_targets ?engineer_id",
+     "start": 493,
+     "end": 553,
+     "status": 200
+    },
+    {
+     "short": "sales_opportunities ?engineer_id",
+     "start": 493,
+     "end": 552,
+     "status": 200
+    },
+    {
+     "short": "service_engineers ?engineer_id",
+     "start": 494,
+     "end": 622,
+     "status": 200
+    },
+    {
+     "short": "notices ?ends_at&order&starts_at",
+     "start": 494,
+     "end": 624,
+     "status": 200
+    },
+    {
+     "short": "sales_activities ?activity_date&activity_date&engineer_id",
+     "start": 625,
+     "end": 775,
+     "status": 200
+    }
+   ]
+  }
+ ]
+}
