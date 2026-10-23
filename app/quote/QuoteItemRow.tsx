@@ -197,7 +197,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
                   onMouseEnter={() => itemKeys.setActive(i)}>
                   <div>
                     <span style={{ fontWeight: 700, color: '#234ea2' }}>{item.item_code}</span>
-                    {/* 종류 배지 — 같은 품번이 SFG/CMM 양쪽에 있거나 Jig 두 줄로 나뉠 때 어느 줄인지 보인다. */}
+                    {/* 종류 배지 — 같은 품번이 SFG/CMM 양쪽에 있거나 묶음 제목으로 나뉠 때 어느 줄인지 보인다. */}
                     <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '1px 6px' }}>{item.sheet_name}</span>
                     <span style={{ marginLeft: 6, color: '#111827' }}>{item.item_name_jp}</span>
                     <span style={{ marginLeft: 6, color: '#6b7280' }}>({item.model_jp})</span>

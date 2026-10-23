@@ -71,7 +71,7 @@ const nextId = () => `eq${++seq}${Math.random().toString(36).slice(2, 7)}`
 
 /**
  * 가격표 줄을 찾는 열쇠 — **품번과 구분을 함께** 쓴다.
- * CMM 본체는 같은 품번이 Jig 포함·제외 두 줄이라 품번만으로는 어느 줄인지 가릴 수 없다.
+ * 같은 품번이 **묶음 제목만 다르게** 여러 줄 들어오는 일이 있어, 품번만으로는 어느 줄인지 가릴 수 없다.
  * 템플릿을 저장·복원하는 쪽과 useEquipConfig 의 조회가 같은 함수를 쓴다.
  */
 export const priceKey = (itemCode: string, variant: string | null | undefined): string =>
@@ -199,7 +199,7 @@ export function lineFromTemplateItem(
     ? it.group_kind as EquipGroup
     : it.group_kind === 'domestic' ? 'include' : 'option'
   const code = (it.part_code ?? '').trim()
-  // **(품번, 구분) 짝**으로 찾는다. 품번만으로 찾으면 Jig 포함/제외 중 아무 줄이나 걸린다.
+  // **(품번, 구분) 짝**으로 찾는다. 품번만으로 찾으면 묶음 제목이 다른 줄 중 아무 것이나 걸린다.
   const found = code ? priceByCode.get(priceKey(code, it.variant)) : undefined
 
   // 원화 원가 줄(옛 국내조달품 · 포함사항에서 직접 적은 줄) — 품번으로 되찾을 값이 없다.
@@ -246,7 +246,7 @@ export function toTemplateItems(lines: EquipLine[], machineQty: number): Templat
     group_kind: l.group,
     row_kind: l.row.row_kind,
     part_code: l.row.partCode.trim() || null,
-    // 가격표에서 고른 줄이면 그 줄의 구분(Jig 포함/제외)을 함께 남긴다.
+    // 가격표에서 고른 줄이면 그 줄의 구분(묶음 제목)을 함께 남긴다.
     // 직접 적은 줄은 가격표에 없으니 '' 다. (옛 임시저장에는 이 칸이 없을 수 있다 → ?? '')
     variant: l.row.selectedItem?.variant ?? '',
     item_name: l.row.itemText.trim() || null,

@@ -13,7 +13,7 @@
 --   이 파일은 그 방식을 버리고 **종류별 덮어쓰기**로 바꾸기 위한 DB 쪽 준비다.
 --
 --   담는 것은 셋이다.
---     단계 1  price_list.variant — 같은 품번을 두 줄로 저장하기 위한 구분 칸(CMM Jig 포함/제외)
+--     단계 1  price_list.variant — 같은 품번을 여러 줄로 저장하기 위한 구분 칸(묶음 제목으로 가른다)
 --     단계 2  price_list_imports — 등록 이력 표
 --     단계 3  apply_price_list_import() — 한 트랜잭션으로 반영하는 함수(RPC)
 --
@@ -66,7 +66,7 @@
 --   단계 1b (유일 인덱스)  — 단계 0 ⑤ 가 0행이라 걸었다.
 --   단계 2 (이력 표)      — 아무 때나.
 --   단계 3 (함수)         — 단계 1 뒤.
---   단계 4 (템플릿 칸)     — 장비 템플릿이 Jig 구분을 잃지 않게. 아무 때나.
+--   단계 4 (템플릿 칸)     — 장비 템플릿이 줄 구분을 잃지 않게. 아무 때나.
 --   단계 5 (코드 배포)    — 가격표 2단계의 화면·API. **단계 1~4 뒤에** 올린다.
 --   단계 6 (함수 교체)     — 납기·묶음 저장과 where true. **파일 맨 아래 블록이 정본이다** —
 --                           단계 3 의 함수 정의는 지난 판이다.
@@ -86,7 +86,7 @@
 --        price_list.updated_at 은 **text**('YYYY-MM-DD' 글자). cost_jpy·price_jpy 는 **integer**.
 --        → 함수는 updated_at 에 v_today 글자를 넣고, 가격은 미리 반올림한다(위 1-b).
 --        → 파서도 정수로 반올림해 보낸다(lib/priceListParse.ts).
---     ② item_code 단독 유일 제약은 없었다 → 두 줄 저장(Jig)이 가능하다.
+--     ② item_code 단독 유일 제약은 없었다 → 같은 품번 여러 줄 저장이 가능하다.
 --     ③ price_list 의 anon 쓰기는 막혀 있다. 쓰기는 서버(service role)만 — 새 라우트가 그렇게 한다.
 --     ④ 지금 들어 있는 종류는 **4개**다: SFG Accessory · CMM Accessory ·
 --        SFG Spare part · CMM Spare. SFG Main · CMM Main body · Calibration 은 **아직 없다**
@@ -111,7 +111,7 @@ order by ordinal_position;
 --    근거 — SFG Spare 와 CMM Spare 에 같은 품번이 313건 겹친다(사용자 확인).
 --           있었다면 지금 데이터가 들어가 있을 수 없다.
 --    여기서 (sheet_name, item_code) 유일 제약이 나오면 단계 1b 는 이미 충족된 것이고,
---    item_code 단독 유일 제약이 나오면 **멈춰라** — 두 줄 저장(Jig)이 불가능하므로
+--    item_code 단독 유일 제약이 나오면 **멈춰라** — 같은 품번 여러 줄 저장이 불가능하므로
 --    그 제약을 떼는 작업을 따로 계획해야 한다.
 select conname, contype, pg_get_constraintdef(oid)
 from pg_constraint
@@ -586,7 +586,7 @@ grant  execute on function public.apply_price_list_import(text, text, text, inte
 -- 단계 4 [적용 완료 2026-10-20]. quote_template_items.variant
 --
 --   장비 구성 템플릿은 **품번만** 저장하고 열 때 가격표에서 원가를 다시 찾는다.
---   그런데 같은 품번이 Jig 포함/제외로 **두 줄**이 되면, 품번만으로는 어느 줄이었는지
+--   그런데 같은 품번이 묶음 제목으로 갈려 **여러 줄**이 되면, 품번만으로는 어느 줄이었는지
 --   알 수 없다(불러올 때 아무 쪽이나 걸린다). 그래서 템플릿 줄에도 구분을 함께 저장한다.
 --
 --   이미 저장된 템플릿은 전부 '' 가 된다 — 「구분 없음」이고, 종전과 똑같이 동작한다.
@@ -602,7 +602,7 @@ alter table public.quote_template_items
 
 comment on column public.quote_template_items.variant is
   'price_list.variant 와 같은 뜻의 구분값. 빈 문자열이 「구분 없음」이다. '
-  '품번만으로는 Jig 포함/제외 두 줄을 가릴 수 없어 함께 저장한다.';
+  '품번만으로는 묶음 제목이 다른 여러 줄을 가릴 수 없어 함께 저장한다.';
 
 -- ── 적용 확인 (읽기) ──
 -- select column_name, data_type, is_nullable, column_default
@@ -615,7 +615,7 @@ comment on column public.quote_template_items.variant is
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- 단계 4 되돌리기:
---   ⚠ 이 칸을 지우면 템플릿이 Jig 포함/제외를 다시 잃는다(줄은 남는다).
+--   ⚠ 이 칸을 지우면 템플릿이 줄 구분(묶음 제목)을 다시 잃는다(줄은 남는다).
 --     지우기 전에 무엇이 들어 있는지 본다:
 --       select template_id, part_code, variant from public.quote_template_items
 --       where variant <> '' order by template_id;
@@ -633,7 +633,7 @@ comment on column public.quote_template_items.variant is
 --   drop index if exists public.price_list_sheet_code_variant_key;
 
 -- 단계 1 되돌리기:
---   ⚠ 이 칸을 지우면 Jig 포함/제외로 나뉘어 들어간 줄의 **구분이 사라진다.**
+--   ⚠ 이 칸을 지우면 묶음 제목으로 나뉘어 들어간 줄의 **구분이 사라진다.**
 --     같은 품번 두 줄이 구별되지 않는 상태로 남는다(줄 자체는 지워지지 않는다).
 --     이미 등록을 한 번이라도 돌린 뒤라면, 지우기 전에 아래로 무엇이 묶여 있는지 먼저 본다.
 --       select sheet_name, item_code, variant, cost_jpy

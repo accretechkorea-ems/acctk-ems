@@ -142,7 +142,7 @@ export function useEquipConfig(args: EquipConfigArgs) {
         .in('sheet_name', EQUIP_SHEETS)
         .order('sheet_name')
       if (qErr) console.error('[equip] 가격표 조회 실패', qErr)
-      // 열쇠는 **(품번, 구분)** 이다 — 품번만 쓰면 Jig 포함/제외가 서로를 덮어쓴다.
+      // 열쇠는 **(품번, 구분)** 이다 — 품번만 쓰면 묶음 제목이 다른 줄이 서로를 덮어쓴다.
       //
       // 같은 (품번, 구분)이 **여러 종류에 있을 때**(SFG Spare 와 CMM Spare 에 313건이 겹친다)
       // 어느 쪽을 쓸지는 정해 두어야 한다. 이름·모델이 같은 같은 부품이라 값이 같으므로
