@@ -1,5 +1,6 @@
 // 견적서 계산 로직(순수 함수). 화면·PDF·저장이 모두 이 파일의 결과를 쓴다.
 
+import { defaultMarginOf } from '@/lib/quoteProfit'
 import { DISCOUNT_LABELS } from './types'
 import type { QuoteRow, ExpenseRow } from './types'
 
@@ -129,12 +130,18 @@ export function calcRow(row: QuoteRow, rate: number): QuoteRow {
   }
 }
 
-export function createRow(): QuoteRow {
+/**
+ * 품목 줄 하나.
+ *
+ * 이익률 기본값은 **견적 분류**가 정한다(lib/quoteProfit.ts) — TSE 는 60, 그 밖은 40 이다.
+ * 분류를 모르는 자리에서 부르면 40 으로 시작한다(지금까지의 동작).
+ */
+export function createRow(category?: string | null): QuoteRow {
   return {
     id: Math.random().toString(36).slice(2),
     itemText: '', selectedItem: null, subLines: [],
     quantity: 1, manual_unit_price: 0,
-    tariff_rate: 1.13, exchange_rate: 0, profit_rate: 40, realized_profit_rate: 0,
+    tariff_rate: 1.13, exchange_rate: 0, profit_rate: defaultMarginOf(category), realized_profit_rate: 0,
     unit_price: 0, supply_price: 0, tax: 0,
     cost_price_jpy: 0, product_price: 0, profit: 0,
     partCode: '', row_kind: 'price_list', manual_cost_jpy: 0, manual_model: '', price_mode: 'rate', expenses: [],
@@ -146,9 +153,9 @@ export function createRow(): QuoteRow {
 }
 
 // 수동입력 품목 행 — 가격표에 없는 제품용. 구입가 JPY 를 직접 입력받는다.
-// 관세율·이익률 기본값은 createRow() 와 동일(1.13 / 40).
-export function createManualJpyRow(): QuoteRow {
-  return { ...createRow(), row_kind: 'manual_jpy' }
+// 관세율·이익률 기본값은 createRow() 와 동일(1.13 / 분류별 40·60).
+export function createManualJpyRow(category?: string | null): QuoteRow {
+  return { ...createRow(category), row_kind: 'manual_jpy' }
 }
 
 // 국내조달품 행 — 원화 원가만 입력한다. 마진이 없으므로 이익률은 0 에서 시작한다.

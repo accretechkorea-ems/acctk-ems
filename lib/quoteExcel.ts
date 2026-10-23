@@ -6,6 +6,7 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { salesStatusLabel } from '@/lib/categoryColors'
+import { profitBreakdown } from '@/lib/quoteProfit'
 // 타입만 가져온다(컴파일 시 사라짐). 런타임 exceljs 는 호출부에서 동적 import 한다.
 import type { Workbook, Worksheet, Cell } from 'exceljs'
 
@@ -48,6 +49,8 @@ export type QuoteExcelData = {
   total_tax: number | null
   total_amount: number | null
   total_cost: number | null
+  /** 견적 분류 — 판관비 규칙(TSE 30%)을 가린다. */
+  category: string | null
   total_profit: number | null
   profit_rate: number | null
   customers: { company_name: string } | null   // customer_id 참조(직판 고객사 / 대리점 견적이면 E.U)
@@ -62,7 +65,7 @@ export type QuoteExcelData = {
 // 지정하지 않으면 PGRST201(300 Multiple Choices)로 조회 전체가 실패한다.
 // 여기의 사람 이름은 실적 귀속자(engineer_id)다.
 const SELECT = `
-  quote_id, quote_number, quote_date, recipient, note, delivery_info, status, quote_type,
+  quote_id, quote_number, quote_date, recipient, note, delivery_info, status, quote_type, category,
   total_supply, total_tax, total_amount, total_cost, total_profit, profit_rate,
   customers:customer_id ( company_name ),
   dealer:dealer_id ( company_name ),
@@ -363,6 +366,34 @@ export function buildQuoteSheet(workbook: Workbook, quote: QuoteExcelData): Work
   ws.getCell(r, 10).numFmt = FMT_RATE
   ws.getCell(r, 10).font = { bold: true }
   for (let c = 1; c <= LAST_COL; c++) borderThin(ws.getCell(r, c))
+  r++
+
+  // ── 판관비·영업이익 — 분류에 규칙이 있을 때만(지금은 TSE 매출의 30%) ──
+  // 저장값(total_profit·profit_rate)은 **매출이익**이다. 아래 두 줄은 거기서 계산한 표시값이다.
+  const bd = profitBreakdown(quote.total_supply ?? 0, quote.total_cost ?? 0, quote.category)
+  if (bd.hasSga) {
+    const extraRow = (label: string, amount: number, rate: number) => {
+      ws.mergeCells(r, 1, r, 7)
+      const l = ws.getCell(r, 1)
+      l.value = label
+      l.font = { bold: true, size: 11 }
+      const v = ws.getCell(r, 8)
+      v.value = amount
+      v.numFmt = FMT_KRW
+      v.font = { bold: true, size: 11 }
+      ws.getCell(r, 9).value = '비율'
+      ws.getCell(r, 9).font = { bold: true, size: 10 }
+      ws.getCell(r, 9).alignment = { horizontal: 'right' }
+      ws.getCell(r, 10).value = Math.round(rate * 10) / 10
+      ws.getCell(r, 10).numFmt = FMT_RATE
+      ws.getCell(r, 10).font = { bold: true }
+      for (let c = 1; c <= LAST_COL; c++) borderThin(ws.getCell(r, c))
+      r++
+    }
+    const sgaPct = (quote.total_supply ?? 0) > 0 ? (bd.sga / (quote.total_supply as number)) * 100 : 0
+    extraRow(`판관비 (매출 × ${sgaPct.toFixed(0)}%)`, -bd.sga, sgaPct)
+    extraRow('영업이익', bd.operatingProfit, bd.operatingRate)
+  }
 
   return ws
 }

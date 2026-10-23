@@ -19,14 +19,16 @@ export type RowAddButtonsProps = {
   serviceRow: QuoteRow | null
   /** 할인 행(있으면 그 버튼이 잠긴다). */
   discountRow: QuoteRow | null
+  /** 지금 고른 견적 분류 — 새 줄의 이익률 기본값이 여기서 나온다(TSE 60 · 그 밖 40). */
+  category?: string
 }
 
-export default function RowAddButtons({ setRows, serviceRow, discountRow }: RowAddButtonsProps) {
+export default function RowAddButtons({ setRows, serviceRow, discountRow, category }: RowAddButtonsProps) {
   // 행 추가 버튼 — 1행: 주버튼(품목) + 수동입력 / 2행: 국내조달품 + 서비스비
   return (
 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
   <button
-    onClick={() => setRows(prev => [...prev, createRow()])}
+    onClick={() => setRows(prev => [...prev, createRow(category)])}
     style={{ minWidth: 0, padding: '11px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', transition: 'background 0.15s ease' }}
     onMouseEnter={e => (e.currentTarget.style.background = '#1c3e87')}
     onMouseLeave={e => (e.currentTarget.style.background = '#234ea2')}
@@ -35,7 +37,7 @@ export default function RowAddButtons({ setRows, serviceRow, discountRow }: RowA
   </button>
   {/* 수동입력 품목 — 가격표에 없는 제품. 개수 제한 없음. */}
   <button
-    onClick={() => setRows(prev => [...prev, createManualJpyRow()])}
+    onClick={() => setRows(prev => [...prev, createManualJpyRow(category)])}
     title="가격표에 없는 품목을 구입가(JPY) 직접 입력으로 추가합니다"
     style={{ minWidth: 0, padding: '11px', background: '#fff', color: '#234ea2', border: '1px solid #ebebeb', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', transition: 'background 0.15s ease' }}
     onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6')}

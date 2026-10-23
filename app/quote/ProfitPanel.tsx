@@ -4,10 +4,20 @@ import { useState } from 'react'
 import type { QuoteRow } from './types'
 import { calcTotals } from './calc'
 import { numKR } from './format'
+import { profitBreakdown } from '@/lib/quoteProfit'
 
-export type ProfitPanelProps = { rows: QuoteRow[]; exchangeRate: number; rateUpdatedAt: string; rateLoading: boolean; onFetchRate: () => void; onRateChange: (rate: number) => void }
+export type ProfitPanelProps = {
+  rows: QuoteRow[]
+  exchangeRate: number
+  rateUpdatedAt: string
+  rateLoading: boolean
+  onFetchRate: () => void
+  onRateChange: (rate: number) => void
+  /** 고른 견적 분류 — 판관비 규칙이 여기서 나온다(TSE 30%). */
+  category?: string
+}
 
-export default function ProfitPanel({ rows, exchangeRate, rateUpdatedAt, rateLoading, onFetchRate, onRateChange }: ProfitPanelProps) {
+export default function ProfitPanel({ rows, exchangeRate, rateUpdatedAt, rateLoading, onFetchRate, onRateChange, category }: ProfitPanelProps) {
   const [editingRate, setEditingRate] = useState(false)
   const [editRateVal, setEditRateVal] = useState('')
 
@@ -25,6 +35,9 @@ export default function ProfitPanel({ rows, exchangeRate, rateUpdatedAt, rateLoa
   // 할인 금액(음수). calcTotals 는 건드리지 않고 여기서만 모아 표시용으로 쓴다.
   const discountAmt = rows.filter(r => r.row_kind === 'discount').reduce((s, r) => s + r.supply_price, 0)
   const isGood = profitPct >= 40
+  // 판관비·영업이익 — 분류 규칙(lib/quoteProfit.ts)으로 계산한 **표시용** 값이다.
+  const breakdown = profitBreakdown(totalSupply, totalProduct, category)
+  const sgaPct = totalSupply > 0 ? (breakdown.sga / totalSupply) * 100 : 0
 
   // 행 종류별 원가 상세. 새 종류(manual_jpy·domestic)는 case 만 추가하면 된다.
   // null 을 반환하면 원가 줄 없이 판매단가부터 표시된다(구분선도 생략).
@@ -131,6 +144,22 @@ export default function ProfitPanel({ rows, exchangeRate, rateUpdatedAt, rateLoa
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>국내 조달품</span><span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>₩{numKR(domesticCost)}</span></div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>매출이익 합계</span><span style={{ fontSize: 13, color: isGood ? '#16a34a' : '#dc2626', fontWeight: 600 }}>₩{numKR(totalProfit)} ({profitPct.toFixed(1)}%)</span></div>
+          {/* 판관비·영업이익 — 분류에 규칙이 있을 때만 낸다(지금은 TSE 매출의 30%).
+              **저장되는 값은 바뀌지 않는다** — total_profit·profit_rate 는 위의 매출이익 그대로다. */}
+          {breakdown.hasSga && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
+                <span style={{ fontSize: 12, color: '#6b7280' }}>판관비 <span style={{ color: '#9ca3af' }}>(매출 × {(sgaPct).toFixed(0)}%)</span></span>
+                <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 500 }}>−₩{numKR(breakdown.sga)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid #ebebeb', marginTop: 2, paddingTop: 8 }}>
+                <span style={{ fontSize: 12, color: '#111827', fontWeight: 700 }}>영업이익</span>
+                <span style={{ fontSize: 13, color: breakdown.operatingProfit >= 0 ? '#16a34a' : '#dc2626', fontWeight: 700 }}>
+                  ₩{numKR(breakdown.operatingProfit)} ({breakdown.operatingRate.toFixed(1)}%)
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

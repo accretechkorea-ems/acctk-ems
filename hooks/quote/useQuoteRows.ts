@@ -28,6 +28,7 @@ import { useCallback, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ExpensePreset, ExpenseRow, PriceItem, QuoteRow } from '@/app/quote/types'
 import { calcExpense, calcRow, createExpenseRow, createRow } from '@/app/quote/calc'
+import { defaultMarginOf } from '@/lib/quoteProfit'
 import { canSplitRowKind, type QuoteCategory } from '@/lib/quoteCategories'
 import { canGroupRowKind, isEquipForm } from '@/lib/quoteForms'
 import { searchPriceList } from '@/lib/priceSearch'
@@ -147,7 +148,12 @@ export function useQuoteRows({
   }, [exchangeRate, terms, setTerms, setTermsOpen])
 
   const updateRow = useCallback((rowId: string, field: keyof QuoteRow, value: any) =>
-    setRows(prev => prev.map(r => r.id !== rowId ? r : calcRow({ ...r, [field]: value }, exchangeRate))),
+    setRows(prev => prev.map(r => {
+      if (r.id !== rowId) return r
+      // 이익률을 사람이 고치면 표시해 둔다 — 분류를 바꿀 때 이 줄은 건드리지 않는다.
+      const touched = field === 'profit_rate' ? { margin_touched: true } : null
+      return calcRow({ ...r, [field]: value, ...touched }, exchangeRate)
+    })),
     [exchangeRate])
 
   const clearItem = useCallback((rowId: string) => {
@@ -170,6 +176,21 @@ export function useQuoteRows({
 
   // 줄별 분류 — 빈 글자는 null 로 눕힌다(「견적 분류를 따른다」가 그 뜻이다).
   // 매출 줄이 아니면 값을 넣지 않는다(domestic·discount 는 통계에서 쓸 자리가 없다).
+  /**
+   * 견적 분류가 바뀌었다 — **손대지 않은 품목 줄**의 이익률만 새 기본값으로 맞춘다.
+   * 사람이 고친 줄(margin_touched)과 이익률이 뜻 없는 줄(국내조달·서비스·할인)은 그대로 둔다.
+   * 임시저장을 되살린 옛 초안도 그대로다 — 되살린 줄은 손댄 것으로 표시해 둔다.
+   */
+  const applyCategoryDefaults = useCallback((category: string | null) => {
+    const next = defaultMarginOf(category)
+    setRows(prev => prev.map(r => {
+      if (r.margin_touched) return r
+      if (r.row_kind !== 'price_list' && r.row_kind !== 'manual_jpy') return r
+      if (r.profit_rate === next) return r
+      return calcRow({ ...r, profit_rate: next }, exchangeRate)
+    }))
+  }, [exchangeRate])
+
   const setRowCategory = useCallback((rowId: string, code: string) =>
     setRows(prev => prev.map(r =>
       r.id !== rowId ? r : { ...r, category: canSplitRowKind(r.row_kind) ? (code || null) : null })), [])
@@ -271,6 +292,8 @@ export function useQuoteRows({
     selectExpensePreset,
     totalExpense,
     invalidExpenseIds,
+    /** 견적 분류가 바뀌면 부른다 — 손대지 않은 품목 줄의 기본 이익률을 맞춘다. */
+    applyCategoryDefaults,
     ctx,
     actions,
   }

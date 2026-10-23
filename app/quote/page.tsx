@@ -153,7 +153,7 @@ function QuotePageInner() {
     setSearchQuery, setSearchResults, setSearchOpen,
     setEditingProfitRate, setProfitRateInput,
     serviceRow, discountRow, expenses,
-    clearAllRowCategories,
+    clearAllRowCategories, applyCategoryDefaults,
     ctx: rowsCtx, actions: rowsActions,
   } = useQuoteRows({ supabase, exchangeRate, terms, setTerms, setTermsOpen, categories: activeCategories, lineSplitOn, formKind })
   const [showPriceGuide, setShowPriceGuide] = useState(false)
@@ -331,6 +331,15 @@ function QuotePageInner() {
   // 부대비용은 빈 행(항목명 미선택)은 조용히 무시하고, 항목명만 고른 채 금액이 0 인 행만 막는다.
   // 분류를 안 골랐으면 확정을 막는다. 품목 입력은 막지 않는다 — 금액을 먼저 잡아 보는
   // 흐름을 끊지 않으려고 **확정 버튼 한 곳에서만** 막는다.
+  /**
+   * 견적 분류 바꾸기 — 상태를 바꾸고, **손대지 않은 품목 줄**의 이익률 기본값도 따라가게 한다
+   * (TSE 60 · 그 밖 40 — lib/quoteProfit.ts). 사람이 고친 줄은 그대로다.
+   */
+  const changeCategory = (v: string) => {
+    setCategory(v)
+    applyCategoryDefaults(v || null)
+  }
+
   const categoryMissing = category.trim() === ''
   // 양식도 같은 규칙이다 — 고르기 전에는 확정만 막는다.
   const formMissing = formKind.trim() === ''
@@ -682,7 +691,7 @@ function QuotePageInner() {
             errors={errors}
             clearError={clearError}
             category={{
-              value: category, setValue: setCategory,
+              value: category, setValue: changeCategory,
               categories: activeCategories, loading: categoriesLoading,
               lineSplitOn, onToggleLineSplit: () => { void toggleLineSplit() }, splitRowCount,
               formKind, setFormKind,
@@ -713,7 +722,7 @@ function QuotePageInner() {
                 <span style={{ fontSize: 42, fontWeight: 900, color: '#000', whiteSpace: 'nowrap' }}>{engineerName}</span>
               </div>
             ))}
-            <ProfitPanel rows={rows} exchangeRate={exchangeRate} rateUpdatedAt={rateUpdatedAt} rateLoading={rateLoading} onFetchRate={fetchRate} onRateChange={handleRateChange} />
+            <ProfitPanel rows={rows} exchangeRate={exchangeRate} rateUpdatedAt={rateUpdatedAt} rateLoading={rateLoading} onFetchRate={fetchRate} onRateChange={handleRateChange} category={category} />
           </div>
 
           {/* 품목 */}
@@ -764,6 +773,7 @@ function QuotePageInner() {
 
             <RowAddButtons
               setRows={setRows}
+              category={category}
               serviceRow={serviceRow}
               discountRow={discountRow}
             />
