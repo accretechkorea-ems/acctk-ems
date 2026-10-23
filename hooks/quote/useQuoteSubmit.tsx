@@ -376,7 +376,9 @@ export function useQuoteSubmit({
         row_kind: r.row_kind,
         product_name: r.itemText || r.selectedItem?.model_jp || '',
         quantity: r.quantity,
-        unit_price_jpy: r.row_kind === 'manual_jpy' ? r.manual_cost_jpy : (r.selectedItem?.cost_jpy ?? null),
+        // 직접 넣은 원가가 사는 칸. 국내조달품은 이 칸에 **원화** 원가가 들어간다
+        // (칸을 새로 만들지 않는다 — app/quote/calc.ts 의 ⚠ 참고).
+        unit_price_jpy: (r.row_kind === 'manual_jpy' || r.row_kind === 'domestic') ? r.manual_cost_jpy : (r.selectedItem?.cost_jpy ?? null),
         unit_price_krw: r.unit_price,
         supply_amount: r.supply_price,
         tax_amount: r.tax,

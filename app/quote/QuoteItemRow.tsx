@@ -66,7 +66,8 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
 
   // 판매가 산출 방식을 고를 수 있는 종류 — 가격표 품목과 수동입력 품목.
   // (국내조달품·서비스비·할인은 금액을 직접 받으므로 해당 없음)
-  const hasPriceMode = row.row_kind === 'price_list' || row.row_kind === 'manual_jpy'
+  // 국내조달품도 이익률로 역산하거나 판매단가를 직접 넣는다(2026-10-23 — 일반 품목이 됐다).
+  const hasPriceMode = row.row_kind === 'price_list' || row.row_kind === 'manual_jpy' || row.row_kind === 'domestic'
   // '판매가' 모드 — 스테퍼 가운데 칸이 이익률 대신 판매단가 입력이 된다.
   const priceInputMode = hasPriceMode && row.price_mode === 'price'
   // 국내조달품 — 마진이 없어 이익률·관세율 스테퍼가 필요 없다(수량만 사용).
@@ -129,8 +130,15 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
   }
   if (row.supply_price > 0) {
     if (isDomestic) {
-      summaryLines.push(<>원가 ₩{numKR(row.unit_price)} × {row.quantity} = <b>₩{numKR(row.product_price)}</b> (이익 없음)</>)
-      summaryLines.push(<>부가세 없음</>)
+      summaryLines.push(<>원가 ₩{numKR(row.cost_price_jpy)} × {row.quantity} = <b>₩{numKR(row.product_price)}</b> (환율·관세 없음)</>)
+      summaryLines.push(<>단가 ₩{numKR(row.unit_price)} × {row.quantity} = 공급가 <b>₩{numKR(row.supply_price)}</b></>)
+      summaryLines.push(<>부가세 ₩{numKR(row.tax)}</>)
+      summaryLines.push(
+        <>실현 이익률{' '}
+          <b style={{ color: row.realized_profit_rate < 0 ? '#dc2626' : '#6b7280' }}>
+            {row.realized_profit_rate.toFixed(1)}%
+          </b>
+        </>)
     } else if (row.row_kind === 'service') {
       summaryLines.push(<>공급가 <b>₩{numKR(row.supply_price)}</b></>)
       summaryLines.push(<>부가세 ₩{numKR(row.tax)}</>)
@@ -358,14 +366,16 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
       </div>
       )}
 
-      {/* 국내조달품 — 원화 원가 직접 입력(마진 없음) */}
+      {/* 국내조달품 — **원화** 원가를 직접 넣는다.
+          칸은 manual_cost_jpy 를 쓴다(이 줄에서는 원화다 — app/quote/calc.ts 의 ⚠ 참고).
+          판매단가·이익률은 아래 공통 칸에서 다른 품목과 똑같이 고른다. */}
       {isDomestic && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', width: 44, flexShrink: 0 }}>원가</label>
           <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-            <input className="q-input" type="number" value={row.manual_unit_price || ''}
-              onChange={e => updateRow(row.id, 'manual_unit_price', parseInt(e.target.value) || 0)}
-              placeholder="원가 직접 입력"
+            <input className="q-input" type="number" value={row.manual_cost_jpy || ''}
+              onChange={e => updateRow(row.id, 'manual_cost_jpy', parseInt(e.target.value) || 0)}
+              placeholder="국내 구입가(원)"
               style={{ ...inp, width: '100%', textAlign: 'right', fontSize: 12, paddingRight: 28 }} />
             <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#9ca3af', pointerEvents: 'none' }}>원</span>
           </div>
@@ -410,7 +420,8 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, marginBottom: 4 }}>
             <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>수량</div>
-            {!isDomestic && <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>{priceInputMode ? '판매단가' : '이익률'}</div>}
+            <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>{priceInputMode ? '판매단가' : '이익률'}</div>
+            {/* 관세율 — 국내조달품은 쓰지 않는다(원가가 이미 원화다). */}
             {!isDomestic && <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>관세율</div>}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
@@ -419,7 +430,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions }: Quot
               <span style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'visible', color: '#111827' }}>{row.quantity}</span>
               <button onClick={() => updateRow(row.id, 'quantity', row.quantity + 1)} style={{ width: 18, height: 18, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0 }}>+</button>
             </div>
-            {isDomestic ? null : priceInputMode ? (
+            {priceInputMode ? (
             <div title="판매단가" style={{ height: 34, border: '1px solid #ebebeb', borderRadius: 6, display: 'flex', alignItems: 'center', padding: '0 6px', gap: 4, minWidth: 0, boxSizing: 'border-box' }}>
               <input
                 type="number"

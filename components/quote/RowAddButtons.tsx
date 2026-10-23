@@ -47,7 +47,7 @@ export default function RowAddButtons({ setRows, serviceRow, discountRow, catego
   </button>
   {/* 국내조달품 — 원화 원가만. 고객 견적서에는 금액 없이 포함사항으로 나간다. */}
   <button
-    onClick={() => setRows(prev => [...prev, createDomesticRow()])}
+    onClick={() => setRows(prev => [...prev, createDomesticRow(category)])}
     title="국내에서 조달하는 항목(원화 원가만, 마진 없음)"
     style={{ minWidth: 0, padding: '11px', background: '#fff', color: '#234ea2', border: '1px solid #ebebeb', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', transition: 'background 0.15s ease' }}
     onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6')}

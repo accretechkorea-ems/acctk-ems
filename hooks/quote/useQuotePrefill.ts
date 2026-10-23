@@ -133,14 +133,15 @@ export function useQuotePrefill({
         profit_rate: Number(it.profit_rate) || 0,
         exchange_rate: 0,
         selectedItem: it.price_list ?? null,
-        manual_cost_jpy: kind === 'manual_jpy' ? Number(it.unit_price_jpy) || 0 : 0,
+        // 국내조달품도 이 칸에서 원가를 되살린다(그 줄에서는 원화다).
+        manual_cost_jpy: (kind === 'manual_jpy' || kind === 'domestic') ? Number(it.unit_price_jpy) || 0 : 0,
         // 모델은 아직 quote_items 에 칸이 없어 되살릴 값이 없다(createRow 의 빈 글자를 쓴다).
         // 칸이 생기면 /api/quote-duplicate 의 select 에 model_name 을 더하고 여기서 받는다.
         // 할인은 사용자가 양수로 넣는 값이라 음수 공급가를 되돌린다.
         manual_unit_price: kind === 'discount' ? Math.abs(Number(it.supply_amount) || 0) : unitKrw,
         // price_mode 는 저장되지 않는다. 이익률 모드는 반드시 1,000원 올림을 하므로
         // 단가가 1,000원 배수가 아니면 판매가 모드였던 것이 확실하다. 배수면 기본값(rate)으로 둔다.
-        price_mode: (kind === 'price_list' || kind === 'manual_jpy') && unitKrw % 1000 !== 0 ? 'price' : 'rate',
+        price_mode: (kind === 'price_list' || kind === 'manual_jpy' || kind === 'domestic') && unitKrw % 1000 !== 0 ? 'price' : 'rate',
         // 품명 아래 설명 줄 — 저장값을 그대로 되살린다. 없거나 깨졌으면 빈 배열이다(subLinesOf).
         subLines: subLinesOf(it.sub_lines),
         // 줄별 분류 — **살아 있는 분류이고 매출 줄일 때만** 되살린다.

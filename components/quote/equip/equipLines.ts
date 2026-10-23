@@ -173,10 +173,14 @@ export function lineFromManual(
     partCode: (opts.partCode ?? '').trim(),
     itemText: opts.name.trim(),
     quantity: Math.max(0, Math.round(opts.quantity ?? opts.qtyPerUnit)),
-    // 구입가를 받은 줄은 이익률로 단가를 역산한다(rate). 그 밖은 적은 금액을 그대로 쓴다.
+    // 구입가를 받은 줄은 이익률로 단가를 역산한다(rate).
+    //
+    // 포함사항 줄(domestic)은 **원가만** 담는다 — 판매단가는 0 이라 견적서에 「-」로 나가고
+    // 매출에 들지 않는다(lib/quoteDomestic.ts 의 include). 2026-10-23 전에는 그 원가가
+    // manual_unit_price 에 있었는데, 국내조달품이 일반 품목이 되면서 그 칸은 판매단가가 됐다.
     price_mode: manualJpy ? 'rate' : 'price',
-    manual_cost_jpy: manualJpy ? (opts.costJpy ?? 0) : 0,
-    manual_unit_price: manualJpy ? 0 : (opts.price ?? 0),
+    manual_cost_jpy: manualJpy ? (opts.costJpy ?? 0) : (opts.price ?? 0),
+    manual_unit_price: 0,
   }
   return { row, checked: opts.checked !== false, group, qtyPerUnit: opts.qtyPerUnit }
 }

@@ -1,6 +1,7 @@
 // 견적서 계산 로직(순수 함수). 화면·PDF·저장이 모두 이 파일의 결과를 쓴다.
 
 import { defaultMarginOf } from '@/lib/quoteProfit'
+import { isBillableRow } from '@/lib/quoteDomestic'
 import { DISCOUNT_LABELS } from './types'
 import type { QuoteRow, ExpenseRow } from './types'
 
@@ -45,19 +46,33 @@ export function calcRow(row: QuoteRow, rate: number): QuoteRow {
       profit_rate: 0, realized_profit_rate: 0,
     }
   }
-  // 국내조달품 — 원화 원가를 그대로 공급가로 쓴다(마진 0). 환율·관세는 쓰지 않는다.
-  // 입력값은 manual_unit_price 를 재사용한다(= 사용자가 직접 넣는 원화 금액).
+  // 국내조달품 — 국내에서 **원화로** 사 온 물건이다. 수동입력 품목과 계산이 같고,
+  // 환율·관세를 쓰지 않는 것만 다르다(원가가 이미 원화다).
+  //
+  // ⚠ 이 줄에서 manual_cost_jpy 는 **원화 원가**다. 칸을 새로 만들지 않으려고 그 칸을
+  //   그대로 쓴다(저장되는 cost_price_jpy 도 이 줄에서는 원화다 — 원가 합계인
+  //   product_price 가 정본이고 그 값은 어느 줄에서나 원화다).
+  //
+  // 2026-10-23 전에는 「매출에 안 넣고 원가에만 넣는 자사 부담 비용」이었다.
+  // 본사 엑셀 양식에 그런 구분이 없어 일반 품목으로 바꿨다(lib/quoteDomestic.ts).
   if (row.row_kind === 'domestic') {
-    const unitPrice = row.manual_unit_price
+    const costKrw = row.manual_cost_jpy
+    const rawUnit = costKrw / (1 - row.profit_rate / 100)
+    const unitPrice = row.price_mode === 'price'
+      ? row.manual_unit_price
+      : Math.ceil(rawUnit / 1000) * 1000
     const supplyPrice = unitPrice * row.quantity
+    const productPrice = Math.round(costKrw * row.quantity)
+    const profit = supplyPrice - productPrice
     return {
       ...row, exchange_rate: exRate,
-      cost_price_jpy: 0, unit_price: unitPrice,
-      // 고객에게 청구하지 않는 자사 부담 비용 — 부가세도 발생하지 않는다.
-      supply_price: supplyPrice, tax: 0,
-      product_price: unitPrice * row.quantity,
-      // 마진이 없는 것이 정의다. 실현 이익률도 0.
-      profit: 0, profit_rate: 0, realized_profit_rate: 0,
+      // 환율·관세를 쓰지 않는다는 뜻으로 1 을 박아 둔다(엑셀의 「환율·관세 미적용」).
+      tariff_rate: 1,
+      cost_price_jpy: costKrw, unit_price: unitPrice,
+      supply_price: supplyPrice, tax: Math.round(supplyPrice * 0.1),
+      product_price: productPrice, profit,
+      // 다른 품목과 같게 — 목표 이익률은 입력값으로 두고 실현값을 따로 채운다.
+      realized_profit_rate: realizedRate(supplyPrice, profit),
     }
   }
   // 수동입력 품목 — 구입가 JPY 만 사용자가 직접 넣고, 계산은 가격표 품목 분기와 동일하다.
@@ -158,9 +173,10 @@ export function createManualJpyRow(category?: string | null): QuoteRow {
   return { ...createRow(category), row_kind: 'manual_jpy' }
 }
 
-// 국내조달품 행 — 원화 원가만 입력한다. 마진이 없으므로 이익률은 0 에서 시작한다.
-export function createDomesticRow(): QuoteRow {
-  return { ...createRow(), row_kind: 'domestic', profit_rate: 0 }
+// 국내조달품 행 — 원화 원가를 직접 넣는다. 이익률 기본값은 다른 품목과 같다(분류가 정한다).
+// 관세율은 1 로 둔다(쓰지 않는다는 뜻 — 화면에 관세 칸을 내지 않는다).
+export function createDomesticRow(category?: string | null): QuoteRow {
+  return { ...createRow(category), row_kind: 'domestic', tariff_rate: 1 }
 }
 
 // 서비스비 행 — 품명 기본값 '서비스비'(사용자 수정 가능, PDF 에 그대로 나감).
@@ -192,10 +208,9 @@ export function createExpenseRow(): ExpenseRow {
 // 합계 — 화면 상단 · ProfitPanel · PDF 미리보기 · PDF 다운로드가 모두 이 함수를 쓴다.
 // (통합 전 4곳의 계산식이 문자 단위로 동일함을 확인한 뒤 하나로 합친 것)
 export function calcTotals(rows: QuoteRow[]) {
-  // 국내조달품은 고객에게 청구하지 않는 자사 부담 비용이다.
-  // 매출(공급가·부가세)에서는 빼고 원가에만 반영해 순이익을 깎는다.
-  // 할인 행은 청구 대상(billable)이며 공급가·부가세가 음수라 그대로 더하면 차감이 된다.
-  const billable = rows.filter(r => r.row_kind !== 'domestic')
+  // 매출에 더하는 줄 — 국내조달품 중 **포함사항·옛 규칙** 줄만 빠진다(lib/quoteDomestic.ts).
+  // 할인 행은 청구 대상이며 공급가·부가세가 음수라 그대로 더하면 차감이 된다.
+  const billable = rows.filter(isBillableRow)
   const totalSupply = billable.reduce((s, r) => s + r.supply_price, 0)
   const totalTax = billable.reduce((s, r) => s + r.tax, 0)
   const totalAmount = totalSupply + totalTax
@@ -204,7 +219,7 @@ export function calcTotals(rows: QuoteRow[]) {
   // 기존 4개 분기는 모두 row.profit === supply_price − product_price 라 값이 달라지지 않는다.
   const totalProfit = totalSupply - totalCost
   const totalProfitRate = totalSupply > 0 ? (totalProfit / totalSupply) * 100 : 0
-  // 국내조달품이 원가를 얼마나 밀어올렸는지 화면에 보여주기 위한 값(합계 계산에는 관여하지 않는다).
+  // 국내조달품이 원가에서 차지하는 몫 — 화면에 보여주기 위한 값이다(합계 계산에는 관여하지 않는다).
   const domesticCost = rows.filter(r => r.row_kind === 'domestic').reduce((s, r) => s + r.product_price, 0)
   return { totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate, domesticCost }
 }

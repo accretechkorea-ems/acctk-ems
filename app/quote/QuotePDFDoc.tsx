@@ -5,6 +5,7 @@ import { Document, Page, Text, View, StyleSheet, Image, Font } from '@react-pdf/
 import type { QuoteRow } from './types'
 import { numKR, amountToKorean } from './format'
 import { withModelSuffix } from '@/lib/priceItemText'
+import { showsOnQuote } from '@/lib/quoteDomestic'
 import { managerNoteLine, noteBodyLines } from '@/lib/quoteRemarks'
 import { TERM_LABELS, defaultTermsFor, termKeysFor, type Terms } from '@/lib/quoteTerms'
 import {
@@ -619,11 +620,11 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({
   const cols = columnsFor(form)
   const colOf = (key: ColKey) => cols.find(c => c.key === key)
 
-  // 국내조달품(원화 원가만 있는 줄)은 고객 견적서에 나오지 않는다 — 매출 제외 · 자사 부담.
-  // 딱 하나 예외가 **포함사항 묶음**이다. 장비 구성의 포함사항은 곧 국내 구매품이고
-  // (PC세트·측정 테이블 등) 고객에게는 「포함」으로 알려야 한다. 금액 칸은 「-」로 나간다
-  // (아래 noAmount 가 포함사항이면 「-」로 그린다). 묶음이 없던 지난 줄은 종전처럼 빠진다.
-  const visible = rows.filter(r => r.row_kind !== 'domestic' || r.group_kind === 'include')
+  // 국내조달품도 **일반 품목처럼** 나간다(2026-10-23 — 본사 엑셀 양식에 맞췄다).
+  // 빠지는 것은 묶음도 판매단가도 없는 **옛 줄** 하나뿐이다 — 옛 견적을 다시 그릴 때
+  // 없던 금액이 생기지 않게. 포함사항 묶음은 금액 칸이 「-」로 나간다(rowAmountCells).
+  // 판정은 lib/quoteDomestic.ts 한곳이다.
+  const visible = rows.filter(showsOnQuote)
   // 할인은 장비 양식에서 합계 블록으로 올라가고, 나머지 양식에서는 품목 마지막 줄로 간다.
   const discountRows = visible.filter(r => r.row_kind === 'discount')
   const itemRows = visible.filter(r => r.row_kind !== 'discount')
