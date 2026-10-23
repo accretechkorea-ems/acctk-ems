@@ -13,6 +13,7 @@ import {
   clearDismiss, noticePhase, type Notice, type NoticePhase,
 } from '@/lib/notices'
 import { invalidateTeamPerms, loadTeamPerms } from '@/lib/teamPerms'
+import { inSalesStats, scopeChoiceOf, scopeValueOf, SCOPE_LABELS, type SalesScopeChoice } from '@/lib/salesScope'
 import { loadMe, invalidateMe } from '@/lib/appData/me'
 import { invalidateEngineers } from '@/lib/appData/engineers'
 // 팀 권한은 메뉴 단위다. 목록·묶음·파생 규칙은 모두 이 파일 한곳에서 온다.
@@ -49,6 +50,8 @@ type Engineer = {
   permission_level: string
   resigned_date: string | null
   office: string | null
+  /** 실적 집계 개인 설정(null = 소속 팀 설정을 따른다). 판정은 lib/salesScope.ts. */
+  in_sales_stats: boolean | null
 }
 
 /** 소속회사 한 줄 — 목록에 필요한 것만. childCount 는 살아있는 사업장 수다. */
@@ -136,14 +139,20 @@ function AdminPageInner() {
   const [engineers, setEngineers] = useState<Engineer[]>([])
   const [engineerLoading, setEngineerLoading] = useState(false)
   const [showAddEngineer, setShowAddEngineer] = useState(false)
-  const [addForm, setAddForm] = useState({ name: '', position: '사원', teams: '', email: '', initials: '', password: '', office: '' })
+  const [addForm, setAddForm] = useState({ name: '', position: '사원', teams: '', email: '', initials: '', password: '', office: '', scope: 'team' as SalesScopeChoice })
   const [addLoading, setAddLoading] = useState(false)
   const [editEngineer, setEditEngineer] = useState<Engineer | null>(null)
-  const [editForm, setEditForm] = useState({ name: '', position: '', teams: '', email: '', initials: '', permission_level: 'member', office: '' })
+  const [editForm, setEditForm] = useState({ name: '', position: '', teams: '', email: '', initials: '', permission_level: 'member', office: '', scope: 'team' as SalesScopeChoice })
   const [editLoading, setEditLoading] = useState(false)
   const [deleteEngineer, setDeleteEngineer] = useState<Engineer | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [resignDate, setResignDate] = useState<string>('')
+  /** 팀 이름 → 팀의 실적 집계 값. 개인 설정이 null 일 때 이 값을 따른다. */
+  const [teamScope, setTeamScope] = useState<Map<string, boolean>>(new Map())
+  /** 목표 관리창의 「집계 제외 직원」 접기. 기본은 닫아 둔다 — 평소에 볼 목록이 아니다. */
+  const [showExcluded, setShowExcluded] = useState(false)
+  /** 집계 설정을 저장 중인 직원. 선택칸을 잠그는 데만 쓴다. */
+  const [savingScope, setSavingScope] = useState<number | null>(null)
   const [showLogModal, setShowLogModal] = useState(false)
 
   // 팀 관리
@@ -269,6 +278,7 @@ function AdminPageInner() {
           permission_level: eng.permission_level ?? '',
           resigned_date: eng.resigned_date,
           office: eng.office,
+          in_sales_stats: eng.in_sales_stats,
         })
         setAuthorized(true)
       }
@@ -316,10 +326,14 @@ function AdminPageInner() {
   // ── 목표 금액 ───────────────────────────────────────────────────────────────
   const fetchTargetData = async () => {
     setTargetLoading(true)
-    const [{ data: eData }, { data: tData }] = await Promise.all([
+    // 팀 값(in_sales_stats)도 같이 읽는다 — 목록을 집계 대상/제외로 가르는 데 쓴다.
+    // loadTeamPerms 는 모듈 캐시라 이미 읽었으면 왕복이 늘지 않는다.
+    const [{ data: eData }, { data: tData }, permMap] = await Promise.all([
       supabase.from('engineers').select('*').order('engineer_id'),
       supabase.from('sales_targets').select('*').eq('year', targetYear).is('quarter', null),
+      loadTeamPerms(),
     ])
+    setTeamScope(new Map([...permMap].map(([name, p]) => [name, p.inSalesStats])))
     const sorted = (eData || []).sort((a: Engineer, b: Engineer) =>
       (POSITION_ORDER[a.position ?? ''] ?? 99) - (POSITION_ORDER[b.position ?? ''] ?? 99)
     )
@@ -360,6 +374,59 @@ function AdminPageInner() {
     setEditingTarget(null)
     fetchTargetData()
   }
+
+  /**
+   * 개인 집계 설정을 바로 저장한다. 저장이 끝나면 목록이 다시 갈려(대상 ↔ 제외)
+   * 그 행이 다른 묶음으로 옮겨 간다 — 눌렀던 자리에 남지 않는 것이 정상이다.
+   *
+   * engineers 쓰기는 service role 라우트에서만 한다. update-engineer 는 이름·팀까지
+   * 전부 다시 쓰므로, 한 칸만 고치는 좁은 길(engineer-sales-scope)을 따로 쓴다.
+   */
+  const handleSaveScope = async (eng: Engineer, choice: SalesScopeChoice) => {
+    const next = scopeValueOf(choice)
+    if (next === (eng.in_sales_stats ?? null)) return
+    setSavingScope(eng.engineer_id)
+    try {
+      const res = await fetch('/api/engineer-sales-scope', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ engineer_id: eng.engineer_id, in_sales_stats: next }),
+      })
+      const result = await res.json().catch(() => ({ error: `서버 오류 (${res.status})` }))
+      if (!res.ok || result.error) { toast.error(`오류: ${result.error ?? '알 수 없는 오류'}`); return }
+      // 집계 대상이 바뀌면 실적 현황·활동 현황이 보는 캐시도 낡는다.
+      // 자기 자신을 고쳤을 때는 홈 「내 실적」 카드가 보는 me 캐시까지 버려야 한다.
+      invalidateEngineers()
+      invalidateTeamPerms()
+      invalidateMe()
+      setEngineers(prev => prev.map(e => e.engineer_id === eng.engineer_id ? { ...e, in_sales_stats: next } : e))
+      toast.success(`${eng.name} · 집계 ${SCOPE_LABELS[choice]}`)
+    } catch {
+      toast.error('오류가 발생했습니다')
+    } finally {
+      setSavingScope(null)
+    }
+  }
+
+  /** 목표 관리창·직원 모달이 함께 쓰는 3선택 칸. 값은 팀 설정 / 포함 / 제외. */
+  const scopeSelect = (
+    value: SalesScopeChoice,
+    onPick: (c: SalesScopeChoice) => void,
+    opts?: { disabled?: boolean; width?: number; hint?: string },
+  ) => (
+    <select value={value} onChange={e => onPick(e.target.value as SalesScopeChoice)}
+      disabled={opts?.disabled}
+      title={`실적 현황·활동 현황·포캐스트 집계에 넣을지${opts?.hint ? ` — ${opts.hint}` : ''}`}
+      style={{
+        ...inp, width: opts?.width ?? 108, padding: '5px 8px', fontSize: 12, fontWeight: 600,
+        color: value === 'team' ? GRAY : TEXT, flexShrink: 0,
+        cursor: opts?.disabled ? 'wait' : 'pointer',
+      }}>
+      <option value="team">집계: {SCOPE_LABELS.team}</option>
+      <option value="in">집계: {SCOPE_LABELS.in}</option>
+      <option value="out">집계: {SCOPE_LABELS.out}</option>
+    </select>
+  )
 
   // ── 직원 관리 ───────────────────────────────────────────────────────────────
   /**
@@ -404,6 +471,7 @@ function AdminPageInner() {
           teams: addForm.teams,
           initials: addForm.initials.trim().toUpperCase(),
           office: addForm.office,
+          in_sales_stats: scopeValueOf(addForm.scope),
         }),
       })
       const result = res.ok
@@ -419,7 +487,7 @@ function AdminPageInner() {
       }
       toast.success(`${addForm.name} 직원이 등록되었습니다`)
       setShowAddEngineer(false)
-      setAddForm({ name: '', position: '사원', teams: '', email: '', initials: '', password: '', office: '' })
+      setAddForm({ name: '', position: '사원', teams: '', email: '', initials: '', password: '', office: '', scope: 'team' })
       fetchEngineers()
     } catch (e) {
       toast.error('오류가 발생했습니다')
@@ -452,6 +520,7 @@ function AdminPageInner() {
           initials: editForm.initials.trim().toUpperCase(),
           permission_level: editForm.permission_level,
           office: editForm.office,
+          in_sales_stats: scopeValueOf(editForm.scope),
         }),
       })
       const result = await res.json().catch(() => ({ error: `서버 오류 (${res.status})` }))
@@ -700,6 +769,7 @@ function AdminPageInner() {
     ])
     setTeamsList((data as Team[]) ?? [])
     setTeamMenus(new Map([...menuMap].map(([name, p]) => [name, p.menus])))
+    setTeamScope(new Map([...menuMap].map(([name, p]) => [name, p.inSalesStats])))
     setTeamLoading(false)
   }
 
@@ -1065,8 +1135,21 @@ function AdminPageInner() {
   // (과거 기간 집계는 실적 현황이 isActiveInPeriod 로 별도 처리. 여기선 현재 재직자만.)
   const activeEngineers = engineers.filter(e => !e.resigned_date)
 
-  // 팀별 그룹핑 (목표 금액용) — 현재 재직자만
-  const teamGroups = activeEngineers.reduce((acc, eng) => {
+  /**
+   * 집계 대상 판정 — 개인 설정이 먼저고, 없으면 소속 팀 설정을 따른다(lib/salesScope.ts).
+   * 목표를 넣어도 집계에서 빠지는 사람(임원·영업관리 등)을 목록에서 걷어내, 목표 합계가
+   * 실적 현황의 모수와 어긋나지 않게 한다.
+   */
+  const scopeTeamOf = (eng: Engineer) =>
+    eng.teams ? { inSalesStats: teamScope.get(eng.teams) === true } : null
+  const scopeHint = (eng: Engineer) =>
+    eng.teams ? `${eng.teams} 팀 설정: ${teamScope.get(eng.teams) === true ? '포함' : '제외'}` : '팀 미배정'
+  const isScoped = (eng: Engineer) => inSalesStats(eng, scopeTeamOf(eng))
+  const scopedEngineers = activeEngineers.filter(isScoped)
+  const excludedEngineers = activeEngineers.filter(e => !isScoped(e))
+
+  // 팀별 그룹핑 (목표 금액용) — 집계 대상인 재직자만
+  const teamGroups = scopedEngineers.reduce((acc, eng) => {
     const team = eng.teams ?? '미배정'
     if (!acc[team]) acc[team] = []
     acc[team].push(eng)
@@ -1083,8 +1166,9 @@ function AdminPageInner() {
     teamEngineers.reduce((s, e) => s + (getTarget(e.engineer_id)?.target_amount || 0), 0)
   const getTeamTotalOrder = (teamEngineers: Engineer[]) =>
     teamEngineers.reduce((s, e) => s + (getTarget(e.engineer_id)?.order_target_amount || 0), 0)
-  const totalAllTarget = activeEngineers.reduce((s, e) => s + (getTarget(e.engineer_id)?.target_amount || 0), 0)
-  const totalAllOrder = activeEngineers.reduce((s, e) => s + (getTarget(e.engineer_id)?.order_target_amount || 0), 0)
+  // 전체 목표 합계도 **집계 대상만** 센다 — 제외된 사람의 목표는 실적 현황에 잡히지 않는다.
+  const totalAllTarget = scopedEngineers.reduce((s, e) => s + (getTarget(e.engineer_id)?.target_amount || 0), 0)
+  const totalAllOrder = scopedEngineers.reduce((s, e) => s + (getTarget(e.engineer_id)?.order_target_amount || 0), 0)
 
   return (
     <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '32px 24px 24px' }}>
@@ -1290,6 +1374,11 @@ function AdminPageInner() {
                             <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>{eng.name}</span>
                             <span style={{ fontSize: 11, color: GRAY, marginLeft: 6 }}>{eng.position}</span>
                           </div>
+                          {/* 집계 설정 — 「제외」로 바꾸면 이 행은 아래 제외 묶음으로 옮겨 간다. */}
+                          {scopeSelect(scopeChoiceOf(eng.in_sales_stats), c => handleSaveScope(eng, c), {
+                            disabled: savingScope === eng.engineer_id,
+                            hint: scopeHint(eng),
+                          })}
                           {isEditing ? (
                             <div style={{ flex: 1, display: 'flex', gap: 6, alignItems: 'flex-end', position: 'relative', marginBottom: targetErr.errors.amount ? 18 : 0 }}>
                               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -1345,6 +1434,41 @@ function AdminPageInner() {
                     })}
                   </div>
                 ))
+              )}
+
+              {/* 집계에서 빠진 재직자 — 목표를 넣어도 실적 현황에 안 잡히므로 평소에는 접어 둔다.
+                  여기서도 선택칸을 바꿀 수 있고, 「포함」으로 바꾸면 위 팀 묶음으로 올라간다. */}
+              {!targetLoading && excludedEngineers.length > 0 && (
+                <div style={{ marginTop: 4, borderTop: `1px solid ${BORDER}`, paddingTop: 12 }}>
+                  <button onClick={() => setShowExcluded(v => !v)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '8px 10px',
+                      background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer',
+                      fontSize: 12, fontWeight: 700, color: GRAY,
+                    }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                      strokeLinecap="round" strokeLinejoin="round"
+                      style={{ transform: showExcluded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}>
+                      <path d="m9 18 6-6-6-6" />
+                    </svg>
+                    집계 제외 직원 {excludedEngineers.length}명 {showExcluded ? '접기' : '보기'}
+                  </button>
+                  {showExcluded && excludedEngineers.map(eng => (
+                    <div key={eng.engineer_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderBottom: `1px solid #f3f4f6` }}>
+                      <div style={{ width: 120, flexShrink: 0 }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>{eng.name}</span>
+                        <span style={{ fontSize: 11, color: GRAY, marginLeft: 6 }}>{eng.position}</span>
+                      </div>
+                      {scopeSelect(scopeChoiceOf(eng.in_sales_stats), c => handleSaveScope(eng, c), {
+                        disabled: savingScope === eng.engineer_id,
+                        hint: scopeHint(eng),
+                      })}
+                      <span style={{ flex: 1, fontSize: 12, color: '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {eng.teams ?? '팀 미배정'} · 목표를 넣어도 실적 현황에 잡히지 않습니다
+                      </span>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
             <div style={{ marginTop: 12, fontSize: 12, color: GRAY }}>* 수주·매출 목표는 각각 선택 입력이며, 둘 다 비운 채 저장하면 해당 목표가 삭제됩니다</div>
@@ -1484,7 +1608,7 @@ function AdminPageInner() {
                           </div>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
-                          <button onClick={() => { setEditEngineer(eng); setEditForm({ name: eng.name, position: eng.position || '사원', teams: eng.teams || '', email: eng.email || '', initials: eng.initials || '', permission_level: eng.permission_level || 'member', office: eng.office || '' }) }}
+                          <button onClick={() => { setEditEngineer(eng); setEditForm({ name: eng.name, position: eng.position || '사원', teams: eng.teams || '', email: eng.email || '', initials: eng.initials || '', permission_level: eng.permission_level || 'member', office: eng.office || '', scope: scopeChoiceOf(eng.in_sales_stats) }) }}
                             style={{ padding: '4px 12px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>수정</button>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
@@ -1534,6 +1658,15 @@ function AdminPageInner() {
                   {selectableOffices(officeList, addForm.office).map(o => <option key={o.code} value={o.code}>{o.label}{o.is_active ? '' : ' (비활성)'}</option>)}
                 </select>
               </div>
+              {/* 실적 집계 — 기본은 「팀 설정을 따름」. 대부분은 이대로 두면 맞는다. */}
+              <div>
+                <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>실적 집계</div>
+                <select value={addForm.scope} onChange={e => setAddForm(p => ({ ...p, scope: e.target.value as SalesScopeChoice }))} style={inp}>
+                  <option value="team">팀 설정을 따름{addForm.teams ? ` (${addForm.teams} 팀: ${teamScope.get(addForm.teams) === true ? '포함' : '제외'})` : ''}</option>
+                  <option value="in">포함 — 팀 설정과 무관하게 집계한다</option>
+                  <option value="out">제외 — 팀이 대상이어도 빼 둔다</option>
+                </select>
+              </div>
               <div>
                 <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>이메일 * (로그인 ID)</div>
                 <input value={addForm.email} onChange={e => { setAddForm(p => ({ ...p, email: e.target.value })); addEngErr.clearError('email') }} placeholder="예: hong@accretechkorea.com" style={addEngErr.errors.email ? { ...inp, border: errBorder } : inp} />
@@ -1552,7 +1685,7 @@ function AdminPageInner() {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
-              <button onClick={() => { setShowAddEngineer(false); setAddForm({ name: '', position: '사원', teams: '', email: '', initials: '', password: '', office: '' }) }}
+              <button onClick={() => { setShowAddEngineer(false); setAddForm({ name: '', position: '사원', teams: '', email: '', initials: '', password: '', office: '', scope: 'team' }) }}
                 style={{ flex: 1, padding: '11px', background: '#f3f4f6', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>취소</button>
               <button onClick={handleAddEngineer} disabled={addLoading}
                 style={{ flex: 1, padding: '11px', background: BLUE, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer', opacity: addLoading ? 0.7 : 1 }}>
@@ -1594,6 +1727,15 @@ function AdminPageInner() {
                 <select value={editForm.office} onChange={e => setEditForm(p => ({ ...p, office: e.target.value }))} style={inp}>
                   <option value="">사무실 미지정</option>
                   {selectableOffices(officeList, editForm.office).map(o => <option key={o.code} value={o.code}>{o.label}{o.is_active ? '' : ' (비활성)'}</option>)}
+                </select>
+              </div>
+              {/* 실적 집계 — 퇴사자도 이 모달에서 고친다(목표 관리창은 재직자만 보여 준다). */}
+              <div>
+                <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>실적 집계</div>
+                <select value={editForm.scope} onChange={e => setEditForm(p => ({ ...p, scope: e.target.value as SalesScopeChoice }))} style={inp}>
+                  <option value="team">팀 설정을 따름{editForm.teams ? ` (${editForm.teams} 팀: ${teamScope.get(editForm.teams) === true ? '포함' : '제외'})` : ''}</option>
+                  <option value="in">포함 — 팀 설정과 무관하게 집계한다</option>
+                  <option value="out">제외 — 팀이 대상이어도 빼 둔다</option>
                 </select>
               </div>
               <div>

@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json()
-  const { engineer_id, name, position, teams, email, initials, permission_level, resigned_date, office } = body
+  const { engineer_id, name, position, teams, email, initials, permission_level, resigned_date, office, in_sales_stats } = body
 
   if (!engineer_id || !name?.trim()) {
     return NextResponse.json({ error: '필수 값 누락' }, { status: 400 })
@@ -71,6 +71,15 @@ export async function POST(req: Request) {
     } else {
       return NextResponse.json({ error: '유효하지 않은 퇴사일 형식입니다.' }, { status: 400 })
     }
+  }
+
+  // 실적 집계 개인 설정 — 보냈을 때만 반영한다(null = 팀 설정을 따른다).
+  // 한 칸만 고치는 길은 /api/engineer-sales-scope 다. 여기는 수정 모달의 전체 저장용.
+  if (in_sales_stats !== undefined) {
+    if (in_sales_stats !== null && typeof in_sales_stats !== 'boolean') {
+      return NextResponse.json({ error: '집계 설정 값이 올바르지 않습니다.' }, { status: 400 })
+    }
+    updateData.in_sales_stats = in_sales_stats
   }
 
   // permission_level 변경은 superadmin만 가능

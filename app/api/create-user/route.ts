@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json()
-  const { email, password, name, position, teams, initials, office } = body
+  const { email, password, name, position, teams, initials, office, in_sales_stats } = body
 
   // 필수 입력값 검증
   if (!email?.trim() || !password?.trim() || !name?.trim()) {
@@ -61,6 +61,9 @@ export async function POST(req: Request) {
 
   if (authError) return NextResponse.json({ error: authError.message }, { status: 400 })
 
+  // 실적 집계 개인 설정 — true/false 만 받고, 그 외(미지정)는 null 로 둔다(= 팀 설정을 따른다).
+  const scope = typeof in_sales_stats === 'boolean' ? in_sales_stats : null
+
   // 이미 engineers 테이블에 있으면 update, 없으면 insert
   const { error: dbError } = await supabaseAdmin.from('engineers').upsert({
     name: name.trim(),
@@ -69,6 +72,7 @@ export async function POST(req: Request) {
     initials: initials?.trim().toUpperCase() || null,
     email: email.trim(),
     office: office?.trim() || null,
+    in_sales_stats: scope,
   }, { onConflict: 'email' })
 
   if (dbError) {
