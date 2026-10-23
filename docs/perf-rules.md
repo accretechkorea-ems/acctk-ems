@@ -80,3 +80,9 @@ NEXT_DIST_DIR=.next-perf npx next build
 
 빌드가 tsconfig.json 에 줄을 더하므로 측정 뒤 `git checkout tsconfig.json` 을 한다.
 측정 폴더(.next-perf*/)는 .gitignore 에 있다 — 두고 있으면 lint 가 빌드 산출물까지 읽는다.
+
+## 경고 기준선
+
+`npm run lint` 의 경고 수는 `lint-baseline.json` 의 `maxWarnings` 가 들고 있고, CI 가
+그 수를 넘으면 막는다(`npm run lint:ci`). **경고를 줄였으면 `lint-baseline.json` 을 같이
+내린다** — 내리지 않으면 다시 늘어나도 아무도 모른다. 자세한 것은 `docs/checks.md`.

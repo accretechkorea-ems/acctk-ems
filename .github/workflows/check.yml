@@ -1,0 +1,45 @@
+# push·PR 때 자동 검사 — 타입·경고 수·하네스.
+#
+# Supabase 키가 필요 없다. 세 단계 모두 운영 DB·Auth 에 붙지 않는다:
+#   · tsc   — 타입만 본다
+#   · lint  — 파일만 본다
+#   · test  — scripts/*-check.js 는 순수 함수 시험이다(scripts/run-checks.js 의 머리말 참고)
+# 키가 필요한 측정 도구(scripts/perf/*)는 test 에 들어가지 않는다 — 이름으로 갈린다.
+#
+# next build 는 넣지 않는다 — Vercel 이 이미 한다(여기서 또 하면 2분을 두 번 쓴다).
+
+name: check
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# 같은 브랜치에 연달아 push 하면 앞의 것을 멈춘다(쓸데없이 두 번 돌지 않게).
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: 설치
+        run: npm ci
+
+      - name: 타입 (tsc 0건이어야 한다)
+        run: npx tsc --noEmit
+
+      - name: 경고 수 (lint-baseline.json 기준선 이하여야 한다)
+        run: npm run lint:ci
+
+      - name: 하네스 (scripts/*-check.js 전부)
+        run: npm test

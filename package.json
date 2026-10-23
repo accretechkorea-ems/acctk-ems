@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "perf": "node scripts/perf/measure.ts",
-    "perf:dev": "node scripts/perf/measure.ts --dev"
+    "perf:dev": "node scripts/perf/measure.ts --dev",
+    "test": "node scripts/run-checks.js",
+    "lint:ci": "node scripts/lint-baseline.js",
+    "check": "npx tsc --noEmit && npm run lint:ci && npm test"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
