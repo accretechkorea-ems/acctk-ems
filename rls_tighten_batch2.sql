@@ -1,17 +1,14 @@
--- ⚠ 정책을 갈아 끼우는 파일이다(drop policy → create policy). 두 번 돌리면 중간에
---   「정책이 없는 순간」이 생긴다 — 돌리기 전에 아래를 다 읽어라.
+-- ⚠ 재실행 금지 — 이미 적용됨. 정책을 갈아 끼우는 파일이라(drop policy → create policy)
+--   다시 돌리면 중간에 「정책이 없는 순간」이 생긴다.
 --
--- RLS 좁히기 묶음 2 (2026-10-08 작성). **적용 여부를 확인하지 못했다(2026-10-23).**
---   왜 — RLS 정책은 PostgREST 로 읽을 수 없다(pg_policies 가 노출돼 있지 않다).
---   이 파일이 만드는 함수 mark_log_restocked 는 DB 에 있지만 **그것은 증거가 아니다** —
---   같은 함수가 db_functions_snapshot.sql(2026-09-11)과 rls_backup_20261008.sql
---   (적용 직전 상태)에도 있어 이 파일보다 먼저 존재했다.
---   확인하려면 Supabase SQL Editor 에서 한 줄 읽으면 된다:
+-- RLS 좁히기 묶음 2 (2026-10-08 작성). **적용 확인 완료 2026-10-23.**
+--   Kevin 이 pg_policies 로 확인 — quotes·customers·service_history·sales_* 등 핵심 표에 열린 정책(true) 없음, 열린 표는 참조 표 9개뿐.
+--   (정책은 PostgREST 로 읽을 수 없어 Supabase SQL Editor 에서 직접 봤다. 다시 볼 때:
 --     select tablename, policyname, cmd, qual from pg_policies
---      where schemaname='public' and tablename in ('price_list','download_logs','quote_sequence');
---   참고로 미로그인(anon) 은 어떤 표도 읽지 못한다(2026-10-23 확인 — 표 단위 권한부터 없다.
---   42501 permission denied). 그래서 지금 당장 새는 곳은 없다.
--- 적용 대기 상태로 둔다 — 아래 「적용 순서와 시험 메모」를 읽고 **한 문장씩 따로** 실행한다.
+--      where schemaname='public' order by tablename, policyname;)
+--   곁들여: 미로그인(anon) 은 어떤 표도 읽지 못한다(2026-10-23 — 표 단위 권한부터 없다.
+--   42501 permission denied). 정책 위에 한 겹이 더 있다.
+-- 기록용이다 — 아래 「적용 순서와 시험 메모」는 그때 무엇을 어떤 순서로 돌렸는지의 기록이다.
 -- begin/commit 으로 묶지 않았다. 문장 하나를 실행하고, 그 문장의 시험을 하고, 다음으로 넘어간다.
 --
 -- 왜 하는가

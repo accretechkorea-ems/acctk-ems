@@ -1,13 +1,11 @@
--- ⚠ 정책을 갈아 끼우는 파일이다(drop policy → create policy). 두 번 돌리면 중간에
---   「정책이 없는 순간」이 생긴다 — 돌리기 전에 아래를 다 읽어라.
+-- ⚠ 재실행 금지 — 이미 적용됨. 정책을 갈아 끼우는 파일이라(drop policy → create policy)
+--   다시 돌리면 중간에 「정책이 없는 순간」이 생긴다.
 --
--- RLS 좁히기 묶음 3 (2026-10-08 작성). **적용 여부를 확인하지 못했다(2026-10-23).**
---   왜 — RLS 정책은 PostgREST 로 읽을 수 없다(batch2 의 머리말과 같은 이유).
---   확인하려면 Supabase SQL Editor 에서:
---     select tablename, policyname, cmd from pg_policies
---      where schemaname='public' and tablename like 'inventory%';
---   미로그인(anon) 이 어떤 표도 읽지 못하는 것은 2026-10-23 확인했다(42501).
--- 적용 대기 상태로 둔다 — 아래 「적용 순서와 시험 메모」를 읽고 **한 문장씩 따로** 실행한다.
+-- RLS 좁히기 묶음 3 (2026-10-08 작성). **적용 확인 완료 2026-10-23.**
+--   Kevin 이 pg_policies 로 확인 — quotes·customers·service_history·sales_* 등 핵심 표에 열린 정책(true) 없음, 열린 표는 참조 표 9개뿐.
+--   (정책은 PostgREST 로 읽을 수 없어 Supabase SQL Editor 에서 직접 봤다 — batch2 와 같은 조회.)
+--   곁들여: 미로그인(anon) 이 어떤 표도 읽지 못하는 것도 2026-10-23 확인했다(42501).
+-- 기록용이다 — 아래 「적용 순서와 시험 메모」는 그때 무엇을 어떤 순서로 돌렸는지의 기록이다.
 -- begin/commit 으로 묶지 않았다. 문장 하나를 실행하고, 그 문장의 시험을 하고, 다음으로 넘어간다.
 -- rls_tighten_batch2.sql 을 먼저 끝낸 뒤에 한다.
 --

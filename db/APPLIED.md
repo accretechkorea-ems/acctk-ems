@@ -11,7 +11,7 @@ SQL 파일은 지금 **저장소 루트**에 있다(`db/` 가 아니다 — 아�
 
 ---
 
-## 적용 확인된 것 — 37개
+## 적용 확인된 것 — 39개
 
 표·컬럼·함수가 **실제로 DB 에 있는지** 읽기 전용으로 확인했다(2026-10-23).
 확인 방법은 PostgREST OpenAPI 문서(= 노출 스키마의 정본)와 컬럼 조회다.
@@ -55,21 +55,33 @@ SQL 파일은 지금 **저장소 루트**에 있다(`db/` 가 아니다 — 아�
 | `showroom_usage_document_schema.sql` | **미상** | Kevin | showroom_usage.document_id. **머리말이 「미적용」이었다 — 고쳤다** |
 | `suggestion_images_schema.sql` | 2026-09-22 | Kevin | suggestions.image_urls |
 | `teams_rls_policy.sql` | 2026-07-27 | Kevin | 함수 is_superadmin. 정책 자체는 읽지 못했다 |
+| `rls_tighten_batch2.sql` | 2026-10-23 확인 | Kevin | **적용 확인 완료** — pg_policies 로 확인: quotes·customers·service_history·sales_* 등 핵심 표에 열린 정책(true) 없음, 열린 표는 참조 표 9개뿐. ⚠ 재실행 금지(drop policy → create policy) |
+| `rls_tighten_batch3.sql` | 2026-10-23 확인 | Kevin | **적용 확인 완료** — pg_policies 로 확인: quotes·customers·service_history·sales_* 등 핵심 표에 열린 정책(true) 없음, 열린 표는 참조 표 9개뿐. ⚠ 재실행 금지(drop policy → create policy) |
 
-## 아직 적용하지 않은 것 / 확인하지 못한 것 — 3개
+## 아직 적용하지 않은 것 — 1개
 
 | 파일 | 상태 | 어떻게 확인하나 |
 |---|---|---|
 | `quotes_rejected_backfill.sql` | **미적용으로 보인다** | `quotes.status = '반려'` 가 0행(2026-10-23). 다만 「되돌릴 대상이 애초에 없었다」와 구분되지 않는다. ⚠ UPDATE 라 두 번 돌리면 결과가 달라진다 |
-| `rls_tighten_batch2.sql` | **확인 불가** | RLS 정책은 PostgREST 로 읽을 수 없다. Supabase SQL Editor 에서 `select tablename, policyname, cmd from pg_policies where schemaname='public' and tablename in ('price_list','download_logs','quote_sequence');` |
-| `rls_tighten_batch3.sql` | **확인 불가** | 같은 이유. `... and tablename like 'inventory%';` |
 
-함수 `mark_log_restocked` 가 DB 에 있는 것은 batch2 적용의 증거가 **아니다** — 같은 함수가
-`db_functions_snapshot.sql`(2026-09-11)과 `rls_backup_20261008.sql`(적용 직전 상태)에도 있어
-그 파일보다 먼저 존재했다.
+### RLS 는 어떻게 확인했나
 
-참고로 **미로그인(anon)은 어떤 표도 읽지 못한다**(2026-10-23 확인 — 표 단위 권한부터 없어
-`42501 permission denied`). 그래서 batch2·3 이 아직 안 들어갔더라도 지금 밖으로 새는 곳은 없다.
+정책은 PostgREST 로 읽을 수 없다(pg_policies 가 노출돼 있지 않다). 그래서 **Kevin 이
+Supabase SQL Editor 에서 직접 봤다**(2026-10-23) — 핵심 표(quotes·customers·
+service_history·sales_*)에 `using (true)` 로 열린 정책이 없고, 열린 것은 참조 표 9개뿐이다.
+batch2·3 이 들어간 상태다.
+
+앞으로 다시 볼 때 쓰는 조회:
+
+```sql
+select tablename, policyname, cmd, qual
+  from pg_policies
+ where schemaname = 'public'
+ order by tablename, policyname;
+```
+
+곁들여 확인한 것: **미로그인(anon)은 어떤 표도 읽지 못한다**(2026-10-23 — 표 단위 권한부터
+없어 `42501 permission denied`). 정책 위에 한 겹이 더 있는 셈이다.
 
 ---
 
