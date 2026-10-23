@@ -3,6 +3,8 @@
 //   npm run perf        운영과 같은 1회 실행(next start, 기본). 서버가 없으면 띄우는 법을 알려 준다.
 //   npm run perf:dev    개발 서버(localhost:3000)에 붙는다 — React Strict Mode 가 effect 를
 //                       두 번 돌리므로 **조회 수가 부풀어** 보인다(보고서에 그 사실을 적는다).
+//   npm run perf -- --login   화면 목록 대신 **로그인 직후 첫 로딩**만 구간별로 3회 잰다
+//                       (찬 캐시·더운 캐시 각 3회 → docs/perf/login-flow.md). scripts/perf/login.ts
 //
 // ── 읽기 전용 ───────────────────────────────────────────────────────────────
 //   할 수 있는 일: 주소 이동 · 보이는 글자 누르기 · 목록 첫 줄 누르기 · ESC.
@@ -19,6 +21,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ModalSpec, ScreenSpec, Step } from './screens.ts'
 import { DETAIL_FROM_LIST, SCREENS, SKIPPED_MODALS } from './screens.ts'
+import { loginMarkdown, measureLogin, type LoginSample } from './login.ts'
 
 const ROOT = process.cwd()
 const DEV = process.argv.includes('--dev')
@@ -33,6 +36,10 @@ const ONLY = (() => {
 })()
 /** 쉼표로 여럿 — --only dashboard,approval 처럼 쓴다. */
 const ONLY_PARTS = ONLY.split(',').map(x => x.trim()).filter(Boolean)
+/** 로그인 흐름만 재는 모드 — 화면 목록은 돌지 않는다. */
+const LOGIN_ONLY = process.argv.includes('--login')
+/** 로그인 흐름을 몇 번 재는가(찬 캐시·더운 캐시 각각). */
+const LOGIN_RUNS = 3
 const picked = <T extends { label: string; path?: string; from?: string }>(list: T[]): T[] =>
   ONLY_PARTS.length === 0
     ? list
@@ -452,6 +459,47 @@ async function main() {
       console.error('개발 서버로 재려면: npm run perf:dev  (Strict Mode 때문에 조회 수가 부풀어 보인다)')
     }
     process.exit(1)
+  }
+
+  const stampNow = () => {
+    const now = new Date()
+    const pad = (x: number) => String(x).padStart(2, '0')
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`
+  }
+  const pwVersion = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).devDependencies.playwright
+
+  // ── 로그인 흐름만 재는 길 ────────────────────────────────────────────────
+  if (LOGIN_ONLY) {
+    const browser = await chromium.launch()
+    const cold: LoginSample[] = []
+    const warm: LoginSample[] = []
+    try {
+      for (let i = 1; i <= LOGIN_RUNS; i++) {
+        // 회차마다 새 컨텍스트 = 받아 둔 것이 아무것도 없는 첫 방문.
+        const c = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+        process.stdout.write(`· 찬 캐시 ${i}/${LOGIN_RUNS} … `)
+        const a = await measureLogin(c, { email, password, base: BASE, supabaseUrl: env.NEXT_PUBLIC_SUPABASE_URL ?? '', cold: true })
+        cold.push(a)
+        console.log(a.ok ? `조용해짐 ${a.quietAt}ms` : `실패(${a.note})`)
+        // 쿠키만 버린다 — JS·문서는 캐시에 남아 있고 세션만 없는 상태.
+        await c.clearCookies()
+        process.stdout.write(`· 더운 캐시 ${i}/${LOGIN_RUNS} … `)
+        const b = await measureLogin(c, { email, password, base: BASE, supabaseUrl: env.NEXT_PUBLIC_SUPABASE_URL ?? '', cold: false })
+        warm.push(b)
+        console.log(b.ok ? `조용해짐 ${b.quietAt}ms` : `실패(${b.note})`)
+        await c.close().catch(() => {})
+      }
+    } finally {
+      await browser.close().catch(() => {})
+    }
+    const stamp = stampNow()
+    const dir = join(ROOT, 'docs', 'perf')
+    mkdirSync(dir, { recursive: true })
+    const meta = { when: stamp.replace(/-(\d{2})(\d{2})$/, ' $1:$2'), mode: DEV ? 'dev (next dev)' : 'start (next start)', base: BASE, pw: pwVersion }
+    writeFileSync(join(dir, stamp + '-login.json'), JSON.stringify({ meta, cold, warm }, null, 1))
+    writeFileSync(join(dir, 'login-flow.md'), loginMarkdown(cold, warm, meta))
+    console.log('\n보고서: docs/perf/login-flow.md · 원자료: docs/perf/' + stamp + '-login.json')
+    return
   }
 
   let browser: Browser | null = null

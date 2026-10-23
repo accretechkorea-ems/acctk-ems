@@ -33,3 +33,20 @@ npm run perf:dev
 `scripts/perf/screens.ts` 의 `SCREENS` 에 한 줄을 더한다. 모달은 `modals` 에
 `{ label, open: [{ kind:'clickText', text:'…' }], expect:'열렸을 때 보이는 글자' }` 로 적는다.
 열리지 않으면 보고서에 그 사실이 남는다(숫자를 만들어 넣지 않는다).
+
+## 로그인 직후 첫 로딩만 재기
+
+```
+npm run perf -- --login
+```
+
+화면 목록은 돌지 않고 **로그인 흐름**만 구간별로 잰다 — 찬 캐시(새 컨텍스트) 3회와
+더운 캐시(쿠키만 버린 같은 컨텍스트) 3회. 「로그인」을 누른 순간을 0 으로 두고
+① auth 토큰 ② 리다이렉트 ③ 문서·JS ④ 본인 확인 사슬(auth/user → engineers → teams)
+⑤ 카드 조회 시작 ⑥ 첫 그림·껍데기·조용해짐 을 적는다.
+
+- 도구: `scripts/perf/login.ts`
+- 결과: `docs/perf/login-flow.md` · 원자료 `docs/perf/<날짜-시각>-login.json`
+- 전후 비교(2026-10-23 작업): `docs/perf/login-flow-fix.md`
+
+요청 순서 표의 「대기」 칸이 사슬을 드러낸다 — 앞 요청이 끝난 뒤에야 시작한 요청이다.
