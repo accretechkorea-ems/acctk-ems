@@ -230,6 +230,10 @@ function QuotePageInner() {
 
   // 비고 본문 — **납기 줄을 넣지 않는다.** 납기는 조건 1번 「납품일정」 한 곳에서만 적고,
   // 그 값이 quotes.delivery_info 로 저장되어 발주·결재 검토표가 쓴다(납기 칸은 없앴다).
+  // 영업이익 하한 미만일 때 적는 사유 — quotes.note 끝에 한 줄로 저장된다.
+  // **PDF 비고에는 넣지 않는다**(lib/quoteOperatingNote.ts).
+  const [operatingReason, setOperatingReason] = useState('')
+
   const finalRemarksForPDF = (() => {
     const parts: string[] = []
     // 줄을 낼지는 종전과 같이 고른 값(euQuery)으로 가르고, **찍는 이름만** 회사 이름을 우선한다.
@@ -387,7 +391,7 @@ function QuotePageInner() {
   } = useQuoteSubmit({
     supabase, toast, router, engineer, initials, onBehalf,
     dateStr, dateDisplay, quoteNo, engineerName, engineerTel,
-    company, receiver, finalRemarksForPDF, showSignature,
+    company, receiver, finalRemarksForPDF, operatingReason, showSignature,
     category, formKind, setCategory, setFormKind, setLineSplitOn,
     rows, expenses, exchangeRate,
     customerId, euCustomerId, isDealer, opportunityId,
@@ -447,7 +451,7 @@ function QuotePageInner() {
     duplicateId, onBehalfId, repairId, prefillOpportunityId, engineer,
     setOnBehalf, setRows, setIsDealer, setCustomerId, setEuCustomerId,
     setSelectedCustomer, setCustomerQuery, setCompany, setSelectedEU, setEuQuery,
-    resolveEuParent, setReceiver, setTermsOpen, setTerms, setRemarks,
+    resolveEuParent, setReceiver, setTermsOpen, setTerms, setRemarks, setOperatingReason,
     setCategory, setFormKind, setLineSplitOn,
     loadOpportunities, setOpportunityId, handleCustomerSelect,
     setCustomerResults, setCustomerSearchOpen, setPrefillNotice,
@@ -722,7 +726,8 @@ function QuotePageInner() {
                 <span style={{ fontSize: 42, fontWeight: 900, color: '#000', whiteSpace: 'nowrap' }}>{engineerName}</span>
               </div>
             ))}
-            <ProfitPanel rows={rows} exchangeRate={exchangeRate} rateUpdatedAt={rateUpdatedAt} rateLoading={rateLoading} onFetchRate={fetchRate} onRateChange={handleRateChange} category={category} />
+            <ProfitPanel rows={rows} exchangeRate={exchangeRate} rateUpdatedAt={rateUpdatedAt} rateLoading={rateLoading} onFetchRate={fetchRate} onRateChange={handleRateChange} category={category}
+              operatingReason={operatingReason} setOperatingReason={setOperatingReason} />
           </div>
 
           {/* 품목 */}

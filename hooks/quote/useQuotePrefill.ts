@@ -20,6 +20,7 @@ import type { CustomerResult, ExpenseRow, PriceItem, QuoteRow, RowKind } from '@
 import { calcExpense, calcRow, createExpenseRow, createRow } from '@/app/quote/calc'
 import { defaultTermsFor, isAllDefault, promoteLegacyDelivery, termsOf, type SetTerms } from '@/lib/quoteTerms'
 import { subLinesOf } from '@/lib/quoteSubLines'
+import { operatingReasonOf, stripOperatingReason } from '@/lib/quoteOperatingNote'
 import { activeQuoteCategories, canSplitRowKind, loadQuoteCategories } from '@/lib/quoteCategories'
 import { canGroupRowKind, isFormKind, isGroupKind } from '@/lib/quoteForms'
 import { parentCompanyName } from '@/components/customer/ParentPicker'
@@ -82,6 +83,8 @@ export type UseQuotePrefillArgs = {
   setTermsOpen: React.Dispatch<React.SetStateAction<boolean>>
   setTerms: SetTerms
   setRemarks: (v: string | null) => void
+  /** 영업이익 하한 미만 사유 — note 끝의 한 줄에서 꺼낸다. */
+  setOperatingReason: (v: string) => void
   setCategory: React.Dispatch<React.SetStateAction<string>>
   setFormKind: React.Dispatch<React.SetStateAction<string>>
   setLineSplitOn: React.Dispatch<React.SetStateAction<boolean>>
@@ -98,7 +101,7 @@ export function useQuotePrefill({
   duplicateId, onBehalfId, repairId, prefillOpportunityId, engineer,
   setOnBehalf, setRows, setIsDealer, setCustomerId, setEuCustomerId,
   setSelectedCustomer, setCustomerQuery, setCompany, setSelectedEU, setEuQuery,
-  resolveEuParent, setReceiver, setTermsOpen, setTerms, setRemarks,
+  resolveEuParent, setReceiver, setTermsOpen, setTerms, setRemarks, setOperatingReason,
   setCategory, setFormKind, setLineSplitOn,
   loadOpportunities, setOpportunityId, handleCustomerSelect,
   setCustomerResults, setCustomerSearchOpen, setPrefillNotice,
@@ -200,8 +203,10 @@ export function useQuotePrefill({
       setTermsOpen(changed)
       setTerms(changed ? restored : null)
     }
-    // note 에는 납기·E.U 줄이 합쳐져 저장된다. 그 둘은 각자 칸에서 다시 만들어지므로 본문만 남긴다.
-    setRemarks((quote.note ?? '').split('\n')
+    // note 에는 납기·E.U 줄과 **영업이익 사유 줄**이 합쳐져 저장된다. 그 셋은 각자 칸에서
+    // 다시 만들어지므로 비고에는 본문만 남긴다(사유는 그 칸으로 돌아간다).
+    setOperatingReason(operatingReasonOf(quote.note))
+    setRemarks(stripOperatingReason(quote.note).split('\n')
       .filter(line => !/^\*\s*납기\s*:/.test(line) && !/^\*\s*E\.U/.test(line))
       .join('\n').trim())
 

@@ -4,7 +4,9 @@ import { useState } from 'react'
 import type { QuoteRow } from './types'
 import { calcTotals } from './calc'
 import { numKR } from './format'
-import { profitBreakdown } from '@/lib/quoteProfit'
+import {
+  belowMinOperatingMessage, isBelowMinOperating, minOperatingMarginOf, profitBreakdown,
+} from '@/lib/quoteProfit'
 
 export type ProfitPanelProps = {
   rows: QuoteRow[]
@@ -15,9 +17,15 @@ export type ProfitPanelProps = {
   onRateChange: (rate: number) => void
   /** 고른 견적 분류 — 판관비 규칙이 여기서 나온다(TSE 30%). */
   category?: string
+  /** 영업이익 하한 미만일 때 적는 사유. quotes.note 끝에 한 줄로 저장된다. */
+  operatingReason: string
+  setOperatingReason: (v: string) => void
 }
 
-export default function ProfitPanel({ rows, exchangeRate, rateUpdatedAt, rateLoading, onFetchRate, onRateChange, category }: ProfitPanelProps) {
+export default function ProfitPanel({
+  rows, exchangeRate, rateUpdatedAt, rateLoading, onFetchRate, onRateChange, category,
+  operatingReason, setOperatingReason,
+}: ProfitPanelProps) {
   const [editingRate, setEditingRate] = useState(false)
   const [editRateVal, setEditRateVal] = useState('')
 
@@ -37,6 +45,10 @@ export default function ProfitPanel({ rows, exchangeRate, rateUpdatedAt, rateLoa
   // 판관비·영업이익 — 분류 규칙(lib/quoteProfit.ts)으로 계산한 **표시용** 값이다.
   const breakdown = profitBreakdown(totalSupply, totalProduct, category)
   const sgaPct = totalSupply > 0 ? (breakdown.sga / totalSupply) * 100 : 0
+  // 영업이익 하한 — 분류가 정한다(TSE 15% · SBS 6%). 미만이면 사유를 묻는다.
+  // **확정을 막지는 않는다** — 경고일 뿐이다(lib/quoteProfit.ts).
+  const minOperating = minOperatingMarginOf(category)
+  const belowMin = isBelowMinOperating(breakdown, category)
 
   // 행 종류별 원가 상세. 새 종류(manual_jpy·domestic)는 case 만 추가하면 된다.
   // null 을 반환하면 원가 줄 없이 판매단가부터 표시된다(구분선도 생략).
@@ -159,6 +171,38 @@ export default function ProfitPanel({ rows, exchangeRate, rateUpdatedAt, rateLoa
                   ₩{numKR(breakdown.operatingProfit)} ({breakdown.operatingRate.toFixed(1)}%)
                 </span>
               </div>
+              {/* 하한 미만 — 빨간 경고와 사유 칸. 사유가 없어도 확정은 막지 않는다.
+                  사유는 quotes.note 끝에 「[영업이익 사유] …」로 저장되고 고객 견적서에는
+                  나가지 않는다(lib/quoteOperatingNote.ts). */}
+              {belowMin && minOperating !== null && (
+                <div style={{ marginTop: 6, paddingTop: 8, borderTop: `1px solid ${'#ebebeb'}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#dc2626"
+                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                    <span style={{ fontSize: 12, color: '#dc2626', fontWeight: 700 }}>
+                      {belowMinOperatingMessage(breakdown.operatingRate, minOperating)}
+                    </span>
+                  </div>
+                  <textarea
+                    value={operatingReason}
+                    onChange={e => setOperatingReason(e.target.value)}
+                    placeholder="예: 일진공기부 공급가격 확정 — 올해 인상 어려움, 내년에 인상 계획"
+                    rows={2}
+                    style={{
+                      width: '100%', boxSizing: 'border-box', resize: 'vertical',
+                      padding: '7px 9px', borderRadius: 6, border: `1px solid ${operatingReason.trim() ? '#ebebeb' : '#dc2626'}`,
+                      fontSize: 12, lineHeight: 1.5, color: '#111827', outline: 'none', fontFamily: 'inherit',
+                    }}
+                  />
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3 }}>
+                    고객 견적서에는 나가지 않습니다. 사유가 없어도 확정은 됩니다.
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

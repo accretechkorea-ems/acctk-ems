@@ -21,6 +21,7 @@ import { calcTotals, createRow } from '@/app/quote/calc'
 
 import { DEFAULT_TERMS, defaultTermsFor, type Terms } from '@/lib/quoteTerms'
 import { clearDraft } from '@/lib/quoteDraft'
+import { withOperatingReason } from '@/lib/quoteOperatingNote'
 import { todayKST } from '@/lib/date'
 import { canSplitRowKind } from '@/lib/quoteCategories'
 import { canGroupRowKind, isEquipForm } from '@/lib/quoteForms'
@@ -54,6 +55,8 @@ export type UseQuoteSubmitArgs = {
   company: string
   receiver: string
   finalRemarksForPDF: string
+  /** 영업이익 하한 미만 사유. note 끝에 한 줄로 붙는다(PDF 비고에는 없다). */
+  operatingReason: string
   showSignature: boolean
   /** 견적 분류(quotes.category). 빈 글자면 저장하지 않는다 — runValidation 이 먼저 막는다. */
   category: string
@@ -149,7 +152,7 @@ function isNameTakenError(err: unknown): boolean {
 export function useQuoteSubmit({
   supabase, toast, router, engineer, initials, onBehalf,
   dateStr, dateDisplay, quoteNo, engineerName, engineerTel,
-  company, receiver, finalRemarksForPDF, showSignature,
+  company, receiver, finalRemarksForPDF, operatingReason, showSignature,
   category, formKind, setCategory, setFormKind, setLineSplitOn,
   rows, expenses, exchangeRate,
   customerId, euCustomerId, isDealer, opportunityId,
@@ -431,7 +434,9 @@ export function useQuoteSubmit({
           // 실적 귀속자. 대필이 아니면 작성자와 같다(대필 자격은 함수가 다시 본다).
           engineer_id: onBehalf ? onBehalf.engineer_id : engineer.engineer_id,
           recipient: receiver,
-          note: finalRemarksForPDF,
+          // note 에는 **사유 한 줄이 더** 붙는다. PDF 비고(finalRemarksForPDF)에는 없다 —
+          // 사유는 내부 판단 기록이라 고객 견적서에 나가지 않는다.
+          note: withOperatingReason(finalRemarksForPDF, operatingReason),
           quote_type: quoteType,
           // 견적 분류 — 빈 글자는 null 로 눕힌다(확정 전 검증이 비어 있는 채로는 못 오게 막는다).
           category: category || null,
