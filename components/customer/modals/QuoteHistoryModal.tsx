@@ -6,6 +6,7 @@ import { isDealerQuote } from '../utils'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { SALES_STATUS_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import { isOrdered, REVENUE_STATUS } from '@/lib/quoteStatus'
+import BackdatedMark from '@/components/quote/BackdatedMark'
 
 type Props = {
   isOpen: boolean
@@ -85,7 +86,11 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, f
                     <tr key={q.quote_id} style={{ borderBottom: `1px solid ${INPUT_BORDER}` }}
                       onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
                       onMouseLeave={e => (e.currentTarget.style.background = '')}>
-                      <td style={{ padding: '10px 12px', fontWeight: 700, color: WHITE_BUTTON_BG, whiteSpace: 'nowrap' }}>{q.quote_number}</td>
+                      {/* 번호 옆 작은 표 — 지난 날짜로 넣은 건이다(홈 목록·실적 현황과 같은 부품). */}
+                      <td style={{ padding: '10px 12px', fontWeight: 700, color: WHITE_BUTTON_BG, whiteSpace: 'nowrap' }}>
+                        {q.quote_number}
+                        <BackdatedMark quoteDate={q.quote_date} createdAt={q.created_at} color={TEXT_SECONDARY} />
+                      </td>
                       {!family && (
                         <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                           <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: '#f3f4f6', color: TEXT_SECONDARY }}>
