@@ -73,11 +73,13 @@ type Team = {
   name: string
   is_special: boolean
   display_order: number
+  /** 실적·활동 집계에 넣는 팀인가(판정은 lib/salesScope.ts). 개인 값으로 덮을 수 있다. */
+  in_sales_stats: boolean
 }
 
 // 팀 관리 표의 열 폭 — 팀 이름(남는 폭) · 권한 개수 · 묶음별 요약(남는 폭) · 버튼 두 개.
 // 메뉴 권한은 14개라 칸으로 나열하면 표가 넘친다. 표에는 요약만 두고 상세는 편집 모달에서 본다.
-const TEAM_GRID = 'minmax(110px, 1fr) 76px minmax(190px, 2fr) 136px'
+const TEAM_GRID = 'minmax(110px, 1fr) 56px 76px minmax(170px, 2fr) 136px'
 // 사무실 표 — 코드·이름·주소(남는 폭)·좌표·순서·사용·버튼.
 const OFFICE_GRID = '90px 80px minmax(160px, 1fr) 170px 48px 48px 150px'
 
@@ -196,6 +198,10 @@ function AdminPageInner() {
   const [teamsList, setTeamsList] = useState<Team[]>([])
   const [teamLoading, setTeamLoading] = useState(false)
   const [newTeamName, setNewTeamName] = useState('')
+  /** 새 팀의 「실적 집계 대상」 — 기본은 꺼짐(teams.in_sales_stats 의 기본값과 같다). */
+  const [newTeamStats, setNewTeamStats] = useState(false)
+  /** 편집 모달의 「실적 집계 대상」. 권한과 함께 저장한다(권한 라우트는 손대지 않는다). */
+  const [permEditStats, setPermEditStats] = useState(false)
   // 새 팀에 켤 메뉴 키. 저장은 라우트가 하고, 화면은 키 목록만 들고 있는다.
   const [newTeamPerm, setNewTeamPerm] = useState<string[]>([])
   const [addTeamLoading, setAddTeamLoading] = useState(false)
@@ -706,6 +712,7 @@ function AdminPageInner() {
     const { data: created, error } = await supabase.from('teams').insert({
       name: newTeamName.trim(),
       display_order: maxOrder + 1,
+      in_sales_stats: newTeamStats,
     }).select('id').single()
     if (error || !created) {
       setAddTeamLoading(false)
@@ -720,6 +727,7 @@ function AdminPageInner() {
     }
     setNewTeamName('')
     setNewTeamPerm([])
+    setNewTeamStats(false)
     setAddTeamOpen(false)
     await dropTeamPermCache()
     fetchTeams()
@@ -730,6 +738,7 @@ function AdminPageInner() {
     setAddTeamOpen(false)
     setNewTeamName('')
     setNewTeamPerm([])
+    setNewTeamStats(false)
   }
 
   // ── 팀 권한 편집 ──
@@ -934,11 +943,23 @@ function AdminPageInner() {
   const openPermEdit = (team: Team) => {
     setPermEditTeam(team)
     setPermEditKeys([...(teamMenus.get(team.name) ?? new Set<string>())])
+    setPermEditStats(team.in_sales_stats)
   }
 
   const handleSaveTeamPerm = async () => {
     if (!permEditTeam) return
     setSavingTeamId(permEditTeam.id)
+    // 집계 대상은 **권한과 다른 자료**다 — teams 를 여기서 바로 고친다(권한 라우트는 메뉴와
+    // can_view_* 만 다룬다). 둘을 한 번의 저장으로 묶어 사용자에게는 한 동작으로 보인다.
+    if (permEditStats !== permEditTeam.in_sales_stats) {
+      const { error: statsErr } = await supabase.from('teams')
+        .update({ in_sales_stats: permEditStats }).eq('id', permEditTeam.id)
+      if (statsErr) {
+        setSavingTeamId(null)
+        toast.error(`집계 대상 저장에 실패했습니다 (${statsErr.code || statsErr.message})`)
+        return
+      }
+    }
     const err = await saveTeamPermKeys(permEditTeam.id, permEditKeys)
     setSavingTeamId(null)
     if (err) { toast.error(`권한 저장에 실패했습니다 (${err})`); return }
@@ -946,7 +967,7 @@ function AdminPageInner() {
     // 캐시를 먼저 버려야 다시 읽을 때 새 값이 온다.
     await dropTeamPermCache()
     await fetchTeams()
-    toast.success('권한이 변경되었습니다. 해당 팀 사용자는 새로고침 후 적용됩니다')
+    toast.success('저장되었습니다. 해당 팀 사용자는 새로고침 후 적용됩니다')
   }
 
   const handleDeleteTeam = async (team: Team) => {
@@ -2121,6 +2142,12 @@ function AdminPageInner() {
                 <input value={newTeamName} onChange={e => { setNewTeamName(e.target.value); teamErr.clearError('teamName') }}
                   onKeyDown={e => e.key === 'Enter' && handleAddTeam()}
                   placeholder="팀 이름 (예: Apps., 5)" style={teamErr.errors.teamName ? { ...inp, flex: 1, border: errBorder } : { ...inp, flex: 1 }} />
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: newTeamStats ? BLUE : GRAY, whiteSpace: 'nowrap' }}
+                  title="켜면 이 팀의 사람들이 실적 현황·활동 현황·포캐스트 집계에 들어갑니다">
+                  <input type="checkbox" checked={newTeamStats} onChange={e => setNewTeamStats(e.target.checked)}
+                    style={{ width: 14, height: 14, accentColor: BLUE, cursor: 'pointer' }} />
+                  실적 집계 대상
+                </label>
                 <button onClick={handleAddTeam} disabled={addTeamLoading || !newTeamName.trim() || !isSuperAdmin(currentEngineer)}
                   style={{ padding: '8px 18px', background: BLUE, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', opacity: (addTeamLoading || !newTeamName.trim() || !isSuperAdmin(currentEngineer)) ? 0.6 : 1 }}>
                   {addTeamLoading ? '...' : '추가'}
@@ -2156,6 +2183,7 @@ function AdminPageInner() {
                     position: 'sticky', top: 0, background: CARD_BG, zIndex: Z.thead,
                   }}>
                     <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>팀</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textAlign: 'center' }} title="실적·활동 집계에 넣는 팀">집계</span>
                     <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textAlign: 'center' }}>권한</span>
                     <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>묶음별</span>
                     <span />
@@ -2171,6 +2199,11 @@ function AdminPageInner() {
                       }}>
                         <span style={{ fontWeight: 700, fontSize: 14, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {team.name}
+                        </span>
+                        {/* 집계 대상 — 켜져 있으면 ○, 아니면 —. 개인 값으로 덮인 사람은 목표 관리창에서 본다. */}
+                        <span style={{ textAlign: 'center', fontSize: 13, fontWeight: 700, color: team.in_sales_stats ? BLUE : '#d1d5db' }}
+                          title={team.in_sales_stats ? '실적 집계 대상' : '집계에서 제외'}>
+                          {team.in_sales_stats ? '○' : '—'}
                         </span>
                         <span style={{ display: 'flex', justifyContent: 'center' }}>
                           <span style={{
@@ -2222,6 +2255,18 @@ function AdminPageInner() {
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 14 }}>
               체크한 메뉴만 이 팀에 보입니다. 데이터 접근 권한은 메뉴에서 자동으로 정해집니다.
             </div>
+            {/* 집계 대상 — **메뉴와 무관한 값**이다. 메뉴를 켜고 끄는 것이 실적 집계를 바꾸지 않는다. */}
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 14,
+              background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '10px 12px',
+            }}>
+              <input type="checkbox" checked={permEditStats} onChange={e => setPermEditStats(e.target.checked)}
+                style={{ width: 14, height: 14, accentColor: BLUE, cursor: 'pointer' }} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>실적 집계 대상</span>
+              <span style={{ fontSize: 11, color: GRAY }}>
+                실적 현황·활동 현황·포캐스트에 이 팀 사람들을 넣는다(개인별로 덮을 수 있다)
+              </span>
+            </label>
             <div style={{ overflowY: 'auto', flex: 1, paddingRight: 2 }}>
               {permCheckboxes(permEditKeys, setPermEditKeys)}
             </div>
