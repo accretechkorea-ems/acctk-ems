@@ -41,3 +41,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 백업 폴더(npm run backup) — 고객 자료가 들어 있다. 저장소에 올리지 않는다.
+/ems-backup/
+ems-backup/

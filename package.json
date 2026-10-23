@@ -11,7 +11,8 @@
     "perf:dev": "node scripts/perf/measure.ts --dev",
     "test": "node scripts/run-checks.js",
     "lint:ci": "node scripts/lint-baseline.js",
-    "check": "npx tsc --noEmit && npm run lint:ci && npm test"
+    "check": "npx tsc --noEmit && npm run lint:ci && npm test",
+    "backup": "node scripts/backup/run.js"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
