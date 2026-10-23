@@ -3,6 +3,10 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { loadMe, invalidateMe } from '@/lib/appData/me'
+import { useAvatarUrl } from '@/hooks/useAvatarUrl'
+import {
+  PROFILE_BUCKET, PROFILE_IMAGE_MAX_BYTES, PROFILE_IMAGE_TYPES, profileImageFileName,
+} from '@/lib/profileImage'
 import { invalidateEngineers } from '@/lib/appData/engineers'
 import { useRouter } from 'next/navigation'
 import { INITIALS_TAKEN_MESSAGE, isInitialsTaken, isInitialsUniqueViolation, normalizeInitials } from '@/lib/initials'
@@ -15,6 +19,8 @@ const TEXT_SECONDARY = '#4b5563'
 const BLUE_BG = '#234ea2'
 const BLUE_TEXT = '#ffffff'
 const DANGER_BG = '#dc2626'
+/** 프로필 사진 지름. 받아 올 변환 폭을 이 값으로 정한다(lib/profileImage.ts). */
+const AVATAR_SIZE = 72
 
 type Engineer = {
   engineer_id: number
@@ -34,7 +40,10 @@ export default function AccountPage() {
   const [initials, setInitials] = useState('')
   const [tel, setTel] = useState('')   // 전화번호(선택)
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null)
-  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null)
+  /** DB 에 저장된 값 — **버킷 안의 경로**다(옛 행은 공개 URL 일 수 있다). */
+  const [profileImagePathValue, setProfileImagePathValue] = useState<string | null>(null)
+  /** 방금 고른 파일의 미리보기(blob:). 저장 전까지만 쓴다. */
+  const [pickedPreview, setPickedPreview] = useState<string | null>(null)
   const [isSavingProfile, setIsSavingProfile] = useState(false)
   const [profileMessage, setProfileMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
@@ -74,7 +83,7 @@ export default function AccountPage() {
         setName(engineerData.name ?? '')
         setInitials(engineerData.initials ?? '')
         setTel(engineerData.tel ?? '')
-        setProfileImageUrl(engineerData.profile_image_url ?? null)
+        setProfileImagePathValue(engineerData.profile_image_url ?? null)
       }
     }
 
@@ -107,36 +116,38 @@ export default function AccountPage() {
       }
     }
 
-    let imageUrl = profileImageUrl
+    // 프로필 사진 — 저장하는 값은 **버킷 안의 경로**다.
+    //
+    // 예전에는 getPublicUrl() 로 만든 공개 주소를 넣었는데, 이 버킷은 비공개라 그 주소는
+    // 열리지 않는다(2026-10-23 확인: HTTP 400 — 사진이 늘 깨져 있었다). 보여 줄 때는
+    // /api/profile-image 가 서명 URL 을 준다(lib/profileImage.ts).
+    let imagePath = profileImagePathValue
 
-    // 프로필 사진 업로드
     if (profileImageFile) {
-      const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
-      if (!ALLOWED_IMAGE_TYPES.includes(profileImageFile.type)) {
+      if (!(PROFILE_IMAGE_TYPES as readonly string[]).includes(profileImageFile.type)) {
         setProfileMessage({ type: 'error', text: 'JPG, PNG, WEBP, GIF 형식의 이미지만 업로드 가능합니다.' })
         setIsSavingProfile(false)
         return
       }
-      if (profileImageFile.size > 5 * 1024 * 1024) {
+      if (profileImageFile.size > PROFILE_IMAGE_MAX_BYTES) {
         setProfileMessage({ type: 'error', text: '파일 크기는 5MB 이하여야 합니다.' })
         setIsSavingProfile(false)
         return
       }
-      const fileExt = profileImageFile.name.split('.').pop()
-      const fileName = `profile-${engineer.engineer_id}-${Date.now()}.${fileExt}`
+      const fileName = profileImageFileName(engineer.engineer_id, profileImageFile.name, Date.now())
 
       const { error: uploadError } = await supabase.storage
-        .from('profile-images')
+        .from(PROFILE_BUCKET)
         .upload(fileName, profileImageFile, { upsert: true })
 
       if (uploadError) {
+        console.error('[account] 사진 업로드 실패', uploadError)
         setProfileMessage({ type: 'error', text: '사진 업로드 중 오류가 발생했습니다.' })
         setIsSavingProfile(false)
         return
       }
 
-      const { data } = supabase.storage.from('profile-images').getPublicUrl(fileName)
-      imageUrl = data.publicUrl
+      imagePath = fileName
     }
 
     const { error } = await supabase
@@ -145,7 +156,7 @@ export default function AccountPage() {
   name: name.trim(),
   initials: initials.trim().toUpperCase() || null,
   tel: tel.trim() || null,   // 선택 입력, 검증 없음
-  profile_image_url: imageUrl,
+  profile_image_url: imagePath,
 })
       .eq('engineer_id', engineer.engineer_id)
 
@@ -160,13 +171,20 @@ export default function AccountPage() {
       return
     }
 
-    setProfileImageUrl(imageUrl)
+    // 새 경로를 넣으면 아래 useAvatarUrl 이 그 경로의 서명 URL 을 받아 **바로** 그린다.
+    setProfileImagePathValue(imagePath)
     setProfileImageFile(null)
+    if (pickedPreview) { URL.revokeObjectURL(pickedPreview); setPickedPreview(null) }
     // 이름·이니셜·사진이 바뀌었다 — 공통 캐시를 버려 사이드바와 다른 화면이 새 값을 읽게 한다.
     invalidateMe()
     invalidateEngineers()
     setProfileMessage({ type: 'success', text: '프로필이 저장되었습니다.' })
   }
+
+  // 프로필 사진 — 버킷이 비공개라 서명 URL 을 받아 그린다(hooks/useAvatarUrl.ts).
+  // 고른 파일이 있으면 그 미리보기가 먼저다 — 저장 전에도 바뀐 사진이 보인다.
+  const { url: avatarUrl } = useAvatarUrl(profileImagePathValue, AVATAR_SIZE)
+  const shownAvatar = pickedPreview ?? avatarUrl
 
   const handleChangePassword = async () => {
     setPasswordMessage(null)
@@ -250,13 +268,14 @@ export default function AccountPage() {
           {/* 프로필 사진 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
             <div style={{
-              width: 72, height: 72, borderRadius: '50%',
+              width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: '50%',
               background: '#234ea2', overflow: 'hidden',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0,
             }}>
-              {profileImageUrl ? (
-                <img src={profileImageUrl} alt="프로필" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              {shownAvatar ? (
+                /* eslint-disable-next-line @next/next/no-img-element -- Supabase 서명 URL 이라 next/image 최적화가 걸리지 않는다 */
+                <img src={shownAvatar} alt="프로필" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
                 <span style={{ color: '#fff', fontSize: 28, fontWeight: 700 }}>
                   {name?.[0]?.toUpperCase() || 'U'}
@@ -271,7 +290,11 @@ export default function AccountPage() {
                 onChange={(e) => {
                   const file = e.target.files?.[0] ?? null
                   setProfileImageFile(file)
-                  if (file) setProfileImageUrl(URL.createObjectURL(file))
+                  // 고른 파일은 blob: 주소로 먼저 보여 준다(올리기 전이다).
+                  setPickedPreview(prev => {
+                    if (prev) URL.revokeObjectURL(prev)
+                    return file ? URL.createObjectURL(file) : null
+                  })
                 }}
                 style={{ fontSize: 13, color: TEXT_PRIMARY }}
               />

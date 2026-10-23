@@ -13,14 +13,14 @@ npm test quote    이름에 'quote' 가 든 하네스만
 
 ## 경고 기준선
 
-지금 경고는 **141건**이고 `lint-baseline.json` 의 `maxWarnings` 가 그 수를 들고 있다.
+지금 경고는 **140건**이고 `lint-baseline.json` 의 `maxWarnings` 가 그 수를 들고 있다.
 넘으면 CI 가 막는다. **경고를 줄였으면 `lint-baseline.json` 의 `maxWarnings` 를 같이 내린다**
 — 내리지 않으면 다시 늘어나도 아무도 모른다(`npm run lint:ci` 가 줄었을 때 그 사실과 새 숫자를
 알려 준다). 올리는 일은 없어야 한다. 올리고 싶으면 그 경고를 먼저 보라.
 
 오류(`maxErrors`)는 0 이다 — 하나라도 생기면 어디인지 찍고 막는다.
 
-경고 141건의 내역과 「고칠 가치 vs 끄고 말 것」 판단은 `docs/audit-2026-10.md` A4 에 있다.
+경고 내역과 「고칠 가치 vs 끄고 말 것」 판단은 `docs/audit-2026-10.md` A4 에 있다.
 
 ## 하네스
 
