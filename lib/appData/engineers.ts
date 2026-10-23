@@ -26,9 +26,11 @@ export type EngineerRow = {
   initials: string | null
   can_switch_division: boolean | null
   resigned_date: string | null
+  /** 실적 집계 개인 강제(null = 팀을 따른다). 판정은 lib/salesScope.ts 다. */
+  in_sales_stats: boolean | null
 }
 
-const COLUMNS = 'engineer_id, name, position, teams, permission_level, office, email, tel, initials, can_switch_division, resigned_date'
+const COLUMNS = 'engineer_id, name, position, teams, permission_level, office, email, tel, initials, can_switch_division, resigned_date, in_sales_stats'
 
 let cache: Promise<EngineerRow[]> | null = null
 

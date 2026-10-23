@@ -25,6 +25,12 @@ export type TeamPerm = {
   menus: Set<string>
   /** 팀의 사업부(teams.division). 값이 없으면 로더가 '계측'으로 채운다. 화면 표시용 — 권한 판정에는 쓰지 않는다. */
   division: Division
+  /**
+   * 실적 집계 대상 팀인가(teams.in_sales_stats).
+   * **권한과 무관한 값**이다 — 메뉴를 켜고 끄는 것이 집계 대상을 바꾸지 않는다.
+   * 판정은 lib/salesScope.ts 의 inSalesStats 하나를 지난다.
+   */
+  inSalesStats: boolean
 }
 
 // 판정 함수에 넘기는 최소 형태. 실제 engineer 객체(추가 필드 다수)를 그대로 넘길 수 있도록 느슨하게 둔다.
@@ -112,15 +118,8 @@ export function canManageEngineers(engineer?: EngineerLike | null): boolean {
   return isSuperAdmin(engineer)
 }
 
-/**
- * 실적·활동 집계에 넣을 '현장 엔지니어' 여부.
- * 사람이 아니라 팀을 묻는 판정이라 superadmin 예외를 두지 않는다(hasPerm 을 쓰지 않는 이유).
- * 고객사와 대시보드를 함께 보면서 관리자 메뉴가 없는 팀이 곧 현장 팀이다.
- * (임원·영업관리·Apps. 는 이 조건에서 자연히 빠진다)
- * perm 이 아직 안 붙은 상태(로딩 등)에서는 기존 동작대로 포함시킨다.
- */
-export function isFieldEngineerTeam(engineer?: EngineerLike | null): boolean {
-  if (!engineer?.perm) return true
-  const menus = engineer.perm.menus
-  return deriveArea(menus, 'customers') && deriveArea(menus, 'dashboard') && !deriveArea(menus, 'admin')
-}
+// 실적·활동 집계 대상 판정은 **이 파일에 없다** — lib/salesScope.ts 의 inSalesStats 다.
+// 예전에는 여기 isFieldEngineerTeam 이 메뉴 권한에서 파생해 판정했는데, 현장 팀에
+// 「실적 현황」·「전자결재」 메뉴를 켜면 admin 영역이 켜진 것으로 파생되어 그 팀 전원이
+// 집계에서 빠졌다. 지금은 teams.in_sales_stats · engineers.in_sales_stats 가 정본이고
+// 메뉴와 무관하다.

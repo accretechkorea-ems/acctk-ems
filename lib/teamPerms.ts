@@ -15,7 +15,7 @@ import type { EngineerLike, TeamPerm } from '@/lib/permissions'
 import { toDivision } from '@/lib/division'
 
 // division — 팀의 사업부(teams.division). 사이드바가 현재 사업부를 정하는 데 쓴다. 비면 '계측'.
-type TeamRow = { id: number | null; name: string | null; division: string | null }
+type TeamRow = { id: number | null; name: string | null; division: string | null; in_sales_stats?: boolean | null }
 type PermRow = { team_id: number | null; perm_key: string | null }
 
 // 진행 중인 요청을 공유해, 여러 화면이 동시에 떠도 조회는 한 번만 나간다.
@@ -33,11 +33,11 @@ export function loadTeamPerms(): Promise<Map<string, TeamPerm>> {
 
     // 한 번에 읽어 본다 — team_permissions.team_id 가 teams.id 를 가리키므로 임베딩이 된다.
     // 모든 화면이 이 둘을 읽으므로(사이드바 권한 판정) 요청 하나가 줄어든다.
-    const one = await supabase.from('teams').select('id, name, division, team_permissions(perm_key)')
+    const one = await supabase.from('teams').select('id, name, division, in_sales_stats, team_permissions(perm_key)')
     if (!one.error) {
       type Nested = TeamRow & { team_permissions: { perm_key: string | null }[] | null }
       const rows = (one.data ?? []) as unknown as Nested[]
-      const teams: TeamRow[] = rows.map(r => ({ id: r.id, name: r.name, division: r.division }))
+      const teams: TeamRow[] = rows.map(r => ({ id: r.id, name: r.name, division: r.division, in_sales_stats: r.in_sales_stats }))
       const perms: PermRow[] = rows.flatMap(r =>
         (r.team_permissions ?? []).map(p => ({ team_id: r.id, perm_key: p.perm_key })))
       return buildMap(teams, perms)
@@ -46,7 +46,7 @@ export function loadTeamPerms(): Promise<Map<string, TeamPerm>> {
     // 관계를 못 찾으면(FK 가 없는 경우 PGRST200) 예전처럼 두 번 읽는다 — 판정이 멈추지 않게.
     console.warn('[teamPerms] 임베딩 조회 실패 — 두 번 읽기로 떨어진다', one.error.code)
     const [teamsRes, permsRes] = await Promise.all([
-      supabase.from('teams').select('id, name, division'),
+      supabase.from('teams').select('id, name, division, in_sales_stats'),
       supabase.from('team_permissions').select('team_id, perm_key'),
     ])
     const error = teamsRes.error ?? permsRes.error
@@ -68,7 +68,7 @@ function buildMap(teams: TeamRow[] | null, perms: PermRow[] | null): Map<string,
   for (const t of teams ?? []) {
     if (t.id == null || !t.name) continue
     nameOf.set(t.id, t.name)
-    map.set(t.name, { menus: new Set<string>(), division: toDivision(t.division) })
+    map.set(t.name, { menus: new Set<string>(), division: toDivision(t.division), inSalesStats: t.in_sales_stats === true })
   }
   for (const p of perms ?? []) {
     if (p.team_id == null || !p.perm_key) continue

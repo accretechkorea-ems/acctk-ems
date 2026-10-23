@@ -6,7 +6,8 @@ import { isActiveInPeriod } from '@/lib/engineers'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { isFieldEngineerTeam, type TeamPerm } from '@/lib/permissions'
+import { type TeamPerm } from '@/lib/permissions'
+import { inSalesStats } from '@/lib/salesScope'
 import { withTeamPerms } from '@/lib/teamPerms'
 import { loadMe } from '@/lib/appData/me'
 import { loadEngineers } from '@/lib/appData/engineers'
@@ -113,7 +114,7 @@ export default function ActivityPage() {
       if (me && !currentUser) {
         setCurrentUser(me)
         // 본인 팀이 집계 대상이면 그 팀으로 시작하고, 아니면(임원·영업관리 등) 전체로 시작한다.
-        setSelectedTeam(me.teams && isFieldEngineerTeam(me) ? me.teams : '전체')
+        setSelectedTeam(me.teams && inSalesStats(me) ? me.teams : '전체')
       }
     }
 
@@ -143,7 +144,7 @@ export default function ActivityPage() {
 
     const positionOrder: Record<string, number> = { '수석': 0, '책임': 1, '선임': 2, '사원': 3 }
     const sortedEngineers = (engineers ?? [])
-      .filter((e: any) => isFieldEngineerTeam(e))
+      .filter((e: any) => inSalesStats(e))
       // 퇴사자는 조회 기간 시작일까지 재직했을 때만 표시 (7/10 퇴사 → 8월 조회 시 숨김)
       .filter((e: any) => isActiveInPeriod(e.resigned_date, start))
       .sort((a, b) => {

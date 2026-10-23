@@ -16,6 +16,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { canViewCustomers } from '@/lib/permissions'
 import { useMe } from '@/lib/appData/MeProvider'
+import { inSalesStats } from '@/lib/salesScope'
 import { ACTIVITY_TYPES } from '@/lib/activity'
 import ActivityCard from '@/components/activity/ActivityCard'
 import DashCard from '@/components/dashboard/DashCard'
@@ -154,8 +155,10 @@ function DashboardPageInner() {
         <div className="home-grid">
           {/* 1행 — 내 실적 · 내 견적 · 활동 기록 · 결재 대기
               먼저 보는 줄에 「내 성적」과 「내 차례」를 둔다. 포캐스트·알림은 둘째 줄이다. */}
+          {/* 내 실적 — **집계 대상자에게만** 보여 준다. 비대상(임원·영업관리 등)에게는
+              목표가 없어 0만 찍히므로, 칸을 비워 둔다(격자 정렬은 유지). */}
           <div className="home-cell">
-            {me && (
+            {me && inSalesStats(me) && (
               <MyStatCard
                 engineer={me}
                 quotes={cards.quotes.data}

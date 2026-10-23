@@ -10,6 +10,7 @@ import {
   type ForecastEngineer, type ForecastOpportunity, type ForecastQuote,
   type ForecastResult, type ForecastTarget,
 } from './forecast'
+import { inSalesStats } from './salesScope'
 
 /** 읽는 칸을 글자로 못박는다 — select('*') 는 새 칸이 생길 때마다 화면으로 끌려 들어온다. */
 const QUOTE_COLUMNS =
@@ -43,11 +44,13 @@ export type LoadForecastArgs = {
 export async function loadForecast(
   sb: SupabaseClient, args: LoadForecastArgs,
 ): Promise<ForecastResult & { errors: string[] }> {
-  const [qRes, oRes, tRes, eRes] = await Promise.all([
+  const [qRes, oRes, tRes, eRes, teamRes] = await Promise.all([
     sb.from('quotes').select(QUOTE_COLUMNS),
     sb.from('sales_opportunities').select(OPP_COLUMNS),
     sb.from('sales_targets').select('engineer_id, year, quarter, order_target_amount'),
-    sb.from('engineers').select('engineer_id, team_id'),
+    // 집계 대상 판정에 개인 값(in_sales_stats)과 팀 이름이 필요하다 — 팀 값은 아래 teams 에서.
+    sb.from('engineers').select('engineer_id, team_id, teams, in_sales_stats'),
+    sb.from('teams').select('name, in_sales_stats'),
   ])
 
   const errors: string[] = []
@@ -56,11 +59,30 @@ export async function loadForecast(
     return (res.data as T[]) ?? []
   }
 
+  /**
+   * **집계 대상자만 남긴다**(lib/salesScope.ts). 예전에는 전원의 견적·기회가 들어가,
+   * 같은 자료를 보는 실적 현황(대상자만)과 모수가 달랐다.
+   * 담당자가 비어 있는 줄은 남긴다 — 누구 것인지 모르는 금액을 조용히 지우지 않는다.
+   */
+  type EngRow = ForecastEngineer & { teams: string | null; in_sales_stats: boolean | null }
+  const engRows = take<EngRow>(eRes, 'engineers')
+  const teamFlag = new Map(
+    take<{ name: string | null; in_sales_stats: boolean | null }>(teamRes, 'teams')
+      .filter(t => !!t.name)
+      .map(t => [t.name as string, { inSalesStats: t.in_sales_stats === true }]),
+  )
+  const scoped = new Set(
+    engRows
+      .filter(e => inSalesStats(e, e.teams ? teamFlag.get(e.teams) : null))
+      .map(e => e.engineer_id),
+  )
+  const mine = (engineerId: number | null | undefined) => engineerId == null || scoped.has(engineerId)
+
   const built = buildForecast({
-    quotes: take<ForecastQuote>(qRes, 'quotes'),
-    opportunities: take<ForecastOpportunity>(oRes, 'sales_opportunities'),
-    targets: take<ForecastTarget>(tRes, 'sales_targets'),
-    engineers: take<ForecastEngineer>(eRes, 'engineers'),
+    quotes: take<ForecastQuote>(qRes, 'quotes').filter(q => mine(q.engineer_id)),
+    opportunities: take<ForecastOpportunity>(oRes, 'sales_opportunities').filter(o => mine(o.engineer_id)),
+    targets: take<ForecastTarget>(tRes, 'sales_targets').filter(t => mine(t.engineer_id)),
+    engineers: engRows,
     today: args.today,
     from: args.from,
     to: args.to,

@@ -34,11 +34,13 @@ export type Me = {
   /** 사업부 전환 권한(superadmin 과 함께일 때만 뜻이 있다). */
   can_switch_division: boolean | null
   resigned_date: string | null
+  /** 실적 집계 개인 강제(null = 팀을 따른다). 홈 「내 실적」 카드가 본다. */
+  in_sales_stats: boolean | null
   /** 소속 팀이 켜 둔 메뉴 키 — team_permissions 에서 붙여준다. */
   perm: TeamPerm | null
 }
 
-const COLUMNS = 'engineer_id, name, position, teams, permission_level, office, email, tel, initials, can_switch_division, resigned_date'
+const COLUMNS = 'engineer_id, name, position, teams, permission_level, office, email, tel, initials, can_switch_division, resigned_date, in_sales_stats'
 
 /** 세션과 본인 행. 로그인하지 않았으면 둘 다 비어 있다. */
 export type MeResult = {

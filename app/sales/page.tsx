@@ -20,7 +20,8 @@ import {
 } from '@/lib/salesStats'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { getViewScope, isFieldEngineerTeam, type TeamPerm } from '@/lib/permissions'
+import { getViewScope, type TeamPerm } from '@/lib/permissions'
+import { inSalesStats } from '@/lib/salesScope'
 import { withTeamPerm, withTeamPerms } from '@/lib/teamPerms'
 import {
   updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, submitQuoteDelete, deleteQuoteSelf,
@@ -1346,7 +1347,7 @@ export default function SalesPage() {
       dealer: q.dealer_id ? { company_name: custMap[q.dealer_id] ?? null } : null,
     }))
     setQuotes(merged as Quote[])
-    // 현장 엔지니어 판정(isFieldEngineerTeam)이 팀 플래그를 보므로 목록에 붙여둔다.
+    // 집계 대상 판정(inSalesStats)이 팀 값을 보므로 목록에 붙여둔다.
     setEngineers(await withTeamPerms(eData as Engineer[] | null))
     setTargets(tData || [])
     setCurrentEngineer(await withTeamPerm(meData as Engineer | null))
@@ -1361,8 +1362,8 @@ export default function SalesPage() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchAll() }, [])
 
-  // 팀 필터 목록 — 실적 집계 대상인 현장 팀만(팀 플래그로 판정).
-  const teams = [...new Set(engineers.filter(e => isFieldEngineerTeam(e)).map(e => e.teams).filter(Boolean))].sort() as string[]
+  // 팀 필터 목록 — 실적 집계 대상만(teams.in_sales_stats · engineers.in_sales_stats).
+  const teams = [...new Set(engineers.filter(e => inSalesStats(e)).map(e => e.teams).filter(Boolean))].sort() as string[]
   const sortedEngineers = [...engineers].sort((a, b) => (POSITION_ORDER[a.position ?? ''] ?? 99) - (POSITION_ORDER[b.position ?? ''] ?? 99))
 
   // 조회 기간의 시작일(YYYY-MM-DD) — 회계연도 4월 시작 기준
@@ -1382,7 +1383,7 @@ export default function SalesPage() {
 
   // 권한별 열람 가능 엔지니어 필터 (+ 퇴사자는 조회 기간 시작일까지 재직한 경우만)
 const visibleEngineers = sortedEngineers.filter(e => {
-    if (!isFieldEngineerTeam(e)) return false
+    if (!inSalesStats(e)) return false
     if (!isActiveInPeriod(e.resigned_date, periodStart)) return false
     if (!currentEngineer) return false
     const scope = getViewScope(currentEngineer)
@@ -1396,7 +1397,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
   // 기간 판정은 lib/salesStats.ts 가 한다 — 여기서는 지금 고른 mode·month 만 얹는다.
   const matchPeriod = (dateStr: string, fiscalYear: number) => matchPeriodOf(dateStr, fiscalYear, mode, month)
 
-  const allEngineers = sortedEngineers.filter(e => isFieldEngineerTeam(e) && isActiveInPeriod(e.resigned_date, periodStart))
+  const allEngineers = sortedEngineers.filter(e => inSalesStats(e) && isActiveInPeriod(e.resigned_date, periodStart))
   const allEngineerIds = allEngineers.map(e => e.engineer_id)
   // 기간을 재는 날짜가 지표마다 다르다.
   //   견적 제출 — 견적을 낸 날(quote_date)

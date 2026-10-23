@@ -19,7 +19,7 @@ import type { EngineerLike, TeamPerm } from '@/lib/permissions'
 import { toDivision } from '@/lib/division'
 
 // division — 팀의 사업부(teams.division). 비면 '계측'. 클라이언트 로더(lib/teamPerms.ts)와 같은 모양으로 맞춘다.
-type TeamRow = { id: number | null; name: string | null; division: string | null }
+type TeamRow = { id: number | null; name: string | null; division: string | null; in_sales_stats?: boolean | null }
 type PermRow = { team_id: number | null; perm_key: string | null }
 
 /** 캐시 유효 시간(ms). 짧게 잡아 권한 변경이 오래 묵지 않게 한다. */
@@ -38,7 +38,7 @@ function buildMap(teams: TeamRow[] | null, perms: PermRow[] | null): Map<string,
   for (const t of teams ?? []) {
     if (t.id == null || !t.name) continue
     nameOf.set(t.id, t.name)
-    map.set(t.name, { menus: new Set<string>(), division: toDivision(t.division) })
+    map.set(t.name, { menus: new Set<string>(), division: toDivision(t.division), inSalesStats: t.in_sales_stats === true })
   }
   for (const p of perms ?? []) {
     if (p.team_id == null || !p.perm_key) continue
@@ -59,7 +59,7 @@ export async function loadTeamPerms(opts?: { fresh?: boolean }): Promise<Map<str
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   )
   const [teamsRes, permsRes] = await Promise.all([
-    supabaseAdmin.from('teams').select('id, name, division'),
+    supabaseAdmin.from('teams').select('id, name, division, in_sales_stats'),
     supabaseAdmin.from('team_permissions').select('team_id, perm_key'),
   ])
   const error = teamsRes.error ?? permsRes.error
