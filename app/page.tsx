@@ -20,7 +20,7 @@ import { todayKST } from '@/lib/date'
 import { useToast } from '@/components/common/Toast'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canViewQuote } from '@/lib/permissions'
+import { canViewQuote, isSuperAdmin } from '@/lib/permissions'
 import { useQuotePdf } from '@/hooks/customer/useQuotePdf'
 
 
@@ -49,6 +49,8 @@ export default function HomePage() {
   const { engineer: me, loading: guardLoading, authorized } = usePageGuard()
   // 이 화면은 고객사 권한으로 들어오지만, 부품 검색은 견적 내용을 보여주므로 견적 권한을 따로 본다.
   const canSearchParts = canViewQuote(me)
+  // 엑셀 내보내기는 관리자만 — 팀 관리·목표 관리 버튼과 같은 판정(permission_level).
+  const canExportExcel = isSuperAdmin(me)
   // 부품 결과의 PDF 아이콘 — 업체 상세와 같은 방식(서명 URL + 조회 기록)을 그대로 쓴다.
   const quotePdf = useQuotePdf({ customer: null, engineerId: me?.engineer_id ?? null })
   const toast = useToast()
@@ -596,6 +598,7 @@ useEffect(() => {
             isLoading={isLoading}
             onExport={handleExportExcel}
             exporting={isExporting}
+            canExport={canExportExcel}
           />
           </div>
 

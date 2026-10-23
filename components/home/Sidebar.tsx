@@ -35,6 +35,8 @@ type Props = {
   /** 지금 목록(필터·검색이 걸린 범위)을 엑셀로 내려받는다. */
   onExport: () => void
   exporting: boolean
+  /** 엑셀 내보내기를 보여 줄지 — superadmin 만. 꺼져 있으면 버튼 자체가 없다. */
+  canExport: boolean
 }
 
 export default function Sidebar({
@@ -58,6 +60,7 @@ export default function Sidebar({
   setPartQuery,
   onExport,
   exporting,
+  canExport,
 }: Props) {
   const [searchFocused, setSearchFocused] = useState(false)
   // 기본값 꺼짐 = 전체(견적만 낸 건 포함). 아직 발주 이상이 거의 없어 조이면 늘 0건이 된다.
@@ -175,8 +178,10 @@ export default function Sidebar({
       )}
 
       {/* 목록 상단 — 지금 걸린 필터·검색 범위를 그대로 엑셀로 내보낸다.
-          부품 모드에서는 아래가 고객 목록이 아니므로 내보내기를 숨긴다. */}
-      {!partMode && (
+          부품 모드에서는 아래가 고객 목록이 아니므로 내보내기를 숨긴다.
+          superadmin 전용(canExport). 조회가 화면에서 나가므로 서버 가드는 없다 — 버튼을 숨기는
+          것일 뿐, 목록을 볼 수 있는 사람이 같은 조회를 하는 것까지 막지는 않는다. */}
+      {canExport && !partMode && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: -4 }}>
           <button
             onClick={onExport}
