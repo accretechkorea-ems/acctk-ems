@@ -15,6 +15,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
+import { sessionEmailForRead } from '@/lib/sessionEmail'
 import { NextResponse } from 'next/server'
 import { canViewMenu } from '@/lib/permissions'
 import { todayKST } from '@/lib/date'
@@ -62,17 +63,26 @@ type Caller = {
   resigned_date: string | null
 }
 
-/** 세션 → engineers. 퇴사자는 막는다. */
-async function loadCaller(): Promise<{ caller: Caller; error: null } | { caller: null; error: NextResponse }> {
+/**
+ * 세션 → engineers. 퇴사자는 막는다.
+ *
+ * forRead 를 주면 토큰을 **그 자리에서** 검증한다(lib/sessionEmail.ts) — Auth 서버 왕복이
+ * 빠진다. 사이드바 배지가 모든 화면에서 가장 느린 요청이었고, 재어 보니 라우트 시간의
+ * 거의 전부가 이 왕복이었다(권한 확인 291~631ms 중 대부분. 문서 조회는 나란히 끝났다).
+ * **쓰기(POST)는 주지 않는다** — 로그아웃했지만 아직 만료되지 않은 토큰을 걸러야 한다.
+ */
+async function loadCaller(forRead = false): Promise<{ caller: Caller; error: null } | { caller: null; error: NextResponse }> {
   const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user?.email) return { caller: null, error: bad('Unauthorized', 401) }
+  const email = forRead
+    ? await sessionEmailForRead(supabase)
+    : (await supabase.auth.getUser()).data.user?.email ?? null
+  if (!email) return { caller: null, error: bad('Unauthorized', 401) }
   const { data: row, error } = await supabase
     .from('engineers')
     .select('engineer_id, name, permission_level, teams, resigned_date')
-    .eq('email', user.email)
+    .eq('email', email)
     .single()
-  if (error) console.error('[approval] caller lookup failed', { email: user.email, error })
+  if (error) console.error('[approval] caller lookup failed', { email, error })
   if (!row || (row as Caller).resigned_date) return { caller: null, error: bad('Forbidden', 403) }
   return { caller: row as Caller, error: null }
 }
@@ -712,7 +722,7 @@ export async function GET(req: Request) {
   // 문서 → 위임 넷이 줄줄이 이어져 이 라우트가 모든 화면에서 가장 느린 요청이었다.
   const needsDocs = box === 'inbox' || box === 'counts'
   const [callerRes, docsRes] = await Promise.all([
-    loadCaller(),
+    loadCaller(true),
     needsDocs ? inProgressDocs() : Promise.resolve(null),
   ])
   const { caller, error: authErr } = callerRes
