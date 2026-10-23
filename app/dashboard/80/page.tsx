@@ -43,6 +43,23 @@ const cardStyle: React.CSSProperties = {
   padding: '14px 16px', display: 'flex', flexDirection: 'column',
 }
 
+/**
+ * 누를 수 있는 카드에 얹는 것 — 커서와 hover(떠오름 + 파란 테두리).
+ * 홈 격자 카드·활동 기록 카드와 같은 동작이다(translateY(-2px) · #c7d7f8 · 0.15s).
+ */
+const clickableCard = (onClick: () => void) => ({
+  onClick,
+  style: { ...cardStyle, cursor: 'pointer', transition: 'transform 0.15s ease, border-color 0.15s ease' },
+  onMouseEnter: (e: React.MouseEvent<HTMLDivElement>) => {
+    e.currentTarget.style.transform = 'translateY(-2px)'
+    e.currentTarget.style.borderColor = '#c7d7f8'
+  },
+  onMouseLeave: (e: React.MouseEvent<HTMLDivElement>) => {
+    e.currentTarget.style.transform = ''
+    e.currentTarget.style.borderColor = '#ebebeb'
+  },
+})
+
 // 마감이 임박한 순. 마감일이 없는 건은 맨 뒤로 보내고, 같으면 등록 순으로 고정한다.
 // (파이프라인 칸반의 열 안 정렬과 같은 규칙 — 두 화면의 순서가 어긋나지 않게)
 function byDueDate(a: SalesOpportunity, b: SalesOpportunity): number {
@@ -77,17 +94,18 @@ function CalendarIcon() {
   )
 }
 
-function CardHead({ title, right, onMore }: { title: string; right?: React.ReactNode; onMore?: () => void }) {
+/**
+ * 카드 머리줄.
+ *
+ * **「전체 보기 →」 글자는 없다.** 카드마다 작은 글자 단추가 달려 있으면 정작 누르고 싶은
+ * 곳(카드 전체)은 반응이 없고 과녁만 작아진다 — 홈 격자에서 같은 이유로 걷어냈다
+ * (components/dashboard/DashCard.tsx). 그 일은 카드 전체 클릭(clickableCard)이 맡는다.
+ */
+function CardHead({ title, right }: { title: string; right?: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
       <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{title}</span>
       {right}
-      {onMore && (
-        <button onClick={onMore}
-          style={{ marginLeft: 'auto', padding: 0, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#234ea2', whiteSpace: 'nowrap' }}>
-          전체 보기 →
-        </button>
-      )}
     </div>
   )
 }
@@ -257,8 +275,8 @@ export default function Dashboard80Page() {
 
         <div className="d80-main">
 
-          {/* ── 왼쪽: 영업기회 ── */}
-          <div style={cardStyle}>
+          {/* ── 왼쪽: 영업기회 ── 카드 전체를 누르면 포캐스트 화면으로 간다. */}
+          <div {...clickableCard(() => router.push('/pipeline'))}>
             <CardHead
               title="포캐스트"
               right={
@@ -268,7 +286,6 @@ export default function Dashboard80Page() {
                   {dueIds.size > 0 && <span style={{ fontSize: 11, color: '#9ca3af' }}>마감 임박 {dueIds.size}</span>}
                 </>
               }
-              onMore={() => router.push('/pipeline')}
             />
             {loading ? (
               <Empty text="불러오는 중..." />
@@ -346,11 +363,11 @@ export default function Dashboard80Page() {
           {/* ── 오른쪽: 홀딩 · 만료 임박 견적 ── */}
           <div className="d80-side">
 
-            <div style={cardStyle}>
+            {/* 카드 전체를 누르면 홀딩 현황으로 간다. */}
+            <div {...clickableCard(() => router.push('/holdings'))}>
               <CardHead
                 title="홀딩 중인 건"
                 right={<Count>{holdingItems.length}건</Count>}
-                onMore={() => router.push('/holdings')}
               />
               {holdingLoading ? (
                 <Empty text="불러오는 중..." />
