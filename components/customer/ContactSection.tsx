@@ -7,12 +7,18 @@
 // 기본은 두 명까지만 편다. 왼쪽 열은 sticky 라 화면 높이만큼만 쓰고(.cust-left 의
 // max-height), 그 아래는 열 안에서 스크롤해야 나온다 — 세 명째부터 「잘린 것처럼」 보였다.
 // 더 있으면 [N명 더 보기] 로 펼친다. 추가 버튼은 접든 펴든 늘 맨 아래에 남는다.
+//
+// **펼쳤을 때는 목록만 스크롤한다.** 담당자가 여럿인 업체에서 펼치면 카드가 왼쪽 열보다
+// 길어져, [N명 더 보기]와 [고객 담당자 추가] 두 줄이 열 바닥에 걸려 겹쳐 보이고 잘렸다.
+// 목록에 제 높이를 주면(LIST_MAX) 그 두 줄은 늘 카드 안에 남는다.
 
 import { useState } from 'react'
 import type { Contact } from './types'
 
 /** 접었을 때 보이는 담당자 수. 이보다 많을 때만 더 보기 줄이 생긴다. */
 const VISIBLE = 2
+/** 펼쳤을 때 목록이 쓰는 최대 높이(px). 넘치면 목록 안에서 스크롤한다 — 네 줄 남짓이다. */
+const LIST_MAX = 300
 
 type Props = {
   contacts: Contact[]
@@ -125,9 +131,18 @@ export default function ContactSection({ contacts, onAdd, onEdit }: Props) {
         )}
       </div>
 
-      {shown.map((c, i) => (
-        <ContactRow key={c.contact_id} contact={c} first={i === 0} onEdit={() => onEdit(c)} />
-      ))}
+      {/* 펼쳤을 때만 높이를 준다 — 접힌 두 줄은 그대로 흐른다(스크롤 자리를 만들지 않는다). */}
+      <style>{`
+        .contact-list { scrollbar-width: thin; scrollbar-color: #d1d5db transparent; }
+        .contact-list::-webkit-scrollbar { width: 5px; }
+        .contact-list::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+        .contact-list::-webkit-scrollbar-track { background: transparent; }
+      `}</style>
+      <div className="contact-list" style={expanded ? { maxHeight: LIST_MAX, overflowY: 'auto' } : undefined}>
+        {shown.map((c, i) => (
+          <ContactRow key={c.contact_id} contact={c} first={i === 0} onEdit={() => onEdit(c)} />
+        ))}
+      </div>
 
       {/* 더 보기 — 두 명 이하면 아예 두지 않는다(누를 것이 없는 줄을 만들지 않는다). */}
       {hidden > 0 && (
