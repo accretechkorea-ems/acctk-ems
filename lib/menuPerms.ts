@@ -50,6 +50,19 @@ export type MenuPerm = {
    */
   menuPublic?: true
   /**
+   * **사이드바에 내지 않는 메뉴.** 화면·라우트·표는 그대로 살아 있고 경로로 직접 들어갈 수 있다.
+   *
+   * 쓰는 때 — 만들어 두었지만 운영에서 쓰지 않는 기능. 지우는 것은 되돌리기 어렵고(화면 1,499줄·
+   * 라우트 2개·표 3개) 자료도 남아 있으므로, 먼저 입구만 막아 두고 한참 지나 아무도 찾지 않으면
+   * 지운다. 팀 관리 화면의 권한 체크 목록에서도 빠진다(CHECKABLE_MENUS).
+   *
+   * ⚠ 숨기면 **권한 행이 조용히 사라질 수 있다.** 팀 관리 화면은 저장할 때 체크된 키만 다시
+   *   넣으므로, 체크 목록에서 빠진 키는 그 팀을 한 번 저장하면 team_permissions 에서 없어진다.
+   *   그러면 경로로 직접 들어가는 길까지 막힌다. 그래서 숨기는 메뉴에는 **permKey** 를 함께
+   *   달아 살아 있는 다른 키로 판정하게 한다(아래 inventory 가 그 예다).
+   */
+  hidden?: true
+  /**
    * 이 메뉴가 속한 사업부(lib/division.ts). 사이드바는 현재 사업부의 메뉴와 공통 메뉴만 보여 준다.
    * 비워 두면 계측이다(menuDivision) — 반도체 메뉴와 공통 메뉴에만 적는다.
    * 권한 판정(public·menuPublic)과는 따로 논다: 홈·알림·전자결재는 로그인 전원에게 열려 있지만 사업부로는 계측이다.
@@ -155,7 +168,11 @@ export const MENU_PERMS: MenuPerm[] = [
 
   // ── 주문 ──
   { key: 'purchase', label: '발주', group: '주문', path: '/purchase', icon: 'package', order: 10, data: ['quote', 'sales_mgmt'] },
-  { key: 'inventory', label: '재고', group: '주문', path: '/inventory', icon: 'archive', order: 20, data: ['sales_mgmt'] },
+  // 재고 — **2026-10-23 숨김.** 운영에서 쓰지 않는다(요청 6건·로그 52건 — docs/audit-2026-10.md A3).
+  // 코드·표·라우트는 그대로 두고 사이드바와 권한 체크 목록에서만 뺀다. /inventory 로 직접
+  // 들어가는 길은 살아 있다 — 판정은 발주(purchase) 권한을 따른다(permKey). 두 키를 가진 팀이
+  // 지금 똑같아서(임원·영업관리) 들어갈 수 있는 사람이 바뀌지 않는다. 삭제는 보류(D32).
+  { key: 'inventory', label: '재고', group: '주문', path: '/inventory', icon: 'archive', order: 20, data: ['sales_mgmt'], hidden: true, permKey: 'purchase' },
 
   // ── 하단 — 전원 공개 ──
   { key: 'suggestions', label: '건의사항', group: '하단', path: '/suggestions', icon: 'message', order: 10, data: [], public: true, division: '공통' },
@@ -264,8 +281,11 @@ export function deriveTeamColumns(menus: Set<string>): Record<string, boolean> {
   return out
 }
 
-/** 팀별로 켤 수 있는 메뉴 — 전원 공개 항목은 체크 대상이 아니다. */
-export const CHECKABLE_MENUS: MenuPerm[] = MENU_PERMS.filter(m => !m.public && !m.permKey)
+/**
+ * 팀별로 켤 수 있는 메뉴 — 전원 공개 항목과 **숨긴 메뉴**는 체크 대상이 아니다.
+ * (permKey 를 따르는 메뉴도 빠진다 — 자기 키로 판정하지 않으므로 켜고 끌 것이 없다.)
+ */
+export const CHECKABLE_MENUS: MenuPerm[] = MENU_PERMS.filter(m => !m.public && !m.permKey && !m.hidden)
 
 /** 체크 대상이 있는 묶음만, 묶음 순서대로. 팀 관리 화면이 이 순서로 그린다. */
 export function checkableGroups(): { group: MenuGroup; title: string; items: MenuPerm[] }[] {
@@ -306,6 +326,8 @@ export function menuForPath(pathname: string): MenuPerm | null {
  */
 export function visibleMenus(group: MenuGroup, engineer?: EngineerLike | null, division?: Division): MenuPerm[] {
   return MENU_PERMS
+    // 숨긴 메뉴는 누구에게도 내지 않는다 — 경로로 직접 들어가는 길만 남는다(MenuPerm.hidden).
+    .filter(m => !m.hidden)
     .filter(m => m.group === group && (m.menuPublic ? canViewAll(engineer) : canViewMenu(engineer, m.permKey ?? m.key)))
     .filter(m => {
       if (!division) return true
