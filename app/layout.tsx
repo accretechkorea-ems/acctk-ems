@@ -19,12 +19,14 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className={`antialiased bg-white text-black`}>
-        <SessionManager />
         {/* 본인 정보(세션 + engineers + 팀 권한)를 **여기서 한 번** 읽어 아래로 내린다.
             화면·훅은 useMe() 로 받는다 — docs/perf-rules.md 1. */}
         <MeProvider>
         <ToastProvider>
           <ConfirmProvider>
+            {/* 자동 로그아웃 감시 — **provider 안쪽**이다. 1분 전 경고를 모달로 띄우므로
+                (종전에는 alert 이었다) 토스트·확인창을 쓸 수 있는 자리에 있어야 한다. */}
+            <SessionManager />
             {/* 좌측 사이드바 + 본문. 공개 경로에서는 본문만 그대로 내보낸다. */}
             <HeaderWrapper>{children}</HeaderWrapper>
           </ConfirmProvider>

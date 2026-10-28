@@ -1,14 +1,15 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { isMobileViewport } from '@/lib/viewport'
 import { invalidateMe, loadMe } from '@/lib/appData/me'
 import { canViewCustomers } from '@/lib/permissions'
 import { DIVISION_HOME, canSwitchDivision, readSavedDivision, teamDivisionOf } from '@/lib/division'
+import { IDLE_REASON } from '@/components/common/SessionManager'
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useRouter()
   const supabase = createClient()
 
@@ -16,6 +17,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  /**
+   * 왜 이 화면에 왔는가 — ?reason=idle 이면 30분 무활동으로 끊긴 것이다
+   * (components/common/SessionManager.tsx 가 그 주소로 보낸다).
+   *
+   * 토스트가 아니라 **폼 위 고정 문구**다. 돌아와서 화면을 보는 시점이 몇 분 뒤일 수도
+   * 있어 잠깐 뜨고 사라지는 안내는 못 본다. 로그인에 성공하면 이 화면을 떠나므로
+   * 따로 지울 일이 없다.
+   */
+  const idleLogout = useSearchParams().get('reason') === IDLE_REASON
 
   const handleLogin = async () => {
     setError('')
@@ -100,6 +110,18 @@ export default function LoginPage() {
           </div>
         </div>
 
+        {idleLogout && (
+          <div
+            style={{
+              marginBottom: 16, padding: '10px 12px', background: '#111',
+              border: '0.5px solid #2a2a2a', borderRadius: 10,
+              fontSize: 12, lineHeight: 1.6, color: '#9ca3af', textAlign: 'center',
+            }}
+          >
+            30분 동안 활동이 없어 자동 로그아웃되었습니다.
+          </div>
+        )}
+
         <div style={{ display: 'grid', gap: 12 }}>
           <input
             value={email}
@@ -165,5 +187,14 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+// useSearchParams 는 Suspense 경계 안에서만 쓸 수 있다(견적·리드 화면과 같은 방식).
+// 이 화면은 ?reason=idle 로 「왜 로그아웃됐는지」를 받는다.
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: '100vh', background: '#111' }} />}>
+      <LoginPageInner />
+    </Suspense>
   )
 }
