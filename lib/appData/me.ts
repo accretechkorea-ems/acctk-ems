@@ -15,7 +15,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { attachTeamPerm, loadTeamPerms } from '@/lib/teamPerms'
 import type { TeamPerm } from '@/lib/permissions'
-import { setUser } from '@sentry/nextjs'
 
 /**
  * 로그인한 본인. 화면·훅이 쓰는 열만 적는다(select('*') 를 쓰지 않는다 — 규칙 5).
@@ -129,9 +128,6 @@ export function loadMe(): Promise<MeResult> {
       return { email, me: null, error: error.message || '본인 정보를 읽지 못했습니다' }
     }
     if (!data) return { email, me: null, error: null }
-    // 오류 보고에 **누구인지만** 적는다 — engineer_id 하나다(이름·메일은 보내지 않는다).
-    // Sentry 가 꺼져 있으면(DSN 없음) 이 호출은 아무 일도 하지 않는다.
-    setUser({ id: String((data as unknown as Me).engineer_id) })
     // 메뉴 권한은 팀 플래그로 판정한다(팀 이름을 코드에 두지 않기 위해).
     // loadTeamPerms 도 모듈 캐시라 여기서 한 번 읽으면 앱 전체가 그 값을 쓴다.
     const map = await permsPromise

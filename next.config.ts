@@ -16,9 +16,7 @@ const securityHeaders = [
       "default-src 'self'",
       // Supabase API + Storage + Realtime + 한국수출입은행 환율 API + 폰트 다운로드
       // + Kakao Maps 좌표변환(Geocoder/Places)·지도 타일 요청
-      // + Sentry 오류 보고(*.ingest.sentry.io — 지역에 따라 us/de 가 붙는다).
-      //   이 호스트가 없으면 브라우저가 보고를 **조용히 막는다** — DSN 을 넣어도 아무것도 안 온다.
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://oapi.koreaexim.go.kr https://fonts.gstatic.com https://dapi.kakao.com https://*.daumcdn.net https://*.kakaocdn.net https://*.kakao.com http://dapi.kakao.com http://*.daumcdn.net https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://oapi.koreaexim.go.kr https://fonts.gstatic.com https://dapi.kakao.com https://*.daumcdn.net https://*.kakaocdn.net https://*.kakao.com http://dapi.kakao.com http://*.daumcdn.net",
       // Kakao Maps SDK
       // (카카오 SDK는 내부적으로 t1.daumcdn.net의 kakao.js를 로드하는데,
       //  로컬(http) 환경에서는 http로 불러오므로 http 스킴도 허용한다.)
