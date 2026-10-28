@@ -10,6 +10,8 @@ import {
 import { invalidateEngineers } from '@/lib/appData/engineers'
 import { useRouter } from 'next/navigation'
 import { INITIALS_TAKEN_MESSAGE, isInitialsTaken, isInitialsUniqueViolation, normalizeInitials } from '@/lib/initials'
+import AddressField from '@/components/customer/modals/AddressField'
+import { geocodeAddress } from '@/lib/geocode'
 
 const PAGE_BG = '#f4f5f7'
 const PANEL_BG = '#ffffff'
@@ -39,6 +41,20 @@ export default function AccountPage() {
   const [name, setName] = useState('')
   const [initials, setInitials] = useState('')
   const [tel, setTel] = useState('')   // 전화번호(선택)
+  /**
+   * 자택 주소(선택). 고객사 지도의 「자택 출발」에만 쓴다.
+   *
+   * 좌표(home_lat·home_lng)는 저장할 때 이 주소를 지오코딩해 함께 넣는다 — 업체 등록과
+   * 같은 경로다(lib/geocode.ts). 주소가 그대로면 다시 변환하지 않는다(카카오 호출 한 번과
+   * 7초 대기를 아낀다). 비우고 저장하면 세 칸 모두 null 이 된다.
+   *
+   * **남에게 보이지 않는다** — 직원 목록·관리자 화면의 조회 열에 이 칸이 없다.
+   */
+  const [homeAddress, setHomeAddress] = useState('')
+  /** 불러온 값 — 주소가 바뀌었는지 가늠해 지오코딩 여부를 정한다. */
+  const [savedHome, setSavedHome] = useState<{ address: string; lat: number | null; lng: number | null }>(
+    { address: '', lat: null, lng: null },
+  )
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null)
   /** DB 에 저장된 값 — **버킷 안의 경로**다(옛 행은 공개 URL 일 수 있다). */
   const [profileImagePathValue, setProfileImagePathValue] = useState<string | null>(null)
@@ -83,6 +99,12 @@ export default function AccountPage() {
         setName(engineerData.name ?? '')
         setInitials(engineerData.initials ?? '')
         setTel(engineerData.tel ?? '')
+        setHomeAddress(engineerData.home_address ?? '')
+        setSavedHome({
+          address: engineerData.home_address ?? '',
+          lat: engineerData.home_lat == null ? null : Number(engineerData.home_lat),
+          lng: engineerData.home_lng == null ? null : Number(engineerData.home_lng),
+        })
         setProfileImagePathValue(engineerData.profile_image_url ?? null)
       }
     }
@@ -150,6 +172,30 @@ export default function AccountPage() {
       imagePath = fileName
     }
 
+    // ── 자택 주소 → 좌표 ────────────────────────────────────────────────
+    // 비웠으면 세 칸 모두 null. 주소가 그대로면 가진 좌표를 그대로 둔다(다시 변환하지 않는다).
+    // 새 주소면 지오코딩한다 — 실패하면 **주소는 저장하고 좌표만 비운다**. 주소 자체는
+    // 쓸모가 있고(사람이 읽는다), 좌표가 없으면 지도의 「자택 출발」이 흐리게 남는다.
+    const home = homeAddress.trim()
+    let homeLat = savedHome.lat
+    let homeLng = savedHome.lng
+    let geoFailed = false
+    if (!home) {
+      homeLat = null
+      homeLng = null
+    } else if (home !== savedHome.address || homeLat == null || homeLng == null) {
+      try {
+        const coords = await geocodeAddress(home)
+        homeLat = coords.latitude
+        homeLng = coords.longitude
+      } catch (e) {
+        console.error('[account] 자택 주소 좌표 변환 실패', e)
+        homeLat = null
+        homeLng = null
+        geoFailed = true
+      }
+    }
+
     const { error } = await supabase
       .from('engineers')
       .update({
@@ -157,6 +203,9 @@ export default function AccountPage() {
   initials: initials.trim().toUpperCase() || null,
   tel: tel.trim() || null,   // 선택 입력, 검증 없음
   profile_image_url: imagePath,
+  home_address: home || null,
+  home_lat: homeLat,
+  home_lng: homeLng,
 })
       .eq('engineer_id', engineer.engineer_id)
 
@@ -171,6 +220,7 @@ export default function AccountPage() {
       return
     }
 
+    setSavedHome({ address: home, lat: homeLat, lng: homeLng })
     // 새 경로를 넣으면 아래 useAvatarUrl 이 그 경로의 서명 URL 을 받아 **바로** 그린다.
     setProfileImagePathValue(imagePath)
     setProfileImageFile(null)
@@ -178,7 +228,10 @@ export default function AccountPage() {
     // 이름·이니셜·사진이 바뀌었다 — 공통 캐시를 버려 사이드바와 다른 화면이 새 값을 읽게 한다.
     invalidateMe()
     invalidateEngineers()
-    setProfileMessage({ type: 'success', text: '프로필이 저장되었습니다.' })
+    setProfileMessage(geoFailed
+      // 저장은 됐다. 다만 지도에서 「자택 출발」을 쓸 수 없다는 사실을 알려 준다.
+      ? { type: 'error', text: '저장했지만 자택 주소의 좌표를 찾지 못했습니다. 지도의 「자택 출발」은 쓸 수 없습니다 — 주소를 다시 검색해 보세요.' }
+      : { type: 'success', text: '프로필이 저장되었습니다.' })
   }
 
   // 프로필 사진 — 버킷이 비공개라 서명 URL 을 받아 그린다(hooks/useAvatarUrl.ts).
@@ -333,6 +386,30 @@ export default function AccountPage() {
               placeholder="010-1234-5678"
               style={inputStyle}
             />
+          </div>
+
+          {/* 자택 주소 (선택) — 업체 등록과 같은 카카오 우편번호 검색 + 상세주소.
+              고객사 지도의 「자택 출발」에만 쓰이고 다른 사람에게는 보이지 않는다. */}
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 13, color: TEXT_SECONDARY, marginBottom: 6 }}>
+              자택 주소 <span style={{ color: '#9ca3af' }}>(선택 · 고객사 지도의 「자택 출발」에 쓰입니다)</span>
+            </div>
+            <AddressField
+              value={homeAddress}
+              onChange={setHomeAddress}
+              inputStyle={inputStyle}
+              errorBorder={DANGER_BG}
+            />
+            {homeAddress.trim() && savedHome.address === homeAddress.trim() && savedHome.lat == null && (
+              <div style={{ fontSize: 12, color: DANGER_BG, marginTop: 6 }}>
+                좌표를 찾지 못한 주소입니다 — 지도의 「자택 출발」은 쓸 수 없습니다.
+              </div>
+            )}
+            {homeAddress.trim() === '' && savedHome.address !== '' && (
+              <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginTop: 6 }}>
+                비운 채 저장하면 등록된 자택 주소가 지워집니다.
+              </div>
+            )}
           </div>
 
           {/* 이메일 (수정 불가) */}

@@ -36,11 +36,24 @@ export type Me = {
   resigned_date: string | null
   /** 실적 집계 개인 강제(null = 팀을 따른다). 홈 「내 실적」 카드가 본다. */
   in_sales_stats: boolean | null
+  /**
+   * 자택 주소와 그 좌표 — **본인 것만** 여기 실린다(이 조회는 자기 행 한 줄이다).
+   *
+   * 쓰는 곳은 고객사 지도의 「자택 출발」 하나다(components/home/MapView.tsx). 좌표를
+   * 여기 실어 두면 지도가 열릴 때 조회가 늘지 않는다. 주소는 내 정보 화면이 되보여 준다.
+   *
+   * **남의 자택 주소는 어느 목록에도 싣지 않는다** — lib/appData/engineers.ts 의 열 목록과
+   * 관리자 화면의 직원 조회에는 이 세 칸이 없다. 사는 곳은 업무에 쓰는 정보가 아니고,
+   * 한 번 목록에 실리면 화면에 그리지 않아도 브라우저까지 나간다.
+   */
+  home_address: string | null
+  home_lat: number | null
+  home_lng: number | null
   /** 소속 팀이 켜 둔 메뉴 키 — team_permissions 에서 붙여준다. */
   perm: TeamPerm | null
 }
 
-const COLUMNS = 'engineer_id, name, position, teams, permission_level, office, email, tel, initials, can_switch_division, resigned_date, in_sales_stats'
+const COLUMNS = 'engineer_id, name, position, teams, permission_level, office, email, tel, initials, can_switch_division, resigned_date, in_sales_stats, home_address, home_lat, home_lng'
 
 /** 세션과 본인 행. 로그인하지 않았으면 둘 다 비어 있다. */
 export type MeResult = {

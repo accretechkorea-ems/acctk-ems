@@ -14,6 +14,8 @@ import {
   type Device,
 } from '@/lib/home'
 import { loadOffices, activeOffices, type Office } from '@/lib/offices'
+import { useMe } from '@/lib/appData/MeProvider'
+import { useToast } from '@/components/common/Toast'
 import { CATEGORY_OPTIONS } from '@/lib/constants'
 import { Z } from '@/lib/zIndex'
 
@@ -56,6 +58,26 @@ export default function MapView({
   const customerMapRef = useRef<Map<number, Customer>>(new Map())
   const [isMapReady, setIsMapReady] = useState(false)
   const restoredMapStateAppliedRef = useRef(false)
+
+  /**
+   * 「자택 출발」의 출발지 — **본인 자택 좌표**다. MeProvider 가 앱 당 한 번 읽어 둔 값을
+   * 그대로 쓴다(조회 0회. lib/appData/me.ts 의 home_lat·home_lng).
+   *
+   * 오버레이 버튼은 카카오 지도 안에 DOM 으로 직접 만든다 — React 렌더 밖이라 그때의 값을
+   * 가둬 두면 나중에 자택을 등록해도 그 버튼은 영영 흐리다. 그래서 ref 로 들고 **누르는
+   * 순간**에 읽는다. 토스트도 같은 이유로 ref 에 둔다.
+   */
+  const { me } = useMe()
+  const toast = useToast()
+  const homeRef = useRef<{ lat: number; lng: number; address: string } | null>(null)
+  const toastRef = useRef(toast)
+  // 렌더 중에 ref 를 쓰지 않는다(React 규칙) — 값이 바뀔 때 효과에서 채운다.
+  useEffect(() => {
+    homeRef.current = (me?.home_lat != null && me?.home_lng != null)
+      ? { lat: Number(me.home_lat), lng: Number(me.home_lng), address: me.home_address ?? '자택' }
+      : null
+    toastRef.current = toast
+  }, [me, toast])
 
   // 길찾기 출발지 — offices 테이블이 정본이다. 지도를 만들 때 한 번 읽어 담아 둔다.
   // 예전에는 여기서 울산·구미만 주소를 다시 지오코딩해 좌표를 덮어썼는데,
@@ -147,25 +169,55 @@ export default function MapView({
       detailBtn.addEventListener('pointerup', (e) => { e.stopPropagation(); goDetail() })
       detailBtn.addEventListener('click', (e) => { e.stopPropagation(); goDetail() })
 
+      // 출발지 버튼 하나 — 한 줄을 n 등분한다(flex:1). 자택까지 넷이면 4분할이다.
+      const NAV_CSS = 'flex:1 1 0;min-width:0;text-align:center;padding:7px 0;background:#ffffff;border:1px solid #ebebeb;border-radius:6px;font-size:12px;text-decoration:none;font-weight:700;'
       const makeNavLink = (href: string, label: string) => {
         const a = document.createElement('a')
         a.href = href
         a.target = '_blank'
         a.rel = 'noopener noreferrer'
         a.textContent = label
-        a.style.cssText = 'flex:1 1 0;text-align:center;padding:7px 0;background:#ffffff;color:#6b7280;border:1px solid #ebebeb;border-radius:6px;font-size:12px;text-decoration:none;font-weight:700;'
+        a.style.cssText = NAV_CSS + 'color:#6b7280;'
         a.addEventListener('touchstart', (e) => { e.stopPropagation() }, { passive: true })
         a.addEventListener('click', (e) => { e.stopPropagation() })
         return a
       }
 
+      /**
+       * 자택 출발 — 좌표가 **없으면 흐린 단추**로 두고, 누르면 어디서 등록하는지 알린다.
+       * 자리를 비우지 않는 이유: 넷이 한 줄에 고정돼 있어야 누를 자리가 사람마다 달라지지
+       * 않는다. 숨기면 「원래 없는 기능」으로 보여 등록할 생각을 못 한다.
+       */
+      const makeHomeButton = () => {
+        const home = homeRef.current
+        if (home) {
+          return makeNavLink(makeNavUrl({ lat: home.lat, lng: home.lng, name: home.address }), '자택')
+        }
+        const b = document.createElement('button')
+        b.type = 'button'
+        b.textContent = '자택'
+        b.title = '내 정보에서 자택 주소를 등록하면 쓸 수 있습니다'
+        b.style.cssText = NAV_CSS + 'color:#d1d5db;cursor:pointer;font-family:inherit;'
+        const warn = (e: Event) => {
+          e.stopPropagation()
+          toastRef.current.error('내 정보에서 자택 주소를 등록하세요')
+        }
+        b.addEventListener('touchstart', (e) => { e.stopPropagation() }, { passive: true })
+        b.addEventListener('click', warn)
+        return b
+      }
+
       detailSlot.appendChild(detailBtn)
-      // 활성 사무실 전부를 sort_order 순으로. 좌표가 없는 곳은 길을 못 찾으므로 건너뛴다.
+      // 자택이 맨 왼쪽 — 내 출발지가 먼저다. 그 뒤로 활성 사무실 전부를 sort_order 순으로.
+      navRow.appendChild(makeHomeButton())
+      // 좌표가 없는 사무실은 길을 못 찾으므로 건너뛴다.
       for (const o of activeOffices(officesRef.current)) {
         if (o.latitude == null || o.longitude == null) continue
         navRow.appendChild(makeNavLink(
           makeNavUrl({ lat: o.latitude, lng: o.longitude, name: o.address }),
-          `${o.label} 출발`,
+          // 「동탄 출발」 → 「동탄」. 넷이 한 줄에 들어가야 해서 글자를 줄였다
+          // (「출발」은 줄 전체가 출발지 고르는 자리라는 것으로 충분히 읽힌다).
+          o.label,
         ))
       }
     }

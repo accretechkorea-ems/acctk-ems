@@ -329,7 +329,9 @@ function AdminPageInner() {
     // 팀 값(in_sales_stats)도 같이 읽는다 — 목록을 집계 대상/제외로 가르는 데 쓴다.
     // loadTeamPerms 는 모듈 캐시라 이미 읽었으면 왕복이 늘지 않는다.
     const [{ data: eData }, { data: tData }, permMap] = await Promise.all([
-      supabase.from('engineers').select('*').order('engineer_id'),
+      // 열을 꼽아 적는다(규칙 5). **자택 주소 세 칸은 넣지 않는다** — 남의 사는 곳은
+      // 화면에 그리지 않아도 목록에 실으면 브라우저까지 나간다(lib/appData/me.ts).
+      supabase.from('engineers').select('engineer_id, name, position, teams, email, initials, permission_level, resigned_date, office, in_sales_stats').order('engineer_id'),
       supabase.from('sales_targets').select('*').eq('year', targetYear).is('quarter', null),
       loadTeamPerms(),
     ])
@@ -437,7 +439,8 @@ function AdminPageInner() {
   const fetchEngineers = async () => {
     setEngineerLoading(true)
     invalidateEngineers()
-    const { data } = await supabase.from('engineers').select('*').order('engineer_id')
+    // 위 조회와 같은 열 목록이다 — 자택 주소 세 칸은 넣지 않는다.
+    const { data } = await supabase.from('engineers').select('engineer_id, name, position, teams, email, initials, permission_level, resigned_date, office, in_sales_stats').order('engineer_id')
     const sorted = (data || []).sort((a: Engineer, b: Engineer) =>
       (POSITION_ORDER[a.position ?? ''] ?? 99) - (POSITION_ORDER[b.position ?? ''] ?? 99)
     )
