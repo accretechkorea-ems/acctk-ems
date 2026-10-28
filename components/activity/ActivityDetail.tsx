@@ -13,10 +13,12 @@ import { canViewMenu } from '@/lib/permissions'
 import { ACTIVITY_TYPES, activityHref, byDateDesc, entryKey, type ActivityEntry } from '@/lib/activity'
 
 // 활동 서비스 기록 상세 '본문'(헤더 + 타입 필터 + 목록 + 동선 지도). 상세 조회를 스스로 관리한다.
-// 두 곳에서 공유한다:
-//   - 활동 현황 페이지: ActivityDetailModal 이 오버레이/카드로 감싸 모달로 사용(variant="modal")
-//   - 개인 대시보드: 카드 안에 직접 인라인 렌더(variant="inline", 오버레이/닫기 없음)
+// 두 곳에서 공유한다 — **둘 다 모달**이다(ActivityDetailModal 이 오버레이/카드로 감싼다):
+//   - 활동 현황 페이지: 엔지니어 카드를 누른 그 사람 · 화면이 고른 기간
+//   - 개인 대시보드(홈): 늘 본인 · 활동 기록 카드에 보이는 달
 // 오버레이·닫기 버튼·카드 래퍼는 이 컴포넌트 밖(호출부)에 있다.
+// variant="inline"(오버레이·닫기 없음)은 홈이 쓰던 것인데 지금 부르는 곳이 없다 — 코드는
+// 남겨 둔다(모달 아닌 자리에 본문만 넣을 때 쓴다).
 //
 // 목록 한 줄을 누르면 그 고객사 상세의 활동 이력 탭으로 가서 그 기록을 찾아간다(lib/activity.ts
 // activityHref). 고객사가 없는 기록이거나 고객사 열람 권한이 없으면 누를 수 없는 줄로 둔다

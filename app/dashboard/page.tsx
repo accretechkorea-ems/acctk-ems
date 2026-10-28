@@ -19,6 +19,7 @@ import { useMe } from '@/lib/appData/MeProvider'
 import { inSalesStats } from '@/lib/salesScope'
 import { ACTIVITY_TYPES } from '@/lib/activity'
 import ActivityCard from '@/components/activity/ActivityCard'
+import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
 import DashCard from '@/components/dashboard/DashCard'
 import { ApprovalCard, ForecastCard, MyStatCard, NotificationCard } from '@/components/dashboard/HomeCards'
 import MyQuoteCard from '@/components/dashboard/MyQuoteCard'
@@ -42,6 +43,8 @@ function DashboardPageInner() {
   const [activityYm, setActivityYm] = useState(() => { const n = nowKSTParts(); return { y: n.y, m: n.m } })
   // 활동 요약 건수. 아직 못 받았으면 null(카드를 그리지 않는다).
   const [actCounts, setActCounts] = useState<Record<string, number> | null>(null)
+  // 활동 상세 모달이 열려 있는가. 카드에 보이는 달(activityYm)을 그대로 쓴다.
+  const [detailOpen, setDetailOpen] = useState(false)
   // 활동 조회 기간: 선택한 달의 1일 ~ 말일. 이번 달이면 1일 ~ 오늘.
   const pad2 = (n: number) => String(n).padStart(2, '0')
   const nowD = nowKSTParts()
@@ -192,8 +195,12 @@ function DashboardPageInner() {
                 total={actTotal}
                 types={ACTIVITY_TYPES}
                 fitHeight
-                // 카드를 누르면 활동 현황 화면으로 간다(월 이동 화살표는 전파를 막는다).
-                onClick={() => router.push('/activity')}
+                // 카드를 누르면 **그 자리에서** 활동 상세 모달이 열린다 — 홈에서 보던
+                // 달의 내 기록을 보려고 누르는 것이고, 화면을 떠나면 돌아올 때 홈을
+                // 처음부터 다시 읽는다(카드 여섯 개를 다시 조회한다). 활동 현황 화면은
+                // 사이드바에 있다 — 그래서 모달 안에도, 카드에도 그리로 가는 링크는 두지
+                // 않는다. 월 이동 화살표는 전파를 막는다(두 곳으로 갈 수는 없다).
+                onClick={() => setDetailOpen(true)}
                 headerRight={
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
                     onClick={e => e.stopPropagation()}>
@@ -229,6 +236,17 @@ function DashboardPageInner() {
         </div>
       </div>
 
+      {/* 활동 상세 — 활동 현황(/activity)에서 카드를 눌렀을 때 뜨는 **그 모달 그대로**다
+          (components/activity/ActivityDetailModal.tsx — 본문은 ActivityDetail). 다른 점은
+          누구의 것을 보느냐뿐이다: 여기는 늘 본인(me)이고, 기간은 카드에 보이는 달이다. */}
+      {detailOpen && me && (
+        <ActivityDetailModal
+          engineer={me}
+          startDate={activityStart}
+          endDate={activityEnd}
+          onClose={() => setDetailOpen(false)}
+        />
+      )}
     </div>
   )
 }
