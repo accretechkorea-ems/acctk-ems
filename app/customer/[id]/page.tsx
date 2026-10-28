@@ -125,8 +125,17 @@ function CustomerDetailPageInner() {
     .cust-left { grid-area: left; display: flex; flex-direction: column; gap: 12px; }
     /* 카드 사이 간격은 이 열의 gap(12) 하나로만 정한다.
        카드 컴포넌트가 제 아래 여백을 들고 있으면(업체 정보 카드의 marginBottom: 16) 그 카드 밑만
-       28px 이 되어 줄이 어긋난다. 인라인 style 이라 !important 가 있어야 덮인다. */
-    .cust-left > * { margin-bottom: 0 !important; }
+       28px 이 되어 줄이 어긋난다. 인라인 style 이라 !important 가 있어야 덮인다.
+
+       flex-shrink: 0 — **카드는 줄어들지 않는다. 넘치면 이 열이 스크롤한다.**
+       이 열은 세로 flex 에 max-height 가 걸려 있어(아래 sticky), 카드 높이의 합이 그 선을
+       넘으면 flex 가 카드를 눌러 줄인다. 보통은 「자동 최소 크기」가 내용 높이 밑으로는
+       못 줄이게 막아 주는데, 그 보호는 **overflow 가 visible 인 항목에만** 적용된다.
+       담당자 카드는 둥근 모서리 때문에 overflow: hidden 이라(ContactSection) 최소 높이가
+       0 으로 풀려 눌렸고, 넘침을 숨기는 쪽이라 스크롤도 못 하고 **그냥 잘렸다** —
+       담당자를 펼치면 세 번째 사람 이름이 반쯤 잘렸고, 창이 낮으면 접은 상태에서도 잘렸다.
+       (측정 2026-10-28, 1500×700: 펼침 265 → 219px · 1500×560: 접음 203 → 79px) */
+    .cust-left > * { margin-bottom: 0 !important; flex-shrink: 0; }
     .cust-center { grid-area: center; min-width: 0; }
     .cust-left {
       position: sticky;
