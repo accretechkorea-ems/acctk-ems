@@ -15,7 +15,7 @@ import { useQuoteDraftSync } from '@/hooks/quote/useQuoteDraftSync'
 import { useQuoteSubmit } from '@/hooks/quote/useQuoteSubmit'
 import AccessGate from '@/components/common/AccessGate'
 import { useConfirm } from '@/components/common/ConfirmDialog'
-import type { Engineer, QuoteRow } from './types'
+import type { Engineer, QuoteRow, RateMeta } from './types'
 import { calcRow, calcTotals } from './calc'
 import { useDebounce } from './useDebounce'
 import ProfitPanel from './ProfitPanel'
@@ -59,7 +59,8 @@ function seqToLetters(seq: number): string {
 import { euDisplayName } from '@/lib/quoteEuName'
 import { clearDraft, draftSavedLabel } from '@/lib/quoteDraft'
 import type { OnBehalfAssignee } from '@/lib/quoteMutations'
-import { todayKST } from '@/lib/date'
+import { nowHmKST, todayKST } from '@/lib/date'
+import { RATE_SOURCE } from '@/lib/exchangeRate'
 import {
   compactYmd, differsInMonth, displayYmd, isBackdated, monthOf, safeQuoteDate,
 } from '@/lib/quoteDate'
@@ -119,7 +120,9 @@ function QuotePageInner() {
   // 임시저장·다시쓰기 복원은 비동기라, 값을 넣는 시점의 최신 환율을 참조로 읽는다.
   // (환율이 아직 0 이면 아래 [exchangeRate] 효과가 도착 후 전 행을 다시 계산한다.)
   const rateRef = useRef(0)
-  const [rateUpdatedAt, setRateUpdatedAt] = useState('')
+  // 지금 보이는 환율이 어디서 온 값인가(app/quote/types.ts 의 RateMeta). 아직 아무것도
+  // 못 받았으면 null — 그때는 화면이 「환율 로딩중」만 보여 준다.
+  const [rateMeta, setRateMeta] = useState<RateMeta | null>(null)
   const [rateLoading, setRateLoading] = useState(false)
 
   const [receiver, setReceiver] = useState('')
@@ -486,15 +489,30 @@ function QuotePageInner() {
   }, [])
 
 
-  const fetchRate = useCallback(async () => {
+  /**
+   * 환율을 들여온다.
+   *
+   * force — **새로고침 버튼이 누른 경우**다. 저장된 값을 보지 않고 곧장 API 로 간다.
+   *   누른 뜻은 「지금 값을 받아라」이므로 캐시 분기를 건너뛴다. 오늘 줄이 있으면
+   *   그만 돌아가던 때에는, 손으로 넣은 환율이 캐시에 섞여 있어(그때는 그것도 저장했다)
+   *   새로고침을 눌러도 방금 자기가 넣은 값이 되돌아왔다 — 실시간 환율로는 못 갔다.
+   *
+   * 화면 처음 열 때(force 아님)는 오늘 저장된 값을 그대로 쓴다 — API 쿼터를 아낀다.
+   * 그 표에는 이제 **API 가 준 값만** 들어가므로(handleRateChange 는 쓰지 않는다) 출처를
+   * 기관 이름으로 적는다. 받은 시각은 표에 없어 화면이 「저장값」으로 닫는다.
+   */
+  const fetchRate = useCallback(async (opts?: { force?: boolean }) => {
+    const force = opts?.force === true
     setRateLoading(true)
     try {
       const { data: cached } = await supabase.from('exchange_rate').select('*').order('id', { ascending: false }).limit(1).single()
       const todayStr = todayKST()
 
-      // 오늘 날짜 캐시가 있으면 바로 사용
-      if (cached && cached.updated_at === todayStr) {
-        setExchangeRate(Number(cached.rate)); setRateUpdatedAt(cached.updated_at); setRateLoading(false); return
+      // 오늘 날짜 캐시가 있으면 바로 사용 — 단, 새로고침을 누른 때는 보지 않는다.
+      if (!force && cached && cached.updated_at === todayStr) {
+        setExchangeRate(Number(cached.rate))
+        setRateMeta({ kind: 'cache', source: RATE_SOURCE, baseDate: String(cached.updated_at) })
+        setRateLoading(false); return
       }
 
       // 외부 API 호출
@@ -503,20 +521,37 @@ function QuotePageInner() {
         const json = await res.json()
         const jpy = json.jpy
         if (jpy && jpy.deal_bas_r) {
-          const rate = parseFloat(jpy.deal_bas_r.replace(',', '')) / 100
-          setExchangeRate(rate); setRateUpdatedAt(todayStr)
+          const rate = parseFloat(String(jpy.deal_bas_r).replace(/,/g, '')) / 100
+          // 기준일 — API 가 'YYYYMMDD' 로 준다. 모양이 아니면 오늘로 적는다.
+          const raw = typeof json.date === 'string' ? json.date : ''
+          const baseDate = /^\d{8}$/.test(raw) ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : todayStr
+          setExchangeRate(rate)
+          setRateMeta({
+            kind: 'api',
+            // 이름은 API 가 보내 준 것을 쓴다. 기관을 바꾸면 그 라우트만 고치면 된다.
+            source: typeof json.source === 'string' && json.source ? json.source : '환율 API',
+            baseDate,
+            fetchedAt: nowHmKST(),
+          })
           await supabase.from('exchange_rate').insert([{ rate, updated_at: todayStr }])
           setRateLoading(false); return
         }
-      } catch { /* API 실패 시 아래 캐시 fallback 사용 */ }
+      } catch { /* API 실패 — 아래에서 갈라진다 */ }
 
-      // API 실패 시 DB에 저장된 가장 최근 환율로 fallback
-      if (cached && cached.rate) {
-        setExchangeRate(Number(cached.rate)); setRateUpdatedAt(cached.updated_at)
+      if (force) {
+        // 누른 사람에게 **못 받았다고 말한다.** 보이는 값은 건드리지 않는다 — 저장된
+        // 값으로 조용히 바꾸면 직접 넣은 환율이 사라지고, 그것도 알리지 않은 셈이 된다.
+        toast.error('실시간 환율을 받지 못했습니다 — 화면의 환율을 그대로 둡니다')
+      } else if (cached && cached.rate) {
+        // 처음 열 때 API 가 안 되면 저장된 가장 최근 값으로라도 시작한다(0 보다 낫다).
+        setExchangeRate(Number(cached.rate))
+        setRateMeta({ kind: 'cache', source: RATE_SOURCE, baseDate: String(cached.updated_at) })
       }
     } catch (e) { console.error(e) }
     setRateLoading(false)
-  }, [])
+  // toast 는 <ToastProvider> 가 useMemo 로 들고 있는 한 덩어리라 바뀌지 않는다 —
+  // 아래 mount 효과가 이 함수를 의존해도 다시 돌지 않는다(components/common/Toast.tsx).
+  }, [toast])
 
   useEffect(() => { fetchRate() }, [fetchRate])
   useEffect(() => { if (!exchangeRate) return; setRows(prev => prev.map(r => calcRow(r, exchangeRate))) }, [exchangeRate]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -528,11 +563,22 @@ function QuotePageInner() {
     if (!list.some(e => e.item_name.trim() && e.amount <= 0)) clearError('expenses')
   }, [rows]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleRateChange = useCallback(async (rate: number) => {
-    const todayStr = todayKST()
+  /**
+   * 환율을 손으로 넣었다 — **이 견적에서만** 쓴다.
+   *
+   * exchange_rate 표에 쓰지 않는다. 그 표는 모두가 공유하는 캐시고, 거기에 넣으면
+   * 오늘 견적 화면을 여는 **다른 사람**도 그 값으로 시작했다. 한 건을 본사 양식에
+   * 맞추려고 넣은 숫자가 회사의 오늘 환율이 되는 셈이다(2026-10-28 에 실제로 그랬다 —
+   * 매매기준율이 8.383 인 날 캐시의 최신 줄이 9.5 였다).
+   *
+   * 그래서 exchange_rate 에 쓰는 곳은 **API 조회가 성공한 한 곳**뿐이다(fetchRate).
+   * 대신 손으로 넣은 값은 화면을 새로 열면 남지 않는다 — 그 견적을 임시저장하면
+   * 줄마다 exchange_rate 가 함께 저장되므로(useQuoteSubmit) 견적 자체는 그대로다.
+   */
+  const handleRateChange = useCallback((rate: number) => {
     setExchangeRate(rate)
-    setRateUpdatedAt(todayStr)
-    await supabase.from('exchange_rate').insert([{ rate, updated_at: todayStr }])
+    // 직접 넣은 값이라고 적는다 — 화면이 「직접 입력」으로 보여 준다.
+    setRateMeta({ kind: 'manual' })
   }, [])
 
 
@@ -735,7 +781,7 @@ function QuotePageInner() {
                 <span style={{ fontSize: 42, fontWeight: 900, color: '#000', whiteSpace: 'nowrap' }}>{engineerName}</span>
               </div>
             ))}
-            <ProfitPanel rows={rows} exchangeRate={exchangeRate} rateUpdatedAt={rateUpdatedAt} rateLoading={rateLoading} onFetchRate={fetchRate} onRateChange={handleRateChange} category={category}
+            <ProfitPanel rows={rows} exchangeRate={exchangeRate} rateMeta={rateMeta} rateLoading={rateLoading} onFetchRate={() => { void fetchRate({ force: true }) }} onRateChange={handleRateChange} category={category}
               operatingReason={operatingReason} setOperatingReason={setOperatingReason} />
           </div>
 

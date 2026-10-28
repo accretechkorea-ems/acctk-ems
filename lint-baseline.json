@@ -1,6 +1,6 @@
 {
-  "comment": "eslint 경고 기준선. 이 수를 넘으면 CI 가 막는다(scripts/lint-check.js). 경고를 줄였으면 이 값도 같이 내린다 — 내리지 않으면 다시 늘어나도 아무도 모른다.",
-  "maxWarnings": 139,
+  "comment": "eslint 경고 기준선. 이 수를 넘으면 CI 가 막는다(scripts/lint-baseline.js). 경고를 줄였으면 이 값도 같이 내린다 — 내리지 않으면 다시 늘어나도 아무도 모른다.",
+  "maxWarnings": 138,
   "maxErrors": 0,
-  "updated": "2026-10-23"
+  "updated": "2026-10-28"
 }

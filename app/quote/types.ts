@@ -109,6 +109,24 @@ export type QuoteRow = {
   group_kind: string | null
 }
 
+// ── 환율의 출처 ──────────────────────────────────────────────────────────────
+// 화면에 **지금 보이는 환율이 어디서 온 값인지** 적으려고 둔다. 숫자만 보면 실시간으로
+// 받은 값인지 누가 손으로 넣은 값인지 알 수 없고, 그 둘은 견적에서 뜻이 전혀 다르다.
+//
+//   api    — 환율 API 에서 방금 받았다. source 는 API 가 제 이름을 적어 보낸 것이고
+//            (/api/exchange-rate), baseDate 는 그 기관이 말하는 **기준일**이다(우리가
+//            받은 날이 아니다 — 주말·공휴일이면 며칠 앞의 날짜가 온다).
+//            fetchedAt 은 우리가 받은 시각(KST, 시:분).
+//   cache  — exchange_rate 표에 저장돼 있던 값이다. 그 표에는 **API 가 준 값만** 들어가고
+//            (사람이 넣은 환율은 들어가지 않는다 — page.tsx 의 handleRateChange) 출처 칸은
+//            없으므로, 이름은 코드가 안다(lib/exchangeRate.ts). baseDate 는 그 줄의
+//            updated_at = 받아서 저장한 날이다. 받은 시각은 남아 있지 않다.
+//   manual — 사람이 두 번 눌러 직접 넣었다. 이 견적 화면에만 있고 아무 데도 저장되지 않는다.
+export type RateMeta =
+  | { kind: 'api'; source: string; baseDate: string; fetchedAt: string }
+  | { kind: 'cache'; source: string; baseDate: string }
+  | { kind: 'manual' }
+
 // ── 부대비용(내부 관리용) ─────────────────────────────────────────────────────
 // 견적 합계·원가·이익률·PDF 어디에도 반영하지 않는다. quote_expenses 에만 기록하고
 // 화면에서는 자기 합계만 보여준다. unit_price 는 저장 시점 스냅샷(프리셋 값 복사본).

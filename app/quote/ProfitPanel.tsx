@@ -1,19 +1,20 @@
 'use client'
 
 import { useState } from 'react'
-import type { QuoteRow } from './types'
+import type { QuoteRow, RateMeta } from './types'
 import { calcTotals } from './calc'
 import { numKR } from './format'
 import {
-  TSE_INTERNAL_RATE,
   belowMinOperatingMessage, isBelowMinOperating, minOperatingMarginOf, profitBreakdown,
 } from '@/lib/quoteProfit'
 
 export type ProfitPanelProps = {
   rows: QuoteRow[]
   exchangeRate: number
-  rateUpdatedAt: string
+  /** 그 환율이 어디서 온 값인가. 아직 못 받았으면 null(app/quote/types.ts). */
+  rateMeta: RateMeta | null
   rateLoading: boolean
+  /** 새로고침 — 저장된 값을 보지 않고 **늘 API** 로 다시 받는다(page.tsx 의 fetchRate). */
   onFetchRate: () => void
   onRateChange: (rate: number) => void
   /** 고른 견적 분류 — 판관비 규칙이 여기서 나온다(TSE 30%). */
@@ -24,11 +25,32 @@ export type ProfitPanelProps = {
 }
 
 export default function ProfitPanel({
-  rows, exchangeRate, rateUpdatedAt, rateLoading, onFetchRate, onRateChange, category,
+  rows, exchangeRate, rateMeta, rateLoading, onFetchRate, onRateChange, category,
   operatingReason, setOperatingReason,
 }: ProfitPanelProps) {
   const [editingRate, setEditingRate] = useState(false)
   const [editRateVal, setEditRateVal] = useState('')
+
+  /**
+   * 환율 옆 작은 글 — **이 숫자가 어디서 온 것인가.**
+   *
+   * 숫자만 있으면 실시간으로 받은 값인지 누가 손으로 넣은 값인지 알 수 없다. 원가가
+   * 전부 이 숫자에 걸려 있어, 견적을 넘기기 전에 그 둘은 구분돼야 한다.
+   *
+   *   API    「한국수출입은행 · 기준일 2026-10-28 · 14:03 조회」
+   *          기준일은 **그 기관이 말하는 날**이다(주말·공휴일이면 며칠 앞), 시각은 우리가
+   *          받은 때(KST).
+   *   저장값 「한국수출입은행 · 기준일 2026-10-28 · 저장값」 — exchange_rate 표에 있던
+   *          값이다. 그 표에는 API 가 준 값만 들어가므로 기관 이름을 적는다. 받은 시각은
+   *          남아 있지 않아 「저장값」으로 닫는다(방금 받은 것과 구분된다).
+   *   직접   「직접 입력」
+   */
+  const rateNote = (): string => {
+    if (!rateMeta) return ''
+    if (rateMeta.kind === 'manual') return '직접 입력'
+    const head = `${rateMeta.source} · 기준일 ${rateMeta.baseDate}`
+    return rateMeta.kind === 'cache' ? `${head} · 저장값` : `${head} · ${rateMeta.fetchedAt} 조회`
+  }
 
   const startEdit = () => {
     setEditRateVal(exchangeRate ? exchangeRate.toFixed(4) : '')
@@ -107,23 +129,13 @@ export default function ProfitPanel({
                 {exchangeRate ? `${exchangeRate.toFixed(4)}원` : '환율 로딩중...'}
               </span>
             )}
-            {rateUpdatedAt && !editingRate && <span style={{ fontSize: 10, color: '#9ca3af' }}>({rateUpdatedAt})</span>}
-            {/* 본사 양식과 같은 숫자로 맞출 때 쓰는 단추. 기본 환율은 API 값이고(날마다 바뀐다)
-                이 값은 엑셀이 쓰는 고정 환율이다. 이미 그 값이면 내지 않는다. */}
-            {!editingRate && exchangeRate !== TSE_INTERNAL_RATE && (
-              <button
-                onClick={() => onRateChange(TSE_INTERNAL_RATE)}
-                title={`TSE 내부 환율 ${TSE_INTERNAL_RATE} 로 맞춘다(본사 엑셀과 같은 값)`}
-                style={{
-                  fontSize: 10, fontWeight: 700, color: '#6b7280', background: '#f3f4f6',
-                  border: 'none', borderRadius: 6, padding: '2px 6px', cursor: 'pointer', whiteSpace: 'nowrap',
-                }}
-              >
-                내부 {TSE_INTERNAL_RATE}
-              </button>
+            {/* 출처·기준 시각. 숫자를 고치는 중에는 내지 않는다(그 순간의 출처는 아직 모른다). */}
+            {!editingRate && rateNote() && (
+              <span style={{ fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap' }}>{rateNote()}</span>
             )}
             <button
               onClick={onFetchRate}
+              title="실시간 환율을 다시 받는다"
               disabled={rateLoading}
               style={{ width: 22, height: 22, borderRadius: '50%', background: '#fff', border: '1px solid #ebebeb', cursor: rateLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s ease' }}
             >

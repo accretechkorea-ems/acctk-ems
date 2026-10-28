@@ -1,4 +1,5 @@
 import { createClient as createServerClient } from '@/lib/supabase/server'
+import { RATE_SOURCE } from '@/lib/exchangeRate'
 import { NextResponse } from 'next/server'
 import https from 'https'
 
@@ -43,7 +44,10 @@ export async function GET() {
       if (!Array.isArray(json) || json.length === 0) continue
       const jpy = json.find((x: { cur_unit: string; deal_bas_r: string }) => x.cur_unit === 'JPY(100)')
       if (jpy && jpy.deal_bas_r) {
-        return NextResponse.json({ jpy, date })
+        // source — 화면이 「어디서 온 값인가」를 그대로 적는다. 이름은 lib/exchangeRate.ts
+        // 한 곳에 있다(저장된 값을 보여 줄 때도 같은 글자를 쓴다).
+        // date 는 **그 기관의 기준일**로, 주말·공휴일이면 소급 조회한 날짜라 오늘이 아니다.
+        return NextResponse.json({ jpy, date, source: RATE_SOURCE })
       }
     }
     return NextResponse.json({ error: 'no data' }, { status: 500 })
