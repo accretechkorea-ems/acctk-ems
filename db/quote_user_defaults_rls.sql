@@ -1,10 +1,13 @@
--- quote_user_defaults RLS 정책 (2026-10-28 작성). **아직 적용하지 않았다.**
---   표 자체는 이미 DB 에 있다(engineer_email·category·exchange_rate·tariff_rate·margin_rate·
---   updated_at, PK = engineer_email + category, RLS 켜짐 · **정책 0개**).
+-- quote_user_defaults RLS 정책 (2026-10-28 작성). **2026-10-28 적용 완료 — Kevin.**
+--   기록용, 다시 실행해도 안전하다(drop policy if exists 뒤 create).
+--   확인: select policyname, cmd from pg_policies where tablename = 'quote_user_defaults' → 3행.
+--
+--   표 자체는 그 전부터 DB 에 있었다(engineer_email·category·exchange_rate·tariff_rate·
+--   margin_rate·updated_at, PK = engineer_email + category, RLS 켜짐 · **정책 0개**였다).
 --   정책이 없으면 RLS 가 켜진 표는 authenticated 에게 **아무것도 허용하지 않는다** —
---   읽기도 쓰기도 전부 막힌다(오류가 아니라 0행으로 끝난다). 그래서 이 파일을 돌리기
---   전까지 「내 설정 기억」 기능은 조용히 아무 일도 하지 않는다. 화면은 그래도 멀쩡하다:
---   행이 없으면 지금까지의 기본값(오늘 환율 · 관세 1.13 · 분류별 이익률)으로 간다.
+--   읽기도 쓰기도 전부 막힌다(오류가 아니라 0행으로 끝난다). 그 동안 「내 설정 기억」은
+--   조용히 아무 일도 하지 않았고, 화면은 종전 기본값(오늘 환율 · 관세 1.13 · 분류별
+--   이익률)으로 멀쩡했다.
 --
 -- 무엇을 담는 표인가
 --   견적 작성 화면에서 **그 사람이 그 분류로 마지막에 확정한** 환율·관세율·이익률이다.

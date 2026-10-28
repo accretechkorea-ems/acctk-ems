@@ -896,6 +896,8 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                             try {
                               const res = await openQuotePdf({
                                 quoteId: q.quote_id, pdfUrl: q.pdf_url, engineerId: currentEngineerId,
+                                // 열람 기록용 — 라우트를 거치지 않는 옛 URL 에서도 두 칸이 차게.
+                                quoteNumber: q.quote_number, companyName: q.customers?.company_name ?? null,
                               })
                               if (!res.ok) toast.error(res.error)
                             } finally {

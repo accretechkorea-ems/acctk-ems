@@ -17,19 +17,41 @@ import { createClient } from '@/lib/supabase/client'
 
 export type OpenResult = { ok: true } | { ok: false; error: string }
 
+/** 열람 기록에 함께 남길 값 — 어느 견적인지 로그만 보고 알 수 있게. */
+type ViewMark = { quoteNumber?: string | null; companyName?: string | null }
+
 /**
- * 열람 기록 한 줄 — 기존 방식을 그대로 쓴다(download_logs, action 'view').
- * 실패해도 열기를 막지 않는다. 목록의 PDF 링크가 이미 이렇게 남기고 있다.
+ * 서버 값을 먼저, 비어 있으면 부르는 쪽 값을 쓴다.
+ * 전개(spread)로 합치면 서버가 준 null 이 부르는 쪽 값을 덮어버린다 — 칸마다 따로 고른다.
  */
-async function logView(quoteId: number, engineerId: number | null) {
+const pickMark = (fromServer: ViewMark | undefined, fallback: ViewMark): ViewMark => ({
+  quoteNumber: fromServer?.quoteNumber ?? fallback.quoteNumber ?? null,
+  companyName: fromServer?.companyName ?? fallback.companyName ?? null,
+})
+
+/**
+ * 열람 기록 한 줄(download_logs, action 'view').
+ *
+ * **견적번호·업체명을 함께 넣는다** — 다운로드 기록(useQuoteSubmit)과 같은 모양이다.
+ * 2026-10-28 전에는 그 두 칸을 null 로 넣어, 열람 줄만 「어느 견적인지」가 비어 있었다
+ * (관리자 화면의 로그 표가 열람 줄에서는 빈칸이었다. quote_id 로 견적을 또 찾아야 했고,
+ * 견적이 지워진 뒤에는 그 길도 끊긴다 — download_logs.quote_id 는 ON DELETE SET NULL 이다).
+ *
+ * 값은 **서버가 준 것**을 쓴다(/api/quote-pdf 의 quoteNumber·companyName). 결재자처럼 견적
+ * 행을 RLS 로 못 읽는 사람도 PDF 는 열 수 있어, 브라우저가 다시 조회하면 또 비게 된다.
+ * 서버가 주지 못한 경우(옛 synology URL 등)에는 부르는 쪽이 들고 있는 값을 쓴다.
+ *
+ * 실패해도 열기를 막지 않는다.
+ */
+async function logView(quoteId: number, engineerId: number | null, mark: ViewMark = {}) {
   if (quoteId <= 0) return
   try {
     const supabase = createClient()
     const { error } = await supabase.from('download_logs').insert({
       engineer_id: engineerId,
       quote_id: quoteId,
-      quote_number: null,
-      company_name: null,
+      quote_number: mark.quoteNumber ?? null,
+      company_name: mark.companyName ?? null,
       action: 'view',
     })
     if (error) console.error('[quotePdf] 열람 기록 실패', { quoteId, error })
@@ -38,15 +60,22 @@ async function logView(quoteId: number, engineerId: number | null) {
   }
 }
 
-/** 서명 URL 을 받아 새 탭으로 연다. 두 입구가 같은 응답을 쓴다. */
-async function openSigned(query: string): Promise<OpenResult> {
+/** 서명 URL 과 **열람 기록에 쓸 값**을 받아 새 탭으로 연다. 두 입구가 같은 응답을 쓴다. */
+type SignedResult = OpenResult & { mark?: ViewMark }
+async function openSigned(query: string): Promise<SignedResult> {
   const res = await fetch(`/api/quote-pdf?${query}`)
   const json = await res.json().catch(() => ({}))
   if (!res.ok || !json?.signedUrl) {
     return { ok: false, error: json?.error || '견적서를 열 수 없습니다' }
   }
   window.open(json.signedUrl, '_blank')
-  return { ok: true }
+  return {
+    ok: true,
+    mark: {
+      quoteNumber: typeof json.quoteNumber === 'string' ? json.quoteNumber : null,
+      companyName: typeof json.companyName === 'string' ? json.companyName : null,
+    },
+  }
 }
 
 export type OpenQuotePdfInput = {
@@ -55,6 +84,12 @@ export type OpenQuotePdfInput = {
   pdfUrl?: string | null
   /** 열람 기록에 남길 사람. 없으면 null 로 남는다(기존 목록과 같다). */
   engineerId?: number | null
+  /**
+   * 열람 기록에 남길 견적번호·업체명 — **서버가 주지 못할 때만** 쓰는 보조값이다
+   * (옛 synology 전체 URL 은 라우트를 거치지 않는다). 서버가 주면 그쪽이 앞선다.
+   */
+  quoteNumber?: string | null
+  companyName?: string | null
 }
 
 /**
@@ -63,12 +98,13 @@ export type OpenQuotePdfInput = {
  * 옛 synology 전체 URL 은 그대로 띄운다(종전 동작). 그 밖에는 버킷 경로만 뽑아 서명 URL 을 받는다.
  */
 export async function openQuotePdf(input: OpenQuotePdfInput): Promise<OpenResult> {
-  const { quoteId, pdfUrl, engineerId = null } = input
+  const { quoteId, pdfUrl, engineerId = null, quoteNumber = null, companyName = null } = input
+  const fallback: ViewMark = { quoteNumber, companyName }
   try {
     if (pdfUrl?.trim()) {
       if (pdfUrl.includes('synology') || pdfUrl.startsWith('http')) {
         window.open(pdfUrl, '_blank')
-        await logView(quoteId, engineerId)
+        await logView(quoteId, engineerId, fallback)
         return { ok: true }
       }
       const path = pdfUrl.startsWith('quote-pdfs/')
@@ -76,10 +112,10 @@ export async function openQuotePdf(input: OpenQuotePdfInput): Promise<OpenResult
         : pdfUrl.split('/quote-pdfs/')[1]
       if (!path) return { ok: false, error: '견적서 파일 경로가 올바르지 않습니다' }
       const res = await openSigned(`path=${encodeURIComponent(path)}`)
-      if (res.ok) await logView(quoteId, engineerId)
+      if (res.ok) await logView(quoteId, engineerId, pickMark(res.mark, fallback))
       return res
     }
-    return await openQuotePdfById(quoteId, engineerId)
+    return await openQuotePdfById(quoteId, engineerId, fallback)
   } catch (e) {
     console.error('[quotePdf] 열기 실패', { quoteId, error: e })
     return { ok: false, error: '견적서를 열지 못했습니다' }
@@ -90,10 +126,14 @@ export async function openQuotePdf(input: OpenQuotePdfInput): Promise<OpenResult
  * 견적 id 만 아는 화면이 쓴다 — 결재 문서의 품의서 본문·검토표, 수리 화면.
  * 서버가 그 견적의 pdf_url 을 찾아 서명 URL 을 돌려준다(같은 파일이다).
  */
-export async function openQuotePdfById(quoteId: number, engineerId: number | null = null): Promise<OpenResult> {
+export async function openQuotePdfById(
+  quoteId: number,
+  engineerId: number | null = null,
+  fallback: ViewMark = {},
+): Promise<OpenResult> {
   try {
     const res = await openSigned(`quoteId=${quoteId}`)
-    if (res.ok) await logView(quoteId, engineerId)
+    if (res.ok) await logView(quoteId, engineerId, pickMark(res.mark, fallback))
     return res
   } catch (e) {
     console.error('[quotePdf] 열기 실패', { quoteId, error: e })
