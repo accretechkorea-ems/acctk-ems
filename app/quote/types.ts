@@ -121,10 +121,13 @@ export type QuoteRow = {
 //            (사람이 넣은 환율은 들어가지 않는다 — page.tsx 의 handleRateChange) 출처 칸은
 //            없으므로, 이름은 코드가 안다(lib/exchangeRate.ts). baseDate 는 그 줄의
 //            updated_at = 받아서 저장한 날이다. 받은 시각은 남아 있지 않다.
+//   saved  — **내가 그 분류로 마지막에 확정할 때 쓴 환율**이다(quote_user_defaults).
+//            분류를 고르면 들어온다. savedAt 은 그 줄을 저장한 날이다.
 //   manual — 사람이 두 번 눌러 직접 넣었다. 이 견적 화면에만 있고 아무 데도 저장되지 않는다.
 export type RateMeta =
   | { kind: 'api'; source: string; baseDate: string; fetchedAt: string }
   | { kind: 'cache'; source: string; baseDate: string }
+  | { kind: 'saved'; savedAt: string | null }
   | { kind: 'manual' }
 
 // ── 부대비용(내부 관리용) ─────────────────────────────────────────────────────

@@ -58,11 +58,12 @@ SQL 파일은 지금 **저장소 루트**에 있다(`db/` 가 아니다 — 아�
 | `rls_tighten_batch2.sql` | 2026-10-23 확인 | Kevin | **적용 확인 완료** — pg_policies 로 확인: quotes·customers·service_history·sales_* 등 핵심 표에 열린 정책(true) 없음, 열린 표는 참조 표 9개뿐. ⚠ 재실행 금지(drop policy → create policy) |
 | `rls_tighten_batch3.sql` | 2026-10-23 확인 | Kevin | **적용 확인 완료** — pg_policies 로 확인: quotes·customers·service_history·sales_* 등 핵심 표에 열린 정책(true) 없음, 열린 표는 참조 표 9개뿐. ⚠ 재실행 금지(drop policy → create policy) |
 
-## 아직 적용하지 않은 것 — 1개
+## 아직 적용하지 않은 것 — 2개
 
 | 파일 | 상태 | 어떻게 확인하나 |
 |---|---|---|
 | `quotes_rejected_backfill.sql` | **미적용으로 보인다** | `quotes.status = '반려'` 가 0행(2026-10-23). 다만 「되돌릴 대상이 애초에 없었다」와 구분되지 않는다. ⚠ UPDATE 라 두 번 돌리면 결과가 달라진다 |
+| `db/quote_user_defaults_rls.sql` | **미적용**(2026-10-28 작성) | `pg_policies` 에 `tablename = 'quote_user_defaults'` 가 0행. 표는 이미 있고 RLS 가 켜져 있는데 **정책이 없어 읽기·쓰기가 전부 막혀 있다** — 그래서 「내 설정 기억」은 지금 조용히 아무 일도 하지 않는다(화면은 종전 기본값으로 멀쩡하다). 돌리면 켜진다. 재실행에 안전하다 |
 
 ### RLS 는 어떻게 확인했나
 

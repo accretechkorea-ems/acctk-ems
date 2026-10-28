@@ -22,6 +22,7 @@ import { calcTotals, createRow } from '@/app/quote/calc'
 import { DEFAULT_TERMS, defaultTermsFor, type Terms } from '@/lib/quoteTerms'
 import { clearDraft } from '@/lib/quoteDraft'
 import { withOperatingReason } from '@/lib/quoteOperatingNote'
+import { defaultsFromRows, saveQuoteUserDefaults } from '@/lib/quoteUserDefaults'
 import { todayKST } from '@/lib/date'
 import { canSplitRowKind } from '@/lib/quoteCategories'
 import { canGroupRowKind, isEquipForm } from '@/lib/quoteForms'
@@ -42,7 +43,8 @@ export type UseQuoteSubmitArgs = {
   supabase: SupabaseClient
   toast: ReturnType<typeof useToast>
   router: { push: (href: string) => void }
-  engineer: { engineer_id: number } | null
+  /** 본인. email 은 「내 설정 기억」이 어느 줄을 쓸지 고르는 데 쓴다(DB 가 다시 본다). */
+  engineer: { engineer_id: number; email?: string | null } | null
   initials: string | null
   onBehalf: OnBehalfAssignee | null
 
@@ -465,6 +467,26 @@ export function useQuoteSubmit({
 
       // 저장이 전부 끝난 뒤에 지운다. 실패하면 아무것도 저장되지 않으므로 초안을 남겨 이어 쓰게 한다.
       clearDraft(engineer.engineer_id)
+
+      /**
+       * 「내 설정 기억」 — 이 분류로 **다음에** 새 견적을 쓸 때의 출발값을 남긴다.
+       * 환율은 확정 시점 값, 관세·이익률은 품목 줄의 최빈값이다(lib/quoteUserDefaults.ts).
+       *
+       * **대필이면 남기지 않는다** — 남의 실적으로 들어가는 견적이라 그 사람의 습관을
+       * 내 기본값으로 기억하면 다음 내 견적이 엉뚱한 값에서 시작한다. 임시저장도 남기지
+       * 않는다(그쪽은 이 함수를 지나지 않는다 — useQuoteDraftSync).
+       *
+       * 실패해도 확정은 성공이다 — await 하되 안에서 콘솔로만 남긴다(견적은 이미 저장됐고
+       * 이 줄은 다음 견적의 편의일 뿐이다. 「저장은 됐지만 …」 같은 안내는 겁만 준다).
+       */
+      if (!onBehalf) {
+        const picked = defaultsFromRows(rows)
+        await saveQuoteUserDefaults(supabase, engineer.email, category, {
+          exchangeRate: exchangeRate > 0 ? exchangeRate : null,
+          tariffRate: picked.tariffRate,
+          marginRate: picked.marginRate,
+        })
+      }
       // 동시 확정으로 미리보기와 다른 번호가 나왔으면 그 사실을 함께 알린다.
       toast.success(issuedNo === quoteNo
         ? `견적서 ${issuedNo} 확정 완료`

@@ -19,13 +19,19 @@ export type ProfitPanelProps = {
   onRateChange: (rate: number) => void
   /** 고른 견적 분류 — 판관비 규칙이 여기서 나온다(TSE 30%). */
   category?: string
+  /**
+   * 저장된 내 설정(계정 × 분류)을 들여왔는가 — 들여왔을 때만 환율 옆에 그 사실을 적는다.
+   * 관세·이익률도 그 값으로 시작했다는 뜻이라(새 줄), 숫자만 보고 「왜 60 이 아니지」
+   * 하고 찾아 헤매지 않게 한다(lib/quoteUserDefaults.ts).
+   */
+  savedDefaultsApplied?: boolean
   /** 영업이익 하한 미만일 때 적는 사유. quotes.note 끝에 한 줄로 저장된다. */
   operatingReason: string
   setOperatingReason: (v: string) => void
 }
 
 export default function ProfitPanel({
-  rows, exchangeRate, rateMeta, rateLoading, onFetchRate, onRateChange, category,
+  rows, exchangeRate, rateMeta, rateLoading, onFetchRate, onRateChange, category, savedDefaultsApplied,
   operatingReason, setOperatingReason,
 }: ProfitPanelProps) {
   const [editingRate, setEditingRate] = useState(false)
@@ -43,11 +49,14 @@ export default function ProfitPanel({
    *   저장값 「한국수출입은행 · 기준일 2026-10-28 · 저장값」 — exchange_rate 표에 있던
    *          값이다. 그 표에는 API 가 준 값만 들어가므로 기관 이름을 적는다. 받은 시각은
    *          남아 있지 않아 「저장값」으로 닫는다(방금 받은 것과 구분된다).
+   *   내 설정 「저장된 설정 · 2026-10-28」 — **내가 그 분류로 마지막에 확정할 때 쓴 환율**이다
+   *          (quote_user_defaults). 기관 이름을 적지 않는다: 그때 직접 넣은 값일 수도 있다.
    *   직접   「직접 입력」
    */
   const rateNote = (): string => {
     if (!rateMeta) return ''
     if (rateMeta.kind === 'manual') return '직접 입력'
+    if (rateMeta.kind === 'saved') return rateMeta.savedAt ? `저장된 설정 · ${rateMeta.savedAt}` : '저장된 설정'
     const head = `${rateMeta.source} · 기준일 ${rateMeta.baseDate}`
     return rateMeta.kind === 'cache' ? `${head} · 저장값` : `${head} · ${rateMeta.fetchedAt} 조회`
   }
@@ -132,6 +141,16 @@ export default function ProfitPanel({
             {/* 출처·기준 시각. 숫자를 고치는 중에는 내지 않는다(그 순간의 출처는 아직 모른다). */}
             {!editingRate && rateNote() && (
               <span style={{ fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap' }}>{rateNote()}</span>
+            )}
+            {/* 내 설정을 들여왔다는 표시 — 환율만이 아니라 관세·이익률도 그 값에서 시작했다.
+                새로고침으로 환율을 덮은 뒤에도 남는다(관세·이익률은 그대로이므로). */}
+            {savedDefaultsApplied && (
+              <span
+                title="이 분류로 마지막에 확정할 때 쓴 환율·관세·이익률을 들여왔습니다"
+                style={{ fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap', borderLeft: '1px solid #ebebeb', paddingLeft: 6 }}
+              >
+                내 설정 불러옴
+              </span>
             )}
             <button
               onClick={onFetchRate}

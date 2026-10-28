@@ -183,13 +183,35 @@ export function useQuoteRows({
    * 사람이 고친 줄(margin_touched)과 이익률이 뜻 없는 줄(국내조달·서비스·할인)은 그대로 둔다.
    * 임시저장을 되살린 옛 초안도 그대로다 — 되살린 줄은 손댄 것으로 표시해 둔다.
    */
-  const applyCategoryDefaults = useCallback((category: string | null) => {
-    const next = defaultMarginOf(category)
+  const applyCategoryDefaults = useCallback((category: string | null, margin?: number | null) => {
+    // margin 을 주면 그 값이 분류 기본값보다 앞선다 — 저장된 내 설정이다
+    // (lib/quoteUserDefaults.ts). 주지 않으면 지금까지와 똑같다.
+    const next = margin ?? defaultMarginOf(category)
     setRows(prev => prev.map(r => {
       if (r.margin_touched) return r
       if (r.row_kind !== 'price_list' && r.row_kind !== 'manual_jpy') return r
       if (r.profit_rate === next) return r
       return calcRow({ ...r, profit_rate: next }, exchangeRate)
+    }))
+  }, [exchangeRate])
+
+  /**
+   * 저장된 내 설정(관세율)을 **아직 비어 있는 줄**에만 입힌다.
+   *
+   * 이미 품목을 고르거나 금액을 넣은 줄은 건드리지 않는다 — 그 줄의 관세는 그 품목에
+   * 맞춰 둔 값일 수 있고, 분류를 고르는 것만으로 남의 숫자가 바뀌면 되돌릴 길이 없다.
+   * 이익률은 applyCategoryDefaults 가 「손대지 않은 줄」 규칙으로 따로 맞춘다.
+   *
+   * 빈 줄의 뜻 — 품목 미선택 · 수동 원가 0 · 판매단가 0 · 공급가 0. 새 견적을 열면
+   * 그런 줄 하나가 놓여 있고(useState 의 createRow()), 그 줄이 이 함수의 주된 대상이다.
+   */
+  const applySavedTariff = useCallback((tariffRate: number | null) => {
+    if (tariffRate == null) return
+    setRows(prev => prev.map(r => {
+      if (r.row_kind !== 'price_list' && r.row_kind !== 'manual_jpy') return r
+      const empty = !r.selectedItem && r.manual_cost_jpy === 0 && r.manual_unit_price === 0 && r.supply_price === 0
+      if (!empty || r.tariff_rate === tariffRate) return r
+      return calcRow({ ...r, tariff_rate: tariffRate }, exchangeRate)
     }))
   }, [exchangeRate])
 
@@ -296,6 +318,7 @@ export function useQuoteRows({
     invalidExpenseIds,
     /** 견적 분류가 바뀌면 부른다 — 손대지 않은 품목 줄의 기본 이익률을 맞춘다. */
     applyCategoryDefaults,
+    applySavedTariff,
     ctx,
     actions,
   }

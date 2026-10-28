@@ -61,6 +61,7 @@ import { clearDraft, draftSavedLabel } from '@/lib/quoteDraft'
 import type { OnBehalfAssignee } from '@/lib/quoteMutations'
 import { nowHmKST, todayKST } from '@/lib/date'
 import { RATE_SOURCE } from '@/lib/exchangeRate'
+import { loadQuoteUserDefaults } from '@/lib/quoteUserDefaults'
 import {
   compactYmd, differsInMonth, displayYmd, isBackdated, monthOf, safeQuoteDate,
 } from '@/lib/quoteDate'
@@ -123,6 +124,18 @@ function QuotePageInner() {
   // 지금 보이는 환율이 어디서 온 값인가(app/quote/types.ts 의 RateMeta). 아직 아무것도
   // 못 받았으면 null — 그때는 화면이 「환율 로딩중」만 보여 준다.
   const [rateMeta, setRateMeta] = useState<RateMeta | null>(null)
+  /**
+   * 저장된 내 설정 — **분류를 고를 때** 읽어 둔 관세율·이익률이고, 이후 추가되는 줄의
+   * 출발값이다(RowAddButtons → createRow). 없으면 null 이고 종전 기본값으로 간다.
+   */
+  const [savedDefaults, setSavedDefaults] = useState<{ tariffRate: number | null; marginRate: number | null } | null>(null)
+  /** 그 줄을 실제로 적용했는가 — 환율 옆 「내 설정 불러옴」 표시의 조건이다. */
+  const [savedApplied, setSavedApplied] = useState(false)
+  /**
+   * 마지막으로 요청한 분류. 설정을 읽는 사이에 분류를 또 바꾸면 **늦게 온 답을 버린다** —
+   * 그러지 않으면 먼저 고른 분류의 환율이 나중에 도착해 화면을 덮는다.
+   */
+  const savedReqRef = useRef('')
   const [rateLoading, setRateLoading] = useState(false)
 
   const [receiver, setReceiver] = useState('')
@@ -157,7 +170,7 @@ function QuotePageInner() {
     setSearchQuery, setSearchResults, setSearchOpen,
     setEditingProfitRate, setProfitRateInput,
     serviceRow, discountRow, expenses,
-    clearAllRowCategories, applyCategoryDefaults,
+    clearAllRowCategories, applyCategoryDefaults, applySavedTariff,
     ctx: rowsCtx, actions: rowsActions,
   } = useQuoteRows({ supabase, exchangeRate, terms, setTerms, setTermsOpen, categories: activeCategories, lineSplitOn, formKind })
   const [showPriceGuide, setShowPriceGuide] = useState(false)
@@ -354,6 +367,38 @@ function QuotePageInner() {
   const changeCategory = (v: string) => {
     setCategory(v)
     applyCategoryDefaults(v || null)
+    void loadMyDefaults(v)
+  }
+
+  /**
+   * 그 분류로 **내가 마지막에 확정한** 환율·관세·이익률을 들여온다(quote_user_defaults).
+   *
+   * 적용 범위
+   *   · 환율      — 화면 환율을 그 값으로 바꾼다(RateMeta 'saved'). 새로고침을 누르면
+   *                 종전대로 API 값이 이것을 덮는다.
+   *   · 이익률    — **손대지 않은** 품목 줄 + 이후 추가되는 줄(applyCategoryDefaults).
+   *   · 관세율    — **아직 비어 있는** 줄 + 이후 추가되는 줄(applySavedTariff).
+   *     이미 품목·금액이 들어간 줄은 건드리지 않는다.
+   *
+   * 하지 않는 때 — 분류를 비웠을 때, 그리고 **다시쓰기**(기존 견적 복제)다. 다시쓰기는
+   * 그 견적의 값이 정본이고, 사람이 분류를 고른 것이 아니라 복제가 채운 것이다
+   * (복제·임시저장 되살리기는 setCategory 를 직접 부르므로 이 함수를 지나지 않는다).
+   */
+  const loadMyDefaults = async (v: string) => {
+    savedReqRef.current = v
+    if (!v || duplicateId != null) { setSavedDefaults(null); setSavedApplied(false); return }
+    const d = await loadQuoteUserDefaults(supabase, engineer?.email, v)
+    // 그 사이에 분류가 또 바뀌었으면 이 답은 버린다.
+    if (savedReqRef.current !== v) return
+    if (!d) { setSavedDefaults(null); setSavedApplied(false); return }
+    setSavedDefaults({ tariffRate: d.tariffRate, marginRate: d.marginRate })
+    setSavedApplied(true)
+    if (d.marginRate != null) applyCategoryDefaults(v, d.marginRate)
+    applySavedTariff(d.tariffRate)
+    if (d.exchangeRate != null) {
+      setExchangeRate(d.exchangeRate)
+      setRateMeta({ kind: 'saved', savedAt: d.savedAt })
+    }
   }
 
   const categoryMissing = category.trim() === ''
@@ -782,6 +827,7 @@ function QuotePageInner() {
               </div>
             ))}
             <ProfitPanel rows={rows} exchangeRate={exchangeRate} rateMeta={rateMeta} rateLoading={rateLoading} onFetchRate={() => { void fetchRate({ force: true }) }} onRateChange={handleRateChange} category={category}
+              savedDefaultsApplied={savedApplied && category !== ''}
               operatingReason={operatingReason} setOperatingReason={setOperatingReason} />
           </div>
 
@@ -832,9 +878,11 @@ function QuotePageInner() {
               />
             ))}
 
+            {/* rowDefaults — 분류를 비우면 저장된 설정도 쓰지 않는다(확정 뒤 초기화가 분류를 비운다). */}
             <RowAddButtons
               setRows={setRows}
               category={category}
+              rowDefaults={category ? savedDefaults : null}
               serviceRow={serviceRow}
               discountRow={discountRow}
             />

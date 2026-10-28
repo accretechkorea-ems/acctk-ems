@@ -11,6 +11,7 @@
 import type { QuoteRow } from '@/app/quote/types'
 import {
   createDiscountRow, createDomesticRow, createManualJpyRow, createRow, createServiceRow,
+  type RowDefaults,
 } from '@/app/quote/calc'
 
 export type RowAddButtonsProps = {
@@ -21,14 +22,21 @@ export type RowAddButtonsProps = {
   discountRow: QuoteRow | null
   /** 지금 고른 견적 분류 — 새 줄의 이익률 기본값이 여기서 나온다(TSE 60 · 그 밖 40). */
   category?: string
+  /**
+   * 저장된 내 설정(관세율·이익률) — 있으면 **분류 기본값보다 앞선다.**
+   * 그 사람이 그 분류로 마지막에 확정한 값이다(lib/quoteUserDefaults.ts).
+   * 서비스비·할인 줄에는 넘기지 않는다 — 두 줄에는 관세도 이익률도 뜻이 없다.
+   */
+  rowDefaults?: RowDefaults | null
 }
 
-export default function RowAddButtons({ setRows, serviceRow, discountRow, category }: RowAddButtonsProps) {
+export default function RowAddButtons({ setRows, serviceRow, discountRow, category, rowDefaults }: RowAddButtonsProps) {
+  const d = rowDefaults ?? undefined
   // 행 추가 버튼 — 1행: 주버튼(품목) + 수동입력 / 2행: 국내조달품 + 서비스비
   return (
 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
   <button
-    onClick={() => setRows(prev => [...prev, createRow(category)])}
+    onClick={() => setRows(prev => [...prev, createRow(category, d)])}
     style={{ minWidth: 0, padding: '11px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', transition: 'background 0.15s ease' }}
     onMouseEnter={e => (e.currentTarget.style.background = '#1c3e87')}
     onMouseLeave={e => (e.currentTarget.style.background = '#234ea2')}
@@ -37,7 +45,7 @@ export default function RowAddButtons({ setRows, serviceRow, discountRow, catego
   </button>
   {/* 수동입력 품목 — 가격표에 없는 제품. 개수 제한 없음. */}
   <button
-    onClick={() => setRows(prev => [...prev, createManualJpyRow(category)])}
+    onClick={() => setRows(prev => [...prev, createManualJpyRow(category, d)])}
     title="가격표에 없는 품목을 구입가(JPY) 직접 입력으로 추가합니다"
     style={{ minWidth: 0, padding: '11px', background: '#fff', color: '#234ea2', border: '1px solid #ebebeb', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', transition: 'background 0.15s ease' }}
     onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6')}
@@ -47,7 +55,7 @@ export default function RowAddButtons({ setRows, serviceRow, discountRow, catego
   </button>
   {/* 국내조달품 — 원화 원가만. 고객 견적서에는 금액 없이 포함사항으로 나간다. */}
   <button
-    onClick={() => setRows(prev => [...prev, createDomesticRow(category)])}
+    onClick={() => setRows(prev => [...prev, createDomesticRow(category, d)])}
     title="국내에서 조달하는 항목(원화 원가만, 마진 없음)"
     style={{ minWidth: 0, padding: '11px', background: '#fff', color: '#234ea2', border: '1px solid #ebebeb', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', transition: 'background 0.15s ease' }}
     onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6')}

@@ -146,17 +146,30 @@ export function calcRow(row: QuoteRow, rate: number): QuoteRow {
 }
 
 /**
+ * 새 줄의 출발값 — **그 사람이 그 분류로 마지막에 확정한 값**이 있으면 그것을 쓴다
+ * (lib/quoteUserDefaults.ts). 칸이 null 이면 아래의 종전 기본값으로 간다.
+ */
+export type RowDefaults = { tariffRate: number | null; marginRate: number | null }
+
+/** 관세율 기본값 — 저장된 설정이 없을 때. components/quote/equip 도 같은 값을 쓴다. */
+const DEFAULT_TARIFF = 1.13
+
+/**
  * 품목 줄 하나.
  *
  * 이익률 기본값은 **견적 분류**가 정한다(lib/quoteProfit.ts) — TSE 는 60, 그 밖은 40 이다.
  * 분류를 모르는 자리에서 부르면 40 으로 시작한다(지금까지의 동작).
+ *
+ * defaults 를 주면 그 값이 분류 기본값보다 앞선다 — 사람이 마지막에 쓴 값이 분류의
+ * 일반값보다 그 사람에게 맞다. 주지 않으면 지금까지와 똑같다.
  */
-export function createRow(category?: string | null): QuoteRow {
+export function createRow(category?: string | null, defaults?: RowDefaults): QuoteRow {
   return {
     id: Math.random().toString(36).slice(2),
     itemText: '', selectedItem: null, subLines: [],
     quantity: 1, manual_unit_price: 0,
-    tariff_rate: 1.13, exchange_rate: 0, profit_rate: defaultMarginOf(category), realized_profit_rate: 0,
+    tariff_rate: defaults?.tariffRate ?? DEFAULT_TARIFF, exchange_rate: 0,
+    profit_rate: defaults?.marginRate ?? defaultMarginOf(category), realized_profit_rate: 0,
     unit_price: 0, supply_price: 0, tax: 0,
     cost_price_jpy: 0, product_price: 0, profit: 0,
     partCode: '', row_kind: 'price_list', manual_cost_jpy: 0, manual_model: '', price_mode: 'rate', expenses: [],
@@ -168,15 +181,17 @@ export function createRow(category?: string | null): QuoteRow {
 }
 
 // 수동입력 품목 행 — 가격표에 없는 제품용. 구입가 JPY 를 직접 입력받는다.
-// 관세율·이익률 기본값은 createRow() 와 동일(1.13 / 분류별 40·60).
-export function createManualJpyRow(category?: string | null): QuoteRow {
-  return { ...createRow(category), row_kind: 'manual_jpy' }
+// 관세율·이익률 기본값은 createRow() 와 동일(저장된 설정 → 1.13 / 분류별 40·60).
+export function createManualJpyRow(category?: string | null, defaults?: RowDefaults): QuoteRow {
+  return { ...createRow(category, defaults), row_kind: 'manual_jpy' }
 }
 
-// 국내조달품 행 — 원화 원가를 직접 넣는다. 이익률 기본값은 다른 품목과 같다(분류가 정한다).
-// 관세율은 1 로 둔다(쓰지 않는다는 뜻 — 화면에 관세 칸을 내지 않는다).
-export function createDomesticRow(category?: string | null): QuoteRow {
-  return { ...createRow(category), row_kind: 'domestic', tariff_rate: 1 }
+// 국내조달품 행 — 원화 원가를 직접 넣는다. 이익률 기본값은 다른 품목과 같다
+// (저장된 설정이 있으면 그 값, 없으면 분류가 정한다).
+// 관세율은 **늘 1** 이다(쓰지 않는다는 뜻 — 화면에 관세 칸을 내지 않는다). 저장된 설정의
+// 관세는 이 줄에 넣지 않는다 — 넣으면 원화 원가에 관세가 곱해져 원가가 부풀어 오른다.
+export function createDomesticRow(category?: string | null, defaults?: RowDefaults): QuoteRow {
+  return { ...createRow(category, defaults), row_kind: 'domestic', tariff_rate: 1 }
 }
 
 // 서비스비 행 — 품명 기본값 '서비스비'(사용자 수정 가능, PDF 에 그대로 나감).
