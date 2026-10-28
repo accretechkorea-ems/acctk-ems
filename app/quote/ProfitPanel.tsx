@@ -153,12 +153,17 @@ export default function ProfitPanel({
             <span
               onDoubleClick={startEdit}
               title="더블클릭하여 수동 입력"
+              // 이 숫자에 원가가 전부 걸려 있어 머리줄에서 가장 크게 읽힌다(11 → 17px, 진한 색).
               // 숫자와 「원」은 한 덩어리다 — 「원」만 다음 줄로 내려가면 숫자가 아닌 것으로 읽힌다.
+              // 「원」은 13px 로 한 급 낮춘다(숫자가 먼저 읽히게).
               style={{
-                fontSize: 11, color: '#6b7280', fontWeight: 700, cursor: 'text',
+                fontSize: 17, color: '#111827', fontWeight: 700, cursor: 'text', lineHeight: 1.2,
                 borderBottom: '1px dashed #9ca3af', whiteSpace: 'nowrap', flexShrink: 0,
+                letterSpacing: '-0.3px',
               }}>
-              {exchangeRate ? `${exchangeRate.toFixed(4)}원` : '환율 로딩중...'}
+              {exchangeRate
+                ? <>{exchangeRate.toFixed(4)}<span style={{ fontSize: 13, fontWeight: 700 }}>원</span></>
+                : <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280' }}>환율 로딩중...</span>}
             </span>
           )}
           {/* 출처·기준 시각. 숫자를 고치는 중에는 내지 않는다(그 순간의 출처는 아직 모른다).

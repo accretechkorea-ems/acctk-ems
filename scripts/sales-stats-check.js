@@ -33,7 +33,7 @@ Module._resolveFilename = function (req, ...rest) {
 
 const {
   fiscalYearOf, matchPeriod, inOrderPeriod, inRevenuePeriod, periodTarget,
-  engineerStat, getFYMonths, monthlyBars, remainingMonths, neededPerMonth, yearSummary,
+  engineerStat, getFYMonths, monthlyBars, remainingMonths, neededPerMonth, yearSummary, unitBars,
 } = load(path.join(ROOT, 'lib/salesStats.ts'))
 
 let fails = 0
@@ -166,6 +166,71 @@ eq('목표가 없으면 달성률·필요액이 전부 null',
   [null, null, null, null])
 
 eq('가로축은 늘 열두 달', getFYMonths(FY).length, 12)
+
+// ── 여러 사람 합 · 단위별 목표 ───────────────────────────────────────────────
+// 사업부 전체 그래프가 쓰는 길이다(실적 현황 상단). 개인 그래프와 **같은 함수**를 쓰므로
+// 사업부 숫자는 개인 숫자의 합과 어긋날 수 없다 — 그 약속을 여기서 못 박는다.
+console.log('\n── 여러 사람(engineerIds) 합 ──')
+{
+  const YOU = 8
+  const two = [
+    { engineer_id: ME, year: FY, quarter: null, target_amount: 120000, order_target_amount: 240000 },
+    { engineer_id: YOU, year: FY, quarter: null, target_amount: 60000, order_target_amount: 120000 },
+    // 분기 목표 줄은 보지 않는다(연간 줄만 정본).
+    { engineer_id: ME, year: FY, quarter: 1, target_amount: 999999, order_target_amount: 999999 },
+    // id 가 비어 있는 옛 줄은 어느 범위에도 들지 않는다.
+    { engineer_id: null, year: FY, quarter: null, target_amount: 777, order_target_amount: 777 },
+  ]
+  const quotes = [
+    q({ engineer_id: ME, status: '수주', purchase_order_at: '2026-05-10', total_supply: 10000 }),
+    q({ engineer_id: YOU, status: '수주', purchase_order_at: '2026-05-20', total_supply: 20000 }),
+    q({ engineer_id: 99, status: '수주', purchase_order_at: '2026-05-21', total_supply: 50000 }),   // 범위 밖
+  ]
+  const mine = monthlyBars(quotes, two, { engineerId: ME, fy: FY })
+  const yours = monthlyBars(quotes, two, { engineerId: YOU, fy: FY })
+  const both = monthlyBars(quotes, two, { engineerIds: [ME, YOU], fy: FY })
+  const may = b => b.find(x => x.month === 5)
+  eq('5월 수주 — 둘의 합', may(both).orderedAmt, may(mine).orderedAmt + may(yours).orderedAmt)
+  eq('범위 밖 사람은 빠진다', may(both).orderedAmt, 30000)
+  eq('월 수주 목표 — 두 사람 연간 합 ÷ 12', may(both).orderTarget, Math.round(360000 / 12))
+  eq('월 매출 목표 — 두 사람 연간 합 ÷ 12', may(both).salesTarget, Math.round(180000 / 12))
+  const sum = yearSummary(quotes, two, { engineerIds: [ME, YOU], fy: FY, today: '2026-10-22' })
+  eq('연간 목표도 합', [sum.orderTarget, sum.salesTarget], [360000, 180000])
+}
+
+console.log('\n── 단위별 칸과 목표(÷12 · ÷4 · ×1) ──')
+{
+  const today = '2026-10-22'
+  const quotes = [
+    q({ status: '수주', purchase_order_at: '2026-05-10', total_supply: 10000 }),        // Q1
+    q({ status: '수주', purchase_order_at: '2026-11-10', total_supply: 30000 }),        // Q3
+    q({ tax_invoice_completed_at: '2026-05-11', status: '매출완료', total_supply: 7000, total_profit: 700 }),
+  ]
+  const months = unitBars(quotes, targets, { engineerId: ME, fy: FY, unit: 'month', today })
+  const quarters = unitBars(quotes, targets, { engineerId: ME, fy: FY, unit: 'quarter', today })
+  const years = unitBars(quotes, targets, { engineerId: ME, fy: FY, unit: 'year', today })
+
+  eq('월 — 칸 열둘', months.length, 12)
+  eq('월 — 목표는 연간 ÷ 12', months[0].orderTarget, Math.round(240000 / 12))
+  eq('월 — 지금 칸은 10월 하나', months.filter(b => b.isNow).map(b => b.label), ['10월'])
+
+  eq('분기 — 칸 넷', quarters.map(b => b.label), ['Q1', 'Q2', 'Q3', 'Q4'])
+  eq('분기 — 목표는 연간 ÷ 4', quarters[0].orderTarget, Math.round(240000 / 4))
+  eq('분기 — Q1 에 5월 수주가 든다', quarters[0].orderedAmt, 10000)
+  eq('분기 — Q3 에 11월 수주가 든다', quarters[2].orderedAmt, 30000)
+  eq('분기 — 열두 달 합과 같다',
+    quarters.reduce((a, b) => a + b.orderedAmt, 0), months.reduce((a, b) => a + b.orderedAmt, 0))
+  eq('분기 — 지금은 Q3(10월)', quarters.filter(b => b.isNow).map(b => b.label), ['Q3'])
+  eq('분기 — 둘째 줄', quarters.map(b => b.sub), ['4~6월', '7~9월', '10~12월', '1~3월'])
+
+  eq('연도 — FY−1·FY·FY+1', years.map(b => b.label), ['FY2025', 'FY2026', 'FY2027'])
+  eq('연도 — 목표는 연간 그대로(÷ 하지 않는다)', years[1].orderTarget, 240000)
+  eq('연도 — 목표가 없는 해는 달성률 null', [years[0].orderTarget, years[0].orderAchieve], [0, null])
+  eq('연도 — FY 칸이 열두 달 합과 같다', years[1].orderedAmt, months.reduce((a, b) => a + b.orderedAmt, 0))
+  eq('연도 — 지금은 FY2026', years.filter(b => b.isNow).map(b => b.label), ['FY2026'])
+  eq('매출도 같은 규칙(Q1 에 5월 계산서)', quarters[0].revenueAmt, 7000)
+  eq('이익도 칸을 따라간다', quarters[0].profitAmt, 700)
+}
 
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
 process.exit(fails === 0 ? 0 : 1)

@@ -152,6 +152,39 @@ export type MonthBars = {
 }
 
 /**
+ * 집계 범위 — **한 명**(engineerId) 또는 **여럿**(engineerIds) 이다.
+ *
+ * 여럿은 사업부 전체 그래프가 쓴다(실적 현황 상단). 한 명은 개인 그래프 모달이 쓴다.
+ * 둘을 한 함수로 둔 이유: 사업부 숫자가 개인 숫자의 합과 어긋나면 어느 쪽이 맞는지
+ * 알 길이 없다. 같은 코드로 더하면 어긋날 수 없다.
+ */
+export type StatScope = { engineerId?: number; engineerIds?: readonly number[] }
+
+/** 범위에 들었는가. id 가 비어 있는 옛 행은 어느 범위에도 들지 않는다. */
+const inScope = (ids: Set<number>, id: number | null): boolean => id != null && ids.has(id)
+
+/** 범위에 든 사람 id. 아무것도 주지 않으면 빈 집합(= 0 원)이다. */
+function idsOf(scope: StatScope): Set<number> {
+  if (scope.engineerIds) return new Set(scope.engineerIds)
+  return new Set(scope.engineerId != null ? [scope.engineerId] : [])
+}
+
+/**
+ * 그 범위의 **연간 목표 합**. 한 명이면 그 사람 한 줄, 여럿이면 그 사람들의 줄을 더한다.
+ * 분기 목표 줄(quarter != null)은 보지 않는다 — 연간 줄만 정본이다.
+ */
+function annualTargetOf(
+  targets: readonly StatTarget[],
+  ids: Set<number>,
+  fy: number,
+  key: 'target_amount' | 'order_target_amount',
+): number {
+  return targets.reduce((s2, x) => (
+    inScope(ids, x.engineer_id) && x.year === fy && x.quarter === null ? s2 + (x[key] || 0) : s2
+  ), 0)
+}
+
+/**
  * 회계연도 열두 달의 막대 자료.
  *
  * 기간 판정은 카드와 **같은 함수**를 쓴다(inOrderPeriod·inRevenuePeriod) — 수주는 발주일,
@@ -161,13 +194,13 @@ export type MonthBars = {
 export function monthlyBars(
   quotes: readonly StatQuote[],
   targets: readonly StatTarget[],
-  opts: { engineerId: number; fy: number },
+  opts: StatScope & { fy: number },
 ): MonthBars[] {
-  const { engineerId, fy } = opts
-  const mine = quotes.filter(q => q.engineer_id === engineerId)
-  const t = targets.find(x => x.engineer_id === engineerId && x.year === fy && x.quarter === null)
-  const orderTarget = Math.round((t?.order_target_amount || 0) / 12)
-  const salesTarget = Math.round((t?.target_amount || 0) / 12)
+  const { fy } = opts
+  const ids = idsOf(opts)
+  const mine = quotes.filter(q => inScope(ids, q.engineer_id))
+  const orderTarget = Math.round(annualTargetOf(targets, ids, fy, 'order_target_amount') / 12)
+  const salesTarget = Math.round(annualTargetOf(targets, ids, fy, 'target_amount') / 12)
 
   return getFYMonths(fy).map(({ label, month, year }) => {
     const ordered = mine.filter(q => inOrderPeriod(q, fy, 'month', month))
@@ -231,20 +264,20 @@ export type YearSummary = {
 export function yearSummary(
   quotes: readonly StatQuote[],
   targets: readonly StatTarget[],
-  opts: { engineerId: number; fy: number; today: string },
+  opts: StatScope & { fy: number; today: string },
 ): YearSummary {
-  const { engineerId, fy, today } = opts
-  const bars = monthlyBars(quotes, targets, { engineerId, fy })
+  const { fy, today } = opts
+  const ids = idsOf(opts)
+  const bars = monthlyBars(quotes, targets, opts)
   const orderedAmt = bars.reduce((s2, b) => s2 + b.orderedAmt, 0)
   const revenueAmt = bars.reduce((s2, b) => s2 + b.revenueAmt, 0)
   const profitAmt = bars.reduce((s2, b) => s2 + b.profitAmt, 0)
 
-  const t = targets.find(x => x.engineer_id === engineerId && x.year === fy && x.quarter === null)
-  const orderTarget = t?.order_target_amount || 0
-  const salesTarget = t?.target_amount || 0
+  const orderTarget = annualTargetOf(targets, ids, fy, 'order_target_amount')
+  const salesTarget = annualTargetOf(targets, ids, fy, 'target_amount')
   const remaining = remainingMonths(fy, today)
 
-  const pending = quotes.filter(q => q.engineer_id === engineerId && q.status === '견적중')
+  const pending = quotes.filter(q => inScope(ids, q.engineer_id) && q.status === '견적중')
 
   return {
     orderedAmt, revenueAmt, profitAmt,
@@ -269,4 +302,115 @@ export function getFYMonths(fy: number): { label: string; month: number; year: n
     out.push({ label: `${month}월`, month, year: m <= 12 ? fy : fy + 1 })
   }
   return out
+}
+
+// ── 그래프 가로축의 칸 — 월 · 분기 · 연도 ───────────────────────────────────
+// 실적 현황 상단의 사업부 그래프가 세 단위를 오간다. 개인 그래프 모달은 월만 쓴다.
+// **더하는 규칙은 한곳에 둔다** — 분기는 그 안의 달을 더하고, 목표는 단위에 맞춰
+// 연간 목표를 ÷12(월) · ÷4(분기) · ×1(연도) 한다.
+
+/** 가로축 단위. */
+export type ChartUnit = 'month' | 'quarter' | 'year'
+
+/** 가로축 한 칸. MonthBars 와 같은 칸을 갖되 label 이 「4월」·「Q1」·「FY2026」 로 달라진다. */
+export type UnitBar = {
+  key: string
+  label: string
+  /** 둘째 줄(분기의 「4~6월」). 없으면 비운다. */
+  sub?: string
+  orderedAmt: number
+  revenueAmt: number
+  profitAmt: number
+  orderTarget: number
+  salesTarget: number
+  orderAchieve: number | null
+  salesAchieve: number | null
+  /** 지금이 그 칸인가 — 막대 뒤 띠와 라벨 색이 이것을 본다. */
+  isNow: boolean
+}
+
+const achieveOf = (amt: number, target: number): number | null =>
+  target > 0 ? (amt / target) * 100 : null
+
+/**
+ * 가로축 칸 자료를 만든다.
+ *
+ *   month   — 회계연도 열두 달(monthlyBars 그대로)
+ *   quarter — Q1~Q4. 그 안의 석 달을 더하고 목표는 연간 ÷ 4
+ *   year    — FY−1 · FY · FY+1 세 해. 목표는 **각 해의 목표 합**이다(÷ 하지 않는다)
+ *
+ * 범위(engineerId 하나 또는 engineerIds 여럿)는 다른 함수와 같다 — 그래서 사업부 그래프의
+ * 숫자는 개인 그래프 숫자의 합과 어긋날 수 없다.
+ */
+export function unitBars(
+  quotes: readonly StatQuote[],
+  targets: readonly StatTarget[],
+  opts: StatScope & { fy: number; unit: ChartUnit; today: string },
+): UnitBar[] {
+  const { fy, unit, today } = opts
+  const nowFy = fiscalYearOf(today)
+  const { m: nowMonth } = ymdParts(today)
+  const nowYear = ymdParts(today).y
+
+  if (unit === 'month') {
+    return monthlyBars(quotes, targets, opts).map(b => ({
+      key: `${b.year}-${b.month}`,
+      label: b.label,
+      orderedAmt: b.orderedAmt,
+      revenueAmt: b.revenueAmt,
+      profitAmt: b.profitAmt,
+      orderTarget: b.orderTarget,
+      salesTarget: b.salesTarget,
+      orderAchieve: b.orderAchieve,
+      salesAchieve: b.salesAchieve,
+      isNow: b.year === nowYear && b.month === nowMonth,
+    }))
+  }
+
+  if (unit === 'quarter') {
+    const months = monthlyBars(quotes, targets, opts)
+    // 월 목표를 더하지 않는다 — ÷12 를 세 번 더하면 반올림 오차가 쌓인다. 연간에서 ÷4 한다.
+    const ids = idsOf(opts)
+    const orderTarget = Math.round(annualTargetOf(targets, ids, fy, 'order_target_amount') / 4)
+    const salesTarget = Math.round(annualTargetOf(targets, ids, fy, 'target_amount') / 4)
+    const nowQuarter = nowFy === fy ? Math.floor(((nowMonth + 8) % 12) / 3) + 1 : 0
+    return [
+      { q: 1, label: 'Q1', sub: '4~6월', ms: [4, 5, 6] },
+      { q: 2, label: 'Q2', sub: '7~9월', ms: [7, 8, 9] },
+      { q: 3, label: 'Q3', sub: '10~12월', ms: [10, 11, 12] },
+      { q: 4, label: 'Q4', sub: '1~3월', ms: [1, 2, 3] },
+    ].map(({ q, label, sub, ms }) => {
+      const mine = months.filter(b => ms.includes(b.month))
+      const orderedAmt = mine.reduce((s2, b) => s2 + b.orderedAmt, 0)
+      const revenueAmt = mine.reduce((s2, b) => s2 + b.revenueAmt, 0)
+      return {
+        key: `q${q}`, label, sub,
+        orderedAmt, revenueAmt,
+        profitAmt: mine.reduce((s2, b) => s2 + b.profitAmt, 0),
+        orderTarget, salesTarget,
+        orderAchieve: achieveOf(orderedAmt, orderTarget),
+        salesAchieve: achieveOf(revenueAmt, salesTarget),
+        isNow: q === nowQuarter,
+      }
+    })
+  }
+
+  // 연도 — 세 해를 각각 제 목표로 잰다(그 해에 목표가 없으면 달성률은 비운다).
+  return [fy - 1, fy, fy + 1].map(y => {
+    const bars = monthlyBars(quotes, targets, { ...opts, fy: y })
+    const ids = idsOf(opts)
+    const orderTarget = annualTargetOf(targets, ids, y, 'order_target_amount')
+    const salesTarget = annualTargetOf(targets, ids, y, 'target_amount')
+    const orderedAmt = bars.reduce((s2, b) => s2 + b.orderedAmt, 0)
+    const revenueAmt = bars.reduce((s2, b) => s2 + b.revenueAmt, 0)
+    return {
+      key: `fy${y}`, label: `FY${y}`,
+      orderedAmt, revenueAmt,
+      profitAmt: bars.reduce((s2, b) => s2 + b.profitAmt, 0),
+      orderTarget, salesTarget,
+      orderAchieve: achieveOf(orderedAmt, orderTarget),
+      salesAchieve: achieveOf(revenueAmt, salesTarget),
+      isNow: y === nowFy,
+    }
+  })
 }

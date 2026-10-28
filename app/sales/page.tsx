@@ -14,14 +14,18 @@ import { SALES_STATUS_COLORS, TEAM_COLORS, getCategoryColor, salesStatusLabel } 
 import EngineerStatCard, { AnimatedGauge } from '@/components/sales/EngineerStatCard'
 import EngineerChartModal from '@/components/sales/EngineerChartModal'
 import {
-  engineerStat, fiscalYearOf, getFYMonths as fyMonths,
+  engineerStat, fiscalYearOf,
   inOrderPeriod as inOrderPeriodOf, inRevenuePeriod as inRevenuePeriodOf,
   matchPeriod as matchPeriodOf,
+  unitBars, yearSummary, type ChartUnit,
 } from '@/lib/salesStats'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { getViewScope, type TeamPerm } from '@/lib/permissions'
 import { inSalesStats } from '@/lib/salesScope'
+import {
+  ChartLegend, ChartPanel, SummaryBoxes, axisMaxOf,
+} from '@/components/sales/salesChart'
 import { withTeamPerm, withTeamPerms } from '@/lib/teamPerms'
 import {
   updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, submitQuoteDelete, deleteQuoteSelf,
@@ -34,7 +38,7 @@ import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice } from '@/lib/appr
 import { openQuotePdf } from '@/lib/openQuotePdf'
 import { approvalDocPath, type LineInput } from '@/lib/approval/types'
 import {
-  isAutoFailed, REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE,
+  isAutoFailed, REVERT_NOTICE, AUTO_FAIL_NOTICE,
   STATUS_FILTER_TABS, editStatusesFor, REJECTED_STATUS,
 } from '@/lib/quoteStatus'
 import SegmentedControl from '@/components/common/SegmentedControl'
@@ -127,13 +131,6 @@ const POSITION_ORDER: Record<string, number> = {
 }
 
 const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
-const numM = (n: number) => {
-  if (n === 0) return '₩0'
-  if (n >= 100000000) return `₩${(n / 100000000).toFixed(1)}억`
-  if (n >= 10000000) return `₩${(n / 10000000).toFixed(0)}천만`
-  if (n >= 1000000) return `₩${(n / 1000000).toFixed(0)}백만`
-  return `₩${Math.round(n / 10000)}만`
-}
 const PAGE_SIZE = 20
 
 // 회계연도·분기는 한국 날짜로 읽는다. 계산서 완료 시각(timestamptz)이 한국 새벽에 찍히면
@@ -142,7 +139,6 @@ const PAGE_SIZE = 20
 const calParts = (dateStr: string) => ymdParts(kstYmd(dateStr))
 
 // 회계연도 판정은 lib/salesStats.ts 가 정본이다(이 화면과 개인 대시보드가 같이 쓴다).
-const getFiscalYear = fiscalYearOf
 
 function getFiscalQuarter(dateStr: string): number {
   const { m } = calParts(dateStr)
@@ -205,160 +201,65 @@ function getPeriodLabel(mode: string, fy: number, month: number): string {
   return ''
 }
 
-const getFYMonths = fyMonths
-
-function BarAnimate({ height, color, width = 36 }: { height: number; color: string; width?: number }) {
-  const [h, setH] = useState(0)
-  useEffect(() => { const t = setTimeout(() => setH(height), 100); return () => clearTimeout(t) }, [height])
-  return (
-    <div style={{ width, height: h, background: color, borderRadius: '4px 4px 0 0', position: 'absolute', bottom: 0, transition: 'height 0.8s cubic-bezier(0.4,0,0.2,1)' }} />
-  )
-}
-
 // ── 통합 실적 차트 ────────────────────────────────────────────────────────────
-type ChartViewType = 'quarterly' | 'monthly' | 'yearly'
-
-function PerformanceChart({ quotes, fy, targets, engineers, filteredEngineerIds, teamFilter }: {
+/**
+ * 사업부 전체 실적 그래프 — **개인 그래프 모달과 같은 구성**이다.
+ *
+ * 2026-10-28 에 통일했다. 전에는 매출 하나만 회색 막대로 묶어 그리고 목표를 막대 위
+ * 짧은 선으로 얹었다. 같은 화면에서 개인 그래프는 수주·매출 두 패널에 목표선을 긋는데,
+ * 위아래 두 그림의 규칙이 다르면 보는 사람이 매번 「이 색이 저기서는 무슨 뜻이었나」를
+ * 다시 맞춰야 했다. 그리는 쪽은 components/sales/salesChart.tsx 한곳이다.
+ *
+ * 단위(월·분기·연도)는 **그대로 둔다** — 사업부는 분기로 보고 개인은 달로 본다.
+ * 목표는 단위에 맞춰 연간 목표를 ÷12 · ÷4 · ×1 한다(lib/salesStats.ts 의 unitBars).
+ *
+ * 집계 대상은 **화면이 넘겨 주는 사람들**이다(engineerIds = inSalesStats · 재직 · 열람 권한 ·
+ * 팀 필터). 목표도 그 사람들의 합이다 — 예전에는 매출 막대는 팀 필터를 따르면서 목표 합은
+ * 집계 대상 여부를 보지 않아, 둘의 기준이 어긋나 있었다.
+ */
+function PerformanceChart({ quotes, fy, targets, engineerIds }: {
   quotes: Quote[]
   fy: number
   targets: SalesTarget[]
-  engineers: Engineer[]
-  filteredEngineerIds: number[]
-  teamFilter: string | null
+  /** 집계 대상 담당자 — 화면이 이미 걸러 둔 목록이다(목표 합도 이 사람들로 낸다). */
+  engineerIds: number[]
 }) {
-  const [chartView, setChartView] = useState<ChartViewType>('quarterly')
-  const BAR_H = 160
+  const [unit, setUnit] = useState<ChartUnit>('quarter')
+  const today = todayKST()
 
-  const nowFY = getCurrentFY()
-  const { y: nowYear, m: nowMonth } = nowKSTParts()
-  const nowFQ = getFiscalQuarter(todayKST())
-
-  const scopedQuotes = teamFilter
-    ? quotes.filter(q => filteredEngineerIds.includes(q.engineer_id))
-    : quotes
-  // 매출로 세는 건 — 상태가 매출완료이고 계산서 완료 시각이 있는 것만.
-  const revenueQuotes = scopedQuotes.filter(q => q.status === REVENUE_STATUS && !!q.tax_invoice_completed_at)
-
-  // 연간 목표 합계도 그 회계연도(4/1 시작)에 재직한 직원만 — 과거 연도는 그때 재직자 포함, 현재는 삭제자 제외.
-  const totalYearTarget = engineers.reduce((s, e) => {
-    if (teamFilter && e.teams !== teamFilter) return s
-    if (!isActiveInPeriod(e.resigned_date, `${fy}-04-01`)) return s
-    const t = targets.find(t => t.engineer_id === e.engineer_id && t.year === fy && t.quarter === null)
-    return s + (t?.target_amount || 0)
-  }, 0)
-
-  const quarterData = [
-    { key: 'Q1', desc: '4~6월', q: 1 },
-    { key: 'Q2', desc: '7~9월', q: 2 },
-    { key: 'Q3', desc: '10~12월', q: 3 },
-    { key: 'Q4', desc: '1~3월', q: 4 },
-  ].map(qd => {
-    // 매출은 세금계산서 발행이 끝난 날 기준으로 센다(완료 시각이 없는 건은 어느 분기에도 안 잡힌다).
-    const rev = revenueQuotes.filter(q => getFiscalYear(q.tax_invoice_completed_at!) === fy && getFiscalQuarter(q.tax_invoice_completed_at!) === qd.q)
-    return {
-      ...qd,
-      revenueAmt: rev.reduce((s, q) => s + (q.total_supply || 0), 0),
-      profitAmt: rev.reduce((s, q) => s + (q.total_profit || 0), 0),
-      targetAmt: Math.round(totalYearTarget / 4),
-      isCurrent: fy === nowFY && qd.q === nowFQ,
-    }
-  })
-
-  const monthData = getFYMonths(fy).map(({ label, month, year }) => {
-    const rev = revenueQuotes.filter(q => {
-      const d = new Date(q.tax_invoice_completed_at!)
-      return d.getFullYear() === year && d.getMonth() + 1 === month
-    })
-    const isCurrent = year === nowYear && month === nowMonth
-    return {
-      label, month, year,
-      revenueAmt: rev.reduce((s, q) => s + (q.total_supply || 0), 0),
-      profitAmt: rev.reduce((s, q) => s + (q.total_profit || 0), 0),
-      targetAmt: Math.round(totalYearTarget / 12),
-      isCurrent,
-      isPast: year < nowYear || (year === nowYear && month < nowMonth),
-    }
-  })
-
-  const yearData = [fy - 1, fy, fy + 1].map(y => {
-    const rev = revenueQuotes.filter(q => getFiscalYear(q.tax_invoice_completed_at!) === y)
-    const yTarget = engineers.reduce((s, e) => {
-      if (teamFilter && e.teams !== teamFilter) return s
-      if (!isActiveInPeriod(e.resigned_date, `${y}-04-01`)) return s   // 각 회계연도 시작 기준 재직자만
-      const t = targets.find(t => t.engineer_id === e.engineer_id && t.year === y && t.quarter === null)
-      return s + (t?.target_amount || 0)
-    }, 0)
-    return {
-      label: `FY${y}`,
-      revenueAmt: rev.reduce((s, q) => s + (q.total_supply || 0), 0),
-      profitAmt: rev.reduce((s, q) => s + (q.total_profit || 0), 0),
-      targetAmt: yTarget,
-      isCurrent: y === nowFY,
-    }
-  })
-
-  const data = chartView === 'quarterly' ? quarterData : chartView === 'monthly' ? monthData : yearData
-  const maxAmt = Math.max(...data.map(d => Math.max(d.revenueAmt, d.targetAmt)), 1)
+  const bars = unitBars(quotes, targets, { engineerIds, fy, unit, today })
+  // 보조 지표는 **연간 누적**이다 — 단위를 바꿔도 같은 다섯 칸이다(개인 그래프와 같다).
+  const sum = yearSummary(quotes, targets, { engineerIds, fy, today })
+  // Y축은 두 패널 공통(axisMaxOf) — 눈금이 다르면 위아래 막대를 눈으로 비교할 수 없다.
+  const axisMax = axisMaxOf(bars)
+  const unitLabel = unit === 'month' ? '월 목표' : unit === 'quarter' ? '분기 목표' : '연간 목표'
 
   return (
     <div style={{ background: CARD_BG, borderRadius: 14, padding: '20px 22px', marginBottom: 20, border: `1px solid ${BORDER}` }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <div style={{ width: 3, height: 16, background: BLUE, borderRadius: 2 }} />
-          <span style={{ fontSize: 14, fontWeight: 800, color: TEXT }}>실적 추이</span>
+          <span style={{ fontSize: 14, fontWeight: 800, color: TEXT, whiteSpace: 'nowrap' }}>실적 추이</span>
           <span style={{ fontSize: 12, color: MUTED, fontWeight: 400 }}>FY{fy}</span>
+          <span style={{ fontSize: 11, color: MUTED }}>· 집계 대상 {engineerIds.length}명</span>
         </div>
-        <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 10, padding: 3, gap: 1 }}>
-          {([['quarterly', '분기별'], ['monthly', '월별'], ['yearly', '연도별']] as [ChartViewType, string][]).map(([v, label]) => (
-            <button key={v} onClick={() => setChartView(v)}
-              style={{ padding: '5px 12px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: chartView === v ? '#fff' : 'transparent', color: chartView === v ? TEXT : GRAY, boxShadow: chartView === v ? '0 1px 3px rgba(0,0,0,0.10)' : 'none', transition: 'all 0.15s ease' }}>
-              {label}
-            </button>
-          ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+          {/* 범례 — 개인 그래프와 같은 글자·같은 색이다. */}
+          <ChartLegend />
+          <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 10, padding: 3, gap: 1 }}>
+            {([['month', '월별'], ['quarter', '분기별'], ['year', '연도별']] as [ChartUnit, string][]).map(([v, label]) => (
+              <button key={v} onClick={() => setUnit(v)}
+                style={{ padding: '5px 12px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: unit === v ? '#fff' : 'transparent', color: unit === v ? TEXT : GRAY, boxShadow: unit === v ? '0 1px 3px rgba(0,0,0,0.10)' : 'none', transition: 'all 0.15s ease' }}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: chartView === 'monthly' ? 'repeat(12, 1fr)' : `repeat(${data.length}, 1fr)`, gap: 8, alignItems: 'flex-end', paddingBottom: 4 }}>
-        {data.map((d: any, i: number) => {
-          const revenueH = Math.max(0, (d.revenueAmt / maxAmt) * BAR_H)
-          const targetH = Math.max(2, (d.targetAmt / maxAmt) * BAR_H)
-          const profitRate = d.revenueAmt > 0 ? (d.profitAmt / d.revenueAmt * 100) : null
-          const achievePct = d.targetAmt > 0 ? (d.revenueAmt / d.targetAmt * 100) : null
-          const barW = 36
-          return (
-            <div key={i} style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 10, color: MUTED, marginBottom: 1, whiteSpace: 'nowrap' }}>
-                {d.revenueAmt > 0 ? numM(d.revenueAmt) : ''}
-              </div>
-              {profitRate !== null && d.revenueAmt > 0 && (
-                <div style={{ fontSize: 9, color: '#15803d', fontWeight: 700, marginBottom: 2 }}>{profitRate.toFixed(0)}%</div>
-              )}
-              <div style={{ position: 'relative', height: BAR_H, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-                <div style={{ width: barW, height: Math.max(2, (Math.max(d.revenueAmt, d.targetAmt * 0.1) / maxAmt) * BAR_H) || 2, background: '#f1f5f9', borderRadius: '4px 4px 0 0', position: 'absolute', bottom: 0 }} />
-                <BarAnimate height={revenueH} color={d.isCurrent ? BLUE : '#94a3b8'} width={barW} />
-                {d.targetAmt > 0 && (
-                  <div style={{ position: 'absolute', bottom: targetH, left: '50%', transform: 'translateX(-50%)', width: barW + 8, height: 2, background: ORANGE, borderRadius: 2, zIndex: 2 }} />
-                )}
-              </div>
-              <div style={{ marginTop: 6 }}>
-                <div style={{ fontSize: chartView === 'monthly' ? 10 : 12, fontWeight: 700, color: d.isCurrent ? BLUE : TEXT, whiteSpace: 'nowrap' }}>{d.label || d.key}</div>
-                {chartView === 'quarterly' && <div style={{ fontSize: 10, color: MUTED }}>{d.desc}</div>}
-                {d.isCurrent && <div style={{ fontSize: 9, color: BLUE, fontWeight: 700, marginTop: 1 }}>● 현재</div>}
-                {achievePct !== null && d.revenueAmt > 0 && (
-                  <div style={{ fontSize: 9, color: achieveColorOf(achievePct), fontWeight: 700 }}>{achievePct.toFixed(0)}%</div>
-                )}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      <div style={{ display: 'flex', gap: 14, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${BORDER}`, fontSize: 11, color: MUTED, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div style={{ width: 10, height: 10, background: '#94a3b8', borderRadius: 2 }} />매출 완료</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div style={{ width: 14, height: 2, background: ORANGE, borderRadius: 1 }} />목표</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div style={{ width: 10, height: 10, background: '#15803d', borderRadius: 2 }} />순이익률</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div style={{ width: 10, height: 10, background: BLUE, borderRadius: 2 }} />현재 기간</div>
-      </div>
+      <ChartPanel kind="order" bars={bars} axisMax={axisMax} unitLabel={unitLabel} />
+      <ChartPanel kind="sales" bars={bars} axisMax={axisMax} unitLabel={unitLabel} />
+      <SummaryBoxes sum={sum} />
     </div>
   )
 }
@@ -1591,7 +1492,8 @@ const visibleEngineers = sortedEngineers.filter(e => {
 
         {/* 실적 추이 차트 */}
         <div style={{ overflow: 'hidden', maxHeight: showChart ? 600 : 0, transition: 'max-height 0.4s cubic-bezier(0.4,0,0.2,1)', marginBottom: showChart ? 20 : 0 }}>
-          <PerformanceChart quotes={quotes} fy={fy} targets={targets} engineers={sortedEngineers} filteredEngineerIds={filteredEngineerIds} teamFilter={teamFilter} />
+          {/* 집계 대상(inSalesStats · 재직 · 열람 권한 · 팀 필터)을 그대로 넘긴다 — 목표 합도 그 사람들로 낸다. */}
+          <PerformanceChart quotes={quotes} fy={fy} targets={targets} engineerIds={filteredEngineerIds} />
         </div>
 
         {/* 팀별 실적 — 이 화면은 관리자 전용이라 항상 전사 범위다.
