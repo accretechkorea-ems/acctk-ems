@@ -92,3 +92,10 @@ NEXT_DIST_DIR=.next-perf npx next build
 **`db/APPLIED.md` 에 한 줄 적는다** — 파일 · 적용일 · 적용한 사람 · 무엇으로 확인했는지.
 파일 머리말도 「YYYY-MM-DD 적용 완료. 기록용, 다시 실행하지 마라」로 함께 고친다.
 머리말과 그 표가 어긋나면 **표가 정본**이다(머리말은 2026-10-23 에 7건이 틀려 있었다).
+
+## engineers 에 칸을 더하면 GRANT 도 함께
+
+`public.engineers` 는 **열 단위로 쓰기 권한을 준다**(RLS 정책은 이 표에 없다). 그래서 칸을
+더하면 `grant update (새 칸) on public.engineers to authenticated;` 를 **함께 돌려야** 화면에서
+저장된다 — 하지 않으면 조용히 실패하지 않고 42501(permission denied for column)로 막힌다.
+2026-10-28 자택 주소 세 칸이 그 경우였다(`db/APPLIED.md` 그 날짜 항목).

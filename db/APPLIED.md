@@ -93,6 +93,23 @@ select tablename, policyname, cmd, qual
 3. **파일 머리말도 고친다**: 「아직 적용하지 않았다」 → 「YYYY-MM-DD 적용 완료. 기록용,
    다시 실행하지 마라」. 머리말과 이 표가 어긋나면 이 표가 정본이다.
 
+### 2026-10-28 — 파일 없이 콘솔에서 돌린 것 네 건
+
+Kevin 이 Supabase SQL 편집기에서 직접 돌렸다(저장소에 파일이 없다 — 그래서 **여기가 유일한
+기록**이다). 다시 돌릴 일이 있으면 아래 문장을 그대로 쓰면 된다.
+
+| 무엇 | 문장 | 어떻게 확인하나 | 다시 돌려도 되나 |
+|---|---|---|---|
+| engineers 자택 칸 3개 | `alter table public.engineers add column if not exists home_address text, add column if not exists home_lat numeric, add column if not exists home_lng numeric;` | 내 정보 화면에 자택 주소가 뜨고 저장된다. 열 조회로도 보인다 | ✅ (if not exists) |
+| 그 3개 칸 쓰기 권한 | `grant update (home_address, home_lat, home_lng) on public.engineers to authenticated;` | 내 정보에서 자택 주소를 저장했을 때 42501 이 나지 않는다 | ✅ |
+| 환율 캐시 오염 줄 삭제 | `delete from public.exchange_rate where id in (199, 200, 201);` | 그 세 줄은 손으로 넣은 9.5 와 「내부 10」 버튼이 남긴 10·10 이었다. 지금 최신 줄이 API 값(8.383)인지 본다 | ⚠ **아니다** — id 는 다시 쓰이지 않지만 이 문장은 「그 세 줄」만 뜻한다 |
+| 열람 로그 두 칸 채우기 | `update public.download_logs set quote_number = q.quote_number, company_name = c.company_name from public.quotes q left join public.customers c on c.customer_id = q.customer_id where download_logs.quote_id = q.quote_id and download_logs.action = 'view' and download_logs.quote_number is null;` | `select count(*) from download_logs where action='view' and quote_number is null` 이 0 이면 됐다(견적이 지워진 줄은 채울 길이 없어 남는다) | ⚠ UPDATE — 두 번 돌려도 바뀔 것이 없지만(is null 조건) 조건을 지우면 안 된다 |
+
+⚠ **engineers 는 열 단위로 권한을 준다**(위 두 번째 줄). 그래서 **칸을 더할 때마다
+`grant update (새 칸) ... to authenticated` 를 함께 돌려야** 화면에서 저장할 수 있다.
+RLS 정책은 engineers 에 아예 없다(2026-10-08 스냅샷 37개 중 0건) — 막는 것은 정책이
+아니라 이 GRANT 다. 같은 말을 `docs/perf-rules.md` 에도 적어 두었다.
+
 ### 다음에 적을 자리
 
 | 파일 | 적용일 | 적용한 사람 | 비고 |

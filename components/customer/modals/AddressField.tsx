@@ -125,7 +125,7 @@ function pickAddress(r: PostcodeResult): string {
 const labelStyle: CSSProperties = { fontSize: 12, color: '#9ca3af', marginBottom: 4, display: 'block' }
 
 export default function AddressField({
-  value, onChange, onTouch, error, inputStyle, errorBorder, disabled,
+  value, onChange, onTouch, error, inputStyle, errorBorder, disabled, clearable,
 }: {
   /** 지금까지의 주소(합쳐진 한 문자열). 저장되는 값 그대로다. */
   value: string
@@ -137,6 +137,14 @@ export default function AddressField({
   inputStyle: CSSProperties
   errorBorder: string
   disabled?: boolean
+  /**
+   * 「지우기」(×) 단추를 낸다 — **값이 있을 때만** 보인다.
+   *
+   * 업체 주소는 필수라 지울 일이 없어 기본은 꺼짐이다. 자택 주소처럼 **선택** 칸에만 켠다
+   * (app/account/page.tsx). 누르면 도로명·상세가 함께 비고 빈 글자로 올린다 —
+   * 부르는 쪽은 그 값을 null 로 저장한다.
+   */
+  clearable?: boolean
 }) {
   // road 가 null 이면 「검색 전」 — 한 칸 자유 입력. 검색으로 고른 뒤에는 두 칸으로 갈린다.
   const [road, setRoad] = useState<string | null>(null)
@@ -235,6 +243,41 @@ export default function AddressField({
     </button>
   )
 
+  /** 지금 보여 주는 값 — 검색으로 고른 도로명이 있으면 그것, 없으면 저장돼 있던 값이다. */
+  const shown = road ?? value
+  /** 비우기 — 두 칸을 함께 되돌린다. road 를 null 로 돌려 「검색 전」 모양으로 간다. */
+  const clear = () => {
+    setRoad(null)
+    setDetail('')
+    onChange('')
+    onTouch?.()
+  }
+
+  const clearBtn = (
+    <button
+      type="button"
+      onClick={clear}
+      disabled={disabled}
+      title="지우기"
+      aria-label="주소 지우기"
+      onMouseEnter={e => { if (!disabled) e.currentTarget.style.color = '#6b7280' }}
+      onMouseLeave={e => { if (!disabled) e.currentTarget.style.color = '#9ca3af' }}
+      style={{
+        flexShrink: 0, width: 36, alignSelf: 'stretch',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: '#ffffff', color: '#9ca3af',
+        border: '1px solid #ebebeb', borderRadius: 6,
+        cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+        transition: 'color 0.15s ease',
+      }}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+      </svg>
+    </button>
+  )
+
   return (
     <div>
       <div style={{ display: 'flex', gap: 6 }}>
@@ -245,7 +288,7 @@ export default function AddressField({
           고장으로 보인다.
         */}
         <input
-          value={road ?? value}
+          value={shown}
           readOnly
           disabled={disabled}
           onClick={btnOff ? undefined : search}
@@ -255,6 +298,8 @@ export default function AddressField({
           style={{ ...style, background: '#fafafa', cursor: btnOff ? 'not-allowed' : 'pointer' }}
         />
         {searchBtn}
+        {/* 값이 없으면 지울 것이 없다 — 단추를 내지 않는다(빈 칸 옆의 × 는 고장처럼 보인다). */}
+        {clearable && shown.trim() !== '' && clearBtn}
       </div>
 
       {/*

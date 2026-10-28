@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { loadMe, invalidateMe } from '@/lib/appData/me'
+import { loadMe } from '@/lib/appData/me'
+import { useMe } from '@/lib/appData/MeProvider'
 import { useAvatarUrl } from '@/hooks/useAvatarUrl'
 import {
   PROFILE_BUCKET, PROFILE_IMAGE_MAX_BYTES, PROFILE_IMAGE_TYPES, profileImageFileName,
 } from '@/lib/profileImage'
-import { invalidateEngineers } from '@/lib/appData/engineers'
 import { useRouter } from 'next/navigation'
 import { INITIALS_TAKEN_MESSAGE, isInitialsTaken, isInitialsUniqueViolation, normalizeInitials } from '@/lib/initials'
 import AddressField from '@/components/customer/modals/AddressField'
@@ -35,6 +35,15 @@ type Engineer = {
 export default function AccountPage() {
   const supabase = createClient()
   const router = useRouter()
+  /**
+   * 저장 뒤 **Provider 까지** 다시 읽는다.
+   *
+   * 예전에는 invalidateMe()·invalidateEngineers() 만 불렀다. 그 둘은 모듈 캐시를 버리는
+   * 일이라, 같은 레이아웃 안에서 화면만 옮기면(내 정보 → 고객사 현황) Provider 가 들고 있는
+   * me 는 **옛 값 그대로**였다. 자택 주소를 지워도 지도의 「자택」이 그대로 살아 있었다.
+   * refresh() 는 캐시를 버리고 다시 읽어 Provider 상태까지 갈아 준다(MeProvider).
+   */
+  const { refresh: refreshMe } = useMe()
 
   const [engineer, setEngineer] = useState<Engineer | null>(null)
   const [email, setEmail] = useState('')
@@ -225,9 +234,9 @@ export default function AccountPage() {
     setProfileImagePathValue(imagePath)
     setProfileImageFile(null)
     if (pickedPreview) { URL.revokeObjectURL(pickedPreview); setPickedPreview(null) }
-    // 이름·이니셜·사진이 바뀌었다 — 공통 캐시를 버려 사이드바와 다른 화면이 새 값을 읽게 한다.
-    invalidateMe()
-    invalidateEngineers()
+    // 이름·이니셜·사진·자택이 바뀌었다 — 공통 캐시를 버려 사이드바·지도가 새 값을 읽게 한다.
+    // (refresh() 가 engineers 목록 캐시까지 함께 버린다 — MeProvider)
+    await refreshMe()
     setProfileMessage(geoFailed
       // 저장은 됐다. 다만 지도에서 「자택 출발」을 쓸 수 없다는 사실을 알려 준다.
       ? { type: 'error', text: '저장했지만 자택 주소의 좌표를 찾지 못했습니다. 지도의 「자택 출발」은 쓸 수 없습니다 — 주소를 다시 검색해 보세요.' }
@@ -399,6 +408,8 @@ export default function AccountPage() {
               onChange={setHomeAddress}
               inputStyle={inputStyle}
               errorBorder={DANGER_BG}
+              // 선택 칸이라 지울 길이 있어야 한다 — 값이 있을 때만 × 가 나온다.
+              clearable
             />
             {homeAddress.trim() && savedHome.address === homeAddress.trim() && savedHome.lat == null && (
               <div style={{ fontSize: 12, color: DANGER_BG, marginTop: 6 }}>
@@ -407,7 +418,7 @@ export default function AccountPage() {
             )}
             {homeAddress.trim() === '' && savedHome.address !== '' && (
               <div style={{ fontSize: 12, color: TEXT_SECONDARY, marginTop: 6 }}>
-                비운 채 저장하면 등록된 자택 주소가 지워집니다.
+                비운 채 <b>프로필 저장</b>을 누르면 등록된 자택 주소가 지워집니다(지도의 「자택 출발」도 꺼집니다).
               </div>
             )}
           </div>
