@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import BackIconButton from '@/components/common/BackIconButton'
 import type { Customer } from './types'
 
 const STATUS_CFG: Record<string, string> = {
@@ -13,9 +14,17 @@ type Props = {
   customer: Customer | null
 
   onEdit: () => void
+  /**
+   * 목록으로 돌아가기 — 제목 앞 화살표가 부른다.
+   *
+   * 화면 맨 위에 「고객사 / 회사명」 한 줄을 두던 자리를 걷고 이 카드가 그 길을 맡는다
+   * (의뢰서 상세와 같은 방식). 저장된 목록 상태를 지우고 갈지는 **화면이 정한다** —
+   * 이 카드는 누른 사실만 알린다.
+   */
+  onBack: () => void
 }
 
-export default function CustomerInfoPanel({ customer, onEdit }: Props) {
+export default function CustomerInfoPanel({ customer, onEdit, onBack }: Props) {
   const [copied, setCopied] = useState(false)
   const sc = STATUS_CFG[customer?.status ?? ''] ?? '#9ca3af'
   // 대리점 경유 견적이 섞여 있을 때만 내역을 덧붙인다 (직판만 있으면 군더더기라 감춘다)
@@ -54,8 +63,10 @@ export default function CustomerInfoPanel({ customer, onEdit }: Props) {
         </svg>
       </button>
 
-      {/* 회사명 + 상태 배지 — 좁은 열에서 수정 버튼과 겹치지 않도록 오른쪽을 비워둔다 */}
+      {/* 화살표 + 회사명 + 상태 배지 — 좁은 열에서 수정 버튼과 겹치지 않도록 오른쪽을 비워둔다.
+          화살표는 줄바꿈에 끌려가지 않게 flexWrap 바깥(첫 칸)에 둔다. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap', paddingRight: 34 }}>
+        <BackIconButton onClick={onBack} label="고객사 목록으로" />
         <h1 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#111827', lineHeight: 1.3, letterSpacing: '-0.3px', wordBreak: 'break-all' }}>
           {customer?.company_name ?? '사업장 정보 없음'}
         </h1>

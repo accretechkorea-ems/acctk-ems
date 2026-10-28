@@ -235,24 +235,9 @@ function CustomerDetailPageInner() {
 
       <main style={{ padding: '20px 24px', background: PAGE_BG, minHeight: '100vh' }}>
 
-        {/* 경로 — 지금 어디인지 한 줄로. 「고객사」는 목록으로 돌아간다
-            (목록 상태를 지우고 하드 내비게이션 — 사이드바의 고객사 항목과 같은 방식). */}
-        <div style={{ height: 48, display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: TEXT_MUTED, minWidth: 0 }}>
-          <button
-            type="button"
-            onClick={() => { sessionStorage.removeItem(HOME_STATE_KEY); window.location.href = '/' }}
-            onMouseEnter={e => (e.currentTarget.style.color = '#111827')}
-            onMouseLeave={e => (e.currentTarget.style.color = TEXT_MUTED)}
-            style={{ border: 'none', background: 'transparent', padding: 0, color: TEXT_MUTED, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer', flexShrink: 0, transition: 'color 0.15s ease' }}
-          >
-            고객사
-          </button>
-          <span style={{ color: '#d1d5db', flexShrink: 0 }}>/</span>
-          <span style={{ color: '#111827', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {customer?.company_name ?? '-'}
-          </span>
-        </div>
-
+        {/* 경로 줄(「고객사 / 회사명」)은 걷었다 — 회사명은 바로 아래 정보 카드의 제목이고,
+            목록으로 가는 길은 그 제목 앞 화살표가 맡는다(의뢰서 상세와 같은 방식).
+            48px 한 줄을 돌려받아 본문이 그만큼 위로 올라온다. */}
         <div className="cust-grid">
 
           {/* ── 좌: 업체 정보 · 담당자 · 요약 ── */}
@@ -260,6 +245,7 @@ function CustomerDetailPageInner() {
             <CustomerInfoPanel
               customer={customer}
               onEdit={() => customerCrud.setIsEditCustomerModalOpen(true)}
+              onBack={() => { sessionStorage.removeItem(HOME_STATE_KEY); window.location.href = '/' }}
             />
 
             <ContactSection

@@ -35,6 +35,7 @@ import { createClient } from '@/lib/supabase/client'
 import { loadMe } from '@/lib/appData/me'
 import { loadEngineers } from '@/lib/appData/engineers'
 import { usePageGuard } from '@/hooks/usePageGuard'
+import BackIconButton from '@/components/common/BackIconButton'
 import AccessGate from '@/components/common/AccessGate'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import { useConfirm } from '@/components/common/ConfirmDialog'
@@ -1123,27 +1124,8 @@ export default function InquiryDetailPage() {
                 <div style={CARD_HEAD}>
                   {/* 목록으로 돌아가는 화살표. 카드 밖에 따로 한 줄을 쓰던 「← 목록」을 여기로 들였다 —
                       한 줄을 돌려받고, 1단으로 쌓이는 좁은 폭에서도 카드가 맨 위라 늘 보인다.
-                      테두리를 두지 않는다: 이 카드에 대한 동작이 아니라 화면을 떠나는 길이고,
-                      오른쪽 수정 아이콘(테두리 있음)과 역할이 달라 보여야 한다.
-                      marginLeft 음수는 버튼 안쪽 여백만큼 당겨 화살표를 카드 왼쪽 선에 맞춘다. */}
-                  <button
-                    type="button" onClick={() => router.push(backTo)}
-                    aria-label="의뢰서 목록으로" title="의뢰서 목록으로"
-                    onMouseEnter={e => { e.currentTarget.style.color = BLUE }}
-                    onMouseLeave={e => { e.currentTarget.style.color = MUTED }}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      padding: 6, marginLeft: -6, border: 'none', background: 'transparent',
-                      color: MUTED, cursor: 'pointer', flexShrink: 0,
-                      transition: 'color 0.15s ease',
-                    }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M19 12H5" />
-                      <path d="m12 19-7-7 7-7" />
-                    </svg>
-                  </button>
+                      모양은 components/common/BackIconButton.tsx 한곳에 있다(고객사 상세도 같은 것을 쓴다). */}
+                  <BackIconButton onClick={() => router.push(backTo)} label="의뢰서 목록으로" />
                   <span style={cardTitle}>{INQUIRY_TYPE_LABEL[row.inquiry_type as InquiryType] ?? row.inquiry_type}</span>
                   {!cancelled && !infoEditing && (
                     <span style={{ marginLeft: 'auto', display: 'flex', flexShrink: 0 }}>
