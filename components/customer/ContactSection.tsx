@@ -33,6 +33,15 @@ type Props = {
 }
 
 const BORDER = '#ebebeb'
+/**
+ * 제목 줄을 닫는 선의 위아래 여백(px). 제목 10 · 첫 사람 10 으로 같다.
+ *
+ * 홈 카드(DashCard)의 CARD_HEAD_STYLE 을 쓰지 않는다 — 그쪽은 격자가 카드 높이를 정해
+ * 머리 높이를 42 로 못 박고 좌우 16, 선 아래 12(CARD_BODY_STYLE)를 쓴다. 이 카드는
+ * 격자에 들지 않고(왼쪽 열 한 칸), 좌우는 담당자 줄과 같은 14 라야 글자가 선다. 28px
+ * 아이콘이 들어가 42 에도 맞지 않는다(10+28+10=48). 그래서 치수를 따로 둔다.
+ */
+const GAP = 10
 
 function ContactRow({ contact, onEdit, first }: { contact: Contact; onEdit: () => void; first: boolean }) {
   const [hovered, setHovered] = useState(false)
@@ -48,7 +57,10 @@ function ContactRow({ contact, onEdit, first }: { contact: Contact; onEdit: () =
       style={{
         // 상하 7 — 좌우(14)보다 좁다. 이름·전화·메일 세 줄이 한 덩어리로 읽히고,
         // 사람 사이는 구분선이 가른다(여백으로 가르지 않는다).
-        padding: '7px 14px',
+        //
+        // 첫 사람만 위를 10 으로 띄운다 — 바로 위 선은 사람 사이를 가르는 선이 아니라
+        // 제목 줄을 닫는 선이고, 그 선의 위아래(제목 10 · 첫 사람 10)를 같게 둔다.
+        padding: `${first ? GAP : 7}px 14px 7px`,
         borderTop: first ? 'none' : `1px solid ${BORDER}`,
         position: 'relative',
       }}
@@ -60,7 +72,7 @@ function ContactRow({ contact, onEdit, first }: { contact: Contact; onEdit: () =
         onMouseLeave={() => setBtnHover(false)}
         aria-label="고객 담당자 수정"
         style={{
-          position: 'absolute', top: 7, right: 14,
+          position: 'absolute', top: first ? GAP : 7, right: 14,
           padding: 0, background: 'none', border: 'none', cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           visibility: hovered ? 'visible' : 'hidden',
@@ -134,8 +146,15 @@ export default function ContactSection({ contacts, onAdd, onEdit }: Props) {
 
       {/* 제목 줄 — 추가는 오른쪽 끝 아이콘 하나다. 카드 맨 아래 한 줄을 쓰던 버튼을
           여기로 들였다: 추가는 이 카드에 대한 동작이라 제목과 같은 줄이 제 자리고,
-          한 줄(41px)을 돌려받는다. 세로 여백은 아이콘(28)에 맞춰 9 로 줄였다. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px' }}>
+          한 줄(41px)을 돌려받는다. 세로 여백은 아이콘(28)에 맞춰 9 로 줄였다.
+
+          아래는 **사람 사이와 같은 선**(1px ${BORDER})으로 닫는다 — 제목 줄과 첫 사람이
+          붙어 있어 어디까지가 머리인지 보이지 않았다. 선은 이 줄에 붙여 둔다(목록 쪽이
+          아니라): 펼치면 목록만 스크롤하므로 목록에 두면 선이 함께 밀려 올라간다. */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: `9px 14px ${GAP}px`, borderBottom: `1px solid ${BORDER}`,
+      }}>
         <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#111827' }}>고객 담당자</h2>
         {contacts.length > 0 && (
           <span style={{ fontSize: 12, color: '#9ca3af' }}>총 {contacts.length}명</span>
