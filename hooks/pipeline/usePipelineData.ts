@@ -1,9 +1,9 @@
 'use client'
 
 // 파이프라인 화면의 데이터 조회. 전체 영업기회와 기회에 묶인 활동을 함께 읽는다.
-// 활동은 두 곳에 쓴다 — 방치 판정(최신 activity_date)과 기회 모달의 연결된 활동 목록.
+// 활동은 기회 모달의 「연결된 활동」 목록에 쓴다(칸반 카드의 방치 판정은 2026-10-28 에 걷었다).
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { loadMe } from '@/lib/appData/me'
 import { loadEngineers } from '@/lib/appData/engineers'
@@ -64,16 +64,9 @@ export function usePipelineData() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 기회별 마지막 활동일. 활동이 없으면 null 이고, 그때는 화면에서 created_at 으로 갈음한다.
-  const lastActivityByOpp = useMemo(() => {
-    const map = new Map<number, string>()
-    for (const a of activities) {
-      if (a.opportunity_id == null || !a.activity_date) continue
-      const prev = map.get(a.opportunity_id)
-      if (!prev || a.activity_date > prev) map.set(a.opportunity_id, a.activity_date)
-    }
-    return map
-  }, [activities])
-
-  return { opportunities, activities, engineers, customers, loading, me, lastActivityByOpp, reload }
+  // 기회별 마지막 활동일(lastActivityByOpp)은 2026-10-28 에 걷었다 — 칸반 카드의
+  // 「N일째 활동 없음」 줄이 없어져 쓰는 곳이 사라졌다. activities 자체는 그대로 둔다
+  // (포캐스트 모달이 활동 이력을 그린다). 80 대시보드는 같은 계산을 제 훅에 들고 있다
+  // (hooks/dashboard/useDashboard80.ts) — 그쪽은 그대로다.
+  return { opportunities, activities, engineers, customers, loading, me, reload }
 }

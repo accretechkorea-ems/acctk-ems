@@ -32,8 +32,8 @@ import {
 } from '@dnd-kit/core'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import SegmentedControl from '@/components/common/SegmentedControl'
 import { isSuperAdmin } from '@/lib/permissions'
+import { cardTitle } from '@/components/common/ui'
 import OpportunityCard from '@/components/pipeline/OpportunityCard'
 import OpportunityModal from '@/components/customer/modals/OpportunityModal'
 import { useOpportunityCrud } from '@/hooks/customer/useOpportunityCrud'
@@ -52,7 +52,14 @@ import type { SalesOpportunity } from '@/components/customer/types'
 // 실주는 열로 두지 않고 판 아래에 접어둔다 (평소엔 시야에서 빼고, 필요할 때만 펼쳐 본다)
 const BOARD_STAGES = STAGES.filter(s => s !== '실주')
 
-type Owner = '내 포캐스트' | '전체'
+/**
+ * 담당자 필터의 값. 'all' 은 전체, 숫자는 그 담당자다.
+ *
+ * null 은 「아직 아무것도 고르지 않았다」 — 그때는 기본값을 쓴다(본인이 목록에 있으면
+ * 본인, 없으면 전체). 상태를 비워 두고 아래에서 기본값을 계산하는 이유: 목록은 자료가
+ * 도착한 뒤에 정해지므로, 효과 안에서 setState 로 채우면 한 번 그린 뒤 다시 그린다.
+ */
+type OwnerPick = number | 'all' | null
 
 /** 내보내기 팝오버의 선택칸 — 화면 다른 곳의 입력칸과 같은 모양이다. */
 const popSel: React.CSSProperties = {
@@ -129,14 +136,14 @@ function DroppableColumn({ stage, isOver, children }: { stage: string; isOver: b
 export default function PipelinePage() {
   const { loading: guardLoading, authorized } = usePageGuard()
   const data = usePipelineData()
-  const { opportunities, activities, engineers, customers, loading, me, lastActivityByOpp, reload } = data
+  const { opportunities, activities, engineers, customers, loading, me, reload } = data
 
   const opp = useOpportunityCrud({ customerId: null, engineerId: me.engineer_id, role: me.role, fetchDetail: reload })
   // 연결된 견적 PDF 열기. 업체명은 견적별로 달라 로그에는 남기지 않는다.
   const quotePdf = useQuotePdf({ customer: null, engineerId: me.engineer_id })
 
-  // 처음에는 회사 전체 기회를 보여준다. '내 기회'는 사용자가 직접 고른다.
-  const [owner, setOwner] = useState<Owner>('전체')
+  // 담당자 필터 — 사용자가 고르기 전에는 null 이고 기본값(본인)이 쓰인다.
+  const [ownerPick, setOwnerPick] = useState<OwnerPick>(null)
   const [search, setSearch] = useState('')
   const [showLost, setShowLost] = useState(false)
 
@@ -149,7 +156,6 @@ export default function PipelinePage() {
   const thisFY = fiscalYearOfMonth(today.slice(0, 7))
   const [xFy, setXFy] = useState(thisFY)
   const [xTeam, setXTeam] = useState('')
-  const [xEng, setXEng] = useState<number | null>(null)
   const fc = useForecast(today, exportOpen)
   const { categories } = useQuoteCategories()
 
@@ -157,15 +163,41 @@ export default function PipelinePage() {
   const [overStage, setOverStage] = useState<string | null>(null)
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
+  /**
+   * 담당자 후보 — **포캐스트가 한 건이라도 있는 사람만**이다. 전체 직원을 늘어놓으면
+   * 고를 것이 없는 이름이 대부분이라 목록이 길어진다. 이름순(가나다)으로 둔다.
+   *
+   * 이름·직급은 기회에 묶여 온 값(engineers)을 쓰고, 없으면 직원 목록에서 찾는다.
+   * 검색어로는 걸러내지 않는다 — 검색 때문에 담당자 목록이 흔들리면 고를 수가 없다.
+   */
+  const ownerOptions = useMemo(() => {
+    const byId = new Map<number, string>()
+    const engName = new Map(engineers.map(e => [e.engineer_id, `${e.name} ${e.position ?? ''}`.trim()]))
+    for (const o of opportunities) {
+      if (o.engineer_id == null || byId.has(o.engineer_id)) continue
+      const fromRow = `${o.engineers?.name ?? ''} ${o.engineers?.position ?? ''}`.trim()
+      byId.set(o.engineer_id, fromRow || engName.get(o.engineer_id) || `#${o.engineer_id}`)
+    }
+    return [...byId].map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'ko'))
+  }, [opportunities, engineers])
+
+  // 고른 담당자. 아직 고르지 않았으면 본인(목록에 있을 때) · 없으면 전체.
+  const ownerValue: number | 'all' = ownerPick
+    ?? (me.engineer_id != null && ownerOptions.some(o => o.id === me.engineer_id) ? me.engineer_id : 'all')
+
+  /** 고른 담당자의 이름 — 내보내기 안내문·파일명이 쓴다. 전체면 빈 글자. */
+  const ownerLabel = ownerValue === 'all' ? '' : (ownerOptions.find(o => o.id === ownerValue)?.label ?? `#${ownerValue}`)
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return opportunities.filter(o => {
-      if (owner === '내 포캐스트' && o.engineer_id !== me.engineer_id) return false
+      if (ownerValue !== 'all' && o.engineer_id !== ownerValue) return false
       if (!q) return true
       return o.title.toLowerCase().includes(q)
         || (o.customers?.company_name ?? '').toLowerCase().includes(q)
     })
-  }, [opportunities, owner, search, me.engineer_id])
+  }, [opportunities, ownerValue, search])
 
   // 낙관적 업데이트 — 저장이 끝나기 전에 화면에서 먼저 옮긴다.
   // 실패하면 이 값만 지우면 원래 단계로 되돌아간다(서버 데이터는 그대로이므로).
@@ -197,7 +229,6 @@ export default function PipelinePage() {
     <DraggableCard key={o.opportunity_id} id={o.opportunity_id} disabled={!opp.canEditOpp(o) || isClosed(o)}>
       <OpportunityCard
         opp={o}
-        lastActivity={lastActivityByOpp.get(o.opportunity_id) ?? null}
         canEdit={opp.canEditOpp(o)}
         onOpen={() => opp.openEditOpp(o)}
         onChangeStage={next => moveTo(o, next)}
@@ -209,12 +240,18 @@ export default function PipelinePage() {
     </DraggableCard>
   )
 
-  // 내보낼 사람 — 팀·담당자를 고르면 좁힌다(아무것도 안 고르면 전체).
+  /**
+   * 내보낼 사람 — **화면 위에서 고른 담당자를 따른다.**
+   *
+   * 예전에는 내보내기 팝오버에 담당자 선택칸이 따로 있어, 화면은 한 사람을 보는데 엑셀은
+   * 전체가 나갔다(어느 쪽이 맞는지 파일을 열어 봐야 알았다). 지금은 고른 사람이 곧 내보낼
+   * 사람이고, 전체일 때만 팀으로 좁힐 수 있다.
+   */
   const exportEngineerIds = useMemo(() => {
+    if (ownerValue !== 'all') return [ownerValue]
     const list = xTeam ? engineers.filter(e => (e.teams ?? '') === xTeam) : engineers
-    const ids = list.map(e => e.engineer_id)
-    return xEng == null ? ids : ids.filter(id => id === xEng)
-  }, [engineers, xTeam, xEng])
+    return list.map(e => e.engineer_id)
+  }, [engineers, xTeam, ownerValue])
 
   const teamNames = useMemo(
     () => [...new Set(engineers.map(e => e.teams).filter((t): t is string => !!t))].sort(),
@@ -250,7 +287,8 @@ export default function PipelinePage() {
       titleOf: r => (r.source === 'quote'
         ? (r.no ?? `#${r.id}`)
         : (opportunities.find(o => o.opportunity_id === r.id)?.title ?? `#${r.id}`)),
-      label: `FY${xFy}${xTeam ? `_${xTeam}` : ''}${xEng != null ? `_${engName.get(xEng) ?? xEng}` : ''}`,
+      // 파일명 꼬리 — 무엇을 내보냈는지 파일만 보고 알 수 있게.
+      label: `FY${xFy}${ownerValue === 'all' ? (xTeam ? `_${xTeam}` : '') : `_${ownerLabel}`}`,
     })
     setExportOpen(false)
   }
@@ -284,35 +322,41 @@ export default function PipelinePage() {
         /* PC 는 상단 바가 없어 화면 높이를 그대로 쓴다. 모바일만 상단 바만큼 뺀다. */
         .pl-page { min-height: 100vh; }
         @media (max-width: 768px) { .pl-page { min-height: calc(100vh - ${TOPBAR_HEIGHT}px); } }
-        /* 카드의 단계 select·종료 버튼은 호버 때만 띄운다.
+        /* 카드의 단계 select·견적 쓰기·종료는 호버 때만 띄운다.
            hover 를 지원하지 않는 기기(터치)에서는 이 미디어 쿼리가 걸리지 않아 항상 보인다.
-           visibility 로만 토글해 자리를 유지하므로 카드 높이는 호버 전후가 같다. */
+           **display 로 감춘다** — visibility 로 자리를 남기면 3행의 담당자·마감 글자가 늘
+           단추 몫만큼 좁아져 잘렸다. 그 줄에 minHeight(22)를 줘, 단추가 나타나도 카드
+           높이는 호버 전후가 같다(OpportunityCard). */
         @media (hover: hover) {
-          .pl-card .pl-card-action { visibility: hidden; }
-          .pl-card:hover .pl-card-action { visibility: visible; }
+          .pl-card .pl-card-action { display: none; }
+          .pl-card:hover .pl-card-action { display: flex; }
         }
       `}</style>
 
       <div style={{ maxWidth: 1600, width: '100%', margin: '0 auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
 
-        <h1 style={{ fontSize: 20, fontWeight: 800, color: '#111827', letterSpacing: '-0.3px', margin: '0 0 12px' }}>
-          포캐스트
-        </h1>
-
-        {/* 필터 — 소유자 · 검색 · 등록/내보내기 버튼을 한 줄에 둔다 */}
+        {/* 머리줄 — **제목도 이 박스 안에 있다**(의뢰서 목록과 같은 식). 페이지 맨 위에
+            제목만 있는 줄을 따로 두면 20px + 여백 12px 을 제목 한 단어에 쓰게 되고,
+            칸반은 그만큼 아래로 내려간다. 제목 · 담당자 · 검색 · 단추가 한 줄이다. */}
         <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, padding: '14px 16px', marginBottom: 12, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {/* 두 항목 폭을 같게(equal) 두고, 폭은 긴 쪽인 '내 기회' 기준으로 잡는다 */}
-            <div style={{ flexShrink: 0 }}>
-              <SegmentedControl
-                options={['내 포캐스트', '전체']}
-                value={owner}
-                onChange={v => setOwner(v as Owner)}
-                equal
-                minItemWidth={64}
-                height={34}
-              />
-            </div>
+            <span style={{ ...cardTitle, fontSize: 20, flexShrink: 0, marginRight: 4 }}>포캐스트</span>
+            {/* 담당자 — 「내 포캐스트 | 전체」 토글을 대신한다. 사람이 늘면 토글로는 남의
+                포캐스트를 볼 길이 없었다(전체에서 눈으로 찾아야 했다).
+                항목은 포캐스트가 있는 사람만이고, 기본값은 본인이다(ownerValue). */}
+            <select
+              value={String(ownerValue)}
+              onChange={e => setOwnerPick(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+              title="담당자"
+              style={{
+                flexShrink: 0, height: 34, padding: '0 8px', border: '1px solid #ebebeb',
+                borderRadius: 6, background: '#fff', color: '#111827', fontSize: 13, fontWeight: 600,
+                fontFamily: 'inherit', cursor: 'pointer', outline: 'none', maxWidth: 180,
+              }}
+            >
+              <option value="all">전체</option>
+              {ownerOptions.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+            </select>
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -437,7 +481,6 @@ export default function PipelinePage() {
                 <div style={{ width: 260, cursor: 'grabbing', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', borderRadius: 8 }}>
                   <OpportunityCard
                     opp={activeOpp}
-                    lastActivity={lastActivityByOpp.get(activeOpp.opportunity_id) ?? null}
                     canEdit={false}
                     onOpen={() => {}}
                     onChangeStage={() => {}}
@@ -450,8 +493,9 @@ export default function PipelinePage() {
         )}
       </div>
 
-      {/* 내보내기 — 회계연도·팀·담당자만 고른다. 칸반의 필터(내 기회·검색)와는 **따로다**
-          (보고용 숫자는 화면에 보이는 카드가 아니라 집계 규칙이 정한 줄에서 나온다). */}
+      {/* 내보내기 — **담당자는 화면 위에서 고른 사람**이고(exportEngineerIds), 여기서는
+          회계연도와 (전체일 때) 팀만 고른다. 검색어는 반영하지 않는다 — 보고용 숫자는
+          화면에 보이는 카드가 아니라 집계 규칙이 정한 줄에서 나온다(lib/forecast.ts). */}
       <Popover anchorRef={exportRef} open={exportOpen} onClose={() => setExportOpen(false)} align="end" width={260}
         style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 8, boxShadow: '0 16px 40px rgba(0,0,0,0.18)', padding: 14 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -464,16 +508,18 @@ export default function PipelinePage() {
               <option key={y} value={y}>FY{y} ({y}.04 ~ {y + 1}.03)</option>
             ))}
           </select>
-          <select value={xTeam} onChange={e => { setXTeam(e.target.value); setXEng(null) }} aria-label="팀" style={popSel}>
-            <option value="">전체 팀</option>
-            {teamNames.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <select value={xEng ?? ''} onChange={e => setXEng(e.target.value ? Number(e.target.value) : null)} aria-label="담당자" style={popSel}>
-            <option value="">전체 담당자</option>
-            {(xTeam ? engineers.filter(e => (e.teams ?? '') === xTeam) : engineers).map(e => (
-              <option key={e.engineer_id} value={e.engineer_id}>{`${e.name} ${e.position ?? ''}`.trim()}</option>
-            ))}
-          </select>
+          {/* 담당자를 고른 상태면 팀 선택칸을 내지 않는다 — 둘이 어긋나면 어느 쪽이
+              나갔는지 파일을 열어 봐야 알게 된다. 전체일 때만 팀으로 좁힌다. */}
+          {ownerValue === 'all' ? (
+            <select value={xTeam} onChange={e => setXTeam(e.target.value)} aria-label="팀" style={popSel}>
+              <option value="">전체 팀</option>
+              {teamNames.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          ) : (
+            <span style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.6 }}>
+              담당자 <b style={{ color: '#111827' }}>{ownerLabel}</b> — 화면 위에서 고른 사람입니다.
+            </span>
+          )}
           <button type="button" onClick={() => void runExport()} disabled={fc.loading}
             style={{
               marginTop: 2, padding: '8px 14px', borderRadius: 6, border: 'none', cursor: fc.loading ? 'default' : 'pointer',

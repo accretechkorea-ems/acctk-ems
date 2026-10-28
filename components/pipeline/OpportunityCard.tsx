@@ -1,19 +1,25 @@
 'use client'
 
-// 파이프라인 칸반 카드.
-// 파이프라인에서 가장 먼저 읽혀야 하는 것은 "어느 회사" 라서 업체명을 제목 자리에 둔다.
-// 단계 select 와 종료 버튼은 평소 감춰두고 호버 때만 띄운다(자리는 유지 → 카드 높이 고정).
-// hover 를 지원하지 않는 기기에서는 CSS 로 항상 보이게 한다(.pl-card-action, 페이지 전역 스타일).
+// 파이프라인 칸반 카드 — **세 줄**이다.
+//
+//   1행  업체명 ───────────── 금액      파이프라인에서 먼저 읽혀야 하는 둘을 한 줄에 둔다
+//   2행  제목                            (한 줄 말줄임, 회색)
+//   3행  담당자 직급 · YYYY-MM 마감 예정 · 견적 N건      [단계 ▾] [견적 쓰기] [종료]
+//
+// 2026-10-28 에 높이를 줄였다(145 → 90px). 한 열에 열 장이 넘게 쌓이는 화면이라, 카드가
+// 낮을수록 한눈에 들어오는 건수가 늘어난다. **지운 정보는 「N일째 활동 없음」 한 줄뿐이고**
+// 나머지는 자리만 바꿨다. 글자 크기는 그대로다.
+//
+// 단계 select·견적 쓰기·종료는 평소 감춰두고 호버 때만 띄운다(.pl-card-action, 페이지 전역
+// 스타일). **display 로 감춘다** — visibility 로 자리를 남기면 3행의 글자가 늘 그만큼 좁아져
+// 담당자·마감이 잘렸다. 대신 그 줄에 minHeight 를 줘, 호버로 단추가 나타나도 카드가 들썩이지
+// 않는다. hover 를 지원하지 않는 기기에서는 그 미디어 쿼리가 걸리지 않아 늘 보인다.
 
 import { STAGES, compactKRW, dateToMonth } from '@/components/customer/opportunity'
 import type { SalesOpportunity } from '@/components/customer/types'
-import { daysBetween, kstYmd, todayKST } from '@/lib/date'
-
-const STALE_DAYS = 30
 
 type Props = {
   opp: SalesOpportunity
-  lastActivity: string | null   // 'YYYY-MM-DD' — 활동이 없으면 null
   canEdit: boolean
   onOpen: () => void
   onChangeStage: (next: string) => void
@@ -23,141 +29,131 @@ type Props = {
   onWriteQuote?: () => void
 }
 
-// 마지막 활동(없으면 등록일)로부터 며칠 지났는지 — 오늘은 한국 기준.
-function staleDays(lastActivity: string | null, createdAt: string): number {
-  const base = lastActivity ?? kstYmd(createdAt)
-  return daysBetween(base, todayKST())
-}
+const MUTED = '#9ca3af'
+const FADE = '#d1d5db'
 
-export default function OpportunityCard({ opp, lastActivity, canEdit, onOpen, onChangeStage, onPickLost, onClose, onWriteQuote }: Props) {
-  const days = staleDays(lastActivity, opp.created_at)
-  const stale = days >= STALE_DAYS
+export default function OpportunityCard({ opp, canEdit, onOpen, onChangeStage, onPickLost, onClose, onWriteQuote }: Props) {
   const closeMonth = dateToMonth(opp.expected_close)
   const quoteCount = opp.quotes?.length ?? 0
   const owner = `${opp.engineers?.name ?? '-'} ${opp.engineers?.position ?? ''}`.trim()
+  const company = opp.customers?.company_name ?? '-'
+  // 3행 왼쪽 — 한 덩어리로 줄이고(말줄임) 「견적 N건」만 따로 둔다(끝까지 보여야 하는 값).
+  const ownerLine = closeMonth ? `${owner} · ${closeMonth} 마감 예정` : owner
 
   return (
     <div
       className="pl-card"
       style={{
         background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8,
-        padding: '10px 12px', transition: 'border-color 0.15s ease',
+        padding: 12, transition: 'border-color 0.15s ease',
       }}
       onMouseEnter={e => { e.currentTarget.style.borderColor = '#c7d7f8' }}
       onMouseLeave={e => { e.currentTarget.style.borderColor = '#ebebeb' }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-        <button
-          onClick={onOpen}
-          style={{ flex: 1, minWidth: 0, textAlign: 'left', padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}
-        >
-          {/* 업체명 — 한 줄 말줄임. 열이 좁아져도 카드 높이가 흔들리지 않는다.
-              잘린 뒷부분(측정실·공장 등 구분 표기)은 title 로 확인한다. */}
-          <div
-            title={opp.customers?.company_name ?? '-'}
+      {/* 1·2행 — 누르면 상세가 열린다(카드에서 가장 넓은 과녁). */}
+      <button
+        onClick={onOpen}
+        style={{
+          display: 'block', width: '100%', minWidth: 0, textAlign: 'left',
+          padding: 0, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+        }}
+      >
+        {/* 업체명 + 금액 — 한 줄. 업체명만 줄어들고(말줄임) 금액은 끝까지 보인다.
+            잘린 뒷부분(측정실·공장 등 구분 표기)은 title 로 확인한다. */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+          <span
+            title={company}
             style={{
-              fontSize: 15, fontWeight: 700, color: '#111827', lineHeight: '20px',
+              flex: 1, minWidth: 0, fontSize: 15, fontWeight: 700, color: '#111827', lineHeight: '20px',
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
             }}
           >
-            {opp.customers?.company_name ?? '-'}
-          </div>
-          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {opp.title}
-          </div>
-        </button>
+            {company}
+          </span>
+          <span style={{ flexShrink: 0, fontSize: 16, fontWeight: 700, color: '#234ea2', lineHeight: '20px' }}>
+            {compactKRW(opp.expected_amount)}
+          </span>
+        </div>
 
-        {/* 단계 변경 — 실주를 고르면 사유를 받아야 하므로 모달을 연다 */}
-        <select
-          className="pl-card-action"
-          value={opp.stage}
-          disabled={!canEdit}
-          // 드래그 센서가 select 조작을 끌기로 오인하지 않도록 여기서 이벤트를 끊는다
-          onPointerDown={e => e.stopPropagation()}
-          onChange={e => {
-            const next = e.target.value
-            if (next === opp.stage) return
-            if (next === '실주') onPickLost()
-            else onChangeStage(next)
-          }}
-          title={canEdit ? '단계 변경' : '담당자만 바꿀 수 있습니다'}
+        <div
+          title={opp.title}
           style={{
-            flexShrink: 0, maxWidth: 84, padding: '3px 6px', borderRadius: 6,
-            border: '1px solid #ebebeb', background: canEdit ? '#fff' : '#f9fafb',
-            color: canEdit ? '#6b7280' : '#9ca3af',
-            fontSize: 11, fontWeight: 700, outline: 'none',
-            cursor: canEdit ? 'pointer' : 'not-allowed',
+            fontSize: 12, color: '#6b7280', lineHeight: '16px', marginTop: 2,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}
         >
-          {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-      </div>
+          {opp.title}
+        </div>
+      </button>
 
-      {/* 금액 줄 — 오른쪽 빈자리에 「견적 쓰기」를 넣는다. 줄을 따로 쓰지 않으므로
-          카드 높이는 그대로다(11px 글자 + 1px 여백이라 16px 금액보다 낮다).
-          단계 select·종료 버튼과 같이 호버 때만 보인다(.pl-card-action). */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 8, minWidth: 0 }}>
-        <span style={{ fontSize: 16, fontWeight: 700, color: '#234ea2' }}>
-          {compactKRW(opp.expected_amount)}
+      {/* 3행 — 담당자·마감·견적 건수, 그리고 오른쪽에 호버 단추들.
+          minHeight 22 는 단추(단계 select)의 높이다 — 호버 때 줄이 커지지 않게 미리 잡아 둔다. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3, minHeight: 22, minWidth: 0 }}>
+        <span
+          title={ownerLine}
+          style={{
+            flex: 1, minWidth: 0, fontSize: 11, color: MUTED,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}
+        >
+          {ownerLine}
         </span>
-        <span style={{ flex: 1 }} />
-        {onWriteQuote && (
-          <button
-            className="pl-card-action"
-            onPointerDown={e => e.stopPropagation()}
-            onClick={onWriteQuote}
-            title="이 포캐스트로 견적서를 작성합니다"
-            style={{ flexShrink: 0, padding: '1px 8px', background: 'none', color: '#234ea2', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
-          >
-            견적 쓰기
-          </button>
-        )}
-      </div>
-
-      {/* 담당자 · 마감 예정 — 한 줄 유지 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4, minWidth: 0 }}>
-        <span style={{ fontSize: 11, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {owner}
-        </span>
-        {closeMonth && (
-          <>
-            <span style={{ color: '#d1d5db' }}>·</span>
-            {/* 열이 가장 좁을 때(판 하한 960 → 열 184) 이 줄이 카드 밖으로 밀려 나가던 유일한 조각이다.
-                줄지 않게 두는 대신 말줄임으로 접히게 한다 — 넓을 때는 지금과 똑같이 다 보인다. */}
-            <span style={{ fontSize: 11, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{closeMonth} 마감 예정</span>
-          </>
-        )}
         {quoteCount > 0 && (
           <>
-            <span style={{ color: '#d1d5db' }}>·</span>
+            <span style={{ color: FADE, flexShrink: 0 }}>·</span>
             <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, flexShrink: 0 }}>견적 {quoteCount}건</span>
           </>
         )}
-        {/* 수주까지 갔지만 매출로 이어지지 않은(또는 견적을 안 붙인) 건을 직접 끝낼 수 있게.
-            줄을 따로 쓰면 수주 칸 카드만 28px 높아져, 이 줄 오른쪽 끝에 붙인다. */}
-        {onClose && canEdit && (
-          <button
-            className="pl-card-action"
+
+        <div className="pl-card-action" style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, marginLeft: 'auto' }}>
+          {onWriteQuote && (
+            <button
+              onPointerDown={e => e.stopPropagation()}
+              onClick={onWriteQuote}
+              title="이 포캐스트로 견적서를 작성합니다"
+              style={{ padding: '1px 6px', background: 'none', color: '#234ea2', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+            >
+              견적 쓰기
+            </button>
+          )}
+
+          {/* 단계 변경 — 실주를 고르면 사유를 받아야 하므로 모달을 연다 */}
+          <select
+            value={opp.stage}
+            disabled={!canEdit}
+            // 드래그 센서가 select 조작을 끌기로 오인하지 않도록 여기서 이벤트를 끊는다
             onPointerDown={e => e.stopPropagation()}
-            onClick={onClose}
-            title="이 포캐스트를 종료합니다"
-            style={{ marginLeft: 'auto', flexShrink: 0, padding: '1px 8px', background: '#f3f4f6', color: '#6b7280', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit' }}
+            onChange={e => {
+              const next = e.target.value
+              if (next === opp.stage) return
+              if (next === '실주') onPickLost()
+              else onChangeStage(next)
+            }}
+            title={canEdit ? '단계 변경' : '담당자만 바꿀 수 있습니다'}
+            style={{
+              maxWidth: 76, padding: '2px 4px', borderRadius: 6,
+              border: '1px solid #ebebeb', background: canEdit ? '#fff' : '#f9fafb',
+              color: canEdit ? '#6b7280' : MUTED,
+              fontSize: 11, fontWeight: 700, outline: 'none',
+              cursor: canEdit ? 'pointer' : 'not-allowed',
+            }}
           >
-            종료
-          </button>
-        )}
-      </div>
+            {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
 
-      {/* 방치 표시 — 색이 아니라 시계 아이콘 + 흐린 글자로 */}
-      {stale && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6 }} title={`마지막 활동 ${lastActivity ?? '없음'}`}>
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-          </svg>
-          <span style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>{days}일째 활동 없음</span>
+          {/* 수주까지 갔지만 매출로 이어지지 않은(또는 견적을 안 붙인) 건을 직접 끝낼 수 있게. */}
+          {onClose && canEdit && (
+            <button
+              onPointerDown={e => e.stopPropagation()}
+              onClick={onClose}
+              title="이 포캐스트를 종료합니다"
+              style={{ padding: '1px 6px', background: '#f3f4f6', color: '#6b7280', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit' }}
+            >
+              종료
+            </button>
+          )}
         </div>
-      )}
-
+      </div>
     </div>
   )
 }
