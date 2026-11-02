@@ -21,6 +21,8 @@
 // 신규 작성은 목적이 비어 있고, 고르기 전에는 목적별 칸 자리에 안내만 보인다.
 
 import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useConfirm } from '@/components/common/ConfirmDialog'
+import type { SubmitOutcome } from './showroomData'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { toMin, computeWorkHours, lunchOverlapHours } from '@/lib/workHours'
@@ -129,6 +131,11 @@ export type DemoRequestBody = {
   carried_out: boolean
   expected_cost: number | null
   note: string
+  /**
+   * 겹침 경고를 보고도 올리겠다는 표시 — 화면이 「그래도 상신」을 받은 뒤에만 붙인다
+   * (사전 신청에만 뜻이 있다. 사후 신청의 겹침 차단은 이것으로 뚫리지 않는다).
+   */
+  force?: boolean
 }
 
 /** 모달이 부모에게 넘기는 저장 요청 — 무엇을 어디로 보낼지 모달이 정한다(showroomData saveSubmission). */
@@ -175,8 +182,11 @@ type Props = {
   engineers: PickerEngineer[]
   currentUserEngineerId: number | null
   onClose: () => void
-  /** 저장 성공이면 null, 실패면 화면에 띄울 메시지를 돌려준다. */
-  onSubmit: (submission: UsageSubmission) => Promise<string | null>
+  /**
+   * 저장 결과. 실패 중 **겹침 경고**(overlapWarning)는 막힌 것이 아니라 묻는 자리다 —
+   * 이 모달이 확인창을 띄우고 「그래도 상신」을 받으면 force 를 실어 다시 부른다.
+   */
+  onSubmit: (submission: UsageSubmission) => Promise<SubmitOutcome>
 }
 
 /** 천 단위 콤마가 붙은 문자열에서 숫자만 뽑는다. */
@@ -228,6 +238,8 @@ export default function UsageModal({
   const [note, setNote] = useState(initial?.note ?? '')
 
   const [saving, setSaving] = useState(false)
+  // 겹침 경고를 보여 줄 확인창(ConfirmDialog) — 「그래도 상신」을 받는 자리다.
+  const confirm = useConfirm()
   // 결재선을 받기 전까지 들고 있는 신청 본문. 결재선 지정 모달에서 확정하면 그때 보낸다.
   const [pendingBody, setPendingBody] = useState<DemoRequestBody | null>(null)
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -352,27 +364,48 @@ export default function UsageModal({
       }
     }
 
+    await send(submission)
+  }
+
+  /**
+   * 보내기 — 겹침 경고가 오면 **한 번 더 묻고** force 로 다시 보낸다.
+   *
+   * 되돌아온 경고에는 시간대·신청자 이름·결재 상태만 들어 있다(남의 목적·고객사는 서버가
+   * 보내지 않는다 — lib/showroomOverlap.ts). 「그래도 상신」을 누르면 둘 다 결재에 올라가고,
+   * **먼저 승인된 쪽만** 사용 기록을 갖는다(나머지는 마지막 승인에서 막힌다).
+   */
+  const send = async (submission: UsageSubmission, forced = false): Promise<void> => {
+    const toSend: UsageSubmission = forced && submission.kind === 'request'
+      ? { ...submission, body: { ...submission.body, force: true } }
+      : submission
     setSaving(true)
     setSubmitError(null)
-    const message = await onSubmit(submission)
+    const out = await onSubmit(toSend)
     setSaving(false)
+    if (out.ok) return
+    if (!forced && out.overlapWarning && out.warnings && out.warnings.length > 0) {
+      const ok = await confirm({
+        title: '겹치는 신청이 있습니다',
+        message: `${out.warnings.join('\n')}\n\n그래도 상신하시겠습니까? 먼저 승인된 쪽만 사용 기록이 만들어집니다.`,
+        confirmText: '그래도 상신',
+        cancelText: '취소',
+      })
+      if (ok) await send(submission, true)
+      return
+    }
     // 실패해도 모달을 닫지 않는다 — 입력을 다시 치게 하지 않기 위해서다.
-    if (message) setSubmitError(message)
+    setSubmitError(out.message)
   }
 
   /** 결재선을 확정하면 그때 상신한다. 실패하면 모달은 그대로 두고 오류만 보여 준다. */
   const submitWithLines = async (lines: LineInput[]) => {
     if (!pendingBody) return
     setPickerOpen(false)
-    setSaving(true)
-    setSubmitError(null)
-    const message = await onSubmit({
+    await send({
       kind: 'request',
       documentId: rewrite?.document_id ?? null,
       body: { ...pendingBody, lines },
     })
-    setSaving(false)
-    if (message) setSubmitError(message)
   }
 
   const toggleBtn = (on: boolean): CSSProperties => ({

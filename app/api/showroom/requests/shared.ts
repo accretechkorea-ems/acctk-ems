@@ -32,6 +32,10 @@ import { withTeamPerm } from '@/lib/teamPermsServer'
 import { addDays } from '@/lib/date'
 import { toMin, computeWorkHours, normTime, TIME_MIN, TIME_MAX } from '@/lib/workHours'
 import {
+  recordClashes, requestClashes, sortClashes, warningLines,
+  type Clash, type DocRowLike, type OverlapTarget,
+} from '@/lib/showroomOverlap'
+import {
   APPROVAL_BUCKET, NDA_STATUSES,
   optionalOneOf, deviceTitle, isValidYmd, isRetroactiveDate, assertShowroomDevice, ensureDeviceConfig,
   isUsagePurpose, purposeNeedsCustomer, requestPurpose,
@@ -268,6 +272,53 @@ export async function findOverlap(sb: SupabaseClient, deviceId: number, date: st
   }
   const hit = (data ?? [])[0] as { start_time: string; end_time: string } | undefined
   return { error: false, clash: hit ? `${normTime(hit.start_time)}~${normTime(hit.end_time)}` : null }
+}
+
+/**
+ * **사전 신청용** 겹침 찾기 — 확정 기록 + 결재가 돌고 있는 다른 사전 신청까지 본다.
+ *
+ * 위의 findOverlap(기록만)은 그대로 둔다 — 사용 기록 등록·사후 신청·마지막 승인 직전은
+ * 「확정된 기록과 겹치면 안 된다」는 더 센 규칙이고, 그 셋은 막는 쪽이다.
+ *
+ * 결재 문서는 **장비·날짜까지 DB 가 좁혀 주지 않는다**(summary 안의 jsonb 다). doc_type 과
+ * status 로 좁혀 받고 나머지는 순수 함수가 가른다(lib/showroomOverlap.ts) — 그 덕에 판정
+ * 규칙을 하네스가 그대로 돌릴 수 있다. 진행중 문서는 많아도 수십 건이다.
+ *
+ * 돌려주는 것: 겹친 목록(기록/신청 구분)과 확인창에 넣을 문구 줄.
+ */
+export async function findOverlaps(
+  sb: SupabaseClient,
+  t: OverlapTarget,
+): Promise<{ error: boolean; clashes: Clash[]; records: Clash[]; requests: Clash[]; lines: string[] }> {
+  const fail = { error: true, clashes: [], records: [], requests: [], lines: [] }
+
+  const [usageRes, docRes] = await Promise.all([
+    sb.from('showroom_usage')
+      .select('usage_id, start_time, end_time')
+      .eq('device_id', t.deviceId)
+      .eq('usage_date', t.date)
+      .is('deleted_at', null),
+    // 결재가 **아직 돌고 있는** 쇼룸 신청만. 완료·반려·회수·폐기는 겹침이 아니다
+    // (완료된 건은 사용 기록이 생겨 위 질의에 잡힌다).
+    sb.from('approval_documents')
+      .select('document_id, status, summary')
+      .eq('doc_type', 'showroom_usage')
+      .in('status', ['진행중']),
+  ])
+
+  if (usageRes.error) {
+    console.error('[showroom/requests] overlap(record) failed', { target: t, error: usageRes.error })
+    return fail
+  }
+  if (docRes.error) {
+    console.error('[showroom/requests] overlap(request) failed', { target: t, error: docRes.error })
+    return fail
+  }
+
+  const records = recordClashes((usageRes.data ?? []) as { start_time: string | null; end_time: string | null }[], t)
+  const requests = requestClashes((docRes.data ?? []) as unknown as DocRowLike[], t)
+  const clashes = sortClashes([...records, ...requests])
+  return { error: false, clashes, records, requests, lines: warningLines(clashes) }
 }
 
 /**

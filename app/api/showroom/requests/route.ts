@@ -20,7 +20,7 @@ import { createApprovalDocument, resubmitApprovalDocument, checkLines, rollbackA
 import { buildSummary, readSummary, type ShowroomSummary } from '@/lib/approval/showroomUsage'
 import type { LineInput } from '@/lib/approval/types'
 import {
-  admin, bad, loadCaller, parseDemoBody, resolveDemo, buildPayload, findOverlap,
+  admin, bad, loadCaller, parseDemoBody, resolveDemo, buildPayload, findOverlap, findOverlaps,
   allocateDocNo, settleDocNo, createUsageFromRequest,
   pdfDataFromPayload, renderApprovalPdf, dropApprovalPdf,
 } from './shared'
@@ -32,6 +32,35 @@ const TARGET_TABLE = 'showroom_usage'
 
 /** 결재함 목록에 보일 제목. */
 const titleOf = (p: DemoRequestPayload) => `${p.device_name} · ${p.usage_date} 쇼룸 사용 신청`
+
+/**
+ * 사전 신청의 겹침 경고 — 겹치면 **409 와 경고 목록**을 돌려주고(문서는 만들지 않는다),
+ * 겹치지 않거나 force 면 null 을 돌려 그대로 진행하게 한다.
+ *
+ * force 는 화면이 「그래도 상신」을 받은 뒤 같은 내용에 실어 보낸다. **사후 신청의 차단은
+ * force 로 뚫리지 않는다** — 그쪽은 기록을 바로 만들기 때문이다(위 분기에서 따로 막는다).
+ */
+async function checkPlanOverlap(
+  sb: ReturnType<typeof admin>,
+  input: { device_id: number; usage_date: string; start_time: string; end_time: string },
+  body: Record<string, unknown>,
+  documentId: number | null,
+): Promise<NextResponse | null> {
+  if (body.force === true) return null
+  const ov = await findOverlaps(sb, {
+    deviceId: input.device_id, date: input.usage_date,
+    start: input.start_time, end: input.end_time,
+    excludeDocumentId: documentId,
+  })
+  if (ov.error) return bad('겹치는 신청을 확인하지 못했습니다. 잠시 뒤 다시 시도해주세요.', 500)
+  if (ov.clashes.length === 0) return null
+  return NextResponse.json({
+    error: '같은 장비·같은 날에 겹치는 사용이 있습니다.',
+    warnings: ov.lines,
+    // 화면이 「그래도 상신」을 물을 수 있다는 표시 — 사후 신청의 차단과 가른다.
+    overlapWarning: true,
+  }, { status: 409 })
+}
 
 /** 화면이 보낸 결재선을 읽는다. 모양만 맞추고 내용 검증은 checkLines 가 한다. */
 function readLines(raw: unknown): LineInput[] | null {
@@ -98,6 +127,16 @@ export async function POST(req: NextRequest) {
     const ov = await findOverlap(sb, input.device_id, input.usage_date, input.start_time, input.end_time)
     if (ov.error) return bad('사용 기록을 확인하지 못했습니다.', 500)
     if (ov.clash) return bad(`같은 장비에 겹치는 사용 기록이 있습니다 (${ov.clash})`, 409)
+  } else {
+    // 사전 신청(예약) — **막지 않고 알린다.** 확정 기록과도, 아직 결재중인 다른 예약과도
+    // 겹칠 수 있는데 뒤쪽은 반려될 수도 있어 막을 근거가 약하다. 대신 올리는 사람이 모르는
+    // 채로 올리지는 않게 한 번 되돌려 보낸다 — 화면이 시간대·사람·상태를 보여 주고
+    // 「그래도 상신」을 받으면 force 로 다시 부른다(lib/showroomOverlap.ts 머리말).
+    //
+    // 이때 **문서를 만들지 않는다** — 되돌려 보낸 뒤에 사람이 그만둘 수 있어서, 반쪽 문서가
+    // 남지 않아야 한다.
+    const warn = await checkPlanOverlap(sb, input, body, null)
+    if (warn) return warn
   }
 
   let payload: DemoRequestPayload
@@ -232,6 +271,10 @@ export async function PATCH(req: NextRequest) {
     const ov = await findOverlap(sb, input.device_id, input.usage_date, input.start_time, input.end_time)
     if (ov.error) return bad('사용 기록을 확인하지 못했습니다.', 500)
     if (ov.clash) return bad(`같은 장비에 겹치는 사용 기록이 있습니다 (${ov.clash})`, 409)
+  } else {
+    // 사전 신청 재상신 — POST 와 같다. **자기 문서는 겹침에서 뺀다**(고치는 중이다).
+    const warn = await checkPlanOverlap(sb, input, body, documentId)
+    if (warn) return warn
   }
 
   // 번호는 처음 상신 때 받은 것을 그대로 쓴다(승인서·기록이 그 번호로 이어져 있다).

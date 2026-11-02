@@ -176,10 +176,29 @@ export async function callShowroomApi(url: string, method: string, body: unknown
   }
 }
 
-/** 사용 기록 모달 저장 결과. 신청이었으면 신청번호·승인서 PDF 성공 여부·사후 여부를 함께 준다. */
+/**
+ * 사용 기록 모달 저장 결과. 신청이었으면 신청번호·승인서 PDF 성공 여부·사후 여부를 함께 준다.
+ *
+ * overlapWarning — **사전 신청의 겹침 경고**다. 막힌 것이 아니라 「알고도 올릴 것이냐」를
+ * 묻는 자리라, 화면이 warnings 를 보여 주고 force 로 다시 부른다(모달의 submit).
+ * 사후 신청의 겹침 차단은 그냥 ok:false 로 온다(force 로 뚫리지 않는다).
+ */
 export type SubmissionResult =
-  | { ok: false; error: string }
+  | { ok: false; error: string; overlapWarning?: boolean; warnings?: string[] }
   | { ok: true; request: { requestNo: string; pdfOk: boolean; retroactive: boolean } | null }
+
+/**
+ * 모달에 돌려주는 결과 — 성공이냐, 메시지를 띄울 실패냐, **겹침 경고**냐.
+ * 경고는 막힌 것이 아니라 「알고도 올릴 것이냐」를 묻는 자리다(모달의 send).
+ */
+export type SubmitOutcome =
+  | { ok: true }
+  | { ok: false; message: string; overlapWarning?: boolean; warnings?: string[] }
+
+/** SubmissionResult → 모달이 쓰는 결과. 두 화면(장비 탭·전체기록 탭)이 같은 변환을 쓴다. */
+export const outcomeOf = (r: SubmissionResult): SubmitOutcome => (
+  r.ok ? { ok: true } : { ok: false, message: r.error, overlapWarning: r.overlapWarning, warnings: r.warnings }
+)
 
 /**
  * 사용 기록 모달의 저장 — 새 작성·재작성은 결재 상신(/api/showroom/requests, POST·PATCH — 결재선을 함께 보낸다),
@@ -200,7 +219,14 @@ export async function saveSubmission(sub: UsageSubmission): Promise<SubmissionRe
       body: JSON.stringify(sub.documentId ? { ...sub.body, document_id: sub.documentId } : sub.body),
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) return { ok: false, error: data?.error || '신청에 실패했습니다.' }
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: data?.error || '신청에 실패했습니다.',
+        overlapWarning: data?.overlapWarning === true,
+        warnings: Array.isArray(data?.warnings) ? data.warnings.map(String) : undefined,
+      }
+    }
     return {
       ok: true,
       request: { requestNo: String(data?.request_no ?? ''), pdfOk: data?.pdfOk !== false, retroactive: data?.retroactive === true },

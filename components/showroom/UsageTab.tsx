@@ -32,7 +32,7 @@ import DeviceMultiSelect from './DeviceMultiSelect'
 import ShowroomExcelButton from './ShowroomExcelButton'
 import type { UsageSheetContext } from '@/lib/showroomExcel'
 import type { PickerEngineer } from './EngineerPicker'
-import { loadPeriodUsages, loadUsageApprovals, callShowroomApi, saveSubmission, editInitial, copyInitial } from './showroomData'
+import { loadPeriodUsages, loadUsageApprovals, callShowroomApi, saveSubmission, editInitial, copyInitial, outcomeOf, type SubmitOutcome } from './showroomData'
 import { SEARCH_MAX, type UsageQuery } from './usageQuery'
 
 const PAGE_SIZE = 30
@@ -223,9 +223,10 @@ export default function UsageTab({
    * 모달 저장 — 새 작성은 목적과 무관하게 사용 신청(/api/showroom/requests), 기존 기록 수정만 /api/showroom/usage 다.
    * 사후 신청은 사용 기록이 바로 생기므로 목록도 다시 읽는다. 신청이었으면 「내 신청」도 다시 읽는다.
    */
-  const submitUsage = async (sub: UsageSubmission): Promise<string | null> => {
+  const submitUsage = async (sub: UsageSubmission): Promise<SubmitOutcome> => {
     const r = await saveSubmission(sub)
-    if (!r.ok) return r.error
+    // 실패·겹침 경고는 모달이 처리한다(경고면 확인창을 띄우고 force 로 다시 부른다).
+    if (!r.ok) return outcomeOf(r)
     setModal({ open: false, initial: null, preset: null })
     setReload(n => n + 1)
     onChanged()
@@ -234,7 +235,7 @@ export default function UsageTab({
       setNotice(r.request.pdfOk ? null
         : `신청은 저장했지만 승인서 PDF 를 만들지 못했습니다(${r.request.requestNo}). 관리자에게 알려주세요.`)
     }
-    return null
+    return { ok: true }
   }
 
   const deleteUsage = async (row: ShowroomUsageRow): Promise<string | null> => {

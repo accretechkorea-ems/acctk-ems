@@ -38,7 +38,7 @@ import UtilizationTab, { type UtilNav } from '@/components/showroom/UtilizationT
 import UsageTab from '@/components/showroom/UsageTab'
 import type { PickerEngineer } from '@/components/showroom/EngineerPicker'
 import {
-  loadShowroomDevices, loadEngineers, callShowroomApi, saveSubmission, requestNotice,
+  loadShowroomDevices, loadEngineers, callShowroomApi, saveSubmission, requestNotice, outcomeOf, type SubmitOutcome,
 } from '@/components/showroom/showroomData'
 import {
   SHOWROOM_PATH, parseTab, parseUsageQuery, usageHref, type ShowroomTab, type UsageQuery,
@@ -237,14 +237,15 @@ function ShowroomPageInner() {
 
   // ── 쓰기 ──────────────────────────────────────────────────────────
   /** 장비 카드·가동률에서 여는 사용 신청 — 목적과 무관하게 승인을 거친다(saveSubmission 이 보낸다). */
-  const submitUsage = async (sub: UsageSubmission): Promise<string | null> => {
+  const submitUsage = async (sub: UsageSubmission): Promise<SubmitOutcome> => {
     const r = await saveSubmission(sub)
-    if (!r.ok) return r.error
+    // 실패·겹침 경고는 모달이 처리한다(경고면 확인창을 띄우고 force 로 다시 부른다).
+    if (!r.ok) return outcomeOf(r)
     setAddModal({ open: false, preset: null })
     // 설정 행이 없던 장비는 저장하면서 기본값으로 만들어진다 — 장비 목록도 맞춰 다시 읽는다.
     onUsageChanged()
     setNotice(r.request ? requestNotice(r.request) : null)
-    return null
+    return { ok: true }
   }
 
   const patchDevice = async (patch: DevicePatch): Promise<string | null> => {
