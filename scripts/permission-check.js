@@ -110,9 +110,10 @@ eq('리드 → 리드만', [
 eq('접촉 보고서는 어느 영역도 열지 않는다(계측 자료 격리)', [
   P.canViewCustomers(who(['contact_semi'])), P.canViewQuote(who(['contact_semi'])), P.canViewSalesMgmt(who(['contact_semi'])),
 ], [false, false, false])
-eq('**전자결재를 켜면 고객·견적·관리 세 영역이 함께 열린다**', [
+// 결재 화면이 견적·쇼룸 요약을 보여 주므로 고객·견적은 열어야 한다. **관리(실적)는 아니다.**
+eq('전자결재를 켜면 고객·견적만 열린다 — 관리 영역은 아니다', [
   P.canViewCustomers(who(['approvals'])), P.canViewQuote(who(['approvals'])), P.canViewAdmin(who(['approvals'])),
-], [true, true, true])
+], [true, true, false])
 eq('superadmin 은 파생과 무관하게 전부 통과', [
   P.canViewCustomers(SUPER), P.canViewLeads(SUPER), P.canViewAdmin(SUPER),
 ], [true, true, true])
@@ -138,7 +139,8 @@ eq('고객 영역을 여는 메뉴 목록', [...M.DERIVED_PERMS.customers],
   ['repair_dashboard', 'dashboard_80', 'activity', 'customers', 'repair', 'showroom', 'inquiries', 'pipeline', 'admin', 'approvals'])
 eq('견적 영역을 여는 메뉴 목록', [...M.DERIVED_PERMS.quote],
   ['dashboard_80', 'quote', 'purchase', 'sales', 'admin', 'approvals'])
-eq('관리 영역을 여는 메뉴 목록', [...M.DERIVED_PERMS.admin], ['sales', 'admin', 'approvals'])
+eq('관리 영역을 여는 메뉴 목록 — **전자결재는 들어 있지 않다**(D37 의심 1 수정)',
+  [...M.DERIVED_PERMS.admin], ['sales', 'admin'])
 eq('파생 규칙이 가리키는 메뉴 키는 모두 등록표에 있다',
   Object.values(M.DERIVED_PERMS).flat().filter(k => !M.MENU_BY_KEY[k]), [])
 
@@ -151,9 +153,9 @@ eq('관리 메뉴 하나 → 고객·견적·영업관리·관리 네 칸', M.de
   can_view_customers: true, can_view_quote: true, can_view_sales_mgmt: true,
   can_view_dashboard: false, can_view_pipeline: false, can_view_leads: false, can_view_admin: true,
 })
-eq('전자결재 하나 → 고객·견적·관리 세 칸', M.deriveTeamColumns(new Set(['approvals'])), {
+eq('전자결재 하나 → 고객·견적 두 칸(관리 칸은 켜지지 않는다)', M.deriveTeamColumns(new Set(['approvals'])), {
   can_view_customers: true, can_view_quote: true, can_view_sales_mgmt: false,
-  can_view_dashboard: false, can_view_pipeline: false, can_view_leads: false, can_view_admin: true,
+  can_view_dashboard: false, can_view_pipeline: false, can_view_leads: false, can_view_admin: false,
 })
 eq('칸 이름 7개가 영역 7개를 모두 덮는다',
   Object.keys(M.DERIVED_PERMS).filter(a => !M.TEAM_PERM_COLUMN[a]), [])

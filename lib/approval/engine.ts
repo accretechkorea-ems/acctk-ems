@@ -25,14 +25,27 @@ export function nextPendingLine(lines: ApprovalLine[]): ApprovalLine | null {
   return sequentialLines(lines).find(l => l.state === '대기') ?? null
 }
 
-/** 남은 '대기' 가 없으면 완료다. */
+/**
+ * 남은 '대기' 가 없으면 완료다.
+ *
+ * **결재·합의가 한 줄도 없으면 완료가 아니다**(2026-11-02 — D37 의심 3). 예전에는 빈 결재선이
+ * 「완료」였다 — find 가 null 을 돌려주기 때문이다. 상신 검증(validateLineInput)이 결재자
+ * 1명 이상을 요구하므로 정상 경로로는 생기지 않지만, 어떤 경로로든 줄 없는 문서가 생기면
+ * 그 자리에서 완료 처리(견적 확정·사용 기록 생성)까지 갈 수 있었다. 판정이 「모른다」일 때
+ * 끝났다고 답하지 않는다. 참조(cc)만 있는 문서도 같다 — 참조는 순서에 들어가지 않는다.
+ */
 export function isComplete(lines: ApprovalLine[]): boolean {
+  if (sequentialLines(lines).length === 0) return false
   return nextPendingLine(lines) === null
 }
 
-/** 아무도 손대지 않았는가 — 회수는 이때만 된다. */
+/**
+ * 아무도 손대지 않았는가 — 회수는 이때만 된다.
+ * 위와 같은 이유로 **빈 결재선은 거짓**이다(every 는 빈 배열에 참을 돌려준다).
+ */
 export function untouched(lines: ApprovalLine[]): boolean {
-  return sequentialLines(lines).every(l => l.state === '대기')
+  const seq = sequentialLines(lines)
+  return seq.length > 0 && seq.every(l => l.state === '대기')
 }
 
 /**

@@ -250,7 +250,14 @@ export const DERIVED_PERMS: Record<PermArea, readonly string[]> = {
   dashboard: ['repair_dashboard', 'dashboard_80', 'activity'],
   pipeline: ['pipeline'],
   leads: ['leads'],
-  admin: ['sales', 'admin', 'approvals'],
+  // 'approvals' 를 **넣지 않는다**(2026-11-02 — D37 의심 1).
+  //   전자결재는 menuPublic 이라 화면을 전원이 쓴다. 그래서 팀 관리 화면의 체크는 「전체 결재
+  //   조회」를 잠그는 뜻만 남았는데, 그 체크 하나가 can_view_admin 까지 켜면 **실적 자료**가
+  //   함께 열린다(RLS 가 그 칸을 본다). 결재 화면이 보여 주는 것은 견적·쇼룸 요약이라
+  //   customers·quote 는 근거가 있지만 관리 영역은 근거가 없었다.
+  //   (고친 날 기준 approvals 를 켠 팀은 「임원」 하나뿐이고 그 팀은 admin 메뉴도 켜 두어
+  //    실제로 열람 범위가 바뀌는 팀은 없다 — 측정해 두었다.)
+  admin: ['sales', 'admin'],
 }
 
 /** 팀이 켜 둔 메뉴 집합에서 영역 하나를 판정한다(사람이 아니라 팀만 본다 — superadmin 예외 없음). */

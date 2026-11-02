@@ -101,15 +101,16 @@ eq('완료 판정은 「남은 대기가 없음」', [
   E.isComplete([line(11, 1, 'approve', 101, '승인')]),
   E.isComplete([line(11, 1, 'approve', 101, '승인'), line(12, 2, 'agree', 102)]),
 ], [false, true, false])
-eq('**빈 결재선은 완료로 판정된다** — 상신 검증이 막아 실제로는 생기지 않는다', E.isComplete([]), true)
-eq('참조만 있는 문서도 완료로 판정된다', E.isComplete([line(14, null, 'cc', 104)]), true)
+eq('**빈 결재선은 완료가 아니다**(D37 의심 3 수정 — 모를 때 끝났다고 답하지 않는다)', E.isComplete([]), false)
+eq('참조만 있는 문서도 완료가 아니다', E.isComplete([line(14, null, 'cc', 104)]), false)
 eq('회수 가능(untouched) — 아무도 안 눌렀을 때만', [
   E.untouched(normal),
   E.untouched([line(11, 1, 'approve', 101, '승인'), line(12, 2, 'agree', 102)]),
   E.untouched([line(11, 1, 'approve', 101, '반려')]),
 ], [true, false, false])
-eq('참조는 회수 판정에 끼지 않는다', E.untouched([line(14, null, 'cc', 104, '승인')]), true)
-eq('빈 결재선도 untouched', E.untouched([]), true)
+eq('**참조만 있는 문서는 회수 판정에서 거짓**(순서를 갖는 줄이 없다)',
+  E.untouched([line(14, null, 'cc', 104, '승인')]), false)
+eq('빈 결재선도 거짓', E.untouched([]), false)
 
 console.log('\n── skippedLineIds — 전결로 건너뛸 줄 ──')
 eq('전결한 1단 뒤의 대기 줄', E.skippedLineIds(normal, 1), [12, 13])
