@@ -396,7 +396,8 @@ export default function UsageModal({
   const saveLabel = saving ? (asRequest ? '신청 중...' : '저장 중...') : asRequest ? '신청' : '저장'
 
   return (
-    <ModalOverlay onClose={onClose} style={{ padding: 12 }}>
+    // 쇼룸 사용 신청 — 칸이 많다. 확인 뒤 닫는다(상태가 27갈래라 변경 여부는 넘기지 않는다).
+    <ModalOverlay onClose={onClose} confirmClose style={{ padding: 12 }}>
       <div onClick={e => e.stopPropagation()} style={{
         width: 'min(900px, 90vw)', maxHeight: 'calc(100dvh - 32px)',
         background: CARD_BG, borderRadius: 8, boxSizing: 'border-box',

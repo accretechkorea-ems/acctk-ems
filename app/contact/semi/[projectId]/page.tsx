@@ -953,7 +953,8 @@ function ProjectEditModal({ project, onClose, onSaved, onDelete, deleting }: {
   }
 
   return (
-    <ModalOverlay onClose={busy ? () => {} : onClose}>
+    // 저장 중에는 닫히지 않는다(closeOn 'none'). 그 밖에는 확인 뒤 닫는다.
+    <ModalOverlay onClose={onClose} closeOn={busy ? 'none' : 'both'} confirmClose>
       <div style={{
         background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 500,
         maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',

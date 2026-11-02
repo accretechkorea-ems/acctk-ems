@@ -45,6 +45,34 @@ const areaStyle: CSSProperties = {
 const stepBtnStyle: CSSProperties = { border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 13, fontWeight: 700, flexShrink: 0 }
 const timeBoxStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 4, background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, padding: '0 6px', height: 44, boxSizing: 'border-box' }
 
+/**
+ * 열었을 때의 폼 값 — 폼의 시작값이자 **변경 여부의 기준**이다(한 곳에서 만든다).
+ * 시작/종료시간: 신규 컬럼 우선 → 없으면 work_hours 로 08:30 기준 역산(점심 보정) →
+ * 그것도 없으면 기본값.
+ */
+function formOf(s: ServiceHistory): ServiceForm {
+  let start = normTime(s.start_time)
+  let end = normTime(s.end_time)
+  if (!start || !end) {
+    start = '08:30'
+    end = (s.work_hours != null && s.work_hours > 0) ? reverseEndTime(s.work_hours) : '17:30'
+  }
+  return {
+    visit_date: s.visit_date ?? '',
+    service_notes: s.service_notes ?? '',
+    etc_notes: s.etc_notes ?? '',
+    visitor: s.visitor ?? '',
+    service_type: s.service_type ?? '신규설치',
+    contact_id: s.contact_id ?? null,
+    is_paid: s.is_paid ?? true,
+    work_hours: s.work_hours ? String(s.work_hours) : '',
+    start_time: start,
+    end_time: end,
+  }
+}
+/** 열었을 때의 참여 엔지니어 — 같은 이유로 한 곳에서 만든다. */
+const idsOf = (s: ServiceHistory): number[] => (s.service_engineers ?? []).map(se => se.engineer_id)
+
 export default function ServiceEditModal({ service, contacts, engineers, isSaving, onClose, onSave, onDelete, onOpenReport, onDeleteReport, onAttachmentsChanged }: Props) {
   const [form, setForm] = useState<ServiceForm>({ visit_date: '', service_notes: '', etc_notes: '', visitor: '', service_type: '신규설치', contact_id: null, is_paid: true, work_hours: '', start_time: '08:30', end_time: '17:30' })
   const [selectedEngineerIds, setSelectedEngineerIds] = useState<number[]>([])
@@ -70,26 +98,8 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
 
   useEffect(() => {
     if (service) {
-      // 시작/종료시간: 신규 컬럼 우선 → 없으면 work_hours 로 08:30 기준 역산(점심 보정) → 그것도 없으면 기본값
-      let start = normTime(service.start_time)
-      let end = normTime(service.end_time)
-      if (!start || !end) {
-        start = '08:30'
-        end = (service.work_hours != null && service.work_hours > 0) ? reverseEndTime(service.work_hours) : '17:30'
-      }
-      setForm({
-        visit_date: service.visit_date ?? '',
-        service_notes: service.service_notes ?? '',
-        etc_notes: service.etc_notes ?? '',
-        visitor: service.visitor ?? '',
-        service_type: service.service_type ?? '신규설치',
-        contact_id: service.contact_id ?? null,
-        is_paid: service.is_paid ?? true,
-        work_hours: service.work_hours ? String(service.work_hours) : '',
-        start_time: start,
-        end_time: end,
-      })
-      setSelectedEngineerIds((service.service_engineers ?? []).map(se => se.engineer_id))
+      setForm(formOf(service))
+      setSelectedEngineerIds(idsOf(service))
       setShowExtraEngineers(false)
       setReportFile(null)
       setErrors({})
@@ -125,7 +135,11 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
   }
 
   return (
-    <ModalOverlay onClose={onClose} style={{ padding: 12 }}>
+    <ModalOverlay
+      onClose={onClose} confirmClose style={{ padding: 12 }}
+      // 불러온 값과 같고 새로 붙인 보고서도 없으면 확인 없이 닫힌다.
+      dirty={JSON.stringify([form, selectedEngineerIds]) !== JSON.stringify([formOf(service), idsOf(service)]) || reportFile !== null}
+    >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{

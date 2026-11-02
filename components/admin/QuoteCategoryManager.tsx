@@ -104,7 +104,8 @@ export default function QuoteCategoryManager({ onClose, canEdit }: QuoteCategory
   const locked = busy || !canEdit
 
   return (
-    <ModalOverlay onClose={onClose}>
+    // 이 화면은 줄마다 즉시 저장한다 — 확인이 필요한 때는 **이름을 고치는 중**일 때뿐이다.
+    <ModalOverlay onClose={onClose} confirmClose dirty={editCode !== null}>
       <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 820, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>견적 분류 관리</div>

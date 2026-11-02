@@ -37,8 +37,11 @@ export default function DeviceAddModal({ isOpen, isSaving, onClose, onSave }: Pr
 
   const handleClose = () => { setForm(emptyForm); setPackingFile(null); setErrors({}); onClose() }
 
+  /** 적은 것이나 고른 파일이 있는가 — 없으면 확인 없이 닫힌다(ModalOverlay). */
+  const dirty = JSON.stringify(form) !== JSON.stringify(emptyForm) || packingFile !== null
+
   return (
-    <ModalOverlay onClose={handleClose}>
+    <ModalOverlay onClose={handleClose} confirmClose dirty={dirty}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{

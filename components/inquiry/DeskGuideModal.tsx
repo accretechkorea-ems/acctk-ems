@@ -115,12 +115,7 @@ export default function DeskGuideModal({ onClose }: { onClose: () => void }) {
   const product = DESK_PRODUCTS.find(p => p.key === productKey) ?? DESK_PRODUCTS[0]
   const panelRef = useRef<HTMLDivElement>(null)
 
-  // ModalOverlay 는 바깥 클릭만 닫는다 — Esc 는 여기서 받는다(명함 뷰어와 같은 방식).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
+  // Esc·바깥 클릭은 둘 다 ModalOverlay 가 받는다(2026-11-02 부터 공용 한곳이다).
 
   // 열리면 패널로 포커스를 옮긴다(키보드로 바로 스크롤·Esc 가 되게).
   useEffect(() => { panelRef.current?.focus() }, [])

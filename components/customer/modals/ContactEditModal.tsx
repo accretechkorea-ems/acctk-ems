@@ -19,19 +19,22 @@ const fieldStyle: CSSProperties = {
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
 }
 
+/** 열었을 때의 값 — 폼의 시작값이자 **변경 여부의 기준**이다(한 곳에서 만든다). */
+const formOf = (c: Contact): ContactForm => ({
+  name: c.name ?? '',
+  department: c.department ?? '',
+  position: c.position ?? '',
+  phone: c.phone ?? '',
+  email: c.email ?? '',
+})
+
 export default function ContactEditModal({ contact, isSaving, onClose, onSave, onDelete }: Props) {
   const [form, setForm] = useState<ContactForm>({ name: '', department: '', position: '', phone: '', email: '' })
   const { errors, setErrors, clearError, validate } = useFieldErrors<'name'>()
 
   useEffect(() => {
     if (contact) {
-      setForm({
-        name: contact.name ?? '',
-        department: contact.department ?? '',
-        position: contact.position ?? '',
-        phone: contact.phone ?? '',
-        email: contact.email ?? '',
-      })
+      setForm(formOf(contact))
       setErrors({})
     }
   }, [contact])
@@ -44,8 +47,11 @@ export default function ContactEditModal({ contact, isSaving, onClose, onSave, o
     onSave(form)
   }
 
+  /** 열었을 때와 달라졌는가 — 그대로면 확인 없이 닫힌다(ModalOverlay). */
+  const dirty = JSON.stringify(form) !== JSON.stringify(formOf(contact))
+
   return (
-    <ModalOverlay onClose={onClose}>
+    <ModalOverlay onClose={onClose} confirmClose dirty={dirty}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{

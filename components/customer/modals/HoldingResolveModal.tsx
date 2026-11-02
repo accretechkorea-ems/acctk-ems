@@ -37,10 +37,12 @@ export default function HoldingResolveModal({ isOpen, holding, ...rest }: Props)
 
 function ResolveForm({ holding, notice, isSaving, onClose, onResolve }: Omit<Props, 'isOpen' | 'holding'> & { holding: Holding }) {
   const [note, setNote] = useState('')
-  const [resolvedAt, setResolvedAt] = useState(todayKST)
+  // 날짜 칸의 기본값 — 아래 dirty 판정이 이 값과 견준다(오늘 그대로면 손대지 않은 것이다).
+  const today = todayKST()
+  const [resolvedAt, setResolvedAt] = useState(today)
 
   return (
-    <ModalOverlay onClose={onClose}>
+    <ModalOverlay onClose={onClose} confirmClose dirty={note.trim() !== '' || resolvedAt !== today}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{

@@ -99,7 +99,9 @@ export default function AddCustomerModal({
   }
 
   return (
-    <ModalOverlay onClose={onClose}>
+    // 입력 폼 — 바깥 클릭·Esc 때 확인을 받는다. 변경 여부는 넘기지 않는다(폼 상태가
+    // 이 모달 밖 훅에 있어 열었을 때와 비교할 기준이 여기 없다) — 그래서 늘 묻는다.
+    <ModalOverlay onClose={onClose} confirmClose>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{

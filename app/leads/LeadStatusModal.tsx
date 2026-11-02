@@ -135,7 +135,8 @@ export default function LeadStatusModal({
   }
 
   return (
-    <ModalOverlay onClose={onClose}>
+    // 상태·메모를 적는 폼 — 확인 뒤 닫는다.
+    <ModalOverlay onClose={onClose} confirmClose>
       <div style={{
         background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 460,
         maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',

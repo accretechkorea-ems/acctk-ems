@@ -30,6 +30,17 @@ const fieldStyle: CSSProperties = {
 }
 const dateStyle: CSSProperties = { ...fieldStyle, colorScheme: 'light' }
 
+/** 열었을 때의 값 — 폼의 시작값이자 **변경 여부의 기준**이다(한 곳에서 만든다). */
+const formOf = (d: Device): DeviceForm => ({
+  device_name: d.device_name ?? '',
+  device_name2: d.device_name2 ?? '',
+  option: d.option ?? '',
+  serial_number: d.serial_number ?? '',
+  program: d.program ?? 'ACCTee',
+  install_date: d.install_date ?? '',
+  category: d.category ?? '20',
+})
+
 export default function DeviceEditModal({ device, isSaving, onClose, onSave, onDelete, onOpenPacking, onImageChanged }: Props) {
   const [form, setForm] = useState<DeviceForm>({ device_name: '', device_name2: '', option: '', serial_number: '', program: 'ACCTee', install_date: '', category: '20' })
   const [packingFile, setPackingFile] = useState<File | null>(null)
@@ -50,15 +61,7 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
 
   useEffect(() => {
     if (device) {
-      setForm({
-        device_name: device.device_name ?? '',
-        device_name2: device.device_name2 ?? '',
-        option: device.option ?? '',
-        serial_number: device.serial_number ?? '',
-        program: device.program ?? 'ACCTee',
-        install_date: device.install_date ?? '',
-        category: device.category ?? '20',
-      })
+      setForm(formOf(device))
       setPackingFile(null)
       setImageUrl(device.image_url)
       setConfirmRemove(false)
@@ -67,6 +70,9 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
   }, [device])
 
   useEffect(() => () => { if (removeTimer.current) clearTimeout(removeTimer.current) }, [])
+
+  /** 열었을 때와 달라졌는가 — 그대로면 확인 없이 닫힌다(ModalOverlay). */
+  const dirty = (device ? JSON.stringify(form) !== JSON.stringify(formOf(device)) : false) || packingFile !== null
 
   // 개별 사진 → 기본 이미지 → 없음 순으로 보여준다.
   //
@@ -117,7 +123,9 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
   }
 
   return (
-    <ModalOverlay onClose={onClose}>
+    // 사진은 저장 버튼과 무관하게 이미 반영됐으므로 변경 여부에 넣지 않는다 —
+    // 칸의 글자와 고른 패킹 파일만 본다.
+    <ModalOverlay onClose={onClose} confirmClose dirty={dirty}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{

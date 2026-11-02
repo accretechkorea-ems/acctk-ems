@@ -64,7 +64,8 @@ export default function DeviceSettingsModal({ device, onClose, onSubmit }: Props
   }
 
   return (
-    <ModalOverlay onClose={onClose} style={{ padding: 12 }}>
+    // 입력 폼 — 확인 뒤 닫는다.
+    <ModalOverlay onClose={onClose} confirmClose style={{ padding: 12 }}>
       <div onClick={e => e.stopPropagation()} style={{
         width: 'calc(100vw - 24px)', maxWidth: 460, maxHeight: 'calc(100dvh - 32px)',
         background: CARD_BG, borderRadius: 8, boxSizing: 'border-box',

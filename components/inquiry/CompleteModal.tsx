@@ -151,7 +151,8 @@ export default function CompleteModal({
   }
 
   return (
-    <ModalOverlay onClose={onClose}>
+    // 입력 폼 — 확인 뒤 닫는다(상태가 여러 갈래라 변경 여부는 넘기지 않는다).
+    <ModalOverlay onClose={onClose} confirmClose>
       <div style={{
         background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 520,
         maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',

@@ -52,6 +52,20 @@ export default function OpportunityModal({
   isOpen, opportunity, activities, customers, lockedCustomerName, engineers, isSaving, canEdit,
   currentUserEngineerId, canPickEngineer, onClose, onSave, onDelete, onOpenQuotePdf, onSetClosed,
 }: Props) {
+  /** 열었을 때의 값 — 폼의 시작값이자 **변경 여부의 기준**이다(한 곳에서 만든다). */
+  const formOf = (o: typeof opportunity): OpportunityForm => (o
+    ? {
+        customer_id: o.customer_id,
+        title: o.title,
+        stage: o.stage,
+        expected_amount: o.expected_amount != null ? String(o.expected_amount) : '',
+        expected_close: dateToMonth(o.expected_close),
+        engineer_id: o.engineer_id,
+        lost_reason: o.lost_reason ?? '',
+        lost_note: o.lost_note ?? '',
+      }
+    : emptyForm(currentUserEngineerId))
+
   const [form, setForm] = useState<OpportunityForm>(() => emptyForm(currentUserEngineerId))
   const { errors, setErrors, clearError, validate } = useFieldErrors<'title' | 'lost_reason' | 'customer_id'>()
   const [custQuery, setCustQuery] = useState('')
@@ -62,18 +76,7 @@ export default function OpportunityModal({
   useEffect(() => {
     if (!isOpen) return
     setErrors({})
-    setForm(opportunity
-      ? {
-          customer_id: opportunity.customer_id,
-          title: opportunity.title,
-          stage: opportunity.stage,
-          expected_amount: opportunity.expected_amount != null ? String(opportunity.expected_amount) : '',
-          expected_close: dateToMonth(opportunity.expected_close),
-          engineer_id: opportunity.engineer_id,
-          lost_reason: opportunity.lost_reason ?? '',
-          lost_note: opportunity.lost_note ?? '',
-        }
-      : emptyForm(currentUserEngineerId))
+    setForm(formOf(opportunity))
     setCustQuery('')
     setCustOpen(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -109,7 +112,7 @@ export default function OpportunityModal({
   }
 
   return (
-    <ModalOverlay onClose={onClose}>
+    <ModalOverlay onClose={onClose} confirmClose dirty={JSON.stringify(form) !== JSON.stringify(formOf(opportunity))}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{

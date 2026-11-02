@@ -54,17 +54,13 @@ export default function MyQuoteCard({ engineerId, slot, initialTab, onReload }: 
   const closeRef = useRef(close)
   useEffect(() => { closeRef.current = close })
 
-  // 모달이 열려 있는 동안 **뒤 화면을 잠그고** ESC 로 닫는다.
-  // ModalOverlay 는 바깥 클릭만 맡는다 — 잠금·ESC 를 거기 넣으면 저장 중인 입력이 있는
-  // 다른 모달까지 ESC 로 닫히므로, 이 모달에서만 건다.
+  // 모달이 열려 있는 동안 **뒤 화면을 잠근다.** Esc 는 ModalOverlay 가 받는다
+  // (2026-11-02 부터 공용 한곳이고, 입력 폼 모달은 그쪽에서 확인을 받는다).
   useEffect(() => {
     if (openTab === null) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeRef.current() }
-    document.addEventListener('keydown', onKey)
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
-      document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prev
     }
   }, [openTab])

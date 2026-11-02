@@ -570,7 +570,8 @@ function MessageModal({
   }
 
   return (
-    <ModalOverlay onClose={onClose}>
+    // 입력 폼 — 확인 뒤 닫는다.
+    <ModalOverlay onClose={onClose} confirmClose>
       <div style={{
         background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 520,
         maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',

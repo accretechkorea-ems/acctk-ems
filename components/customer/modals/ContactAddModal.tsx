@@ -34,8 +34,11 @@ export default function ContactAddModal({ isOpen, isSaving, onClose, onSave }: P
 
   const handleClose = () => { setForm(emptyForm); setErrors({}); onClose() }
 
+  /** 적은 것이 있는가 — 없으면 Esc·바깥 클릭에 확인을 받지 않는다(ModalOverlay). */
+  const dirty = JSON.stringify(form) !== JSON.stringify(emptyForm)
+
   return (
-    <ModalOverlay onClose={handleClose}>
+    <ModalOverlay onClose={handleClose} confirmClose dirty={dirty}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{

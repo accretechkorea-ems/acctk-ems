@@ -1,8 +1,14 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import ModalOverlay from './ModalOverlay'
+import { ConfirmContext, useConfirm, type ConfirmFn, type ConfirmOptions } from './confirmContext'
 import { Z } from '@/lib/zIndex'
+
+// 문맥·훅은 components/common/confirmContext.tsx 에 있다(순환 import 를 피한다 — 그 파일
+// 머리말 참고). 부르는 곳이 바뀌지 않게 여기서 그대로 다시 내보낸다.
+export { useConfirm }
+export type { ConfirmFn, ConfirmOptions }
 
 /**
  * 확인 다이얼로그 시스템 (Context 기반, Toast.tsx 와 동일 패턴).
@@ -20,26 +26,9 @@ import { Z } from '@/lib/zIndex'
  * - title·message 필수. confirmText 기본 '확인' / cancelText 기본 '취소'
  * - variant 'danger' → 확인 버튼 빨강, 'default'(기본) → #234ea2
  * - message 의 줄바꿈(\n) 반영 (whiteSpace: pre-line)
- * - 열리면 확인 버튼 포커스 / ESC·오버레이 바깥 클릭 → false 반환
+ * - 열리면 확인 버튼 포커스 / Esc·오버레이 바깥 클릭 → false 반환(ModalOverlay 가 둘 다 받는다)
  * - z-index 는 Z.confirm — 모달·전체화면 지도 위, Toast 아래
  */
-
-type ConfirmOptions = {
-  title: string
-  message: string
-  confirmText?: string
-  cancelText?: string
-  variant?: 'danger' | 'default'
-}
-type ConfirmFn = (options: ConfirmOptions) => Promise<boolean>
-
-const ConfirmContext = createContext<ConfirmFn | null>(null)
-
-export function useConfirm(): ConfirmFn {
-  const ctx = useContext(ConfirmContext)
-  if (!ctx) throw new Error('useConfirm 은 <ConfirmProvider> 안에서만 사용할 수 있습니다.')
-  return ctx
-}
 
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [options, setOptions] = useState<ConfirmOptions | null>(null)
@@ -74,12 +63,7 @@ function ConfirmDialog({ options, onClose }: { options: ConfirmOptions; onClose:
 
   // 열리면 확인 버튼 포커스
   useEffect(() => { confirmBtnRef.current?.focus() }, [])
-  // ESC → false
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(false) }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
+  // Esc 는 ModalOverlay 가 받는다 — 바깥 클릭과 같이 onClose(false) = **취소**다.
 
   return (
     <ModalOverlay onClose={() => onClose(false)} style={{ zIndex: Z.confirm }}>

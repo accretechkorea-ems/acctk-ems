@@ -428,7 +428,8 @@ export default function BulkImportModal({
   }
 
   return (
-    <ModalOverlay onClose={close}>
+    // 붙여 넣은 표가 들어 있을 수 있다 — 확인 뒤 닫는다.
+    <ModalOverlay onClose={close} confirmClose>
       <div style={{
         background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 1100,
         maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',

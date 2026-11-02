@@ -209,17 +209,15 @@ export default function AddressField({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boxOpen])
 
-  // 떠 있는 동안 ESC 로 닫고 뒤쪽 스크롤을 잠근다(Sidebar 드로어와 같은 방식).
+  // 떠 있는 동안 뒤쪽 스크롤을 잠근다. **Esc 는 ModalOverlay 가 받는다**(2026-11-02 부터
+  // 공용 한곳이다 — 여기서 또 받으면 두 겹이 한 번에 닫힌다).
   // 카카오 화면 안(iframe)에 포커스가 있으면 키 이벤트가 우리 쪽으로 오지 않는다 —
   // 그래서 [닫기] 버튼과 바깥 클릭이 항상 함께 있어야 한다.
   useEffect(() => {
     if (!boxOpen) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setBoxOpen(false) }
-    document.addEventListener('keydown', onKey)
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {
-      document.removeEventListener('keydown', onKey)
       document.body.style.overflow = prevOverflow
     }
   }, [boxOpen])
@@ -307,9 +305,13 @@ export default function AddressField({
         Z.subModal = 「모달 위에서 다시 열리는 모달」 층위(lib/zIndex.ts)로, 세 화면 중
         두 곳이 모달 안이라 이 층이 정확히 맞는다. 새 값을 만들지 않았다.
         서버 렌더에는 body 가 없다 — boxOpen 은 사용자가 눌러야 켜지므로 그릴 것도 없다.
+
+        이것은 **검색 창**이다 — 닫아도 잃을 입력이 없다(주소 칸은 이 창 밖에 있다).
+        그래서 confirmClose 는 켜 두고 dirty 를 false 로 둔다 — 규칙을 한 줄로 남기면서
+        「저장하지 않고 닫을까요?」가 검색을 닫을 때마다 뜨지는 않게.
       */}
       {boxOpen && typeof document !== 'undefined' && createPortal(
-        <ModalOverlay onClose={() => setBoxOpen(false)} style={{ zIndex: Z.subModal }}>
+        <ModalOverlay onClose={() => setBoxOpen(false)} confirmClose dirty={false} style={{ zIndex: Z.subModal }}>
           <div
             onClick={e => e.stopPropagation()}
             style={{

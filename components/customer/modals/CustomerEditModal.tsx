@@ -23,19 +23,22 @@ const fieldStyle: CSSProperties = {
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
 }
 
+/** 열었을 때의 값 — 폼의 시작값이자 **변경 여부의 기준**이다(한 곳에서 만든다). */
+const formOf = (c: Customer): CustomerEditFormData => ({
+  company_name: c.company_name ?? '',
+  address: c.address ?? '',
+  agency: c.agency ?? '',
+  status: c.status ?? '활성',
+  parent_customer_id: c.parent_customer_id ?? null,
+})
+
 export default function CustomerEditModal({ customer, isSaving, isDeleting, onClose, onSave, onDelete }: Props) {
   const [form, setForm] = useState<CustomerEditFormData>({ company_name: '', address: '', agency: '', status: '활성', parent_customer_id: null })
   const { errors, setErrors, clearError, validate } = useFieldErrors<'company_name' | 'address'>()
 
   useEffect(() => {
     if (customer) {
-      setForm({
-        company_name: customer.company_name ?? '',
-        address: customer.address ?? '',
-        agency: customer.agency ?? '',
-        status: customer.status ?? '활성',
-        parent_customer_id: customer.parent_customer_id ?? null,
-      })
+      setForm(formOf(customer))
       setErrors({})
     }
   }, [customer])
@@ -52,8 +55,11 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
     onSave(form)
   }
 
+  /** 열었을 때와 달라졌는가 — 그대로면 확인 없이 닫힌다(ModalOverlay). */
+  const dirty = JSON.stringify(form) !== JSON.stringify(formOf(customer))
+
   return (
-    <ModalOverlay onClose={onClose}>
+    <ModalOverlay onClose={onClose} confirmClose dirty={dirty}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{

@@ -269,7 +269,8 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
   }
 
   return (
-    <ModalOverlay onClose={onClose}>
+    // 입력 폼 — 확인 뒤 닫는다.
+    <ModalOverlay onClose={onClose} confirmClose>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{

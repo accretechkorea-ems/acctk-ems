@@ -41,8 +41,18 @@ const areaStyle: CSSProperties = {
 const stepBtnStyle: CSSProperties = { border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 13, fontWeight: 700, flexShrink: 0 }
 const timeBoxStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 4, background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, padding: '0 6px', height: 44, boxSizing: 'border-box' }
 
+/**
+ * 열었을 때의 폼 값 — 폼의 시작값이자 **변경 여부의 기준**이다(한 곳에서 만든다).
+ * 방문일만 오늘이고 나머지는 고정값이다.
+ */
+const freshForm = (): ServiceForm => ({
+  visit_date: todayKST(), service_notes: '', etc_notes: '', visitor: '',
+  service_type: '신규설치', contact_id: null, is_paid: true,
+  work_hours: '', start_time: '08:30', end_time: '17:30',
+})
+
 export default function ServiceAddModal({ deviceId, contacts, engineers, currentUserEngineerId, isSaving, onClose, onSave }: Props) {
-  const [form, setForm] = useState<ServiceForm>({ visit_date: '', service_notes: '', etc_notes: '', visitor: '', service_type: '신규설치', contact_id: null, is_paid: true, work_hours: '', start_time: '08:30', end_time: '17:30' })
+  const [form, setForm] = useState<ServiceForm>(freshForm)
   const [selectedEngineerIds, setSelectedEngineerIds] = useState<number[]>([])
   const [showExtraEngineers, setShowExtraEngineers] = useState(false)
   const [showHint, setShowHint] = useState(false)
@@ -63,7 +73,7 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
 
   useEffect(() => {
     if (deviceId !== null) {
-      setForm({ visit_date: todayKST(), service_notes: '', etc_notes: '', visitor: '', service_type: '신규설치', contact_id: null, is_paid: true, work_hours: '', start_time: '08:30', end_time: '17:30' })
+      setForm(freshForm())
       setSelectedEngineerIds(currentUserEngineerId ? [currentUserEngineerId] : [])
       setShowExtraEngineers(false)
       setErrors({})
@@ -90,7 +100,15 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
   }
 
   return (
-    <ModalOverlay onClose={onClose} style={{ padding: 12 }}>
+    <ModalOverlay
+      onClose={onClose} confirmClose style={{ padding: 12 }}
+      // 열었을 때와 같고 붙인 파일도 없으면 확인 없이 닫힌다.
+      dirty={
+        JSON.stringify([form, selectedEngineerIds])
+          !== JSON.stringify([freshForm(), currentUserEngineerId ? [currentUserEngineerId] : []])
+        || files.length > 0
+      }
+    >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{

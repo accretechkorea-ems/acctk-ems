@@ -385,7 +385,8 @@ function RegisterModal({
   }
 
   return (
-    <ModalOverlay onClose={onClose}>
+    // 입력 폼 — 확인 뒤 닫는다.
+    <ModalOverlay onClose={onClose} confirmClose>
       <div style={{
         background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 500,
         maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
@@ -571,7 +572,8 @@ function CreateModal({
   const label: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 5, display: 'block' }
 
   return (
-    <ModalOverlay onClose={close}>
+    // 입력 폼 — 확인 뒤 닫는다.
+    <ModalOverlay onClose={close} confirmClose>
       <div style={{
         background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 420,
         boxShadow: '0 20px 60px rgba(0,0,0,0.22)',

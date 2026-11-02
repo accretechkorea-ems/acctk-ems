@@ -39,6 +39,17 @@ const emptyForm = (): SalesActivityForm => ({
 })
 
 export default function SalesActivityModal({ isOpen, activity, contacts, opportunities, isSaving, canDelete, onClose, onSave, onDelete }: Props) {
+  /** 열었을 때의 값 — 폼의 시작값이자 **변경 여부의 기준**이다(한 곳에서 만든다). */
+  const formOf = (a: typeof activity): SalesActivityForm => (a
+    ? {
+        opportunity_id: a.opportunity_id,
+        activity_date: a.activity_date ?? todayKST(),
+        activity_type: a.activity_type,
+        contact_id: a.contact_id,
+        content: a.content ?? '',
+      }
+    : emptyForm())
+
   const [form, setForm] = useState<SalesActivityForm>(emptyForm)
   const { errors, setErrors, clearError, validate } = useFieldErrors<'activity_date' | 'activity_type' | 'content'>()
 
@@ -46,15 +57,7 @@ export default function SalesActivityModal({ isOpen, activity, contacts, opportu
   useEffect(() => {
     if (!isOpen) return
     setErrors({})
-    setForm(activity
-      ? {
-          opportunity_id: activity.opportunity_id,
-          activity_date: activity.activity_date ?? todayKST(),
-          activity_type: activity.activity_type,
-          contact_id: activity.contact_id,
-          content: activity.content ?? '',
-        }
-      : emptyForm())
+    setForm(formOf(activity))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, activity])
 
@@ -74,7 +77,7 @@ export default function SalesActivityModal({ isOpen, activity, contacts, opportu
   }
 
   return (
-    <ModalOverlay onClose={onClose}>
+    <ModalOverlay onClose={onClose} confirmClose dirty={JSON.stringify(form) !== JSON.stringify(formOf(activity))}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{

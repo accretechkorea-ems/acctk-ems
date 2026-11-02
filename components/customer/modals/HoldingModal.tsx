@@ -172,6 +172,10 @@ export default function HoldingModal({
   const done = !!holding?.resolved_at
   // 제목·시작일 중 하나라도 바뀌었을 때만 저장을 연다
   const dirty = !!holding && (titleEdit.trim() !== holding.title || startedEdit !== holding.started_at)
+  /** 닫을 때 확인을 받을지 — 이 모달에서 「적던 것」 전부를 본다. */
+  const closeDirty = dirty
+    || form.title.trim() !== '' || form.first_note.trim() !== '' || form.started_at !== todayKST()
+    || note.trim() !== '' || editingNote !== null
 
   // 등록 · 메모 · 레포트 · 해제를 한 줄기로. 날짜만 비교하므로(레포트는 방문일뿐 시각이 없다)
   // 같은 날짜는 KIND_RANK 로 순서를 고정해 조회할 때마다 뒤바뀌지 않게 한다.
@@ -216,7 +220,9 @@ export default function HoldingModal({
   }
 
   return (
-    <ModalOverlay onClose={onClose}>
+    // 닫기 확인은 **적던 것이 있을 때만** 받는다 — 제목·시작일 수정(dirty), 새 보류 등록 폼,
+    // 새 메모, 인라인 메모 수정 중 어느 하나라도 손댔으면 묻는다.
+    <ModalOverlay onClose={onClose} confirmClose dirty={closeDirty}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{

@@ -29,7 +29,8 @@ export default function DeviceImageModal({ device, isSaving, onClose, onSave }: 
   }
 
   return (
-    <ModalOverlay onClose={handleClose}>
+    // 고른 파일이 있을 때만 확인을 받는다(그냥 열어 본 경우는 바로 닫힌다).
+    <ModalOverlay onClose={handleClose} confirmClose dirty={file !== null}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
