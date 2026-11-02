@@ -1,29 +1,12 @@
-import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
-import { canManageEngineers } from '@/lib/permissions'
 import { todayKST } from '@/lib/date'
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 export async function POST(req: Request) {
   // 인증 확인
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  // 권한 확인 (계정 관리는 superadmin 전용)
-  const { data: caller } = await supabase
-    .from('engineers')
-    .select('permission_level')
-    .eq('email', user.email!)
-    .single()
-  if (!caller || !canManageEngineers(caller)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  // 인증·권한 — 관리자 전용(lib/apiCaller.ts 의 Need 가 그 판정을 한다).
+  const { error: authErr, caller, sb } = await loadCaller({ kind: 'superadmin' }, { tag: 'delete-user', method: 'POST' })
+  if (authErr) return authErr
 
   const body = await req.json()
   const { engineer_id, email, resigned_date } = body
@@ -46,13 +29,13 @@ export async function POST(req: Request) {
   }
 
   // 자기 자신은 퇴사 처리 불가
-  if (user.email === email.trim()) {
+  if (caller.email === email.trim()) {
     return NextResponse.json({ error: '자기 자신은 퇴사 처리할 수 없습니다.' }, { status: 400 })
   }
 
   // 대상 권한 확인 — superadmin 계정은 superadmin 만 퇴사 처리할 수 있다.
   // (계정 관리 자체가 superadmin 전용이라 지금은 항상 통과하지만, 권한이 넓어져도 안전하도록 남긴다)
-  const { data: target } = await supabase
+  const { data: target } = await sb
     .from('engineers')
     .select('permission_level')
     .eq('engineer_id', engineer_id)
@@ -73,7 +56,7 @@ export async function POST(req: Request) {
   //    - 반대로 team_id(teams.id FK)는 끊는다. 앱은 이 컬럼을 읽는 곳이 한 곳도 없고,
   //      값이 남아 있으면 그 팀을 지울 때 FK 위반(23503)으로 삭제가 막히기 때문이다.
   //      즉 표시·집계용 소속(teams)은 남기고, 참조 무결성만 끊는다.
-  const { error: updateError } = await supabaseAdmin
+  const { error: updateError } = await sb
     .from('engineers')
     .update({ resigned_date: resignedDate, email: null, team_id: null })
     .eq('engineer_id', engineer_id)
@@ -92,13 +75,13 @@ export async function POST(req: Request) {
     const PER_PAGE = 200
     let targetUser: { id: string } | null = null
     for (let page = 1; page <= 20 && !targetUser; page++) {
-      const { data: users, error: listErr } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: PER_PAGE })
+      const { data: users, error: listErr } = await sb.auth.admin.listUsers({ page, perPage: PER_PAGE })
       if (listErr) throw listErr
       targetUser = users.users.find(u => u.email === targetEmail) ?? null
       if (users.users.length < PER_PAGE) break
     }
     if (targetUser) {
-      const { error: delErr } = await supabaseAdmin.auth.admin.deleteUser(targetUser.id)
+      const { error: delErr } = await sb.auth.admin.deleteUser(targetUser.id)
       if (delErr) throw delErr
     }
     // 계정이 아예 없으면(이미 지워졌거나 만든 적 없음) 목적은 이미 달성된 상태라 경고하지 않는다.

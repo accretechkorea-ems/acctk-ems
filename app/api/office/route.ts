@@ -2,15 +2,8 @@
 //
 // offices 에는 SELECT 정책만 있고 쓰기 정책이 없다. 모든 쓰기는 이 라우트가 service role 로 한다.
 // 화면에서도 관리자에게만 카드를 보이지만, 그것만으로는 막을 수 없어 여기서 다시 판정한다.
-import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
-import { isSuperAdmin } from '@/lib/permissions'
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
@@ -31,18 +24,10 @@ function parseCoord(v: unknown, min: number, max: number, label: string): number
 }
 
 export async function POST(req: Request) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return bad('Unauthorized', 401)
-
-  const { data: caller, error: callerErr } = await supabase
-    .from('engineers')
-    .select('engineer_id, name, permission_level')
-    .eq('email', user.email!)
-    .single()
-  if (callerErr) console.error('[office] caller lookup failed', { email: user.email, error: callerErr })
-  // 사무실은 길찾기·동선·직원 소속이 모두 참조하는 기준 데이터라 superadmin 으로 제한한다.
-  if (!caller || !isSuperAdmin(caller)) return bad('Forbidden', 403)
+  // 사무실은 길찾기·동선·직원 소속이 모두 참조하는 기준 데이터라 관리자로 제한한다.
+  // 인증·권한 — 관리자 전용(lib/apiCaller.ts 의 Need 가 그 판정을 한다).
+  const { error: authErr, caller, sb } = await loadCaller({ kind: 'superadmin' }, { tag: 'office', method: 'POST' })
+  if (authErr) return authErr
 
   let body: Record<string, unknown>
   try {
@@ -80,11 +65,11 @@ export async function POST(req: Request) {
     if (!coords.ok) return bad(coords.error)
 
     // code 는 unique 라 DB 도 막지만, 사람이 읽을 문구로 돌려주려고 먼저 본다.
-    const { data: dup } = await supabaseAdmin.from('offices').select('office_id').eq('code', code).maybeSingle()
+    const { data: dup } = await sb.from('offices').select('office_id').eq('code', code).maybeSingle()
     if (dup) return bad(`코드 '${code}' 는 이미 쓰고 있습니다.`)
 
     const sortOrder = Number(body.sort_order)
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await sb
       .from('offices')
       .insert({
         code, label, address,
@@ -106,7 +91,7 @@ export async function POST(req: Request) {
     const officeId = Number(body.officeId)
     if (!Number.isInteger(officeId) || officeId <= 0) return bad('사무실을 지정해주세요.')
 
-    const { data: office } = await supabaseAdmin
+    const { data: office } = await sb
       .from('offices').select('office_id, code').eq('office_id', officeId).maybeSingle()
     if (!office) return bad('사무실을 찾을 수 없습니다.', 404)
 
@@ -121,7 +106,7 @@ export async function POST(req: Request) {
     if (!coords.ok) return bad(coords.error)
 
     const sortOrder = Number(body.sort_order)
-    const { error } = await supabaseAdmin
+    const { error } = await sb
       .from('offices')
       .update({
         label, address,
@@ -143,11 +128,11 @@ export async function POST(req: Request) {
     const officeId = Number(body.officeId)
     if (!Number.isInteger(officeId) || officeId <= 0) return bad('사무실을 지정해주세요.')
 
-    const { data: office } = await supabaseAdmin
+    const { data: office } = await sb
       .from('offices').select('office_id, code, label').eq('office_id', officeId).maybeSingle()
     if (!office) return bad('사무실을 찾을 수 없습니다.', 404)
 
-    const { data: members, error: memErr } = await supabaseAdmin
+    const { data: members, error: memErr } = await sb
       .from('engineers')
       .select('engineer_id')
       .eq('office', office.code)
@@ -161,7 +146,7 @@ export async function POST(req: Request) {
       return bad(`${office.label} 사무실에 소속된 재직 직원이 ${count}명 있습니다. 먼저 다른 사무실로 옮겨주세요.`)
     }
 
-    const { error } = await supabaseAdmin
+    const { error } = await sb
       .from('offices')
       .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq('office_id', officeId)
@@ -177,7 +162,7 @@ export async function POST(req: Request) {
   if (action === 'activate') {
     const officeId = Number(body.officeId)
     if (!Number.isInteger(officeId) || officeId <= 0) return bad('사무실을 지정해주세요.')
-    const { error } = await supabaseAdmin
+    const { error } = await sb
       .from('offices')
       .update({ is_active: true, updated_at: new Date().toISOString() })
       .eq('office_id', officeId)

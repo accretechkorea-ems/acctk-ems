@@ -1,12 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
-import { canManageEngineers } from '@/lib/permissions'
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 /**
  * 직원 한 명의 「실적 집계」 개인 설정만 바꾼다.
@@ -18,18 +11,9 @@ const supabaseAdmin = createClient(
  * in_sales_stats: true = 포함 · false = 제외 · null = 팀 설정을 따른다.
  */
 export async function POST(req: Request) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: caller } = await supabase
-    .from('engineers')
-    .select('permission_level, engineer_id')
-    .eq('email', user.email!)
-    .single()
-  if (!caller || !canManageEngineers(caller)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  // 인증·권한 — 관리자 전용(lib/apiCaller.ts 의 Need 가 그 판정을 한다).
+  const { error: authErr, sb } = await loadCaller({ kind: 'superadmin' }, { tag: 'engineer-sales-scope', method: 'POST' })
+  if (authErr) return authErr
 
   const body = await req.json()
   const { engineer_id, in_sales_stats } = body
@@ -40,7 +24,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '집계 설정 값이 올바르지 않습니다.' }, { status: 400 })
   }
 
-  const { error } = await supabaseAdmin
+  const { error } = await sb
     .from('engineers')
     .update({ in_sales_stats })
     .eq('engineer_id', Number(engineer_id))

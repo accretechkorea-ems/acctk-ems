@@ -5,9 +5,8 @@
 //   · 스토리지 업로드도 서버가 한다(파일명을 서버가 정해 경로 조작·덮어쓰기를 막는다).
 //   · 삭제할 때 스토리지 이미지까지 함께 지워야 해서, 두 작업을 한곳에서 묶는다.
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
-import { isSuperAdmin } from '@/lib/permissions'
 import { parseDataUrlImage } from '@/lib/imageUpload'
 import {
   NOTICE_BUCKET, NOTICE_MAX_IMAGES, NOTICE_IMAGE_MAX_BYTES,
@@ -87,16 +86,9 @@ async function removeImages(urls: string[]): Promise<void> {
 }
 
 export async function POST(req: Request) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: caller } = await supabase
-    .from('engineers')
-    .select('engineer_id, permission_level')
-    .eq('email', user.email!)
-    .single()
-  if (!caller || !isSuperAdmin(caller)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // 인증·권한 — 관리자 전용(lib/apiCaller.ts 의 Need 가 그 판정을 한다).
+  const { error: authErr, caller } = await loadCaller({ kind: 'superadmin' }, { tag: 'notice', method: 'POST' })
+  if (authErr) return authErr
 
   const body = await req.json().catch(() => ({}))
   const action: string = body?.action ?? ''
@@ -116,7 +108,7 @@ export async function POST(req: Request) {
       console.error('[notice] delete failed', { noticeId, error })
       return bad('삭제하지 못했습니다.', 500)
     }
-    console.log('[notice] delete', { noticeId, by: user.email })
+    console.log('[notice] delete', { noticeId, by: caller.email })
     return NextResponse.json({ success: true })
   }
 
@@ -155,7 +147,7 @@ export async function POST(req: Request) {
     if (up.urls.length > 0) {
       await supabaseAdmin.from('notices').update({ image_urls: up.urls }).eq('notice_id', created.notice_id)
     }
-    console.log('[notice] create', { noticeId: created.notice_id, images: up.urls.length, by: user.email })
+    console.log('[notice] create', { noticeId: created.notice_id, images: up.urls.length, by: caller.email })
     return NextResponse.json({ success: true, noticeId: created.notice_id })
   }
 
@@ -181,7 +173,7 @@ export async function POST(req: Request) {
     // 목록에서 빠진 옛 이미지는 스토리지에서도 지운다.
     const before = ((row.image_urls ?? []) as string[])
     await removeImages(before.filter(u => !up.urls.includes(u)))
-    console.log('[notice] update', { noticeId, images: up.urls.length, by: user.email })
+    console.log('[notice] update', { noticeId, images: up.urls.length, by: caller.email })
     return NextResponse.json({ success: true })
   }
 

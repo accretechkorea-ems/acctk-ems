@@ -6,9 +6,8 @@
 //     지우기 직전에 서버가 다시 세어 0 이 아니면 거부한다.
 //   · service role 로 세야 RLS·필터에 가려 실제보다 적게 세는 일이 없다.
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
-import { isSuperAdmin } from '@/lib/permissions'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,17 +28,10 @@ async function childCount(parentId: number): Promise<number> {
 }
 
 export async function POST(req: Request) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: caller } = await supabase
-    .from('engineers')
-    .select('engineer_id, permission_level')
-    .eq('email', user.email!)
-    .single()
   // 소속회사는 여러 업체가 함께 물려 있는 구조라 superadmin 으로 제한한다(팀·직원 관리와 같은 기준).
-  if (!caller || !isSuperAdmin(caller)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // 인증·권한 — 관리자 전용(lib/apiCaller.ts 의 Need 가 그 판정을 한다).
+  const { error: authErr, caller } = await loadCaller({ kind: 'superadmin' }, { tag: 'parent-company', method: 'POST' })
+  if (authErr) return authErr
 
   const body = await req.json().catch(() => ({}))
   const action: string = body?.action ?? ''
@@ -76,7 +68,7 @@ export async function POST(req: Request) {
       console.error('[parent-company] rename failed', { parentId, error })
       return bad('이름을 수정하지 못했습니다.', 500)
     }
-    console.log('[parent-company] rename', { parentId, from: target.company_name, to: name, by: user.email })
+    console.log('[parent-company] rename', { parentId, from: target.company_name, to: name, by: caller.email })
     return NextResponse.json({ success: true })
   }
 
@@ -98,7 +90,7 @@ export async function POST(req: Request) {
       console.error('[parent-company] delete failed', { parentId, error })
       return bad('삭제하지 못했습니다.', 500)
     }
-    console.log('[parent-company] delete', { parentId, name: target.company_name, by: user.email })
+    console.log('[parent-company] delete', { parentId, name: target.company_name, by: caller.email })
     return NextResponse.json({ success: true })
   }
 

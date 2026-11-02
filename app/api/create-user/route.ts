@@ -1,29 +1,12 @@
-import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
-import { canManageEngineers } from '@/lib/permissions'
 import { INITIALS_TAKEN_MESSAGE, isInitialsTaken, isInitialsUniqueViolation, normalizeInitials } from '@/lib/initials'
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 export async function POST(req: Request) {
   // 인증 확인
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  // 권한 확인 (계정 관리는 superadmin 전용)
-  const { data: caller } = await supabase
-    .from('engineers')
-    .select('permission_level')
-    .eq('email', user.email!)
-    .single()
-  if (!caller || !canManageEngineers(caller)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  // 인증·권한 — 관리자 전용(lib/apiCaller.ts 의 Need 가 그 판정을 한다).
+  const { error: authErr, sb } = await loadCaller({ kind: 'superadmin' }, { tag: 'create-user', method: 'POST' })
+  if (authErr) return authErr
 
   const body = await req.json()
   const { email, password, name, position, teams, initials, office, in_sales_stats } = body
@@ -41,7 +24,7 @@ export async function POST(req: Request) {
   // 로그인 계정만 덩그러니 남는다. 최종 판정은 아래 upsert 의 23505 처리가 한다.
   const wantInitials = normalizeInitials(initials)
   if (wantInitials) {
-    const { data: peers, error: peerErr } = await supabaseAdmin
+    const { data: peers, error: peerErr } = await sb
       .from('engineers')
       .select('engineer_id, initials, resigned_date')
       .eq('initials', wantInitials)
@@ -52,7 +35,7 @@ export async function POST(req: Request) {
   }
 
   // 1. Auth 계정 생성
-  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+  const { data: authData, error: authError } = await sb.auth.admin.createUser({
     email: email.trim(),
     password,
     email_confirm: true,
@@ -65,7 +48,7 @@ export async function POST(req: Request) {
   const scope = typeof in_sales_stats === 'boolean' ? in_sales_stats : null
 
   // 이미 engineers 테이블에 있으면 update, 없으면 insert
-  const { error: dbError } = await supabaseAdmin.from('engineers').upsert({
+  const { error: dbError } = await sb.from('engineers').upsert({
     name: name.trim(),
     position: position?.trim() || null,
     teams: teams?.trim() || null,

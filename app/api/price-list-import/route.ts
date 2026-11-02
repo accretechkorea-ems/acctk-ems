@@ -22,9 +22,8 @@
 //   중간에 실패하면 아무것도 바뀌지 않는다. 이 함수는 service_role 에만 실행 권한이 있다.
 
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
-import { isSuperAdmin } from '@/lib/permissions'
 import { PARSE_ROW_MAX } from '@/lib/priceListParse'
 
 const supabaseAdmin = createClient(
@@ -177,18 +176,10 @@ async function loadCurrent(sheetName: string): Promise<Map<string, CleanRow>> {
 }
 
 export async function POST(req: Request) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return bad('Unauthorized', 401)
-
-  const { data: caller, error: callerErr } = await supabase
-    .from('engineers')
-    .select('engineer_id, name, permission_level')
-    .eq('email', user.email!)
-    .single()
-  if (callerErr) console.error('[price-list-import] caller lookup failed', { email: user.email, error: callerErr })
   // 가격표는 모든 견적의 원가가 기대는 기준 데이터라 superadmin 으로 제한한다.
-  if (!caller || !isSuperAdmin(caller)) return bad('Forbidden', 403)
+  // 인증·권한 — 관리자 전용(lib/apiCaller.ts 의 Need 가 그 판정을 한다).
+  const { error: authErr, caller } = await loadCaller({ kind: 'superadmin' }, { tag: 'price-list-import', method: 'POST' })
+  if (authErr) return authErr
 
   let body: Record<string, unknown>
   try {

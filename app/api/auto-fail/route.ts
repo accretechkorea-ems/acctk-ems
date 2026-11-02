@@ -13,9 +13,8 @@
 // '견적중' 건만 읽으므로 양이 적다(전체 견적의 일부).
 
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
-import { canManageEngineers } from '@/lib/permissions'
 import { todayKST } from '@/lib/date'
 import { AUTO_FAIL_REASON, FAIL_STATUS, PENDING_STATUS, isExpired } from '@/lib/quoteStatus'
 
@@ -59,14 +58,10 @@ async function sweep(): Promise<SweepResult> {
 
 // ── GET: Vercel Cron ────────────────────────────────────────────────
 export async function GET(req: Request) {
-  const secret = process.env.CRON_SECRET
-  if (!secret) {
-    console.error('[auto-fail] CRON_SECRET 이 없어 Cron 호출을 받지 않는다')
-    return NextResponse.json({ error: 'Not configured' }, { status: 503 })
-  }
-  if (req.headers.get('authorization') !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  // Cron 호출 — 비밀값만 본다(사람이 아니다). 설정이 없으면 503, 틀리면 401 로
+  // 종전과 같이 답한다(lib/apiCaller.ts 의 Need 'cron').
+  const { error: authErr } = await loadCaller({ kind: 'cron' }, { tag: 'auto-fail', req })
+  if (authErr) return authErr
 
   try {
     const r = await sweep()
@@ -81,18 +76,9 @@ export async function GET(req: Request) {
 
 // ── POST: 화면에서 부르는 기존 경로 ─────────────────────────────────
 export async function POST() {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: caller } = await supabase
-    .from('engineers')
-    .select('permission_level')
-    .eq('email', user.email!)
-    .single()
-  if (!caller || !canManageEngineers(caller)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  // 인증·권한 — 관리자 전용(lib/apiCaller.ts 의 Need 가 그 판정을 한다).
+  const { error: authErr } = await loadCaller({ kind: 'superadmin' }, { tag: 'auto-fail', method: 'POST' })
+  if (authErr) return authErr
 
   try {
     const r = await sweep()

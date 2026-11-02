@@ -1,32 +1,16 @@
-import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
-import { canManageEngineers } from '@/lib/permissions'
 import { INITIALS_TAKEN_MESSAGE, isInitialsTaken, isInitialsUniqueViolation, normalizeInitials } from '@/lib/initials'
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 const ALLOWED_POSITIONS = ['사장', '총괄', '수석', '책임', '선임', '사원']
 // '팀장'(manager) 은 폐지했다. 새로 부여할 수 없다.
 const ALLOWED_PERMISSIONS = ['superadmin', 'member']
 
 export async function POST(req: Request) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  // 호출자 권한 확인
-  const { data: caller } = await supabase
-    .from('engineers')
-    .select('permission_level, engineer_id')
-    .eq('email', user.email!)
-    .single()
-  if (!caller || !canManageEngineers(caller)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  // 인증·권한 — 관리자 전용(lib/apiCaller.ts 의 Need 가 그 판정을 한다).
+  // 「대상이 관리자면」·「권한 칸은 관리자만」 같은 세부 판정은 아래에서 그대로 본다.
+  const { error: authErr, caller, sb } = await loadCaller({ kind: 'superadmin' }, { tag: 'update-engineer', method: 'POST' })
+  if (authErr) return authErr
 
   const body = await req.json()
   const { engineer_id, name, position, teams, email, initials, permission_level, resigned_date, office, in_sales_stats } = body
@@ -38,7 +22,7 @@ export async function POST(req: Request) {
   // 대상 가드 — 본인 정보 수정은 허용. 타인이 superadmin 이면 caller 도 superadmin 이어야 한다.
   // delete-user 와 동일한 판정. 대상 레벨은 RLS 에 막히지 않도록 service role 로 조회한다.
   if (Number(engineer_id) !== caller.engineer_id) {
-    const { data: target } = await supabaseAdmin
+    const { data: target } = await sb
       .from('engineers')
       .select('permission_level')
       .eq('engineer_id', Number(engineer_id))
@@ -97,7 +81,7 @@ export async function POST(req: Request) {
   // 퇴사자는 세지 않는다. 최종 판정은 아래 update 의 23505 처리가 한다.
   const wantInitials = normalizeInitials(initials)
   if (wantInitials) {
-    const { data: peers, error: peerErr } = await supabaseAdmin
+    const { data: peers, error: peerErr } = await sb
       .from('engineers')
       .select('engineer_id, initials, resigned_date')
       .eq('initials', wantInitials)
@@ -107,7 +91,7 @@ export async function POST(req: Request) {
     }
   }
 
-  const { error } = await supabaseAdmin
+  const { error } = await sb
     .from('engineers')
     .update(updateData)
     .eq('engineer_id', Number(engineer_id))

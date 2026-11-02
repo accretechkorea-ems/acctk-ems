@@ -5,22 +5,15 @@
 // 그래서 "캐시만 버려 달라" 는 신호를 받을 자리가 따로 필요하다.
 //
 // 읽는 것도 쓰는 것도 없다 — 서버 메모리의 캐시를 비우는 것이 전부다.
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
-import { isSuperAdmin } from '@/lib/permissions'
 import { invalidateTeamPerms } from '@/lib/teamPermsServer'
 
 export async function POST() {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: caller } = await supabase
-    .from('engineers')
-    .select('permission_level')
-    .eq('email', user.email!)
-    .single()
-  if (!caller || !isSuperAdmin(caller)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // 인증·권한 — 관리자 전용. **이 라우트는 DB 를 읽지도 쓰지도 않는다**(서버 메모리의
+  // 팀 권한 캐시만 비운다). 그래서 service role 클라이언트(sb)를 받지 않는다.
+  const { error: authErr } = await loadCaller({ kind: 'superadmin' }, { tag: 'team-perms', method: 'POST' })
+  if (authErr) return authErr
 
   invalidateTeamPerms()
   return NextResponse.json({ ok: true })

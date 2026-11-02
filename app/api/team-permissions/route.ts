@@ -13,9 +13,8 @@
 // service role 로 쓴다 — 팀 권한은 관리자만 바꾸며, 판정 자료 자체가 RLS 에 막히면 안 된다.
 
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
-import { isSuperAdmin } from '@/lib/permissions'
 import { invalidateTeamPerms } from '@/lib/teamPermsServer'
 import { MENU_BY_KEY, deriveTeamColumns } from '@/lib/menuPerms'
 
@@ -36,17 +35,10 @@ async function replaceKeys(teamId: number, next: string[]): Promise<string | nul
 }
 
 export async function POST(req: Request) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   // 팀 권한을 바꾸는 일은 superadmin 만 한다(팀 플래그와 무관한 계정 등급 판정이다).
-  const { data: caller } = await supabase
-    .from('engineers')
-    .select('permission_level')
-    .eq('email', user.email!)
-    .single()
-  if (!caller || !isSuperAdmin(caller)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // 인증·권한 — 관리자 전용(lib/apiCaller.ts 의 Need 가 그 판정을 한다).
+  const { error: authErr } = await loadCaller({ kind: 'superadmin' }, { tag: 'team-permissions', method: 'POST' })
+  if (authErr) return authErr
 
   const body = await req.json().catch(() => null) as { teamId?: unknown; permKeys?: unknown } | null
   const teamId = Number(body?.teamId)
