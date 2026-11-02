@@ -383,7 +383,11 @@ export function useQuoteSubmit({
         quantity: r.quantity,
         // 직접 넣은 원가가 사는 칸. 국내조달품은 이 칸에 **원화** 원가가 들어간다
         // (칸을 새로 만들지 않는다 — app/quote/calc.ts 의 ⚠ 참고).
-        unit_price_jpy: (r.row_kind === 'manual_jpy' || r.row_kind === 'domestic') ? r.manual_cost_jpy : (r.selectedItem?.cost_jpy ?? null),
+        // 가격표 품목은 **줄에서 고친 값이 있으면 그것**을 저장한다(없으면 가격표 값).
+        // 이익 분석표 엑셀·결재 검토표가 이 칸을 읽으므로 고친 값이 그대로 따라간다.
+        unit_price_jpy: (r.row_kind === 'manual_jpy' || r.row_kind === 'domestic')
+          ? r.manual_cost_jpy
+          : (r.cost_jpy_override ?? r.selectedItem?.cost_jpy ?? null),
         unit_price_krw: r.unit_price,
         supply_amount: r.supply_price,
         tax_amount: r.tax,

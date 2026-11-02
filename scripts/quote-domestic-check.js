@@ -32,7 +32,9 @@ Module._resolveFilename = function (req, ...rest) {
 }
 
 const { domesticRole, showsOnQuote, isBillableRow } = load(path.join(ROOT, 'lib/quoteDomestic.ts'))
-const { calcRow, calcTotals, createDomesticRow } = load(path.join(ROOT, 'app/quote/calc.ts'))
+const {
+  calcRow, calcTotals, createDomesticRow, createRow, costJpyOf, overrideCostJpy,
+} = load(path.join(ROOT, 'app/quote/calc.ts'))
 const { profitBreakdown } = load(path.join(ROOT, 'lib/quoteProfit.ts'))
 
 let fails = 0
@@ -142,5 +144,45 @@ console.log('\n── 판관비·영업이익은 매출 기준이라 함께 움�
   eq('영업이익률 20%', b.operatingRate, 20)
 }
 
+console.log('\n── 가격표 구입가를 줄에서 고쳤을 때 ──')
+// 가격표 값은 selectedItem 에 그대로 남고, 고친 값이 있으면 그것으로 계산한다.
+// (화면은 그 차이를 「가격표 ¥…」로 보여 주고 되돌릴 수 있게 한다 — app/quote/QuoteItemRow.tsx)
+const pl = (over = {}) => ({
+  ...createRow(), row_kind: 'price_list',
+  selectedItem: { id: 1, sheet_name: 'CMM', item_code: 'K-1', variant: '', item_name_jp: null, model_jp: null,
+    item_name_en: null, model_en: null, price_jpy: 300000, cost_jpy: 204200, delivery_time: null, stock_quantity: null },
+  ...over,
+})
+eq('고친 값이 없으면 가격표 값', costJpyOf(pl()), 204200)
+eq('고친 값이 있으면 그 값', costJpyOf(pl({ cost_jpy_override: 180000 })), 180000)
+eq('**0 도 고친 값이다**(「구입가 0」을 적은 것)', costJpyOf(pl({ cost_jpy_override: 0 })), 0)
+eq('품목이 없고 고친 값도 없으면 0', costJpyOf({ ...createRow(), selectedItem: null }), 0)
+eq('가격표에 구입가가 없어도 고친 값으로 계산된다',
+  costJpyOf(pl({ selectedItem: { ...pl().selectedItem, cost_jpy: null }, cost_jpy_override: 50000 })), 50000)
+{
+  // 이익률 모드 — 구입가 ¥204,200 × 환율 9.5 × 관세 1.13 이 원가다. 고치면 그 식이 따라 바뀐다.
+  const before = calcRow(pl({ profit_rate: 40, quantity: 1 }), 9.5)
+  const after = calcRow(pl({ profit_rate: 40, quantity: 1, cost_jpy_override: 180000 }), 9.5)
+  eq('고치면 원가가 따라 바뀐다', [before.product_price, after.product_price],
+    [Math.round(204200 * 9.5 * 1.13), Math.round(180000 * 9.5 * 1.13)])
+  eq('단가도 다시 계산된다(1,000원 올림)', [before.unit_price > after.unit_price, after.unit_price % 1000], [true, 0])
+  eq('저장에 쓰는 구입가 칸도 고친 값이다', [before.cost_price_jpy, after.cost_price_jpy], [204200, 180000])
+}
+{
+  // 판매가 모드 — 단가는 사람이 적은 그대로, 원가만 고친 구입가로 바뀐다.
+  const r = calcRow(pl({ price_mode: 'price', manual_unit_price: 3000000, quantity: 2, cost_jpy_override: 100000 }), 9.5)
+  eq('판매가 모드에서도 원가가 고친 값을 쓴다', [r.unit_price, r.supply_price, r.product_price],
+    [3000000, 6000000, Math.round(100000 * 9.5 * 1.13 * 2)])
+}
+
+console.log('\n── 저장값 → 고친 값 되살리기(다시쓰기) ──')
+eq('저장값이 가격표와 같으면 고친 적이 없다', overrideCostJpy(204200, 204200), null)
+eq('다르면 고친 값으로 되살린다', overrideCostJpy(180000, 204200), 180000)
+eq('저장값이 비었으면 가격표를 따른다',
+  [overrideCostJpy(null, 204200), overrideCostJpy(undefined, 204200), overrideCostJpy('', 204200)], [null, null, null])
+eq('가격표 품목이 사라졌으면 저장값을 그대로 쓴다', overrideCostJpy(180000, null), 180000)
+eq('문자열 숫자도 받는다(PostgREST)', overrideCostJpy('180000', 204200), 180000)
+eq('숫자가 아니면 가격표를 따른다', overrideCostJpy('없음', 204200), null)
+eq('0 이 저장돼 있으면 고친 값이다', overrideCostJpy(0, 204200), 0)
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
 process.exit(fails === 0 ? 0 : 1)

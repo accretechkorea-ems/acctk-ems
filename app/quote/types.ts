@@ -88,6 +88,20 @@ export type QuoteRow = {
   row_kind: RowKind
   // 수동입력 품목 전용 — 구입가 JPY(가격표의 cost_jpy 자리). 다른 종류는 0.
   manual_cost_jpy: number
+  /**
+   * **가격표 품목의 구입가(JPY)를 사람이 고친 값.** null 이 기본이고 그 뜻은
+   * 「가격표 값(selectedItem.cost_jpy)을 쓴다」다 — price_list 줄에만 쓴다
+   * (수동입력은 manual_cost_jpy, 국내조달품은 그 칸이 원화 원가다).
+   *
+   * 왜 가격표 값을 덮어쓰지 않고 따로 두는가 — 되돌리려면 **원래 값이 남아 있어야** 한다.
+   * selectedItem 은 가격표 그대로 두고, 이 칸이 있을 때만 그 값을 쓴다(app/quote/calc.ts 의
+   * costJpyOf). 그래서 칸 옆에 「가격표 ¥…」를 띄우고 되돌릴 수 있다.
+   *
+   * 저장은 quote_items.unit_price_jpy 다 — 가격표 품목도 그 칸에 **고친 값**이 들어간다
+   * (hooks/quote/useQuoteSubmit.tsx). 다시쓰기는 저장값과 지금 가격표 값이 다르면 이 칸을
+   * 되살린다(hooks/quote/useQuotePrefill.ts). 임시저장은 줄을 통째로 담아 그대로 남는다.
+   */
+  cost_jpy_override: number | null
   // 수동입력 품목 전용 — **모델**(가격표의 model_jp 자리). 다른 종류는 빈 글자.
   // 20 견적서는 모델 열이 따로 있고, 가격표 품목은 그 열을 price_list.model_jp 로 채운다.
   // 직접 적은 줄은 채울 값이 없어 칸이 비어 있었다 — 그 자리를 사람이 적는다.

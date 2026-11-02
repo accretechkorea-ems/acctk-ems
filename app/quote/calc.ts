@@ -13,6 +13,30 @@ import type { QuoteRow, ExpenseRow } from './types'
 const realizedRate = (supplyPrice: number, profit: number) =>
   supplyPrice > 0 ? (profit / supplyPrice) * 100 : 0
 
+/**
+ * 가격표 품목의 구입가(JPY) — **고친 값이 있으면 그것, 없으면 가격표 값.**
+ *
+ * 0 은 고친 값으로 본다(「구입가 0」을 적은 것이다). 칸을 비우면 화면이 null 을 넣어
+ * 가격표 값으로 돌아간다(app/quote/QuoteItemRow.tsx).
+ */
+export const costJpyOf = (row: QuoteRow): number =>
+  row.cost_jpy_override ?? row.selectedItem?.cost_jpy ?? 0
+
+/**
+ * 저장된 구입가 → 「고친 값」인가 — 다시쓰기·복원이 쓴다.
+ *
+ * 저장값이 **지금 가격표 값과 다르면** 사람이 고친 것이다. 같으면 null 을 돌려 가격표를
+ * 따르게 둔다(그 뒤 가격표가 바뀌면 새 값으로 계산되는 쪽이 맞다 — 고친 적이 없는 줄이다).
+ * 가격표 품목이 사라져 비교할 값이 없으면 저장값을 그대로 쓴다(원가를 잃지 않는다).
+ */
+export function overrideCostJpy(saved: unknown, listCost: number | null): number | null {
+  if (saved === null || saved === undefined || saved === '') return null
+  const v = Number(saved)
+  if (!Number.isFinite(v)) return null
+  if (listCost !== null && v === listCost) return null
+  return v
+}
+
 export function calcRow(row: QuoteRow, rate: number): QuoteRow {
   const exRate = rate || row.exchange_rate
   // 서비스비 — 공급가는 직접 입력, 원가는 부대비용 내역의 합. 수량은 1 고정.
@@ -101,7 +125,7 @@ export function calcRow(row: QuoteRow, rate: number): QuoteRow {
   // 원가를 계산할 수 없어도(품목 미선택·구입가 없음·환율 없음) 단가만으로 성립하므로
   // 아래 이익률 모드 분기보다 앞에서 갈라진다. 원가가 0 이면 이익률은 100% 가 된다.
   if (row.row_kind === 'price_list' && row.price_mode === 'price') {
-    const costJpy = row.selectedItem?.cost_jpy ?? 0
+    const costJpy = costJpyOf(row)
     // 사용자가 친 값을 그대로 쓴다 — 여기서 올리면 발주서 금액을 정확히 맞출 수 없다.
     const unitPrice = row.manual_unit_price
     const supplyPrice = unitPrice * row.quantity
@@ -118,8 +142,8 @@ export function calcRow(row: QuoteRow, rate: number): QuoteRow {
       realized_profit_rate: realizedRate(supplyPrice, profit),
     }
   }
-  if (row.row_kind === 'price_list' && row.selectedItem?.cost_jpy && exRate) {
-    const costJpy = row.selectedItem.cost_jpy
+  if (row.row_kind === 'price_list' && costJpyOf(row) && exRate) {
+    const costJpy = costJpyOf(row)
     const rawUnit = (costJpy * exRate * row.tariff_rate) / (1 - row.profit_rate / 100)
     const unitPrice = Math.ceil(rawUnit / 1000) * 1000
     const supplyPrice = unitPrice * row.quantity
@@ -173,6 +197,8 @@ export function createRow(category?: string | null, defaults?: RowDefaults): Quo
     unit_price: 0, supply_price: 0, tax: 0,
     cost_price_jpy: 0, product_price: 0, profit: 0,
     partCode: '', row_kind: 'price_list', manual_cost_jpy: 0, manual_model: '', price_mode: 'rate', expenses: [],
+    // 가격표 구입가는 고치지 않은 상태로 시작한다(= 가격표 값을 쓴다).
+    cost_jpy_override: null,
     // 줄별 분류 — 기본은 비움(= 견적 분류를 따른다). 「분류 나누기」로 바꾼 줄만 값이 들어간다.
     category: null,
     // 장비 구성 묶음 — 기본은 비움. 장비 양식에서 고르거나 7단계 구성 모달이 채운다.

@@ -136,7 +136,8 @@ export function useQuoteRows({
       // 품목 선택 시점에 품명 칸을 1회 채운다(이후 itemText 는 순수 사용자 입력).
       // 무엇을 채우는지는 가격표(20/80)에 따라 다르다 — lib/priceItemText.ts 가 정한다.
       const itemText = itemTextOnSelect(r.itemText, !!r.selectedItem, item)
-      return calcRow({ ...r, selectedItem: item, itemText, partCode: item.item_code }, exchangeRate)
+      // 구입가를 고쳐 둔 줄에 **다른 품목**을 고르면 그 값은 버린다(앞 품목의 값이다).
+      return calcRow({ ...r, selectedItem: item, itemText, partCode: item.item_code, cost_jpy_override: null }, exchangeRate)
     }))
     setSearchOpen(prev => ({ ...prev, [rowId]: false }))
     setSearchQuery(prev => ({ ...prev, [rowId]: item.item_code }))
@@ -160,7 +161,7 @@ export function useQuoteRows({
 
   const clearItem = useCallback((rowId: string) => {
     // 품목 해제(× 버튼) — 종류는 price_list 그대로 두고 선택만 비운다.
-    setRows(prev => prev.map(r => r.id !== rowId ? r : calcRow({ ...r, selectedItem: null, manual_unit_price: 0, partCode: '' }, exchangeRate)))
+    setRows(prev => prev.map(r => r.id !== rowId ? r : calcRow({ ...r, selectedItem: null, manual_unit_price: 0, partCode: '', cost_jpy_override: null }, exchangeRate)))
     setSearchQuery(prev => ({ ...prev, [rowId]: '' }))
     setSearchResults(prev => ({ ...prev, [rowId]: [] }))
   }, [exchangeRate])

@@ -101,7 +101,15 @@ export function loadDraft(engineerId: number): QuoteDraft | null {
     // 뒤에 더한 줄 칸은 **없으면 기본값으로 채운다.** 버전을 올리면 작성 중이던 옛 초안이
     // 통째로 버려지고, 그대로 두면 undefined 가 입력칸에 들어가 React 가 제어를 놓친다.
     //   manual_model — 수동입력 줄의 모델(2026-10-21 추가).
-    return { ...d, rows: d.rows.map(r => ({ ...r, manual_model: typeof r.manual_model === 'string' ? r.manual_model : '' })) }
+    return {
+      ...d,
+      rows: d.rows.map(r => ({
+        ...r,
+        manual_model: typeof r.manual_model === 'string' ? r.manual_model : '',
+        // 2026-11-02 에 더한 칸 — 옛 초안에는 없다. 없으면 「가격표 값을 쓴다」(null).
+        cost_jpy_override: typeof r.cost_jpy_override === 'number' ? r.cost_jpy_override : null,
+      })),
+    }
   } catch { clearDraft(engineerId); return null }
 }
 

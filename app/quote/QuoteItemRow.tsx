@@ -10,6 +10,7 @@ import type { RecentSaleLookup } from '@/hooks/quote/useRecentSales'
 import { canSplitRowKind } from '@/lib/quoteCategories'
 import { GROUP_KINDS, GROUP_LABELS, canGroupRowKind, isGeneral20Form } from '@/lib/quoteForms'
 import { numKR } from './format'
+import { costJpyOf } from './calc'
 import { DISCOUNT_LABELS } from './types'
 import { inp } from './styles'
 import ExpenseSection from './ExpenseSection'
@@ -79,6 +80,13 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
   const isDiscount = row.row_kind === 'discount'
   /** 20 견적서인가 — 수동 입력 칸 순서(품번 → 품명 → 모델)가 그 양식의 열 순서를 따른다. */
   const is20 = isGeneral20Form(formKind)
+  // 가격표 품목의 구입가(JPY) — 줄에서 직접 고칠 수 있다(2026-11-02).
+  //   listCostJpy — 가격표에 적힌 값(정본). selectedItem 은 손대지 않으므로 늘 남아 있다.
+  //   shownCostJpy— 지금 계산에 쓰는 값(고친 값이 있으면 그것).
+  //   costEdited  — 둘이 다른가 → 칸 옆에 「가격표 ¥…」와 되돌리기를 낸다.
+  const listCostJpy = row.selectedItem?.cost_jpy ?? null
+  const shownCostJpy = costJpyOf(row)
+  const costEdited = row.cost_jpy_override !== null && row.cost_jpy_override !== listCostJpy
   /**
    * 모델 직접 입력 — 수동입력 품목만(국내조달품은 견적서에 모델이 나가지 않는다).
    * 20 견적서의 모델 열과 80 견적서 품명의 「(모델)」이 이 값을 읽는다.
@@ -134,7 +142,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
       <>최근 판매 <b style={{ color: '#234ea2' }}>₩{numKR(mySale.unitPrice)}</b>
         <span style={{ color: '#9ca3af' }}> · {mySale.quoteDate} {mySale.quoteNumber}</span></>)
   }
-  if (row.row_kind === 'manual_jpy' && row.product_price > 0) {
+  if ((row.row_kind === 'manual_jpy' || row.row_kind === 'price_list') && row.product_price > 0) {
     summaryLines.push(<>구입가 ¥{numKR(row.cost_price_jpy)} × 환율 {row.exchange_rate.toFixed(2)} × 관세 ×{row.tariff_rate.toFixed(2)} = 원가 <b>₩{numKR(row.product_price)}</b></>)
   }
   if (isDiscount && row.supply_price < 0) {
@@ -263,6 +271,45 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
         </div>
         </div>
       </div>
+      )}
+
+      {/* 가격표 품목의 구입가(JPY) — **직접 고칠 수 있다.**
+          가격표 값은 selectedItem 에 그대로 남아 있어 언제든 되돌릴 수 있다(cost_jpy_override).
+          칸을 비우면 가격표 값으로 돌아간다(null). 고치면 원가·단가·이익률이 함께 다시 계산된다. */}
+      {row.row_kind === 'price_list' && row.selectedItem && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', width: 44, flexShrink: 0 }}>구입가</label>
+          <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+            <input className="q-input" type="number" value={shownCostJpy || ''}
+              onChange={e => {
+                const v = e.target.value.trim()
+                // 빈 칸은 「고치지 않음」으로 되돌린다 — 0 을 적으면 구입가 0 이다.
+                updateRow(row.id, 'cost_jpy_override', v === '' ? null : (parseInt(v) || 0))
+              }}
+              placeholder="가격표 구입가"
+              style={{ ...inp, width: '100%', textAlign: 'right', fontSize: 12, paddingRight: 28 }} />
+            <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#9ca3af', pointerEvents: 'none' }}>¥</span>
+          </div>
+          {/* 고친 줄에만 — 가격표 값이 무엇이었는지와 되돌리기. */}
+          {costEdited && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+              <span title={`가격표 구입가 ¥${listCostJpy == null ? '-' : numKR(listCostJpy)}`}
+                style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }}>
+                가격표 ¥{listCostJpy == null ? '-' : numKR(listCostJpy)}
+              </span>
+              <button onClick={() => updateRow(row.id, 'cost_jpy_override', null)}
+                title="가격표 값으로 되돌리기"
+                style={{ width: 20, height: 20, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'color 0.15s ease' }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#234ea2')}
+                onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="1 4 1 10 7 10" />
+                  <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {/* 품번 직접 입력 — 수동입력 품목 · 국내조달품 공용 */}
