@@ -65,3 +65,19 @@ export function profileImageFileName(engineerId: number, originalName: string, n
   const safeExt = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) ? ext : 'jpg'
   return `profile-${engineerId}-${now}.${safeExt}`
 }
+
+/**
+ * 그 파일이 **이 직원의** 사진인가 — 이름 규칙(`profile-<engineer_id>-<시각>.jpg`)으로 본다.
+ *
+ * 왜 이름으로 보는가 — 옛 사진을 지우는 자리에서 쓴다(라우트의 DELETE). 지울 파일은 이미
+ * 어느 행도 가리키지 않아 DB 로 소유자를 찾을 수 없다. 남는 단서가 이름뿐이고, 그래서
+ * 업로드가 **늘 이 모양으로** 이름을 만든다(profileImageFileName).
+ *
+ * `profile-2-…` 를 engineer_id 20 이 지우는 일이 없어야 하므로 붙임표까지 맞춘다.
+ * 시각이 없는 옛 이름(`profile-20.jpg`)도 받아들인다.
+ */
+export function isOwnProfileImageName(name: string, engineerId: number): boolean {
+  if (!Number.isInteger(engineerId) || engineerId <= 0) return false
+  const head = `profile-${engineerId}`
+  return name.startsWith(`${head}-`) || name.startsWith(`${head}.`)
+}

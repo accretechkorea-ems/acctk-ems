@@ -7,11 +7,39 @@ import { useMe } from '@/lib/appData/MeProvider'
 import { useAvatarUrl } from '@/hooks/useAvatarUrl'
 import {
   PROFILE_BUCKET, PROFILE_IMAGE_MAX_BYTES, PROFILE_IMAGE_TYPES, profileImageFileName,
+  profileImagePath, isOwnProfileImageName,
 } from '@/lib/profileImage'
 import { useRouter } from 'next/navigation'
 import { INITIALS_TAKEN_MESSAGE, isInitialsTaken, isInitialsUniqueViolation, normalizeInitials } from '@/lib/initials'
 import AddressField from '@/components/customer/modals/AddressField'
 import { geocodeAddress } from '@/lib/geocode'
+
+/**
+ * 갈아 끼운 뒤 남은 **옛 프로필 사진**을 버킷에서 지운다.
+ *
+ * 지우는 일은 라우트가 한다(service role) — 버킷이 비공개라 정책을 타고, 지우기는
+ * 되돌릴 수 없어 「자기 사진인가 · 아직 쓰는 사진인가」를 서버에서 한 번 더 본다
+ * (app/api/profile-image/route.ts 의 DELETE).
+ *
+ * 여기서는 **부를 이유가 없는 경우를 걸러내고** 결과를 삼킨다.
+ *   · 바뀐 것이 없다(같은 파일) — 지금 쓰는 사진을 지울 뻔한 자리다
+ *   · 우리 버킷 파일이 아니다(외부 주소·빈 값) — 지울 것이 없다
+ *   · 이름이 자기 것이 아니다 — 라우트가 403 으로 막을 요청을 미리 접는다
+ */
+async function cleanupOldProfileImage(
+  oldPath: string | null,
+  newPath: string | null,
+  engineerId: number,
+): Promise<void> {
+  if (!oldPath || oldPath === newPath) return
+  if (!isOwnProfileImageName(oldPath, engineerId)) return
+  try {
+    const res = await fetch(`/api/profile-image?path=${encodeURIComponent(oldPath)}`, { method: 'DELETE' })
+    if (!res.ok) console.warn('[account] 옛 사진 삭제 실패 — 고아 파일이 남는다', oldPath, res.status)
+  } catch (e) {
+    console.warn('[account] 옛 사진 삭제 요청 실패 — 고아 파일이 남는다', oldPath, e)
+  }
+}
 
 const PAGE_BG = '#f4f5f7'
 const PANEL_BG = '#ffffff'
@@ -153,6 +181,9 @@ export default function AccountPage() {
     // 열리지 않는다(2026-10-23 확인: HTTP 400 — 사진이 늘 깨져 있었다). 보여 줄 때는
     // /api/profile-image 가 서명 URL 을 준다(lib/profileImage.ts).
     let imagePath = profileImagePathValue
+    // 갈아 끼우기 전의 파일 — 저장이 끝나면 이것을 지운다. 외부 주소·빈 값이면 null 이다
+    // (lib/storagePath.ts — 우리 버킷 주소가 아니면 지울 것이 없다).
+    const previousImagePath = profileImagePath(profileImagePathValue)
 
     if (profileImageFile) {
       if (!(PROFILE_IMAGE_TYPES as readonly string[]).includes(profileImageFile.type)) {
@@ -230,6 +261,13 @@ export default function AccountPage() {
     }
 
     setSavedHome({ address: home, lat: homeLat, lng: homeLng })
+
+    // 옛 사진 정리 — **DB 갱신이 끝난 뒤에만** 한다. 이 시점에 옛 파일은 어느 행도
+    // 가리키지 않으므로 지워도 화면이 깨지지 않는다(순서를 뒤집으면 저장이 실패했을 때
+    // 사진만 사라진다). 실패해도 교체 자체는 끝난 일이라 기다리지 않고 경고만 남긴다 —
+    // 남는 것은 고아 파일 한 장이다.
+    void cleanupOldProfileImage(previousImagePath, imagePath, engineer.engineer_id)
+
     // 새 경로를 넣으면 아래 useAvatarUrl 이 그 경로의 서명 URL 을 받아 **바로** 그린다.
     setProfileImagePathValue(imagePath)
     setProfileImageFile(null)

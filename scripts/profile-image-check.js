@@ -33,6 +33,7 @@ Module._resolveFilename = function (req, ...rest) {
 const {
   PROFILE_BUCKET, AVATAR_WIDTHS, avatarWidthFor,
   profileImagePath, isSafeProfileImageName, profileImageFileName,
+  isOwnProfileImageName,
 } = load(path.join(ROOT, 'lib/profileImage.ts'))
 
 let fails = 0
@@ -84,5 +85,22 @@ eq('72px 자리 → 160', avatarWidthFor(72), 160)
 eq('24px 자리 → 80', avatarWidthFor(24), 80)
 eq('아주 큰 자리는 가장 큰 값', avatarWidthFor(400), 320)
 
+console.log('\n── 지워도 되는 내 사진인가(옛 파일 정리) ──')
+// 이 판정이 틀리면 **남의 사진을 지운다**. 라우트의 DELETE 가 이것으로 소유자를 가른다
+// (지울 파일은 이미 어느 행도 가리키지 않아 DB 로는 소유자를 찾을 수 없다).
+eq('자기 사진', isOwnProfileImageName(FILE, 20), true)
+eq('시각이 없는 옛 이름도 받는다', isOwnProfileImageName('profile-20.jpg', 20), true)
+eq('남의 사진은 아니다', isOwnProfileImageName('profile-21-1790139458648.jpg', 20), false)
+eq('앞자리가 겹치는 번호를 가른다(2 와 20)', [
+  isOwnProfileImageName('profile-20-1.jpg', 2), isOwnProfileImageName('profile-2-1.jpg', 20),
+], [false, false])
+eq('프로필 사진 이름이 아니면 아니다', [
+  isOwnProfileImageName('device-20-1.jpg', 20), isOwnProfileImageName('default_20.jpg', 20), isOwnProfileImageName('', 20),
+], [false, false, false])
+eq('번호가 수상하면 아니다', [
+  isOwnProfileImageName('profile-0-1.jpg', 0), isOwnProfileImageName('profile-1.5-1.jpg', 1.5),
+], [false, false])
+eq('방금 올린 이름은 자기 것으로 읽힌다',
+  isOwnProfileImageName(profileImageFileName(20, 'a.png', 1790139458648), 20), true)
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
 process.exit(fails === 0 ? 0 : 1)
