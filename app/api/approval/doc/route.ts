@@ -15,10 +15,9 @@
 //
 // 읽기 전용이다. 상태를 바꾸지 않으므로 조건부 UPDATE 도 캐시도 없다.
 
-import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { withTeamPerm } from '@/lib/teamPermsServer'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { isOwner, loadCaller } from '@/lib/apiCaller'
 import { canViewApprovalDocument } from '@/lib/approval/docAccess'
 import { ownerActions, turnOf } from '@/lib/approval/docActions'
 import { todayKST } from '@/lib/date'
@@ -26,19 +25,7 @@ import type { ApprovalDocument, ApprovalLine, Delegation } from '@/lib/approval/
 
 const TAG = 'approval/doc'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
-
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status })
-
-type Caller = {
-  engineer_id: number
-  permission_level: string | null
-  teams: string | null
-  resigned_date: string | null
-}
 
 /** 화면이 사람 번호를 이름으로 바꾸는 데 쓰는 값 — 목록 화면의 people 맵과 같은 모양이다. */
 type Person = { name: string | null; position: string | null; teams: string | null }
@@ -50,25 +37,12 @@ export async function GET(req: NextRequest) {
     return bad('문서를 지정해주세요.')
   }
 
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user?.email) return bad('Unauthorized', 401)
+  // 로그인·재직·팀 권한 부착을 한 줄로(lib/apiCaller.ts).
+  // 「approvals 메뉴 권한자」 줄은 팀 권한이 붙어 있어야 돈다(docAccess.ts).
+  const { error: authErr, caller, sb } = await loadCaller({ kind: 'login' }, { tag: TAG, req })
+  if (authErr) return authErr
 
-  // 세션 → engineers. 퇴사자는 막는다(결재 라우트의 loadCaller 와 같은 기준).
-  const { data: callerRow, error: callerErr } = await supabase
-    .from('engineers')
-    .select('engineer_id, permission_level, teams, resigned_date')
-    .eq('email', user.email)
-    .single()
-  if (callerErr) console.error(`[${TAG}] caller lookup failed`, { email: user.email, error: callerErr })
-  const row = (callerRow ?? null) as Caller | null
-  if (!row || row.resigned_date) return bad('Forbidden', 403)
-
-  // 팀 권한을 붙인다 — 「approvals 메뉴 권한자」 줄이 그것 없이는 돌지 않는다(docAccess.ts).
-  const caller = await withTeamPerm(row)
-  if (!caller) return bad('Forbidden', 403)
-
-  const { data: docRow, error: docErr } = await supabaseAdmin
+  const { data: docRow, error: docErr } = await sb
     .from('approval_documents')
     .select('*, approval_lines(*)')
     .eq('document_id', documentId)
@@ -82,7 +56,7 @@ export async function GET(req: NextRequest) {
 
   // 권한을 **나머지보다 먼저** 본다 — 볼 수 없는 사람의 요청에는 사람 이름·위임 조회가 나가지 않는다.
   // 판정이 실패하면 거짓이다(fail-closed, docAccess.ts).
-  if (!(await canViewApprovalDocument(supabaseAdmin, doc, caller))) {
+  if (!(await canViewApprovalDocument(sb, doc, caller))) {
     console.warn(`[${TAG}] 권한 없음`, { documentId, callerId: caller.engineer_id })
     return bad('이 문서를 볼 권한이 없습니다.', 403)
   }
@@ -100,14 +74,15 @@ export async function GET(req: NextRequest) {
   // 지금 차례인 줄에 걸린 위임만 읽는다(목록 라우트가 미결함에서 하는 것과 같다).
   const today = todayKST()
   const pending = lines.find(l => l.kind !== 'cc' && l.state === '대기') ?? null
-  const delegations = pending ? await loadDelegations(pending.approver_id, doc.doc_type, today) : []
+  const delegations = pending ? await loadDelegations(sb, pending.approver_id, doc.doc_type, today) : []
 
   const turn = turnOf(actionDoc, caller.engineer_id, delegations, today)
-  const isOwner = doc.requester_id === caller.engineer_id
+  // 「본인인가」는 공용 함수가 칸 이름을 안다(approval_documents 는 requester_id).
+  const mine = isOwner(doc, caller)
   const owner = ownerActions(actionDoc)
 
   // 이름이 필요한 사람만 — 기안자 + 결재선 전원(참조 포함) + 실제 처리자(대결이면 대리인).
-  const people = await loadPeople([
+  const people = await loadPeople(sb, [
     doc.requester_id,
     ...lines.map(l => l.approver_id),
     ...lines.map(l => l.acted_by).filter((n): n is number => n != null),
@@ -141,22 +116,22 @@ export async function GET(req: NextRequest) {
       approve: turn.canAct,
       delegated: turn.asDelegate,
       currentApproverId: turn.line?.approver_id ?? null,
-      isOwner,
-      withdraw: isOwner && owner.withdraw,
-      resubmit: isOwner && owner.resubmit,
+      isOwner: mine,
+      withdraw: mine && owner.withdraw,
+      resubmit: mine && owner.resubmit,
       /**
        * 지울 수 있는가(회수·폐기된 문서, 그것을 켠 종류만).
        * 화면은 등록표에서 같은 값을 직접 읽어 버튼을 그리므로 이 칸을 **쓰지는 않는다** —
        * 라우트가 돌려주는 동작 플래그를 한 벌로 맞춰 두려고 함께 담는다.
        */
-      deleteClosed: isOwner && owner.deleteClosed != null,
+      deleteClosed: mine && owner.deleteClosed != null,
     },
   })
 }
 
 /** 그 사람에게 걸린, 오늘 유효한 위임. 못 읽어도 본인 결재는 막지 않는다(대리 처리만 못 한다). */
-async function loadDelegations(ownerId: number, docType: string, today: string): Promise<Delegation[]> {
-  const { data, error } = await supabaseAdmin
+async function loadDelegations(sb: SupabaseClient, ownerId: number, docType: string, today: string): Promise<Delegation[]> {
+  const { data, error } = await sb
     .from('approval_delegations')
     .select('owner_id, delegate_id, start_date, end_date, doc_type')
     .eq('owner_id', ownerId)
@@ -170,10 +145,10 @@ async function loadDelegations(ownerId: number, docType: string, today: string):
 }
 
 /** 번호 → 이름·직급·팀. 못 읽으면 빈 표 — 화면이 「#12」로 그린다(문서를 막지 않는다). */
-async function loadPeople(ids: number[]): Promise<Record<number, Person>> {
+async function loadPeople(sb: SupabaseClient, ids: number[]): Promise<Record<number, Person>> {
   const want = [...new Set(ids.filter(n => Number.isFinite(n)))]
   if (want.length === 0) return {}
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await sb
     .from('engineers')
     .select('engineer_id, name, position, teams')
     .in('engineer_id', want)

@@ -22,7 +22,7 @@
 // 읽기 전용이다. 상태를 바꾸지 않으므로 조건부 UPDATE 도 캐시도 없다.
 
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 import { nextPendingLine } from '@/lib/approval/engine'
 import { CLOSED_STATUSES, closedBoxRows, type DoneDoc } from '@/lib/approval/doneBox'
@@ -185,17 +185,11 @@ export async function GET(req: NextRequest) {
   const scope = sp.get('scope') ?? 'all'
   if (!['all', 'open', 'closed'].includes(scope)) return bad('scope 가 올바르지 않습니다.')
 
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user?.email) return bad('Unauthorized', 401)
-  const { data: row } = await supabase
-    .from('engineers')
-    .select('engineer_id, resigned_date')
-    .eq('email', user.email)
-    .single()
-  const me = row as { engineer_id: number; resigned_date: string | null } | null
-  if (!me || me.resigned_date) return bad('Forbidden', 403)
-  const myId = me.engineer_id
+  // 로그인·재직 확인을 한 줄로(lib/apiCaller.ts). 이 라우트는 **본인 범위**로만 조회하므로
+  // 메뉴 권한은 보지 않는다 — 함에 담기는 문서를 myId 로 거른다(lib/approval/doneBox.ts).
+  const { error: authErr, caller } = await loadCaller({ kind: 'login' }, { tag: TAG, req })
+  if (authErr) return authErr
+  const myId = caller.engineer_id
 
   const counts = await loadCounts(myId)
 

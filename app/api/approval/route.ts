@@ -14,8 +14,7 @@
 //     원 문서를 검증한 뒤 lib/approval/submit.ts 를 직접 부른다.
 
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
-import { sessionEmailForRead } from '@/lib/sessionEmail'
+import { loadCaller as loadApiCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { canViewMenu } from '@/lib/permissions'
 import { todayKST } from '@/lib/date'
@@ -55,13 +54,8 @@ const bad = (error: string, status = 400) => NextResponse.json({ error }, { stat
  */
 const GENERIC_SUBMIT_DISABLED = true
 
-type Caller = {
-  engineer_id: number
-  name: string | null
-  permission_level: string | null
-  teams: string | null
-  resigned_date: string | null
-}
+/** 호출자 — 공용 모양 그대로다(lib/apiCaller.ts). 팀 권한(perm)이 붙어 있다. */
+type Caller = ApiCaller
 
 /**
  * 세션 → engineers. 퇴사자는 막는다.
@@ -72,19 +66,18 @@ type Caller = {
  * **쓰기(POST)는 주지 않는다** — 로그아웃했지만 아직 만료되지 않은 토큰을 걸러야 한다.
  */
 async function loadCaller(forRead = false): Promise<{ caller: Caller; error: null } | { caller: null; error: NextResponse }> {
-  const supabase = await createServerClient()
-  const email = forRead
-    ? await sessionEmailForRead(supabase)
-    : (await supabase.auth.getUser()).data.user?.email ?? null
-  if (!email) return { caller: null, error: bad('Unauthorized', 401) }
-  const { data: row, error } = await supabase
-    .from('engineers')
-    .select('engineer_id, name, permission_level, teams, resigned_date')
-    .eq('email', email)
-    .single()
-  if (error) console.error('[approval] caller lookup failed', { email, error })
-  if (!row || (row as Caller).resigned_date) return { caller: null, error: bad('Forbidden', 403) }
-  return { caller: row as Caller, error: null }
+  // 속만 공용 함수로 바꿨다(lib/apiCaller.ts) — 부르는 자리 두 곳의 모양은 그대로다.
+  // 달라진 것 하나: **팀 권한이 붙어 온다.** 그래서 결재함 「전체」(box='all')의
+  // canViewMenu(caller,'approvals') 가 제대로 돈다 — 종전에는 권한이 붙지 않아 그 줄이
+  // superadmin 만 통과했다(lib/approval/docAccess.ts 머리말이 그 함정을 적어 두었다.
+  // /api/approval/doc·history 는 이미 붙여 넘기고 있어 라우트마다 답이 갈려 있었다).
+  const r = await loadApiCaller({ kind: 'login' }, {
+    tag: 'approval',
+    method: forRead ? 'GET' : 'POST',
+    // 읽기는 토큰을 그 자리에서 검증한다(Auth 왕복 생략 — 종전 forRead 와 같은 뜻).
+    readOnly: forRead,
+  })
+  return r.error ? { caller: null, error: r.error } : { caller: r.caller, error: null }
 }
 
 type DocWithLines = ApprovalDocument & { approval_lines: ApprovalLine[] }

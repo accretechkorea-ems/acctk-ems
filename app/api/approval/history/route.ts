@@ -15,55 +15,27 @@
 // created_at 오름차순). 사람 이름은 담지 않는다 — 화면이 이미 engineers 를 통째로 읽어 두고
 // actor_id 를 이름으로 바꾼다(app/approval/page.tsx 의 people). 여기서 또 조인하면 왕복만 는다.
 
-import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { withTeamPerm } from '@/lib/teamPermsServer'
+import { loadCaller } from '@/lib/apiCaller'
 import { canViewApprovalDocument } from '@/lib/approval/docAccess'
 
 const TAG = 'approval/history'
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
 
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status })
 
 /** DocDetail 이 읽는 칸. 늘리지 마라 — 화면이 쓰지 않는 값을 내보낼 이유가 없다. */
 const HISTORY_SELECT = 'history_id, action, actor_id, step, comment, created_at'
 
-type Caller = {
-  engineer_id: number
-  permission_level: string | null
-  teams: string | null
-  resigned_date: string | null
-}
-
 export async function GET(req: NextRequest) {
   const documentId = Number(req.nextUrl.searchParams.get('document_id'))
   if (!Number.isSafeInteger(documentId) || documentId <= 0) return bad('문서를 지정해주세요.')
 
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user?.email) return bad('Unauthorized', 401)
+  // 로그인·재직·팀 권한 부착을 한 줄로(lib/apiCaller.ts). 「approvals 메뉴 권한자」 줄은
+  // 팀 권한이 붙어 있어야 돌고(docAccess.ts), 읽기(GET)라 캐시를 그대로 쓴다.
+  const { error: authErr, caller, sb } = await loadCaller({ kind: 'login' }, { tag: TAG, req })
+  if (authErr) return authErr
 
-  // 세션 → engineers. 퇴사자는 막는다(결재 라우트의 loadCaller 와 같은 기준).
-  const { data: callerRow, error: callerErr } = await supabase
-    .from('engineers')
-    .select('engineer_id, permission_level, teams, resigned_date')
-    .eq('email', user.email)
-    .single()
-  if (callerErr) console.error(`[${TAG}] caller lookup failed`, { email: user.email, error: callerErr })
-  const row = (callerRow ?? null) as Caller | null
-  if (!row || row.resigned_date) return bad('Forbidden', 403)
-
-  // 팀 권한을 붙인다 — 「approvals 메뉴 권한자」 줄이 그것 없이는 돌지 않는다
-  // (붙이지 않으면 superadmin 만 통과한다). 읽기 전용이라 캐시를 그대로 쓴다.
-  const caller = await withTeamPerm(row)
-  if (!caller) return bad('Forbidden', 403)
-
-  const { data: docRow, error: docErr } = await supabaseAdmin
+  const { data: docRow, error: docErr } = await sb
     .from('approval_documents')
     .select('document_id, requester_id')
     .eq('document_id', documentId)
@@ -77,12 +49,12 @@ export async function GET(req: NextRequest) {
 
   // 권한을 **읽기보다 먼저** 본다 — 볼 수 없는 사람의 요청에는 이력 조회가 아예 나가지 않는다.
   // 판정이 실패하면 거짓이다(fail-closed, docAccess.ts).
-  if (!(await canViewApprovalDocument(supabaseAdmin, doc, caller))) {
+  if (!(await canViewApprovalDocument(sb, doc, caller))) {
     console.warn(`[${TAG}] 권한 없음`, { documentId, callerId: caller.engineer_id })
     return bad('이 문서를 볼 권한이 없습니다.', 403)
   }
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await sb
     .from('approval_history')
     .select(HISTORY_SELECT)
     .eq('document_id', documentId)
