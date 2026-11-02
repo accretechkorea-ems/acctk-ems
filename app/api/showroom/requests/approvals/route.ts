@@ -12,9 +12,9 @@
 // 읽기 전용이다. 권한은 쇼룸 메뉴 하나로 본다(기록 목록을 볼 수 있는 사람이면 그 승인 정보도 본다).
 
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewMenu } from '@/lib/permissions'
 import type { UsageApprovalDoc } from '@/lib/showroom'
-import { admin, bad, loadCaller } from '../shared'
+import { bad } from '../shared'
+import { loadCaller } from '@/lib/apiCaller'
 
 const TAG = 'showroom/requests/approvals'
 
@@ -67,9 +67,10 @@ function lastApproved(lines: LineRow[]): LineRow | null {
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await loadCaller(TAG)
-  if (auth.error) return auth.error
-  if (!canViewMenu(auth.caller, 'showroom')) return bad('Forbidden', 403)
+  // 로그인·재직·쇼룸 메뉴 권한을 한 줄로(lib/apiCaller.ts).
+  // 읽기(GET)라 팀 권한 캐시(30초)를 그대로 쓴다 — 종전과 같다.
+  const { error: authErr, sb } = await loadCaller({ kind: 'menu', keys: ['showroom'] }, { tag: TAG, req })
+  if (authErr) return authErr
 
   // id 는 양의 정수만 받는다. 모양이 아닌 값은 조용히 버린다 — 한 건이 깨졌다고 목록 전체의 승인
   // 정보를 비우지 않는다(그 행만 doc 없이 그려지고, 화면은 상태를 꾸며 내지 않는다).
@@ -81,7 +82,6 @@ export async function GET(req: NextRequest) {
   )]
   if (ids.length === 0) return NextResponse.json({ approvals: {} })
 
-  const sb = admin()
   const approvals: Record<number, UsageApprovalDoc> = {}
 
   for (let i = 0; i < ids.length; i += CHUNK) {

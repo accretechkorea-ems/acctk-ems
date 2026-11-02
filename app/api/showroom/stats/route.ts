@@ -33,10 +33,8 @@
 //   · 견적·수주 전환율의 분모는 고객 데모 건수 하나다(측정대행은 견적으로 이어지는 일이 아니다).
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { isDisposed } from '@/lib/deviceStatus'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewMenu } from '@/lib/permissions'
-import { withTeamPerm } from '@/lib/teamPermsServer'
 import { todayKST, daysBetween } from '@/lib/date'
 import { computeKoreanHolidays } from '@/lib/holidays'
 import {
@@ -47,8 +45,6 @@ import {
   type PeriodWindow, type MonthMetrics, type DeviceUtilStat, type HeatmapRow,
   type MonthTrend, type CustomerStat, type ShowroomSite, type SiteUtil, type ShowroomStats, type YearlyStats,
 } from '@/lib/showroom'
-
-type Caller = { engineer_id: number; name: string | null; permission_level: string | null; teams: string | null }
 
 /** PostgREST 한 번에 받을 행 수. 서버 max_rows(기본 1,000)보다 크게 잡지 않는다. */
 const PAGE = 1000
@@ -64,23 +60,14 @@ const admin = () => createClient(
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
-/** 로그인 + 고객사 권한. 읽기 전용이라 팀 권한 캐시(30초)를 그대로 쓴다. */
+/**
+ * 로그인 + 쇼룸 메뉴 권한. 속은 공용 함수다(lib/apiCaller.ts).
+ * 읽기 전용이라 팀 권한 캐시(30초)를 그대로 쓴다 — 아래 GET 이 이 함수를 자료 조회와
+ * **겹쳐서** 띄우므로 돌려주는 모양({ error })은 그대로 둔다.
+ */
 async function authorize() {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: bad('Unauthorized', 401) }
-
-  const { data: callerRow, error: callerErr } = await supabase
-    .from('engineers')
-    .select('engineer_id, name, permission_level, teams')
-    .eq('email', user.email!)
-    .single()
-  if (callerErr) console.error('[showroom/stats] caller lookup failed', { email: user.email, error: callerErr })
-  if (!callerRow) return { error: bad('Forbidden', 403) }
-
-  const caller = await withTeamPerm(callerRow as Caller)
-  if (!caller || !canViewMenu(caller, 'showroom')) return { error: bad('Forbidden', 403) }
-  return { error: null }
+  const r = await loadCaller({ kind: 'menu', keys: ['showroom'] }, { tag: 'showroom/stats', method: 'GET' })
+  return { error: r.error }
 }
 
 type UsageRow = {

@@ -11,16 +11,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { APPROVAL_BUCKET, DEMO_REQUEST_TYPE, REQUEST_APPROVED } from '@/lib/showroom'
-import { admin, bad, loadCaller, approvalPdfName } from '../shared'
+import { admin, bad, approvalPdfName } from '../shared'
+import { isOwner, loadCaller } from '@/lib/apiCaller'
 
 const TAG = 'showroom/requests/pdf'
 
 export async function GET(req: NextRequest) {
-  const auth = await loadCaller(TAG)
-  if (auth.error) return auth.error
-  const caller = auth.caller
-
-  const sb = admin()
+  // 로그인·재직 확인만 공용 함수로 받는다 — **누가 이 승인서를 볼 수 있는지는 아래에서
+  // 문서마다 따로 판정한다**(본인·결재선·관리자·완료 문서+쇼룸 권한).
+  const { error: authErr, caller, sb } = await loadCaller({ kind: 'login' }, { tag: TAG, req })
+  if (authErr) return authErr
 
   // ── 전자결재로 올린 신청 ──
   const docId = Number(req.nextUrl.searchParams.get('doc'))
@@ -43,11 +43,11 @@ export async function GET(req: NextRequest) {
     } | null
     if (!d || d.doc_type !== 'showroom_usage') return bad('신청을 찾을 수 없습니다.', 404)
     const inLine = (d.approval_lines ?? []).some(l => l.approver_id === caller.engineer_id)
-    const allowed = d.requester_id === caller.engineer_id || inLine || isSuperAdmin(caller)
+    const allowed = isOwner(d, caller) || inLine || isSuperAdmin(caller)
       || canViewMenu(caller, 'approvals')
       || (d.status === '완료' && canViewMenu(caller, 'showroom'))
     if (!allowed) return bad('Forbidden', 403)
-    return signed(sb, d.summary?.pdf_url ?? null, auth.email, docId)
+    return signed(sb, d.summary?.pdf_url ?? null, caller.email, docId)
   }
 
   // ── 옛 요청함 신청 ──
@@ -62,11 +62,11 @@ export async function GET(req: NextRequest) {
   }
   const r = row as { request_id: number; request_type: string; status: string; requester_id: number; pdf_url: string | null } | null
   if (!r || r.request_type !== DEMO_REQUEST_TYPE) return bad('신청을 찾을 수 없습니다.', 404)
-  const allowed = r.requester_id === caller.engineer_id || isSuperAdmin(caller) || canViewMenu(caller, 'approvals')
+  const allowed = isOwner(r, caller) || isSuperAdmin(caller) || canViewMenu(caller, 'approvals')
     || (r.status === REQUEST_APPROVED && canViewMenu(caller, 'showroom'))
   if (!allowed) return bad('Forbidden', 403)
 
-  return signed(sb, r.pdf_url, auth.email, id)
+  return signed(sb, r.pdf_url, caller.email, id)
 }
 
 /** 저장 경로 → 서명 URL. 감사 로그도 여기서 남긴다(옛 신청·결재 문서 공통). */
