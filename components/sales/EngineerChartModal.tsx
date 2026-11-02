@@ -13,11 +13,11 @@
 
 import { TEAM_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import { todayKST } from '@/lib/date'
+import ModalOverlay from '@/components/common/ModalOverlay'
 import { unitBars, yearSummary, type StatQuote, type StatTarget } from '@/lib/salesStats'
 import {
   ChartLegend, ChartPanel, SummaryBoxes, axisMaxOf, numKR,
 } from '@/components/sales/salesChart'
-import { Z } from '@/lib/zIndex'
 
 const CARD_BG = '#ffffff'
 const BORDER = '#ebebeb'
@@ -43,7 +43,7 @@ export default function EngineerChartModal({ engineer, quotes, targets, fy, onCl
   const tc = getCategoryColor(TEAM_COLORS, engineer.teams)
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+    <ModalOverlay onClose={onClose} style={{ background: 'rgba(0,0,0,0.5)' }}>
       <div style={{
         background: CARD_BG, borderRadius: 18,
         // 1366×768 노트북에서 스크롤이 생기지 않는 높이다(90vh = 691 > 쌓인 617).
@@ -77,6 +77,6 @@ export default function EngineerChartModal({ engineer, quotes, targets, fy, onCl
           <SummaryBoxes sum={sum} />
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

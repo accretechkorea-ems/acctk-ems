@@ -10,7 +10,7 @@ import { canViewMenu, type TeamPerm } from '@/lib/permissions'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import AccessGate from '@/components/common/AccessGate'
-import { Z } from '@/lib/zIndex'
+import ModalOverlay from '@/components/common/ModalOverlay'
 import Popover from '@/components/common/Popover'
 import AssigneePicker from '@/components/quote/AssigneePicker'
 
@@ -520,7 +520,7 @@ export default function PurchasePage() {
       />
 
       {orderModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={() => setOrderModal(null)} confirmClose closeOn={processing ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.55)' }}>
           <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 400, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>주문완료 처리</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 20 }}>{orderModal.quote_number} · {custMap[orderModal.customer_id ?? 0] ?? '-'}</div>
@@ -548,12 +548,12 @@ export default function PurchasePage() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* 세금계산서 발행완료 모달 */}
       {taxModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={() => setTaxModal(null)} confirmClose closeOn={taxProcessing ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.55)' }}>
           <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 380, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>세금계산서 발행 완료</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{taxModal.quote_number} · {custMap[taxModal.customer_id ?? 0] ?? '-'}</div>
@@ -580,12 +580,12 @@ export default function PurchasePage() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* 출하일정/메모 편집 모달 */}
       {editScheduleModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={() => setEditScheduleModal(null)} confirmClose closeOn={editSaving ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.55)' }}>
           <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 400, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>일정/메모 수정</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 20 }}>{editScheduleModal.quote_number} · {custMap[editScheduleModal.customer_id ?? 0] ?? '-'}</div>
@@ -611,7 +611,7 @@ export default function PurchasePage() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   )

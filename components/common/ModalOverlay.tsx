@@ -12,9 +12,9 @@
 // ── 여러 겹일 때는 맨 위만 닫힌다 ──────────────────────────────────────────
 //   모달 위에 모달이 열리는 자리가 있다(업체 등록 → 주소 검색, 결재 → 결재선 고르기,
 //   그리고 아래의 「저장하지 않고 닫을까요?」 확인창 자체). Esc 를 각자 받으면 한 번에
-//   두 겹이 닫힌다. 그래서 떠 있는 오버레이를 **쌓아 두고**(stack) 맨 위인 것만 반응한다.
-//   닫는 길이 막힌 모달(closeOn='none')도 쌓기에는 들어간다 — 그래야 그 아래 모달이
-//   대신 닫히는 일이 없다.
+//   두 겹이 닫힌다. 그래서 떠 있는 오버레이를 **쌓아 두고 맨 위인 것만** 반응한다 —
+//   그 쌓임은 components/common/overlayStack.ts 가 들고, 모달이 아닌 드로어·전체화면
+//   지도도 같은 줄에 선다. 닫는 길이 막힌 모달(closeOn='none')도 쌓기에는 들어간다.
 //
 // ── 입력 중인 폼은 묻고 닫는다 ─────────────────────────────────────────────
 //   confirmClose 를 켜면 Esc·바깥 클릭이 바로 닫지 않고 「저장하지 않고 닫을까요?」를
@@ -25,9 +25,10 @@
 //   대부분이라, 그때까지 확인을 받으면 성가신 쪽이 이긴다). 못 주는 모달은 confirmClose
 //   만 켜 둔다 — 그런 모달은 늘 묻는다.
 
-import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
+import { useRef, type CSSProperties, type ReactNode } from 'react'
 import { modalOverlayStyle } from '../customer/constants'
 import { useConfirmOptional } from './confirmContext'
+import { useOverlayEsc } from './overlayStack'
 
 /** 닫는 길. 'both' = Esc + 바깥 클릭(기본) · 'backdrop' = 바깥 클릭만 · 'none' = 둘 다 막는다. */
 export type CloseOn = 'both' | 'backdrop' | 'none'
@@ -46,9 +47,6 @@ type Props = {
    */
   dirty?: boolean
 }
-
-/** 떠 있는 오버레이 — 뒤가 맨 위다. Esc 는 맨 위만 받는다. */
-const stack: symbol[] = []
 
 export default function ModalOverlay({
   onClose, children, style, closeOn = 'both', confirmClose = false, dirty,
@@ -74,28 +72,9 @@ export default function ModalOverlay({
     onClose()
   }
 
-  // 아래 keydown 은 한 번만 걸고 **ref 로 최신 함수**를 부른다(렌더마다 다시 걸지 않는다).
-  // 렌더 중에 ref 를 쓰지 않으려고 동기화는 효과에서 한다(React 규칙).
-  const requestRef = useRef(requestClose)
-  useEffect(() => { requestRef.current = requestClose })
-
-  useEffect(() => {
-    const id = Symbol('modal')
-    stack.push(id)
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      // 맨 위가 아니면 모른 척한다(위에 뜬 모달이 닫힐 차례다).
-      if (stack[stack.length - 1] !== id) return
-      void requestRef.current()
-    }
-    // Esc 를 받지 않는 모달도 **쌓기에는 들어간다** — 그래야 그 아래 모달이 대신 닫히지 않는다.
-    if (closeOn === 'both') document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      const i = stack.lastIndexOf(id)
-      if (i >= 0) stack.splice(i, 1)
-    }
-  }, [closeOn])
+  // 쌓임·Esc 는 공용 훅이 본다(components/common/overlayStack.ts) — 모달이 아닌
+  // 드로어·전체화면 지도도 같은 줄에 서서 두 겹이 함께 닫히지 않는다.
+  useOverlayEsc(closeOn === 'both', () => { void requestClose() })
 
   const backdropOk = closeOn === 'both' || closeOn === 'backdrop'
 

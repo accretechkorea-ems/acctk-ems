@@ -10,7 +10,7 @@
 // 작성자 정보가 PDF 에 들어가므로 engineer 가 없으면 그 자리에서 멈춘다.
 
 import { numKR } from '@/app/quote/format'
-import { Z } from '@/lib/zIndex'
+import ModalOverlay from '@/components/common/ModalOverlay'
 import type { useToast } from '@/components/common/Toast'
 
 export type ConfirmQuoteModalProps = {
@@ -31,9 +31,13 @@ export default function ConfirmQuoteModal({
   quoteNo, totalSupply, totalCost, totalProfit, totalProfitRate,
   errors, isSubmitting, engineer, toast, setShowConfirmModal, runConfirm,
 }: ConfirmQuoteModalProps) {
-  // 견적 확정 확인 모달
+  // 견적 확정 확인 모달.
+  //
+  // 확정은 **결정**이다 — Esc·바깥 클릭은 [취소] 버튼과 같은 길로 간다
+  // (setShowConfirmModal(false)). 되돌릴 수 없는 확정이 바깥 클릭으로 실행되는 일은 없다.
+  // 배경은 종전 값(0.5)을 그대로 넘긴다 — 공용 오버레이 기본은 0.65 다.
   return (
-<div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+    <ModalOverlay onClose={() => setShowConfirmModal(false)} style={{ background: 'rgba(0,0,0,0.5)' }}>
   <div style={{ background: '#fff', borderRadius: 8, padding: 32, width: '100%', maxWidth: 440, boxShadow: '0 24px 64px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
     <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 4, letterSpacing: '-0.3px' }}>견적 확정</div>
     <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, fontWeight: 500 }}>{quoteNo} <span style={{ color: '#9ca3af' }}>(예상 번호 — 확정할 때 발급)</span></div>
@@ -91,6 +95,6 @@ export default function ConfirmQuoteModal({
       </button>
     </div>
   </div>
-</div>
+</ModalOverlay>
   )
 }

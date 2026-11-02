@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { loadEngineers } from '@/lib/appData/engineers'
 import { canViewQuote } from '@/lib/permissions'
 import { withTeamPerms } from '@/lib/teamPerms'
-import { Z } from '@/lib/zIndex'
+import ModalOverlay from '@/components/common/ModalOverlay'
 
 /**
  * 견적 대필 — 실적을 받을 담당자를 고르는 모달.
@@ -68,10 +68,7 @@ function Panel({ onClose, onPick }: Omit<Props, 'open'>) {
   }, [list, query])
 
   return (
-    <div
-      onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
-    >
+    <ModalOverlay onClose={onClose} confirmClose dirty={query.trim() !== ''} style={{ background: 'rgba(0,0,0,0.55)' }}>
       <div onClick={e => e.stopPropagation()}
         style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 400, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
         <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>견적서 대필</div>
@@ -114,6 +111,6 @@ function Panel({ onClose, onPick }: Omit<Props, 'open'>) {
           취소
         </button>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

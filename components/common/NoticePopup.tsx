@@ -12,7 +12,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Z } from '@/lib/zIndex'
+import ModalOverlay from '@/components/common/ModalOverlay'
 import { dismissNotice, isDismissed, noticePhase, type DismissKind, type Notice } from '@/lib/notices'
 import { todayKST } from '@/lib/date'
 
@@ -85,12 +85,7 @@ export default function NoticePopup() {
   const images = (notice.image_urls ?? []).filter(Boolean)
 
   return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
-      }}
-    >
+    <ModalOverlay onClose={close} style={{ background: 'rgba(0,0,0,0.5)', padding: 16 }}>
       <div
         style={{
           // 640 은 이미 관리자 모달들이 쓰는 폭이다(새 값이 아니다).
@@ -154,6 +149,6 @@ export default function NoticePopup() {
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

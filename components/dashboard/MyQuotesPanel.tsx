@@ -26,6 +26,7 @@ import {
 } from '@/lib/quoteStatus'
 import { achieveColorOf } from '@/lib/fiscal'
 import { Z } from '@/lib/zIndex'
+import ModalOverlay from '@/components/common/ModalOverlay'
 import Popover from '@/components/common/Popover'
 import BackdatedMark from '@/components/quote/BackdatedMark'
 import { nowKSTParts, todayKST } from '@/lib/date'
@@ -941,7 +942,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
 
       {/* ── 발주서 등록 서브모달 ── */}
       {poQuote && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: SUBMODAL_Z, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <ModalOverlay onClose={() => { setPoQuote(null); setPoFile(null); setPoMemo('') }} confirmClose closeOn={poUploading ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: SUBMODAL_Z, padding: 0 }}>
           <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>발주서 등록</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{poQuote.quote_number}</div>
@@ -1034,12 +1035,12 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* ── 세금계산서 요청 서브모달 ── */}
       {taxQuote && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: SUBMODAL_Z, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <ModalOverlay onClose={() => { setTaxQuote(null); setTaxDate('') }} confirmClose closeOn={taxSending ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: SUBMODAL_Z, padding: 0 }}>
           <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 340, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>세금계산서 발행 요청</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{taxQuote.quote_number}</div>
@@ -1058,12 +1059,12 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* ── 취소 / 실패 처리 서브모달 ── */}
       {editQuote && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: SUBMODAL_Z, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <ModalOverlay onClose={() => setEditQuote(null)} confirmClose style={{ background: 'rgba(0,0,0,0.6)', zIndex: SUBMODAL_Z, padding: 0 }}>
           <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 4 }}>삭제 / 실패 처리</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{editQuote.quote_number} · {editQuote.company_name || ''}</div>
@@ -1145,7 +1146,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* 삭제 요청 결재선. 확정하면 상태 변경과 상신이 이어진다. */}

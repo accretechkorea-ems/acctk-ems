@@ -28,6 +28,7 @@ import ConfirmQuoteModal from '@/components/quote/ConfirmQuoteModal'
 import QuoteItemRow from './QuoteItemRow'
 import { useRecentSales } from '@/hooks/quote/useRecentSales'
 import { Z } from '@/lib/zIndex'
+import ModalOverlay from '@/components/common/ModalOverlay'
 import { defaultTermsFor, normalizeTerms, termKeysFor, type SetTerms, type Terms } from '@/lib/quoteTerms'
 import { defaultRemarksFor } from '@/lib/quoteRemarks'
 import { normalizeSubLines } from '@/lib/quoteSubLines'
@@ -925,7 +926,7 @@ function QuotePageInner() {
       {/* 견적 확정 확인 모달 */}
       {/* 임시저장 안내 — 저장분이 있을 때만. 답하기 전에는 자동 저장이 시작되지 않는다. */}
       {draftAsk && engineer && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={() => {}} closeOn="none" style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div style={{ background: '#fff', borderRadius: 8, padding: 32, width: '100%', maxWidth: 440, boxShadow: '0 24px 64px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 4, letterSpacing: '-0.3px' }}>작성 중이던 내용이 있습니다</div>
             <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, fontWeight: 500 }}>
@@ -949,7 +950,7 @@ function QuotePageInner() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {showConfirmModal && (

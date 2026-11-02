@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { loadEngineers } from '@/lib/appData/engineers'
 import { useToast } from '@/components/common/Toast'
 import { Z } from '@/lib/zIndex'
+import ModalOverlay from '@/components/common/ModalOverlay'
 import {
   BLUE, BORDER, CARD_BG, DANGER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT,
   btnGhost, btnPrimary, inputStyle,
@@ -269,10 +270,7 @@ export default function LinePickerModal({
   if (!open) return null
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
-    }}>
+    <ModalOverlay onClose={onClose} confirmClose closeOn={busy ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal }}>
       {/* 외곽 크기를 **고정**한다 — 예전에는 높이가 내용에 따라 정해져(maxHeight 만 있었다)
           고른 팀의 인원 수에 따라 창이 커졌다 작아졌다 했다. 사람을 고르는 동안 창이 움직이면
           다음에 누를 자리가 매번 달라진다.
@@ -460,6 +458,6 @@ export default function LinePickerModal({
           </div>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

@@ -17,6 +17,7 @@ import { useFieldErrors, FieldError, errBorder } from '@/components/common/field
 import { REPAIR_STATUS_COLORS, REPAIR_MEANING_COLORS } from '@/lib/categoryColors'
 import { isAtHq } from '@/lib/repairStats'
 import { Z } from '@/lib/zIndex'
+import ModalOverlay from '@/components/common/ModalOverlay'
 import { todayKST, nowKSTParts } from '@/lib/date'
 
 // ── 색상 (기존 페이지 컨벤션과 동일) ──
@@ -913,8 +914,7 @@ export default function RepairPage() {
 
       {/* ── 본사 복귀 처리 다이얼로그 (복귀일 입력 → 출고대기) ── */}
       {hqReturning && (
-        <div onClick={() => !isHqSaving && setHqReturning(null)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.subModal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={() => setHqReturning(null)} confirmClose closeOn={isHqSaving ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.5)', zIndex: Z.subModal }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background: CARD_BG, borderRadius: 10, width: '100%', maxWidth: 360, padding: 22, border: `1px solid ${BORDER}`, boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>본사 복귀 처리</div>
@@ -933,12 +933,12 @@ export default function RepairPage() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* ── 엑셀 일괄 등록 모달 ── */}
       {showImport && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={() => setShowImport(false)} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div style={{ background: CARD_BG, borderRadius: 14, width: '100%', maxWidth: 920, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', border: `1px solid ${BORDER}` }}>
             {/* 헤더 */}
             <div style={{ padding: '16px 20px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1018,7 +1018,7 @@ export default function RepairPage() {
               </div>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       <style>{`

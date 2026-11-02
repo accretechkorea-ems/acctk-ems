@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { loadEngineers } from '@/lib/appData/engineers'
 import { useToast } from '@/components/common/Toast'
-import { Z } from '@/lib/zIndex'
+import ModalOverlay from '@/components/common/ModalOverlay'
 import { todayKST } from '@/lib/date'
 import { DOC_TYPES } from '@/lib/approval/docTypes'
 import { REASON_MAX, type DelegationStatus } from '@/lib/approval/delegation'
@@ -270,10 +270,7 @@ export default function DelegationModal({
   const dateInvalid = startDate > endDate || endDate < today
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.modal,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
-    }}>
+    <ModalOverlay onClose={onClose} confirmClose style={{ background: 'rgba(0,0,0,0.6)' }}>
       <div style={{
         background: CARD_BG, borderRadius: 8, padding: 20, width: '100%', maxWidth: 560,
         maxHeight: '86vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
@@ -429,6 +426,6 @@ export default function DelegationModal({
           </div>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

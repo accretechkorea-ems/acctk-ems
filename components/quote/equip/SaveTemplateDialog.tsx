@@ -9,6 +9,7 @@
 //   남의 것을 덮어쓰지 않게 하는 쪽을 택했다.
 
 import { useState } from 'react'
+import ModalOverlay from '@/components/common/ModalOverlay'
 import { Z } from '@/lib/zIndex'
 import { TEMPLATE_NAME_MAX } from '@/lib/quoteTemplates'
 import type { QuoteTemplate } from '@/lib/quoteTemplates'
@@ -83,7 +84,7 @@ export function SaveTemplateDialog(props: SaveTemplateDialogProps) {
   }
 
   return (
-    <div style={box} onClick={onClose}>
+    <ModalOverlay onClose={onClose} confirmClose dirty={name.trim() !== ''} style={box}>
       <div style={panel} onClick={e => e.stopPropagation()}>
         <div style={head}>구성을 템플릿으로 저장</div>
         <div style={sub}>
@@ -126,7 +127,7 @@ export function SaveTemplateDialog(props: SaveTemplateDialogProps) {
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }
 
@@ -140,7 +141,7 @@ export type DeleteTemplateDialogProps = {
 export function DeleteTemplateDialog({ target, busy, onDelete, onClose }: DeleteTemplateDialogProps) {
   const [err, setErr] = useState('')
   return (
-    <div style={box} onClick={onClose}>
+    <ModalOverlay onClose={onClose} style={box}>
       <div style={panel} onClick={e => e.stopPropagation()}>
         <div style={head}>이 구성을 삭제할까요?</div>
         <div style={sub}>목록에서 사라집니다. 이미 만든 견적서는 그대로 남습니다.</div>
@@ -161,6 +162,6 @@ export function DeleteTemplateDialog({ target, busy, onDelete, onClose }: Delete
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

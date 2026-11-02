@@ -16,6 +16,7 @@ import { useConfirm } from '@/components/common/ConfirmDialog'
 import { getCategoryColor, SALES_STATUS_COLORS, type CategoryColor } from '@/lib/categoryColors'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import { Z } from '@/lib/zIndex'
+import ModalOverlay from '@/components/common/ModalOverlay'
 import { useLeadFilters, ALL, NONE } from '@/hooks/leads/useLeadFilters'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import LeadExcelButton from '@/components/leads/LeadExcelButton'
@@ -1207,13 +1208,10 @@ function LeadsPageInner() {
       {/* 명함 크게 보기. 화면에 이 용도의 기존 부품이 없어 새로 둔다 —
           겹칠 것이 없는 전체 화면 오버레이라 바깥 클릭·ESC 로만 닫는다. */}
       {cardViewer && (
-        <div
-          onClick={() => setCardViewer(null)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: Z.fullscreen, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32, cursor: 'zoom-out' }}
-        >
+        <ModalOverlay onClose={() => setCardViewer(null)} style={{ background: 'rgba(0,0,0,0.8)', zIndex: Z.fullscreen, padding: 32, cursor: 'zoom-out' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={cardViewer} alt="명함" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8, background: '#fff' }} />
-        </div>
+        </ModalOverlay>
       )}
     </div>
   )

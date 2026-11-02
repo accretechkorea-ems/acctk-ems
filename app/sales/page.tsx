@@ -45,6 +45,7 @@ import SegmentedControl from '@/components/common/SegmentedControl'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import { Z } from '@/lib/zIndex'
+import ModalOverlay from '@/components/common/ModalOverlay'
 import Popover from '@/components/common/Popover'
 import BackdatedMark from '@/components/quote/BackdatedMark'
 import { todayKST, nowKSTParts, daysBetween, kstYmd, ymdParts } from '@/lib/date'
@@ -672,7 +673,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+    <ModalOverlay onClose={onClose} style={{ background: 'rgba(0,0,0,0.5)', padding: 16 }}>
       <div style={{ background: CARD_BG, borderRadius: 18, width: '100%', minWidth: 900, maxWidth: 1200, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', position: 'relative' }}>
         <div style={{ padding: '18px 24px', borderBottom: `1px solid ${BORDER}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
@@ -958,7 +959,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
         )}
         {/* 발주서 등록 모달 */}
         {poQuote && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ModalOverlay onClose={() => { setPoQuote(null); setPoFile(null); setPoMemo('') }} confirmClose closeOn={poUploading ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, padding: 0 }}>
             <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>발주서 등록</div>
               <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{poQuote.quote_number}</div>
@@ -1067,12 +1068,12 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                 </button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
 
         {/* 세금계산서 요청 모달 */}
         {taxQuote && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ModalOverlay onClose={() => { setTaxQuote(null); setTaxDate('') }} confirmClose closeOn={taxSending ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, padding: 0 }}>
             <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 340, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>세금계산서 발행 요청</div>
               <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{taxQuote.quote_number}</div>
@@ -1091,11 +1092,11 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                 </button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
 
         {editQuote && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ModalOverlay onClose={() => setEditQuote(null)} confirmClose style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, padding: 0 }}>
             <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 4 }}>삭제 / 실패 처리</div>
               <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{editQuote.quote_number} · {editQuote.customers?.company_name || ''}</div>
@@ -1172,7 +1173,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                 </button>
               </div>
             </div>
-          </div>
+          </ModalOverlay>
         )}
 
         {/* 삭제 요청 결재선. 확정하면 상태 변경과 상신이 이어진다. */}
@@ -1195,7 +1196,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
           busy={approvalChecking}
         />
       </div>
-    </div>
+    </ModalOverlay>
   )
 }
 

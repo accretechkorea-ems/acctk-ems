@@ -27,6 +27,7 @@ import Popover from '@/components/common/Popover'
 import { useNotificationStore } from '@/lib/appData/notifications'
 import { useApprovalInbox } from '@/lib/appData/approvalInbox'
 import { Z } from '@/lib/zIndex'
+import { useOverlayEsc } from '@/components/common/overlayStack'
 
 /** 사이드바 폭. 본문 margin-left 와 같아야 한다(HeaderWrapper 가 같은 값을 쓴다). */
 export const SIDEBAR_WIDTH = 232
@@ -251,15 +252,11 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
 
 
   // ESC — 드로어·알림·프로필을 함께 닫는다.
-  useEffect(() => {
-    if (!drawerOpen && !meOpen) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      setDrawerOpen(false); setMeOpen(false)
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [drawerOpen, meOpen])
+  //
+  // 이 드로어는 모달이 아니지만(ModalOverlay 를 쓰지 않는다) **같은 쌓임에 합류한다** —
+  // 드로어 위에서 모달이 열렸을 때 Esc 한 번에 두 겹이 닫히지 않게(2026-11-02,
+  // components/common/overlayStack.ts).
+  useOverlayEsc(true, () => { setDrawerOpen(false); setMeOpen(false) }, drawerOpen || meOpen)
 
   // 드로어가 열려 있는 동안 본문 스크롤을 잠근다.
   useEffect(() => {

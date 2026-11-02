@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { RouteStop } from '@/lib/routeMap'
 import { useOffices, findOffice } from '@/lib/offices'
 import { Z } from '@/lib/zIndex'
+import { useOverlayEsc } from '@/components/common/overlayStack'
 
 // 엔지니어 동선 지도(전체 화면 오버레이). 방문지 마커 + 연결선 + 사무실 마커.
 // 연결선 모드는 지도 안 토글로 전환한다(기본 visits, 열 때마다 초기화):
@@ -107,12 +108,9 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
     if (officeState === 'failed') console.error('[RouteMapView] 사무실 정보를 불러오지 못했습니다 (offices 조회 결과 0행)')
   }, [officeState])
 
-  // ESC 로 닫기
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  // ESC 로 닫기 — 이 전체화면 지도는 모달이 아니지만 **같은 쌓임에 합류한다**
+  // (지도 위에서 모달이 열렸을 때 Esc 한 번에 두 겹이 닫히지 않게).
+  useOverlayEsc(true, onClose)
 
   // 지도 초기화 — useEffect 는 페인트 이후 실행되므로 오버레이 컨테이너 크기가
   // 확정된 뒤에 지도를 만든다. 추가로 relayout() 1회 + ResizeObserver 로 보정.
