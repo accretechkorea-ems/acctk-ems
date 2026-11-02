@@ -1,4 +1,4 @@
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { RATE_SOURCE } from '@/lib/exchangeRate'
 import { NextResponse } from 'next/server'
 import https from 'https'
@@ -19,10 +19,10 @@ function httpsGet(url: string): Promise<string> {
 }
 
 export async function GET() {
-  // 로그인한 사용자만 호출 가능 (외부 무인증 호출로 인한 API 쿼터 남용 방지)
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // 로그인한 사용자만 호출 가능 (외부 무인증 호출로 인한 API 쿼터 남용 방지).
+  // 읽기(GET)라 토큰을 그 자리에서 검증한다 — 환율 API 왕복에 Auth 왕복을 얹을 이유가 없다.
+  const { error: authErr } = await loadCaller({ kind: 'login' }, { tag: 'exchange-rate', method: 'GET', readOnly: true })
+  if (authErr) return authErr
 
   const authKey = process.env.KOREA_EXIM_API_KEY
   if (!authKey) {

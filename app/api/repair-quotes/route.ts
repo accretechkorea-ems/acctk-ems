@@ -1,8 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewMenu } from '@/lib/permissions'
-import { withTeamPerm } from '@/lib/teamPermsServer'
 
 // 20팀 수리 업무용 견적 조회 API.
 // quotes RLS 는 개인 소유 모델이라, 동료·superadmin·타팀이 20팀 수리 건의 견적을 대신 작성하면 20팀이 못 읽는다.
@@ -28,18 +26,10 @@ type QuoteSummary = { quote_id: number; quote_number: string; total_supply: numb
  * 자료 조회와 겹친다(권한이 없으면 받아 둔 것을 쓰지 않고 거절한다).
  */
 async function authorize(): Promise<{ error: NextResponse | null; email: string | null }> {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }), email: null }
-
-  const { data: callerRow } = await supabaseAdmin
-    .from('engineers')
-    .select('engineer_id, permission_level, teams')
-    .eq('email', user.email!)
-    .single()
-  const caller = await withTeamPerm(callerRow)
-  if (!canViewMenu(caller, 'repair')) return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }), email: null }
-  return { error: null, email: user.email ?? null }
+  // 속은 공용 함수다(lib/apiCaller.ts) — 로그인·재직·20 수리 메뉴 권한을 한 번에 본다.
+  // 돌려주는 모양({ error, email })은 그대로 두어 부르는 자리를 손대지 않았다.
+  const r = await loadCaller({ kind: 'menu', keys: ['repair'] }, { tag: 'repair-quotes', method: 'GET' })
+  return r.error ? { error: r.error, email: null } : { error: null, email: r.caller.email }
 }
 
 export async function GET(req: NextRequest) {

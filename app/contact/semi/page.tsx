@@ -26,7 +26,7 @@ import {
   cardStyle, cardHeader, cardTitle, countBadge, rowStyle, btnPrimary, btnGhost, inputStyle,
 } from '@/components/common/ui'
 import { errorInfo } from '@/lib/errorInfo'
-import { FIELD_BY_KEY, emptyInput, validateReport, type FieldKey } from '@/lib/semiContact'
+import { apiErrorText, emptyInput, FIELD_BY_KEY, type FieldKey, validateReport } from '@/lib/semiContact'
 import {
   PROJECT_KEYS, PROJECT_NO_KEY, PROJECT_NO_LABEL, PROJECT_NO_MAX, PROJECT_TEXT_MAX, validateProjectNo,
 } from '@/lib/semiContact/project'
@@ -102,7 +102,7 @@ export default function ContactSemiPage() {
         if (cancelled) return
         if (!res.ok) {
           console.error('[contact/semi] Project 목록 조회 실패', { status: res.status, error: json })
-          setLoadError(json.error || `목록을 불러오지 못했습니다 (${res.status})`)
+          setLoadError(apiErrorText(res.status, json, `목록을 불러오지 못했습니다 (${res.status})`))
           setRows([])
           return
         }
@@ -392,7 +392,7 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
         // 칸별 오류는 그 칸 아래에, 나머지는 모달 아래 상자에 보인다. 번호 중복은 번호 칸 아래에만 보인다.
         const fe = json.fieldErrors && typeof json.fieldErrors === 'object' ? json.fieldErrors : null
         if (fe) setErrors(fe)
-        if (!fe) setError(json.error || `Project 를 만들지 못했습니다 (${res.status})`)
+        if (!fe) setError(apiErrorText(res.status, json, `Project 를 만들지 못했습니다 (${res.status})`))
         console.error('[contact/semi] Project 만들기 실패', { status: res.status, error: json })
         return
       }

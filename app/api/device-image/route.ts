@@ -1,8 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller as loadApiCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewMenu } from '@/lib/permissions'
-import { withTeamPerm } from '@/lib/teamPermsServer'
 import {
   DEVICE_BUCKET, DEVICE_IMAGE_WIDTHS, deviceImagePath, isDefaultDeviceImage, isSafeDeviceImageName,
 } from '@/lib/deviceImage'
@@ -31,25 +29,13 @@ const MAX_PATHS = 60
  */
 
 /** 로그인한 직원인가 + 장비를 볼 수 있는 메뉴 권한이 있는가. */
-async function loadCaller(): Promise<{ ok: true } | { ok: false; res: NextResponse }> {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { ok: false, res: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
-
-  const { data: row } = await supabaseAdmin
-    .from('engineers')
-    .select('engineer_id, permission_level, teams, resigned_date')
-    .eq('email', user.email!)
-    .single()
-  if (!row || row.resigned_date) {
-    return { ok: false, res: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
-  }
-  const caller = await withTeamPerm(row)
-  // 장비 사진은 고객사 화면과 쇼룸에 나온다 — 둘 중 하나라도 볼 수 있으면 허용한다.
-  if (!canViewMenu(caller, 'customers') && !canViewMenu(caller, 'showroom')) {
-    return { ok: false, res: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
-  }
-  return { ok: true }
+async function callerOk(): Promise<{ ok: true } | { ok: false; res: NextResponse }> {
+  // 속은 공용 함수다(lib/apiCaller.ts). **장비 사진은 고객사 화면과 쇼룸에 나오므로 둘 중
+  // 하나라도** 볼 수 있으면 허용한다(Need.menu 는 키를 하나라도 통과하면 된다).
+  // 돌려주는 모양({ ok })은 그대로 두어 부르는 두 자리(GET·POST)를 손대지 않았다.
+  const r = await loadApiCaller({ kind: 'menu', keys: ['customers', 'showroom'] },
+    { tag: 'device-image', method: 'GET' })
+  return r.error ? { ok: false, res: r.error } : { ok: true }
 }
 
 /** 폭 — 목록 안의 값만. 주지 않으면 원본을 서명한다. */
@@ -99,7 +85,7 @@ async function signOne(path: string, width: number | null): Promise<string | nul
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await loadCaller()
+  const auth = await callerOk()
   if (!auth.ok) return auth.res
 
   const raw = req.nextUrl.searchParams.get('path')
@@ -126,7 +112,7 @@ export async function GET(req: NextRequest) {
  * 서명하지 못한 경로는 **그냥 빠진다** — 보조 정보라 한 장 때문에 화면을 막지 않는다.
  */
 export async function POST(req: NextRequest) {
-  const auth = await loadCaller()
+  const auth = await callerOk()
   if (!auth.ok) return auth.res
 
   const body = await req.json().catch(() => null) as { paths?: unknown; w?: unknown } | null

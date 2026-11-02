@@ -35,11 +35,7 @@ import {
 } from '@/components/common/ui'
 import { daysBetween, todayKST } from '@/lib/date'
 import { errorInfo } from '@/lib/errorInfo'
-import {
-  ACTION_LABELS, ACTION_STATUSES, AUTHOR_FIELD, FIELDS, FIELD_BY_KEY, SECTIONS,
-  actionFromStorage, changedFields, emptyInput, fromStorage, validateReport,
-  type ActionInput, type FieldDef, type FieldKey, type ReportInput,
-} from '@/lib/semiContact'
+import { ACTION_LABELS, ACTION_STATUSES, actionFromStorage, apiErrorText, AUTHOR_FIELD, changedFields, emptyInput, FIELD_BY_KEY, FIELDS, fromStorage, SECTIONS, type ActionInput, type FieldDef, type FieldKey, type ReportInput, validateReport } from '@/lib/semiContact'
 import {
   PROJECT_KEYS, PROJECT_NO_KEY, PROJECT_NO_LABEL, PROJECT_NO_MAX, PROJECT_TEXT_MAX, validateProjectNo,
 } from '@/lib/semiContact/project'
@@ -264,7 +260,7 @@ function SemiProjectDetailInner() {
       if (!res.ok) {
         const json = await res.json().catch(() => ({}))
         console.error('[contact/semi/detail] 엑셀 실패', { status: res.status, error: json })
-        toast.error(json.error || `엑셀을 내려받지 못했습니다 (${res.status})`)
+        toast.error(apiErrorText(res.status, json, `엑셀을 내려받지 못했습니다 (${res.status})`))
         return
       }
       const blob = await res.blob()
@@ -306,7 +302,7 @@ function SemiProjectDetailInner() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         console.error('[contact/semi/detail] Project 삭제 실패', { status: res.status, error: json })
-        toast.error(json.error || `Project 를 삭제하지 못했습니다 (${res.status})`)
+        toast.error(apiErrorText(res.status, json, `Project 를 삭제하지 못했습니다 (${res.status})`))
         return
       }
       toast.success(`Project 를 삭제했습니다 (보고서 ${json.deleted?.reports ?? 0}건, Action ${json.deleted?.actions ?? 0}건)`)
@@ -337,7 +333,7 @@ function SemiProjectDetailInner() {
       if (!res.ok) {
         console.error('[contact/semi/detail] Action 상태 저장 실패', { status: res.status, error: json })
         setActionRows(rows => rows.map(a => (a.action_id === actionId ? { ...a, status: prevStatus } : a)))
-        toast.error(json.error || `Action 상태를 바꾸지 못했습니다 (${res.status})`)
+        toast.error(apiErrorText(res.status, json, `Action 상태를 바꾸지 못했습니다 (${res.status})`))
       }
     } catch (e) {
       console.error('[contact/semi/detail] Action 상태 저장 실패', errorInfo(e))
@@ -936,7 +932,7 @@ function ProjectEditModal({ project, onClose, onSaved, onDelete, deleting }: {
         // 칸별 오류(번호 중복 포함)는 그 칸 아래에만, 그 밖의 오류는 모달 아래 상자에 보인다.
         const fe = json.fieldErrors && typeof json.fieldErrors === 'object' ? json.fieldErrors : null
         if (fe) setErrors(fe)
-        if (!fe) setError(json.error || `Project 정보를 수정하지 못했습니다 (${res.status})`)
+        if (!fe) setError(apiErrorText(res.status, json, `Project 정보를 수정하지 못했습니다 (${res.status})`))
         console.error('[contact/semi/detail] Project 정보 수정 실패', { status: res.status, error: json })
         return
       }

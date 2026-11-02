@@ -42,11 +42,7 @@ import {
 import { kstStamp, nowHmKST, todayKST } from '@/lib/date'
 import { errorInfo } from '@/lib/errorInfo'
 import { loadTeamPerms } from '@/lib/teamPerms'
-import {
-  ACTION_LABELS, ACTION_PRIORITIES, ACTION_STATUSES, FIELDS, FIELD_BY_KEY, FIELD_KEYS, SECTIONS,
-  actionFromStorage, changedFields, emptyAction, emptyInput, fromStorage, meaningfulActions, prefillFromPrevious, validateReport,
-  type ActionField, type ActionInput, type FieldDef, type FieldKey, type ReportInput,
-} from '@/lib/semiContact'
+import { ACTION_LABELS, ACTION_PRIORITIES, ACTION_STATUSES, actionFromStorage, apiErrorText, changedFields, emptyAction, emptyInput, FIELD_BY_KEY, FIELD_KEYS, FIELDS, fromStorage, meaningfulActions, prefillFromPrevious, SECTIONS, type ActionField, type ActionInput, type FieldDef, type FieldKey, type ReportInput, validateReport } from '@/lib/semiContact'
 import { PROJECT_KEYS } from '@/lib/semiContact/project'
 import { NEXT_CONTACT_TBD_LABEL, nextContactTbdOf } from '@/lib/semiContact/storage'
 import { layoutOf } from '@/lib/semiContact/layout'
@@ -486,7 +482,7 @@ function SemiReportWriteInner() {
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
         console.error('[contact/semi/write] 보고서 삭제 실패', { status: res.status, error: json })
-        toast.error(json.error || `보고서를 삭제하지 못했습니다 (${res.status})`)
+        toast.error(apiErrorText(res.status, json, `보고서를 삭제하지 못했습니다 (${res.status})`))
         return
       }
       if (draftKey !== null) clearDraftAt(draftKey)
@@ -549,12 +545,12 @@ function SemiReportWriteInner() {
         setErrors((json.fieldErrors ?? {}) as Partial<Record<FieldKey | 'actions', string>>)
         setActionErrors(mapActionErrors(sendRows, Array.isArray(json.actionErrors) ? json.actionErrors : []))
         scrollToError.current = true
-        toast.error(json.error || '입력값을 확인해주세요')
+        toast.error(apiErrorText(res.status, json, '입력값을 확인해주세요'))
         return
       }
       if (!res.ok) {
         console.error('[contact/semi/write] 저장 실패', { status: res.status, error: json })
-        toast.error(json.error || `보고서를 저장하지 못했습니다 (${res.status})`)
+        toast.error(apiErrorText(res.status, json, `보고서를 저장하지 못했습니다 (${res.status})`))
         return
       }
       if (draftKey !== null) clearDraftAt(draftKey)

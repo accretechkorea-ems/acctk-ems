@@ -13,7 +13,7 @@
 // 같은 날이면 report_id 가 큰 보고서)의 날짜·작성자 이름·직책(engineers.position). 정렬은 최근 접촉 내림차순, 보고서가 없으면 생성일로 견준다.
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import { authorizeSemiContact } from '@/lib/semiContactServer'
+import { loadCaller } from '@/lib/apiCaller'
 import { kstYmd } from '@/lib/date'
 
 const TAG = 'semi-contact/projects'
@@ -68,7 +68,10 @@ async function handle(req: NextRequest) {
     console.error(`[${TAG}] 환경 변수 누락 — SUPABASE URL 또는 SERVICE_ROLE_KEY`)
     return bad('서버 설정 오류 — 환경 변수가 없습니다. 관리자에게 알려주세요.', 500)
   }
-  const auth = await authorizeSemiContact(TAG)
+  // 로그인 + 접촉 보고서 권한(사업부 + contact_semi) — 공용 함수의 Need 'semi' 다.
+  // 401·403 문구는 **공용 모양**('Unauthorized'/'Forbidden')으로 통일했다. 한국어 안내는
+  // 화면이 만든다(lib/semiContact.ts 의 apiErrorText).
+  const auth = await loadCaller({ kind: 'semi' }, { tag: TAG, method: 'GET' })
   if (auth.error) return auth.error
   const teamParam = new URL(req.url).searchParams.get('team')
   const team = teamParam === null ? null : teamParam.trim()
