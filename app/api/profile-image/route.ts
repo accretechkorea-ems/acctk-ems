@@ -1,16 +1,12 @@
-import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 import {
   AVATAR_WIDTHS, PROFILE_BUCKET, isSafeProfileImageName, isOwnProfileImageName, profileImagePath,
 } from '@/lib/profileImage'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 /** 서명 URL 만료 — 코드베이스의 다른 서명 URL 과 같은 1시간. */
+const TAG = 'profile-image'
+
 const SIGNED_URL_TTL = 60 * 60
 
 /**
@@ -23,9 +19,11 @@ const SIGNED_URL_TTL = 60 * 60
  * (2026-10-23 실측: 원본 323,711바이트 → width=80 변환 2,190바이트).
  */
 export async function GET(req: NextRequest) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // 로그인·재직 확인 + service role 클라이언트를 한 줄로(lib/apiCaller.ts).
+  // 프로필 사진은 사내 직원끼리 보는 것이 정상이라 메뉴 권한은 보지 않는다 — Need 는 login 이다.
+  // (종전에도 「engineers 행이 있는가」만 보았다. 그 조회가 loadCaller 안으로 들어갔다.)
+  const { error: authErr, caller, sb: supabaseAdmin } = await loadCaller({ kind: 'login' }, { tag: TAG, method: 'GET' })
+  if (authErr) return authErr
 
   const raw = req.nextUrl.searchParams.get('path')
   if (!raw) return NextResponse.json({ error: 'path required' }, { status: 400 })
@@ -41,15 +39,6 @@ export async function GET(req: NextRequest) {
   if (width !== null && !(AVATAR_WIDTHS as readonly number[]).includes(width)) {
     return NextResponse.json({ error: 'Invalid w' }, { status: 400 })
   }
-
-  // 권한: 프로필 사진은 사내 직원끼리 열람하는 것이 정상이므로 '인증된 직원' 이면 허용한다.
-  // RLS 에 의존하지 않도록 service role 로 caller 가 실제 engineers 행인지 명시적으로 확인한다.
-  const { data: caller } = await supabaseAdmin
-    .from('engineers')
-    .select('engineer_id')
-    .eq('email', user.email!)
-    .single()
-  if (!caller) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   // 서명 대상이 실제 프로필 이미지 경로인지 확인한다(버킷 안의 임의 객체를 서명하지 않게).
   //
@@ -79,7 +68,7 @@ export async function GET(req: NextRequest) {
 
   try {
     await supabaseAdmin.from('audit_log').insert({
-      actor_email: user.email, action: 'READ', table_name: PROFILE_BUCKET, row_id: safePath,
+      actor_email: caller.email, action: 'READ', table_name: PROFILE_BUCKET, row_id: safePath,
     })
   } catch { /* best-effort */ }
 
@@ -104,9 +93,9 @@ export async function GET(req: NextRequest) {
  * (app/account/page.tsx). 그래서 여기서도 막지 않고 기록만 남긴다.
  */
 export async function DELETE(req: NextRequest) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // ① 누가 부르는가 — 로그인·재직 확인(lib/apiCaller.ts). sb 는 service role 이다.
+  const { error: authErr, caller, sb: supabaseAdmin } = await loadCaller({ kind: 'login' }, { tag: TAG, req })
+  if (authErr) return authErr
 
   const raw = req.nextUrl.searchParams.get('path')
   if (!raw) return NextResponse.json({ error: 'path required' }, { status: 400 })
@@ -115,14 +104,6 @@ export async function DELETE(req: NextRequest) {
   if (!safePath || !isSafeProfileImageName(safePath)) {
     return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
   }
-
-  // ① 누가 부르는가.
-  const { data: caller } = await supabaseAdmin
-    .from('engineers')
-    .select('engineer_id')
-    .eq('email', user.email!)
-    .single()
-  if (!caller) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   // ③ 자기 사진만.
   if (!isOwnProfileImageName(safePath, caller.engineer_id)) {
@@ -151,7 +132,7 @@ export async function DELETE(req: NextRequest) {
 
   try {
     await supabaseAdmin.from('audit_log').insert({
-      actor_email: user.email, action: 'DELETE', table_name: PROFILE_BUCKET, row_id: safePath,
+      actor_email: caller.email, action: 'DELETE', table_name: PROFILE_BUCKET, row_id: safePath,
     })
   } catch { /* best-effort */ }
 

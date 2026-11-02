@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { canViewMenu } from '@/lib/permissions'
 import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
@@ -18,17 +18,10 @@ const supabaseAdmin = createClient(
 )
 
 export async function POST(req: Request) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: caller, error: callerErr } = await supabase
-    .from('engineers')
-    .select('engineer_id, name, position, permission_level, teams')
-    .eq('email', user.email!)
-    .single()
-  if (callerErr) console.error(' caller lookup failed', { email: user.email, error: callerErr })
-  if (!caller) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // 로그인·재직 확인만 공용 함수로 받는다 — **문턱은 아래에서 갈린다**:
+  // 발주 메뉴가 있는 팀(또는 관리자)은 모든 견적, 그 밖에는 본인 견적만.
+  const { error: authErr, caller } = await loadCaller({ kind: 'login' }, { tag: 'purchase-order', req })
+  if (authErr) return authErr
 
   // 팀 권한 플래그 — caller 판정과 아래 알림 대상 선별에 함께 쓴다.
   // 발주·계산서 상태를 바꾸는 라우트다. 권한 변경이 즉시 반영돼야 해 캐시를 건너뛴다.
@@ -84,10 +77,10 @@ export async function POST(req: Request) {
   }
 
   // 로그: 누가 어떤 action 을 어떤 견적에 했는지 추적
-  console.log('[purchase-order]', { action, quoteId, callerId: caller.engineer_id, callerEmail: user.email, privileged, gate: gateRow.gate })
+  console.log('[purchase-order]', { action, quoteId, callerId: caller.engineer_id, callerEmail: caller.email, privileged, gate: gateRow.gate })
 
   const sender = caller
-  const senderLabel = [sender.name, sender.position].filter(Boolean).join(' ') || (user.email ?? '')
+  const senderLabel = [sender.name, sender.position].filter(Boolean).join(' ') || caller.email
 
   // 발주서 업로드
   if (action === 'upload') {
@@ -315,9 +308,10 @@ export async function POST(req: Request) {
 }
 
 export async function GET(req: Request) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // 발주서 PDF 서명 — 로그인·재직 확인만 한다. **그 파일이 실제 발주서인지**는 아래에서
+  // 조회로 확인한다(종전과 같다. 읽기라 팀 권한 캐시를 그대로 쓴다).
+  const { error: authErr, sb: supabase } = await loadCaller({ kind: 'login' }, { tag: 'purchase-order', method: 'GET' })
+  if (authErr) return authErr
 
   const { searchParams } = new URL(req.url)
   const path = searchParams.get('path')

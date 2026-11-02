@@ -6,7 +6,7 @@
 // 이 라우트는 상태(status)만 바꾼다 — 본문에 다른 칸이 와도 쓰지 않는다. 상태 값은 등록표(ACTION_STATUSES)의 것만.
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import { authorizeSemiContact } from '@/lib/semiContactServer'
+import { loadCaller } from '@/lib/apiCaller'
 import { ACTION_STATUSES } from '@/lib/semiContact'
 
 const TAG = 'semi-contact/action'
@@ -32,7 +32,9 @@ async function handle(req: NextRequest) {
     console.error(`[${TAG}] 환경 변수 누락 — SUPABASE URL 또는 SERVICE_ROLE_KEY`)
     return bad('서버 설정 오류 — 환경 변수가 없습니다. 관리자에게 알려주세요.', 500)
   }
-  const auth = await authorizeSemiContact(TAG)
+  // 로그인 + 접촉 보고서 권한 — 공용 함수의 Need 'semi'(lib/apiCaller.ts).
+  // 401·403 문구는 공용 모양이고, 한국어 안내는 화면이 만든다(lib/semiContact 의 apiErrorText).
+  const auth = await loadCaller({ kind: 'semi' }, { tag: TAG, req })
   if (auth.error) return auth.error
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>

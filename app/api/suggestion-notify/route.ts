@@ -8,10 +8,9 @@
 // 아무 문구나 담은 알림을 남에게 보낼 수 있다. 다만 「직전 값」(답변 유무·이전 상태)은
 // 저장이 끝난 뒤엔 DB 에 없으므로 화면이 보내 주되, DB 의 현재 값과 앞뒤가 맞는지 본다.
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { isSuperAdmin } from '@/lib/permissions'
-import { withTeamPerm } from '@/lib/teamPermsServer'
 
 /**
  * 건의사항을 받아 보는 관리자(권재원). 지금은 1인 관리자 체계라 하드코딩한다.
@@ -33,24 +32,17 @@ const supabaseAdmin = createClient(
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 const skip = (reason: string) => NextResponse.json({ sent: false, reason })
 
-type Caller = { engineer_id: number; name: string | null; position: string | null; permission_level: string | null; teams: string | null }
+/** 호출자 — 공용 모양 그대로다(lib/apiCaller.ts). */
+type Caller = ApiCaller
 type Row = { suggestion_id: number; title: string; engineer_id: number; admin_reply: string | null; status: string }
 
 const cut = (s: string) => (s.length > TITLE_MAX ? `${s.slice(0, TITLE_MAX)}…` : s)
 
 export async function POST(req: Request) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: callerRow, error: callerErr } = await supabase
-    .from('engineers')
-    .select('engineer_id, name, position, permission_level, teams')
-    .eq('email', user.email)
-    .single()
-  if (callerErr) console.error('[suggestion-notify] caller lookup failed', { email: user.email, error: callerErr })
-  const caller = await withTeamPerm(callerRow as Caller | null)
-  if (!caller) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // 건의사항은 로그인 전원이 쓰는 화면이라 메뉴 권한을 보지 않는다 — Need 는 login 이다.
+  // 「자기 건의에만 알림」·「답변 알림은 관리자만」은 아래 두 함수가 그대로 판정한다.
+  const { error: authErr, caller } = await loadCaller({ kind: 'login' }, { tag: 'suggestion-notify', req })
+  if (authErr) return authErr
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
   const action = typeof body.action === 'string' ? body.action : 'created'

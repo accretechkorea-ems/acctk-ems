@@ -9,10 +9,8 @@
 // 항목·상태값은 lib/installPrep.ts 의 화이트리스트로 본다(DB 의 CHECK 와 같은 목록이다).
 
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewMenu } from '@/lib/permissions'
-import { withTeamPerm } from '@/lib/teamPermsServer'
 import { isPrepStatus, PREP_DONE, prepItemOf } from '@/lib/installPrep'
 
 const PREP_COLUMNS =
@@ -30,23 +28,14 @@ const supabaseAdmin = createClient(
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
-type Caller = { engineer_id: number; permission_level: string | null; teams: string | null }
+/** 호출자 — 공용 모양 그대로다(lib/apiCaller.ts). */
+type Caller = ApiCaller
 
 /** 로그인 + 고객사 열람 권한. 통과하면 caller 를 돌려준다. */
 async function authorize(): Promise<{ error: NextResponse; caller: null } | { error: null; caller: Caller }> {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user?.email) return { error: bad('Unauthorized', 401), caller: null }
-
-  const { data: row, error } = await supabase
-    .from('engineers')
-    .select('engineer_id, permission_level, teams')
-    .eq('email', user.email)
-    .single()
-  if (error) console.error('[install-prep] caller lookup failed', { email: user.email, error })
-  const caller = await withTeamPerm((row ?? null) as Caller | null)
-  if (!caller || !canViewMenu(caller, 'customers')) return { error: bad('Forbidden', 403), caller: null }
-  return { error: null, caller }
+  // 속은 공용 함수다(lib/apiCaller.ts) — 로그인·재직·고객사 메뉴 권한을 한 번에 본다.
+  const r = await loadCaller({ kind: 'menu', keys: ['customers'] }, { tag: 'install-prep', method: 'POST' })
+  return r.error ? { error: r.error, caller: null } : { error: null, caller: r.caller }
 }
 
 /** 양의 정수만. 목록은 쉼표로 받는다. */

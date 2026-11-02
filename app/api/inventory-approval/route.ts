@@ -1,8 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { isOwner, loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
-import { canViewMenu } from '@/lib/permissions'
-import { withTeamPerm } from '@/lib/teamPermsServer'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,22 +8,11 @@ const supabaseAdmin = createClient(
 )
 
 export async function POST(req: Request) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   // 재고 메뉴 권한 또는 superadmin만 허용
-  const { data: callerRow, error: callerErr } = await supabase
-    .from('engineers')
-    .select('engineer_id, teams, permission_level')
-    .eq('email', user.email!)
-    .single()
-  if (callerErr) console.error(' caller lookup failed', { email: user.email, error: callerErr })
   // 재고 요청을 승인·반려하는 라우트다. 권한 변경이 즉시 반영돼야 해 캐시를 건너뛴다.
-  const caller = await withTeamPerm(callerRow, { fresh: true })
-  if (!caller || !canViewMenu(caller, 'inventory')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  // 재고 요청을 승인·반려하는 라우트다. 쓰기라 팀 권한 캐시를 건너뛴다.
+  const { error: authErr, caller } = await loadCaller({ kind: 'menu', keys: ['inventory'] }, { tag: 'inventory-approval', req })
+  if (authErr) return authErr
 
   const body = await req.json()
   const { action, request_id, reject_reason } = body
@@ -42,6 +29,14 @@ export async function POST(req: Request) {
 
   if (reqErr || !req_data) return NextResponse.json({ error: '요청을 찾을 수 없습니다.' }, { status: 404 })
   if (req_data.status !== '대기중') return NextResponse.json({ error: '이미 처리된 요청입니다.' }, { status: 409 })
+
+  // **자기 요청은 자기가 승인하지 못한다**(2026-11-02 추가 — D37 조사 ②).
+  //   재고 메뉴 권한만 있으면 승인·반려가 되는 라우트라, 요청자와 승인자가 같아도 통과했다.
+  //   재고가 실제로 줄어드는 자리라 둘을 갈라야 한다. 메뉴는 사이드바에서 숨겨졌지만
+  //   (/inventory 직접 접근은 살아 있다) 라우트는 그대로 돌고 있으므로 여기서 막는다.
+  if (isOwner(req_data, caller)) {
+    return NextResponse.json({ error: '본인 요청은 승인할 수 없습니다.' }, { status: 403 })
+  }
 
   if (action === 'approve') {
     // 재고 수량 확인

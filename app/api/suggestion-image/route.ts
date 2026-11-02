@@ -8,7 +8,7 @@
 // 공지 이미지(/api/notice)와 같은 text[] 방식이되, 배열에는 전체 URL 이 아니라
 // 버킷 안 파일명만 담는다(비공개 버킷이므로 열 때 서명 URL 을 발급한다).
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 import { isSuperAdmin } from '@/lib/permissions'
 import { parseDataUrlImage } from '@/lib/imageUpload'
@@ -28,23 +28,16 @@ const supabaseAdmin = createClient(
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
-type Caller = { engineer_id: number; permission_level: string | null; teams: string | null }
+/** 호출자 — 공용 모양 그대로다(lib/apiCaller.ts). */
+type Caller = ApiCaller
 type Row = { suggestion_id: number; engineer_id: number; image_urls: string[] | null }
 
 /** 로그인 확인. 건의사항 화면은 로그인 전원 열람이라 별도 권한 판정이 없다. */
 async function authorize(): Promise<{ error: NextResponse; caller: null } | { error: null; caller: Caller }> {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user?.email) return { error: bad('Unauthorized', 401), caller: null }
-
-  const { data: row, error } = await supabase
-    .from('engineers')
-    .select('engineer_id, permission_level, teams')
-    .eq('email', user.email)
-    .single()
-  if (error) console.error('[suggestion-image] caller lookup failed', { email: user.email, error })
-  if (!row) return { error: bad('Forbidden', 403), caller: null }
-  return { error: null, caller: row as Caller }
+  // 건의사항 화면은 로그인 전원 열람이라 메뉴 권한을 보지 않는다 — Need 는 login 이다.
+  // 「작성자만 올리고 지운다」는 판정은 아래 핸들러가 그대로 한다.
+  const r = await loadCaller({ kind: 'login' }, { tag: 'suggestion-image', method: 'POST' })
+  return r.error ? { error: r.error, caller: null } : { error: null, caller: r.caller }
 }
 
 /** 건의 1건을 service role 로 읽는다. */

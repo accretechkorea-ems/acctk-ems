@@ -2,7 +2,7 @@
 //   GET /api/semi-contact/export?project_id=<id>              → 전체 이력(시트: 이력 · Action · 요약)
 //   GET /api/semi-contact/export?project_id=<id>&report_id=<id> → 보고서 한 장(파일명 <Project 번호>_#n_접촉일.xlsx)
 //
-// 접근 검사는 다른 접촉 보고서 라우트와 같은 authorizeSemiContact(lib/semiContactServer.ts) — 401·403 형식도 같다.
+// 접근 검사는 다른 라우트와 같은 공용 호출자다(lib/apiCaller.ts 의 Need 'semi') — 401·403 형식도 같다.
 // 데이터는 service role 로 읽는다(Project 상세 화면과 같은 세 표, 작성자 이름은 author FK 임베드).
 // Project 가 없으면 404, report_id 가 그 Project 의 보고서가 아니면 404.
 // 시트 모양은 lib/semiContact/excel.ts 가 정하고, 이 라우트는 exceljs 로 Workbook 을 만들어 넘긴 뒤 파일로 돌려준다

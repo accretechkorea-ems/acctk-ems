@@ -17,10 +17,9 @@
 //
 // created_by 는 본문 값을 쓰지 않고 세션에서 강제한다 — 누가 발급했는지가 책임 소재다.
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
-import { withTeamPerm } from '@/lib/teamPermsServer'
+import { isSuperAdmin } from '@/lib/permissions'
 import { addDays, todayKST } from '@/lib/date'
 import {
   buildInquiryNo, inquiryTypeOf, isInquiryDirection, periodKeyFor,
@@ -44,7 +43,8 @@ const ATTACHMENT_BUCKET = 'inquiry-attachments'
  */
 const MAX_TRIES = 5
 
-type Caller = { engineer_id: number; permission_level: string | null; teams: string | null }
+/** 호출자 — 공용 모양 그대로다(lib/apiCaller.ts). */
+type Caller = ApiCaller
 
 const admin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -86,21 +86,13 @@ const isMissingFunction = (e: unknown): boolean => {
 
 /** 로그인 + 의뢰서 메뉴 권한. 통과하면 caller 를 돌려준다. */
 async function authorize(): Promise<{ error: NextResponse; caller: null } | { error: null; caller: Caller }> {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user?.email) return { error: bad('로그인이 필요합니다. 다시 로그인해 주세요.', 401), caller: null }
-
-  const { data: row, error } = await supabase
-    .from('engineers')
-    .select('engineer_id, permission_level, teams')
-    .eq('email', user.email)
-    .single()
-  if (error) console.error(`[${TAG}] caller lookup failed`, { email: user.email, error })
-  const caller = await withTeamPerm((row ?? null) as Caller | null)
-  if (!caller || !canViewMenu(caller, 'inquiries')) {
-    return { error: bad('이 메뉴를 사용할 권한이 없습니다.', 403), caller: null }
-  }
-  return { error: null, caller }
+  // 속은 공용 함수다(lib/apiCaller.ts) — 로그인·재직·의뢰서 메뉴 권한을 한 번에 본다.
+  // **문구는 종전 그대로** 한국어다(이 화면은 라우트가 보낸 글을 그대로 띄운다).
+  const r = await loadCaller({ kind: 'menu', keys: ['inquiries'] }, { tag: TAG, method: 'POST' })
+  if (!r.error) return { error: null, caller: r.caller }
+  return r.error.status === 401
+    ? { error: bad('로그인이 필요합니다. 다시 로그인해 주세요.', 401), caller: null }
+    : { error: bad('이 메뉴를 사용할 권한이 없습니다.', 403), caller: null }
 }
 
 /**

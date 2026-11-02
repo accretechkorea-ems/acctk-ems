@@ -6,10 +6,10 @@
 //   · 남의 engineer_id 로 notifications 를 넣는 일은 service role 에서만 하게 막는다
 //     (notifications 의 INSERT 정책을 없애기 위한 선행 작업이다).
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
+import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
 import { canViewMenu } from '@/lib/permissions'
-import { withTeamPerm, loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,22 +20,12 @@ const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 const bad = (message: string) => NextResponse.json({ error: message }, { status: 400 })
 
 export async function POST(req: Request) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   // 재고 화면 자체가 canViewSalesMgmt 로 잠겨 있다(usePageGuard). 같은 판정을 서버에서 다시 한다.
-  const { data: callerRow, error: callerErr } = await supabase
-    .from('engineers')
-    .select('engineer_id, teams, permission_level')
-    .eq('email', user.email!)
-    .single()
-  if (callerErr) console.error('[inventory-request] caller lookup failed', { email: user.email, error: callerErr })
   // 권한을 거둔 직후에도 통과하면 곤란해 캐시를 건너뛴다(승인 라우트와 같은 기준).
-  const caller = await withTeamPerm(callerRow, { fresh: true })
-  if (!caller || !canViewMenu(caller, 'inventory')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  // 재고 화면 자체가 같은 판정으로 잠겨 있다(usePageGuard). 쓰기라 팀 권한 캐시를
+  // 건너뛴다 — 쓰기 메서드의 기본값이다(lib/apiCaller.ts).
+  const { error: authErr, caller } = await loadCaller({ kind: 'menu', keys: ['inventory'] }, { tag: 'inventory-request', req })
+  if (authErr) return authErr
 
   const body = await req.json().catch(() => ({}))
   const itemId = Number(body?.item_id)

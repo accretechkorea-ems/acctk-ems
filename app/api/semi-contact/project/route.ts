@@ -1,7 +1,7 @@
 // 반도체 고객 접촉 보고 — Project 만들기(POST)·정보 수정(PATCH)·삭제(DELETE).
 //
 // 흐름(만들기)
-//   1. 접근 검사(lib/semiContactServer.ts) — 세션으로 로그인 확인, service role 로 engineers·팀 사업부를 읽어
+//   1. 접근 검사(lib/apiCaller.ts 의 Need 'semi') — 세션으로 로그인 확인, service role 로 engineers·팀 사업부를 읽어
 //      반도체 팀 + contact_semi 권한 또는 사업부 전환 권한자만 통과. 없으면 403.
 //   2. 본문에서 Project 번호와 Project 칸(등록표의 storage 'project')만 꺼내 검증한다.
 //      번호는 사람이 직접 적는 자유 형식이다(lib/semiContact/project.ts — 앞뒤 공백 제거·빈 값 불가·길이 상한만).
@@ -19,7 +19,7 @@
 // created_by 는 본문 값을 쓰지 않고 세션에서 강제한다. created_at·updated_at 은 DB 기본값(now())이 채운다.
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import { authorizeSemiContact } from '@/lib/semiContactServer'
+import { loadCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { isSuperAdmin } from '@/lib/permissions'
 import { emptyInput, toStorage, validateReport, type FieldKey } from '@/lib/semiContact'
 import {
@@ -28,7 +28,8 @@ import {
 
 const TAG = 'semi-contact/project'
 
-type Caller = { engineer_id: number; permission_level: string | null; teams: string | null }
+/** 호출자 — 공용 모양 그대로다(lib/apiCaller.ts). */
+type Caller = ApiCaller
 
 const admin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -79,11 +80,13 @@ function dbConstraintResponse(e: { code?: string } | null): NextResponse | null 
 
 /**
  * 로그인 + 접촉 보고서 접근 권한./**
- * 로그인 + 접촉 보고서 접근 권한. 판정은 공용 함수 authorizeSemiContact(lib/semiContactServer.ts)가 한다 —
+ * 로그인 + 접촉 보고서 접근 권한. 판정은 공용 호출자(lib/apiCaller.ts)의 Need 'semi' 가 한다 —
  * 화면 가드와 같은 규칙(반도체 팀 + contact_semi 권한, 또는 사업부 전환 권한자). 메시지·상태 코드는 종전과 같다.
  */
 async function authorize(): Promise<{ error: NextResponse; caller: null } | { error: null; caller: Caller }> {
-  return authorizeSemiContact(TAG)
+  // 공용 함수의 Need 'semi' — 사업부 + contact_semi 를 본다(lib/apiCaller.ts).
+  // 401·403 문구는 공용 모양이고, 한국어 안내는 화면이 만든다(lib/semiContact 의 apiErrorText).
+  return loadCaller({ kind: 'semi' }, { tag: TAG, method: 'POST' })
 }
 
 export async function POST(req: NextRequest) {

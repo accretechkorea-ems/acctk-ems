@@ -1,7 +1,7 @@
 // 반도체 고객 접촉 보고 — 접촉 보고서 한 장 저장(새로 쓰기만. 수정 PATCH 는 다음 단계).
 //
 // 흐름(로그인·권한·클라이언트 구분은 app/api/semi-contact/project/route.ts 와 같다)
-//   1. 접근 검사(lib/semiContactServer.ts) — 반도체 팀 + contact_semi 권한 또는 사업부 전환 권한자만. 없으면 403.
+//   1. 접근 검사(lib/apiCaller.ts 의 Need 'semi') — 반도체 팀 + contact_semi 권한 또는 사업부 전환 권한자만. 없으면 403.
 //   2. project_id 가 실제로 있는지 service role 로 확인한다. 없으면 404.
 //   3. 본문의 필드 값(등록표 36칸)·Action 줄·「Action 없음」을 lib/semiContact 의 validateReport 로 검증한다.
 //      Project 칸(고객사·사업장/부서·Project/구매안건)은 본문 값을 쓰지 않고 방금 읽은 Project 값으로 채운다 —
@@ -23,7 +23,7 @@
 //   Project updated_at 갱신은 보고서가 이미 저장된 뒤라 실패해도 되돌리지 않는다(로그만 남긴다 — 목록 정렬용 시각이다).
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-import { authorizeSemiContact } from '@/lib/semiContactServer'
+import { loadCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { isSuperAdmin } from '@/lib/permissions'
 import {
   FIELD_KEYS, NEXT_CONTACT_TBD_KEY, emptyInput, meaningfulActions, toStorage, actionToStorage, validateReport,
@@ -39,7 +39,8 @@ const ACTIONS_MAX = 50
 /** 칸 하나의 길이 상한. 긴 글(회의 내용 등)도 넉넉히 들어가는 값이다 — 잘못된 요청을 막는 안전 상한이다. */
 const FIELD_TEXT_MAX = 10_000
 
-type Caller = { engineer_id: number; permission_level: string | null; teams: string | null }
+/** 호출자 — 공용 모양 그대로다(lib/apiCaller.ts). */
+type Caller = ApiCaller
 
 const admin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -61,11 +62,13 @@ const envReady = (): boolean =>
   !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY
 
 /**
- * 로그인 + 접촉 보고서 접근 권한. 판정은 공용 함수 authorizeSemiContact(lib/semiContactServer.ts)가 한다 —
+ * 로그인 + 접촉 보고서 접근 권한. 판정은 공용 호출자(lib/apiCaller.ts)의 Need 'semi' 가 한다 —
  * 화면 가드와 같은 규칙(반도체 팀 + contact_semi 권한, 또는 사업부 전환 권한자). 메시지·상태 코드는 종전과 같다.
  */
 async function authorize(): Promise<{ error: NextResponse; caller: null } | { error: null; caller: Caller }> {
-  return authorizeSemiContact(TAG)
+  // 공용 함수의 Need 'semi' — 사업부 + contact_semi 를 본다(lib/apiCaller.ts).
+  // 401·403 문구는 공용 모양이고, 한국어 안내는 화면이 만든다(lib/semiContact 의 apiErrorText).
+  return loadCaller({ kind: 'semi' }, { tag: TAG, method: 'POST' })
 }
 
 /** 문자열만 받는다(그 밖은 빈 값). */

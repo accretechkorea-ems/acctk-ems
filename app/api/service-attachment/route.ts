@@ -9,10 +9,9 @@
 // 접근 권한은 고객사 열람 권한(canViewCustomers)을 기준으로 한다 — 고객 현장 자료다.
 // 개별 삭제만 올린 사람 본인 또는 superadmin 으로 좁힌다(남이 올린 자료를 함부로 지우지 못하게).
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
-import { withTeamPerm } from '@/lib/teamPermsServer'
+import { isSuperAdmin } from '@/lib/permissions'
 import { parseDataUrlImage } from '@/lib/imageUpload'
 // 앞머리 바이트 판정과 문서 형식 표는 의뢰서 교신 첨부와 함께 쓴다(lib/fileTypes.ts).
 // 값·동작은 여기 있던 것과 같다 — 옮기기만 했다.
@@ -38,23 +37,14 @@ const supabaseAdmin = createClient(
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
-type Caller = { engineer_id: number; permission_level: string | null; teams: string | null }
+/** 호출자 — 공용 모양 그대로다(lib/apiCaller.ts). */
+type Caller = ApiCaller
 
 /** 로그인 + 고객사 열람 권한. 통과하면 caller 를 돌려준다. */
 async function authorize(): Promise<{ error: NextResponse; caller: null } | { error: null; caller: Caller }> {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user?.email) return { error: bad('Unauthorized', 401), caller: null }
-
-  const { data: row, error } = await supabase
-    .from('engineers')
-    .select('engineer_id, permission_level, teams')
-    .eq('email', user.email)
-    .single()
-  if (error) console.error('[service-attachment] caller lookup failed', { email: user.email, error })
-  const caller = await withTeamPerm((row ?? null) as Caller | null)
-  if (!caller || !canViewMenu(caller, 'customers')) return { error: bad('Forbidden', 403), caller: null }
-  return { error: null, caller }
+  // 속은 공용 함수다(lib/apiCaller.ts) — 로그인·재직·고객사 메뉴 권한을 한 번에 본다.
+  const r = await loadCaller({ kind: 'menu', keys: ['customers'] }, { tag: 'service-attachment', method: 'POST' })
+  return r.error ? { error: r.error, caller: null } : { error: null, caller: r.caller }
 }
 
 // ── 파일 검증 ───────────────────────────────────────────────────────
