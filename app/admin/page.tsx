@@ -30,6 +30,7 @@ import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import AutocompleteInput from '@/components/common/AutocompleteInput'
 import { Z } from '@/lib/zIndex'
+import ModalOverlay from '@/components/common/ModalOverlay'
 import { todayKST, nowKSTParts } from '@/lib/date'
 
 const BLUE = '#234ea2'
@@ -112,6 +113,27 @@ const POSITION_ORDER: Record<string, number> = {
 
 const POSITIONS = ['사장', '총괄', '수석', '책임', '선임', '사원']
 
+/**
+ * 직원 등록 폼의 **시작값** — 폼을 열 때 넣는 값이자 「적은 것이 있는가」의 기준이다
+ * (ModalOverlay 의 dirty. 한곳에서 만들지 않으면 둘이 갈려 「바뀐 게 없는데 묻는다」가 생긴다).
+ */
+const emptyAddForm = () => ({
+  name: '', position: '사원', teams: '', email: '', initials: '', password: '', office: '',
+  scope: 'team' as SalesScopeChoice,
+})
+
+/** 직원 수정 폼의 시작값 — 고른 직원의 지금 값이다(없으면 빈 값). 같은 이유로 한곳에 둔다. */
+const editFormOf = (e: Engineer | null) => ({
+  name: e?.name ?? '',
+  position: e?.position || (e ? '사원' : ''),
+  teams: e?.teams || '',
+  email: e?.email || '',
+  initials: e?.initials || '',
+  permission_level: e?.permission_level || 'member',
+  office: e?.office || '',
+  scope: e ? scopeChoiceOf(e.in_sales_stats) : ('team' as SalesScopeChoice),
+})
+
 function AdminPageInner() {
   const supabase = createClient()
   const router = useRouter()
@@ -139,10 +161,10 @@ function AdminPageInner() {
   const [engineers, setEngineers] = useState<Engineer[]>([])
   const [engineerLoading, setEngineerLoading] = useState(false)
   const [showAddEngineer, setShowAddEngineer] = useState(false)
-  const [addForm, setAddForm] = useState({ name: '', position: '사원', teams: '', email: '', initials: '', password: '', office: '', scope: 'team' as SalesScopeChoice })
+  const [addForm, setAddForm] = useState(emptyAddForm)
   const [addLoading, setAddLoading] = useState(false)
   const [editEngineer, setEditEngineer] = useState<Engineer | null>(null)
-  const [editForm, setEditForm] = useState({ name: '', position: '', teams: '', email: '', initials: '', permission_level: 'member', office: '', scope: 'team' as SalesScopeChoice })
+  const [editForm, setEditForm] = useState(() => editFormOf(null))
   const [editLoading, setEditLoading] = useState(false)
   const [deleteEngineer, setDeleteEngineer] = useState<Engineer | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -1343,7 +1365,7 @@ function AdminPageInner() {
 
       {/* ── 목표 금액 모달 ── */}
       {showTargetModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={() => setShowTargetModal(false)} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 680, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🎯 목표 금액 관리</div>
@@ -1476,12 +1498,12 @@ function AdminPageInner() {
             </div>
             <div style={{ marginTop: 12, fontSize: 12, color: GRAY }}>* 수주·매출 목표는 각각 선택 입력이며, 둘 다 비운 채 저장하면 해당 목표가 삭제됩니다</div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* 견적서 삭제 안내 — 이 화면에는 삭제 기능이 없다. 결재함으로 보내는 길만 알려 준다. */}
       {showQuoteModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={closeQuoteModal} style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 520, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🗑️ 견적서 삭제</div>
@@ -1503,12 +1525,12 @@ function AdminPageInner() {
                 style={{ flex: 1, padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>결재함 열기</button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* ── 다운로드 로그 모달 ── */}
       {showLogModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={() => setShowLogModal(false)} style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 1100, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>📋 다운로드 로그</div>
@@ -1556,12 +1578,12 @@ function AdminPageInner() {
             </div>
             <div style={{ marginTop: 12, fontSize: 12, color: GRAY }}>* 최근 7일 이내 · 최대 1000건 표시 / 전체 기록은 Supabase에 보관됩니다</div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* ── 직원 관리 모달 ── */}
       {showEngineerModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={() => setShowEngineerModal(false)} style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
              <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>👥 직원 관리</div>
@@ -1611,7 +1633,7 @@ function AdminPageInner() {
                           </div>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
-                          <button onClick={() => { setEditEngineer(eng); setEditForm({ name: eng.name, position: eng.position || '사원', teams: eng.teams || '', email: eng.email || '', initials: eng.initials || '', permission_level: eng.permission_level || 'member', office: eng.office || '', scope: scopeChoiceOf(eng.in_sales_stats) }) }}
+                          <button onClick={() => { setEditEngineer(eng); setEditForm(editFormOf(eng)) }}
                             style={{ padding: '4px 12px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>수정</button>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
@@ -1625,12 +1647,12 @@ function AdminPageInner() {
               )}
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* ── 직원 등록 모달 ── */}
       {showAddEngineer && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={() => { setShowAddEngineer(false); setAddForm(emptyAddForm()) }} confirmClose dirty={JSON.stringify(addForm) !== JSON.stringify(emptyAddForm())} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 28, width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, marginBottom: 20 }}>직원 등록</div>
             <div style={{ display: 'grid', gap: 12 }}>
@@ -1696,12 +1718,12 @@ function AdminPageInner() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* ── 직원 수정 모달 ── */}
       {editEngineer && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={() => setEditEngineer(null)} confirmClose dirty={editEngineer ? JSON.stringify(editForm) !== JSON.stringify(editFormOf(editEngineer)) : false} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 28, width: '100%', maxWidth: 640, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, marginBottom: 20 }}>직원 정보 수정</div>
             <div style={{ display: 'grid', gap: 12 }}>
@@ -1787,7 +1809,7 @@ function AdminPageInner() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* ── 견적 분류 관리 모달 ── 목록·쓰기는 컴포넌트가 들고 있다. */}
@@ -1808,7 +1830,7 @@ function AdminPageInner() {
 
       {/* ── 부대비용 단가 모달 ── */}
       {showPresetModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={() => { setShowPresetModal(false); setEditingPreset(null) }} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🧾 부대비용 단가</div>
@@ -1889,12 +1911,12 @@ function AdminPageInner() {
             </div>
             <div style={{ marginTop: 12, fontSize: 11, color: GRAY }}>* 항목명이나 단가를 클릭하면 바로 수정할 수 있습니다. 단가를 바꿔도 이미 저장된 견적서 금액은 변하지 않습니다</div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* ── 공지 관리 모달 ── */}
       {showNoticeModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={() => { setShowNoticeModal(false); setNoticeEditing(null) }} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 760, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>📢 공지 관리</div>
@@ -2033,12 +2055,12 @@ function AdminPageInner() {
               </div>
             )}
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* ── 소속회사 관리 모달 ── */}
       {showParentModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={() => { setShowParentModal(false); setParentEditing(null) }} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 720, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🏬 회사 관리</div>
@@ -2144,12 +2166,12 @@ function AdminPageInner() {
               사업장이 연결된 회사는 삭제할 수 없습니다. 사업장 쪽에서 회사를 해제한 뒤 지워주세요.
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* ── 팀 관리 모달 ── */}
       {showOfficeModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={() => { setShowOfficeModal(false); closeOfficeForm() }} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🏢 사무실 관리</div>
@@ -2257,11 +2279,11 @@ function AdminPageInner() {
               ))}
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {showTeamModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={closeTeamModal} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
           {/* 팀 목록이 본체라 다른 모달보다 넓게 쓴다(이 모달에만 적용) */}
           <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -2386,12 +2408,12 @@ function AdminPageInner() {
               * 권한 변경은 저장 즉시 서버(API·RLS)에 반영됩니다. 다만 화면 메뉴는 브라우저가 팀 권한을 세션당 한 번만 읽어 두므로, 해당 팀 사용자는 새로고침 후 적용됩니다
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
 
       {/* ── 팀 권한 편집 모달 ── */}
       {permEditTeam && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={() => setPermEditTeam(null)} confirmClose closeOn={savingTeamId === permEditTeam.id ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal }}>
           <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, width: '100%', maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>{permEditTeam.name} 권한</div>
@@ -2430,11 +2452,11 @@ function AdminPageInner() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
       {/* ── 직원 삭제 모달 ── */}
       {deleteEngineer && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <ModalOverlay onClose={() => setDeleteEngineer(null)} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal }}>
           <div style={{ background: CARD_BG, borderRadius: 16, padding: 28, width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, marginBottom: 12 }}>직원 삭제</div>
             <div style={{ fontSize: 14, color: GRAY, lineHeight: 1.8, marginBottom: 16 }}>
@@ -2460,7 +2482,7 @@ function AdminPageInner() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   )
