@@ -15,7 +15,7 @@
 // 화면이 같은 함수를 쓸 수 있고, 스크립트로 그대로 돌려 볼 수 있다.
 
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller as loadApiCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { isSuperAdmin } from '@/lib/permissions'
 import { todayKST } from '@/lib/date'
@@ -36,21 +36,17 @@ const bad = (error: string, status = 400) => NextResponse.json({ error }, { stat
 
 const ROW_COLUMNS = 'delegation_id, owner_id, delegate_id, start_date, end_date, doc_type, reason, created_at'
 
-type Caller = { engineer_id: number; permission_level: string | null }
+/** 호출자 — 공용 모양 그대로다(lib/apiCaller.ts). */
+type Caller = ApiCaller
 
-/** 세션 → engineers. 퇴사자는 막는다. superadmin 판정에 permission_level 을 함께 읽는다. */
+/**
+ * 세션 → engineers. 속은 공용 함수다(lib/apiCaller.ts) — 로그인·재직·팀 권한을 한 번에 본다.
+ * 부르는 세 자리(GET·POST·DELETE)의 모양은 그대로 두었다. superadmin 판정에 쓰는
+ * permission_level 은 공용 호출자가 늘 들고 온다.
+ */
 async function loadCaller(): Promise<{ caller: Caller; error: null } | { caller: null; error: NextResponse }> {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user?.email) return { caller: null, error: bad('Unauthorized', 401) }
-  const { data: row } = await supabase
-    .from('engineers')
-    .select('engineer_id, permission_level, resigned_date')
-    .eq('email', user.email)
-    .single()
-  const me = row as Caller & { resigned_date: string | null } | null
-  if (!me || me.resigned_date) return { caller: null, error: bad('Forbidden', 403) }
-  return { caller: { engineer_id: me.engineer_id, permission_level: me.permission_level }, error: null }
+  const r = await loadApiCaller({ kind: 'login' }, { tag: TAG, method: 'POST' })
+  return r.error ? { caller: null, error: r.error } : { caller: r.caller, error: null }
 }
 
 type Person = { engineer_id: number; name: string | null; position: string | null }

@@ -21,12 +21,12 @@
 //   감사 기록에 의존하지 않고, 상태 변경과 문서 생성이 한 요청 안에서 붙어 있어야 중간 상태
 //   ('결재중' 인데 문서가 없는 견적)가 남지 않는다. 행위자는 아래 audit_log 한 줄로 따로 남긴다.
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { loadCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 import { canViewMenu } from '@/lib/permissions'
 import { canViewApprovalDocument, type DocAccessRef } from '@/lib/approval/docAccess'
-import { attachTeamPerm, loadTeamPerms } from '@/lib/teamPermsServer'
+import { loadTeamPerms } from '@/lib/teamPermsServer'
 import type { TeamPerm } from '@/lib/permissions'
 import { todayKST } from '@/lib/date'
 import { checkLines, createApprovalDocument } from '@/lib/approval/submit'
@@ -48,12 +48,8 @@ const TAG = 'quote-approval'
 /** 감사 기록의 action. 트리거가 남기는 UPDATE 와 구분된다. */
 const AUDIT_ACTION_SUBMIT = 'QUOTE_APPROVAL_SUBMIT'
 
-type Caller = { engineer_id: number; name: string | null; permission_level: string | null; teams: string | null }
-
-const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+/** 호출자 — 공용 모양 그대로다(lib/apiCaller.ts). */
+type Caller = ApiCaller
 
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status })
 
@@ -297,9 +293,6 @@ async function review(sb: SupabaseClient, caller: Caller, body: Record<string, u
 
 export async function POST(req: NextRequest) {
   const timer = makeTimer()
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return bad('Unauthorized', 401)
 
   const body = await req.json().catch(() => ({}))
   const action: string = typeof body?.action === 'string' ? body.action : ''
@@ -319,17 +312,17 @@ export async function POST(req: NextRequest) {
       return new Map<string, TeamPerm>()
     }))
 
-  // 세션 → engineers. 퇴사자는 막는다(결재 라우트의 loadCaller 와 같은 기준).
-  const { data: callerRow, error: callerErr } = await timer.step('auth', () => supabase
-    .from('engineers')
-    .select('engineer_id, name, permission_level, teams, resigned_date')
-    .eq('email', user.email!)
-    .single())
-  if (callerErr) console.error(`[${TAG}] caller lookup failed`, { email: user.email, error: callerErr })
-  const row = (callerRow ?? null) as (Caller & { resigned_date: string | null }) | null
-  if (!row || row.resigned_date) return bad('Forbidden', 403)
-
-  const sb = admin()
+  // 로그인·재직·팀 권한 부착을 공용 함수로(lib/apiCaller.ts).
+  //
+  // **팀 권한을 미리 띄우는 방식은 그대로다.** 위 permsPromise 가 fresh 로 받아 **모듈 캐시를
+  // 새로 채우므로**, 여기서 fresh 를 끄고 불러도 방금 받은 그 값을 쓴다(lib/teamPermsServer.ts).
+  // 그래서 판정의 신선도는 종전과 같고 왕복도 늘지 않는다 — engineers 조회와 팀 권한 조회가
+  // 여전히 나란히 간다('gates' 액션은 팀 권한을 쓰지 않아 띄우지도 않는다).
+  if (permsPromise) await timer.step('perm-wait', () => permsPromise)
+  const auth = await timer.step('auth', () => loadCaller({ kind: 'login' }, { tag: TAG, req, fresh: false }))
+  if (auth.error) return auth.error
+  const row = auth.caller
+  const sb = auth.sb
 
   // ── 승인 게이트 조회 — 부작용 없음 ──
   // 목록 화면이 행마다 「발주서 등록·계산서 요청·PDF 열기」를 보여 줄지 정하는 데 쓴다.
@@ -364,10 +357,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ gates, docs, docIds })
   }
 
-  // 견적을 상신하는 라우트다. 권한을 거둔 직후에도 통과하면 곤란해 캐시를 건너뛴다
-  // (견적 삭제 요청 라우트와 같은 판단 — 위에서 fresh: true 로 띄워 둔 그 promise 다).
-  const caller = permsPromise ? attachTeamPerm(await permsPromise, row as Caller) : null
-  if (!caller) return bad('Forbidden', 403)
+  // 호출자에 팀 권한이 이미 붙어 있다(위 loadCaller). 이름만 종전과 같게 둔다.
+  const caller = row
 
   // ── 견적 검토표 — 읽기 전용 ──
   // **견적 작성 권한을 요구하지 않는다.** 다른 팀 결재자·참조자가 결재선에 들어올 수 있고,
@@ -492,7 +483,7 @@ export async function POST(req: NextRequest) {
   // 누가 올렸는지 한 줄. service role 로 상태를 바꿨으므로 quotes 의 감사 트리거에는
   // 행위자가 남지 않는다(이 파일 머리말). best-effort 다 — 기록이 실패해도 상신은 이미 끝났다.
   const { error: auditErr } = await sb.from('audit_log').insert({
-    actor_email: user.email ?? null,
+    actor_email: caller.email,
     action: AUDIT_ACTION_SUBMIT,
     table_name: QUOTE_TARGET_TABLE,
     row_id: String(quoteId),

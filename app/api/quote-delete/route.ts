@@ -1,8 +1,7 @@
-import { createClient } from '@supabase/supabase-js'
 import { createClient as createServerClient } from '@/lib/supabase/server'
+import { isOwner, loadCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
-import { withTeamPerm } from '@/lib/teamPermsServer'
 import { todayKST } from '@/lib/date'
 import { checkLines, createApprovalDocument } from '@/lib/approval/submit'
 import {
@@ -41,13 +40,6 @@ import type { LineInput } from '@/lib/approval/types'
 // 이유는 quotes 에 걸린 감사 트리거가 행위자를 auth.jwt() 에서 읽기 때문이다 — service role 로
 // 쓰면 누가 요청했는지가 audit_log 에서 사라지고, 반려 시 되돌릴 이전 상태도 그 기록에서 읽는다.
 
-type Caller = { engineer_id: number; permission_level: string | null; teams: string | null }
-
-const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 /** 화면이 보낸 결재선을 읽는다. 모양만 맞추고 내용 검증은 checkLines 가 한다(쇼룸과 같다). */
 function readLines(raw: unknown): LineInput[] | null {
   if (!Array.isArray(raw) || raw.length === 0) return null
@@ -60,10 +52,6 @@ function readLines(raw: unknown): LineInput[] | null {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   const body = await req.json().catch(() => ({}))
   const quoteId = Number(body?.quoteId)
   const action: string = body?.action ?? 'request'
@@ -72,16 +60,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
   }
 
-  const { data: callerRow } = await supabase
-    .from('engineers')
-    .select('engineer_id, permission_level, teams')
-    .eq('email', user.email!)
-    .single()
-  if (!callerRow) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  // 견적을 실제로 지우는 라우트다. 권한을 거둔 직후에도 통과하면 곤란해 캐시를 건너뛴다.
-  const caller = await withTeamPerm(callerRow as Caller, { fresh: true })
-
-  const supabaseAdmin = admin()
+  // 로그인·재직·팀 권한 부착을 공용 함수로(lib/apiCaller.ts).
+  // 견적을 실제로 지우는 라우트라 팀 권한 캐시를 건너뛴다 — 쓰기 메서드의 기본값이 그렇다.
+  const auth = await loadCaller({ kind: 'login' }, { tag: 'quote-delete', req })
+  if (auth.error) return auth.error
+  const caller = auth.caller
+  const supabaseAdmin = auth.sb
+  // **세션 클라이언트는 인증용이 아니라 삭제용이다.** 견적 DELETE 는 일부러 이 클라이언트로
+  // 보낸다 — quotes 의 RLS(quotes_delete)를 타야 「본인 견적만」이 DB 에서도 지켜진다
+  // (아래 executeQuoteDelete 의 sbQuote).
+  const supabase = await createServerClient()
 
   // ── 본인 삭제 — 결재를 거치지 않는다 ──
   if (action === 'self') {
@@ -119,7 +107,7 @@ export async function POST(req: NextRequest) {
     // 「superadmin 이거나 quotes.engineer_id = 나」. 여기서만 넓게 열어 두면 아래 DELETE 가
     // 조용히 0행이 되어(RLS 는 막아도 에러를 내지 않는다) 원인을 알 수 없는 실패가 된다.
     // 대필 견적을 쓰기만 한 사람(created_by)은 실적 담당자가 아니라서 이 길로는 못 지운다.
-    const mine = quote.engineer_id != null && quote.engineer_id === caller?.engineer_id
+    const mine = quote.engineer_id != null && quote.engineer_id === caller.engineer_id
     if (!mine && !isSuperAdmin(caller)) {
       return NextResponse.json({ error: '본인 견적만 삭제할 수 있습니다.' }, { status: 403 })
     }
@@ -127,8 +115,8 @@ export async function POST(req: NextRequest) {
     // 결재 문서를 함께 지우는 길 — **작성자 본인이고, 그 문서의 상신자도 본인**일 때만.
     // 결재 문서를 지우는 유일한 자리다(반려·완료 문서는 위 verdict 에서 이미 막혔다).
     if (verdict.withDocuments) {
-      const isWriter = (quote.created_by ?? quote.engineer_id) === caller!.engineer_id
-      const allRequestedByMe = docRes.requesterIds.every(id => id === caller!.engineer_id)
+      const isWriter = isOwner(quote, caller)
+      const allRequestedByMe = docRes.requesterIds.every(id => id === caller.engineer_id)
       if (!isWriter || !allRequestedByMe) {
         return NextResponse.json(
           { error: '견적을 작성하고 결재를 올린 사람만 결재 문서까지 지울 수 있습니다.' }, { status: 403 })
@@ -138,7 +126,7 @@ export async function POST(req: NextRequest) {
       const logged = await writeClosedDeleteAudit(
         supabaseAdmin,
         { quote_id: quote.quote_id, quote_number: quote.quote_number, status: quote.status },
-        { docs, actorId: caller!.engineer_id, reason },
+        { docs, actorId: caller.engineer_id, reason },
       )
       if (!logged) {
         return NextResponse.json({ error: '삭제 기록을 남기지 못해 중단했습니다.' }, { status: 500 })
@@ -173,7 +161,7 @@ export async function POST(req: NextRequest) {
         await writeResidueAudit(
           supabaseAdmin,
           { quote_id: quote.quote_id, quote_number: quote.quote_number },
-          { docs, actorId: caller!.engineer_id, detail: done.error },
+          { docs, actorId: caller.engineer_id, detail: done.error },
         )
         return NextResponse.json(
           { error: `${done.error} 결재 문서는 지워졌습니다 — 다시 시도해 주세요.` }, { status: done.status })
@@ -183,7 +171,7 @@ export async function POST(req: NextRequest) {
 
     await writeDeleteAudit(supabaseAdmin, done.quote, {
       action: verdict.withDocuments ? AUDIT_ACTION_SELF_WITH_DOC : AUDIT_ACTION_SELF,
-      actorId: caller!.engineer_id,
+      actorId: caller.engineer_id,
       detail: {
         reason,
         status_before: done.quote.status,
@@ -193,7 +181,7 @@ export async function POST(req: NextRequest) {
       },
     })
     // superadmin 이 남의 견적을 지운 경우에만 알림이 간다.
-    await notifyQuoteDeleted(supabaseAdmin, done.quote, [caller!.engineer_id])
+    await notifyQuoteDeleted(supabaseAdmin, done.quote, [caller.engineer_id])
 
     return NextResponse.json({
       success: true,
@@ -218,8 +206,8 @@ export async function POST(req: NextRequest) {
     // 대필 건은 실적 담당자(engineer_id)가 아니라 쓴 사람(created_by)이 기준이다 —
     // 견적서를 만들지 않은 쪽은 지워도 되는 건인지 판단할 수 없다.
     // created_by 가 빈 옛 데이터는 engineer_id 로 본다(대필 도입 전 건은 둘이 같다).
-    const isOwner = caller?.engineer_id === (quote.created_by ?? quote.engineer_id)
-    if (!isOwner && !canViewMenu(caller, 'approvals')) {
+    const mine = isOwner(quote, caller)
+    if (!mine && !canViewMenu(caller, 'approvals')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -263,7 +251,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 결재선이 틀려서 막힐 건이면 문서를 만들기 전에 멈춘다.
-    const lineProblem = await checkLines(supabaseAdmin, lines, caller!.engineer_id, QUOTE_DELETE_TYPE)
+    const lineProblem = await checkLines(supabaseAdmin, lines, caller.engineer_id, QUOTE_DELETE_TYPE)
     if (lineProblem) return NextResponse.json({ error: lineProblem }, { status: 400 })
 
     const summary = await buildQuoteDeleteSummary(supabaseAdmin, quote)
@@ -276,7 +264,7 @@ export async function POST(req: NextRequest) {
       targetTable: QUOTE_DELETE_TARGET_TABLE,
       targetId: quoteId,
       lines,
-      requesterId: caller!.engineer_id,
+      requesterId: caller.engineer_id,
       today: todayKST(),
     })
     if (!made.ok) return NextResponse.json({ error: made.error }, { status: made.status })

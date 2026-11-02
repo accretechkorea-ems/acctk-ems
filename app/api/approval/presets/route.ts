@@ -9,7 +9,7 @@
 // 상신에서 걸린다. 그래도 저장할 때 한 번 걸러 두면 불러온 직후 바로 알 수 있다.
 
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller as loadApiCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { docTypeOf } from '@/lib/approval/docTypes'
 import { validateLineInput } from '@/lib/approval/engine'
@@ -22,19 +22,14 @@ const supabaseAdmin = createClient(
 
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status })
 
-/** 세션 → engineers. 퇴사자는 막는다. */
+/**
+ * 세션 → engineers. 속은 공용 함수다(lib/apiCaller.ts — 로그인·재직 확인).
+ * 이 라우트는 **본인 것만** 읽고 쓰므로(owner_id = 나) 메뉴 권한은 보지 않는다.
+ * 돌려주는 모양({ id })은 그대로 두어 세 핸들러를 손대지 않았다.
+ */
 async function loadCaller(): Promise<{ id: number; error: null } | { id: null; error: NextResponse }> {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user?.email) return { id: null, error: bad('Unauthorized', 401) }
-  const { data: row } = await supabase
-    .from('engineers')
-    .select('engineer_id, resigned_date')
-    .eq('email', user.email)
-    .single()
-  const me = row as { engineer_id: number; resigned_date: string | null } | null
-  if (!me || me.resigned_date) return { id: null, error: bad('Forbidden', 403) }
-  return { id: me.engineer_id, error: null }
+  const r = await loadApiCaller({ kind: 'login' }, { tag: 'approval/presets', method: 'POST' })
+  return r.error ? { id: null, error: r.error } : { id: r.caller.engineer_id, error: null }
 }
 
 export async function GET() {

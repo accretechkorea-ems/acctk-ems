@@ -14,7 +14,7 @@
 //     원 문서를 검증한 뒤 lib/approval/submit.ts 를 직접 부른다.
 
 import { createClient } from '@supabase/supabase-js'
-import { loadCaller as loadApiCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
+import { isOwner, loadCaller as loadApiCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { canViewMenu } from '@/lib/permissions'
 import { todayKST } from '@/lib/date'
@@ -440,7 +440,7 @@ async function withdraw(caller: Caller, body: Record<string, unknown>) {
 
   const doc = await loadDocument(documentId)
   if (!doc) return bad('문서를 찾을 수 없습니다.', 404)
-  if (doc.requester_id !== caller.engineer_id) return bad('상신한 사람만 회수할 수 있습니다.', 403)
+  if (!isOwner(doc, caller)) return bad('상신한 사람만 회수할 수 있습니다.', 403)
   if (doc.status !== '진행중') return bad(`이미 ${doc.status} 상태인 문서입니다.`, 409)
 
   const { data: closed, error } = await supabaseAdmin
@@ -513,7 +513,7 @@ async function deleteDoc(caller: Caller, body: Record<string, unknown>) {
 
   const doc = await loadDocument(documentId)
   if (!doc) return bad('문서를 찾을 수 없습니다.', 404)
-  if (doc.requester_id !== caller.engineer_id) return bad('상신한 사람만 삭제할 수 있습니다.', 403)
+  if (!isOwner(doc, caller)) return bad('상신한 사람만 삭제할 수 있습니다.', 403)
   if (doc.status !== '회수' && doc.status !== '폐기') {
     return bad('회수한 문서만 삭제할 수 있습니다.', 409)
   }
@@ -615,7 +615,7 @@ async function resubmit(caller: Caller, body: Record<string, unknown>) {
 
   const doc = await loadDocument(documentId)
   if (!doc) return bad('문서를 찾을 수 없습니다.', 404)
-  if (doc.requester_id !== caller.engineer_id) return bad('상신한 사람만 다시 올릴 수 있습니다.', 403)
+  if (!isOwner(doc, caller)) return bad('상신한 사람만 다시 올릴 수 있습니다.', 403)
   // 유형이 재상신을 허용하는지 — 분기를 두지 않고 등록표의 칸으로만 본다(docTypes.ts).
   // 견적서는 내용을 고쳐야 다시 올릴 수 있어 같은 문서를 되돌리는 길을 막아 둔다.
   const resubDef = docTypeOf(doc.doc_type)
