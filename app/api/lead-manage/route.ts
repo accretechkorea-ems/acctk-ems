@@ -24,10 +24,9 @@
 // leads.blocked_by/blocked_at 은 CHECK(leads_blocked_actor_check)가 지킨다:
 // 상태가 '배정불가' 가 아니면 둘 다 null 이어야 한다. 상태를 되돌릴 때 반드시 함께 비운다.
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { isOwner, loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
-import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
 import { todayKST } from '@/lib/date'
 import {
   findCustomerCandidates, leadForecastTitle, leadSourceLine, nextMonthEnd,
@@ -145,17 +144,9 @@ async function notifyPartnerAssigned(lead: LeadRow, assignedTo: number, changed:
 }
 
 export async function POST(req: Request) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return bad('Unauthorized', 401)
-
-  const { data: caller, error: callerErr } = await supabase
-    .from('engineers')
-    .select('engineer_id, name, permission_level, teams')
-    .eq('email', user.email!)
-    .single()
-  if (callerErr) console.error('[lead-manage] caller lookup failed', { email: user.email, error: callerErr })
-  if (!caller) return bad('Forbidden', 403)
+  // 로그인·재직 확인 — **동작별 문턱은 아래에서 그대로 본다**(관리자 / 리드 권한 + 배정자).
+  const { error: authErr, caller } = await loadCaller({ kind: 'login' }, { tag: 'lead-manage', req })
+  if (authErr) return authErr
 
   let body: Record<string, unknown>
   try {
@@ -180,8 +171,9 @@ export async function POST(req: Request) {
   // 소속 팀에 리드 메뉴 권한이 있는지 — 배정만으로 통과시키면 나중에 메뉴를 꺼도
   // 과거에 배정받은 건을 계속 만질 수 있다. superadmin 은 hasPerm 이 먼저 통과시킨다.
   // 리드를 배정·이관하는 라우트다. 권한 변경이 즉시 반영돼야 해 캐시를 건너뛴다.
-  const hasLeadPerm = canViewMenu(attachTeamPerm(await loadTeamPerms({ fresh: true }), caller), 'leads')
-  const assignee = hasLeadPerm && lead.assigned_to != null && lead.assigned_to === caller.engineer_id
+  // 호출자에 팀 권한이 이미 붙어 있다(loadCaller — 쓰기라 캐시를 건너뛰고 받았다).
+  const hasLeadPerm = canViewMenu(caller, 'leads')
+  const assignee = hasLeadPerm && isOwner(lead, caller)
   // 관리자도 담당자도 아니면 이 리드에 손댈 수 없다(존재 여부도 알려주지 않는다).
   if (!admin && !assignee) return bad('Forbidden', 403)
 

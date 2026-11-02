@@ -12,9 +12,8 @@
 // 권한과 확인 문구를 여기서 다시 검증한다. 화면을 거치지 않고 이 라우트를 직접 부르는 경우가 방어 대상이다.
 // leads 를 참조하는 FK 는 없으므로 행 하나만 지우면 되고, 전환된 영업기회·활동 기록은 건드리지 않는다.
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
-import { isSuperAdmin } from '@/lib/permissions'
 import { CARD_BUCKET } from '@/lib/leadOptions'
 
 const supabaseAdmin = createClient(
@@ -38,18 +37,9 @@ export async function POST(req: Request) {
     )
   }
 
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: caller, error: callerErr } = await supabase
-    .from('engineers')
-    .select('engineer_id, name, permission_level')
-    .eq('email', user.email!)
-    .single()
-  if (callerErr) console.error('[lead-delete] caller lookup failed', { email: user.email, error: callerErr })
-  // 리드 삭제는 되돌릴 수 없어 superadmin 으로 제한한다(팀 권한 플래그와 무관).
-  if (!caller || !isSuperAdmin(caller)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // 리드 삭제는 되돌릴 수 없어 관리자로 제한한다(팀 권한 플래그와 무관 — Need 가 그 뜻이다).
+  const { error: authErr, caller } = await loadCaller({ kind: 'superadmin' }, { tag: 'lead-delete', req })
+  if (authErr) return authErr
 
   let body: { leadId?: unknown; confirmText?: unknown }
   try {
@@ -105,6 +95,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '삭제하지 못했습니다.' }, { status: 500 })
   }
 
-  console.log('[lead-delete]', { leadId, callerId: caller.engineer_id, callerEmail: user.email, converted: lead.converted_opportunity_id })
+  console.log('[lead-delete]', { leadId, callerId: caller.engineer_id, callerEmail: caller.email, converted: lead.converted_opportunity_id })
   return NextResponse.json({ success: true })
 }

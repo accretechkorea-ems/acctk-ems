@@ -1,23 +1,10 @@
-import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-import { canManageEngineers } from '@/lib/permissions'
+import { loadCaller } from '@/lib/apiCaller'
 
 export async function POST(req: NextRequest) {
-  // 인증 확인
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  // 권한 확인 (계정 관리는 superadmin 전용)
-  const { data: caller } = await supabase
-    .from('engineers')
-    .select('permission_level')
-    .eq('email', user.email!)
-    .single()
-  if (!caller || !canManageEngineers(caller)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  // 인증·권한 — 관리자 전용이다(종전 canManageEngineers = superadmin 과 같은 문턱).
+  const { error: authErr, sb } = await loadCaller({ kind: 'superadmin' }, { tag: 'delete-quote-pdf', req })
+  if (authErr) return authErr
 
   const body = await req.json()
   const { filePath } = body
@@ -30,7 +17,7 @@ export async function POST(req: NextRequest) {
   }
 
   // DB에서 해당 파일이 실제 견적서 PDF인지 확인
-  const { count } = await supabase
+  const { count } = await sb
     .from('quotes')
     .select('quote_id', { count: 'exact', head: true })
     .eq('pdf_url', `quote-pdfs/${safePath}`)
@@ -38,12 +25,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'File not found' }, { status: 404 })
   }
 
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
-
-  const { error } = await supabaseAdmin.storage.from('quote-pdfs').remove([safePath])
+  const { error } = await sb.storage.from('quote-pdfs').remove([safePath])
   if (error) {
     console.error('[delete-quote-pdf] 삭제 실패', error)
     return NextResponse.json({ error: '파일 삭제에 실패했습니다.' }, { status: 500 })

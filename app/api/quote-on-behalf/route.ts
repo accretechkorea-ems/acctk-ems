@@ -1,5 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 import { canViewMenu, canViewSalesMgmt } from '@/lib/permissions'
 import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
@@ -17,33 +16,19 @@ import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
 
 const TYPE_ON_BEHALF = 'quote_on_behalf'
 
-const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
-
 export async function POST(req: NextRequest) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   const body = await req.json().catch(() => ({}))
   const action: string = body?.action ?? 'resolve'
   if (action !== 'resolve' && action !== 'notify') {
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
   }
 
-  const supabaseAdmin = admin()
-  // 남의 실적으로 견적을 쓸 자격을 판정하는 라우트다. 권한 변경이 즉시 반영돼야 해 캐시를 건너뛴다.
-  const teamPerms = await loadTeamPerms({ fresh: true })
-
-  const { data: callerRow } = await supabase
-    .from('engineers')
-    .select('engineer_id, name, position, permission_level, teams')
-    .eq('email', user.email!)
-    .single()
-  if (!callerRow) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  const caller = attachTeamPerm(teamPerms, callerRow)
+  // 남의 실적으로 견적을 쓸 자격을 판정하는 라우트다. 권한 변경이 즉시 반영돼야 해
+  // 캐시를 건너뛴다 — 쓰기 메서드의 기본값이 그렇다(lib/apiCaller.ts).
+  const { error: authErr, caller, sb: supabaseAdmin } = await loadCaller({ kind: 'login' }, { tag: 'quote-on-behalf', req })
+  if (authErr) return authErr
+  // 대상자 판정에 쓸 팀 권한 표 — loadCaller 가 방금 새로 채운 캐시를 그대로 읽는다.
+  const teamPerms = await loadTeamPerms()
 
   // 대필은 영업관리(+superadmin)만 한다. 두 action 모두 같은 문턱을 쓴다 —
   // notify 만 통과시키면 남의 실적으로 만든 견적에 알림까지 붙일 수 있다.
@@ -95,7 +80,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, notified: 0 })
   }
 
-  const writer = [caller.name, caller.position].filter(Boolean).join(' ') || (user.email ?? '')
+  const writer = [caller.name, caller.position].filter(Boolean).join(' ') || caller.email
   const { error: notiErr } = await supabaseAdmin.from('notifications').insert({
     engineer_id: quote.engineer_id,
     title: '대필 견적 등록',

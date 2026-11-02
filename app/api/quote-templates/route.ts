@@ -17,10 +17,8 @@
 // 실수로 지운 것을 되살릴 수도 없다.
 
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
-import { canViewMenu } from '@/lib/permissions'
-import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
 import { GROUP_KINDS } from '@/lib/quoteForms'
 // ⚠ 상한은 **lib/quoteTemplateLimits.ts** 에서 가져온다. lib/quoteTemplates.ts 는
 //   `'use client'` 라서 거기서 가져오면 Next 가 client reference proxy 로 바꿔 끼우고,
@@ -158,22 +156,11 @@ function readItems(raw: unknown): { ok: true; items: ItemInput[] } | { ok: false
 }
 
 export async function POST(req: Request) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return bad('Unauthorized', 401)
-
-  const { data: caller } = await supabase
-    .from('engineers')
-    .select('engineer_id, name, position, permission_level, teams')
-    .eq('email', user.email!)
-    .single()
-  if (!caller) return bad('Forbidden', 403)
-
-  // 견적 작성 권한(또는 superadmin). canViewMenu 는 superadmin 이면 늘 통과한다.
-  // 권한 변경이 바로 먹어야 하므로 캐시를 건너뛴다(발주 라우트와 같은 규칙).
-  const teamPerms = await loadTeamPerms({ fresh: true })
-  if (!canViewMenu(attachTeamPerm(teamPerms, caller), 'quote')) {
-    return bad('견적 작성 권한이 없습니다.', 403)
+  // 견적 작성 권한(또는 관리자) — Need 가 그 판정을 한다. 쓰기라 팀 권한 캐시를
+  // 건너뛴다(쓰기 메서드의 기본값). 403 문구는 종전 그대로 둔다.
+  const { error: authErr, caller } = await loadCaller({ kind: 'menu', keys: ['quote'] }, { tag: 'quote-templates', method: 'POST' })
+  if (authErr) {
+    return authErr.status === 403 ? bad('견적 작성 권한이 없습니다.', 403) : authErr
   }
 
   const body = await req.json().catch(() => null) as Record<string, unknown> | null

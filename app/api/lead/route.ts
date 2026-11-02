@@ -1,10 +1,19 @@
 // 대리점 리드 등록(/lead) 접수 라우트.
 //
-// 이 라우트는 인증을 요구하지 않는다 — 폼이 로그인 없는 공개 페이지이기 때문이다.
+// ⚠ **공개 라우트 — 인증 없음.** 이 저장소에서 유일하다(2026-11-02 전수 조사). 폼이 로그인
+// 없는 공개 페이지라 호출자를 알 수 없고, 그래서 **lib/apiCaller.ts 의 loadCaller 를 쓰지
+// 않는다.** 방어선은 셋뿐이다.
+//   ① honeypot — 사람 눈에 안 보이는 칸(HONEYPOT_FIELD)이 채워져 오면 **조용히 성공으로**
+//      돌려보낸다(봇에게 실패를 알려 주지 않는다. 저장은 하지 않는다).
+//   ② 재검증 — 길이·형식·등록표(업종·관심제품·경쟁사·예산·구매시기) 전부 여기서 다시 본다.
+//      화면의 검증은 편의일 뿐이다.
+//   ③ 중복 검사 — 같은 값이 겹쳐 오는 것을 막는다(경쟁사 중복 등).
+// 속도 제한·캡차는 **없다.** 남용이 보이면 그때 더한다(지금은 들어오는 양이 적다).
+//
 // 따라서 화면의 검증은 편의일 뿐이고, 여기서 하는 재검증이 유일한 방어선이다.
 // 저장은 service role 로 한다(anon 정책에 기대지 않는다). 알림도 여기서만 만든다 —
 // 익명 사용자가 notifications 를 직접 건드릴 수 있으면 안 되기 때문이다.
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { adminEngineerIds, notifyLead } from '@/lib/leadNotify'
 import { sendLeadMail, sendPartnerReceiptMail } from '@/lib/leadMail'
@@ -17,10 +26,8 @@ import { josa } from '@/lib/josa'
 import { parseDataUrlImage } from '@/lib/imageUpload'
 import { todayKST } from '@/lib/date'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// 호출자가 없어도 클라이언트는 **한 곳에서** 받는다(lib/apiCaller.ts 의 adminClient).
+const supabaseAdmin = adminClient()
 
 type Body = Record<string, unknown>
 
