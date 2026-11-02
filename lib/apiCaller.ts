@@ -38,6 +38,19 @@ import { canAccessSemiContact } from '@/lib/division'
 import { sessionEmailForRead } from '@/lib/sessionEmail'
 import { withTeamPerm as realWithTeamPerm } from '@/lib/teamPermsServer'
 
+/**
+ * service role 클라이언트 — **라우트가 직접 만들지 않는다.**
+ *
+ * 보통은 loadCaller 가 돌려주는 sb 를 쓰면 된다. 이 함수를 직접 부르는 자리는
+ * **호출자가 없는 라우트** 하나뿐이다(/api/lead — 로그인 없는 공개 폼). 그런 자리에도
+ * 클라이언트 설정이 흩어지지 않게 입구를 하나로 둔다(D15 가 이 함수를
+ * lib/supabase/admin.ts 로 옮길 자리다).
+ */
+export const adminClient = (): SupabaseClient => createAdminClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+)
+
 /** 무엇을 요구하는가. 라우트가 이것 하나만 적는다. */
 export type Need =
   /** 로그인한 직원이면 된다(환율·본인 자료 등). */

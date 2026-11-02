@@ -1,8 +1,6 @@
-import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { isOwner, loadCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
-import { withTeamPerm } from '@/lib/teamPermsServer'
+import { isSuperAdmin } from '@/lib/permissions'
 import { CARD_BUCKET } from '@/lib/leadOptions'
 
 // 리드 명함 이미지의 서명 URL 발급.
@@ -13,15 +11,11 @@ import { CARD_BUCKET } from '@/lib/leadOptions'
 // 상세를 열어둔 채 한참 뒤에 눌러도 유효하고, 링크가 새어 나가도 하루를 넘기지 않는다.
 const SIGNED_URL_TTL = 60 * 60
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 export async function GET(req: NextRequest) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // 로그인·재직·리드 메뉴 권한을 한 줄로(lib/apiCaller.ts).
+  // 「관리자(전체) 또는 리드 권한이 있는 팀」이라는 문턱은 그대로다 — 배정자 판정은 아래에서.
+  const { error: authErr, caller, sb } = await loadCaller({ kind: 'menu', keys: ['leads'] }, { tag: 'lead-card', req })
+  if (authErr) return authErr
 
   const path = req.nextUrl.searchParams.get('path')
   if (!path) return NextResponse.json({ error: 'path required' }, { status: 400 })
@@ -32,18 +26,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid path' }, { status: 400 })
   }
 
-  const { data: callerRow } = await supabaseAdmin
-    .from('engineers')
-    .select('engineer_id, permission_level, teams')
-    .eq('email', user.email!)
-    .single()
-  const caller = await withTeamPerm(callerRow)
-  if (!caller) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  // 리드 화면에 들어올 수 있는 사람만 — 관리자(전체) 또는 리드 권한이 있는 팀.
-  if (!canViewMenu(caller, 'leads')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-
   // 서명 대상이 실제 리드의 명함 경로인지 확인한다. 임의의 파일명에 서명해주지 않는다.
-  const { data: lead } = await supabaseAdmin
+  const { data: lead } = await sb
     .from('leads')
     .select('lead_id, assigned_to')
     .eq('business_card_url', safePath)
@@ -51,11 +35,11 @@ export async function GET(req: NextRequest) {
   if (!lead) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   // 담당자는 자기에게 배정된 리드만 볼 수 있다(목록 조회와 같은 규칙).
-  if (!isSuperAdmin(caller) && lead.assigned_to !== caller.engineer_id) {
+  if (!isSuperAdmin(caller) && !isOwner(lead, caller)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { data, error } = await supabaseAdmin.storage
+  const { data, error } = await sb.storage
     .from(CARD_BUCKET)
     .createSignedUrl(safePath, SIGNED_URL_TTL)
   if (error || !data) {
@@ -64,8 +48,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    await supabaseAdmin.from('audit_log').insert({
-      actor_email: user.email, action: 'READ', table_name: CARD_BUCKET, row_id: safePath,
+    await sb.from('audit_log').insert({
+      actor_email: caller.email, action: 'READ', table_name: CARD_BUCKET, row_id: safePath,
     })
   } catch { /* best-effort */ }
 

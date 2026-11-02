@@ -294,6 +294,28 @@ const run = async () => {
     A.isOwnerOrSuperAdmin({ created_by: 9 }, null),
   ], [true, false, true, false])
 
+  console.log('\n── 견적의 「본인 견적인가」 — 종전 규칙과 같은가(D13) ──')
+  // 라우트들이 손으로 쓰던 식은 `(created_by ?? engineer_id) === 나` 였다
+  // (app/api/quote-duplicate · quote-delete 의 isWriter). isOwner 의 칸 우선순위가
+  // 그 식과 **글자 단위로 같은 답**을 내는지 모든 조합으로 맞춰 본다.
+  {
+    const oldRule = (q, me) => (q.created_by ?? q.engineer_id) === me.engineer_id
+    const vals = [null, 7, 9, undefined]
+    const rows = []
+    for (const created_by of vals) {
+      for (const engineer_id of vals) {
+        const q = {}
+        if (created_by !== undefined) q.created_by = created_by
+        if (engineer_id !== undefined) q.engineer_id = engineer_id
+        rows.push({ q, old: oldRule(q, me), now: A.isOwner(q, me) })
+      }
+    }
+    eq('16가지 조합에서 옛 식과 답이 같다', rows.filter(r => r.old !== r.now).map(r => r.q), [])
+    eq('대필 — created_by 가 나면 참, 실적 담당자가 나여도 거짓',
+      [A.isOwner({ created_by: 7, engineer_id: 9 }, me), A.isOwner({ created_by: 9, engineer_id: 7 }, me)], [true, false])
+    eq('created_by 가 비면 실적 담당자를 본다(옛 ?? 규칙)',
+      [A.isOwner({ created_by: null, engineer_id: 7 }, me), A.isOwner({ created_by: null, engineer_id: 9 }, me)], [true, false])
+  }
   console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
   process.exit(fails === 0 ? 0 : 1)
 }

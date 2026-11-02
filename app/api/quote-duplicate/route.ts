@@ -7,26 +7,14 @@
 //
 // 읽기 전용이다. 새 견적은 사용자가 화면에서 「견적 확정」을 눌러야 만들어지고,
 // 번호도 그때 기존 규칙(quote_sequence)대로 발급된다.
-import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { isOwner, loadCaller, ownerOf } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
-
 export async function POST(req: Request) {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const { data: caller } = await supabase
-    .from('engineers')
-    .select('engineer_id')
-    .eq('email', user.email!)
-    .single()
-  if (!caller) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // 로그인·재직 확인을 한 줄로(lib/apiCaller.ts). 메뉴 권한은 보지 않는다 —
+  // 이 라우트의 문턱은 「본인 견적인가」 하나다(아래).
+  const { error: authErr, caller, sb } = await loadCaller({ kind: 'login' }, { tag: 'quote-duplicate', req })
+  if (authErr) return authErr
 
   const body = await req.json().catch(() => ({}))
   const quoteId = Number(body?.quoteId)
@@ -34,7 +22,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '견적을 지정해주세요.' }, { status: 400 })
   }
 
-  const { data: quote, error } = await supabaseAdmin
+  const { data: quote, error } = await sb
     .from('quotes')
     .select('quote_id, quote_number, customer_id, dealer_id, opportunity_id, recipient, delivery_info, note, quote_type, engineer_id, created_by, terms, category, form_kind')
     .eq('quote_id', quoteId)
@@ -46,21 +34,23 @@ export async function POST(req: Request) {
   if (!quote) return NextResponse.json({ error: '견적을 찾을 수 없습니다.' }, { status: 404 })
 
   // 본인 견적만. 남의 것이면 존재 여부도 알려주지 않도록 같은 문구로 막는다.
-  const owner = quote.created_by ?? quote.engineer_id
-  if (owner !== caller.engineer_id) {
-    console.warn('[quote-duplicate] 남의 견적 접근', { quoteId, by: caller.engineer_id, owner })
+  // 판정은 공용 함수가 한다 — **칸 우선순위(created_by → engineer_id)가 여기 규칙과 같다**
+  // (대필로 쓴 건은 실적 담당자가 아니라 대필한 사람의 것이다. scripts/api-caller-check.js
+  //  가 그 순서를 못 박아 둔다).
+  if (!isOwner(quote, caller)) {
+    console.warn('[quote-duplicate] 남의 견적 접근', { quoteId, by: caller.engineer_id, owner: ownerOf(quote) })
     return NextResponse.json({ error: '본인이 작성한 견적만 다시 쓸 수 있습니다.' }, { status: 403 })
   }
 
   // 품목 — 가격표 품목은 selectedItem 복원을 위해 price_list 전체를 함께 가져온다.
-  const { data: items } = await supabaseAdmin
+  const { data: items } = await sb
     .from('quote_items')
     .select('item_id, price_list_id, part_code, row_kind, product_name, quantity, unit_price_jpy, unit_price_krw, supply_amount, profit_rate, tariff_rate, sub_lines, category, group_kind, price_list(*)')
     .eq('quote_id', quoteId)
     .order('item_id', { ascending: true })
 
   // 부대비용 — 서비스비 행에 되돌려 붙인다.
-  const { data: expenses } = await supabaseAdmin
+  const { data: expenses } = await sb
     .from('quote_expenses')
     .select('item_name, unit_price, headcount, days, amount')
     .eq('quote_id', quoteId)
