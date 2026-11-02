@@ -8,11 +8,8 @@
 // 법정공휴일은 /api/showroom/stats 가 그해 첫 조회 때 lib/holidays.ts 계산으로 채운다.
 // 새 테이블에는 읽기 정책만 있다 — 쓰기는 service role 로 한다.
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
-import { isSuperAdmin } from '@/lib/permissions'
-
-type Caller = { engineer_id: number; name: string | null; permission_level: string | null; teams: string | null }
 
 const NAME_MAX = 50
 
@@ -23,21 +20,13 @@ const admin = () => createClient(
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
-/** 로그인 + superadmin. app/api/showroom/devices/route.ts 의 authorize() 와 같다. */
+/**
+ * 로그인 + 관리자. 속은 공용 함수다(lib/apiCaller.ts — Need 가 superadmin 판정까지 한다).
+ * 조회(GET)도 관리자 전용이라 한 함수로 둔다 — 종전과 같다.
+ */
 async function authorize() {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: bad('Unauthorized', 401) }
-
-  const { data: callerRow, error: callerErr } = await supabase
-    .from('engineers')
-    .select('engineer_id, name, permission_level, teams')
-    .eq('email', user.email!)
-    .single()
-  if (callerErr) console.error('[showroom/holidays] caller lookup failed', { email: user.email, error: callerErr })
-  if (!callerRow) return { error: bad('Forbidden', 403) }
-  if (!isSuperAdmin(callerRow as Caller)) return { error: bad('Forbidden', 403) }
-  return { error: null }
+  const r = await loadCaller({ kind: 'superadmin' }, { tag: 'showroom/holidays', method: 'POST' })
+  return { error: r.error }
 }
 
 /** 실제로 있는 날짜인지까지 본다('2026-02-30' 은 거절). */

@@ -6,15 +6,12 @@
 //
 // 새 테이블에는 읽기 정책만 있다 — 쓰기는 전부 service role 로 한다.
 import { createClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { loadCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
-import { isSuperAdmin } from '@/lib/permissions'
 import {
   DEFAULT_DAILY_HOURS, DEFAULT_DEVICE_STATUS, MAX_DAILY_HOURS, DEVICE_STATUSES,
   assertShowroomDevice,
 } from '@/lib/showroom'
-
-type Caller = { engineer_id: number; name: string | null; permission_level: string | null; teams: string | null }
 
 const admin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -24,25 +21,12 @@ const admin = () => createClient(
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
 /**
- * 로그인 + superadmin 확인. 다른 쇼룸 라우트(app/api/showroom/usage)의 authorize() 와 같은 모양이다.
- * 판정이 permission_level 하나로 끝나므로 팀 플래그(withTeamPerm)는 붙이지 않는다.
+ * 로그인 + 관리자 확인. 속은 공용 함수다(lib/apiCaller.ts) — Need 가 superadmin 이면
+ * 거기서 isSuperAdmin 까지 본다. 돌려주는 모양({ error, caller })은 그대로 두어
+ * 부르는 자리(PATCH)를 손대지 않았다.
  */
 async function authorize() {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: bad('Unauthorized', 401), caller: null }
-
-  const { data: callerRow, error: callerErr } = await supabase
-    .from('engineers')
-    .select('engineer_id, name, permission_level, teams')
-    .eq('email', user.email!)
-    .single()
-  if (callerErr) console.error('[showroom/devices] caller lookup failed', { email: user.email, error: callerErr })
-  if (!callerRow) return { error: bad('Forbidden', 403), caller: null }
-
-  const caller = callerRow as Caller
-  if (!isSuperAdmin(caller)) return { error: bad('Forbidden', 403), caller: null }
-  return { error: null, caller }
+  return loadCaller({ kind: 'superadmin' }, { tag: 'showroom/devices', method: 'PATCH' })
 }
 
 /** daily_hours 검증. DB check(> 0 and <= 24)와 같은 범위. */

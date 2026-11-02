@@ -18,18 +18,15 @@
 //
 // 신청서(데모 승인)는 이번 범위가 아니다 — request_id 는 null 로 둔다.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { createClient as createServerClient } from '@/lib/supabase/server'
+import { isOwner, loadCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
-import { withTeamPerm } from '@/lib/teamPermsServer'
+import { isSuperAdmin } from '@/lib/permissions'
 import { toMin, computeWorkHours, normTime, TIME_MIN, TIME_MAX } from '@/lib/workHours'
 import {
   isUsagePurpose, purposeNeedsCustomer, optionalOneOf, DEMO_PURPOSE,
   NDA_STATUSES, RESULT_CATEGORIES, PURPOSE_FIELDS, type UsageField,
   ensureDeviceConfig, assertShowroomDevice,
 } from '@/lib/showroom'
-
-type Caller = { engineer_id: number; name: string | null; permission_level: string | null; teams: string | null }
 
 const admin = () => createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,24 +39,13 @@ const DEMO_VIA_REQUEST = '고객 데모는 사용 신청으로 등록해주세�
 /** 2026-09-21 — 목적 5종이 전부 신청·승인을 거친다. 이 라우트로는 새 기록을 만들 수 없다. */
 const USAGE_VIA_REQUEST = '사용 기록은 사용 신청으로 등록해주세요(관리자 승인을 거칩니다).'
 
-/** 로그인 + 고객사 권한 확인. 다른 쇼룸 라우트(app/api/showroom/devices)의 authorize() 와 같은 모양이다. */
+/**
+ * 로그인 + 쇼룸 메뉴 권한. 속은 공용 함수다(lib/apiCaller.ts).
+ * 상태를 바꾸는 라우트라 팀 권한 캐시를 건너뛴다 — 쓰기 메서드의 기본값이 그렇다.
+ * 돌려주는 모양({ error, caller })은 그대로 두어 부르는 두 자리를 손대지 않았다.
+ */
 async function authorize() {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: bad('Unauthorized', 401), caller: null }
-
-  const { data: callerRow, error: callerErr } = await supabase
-    .from('engineers')
-    .select('engineer_id, name, permission_level, teams')
-    .eq('email', user.email!)
-    .single()
-  if (callerErr) console.error('[showroom/usage] caller lookup failed', { email: user.email, error: callerErr })
-  if (!callerRow) return { error: bad('Forbidden', 403), caller: null }
-
-  const caller = await withTeamPerm(callerRow as Caller, { fresh: true })
-  if (!caller || !canViewMenu(caller, 'showroom')) return { error: bad('Forbidden', 403), caller: null }
-
-  return { error: null, caller }
+  return loadCaller({ kind: 'menu', keys: ['showroom'] }, { tag: 'showroom/usage', method: 'PATCH' })
 }
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/
@@ -278,7 +264,7 @@ export async function PATCH(req: NextRequest) {
     return bad('사용 기록을 불러오지 못했습니다.', 500)
   }
   if (!row || row.deleted_at) return bad('사용 기록을 찾을 수 없습니다.', 404)
-  if (row.created_by !== caller.engineer_id && !isSuperAdmin(caller)) return bad('Forbidden', 403)
+  if (!isOwner(row, caller) && !isSuperAdmin(caller)) return bad('Forbidden', 403)
 
   // 목적 바꾸기 규칙 — 신청으로 만든 기록은 목적을 그대로 두고, 다른 목적을 고객 데모로 바꾸지 못한다.
   const nextPurpose = typeof body.purpose === 'string' ? body.purpose : ''
@@ -349,7 +335,7 @@ export async function DELETE(req: NextRequest) {
   }
   if (!row) return bad('사용 기록을 찾을 수 없습니다.', 404)
   if (row.deleted_at) return bad('이미 삭제된 기록입니다.', 409)
-  if (row.created_by !== caller.engineer_id && !isSuperAdmin(caller)) return bad('Forbidden', 403)
+  if (!isOwner(row, caller) && !isSuperAdmin(caller)) return bad('Forbidden', 403)
 
   // 이미 지워진 건을 다시 지우지 않도록 조건을 함께 건다(동시 처리 방지).
   const now = new Date().toISOString()

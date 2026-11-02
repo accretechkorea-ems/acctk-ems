@@ -27,8 +27,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { renderToBuffer } from '@react-pdf/renderer'
-import { createClient as createServerClient } from '@/lib/supabase/server'
-import { withTeamPerm } from '@/lib/teamPermsServer'
 import { addDays } from '@/lib/date'
 import { isDisposed } from '@/lib/deviceStatus'
 import { toMin, computeWorkHours, normTime, TIME_MIN, TIME_MAX } from '@/lib/workHours'
@@ -59,27 +57,17 @@ export const bad = (message: string, status = 400) => NextResponse.json({ error:
 // 옛 요청함이 쓰던 알림 유형(showroom_demo_*)은 만드는 코드가 없어졌고, 쌓인 옛 알림은 그대로 남는다
 // (알림 화면의 「요청/결재」 묶음이 showroom_ 접두어로 계속 잡아 준다 — 그 분류는 건드리지 않았다).
 
-// ── 로그인한 사람 ─────────────────────────────────────────────────
-export type Caller = { engineer_id: number; name: string | null; permission_level: string | null; teams: string | null }
+// 호출자 확인은 **이 파일에 두지 않는다** — 공용 함수 하나가 한다(lib/apiCaller.ts).
+// 여기에는 쇼룸 도메인만 남긴다: 본문 검증 · 겹침 판정 · 승인서 PDF · 사용 기록 만들기.
+// (2026-11-02 D12 — 지역 loadCaller 를 지웠다. 라우트마다 세션·engineers·팀 권한을
+//  따로 읽던 자리가 하나로 모였다.)
 
-/** 로그인 + 엔지니어 행 + 팀 권한. 상태를 바꾸는 라우트는 fresh 로 팀 권한 캐시를 건너뛴다. */
-export async function loadCaller(tag: string, opts?: { fresh?: boolean }): Promise<
-  { error: NextResponse; caller: null; email: null } | { error: null; caller: Caller; email: string }
-> {
-  const supabase = await createServerClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user?.email) return { error: bad('Unauthorized', 401), caller: null, email: null }
-
-  const { data: row, error } = await supabase
-    .from('engineers')
-    .select('engineer_id, name, permission_level, teams')
-    .eq('email', user.email)
-    .single()
-  if (error) console.error(`[${tag}] caller lookup failed`, { email: user.email, error })
-  const caller = await withTeamPerm((row ?? null) as Caller | null, opts)
-  if (!caller) return { error: bad('Forbidden', 403), caller: null, email: null }
-  return { error: null, caller, email: user.email }
-}
+/**
+ * 승인서·결재 문서에 **적는** 신청자 — 이름과 팀만 쓴다(buildPayload).
+ * 권한 판정은 이 파일이 하지 않는다(lib/apiCaller.ts). 그래서 칸을 두 개로 좁혀 두어
+ * 공용 호출자를 그대로 넘길 수 있다.
+ */
+export type Caller = { engineer_id: number; name?: string | null; teams?: string | null }
 
 
 // ── 본문 검증 ─────────────────────────────────────────────────────
@@ -251,7 +239,7 @@ export function buildPayload(input: DemoInput, snap: Snapshot, requestNo: string
     expected_cost: input.expected_cost,
     note: input.note,
     requester_name: caller.name ?? '-',
-    requester_team: caller.teams,
+    requester_team: caller.teams ?? null,
   }
 }
 

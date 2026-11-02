@@ -13,17 +13,17 @@
 //         결재선을 새로 주면 그것으로 갈아끼운다.
 // 응답에 retroactive(사후 여부)를 실어 화면이 안내 문구를 고른다.
 import { NextRequest, NextResponse } from 'next/server'
-import { canViewMenu } from '@/lib/permissions'
 import { todayKST } from '@/lib/date'
 import { type DemoRequestPayload } from '@/lib/showroom'
 import { createApprovalDocument, resubmitApprovalDocument, checkLines, rollbackApprovalDocument } from '@/lib/approval/submit'
 import { buildSummary, readSummary, type ShowroomSummary } from '@/lib/approval/showroomUsage'
 import type { LineInput } from '@/lib/approval/types'
 import {
-  admin, bad, loadCaller, parseDemoBody, resolveDemo, buildPayload, findOverlap, findOverlaps,
+  admin, bad, parseDemoBody, resolveDemo, buildPayload, findOverlap, findOverlaps,
   allocateDocNo, settleDocNo, createUsageFromRequest,
   pdfDataFromPayload, renderApprovalPdf, dropApprovalPdf,
 } from './shared'
+import { isOwner, loadCaller } from '@/lib/apiCaller'
 
 const TAG = 'showroom/requests'
 
@@ -100,10 +100,9 @@ async function makePdf(
 
 // ── POST: 상신 ──────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  const auth = await loadCaller(TAG, { fresh: true })
+  const auth = await loadCaller({ kind: 'menu', keys: ['showroom'] }, { tag: TAG, req })
   if (auth.error) return auth.error
   const caller = auth.caller
-  if (!canViewMenu(caller, 'showroom')) return bad('Forbidden', 403)
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
   const today = todayKST()
@@ -225,10 +224,9 @@ export async function POST(req: NextRequest) {
 
 // ── PATCH: 반려·회수 건 재작성 ───────────────────────────────────────
 export async function PATCH(req: NextRequest) {
-  const auth = await loadCaller(TAG, { fresh: true })
+  const auth = await loadCaller({ kind: 'menu', keys: ['showroom'] }, { tag: TAG, req })
   if (auth.error) return auth.error
   const caller = auth.caller
-  if (!canViewMenu(caller, 'showroom')) return bad('Forbidden', 403)
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
   const documentId = Number(body.document_id)
@@ -246,7 +244,7 @@ export async function PATCH(req: NextRequest) {
   }
   const doc = row as { doc_type: string; status: string; requester_id: number; summary: Record<string, unknown> } | null
   if (!doc || doc.doc_type !== DOC_TYPE) return bad('문서를 찾을 수 없습니다.', 404)
-  if (doc.requester_id !== caller.engineer_id) return bad('본인이 낸 신청만 다시 쓸 수 있습니다.', 403)
+  if (!isOwner(doc, caller)) return bad('본인이 낸 신청만 다시 쓸 수 있습니다.', 403)
   if (doc.status !== '반려' && doc.status !== '회수') return bad('반려·회수된 신청만 다시 쓸 수 있습니다.', 409)
   const before = readSummary(doc.summary)
   if (!before) return bad('신청 내용을 읽지 못했습니다.', 500)
