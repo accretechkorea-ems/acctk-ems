@@ -23,6 +23,10 @@ export type Device = {
   program: string | null
   image_url: string | null
   category: string | null
+  /** 사용 상태 — 기본 '사용중'. '폐기' 면 목록에서 숨긴다(lib/deviceStatus.ts). */
+  status: string | null
+  /** 폐기한 날(date). 폐기가 아니면 null 이다. */
+  disposed_at: string | null
 }
 
 export type Contact = {

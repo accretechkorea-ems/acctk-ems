@@ -13,6 +13,7 @@ import { SERVICE_TYPE_COLORS, TIMELINE_KIND_COLORS, getCategoryColor, salesStatu
 import { numKR } from './constants'
 import { isDealerQuote } from './utils'
 import { deviceLabel, elapsedLabel } from './holding'
+import { isDisposed } from '@/lib/deviceStatus'
 import type { Device, Holding, Quote, SalesActivity, ServiceHistory } from './types'
 import { isFutureVisit } from '@/lib/serviceVisit'
 import { timelineKey } from '@/lib/activity'
@@ -52,6 +53,8 @@ type Item = {
   note?: string          // 내용 뒤에 덧붙는 부가정보 (홀딩 경과 등)
   owner: string          // 오른쪽 열 둘째 줄 — 방문 엔지니어 / 작성자
   badge?: string         // 대리점 견적 표시 등
+  /** 제목(장비명) 바로 옆 뱃지 — 폐기된 장비를 가리키는 지난 기록에 붙는다. */
+  titleBadge?: string
   onClick?: () => void
   onEdit?: () => void    // 영업 활동에만 있다 (호버 시 나타나는 연필)
   sortAt: number         // 정렬 키 — 등록 시각(epoch ms). 종류와 무관하게 이 값만으로 순서가 정해진다
@@ -182,6 +185,11 @@ function TimelineRow({ item, first, focused }: { item: Item; first: boolean; foc
               )}
             </SizedCell>
             <span style={{ fontSize: 12, color: '#234ea2', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{item.title}</span>
+            {item.titleBadge && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                {item.titleBadge}
+              </span>
+            )}
             {item.badge && (
               <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>
                 {item.badge}
@@ -282,6 +290,13 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
     return (h: ServiceHistory) => (h.device_id == null ? '-' : map.get(Number(h.device_id)) ?? '-')
   }, [devices])
 
+  // 폐기된 장비를 가리키는 지난 기록은 **그대로 보여 준다** — 대신 이름 옆에 「폐기」를 붙여
+  // 지금은 쓰지 않는 장비임을 알린다(목록에서는 숨겨져 있어 찾아도 안 나온다).
+  const disposedIds = useMemo(
+    () => new Set(devices.filter(isDisposed).map(d => d.device_id)),
+    [devices],
+  )
+
   const items = useMemo<Item[]>(() => {
     const serviceItems: Item[] = history.map(h => ({
       key: timelineKey('service', h.service_id),
@@ -290,6 +305,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
       label: h.service_type ?? '-',
       dot: getCategoryColor(SERVICE_TYPE_COLORS, h.service_type).dot ?? '#9ca3af',
       title: deviceNameOf(h),
+      titleBadge: h.device_id != null && disposedIds.has(Number(h.device_id)) ? '폐기' : undefined,
       body: h.service_notes ?? '',
       labelSuffix: h.is_paid !== null ? (h.is_paid ? '유상' : '무상') : undefined,
       // 아직 오지 않은 방문 — 다녀온 기록과 섞이지 않게 표시한다(예정 건을 미리 등록한다).
@@ -341,6 +357,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
       label: '홀딩',
       dot: TIMELINE_KIND_COLORS['홀딩'].dot,
       title: deviceLabel(h),
+      titleBadge: h.device_id != null && disposedIds.has(Number(h.device_id)) ? '폐기' : undefined,
       body: h.resolved_at ? `${h.title} — 해제 ${h.resolved_at}` : h.title,
       note: elapsedLabel(h),
       owner: withPosition(h.engineers),
@@ -351,7 +368,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
     }))
 
     return [...serviceItems, ...quoteItems, ...salesItems, ...holdingItems]
-  }, [history, quotes, activities, holdings, customerId, deviceNameOf, onOpenQuotePdf, onOpenHolding, onEditActivity, canEditActivity])
+  }, [history, quotes, activities, holdings, customerId, deviceNameOf, disposedIds, onOpenQuotePdf, onOpenHolding, onEditActivity, canEditActivity])
 
   const counts = useMemo(() => ({
     '전체': items.length,

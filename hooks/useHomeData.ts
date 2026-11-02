@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { IN_USE_FILTER } from '@/lib/deviceStatus'
 import { createClient } from '@/lib/supabase/client'
 import { type Customer, type Device, type ServiceHistory, toTimeValue } from '@/lib/home'
 
@@ -32,6 +33,8 @@ export function useHomeData({
           'device_id, customer_id, device_name, device_name2, option, serial_number, program, install_date, category, packing_list_url'
         )
         .is('deleted_at', null)
+        // 폐기한 장비는 업체 카드·목록·지도의 장비 줄에 나오지 않는다(lib/deviceStatus.ts).
+        .or(IN_USE_FILTER)
         .range(0, 5000),
 
       supabase.from('service_history').select('customer_id, visit_date').range(0, 5000),

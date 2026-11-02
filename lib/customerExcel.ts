@@ -15,6 +15,8 @@
 // xlsx 는 누를 때 동적으로 불러온다(초기 번들에 넣지 않는다 — 포캐스트·리드 엑셀과 같은 방식).
 
 /** 장비 한 대 — 엑셀이 읽는 칸만. */
+import { isInUse } from './deviceStatus'
+
 export type ExcelDevice = {
   device_name: string | null
   device_name2: string | null
@@ -39,22 +41,22 @@ export type ExcelCustomer = {
 /** 조회할 때 쓰는 select 문자열. 쓰는 열만 읽고, 장비는 임베딩으로 한 번에 받는다. */
 export const CUSTOMER_EXCEL_SELECT =
   'customer_id, status, company_name, region1, region2, address, agency, parent_customer_id,' +
-  ' devices(device_name, device_name2, option, serial_number, install_year, install_date, deleted_at)'
+  ' devices(device_name, device_name2, option, serial_number, install_year, install_date, deleted_at, status)'
 
 /** 조회 결과 한 줄(임베딩 포함). deleted_at 은 걸러내는 데만 쓴다. */
 export type CustomerExcelRow = Omit<ExcelCustomer, 'devices'> & {
-  devices?: (ExcelDevice & { deleted_at?: string | null })[] | null
+  devices?: (ExcelDevice & { deleted_at?: string | null; status?: string | null })[] | null
 }
 
 /**
  * 조회 결과 → 엑셀이 읽는 꼴.
- * 지워진 장비를 여기서 걸러낸다 — 임베딩은 부모의 deleted_at 조건을 물려받지 않으므로,
- * 지운 장비가 그대로 줄이 되어 따라 들어온다.
+ * 지워진 장비와 **폐기한 장비**를 여기서 걸러낸다 — 임베딩은 부모의 조건을 물려받지 않으므로,
+ * 지운 장비가 그대로 줄이 되어 따라 들어온다. 폐기도 같은 자리에서 뺀다(화면 목록과 같게).
  */
 export function toExcelCustomer(row: CustomerExcelRow): ExcelCustomer {
   return {
     ...row,
-    devices: (row.devices ?? []).filter(d => !d.deleted_at),
+    devices: (row.devices ?? []).filter(d => !d.deleted_at && isInUse(d)),
   }
 }
 

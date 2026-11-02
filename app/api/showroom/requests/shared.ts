@@ -30,6 +30,7 @@ import { renderToBuffer } from '@react-pdf/renderer'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { withTeamPerm } from '@/lib/teamPermsServer'
 import { addDays } from '@/lib/date'
+import { isDisposed } from '@/lib/deviceStatus'
 import { toMin, computeWorkHours, normTime, TIME_MIN, TIME_MAX } from '@/lib/workHours'
 import {
   recordClashes, requestClashes, sortClashes, warningLines,
@@ -188,7 +189,7 @@ export async function resolveDemo(sb: SupabaseClient, input: DemoInput): Promise
   if (notDevice) return { error: notDevice, status: 404 }
 
   const [devRes, cfgRes, custRes, engRes] = await Promise.all([
-    sb.from('devices').select('device_name, device_name2, option, customer_id').eq('device_id', input.device_id).maybeSingle(),
+    sb.from('devices').select('device_name, device_name2, option, customer_id, status').eq('device_id', input.device_id).maybeSingle(),
     sb.from('showroom_devices').select('is_active').eq('device_id', input.device_id).maybeSingle(),
     // 대상 고객사가 없는 목적(유지보수·교육·기타)은 조회할 것이 없다.
     input.customer_id === null
@@ -202,6 +203,9 @@ export async function resolveDemo(sb: SupabaseClient, input: DemoInput): Promise
   }
   if (!devRes.data) return { error: '장비를 찾을 수 없습니다.', status: 404 }
   if (cfgRes.data?.is_active === false) return { error: '사용하지 않는 장비는 신청할 수 없습니다.', status: 400 }
+  // 폐기한 장비로는 **새** 신청을 올리지 못한다. 지난 기록·지난 신청은 그대로 남는다
+  // (기록 수정은 막지 않는다 — assertShowroomDevice 에 넣지 않은 이유다).
+  if (isDisposed(devRes.data)) return { error: '폐기된 장비는 신청할 수 없습니다.', status: 400 }
   if (input.customer_id !== null && !custRes.data) return { error: '대상 고객사를 찾을 수 없습니다.', status: 404 }
   const engs = (engRes.data ?? []) as { engineer_id: number; name: string | null }[]
   if (engs.length !== input.engineer_ids.length) return { error: '참여 엔지니어를 다시 선택해주세요.', status: 400 }

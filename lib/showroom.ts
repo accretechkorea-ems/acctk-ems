@@ -495,6 +495,9 @@ export type ShowroomDeviceBase = {
   program: string | null
   image_url: string | null
   category: string | null
+  /** 고객 장비의 사용 상태 — '폐기' 면 쇼룸 장비 목록에서도 숨긴다(lib/deviceStatus.ts). */
+  status: string | null
+  disposed_at: string | null
 }
 
 /** devices + showroom_devices 설정을 합친 것. 설정 행이 없으면 기본값이 들어간다. */

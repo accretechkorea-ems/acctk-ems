@@ -115,6 +115,7 @@ RLS 정책은 engineers 에 아예 없다(2026-10-08 스냅샷 37개 중 0건) �
 | 파일 | 적용일 | 적용한 사람 | 비고 |
 |---|---|---|---|
 | `db/quote_user_defaults_rls.sql` | 2026-10-28 | Kevin | 정책 3개(select·insert·update, 전부 본인 email 행만). 재실행에 안전하다(drop policy if exists). **확인 방법**: `select policyname, cmd from pg_policies where tablename = 'quote_user_defaults'` 가 3행이면 됐다. 화면에서는 견적 확정 → 새 견적 → 같은 분류에서 「내 설정 불러옴」이 뜬다 |
+| `db/devices_status_grant.sql` | **미적용** | — | 장비 폐기 처리용 열 권한(status·disposed_at). **devices 가 열 단위 GRANT 표일 때만 돌린다** — 파일 [0단계] 조회로 가른다. 2026-11-02 확인: 두 칸 **읽기는 이미 된다**(1,450줄 전부 `사용중`). 쓰기는 돌려 보지 않으면 알 수 없어 확인하지 않았다 — 화면에서 「폐기 처리」가 `42501` 로 막히면 이 파일을 돌린다. 재실행 안전 |
 
 ---
 

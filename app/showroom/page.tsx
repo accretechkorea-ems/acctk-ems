@@ -22,6 +22,7 @@
 // 조회는 effect 에서 외부 응답을 받은 콜백으로만 반영한다 — '불러오는 중'은 요청 키로 파생시킨다.
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { inUseOnly } from '@/lib/deviceStatus'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { usePageGuard } from '@/hooks/usePageGuard'
@@ -167,7 +168,10 @@ function ShowroomPageInner() {
   const refreshing = summaryLoading || utilLoading
 
   // 장비 카드 묶음 — 첫 사무실 제목은 헤더가, 나머지는 그리드가 그린다.
-  const deviceGroups = useMemo(() => groupDevices(devices, admin), [devices, admin])
+  // 장비 탭·가동률·신청은 **쓰는 장비만** 본다. devices 자체는 폐기까지 들고 있다 —
+  // 전체기록 탭이 지난 기록의 장비 이름을 여기서 찾기 때문이다(폐기 뱃지도 거기서 붙인다).
+  const liveDevices = useMemo(() => inUseOnly(devices), [devices])
+  const deviceGroups = useMemo(() => groupDevices(liveDevices, admin), [liveDevices, admin])
   const firstGroup = deviceGroups[0] ?? null
   // 가동률 사무실 — 고르지 않았으면 첫 사무실. 상태로 따로 두지 않고 파생시킨다(사무실 목록이 늦게 와도 맞게).
   const utilSite: number | 'all' | null = utilNav.site ?? sites[0]?.customer_id ?? null
@@ -260,7 +264,7 @@ function ShowroomPageInner() {
   if (!authorized) return <AccessGate loading={guardLoading} />
 
   // 기록을 남길 수 있는 장비 — 사용여부가 꺼진 장비는 고를 수 없다.
-  const usableDevices = devices.filter(d => d.is_active)
+  const usableDevices = liveDevices.filter(d => d.is_active)
 
   return (
     <main style={{ padding: '24px 28px', background: PAGE_BG, minHeight: '100vh' }}>

@@ -5,6 +5,7 @@ import type { Device, Holding, ServiceHistory } from './types'
 import { INPUT_BORDER, TEXT_MUTED } from './constants'
 import { getInstallDisplay, getDefaultImageUrl } from './utils'
 import { deviceImageWidthFor } from '@/lib/deviceImage'
+import { isDisposed, disposedLabel, inUseOnly, disposedOnly } from '@/lib/deviceStatus'
 import { useDeviceImageUrls, type StorageImageLookup } from '@/hooks/useStorageImageUrls'
 
 /** 카드 사진을 받을 폭(px) — 장비 카드 폭에 맞춘다. */
@@ -15,6 +16,7 @@ import { ServiceFilesButton, reportDownloadName } from './ServiceAttachments'
 
 
 type Props = {
+  /** **폐기까지 포함한** 그 업체의 장비 전부. 무엇을 보일지는 아래 토글이 고른다. */
   devices: Device[]
   /** 레포트 표시 이름에 쓴다. 내려받을 때의 이름과 같아야 한다. */
   companyName: string | null
@@ -177,9 +179,13 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
   const hasPhoto = !!(d.image_url || defaultImg)
   const packingInputRef = useRef<HTMLInputElement | null>(null)
 
+  // 폐기된 장비는 **지워진 것이 아니라 쓰지 않는 것**이다 — 카드는 그대로 두고 바탕과
+  // 글자만 죽인다(사진·버튼은 그대로 쓴다. 지난 레포트를 열어 볼 일이 남아 있다).
+  const disposed = isDisposed(d)
+
   return (
     <div style={{
-      minWidth: 300, maxWidth: 300, background: '#ffffff', borderRadius: 8, padding: '14px 16px',
+      minWidth: 300, maxWidth: 300, background: disposed ? '#fafafa' : '#ffffff', borderRadius: 8, padding: '14px 16px',
       border: '1px solid #ebebeb', flex: '0 0 auto', position: 'relative',
       alignSelf: 'flex-start',
     }}>
@@ -236,12 +242,21 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
 
       {/* 장비명 */}
       <div style={{
-        fontSize: 15, fontWeight: 700, color: '#111827', textAlign: 'center',
+        fontSize: 15, fontWeight: 700, color: disposed ? '#6b7280' : '#111827', textAlign: 'center',
         whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         marginTop: 10, padding: '0 4px',
       }} title={deviceTitle || '-'}>
         {deviceTitle || '-'}
       </div>
+
+      {/* 폐기 뱃지 — 폐기일까지 보여 준다(언제 뺀 장비인지가 곧 이력이다). */}
+      {disposed && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '3px 10px', whiteSpace: 'nowrap' }}>
+            {disposedLabel(d)}
+          </span>
+        </div>
+      )}
 
       {/* 진행 중 홀딩 배지 */}
       {activeHolding && (
@@ -348,10 +363,15 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
 
 export default function DeviceSection({ devices, companyName, historyByDevice, onAddDevice, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, reportBusyId, onUploadPacking, onOpenPacking, activeHoldingByDevice, holdingByService, onAddHolding, onOpenHolding }: Props) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  // 폐기 장비를 **이 목록에서만** 다시 볼 수 있다(다른 화면은 전부 사용중만 본다).
+  // 기본은 꺼짐 — 쓰는 장비만 보이는 것이 평소의 모습이다.
+  const [showDisposed, setShowDisposed] = useState(false)
+  const disposedCount = disposedOnly(devices).length
+  const shown = showDisposed ? devices : inUseOnly(devices)
   // 장비 사진 — 카드마다 서명을 받으면 요청이 장비 수만큼 늘어난다. 여기서 **한 번에** 받는다
   // (올린 사진 + 기종 카탈로그 사진 둘 다).
   const imageUrl = useDeviceImageUrls(
-    devices.flatMap(d => [d.image_url, getDefaultImageUrl(d, supabaseUrl)]),
+    shown.flatMap(d => [d.image_url, getDefaultImageUrl(d, supabaseUrl)]),
     deviceImageWidthFor(CARD_IMG_W),
   )
 
@@ -360,8 +380,25 @@ export default function DeviceSection({ devices, companyName, historyByDevice, o
   return (
     <div>
 
+      {/* 폐기 포함 토글 — 폐기된 장비가 하나도 없으면 두지 않는다(끌 것이 없는 스위치다). */}
+      {disposedCount > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <button
+            onClick={() => setShowDisposed(v => !v)}
+            style={{
+              fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: 6, cursor: 'pointer',
+              background: showDisposed ? '#f3f4f6' : '#fff',
+              border: '1px solid #ebebeb',
+              color: showDisposed ? '#111827' : '#9ca3af',
+            }}
+          >
+            폐기 포함 {disposedCount}
+          </button>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 4, alignItems: 'flex-start' }}>
-        {devices.map((d) => (
+        {shown.map((d) => (
           <DeviceCard
             key={d.device_id}
             d={d}

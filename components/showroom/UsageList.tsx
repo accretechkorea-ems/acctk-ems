@@ -63,6 +63,8 @@ type Props = {
   /** 이 쪽에 그릴 행(이미 걸러지고 정렬된 것) */
   rows: ShowroomUsageRow[]
   deviceName: (id: number) => string
+  /** 그 장비가 폐기됐는가 — 지난 기록은 그대로 두고 이름 옆에 「폐기」만 붙인다. */
+  deviceDisposed?: (id: number) => boolean
   usageEngineers: Record<number, number[]>
   /** 전자결재로 만든 기록의 승인 정보(문서 id 기준). 옛 건은 행에 임베딩돼 와서 여기 없다. */
   approvals: Record<number, UsageApprovalDoc>
@@ -127,7 +129,7 @@ function Detail({ row, author, approval, canOpenPdf, onOpenPdf }: {
 }
 
 export default function UsageList({
-  rows, deviceName, usageEngineers, approvals, engineerName, loading, emptyText, canEdit, onEdit, onCopy, onDelete,
+  rows, deviceName, deviceDisposed, usageEngineers, approvals, engineerName, loading, emptyText, canEdit, onEdit, onCopy, onDelete,
 }: Props) {
   const [openId, setOpenId] = useState<number | null>(null)
   const [confirmId, setConfirmId] = useState<number | null>(null)
@@ -234,8 +236,14 @@ export default function UsageList({
                     <span title="데모 신청으로 만든 기록" style={{ ...countBadge, padding: '1px 6px' }}>신청</span>
                   )}
                 </span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: TEXT, ...ellipsis }} title={deviceName(r.device_id)}>
-                  {deviceName(r.device_id)}
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }} title={deviceName(r.device_id)}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: TEXT, ...ellipsis }}>
+                    {deviceName(r.device_id)}
+                  </span>
+                  {/* 지금은 쓰지 않는 장비다 — 목록에서 찾아도 안 나오는 이유를 여기서 알린다. */}
+                  {deviceDisposed?.(r.device_id) && (
+                    <span title="폐기된 장비" style={{ ...countBadge, padding: '1px 6px', flexShrink: 0 }}>폐기</span>
+                  )}
                 </span>
                 <span style={{ fontSize: 13, color: r.customers?.company_name ? SUB : FAINT, ...ellipsis }} title={r.customers?.company_name ?? undefined}>
                   {r.customers?.company_name ?? '-'}

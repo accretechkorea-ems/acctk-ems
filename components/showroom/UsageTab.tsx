@@ -15,6 +15,7 @@
 // 조회는 effect 에서 외부 응답을 받은 콜백으로만 반영한다 — '불러오는 중'은 요청 키로 파생시킨다.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { isDisposed, inUseOnly } from '@/lib/deviceStatus'
 import type { createClient } from '@/lib/supabase/client'
 import {
   USAGE_PURPOSES, deviceTitle, periodFromRange, periodRange, round1,
@@ -178,6 +179,8 @@ export default function UsageTab({
     const d = deviceById.get(id)
     return d ? deviceTitle(d) : `장비 #${id}`
   }, [deviceById])
+  // 폐기된 장비의 지난 기록 — 이름은 그대로 두고 뱃지만 붙인다(엑셀에는 넣지 않는다).
+  const deviceDisposed = useCallback((id: number) => isDisposed(deviceById.get(id)), [deviceById])
   const engineerName = useCallback(
     (id: number | null) => (id == null ? '' : engineers.find(e => e.engineer_id === id)?.name ?? ''),
     [engineers],
@@ -247,7 +250,9 @@ export default function UsageTab({
   }
 
   // 기록을 남길 수 있는 장비 — 사용여부가 꺼진 장비는 고를 수 없다.
-  const usableDevices = devices.filter(d => d.is_active)
+  // 새 기록·신청을 올릴 수 있는 장비 — 사용여부가 켜져 있고 폐기되지 않은 것.
+  const liveDevices = inUseOnly(devices)
+  const usableDevices = liveDevices.filter(d => d.is_active)
 
   return (
     <>
@@ -269,7 +274,7 @@ export default function UsageTab({
             period={periodFromRange(query.from, query.to)}
             onChange={p => setFilter(periodRange(p))}
           />
-          <DeviceMultiSelect devices={devices} sites={sites} selected={query.devices} onChange={ids => setFilter({ devices: ids })} />
+          <DeviceMultiSelect devices={liveDevices} sites={sites} selected={query.devices} onChange={ids => setFilter({ devices: ids })} />
           <select value={query.purpose ?? ''} aria-label="사용목적"
             onChange={e => setFilter({ purpose: e.target.value || null })}
             style={{ ...inputStyle, cursor: 'pointer' }}>
@@ -322,6 +327,7 @@ export default function UsageTab({
         <UsageList
           rows={pageRows}
           deviceName={deviceName}
+          deviceDisposed={deviceDisposed}
           usageEngineers={usageEngineers}
           approvals={approvals}
           engineerName={engineerName}

@@ -32,6 +32,7 @@
 //     그 장비의 기록은 건수·시간 같은 기간 지표에는 그대로 들어간다.
 //   · 견적·수주 전환율의 분모는 고객 데모 건수 하나다(측정대행은 견적으로 이어지는 일이 아니다).
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { isDisposed } from '@/lib/deviceStatus'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { canViewMenu } from '@/lib/permissions'
@@ -393,7 +394,7 @@ export async function GET(req: NextRequest) {
   if (sites.length > 0) {
     const { data: devRows, error: devErr } = await sb
       .from('devices')
-      .select('device_id, customer_id, device_name, device_name2, option, deleted_at, showroom_devices(daily_hours, device_status, is_active, sort_order)')
+      .select('device_id, customer_id, device_name, device_name2, option, deleted_at, status, showroom_devices(daily_hours, device_status, is_active, sort_order)')
       .in('customer_id', sites.map(s => s.customer_id))
     if (devErr) {
       console.error('[showroom/stats] device load failed', devErr)
@@ -404,11 +405,13 @@ export async function GET(req: NextRequest) {
       device_id: number; customer_id: number
       device_name: string | null; device_name2: string | null; option: string | null
       deleted_at: string | null
+      status: string | null
       showroom_devices: Cfg | Cfg[] | null
     }
     for (const d of (devRows ?? []) as unknown as DevRow[]) {
       siteOfDevice.set(d.device_id, d.customer_id)
       if (d.deleted_at) continue
+      if (isDisposed(d)) continue              // 폐기 — 가동률 대상이 아니다(옛 기록의 사무실 매핑은 위에 남았다)
       // device_id 가 showroom_devices 의 PK 라 1:1 이다. PostgREST 판에 따라 객체나 배열로 온다.
       const cfg = Array.isArray(d.showroom_devices) ? d.showroom_devices[0] ?? null : d.showroom_devices
       if (cfg?.is_active === false) continue   // 사용여부 N — 가동률에서 뺀다

@@ -10,6 +10,8 @@ import { useToast } from '@/components/common/Toast'
 import { DEVICE_BUCKET, deviceImagePath, isDefaultDeviceImage } from '@/lib/deviceImage'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { downsizeImage } from '@/lib/leadCardImage'
+import { disposePatch, restorePatch, isDisposed } from '@/lib/deviceStatus'
+import { todayKST } from '@/lib/date'
 import type { Device, DeviceForm } from '@/components/customer/types'
 
 // ── 장비 사진 ──
@@ -224,7 +226,14 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
 
   const handleDeleteDevice = async () => {
     if (!selectedDevice) return
-    const ok = await confirmDialog({ title: '장비 삭제', message: '이 장비를 삭제하시겠습니까?', confirmText: '삭제', variant: 'danger' })
+    // 삭제는 지난 기록에서 장비 이름까지 사라지게 한다 — 수명이 끝난 장비는 폐기 처리가 맞다.
+    const ok = await confirmDialog({
+      title: '장비 삭제',
+      message: isDisposed(selectedDevice)
+        ? '이 장비를 삭제하시겠습니까?\n이미 폐기 처리된 장비입니다 — 삭제하면 지난 기록에서 장비 이름도 사라집니다.'
+        : '이 장비를 삭제하시겠습니까?\n실제로 쓰던 장비라면 삭제보다 「폐기 처리」를 권장합니다 — 목록에서는 숨겨지고 지난 기록은 남습니다.',
+      confirmText: '삭제', variant: 'danger',
+    })
     if (!ok) return
     setIsSavingDeviceEdit(true)
     const { error } = await supabase.from('devices').update({ deleted_at: new Date().toISOString() }).eq('device_id', selectedDevice.device_id)
@@ -235,6 +244,40 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
     await fetchDetail()
   }
 
+  /**
+   * 폐기 처리 — 목록에서 숨기고 **이력은 남긴다**(지난 레포트·홀딩·쇼룸 기록은 그대로
+   * 이 장비를 가리킨다). 삭제(deleted_at)와 달리 되돌릴 수 있다.
+   *
+   * 날짜는 한국 기준 오늘이다 — 자정 무렵에 UTC 로 적으면 하루 전으로 찍힌다.
+   */
+  const handleDisposeDevice = async () => {
+    if (!selectedDevice) return
+    const ok = await confirmDialog({
+      title: '장비 폐기 처리',
+      message: '이 장비를 폐기 처리할까요? 목록에서 숨겨지고 이력은 남습니다',
+      confirmText: '폐기 처리',
+    })
+    if (!ok) return
+    setIsSavingDeviceEdit(true)
+    const { error } = await supabase.from('devices').update(disposePatch(todayKST())).eq('device_id', selectedDevice.device_id)
+    setIsSavingDeviceEdit(false)
+    if (error) { toast.error(error.message || '폐기 처리 중 오류가 발생했습니다'); return }
+    toast.success('장비를 폐기 처리했습니다')
+    setSelectedDevice(null)
+    await fetchDetail()
+  }
+
+  /** 폐기 취소 — 상태를 「사용중」으로 되돌리고 폐기일을 비운다. 확인창은 두지 않는다(되돌리는 쪽이다). */
+  const handleRestoreDevice = async () => {
+    if (!selectedDevice) return
+    setIsSavingDeviceEdit(true)
+    const { error } = await supabase.from('devices').update(restorePatch()).eq('device_id', selectedDevice.device_id)
+    setIsSavingDeviceEdit(false)
+    if (error) { toast.error(error.message || '폐기 취소 중 오류가 발생했습니다'); return }
+    toast.success('폐기를 취소했습니다')
+    setSelectedDevice(null)
+    await fetchDetail()
+  }
   // ── 장비 사진 업로드 (모달) ──
   // 실제 업로드는 카드와 공유하는 uploadDeviceImage 가 한다. 여기서는 모달 상태와 목록 갱신만 맡는다.
   const handleUploadDeviceImage = async (file: File) => {
@@ -325,6 +368,7 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
     selectedImageDevice, setSelectedImageDevice,
     isSavingDevice, isSavingDeviceEdit, isSavingDeviceImage,
     handleAddDevice, handleUpdateDevice, handleDeleteDevice,
+    handleDisposeDevice, handleRestoreDevice,
     handleUploadDeviceImage, handleOpenPacking, handleUploadPacking,
   }
 }

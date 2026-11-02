@@ -8,6 +8,7 @@ import { useToast } from '@/components/common/Toast'
 import { getDefaultImageUrl } from '../utils'
 import { useDeviceImageUrls } from '@/hooks/useStorageImageUrls'
 import { removeDeviceImage, uploadDeviceImage } from '@/hooks/customer/useDeviceCrud'
+import { isDisposed, disposedLabel } from '@/lib/deviceStatus'
 
 /** 사진 삭제 확정 대기 시간. */
 const IMG_CONFIRM_MS = 3000
@@ -18,6 +19,10 @@ type Props = {
   onClose: () => void
   onSave: (form: DeviceForm, packingFile: File | null) => void
   onDelete: () => void
+  /** 폐기 처리 — 확인창부터 저장까지 훅이 한다(useDeviceCrud). */
+  onDispose: () => void
+  /** 폐기 취소 — 상태를 「사용중」으로 되돌린다. */
+  onRestore: () => void
   onOpenPacking: () => void
   /** 사진을 바꾸거나 지운 직후 목록을 다시 읽는다 — 카드 썸네일이 바로 따라오게. */
   onImageChanged?: () => void
@@ -41,7 +46,7 @@ const formOf = (d: Device): DeviceForm => ({
   category: d.category ?? '20',
 })
 
-export default function DeviceEditModal({ device, isSaving, onClose, onSave, onDelete, onOpenPacking, onImageChanged }: Props) {
+export default function DeviceEditModal({ device, isSaving, onClose, onSave, onDelete, onDispose, onRestore, onOpenPacking, onImageChanged }: Props) {
   const [form, setForm] = useState<DeviceForm>({ device_name: '', device_name2: '', option: '', serial_number: '', program: 'ACCTee', install_date: '', category: '20' })
   const [packingFile, setPackingFile] = useState<File | null>(null)
   const { errors, setErrors, clearError, validate } = useFieldErrors<'device_name'>()
@@ -84,6 +89,9 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
   const shownImage = lookup(imageUrl) ?? lookup(defaultImg)
 
   if (!device) return null
+
+  /** 폐기된 장비인가 — 뱃지와 버튼이 갈린다. */
+  const disposed = isDisposed(device)
 
   /** 삭제는 두 번 눌러야 실행된다. 3초가 지나면 원래대로 돌아간다. */
   const armRemove = () => {
@@ -135,7 +143,15 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>장비 수정</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>장비 수정</div>
+            {/* 폐기된 장비임을 먼저 알린다 — 칸을 고치러 들어왔는데 목록에 없는 이유가 여기 있다. */}
+            {disposed && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '3px 9px', whiteSpace: 'nowrap' }}>
+                {disposedLabel(device)}
+              </span>
+            )}
+          </div>
           <button
             onClick={onClose}
             title="닫기"
@@ -295,11 +311,20 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 24 }}>
-          <button
-            onClick={onDelete}
-            disabled={isSaving}
-            style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}
-          >삭제</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={onDelete}
+              disabled={isSaving}
+              style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}
+            >삭제</button>
+            {/* 폐기는 되돌릴 수 있어 빨강을 쓰지 않는다 — 삭제와 한눈에 갈라야 한다. */}
+            <button
+              onClick={disposed ? onRestore : onDispose}
+              disabled={isSaving}
+              title={disposed ? '상태를 「사용중」으로 되돌립니다' : '목록에서 숨기고 이력은 남깁니다'}
+              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: 6, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}
+            >{disposed ? '폐기 취소' : '폐기 처리'}</button>
+          </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={onClose}

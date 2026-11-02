@@ -28,6 +28,7 @@ import HorizontalScroller from '@/components/common/HorizontalScroller'
 import CustomerInfoPanel from '@/components/customer/CustomerInfoPanel'
 import ContactSection from '@/components/customer/ContactSection'
 import DeviceSection from '@/components/customer/DeviceSection'
+import { inUseOnly } from '@/lib/deviceStatus'
 import ActivityTimeline from '@/components/customer/ActivityTimeline'
 import SummaryPanel from '@/components/customer/SummaryPanel'
 import SalesActivityModal from '@/components/customer/modals/SalesActivityModal'
@@ -63,6 +64,10 @@ function CustomerDetailPageInner() {
     loading, currentUserEngineerId, currentUserRole,
     historyByDevice, fetchDetail,
   } = detail
+
+  // 건수·요약은 **쓰는 장비만** 센다. 목록(DeviceSection)과 타임라인은 폐기까지 받아 간다 —
+  // 목록은 「폐기 포함」 토글을 갖고, 타임라인은 지난 기록의 장비 이름을 여기서 찾는다.
+  const activeDevices = inUseOnly(devices)
 
   const holding = useHoldingCrud({ customerId, holdings, engineerId: currentUserEngineerId, fetchDetail, activeHoldingByDevice, role: currentUserRole })
   const service = useServiceCrud({
@@ -264,7 +269,7 @@ function CustomerDetailPageInner() {
             />
             <SummaryPanel
               quotes={quotes}
-              deviceCount={devices.length}
+              deviceCount={activeDevices.length}
               history={history}
               customerId={customerId}
               opportunities={opportunities}
@@ -292,7 +297,7 @@ function CustomerDetailPageInner() {
         <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, overflow: 'hidden' }}>
           <div style={{ padding: '9px 14px', borderBottom: '1px solid #ebebeb', display: 'flex', justifyContent: 'center' }}>
             <SegmentedControl
-              options={['활동 이력', { label: '장비', value: '장비', suffix: String(devices.length) }]}
+              options={['활동 이력', { label: '장비', value: '장비', suffix: String(activeDevices.length) }]}
               value={tab}
               onChange={v => setTab(v as '활동 이력' | '장비')}
             />
@@ -396,6 +401,8 @@ function CustomerDetailPageInner() {
           onClose={() => device.setSelectedDevice(null)}
           onSave={device.handleUpdateDevice}
           onDelete={device.handleDeleteDevice}
+          onDispose={device.handleDisposeDevice}
+          onRestore={device.handleRestoreDevice}
           onOpenPacking={() => device.selectedDevice && device.handleOpenPacking(device.selectedDevice)}
           onImageChanged={fetchDetail}
         />
