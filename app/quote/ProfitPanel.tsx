@@ -47,9 +47,13 @@ const ROW_GRID = '62px 1fr auto'
 const amountCell: React.CSSProperties = { textAlign: 'right', whiteSpace: 'nowrap', fontSize: 12 }
 /** 라벨 칸. */
 const labelCell: React.CSSProperties = { fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }
-/** 가운데 식 칸 — 넘치면 말줄임(금액을 밀어내지 않는다). */
-const exprCell: React.CSSProperties = {
-  fontSize: 12, color: '#9ca3af', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+/**
+ * 품목 두 줄 — **오른쪽 정렬**이라 끝선이 아래 합계 금액 열과 같다(둘 다 이 블록의
+ * 안쪽 여백에서 끝난다). 접지 않는다 — 넘치면 말줄임으로 끊어 두 줄을 지킨다.
+ */
+const itemLine: React.CSSProperties = {
+  fontSize: 12, color: '#9ca3af', lineHeight: 1.6, textAlign: 'right',
+  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
 }
 
 export default function ProfitPanel({
@@ -144,18 +148,18 @@ export default function ProfitPanel({
   const minOperating = minOperatingMarginOf(category)
   const belowMin = isBelowMinOperating(breakdown, category)
 
-  // ── 품목 한 칸 = 세 줄 격자 ─────────────────────────────────────────
+  // ── 품목 한 칸 = 오른쪽 정렬 두 줄 ─────────────────────────────────
   //
-  //   원가      ¥13,900 × 1.13 × 8.49     ₩133,357
-  //   매출이익  41%                       ₩93,643
-  //   공급가    ₩227,000 × 1              ₩227,000
+  //   ¥13,900 × 1.13 × 8.49 = ₩133,357 (원가) · 매출이익 ₩93,643 (41%)
+  //                                   ₩227,000 × 1 = ₩227,000
   //
-  // 라벨·식·금액 세 열이고 **금액은 오른쪽에 모아 자릿수를 맞춘다**(tabular-nums).
-  // 아래 합계 블록도 같은 열 폭을 써서, 품목 금액과 합계 금액이 한 줄에 선다 —
-  // 눈이 세로로 훑으면 자리 수가 어긋나지 않는다.
+  // 왼쪽에 라벨 열을 두던 세 줄 격자를 걷었다 — 라벨 세 개가 품목마다 되풀이되면서
+  // 정작 읽어야 할 식과 금액을 오른쪽으로 밀었다. 지금은 **식 자체가 설명**이고
+  // (「= ₩133,357 (원가)」), 두 줄 모두 오른쪽에 붙어 **끝선이 아래 합계 금액 열과
+  // 같다**. 세로로 훑으면 품목 금액과 합계 금액의 자릿수가 한 줄에 선다(tabular-nums).
   //
-  // 종전에는 한 줄에 식과 금액을 이어 적어(「… = 원가 ₩133,357」) 금액의 시작 위치가
-  // 줄마다 달랐다. 품목이 대여섯이면 금액을 찾으려고 매번 줄을 왼쪽부터 읽어야 했다.
+  // 색은 세 단이다 — 식은 흐리게(#9ca3af), 금액은 한 단 진하게(#374151), 공급가 결과만
+  // 본문색으로 굵게. 매출이익만 초록이라 눈이 먼저 간다.
   const costExpr = (r: QuoteRow): React.ReactNode => {
     switch (r.row_kind) {
       case 'price_list':
@@ -323,28 +327,30 @@ export default function ProfitPanel({
           // 국내조달품은 마진이 없는 자사 부담 항목이라 이익 색상 규칙에서 제외한다(중립색).
           const profitColor = r.row_kind === 'domestic' ? '#6b7280' : (r.profit >= 0 ? '#16a34a' : '#dc2626')
           return (
-          <div key={r.id} style={{ marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+          // 품목 사이에는 구분선을 두지 않는다 — 품목 다섯이면 선이 다섯이고,
+          // 그 선들이 합계 위 굵은 선보다 먼저 눈에 들어온다.
+          <div key={r.id} style={{ marginBottom: 9 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
               <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#234ea2', color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
               <span style={{ fontSize: 11, color: '#111827', fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemLabel(r)}</span>
             </div>
-            {/* 세 줄 — 원가 · 매출이익 · 공급가. 블록 안에는 구분선을 두지 않는다
-                (줄마다 선을 그으면 품목 다섯에 선이 열다섯이고, 그 선들이 합계 위 굵은
-                 선보다 먼저 눈에 들어온다). */}
-            <div style={{ display: 'grid', gridTemplateColumns: ROW_GRID, columnGap: 8, rowGap: 2, alignItems: 'baseline' }}>
-              <span style={labelCell}>원가</span>
-              <span style={exprCell}>{expr}</span>
-              <span className="num" style={{ ...amountCell, color: '#374151', fontWeight: 500 }}>₩{numKR(r.product_price)}</span>
-
-              <span style={labelCell}>매출이익</span>
-              <span style={exprCell}>{r.profit_rate}%</span>
-              <span className="num" style={{ ...amountCell, color: profitColor, fontWeight: 500 }}>₩{numKR(r.profit)}</span>
-
-              <span style={labelCell}>공급가</span>
-              <span style={exprCell}>
-                ₩{numKR(r.unit_price)}<span style={{ color: '#d1d5db' }}> × </span>{r.quantity}
-              </span>
-              <span className="num" style={{ ...amountCell, color: '#111827', fontWeight: 700 }}>₩{numKR(r.supply_price)}</span>
+            {/* 1행 — 원가가 어떻게 나왔고 얼마가 남나. */}
+            <div className="num" style={itemLine}>
+              {expr}
+              <span style={{ color: '#d1d5db' }}> = </span>
+              <span style={{ color: '#374151', fontWeight: 500 }}>₩{numKR(r.product_price)}</span>
+              <span style={{ color: '#9ca3af' }}> (원가)</span>
+              <span style={{ color: '#d1d5db' }}> · </span>
+              매출이익{' '}
+              <span style={{ color: profitColor, fontWeight: 500 }}>₩{numKR(r.profit)}</span>
+              <span style={{ color: profitColor }}> ({r.profit_rate}%)</span>
+            </div>
+            {/* 2행 — 얼마에 몇 개를 파나. 결과(공급가)만 본문색으로 굵다. */}
+            <div className="num" style={itemLine}>
+              ₩{numKR(r.unit_price)}
+              <span style={{ color: '#d1d5db' }}> × </span>{r.quantity}
+              <span style={{ color: '#d1d5db' }}> = </span>
+              <span style={{ color: '#111827', fontWeight: 700 }}>₩{numKR(r.supply_price)}</span>
             </div>
           </div>
           )
