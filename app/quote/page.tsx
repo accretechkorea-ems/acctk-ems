@@ -21,6 +21,7 @@ import { useDebounce } from './useDebounce'
 import ProfitPanel from './ProfitPanel'
 import CustomerCard from '@/components/quote/CustomerCard'
 import RowAddButtons from '@/components/quote/RowAddButtons'
+import LockedSection from '@/components/quote/LockedSection'
 import Watermark from '@/components/quote/Watermark'
 import EquipConfigLauncher from '@/components/quote/equip/EquipConfigLauncher'
 import QuotePreviewPane from '@/components/quote/QuotePreviewPane'
@@ -404,6 +405,14 @@ function QuotePageInner() {
   const categoryMissing = category.trim() === ''
   // 양식도 같은 규칙이다 — 고르기 전에는 확정만 막는다.
   const formMissing = formKind.trim() === ''
+  /**
+   * 분류·양식을 고르기 전에는 **그 아래 입력을 전부 잠근다**(사명부터 품목·수익 분석까지).
+   * 둘은 그 아래 모든 값의 기준이라, 나중에 고르면 이미 적어 둔 값이 한꺼번에 바뀐다
+   * (줄 이익률·줄 분류·가격표 검색 범위·PDF 열 구성). 확정 단추는 전부터 막혀 있었지만
+   * (QuotePreviewPane 의 categoryMissing) 막힌 이유가 저 위에 있다는 것은 끝까지 가 본
+   * 뒤에야 알 수 있었다 — 이제 들어가기 전에 막는다.
+   */
+  const inputsLocked = categoryMissing || formMissing
   const runValidation = () => validate({
     category: categoryMissing ? '견적 분류를 선택해주세요' : null,
     form: formMissing ? '견적서 양식을 선택해주세요' : null,
@@ -807,6 +816,7 @@ function QuotePageInner() {
               않았으므로 정체를 유지해도 렌더 횟수가 달라지지 않는다 — useMemo 를 두지 않는다
               (행 카드는 수십 개가 되므로 그쪽만 useQuoteRows 에서 안정화했다). */}
           <CustomerCard
+            locked={inputsLocked}
             errors={errors}
             clearError={clearError}
             category={{
@@ -834,6 +844,7 @@ function QuotePageInner() {
           />
 
 
+       <LockedSection locked={inputsLocked}>
        <div style={{ position: 'relative', overflow: 'hidden' }}>
             <Watermark name={engineerName} rows={4} />
             <ProfitPanel rows={rows} rates={rates} rateMeta={rateMeta} rateLoading={rateLoading} onFetchRate={() => { void fetchRate({ force: true }) }} onRateChange={handleRateChange} usdReference={usdReference} onUseUsdReference={useUsdReference} category={category}
@@ -886,6 +897,7 @@ function QuotePageInner() {
             />
             <FieldError message={errors.items} style={{ marginTop: 8 }} />
           </div>
+          </LockedSection>
         </div>
 
         <QuotePreviewPane

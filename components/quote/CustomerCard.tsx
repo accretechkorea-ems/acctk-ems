@@ -18,6 +18,7 @@ import { Z } from '@/lib/zIndex'
 import { type SetTerms, type Terms, TERM_LABELS, defaultTermsFor, termKeysFor } from '@/lib/quoteTerms'
 import RemarksEditor from '@/components/quote/RemarksEditor'
 import TermsEditor from '@/components/quote/TermsEditor'
+import LockedSection from '@/components/quote/LockedSection'
 import type { CustomerResult } from '@/app/quote/types'
 import type { QuoteCategory } from '@/lib/quoteCategories'
 import { FORM_KINDS, FORM_LABELS } from '@/lib/quoteForms'
@@ -112,6 +113,8 @@ export type CustomerCardCategory = {
 // prop 은 일곱 개다(3b 정리 전에는 52개였다).
 // errors·clearError 는 분류·사명·E.U 세 묶음이 함께 쓰는 검증 통로라 묶지 않고 그대로 둔다.
 export type CustomerCardProps = {
+  /** 분류·양식을 아직 고르지 않았는가 — 그렇다면 사명 아래를 전부 잠근다. */
+  locked: boolean
   errors: { category?: string; form?: string; company?: string; eu?: string; items?: string; expenses?: string }
   clearError: (key: 'category' | 'form' | 'company' | 'eu' | 'items' | 'expenses') => void
   category: CustomerCardCategory
@@ -121,7 +124,7 @@ export type CustomerCardProps = {
   doc: CustomerCardDoc
 }
 
-export default function CustomerCard({ errors, clearError, category, customer, eu, opportunity, doc }: CustomerCardProps) {
+export default function CustomerCard({ locked, errors, clearError, category, customer, eu, opportunity, doc }: CustomerCardProps) {
   // 묶음을 풀어 **종전과 같은 이름**으로 둔다 — 아래 JSX 는 한 줄도 바뀌지 않았다.
   const {
     value: categoryValue, setValue: setCategoryValue,
@@ -226,6 +229,17 @@ export default function CustomerCard({ errors, clearError, category, customer, e
         </div>
       )}
     </div>
+
+    {/* 분류·양식을 고르기 전에는 **여기부터 아래가 전부 잠긴다.** 그 둘이 품목의
+        이익률·분류·가격표 검색 범위와 PDF 열 구성을 정하기 때문이다
+        (이유는 components/quote/LockedSection.tsx 에 적어 두었다). */}
+    {locked && (
+      <div style={{ marginTop: 6, marginLeft: 10, fontSize: 11, color: '#9ca3af' }}>
+        분류와 양식을 먼저 선택하세요
+      </div>
+    )}
+
+    <LockedSection locked={locked}>
 
     {/* 사명 + 대리점 체크박스 */}
     <div style={{ marginBottom: errors.company ? 8 + 18 : 8 }}>
@@ -441,6 +455,8 @@ export default function CustomerCard({ errors, clearError, category, customer, e
     </div>
 
     <TermsEditor termsOpen={termsOpen} terms={terms} setTerms={setTerms} formKind={formKind} />
+
+    </LockedSection>
   </div>
   )
 }
