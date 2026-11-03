@@ -326,12 +326,27 @@ console.log('\n── 판매가 모드: 품목을 바꾸면 손으로 적은 단
   const edited = rowWithSelectedItem({ row: { ...priced, cost_jpy_override: 99999 }, item: item('B-2', 20000), itemText: 'B', category: 'TSE', rates: RATES })
   eq('고쳐 둔 구입가도 버린다', [edited.cost_jpy_override, edited.cost_price_jpy], [null, 20000])
 
-  // **이익률 모드**에서 품목을 고르는 것은 종전 그대로다 — 버릴 단가가 없다.
+  // **이익률 모드에서도 똑같이 되돌린다**(2026-11-03). 예전에는 「고친 이익률은 지킨다」는
+  // 예외가 있었는데, 같은 동작이 모드에 따라 다르게 끝나 무엇이 남는지 외워야 했다.
   const rateRow = calcRow({ ...createRow(), row_kind: 'price_list', selectedItem: item('A-1', 13900),
-    profit_rate: 45, margin_touched: true, quantity: 1, tariff_rate: 1.13 }, RATES)
+    profit_rate: 45, margin_touched: true, quantity: 4, tariff_rate: 1.05,
+    subLines: ['- 앞 품목 설명'] }, RATES)
   const rateNext = rowWithSelectedItem({ row: rateRow, item: item('B-2', 20000), itemText: 'B', category: 'TSE', rates: RATES })
-  eq('이익률 모드는 사람이 고친 이익률을 지키고 표시도 남긴다',
-    [rateNext.price_mode, rateNext.profit_rate, rateNext.margin_touched], ['rate', 45, true])
+  eq('이익률 모드도 분류 기본값으로 되돌린다(45 → 60)',
+    [rateNext.price_mode, rateNext.profit_rate, rateNext.margin_touched], ['rate', 60, false])
+  eq('수량은 1 로, 관세는 기본값(1.13)으로', [rateNext.quantity, rateNext.tariff_rate], [1, 1.13])
+  eq('앞 품목의 상세 설명 줄도 버린다', rateNext.subLines, [])
+
+  // 계정 기본값(내 설정)이 있으면 **새 줄과 같은 규칙**으로 그것이 앞선다.
+  const mine = rowWithSelectedItem({ row: rateRow, item: item('B-2', 20000), itemText: 'B',
+    category: 'TSE', defaults: { tariffRate: 1.08, marginRate: 52 }, rates: RATES })
+  eq('계정 기본값이 분류 기본값보다 앞선다', [mine.tariff_rate, mine.profit_rate], [1.08, 52])
+
+  // 그 줄의 **정체**는 지킨다 — id·종류·줄 분류·장비 묶음.
+  const keep = rowWithSelectedItem({ row: { ...rateRow, category: 'SBS', group_kind: 'option' },
+    item: item('B-2', 20000), itemText: 'B', category: 'TSE', rates: RATES })
+  eq('id·종류·줄 분류·묶음은 그대로',
+    [keep.id === rateRow.id, keep.row_kind, keep.category, keep.group_kind], [true, 'price_list', 'SBS', 'option'])
 
   // **같은 품목에서 수량·관세만 바꾸는 것**은 판매가 모드를 그대로 둔다.
   const qty5 = calcRow({ ...priced, quantity: 5 }, RATES)

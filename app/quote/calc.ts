@@ -183,17 +183,19 @@ export function calcRow(row: QuoteRow, rates: Rates): QuoteRow {
 /**
  * 품목을 고른 뒤의 줄 — 화면·구성 모달이 함께 쓴다.
  *
- * ── 판매가 모드는 **그 품목에만 매인 값**이다 ────────────────────────────
- *   판매가 모드의 단가는 사람이 그 품목을 보고 손으로 적은 금액이다(발주서가 먼저 온 건).
- *   그 상태에서 다른 품목을 고르면 **앞 품목의 가격이 새 품목에 그대로 남아** 원가와 아무
- *   관계 없는 단가가 조용히 따라다닌다 — 이익률이 90%로 뜨거나 음수가 되는데, 사람은
- *   자기가 적은 값이라 틀렸다고 보지 않는다.
- *   그래서 품목을 고르는 순간 **이익률 모드로 되돌리고** 단가를 버리고, 이익률은 그 줄의
- *   분류 기본값에서 다시 시작한다(줄 분류가 있으면 그것이 견적 분류보다 앞선다).
- *   사람이 고쳤다는 표시(margin_touched)도 지운다 — 새 품목에는 아직 손댄 적이 없다.
+ * ── **고른 순간 그 줄은 새 줄이 된다** ──────────────────────────────────
+ *   품목이 바뀌면 그 줄에 적혀 있던 수는 **전부 앞 품목의 것**이다.
+ *   수량 3, 관세 1.08, 이익률 55, 손으로 적은 판매가 450,000, 고쳐 둔 구입가, 상세 설명
+ *   줄 — 어느 하나도 새 품목에 맞다는 근거가 없는데, 사람은 자기가 넣은 값이라 다시 보지
+ *   않는다. 그래서 **모드와 무관하게** 새 줄의 출발값으로 되돌린다(createRow 와 같은 규칙:
+ *   수량 1 · 관세·이익률은 계정 기본값이 있으면 그것, 없으면 분류 기본값 · 이익률 모드).
  *
- *   **수량·관세·이익률만 바꾸는 것은 그대로다** — 품목이 그대로이기 때문이다.
- *   이익률 모드에서 품목을 고르는 것도 그대로다(버릴 단가가 없다).
+ *   지키는 것은 그 줄의 **정체**뿐이다 — id·종류(row_kind)·줄 분류·장비 묶음.
+ *   그것들은 품목이 아니라 「이 줄이 견적에서 어디에 속하는가」이기 때문이다.
+ *
+ *   2026-11-03 까지는 「이익률 모드면 고친 이익률을 지킨다」는 예외가 있었다. 그 예외가
+ *   있으면 같은 동작(품목 바꾸기)이 모드에 따라 다르게 끝나, 무엇이 남고 무엇이 지워지는지
+ *   사람이 외워야 했다. 규칙은 하나다 — **품목을 바꾸면 줄도 새것이다.**
  */
 export function rowWithSelectedItem(args: {
   row: QuoteRow
@@ -202,25 +204,30 @@ export function rowWithSelectedItem(args: {
   itemText: string
   /** 견적 분류. 줄 분류(row.category)가 있으면 그것이 앞선다. */
   category?: string | null
+  /** 저장된 내 설정(관세율·이익률) — 새 줄과 같은 규칙으로 분류 기본값보다 앞선다. */
+  defaults?: RowDefaults | null
   rates: Rates
 }): QuoteRow {
-  const { row, item, itemText, category, rates } = args
-  const base: QuoteRow = {
+  const { row, item, itemText, category, defaults, rates } = args
+  // 새 줄의 출발값을 그대로 빌린다 — 「새 줄처럼」의 뜻이 여기 한 곳에만 있게 한다.
+  const fresh = createRow(row.category ?? category, defaults ?? undefined)
+  return calcRow({
     ...row,
+    // 그 줄의 정체는 지킨다(id·종류·줄 분류·묶음은 ...row 에 그대로 있다).
     selectedItem: item,
     itemText,
     partCode: item.item_code,
-    // 구입가를 고쳐 둔 줄에 **다른 품목**을 고르면 그 값은 버린다(앞 품목의 값이다).
-    cost_jpy_override: null,
     // 통화는 **가격표가 정한다** — 사람이 고르지 못한다(price_list.currency).
     currency: toCurrency(item.currency),
-  }
-  if (row.price_mode !== 'price') return calcRow(base, rates)
-  return calcRow({
-    ...base,
+    // 앞 품목의 값 — 전부 버린다.
+    cost_jpy_override: null,
+    subLines: [],
+    quantity: fresh.quantity,
+    tariff_rate: fresh.tariff_rate,
+    profit_rate: fresh.profit_rate,
     price_mode: 'rate',
     manual_unit_price: 0,
-    profit_rate: defaultMarginOf(row.category ?? category ?? null),
+    // 새 품목에는 아직 손댄 적이 없다 — 분류를 바꾸면 이익률이 따라와야 한다.
     margin_touched: false,
   }, rates)
 }

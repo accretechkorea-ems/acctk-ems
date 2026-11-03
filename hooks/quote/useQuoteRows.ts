@@ -28,6 +28,7 @@ import { useCallback, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ExpensePreset, ExpenseRow, PriceItem, QuoteRow } from '@/app/quote/types'
 import { calcExpense, calcRow, rowWithSelectedItem, createExpenseRow, createRow } from '@/app/quote/calc'
+import type { RowDefaults } from '@/app/quote/calc'
 import { type Rates } from '@/lib/quoteCurrency'
 import { defaultMarginOf } from '@/lib/quoteProfit'
 import { canSplitRowKind, type QuoteCategory } from '@/lib/quoteCategories'
@@ -46,6 +47,8 @@ export type UseQuoteRowsArgs = {
   /** 고를 수 있는 견적 분류(활성만). 줄별 분류 선택칸이 쓴다. */
   /** 고른 견적 분류 — 품목을 바꿀 때 되돌릴 이익률 기본값이 여기서 나온다. */
   category?: string | null
+  /** 저장된 내 설정(관세율·이익률) — 품목을 바꿀 때 새 줄과 같은 값으로 되돌린다. */
+  rowDefaults?: RowDefaults | null
   categories: QuoteCategory[]
   /** 「분류 나누기」가 켜져 있는가. 꺼져 있으면 줄별 분류 선택칸을 그리지 않는다. */
   lineSplitOn: boolean
@@ -105,7 +108,7 @@ export type QuoteRowsActions = {
 }
 
 export function useQuoteRows({
-  supabase, rates, terms, setTerms, category, categories, lineSplitOn, formKind,
+  supabase, rates, terms, setTerms, category, rowDefaults, categories, lineSplitOn, formKind,
 }: UseQuoteRowsArgs) {
   const [rows, setRows] = useState<QuoteRow[]>([createRow()])
   const [expensePresets, setExpensePresets] = useState<ExpensePreset[]>([])
@@ -145,6 +148,7 @@ export function useQuoteRows({
         item,
         itemText: itemTextOnSelect(r.itemText, !!r.selectedItem, item),
         category,
+        defaults: rowDefaults,
         rates,
       })
     }))
@@ -163,7 +167,7 @@ export function useQuoteRows({
     if (item.delivery_time && terms.delivery_schedule === DEFAULT_TERMS.delivery_schedule) {
       setTerms(prev => ({ ...prev, delivery_schedule: `발주 후 ${item.delivery_time}주` }))
     }
-  }, [rates, terms, setTerms, category])
+  }, [rates, terms, setTerms, category, rowDefaults])
 
   const updateRow = useCallback((rowId: string, field: keyof QuoteRow, value: any) =>
     setRows(prev => prev.map(r => {

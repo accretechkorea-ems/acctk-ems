@@ -20,7 +20,6 @@ import { calcRow, calcTotals } from './calc'
 import { useDebounce } from './useDebounce'
 import ProfitPanel from './ProfitPanel'
 import CustomerCard from '@/components/quote/CustomerCard'
-import PriceGuidePopup from '@/components/quote/PriceGuidePopup'
 import RowAddButtons from '@/components/quote/RowAddButtons'
 import Watermark from '@/components/quote/Watermark'
 import EquipConfigLauncher from '@/components/quote/equip/EquipConfigLauncher'
@@ -182,9 +181,7 @@ function QuotePageInner() {
     serviceRow, discountRow, expenses,
     clearAllRowCategories, applyCategoryDefaults, applySavedTariff,
     ctx: rowsCtx, actions: rowsActions,
-  } = useQuoteRows({ supabase, rates, terms, setTerms, category, categories: activeCategories, lineSplitOn, formKind })
-  const [showPriceGuide, setShowPriceGuide] = useState(false)
-  const priceGuideRef = useRef<HTMLDivElement | null>(null)
+  } = useQuoteRows({ supabase, rates, terms, setTerms, category, rowDefaults: category ? savedDefaults : null, categories: activeCategories, lineSplitOn, formKind })
 
   // 고객사·대리점·E.U·영업기회 — 검색·선택·해제. 상태·함수를 그대로 옮긴 훅이다.
   // **이 자리에서 부른다** — 훅 안의 useOutsideClick·useListKeyboard 네 개가 원본에서 첫 effect 들이었다.
@@ -210,17 +207,6 @@ function QuotePageInner() {
     handleCustomerSelect, handleCustomerClear,
     handleEUSearch, resolveEuParent, handleEUSelect, handleEUClear,
   } = useQuoteCustomer({ supabase, clearError })
-
-  useEffect(() => {
-    if (!showPriceGuide) return
-    const handleClickOutside = (e: MouseEvent) => {
-      if (priceGuideRef.current && !priceGuideRef.current.contains(e.target as Node)) {
-        setShowPriceGuide(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showPriceGuide])
 
   // 견적 날짜 — 기본은 오늘(한국)이고 **지난 날짜로도 쓸 수 있다**(미래는 못 고른다).
   // 번호·작성일·실적 달이 모두 이 날짜를 따른다 — create_quote(p_date) 가 그 날짜의 다음
@@ -877,7 +863,7 @@ function QuotePageInner() {
           </div>
 
           {/* 품목 */}
-          <div onClick={() => showPriceGuide && setShowPriceGuide(false)} style={{ background: '#fff', borderRadius: 8, padding: '20px 20px', border: '1px solid #ebebeb', position: 'relative' }}>
+          <div style={{ background: '#fff', borderRadius: 8, padding: '20px 20px', border: '1px solid #ebebeb', position: 'relative' }}>
             {/* 워터마크 — 농도·크기·간격은 컴포넌트 한 곳에 있다(components/quote/Watermark.tsx). */}
             <Watermark name={engineerName} rows={14} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
@@ -896,12 +882,6 @@ function QuotePageInner() {
                 setRows={setRows}
                 myId={engineer?.engineer_id ?? null}
                 myName={[engineer?.name, engineer?.position].filter(Boolean).join(' ')}
-              />
-              {/* 마진/정도검사 가이드 버튼 — 오른쪽 끝 */}
-              <PriceGuidePopup
-                open={showPriceGuide}
-                setOpen={setShowPriceGuide}
-                containerRef={priceGuideRef}
               />
             </div>
 

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useMemo, useRef } from 'react'
+import React, { useCallback, useMemo, useRef, useState } from 'react'
 import { useOutsideClick } from '@/hooks/useOutsideClick'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import SegmentedControl from '@/components/common/SegmentedControl'
@@ -37,10 +37,10 @@ const EMPTY_ITEMS: PriceItem[] = []
 // 왼쪽 44px 라벨 칸 때문에 입력 폭도 그만큼 좁았다. **칸과 정보는 하나도 빼지 않았다.**
 // **칸 높이는 하나다(32px).** 단마다 높이가 다르면 세로로 훑을 때 칸의 윗변이 들쭉날쭉해
 // 줄이 세 단이 아니라 다섯 단처럼 보인다. 품번·품명·구입가·수량·관세·토글·값 칸이 모두 같다.
-const H_CELL = 32
+const H_CELL = 28
 /** 상세 설명 줄 — 품목 칸이 아니라 그 아래 딸린 글이라 한 급 낮다. */
-const H_SUB = 26
-const GAP = 3           // 칸 사이·단 사이 여백
+const H_SUB = 24
+const GAP = 4           // 칸 사이·단 사이 여백
 
 /**
  * 칸 테두리 상자 — 접두 글자와 입력을 한 테두리 안에 담는다.
@@ -82,7 +82,7 @@ const badge: React.CSSProperties = {
   borderRadius: 99, padding: '1px 7px', whiteSpace: 'nowrap', flexShrink: 0,
 }
 /** 결과 줄의 숫자 — 그 줄에서 사람이 가장 자주 보는 값이라 한 급 크다. */
-const resultNum: React.CSSProperties = { marginLeft: 2, fontSize: 15, fontWeight: 700, color: '#111827' }
+const resultNum: React.CSSProperties = { marginLeft: 2, fontSize: 13, fontWeight: 700, color: '#111827' }
 
 // 품목 행 카드 1개(일반 품목 / 서비스비 공용).
 //
@@ -114,6 +114,12 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
     setSearchOpen, setEditingProfitRate, setProfitRateInput,
     addExpense, removeExpense, updateExpense, selectExpensePreset,
   } = actions
+  // 할인 줄의 이름 — 평소에는 글자와 ▾ 뿐이고, 더블클릭하면 직접 쓰는 칸이 된다.
+  const [discountMenu, setDiscountMenu] = useState(false)
+  const [editingDiscountName, setEditingDiscountName] = useState(false)
+  const discountMenuRef = useRef<HTMLDivElement>(null)
+  useOutsideClick(discountMenuRef, useCallback(() => setDiscountMenu(false), []), discountMenu)
+
   // 가격표 검색 드롭다운 — 바깥 클릭(및 ESC)으로 닫는다. 항목을 반드시 골라야 빠져나올 수 있던 문제 해결.
   // 드롭다운은 searchRef 안에 있으므로 항목 클릭은 '바깥'으로 판정되지 않아 선택 동작에 영향이 없다.
   const searchRef = useRef<HTMLDivElement>(null)
@@ -213,7 +219,9 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
             토글 옆 칸에 있어 같은 수를 두 번 적는 꼴이 된다. 판매가 모드에는 그 칸이
             없어(₩ 입력으로 바뀐다) 이 줄이 이익률을 볼 수 있는 유일한 자리다. */}
         {priceInputMode && (
-          <span style={{ color: belowCost ? '#dc2626' : '#9ca3af', fontWeight: belowCost ? 700 : 400 }}>
+          // 이익이 나는 것이 보통이라 **평소 초록**이고, 원가 아래로 내려갈 때만 빨강이다
+          // (늘 회색이면 좋은지 나쁜지 읽으려 멈춰야 한다). 소수 한 자리로 끊는다.
+          <span style={{ color: belowCost ? '#dc2626' : '#16a34a', fontWeight: 700, whiteSpace: 'nowrap' }}>
             {' '}({row.realized_profit_rate.toFixed(1)}%)
           </span>
         )}
@@ -286,9 +294,9 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
   }) : null
 
   return (
-    <div style={{ background: '#f8fafc', borderRadius: 8, padding: '6px 10px', marginBottom: 7, border: '1px solid #e5e7eb' }}>
+    <div style={{ background: '#f8fafc', borderRadius: 8, padding: '4px 8px', marginBottom: 6, border: '1px solid #e5e7eb' }}>
       {/* ── 머리줄 — 번호 · 종류 · 통화 · 줄 추가 · 삭제 ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: GAP, height: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: GAP, height: 17 }}>
         {rowCount > 1 && (
           <span style={{ width: 17, height: 17, borderRadius: 999, background: '#234ea2', color: '#fff', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}>{rowIdx + 1}</span>
         )}
@@ -438,18 +446,6 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
         {!is20 && modelCell}
 
         {/* 할인 — 견적서에 찍히는 문구만 고른다(로직은 동일) */}
-        {isDiscount && (
-          <div style={{ flex: '1 1 auto', minWidth: 0 }}>
-            <SegmentedControl
-              options={DISCOUNT_LABELS.map(v => ({ label: v, value: v }))}
-              value={row.itemText}
-              onChange={v => updateRow(row.id, 'itemText', v)}
-              equal
-              height={H_CELL}
-            />
-          </div>
-        )}
-
         {/* 품명 — **회색 보조 칸**이되 고칠 수 있다. 그 글자가 견적서 PDF 에 그대로 나가고,
             품목을 고르면 커서가 맨 앞으로 와서 앞에 덧붙여 쓰는 방식이다(focusItemName). */}
         {/* ref 는 JSX 에 직접 단다 — 렌더 중에 ref 값을 넘기면 react-hooks/refs 에 걸린다
@@ -584,8 +580,60 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
       )}
 
       {/* 할인 — 깎을 금액을 양수로 입력한다(계산에는 음수로 들어간다) */}
+      {/* 할인 — **한 줄이다.** 이름과 깎을 금액 둘뿐이라 단을 나눌 것이 없다.
+          이름은 견적서 PDF 의 품명 칸에 **그 글자 그대로** 나가고 저장도 그 글자다
+          (quote_items.product_name). 종전 슬라이딩 토글은 고를 수 있는 글자가 둘뿐이라
+          그 밖의 말을 쓸 수 없었다 — 이제 ▾ 로 둘을 고르고, 더블클릭하면 직접 쓴다.
+          옛 견적은 저장된 글자를 그대로 되살리므로 그대로 보인다. */}
       {isDiscount && (
-        <div style={{ marginBottom: GAP }}>
+        <div style={{ display: 'flex', gap: GAP, marginBottom: GAP }}>
+          <div ref={discountMenuRef} style={{ position: 'relative', flex: '0 0 150px', minWidth: 0 }}>
+            {editingDiscountName ? (
+              <label style={{ ...boxBase, height: H_CELL, cursor: 'text' }}>
+                <input
+                  autoFocus
+                  className="q-bare"
+                  value={row.itemText}
+                  onChange={e => updateRow(row.id, 'itemText', e.target.value)}
+                  onBlur={() => setEditingDiscountName(false)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur() }}
+                  placeholder="예: SPECIAL DISCOUNT"
+                  style={{ ...bare, fontWeight: 700 }}
+                />
+              </label>
+            ) : (
+              <div
+                onDoubleClick={() => setEditingDiscountName(true)}
+                title="더블클릭하면 이름을 직접 쓸 수 있습니다"
+                style={{ ...boxBase, height: H_CELL, cursor: 'default' }}
+              >
+                <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 700, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {row.itemText || DISCOUNT_LABELS[0]}
+                </span>
+                <button
+                  onClick={() => setDiscountMenu(v => !v)}
+                  title="자주 쓰는 이름"
+                  style={{ width: 16, height: 16, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 10, lineHeight: 1, flexShrink: 0 }}
+                >▾</button>
+              </div>
+            )}
+            {/* 자주 쓰는 이름 — 고르면 그 글자가 그대로 들어간다(값이 아니라 글자다). */}
+            {discountMenu && !editingDiscountName && (
+              <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #234ea2', borderRadius: 6, boxShadow: '0 8px 24px rgba(35,78,162,0.12)', overflow: 'hidden' }}>
+                {DISCOUNT_LABELS.map(label => (
+                  <button
+                    key={label}
+                    onClick={() => { updateRow(row.id, 'itemText', label); setDiscountMenu(false) }}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '5px 8px', border: 'none', background: row.itemText === label ? '#f0f4ff' : '#fff', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}
+                  >{label}</button>
+                ))}
+                <button
+                  onClick={() => { setDiscountMenu(false); setEditingDiscountName(true) }}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '5px 8px', border: 'none', borderTop: '1px solid #ebebeb', background: '#fff', cursor: 'pointer', fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}
+                >직접 쓰기…</button>
+              </div>
+            )}
+          </div>
           {moneyCell({
             value: row.manual_unit_price,
             onChange: v => updateRow(row.id, 'manual_unit_price', parseInt(v) || 0),
@@ -674,7 +722,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
       {/* ── 결과 줄 — 그 줄이 얼마가 되는가. 왼쪽에는 「최근 판매」(같은 고객사에 마지막으로
           판 단가)를 둔다 — 단가를 정할 때 가장 먼저 보는 값이라 결과 바로 옆이 제자리다. ── */}
       {(result || mySale || belowCost) && (
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 3, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 2, minWidth: 0, lineHeight: 1.25 }}>
           {/* 원가 아래로 판 줄 — 오른쪽 %만 붉히면 작아서 지나친다. 왼쪽에 말로 적는다. */}
           {belowCost && (
             <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', whiteSpace: 'nowrap', flexShrink: 0 }}>
