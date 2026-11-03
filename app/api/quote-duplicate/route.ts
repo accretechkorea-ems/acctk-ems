@@ -45,7 +45,7 @@ export async function POST(req: Request) {
   // 품목 — 가격표 품목은 selectedItem 복원을 위해 price_list 전체를 함께 가져온다.
   const { data: items } = await sb
     .from('quote_items')
-    .select('item_id, price_list_id, part_code, row_kind, product_name, quantity, unit_price_jpy, unit_price_krw, supply_amount, profit_rate, tariff_rate, sub_lines, category, group_kind, price_list(*)')
+    .select('item_id, price_list_id, part_code, row_kind, product_name, quantity, unit_price_jpy, unit_price_krw, supply_amount, profit_rate, tariff_rate, sub_lines, category, group_kind, model_name, currency, price_list(*)')
     .eq('quote_id', quoteId)
     .order('item_id', { ascending: true })
 

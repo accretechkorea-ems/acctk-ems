@@ -219,6 +219,9 @@ export function rowWithSelectedItem(args: {
     partCode: item.item_code,
     // 통화는 **가격표가 정한다** — 사람이 고르지 못한다(price_list.currency).
     currency: toCurrency(item.currency),
+    // 모델 — 가격표 값을 그대로 넣는다(20 양식의 모델 열이 읽고, 사람이 고칠 수 있다).
+    // 80 양식에는 모델 열이 없어 이 값이 쓰이지 않는다(품명에 「(모델)」로 합쳐 나간다).
+    manual_model: (item.model_jp ?? '').trim(),
     // 앞 품목의 값 — 전부 버린다.
     cost_jpy_override: null,
     subLines: [],

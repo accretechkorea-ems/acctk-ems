@@ -412,11 +412,16 @@ export function useQuoteSubmit({
         // 품명 아래 설명 줄 — **줄이 없으면 null**(저장하지 않는다 = 줄 없음).
         // 확정 때 PDF 가 그리는 값과 같은 정규화 결과다(normalizedSubLines).
         sub_lines: normalizedSubLines(r),
-        // 수동입력 줄의 모델 — 적지 않았으면 null.
-        // ⚠ quote_items 에 아직 이 칸이 없다. create_quote 가 품목을
-        //   jsonb_populate_recordset 으로 받으므로 **지금은 조용히 버려진다**(예외는 나지 않는다).
-        //   quote_items_model_schema.sql 의 단계 1·2 를 실행하면 그때부터 그대로 저장된다.
-        model_name: r.row_kind === 'manual_jpy' ? (r.manual_model.trim() || null) : null,
+        // 그 줄의 모델 — 적지 않았으면 null.
+        //
+        // 직접 입력 줄과 **가격표 줄**(20 양식에서 모델 칸이 생겼다) 둘 다 남긴다. 가격표
+        // 줄은 품목을 고를 때 가격표 값이 들어오므로, 고치지 않았다면 가격표와 같은 글자가
+        // 저장된다 — 나중에 가격표가 바뀌어도 **그때 나간 견적서의 글자**가 남는다.
+        // (quote_items.model_name 은 실재하는 칸이다 — 2026-11-03 읽기로 확인했다.
+        //  종전 주석의 「아직 칸이 없다」는 낡은 말이었다.)
+        model_name: (r.row_kind === 'manual_jpy' || r.row_kind === 'price_list')
+          ? (r.manual_model.trim() || null)
+          : null,
       }))
 
       // 부대비용(내부 관리용). 견적 합계·PDF 와 무관하게 quote_expenses 에만 기록한다.

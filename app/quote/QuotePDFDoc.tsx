@@ -804,8 +804,10 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({
               : (row.partCode.trim() || ((row.itemText.trim() || row.supply_price > 0) ? '-' : ''))
             const codeDraw = codeLayout(codeRaw, codeCol, size)
 
-            // 모델 — 20 견적서만. 가격표 품목은 model_jp, 직접 적은 줄은 사람이 적은 모델이다.
-            const modelText = modelCol ? (row.selectedItem?.model_jp || row.manual_model || '') : ''
+            // 모델 — 20 견적서만. **줄에 적힌 모델이 먼저**다(가격표 줄도 2026-11-03 부터
+            // 모델 칸을 갖는다 — 품목을 고르면 가격표 값이 들어오고 고칠 수 있다).
+            // 비어 있으면 가격표 값으로 떨어진다(옛 견적·구성 모달로 들어온 줄).
+            const modelText = modelCol ? (row.manual_model || row.selectedItem?.model_jp || '') : ''
             // 20 은 모델 열이 따로 있어 품명 끝의 「(모델)」을 뗀다(같은 글자가 두 번 나오지 않게).
             // 80 은 모델 열이 없으므로 **반대로** 품명 뒤에 붙인다 — 가격표 품목이 품명에
             // 「(model_jp)」를 담는 것과 같은 모양이다(직접 적은 줄만 해당. 그 밖은 빈 글자).

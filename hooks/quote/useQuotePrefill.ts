@@ -54,6 +54,8 @@ export type DuplicatePayload = {
     category: string | null
     /** 장비 구성 묶음(quote_items.group_kind). null 이면 묶음이 없었다. */
     group_kind: string | null
+    /** 그 줄의 모델(quote_items.model_name). 모델 칸이 생기기 전 줄은 null 이다. */
+    model_name?: string | null
     price_list: PriceItem | null
   }[]
   expenses: { item_name: string | null; unit_price: number | null; headcount: number | null; days: number | null }[]
@@ -147,8 +149,9 @@ export function useQuotePrefill({
         // 통화 — 저장값을 그대로. 가격표 줄은 **지금 가격표의 통화**가 정본이다(가격표가
         // 통화를 바꿨으면 새 값을 따른다 — 구입가와 통화가 어긋나지 않게).
         currency: toCurrency(kind === 'price_list' ? (it.price_list?.currency ?? it.currency) : it.currency),
-        // 모델은 아직 quote_items 에 칸이 없어 되살릴 값이 없다(createRow 의 빈 글자를 쓴다).
-        // 칸이 생기면 /api/quote-duplicate 의 select 에 model_name 을 더하고 여기서 받는다.
+        // 모델 — 저장된 글자를 그대로 되살린다(그때 나간 견적서의 글자다). 없으면 지금
+        // 가격표 값으로 채운다(모델 칸이 생기기 전에 만든 가격표 줄이 그렇다).
+        manual_model: String(it.model_name ?? it.price_list?.model_jp ?? '').trim(),
         // 할인은 사용자가 양수로 넣는 값이라 음수 공급가를 되돌린다.
         manual_unit_price: kind === 'discount' ? Math.abs(Number(it.supply_amount) || 0) : unitKrw,
         // price_mode 는 저장되지 않는다. 이익률 모드는 반드시 1,000원 올림을 하므로

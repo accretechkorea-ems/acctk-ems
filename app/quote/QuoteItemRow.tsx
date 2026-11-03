@@ -298,12 +298,23 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
     </label>
   )
 
-  /** 모델 칸 — 직접 입력 줄만. 두는 자리는 양식이 정한다(80 은 품명 앞, 20 은 뒤). */
-  const modelCell = row.row_kind === 'manual_jpy' ? textCell({
+  /**
+   * 모델 칸 — **20 견적서에는 가격표 줄에도 둔다.**
+   *
+   * 20 양식에는 모델 열이 따로 있고, 가격표 줄은 그 열을 가격표 값(price_list.model_jp)으로
+   * 자동으로 채워 왔다 — 칸이 없어 **고칠 수가 없었다.** 같은 품번이라도 고객에게 나가는
+   * 모델 표기를 다르게 적어야 하는 때가 있어 칸을 둔다(품목을 고르면 가격표 값이 들어오고,
+   * 고치면 고친 값이 PDF 의 모델 열로 나간다 — app/quote/QuotePDFDoc.tsx 의 modelText).
+   *
+   * 80 양식은 모델 열이 없어 칸도 두지 않는다 — 거기서는 모델이 품명 뒤에 「(모델)」로
+   * 합쳐 나간다(lib/priceItemText.ts). 국내 구매·서비스비·할인은 모델이 나가지 않는다.
+   */
+  const hasModelCell = row.row_kind === 'manual_jpy' || (is20 && row.row_kind === 'price_list')
+  const modelCell = hasModelCell ? textCell({
     label: '모델',
     value: row.manual_model,
     onChange: v => updateRow(row.id, 'manual_model', v),
-    placeholder: '예: NEX 200',
+    placeholder: row.row_kind === 'price_list' ? '가격표 모델' : '예: NEX 200',
     basis: '110px',
   }) : null
 
@@ -373,7 +384,8 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
               value: searchQuery[row.id] || '',
               onChange: v => handleSearch(row.id, v),
               placeholder: '가격표 검색',
-              basis: '140px',
+              // 20 은 세 칸(품번·품명·모델)이라 직접 입력 줄과 같은 비율로 나눈다.
+              basis: is20 ? '110px' : '140px',
               onFocus: () => setSearchOpen(prev => ({ ...prev, [row.id]: true })),
               onKeyDown: itemKeys.onKeyDown,
               extra: row.selectedItem ? (
@@ -466,13 +478,15 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
             (그 규칙의 뜻 그대로, 렌더는 ref 를 몰라야 한다). 그래서 이 칸만 손으로 적는다. */}
         {!isDiscount && (
           <label title={row.selectedItem ? '가격표 품명 — 고칠 수 있습니다' : undefined}
-            style={{ ...boxBase, height: H_CELL, flex: '1 1 140px', cursor: 'text' }}>
+            style={{ ...boxBase, height: H_CELL, flex: is20 ? '1 1 120px' : '1 1 140px', cursor: 'text' }}>
             <span style={prefix}>품명</span>
+            {/* 글자는 **본문색**이다 — 고칠 수 있는 칸인데 회색이면 읽기 전용으로 읽힌다.
+                보조로 보이게 하는 일은 칸 안 접두 글자(회색)가 맡는다. */}
             <input ref={itemNameRef} className="q-bare" value={row.itemText}
               onChange={e => updateRow(row.id, 'itemText', e.target.value)}
               onFocus={closeSearch}
               placeholder="예: 스타일러스"
-              style={{ ...bare, color: '#6b7280' }} />
+              style={bare} />
           </label>
         )}
 
