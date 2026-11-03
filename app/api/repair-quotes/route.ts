@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -11,10 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 //     연결 안 된 임의 견적은 403 또는 제외.
 //   - 예외: ?q= 검색만 작성자 teams='20' 기준 유지(수리 모달 미사용, 범위 확대 금지).
 //   - 반환 필드는 최소(quote_id, quote_number, total_supply, company_name). total_profit·quote_items 등 상세 금지.
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const supabaseAdmin = adminClient()
 
 // service role 조회 대상(내부용). engineer_id 는 필터에만 쓰고 응답엔 넣지 않는다.
 const SELECT = 'quote_id, quote_number, total_supply, customer_id, engineer_id'

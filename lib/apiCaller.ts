@@ -31,7 +31,8 @@
 //   보이지만, 열람 판정이 실패를 허용으로 떨어뜨리는 것보다 낫다
 //   (lib/approval/docAccess.ts 가 같은 규칙을 쓴다).
 
-import { createClient as createAdminClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { canViewMenu, isSuperAdmin, type EngineerLike } from '@/lib/permissions'
 import { canAccessSemiContact } from '@/lib/division'
@@ -39,17 +40,13 @@ import { sessionEmailForRead } from '@/lib/sessionEmail'
 import { withTeamPerm as realWithTeamPerm } from '@/lib/teamPermsServer'
 
 /**
- * service role 클라이언트 — **라우트가 직접 만들지 않는다.**
+ * service role 클라이언트 — 정본은 lib/supabase/admin.ts 다(D15).
  *
- * 보통은 loadCaller 가 돌려주는 sb 를 쓰면 된다. 이 함수를 직접 부르는 자리는
- * **호출자가 없는 라우트** 하나뿐이다(/api/lead — 로그인 없는 공개 폼). 그런 자리에도
- * 클라이언트 설정이 흩어지지 않게 입구를 하나로 둔다(D15 가 이 함수를
- * lib/supabase/admin.ts 로 옮길 자리다).
+ * 여기서 **다시 내보내는** 이유: 라우트들이 이 파일에서 함께 가져다 쓰고 있었고(공개 폼
+ * /api/lead), 호출자 확인과 클라이언트가 한 import 로 끝나는 쪽이 읽기 쉽다.
+ * 만드는 코드는 더 이상 이 파일에 없다.
  */
-export const adminClient = (): SupabaseClient => createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+export { adminClient } from '@/lib/supabase/admin'
 
 /** 무엇을 요구하는가. 라우트가 이것 하나만 적는다. */
 export type Need =
@@ -148,10 +145,7 @@ const defaultDeps: CallerDeps = {
     const mod = await import('@/lib/supabase/server')
     return mod.createClient()
   },
-  admin: () => createAdminClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  ),
+  admin: adminClient,
   withTeamPerm: realWithTeamPerm,
   cronSecret: () => process.env.CRON_SECRET,
 }

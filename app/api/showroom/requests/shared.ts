@@ -24,7 +24,8 @@
 // 쓰기는 전부 service role 로 한다(approval_requests·showroom_usage 에는 읽기 정책만 있다).
 // 승인서 PDF 는 비공개 버킷 showroom-approvals 에 올린다. 파일 이름 규칙은 견적서와 같다 —
 // 덮어쓰지 않고(upsert: false), 이름이 이미 있으면 _2, _3 … 을 붙인다.
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { renderToBuffer } from '@react-pdf/renderer'
 import { addDays } from '@/lib/date'
@@ -45,10 +46,7 @@ import { approvalPdfDocument, type ApprovalPdfData, type ApprovalStamp } from '@
 // 승인서 결재란 한 칸 — 쇼룸 결재 유형(lib/approval/showroomUsage.ts)도 같은 타입을 쓴다.
 export type { ApprovalStamp }
 
-export const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+export const admin = adminClient
 
 export const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 

@@ -21,15 +21,12 @@
 //   apply_price_list_import() 가 한 트랜잭션에서 덮어쓰기·삽입·이력을 모두 한다.
 //   중간에 실패하면 아무것도 바뀌지 않는다. 이 함수는 service_role 에만 실행 권한이 있다.
 
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { PARSE_ROW_MAX } from '@/lib/priceListParse'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const supabaseAdmin = adminClient()
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 

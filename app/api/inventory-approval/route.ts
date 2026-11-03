@@ -1,11 +1,8 @@
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { isOwner, loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const supabaseAdmin = adminClient()
 
 export async function POST(req: Request) {
   // 재고 메뉴 권한 또는 superadmin만 허용

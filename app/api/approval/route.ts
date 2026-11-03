@@ -13,7 +13,7 @@
 //     (GENERIC_SUBMIT_DISABLED — 이유는 그 상수 설명에 있다). 상신은 업무별 라우트가
 //     원 문서를 검증한 뒤 lib/approval/submit.ts 를 직접 부른다.
 
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { isOwner, loadCaller as loadApiCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { canViewMenu } from '@/lib/permissions'
@@ -31,10 +31,7 @@ import {
 } from '@/lib/approval/types'
 import { checkLines, createApprovalDocument } from '@/lib/approval/submit'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const supabaseAdmin = adminClient()
 
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status })
 
@@ -264,6 +261,7 @@ async function approve(caller: Caller, body: Record<string, unknown>) {
   const hooks = handlersOf(doc.doc_type)
   if (done && hooks.beforeComplete) {
     const problem = await hooks.beforeComplete({
+      sb: supabaseAdmin,
       documentId, docNo: doc.doc_no, targetTable: doc.target_table, targetId: doc.target_id,
       summary: doc.summary ?? {}, requesterId: doc.requester_id, actorId: caller.engineer_id, lines: after,
     })
@@ -308,7 +306,8 @@ async function approve(caller: Caller, body: Record<string, unknown>) {
       // 유형별 실행. 실패해도 결재 자체는 이미 끝났으므로 되돌리지 않고 기록만 남긴다.
       try {
         await hooks.onComplete?.({
-          documentId, docNo: doc.doc_no, targetTable: doc.target_table, targetId: doc.target_id,
+          sb: supabaseAdmin,
+      documentId, docNo: doc.doc_no, targetTable: doc.target_table, targetId: doc.target_id,
           summary: doc.summary ?? {}, requesterId: doc.requester_id, actorId: caller.engineer_id, lines: after,
         })
       } catch (e) {
@@ -351,6 +350,7 @@ async function runRevert(doc: DocWithLines, actorId: number, outcome: '반려' |
   if (!hooks.onRevert) return
   try {
     await hooks.onRevert({
+      sb: supabaseAdmin,
       documentId: doc.document_id, docNo: doc.doc_no, targetTable: doc.target_table, targetId: doc.target_id,
       summary: doc.summary ?? {}, requesterId: doc.requester_id, actorId, lines: doc.approval_lines,
       // **어떻게 끝났는지를 적어 넘긴다.** doc 은 상태를 바꾸기 전에 읽은 값이라 여기서

@@ -23,7 +23,7 @@
 // 시각이 행에서 지워진다 — 그래서 block·unblock 둘 다 audit_log 에 한 줄씩 남긴다.
 // leads.blocked_by/blocked_at 은 CHECK(leads_blocked_actor_check)가 지킨다:
 // 상태가 '배정불가' 가 아니면 둘 다 null 이어야 한다. 상태를 되돌릴 때 반드시 함께 비운다.
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { isOwner, loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
@@ -39,10 +39,7 @@ import {
   LEAD_CONVERT_ACTIVITY_TYPE, MAX_LEN, SKIP_REASON_MIN, isLeadClosed, leadNoTag,
 } from '@/lib/leadOptions'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const supabaseAdmin = adminClient()
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 

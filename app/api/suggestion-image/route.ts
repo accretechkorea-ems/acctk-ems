@@ -7,7 +7,7 @@
 //
 // 공지 이미지(/api/notice)와 같은 text[] 방식이되, 배열에는 전체 URL 이 아니라
 // 버킷 안 파일명만 담는다(비공개 버킷이므로 열 때 서명 URL 을 발급한다).
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 import { isSuperAdmin } from '@/lib/permissions'
@@ -21,10 +21,7 @@ const MAX_BYTES = 5 * 1024 * 1024
 /** 서명 URL 만료 — 코드베이스의 다른 서명 URL 과 같은 1시간. */
 const SIGNED_URL_TTL = 60 * 60
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const supabaseAdmin = adminClient()
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 

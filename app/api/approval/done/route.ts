@@ -21,7 +21,7 @@
 //
 // 읽기 전용이다. 상태를 바꾸지 않으므로 조건부 UPDATE 도 캐시도 없다.
 
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 import { nextPendingLine } from '@/lib/approval/engine'
@@ -32,10 +32,7 @@ import type { ApprovalDocument, ApprovalLine } from '@/lib/approval/types'
 
 const TAG = 'approval/done'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const supabaseAdmin = adminClient()
 
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status })
 

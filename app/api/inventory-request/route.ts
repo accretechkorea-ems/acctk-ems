@@ -5,16 +5,13 @@
 //     여기서는 세션에서만 얻고, 요청 본문에 무엇이 들어오든 쓰지 않는다.
 //   · 남의 engineer_id 로 notifications 를 넣는 일은 service role 에서만 하게 막는다
 //     (notifications 의 INSERT 정책을 없애기 위한 선행 작업이다).
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
 import { canViewMenu } from '@/lib/permissions'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const supabaseAdmin = adminClient()
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 const bad = (message: string) => NextResponse.json({ error: message }, { status: 400 })

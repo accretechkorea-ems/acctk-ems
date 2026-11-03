@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { canViewMenu } from '@/lib/permissions'
@@ -12,10 +12,7 @@ const REQUEST_MEMO_MAX = 500
 /** 알림에 덧붙이는 메모 미리보기 길이. */
 const MEMO_PREVIEW_MAX = 40
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const supabaseAdmin = adminClient()
 
 export async function POST(req: Request) {
   // 로그인·재직 확인만 공용 함수로 받는다 — **문턱은 아래에서 갈린다**:

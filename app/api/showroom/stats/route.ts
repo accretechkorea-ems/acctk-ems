@@ -31,7 +31,8 @@
 //   · 사용여부가 꺼진 장비(is_active=false)는 장비 목록·히트맵·평균에서 뺀다.
 //     그 장비의 기록은 건수·시간 같은 기간 지표에는 그대로 들어간다.
 //   · 견적·수주 전환율의 분모는 고객 데모 건수 하나다(측정대행은 견적으로 이어지는 일이 아니다).
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { isDisposed } from '@/lib/deviceStatus'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
@@ -53,10 +54,7 @@ const TOP_N = 10
 const MIN_YEAR = 2000
 const MAX_YEAR = 2100
 
-const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const admin = adminClient
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 

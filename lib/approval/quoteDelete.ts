@@ -20,7 +20,7 @@
 // 되돌리기(onRevert)는 반려·회수·폐기 세 경우에 모두 불린다. 결재가 어떻게 끝났든 견적이
 // '취소요청' 에 갇히면 안 되기 때문이다. 그래서 조건부 UPDATE 로 짜서 여러 번 불려도 안전하다.
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { OnCompleteContext } from './docTypes'
 
 const TAG = 'approval/quoteDelete'
@@ -46,11 +46,6 @@ const FAIL_STATUS = '실패'
 const PDF_BUCKET = 'quote-pdfs'
 
 const TYPE_COMPLETED = 'quote_deleted'
-
-const admin = (): SupabaseClient => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
 
 /**
  * 견적 삭제 요청 문서의 summary.
@@ -282,13 +277,12 @@ export async function notifyQuoteDeleted(sb: SupabaseClient, quote: DeletedQuote
  * 결재가 도는 동안 견적이 '취소요청' 에서 벗어났다면 요청이 사실상 취소된 것이라 지우지 않는다.
  * 실패해도 결재 자체는 이미 끝났으므로 되돌리지 않고 기록만 남긴다(라우트가 그렇게 부른다).
  */
-export async function onCompleteQuoteDelete(ctx: OnCompleteContext): Promise<void> {
+export async function onCompleteQuoteDelete({ sb, ...ctx }: OnCompleteContext): Promise<void> {
   const quoteId = ctx.targetId
   if (quoteId == null) {
     console.error(`[${TAG}] targetId 가 없다 — 지울 견적을 알 수 없다`, { documentId: ctx.documentId })
     return
   }
-  const sb = admin()
   const done = await executeQuoteDelete({
     sb, quoteId, allowedStatuses: [DELETE_REQUEST_STATUS], via: '결재',
   })
@@ -309,13 +303,12 @@ export async function onCompleteQuoteDelete(ctx: OnCompleteContext): Promise<voi
  * 조건부 UPDATE 라 이미 돌아간 견적에는 아무 일도 일어나지 않는다. 폐기는 반려·회수된 문서에만
  * 할 수 있어 이미 한 번 불린 뒤인데, 그래도 안전하게 다시 부를 수 있어야 한다.
  */
-export async function onRevertQuoteDelete(ctx: OnCompleteContext): Promise<void> {
+export async function onRevertQuoteDelete({ sb, ...ctx }: OnCompleteContext): Promise<void> {
   const quoteId = ctx.targetId
   if (quoteId == null) {
     console.error(`[${TAG}] targetId 가 없다 — 되돌릴 견적을 알 수 없다`, { documentId: ctx.documentId })
     return
   }
-  const sb = admin()
 
   // audit_log 가 정본이다. 못 읽으면 상신 때 담아 둔 summary 값으로, 그것도 없으면 기본값으로 간다.
   const fromAudit = await loadRestoreTarget(sb, quoteId)

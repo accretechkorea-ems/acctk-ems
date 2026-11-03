@@ -9,7 +9,7 @@
 //   사후 신청(계획일이 오늘 이하) — 이미 끝난 사용이라 상신 때 기록을 만들어 두었다(쇼룸 라우트가 한다).
 //     결재는 「확인」일 뿐이므로 완료 시 기록에 손대지 않고 승인서에 도장만 찍는다.
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { DemoRequestPayload } from '@/lib/showroom'
 import {
   createUsageFromRequest, findOverlap, pdfDataFromPayload, renderApprovalPdf, dropApprovalPdf,
@@ -18,11 +18,6 @@ import {
 import type { ApprovalLine } from './types'
 
 const TAG = 'approval/showroomUsage'
-
-const admin = (): SupabaseClient => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
 
 /**
  * 쇼룸 사용 신청 문서의 summary.
@@ -136,11 +131,10 @@ async function refreshPdf(
  * 완료 직전 점검 — 사전 신청만 본다. 겹치는 사용 기록이 있으면 사람이 읽을 메시지를 돌려주고,
  * 그러면 마지막 승인이 막힌다 — 결재자에게 「기록을 정리한 뒤 결재해주세요」로 돌려준다.
  */
-export async function beforeCompleteShowroom(ctx: { documentId: number; summary: Record<string, unknown> }): Promise<string | null> {
+export async function beforeCompleteShowroom({ sb, ...ctx }: { sb: SupabaseClient; documentId: number; summary: Record<string, unknown> }): Promise<string | null> {
   const s = readSummary(ctx.summary)
   if (!s || s.is_retroactive) return null
   const p = s.payload
-  const sb = admin()
   const ov = await findOverlap(sb, p.device_id, p.usage_date, p.start_time, p.end_time)
   if (ov.error) return '사용 기록을 확인하지 못했습니다. 잠시 뒤 다시 시도해주세요.'
   if (ov.clash) return `같은 장비·같은 날 겹치는 사용 기록이 있습니다 (${ov.clash}). 기록을 정리한 뒤 결재해주세요.`
@@ -151,7 +145,9 @@ export async function beforeCompleteShowroom(ctx: { documentId: number; summary:
  * 결재 완료 — 사전 신청이면 사용 기록을 만들고, 두 경우 모두 승인서에 도장을 찍는다.
  * 여기서 실패해도 결재 자체는 이미 끝났다(라우트가 기록만 남긴다).
  */
-export async function onCompleteShowroom(ctx: {
+export async function onCompleteShowroom({ sb, ...ctx }: {
+  /** service role 클라이언트 — 부르는 쪽이 넘긴다(lib/approval/docTypes.ts 의 설명). */
+  sb: SupabaseClient
   documentId: number
   summary: Record<string, unknown>
   requesterId: number
@@ -162,7 +158,6 @@ export async function onCompleteShowroom(ctx: {
     console.error(`[${TAG}] summary 모양이 아니다 — 아무것도 하지 않는다`, { documentId: ctx.documentId })
     return
   }
-  const sb = admin()
   let next = s
 
   if (!s.is_retroactive && s.usage_id == null) {
@@ -217,7 +212,9 @@ export async function onCompleteShowroom(ctx: {
  * 실패해도 던지지 않는다 — 회수·폐기 전이는 이미 끝났고, runRevert 가 기록만 남긴다
  * (quote_delete 의 onRevertQuoteDelete 와 같은 규칙).
  */
-export async function onRevertShowroom(ctx: {
+export async function onRevertShowroom({ sb, ...ctx }: {
+  /** service role 클라이언트 — 부르는 쪽이 넘긴다. */
+  sb: SupabaseClient
   documentId: number
   docNo: string
   targetId: number | null
@@ -239,7 +236,6 @@ export async function onRevertShowroom(ctx: {
   const usageId = s.usage_id ?? ctx.targetId
   if (usageId == null) return   // 이미 치웠다(두 번째 호출)
 
-  const sb = admin()
 
   // 방어 — 이 기록이 **정말 이 문서의 것인가**. 옛 요청함 건(request_id)이거나 남의 문서에 묶인
   // 기록이면 손대지 않는다. document_id 가 아직 null 인 과거 기록은 target_id 로만 이어져 있어

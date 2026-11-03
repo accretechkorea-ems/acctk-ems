@@ -10,10 +10,20 @@
 // 서버 전용 모듈이 클라이언트 번들 그래프로 끌려와 빌드가 깨진다(Turbopack 이 dynamic import 도 따라간다).
 // 이 파일에는 순수한 값과 판정만 둔다.
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ApprovalLine } from './types'
 
 /** 실행 함수가 받는 것. 엔진은 원 테이블을 모르고, 이 값만 넘긴다. */
 export type OnCompleteContext = {
+  /**
+   * service role 클라이언트 — **부르는 쪽(결재 라우트)이 넘긴다.**
+   *
+   * 실행 함수가 안에서 만들지 않는 이유: 만들면 시험할 때 바꿔 끼울 수가 없다
+   * (docs/audit-2026-10.md D37 (나) — 「안에서 클라이언트를 만들어 스텁 불가」로 적혀 있던
+   * 셋이 이 셋이다). 인자로 받으면 가짜 클라이언트로 완료·되돌리기 경로를 시험할 수 있다.
+   * 타입만 가져오므로 이 파일이 화면에서 읽히는 데는 영향이 없다.
+   */
+  sb: SupabaseClient
   documentId: number
   docNo: string
   targetTable: string

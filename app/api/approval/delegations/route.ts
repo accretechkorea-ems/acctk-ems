@@ -14,7 +14,7 @@
 // 검증(기간 겹침·사슬)은 DB 를 모르는 순수 함수에 두었다(lib/approval/delegation.ts) —
 // 화면이 같은 함수를 쓸 수 있고, 스크립트로 그대로 돌려 볼 수 있다.
 
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller as loadApiCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { isSuperAdmin } from '@/lib/permissions'
@@ -27,10 +27,7 @@ import {
 
 const TAG = 'approval/delegations'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const supabaseAdmin = adminClient()
 
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status })
 

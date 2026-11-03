@@ -16,7 +16,7 @@
 //
 // 접근 권한은 의뢰서 메뉴 권한(inquiries)을 기준으로 한다.
 // 개별 삭제만 올린 사람 본인 또는 superadmin 으로 좁힌다(남이 올린 자료를 함부로 지우지 못하게).
-import { createClient } from '@supabase/supabase-js'
+import { adminClient, adminEnvReady } from '@/lib/supabase/admin'
 import { loadCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 import { isSuperAdmin } from '@/lib/permissions'
@@ -38,10 +38,7 @@ const NAME_MAX = 200
 const ATTACHMENT_COLUMNS =
   'id, message_id, inquiry_id, file_path, file_name, content_type, byte_size, sort_order, uploaded_by, created_at'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const supabaseAdmin = adminClient()
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
@@ -61,8 +58,7 @@ function reasonOf(e: unknown): string {
  * 라우트가 JSON 이 아닌 500 을 내보낸다 — 그러면 화면에 이유가 아예 남지 않는다.
  * 부르는 쪽에서 먼저 확인해 사유가 실린 JSON 으로 돌려준다.
  */
-const envReady = (): boolean =>
-  !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY
+const envReady = adminEnvReady
 
 /** 호출자 — 공용 모양 그대로다(lib/apiCaller.ts). */
 type Caller = ApiCaller

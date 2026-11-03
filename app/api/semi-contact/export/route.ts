@@ -7,8 +7,8 @@
 // Project 가 없으면 404, report_id 가 그 Project 의 보고서가 아니면 404.
 // 시트 모양은 lib/semiContact/excel.ts 가 정하고, 이 라우트는 exceljs 로 Workbook 을 만들어 넘긴 뒤 파일로 돌려준다
 // (저장소의 다른 엑셀은 브라우저에서 만들지만, 이것은 권한 검사와 service role 읽기를 한 곳에서 하려고 서버에서 만든다).
+import { adminClient, adminEnvReady } from '@/lib/supabase/admin'
 import ExcelJS from 'exceljs'
-import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { loadCaller } from '@/lib/apiCaller'
 import { todayKST } from '@/lib/date'
@@ -24,10 +24,7 @@ const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
 
 const bad = (message: string, status: number) => NextResponse.json({ error: message }, { status })
 
-const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const admin = adminClient
 
 /** 한글 파일명이 깨지지 않게 filename*(UTF-8)을 주고, 옛 브라우저용 ASCII 이름도 함께 둔다. */
 function disposition(name: string): string {
@@ -64,7 +61,7 @@ export async function GET(req: NextRequest) {
 }
 
 async function handle(req: NextRequest) {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!adminEnvReady()) {
     console.error(`[${TAG}] 환경 변수 누락 — SUPABASE URL 또는 SERVICE_ROLE_KEY`)
     return bad('서버 설정 오류 — 환경 변수가 없습니다. 관리자에게 알려주세요.', 500)
   }

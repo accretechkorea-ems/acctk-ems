@@ -16,7 +16,7 @@
 //                    claim_inquiry_seq 의 EXECUTE 도 service_role 에만 있다.
 //
 // created_by 는 본문 값을 쓰지 않고 세션에서 강제한다 — 누가 발급했는지가 책임 소재다.
-import { createClient } from '@supabase/supabase-js'
+import { adminClient, adminEnvReady } from '@/lib/supabase/admin'
 import { loadCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 import { isSuperAdmin } from '@/lib/permissions'
@@ -46,10 +46,7 @@ const MAX_TRIES = 5
 /** 호출자 — 공용 모양 그대로다(lib/apiCaller.ts). */
 type Caller = ApiCaller
 
-const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const admin = adminClient
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
@@ -73,8 +70,7 @@ function reasonOf(e: unknown): string {
  * 그러면 화면은 응답을 파싱하지 못해 사유가 아예 남지 않는다(빈 {} 만 찍힌다).
  * 부르는 쪽에서 먼저 확인해 사유가 실린 JSON 으로 돌려준다.
  */
-const envReady = (): boolean =>
-  !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY
+const envReady = adminEnvReady
 
 /** rpc 가 「함수가 없다」고 답했는가. 배포 때 SQL 파일을 아직 돌리지 않은 경우다. */
 const isMissingFunction = (e: unknown): boolean => {

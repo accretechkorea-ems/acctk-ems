@@ -12,16 +12,13 @@
 // 다른 월 단위 계산이라 `quote_date < 오늘-30일` 같은 한 줄로는 정확히 표현되지 않는다.
 // '견적중' 건만 읽으므로 양이 적다(전체 견적의 일부).
 
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { todayKST } from '@/lib/date'
 import { AUTO_FAIL_REASON, FAIL_STATUS, PENDING_STATUS, isExpired } from '@/lib/quoteStatus'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const supabaseAdmin = adminClient()
 
 /** 국내수리 견적은 '견적중' 을 거치지 않는 별도 흐름이라 자동 실주 대상이 아니다. */
 const SKIP_QUOTE_TYPE = 'repair_domestic'

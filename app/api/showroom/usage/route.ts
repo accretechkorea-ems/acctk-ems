@@ -17,7 +17,8 @@
 //   · 참여 엔지니어 최소 1명
 //
 // 신청서(데모 승인)는 이번 범위가 아니다 — request_id 는 null 로 둔다.
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { isOwner, loadCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 import { isSuperAdmin } from '@/lib/permissions'
@@ -28,10 +29,7 @@ import {
   ensureDeviceConfig, assertShowroomDevice,
 } from '@/lib/showroom'
 
-const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const admin = adminClient
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 

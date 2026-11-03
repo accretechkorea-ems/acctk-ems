@@ -11,15 +11,12 @@
 // 화면(/leads)에서도 superadmin 에게만 버튼을 보이지만, 그것만으로는 막을 수 없어
 // 권한과 확인 문구를 여기서 다시 검증한다. 화면을 거치지 않고 이 라우트를 직접 부르는 경우가 방어 대상이다.
 // leads 를 참조하는 FK 는 없으므로 행 하나만 지우면 되고, 전환된 영업기회·활동 기록은 건드리지 않는다.
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { CARD_BUCKET } from '@/lib/leadOptions'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const supabaseAdmin = adminClient()
 
 /**
  * 삭제를 막아 둔 스위치. false 로 바꾸면 아래 코드가 예전처럼 동작한다.

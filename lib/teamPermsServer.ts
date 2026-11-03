@@ -14,7 +14,7 @@
 //
 // service role 로 읽는다 — 권한 판정 자료 자체가 RLS 에 막히면 안 되기 때문이다.
 
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import type { EngineerLike, TeamPerm } from '@/lib/permissions'
 import { toDivision } from '@/lib/division'
 
@@ -54,10 +54,7 @@ function buildMap(teams: TeamRow[] | null, perms: PermRow[] | null): Map<string,
  */
 export async function loadTeamPerms(opts?: { fresh?: boolean }): Promise<Map<string, TeamPerm>> {
   if (!opts?.fresh && cache && Date.now() - cache.at < TTL_MS) return cache.map
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  )
+  const supabaseAdmin = adminClient()
   const [teamsRes, permsRes] = await Promise.all([
     supabaseAdmin.from('teams').select('id, name, division, in_sales_stats'),
     supabaseAdmin.from('team_permissions').select('team_id, perm_key'),

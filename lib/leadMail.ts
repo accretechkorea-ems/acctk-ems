@@ -13,14 +13,11 @@
 // 이 모듈의 함수는 예외를 밖으로 던지지 않는다 — 메일은 부가 작업이고, 실패해도 리드 등록은
 // 성공으로 끝나야 한다. 실패는 console.error 로만 남긴다.
 
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { isSuperAdmin } from '@/lib/permissions'
 import { leadLink } from '@/lib/leadNotify'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const supabaseAdmin = adminClient()
 
 const FROM = '아크레텍코리아 EMS <acctk-ems@accretechkorea.com>'
 const RESEND_ENDPOINT = 'https://api.resend.com/emails'

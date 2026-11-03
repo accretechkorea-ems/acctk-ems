@@ -7,7 +7,7 @@
 // 제목·작성자·답변·상태는 본문에서 받지 않고 저장된 건의를 다시 읽어서 쓴다. 본문을 믿으면
 // 아무 문구나 담은 알림을 남에게 보낼 수 있다. 다만 「직전 값」(답변 유무·이전 상태)은
 // 저장이 끝난 뒤엔 DB 에 없으므로 화면이 보내 주되, DB 의 현재 값과 앞뒤가 맞는지 본다.
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { isSuperAdmin } from '@/lib/permissions'
@@ -24,10 +24,7 @@ const TITLE_MAX = 40
 /** suggestions.status 에 들어갈 수 있는 값. 화면이 보낸 이전 상태를 이 목록으로 검증한다. */
 const KNOWN_STATUSES = ['접수', '검토중', '완료', '보류']
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const supabaseAdmin = adminClient()
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 const skip = (reason: string) => NextResponse.json({ sent: false, reason })

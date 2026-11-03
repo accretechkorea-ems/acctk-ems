@@ -12,16 +12,13 @@
 //
 // service role 로 쓴다 — 팀 권한은 관리자만 바꾸며, 판정 자료 자체가 RLS 에 막히면 안 된다.
 
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { invalidateTeamPerms } from '@/lib/teamPermsServer'
 import { MENU_BY_KEY, deriveTeamColumns } from '@/lib/menuPerms'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const supabaseAdmin = adminClient()
 
 /** 그 팀의 메뉴 권한을 통째로 next 로 바꾼다(지우고 다시 넣는다). 실패하면 에러 메시지. */
 async function replaceKeys(teamId: number, next: string[]): Promise<string | null> {

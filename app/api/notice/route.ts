@@ -4,7 +4,7 @@
 //   · notices 에는 INSERT/UPDATE/DELETE 정책이 없다 — 쓰기는 service role 로만 이뤄져야 한다.
 //   · 스토리지 업로드도 서버가 한다(파일명을 서버가 정해 경로 조작·덮어쓰기를 막는다).
 //   · 삭제할 때 스토리지 이미지까지 함께 지워야 해서, 두 작업을 한곳에서 묶는다.
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { parseDataUrlImage } from '@/lib/imageUpload'
@@ -13,10 +13,7 @@ import {
   NOTICE_TITLE_MAX, NOTICE_BODY_MAX,
 } from '@/lib/notices'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const supabaseAdmin = adminClient()
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')

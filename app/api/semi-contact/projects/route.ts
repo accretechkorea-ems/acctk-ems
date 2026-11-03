@@ -11,7 +11,7 @@
 //
 // 행마다 돌려주는 값: 번호·고객사·사업장/부서·안건·생성일, 접촉 횟수, 최근 접촉(가장 늦은 contact_date,
 // 같은 날이면 report_id 가 큰 보고서)의 날짜·작성자 이름·직책(engineers.position). 정렬은 최근 접촉 내림차순, 보고서가 없으면 생성일로 견준다.
-import { createClient } from '@supabase/supabase-js'
+import { adminClient, adminEnvReady } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { loadCaller } from '@/lib/apiCaller'
 import { kstYmd } from '@/lib/date'
@@ -20,10 +20,7 @@ const TAG = 'semi-contact/projects'
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
-const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const admin = adminClient
 
 type ProjectRow = {
   project_id: number
@@ -64,7 +61,7 @@ export async function GET(req: NextRequest) {
 }
 
 async function handle(req: NextRequest) {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!adminEnvReady()) {
     console.error(`[${TAG}] 환경 변수 누락 — SUPABASE URL 또는 SERVICE_ROLE_KEY`)
     return bad('서버 설정 오류 — 환경 변수가 없습니다. 관리자에게 알려주세요.', 500)
   }

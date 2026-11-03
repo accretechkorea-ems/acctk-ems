@@ -8,7 +8,7 @@
 //
 // 접근 권한은 고객사 열람 권한(canViewCustomers)을 기준으로 한다 — 고객 현장 자료다.
 // 개별 삭제만 올린 사람 본인 또는 superadmin 으로 좁힌다(남이 올린 자료를 함부로 지우지 못하게).
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 import { isSuperAdmin } from '@/lib/permissions'
@@ -30,10 +30,7 @@ const NAME_MAX = 200
 const ATTACHMENT_COLUMNS =
   'attachment_id, service_id, file_path, file_name, content_type, byte_size, sort_order, uploaded_by, created_at, engineers(name, position)'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const supabaseAdmin = adminClient()
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 

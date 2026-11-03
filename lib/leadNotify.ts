@@ -2,13 +2,10 @@
 //
 // 알림은 어디까지나 부가 작업이다. 실패해도 원래 동작(등록·배정·상태 변경)을 되돌리지 않고
 // console.error 만 남긴다. 그래서 이 모듈의 함수는 예외를 밖으로 던지지 않는다.
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { isSuperAdmin } from '@/lib/permissions'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const supabaseAdmin = adminClient()
 
 /** 알림에서 리드를 여는 주소. 목록이 이 값을 보고 해당 건을 펼친다. */
 export const leadLink = (leadId: number) => `/leads?lead=${leadId}`

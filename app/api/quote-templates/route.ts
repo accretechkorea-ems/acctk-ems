@@ -16,7 +16,7 @@
 // 삭제는 soft delete 다. 행을 지우면 「남의 것을 복사해 저장」한 쪽에서 출처를 되짚을 수 없고
 // 실수로 지운 것을 되살릴 수도 없다.
 
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { GROUP_KINDS } from '@/lib/quoteForms'
@@ -27,10 +27,7 @@ import {
   TEMPLATE_ITEM_MAX, TEMPLATE_NAME_MAX, TEMPLATE_PRICE_MAX, TEMPLATE_QTY_MAX,
 } from '@/lib/quoteTemplateLimits'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const supabaseAdmin = adminClient()
 
 /** 줄의 묶음 — 화면의 네 묶음과 같다(스키마 CHECK 와도 같아야 한다). */
 const ITEM_GROUP_KINDS: readonly string[] = [...GROUP_KINDS, 'domestic']

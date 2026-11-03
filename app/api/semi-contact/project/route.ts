@@ -17,7 +17,7 @@
 //   service role   — 조회·insert·update. semi_projects 에는 읽기 정책만 있다(쓰기는 막혀 있다).
 //
 // created_by 는 본문 값을 쓰지 않고 세션에서 강제한다. created_at·updated_at 은 DB 기본값(now())이 채운다.
-import { createClient } from '@supabase/supabase-js'
+import { adminClient, adminEnvReady } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { loadCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { isSuperAdmin } from '@/lib/permissions'
@@ -31,10 +31,7 @@ const TAG = 'semi-contact/project'
 /** 호출자 — 공용 모양 그대로다(lib/apiCaller.ts). */
 type Caller = ApiCaller
 
-const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const admin = adminClient
 
 const bad = (message: string, status = 400, extra?: Record<string, unknown>) =>
   NextResponse.json({ error: message, ...extra }, { status })
@@ -47,8 +44,7 @@ function reasonOf(e: unknown): string {
   return `${msg}${code}`
 }
 
-const envReady = (): boolean =>
-  !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY
+const envReady = adminEnvReady
 
 /**
  * 같은 Project 번호가 이미 있는가(대소문자 무시). excludeId 는 정보 수정 때 자기 자신을 빼려고 쓴다.

@@ -7,16 +7,13 @@
 //
 // 법정공휴일은 /api/showroom/stats 가 그해 첫 조회 때 lib/holidays.ts 계산으로 채운다.
 // 새 테이블에는 읽기 정책만 있다 — 쓰기는 service role 로 한다.
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 
 const NAME_MAX = 50
 
-const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const admin = adminClient
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 

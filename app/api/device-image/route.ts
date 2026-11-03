@@ -1,14 +1,11 @@
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller as loadApiCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 import {
   DEVICE_BUCKET, DEVICE_IMAGE_WIDTHS, deviceImagePath, isDefaultDeviceImage, isSafeDeviceImageName,
 } from '@/lib/deviceImage'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const supabaseAdmin = adminClient()
 
 /** 서명 URL 만료 — 코드베이스의 다른 서명 URL 과 같은 1시간. */
 const SIGNED_URL_TTL = 60 * 60

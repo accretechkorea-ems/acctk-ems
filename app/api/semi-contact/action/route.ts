@@ -4,7 +4,7 @@
 // 허용: 접근 검사(authorizeSemiContact)만 통과하면 누구나 — Action 의 담당은 사람이 아니라 팀이라,
 // 보고서 작성자가 아니어도 처리 결과(상태)를 바꿀 수 있어야 한다. 401·403 형식은 다른 접촉 보고서 라우트와 같다.
 // 이 라우트는 상태(status)만 바꾼다 — 본문에 다른 칸이 와도 쓰지 않는다. 상태 값은 등록표(ACTION_STATUSES)의 것만.
-import { createClient } from '@supabase/supabase-js'
+import { adminClient, adminEnvReady } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { loadCaller } from '@/lib/apiCaller'
 import { ACTION_STATUSES } from '@/lib/semiContact'
@@ -13,10 +13,7 @@ const TAG = 'semi-contact/action'
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
-const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const admin = adminClient
 
 export async function PATCH(req: NextRequest) {
   try {
@@ -28,7 +25,7 @@ export async function PATCH(req: NextRequest) {
 }
 
 async function handle(req: NextRequest) {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!adminEnvReady()) {
     console.error(`[${TAG}] 환경 변수 누락 — SUPABASE URL 또는 SERVICE_ROLE_KEY`)
     return bad('서버 설정 오류 — 환경 변수가 없습니다. 관리자에게 알려주세요.', 500)
   }

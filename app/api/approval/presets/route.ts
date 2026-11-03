@@ -8,17 +8,14 @@
 // 불러온 뒤 상신 시점에 서버가 다시 검증하므로, 저장 시점 이후 퇴사한 사람이 섞여 있어도
 // 상신에서 걸린다. 그래도 저장할 때 한 번 걸러 두면 불러온 직후 바로 알 수 있다.
 
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller as loadApiCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { docTypeOf } from '@/lib/approval/docTypes'
 import { validateLineInput } from '@/lib/approval/engine'
 import type { LineInput } from '@/lib/approval/types'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const supabaseAdmin = adminClient()
 
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status })
 

@@ -16,7 +16,7 @@
 // 결재 연결을 떼어 낼 때는 handlers.ts 의 quote 항목을 `{}` 로 비우고 상신 라우트만 닫으면 된다 —
 // 이 파일 밖으로 견적↔결재 지식이 새어 나가지 않게 두었다.
 
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { OnCompleteContext } from './docTypes'
 import {
   gateOf, restoreStatusOf, REJECTED_QUOTE_STATUS, SUBMITTED_STATUS,
@@ -33,11 +33,6 @@ export {
   gateOf, gateAllows, GATE_BLOCK_MESSAGE,
 } from './quoteApprovalKeys'
 export type { QuoteGate } from './quoteApprovalKeys'
-
-const admin = (): SupabaseClient => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
 
 /**
  * 견적서 결재 문서의 summary.
@@ -257,13 +252,12 @@ async function notifyRequester(
  * 그리고 실적 담당자가 작성자와 다르면(대필 견적) 그 사람에게도 알린다 —
  * 자기 실적에 잡히는 견적이 이제 쓸 수 있게 됐다는 사실을 본인이 알아야 한다.
  */
-export async function onCompleteQuote(ctx: OnCompleteContext): Promise<void> {
+export async function onCompleteQuote({ sb, ...ctx }: OnCompleteContext): Promise<void> {
   const quoteId = ctx.targetId
   if (quoteId == null) {
     console.error(`[${TAG}] targetId 가 없다 — 되돌릴 견적을 알 수 없다`, { documentId: ctx.documentId })
     return
   }
-  const sb = admin()
   const target = restoreFrom(ctx.summary)
   const quoteNo = quoteNumberFrom(ctx.summary) ?? ctx.docNo
 
@@ -323,13 +317,12 @@ export async function onCompleteQuote(ctx: OnCompleteContext): Promise<void> {
  * summary.restore_status 는 반려 견적에도 그대로 남는다 — 삭제 요청이 반려될 때 그 값으로
  * 되돌아가야 한다(lib/approval/quoteDelete.ts 는 별도 문서의 복원 규칙을 따로 갖는다).
  */
-export async function onRevertQuote(ctx: OnCompleteContext): Promise<void> {
+export async function onRevertQuote({ sb, ...ctx }: OnCompleteContext): Promise<void> {
   const quoteId = ctx.targetId
   if (quoteId == null) {
     console.error(`[${TAG}] targetId 가 없다 — 되돌릴 견적을 알 수 없다`, { documentId: ctx.documentId })
     return
   }
-  const sb = admin()
   const rejected = ctx.outcome === '반려'
   const target = rejected ? REJECTED_QUOTE_STATUS : restoreFrom(ctx.summary)
   const changed = await releaseQuote(sb, quoteId, target, rejected ? '반려' : '되돌리기')

@@ -8,7 +8,7 @@
 // 접근 권한은 고객사 열람 권한(canViewCustomers)을 기준으로 한다 — 고객 현장 자료다.
 // 항목·상태값은 lib/installPrep.ts 의 화이트리스트로 본다(DB 의 CHECK 와 같은 목록이다).
 
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 import { isPrepStatus, PREP_DONE, prepItemOf } from '@/lib/installPrep'
@@ -21,10 +21,7 @@ const MAX_IDS = 100
 /** 글자 칸 상한. 넘치면 잘라 저장한다(업체명·연락처·상대·메모). */
 const TEXT_MAX = 200
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const supabaseAdmin = adminClient()
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 

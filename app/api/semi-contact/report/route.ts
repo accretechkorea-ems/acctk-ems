@@ -21,7 +21,7 @@
 //   되돌리는 delete 마저 실패하면(드묾) Action 없는 보고서가 남는다 — 그 report_id 를 서버 로그와 오류 응답에 실어
 //   사람이 지울 수 있게 한다.
 //   Project updated_at 갱신은 보고서가 이미 저장된 뒤라 실패해도 되돌리지 않는다(로그만 남긴다 — 목록 정렬용 시각이다).
-import { createClient } from '@supabase/supabase-js'
+import { adminClient, adminEnvReady } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { loadCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { isSuperAdmin } from '@/lib/permissions'
@@ -42,10 +42,7 @@ const FIELD_TEXT_MAX = 10_000
 /** 호출자 — 공용 모양 그대로다(lib/apiCaller.ts). */
 type Caller = ApiCaller
 
-const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-)
+const admin = adminClient
 
 const bad = (message: string, status = 400, extra?: Record<string, unknown>) =>
   NextResponse.json({ error: message, ...extra }, { status })
@@ -58,8 +55,7 @@ function reasonOf(e: unknown): string {
   return `${msg}${code}`
 }
 
-const envReady = (): boolean =>
-  !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY
+const envReady = adminEnvReady
 
 /**
  * 로그인 + 접촉 보고서 접근 권한. 판정은 공용 호출자(lib/apiCaller.ts)의 Need 'semi' 가 한다 —

@@ -5,7 +5,7 @@
 // 담고, 행이 없으면 기본값으로 본다. 그래서 POST(등록)가 없고 PATCH 하나가 upsert 로 동작한다.
 //
 // 새 테이블에는 읽기 정책만 있다 — 쓰기는 전부 service role 로 한다.
-import { createClient } from '@supabase/supabase-js'
+import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 import {
@@ -13,10 +13,7 @@ import {
   assertShowroomDevice,
 } from '@/lib/showroom'
 
-const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const admin = adminClient
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
