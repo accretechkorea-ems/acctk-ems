@@ -1,6 +1,7 @@
 'use client'
 
 import { FieldError } from '@/components/common/fieldErrors'
+import MoneyInput from '@/components/common/MoneyInput'
 import type { ExpensePreset, ExpenseRow, QuoteRow } from './types'
 import { numKR } from './format'
 import { inp } from './styles'
@@ -74,9 +75,15 @@ export default function ExpenseSection({
             <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>일수</div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
-            <input className="q-input" type="number" value={exp.unit_price || ''}
-              onChange={e => updateExpense(exp.id, { unit_price: parseInt(e.target.value) || 0 })}
-              placeholder="0" style={{ ...inp, width: '100%', minWidth: 0, textAlign: 'center' }} />
+            {/* 단가만 쉼표를 넣는다 — 인원·일수는 한두 자리라 넣을 것이 없다.
+                값은 순수 숫자로 올라간다(components/common/MoneyInput.tsx). */}
+            <MoneyInput
+              className="q-input"
+              value={exp.unit_price}
+              onChange={v => updateExpense(exp.id, { unit_price: v ?? 0 })}
+              placeholder="0"
+              style={{ ...inp, width: '100%', minWidth: 0, textAlign: 'center' }}
+            />
             <input className="q-input" type="number" value={exp.headcount || ''}
               onChange={e => updateExpense(exp.id, { headcount: parseInt(e.target.value) || 0 })}
               placeholder="0" style={{ ...inp, width: '100%', minWidth: 0, textAlign: 'center' }} />

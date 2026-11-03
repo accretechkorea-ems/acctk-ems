@@ -4,6 +4,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react'
 import { useOutsideClick } from '@/hooks/useOutsideClick'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import SegmentedControl from '@/components/common/SegmentedControl'
+import MoneyInput from '@/components/common/MoneyInput'
 import type { PriceItem, QuoteRow } from './types'
 import type { QuoteRowsActions, QuoteRowsCtx } from '@/hooks/quote/useQuoteRows'
 import type { RecentSaleLookup } from '@/hooks/quote/useRecentSales'
@@ -76,10 +77,16 @@ const stepVal: React.CSSProperties = {
   flex: 1, minWidth: 0, textAlign: 'center', fontSize: 12, fontWeight: 500,
   whiteSpace: 'nowrap', color: '#111827',
 }
-/** 머리줄 배지. */
+/**
+ * 머리줄 배지 — 종류·통화·분류가 **같은 옷**을 입는다. 셋 다 「이 줄이 무엇인가」를
+ * 말하는 꼬리표라, 색이 서로 다르면 중요도가 다른 것처럼 읽힌다.
+ * 한 줄만 다른 분류일 때는 **테두리**로 가른다(아래 differs) — 글자색까지 바꾸면
+ * 같은 꼬리표가 두 가지 색으로 보인다.
+ */
 const badge: React.CSSProperties = {
-  fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6',
+  fontSize: 11, fontWeight: 500, color: '#234ea2', background: '#eef2fb',
   borderRadius: 99, padding: '1px 7px', whiteSpace: 'nowrap', flexShrink: 0,
+  border: '1px solid transparent', boxSizing: 'border-box',
 }
 /** 결과 줄의 숫자 — 그 줄에서 사람이 가장 자주 보는 값이라 한 급 크다. */
 const resultNum: React.CSSProperties = { marginLeft: 2, fontSize: 13, fontWeight: 700, color: '#111827' }
@@ -210,11 +217,10 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
   // 수량이 1이면 공급가 = 판매단가라 **공급가를 적지 않는다**(같은 수를 두 번 적는 꼴).
   // 할인·서비스비는 판매단가라는 말이 맞지 않아 각자의 말로 적는다.
   const result: React.ReactNode | null = (() => {
-    if (isDiscount) {
-      return row.supply_price < 0
-        ? <>할인 <b style={resultNum}>−₩{numKR(Math.abs(row.supply_price))}</b></>
-        : null
-    }
+    // 할인은 결과 줄을 내지 않는다 — 칸에 적은 수가 곧 결과이고(깎을 금액 하나뿐이다),
+    // 같은 수를 바로 아래 한 번 더 적는 꼴이었다. 빠진 금액은 수익 분석의 「할인」 줄과
+    // 합계에 그대로 있다. 대신 **입력 숫자를 빨강**으로 적어 빼는 값임을 알린다.
+    if (isDiscount) return null
     if (isService) {
       return row.supply_price > 0 ? <>공급가 <b style={resultNum}>₩{numKR(row.supply_price)}</b></> : null
     }
@@ -253,17 +259,26 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
   /** 숫자 칸 하나 — 오른쪽 정렬 입력 + 단위 기호(¥ · $ · 원). */
   const moneyCell = (opts: {
     value: number | null
-    onChange: (v: string) => void
+    /** 순수 숫자를 받는다(쉼표는 보이는 글자에만 붙는다 — lib/moneyInput.ts). */
+    onChange: (v: number | null) => void
     unit: string
     placeholder: string
     title?: string
+    /** 달러 칸만 소수 두 자리. 엔·원은 정수다. */
+    decimals?: number
+    /** 글자색 — 할인처럼 빼는 금액은 빨강이다. */
+    color?: string
     extra?: React.ReactNode
   }) => (
     <label title={opts.title} style={{ ...boxBase, height: H_CELL, cursor: 'text' }}>
-      <input className="q-bare" type="number" value={opts.value || ''}
-        onChange={e => opts.onChange(e.target.value)}
+      <MoneyInput
+        className="q-bare"
+        value={opts.value}
+        onChange={opts.onChange}
+        decimals={opts.decimals}
         placeholder={opts.placeholder}
-        style={{ ...bare, textAlign: 'right' }} />
+        style={{ ...bare, textAlign: 'right', color: opts.color ?? bare.color }}
+      />
       {opts.extra}
       <span style={prefix}>{opts.unit}</span>
     </label>
@@ -309,7 +324,9 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
    * 80 양식은 모델 열이 없어 칸도 두지 않는다 — 거기서는 모델이 품명 뒤에 「(모델)」로
    * 합쳐 나간다(lib/priceItemText.ts). 국내 구매·서비스비·할인은 모델이 나가지 않는다.
    */
-  const hasModelCell = row.row_kind === 'manual_jpy' || (is20 && row.row_kind === 'price_list')
+  // **20 양식만** 모델 칸을 낸다(가격표 줄·직접 입력 줄 같은 규칙). 80 양식에는 모델 열이
+  // 없어 모델이 품명 뒤에 「(모델)」로 합쳐 나가므로, 칸을 두면 어디에 적어야 하는지가 갈린다.
+  const hasModelCell = is20 && (row.row_kind === 'manual_jpy' || row.row_kind === 'price_list')
   const modelCell = hasModelCell ? textCell({
     label: '모델',
     value: row.manual_model,
@@ -334,7 +351,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
             value={row.currency}
             onChange={e => updateRow(row.id, 'currency', e.target.value as Currency)}
             title="이 줄의 통화"
-            style={{ ...badge, color: '#234ea2', border: 'none', cursor: 'pointer', height: 19, padding: '0 4px', appearance: 'none', textAlign: 'center' }}
+            style={{ ...badge, cursor: 'pointer', height: 19, padding: '0 4px', appearance: 'none', textAlign: 'center' }}
           >
             {CURRENCIES.map(c => <option key={c} value={c}>{CURRENCY_SYMBOL[c]} {c}</option>)}
           </select>
@@ -358,9 +375,10 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
               onChange={e => setRowCategory(row.id, e.target.value)}
               title={differs ? '견적 분류와 다른 줄입니다' : '이 줄의 분류'}
               style={{
-                ...badge, border: 'none', cursor: 'pointer', height: 17, padding: '0 4px',
+                ...badge, cursor: 'pointer', height: 17, padding: '0 4px',
                 appearance: 'none', textAlign: 'center',
-                color: differs ? '#234ea2' : '#9ca3af',
+                // 상단 분류와 다른 줄만 테두리로 가른다(색은 같다).
+                borderColor: differs ? '#234ea2' : 'transparent',
               }}
             >
               {/* 상단 분류를 아직 안 골랐으면 빈 값도 고를 수 있다(그때는 견적 분류를 따른다). */}
@@ -573,7 +591,9 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
               돌아간다(null). 고치면 원가·단가·이익률이 함께 다시 계산된다. */}
           {row.row_kind === 'price_list' && moneyCell({
             value: shownCostJpy,
-            onChange: v => updateRow(row.id, 'cost_jpy_override', v.trim() === '' ? null : (parseInt(v) || 0)),
+            // 빈 칸은 「고치지 않음」으로 되돌린다 — 0 을 적으면 구입가 0 이다.
+            onChange: v => updateRow(row.id, 'cost_jpy_override', v),
+            decimals: row.currency === 'USD' ? 2 : 0,
             unit: sym,
             placeholder: '구입가',
             title: '가격표 구입가 — 고치면 원가가 따라 바뀝니다',
@@ -595,9 +615,10 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
               (칸은 manual_cost_jpy 를 쓴다. 이 줄에서는 원화다 — app/quote/calc.ts 의 ⚠ 참고). */}
           {(row.row_kind === 'manual_jpy' || isDomestic) && moneyCell({
             value: row.manual_cost_jpy,
-            onChange: v => updateRow(row.id, 'manual_cost_jpy', parseInt(v) || 0),
+            onChange: v => updateRow(row.id, 'manual_cost_jpy', v ?? 0),
             unit: isDomestic ? '원' : sym,
             placeholder: isDomestic ? '국내 구입가' : '구입가',
+            decimals: !isDomestic && row.currency === 'USD' ? 2 : 0,
           })}
 
           <div title="수량" style={{ ...boxBase, height: H_CELL, padding: '0 5px' }}>
@@ -675,9 +696,10 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
           </div>
           {moneyCell({
             value: row.manual_unit_price,
-            onChange: v => updateRow(row.id, 'manual_unit_price', parseInt(v) || 0),
+            onChange: v => updateRow(row.id, 'manual_unit_price', v ?? 0),
             unit: '원',
             placeholder: '할인 금액',
+            color: '#dc2626',
           })}
         </div>
       )}
@@ -688,7 +710,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
           <div style={{ marginBottom: GAP }}>
             {moneyCell({
               value: row.manual_unit_price,
-              onChange: v => updateRow(row.id, 'manual_unit_price', parseInt(v) || 0),
+              onChange: v => updateRow(row.id, 'manual_unit_price', v ?? 0),
               unit: '원',
               placeholder: '서비스 금액',
             })}
@@ -723,7 +745,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
           />
           {priceInputMode ? moneyCell({
             value: row.manual_unit_price,
-            onChange: v => updateRow(row.id, 'manual_unit_price', parseInt(v) || 0),
+            onChange: v => updateRow(row.id, 'manual_unit_price', v ?? 0),
             unit: '원',
             placeholder: '판매단가',
             title: '고객이 정한 판매단가를 그대로 넣습니다',
