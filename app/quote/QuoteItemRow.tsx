@@ -35,9 +35,11 @@ const EMPTY_ITEMS: PriceItem[] = []
 //
 // 칸 위에 라벨을 다는 대신 칸 안 왼쪽에 작은 글자를 둔다. 라벨 줄 하나가 15px + 여백이고,
 // 왼쪽 44px 라벨 칸 때문에 입력 폭도 그만큼 좁았다. **칸과 정보는 하나도 빼지 않았다.**
-const H_FIELD = 26      // 글자 칸 높이
-const H_CELL = 32       // 2단 격자 칸 높이(구입가·수량·관세)
-const H_MODE = 28       // 3단 칸 높이(토글·이익률·판매단가) — 2단보다 한 급 낮다
+// **칸 높이는 하나다(32px).** 단마다 높이가 다르면 세로로 훑을 때 칸의 윗변이 들쭉날쭉해
+// 줄이 세 단이 아니라 다섯 단처럼 보인다. 품번·품명·구입가·수량·관세·토글·값 칸이 모두 같다.
+const H_CELL = 32
+/** 상세 설명 줄 — 품목 칸이 아니라 그 아래 딸린 글이라 한 급 낮다. */
+const H_SUB = 26
 const GAP = 3           // 칸 사이·단 사이 여백
 
 /**
@@ -79,17 +81,8 @@ const badge: React.CSSProperties = {
   fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6',
   borderRadius: 99, padding: '1px 7px', whiteSpace: 'nowrap', flexShrink: 0,
 }
-/** 요약 한 줄 — **접지 않는다.** 넘치면 말줄임으로 끊는다(두 줄 고정이 무너지지 않게). */
-const sumLine: React.CSSProperties = {
-  fontSize: 11, color: '#9ca3af', lineHeight: 1.45,
-  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-}
-/**
- * 요약 속 숫자 — 라벨(원가·공급가·부가세)은 흐리고 **숫자만** 진하다.
- * 본문(#111827)보다 한 단 연한 #374151 을 쓴다 — 요약은 입력값이 아니라 결과라,
- * 같은 농도면 눈이 어디를 봐야 할지 고르지 못한다.
- */
-const numStrong: React.CSSProperties = { color: '#374151', fontWeight: 500 }
+/** 결과 줄의 숫자 — 그 줄에서 사람이 가장 자주 보는 값이라 한 급 크다. */
+const resultNum: React.CSSProperties = { marginLeft: 2, fontSize: 15, fontWeight: 700, color: '#111827' }
 
 // 품목 행 카드 1개(일반 품목 / 서비스비 공용).
 //
@@ -188,60 +181,32 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
     focusItemName()
   })
 
-  // ── 계산 요약: 점선 아래 **두 줄 고정** ───────────────────────────────
+  // ── 결과 한 줄 ────────────────────────────────────────────────────
   //
-  //   1줄  원가 ₩253,283 = ¥13,200 × 8.49 × 1.13
-  //   2줄  공급가 ₩508,000 (× 2) · 부가세 ₩50,800 · 이익 50%
+  //   판매단가 ₩227,000 · 공급가 ₩681,000 (× 3)
   //
-  // 접지 않는다 — 줄 수가 값에 따라 달라지면 카드 높이가 들쑥날쑥해서 여러 줄을 훑을 때
-  // 눈이 자리를 다시 찾아야 한다. 넘치면 말줄임으로 끊는다.
-  const costSummary: React.ReactNode | null = (() => {
+  // 종전에는 점선 아래에 원가 식·부가세·이익률까지 두 줄로 적었다. 그 셋은 **수익 분석
+  // 패널에 이미 같은 값으로 있고**(원가 식·매출이익·합계), 줄마다 되풀이되면서 정작
+  // 고치려는 칸보다 글자가 많아졌다. 줄에 남길 것은 「얼마에 팔아 얼마가 되는가」뿐이다.
+  //
+  // 수량이 1이면 공급가 = 판매단가라 **공급가를 적지 않는다**(같은 수를 두 번 적는 꼴).
+  // 할인·서비스비는 판매단가라는 말이 맞지 않아 각자의 말로 적는다.
+  const result: React.ReactNode | null = (() => {
     if (isDiscount) {
       return row.supply_price < 0
-        ? <>할인 <span style={numStrong}>−₩{numKR(Math.abs(row.supply_price))}</span></>
+        ? <>할인 <b style={resultNum}>−₩{numKR(Math.abs(row.supply_price))}</b></>
         : null
-    }
-    if (isService) {
-      return row.product_price > 0
-        ? <>원가 <span style={numStrong}>₩{numKR(row.product_price)}</span> = 부대비용 {row.expenses.length}건</>
-        : null
-    }
-    if (isDomestic) {
-      return row.product_price > 0
-        ? <>원가 <span style={numStrong}>₩{numKR(row.product_price)}</span> = ₩{numKR(row.cost_price_jpy)} × {row.quantity}<span style={{ color: '#d1d5db' }}> (환율·관세 없음)</span></>
-        : null
-    }
-    return row.product_price > 0
-      ? (
-        <>
-          원가 <span style={numStrong}>₩{numKR(row.product_price)}</span>
-          {' = '}{sym}<span style={numStrong}>{numKR(row.cost_price_jpy)}</span>
-          {' × '}<span style={numStrong}>{row.exchange_rate.toFixed(2)}</span>
-          {' × '}<span style={numStrong}>{row.tariff_rate.toFixed(2)}</span>
-          {/* 구입가를 고친 줄 — 가격표에 적힌 값이 얼마였는지 같은 줄 끝에 남긴다. */}
-          {costEdited && <span style={{ color: '#d1d5db' }}> (가격표 {sym}{listCostJpy == null ? '-' : numKR(listCostJpy)})</span>}
-        </>
-      )
-      : null
-  })()
-
-  const saleSummary: React.ReactNode | null = (() => {
-    if (isDiscount) {
-      return row.supply_price < 0 ? <>부가세 <span style={numStrong}>−₩{numKR(Math.abs(row.tax))}</span></> : null
     }
     if (row.supply_price <= 0) return null
+    if (isService) return <>공급가 <b style={resultNum}>₩{numKR(row.supply_price)}</b></>
     return (
       <>
-        공급가 <span style={numStrong}>₩{numKR(row.supply_price)}</span>
-        {!isService && <span style={{ color: '#d1d5db' }}> (× {row.quantity})</span>}
-        <span style={{ color: '#d1d5db' }}> · </span>
-        부가세 <span style={numStrong}>₩{numKR(row.tax)}</span>
-        {!isService && (
+        판매단가 <b style={resultNum}>₩{numKR(row.unit_price)}</b>
+        {row.quantity > 1 && (
           <>
             <span style={{ color: '#d1d5db' }}> · </span>
-            이익 <span style={{ color: row.realized_profit_rate < 0 ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
-              {row.realized_profit_rate.toFixed(0)}%
-            </span>
+            공급가 <b style={resultNum}>₩{numKR(row.supply_price)}</b>
+            <span style={{ color: '#9ca3af' }}> (× {row.quantity})</span>
           </>
         )}
       </>
@@ -256,10 +221,8 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
     placeholder: string
     title?: string
     extra?: React.ReactNode
-    /** 칸 높이 — 적지 않으면 2단 격자 높이(32)다. */
-    height?: number
   }) => (
-    <label title={opts.title} style={{ ...boxBase, height: opts.height ?? H_CELL, cursor: 'text' }}>
+    <label title={opts.title} style={{ ...boxBase, height: H_CELL, cursor: 'text' }}>
       <input className="q-bare" type="number" value={opts.value || ''}
         onChange={e => opts.onChange(e.target.value)}
         placeholder={opts.placeholder}
@@ -284,7 +247,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
     onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>
   }) => (
     <label title={opts.title} style={{
-      ...boxBase, height: H_FIELD, flex: `1 1 ${opts.basis}`, cursor: 'text',
+      ...boxBase, height: H_CELL, flex: `1 1 ${opts.basis}`, cursor: 'text',
       background: opts.muted ? '#f8fafc' : '#fff',
     }}>
       <span style={prefix}>{opts.label}</span>
@@ -337,13 +300,16 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
         <span style={{ flex: 1 }} />
 
         {/* 줄 추가 — 품명 아래에 붙는 설명 줄(견적서 PDF 에 그대로 나간다). */}
+        {/* 줄 추가 — **동작은 종전 그대로**다(useQuoteRows 의 addSubLine: 그 품목의
+            subLines 에 빈 줄을 하나 더한다 = 품명 아래에 빈 설명 줄이 생긴다).
+            아이콘만으로는 무엇이 추가되는지 알 수 없어 글자로 되돌린다. */}
         {canAddSubLine && (
           <button onClick={() => addSubLine(row.id)}
-            title="상세 내용 줄 추가"
-            style={{ width: 20, height: 20, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'color 0.15s ease' }}
+            title="품명 아래에 상세 설명 줄을 하나 더합니다"
+            style={{ height: 18, padding: '0 5px', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, transition: 'color 0.15s ease' }}
             onMouseEnter={e => (e.currentTarget.style.color = '#234ea2')}
             onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            + 줄 추가
           </button>
         )}
         {rowCount > 1 && (
@@ -357,11 +323,14 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
         )}
       </div>
 
-      {/* ── 1단 — 무엇인가. 칸 **안**의 접두 글자가 바깥 라벨을 대신한다. ── */}
-      <div style={{ display: 'flex', gap: GAP, marginBottom: GAP, flexWrap: 'wrap' }}>
+      {/* ── 1단 — 무엇인가. 칸 **안**의 접두 글자가 바깥 라벨을 대신한다. ──
+          검색 후보 목록은 **이 단 전체 폭**으로 펼친다(품번 칸 폭이 아니라). 품번·품명·모델이
+          한 줄에 들어가야 고를 수 있는데, 140px 짜리 품번 칸 폭에서는 품명이 두 글자 만에
+          잘렸다. 기준 상자(position:relative)와 바깥 클릭 감지(searchRef)가 여기 있는 이유다. */}
+      <div ref={searchRef} style={{ position: 'relative', display: 'flex', gap: GAP, marginBottom: GAP, flexWrap: 'wrap' }}>
         {/* 가격표 검색(품번) — 선택한 품목의 item_code 가 그대로 표시된다. */}
         {row.row_kind === 'price_list' && (
-          <div ref={searchRef} style={{ position: 'relative', flex: '1 1 140px', minWidth: 0, display: 'flex' }}>
+          <>
             {textCell({
               label: '품번',
               value: searchQuery[row.id] || '',
@@ -380,63 +349,64 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
                 </button>
               ) : null,
             })}
-            {/* 검색 칸의 키보드·열림은 textCell 바깥에서 붙인다 — 아래 숨은 입력이 아니라
-                위 입력에 직접 걸기 위해 onFocus·onKeyDown 을 가로채는 덮개를 두지 않는다. */}
-            {searchOpen[row.id] && itemResults.length > 0 && (
-              <div ref={itemListRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #234ea2', borderRadius: 8, maxHeight: 200, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
-                {itemResults.map((item, i) => (
-                  <div key={item.id} onClick={() => { handleSelect(row.id, item); focusItemName() }}
-                    style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 11, transition: 'background 0.15s ease', background: itemKeys.active === i ? '#f0f4ff' : '#fff' }}
-                    onMouseEnter={() => itemKeys.setActive(i)}>
-                    <div>
-                      <span style={{ fontWeight: 700, color: '#234ea2' }}>{item.item_code}</span>
-                      {/* 종류 배지 — 같은 품번이 SFG/CMM 양쪽에 있거나 묶음 제목으로 나뉠 때 어느 줄인지 보인다. */}
-                      <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '1px 6px' }}>{item.sheet_name}</span>
-                      <span style={{ marginLeft: 6, color: '#111827' }}>{item.item_name_jp}</span>
-                      <span style={{ marginLeft: 6, color: '#6b7280' }}>({item.model_jp})</span>
-                    </div>
-                    <div style={{ color: '#9ca3af', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {/* 후보의 금액 — **그 가격표 줄의 통화**로 적는다(줄이 고른 통화가 아니다).
-                          달러 가격표(SBS-USD)가 섞여 있어, 기호 없이 숫자만 보면 150배를 잘못 읽는다. */}
-                      {(() => {
-                        const isym = CURRENCY_SYMBOL[toCurrency(item.currency)]
-                        return <span>정가: {isym}{item.price_jpy?.toLocaleString()} / 구입가: {isym}{item.cost_jpy?.toLocaleString()}</span>
-                      })()}
-                      {/* 최근 판매 — 같은 고객사에 마지막으로 판 단가. 없으면 아무것도 내지 않는다. */}
-                      {(() => {
-                        const sale = recentSale(item.id, item.item_code)
-                        if (!sale) return null
-                        return (
-                          <span title={`${sale.quoteNumber} · ${sale.quoteDate}`}
-                            style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: '#e6ecf8', color: '#234ea2' }}>
-                            최근 판매 ₩{numKR(sale.unitPrice)}
-                          </span>
-                        )
-                      })()}
-                      {(() => {
-                        const hasStock = item.stock_quantity != null && item.stock_quantity > 0
-                        const hasDelivery = item.delivery_time != null
-                        if (hasStock) return (
-                          <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: '#dcfce7', color: '#15803d' }}>
-                            재고 {item.stock_quantity}개
-                          </span>
-                        )
-                        if (hasDelivery) return (
-                          <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: '#fef9c3', color: '#854d0e' }}>
-                            발주 후 {item.delivery_time}주
-                          </span>
-                        )
-                        return (
-                          <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: '#fee2e2', color: '#b91c1c' }}>
-                            담당자 납기 문의
-                          </span>
-                        )
-                      })()}
-                    </div>
+          </>
+        )}
+
+        {/* 후보 목록 — 한 줄에 **품번 · 시트 · 품명 · (모델)**, 그 아래 작은 글씨로 정가·구입가와
+            오른쪽 끝 뱃지(재고·납기·최근 판매). 뱃지를 아래 줄 오른쪽 끝에 **한 줄로** 묶어
+            두면 폭이 좁아도 세로로 깨지지 않는다. 줄 높이를 낮춰 한 번에 보이는 수를 늘렸다. */}
+        {row.row_kind === 'price_list' && searchOpen[row.id] && itemResults.length > 0 && (
+          <div ref={itemListRef} style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #234ea2', borderRadius: 8, maxHeight: 300, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
+            {itemResults.map((item, i) => {
+              const isym = CURRENCY_SYMBOL[toCurrency(item.currency)]
+              const sale = recentSale(item.id, item.item_code)
+              const hasStock = item.stock_quantity != null && item.stock_quantity > 0
+              const hasDelivery = item.delivery_time != null
+              return (
+                <div key={item.id} onClick={() => { handleSelect(row.id, item); focusItemName() }}
+                  style={{ padding: '5px 9px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', transition: 'background 0.15s ease', background: itemKeys.active === i ? '#f0f4ff' : '#fff' }}
+                  onMouseEnter={() => itemKeys.setActive(i)}>
+                  {/* 1줄 — 무엇인가. 넘치면 품명부터 줄어든다(품번·모델은 끝까지 남는다). */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                    <span style={{ fontWeight: 700, color: '#234ea2', flexShrink: 0 }}>{item.item_code}</span>
+                    {/* 종류 배지 — 같은 품번이 SFG/CMM 양쪽에 있거나 묶음 제목으로 나뉠 때 어느 줄인지 보인다. */}
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '0 5px', flexShrink: 0 }}>{item.sheet_name}</span>
+                    <span style={{ color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.item_name_jp}</span>
+                    {item.model_jp && <span style={{ color: '#9ca3af', flexShrink: 0 }}>({item.model_jp})</span>}
                   </div>
-                ))}
-              </div>
-            )}
+                  {/* 2줄 — 왼쪽 금액, 오른쪽 끝 뱃지. 금액은 **그 가격표 줄의 통화**로 적는다
+                      (달러 가격표가 섞여 있어, 기호 없이 숫자만 보면 150배를 잘못 읽는다). */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 1, fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap' }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      정가 {item.price_jpy == null ? '-' : `${isym}${item.price_jpy.toLocaleString()}`}
+                      <span style={{ color: '#d1d5db' }}> · </span>
+                      구입가 {item.cost_jpy == null ? '-' : `${isym}${item.cost_jpy.toLocaleString()}`}
+                    </span>
+                    <span style={{ flex: 1 }} />
+                    {/* 최근 판매 — 같은 고객사에 마지막으로 판 단가. 없으면 내지 않는다. */}
+                    {sale && (
+                      <span title={`${sale.quoteNumber} · ${sale.quoteDate}`}
+                        style={{ fontSize: 10, fontWeight: 700, padding: '0 5px', borderRadius: 6, background: '#e6ecf8', color: '#234ea2', flexShrink: 0 }}>
+                        최근 ₩{numKR(sale.unitPrice)}
+                      </span>
+                    )}
+                    {hasStock ? (
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '0 5px', borderRadius: 6, background: '#dcfce7', color: '#15803d', flexShrink: 0 }}>
+                        재고 {item.stock_quantity}개
+                      </span>
+                    ) : hasDelivery ? (
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '0 5px', borderRadius: 6, background: '#fef9c3', color: '#854d0e', flexShrink: 0 }}>
+                        발주 후 {item.delivery_time}주
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '0 5px', borderRadius: 6, background: '#fee2e2', color: '#b91c1c', flexShrink: 0 }}>
+                        담당자 납기 문의
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
 
@@ -460,7 +430,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
               value={row.itemText}
               onChange={v => updateRow(row.id, 'itemText', v)}
               equal
-              height={H_FIELD}
+              height={H_CELL}
             />
           </div>
         )}
@@ -471,10 +441,11 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
             (그 규칙의 뜻 그대로, 렌더는 ref 를 몰라야 한다). 그래서 이 칸만 손으로 적는다. */}
         {!isDiscount && (
           <label title={row.selectedItem ? '가격표 품명 — 고칠 수 있습니다' : undefined}
-            style={{ ...boxBase, height: H_FIELD, flex: '1 1 140px', cursor: 'text' }}>
+            style={{ ...boxBase, height: H_CELL, flex: '1 1 140px', cursor: 'text' }}>
             <span style={prefix}>품명</span>
             <input ref={itemNameRef} className="q-bare" value={row.itemText}
               onChange={e => updateRow(row.id, 'itemText', e.target.value)}
+              onFocus={closeSearch}
               placeholder="예: 스타일러스"
               style={{ ...bare, color: '#6b7280' }} />
           </label>
@@ -489,7 +460,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
         <div style={{ marginBottom: GAP }}>
           {row.subLines.map((line, li) => (
             <div key={li} style={{ display: 'flex', alignItems: 'center', gap: GAP, marginBottom: 3 }}>
-              <label style={{ ...boxBase, height: 24, flex: 1, cursor: 'text' }}>
+              <label style={{ ...boxBase, height: H_SUB, flex: 1, cursor: 'text' }}>
                 <span style={prefix}>·</span>
                 <input className="q-bare" value={line} onChange={e => updateSubLine(row.id, li, e.target.value)}
                   placeholder="예: - Leaf Spring 교체" style={{ ...bare, fontSize: 11 }} />
@@ -516,7 +487,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
               value={row.category ?? ''}
               onChange={e => setRowCategory(row.id, e.target.value)}
               title="줄 분류"
-              style={{ ...inp, height: H_FIELD, padding: '0 8px', flex: 1, minWidth: 0, cursor: 'pointer', color: row.category ? '#111827' : '#9ca3af' }}
+              style={{ ...inp, height: H_CELL, padding: '0 8px', flex: 1, minWidth: 0, cursor: 'pointer', color: row.category ? '#111827' : '#9ca3af' }}
             >
               <option value="">분류: 견적 분류 그대로</option>
               {categories.map(c => (
@@ -531,7 +502,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
               value={row.group_kind ?? ''}
               onChange={e => setRowGroupKind(row.id, e.target.value)}
               title="장비 구성 묶음"
-              style={{ ...inp, height: H_FIELD, padding: '0 8px', flex: 1, minWidth: 0, cursor: 'pointer', color: row.group_kind ? '#111827' : '#9ca3af' }}
+              style={{ ...inp, height: H_CELL, padding: '0 8px', flex: 1, minWidth: 0, cursor: 'pointer', color: row.group_kind ? '#111827' : '#9ca3af' }}
             >
               <option value="">묶음 없음</option>
               {GROUP_KINDS.map(k => (
@@ -646,7 +617,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
             value={row.price_mode}
             onChange={v => updateRow(row.id, 'price_mode', v)}
             equal
-            height={H_MODE}
+            height={H_CELL}
           />
           {priceInputMode ? moneyCell({
             value: row.manual_unit_price,
@@ -654,9 +625,8 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
             unit: '원',
             placeholder: '판매단가',
             title: '고객이 정한 판매단가를 그대로 넣습니다',
-            height: H_MODE,
           }) : (
-            <div title="이익률 — 눌러서 직접 입력" style={{ ...boxBase, height: H_MODE, padding: '0 5px' }}>
+            <div title="이익률 — 눌러서 직접 입력" style={{ ...boxBase, height: H_CELL, padding: '0 5px' }}>
               <button onClick={() => updateRow(row.id, 'profit_rate', Math.max(0, row.profit_rate - 5))} style={stepBtn}>−</button>
               {editingProfitRate[row.id] ? (
                 <input
@@ -686,12 +656,9 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
         </div>
       )}
 
-      {/* ── 결과 줄 — 이익률 모드면 계산된 판매단가, 판매가 모드면 실현 이익률. ──
-          왼쪽에는 「최근 판매」(같은 고객사에 마지막으로 판 단가)를 둔다 — 단가를 정할 때
-          가장 먼저 보는 값이라 결과 바로 옆이 제자리다. */}
-      {/* 아직 아무 값도 없는 줄에는 내지 않는다 — 「판매단가 ₩0」은 알려 주는 것이 없고,
-          그 한 줄 때문에 빈 줄이 23px 높아진다(줄을 막 추가한 직후가 가장 흔한 상태다). */}
-      {((hasPriceMode && row.unit_price > 0) || mySale) && (
+      {/* ── 결과 줄 — 그 줄이 얼마가 되는가. 왼쪽에는 「최근 판매」(같은 고객사에 마지막으로
+          판 단가)를 둔다 — 단가를 정할 때 가장 먼저 보는 값이라 결과 바로 옆이 제자리다. ── */}
+      {(result || mySale) && (
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 3, minWidth: 0 }}>
           {mySale && (
             <span title={`${mySale.quoteNumber} · ${mySale.quoteDate}`}
@@ -700,29 +667,11 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
             </span>
           )}
           <span style={{ flex: 1 }} />
-          {hasPriceMode && (
-            priceInputMode ? (
-              <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }}>
-                실현 이익률{' '}
-                <b className="num" style={{ marginLeft: 3, fontSize: 15, fontWeight: 700, color: row.realized_profit_rate < 0 ? '#dc2626' : '#111827' }}>
-                  {row.realized_profit_rate.toFixed(1)}%
-                </b>
-              </span>
-            ) : (
-              /* 이 줄에서 사람이 가장 자주 보는 숫자다 — 한 급 크게(15px·700) 둔다. */
-              <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }}>
-                판매단가 <b className="num" style={{ marginLeft: 3, fontSize: 15, fontWeight: 700, color: '#111827' }}>₩{numKR(row.unit_price)}</b>
-              </span>
-            )
+          {result && (
+            <span className="num" style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {result}
+            </span>
           )}
-        </div>
-      )}
-
-      {/* ── 계산 요약 — 점선 아래 두 줄. 값이 아직 없으면 자리도 두지 않는다. ── */}
-      {(costSummary || saleSummary) && (
-        <div style={{ marginTop: 5, paddingTop: 5, borderTop: '1px dashed #ebebeb' }}>
-          <div style={sumLine}>{costSummary}</div>
-          <div style={sumLine}>{saleSummary}</div>
         </div>
       )}
     </div>
