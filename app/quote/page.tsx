@@ -62,6 +62,7 @@ import { clearDraft, draftSavedLabel } from '@/lib/quoteDraft'
 import type { OnBehalfAssignee } from '@/lib/quoteMutations'
 import { nowHmKST, todayKST } from '@/lib/date'
 import { RATE_SOURCE } from '@/lib/exchangeRate'
+import { CURRENCIES, USD_DEFAULT_RATE, type Currency, type Rates } from '@/lib/quoteCurrency'
 import { loadQuoteUserDefaults } from '@/lib/quoteUserDefaults'
 import {
   compactYmd, differsInMonth, displayYmd, isBackdated, monthOf, safeQuoteDate,
@@ -118,13 +119,21 @@ function QuotePageInner() {
   const [engineer, setEngineer] = useState<Engineer | null>(null)
   // 대필 대상. 서버가 승인한 뒤에만 채워진다(null 이면 평소대로 본인 견적).
   const [onBehalf, setOnBehalf] = useState<OnBehalfAssignee | null>(null)
-  const [exchangeRate, setExchangeRate] = useState<number>(0)
+  /**
+   * **통화별 환율**(2026-11-03 다통화 2단계).
+   *   JPY — 받아서 채운다(0 이면 「환율 로딩중」). 종전 exchangeRate 와 같은 값이다.
+   *   USD — **사람이 정하는 값**이라 상수에서 시작한다(lib/quoteCurrency.ts 의 USD_DEFAULT_RATE).
+   *         실시간 매매기준율은 옆에 참고로 보여 주고, 누르면 그 값으로 바꾼다.
+   */
+  const [rates, setRates] = useState<Rates>({ JPY: 0, USD: USD_DEFAULT_RATE })
   // 임시저장·다시쓰기 복원은 비동기라, 값을 넣는 시점의 최신 환율을 참조로 읽는다.
-  // (환율이 아직 0 이면 아래 [exchangeRate] 효과가 도착 후 전 행을 다시 계산한다.)
-  const rateRef = useRef(0)
-  // 지금 보이는 환율이 어디서 온 값인가(app/quote/types.ts 의 RateMeta). 아직 아무것도
-  // 못 받았으면 null — 그때는 화면이 「환율 로딩중」만 보여 준다.
-  const [rateMeta, setRateMeta] = useState<RateMeta | null>(null)
+  // (엔 환율이 아직 0 이면 아래 [rates] 효과가 도착 후 전 행을 다시 계산한다.)
+  const rateRef = useRef<Rates>({ JPY: 0, USD: USD_DEFAULT_RATE })
+  // 지금 보이는 환율이 어디서 온 값인가(app/quote/types.ts 의 RateMeta) — **통화별**이다.
+  // 칸이 비어 있으면 아직 아무것도 못 받은 것이다(화면이 「환율 로딩중」을 보여 준다).
+  const [rateMeta, setRateMeta] = useState<Partial<Record<Currency, RateMeta>>>({})
+  /** 수출입은행이 준 달러 매매기준율 — **참고용**이다(누르면 그 값으로 바꾼다). */
+  const [usdReference, setUsdReference] = useState<{ rate: number; baseDate: string } | null>(null)
   /**
    * 저장된 내 설정 — **분류를 고를 때** 읽어 둔 관세율·이익률이고, 이후 추가되는 줄의
    * 출발값이다(RowAddButtons → createRow). 없으면 null 이고 종전 기본값으로 간다.
@@ -173,7 +182,7 @@ function QuotePageInner() {
     serviceRow, discountRow, expenses,
     clearAllRowCategories, applyCategoryDefaults, applySavedTariff,
     ctx: rowsCtx, actions: rowsActions,
-  } = useQuoteRows({ supabase, exchangeRate, terms, setTerms, setTermsOpen, categories: activeCategories, lineSplitOn, formKind })
+  } = useQuoteRows({ supabase, rates, terms, setTerms, setTermsOpen, categories: activeCategories, lineSplitOn, formKind })
   const [showPriceGuide, setShowPriceGuide] = useState(false)
   const priceGuideRef = useRef<HTMLDivElement | null>(null)
 
@@ -397,8 +406,9 @@ function QuotePageInner() {
     if (d.marginRate != null) applyCategoryDefaults(v, d.marginRate)
     applySavedTariff(d.tariffRate)
     if (d.exchangeRate != null) {
-      setExchangeRate(d.exchangeRate)
-      setRateMeta({ kind: 'saved', savedAt: d.savedAt })
+      // 분류 기본값에 들어 있는 것은 **엔 환율**이다(useQuoteSubmit 이 그렇게 저장한다).
+      setRates(prev => ({ ...prev, JPY: d.exchangeRate as number }))
+      setRateMeta(prev => ({ ...prev, JPY: { kind: 'saved', savedAt: d.savedAt } }))
     }
   }
 
@@ -451,7 +461,7 @@ function QuotePageInner() {
     dateStr, dateDisplay, quoteNo, engineerName, engineerTel,
     company, receiver, finalRemarksForPDF, operatingReason, showSignature,
     category, formKind, setCategory, setFormKind, setLineSplitOn,
-    rows, expenses, exchangeRate,
+    rows, expenses, rates,
     customerId, euCustomerId, isDealer, opportunityId,
     totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate,
     termsResult, subLinesResult, normalizedSubLines, withNormalizedSubLines,
@@ -484,7 +494,7 @@ function QuotePageInner() {
     f()
   }, [])
 
-  useEffect(() => { rateRef.current = exchangeRate }, [exchangeRate])
+  useEffect(() => { rateRef.current = rates }, [rates])
 
   // 임시저장 — 저장분 확인 · 되돌리기 · 자동 저장. effect 둘을 그대로 옮긴 훅이다.
   // 모달에 답하기 전에는 자동 저장이 시작되지 않는다(draftReady). 순서가 규칙이라 여기서 부른다.
@@ -551,35 +561,58 @@ function QuotePageInner() {
     const force = opts?.force === true
     setRateLoading(true)
     try {
-      const { data: cached } = await supabase.from('exchange_rate').select('*').order('id', { ascending: false }).limit(1).single()
+      // 캐시도 **통화별**이다 — 통화마다 가장 최근 줄 하나를 읽는다(exchange_rate.currency).
+      // 두 질의를 나란히 보낸다(서로 기다릴 이유가 없다).
+      const cachedOf = async (currency: Currency) => {
+        const { data } = await supabase.from('exchange_rate')
+          .select('rate, updated_at, currency')
+          .eq('currency', currency)
+          .order('id', { ascending: false }).limit(1).maybeSingle()
+        return (data ?? null) as { rate: number; updated_at: string } | null
+      }
+      const [cachedJpy, cachedUsd] = await Promise.all([cachedOf('JPY'), cachedOf('USD')])
       const todayStr = todayKST()
 
-      // 오늘 날짜 캐시가 있으면 바로 사용 — 단, 새로고침을 누른 때는 보지 않는다.
-      if (!force && cached && cached.updated_at === todayStr) {
-        setExchangeRate(Number(cached.rate))
-        setRateMeta({ kind: 'cache', source: RATE_SOURCE, baseDate: String(cached.updated_at) })
+      // 달러 참고값 — 오늘 저장된 줄이 있으면 먼저 보여 준다(API 가 안 돼도 참고는 남는다).
+      if (cachedUsd?.rate) setUsdReference({ rate: Number(cachedUsd.rate), baseDate: String(cachedUsd.updated_at) })
+
+      // 오늘 날짜 **엔** 캐시가 있으면 바로 사용 — 단, 새로고침을 누른 때는 보지 않는다.
+      // (달러는 사람이 정하는 값이라 캐시로 덮지 않는다 — 참고값만 채운다)
+      if (!force && cachedJpy && cachedJpy.updated_at === todayStr) {
+        setRates(prev => ({ ...prev, JPY: Number(cachedJpy.rate) }))
+        setRateMeta(prev => ({ ...prev, JPY: { kind: 'cache', source: RATE_SOURCE, baseDate: String(cachedJpy.updated_at) } }))
         setRateLoading(false); return
       }
 
-      // 외부 API 호출
+      // 외부 API 호출 — 한 번에 엔·달러를 받는다.
       try {
         const res = await fetch('/api/exchange-rate')
         const json = await res.json()
-        const jpy = json.jpy
-        if (jpy && jpy.deal_bas_r) {
-          const rate = parseFloat(String(jpy.deal_bas_r).replace(/,/g, '')) / 100
+        const got = json as {
+          JPY?: { rate: number; date: string } | null
+          USD?: { rate: number; date: string } | null
+          source?: string
+        }
+        if (got.JPY?.rate) {
           // 기준일 — API 가 'YYYYMMDD' 로 준다. 모양이 아니면 오늘로 적는다.
-          const raw = typeof json.date === 'string' ? json.date : ''
-          const baseDate = /^\d{8}$/.test(raw) ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : todayStr
-          setExchangeRate(rate)
-          setRateMeta({
-            kind: 'api',
-            // 이름은 API 가 보내 준 것을 쓴다. 기관을 바꾸면 그 라우트만 고치면 된다.
-            source: typeof json.source === 'string' && json.source ? json.source : '환율 API',
-            baseDate,
-            fetchedAt: nowHmKST(),
-          })
-          await supabase.from('exchange_rate').insert([{ rate, updated_at: todayStr }])
+          const ymd = (raw: unknown) => (typeof raw === 'string' && /^\d{8}$/.test(raw)
+            ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : todayStr)
+          // 이름은 API 가 보내 준 것을 쓴다. 기관을 바꾸면 그 라우트만 고치면 된다.
+          const source = typeof got.source === 'string' && got.source ? got.source : '환율 API'
+          const jpyDate = ymd(got.JPY.date)
+          setRates(prev => ({ ...prev, JPY: got.JPY!.rate }))
+          setRateMeta(prev => ({ ...prev, JPY: { kind: 'api', source, baseDate: jpyDate, fetchedAt: nowHmKST() } }))
+
+          // 달러는 **덮지 않는다** — 참고값으로만 둔다(사람이 정한 값이 화면에 있다).
+          if (got.USD?.rate) setUsdReference({ rate: got.USD.rate, baseDate: ymd(got.USD.date) })
+
+          // 받은 통화를 통화별로 한 줄씩 저장한다(오늘 줄이 이미 있어도 한 줄 더 쌓는다 —
+          // 종전 엔 동작과 같다. 읽을 때 가장 최근 줄을 쓴다).
+          const toSave = CURRENCIES
+            .map(cur => ({ cur, rate: got[cur]?.rate }))
+            .filter((x): x is { cur: Currency; rate: number } => typeof x.rate === 'number' && x.rate > 0)
+            .map(x => ({ rate: x.rate, currency: x.cur, updated_at: todayStr }))
+          if (toSave.length > 0) await supabase.from('exchange_rate').insert(toSave)
           setRateLoading(false); return
         }
       } catch { /* API 실패 — 아래에서 갈라진다 */ }
@@ -588,10 +621,10 @@ function QuotePageInner() {
         // 누른 사람에게 **못 받았다고 말한다.** 보이는 값은 건드리지 않는다 — 저장된
         // 값으로 조용히 바꾸면 직접 넣은 환율이 사라지고, 그것도 알리지 않은 셈이 된다.
         toast.error('실시간 환율을 받지 못했습니다 — 화면의 환율을 그대로 둡니다')
-      } else if (cached && cached.rate) {
+      } else if (cachedJpy && cachedJpy.rate) {
         // 처음 열 때 API 가 안 되면 저장된 가장 최근 값으로라도 시작한다(0 보다 낫다).
-        setExchangeRate(Number(cached.rate))
-        setRateMeta({ kind: 'cache', source: RATE_SOURCE, baseDate: String(cached.updated_at) })
+        setRates(prev => ({ ...prev, JPY: Number(cachedJpy.rate) }))
+        setRateMeta(prev => ({ ...prev, JPY: { kind: 'cache', source: RATE_SOURCE, baseDate: String(cachedJpy.updated_at) } }))
       }
     } catch (e) { console.error(e) }
     setRateLoading(false)
@@ -600,7 +633,12 @@ function QuotePageInner() {
   }, [toast])
 
   useEffect(() => { fetchRate() }, [fetchRate])
-  useEffect(() => { if (!exchangeRate) return; setRows(prev => prev.map(r => calcRow(r, exchangeRate))) }, [exchangeRate]) // eslint-disable-line react-hooks/exhaustive-deps
+  // 환율이 바뀌면 전 줄을 다시 계산한다 — **엔이 아직 0 이면 기다린다**(종전과 같다).
+  // 달러만 바뀌어도 돈다(달러 줄이 섞여 있으면 그 줄만 값이 바뀐다).
+  useEffect(() => {
+    if (!rates.JPY) return
+    setRows(prev => prev.map(r => calcRow(r, rates)))
+  }, [rates.JPY, rates.USD]) // eslint-disable-line react-hooks/exhaustive-deps
   // 어느 품목이든 금액이 생기면 집계 에러(items) 를 즉시 해제한다.
   useEffect(() => { if (rows.some(r => r.supply_price > 0)) clearError('items') }, [rows]) // eslint-disable-line react-hooks/exhaustive-deps
   // 금액 0 인 부대비용 행이 모두 해소되면 에러를 즉시 해제한다(부대비용은 rows 안에 있다).
@@ -621,11 +659,21 @@ function QuotePageInner() {
    * 대신 손으로 넣은 값은 화면을 새로 열면 남지 않는다 — 그 견적을 임시저장하면
    * 줄마다 exchange_rate 가 함께 저장되므로(useQuoteSubmit) 견적 자체는 그대로다.
    */
-  const handleRateChange = useCallback((rate: number) => {
-    setExchangeRate(rate)
-    // 직접 넣은 값이라고 적는다 — 화면이 「직접 입력」으로 보여 준다.
-    setRateMeta({ kind: 'manual' })
+  const handleRateChange = useCallback((currency: Currency, rate: number) => {
+    setRates(prev => ({ ...prev, [currency]: rate }))
+    // 직접 넣은 값이라고 적는다 — 화면이 「직접 입력」으로 보여 준다(그 통화만).
+    setRateMeta(prev => ({ ...prev, [currency]: { kind: 'manual' } }))
   }, [])
+
+  /** 달러 참고값을 그대로 쓴다 — 옆의 「수출입은행 …」을 누른 경우다. */
+  const useUsdReference = useCallback(() => {
+    if (!usdReference) return
+    setRates(prev => ({ ...prev, USD: usdReference.rate }))
+    setRateMeta(prev => ({
+      ...prev,
+      USD: { kind: 'api', source: RATE_SOURCE, baseDate: usdReference.baseDate, fetchedAt: nowHmKST() },
+    }))
+  }, [usdReference])
 
 
   if (!authorized) return <AccessGate loading={guardLoading} />
@@ -827,7 +875,7 @@ function QuotePageInner() {
                 <span style={{ fontSize: 42, fontWeight: 900, color: '#000', whiteSpace: 'nowrap' }}>{engineerName}</span>
               </div>
             ))}
-            <ProfitPanel rows={rows} exchangeRate={exchangeRate} rateMeta={rateMeta} rateLoading={rateLoading} onFetchRate={() => { void fetchRate({ force: true }) }} onRateChange={handleRateChange} category={category}
+            <ProfitPanel rows={rows} rates={rates} rateMeta={rateMeta} rateLoading={rateLoading} onFetchRate={() => { void fetchRate({ force: true }) }} onRateChange={handleRateChange} usdReference={usdReference} onUseUsdReference={useUsdReference} category={category}
               savedDefaultsApplied={savedApplied && category !== ''}
               operatingReason={operatingReason} setOperatingReason={setOperatingReason} />
           </div>
@@ -852,8 +900,8 @@ function QuotePageInner() {
               <EquipConfigLauncher
                 formKind={formKind}
                 category={category}
-                exchangeRate={exchangeRate}
-                setExchangeRate={setExchangeRate}
+                exchangeRate={rates.JPY}
+                setExchangeRate={(v: number) => setRates(prev => ({ ...prev, JPY: v }))}
                 rows={rows}
                 setRows={setRows}
                 myId={engineer?.engineer_id ?? null}

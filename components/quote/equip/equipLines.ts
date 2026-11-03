@@ -17,6 +17,7 @@
 import { isGroupKind } from '@/lib/quoteForms'
 import type { PriceItem, QuoteRow } from '@/app/quote/types'
 import { calcRow, createDiscountRow, createDomesticRow, createManualJpyRow, createRow } from '@/app/quote/calc'
+import { jpyOnly } from '@/lib/quoteCurrency'
 import type { QuoteTemplateItem, TemplateItemInput } from '@/lib/quoteTemplates'
 
 /**
@@ -106,7 +107,10 @@ export function recalcLine(line: EquipLine, machineQty: number, exRate: number, 
     // 구성 묶음은 그대로 저장된다 — 원화 원가 줄도 포함사항으로 묶인다.
     group_kind: line.group,
   }
-  return { ...line, row: calcRow(next, exRate) }
+  // 장비 구성은 **엔 단가**만 다룬다(본체·옵션은 수동입력 엔, 포함사항은 원화).
+  // 그래서 엔 환율만 묶어 넘긴다 — 달러 가격표 품목을 이 모달에서 고르면 원가가 0 으로
+  // 보인다(hasCost 가 「-」로 그린다). 달러 칸은 3단계에 둔다.
+  return { ...line, row: calcRow(next, jpyOnly(exRate)) }
 }
 
 /** 여러 줄을 한 번에 다시 계산한다. */
@@ -285,7 +289,7 @@ export function toQuoteRows(lines: EquipLine[]): QuoteRow[] {
 /** 모달에서 적은 특별 할인 → 기존 할인 줄(견적당 1건). 0 이면 줄을 만들지 않는다. */
 export function toDiscountRow(amount: number, exRate: number): QuoteRow | null {
   if (!(amount > 0)) return null
-  return calcRow({ ...createDiscountRow(), manual_unit_price: amount }, exRate)
+  return calcRow({ ...createDiscountRow(), manual_unit_price: amount }, jpyOnly(exRate))
 }
 
 /** 체크된 줄만. 요약·저장이 함께 쓴다. */

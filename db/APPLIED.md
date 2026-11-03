@@ -110,12 +110,44 @@ Kevin 이 Supabase SQL 편집기에서 직접 돌렸다(저장소에 파일이 �
 RLS 정책은 engineers 에 아예 없다(2026-10-08 스냅샷 37개 중 0건) — 막는 것은 정책이
 아니라 이 GRANT 다. 같은 말을 `docs/perf-rules.md` 에도 적어 두었다.
 
+### 파일 없이 더한 칸 — 통화 3개 (2026-11-03, Kevin)
+
+다통화를 쓰려고 Kevin 이 **SQL 파일 없이 콘솔에서 직접** 더한 칸이다. 적용 기록이 파일에
+남지 않으므로 여기에 적는다. 셋 다 `text not null default 'JPY'` 이고, **더한 날 기준으로
+기존 줄은 전부 `JPY`** 다(읽기로 확인). 그래서 이 칸이 생긴 것만으로 과거 금액이 달라지는
+일은 없다.
+
+| 표 | 칸 | 누가 읽는가 |
+|---|---|---|
+| `price_list` | `currency` | 가격표에서 고른 줄의 통화. 견적 화면이 그대로 줄에 옮긴다(`hooks/quote/useQuoteRows.ts`). 화면에서는 **고를 수 없다** — 가격표가 정본이다 |
+| `exchange_rate` | `currency` | 환율을 **통화별 한 줄씩** 쌓는다. 읽을 때도 통화별로 가장 최근 줄을 본다(`app/quote/page.tsx` 의 `fetchRate`) |
+| `quote_items` | `currency` | 그 줄을 어느 통화로 계산했나. 다시쓰기·임시저장 복원이 이 값을 되살린다(`hooks/quote/useQuotePrefill.ts`) |
+
+확인 방법:
+
+```sql
+select table_name, column_name, column_default, is_nullable
+  from information_schema.columns
+ where table_schema = 'public' and column_name = 'currency'
+ order by table_name;
+-- price_list · exchange_rate · quote_items 세 줄, 전부 default 'JPY'::text · NO
+
+select currency, count(*) from public.quote_items group by 1 order by 2 desc;
+-- 다통화 2단계 시점에는 JPY 한 줄뿐이어야 한다
+```
+
+⚠ `price_list` 가 **열 단위 GRANT** 표라면 새 칸의 `select` 권한이 따로 필요하다
+(`engineers` 가 그런 표다 — 위 2026-10-28 항목). 화면에서 가격표 줄의 통화가 늘 `JPY` 로
+보이면 그것을 먼저 본다 — 코드는 값이 없으면 `JPY` 로 읽기 때문에(`lib/quoteCurrency.ts`
+의 `toCurrency`) **조용히 틀린다.**
+
 ### 다음에 적을 자리
 
 | 파일 | 적용일 | 적용한 사람 | 비고 |
 |---|---|---|---|
 | `db/quote_user_defaults_rls.sql` | 2026-10-28 | Kevin | 정책 3개(select·insert·update, 전부 본인 email 행만). 재실행에 안전하다(drop policy if exists). **확인 방법**: `select policyname, cmd from pg_policies where tablename = 'quote_user_defaults'` 가 3행이면 됐다. 화면에서는 견적 확정 → 새 견적 → 같은 분류에서 「내 설정 불러옴」이 뜬다 |
 | `db/devices_status_grant.sql` | **미적용** | — | 장비 폐기 처리용 열 권한(status·disposed_at). **devices 가 열 단위 GRANT 표일 때만 돌린다** — 파일 [0단계] 조회로 가른다. 2026-11-02 확인: 두 칸 **읽기는 이미 된다**(1,450줄 전부 `사용중`). 쓰기는 돌려 보지 않으면 알 수 없어 확인하지 않았다 — 화면에서 「폐기 처리」가 `42501` 로 막히면 이 파일을 돌린다. 재실행 안전 |
+| `db/price_list_currency_schema.sql` | 2026-11-03 | Kevin | **다통화 1단계.** `price_list.currency text not null default 'JPY'`. 같은 날 Kevin 이 `exchange_rate.currency` · `quote_items.currency` 도 손으로 더했다(파일 없음 — 위 「파일 없이 더한 칸」 참고). 2026-11-03 읽기로 확인: 세 표 모두 칸이 있고 **기존 줄은 전부 `JPY`** 다. 재실행 안전(`add column if not exists`) |
 
 ---
 

@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import type { QuoteRow, RateMeta } from './types'
+import { CURRENCY_SYMBOL, type Currency, type Rates } from '@/lib/quoteCurrency'
+import { RATE_SOURCE } from '@/lib/exchangeRate'
 import { calcTotals } from './calc'
 import { numKR } from './format'
 import {
@@ -10,13 +12,17 @@ import {
 
 export type ProfitPanelProps = {
   rows: QuoteRow[]
-  exchangeRate: number
-  /** 그 환율이 어디서 온 값인가. 아직 못 받았으면 null(app/quote/types.ts). */
-  rateMeta: RateMeta | null
+  /** 통화별 환율(lib/quoteCurrency.ts). 엔은 받아서 채우고 달러는 사람이 정한다. */
+  rates: Rates
+  /** 그 환율이 어디서 온 값인가 — **통화별**이다. 칸이 비면 아직 못 받았다(app/quote/types.ts). */
+  rateMeta: Partial<Record<Currency, RateMeta>>
   rateLoading: boolean
   /** 새로고침 — 저장된 값을 보지 않고 **늘 API** 로 다시 받는다(page.tsx 의 fetchRate). */
   onFetchRate: () => void
-  onRateChange: (rate: number) => void
+  onRateChange: (currency: Currency, rate: number) => void
+  /** 수출입은행이 준 달러 매매기준율 — 참고로 보여 주고, 누르면 그 값으로 바꾼다. */
+  usdReference?: { rate: number; baseDate: string } | null
+  onUseUsdReference?: () => void
   /** 고른 견적 분류 — 판관비 규칙이 여기서 나온다(TSE 30%). */
   category?: string
   /**
@@ -31,11 +37,14 @@ export type ProfitPanelProps = {
 }
 
 export default function ProfitPanel({
-  rows, exchangeRate, rateMeta, rateLoading, onFetchRate, onRateChange, category, savedDefaultsApplied,
-  operatingReason, setOperatingReason,
+  rows, rates, rateMeta, rateLoading, onFetchRate, onRateChange, usdReference, onUseUsdReference,
+  category, savedDefaultsApplied, operatingReason, setOperatingReason,
 }: ProfitPanelProps) {
-  const [editingRate, setEditingRate] = useState(false)
+  // 어느 통화를 고치는 중인가 — null 이면 아무것도 고치지 않는다(종전 boolean 을 통화로 넓혔다).
+  const [editing, setEditing] = useState<Currency | null>(null)
   const [editRateVal, setEditRateVal] = useState('')
+  /** 달러 줄이 섞여 있나 — 그때만 달러 환율 칸을 낸다(엔만 쓰는 견적은 종전 모습 그대로). */
+  const hasUsdRow = rows.some(r => r.currency === 'USD')
 
   /**
    * 환율 옆 작은 글 — **이 숫자가 어디서 온 것인가.**
@@ -60,30 +69,33 @@ export default function ProfitPanel({
    * 하나뿐이다. 그래서 「한국수출입은행 ·」 뒤에서만 접히고 「기준일 2026-10-28 · 16:08
    * 조회」가 중간에서 잘리지 않는다. 한 토막뿐이면(직접 입력) 접히지 않는다.
    */
-  const rateNote = (): { head: string; rest: string } | null => {
-    if (!rateMeta) return null
-    if (rateMeta.kind === 'manual') return { head: '직접 입력', rest: '' }
-    if (rateMeta.kind === 'saved') {
-      return rateMeta.savedAt ? { head: '저장된 설정 ·', rest: rateMeta.savedAt } : { head: '저장된 설정', rest: '' }
+  const rateNote = (currency: Currency): { head: string; rest: string } | null => {
+    const meta = rateMeta[currency]
+    if (!meta) return null
+    if (meta.kind === 'manual') return { head: '직접 입력', rest: '' }
+    if (meta.kind === 'saved') {
+      return meta.savedAt ? { head: '저장된 설정 ·', rest: meta.savedAt } : { head: '저장된 설정', rest: '' }
     }
     return {
-      head: `${rateMeta.source} ·`,
-      rest: rateMeta.kind === 'cache'
-        ? `기준일 ${rateMeta.baseDate} · 저장값`
-        : `기준일 ${rateMeta.baseDate} · ${rateMeta.fetchedAt} 조회`,
+      head: `${meta.source} ·`,
+      rest: meta.kind === 'cache'
+        ? `기준일 ${meta.baseDate} · 저장값`
+        : `기준일 ${meta.baseDate} · ${meta.fetchedAt} 조회`,
     }
   }
 
-  const note = rateNote()
+  const note = rateNote('JPY')
 
-  const startEdit = () => {
-    setEditRateVal(exchangeRate ? exchangeRate.toFixed(4) : '')
-    setEditingRate(true)
+  /** 그 통화의 환율을 고치기 시작한다(더블클릭). 자리수는 통화에 맞춘다. */
+  const startEdit = (currency: Currency) => {
+    const v = rates[currency]
+    setEditRateVal(v ? (currency === 'JPY' ? v.toFixed(4) : String(v)) : '')
+    setEditing(currency)
   }
   const commitEdit = () => {
     const n = parseFloat(editRateVal)
-    if (!isNaN(n) && n > 0) onRateChange(n)
-    setEditingRate(false)
+    if (editing && !isNaN(n) && n > 0) onRateChange(editing, n)
+    setEditing(null)
   }
   // 통합 전 이 자리의 계산식은 calcTotals 와 문자 단위로 동일했다(변수명만 다름).
   const { totalSupply, totalCost: totalProduct, totalProfit, totalProfitRate: profitPct, domesticCost } = calcTotals(rows)
@@ -139,19 +151,19 @@ export default function ProfitPanel({
         </div>
         {/* 환율 + 출처 — 이 묶음만 줄어든다(minWidth 0 이 없으면 flex 항목은 내용 밑으로 줄지 않는다). */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, flex: '1 1 auto' }}>
-          {editingRate ? (
+          {editing === 'JPY' ? (
             <input
               type="number"
               value={editRateVal}
               onChange={e => setEditRateVal(e.target.value)}
               onBlur={commitEdit}
-              onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditingRate(false) }}
+              onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(null) }}
               autoFocus
               style={{ width: 80, fontSize: 11, fontWeight: 700, color: '#234ea2', border: '1px solid #234ea2', borderRadius: 6, padding: '1px 5px', outline: 'none' }}
             />
           ) : (
             <span
-              onDoubleClick={startEdit}
+              onDoubleClick={() => startEdit('JPY')}
               title="더블클릭하여 수동 입력"
               // 이 숫자에 원가가 전부 걸려 있어 머리줄에서 가장 크게 읽힌다(11 → 17px, 진한 색).
               // 숫자와 「원」은 한 덩어리다 — 「원」만 다음 줄로 내려가면 숫자가 아닌 것으로 읽힌다.
@@ -161,19 +173,62 @@ export default function ProfitPanel({
                 borderBottom: '1px dashed #9ca3af', whiteSpace: 'nowrap', flexShrink: 0,
                 letterSpacing: '-0.3px',
               }}>
-              {exchangeRate
-                ? <>{exchangeRate.toFixed(4)}<span style={{ fontSize: 13, fontWeight: 700 }}>원</span></>
+              {rates.JPY
+                ? <>{rates.JPY.toFixed(4)}<span style={{ fontSize: 13, fontWeight: 700 }}>원</span></>
                 : <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280' }}>환율 로딩중...</span>}
             </span>
           )}
           {/* 출처·기준 시각. 숫자를 고치는 중에는 내지 않는다(그 순간의 출처는 아직 모른다).
               폭이 모자라면 **이 글자만** 두 줄로 접힌다(아래 두 토막 사이의 공백 한 곳). */}
-          {!editingRate && note && (
+          {editing !== 'JPY' && note && (
             <span style={{ fontSize: 10, color: '#9ca3af', whiteSpace: 'normal', lineHeight: 1.35, minWidth: 0 }}>
               <span style={{ whiteSpace: 'nowrap' }}>{note.head}</span>
               {note.rest && <>{' '}<span style={{ whiteSpace: 'nowrap' }}>{note.rest}</span></>}
             </span>
           )}
+          {/* 달러 환율 — **달러 줄이 섞여 있을 때만** 낸다(엔만 쓰는 견적은 종전 모습 그대로).
+              엔과 달리 **사람이 정하는 값**이라 실시간 환율로 덮지 않는다(lib/quoteCurrency.ts 의
+              USD_DEFAULT_RATE 에서 시작한다). 옆의 「수출입은행 …」을 누르면 그 값으로 바꾼다. */}
+          {hasUsdRow && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, borderLeft: '1px solid #ebebeb', paddingLeft: 8 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280' }}>{CURRENCY_SYMBOL.USD}</span>
+              {editing === 'USD' ? (
+                <input
+                  type="number"
+                  value={editRateVal}
+                  onChange={e => setEditRateVal(e.target.value)}
+                  onBlur={commitEdit}
+                  onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(null) }}
+                  autoFocus
+                  style={{ width: 70, fontSize: 11, fontWeight: 700, color: '#234ea2', border: '1px solid #234ea2', borderRadius: 6, padding: '1px 5px', outline: 'none' }}
+                />
+              ) : (
+                <span
+                  onDoubleClick={() => startEdit('USD')}
+                  title="더블클릭하여 수동 입력"
+                  style={{
+                    fontSize: 15, color: '#111827', fontWeight: 700, cursor: 'text', lineHeight: 1.2,
+                    borderBottom: '1px dashed #9ca3af', whiteSpace: 'nowrap', letterSpacing: '-0.3px',
+                  }}>
+                  {rates.USD ? <>{numKR(rates.USD)}<span style={{ fontSize: 12, fontWeight: 700 }}>원</span></> : '-'}
+                </span>
+              )}
+              {/* 참고값 — 누르면 그 값으로 바꾼다. 지금 값과 같으면 내지 않는다(할 일이 없다). */}
+              {editing !== 'USD' && usdReference && usdReference.rate !== rates.USD && (
+                <button
+                  onClick={() => onUseUsdReference?.()}
+                  title={`${RATE_SOURCE} 매매기준율로 바꿉니다`}
+                  style={{ fontSize: 10, color: '#234ea2', background: 'none', border: 'none', padding: 0, cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'underline dotted' }}
+                >
+                  {RATE_SOURCE} {numKR(usdReference.rate)} · {usdReference.baseDate}
+                </button>
+              )}
+              {editing !== 'USD' && rateMeta.USD?.kind === 'manual' && (
+                <span style={{ fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap' }}>직접 입력</span>
+              )}
+            </span>
+          )}
+
           {/* 내 설정을 들여왔다는 표시 — 환율만이 아니라 관세·이익률도 그 값에서 시작했다.
               새로고침으로 환율을 덮은 뒤에도 남는다(관세·이익률은 그대로이므로). */}
           {savedDefaultsApplied && (

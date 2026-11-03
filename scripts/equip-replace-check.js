@@ -45,7 +45,9 @@ const eq = (name, got, want) => {
   console.log(`${ok ? 'OK  ' : 'FAIL'} ${name}  got=${JSON.stringify(got)} want=${JSON.stringify(want)}`)
 }
 
-const RATE = 9.2
+// 통화별 환율 묶음 — calcRow 가 줄의 통화로 고른다(lib/quoteCurrency.ts).
+// 이 하네스의 줄은 전부 엔(기본값)이라 **달러 값은 쓰이지 않는다.**
+const RATE = { JPY: 9.2, USD: 1600 }
 const mk = (row, over) => calc.calcRow({ ...row, ...over }, RATE)
 
 // ── 지우는 줄 ──────────────────────────────────────────────────────────────

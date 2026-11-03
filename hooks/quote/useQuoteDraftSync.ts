@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CustomerResult, QuoteRow } from '@/app/quote/types'
 import { calcRow } from '@/app/quote/calc'
+import type { Rates } from '@/lib/quoteCurrency'
 import { defaultTermsFor, isAllDefault, promoteLegacyDelivery, type SetTerms, type Terms } from '@/lib/quoteTerms'
 import { safeQuoteDate } from '@/lib/quoteDate'
 import { activeQuoteCategories, loadQuoteCategories } from '@/lib/quoteCategories'
@@ -24,8 +25,8 @@ import type { useToast } from '@/components/common/Toast'
 
 export type UseQuoteDraftSyncArgs = {
   toast: ReturnType<typeof useToast>
-  /** 값을 넣는 시점의 최신 환율(page.tsx 의 rateRef). */
-  rateRef: { current: number }
+  /** 값을 넣는 시점의 최신 환율 묶음(page.tsx 의 rateRef — 통화별). */
+  rateRef: { current: Rates }
   engineer: { engineer_id: number } | null
   /** 주소로 들어온 프리필이 있으면 저장분은 묻지 않고 버린다. */
   hasUrlPrefill: boolean

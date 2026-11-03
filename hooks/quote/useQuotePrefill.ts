@@ -18,6 +18,7 @@ import type { ReadonlyURLSearchParams } from 'next/navigation'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CustomerResult, ExpenseRow, PriceItem, QuoteRow, RowKind } from '@/app/quote/types'
 import { calcExpense, calcRow, createExpenseRow, createRow, overrideCostJpy } from '@/app/quote/calc'
+import { toCurrency, type Rates } from '@/lib/quoteCurrency'
 import { defaultTermsFor, isAllDefault, promoteLegacyDelivery, termsOf, type SetTerms } from '@/lib/quoteTerms'
 import { subLinesOf } from '@/lib/quoteSubLines'
 import { operatingReasonOf, stripOperatingReason } from '@/lib/quoteOperatingNote'
@@ -43,6 +44,8 @@ export type DuplicatePayload = {
   items: {
     price_list_id: number | null; part_code: string | null; row_kind: string | null
     product_name: string | null; quantity: number | null; unit_price_jpy: number | null
+    /** 그 줄의 통화(quote_items.currency · 기본 'JPY'). 옛 줄도 값이 있다. */
+    currency?: string | null
     unit_price_krw: number | null; supply_amount: number | null
     profit_rate: number | null; tariff_rate: number | null
     /** 품명 아래 설명 줄(quote_items.sub_lines). null 이면 줄이 없다. */
@@ -60,8 +63,8 @@ export type UseQuotePrefillArgs = {
   supabase: SupabaseClient
   toast: ReturnType<typeof useToast>
   searchParams: ReadonlyURLSearchParams
-  /** 값을 넣는 시점의 최신 환율(page.tsx 의 rateRef). */
-  rateRef: { current: number }
+  /** 값을 넣는 시점의 최신 환율 묶음(page.tsx 의 rateRef — 통화별). */
+  rateRef: { current: Rates }
   duplicateId: number | null
   /** 포캐스트의 「견적 쓰기」로 넘어왔을 때의 영업기회 id. 고객과 기회를 미리 고른다. */
   prefillOpportunityId: number | null
@@ -141,6 +144,9 @@ export function useQuotePrefill({
         // 가격표 품목의 구입가 — 저장값이 **지금 가격표 값과 다르면** 사람이 고친 것이므로
         // 그대로 되살린다. 같으면 null 로 두어 가격표를 따른다(가격표가 바뀌면 새 값을 쓴다).
         cost_jpy_override: kind === 'price_list' ? overrideCostJpy(it.unit_price_jpy, it.price_list?.cost_jpy ?? null) : null,
+        // 통화 — 저장값을 그대로. 가격표 줄은 **지금 가격표의 통화**가 정본이다(가격표가
+        // 통화를 바꿨으면 새 값을 따른다 — 구입가와 통화가 어긋나지 않게).
+        currency: toCurrency(kind === 'price_list' ? (it.price_list?.currency ?? it.currency) : it.currency),
         // 모델은 아직 quote_items 에 칸이 없어 되살릴 값이 없다(createRow 의 빈 글자를 쓴다).
         // 칸이 생기면 /api/quote-duplicate 의 select 에 model_name 을 더하고 여기서 받는다.
         // 할인은 사용자가 양수로 넣는 값이라 음수 공급가를 되돌린다.

@@ -10,7 +10,8 @@ import type { RecentSaleLookup } from '@/hooks/quote/useRecentSales'
 import { canSplitRowKind } from '@/lib/quoteCategories'
 import { GROUP_KINDS, GROUP_LABELS, canGroupRowKind, isGeneral20Form } from '@/lib/quoteForms'
 import { numKR } from './format'
-import { costJpyOf } from './calc'
+import { costOf } from './calc'
+import { CURRENCIES, CURRENCY_LABEL, CURRENCY_SYMBOL, type Currency } from '@/lib/quoteCurrency'
 import { DISCOUNT_LABELS } from './types'
 import { inp } from './styles'
 import ExpenseSection from './ExpenseSection'
@@ -84,8 +85,10 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
   //   listCostJpy — 가격표에 적힌 값(정본). selectedItem 은 손대지 않으므로 늘 남아 있다.
   //   shownCostJpy— 지금 계산에 쓰는 값(고친 값이 있으면 그것).
   //   costEdited  — 둘이 다른가 → 칸 옆에 「가격표 ¥…」와 되돌리기를 낸다.
+  /** 이 줄의 통화 기호 — 구입가 칸·요약에 붙는다(원화 줄은 쓰지 않는다). */
+  const sym = CURRENCY_SYMBOL[row.currency]
   const listCostJpy = row.selectedItem?.cost_jpy ?? null
-  const shownCostJpy = costJpyOf(row)
+  const shownCostJpy = costOf(row)
   const costEdited = row.cost_jpy_override !== null && row.cost_jpy_override !== listCostJpy
   /**
    * 모델 직접 입력 — 수동입력 품목만(국내조달품은 견적서에 모델이 나가지 않는다).
@@ -143,7 +146,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
         <span style={{ color: '#9ca3af' }}> · {mySale.quoteDate} {mySale.quoteNumber}</span></>)
   }
   if ((row.row_kind === 'manual_jpy' || row.row_kind === 'price_list') && row.product_price > 0) {
-    summaryLines.push(<>구입가 ¥{numKR(row.cost_price_jpy)} × 환율 {row.exchange_rate.toFixed(2)} × 관세 ×{row.tariff_rate.toFixed(2)} = 원가 <b>₩{numKR(row.product_price)}</b></>)
+    summaryLines.push(<>구입가 {sym}{numKR(row.cost_price_jpy)} × 환율 {row.exchange_rate.toFixed(2)} × 관세 ×{row.tariff_rate.toFixed(2)} = 원가 <b>₩{numKR(row.product_price)}</b></>)
   }
   if (isDiscount && row.supply_price < 0) {
     summaryLines.push(<>할인 <b>−₩{numKR(Math.abs(row.supply_price))}</b></>)
@@ -288,14 +291,14 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
               }}
               placeholder="가격표 구입가"
               style={{ ...inp, width: '100%', textAlign: 'right', fontSize: 12, paddingRight: 28 }} />
-            <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#9ca3af', pointerEvents: 'none' }}>¥</span>
+            <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#9ca3af', pointerEvents: 'none' }}>{sym}</span>
           </div>
           {/* 고친 줄에만 — 가격표 값이 무엇이었는지와 되돌리기. */}
           {costEdited && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-              <span title={`가격표 구입가 ¥${listCostJpy == null ? '-' : numKR(listCostJpy)}`}
+              <span title={`가격표 구입가 ${sym}${listCostJpy == null ? '-' : numKR(listCostJpy)}`}
                 style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }}>
-                가격표 ¥{listCostJpy == null ? '-' : numKR(listCostJpy)}
+                가격표 {sym}{listCostJpy == null ? '-' : numKR(listCostJpy)}
               </span>
               <button onClick={() => updateRow(row.id, 'cost_jpy_override', null)}
                 title="가격표 값으로 되돌리기"
@@ -453,6 +456,23 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
         </div>
       )}
 
+      {/* 수동입력 품목 — **통화 선택.** 가격표 줄에는 내지 않는다(가격표가 정본이다).
+          고치면 그 줄의 원가가 그 통화의 환율로 다시 계산된다(app/quote/calc.ts). */}
+      {row.row_kind === 'manual_jpy' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <label style={{ fontSize: 13, fontWeight: 600, color: '#6b7280', width: 44, flexShrink: 0 }}>통화</label>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <SegmentedControl
+              options={CURRENCIES.map(c => ({ label: CURRENCY_LABEL[c], value: c }))}
+              value={row.currency}
+              onChange={v => updateRow(row.id, 'currency', v as Currency)}
+              equal
+              height={34}
+            />
+          </div>
+        </div>
+      )}
+
       {/* 수동입력 품목 — 구입가 JPY */}
       {row.row_kind === 'manual_jpy' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -462,7 +482,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
               onChange={e => updateRow(row.id, 'manual_cost_jpy', parseInt(e.target.value) || 0)}
               placeholder="구입가 직접 입력"
               style={{ ...inp, width: '100%', textAlign: 'right', fontSize: 12, paddingRight: 28 }} />
-            <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#9ca3af', pointerEvents: 'none' }}>¥</span>
+            <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: '#9ca3af', pointerEvents: 'none' }}>{sym}</span>
           </div>
         </div>
       )}

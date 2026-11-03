@@ -18,6 +18,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 import type { ExpenseRow, PriceItem, QuoteRow } from '@/app/quote/types'
 import { calcTotals, createRow } from '@/app/quote/calc'
+import { pickRate, type Rates } from '@/lib/quoteCurrency'
 
 import { DEFAULT_TERMS, defaultTermsFor, type Terms } from '@/lib/quoteTerms'
 import { clearDraft } from '@/lib/quoteDraft'
@@ -70,7 +71,8 @@ export type UseQuoteSubmitArgs = {
 
   rows: QuoteRow[]
   expenses: ExpenseRow[]
-  exchangeRate: number
+  /** 통화별 환율 — 줄마다 그 통화의 값을 저장한다(lib/quoteCurrency.ts). */
+  rates: Rates
 
   customerId: number | null
   euCustomerId: number | null
@@ -156,7 +158,7 @@ export function useQuoteSubmit({
   dateStr, dateDisplay, quoteNo, engineerName, engineerTel,
   company, receiver, finalRemarksForPDF, operatingReason, showSignature,
   category, formKind, setCategory, setFormKind, setLineSplitOn,
-  rows, expenses, exchangeRate,
+  rows, expenses, rates,
   customerId, euCustomerId, isDealer, opportunityId,
   totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate,
   termsResult, subLinesResult, normalizedSubLines, withNormalizedSubLines,
@@ -388,6 +390,9 @@ export function useQuoteSubmit({
         unit_price_jpy: (r.row_kind === 'manual_jpy' || r.row_kind === 'domestic')
           ? r.manual_cost_jpy
           : (r.cost_jpy_override ?? r.selectedItem?.cost_jpy ?? null),
+        // 그 줄이 어느 통화로 계산됐는가 — 아래 exchange_rate 가 그 통화의 환율이다.
+        // (옛 줄은 DB 기본값 'JPY' 라 뜻이 그대로 맞는다)
+        currency: r.currency,
         unit_price_krw: r.unit_price,
         supply_amount: r.supply_price,
         tax_amount: r.tax,
@@ -401,7 +406,8 @@ export function useQuoteSubmit({
         // 목표값이 아니라 실현 이익률을 남긴다 — 1,000원 올림·판매단가 직접 입력이 반영된 값이라
         // profit_amount / supply_amount 와 앞뒤가 맞는다(엑셀 분석표가 이 값을 그대로 쓴다).
         profit_rate: r.realized_profit_rate,
-        exchange_rate: r.exchange_rate || exchangeRate,
+        // **그 줄의 통화의 환율**이다(위 currency 와 짝이다).
+        exchange_rate: r.exchange_rate || pickRate(r.currency, rates),
         tariff_rate: r.tariff_rate,
         // 품명 아래 설명 줄 — **줄이 없으면 null**(저장하지 않는다 = 줄 없음).
         // 확정 때 PDF 가 그리는 값과 같은 정규화 결과다(normalizedSubLines).
@@ -486,7 +492,9 @@ export function useQuoteSubmit({
       if (!onBehalf) {
         const picked = defaultsFromRows(rows)
         await saveQuoteUserDefaults(supabase, engineer.email, category, {
-          exchangeRate: exchangeRate > 0 ? exchangeRate : null,
+          // 분류 기본값은 **엔 환율만** 기억한다 — 달러 환율은 사람이 정하는 값이라
+          // (lib/quoteCurrency.ts 의 USD_DEFAULT_RATE) 분류마다 기억할 이유가 아직 없다.
+          exchangeRate: rates.JPY > 0 ? rates.JPY : null,
           tariffRate: picked.tariffRate,
           marginRate: picked.marginRate,
         })

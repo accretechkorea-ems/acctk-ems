@@ -1,5 +1,6 @@
 import { loadCaller } from '@/lib/apiCaller'
 import { RATE_SOURCE } from '@/lib/exchangeRate'
+import { CURRENCIES, findEximRow, ratesFromExim, type Currency } from '@/lib/quoteCurrency'
 import { NextResponse } from 'next/server'
 import https from 'https'
 
@@ -42,13 +43,33 @@ export async function GET() {
       )
       const json = JSON.parse(text)
       if (!Array.isArray(json) || json.length === 0) continue
-      const jpy = json.find((x: { cur_unit: string; deal_bas_r: string }) => x.cur_unit === 'JPY(100)')
-      if (jpy && jpy.deal_bas_r) {
-        // source — 화면이 「어디서 온 값인가」를 그대로 적는다. 이름은 lib/exchangeRate.ts
-        // 한 곳에 있다(저장된 값을 보여 줄 때도 같은 글자를 쓴다).
-        // date 는 **그 기관의 기준일**로, 주말·공휴일이면 소급 조회한 날짜라 오늘이 아니다.
-        return NextResponse.json({ jpy, date, source: RATE_SOURCE })
+
+      // **한 번의 호출에서 통화 둘을 집는다** — 같은 응답에 23종이 들어 있다(2026-11-03 실측).
+      // 엔은 100단위라 100으로 나눈다(lib/quoteCurrency.ts 의 rateFromExim).
+      const rates = ratesFromExim(json)
+      // 엔을 못 읽은 날짜는 **쓰지 않는다** — 종전 동작과 같다(다음 날짜로 넘어간다).
+      // 달러만 없는 날은 엔으로 진행한다(화면의 달러 환율은 사람이 정한 값으로 시작한다).
+      if (rates.JPY === undefined) continue
+
+      const byCurrency: Partial<Record<Currency, { rate: number; date: string }>> = {}
+      for (const cur of CURRENCIES) {
+        const rate = rates[cur]
+        if (rate !== undefined) byCurrency[cur] = { rate, date }
       }
+
+      // source — 화면이 「어디서 온 값인가」를 그대로 적는다. 이름은 lib/exchangeRate.ts
+      // 한 곳에 있다(저장된 값을 보여 줄 때도 같은 글자를 쓴다).
+      // date 는 **그 기관의 기준일**로, 주말·공휴일이면 소급 조회한 날짜라 오늘이 아니다.
+      //
+      // jpy·date 는 **옛 모양 그대로 함께 보낸다** — 이 라우트를 부르는 자리가 더 있을 때
+      // 한꺼번에 깨지지 않게 둔다(화면은 아래 JPY·USD 를 읽는다).
+      return NextResponse.json({
+        JPY: byCurrency.JPY ?? null,
+        USD: byCurrency.USD ?? null,
+        source: RATE_SOURCE,
+        date,
+        jpy: findEximRow(json, 'JPY'),
+      })
     }
     return NextResponse.json({ error: 'no data' }, { status: 500 })
   } catch (e: unknown) {

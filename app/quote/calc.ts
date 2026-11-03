@@ -3,6 +3,7 @@
 import { defaultMarginOf } from '@/lib/quoteProfit'
 import { isBillableRow } from '@/lib/quoteDomestic'
 import { DISCOUNT_LABELS } from './types'
+import { DEFAULT_CURRENCY, pickRate, toCurrency, type Rates } from '@/lib/quoteCurrency'
 import type { QuoteRow, ExpenseRow } from './types'
 
 /**
@@ -14,13 +15,17 @@ const realizedRate = (supplyPrice: number, profit: number) =>
   supplyPrice > 0 ? (profit / supplyPrice) * 100 : 0
 
 /**
- * 가격표 품목의 구입가(JPY) — **고친 값이 있으면 그것, 없으면 가격표 값.**
+ * 가격표 품목의 구입가 — **고친 값이 있으면 그것, 없으면 가격표 값.**
  *
- * 0 은 고친 값으로 본다(「구입가 0」을 적은 것이다). 칸을 비우면 화면이 null 을 넣어
- * 가격표 값으로 돌아간다(app/quote/QuoteItemRow.tsx).
+ * 이름에 통화를 넣지 않는다(2026-11-03): 그 숫자가 엔인지 달러인지는 **줄의 currency** 가
+ * 정하고, 이 함수는 「얼마인가」만 답한다. 0 은 고친 값으로 본다(「구입가 0」을 적은 것이다).
+ * 칸을 비우면 화면이 null 을 넣어 가격표 값으로 돌아간다(app/quote/QuoteItemRow.tsx).
  */
-export const costJpyOf = (row: QuoteRow): number =>
+export const costOf = (row: QuoteRow): number =>
   row.cost_jpy_override ?? row.selectedItem?.cost_jpy ?? 0
+
+/** 옛 이름 — 부르는 자리가 남아 있어 당분간 함께 둔다(3단계에서 지운다). */
+export const costJpyOf = costOf
 
 /**
  * 저장된 구입가 → 「고친 값」인가 — 다시쓰기·복원이 쓴다.
@@ -37,8 +42,14 @@ export function overrideCostJpy(saved: unknown, listCost: number | null): number
   return v
 }
 
-export function calcRow(row: QuoteRow, rate: number): QuoteRow {
-  const exRate = rate || row.exchange_rate
+export function calcRow(row: QuoteRow, rates: Rates): QuoteRow {
+  // **그 줄의 통화에 맞는 환율**을 고른다(lib/quoteCurrency.ts). 받은 묶음에 그 통화가 없거나
+  // 0 이면 0 이 되고, 아래 분기들이 「계산할 근거가 없다」로 떨어진다 — 1 로 바꿔 주지 않는다
+  // (그러면 구입가가 그대로 원화가 되어 조용히 틀린다).
+  //
+  // 줄에 남아 있는 exchange_rate 를 뒤에 두는 것은 종전과 같다 — 복원 직후처럼 화면 환율이
+  // 아직 0 일 때 그 줄이 저장 당시 환율로 계산되게 한다.
+  const exRate = pickRate(row.currency, rates) || row.exchange_rate
   // 서비스비 — 공급가는 직접 입력, 원가는 부대비용 내역의 합. 수량은 1 고정.
   if (row.row_kind === 'service') {
     const unitPrice = row.manual_unit_price
@@ -125,7 +136,7 @@ export function calcRow(row: QuoteRow, rate: number): QuoteRow {
   // 원가를 계산할 수 없어도(품목 미선택·구입가 없음·환율 없음) 단가만으로 성립하므로
   // 아래 이익률 모드 분기보다 앞에서 갈라진다. 원가가 0 이면 이익률은 100% 가 된다.
   if (row.row_kind === 'price_list' && row.price_mode === 'price') {
-    const costJpy = costJpyOf(row)
+    const costJpy = costOf(row)
     // 사용자가 친 값을 그대로 쓴다 — 여기서 올리면 발주서 금액을 정확히 맞출 수 없다.
     const unitPrice = row.manual_unit_price
     const supplyPrice = unitPrice * row.quantity
@@ -142,8 +153,8 @@ export function calcRow(row: QuoteRow, rate: number): QuoteRow {
       realized_profit_rate: realizedRate(supplyPrice, profit),
     }
   }
-  if (row.row_kind === 'price_list' && costJpyOf(row) && exRate) {
-    const costJpy = costJpyOf(row)
+  if (row.row_kind === 'price_list' && costOf(row) && exRate) {
+    const costJpy = costOf(row)
     const rawUnit = (costJpy * exRate * row.tariff_rate) / (1 - row.profit_rate / 100)
     const unitPrice = Math.ceil(rawUnit / 1000) * 1000
     const supplyPrice = unitPrice * row.quantity
@@ -199,6 +210,9 @@ export function createRow(category?: string | null, defaults?: RowDefaults): Quo
     partCode: '', row_kind: 'price_list', manual_cost_jpy: 0, manual_model: '', price_mode: 'rate', expenses: [],
     // 가격표 구입가는 고치지 않은 상태로 시작한다(= 가격표 값을 쓴다).
     cost_jpy_override: null,
+    // 통화 — 엔으로 시작한다. 가격표 품목을 고르면 그 가격표의 통화로 바뀌고(useQuoteRows),
+    // 수동입력 줄은 사람이 고른다.
+    currency: DEFAULT_CURRENCY,
     // 줄별 분류 — 기본은 비움(= 견적 분류를 따른다). 「분류 나누기」로 바꾼 줄만 값이 들어간다.
     category: null,
     // 장비 구성 묶음 — 기본은 비움. 장비 양식에서 고르거나 7단계 구성 모달이 채운다.
@@ -248,6 +262,13 @@ export function createExpenseRow(): ExpenseRow {
 
 // 합계 — 화면 상단 · ProfitPanel · PDF 미리보기 · PDF 다운로드가 모두 이 함수를 쓴다.
 // (통합 전 4곳의 계산식이 문자 단위로 동일함을 확인한 뒤 하나로 합친 것)
+/**
+ * 줄에 통화를 넣어 돌려준다 — 복원·가격표 선택처럼 **바깥에서 온 값**을 눕히는 자리에서 쓴다.
+ * 모르는 값은 엔이 된다(lib/quoteCurrency.ts 의 toCurrency).
+ */
+export const withCurrency = (row: QuoteRow, currency: unknown): QuoteRow =>
+  ({ ...row, currency: toCurrency(currency) })
+
 export function calcTotals(rows: QuoteRow[]) {
   // 매출에 더하는 줄 — 국내조달품 중 **포함사항·옛 규칙** 줄만 빠진다(lib/quoteDomestic.ts).
   // 할인 행은 청구 대상이며 공급가·부가세가 음수라 그대로 더하면 차감이 된다.

@@ -1,5 +1,7 @@
 // 견적서 화면·PDF 공용 타입.
 
+import type { Currency } from '@/lib/quoteCurrency'
+
 export type Engineer = {
   engineer_id: number
   name: string
@@ -23,8 +25,17 @@ export type PriceItem = {
   model_jp: string | null
   item_name_en: string | null
   model_en: string | null
+  // ⚠ 칸 이름에 jpy 가 박혀 있지만 **엔이 아닐 수 있다** — 통화는 아래 currency 가 정한다
+  //   (2026-11-03 다통화 2단계. 칸 이름을 바꾸면 저장된 견적·엑셀·결재 검토표가 함께 깨져서
+  //    이름은 그대로 두고 뜻만 「그 통화의 금액」으로 넓혔다).
   price_jpy: number | null
   cost_jpy: number | null
+  /**
+   * 그 줄의 금액이 어느 통화인가(price_list.currency · 기본 'JPY').
+   * 가격표에서 온 줄은 **사람이 고르지 못한다** — 가격표가 정본이다.
+   * 옛 임시저장에는 이 칸이 없어 undefined 로 온다(읽는 쪽이 toCurrency 로 눕힌다).
+   */
+  currency?: string | null
   delivery_time: string | null
   stock_quantity: number | null
 }
@@ -86,7 +97,17 @@ export type QuoteRow = {
   partCode: string
   // 행 종류(단일 판별 필드). selectedItem 유무·is_service 조합 대신 이 값으로만 분기한다.
   row_kind: RowKind
-  // 수동입력 품목 전용 — 구입가 JPY(가격표의 cost_jpy 자리). 다른 종류는 0.
+  /**
+   * **이 줄의 통화.** 원가를 원화로 바꿀 때 어느 환율을 쓸지 정한다(lib/quoteCurrency.ts).
+   *
+   *   가격표 줄(price_list)  — 품목을 고르면 가격표의 통화가 들어온다. 사람이 못 고친다.
+   *   수동입력 줄(manual_jpy)— 사람이 고른다(기본 엔).
+   *   국내조달품·서비스비·할인 — 원화라 환율을 쓰지 않는다. 값은 'JPY' 로 두지만 보지 않는다.
+   *
+   * 저장: quote_items.currency(기본 'JPY'). 다시쓰기·임시저장도 이 값을 되살린다.
+   */
+  currency: Currency
+  // 수동입력 품목 전용 — 구입가(그 줄의 통화). 다른 종류는 0.
   manual_cost_jpy: number
   /**
    * **가격표 품목의 구입가(JPY)를 사람이 고친 값.** null 이 기본이고 그 뜻은

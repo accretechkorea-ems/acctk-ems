@@ -37,6 +37,10 @@ const {
 } = load(path.join(ROOT, 'app/quote/calc.ts'))
 const { profitBreakdown } = load(path.join(ROOT, 'lib/quoteProfit.ts'))
 
+// 통화별 환율 묶음(lib/quoteCurrency.ts). **이 하네스의 줄은 전부 엔**이라
+// 달러 값은 쓰이지 않는다 — 종전 `calcRow(row, 9.5)` 와 **같은 결과**여야 한다.
+const RATES = { JPY: 9.5, USD: 1600 }
+
 let fails = 0
 const eq = (name, got, want) => {
   const ok = JSON.stringify(got) === JSON.stringify(want)
@@ -72,7 +76,7 @@ eq('할인은 더한다(음수로 깎인다)', isBillableRow({ row_kind: 'discou
 console.log('\n── 계산: 이익률로 역산 + 천원 올림 ──')
 {
   // 원가 100,000원 · 이익률 40% → 166,666.67 → 천원 올림 167,000
-  const r = calcRow(dom({ manual_cost_jpy: 100000, profit_rate: 40, quantity: 2, price_mode: 'rate' }), 9.5)
+  const r = calcRow(dom({ manual_cost_jpy: 100000, profit_rate: 40, quantity: 2, price_mode: 'rate' }), RATES)
   eq('단가(천원 올림)', r.unit_price, 167000)
   eq('공급가', r.supply_price, 334000)
   eq('부가세 10%', r.tax, 33400)
@@ -85,7 +89,7 @@ console.log('\n── 계산: 이익률로 역산 + 천원 올림 ──')
 
 console.log('\n── 계산: 판매단가 직접 입력은 올리지 않는다 ──')
 {
-  const r = calcRow(dom({ manual_cost_jpy: 100000, manual_unit_price: 123456, quantity: 1, price_mode: 'price' }), 9.5)
+  const r = calcRow(dom({ manual_cost_jpy: 100000, manual_unit_price: 123456, quantity: 1, price_mode: 'price' }), RATES)
   eq('단가 그대로', r.unit_price, 123456)
   eq('공급가', r.supply_price, 123456)
   eq('부가세', r.tax, 12346)
@@ -95,7 +99,7 @@ console.log('\n── 계산: 판매단가 직접 입력은 올리지 않는다 
 
 console.log('\n── 계산: 원가가 없으면 금액도 없다 ──')
 {
-  const r = calcRow(dom({ manual_cost_jpy: 0, profit_rate: 40, quantity: 1, price_mode: 'rate' }), 9.5)
+  const r = calcRow(dom({ manual_cost_jpy: 0, profit_rate: 40, quantity: 1, price_mode: 'rate' }), RATES)
   eq('단가 0', r.unit_price, 0)
   eq('공급가 0', r.supply_price, 0)
   eq('이익 0', r.profit, 0)
@@ -103,7 +107,7 @@ console.log('\n── 계산: 원가가 없으면 금액도 없다 ──')
 
 console.log('\n── 합계: 일반 품목으로 들어간다 ──')
 {
-  const normal = calcRow(dom({ manual_cost_jpy: 100000, manual_unit_price: 200000, quantity: 1, price_mode: 'price' }), 9.5)
+  const normal = calcRow(dom({ manual_cost_jpy: 100000, manual_unit_price: 200000, quantity: 1, price_mode: 'price' }), RATES)
   const t = calcTotals([normal])
   eq('매출에 든다', t.totalSupply, 200000)
   eq('부가세에 든다', t.totalTax, 20000)
@@ -114,7 +118,7 @@ console.log('\n── 합계: 일반 품목으로 들어간다 ──')
 
 console.log('\n── 합계: 포함사항은 원가만 ──')
 {
-  const inc = calcRow(dom({ manual_cost_jpy: 300000, manual_unit_price: 0, quantity: 1, price_mode: 'price', group_kind: 'include' }), 9.5)
+  const inc = calcRow(dom({ manual_cost_jpy: 300000, manual_unit_price: 0, quantity: 1, price_mode: 'price', group_kind: 'include' }), RATES)
   const t = calcTotals([inc])
   eq('매출 0', t.totalSupply, 0)
   eq('부가세 0', t.totalTax, 0)
@@ -125,7 +129,7 @@ console.log('\n── 합계: 포함사항은 원가만 ──')
 console.log('\n── 합계: 옛 줄도 원가만(지난 견적이 바뀌지 않는다) ──')
 {
   // 옛 줄 모양 — 묶음 없음 · 판매단가 0 · 원가만 있다.
-  const old = calcRow(dom({ manual_cost_jpy: 250000, manual_unit_price: 0, quantity: 1, price_mode: 'price', group_kind: null }), 9.5)
+  const old = calcRow(dom({ manual_cost_jpy: 250000, manual_unit_price: 0, quantity: 1, price_mode: 'price', group_kind: null }), RATES)
   eq('역할은 숨김', domesticRole(old), 'hidden')
   const t = calcTotals([old])
   eq('매출 0', t.totalSupply, 0)
@@ -134,7 +138,7 @@ console.log('\n── 합계: 옛 줄도 원가만(지난 견적이 바뀌지 �
 
 console.log('\n── 판관비·영업이익은 매출 기준이라 함께 움직인다 ──')
 {
-  const normal = calcRow(dom({ manual_cost_jpy: 1000000, manual_unit_price: 2000000, quantity: 1, price_mode: 'price' }), 9.5)
+  const normal = calcRow(dom({ manual_cost_jpy: 1000000, manual_unit_price: 2000000, quantity: 1, price_mode: 'price' }), RATES)
   const t = calcTotals([normal])
   const b = profitBreakdown(t.totalSupply, t.totalCost, 'TSE')
   eq('매출 200만', b.revenue, 2000000)
@@ -161,8 +165,8 @@ eq('가격표에 구입가가 없어도 고친 값으로 계산된다',
   costJpyOf(pl({ selectedItem: { ...pl().selectedItem, cost_jpy: null }, cost_jpy_override: 50000 })), 50000)
 {
   // 이익률 모드 — 구입가 ¥204,200 × 환율 9.5 × 관세 1.13 이 원가다. 고치면 그 식이 따라 바뀐다.
-  const before = calcRow(pl({ profit_rate: 40, quantity: 1 }), 9.5)
-  const after = calcRow(pl({ profit_rate: 40, quantity: 1, cost_jpy_override: 180000 }), 9.5)
+  const before = calcRow(pl({ profit_rate: 40, quantity: 1 }), RATES)
+  const after = calcRow(pl({ profit_rate: 40, quantity: 1, cost_jpy_override: 180000 }), RATES)
   eq('고치면 원가가 따라 바뀐다', [before.product_price, after.product_price],
     [Math.round(204200 * 9.5 * 1.13), Math.round(180000 * 9.5 * 1.13)])
   eq('단가도 다시 계산된다(1,000원 올림)', [before.unit_price > after.unit_price, after.unit_price % 1000], [true, 0])
@@ -170,7 +174,7 @@ eq('가격표에 구입가가 없어도 고친 값으로 계산된다',
 }
 {
   // 판매가 모드 — 단가는 사람이 적은 그대로, 원가만 고친 구입가로 바뀐다.
-  const r = calcRow(pl({ price_mode: 'price', manual_unit_price: 3000000, quantity: 2, cost_jpy_override: 100000 }), 9.5)
+  const r = calcRow(pl({ price_mode: 'price', manual_unit_price: 3000000, quantity: 2, cost_jpy_override: 100000 }), RATES)
   eq('판매가 모드에서도 원가가 고친 값을 쓴다', [r.unit_price, r.supply_price, r.product_price],
     [3000000, 6000000, Math.round(100000 * 9.5 * 1.13 * 2)])
 }
@@ -184,5 +188,51 @@ eq('가격표 품목이 사라졌으면 저장값을 그대로 쓴다', override
 eq('문자열 숫자도 받는다(PostgREST)', overrideCostJpy('180000', 204200), 180000)
 eq('숫자가 아니면 가격표를 따른다', overrideCostJpy('없음', 204200), null)
 eq('0 이 저장돼 있으면 고친 값이다', overrideCostJpy(0, 204200), 0)
+console.log('\n── 전 줄 엔이면 결과가 달라지지 않는다(다통화 2단계) ──')
+// 통화 칸이 생긴 뒤에도 **엔 줄의 금액은 한 원도 바뀌지 않아야** 한다.
+// 종전 식(구입가 × 엔환율 × 관세)을 여기서 손으로 다시 세워 비교한다 — calcRow 를 믿지 않는다.
+{
+  const JPY = RATES.JPY
+  const 손계산 = (cost, qty, margin, tariff) => {
+    const 원가단가 = cost * JPY * tariff
+    const 단가 = Math.ceil((원가단가 / (1 - margin / 100)) / 1000) * 1000
+    return { 단가, 공급가: 단가 * qty, 원가: Math.round(원가단가 * qty) }
+  }
+  const 표본 = [
+    { cost: 204200, qty: 1, margin: 40, tariff: 1.13 },
+    { cost: 18500, qty: 3, margin: 26, tariff: 1.13 },
+    { cost: 1460, qty: 10, margin: 60, tariff: 1 },
+    { cost: 3611100, qty: 2, margin: 40, tariff: 1.13 },
+  ]
+  for (const s of 표본) {
+    const want = 손계산(s.cost, s.qty, s.margin, s.tariff)
+    // 가격표 줄(통화 칸 기본값 = JPY)
+    const row = calcRow(pl({ selectedItem: { ...pl().selectedItem, cost_jpy: s.cost }, quantity: s.qty, profit_rate: s.margin, tariff_rate: s.tariff }), RATES)
+    eq(`가격표 엔 줄 — 구입가 ${s.cost} × ${s.qty}개`,
+      [row.unit_price, row.supply_price, row.product_price, row.currency],
+      [want.단가, want.공급가, want.원가, 'JPY'])
+    // 수동입력 줄(통화를 손으로 JPY 로 둔 경우) — 같은 답이어야 한다
+    const man = calcRow({ ...createRow(), row_kind: 'manual_jpy', currency: 'JPY', manual_cost_jpy: s.cost, quantity: s.qty, profit_rate: s.margin, tariff_rate: s.tariff }, RATES)
+    eq(`수동입력 엔 줄 — 같은 답`, [man.unit_price, man.supply_price, man.product_price], [want.단가, want.공급가, want.원가])
+  }
+  eq('통화를 적지 않은 옛 줄도 엔으로 계산된다', (() => {
+    const legacy = { ...pl({ profit_rate: 40, quantity: 1 }) }
+    delete legacy.currency
+    const got = calcRow(legacy, RATES)
+    return [got.unit_price, got.supply_price, got.product_price]
+  })(), (() => { const w = 손계산(204200, 1, 40, 1.13); return [w.단가, w.공급가, w.원가] })())
+}
+
+console.log('\n── 달러 줄은 달러 환율로 계산된다 ──')
+{
+  const usd = calcRow(pl({ selectedItem: { ...pl().selectedItem, cost_jpy: 1500, currency: 'USD' }, currency: 'USD', profit_rate: 26, quantity: 1, tariff_rate: 1.13 }), RATES)
+  const 원가 = Math.round(1500 * RATES.USD * 1.13)
+  eq('구입가 $1,500 × 1,600원 × 관세 1.13', [usd.product_price, usd.currency], [원가, 'USD'])
+  eq('단가는 그 원가에서 역산된다(1,000원 올림)', usd.unit_price, Math.ceil((1500 * RATES.USD * 1.13 / (1 - 0.26)) / 1000) * 1000)
+  eq('**엔 환율로 계산하면 150배 작다**(통화를 안 보면 생기는 일)',
+    usd.product_price > Math.round(1500 * RATES.JPY * 1.13) * 100, true)
+  const noRate = calcRow(pl({ selectedItem: { ...pl().selectedItem, cost_jpy: 1500, currency: 'USD' }, currency: 'USD', profit_rate: 26, quantity: 1 }), { JPY: RATES.JPY })
+  eq('달러 환율이 없으면 금액을 만들지 않는다', [noRate.product_price, noRate.supply_price], [0, 0])
+}
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
 process.exit(fails === 0 ? 0 : 1)

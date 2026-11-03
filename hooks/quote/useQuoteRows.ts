@@ -28,6 +28,7 @@ import { useCallback, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ExpensePreset, ExpenseRow, PriceItem, QuoteRow } from '@/app/quote/types'
 import { calcExpense, calcRow, createExpenseRow, createRow } from '@/app/quote/calc'
+import { toCurrency, type Rates } from '@/lib/quoteCurrency'
 import { defaultMarginOf } from '@/lib/quoteProfit'
 import { canSplitRowKind, type QuoteCategory } from '@/lib/quoteCategories'
 import { canGroupRowKind, isEquipForm } from '@/lib/quoteForms'
@@ -38,7 +39,7 @@ import { DEFAULT_TERMS, type SetTerms, type Terms } from '@/lib/quoteTerms'
 
 export type UseQuoteRowsArgs = {
   supabase: SupabaseClient
-  exchangeRate: number
+  rates: Rates
   /** 조건 네(다섯) 줄. 가격표 납기를 「납품일정」에 채울지 보는 데만 쓴다. */
   terms: Terms
   setTerms: SetTerms
@@ -103,7 +104,7 @@ export type QuoteRowsActions = {
 }
 
 export function useQuoteRows({
-  supabase, exchangeRate, terms, setTerms, setTermsOpen, categories, lineSplitOn, formKind,
+  supabase, rates, terms, setTerms, setTermsOpen, categories, lineSplitOn, formKind,
 }: UseQuoteRowsArgs) {
   const [rows, setRows] = useState<QuoteRow[]>([createRow()])
   const [expensePresets, setExpensePresets] = useState<ExpensePreset[]>([])
@@ -137,7 +138,11 @@ export function useQuoteRows({
       // 무엇을 채우는지는 가격표(20/80)에 따라 다르다 — lib/priceItemText.ts 가 정한다.
       const itemText = itemTextOnSelect(r.itemText, !!r.selectedItem, item)
       // 구입가를 고쳐 둔 줄에 **다른 품목**을 고르면 그 값은 버린다(앞 품목의 값이다).
-      return calcRow({ ...r, selectedItem: item, itemText, partCode: item.item_code, cost_jpy_override: null }, exchangeRate)
+      // 통화는 **가격표가 정한다** — 사람이 고르지 못한다(price_list.currency).
+      return calcRow({
+        ...r, selectedItem: item, itemText, partCode: item.item_code, cost_jpy_override: null,
+        currency: toCurrency(item.currency),
+      }, rates)
     }))
     setSearchOpen(prev => ({ ...prev, [rowId]: false }))
     setSearchQuery(prev => ({ ...prev, [rowId]: item.item_code }))
@@ -148,23 +153,23 @@ export function useQuoteRows({
       setTerms(prev => ({ ...prev, delivery_schedule: `발주 후 ${item.delivery_time}주` }))
       setTermsOpen(true)
     }
-  }, [exchangeRate, terms, setTerms, setTermsOpen])
+  }, [rates, terms, setTerms, setTermsOpen])
 
   const updateRow = useCallback((rowId: string, field: keyof QuoteRow, value: any) =>
     setRows(prev => prev.map(r => {
       if (r.id !== rowId) return r
       // 이익률을 사람이 고치면 표시해 둔다 — 분류를 바꿀 때 이 줄은 건드리지 않는다.
       const touched = field === 'profit_rate' ? { margin_touched: true } : null
-      return calcRow({ ...r, [field]: value, ...touched }, exchangeRate)
+      return calcRow({ ...r, [field]: value, ...touched }, rates)
     })),
-    [exchangeRate])
+    [rates])
 
   const clearItem = useCallback((rowId: string) => {
     // 품목 해제(× 버튼) — 종류는 price_list 그대로 두고 선택만 비운다.
-    setRows(prev => prev.map(r => r.id !== rowId ? r : calcRow({ ...r, selectedItem: null, manual_unit_price: 0, partCode: '', cost_jpy_override: null }, exchangeRate)))
+    setRows(prev => prev.map(r => r.id !== rowId ? r : calcRow({ ...r, selectedItem: null, manual_unit_price: 0, partCode: '', cost_jpy_override: null }, rates)))
     setSearchQuery(prev => ({ ...prev, [rowId]: '' }))
     setSearchResults(prev => ({ ...prev, [rowId]: [] }))
-  }, [exchangeRate])
+  }, [rates])
 
   const updateSubLine = useCallback((rowId: string, idx: number, val: string) =>
     setRows(prev => prev.map(r => { if (r.id !== rowId) return r; const lines = [...r.subLines]; lines[idx] = val; return { ...r, subLines: lines } })), [])
@@ -192,9 +197,9 @@ export function useQuoteRows({
       if (r.margin_touched) return r
       if (r.row_kind !== 'price_list' && r.row_kind !== 'manual_jpy') return r
       if (r.profit_rate === next) return r
-      return calcRow({ ...r, profit_rate: next }, exchangeRate)
+      return calcRow({ ...r, profit_rate: next }, rates)
     }))
-  }, [exchangeRate])
+  }, [rates])
 
   /**
    * 저장된 내 설정(관세율)을 **아직 비어 있는 줄**에만 입힌다.
@@ -212,9 +217,9 @@ export function useQuoteRows({
       if (r.row_kind !== 'price_list' && r.row_kind !== 'manual_jpy') return r
       const empty = !r.selectedItem && r.manual_cost_jpy === 0 && r.manual_unit_price === 0 && r.supply_price === 0
       if (!empty || r.tariff_rate === tariffRate) return r
-      return calcRow({ ...r, tariff_rate: tariffRate }, exchangeRate)
+      return calcRow({ ...r, tariff_rate: tariffRate }, rates)
     }))
-  }, [exchangeRate])
+  }, [rates])
 
   const setRowCategory = useCallback((rowId: string, code: string) =>
     setRows(prev => prev.map(r =>
@@ -239,8 +244,8 @@ export function useQuoteRows({
   // 부대비용 내역 갱신 — 서비스비 행의 expenses 를 바꾼 뒤 calcRow 로 원가·이익을 재계산한다.
   // (calcExpense 로 amount 재계산 → calcRow 로 행 원가 반영, 두 단계 모두 map 안에서 처리)
   const updateServiceExpenses = useCallback((fn: (list: ExpenseRow[]) => ExpenseRow[]) =>
-    setRows(prev => prev.map(r => r.row_kind !== 'service' ? r : calcRow({ ...r, expenses: fn(r.expenses) }, exchangeRate))),
-    [exchangeRate])
+    setRows(prev => prev.map(r => r.row_kind !== 'service' ? r : calcRow({ ...r, expenses: fn(r.expenses) }, rates))),
+    [rates])
 
   // 항목명 선택은 unit_price 도 함께 바꾸므로 patch 객체로 받는다.
   const updateExpense = useCallback((expenseId: string, patch: Partial<ExpenseRow>) =>
