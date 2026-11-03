@@ -83,6 +83,11 @@ export type QuoteRow = {
    * 맞추려고 둔다(고친 줄은 그대로). 저장하지 않는다 — 작성 화면에서만 쓰는 표시다.
    */
   margin_touched?: boolean
+  /**
+   * 줄 분류를 **그 줄에서 직접 바꿨는가.** 상단 견적 분류를 바꾸면 이 표시가 없는 줄만
+   * 따라 바뀐다(app/quote/calc.ts 의 rowsForQuoteCategory). 이익률의 margin_touched 와 같은 뜻이다.
+   */
+  category_touched?: boolean
   // 올림·직접입력까지 반영된 **실현 이익률**. 화면 요약과 quote_items 저장이 이 값을 쓴다.
   // 계산 결과라 사용자가 직접 넣지 않는다(calcRow 가 매번 다시 채운다).
   realized_profit_rate: number

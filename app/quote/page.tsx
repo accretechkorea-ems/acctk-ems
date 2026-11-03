@@ -15,7 +15,6 @@ import { useQuotePrefill } from '@/hooks/quote/useQuotePrefill'
 import { useQuoteDraftSync } from '@/hooks/quote/useQuoteDraftSync'
 import { useQuoteSubmit } from '@/hooks/quote/useQuoteSubmit'
 import AccessGate from '@/components/common/AccessGate'
-import { useConfirm } from '@/components/common/ConfirmDialog'
 import type { Engineer, QuoteRow, RateMeta } from './types'
 import { calcRow, calcTotals } from './calc'
 import { useDebounce } from './useDebounce'
@@ -97,7 +96,6 @@ function QuotePageInner() {
   const toast = useToast()
   const { errors, setErrors, clearError, validate } = useFieldErrors<'category' | 'form' | 'company' | 'eu' | 'items' | 'expenses'>()
   // 줄별 분류를 끌 때 확인창을 띄운다(alert·confirm 대신 공용 다이얼로그).
-  const confirmDialog = useConfirm()
   const [isClient, setIsClient] = useState(false)
 
   // ── 견적 분류 ──
@@ -109,7 +107,6 @@ function QuotePageInner() {
   // 고른 견적 분류(quotes.category). 빈 글자는 미선택이고, 그때는 확정이 막힌다.
   const [category, setCategory] = useState('')
   // 「분류 나누기」 — 켜면 각 품목 줄에 분류 선택칸이 생긴다. 저장되지 않는 화면 상태다.
-  const [lineSplitOn, setLineSplitOn] = useState(false)
 
   // ── 견적서 양식(quotes.form_kind) ──
   // 이 값 하나가 PDF 의 열·그룹 행·조건(보증)·합계 모양을 모두 가른다(lib/quoteForms.ts).
@@ -181,9 +178,9 @@ function QuotePageInner() {
     setSearchQuery, setSearchResults, setSearchOpen,
     setEditingProfitRate, setProfitRateInput,
     serviceRow, discountRow, expenses,
-    clearAllRowCategories, applyCategoryDefaults, applySavedTariff,
+    applyCategoryDefaults, applySavedTariff,
     ctx: rowsCtx, actions: rowsActions,
-  } = useQuoteRows({ supabase, rates, terms, setTerms, category, rowDefaults: category ? savedDefaults : null, categories: activeCategories, lineSplitOn, formKind })
+  } = useQuoteRows({ supabase, rates, terms, setTerms, category, rowDefaults: category ? savedDefaults : null, categories: activeCategories, formKind })
 
   // 줄이 늘거나 줄거나 설명 줄이 붙으면 그 위쪽 높이가 바뀐다 — 그때 **치고 있던 칸이**
   // 화면에서 같은 자리에 남도록 스크롤을 보정한다(hooks/useFocusAnchor.ts).
@@ -407,29 +404,6 @@ function QuotePageInner() {
   const categoryMissing = category.trim() === ''
   // 양식도 같은 규칙이다 — 고르기 전에는 확정만 막는다.
   const formMissing = formKind.trim() === ''
-  // 줄별 분류가 들어간 줄 수 — 「분류 나누기」 옆에 보여 주고, 끌 때 확인창 여부를 가른다.
-  const splitRowCount = rows.filter(r => r.category != null).length
-
-  /**
-   * 「분류 나누기」 켜고 끄기.
-   * 끌 때 이미 지정한 줄이 있으면 확인을 받는다 — 끄면 그 값들이 전부 사라지기 때문이다
-   * (저장은 null 로 들어가고, 통계는 견적 분류로 떨어진다).
-   */
-  const toggleLineSplit = async () => {
-    if (!lineSplitOn) { setLineSplitOn(true); return }
-    if (splitRowCount > 0) {
-      const ok = await confirmDialog({
-        title: '줄별 분류 지우기',
-        message: `${splitRowCount}개 줄에 지정한 분류가 사라집니다. 모든 줄이 견적 분류를 따릅니다.`,
-        confirmText: '끄고 지우기',
-        variant: 'danger',
-      })
-      if (!ok) return
-    }
-    clearAllRowCategories()
-    setLineSplitOn(false)
-  }
-
   const runValidation = () => validate({
     category: categoryMissing ? '견적 분류를 선택해주세요' : null,
     form: formMissing ? '견적서 양식을 선택해주세요' : null,
@@ -452,7 +426,7 @@ function QuotePageInner() {
     supabase, toast, router, engineer, initials, onBehalf,
     dateStr, dateDisplay, quoteNo, engineerName, engineerTel,
     company, receiver, finalRemarksForPDF, operatingReason, showSignature,
-    category, formKind, setCategory, setFormKind, setLineSplitOn,
+    category, formKind, setCategory, setFormKind,
     rows, expenses, rates,
     customerId, euCustomerId, isDealer, opportunityId,
     totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate,
@@ -512,7 +486,7 @@ function QuotePageInner() {
     setOnBehalf, setRows, setIsDealer, setCustomerId, setEuCustomerId,
     setSelectedCustomer, setCustomerQuery, setCompany, setSelectedEU, setEuQuery,
     resolveEuParent, setReceiver, setTermsOpen, setTerms, setRemarks, setOperatingReason,
-    setCategory, setFormKind, setLineSplitOn,
+    setCategory, setFormKind,
     loadOpportunities, setOpportunityId, handleCustomerSelect,
     setCustomerResults, setCustomerSearchOpen, setPrefillNotice,
   })
@@ -838,7 +812,6 @@ function QuotePageInner() {
             category={{
               value: category, setValue: changeCategory,
               categories: activeCategories, loading: categoriesLoading,
-              lineSplitOn, onToggleLineSplit: () => { void toggleLineSplit() }, splitRowCount,
               formKind, setFormKind,
             }}
             customer={{

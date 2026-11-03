@@ -92,7 +92,6 @@ export type UseQuotePrefillArgs = {
   setOperatingReason: (v: string) => void
   setCategory: React.Dispatch<React.SetStateAction<string>>
   setFormKind: React.Dispatch<React.SetStateAction<string>>
-  setLineSplitOn: React.Dispatch<React.SetStateAction<boolean>>
   loadOpportunities: (cid: number | null) => Promise<void>
   setOpportunityId: React.Dispatch<React.SetStateAction<number | null>>
   handleCustomerSelect: (c: CustomerResult) => void
@@ -107,7 +106,7 @@ export function useQuotePrefill({
   setOnBehalf, setRows, setIsDealer, setCustomerId, setEuCustomerId,
   setSelectedCustomer, setCustomerQuery, setCompany, setSelectedEU, setEuQuery,
   resolveEuParent, setReceiver, setTermsOpen, setTerms, setRemarks, setOperatingReason,
-  setCategory, setFormKind, setLineSplitOn,
+  setCategory, setFormKind,
   loadOpportunities, setOpportunityId, handleCustomerSelect,
   setCustomerResults, setCustomerSearchOpen, setPrefillNotice,
 }: UseQuotePrefillArgs) {
@@ -163,6 +162,11 @@ export function useQuotePrefill({
         // 비활성이 된 분류를 그대로 들고 오면 선택칸에 없는 값이 남아 고칠 수 없다.
         category: (canSplitRowKind(kind) && it.category != null
           && activeList.some(c => c.code === it.category)) ? it.category : null,
+        // 저장돼 있던 줄 분류는 **그 줄에서 고른 값**으로 본다 — 다시쓰기 뒤에 상단 분류를
+        // 바꿔도 그 줄은 따라가지 않는다(섞인 견적을 그대로 되살리는 것이 목적이다).
+        // 옛 견적(줄 분류 null)은 표시가 없어 상단 분류를 따른다.
+        category_touched: canSplitRowKind(kind) && it.category != null
+          && activeList.some(c => c.code === it.category),
         // 구성 묶음 — 아는 값이고 묶음을 둘 수 있는 줄일 때만 되살린다.
         group_kind: (canGroupRowKind(kind) && isGroupKind(it.group_kind)) ? it.group_kind : null,
         expenses: kind === 'service' ? expenseRows : [],
@@ -176,9 +180,8 @@ export function useQuotePrefill({
       ? quote.category
       : ''
     setCategory(dupCategory)
-    // 되살린 줄 중에 분류가 들어간 것이 있으면 「분류 나누기」를 켜 둔다 — 그러지 않으면
-    // 값이 있는데 화면에 선택칸이 없어 보이지 않는다.
-    setLineSplitOn(built.some(r => r.category != null))
+    // 「분류 나누기」 토글은 없어졌다 — 되살린 줄에 분류가 있으면 **그 줄에서 직접 고른
+    // 값**으로 보고 표시를 남긴다(상단 분류를 다시 골라도 따라가지 않는다).
     // 양식 — 원본 값을 그대로. null(기존 양식)이거나 모르는 값이면 비워 다시 고르게 한다.
     setFormKind(isFormKind(quote.form_kind) ? quote.form_kind : '')
 

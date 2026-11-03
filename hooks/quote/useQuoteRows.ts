@@ -27,10 +27,9 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ExpensePreset, ExpenseRow, PriceItem, QuoteRow } from '@/app/quote/types'
-import { calcExpense, calcRow, rowWithSelectedItem, createExpenseRow, createRow } from '@/app/quote/calc'
+import { calcExpense, calcRow, rowWithSelectedItem, rowsForQuoteCategory, createExpenseRow, createRow } from '@/app/quote/calc'
 import type { RowDefaults } from '@/app/quote/calc'
 import { type Rates } from '@/lib/quoteCurrency'
-import { defaultMarginOf } from '@/lib/quoteProfit'
 import { canSplitRowKind, type QuoteCategory } from '@/lib/quoteCategories'
 import { canGroupRowKind, isEquipForm } from '@/lib/quoteForms'
 import { searchPriceList } from '@/lib/priceSearch'
@@ -50,8 +49,6 @@ export type UseQuoteRowsArgs = {
   /** 저장된 내 설정(관세율·이익률) — 품목을 바꿀 때 새 줄과 같은 값으로 되돌린다. */
   rowDefaults?: RowDefaults | null
   categories: QuoteCategory[]
-  /** 「분류 나누기」가 켜져 있는가. 꺼져 있으면 줄별 분류 선택칸을 그리지 않는다. */
-  lineSplitOn: boolean
   /** 고른 견적 양식. 장비(equip80)일 때만 줄 묶음 선택칸이 나온다. */
   formKind: string
 }
@@ -69,10 +66,10 @@ export type QuoteRowsCtx = {
   presetError: boolean
   invalidExpenseIds: Set<string>
   totalExpense: number
-  /** 「분류 나누기」가 켜져 있는가. 꺼져 있으면 행 카드가 분류 선택칸을 그리지 않는다. */
-  lineSplitOn: boolean
-  /** 줄별 분류 선택칸의 후보(활성 분류만). */
+  /** 줄 분류 뱃지의 후보(활성 분류만). */
   categories: QuoteCategory[]
+  /** 상단에서 고른 견적 분류 — 줄 뱃지가 **그것과 다를 때만** 진하게 낸다. */
+  quoteCategory: string | null
   /** 장비 양식인가. 줄 묶음 선택칸을 낼지 가른다. */
   equipForm: boolean
   /** 고른 견적 양식(general20·parts80·equip80). 수동 입력 칸 순서가 이 값을 본다. */
@@ -108,7 +105,7 @@ export type QuoteRowsActions = {
 }
 
 export function useQuoteRows({
-  supabase, rates, terms, setTerms, category, rowDefaults, categories, lineSplitOn, formKind,
+  supabase, rates, terms, setTerms, category, rowDefaults, categories, formKind,
 }: UseQuoteRowsArgs) {
   const [rows, setRows] = useState<QuoteRow[]>([createRow()])
   const [expensePresets, setExpensePresets] = useState<ExpensePreset[]>([])
@@ -199,20 +196,11 @@ export function useQuoteRows({
   // 줄별 분류 — 빈 글자는 null 로 눕힌다(「견적 분류를 따른다」가 그 뜻이다).
   // 매출 줄이 아니면 값을 넣지 않는다(domestic·discount 는 통계에서 쓸 자리가 없다).
   /**
-   * 견적 분류가 바뀌었다 — **손대지 않은 품목 줄**의 이익률만 새 기본값으로 맞춘다.
-   * 사람이 고친 줄(margin_touched)과 이익률이 뜻 없는 줄(국내조달·서비스·할인)은 그대로 둔다.
-   * 임시저장을 되살린 옛 초안도 그대로다 — 되살린 줄은 손댄 것으로 표시해 둔다.
+   * 견적 분류가 바뀌었다 — **줄 분류와 이익률**을 함께 맞춘다.
+   * 규칙은 순수 함수에 있다(app/quote/calc.ts 의 rowsForQuoteCategory) — 하네스가 그것을 돌린다.
    */
   const applyCategoryDefaults = useCallback((category: string | null, margin?: number | null) => {
-    // margin 을 주면 그 값이 분류 기본값보다 앞선다 — 저장된 내 설정이다
-    // (lib/quoteUserDefaults.ts). 주지 않으면 지금까지와 똑같다.
-    const next = margin ?? defaultMarginOf(category)
-    setRows(prev => prev.map(r => {
-      if (r.margin_touched) return r
-      if (r.row_kind !== 'price_list' && r.row_kind !== 'manual_jpy') return r
-      if (r.profit_rate === next) return r
-      return calcRow({ ...r, profit_rate: next }, rates)
-    }))
+    setRows(prev => rowsForQuoteCategory(prev, category, margin, rates))
   }, [rates])
 
   /**
@@ -235,16 +223,15 @@ export function useQuoteRows({
     }))
   }, [rates])
 
+  // 줄에서 직접 고른 분류 — **표시를 남긴다.** 그 뒤로는 상단 분류를 바꿔도 이 줄은
+  // 따라가지 않는다(rowsForQuoteCategory). 빈 글자는 「견적 분류를 따른다」로 되돌린다.
   const setRowCategory = useCallback((rowId: string, code: string) =>
-    setRows(prev => prev.map(r =>
-      r.id !== rowId ? r : { ...r, category: canSplitRowKind(r.row_kind) ? (code || null) : null })), [])
+    setRows(prev => prev.map(r => (r.id !== rowId ? r : {
+      ...r,
+      category: canSplitRowKind(r.row_kind) ? (code || null) : null,
+      category_touched: canSplitRowKind(r.row_kind) && !!code,
+    }))), [])
 
-  /** 모든 줄의 분류를 지운다. 「분류 나누기」를 끌 때 쓴다. */
-  const clearAllRowCategories = useCallback(() =>
-    setRows(prev => prev.map(r => r.category == null ? r : { ...r, category: null })), [])
-
-  // 장비 구성 묶음 — 빈 글자는 null 로 눕힌다(「묶음 없음」이 그 뜻이다).
-  // 묶음을 둘 수 없는 줄(국내조달품·할인)에는 값을 넣지 않는다.
   const setRowGroupKind = useCallback((rowId: string, kind: string) =>
     setRows(prev => prev.map(r =>
       r.id !== rowId ? r : { ...r, group_kind: canGroupRowKind(r.row_kind) ? (kind || null) : null })), [])
@@ -289,12 +276,12 @@ export function useQuoteRows({
     editingProfitRate, profitRateInput,
     expensePresets, presetError,
     invalidExpenseIds, totalExpense,
-    lineSplitOn, categories, equipForm: isEquipForm(formKind), formKind,
+    categories, quoteCategory: category ?? null, equipForm: isEquipForm(formKind), formKind,
     priceSheets,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [rows.length, searchQuery, searchResults, searchOpen,
        editingProfitRate, profitRateInput, expensePresets, presetError,
-       invalidExpenseKey, totalExpense, lineSplitOn, categories, formKind,
+       invalidExpenseKey, totalExpense, categories, category, formKind,
        priceSheets])
 
   const actions = useMemo<QuoteRowsActions>(() => ({
@@ -325,7 +312,6 @@ export function useQuoteRows({
     removeRow,
     setRowCategory,
     setRowGroupKind,
-    clearAllRowCategories,
     serviceRow,
     discountRow,
     expenses,

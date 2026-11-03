@@ -106,7 +106,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
   const {
     rowCount, searchQuery, searchResults, searchOpen, priceSheets,
     editingProfitRate, profitRateInput, expensePresets, presetError,
-    invalidExpenseIds, totalExpense, lineSplitOn, categories, equipForm, formKind,
+    invalidExpenseIds, totalExpense, categories, quoteCategory, equipForm, formKind,
   } = ctx
   const {
     updateRow, addSubLine, updateSubLine, removeSubLine,
@@ -345,6 +345,31 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
           </span>
         )}
 
+        {/* 줄 분류 — **매출 줄만**(국내 구매·할인은 통계에서 쓸 자리가 없다).
+            줄을 만들 때 상단 견적 분류가 들어오고, 여기서 바꾸면 그 줄은 그 값을 지킨다
+            (상단 분류를 다시 골라도 따라가지 않는다 — app/quote/calc.ts 의 rowsForQuoteCategory).
+            **상단과 다른 줄만 진하게** 낸다 — 섞인 견적이 한눈에 보이게. */}
+        {canSplitRowKind(row.row_kind) && categories.length > 0 && (() => {
+          const shown = row.category ?? quoteCategory ?? ''
+          const differs = !!shown && shown !== (quoteCategory ?? '')
+          return (
+            <select
+              value={shown}
+              onChange={e => setRowCategory(row.id, e.target.value)}
+              title={differs ? '견적 분류와 다른 줄입니다' : '이 줄의 분류'}
+              style={{
+                ...badge, border: 'none', cursor: 'pointer', height: 17, padding: '0 4px',
+                appearance: 'none', textAlign: 'center',
+                color: differs ? '#234ea2' : '#9ca3af',
+              }}
+            >
+              {/* 상단 분류를 아직 안 골랐으면 빈 값도 고를 수 있다(그때는 견적 분류를 따른다). */}
+              {!quoteCategory && <option value="">분류</option>}
+              {categories.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+            </select>
+          )
+        })()}
+
         <span style={{ flex: 1 }} />
 
         {/* 줄 추가 — 품명 아래에 붙는 설명 줄(견적서 PDF 에 그대로 나간다). */}
@@ -517,39 +542,22 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
         </div>
       )}
 
-      {/* 줄별 분류·묶음 — 켠 견적에만 나온다. 둘 다 켜면 한 단에 나란히 둔다. */}
-      {((lineSplitOn && canSplitRowKind(row.row_kind)) || (equipForm && canGroupRowKind(row.row_kind))) && (
+      {/* 장비 구성 묶음 — 장비 양식에서만. 줄 분류는 머리줄 뱃지로 올라갔다. */}
+      {equipForm && canGroupRowKind(row.row_kind) && (
         <div style={{ display: 'flex', gap: GAP, marginBottom: GAP }}>
-          {/* 비워 두면 견적 분류를 따른다(= quote_items.category 가 null 로 저장된다). */}
-          {lineSplitOn && canSplitRowKind(row.row_kind) && (
-            <select
-              className="q-input"
-              value={row.category ?? ''}
-              onChange={e => setRowCategory(row.id, e.target.value)}
-              title="줄 분류"
-              style={{ ...inp, height: H_CELL, padding: '0 8px', flex: 1, minWidth: 0, cursor: 'pointer', color: row.category ? '#111827' : '#9ca3af' }}
-            >
-              <option value="">분류: 견적 분류 그대로</option>
-              {categories.map(c => (
-                <option key={c.code} value={c.code}>분류: {c.label}</option>
-              ))}
-            </select>
-          )}
-          {/* 장비 구성 묶음 — 비워 두면 그룹 없이 PDF 맨 뒤에 붙는다. 7단계 구성 모달이 이 값을 대신 채운다. */}
-          {equipForm && canGroupRowKind(row.row_kind) && (
-            <select
-              className="q-input"
-              value={row.group_kind ?? ''}
-              onChange={e => setRowGroupKind(row.id, e.target.value)}
-              title="장비 구성 묶음"
-              style={{ ...inp, height: H_CELL, padding: '0 8px', flex: 1, minWidth: 0, cursor: 'pointer', color: row.group_kind ? '#111827' : '#9ca3af' }}
-            >
-              <option value="">묶음 없음</option>
-              {GROUP_KINDS.map(k => (
-                <option key={k} value={k}>묶음: {GROUP_LABELS[k]}</option>
-              ))}
-            </select>
-          )}
+          {/* 비워 두면 그룹 없이 PDF 맨 뒤에 붙는다. 7단계 구성 모달이 이 값을 대신 채운다. */}
+          <select
+            className="q-input"
+            value={row.group_kind ?? ''}
+            onChange={e => setRowGroupKind(row.id, e.target.value)}
+            title="장비 구성 묶음"
+            style={{ ...inp, height: H_CELL, padding: '0 8px', flex: 1, minWidth: 0, cursor: 'pointer', color: row.group_kind ? '#111827' : '#9ca3af' }}
+          >
+            <option value="">묶음 없음</option>
+            {GROUP_KINDS.map(k => (
+              <option key={k} value={k}>묶음: {GROUP_LABELS[k]}</option>
+            ))}
+          </select>
         </div>
       )}
 

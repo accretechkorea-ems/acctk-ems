@@ -104,11 +104,6 @@ export type CustomerCardCategory = {
   /** 고를 수 있는 분류(활성만). */
   categories: QuoteCategory[]
   loading: boolean
-  lineSplitOn: boolean
-  /** 켜고 끄기. 끌 때 줄에 값이 남아 있으면 부르는 쪽이 확인창을 띄운다. */
-  onToggleLineSplit: () => void
-  /** 지금 줄별 분류가 들어간 줄 수. 「분류 나누기」 버튼 옆에 보여 준다. */
-  splitRowCount: number
   /** 견적서 양식(quotes.form_kind). 분류와 같은 규칙으로 고르기 전에는 확정이 막힌다. */
   formKind: string
   setFormKind: (v: string) => void
@@ -131,7 +126,6 @@ export default function CustomerCard({ errors, clearError, category, customer, e
   const {
     value: categoryValue, setValue: setCategoryValue,
     categories, loading: categoriesLoading,
-    lineSplitOn, onToggleLineSplit, splitRowCount,
     formKind, setFormKind,
   } = category
   const {
@@ -223,34 +217,14 @@ export default function CustomerCard({ errors, clearError, category, customer, e
           <FieldError message={errors.form} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 2, whiteSpace: 'nowrap' }} />
         </div>
       </div>
-      {/* 분류 나누기 — 평소에는 줄별 분류 칸을 숨긴다(한 견적에 여러 분류가 섞이는 일이 드물다).
-          켜면 매출 줄(가격표·수동입력·서비스비)에 분류 선택칸이 생긴다. */}
-      <div style={{ marginTop: 4, marginLeft: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <button
-          type="button"
-          onClick={onToggleLineSplit}
-          disabled={!categoryValue && !lineSplitOn}
-          title={!categoryValue && !lineSplitOn ? '견적 분류를 먼저 고르세요' : undefined}
-          style={{
-            padding: '3px 9px', borderRadius: 6, fontSize: 11, fontWeight: 700,
-            background: lineSplitOn ? '#234ea2' : '#f3f4f6',
-            color: lineSplitOn ? '#ffffff' : (!categoryValue ? '#d1d5db' : '#6b7280'),
-            border: 'none', cursor: (!categoryValue && !lineSplitOn) ? 'not-allowed' : 'pointer',
-            whiteSpace: 'nowrap', transition: 'background 0.15s ease',
-          }}>
-          {lineSplitOn ? '분류 나누기 끄기' : '분류 나누기'}
-        </button>
-        <span style={{ fontSize: 11, color: '#9ca3af' }}>
-          {/* 목록을 못 읽었으면 그 사실을 알린다 — 빈 드롭다운만 두면 「왜 확정이 안 되나」가 된다. */}
-          {!categoriesLoading && categories.length === 0
-            ? '분류 목록을 불러오지 못했습니다. 새로고침하거나 관리자에게 문의해주세요'
-            : lineSplitOn
-              ? (splitRowCount > 0
-                  ? `${splitRowCount}개 줄에 다른 분류를 지정했습니다`
-                  : '줄마다 다른 분류를 고를 수 있습니다. 비워 두면 견적 분류를 따릅니다')
-              : '줄마다 분류가 다를 때만 켜세요'}
-        </span>
-      </div>
+      {/* 분류 목록을 못 읽었으면 그 사실을 알린다 — 빈 드롭다운만 두면 「왜 확정이 안 되나」가 된다.
+          줄마다 다른 분류는 이제 **줄 머리줄의 뱃지**에서 고른다(「분류 나누기」 토글은 걷었다 —
+          켜고 끄는 단계가 없어도 되는 일이었고, 끌 때 지정한 값이 사라지는 함정이 있었다). */}
+      {!categoriesLoading && categories.length === 0 && (
+        <div style={{ marginTop: 4, marginLeft: 10, fontSize: 11, color: '#9ca3af' }}>
+          분류 목록을 불러오지 못했습니다. 새로고침하거나 관리자에게 문의해주세요
+        </div>
+      )}
     </div>
 
     {/* 사명 + 대리점 체크박스 */}
@@ -437,19 +411,22 @@ export default function CustomerCard({ errors, clearError, category, customer, e
           }}
           style={{ width: 14, height: 14, cursor: 'pointer', accentColor: '#234ea2' }}
         />
-        <span style={{ fontSize: 11, fontWeight: 700, color: termsOpen ? '#234ea2' : '#6b7280' }}>조건 변경</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: termsOpen ? '#234ea2' : '#6b7280', whiteSpace: 'nowrap' }}>조건 변경</span>
       </label>
-      {/* 꺼져 있는데 채워진 조건이 있다 — 가격표 품목의 납기가 들어온 경우다(useQuoteRows).
-          **체크를 대신 눌러 주지 않는다.** 꺼진 채로 두면 그 값은 저장·PDF 에 나가지 않으므로,
-          무엇이 기다리고 있는지 적고 누를 자리를 준다. 누르는 것은 사람이다. */}
+      {/* 가격표 납기가 조건 칸에 들어와 있는데 체크가 꺼져 있다 — 그대로 두면 저장·PDF 가
+          기본 문구를 쓰므로 그 값이 조용히 버려진다. **대신 눌러 주지는 않는다**(체크는 사람이
+          누를 때만 바뀐다) — 누를 자리만 작은 뱃지로 둔다. */}
       {!termsOpen && pendingTerms.length > 0 && (
         <button
           type="button"
           onClick={() => setTermsOpen(true)}
-          title="조건 변경을 켜고 이 값을 반영합니다"
-          style={{ fontSize: 11, fontWeight: 600, color: '#234ea2', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline dotted', whiteSpace: 'nowrap' }}
+          title={`${pendingTerms.join(' · ')} — 누르면 조건 변경을 켜고 반영합니다`}
+          style={{
+            fontSize: 11, fontWeight: 700, color: '#234ea2', background: '#eff4ff',
+            border: 'none', borderRadius: 99, padding: '2px 8px', cursor: 'pointer', whiteSpace: 'nowrap',
+          }}
         >
-          {pendingTerms.join(' · ')} 대기
+          납기 반영 가능
         </button>
       )}
       <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
@@ -459,7 +436,7 @@ export default function CustomerCard({ errors, clearError, category, customer, e
           onChange={e => setShowSignature(e.target.checked)}
           style={{ width: 14, height: 14, cursor: 'pointer', accentColor: '#234ea2' }}
         />
-        <span style={{ fontSize: 11, fontWeight: 700, color: showSignature ? '#234ea2' : '#6b7280' }}>고객사 서명란 추가</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: showSignature ? '#234ea2' : '#6b7280', whiteSpace: 'nowrap' }}>고객사 서명란 추가</span>
       </label>
     </div>
 

@@ -38,6 +38,7 @@ const {
 // 줄 계산 — 목표 이익률(입력칸)과 실현 이익률(결과)이 갈리는 자리를 보려면 이것이 필요하다.
 const {
   calcRow, createRow, calcTotals, createDiscountRow, rowWithSelectedItem,
+  rowsForQuoteCategory,
 } = load(path.join(ROOT, 'app/quote/calc.ts'))
 const {
   inValidQuoteView, EXPIRY_TRACKED_STATUSES, quoteExpiry, isExpired,
@@ -358,6 +359,59 @@ console.log('\n── 판매가 모드: 품목을 바꾸면 손으로 적은 단
   const cheap = calcRow({ ...priced, manual_unit_price: 100000 }, RATES)
   eq('단가가 원가보다 낮으면 실현 이익률이 음수', cheap.realized_profit_rate < 0, true)
   eq('그 값', Number(cheap.realized_profit_rate.toFixed(1)), -33.4)
+}
+console.log('\n── 상단 분류를 바꾸면 줄은 어떻게 따라가나 ──')
+// 「분류 나누기」 토글을 걷고(2026-11-03) 모든 매출 줄이 제 분류를 갖는다.
+// 상단 분류를 바꾸면 **직접 바꾸지 않은 줄만** 따라간다.
+{
+  const RATES = { JPY: 8.49, USD: 1600 }
+  const base = (over) => calcRow({ ...createRow('TSE'), row_kind: 'price_list',
+    selectedItem: { id: 1, sheet_name: 'CMM', item_code: 'A-1', variant: '', item_name_jp: null,
+      model_jp: null, item_name_en: null, model_en: null, price_jpy: null, cost_jpy: 13900,
+      delivery_time: null, stock_quantity: null },
+    quantity: 1, tariff_rate: 1.13, ...over }, RATES)
+
+  eq('새 줄은 상단 분류를 달고 나온다', createRow('TSE').category, 'TSE')
+  eq('이익률도 그 분류의 기본값(TSE 60)', createRow('TSE').profit_rate, 60)
+
+  // ① 손대지 않은 줄 — 분류도 이익률도 따라간다.
+  const plain = base({})
+  const movedPlain = rowsForQuoteCategory([plain], 'SBS', null, RATES)[0]
+  eq('손대지 않은 줄은 새 분류로', movedPlain.category, 'SBS')
+  eq('이익률도 그 분류 기본값(SBS 26)', movedPlain.profit_rate, 26)
+
+  // ② 줄에서 분류를 직접 바꾼 줄 — 분류는 지키고 이익률만 따라간다.
+  const touched = base({ category: 'SBS', category_touched: true })
+  const movedTouched = rowsForQuoteCategory([touched], 'TSE', null, RATES)[0]
+  eq('직접 바꾼 줄의 분류는 그대로', movedTouched.category, 'SBS')
+  eq('이익률은 손대지 않았으므로 따라간다(TSE 60)', movedTouched.profit_rate, 60)
+
+  // ③ 이익률을 손으로 고친 줄 — 이익률은 지킨다(종전 규칙 그대로).
+  const margin = base({ profit_rate: 55, margin_touched: true })
+  const movedMargin = rowsForQuoteCategory([margin], 'SBS', null, RATES)[0]
+  eq('분류는 따라가고', movedMargin.category, 'SBS')
+  eq('손으로 고친 이익률은 지킨다', movedMargin.profit_rate, 55)
+
+  // ④ 저장된 내 설정(marginRate)이 분류 기본값보다 앞선다.
+  eq('내 설정 이익률이 앞선다', rowsForQuoteCategory([plain], 'SBS', 48, RATES)[0].profit_rate, 48)
+
+  // ⑤ 분류가 뜻 없는 줄(국내 구매·할인)에는 분류를 달지 않는다.
+  const dom = calcRow({ ...createRow('TSE'), row_kind: 'domestic', manual_cost_jpy: 1000 }, RATES)
+  eq('국내 구매 줄은 분류를 달지 않는다', rowsForQuoteCategory([dom], 'SBS', null, RATES)[0].category, null)
+  const disc = calcRow({ ...createDiscountRow(), manual_unit_price: 1000 }, RATES)
+  eq('할인 줄도 마찬가지', rowsForQuoteCategory([disc], 'SBS', null, RATES)[0].category, null)
+
+  // ⑥ 바뀔 것이 없으면 **같은 객체**를 돌려준다(쓸데없는 다시 그리기를 만들지 않는다).
+  const same = rowsForQuoteCategory([movedPlain], 'SBS', null, RATES)[0]
+  eq('바뀐 것이 없으면 줄을 새로 만들지 않는다', same === movedPlain, true)
+
+  // ⑦ 품목을 바꿔도 분류는 유지된다(초기화 대상이 아니다).
+  const item2 = { id: 2, sheet_name: 'CMM', item_code: 'B-2', variant: '', item_name_jp: null,
+    model_jp: null, item_name_en: null, model_en: null, price_jpy: null, cost_jpy: 20000,
+    delivery_time: null, stock_quantity: null }
+  const after = rowWithSelectedItem({ row: touched, item: item2, itemText: 'B', category: 'TSE', rates: RATES })
+  eq('품목을 바꿔도 줄 분류와 표시는 그대로', [after.category, after.category_touched], ['SBS', true])
+  eq('이익률은 그 줄 분류의 기본값으로 돌아간다(SBS 26)', after.profit_rate, 26)
 }
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
 process.exit(fails === 0 ? 0 : 1)

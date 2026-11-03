@@ -2,6 +2,7 @@
 
 import { defaultMarginOf } from '@/lib/quoteProfit'
 import { isBillableRow } from '@/lib/quoteDomestic'
+import { canSplitRowKind } from '@/lib/quoteCategories'
 import { DISCOUNT_LABELS } from './types'
 import { DEFAULT_CURRENCY, pickRate, toCurrency, type Rates } from '@/lib/quoteCurrency'
 import type { PriceItem, QuoteRow, ExpenseRow } from './types'
@@ -181,6 +182,37 @@ export function calcRow(row: QuoteRow, rates: Rates): QuoteRow {
 }
 
 /**
+ * 견적 분류를 바꿨을 때 줄들이 따라가는 규칙 — **순수 함수**(하네스가 그대로 돌린다).
+ *
+ *   · 분류   — 그 줄에서 **직접 바꾸지 않은 줄**(category_touched 가 아닌 줄)만 새 분류로.
+ *             직접 바꾼 줄은 그대로 둔다 — 사람이 고른 값을 상단 선택이 덮으면,
+ *             섞인 견적에서 손으로 맞춰 둔 줄이 조용히 틀어진다.
+ *   · 이익률 — 종전 규칙 그대로. 손대지 않은(margin_touched 가 아닌) **품목 줄**만
+ *             새 기본값으로 맞춘다. margin 을 주면 그 값이 분류 기본값보다 앞선다
+ *             (저장된 내 설정 — lib/quoteUserDefaults.ts).
+ *
+ * 분류가 뜻 없는 줄(국내 구매·할인)은 분류를 달지 않는다 — 통계에서 쓸 자리가 없다
+ * (lib/quoteCategories.ts 의 LINE_SPLIT_ROW_KINDS).
+ */
+export function rowsForQuoteCategory(
+  rows: readonly QuoteRow[],
+  category: string | null,
+  margin: number | null | undefined,
+  rates: Rates,
+): QuoteRow[] {
+  const nextMargin = margin ?? defaultMarginOf(category)
+  return rows.map(r => {
+    const nextCategory = !canSplitRowKind(r.row_kind)
+      ? null
+      : r.category_touched ? r.category : (category || null)
+    const marginable = r.row_kind === 'price_list' || r.row_kind === 'manual_jpy'
+    const nextProfit = marginable && !r.margin_touched ? nextMargin : r.profit_rate
+    if (nextCategory === r.category && nextProfit === r.profit_rate) return r
+    return calcRow({ ...r, category: nextCategory, profit_rate: nextProfit }, rates)
+  })
+}
+
+/**
  * 품목을 고른 뒤의 줄 — 화면·구성 모달이 함께 쓴다.
  *
  * ── **고른 순간 그 줄은 새 줄이 된다** ──────────────────────────────────
@@ -268,8 +300,10 @@ export function createRow(category?: string | null, defaults?: RowDefaults): Quo
     // 통화 — 엔으로 시작한다. 가격표 품목을 고르면 그 가격표의 통화로 바뀌고(useQuoteRows),
     // 수동입력 줄은 사람이 고른다.
     currency: DEFAULT_CURRENCY,
-    // 줄별 분류 — 기본은 비움(= 견적 분류를 따른다). 「분류 나누기」로 바꾼 줄만 값이 들어간다.
-    category: null,
+    // 줄 분류 — **상단에서 고른 견적 분류를 달고 나온다.** 2026-11-03 까지는 비워 두고
+    // 「분류 나누기」를 켠 줄만 값이 들어갔는데, 그 토글을 걷으면서 모든 매출 줄이 처음부터
+    // 자기 분류를 갖는다(비어 있으면 저장·통계가 견적 분류로 떨어지는 것은 그대로다).
+    category: category ?? null,
     // 장비 구성 묶음 — 기본은 비움. 장비 양식에서 고르거나 7단계 구성 모달이 채운다.
     group_kind: null,
   }
@@ -286,7 +320,8 @@ export function createManualJpyRow(category?: string | null, defaults?: RowDefau
 // 관세율은 **늘 1** 이다(쓰지 않는다는 뜻 — 화면에 관세 칸을 내지 않는다). 저장된 설정의
 // 관세는 이 줄에 넣지 않는다 — 넣으면 원화 원가에 관세가 곱해져 원가가 부풀어 오른다.
 export function createDomesticRow(category?: string | null, defaults?: RowDefaults): QuoteRow {
-  return { ...createRow(category, defaults), row_kind: 'domestic', tariff_rate: 1 }
+  // 분류는 달지 않는다 — 매출에 안 잡히는 줄이라 통계에서 쓸 자리가 없다(LINE_SPLIT_ROW_KINDS).
+  return { ...createRow(category, defaults), row_kind: 'domestic', tariff_rate: 1, category: null }
 }
 
 // 서비스비 행 — 품명 기본값 '서비스비'(사용자 수정 가능, PDF 에 그대로 나감).
@@ -298,7 +333,7 @@ export function createServiceRow(): QuoteRow {
 // 할인 행 — 라벨 기본값 'DISCOUNT'(사용자가 SPECIAL DISCOUNT 로 바꿀 수 있다).
 // 수량·이익률은 쓰지 않으므로 0 에서 시작한다.
 export function createDiscountRow(): QuoteRow {
-  return { ...createRow(), row_kind: 'discount', itemText: DISCOUNT_LABELS[0], quantity: 0, profit_rate: 0, tariff_rate: 0 }
+  return { ...createRow(), row_kind: 'discount', itemText: DISCOUNT_LABELS[0], quantity: 0, profit_rate: 0, tariff_rate: 0, category: null }
 }
 
 // 단가 × 인원 × 일수. 세 값 중 하나라도 바뀌면 이 함수를 통과시켜 재계산한다.

@@ -67,7 +67,6 @@ export type UseQuoteSubmitArgs = {
   formKind: string
   setCategory: React.Dispatch<React.SetStateAction<string>>
   setFormKind: React.Dispatch<React.SetStateAction<string>>
-  setLineSplitOn: React.Dispatch<React.SetStateAction<boolean>>
 
   rows: QuoteRow[]
   expenses: ExpenseRow[]
@@ -157,7 +156,7 @@ export function useQuoteSubmit({
   supabase, toast, router, engineer, initials, onBehalf,
   dateStr, dateDisplay, quoteNo, engineerName, engineerTel,
   company, receiver, finalRemarksForPDF, operatingReason, showSignature,
-  category, formKind, setCategory, setFormKind, setLineSplitOn,
+  category, formKind, setCategory, setFormKind,
   rows, expenses, rates,
   customerId, euCustomerId, isDealer, opportunityId,
   totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate,
@@ -315,7 +314,7 @@ export function useQuoteSubmit({
     setSearchQuery({}); setSearchResults({}); setSearchOpen({})
     setEditingProfitRate({}); setProfitRateInput({})
     // 분류·양식도 처음 상태로. 이어서 다음 견적을 쓸 때 다시 고르게 한다(다른 건일 수 있다).
-    setCategory(''); setFormKind(''); setLineSplitOn(false)
+    setCategory(''); setFormKind('')
     setOnBehalf(null)
     setErrors({})
     // 주소창의 프리필 파라미터를 지운다. 라우터를 거치지 않아 이 컴포넌트가 다시 마운트되지 않는다.
