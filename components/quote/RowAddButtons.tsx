@@ -17,7 +17,7 @@ import {
   createDiscountRow, createDomesticRow, createManualJpyRow, createRow, createServiceRow,
   type RowDefaults,
 } from '@/app/quote/calc'
-import { ROW_KIND_HINT, ROW_KIND_ORDER, rowKindAddLabel } from '@/lib/quoteRowKinds'
+import { ROW_KIND_HINT, ROW_KIND_LABEL, ROW_KIND_ORDER } from '@/lib/quoteRowKinds'
 
 export type RowAddButtonsProps = {
   setRows: React.Dispatch<React.SetStateAction<QuoteRow[]>>
@@ -57,7 +57,8 @@ export default function RowAddButtons({ setRows, serviceRow, discountRow, catego
   }
 
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+    // 폭이 340px 까지 좁아져도 **한 줄**이어야 한다(실측 기준). 여백 4 · 좌우 6 이 그 선이다.
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
       {ROW_KIND_ORDER.map(kind => {
         // 가격표 줄이 주버튼이다 — 열에 아홉은 이것으로 넣는다.
         const primary = kind === 'price_list'
@@ -69,7 +70,10 @@ export default function RowAddButtons({ setRows, serviceRow, discountRow, catego
             disabled={locked !== null}
             title={locked ?? ROW_KIND_HINT[kind]}
             style={{
-              height: 30, padding: '0 12px', borderRadius: 6, flex: primary ? '1 1 120px' : '0 1 auto',
+              // 다섯이 **한 줄**에 들어가야 한다(340px 폭 기준). 그래서 글자에서 「+」를 떼고
+              // 좌우 여백을 8 로 줄였다 — 「+ 」 다섯 개가 50px 쯤을 먹어 그것만으로 줄이
+              // 넘쳤다. 폭 규칙은 다섯이 같다(주버튼도 같다 — 색만 다르다).
+              height: 28, padding: '0 6px', borderRadius: 6, flex: '1 1 auto', minWidth: 0,
               background: primary && !locked ? '#234ea2' : '#fff',
               color: locked ? '#9ca3af' : primary ? '#fff' : '#234ea2',
               border: primary && !locked ? 'none' : '1px solid #ebebeb',
@@ -85,7 +89,7 @@ export default function RowAddButtons({ setRows, serviceRow, discountRow, catego
               e.currentTarget.style.background = primary ? '#234ea2' : '#fff'
             }}
           >
-            {rowKindAddLabel(kind)}
+            {ROW_KIND_LABEL[kind]}
           </button>
         )
       })}

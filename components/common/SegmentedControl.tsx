@@ -85,7 +85,7 @@ export default function SegmentedControl({ options, value, onChange, equal = fal
         <div style={{
           position: 'absolute', top: 3, bottom: 3, left: 0, width: ind.width,
           transform: `translateX(${ind.left}px)`,
-          background: '#f1f3f5', borderRadius: 6,
+          background: '#f3f4f6', borderRadius: 6,
           pointerEvents: 'none',
           transition: animate
             ? 'transform 200ms cubic-bezier(0.4, 0, 0.2, 1), width 200ms cubic-bezier(0.4, 0, 0.2, 1)'

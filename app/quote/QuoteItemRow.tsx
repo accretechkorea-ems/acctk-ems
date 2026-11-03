@@ -601,8 +601,10 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
           그 밖의 말을 쓸 수 없었다 — 이제 ▾ 로 둘을 고르고, 더블클릭하면 직접 쓴다.
           옛 견적은 저장된 글자를 그대로 되살리므로 그대로 보인다. */}
       {isDiscount && (
-        <div style={{ display: 'flex', gap: GAP, marginBottom: GAP }}>
-          <div ref={discountMenuRef} style={{ position: 'relative', flex: '0 0 150px', minWidth: 0 }}>
+        // 두 칸이 카드 안쪽 폭을 **반씩** 나눈다. 종전에는 이름 칸만 폭을 고정하고
+        // 금액 칸은 제 내용만큼만 넓어져(moneyCell 에 flex 가 없다) 오른쪽이 비었다.
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: GAP, marginBottom: GAP }}>
+          <div ref={discountMenuRef} style={{ position: 'relative', minWidth: 0 }}>
             {editingDiscountName ? (
               <label style={{ ...boxBase, height: H_CELL, cursor: 'text' }}>
                 <input
@@ -653,7 +655,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
             value: row.manual_unit_price,
             onChange: v => updateRow(row.id, 'manual_unit_price', parseInt(v) || 0),
             unit: '원',
-            placeholder: '깎을 금액',
+            placeholder: '할인 금액',
           })}
         </div>
       )}
