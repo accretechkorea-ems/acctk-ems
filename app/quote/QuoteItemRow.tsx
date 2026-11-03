@@ -40,19 +40,29 @@ const H_CELL = 32       // 2단 격자 칸 높이(구입가·수량·관세)
 const H_MODE = 28       // 3단 칸 높이(토글·이익률·판매단가) — 2단보다 한 급 낮다
 const GAP = 3           // 칸 사이·단 사이 여백
 
-/** 칸 테두리 상자 — 접두 글자와 입력을 한 테두리 안에 담는다. */
+/**
+ * 칸 테두리 상자 — 접두 글자와 입력을 한 테두리 안에 담는다.
+ *
+ * 테두리를 한 단 진하게(#ebebeb → #d1d5db) 하고 **줄 카드 바탕을 회색(#f8fafc)**, 칸만
+ * 흰색으로 둔다. 종전에는 카드도 칸도 흰색이고 테두리가 가장 연한 색이라, 칸이 몇 개이고
+ * 어디서 끝나는지 눈으로 세어야 했다. 이제 흰 칸이 회색 바탕 위에 떠 보인다.
+ */
 const boxBase: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, boxSizing: 'border-box',
-  border: '1px solid #ebebeb', borderRadius: 6, background: '#fff', padding: '0 8px',
+  border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', padding: '0 8px',
 }
 /** 칸 안 접두 글자 — 「품번」「품명」「¥」. 바깥 라벨을 대신한다. */
 const prefix: React.CSSProperties = {
   fontSize: 11, fontWeight: 700, color: '#9ca3af', flexShrink: 0, whiteSpace: 'nowrap',
 }
-/** 테두리를 상자에 넘긴 입력. */
+/**
+ * 테두리를 상자에 넘긴 입력 — **사람이 넣은 값**이라 가장 진하다(#111827 · 500).
+ * 접두어(prefix)와 단위는 한 단 흐리게 둬서, 한 칸 안에서 값이 먼저 읽힌다.
+ * placeholder 는 손대지 않는다 — 브라우저가 글자색의 절반 농도로 그린다(globals.css).
+ */
 const bare: React.CSSProperties = {
   flex: 1, minWidth: 0, width: '100%', border: 'none', outline: 'none', background: 'transparent',
-  fontSize: 12, color: '#111827', padding: 0, boxSizing: 'border-box',
+  fontSize: 12, fontWeight: 500, color: '#111827', padding: 0, boxSizing: 'border-box',
 }
 /** 스테퍼의 −/+ 단추. */
 const stepBtn: React.CSSProperties = {
@@ -74,8 +84,12 @@ const sumLine: React.CSSProperties = {
   fontSize: 11, color: '#9ca3af', lineHeight: 1.45,
   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
 }
-/** 요약 속 숫자 — 글자는 흐리고 숫자만 진하다. */
-const numStrong: React.CSSProperties = { color: '#111827', fontWeight: 600 }
+/**
+ * 요약 속 숫자 — 라벨(원가·공급가·부가세)은 흐리고 **숫자만** 진하다.
+ * 본문(#111827)보다 한 단 연한 #374151 을 쓴다 — 요약은 입력값이 아니라 결과라,
+ * 같은 농도면 눈이 어디를 봐야 할지 고르지 못한다.
+ */
+const numStrong: React.CSSProperties = { color: '#374151', fontWeight: 500 }
 
 // 품목 행 카드 1개(일반 품목 / 서비스비 공용).
 //
@@ -202,8 +216,8 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
         <>
           원가 <span style={numStrong}>₩{numKR(row.product_price)}</span>
           {' = '}{sym}<span style={numStrong}>{numKR(row.cost_price_jpy)}</span>
-          {' × '}{row.exchange_rate.toFixed(2)}
-          {' × '}{row.tariff_rate.toFixed(2)}
+          {' × '}<span style={numStrong}>{row.exchange_rate.toFixed(2)}</span>
+          {' × '}<span style={numStrong}>{row.tariff_rate.toFixed(2)}</span>
           {/* 구입가를 고친 줄 — 가격표에 적힌 값이 얼마였는지 같은 줄 끝에 남긴다. */}
           {costEdited && <span style={{ color: '#d1d5db' }}> (가격표 {sym}{listCostJpy == null ? '-' : numKR(listCostJpy)})</span>}
         </>
@@ -294,7 +308,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
   }) : null
 
   return (
-    <div style={{ background: '#ffffff', borderRadius: 8, padding: '6px 10px', marginBottom: 7, border: '1px solid #ebebeb' }}>
+    <div style={{ background: '#f8fafc', borderRadius: 8, padding: '6px 10px', marginBottom: 7, border: '1px solid #e5e7eb' }}>
       {/* ── 머리줄 — 번호 · 종류 · 통화 · 줄 추가 · 삭제 ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: GAP, height: 18 }}>
         {rowCount > 1 && (
@@ -457,7 +471,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
             (그 규칙의 뜻 그대로, 렌더는 ref 를 몰라야 한다). 그래서 이 칸만 손으로 적는다. */}
         {!isDiscount && (
           <label title={row.selectedItem ? '가격표 품명 — 고칠 수 있습니다' : undefined}
-            style={{ ...boxBase, height: H_FIELD, flex: '1 1 140px', cursor: 'text', background: '#f8fafc' }}>
+            style={{ ...boxBase, height: H_FIELD, flex: '1 1 140px', cursor: 'text' }}>
             <span style={prefix}>품명</span>
             <input ref={itemNameRef} className="q-bare" value={row.itemText}
               onChange={e => updateRow(row.id, 'itemText', e.target.value)}
@@ -569,14 +583,14 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
 
           <div title="수량" style={{ ...boxBase, height: H_CELL, padding: '0 5px' }}>
             <button onClick={() => updateRow(row.id, 'quantity', Math.max(1, row.quantity - 1))} style={stepBtn}>−</button>
-            <span style={stepVal}>{row.quantity}<span style={{ color: '#9ca3af' }}>개</span></span>
+            <span style={stepVal}>{row.quantity}<span style={{ color: '#9ca3af', fontWeight: 400 }}>개</span></span>
             <button onClick={() => updateRow(row.id, 'quantity', row.quantity + 1)} style={stepBtn}>+</button>
           </div>
 
           {!isDomestic && (
             <div title="관세율" style={{ ...boxBase, height: H_CELL, padding: '0 5px' }}>
               <button onClick={() => updateRow(row.id, 'tariff_rate', parseFloat((row.tariff_rate - 0.01).toFixed(2)))} style={stepBtn}>−</button>
-              <span style={stepVal}>×{row.tariff_rate.toFixed(2)}</span>
+              <span style={stepVal}><span style={{ color: '#9ca3af', fontWeight: 400 }}>×</span>{row.tariff_rate.toFixed(2)}</span>
               <button onClick={() => updateRow(row.id, 'tariff_rate', parseFloat((row.tariff_rate + 0.01).toFixed(2)))} style={stepBtn}>+</button>
             </div>
           )}
@@ -690,13 +704,14 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
             priceInputMode ? (
               <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }}>
                 실현 이익률{' '}
-                <b style={{ fontSize: 12, color: row.realized_profit_rate < 0 ? '#dc2626' : '#111827' }}>
+                <b className="num" style={{ marginLeft: 3, fontSize: 15, fontWeight: 700, color: row.realized_profit_rate < 0 ? '#dc2626' : '#111827' }}>
                   {row.realized_profit_rate.toFixed(1)}%
                 </b>
               </span>
             ) : (
+              /* 이 줄에서 사람이 가장 자주 보는 숫자다 — 한 급 크게(15px·700) 둔다. */
               <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }}>
-                판매단가 <b style={{ fontSize: 12, color: '#111827' }}>₩{numKR(row.unit_price)}</b>
+                판매단가 <b className="num" style={{ marginLeft: 3, fontSize: 15, fontWeight: 700, color: '#111827' }}>₩{numKR(row.unit_price)}</b>
               </span>
             )
           )}

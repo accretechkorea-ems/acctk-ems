@@ -22,12 +22,12 @@ import ProfitPanel from './ProfitPanel'
 import CustomerCard from '@/components/quote/CustomerCard'
 import PriceGuidePopup from '@/components/quote/PriceGuidePopup'
 import RowAddButtons from '@/components/quote/RowAddButtons'
+import Watermark from '@/components/quote/Watermark'
 import EquipConfigLauncher from '@/components/quote/equip/EquipConfigLauncher'
 import QuotePreviewPane from '@/components/quote/QuotePreviewPane'
 import ConfirmQuoteModal from '@/components/quote/ConfirmQuoteModal'
 import QuoteItemRow from './QuoteItemRow'
 import { useRecentSales } from '@/hooks/quote/useRecentSales'
-import { Z } from '@/lib/zIndex'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { defaultTermsFor, normalizeTerms, termKeysFor, type SetTerms, type Terms } from '@/lib/quoteTerms'
 import { defaultRemarksFor } from '@/lib/quoteRemarks'
@@ -870,11 +870,7 @@ function QuotePageInner() {
 
 
        <div style={{ position: 'relative', overflow: 'hidden' }}>
-            {[-1, 0, 1, 2].map(i => (
-              <div key={i} style={{ position: 'absolute', top: `${i * 140 + 60}px`, left: 0, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: Z.decor, transform: 'rotate(-20deg)', opacity: 0.05 }}>
-                <span style={{ fontSize: 42, fontWeight: 900, color: '#000', whiteSpace: 'nowrap' }}>{engineerName}</span>
-              </div>
-            ))}
+            <Watermark name={engineerName} rows={4} />
             <ProfitPanel rows={rows} rates={rates} rateMeta={rateMeta} rateLoading={rateLoading} onFetchRate={() => { void fetchRate({ force: true }) }} onRateChange={handleRateChange} usdReference={usdReference} onUseUsdReference={useUsdReference} category={category}
               savedDefaultsApplied={savedApplied && category !== ''}
               operatingReason={operatingReason} setOperatingReason={setOperatingReason} />
@@ -882,14 +878,8 @@ function QuotePageInner() {
 
           {/* 품목 */}
           <div onClick={() => showPriceGuide && setShowPriceGuide(false)} style={{ background: '#fff', borderRadius: 8, padding: '20px 20px', border: '1px solid #ebebeb', position: 'relative' }}>
-            {/* 워터마크 — 자체 overflow:hidden 컨테이너로 분리하여 팝업이 잘리지 않도록 */}
-            <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: Z.decor, borderRadius: 8 }}>
-              {Array.from({ length: 20 }, (_, i) => i).map(i => (
-                <div key={i} style={{ position: 'absolute', top: `${i * 140}px`, left: 0, right: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transform: 'rotate(-20deg)', opacity: 0.05 }}>
-                  <span style={{ fontSize: 42, fontWeight: 900, color: '#000', whiteSpace: 'nowrap' }}>{engineerName}</span>
-                </div>
-              ))}
-            </div>
+            {/* 워터마크 — 농도·크기·간격은 컴포넌트 한 곳에 있다(components/quote/Watermark.tsx). */}
+            <Watermark name={engineerName} rows={14} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
               <div style={{ width: 3, height: 16, background: '#234ea2', borderRadius: 6, flexShrink: 0 }} />
               <span style={{ fontWeight: 800, fontSize: 14, color: '#111827' }}>품목</span>
