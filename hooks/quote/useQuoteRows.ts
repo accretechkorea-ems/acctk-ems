@@ -27,8 +27,8 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ExpensePreset, ExpenseRow, PriceItem, QuoteRow } from '@/app/quote/types'
-import { calcExpense, calcRow, createExpenseRow, createRow } from '@/app/quote/calc'
-import { toCurrency, type Rates } from '@/lib/quoteCurrency'
+import { calcExpense, calcRow, rowWithSelectedItem, createExpenseRow, createRow } from '@/app/quote/calc'
+import { type Rates } from '@/lib/quoteCurrency'
 import { defaultMarginOf } from '@/lib/quoteProfit'
 import { canSplitRowKind, type QuoteCategory } from '@/lib/quoteCategories'
 import { canGroupRowKind, isEquipForm } from '@/lib/quoteForms'
@@ -44,6 +44,8 @@ export type UseQuoteRowsArgs = {
   terms: Terms
   setTerms: SetTerms
   /** 고를 수 있는 견적 분류(활성만). 줄별 분류 선택칸이 쓴다. */
+  /** 고른 견적 분류 — 품목을 바꿀 때 되돌릴 이익률 기본값이 여기서 나온다. */
+  category?: string | null
   categories: QuoteCategory[]
   /** 「분류 나누기」가 켜져 있는가. 꺼져 있으면 줄별 분류 선택칸을 그리지 않는다. */
   lineSplitOn: boolean
@@ -103,7 +105,7 @@ export type QuoteRowsActions = {
 }
 
 export function useQuoteRows({
-  supabase, rates, terms, setTerms, categories, lineSplitOn, formKind,
+  supabase, rates, terms, setTerms, category, categories, lineSplitOn, formKind,
 }: UseQuoteRowsArgs) {
   const [rows, setRows] = useState<QuoteRow[]>([createRow()])
   const [expensePresets, setExpensePresets] = useState<ExpensePreset[]>([])
@@ -135,13 +137,16 @@ export function useQuoteRows({
       if (r.id !== rowId) return r
       // 품목 선택 시점에 품명 칸을 1회 채운다(이후 itemText 는 순수 사용자 입력).
       // 무엇을 채우는지는 가격표(20/80)에 따라 다르다 — lib/priceItemText.ts 가 정한다.
-      const itemText = itemTextOnSelect(r.itemText, !!r.selectedItem, item)
-      // 구입가를 고쳐 둔 줄에 **다른 품목**을 고르면 그 값은 버린다(앞 품목의 값이다).
-      // 통화는 **가격표가 정한다** — 사람이 고르지 못한다(price_list.currency).
-      return calcRow({
-        ...r, selectedItem: item, itemText, partCode: item.item_code, cost_jpy_override: null,
-        currency: toCurrency(item.currency),
-      }, rates)
+      //
+      // 나머지(구입가 override 버리기·통화·판매가 모드 되돌리기)는 순수 함수가 한다 —
+      // 하네스가 그대로 돌릴 수 있게 app/quote/calc.ts 에 둔다.
+      return rowWithSelectedItem({
+        row: r,
+        item,
+        itemText: itemTextOnSelect(r.itemText, !!r.selectedItem, item),
+        category,
+        rates,
+      })
     }))
     setSearchOpen(prev => ({ ...prev, [rowId]: false }))
     setSearchQuery(prev => ({ ...prev, [rowId]: item.item_code }))
@@ -158,7 +163,7 @@ export function useQuoteRows({
     if (item.delivery_time && terms.delivery_schedule === DEFAULT_TERMS.delivery_schedule) {
       setTerms(prev => ({ ...prev, delivery_schedule: `발주 후 ${item.delivery_time}주` }))
     }
-  }, [rates, terms, setTerms])
+  }, [rates, terms, setTerms, category])
 
   const updateRow = useCallback((rowId: string, field: keyof QuoteRow, value: any) =>
     setRows(prev => prev.map(r => {

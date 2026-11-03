@@ -4,7 +4,7 @@ import { defaultMarginOf } from '@/lib/quoteProfit'
 import { isBillableRow } from '@/lib/quoteDomestic'
 import { DISCOUNT_LABELS } from './types'
 import { DEFAULT_CURRENCY, pickRate, toCurrency, type Rates } from '@/lib/quoteCurrency'
-import type { QuoteRow, ExpenseRow } from './types'
+import type { PriceItem, QuoteRow, ExpenseRow } from './types'
 
 /**
  * 실현 이익률 — 공급가와 원가로 다시 잡는다.
@@ -178,6 +178,51 @@ export function calcRow(row: QuoteRow, rates: Rates): QuoteRow {
     supply_price: 0, tax: 0,
     product_price: 0, profit: 0, realized_profit_rate: 0,
   }
+}
+
+/**
+ * 품목을 고른 뒤의 줄 — 화면·구성 모달이 함께 쓴다.
+ *
+ * ── 판매가 모드는 **그 품목에만 매인 값**이다 ────────────────────────────
+ *   판매가 모드의 단가는 사람이 그 품목을 보고 손으로 적은 금액이다(발주서가 먼저 온 건).
+ *   그 상태에서 다른 품목을 고르면 **앞 품목의 가격이 새 품목에 그대로 남아** 원가와 아무
+ *   관계 없는 단가가 조용히 따라다닌다 — 이익률이 90%로 뜨거나 음수가 되는데, 사람은
+ *   자기가 적은 값이라 틀렸다고 보지 않는다.
+ *   그래서 품목을 고르는 순간 **이익률 모드로 되돌리고** 단가를 버리고, 이익률은 그 줄의
+ *   분류 기본값에서 다시 시작한다(줄 분류가 있으면 그것이 견적 분류보다 앞선다).
+ *   사람이 고쳤다는 표시(margin_touched)도 지운다 — 새 품목에는 아직 손댄 적이 없다.
+ *
+ *   **수량·관세·이익률만 바꾸는 것은 그대로다** — 품목이 그대로이기 때문이다.
+ *   이익률 모드에서 품목을 고르는 것도 그대로다(버릴 단가가 없다).
+ */
+export function rowWithSelectedItem(args: {
+  row: QuoteRow
+  item: PriceItem
+  /** 품명 칸에 채울 글자 — 가격표(20/80)에 따라 다르다(lib/priceItemText.ts 가 정한다). */
+  itemText: string
+  /** 견적 분류. 줄 분류(row.category)가 있으면 그것이 앞선다. */
+  category?: string | null
+  rates: Rates
+}): QuoteRow {
+  const { row, item, itemText, category, rates } = args
+  const base: QuoteRow = {
+    ...row,
+    selectedItem: item,
+    itemText,
+    partCode: item.item_code,
+    // 구입가를 고쳐 둔 줄에 **다른 품목**을 고르면 그 값은 버린다(앞 품목의 값이다).
+    cost_jpy_override: null,
+    // 통화는 **가격표가 정한다** — 사람이 고르지 못한다(price_list.currency).
+    currency: toCurrency(item.currency),
+  }
+  if (row.price_mode !== 'price') return calcRow(base, rates)
+  return calcRow({
+    ...base,
+    price_mode: 'rate',
+    manual_unit_price: 0,
+    profit_rate: defaultMarginOf(row.category ?? category ?? null),
+    margin_touched: false,
+  }, rates)
 }
 
 /**

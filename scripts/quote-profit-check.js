@@ -36,7 +36,9 @@ const {
   minOperatingMarginOf, isBelowMinOperating, belowMinOperatingMessage,
 } = load(path.join(ROOT, 'lib/quoteProfit.ts'))
 // 줄 계산 — 목표 이익률(입력칸)과 실현 이익률(결과)이 갈리는 자리를 보려면 이것이 필요하다.
-const { calcRow, createRow, calcTotals, createDiscountRow } = load(path.join(ROOT, 'app/quote/calc.ts'))
+const {
+  calcRow, createRow, calcTotals, createDiscountRow, rowWithSelectedItem,
+} = load(path.join(ROOT, 'app/quote/calc.ts'))
 const {
   inValidQuoteView, EXPIRY_TRACKED_STATUSES, quoteExpiry, isExpired,
 } = load(path.join(ROOT, 'lib/quoteStatus.ts'))
@@ -289,6 +291,58 @@ console.log('\n── 목표 이익률 vs 실현 이익률 ──')
   eq('합계 공급가는 할인 반영 후', totals.totalSupply, 1350000 - 350000)
   eq('합계 이익률의 분모도 그 값', Number(totals.totalProfitRate.toFixed(1)),
     Number((((1000000 - 400057) / 1000000) * 100).toFixed(1)))
+}
+console.log('\n── 판매가 모드: 품목을 바꾸면 손으로 적은 단가를 버린다 ──')
+// 판매가 모드의 단가는 **그 품목을 보고 적은 금액**이다. 다른 품목을 골랐는데 그 값이
+// 남아 있으면 원가와 아무 관계 없는 단가가 조용히 따라다닌다.
+{
+  const RATES = { JPY: 8.49, USD: 1600 }
+  const item = (code, cost) => ({ id: code.length, sheet_name: 'CMM', item_code: code, variant: '',
+    item_name_jp: null, model_jp: null, item_name_en: null, model_en: null,
+    price_jpy: null, cost_jpy: cost, delivery_time: null, stock_quantity: null })
+
+  // 판매가 모드로 단가 450,000 을 적어 둔 줄(앞 품목 구입가 ¥13,900).
+  const priced = calcRow({ ...createRow(), row_kind: 'price_list', selectedItem: item('A-1', 13900),
+    price_mode: 'price', manual_unit_price: 450000, quantity: 3, tariff_rate: 1.13,
+    profit_rate: 55, margin_touched: true }, RATES)
+  eq('되돌리기 전 — 판매가 모드·단가 450,000', [priced.price_mode, priced.unit_price], ['price', 450000])
+
+  // 다른 품목(구입가 ¥20,000)을 고른다 → 이익률 모드로 돌아가고 단가를 버린다.
+  const next = rowWithSelectedItem({ row: priced, item: item('B-2', 20000), itemText: 'B 품목', category: 'TSE', rates: RATES })
+  eq('이익률 모드로 되돌린다', next.price_mode, 'rate')
+  eq('손으로 적은 단가를 버린다', next.manual_unit_price, 0)
+  eq('이익률은 **분류 기본값**에서 다시 시작(TSE 60)', next.profit_rate, 60)
+  eq('사람이 고쳤다는 표시도 지운다', next.margin_touched, false)
+  eq('품목·품번·품명이 새 것이다', [next.selectedItem.item_code, next.partCode, next.itemText], ['B-2', 'B-2', 'B 품목'])
+  // 새 단가 = 원가(20,000 × 8.49 × 1.13 = 191,826) ÷ (1−0.6) → 천원 올림
+  eq('단가는 새 품목 원가에서 다시 난다', next.unit_price, Math.ceil((20000 * 8.49 * 1.13 / 0.4) / 1000) * 1000)
+  eq('앞 품목의 450,000 은 어디에도 남지 않는다', next.unit_price !== 450000, true)
+
+  // 줄 분류가 있으면 그것이 견적 분류보다 앞선다(SBS 26).
+  const sbs = rowWithSelectedItem({ row: { ...priced, category: 'SBS' }, item: item('C-3', 10000), itemText: 'C', category: 'TSE', rates: RATES })
+  eq('줄 분류가 견적 분류보다 앞선다(SBS 26)', sbs.profit_rate, 26)
+
+  // 구입가를 고쳐 둔 값도 함께 버린다(앞 품목의 값이다).
+  const edited = rowWithSelectedItem({ row: { ...priced, cost_jpy_override: 99999 }, item: item('B-2', 20000), itemText: 'B', category: 'TSE', rates: RATES })
+  eq('고쳐 둔 구입가도 버린다', [edited.cost_jpy_override, edited.cost_price_jpy], [null, 20000])
+
+  // **이익률 모드**에서 품목을 고르는 것은 종전 그대로다 — 버릴 단가가 없다.
+  const rateRow = calcRow({ ...createRow(), row_kind: 'price_list', selectedItem: item('A-1', 13900),
+    profit_rate: 45, margin_touched: true, quantity: 1, tariff_rate: 1.13 }, RATES)
+  const rateNext = rowWithSelectedItem({ row: rateRow, item: item('B-2', 20000), itemText: 'B', category: 'TSE', rates: RATES })
+  eq('이익률 모드는 사람이 고친 이익률을 지키고 표시도 남긴다',
+    [rateNext.price_mode, rateNext.profit_rate, rateNext.margin_touched], ['rate', 45, true])
+
+  // **같은 품목에서 수량·관세만 바꾸는 것**은 판매가 모드를 그대로 둔다.
+  const qty5 = calcRow({ ...priced, quantity: 5 }, RATES)
+  eq('수량만 바꾸면 판매가 모드·단가 유지', [qty5.price_mode, qty5.unit_price, qty5.supply_price], ['price', 450000, 2250000])
+  const tariff = calcRow({ ...priced, tariff_rate: 1.2 }, RATES)
+  eq('관세만 바꿔도 단가 유지(원가만 바뀐다)', [tariff.price_mode, tariff.unit_price], ['price', 450000])
+
+  // 원가보다 싸게 판 줄 — 실현 이익률이 음수다(결과 줄이 붉어지는 조건).
+  const cheap = calcRow({ ...priced, manual_unit_price: 100000 }, RATES)
+  eq('단가가 원가보다 낮으면 실현 이익률이 음수', cheap.realized_profit_rate < 0, true)
+  eq('그 값', Number(cheap.realized_profit_rate.toFixed(1)), -33.4)
 }
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
 process.exit(fails === 0 ? 0 : 1)

@@ -181,6 +181,13 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
     focusItemName()
   })
 
+  /**
+   * **원가보다 싸게 판 줄인가.** 판매가 모드에서 단가를 손으로 적다 보면 원가 아래로
+   * 내려가는 일이 있는데, 금액만 보고는 알 수 없다(숫자가 커서 커 보인다).
+   * 실현 이익률이 음수라는 뜻이고, 그때만 결과 줄이 붉어진다.
+   */
+  const belowCost = row.supply_price > 0 && row.realized_profit_rate < 0
+
   // ── 결과 한 줄 ────────────────────────────────────────────────────
   //
   //   판매단가 ₩227,000 · 공급가 ₩681,000 (× 3)
@@ -202,6 +209,14 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
     return (
       <>
         판매단가 <b style={resultNum}>₩{numKR(row.unit_price)}</b>
+        {/* 판매가 모드에만 **실현 이익률**을 붙인다 — 이익률 모드는 목표값이 바로 위
+            토글 옆 칸에 있어 같은 수를 두 번 적는 꼴이 된다. 판매가 모드에는 그 칸이
+            없어(₩ 입력으로 바뀐다) 이 줄이 이익률을 볼 수 있는 유일한 자리다. */}
+        {priceInputMode && (
+          <span style={{ color: belowCost ? '#dc2626' : '#9ca3af', fontWeight: belowCost ? 700 : 400 }}>
+            {' '}({row.realized_profit_rate.toFixed(1)}%)
+          </span>
+        )}
         {row.quantity > 1 && (
           <>
             <span style={{ color: '#d1d5db' }}> · </span>
@@ -658,8 +673,14 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
 
       {/* ── 결과 줄 — 그 줄이 얼마가 되는가. 왼쪽에는 「최근 판매」(같은 고객사에 마지막으로
           판 단가)를 둔다 — 단가를 정할 때 가장 먼저 보는 값이라 결과 바로 옆이 제자리다. ── */}
-      {(result || mySale) && (
+      {(result || mySale || belowCost) && (
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 3, minWidth: 0 }}>
+          {/* 원가 아래로 판 줄 — 오른쪽 %만 붉히면 작아서 지나친다. 왼쪽에 말로 적는다. */}
+          {belowCost && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              원가보다 낮음
+            </span>
+          )}
           {mySale && (
             <span title={`${mySale.quoteNumber} · ${mySale.quoteDate}`}
               style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
