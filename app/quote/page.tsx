@@ -10,6 +10,7 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import { useQuoteCustomer } from '@/hooks/quote/useQuoteCustomer'
 import { useQuoteCategories, activeQuoteCategories } from '@/lib/quoteCategories'
 import { useQuoteRows } from '@/hooks/quote/useQuoteRows'
+import { useFocusAnchor } from '@/hooks/useFocusAnchor'
 import { useQuotePrefill } from '@/hooks/quote/useQuotePrefill'
 import { useQuoteDraftSync } from '@/hooks/quote/useQuoteDraftSync'
 import { useQuoteSubmit } from '@/hooks/quote/useQuoteSubmit'
@@ -160,6 +161,7 @@ function QuotePageInner() {
   // termsOpen 이 꺼져 있으면 **기본값으로 그린다**(아래 pdfTerms). 체크를 풀면 적어 둔 값도 버린다
   // — 「닫아 두었는데 저장은 바뀐 값으로 됐다」가 되지 않게 한다.
   const [termsOpen, setTermsOpen] = useState(false)
+
   // 비고와 같은 규칙이다 — **손댄 값만** 상태로 들고(null = 손대지 않음), 손대지 않았으면
   // 고른 양식의 기본 문구를 그대로 본다. 그래서 양식을 바꾸면 기본값이 저절로 따라온다.
   const [termsDraft, setTermsDraft] = useState<Terms | null>(null)
@@ -182,6 +184,10 @@ function QuotePageInner() {
     clearAllRowCategories, applyCategoryDefaults, applySavedTariff,
     ctx: rowsCtx, actions: rowsActions,
   } = useQuoteRows({ supabase, rates, terms, setTerms, category, rowDefaults: category ? savedDefaults : null, categories: activeCategories, lineSplitOn, formKind })
+
+  // 줄이 늘거나 줄거나 설명 줄이 붙으면 그 위쪽 높이가 바뀐다 — 그때 **치고 있던 칸이**
+  // 화면에서 같은 자리에 남도록 스크롤을 보정한다(hooks/useFocusAnchor.ts).
+  useFocusAnchor([rows])
 
   // 고객사·대리점·E.U·영업기회 — 검색·선택·해제. 상태·함수를 그대로 옮긴 훅이다.
   // **이 자리에서 부른다** — 훅 안의 useOutsideClick·useListKeyboard 네 개가 원본에서 첫 effect 들이었다.

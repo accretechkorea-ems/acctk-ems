@@ -65,8 +65,14 @@ export default function SegmentedControl({ options, value, onChange, equal = fal
     }
   }, [ind, animate])
 
+  // ── 색 ────────────────────────────────────────────────────────────────
+  //   바탕은 **흰색**이고 다른 입력 칸과 같은 테두리를 두른다(#d1d5db). 고른 쪽만
+  //   연회색으로 눌린 것처럼 칠한다. 2026-11-03 에 뒤집었다 — 종전에는 트랙이 회색이고
+  //   고른 쪽이 흰색이었는데, 흰 칸들 사이에 회색 덩어리가 끼면 그 토글이 입력 칸이
+  //   아니라 **꺼진 버튼**처럼 보였다(견적 줄의 「이익률 | 판매가」가 그랬다).
   const containerStyle: React.CSSProperties = {
-    position: 'relative', background: '#f5f5f5', borderRadius: 8, padding: 3, gap: 0,
+    position: 'relative', background: '#ffffff', border: '1px solid #d1d5db',
+    boxSizing: 'border-box', borderRadius: 8, padding: 3, gap: 0,
     ...(equal
       ? { display: 'grid', gridTemplateColumns: `repeat(${opts.length}, minmax(${minItemWidth != null ? `${minItemWidth}px` : 0}, 1fr))` }
       : { display: 'inline-flex' }),
@@ -79,7 +85,7 @@ export default function SegmentedControl({ options, value, onChange, equal = fal
         <div style={{
           position: 'absolute', top: 3, bottom: 3, left: 0, width: ind.width,
           transform: `translateX(${ind.left}px)`,
-          background: '#ffffff', borderRadius: 6, boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+          background: '#f1f3f5', borderRadius: 6,
           pointerEvents: 'none',
           transition: animate
             ? 'transform 200ms cubic-bezier(0.4, 0, 0.2, 1), width 200ms cubic-bezier(0.4, 0, 0.2, 1)'
@@ -96,8 +102,9 @@ export default function SegmentedControl({ options, value, onChange, equal = fal
               padding: equal ? 0 : '0 12px', textAlign: 'center', borderRadius: 6,
               fontSize: 13, background: 'transparent', border: 'none', whiteSpace: 'nowrap',
               cursor: o.disabled ? 'not-allowed' : 'pointer',
-              color: o.disabled ? '#d1d5db' : active ? '#111827' : '#6b7280',
-              fontWeight: active ? 600 : 400,
+              color: o.disabled ? '#d1d5db' : active ? '#111827' : '#9ca3af',
+              // 고른 쪽은 **굵게** — 바탕 차이(흰색 ↔ 연회색)만으로는 약하다.
+              fontWeight: active ? 700 : 500,
               transition: 'color 200ms',
             }}>
             {o.label}

@@ -193,6 +193,11 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
    * 실현 이익률이 음수라는 뜻이고, 그때만 결과 줄이 붉어진다.
    */
   const belowCost = row.supply_price > 0 && row.realized_profit_rate < 0
+  /**
+   * 이 줄에 **무엇이든 들어 있나** — 품목·구입가·금액 중 하나.
+   * 결과 줄을 낼지 가르는 기준이다(아래 result 주석). 아직 아무것도 아닌 줄은 조용히 둔다.
+   */
+  const hasContent = !!row.selectedItem || row.manual_cost_jpy > 0 || row.manual_unit_price > 0 || row.unit_price > 0
 
   // ── 결과 한 줄 ────────────────────────────────────────────────────
   //
@@ -210,8 +215,17 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
         ? <>할인 <b style={resultNum}>−₩{numKR(Math.abs(row.supply_price))}</b></>
         : null
     }
-    if (row.supply_price <= 0) return null
-    if (isService) return <>공급가 <b style={resultNum}>₩{numKR(row.supply_price)}</b></>
+    if (isService) {
+      return row.supply_price > 0 ? <>공급가 <b style={resultNum}>₩{numKR(row.supply_price)}</b></> : null
+    }
+    // **판매단가가 아직 없어도 줄 자리는 지킨다.** 판매가 모드로 바꾸면 사람이 단가를
+    // 적기 전까지 공급가가 0 이라, 결과 줄이 사라지면서 카드가 20px 쯤 줄어든다 —
+    // 그 순간 아래 줄들이 위로 올라오고, 치려던 칸이 눈앞에서 비켜난다.
+    // 품목도 금액도 없는 **아직 아무것도 아닌 줄**에만 줄을 내지 않는다(그때는 어느
+    // 모드에서도 안 내므로 모드를 오가도 높이가 같다).
+    if (row.supply_price <= 0) {
+      return hasContent ? <>판매단가 <span style={{ ...resultNum, color: '#9ca3af' }}>—</span></> : null
+    }
     return (
       <>
         판매단가 <b style={resultNum}>₩{numKR(row.unit_price)}</b>
@@ -469,21 +483,22 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
       {/* 상세 줄 — 품명 아래에 그대로 붙는다(견적서 PDF 에 나가는 글자다). */}
       {row.subLines.length > 0 && (
         <div style={{ marginBottom: GAP }}>
+          {/* 삭제는 **칸 안** 오른쪽 끝이다. 바깥에 ✕ 를 두면 그만큼 칸이 짧아지는데,
+              이 줄은 견적서에 그대로 나가는 글이라 폭이 가장 아쉬운 자리다. */}
           {row.subLines.map((line, li) => (
-            <div key={li} style={{ display: 'flex', alignItems: 'center', gap: GAP, marginBottom: 3 }}>
-              <label style={{ ...boxBase, height: H_SUB, flex: 1, cursor: 'text' }}>
-                <span style={prefix}>·</span>
-                <input className="q-bare" value={line} onChange={e => updateSubLine(row.id, li, e.target.value)}
-                  placeholder="예: - Leaf Spring 교체" style={{ ...bare, fontSize: 11 }} />
-              </label>
+            <label key={li} style={{ ...boxBase, height: H_SUB, cursor: 'text', marginBottom: 3, paddingRight: 2 }}>
+              <span style={prefix}>·</span>
+              <input className="q-bare" value={line} onChange={e => updateSubLine(row.id, li, e.target.value)}
+                placeholder="예: - Leaf Spring 교체" style={{ ...bare, fontSize: 11 }} />
               <button onClick={() => removeSubLine(row.id, li)}
-                title="상세 줄 삭제"
-                style={{ width: 18, height: 18, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                onMouseEnter={e => (e.currentTarget.style.color = '#dc2626')}
+                title="이 설명 줄 지우기"
+                // 누르는 자리는 24px 로 넉넉히 두고, 보이는 아이콘만 작다.
+                style={{ width: 24, height: 24, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'color 0.15s ease' }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#6b7280')}
                 onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12" /></svg>
               </button>
-            </div>
+            </label>
           ))}
         </div>
       )}

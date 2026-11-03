@@ -323,7 +323,14 @@ export default function ProfitPanel({
       </div>
       <div style={{ padding: '12px 16px' }}>
         {rows.map((r, i) => {
-          if (r.supply_price <= 0) return null
+          // **판매가가 아직 없는 품목도 자리를 지킨다.** 종전에는 공급가 0 인 줄을 걸러
+          // 냈는데, 판매가 모드로 바꾸는 순간(단가를 적기 전) 그 품목이 패널에서 통째로
+          // 사라져 아래 합계가 위로 솟았다 — 숫자를 치던 사람 눈앞에서 화면이 뛴다.
+          // 품목도 금액도 없는 줄은 종전처럼 내지 않는다(합계에는 어느 쪽이든 0 이다).
+          const waiting = r.supply_price <= 0
+          const hasContent = !!r.selectedItem || r.manual_cost_jpy > 0 || r.manual_unit_price > 0
+            || (r.row_kind === 'service' && r.expenses.length > 0)
+          if (waiting && !hasContent) return null
           const expr = costExpr(r)
           // 국내조달품은 마진이 없는 자사 부담 항목이라 이익 색상 규칙에서 제외한다(중립색).
           const profitColor = r.row_kind === 'domestic' ? '#6b7280' : (r.profit >= 0 ? '#16a34a' : '#dc2626')
@@ -336,31 +343,42 @@ export default function ProfitPanel({
               <span style={{ fontSize: 11, color: '#111827', fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemLabel(r)}</span>
             </div>
             {/* 1행 — 원가가 어떻게 나왔고 얼마가 남나. */}
-            {/* 1행 — 넘치면 **식만** 줄인다. 매출이익은 이 줄에서 가장 중요한 값이라
-                끝까지 남겨야 한다(원가보다 싸게 판 줄의 「(-24364.8%)」가 잘리면 그 줄이
-                멀쩡해 보인다). 실현 이익률은 소수 한 자리로 끊는다. */}
-            <div className="num" style={itemLine}>
-              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {expr}
-                <span style={{ color: '#d1d5db' }}> = </span>
-                <span style={{ color: '#374151', fontWeight: 500 }}>₩{numKR(r.product_price)}</span>
-                <span style={{ color: '#9ca3af' }}> (원가)</span>
-              </span>
-              <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-                <span style={{ color: '#d1d5db' }}> · </span>
-                매출이익{' '}
-                <span style={{ color: profitColor, fontWeight: 500 }}>₩{numKR(r.profit)}</span>
-                {/* **실현** 이익률(매출이익 ÷ 공급가)이다 — 이익률 칸의 목표가 아니다. */}
-                <span style={{ color: profitColor }}> ({r.realized_profit_rate.toFixed(1)}%)</span>
-              </span>
-            </div>
-            {/* 2행 — 얼마에 몇 개를 파나. 결과(공급가)만 본문색으로 굵다. */}
-            <div className="num" style={itemLine}>
-              ₩{numKR(r.unit_price)}
-              <span style={{ color: '#d1d5db' }}> × </span>{r.quantity}
-              <span style={{ color: '#d1d5db' }}> = </span>
-              <span style={{ color: '#111827', fontWeight: 700 }}>₩{numKR(r.supply_price)}</span>
-            </div>
+            {waiting ? (
+              // 글자는 한 줄이되 **높이는 아래 두 줄과 같다**(minHeight). 그래야 판매가를
+              // 적는 순간 이 칸이 두 줄로 늘어나면서 패널이 솟지 않는다 — 실측에서 이
+              // 1줄/2줄 차이가 19px 였고, 그만큼 화면이 뛰었다.
+              <div style={{ ...itemLine, minHeight: 'calc(2 * 1.6em)', alignItems: 'center' }}>
+                <span style={{ color: '#9ca3af' }}>판매가 미입력</span>
+              </div>
+            ) : (
+              <>
+                {/* 1행 — 넘치면 **식만** 줄인다. 매출이익은 이 줄에서 가장 중요한 값이라
+                    끝까지 남겨야 한다(원가보다 싸게 판 줄의 「(-24364.8%)」가 잘리면 그 줄이
+                    멀쩡해 보인다). 실현 이익률은 소수 한 자리로 끊는다. */}
+                <div className="num" style={itemLine}>
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {expr}
+                    <span style={{ color: '#d1d5db' }}> = </span>
+                    <span style={{ color: '#374151', fontWeight: 500 }}>₩{numKR(r.product_price)}</span>
+                    <span style={{ color: '#9ca3af' }}> (원가)</span>
+                  </span>
+                  <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    <span style={{ color: '#d1d5db' }}> · </span>
+                    매출이익{' '}
+                    <span style={{ color: profitColor, fontWeight: 500 }}>₩{numKR(r.profit)}</span>
+                    {/* **실현** 이익률(매출이익 ÷ 공급가)이다 — 이익률 칸의 목표가 아니다. */}
+                    <span style={{ color: profitColor }}> ({r.realized_profit_rate.toFixed(1)}%)</span>
+                  </span>
+                </div>
+                {/* 2행 — 얼마에 몇 개를 파나. 결과(공급가)만 본문색으로 굵다. */}
+                <div className="num" style={itemLine}>
+                  ₩{numKR(r.unit_price)}
+                  <span style={{ color: '#d1d5db' }}> × </span>{r.quantity}
+                  <span style={{ color: '#d1d5db' }}> = </span>
+                  <span style={{ color: '#111827', fontWeight: 700 }}>₩{numKR(r.supply_price)}</span>
+                </div>
+              </>
+            )}
           </div>
           )
         })}
