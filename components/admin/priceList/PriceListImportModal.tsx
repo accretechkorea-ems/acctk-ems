@@ -55,11 +55,16 @@ export default function PriceListImportModal({ onClose, canEdit }: PriceListImpo
 
   const handleApply = async () => {
     const names = c.planned.map(s => s.parse.sheetName)
+    // 통화가 엔이 아닌 시트 — 금액의 뜻이 다르므로 등록 전에 이름을 적어 보여 준다.
+    const foreign = c.planned.filter(s => s.parse.currency !== 'JPY')
     const ok = await confirmDialog({
       title: '가격표를 등록할까요?',
       message:
         `${c.line} Price List · 시트 ${names.length}개 · ${num(c.totals.registered)}건을 등록합니다.\n`
         + `${names.join(' / ')}\n\n`
+        + (foreign.length > 0
+          ? `통화: ${foreign.map(s => `${s.parse.sheetName} = ${s.parse.currency}`).join(' / ')} — 나머지 시트는 JPY 입니다.\n\n`
+          : '')
         + '같은 품번은 덮어쓰고, 파일에 없는 품목은 그대로 남습니다.\n'
         + '시트마다 따로 적용되므로 한 시트가 실패해도 나머지는 그대로 들어갑니다.\n'
         + '지난 견적의 금액은 바뀌지 않습니다.',

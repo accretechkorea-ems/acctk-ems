@@ -11,6 +11,7 @@
 import { useState } from 'react'
 import { BORDER, DANGER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT } from '@/components/common/ui'
 import { kindOf } from '@/lib/priceListKinds'
+import { CURRENCY_LABEL, CURRENCY_SYMBOL } from '@/lib/quoteCurrency'
 import type { SheetPlan } from './priceListImport'
 import type { SheetOutcome } from './usePriceListImport'
 
@@ -70,7 +71,15 @@ export default function PriceListSheetTable({ sheets, outcomes }: PriceListSheet
                 <div style={{ fontSize: 11, fontWeight: 500, color: FAINT, marginTop: 2 }}>
                   {p.headerRow > 0 ? `머리글 ${p.headerRow}행` : '머리글 없음'}
                   {s.bytes > 0 ? ` · ${num(Math.round(s.bytes / 1024))}KB` : ''}
+                  {` · 통화 ${p.currency}`}
                 </div>
+                {/* 달러 시트 — 금액의 뜻이 다른 시트라 한 번 더 알린다. 통화는 **시트 이름**이
+                    정한다(lib/priceListKinds.ts) — 파일 안에 통화를 적는 칸은 없다. */}
+                {p.currency !== 'JPY' && (
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#234ea2', marginTop: 2 }}>
+                    {CURRENCY_SYMBOL[p.currency]} {CURRENCY_LABEL[p.currency]} 가격표 — 정가·구입가를 달러로 읽습니다
+                  </div>
+                )}
                 {/* 아는 시트 이름이 아니면 견적 검색의 20/80 필터에 걸리지 않는다 — 등록은 되지만 알려 준다. */}
                 {s.willImport && kindOf(p.sheetName) === null && (
                   <div style={{ fontSize: 11, fontWeight: 500, color: SUB, marginTop: 2 }}>

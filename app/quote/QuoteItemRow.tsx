@@ -11,7 +11,7 @@ import { canSplitRowKind } from '@/lib/quoteCategories'
 import { GROUP_KINDS, GROUP_LABELS, canGroupRowKind, isGeneral20Form } from '@/lib/quoteForms'
 import { numKR } from './format'
 import { costOf } from './calc'
-import { CURRENCIES, CURRENCY_LABEL, CURRENCY_SYMBOL, type Currency } from '@/lib/quoteCurrency'
+import { CURRENCIES, CURRENCY_LABEL, CURRENCY_SYMBOL, toCurrency, type Currency } from '@/lib/quoteCurrency'
 import { DISCOUNT_LABELS } from './types'
 import { inp } from './styles'
 import ExpenseSection from './ExpenseSection'
@@ -235,7 +235,12 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
                     <span style={{ marginLeft: 6, color: '#6b7280' }}>({item.model_jp})</span>
                   </div>
                   <div style={{ color: '#9ca3af', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span>정가: ¥{item.price_jpy?.toLocaleString()} / 구입가: ¥{item.cost_jpy?.toLocaleString()}</span>
+                    {/* 후보의 금액 — **그 가격표 줄의 통화**로 적는다(줄이 고른 통화가 아니다).
+                        달러 가격표(SBS-USD)가 섞여 있어, 기호 없이 숫자만 보면 150배를 잘못 읽는다. */}
+                    {(() => {
+                      const isym = CURRENCY_SYMBOL[toCurrency(item.currency)]
+                      return <span>정가: {isym}{item.price_jpy?.toLocaleString()} / 구입가: {isym}{item.cost_jpy?.toLocaleString()}</span>
+                    })()}
                     {/* 최근 판매 — 같은 고객사에 마지막으로 판 단가. 없으면 아무것도 내지 않는다. */}
                     {(() => {
                       const sale = recentSale(item.id, item.item_code)

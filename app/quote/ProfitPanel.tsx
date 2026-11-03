@@ -5,9 +5,10 @@ import type { QuoteRow, RateMeta } from './types'
 import { CURRENCY_SYMBOL, type Currency, type Rates } from '@/lib/quoteCurrency'
 import { RATE_SOURCE } from '@/lib/exchangeRate'
 import { calcTotals } from './calc'
+import { isBillableRow } from '@/lib/quoteDomestic'
 import { numKR } from './format'
 import {
-  belowMinOperatingMessage, isBelowMinOperating, minOperatingMarginOf, profitBreakdown,
+  belowMinOperatingMessage, isBelowMinOperating, minOperatingMarginOf, profitBreakdownOfLines,
 } from '@/lib/quoteProfit'
 
 export type ProfitPanelProps = {
@@ -102,8 +103,27 @@ export default function ProfitPanel({
   // 할인 금액(음수). calcTotals 는 건드리지 않고 여기서만 모아 표시용으로 쓴다.
   const discountAmt = rows.filter(r => r.row_kind === 'discount').reduce((s, r) => s + r.supply_price, 0)
   // 판관비·영업이익 — 분류 규칙(lib/quoteProfit.ts)으로 계산한 **표시용** 값이다.
-  const breakdown = profitBreakdown(totalSupply, totalProduct, category)
+  //
+  // **줄별 분류로 안분한다**(혼합 견적 — TSE + SBS). 줄에 분류가 없으면 견적 분류를 따르므로
+  // 분류를 나누지 않은 견적은 종전과 한 원도 다르지 않다. 매출·원가 **합계**는 calcTotals 가
+  // 정본이라(국내조달품이 매출에서 빠지는 규칙이 거기 있다) 줄 목록은 판관비를 나눌 때만 쓴다.
+  const lineBd = profitBreakdownOfLines(
+    rows.map(r => ({ supply: isBillableRow(r) ? r.supply_price : 0, cost: r.product_price, category: r.category })),
+    category,
+  )
+  const breakdown = {
+    ...lineBd,
+    revenue: totalSupply,
+    cost: totalProduct,
+    grossProfit: totalProfit,
+    grossRate: profitPct,
+    operatingProfit: totalProfit - lineBd.sga,
+    operatingRate: totalSupply > 0 ? ((totalProfit - lineBd.sga) / totalSupply) * 100 : 0,
+  }
   const sgaPct = totalSupply > 0 ? (breakdown.sga / totalSupply) * 100 : 0
+  // 분류가 섞이면 「매출 × 30%」 같은 한 줄 설명이 맞지 않는다 — 섞였다고 적는다.
+  const mixedCategory = new Set(rows.filter(isBillableRow).map(r => (r.category ?? '') || (category ?? ''))).size > 1
+  const sgaNote = mixedCategory ? `분류별 안분 ${sgaPct.toFixed(1)}%` : `매출 × ${sgaPct.toFixed(0)}%`
   // 영업이익 하한 — 분류가 정한다(TSE 15% · SBS 6%). 미만이면 사유를 묻는다.
   // **확정을 막지는 않는다** — 경고일 뿐이다(lib/quoteProfit.ts).
   const minOperating = minOperatingMarginOf(category)
@@ -117,7 +137,7 @@ export default function ProfitPanel({
       case 'manual_jpy':   // 구입가 출처만 다르고 원가 산출은 동일하다
         return (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>구입가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>¥{r.cost_price_jpy.toLocaleString()}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>구입가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>{CURRENCY_SYMBOL[r.currency]}{r.cost_price_jpy.toLocaleString()}</span></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>관세 × 환율</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>×{r.tariff_rate} × {r.exchange_rate.toFixed(2)}</span></div>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>원가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>₩{numKR(r.product_price)}</span></div>
           </>
@@ -297,7 +317,7 @@ export default function ProfitPanel({
           {breakdown.hasSga && (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
-                <span style={{ fontSize: 12, color: '#6b7280' }}>판관비 <span style={{ color: '#9ca3af' }}>(매출 × {(sgaPct).toFixed(0)}%)</span></span>
+                <span style={{ fontSize: 12, color: '#6b7280' }}>판관비 <span style={{ color: '#9ca3af' }}>({sgaNote})</span></span>
                 <span style={{ fontSize: 13, color: '#dc2626', fontWeight: 500 }}>−₩{numKR(breakdown.sga)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid #ebebeb', marginTop: 2, paddingTop: 8 }}>

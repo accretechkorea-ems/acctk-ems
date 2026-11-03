@@ -132,6 +132,71 @@ export type ProfitBreakdown = {
  * 매출이익 150만(60%) · 판관비 75만(30%) · 영업이익 75만(30%)이다.
  * 반올림은 원 단위에서 한다 — 화면과 엑셀이 다른 수를 보이지 않게.
  */
+/** 줄 하나 — 판관비를 그 줄의 분류로 매긴다. */
+export type ProfitLine = {
+  /** 그 줄의 공급가(매출). */
+  supply: number
+  /** 그 줄의 원가. */
+  cost: number
+  /** 그 줄의 분류. 비우면 견적 분류를 따른다(quote_items.category 가 null 인 줄). */
+  category?: string | null
+}
+
+/**
+ * **줄별 분류로 판관비를 안분해** 합산한다 — 혼합 견적(TSE + SBS) 때문에 필요하다.
+ *
+ * 한 견적 안에 분류가 섞이면(「분류 나누기」) 판관비율이 줄마다 다르다. 견적 분류 하나로
+ * 전부 곱하면 **SBS 줄에 TSE 의 30% 가 붙는다** — 영업이익이 그만큼 낮게 나오고, 하한
+ * 경고(6%·15%)가 엉뚱한 견적에서 뜬다.
+ *
+ * 반올림은 **분류 묶음마다 한 번**이다. 줄마다 반올림하면 줄 수에 따라 합이 흔들리고,
+ * 맨 끝에 한 번만 하면 혼합이 안 된다. 묶음 단위로 하면 **전 줄이 같은 분류일 때
+ * profitBreakdown 과 한 원도 다르지 않다**(그 경우 묶음이 하나뿐이다).
+ *
+ * @param lines    줄 목록(공급가·원가·분류)
+ * @param category 견적 분류 — 줄에 분류가 없을 때 쓴다.
+ */
+export function profitBreakdownOfLines(
+  lines: readonly ProfitLine[],
+  category: string | null | undefined,
+): ProfitBreakdown {
+  // 분류 묶음별 매출 — 판관비는 **매출** 기준이다(원가가 아니다).
+  const supplyBy = new Map<string, number>()
+  let revenue = 0
+  let cost = 0
+  for (const l of lines) {
+    const supply = Number.isFinite(l.supply) ? l.supply : 0
+    const c = Number.isFinite(l.cost) ? l.cost : 0
+    revenue += supply
+    cost += c
+    // 빈 글자·null 은 견적 분류로 접는다 — 두 값이 같은 묶음에 들어가야 반올림이 한 번이다.
+    const key = (l.category ?? '') || (category ?? '')
+    supplyBy.set(key, (supplyBy.get(key) ?? 0) + supply)
+  }
+
+  let sga = 0
+  let hasSga = false
+  for (const [key, supply] of supplyBy) {
+    const rate = sgaRateOf(key || null)
+    if (rate > 0) hasSga = true
+    sga += Math.round(supply * rate)
+  }
+
+  const grossProfit = revenue - cost
+  const operatingProfit = grossProfit - sga
+  const pct = (v: number) => (revenue > 0 ? (v / revenue) * 100 : 0)
+  return {
+    revenue,
+    cost,
+    grossProfit,
+    grossRate: pct(grossProfit),
+    sga,
+    operatingProfit,
+    operatingRate: pct(operatingProfit),
+    hasSga,
+  }
+}
+
 export function profitBreakdown(revenue: number, cost: number, category: string | null | undefined): ProfitBreakdown {
   const rate = sgaRateOf(category)
   const grossProfit = revenue - cost

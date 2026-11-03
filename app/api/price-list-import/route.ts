@@ -22,6 +22,7 @@
 //   중간에 실패하면 아무것도 바뀌지 않는다. 이 함수는 service_role 에만 실행 권한이 있다.
 
 import { adminClient } from '@/lib/supabase/admin'
+import { currencyOfSheet } from '@/lib/priceListKinds'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { PARSE_ROW_MAX } from '@/lib/priceListParse'
@@ -277,7 +278,39 @@ export async function POST(req: Request) {
       // 함수가 던진 문구를 그대로 보여 준다(한글로 쓰여 있다). 아무것도 바뀌지 않았다.
       return bad(error.message || '적용하지 못했습니다.', 500)
     }
-    return NextResponse.json({ ok: true, result: data })
+
+    // ── 통화 맞추기 ──────────────────────────────────────────────────────
+    //
+    // 그 시트의 통화는 시트 이름이 정한다(lib/priceListKinds.ts 의 currencyOfSheet).
+    // **DB 함수는 이 칸을 모른다** — apply_price_list_import 의 insert·update 목록에
+    // currency 가 없다(price_list_import_schema.sql). 그래서 새로 들어간 줄은 칸 기본값
+    // 'JPY' 로 남는데, 달러 시트에서 그대로 두면 원가가 **150배 작게** 계산된다
+    // (원/달러 1,341 ÷ 원/엔 8.49). 함수를 고치는 것은 DB 작업이라, 등록 직후 라우트가
+    // 그 시트의 통화를 맞춘다. 함수가 통화까지 다루게 되면 이 블록을 지워라.
+    //
+    // 시트 전체를 맞춘다(이번에 들어간 줄만이 아니라) — 한 시트의 통화는 하나이고,
+    // 전에 들어간 줄이 다른 통화로 남아 있으면 같은 시트 안에서 금액의 뜻이 갈린다.
+    const currency = currencyOfSheet(sheetName)
+    const { error: curErr, count: curFixed } = await supabaseAdmin
+      .from('price_list')
+      .update({ currency }, { count: 'exact' })
+      .eq('sheet_name', sheetName)
+      // is.null 을 함께 적는다 — SQL 에서 `null <> 'JPY'` 는 참이 아니라 null 이라
+      // 통화가 빈 줄이 걸러져 나간다(lib/deviceStatus.ts 의 IN_USE_FILTER 와 같은 이유).
+      .or(`currency.is.null,currency.neq.${currency}`)
+    if (curErr) {
+      // 등록 자체는 끝났다 — 되돌리지 않고 **알린다.** 통화만 틀린 상태는 가격표 화면에서
+      // 보이고 다시 등록하면 고쳐진다(위 update 가 시트 전체를 맞춘다).
+      console.error('[price-list-import] 통화 맞추기 실패', { sheetName, currency, error: curErr })
+    }
+
+    return NextResponse.json({
+      ok: true,
+      result: data,
+      currency,
+      currency_fixed: curErr ? null : (curFixed ?? 0),
+      currency_error: curErr ? (curErr.message || '통화를 맞추지 못했습니다.') : null,
+    })
   }
 
   return bad(`알 수 없는 동작입니다: ${action || '(비어 있음)'}`)

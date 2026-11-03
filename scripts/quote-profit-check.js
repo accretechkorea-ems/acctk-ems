@@ -32,6 +32,7 @@ Module._resolveFilename = function (req, ...rest) {
 
 const {
   CATEGORY_PROFIT_RULES, DEFAULT_MARGIN, defaultMarginOf, sgaRateOf, profitBreakdown,
+  profitBreakdownOfLines,
   minOperatingMarginOf, isBelowMinOperating, belowMinOperatingMessage,
 } = load(path.join(ROOT, 'lib/quoteProfit.ts'))
 const {
@@ -183,5 +184,59 @@ eq('본문이 없으면 빈 글자', stripOperatingReason('[영업이익 사유]
 eq('사유가 없으면 그대로', stripOperatingReason('본문\n둘째 줄'), '본문\n둘째 줄')
 eq('PDF 비고에는 사유가 없다', stripOperatingReason(withOperatingReason('비고 본문', '사유')), '비고 본문')
 
+console.log('\n── 혼합 견적: 판관비를 줄별 분류로 안분한다 ──')
+// 한 견적에 TSE 와 SBS 가 섞이면 판관비율이 줄마다 다르다(0.30 / 0.20).
+// 견적 분류 하나로 전부 곱하면 SBS 줄에 TSE 의 30% 가 붙어 영업이익이 낮게 나온다.
+{
+  // TSE 2줄(매출 300만·200만) + SBS 2줄(매출 100만·400만). 원가는 각각 절반이다.
+  const lines = [
+    { supply: 3000000, cost: 1500000, category: 'TSE' },
+    { supply: 2000000, cost: 1000000, category: 'TSE' },
+    { supply: 1000000, cost: 600000, category: 'SBS' },
+    { supply: 4000000, cost: 2400000, category: 'SBS' },
+  ]
+  const b = profitBreakdownOfLines(lines, 'TSE')
+  eq('매출은 네 줄 합', b.revenue, 10000000)
+  eq('원가도 네 줄 합', b.cost, 5500000)
+  eq('매출이익 = 매출 − 원가', b.grossProfit, 4500000)
+  // TSE 500만 × 0.30 = 150만 · SBS 500만 × 0.20 = 100만 → 250만
+  eq('판관비는 분류별로 매겨 더한다', b.sga, 2500000)
+  eq('**견적 분류 하나로 곱한 값(300만)과 다르다**', b.sga !== profitBreakdown(10000000, 5500000, 'TSE').sga, true)
+  eq('영업이익 = 매출이익 − 판관비', b.operatingProfit, 2000000)
+  eq('영업이익률', Number(b.operatingRate.toFixed(1)), 20)
+  eq('판관비 줄을 낸다', b.hasSga, true)
+}
+
+{
+  // 줄에 분류가 없으면 **견적 분류**를 따른다 — 「분류 나누기」를 켜지 않은 견적이 그렇다.
+  const lines = [
+    { supply: 1500000, cost: 600000 },
+    { supply: 1000000, cost: 400000, category: null },
+  ]
+  const got = profitBreakdownOfLines(lines, 'TSE')
+  const want = profitBreakdown(2500000, 1000000, 'TSE')
+  eq('전 줄 같은 분류면 지금 함수와 **한 원도 다르지 않다**',
+    [got.revenue, got.cost, got.sga, got.operatingProfit, got.hasSga],
+    [want.revenue, want.cost, want.sga, want.operatingProfit, want.hasSga])
+}
+
+{
+  // 반올림은 **분류 묶음마다 한 번**이다 — 줄마다 반올림하면 줄 수에 따라 합이 흔들린다.
+  const odd = [{ supply: 333333, cost: 0, category: 'SBS' }, { supply: 333333, cost: 0, category: 'SBS' }]
+  eq('한 묶음은 합계에 한 번만 반올림', profitBreakdownOfLines(odd, 'SBS').sga, Math.round(666666 * 0.2))
+  eq('줄마다 반올림한 값과 다를 수 있다', Math.round(333333 * 0.2) * 2, 133334)
+
+  // 규칙이 없는 분류가 섞이면 그 줄만 판관비가 0 이다.
+  const mixedFree = profitBreakdownOfLines([
+    { supply: 1000000, cost: 0, category: 'TSE' },
+    { supply: 1000000, cost: 0, category: 'ETC' },
+  ], null)
+  eq('규칙 없는 분류 줄은 판관비 0', mixedFree.sga, 300000)
+  eq('그래도 판관비 줄은 낸다(TSE 가 있다)', mixedFree.hasSga, true)
+
+  eq('줄이 없으면 전부 0', profitBreakdownOfLines([], 'TSE'),
+    { revenue: 0, cost: 0, grossProfit: 0, grossRate: 0, sga: 0, operatingProfit: 0, operatingRate: 0, hasSga: false })
+  eq('규칙 없는 분류만이면 판관비 줄을 내지 않는다', profitBreakdownOfLines([{ supply: 100, cost: 0 }], null).hasSga, false)
+}
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
 process.exit(fails === 0 ? 0 : 1)

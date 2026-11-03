@@ -13,6 +13,9 @@
 //   위치를 고정하면 그런 파일에서 **엉뚱한 열을 가격으로 읽는다** — 조용히 틀리는 쪽이
 //   제일 나쁘다. 그래서 이름 후보로 찾고, 못 찾으면 한글로 어느 열이 없는지 알린다.
 
+import type { Currency } from './quoteCurrency'
+import { DEFAULT_CURRENCY } from './quoteCurrency'
+
 /**
  * 어느 견적 양식의 가격표인가.
  *   '80' — 80 파츠·80 장비 견적서가 쓰는 본사 가격표(기존 7개)
@@ -33,6 +36,12 @@ export type PriceListKind = {
   /** price_list.sheet_name 에 그대로 들어가는 글자. 바꾸지 마라. */
   sheet: string
   line: PriceLine
+  /**
+   * 그 시트의 **금액 통화**(price_jpy·cost_jpy 의 뜻). 적지 않으면 엔이다.
+   * 칸 이름에 jpy 가 박혀 있지만 뜻은 「그 줄의 통화로 적힌 금액」이다
+   * (lib/quoteCurrency.ts · db/price_list_currency_schema.sql).
+   */
+  currency?: Currency
 }
 
 export const PRICE_LIST_KINDS: readonly PriceListKind[] = [
@@ -52,6 +61,10 @@ export const PRICE_LIST_KINDS: readonly PriceListKind[] = [
   { sheet: 'Unit_Other', line: '20' },
   { sheet: 'ATC', line: '20' },
   { sheet: 'SBS', line: '20' },
+  // SBS 달러 매입분 — Schmitt 에서 **달러로** 사 오는 품목이다(딜러가 CURRENT 를 그대로 넣는다).
+  // 엔으로 사 오는 본사 경유품은 위 'SBS' 시트에 그대로 남는다 — 두 경로가 한 시트에 섞이면
+  // 같은 숫자가 어느 통화인지 알 수 없다(db/price_list_sbs_usd_update.sql 의 결론).
+  { sheet: 'SBS-USD', line: '20', currency: 'USD' },
   { sheet: 'Amp', line: '20' },
   { sheet: 'Airmicrometer', line: '20' },
   { sheet: 'Gauge', line: '20' },
@@ -89,6 +102,16 @@ export function sheetsForForm(formKind: string | null | undefined): readonly str
 /** 종류 글자로 찾는다. 목록에 없는 글자는 받지 않는다(서버도 같은 함수로 검사한다). */
 export const kindOf = (sheet: string): PriceListKind | null =>
   PRICE_LIST_KINDS.find(k => k.sheet === sheet) ?? null
+
+/**
+ * 그 시트의 통화 — **아는 시트가 아니면 엔**이다.
+ *
+ * 모르는 시트를 달러로 보지 않는 이유: 달러로 잘못 보면 원가가 150배가 되고(원/달러 ÷ 원/엔),
+ * 엔으로 잘못 보면 150분의 1이 된다. 둘 다 틀리지만 **작게 틀리는 쪽**이 견적서에 터무니없는
+ * 금액으로 드러나 바로 잡힌다. 통화는 목록에 적은 시트에서만 올라온다.
+ */
+export const currencyOfSheet = (sheet: string | null | undefined): Currency =>
+  (sheet ? kindOf(sheet)?.currency ?? DEFAULT_CURRENCY : DEFAULT_CURRENCY)
 
 /**
  * 그 가격표 줄이 어느 묶음인가 — **sheet_name 으로만** 가른다.

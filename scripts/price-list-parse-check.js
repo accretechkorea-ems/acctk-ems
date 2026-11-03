@@ -404,5 +404,18 @@ if (realPath) {
   }
 }
 
+console.log('\n── 10. 시트 통화(달러 가격표) ──')
+// 통화는 **시트 이름**이 정한다 — 파일 안에 통화 칸을 두지 않는다(머리글은 같은 일곱 개).
+{
+  const usd = parse(basic, '20', 'SBS-USD')
+  eq('SBS-USD 시트는 달러', usd.currency, 'USD')
+  eq('행에도 통화가 담긴다', usd.rows.map(r => r.currency), ['USD', 'USD'])
+  eq('머리글 일곱 개는 그대로', usd.columns.map(c => c.name), ['품번', '품명', '모델', '정가', '구입가', '납기', '비고'])
+  eq('금액을 달리 읽지 않는다(숫자는 그대로)', [usd.rows[0].price_jpy, usd.rows[0].cost_jpy], [200000, 120000])
+
+  const jpy = parse(basic, '20', 'SBS')
+  eq('엔 시트(SBS)는 JPY', jpy.currency, 'JPY')
+  eq('모르는 시트 이름도 JPY 로 본다(작게 틀리는 쪽)', parse(basic, '20', '처음 보는 시트').currency, 'JPY')
+}
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
 process.exit(fails === 0 ? 0 : 1)

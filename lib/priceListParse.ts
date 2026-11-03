@@ -27,7 +27,8 @@
 //   골라 버리면 사람이 올린 파일과 저장된 결과가 어긋나고, 그 차이를 아무도 못 본다.
 
 import type { PriceLine } from './priceListKinds'
-import { normHeader } from './priceListKinds'
+import { currencyOfSheet, normHeader } from './priceListKinds'
+import type { Currency } from './quoteCurrency'
 
 // ── 머리글 ──────────────────────────────────────────────────────────────────
 
@@ -62,6 +63,12 @@ export type ParsedPriceRow = {
   sheet_name: string
   /** 어느 가격표인가 — 인자로 받은 '80' | '20'. */
   line: PriceLine
+  /**
+   * 금액의 통화 — **시트 이름이 정한다**(lib/priceListKinds.ts 의 currencyOfSheet).
+   * 머리글은 통화와 무관하게 같은 한글 일곱 개다. 파일에 통화를 적는 칸을 두지 않는 이유는,
+   * 같은 시트 안에서 줄마다 통화가 갈리면 합계·환율을 사람이 읽을 수 없기 때문이다.
+   */
+  currency: Currency
   item_code: string
   /** 같은 품번이 값이 다르게 여러 줄일 때만 채운다(= 그 줄의 묶음 제목). 아래 2-pass 참조. */
   variant: string
@@ -98,6 +105,8 @@ export type ParseCounts = {
 export type ParseResult = {
   sheetName: string
   line: PriceLine
+  /** 그 시트의 통화(시트 이름으로 정한다). 화면이 등록 전에 사람에게 보여 준다. */
+  currency: Currency
   /** 사람이 읽는 엑셀 행 번호. 못 찾으면 0. */
   headerRow: number
   columns: { name: HeaderName; index: number }[]
@@ -324,7 +333,7 @@ function sectionTitle(s: string | null): string | null {
  */
 export function parseSheet(ws: SheetLike, line: PriceLine, sheetName = ''): ParseResult {
   const out: ParseResult = {
-    sheetName, line, headerRow: 0, columns: [], validText: null, topDate: null,
+    sheetName, line, currency: currencyOfSheet(sheetName), headerRow: 0, columns: [], validText: null, topDate: null,
     rows: [],
     counts: {
       itemRows: 0, registered: 0, noCost: 0, nonItem: 0,
@@ -418,6 +427,7 @@ export function parseSheet(ws: SheetLike, line: PriceLine, sheetName = ''): Pars
     kept.push({
       sheet_name: sheetName,
       line,
+      currency: out.currency,
       item_code: codeCell,
       variant: '',
       grp,

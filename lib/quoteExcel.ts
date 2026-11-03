@@ -6,7 +6,8 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { salesStatusLabel } from '@/lib/categoryColors'
-import { profitBreakdown } from '@/lib/quoteProfit'
+import { profitBreakdownOfLines } from '@/lib/quoteProfit'
+import { toCurrency, type Currency } from '@/lib/quoteCurrency'
 // 타입만 가져온다(컴파일 시 사라짐). 런타임 exceljs 는 호출부에서 동적 import 한다.
 import type { Workbook, Worksheet, Cell } from 'exceljs'
 
@@ -25,6 +26,10 @@ export type QuoteExcelItem = {
   profit_rate: number | null
   exchange_rate: number | null
   tariff_rate: number | null
+  /** 그 줄의 통화(quote_items.currency). 없으면 엔 — 통화 칸이 생기기 전 견적이다. */
+  currency: string | null
+  /** 그 줄의 분류. 비면 견적 분류를 따른다 — 판관비 안분이 이 값을 본다. */
+  category: string | null
 }
 
 export type QuoteExcelExpense = {
@@ -72,7 +77,8 @@ const SELECT = `
   engineers!quotes_engineer_id_fkey ( name, position ),
   quote_items ( item_id, row_kind, part_code, product_name, quantity,
                 unit_price_jpy, unit_price_krw, supply_amount, tax_amount,
-                cost_amount, profit_amount, profit_rate, exchange_rate, tariff_rate ),
+                cost_amount, profit_amount, profit_rate, exchange_rate, tariff_rate,
+                currency, category ),
   quote_expenses ( expense_id, item_name, unit_price, headcount, days, amount )
 `
 
@@ -108,13 +114,37 @@ export async function fetchQuotesForExcel(ids: number[]): Promise<QuoteExcelData
 const FF_DANGER = 'FFDC2626'
 const FMT_KRW = '#,##0'
 const FMT_JPY = '¥#,##0'
+const FMT_USD = '$#,##0'
+/** 그 줄의 통화에 맞는 숫자 형식 — 엑셀에서도 기호가 금액에 붙어 나간다. */
+const fmtOf = (currency: string | null | undefined) => (toCurrency(currency) === 'USD' ? FMT_USD : FMT_JPY)
 const FMT_RATE = '0.0"%"'
 const FMT_TARIFF = '0.00'
 const FMT_FX = '0.0000'
 
 const GRAY_BG = 'FFF3F4F6'
 const TITLE_BG = 'FFD9E1F2'
-const LAST_COL = 10  // J (…H 공급가액 · I 이익 · J 이익률)
+
+/**
+ * 열 번호 — **이름으로 쓴다.** 2026-11-03 에 「통화」 열이 품목명 뒤에 끼어들면서 뒤의 열이
+ * 전부 한 칸씩 밀렸다. 숫자를 그대로 적어 두면 그런 변경 때마다 스무 군데를 함께 고쳐야 하고,
+ * 한 군데를 놓치면 금액이 엉뚱한 칸에 적힌다(조용히 틀린다).
+ */
+const COL = {
+  code: 1,      // 품번
+  name: 2,      // 품목명
+  qty: 3,       // 수량
+  currency: 4,  // 통화 — 구입가가 어느 돈인가(JPY/USD)
+  costFx: 5,    // 구입가(그 통화)
+  tariff: 6,    // 관세율
+  costKrw: 7,   // 원화환산
+  unit: 8,      // 판매단가
+  supply: 9,    // 공급가액
+  profit: 10,   // 이익
+  rate: 11,     // 이익률
+} as const
+const LAST_COL = COL.rate
+/** 합계 줄 — 라벨을 여기까지 합치고 금액은 공급가액 칸에 적는다. */
+const TOTAL_LABEL_END = COL.unit
 
 const fillBg = (cell: Cell, argb = GRAY_BG) => {
   cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } }
@@ -152,10 +182,11 @@ const isUnknownKind = (k: string | null) => k === null || !KNOWN_KINDS.includes(
 export function buildQuoteSheet(workbook: Workbook, quote: QuoteExcelData): Worksheet {
   const ws = workbook.addWorksheet(safeSheetName(quote.quote_number, workbook.worksheets.map(w => w.name)))
 
-  ws.getColumn(1).width = 14
-  ws.getColumn(2).width = 30
-  ws.getColumn(3).width = 8
-  for (let c = 4; c <= LAST_COL; c++) ws.getColumn(c).width = 14
+  ws.getColumn(COL.code).width = 14
+  ws.getColumn(COL.name).width = 30
+  ws.getColumn(COL.qty).width = 8
+  ws.getColumn(COL.currency).width = 7
+  for (let c = COL.costFx; c <= LAST_COL; c++) ws.getColumn(c).width = 14
 
   const items = quote.quote_items ?? []
   const groupA = items.filter(i => i.row_kind === 'price_list' || i.row_kind === 'manual_jpy' || isUnknownKind(i.row_kind))
@@ -164,8 +195,16 @@ export function buildQuoteSheet(workbook: Workbook, quote: QuoteExcelData): Work
   const discountItem = items.find(i => i.row_kind === 'discount') ?? null
   const expenses = quote.quote_expenses ?? []
 
-  // 환율은 행별 컬럼이라 값이 갈리면 대표값을 쓰지 않는다.
-  const rates = [...new Set(items.map(i => i.exchange_rate).filter((v): v is number => typeof v === 'number' && v > 0))]
+  // 환율은 행별 칸이라 값이 갈리면 대표값을 쓰지 않는다. **통화별로** 모은다 —
+  // 엔 줄과 달러 줄이 섞인 견적에서 둘을 한 칸에 담으면 「행별 상이」만 남아 쓸모가 없다.
+  const ratesOf = (currency: Currency) => [...new Set(
+    items
+      .filter(i => toCurrency(i.currency) === currency)
+      .map(i => i.exchange_rate)
+      .filter((v): v is number => typeof v === 'number' && v > 0),
+  )]
+  const rates = ratesOf('JPY')
+  const usdRates = ratesOf('USD')
 
   let r = 1
   const sectionRow = (label: string) => {
@@ -212,7 +251,8 @@ export function buildQuoteSheet(workbook: Workbook, quote: QuoteExcelData): Work
   r += 2
 
   // ── 기본 정보 (좌: A/B, 우: E/F) ──
-  const fxLabel = rates.length === 0 ? '-' : rates.length > 1 ? '행별 상이' : rates[0]
+  const fxLabelOf = (list: number[]) => (list.length === 0 ? '-' : list.length > 1 ? '행별 상이' : list[0])
+  const fxLabel = fxLabelOf(rates)
   const info: [string, string | number | null, string, string | number | null][] = [
     ['견적번호', quote.quote_number, '환율적용월', (quote.quote_date ?? '').slice(0, 7) || '-'],
     ['고객사', quote.customers?.company_name ?? '-', '엔화 환율', fxLabel],
@@ -222,8 +262,10 @@ export function buildQuoteSheet(workbook: Workbook, quote: QuoteExcelData): Work
     // 상태는 저장값이 아니라 화면과 같은 표시 이름으로 적는다('실패' → 「미수주」).
     ['견적일자', quote.quote_date ?? '-', '상태', quote.status ? salesStatusLabel(quote.status) : '-'],
   ]
+  // 달러 줄이 섞인 견적에만 한 줄 더 — 엔만 쓰는 견적의 모양은 그대로다.
+  if (usdRates.length > 0) info.push(['', null, '달러 환율', fxLabelOf(usdRates)])
   for (const [l1, v1, l2, v2] of info) {
-    labelValue(1, l1, v1)
+    if (l1) labelValue(1, l1, v1)
     labelValue(5, l2, v2)
     if (typeof v2 === 'number') ws.getCell(r, 6).numFmt = FMT_FX
     r++
@@ -232,47 +274,51 @@ export function buildQuoteSheet(workbook: Workbook, quote: QuoteExcelData): Work
 
   // ── (A) 본사 구입가 ──
   sectionRow('(A) 본사 구입가')
-  headerRow(['품번', '품목명', '수량', '구입가(JPY)', '관세율', '원화환산', '판매단가', '공급가액', '이익', '이익률'])
+  // 「구입가(JPY)」가 아니라 **통화 열 + 구입가**다 — 달러 매입 품목이 섞이기 때문이다.
+  headerRow(['품번', '품목명', '수량', '통화', '구입가', '관세율', '원화환산', '판매단가', '공급가액', '이익', '이익률'])
   let sumACost = 0, sumASupply = 0, sumAProfit = 0
   for (const it of groupA) {
-    ws.getCell(r, 1).value = it.part_code ?? '-'
-    ws.getCell(r, 2).value = (it.product_name ?? '') + (isUnknownKind(it.row_kind) ? ' (종류 미상)' : '')
-    ws.getCell(r, 3).value = it.quantity ?? 0
-    ws.getCell(r, 4).value = it.unit_price_jpy ?? null
-    ws.getCell(r, 4).numFmt = FMT_JPY
-    ws.getCell(r, 5).value = it.tariff_rate ?? null
-    ws.getCell(r, 5).numFmt = FMT_TARIFF
-    ws.getCell(r, 6).value = it.cost_amount ?? 0
-    ws.getCell(r, 7).value = it.unit_price_krw ?? 0
-    ws.getCell(r, 8).value = it.supply_amount ?? 0
-    ws.getCell(r, 9).value = it.profit_amount ?? 0
-    ws.getCell(r, 10).value = it.profit_rate ?? 0
-    ws.getCell(r, 10).numFmt = FMT_RATE
-    for (const c of [6, 7, 8, 9]) ws.getCell(r, c).numFmt = FMT_KRW
+    const cur = toCurrency(it.currency)
+    ws.getCell(r, COL.code).value = it.part_code ?? '-'
+    ws.getCell(r, COL.name).value = (it.product_name ?? '') + (isUnknownKind(it.row_kind) ? ' (종류 미상)' : '')
+    ws.getCell(r, COL.qty).value = it.quantity ?? 0
+    ws.getCell(r, COL.currency).value = cur
+    ws.getCell(r, COL.currency).alignment = { horizontal: 'center' }
+    ws.getCell(r, COL.costFx).value = it.unit_price_jpy ?? null
+    ws.getCell(r, COL.costFx).numFmt = fmtOf(it.currency)
+    ws.getCell(r, COL.tariff).value = it.tariff_rate ?? null
+    ws.getCell(r, COL.tariff).numFmt = FMT_TARIFF
+    ws.getCell(r, COL.costKrw).value = it.cost_amount ?? 0
+    ws.getCell(r, COL.unit).value = it.unit_price_krw ?? 0
+    ws.getCell(r, COL.supply).value = it.supply_amount ?? 0
+    ws.getCell(r, COL.profit).value = it.profit_amount ?? 0
+    ws.getCell(r, COL.rate).value = it.profit_rate ?? 0
+    ws.getCell(r, COL.rate).numFmt = FMT_RATE
+    for (const c of [COL.costKrw, COL.unit, COL.supply, COL.profit]) ws.getCell(r, c).numFmt = FMT_KRW
     for (let c = 1; c <= LAST_COL; c++) borderThin(ws.getCell(r, c))
     sumACost += it.cost_amount ?? 0
     sumASupply += it.supply_amount ?? 0
     sumAProfit += it.profit_amount ?? 0
     r++
   }
-  ws.getCell(r, 1).value = '계'
-  ws.getCell(r, 1).font = { bold: true }
-  ws.getCell(r, 6).value = sumACost
-  ws.getCell(r, 8).value = sumASupply
-  ws.getCell(r, 9).value = sumAProfit
-  for (const c of [6, 8, 9]) { ws.getCell(r, c).numFmt = FMT_KRW; ws.getCell(r, c).font = { bold: true } }
+  ws.getCell(r, COL.code).value = '계'
+  ws.getCell(r, COL.code).font = { bold: true }
+  ws.getCell(r, COL.costKrw).value = sumACost
+  ws.getCell(r, COL.supply).value = sumASupply
+  ws.getCell(r, COL.profit).value = sumAProfit
+  for (const c of [COL.costKrw, COL.supply, COL.profit]) { ws.getCell(r, c).numFmt = FMT_KRW; ws.getCell(r, c).font = { bold: true } }
   for (let c = 1; c <= LAST_COL; c++) borderTopThick(ws.getCell(r, c))
   r++
 
   // ── 할인 — (A) 계 바로 아래 한 줄. 총액에서만 빼는 항목이라 원가·이익률 칸은 비운다.
   //    이익 칸에는 줄어든 금액(음수)을 그대로 적는다 — 총계의 순이익과 이어지도록.
   if (discountItem) {
-    ws.getCell(r, 1).value = '-'
-    ws.getCell(r, 2).value = discountItem.product_name ?? 'DISCOUNT'
-    ws.getCell(r, 2).font = { bold: true }
-    ws.getCell(r, 8).value = discountItem.supply_amount ?? 0
-    ws.getCell(r, 9).value = discountItem.profit_amount ?? 0
-    for (const c of [8, 9]) { ws.getCell(r, c).numFmt = FMT_KRW; ws.getCell(r, c).font = { bold: true, color: { argb: FF_DANGER } } }
+    ws.getCell(r, COL.code).value = '-'
+    ws.getCell(r, COL.name).value = discountItem.product_name ?? 'DISCOUNT'
+    ws.getCell(r, COL.name).font = { bold: true }
+    ws.getCell(r, COL.supply).value = discountItem.supply_amount ?? 0
+    ws.getCell(r, COL.profit).value = discountItem.profit_amount ?? 0
+    for (const c of [COL.supply, COL.profit]) { ws.getCell(r, c).numFmt = FMT_KRW; ws.getCell(r, c).font = { bold: true, color: { argb: FF_DANGER } } }
     for (let c = 1; c <= LAST_COL; c++) borderThin(ws.getCell(r, c))
     r++
   }
@@ -281,23 +327,23 @@ export function buildQuoteSheet(workbook: Workbook, quote: QuoteExcelData): Work
   // ── (B) 국내조달품 (해당 행이 없으면 블록 자체를 생략) ──
   if (groupB.length > 0) {
     sectionRow('(B) 국내조달품')
-    headerRow(['품번', '품목명', '수량', null, null, null, null, '금액'])
+    headerRow(['품번', '품목명', '수량', null, null, null, null, null, '금액'])
     let sumBCost = 0
     for (const it of groupB) {
-      ws.getCell(r, 1).value = it.part_code ?? '-'
-      ws.getCell(r, 2).value = it.product_name ?? ''
-      ws.getCell(r, 3).value = it.quantity ?? 0
-      ws.getCell(r, 8).value = it.cost_amount ?? 0
-      ws.getCell(r, 8).numFmt = FMT_KRW
+      ws.getCell(r, COL.code).value = it.part_code ?? '-'
+      ws.getCell(r, COL.name).value = it.product_name ?? ''
+      ws.getCell(r, COL.qty).value = it.quantity ?? 0
+      ws.getCell(r, COL.supply).value = it.cost_amount ?? 0
+      ws.getCell(r, COL.supply).numFmt = FMT_KRW
       for (let c = 1; c <= LAST_COL; c++) borderThin(ws.getCell(r, c))
       sumBCost += it.cost_amount ?? 0
       r++
     }
-    ws.getCell(r, 1).value = '계'
-    ws.getCell(r, 1).font = { bold: true }
-    ws.getCell(r, 8).value = sumBCost
-    ws.getCell(r, 8).numFmt = FMT_KRW
-    ws.getCell(r, 8).font = { bold: true }
+    ws.getCell(r, COL.code).value = '계'
+    ws.getCell(r, COL.code).font = { bold: true }
+    ws.getCell(r, COL.supply).value = sumBCost
+    ws.getCell(r, COL.supply).numFmt = FMT_KRW
+    ws.getCell(r, COL.supply).font = { bold: true }
     for (let c = 1; c <= LAST_COL; c++) borderTopThick(ws.getCell(r, c))
     r += 2
   }
@@ -305,43 +351,43 @@ export function buildQuoteSheet(workbook: Workbook, quote: QuoteExcelData): Work
   // ── 서비스비 (서비스 행도 부대비용도 없으면 블록 생략) ──
   if (serviceItem || expenses.length > 0) {
     sectionRow('서비스비')
-    headerRow(['항목', null, '단가', '인원', '일수', null, null, '금액'])
+    headerRow(['항목', null, '단가', '인원', '일수', null, null, null, '금액'])
     let sumExpense = 0
     for (const e of expenses) {
-      ws.mergeCells(r, 1, r, 2)
-      ws.getCell(r, 1).value = e.item_name ?? ''
-      ws.getCell(r, 3).value = e.unit_price ?? 0
-      ws.getCell(r, 3).numFmt = FMT_KRW
-      ws.getCell(r, 4).value = e.headcount ?? 0
-      ws.getCell(r, 5).value = e.days ?? 0
-      ws.getCell(r, 8).value = e.amount ?? 0
-      ws.getCell(r, 8).numFmt = FMT_KRW
+      ws.mergeCells(r, COL.code, r, COL.name)
+      ws.getCell(r, COL.code).value = e.item_name ?? ''
+      ws.getCell(r, COL.qty).value = e.unit_price ?? 0
+      ws.getCell(r, COL.qty).numFmt = FMT_KRW
+      ws.getCell(r, COL.currency).value = e.headcount ?? 0
+      ws.getCell(r, COL.costFx).value = e.days ?? 0
+      ws.getCell(r, COL.supply).value = e.amount ?? 0
+      ws.getCell(r, COL.supply).numFmt = FMT_KRW
       for (let c = 1; c <= LAST_COL; c++) borderThin(ws.getCell(r, c))
       sumExpense += e.amount ?? 0
       r++
     }
-    ws.getCell(r, 1).value = '계'
-    ws.getCell(r, 1).font = { bold: true }
-    ws.getCell(r, 8).value = sumExpense
-    ws.getCell(r, 8).numFmt = FMT_KRW
-    ws.getCell(r, 8).font = { bold: true }
+    ws.getCell(r, COL.code).value = '계'
+    ws.getCell(r, COL.code).font = { bold: true }
+    ws.getCell(r, COL.supply).value = sumExpense
+    ws.getCell(r, COL.supply).numFmt = FMT_KRW
+    ws.getCell(r, COL.supply).font = { bold: true }
     for (let c = 1; c <= LAST_COL; c++) borderTopThick(ws.getCell(r, c))
     r++
-    ws.getCell(r, 1).value = '서비스 공급가'
-    ws.getCell(r, 1).font = { bold: true }
-    ws.getCell(r, 8).value = serviceItem?.supply_amount ?? 0
-    ws.getCell(r, 8).numFmt = FMT_KRW
+    ws.getCell(r, COL.code).value = '서비스 공급가'
+    ws.getCell(r, COL.code).font = { bold: true }
+    ws.getCell(r, COL.supply).value = serviceItem?.supply_amount ?? 0
+    ws.getCell(r, COL.supply).numFmt = FMT_KRW
     r += 2
   }
 
   // ── 총계 (정본 = quotes 저장값) ──
   sectionRow('총계')
   const totalRow = (label: string, value: number | null) => {
-    ws.mergeCells(r, 1, r, 7)
+    ws.mergeCells(r, 1, r, TOTAL_LABEL_END)
     const l = ws.getCell(r, 1)
     l.value = label
     l.font = { bold: true, size: 11 }
-    const v = ws.getCell(r, 8)
+    const v = ws.getCell(r, COL.supply)
     v.value = value ?? 0
     v.numFmt = FMT_KRW
     v.font = { size: 11 }
@@ -353,45 +399,70 @@ export function buildQuoteSheet(workbook: Workbook, quote: QuoteExcelData): Work
   totalRow('부가세', quote.total_tax)
   totalRow('총액', quote.total_amount)
 
-  ws.mergeCells(r, 1, r, 7)
+  ws.mergeCells(r, 1, r, TOTAL_LABEL_END)
   ws.getCell(r, 1).value = '최종 이윤'
   ws.getCell(r, 1).font = { bold: true, size: 11 }
-  ws.getCell(r, 8).value = quote.total_profit ?? 0
-  ws.getCell(r, 8).numFmt = FMT_KRW
-  ws.getCell(r, 8).font = { bold: true, size: 11 }
-  ws.getCell(r, 9).value = '이익률'
-  ws.getCell(r, 9).font = { bold: true, size: 10 }
-  ws.getCell(r, 9).alignment = { horizontal: 'right' }
-  ws.getCell(r, 10).value = quote.profit_rate ?? 0
-  ws.getCell(r, 10).numFmt = FMT_RATE
-  ws.getCell(r, 10).font = { bold: true }
+  ws.getCell(r, COL.supply).value = quote.total_profit ?? 0
+  ws.getCell(r, COL.supply).numFmt = FMT_KRW
+  ws.getCell(r, COL.supply).font = { bold: true, size: 11 }
+  ws.getCell(r, COL.profit).value = '이익률'
+  ws.getCell(r, COL.profit).font = { bold: true, size: 10 }
+  ws.getCell(r, COL.profit).alignment = { horizontal: 'right' }
+  ws.getCell(r, COL.rate).value = quote.profit_rate ?? 0
+  ws.getCell(r, COL.rate).numFmt = FMT_RATE
+  ws.getCell(r, COL.rate).font = { bold: true }
   for (let c = 1; c <= LAST_COL; c++) borderThin(ws.getCell(r, c))
   r++
 
   // ── 판관비·영업이익 — 분류에 규칙이 있을 때만(지금은 TSE 매출의 30%) ──
   // 저장값(total_profit·profit_rate)은 **매출이익**이다. 아래 두 줄은 거기서 계산한 표시값이다.
-  const bd = profitBreakdown(quote.total_supply ?? 0, quote.total_cost ?? 0, quote.category)
+  // **줄별 분류로 안분한다**(혼합 견적 — TSE + SBS). 줄에 분류가 없으면 견적 분류를 따르므로
+  // 분류를 나누지 않은 견적은 종전과 한 원도 다르지 않다(lib/quoteProfit.ts).
+  //
+  // 매출·원가는 **저장된 합계**(quotes.total_*)가 정본이다 — 국내조달품이 total_supply 에서
+  // 빠지는 등 줄 합과 다를 수 있다. 그래서 줄 목록은 **판관비를 나눌 비율**로만 쓰고,
+  // 합계는 아래에서 저장값으로 되돌린다.
+  const lineBd = profitBreakdownOfLines(
+    items.map(it => ({ supply: it.supply_amount ?? 0, cost: it.cost_amount ?? 0, category: it.category })),
+    quote.category,
+  )
+  const savedRevenue = quote.total_supply ?? 0
+  const savedCost = quote.total_cost ?? 0
+  // 저장 합계에 맞춘 판관비 — 줄 합과 저장 합이 다르면 그 비율만큼 옮긴다(둘이 같으면 그대로).
+  const sga = lineBd.revenue > 0 ? Math.round(lineBd.sga * (savedRevenue / lineBd.revenue)) : 0
+  const grossProfit = savedRevenue - savedCost
+  const bd = {
+    ...lineBd,
+    revenue: savedRevenue,
+    cost: savedCost,
+    grossProfit,
+    sga,
+    operatingProfit: grossProfit - sga,
+    operatingRate: savedRevenue > 0 ? ((grossProfit - sga) / savedRevenue) * 100 : 0,
+  }
   if (bd.hasSga) {
     const extraRow = (label: string, amount: number, rate: number) => {
-      ws.mergeCells(r, 1, r, 7)
+      ws.mergeCells(r, 1, r, TOTAL_LABEL_END)
       const l = ws.getCell(r, 1)
       l.value = label
       l.font = { bold: true, size: 11 }
-      const v = ws.getCell(r, 8)
+      const v = ws.getCell(r, COL.supply)
       v.value = amount
       v.numFmt = FMT_KRW
       v.font = { bold: true, size: 11 }
-      ws.getCell(r, 9).value = '비율'
-      ws.getCell(r, 9).font = { bold: true, size: 10 }
-      ws.getCell(r, 9).alignment = { horizontal: 'right' }
-      ws.getCell(r, 10).value = Math.round(rate * 10) / 10
-      ws.getCell(r, 10).numFmt = FMT_RATE
-      ws.getCell(r, 10).font = { bold: true }
+      ws.getCell(r, COL.profit).value = '비율'
+      ws.getCell(r, COL.profit).font = { bold: true, size: 10 }
+      ws.getCell(r, COL.profit).alignment = { horizontal: 'right' }
+      ws.getCell(r, COL.rate).value = Math.round(rate * 10) / 10
+      ws.getCell(r, COL.rate).numFmt = FMT_RATE
+      ws.getCell(r, COL.rate).font = { bold: true }
       for (let c = 1; c <= LAST_COL; c++) borderThin(ws.getCell(r, c))
       r++
     }
-    const sgaPct = (quote.total_supply ?? 0) > 0 ? (bd.sga / (quote.total_supply as number)) * 100 : 0
-    extraRow(`판관비 (매출 × ${sgaPct.toFixed(0)}%)`, -bd.sga, sgaPct)
+    const sgaPct = savedRevenue > 0 ? (bd.sga / savedRevenue) * 100 : 0
+    // 분류가 섞인 견적은 「매출 × 30%」 같은 한 줄 설명이 맞지 않는다 — 섞였다고 적는다.
+    const mixed = new Set(items.map(it => (it.category ?? '') || (quote.category ?? ''))).size > 1
+    extraRow(`판관비 (${mixed ? '분류별 안분' : `매출 × ${sgaPct.toFixed(0)}%`})`, -bd.sga, sgaPct)
     extraRow('영업이익', bd.operatingProfit, bd.operatingRate)
   }
 

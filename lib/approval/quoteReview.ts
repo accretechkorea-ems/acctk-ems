@@ -13,6 +13,7 @@
 // (lib/quoteEuName.ts 의 euDisplayName). 대리점·E.U 양쪽에 같은 규칙을 쓴다.
 
 import { euDisplayName } from '@/lib/quoteEuName'
+import { CURRENCY_SYMBOL, toCurrency } from '@/lib/quoteCurrency'
 import { subLinesOf } from '@/lib/quoteSubLines'
 import { changedTerms, defaultTermsFor } from '@/lib/quoteTerms'
 
@@ -70,6 +71,11 @@ export type RawItem = {
   profit_rate: unknown
   exchange_rate: unknown
   tariff_rate: unknown
+  /**
+   * 그 줄의 통화(quote_items.currency). 없거나 모르는 값이면 엔으로 본다 —
+   * 통화 칸이 생기기 전(2026-11-03)의 견적은 전부 엔이다(lib/quoteCurrency.ts 의 toCurrency).
+   */
+  currency?: unknown
   /** 품명 아래 설명 줄(quote_items.sub_lines). 그 칸이 생기기 전의 견적은 null 이다. */
   sub_lines?: unknown
 }
@@ -121,7 +127,7 @@ export type ReviewItem = {
   cost: number | null
   profit: number | null
   profitRate: number | null
-  /** 품번·구입가(엔)·환율·관세. 값이 없는 것은 빠진다. */
+  /** 품번·구입가(그 줄의 통화)·환율·관세. 값이 없는 것은 빠진다. */
   subParts: SubPart[]
   /**
    * 품명 아래 설명 줄 — **견적서 PDF 에 그대로 나가는 글자**다(시리얼 번호·옵션 등).
@@ -199,13 +205,20 @@ function partyLabel(p: PartyName | null): { shown: string; site: string | null }
   return { shown: shown || '-', site: site && site !== shown ? site : null }
 }
 
-/** 품목 보조 줄 — 값이 있는 것만. 가격표 품목만 구입가·환율·관세가 채워진다. */
+/**
+ * 품목 보조 줄 — 값이 있는 것만. 가격표 품목만 구입가·환율·관세가 채워진다.
+ *
+ * 구입가 앞의 기호는 **그 줄의 통화**다(¥ / $). 달러로 사 온 품목에 ¥ 를 붙이면 결재자가
+ * 150배 틀린 금액으로 읽는다 — 환율 칸이 옆에 있어도 숫자 앞 기호를 먼저 본다.
+ */
 function subPartsOf(it: RawItem): SubPart[] {
   const out: SubPart[] = []
   const code = (it.part_code ?? '').trim()
   if (code) out.push({ label: '품번', value: code })
   const jpy = num(it.unit_price_jpy)
-  if (jpy !== null && jpy !== 0) out.push({ label: '구입가', value: `¥${comma(jpy)}` })
+  if (jpy !== null && jpy !== 0) {
+    out.push({ label: '구입가', value: `${CURRENCY_SYMBOL[toCurrency(it.currency)]}${comma(jpy)}` })
+  }
   const fx = num(it.exchange_rate)
   if (fx !== null && fx !== 0) out.push({ label: '환율', value: String(fx) })
   const tariff = num(it.tariff_rate)
