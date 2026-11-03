@@ -35,6 +35,8 @@ const {
   profitBreakdownOfLines,
   minOperatingMarginOf, isBelowMinOperating, belowMinOperatingMessage,
 } = load(path.join(ROOT, 'lib/quoteProfit.ts'))
+// 줄 계산 — 목표 이익률(입력칸)과 실현 이익률(결과)이 갈리는 자리를 보려면 이것이 필요하다.
+const { calcRow, createRow, calcTotals, createDiscountRow } = load(path.join(ROOT, 'app/quote/calc.ts'))
 const {
   inValidQuoteView, EXPIRY_TRACKED_STATUSES, quoteExpiry, isExpired,
 } = load(path.join(ROOT, 'lib/quoteStatus.ts'))
@@ -237,6 +239,56 @@ console.log('\n── 혼합 견적: 판관비를 줄별 분류로 안분한다 
   eq('줄이 없으면 전부 0', profitBreakdownOfLines([], 'TSE'),
     { revenue: 0, cost: 0, grossProfit: 0, grossRate: 0, sga: 0, operatingProfit: 0, operatingRate: 0, hasSga: false })
   eq('규칙 없는 분류만이면 판관비 줄을 내지 않는다', profitBreakdownOfLines([{ supply: 100, cost: 0 }], null).hasSga, false)
+}
+console.log('\n── 목표 이익률 vs 실현 이익률 ──')
+// 이익률 칸(row.profit_rate)은 **사람이 넣는 목표**이고, 실현 이익률
+// (row.realized_profit_rate = 매출이익 ÷ 공급가)은 **결과**다. 금액 옆에 적는 %는
+// 늘 실현값이어야 한다 — 목표를 적으면 바로 옆 금액과 앞뒤가 맞지 않는다.
+{
+  const RATES = { JPY: 8.49, USD: 1600 }
+  const item = (cost) => ({ id: 1, sheet_name: 'CMM', item_code: 'K-1', variant: '',
+    item_name_jp: null, model_jp: null, item_name_en: null, model_en: null,
+    price_jpy: null, cost_jpy: cost, delivery_time: null, stock_quantity: null })
+
+  // ① 판매가 모드 — 단가 450,000 × 3개, 구입가 ¥13,900(원가 400,071).
+  const price = calcRow({ ...createRow(), row_kind: 'price_list', selectedItem: item(13900),
+    price_mode: 'price', manual_unit_price: 450000, quantity: 3, tariff_rate: 1.13, profit_rate: 40 }, RATES)
+  eq('판매가 모드 — 공급가', price.supply_price, 1350000)
+  eq('판매가 모드 — 원가', price.product_price, 400057)   // 13,900 × 8.49 × 1.13 × 3
+  eq('판매가 모드 — 매출이익', price.profit, 949943)
+  eq('판매가 모드 — **실현 이익률 70.4%**', Number(price.realized_profit_rate.toFixed(1)), 70.4)
+  eq('목표 이익률 칸은 입력값 그대로(40)', price.profit_rate, 40)
+  eq('**둘이 다르다** — 금액 옆에는 실현값을 적어야 한다', price.profit_rate !== Number(price.realized_profit_rate.toFixed(1)), true)
+
+  // ② 수량을 바꿔도 실현 이익률은 그대로다(공급가·원가가 같은 배수로 움직인다).
+  const price1 = calcRow({ ...price, quantity: 1 }, RATES)
+  eq('판매가 모드 — 수량 1 로 줄여도 실현 이익률이 같다',
+    [Number(price1.realized_profit_rate.toFixed(1)), price1.supply_price, price1.product_price],
+    [70.4, 450000, 133352])
+
+  // ③ 이익률 모드 — 1,000원 올림 때문에 목표와 실현이 **조금** 다르다.
+  const rate = calcRow({ ...createRow(), row_kind: 'price_list', selectedItem: item(13900),
+    price_mode: 'rate', profit_rate: 40, quantity: 1, tariff_rate: 1.13 }, RATES)
+  // 원가 133,352 → 목표 40% 역산 222,254 → 천원 올림 223,000
+  eq('이익률 모드 — 단가는 천원 올림', rate.unit_price, 223000)
+  eq('이익률 모드 — 원가', rate.product_price, 133352)
+  eq('이익률 모드 — 실현 이익률은 목표(40)보다 조금 높다', Number(rate.realized_profit_rate.toFixed(1)), 40.2)
+  eq('목표와 실현이 같지 않다(올림분)', rate.profit_rate !== Number(rate.realized_profit_rate.toFixed(1)), true)
+
+  // ④ 달러 줄 — 그 줄의 통화 환율로 원가가 잡히고, 실현 이익률도 그 원가로 난다.
+  const usd = calcRow({ ...createRow(), row_kind: 'price_list', currency: 'USD',
+    selectedItem: { ...item(1200), currency: 'USD' },
+    price_mode: 'price', manual_unit_price: 3000000, quantity: 1, tariff_rate: 1.13 }, RATES)
+  eq('달러 줄 — 원가는 달러 환율로', usd.product_price, Math.round(1200 * 1600 * 1.13))
+  eq('달러 줄 — 실현 이익률', Number(usd.realized_profit_rate.toFixed(1)),
+    Number((((3000000 - Math.round(1200 * 1600 * 1.13)) / 3000000) * 100).toFixed(1)))
+
+  // ⑤ 합계 이익률의 분모 — **할인을 뺀 뒤의 공급가**다(할인 줄도 청구 대상이다).
+  const disc = { ...createDiscountRow(), manual_unit_price: 350000 }
+  const totals = calcTotals([price, calcRow(disc, RATES)])
+  eq('합계 공급가는 할인 반영 후', totals.totalSupply, 1350000 - 350000)
+  eq('합계 이익률의 분모도 그 값', Number(totals.totalProfitRate.toFixed(1)),
+    Number((((1000000 - 400057) / 1000000) * 100).toFixed(1)))
 }
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
 process.exit(fails === 0 ? 0 : 1)

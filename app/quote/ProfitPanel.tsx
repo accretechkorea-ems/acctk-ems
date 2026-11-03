@@ -343,7 +343,12 @@ export default function ProfitPanel({
               <span style={{ color: '#d1d5db' }}> · </span>
               매출이익{' '}
               <span style={{ color: profitColor, fontWeight: 500 }}>₩{numKR(r.profit)}</span>
-              <span style={{ color: profitColor }}> ({r.profit_rate}%)</span>
+              {/* **실현** 이익률이다(매출이익 ÷ 공급가). 종전에는 row.profit_rate 를 찍었는데
+                  그 값은 이익률 칸의 **목표**라, 판매가 모드에서는 사람이 넣은 단가와 아무
+                  상관이 없는 수가 괄호 안에 떴다(단가 450,000 × 3 = 1,350,000 · 원가 400,071
+                  이면 70.4% 인데 40% 로 보였다). 이익률 모드에서도 1,000원 올림 때문에 목표와
+                  실현이 조금 다르다 — 괄호 안 %와 옆의 금액은 같은 식에서 나와야 한다. */}
+              <span style={{ color: profitColor }}> ({r.realized_profit_rate.toFixed(1)}%)</span>
             </div>
             {/* 2행 — 얼마에 몇 개를 파나. 결과(공급가)만 본문색으로 굵다. */}
             <div className="num" style={itemLine}>
