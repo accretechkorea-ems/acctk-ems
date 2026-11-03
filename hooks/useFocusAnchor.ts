@@ -65,7 +65,6 @@ export function useFocusAnchor(deps: DependencyList): void {
   useLayoutEffect(() => {
     document.addEventListener('focusin', record, true)
     return () => document.removeEventListener('focusin', record, true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useLayoutEffect(() => {
