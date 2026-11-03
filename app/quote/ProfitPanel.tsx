@@ -6,6 +6,7 @@ import { CURRENCY_SYMBOL, type Currency, type Rates } from '@/lib/quoteCurrency'
 import { RATE_SOURCE } from '@/lib/exchangeRate'
 import { calcTotals } from './calc'
 import { isBillableRow } from '@/lib/quoteDomestic'
+import { ROW_KIND_LABEL } from '@/lib/quoteRowKinds'
 import { numKR } from './format'
 import {
   belowMinOperatingMessage, isBelowMinOperating, minOperatingMarginOf, profitBreakdownOfLines,
@@ -353,7 +354,7 @@ export default function ProfitPanel({
           )}
           {/* 국내조달품이 원가에 얼마나 얹혔는지 — 마진 조절 판단용. 해당 행이 없으면 표시하지 않는다. */}
           {domesticCost > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>국내 조달품</span><span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>₩{numKR(domesticCost)}</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>{ROW_KIND_LABEL.domestic}</span><span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>₩{numKR(domesticCost)}</span></div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>매출이익 합계</span><span style={{ fontSize: 13, color: '#16a34a', fontWeight: 600 }}>₩{numKR(totalProfit)} ({profitPct.toFixed(1)}%)</span></div>
           {/* 판관비·영업이익 — 분류에 규칙이 있을 때만 낸다(지금은 TSE 매출의 30%).

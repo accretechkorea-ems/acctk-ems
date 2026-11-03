@@ -15,7 +15,7 @@ import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { isClosed } from '@/components/customer/opportunity'
 import { euDisplayName } from '@/lib/quoteEuName'
 import { Z } from '@/lib/zIndex'
-import { type SetTerms, type Terms } from '@/lib/quoteTerms'
+import { type SetTerms, type Terms, TERM_LABELS, defaultTermsFor, termKeysFor } from '@/lib/quoteTerms'
 import RemarksEditor from '@/components/quote/RemarksEditor'
 import TermsEditor from '@/components/quote/TermsEditor'
 import type { CustomerResult } from '@/app/quote/types'
@@ -166,6 +166,18 @@ export default function CustomerCard({ errors, clearError, category, customer, e
 
 
   // 기본 정보
+  /**
+   * 「조건 변경」이 꺼져 있는데 기본값과 다른 칸 — 지금은 가격표 납기가 들어오는 길뿐이다.
+   * 꺼져 있으면 저장·PDF 가 기본값을 쓰므로(app/quote/page.tsx 의 termsResult) 그대로 두면
+   * 조용히 버려진다. 그래서 **버려지기 전에** 사람에게 보여 준다.
+   */
+  const termsBase = defaultTermsFor(formKind)
+  const pendingTerms = termsOpen
+    ? []
+    : termKeysFor(formKind)
+      .filter(k => (terms[k] ?? '') !== (termsBase[k] ?? ''))
+      .map(k => `${TERM_LABELS[k]} 「${terms[k]}」`)
+
   return (
   <div style={{ background: '#fff', borderRadius: 8, padding: '14px 16px', marginBottom: 14, border: '1px solid #ebebeb' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -427,6 +439,19 @@ export default function CustomerCard({ errors, clearError, category, customer, e
         />
         <span style={{ fontSize: 11, fontWeight: 700, color: termsOpen ? '#234ea2' : '#6b7280' }}>조건 변경</span>
       </label>
+      {/* 꺼져 있는데 채워진 조건이 있다 — 가격표 품목의 납기가 들어온 경우다(useQuoteRows).
+          **체크를 대신 눌러 주지 않는다.** 꺼진 채로 두면 그 값은 저장·PDF 에 나가지 않으므로,
+          무엇이 기다리고 있는지 적고 누를 자리를 준다. 누르는 것은 사람이다. */}
+      {!termsOpen && pendingTerms.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setTermsOpen(true)}
+          title="조건 변경을 켜고 이 값을 반영합니다"
+          style={{ fontSize: 11, fontWeight: 600, color: '#234ea2', background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline dotted', whiteSpace: 'nowrap' }}
+        >
+          {pendingTerms.join(' · ')} 대기
+        </button>
+      )}
       <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
         <input
           type="checkbox"

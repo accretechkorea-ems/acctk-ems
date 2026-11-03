@@ -1,18 +1,23 @@
 'use client'
 
-// 견적 작성 화면의 **품목 행 추가 버튼** 다섯 개 — 품목 · 수동입력 · 국내조달품 · 서비스비 · 할인.
+// 견적 작성 화면의 **품목 줄 추가 버튼** — 가격표 · 직접 입력 · 국내 구매 · 서비스비 · 할인.
 //
-// app/quote/page.tsx 에서 **그대로 옮겨 온 것**이다(분리 리팩터 3a). JSX·스타일·문구·주석·
-// hover 처리를 한 글자도 바꾸지 않았다(들여쓰기 12칸만 덜어냈다).
+// ── 큰 단추 다섯에서 작은 띠 하나로 ────────────────────────────────────────
+//   종전에는 11px 패딩의 큰 단추가 2열 3줄로 쌓여 품목 목록 아래를 150px 넘게 차지했다.
+//   줄을 하나 더 넣는 일보다 **이미 넣은 줄을 고치는 일**이 훨씬 잦은데, 그 자리를 단추가
+//   먹고 있었다. 높이 30px 짜리 한 줄로 눕히고 좁으면 접히게 둔다.
+//
+// 이름은 lib/quoteRowKinds.ts 한 곳에서 온다 — 줄 머리의 배지와 **같은 글자**여야 한다.
 //
 // 서비스비와 할인은 **견적당 1건**이라 이미 있으면 비활성이다. 그 판정에 쓰는 두 행은
 // rows 에서 파생된 값이라 화면에서 받는다(useQuoteRows 의 serviceRow·discountRow).
 
-import type { QuoteRow } from '@/app/quote/types'
+import type { QuoteRow, RowKind } from '@/app/quote/types'
 import {
   createDiscountRow, createDomesticRow, createManualJpyRow, createRow, createServiceRow,
   type RowDefaults,
 } from '@/app/quote/calc'
+import { ROW_KIND_HINT, ROW_KIND_ORDER, rowKindAddLabel } from '@/lib/quoteRowKinds'
 
 export type RowAddButtonsProps = {
   setRows: React.Dispatch<React.SetStateAction<QuoteRow[]>>
@@ -32,59 +37,58 @@ export type RowAddButtonsProps = {
 
 export default function RowAddButtons({ setRows, serviceRow, discountRow, category, rowDefaults }: RowAddButtonsProps) {
   const d = rowDefaults ?? undefined
-  // 행 추가 버튼 — 1행: 주버튼(품목) + 수동입력 / 2행: 국내조달품 + 서비스비
+
+  /** 그 종류의 새 줄을 만든다 — 서비스비·할인에는 분류 기본값을 넘기지 않는다. */
+  const makeRow = (kind: RowKind): QuoteRow => {
+    switch (kind) {
+      case 'manual_jpy': return createManualJpyRow(category, d)
+      case 'domestic': return createDomesticRow(category, d)
+      case 'service': return createServiceRow()
+      case 'discount': return createDiscountRow()
+      default: return createRow(category, d)
+    }
+  }
+
+  /** 견적당 1건인 두 종류 — 이미 있으면 잠근다. */
+  const lockedOf = (kind: RowKind): string | null => {
+    if (kind === 'service' && serviceRow !== null) return '서비스비는 견적당 1건만 추가할 수 있습니다'
+    if (kind === 'discount' && discountRow !== null) return '할인은 견적당 1건만 추가할 수 있습니다'
+    return null
+  }
+
   return (
-<div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
-  <button
-    onClick={() => setRows(prev => [...prev, createRow(category, d)])}
-    style={{ minWidth: 0, padding: '11px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', transition: 'background 0.15s ease' }}
-    onMouseEnter={e => (e.currentTarget.style.background = '#1c3e87')}
-    onMouseLeave={e => (e.currentTarget.style.background = '#234ea2')}
-  >
-    + 품목 추가
-  </button>
-  {/* 수동입력 품목 — 가격표에 없는 제품. 개수 제한 없음. */}
-  <button
-    onClick={() => setRows(prev => [...prev, createManualJpyRow(category, d)])}
-    title="가격표에 없는 품목을 구입가(JPY) 직접 입력으로 추가합니다"
-    style={{ minWidth: 0, padding: '11px', background: '#fff', color: '#234ea2', border: '1px solid #ebebeb', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', transition: 'background 0.15s ease' }}
-    onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6')}
-    onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#fff')}
-  >
-    + 수동입력
-  </button>
-  {/* 국내조달품 — 원화 원가만. 고객 견적서에는 금액 없이 포함사항으로 나간다. */}
-  <button
-    onClick={() => setRows(prev => [...prev, createDomesticRow(category, d)])}
-    title="국내에서 조달하는 항목(원화 원가만, 마진 없음)"
-    style={{ minWidth: 0, padding: '11px', background: '#fff', color: '#234ea2', border: '1px solid #ebebeb', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', transition: 'background 0.15s ease' }}
-    onMouseEnter={e => ((e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6')}
-    onMouseLeave={e => ((e.currentTarget as HTMLButtonElement).style.background = '#fff')}
-  >
-    + 국내조달품
-  </button>
-  {/* 서비스비는 견적당 1건. 이미 있으면 비활성. */}
-  <button
-    onClick={() => setRows(prev => [...prev, createServiceRow()])}
-    disabled={serviceRow !== null}
-    title={serviceRow !== null ? '서비스비는 견적당 1건만 추가할 수 있습니다' : undefined}
-    style={{ minWidth: 0, padding: '11px', background: '#fff', color: serviceRow !== null ? '#9ca3af' : '#234ea2', border: '1px solid #ebebeb', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: serviceRow !== null ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', transition: 'background 0.15s ease' }}
-    onMouseEnter={e => { if (serviceRow === null) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6' }}
-    onMouseLeave={e => { if (serviceRow === null) (e.currentTarget as HTMLButtonElement).style.background = '#fff' }}
-  >
-    + 서비스비
-  </button>
-  {/* 할인 — 총액에서 한 번만 빼므로 견적당 1건. 이미 있으면 비활성. */}
-  <button
-    onClick={() => setRows(prev => [...prev, createDiscountRow()])}
-    disabled={discountRow !== null}
-    title={discountRow !== null ? '할인은 견적당 1건만 추가할 수 있습니다' : '총액에서 빼는 할인 행을 추가합니다'}
-    style={{ gridColumn: '1 / -1', minWidth: 0, padding: '11px', background: '#fff', color: discountRow !== null ? '#9ca3af' : '#234ea2', border: '1px solid #ebebeb', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: discountRow !== null ? 'not-allowed' : 'pointer', transition: 'background 0.15s ease' }}
-    onMouseEnter={e => { if (discountRow === null) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6' }}
-    onMouseLeave={e => { if (discountRow === null) (e.currentTarget as HTMLButtonElement).style.background = '#fff' }}
-  >
-    + DISCOUNT
-  </button>
-</div>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {ROW_KIND_ORDER.map(kind => {
+        // 가격표 줄이 주버튼이다 — 열에 아홉은 이것으로 넣는다.
+        const primary = kind === 'price_list'
+        const locked = lockedOf(kind)
+        return (
+          <button
+            key={kind}
+            onClick={() => setRows(prev => [...prev, makeRow(kind)])}
+            disabled={locked !== null}
+            title={locked ?? ROW_KIND_HINT[kind]}
+            style={{
+              height: 30, padding: '0 12px', borderRadius: 6, flex: primary ? '1 1 120px' : '0 1 auto',
+              background: primary && !locked ? '#234ea2' : '#fff',
+              color: locked ? '#9ca3af' : primary ? '#fff' : '#234ea2',
+              border: primary && !locked ? 'none' : '1px solid #ebebeb',
+              fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap',
+              cursor: locked ? 'not-allowed' : 'pointer', transition: 'background 0.15s ease',
+            }}
+            onMouseEnter={e => {
+              if (locked) return
+              e.currentTarget.style.background = primary ? '#1c3e87' : '#f3f4f6'
+            }}
+            onMouseLeave={e => {
+              if (locked) return
+              e.currentTarget.style.background = primary ? '#234ea2' : '#fff'
+            }}
+          >
+            {rowKindAddLabel(kind)}
+          </button>
+        )
+      })}
+    </div>
   )
 }

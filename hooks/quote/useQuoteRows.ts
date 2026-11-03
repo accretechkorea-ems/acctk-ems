@@ -43,7 +43,6 @@ export type UseQuoteRowsArgs = {
   /** 조건 네(다섯) 줄. 가격표 납기를 「납품일정」에 채울지 보는 데만 쓴다. */
   terms: Terms
   setTerms: SetTerms
-  setTermsOpen: React.Dispatch<React.SetStateAction<boolean>>
   /** 고를 수 있는 견적 분류(활성만). 줄별 분류 선택칸이 쓴다. */
   categories: QuoteCategory[]
   /** 「분류 나누기」가 켜져 있는가. 꺼져 있으면 줄별 분류 선택칸을 그리지 않는다. */
@@ -104,7 +103,7 @@ export type QuoteRowsActions = {
 }
 
 export function useQuoteRows({
-  supabase, rates, terms, setTerms, setTermsOpen, categories, lineSplitOn, formKind,
+  supabase, rates, terms, setTerms, categories, lineSplitOn, formKind,
 }: UseQuoteRowsArgs) {
   const [rows, setRows] = useState<QuoteRow[]>([createRow()])
   const [expensePresets, setExpensePresets] = useState<ExpensePreset[]>([])
@@ -147,13 +146,19 @@ export function useQuoteRows({
     setSearchOpen(prev => ({ ...prev, [rowId]: false }))
     setSearchQuery(prev => ({ ...prev, [rowId]: item.item_code }))
     // 가격표 납기 → 조건 1번 「납품일정」. **아직 기본값일 때만** 채운다(사람이 적어 둔 값을
-    // 덮지 않는다). 조건 블록은 꺼져 있으면 저장·PDF 가 기본값을 쓰므로 함께 켠다 —
-    // 켜지 않으면 채운 값이 조용히 버려진다(app/quote/page.tsx 의 termsResult).
+    // 덮지 않는다).
+    //
+    // ⚠ **체크(「조건 변경」)는 건드리지 않는다.** 예전에는 여기서 setTermsOpen(true) 를 했다 —
+    //   채운 값이 저장되게 하려는 것이었는데(꺼져 있으면 PDF·저장이 기본값을 쓴다), 품목 하나를
+    //   골랐을 뿐인데 체크가 저절로 켜지고 조건 네 칸이 펼쳐졌다. 사람은 자기가 누르지 않은
+    //   것이 켜진 이유를 알 수 없고, 되돌리려고 체크를 풀면 적어 둔 조건까지 함께 날아간다
+    //   (체크 해제가 setTerms(null) 이다 — components/quote/CustomerCard.tsx).
+    //   체크는 **사람이 누를 때만** 바뀐다. 값은 여기서 채워 두고, 꺼져 있으면 체크 옆에
+    //   「가격표 납기가 들어왔다」고 알려 사람이 켜게 한다(CustomerCard 의 납기 안내).
     if (item.delivery_time && terms.delivery_schedule === DEFAULT_TERMS.delivery_schedule) {
       setTerms(prev => ({ ...prev, delivery_schedule: `발주 후 ${item.delivery_time}주` }))
-      setTermsOpen(true)
     }
-  }, [rates, terms, setTerms, setTermsOpen])
+  }, [rates, terms, setTerms])
 
   const updateRow = useCallback((rowId: string, field: keyof QuoteRow, value: any) =>
     setRows(prev => prev.map(r => {

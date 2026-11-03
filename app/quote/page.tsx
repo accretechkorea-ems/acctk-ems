@@ -182,7 +182,7 @@ function QuotePageInner() {
     serviceRow, discountRow, expenses,
     clearAllRowCategories, applyCategoryDefaults, applySavedTariff,
     ctx: rowsCtx, actions: rowsActions,
-  } = useQuoteRows({ supabase, rates, terms, setTerms, setTermsOpen, categories: activeCategories, lineSplitOn, formKind })
+  } = useQuoteRows({ supabase, rates, terms, setTerms, categories: activeCategories, lineSplitOn, formKind })
   const [showPriceGuide, setShowPriceGuide] = useState(false)
   const priceGuideRef = useRef<HTMLDivElement | null>(null)
 
