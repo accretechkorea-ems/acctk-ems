@@ -112,7 +112,7 @@ export function useCustomerDetail(customerId: number) {
         .order('created_at', { ascending: false }),
       // 장비 홀딩(미해결 이슈). devices·engineers·holding_notes 로 향하는 FK 가 각각 하나뿐이라 관계 지정 없이 임베딩된다.
       supabase.from('holdings')
-        .select('*, devices(device_name, device_name2, serial_number), engineers(name, position), holding_notes(*, engineers(name, position))')
+        .select('*, devices(device_name, device_name2, serial_number, status, disposed_at), engineers(name, position), holding_notes(*, engineers(name, position))')
         .eq('customer_id', customerId)
         .order('started_at', { ascending: false }),
     ])

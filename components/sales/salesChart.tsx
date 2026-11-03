@@ -76,15 +76,60 @@ function niceStep(raw: number): number {
   return nice * exp
 }
 
+// ── Y축 최대값 ──────────────────────────────────────────────────────────────
+//
+// **목표가 축을 정한다.** 이 그래프를 보는 목적은 「목표에 얼마나 왔나」이고, 목표선이 늘 같은
+// 자리(축의 2/3)에 있으면 칸을 옮겨 봐도 눈이 기준을 다시 찾지 않는다.
+//
+// 가장 큰 막대로 축을 잡던 종전 규칙의 문제 — 한 칸이 유별나게 크면(큰 장비 한 대가 들어간 달)
+// 나머지 열한 칸이 바닥에 깔려 목표선과 붙어 버린다. 그 칸들의 달성 여부가 **안 보인다.**
+// 그래서 축을 목표에 묶고, 넘친 칸은 잘렸다는 표시를 달아 둔다(BreakBands·라벨의 ▲).
+
+/** 목표에서 축을 잡을 때의 배수 — 목표선이 축의 2/3 자리에 온다. */
+export const AXIS_TARGET_FACTOR = 1.5
+/** 목표가 없을 때의 배수 — 가장 큰 막대 위에 금액이 들어갈 여유다(종전 규칙 그대로). */
+export const AXIS_BAR_FACTOR = 1.15
+
+export type AxisPlan = {
+  /** 두 패널이 함께 쓰는 Y축 최대값. */
+  max: number
+  /** 목표에서 잡았나 — 거짓이면 가장 큰 막대에서 잡았다(목표 미설정). */
+  fromTarget: boolean
+}
+
 /**
- * 두 패널이 함께 쓸 Y축 최대값 — 모든 칸의 수주·매출과 두 목표를 통틀어 가장 큰 값의 1.15배.
- * 막대 위 금액이 패널 위로 잘리지 않을 만큼의 여유다.
+ * 축 계획 — **그 단위 목표 × 1.5.** 칸마다 목표가 다르면(연도별) 가장 큰 목표를 쓴다.
+ *
+ * 목표는 수주·매출 두 가지인데 **두 패널이 축을 함께 쓰므로** 둘 중 큰 쪽으로 잡는다.
+ * 목표가 하나도 없으면(미설정) 종전처럼 가장 큰 막대의 1.15배다 — 그때는 축을 묶을 기준이 없다.
  */
-export function axisMaxOf(bars: readonly UnitBar[]): number {
-  const raw = Math.max(
-    1, ...bars.map(b => Math.max(b.orderedAmt, b.revenueAmt, b.orderTarget, b.salesTarget)),
-  )
-  return raw * 1.15
+export function axisPlanOf(bars: readonly UnitBar[]): AxisPlan {
+  const target = Math.max(0, ...bars.map(b => Math.max(b.orderTarget, b.salesTarget)))
+  if (target > 0) return { max: target * AXIS_TARGET_FACTOR, fromTarget: true }
+  const raw = Math.max(1, ...bars.map(b => Math.max(b.orderedAmt, b.revenueAmt)))
+  return { max: raw * AXIS_BAR_FACTOR, fromTarget: false }
+}
+
+/** 부르는 쪽이 쓰는 이름은 그대로다 — 축 최대값 하나만 필요한 자리가 많다. */
+export const axisMaxOf = (bars: readonly UnitBar[]): number => axisPlanOf(bars).max
+
+export type BarShape = {
+  /** 축 높이에 대한 비율 — **1 을 넘지 않는다**(넘친 막대는 축 끝까지만 그린다). */
+  ratio: number
+  /** 축을 넘겼나 — 끊김 띠와 라벨의 ▲ 가 이것을 본다. */
+  over: boolean
+}
+
+/**
+ * 막대 하나의 모양 — 비율과 「넘쳤나」.
+ *
+ * 축을 넘긴 막대를 **축 끝까지** 그리는 이유는, 그리지 않거나 축을 늘리면 둘 다 거짓말이 되기
+ * 때문이다(안 그리면 실적이 없는 칸처럼 보이고, 늘리면 다른 칸이 깔린다). 끝까지 그린 뒤
+ * 「여기서 끊겼다」를 표시하고 금액은 라벨에 그대로 적는다 — 정확한 값은 글자가 말한다.
+ */
+export function barShapeOf(value: number, axisMax: number): BarShape {
+  if (!(axisMax > 0) || !(value > 0)) return { ratio: 0, over: false }
+  return { ratio: Math.min(1, value / axisMax), over: value > axisMax }
 }
 
 /**
@@ -101,6 +146,31 @@ function BarAnimate({ x, height, width, color }: {
       x={x} y={BASE_Y - h} width={width} height={h} rx={3} fill={color}
       style={{ transition: 'height 0.8s cubic-bezier(0.4,0,0.2,1), y 0.8s cubic-bezier(0.4,0,0.2,1)' }}
     />
+  )
+}
+
+/**
+ * 축을 넘긴 막대의 **끊김 표시** — 막대 윗부분을 흰 사선 띠 두 줄로 끊는다.
+ *
+ * 왜 필요한가 — 축이 목표에 묶여 있어 크게 넘긴 칸은 모두 축 끝에서 잘린다. 잘린 막대를
+ * 그대로 두면 서로 다른 값이 **같은 높이로 보인다.** 사선 띠는 「이 막대는 여기서 끝난 것이
+ * 아니다」를 그림만으로 알린다(금액은 라벨에 그대로 적혀 있다).
+ *
+ * 띠는 막대가 다 자란 뒤에 나타난다 — 자라는 동안 띠만 허공에 떠 있으면 흠집처럼 보인다.
+ */
+function BreakBands({ x, width, top }: { x: number; width: number; top: number }) {
+  const [shown, setShown] = useState(false)
+  useEffect(() => { const t = setTimeout(() => setShown(true), 700); return () => clearTimeout(t) }, [])
+  return (
+    <g style={{ opacity: shown ? 1 : 0, transition: 'opacity 0.3s ease' }}>
+      {/* 두 줄 — 한 줄은 그림의 흠으로 보이고, 셋이면 막대 색이 끊겨 짧아 보인다. */}
+      {[0, 7].map(dy => (
+        <line
+          key={dy} x1={x} y1={top + 14 + dy} x2={x + width} y2={top + 6 + dy}
+          stroke="#ffffff" strokeWidth={3}
+        />
+      ))}
+    </g>
   )
 }
 
@@ -170,8 +240,10 @@ export function ChartPanel({ kind, bars, axisMax, unitLabel }: {
         // 막대를 그리면 바닥에 짧은 선 조각으로 남아 실적이 있는 것처럼 보였다.
         const has = v > 0
         const cx = PAD_L + slot * i + slot / 2
+        // 축을 넘긴 칸은 비율이 1 에서 멈춘다(barShapeOf) — 축 끝까지 그리고 끊김을 표시한다.
+        const shape = barShapeOf(v, axisMax)
         // 아주 작은 값도 「선」이 아니라 막대로 읽히게 최소 높이를 준다.
-        const barH = has ? Math.max(3, PLOT_H * (v / axisMax)) : 0
+        const barH = has ? Math.max(3, PLOT_H * shape.ratio) : 0
         const ach = achieveOf(b)
         const t = targetOf(b)
         return (
@@ -181,7 +253,11 @@ export function ChartPanel({ kind, bars, axisMax, unitLabel }: {
             {has && (
               <>
                 <BarAnimate x={cx - barW / 2} height={barH} width={barW} color={color} />
-                <text x={cx} y={BASE_Y - barH - 6} textAnchor="middle" fontSize={11} fontWeight={700} fill={color}>{numM(v)}</text>
+                {/* 넘친 칸 — 축 끝에서 끊겼음을 띠로, 금액 뒤의 ▲ 로 알린다. */}
+                {shape.over && <BreakBands x={cx - barW / 2} width={barW} top={BASE_Y - barH} />}
+                <text x={cx} y={BASE_Y - barH - 6} textAnchor="middle" fontSize={11} fontWeight={700} fill={color}>
+                  {numM(v)}{shape.over ? ' ▲' : ''}
+                </text>
               </>
             )}
             {/* 칸마다 목표가 다를 때(연도별) — 그 칸 폭만큼만 선을 긋는다. */}

@@ -11,7 +11,7 @@ import HoldingModal from '@/components/customer/modals/HoldingModal'
 import HoldingResolveModal from '@/components/customer/modals/HoldingResolveModal'
 import { useHoldingCrud } from '@/hooks/customer/useHoldingCrud'
 import { useHoldingList } from '@/hooks/holding/useHoldingList'
-import { deviceLabel, elapsedDays, elapsedLabel } from '@/components/customer/holding'
+import { deviceLabel, elapsedDays, elapsedLabel, isHoldingDeviceDisposed } from '@/components/customer/holding'
 import type { Holding } from '@/components/customer/types'
 
 const PAGE_BG = '#f4f5f7'
@@ -48,6 +48,11 @@ function HoldingCard({ h, onOpen, onResolve }: { h: Holding; onOpen: () => void;
           <span style={{ fontSize: 12, color: '#234ea2', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
             {deviceLabel(h)}
           </span>
+          {/* 폐기된 장비를 가리키는 홀딩 — 줄은 그대로 두고 이름 옆에 알린다(그 장비는
+              장비 목록에서 숨겨져 있어 찾아도 안 나온다). 타임라인과 같은 뱃지다. */}
+          {isHoldingDeviceDisposed(h) && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>폐기</span>
+          )}
         </button>
         {stale && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }} title={`시작 ${h.started_at}`}>

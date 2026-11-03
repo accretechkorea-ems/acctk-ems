@@ -137,7 +137,14 @@ export type Holding = {
   created_by: number | null
   created_at: string
   updated_at: string
-  devices?: { device_name: string | null; device_name2: string | null; serial_number: string | null } | null
+  // status·disposed_at 은 **폐기 뱃지** 때문에 함께 읽는다 — 홀딩은 지난 기록이라
+  // 폐기된 장비를 그대로 가리킨다(그 장비는 목록에서 숨겨져 찾아도 안 나온다).
+  // 조회가 그 두 칸을 빼고 읽어 올 수도 있어 선택 칸으로 둔다(없으면 「사용중」으로 본다 —
+  // lib/deviceStatus.ts 의 isDisposed).
+  devices?: {
+    device_name: string | null; device_name2: string | null; serial_number: string | null
+    status?: string | null; disposed_at?: string | null
+  } | null
   engineers?: { name: string; position: string | null } | null
   holding_notes?: HoldingNote[]
   // 홀딩 현황 화면에서만 함께 읽는다 (업체 상세는 이미 업체를 알고 있어 생략)

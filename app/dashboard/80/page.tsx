@@ -400,8 +400,16 @@ export default function Dashboard80Page() {
                             {u.company}
                           </span>
                         </span>
-                        <span style={{ fontSize: 12, color: '#234ea2', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {u.title}
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                          <span style={{ fontSize: 12, color: '#234ea2', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+                            {u.title}
+                          </span>
+                          {/* 폐기된 장비를 가리키는 홀딩 — 장비 목록에는 없는 이름이라 알려 둔다. */}
+                          {u.titleBadge && (
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', background: '#f3f4f6', borderRadius: 99, padding: '1px 7px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                              {u.titleBadge}
+                            </span>
+                          )}
                         </span>
                         <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {u.owner}

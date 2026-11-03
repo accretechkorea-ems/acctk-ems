@@ -22,7 +22,7 @@ export function useHoldingList() {
     setLoading(true)
     const { data, error } = await supabase
       .from('holdings')
-      .select('*, customers(company_name), devices(device_name, device_name2, serial_number), engineers(name, position), holding_notes(*, engineers(name, position))')
+      .select('*, customers(company_name), devices(device_name, device_name2, serial_number, status, disposed_at), engineers(name, position), holding_notes(*, engineers(name, position))')
       .order('started_at', { ascending: false })
     setLoading(false)
 

@@ -83,7 +83,7 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
     if (!onActiveHoldingFound) return
     const { data: active, error: holdingErr } = await supabase
       .from('holdings')
-      .select('*, devices(device_name, device_name2, serial_number), engineers(name, position), holding_notes(*, engineers(name, position))')
+      .select('*, devices(device_name, device_name2, serial_number, status, disposed_at), engineers(name, position), holding_notes(*, engineers(name, position))')
       .eq('device_id', savedDeviceId)
       .is('resolved_at', null)
       .limit(1)

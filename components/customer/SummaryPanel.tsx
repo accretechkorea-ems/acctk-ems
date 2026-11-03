@@ -6,7 +6,7 @@
 import { useMemo, useRef, useState, type CSSProperties } from 'react'
 import { countQuoteChannels } from './utils'
 import { STAGES, compactKRW, isClosed, stageRank } from './opportunity'
-import { deviceLabel, elapsedLabel } from './holding'
+import { deviceLabel, elapsedLabel, isHoldingDeviceDisposed } from './holding'
 import type { Holding, Quote, SalesOpportunity, ServiceHistory } from './types'
 import Popover from '@/components/common/Popover'
 
@@ -220,6 +220,10 @@ function HoldingRow({ h, onClick }: { h: Holding; onClick: () => void }) {
       <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 7px', flexShrink: 0, maxWidth: 78, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {deviceLabel(h)}
       </span>
+      {/* 폐기된 장비 — 280px 짜리 줄이라 글자 없이 「폐기」만 붙인다(날짜는 장비 카드에 있다). */}
+      {isHoldingDeviceDisposed(h) && (
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', background: '#f3f4f6', borderRadius: 99, padding: '2px 7px', flexShrink: 0, whiteSpace: 'nowrap' }}>폐기</span>
+      )}
       <span style={{ fontSize: 12, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>
         {h.title}
       </span>

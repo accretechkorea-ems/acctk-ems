@@ -35,6 +35,10 @@ const {
   fiscalYearOf, matchPeriod, inOrderPeriod, inRevenuePeriod, periodTarget,
   engineerStat, getFYMonths, monthlyBars, remainingMonths, neededPerMonth, yearSummary, unitBars,
 } = load(path.join(ROOT, 'lib/salesStats.ts'))
+// 그리는 쪽의 **순수 함수만** 꺼내 쓴다(축 계획·막대 모양). 그림은 그리지 않는다.
+const {
+  axisPlanOf, barShapeOf, AXIS_TARGET_FACTOR, AXIS_BAR_FACTOR,
+} = load(path.join(ROOT, 'components/sales/salesChart.tsx'))
 
 let fails = 0
 const eq = (name, got, want) => {
@@ -232,5 +236,43 @@ console.log('\n── 단위별 칸과 목표(÷12 · ÷4 · ×1) ──')
   eq('이익도 칸을 따라간다', quarters[0].profitAmt, 700)
 }
 
+console.log('\n── 그래프 Y축: 목표 × 1.5 ──')
+{
+  // 「월 목표 3천만 원」 한 사람의 FY. 한 달에 2.68억(큰 장비 한 대)이 들어간 칸이 있다.
+  const bar = over => ({
+    key: 'k', label: '10월', orderedAmt: 0, revenueAmt: 0, profitAmt: 0,
+    orderTarget: 30000000, salesTarget: 30000000, orderAchieve: null, salesAchieve: null,
+    isNow: false, ...over,
+  })
+  const bars = [bar({ orderedAmt: 268000000 }), bar({ key: 2, orderedAmt: 12000000 })]
+  const plan = axisPlanOf(bars)
+  eq('목표 3천만 → 축 4천5백만(목표 기준)', [plan.max, plan.fromTarget], [45000000, true])
+  eq('배수는 1.5 다', AXIS_TARGET_FACTOR, 1.5)
+
+  // 2.68억 막대 — 축 끝까지만 그리고(cap) 넘쳤다고 표시한다(over).
+  const big = barShapeOf(268000000, plan.max)
+  eq('2.68억 막대는 축 끝에서 끊긴다(cap)', big.ratio, 1)
+  eq('넘쳤다고 표시한다(over)', big.over, true)
+
+  // 목표 안에 있는 칸은 종전과 똑같이 비율대로 그린다.
+  const small = barShapeOf(12000000, plan.max)
+  eq('1,200만 막대는 비율 그대로(넘치지 않는다)', [small.ratio, small.over], [12000000 / 45000000, false])
+  eq('목표선은 축의 2/3 자리', 30000000 / plan.max, 2 / 3)
+
+  // 목표가 딱 맞는 칸 — **같은 값은 넘친 것이 아니다**(경계).
+  eq('축과 같은 값은 넘치지 않는다', barShapeOf(45000000, 45000000), { ratio: 1, over: false })
+  eq('1원만 넘어도 넘친 것이다', barShapeOf(45000001, 45000000).over, true)
+  eq('0 짜리 칸은 모양이 없다', barShapeOf(0, 45000000), { ratio: 0, over: false })
+  eq('축이 0 이면 나누지 않는다', barShapeOf(100, 0), { ratio: 0, over: false })
+
+  // 수주·매출 목표가 다르면 **큰 쪽**으로 잡는다 — 두 패널이 축을 함께 쓴다.
+  eq('두 목표 중 큰 쪽', axisPlanOf([bar({ orderTarget: 20000000, salesTarget: 50000000 })]).max, 75000000)
+
+  // 목표가 없으면 종전 규칙(가장 큰 막대 × 1.15).
+  const noTarget = axisPlanOf([bar({ orderTarget: 0, salesTarget: 0, orderedAmt: 10000000 })])
+  eq('목표 미설정 → 가장 큰 막대 × 1.15', [noTarget.max, noTarget.fromTarget], [11500000, false])
+  eq('그 배수는 1.15 다(종전 값)', AXIS_BAR_FACTOR, 1.15)
+  eq('목표도 막대도 없으면 0 으로 나누지 않는다', axisPlanOf([bar({ orderTarget: 0, salesTarget: 0 })]).max, 1.15)
+}
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
 process.exit(fails === 0 ? 0 : 1)

@@ -674,7 +674,11 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
 
   return (
     <ModalOverlay onClose={onClose} style={{ background: 'rgba(0,0,0,0.5)', padding: 16 }}>
-      <div style={{ background: CARD_BG, borderRadius: 18, width: '100%', minWidth: 900, maxWidth: 1200, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', position: 'relative' }}>
+      {/* 높이는 **견적 수와 무관하게 고정**이다(92vh). 내용에 맞춰 늘었다 줄었다 하면
+          상태 칩을 누를 때마다 모달이 들썩이고, 표의 머리줄·쪽 넘김 버튼 자리가 옮겨
+          다음에 누를 것을 눈으로 다시 찾아야 한다. 개인 그래프 모달과 같은 방식이다
+          (components/sales/EngineerChartModal.tsx — 그쪽은 min(760px, 90vh)). */}
+      <div style={{ background: CARD_BG, borderRadius: 18, width: '100%', minWidth: 900, maxWidth: 1200, height: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', position: 'relative' }}>
         <div style={{ padding: '18px 24px', borderBottom: `1px solid ${BORDER}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
             <div>
@@ -748,9 +752,10 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
             />
           </div>
         </div>
-        <div style={{ overflowY: 'auto', flex: 1 }}>
+        <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, display: paged.length === 0 ? 'flex' : 'block' }}>
           {paged.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>견적이 없습니다</div>
+            // 높이가 고정이라 빈 자리가 넓다 — 글을 위에 붙여 두면 아래가 텅 빈 칸으로 남는다.
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: GRAY, fontSize: 13 }}>견적이 없습니다</div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead style={{ position: 'sticky', top: 0, background: CARD_BG, zIndex: Z.thead }}>

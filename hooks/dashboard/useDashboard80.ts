@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { isClosed } from '@/components/customer/opportunity'
-import { deviceLabel, elapsedDays } from '@/components/customer/holding'
+import { deviceLabel, elapsedDays, isHoldingDeviceDisposed } from '@/components/customer/holding'
 import { INSTALL_SERVICE_TYPE, prepSummary, type PrepSummary } from '@/lib/installPrep'
 import { countedVisitEnd } from '@/lib/serviceVisit'
 import { todayKST, daysBetween, nowKSTParts, nowHmKST } from '@/lib/date'
@@ -98,6 +98,8 @@ export type UrgentItem = {
   key: string
   company: string
   title: string           // 장비명 또는 기회 제목
+  /** 제목 옆 뱃지 — 홀딩이 **폐기된 장비**를 가리킬 때 「폐기」. 그 밖에는 비운다. */
+  titleBadge?: string
   owner: string           // 담당자
   status: string          // '45일째' / '32일 무활동' / '이번 달 마감'
   score: number           // 클수록 급하다(아래 주석 참조)
@@ -156,6 +158,8 @@ export function buildUrgentItems(args: {
       key: `holding-${h.holding_id}`,
       company: h.customers?.company_name ?? '-',
       title: deviceLabel(h),
+      // 폐기된 장비를 가리키는 홀딩도 그대로 센다 — 장비를 뺐어도 홀딩은 아직 안 풀렸다.
+      titleBadge: isHoldingDeviceDisposed(h) ? '폐기' : undefined,
       owner: h.engineers?.name ?? '-',
       status: `${days}일째`,
       score: days,
