@@ -129,35 +129,69 @@ export default function ProfitPanel({
   const minOperating = minOperatingMarginOf(category)
   const belowMin = isBelowMinOperating(breakdown, category)
 
-  // 행 종류별 원가 상세. 새 종류(manual_jpy·domestic)는 case 만 추가하면 된다.
-  // null 을 반환하면 원가 줄 없이 판매단가부터 표시된다(구분선도 생략).
-  const costDetail = (r: QuoteRow) => {
+  // ── 품목 한 칸 = 두 줄 ────────────────────────────────────────────────
+  //
+  // 종전에는 구입가·관세×환율·원가·판매단가·공급가·매출이익을 **여섯 줄**로 적었다.
+  // 품목이 여섯이면 서른여섯 줄이라, 정작 보려던 아래쪽 합계·판관비·영업이익이 화면
+  // 밖으로 밀려났다. 값은 하나도 빼지 않고 **식으로 이어** 두 줄에 담는다.
+  //
+  //   1줄  ¥130,500 × 1.13 × 8.46 = 원가 ₩1,248,159
+  //   2줄  ₩3,000,000 × 1 = ₩3,000,000 · 매출이익 ₩1,751,841 (58.4%)
+  //
+  // 줄 종류마다 1줄의 재료가 다르다 — 가격표·수동입력은 구입가 식, 서비스비는 부대비용
+  // 건수와 원가, 국내조달품은 원가와 「이익 없음」이다. 2줄은 모두 같다.
+  const costLine = (r: QuoteRow): React.ReactNode => {
     switch (r.row_kind) {
       case 'price_list':
       case 'manual_jpy':   // 구입가 출처만 다르고 원가 산출은 동일하다
         return (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>구입가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>{CURRENCY_SYMBOL[r.currency]}{r.cost_price_jpy.toLocaleString()}</span></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>관세 × 환율</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>×{r.tariff_rate} × {r.exchange_rate.toFixed(2)}</span></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>원가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>₩{numKR(r.product_price)}</span></div>
+            {CURRENCY_SYMBOL[r.currency]}{r.cost_price_jpy.toLocaleString()}
+            <span style={{ color: '#9ca3af' }}> × </span>{r.tariff_rate}
+            <span style={{ color: '#9ca3af' }}> × </span>{r.exchange_rate.toFixed(2)}
+            <span style={{ color: '#9ca3af' }}> = 원가 </span>
+            <b style={{ color: '#111827', fontWeight: 600 }}>₩{numKR(r.product_price)}</b>
           </>
         )
       case 'service':
         return (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>부대비용</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>{r.expenses.length}건</span></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>원가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>₩{numKR(r.product_price)}</span></div>
+            부대비용 {r.expenses.length}건
+            <span style={{ color: '#9ca3af' }}> = 원가 </span>
+            <b style={{ color: '#111827', fontWeight: 600 }}>₩{numKR(r.product_price)}</b>
           </>
         )
       case 'domestic':
         return (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>원가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>₩{numKR(r.product_price)}</span></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>이익</span><span style={{ fontSize: 13, color: '#6b7280', fontWeight: 500 }}>이익 없음</span></div>
+            <span style={{ color: '#9ca3af' }}>원가 </span>
+            <b style={{ color: '#111827', fontWeight: 600 }}>₩{numKR(r.product_price)}</b>
+            <span style={{ color: '#9ca3af' }}> · 이익 없음</span>
           </>
         )
+      default:
+        return null
     }
   }
+
+  /**
+   * 품목 이름 — **품번과 품명이 같으면 한 번만** 적는다.
+   *
+   * 종전에는 `{itemText} ({model_jp})` 를 그대로 이어 붙여, 가격표 품목의 품명이 모델명
+   * 그대로인 줄에서 「(A-1207-0020-RBE) (A-1207-0020-RBE)」처럼 두 번 나왔다.
+   * 괄호·공백을 떼고 견준 뒤 같으면 하나로 접는다.
+   */
+  const itemLabel = (r: QuoteRow): string => {
+    const bare = (v: string | null | undefined) => (v ?? '').replace(/[()\s]/g, '').toLowerCase()
+    const name = (r.itemText ?? '').trim()
+    const model = (r.selectedItem?.model_jp ?? '').trim()
+    if (!model) return name || '-'
+    if (!name) return model
+    // 품명이 모델을 이미 품고 있으면(「(모델)」로 들어간 경우 포함) 품명만 적는다.
+    if (bare(name) === bare(model) || bare(name).includes(bare(model))) return name
+    return `${name} (${model})`
+  }
+
   return (
     <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #ebebeb', marginBottom: 14, overflow: 'hidden' }}>
       {/* 머리줄 — 한 줄에 네 덩어리다. **줄이는 것은 출처 글자 하나뿐**이다:
@@ -283,24 +317,34 @@ export default function ProfitPanel({
       <div style={{ padding: '12px 16px' }}>
         {rows.map((r, i) => {
           if (r.supply_price <= 0) return null
-          const detail = costDetail(r)
+          const line1 = costLine(r)
+          // 국내조달품은 마진이 없는 자사 부담 항목이라 이익 색상 규칙에서 제외한다(중립색).
+          const profitColor = r.row_kind === 'domestic' ? '#6b7280' : (r.profit >= 0 ? '#16a34a' : '#dc2626')
           return (
-          <div key={r.id} style={{ marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#234ea2', color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
-              <span style={{ fontSize: 11, color: '#111827', fontWeight: 600 }}>{r.itemText && r.itemText}{r.selectedItem && ` (${r.selectedItem.model_jp})`}</span>
+          <div key={r.id} style={{ marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #ebebeb' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+              <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#234ea2', color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
+              <span style={{ fontSize: 11, color: '#111827', fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemLabel(r)}</span>
             </div>
-            {detail}
-            <div style={{ borderTop: detail ? '1px solid #ebebeb' : undefined }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>판매단가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>₩{numKR(r.unit_price)}</span></div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>공급가</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 500 }}>₩{numKR(r.supply_price)}</span></div>
-              {/* 국내조달품은 마진이 없는 자사 부담 항목이라 이익 색상 규칙에서 제외한다(중립색). */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>매출이익 <span style={{ color: r.row_kind === 'domestic' ? '#6b7280' : (r.profit >= 0 ? '#16a34a' : '#dc2626') }}>({r.profit_rate}%)</span></span><span style={{ fontSize: 13, color: r.row_kind === 'domestic' ? '#6b7280' : (r.profit >= 0 ? '#16a34a' : '#dc2626'), fontWeight: 500 }}>₩{numKR(r.profit)}</span></div>
+            {/* 1줄 — 원가가 어떻게 나왔나. 종류에 따라 재료가 다르다(costLine). */}
+            {line1 && (
+              <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.6, paddingLeft: 22 }}>{line1}</div>
+            )}
+            {/* 2줄 — 얼마에 몇 개를 팔아 얼마가 남나. 모든 종류가 같다. */}
+            <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.6, paddingLeft: 22 }}>
+              ₩{numKR(r.unit_price)}
+              <span style={{ color: '#9ca3af' }}> × </span>{r.quantity}
+              <span style={{ color: '#9ca3af' }}> = </span>
+              <b style={{ color: '#111827', fontWeight: 600 }}>₩{numKR(r.supply_price)}</b>
+              <span style={{ color: '#d1d5db' }}> · </span>
+              <span style={{ color: '#9ca3af' }}>매출이익 </span>
+              <b style={{ color: profitColor, fontWeight: 600 }}>₩{numKR(r.profit)}</b>
+              <span style={{ color: profitColor }}> ({r.profit_rate}%)</span>
             </div>
           </div>
           )
         })}
-        <div style={{ marginTop: 4, paddingTop: 6, borderTop: '2px solid #111827' }}>
+        <div style={{ marginTop: 2, paddingTop: 6, borderTop: '2px solid #111827' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>공급가 합계</span><span style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>₩{numKR(totalSupply)}</span></div>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}><span style={{ fontSize: 12, color: '#6b7280' }}>원가 합계</span><span style={{ fontSize: 13, color: '#dc2626', fontWeight: 600 }}>−₩{numKR(totalProduct)}</span></div>
           {/* 할인 — 총액에서 빠진 금액. 행 목록에는 공급가가 음수라 나오지 않으므로 여기서 알린다. */}
