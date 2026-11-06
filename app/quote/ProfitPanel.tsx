@@ -48,13 +48,36 @@ const amountCell: React.CSSProperties = { textAlign: 'right', whiteSpace: 'nowra
 /** 라벨 칸. */
 const labelCell: React.CSSProperties = { fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }
 /**
- * 품목 두 줄 — **오른쪽 정렬**이라 끝선이 아래 합계 금액 열과 같다(둘 다 이 블록의
- * 안쪽 여백에서 끝난다). 접지 않는다 — 넘치면 말줄임으로 끊어 두 줄을 지킨다.
+ * 식 줄 — 원가가 어떻게 나왔고 얼마가 남나. **왼쪽 정렬**이고 번호 뱃지 폭만큼 들여 쓴다
+ * (제목 줄의 품명과 같은 선에서 시작한다). 금액은 제목 줄 오른쪽 끝으로 옮겼으므로
+ * 이 줄은 설명만 남는다 — 설명을 오른쪽에 붙여 두면 품명과 끝선이 어긋나 읽는 눈이
+ * 줄마다 좌우로 움직인다. 접지 않는다(넘치면 식만 말줄임으로 끊는다).
  */
 const itemLine: React.CSSProperties = {
-  fontSize: 12, color: '#9ca3af', lineHeight: 1.6, justifyContent: 'flex-end',
-  // 오른쪽 정렬이되 **두 토막**이다 — 넘칠 때 왼쪽(식)만 줄어든다(1행 주석 참고).
+  fontSize: 12, color: '#9ca3af', lineHeight: 1.6, paddingLeft: 22,
+  // **두 토막**이다 — 넘칠 때 왼쪽(식)만 줄어든다.
   display: 'flex', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden',
+}
+/** 품목 번호 뱃지 — 품목 패널의 줄 번호와 같은 수다. 폭 16 + 여백 6 = 식 줄 들여쓰기. */
+const numBadge: React.CSSProperties = {
+  width: 16, height: 16, borderRadius: '50%', background: '#234ea2', color: '#fff',
+  fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center',
+  justifyContent: 'center', flexShrink: 0,
+}
+/**
+ * 환율 묶음 — 「¥ 10.0000원」. **숫자만 크고**(17/700) 통화 기호와 「원」은 회색 곁글이다.
+ * 점선 밑줄은 걷었다 — 링크처럼 보여 한 번 눌러 보게 만들었는데, 고치는 길은 더블클릭이다.
+ */
+const ratePrefix: React.CSSProperties = { fontSize: 11, color: '#6b7280', fontWeight: 600 }
+const rateNum: React.CSSProperties = {
+  fontSize: 17, color: '#111827', fontWeight: 700, cursor: 'text', lineHeight: 1.2,
+  whiteSpace: 'nowrap', letterSpacing: '-0.3px',
+}
+const rateUnit: React.CSSProperties = { fontSize: 12, color: '#6b7280', fontWeight: 600, letterSpacing: 0 }
+/** 환율을 손으로 고치는 칸. */
+const rateEditBox: React.CSSProperties = {
+  fontSize: 15, fontWeight: 700, color: '#234ea2', border: '1px solid #234ea2',
+  borderRadius: 6, padding: '1px 5px', outline: 'none',
 }
 
 export default function ProfitPanel({
@@ -68,41 +91,27 @@ export default function ProfitPanel({
   const hasUsdRow = rows.some(r => r.currency === 'USD')
 
   /**
-   * 환율 옆 작은 글 — **이 숫자가 어디서 온 것인가.**
+   * 환율 옆 작은 글 — **이 숫자가 어디서 온 것인가.** 「한국수출입은행 · 11-03」 한 줄이다.
    *
-   * 숫자만 있으면 실시간으로 받은 값인지 누가 손으로 넣은 값인지 알 수 없다. 원가가
-   * 전부 이 숫자에 걸려 있어, 견적을 넘기기 전에 그 둘은 구분돼야 한다.
+   * 숫자만 있으면 받은 값인지 누가 손으로 넣은 값인지 알 수 없고, 원가가 전부 이 숫자에
+   * 걸려 있어 그 둘은 넘기기 전에 구분돼야 한다. 다만 적을 것은 **기관과 날**뿐이다 —
+   * 조회 시각·「저장값」 같은 말은 숫자를 읽는 데 보태는 것이 없는데도 머리줄을 두 줄로
+   * 밀어 냈다(기준일과 조회 시각이 한 줄에 나란히 붙어 어느 쪽이 환율의 날인지도 흐렸다).
    *
-   *   API    「한국수출입은행 · 기준일 2026-10-28 · 14:03 조회」
-   *          기준일은 **그 기관이 말하는 날**이다(주말·공휴일이면 며칠 앞), 시각은 우리가
-   *          받은 때(KST).
-   *   저장값 「한국수출입은행 · 기준일 2026-10-28 · 저장값」 — exchange_rate 표에 있던
-   *          값이다. 그 표에는 API 가 준 값만 들어가므로 기관 이름을 적는다. 받은 시각은
-   *          남아 있지 않아 「저장값」으로 닫는다(방금 받은 것과 구분된다).
-   *   내 설정 「저장된 설정 · 2026-10-28」 — **내가 그 분류로 마지막에 확정할 때 쓴 환율**이다
-   *          (quote_user_defaults). 기관 이름을 적지 않는다: 그때 직접 넣은 값일 수도 있다.
-   *   직접   「직접 입력」
+   *   받은 값·저장값  「한국수출입은행 · 11-03」 — 11-03 은 **그 기관이 말하는 기준일**이다
+   *                   (주말·공휴일이면 며칠 앞). exchange_rate 표에 있던 값도 그 기관이 준
+   *                   값이므로 같게 적는다.
+   *   내 설정         「저장된 설정 · 11-03」 — 내가 그 분류로 마지막에 확정할 때 쓴 환율이다
+   *                   (quote_user_defaults). 그때 직접 넣은 값일 수도 있어 기관을 적지 않는다.
+   *   직접 입력        **빈 글.** 출처가 없다 — 칸이 비어 있는 것이 곧 손으로 넣었다는 뜻이다.
    */
-  /**
-   * 출처 글을 **두 토막**으로 돌려준다 — 폭이 모자랄 때 접히는 자리를 한 곳만 남기려고.
-   *
-   * 두 토막을 각각 nowrap 으로 두고 사이에 공백 하나만 두면, 줄이 끊기는 곳은 그 공백
-   * 하나뿐이다. 그래서 「한국수출입은행 ·」 뒤에서만 접히고 「기준일 2026-10-28 · 16:08
-   * 조회」가 중간에서 잘리지 않는다. 한 토막뿐이면(직접 입력) 접히지 않는다.
-   */
-  const rateNote = (currency: Currency): { head: string; rest: string } | null => {
+  const rateNote = (currency: Currency): string => {
     const meta = rateMeta[currency]
-    if (!meta) return null
-    if (meta.kind === 'manual') return { head: '직접 입력', rest: '' }
-    if (meta.kind === 'saved') {
-      return meta.savedAt ? { head: '저장된 설정 ·', rest: meta.savedAt } : { head: '저장된 설정', rest: '' }
-    }
-    return {
-      head: `${meta.source} ·`,
-      rest: meta.kind === 'cache'
-        ? `기준일 ${meta.baseDate} · 저장값`
-        : `기준일 ${meta.baseDate} · ${meta.fetchedAt} 조회`,
-    }
+    if (!meta || meta.kind === 'manual') return ''
+    // 기준일·저장일은 'YYYY-MM-DD' 다. 머리줄에는 월·일만 쓴다(해는 올해다).
+    const mmdd = (d: string) => d.slice(5) || d
+    if (meta.kind === 'saved') return meta.savedAt ? `저장된 설정 · ${mmdd(meta.savedAt)}` : '저장된 설정'
+    return `${meta.source} · ${mmdd(meta.baseDate)}`
   }
 
   const note = rateNote('JPY')
@@ -149,17 +158,17 @@ export default function ProfitPanel({
   const minOperating = minOperatingMarginOf(category)
   const belowMin = isBelowMinOperating(breakdown, category)
 
-  // ── 품목 한 칸 = 오른쪽 정렬 두 줄 ─────────────────────────────────
+  // ── 품목 한 칸 = 제목 줄 + 식 줄 ───────────────────────────────────
   //
-  //   ¥13,900 × 1.13 × 8.49 = ₩133,357 (원가) · 매출이익 ₩93,643 (41%)
-  //                                   ₩227,000 × 1 = ₩227,000
+  //   ① A-1207-0020-RBE  ×1                                    ₩286,000
+  //      ¥13,900 × 1.13 × 10.00 = ₩157,070 (원가) · 매출이익 ₩128,930 (45.1%)
   //
-  // 왼쪽에 라벨 열을 두던 세 줄 격자를 걷었다 — 라벨 세 개가 품목마다 되풀이되면서
-  // 정작 읽어야 할 식과 금액을 오른쪽으로 밀었다. 지금은 **식 자체가 설명**이고
-  // (「= ₩133,357 (원가)」), 두 줄 모두 오른쪽에 붙어 **끝선이 아래 합계 금액 열과
-  // 같다**. 세로로 훑으면 품목 금액과 합계 금액의 자릿수가 한 줄에 선다(tabular-nums).
+  // **제목 줄이 그 품목의 결론이다** — 무엇을 몇 개 팔아 얼마가 되나. 그래서 금액(공급가
+  // = 단가 × 수량)은 제목 줄 오른쪽 끝, 아래 합계 금액 열과 **같은 끝선**에 붙는다.
+  // 단가는 적지 않는다(식 줄에서 원가를 보고 나면 단가는 공급가 ÷ 수량이고, 그 세 수를
+  // 한 줄에 늘어놓으면 어느 것이 손님에게 나가는 금액인지가 흐려진다).
   //
-  // 색은 세 단이다 — 식은 흐리게(#9ca3af), 금액은 한 단 진하게(#374151), 공급가 결과만
+  // 색은 세 단이다 — 식은 흐리게(#9ca3af), 금액은 한 단 진하게(#374151), 공급가만
   // 본문색으로 굵게. 매출이익만 초록이라 눈이 먼저 간다.
   const costExpr = (r: QuoteRow): React.ReactNode => {
     switch (r.row_kind) {
@@ -199,60 +208,74 @@ export default function ProfitPanel({
     return `${name} (${model})`
   }
 
+  /** 품목도 금액도 없는 줄은 패널에 내지 않는다(합계에는 어느 쪽이든 0 이다). */
+  const hasContent = (r: QuoteRow): boolean => !!r.selectedItem || r.manual_cost_jpy > 0
+    || r.manual_unit_price > 0 || (r.row_kind === 'service' && r.expenses.length > 0)
+  /**
+   * 패널에 낼 줄 — **번호는 견적 줄 번호**다(품목 패널의 번호와 같아야 한다. 건너뛴 줄이
+   * 있어도 번호는 밀리지 않는다). 지브라 띠는 **여기 보이는 순서**로 센다 — 줄 번호로
+   * 세면 건너뛴 자리에서 같은 색 띠가 두 줄 이어진다.
+   */
+  const shown = rows
+    .map((row, i) => ({ row, no: i + 1 }))
+    .filter(({ row }) => row.supply_price !== 0 || hasContent(row))
+
   return (
     <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #ebebeb', marginBottom: 14, overflow: 'hidden' }}>
-      {/* 머리줄 — 한 줄에 네 덩어리다. **줄이는 것은 출처 글자 하나뿐**이다:
-          제목·환율·오른쪽 끝(새로고침·이익률)은 flexShrink 0 으로 묶어 두고, 좁아지면
-          출처만 두 줄로 접힌다. 예전에는 아무것도 묶어 두지 않아 좁은 폭에서 「수익 분석」이
-          두 줄로 쪼개지고 「8.3830원」의 「원」이 혼자 다음 줄로 내려갔다. */}
+      {/* 머리줄 — 한 줄에 **세 덩어리**다: 제목 · 환율 묶음 · 오른쪽 끝 이익률.
+          환율 묶음은 「¥ 10.0000원 ↻」 하나로 읽힌다 — 숫자·단위·새로고침을 한 덩어리로
+          붙여 **그 버튼이 이 숫자를 다시 받는 버튼**임을 자리로 알린다(예전에는 오른쪽 끝
+          이익률 옆에 떨어져 있어, 무엇을 새로 받는 단추인지 글로만 설명됐다).
+          줄이는 것은 출처 글자 하나뿐이다 — 제목·환율·이익률은 flexShrink 0 으로 묶는다. */}
       <div style={{ background: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #ebebeb' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <div style={{ width: 3, height: 14, background: '#234ea2', borderRadius: 6, flexShrink: 0 }} />
           <span style={{ fontSize: 13, fontWeight: 800, color: '#111827', whiteSpace: 'nowrap' }}>수익 분석</span>
         </div>
-        {/* 환율 + 출처 — 이 묶음만 줄어든다(minWidth 0 이 없으면 flex 항목은 내용 밑으로 줄지 않는다). */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, flex: '1 1 auto' }}>
-          {editing === 'JPY' ? (
-            <input
-              type="number"
-              value={editRateVal}
-              onChange={e => setEditRateVal(e.target.value)}
-              onBlur={commitEdit}
-              onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(null) }}
-              autoFocus
-              style={{ width: 80, fontSize: 11, fontWeight: 700, color: '#234ea2', border: '1px solid #234ea2', borderRadius: 6, padding: '1px 5px', outline: 'none' }}
-            />
-          ) : (
-            <span
-              onDoubleClick={() => startEdit('JPY')}
-              title="더블클릭하여 수동 입력"
-              // 이 숫자에 원가가 전부 걸려 있어 머리줄에서 가장 크게 읽힌다(11 → 17px, 진한 색).
-              // 숫자와 「원」은 한 덩어리다 — 「원」만 다음 줄로 내려가면 숫자가 아닌 것으로 읽힌다.
-              // 「원」은 13px 로 한 급 낮춘다(숫자가 먼저 읽히게).
-              style={{
-                fontSize: 17, color: '#111827', fontWeight: 700, cursor: 'text', lineHeight: 1.2,
-                borderBottom: '1px dashed #9ca3af', whiteSpace: 'nowrap', flexShrink: 0,
-                letterSpacing: '-0.3px',
-              }}>
-              {rates.JPY
-                ? <>{rates.JPY.toFixed(4)}<span style={{ fontSize: 13, fontWeight: 700 }}>원</span></>
-                : <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280' }}>환율 로딩중...</span>}
-            </span>
-          )}
-          {/* 출처·기준 시각. 숫자를 고치는 중에는 내지 않는다(그 순간의 출처는 아직 모른다).
-              폭이 모자라면 **이 글자만** 두 줄로 접힌다(아래 두 토막 사이의 공백 한 곳). */}
-          {editing !== 'JPY' && note && (
-            <span style={{ fontSize: 10, color: '#9ca3af', whiteSpace: 'normal', lineHeight: 1.35, minWidth: 0 }}>
-              <span style={{ whiteSpace: 'nowrap' }}>{note.head}</span>
-              {note.rest && <>{' '}<span style={{ whiteSpace: 'nowrap' }}>{note.rest}</span></>}
-            </span>
-          )}
+        {/* 환율 묶음 + 출처 — 이 묶음만 줄어든다(minWidth 0 이 없으면 flex 항목은 내용 밑으로 줄지 않는다). */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 auto' }}>
+          <span style={{ display: 'flex', alignItems: 'baseline', gap: 3, flexShrink: 0 }}>
+            <span style={ratePrefix}>{CURRENCY_SYMBOL.JPY}</span>
+            {editing === 'JPY' ? (
+              <input
+                type="number"
+                value={editRateVal}
+                onChange={e => setEditRateVal(e.target.value)}
+                onBlur={commitEdit}
+                onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(null) }}
+                autoFocus
+                style={{ ...rateEditBox, width: 90 }}
+              />
+            ) : (
+              <span onDoubleClick={() => startEdit('JPY')} title="더블클릭하여 수동 입력" style={rateNum}>
+                {rates.JPY
+                  ? <>{rates.JPY.toFixed(4)}<span style={rateUnit}>원</span></>
+                  : <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280' }}>환율 로딩중...</span>}
+              </span>
+            )}
+            {/* 새로고침 — **환율 묶음 안**이다(위 주석). 동작은 종전 그대로: 저장값을 보지 않고
+                늘 API 로 다시 받는다. 테두리 없는 아이콘 하나로 둔다 — 동그란 테두리를 두면
+                숫자 옆에 단추가 하나 더 선 것처럼 보여 묶음이 끊긴다. */}
+            <button
+              onClick={onFetchRate}
+              title="실시간 환율을 다시 받는다"
+              disabled={rateLoading}
+              style={{ background: 'none', border: 'none', padding: 0, marginLeft: 1, alignSelf: 'center', display: 'flex', alignItems: 'center', flexShrink: 0, cursor: rateLoading ? 'not-allowed' : 'pointer' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={rateLoading ? '#d1d5db' : '#9ca3af'} strokeWidth="2" strokeLinecap="round">
+                <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+              </svg>
+            </button>
+          </span>
+
           {/* 달러 환율 — **달러 줄이 섞여 있을 때만** 낸다(엔만 쓰는 견적은 종전 모습 그대로).
               엔과 달리 **사람이 정하는 값**이라 실시간 환율로 덮지 않는다(lib/quoteCurrency.ts 의
-              USD_DEFAULT_RATE 에서 시작한다). 옆의 「수출입은행 …」을 누르면 그 값으로 바꾼다. */}
+              USD_DEFAULT_RATE 에서 시작한다). 옆의 「수출입은행 …」을 누르면 그 값으로 바꾼다.
+              모양은 엔과 같다 — 「$ 1,600원」. */}
           {hasUsdRow && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, borderLeft: '1px solid #ebebeb', paddingLeft: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280' }}>{CURRENCY_SYMBOL.USD}</span>
+            <span style={{ display: 'flex', alignItems: 'baseline', gap: 3, flexShrink: 0, borderLeft: '1px solid #ebebeb', paddingLeft: 8 }}>
+              <span style={ratePrefix}>{CURRENCY_SYMBOL.USD}</span>
               {editing === 'USD' ? (
                 <input
                   type="number"
@@ -261,17 +284,11 @@ export default function ProfitPanel({
                   onBlur={commitEdit}
                   onKeyDown={e => { if (e.key === 'Enter') commitEdit(); if (e.key === 'Escape') setEditing(null) }}
                   autoFocus
-                  style={{ width: 70, fontSize: 11, fontWeight: 700, color: '#234ea2', border: '1px solid #234ea2', borderRadius: 6, padding: '1px 5px', outline: 'none' }}
+                  style={{ ...rateEditBox, width: 80 }}
                 />
               ) : (
-                <span
-                  onDoubleClick={() => startEdit('USD')}
-                  title="더블클릭하여 수동 입력"
-                  style={{
-                    fontSize: 15, color: '#111827', fontWeight: 700, cursor: 'text', lineHeight: 1.2,
-                    borderBottom: '1px dashed #9ca3af', whiteSpace: 'nowrap', letterSpacing: '-0.3px',
-                  }}>
-                  {rates.USD ? <>{numKR(rates.USD)}<span style={{ fontSize: 12, fontWeight: 700 }}>원</span></> : '-'}
+                <span onDoubleClick={() => startEdit('USD')} title="더블클릭하여 수동 입력" style={{ ...rateNum, fontSize: 15 }}>
+                  {rates.USD ? <>{numKR(rates.USD)}<span style={rateUnit}>원</span></> : '-'}
                 </span>
               )}
               {/* 참고값 — 누르면 그 값으로 바꾼다. 지금 값과 같으면 내지 않는다(할 일이 없다). */}
@@ -279,14 +296,19 @@ export default function ProfitPanel({
                 <button
                   onClick={() => onUseUsdReference?.()}
                   title={`${RATE_SOURCE} 매매기준율로 바꿉니다`}
-                  style={{ fontSize: 10, color: '#234ea2', background: 'none', border: 'none', padding: 0, cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'underline dotted' }}
+                  style={{ fontSize: 11, color: '#234ea2', background: 'none', border: 'none', padding: 0, cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'underline dotted', alignSelf: 'center' }}
                 >
-                  {RATE_SOURCE} {numKR(usdReference.rate)} · {usdReference.baseDate}
+                  {RATE_SOURCE} {numKR(usdReference.rate)}
                 </button>
               )}
-              {editing !== 'USD' && rateMeta.USD?.kind === 'manual' && (
-                <span style={{ fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap' }}>직접 입력</span>
-              )}
+            </span>
+          )}
+
+          {/* 출처 — 「한국수출입은행 · 11-03」 한 줄(위 rateNote). 숫자를 고치는 중에는 내지
+              않는다(그 순간의 출처는 아직 모른다). 손으로 넣은 환율에는 출처가 없어 빈 글이다. */}
+          {editing !== 'JPY' && note && (
+            <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+              {note}
             </span>
           )}
 
@@ -295,94 +317,85 @@ export default function ProfitPanel({
           {savedDefaultsApplied && (
             <span
               title="이 분류로 마지막에 확정할 때 쓴 환율·관세·이익률을 들여왔습니다"
-              style={{ fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap', borderLeft: '1px solid #ebebeb', paddingLeft: 6, flexShrink: 0 }}
+              style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap', borderLeft: '1px solid #ebebeb', paddingLeft: 6, flexShrink: 0 }}
             >
               내 설정 불러옴
             </span>
           )}
         </div>
-        {/* 오른쪽 끝 — 새로고침과 이익률은 늘 한 줄로 붙어 있다(줄지 않는다). */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', flexShrink: 0 }}>
-          <button
-            onClick={onFetchRate}
-            title="실시간 환율을 다시 받는다"
-            disabled={rateLoading}
-            style={{ width: 22, height: 22, borderRadius: '50%', background: '#fff', border: '1px solid #ebebeb', cursor: rateLoading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s ease' }}
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={rateLoading ? '#9ca3af' : '#111827'} strokeWidth="2.5">
-              <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
-              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-            </svg>
-          </button>
-          {/* 이익률 — **값과 무관하게 초록**이다. 낮다고 빨강으로 바꾸면 견적을 손님 앞에서
-              펼칠 때 경고처럼 보인다(합계 블록의 매출이익도 같은 이유로 늘 초록). */}
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#16a34a', whiteSpace: 'nowrap' }}>
-            이익률 {profitPct.toFixed(1)}%
-          </span>
-        </div>
+        {/* 오른쪽 끝 — **이익률 하나뿐**이다. 값과 무관하게 초록이다 — 낮다고 빨강으로 바꾸면
+            견적을 손님 앞에서 펼칠 때 경고처럼 보인다(합계의 매출이익도 같은 이유로 늘 초록). */}
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#16a34a', whiteSpace: 'nowrap', marginLeft: 'auto', flexShrink: 0 }}>
+          이익률 {profitPct.toFixed(1)}%
+        </span>
       </div>
       <div style={{ padding: '12px 16px' }}>
-        {rows.map((r, i) => {
+        {shown.map(({ row: r, no }, vi) => {
+          const isDiscount = r.row_kind === 'discount'
           // **판매가가 아직 없는 품목도 자리를 지킨다.** 종전에는 공급가 0 인 줄을 걸러
           // 냈는데, 판매가 모드로 바꾸는 순간(단가를 적기 전) 그 품목이 패널에서 통째로
           // 사라져 아래 합계가 위로 솟았다 — 숫자를 치던 사람 눈앞에서 화면이 뛴다.
-          // 품목도 금액도 없는 줄은 종전처럼 내지 않는다(합계에는 어느 쪽이든 0 이다).
-          const waiting = r.supply_price <= 0
-          const hasContent = !!r.selectedItem || r.manual_cost_jpy > 0 || r.manual_unit_price > 0
-            || (r.row_kind === 'service' && r.expenses.length > 0)
-          if (waiting && !hasContent) return null
+          //
+          // 그 자리글은 **파는 줄에만** 낸다(가격표·직접 입력). 할인은 깎을 금액이 곧 그
+          // 줄의 전부이고 국내 구매는 원가에서 판매가가 따라 나오므로, 둘에 「판매가 미입력」을
+          // 적으면 적을 칸이 없는 것을 적으라고 말하는 꼴이다(종전에는 할인 줄에 떴다).
+          const waiting = r.supply_price <= 0 && (r.row_kind === 'price_list' || r.row_kind === 'manual_jpy')
           const expr = costExpr(r)
           // 국내조달품은 마진이 없는 자사 부담 항목이라 이익 색상 규칙에서 제외한다(중립색).
           const profitColor = r.row_kind === 'domestic' ? '#6b7280' : (r.profit >= 0 ? '#16a34a' : '#dc2626')
           return (
-          // 품목 사이에는 구분선을 두지 않는다 — 품목 다섯이면 선이 다섯이고,
-          // 그 선들이 합계 위 굵은 선보다 먼저 눈에 들어온다.
-          <div key={r.id} style={{ marginBottom: 9 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-              <span style={{ width: 16, height: 16, borderRadius: '50%', background: '#234ea2', color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
+          // 품목 사이에는 구분선을 두지 않는다 — 품목 다섯이면 선이 다섯이고, 그 선들이
+          // 합계 위 굵은 선보다 먼저 눈에 들어온다. 대신 **홀수 블록에만 아주 연한 띠**를
+          // 깔아 두 줄이 한 품목이라는 것을 묶어 보인다.
+          //
+          // 좌우로 음수 마진을 줘 **띠만** 바깥으로 넓힌다 — 안쪽 여백(8)을 그만큼 되돌려
+          // 제목 줄 금액의 끝선이 아래 합계 금액 열과 **같은 자리**에 서게 한다.
+          <div key={r.id} style={{
+            background: vi % 2 === 0 ? '#fafbfc' : '#fff',
+            borderRadius: 6, padding: '7px 8px', margin: '0 -8px 2px',
+          }}>
+            {/* 제목 줄 — 번호 · 품명 · ×수량 ……… 공급가(단가 × 수량). */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={numBadge}>{no}</span>
               <span style={{ fontSize: 11, color: '#111827', fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemLabel(r)}</span>
+              {/* 수량 — 할인 줄에는 수량이 없다(0 이다). */}
+              {r.quantity > 0 && (
+                <span className="num" style={{ fontSize: 12, color: '#9ca3af', whiteSpace: 'nowrap', flexShrink: 0 }}>×{r.quantity}</span>
+              )}
+              <span style={{ flex: 1 }} />
+              {!waiting && (
+                // 할인은 **빼는 금액**이라 빨강에 음수 부호다(합계의 할인 줄과 같은 꼴).
+                <span className="num" style={{ fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, color: isDiscount ? '#dc2626' : '#111827' }}>
+                  {isDiscount ? <>−₩{numKR(Math.abs(r.supply_price))}</> : <>₩{numKR(r.supply_price)}</>}
+                </span>
+              )}
             </div>
-            {/* 1행 — 원가가 어떻게 나왔고 얼마가 남나. */}
-            {waiting ? (
-              // 글자는 한 줄이되 **높이는 아래 두 줄과 같다**(minHeight). 그래야 판매가를
-              // 적는 순간 이 칸이 두 줄로 늘어나면서 패널이 솟지 않는다 — 실측에서 이
-              // 1줄/2줄 차이가 19px 였고, 그만큼 화면이 뛰었다.
-              <div style={{ ...itemLine, minHeight: 'calc(2 * 1.6em)', alignItems: 'center' }}>
-                <span style={{ color: '#9ca3af' }}>판매가 미입력</span>
-              </div>
+            {/* 식 줄 — 할인에는 없다(제목 줄의 금액이 그 줄의 전부다). */}
+            {!isDiscount && (waiting ? (
+              <div style={itemLine}><span style={{ color: '#9ca3af' }}>판매가 미입력</span></div>
             ) : (
-              <>
-                {/* 1행 — 넘치면 **식만** 줄인다. 매출이익은 이 줄에서 가장 중요한 값이라
-                    끝까지 남겨야 한다(원가보다 싸게 판 줄의 「(-24364.8%)」가 잘리면 그 줄이
-                    멀쩡해 보인다). 실현 이익률은 소수 한 자리로 끊는다. */}
-                <div className="num" style={itemLine}>
-                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {expr}
-                    <span style={{ color: '#d1d5db' }}> = </span>
-                    <span style={{ color: '#374151', fontWeight: 500 }}>₩{numKR(r.product_price)}</span>
-                    <span style={{ color: '#9ca3af' }}> (원가)</span>
-                  </span>
-                  <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-                    <span style={{ color: '#d1d5db' }}> · </span>
-                    매출이익{' '}
-                    <span style={{ color: profitColor, fontWeight: 500 }}>₩{numKR(r.profit)}</span>
-                    {/* **실현** 이익률(매출이익 ÷ 공급가)이다 — 이익률 칸의 목표가 아니다. */}
-                    <span style={{ color: profitColor }}> ({r.realized_profit_rate.toFixed(1)}%)</span>
-                  </span>
-                </div>
-                {/* 2행 — 얼마에 몇 개를 파나. 결과(공급가)만 본문색으로 굵다. */}
-                <div className="num" style={itemLine}>
-                  ₩{numKR(r.unit_price)}
-                  <span style={{ color: '#d1d5db' }}> × </span>{r.quantity}
+              // 넘치면 **식만** 줄인다. 매출이익은 이 줄에서 가장 중요한 값이라 끝까지
+              // 남겨야 한다(원가보다 싸게 판 줄의 「(-24364.8%)」가 잘리면 그 줄이 멀쩡해 보인다).
+              <div className="num" style={itemLine}>
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {expr}
                   <span style={{ color: '#d1d5db' }}> = </span>
-                  <span style={{ color: '#111827', fontWeight: 700 }}>₩{numKR(r.supply_price)}</span>
-                </div>
-              </>
-            )}
+                  <span style={{ color: '#374151', fontWeight: 500 }}>₩{numKR(r.product_price)}</span>
+                  <span style={{ color: '#9ca3af' }}> (원가)</span>
+                </span>
+                <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  <span style={{ color: '#d1d5db' }}> · </span>
+                  매출이익{' '}
+                  <span style={{ color: profitColor, fontWeight: 500 }}>₩{numKR(r.profit)}</span>
+                  {/* **실현** 이익률(매출이익 ÷ 공급가)이다 — 이익률 칸의 목표가 아니다. */}
+                  <span style={{ color: profitColor }}> ({r.realized_profit_rate.toFixed(1)}%)</span>
+                </span>
+              </div>
+            ))}
           </div>
           )
         })}
-        {/* 합계 — 위 품목과 **같은 열 폭**이라 금액이 한 줄에 선다(ROW_GRID). */}
+        {/* 합계 — 위 품목과 **같은 열 폭**이라 금액이 한 줄에 선다(ROW_GRID). 띠 밖이다. */}
         <div style={{
           marginTop: 2, paddingTop: 7, borderTop: '2px solid #111827',
           display: 'grid', gridTemplateColumns: ROW_GRID, columnGap: 8, rowGap: 5, alignItems: 'baseline',

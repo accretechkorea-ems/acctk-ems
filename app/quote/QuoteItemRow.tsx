@@ -80,11 +80,16 @@ const stepVal: React.CSSProperties = {
 /**
  * 머리줄 배지 — 종류·통화·분류가 **같은 옷**을 입는다. 셋 다 「이 줄이 무엇인가」를
  * 말하는 꼬리표라, 색이 서로 다르면 중요도가 다른 것처럼 읽힌다.
+ *
+ * 배경은 **중립 회색**이다(디자인 표의 배지 배경 #f3f4f6) — 꼬리표는 읽을 것이 아니라
+ * 가려 보는 것이라, 배경까지 액센트 계열로 물들이면 줄마다 파란 조각이 세 개씩 깔려
+ * 정작 읽어야 할 품명·금액보다 먼저 눈에 든다. 글자만 액센트로 둔다.
+ *
  * 한 줄만 다른 분류일 때는 **테두리**로 가른다(아래 differs) — 글자색까지 바꾸면
  * 같은 꼬리표가 두 가지 색으로 보인다.
  */
 const badge: React.CSSProperties = {
-  fontSize: 11, fontWeight: 500, color: '#234ea2', background: '#eef2fb',
+  fontSize: 11, fontWeight: 500, color: '#234ea2', background: '#f3f4f6',
   borderRadius: 99, padding: '1px 7px', whiteSpace: 'nowrap', flexShrink: 0,
   border: '1px solid transparent', boxSizing: 'border-box',
 }
