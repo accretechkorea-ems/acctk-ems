@@ -161,7 +161,7 @@ export default function ProfitPanel({
   // ── 품목 한 칸 = 제목 줄 + 식 줄 ───────────────────────────────────
   //
   //   ① A-1207-0020-RBE  ×1                                    ₩286,000
-  //      ¥13,900 × 1.13 × 10.00 = ₩157,070 (원가) · 매출이익 ₩128,930 (45.1%)
+  //      ¥13,900 × 1.13 × 10.00 = ₩157,070 · 매출이익 ₩128,930 (45.1%)
   //
   // **제목 줄이 그 품목의 결론이다** — 무엇을 몇 개 팔아 얼마가 되나. 그래서 금액(공급가
   // = 단가 × 수량)은 제목 줄 오른쪽 끝, 아래 합계 금액 열과 **같은 끝선**에 붙는다.
@@ -336,10 +336,13 @@ export default function ProfitPanel({
           // 냈는데, 판매가 모드로 바꾸는 순간(단가를 적기 전) 그 품목이 패널에서 통째로
           // 사라져 아래 합계가 위로 솟았다 — 숫자를 치던 사람 눈앞에서 화면이 뛴다.
           //
-          // 그 자리글은 **파는 줄에만** 낸다(가격표·직접 입력). 할인은 깎을 금액이 곧 그
-          // 줄의 전부이고 국내 구매는 원가에서 판매가가 따라 나오므로, 둘에 「판매가 미입력」을
-          // 적으면 적을 칸이 없는 것을 적으라고 말하는 꼴이다(종전에는 할인 줄에 떴다).
-          const waiting = r.supply_price <= 0 && (r.row_kind === 'price_list' || r.row_kind === 'manual_jpy')
+          // 그 자리글은 **파는 줄에만** 낸다(가격표·직접 입력·서비스비). 할인은 깎을 금액이
+          // 곧 그 줄의 전부이고 국내 구매는 원가에서 판매가가 따라 나오므로, 둘에 「판매가
+          // 미입력」을 적으면 적을 칸이 없는 것을 적으라고 말하는 꼴이다(종전에는 할인 줄에 떴다).
+          // 서비스비는 판매가를 손으로 적는 줄이라 함께 묶는다 — 빼 두었더니 값을 적기 전에
+          // 매출이익이 **−원가**로 찍혀, 아직 쓰는 중인 줄이 손해 본 줄처럼 보였다.
+          const waiting = r.supply_price <= 0
+            && (r.row_kind === 'price_list' || r.row_kind === 'manual_jpy' || r.row_kind === 'service')
           const expr = costExpr(r)
           // 국내조달품은 마진이 없는 자사 부담 항목이라 이익 색상 규칙에서 제외한다(중립색).
           const profitColor = r.row_kind === 'domestic' ? '#6b7280' : (r.profit >= 0 ? '#16a34a' : '#dc2626')
@@ -380,8 +383,10 @@ export default function ProfitPanel({
                 <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {expr}
                   <span style={{ color: '#d1d5db' }}> = </span>
+                  {/* 원가 — 「(원가)」라는 글자는 떼었다. 식이 「구입가 × 관세 × 환율 =」로
+                      끝나므로 그 결과가 원가라는 것은 식 자체가 말하고, 그 네 글자가
+                      좁은 폭(실측 412px)에서 앞의 **원가 숫자를 말줄임으로 먹었다**. */}
                   <span style={{ color: '#374151', fontWeight: 500 }}>₩{numKR(r.product_price)}</span>
-                  <span style={{ color: '#9ca3af' }}> (원가)</span>
                 </span>
                 <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
                   <span style={{ color: '#d1d5db' }}> · </span>

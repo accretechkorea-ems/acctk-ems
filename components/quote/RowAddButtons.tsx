@@ -57,11 +57,9 @@ export default function RowAddButtons({ setRows, serviceRow, discountRow, catego
   }
 
   return (
-    // 폭이 340px 까지 좁아져도 **한 줄**이어야 한다(실측 기준). 여백 4 · 좌우 6 이 그 선이다.
+    // 폭이 340px 까지 좁아져도 **한 줄**이어야 한다(실측 기준). 사이 여백 4 · 좌우 4 가 그 선이다.
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
       {ROW_KIND_ORDER.map(kind => {
-        // 가격표 줄이 주버튼이다 — 열에 아홉은 이것으로 넣는다.
-        const primary = kind === 'price_list'
         const locked = lockedOf(kind)
         return (
           <button
@@ -70,26 +68,28 @@ export default function RowAddButtons({ setRows, serviceRow, discountRow, catego
             disabled={locked !== null}
             title={locked ?? ROW_KIND_HINT[kind]}
             style={{
-              // 다섯이 **한 줄**에 들어가야 한다(340px 폭 기준). 그래서 글자에서 「+」를 떼고
-              // 좌우 여백을 8 로 줄였다 — 「+ 」 다섯 개가 50px 쯤을 먹어 그것만으로 줄이
-              // 넘쳤다. 폭 규칙은 다섯이 같다(주버튼도 같다 — 색만 다르다).
-              height: 28, padding: '0 6px', borderRadius: 6, flex: '1 1 auto', minWidth: 0,
-              background: primary && !locked ? '#234ea2' : '#fff',
-              color: locked ? '#9ca3af' : primary ? '#fff' : '#234ea2',
-              border: primary && !locked ? 'none' : '1px solid #ebebeb',
-              fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap',
+              // 다섯이 **같은 옷**이다 — 흰 바탕·회색 테두리·파란 글자. 가격표만 파랗게
+              // 칠해 두었더니 그것이 「확정」 같은 실행 단추로 보였다(이 띠는 줄을 하나
+              // 더하는 자리일 뿐이다). 어느 것을 더 자주 쓰는지는 **왼쪽부터**라는 차례가
+              // 이미 말한다(ROW_KIND_ORDER).
+              //
+              // 글자 앞의 「+」는 되돌렸다 — 무엇을 하는 띠인지는 그 기호 하나가 가장 짧게
+              // 말한다. 그만큼 폭이 늘어, **340px 에서도 한 줄**을 지키려고 좌우 여백을
+              // 4 로 줄이고 글자를 11px 로 낮췄다. 실측(필요 폭 — 다섯 합 + 사이 여백):
+              //   12px·여백 4 → 331 · 12px·여백 3 → 317 · **11px·여백 4 → 309**
+              // 패널이 340 일 때 이 띠에 주어지는 폭은 316 이라(좌우 여백 42), 글자를
+              // 낮추지 않고는 들어가지 않는다. 지금 화면(패널 412)에서는 띠가 388 이다.
+              height: 28, padding: '0 4px', borderRadius: 6, flex: '1 1 auto', minWidth: 0,
+              background: '#fff',
+              color: locked ? '#9ca3af' : '#234ea2',
+              border: '1px solid #ebebeb',
+              fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap',
               cursor: locked ? 'not-allowed' : 'pointer', transition: 'background 0.15s ease',
             }}
-            onMouseEnter={e => {
-              if (locked) return
-              e.currentTarget.style.background = primary ? '#1c3e87' : '#f3f4f6'
-            }}
-            onMouseLeave={e => {
-              if (locked) return
-              e.currentTarget.style.background = primary ? '#234ea2' : '#fff'
-            }}
+            onMouseEnter={e => { if (!locked) e.currentTarget.style.background = '#f3f4f6' }}
+            onMouseLeave={e => { if (!locked) e.currentTarget.style.background = '#fff' }}
           >
-            {ROW_KIND_LABEL[kind]}
+            + {ROW_KIND_LABEL[kind]}
           </button>
         )
       })}

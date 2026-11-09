@@ -20,6 +20,7 @@ paths:
 | 페이지 배경 | `#fafafa` | activity main, CustomerList 컨테이너 |
 | 표면(카드/모달/팝업) 배경 | `#ffffff` | 카드·모달·정보창 |
 | 중립 배경(배지/칩/트랙) | `#f3f4f6` | 팀 배지·건수 배지·SegmentedControl 트랙·clear 버튼 |
+| 지브라 띠 | `#fafbfc` | 품목 블록 홀수 줄(견적 수익 분석) — 띠로만 묶고 구분선은 두지 않는다 |
 | 테두리 | `#ebebeb` | 카드·컨테이너·구분선·지도·입력 |
 | 카드 hover 테두리 | `#c7d7f8` | CustomerCard·activity 카드 hover |
 | 텍스트 - 진함 | `#111827` | 제목·본문 강조·숫자 |

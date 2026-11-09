@@ -22,9 +22,10 @@ export const ROW_KIND_LABEL: Record<RowKind, string> = {
   discount: '할인',
 }
 
-// 2026-11-03 — 추가 버튼의 「+ 」 접두는 걷었다. 다섯 버튼이 한 줄에 들어가야 하는데
-// 「+ 」 다섯 개가 50px 쯤을 먹어 그것만으로 줄이 넘쳤다(실측). 버튼과 배지가 **같은 글자**를
-// 쓰는 것은 그대로다 — 둘 다 아래 ROW_KIND_LABEL 을 읽는다.
+// 추가 버튼은 이 이름 앞에 「+ 」를 붙여 쓴다(components/quote/RowAddButtons.tsx).
+// 「+ 」 다섯 개가 50px 쯤을 먹어 한동안 걷어 두었다가, 버튼 좌우 여백을 4 로 줄여
+// 되돌렸다 — 340px 에서도 한 줄이다(실측). 버튼과 배지가 **같은 글자**를 쓰는 것은
+// 그대로다 — 둘 다 아래 ROW_KIND_LABEL 을 읽는다.
 
 /** 추가 버튼의 설명(마우스를 얹으면 나온다). 무엇에 쓰는 줄인지 한 문장. */
 export const ROW_KIND_HINT: Record<RowKind, string> = {

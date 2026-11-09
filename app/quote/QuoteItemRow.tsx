@@ -85,11 +85,14 @@ const stepVal: React.CSSProperties = {
  * 가려 보는 것이라, 배경까지 액센트 계열로 물들이면 줄마다 파란 조각이 세 개씩 깔려
  * 정작 읽어야 할 품명·금액보다 먼저 눈에 든다. 글자만 액센트로 둔다.
  *
+ * 굵기 700 은 **압축 전부터 쓰던 값**이다(디자인 표의 「배지 글자 11/700」). 11px 짜리
+ * 짧은 글자는 500 으로 두면 배경 회색에 묻혀 멀리서 종류가 읽히지 않는다.
+ *
  * 한 줄만 다른 분류일 때는 **테두리**로 가른다(아래 differs) — 글자색까지 바꾸면
  * 같은 꼬리표가 두 가지 색으로 보인다.
  */
 const badge: React.CSSProperties = {
-  fontSize: 11, fontWeight: 500, color: '#234ea2', background: '#f3f4f6',
+  fontSize: 11, fontWeight: 700, color: '#234ea2', background: '#f3f4f6',
   borderRadius: 99, padding: '1px 7px', whiteSpace: 'nowrap', flexShrink: 0,
   border: '1px solid transparent', boxSizing: 'border-box',
 }
