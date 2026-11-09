@@ -27,11 +27,15 @@ const EMPTY_ITEMS: PriceItem[] = []
 // 품목 패널은 폭이 340px 남짓이고 견적 하나에 줄이 예닐곱이다. 그래서 **한 줄이 한눈에
 // 들어오는 것**이 이 카드의 목표다. 2026-11-03 에 두 번 줄였다(245 → 151 → 지금).
 //
-//   머리줄   번호 · 종류 · 통화 · (줄 추가) · 삭제
-//   1단      품번(검색) · 모델 · 품명        — 칸 **안**에 접두 글자를 둔다(바깥 라벨 없음)
-//   2단      구입가 · 수량 −/+ · 관세 −/+     — 3칸 격자 1.2 : 1 : 1
-//   3단      [이익률|판매가] · 값 칸          — 2칸 격자
+//   머리줄   번호 · 종류 · 통화 · 분류 · (줄 추가) · 삭제
+//   1단      품번(검색) · 품명 · (모델)       — 칸 **안**에 접두 글자를 둔다(바깥 라벨 없음)
+//   2단      [이익률|판매가] · 값 칸          — 2칸 격자 5:5
+//   3단      구입가 · 수량 −/+ · 관세 −/+     — 3칸 격자 1.2 : 1 : 1
 //   결과     판매단가(이익률 모드) 또는 실현 이익률(판매가 모드)
+//
+// **국내 구매 줄만 2단과 3단이 뒤바뀐다** — 원가를 넣어야 판매가가 따라 나오기 때문이다
+// (1행 품번·품명 / 2행 국내 구입가·수량 / 3행 토글·값, 셋 다 5:5 라 세로선이 한 줄로 선다).
+// 그 밖의 줄에서 「어떻게 파는가」가 위인 까닭은 priceModeGrid 주석에 적었다.
 //   요약     점선 아래 **두 줄 고정**(줄바꿈 없음)
 //
 // 칸 위에 라벨을 다는 대신 칸 안 왼쪽에 작은 글자를 둔다. 라벨 줄 하나가 15px + 여백이고,
@@ -340,8 +344,74 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
     value: row.manual_model,
     onChange: v => updateRow(row.id, 'manual_model', v),
     placeholder: row.row_kind === 'price_list' ? '가격표 모델' : '예: NEX 200',
-    basis: '110px',
+    // 1행의 칸들은 기준폭이 **모두 같다** — 그래야 고르게 나뉜다(품번 칸 주석).
+    basis: is20 ? '110px' : '140px',
   }) : null
+
+  /**
+   * 「어떻게 파는가」 칸 — [이익률|판매가] 토글 · 값. 2칸 격자(5:5)다.
+   *
+   * **자리가 줄 종류마다 다르다.** 가격표·직접 입력 줄에서는 1행 바로 아래(2행)이고,
+   * 국내 구매 줄에서는 맨 아래(3행)다. 그래서 JSX 를 여기 한 번만 쓰고 자리만 바꿔 끼운다
+   * (아래 두 군데 — 같은 화면을 두 번 적으면 한쪽만 고쳐지는 날이 온다).
+   *
+   * 왜 가격표·직접 입력은 위인가 — 사람이 그 줄에서 **먼저 정하는 것은 파는 값**이다.
+   * 구입가·수량·관세는 한 번 넣고 두는 값이고, 이익률과 판매단가는 손님과 주고받으며
+   * 몇 번이고 고친다. 국내 구매는 반대다 — 원가를 넣어야 판매가가 따라 나오므로
+   * 구입가·수량이 먼저다.
+   *
+   * 발주서가 먼저 온 건은 고객이 정한 금액이 있어, 이익률을 더듬는 대신 그 단가를
+   * 그대로 넣는다(판매가 모드). 그때 값 칸은 ₩ 입력이 된다.
+   */
+  const priceModeGrid = hasPriceMode ? (
+    <div style={{
+      display: 'grid', gap: GAP, gridTemplateColumns: '1fr 1fr',
+      // 아래에 칸이 더 있으면 여백을 둔다(국내 구매는 이 칸이 마지막이다 — 결과 줄만 남는다).
+      marginBottom: isDomestic ? 0 : GAP,
+    }}>
+      <SegmentedControl
+        options={[{ label: '이익률', value: 'rate' }, { label: '판매가', value: 'price' }]}
+        value={row.price_mode}
+        onChange={v => updateRow(row.id, 'price_mode', v)}
+        equal
+        height={H_CELL}
+      />
+      {priceInputMode ? moneyCell({
+        value: row.manual_unit_price,
+        onChange: v => updateRow(row.id, 'manual_unit_price', v ?? 0),
+        unit: '원',
+        placeholder: '판매단가',
+        title: '고객이 정한 판매단가를 그대로 넣습니다',
+      }) : (
+        <div title="이익률 — 눌러서 직접 입력" style={{ ...boxBase, height: H_CELL, padding: '0 5px' }}>
+          <button onClick={() => updateRow(row.id, 'profit_rate', Math.max(0, row.profit_rate - 5))} style={stepBtn}>−</button>
+          {editingProfitRate[row.id] ? (
+            <input
+              autoFocus
+              type="number"
+              value={profitRateInput[row.id] ?? ''}
+              onChange={e => setProfitRateInput(p => ({ ...p, [row.id]: e.target.value }))}
+              onBlur={() => {
+                const v = Math.min(95, Math.max(0, parseInt(profitRateInput[row.id] || '0') || 0))
+                updateRow(row.id, 'profit_rate', v)
+                setEditingProfitRate(p => ({ ...p, [row.id]: false }))
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur()
+              }}
+              style={{ ...bare, textAlign: 'center', fontWeight: 500, border: '1px solid #234ea2', borderRadius: 6, padding: '1px 2px' }}
+            />
+          ) : (
+            <span
+              onClick={() => { setEditingProfitRate(p => ({ ...p, [row.id]: true })); setProfitRateInput(p => ({ ...p, [row.id]: String(row.profit_rate) })) }}
+              style={{ ...stepVal, color: row.profit_rate >= 40 ? '#16a34a' : '#dc2626', cursor: 'text' }}
+            >{row.profit_rate}%</span>
+          )}
+          <button onClick={() => updateRow(row.id, 'profit_rate', Math.min(95, row.profit_rate + 5))} style={stepBtn}>+</button>
+        </div>
+      )}
+    </div>
+  ) : null
 
   return (
     <div style={{ background: '#f8fafc', borderRadius: 8, padding: '4px 8px', marginBottom: 6, border: '1px solid #e5e7eb' }}>
@@ -510,13 +580,17 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
           </div>
         )}
 
-        {/* 품번 직접 입력 — 직접 입력 품목 · 국내 구매 공용 */}
+        {/* 품번 직접 입력 — 직접 입력 품목 · 국내 구매 공용.
+            기준폭을 품명 칸과 **같게** 둔다(아래 품명의 basis 와 같은 값이다). 둘 다 같은
+            비율로 늘어나므로 칸이 둘뿐인 줄(80 양식·국내 구매)에서는 1행이 정확히 반반이 되고,
+            그 세로선이 아래 2칸 격자(5:5)의 선과 한 줄로 선다. 20 양식은 모델까지 셋이라
+            세로선이 2칸 격자와 만나지 않는다 — 그 줄은 셋이 고르게 나뉜다. */}
         {(row.row_kind === 'manual_jpy' || isDomestic) && textCell({
           label: '품번',
           value: row.partCode,
           onChange: v => updateRow(row.id, 'partCode', v),
           placeholder: '예: KT35000',
-          basis: '110px',
+          basis: is20 ? '110px' : '140px',
         })}
 
         {/* 모델 — 80 양식은 품명에 「(모델)」로 들어가므로 품명 **앞**이다. */}
@@ -529,7 +603,7 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
             (그 규칙의 뜻 그대로, 렌더는 ref 를 몰라야 한다). 그래서 이 칸만 손으로 적는다. */}
         {!isDiscount && (
           <label title={row.selectedItem ? '가격표 품명 — 고칠 수 있습니다' : undefined}
-            style={{ ...boxBase, height: H_CELL, flex: is20 ? '1 1 120px' : '1 1 140px', cursor: 'text' }}>
+            style={{ ...boxBase, height: H_CELL, flex: is20 ? '1 1 110px' : '1 1 140px', cursor: 'text' }}>
             <span style={prefix}>품명</span>
             {/* 글자는 **본문색**이다 — 고칠 수 있는 칸인데 회색이면 읽기 전용으로 읽힌다.
                 보조로 보이게 하는 일은 칸 안 접두 글자(회색)가 맡는다. */}
@@ -587,12 +661,18 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
         </div>
       )}
 
-      {/* ── 2단 — 얼마인가. 3칸 격자(구입가 1.2 : 수량 1 : 관세 1). ──
-          국내 구매는 관세가 없어 두 칸이다(구입가·수량). */}
+      {/* ── 「어떻게 파는가」가 **가격표·직접 입력 줄에서는 2행**이다(priceModeGrid 주석). ── */}
+      {!isDomestic && priceModeGrid}
+
+      {/* ── 얼마에 사 오는가 — 구입가 · 수량 · 관세. 3칸 격자(1.2 : 1 : 1)다.
+          국내 구매는 관세가 없어 **두 칸이고 5:5** 다 — 그 줄은 세 단이 모두 2칸이라
+          1행(품번·품명) · 2행(구입가·수량) · 3행(토글·값)의 세로선이 한 줄로 선다. */}
       {!isDiscount && !isService && (
         <div style={{
-          display: 'grid', gap: GAP, marginBottom: GAP,
-          gridTemplateColumns: isDomestic ? '1.2fr 1fr' : '1.2fr 1fr 1fr',
+          display: 'grid', gap: GAP,
+          // 가격표·직접 입력에서는 이 칸이 마지막이다(아래는 결과 줄뿐).
+          marginBottom: isDomestic ? GAP : 0,
+          gridTemplateColumns: isDomestic ? '1fr 1fr' : '1.2fr 1fr 1fr',
         }}>
           {/* 가격표 품목의 구입가 — **직접 고칠 수 있다.** 가격표 값은 selectedItem 에 그대로
               남아 있어 언제든 되돌릴 수 있다(cost_jpy_override). 칸을 비우면 가격표 값으로
@@ -739,54 +819,8 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
         </>
       )}
 
-      {/* ── 3단 — 어떻게 파는가. 2칸 격자: [이익률|판매가] 토글 · 값 칸. ──
-          발주서가 먼저 온 건은 고객이 정한 금액이 있어, 이익률을 더듬는 대신 그 단가를
-          그대로 넣는다(판매가 모드). 그때 값 칸은 ₩ 입력이 된다. */}
-      {hasPriceMode && (
-        <div style={{ display: 'grid', gap: GAP, gridTemplateColumns: '1fr 1fr' }}>
-          <SegmentedControl
-            options={[{ label: '이익률', value: 'rate' }, { label: '판매가', value: 'price' }]}
-            value={row.price_mode}
-            onChange={v => updateRow(row.id, 'price_mode', v)}
-            equal
-            height={H_CELL}
-          />
-          {priceInputMode ? moneyCell({
-            value: row.manual_unit_price,
-            onChange: v => updateRow(row.id, 'manual_unit_price', v ?? 0),
-            unit: '원',
-            placeholder: '판매단가',
-            title: '고객이 정한 판매단가를 그대로 넣습니다',
-          }) : (
-            <div title="이익률 — 눌러서 직접 입력" style={{ ...boxBase, height: H_CELL, padding: '0 5px' }}>
-              <button onClick={() => updateRow(row.id, 'profit_rate', Math.max(0, row.profit_rate - 5))} style={stepBtn}>−</button>
-              {editingProfitRate[row.id] ? (
-                <input
-                  autoFocus
-                  type="number"
-                  value={profitRateInput[row.id] ?? ''}
-                  onChange={e => setProfitRateInput(p => ({ ...p, [row.id]: e.target.value }))}
-                  onBlur={() => {
-                    const v = Math.min(95, Math.max(0, parseInt(profitRateInput[row.id] || '0') || 0))
-                    updateRow(row.id, 'profit_rate', v)
-                    setEditingProfitRate(p => ({ ...p, [row.id]: false }))
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur()
-                  }}
-                  style={{ ...bare, textAlign: 'center', fontWeight: 500, border: '1px solid #234ea2', borderRadius: 6, padding: '1px 2px' }}
-                />
-              ) : (
-                <span
-                  onClick={() => { setEditingProfitRate(p => ({ ...p, [row.id]: true })); setProfitRateInput(p => ({ ...p, [row.id]: String(row.profit_rate) })) }}
-                  style={{ ...stepVal, color: row.profit_rate >= 40 ? '#16a34a' : '#dc2626', cursor: 'text' }}
-                >{row.profit_rate}%</span>
-              )}
-              <button onClick={() => updateRow(row.id, 'profit_rate', Math.min(95, row.profit_rate + 5))} style={stepBtn}>+</button>
-            </div>
-          )}
-        </div>
-      )}
+      {/* ── 국내 구매 줄에서만 **3행**이다 — 원가를 넣어야 판매가가 따라 나온다. ── */}
+      {isDomestic && priceModeGrid}
 
       {/* ── 결과 줄 — 그 줄이 얼마가 되는가. 왼쪽에는 「최근 판매」(같은 고객사에 마지막으로
           판 단가)를 둔다 — 단가를 정할 때 가장 먼저 보는 값이라 결과 바로 옆이 제자리다. ── */}
