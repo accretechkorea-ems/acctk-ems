@@ -48,6 +48,9 @@ import { Z } from '@/lib/zIndex'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import Popover from '@/components/common/Popover'
 import BackdatedMark from '@/components/quote/BackdatedMark'
+import RepairInfoButton from '@/components/quote/RepairInfoButton'
+import RepairInfoDrawer from '@/components/quote/RepairInfoDrawer'
+import { fetchRepairInfoStates, type RepairInfoRow, type RepairInfoState } from '@/lib/quoteRepairInfo'
 import { todayKST, nowKSTParts, daysBetween, kstYmd, ymdParts } from '@/lib/date'
 
 // 기간 필터 모드 — 회계연도(4월 시작) 기준. h1=상반기(4~9월), h2=하반기(10~다음해 3월)
@@ -440,11 +443,25 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   // 참여자·관리자」라 브라우저는 남의 결재 문서를 못 읽는다 — 그래서 서버에 묻는다.
   // 모달에 뜬 견적 전부를 한 번에 물어보고(200개씩 끊어 보낸다) 행마다 꺼내 쓴다.
   const [gates, setGates] = useState<QuoteGateTable | null>(null)
+  /**
+   * 수리정보 뱃지 — 수리 건 견적의 작성 상태다. 한 번에 물어본다(lib/quoteRepairInfo.ts).
+   * repairs 는 견적 목록 사람들에게 열려 있지 않아 서비스 롤 라우트를 거친다.
+   */
+  const [repairStates, setRepairStates] = useState<Map<number, RepairInfoRow>>(new Map())
+  /** 열려 있는 수리 정보 드로어. */
+  const [repairDrawer, setRepairDrawer] = useState<{ quoteId: number; quoteNumber: string } | null>(null)
+  /** 저장하면 그 행의 뱃지만 제자리에서 고친다(목록을 다시 읽지 않는다). */
+  const onRepairSaved = (quoteId: number, state: RepairInfoState) => {
+    setRepairStates(prev => new Map(prev).set(quoteId, { isRepair: true, state }))
+  }
+
   const allQuoteKey = quotes.map(q => q.quote_id).join(',')
   useEffect(() => {
     let cancelled = false
     const ids = allQuoteKey ? allQuoteKey.split(',').map(Number) : []
     fetchQuoteGates(ids).then(found => { if (!cancelled) setGates(found) })
+    // 수리정보 뱃지 — 수리 건인 행만 담겨 온다(라우트가 가린다).
+    fetchRepairInfoStates(ids).then(found => { if (!cancelled) setRepairStates(found) })
     return () => { cancelled = true }
   }, [allQuoteKey])
 
@@ -925,6 +942,13 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                               계산서 요청
                             </button>
                           )}
+                          {/* 수리 건 견적에만 나온다 — 상태를 보여 주고 누르면 드로어가 열린다. */}
+                          {repairStates.get(q.quote_id)?.isRepair && (
+                            <RepairInfoButton
+                              state={repairStates.get(q.quote_id)!.state}
+                              onClick={() => setRepairDrawer({ quoteId: q.quote_id, quoteNumber: q.quote_number })}
+                            />
+                          )}
                           {/* 「⋮」 는 상태 변경·삭제 요청 창을 여는 유일한 입구다. 결재가 도는 중이면
                               그 창의 모든 동작이 updateQuoteStatus 에서 0행이 되므로 버튼을 내지 않고
                               이유만 적는다(lib/quoteMutations.ts · 전자결재 6단계 B). */}
@@ -1190,6 +1214,18 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
           myId={currentEngineerId}
           docType="quote_delete"
         />
+
+
+        {/* 수리 정보 — 목록 행의 「수리정보」 단추가 연다. 안은 작성 화면과 같은 패널이다. */}
+        {repairDrawer && (
+          <RepairInfoDrawer
+            quoteId={repairDrawer.quoteId}
+            quoteNumber={repairDrawer.quoteNumber}
+            onClose={() => setRepairDrawer(null)}
+            onSaved={onRepairSaved}
+            toast={toast}
+          />
+        )}
 
         {/* 견적서 결재 올리기 — 삭제 요청과 다른 유형이라 모달을 따로 둔다. */}
         <LinePickerModal

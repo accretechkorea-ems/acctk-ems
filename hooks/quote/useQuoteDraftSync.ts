@@ -44,6 +44,9 @@ export type UseQuoteDraftSyncArgs = {
   opportunityId: number | null
   /** 고른 수신인 담당자. 초안에 그대로 담는다(글자가 아니라 id 다). */
   recipientContactId: number | null
+  /** 고른 수리 건과 적어 둔 수리 정보 — 확정 전에는 초안이 들고 있는다. */
+  repairLinkId: number | null
+  repairInfo: { symptom: string | null; cause: string | null; result: string | null }
   /** 견적 날짜 'YYYY-MM-DD'. 초안에 함께 담는다. */
   quoteDate: string
   setQuoteDate: (v: string) => void
@@ -64,6 +67,8 @@ export type UseQuoteDraftSyncArgs = {
   debouncedCompany: string
   debouncedReceiver: string
   debouncedFinalRemarks: string
+  /** 수리 건·수리 정보가 바뀌었나를 묶은 글자(page.tsx). 저장 effect 의 의존성이다. */
+  debouncedRepairKey: string
 
   // 저장분을 되돌릴 때 쓰는 화면 setter 들
   setCompany: React.Dispatch<React.SetStateAction<string>>
@@ -76,6 +81,8 @@ export type UseQuoteDraftSyncArgs = {
   setEuQuery: React.Dispatch<React.SetStateAction<string>>
   resolveEuParent: (customerId: number | null) => void
   setRecipientContactId: React.Dispatch<React.SetStateAction<number | null>>
+  setRepairLinkId: React.Dispatch<React.SetStateAction<number | null>>
+  setRepairInfo: React.Dispatch<React.SetStateAction<{ symptom: string | null; cause: string | null; result: string | null }>>
   /** 옛 초안의 수신인 글자를 되살릴 자리(안내로만 쓴다). */
   setLegacyRecipient: React.Dispatch<React.SetStateAction<string>>
   setRemarks: (v: string | null) => void
@@ -92,13 +99,14 @@ export function useQuoteDraftSync({
   toast, rateRef, engineer, hasUrlPrefill,
   onBehalf, company, customerId, selectedCustomer, customerQuery, isDealer,
   euCustomerId, selectedEU, euQuery, opportunityId,
-  recipientContactId, remarks, showSignature, termsOpen, terms, rows,
+  recipientContactId, repairLinkId, repairInfo, remarks, showSignature, termsOpen, terms, rows,
   quoteDate, setQuoteDate,
   category, formKind, setCategory, setFormKind,
-  debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks,
+  debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks, debouncedRepairKey,
   setCompany, setCustomerId, setSelectedCustomer, setCustomerQuery, setIsDealer,
   setEuCustomerId, setSelectedEU, setEuQuery, resolveEuParent,
-  setRecipientContactId, setLegacyRecipient, setRemarks, setShowSignature, setTermsOpen, setTerms, setRows,
+  setRecipientContactId, setLegacyRecipient, setRepairLinkId, setRepairInfo,
+  setRemarks, setShowSignature, setTermsOpen, setTerms, setRows,
   loadOpportunities, setOpportunityId, setOnBehalf,
 }: UseQuoteDraftSyncArgs) {
   // 임시저장 — 저장분이 있으면 이어쓸지 먼저 묻는다. 답하기 전에는 자동 저장을 시작하지 않는다
@@ -131,6 +139,9 @@ export function useQuoteDraftSync({
     // 수신인 — 담당자 id 를 되살린다. 옛 초안에는 글자뿐이라 그것은 안내로만 띄운다.
     setRecipientContactId(d.recipientContactId ?? null)
     setLegacyRecipient(d.recipientContactId == null ? (d.receiver ?? '') : '')
+    // 수리 건·수리 정보 — 옛 초안에는 없다(loadDraft 가 기본값으로 채워 준다).
+    setRepairLinkId(d.repairLinkId ?? null)
+    setRepairInfo(d.repairInfo ?? { symptom: null, cause: null, result: null })
     setRemarks(d.remarks); setShowSignature(d.showSignature)
     // 견적 날짜 — 옛 초안에는 없다. 없거나 미래면 오늘로 떨어진다.
     setQuoteDate(safeQuoteDate(d.quoteDate))
@@ -174,7 +185,8 @@ export function useQuoteDraftSync({
       onBehalfId: onBehalf?.engineer_id ?? null,
       company, customerId, selectedCustomer, customerQuery, isDealer,
       euCustomerId, selectedEU, euQuery, opportunityId,
-      recipientContactId, receiver: '', remarks, showSignature, termsOpen, terms, rows,
+      recipientContactId, receiver: '', repairLinkId, repairInfo,
+      remarks, showSignature, termsOpen, terms, rows,
       quoteDate,
       category, formKind,
     }
@@ -183,7 +195,7 @@ export function useQuoteDraftSync({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engineer, draftReady, debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks,
       onBehalf, customerId, selectedCustomer, isDealer, euCustomerId, selectedEU, opportunityId, showSignature,
-      termsOpen, terms])
+      termsOpen, terms, debouncedRepairKey])
 
   return { draftAsk, setDraftAsk, draftReady, setDraftReady, applyDraft }
 }

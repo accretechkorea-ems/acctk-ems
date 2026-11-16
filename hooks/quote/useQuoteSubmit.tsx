@@ -22,6 +22,7 @@ import { pickRate, type Rates } from '@/lib/quoteCurrency'
 
 import { DEFAULT_TERMS, defaultTermsFor, type Terms } from '@/lib/quoteTerms'
 import { clearDraft } from '@/lib/quoteDraft'
+import { saveRepairInfo, type RepairInfoFields } from '@/lib/quoteRepairInfo'
 import { withOperatingReason } from '@/lib/quoteOperatingNote'
 import { defaultsFromRows, saveQuoteUserDefaults } from '@/lib/quoteUserDefaults'
 import { todayKST } from '@/lib/date'
@@ -60,6 +61,10 @@ export type UseQuoteSubmitArgs = {
   receiver: string
   /** 고른 수신인 담당자(quotes.recipient_contact_id). 확정 검증이 null 을 막는다. */
   recipientContactId: number | null
+  /** 적어 둔 수리 정보 — 확정으로 quote_id 가 생긴 **뒤에** 올린다(그 전에는 쓸 곳이 없다). */
+  repairInfo: RepairInfoFields
+  setRepairLinkId: React.Dispatch<React.SetStateAction<number | null>>
+  setRepairInfo: React.Dispatch<React.SetStateAction<RepairInfoFields>>
   finalRemarksForPDF: string
   /** 영업이익 하한 미만 사유. note 끝에 한 줄로 붙는다(PDF 비고에는 없다). */
   operatingReason: string
@@ -159,7 +164,8 @@ function isNameTakenError(err: unknown): boolean {
 export function useQuoteSubmit({
   supabase, toast, router, engineer, initials, onBehalf,
   dateStr, dateDisplay, quoteNo, engineerName, engineerTel,
-  company, receiver, recipientContactId, finalRemarksForPDF, operatingReason, showSignature,
+  company, receiver, recipientContactId, repairInfo, setRepairLinkId, setRepairInfo,
+  finalRemarksForPDF, operatingReason, showSignature,
   category, formKind, setCategory, setFormKind,
   rows, expenses, rates,
   customerId, euCustomerId, isDealer, opportunityId,
@@ -312,6 +318,8 @@ export function useQuoteSubmit({
     setOpportunities([]); setOpportunityId(null)
     // 비고는 **손댄 글자를 버린다**(null) — 그러면 다음 견적의 양식에 맞는 기본 문구가 보인다.
     setRecipientContactId(null); setLegacyRecipient('')
+    // 수리 건은 그 견적의 것이다 — 다음 견적으로 따라오면 엉뚱한 수리 건에 붙는다.
+    setRepairLinkId(null); setRepairInfo({ symptom: null, cause: null, result: null })
     setRemarks(null); setRemarksOpen(false); setShowSignature(false)
     // 견적 날짜도 오늘로 되돌린다 — 지난 날짜로 한 건 쓴 뒤 다음 건이 그 날짜로 이어지지 않게.
     setQuoteDate(todayKST())
@@ -512,6 +520,20 @@ export function useQuoteSubmit({
         const { error: rcErr } = await supabase
           .from('quotes').update({ recipient_contact_id: recipientContactId }).eq('quote_id', savedQuoteId)
         if (rcErr) console.error('[quote] 수신인 담당자 연결 실패', { quoteId: savedQuoteId, recipientContactId, error: rcErr })
+      }
+
+      /**
+       * 수리 정보 — 적어 둔 것이 있으면 올린다.
+       *
+       * 수리 건 연결(repairs.quote_id)은 **함수가 이미 했다**(p_repair_id). 증상·원인·
+       * 결과는 quote_repair_info 에 들어가는데 그 표는 quote_id 가 있어야 쓸 수 있어
+       * 여기가 가장 이른 자리다. 실패해도 확정은 성공이다 — 견적은 이미 저장됐고,
+       * 목록의 「수리 정보」 드로어에서 다시 적을 수 있다(그래서 토스트로만 알린다).
+       */
+      const hasRepairText = [repairInfo.symptom, repairInfo.cause, repairInfo.result].some(v => (v ?? '').trim() !== '')
+      if (hasRepairText) {
+        const r = await saveRepairInfo(savedQuoteId, repairInfo)
+        if (!r.ok) toast.error('견적은 저장되었으나 수리 정보 저장에 실패했습니다. 목록에서 다시 저장해주세요.')
       }
 
       // 저장이 전부 끝난 뒤에 지운다. 실패하면 아무것도 저장되지 않으므로 초안을 남겨 이어 쓰게 한다.
