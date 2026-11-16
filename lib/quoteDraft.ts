@@ -34,13 +34,6 @@ export type QuoteDraft = {
   /** 고른 수신인 담당자(quotes.recipient_contact_id). 옛 초안에는 없다 → null 로 떨어진다. */
   recipientContactId: number | null
   /**
-   * 고른 **수리 건**(repairs.repair_id). 연결은 견적이 저장될 때 repairs.quote_id 에
-   * 적히므로, 그 전까지는 초안이 들고 있어야 한 번 고른 것이 새로고침에 날아가지 않는다.
-   */
-  repairLinkId: number | null
-  /** 적어 둔 수리 정보. 확정할 때 quote_repair_info 로 올라간다. */
-  repairInfo: { symptom: string | null; cause: string | null; result: string | null }
-  /**
    * 옛 초안의 **수신인 글자** — 더 이상 저장하지 않는다(화면에 칸이 없다. 담당자를 고른다).
    * 읽을 때만 쓴다: 값이 있으면 「이전 수신인: …」 안내로 보여 주고 사람이 담당자를 고른다.
    */
@@ -87,9 +80,6 @@ export type QuoteDraft = {
 export function isDraftMeaningful(d: Omit<QuoteDraft, 'v' | 'savedAt'>): boolean {
   if (d.company.trim() || d.customerQuery.trim() || d.receiver.trim()) return true
   if (d.recipientContactId != null) return true
-  // 수리 건을 걸었거나 수리 정보를 적었으면 「쓰던 내용」이다.
-  if (d.repairLinkId != null) return true
-  if ([d.repairInfo?.symptom, d.repairInfo?.cause, d.repairInfo?.result].some(v => (v ?? '').trim() !== '')) return true
   if (d.customerId != null || d.euCustomerId != null || d.opportunityId != null) return true
   if (d.showSignature || d.isDealer) return true
   // 조건을 손댔으면 「작성 중이던 내용」이다.
@@ -132,13 +122,6 @@ export function loadDraft(engineerId: number): QuoteDraft | null {
       // 2026-11-16 에 더한 칸 — 그 전 초안에는 수신인이 글자(receiver)로만 들어 있다.
       recipientContactId: typeof d.recipientContactId === 'number' ? d.recipientContactId : null,
       receiver: typeof d.receiver === 'string' ? d.receiver : '',
-      // 2026-11-16 에 더한 칸 — 그 전 초안에는 없다.
-      repairLinkId: typeof d.repairLinkId === 'number' ? d.repairLinkId : null,
-      repairInfo: {
-        symptom: typeof d.repairInfo?.symptom === 'string' ? d.repairInfo.symptom : null,
-        cause: typeof d.repairInfo?.cause === 'string' ? d.repairInfo.cause : null,
-        result: typeof d.repairInfo?.result === 'string' ? d.repairInfo.result : null,
-      },
     }
   } catch { clearDraft(engineerId); return null }
 }

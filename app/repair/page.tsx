@@ -17,6 +17,9 @@ import { useFieldErrors, FieldError, errBorder } from '@/components/common/field
 import { REPAIR_STATUS_COLORS, REPAIR_MEANING_COLORS } from '@/lib/categoryColors'
 import { isAtHq } from '@/lib/repairStats'
 import { Z } from '@/lib/zIndex'
+import RepairInfoButton from '@/components/quote/RepairInfoButton'
+import RepairInfoDrawer from '@/components/quote/RepairInfoDrawer'
+import { fetchRepairInfoStates, type RepairInfoRow, type RepairInfoState } from '@/lib/quoteRepairInfo'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { todayKST, nowKSTParts } from '@/lib/date'
 
@@ -39,7 +42,8 @@ const ACTIVE_BG = '#f1f1f1' // 필터 활성 배경 (중립)
 // 순번·구분·입고일·회사명·제품구분·시리얼번호·출고일·견적·상태·수정
 // 견적(아이콘+금액)·상태(상태텍스트+본사 발송 배지+본사 복귀 버튼 동시 노출)는 잘리지 않도록 넉넉히.
 // 상태 컬럼 = 4구역 고정폭(80+90+44+28) + 구역 gap(3×6) + td 좌우 padding(20) ≈ 280
-const COL_WIDTHS: (number | 'auto')[] = [46, 56, 92, 'auto', 'auto', 'auto', 92, 130, 280, 44]
+// 2026-11-16 — 「견적」 열에 견적번호와 수리정보 단추가 함께 서서 130 → 230 으로 넓혔다.
+const COL_WIDTHS: (number | 'auto')[] = [46, 56, 92, 'auto', 'auto', 'auto', 92, 230, 280, 44]
 
 // 자동완성 후보: 빈 값·null 제외, 사용 빈도 높은 순 정렬
 const freqSorted = (values: (string | null | undefined)[]): string[] => {
@@ -178,6 +182,17 @@ export default function RepairPage() {
     return () => { document.removeEventListener('click', close); window.removeEventListener('scroll', close, true) }
   }, [openMemoId])
 
+  /**
+   * 수리 정보 상태 — 연결된 견적의 「미작성/작성중/완료」다. 견적 목록과 **같은 함수**로
+   * 받는다(lib/quoteRepairInfo.ts). 여기서는 연결된 견적이 있는 줄만 물어본다.
+   */
+  const [repairStates, setRepairStates] = useState<Map<number, RepairInfoRow>>(new Map())
+  /** 열려 있는 수리 정보 드로어. */
+  const [infoDrawer, setInfoDrawer] = useState<{ quoteId: number; quoteNumber: string } | null>(null)
+  const onInfoSaved = (quoteId: number, state: RepairInfoState) => {
+    setRepairStates(prev => new Map(prev).set(quoteId, { isRepair: true, state }))
+  }
+
   // 연결된 견적 요약을 API 로 배치 조회(20팀 견적만 service role 로 오픈). 연결 없으면 호출 안 함.
   useEffect(() => {
     const ids = [...new Set(repairs.map(r => r.quote_id).filter((v): v is number => v != null))]
@@ -190,8 +205,24 @@ export default function RepairPage() {
         for (const q of (j.quotes ?? []) as RepairQuote[]) m[q.quote_id] = q
         setQuoteMap(m)
       }).catch(() => { /* 못 읽으면 금액 미표시(오류 없음) */ })
+    // 수리 정보 뱃지 — 연결된 견적만 물어본다(없으면 호출도 하지 않는다).
+    fetchRepairInfoStates(ids).then(found => { if (!cancelled) setRepairStates(found) })
     return () => { cancelled = true }
   }, [repairs])
+
+  /**
+   * 「+ 견적서」 — 그 수리품으로 견적서를 쓰러 간다.
+   *
+   * 넘기는 값은 모달에 있던 것과 같다(회사명·제품 구분·시리얼). 모달이 아니라 목록이라
+   * **미저장 변경을 걱정할 것이 없다** — 저장된 줄의 값을 그대로 들고 간다.
+   */
+  const goWriteQuote = (r: Repair) => {
+    const params = new URLSearchParams({ repair_id: String(r.repair_id) })
+    if ((r.customer_name ?? '').trim()) params.set('customer', r.customer_name!.trim())
+    if ((r.product_type ?? '').trim()) params.set('product', r.product_type!.trim())
+    if ((r.serial_number ?? '').trim()) params.set('serial', r.serial_number!.trim())
+    router.push(`/quote?${params.toString()}`)
+  }
 
   // ── 접수 등록 ──
   const handleSubmit = async () => {
@@ -506,6 +537,17 @@ export default function RepairPage() {
     )
   }
 
+  /** 수리 정보 드로어 — 목록 어느 구역에서 열어도 같은 것이다. */
+  const infoDrawerNode = infoDrawer ? (
+    <RepairInfoDrawer
+      quoteId={infoDrawer.quoteId}
+      quoteNumber={infoDrawer.quoteNumber}
+      onClose={() => setInfoDrawer(null)}
+      onSaved={onInfoSaved}
+      toast={toast}
+    />
+  ) : null
+
   // 목록 행 (고정 블록·페이지 목록 공용)
   const repairRow = (r: Repair) => {
     return (
@@ -520,23 +562,35 @@ export default function RepairPage() {
       <td style={td}>{r.serial_number || '-'}</td>
       <td style={{ ...td, textAlign: 'center', color: GRAY }}>{r.shipped_date || '-'}</td>
       <td style={{ ...td, textAlign: 'center' }}>
-        {/* 연결된 견적의 청구 금액(클릭 시 PDF). 연결 안 된 건은 비워둠. 금액은 견적서(total_supply)가 유일 출처. */}
+        {/* 견적 — 연결 전에는 **쓰러 가는 단추**, 연결 뒤에는 견적번호(클릭 시 PDF)와
+            수리 정보 단추다. 수리 정보는 드로어에서 적고 거기서 문서도 만든다. */}
         {(() => {
           const q = r.quote_id != null ? quoteMap[r.quote_id] : undefined
-          if (!q) return null                              // 연결 안 된 건: 빈 칸(아이콘 없음)
+          if (r.quote_id == null) {
+            // 수리불가·수리진행안함 건에는 견적서를 쓰지 않는다(모달에 있던 규칙 그대로).
+            if (r.special_type === '수리불가' || r.special_type === '수리진행안함') return null
+            return (
+              <button onClick={() => goWriteQuote(r)}
+                title="이 수리품으로 견적서를 작성합니다"
+                style={{ padding: '3px 9px', border: `1px solid ${BORDER}`, borderRadius: 6, background: '#fff', color: BLUE, fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                + 견적서
+              </button>
+            )
+          }
+          const state = repairStates.get(r.quote_id)
           return (
-            // 문서 아이콘 + 금액 = 클릭하면 견적서 PDF. 아이콘으로 클릭 가능함을 드러낸다.
-            <span onClick={() => openQuotePdf(q.quote_id)} title={`${q.quote_number} · 견적서 보기`}
-              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: pdfBusyId === null ? 'pointer' : 'default', color: BLUE, fontWeight: 600, whiteSpace: 'nowrap', lineHeight: 1, opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, display: 'block' }}>
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-                <line x1="16" y1="13" x2="8" y2="13" />
-                <line x1="16" y1="17" x2="8" y2="17" />
-                <line x1="10" y1="9" x2="8" y2="9" />
-              </svg>
-              ₩{numKR(q.total_supply ?? 0)}
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, flexWrap: 'nowrap' }}>
+              <span onClick={() => openQuotePdf(r.quote_id!)} title={`${q?.quote_number ?? '견적'} · 견적서 보기`}
+                style={{ cursor: pdfBusyId === null ? 'pointer' : 'default', color: BLUE, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', opacity: pdfBusyId === r.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
+                {q?.quote_number ?? `#${r.quote_id}`}
+              </span>
+              {state?.isRepair && (
+                <RepairInfoButton
+                  state={state.state}
+                  onClick={() => setInfoDrawer({ quoteId: r.quote_id!, quoteNumber: q?.quote_number ?? `#${r.quote_id}` })}
+                />
+              )}
+            </div>
           )
         })()}
       </td>
@@ -908,6 +962,9 @@ export default function RepairPage() {
         </div>
 
       </div>
+
+      {/* ── 수리 정보 드로어 — 「견적」 열의 수리정보 단추가 연다(견적 목록과 같은 것). ── */}
+      {infoDrawerNode}
 
       {/* ── 수리품 수정 모달 ── */}
       <RepairEditModal repair={editing} isSaving={isEditSaving} onClose={() => setEditing(null)} onSave={handleEditSave} onDelete={handleDelete} />

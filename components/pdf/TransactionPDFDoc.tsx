@@ -58,7 +58,15 @@ const S = StyleSheet.create({
   },
   th: { fontSize: S_CELL, textAlign: 'center' },
   td: { fontSize: S_CELL },
-  sub: { fontSize: S_SUB, color: C_SUB, marginTop: 0.4 * MM },
+  /**
+   * 품명·보조 줄은 **각각 한 줄**이다(넘치면 … 로 끊는다).
+   *
+   * 수리 건 품명은 「견적번호_모델 (S/N …) 수리 건」이라 모델이 길면 두 줄이 된다. 그러면
+   * 줄 높이를 아무리 줄여도 칸이 두 줄 글자만큼 남아, 품목 세 줄만 있어도 표가 길어져
+   * 두 쪽이 됐다(실측). 한 줄로 못 박으면 품목 수와 표 높이가 비례해 한 장을 지킬 수 있다.
+   */
+  tdName: { fontSize: S_CELL, maxLines: 1, textOverflow: 'ellipsis' },
+  sub: { fontSize: S_SUB, color: C_SUB, marginTop: 0.4 * MM, maxLines: 1, textOverflow: 'ellipsis' },
   // .confirm{border:1.5px solid #000;padding:20px;text-align:center}
   confirm: {
     borderWidth: W_BOX, borderColor: C_BLACK, paddingVertical: 5 * MM, paddingHorizontal: 5 * MM,
@@ -142,7 +150,7 @@ export function TransactionPDFDoc({
                 <Text style={S.td}>{l.no}</Text>
               </View>
               <View style={[S.cell, { width: COL_NAME }]}>
-                <Text style={S.td}>{l.name}</Text>
+                <Text style={S.tdName}>{l.name}</Text>
                 {showSub && l.sub ? <Text style={S.sub}>{l.sub}</Text> : null}
               </View>
               <View style={[S.cell, { width: COL.qty, alignItems: 'center' }]}>

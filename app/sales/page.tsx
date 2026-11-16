@@ -50,6 +50,7 @@ import Popover from '@/components/common/Popover'
 import BackdatedMark from '@/components/quote/BackdatedMark'
 import RepairInfoButton from '@/components/quote/RepairInfoButton'
 import QuoteDocButtons from '@/components/quote/QuoteDocButtons'
+import { isGeneral20Form } from '@/lib/quoteForms'
 import RepairInfoDrawer from '@/components/quote/RepairInfoDrawer'
 import { fetchRepairInfoStates, type RepairInfoRow, type RepairInfoState } from '@/lib/quoteRepairInfo'
 import { todayKST, nowKSTParts, daysBetween, kstYmd, ymdParts } from '@/lib/date'
@@ -82,6 +83,8 @@ type Quote = {
   profit_rate: number | null
   status: string
   quote_type?: string | null
+  /** 견적서 양식 — 수리·문서 단추를 20 견적서 행에만 내려고 읽는다(select 는 * 다). */
+  form_kind?: string | null
   // order_date · revenue_date 는 코드에서 쓰지 않는다(수주·매출 시점은 처리 시각 컬럼이 정본).
   fail_reason: string | null
   recipient: string | null
@@ -448,6 +451,13 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
    * 수리정보 뱃지 — 수리 건 견적의 작성 상태다. 한 번에 물어본다(lib/quoteRepairInfo.ts).
    * repairs 는 견적 목록 사람들에게 열려 있지 않아 서비스 롤 라우트를 거친다.
    */
+  /**
+   * 수리·문서 단추를 낼 행인가 — **20 견적서 양식**일 때만이다.
+   *
+   * 수리 건 정보도 거래명세서·수리내역서도 20팀 수리 업무에서 나온 것이다. 80 파츠·
+   * 80 장비 견적에 그 단추가 붙으면 쓰지 않을 문서가 목록마다 따라다닌다.
+   */
+  const isRepairForm = (q: { form_kind?: string | null }) => isGeneral20Form(q.form_kind)
   const [repairStates, setRepairStates] = useState<Map<number, RepairInfoRow>>(new Map())
   /**
    * 문서를 낼 수 있는 견적인가.
@@ -952,20 +962,22 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                               계산서 요청
                             </button>
                           )}
-                          {/* 수리 건 견적에만 나온다 — 상태를 보여 주고 누르면 드로어가 열린다. */}
-                          {repairStates.get(q.quote_id)?.isRepair && (
+                          {/* 20 견적서이고 수리 건인 행에만 나온다. */}
+                          {isRepairForm(q) && repairStates.get(q.quote_id)?.isRepair && (
                             <RepairInfoButton
                               state={repairStates.get(q.quote_id)!.state}
                               onClick={() => setRepairDrawer({ quoteId: q.quote_id, quoteNumber: q.quote_number })}
                             />
                           )}
-                          {/* 거래명세서·수리내역서 — 수리 건이 아니어도 거래명세서는 낸다. */}
-                          <QuoteDocButtons
-                            quoteId={q.quote_id}
-                            isRepair={!!repairStates.get(q.quote_id)?.isRepair}
-                            enabled={docEnabled(q)}
-                            toast={toast}
-                          />
+                          {/* 거래명세서·수리내역서 — 20 견적서 행에만 둔다. */}
+                          {isRepairForm(q) && (
+                            <QuoteDocButtons
+                              quoteId={q.quote_id}
+                              isRepair={!!repairStates.get(q.quote_id)?.isRepair}
+                              enabled={docEnabled(q)}
+                              toast={toast}
+                            />
+                          )}
                           {/* 「⋮」 는 상태 변경·삭제 요청 창을 여는 유일한 입구다. 결재가 도는 중이면
                               그 창의 모든 동작이 updateQuoteStatus 에서 0행이 되므로 버튼을 내지 않고
                               이유만 적는다(lib/quoteMutations.ts · 전자결재 6단계 B). */}

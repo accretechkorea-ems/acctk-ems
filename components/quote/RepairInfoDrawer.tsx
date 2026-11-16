@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import RepairInfoPanel from '@/components/quote/RepairInfoPanel'
+import QuoteDocButtons from '@/components/quote/QuoteDocButtons'
 import {
   deleteRepairPhoto, fetchRepairInfo, movePhoto, orderRepairPhotos, photoRoom,
   repairInfoState, saveRepairInfo, uploadRepairPhotos,
@@ -129,6 +130,12 @@ export default function RepairInfoDrawer({ quoteId, quoteNumber, onClose, onSave
             style={{ width: 24, height: 24, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           </button>
+        </div>
+        {/* 문서 — **드로어 안에서** 만든다. 수리품 목록에서 열었든 견적 목록에서 열었든
+            적는 일과 내는 일이 한 자리에서 끝나게. 수리내역서는 수리 건이 걸린 견적만이다. */}
+        <div style={{ padding: '8px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 11, color: '#9ca3af' }}>문서</span>
+          <QuoteDocButtons quoteId={quoteId} isRepair={repair !== null} enabled={!loading} toast={toast} />
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px' }}>
           {loading

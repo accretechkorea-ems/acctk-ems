@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, type CSSProperties, useRef } from 'react'
-import { useRouter } from 'next/navigation'
 import type { Repair, RepairStatus, RepairQuote } from '@/hooks/useRepairs'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useConfirm } from '@/components/common/ConfirmDialog'
@@ -117,7 +116,6 @@ function buildPatch(repair: Repair, form: PatchForm): Record<string, unknown> {
 export default function RepairEditModal({ repair, isSaving, onClose, onSave, onDelete }: Props) {
   const confirmDialog = useConfirm()
   const toast = useToast()
-  const router = useRouter()
   const { errors, setErrors, clearError, validate } = useFieldErrors<'customerName' | 'receivedDate'>()
   const [itemType, setItemType] = useState<Category>('게이지')
   // 견적서 PDF 를 여는 중인지 — 연타 방지 + 버튼 문구 변경.
@@ -169,51 +167,9 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
 
   const unlinkQuote = () => { setQuoteId(null); setLinkedSummary(null) }
 
-  // 폼이 원본 repair 와 달라졌는지(미저장 변경). 견적서로 넘어가는 필드 + 나머지 편집 필드 전부 비교.
-  const hasUnsavedChanges = (): boolean => {
-    const initItemType = repair.item_type === '앰프' ? '앰프' : '게이지'
-    return (
-      itemType !== initItemType ||
-      receivedDate !== (repair.received_date ?? '') ||
-      customerName !== (repair.customer_name ?? '') ||
-      productType !== (repair.product_type ?? '') ||
-      serialNumber !== (repair.serial_number ?? '') ||
-      status !== repair.status ||
-      shippedDate !== (repair.shipped_date ?? '') ||
-      specialType !== (repair.special_type ?? '') ||
-      repairContent !== (repair.repair_content ?? '') ||
-      hqRequestedAt !== (repair.hq_requested_at ?? '') ||
-      hqReturnedAt !== (repair.hq_returned_at ?? '') ||
-      quoteId !== (repair.quote_id ?? null)
-    )
-  }
-
-  // 이 수리 건으로 견적서 작성 → /quote 로 이동(현재 폼 값 prefill). 저장 시 repairs.quote_id 자동 연결.
-  // 이미 연결돼 있으면 대체 확인. 미저장 변경이 있으면 저장 후 이동(저장 실패 시 이동 안 함).
-  const onCreateQuote = async () => {
-    if (quoteId != null) {
-      const ok = await confirmDialog({ title: '견적서 새로 작성', message: '이미 견적서가 연결되어 있습니다. 새로 작성하면 기존 연결이 대체됩니다.', confirmText: '계속', variant: 'default' })
-      if (!ok) return
-    }
-    // 미저장 변경 가드: 확인 → 저장 → 성공 시에만 이동.
-    if (hasUnsavedChanges()) {
-      const ok = await confirmDialog({ title: '저장되지 않은 변경', message: '저장하지 않은 변경사항이 있습니다.\n저장 후 견적서 작성으로 이동합니다.', confirmText: '저장 후 이동', variant: 'default' })
-      if (!ok) return
-      const ok0 = validate({
-        customerName: customerName.trim() ? null : '회사명을 입력해주세요',
-        receivedDate: receivedDate ? null : '입고일을 입력해주세요',
-      })
-      if (!ok0) return
-      const saved = await onSave(repair.repair_id, buildPatch(repair, { itemType, receivedDate, customerName, productType, serialNumber, status, shippedDate, specialType, repairContent, hqRequestedAt, hqReturnedAt, quoteId }))
-      if (!saved) return // 저장 실패 → 이동하지 않음(에러 토스트는 onSave 에서 표시)
-    }
-    // prefill 은 현재 폼 값(= 방금 저장된 값) 기준.
-    const params = new URLSearchParams({ repair_id: String(repair.repair_id) })
-    if (customerName.trim()) params.set('customer', customerName.trim())
-    if (productType.trim()) params.set('product', productType.trim())
-    if (serialNumber.trim()) params.set('serial', serialNumber.trim())
-    router.push(`/quote?${params.toString()}`)
-  }
+  // 「견적서 작성」은 **목록의 「견적」 열**로 옮겼다(2026-11-16) — 모달과 목록 두 곳에
+  // 같은 단추가 있으면 어느 쪽이 지금 값을 들고 가는지가 흐려진다. 여기에는 연결된 견적을
+  // 열고 끊는 길만 남는다.
 
   // 연결된 견적서 PDF 열기 — /api/repair-quotes?pdf=. 서버가 20팀·연결 여부를 검사(임의 견적 차단).
   const openQuotePdf = async () => {
@@ -394,7 +350,10 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
             </div>
           </div>
 
-          {/* ── 견적서 ── 한 줄: 왼쪽 = 작성 버튼(또는 연결된 견적 정보), 오른쪽 = 견적서 보기 / 연결 해제 */}
+          {/* ── 견적서 ── **연결된 건일 때만** 나온다: 견적번호·금액 + 견적서 보기 / 연결 해제.
+              견적서를 새로 쓰는 길은 목록의 「견적」 열에만 둔다(2026-11-16) — 모달 안과 목록
+              두 곳에 같은 단추가 있으면 어느 쪽이 지금 값을 들고 가는지가 흐려진다. */}
+          {quoteId != null && (
           <div style={sectionDivider}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {linkedSummary ? (
@@ -420,15 +379,10 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
                   <button type="button" onClick={unlinkQuote}
                     style={{ padding: '7px 12px', border: '1px solid #fecdd3', borderRadius: 6, background: '#fff', color: '#be123c', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>연결 해제</button>
                 </>
-              ) : specialType !== '수리불가' && specialType !== '수리진행안함' ? (
-                // 미연결 + 견적 가능(본사수리/국내수리): 작은 작성 버튼만 왼쪽에.
-                <button type="button" onClick={onCreateQuote}
-                  style={{ padding: '7px 12px', border: 'none', borderRadius: 6, background: '#234ea2', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  + 견적서 작성
-                </button>
               ) : null}
             </div>
           </div>
+          )}
         </div>
 
         {/* 푸터 — 삭제(좌측 하단) · 취소/저장(우측). 삭제는 저장과 떨어뜨려 오조작 방지. */}

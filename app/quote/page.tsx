@@ -19,8 +19,7 @@ import type { Engineer, QuoteRow, RateMeta } from './types'
 import { calcRow, calcTotals, createTitleRow, rowsAreEmpty } from './calc'
 import { itemNumbers } from '@/lib/quoteRowKinds'
 import { displayRecipient } from '@/lib/quoteRecipient'
-import { fetchRepairBrief, type RepairBrief, type RepairInfoFields } from '@/lib/quoteRepairInfo'
-import RepairSection from '@/components/quote/RepairSection'
+import { fetchRepairBrief, type RepairBrief } from '@/lib/quoteRepairInfo'
 import type { Contact } from '@/components/customer/types'
 import { GENERAL20_SUBTITLE, isGeneral20Form } from '@/lib/quoteForms'
 import { useDebounce } from './useDebounce'
@@ -170,30 +169,18 @@ function QuotePageInner() {
    */
   const [legacyRecipient, setLegacyRecipient] = useState('')
   /**
-   * 이 견적이 걸린 **수리 건**. 연결은 repairs.quote_id 한 곳에만 적히는데, 그 칸은
-   * 견적이 저장돼 quote_id 가 생긴 뒤에야 쓸 수 있다(create_quote 의 p_repair_id).
-   * 그래서 확정 전에는 **고른 값을 화면이 들고 있다** — 임시저장에도 함께 담긴다.
+   * 수리품 목록에서 넘어온 견적이면 **어느 수리품인지만** 보여 준다(읽기 전용 칩).
    *
-   * 주소로 들어온 ?repair_id 와 화면에서 고른 값은 같은 칸을 쓴다(둘이 갈리면 어느 쪽으로
-   * 저장되는지가 흐려진다). 주소값은 아래 effect 가 한 번 넣어 준다.
+   * 연결은 확정할 때 repairs.quote_id 에 적힌다(create_quote 의 p_repair_id) — 여기서
+   * 고르거나 끊는 길은 없다. 수리 정보(증상·원인·결과·사진)는 **확정한 뒤** 목록의
+   * 「수리 정보」 드로어에서 적는다(components/quote/RepairInfoDrawer.tsx).
    */
-  const [repairLinkId, setRepairLinkId] = useState<number | null>(null)
-  /** 그 수리 건의 읽기 전용 칸(구분·시리얼·날짜 셋). 라우트가 준다. */
   const [repairBrief, setRepairBrief] = useState<RepairBrief | null>(null)
-  /** 적어 둔 수리 정보 — 확정할 때 함께 올린다(아직 저장할 quote_id 가 없다). */
-  const [repairInfo, setRepairInfo] = useState<RepairInfoFields>({ symptom: null, cause: null, result: null })
-
-  /** 고른 수리 건 한 줄을 받아 온다. 비우면 읽기 줄도 사라진다. */
   useEffect(() => {
-    if (repairLinkId == null) { setRepairBrief(null); return }
+    if (repairId == null) { setRepairBrief(null); return }
     let alive = true
-    fetchRepairBrief(repairLinkId).then(r => { if (alive) setRepairBrief(r) })
+    fetchRepairBrief(repairId).then(r => { if (alive) setRepairBrief(r) })
     return () => { alive = false }
-  }, [repairLinkId])
-
-  /** 주소로 들어온 수리 건(?repair_id) — 한 번만 넣는다. */
-  useEffect(() => {
-    if (repairId != null) setRepairLinkId(repairId)
   }, [repairId])
 
   /** 고른 담당자 한 줄. 목록이 바뀌어 사라졌으면 null 이다. */
@@ -288,12 +275,6 @@ function QuotePageInner() {
   const debouncedCompany = useDebounce(company, 600)
   const debouncedReceiver = useDebounce(receiver, 600)
   const debouncedRows = useDebounce(rows, 600)
-  /**
-   * 수리 건 연결·수리 정보가 **바뀌었나**를 한 글자로 묶은 값. 임시저장 effect 의 의존성이다 —
-   * 객체를 그대로 넣으면 글자 한 자마다 저장이 돌고, 넣지 않으면 그 둘만 바꾼 초안은
-   * 아예 저장되지 않는다(실측으로 확인 — 고른 수리 건이 새로고침에 날아갔다).
-   */
-  const debouncedRepairKey = useDebounce(`${repairLinkId ?? ''}|${repairInfo.symptom ?? ''}|${repairInfo.cause ?? ''}|${repairInfo.result ?? ''}`, 600)
   // 조건 네 줄 — 미리보기도 다른 칸과 같은 600ms 디바운스를 쓴다(글자마다 PDF 를 다시 그리지 않게).
   const debouncedTerms = useDebounce(terms, 600)
   const debouncedTermsOpen = useDebounce(termsOpen, 600)
@@ -550,9 +531,7 @@ function QuotePageInner() {
     totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate,
     termsResult, subLinesResult, normalizedSubLines, withNormalizedSubLines,
     runValidation, setErrors,
-    // 수리 건 — 주소로 들어온 것이든 화면에서 고른 것이든 **repairLinkId 하나**다.
-    repairId: repairLinkId, repairInfo, setRepairLinkId, setRepairInfo,
-    hasUrlPrefill, setParamsCleared, setPreviewSeq,
+    repairId, hasUrlPrefill, setParamsCleared, setPreviewSeq,
     setCompany, setCustomerId, setCustomerQuery, setCustomerResults, setCustomerSearchOpen,
     setSelectedCustomer, setPrefillNotice, setIsDealer,
     setEuCustomerId, setEuQuery, setEuResults, setEuSearchOpen, setSelectedEU, resolveEuParent,
@@ -588,14 +567,13 @@ function QuotePageInner() {
     toast, rateRef, engineer, hasUrlPrefill,
     onBehalf, company, customerId, selectedCustomer, customerQuery, isDealer,
     euCustomerId, selectedEU, euQuery, opportunityId,
-    recipientContactId, repairLinkId, repairInfo,
-    remarks, showSignature, termsOpen, terms, rows,
+    recipientContactId, remarks, showSignature, termsOpen, terms, rows,
     quoteDate, setQuoteDate,
     category, formKind, setCategory, setFormKind,
-    debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks, debouncedRepairKey,
+    debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks,
     setCompany, setCustomerId, setSelectedCustomer, setCustomerQuery, setIsDealer,
     setEuCustomerId, setSelectedEU, setEuQuery, resolveEuParent,
-    setRecipientContactId, setLegacyRecipient, setRepairLinkId, setRepairInfo,
+    setRecipientContactId, setLegacyRecipient,
     setRemarks, setShowSignature, setTermsOpen, setTerms, setRows,
     loadOpportunities, setOpportunityId, setOnBehalf,
   })
@@ -914,8 +892,11 @@ function QuotePageInner() {
       `}</style>
       {repairId != null && (
         <div style={{ padding: '16px 20px 0' }}>
+          {/* 어느 수리품의 견적인지만 알린다 — 읽기 전용이다(고르거나 끊는 길은 없다). */}
           <div style={{ background: '#eff4ff', border: '1px solid #c7d7f8', borderRadius: 8, padding: '10px 14px', fontSize: 13, fontWeight: 700, color: '#234ea2' }}>
-            수리 건 #{repairId} 의 견적서를 작성 중입니다
+            수리 건 #{repairId}
+            {repairBrief?.product_type ? <span style={{ fontWeight: 500 }}> · {repairBrief.product_type}</span> : null}
+            {repairBrief?.serial_number ? <span style={{ fontWeight: 500 }}> · S/N {repairBrief.serial_number}</span> : null}
           </div>
         </div>
       )}
@@ -1020,18 +1001,6 @@ function QuotePageInner() {
             />
             <FieldError message={errors.items} style={{ marginTop: 8 }} />
           </div>
-
-          {/* 수리 건 — 수리 목록에서 넘어온 견적이면 펼쳐져 있고, 일반 견적은 접혀 있다.
-              연결은 확정할 때 repairs.quote_id 에 적힌다(RepairSection 주석). */}
-          <RepairSection
-            repairId={repairLinkId}
-            setRepairId={setRepairLinkId}
-            repair={repairBrief}
-            info={repairInfo}
-            setInfo={setRepairInfo}
-            customerName={company}
-            fromUrl={repairId != null}
-          />
           </LockedSection>
         </div>
 

@@ -83,20 +83,19 @@ const states = new Map([[101, { isRepair: true, state: 'none' }]])
 eq('수리 건 견적에는 뱃지가 있다', states.get(101)?.isRepair === true, true)
 eq('일반 견적은 표에 없다 → 단추 없음', states.get(202) ?? null, null)
 
-console.log('\n── ③ 연결 후 확정 — 고른 값이 초안에 남는다 ──')
+console.log('\n── ③ 수리 건 연결 — 주소로만 들어온다 ──')
+// 2026-11-16 부터 작성 화면에는 수리 건을 고르는 길이 없다. 수리품 목록의 「+ 견적서」가
+// ?repair_id= 로 넘기고, 확정할 때 create_quote(p_repair_id) 가 repairs.quote_id 를 쓴다.
+// 그래서 **초안(localStorage)에는 수리 값이 하나도 없다** — 그 약속을 여기서 못 박는다.
 const baseDraft = {
   company: '', customerQuery: '', receiver: '', customerId: null, euCustomerId: null,
   opportunityId: null, showSignature: false, isDealer: false, termsOpen: false,
-  recipientContactId: null, repairLinkId: null,
-  repairInfo: { symptom: null, cause: null, result: null },
-  rows: [],
+  recipientContactId: null, rows: [],
 }
 eq('빈 초안은 저장하지 않는다', isDraftMeaningful(baseDraft), false)
-eq('수리 건을 걸면 「쓰던 내용」이다', isDraftMeaningful({ ...baseDraft, repairLinkId: 77 }), true)
-eq('수리 정보를 적어도 그렇다',
-  isDraftMeaningful({ ...baseDraft, repairInfo: info('전원 불량', null, null) }), true)
-eq('공백만 적은 것은 아니다',
-  isDraftMeaningful({ ...baseDraft, repairInfo: info('   ', null, null) }), false)
+eq('초안에 수리 칸이 없다', Object.keys(baseDraft).some(k => /repair/i.test(k)), false)
+eq('사명을 적으면 「쓰던 내용」이다', isDraftMeaningful({ ...baseDraft, company: '파카코리아' }), true)
+eq('수신인을 고르면 그렇다', isDraftMeaningful({ ...baseDraft, recipientContactId: 1477 }), true)
 
 console.log('\n── ④ 드로어 저장 — 뱃지가 그 자리에서 바뀐다 ──')
 // 목록은 저장 결과를 다시 읽지 않고 **같은 판정 함수**로 제자리에서 고친다.
@@ -141,8 +140,7 @@ console.log('\n── ⑧ 확정 전 견적 — 올릴 곳이 없다 ──')
 // 그려지고 그때는 사진 영역이 잠긴다(components/quote/RepairInfoPanel.tsx).
 // 그 약속을 글자로 못 박는다 — 초안 형식에 사진 칸이 **없다**.
 const draftKeys = Object.keys(baseDraft)
-eq('초안에 사진 칸이 없다', draftKeys.some(k => /photo/i.test(k)), false)
-eq('초안이 담는 수리 값은 둘뿐', draftKeys.filter(k => /repair/i.test(k)).sort(), ['repairInfo', 'repairLinkId'])
+eq('초안은 수리 값을 담지 않는다', draftKeys.filter(k => /repair/i.test(k)), [])
 eq('확정 전에는 사진 0장으로 센다', repairInfoState(info('a', 'b', 'c'), 0), 'partial')
 
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
