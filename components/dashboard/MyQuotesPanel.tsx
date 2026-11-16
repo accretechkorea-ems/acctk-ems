@@ -29,6 +29,7 @@ import { Z } from '@/lib/zIndex'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import Popover from '@/components/common/Popover'
 import RepairInfoButton from '@/components/quote/RepairInfoButton'
+import QuoteDocButtons from '@/components/quote/QuoteDocButtons'
 import RepairInfoDrawer from '@/components/quote/RepairInfoDrawer'
 import { fetchRepairInfoStates, type RepairInfoRow, type RepairInfoState } from '@/lib/quoteRepairInfo'
 import BackdatedMark from '@/components/quote/BackdatedMark'
@@ -139,6 +140,15 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
    * repairs 는 견적 목록 사람들에게 열려 있지 않아 서비스 롤 라우트를 거친다.
    */
   const [repairStates, setRepairStates] = useState<Map<number, RepairInfoRow>>(new Map())
+  /**
+   * 문서를 낼 수 있는 견적인가.
+   *
+   * 목록에 있는 줄은 **이미 확정된 견적**이다(작성 중인 견적은 저장되지 않는다). 그래서
+   * 기본은 허용이고, 거래 자체가 없던 일이 된 줄만 막는다 — 실주·삭제 요청에 거래명세서를
+   * 내면 그 문서가 거래 증빙으로 남는다.
+   */
+  const docEnabled = (q: { status?: string | null }) =>
+    !['실주', '삭제 요청'].includes((q.status ?? '').trim())
   /** 열려 있는 수리 정보 드로어. */
   const [repairDrawer, setRepairDrawer] = useState<{ quoteId: number; quoteNumber: string } | null>(null)
   /** 저장하면 그 행의 뱃지만 제자리에서 고친다(목록을 다시 읽지 않는다). */
@@ -886,6 +896,13 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                             onClick={() => setRepairDrawer({ quoteId: q.quote_id, quoteNumber: q.quote_number })}
                           />
                         )}
+                        {/* 거래명세서·수리내역서 — 수리 건이 아니어도 거래명세서는 낸다. */}
+                        <QuoteDocButtons
+                          quoteId={q.quote_id}
+                          isRepair={!!repairStates.get(q.quote_id)?.isRepair}
+                          enabled={docEnabled(q)}
+                          toast={toast}
+                        />
                         {/* 왜 버튼이 없는지 — 결재 중·미승인·확인 중을 짧게 알린다. */}
                         {(q.status === '견적중' || q.status === SUBMITTED_STATUS
                           || (q.quote_type === 'repair_domestic' && q.status === '수리중')) && !allowsFor(q) && (

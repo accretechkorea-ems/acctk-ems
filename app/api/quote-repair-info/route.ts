@@ -22,6 +22,8 @@
 //   photo-add     사진 올리기(줄인 data URL 을 받아 버킷에 넣고 줄을 더한다)
 //   photo-delete  사진 지우기(**저장소 파일까지**)
 //   photo-order   보이는 차례 그대로 sort_order 다시 매기기
+//   doc-data      거래명세서·수리내역서를 그리는 데 드는 자료 한 묶음
+//   doc-save      그린 PDF 를 quote-pdfs 에 올리고 열어 볼 주소를 돌려준다
 //
 // ── 사진을 왜 이 라우트에 두나 ──────────────────────────────────────────────
 //   권한 판정이 글자 저장과 **완전히 같고**(작성자 + superadmin), 드로어가 열릴 때
@@ -48,6 +50,11 @@ const SEARCH_LIMIT = 20
 const TEXT_MAX = 2000
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
+
+/** 견적서 PDF 와 **같은 버킷**이다 — 한 견적에서 나온 문서가 한곳에 모인다. */
+const DOC_BUCKET = 'quote-pdfs'
+/** 그린 PDF 의 상한. A4 한 장에 사진 넉 장이면 1MB 안쪽이다(실측 ~0.5MB). */
+const DOC_MAX_BYTES = 8 * 1024 * 1024
 
 /** 사진 버킷 — 비공개다. 보여 줄 때는 1시간 서명 URL 을 만든다. */
 const PHOTO_BUCKET = 'quote-repair-photos'
@@ -341,6 +348,79 @@ export async function POST(req: Request) {
       await sb.from('quote_repair_photos').update({ sort_order: i }).eq('photo_id', ids[i]).eq('quote_id', quoteId)
     }
     return NextResponse.json({ ok: true })
+  }
+
+  // ── 문서 자료 ─────────────────────────────────────────────────────────────
+  //
+  // 거래명세서·수리내역서가 쓰는 칸을 **한 번에** 돌려준다. 표가 다섯이라(견적·품목·
+  // 고객사·담당자·작성자 + 수리 건·수리 정보·사진) 화면이 따로 물으면 왕복이 여덟 번이고,
+  // 그중 셋(repairs·contacts·engineers)은 견적 화면 사람들에게 RLS 로 열려 있지도 않다.
+  if (action === 'doc-data') {
+    const quoteId = intOf(body.quoteId)
+    if (quoteId === null) return bad('견적을 지정해주세요.')
+
+    const { data: quote } = await sb.from('quotes')
+      .select('quote_id, quote_number, quote_date, status, recipient, recipient_contact_id, customer_id, dealer_id, engineer_id, created_by')
+      .eq('quote_id', quoteId).maybeSingle()
+    if (!quote) return bad('견적을 찾을 수 없습니다.', 404)
+
+    // 공급받는자 — **대리점 견적이면 최종 사용 업체**가 받는 쪽이다(customer_id 가 그것이다).
+    const [{ data: customer }, { data: contact }, { data: engineer }, { data: items }, { data: repair }, { data: info }] = await Promise.all([
+      quote.customer_id == null
+        ? Promise.resolve({ data: null })
+        : sb.from('customers').select('company_name, address').eq('customer_id', quote.customer_id).maybeSingle(),
+      quote.recipient_contact_id == null
+        ? Promise.resolve({ data: null })
+        : sb.from('contacts').select('name, position, phone').eq('contact_id', quote.recipient_contact_id).maybeSingle(),
+      sb.from('engineers').select('name, position, tel, office').eq('engineer_id', quote.created_by ?? quote.engineer_id).maybeSingle(),
+      sb.from('quote_items')
+        .select('item_id, row_kind, product_name, model_name, part_code, quantity, supply_amount, price_list(model_jp)')
+        .eq('quote_id', quoteId).order('item_id', { ascending: true }),
+      sb.from('repairs').select(REPAIR_SELECT).eq('quote_id', quoteId).maybeSingle(),
+      sb.from('quote_repair_info').select('symptom, cause, result').eq('quote_id', quoteId).maybeSingle(),
+    ])
+
+    return NextResponse.json({
+      quote,
+      customer: customer ?? null,
+      contact: contact ?? null,
+      engineer: engineer ?? null,
+      items: items ?? [],
+      repair: repair ?? null,
+      info: info ?? null,
+      photos: await listPhotos(quoteId),
+    })
+  }
+
+  // ── 문서 저장 ─────────────────────────────────────────────────────────────
+  //
+  // 그리는 일은 화면이 한다(견적서 PDF 와 같은 @react-pdf/renderer). 여기서는 **올리기만**
+  // 한다 — 파일 이름을 서버가 정해야 남의 견적 번호로 덮어쓰는 길이 막힌다.
+  if (action === 'doc-save') {
+    const quoteId = intOf(body.quoteId)
+    const kind = body.kind === 'repair' ? 'repair' : body.kind === 'transaction' ? 'transaction' : null
+    if (quoteId === null || kind === null) return bad('문서를 지정해주세요.')
+
+    const { data: quote } = await sb.from('quotes')
+      .select('quote_id, quote_number').eq('quote_id', quoteId).maybeSingle()
+    if (!quote) return bad('견적을 찾을 수 없습니다.', 404)
+
+    const raw = typeof body.dataUrl === 'string' ? body.dataUrl : ''
+    const m = raw.match(/^data:application\/pdf;base64,([A-Za-z0-9+/=]+)$/)
+    if (!m) return bad('문서를 읽지 못했습니다.')
+    const bytes = Buffer.from(m[1], 'base64')
+    if (bytes.length === 0 || bytes.length > DOC_MAX_BYTES) return bad('문서 크기가 올바르지 않습니다.')
+
+    // 이름은 견적번호에서 만든다(lib/quoteDocs.ts 와 같은 규칙).
+    const name = `${(quote.quote_number ?? '').trim().replace(/^No\./i, '')}${kind === 'transaction' ? 'T' : 'R'}.pdf`
+    const { error } = await sb.storage.from(DOC_BUCKET)
+      .upload(name, bytes, { contentType: 'application/pdf', upsert: true })
+    if (error) {
+      console.error('[quote-repair-info] 문서 업로드 실패', { quoteId, name, error })
+      return bad('문서를 저장하지 못했습니다.', 500)
+    }
+    const { data: signed } = await sb.storage.from(DOC_BUCKET).createSignedUrl(name, SIGN_TTL)
+    return NextResponse.json({ ok: true, name, url: signed?.signedUrl ?? null, bytes: bytes.length })
   }
 
   return bad('알 수 없는 요청입니다.')

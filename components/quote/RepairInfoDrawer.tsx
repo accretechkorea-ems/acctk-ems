@@ -39,6 +39,16 @@ export default function RepairInfoDrawer({ quoteId, quoteNumber, onClose, onSave
   /** 사진 — 라우트가 준 차례 그대로. 서명 URL 이 함께 온다. */
   const [photos, setPhotos] = useState<RepairPhoto[]>([])
   const [uploading, setUploading] = useState<{ done: number; total: number } | null>(null)
+  /**
+   * 저장하지 않은 글자가 있는가 — 받아 온 값과 지금 값을 견준다.
+   *
+   * 증상·원인·결과와 **사진 설명**이 그 대상이다(사진 자체·차례는 고르는 즉시 저장되므로
+   * 닫아도 잃을 것이 없다). 바뀐 것이 없으면 묻지 않는다 — 열어 보고 그냥 닫는 흐름이
+   * 대부분이라, 그때까지 확인을 받으면 성가신 쪽이 이긴다(ModalOverlay 의 dirty).
+   */
+  const [saved, setSaved] = useState<{ info: RepairInfoFields; captions: string }>({ info: EMPTY, captions: '' })
+  const captionKey = (list: RepairPhoto[]) => list.map(p => `${p.photo_id}:${p.caption ?? ''}`).join('|')
+  const dirty = JSON.stringify(value) !== JSON.stringify(saved.info) || captionKey(photos) !== saved.captions
 
   useEffect(() => {
     let alive = true
@@ -49,6 +59,7 @@ export default function RepairInfoDrawer({ quoteId, quoteNumber, onClose, onSave
       setValue(d?.info ?? EMPTY)
       setPhotos(d?.photos ?? [])
       setCanEdit(!!d?.canEdit)
+      setSaved({ info: d?.info ?? EMPTY, captions: captionKey(d?.photos ?? []) })
       setLoading(false)
     })()
     return () => { alive = false }
@@ -60,6 +71,7 @@ export default function RepairInfoDrawer({ quoteId, quoteNumber, onClose, onSave
     const r = await saveRepairInfo(quoteId, value, captions)
     if (!r.ok) { toast.error(r.error ?? '저장하지 못했습니다'); return false }
     toast.success('수리 정보를 저장했습니다')
+    setSaved({ info: value, captions: captionKey(photos) })
     onSaved?.(quoteId, repairInfoState(value, photos.length))
     return true
   }
@@ -78,6 +90,7 @@ export default function RepairInfoDrawer({ quoteId, quoteNumber, onClose, onSave
     setUploading(null)
     if (!r.ok) { toast.error(r.error ?? '사진을 올리지 못했습니다'); return }
     setPhotos(r.photos ?? [])
+    setSaved(s => ({ ...s, captions: captionKey(r.photos ?? []) }))
     toast.success(`사진 ${take.length}장을 올렸습니다`)
     onSaved?.(quoteId, repairInfoState(value, (r.photos ?? []).length))
   }
@@ -86,6 +99,7 @@ export default function RepairInfoDrawer({ quoteId, quoteNumber, onClose, onSave
     const r = await deleteRepairPhoto(quoteId, photoId)
     if (!r.ok) { toast.error(r.error ?? '사진을 지우지 못했습니다'); return }
     setPhotos(r.photos ?? [])
+    setSaved(s => ({ ...s, captions: captionKey(r.photos ?? []) }))
     toast.success('사진을 지웠습니다')
     onSaved?.(quoteId, repairInfoState(value, (r.photos ?? []).length))
   }
@@ -100,7 +114,7 @@ export default function RepairInfoDrawer({ quoteId, quoteNumber, onClose, onSave
   }
 
   return (
-    <ModalOverlay onClose={onClose} style={{ justifyContent: 'flex-end', alignItems: 'stretch', padding: 0 }}>
+    <ModalOverlay onClose={onClose} confirmClose dirty={dirty} style={{ justifyContent: 'flex-end', alignItems: 'stretch', padding: 0 }}>
       <div style={{
         width: 'min(460px, 100vw)', height: '100%', background: '#fff',
         borderLeft: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column',
