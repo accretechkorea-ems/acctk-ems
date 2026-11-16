@@ -844,6 +844,16 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({
               ? stripModelSuffix(stripLeadNo(row.itemText), modelText)
               : withModelSuffix(stripLeadNo(row.itemText), row.manual_model || '')
 
+            // 할인 문구(「DISCOUNT」·「SPECIAL DISCOUNT」·직접 쓴 글자)는 **금액 바로 왼쪽**에
+            // 둔다 — 품명 칸에 두면 7열짜리 20 양식에서 셋째 칸, 곧 쪽 한가운데에 혼자 떠서
+            // 오른쪽 끝의 빼는 금액과 멀찍이 떨어진다. 둘은 한 문장으로 읽혀야 한다.
+            //
+            // 자리는 **수량 칸과 단가 칸을 합친 폭**이다(할인 줄은 수량도 단가도 비어 있다).
+            // 단가 칸 하나로는 「SPECIAL DISCOUNT」가 들어가지 않아 두 줄로 접힌다 — 칸
+            // 구분선을 긋지 않는 줄이라 둘을 합쳐도 모양이 달라지지 않는다.
+            const discountLabel = isDiscount ? stripLeadNo(row.itemText).trim() : ''
+            const qtyUnitW = colOf('qty')!.width + colOf('unit')!.width
+
             // 할인 줄은 **칸 구분선도 아래 선도 긋지 않는다** — 라벨과 금액만 놓인 한 줄로
             // 보이게. 할인은 늘 품목 맨 끝 줄이고 그 아래(빈 영역·비고)가 칸 없는 한 덩어리라,
             // 여기서 선을 그으면 열린 공간이 도로 잘려 보인다. 2026-10 통합 양식으로 옮길 때
@@ -876,7 +886,7 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({
                     return (
                       <View key={c.key} style={base}>
                         <Text style={{ fontSize: size, color: textColor }}>
-                          {wrapLongWords(nameRaw, innerWidth(nameCol), size)}
+                          {isDiscount ? '' : wrapLongWords(nameRaw, innerWidth(nameCol), size)}
                         </Text>
                         {row.subLines.map((line, i) => line ? (
                           <Text key={i} style={{ fontSize: subSize, marginTop: 1, color: textColor }}>
@@ -896,6 +906,16 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({
                     )
                   }
                   if (c.key === 'qty') {
+                    // 할인 줄 — 이 칸이 **단가 칸까지 걸쳐** 문구를 담는다(위 주석).
+                    if (isDiscount) {
+                      return (
+                        <View key={c.key} style={[S.td, { width: qtyUnitW, minHeight: rowHeight(size), borderRightWidth: 0, alignItems: 'flex-end' }]}>
+                          <Text style={{ fontSize: size, textAlign: 'right', color: textColor }}>
+                            {wrapLongWords(discountLabel, qtyUnitW - CELL_PAD * 2, size)}
+                          </Text>
+                        </View>
+                      )
+                    }
                     return (
                       <View key={c.key} style={[...base, { alignItems: 'center' }]}>
                         <Text style={{ fontSize: size, textAlign: 'center', color: textColor }}>
@@ -905,7 +925,9 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({
                     )
                   }
                   if (c.key === 'unit') {
-                    // 금액이 없는 줄·할인 줄은 단가 칸을 **비운다**(「포함」 글자를 쓰지 않는다).
+                    // 할인 줄에서는 바로 위 수량 칸이 이 폭까지 먹었다 — 칸을 따로 내지 않는다.
+                    if (isDiscount) return null
+                    // 금액이 없는 줄은 단가 칸을 **비운다**(「포함」 글자를 쓰지 않는다).
                     return (
                       <View key={c.key} style={[...base, { alignItems: 'flex-end' }]}>
                         <Text style={{ fontSize: size, textAlign: 'right', color: textColor }}>
