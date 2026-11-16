@@ -18,11 +18,20 @@
 //   detail  견적 한 건의 수리 건 + 적어 둔 내용 + 내가 고칠 수 있는가
 //   repair  수리 건 한 줄(아직 저장하지 않은 견적이 쓴다)
 //   search  수리 건 고르기(같은 고객사 건이 앞에 선다)
-//   save    증상·원인·결과 덮어쓰기(upsert)
+//   save    증상·원인·결과 덮어쓰기(upsert) + 사진 설명
+//   photo-add     사진 올리기(줄인 data URL 을 받아 버킷에 넣고 줄을 더한다)
+//   photo-delete  사진 지우기(**저장소 파일까지**)
+//   photo-order   보이는 차례 그대로 sort_order 다시 매기기
+//
+// ── 사진을 왜 이 라우트에 두나 ──────────────────────────────────────────────
+//   권한 판정이 글자 저장과 **완전히 같고**(작성자 + superadmin), 드로어가 열릴 때
+//   수리 건·글자·사진을 한 번에 받아야 하며(detail), 서비스 롤로 올리고 DB 에는 경로만
+//   남기는 방식은 service-attachment 라우트와 같다. 라우트를 더 쪼개면 같은 권한 코드가
+//   두 곳이 된다.
 
 import { adminClient } from '@/lib/supabase/admin'
 import { isOwnerOrSuperAdmin, loadCaller } from '@/lib/apiCaller'
-import { repairInfoState, type RepairInfoRow } from '@/lib/quoteRepairInfo'
+import { MAX_PHOTOS, PHOTO_MAX_BYTES, repairInfoState, type RepairInfoRow } from '@/lib/quoteRepairInfo'
 import { NextResponse } from 'next/server'
 
 const sb = adminClient()
@@ -39,6 +48,51 @@ const SEARCH_LIMIT = 20
 const TEXT_MAX = 2000
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
+
+/** 사진 버킷 — 비공개다. 보여 줄 때는 1시간 서명 URL 을 만든다. */
+const PHOTO_BUCKET = 'quote-repair-photos'
+/** 서명 URL 수명(초). */
+const SIGN_TTL = 60 * 60
+/** 사진 설명 길이 — 한 줄 설명이다. */
+const CAPTION_MAX = 200
+
+/**
+ * 받은 data URL 을 바이트로. 화면이 이미 줄여서 보내지만(lib/leadCardImage.ts) 화면을
+ * 거치지 않는 호출을 가정하고 **여기서 다시 본다** — 형식과 크기 둘 다.
+ */
+function parsePhoto(dataUrl: unknown): { bytes: Buffer; contentType: string } | { error: string } {
+  if (typeof dataUrl !== 'string') return { error: '사진을 읽지 못했습니다.' }
+  const m = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/)
+  if (!m) return { error: 'JPG/PNG로 변환해 올려주세요' }
+  const bytes = Buffer.from(m[2], 'base64')
+  if (bytes.length === 0) return { error: '사진을 읽지 못했습니다.' }
+  if (bytes.length > PHOTO_MAX_BYTES) return { error: '사진이 너무 큽니다(줄인 뒤 2MB 이하만 올릴 수 있습니다)' }
+  return { bytes, contentType: m[1] }
+}
+
+/** 그 견적의 사진 — 차례대로, 서명 URL 을 붙여서. */
+async function listPhotos(quoteId: number) {
+  const { data } = await sb.from('quote_repair_photos')
+    .select('photo_id, storage_path, caption, sort_order')
+    .eq('quote_id', quoteId)
+    .order('sort_order', { ascending: true })
+    .order('photo_id', { ascending: true })
+  const rows = data ?? []
+  if (rows.length === 0) return []
+  const { data: signed } = await sb.storage.from(PHOTO_BUCKET)
+    .createSignedUrls(rows.map(r => r.storage_path), SIGN_TTL)
+  const urlOf = new Map((signed ?? []).map(x => [x.path, x.signedUrl]))
+  return rows.map(r => ({ ...r, url: urlOf.get(r.storage_path) ?? null }))
+}
+
+/** 저장할 수 있는 사람인가 — 견적 작성자 + superadmin(글자 저장과 같은 규칙). */
+async function guardEdit(quoteId: number, caller: Parameters<typeof isOwnerOrSuperAdmin>[1]) {
+  const { data: quote } = await sb.from('quotes')
+    .select('quote_id, created_by, engineer_id').eq('quote_id', quoteId).maybeSingle()
+  if (!quote) return bad('견적을 찾을 수 없습니다.', 404)
+  if (!isOwnerOrSuperAdmin(quote, caller)) return bad('본인이 작성한 견적만 고칠 수 있습니다.', 403)
+  return null
+}
 
 /** 들어온 글자 다듬기 — 빈 글자는 null(= 적지 않음)이다. */
 const text = (v: unknown): string | null => {
@@ -67,9 +121,11 @@ export async function POST(req: Request) {
     const states: Record<number, RepairInfoRow> = {}
     if (ids.length === 0) return NextResponse.json({ states })
 
-    const [{ data: repairs, error: rErr }, { data: infos, error: iErr }] = await Promise.all([
+    const [{ data: repairs, error: rErr }, { data: infos, error: iErr }, { data: photos }] = await Promise.all([
       sb.from('repairs').select('quote_id').in('quote_id', ids),
       sb.from('quote_repair_info').select('quote_id, symptom, cause, result').in('quote_id', ids),
+      // 완료 판정에 **사진 수**가 든다(2026-11-16 부터). 수만 세면 되므로 경로는 받지 않는다.
+      sb.from('quote_repair_photos').select('quote_id').in('quote_id', ids),
     ])
     if (rErr || iErr) {
       console.error('[quote-repair-info] states 조회 실패', { error: rErr ?? iErr })
@@ -77,10 +133,15 @@ export async function POST(req: Request) {
     }
     const repairSet = new Set((repairs ?? []).map(r => Number(r.quote_id)))
     const infoMap = new Map((infos ?? []).map(r => [Number(r.quote_id), r]))
+    const photoCount = new Map<number, number>()
+    for (const r of photos ?? []) {
+      const id = Number(r.quote_id)
+      photoCount.set(id, (photoCount.get(id) ?? 0) + 1)
+    }
     for (const id of ids) {
       // 수리 건이 아닌 견적은 뱃지도 버튼도 내지 않는다 — 그 줄에는 없는 개념이다.
       if (!repairSet.has(id)) continue
-      states[id] = { isRepair: true, state: repairInfoState(infoMap.get(id) ?? null) }
+      states[id] = { isRepair: true, state: repairInfoState(infoMap.get(id) ?? null, photoCount.get(id) ?? 0) }
     }
     return NextResponse.json({ states })
   }
@@ -99,6 +160,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       repair: repair ?? null,
       info: info ?? null,
+      photos: await listPhotos(quoteId),
       canEdit: isOwnerOrSuperAdmin(quote, caller),
     })
   }
@@ -167,7 +229,118 @@ export async function POST(req: Request) {
       console.error('[quote-repair-info] 저장 실패', { quoteId, error })
       return bad('저장하지 못했습니다.', 500)
     }
-    return NextResponse.json({ ok: true, state: repairInfoState(fields) })
+
+    // 사진 설명 — 저장 버튼이 글자와 함께 보낸다(사진 자체는 고를 때 이미 올라갔다).
+    const captions = (body.captions ?? null) as Record<string, unknown> | null
+    if (captions && typeof captions === 'object') {
+      for (const [k, v] of Object.entries(captions)) {
+        const photoId = intOf(k)
+        if (photoId === null) continue
+        const caption = typeof v === 'string' ? (v.trim().slice(0, CAPTION_MAX) || null) : null
+        // 남의 견적 사진을 고치지 못하게 quote_id 를 함께 건다.
+        await sb.from('quote_repair_photos').update({ caption }).eq('photo_id', photoId).eq('quote_id', quoteId)
+      }
+    }
+
+    const { count } = await sb.from('quote_repair_photos')
+      .select('photo_id', { count: 'exact', head: true }).eq('quote_id', quoteId)
+    return NextResponse.json({ ok: true, state: repairInfoState(fields, count ?? 0) })
+  }
+
+  // ── 사진 올리기 ───────────────────────────────────────────────────────────
+  if (action === 'photo-add') {
+    const quoteId = intOf(body.quoteId)
+    if (quoteId === null) return bad('견적을 지정해주세요.')
+    const denied = await guardEdit(quoteId, caller)
+    if (denied) return denied
+
+    const items = Array.isArray(body.items) ? body.items : []
+    if (items.length === 0) return bad('올릴 사진이 없습니다.')
+
+    const { count } = await sb.from('quote_repair_photos')
+      .select('photo_id', { count: 'exact', head: true }).eq('quote_id', quoteId)
+    const already = count ?? 0
+    if (already + items.length > MAX_PHOTOS) {
+      return bad(`사진은 ${MAX_PHOTOS}장까지 올릴 수 있습니다 (현재 ${already}장).`)
+    }
+
+    // 먼저 전부 검증한다 — 반쯤 올리고 막히는 것보다 시작 전에 막는 편이 낫다
+    // (service-attachment 라우트와 같은 차례다).
+    const stamp = Date.now()
+    const prepared: { path: string; bytes: Buffer; contentType: string }[] = []
+    for (let i = 0; i < items.length; i++) {
+      const parsed = parsePhoto((items[i] as { dataUrl?: unknown })?.dataUrl)
+      if ('error' in parsed) return bad(parsed.error)
+      // 경로 규칙은 이 저장소 관행대로 **평평한 이름**이다(폴더를 쓰지 않는다).
+      prepared.push({ path: `qr-${quoteId}-${stamp}-${i}.jpg`, ...parsed })
+    }
+
+    const uploaded: string[] = []
+    for (const p of prepared) {
+      const { error } = await sb.storage.from(PHOTO_BUCKET)
+        .upload(p.path, p.bytes, { contentType: p.contentType, upsert: false })
+      if (error) {
+        console.error('[quote-repair-info] 사진 업로드 실패', { quoteId, path: p.path, error })
+        // 올라간 것을 되돌린다 — 줄이 없는 파일이 버킷에 남지 않게.
+        if (uploaded.length > 0) await sb.storage.from(PHOTO_BUCKET).remove(uploaded)
+        return bad('사진을 올리지 못했습니다.', 500)
+      }
+      uploaded.push(p.path)
+    }
+
+    const { error: insErr } = await sb.from('quote_repair_photos').insert(
+      uploaded.map((path, i) => ({
+        quote_id: quoteId, storage_path: path, caption: null,
+        sort_order: already + i, uploaded_by: caller.engineer_id,
+      })),
+    )
+    if (insErr) {
+      console.error('[quote-repair-info] 사진 줄 저장 실패', { quoteId, error: insErr })
+      await sb.storage.from(PHOTO_BUCKET).remove(uploaded)
+      return bad('사진을 올리지 못했습니다.', 500)
+    }
+    return NextResponse.json({ ok: true, photos: await listPhotos(quoteId) })
+  }
+
+  // ── 사진 지우기 ───────────────────────────────────────────────────────────
+  if (action === 'photo-delete') {
+    const quoteId = intOf(body.quoteId)
+    const photoId = intOf(body.photoId)
+    if (quoteId === null || photoId === null) return bad('사진을 지정해주세요.')
+    const denied = await guardEdit(quoteId, caller)
+    if (denied) return denied
+
+    const { data: row } = await sb.from('quote_repair_photos')
+      .select('photo_id, storage_path').eq('photo_id', photoId).eq('quote_id', quoteId).maybeSingle()
+    if (!row) return bad('사진을 찾을 수 없습니다.', 404)
+
+    // 파일을 먼저 지운다 — 줄만 남으면 화면에서 깨진 사진이 되지만, 파일만 남으면
+    // 아무도 모르는 쓰레기가 된다(지울 길이 화면에 없다).
+    const { error: rmErr } = await sb.storage.from(PHOTO_BUCKET).remove([row.storage_path])
+    if (rmErr) console.error('[quote-repair-info] 저장소 파일 삭제 실패 — 고아 파일이 남는다', { path: row.storage_path, error: rmErr })
+    const { error } = await sb.from('quote_repair_photos').delete().eq('photo_id', photoId).eq('quote_id', quoteId)
+    if (error) {
+      console.error('[quote-repair-info] 사진 줄 삭제 실패', { photoId, error })
+      return bad('사진을 지우지 못했습니다.', 500)
+    }
+    return NextResponse.json({ ok: true, photos: await listPhotos(quoteId) })
+  }
+
+  // ── 차례 ──────────────────────────────────────────────────────────────────
+  if (action === 'photo-order') {
+    const quoteId = intOf(body.quoteId)
+    if (quoteId === null) return bad('견적을 지정해주세요.')
+    const denied = await guardEdit(quoteId, caller)
+    if (denied) return denied
+
+    const ids = Array.isArray(body.photoIds)
+      ? body.photoIds.map(intOf).filter((n): n is number => n !== null)
+      : []
+    if (ids.length === 0) return bad('차례를 알 수 없습니다.')
+    for (let i = 0; i < ids.length; i++) {
+      await sb.from('quote_repair_photos').update({ sort_order: i }).eq('photo_id', ids[i]).eq('quote_id', quoteId)
+    }
+    return NextResponse.json({ ok: true })
   }
 
   return bad('알 수 없는 요청입니다.')

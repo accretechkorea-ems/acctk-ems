@@ -38,6 +38,7 @@ Module._resolveFilename = function (req, ...rest) {
 
 const {
   repairInfoState, REPAIR_INFO_LABEL, REPAIR_INFO_DOT, repairDate, shippedLabel,
+  MAX_PHOTOS, PHOTO_MAX_BYTES, canAddPhoto, photoRoom, movePhoto,
 } = load(path.join(ROOT, 'lib/quoteRepairInfo.ts'))
 const { isDraftMeaningful } = load(path.join(ROOT, 'lib/quoteDraft.ts'))
 
@@ -56,7 +57,11 @@ eq('줄이 아예 없어도 미작성', repairInfoState(null), 'none')
 eq('공백만 적은 것은 적은 것이 아니다', repairInfoState(info('  ', '\n', '')), 'none')
 eq('증상만', repairInfoState(info('전원이 안 들어옴', null, null)), 'partial')
 eq('증상·원인', repairInfoState(info('전원이 안 들어옴', '기판 소손', null)), 'partial')
-eq('셋 다 적으면 완료', repairInfoState(info('전원이 안 들어옴', '기판 소손', '기판 교체')), 'done')
+// **사진이 있어야 완료**다(2026-11-16). 글 셋만으로는 작성중이다.
+eq('글 셋만으로는 완료가 아니다', repairInfoState(info('전원이 안 들어옴', '기판 소손', '기판 교체')), 'partial')
+eq('글 셋 + 사진 한 장이면 완료', repairInfoState(info('전원이 안 들어옴', '기판 소손', '기판 교체'), 1), 'done')
+eq('사진이 넉 장이어도 완료', repairInfoState(info('a', 'b', 'c'), 4), 'done')
+eq('사진만 있고 글이 없으면 작성중', repairInfoState(info(null, null, null), 2), 'partial')
 eq('결과만 비면 완료가 아니다', repairInfoState(info('a', 'b', '   ')), 'partial')
 eq('뱃지 글자', [REPAIR_INFO_LABEL.none, REPAIR_INFO_LABEL.partial, REPAIR_INFO_LABEL.done],
   ['미작성', '작성중', '완료'])
@@ -96,11 +101,49 @@ eq('공백만 적은 것은 아니다',
 console.log('\n── ④ 드로어 저장 — 뱃지가 그 자리에서 바뀐다 ──')
 // 목록은 저장 결과를 다시 읽지 않고 **같은 판정 함수**로 제자리에서 고친다.
 const saved = info('전원이 안 들어옴', '기판 소손', '기판 교체 후 정상')
-const next = new Map(states).set(101, { isRepair: true, state: repairInfoState(saved) })
+const next = new Map(states).set(101, { isRepair: true, state: repairInfoState(saved, 1) })
 eq('미작성 → 완료', [states.get(101).state, next.get(101).state], ['none', 'done'])
 eq('다른 행은 그대로', next.get(202) ?? null, null)
 // 라우트도 저장 뒤 같은 상태를 돌려준다(화면과 서버가 같은 함수를 쓴다).
 eq('일부만 저장하면 작성중', repairInfoState(info('전원이 안 들어옴', '', null)), 'partial')
+
+console.log('\n── ⑤ 사진 — 넉 장까지 ──')
+eq('상한은 4장', MAX_PHOTOS, 4)
+eq('줄인 뒤 상한은 2MB', PHOTO_MAX_BYTES, 2 * 1024 * 1024)
+eq('비었으면 더 올릴 수 있다', canAddPhoto(0), true)
+eq('세 장이면 아직 된다', canAddPhoto(3), true)
+eq('넉 장이면 **다섯 장째는 막힌다**', canAddPhoto(4), false)
+eq('넉 장을 넘겨도 막힌다(방어)', canAddPhoto(7), false)
+eq('남은 자리 — 한 번에 여러 장 고를 때', [photoRoom(0), photoRoom(2), photoRoom(4), photoRoom(9)], [4, 2, 0, 0])
+
+console.log('\n── ⑥ 사진 — 차례 바꾸기 ──')
+const ph = (id) => ({ photo_id: id })
+const four = [ph(11), ph(12), ph(13), ph(14)]
+eq('한 칸 위로', movePhoto(four, 13, -1).map(p => p.photo_id), [11, 13, 12, 14])
+eq('한 칸 아래로', movePhoto(four, 11, 1).map(p => p.photo_id), [12, 11, 13, 14])
+// 끝에서 더 밀면 **같은 배열을 그대로** 돌려준다 — 부르는 쪽이 「바뀐 것 없음」을 알고
+// 서버에 쓸데없이 묻지 않는다(RepairInfoDrawer 의 reorder).
+eq('맨 위에서 더 위로 — 그대로', movePhoto(four, 11, -1) === four, true)
+eq('맨 아래에서 더 아래로 — 그대로', movePhoto(four, 14, 1) === four, true)
+eq('없는 사진 — 그대로', movePhoto(four, 99, 1) === four, true)
+eq('원본을 건드리지 않는다', four.map(p => p.photo_id), [11, 12, 13, 14])
+
+console.log('\n── ⑦ 사진 — 지우기 ──')
+// 지우면 라우트가 남은 목록을 그대로 돌려준다. 뱃지는 그 수로 다시 센다.
+const afterDelete = four.filter(p => p.photo_id !== 12)
+eq('한 장 지우면 셋', afterDelete.map(p => p.photo_id), [11, 13, 14])
+eq('지운 뒤 다시 올릴 자리가 생긴다', canAddPhoto(afterDelete.length), true)
+eq('마지막 한 장을 지우면 완료가 풀린다',
+  [repairInfoState(saved, 1), repairInfoState(saved, 0)], ['done', 'partial'])
+
+console.log('\n── ⑧ 확정 전 견적 — 올릴 곳이 없다 ──')
+// 사진은 파일이라 초안(localStorage)에 담지 않는다. 확정 전 패널은 mode='draft' 로
+// 그려지고 그때는 사진 영역이 잠긴다(components/quote/RepairInfoPanel.tsx).
+// 그 약속을 글자로 못 박는다 — 초안 형식에 사진 칸이 **없다**.
+const draftKeys = Object.keys(baseDraft)
+eq('초안에 사진 칸이 없다', draftKeys.some(k => /photo/i.test(k)), false)
+eq('초안이 담는 수리 값은 둘뿐', draftKeys.filter(k => /repair/i.test(k)).sort(), ['repairInfo', 'repairLinkId'])
+eq('확정 전에는 사진 0장으로 센다', repairInfoState(info('a', 'b', 'c'), 0), 'partial')
 
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
 process.exit(fails === 0 ? 0 : 1)

@@ -22,21 +22,68 @@ export type RepairInfoFields = {
 
 /**
  * 작성 상태.
- *   none    아무것도 적지 않았다
- *   partial 셋 중 일부만 적었다
- *   done    증상·원인·결과를 **모두** 적었다
+ *   none    아무것도 없다 — 글자도 사진도
+ *   partial 적다 말았다
+ *   done    증상·원인·결과를 **모두** 적고 **사진이 한 장 이상** 있다
  *
- * 사진 조건은 아직 넣지 않는다(사진 기능이 다음 단계다 — 그때 done 기준에 1장 이상이 더해진다).
+ * 사진까지 봐야 완료인 까닭 — 이 정보는 수리 보고의 근거다. 글만 적고 사진이 없으면
+ * 「무엇을 고쳤는지」를 나중에 아무도 확인할 수 없다. 글 셋이 다 차도 사진이 없으면
+ * 작성중으로 둔다.
  */
 export type RepairInfoState = 'none' | 'partial' | 'done'
 
 const filled = (v: string | null | undefined): boolean => (v ?? '').trim() !== ''
 
-export function repairInfoState(info: RepairInfoFields | null | undefined): RepairInfoState {
-  if (!info) return 'none'
-  const n = [info.symptom, info.cause, info.result].filter(filled).length
-  if (n === 0) return 'none'
-  return n === 3 ? 'done' : 'partial'
+export function repairInfoState(
+  info: RepairInfoFields | null | undefined,
+  photoCount = 0,
+): RepairInfoState {
+  const n = info ? [info.symptom, info.cause, info.result].filter(filled).length : 0
+  const photos = Math.max(0, photoCount)
+  if (n === 0 && photos === 0) return 'none'
+  return n === 3 && photos >= 1 ? 'done' : 'partial'
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 사진
+// ════════════════════════════════════════════════════════════════════════════
+
+/** 한 견적에 붙일 수 있는 사진 수. 다섯 장째는 받지 않는다. */
+export const MAX_PHOTOS = 4
+/**
+ * 줄인 **뒤**의 상한. 긴 변 1,600 · 품질 0.8 로 줄이면 폰 사진도 보통 300~700KB 다 —
+ * 2MB 를 넘는다면 사진이 아니라 다른 것이 들어온 것으로 본다(스크린샷 수십 장을 이어
+ * 붙인 그림 등). 라우트도 같은 수로 다시 센다.
+ */
+export const PHOTO_MAX_BYTES = 2 * 1024 * 1024
+
+export type RepairPhoto = {
+  photo_id: number
+  storage_path: string
+  caption: string | null
+  sort_order: number
+  /** 보여 줄 주소 — 라우트가 1시간짜리 서명 URL 로 만들어 준다(버킷이 비공개다). */
+  url?: string | null
+}
+
+/** 더 올릴 수 있나. */
+export const canAddPhoto = (count: number): boolean => count < MAX_PHOTOS
+
+/** 몇 장까지 받을 수 있나 — 한 번에 여러 장을 고른 경우에 쓴다. */
+export const photoRoom = (count: number): number => Math.max(0, MAX_PHOTOS - count)
+
+/**
+ * 순서 바꾸기 — **한 칸 위/아래**. 끝에서 더 밀면 그대로 둔다(되돌려 주는 것이 아니라
+ * 같은 배열을 준다 — 부르는 쪽이 「바뀐 것이 없다」를 알 수 있게 길이·차례로 견준다).
+ */
+export function movePhoto<T extends { photo_id: number }>(list: T[], photoId: number, dir: -1 | 1): T[] {
+  const i = list.findIndex(p => p.photo_id === photoId)
+  if (i < 0) return list
+  const j = i + dir
+  if (j < 0 || j >= list.length) return list
+  const next = [...list]
+  ;[next[i], next[j]] = [next[j], next[i]]
+  return next
 }
 
 /** 뱃지 글자. */
@@ -125,6 +172,8 @@ export async function fetchRepairInfoStates(quoteIds: number[]): Promise<Map<num
 export type RepairInfoDetail = {
   repair: RepairBrief | null
   info: RepairInfoFields | null
+  /** 사진 — sort_order 순. 서명 URL 이 함께 온다. */
+  photos: RepairPhoto[]
   /** 저장할 수 있는가 — 견적 작성자 또는 관리자(라우트가 판정한다). */
   canEdit: boolean
 }
@@ -139,7 +188,7 @@ export async function fetchRepairInfo(quoteId: number): Promise<RepairInfoDetail
     })
     const json = await res.json().catch(() => ({}))
     if (!res.ok) { console.error('[quoteRepairInfo] 조회 실패', { quoteId, status: res.status, error: json?.error }); return null }
-    return { repair: json.repair ?? null, info: json.info ?? null, canEdit: !!json.canEdit }
+    return { repair: json.repair ?? null, info: json.info ?? null, photos: json.photos ?? [], canEdit: !!json.canEdit }
   } catch (e) {
     console.error('[quoteRepairInfo] 조회 예외', e)
     return null
@@ -174,18 +223,103 @@ export async function searchRepairs(keyword: string, customerName: string | null
   } catch { return [] }
 }
 
-/** 저장(덮어쓰기). 성공이면 true. */
-export async function saveRepairInfo(quoteId: number, fields: RepairInfoFields): Promise<{ ok: boolean; error?: string }> {
+/**
+ * 저장(덮어쓰기). 사진 설명도 함께 보낸다 — 사진 자체는 고를 때 바로 올라가지만(파일이다),
+ * **설명 글자는 저장 버튼이 쓴다**(글자마다 쓰면 한 자 칠 때마다 서버에 간다).
+ */
+export async function saveRepairInfo(
+  quoteId: number,
+  fields: RepairInfoFields,
+  captions?: Record<number, string | null>,
+): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await fetch('/api/quote-repair-info', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'save', quoteId, ...fields }),
+      body: JSON.stringify({ action: 'save', quoteId, ...fields, captions: captions ?? null }),
     })
     const json = await res.json().catch(() => ({}))
     if (!res.ok) return { ok: false, error: json?.error ?? '저장하지 못했습니다.' }
     return { ok: true }
   } catch {
     return { ok: false, error: '저장하지 못했습니다.' }
+  }
+}
+
+/**
+ * 사진 올리기 — 브라우저에서 **줄인 뒤** data URL 로 보낸다(원본을 보내지 않는다).
+ *
+ * 줄이는 규칙은 명함 사진과 **같은 것을 쓴다**(lib/leadCardImage.ts — 긴 변 1,600 ·
+ * 품질 0.8 · EXIF 회전 반영 후 재인코딩이라 EXIF 는 사라진다). 같은 규칙을 두 벌 두면
+ * 한쪽만 고쳐지는 날이 온다.
+ *
+ * HEIC(아이폰 기본 형식)는 브라우저가 디코딩하지 못하는 경우가 많다 — 그때는 줄이기가
+ * 실패하므로 **바꿔서 올려 달라고** 알린다(여기서 변환해 주지는 못한다).
+ */
+export async function uploadRepairPhotos(
+  quoteId: number,
+  files: File[],
+  onProgress?: (done: number, total: number) => void,
+): Promise<{ ok: boolean; error?: string; photos?: RepairPhoto[] }> {
+  const { downsizeImage, dataUrlBytes } = await import('@/lib/leadCardImage')
+  const items: { dataUrl: string }[] = []
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i]
+    let shrunk
+    try {
+      shrunk = await downsizeImage(f)
+    } catch {
+      const heic = /heic|heif/i.test(f.type) || /\.(heic|heif)$/i.test(f.name)
+      return { ok: false, error: heic ? 'JPG/PNG로 변환해 올려주세요' : '이미지를 읽지 못했습니다' }
+    }
+    if (dataUrlBytes(shrunk.dataUrl) > PHOTO_MAX_BYTES) {
+      return { ok: false, error: '사진이 너무 큽니다(줄인 뒤 2MB 이하만 올릴 수 있습니다)' }
+    }
+    items.push({ dataUrl: shrunk.dataUrl })
+    onProgress?.(i + 1, files.length)
+  }
+  try {
+    const res = await fetch('/api/quote-repair-info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'photo-add', quoteId, items }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: json?.error ?? '사진을 올리지 못했습니다.' }
+    return { ok: true, photos: json.photos ?? [] }
+  } catch {
+    return { ok: false, error: '사진을 올리지 못했습니다.' }
+  }
+}
+
+/** 사진 지우기 — 저장소 파일까지 함께 지운다(라우트가 한다). */
+export async function deleteRepairPhoto(quoteId: number, photoId: number): Promise<{ ok: boolean; error?: string; photos?: RepairPhoto[] }> {
+  try {
+    const res = await fetch('/api/quote-repair-info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'photo-delete', quoteId, photoId }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: json?.error ?? '사진을 지우지 못했습니다.' }
+    return { ok: true, photos: json.photos ?? [] }
+  } catch {
+    return { ok: false, error: '사진을 지우지 못했습니다.' }
+  }
+}
+
+/** 차례 바꾸기 — 보이는 순서를 그대로 보낸다(0,1,2,3 으로 다시 매긴다). */
+export async function orderRepairPhotos(quoteId: number, photoIds: number[]): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch('/api/quote-repair-info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'photo-order', quoteId, photoIds }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: json?.error ?? '순서를 바꾸지 못했습니다.' }
+    return { ok: true }
+  } catch {
+    return { ok: false, error: '순서를 바꾸지 못했습니다.' }
   }
 }

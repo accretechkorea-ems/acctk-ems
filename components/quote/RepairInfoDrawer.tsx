@@ -12,8 +12,10 @@ import { useEffect, useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import RepairInfoPanel from '@/components/quote/RepairInfoPanel'
 import {
-  fetchRepairInfo, saveRepairInfo, repairInfoState,
-  type RepairBrief, type RepairInfoFields, type RepairInfoState,
+  deleteRepairPhoto, fetchRepairInfo, movePhoto, orderRepairPhotos, photoRoom,
+  repairInfoState, saveRepairInfo, uploadRepairPhotos,
+  MAX_PHOTOS,
+  type RepairBrief, type RepairInfoFields, type RepairInfoState, type RepairPhoto,
 } from '@/lib/quoteRepairInfo'
 
 const BORDER = '#ebebeb'
@@ -34,6 +36,9 @@ export default function RepairInfoDrawer({ quoteId, quoteNumber, onClose, onSave
   const [repair, setRepair] = useState<RepairBrief | null>(null)
   const [value, setValue] = useState<RepairInfoFields>(EMPTY)
   const [canEdit, setCanEdit] = useState(false)
+  /** 사진 — 라우트가 준 차례 그대로. 서명 URL 이 함께 온다. */
+  const [photos, setPhotos] = useState<RepairPhoto[]>([])
+  const [uploading, setUploading] = useState<{ done: number; total: number } | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -42,18 +47,56 @@ export default function RepairInfoDrawer({ quoteId, quoteNumber, onClose, onSave
       if (!alive) return
       setRepair(d?.repair ?? null)
       setValue(d?.info ?? EMPTY)
+      setPhotos(d?.photos ?? [])
       setCanEdit(!!d?.canEdit)
       setLoading(false)
     })()
     return () => { alive = false }
   }, [quoteId])
 
+  /** 설명 글자는 저장 버튼이 함께 쓴다 — 사진 줄마다 지금 화면 값을 모아 보낸다. */
   const save = async (): Promise<boolean> => {
-    const r = await saveRepairInfo(quoteId, value)
+    const captions = Object.fromEntries(photos.map(p => [p.photo_id, p.caption ?? '']))
+    const r = await saveRepairInfo(quoteId, value, captions)
     if (!r.ok) { toast.error(r.error ?? '저장하지 못했습니다'); return false }
     toast.success('수리 정보를 저장했습니다')
-    onSaved?.(quoteId, repairInfoState(value))
+    onSaved?.(quoteId, repairInfoState(value, photos.length))
     return true
+  }
+
+  /**
+   * 사진 올리기 — **고르는 즉시** 간다(파일이라 저장 버튼까지 들고 있을 수 없다).
+   * 넉 장을 넘겨 고르면 들어갈 만큼만 받고 나머지는 알린다.
+   */
+  const addPhotos = async (files: File[]) => {
+    const room = photoRoom(photos.length)
+    if (room === 0) { toast.error(`사진은 ${MAX_PHOTOS}장까지 올릴 수 있습니다`); return }
+    const take = files.slice(0, room)
+    if (files.length > room) toast.error(`사진은 ${MAX_PHOTOS}장까지입니다 — ${take.length}장만 올립니다`)
+    setUploading({ done: 0, total: take.length })
+    const r = await uploadRepairPhotos(quoteId, take, (done, total) => setUploading({ done, total }))
+    setUploading(null)
+    if (!r.ok) { toast.error(r.error ?? '사진을 올리지 못했습니다'); return }
+    setPhotos(r.photos ?? [])
+    toast.success(`사진 ${take.length}장을 올렸습니다`)
+    onSaved?.(quoteId, repairInfoState(value, (r.photos ?? []).length))
+  }
+
+  const removePhoto = async (photoId: number) => {
+    const r = await deleteRepairPhoto(quoteId, photoId)
+    if (!r.ok) { toast.error(r.error ?? '사진을 지우지 못했습니다'); return }
+    setPhotos(r.photos ?? [])
+    toast.success('사진을 지웠습니다')
+    onSaved?.(quoteId, repairInfoState(value, (r.photos ?? []).length))
+  }
+
+  /** 차례 — 화면을 먼저 바꾸고 그 차례를 그대로 보낸다(한 칸 위/아래라 되돌릴 일이 드물다). */
+  const reorder = async (photoId: number, dir: -1 | 1) => {
+    const next = movePhoto(photos, photoId, dir)
+    if (next === photos) return
+    setPhotos(next)
+    const r = await orderRepairPhotos(quoteId, next.map(p => p.photo_id))
+    if (!r.ok) { toast.error(r.error ?? '순서를 바꾸지 못했습니다'); setPhotos(photos) }
   }
 
   return (
@@ -76,7 +119,22 @@ export default function RepairInfoDrawer({ quoteId, quoteNumber, onClose, onSave
         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px' }}>
           {loading
             ? <div style={{ fontSize: 12, color: '#9ca3af' }}>불러오는 중…</div>
-            : <RepairInfoPanel repair={repair} value={value} onChange={setValue} mode="saved" onSave={save} canEdit={canEdit} />}
+            : (
+              <RepairInfoPanel
+                repair={repair}
+                value={value}
+                onChange={setValue}
+                mode="saved"
+                onSave={save}
+                canEdit={canEdit}
+                photos={photos}
+                onAddPhotos={addPhotos}
+                onDeletePhoto={removePhoto}
+                onMovePhoto={reorder}
+                onCaption={(id, caption) => setPhotos(prev => prev.map(p => (p.photo_id === id ? { ...p, caption } : p)))}
+                uploading={uploading}
+              />
+            )}
         </div>
       </div>
     </ModalOverlay>
