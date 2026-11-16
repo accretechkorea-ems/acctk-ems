@@ -64,6 +64,8 @@ export type RepairPhoto = {
   sort_order: number
   /** 보여 줄 주소 — 라우트가 1시간짜리 서명 URL 로 만들어 준다(버킷이 비공개다). */
   url?: string | null
+  /** 저장소에서 파일이 사라진 줄 — 화면이 「파일 없음」으로 적고 지울 수 있게 한다. */
+  missing?: boolean
 }
 
 /** 더 올릴 수 있나. */
@@ -140,6 +142,10 @@ export type RepairInfoRow = {
   /** 이 견적이 수리 건인가(repairs.quote_id 로 연결돼 있는가). */
   isRepair: boolean
   state: RepairInfoState
+  /** 수리 정보 줄이 있는가 — 내용이 비어 있어도 참이다(행 아이콘 색이 이것을 본다). */
+  hasInfo: boolean
+  /** 거래명세서 PDF 가 버킷에 이미 있는가. */
+  hasTransaction: boolean
 }
 
 /**

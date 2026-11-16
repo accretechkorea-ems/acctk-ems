@@ -50,6 +50,11 @@ export type RepairInfoPanelProps = {
   onCaption?: (photoId: number, caption: string) => void
   /** 올리는 중 — 「2/3 올리는 중…」. */
   uploading?: { done: number; total: number } | null
+  /**
+   * 맨 아래 「상태 + 저장」 줄을 감춘다 — **모달이 그 줄을 자기 바닥에 고정**으로 두기
+   * 때문이다(components/quote/RepairInfoModal.tsx). 패널 안에 또 두면 저장 단추가 둘이 된다.
+   */
+  hideSaveRow?: boolean
 }
 
 /** 위 읽기 줄의 한 칸. */
@@ -91,6 +96,7 @@ function Field({
 export default function RepairInfoPanel({
   repair, value, onChange, mode, onSave, canEdit = true,
   photos = [], onAddPhotos, onDeletePhoto, onMovePhoto, onCaption, uploading = null,
+  hideSaveRow = false,
 }: RepairInfoPanelProps) {
   const [saving, setSaving] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -173,10 +179,16 @@ export default function RepairInfoPanel({
             {photos.map((ph, i) => (
               <div key={ph.photo_id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: 6, borderRadius: 6, border: `1px solid ${BORDER}` }}>
                 {/* 미리보기 — 버킷이 비공개라 1시간 서명 URL 이다(라우트가 만든다). */}
+                {/* 저장소에서 파일이 사라진 줄 — 빈 네모 대신 **「파일 없음」**이라고 적는다.
+                    (옆의 ✕ 로 그 줄을 지울 수 있다 — 줄만 남아 떠도는 것을 사람이 치우게.) */}
                 {ph.url
                   // eslint-disable-next-line @next/next/no-img-element
                   ? <img src={ph.url} alt={`수리 사진 ${i + 1}`} style={{ width: 76, height: 76, objectFit: 'cover', borderRadius: 4, flexShrink: 0, background: '#f3f4f6' }} />
-                  : <div style={{ width: 76, height: 76, borderRadius: 4, background: '#f3f4f6', flexShrink: 0 }} />}
+                  : (
+                    <div style={{ width: 76, height: 76, borderRadius: 4, background: '#f3f4f6', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: MUTED, textAlign: 'center', lineHeight: 1.3 }}>
+                      파일 없음
+                    </div>
+                  )}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <input
                     value={ph.caption ?? ''}
@@ -209,6 +221,7 @@ export default function RepairInfoPanel({
         )}
       </div>
 
+      {!hideSaveRow && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
         {/* 지금 상태 — 목록 뱃지와 **같은 판정**이다(lib/quoteRepairInfo.ts). */}
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: GRAY }}>
@@ -238,6 +251,7 @@ export default function RepairInfoPanel({
           <span style={{ fontSize: 11, color: MUTED }}>작성자만 고칠 수 있습니다</span>
         )}
       </div>
+      )}
     </div>
   )
 }

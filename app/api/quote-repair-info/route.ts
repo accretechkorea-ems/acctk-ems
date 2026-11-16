@@ -89,7 +89,9 @@ async function listPhotos(quoteId: number) {
   const { data: signed } = await sb.storage.from(PHOTO_BUCKET)
     .createSignedUrls(rows.map(r => r.storage_path), SIGN_TTL)
   const urlOf = new Map((signed ?? []).map(x => [x.path, x.signedUrl]))
-  return rows.map(r => ({ ...r, url: urlOf.get(r.storage_path) ?? null }))
+  // 파일이 사라진 줄 — 주소를 만들어 주지 못한 것이 그 표시다. 화면이 「파일 없음」으로
+  // 적고 ✕ 로 지울 수 있게 한다(줄만 남아 빈 네모가 되는 것을 막는다).
+  return rows.map(r => ({ ...r, url: urlOf.get(r.storage_path) ?? null, missing: !urlOf.get(r.storage_path) }))
 }
 
 /** 저장할 수 있는 사람인가 — 견적 작성자 + superadmin(글자 저장과 같은 규칙). */
@@ -128,6 +130,15 @@ export async function POST(req: Request) {
     const states: Record<number, RepairInfoRow> = {}
     if (ids.length === 0) return NextResponse.json({ states })
 
+    // 거래명세서가 이미 있는가 — 버킷을 한 번 훑어 이름으로 맞춘다(행마다 묻지 않는다).
+    const { data: quoteRows } = await sb.from('quotes').select('quote_id, quote_number').in('quote_id', ids)
+    const docName = new Map<number, string>()
+    for (const q of quoteRows ?? []) {
+      docName.set(Number(q.quote_id), `${(q.quote_number ?? '').trim().replace(/^No\./i, '')}T.pdf`)
+    }
+    const { data: files } = await sb.storage.from(DOC_BUCKET).list('', { limit: 1000 })
+    const fileSet = new Set((files ?? []).map(f => f.name))
+
     const [{ data: repairs, error: rErr }, { data: infos, error: iErr }, { data: photos }] = await Promise.all([
       sb.from('repairs').select('quote_id').in('quote_id', ids),
       sb.from('quote_repair_info').select('quote_id, symptom, cause, result').in('quote_id', ids),
@@ -145,10 +156,17 @@ export async function POST(req: Request) {
       const id = Number(r.quote_id)
       photoCount.set(id, (photoCount.get(id) ?? 0) + 1)
     }
+    // **요청한 견적을 모두 담는다**(2026-11-16). 행 아이콘이 수리 건이 아닌 20 견적서에도
+    // 서야 해서(거래명세서는 수리와 무관하게 낸다), 수리 건 여부는 칸으로만 알린다.
     for (const id of ids) {
-      // 수리 건이 아닌 견적은 뱃지도 버튼도 내지 않는다 — 그 줄에는 없는 개념이다.
-      if (!repairSet.has(id)) continue
-      states[id] = { isRepair: true, state: repairInfoState(infoMap.get(id) ?? null, photoCount.get(id) ?? 0) }
+      const info = infoMap.get(id) ?? null
+      states[id] = {
+        isRepair: repairSet.has(id),
+        state: repairInfoState(info, photoCount.get(id) ?? 0),
+        // 적은 줄이 **있기만 하면** 참이다(내용이 비어 있어도) — 아이콘 색이 그 값을 본다.
+        hasInfo: info !== null,
+        hasTransaction: fileSet.has(docName.get(id) ?? ''),
+      }
     }
     return NextResponse.json({ states })
   }
@@ -390,6 +408,21 @@ export async function POST(req: Request) {
       info: info ?? null,
       photos: await listPhotos(quoteId),
     })
+  }
+
+  // ── 이미 있는 문서 열기 ───────────────────────────────────────────────────
+  //
+  // 영수증 아이콘이 파란 줄(= 파일이 이미 있다)은 **다시 만들지 않는다** — 20초를 기다릴
+  // 까닭이 없고, 한 번 낸 문서를 손도 안 댔는데 새로 찍어 두는 것도 이상하다.
+  if (action === 'doc-url') {
+    const quoteId = intOf(body.quoteId)
+    const kind = body.kind === 'repair' ? 'repair' : body.kind === 'transaction' ? 'transaction' : null
+    if (quoteId === null || kind === null) return bad('문서를 지정해주세요.')
+    const { data: quote } = await sb.from('quotes').select('quote_number').eq('quote_id', quoteId).maybeSingle()
+    if (!quote) return bad('견적을 찾을 수 없습니다.', 404)
+    const name = `${(quote.quote_number ?? '').trim().replace(/^No./i, '')}${kind === 'transaction' ? 'T' : 'R'}.pdf`
+    const { data: signed } = await sb.storage.from(DOC_BUCKET).createSignedUrl(name, SIGN_TTL)
+    return NextResponse.json({ ok: !!signed?.signedUrl, name, url: signed?.signedUrl ?? null })
   }
 
   // ── 문서 저장 ─────────────────────────────────────────────────────────────

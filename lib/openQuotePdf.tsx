@@ -14,6 +14,7 @@
 // 결재 문서 열람 권한. 결재자·참조자가 결재 화면에서 열 수 있는 것이 그 두 번째 줄이다.
 
 import { createClient } from '@/lib/supabase/client'
+import { openPdf, pdfNameOf } from '@/lib/pdfViewer'
 
 export type OpenResult = { ok: true } | { ok: false; error: string }
 
@@ -60,7 +61,11 @@ async function logView(quoteId: number, engineerId: number | null, mark: ViewMar
   }
 }
 
-/** 서명 URL 과 **열람 기록에 쓸 값**을 받아 새 탭으로 연다. 두 입구가 같은 응답을 쓴다. */
+/**
+ * 서명 URL 과 **열람 기록에 쓸 값**을 받아 **모달 뷰어**로 연다(2026-11-16 — 전에는 새 탭).
+ * 내장 뷰어로 못 여는 환경이면 창구가 알아서 새 탭으로 보낸다(lib/pdfViewer.ts).
+ * 두 입구가 같은 응답을 쓴다.
+ */
 type SignedResult = OpenResult & { mark?: ViewMark }
 async function openSigned(query: string): Promise<SignedResult> {
   const res = await fetch(`/api/quote-pdf?${query}`)
@@ -68,7 +73,7 @@ async function openSigned(query: string): Promise<SignedResult> {
   if (!res.ok || !json?.signedUrl) {
     return { ok: false, error: json?.error || '견적서를 열 수 없습니다' }
   }
-  window.open(json.signedUrl, '_blank')
+  openPdf({ url: json.signedUrl, name: pdfNameOf(json.signedUrl, '견적서.pdf') })
   return {
     ok: true,
     mark: {
@@ -103,7 +108,8 @@ export async function openQuotePdf(input: OpenQuotePdfInput): Promise<OpenResult
   try {
     if (pdfUrl?.trim()) {
       if (pdfUrl.includes('synology') || pdfUrl.startsWith('http')) {
-        window.open(pdfUrl, '_blank')
+        // 옛 synology 주소는 우리 버킷이 아니다 — 그대로 띄운다(뷰어도 iframe 이라 같다).
+        openPdf({ url: pdfUrl, name: pdfNameOf(pdfUrl, '견적서.pdf') })
         await logView(quoteId, engineerId, fallback)
         return { ok: true }
       }

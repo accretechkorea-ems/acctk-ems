@@ -168,3 +168,22 @@ export async function generateQuoteDoc(quoteId: number, kind: QuoteDocKind): Pro
 
 /** 화면이 쓰는 이름 — 토스트·단추 글자. */
 export { DOC_LABEL, docNumber }
+
+/**
+ * **이미 만들어 둔 문서**의 주소만 받는다 — 다시 그리지 않는다(아이콘이 파란 줄).
+ * 파일이 없으면 ok:false 라, 부르는 쪽이 그때 만든다.
+ */
+export async function existingQuoteDoc(quoteId: number, kind: QuoteDocKind): Promise<DocResult> {
+  try {
+    const res = await fetch('/api/quote-repair-info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'doc-url', quoteId, kind }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || !json?.url) return { ok: false, error: '아직 만들어 둔 문서가 없습니다.' }
+    return { ok: true, url: json.url as string, name: json.name as string, bytes: 0 }
+  } catch {
+    return { ok: false, error: '문서를 열지 못했습니다.' }
+  }
+}

@@ -28,10 +28,9 @@ import { achieveColorOf } from '@/lib/fiscal'
 import { Z } from '@/lib/zIndex'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import Popover from '@/components/common/Popover'
-import RepairInfoButton from '@/components/quote/RepairInfoButton'
-import QuoteDocButtons from '@/components/quote/QuoteDocButtons'
+import QuoteRowIcons from '@/components/quote/QuoteRowIcons'
 import { isGeneral20Form } from '@/lib/quoteForms'
-import RepairInfoDrawer from '@/components/quote/RepairInfoDrawer'
+import RepairInfoModal from '@/components/quote/RepairInfoModal'
 import { fetchRepairInfoStates, type RepairInfoRow, type RepairInfoState } from '@/lib/quoteRepairInfo'
 import BackdatedMark from '@/components/quote/BackdatedMark'
 import { nowKSTParts, todayKST } from '@/lib/date'
@@ -150,22 +149,18 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
    */
   const isRepairForm = (q: { form_kind?: string | null }) => isGeneral20Form(q.form_kind)
   const [repairStates, setRepairStates] = useState<Map<number, RepairInfoRow>>(new Map())
-  /**
-   * 문서를 낼 수 있는 견적인가.
-   *
-   * 목록에 있는 줄은 **이미 확정된 견적**이다(작성 중인 견적은 저장되지 않는다). 그래서
-   * 기본은 허용이고, 거래 자체가 없던 일이 된 줄만 막는다 — 실주·삭제 요청에 거래명세서를
-   * 내면 그 문서가 거래 증빙으로 남는다.
-   */
-  const docEnabled = (q: { status?: string | null }) =>
-    !['실주', '삭제 요청'].includes((q.status ?? '').trim())
-  /** 열려 있는 수리 정보 드로어. */
+  /** 열려 있는 수리 정보 모달. */
   const [repairDrawer, setRepairDrawer] = useState<{ quoteId: number; quoteNumber: string } | null>(null)
-  /** 저장하면 그 행의 뱃지만 제자리에서 고친다(목록을 다시 읽지 않는다). */
+  /** 저장 뒤에는 수리 정보 줄이 생긴 것이므로 hasInfo 도 함께 세운다(아이콘 색). */
   const onRepairSaved = (quoteId: number, state: RepairInfoState) => {
-    setRepairStates(prev => new Map(prev).set(quoteId, { isRepair: true, state }))
+    setRepairStates(prev => {
+      const cur = prev.get(quoteId)
+      return new Map(prev).set(quoteId, {
+        isRepair: cur?.isRepair ?? true, state, hasInfo: true,
+        hasTransaction: cur?.hasTransaction ?? false,
+      })
+    })
   }
-
   // 결재 올리기 — 결재선을 받을 대상 견적. null 이면 모달이 닫혀 있다.
   const [approvalQuote, setApprovalQuote] = useState<Quote | null>(null)
   const [approvalChecking, setApprovalChecking] = useState(false)
@@ -899,22 +894,26 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                             계산서 요청
                           </button>
                         )}
-                        {/* 20 견적서이고 수리 건인 행에만 나온다 — 상태를 보여 주고 누르면 드로어가 열린다. */}
-                        {isRepairForm(q) && repairStates.get(q.quote_id)?.isRepair && (
-                          <RepairInfoButton
-                            state={repairStates.get(q.quote_id)!.state}
-                            onClick={() => setRepairDrawer({ quoteId: q.quote_id, quoteNumber: q.quote_number })}
-                          />
-                        )}
-                        {/* 거래명세서·수리내역서 — 20 견적서 행에만 둔다. */}
+                        {/* 20 견적서 행 — 문서·공구·영수증 아이콘 셋(components/quote/QuoteRowIcons.tsx). */}
                         {isRepairForm(q) && (
-                          <QuoteDocButtons
+                          <QuoteRowIcons
                             quoteId={q.quote_id}
-                            isRepair={!!repairStates.get(q.quote_id)?.isRepair}
-                            enabled={docEnabled(q)}
+                            hasInfo={!!repairStates.get(q.quote_id)?.hasInfo}
+                            state={repairStates.get(q.quote_id)?.state ?? 'none'}
+                            hasTransaction={!!repairStates.get(q.quote_id)?.hasTransaction}
+                            onOpenQuotePdf={() => { void openQuotePdf({ quoteId: q.quote_id, pdfUrl: q.pdf_url, engineerId, quoteNumber: q.quote_number, companyName: q.company_name }) }}
+                            onOpenInfo={() => setRepairDrawer({ quoteId: q.quote_id, quoteNumber: q.quote_number })}
+                            onTransactionMade={() => setRepairStates(prev => {
+                              const cur = prev.get(q.quote_id)
+                              return new Map(prev).set(q.quote_id, {
+                                isRepair: cur?.isRepair ?? false, state: cur?.state ?? 'none',
+                                hasInfo: cur?.hasInfo ?? false, hasTransaction: true,
+                              })
+                            })}
                             toast={toast}
                           />
                         )}
+
                         {/* 왜 버튼이 없는지 — 결재 중·미승인·확인 중을 짧게 알린다. */}
                         {(q.status === '견적중' || q.status === SUBMITTED_STATUS
                           || (q.quote_type === 'repair_domestic' && q.status === '수리중')) && !allowsFor(q) && (
@@ -1214,7 +1213,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
 
       {/* 수리 정보 — 목록 행의 「수리정보」 단추가 연다. 안은 작성 화면과 같은 패널이다. */}
       {repairDrawer && (
-        <RepairInfoDrawer
+        <RepairInfoModal
           quoteId={repairDrawer.quoteId}
           quoteNumber={repairDrawer.quoteNumber}
           onClose={() => setRepairDrawer(null)}

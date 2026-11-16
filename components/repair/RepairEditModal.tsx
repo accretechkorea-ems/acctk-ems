@@ -5,6 +5,7 @@ import type { Repair, RepairStatus, RepairQuote } from '@/hooks/useRepairs'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useToast } from '@/components/common/Toast'
+import { openPdf, pdfNameOf } from '@/lib/pdfViewer'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { todayKST } from '@/lib/date'
 
@@ -180,7 +181,7 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
     try {
       const res = await fetch(`/api/repair-quotes?pdf=${quoteId}`)
       const json = await res.json().catch(() => ({}))
-      if (res.ok && json.url) window.open(json.url, '_blank')
+      if (res.ok && json.url) openPdf({ url: json.url, name: pdfNameOf(json.url, '견적서.pdf') })
       else toast.error(json.error === 'No PDF' ? '견적서 PDF가 없습니다' : json.error === 'Forbidden' ? '견적서 열람 권한이 없습니다' : '견적서를 열 수 없습니다')
     } finally {
       pdfBusyRef.current = false

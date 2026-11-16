@@ -17,9 +17,10 @@ import { useFieldErrors, FieldError, errBorder } from '@/components/common/field
 import { REPAIR_STATUS_COLORS, REPAIR_MEANING_COLORS } from '@/lib/categoryColors'
 import { isAtHq } from '@/lib/repairStats'
 import { Z } from '@/lib/zIndex'
-import RepairInfoButton from '@/components/quote/RepairInfoButton'
-import RepairInfoDrawer from '@/components/quote/RepairInfoDrawer'
+import QuoteRowIcons from '@/components/quote/QuoteRowIcons'
+import RepairInfoModal from '@/components/quote/RepairInfoModal'
 import { fetchRepairInfoStates, type RepairInfoRow, type RepairInfoState } from '@/lib/quoteRepairInfo'
+import { openPdf, pdfNameOf } from '@/lib/pdfViewer'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { todayKST, nowKSTParts } from '@/lib/date'
 
@@ -187,10 +188,17 @@ export default function RepairPage() {
    * 받는다(lib/quoteRepairInfo.ts). 여기서는 연결된 견적이 있는 줄만 물어본다.
    */
   const [repairStates, setRepairStates] = useState<Map<number, RepairInfoRow>>(new Map())
-  /** 열려 있는 수리 정보 드로어. */
-  const [infoDrawer, setInfoDrawer] = useState<{ quoteId: number; quoteNumber: string } | null>(null)
+  /** 열려 있는 수리 정보 모달. */
+  const [infoModal, setInfoModal] = useState<{ quoteId: number; quoteNumber: string } | null>(null)
   const onInfoSaved = (quoteId: number, state: RepairInfoState) => {
-    setRepairStates(prev => new Map(prev).set(quoteId, { isRepair: true, state }))
+    // 저장 뒤에는 **수리 정보 줄이 생긴 것**이므로 hasInfo 도 함께 세운다(아이콘 색).
+    setRepairStates(prev => {
+      const cur = prev.get(quoteId)
+      return new Map(prev).set(quoteId, {
+        isRepair: cur?.isRepair ?? true, state, hasInfo: true,
+        hasTransaction: cur?.hasTransaction ?? false,
+      })
+    })
   }
 
   // 연결된 견적 요약을 API 로 배치 조회(20팀 견적만 service role 로 오픈). 연결 없으면 호출 안 함.
@@ -308,7 +316,7 @@ export default function RepairPage() {
     try {
       const res = await fetch(`/api/repair-quotes?pdf=${quoteId}`)
       const json = await res.json().catch(() => ({}))
-      if (res.ok && json.url) window.open(json.url, '_blank')
+      if (res.ok && json.url) openPdf({ url: json.url, name: pdfNameOf(json.url, '견적서.pdf') })
       else toast.error(json.error === 'No PDF' ? '견적서 PDF가 없습니다' : json.error === 'Forbidden' ? '견적서 열람 권한이 없습니다' : '견적서를 열 수 없습니다')
     } finally {
       pdfBusyRef.current = false
@@ -537,12 +545,12 @@ export default function RepairPage() {
     )
   }
 
-  /** 수리 정보 드로어 — 목록 어느 구역에서 열어도 같은 것이다. */
-  const infoDrawerNode = infoDrawer ? (
-    <RepairInfoDrawer
-      quoteId={infoDrawer.quoteId}
-      quoteNumber={infoDrawer.quoteNumber}
-      onClose={() => setInfoDrawer(null)}
+  /** 수리 정보 모달 — 목록 어느 구역에서 열어도 같은 것이다. */
+  const infoModalNode = infoModal ? (
+    <RepairInfoModal
+      quoteId={infoModal.quoteId}
+      quoteNumber={infoModal.quoteNumber}
+      onClose={() => setInfoModal(null)}
       onSaved={onInfoSaved}
       toast={toast}
     />
@@ -577,20 +585,25 @@ export default function RepairPage() {
               </button>
             )
           }
-          const state = repairStates.get(r.quote_id)
+          const st = repairStates.get(r.quote_id)
+          const no = q?.quote_number ?? `#${r.quote_id}`
           return (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, flexWrap: 'nowrap' }}>
-              <span onClick={() => openQuotePdf(r.quote_id!)} title={`${q?.quote_number ?? '견적'} · 견적서 보기`}
-                style={{ cursor: pdfBusyId === null ? 'pointer' : 'default', color: BLUE, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', opacity: pdfBusyId === r.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
-                {q?.quote_number ?? `#${r.quote_id}`}
-              </span>
-              {state?.isRepair && (
-                <RepairInfoButton
-                  state={state.state}
-                  onClick={() => setInfoDrawer({ quoteId: r.quote_id!, quoteNumber: q?.quote_number ?? `#${r.quote_id}` })}
-                />
-              )}
-            </div>
+            <QuoteRowIcons
+              quoteId={r.quote_id}
+              hasInfo={!!st?.hasInfo}
+              state={st?.state ?? 'none'}
+              hasTransaction={!!st?.hasTransaction}
+              onOpenQuotePdf={() => openQuotePdf(r.quote_id!)}
+              onOpenInfo={() => setInfoModal({ quoteId: r.quote_id!, quoteNumber: no })}
+              onTransactionMade={() => setRepairStates(prev => {
+                const cur = prev.get(r.quote_id!)
+                return new Map(prev).set(r.quote_id!, {
+                  isRepair: cur?.isRepair ?? true, state: cur?.state ?? 'none',
+                  hasInfo: cur?.hasInfo ?? false, hasTransaction: true,
+                })
+              })}
+              toast={toast}
+            />
           )
         })()}
       </td>
@@ -963,8 +976,8 @@ export default function RepairPage() {
 
       </div>
 
-      {/* ── 수리 정보 드로어 — 「견적」 열의 수리정보 단추가 연다(견적 목록과 같은 것). ── */}
-      {infoDrawerNode}
+      {/* ── 수리 정보 모달 — 「견적」 열의 공구 아이콘이 연다(견적 목록과 같은 것). ── */}
+      {infoModalNode}
 
       {/* ── 수리품 수정 모달 ── */}
       <RepairEditModal repair={editing} isSaving={isEditSaving} onClose={() => setEditing(null)} onSave={handleEditSave} onDelete={handleDelete} />
