@@ -5,10 +5,16 @@
 // 새 탭으로 던지면 돌아올 때 목록이 처음 상태로 되감긴다(필터·스크롤). 한 건씩 훑으며
 // 확인하는 일이라 **보던 화면 위에** 띄우는 편이 짧다.
 //
-// ── 여는 길이 막히면 새 탭 ─────────────────────────────────────────────────
-//   iframe 안에서 PDF 를 못 그리는 환경이 있다(모바일 사파리). 그 판정은 lib/pdfViewer.ts
-//   가 미리 하고, 그래도 iframe 이 **실패하거나 12초가 지나도 못 그리면** 여기서 새 탭으로
-//   보내고 모달을 닫는다 — 빈 네모를 보여 주고 끝내지 않는다.
+// ── 서명 URL 을 iframe 에 **직접 넣지 않는다** ─────────────────────────────
+//   CSP 의 frame-src 에 Supabase 도메인이 없어서, 서명 URL 을 그대로 넣으면 브라우저가
+//   「이 콘텐츠는 차단되어 있습니다」로 막는다. 그 도메인을 frame-src 에 여는 대신
+//   **파일을 받아 와 blob: 로 바꿔** 띄운다 — frame-src 에는 blob: 이 이미 있고(react-pdf
+//   미리보기가 쓴다), 받아 오는 길은 connect-src 가 이미 열어 둔 그 길이다. 그래서
+//   CSP 는 한 글자도 바꾸지 않았다. 닫을 때 그 blob 주소를 반납한다(revokeObjectURL).
+//
+// ── 못 그리면 새 탭 ────────────────────────────────────────────────────────
+//   내려받기가 실패하거나 iframe 이 **12초** 안에 못 그리면 원래 서명 URL 로 새 탭을 연다.
+//   (모바일 사파리처럼 처음부터 못 그리는 환경은 lib/pdfViewer.ts 가 먼저 가른다.)
 //
 // ── 모션은 이 모달의 것이다 ────────────────────────────────────────────────
 //   공용 ModalOverlay 를 건드리지 않는다(29개 모달이 함께 쓰는 자리다). 열릴 때 배경
@@ -22,7 +28,7 @@ import type { PdfDoc } from '@/lib/pdfViewer'
 const BORDER = '#ebebeb'
 const MUTED = '#9ca3af'
 
-/** iframe 이 이 시간 안에 못 뜨면 새 탭으로 보낸다. */
+/** 내려받기 + 그리기가 이 시간 안에 안 끝나면 새 탭으로 보낸다. */
 const LOAD_TIMEOUT = 12000
 
 export type PdfViewerModalProps = {
@@ -31,27 +37,66 @@ export type PdfViewerModalProps = {
 }
 
 export default function PdfViewerModal({ doc, onClose }: PdfViewerModalProps) {
-  /** 움직임을 줄여 달라는 설정이면 모션 없이 즉시 바꾼다. */
   const reduced = typeof window !== 'undefined'
     && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
   const [shown, setShown] = useState(reduced)
   const [closing, setClosing] = useState(false)
+  /** 받아 온 파일의 blob 주소 — iframe 은 이것만 본다. */
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const closedRef = useRef(false)
 
-  // 다음 프레임에 켜야 전환이 돈다(처음 그릴 때 이미 켜져 있으면 전환이 없다).
+  const stopTimer = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null } }
+
+  /** 못 그린다 — 원래 주소로 새 탭을 열고 모달을 닫는다. */
+  const bailToTab = () => {
+    if (closedRef.current) return
+    closedRef.current = true
+    stopTimer()
+    window.open(doc.url, '_blank')
+    onClose()
+  }
+
   useEffect(() => {
     if (reduced) return
     const id = requestAnimationFrame(() => setShown(true))
     return () => cancelAnimationFrame(id)
   }, [reduced])
 
+  // 파일을 받아 blob 주소로 바꾼다. 닫을 때 반납한다.
+  useEffect(() => {
+    let alive = true
+    let made: string | null = null
+    timer.current = setTimeout(bailToTab, LOAD_TIMEOUT)
+    ;(async () => {
+      try {
+        const res = await fetch(doc.url)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const blob = await res.blob()
+        if (!alive) return
+        made = URL.createObjectURL(blob)
+        setBlobUrl(made)
+      } catch (e) {
+        console.error('[pdfViewer] 파일을 받지 못했다 — 새 탭으로 보낸다', e)
+        if (alive) bailToTab()
+      }
+    })()
+    return () => {
+      alive = false
+      stopTimer()
+      if (made) URL.revokeObjectURL(made)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc.url])
+
   const close = () => {
+    if (closedRef.current) return
+    closedRef.current = true
     if (reduced) { onClose(); return }
     setClosing(true)
     setTimeout(onClose, 120)
   }
 
-  // Esc — 이 모달은 공용 오버레이를 쓰지 않으므로 여기서 받는다.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
     window.addEventListener('keydown', onKey)
@@ -59,24 +104,13 @@ export default function PdfViewerModal({ doc, onClose }: PdfViewerModalProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 못 그리면 새 탭 — 뜨면 시계를 끈다.
-  useEffect(() => {
-    timer.current = setTimeout(() => {
-      window.open(doc.url, '_blank')
-      onClose()
-    }, LOAD_TIMEOUT)
-    return () => { if (timer.current) clearTimeout(timer.current) }
-  }, [doc.url, onClose])
-
-  const onLoaded = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null } }
-  const onFailed = () => {
-    if (timer.current) { clearTimeout(timer.current); timer.current = null }
-    window.open(doc.url, '_blank')
-    onClose()
-  }
-
   const open = shown && !closing
   const motion = reduced ? 'none' : undefined
+  const linkStyle: React.CSSProperties = {
+    padding: '4px 9px', border: `1px solid ${BORDER}`, borderRadius: 6,
+    fontSize: 11, fontWeight: 700, color: '#234ea2', textDecoration: 'none',
+    background: '#fff', cursor: 'pointer',
+  }
 
   return (
     <div
@@ -103,26 +137,33 @@ export default function PdfViewerModal({ doc, onClose }: PdfViewerModalProps) {
             {doc.name}
           </span>
           <span style={{ flex: 1 }} />
-          <a href={doc.url} target="_blank" rel="noopener noreferrer"
-            style={{ padding: '4px 9px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#234ea2', textDecoration: 'none' }}>
-            새 탭
-          </a>
-          <a href={doc.url} download={doc.name}
-            style={{ padding: '4px 9px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 11, fontWeight: 700, color: '#234ea2', textDecoration: 'none' }}>
-            다운로드
-          </a>
+          {/* 문서마다 다른 한 가지 — 수리내역서에서는 「정보 수정」이다. */}
+          {doc.action && (
+            <button onClick={() => { doc.action?.onClick(); close() }} style={linkStyle}>
+              {doc.action.label}
+            </button>
+          )}
+          <a href={doc.url} target="_blank" rel="noopener noreferrer" style={linkStyle}>새 탭</a>
+          {/* 내려받기는 blob 주소로 한다 — 다른 도메인의 주소에는 download 가 먹지 않는다. */}
+          <a href={blobUrl ?? doc.url} download={doc.name} style={linkStyle}>다운로드</a>
           <button onClick={close} title="닫기" aria-label="닫기"
             style={{ width: 24, height: 24, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: MUTED, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           </button>
         </div>
-        <iframe
-          src={doc.url}
-          title={doc.name}
-          onLoad={onLoaded}
-          onError={onFailed}
-          style={{ flex: 1, width: '100%', border: 'none', background: '#f3f4f6' }}
-        />
+        {blobUrl ? (
+          <iframe
+            src={blobUrl}
+            title={doc.name}
+            onLoad={stopTimer}
+            onError={bailToTab}
+            style={{ flex: 1, width: '100%', border: 'none', background: '#f3f4f6' }}
+          />
+        ) : (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: MUTED, background: '#f3f4f6' }}>
+            문서를 불러오는 중…
+          </div>
+        )}
       </div>
     </div>
   )

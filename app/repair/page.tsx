@@ -18,6 +18,7 @@ import { REPAIR_STATUS_COLORS, REPAIR_MEANING_COLORS } from '@/lib/categoryColor
 import { isAtHq } from '@/lib/repairStats'
 import { Z } from '@/lib/zIndex'
 import QuoteRowIcons from '@/components/quote/QuoteRowIcons'
+import { openRepairDoc } from '@/lib/repairDocFlow'
 import RepairInfoModal from '@/components/quote/RepairInfoModal'
 import { fetchRepairInfoStates, type RepairInfoRow, type RepairInfoState } from '@/lib/quoteRepairInfo'
 import { openPdf, pdfNameOf } from '@/lib/pdfViewer'
@@ -189,7 +190,7 @@ export default function RepairPage() {
    */
   const [repairStates, setRepairStates] = useState<Map<number, RepairInfoRow>>(new Map())
   /** 열려 있는 수리 정보 모달. */
-  const [infoModal, setInfoModal] = useState<{ quoteId: number; quoteNumber: string } | null>(null)
+  const [infoModal, setInfoModal] = useState<{ quoteId: number; quoteNumber: string; fromDoc: boolean } | null>(null)
   const onInfoSaved = (quoteId: number, state: RepairInfoState) => {
     // 저장 뒤에는 **수리 정보 줄이 생긴 것**이므로 hasInfo 도 함께 세운다(아이콘 색).
     setRepairStates(prev => {
@@ -552,6 +553,14 @@ export default function RepairPage() {
       quoteNumber={infoModal.quoteNumber}
       onClose={() => setInfoModal(null)}
       onSaved={onInfoSaved}
+      afterSave={infoModal.fromDoc ? () => {
+        const m = infoModal
+        setInfoModal(null)
+        void openRepairDoc({
+          quoteId: m.quoteId, toast, regenerate: true,
+          onEdit: () => setInfoModal({ ...m, fromDoc: true }),
+        })
+      } : undefined}
       toast={toast}
     />
   ) : null
@@ -577,12 +586,18 @@ export default function RepairPage() {
           if (r.quote_id == null) {
             // 수리불가·수리진행안함 건에는 견적서를 쓰지 않는다(모달에 있던 규칙 그대로).
             if (r.special_type === '수리불가' || r.special_type === '수리진행안함') return null
+            // 아이콘 하나로 — 연결된 줄의 아이콘 셋과 같은 크기·간격이다.
             return (
-              <button onClick={() => goWriteQuote(r)}
-                title="이 수리품으로 견적서를 작성합니다"
-                style={{ padding: '3px 9px', border: `1px solid ${BORDER}`, borderRadius: 6, background: '#fff', color: BLUE, fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                + 견적서
-              </button>
+              <QuoteRowIcons
+                quoteId={0}
+                hasInfo={false}
+                state="none"
+                hasTransaction={false}
+                onOpenQuotePdf={() => {}}
+                onOpenInfo={() => {}}
+                onCreateQuote={() => goWriteQuote(r)}
+                toast={toast}
+              />
             )
           }
           const st = repairStates.get(r.quote_id)
@@ -594,7 +609,7 @@ export default function RepairPage() {
               state={st?.state ?? 'none'}
               hasTransaction={!!st?.hasTransaction}
               onOpenQuotePdf={() => openQuotePdf(r.quote_id!)}
-              onOpenInfo={() => setInfoModal({ quoteId: r.quote_id!, quoteNumber: no })}
+              onOpenInfo={fromDoc => setInfoModal({ quoteId: r.quote_id!, quoteNumber: no, fromDoc })}
               onTransactionMade={() => setRepairStates(prev => {
                 const cur = prev.get(r.quote_id!)
                 return new Map(prev).set(r.quote_id!, {

@@ -14,10 +14,15 @@
 //   빈 탭을 열어 둔다(응답을 받은 뒤에 여는 탭은 팝업 차단에 걸린다).
 
 export type PdfDoc = {
-  /** 서명 URL 또는 공개 주소. */
+  /** 서명 URL 또는 공개 주소. 뷰어가 **받아서 blob 으로** 띄운다(PdfViewerModal 주석). */
   url: string
   /** 머리줄에 적는 이름(파일명). */
   name: string
+  /**
+   * 문서마다 다른 단추 하나 — 수리내역서의 「정보 수정」이 그것이다.
+   * 누르면 그 일을 하고 뷰어는 닫힌다.
+   */
+  action?: { label: string; onClick: () => void }
 }
 
 type Handler = (doc: PdfDoc) => void

@@ -29,6 +29,7 @@ import { Z } from '@/lib/zIndex'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import Popover from '@/components/common/Popover'
 import QuoteRowIcons from '@/components/quote/QuoteRowIcons'
+import { openRepairDoc } from '@/lib/repairDocFlow'
 import { isGeneral20Form } from '@/lib/quoteForms'
 import RepairInfoModal from '@/components/quote/RepairInfoModal'
 import { fetchRepairInfoStates, type RepairInfoRow, type RepairInfoState } from '@/lib/quoteRepairInfo'
@@ -150,7 +151,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
   const isRepairForm = (q: { form_kind?: string | null }) => isGeneral20Form(q.form_kind)
   const [repairStates, setRepairStates] = useState<Map<number, RepairInfoRow>>(new Map())
   /** 열려 있는 수리 정보 모달. */
-  const [repairDrawer, setRepairDrawer] = useState<{ quoteId: number; quoteNumber: string } | null>(null)
+  const [repairDrawer, setRepairDrawer] = useState<{ quoteId: number; quoteNumber: string; fromDoc: boolean } | null>(null)
   /** 저장 뒤에는 수리 정보 줄이 생긴 것이므로 hasInfo 도 함께 세운다(아이콘 색). */
   const onRepairSaved = (quoteId: number, state: RepairInfoState) => {
     setRepairStates(prev => {
@@ -902,7 +903,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                             state={repairStates.get(q.quote_id)?.state ?? 'none'}
                             hasTransaction={!!repairStates.get(q.quote_id)?.hasTransaction}
                             onOpenQuotePdf={() => { void openQuotePdf({ quoteId: q.quote_id, pdfUrl: q.pdf_url, engineerId, quoteNumber: q.quote_number, companyName: q.company_name }) }}
-                            onOpenInfo={() => setRepairDrawer({ quoteId: q.quote_id, quoteNumber: q.quote_number })}
+                            onOpenInfo={fromDoc => setRepairDrawer({ quoteId: q.quote_id, quoteNumber: q.quote_number, fromDoc })}
                             onTransactionMade={() => setRepairStates(prev => {
                               const cur = prev.get(q.quote_id)
                               return new Map(prev).set(q.quote_id, {
@@ -1218,6 +1219,14 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
           quoteNumber={repairDrawer.quoteNumber}
           onClose={() => setRepairDrawer(null)}
           onSaved={onRepairSaved}
+          afterSave={repairDrawer.fromDoc ? () => {
+            const m = repairDrawer
+            setRepairDrawer(null)
+            void openRepairDoc({
+              quoteId: m.quoteId, toast, regenerate: true,
+              onEdit: () => setRepairDrawer({ ...m, fromDoc: true }),
+            })
+          } : undefined}
           toast={toast}
         />
       )}

@@ -10,7 +10,9 @@
 //   흐린 회색  아직 아무것도 없다
 //   파랑       볼 것이 있다
 //     문서   늘 파랑(확정된 견적에는 PDF 가 있다)
-//     공구   수리 정보 줄이 있으면 파랑 — 툴팁에 미작성/작성중/완료
+//     공구   수리 정보 줄이 있으면 파랑. **누르는 곳이 상태에 따라 갈린다** —
+//            아직 안 적었으면 작성 모달, 적어 둔 것이 있으면 **수리내역서 PDF** 가 먼저
+//            열린다(그 뷰어의 「정보 수정」이 작성 모달로 보낸다 — lib/repairDocFlow.ts).
 //     영수증 거래명세서 PDF 가 버킷에 있으면 파랑. 없으면 눌렀을 때 만들고 연다.
 
 import { useState } from 'react'
@@ -18,6 +20,7 @@ import { DOC_LABEL } from '@/lib/quoteDocs'
 import { existingQuoteDoc, generateQuoteDoc } from '@/lib/quoteDocGenerate'
 import { openPdf, shouldUseNewTab } from '@/lib/pdfViewer'
 import { REPAIR_INFO_LABEL, type RepairInfoState } from '@/lib/quoteRepairInfo'
+import { openRepairDoc } from '@/lib/repairDocFlow'
 
 /** 아이콘 한 칸 — lucide 선 아이콘(stroke 2), 20px. */
 const ICON = 20
@@ -35,8 +38,10 @@ export type QuoteRowIconsProps = {
   hasTransaction: boolean
   /** 견적서 PDF 를 여는 길 — 화면마다 다르다(목록은 경로, 수리 화면은 id). */
   onOpenQuotePdf: () => void
-  /** 수리 정보 모달 열기. */
-  onOpenInfo: () => void
+  /** 수리 정보 **작성 모달** 열기. fromDoc 이면 저장 뒤 수리내역서로 돌아간다. */
+  onOpenInfo: (fromDoc: boolean) => void
+  /** 「+ 견적서」 — 아직 견적이 없는 줄에서만 준다(수리품 목록). 주면 아이콘이 이것 하나다. */
+  onCreateQuote?: () => void
   toast: { success: (m: string) => void; error: (m: string) => void }
   /** 거래명세서를 이미 만들었다고 부르는 쪽에 알린다(아이콘 색을 그 자리에서 바꾼다). */
   onTransactionMade?: () => void
@@ -51,8 +56,37 @@ const btnStyle = (on: boolean, busy: boolean): React.CSSProperties => ({
 
 export default function QuoteRowIcons({
   quoteId, hasInfo, state, hasTransaction, onOpenQuotePdf, onOpenInfo, toast, onTransactionMade,
+  onCreateQuote,
 }: QuoteRowIconsProps) {
   const [busy, setBusy] = useState(false)
+  const [docBusy, setDocBusy] = useState(false)
+
+  /** 견적이 없는 줄 — 쓰러 가는 「+」 하나만 낸다. */
+  if (onCreateQuote) {
+    return (
+      <button onClick={onCreateQuote} aria-label="견적서 작성" title="견적서 작성" style={btnStyle(true, false)}>
+        <svg width={ICON} height={ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
+    )
+  }
+
+  /**
+   * 공구 — 적어 둔 것이 없으면 작성 모달, 있으면 **문서부터**.
+   * 적어 둔 건을 다시 볼 때 보고 싶은 것은 완성된 문서다(lib/repairDocFlow.ts 주석).
+   */
+  const onWrench = async () => {
+    if (!hasInfo) { onOpenInfo(false); return }
+    if (docBusy) return
+    setDocBusy(true)
+    try {
+      await openRepairDoc({ quoteId, toast, onEdit: () => onOpenInfo(true) })
+    } finally {
+      setDocBusy(false)
+    }
+  }
 
   /** 거래명세서 — 있으면 열고, 없으면 만들어서 연다(둘 다 같은 이름의 한 파일이다). */
   const openTransaction = async () => {
@@ -88,11 +122,12 @@ export default function QuoteRowIcons({
         </svg>
       </button>
 
-      {/* 수리 정보 — lucide wrench */}
-      <button onClick={onOpenInfo}
-        aria-label={`수리 정보 ${REPAIR_INFO_LABEL[state]}`}
-        title={hasInfo ? `수리 정보 — ${REPAIR_INFO_LABEL[state]}` : '수리 정보 — 미작성'}
-        style={btnStyle(hasInfo, false)}>
+      {/* 수리 정보 — lucide wrench. 이름도 상태에 따라 다르다(누르면 가는 곳이 다르다). */}
+      <button onClick={() => void onWrench()}
+        aria-label={hasInfo ? '수리내역서 보기' : '수리 정보 작성'}
+        title={hasInfo ? `수리내역서 보기 — 수리 정보 ${REPAIR_INFO_LABEL[state]}` : '수리 정보 작성'}
+        disabled={docBusy}
+        style={btnStyle(hasInfo, docBusy)}>
         <svg width={ICON} height={ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
         </svg>
