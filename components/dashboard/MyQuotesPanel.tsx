@@ -1223,7 +1223,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
             const m = repairDrawer
             setRepairDrawer(null)
             void openRepairDoc({
-              quoteId: m.quoteId, toast, regenerate: true,
+              quoteId: m.quoteId, toast,
               onEdit: () => setRepairDrawer({ ...m, fromDoc: true }),
             })
           } : undefined}

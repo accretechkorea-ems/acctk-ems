@@ -85,12 +85,18 @@ eq('합계 = 줄의 합', lines.reduce((s, l) => s + l.supply, 0), 565000 + 1200
 eq('세액 합계', lines.reduce((s, l) => s + l.tax, 0), 56500 + 12000 - 5000)
 
 console.log('\n── 한 장 유지(거래명세서) ──')
-eq('열 줄까지는 높이 그대로', [D.transactionRowHeight(1), D.transactionRowHeight(10)], [11.2, 11.2])
-// 열한 줄째부터 줄여서 표 전체 높이를 지킨다.
-eq('열한 줄이면 줄어든다', Math.round(D.transactionRowHeight(11) * 10) / 10, 10.2)
-eq('스무 줄이어도 전체 높이는 그대로',
-  Math.round(D.transactionRowHeight(20) * 20 * 10) / 10, Math.round(11.2 * 10 * 10) / 10)
-eq('바닥이 있다(글자가 들어갈 높이)', D.transactionRowHeight(100), 5)
+// 줄 높이 = 남은 높이 ÷ 줄 수. 상한은 양식의 높이, 하한은 9pt 한 줄이다.
+eq('남은 높이 = 쪽 − 여백 − 늘 있는 덩어리',
+  Math.round((D.TRANSACTION_PAGE_MM - D.TRANSACTION_MARGIN_MM * 2 - D.TRANSACTION_FIXED_MM) * 10) / 10,
+  D.TRANSACTION_BODY_MM)
+eq('열 줄까지는 상한 그대로', [D.transactionRowHeight(1), D.transactionRowHeight(10)], [11.2, 11.2])
+eq('열한 줄이면 남은 높이를 나눈다',
+  Math.round(D.transactionRowHeight(11) * 100) / 100, Math.round((121.5 / 11) * 100) / 100)
+eq('열여덟 줄도 하한 위', D.transactionRowHeight(18) > D.TRANSACTION_ROW_MIN_MM, true)
+eq('하한이 있다(9pt 한 줄)', D.transactionRowHeight(100), 6.5)
+eq('한 장에 드는 최대 줄 수', D.TRANSACTION_MAX_ROWS, 18)
+eq('열여덟까지 한 장 · 열아홉부터 두 장',
+  [D.transactionFitsOnePage(18), D.transactionFitsOnePage(19)], [true, false])
 
 console.log('\n── 수리내역서 — 교환 부품 ──')
 eq('파트 성격 줄만 담는다', D.partRows(items).map(r => r.name), ['GAUGE HEAD', '케이블'])

@@ -4,9 +4,14 @@
 // 그리는 기술은 견적서와 같다(@react-pdf/renderer). 흑백·괘선표·A4 한 장이다.
 //
 // ── 한 장을 지키는 법 ───────────────────────────────────────────────────────
-//   표가 열 줄이 되도록 빈 줄을 채우고(TRANSACTION_MIN_ROWS), 열 줄을 넘으면 **줄 높이를
-//   줄인다**(transactionRowHeight). 그래서 품목이 몇이든 표의 높이가 같고, 아래 확인란과
-//   마감선이 늘 같은 자리에 온다.
+//   표가 열 줄이 되도록 빈 줄을 채우고(TRANSACTION_MIN_ROWS), 줄 높이는 **쪽에서 남는
+//   높이를 줄 수로 나눠** 정한다(transactionRowHeight — lib/quoteDocs.ts). 그래서 품목이
+//   몇이든 표가 쪽을 넘지 않고, 아래 확인란과 마감선이 늘 같은 자리에 온다.
+//
+// ── 하한으로도 안 들어가면 두 장 ───────────────────────────────────────────
+//   줄 높이가 하한(9pt 한 줄)까지 내려가도 넘치면 표가 다음 쪽으로 이어진다. 그때
+//   **머리행이 따라가고**(fixed), 합계·총 합계는 한 덩어리로, 확인란·마감선·문서번호도
+//   한 덩어리로 묶어 둔다(wrap={false}) — 마감선만 홀로 다음 쪽에 떨어지지 않게.
 //
 // ── 수리 건이 아니어도 낼 수 있다 ───────────────────────────────────────────
 //   그때는 품명 줄에 S/N 과 「수리 건」이 붙지 않는다(lib/quoteDocs.ts 의 transactionItemName).
@@ -18,7 +23,8 @@ import {
   S_H2, S_SUB, S_TOTAL, SUPPLIER, W_BOX, W_HAIR,
 } from './docBase'
 import {
-  TRANSACTION_MIN_ROWS, bareQuoteNumber, docNumber, longDate, transactionRowHeight,
+  TRANSACTION_LINE_HEIGHT, TRANSACTION_MIN_ROWS, TRANSACTION_ROW_MM,
+  bareQuoteNumber, docNumber, longDate, transactionRowHeight,
   type TransactionLine,
 } from '@/lib/quoteDocs'
 
@@ -45,7 +51,11 @@ const S = StyleSheet.create({
   // .kv{display:grid;grid-template-columns:52px 1fr;row-gap:4px;column-gap:8px;font-size:9.8pt}
   kvRow: { flexDirection: 'row', marginBottom: 1.1 * MM },
   kvKey: { width: 14 * MM, fontSize: S_CELL },
-  kvVal: { flex: 1, fontSize: S_CELL },
+  /**
+   * 주소가 길면 접히되 **두 줄까지**다. 이 블록이 한없이 길어지면 품목 표 몫(남은 높이)이
+   * 흔들려 한 장 약속이 깨진다 — 남은 높이는 두 줄까지를 내다보고 잡아 두었다.
+   */
+  kvVal: { flex: 1, fontSize: S_CELL, maxLines: 2, textOverflow: 'ellipsis' },
   h2: { fontSize: S_H2, marginTop: 2 * MM, marginBottom: 1 * MM },
   // table.i{border:1.5px solid #000}
   table: { width: CONTENT_W, borderWidth: W_BOX, borderColor: C_BLACK },
@@ -56,8 +66,8 @@ const S = StyleSheet.create({
     borderRightWidth: W_HAIR, borderRightColor: C_BLACK,
     paddingVertical: 1 * MM, paddingHorizontal: 1.6 * MM, justifyContent: 'center',
   },
-  th: { fontSize: S_CELL, textAlign: 'center' },
-  td: { fontSize: S_CELL },
+  th: { fontSize: S_CELL, textAlign: 'center', lineHeight: TRANSACTION_LINE_HEIGHT },
+  td: { fontSize: S_CELL, lineHeight: TRANSACTION_LINE_HEIGHT },
   /**
    * 품명·보조 줄은 **각각 한 줄**이다(넘치면 … 로 끊는다).
    *
@@ -65,8 +75,11 @@ const S = StyleSheet.create({
    * 줄 높이를 아무리 줄여도 칸이 두 줄 글자만큼 남아, 품목 세 줄만 있어도 표가 길어져
    * 두 쪽이 됐다(실측). 한 줄로 못 박으면 품목 수와 표 높이가 비례해 한 장을 지킬 수 있다.
    */
-  tdName: { fontSize: S_CELL, maxLines: 1, textOverflow: 'ellipsis' },
-  sub: { fontSize: S_SUB, color: C_SUB, marginTop: 0.4 * MM, maxLines: 1, textOverflow: 'ellipsis' },
+  tdName: { fontSize: S_CELL, lineHeight: TRANSACTION_LINE_HEIGHT, maxLines: 1, textOverflow: 'ellipsis' },
+  sub: {
+    fontSize: S_SUB, color: C_SUB, lineHeight: TRANSACTION_LINE_HEIGHT,
+    marginTop: 0.4 * MM, maxLines: 1, textOverflow: 'ellipsis',
+  },
   // .confirm{border:1.5px solid #000;padding:20px;text-align:center}
   confirm: {
     borderWidth: W_BOX, borderColor: C_BLACK, paddingVertical: 5 * MM, paddingHorizontal: 5 * MM,
@@ -89,16 +102,17 @@ export function TransactionPDFDoc({
   quoteNumber, issuedDate, customerName, customerAddress, contact, lines,
 }: TransactionPDFDocProps) {
   const rowCount = Math.max(TRANSACTION_MIN_ROWS, lines.length)
-  const rowH = transactionRowHeight(rowCount) * MM
+  const rowMM = transactionRowHeight(rowCount)
+  const rowH = rowMM * MM
   const blanks = Math.max(0, TRANSACTION_MIN_ROWS - lines.length)
   /**
-   * 보조 줄(품명 · 처리 결과)은 **열 줄까지만** 낸다.
+   * 보조 줄(품명 · 처리 결과)은 **줄 높이가 양식 그대로일 때만** 낸다.
    *
-   * 줄 높이를 줄여도 칸 안의 글자는 줄지 않는다 — 두 줄짜리 칸은 9mm 밑으로 내려가지
-   * 않아서, 열한 줄째부터는 표가 계속 길어져 한 장을 넘겼다(실측: 14줄에서 2쪽).
-   * 품명 줄이 본문이고 보조 줄은 덧붙임이라, 넘칠 때는 덧붙임을 먼저 접는다.
+   * 줄 높이를 줄여도 칸 안의 글자는 줄지 않는다 — 두 줄짜리 칸은 더 납작해지지 않아서,
+   * 줄이 좁아지면 표가 계속 길어진다(실측: 예전 규칙에서 14줄이면 2쪽이었다).
+   * 품명 줄이 본문이고 보조 줄은 덧붙임이라, 좁아질 때는 덧붙임을 먼저 접는다.
    */
-  const showSub = lines.length <= TRANSACTION_MIN_ROWS
+  const showSub = rowMM >= TRANSACTION_ROW_MM
   const supplySum = lines.reduce((s, l) => s + l.supply, 0)
   const taxSum = lines.reduce((s, l) => s + l.tax, 0)
 
@@ -136,7 +150,8 @@ export function TransactionPDFDoc({
 
         <Text style={S.h2}>공급 물품 내역</Text>
         <View style={S.table}>
-          <View style={S.thRow}>
+          {/* fixed — 표가 다음 쪽으로 이어지면 머리행도 따라간다. */}
+          <View style={S.thRow} fixed>
             <Text style={[S.cell, S.th, { width: COL.no }]}>No</Text>
             <Text style={[S.cell, S.th, { width: COL_NAME }]}>품 명</Text>
             <Text style={[S.cell, S.th, { width: COL.qty }]}>수량</Text>
@@ -178,45 +193,52 @@ export function TransactionPDFDoc({
             </View>
           ))}
 
-          {/* .sumrow — 합 계 */}
-          <View style={S.row}>
-            <View style={[S.cell, { width: COL.no + COL_NAME + COL.qty, alignItems: 'center' }]}>
-              <Text style={S.td}>합 계</Text>
+          {/* 합계 두 줄은 **한 덩어리**다 — 둘이 쪽을 사이에 두고 갈라지지 않게. */}
+          <View wrap={false}>
+            {/* .sumrow — 합 계 */}
+            <View style={S.row}>
+              <View style={[S.cell, { width: COL.no + COL_NAME + COL.qty, alignItems: 'center' }]}>
+                <Text style={S.td}>합 계</Text>
+              </View>
+              <View style={[S.cell, { width: COL.supply, alignItems: 'flex-end' }]}>
+                <Text style={S.td}>{numKR(supplySum)}</Text>
+              </View>
+              <View style={[S.cell, { width: COL.tax, alignItems: 'flex-end', borderRightWidth: 0 }]}>
+                <Text style={S.td}>{numKR(taxSum)}</Text>
+              </View>
             </View>
-            <View style={[S.cell, { width: COL.supply, alignItems: 'flex-end' }]}>
-              <Text style={S.td}>{numKR(supplySum)}</Text>
-            </View>
-            <View style={[S.cell, { width: COL.tax, alignItems: 'flex-end', borderRightWidth: 0 }]}>
-              <Text style={S.td}>{numKR(taxSum)}</Text>
-            </View>
-          </View>
-          {/* .totrow{border-top:1.5px solid #000;font-size:10.5pt} */}
-          <View style={{ flexDirection: 'row', borderTopWidth: W_BOX, borderTopColor: C_BLACK }}>
-            <View style={[S.cell, { width: COL.no + COL_NAME + COL.qty, alignItems: 'center' }]}>
-              <Text style={{ fontSize: S_TOTAL }}>총 합계 (부가세 포함)</Text>
-            </View>
-            <View style={[S.cell, { width: COL.supply + COL.tax, alignItems: 'flex-end', borderRightWidth: 0 }]}>
-              <Text style={{ fontSize: S_TOTAL }}>₩ {numKR(supplySum + taxSum)}</Text>
+            {/* .totrow{border-top:1.5px solid #000;font-size:10.5pt} */}
+            <View style={{ flexDirection: 'row', borderTopWidth: W_BOX, borderTopColor: C_BLACK }}>
+              <View style={[S.cell, { width: COL.no + COL_NAME + COL.qty, alignItems: 'center' }]}>
+                <Text style={{ fontSize: S_TOTAL }}>총 합계 (부가세 포함)</Text>
+              </View>
+              <View style={[S.cell, { width: COL.supply + COL.tax, alignItems: 'flex-end', borderRightWidth: 0 }]}>
+                <Text style={{ fontSize: S_TOTAL }}>₩ {numKR(supplySum + taxSum)}</Text>
+              </View>
             </View>
           </View>
         </View>
 
-        {/* 남는 세로 공간을 먹어 확인란·마감선을 바닥에 붙인다(.grow). */}
+        {/* 남는 세로 공간을 먹어 확인란·마감선을 바닥에 붙인다(.grow).
+            두 쪽이 되면 남는 공간이 없어 저절로 접힌다. */}
         <View style={{ flexGrow: 1 }} />
 
-        <View style={S.confirm}>
-          <Text style={{ fontSize: S_H2 }}>상기 물품의 거래를 실행하였음을 확인합니다.</Text>
-          <Text style={{ fontSize: S_BODY, marginTop: 3.5 * MM }}>{longDate(issuedDate)}</Text>
-          <Text style={{ fontSize: 11.5, marginTop: 3.5 * MM }}>
-            Accretech Korea Co., Ltd.  <Text style={{ fontSize: S_BODY }}>(인)</Text>
+        {/* 확인란·마감선·문서번호도 **한 덩어리**다 — 마감선만 홀로 넘어가지 않게. */}
+        <View wrap={false}>
+          <View style={S.confirm}>
+            <Text style={{ fontSize: S_H2 }}>상기 물품의 거래를 실행하였음을 확인합니다.</Text>
+            <Text style={{ fontSize: S_BODY, marginTop: 3.5 * MM }}>{longDate(issuedDate)}</Text>
+            <Text style={{ fontSize: 11.5, marginTop: 3.5 * MM }}>
+              Accretech Korea Co., Ltd.  <Text style={{ fontSize: S_BODY }}>(인)</Text>
+            </Text>
+          </View>
+
+          {/* 마감선 + 문서번호. 쪽 번호도 하단 연락처도 두지 않는다(양식 최종안). */}
+          <View style={{ borderBottomWidth: 2, borderBottomColor: C_BLACK, marginTop: 5 * MM }} />
+          <Text style={{ fontSize: S_DOC, paddingTop: 1 * MM }}>
+            문서번호 : {docNumber(quoteNumber, 'transaction')}
           </Text>
         </View>
-
-        {/* 마감선 + 문서번호. 쪽 번호도 하단 연락처도 두지 않는다(양식 최종안). */}
-        <View style={{ borderBottomWidth: 2, borderBottomColor: C_BLACK, marginTop: 5 * MM }} />
-        <Text style={{ fontSize: S_DOC, paddingTop: 1 * MM }}>
-          문서번호 : {docNumber(quoteNumber, 'transaction')}
-        </Text>
       </Page>
     </Document>
   )

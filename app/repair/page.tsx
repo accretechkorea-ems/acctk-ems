@@ -557,7 +557,7 @@ export default function RepairPage() {
         const m = infoModal
         setInfoModal(null)
         void openRepairDoc({
-          quoteId: m.quoteId, toast, regenerate: true,
+          quoteId: m.quoteId, toast,
           onEdit: () => setInfoModal({ ...m, fromDoc: true }),
         })
       } : undefined}

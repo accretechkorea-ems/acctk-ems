@@ -127,18 +127,53 @@ export function transactionLines(
 
 /** 표가 비어 보이지 않게 채우는 빈 줄 수(열 줄을 채운다). */
 export const TRANSACTION_MIN_ROWS = 10
-/** 열 줄일 때의 줄 높이(mm) — 양식 최종안 그대로. */
+/** 줄 높이의 **상한**(mm) — 양식 최종안의 열 줄짜리 표가 이 높이다. 더 키우지 않는다. */
 export const TRANSACTION_ROW_MM = 11.2
+/**
+ * 줄 높이의 **하한**(mm) — 9pt 글자 한 줄이 들어가는 높이다.
+ * 이 높이에서는 칸 글자와 안여백도 한 단 줄인다(transactionCellFont·transactionCellPadMM).
+ */
+export const TRANSACTION_ROW_MIN_MM = 6.5
+
+// ── 한 장에 담는 법 ─────────────────────────────────────────────────────────
+//   줄 높이를 고정값으로 두면 품목이 늘 때 표만 길어져 쪽이 넘어간다. 그래서
+//   **쪽에서 남는 높이를 줄 수로 나눈다**.
+//
+//   남은 높이 = A4 세로 297 − 위아래 여백 22 − 늘 있는 덩어리(머리·공급자 블록·
+//   「공급 물품 내역」 제목·표 머리행·합계·총 합계·확인란·마감선·문서번호)
+//
+//   늘 있는 덩어리의 높이는 **실측**이다. 줄 수를 고정하고 줄 높이를 이분법으로 올려
+//   2쪽이 되는 지점을 찾으면 품목 표 몫이 126.1mm 다(12줄 × 10.51mm). 거기서 주소가
+//   두 줄로 접힐 여유 한 줄(4.6mm)을 빼 **121.5mm** 를 쓴다 — 긴 주소 하나 때문에
+//   한 장 약속이 깨지지 않게. scripts/quote-docs-check.js 가 실제로 그려서 다시 본다.
+/** A4 세로(mm). */
+export const TRANSACTION_PAGE_MM = 297
+/** 위아래 여백(mm) — @page margin. */
+export const TRANSACTION_MARGIN_MM = 11
+/** 품목 표가 쓸 수 있는 높이(mm). */
+export const TRANSACTION_BODY_MM = 121.5
+/** 늘 있는 덩어리의 높이(mm) — 위 셋에서 따라 나온다. */
+export const TRANSACTION_FIXED_MM =
+  TRANSACTION_PAGE_MM - TRANSACTION_MARGIN_MM * 2 - TRANSACTION_BODY_MM
+
+/** 줄 높이 — 남은 높이 ÷ 줄 수. 상한(양식 높이)과 하한(9pt 한 줄) 사이로 자른다. */
+export function transactionRowHeight(rows: number): number {
+  if (rows <= 0) return TRANSACTION_ROW_MM
+  return Math.min(TRANSACTION_ROW_MM, Math.max(TRANSACTION_ROW_MIN_MM, TRANSACTION_BODY_MM / rows))
+}
+
+/** 한 장에 들어가는 **최대 줄 수** — 하한 높이로도 넘치면 2쪽이다. */
+export const TRANSACTION_MAX_ROWS = Math.floor(TRANSACTION_BODY_MM / TRANSACTION_ROW_MIN_MM)
+
+/** 이 줄 수가 한 장에 들어가는가. */
+export const transactionFitsOnePage = (rows: number): boolean => rows <= TRANSACTION_MAX_ROWS
 
 /**
- * 줄 높이 — 열 줄까지는 그대로, 넘치면 **줄여서 한 장에 담는다**.
- * 열한 줄째부터 (열 줄 × 높이)를 줄 수로 나눠 전체 높이를 지킨다. 너무 납작해지지 않게
- * 바닥을 둔다(5mm — 9.8pt 글자가 들어가는 최소 높이다).
+ * 칸 글줄 간격 — **1.2 로 못 박는다**(기본값은 1.5쯤이라 글자보다 칸이 훨씬 커진다).
+ * 9.8pt × 1.2 = 11.76pt(4.15mm), 위아래 안여백 1mm 씩을 더해 6.2mm —
+ * 그래야 하한 6.5mm 짜리 줄에 글자가 들어가고, 보조 줄까지 있는 두 줄 칸도 11.2mm 에 든다.
  */
-export function transactionRowHeight(rows: number): number {
-  if (rows <= TRANSACTION_MIN_ROWS) return TRANSACTION_ROW_MM
-  return Math.max(5, (TRANSACTION_ROW_MM * TRANSACTION_MIN_ROWS) / rows)
-}
+export const TRANSACTION_LINE_HEIGHT = 1.2
 
 // ════════════════════════════════════════════════════════════════════════════
 // 수리내역서

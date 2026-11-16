@@ -1257,7 +1257,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
               const m = repairDrawer
               setRepairDrawer(null)
               void openRepairDoc({
-                quoteId: m.quoteId, toast, regenerate: true,
+                quoteId: m.quoteId, toast,
                 onEdit: () => setRepairDrawer({ ...m, fromDoc: true }),
               })
             } : undefined}

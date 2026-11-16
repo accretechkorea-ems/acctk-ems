@@ -13,11 +13,17 @@
 //     공구   수리 정보 줄이 있으면 파랑. **누르는 곳이 상태에 따라 갈린다** —
 //            아직 안 적었으면 작성 모달, 적어 둔 것이 있으면 **수리내역서 PDF** 가 먼저
 //            열린다(그 뷰어의 「정보 수정」이 작성 모달로 보낸다 — lib/repairDocFlow.ts).
-//     영수증 거래명세서 PDF 가 버킷에 있으면 파랑. 없으면 눌렀을 때 만들고 연다.
+//     영수증 거래명세서 PDF 가 **한 번이라도 만들어졌으면** 파랑.
+//
+// ── 문서는 누를 때마다 다시 그린다 ─────────────────────────────────────────
+//   거래명세서·수리내역서는 버킷의 파일을 그대로 열지 않는다. 자료가 그 뒤에 바뀌었으면
+//   옛 문서가 열리기 때문이다 — 고객에게 나가는 서류라 그 여지를 두지 않는다. 그리는 데
+//   스무 초쯤 걸리므로 그동안 아이콘 자리에 **도는 고리**를 낸다.
+//   견적서는 다르다 — 확정 시점의 파일 그대로가 정본이다.
 
 import { useState } from 'react'
 import { DOC_LABEL } from '@/lib/quoteDocs'
-import { existingQuoteDoc, generateQuoteDoc } from '@/lib/quoteDocGenerate'
+import { generateQuoteDoc } from '@/lib/quoteDocGenerate'
 import { openPdf, shouldUseNewTab } from '@/lib/pdfViewer'
 import { REPAIR_INFO_LABEL, type RepairInfoState } from '@/lib/quoteRepairInfo'
 import { openRepairDoc } from '@/lib/repairDocFlow'
@@ -51,8 +57,21 @@ const btnStyle = (on: boolean, busy: boolean): React.CSSProperties => ({
   width: ICON + 6, height: ICON + 6, padding: 0, background: 'none', border: 'none',
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
   color: on ? BLUE : DIM, cursor: busy ? 'progress' : 'pointer', flexShrink: 0,
-  opacity: busy ? 0.5 : 1, transition: 'color 0.15s ease, opacity 0.15s ease',
+  opacity: 1, transition: 'color 0.15s ease',
 })
+
+/**
+ * 만드는 중 — 아이콘 자리에서 도는 고리(lucide loader-2).
+ * 아이콘을 흐리게만 하면 「눌리지 않는 단추」와 구별되지 않는다. 문서 한 장을 그리는 데
+ * 스무 초쯤 걸려서, 뭔가 돌고 있다는 표시가 없으면 한 번 더 누르게 된다.
+ */
+const Spinner = () => (
+  <svg width={ICON} height={ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    style={{ animation: 'qri-spin 0.8s linear infinite' }}>
+    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+  </svg>
+)
 
 export default function QuoteRowIcons({
   quoteId, hasInfo, state, hasTransaction, onOpenQuotePdf, onOpenInfo, toast, onTransactionMade,
@@ -88,21 +107,17 @@ export default function QuoteRowIcons({
     }
   }
 
-  /** 거래명세서 — 있으면 열고, 없으면 만들어서 연다(둘 다 같은 이름의 한 파일이다). */
+  /** 거래명세서 — **지금 자료로 다시 그려서** 연다(같은 이름의 한 파일을 덮어쓴다). */
   const openTransaction = async () => {
     if (busy) return
     const tab = shouldUseNewTab() ? window.open('', '_blank') : null
     setBusy(true)
     try {
-      // 이미 있으면 **그 파일을 그대로 연다** — 다시 그리는 데 20초가 걸린다.
-      const r = hasTransaction
-        ? await existingQuoteDoc(quoteId, 'transaction')
-        : await generateQuoteDoc(quoteId, 'transaction')
+      const r = await generateQuoteDoc(quoteId, 'transaction')
       if (!r.ok) { tab?.close(); toast.error(r.error); return }
-      if (!hasTransaction) {
-        toast.success(`${DOC_LABEL.transaction} ${r.name} 을 만들었습니다`)
-        onTransactionMade?.()
-      }
+      toast.success(`${DOC_LABEL.transaction} ${r.name} 을 만들었습니다`)
+      // 처음 만든 줄이면 아이콘 색이 그 자리에서 파랑으로 바뀐다.
+      if (!hasTransaction) onTransactionMade?.()
       openPdf({ url: r.url, name: r.name }, tab)
     } finally {
       setBusy(false)
@@ -111,6 +126,7 @@ export default function QuoteRowIcons({
 
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      <style>{'@keyframes qri-spin { to { transform: rotate(360deg); } }'}</style>
       {/* 견적서 — lucide file-text */}
       <button onClick={onOpenQuotePdf} aria-label="견적서 보기" title="견적서 보기" style={btnStyle(true, false)}>
         <svg width={ICON} height={ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -128,21 +144,25 @@ export default function QuoteRowIcons({
         title={hasInfo ? `수리내역서 보기 — 수리 정보 ${REPAIR_INFO_LABEL[state]}` : '수리 정보 작성'}
         disabled={docBusy}
         style={btnStyle(hasInfo, docBusy)}>
-        <svg width={ICON} height={ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-        </svg>
+        {docBusy ? <Spinner /> : (
+          <svg width={ICON} height={ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+          </svg>
+        )}
       </button>
 
       {/* 거래명세서 — lucide receipt */}
       <button onClick={() => void openTransaction()}
         aria-label="거래명세서" title={hasTransaction ? '거래명세서 보기' : '거래명세서 만들어 보기'}
         disabled={busy} style={btnStyle(hasTransaction, busy)}>
-        <svg width={ICON} height={ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z" />
-          <line x1="8" y1="8" x2="16" y2="8" />
-          <line x1="8" y1="12" x2="16" y2="12" />
-          <line x1="8" y1="16" x2="13" y2="16" />
-        </svg>
+        {busy ? <Spinner /> : (
+          <svg width={ICON} height={ICON} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z" />
+            <line x1="8" y1="8" x2="16" y2="8" />
+            <line x1="8" y1="12" x2="16" y2="12" />
+            <line x1="8" y1="16" x2="13" y2="16" />
+          </svg>
+        )}
       </button>
     </span>
   )
