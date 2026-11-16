@@ -42,7 +42,8 @@ export type UseQuoteDraftSyncArgs = {
   selectedEU: CustomerResult | null
   euQuery: string
   opportunityId: number | null
-  receiver: string
+  /** 고른 수신인 담당자. 초안에 그대로 담는다(글자가 아니라 id 다). */
+  recipientContactId: number | null
   /** 견적 날짜 'YYYY-MM-DD'. 초안에 함께 담는다. */
   quoteDate: string
   setQuoteDate: (v: string) => void
@@ -74,7 +75,9 @@ export type UseQuoteDraftSyncArgs = {
   setSelectedEU: React.Dispatch<React.SetStateAction<CustomerResult | null>>
   setEuQuery: React.Dispatch<React.SetStateAction<string>>
   resolveEuParent: (customerId: number | null) => void
-  setReceiver: React.Dispatch<React.SetStateAction<string>>
+  setRecipientContactId: React.Dispatch<React.SetStateAction<number | null>>
+  /** 옛 초안의 수신인 글자를 되살릴 자리(안내로만 쓴다). */
+  setLegacyRecipient: React.Dispatch<React.SetStateAction<string>>
   setRemarks: (v: string | null) => void
   setShowSignature: React.Dispatch<React.SetStateAction<boolean>>
   setTermsOpen: React.Dispatch<React.SetStateAction<boolean>>
@@ -89,13 +92,13 @@ export function useQuoteDraftSync({
   toast, rateRef, engineer, hasUrlPrefill,
   onBehalf, company, customerId, selectedCustomer, customerQuery, isDealer,
   euCustomerId, selectedEU, euQuery, opportunityId,
-  receiver, remarks, showSignature, termsOpen, terms, rows,
+  recipientContactId, remarks, showSignature, termsOpen, terms, rows,
   quoteDate, setQuoteDate,
   category, formKind, setCategory, setFormKind,
   debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks,
   setCompany, setCustomerId, setSelectedCustomer, setCustomerQuery, setIsDealer,
   setEuCustomerId, setSelectedEU, setEuQuery, resolveEuParent,
-  setReceiver, setRemarks, setShowSignature, setTermsOpen, setTerms, setRows,
+  setRecipientContactId, setLegacyRecipient, setRemarks, setShowSignature, setTermsOpen, setTerms, setRows,
   loadOpportunities, setOpportunityId, setOnBehalf,
 }: UseQuoteDraftSyncArgs) {
   // 임시저장 — 저장분이 있으면 이어쓸지 먼저 묻는다. 답하기 전에는 자동 저장을 시작하지 않는다
@@ -125,7 +128,10 @@ export function useQuoteDraftSync({
     setEuCustomerId(d.euCustomerId); setSelectedEU(d.selectedEU); setEuQuery(d.euQuery)
     // 회사 이름은 저장분에 담지 않는다(초안 형식을 바꾸지 않는다) — 되살릴 때 다시 구한다.
     resolveEuParent(d.euCustomerId)
-    setReceiver(d.receiver); setRemarks(d.remarks); setShowSignature(d.showSignature)
+    // 수신인 — 담당자 id 를 되살린다. 옛 초안에는 글자뿐이라 그것은 안내로만 띄운다.
+    setRecipientContactId(d.recipientContactId ?? null)
+    setLegacyRecipient(d.recipientContactId == null ? (d.receiver ?? '') : '')
+    setRemarks(d.remarks); setShowSignature(d.showSignature)
     // 견적 날짜 — 옛 초안에는 없다. 없거나 미래면 오늘로 떨어진다.
     setQuoteDate(safeQuoteDate(d.quoteDate))
     // 조건은 **선택 필드**다 — 옛 초안에는 없으므로 없으면 닫힌 기본 상태로 둔다.
@@ -168,7 +174,7 @@ export function useQuoteDraftSync({
       onBehalfId: onBehalf?.engineer_id ?? null,
       company, customerId, selectedCustomer, customerQuery, isDealer,
       euCustomerId, selectedEU, euQuery, opportunityId,
-      receiver, remarks, showSignature, termsOpen, terms, rows,
+      recipientContactId, receiver: '', remarks, showSignature, termsOpen, terms, rows,
       quoteDate,
       category, formKind,
     }

@@ -24,7 +24,7 @@ export async function POST(req: Request) {
 
   const { data: quote, error } = await sb
     .from('quotes')
-    .select('quote_id, quote_number, customer_id, dealer_id, opportunity_id, recipient, delivery_info, note, quote_type, engineer_id, created_by, terms, category, form_kind')
+    .select('quote_id, quote_number, customer_id, dealer_id, opportunity_id, recipient, recipient_contact_id, delivery_info, note, quote_type, engineer_id, created_by, terms, category, form_kind')
     .eq('quote_id', quoteId)
     .maybeSingle()
   if (error) {
@@ -63,6 +63,8 @@ export async function POST(req: Request) {
       dealer_id: quote.dealer_id,
       opportunity_id: quote.opportunity_id,
       recipient: quote.recipient,
+      // 수신인 담당자 — 2026-11-16 부터 저장한다. 그 전 견적은 null 이고 recipient 글자만 있다.
+      recipient_contact_id: quote.recipient_contact_id ?? null,
       delivery_info: quote.delivery_info,
       note: quote.note,
       quote_type: quote.quote_type,

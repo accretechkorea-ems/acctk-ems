@@ -34,6 +34,8 @@ export type DuplicatePayload = {
     quote_number: string
     customer_id: number | null; dealer_id: number | null; opportunity_id: number | null
     recipient: string | null; delivery_info: string | null; note: string | null; quote_type: string | null
+    /** 수신인 담당자(2026-11-16 부터). null 이면 그 전 견적이라 recipient 글자만 있다. */
+    recipient_contact_id?: number | null
     /** 조건 네 줄(quotes.terms). null 이면 모두 기본값이다. */
     terms: unknown
     /** 견적 분류(quotes.category). null 이면 미분류(개편 전 견적)다. */
@@ -84,7 +86,11 @@ export type UseQuotePrefillArgs = {
   setSelectedEU: React.Dispatch<React.SetStateAction<CustomerResult | null>>
   setEuQuery: React.Dispatch<React.SetStateAction<string>>
   resolveEuParent: (customerId: number | null) => void
-  setReceiver: React.Dispatch<React.SetStateAction<string>>
+  setRecipientContactId: React.Dispatch<React.SetStateAction<number | null>>
+  /** 옛 견적의 수신인 글자 — 고르는 자리에는 쓰지 않고 안내로만 보여 준다. */
+  setLegacyRecipient: React.Dispatch<React.SetStateAction<string>>
+  /** 담당자를 넣은 직후 고객사 effect 가 그것을 비우지 않게 한 번 막는 깃발. */
+  keepContactRef: React.MutableRefObject<boolean>
   setTermsOpen: React.Dispatch<React.SetStateAction<boolean>>
   setTerms: SetTerms
   setRemarks: (v: string | null) => void
@@ -105,7 +111,8 @@ export function useQuotePrefill({
   duplicateId, onBehalfId, repairId, prefillOpportunityId, engineer,
   setOnBehalf, setRows, setIsDealer, setCustomerId, setEuCustomerId,
   setSelectedCustomer, setCustomerQuery, setCompany, setSelectedEU, setEuQuery,
-  resolveEuParent, setReceiver, setTermsOpen, setTerms, setRemarks, setOperatingReason,
+  resolveEuParent, setRecipientContactId, setLegacyRecipient, keepContactRef,
+  setTermsOpen, setTerms, setRemarks, setOperatingReason,
   setCategory, setFormKind,
   loadOpportunities, setOpportunityId, handleCustomerSelect,
   setCustomerResults, setCustomerSearchOpen, setPrefillNotice,
@@ -213,7 +220,16 @@ export function useQuotePrefill({
       resolveEuParent(euId)
     }
 
-    setReceiver(quote.recipient ?? '')
+    // 수신인 — **담당자가 있으면 그 사람을 고른 상태로** 연다. 고객사도 함께 들어오므로
+    // 담당자 목록을 다시 읽는 effect 가 뒤따라 도는데, 그것이 선택을 비우지 않게 막아 둔다.
+    //
+    // 옛 견적에는 FK 가 없고 글자만 있다(저장된 158건 중 145건). 그 글자는 **새 견적으로
+    // 옮기지 않는다** — 누구인지 담당자 표에서 짚어 줘야 다음부터 이어지기 때문이다.
+    // 대신 「이전 수신인: …」으로 보여 주고 고르게 한다(components/quote/CustomerCard.tsx).
+    const dupContactId = quote.recipient_contact_id ?? null
+    if (dupContactId != null) keepContactRef.current = true
+    setRecipientContactId(dupContactId)
+    setLegacyRecipient(dupContactId == null ? (quote.recipient ?? '') : '')
     // 조건 네 줄 — 원본에 바꾼 값이 있으면 체크를 켜고 채운다. 없으면 **닫힌 기본 상태**다.
     // 옛 견적은 납기를 delivery_info 에만 담고 있다(납기 칸이 있던 시절) — 납품일정이
     // 기본값이면 그 값을 올린다(규칙·예외는 promoteLegacyDelivery 에 있다).

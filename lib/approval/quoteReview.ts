@@ -16,6 +16,7 @@ import { euDisplayName } from '@/lib/quoteEuName'
 import { CURRENCY_SYMBOL, toCurrency } from '@/lib/quoteCurrency'
 import { subLinesOf } from '@/lib/quoteSubLines'
 import { isTitleRowKind } from '@/lib/quoteRowKinds'
+import { displayRecipient } from '@/lib/quoteRecipient'
 import { changedTerms, defaultTermsFor } from '@/lib/quoteTerms'
 
 /** 숫자로 읽는다. null·빈 값·숫자가 아닌 값은 null — 0 으로 바꾸지 않는다(「없음」과 0 은 다르다). */
@@ -42,6 +43,8 @@ export type RawQuote = {
   status: string | null
   quote_type: string | null
   recipient: string | null
+  /** 수신인 담당자(2026-11-16 부터). 있으면 이 사람이 정본이다 — lib/quoteRecipient.ts. */
+  recipient_contact?: { name: string | null; position: string | null } | null
   note: string | null
   delivery_info: string | null
   total_supply: unknown
@@ -263,7 +266,9 @@ export function buildQuoteReview(input: ReviewInput): QuoteReview {
       dealer: deal ? deal.shown : null,
       dealerSite: deal ? deal.site : null,
     },
-    recipient: q.recipient,
+    // 수신인 — 담당자가 연결돼 있으면 그 사람으로 짓고, 옛 견적은 적혀 있던 글자 그대로.
+    // 화면·견적서와 **같은 함수**를 쓴다(lib/quoteRecipient.ts).
+    recipient: displayRecipient(q.recipient_contact, q.recipient) || null,
     engineer: input.engineer,
     createdBy: input.createdBy,
     delivery: q.delivery_info,

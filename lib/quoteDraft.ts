@@ -31,6 +31,12 @@ export type QuoteDraft = {
   selectedEU: CustomerResult | null
   euQuery: string
   opportunityId: number | null
+  /** 고른 수신인 담당자(quotes.recipient_contact_id). 옛 초안에는 없다 → null 로 떨어진다. */
+  recipientContactId: number | null
+  /**
+   * 옛 초안의 **수신인 글자** — 더 이상 저장하지 않는다(화면에 칸이 없다. 담당자를 고른다).
+   * 읽을 때만 쓴다: 값이 있으면 「이전 수신인: …」 안내로 보여 주고 사람이 담당자를 고른다.
+   */
   receiver: string
   /**
    * 옛 초안의 **납기** — 더 이상 저장하지 않는다(화면에 칸이 없다). 읽을 때만 쓴다:
@@ -73,6 +79,7 @@ export type QuoteDraft = {
  */
 export function isDraftMeaningful(d: Omit<QuoteDraft, 'v' | 'savedAt'>): boolean {
   if (d.company.trim() || d.customerQuery.trim() || d.receiver.trim()) return true
+  if (d.recipientContactId != null) return true
   if (d.customerId != null || d.euCustomerId != null || d.opportunityId != null) return true
   if (d.showSignature || d.isDealer) return true
   // 조건을 손댔으면 「작성 중이던 내용」이다.
@@ -112,6 +119,9 @@ export function loadDraft(engineerId: number): QuoteDraft | null {
         // 2026-11-02 에 더한 칸 — 옛 초안에는 없다. 없으면 「가격표 값을 쓴다」(null).
         cost_jpy_override: typeof r.cost_jpy_override === 'number' ? r.cost_jpy_override : null,
       })),
+      // 2026-11-16 에 더한 칸 — 그 전 초안에는 수신인이 글자(receiver)로만 들어 있다.
+      recipientContactId: typeof d.recipientContactId === 'number' ? d.recipientContactId : null,
+      receiver: typeof d.receiver === 'string' ? d.receiver : '',
     }
   } catch { clearDraft(engineerId); return null }
 }

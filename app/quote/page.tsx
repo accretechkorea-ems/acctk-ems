@@ -18,6 +18,8 @@ import AccessGate from '@/components/common/AccessGate'
 import type { Engineer, QuoteRow, RateMeta } from './types'
 import { calcRow, calcTotals, createTitleRow, rowsAreEmpty } from './calc'
 import { itemNumbers } from '@/lib/quoteRowKinds'
+import { displayRecipient } from '@/lib/quoteRecipient'
+import type { Contact } from '@/components/customer/types'
 import { GENERAL20_SUBTITLE, isGeneral20Form } from '@/lib/quoteForms'
 import { useDebounce } from './useDebounce'
 import ProfitPanel from './ProfitPanel'
@@ -97,7 +99,7 @@ function QuotePageInner() {
   const hasUrlPrefill = repairId != null || onBehalfId != null || duplicateId != null || prefillOpportunityId != null
   const { loading: guardLoading, authorized } = usePageGuard()
   const toast = useToast()
-  const { errors, setErrors, clearError, validate } = useFieldErrors<'category' | 'form' | 'company' | 'eu' | 'items' | 'expenses'>()
+  const { errors, setErrors, clearError, validate } = useFieldErrors<'category' | 'form' | 'company' | 'eu' | 'recipient' | 'items' | 'expenses'>()
   // 줄별 분류를 끌 때 확인창을 띄운다(alert·confirm 대신 공용 다이얼로그).
   const [isClient, setIsClient] = useState(false)
 
@@ -148,7 +150,27 @@ function QuotePageInner() {
   const savedReqRef = useRef('')
   const [rateLoading, setRateLoading] = useState(false)
 
-  const [receiver, setReceiver] = useState('')
+  /**
+   * 수신인 — **고객사 담당자 한 사람**이다(quotes.recipient_contact_id).
+   *
+   * 2026-11-16 까지는 자유 입력 글자였다. 같은 사람이 「김강민 선임님」·「김강민 선임」으로
+   * 갈려 적히고, 그 사람에게 보낸 견적을 모아 볼 수도 없었다(조사: 저장된 158건 중 145건이
+   * 그 꼴). 이제는 contacts 의 줄을 가리키고, 문서에 찍는 글자는 그 줄에서 짓는다
+   * (lib/quoteRecipient.ts).
+   */
+  const [recipientContactId, setRecipientContactId] = useState<number | null>(null)
+  /** 고른 고객사의 담당자 목록 — 고객사가 바뀌면 다시 읽는다(삭제된 줄은 뺀다). */
+  const [contacts, setContacts] = useState<Contact[]>([])
+  const [contactsLoading, setContactsLoading] = useState(false)
+  /**
+   * 옛 견적의 수신인 글자. 다시쓰기·복제로 **FK 가 없는 견적**을 열었을 때만 찬다.
+   * 고르는 자리에는 쓰지 않고 「이전 수신인: …」 안내로만 보여 준다.
+   */
+  const [legacyRecipient, setLegacyRecipient] = useState('')
+  /** 고른 담당자 한 줄. 목록이 바뀌어 사라졌으면 null 이다. */
+  const selectedContact = contacts.find(c => c.contact_id === recipientContactId) ?? null
+  /** 문서에 찍히는 수신인 — 담당자가 있으면 그 이름, 없으면 옛 글자(lib/quoteRecipient.ts). */
+  const receiver = displayRecipient(selectedContact, legacyRecipient)
   // 비고 — **손댄 글자만** 상태로 들고, 손대지 않았으면 양식의 기본 문구를 그대로 보여 준다.
   // null = 아직 손대지 않았다. 이렇게 두면 양식을 바꿀 때 기본 문구가 **저절로** 따라오고,
   // effect 로 상태를 덮어쓰지 않아도 된다(덮어쓰면 사람이 적던 글자를 지울 위험이 생긴다).
@@ -256,6 +278,36 @@ function QuotePageInner() {
     ...Object.values(rowsCtx.searchResults).flat().map(it => ({ priceListId: it.id, partCode: it.item_code })),
   ], [rows, rowsCtx.searchResults])
   const recentSale = useRecentSales(supabase, customerId, saleKeys)
+
+  /**
+   * 담당자 목록 — 고른 고객사의 것만 읽는다.
+   *
+   * 고객사를 바꾸면 **고른 담당자를 비운다** — 다른 회사 사람이 수신인으로 남는 것이
+   * 가장 나쁜 결과다(그 이름이 그대로 견적서에 찍혀 나간다). 다시쓰기로 들어온 선택은
+   * 고객사가 함께 들어오므로 이 자리에서 지워지지 않는다(아래 keepRef 참고).
+   */
+  const contactReqRef = useRef(0)
+  /** 다시쓰기가 막 넣어 준 담당자 — 그 한 번은 비우지 않는다. */
+  const keepContactRef = useRef(false)
+  useEffect(() => {
+    const req = ++contactReqRef.current
+    if (!keepContactRef.current) setRecipientContactId(null)
+    keepContactRef.current = false
+    if (customerId == null) { setContacts([]); return }
+    setContactsLoading(true)
+    supabase.from('contacts')
+      .select('contact_id, customer_id, name, department, position, phone, email')
+      .is('deleted_at', null).eq('customer_id', customerId)
+      .order('contact_id', { ascending: true })
+      .then(({ data }) => {
+        // 사이에 고객사를 또 바꿨으면 늦게 온 답은 버린다.
+        if (contactReqRef.current !== req) return
+        setContacts((data as Contact[]) ?? [])
+        setContactsLoading(false)
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId])
+
 
   // 영업이익 하한 미만일 때 적는 사유 — quotes.note 끝에 한 줄로 저장된다.
   // **PDF 비고에는 넣지 않는다**(lib/quoteOperatingNote.ts).
@@ -439,6 +491,9 @@ function QuotePageInner() {
       ? null
       : (isDealer ? '등록된 대리점을 검색해서 선택해주세요' : '등록된 고객사를 검색해서 선택해주세요'),
     eu: isDealer && !euCustomerId ? '최종 사용 업체를 검색해서 선택해주세요' : null,
+    // 수신인 — **옛 견적을 다시 쓸 때도 고르게 한다.** 그 글자가 누구인지 담당자 표에서
+    // 짚어 주지 않으면 새 견적에도 글자만 남아, 옮기려던 일이 한 건씩 늘어날 뿐이다.
+    recipient: recipientContactId == null ? '수신인 담당자를 선택해주세요' : null,
     items: rows.some(r => r.supply_price > 0) ? null : '품목 금액을 입력해주세요',
     expenses: expenses.some(e => e.item_name.trim() && e.amount <= 0)
       ? '단가 · 인원 · 일수를 입력해주세요' : null,
@@ -453,7 +508,7 @@ function QuotePageInner() {
   } = useQuoteSubmit({
     supabase, toast, router, engineer, initials, onBehalf,
     dateStr, dateDisplay, quoteNo, engineerName, engineerTel,
-    company, receiver, finalRemarksForPDF, operatingReason, showSignature,
+    company, receiver, recipientContactId, finalRemarksForPDF, operatingReason, showSignature,
     category, formKind, setCategory, setFormKind,
     rows, expenses, rates,
     customerId, euCustomerId, isDealer, opportunityId,
@@ -465,7 +520,7 @@ function QuotePageInner() {
     setSelectedCustomer, setPrefillNotice, setIsDealer,
     setEuCustomerId, setEuQuery, setEuResults, setEuSearchOpen, setSelectedEU, resolveEuParent,
     setOpportunities, setOpportunityId,
-    setReceiver, setRemarks, setRemarksOpen, setShowSignature, setQuoteDate,
+    setRecipientContactId, setLegacyRecipient, setRemarks, setRemarksOpen, setShowSignature, setQuoteDate,
     setRows, setSearchQuery, setSearchResults, setSearchOpen,
     setEditingProfitRate, setProfitRateInput, setOnBehalf,
   })
@@ -496,13 +551,13 @@ function QuotePageInner() {
     toast, rateRef, engineer, hasUrlPrefill,
     onBehalf, company, customerId, selectedCustomer, customerQuery, isDealer,
     euCustomerId, selectedEU, euQuery, opportunityId,
-    receiver, remarks, showSignature, termsOpen, terms, rows,
+    recipientContactId, remarks, showSignature, termsOpen, terms, rows,
     quoteDate, setQuoteDate,
     category, formKind, setCategory, setFormKind,
     debouncedRows, debouncedCompany, debouncedReceiver, debouncedFinalRemarks,
     setCompany, setCustomerId, setSelectedCustomer, setCustomerQuery, setIsDealer,
     setEuCustomerId, setSelectedEU, setEuQuery, resolveEuParent,
-    setReceiver, setRemarks, setShowSignature, setTermsOpen, setTerms, setRows,
+    setRecipientContactId, setLegacyRecipient, setRemarks, setShowSignature, setTermsOpen, setTerms, setRows,
     loadOpportunities, setOpportunityId, setOnBehalf,
   })
 
@@ -513,7 +568,8 @@ function QuotePageInner() {
     duplicateId, onBehalfId, repairId, prefillOpportunityId, engineer,
     setOnBehalf, setRows, setIsDealer, setCustomerId, setEuCustomerId,
     setSelectedCustomer, setCustomerQuery, setCompany, setSelectedEU, setEuQuery,
-    resolveEuParent, setReceiver, setTermsOpen, setTerms, setRemarks, setOperatingReason,
+    resolveEuParent, setRecipientContactId, setLegacyRecipient, keepContactRef,
+    setTermsOpen, setTerms, setRemarks, setOperatingReason,
     setCategory, setFormKind,
     loadOpportunities, setOpportunityId, handleCustomerSelect,
     setCustomerResults, setCustomerSearchOpen, setPrefillNotice,
@@ -855,8 +911,16 @@ function QuotePageInner() {
               handleEUSearch, handleEUSelect, handleEUClear,
             }}
             opportunity={{ loadOpportunities, opportunities, opportunityId, setOpportunityId }}
+            recipient={{
+              contactId: recipientContactId,
+              setContactId: v => { setRecipientContactId(v); clearError('recipient') },
+              contacts,
+              loading: contactsLoading,
+              customerId,
+              legacyText: legacyRecipient,
+            }}
             doc={{
-              receiver, setReceiver,
+
               remarks, setRemarks, remarksOpen, setRemarksOpen, defaultRemarks,
               showSignature, setShowSignature, termsOpen, setTermsOpen, terms, setTerms,
             }}

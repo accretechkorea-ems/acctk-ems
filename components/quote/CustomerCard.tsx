@@ -14,6 +14,8 @@ import { FieldError, errBorder } from '@/components/common/fieldErrors'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { isClosed } from '@/components/customer/opportunity'
 import { euDisplayName } from '@/lib/quoteEuName'
+import { contactOptionLabel } from '@/lib/quoteRecipient'
+import type { Contact } from '@/components/customer/types'
 import { Z } from '@/lib/zIndex'
 import { type SetTerms, type Terms, TERM_LABELS, defaultTermsFor, termKeysFor } from '@/lib/quoteTerms'
 import RemarksEditor from '@/components/quote/RemarksEditor'
@@ -76,10 +78,26 @@ export type CustomerCardOpportunity = {
   setOpportunityId: (v: number | null) => void
 }
 
-/** 문서에 찍히는 나머지 입력 — 수신인·비고·서명란·조건. */
+/**
+ * 수신인 — **고객사 담당자 한 사람**을 고른다(quotes.recipient_contact_id).
+ *
+ * 글자를 치지 않는다. 담당자는 고객사 상세에서 관리하는 표(contacts)가 정본이고, 견적은
+ * 그 줄을 가리키기만 한다 — 그래야 같은 사람이 「김강민 선임님」·「김강민 선임」으로 갈려
+ * 적히지 않는다(lib/quoteRecipient.ts 머리말).
+ */
+export type CustomerCardRecipient = {
+  contactId: number | null
+  setContactId: (v: number | null) => void
+  contacts: Contact[]
+  loading: boolean
+  /** 고객사를 아직 안 골랐으면 고를 거리가 없다 — 칸을 잠근다. */
+  customerId: number | null
+  /** 옛 견적을 다시 쓸 때만 찬다 — 「이전 수신인: …」 안내로만 쓴다. */
+  legacyText: string
+}
+
+/** 문서에 찍히는 나머지 입력 — 비고·서명란·조건. */
 export type CustomerCardDoc = {
-  receiver: string
-  setReceiver: (v: string) => void
   remarks: string
   setRemarks: (v: string) => void
   remarksOpen: boolean
@@ -115,16 +133,17 @@ export type CustomerCardCategory = {
 export type CustomerCardProps = {
   /** 분류·양식을 아직 고르지 않았는가 — 그렇다면 사명 아래를 전부 잠근다. */
   locked: boolean
-  errors: { category?: string; form?: string; company?: string; eu?: string; items?: string; expenses?: string }
-  clearError: (key: 'category' | 'form' | 'company' | 'eu' | 'items' | 'expenses') => void
+  errors: { category?: string; form?: string; company?: string; eu?: string; recipient?: string; items?: string; expenses?: string }
+  clearError: (key: 'category' | 'form' | 'company' | 'eu' | 'recipient' | 'items' | 'expenses') => void
   category: CustomerCardCategory
   customer: CustomerCardCustomer
   eu: CustomerCardEu
   opportunity: CustomerCardOpportunity
+  recipient: CustomerCardRecipient
   doc: CustomerCardDoc
 }
 
-export default function CustomerCard({ locked, errors, clearError, category, customer, eu, opportunity, doc }: CustomerCardProps) {
+export default function CustomerCard({ locked, errors, clearError, category, customer, eu, opportunity, recipient, doc }: CustomerCardProps) {
   // 묶음을 풀어 **종전과 같은 이름**으로 둔다 — 아래 JSX 는 한 줄도 바뀌지 않았다.
   const {
     value: categoryValue, setValue: setCategoryValue,
@@ -144,7 +163,11 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
   } = eu
   const { loadOpportunities, opportunities, opportunityId, setOpportunityId } = opportunity
   const {
-    receiver, setReceiver,
+    contactId: recipientContactId, setContactId: setRecipientContactId,
+    contacts, loading: contactsLoading,
+    customerId: recipientCustomerId, legacyText: legacyRecipient,
+  } = recipient
+  const {
     remarks, setRemarks, remarksOpen, setRemarksOpen, defaultRemarks,
     showSignature, setShowSignature, termsOpen, setTermsOpen, terms, setTerms,
   } = doc
@@ -391,14 +414,49 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
       </div>
     )}
 
-    {/* 수신인 — 한 줄.
+    {/* 수신인 — **고객사 담당자에서 고른다.** 직접 치지 않는다(위 CustomerCardRecipient).
         납기 칸은 없앴다. 납기는 조건 1번 「납품일정」 한 곳에서 적고, 그 값이
         quotes.delivery_info 로 저장된다(발주·결재 검토표가 읽던 칸 그대로다). */}
     <div style={{ marginBottom: 8 }}>
-      <div className="q-box">
+      <div className="q-box" style={{ border: errors.recipient ? errBorder : undefined }}>
         <span className="q-box-label">수신인</span>
-        <input className="q-box-field" value={receiver} onChange={e => setReceiver(e.target.value)} placeholder="예: 홍길동 부장님" />
+        <select
+          className="q-box-field"
+          value={recipientContactId ?? ''}
+          disabled={recipientCustomerId == null || contacts.length === 0}
+          onChange={e => setRecipientContactId(e.target.value === '' ? null : Number(e.target.value))}
+          style={{ cursor: recipientCustomerId == null || contacts.length === 0 ? 'not-allowed' : 'pointer', color: recipientContactId == null ? '#9ca3af' : '#111827' }}
+        >
+          <option value="">
+            {recipientCustomerId == null ? '고객사를 먼저 선택하세요'
+              : contactsLoading ? '담당자 불러오는 중…'
+              : contacts.length === 0 ? '등록된 담당자가 없습니다'
+              : '담당자 선택'}
+          </option>
+          {contacts.map(c => (
+            <option key={c.contact_id} value={c.contact_id}>{contactOptionLabel(c)}</option>
+          ))}
+        </select>
       </div>
+      <FieldError message={errors.recipient} />
+      {/* 담당자가 0명 — 고를 거리가 없다. 어디서 등록하는지까지 알려 준다(새 탭으로 연다,
+          쓰던 견적을 두고 떠나지 않게). */}
+      {recipientCustomerId != null && !contactsLoading && contacts.length === 0 && (
+        <div style={{ marginTop: 4, marginLeft: 10, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, color: '#9ca3af' }}>고객사 상세에서 담당자를 먼저 등록하세요</span>
+          <a href={`/customer/${recipientCustomerId}`} target="_blank" rel="noopener noreferrer"
+            style={{ fontSize: 11, color: '#234ea2', fontWeight: 600, textDecoration: 'none' }}>
+            고객사 상세 열기 →
+          </a>
+        </div>
+      )}
+      {/* 옛 견적을 다시 쓰는 중 — 그 견적에는 담당자가 아니라 글자만 있었다.
+          누구였는지 보여 주고 고르게 한다(그 글자는 새 견적으로 옮기지 않는다). */}
+      {legacyRecipient.trim() !== '' && recipientContactId == null && (
+        <div style={{ marginTop: 4, marginLeft: 10, fontSize: 11, color: '#9ca3af' }}>
+          이전 수신인: {legacyRecipient.trim()} — 담당자를 선택하세요
+        </div>
+      )}
     </div>
 
     <RemarksEditor

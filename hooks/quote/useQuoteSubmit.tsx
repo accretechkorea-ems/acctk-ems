@@ -56,7 +56,10 @@ export type UseQuoteSubmitArgs = {
   engineerTel: string
 
   company: string
+  /** 문서에 찍히는 수신인 글자 — 담당자에서 지은 값이다(lib/quoteRecipient.ts). */
   receiver: string
+  /** 고른 수신인 담당자(quotes.recipient_contact_id). 확정 검증이 null 을 막는다. */
+  recipientContactId: number | null
   finalRemarksForPDF: string
   /** 영업이익 하한 미만 사유. note 끝에 한 줄로 붙는다(PDF 비고에는 없다). */
   operatingReason: string
@@ -115,7 +118,8 @@ export type UseQuoteSubmitArgs = {
   resolveEuParent: (customerId: number | null) => void
   setOpportunities: React.Dispatch<React.SetStateAction<SalesOpportunity[]>>
   setOpportunityId: React.Dispatch<React.SetStateAction<number | null>>
-  setReceiver: React.Dispatch<React.SetStateAction<string>>
+  setRecipientContactId: React.Dispatch<React.SetStateAction<number | null>>
+  setLegacyRecipient: React.Dispatch<React.SetStateAction<string>>
   /** null = 손댄 글자를 버린다(양식의 기본 문구로 돌아간다). */
   setRemarks: (v: string | null) => void
   /** 견적 날짜를 오늘로 되돌린다(확정 뒤 초기화). */
@@ -155,7 +159,7 @@ function isNameTakenError(err: unknown): boolean {
 export function useQuoteSubmit({
   supabase, toast, router, engineer, initials, onBehalf,
   dateStr, dateDisplay, quoteNo, engineerName, engineerTel,
-  company, receiver, finalRemarksForPDF, operatingReason, showSignature,
+  company, receiver, recipientContactId, finalRemarksForPDF, operatingReason, showSignature,
   category, formKind, setCategory, setFormKind,
   rows, expenses, rates,
   customerId, euCustomerId, isDealer, opportunityId,
@@ -167,7 +171,7 @@ export function useQuoteSubmit({
   setSelectedCustomer, setPrefillNotice, setIsDealer,
   setEuCustomerId, setEuQuery, setEuResults, setEuSearchOpen, setSelectedEU, resolveEuParent,
   setOpportunities, setOpportunityId,
-  setReceiver, setRemarks, setRemarksOpen, setShowSignature, setQuoteDate,
+  setRecipientContactId, setLegacyRecipient, setRemarks, setRemarksOpen, setShowSignature, setQuoteDate,
   setRows, setSearchQuery, setSearchResults, setSearchOpen,
   setEditingProfitRate, setProfitRateInput, setOnBehalf,
 }: UseQuoteSubmitArgs) {
@@ -307,7 +311,8 @@ export function useQuoteSubmit({
     resolveEuParent(null)
     setOpportunities([]); setOpportunityId(null)
     // 비고는 **손댄 글자를 버린다**(null) — 그러면 다음 견적의 양식에 맞는 기본 문구가 보인다.
-    setReceiver(''); setRemarks(null); setRemarksOpen(false); setShowSignature(false)
+    setRecipientContactId(null); setLegacyRecipient('')
+    setRemarks(null); setRemarksOpen(false); setShowSignature(false)
     // 견적 날짜도 오늘로 되돌린다 — 지난 날짜로 한 건 쓴 뒤 다음 건이 그 날짜로 이어지지 않게.
     setQuoteDate(todayKST())
     setRows([createRow()])
@@ -452,6 +457,14 @@ export function useQuoteSubmit({
           delivery_info: termsResult.ok ? termsResult.terms.delivery_schedule : DEFAULT_TERMS.delivery_schedule,
           // 실적 귀속자. 대필이 아니면 작성자와 같다(대필 자격은 함수가 다시 본다).
           engineer_id: onBehalf ? onBehalf.engineer_id : engineer.engineer_id,
+          // 수신인 — 두 칸에 나눠 담는다.
+          //   recipient_contact_id  **정본.** 어느 담당자인가(아래 4번에서 채운다).
+          //   recipient             그때 문서에 찍힌 글자(「김소희 과장님」). 스냅샷이다.
+          //
+          // 글자를 함께 남기는 까닭: 이 칸을 읽는 곳이 셋 더 있다(결재 검토표·내부 엑셀·
+          // /sales). 비워 두면 그 셋이 한꺼번에 빈칸이 되고, 담당자 이름이 나중에 바뀌면
+          // **그때 보낸 문서와 다른 이름**이 검토표에 뜬다. 품번·품명을 줄에 스냅샷으로
+          // 남기는 것과 같은 규칙이다(quote_items.part_code 주석).
           recipient: receiver,
           // note 에는 **사유 한 줄이 더** 붙는다. PDF 비고(finalRemarksForPDF)에는 없다 —
           // 사유는 내부 판단 기록이라 고객 견적서에 나가지 않는다.
@@ -481,6 +494,25 @@ export function useQuoteSubmit({
       savedQuoteId = Number(saved.quote_id)
       issuedNo = saved.quote_number
       issuedSeq = saved.seq
+
+      /**
+       * 수신인 담당자(recipient_contact_id)를 채운다 — **저장 직후 한 번 더 쓴다.**
+       *
+       * create_quote 가 quotes 에 넣는 칸은 **목록에 적힌 것뿐**이고 이 칸은 거기 없다.
+       * 함수를 다시 만들어 칸을 더하는 길도 있었지만 그러지 않았다: 지금 DB 에 사는
+       * create_quote 는 저장소의 어느 SQL 파일보다 **새것**이다(quote_items 의 model_name ·
+       * currency 가 실제로 저장되는데 그 둘을 넣는 파일이 없다 — 2026-11-16 확인). 파일을
+       * 바탕으로 함수를 다시 만들면 그 두 칸이 조용히 사라진다.
+       *
+       * 그래서 pdf_url 과 **같은 방식**으로 뒤에서 채운다(아래 handleDownloadPDF 의 update).
+       * 실패해도 견적은 이미 저장됐고, recipient 글자 스냅샷이 남아 문서·검토표·엑셀은
+       * 제 이름을 보여 준다 — 끊기는 것은 「그 담당자에게 보낸 견적」으로 거슬러 가는 길뿐이다.
+       */
+      if (recipientContactId != null) {
+        const { error: rcErr } = await supabase
+          .from('quotes').update({ recipient_contact_id: recipientContactId }).eq('quote_id', savedQuoteId)
+        if (rcErr) console.error('[quote] 수신인 담당자 연결 실패', { quoteId: savedQuoteId, recipientContactId, error: rcErr })
+      }
 
       // 저장이 전부 끝난 뒤에 지운다. 실패하면 아무것도 저장되지 않으므로 초안을 남겨 이어 쓰게 한다.
       clearDraft(engineer.engineer_id)

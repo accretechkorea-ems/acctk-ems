@@ -137,6 +137,7 @@ type DocRef = DocAccessRef
 /** 검토표가 읽는 칸. 저장값을 그대로 돌려준다 — 다시 계산하지 않는다. */
 const REVIEW_QUOTE_SELECT = `
   quote_id, quote_number, quote_date, status, quote_type, recipient, note, delivery_info,
+  recipient_contact:recipient_contact_id ( name, position ),
   total_supply, total_tax, total_amount, total_cost, total_profit, profit_rate,
   customer_id, dealer_id, engineer_id, created_by, terms, form_kind
 `
