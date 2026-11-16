@@ -148,6 +148,9 @@ select currency, count(*) from public.quote_items group by 1 order by 2 desc;
 | `db/quote_user_defaults_rls.sql` | 2026-10-28 | Kevin | 정책 3개(select·insert·update, 전부 본인 email 행만). 재실행에 안전하다(drop policy if exists). **확인 방법**: `select policyname, cmd from pg_policies where tablename = 'quote_user_defaults'` 가 3행이면 됐다. 화면에서는 견적 확정 → 새 견적 → 같은 분류에서 「내 설정 불러옴」이 뜬다 |
 | `db/devices_status_grant.sql` | **미적용** | — | 장비 폐기 처리용 열 권한(status·disposed_at). **devices 가 열 단위 GRANT 표일 때만 돌린다** — 파일 [0단계] 조회로 가른다. 2026-11-02 확인: 두 칸 **읽기는 이미 된다**(1,450줄 전부 `사용중`). 쓰기는 돌려 보지 않으면 알 수 없어 확인하지 않았다 — 화면에서 「폐기 처리」가 `42501` 로 막히면 이 파일을 돌린다. 재실행 안전 |
 | `db/price_list_currency_schema.sql` | 2026-11-03 | Kevin | **다통화 1단계.** `price_list.currency text not null default 'JPY'`. 같은 날 Kevin 이 `exchange_rate.currency` · `quote_items.currency` 도 손으로 더했다(파일 없음 — 위 「파일 없이 더한 칸」 참고). 2026-11-03 읽기로 확인: 세 표 모두 칸이 있고 **기존 줄은 전부 `JPY`** 다. 재실행 안전(`add column if not exists`) |
+| `db/quote_recipient_contact_schema.sql` | 2026-11-16 | 본인(사용자) | **견적 수신인 = 담당자.** `quotes.recipient_contact_id` (bigint → contacts) + 부분 인덱스. 2026-11-16 왕복 실측으로 확인: 담당자를 골라 확정한 견적에 FK 1477 과 글자 스냅샷 「강동우 과장님」이 함께 박혔고 다시쓰기에서 그 담당자가 선택된 채로 열렸다. 재실행 안전(`add column if not exists`). ⚠ 파일의 `comment on column quotes.recipient` 문구는 적용 뒤 한 번 고쳤다(칸·제약은 그대로) |
+| `db/quote_repair_info_schema.sql` | 2026-11-16 | 본인(사용자) | **견적 수리 건 정보.** 표 2개(quote_repair_info·quote_repair_photos) + RLS 8개. 2026-11-16 확인: 두 표 모두 조회된다. **버킷 `quote-repair-photos` 는 아직 없다** — 그 부분만 `db/quote_repair_photos_bucket.sql` 로 떼어 두었다. ⚠ 재실행 금지(create policy) |
+| `db/quote_repair_photos_bucket.sql` | **미적용** | — | 사진 버킷과 정책 4개. 버킷은 대시보드(또는 파일 안의 insert)로 먼저 만들고 정책을 돌린다. 2026-11-16 읽기로 버킷이 없음을 확인했다 |
 
 ---
 
