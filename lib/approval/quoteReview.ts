@@ -15,6 +15,7 @@
 import { euDisplayName } from '@/lib/quoteEuName'
 import { CURRENCY_SYMBOL, toCurrency } from '@/lib/quoteCurrency'
 import { subLinesOf } from '@/lib/quoteSubLines'
+import { isTitleRowKind } from '@/lib/quoteRowKinds'
 import { changedTerms, defaultTermsFor } from '@/lib/quoteTerms'
 
 /** 숫자로 읽는다. null·빈 값·숫자가 아닌 값은 null — 0 으로 바꾸지 않는다(「없음」과 0 은 다르다). */
@@ -274,6 +275,8 @@ export function buildQuoteReview(input: ReviewInput): QuoteReview {
     itemsOk: input.itemsOk !== false,
     expensesOk: input.expensesOk !== false,
     items: [...input.items]
+      // 제목줄은 금액 없는 글자 줄이라 검토표 품목 목록에서 뺀다(합계와 줄 수가 어긋나지 않게).
+      .filter(it => !isTitleRowKind(it.row_kind))
       // 화면·엑셀과 같은 순서(item_id)다 — 임베딩된 행은 순서가 보장되지 않는다.
       .sort((a, b) => a.item_id - b.item_id)
       .map(it => ({

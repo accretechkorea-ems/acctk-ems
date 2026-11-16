@@ -106,14 +106,19 @@ const resultNum: React.CSSProperties = { marginLeft: 2, fontSize: 13, fontWeight
 // 품목 행 카드 1개(일반 품목 / 서비스비 공용).
 //
 // prop 은 다섯 개다(3b 정리 전에는 28개였다).
-//   row · rowIdx · errors — 이 행 하나에 딸린 값
+//   row · itemNo · errors — 이 행 하나에 딸린 값
 //   ctx                   — 여러 행이 함께 **읽는** 값(검색 결과·프리셋·행 수 …)
 //   actions               — 여러 행이 함께 **쓰는** 콜백
 // 두 묶음은 useQuoteRows 가 useMemo·useCallback 으로 만들어 정체를 유지한다. 그래서 행이
 // 수십 개로 늘어도 넘기는 값이 늘지 않고, 앞으로 React.memo 를 씌울 때도 그대로 먹는다.
 export type QuoteItemRowProps = {
   row: QuoteRow
-  rowIdx: number
+  /**
+   * 머리줄에 찍는 **품목 순번**. 제목줄은 번호를 먹지 않아 null 이다
+   * (lib/quoteRowKinds.ts 의 itemNumbers 가 목록 전체를 한 번에 매긴다 —
+   *  배열 자리를 그대로 쓰면 제목줄 뒤의 번호가 하나씩 밀린다).
+   */
+  itemNo: number | null
   errors: { expenses?: string }
   ctx: QuoteRowsCtx
   actions: QuoteRowsActions
@@ -121,7 +126,7 @@ export type QuoteItemRowProps = {
   recentSale: RecentSaleLookup
 }
 
-export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recentSale }: QuoteItemRowProps) {
+export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recentSale }: QuoteItemRowProps) {
   const {
     rowCount, searchQuery, searchResults, searchOpen, priceSheets,
     editingProfitRate, profitRateInput, expensePresets, presetError,
@@ -413,12 +418,46 @@ export default function QuoteItemRow({ row, rowIdx, errors, ctx, actions, recent
     </div>
   ) : null
 
+  /**
+   * 제목줄 — **글자 한 칸뿐**이다.
+   *
+   * 머리줄은 다른 줄과 같은 모양이되 번호가 없다(순번은 품목만 센다 — itemNo 가 null 이다).
+   * 수량·단가·통화·분류·이익률 칸은 하나도 내지 않는다 — 그 줄에 없는 값이다.
+   * 글자를 비우면 견적서에서 그 줄 자체가 빠진다(app/quote/QuotePDFDoc.tsx 의 buildFlatRows).
+   */
+  if (row.row_kind === 'title') {
+    return (
+      <div style={{ background: '#f8fafc', borderRadius: 8, padding: '4px 8px', marginBottom: 6, border: '1px solid #e5e7eb' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: GAP, height: 17 }}>
+          <span style={badge}>{ROW_KIND_LABEL[row.row_kind]}</span>
+          <span style={{ flex: 1 }} />
+          {rowCount > 1 && (
+            <button onClick={() => removeRow(row.id)}
+              title="줄 삭제"
+              style={{ width: 20, height: 20, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'color 0.15s ease' }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#dc2626')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+            </button>
+          )}
+        </div>
+        <label style={{ ...boxBase, height: H_CELL, cursor: 'text' }}>
+          <span style={prefix}>제목</span>
+          <input className="q-bare" value={row.itemText}
+            onChange={e => updateRow(row.id, 'itemText', e.target.value)}
+            placeholder="예: 예비품 견적서"
+            style={bare} />
+        </label>
+      </div>
+    )
+  }
+
   return (
     <div style={{ background: '#f8fafc', borderRadius: 8, padding: '4px 8px', marginBottom: 6, border: '1px solid #e5e7eb' }}>
       {/* ── 머리줄 — 번호 · 종류 · 통화 · 줄 추가 · 삭제 ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: GAP, height: 17 }}>
-        {rowCount > 1 && (
-          <span style={{ width: 17, height: 17, borderRadius: 999, background: '#234ea2', color: '#fff', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}>{rowIdx + 1}</span>
+        {rowCount > 1 && itemNo !== null && (
+          <span style={{ width: 17, height: 17, borderRadius: 999, background: '#234ea2', color: '#fff', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}>{itemNo}</span>
         )}
         <span style={badge}>{ROW_KIND_LABEL[row.row_kind]}</span>
 

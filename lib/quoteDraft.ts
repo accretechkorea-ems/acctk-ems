@@ -77,7 +77,10 @@ export function isDraftMeaningful(d: Omit<QuoteDraft, 'v' | 'savedAt'>): boolean
   if (d.showSignature || d.isDealer) return true
   // 조건을 손댔으면 「작성 중이던 내용」이다.
   if (d.termsOpen) return true
-  return d.rows.some(r =>
+  // 제목줄은 세지 않는다 — 20 양식을 고르면 「예비품 견적서」 한 줄이 **저절로** 들어가므로
+  // (app/quote/page.tsx 의 changeFormKind), 그것까지 「작성 중이던 내용」으로 보면 아무것도
+  // 적지 않은 사람에게 다음 방문마다 「이어서 쓰시겠습니까」를 묻게 된다.
+  return d.rows.filter(r => r.row_kind !== 'title').some(r =>
     r.itemText.trim() || r.partCode.trim() || r.selectedItem
     || r.manual_cost_jpy > 0 || r.manual_unit_price > 0
     || r.subLines.some(l => l.trim())

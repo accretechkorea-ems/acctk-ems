@@ -15,6 +15,7 @@
 import type { QuoteRow, RowKind } from '@/app/quote/types'
 import {
   createDiscountRow, createDomesticRow, createManualJpyRow, createRow, createServiceRow,
+  createTitleRow,
   type RowDefaults,
 } from '@/app/quote/calc'
 import { ROW_KIND_HINT, ROW_KIND_LABEL, ROW_KIND_ORDER } from '@/lib/quoteRowKinds'
@@ -45,6 +46,8 @@ export default function RowAddButtons({ setRows, serviceRow, discountRow, catego
       case 'domestic': return createDomesticRow(category, d)
       case 'service': return createServiceRow()
       case 'discount': return createDiscountRow()
+      // 제목줄은 글자만 있는 줄이라 분류 기본값(관세·이익률)을 받지 않는다.
+      case 'title': return createTitleRow()
       default: return createRow(category, d)
     }
   }
@@ -74,11 +77,13 @@ export default function RowAddButtons({ setRows, serviceRow, discountRow, catego
               // 이미 말한다(ROW_KIND_ORDER).
               //
               // 글자 앞의 「+」는 되돌렸다 — 무엇을 하는 띠인지는 그 기호 하나가 가장 짧게
-              // 말한다. 그만큼 폭이 늘어, **340px 에서도 한 줄**을 지키려고 좌우 여백을
-              // 4 로 줄이고 글자를 11px 로 낮췄다. 실측(필요 폭 — 다섯 합 + 사이 여백):
-              //   12px·여백 4 → 331 · 12px·여백 3 → 317 · **11px·여백 4 → 309**
-              // 패널이 340 일 때 이 띠에 주어지는 폭은 316 이라(좌우 여백 42), 글자를
-              // 낮추지 않고는 들어가지 않는다. 지금 화면(패널 412)에서는 띠가 388 이다.
+              // 말한다. 그만큼 폭이 늘어 좌우 여백을 4 로 줄이고 글자를 11px 로 낮췄다.
+              //
+              // **여섯이 한 줄에 들어가는 최소 폭은 362px 다**(실측 — 여섯 합 + 사이 여백.
+              // 12px 이면 388 이다). 지금 화면에서 이 띠에 주어지는 폭은 388 이라 한 줄이다
+              // (품목 패널 412 − 좌우 여백 42 … 칼럼 폭이 430 으로 고정이라 흔들리지 않는다).
+              // 제목줄이 더해지기 전 다섯이던 때의 기준(340px 한 줄)은 이제 지킬 수 없다 —
+              // 여백·글자를 더 줄여도(11px·여백 2) 334 가 바닥이다.
               height: 28, padding: '0 4px', borderRadius: 6, flex: '1 1 auto', minWidth: 0,
               background: '#fff',
               color: locked ? '#9ca3af' : '#234ea2',

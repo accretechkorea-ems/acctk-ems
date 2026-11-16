@@ -7,6 +7,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { salesStatusLabel } from '@/lib/categoryColors'
 import { profitBreakdownOfLines } from '@/lib/quoteProfit'
+import { isTitleRowKind } from '@/lib/quoteRowKinds'
 import { toCurrency, type Currency } from '@/lib/quoteCurrency'
 // 타입만 가져온다(컴파일 시 사라짐). 런타임 exceljs 는 호출부에서 동적 import 한다.
 import type { Workbook, Worksheet, Cell } from 'exceljs'
@@ -188,7 +189,9 @@ export function buildQuoteSheet(workbook: Workbook, quote: QuoteExcelData): Work
   ws.getColumn(COL.currency).width = 7
   for (let c = COL.costFx; c <= LAST_COL; c++) ws.getColumn(c).width = 14
 
-  const items = quote.quote_items ?? []
+  // 제목줄은 **품목이 아니다** — 금액 없는 글자 한 줄이라 분석표에 자리가 없다.
+  // (거르지 않으면 「종류 미상」으로 A 블록에 0 원짜리 줄이 하나 생긴다.)
+  const items = (quote.quote_items ?? []).filter(i => !isTitleRowKind(i.row_kind))
   const groupA = items.filter(i => i.row_kind === 'price_list' || i.row_kind === 'manual_jpy' || isUnknownKind(i.row_kind))
   const groupB = items.filter(i => i.row_kind === 'domestic')
   const serviceItem = items.find(i => i.row_kind === 'service') ?? null

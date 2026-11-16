@@ -9,8 +9,8 @@ import { showsOnQuote } from '@/lib/quoteDomestic'
 import { managerNoteLine, noteBodyLines } from '@/lib/quoteRemarks'
 import { TERM_LABELS, defaultTermsFor, termKeysFor, type Terms } from '@/lib/quoteTerms'
 import {
-  GENERAL20_SUBTITLE, GROUP_KINDS, GROUP_PDF_LABELS,
-  formKindOf, isEquipForm, isGeneral20Form, type FormKind, type GroupKind,
+  GROUP_KINDS, GROUP_PDF_LABELS,
+  formKindOf, isEquipForm, type FormKind, type GroupKind,
 } from '@/lib/quoteForms'
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -444,16 +444,45 @@ export function buildEquipRows(rows: QuoteRow[]): DrawRow[] {
     }))
   }
   // 묶음을 고르지 않은 줄 — 그룹 없이 맨 뒤에 붙인다(통번호).
+  // 제목줄은 묶음을 못 고르는 줄이라 늘 여기로 온다. 가로 제목으로 내고 번호는 먹지 않는다
+  // (빈 글자는 내지 않는다 — buildFlatRows 와 같은 규칙).
   const loose = rows.filter(r => r.group_kind == null || !GROUP_KINDS.includes(r.group_kind as GroupKind))
-  loose.forEach((row, i) => out.push({ kind: 'item', no: String(i + 1), row, include: false }))
+  let looseNo = 0
+  for (const row of loose) {
+    if (row.row_kind === 'title') {
+      const label = row.itemText.trim()
+      if (label) out.push({ kind: 'subtitle', label })
+      continue
+    }
+    looseNo += 1
+    out.push({ kind: 'item', no: String(looseNo), row, include: false })
+  }
   return out
 }
 
-/** 파츠·20 — 그룹이 없다. 통번호만 매긴다(20 은 맨 앞에 부제 줄). */
-export function buildFlatRows(rows: QuoteRow[], subtitle: string | null): DrawRow[] {
+/**
+ * 파츠·20 — 그룹이 없다. 통번호만 매긴다.
+ *
+ * **제목줄(row_kind='title')은 가로로 걸치는 제목 줄이 된다.** 20 견적서의 「예비품
+ * 견적서」가 2026-11-16 까지 양식에 박혀 있던 그 자리이고, 이제는 사람이 넣은 줄이라
+ * 글자도 자리도 바꿀 수 있다. 글자가 비면 **줄 자체를 내지 않는다** — 빈 제목 줄은
+ * 표 한가운데에 까닭 없는 빈 칸으로 남는다.
+ *
+ * 번호는 **품목만** 센다(제목줄은 먹지 않는다). 그래서 제목줄을 가운데 끼워도 아래
+ * 품목 번호가 밀리지 않는다.
+ */
+export function buildFlatRows(rows: QuoteRow[]): DrawRow[] {
   const out: DrawRow[] = []
-  if (subtitle) out.push({ kind: 'subtitle', label: subtitle })
-  rows.forEach((row, i) => out.push({ kind: 'item', no: String(i + 1), row, include: false }))
+  let no = 0
+  for (const row of rows) {
+    if (row.row_kind === 'title') {
+      const label = row.itemText.trim()
+      if (label) out.push({ kind: 'subtitle', label })
+      continue
+    }
+    no += 1
+    out.push({ kind: 'item', no: String(no), row, include: false })
+  }
   return out
 }
 
@@ -635,13 +664,13 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({
   const subtotal = totalSupply - discountTotal   // 할인 전 금액
 
   // 그릴 줄 — 장비는 그룹·계층 번호, 나머지는 통번호(20 은 부제 줄이 맨 앞).
+  // 20 견적서의 「예비품 견적서」는 **양식에 박아 두지 않는다**(2026-11-16). 그 줄은 이제
+  // 품목 목록의 제목줄(row_kind='title')이고, 20 양식을 고를 때 화면이 첫 줄에 넣어 준다
+  // (app/quote/page.tsx 의 changeFormKind). 그래서 글자도 자리도 사람이 정한다.
   const drawRows: DrawRow[] = equip
     ? buildEquipRows(itemRows)
-    : buildFlatRows(
-        // 장비가 아니면 할인을 품목 맨 끝에 붙인다(입력 순서와 무관하게).
-        [...itemRows, ...discountRows],
-        isGeneral20Form(form) ? GENERAL20_SUBTITLE : null,
-      )
+    // 장비가 아니면 할인을 품목 맨 끝에 붙인다(입력 순서와 무관하게).
+    : buildFlatRows([...itemRows, ...discountRows])
 
   // 비고 — 담당자 줄이 **문구 맨 위**다. 문구는 칸 바닥에서부터 쌓이고(S.noteBody)
   // 제목 「비고」만 칸 맨 위에 남는다. 담당자 줄을 그릴 때 붙이는 이유는 lib/quoteRemarks.ts 참조.
@@ -815,11 +844,19 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({
               ? stripModelSuffix(stripLeadNo(row.itemText), modelText)
               : withModelSuffix(stripLeadNo(row.itemText), row.manual_model || '')
 
+            // 할인 줄은 **칸 구분선도 아래 선도 긋지 않는다** — 라벨과 금액만 놓인 한 줄로
+            // 보이게. 할인은 늘 품목 맨 끝 줄이고 그 아래(빈 영역·비고)가 칸 없는 한 덩어리라,
+            // 여기서 선을 그으면 열린 공간이 도로 잘려 보인다. 2026-10 통합 양식으로 옮길 때
+            // 이 두 규칙이 빠져 선이 다시 생겼다(옛 코드의 noRule — 063982d).
+            const rowStyle = isDiscount ? [S.itemRow, { borderBottomWidth: 0 }] : [S.itemRow]
             return (
-              <View key={row.id} style={S.itemRow} wrap={false}>
+              <View key={row.id} style={rowStyle} wrap={false}>
                 {cols.map((c, ci) => {
                   const last = ci === cols.length - 1
-                  const base = [S.td, { width: c.width, minHeight: rowHeight(size) }, ...(last ? [{ borderRightWidth: 0 }] : [])]
+                  const base = [
+                    S.td, { width: c.width, minHeight: rowHeight(size) },
+                    ...(last || isDiscount ? [{ borderRightWidth: 0 }] : []),
+                  ]
                   const align = (a: Align) => (a === 'center' ? 'center' : a === 'right' ? 'right' : 'left')
                   if (c.key === 'seq') {
                     return (

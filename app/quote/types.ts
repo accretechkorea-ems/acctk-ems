@@ -54,7 +54,14 @@ export type CustomerResult = {
 //   service    — 서비스비(견적당 1건)
 //   discount   — 할인(견적당 1건). 총액에서만 빼며 품목별로 안분하지 않는다.
 //                라벨('DISCOUNT' / 'SPECIAL DISCOUNT')은 itemText 에 담아 품명 칸으로 그대로 나간다.
-export type RowKind = 'price_list' | 'manual_jpy' | 'domestic' | 'service' | 'discount'
+//   title      — 제목줄. **금액이 없는 글자 한 줄**이다. 견적서 표에서 열 전체에 가로로
+//                걸쳐 가운데 정렬로 찍힌다(20 견적서의 「예비품 견적서」가 그 자리다).
+//                글자는 itemText 에 담는다. 합계·원가·이익·판관비 어디에도 들지 않고
+//                순번도 먹지 않는다(품목만 1,2,3… — lib/quoteRowKinds.ts 의 itemNumbers).
+//
+// ⚠ DB 는 quote_items.row_kind **text 열**이고 CHECK·enum 이 없다(quote_schema_snapshot.sql).
+//    그래서 종류를 늘릴 때 스키마를 고치지 않는다 — 이 줄과 lib/quoteRowKinds.ts 만 고친다.
+export type RowKind = 'price_list' | 'manual_jpy' | 'domestic' | 'service' | 'discount' | 'title'
 
 // 할인 행의 라벨. 로직은 같고 견적서에 찍히는 문구만 다르다.
 export const DISCOUNT_LABELS = ['DISCOUNT', 'SPECIAL DISCOUNT'] as const

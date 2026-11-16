@@ -20,6 +20,7 @@ export const ROW_KIND_LABEL: Record<RowKind, string> = {
   domestic: '국내 구매',
   service: '서비스비',
   discount: '할인',
+  title: '제목줄',
 }
 
 // 추가 버튼은 이 이름 앞에 「+ 」를 붙여 쓴다(components/quote/RowAddButtons.tsx).
@@ -34,9 +35,31 @@ export const ROW_KIND_HINT: Record<RowKind, string> = {
   domestic: '국내에서 사서 우리가 부담하는 항목(원화 원가만, 마진 없음)',
   service: '설치·교육처럼 인건비가 원가인 항목(견적당 1건)',
   discount: '총액에서 빼는 할인 줄(견적당 1건)',
+  title: '견적서 표에 가로로 걸치는 제목 한 줄(금액 없음)',
 }
 
 /** 추가 버튼을 세우는 순서. 왼쪽이 가장 자주 쓰는 것이다. */
 export const ROW_KIND_ORDER: readonly RowKind[] = [
-  'price_list', 'manual_jpy', 'domestic', 'service', 'discount',
+  'price_list', 'manual_jpy', 'domestic', 'service', 'discount', 'title',
 ]
+
+/**
+ * 금액이 없는 **글자 줄**인가 — 제목줄.
+ *
+ * 합계·순번·엑셀·결재 검토표가 이 판정 하나로 그 줄을 비켜 간다. 종류 글자를 여기저기
+ * 적지 않으려고 함수로 둔다(저장된 줄은 문자열이라 RowKind 로 좁혀지지 않는다).
+ */
+export const isTitleRowKind = (rowKind: string | null | undefined): boolean => rowKind === 'title'
+
+/**
+ * 화면·견적서에 찍는 **품목 순번**. 제목줄은 번호를 먹지 않고 null 을 받는다.
+ *
+ *   [가격표, 제목줄, 가격표, 할인]  →  [1, null, 2, 3]
+ *
+ * 순수 함수다(하네스가 그대로 돌린다 — scripts/quote-title-check.js). 줄의 모양을 묻지
+ * 않고 종류만 본다 — 화면의 QuoteRow 와 저장된 quote_items 둘 다 그대로 넘길 수 있다.
+ */
+export function itemNumbers(rows: readonly { row_kind?: string | null }[]): (number | null)[] {
+  let n = 0
+  return rows.map(r => (isTitleRowKind(r.row_kind) ? null : ++n))
+}

@@ -17,13 +17,13 @@ import { useEffect, useRef } from 'react'
 import type { ReadonlyURLSearchParams } from 'next/navigation'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CustomerResult, ExpenseRow, PriceItem, QuoteRow, RowKind } from '@/app/quote/types'
-import { calcExpense, calcRow, createExpenseRow, createRow, overrideCostJpy } from '@/app/quote/calc'
+import { calcExpense, calcRow, createExpenseRow, createRow, createTitleRow, overrideCostJpy } from '@/app/quote/calc'
 import { toCurrency, type Rates } from '@/lib/quoteCurrency'
 import { defaultTermsFor, isAllDefault, promoteLegacyDelivery, termsOf, type SetTerms } from '@/lib/quoteTerms'
 import { subLinesOf } from '@/lib/quoteSubLines'
 import { operatingReasonOf, stripOperatingReason } from '@/lib/quoteOperatingNote'
 import { activeQuoteCategories, canSplitRowKind, loadQuoteCategories } from '@/lib/quoteCategories'
-import { canGroupRowKind, isFormKind, isGroupKind } from '@/lib/quoteForms'
+import { canGroupRowKind, GENERAL20_SUBTITLE, isFormKind, isGeneral20Form, isGroupKind } from '@/lib/quoteForms'
 import { parentCompanyName } from '@/components/customer/ParentPicker'
 import { resolveOnBehalf, type OnBehalfAssignee } from '@/lib/quoteMutations'
 import type { useToast } from '@/components/common/Toast'
@@ -172,7 +172,15 @@ export function useQuotePrefill({
         expenses: kind === 'service' ? expenseRows : [],
       }, rateRef.current)
     })
-    setRows(built.length > 0 ? built : [createRow()])
+    // 20 견적서인데 제목줄이 하나도 없으면 「예비품 견적서」를 첫 줄에 되살린다.
+    //
+    // 그 글자는 2026-11-16 까지 **양식에 박혀 있었다** — 그때 저장된 견적에는 그 줄이
+    // quote_items 에 없다. 그대로 다시 그리면 고객에게 나가던 제목이 말없이 사라지므로,
+    // 옛 견적을 열 때 눈에 보이는 줄로 되살려 둔다(지우거나 고쳐 쓸 수 있다).
+    const needsTitle = isGeneral20Form(quote.form_kind)
+      && !built.some(r => r.row_kind === 'title')
+    const withTitle = needsTitle ? [createTitleRow(GENERAL20_SUBTITLE), ...built] : built
+    setRows(withTitle.length > 0 ? withTitle : [createRow()])
 
     // 견적 분류 — 원본 값을 그대로 가져온다. 다만 **미분류(null)거나 비활성이 된 분류**면
     // 비워 둬서 다시 고르게 한다(없는 값을 고른 것처럼 보이면 그대로 확정될 수 있다).

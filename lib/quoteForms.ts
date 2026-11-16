@@ -49,10 +49,16 @@ export const isEquipForm = (v: string | null | undefined): boolean => v === 'equ
 export const isGeneral20Form = (v: string | null | undefined): boolean => v === 'general20'
 
 /**
- * 20 견적서 표 첫 줄의 부제.
+ * 20 견적서 표 첫 줄의 부제 — **처음 넣어 주는 글자일 뿐이다.**
  *
- * ⚠ **데이터 출처가 없다.** 지금 코드·DB 어디에도 이 문구를 담는 칸이 없고, 레퍼런스(v13)에
- *   표 첫 줄로 들어가 있어 양식에 딸린 고정 문구로 둔다. 건마다 달라야 한다면 칸이 필요하다.
+ * 2026-11-16 까지는 양식에 박힌 고정 문구였다(PDF 가 표 첫 줄을 늘 이 글자로 그렸다).
+ * 지금은 품목 목록의 **제목줄**(row_kind='title')이 그 자리를 맡는다 — 20 양식을 고를 때
+ * 화면이 이 글자로 첫 줄을 만들어 주고(app/quote/page.tsx 의 changeFormKind), 그 뒤로는
+ * 사람이 고치거나 지울 수 있다. 저장된 견적에는 그 줄이 글자 그대로 남는다.
+ *
+ * 되살리기에서도 쓴다 — 이 변경 **전에** 저장된 20 견적서에는 제목줄이 없어, 열 때 이
+ * 글자로 한 줄을 만들어 둔다(hooks/quote/useQuotePrefill.ts). 그러지 않으면 다시쓰기로
+ * 만든 견적서에서 고객이 보던 제목이 말없이 사라진다.
  */
 export const GENERAL20_SUBTITLE = '예비품 견적서'
 

@@ -6,7 +6,7 @@ import { CURRENCY_SYMBOL, type Currency, type Rates } from '@/lib/quoteCurrency'
 import { RATE_SOURCE } from '@/lib/exchangeRate'
 import { calcTotals } from './calc'
 import { isBillableRow } from '@/lib/quoteDomestic'
-import { ROW_KIND_LABEL } from '@/lib/quoteRowKinds'
+import { itemNumbers, ROW_KIND_LABEL } from '@/lib/quoteRowKinds'
 import { numKR } from './format'
 import {
   belowMinOperatingMessage, isBelowMinOperating, minOperatingMarginOf, profitBreakdownOfLines,
@@ -217,8 +217,10 @@ export default function ProfitPanel({
    * 세면 건너뛴 자리에서 같은 색 띠가 두 줄 이어진다.
    */
   const shown = rows
-    .map((row, i) => ({ row, no: i + 1 }))
-    .filter(({ row }) => row.supply_price !== 0 || hasContent(row))
+    // 번호는 품목 패널과 **같은 규칙**으로 매긴다 — 제목줄은 번호를 먹지 않는다.
+    .map((row, i) => ({ row, no: itemNumbers(rows)[i] }))
+    // 제목줄은 셈에 들지 않는 글자 줄이라 이 패널에 내지 않는다.
+    .filter(({ row, no }) => no !== null && (row.supply_price !== 0 || hasContent(row)))
 
   return (
     <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #ebebeb', marginBottom: 14, overflow: 'hidden' }}>

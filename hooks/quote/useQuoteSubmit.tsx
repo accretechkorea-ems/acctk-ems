@@ -372,9 +372,12 @@ export function useQuoteSubmit({
       //              다시쓰기·통계에서 그 줄이 사라진다. 그래서 글자가 있는 포함사항 줄은 통과시킨다.
       //              group_kind 는 장비 양식에서만 채워지므로 다른 두 양식은 종전과 같다.
       // quote_id 는 넣지 않는다 — 함수가 방금 만든 견적의 id 로 채운다(클라이언트 값은 믿지 않는다).
+      //   제목줄   — 금액이 **없는 것이 정의**다(글자 한 줄). 글자가 있으면 저장한다 —
+      //              저장하지 않으면 다시쓰기·복제에서 그 줄이 사라져 견적서 모양이 달라진다.
       const keepItem = (r: QuoteRow) =>
         r.supply_price > 0
         || (r.row_kind === 'discount' && r.supply_price < 0)
+        || (r.row_kind === 'title' && !!r.itemText.trim())
         || (isEquipForm(formKind) && r.group_kind === 'include' && !!(r.partCode.trim() || r.itemText.trim()))
       const items = rows.filter(keepItem).map(r => ({
         price_list_id: r.selectedItem?.id ?? null,

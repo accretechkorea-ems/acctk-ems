@@ -780,7 +780,8 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                   // 따라 바뀌어 버린다(가격표 2단계에서 뒤집었다).
                   const itemNames = q.quote_items && q.quote_items.length > 0
                     // 할인은 품목이 아니라 총액 차감이라 목록에서 뺀다.
-                    ? q.quote_items.filter(i => i.row_kind !== 'discount').map(i => i.product_name || i.price_list?.model_jp).filter(Boolean).join(', ')
+                    // 제목줄도 뺀다 — 금액 없는 글자 줄이라 품목 이름 자리에 끼면 품목처럼 읽힌다.
+                    ? q.quote_items.filter(i => i.row_kind !== 'discount' && i.row_kind !== 'title').map(i => i.product_name || i.price_list?.model_jp).filter(Boolean).join(', ')
                     : '-'
                   const showOrderInfo = ['주문완료', '세금계산서 요청', '매출완료'].includes(q.status)
                   return (

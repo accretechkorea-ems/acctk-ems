@@ -51,6 +51,16 @@ export function calcRow(row: QuoteRow, rates: Rates): QuoteRow {
   // 줄에 남아 있는 exchange_rate 를 뒤에 두는 것은 종전과 같다 — 복원 직후처럼 화면 환율이
   // 아직 0 일 때 그 줄이 저장 당시 환율로 계산되게 한다.
   const exRate = pickRate(row.currency, rates) || row.exchange_rate
+  // 제목줄 — **셈할 것이 없다.** 글자(itemText)만 들고 있고 금액 칸은 전부 0 으로 눌러 둔다.
+  // 0 으로 눌러 두면 합계·이익·판관비가 이 줄을 따로 빼지 않아도 한 원도 움직이지 않는다
+  // (calcTotals 는 더하기만 한다). 종류를 아는 곳은 순번·견적서·엑셀 세 곳뿐이다.
+  if (row.row_kind === 'title') {
+    return {
+      ...row, exchange_rate: exRate, quantity: 0, tariff_rate: 0,
+      cost_price_jpy: 0, unit_price: 0, supply_price: 0, tax: 0,
+      product_price: 0, profit: 0, profit_rate: 0, realized_profit_rate: 0,
+    }
+  }
   // 서비스비 — 공급가는 직접 입력, 원가는 부대비용 내역의 합. 수량은 1 고정.
   if (row.row_kind === 'service') {
     const unitPrice = row.manual_unit_price
@@ -334,6 +344,33 @@ export function createServiceRow(): QuoteRow {
 // 수량·이익률은 쓰지 않으므로 0 에서 시작한다.
 export function createDiscountRow(): QuoteRow {
   return { ...createRow(), row_kind: 'discount', itemText: DISCOUNT_LABELS[0], quantity: 0, profit_rate: 0, tariff_rate: 0, category: null }
+}
+
+/**
+ * 제목줄 — **글자 한 줄.** 금액 칸이 하나도 없다(수량·이익률·관세까지 0 이다).
+ *
+ * 20 견적서의 「예비품 견적서」처럼 표 가운데에 가로로 걸치는 줄이다. 종전에는 그 글자가
+ * 양식에 박혀 있어 고칠 수도, 다른 자리에 둘 수도 없었다(lib/quoteForms.ts 의 옛 주석).
+ */
+export function createTitleRow(text = ''): QuoteRow {
+  return {
+    ...createRow(), row_kind: 'title', itemText: text,
+    quantity: 0, profit_rate: 0, tariff_rate: 0, category: null,
+  }
+}
+
+/**
+ * 아직 **아무것도 적지 않은** 품목 목록인가.
+ *
+ * 새 견적은 빈 가격표 줄 하나로 시작하므로 「줄이 0개」가 아니라 「줄은 있는데 빈 줄뿐」이
+ * 비어 있는 상태다. 20 양식을 고를 때 제목줄을 저절로 넣을지가 이 판정에 걸린다 —
+ * 사람이 뭔가 적기 시작한 뒤에 줄이 끼어들면 그것은 끼어드는 것이다.
+ */
+export function rowsAreEmpty(rows: readonly QuoteRow[]): boolean {
+  return rows.every(r =>
+    !r.itemText.trim() && !r.partCode.trim() && !r.selectedItem
+    && !r.manual_cost_jpy && !r.manual_unit_price && !r.cost_jpy_override
+    && r.subLines.length === 0 && r.expenses.length === 0)
 }
 
 // 단가 × 인원 × 일수. 세 값 중 하나라도 바뀌면 이 함수를 통과시켜 재계산한다.

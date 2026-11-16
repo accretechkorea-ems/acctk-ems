@@ -16,7 +16,9 @@ import { useQuoteDraftSync } from '@/hooks/quote/useQuoteDraftSync'
 import { useQuoteSubmit } from '@/hooks/quote/useQuoteSubmit'
 import AccessGate from '@/components/common/AccessGate'
 import type { Engineer, QuoteRow, RateMeta } from './types'
-import { calcRow, calcTotals } from './calc'
+import { calcRow, calcTotals, createTitleRow, rowsAreEmpty } from './calc'
+import { itemNumbers } from '@/lib/quoteRowKinds'
+import { GENERAL20_SUBTITLE, isGeneral20Form } from '@/lib/quoteForms'
 import { useDebounce } from './useDebounce'
 import ProfitPanel from './ProfitPanel'
 import CustomerCard from '@/components/quote/CustomerCard'
@@ -299,6 +301,9 @@ function QuotePageInner() {
   /** 미리보기 번호. 저장되는 번호는 create_quote 함수가 만든다(동시 확정 시 이 값과 다를 수 있다). */
   const quoteNo = buildQuoteNo(previewSeq)
   const { totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate } = calcTotals(rows)
+  /** 줄마다의 **품목 순번** — 제목줄은 null 이다. 「총 N개」도 품목만 센다. */
+  const itemNos = itemNumbers(rows)
+  const itemCount = itemNos.filter(n => n !== null).length
   // 견적서에 찍히는 담당자는 실적 담당자다 — 고객이 연락할 사람이 작성자가 아니라 그쪽이기 때문이다.
   // 대필이 아니면 실적 담당자가 곧 본인이라 종전과 같다. (견적번호는 반대로 작성자 이니셜을 쓴다.)
   const creditedName = onBehalf ? onBehalf.name : (engineer?.name ?? '')
@@ -364,6 +369,20 @@ function QuotePageInner() {
    * 견적 분류 바꾸기 — 상태를 바꾸고, **손대지 않은 품목 줄**의 이익률 기본값도 따라가게 한다
    * (TSE 60 · 그 밖 40 — lib/quoteProfit.ts). 사람이 고친 줄은 그대로다.
    */
+  /**
+   * 양식 고르기 — 20 견적서를 고르고 **품목이 아직 비어 있으면** 「예비품 견적서」 제목줄을
+   * 첫 줄에 넣는다.
+   *
+   * 그 글자는 2026-11-16 까지 양식에 박혀 있어 고칠 수도 지울 수도 없었다. 이제는 보통
+   * 줄이라 지우거나 고쳐 쓸 수 있고, 대신 **20 을 고른 사람이 늘 쓰던 모습**으로 시작하게
+   * 한 줄을 넣어 둔다. 뭔가 적기 시작한 뒤에는 넣지 않는다 — 그때 끼어드는 줄은 방해다.
+   */
+  const changeFormKind = (v: string) => {
+    setFormKind(v)
+    if (!isGeneral20Form(v)) return
+    setRows(prev => (rowsAreEmpty(prev) ? [createTitleRow(GENERAL20_SUBTITLE), ...prev] : prev))
+  }
+
   const changeCategory = (v: string) => {
     setCategory(v)
     applyCategoryDefaults(v || null)
@@ -822,7 +841,7 @@ function QuotePageInner() {
             category={{
               value: category, setValue: changeCategory,
               categories: activeCategories, loading: categoriesLoading,
-              formKind, setFormKind,
+              formKind, setFormKind: changeFormKind,
             }}
             customer={{
               selectedCustomer, customerQuery, customerResults, customerSearchOpen, setCustomerSearchOpen,
@@ -859,8 +878,8 @@ function QuotePageInner() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
               <div style={{ width: 3, height: 16, background: '#234ea2', borderRadius: 6, flexShrink: 0 }} />
               <span style={{ fontWeight: 800, fontSize: 14, color: '#111827' }}>품목</span>
-              {rows.length > 0 && (
-                <span style={{ fontSize: 12, color: '#9ca3af' }}>총 {rows.length}개</span>
+              {itemCount > 0 && (
+                <span style={{ fontSize: 12, color: '#9ca3af' }}>총 {itemCount}개</span>
               )}
               {/* 장비 구성 선택 — 장비 양식에서만 나온다(그 밖의 양식에서는 아무것도 그리지 않는다) */}
               <EquipConfigLauncher
@@ -875,11 +894,12 @@ function QuotePageInner() {
               />
             </div>
 
+            {/* 번호는 **품목만** 센다 — 제목줄은 건너뛴다(lib/quoteRowKinds.ts 의 itemNumbers). */}
             {rows.map((row, rowIdx) => (
               <QuoteItemRow
                 key={row.id}
                 row={row}
-                rowIdx={rowIdx}
+                itemNo={itemNos[rowIdx]}
                 errors={errors}
                 ctx={rowsCtx}
                 actions={rowsActions}
