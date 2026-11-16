@@ -135,5 +135,8 @@ paths:
 
 - `borderRadius: '50%'`(dot·닫기 버튼·아바타)는 원형 유지 — pill로 바꾸지 말 것.
 - react-pdf 인쇄용 색(`#000` 등)은 화면 토큰으로 치환 금지.
+- PDF 모달 뷰어 본문 바탕 `#e6e6e6`(`lib/pdfViewer.ts` 의 `VIEWER_BG`)은
+  **브라우저 PDF 뷰어의 배경색**과 맞춘 값이다 — 다르면 창과 문서 사이에 띠가 보인다.
+  화면 토큰으로 치환 금지(위 react-pdf 색과 같은 성격이다).
 - transition 기본은 `0.15s ease`. `0.25s cubic-bezier(0.4,0,0.2,1)`는
   SegmentedControl 슬라이딩 인디케이터 전용 예외.

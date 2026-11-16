@@ -890,16 +890,8 @@ function QuotePageInner() {
           resize: vertical;
         }
       `}</style>
-      {repairId != null && (
-        <div style={{ padding: '16px 20px 0' }}>
-          {/* 어느 수리품의 견적인지만 알린다 — 읽기 전용이다(고르거나 끊는 길은 없다). */}
-          <div style={{ background: '#eff4ff', border: '1px solid #c7d7f8', borderRadius: 8, padding: '10px 14px', fontSize: 13, fontWeight: 700, color: '#234ea2' }}>
-            수리 건 #{repairId}
-            {repairBrief?.product_type ? <span style={{ fontWeight: 500 }}> · {repairBrief.product_type}</span> : null}
-            {repairBrief?.serial_number ? <span style={{ fontWeight: 500 }}> · S/N {repairBrief.serial_number}</span> : null}
-          </div>
-        </div>
-      )}
+      {/* 수리 건 알림 띠는 미리보기 머리줄의 칩으로 옮겼다(QuotePreviewPane 의 repairChip) —
+          맨 위 띠는 품목을 적다 스크롤하면 화면 밖으로 나갔다. */}
       {/* 폭 상한을 두지 않는다 — 사이드바가 232px 을 가져가므로 남는 폭을 미리보기가 그대로 쓴다.
           입력칸은 430px 고정, 미리보기는 남은 폭. 둘이 함께 들어갈 폭이 안 되면(약 930px 미만)
           미리보기가 아래로 내려간다(flexWrap). */}
@@ -1019,6 +1011,11 @@ function QuotePageInner() {
           toast={toast}
           runValidation={runValidation}
           categoryMissing={categoryMissing || formMissing}
+          repairChip={repairId == null ? null : {
+            repairId,
+            productType: repairBrief?.product_type ?? null,
+            serialNumber: repairBrief?.serial_number ?? null,
+          }}
           formKind={formKind}
           setShowConfirmModal={setShowConfirmModal}
           dateDisplay={dateDisplay}

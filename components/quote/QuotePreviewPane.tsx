@@ -55,6 +55,11 @@ export type QuotePreviewPaneProps = {
   setShowConfirmModal: (v: boolean) => void
   /** 견적 분류·양식을 아직 안 골랐는가. true 면 확정 버튼을 잠그고 이유를 보여 준다. */
   categoryMissing: boolean
+  /**
+   * 수리품에서 넘어온 견적이면 그 수리 건 — 머리줄에 작은 칩으로 적는다(읽기 전용).
+   * 일반 견적이면 null 이고 칩도 없다.
+   */
+  repairChip?: { repairId: number; productType?: string | null; serialNumber?: string | null } | null
   dateDisplay: string
   engineerName: string
   engineerTel: string
@@ -74,7 +79,7 @@ export type QuotePreviewPaneProps = {
 export default function QuotePreviewPane({
   isClient, missingInitials, seqLoadError, quoteNo,
   quoteDate, onQuoteDate, maxQuoteDate, backdated, otherMonth, onBehalf, isSaving,
-  toast, runValidation, setShowConfirmModal, categoryMissing,
+  toast, runValidation, setShowConfirmModal, categoryMissing, repairChip,
   dateDisplay, engineerName, engineerTel, showSignature, previewTerms, formKind,
   debouncedCompany, debouncedReceiver, debouncedRows, debouncedFinalRemarks,
   pdfTotalSupply, pdfTotalTax, pdfTotalAmount,
@@ -132,6 +137,20 @@ export default function QuotePreviewPane({
         )}
       </div>
       </div>
+      {/* 수리 건 — 어느 수리품의 견적인지만 알린다(읽기 전용, 고르거나 끊는 길은 없다).
+          화면 맨 위에 띠로 두면 작성하다 스크롤하면 사라졌다 — 확정 버튼 옆이면 늘 보인다. */}
+      {repairChip && (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: 6,
+          background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.5)',
+          color: '#ffffff', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
+          maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>
+          수리 건 #{repairChip.repairId}
+          {repairChip.productType ? <span style={{ fontWeight: 500 }}>&nbsp;· {repairChip.productType}</span> : null}
+          {repairChip.serialNumber ? <span style={{ fontWeight: 500 }}>&nbsp;· S/N {repairChip.serialNumber}</span> : null}
+        </span>
+      )}
       {/* 대필 중임을 작성하는 내내 보이게 둔다 — 남의 실적으로 저장되는 화면이라 헷갈리면 안 된다. */}
       {onBehalf && (
         <span style={{ padding: '4px 10px', borderRadius: 99, background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.5)', color: '#ffffff', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>

@@ -16,6 +16,11 @@
 //   내려받기가 실패하거나 iframe 이 **12초** 안에 못 그리면 원래 서명 URL 로 새 탭을 연다.
 //   (모바일 사파리처럼 처음부터 못 그리는 환경은 lib/pdfViewer.ts 가 먼저 가른다.)
 //
+// ── 창은 A4 를 그대로 담는다 ───────────────────────────────────────────────
+//   창을 넓게 잡으면 브라우저 PDF 뷰어가 쪽을 가운데 두고 좌우를 제 배경색(검정에 가까운
+//   회색)으로 채운다. 그래서 세로를 화면의 96% 로 먼저 잡고 가로를 **문서 비율**로 맞춘다
+//   (lib/pdfViewer.ts 의 pdfViewerBox). 창 바탕도 뷰어 배경색과 같게 둬 이음매를 없앤다.
+//
 // ── 모션은 이 모달의 것이다 ────────────────────────────────────────────────
 //   공용 ModalOverlay 를 건드리지 않는다(29개 모달이 함께 쓰는 자리다). 열릴 때 배경
 //   0→1(150ms)과 창 0→1·아래서 8px·0.98→1(180ms ease-out), 닫힐 때 역순 120ms.
@@ -23,6 +28,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Z } from '@/lib/zIndex'
+import { PDF_VIEW_PARAMS, VIEWER_BG, VIEWER_HEADER_H, pdfViewerBox } from '@/lib/pdfViewer'
 import type { PdfDoc } from '@/lib/pdfViewer'
 
 const BORDER = '#ebebeb'
@@ -45,6 +51,17 @@ export default function PdfViewerModal({ doc, onClose }: PdfViewerModalProps) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const closedRef = useRef(false)
+  const frameRef = useRef<HTMLIFrameElement | null>(null)
+  /** 창 치수 — A4 비율로 잡는다(lib/pdfViewer.ts 의 pdfViewerBox). 화면이 바뀌면 다시 잰다. */
+  const [box, setBox] = useState(() => (typeof window === 'undefined'
+    ? { width: 720, height: 980, bodyHeight: 980 - VIEWER_HEADER_H }
+    : pdfViewerBox(window.innerWidth, window.innerHeight)))
+
+  useEffect(() => {
+    const onResize = () => setBox(pdfViewerBox(window.innerWidth, window.innerHeight))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   const stopTimer = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null } }
 
@@ -104,6 +121,21 @@ export default function PdfViewerModal({ doc, onClose }: PdfViewerModalProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  /**
+   * 인쇄 — 뷰어 안의 문서를 그대로 인쇄 대화상자로 보낸다.
+   * blob 은 이 화면과 같은 출처라 contentWindow 를 만질 수 있다. 그래도 막는 브라우저가
+   * 있어(PDF 를 플러그인으로 그리는 자리) 실패하면 새 탭으로 보낸다 — 거기서 인쇄하면 된다.
+   */
+  const printDoc = () => {
+    const w = frameRef.current?.contentWindow
+    try {
+      if (w) { w.focus(); w.print(); return }
+    } catch (e) {
+      console.error('[pdfViewer] 인쇄를 열지 못했다 — 새 탭으로 보낸다', e)
+    }
+    window.open(doc.url, '_blank')
+  }
+
   const open = shown && !closing
   const motion = reduced ? 'none' : undefined
   const linkStyle: React.CSSProperties = {
@@ -124,7 +156,8 @@ export default function PdfViewerModal({ doc, onClose }: PdfViewerModalProps) {
     >
       <div
         style={{
-          width: 'min(1000px, 90vw)', height: '90vh', background: '#fff', borderRadius: 8,
+          // 가로세로가 A4 를 따른다 — 그래야 뷰어가 좌우를 제 배경색으로 채우지 않는다.
+          width: box.width, height: box.height, background: VIEWER_BG, borderRadius: 8,
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
           opacity: open ? 1 : 0,
@@ -132,7 +165,11 @@ export default function PdfViewerModal({ doc, onClose }: PdfViewerModalProps) {
           transition: motion ?? `opacity ${closing ? 120 : 180}ms ease-out, transform ${closing ? 120 : 180}ms ease-out`,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', borderBottom: `1px solid ${BORDER}` }}>
+        <div style={{
+          height: VIEWER_HEADER_H, flexShrink: 0, boxSizing: 'border-box',
+          display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px',
+          background: '#fff', borderBottom: `1px solid ${BORDER}`,
+        }}>
           <span style={{ fontSize: 13, fontWeight: 800, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {doc.name}
           </span>
@@ -143,6 +180,7 @@ export default function PdfViewerModal({ doc, onClose }: PdfViewerModalProps) {
               {doc.action.label}
             </button>
           )}
+          <button onClick={printDoc} style={linkStyle}>인쇄</button>
           <a href={doc.url} target="_blank" rel="noopener noreferrer" style={linkStyle}>새 탭</a>
           {/* 내려받기는 blob 주소로 한다 — 다른 도메인의 주소에는 download 가 먹지 않는다. */}
           <a href={blobUrl ?? doc.url} download={doc.name} style={linkStyle}>다운로드</a>
@@ -153,14 +191,16 @@ export default function PdfViewerModal({ doc, onClose }: PdfViewerModalProps) {
         </div>
         {blobUrl ? (
           <iframe
-            src={blobUrl}
+            ref={frameRef}
+            // 검은 툴바·쪽 목록을 감추고 가로에 맞춰 편다(듣지 않는 브라우저는 기본 모양).
+            src={blobUrl + PDF_VIEW_PARAMS}
             title={doc.name}
             onLoad={stopTimer}
             onError={bailToTab}
-            style={{ flex: 1, width: '100%', border: 'none', background: '#f3f4f6' }}
+            style={{ flex: 1, width: '100%', border: 'none', background: VIEWER_BG }}
           />
         ) : (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: MUTED, background: '#f3f4f6' }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: MUTED, background: VIEWER_BG }}>
             문서를 불러오는 중…
           </div>
         )}
