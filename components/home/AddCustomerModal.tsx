@@ -20,10 +20,15 @@ import { useEffect } from 'react'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import AddressField from '@/components/customer/modals/AddressField'
 import ParentPicker from '@/components/customer/ParentPicker'
-import { FieldHint, SITE_NAME_HINT } from '@/components/customer/siteFormHints'
+
+/** 칸 위의 작은 이름표 — 회사명·사업장명·상태가 나란히 서서 무엇인지 글자로 알려야 한다. */
+const fieldLabelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: '#9ca3af', marginBottom: 4 }
 
 type CustomerForm = {
+  /** 회사명 + 사업장명을 합쳐 둔 값. 이관이 끝날 때까지 화면들이 이 칸을 읽는다. */
   company_name: string
+  /** 사업장명(선택). 회사명은 고른 회사 줄에 있다. */
+  site_name: string
   address: string
   agency: string
   status: string
@@ -31,7 +36,7 @@ type CustomerForm = {
 }
 
 // 검증 에러 key: 스칼라 3종 + 장비 항목별(device_0, device_1 …) — 인덱스는 템플릿 리터럴로 타입 안전
-type ErrKey = 'company_name' | 'address' | 'contact_name' | `device_${number}`
+type ErrKey = 'parent_customer_id' | 'address' | 'contact_name' | `device_${number}`
 
 type Props = {
   isOpen: boolean
@@ -83,7 +88,8 @@ export default function AddCustomerModal({
   // 다만 뭔가 입력했다면 그 안의 필수 칸은 그대로 검증한다.
   const handleSave = () => {
     const rules: Partial<Record<ErrKey, string | null>> = {
-      company_name: customerForm.company_name.trim() ? null : '사업장명을 입력해주세요',
+      // 회사는 필수다 — 사업장명은 비워 둘 수 있다(사업장이 한 곳이면 회사명만으로 부른다).
+      parent_customer_id: customerForm.parent_customer_id == null ? '회사명을 선택해주세요' : null,
       address: customerForm.address.trim() ? null : '주소를 입력해주세요',
       contact_name: isEmptyContactForm(contactForm) || contactForm.name.trim()
         ? null
@@ -141,6 +147,18 @@ export default function AddCustomerModal({
           </div>
 
           <div style={{ display: 'grid', gap: 12 }}>
+            {/* 회사명 — **필수**다. 목록에 없으면 그 자리에서 새 회사로 등록한다(분류를 함께 고른다). */}
+            <div>
+              <div style={fieldLabelStyle}>회사명</div>
+              <ParentPicker
+                value={customerForm.parent_customer_id}
+                onChange={id => { setCustomerForm(prev => ({ ...prev, parent_customer_id: id })); clearError('parent_customer_id') }}
+                allowCreate
+                disabled={isSavingCustomer}
+              />
+              <FieldError message={errors.parent_customer_id} />
+            </div>
+
             <div
               style={{
                 display: 'grid',
@@ -152,17 +170,18 @@ export default function AddCustomerModal({
               }}
             >
               <div>
+                <div style={fieldLabelStyle}>사업장명</div>
                 <input
-                  value={customerForm.company_name}
-                  onChange={(e) => { setCustomerForm((prev) => ({ ...prev, company_name: e.target.value })); clearError('company_name') }}
-                  placeholder="사업장명"
-                  style={errors.company_name ? { ...inputStyle, border: errBorder } : inputStyle}
+                  value={customerForm.site_name}
+                  onChange={(e) => setCustomerForm((prev) => ({ ...prev, site_name: e.target.value }))}
+                  placeholder="ex) 감마세타엔진공장"
+                  style={inputStyle}
                 />
-                <FieldError message={errors.company_name} />
-                <FieldHint text={SITE_NAME_HINT} />
               </div>
 
-              <select
+              <div>
+                <div style={fieldLabelStyle}>상태</div>
+                <select
                 value={customerForm.status}
                 onChange={(e) =>
                   setCustomerForm((prev) => ({
@@ -175,15 +194,9 @@ export default function AddCustomerModal({
                 <option value="활성">활성</option>
                 <option value="잠재">잠재</option>
                 <option value="이탈">이탈</option>
-              </select>
+                </select>
+              </div>
             </div>
-
-            {/* 소속회사 — 같은 회사에 속하면 여기서 묶는다. 비워 두면 단독 업체가 된다. */}
-            <ParentPicker
-              value={customerForm.parent_customer_id}
-              onChange={id => setCustomerForm(prev => ({ ...prev, parent_customer_id: id }))}
-              allowCreate
-            />
 
             {/* 주소 — [주소 검색]으로 정규 주소를 받고, 상세는 따로 입력한다(합쳐서 한 칸에 저장된다).
                 정규 주소를 쓰면 저장 때 도는 좌표 변환(지오코딩) 실패가 대부분 사라진다. */}

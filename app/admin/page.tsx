@@ -7,6 +7,7 @@ import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { INITIALS_TAKEN_MESSAGE, isInitialsTaken } from '@/lib/initials'
 import { invalidateParents } from '@/components/customer/ParentPicker'
 import { josa } from '@/lib/josa'
+import { INDUSTRIES } from '@/lib/leadOptions'
 import { downsizeImage } from '@/lib/leadCardImage'
 import {
   NOTICE_MAX_IMAGES, NOTICE_TITLE_MAX, NOTICE_BODY_MAX,
@@ -59,6 +60,8 @@ type Engineer = {
 type ParentRow = {
   customer_id: number
   company_name: string
+  /** 분류(산업군) — 리드 등록과 같은 목록이다(lib/leadOptions.ts). 옛 회사 줄은 비어 있다. */
+  industry: string | null
   created_at: string | null
   childCount: number
 }
@@ -204,7 +207,7 @@ function AdminPageInner() {
   const [parentOnlyEmpty, setParentOnlyEmpty] = useState(false)
   const [parentBusy, setParentBusy] = useState<number | null>(null)
   // 이름 수정 중인 행과 입력값. 한 번에 한 행만 고친다.
-  const [parentEditing, setParentEditing] = useState<{ id: number; name: string } | null>(null)
+  const [parentEditing, setParentEditing] = useState<{ id: number; name: string; industry: string } | null>(null)
 
   // ── 사무실 관리 ──
   // 값은 offices 테이블이 정본이다. 직원 등록·수정의 사무실 드롭다운도 같은 목록을 쓴다.
@@ -712,7 +715,7 @@ function AdminPageInner() {
     setParentLoading(true)
     const [{ data: parents, error: pErr }, { data: children, error: cErr }] = await Promise.all([
       supabase.from('customers')
-        .select('customer_id, company_name, created_at')
+        .select('customer_id, company_name, industry, created_at')
         .eq('is_parent', true).is('deleted_at', null),
       supabase.from('customers')
         .select('parent_customer_id')
@@ -723,21 +726,22 @@ function AdminPageInner() {
     for (const c of (children ?? []) as { parent_customer_id: number }[]) {
       count[c.parent_customer_id] = (count[c.parent_customer_id] ?? 0) + 1
     }
-    setParentRows(((parents ?? []) as { customer_id: number; company_name: string | null; created_at: string | null }[])
+    setParentRows(((parents ?? []) as { customer_id: number; company_name: string | null; industry: string | null; created_at: string | null }[])
       .map(p => ({
         customer_id: p.customer_id,
         company_name: p.company_name ?? '',
+        industry: p.industry ?? null,
         created_at: p.created_at,
         childCount: count[p.customer_id] ?? 0,
       })))
     setParentLoading(false)
   }
 
-  const callParentRoute = async (action: 'rename' | 'delete', parentId: number, name?: string) => {
+  const callParentRoute = async (action: 'rename' | 'delete', parentId: number, name?: string, industry?: string) => {
     const res = await fetch('/api/parent-company', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, parentId, name }),
+      body: JSON.stringify({ action, parentId, name, industry }),
     })
     const json = await res.json().catch(() => ({}))
     return res.ok && !json.error ? { ok: true as const } : { ok: false as const, error: json.error ?? `서버 오류 (${res.status})` }
@@ -748,7 +752,7 @@ function AdminPageInner() {
     const name = parentEditing.name.trim()
     if (!name) { toast.error('회사명을 입력해주세요'); return }
     setParentBusy(parentEditing.id)
-    const r = await callParentRoute('rename', parentEditing.id, name)
+    const r = await callParentRoute('rename', parentEditing.id, name, parentEditing.industry)
     setParentBusy(null)
     if (!r.ok) { toast.error(r.error); return }
     toast.success('회사명을 수정했습니다')
@@ -2090,7 +2094,7 @@ function AdminPageInner() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead style={{ position: 'sticky', top: 0, background: CARD_BG, zIndex: Z.thead }}>
                     <tr style={{ borderBottom: `2px solid ${BORDER}` }}>
-                      {['회사명', '사업장', '등록일', '관리'].map(h => (
+                      {['회사명', '분류', '사업장', '등록일', '관리'].map(h => (
                         <th key={h} style={{ padding: '9px 12px', textAlign: 'left', color: GRAY, fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -2106,12 +2110,27 @@ function AdminPageInner() {
                               <input
                                 autoFocus
                                 value={parentEditing.name}
-                                onChange={e => setParentEditing({ id: p.customer_id, name: e.target.value })}
+                                onChange={e => setParentEditing({ ...parentEditing, name: e.target.value })}
                                 onKeyDown={e => { if (e.key === 'Enter') handleParentRename(); if (e.key === 'Escape') setParentEditing(null) }}
                                 style={{ ...inp, width: '100%' }}
                               />
                             ) : (
                               <span style={{ color: TEXT, fontWeight: 600 }}>{p.company_name}</span>
+                            )}
+                          </td>
+                          {/* 분류 — 리드 등록의 산업군과 같은 목록. 옛 회사 줄은 비어 있어 여기서 채운다. */}
+                          <td style={{ padding: '9px 12px' }}>
+                            {editing ? (
+                              <select
+                                value={parentEditing.industry}
+                                onChange={e => setParentEditing({ ...parentEditing, industry: e.target.value })}
+                                style={{ ...inp, width: '100%', cursor: 'pointer' }}
+                              >
+                                <option value="">분류 없음</option>
+                                {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+                              </select>
+                            ) : (
+                              <span style={{ color: p.industry ? TEXT : GRAY, whiteSpace: 'nowrap' }}>{p.industry || '없음'}</span>
                             )}
                           </td>
                           {/* 0곳이면 정리 대상이라는 뜻이라 눈에 띄게 둔다 */}
@@ -2134,7 +2153,7 @@ function AdminPageInner() {
                                 </>
                               ) : (
                                 <>
-                                  <button onClick={() => setParentEditing({ id: p.customer_id, name: p.company_name })}
+                                  <button onClick={() => setParentEditing({ id: p.customer_id, name: p.company_name, industry: p.industry ?? '' })}
                                     style={{ padding: '4px 10px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
                                     이름 수정
                                   </button>

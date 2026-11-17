@@ -101,7 +101,9 @@ const toggleCategory = (category: string) => {
   const [isSavingCustomer, setIsSavingCustomer] = useState(false)
 
   const [customerForm, setCustomerForm] = useState({
+    // 저장할 때 「회사명 사업장명」을 합쳐 넣는 칸(lib/addCustomer.ts).
     company_name: '',
+    site_name: '',
     address: '',
     agency: '',
     status: '활성',
@@ -225,6 +227,7 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
   const resetForms = () => {
     setCustomerForm({
       company_name: '',
+      site_name: '',
       address: '',
       agency: '',
       status: '활성',

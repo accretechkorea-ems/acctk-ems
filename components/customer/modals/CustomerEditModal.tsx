@@ -5,7 +5,6 @@ import type { Customer, CustomerEditFormData } from '../types'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import ParentPicker from '@/components/customer/ParentPicker'
-import { FieldHint, SITE_NAME_HINT } from '@/components/customer/siteFormHints'
 import AddressField from './AddressField'
 
 type Props = {
@@ -26,6 +25,7 @@ const fieldStyle: CSSProperties = {
 /** 열었을 때의 값 — 폼의 시작값이자 **변경 여부의 기준**이다(한 곳에서 만든다). */
 const formOf = (c: Customer): CustomerEditFormData => ({
   company_name: c.company_name ?? '',
+  site_name: c.site_name ?? '',
   address: c.address ?? '',
   agency: c.agency ?? '',
   status: c.status ?? '활성',
@@ -33,8 +33,8 @@ const formOf = (c: Customer): CustomerEditFormData => ({
 })
 
 export default function CustomerEditModal({ customer, isSaving, isDeleting, onClose, onSave, onDelete }: Props) {
-  const [form, setForm] = useState<CustomerEditFormData>({ company_name: '', address: '', agency: '', status: '활성', parent_customer_id: null })
-  const { errors, setErrors, clearError, validate } = useFieldErrors<'company_name' | 'address'>()
+  const [form, setForm] = useState<CustomerEditFormData>({ company_name: '', site_name: '', address: '', agency: '', status: '활성', parent_customer_id: null })
+  const { errors, setErrors, clearError, validate } = useFieldErrors<'parent_customer_id' | 'address'>()
 
   useEffect(() => {
     if (customer) {
@@ -48,7 +48,8 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
   // 검증은 여기(모달)에서 인라인으로 수집 → 통과 시에만 onSave(form)
   const handleSave = () => {
     const ok = validate({
-      company_name: form.company_name.trim() ? null : '사업장명을 입력해주세요',
+      // 회사는 필수, 사업장명은 선택이다.
+      parent_customer_id: form.parent_customer_id == null ? '회사명을 선택해주세요' : null,
       address: form.address.trim() ? null : '주소를 입력해주세요',
     })
     if (!ok) return
@@ -86,11 +87,20 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
         </div>
 
         <div style={{ display: 'grid', gap: 14 }}>
+          {/* 회사명 — **필수**. 목록에 없으면 그 자리에서 새 회사로 등록한다(분류를 함께 고른다). */}
+          <div>
+            <label style={labelStyle}>회사명</label>
+            <ParentPicker
+              value={form.parent_customer_id}
+              onChange={id => { setForm(p => ({ ...p, parent_customer_id: id })); clearError('parent_customer_id') }}
+              allowCreate
+              disabled={isSaving}
+            />
+            <FieldError message={errors.parent_customer_id} />
+          </div>
           <div>
             <label style={labelStyle}>사업장명</label>
-            <input value={form.company_name} onChange={(e) => { setForm(p => ({ ...p, company_name: e.target.value })); clearError('company_name') }} placeholder="사업장명" style={errors.company_name ? { ...fieldStyle, border: errBorder } : fieldStyle} />
-            <FieldError message={errors.company_name} />
-            <FieldHint text={SITE_NAME_HINT} />
+            <input value={form.site_name} onChange={(e) => setForm(p => ({ ...p, site_name: e.target.value }))} placeholder="ex) 감마세타엔진공장" style={fieldStyle} />
           </div>
           <div>
             <label style={labelStyle}>주소</label>
@@ -112,16 +122,6 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
             <input value={form.agency} onChange={(e) => setForm(p => ({ ...p, agency: e.target.value }))} placeholder="대리점" style={fieldStyle} />
           </div>
 
-          <div>
-            <label style={labelStyle}>회사명</label>
-            {/* 같은 회사의 업체들을 묶는 행. 바꾸거나 해제해도 견적·장비는 이 업체에 그대로 남는다. */}
-            <ParentPicker
-              value={form.parent_customer_id}
-              onChange={id => setForm(p => ({ ...p, parent_customer_id: id }))}
-              allowCreate
-              disabled={isSaving}
-            />
-          </div>
           <div>
             <label style={labelStyle}>상태</label>
             <select value={form.status} onChange={(e) => setForm(p => ({ ...p, status: e.target.value }))} style={fieldStyle}>

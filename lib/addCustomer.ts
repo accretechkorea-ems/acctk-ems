@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { createEmptyDeviceForm, isEmptyDeviceForm, isEmptyContactForm, type NewDeviceForm } from '@/lib/home'
+import { customerLabel } from '@/lib/customerLabel'
 
 export const addCustomer = async ({
   customerForm,
@@ -15,7 +16,7 @@ export const addCustomer = async ({
 
   // 사용자 검증은 호출 컴포넌트(AddCustomerModal)에서 인라인으로 처리한다.
   // 여기서는 방어용 최소 가드만 둔다 (throw → 호출부 catch 에서 toast.error 로 표면화).
-  if (!customerForm.company_name?.trim()) throw new Error('사업장명을 입력해주세요')
+  if (customerForm.parent_customer_id == null) throw new Error('회사명을 선택해주세요')
 
   setIsSavingCustomer(true)
 
@@ -25,11 +26,22 @@ export const addCustomer = async ({
     const { geocodeAddress } = await import('@/lib/geocode')
     const coords = await geocodeAddress(customerForm.address)
 
+    // 회사 이름은 고른 회사 줄에서 읽는다 — 폼에는 id 만 있다.
+    const { data: parentRow } = await supabase
+      .from('customers').select('company_name')
+      .eq('customer_id', customerForm.parent_customer_id).maybeSingle()
+    const siteName = (customerForm.site_name ?? '').trim()
+    // company_name 에는 **합친 이름**을 넣는다. 이관이 끝날 때까지 화면·문서·엑셀이
+    // 아직 이 칸만 읽기 때문이다(2단계에서 customerLabel 로 옮긴다).
+    const combined = customerLabel(parentRow?.company_name ?? '', siteName)
+    if (!combined) throw new Error('회사명을 선택해주세요')
+
     const { data: insertedCustomer, error: customerError } = await supabase
       .from('customers')
       .insert([
         {
-          company_name: customerForm.company_name.trim(),
+          company_name: combined,
+          site_name: siteName || null,
           address: customerForm.address.trim(),
           agency: customerForm.agency.trim() || null,
           status: customerForm.status,

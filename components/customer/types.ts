@@ -1,6 +1,9 @@
 export type Customer = {
   customer_id: number
+  /** 지금 화면에 보이는 이름. 새로 등록한 줄은 「회사명 사업장명」을 합쳐 둔 값이다. */
   company_name: string | null
+  /** 사업장명(선택). 회사명은 부모 줄에 있다 — lib/customerLabel.ts */
+  site_name?: string | null
   address: string | null
   status: string | null
   agency: string | null
@@ -257,7 +260,9 @@ export type ContactForm = {
 }
 
 export type CustomerEditFormData = {
+  /** 저장할 때 「회사명 사업장명」을 합쳐 넣는다(hooks/customer/useCustomerCrud.ts). */
   company_name: string
+  site_name: string
   address: string
   agency: string
   status: string

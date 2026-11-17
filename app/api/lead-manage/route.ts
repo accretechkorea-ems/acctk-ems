@@ -50,6 +50,8 @@ type LeadRow = {
   /** 파트너사 담당자 메일. 칸이 생기기 전 등록분은 null 이라 그때는 메일을 보내지 않는다. */
   partner_email: string | null
   customer_company: string
+  /** 산업군 — 전환할 때 **회사 줄의 분류**가 된다(lib/leadOptions.ts 의 목록). */
+  industry: string | null
   interest_product: string
   expected_purchase: string | null
   meeting_note: string
@@ -159,7 +161,7 @@ export async function POST(req: Request) {
   // 권한 판정은 화면이 보낸 값이 아니라 DB 의 현재 값으로 한다.
   const { data: lead, error: leadErr } = await supabaseAdmin
     .from('leads')
-    .select('lead_id, lead_no, partner_name, partner_email, customer_company, interest_product, expected_purchase, meeting_note, request_note, status, assigned_to, block_reason, blocked_by, blocked_at, converted_opportunity_id, customer_id, created_at, address, city, contact_name, contact_dept, contact_title, contact_email, contact_office_tel, contact_mobile')
+    .select('lead_id, lead_no, partner_name, partner_email, customer_company, industry, interest_product, expected_purchase, meeting_note, request_note, status, assigned_to, block_reason, blocked_by, blocked_at, converted_opportunity_id, customer_id, created_at, address, city, contact_name, contact_dept, contact_title, contact_email, contact_office_tel, contact_mobile')
     .eq('lead_id', leadId)
     .single<LeadRow>()
   if (leadErr || !lead) return bad('리드를 찾을 수 없습니다.', 404)
@@ -256,8 +258,36 @@ export async function POST(req: Request) {
             candidates: candidates.map(c => ({ customer_id: c.customer_id, company_name: c.company_name, address: c.address ?? null })),
           }, { status: 409 })
         }
-        // 새 고객사 — 리드에 있는 값만 옮긴다. 상태는 「잠재」(아직 거래가 없다),
+        // 회사 줄(is_parent) — 같은 이름이 있으면 그것을 쓰고, 없으면 만든다.
+        // **리드의 산업군이 회사의 분류가 된다** — 리드에만 있고 업체에는 없던 값이다.
+        // 만들지 못해도 배정은 계속한다(사업장만 남고 회사 연결이 비는 일이다).
+        const companyName = (lead.customer_company ?? '').trim()
+        let parentId: number | null = null
+        if (companyName) {
+          const { data: parent } = await supabaseAdmin.from('customers')
+            .select('customer_id, industry')
+            .eq('is_parent', true).is('deleted_at', null).eq('company_name', companyName)
+            .maybeSingle()
+          if (parent) {
+            parentId = parent.customer_id
+            // 분류가 비어 있던 옛 회사 줄이면 리드 값으로 채운다(덮어쓰지는 않는다).
+            if (!parent.industry && lead.industry) {
+              await supabaseAdmin.from('customers')
+                .update({ industry: lead.industry }).eq('customer_id', parent.customer_id)
+            }
+          } else {
+            const { data: madeParent, error: parentErr } = await supabaseAdmin.from('customers')
+              .insert({ company_name: companyName, is_parent: true, industry: lead.industry ?? null })
+              .select('customer_id')
+              .single()
+            if (parentErr) console.error('[lead-manage] parent insert failed', { leadId, companyName, error: parentErr })
+            parentId = madeParent?.customer_id ?? null
+          }
+        }
+
+        // 새 고객사(사업장) — 리드에 있는 값만 옮긴다. 상태는 「잠재」(아직 거래가 없다),
         // 사업부는 '80'(리드에 사업부 칸이 없다. 지금 고객사 대부분이 이 값이다).
+        // 사업장명은 비워 둔다 — 리드에는 사업장 칸이 없다(회사명만으로 부른다).
         const { data: made, error: makeErr } = await supabaseAdmin.from('customers')
           .insert({
             company_name: lead.customer_company,
@@ -266,6 +296,7 @@ export async function POST(req: Request) {
             status: '잠재',
             division: '80',
             is_parent: false,
+            parent_customer_id: parentId,
           })
           .select('customer_id')
           .single()

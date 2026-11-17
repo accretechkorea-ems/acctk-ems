@@ -1,4 +1,4 @@
-// 소속회사(부모 업체) 관리 — 이름 수정과 삭제.
+// 소속회사(부모 업체) 관리 — 이름·분류 수정과 삭제.
 //
 // 라우트로 둔 이유:
 //   · 삭제는 되돌릴 수 없고, 사업장이 남아 있으면 그 사업장들의 parent_customer_id 가 끊긴다.
@@ -6,6 +6,7 @@
 //     지우기 직전에 서버가 다시 세어 0 이 아니면 거부한다.
 //   · service role 로 세야 RLS·필터에 가려 실제보다 적게 세는 일이 없다.
 import { adminClient } from '@/lib/supabase/admin'
+import { INDUSTRIES } from '@/lib/leadOptions'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 
@@ -44,10 +45,13 @@ export async function POST(req: Request) {
   if (!target || target.deleted_at) return bad('회사를 찾을 수 없습니다.', 404)
   if (!target.is_parent) return bad('회사가 아닙니다.')
 
-  // ── 이름 수정 ──
+  // ── 이름·분류 수정 ──
   if (action === 'rename') {
     const name = typeof body?.name === 'string' ? body.name.trim() : ''
     if (!name) return bad('회사명을 입력해주세요.')
+    // 분류는 리드 등록과 **같은 목록**이다(lib/leadOptions.ts) — 폼을 우회한 값을 여기서 막는다.
+    const industry = typeof body?.industry === 'string' ? body.industry.trim() : ''
+    if (industry && !INDUSTRIES.includes(industry)) return bad('분류 값이 올바르지 않습니다.')
 
     // 같은 이름의 소속회사가 이미 있으면 막는다(자기 자신은 제외).
     const { data: dup } = await supabaseAdmin
@@ -60,7 +64,9 @@ export async function POST(req: Request) {
     if (dup && dup.length > 0) return bad('같은 이름의 회사가 이미 있습니다.')
 
     const { error } = await supabaseAdmin
-      .from('customers').update({ company_name: name }).eq('customer_id', parentId)
+      .from('customers')
+      .update({ company_name: name, ...(body?.industry === undefined ? null : { industry: industry || null }) })
+      .eq('customer_id', parentId)
     if (error) {
       console.error('[parent-company] rename failed', { parentId, error })
       return bad('이름을 수정하지 못했습니다.', 500)

@@ -9,6 +9,7 @@ import { geocodeAddress } from '@/lib/geocode'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
+import { customerLabel } from '@/lib/customerLabel'
 import type { Customer, CustomerEditFormData } from '@/components/customer/types'
 import { deleteServiceAttachments } from '@/components/customer/attachments'
 
@@ -37,8 +38,17 @@ export function useCustomerCrud({ customer, fetchDetail }: Args) {
       // 지오코딩이 실패하면 저장 자체가 막힌다.
       const addressChanged = form.address.trim() !== (customer.address ?? '').trim()
       const coords = addressChanged ? await geocodeAddress(form.address.trim()) : null
+      // 회사 이름은 고른 회사 줄에서 읽어 사업장명과 합친다 — 이관이 끝날 때까지
+      // 화면·문서·엑셀이 company_name 한 칸만 읽기 때문이다(lib/customerLabel.ts).
+      const { data: parentRow } = form.parent_customer_id == null
+        ? { data: null }
+        : await supabase.from('customers').select('company_name')
+          .eq('customer_id', form.parent_customer_id).maybeSingle()
+      const siteName = (form.site_name ?? '').trim()
+      const combined = customerLabel(parentRow?.company_name ?? '', siteName) || form.company_name.trim()
+
       const { error } = await supabase.from('customers').update({
-        company_name: form.company_name.trim(), address: form.address.trim(),
+        company_name: combined, site_name: siteName || null, address: form.address.trim(),
         agency: form.agency.trim() || null, status: form.status,
         parent_customer_id: form.parent_customer_id,
         ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : null),

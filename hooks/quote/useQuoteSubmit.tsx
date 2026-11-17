@@ -553,6 +553,22 @@ export function useQuoteSubmit({
       if (saved.repair_linked === false) {
         toast.error('견적서는 저장됐지만 수리 건 연결에 실패했습니다. 수리 목록에서 수동으로 연결해주세요.')
       } else if (saved.repair_linked === true) {
+        /**
+         * 수리 건의 **고객사**도 이때 채운다.
+         *
+         * repairs.customer_name 은 손으로 적는 글자라 고객사 표와 이어져 있지 않았다
+         * (344건 전부 customer_id 가 비어 있었다). 견적이 붙는 순간은 그 수리품이 어느
+         * 고객사 것인지 사람이 고른 유일한 시점이라, 그 값을 여기서 옮겨 둔다.
+         * 이름(customer_name)은 건드리지 않는다 — 적어 둔 글자가 정본이다.
+         * 실패해도 견적 확정은 성공이다(연결만 비는 일이라 다음에 다시 채울 수 있다).
+         */
+        const { data: savedQuote } = await supabase
+          .from('quotes').select('customer_id').eq('quote_id', savedQuoteId).maybeSingle()
+        if (savedQuote?.customer_id) {
+          const { error: linkErr } = await supabase
+            .from('repairs').update({ customer_id: savedQuote.customer_id }).eq('repair_id', repairId!)
+          if (linkErr) console.error('[quote] 수리 건 고객사 연결 실패', { repairId, error: linkErr })
+        }
         toast.success(`수리 건 #${repairId} 에 견적서가 연결되었습니다`)
         linkedRepair = true
       }

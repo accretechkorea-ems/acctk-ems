@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Popover from '@/components/common/Popover'
-import { FieldHint, PARENT_COMPANY_HINT } from '@/components/customer/siteFormHints'
+import { INDUSTRIES } from '@/lib/leadOptions'
 
 /**
  * 소속회사(부모) 선택 칸.
@@ -17,7 +17,7 @@ import { FieldHint, PARENT_COMPANY_HINT } from '@/components/customer/siteFormHi
  * 업체 추가·수정 두 모달이 같은 규칙을 쓰도록 한곳에 둔다.
  */
 
-export type ParentOption = { customer_id: number; company_name: string }
+export type ParentOption = { customer_id: number; company_name: string; industry: string | null }
 
 // 부모는 몇 백 행뿐이라 한 번 읽어 캐시하고 화면에서 걸러 쓴다(사무실 목록과 같은 방식).
 let cache: Promise<ParentOption[]> | null = null
@@ -28,7 +28,7 @@ export function loadParents(): Promise<ParentOption[]> {
     const supabase = createClient()
     const { data, error } = await supabase
       .from('customers')
-      .select('customer_id, company_name')
+      .select('customer_id, company_name, industry')
       .eq('is_parent', true)
       .is('deleted_at', null)
       .order('company_name')
@@ -38,7 +38,9 @@ export function loadParents(): Promise<ParentOption[]> {
       cache = null
       return []
     }
-    return (data ?? []).map(r => ({ customer_id: r.customer_id, company_name: r.company_name ?? '' }))
+    return (data ?? []).map(r => ({
+      customer_id: r.customer_id, company_name: r.company_name ?? '', industry: r.industry ?? null,
+    }))
   })()
   return cache
 }
@@ -65,21 +67,25 @@ export function invalidateParents(): void {
 }
 
 /**
- * 부모 행을 새로 만든다. 이름과 표시만 있는 껍데기라 주소·좌표를 받지 않는다
+ * 회사 행을 새로 만든다. 이름·분류만 있는 껍데기라 주소·좌표를 받지 않는다
  * (업체 등록 경로는 주소 지오코딩이 필수라 그대로 쓸 수 없다).
+ *
+ * **분류는 필수다** — 리드 등록의 산업군과 같은 목록이다(lib/leadOptions.ts). 회사를
+ * 만드는 자리가 여기 하나뿐이라, 여기서 받지 않으면 분류 없는 회사가 계속 생긴다.
  */
-export async function createParent(companyName: string): Promise<ParentOption> {
+export async function createParent(companyName: string, industry: string): Promise<ParentOption> {
   const supabase = createClient()
   const name = companyName.trim()
   if (!name) throw new Error('회사명을 입력해주세요')
+  if (!INDUSTRIES.includes(industry)) throw new Error('분류를 선택해주세요')
   const { data, error } = await supabase
     .from('customers')
-    .insert([{ company_name: name, is_parent: true }])
-    .select('customer_id, company_name')
+    .insert([{ company_name: name, is_parent: true, industry }])
+    .select('customer_id, company_name, industry')
     .single()
   if (error || !data) throw error || new Error('회사를 만들지 못했습니다')
   invalidateParents()
-  return { customer_id: data.customer_id, company_name: data.company_name ?? name }
+  return { customer_id: data.customer_id, company_name: data.company_name ?? name, industry: data.industry ?? industry }
 }
 
 const fieldStyle: CSSProperties = {
@@ -107,6 +113,9 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, o
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
+  /** 「새 회사로 등록」을 누른 뒤의 칸 — 분류를 고르기 전에는 만들지 않는다. */
+  const [newName, setNewName] = useState<string | null>(null)
+  const [newIndustry, setNewIndustry] = useState('')
   const anchorRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -130,32 +139,58 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, o
   )
   const canCreate = !!allowCreate && !!query.trim() && !exact
 
-  const create = useCallback(async () => {
+  const create = useCallback(async (name: string, industry: string) => {
     setCreating(true)
     try {
-      const made = await createParent(query)
+      const made = await createParent(name, industry)
       setParents(await loadParents())
       onChange(made.customer_id)
-      setQuery(''); setOpen(false)
+      setQuery(''); setOpen(false); setNewName(null); setNewIndustry('')
     } catch (e) {
       onError?.((e as Error).message || '회사를 만들지 못했습니다')
     } finally {
       setCreating(false)
     }
-  }, [query, onChange, onError])
+  }, [onChange, onError])
 
-  // 이미 고른 상태 — 이름과 해제 버튼만 보여준다.
-  // 안내 문구는 고른 뒤에도 남긴다 — 사업장이 한 곳뿐인데 잘못 묶었을 때 해제하면 된다는 것을 알려야 한다.
+  // 이미 고른 상태 — 이름(과 분류)과 해제 버튼만 보여준다.
   if (value != null) {
     return (
-      <div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{ ...fieldStyle, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: '#f9fafb' }}>
-            {picked ? picked.company_name : `회사 #${value}`}
-          </div>
-          <button type="button" disabled={disabled} onClick={() => { onChange(null); setQuery('') }} style={ghostBtn}>해제</button>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ ...fieldStyle, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: '#f9fafb' }}>
+          {picked ? picked.company_name : `회사 #${value}`}
+          {picked?.industry ? <span style={{ fontSize: 12, color: '#9ca3af' }}>{`  ${picked.industry}`}</span> : null}
         </div>
-        <FieldHint text={PARENT_COMPANY_HINT} />
+        <button type="button" disabled={disabled} onClick={() => { onChange(null); setQuery('') }} style={ghostBtn}>해제</button>
+      </div>
+    )
+  }
+
+  // 「새 회사로 등록」을 누른 뒤 — 분류를 고르기 전에는 만들지 않는다.
+  if (newName != null) {
+    return (
+      <div style={{ display: 'grid', gap: 8 }}>
+        <div style={{ ...fieldStyle, background: '#f9fafb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {newName}
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <select
+            value={newIndustry}
+            disabled={creating}
+            onChange={e => setNewIndustry(e.target.value)}
+            style={{ ...fieldStyle, flex: 1, minWidth: 0, cursor: 'pointer' }}
+          >
+            <option value="">분류 선택 (필수)</option>
+            {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+          </select>
+          <button type="button" disabled={creating || !newIndustry}
+            onClick={() => void create(newName, newIndustry)}
+            style={{ ...ghostBtn, background: newIndustry ? '#234ea2' : '#f3f4f6', color: newIndustry ? '#fff' : '#9ca3af', cursor: newIndustry ? 'pointer' : 'not-allowed' }}>
+            {creating ? '등록 중...' : '등록'}
+          </button>
+          <button type="button" disabled={creating}
+            onClick={() => { setNewName(null); setNewIndustry('') }} style={ghostBtn}>취소</button>
+        </div>
       </div>
     )
   }
@@ -167,7 +202,7 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, o
         disabled={disabled || creating}
         onChange={e => { setQuery(e.target.value); setOpen(true) }}
         onFocus={() => setOpen(true)}
-        placeholder="회사명 검색 (선택)"
+        placeholder="ex) (주)현대자동차"
         style={fieldStyle}
       />
       {/* 모달 안에서 열려도 잘리지 않도록 포털로 띄운다 */}
@@ -187,21 +222,21 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, o
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
           >
             {p.company_name}
+            {/* 회사 줄에는 주소가 없다(껍데기 행이다) — 같은 이름을 가려 주는 것은 분류다. */}
+            {p.industry ? <span style={{ fontSize: 12, color: '#9ca3af' }}>{`  — ${p.industry}`}</span> : null}
           </div>
         ))}
         {canCreate && (
           <div
-            onMouseDown={e => { e.preventDefault(); create() }}
+            onMouseDown={e => { e.preventDefault(); setNewName(query.trim()); setOpen(false) }}
             style={{ padding: '8px 11px', cursor: 'pointer', fontSize: 13, color: '#234ea2', fontWeight: 700, borderTop: matches.length ? '1px solid #ebebeb' : undefined }}
             onMouseEnter={e => { e.currentTarget.style.background = '#f5f5f5' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
           >
-            {creating ? '만드는 중...' : `「${query.trim()}」 새 회사로 만들기`}
+            {`「${query.trim()}」 새 회사로 등록`}
           </div>
         )}
       </Popover>
-      {/* 안내는 두 모달이 함께 쓰는 이 부품에 둔다 — 한 곳에 넣으면 등록·수정 양쪽에 모두 나온다. */}
-      <FieldHint text={PARENT_COMPANY_HINT} />
     </div>
   )
 }
