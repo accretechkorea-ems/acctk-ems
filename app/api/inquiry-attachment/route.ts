@@ -326,12 +326,22 @@ export async function GET(req: NextRequest) {
   if (!row) return bad('첨부파일을 찾을 수 없습니다.', 404)
   const att = row as { file_path: string; file_name: string }
 
-  // download 옵션이 Content-Disposition: attachment 를 붙인다.
+  /**
+   * 열람(mode=view)과 저장(기본)을 **나눠서** 내려준다.
+   *
+   *   저장 — download 옵션이 Content-Disposition: attachment 를 붙인다. 형식을 가리지 않고
+   *          전부 붙이는 이유: 이 버킷의 파일은 본사와 주고받은 문서라 저장이 목적이고,
+   *          .eml 처럼 앞머리로 형식을 가릴 수 없는 파일이 섞여 있다.
+   *   열람 — PDF 모달 뷰어·엑셀 미리보기가 쓴다. attachment 가 붙어 있으면 브라우저가
+   *          받아 버려 화면 안에서 열 수가 없다. 그래서 그때만 떼어 준다.
+   */
+  const view = req.nextUrl.searchParams.get('mode') === 'view'
+
   // 형식을 가리지 않고 전부 붙이는 이유 — 이 버킷의 파일은 본사와 주고받은 문서라 저장이 목적이고,
   // .eml 처럼 앞머리로 형식을 가릴 수 없는 파일이 섞여 있다. 브라우저가 열어 보지 않게 못 박는다.
   // 원래 파일 이름으로 내려받게 이름도 함께 넘긴다(경로는 서버가 정한 iq-… 이라 사람이 못 읽는다).
   const { data, error: signErr } = await supabaseAdmin.storage
-    .from(BUCKET).createSignedUrl(att.file_path, SIGNED_URL_TTL, { download: att.file_name })
+    .from(BUCKET).createSignedUrl(att.file_path, SIGNED_URL_TTL, view ? undefined : { download: att.file_name })
   if (signErr || !data?.signedUrl) {
     console.error(`[${TAG}] 단계=서명URL발급 버킷=${BUCKET} attachmentId=${attachmentId}`, signErr)
     return bad(`저장소 열기 실패: ${reasonOf(signErr)}`, 500)

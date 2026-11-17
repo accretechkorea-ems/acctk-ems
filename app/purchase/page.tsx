@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useEffect, useState } from 'react'
+import { openPdf, pdfNameOf } from '@/lib/pdfViewer'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { loadMe } from '@/lib/appData/me'
@@ -185,7 +186,7 @@ export default function PurchasePage() {
     try {
       const res = await fetch(`/api/quote-pdf?path=${encodeURIComponent(path)}`)
       const json = await res.json()
-      if (json.signedUrl) window.open(json.signedUrl, '_blank')
+      if (json.signedUrl) openPdf({ url: json.signedUrl, name: pdfNameOf(json.signedUrl, '견적서.pdf') })
     } finally { pdfBusyRef.current = false; setPdfBusyId(null) }
   }
 
@@ -197,7 +198,7 @@ export default function PurchasePage() {
     try {
       const res = await fetch(`/api/purchase-order?path=${encodeURIComponent(q.purchase_order_url)}`)
       const json = await res.json()
-      if (json.signedUrl) window.open(json.signedUrl, '_blank')
+      if (json.signedUrl) openPdf({ url: json.signedUrl, name: pdfNameOf(json.signedUrl, '발주서.pdf') })
     } finally { pdfBusyRef.current = false; setPdfBusyId(null) }
   }
 

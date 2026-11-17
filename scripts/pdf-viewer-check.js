@@ -29,23 +29,27 @@ const eq = (name, got, want) => {
   if (!ok) fails++
   console.log(`${ok ? 'OK  ' : 'FAIL'} ${name}  got=${JSON.stringify(got)} want=${JSON.stringify(want)}`)
 }
-/** 본문이 A4 비율인가 — 가로에서 스크롤바를 뺀 값과 세로의 비(소수 둘째 자리까지). */
-const ratio = box => Math.round(((box.width - V.SCROLLBAR_W) / box.bodyHeight) * 100) / 100
-const A4 = Math.round(V.A4_RATIO * 100) / 100
-
 console.log('── 창 치수 ──')
-for (const [vw, vh] of [[1920, 1080], [1366, 768], [2560, 1440], [1280, 1024]]) {
+// 가로를 먼저 정한다 — 화면의 92%, 상한 1100px. 세로는 화면의 96%.
+for (const [vw, vh] of [[1920, 1080], [1366, 768], [1536, 864], [2560, 1440]]) {
   const box = V.pdfViewerBox(vw, vh)
   eq(`${vw}×${vh} — 세로는 화면의 96%`, box.height, Math.round(vh * V.VIEWER_VH))
-  eq(`${vw}×${vh} — 본문이 A4 비율`, ratio(box), A4)
-  eq(`${vw}×${vh} — 가로 상한 안`, box.width <= Math.round(vw * V.VIEWER_MAX_VW), true)
+  eq(`${vw}×${vh} — 가로는 화면의 92%와 상한 중 작은 쪽`,
+    box.width, Math.min(Math.round(vw * V.VIEWER_VW), V.VIEWER_MAX_W))
+  eq(`${vw}×${vh} — 본문 높이 = 창 − 머리줄`, box.bodyHeight, box.height - V.VIEWER_HEADER_H)
 }
 
-console.log('\n── 좁은 화면(가로 상한에 걸릴 때) ──')
+console.log('\n── 노트북에서 넓어졌는가(예전 규칙과 견줌) ──')
+// 예전 규칙은 세로를 먼저 잡고 A4 비율로 가로를 정했다 → 1366×768 에서 504px 이었다.
+eq('1366×768 — 예전 504px 보다 넓다', V.pdfViewerBox(1366, 768).width > 504, true)
+// 1366×0.92 = 1257 이지만 상한 1100 이 먼저 걸린다 — 그래도 예전의 두 배가 넘는다.
+eq('1366×768 — 실제 폭', V.pdfViewerBox(1366, 768).width, V.VIEWER_MAX_W)
+eq('1920×1080 — 상한에 걸린다', V.pdfViewerBox(1920, 1080).width, V.VIEWER_MAX_W)
+
+console.log('\n── 좁은 화면 ──')
 const narrow = V.pdfViewerBox(420, 900)
-eq('가로를 상한에 맞춘다', narrow.width, Math.round(420 * V.VIEWER_MAX_VW))
-eq('세로를 비율대로 줄인다', ratio(narrow), A4)
-eq('세로가 화면 96% 보다 낮아진다', narrow.height < Math.round(900 * V.VIEWER_VH), true)
+eq('가로는 화면의 92%', narrow.width, Math.round(420 * V.VIEWER_VW))
+eq('세로는 화면의 96%', narrow.height, Math.round(900 * V.VIEWER_VH))
 
 console.log('\n── 뷰어에 주는 설정 ──')
 eq('툴바·쪽 목록을 감추고 가로 맞춤',

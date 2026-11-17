@@ -6,6 +6,7 @@
 // 여는 데 성공하면 download_logs 에 조회 기록을 남긴다.
 
 import { useRef, useState } from 'react'
+import { openPdf, pdfNameOf } from '@/lib/pdfViewer'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import type { Customer, Quote } from '@/components/customer/types'
@@ -27,6 +28,7 @@ export function useQuotePdf({ customer, engineerId }: Args) {
     // state 는 다음 렌더에야 반영돼 같은 틱의 연타를 못 막는다 — 판정은 ref 로 한다.
     if (busyRef.current) return
     if (!q.pdf_url) { toast.error('저장된 견적서 PDF가 없습니다'); return }
+    // 옛 시놀로지 주소는 우리 저장소가 아니라 서명 URL 을 못 만든다 — 새 탭 그대로.
     if (q.pdf_url.includes('synology')) { window.open(q.pdf_url, '_blank'); return }
     const path = q.pdf_url.startsWith('quote-pdfs/') ? q.pdf_url.replace('quote-pdfs/', '') : q.pdf_url.split('/quote-pdfs/')[1]
     if (!path) { toast.error('견적서 PDF 경로를 확인할 수 없습니다'); return }
@@ -36,7 +38,7 @@ export function useQuotePdf({ customer, engineerId }: Args) {
       const res = await fetch(`/api/quote-pdf?path=${encodeURIComponent(path)}`)
       const json = await res.json()
       if (!json.signedUrl) { toast.error(json.error || '견적서를 열 수 없습니다'); return }
-      window.open(json.signedUrl, '_blank')
+      openPdf({ url: json.signedUrl, name: pdfNameOf(json.signedUrl, '견적서.pdf') })
       await supabase.from('download_logs').insert({
         engineer_id: engineerId,
         quote_id: q.quote_id,

@@ -12,6 +12,7 @@
 // 예전처럼 객체를 state 에 복사해 두면 메모를 고쳐도 목록만 갱신되고 모달은 옛 내용을 그렸다.
 
 import { useRef, useState } from 'react'
+import { openPdf, pdfNameOf } from '@/lib/pdfViewer'
 import { createClient } from '@/lib/supabase/client'
 import { josa } from '@/lib/josa'
 import { useToast } from '@/components/common/Toast'
@@ -137,8 +138,8 @@ export function useHoldingCrud({ customerId, holdings, engineerId, fetchDetail, 
       const path = toReportPath(report.report_url)
       const { data, error } = await supabase.storage.from('service-report').createSignedUrl(path, 3600)
       if (error || !data?.signedUrl) throw error || new Error('레포트를 열 수 없습니다.')
-      if (win) { win.opener = null; win.location.href = data.signedUrl }
-      else window.open(data.signedUrl, '_blank')
+      // 모달로 띄운다 — 미리 열어 둔 빈 탭은 새 탭으로 갈 자리에서만 쓰인다.
+      openPdf({ url: data.signedUrl, name: pdfNameOf(data.signedUrl, '서비스 리포트.pdf') }, win)
     } catch (e) {
       if (win) win.close()
       console.error('[holding] open report failed', e)

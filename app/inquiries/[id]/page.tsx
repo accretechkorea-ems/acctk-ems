@@ -41,6 +41,8 @@ import SegmentedControl from '@/components/common/SegmentedControl'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useToast } from '@/components/common/Toast'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import { isPdfName, openPdf } from '@/lib/pdfViewer'
+import XlsxPreviewModal, { type XlsxDoc } from '@/components/xlsx/XlsxPreviewModal'
 import FilePicker, { failText, sizeText, uploadFiles } from '@/components/inquiry/files'
 import CompleteModal from '@/components/inquiry/CompleteModal'
 import {
@@ -680,6 +682,8 @@ export default function InquiryDetailPage() {
   // 내용 기록.
   const [messages, setMessages] = useState<Message[]>([])
   const [files, setFiles] = useState<Attachment[]>([])
+  /** 미리보기로 열어 둔 엑셀 첨부. 닫으면 null 이다. */
+  const [xlsxDoc, setXlsxDoc] = useState<XlsxDoc | null>(null)
   /** 「내용 추가」 모달이 열려 있는가. */
   const [msgOpen, setMsgOpen] = useState(false)
   /** 「작성 완료」 모달이 열려 있는가. */
@@ -1055,12 +1059,22 @@ export default function InquiryDetailPage() {
     }
   }
 
-  /** 첨부 내려받기 — 서명 URL 을 받아 새 창으로 연다(Content-Disposition 이 attachment 다). */
+  /**
+   * 첨부 열기 — 형식에 따라 가는 곳이 다르다.
+   *   PDF   모달 뷰어(components/pdf/PdfViewerModal)
+   *   엑셀  미리보기 모달(components/xlsx/XlsxPreviewModal) — 파싱은 이 브라우저에서만 한다
+   *   그 밖 종전대로 내려받기(.eml·zip 처럼 화면에서 열 수 없는 것들)
+   * 앞의 둘은 **열람용 서명 URL**(mode=view)을 받는다 — 기본 주소에는 attachment 가 붙어 있어
+   * 화면 안에서 열 수가 없다.
+   */
   const openFile = async (a: Attachment) => {
+    const preview = isPdfName(a.file_name) || /.(xlsx|xlsm)$/i.test(a.file_name)
     try {
-      const res = await fetch(`/api/inquiry-attachment?attachmentId=${a.id}`)
+      const res = await fetch(`/api/inquiry-attachment?attachmentId=${a.id}${preview ? '&mode=view' : ''}`)
       const json = await res.json().catch(() => ({}))
       if (!res.ok || !json.signedUrl) { toast.error(json.error || '파일을 열 수 없습니다.'); return }
+      if (isPdfName(a.file_name)) { openPdf({ url: json.signedUrl, name: a.file_name }); return }
+      if (preview) { setXlsxDoc({ url: json.signedUrl, name: a.file_name, byteSize: a.byte_size }); return }
       window.open(json.signedUrl, '_blank', 'noopener')
     } catch (e) {
       console.error('[inquiries] 파일 열기 실패', e)
@@ -1377,6 +1391,8 @@ export default function InquiryDetailPage() {
           onSaved={loadThread}
         />
       )}
+
+      {xlsxDoc && <XlsxPreviewModal doc={xlsxDoc} onClose={() => setXlsxDoc(null)} />}
 
       {completeOpen && row && (
         <CompleteModal

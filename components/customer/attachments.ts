@@ -4,6 +4,7 @@
 // 업로드·삭제는 전부 /api/service-attachment(service role)를 거친다. 브라우저에서
 // 스토리지를 직접 건드리지 않는다 — 버킷이 비공개고 파일명도 서버가 정한다.
 import { downsizeImage } from '@/lib/leadCardImage'
+import { isPdfName, openPdf, pdfNameOf } from '@/lib/pdfViewer'
 import type { ServiceAttachment } from './types'
 
 /** 서비스 기록 1건당 첨부 상한. 라우트의 MAX_PER_SERVICE 와 같은 값이어야 한다. */
@@ -198,14 +199,21 @@ export async function deleteServiceAttachments(serviceId: number): Promise<{ ok:
   }
 }
 
-/** 첨부를 새 탭에서 연다(1시간짜리 서명 URL). */
-export async function openAttachment(attachmentId: number): Promise<{ ok: true } | Fail> {
+/**
+ * 첨부를 연다(1시간짜리 서명 URL).
+ * PDF 는 **모달 뷰어**로, 사진 등 그 밖은 종전대로 새 탭이다(뷰어는 PDF 만 그린다).
+ */
+export async function openAttachment(attachmentId: number, fileName?: string | null): Promise<{ ok: true } | Fail> {
   try {
     const res = await fetch(`${API}?attachmentId=${attachmentId}`)
     if (!res.ok) return { ok: false, error: await errorOf(res, '첨부파일을 열 수 없습니다.') }
     const body = await res.json() as { signedUrl?: string }
     if (!body.signedUrl) return { ok: false, error: '첨부파일을 열 수 없습니다.' }
-    window.open(body.signedUrl, '_blank', 'noopener')
+    if (isPdfName(fileName) || isPdfName(body.signedUrl)) {
+      openPdf({ url: body.signedUrl, name: (fileName ?? '').trim() || pdfNameOf(body.signedUrl, '첨부.pdf') })
+    } else {
+      window.open(body.signedUrl, '_blank', 'noopener')
+    }
     return { ok: true }
   } catch (e) {
     console.error('[첨부] 열기 요청 실패', e)

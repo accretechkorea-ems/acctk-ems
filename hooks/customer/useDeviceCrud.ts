@@ -5,6 +5,7 @@
 // 장비 도메인 안에 함께 둔다.
 
 import { useRef, useState } from 'react'
+import { isPdfName, openPdf, pdfNameOf } from '@/lib/pdfViewer'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { DEVICE_BUCKET, deviceImagePath, isDefaultDeviceImage } from '@/lib/deviceImage'
@@ -335,7 +336,10 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
       const path = toPackingPath(device.packing_list_url)
       const { data, error } = await supabase.storage.from('packing-lists').createSignedUrl(path, 3600)
       if (error || !data?.signedUrl) throw error || new Error('파일을 열 수 없습니다.')
-      if (win) {
+      // PDF 면 모달 뷰어로, 사진이면 종전대로 새 탭이다(뷰어는 PDF 만 그린다).
+      if (isPdfName(path)) {
+        openPdf({ url: data.signedUrl, name: pdfNameOf(path, '납입의사록.pdf') }, win)
+      } else if (win) {
         win.opener = null // 보안: 열린 탭이 원본 창에 접근하지 못하도록
         win.location.href = data.signedUrl
       } else {

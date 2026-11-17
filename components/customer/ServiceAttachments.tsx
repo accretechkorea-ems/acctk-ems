@@ -195,7 +195,7 @@ export function ServiceAttachmentEditor({ serviceId, initial, report, onPickRepo
   }
 
   const handleOpen = async (a: ServiceAttachment) => {
-    const r = await openAttachment(a.attachment_id)
+    const r = await openAttachment(a.attachment_id, a.file_name)
     if (!r.ok) toast.error(r.error)
   }
 
@@ -333,7 +333,7 @@ export function ServiceFilesButton({ attachments, report, trailing }: {
   const rows = [...attachments].sort(byOrder)
 
   const handleOpen = async (a: ServiceAttachment) => {
-    const r = await openAttachment(a.attachment_id)
+    const r = await openAttachment(a.attachment_id, a.file_name)
     if (!r.ok) toast.error(r.error)
   }
 
