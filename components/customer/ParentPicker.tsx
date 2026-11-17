@@ -106,11 +106,27 @@ type Props = {
   /** 저장 중 등으로 잠글 때 */
   disabled?: boolean
   onError?: (message: string) => void
+  /**
+   * **부모가 없는 줄을 고칠 때** 칸에 미리 채워 두는 이름(그 줄의 company_name).
+   *
+   * 이관 전에 들어온 사업장 591곳은 회사 줄이 없어 이 칸이 빈칸으로 떴다. 적혀 있던
+   * 이름을 그대로 보여 주고, 고르지 않고 저장하면 그 이름으로 회사를 찾거나 만든다
+   * (hooks/customer/useCustomerCrud.ts). 주면 칸이 **바깥에서 조종**된다.
+   */
+  nameValue?: string
+  onNameChange?: (name: string) => void
 }
 
-export default function ParentPicker({ value, onChange, allowCreate, disabled, onError }: Props) {
+export default function ParentPicker({ value, onChange, allowCreate, disabled, onError, nameValue, onNameChange }: Props) {
   const [parents, setParents] = useState<ParentOption[]>([])
-  const [query, setQuery] = useState('')
+  const [ownQuery, setOwnQuery] = useState('')
+  // 바깥에서 이름을 주면 그 값이 칸의 내용이다(부모 없는 줄을 고치는 경우).
+  const controlled = nameValue !== undefined
+  const query = controlled ? nameValue : ownQuery
+  const setQuery = useCallback(
+    (v: string) => { if (controlled) onNameChange?.(v); else setOwnQuery(v) },
+    [controlled, onNameChange],
+  )
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   /** 「새 회사로 등록」을 누른 뒤의 칸 — 분류를 고르기 전에는 만들지 않는다. */
@@ -151,7 +167,7 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, o
     } finally {
       setCreating(false)
     }
-  }, [onChange, onError])
+  }, [onChange, onError, setQuery])
 
   // 이미 고른 상태 — 이름(과 분류)과 해제 버튼만 보여준다.
   if (value != null) {

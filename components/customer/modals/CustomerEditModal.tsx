@@ -49,7 +49,11 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
   const handleSave = () => {
     const ok = validate({
       // 회사는 필수, 사업장명은 선택이다.
-      parent_customer_id: form.parent_customer_id == null ? '회사명을 선택해주세요' : null,
+      // 회사 줄이 아직 없는 사업장(이관 전에 들어온 591곳)은 **이름만 적혀 있다** —
+      // 그 이름으로 저장하면 회사를 찾거나 만들어 잇는다(hooks/customer/useCustomerCrud.ts).
+      parent_customer_id: form.parent_customer_id == null && !form.company_name.trim()
+        ? '회사명을 입력해주세요'
+        : null,
       address: form.address.trim() ? null : '주소를 입력해주세요',
     })
     if (!ok) return
@@ -87,12 +91,15 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
         </div>
 
         <div style={{ display: 'grid', gap: 14 }}>
-          {/* 회사명 — **필수**. 목록에 없으면 그 자리에서 새 회사로 등록한다(분류를 함께 고른다). */}
+          {/* 회사명 — **필수**. 목록에 없으면 그 자리에서 새 회사로 등록한다(분류를 함께 고른다).
+              회사 줄이 아직 없는 사업장은 그 줄에 적혀 있던 이름이 칸에 채워져 보인다. */}
           <div>
             <label style={labelStyle}>회사명</label>
             <ParentPicker
               value={form.parent_customer_id}
               onChange={id => { setForm(p => ({ ...p, parent_customer_id: id })); clearError('parent_customer_id') }}
+              nameValue={form.company_name}
+              onNameChange={v => { setForm(p => ({ ...p, company_name: v })); clearError('parent_customer_id') }}
               allowCreate
               disabled={isSaving}
             />

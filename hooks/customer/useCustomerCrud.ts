@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { customerLabel } from '@/lib/customerLabel'
+import { invalidateParents } from '@/components/customer/ParentPicker'
 import type { Customer, CustomerEditFormData } from '@/components/customer/types'
 import { deleteServiceAttachments } from '@/components/customer/attachments'
 
@@ -38,19 +39,51 @@ export function useCustomerCrud({ customer, fetchDetail }: Args) {
       // 지오코딩이 실패하면 저장 자체가 막힌다.
       const addressChanged = form.address.trim() !== (customer.address ?? '').trim()
       const coords = addressChanged ? await geocodeAddress(form.address.trim()) : null
-      // 회사 이름은 고른 회사 줄에서 읽어 사업장명과 합친다 — 이관이 끝날 때까지
-      // 화면·문서·엑셀이 company_name 한 칸만 읽기 때문이다(lib/customerLabel.ts).
-      const { data: parentRow } = form.parent_customer_id == null
-        ? { data: null }
-        : await supabase.from('customers').select('company_name')
-          .eq('customer_id', form.parent_customer_id).maybeSingle()
+      /**
+       * 회사 줄을 정한다.
+       *
+       * 골라 둔 회사가 있으면 그 줄이고, **없으면 적혀 있는 회사명으로 찾거나 만든다** —
+       * 이관 전에 들어온 사업장(회사 줄이 없는 591곳)을 한 줄씩 손으로 옮기는 길이다.
+       * 여기서 만든 회사에는 분류가 비어 있다(관리자 화면의 「회사 관리」에서 채운다).
+       */
+      let parentId = form.parent_customer_id
+      let companyName = ''
+      if (parentId != null) {
+        const { data: parentRow } = await supabase.from('customers').select('company_name')
+          .eq('customer_id', parentId).maybeSingle()
+        companyName = (parentRow?.company_name ?? '').trim()
+      } else {
+        companyName = form.company_name.trim()
+        if (!companyName) {
+          setIsSavingCustomerEdit(false)
+          toast.error('회사명을 입력해주세요')
+          return
+        }
+        const { data: found } = await supabase.from('customers').select('customer_id')
+          .eq('is_parent', true).is('deleted_at', null).eq('company_name', companyName).maybeSingle()
+        if (found) {
+          parentId = found.customer_id
+        } else {
+          const { data: made, error: makeErr } = await supabase.from('customers')
+            .insert({ company_name: companyName, is_parent: true }).select('customer_id').single()
+          if (makeErr || !made) {
+            setIsSavingCustomerEdit(false)
+            toast.error(makeErr?.message || '회사를 만들지 못했습니다')
+            return
+          }
+          parentId = made.customer_id
+          invalidateParents()   // 회사 목록 캐시가 새 회사를 모르고 있다
+        }
+      }
+
+      // 화면·문서·엑셀이 company_name 한 칸만 읽으므로 합친 이름을 넣어 둔다(lib/customerLabel.ts).
       const siteName = (form.site_name ?? '').trim()
-      const combined = customerLabel(parentRow?.company_name ?? '', siteName) || form.company_name.trim()
+      const combined = customerLabel(companyName, siteName) || form.company_name.trim()
 
       const { error } = await supabase.from('customers').update({
         company_name: combined, site_name: siteName || null, address: form.address.trim(),
         agency: form.agency.trim() || null, status: form.status,
-        parent_customer_id: form.parent_customer_id,
+        parent_customer_id: parentId,
         ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : null),
       }).eq('customer_id', customer.customer_id)
       setIsSavingCustomerEdit(false)
