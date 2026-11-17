@@ -9,11 +9,14 @@ import { STAGES, compactKRW, isClosed, stageRank } from './opportunity'
 import { deviceLabel, elapsedLabel, isHoldingDeviceDisposed } from './holding'
 import type { Holding, Quote, SalesOpportunity, ServiceHistory } from './types'
 import Popover from '@/components/common/Popover'
+import { pickLastTouch } from '@/lib/customerLastTouch'
 
 type Props = {
   quotes: Quote[]
   deviceCount: number
   history: ServiceHistory[]
+  /** 영업활동 날짜만 — 「최근 접점」 계산에 쓴다(목록 정렬과 같은 판정이다). */
+  activityDates: (string | null)[]
   customerId: number
   opportunities: SalesOpportunity[]
   onAddOpportunity: () => void
@@ -235,7 +238,7 @@ function HoldingRow({ h, onClick }: { h: Holding; onClick: () => void }) {
 }
 
 export default function SummaryPanel({
-  quotes, deviceCount, history, customerId, opportunities,
+  quotes, deviceCount, history, customerId, opportunities, activityDates,
   onAddOpportunity, onOpenOpportunity, onChangeStage, canEditOpportunity,
   holdings, onOpenHolding, onQuoteHistoryOpen, family, onFamilyQuoteHistoryOpen, onDeviceOpen,
 }: Props) {
@@ -257,15 +260,15 @@ export default function SummaryPanel({
     return { open, closed }
   }, [opportunities])
 
-  // 날짜가 없는 기록이 많아 max 를 구하기 전에 걸러낸다. 값은 'YYYY-MM-DD' 라 문자열 비교로 충분.
-  const lastVisit = useMemo(() => {
-    let latest: string | null = null
-    for (const h of history) {
-      if (!h.visit_date) continue
-      if (latest === null || h.visit_date > latest) latest = h.visit_date
-    }
-    return latest
-  }, [history])
+  /**
+   * 마지막 접점 — **목록 정렬과 같은 판정**이다(lib/customerLastTouch.ts).
+   * 예전에는 서비스 리포트만 봐서, 견적·영업활동만 있는 업체가 「없음」으로 보였다.
+   */
+  const lastTouch = useMemo(() => pickLastTouch({
+    activity: activityDates,
+    service: history.map(h => h.visit_date),
+    quote: quotes.map(q => q.quote_date),
+  }), [activityDates, history, quotes])
 
   return (
     <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, padding: '14px 16px' }}>
@@ -287,7 +290,9 @@ export default function SummaryPanel({
           muted={deviceCount === 0}
           onClick={deviceCount > 0 ? onDeviceOpen : undefined}
         />
-        <StatBox label="최근 방문" value={lastVisit ?? NONE} muted={!lastVisit} />
+        {/* 「방문」이 아니라 **접점**이다 — 견적·영업활동도 이 칸에 올라온다. */}
+        <StatBox label={lastTouch ? `최근 ${lastTouch.source}` : '최근 접점'}
+          value={lastTouch?.date ?? NONE} muted={!lastTouch} />
       </div>
 
       {/* 견적의 딸림줄 — 대리점 경유 내역과 같은 회사 합계. 박스 아래에 붙인다. */}

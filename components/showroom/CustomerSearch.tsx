@@ -5,7 +5,7 @@
 // 기존 고객사 검색은 독립 컴포넌트가 아니라 app/quote/page.tsx 안에 인라인으로 박혀 있다
 // (:1112-1174 마크업, :368-375 조회). 그래서 같은 방식으로 새로 만들되,
 // 조회 조건·키보드 조작·목록 모양은 그쪽과 똑같이 맞춘다.
-//   · 조회: customers 에서 deleted_at is null, is_parent=false, company_name ilike, 최대 10건
+//   · 조회: customers 에서 deleted_at is null, is_parent=false, 회사명·사업장명 ilike, 최대 10건
 //   · ↑↓ 이동 / Enter 선택 / Esc 닫기 — useListKeyboard 공용 훅
 //   · 바깥 클릭 시 닫힘 — useOutsideClick 공용 훅
 // AutocompleteInput 은 문자열만 돌려주므로 여기서는 쓸 수 없다(customer_id 가 필요하다).
@@ -61,7 +61,8 @@ export default function CustomerSearch({ value, onChange, placeholder = '업체�
       .select('customer_id, company_name, address, status')
       .is('deleted_at', null)
       .eq('is_parent', false)
-      .ilike('company_name', `%${q}%`)
+      // 회사명·사업장명 둘 다 — 「현대자동차」로도, 「감마세타」로도 걸려야 한다.
+      .or(`company_name.ilike.%${q}%,site_name.ilike.%${q}%`)
       .limit(10)
     if (error) { console.error('[showroom] customer search failed', error); return }
     setResults((data ?? []) as CustomerHit[])

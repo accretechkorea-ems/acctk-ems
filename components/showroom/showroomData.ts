@@ -5,6 +5,7 @@
 // 조회 함수는 실패하면 Error 를 던진다. 화면이 받아 사용자에게 보일 문구로 바꾼다.
 
 import type { createClient } from '@/lib/supabase/client'
+import { CUSTOMER_NAME_SELECT } from '@/lib/customerLabel'
 import { normTime, toMin, toHHMM } from '@/lib/workHours'
 import {
   siteShortName, DEFAULT_DAILY_HOURS, DEFAULT_DEVICE_STATUS,
@@ -32,7 +33,7 @@ const USAGE_SELECT =
   'usage_id, device_id, usage_date, start_time, end_time, work_hours, purpose, customer_id,' +
   ' project_name, customer_dept, content, sample_material, carried_out, expected_cost, nda_status,' +
   ' expected_result, result, result_category, issue, follow_up, quote_id, note, request_id, document_id, created_by,' +
-  ' customers(company_name), quotes(quote_number),' +
+  ` customers(${CUSTOMER_NAME_SELECT}), quotes(quote_number),` +
   ' approval_requests(approver_id, decided_at, status, retro:payload->is_retroactive)'
 
 /**

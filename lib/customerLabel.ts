@@ -55,6 +55,47 @@ export function customerLabelOf(
   return customerLabel(company, site)
 }
 
+// ── 조회에서 이름을 읽는 법 ────────────────────────────────────────────────
+//   회사명은 **부모 줄**에 있으므로 함께 읽어야 한다. supabase 의 내장 조인으로
+//   한 번에 가져온다(자기 참조 FK 라 `parent:parent_customer_id(...)` 로 쓴다).
+//
+//       .select(`customer_id, ${CUSTOMER_NAME_SELECT}, address`)
+//
+//   읽어 온 줄은 customerDisplayName() 에 그대로 넘긴다.
+
+/** 이름에 필요한 칸들 — select 문자열에 그대로 붙인다. */
+export const CUSTOMER_NAME_SELECT = 'company_name, site_name, parent:parent_customer_id(company_name)'
+
+/** 내장 조인으로 함께 읽은 부모(한 줄이지만 배열로 올 때도 있어 둘 다 받는다). */
+export type ParentNameJoin = { company_name?: string | null } | { company_name?: string | null }[] | null
+
+export type CustomerNameRowWithParent = CustomerNameRow & { parent?: ParentNameJoin }
+
+/** 조인해 온 부모에서 이름만. */
+export function parentNameOf(parent: ParentNameJoin | undefined): string | null {
+  const one = Array.isArray(parent) ? parent[0] : parent
+  const name = (one?.company_name ?? '').trim()
+  return name || null
+}
+
+/**
+ * 화면·문서·엑셀이 쓰는 **한 줄 이름**. 조회가 CUSTOMER_NAME_SELECT 를 쓴 줄을 넘긴다.
+ * 회사 줄(is_parent)은 자기 이름이 곧 회사명이라 그대로 나온다.
+ */
+export function customerDisplayName(row: CustomerNameRowWithParent | null | undefined): string {
+  if (!row) return ''
+  return customerLabelOf(row, parentNameOf(row.parent))
+}
+
+/**
+ * **회사명만** — 견적서의 「○○ 귀하」와 E.U 칸이 쓴다(사업장명은 빼는 자리다).
+ * 부모가 있으면 부모 이름, 없으면 그 줄의 이름이다.
+ */
+export function customerCompanyName(row: CustomerNameRowWithParent | null | undefined): string {
+  if (!row) return ''
+  return parentNameOf(row.parent) ?? (row.company_name ?? '').trim()
+}
+
 /** 같은 이름이 여럿일 때 가려 주는 꼬리 — 「… — 경기도 화성시 동탄…」. */
 export function customerLabelWithAddress(
   label: string,

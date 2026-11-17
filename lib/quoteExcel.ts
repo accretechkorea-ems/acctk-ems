@@ -5,6 +5,7 @@
 // 컬럼명은 실제 테이블(quotes / quote_items / quote_expenses)에서 확인한 것과 일치한다.
 
 import { createClient } from '@/lib/supabase/client'
+import { CUSTOMER_NAME_SELECT, customerDisplayName, type CustomerNameRowWithParent } from '@/lib/customerLabel'
 import { salesStatusLabel } from '@/lib/categoryColors'
 import { profitBreakdownOfLines } from '@/lib/quoteProfit'
 import { isTitleRowKind } from '@/lib/quoteRowKinds'
@@ -59,8 +60,9 @@ export type QuoteExcelData = {
   category: string | null
   total_profit: number | null
   profit_rate: number | null
-  customers: { company_name: string } | null   // customer_id 참조(직판 고객사 / 대리점 견적이면 E.U)
-  dealer: { company_name: string } | null      // dealer_id 참조(대리점). 직판이면 null
+  // customer_id 참조(직판 고객사 / 대리점 견적이면 E.U). 이름은 「회사명 사업장명」으로 적는다.
+  customers: CustomerNameRowWithParent | null
+  dealer: CustomerNameRowWithParent | null     // dealer_id 참조(대리점). 직판이면 null
   engineers: { name: string; position: string | null } | null
   quote_items: QuoteExcelItem[]
   quote_expenses: QuoteExcelExpense[]
@@ -73,8 +75,8 @@ export type QuoteExcelData = {
 const SELECT = `
   quote_id, quote_number, quote_date, recipient, note, delivery_info, status, quote_type, category,
   total_supply, total_tax, total_amount, total_cost, total_profit, profit_rate,
-  customers:customer_id ( company_name ),
-  dealer:dealer_id ( company_name ),
+  customers:customer_id ( ${CUSTOMER_NAME_SELECT} ),
+  dealer:dealer_id ( ${CUSTOMER_NAME_SELECT} ),
   engineers!quotes_engineer_id_fkey ( name, position ),
   quote_items ( item_id, row_kind, part_code, product_name, quantity,
                 unit_price_jpy, unit_price_krw, supply_amount, tax_amount,
@@ -258,10 +260,10 @@ export function buildQuoteSheet(workbook: Workbook, quote: QuoteExcelData): Work
   const fxLabel = fxLabelOf(rates)
   const info: [string, string | number | null, string, string | number | null][] = [
     ['견적번호', quote.quote_number, '환율적용월', (quote.quote_date ?? '').slice(0, 7) || '-'],
-    ['고객사', quote.customers?.company_name ?? '-', '엔화 환율', fxLabel],
+    ['고객사', customerDisplayName(quote.customers) || '-', '엔화 환율', fxLabel],
     // 이 이름은 실적 귀속자(quotes.engineer_id)다. 대필이면 쓴 사람과 다르므로 「작성자」가 아니라 「담당자」다.
     // 다른 화면(실적 현황·발주관리·유지보수·고객사 상세)도 같은 값을 「담당자」로 부른다.
-    ['담당자', [quote.engineers?.name, quote.engineers?.position].filter(Boolean).join(' ') || '-', '대리점', quote.dealer?.company_name ?? '(직판)'],
+    ['담당자', [quote.engineers?.name, quote.engineers?.position].filter(Boolean).join(' ') || '-', '대리점', customerDisplayName(quote.dealer) || '(직판)'],
     // 상태는 저장값이 아니라 화면과 같은 표시 이름으로 적는다('실패' → 「미수주」).
     ['견적일자', quote.quote_date ?? '-', '상태', quote.status ? salesStatusLabel(quote.status) : '-'],
   ]

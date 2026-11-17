@@ -58,6 +58,20 @@ eq('부모가 없고 사업장명만 있으면 자기 이름을 회사명으로'
   '연암테크 김해공장')
 eq('칸이 비어 있어도 터지지 않는다', L.customerLabelOf({}, null), '')
 
+console.log('\n── 조회해 온 줄에서 이름 뽑기 ──')
+eq('select 에 붙이는 글자',
+  L.CUSTOMER_NAME_SELECT, 'company_name, site_name, parent:parent_customer_id(company_name)')
+const joined = { company_name: '현대위아 창원2공장', site_name: '창원2공장', parent: { company_name: '현대위아' } }
+eq('한 줄 이름', L.customerDisplayName(joined), '현대위아 창원2공장')
+eq('부모가 배열로 와도 같다',
+  L.customerDisplayName({ ...joined, parent: [{ company_name: '현대위아' }] }), '현대위아 창원2공장')
+eq('회사명만(견적서 귀하·E.U)', L.customerCompanyName(joined), '현대위아')
+eq('부모가 없으면 그 줄 이름이 회사명',
+  L.customerCompanyName({ company_name: '가나공업', site_name: null, parent: null }), '가나공업')
+eq('회사 줄은 자기 이름 그대로',
+  L.customerDisplayName({ company_name: '현대위아', site_name: null, parent: null }), '현대위아')
+eq('줄이 없으면 빈 글자', [L.customerDisplayName(null), L.customerCompanyName(undefined)], ['', ''])
+
 console.log('\n── 같은 이름을 가리는 주소 꼬리 ──')
 eq('주소 앞부분을 붙인다',
   L.customerLabelWithAddress('현대자동차㈜', '울산 북구 염포로 700'),

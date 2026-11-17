@@ -34,6 +34,7 @@
 import { adminClient } from '@/lib/supabase/admin'
 import { isOwnerOrSuperAdmin, loadCaller } from '@/lib/apiCaller'
 import { MAX_PHOTOS, PHOTO_MAX_BYTES, repairInfoState, type RepairInfoRow } from '@/lib/quoteRepairInfo'
+import { CUSTOMER_NAME_SELECT, customerDisplayName } from '@/lib/customerLabel'
 import { NextResponse } from 'next/server'
 
 const sb = adminClient()
@@ -386,7 +387,8 @@ export async function POST(req: Request) {
     const [{ data: customer }, { data: contact }, { data: engineer }, { data: items }, { data: repair }, { data: info }] = await Promise.all([
       quote.customer_id == null
         ? Promise.resolve({ data: null })
-        : sb.from('customers').select('company_name, address').eq('customer_id', quote.customer_id).maybeSingle(),
+                // 이름은 「회사명 사업장명」으로 나간다 — 회사명은 부모 줄에 있어 함께 읽는다.
+        : sb.from('customers').select(`${CUSTOMER_NAME_SELECT}, address`).eq('customer_id', quote.customer_id).maybeSingle(),
       quote.recipient_contact_id == null
         ? Promise.resolve({ data: null })
         : sb.from('contacts').select('name, position, phone').eq('contact_id', quote.recipient_contact_id).maybeSingle(),
@@ -400,7 +402,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       quote,
-      customer: customer ?? null,
+      // 거래명세서·수리내역서가 그대로 찍는 한 줄 이름(lib/customerLabel.ts).
+      customer: customer ? { company_name: customerDisplayName(customer), address: customer.address ?? null } : null,
       contact: contact ?? null,
       engineer: engineer ?? null,
       items: items ?? [],

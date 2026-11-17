@@ -69,7 +69,9 @@ export function useQuoteCustomer({ supabase, clearError }: UseQuoteCustomerArgs)
       .from('customers').select('customer_id, company_name, address, status')
       .is('deleted_at', null)
       .eq('is_parent', false)   // 부모 행(회사 묶음)은 견적 대상이 아니다
-      .ilike('company_name', `%${q}%`).limit(10)
+      // 회사명·사업장명 둘 다 건다(합친 이름이 company_name 에 들어 있지만,
+      // 사업장명만으로 찾는 사람도 있다).
+      .or(`company_name.ilike.%${q}%,site_name.ilike.%${q}%`).limit(10)
     setCustomerResults(data || [])
     setCustomerSearchOpen(true)
   }
@@ -124,7 +126,7 @@ export function useQuoteCustomer({ supabase, clearError }: UseQuoteCustomerArgs)
       .from('customers').select('customer_id, company_name, address, status')
       .is('deleted_at', null)
       .eq('is_parent', false)   // 부모 행(회사 묶음)은 견적 대상이 아니다
-      .ilike('company_name', `%${q}%`).limit(10)
+      .or(`company_name.ilike.%${q}%,site_name.ilike.%${q}%`).limit(10)
     setEuResults(data || [])
     setEuSearchOpen(true)
   }

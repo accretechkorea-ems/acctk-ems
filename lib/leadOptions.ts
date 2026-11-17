@@ -134,10 +134,16 @@ export const CARD_BUCKET = 'lead-cards'
  */
 export const LEAD_STATUSES = ['신규', '진행중', '전환완료', '미진행', '배정불가'] as const
 
-/** 전환 시 남기는 영업활동의 유형. SalesActivityModal 의 ACTIVITY_TYPES 에 있는 값이어야 한다.
- *  파트너사가 현장에서 만나 적어 온 기록이라 '방문미팅' 으로 남긴다.
- *  (그 상수는 'use client' 모듈에 있어 API 라우트에서 import 할 수 없으므로 여기에 둔다) */
-export const LEAD_CONVERT_ACTIVITY_TYPE = '방문미팅'
+/**
+ * 전환 시 **자동으로** 남기는 영업활동의 유형.
+ *
+ * 파트너사가 적어 온 리드 기록이지 우리가 방문한 것이 아니다 — 예전에는 '방문미팅' 으로
+ * 적혀 방문 건수가 부풀었다. 이 값은 **자동 생성 전용**이라 사람이 고르는 드롭다운
+ * (SalesActivityModal 의 ACTIVITY_TYPES)에는 넣지 않는다.
+ * DB 의 sales_activities_type_check 에도 이 값이 있어야 한다(db/sales_activity_lead_type.sql).
+ * (ACTIVITY_TYPES 는 'use client' 모듈에 있어 API 라우트에서 import 할 수 없으므로 여기에 둔다)
+ */
+export const LEAD_CONVERT_ACTIVITY_TYPE = '리드 등록'
 
 export const LEAD_STATUS_NEW = '신규'
 export const LEAD_STATUS_ACTIVE = '진행중'

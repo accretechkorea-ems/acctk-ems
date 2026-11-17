@@ -14,6 +14,7 @@
 
 // 모바일 상단 바 높이 — 표 머리가 붙는 위치를 이 상수 하나로 맞춘다.
 import { TOPBAR_HEIGHT } from '@/components/layout/Sidebar'
+import { customerDisplayName } from '@/lib/customerLabel'
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react'
 import { getCategoryColor } from '@/lib/categoryColors'
 import { Z } from '@/lib/zIndex'
@@ -245,8 +246,8 @@ export default function UsageList({
                     <span title="폐기된 장비" style={{ ...countBadge, padding: '1px 6px', flexShrink: 0 }}>폐기</span>
                   )}
                 </span>
-                <span style={{ fontSize: 13, color: r.customers?.company_name ? SUB : FAINT, ...ellipsis }} title={r.customers?.company_name ?? undefined}>
-                  {r.customers?.company_name ?? '-'}
+                <span style={{ fontSize: 13, color: customerDisplayName(r.customers) ? SUB : FAINT, ...ellipsis }} title={customerDisplayName(r.customers) || undefined}>
+                  {customerDisplayName(r.customers) || '-'}
                 </span>
                 <span className="sr-ut-time num" style={{ fontSize: 12, color: SUB, ...ellipsis }}>
                   {normTime(r.start_time)}~{normTime(r.end_time)} ({r.work_hours}h)

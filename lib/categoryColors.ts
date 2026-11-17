@@ -29,6 +29,8 @@ export const ACTIVITY_TYPE_COLORS = {
   '방문미팅': SERVICE_TYPE_COLORS['신규설치'],      // 실제 방문의 기본색
   '사양검토': SERVICE_TYPE_COLORS['이전설치'],      // 검토·기획 성격
   '경쟁입찰': SERVICE_TYPE_COLORS['B/S'],           // 경쟁·리스크
+  // 리드 전환이 자동으로 남기는 줄 — 사람이 고르는 종류가 아니라 색도 빌려 쓴다.
+  '리드 등록': SERVICE_TYPE_COLORS['유선기술지원'],
 } as const satisfies Record<string, CategoryColor>;
 
 /* 고객사 상세 통합 타임라인의 항목 종류 dot.

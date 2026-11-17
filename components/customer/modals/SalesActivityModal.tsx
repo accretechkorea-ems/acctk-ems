@@ -10,7 +10,9 @@ import { isClosed } from '../opportunity'
 import type { Contact, SalesActivity, SalesActivityForm, SalesOpportunity } from '../types'
 import { todayKST } from '@/lib/date'
 
-// sales_activities.activity_type CHECK 와 같은 값이어야 한다.
+// 사람이 고를 수 있는 종류. sales_activities.activity_type CHECK 의 **부분집합**이다 —
+// 「리드 등록」은 리드 전환이 자동으로 남기는 줄 전용이라 여기 넣지 않는다
+// (lib/leadOptions.ts 의 LEAD_CONVERT_ACTIVITY_TYPE).
 export const ACTIVITY_TYPES = ['전화상담', '방문미팅', '사양검토', '경쟁입찰'] as const
 
 type Props = {

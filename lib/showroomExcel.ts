@@ -10,6 +10,7 @@
 
 // 타입만 가져온다(컴파일 시 사라짐). 런타임 exceljs 는 호출부에서 동적 import 한다.
 import type { Workbook, Worksheet, Cell, CellValue, PaperSize } from 'exceljs'
+import { customerDisplayName } from '@/lib/customerLabel'
 import { addDays } from '@/lib/date'
 import { normTime } from '@/lib/workHours'
 import {
@@ -362,7 +363,7 @@ const usageColumns = (ctx: UsageSheetContext): UsageCol[] => [
   { label: '장비명', get: r => text(ctx.deviceName(r.device_id)) },
   { label: '사용목적', get: r => r.purpose },
   { label: '신청여부', kind: 'center', get: r => (viewOf(ctx, r).isRequest ? '신청' : null) },
-  { label: '대상 고객사', get: r => text(r.customers?.company_name) },
+  { label: '대상 고객사', get: r => text(customerDisplayName(r.customers)) },
   { label: '고객부서', get: r => text(r.customer_dept) },
   { label: '시작', kind: 'center', get: r => text(normTime(r.start_time)) },
   { label: '종료', kind: 'center', get: r => text(normTime(r.end_time)) },

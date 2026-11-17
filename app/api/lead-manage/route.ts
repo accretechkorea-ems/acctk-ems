@@ -29,7 +29,7 @@ import { NextResponse } from 'next/server'
 import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { todayKST } from '@/lib/date'
 import {
-  findCustomerCandidates, leadForecastTitle, leadSourceLine, nextMonthEnd,
+  findCustomerCandidates, leadActivityContent, leadForecastTitle, nextMonthEnd,
   type CustomerLike,
 } from '@/lib/leadCustomer'
 import { adminEngineerIds, notifyLead } from '@/lib/leadNotify'
@@ -198,6 +198,8 @@ export async function POST(req: Request) {
     if (lead.status === LEAD_STATUS_BLOCKED) {
       return bad('배정 불가 상태에서는 담당자를 지정할 수 없습니다. 먼저 배정 불가를 해제해 주세요.', 409)
     }
+    /** 배정받는 사람 이름 — 자동 기록의 마지막 줄에 적는다. */
+    let assigneeName: string | null = null
     const raw = body.assignedTo
     const assignedTo = raw === null || raw === '' ? null : Number(raw)
     if (assignedTo !== null && !Number.isInteger(assignedTo)) return bad('담당자가 올바르지 않습니다.')
@@ -206,10 +208,11 @@ export async function POST(req: Request) {
       // 실재하는 재직 직원인지 확인한다(퇴사자나 없는 id 로 배정되지 않게).
       const { data: target } = await supabaseAdmin
         .from('engineers')
-        .select('engineer_id, resigned_date')
+        .select('engineer_id, name, resigned_date')
         .eq('engineer_id', assignedTo)
         .single()
       if (!target || target.resigned_date) return bad('배정할 수 없는 담당자입니다.')
+      assigneeName = target.name ?? null
     }
 
     // 배정에 따라 상태가 자동으로 따라간다. 다만 종결된 건은 건드리지 않는다.
@@ -338,8 +341,15 @@ export async function POST(req: Request) {
 
       // ③ 첫 활동 — 회의록·요청사항을 그대로 남긴다. 맨 앞 줄이 **출처(리드 번호)** 다
       //    (sales_opportunities 에 메모 칸이 없어 이 기록이 그 자리를 대신한다).
-      const content = [leadSourceLine(lead.lead_no), lead.meeting_note, lead.request_note]
-        .filter(t => t && String(t).trim()).join('\n\n')
+      //    마지막 줄에는 **담당자 배정**을 적는다 — 활동일이 리드가 처음 등록된 날이라
+      //    배정 사실이 이 기록 어디에도 남지 않기 때문이다.
+      const content = leadActivityContent({
+        leadNo: lead.lead_no,
+        meetingNote: lead.meeting_note,
+        requestNote: lead.request_note,
+        engineerName: assigneeName,
+        assignedDate: new Date().toISOString().slice(0, 10),
+      })
       const { error: actErr } = await supabaseAdmin.from('sales_activities').insert({
         opportunity_id: opportunityId,
         customer_id: customerId,

@@ -342,7 +342,8 @@ export function useQuotePrefill({
     if (customer) {
       setCustomerQuery(customer)
       supabase.from('customers').select('customer_id, company_name, address, status')
-        .is('deleted_at', null).eq('is_parent', false).ilike('company_name', `%${customer}%`).limit(10)
+        .is('deleted_at', null).eq('is_parent', false)
+        .or(`company_name.ilike.%${customer}%,site_name.ilike.%${customer}%`).limit(10)
         .then(({ data }) => {
           if (!data || data.length === 0) return
           if (data.length === 1) { handleCustomerSelect(data[0]); return }

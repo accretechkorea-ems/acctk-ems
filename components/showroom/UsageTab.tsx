@@ -15,6 +15,7 @@
 // 조회는 effect 에서 외부 응답을 받은 콜백으로만 반영한다 — '불러오는 중'은 요청 키로 파생시킨다.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { customerDisplayName } from '@/lib/customerLabel'
 import { isDisposed, inUseOnly } from '@/lib/deviceStatus'
 import type { createClient } from '@/lib/supabase/client'
 import {
@@ -60,7 +61,7 @@ type Props = {
 
 /** 검색 대상 — 대상 고객사명 · 프로젝트명 · 상세 내용 · 사용결과 · 비고. */
 const haystack = (r: ShowroomUsageRow): string =>
-  [r.customers?.company_name, r.project_name, r.content, r.result, r.note].filter(Boolean).join('\n').toLowerCase()
+  [customerDisplayName(r.customers), r.project_name, r.content, r.result, r.note].filter(Boolean).join('\n').toLowerCase()
 
 /** 날짜 내림차순, 같은 날은 시작시간 내림차순(같으면 나중에 쓴 기록이 위). */
 const byNewest = (a: ShowroomUsageRow, b: ShowroomUsageRow): number =>

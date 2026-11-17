@@ -1,11 +1,14 @@
 import { useEffect } from 'react'
 import { IN_USE_FILTER } from '@/lib/deviceStatus'
 import { createClient } from '@/lib/supabase/client'
-import { type Customer, type Device, type ServiceHistory, toTimeValue } from '@/lib/home'
+import { type Customer, type Device } from '@/lib/home'
+import { loadLastTouchMap, touchValue } from '@/lib/customerLastTouch'
+import { CUSTOMER_NAME_SELECT, customerDisplayName, parentNameOf } from '@/lib/customerLabel'
 
 type Params = {
   setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>
   setDeviceMap: React.Dispatch<React.SetStateAction<Map<number, Device[]>>>
+  /** 업체 → 마지막 접점 시각(영업활동·서비스·견적·수리 중 최신). 목록 정렬이 쓴다. */
   setLatestServiceDateMap: React.Dispatch<React.SetStateAction<Map<number, number>>>
 }
 
@@ -17,10 +20,10 @@ export function useHomeData({
   const supabase = createClient()
 
   const fetchData = async () => {
-    const [customerRes, deviceRes, historyRes] = await Promise.all([
+    const [customerRes, deviceRes, lastTouch] = await Promise.all([
       supabase
   .from('customers')
-  .select('customer_id, company_name, address, latitude, longitude, status, agency, category')
+  .select(`customer_id, ${CUSTOMER_NAME_SELECT}, address, latitude, longitude, status, agency, category`)
         .is('deleted_at', null)
         // 부모 행(회사 묶음)은 지도 마커·업체 목록에 나오면 안 된다
         .eq('is_parent', false)
@@ -37,7 +40,8 @@ export function useHomeData({
         .or(IN_USE_FILTER)
         .range(0, 5000),
 
-      supabase.from('service_history').select('customer_id, visit_date').range(0, 5000),
+      // 마지막 접점은 네 표를 함께 본다(lib/customerLastTouch.ts).
+      loadLastTouchMap(supabase),
     ])
 
     if (customerRes.error) {
@@ -45,7 +49,10 @@ export function useHomeData({
     } else {
       const normalizedCustomers: Customer[] = (customerRes.data || []).map((c: any) => ({
         customer_id: Number(c.customer_id),
-        company_name: c.company_name ?? '',
+        // 이름은 여기서 한 번 만든다 — 화면 조각마다 회사·사업장을 다시 잇지 않게.
+        company_name: customerDisplayName(c),
+        site_name: c.site_name ?? null,
+        company_only: parentNameOf(c.parent) ?? (c.company_name ?? null),
         address: c.address ?? null,
         latitude: c.latitude == null ? null : Number(c.latitude),
         longitude: c.longitude == null ? null : Number(c.longitude),
@@ -86,25 +93,10 @@ category: c.category ?? null,
       setDeviceMap(map)
     }
 
-    if (historyRes.error) {
-      console.warn('service_history 조회 오류:', historyRes.error)
-    } else {
-      const map = new Map<number, number>()
-
-      ;(historyRes.data as ServiceHistory[] | null)?.forEach((item) => {
-        const customerId = Number(item.customer_id)
-        if (Number.isNaN(customerId)) return
-
-        const current = map.get(customerId) ?? 0
-        const nextValue = toTimeValue(item.visit_date)
-
-        if (nextValue > current) {
-          map.set(customerId, nextValue)
-        }
-      })
-
-      setLatestServiceDateMap(map)
-    }
+    // 마지막 접점 — 네 갈래(영업활동·서비스·견적·수리) 중 최신 날짜를 시각으로 바꿔 둔다.
+    const touchMap = new Map<number, number>()
+    for (const [customerId, touch] of lastTouch) touchMap.set(customerId, touchValue(touch))
+    setLatestServiceDateMap(touchMap)
   }
 
   useEffect(() => {

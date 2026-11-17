@@ -2,7 +2,16 @@ import type { CSSProperties } from 'react'
 
 export type Customer = {
   customer_id: number
+  /**
+   * 화면에 쓰는 **한 줄 이름** — 「회사명 사업장명」.
+   * 읽어 올 때 lib/customerLabel.ts 의 customerDisplayName 으로 만들어 담는다
+   * (hooks/useHomeData.ts). 그래서 카드·지도·엑셀은 이 칸만 읽으면 된다.
+   */
   company_name: string
+  /** 사업장명만(없으면 null). 회사명만 필요한 자리가 있어 함께 들고 있는다. */
+  site_name?: string | null
+  /** 회사명만 — 사업장이 여럿인 회사를 묶어 셀 때 쓴다. */
+  company_only?: string | null
   address: string | null
   latitude: number | null
   longitude: number | null

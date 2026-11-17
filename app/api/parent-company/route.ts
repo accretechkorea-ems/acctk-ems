@@ -71,8 +71,31 @@ export async function POST(req: Request) {
       console.error('[parent-company] rename failed', { parentId, error })
       return bad('이름을 수정하지 못했습니다.', 500)
     }
-    console.log('[parent-company] rename', { parentId, from: target.company_name, to: name, by: caller.email })
-    return NextResponse.json({ success: true })
+
+    /**
+     * 사업장 줄의 이름도 함께 고친다.
+     *
+     * 사업장 줄의 company_name 에는 **「회사명 사업장명」을 합쳐 둔 값**이 들어 있다
+     * (lib/customerLabel.ts 의 이관 규칙). 회사 이름만 바꾸고 두면 사업장 줄이 옛 회사명을
+     * 그대로 들고 있어, 같은 회사가 화면마다 다른 이름으로 불린다.
+     * 사업장명(site_name)이 없는 줄은 회사명만 들고 있으므로 그 이름으로 맞춘다.
+     */
+    const { data: children } = await supabaseAdmin
+      .from('customers')
+      .select('customer_id, site_name')
+      .eq('parent_customer_id', parentId)
+      .is('deleted_at', null)
+    let renamed = 0
+    for (const child of children ?? []) {
+      const site = (child.site_name ?? '').trim()
+      const combined = site ? `${name} ${site}` : name
+      const { error: cErr } = await supabaseAdmin
+        .from('customers').update({ company_name: combined }).eq('customer_id', child.customer_id)
+      if (cErr) console.error('[parent-company] child rename failed', { child: child.customer_id, error: cErr })
+      else renamed++
+    }
+    console.log('[parent-company] rename', { parentId, from: target.company_name, to: name, renamed, by: caller.email })
+    return NextResponse.json({ success: true, renamedSites: renamed })
   }
 
   // ── 삭제 ──

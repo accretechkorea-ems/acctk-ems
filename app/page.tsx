@@ -326,11 +326,14 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
       const aLatestDevice = Math.max(0, ...aDevices.map((d) => toTimeValue(d.install_date)))
       const bLatestDevice = Math.max(0, ...bDevices.map((d) => toTimeValue(d.install_date)))
 
-      const aLatestService = latestServiceDateMap.get(a.customer_id) ?? 0
-      const bLatestService = latestServiceDateMap.get(b.customer_id) ?? 0
+      // 마지막 접점 — 영업활동·서비스·견적·수리 중 최신(lib/customerLastTouch.ts).
+      // 예전에는 서비스 리포트만 봐서, 견적·수리만 있는 업체가 아래로 깔렸다.
+      const aLatestTouch = latestServiceDateMap.get(a.customer_id) ?? 0
+      const bLatestTouch = latestServiceDateMap.get(b.customer_id) ?? 0
 
-      const aLatest = Math.max(aLatestDevice, aLatestService, a.customer_id)
-      const bLatest = Math.max(bLatestDevice, bLatestService, b.customer_id)
+      // customer_id 는 날짜가 하나도 없는 업체끼리의 차례를 정하는 꼬리표다(나중에 등록한 것이 위).
+      const aLatest = Math.max(aLatestDevice, aLatestTouch, a.customer_id)
+      const bLatest = Math.max(bLatestDevice, bLatestTouch, b.customer_id)
 
       return bLatest - aLatest
     })

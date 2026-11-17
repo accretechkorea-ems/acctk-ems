@@ -7,6 +7,7 @@
 // devices 가 곧 쇼룸 장비이고, showroom_devices 는 그 장비의 '설정'만 담는다(없으면 기본값).
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { CustomerNameRowWithParent } from '@/lib/customerLabel'
 import { SERVICE_TYPE_COLORS, FALLBACK_COLOR, type CategoryColor } from '@/lib/categoryColors'
 import { addDays, daysBetween, ymdParts } from '@/lib/date'
 
@@ -552,7 +553,8 @@ export type ShowroomUsageRow = {
    */
   approval_requests: { approver_id: number | null; decided_at: string | null; status: string; retro: boolean | null } | null
   created_by: number
-  customers: { company_name: string | null } | null
+  /** 고객사 이름 세 칸 — 화면·엑셀은 customerDisplayName 으로 합쳐 쓴다(lib/customerLabel.ts). */
+  customers: CustomerNameRowWithParent | null
   quotes: { quote_number: string | null } | null
 }
 

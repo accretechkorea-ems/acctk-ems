@@ -84,3 +84,36 @@ export function leadForecastTitle(company: string | null | undefined, product: s
  */
 export const leadSourceLine = (leadNo: string | null | undefined): string =>
   (leadNo && leadNo.trim() ? `[리드 ${leadNo.trim()}]` : '[리드]')
+
+/**
+ * 자동 기록의 **마지막 줄** — 누가 언제 맡게 됐는지.
+ *
+ * 활동일은 리드가 **처음 등록된 날**이라(배정일이 아니다) 배정 사실이 어디에도 남지 않는다.
+ * 그 한 줄을 본문 끝에 붙여 둔다. 이름이 없으면 「담당자 배정 (2026-11-17)」로만 적는다.
+ */
+export const leadAssignLine = (
+  engineerName: string | null | undefined,
+  assignedDate: string,
+): string => {
+  const who = (engineerName ?? '').trim()
+  return who ? `담당자 배정 → ${who} (${assignedDate})` : `담당자 배정 (${assignedDate})`
+}
+
+/**
+ * 리드 전환이 남기는 활동 기록 본문 — 출처 줄 · 회의록 · 요청사항 · 배정 줄.
+ * 비어 있는 토막은 건너뛴다(빈 줄이 겹치지 않게).
+ */
+export function leadActivityContent(input: {
+  leadNo: string | null | undefined
+  meetingNote: string | null | undefined
+  requestNote: string | null | undefined
+  engineerName: string | null | undefined
+  assignedDate: string
+}): string {
+  return [
+    leadSourceLine(input.leadNo),
+    input.meetingNote,
+    input.requestNote,
+    leadAssignLine(input.engineerName, input.assignedDate),
+  ].filter(t => t && String(t).trim()).join('\n\n')
+}

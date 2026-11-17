@@ -271,6 +271,7 @@ function CustomerDetailPageInner() {
               quotes={quotes}
               deviceCount={activeDevices.length}
               history={history}
+              activityDates={activities.map(a => a.activity_date ?? null)}
               customerId={customerId}
               opportunities={opportunities}
               onAddOpportunity={opp.openNewOpp}
