@@ -66,5 +66,25 @@ console.log('\n── 권한 — 수리 메모(수리 목록을 보는 사람) �
 eq('목록을 볼 수 있으면 고친다', P.canEditRepairMemo(true), true)
 eq('못 보면 못 고친다', P.canEditRepairMemo(false), false)
 
+// 서버 판정 — 라우트(/api/purchase-order, action=save_memo)가 그대로 쓰는 함수다.
+// 실측으로는 발주 권한이 없는 계정이 있어야 403 두 갈래를 볼 수 있어, 그 분기를 여기서 고정한다.
+console.log('\n── 서버 판정(save_memo) ──')
+const v = (p) => P.memoSaveVerdict({ privileged: false, isOwner: false, hasRequestMemo: false, hasOrderMemo: false, ...p })
+eq('보낸 메모가 없으면 400', v({}), { ok: false, status: 400, reason: '저장할 메모가 없습니다.' })
+eq('남의 견적 + 권한 없음 → 403',
+  v({ hasRequestMemo: true }), { ok: false, status: 403, reason: 'Forbidden' })
+eq('본인 견적의 요청 메모 → 통과',
+  v({ isOwner: true, hasRequestMemo: true }), { ok: true })
+eq('본인 견적이어도 영업관리 메모는 403',
+  v({ isOwner: true, hasOrderMemo: true }),
+  { ok: false, status: 403, reason: '영업관리 메모는 발주 담당자만 고칠 수 있습니다.' })
+eq('발주 담당자는 남의 견적의 영업관리 메모도 통과',
+  v({ privileged: true, hasOrderMemo: true }), { ok: true })
+eq('발주 담당자는 요청 메모도 통과',
+  v({ privileged: true, hasRequestMemo: true }), { ok: true })
+eq('두 칸을 함께 보내면 더 엄한 쪽을 본다(권한 없으면 403)',
+  v({ isOwner: true, hasRequestMemo: true, hasOrderMemo: true }),
+  { ok: false, status: 403, reason: '영업관리 메모는 발주 담당자만 고칠 수 있습니다.' })
+
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
 process.exit(fails === 0 ? 0 : 1)

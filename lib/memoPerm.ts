@@ -38,3 +38,39 @@ export function canEditOrderMemo(user: MemoUser): boolean {
 export function canEditRepairMemo(canSeeRepairList: boolean): boolean {
   return canSeeRepairList
 }
+
+// ── 서버가 메모 저장 요청을 받아들일지 ─────────────────────────────────────
+//   화면이 아니라 **서버의 판정**이다. 화면은 못 고치는 메모의 편집을 아예 열지 않지만,
+//   요청은 화면을 거치지 않고도 올 수 있으므로 같은 규칙을 여기서 한 번 더 본다.
+//   규칙을 라우트 안에 적어 두면 화면 쪽 규칙과 조용히 갈린다 — 그래서 한 함수다.
+
+export type MemoSaveRequest = {
+  /** 발주 메뉴가 있는 사람인가(영업관리·superadmin). */
+  privileged: boolean
+  /** 그 견적의 임자인가(quotes.engineer_id = 부른 사람). */
+  isOwner: boolean
+  /** 요청 메모를 보냈는가(보낸 칸만 갱신한다). */
+  hasRequestMemo: boolean
+  /** 영업관리 메모를 보냈는가. */
+  hasOrderMemo: boolean
+}
+
+export type MemoSaveVerdict =
+  | { ok: true }
+  | { ok: false; status: 400 | 403; reason: string }
+
+/** 메모 저장 요청 한 건의 판정. 거절이면 그대로 돌려줄 메시지까지 담는다. */
+export function memoSaveVerdict(req: MemoSaveRequest): MemoSaveVerdict {
+  if (!req.hasRequestMemo && !req.hasOrderMemo) {
+    return { ok: false, status: 400, reason: '저장할 메모가 없습니다.' }
+  }
+  // 남의 견적은 발주 담당자만 만진다(요청 메모도 마찬가지다).
+  if (!req.privileged && !req.isOwner) {
+    return { ok: false, status: 403, reason: 'Forbidden' }
+  }
+  // 영업관리 메모는 발주 담당자 전용 — 견적 임자여도 못 고친다.
+  if (req.hasOrderMemo && !req.privileged) {
+    return { ok: false, status: 403, reason: '영업관리 메모는 발주 담당자만 고칠 수 있습니다.' }
+  }
+  return { ok: true }
+}

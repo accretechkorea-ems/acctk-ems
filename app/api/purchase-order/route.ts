@@ -2,6 +2,7 @@ import { adminClient } from '@/lib/supabase/admin'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { canViewMenu } from '@/lib/permissions'
+import { memoSaveVerdict } from '@/lib/memoPerm'
 import { loadTeamPerms, attachTeamPerm } from '@/lib/teamPermsServer'
 import { josa } from '@/lib/josa'
 import { gateAllows, GATE_BLOCK_MESSAGE, loadQuoteGates, SUBMITTED_STATUS } from '@/lib/approval/quoteApproval'
@@ -323,12 +324,20 @@ export async function POST(req: Request) {
   if (action === 'save_memo') {
     const rawRequest = formData.get('requestMemo') as string | null
     const rawOrder = formData.get('orderMemo') as string | null
-    if (rawRequest === null && rawOrder === null) {
-      return NextResponse.json({ error: '저장할 메모가 없습니다.' }, { status: 400 })
-    }
-    // 영업관리 메모는 발주 메뉴가 있는 사람만 — 위의 소유자 통과(privileged=false)로는 못 쓴다.
-    if (rawOrder !== null && !privileged) {
-      return NextResponse.json({ error: '영업관리 메모는 발주 담당자만 고칠 수 있습니다.' }, { status: 403 })
+
+    // 판정은 화면과 **같은 함수**로 한다(lib/memoPerm.ts) — 라우트 안에 규칙을 또 적으면
+    // 화면 쪽과 조용히 갈린다. 남의 견적은 위에서 이미 걸러지지만, 여기서 한 번 더 본다.
+    const { data: ownerRow } = await supabaseAdmin
+      .from('quotes').select('engineer_id').eq('quote_id', Number(quoteId)).maybeSingle()
+    const verdict = memoSaveVerdict({
+      privileged,
+      isOwner: !!ownerRow && ownerRow.engineer_id === caller.engineer_id,
+      hasRequestMemo: rawRequest !== null,
+      hasOrderMemo: rawOrder !== null,
+    })
+    if (!verdict.ok) {
+      console.warn('[purchase-order] memo 거절', { quoteId, status: verdict.status, reason: verdict.reason })
+      return NextResponse.json({ error: verdict.reason }, { status: verdict.status })
     }
 
     const patch: Record<string, string | null> = {}
