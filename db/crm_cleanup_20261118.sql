@@ -20,13 +20,14 @@
 --   살아있는 customers 1,649 = 회사 282 + 사업장(부모 있음) 775 + 사업장(부모 없음) 592
 --   agency 채워진 줄 624 (전부 사업장 줄)
 --   만들 줄: 대리점 29 + 회사 561
---   고칠 줄: 자동 연결 20 · 회사 붙이기 569 · 병합 자식 46(40+4+2)
---            · 이름·메모 직접 수정 4
---   deleted_at 찍을 줄: 5 (305 · 1730 · 1733 · 1734 · 1825)
---   끝난 뒤: 살아있는 줄 2,234 = 회사 840 + 사업장 1,364 + 대리점 전용 줄 30
---            (대리점 깃발이 켜진 줄은 45 — 그중 16 는 회사·사업장 줄과 겹친다)
---   부모 없는 사업장 592 = 자동 연결 20 + 회사 붙이기 569
---            + 닫는 줄 2(305 · 1825) + 대리점 줄 1(1779)  →  ⑦ 제약 위반 0
+--   고칠 줄: 자동 연결 20 · 회사 붙이기 570 · 병합 자식 46(40+4+2)
+--            · 이름·메모 직접 수정 5
+--   deleted_at 찍을 줄: 4 (305 · 1730 · 1733 · 1734)
+--   끝난 뒤: 살아있는 줄 2,235 = 회사 840 + 사업장 1,365 + 대리점 전용 줄 30
+--            (대리점 깃발이 켜진 줄은 45 — 그중 15 은 회사·사업장 줄과 겹치고,
+--             1779 만 대리점 전용으로 남는다)
+--   부모 없는 사업장 592 = 자동 연결 20 + 회사 붙이기 570
+--            + 닫는 줄 1(305) + 대리점 줄 1(1779)  →  ⑦ 제약 위반 0
 
 
 -- ═══════════════════════════════════════════════════════════════════════
@@ -173,8 +174,12 @@ order by customer_id;
 
 
 -- ═══════════════════════════════════════════════════════════════════════
--- ③ 병합 — 305→1779 · 1825→618 · 1730→1729 · 1733·1734→1744
---    (결정 4·14·6·7)
+-- ③ 병합 — 305→1779 · 1730→1729 · 1733·1734→1744 (결정 4·6·7)
+--
+--    보부하이테크(618·1825)는 **병합하지 않는다**(결정 14 고침). 두 줄의 주소가
+--    서로 다르다 — 618 경기도 용인시 수지구 죽전동 / 1825 강원특별자치도 강릉시
+--    과학단지로. 이름만 같은 **서로 다른 사업장**이라, 회사 「보부하이테크」 아래
+--    두 사업장으로 둔다(⑤ 승격 표에 site_name 용인·강릉 으로 들어 있다).
 -- ═══════════════════════════════════════════════════════════════════════
 
 -- ③-1 젠트 — 305 의 참조를 1779 로 옮기고 305 를 닫는다.
@@ -193,45 +198,11 @@ update public.leads               set customer_id = 1779 where customer_id = 305
 update public.customers set agency_customer_id = 1779 where agency_customer_id = 305;
 update public.customers set deleted_at = now() where customer_id = 305;
 
--- ③-2 보부하이테크 — 1825(참조 3) 을 618(참조 8) 으로 옮기고 1825 을 닫는다(결정 14).
---
---      ⚠ **돌리기 전에 아래 확인 select 를 먼저 보라.** 두 줄의 **주소가 다르다** —
---         618  경기도 용인시 수지구 죽전동 1360-5   (담당자 2 · 장비 2 · 서비스 2 · 고객 견적 2 = 8)
---         1825 강원특별자치도 강릉시 과학단지로 106-14 (담당자 1 · 장비 1 · 서비스 1 = 3)
---         이름만 같고 **서로 다른 사업장**일 수 있다(2차 보고에서 「사실상 중복」이라고
---         적은 것은 주소를 보지 않고 쓴 것이다). 두 사업장이라면 이 블록을 지우고
---         대신 아래 「대안」 두 줄을 쓰면 회사 「보부하이테크」 아래 두 사업장이 된다.
---         병합하면 1825 의 주소·좌표는 닫힌 줄에만 남는다(백업으로 되돌릴 수 있다).
-select customer_id, company_name, status, address, latitude, longitude,
-       (select count(*) from public.contacts       x where x.customer_id = c.customer_id and x.deleted_at is null) as 담당자,
-       (select count(*) from public.devices        x where x.customer_id = c.customer_id) as 장비,
-       (select count(*) from public.service_history x where x.customer_id = c.customer_id) as 서비스,
-       (select count(*) from public.quotes         x where x.customer_id = c.customer_id) as 견적
-from public.customers c where customer_id in (618, 1825);
-
-update public.quotes   set dealer_id   = 618 where dealer_id   = 1825;
-update public.quotes   set customer_id = 618 where customer_id = 1825;
-update public.contacts set customer_id = 618 where customer_id = 1825;
-update public.devices  set customer_id = 618 where customer_id = 1825;
-update public.service_history     set customer_id = 618 where customer_id = 1825;
-update public.sales_activities    set customer_id = 618 where customer_id = 1825;
-update public.sales_opportunities set customer_id = 618 where customer_id = 1825;
-update public.repairs             set customer_id = 618 where customer_id = 1825;
-update public.showroom_usage      set customer_id = 618 where customer_id = 1825;
-update public.holdings            set customer_id = 618 where customer_id = 1825;
-update public.leads               set customer_id = 618 where customer_id = 1825;
-update public.customers set agency_customer_id = 618 where agency_customer_id = 1825;
-update public.customers set deleted_at = now() where customer_id = 1825;
---      대안(두 사업장으로 남길 때) — 위 ③-2 를 전부 지우고 이 두 줄만 쓴다.
---      insert into public.site_promote_20261118 (site_customer_id, new_company_name, new_company_status, new_site_name)
---        values (1825, '보부하이테크', '활성', '강릉');   -- ⑤ 승격 표에 한 줄 더한다
---      update public.site_promote_20261118 set new_site_name = '죽전' where site_customer_id = 618;
-
--- ③-3 현대자동차 — 1730(사업장 40) → 1729. 둘 다 자기 데이터가 0건인 묶음 줄이다.
+-- ③-2 현대자동차 — 1730(사업장 40) → 1729. 둘 다 자기 데이터가 0건인 묶음 줄이다.
 update public.customers set parent_customer_id = 1729 where parent_customer_id = 1730;
 update public.customers set deleted_at = now() where customer_id = 1730;
 
--- ③-4 현대트랜시스 — 회사 줄 1733·1734 를 1744 로 접고, 자식의 site_name 을 채운다.
+-- ③-3 현대트랜시스 — 회사 줄 1733·1734 를 1744 로 접고, 자식의 site_name 을 채운다.
 update public.customers set parent_customer_id = 1744, site_name = '지곡공장' where parent_customer_id = 1733;
 update public.customers set parent_customer_id = 1744, site_name = '화성공장' where parent_customer_id = 1734;
 update public.customers set deleted_at = now() where customer_id in (1733, 1734);
@@ -243,13 +214,13 @@ where is_parent and deleted_at is null
 group by 1 having count(*) > 1
 order by 1;
 
--- 확인 ② — 닫은 줄 5개의 참조. 전부 0 이어야 한다(305·1825 은 옮겼다).
+-- 확인 ② — 닫은 줄 4개의 참조. 전부 0 이어야 한다(305 는 1779 로 옮겼다).
 select c.customer_id, c.company_name, c.deleted_at is not null as 닫힘,
        (select count(*) from public.customers x where x.parent_customer_id = c.customer_id) as 자식,
        (select count(*) from public.quotes   x where x.customer_id = c.customer_id or x.dealer_id = c.customer_id) as 견적,
        (select count(*) from public.contacts x where x.customer_id = c.customer_id) as 담당자,
        (select count(*) from public.devices  x where x.customer_id = c.customer_id) as 장비
-from public.customers c where c.customer_id in (305, 1730, 1733, 1734, 1825)
+from public.customers c where c.customer_id in (305, 1730, 1733, 1734)
 order by c.customer_id;
 
 
@@ -295,34 +266,31 @@ order by c.customer_id;
 
 
 -- ═══════════════════════════════════════════════════════════════════════
--- ⑤ 회사 줄 만들고 붙이기 — 569줄 → 회사 561개
---    ⒜ 같은 이름 묶음 16곳
+-- ⑤ 회사 줄 만들고 붙이기 — 570줄 → 회사 561개
+--    ⒜ 같은 이름 묶음 18곳
 --    ⒝ 홀로 544곳  ⒞ 미연결 유지였던 8곳(결정 9)
 --    새 회사명은 ㈜·(주)·주식회사를 뗀 표기다(결정 11). 이탈 69곳도 포함한다(결정 12) —
 --    빼 두면 ⑦ 제약에 걸린다. 회사 줄의 status 는 그 아래 사업장과 같게 넣는다(결정 12).
---    site_name 은 추출 결과가 569줄 모두 빈칸이라 넣지 않는다
---    (사업장을 가릴 글자가 데이터에 없다).
+--    site_name 은 568줄이 빈칸이다 — 이름에서 뽑을 글자가 없다.
+--    보부하이테크 두 줄만 주소에서 따 넣는다(618 용인 · 1825 강릉 — 결정 14 고침).
 -- ═══════════════════════════════════════════════════════════════════════
 
--- ⑤-0 이름에 상태 메모가 섞여 있던 활성·잠재 4줄 — **사업장 줄의 이름과 메모를 직접 고친다**
+-- ⑤-0 이름이 잘못 들어 있던 5줄 — **사업장 줄의 이름(과 메모)을 직접 고친다**
 --      (결정 13, 사용자 승인 예외). 회사명은 아래 승격 표가 이 이름에 맞춰져 있다.
+--      앞 4줄은 이름에 섞인 상태 메모를 note 로 옮기는 것이고, 1764 는 원문에 여는
+--      괄호가 빠져 있던 것을 메운다('주)대진이엔지' → '(주)대진이엔지').
 update public.customers set company_name = '우창기계(주)', note = '정광기계에서 중고로 측정기 매입' where customer_id = 245;
 update public.customers set company_name = '썬하이드로릭스 코리아(주)', note = '인천 서구 이전' where customer_id = 452;
 update public.customers set company_name = '동우HST', note = '동우열처리공업 → 동우HST 사명 변경, 충남 아산으로 사옥 이전' where customer_id = 780;
 update public.customers set company_name = '큐블락', note = '경기도 시흥으로 사옥 이전' where customer_id = 1254;
+update public.customers set company_name = '(주)대진이엔지' where customer_id = 1764;
 
--- 확인 — 4줄. 바뀐 이름·메모와 백업의 옛 이름을 나란히 본다.
+-- 확인 — 5줄. 바뀐 이름·메모와 백업의 옛 이름을 나란히 본다.
 select c.customer_id, b.company_name as 옛이름, c.company_name as 새이름, c.note, c.status
 from public.customers c
 join public.customers_backup_20261118 b on b.customer_id = c.customer_id
-where c.customer_id in (245, 452, 780, 1254)
+where c.customer_id in (245, 452, 780, 1254, 1764)
 order by c.customer_id;
-
---      ※ 1764(활성)은 원문이 '주)대진이엔지' 로 **여는 괄호가 빠져 있다**. 결정 13 의
---        네 줄에 들어 있지 않아 그대로 두었다 — 새 회사명도 '주)대진이엔지' 가 된다.
---        고치려면 아래 한 줄을 풀고, 승격 표 insert 가 끝난 뒤 두 번째 줄도 돌려라.
--- update public.customers set company_name = '(주)대진이엔지' where customer_id = 1764;
--- /* ⑤ insert 뒤 */ update public.site_promote_20261118 set new_company_name = '대진이엔지' where site_customer_id = 1764;
 
 -- 이탈 15줄은 이름을 그대로 둔다(결정 13) — 회사명에 '-폐업' 등이 그대로 들어간다.
 --   81 리버티-폐업 · 439 ㈜썬스타특수정밀 (폐업) · 464 카스윈 (창원본사로 이전 )
@@ -572,7 +540,7 @@ insert into public.site_promote_20261118 (site_customer_id, new_company_name, ne
   (604, '청호산업', '활성', null),
   (615, '정진기계', '잠재', null),
   (617, '성지정공', '잠재', null),
-  (618, '보부하이테크', '활성', null),
+  (618, '보부하이테크', '활성', '용인'),
   (619, '아이원스', '잠재', null),
   (620, '엘엠텍', '활성', null),
   (621, '플라텍', '활성', null),
@@ -870,7 +838,7 @@ insert into public.site_promote_20261118 (site_customer_id, new_company_name, ne
   (1760, '일신프라스틱', '활성', null),
   (1762, '주영정공', '활성', null),
   (1763, '성광정밀', '활성', null),
-  (1764, '주)대진이엔지', '활성', null),
+  (1764, '대진이엔지', '활성', null),
   (1765, '디아이티', '활성', null),
   (1766, '알에스교정센터', '활성', null),
   (1767, '하나무역', '활성', null),
@@ -908,9 +876,10 @@ insert into public.site_promote_20261118 (site_customer_id, new_company_name, ne
   (1820, 'DM motive', '활성', null),
   (1821, '동부정밀', '활성', null),
   (1822, '한국코어텍', '활성', null),
+  (1825, '보부하이테크', '활성', '강릉'),
   (1830, '효명정공', '활성', null);
 
--- 확인 — 569줄 / 이름 561개 / 이름마다 status 가 하나여야 한다.
+-- 확인 — 570줄 / 이름 561개 / 이름마다 status 가 하나여야 한다.
 select (select count(*) from public.site_promote_20261118) as 줄,
        (select count(distinct new_company_name) from public.site_promote_20261118) as 이름,
        (select count(*) from (
@@ -938,11 +907,19 @@ select (select count(*) from public.site_promote_20261118 where parent_customer_
        (select count(distinct parent_customer_id) from public.site_promote_20261118) as 만든회사,
        (select count(*) from public.customers where is_parent and status = '이탈' and deleted_at is null) as 이탈회사;
 
--- ⑤-2 붙이기.
+-- ⑤-2 붙이기. site_name 은 **승격 표에 값이 있는 줄만** 채운다(보부하이테크 두 줄).
 update public.customers c
-   set parent_customer_id = p.parent_customer_id
+   set parent_customer_id = p.parent_customer_id,
+       site_name = coalesce(nullif(p.new_site_name, ''), c.site_name)
 from public.site_promote_20261118 p
 where c.customer_id = p.site_customer_id;
+
+-- 확인 — site_name 이 들어간 줄(보부하이테크 618 용인 · 1825 강릉).
+select c.customer_id, c.company_name, c.site_name, p.company_name as 회사
+from public.customers c
+left join public.customers p on p.customer_id = c.parent_customer_id
+where c.customer_id in (618, 1825)
+order by c.customer_id;
 
 -- 확인 — 회사 840 · 대리점 45 · 부모 없는 사업장은 **1**(1779, 대리점 줄) 이어야 한다.
 select (select count(*) from public.customers where is_parent  and deleted_at is null) as 회사줄,
@@ -1016,8 +993,8 @@ select conname, pg_get_constraintdef(oid)
 from pg_constraint
 where conrelid = 'public.customers'::regclass and conname = 'customers_parent_or_company';
 
--- 최종 집계 — 기대값: 살아있는 줄 2,234 · 회사 840 · 대리점 45
---              · 사업장 1,364 · 대리점 연결된 사업장 540 · 메모 있는 줄 14
+-- 최종 집계 — 기대값: 살아있는 줄 2,235 · 회사 840 · 대리점 45
+--              · 사업장 1,365 · 대리점 연결된 사업장 540 · 메모 있는 줄 14
 select (select count(*) from public.customers where deleted_at is null) as 살아있는줄,
        (select count(*) from public.customers where deleted_at is null and is_parent) as 회사,
        (select count(*) from public.customers where deleted_at is null and is_agency) as 대리점,
@@ -1047,11 +1024,11 @@ select (select count(*) from public.customers where deleted_at is null) as 살�
 --  where b.customer_id = c.customer_id;
 -- update public.customers set note = null, is_agency = false, agency_customer_id = null;
 --
--- -- 참조 되돌리기(305 → 1779, 1825 → 618 로 옮긴 것)
+-- -- 참조 되돌리기(305 → 1779 로 옮긴 것)
 -- update public.quotes q set customer_id = b.customer_id, dealer_id = b.dealer_id
 --   from public.quotes_backup_20261118 b where b.quote_id = q.quote_id;
 -- -- contacts·devices·service_history 등은 백업을 받지 않았다. 되돌릴 일이 있으면
--- -- customer_id 를 다시 305 · 1825 로 바꾸면 된다(옮긴 줄 수는 ③ 확인 select 에 남는다).
+-- -- customer_id 를 다시 305 로 바꾸면 된다(옮긴 줄 수는 ③ 확인 select 에 남는다).
 --
 -- alter table public.sales_activities drop constraint sales_activities_activity_type_fkey;
 -- alter table public.sales_activities add constraint sales_activities_activity_type_check
