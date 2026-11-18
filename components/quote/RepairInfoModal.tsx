@@ -21,6 +21,7 @@
 // 또 두면 같은 문서를 여는 입구가 둘이 된다.
 
 import { useEffect, useRef, useState } from 'react'
+import { useOverlayEsc } from '@/components/common/overlayStack'
 import RepairInfoPanel from '@/components/quote/RepairInfoPanel'
 import { useConfirmOptional } from '@/components/common/confirmContext'
 import { Z } from '@/lib/zIndex'
@@ -92,11 +93,10 @@ export default function RepairInfoModal({ quoteId, quoteNumber, onClose, onSaved
   // 늘 최신 requestClose 를 가리키게 둔다 — 그리는 동안 ref 를 건드리지 않는다(react-hooks/refs).
   useEffect(() => { closeRef.current = () => { void requestClose() } })
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeRef.current() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  // Esc — **쌓임의 맨 위만** 받는다(components/common/overlayStack.ts).
+  // 이 모달 위에서 PDF 뷰어가 열리는 자리가 있어(수리내역서·거래명세서), 각자 keydown 을
+  // 달아 두면 Esc 한 번에 뷰어와 이 모달이 함께 닫혔다.
+  useOverlayEsc(true, () => closeRef.current())
 
   useEffect(() => {
     let alive = true

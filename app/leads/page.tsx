@@ -4,6 +4,7 @@
 // 영업관리 메뉴 안에 있지만 영업 업무라 접근 권한은 영업 현황과 같은 canViewPipeline 을 쓴다.
 
 import { useEffect, useMemo, useState, Suspense, Fragment, type CSSProperties } from 'react'
+import { useOverlayEsc } from '@/components/common/overlayStack'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { loadEngineers } from '@/lib/appData/engineers'
@@ -256,12 +257,9 @@ function LeadsPageInner() {
   const [pdfBusy, setPdfBusy] = useState<number | null>(null)
   // 명함 크게 보기. 썸네일이 이미 받아온 서명 URL 을 그대로 쓴다(다시 발급하지 않는다).
   const [cardViewer, setCardViewer] = useState<string | null>(null)
-  useEffect(() => {
-    if (!cardViewer) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setCardViewer(null) }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [cardViewer])
+  // Esc — 쌓임의 맨 위만(components/common/overlayStack.ts). 명함 위에 다른 것이 열려도
+  // 한 번에 두 겹이 닫히지 않는다.
+  useOverlayEsc(true, () => setCardViewer(null), cardViewer != null)
 
   useEffect(() => {
     if (!authorized) return

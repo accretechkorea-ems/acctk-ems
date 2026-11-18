@@ -52,8 +52,8 @@ eq('가로는 화면의 92%', narrow.width, Math.round(420 * V.VIEWER_VW))
 eq('세로는 화면의 96%', narrow.height, Math.round(900 * V.VIEWER_VH))
 
 console.log('\n── 뷰어에 주는 설정 ──')
-eq('툴바·쪽 목록을 감추고 가로 맞춤',
-  V.PDF_VIEW_PARAMS, '#toolbar=0&navpanes=0&scrollbar=1&view=FitH')
+eq('툴바·쪽 목록을 감추고 배율 100%',
+  V.PDF_VIEW_PARAMS, '#toolbar=0&navpanes=0&scrollbar=1&zoom=100')
 eq('창 바탕 = 뷰어 배경색', V.VIEWER_BG, '#e6e6e6')
 
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)

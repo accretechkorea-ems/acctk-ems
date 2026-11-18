@@ -28,7 +28,9 @@
 //   prefers-reduced-motion 이면 둘 다 즉시다.
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Z } from '@/lib/zIndex'
+import { useOverlayEsc } from '@/components/common/overlayStack'
 import { PDF_VIEW_PARAMS, VIEWER_BG, VIEWER_HEADER_H, pdfViewerBox } from '@/lib/pdfViewer'
 import type { PdfDoc } from '@/lib/pdfViewer'
 
@@ -115,12 +117,10 @@ export default function PdfViewerModal({ doc, onClose }: PdfViewerModalProps) {
     setTimeout(onClose, 120)
   }
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // Esc — **맨 위 오버레이만** 받는다(components/common/overlayStack.ts).
+  // 뷰어는 수리 정보 모달·견적 목록 팝업 위에서 열리므로, 각자 keydown 을 달면 Esc 한 번에
+  // 두 겹이 닫힌다.
+  useOverlayEsc(true, () => close())
 
   /**
    * 인쇄 — 뷰어 안의 문서를 그대로 인쇄 대화상자로 보낸다.
@@ -145,11 +145,15 @@ export default function PdfViewerModal({ doc, onClose }: PdfViewerModalProps) {
     background: '#fff', cursor: 'pointer',
   }
 
-  return (
+  // **body 끝에 붙인다**(포털) — 모달 안에서 열려도 그 모달의 스택 컨텍스트·overflow 에
+  // 갇히지 않는다. 띄울 곳이 아직 없으면(서버 렌더) 아무것도 그리지 않는다.
+  if (typeof document === 'undefined') return null
+
+  return createPortal((
     <div
       onMouseDown={e => { if (e.target === e.currentTarget) close() }}
       style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: Z.modal,
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: Z.viewer,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         opacity: open ? 1 : 0,
         transition: motion ?? `opacity ${closing ? 120 : 150}ms ease-out`,
@@ -207,5 +211,5 @@ export default function PdfViewerModal({ doc, onClose }: PdfViewerModalProps) {
         )}
       </div>
     </div>
-  )
+  ), document.body)
 }

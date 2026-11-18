@@ -88,10 +88,13 @@ export function pdfViewerBox(vw: number, vh: number): { width: number; height: n
 }
 
 /**
- * 뷰어에게 주는 보기 설정 — 검은 툴바·쪽 목록을 감추고 가로에 맞춰 편다.
+ * 뷰어에게 주는 보기 설정 — 검은 툴바·쪽 목록을 감추고 **배율을 100% 로 못 박는다**.
+ * 가로 맞춤(view=FitH)은 창 폭에 따라 글자 크기가 달라져, 같은 문서가 자리마다 다르게
+ * 보였다. 100% 면 A4 한 쪽이 늘 794px(96dpi 기준)이고, 창이 그보다 넓으면 뷰어가
+ * 가운데에 두고 좌우를 제 배경색으로 채운다(창 바탕도 같은 색이라 이음매가 없다).
  * 듣지 않는 브라우저도 있다(그때는 그냥 기본 모양이다 — 해가 되지는 않는다).
  */
-export const PDF_VIEW_PARAMS = '#toolbar=0&navpanes=0&scrollbar=1&view=FitH'
+export const PDF_VIEW_PARAMS = '#toolbar=0&navpanes=0&scrollbar=1&zoom=100'
 
 /** 브라우저 PDF 뷰어의 배경색 — 창 바탕을 이 색으로 맞춰야 이음매가 안 보인다. */
 export const VIEWER_BG = '#e6e6e6'

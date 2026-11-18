@@ -15,10 +15,15 @@
 //   병합·굵게·배경색·테두리·열 너비까지는 옮기지만 차트·그림·조건부 서식은 빠진다.
 //   그래서 머리줄에 그 사실을 적고 「다운로드」를 늘 함께 둔다.
 //
-// 크기·모션은 **수리 정보 모달과 같다**(components/quote/RepairInfoModal.tsx).
+// 크기는 **PDF 뷰어와 같은 규칙**이다(lib/pdfViewer.ts 의 pdfViewerBox — 화면 폭의 92%,
+// 최대 1100px · 높이 96%). 엑셀은 가로로 넓어 720px 로는 한 화면에 몇 칸 들어오지 않았다.
+// 모션은 수리 정보 모달 그대로다(150/180ms, 닫을 때 120ms).
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Z } from '@/lib/zIndex'
+import { useOverlayEsc } from '@/components/common/overlayStack'
+import { pdfViewerBox } from '@/lib/pdfViewer'
 
 /** 미리보기로 열 수 있는 형식. 그 밖(.xls·.csv·.eml …)은 받아서 봐야 한다. */
 const PREVIEWABLE = /\.(xlsx|xlsm)$/i
@@ -106,6 +111,16 @@ export default function XlsxPreviewModal({ doc, onClose }: { doc: XlsxDoc; onClo
   const [error, setError] = useState<string | null>(null)
   const [big, setBig] = useState(false)
   const closedRef = useRef(false)
+  /** 창 치수 — PDF 뷰어와 같은 규칙. 화면이 바뀌면 다시 잰다. */
+  const [box, setBox] = useState(() => (typeof window === 'undefined'
+    ? { width: 1100, height: 900, bodyHeight: 852 }
+    : pdfViewerBox(window.innerWidth, window.innerHeight)))
+
+  useEffect(() => {
+    const onResize = () => setBox(pdfViewerBox(window.innerWidth, window.innerHeight))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   useEffect(() => {
     if (reduced) return
@@ -121,12 +136,8 @@ export default function XlsxPreviewModal({ doc, onClose }: { doc: XlsxDoc; onClo
     setTimeout(onClose, 120)
   }
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // Esc — 맨 위 오버레이만(PDF 뷰어와 같은 규칙).
+  useOverlayEsc(true, () => close())
 
   // 파일을 받아 그 자리에서 읽는다 — 서버로 되보내지 않는다.
   useEffect(() => {
@@ -223,11 +234,15 @@ export default function XlsxPreviewModal({ doc, onClose }: { doc: XlsxDoc; onClo
     fontSize: 11, fontWeight: 700, color: '#234ea2', textDecoration: 'none', background: '#fff', cursor: 'pointer',
   }
 
-  return (
+  // **body 끝에 붙인다**(포털) — 모달 안에서 열려도 그 모달의 스택 컨텍스트·overflow 에
+  // 갇히지 않는다. 띄울 곳이 아직 없으면(서버 렌더) 아무것도 그리지 않는다.
+  if (typeof document === 'undefined') return null
+
+  return createPortal((
     <div
       onMouseDown={e => { if (e.target === e.currentTarget) close() }}
       style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: Z.modal,
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: Z.viewer,
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
         opacity: open ? 1 : 0,
         transition: motion ?? `opacity ${closing ? 120 : 150}ms ease-out`,
@@ -235,8 +250,8 @@ export default function XlsxPreviewModal({ doc, onClose }: { doc: XlsxDoc; onClo
     >
       <div
         style={{
-          // 수리 정보 모달과 같은 치수·모션이다.
-          width: 720, maxWidth: '100%', height: 'min(830px, 90vh)', background: '#fff', borderRadius: 8,
+          // 치수는 PDF 뷰어와 같다. 모션만 수리 정보 모달 그대로다.
+          width: box.width, height: box.height, maxWidth: '100%', background: '#fff', borderRadius: 8,
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
           opacity: open ? 1 : 0,
@@ -333,5 +348,5 @@ export default function XlsxPreviewModal({ doc, onClose }: { doc: XlsxDoc; onClo
         </div>
       </div>
     </div>
-  )
+  ), document.body)
 }
