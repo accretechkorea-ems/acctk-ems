@@ -13,6 +13,9 @@ import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import AccessGate from '@/components/common/AccessGate'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import Popover from '@/components/common/Popover'
+import MemoPopover from '@/components/common/MemoPopover'
+import { saveQuoteMemo } from '@/lib/quoteMutations'
+import { useToast } from '@/components/common/Toast'
 import AssigneePicker from '@/components/quote/AssigneePicker'
 
 const BLUE = '#234ea2'
@@ -73,6 +76,7 @@ const fmtShort = (s: string | null) => {
 export default function PurchasePage() {
   const supabase = createClient()
   const router = useRouter()
+  const toast = useToast()
   const [quotes, setQuotes] = useState<PurchaseQuote[]>([])
   const [custMap, setCustMap] = useState<Record<number, string>>({})
   const [engMap, setEngMap] = useState<Record<string, string>>({})
@@ -96,9 +100,7 @@ export default function PurchasePage() {
   const [taxModal, setTaxModal] = useState<PurchaseQuote | null>(null)
   const [taxProcessing, setTaxProcessing] = useState(false)
   // 메모 툴팁
-  const [hoveredMemoId, setHoveredMemoId] = useState<number | null>(null)
   // 표 컨테이너가 잘라서 툴팁을 포털로 띄운다. 앵커는 지금 가리키고 있는 줄.
-  const memoAnchorRef = useRef<HTMLDivElement>(null)
   // 배송 주소 팝업
   const [addressPopupId, setAddressPopupId] = useState<number | null>(null)
   // 열린 행의 배송 배지. 포털 팝오버가 이 좌표를 기준으로 뜬다.
@@ -109,7 +111,6 @@ export default function PurchasePage() {
   // 출하일정/메모 편집 모달
   const [editScheduleModal, setEditScheduleModal] = useState<PurchaseQuote | null>(null)
   const [editShippingDate, setEditShippingDate] = useState('')
-  const [editOrderMemo, setEditOrderMemo] = useState('')
   const [editSaving, setEditSaving] = useState(false)
 
   const fetchAll = async () => {
@@ -230,6 +231,18 @@ export default function PurchasePage() {
     await fetchAll()
   }
 
+  /** 메모만 저장한다 — 목록의 메모 팝오버가 부른다(보낸 칸만 갱신된다). */
+  const saveMemo = async (quoteId: number, patch: { requestMemo?: string; orderMemo?: string }): Promise<boolean> => {
+    const r = await saveQuoteMemo({ quoteId, ...patch })
+    if (!r.ok) { toast.error('메모를 저장하지 못했습니다: ' + r.error); return false }
+    toast.success('메모를 저장했습니다')
+    await fetchAll()
+    return true
+  }
+
+  /** 목록·팝오버가 쓰는 고객사 이름. */
+  const customerName = (q: PurchaseQuote): string => custMap[q.customer_id ?? 0] ?? '-'
+
   const handleEditSchedule = async () => {
     if (!editScheduleModal) return
     setEditSaving(true)
@@ -237,7 +250,6 @@ export default function PurchasePage() {
     fd.append('quoteId', String(editScheduleModal.quote_id))
     fd.append('action', 'update_schedule')
     fd.append('shippingDate', editShippingDate)
-    fd.append('orderMemo', editOrderMemo)
     await fetch('/api/purchase-order', { method: 'POST', body: fd })
     setEditSaving(false)
     setEditScheduleModal(null)
@@ -411,36 +423,28 @@ export default function PurchasePage() {
                           : <span style={{ color: MUTED, fontSize: 12 }}>-</span>}
                       </td>
                       <td style={{ padding: '9px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                        {(q.order_memo || q.order_request_memo) ? (
-                          <div ref={hoveredMemoId === q.quote_id ? memoAnchorRef : null} style={{ display: 'inline-block' }}
-                            onMouseEnter={() => setHoveredMemoId(q.quote_id)}
-                            onMouseLeave={() => setHoveredMemoId(null)}>
-                            <span style={{ fontSize: 11, cursor: 'help', color: GRAY }}>📋 메모</span>
-                            {/* 표 컨테이너가 자르지 못하도록 포털로 띄운다. 원래대로 위쪽을 먼저 시도한다. */}
-                            <Popover
-                              anchorRef={memoAnchorRef}
-                              open={hoveredMemoId === q.quote_id}
-                              onClose={() => setHoveredMemoId(null)}
-                              prefer="top"
-                              gap={6}
-                              style={{ background: '#1e293b', color: '#e2e8f0', borderRadius: 9, padding: '8px 12px', fontSize: 11, minWidth: 160, maxWidth: 260, lineHeight: 1.6, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', pointerEvents: 'none' }}
-                            >
-                              {/* 메모는 두 칸이다 — 발주서를 올린 작성자가 쓴 것과 영업관리가 쓴 것을 나눠 보여준다. */}
-                              {q.order_request_memo && (
-                                <>
-                                  <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 3, fontWeight: 700 }}>작성자 요청</div>
-                                  <div style={{ marginBottom: q.order_memo ? 8 : 0 }}>{q.order_request_memo}</div>
-                                </>
-                              )}
-                              {q.order_memo && (
-                                <>
-                                  <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 3, fontWeight: 700 }}>영업관리 메모</div>
-                                  <div>{q.order_memo}</div>
-                                </>
-                              )}
-                            </Popover>
-                          </div>
-                        ) : <span style={{ color: MUTED, fontSize: 11 }}>-</span>}
+                        {/* 메모 둘 — 공용 부품으로 본다(components/common/MemoPopover.tsx).
+                            여기는 발주를 처리하는 화면이라 둘 다 고칠 수 있다:
+                            요청 메모는 작성자 본인 또는 영업관리, 영업관리 메모는 영업관리만
+                            (서버가 lib/memoPerm.ts 와 같은 기준으로 다시 본다). */}
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <MemoPopover
+                            title={`${q.quote_number} · ${customerName(q)}`}
+                            value={q.order_request_memo}
+                            badge="요청"
+                            label="요청 메모"
+                            canEdit
+                            onSave={text => saveMemo(q.quote_id, { requestMemo: text })}
+                          />
+                          <MemoPopover
+                            title={`${q.quote_number} · ${customerName(q)}`}
+                            value={q.order_memo}
+                            badge="영업관리"
+                            label="영업관리 메모"
+                            canEdit
+                            onSave={text => saveMemo(q.quote_id, { orderMemo: text })}
+                          />
+                        </span>
                       </td>
                       <td style={{ padding: '9px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'center' }}>
@@ -495,7 +499,7 @@ export default function PurchasePage() {
                           )}
                         </div>
                         <button
-                          onClick={() => { setEditScheduleModal(q); setEditShippingDate(q.shipping_date || ''); setEditOrderMemo(q.order_memo || '') }}
+                          onClick={() => { setEditScheduleModal(q); setEditShippingDate(q.shipping_date || '') }}
                           style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 13, color: MUTED }}
                           onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6'; (e.currentTarget as HTMLButtonElement).style.color = GRAY }}
                           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.color = MUTED }}>
@@ -588,18 +592,16 @@ export default function PurchasePage() {
       {editScheduleModal && (
         <ModalOverlay onClose={() => setEditScheduleModal(null)} confirmClose closeOn={editSaving ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.55)' }}>
           <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 400, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>일정/메모 수정</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>출하 일정 수정</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 20 }}>{editScheduleModal.quote_number} · {custMap[editScheduleModal.customer_id ?? 0] ?? '-'}</div>
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 11, color: GRAY, marginBottom: 5, fontWeight: 600 }}>출하 예정일</div>
               <input type="date" className="date-fit" value={editShippingDate} onChange={e => setEditShippingDate(e.target.value)}
                 style={{ ...inp, colorScheme: 'light' }} />
             </div>
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 11, color: GRAY, marginBottom: 5, fontWeight: 600 }}>메모</div>
-              <textarea value={editOrderMemo} onChange={e => setEditOrderMemo(e.target.value)} rows={3}
-                placeholder="납품 조건, 특이사항 등 메모"
-                style={{ ...inp, resize: 'vertical', lineHeight: 1.5 }} />
+            {/* 메모 칸은 걷었다 — 목록의 메모 아이콘에서 바로 고친다(MemoPopover). */}
+            <div style={{ marginBottom: 20, fontSize: 11, color: GRAY, lineHeight: 1.6 }}>
+              메모는 목록의 메모 아이콘에서 적고 고칩니다.
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setEditScheduleModal(null)} disabled={editSaving}

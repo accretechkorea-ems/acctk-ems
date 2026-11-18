@@ -10,8 +10,9 @@ import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import {
   updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, submitQuoteDelete, deleteQuoteSelf,
-  checkQuoteApprovalLines, submitQuoteApproval, PO_MEMO_MAX,
+  checkQuoteApprovalLines, submitQuoteApproval, saveQuoteMemo as saveQuoteMemoApi,
 } from '@/lib/quoteMutations'
+import MemoPopover from '@/components/common/MemoPopover'
 import { requestDeleteVerdict, selfDeleteVerdict, REJECTED_DELETE_MESSAGE } from '@/lib/quoteDeletePolicy'
 import LinePickerModal from '@/components/approval/LinePickerModal'
 import { canSubmitApproval, loadQuoteApprovalDocIds, fetchQuoteGates, gateFor, docIdFor, docHistoryFor, type QuoteGateTable } from '@/lib/quoteApprovalDocs'
@@ -196,9 +197,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
   const [page, setPage] = useState(1)
 
   // 메모 툴팁 + 서브모달 상태
-  const [hoveredMemoId, setHoveredMemoId] = useState<number | null>(null)
   // 목록 상자가 overflow 로 잘라서 툴팁을 포털로 띄운다. 앵커는 지금 가리키고 있는 줄.
-  const memoAnchorRef = useRef<HTMLDivElement>(null)
   // 행 동작 메뉴(⋮). 한 번에 하나만 열리므로 앵커 ref 도 하나를 돌려 쓴다(메모 팝오버와 같은 방식).
   const [menuQuoteId, setMenuQuoteId] = useState<number | null>(null)
   // PDF 를 여는 중인 견적 id. 서명 URL 왕복 동안 아무 반응이 없으면 다시 누르게 된다.
@@ -218,7 +217,6 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
   // 발주서 등록
   const [poQuote, setPoQuote] = useState<Quote | null>(null)
   const [poFile, setPoFile] = useState<File | null>(null)
-  const [poMemo, setPoMemo] = useState('')
   const [poDelivery, setPoDelivery] = useState<'직납' | '택배발송'>('직납')
   const [poAddress, setPoAddress] = useState('')
   const [poAddressMode, setPoAddressMode] = useState<'company' | 'direct'>('company')
@@ -597,13 +595,25 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
     }
     const result = await uploadPurchaseOrder({
       quoteId: poQuote.quote_id, quoteNumber: poQuote.quote_number, file: poFile, deliveryMethod: poDelivery, deliveryAddress,
-      requestMemo: poMemo,
     })
     setPoUploading(false)
     if (!result.ok) { toast.error(`발주서 등록 실패: ${result.error}`); return }
     toast.success('발주서가 등록되었습니다')
-    setPoQuote(null); setPoFile(null); setPoMemo(''); setPoAddress(''); setPoAddressMode('company'); setPoCompanyAddress(null); setPoContactId(''); setPoContacts([])
+    setPoQuote(null); setPoFile(null); setPoAddress(''); setPoAddressMode('company'); setPoCompanyAddress(null); setPoContactId(''); setPoContacts([])
     await loadData()
+  }
+
+  /**
+   * 메모만 저장한다 — 목록의 메모 팝오버가 부른다.
+   * 발주서 등록과 **따로** 둔 이유: 등록 모달 안에만 메모 칸이 있어서, 올리고 나면 자기가 쓴
+   * 요청 메모를 다시 볼 수도 고칠 수도 없었다(그 모달은 늘 빈 칸으로 열렸다).
+   */
+  const saveQuoteMemo = async (quoteId: number, patch: { requestMemo?: string; orderMemo?: string }): Promise<boolean> => {
+    const r = await saveQuoteMemoApi({ quoteId, ...patch })
+    if (!r.ok) { toast.error(`메모를 저장하지 못했습니다: ${r.error}`); return false }
+    toast.success('메모를 저장했습니다')
+    await loadData()
+    return true
   }
 
   const handleTaxRequest = async () => {
@@ -829,42 +839,34 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                             만료
                           </span>
                         )}
-                        {showOrderInfo && (q.shipping_date || q.order_memo || q.order_request_memo) && (
-                          <div ref={hoveredMemoId === q.quote_id ? memoAnchorRef : null}
-                            onMouseEnter={() => setHoveredMemoId(q.quote_id)}
-                            onMouseLeave={() => setHoveredMemoId(null)}>
-                            <span style={{ fontSize: 10, cursor: 'help', display: 'flex', alignItems: 'center', gap: 3 }}>
-                              <span style={{ color: MUTED, fontWeight: 600 }}>출하예정</span>
-                              <span style={{ color: '#0369a1', fontWeight: 700 }}>{q.shipping_date || '미정'}</span>
-                              {(q.order_memo || q.order_request_memo) && <span style={{ fontSize: 9 }}>📋</span>}
-                            </span>
-                            <Popover
-                              anchorRef={memoAnchorRef}
-                              open={hoveredMemoId === q.quote_id}
-                              onClose={() => setHoveredMemoId(null)}
-                              align="center"
-                              gap={6}
-                              style={{ background: '#1e293b', color: '#e2e8f0', borderRadius: 9, padding: '8px 12px', fontSize: 11, minWidth: 180, maxWidth: 260, lineHeight: 1.6, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', pointerEvents: 'none' }}
-                            >
-                                <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginBottom: 4 }}>처리 담당자</div>
-                                <div style={{ fontWeight: 700, color: '#e2e8f0', marginBottom: (q.order_memo || q.order_request_memo) ? 8 : 0 }}>
-                                  {q.tax_completed_by || q.order_completed_by || '-'}
-                                </div>
-                                {/* 메모는 두 칸이다 — 누가 쓴 것인지 라벨로 구분한다. */}
-                                {q.order_request_memo && (
-                                  <>
-                                    <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginBottom: 3 }}>작성자 요청</div>
-                                    <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginBottom: q.order_memo ? 8 : 0 }}>{q.order_request_memo}</div>
-                                  </>
-                                )}
-                                {q.order_memo && (
-                                  <>
-                                    <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginBottom: 3 }}>영업관리 메모</div>
-                                    <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{q.order_memo}</div>
-                                  </>
-                                )}
-                            </Popover>
-                          </div>
+                        {/* 출하예정 — 주문 뒤 단계에서만 적힌다. */}
+                        {showOrderInfo && q.shipping_date && (
+                          <span style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 3 }}>
+                            <span style={{ color: MUTED, fontWeight: 600 }}>출하예정</span>
+                            <span style={{ color: '#0369a1', fontWeight: 700 }}>{q.shipping_date}</span>
+                          </span>
+                        )}
+                        {/* 메모 둘 — **발주서가 올라간 건이면 상태와 무관하게** 낸다.
+                            전에는 주문완료 뒤에만 보여서, 발주 직후에는 자기가 쓴 요청 메모조차
+                            다시 볼 수 없었다. 요청 메모는 작성자 본인이 여기서 바로 고친다. */}
+                        {q.purchase_order_at && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <MemoPopover
+                              title={`${q.quote_number} · ${q.company_name}`}
+                              value={q.order_request_memo}
+                              badge="요청"
+                              label="요청 메모"
+                              canEdit
+                              onSave={text => saveQuoteMemo(q.quote_id, { requestMemo: text })}
+                            />
+                            {/* 영업관리가 쓴 메모는 여기서는 읽기만 한다(서로의 칸을 덮어쓰지 않는다). */}
+                            <MemoPopover
+                              title={`${q.quote_number} · ${q.company_name}`}
+                              value={q.order_memo}
+                              badge="영업관리"
+                              label="영업관리 메모"
+                            />
+                          </span>
                         )}
                       </div>
                     </td>
@@ -884,7 +886,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                             '주문완료' 에서 넘어가는 계산서 요청은 이미 수주된 건이라 게이트가 허용이다
                             — 발주 이후 상태는 라우트가 막지 않으므로 화면도 같은 기준으로 둔다. */}
                         {q.status === '견적중' && q.quote_type !== 'repair_domestic' && allowsFor(q) && (
-                          <button onClick={() => { setPoQuote(q); setPoFile(null); setPoMemo('') }}
+                          <button onClick={() => { setPoQuote(q); setPoFile(null) }}
                             style={{ padding: '3px 7px', background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#7c3aed' }}>
                             발주서 등록
                           </button>
@@ -995,7 +997,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
 
       {/* ── 발주서 등록 서브모달 ── */}
       {poQuote && (
-        <ModalOverlay onClose={() => { setPoQuote(null); setPoFile(null); setPoMemo('') }} confirmClose closeOn={poUploading ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: SUBMODAL_Z, padding: 0 }}>
+        <ModalOverlay onClose={() => { setPoQuote(null); setPoFile(null) }} confirmClose closeOn={poUploading ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: SUBMODAL_Z, padding: 0 }}>
           <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>발주서 등록</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{poQuote.quote_number}</div>
@@ -1068,19 +1070,13 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                 <input ref={poFileRef} type="file" accept="application/pdf" onChange={e => setPoFile(e.target.files?.[0] || null)} style={{ display: 'none' }} />
               </div>
             </div>
-            {/* 요청 메모 — 영업관리가 쓰는 메모와 다른 칸에 저장된다(서로 덮어쓰지 않는다) */}
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 11, color: GRAY, marginBottom: 6, fontWeight: 600 }}>
-                요청 메모 <span style={{ color: MUTED, fontWeight: 500 }}>(선택)</span>
-                <span style={{ float: 'right', color: MUTED, fontWeight: 500 }}>{poMemo.length} / {PO_MEMO_MAX}</span>
-              </div>
-              <textarea value={poMemo} onChange={e => setPoMemo(e.target.value.slice(0, PO_MEMO_MAX))} rows={3}
-                maxLength={PO_MEMO_MAX}
-                placeholder="납기 요청, 고객 특이사항 등 영업관리에 전달할 내용"
-                style={{ width: '100%', padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+            {/* 요청 메모 칸은 여기서 걷었다 — 이 모달은 **파일만** 맡는다.
+                메모는 목록의 메모 아이콘에서 쓰고 고친다(올린 뒤에도 다시 볼 수 있게). */}
+            <div style={{ marginBottom: 16, fontSize: 11, color: MUTED, lineHeight: 1.6 }}>
+              요청 메모는 등록 뒤 목록의 메모 아이콘에서 적고 고칩니다.
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => { setPoQuote(null); setPoFile(null); setPoMemo('') }} disabled={poUploading}
+              <button onClick={() => { setPoQuote(null); setPoFile(null) }} disabled={poUploading}
                 style={{ flex: 1, padding: 9, background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>취소</button>
               <button onClick={handlePoUpload} disabled={poUploading || !poFile}
                 style={{ flex: 1, padding: 9, background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, opacity: (poUploading || !poFile) ? 0.6 : 1 }}>

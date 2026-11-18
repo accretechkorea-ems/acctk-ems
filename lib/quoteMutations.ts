@@ -65,8 +65,6 @@ export type UploadPurchaseOrderParams = {
   file: File
   deliveryMethod: string
   deliveryAddress?: string // 이미 구성된 배송정보 문자열(UI 파생). 있으면만 전송.
-  /** 견적 작성자가 남기는 요청 메모(선택). 영업관리가 쓰는 order_memo 와 다른 칸이다. */
-  requestMemo?: string
 }
 
 // 발주서 업로드(/api/purchase-order, action=upload). deliveryAddress 구성은 호출부 책임.
@@ -78,8 +76,28 @@ export async function uploadPurchaseOrder(p: UploadPurchaseOrderParams): Promise
   fd.append('file', p.file)
   fd.append('deliveryMethod', p.deliveryMethod)
   if (p.deliveryAddress) fd.append('deliveryAddress', p.deliveryAddress)
-  // 빈 값도 보낸다 — 재등록에서 메모를 지운 경우를 서버가 알아야 null 로 되돌린다.
-  fd.append('requestMemo', p.requestMemo ?? '')
+  // 메모는 **보내지 않는다** — 발주서 등록은 파일만 맡고, 요청 메모는 목록의 메모 팝오버가
+  // 따로 저장한다(saveQuoteMemo). 안 보내면 서버가 기존 메모를 건드리지 않는다.
+  const res = await fetch('/api/purchase-order', { method: 'POST', body: fd })
+  const json = await res.json().catch(() => ({}))
+  return res.ok ? { ok: true } : { ok: false, error: json.error || String(res.status) }
+}
+
+/** 메모만 저장한다 — 보낸 칸만 갱신된다(서로 덮어쓰지 않는다). */
+export type SaveQuoteMemoParams = {
+  quoteId: number
+  /** 견적 작성자가 쓴 요청 메모. 작성자 본인·영업관리만 고칠 수 있다(서버가 다시 본다). */
+  requestMemo?: string
+  /** 영업관리가 쓴 메모. 발주 메뉴가 있는 사람만 고칠 수 있다. */
+  orderMemo?: string
+}
+
+export async function saveQuoteMemo(p: SaveQuoteMemoParams): Promise<MutationResult> {
+  const fd = new FormData()
+  fd.append('quoteId', String(p.quoteId))
+  fd.append('action', 'save_memo')
+  if (p.requestMemo !== undefined) fd.append('requestMemo', p.requestMemo)
+  if (p.orderMemo !== undefined) fd.append('orderMemo', p.orderMemo)
   const res = await fetch('/api/purchase-order', { method: 'POST', body: fd })
   const json = await res.json().catch(() => ({}))
   return res.ok ? { ok: true } : { ok: false, error: json.error || String(res.status) }

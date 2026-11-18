@@ -68,7 +68,9 @@ export async function POST(req: Request) {
   const gateRow = gateRes.gates.get(qid)
   if (!gateRow) return NextResponse.json({ error: '견적을 찾을 수 없습니다.' }, { status: 404 })
   const firstTransition = (APPROVABLE_STATUSES as readonly string[]).includes(gateRow.status)
-  if (gateRow.status === SUBMITTED_STATUS || (firstTransition && !gateAllows(gateRow.gate))) {
+  // 메모만 고치는 것은 **전이가 아니다** — 결재가 도는 동안에도 적어 둘 수 있어야 한다.
+  const movesForward = action !== 'save_memo'
+  if (movesForward && (gateRow.status === SUBMITTED_STATUS || (firstTransition && !gateAllows(gateRow.gate)))) {
     console.warn('[purchase-order] 게이트 차단', { action, quoteId, status: gateRow.status, gate: gateRow.gate })
     return NextResponse.json({ error: GATE_BLOCK_MESSAGE }, { status: 409 })
   }
@@ -101,8 +103,10 @@ export async function POST(req: Request) {
     const deliveryMethod = formData.get('deliveryMethod') as string | null
     const deliveryAddress = formData.get('deliveryAddress') as string | null
     // 견적 작성자가 남기는 요청 메모. 영업관리가 쓰는 order_memo 와 다른 칸이라 서로 덮어쓰지 않는다.
-    // 재등록이면 새 값으로 갈아 끼운다(비웠으면 null 로 되돌린다).
-    const requestMemo = ((formData.get('requestMemo') as string | null) ?? '').trim().slice(0, REQUEST_MEMO_MAX)
+    // **보낸 경우에만** 갱신한다 — 발주서만 다시 올리는 길에서 빈 값이 기존 메모를 지웠다
+    // (화면이 메모 칸을 늘 빈 채로 열어 두었기 때문이다. 지금은 메모를 따로 고친다).
+    const rawMemo = formData.get('requestMemo') as string | null
+    const requestMemo = (rawMemo ?? '').trim().slice(0, REQUEST_MEMO_MAX)
 
     const { error: updErr } = await supabaseAdmin.from('quotes').update({
       status: '발주(주문 대기)',
@@ -110,7 +114,7 @@ export async function POST(req: Request) {
       purchase_order_at: new Date().toISOString(),
       delivery_method: deliveryMethod || null,
       delivery_info: deliveryAddress || null,
-      order_request_memo: requestMemo || null,
+      ...(rawMemo === null ? null : { order_request_memo: requestMemo || null }),
     }).eq('quote_id', Number(quoteId))
     if (updErr) console.error(' quotes update failed', { action, quoteId, error: updErr })
 
@@ -148,6 +152,8 @@ export async function POST(req: Request) {
   // 주문완료 처리
   if (action === 'complete_order') {
     const shippingDate = formData.get('shippingDate') as string | null
+    // 메모는 **보낸 경우에만** 갱신한다 — 목록의 메모 팝오버가 따로 저장하기 때문에
+    // 이 길에서는 아예 보내지 않는 경우가 있다(안 보낸 칸을 null 로 지우면 안 된다).
     const orderMemo = formData.get('orderMemo') as string | null
 
     const { data: quote, error: quoteErr } = await supabaseAdmin
@@ -160,7 +166,7 @@ export async function POST(req: Request) {
     const { error: updErr } = await supabaseAdmin.from('quotes').update({
       status: '주문완료',
       shipping_date: shippingDate || null,
-      order_memo: orderMemo || null,
+      ...(orderMemo === null ? null : { order_memo: orderMemo.trim() || null }),
       order_completed_at: new Date().toISOString(),
       order_completed_by: senderLabel,
     }).eq('quote_id', Number(quoteId))
@@ -269,6 +275,8 @@ export async function POST(req: Request) {
   // 출하일정/메모 수정
   if (action === 'update_schedule') {
     const shippingDate = formData.get('shippingDate') as string | null
+    // 메모는 **보낸 경우에만** 갱신한다 — 목록의 메모 팝오버가 따로 저장하기 때문에
+    // 이 길에서는 아예 보내지 않는 경우가 있다(안 보낸 칸을 null 로 지우면 안 된다).
     const orderMemo = formData.get('orderMemo') as string | null
 
     const { data: quote, error: quoteErr } = await supabaseAdmin
@@ -280,7 +288,7 @@ export async function POST(req: Request) {
 
     const { error: updErr } = await supabaseAdmin.from('quotes').update({
       shipping_date: shippingDate || null,
-      order_memo: orderMemo || null,
+      ...(orderMemo === null ? null : { order_memo: orderMemo.trim() || null }),
     }).eq('quote_id', Number(quoteId))
     if (updErr) console.error(' quotes update failed', { action, quoteId, error: updErr })
 
@@ -299,6 +307,40 @@ export async function POST(req: Request) {
       if (notiErr) console.error(' notification insert failed', { action, quoteId, error: notiErr })
     }
     return NextResponse.json({ success: true })
+  }
+
+  /**
+   * 메모만 저장한다 — 파일 없이, 상태도 건드리지 않는다.
+   *
+   * 메모를 고치는 길이 「발주서 등록」 모달 안에만 있어서, 올리고 나면 자기가 쓴 요청 메모를
+   * 다시 볼 수도 고칠 수도 없었다. 그래서 메모를 **따로** 뗀다.
+   *
+   *   requestMemo — 견적 작성자가 쓴 요청. **작성자 본인 또는 영업관리**만 고친다.
+   *   orderMemo   — 영업관리가 쓴 메모. 영업관리만 고친다.
+   *
+   * 둘 다 **보낸 칸만** 갱신한다(안 보낸 칸은 그대로 둔다 — 서로 덮어쓰지 않는다).
+   */
+  if (action === 'save_memo') {
+    const rawRequest = formData.get('requestMemo') as string | null
+    const rawOrder = formData.get('orderMemo') as string | null
+    if (rawRequest === null && rawOrder === null) {
+      return NextResponse.json({ error: '저장할 메모가 없습니다.' }, { status: 400 })
+    }
+    // 영업관리 메모는 발주 메뉴가 있는 사람만 — 위의 소유자 통과(privileged=false)로는 못 쓴다.
+    if (rawOrder !== null && !privileged) {
+      return NextResponse.json({ error: '영업관리 메모는 발주 담당자만 고칠 수 있습니다.' }, { status: 403 })
+    }
+
+    const patch: Record<string, string | null> = {}
+    if (rawRequest !== null) patch.order_request_memo = rawRequest.trim().slice(0, REQUEST_MEMO_MAX) || null
+    if (rawOrder !== null) patch.order_memo = rawOrder.trim().slice(0, REQUEST_MEMO_MAX) || null
+
+    const { error: memoErr } = await supabaseAdmin.from('quotes').update(patch).eq('quote_id', Number(quoteId))
+    if (memoErr) {
+      console.error('[purchase-order] memo update failed', { quoteId, error: memoErr })
+      return NextResponse.json({ error: '메모를 저장하지 못했습니다.' }, { status: 500 })
+    }
+    return NextResponse.json({ success: true, ...patch })
   }
 
   return NextResponse.json({ error: '알 수 없는 action' }, { status: 400 })

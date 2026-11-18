@@ -9,6 +9,8 @@ import { useRepairs, type Repair, type RepairStatus, type RepairQuote } from '@/
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import RepairEditModal from '@/components/repair/RepairEditModal'
+import MemoPopover from '@/components/common/MemoPopover'
+import { canEditRepairMemo } from '@/lib/memoPerm'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import AutocompleteInput from '@/components/common/AutocompleteInput'
 import { useConfirm } from '@/components/common/ConfirmDialog'
@@ -146,9 +148,6 @@ export default function RepairPage() {
   const [isEditSaving, setIsEditSaving] = useState(false)
   // 연결된 견적 요약(목록 금액 표시용). quotes RLS 우회를 위해 /api/repair-quotes 로 배치 조회.
   const [quoteMap, setQuoteMap] = useState<Record<number, RepairQuote>>({})
-  const [openMemoId, setOpenMemoId] = useState<number | null>(null) // 클릭으로 열리는 메모 팝오버 대상 repair_id (한 번에 하나)
-  // 메모 팝오버 위치(fixed) — 테이블 overflow/row 스태킹을 벗어나려고 뷰포트 기준으로 띄운다.
-  const [memoAnchor, setMemoAnchor] = useState<{ up: boolean; right: number; top?: number; bottom?: number } | null>(null)
   // 본사 복귀 처리(복귀일 입력) 다이얼로그
   const [hqReturning, setHqReturning] = useState<Repair | null>(null)
   const [hqReturnDate, setHqReturnDate] = useState(todayKST())
@@ -174,15 +173,6 @@ export default function RepairPage() {
   // 필터 변경 시 첫 페이지로
   useEffect(() => { setPage(0) }, [statusFilter, categoryFilter, search, dateBasis, dateMonth])
 
-  // 메모 팝오버: 바깥(문서) 클릭 시 닫기. 아이콘/팝오버 내부 클릭은 stopPropagation 으로 유지.
-  // fixed 라 스크롤하면 아이콘과 어긋나므로 스크롤 시에도 닫는다(capture 로 내부 스크롤 컨테이너 포함).
-  useEffect(() => {
-    if (openMemoId == null) return
-    const close = () => setOpenMemoId(null)
-    document.addEventListener('click', close)
-    window.addEventListener('scroll', close, true)
-    return () => { document.removeEventListener('click', close); window.removeEventListener('scroll', close, true) }
-  }, [openMemoId])
 
   /**
    * 수리 정보 상태 — 연결된 견적의 「미작성/작성중/완료」다. 견적 목록과 **같은 함수**로
@@ -294,6 +284,19 @@ export default function RepairPage() {
     if (error) { toast.error('삭제 실패: ' + error.message); return }
     setEditing(null)
     await refetch()
+  }
+
+  /**
+   * 메모만 저장한다 — 목록의 메모 팝오버가 부른다.
+   * 수정 모달과 **같은 칸**(repair_content)이라 어느 쪽으로 고쳐도 같은 글이다.
+   */
+  const saveRepairMemo = async (repairId: number, text: string): Promise<boolean> => {
+    const { error } = await supabase.from('repairs')
+      .update({ repair_content: text.trim() || null }).eq('repair_id', repairId)
+    if (error) { toast.error('메모를 저장하지 못했습니다: ' + error.message); return false }
+    toast.success('메모를 저장했습니다')
+    await refetch()
+    return true
   }
 
   // ── 수정 저장 (타임스탬프 정리는 RepairEditModal 의 buildPatch 에서 처리한 patch 를 그대로 적용) ──
@@ -659,35 +662,17 @@ export default function RepairPage() {
           <span style={{ width: 44, flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
             {specialBadge(r)}
           </span>
-          {/* 4) 메모 아이콘 — 클릭 시 말풍선 펼침(우측 정렬로 열어 우측 끝 잘림 방지) */}
-          <span style={{ width: 28, flexShrink: 0, display: 'flex', justifyContent: 'center', position: 'relative' }}>
-            {r.repair_content && (
-              <>
-                <button type="button" title="메모"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    const opening = openMemoId !== r.repair_id
-                    if (opening) {
-                      // fixed 로 띄운다(테이블 overflow/row 스태킹 탈출). 아이콘 rect 로 뷰포트 기준 위치 계산.
-                      const rc = e.currentTarget.getBoundingClientRect()
-                      const up = rc.top >= 300   // 위 공간 충분하면 위로, 부족하면 아래로 자동 전환
-                      setMemoAnchor(up
-                        ? { up, right: window.innerWidth - rc.right, bottom: window.innerHeight - rc.top + 6 }
-                        : { up, right: window.innerWidth - rc.right, top: rc.bottom + 6 })
-                    }
-                    setOpenMemoId(id => (id === r.repair_id ? null : r.repair_id))
-                  }}
-                  style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontSize: 14, lineHeight: 1, display: 'inline-flex' }}>📋</button>
-                {openMemoId === r.repair_id && memoAnchor && (
-                  <div onClick={(e) => e.stopPropagation()}
-                    style={{ position: 'fixed', right: memoAnchor.right, zIndex: Z.popover, animation: 'memo-pop 0.16s ease-out',
-                      ...(memoAnchor.up ? { bottom: memoAnchor.bottom, transformOrigin: 'bottom right' } : { top: memoAnchor.top, transformOrigin: 'top right' }),
-                      background: '#fff', color: '#111827', border: '1px solid #e5e7eb', borderRadius: 8, padding: '14px 16px', fontSize: 13, minWidth: 240, maxWidth: 280, minHeight: 160, lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word', textAlign: 'left', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
-                    {r.repair_content}
-                  </div>
-                )}
-              </>
-            )}
+          {/* 4) 메모 — 호버로 보고 눌러서 고친다(components/common/MemoPopover.tsx).
+              메모가 없어도 자리를 비우지 않는다 — 아이콘 열이 행마다 어긋나지 않게. */}
+          <span style={{ width: 28, flexShrink: 0, display: 'flex', justifyContent: 'center' }}
+            onClick={e => e.stopPropagation()}>
+            <MemoPopover
+              title={[r.customer_name, r.product_type, r.serial_number ? `S/N ${r.serial_number}` : null]
+                .map(v => (v ?? '').trim()).filter(Boolean).join(' · ')}
+              value={r.repair_content}
+              canEdit={canEditRepairMemo(true)}
+              onSave={text => saveRepairMemo(r.repair_id, text)}
+            />
           </span>
         </div>
       </td>

@@ -28,7 +28,7 @@ import {
 } from '@/components/sales/salesChart'
 import { withTeamPerm, withTeamPerms } from '@/lib/teamPerms'
 import {
-  updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, submitQuoteDelete, deleteQuoteSelf,
+  updateQuoteStatus, uploadPurchaseOrder, requestTaxInvoice, submitQuoteDelete, deleteQuoteSelf, saveQuoteMemo,
   checkQuoteApprovalLines, submitQuoteApproval, PO_MEMO_MAX,
 } from '@/lib/quoteMutations'
 import { requestDeleteVerdict, selfDeleteVerdict, REJECTED_DELETE_MESSAGE } from '@/lib/quoteDeletePolicy'
@@ -672,8 +672,13 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
       file: poFile,
       deliveryMethod: poDelivery,
       deliveryAddress,
-      requestMemo: poMemo,
     })
+    // 요청 메모는 **따로** 저장한다 — 업로드는 파일만 맡는다(메모를 안 보내면 서버가
+    // 기존 메모를 건드리지 않는다. lib/quoteMutations.ts 의 saveQuoteMemo).
+    if (result.ok && poMemo.trim()) {
+      const memoRes = await saveQuoteMemo({ quoteId: poQuote.quote_id, requestMemo: poMemo })
+      if (!memoRes.ok) toast.error(`메모를 저장하지 못했습니다: ${memoRes.error}`)
+    }
     setPoUploading(false)
     if (!result.ok) {
       toast.error(`발주서 등록 실패: ${result.error}`)
