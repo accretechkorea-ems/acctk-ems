@@ -95,7 +95,9 @@ export default function ListHeader({
 
       <span style={{ flex: 1 }} />
 
-      {canExport && (
+      {/* 엑셀·등록은 **목록 모드에서만** 낸다. 지도는 보는 화면이고, 거기서 쓰던 등록 버튼은
+          왼쪽 목록 패널의 「+ 업체」로 옮겼다(좌 패널 탭 줄). */}
+      {view === 'list' && canExport && (
         <button type="button" onClick={onExport} disabled={exportOff} aria-label="엑셀 내보내기"
           title={exporting ? '내보내는 중...' : count > 0 ? `엑셀 내보내기 — 지금 목록 ${count}개` : '엑셀 내보내기 — 내보낼 고객사가 없습니다'}
           style={{ ...btn, width: 34, padding: 0, justifyContent: 'center', color: SUB, cursor: exportOff ? 'default' : 'pointer', opacity: exportOff ? 0.5 : 1 }}>
@@ -107,7 +109,9 @@ export default function ListHeader({
       {/* 등록 길은 하나다 — 폼 안에서 회사명을 찾고, 없으면 그 자리에서 새 회사로 만든다
           (components/customer/ParentPicker.tsx 의 「새 회사로 등록」 + 분류). 버튼을 둘로
           가르면 「회사부터 만들어야 하나」를 매번 고민하게 된다. */}
-      <button type="button" onClick={onAdd} style={primary}>+ 업체 등록</button>
+      {view === 'list' && (
+        <button type="button" onClick={onAdd} style={primary}>+ 업체 등록</button>
+      )}
     </div>
   )
 }

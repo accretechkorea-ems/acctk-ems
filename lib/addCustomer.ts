@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { createEmptyDeviceForm, isEmptyDeviceForm, isEmptyContactForm, type NewDeviceForm } from '@/lib/home'
 import { customerLabel } from '@/lib/customerLabel'
+import { normalizeRegion } from '@/lib/region'
 
 export const addCustomer = async ({
   customerForm,
@@ -43,6 +44,9 @@ export const addCustomer = async ({
           company_name: combined,
           site_name: siteName || null,
           address: customerForm.address.trim(),
+          // 지역1 은 주소에서 뽑아 **정본 약칭**으로 넣는다(lib/region.ts). 전에는 이 칸을
+          // 아예 쓰지 않아 새로 등록한 줄의 지역이 늘 비어 있었다.
+          region1: normalizeRegion(null, customerForm.address),
           // 대리점은 줄을 가리킨다(lib/customerAgency.ts). 옛 agency 텍스트 칸은 쓰지 않는다.
           agency_customer_id: customerForm.agency_customer_id ?? null,
           status: customerForm.status,

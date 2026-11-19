@@ -45,6 +45,14 @@ type Props = {
   isSavingCustomer: boolean
   /** 회사를 고정한 채 연다(회사 카드의 「+ 사업장 추가」). */
   lockCompany?: boolean
+  /**
+   * **대리점 모드** — 같은 폼으로 대리점 줄을 만든다.
+   *   · 회사명 칸 → 「대리점명」 한 줄(회사를 고르지 않는다 — 대리점은 회사에 묶이지 않는다)
+   *   · 사업장명·대리점 칸은 없다(대리점의 대리점은 없다)
+   *   · 담당자·장비도 받지 않는다 — 대리점은 우리 장비를 쓰는 곳이 아니다. 쓰는 곳이면
+   *     사업장으로도 따로 등록한다(지금 대리점 45곳 중 15곳이 그렇다).
+   */
+  mode?: 'site' | 'agency'
   customerForm: CustomerForm
   setCustomerForm: React.Dispatch<React.SetStateAction<CustomerForm>>
   contactForm: Contact
@@ -65,6 +73,7 @@ export default function AddCustomerModal({
   isOpen,
   isSavingCustomer,
   lockCompany,
+  mode = 'site',
   customerForm,
   setCustomerForm,
   contactForm,
@@ -77,6 +86,7 @@ export default function AddCustomerModal({
   onSave,
 }: Props) {
   const { errors, setErrors, clearError, validate } = useFieldErrors<ErrKey>()
+  const isAgency = mode === 'agency'
   // 모달 열림/닫힘(gate=isOpen) 시 에러 초기화
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setErrors({}) }, [isOpen])
@@ -94,8 +104,12 @@ export default function AddCustomerModal({
   const handleSave = () => {
     const rules: Partial<Record<ErrKey, string | null>> = {
       // 회사는 필수다 — 사업장명은 비워 둘 수 있다(사업장이 한 곳이면 회사명만으로 부른다).
-      parent_customer_id: customerForm.parent_customer_id == null ? '회사명을 선택해주세요' : null,
-      address: customerForm.address.trim() ? null : '주소를 입력해주세요',
+      parent_customer_id: isAgency
+        ? (customerForm.company_name.trim() ? null : '대리점명을 입력해주세요')
+        : (customerForm.parent_customer_id == null ? '회사명을 선택해주세요' : null),
+      // 대리점은 주소를 **선택**으로 둔다 — 지금 등록된 45곳 중 29곳이 주소가 없다
+      // (이름만으로 부르는 거래처다). 사업장은 지도에 찍어야 하므로 그대로 필수다.
+      address: isAgency || customerForm.address.trim() ? null : '주소를 입력해주세요',
       contact_name: isEmptyContactForm(contactForm) || contactForm.name.trim()
         ? null
         : '고객 담당자 이름을 입력해주세요',
@@ -136,7 +150,7 @@ export default function AddCustomerModal({
             color: TEXT_PRIMARY,
           }}
         >
-          업체 등록
+          {isAgency ? '대리점 등록' : '업체 등록'}
         </div>
 
         <div style={{ ...sectionCardStyle, marginBottom: 16 }}>
@@ -148,13 +162,21 @@ export default function AddCustomerModal({
               color: TEXT_PRIMARY,
             }}
           >
-            사업장 정보
+            {isAgency ? '대리점 정보' : '사업장 정보'}
           </div>
 
           <div style={{ display: 'grid', gap: 12 }}>
             {/* 회사명 — **필수**다. 목록에 없으면 그 자리에서 새 회사로 등록한다(분류를 함께 고른다). */}
             <div>
-              <div style={fieldLabelStyle}>회사명</div>
+              <div style={fieldLabelStyle}>{isAgency ? '대리점명' : '회사명'}</div>
+              {isAgency ? (
+                <input
+                  value={customerForm.company_name}
+                  onChange={e => { setCustomerForm(prev => ({ ...prev, company_name: e.target.value })); clearError('parent_customer_id') }}
+                  placeholder={'ex) 젠트'}
+                  style={inputStyle}
+                />
+              ) : (
               <ParentPicker
                 value={customerForm.parent_customer_id}
                 onChange={id => { setCustomerForm(prev => ({ ...prev, parent_customer_id: id })); clearError('parent_customer_id') }}
@@ -162,6 +184,7 @@ export default function AddCustomerModal({
                 locked={lockCompany}
                 disabled={isSavingCustomer}
               />
+              )}
               <FieldError message={errors.parent_customer_id} />
             </div>
 
@@ -175,6 +198,7 @@ export default function AddCustomerModal({
                 alignItems: 'start',
               }}
             >
+              {isAgency ? <div /> : (
               <div>
                 <div style={fieldLabelStyle}>사업장명</div>
                 <input
@@ -184,6 +208,7 @@ export default function AddCustomerModal({
                   style={inputStyle}
                 />
               </div>
+              )}
 
               <div>
                 <div style={fieldLabelStyle}>상태</div>
@@ -218,17 +243,22 @@ export default function AddCustomerModal({
             <FieldError message={errors.address} />
 
             {/* 대리점 — 자유 입력이 아니라 등록된 대리점에서 고른다(AgencyPicker).
-                고르지 않으면 직판이다. */}
-            <div style={fieldLabelStyle}>대리점</div>
-            <AgencyPicker
-              value={customerForm.agency_customer_id}
-              onChange={id => setCustomerForm(prev => ({ ...prev, agency_customer_id: id }))}
-              disabled={isSavingCustomer}
-              inputStyle={inputStyle}
-            />
+                고르지 않으면 직판이다. 대리점을 만드는 중에는 이 칸이 없다. */}
+            {!isAgency && (
+              <>
+                <div style={fieldLabelStyle}>대리점</div>
+                <AgencyPicker
+                  value={customerForm.agency_customer_id}
+                  onChange={id => setCustomerForm(prev => ({ ...prev, agency_customer_id: id }))}
+                  disabled={isSavingCustomer}
+                  inputStyle={inputStyle}
+                />
+              </>
+            )}
           </div>
         </div>
 
+        {!isAgency && (
         <div style={{ ...sectionCardStyle, marginBottom: 16 }}>
           <div
             style={{
@@ -463,7 +493,9 @@ export default function AddCustomerModal({
             ))}
           </div>
         </div>
+        )}
 
+        {!isAgency && (
         <div style={{ ...sectionCardStyle, marginBottom: 16 }}>
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: TEXT_PRIMARY }}>
@@ -530,6 +562,7 @@ export default function AddCustomerModal({
             />
           </div>
         </div>
+        )}
 
         <div
           style={{

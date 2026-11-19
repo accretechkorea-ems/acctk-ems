@@ -11,6 +11,7 @@
 // AutocompleteInput 은 문자열만 돌려주므로 여기서는 쓸 수 없다(customer_id 가 필요하다).
 
 import { useRef, useState } from 'react'
+import { searchOr, withNameEnFallback } from '@/lib/nameEn'
 import { createClient } from '@/lib/supabase/client'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { useOutsideClick } from '@/hooks/useOutsideClick'
@@ -57,15 +58,16 @@ export default function CustomerSearch({ value, onChange, placeholder = '업체�
     setQuery(q)
     if (!q.trim()) { setResults([]); setOpen(false); return }
     // 부모 행(회사 묶음)은 사용 대상이 아니다 — 견적 화면과 같은 조건.
-    const { data, error } = await supabase
+    // 회사명·사업장명·영문명 — 「현대자동차」로도, 「감마세타」로도, 「HYUNDAI」로도 걸려야 한다.
+    // 영문명 칸이 없는 DB 면 그 칸만 빼고 다시 읽는다(lib/nameEn.ts).
+    const { data, error } = await withNameEnFallback(useEn => supabase
       .from('customers')
       .select('customer_id, company_name, address, status')
       .is('deleted_at', null)
       .eq('is_parent', false)
       .or(NOT_AGENCY_ONLY)   // 대리점 전용 줄은 쇼룸 사용 대상이 아니다
-      // 회사명·사업장명 둘 다 — 「현대자동차」로도, 「감마세타」로도 걸려야 한다.
-      .or(`company_name.ilike.%${q}%,site_name.ilike.%${q}%`)
-      .limit(10)
+      .or(searchOr(q, useEn))
+      .limit(10))
     if (error) { console.error('[showroom] customer search failed', error); return }
     setResults((data ?? []) as CustomerHit[])
     setOpen(true)

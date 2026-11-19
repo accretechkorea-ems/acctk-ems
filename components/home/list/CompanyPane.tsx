@@ -11,12 +11,24 @@
 //   정리 SQL 이 만든 회사 561곳에는 분류가 비어 있다(2026-11-19 실측: 763곳 중 거의 전부).
 //   그래서 카드에서 **바로 고르고 저장**한다 — 관리 화면까지 가지 않게.
 
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import ModalOverlay from '@/components/common/ModalOverlay'
+import CompanySearchModal from '@/components/home/list/CompanySearchModal'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import { invalidateParents } from '@/components/customer/ParentPicker'
 import { DIRECT_SALE_LABEL, useAgencies } from '@/lib/customerAgency'
 import { daysLabel, isStale, regionOf, type CompanyGroup, type SiteRow } from '@/lib/customerList'
+
+/** /api/parent-company 한 번. 결과를 한글 메시지로 바꿔 돌려준다. */
+async function callRoute(body: Record<string, unknown>): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; error: string }> {
+  const res = await fetch('/api/parent-company', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok || json?.error) return { ok: false, error: json?.error ?? `서버 오류 (${res.status})` }
+  return { ok: true, data: json }
+}
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
@@ -53,10 +65,17 @@ export type CompanyPaneProps = {
   onOpenSite: (siteId: number) => void
   /** 「+ 사업장 추가」 — 이 회사로 고정된 등록 폼을 연다. */
   onAddSite: () => void
+  /** 회사를 병합·삭제해 사라졌을 때 — 화면이 선택을 푼다. */
+  onCompanyGone: () => void
+  /**
+   * 슈퍼관리자인가 — **회사 수준**(이름 변경·병합)은 그 사람만 한다.
+   * 사업장 수준(사업장명·대리점·상태·이동)은 고객사 메뉴를 보는 사람이면 된다.
+   */
+  canEditCompany: boolean
 }
 
 export default function CompanyPane({
-  group, engineerName, onSaved, onError, onToast, onOpenSite, onAddSite,
+  group, engineerName, onSaved, onError, onToast, onOpenSite, onAddSite, onCompanyGone, canEditCompany,
 }: CompanyPaneProps) {
   const supabase = createClient()
   const agencies = useAgencies()
@@ -66,13 +85,15 @@ export default function CompanyPane({
   const [editing, setEditing] = useState<string | null>(null)
   const [industry, setIndustry] = useState(group.industry ?? '')
   const [savingIndustry, setSavingIndustry] = useState(false)
+  /** 회사 이름·영문명 고치기 — 열려 있을 때만 칸이 보인다. */
+  const [editCompany, setEditCompany] = useState<{ name: string; nameEn: string } | null>(null)
+  /** 「다른 회사로 이동」·「회사 병합」의 고르는 창. */
+  const [moveOpen, setMoveOpen] = useState(false)
+  const [mergeTarget, setMergeTarget] = useState<{ id: number; name: string } | null>(null)
+  const [mergeOpen, setMergeOpen] = useState(false)
 
-  // 회사를 바꿔 고르면 선택·편집 상태를 턴다(앞 회사의 선택이 남으면 엉뚱한 줄을 고친다).
-  useEffect(() => {
-    setChecked(new Set())
-    setEditing(null)
-    setIndustry(group.industry ?? '')
-  }, [group.companyId, group.industry])
+  // 회사를 바꿔 고르면 이 조각은 **통째로 다시 그려진다** — 부르는 쪽이 key 에 회사 id 를
+  // 준다(app/page.tsx). 그래서 앞 회사의 선택·편집 상태를 effect 로 털 필요가 없다.
 
   const toggle = (id: number) => {
     setChecked(prev => {
@@ -106,6 +127,61 @@ export default function CompanyPane({
     onSaved()
   }
 
+  /** 회사 이름·영문명 — 라우트가 자식 사업장 이름도 다시 만든다. */
+  const saveCompanyName = async () => {
+    if (!editCompany || busy) return
+    const name = editCompany.name.trim()
+    if (!name) { onError('회사명을 입력해주세요'); return }
+    setBusy(true)
+    const r = await callRoute({
+      action: 'rename', parentId: group.companyId, name,
+      industry: group.industry ?? '', nameEn: editCompany.nameEn.trim(),
+    })
+    setBusy(false)
+    if (!r.ok) { onError(r.error); return }
+    setEditCompany(null)
+    onToast(`회사 이름을 바꿨습니다 (사업장 ${(r.data.renamedSites as number) ?? 0}곳도 함께)`)
+    onSaved()
+  }
+
+  /** 고른 사업장을 다른 회사로 옮긴다. 참조는 사업장에 붙어 있어 그대로 따라간다. */
+  const moveSites = async (toId: number, toName: string) => {
+    if (busy) return
+    setMoveOpen(false)
+    setBusy(true)
+    const r = await callRoute({ action: 'move', toParentId: toId, siteIds: [...checked] })
+    setBusy(false)
+    if (!r.ok) { onError(r.error); return }
+    setChecked(new Set())
+    onToast(`사업장 ${(r.data.moved as number) ?? 0}곳을 「${toName}」 로 옮겼습니다`)
+    onSaved()
+  }
+
+  /** 이 회사를 다른 회사로 합친다. **되돌릴 수 없다.** */
+  const doMerge = async () => {
+    if (!mergeTarget || busy) return
+    setBusy(true)
+    const r = await callRoute({ action: 'merge', parentId: group.companyId, intoParentId: mergeTarget.id })
+    setBusy(false)
+    if (!r.ok) { onError(r.error); return }
+    setMergeTarget(null)
+    onToast(`「${group.companyName}」 를 「${mergeTarget.name}」 로 합쳤습니다`)
+    onCompanyGone()
+    onSaved()
+  }
+
+  /** 사업장명 — site_name 을 고치고 company_name 을 다시 만든다(라우트). */
+  const saveSiteName = async (siteId: number, next: string) => {
+    if (busy) return
+    setBusy(true)
+    const r = await callRoute({ action: 'rename-site', siteId, siteName: next.trim() })
+    setBusy(false)
+    setEditing(null)
+    if (!r.ok) { onError(r.error); return }
+    onToast('사업장명을 바꿨습니다')
+    onSaved()
+  }
+
   const selected = [...checked]
 
   return (
@@ -115,7 +191,36 @@ export default function CompanyPane({
       <section style={{ ...card, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 200 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: TEXT, letterSpacing: '-0.5px' }}>{group.companyName}</h1>
+            {editCompany ? (
+              <>
+                <input value={editCompany.name} autoFocus disabled={busy}
+                  onChange={e => setEditCompany({ ...editCompany, name: e.target.value })}
+                  onKeyDown={e => { if (e.key === 'Enter') void saveCompanyName(); if (e.key === 'Escape') setEditCompany(null) }}
+                  placeholder="회사명"
+                  style={{ height: 30, width: 190, padding: '0 8px', borderRadius: 6, border: `1px solid ${BLUE}`, fontSize: 15, fontWeight: 700, outline: 'none' }} />
+                <input value={editCompany.nameEn} disabled={busy}
+                  onChange={e => setEditCompany({ ...editCompany, nameEn: e.target.value })}
+                  onKeyDown={e => { if (e.key === 'Enter') void saveCompanyName(); if (e.key === 'Escape') setEditCompany(null) }}
+                  placeholder="영문 회사명 (선택)"
+                  style={{ height: 30, width: 170, padding: '0 8px', borderRadius: 6, border: `1px solid ${BORDER}`, fontSize: 12, outline: 'none' }} />
+                <button type="button" onClick={() => void saveCompanyName()} disabled={busy}
+                  style={{ ...btn, background: BLUE, borderColor: BLUE, color: '#fff' }}>저장</button>
+                <button type="button" onClick={() => setEditCompany(null)} disabled={busy} style={btn}>취소</button>
+              </>
+            ) : (
+              <>
+                <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: TEXT, letterSpacing: '-0.5px' }}>{group.companyName}</h1>
+                {group.nameEn && <span style={{ fontSize: 12, color: MUTED }}>{group.nameEn}</span>}
+                <button type="button" aria-label="회사 정보 수정" disabled={!canEditCompany}
+                  title={canEditCompany ? '회사명·영문명 수정' : '회사명 수정은 슈퍼관리자만 할 수 있습니다'}
+                  onClick={() => setEditCompany({ name: group.companyName, nameEn: group.nameEn ?? '' })}
+                  style={{ width: 26, height: 26, padding: 0, borderRadius: 6, border: 'none', background: 'transparent', color: MUTED, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = NEUTRAL; e.currentTarget.style.color = TEXT }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = MUTED }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" /></svg>
+                </button>
+              </>
+            )}
             {/* 분류 — 비어 있는 회사가 많아 여기서 바로 고른다. */}
             <select
               value={industry}
@@ -159,7 +264,13 @@ export default function CompanyPane({
         </div>
 
         <span style={{ flex: 1 }} />
-        <button type="button" onClick={onAddSite} style={btn}>+ 사업장 추가</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" onClick={onAddSite} style={btn}>+ 사업장 추가</button>
+          {/* 병합 — **되돌릴 수 없다.** 슈퍼관리자만 누를 수 있다(라우트도 같은 문턱이다). */}
+          <button type="button" disabled={!canEditCompany} title={canEditCompany ? '다른 회사로 합칩니다' : '회사 병합은 슈퍼관리자만 할 수 있습니다'}
+            onClick={() => setMergeOpen(true)}
+            style={{ ...btn, color: canEditCompany ? TEXT : MUTED, cursor: canEditCompany ? 'pointer' : 'not-allowed' }}>회사 병합</button>
+        </div>
       </section>
 
       {/* ── 사업장 표 ── */}
@@ -198,7 +309,25 @@ export default function CompanyPane({
                     <td style={td}>
                       <input type="checkbox" checked={on} onChange={() => toggle(id)} aria-label={`${s.siteName} 선택`} />
                     </td>
-                    <td style={{ ...td, fontWeight: 600 }}>{s.siteName}</td>
+                    <td style={{ ...td, fontWeight: 600 }}>
+                      {editing === `${id}:site` ? (
+                        <input autoFocus defaultValue={s.customer.site_name ?? ''} disabled={busy}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') void saveSiteName(id, (e.target as HTMLInputElement).value)
+                            if (e.key === 'Escape') setEditing(null)
+                          }}
+                          onBlur={e => void saveSiteName(id, e.target.value)}
+                          placeholder="사업장명 (비우면 회사명만)"
+                          style={{ height: 26, width: 170, borderRadius: 6, border: `1px solid ${BLUE}`, fontSize: 12, padding: '0 6px', outline: 'none' }} />
+                      ) : (
+                        <button type="button" onClick={() => setEditing(`${id}:site`)}
+                          style={{ border: '1px solid transparent', background: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: TEXT, padding: '3px 6px', borderRadius: 6, fontFamily: 'inherit' }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.background = '#fff' }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = 'none' }}>
+                          {s.siteName}
+                        </button>
+                      )}
+                    </td>
                     <td style={{ ...td, color: SUB }}>{regionOf(s.customer) || '-'}</td>
 
                     {/* 대리점 — 눌러서 고른다 */}
@@ -304,7 +433,10 @@ export default function CompanyPane({
               </select>
             </label>
 
-            {/* 「다른 회사로 이동」은 다음 회차다 — 옮기면 이름·회사 줄이 함께 바뀌어야 한다. */}
+            <button type="button" disabled={busy} onClick={() => setMoveOpen(true)}
+              style={{ height: 26, padding: '0 10px', borderRadius: 6, border: '1px solid #374151', background: 'transparent', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              다른 회사로 이동
+            </button>
             <span style={{ flex: 1 }} />
             <button type="button" onClick={() => setChecked(new Set())}
               style={{ border: 'none', background: 'none', color: MUTED, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -313,6 +445,57 @@ export default function CompanyPane({
           </div>
         )}
       </section>
+
+      {/* 다른 회사로 이동 — 고르면 바로 옮긴다(참조는 사업장에 붙어 있어 그대로 따라간다). */}
+      {moveOpen && (
+        <CompanySearchModal
+          title="다른 회사로 이동"
+          hint={`고른 사업장 ${selected.length}곳을 어느 회사로 옮길지 고릅니다. 장비·담당자·견적은 사업장에 붙어 있어 그대로 따라갑니다.`}
+          excludeId={group.companyId}
+          confirmText="옮기기"
+          onPick={(id, name) => void moveSites(id, name)}
+          onClose={() => setMoveOpen(false)}
+        />
+      )}
+
+      {/* 회사 병합 — ① 대상 고르기 → ② 확인 */}
+      {mergeOpen && (
+        <CompanySearchModal
+          title="회사 병합"
+          hint={`「${group.companyName}」 의 사업장 ${group.sites.length}곳을 어느 회사로 합칠지 고릅니다.`}
+          excludeId={group.companyId}
+          confirmText="다음"
+          onPick={(id, name) => { setMergeOpen(false); setMergeTarget({ id, name }) }}
+          onClose={() => setMergeOpen(false)}
+        />
+      )}
+      {mergeTarget && (
+        <ModalOverlay onClose={() => setMergeTarget(null)}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 440, background: '#fff', borderRadius: 8, padding: 22, border: `1px solid ${BORDER}`, boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }}>
+            <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, marginBottom: 12 }}>회사 병합 — 한 번 더 확인</div>
+            <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.9 }}>
+              <b>{group.companyName}</b>
+              <span style={{ color: SUB }}>{` (사업장 ${group.sites.length}곳 · 장비 ${group.deviceCount} · 진행 견적 ${group.openQuotes})`}</span>
+              <br />↓
+              <br /><b>{mergeTarget.name}</b> 로 합칩니다.
+            </div>
+            <ul style={{ fontSize: 12, color: SUB, lineHeight: 1.9, marginTop: 12, paddingLeft: 18 }}>
+              <li>사업장이 전부 옮겨 가고 이름이 「{mergeTarget.name} 사업장명」 으로 다시 만들어집니다.</li>
+              <li>분류·영문명·메모는 <b>받는 회사가 비어 있을 때만</b> 가져옵니다.</li>
+              <li><b style={{ color: DANGER }}>되돌리기는 없습니다.</b> 합친 회사 줄은 닫히고(삭제 표시) 목록에서 사라집니다.</li>
+            </ul>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
+              <button onClick={() => setMergeTarget(null)} disabled={busy}
+                style={{ padding: '9px 15px', background: '#fff', color: SUB, borderRadius: 6, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+              <button onClick={() => void doMerge()} disabled={busy}
+                style={{ padding: '9px 17px', background: DANGER, color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: busy ? 0.6 : 1 }}>
+                {busy ? '합치는 중…' : '합치기'}
+              </button>
+            </div>
+          </div>
+        </ModalOverlay>
+      )}
     </div>
   )
 }

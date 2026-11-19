@@ -1,4 +1,10 @@
-// 소속회사(부모 업체) 관리 — 이름·분류 수정과 삭제.
+// 회사(부모 업체) 관리 — 이름·분류 수정, 삭제, **병합·사업장 이동·사업장명 수정**.
+//
+// 2026-11-19: 관리 화면의 「회사 관리」 카드는 걷고, 고객사 **목록 보기**가 이 라우트를
+// 부른다. 라우트를 남긴 이유는 아래 두 가지가 화면 쪽에 없기 때문이다 —
+//   · 회사 이름이 바뀌면 **자식 사업장의 company_name 도 다시 만들어야 한다**
+//     (사업장 줄에는 「회사명 사업장명」이 합쳐져 들어 있다 — lib/customerLabel.ts).
+//   · 지우거나 병합하기 직전에 **service role 로 다시 세어** 경합을 막는다.
 //
 // 라우트로 둔 이유:
 //   · 삭제는 되돌릴 수 없고, 사업장이 남아 있으면 그 사업장들의 parent_customer_id 가 끊긴다.
@@ -6,6 +12,7 @@
 //     지우기 직전에 서버가 다시 세어 0 이 아니면 거부한다.
 //   · service role 로 세야 RLS·필터에 가려 실제보다 적게 세는 일이 없다.
 import { adminClient } from '@/lib/supabase/admin'
+import { colsWithNameEn, withNameEnFallback } from '@/lib/nameEn'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
@@ -25,14 +32,130 @@ async function childCount(parentId: number): Promise<number> {
   return count ?? 0
 }
 
-export async function POST(req: Request) {
-  // 소속회사는 여러 업체가 함께 물려 있는 구조라 superadmin 으로 제한한다(팀·직원 관리와 같은 기준).
-  // 인증·권한 — 관리자 전용(lib/apiCaller.ts 의 Need 가 그 판정을 한다).
-  const { error: authErr, caller } = await loadCaller({ kind: 'superadmin' }, { tag: 'parent-company', method: 'POST' })
-  if (authErr) return authErr
+/**
+ * 어떤 회사의 자식 사업장 이름을 **그 회사 이름으로 다시 만든다**.
+ * 사업장 줄의 company_name 에는 「회사명 사업장명」이 합쳐져 들어 있다(lib/customerLabel.ts).
+ * 회사명이 바뀌거나 사업장이 다른 회사로 옮겨 가면 이 값이 옛 회사명을 들고 남는다.
+ */
+async function rebuildChildNames(parentId: number, companyName: string): Promise<number> {
+  const { data: children } = await supabaseAdmin
+    .from('customers')
+    .select('customer_id, site_name')
+    .eq('parent_customer_id', parentId)
+    .is('deleted_at', null)
+  let renamed = 0
+  for (const child of children ?? []) {
+    const site = (child.site_name ?? '').trim()
+    const combined = site ? `${companyName} ${site}` : companyName
+    const { error } = await supabaseAdmin
+      .from('customers').update({ company_name: combined }).eq('customer_id', child.customer_id)
+    if (error) console.error('[parent-company] child rename failed', { child: child.customer_id, error })
+    else renamed++
+  }
+  return renamed
+}
 
+/**
+ * 액션마다 문턱이 다르다.
+ *
+ *   **사업장 수준**(rename-site · move) — 고객사 메뉴를 보는 사람이면 된다.
+ *     사업장명·소속은 수정 폼에서도 누구나 고치는 값이다(hooks/customer/useCustomerCrud.ts).
+ *     이 둘이 라우트를 거치는 이유는 권한이 아니라 **company_name 을 다시 만들기 위해서**다 —
+ *     여기서 superadmin 을 요구하면 평소 하던 수정이 막힌다(2026-11-19 실측에서 403 이었다).
+ *
+ *   **회사 수준**(rename · merge · delete) — superadmin.
+ *     회사 한 줄에 사업장 여럿이 물려 있어, 이름·병합·삭제는 그 전부에 닿는다.
+ */
+const SITE_LEVEL = new Set(['rename-site', 'move'])
+
+export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}))
   const action: string = body?.action ?? ''
+
+  // 인증·권한 — 액션에 맞는 문턱(lib/apiCaller.ts 의 Need 가 그 판정을 한다).
+  const { error: authErr, caller } = SITE_LEVEL.has(action)
+    ? await loadCaller({ kind: 'menu', keys: ['customers'] }, { tag: 'parent-company', method: 'POST' })
+    : await loadCaller({ kind: 'superadmin' }, { tag: 'parent-company', method: 'POST' })
+  if (authErr) return authErr
+
+  // ── 사업장 이름만 고치기 — 회사를 지정하지 않는다 ──────────────────────
+  //   site_name 을 바꾸고 company_name 을 「회사명 사업장명」으로 다시 만든다.
+  //   목록 보기의 사업장 표가 그 자리에서 고칠 때 부른다.
+  if (action === 'rename-site') {
+    const siteId = Number(body?.siteId)
+    if (!Number.isInteger(siteId) || siteId <= 0) return bad('사업장을 지정해주세요.')
+    const siteName = typeof body?.siteName === 'string' ? body.siteName.trim() : ''
+
+    const { data: site } = await supabaseAdmin
+      .from('customers')
+      .select('customer_id, is_parent, parent_customer_id, deleted_at')
+      .eq('customer_id', siteId)
+      .maybeSingle()
+    if (!site || site.deleted_at) return bad('사업장을 찾을 수 없습니다.', 404)
+    if (site.is_parent) return bad('회사 줄은 사업장명을 가질 수 없습니다.')
+
+    // 회사 이름을 읽어 합친 이름을 만든다. 회사가 없으면(미연결) 사업장명만 쓴다.
+    let companyName = ''
+    if (site.parent_customer_id != null) {
+      const { data: parent } = await supabaseAdmin
+        .from('customers').select('company_name').eq('customer_id', site.parent_customer_id).maybeSingle()
+      companyName = (parent?.company_name ?? '').trim()
+    }
+    const combined = companyName
+      ? (siteName ? `${companyName} ${siteName}` : companyName)
+      : siteName
+    if (!combined) return bad('사업장명을 입력해주세요.')
+
+    const { error } = await supabaseAdmin
+      .from('customers')
+      .update({ site_name: siteName || null, company_name: combined })
+      .eq('customer_id', siteId)
+    if (error) {
+      console.error('[parent-company] rename-site failed', { siteId, error })
+      return bad('사업장명을 수정하지 못했습니다.', 500)
+    }
+    console.log('[parent-company] rename-site', { siteId, siteName, by: caller.email })
+    return NextResponse.json({ success: true, company_name: combined })
+  }
+
+  // ── 사업장을 다른 회사로 옮기기 ───────────────────────────────────────
+  //   참조(견적·장비·담당자·서비스)는 **사업장에 붙어 있으므로 그대로** 따라간다.
+  //   바뀌는 칸은 parent_customer_id 와, 그에 따라 다시 만드는 company_name 둘이다.
+  if (action === 'move') {
+    const toParentId = Number(body?.toParentId)
+    const siteIds: number[] = Array.isArray(body?.siteIds)
+      ? body.siteIds.map(Number).filter((n: number) => Number.isInteger(n) && n > 0)
+      : []
+    if (!Number.isInteger(toParentId) || toParentId <= 0) return bad('옮길 회사를 지정해주세요.')
+    if (siteIds.length === 0) return bad('옮길 사업장을 고르세요.')
+
+    const { data: to } = await supabaseAdmin
+      .from('customers').select('customer_id, company_name, is_parent, deleted_at')
+      .eq('customer_id', toParentId).maybeSingle()
+    if (!to || to.deleted_at) return bad('옮길 회사를 찾을 수 없습니다.', 404)
+    if (!to.is_parent) return bad('회사가 아닙니다.')
+
+    // 회사 줄을 사업장처럼 옮기려는 요청은 막는다(순환이 생긴다).
+    const { data: targets } = await supabaseAdmin
+      .from('customers').select('customer_id, is_parent, site_name').in('customer_id', siteIds)
+    if ((targets ?? []).some(t => t.is_parent)) return bad('회사 줄은 옮길 수 없습니다.')
+
+    const companyName = (to.company_name ?? '').trim()
+    let moved = 0
+    for (const t of targets ?? []) {
+      const site = (t.site_name ?? '').trim()
+      const combined = site ? `${companyName} ${site}` : companyName
+      const { error } = await supabaseAdmin
+        .from('customers')
+        .update({ parent_customer_id: toParentId, company_name: combined })
+        .eq('customer_id', t.customer_id)
+      if (error) console.error('[parent-company] move failed', { site: t.customer_id, error })
+      else moved++
+    }
+    console.log('[parent-company] move', { toParentId, siteIds, moved, by: caller.email })
+    return NextResponse.json({ success: true, moved })
+  }
+
   const parentId = Number(body?.parentId)
   if (!Number.isInteger(parentId) || parentId <= 0) return bad('회사를 지정해주세요.')
 
@@ -51,6 +174,8 @@ export async function POST(req: Request) {
     if (!name) return bad('회사명을 입력해주세요.')
     // 분류는 리드 등록과 **같은 목록**이다(lib/leadOptions.ts) — 폼을 우회한 값을 여기서 막는다.
     const industry = typeof body?.industry === 'string' ? body.industry.trim() : ''
+    // 영문 회사명 — 선택 입력이다. 보내지 않으면 지금 값을 그대로 둔다.
+    const nameEn = typeof body?.nameEn === 'string' ? body.nameEn.trim() : null
     if (industry && !INDUSTRIES.includes(industry)) return bad('분류 값이 올바르지 않습니다.')
 
     // 같은 이름의 소속회사가 이미 있으면 막는다(자기 자신은 제외).
@@ -63,39 +188,82 @@ export async function POST(req: Request) {
       .neq('customer_id', parentId)
     if (dup && dup.length > 0) return bad('같은 이름의 회사가 이미 있습니다.')
 
-    const { error } = await supabaseAdmin
+    const { error } = await withNameEnFallback(useEn => supabaseAdmin
       .from('customers')
-      .update({ company_name: name, ...(body?.industry === undefined ? null : { industry: industry || null }) })
-      .eq('customer_id', parentId)
+      .update({
+        company_name: name,
+        ...(body?.industry === undefined ? null : { industry: industry || null }),
+        // 영문명 칸이 없는 DB 면 이름·분류만 고친다(그 칸은 SQL 을 적용한 뒤에 쓰인다).
+        ...(nameEn === null || !useEn ? null : { name_en: nameEn || null }),
+      })
+      .eq('customer_id', parentId))
     if (error) {
       console.error('[parent-company] rename failed', { parentId, error })
       return bad('이름을 수정하지 못했습니다.', 500)
     }
 
-    /**
-     * 사업장 줄의 이름도 함께 고친다.
-     *
-     * 사업장 줄의 company_name 에는 **「회사명 사업장명」을 합쳐 둔 값**이 들어 있다
-     * (lib/customerLabel.ts 의 이관 규칙). 회사 이름만 바꾸고 두면 사업장 줄이 옛 회사명을
-     * 그대로 들고 있어, 같은 회사가 화면마다 다른 이름으로 불린다.
-     * 사업장명(site_name)이 없는 줄은 회사명만 들고 있으므로 그 이름으로 맞춘다.
-     */
-    const { data: children } = await supabaseAdmin
-      .from('customers')
-      .select('customer_id, site_name')
-      .eq('parent_customer_id', parentId)
-      .is('deleted_at', null)
-    let renamed = 0
-    for (const child of children ?? []) {
-      const site = (child.site_name ?? '').trim()
-      const combined = site ? `${name} ${site}` : name
-      const { error: cErr } = await supabaseAdmin
-        .from('customers').update({ company_name: combined }).eq('customer_id', child.customer_id)
-      if (cErr) console.error('[parent-company] child rename failed', { child: child.customer_id, error: cErr })
-      else renamed++
-    }
+    // 사업장 줄의 이름도 함께 고친다 — 자세한 까닭은 rebuildChildNames 의 주석에.
+    const renamed = await rebuildChildNames(parentId, name)
     console.log('[parent-company] rename', { parentId, from: target.company_name, to: name, renamed, by: caller.email })
     return NextResponse.json({ success: true, renamedSites: renamed })
+  }
+
+  // ── 병합 ──────────────────────────────────────────────────────────────
+  //   target(parentId) 을 into(intoParentId) 로 합친다.
+  //     · 자식 사업장을 전부 옮기고 이름을 다시 만든다.
+  //     · industry·name_en·note 는 **남는 쪽이 비어 있을 때만** 가져온다
+  //       (살아 있는 값을 덮지 않는다).
+  //     · 지워지는 회사 줄은 **soft delete**(deleted_at) — 되돌리기는 없다고 알린다.
+  if (action === 'merge') {
+    // select 문자열이 변수라 supabase 가 줄 모양을 추론하지 못한다 — 읽는 칸만 적어 둔다.
+    type MergeRow = {
+      customer_id?: number; company_name?: string | null; is_parent?: boolean | null
+      deleted_at?: string | null; industry?: string | null; name_en?: string | null; note?: string | null
+    }
+    const intoId = Number(body?.intoParentId)
+    if (!Number.isInteger(intoId) || intoId <= 0) return bad('합칠 회사를 지정해주세요.')
+    if (intoId === parentId) return bad('같은 회사끼리는 합칠 수 없습니다.')
+
+    // 영문명 칸이 아직 없는 DB 라면 그 칸만 빼고 읽는다 — 한 칸 때문에 병합이 막히지 않게.
+    const { data: into } = await withNameEnFallback(useEn => supabaseAdmin
+      .from('customers')
+      .select(colsWithNameEn('customer_id, company_name, is_parent, deleted_at, industry, note', useEn))
+      .eq('customer_id', intoId).maybeSingle<MergeRow>())
+    if (!into || into.deleted_at) return bad('합칠 회사를 찾을 수 없습니다.', 404)
+    if (!into.is_parent) return bad('합칠 대상이 회사가 아닙니다.')
+
+    const { data: from } = await withNameEnFallback(useEn => supabaseAdmin
+      .from('customers').select(colsWithNameEn('industry, note', useEn))
+      .eq('customer_id', parentId).maybeSingle<MergeRow>())
+
+    // 자식 옮기기 → 이름 다시 만들기
+    const { error: moveErr } = await supabaseAdmin
+      .from('customers').update({ parent_customer_id: intoId }).eq('parent_customer_id', parentId)
+    if (moveErr) {
+      console.error('[parent-company] merge move failed', { parentId, intoId, error: moveErr })
+      return bad('사업장을 옮기지 못했습니다.', 500)
+    }
+    const renamed = await rebuildChildNames(intoId, (into.company_name ?? '').trim())
+
+    // 빈 칸만 채운다.
+    const patch: Record<string, unknown> = {}
+    const empty = (v: unknown) => v == null || String(v).trim() === ''
+    if (empty(into.industry) && !empty(from?.industry)) patch.industry = from?.industry
+    if (empty(into.name_en) && !empty(from?.name_en)) patch.name_en = from?.name_en
+    if (empty(into.note) && !empty(from?.note)) patch.note = from?.note
+    if (Object.keys(patch).length > 0) {
+      const { error: pErr } = await supabaseAdmin.from('customers').update(patch).eq('customer_id', intoId)
+      if (pErr) console.error('[parent-company] merge patch failed', { intoId, error: pErr })
+    }
+
+    const { error: delErr } = await supabaseAdmin
+      .from('customers').update({ deleted_at: new Date().toISOString() }).eq('customer_id', parentId)
+    if (delErr) {
+      console.error('[parent-company] merge close failed', { parentId, error: delErr })
+      return bad('합친 뒤 옛 회사 줄을 닫지 못했습니다.', 500)
+    }
+    console.log('[parent-company] merge', { from: parentId, into: intoId, renamed, patch, by: caller.email })
+    return NextResponse.json({ success: true, movedSites: renamed, filled: Object.keys(patch) })
   }
 
   // ── 삭제 ──

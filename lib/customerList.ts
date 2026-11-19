@@ -16,6 +16,7 @@
 
 import type { Customer } from '@/lib/home'
 import type { LastTouch } from '@/lib/customerLastTouch'
+import { regionKey } from '@/lib/region'
 
 /** 오래 손대지 않았다고 보는 기준(일). 칩·빨간 글씨가 같은 값을 쓴다. */
 export const STALE_DAYS = 90
@@ -38,6 +39,8 @@ export type CompanyGroup = {
   companyId: number
   companyName: string
   industry: string | null
+  /** 회사 영문명(있으면). 검색과 회사 카드가 쓴다. */
+  nameEn: string | null
   sites: SiteRow[]
   /** 묶음 안에서 가장 최근 접점(없으면 null). 정렬이 쓴다. */
   touch: LastTouch | null
@@ -147,6 +150,7 @@ export function matchesSite(
   companyName: string,
   deviceCategories: string[],
   allCategories: readonly string[],
+  companyNameEn?: string | null,
 ): boolean {
   const c = site.customer
   if (filter.statuses.length === 0) return false
@@ -165,7 +169,8 @@ export function matchesSite(
   const q = filter.query.trim().toLowerCase()
   if (!q) return true
   const hay = [
-    companyName, c.company_name ?? '', site.siteName, c.address ?? '', c.agency_name ?? '',
+    companyName, companyNameEn ?? '', c.company_name ?? '', site.siteName,
+    c.address ?? '', c.agency_name ?? '',
   ].join(' ').toLowerCase()
   return hay.includes(q)
 }
@@ -229,7 +234,7 @@ export type BuildInput = {
   /** 목록 조회가 준 사업장 줄(대리점 전용 줄은 이미 빠져 있다). */
   customers: Customer[]
   /** 회사 줄 — id → {이름, 분류}. */
-  companies: Map<number, { company_name: string; industry: string | null }>
+  companies: Map<number, { company_name: string; industry: string | null; name_en?: string | null }>
   deviceCount: (customerId: number) => number
   deviceCategories: (customerId: number) => string[]
   openQuotes: (customerId: number) => number
@@ -273,7 +278,7 @@ export function buildCompanyTree(input: BuildInput): BuildResult {
       touch,
       days: daysSince(touch?.date ?? null, today),
     }
-    if (!matchesSite(row, filter, companyName, input.deviceCategories(c.customer_id), input.allCategories)) continue
+    if (!matchesSite(row, filter, companyName, input.deviceCategories(c.customer_id), input.allCategories, company?.name_en)) continue
     siteCount++
     const list = byCompany.get(parentId)
     if (list) list.push(row)
@@ -292,6 +297,7 @@ export function buildCompanyTree(input: BuildInput): BuildResult {
       companyId,
       companyName: company?.company_name ?? `회사 #${companyId}`,
       industry: company?.industry ?? null,
+      nameEn: company?.name_en ?? null,
       // 이름이 겹치는 사업장은 주소로 가려 준다 — 「본사」가 세 줄 나란히 서지 않게.
       sites: sortSites(disambiguateSites(sites), input.sort),
       touch: best,

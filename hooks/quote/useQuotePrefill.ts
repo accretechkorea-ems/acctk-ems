@@ -14,6 +14,7 @@
 // 내용만 쓴다. 그 규칙은 서버(/api/quote-duplicate · /api/quote-on-behalf)에 있다.
 
 import { useEffect, useRef } from 'react'
+import { searchOr, withNameEnFallback } from '@/lib/nameEn'
 import { NOT_AGENCY_ONLY } from '@/lib/customerAgency'
 import type { ReadonlyURLSearchParams } from 'next/navigation'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -342,9 +343,9 @@ export function useQuotePrefill({
     // 여러 건이면 고객사를 고르지 않으면 저장이 막히므로, 후보 목록을 바로 펼쳐 두고 안내한다.
     if (customer) {
       setCustomerQuery(customer)
-      supabase.from('customers').select('customer_id, company_name, address, status')
+      withNameEnFallback(useEn => supabase.from('customers').select('customer_id, company_name, address, status')
         .is('deleted_at', null).eq('is_parent', false).or(NOT_AGENCY_ONLY)
-        .or(`company_name.ilike.%${customer}%,site_name.ilike.%${customer}%`).limit(10)
+        .or(searchOr(customer, useEn)).limit(10))
         .then(({ data }) => {
           if (!data || data.length === 0) return
           if (data.length === 1) { handleCustomerSelect(data[0]); return }

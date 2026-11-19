@@ -15,6 +15,7 @@
 //     (useOutsideClick 둘 → useListKeyboard 둘 순서가 원본과 같다).
 
 import { useCallback, useRef, useState } from 'react'
+import { searchOr, withNameEnFallback } from '@/lib/nameEn'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { useOutsideClick } from '@/hooks/useOutsideClick'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
@@ -76,16 +77,18 @@ export function useQuoteCustomer({ supabase, clearError }: UseQuoteCustomerArgs)
   const handleCustomerSearch = async (q: string) => {
     setCustomerQuery(q)
     if (!q.trim()) { setCustomerResults([]); return }
-    let query = supabase
-      .from('customers').select('customer_id, company_name, address, status')
-      .is('deleted_at', null)
-      // 회사명·사업장명 둘 다 건다(합친 이름이 company_name 에 들어 있지만,
-      // 사업장명만으로 찾는 사람도 있다).
-      .or(`company_name.ilike.%${q}%,site_name.ilike.%${q}%`)
-    query = isDealer
-      ? query.eq('is_agency', true)
-      : query.eq('is_parent', false).or(NOT_AGENCY_ONLY)   // 부모 행(회사 묶음)·대리점 전용 줄 제외
-    const { data } = await query.limit(10)
+    // 회사명·사업장명·영문명을 함께 본다(사업장명만으로 찾는 사람도 있다).
+    // 영문명 칸이 아직 없는 DB 면 그 칸만 빼고 한 번 더 읽는다 — lib/nameEn.ts.
+    const { data } = await withNameEnFallback(useEn => {
+      let query = supabase
+        .from('customers').select('customer_id, company_name, address, status')
+        .is('deleted_at', null)
+        .or(searchOr(q, useEn))
+      query = isDealer
+        ? query.eq('is_agency', true)
+        : query.eq('is_parent', false).or(NOT_AGENCY_ONLY)   // 부모 행(회사 묶음)·대리점 전용 줄 제외
+      return query.limit(10)
+    })
     setCustomerResults(data || [])
     setCustomerSearchOpen(true)
   }
@@ -136,12 +139,12 @@ export function useQuoteCustomer({ supabase, clearError }: UseQuoteCustomerArgs)
   const handleEUSearch = async (q: string) => {
     setEuQuery(q)
     if (!q.trim()) { setEuResults([]); return }
-    const { data } = await supabase
+    const { data } = await withNameEnFallback(useEn => supabase
       .from('customers').select('customer_id, company_name, address, status')
       .is('deleted_at', null)
       .eq('is_parent', false)   // 부모 행(회사 묶음)은 견적 대상이 아니다
       .or(NOT_AGENCY_ONLY)      // 대리점 전용 줄은 최종 사용 업체가 아니다
-      .or(`company_name.ilike.%${q}%,site_name.ilike.%${q}%`).limit(10)
+      .or(searchOr(q, useEn)).limit(10))
     setEuResults(data || [])
     setEuSearchOpen(true)
   }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { colsWithNameEn, withNameEnFallback } from '@/lib/nameEn'
 import { createClient } from '@/lib/supabase/client'
 import Popover from '@/components/common/Popover'
 import { INDUSTRIES } from '@/lib/leadOptions'
@@ -17,7 +18,13 @@ import { INDUSTRIES } from '@/lib/leadOptions'
  * 업체 추가·수정 두 모달이 같은 규칙을 쓰도록 한곳에 둔다.
  */
 
-export type ParentOption = { customer_id: number; company_name: string; industry: string | null }
+export type ParentOption = {
+  customer_id: number
+  company_name: string
+  industry: string | null
+  /** 회사 영문명 — 검색이 한글 이름과 함께 본다(db/customer_name_en_20261119.sql). */
+  name_en: string | null
+}
 
 // 부모는 몇 백 행뿐이라 한 번 읽어 캐시하고 화면에서 걸러 쓴다(사무실 목록과 같은 방식).
 let cache: Promise<ParentOption[]> | null = null
@@ -26,20 +33,27 @@ export function loadParents(): Promise<ParentOption[]> {
   if (cache) return cache
   cache = (async () => {
     const supabase = createClient()
-    const { data, error } = await supabase
+    const COLS = 'customer_id, company_name, industry'
+    const load = (cols: string) => supabase
       .from('customers')
-      .select('customer_id, company_name, industry')
+      .select(cols)
       .eq('is_parent', true)
       .is('deleted_at', null)
       .order('company_name')
+
+    // **영문명 칸이 아직 없는 DB** 에서도 목록은 떠야 한다 — lib/nameEn.ts 가 그 되돌이길이다.
+    const { data, error } = await withNameEnFallback(useEn => load(colsWithNameEn(COLS, useEn)))
     if (error) {
       // 실패하면 캐시를 비워 다음 호출에서 다시 시도한다.
       console.error('[parents] load failed', error)
       cache = null
       return []
     }
-    return (data ?? []).map(r => ({
+    // select 문자열이 변수라 supabase 가 줄 모양을 추론하지 못한다 — 읽는 칸만 적어 둔 타입으로 받는다.
+    type Row = { customer_id: number; company_name: string | null; industry: string | null; name_en?: string | null }
+    return ((data ?? []) as unknown as Row[]).map(r => ({
       customer_id: r.customer_id, company_name: r.company_name ?? '', industry: r.industry ?? null,
+      name_en: r.name_en ?? null,
     }))
   })()
   return cache
@@ -73,19 +87,22 @@ export function invalidateParents(): void {
  * **분류는 필수다** — 리드 등록의 산업군과 같은 목록이다(lib/leadOptions.ts). 회사를
  * 만드는 자리가 여기 하나뿐이라, 여기서 받지 않으면 분류 없는 회사가 계속 생긴다.
  */
-export async function createParent(companyName: string, industry: string): Promise<ParentOption> {
+export async function createParent(companyName: string, industry: string, nameEn?: string): Promise<ParentOption> {
   const supabase = createClient()
   const name = companyName.trim()
   if (!name) throw new Error('회사명을 입력해주세요')
   if (!INDUSTRIES.includes(industry)) throw new Error('분류를 선택해주세요')
   const { data, error } = await supabase
     .from('customers')
-    .insert([{ company_name: name, is_parent: true, industry }])
-    .select('customer_id, company_name, industry')
+    .insert([{ company_name: name, is_parent: true, industry, name_en: (nameEn ?? '').trim() || null }])
+    .select('customer_id, company_name, industry, name_en')
     .single()
   if (error || !data) throw error || new Error('회사를 만들지 못했습니다')
   invalidateParents()
-  return { customer_id: data.customer_id, company_name: data.company_name ?? name, industry: data.industry ?? industry }
+  return {
+    customer_id: data.customer_id, company_name: data.company_name ?? name,
+    industry: data.industry ?? industry, name_en: data.name_en ?? null,
+  }
 }
 
 const fieldStyle: CSSProperties = {
@@ -137,6 +154,8 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, l
   /** 「새 회사로 등록」을 누른 뒤의 칸 — 분류를 고르기 전에는 만들지 않는다. */
   const [newName, setNewName] = useState<string | null>(null)
   const [newIndustry, setNewIndustry] = useState('')
+  /** 영문 회사명 — 선택 입력이다(없으면 비워 둔다). */
+  const [newNameEn, setNewNameEn] = useState('')
   const anchorRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -160,13 +179,13 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, l
   )
   const canCreate = !!allowCreate && !!query.trim() && !exact
 
-  const create = useCallback(async (name: string, industry: string) => {
+  const create = useCallback(async (name: string, industry: string, nameEn: string) => {
     setCreating(true)
     try {
-      const made = await createParent(name, industry)
+      const made = await createParent(name, industry, nameEn)
       setParents(await loadParents())
       onChange(made.customer_id)
-      setQuery(''); setOpen(false); setNewName(null); setNewIndustry('')
+      setQuery(''); setOpen(false); setNewName(null); setNewIndustry(''); setNewNameEn('')
     } catch (e) {
       onError?.((e as Error).message || '회사를 만들지 못했습니다')
     } finally {
@@ -196,6 +215,15 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, l
         <div style={{ ...fieldStyle, background: '#f9fafb', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {newName}
         </div>
+        {/* 영문 회사명 — 선택 입력. 「HYUNDAI TRANSYS」처럼 고객이 영문으로 부르는 이름을
+            적어 두면 검색에서 함께 찾힌다. */}
+        <input
+          value={newNameEn}
+          disabled={creating}
+          onChange={e => setNewNameEn(e.target.value)}
+          placeholder="영문 회사명 (선택)"
+          style={fieldStyle}
+        />
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <select
             value={newIndustry}
@@ -207,12 +235,12 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, l
             {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
           </select>
           <button type="button" disabled={creating || !newIndustry}
-            onClick={() => void create(newName, newIndustry)}
+            onClick={() => void create(newName, newIndustry, newNameEn)}
             style={{ ...ghostBtn, background: newIndustry ? '#234ea2' : '#f3f4f6', color: newIndustry ? '#fff' : '#9ca3af', cursor: newIndustry ? 'pointer' : 'not-allowed' }}>
             {creating ? '등록 중...' : '등록'}
           </button>
           <button type="button" disabled={creating}
-            onClick={() => { setNewName(null); setNewIndustry('') }} style={ghostBtn}>취소</button>
+            onClick={() => { setNewName(null); setNewIndustry(''); setNewNameEn('') }} style={ghostBtn}>취소</button>
         </div>
       </div>
     )

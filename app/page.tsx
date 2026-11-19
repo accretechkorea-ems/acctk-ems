@@ -2,7 +2,7 @@
 
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 // 모바일 상단 바 높이 — 화면 높이를 계산하는 곳은 이 상수 하나를 본다(PC 는 상단 바가 없다).
 import { TOPBAR_HEIGHT } from '@/components/layout/Sidebar'
@@ -18,19 +18,22 @@ import {
 } from '@/lib/customerExcel'
 import { NOT_AGENCY_ONLY, useAgencies } from '@/lib/customerAgency'
 import ListHeader, { type HomeView } from '@/components/home/ListHeader'
-import CustomerListPanel, { type ListTab } from '@/components/home/list/CustomerListPanel'
+import CustomerListPanel, { type CleanupBucket, type CleanupRow, type ListTab } from '@/components/home/list/CustomerListPanel'
 import CompanyPane from '@/components/home/list/CompanyPane'
 import CustomerDetailBody from '@/components/customer/CustomerDetailBody'
 import { loadEngineers } from '@/lib/appData/engineers'
-import { loadParents, type ParentOption } from '@/components/customer/ParentPicker'
+import { invalidateParents, loadParents, type ParentOption } from '@/components/customer/ParentPicker'
 import { useOpenQuotes } from '@/hooks/useOpenQuotes'
+import { addAgency } from '@/lib/addAgency'
+import { invalidateAgencies } from '@/lib/customerAgency'
 import {
-  buildCompanyTree, regionOf, EMPTY_FILTER,
+  buildCompanyTree, EMPTY_FILTER,
   type ListFilter, type SortKey,
 } from '@/lib/customerList'
 import type { LastTouch } from '@/lib/customerLastTouch'
 import { todayKST } from '@/lib/date'
 import { useToast } from '@/components/common/Toast'
+import { useConfirm } from '@/components/common/ConfirmDialog'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { isSuperAdmin } from '@/lib/permissions'
@@ -62,6 +65,7 @@ export default function HomePage() {
   // 엑셀 내보내기는 관리자만 — 팀 관리·목표 관리 버튼과 같은 판정(permission_level).
   const canExportExcel = isSuperAdmin(me)
   const toast = useToast()
+  const confirmDialog = useConfirm()
 
   const listScrollRef = useRef<HTMLDivElement | null>(null)
   const restoredHomeStateRef = useRef(false)
@@ -93,6 +97,12 @@ export default function HomePage() {
     categories: [...CATEGORY_OPTIONS],
   })
   const [listSort, setListSort] = useState<SortKey>('touch')
+  /** 분류를 한 번에 지정할 회사들(3a). */
+  const [checkedCompanies, setCheckedCompanies] = useState<Set<number>>(new Set())
+  /** 정리 필요 탭에서 보고 있는 묶음(4). */
+  const [cleanupBucket, setCleanupBucket] = useState<CleanupBucket>('industry')
+  /** 대리점 탭에서 고른 대리점 — 회사 탭이 그 대리점의 사업장만 보여 준다(7). */
+  const [agencyFilterId, setAgencyFilterId] = useState<number | null>(null)
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null)
   const [selectedSiteId, setSelectedSiteId] = useState<number | null>(null)
@@ -100,10 +110,13 @@ export default function HomePage() {
   const [lastTouchMap, setLastTouchMap] = useState<Map<number, LastTouch>>(new Map())
   /** 등록 폼의 회사를 고정한 채 열었는가(회사 카드의 「+ 사업장 추가」). */
   const [lockAddCompany, setLockAddCompany] = useState(false)
+  /** 등록 폼의 모드 — 사업장 / 대리점. 같은 폼을 쓰고 칸만 달라진다. */
+  const [addMode, setAddMode] = useState<'site' | 'agency'>('site')
   // 진행 견적 수는 **목록 보기를 열 때만** 읽는다(첫 화면 조회를 늘리지 않는다).
   const openQuotes = useOpenQuotes(view === 'list')
-  // 대리점 탭의 건수 — 목록은 캐시를 공유하므로 조회는 앱당 한 번이다.
-  const agencyCount = useAgencies().length
+  // 대리점 목록 — 캐시를 공유하므로 조회는 앱당 한 번이다(탭의 건수·목록이 같은 값을 본다).
+  const agencyList = useAgencies()
+  const agencyCount = agencyList.length
   /** 작성자 id → 이름. 직원 목록은 공통 층에서 받는다(조회 0회).  */
   const [engineerNameMap, setEngineerNameMap] = useState<Map<number, string>>(new Map())
 
@@ -420,12 +433,18 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
   //   좌 패널의 건수와 우측 표의 줄은 **같은 셈법**을 써야 한다 — 그 셈법은
   //   lib/customerList.ts 에 있고, 여기서는 재료만 모아 넘긴다.
   const companyMap = useMemo(
-    () => new Map(companies.map(c => [c.customer_id, { company_name: c.company_name, industry: c.industry }])),
+    () => new Map(companies.map(c => [c.customer_id, { company_name: c.company_name, industry: c.industry, name_en: c.name_en }])),
     [companies],
   )
   const today = todayKST()
+  /** 대리점으로 걸러 볼 때는 그 대리점을 쓰는 사업장만 넘긴다(7). */
+  const treeCustomers = useMemo(
+    () => (agencyFilterId == null ? customers : customers.filter(c => c.agency_customer_id === agencyFilterId)),
+    [customers, agencyFilterId],
+  )
+
   const listTree = useMemo(() => buildCompanyTree({
-    customers,
+    customers: treeCustomers,
     companies: companyMap,
     deviceCount: id => (deviceMap.get(id) ?? []).length,
     deviceCategories: id => (deviceMap.get(id) ?? []).map(d => d.category).filter((x): x is string => !!x),
@@ -435,13 +454,100 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
     filter: { ...listFilter, query },
     allCategories: CATEGORY_OPTIONS,
     sort: listSort,
-  }), [customers, companyMap, deviceMap, openQuotes, lastTouchMap, today, listFilter, query, listSort])
+  }), [treeCustomers, companyMap, deviceMap, openQuotes, lastTouchMap, today, listFilter, query, listSort])
 
-  /** 지역 칩의 후보 — 데이터에 실제로 있는 값만(빈 값은 뺀다). */
-  const regionOptions = useMemo(
-    () => [...new Set(customers.map(c => regionOf(c)).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')),
+  // ── 정리 필요 탭의 네 묶음(4) ────────────────────────────────────────────
+  //   조건을 각 조각에 흩지 않고 여기서 한 번에 만든다 — 건수와 줄이 같은 셈법이어야 한다.
+  const cleanup = useMemo<Record<CleanupBucket, CleanupRow[]>>(() => {
+    const sitesByParent = new Map<number, Customer[]>()
+    for (const c of customers) {
+      const pid = c.parent_customer_id
+      if (pid == null) continue
+      const list = sitesByParent.get(pid)
+      if (list) list.push(c); else sitesByParent.set(pid, [c])
+    }
+    // 이름 중복 의심 — 괄호·㈜·공백을 턴 뒤 같은 이름인 회사가 둘 이상.
+    const norm = (v: string) => v
+      .replace(/㈜|\(\s*주\s*\)|주식회사|\(유\)|㈲|유한회사/g, '')
+      .replace(/[()\[\]{}·,.\-_/\s]/g, '').toLowerCase()
+    const byNorm = new Map<string, ParentOption[]>()
+    for (const p of companies) {
+      const k = norm(p.company_name)
+      const list = byNorm.get(k)
+      if (list) list.push(p); else byNorm.set(k, [p])
+    }
+
+    const industry: CleanupRow[] = []
+    const dupName: CleanupRow[] = []
+    const blankSites: CleanupRow[] = []
+    const emptyCompany: CleanupRow[] = []
+
+    for (const p of companies) {
+      const sites = sitesByParent.get(p.customer_id) ?? []
+      if (!(p.industry ?? '').trim()) {
+        industry.push({ companyId: p.customer_id, companyName: p.company_name, hint: `사업장 ${sites.length}곳 · 분류를 고르세요` })
+      }
+      if (sites.length === 0) {
+        emptyCompany.push({ companyId: p.customer_id, companyName: p.company_name, hint: '묶인 사업장이 없습니다 — 지울 수 있습니다' })
+      }
+      const blanks = sites.filter(c => !(c.site_name ?? '').trim()).length
+      if (blanks >= 2) {
+        blankSites.push({ companyId: p.customer_id, companyName: p.company_name, hint: `사업장 ${sites.length}곳 중 ${blanks}곳이 이름 없음 — 사업장명을 적으세요` })
+      }
+    }
+    for (const [, list] of byNorm) {
+      if (list.length < 2) continue
+      for (const p of list) {
+        dupName.push({
+          companyId: p.customer_id, companyName: p.company_name,
+          hint: `같은 이름: ${list.filter(x => x.customer_id !== p.customer_id).map(x => x.company_name).join(' · ')}`,
+        })
+      }
+    }
+    const byName = (a: CleanupRow, b: CleanupRow) => a.companyName.localeCompare(b.companyName, 'ko')
+    return {
+      industry: industry.sort(byName), dupName: dupName.sort(byName),
+      blankSites: blankSites.sort(byName), emptyCompany: emptyCompany.sort(byName),
+    }
+  }, [companies, customers])
+
+  /** 대리점 하나가 몇 곳에 붙어 있나(대리점 탭의 오른쪽 수). */
+  const agencySiteCount = useCallback(
+    (agencyId: number) => customers.filter(c => c.agency_customer_id === agencyId).length,
     [customers],
   )
+
+  /** 회사 여럿의 분류를 한 번에 지정한다(3a). */
+  const bulkIndustry = async (value: string) => {
+    const ids = [...checkedCompanies]
+    if (ids.length === 0 || !value) return
+    const { error } = await supabase.from('customers').update({ industry: value }).in('customer_id', ids)
+    if (error) { toast.error(error.message || '분류를 저장하지 못했습니다'); return }
+    invalidateParents()
+    loadParents().then(setCompanies)
+    setCheckedCompanies(new Set())
+    toast.success(`회사 ${ids.length}곳의 분류를 「${value}」 로 바꿨습니다`)
+  }
+
+  /** 사업장 0곳 회사를 지운다(정리 필요 탭). 라우트가 지우기 직전에 다시 센다. */
+  const deleteEmptyCompany = async (companyId: number, companyName: string) => {
+    const ok = await confirmDialog({
+      title: '회사 삭제',
+      message: `'${companyName}' 회사 줄을 지웁니다. 묶인 사업장이 없을 때만 지워지며, 되돌릴 수 없습니다.`,
+      confirmText: '삭제', variant: 'danger',
+    })
+    if (!ok) return
+    const res = await fetch('/api/parent-company', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete', parentId: companyId }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || json?.error) { toast.error(json?.error ?? `서버 오류 (${res.status})`); return }
+    invalidateParents()
+    loadParents().then(setCompanies)
+    if (selectedCompanyId === companyId) { setSelectedCompanyId(null); setSelectedSiteId(null) }
+    toast.success(`${companyName} 회사를 지웠습니다`)
+  }
 
   /** 지금 고른 회사 묶음. */
   const selectedGroup = useMemo(
@@ -457,11 +563,40 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
    * 「+ 사업장 추가」는 거기에 더해 회사를 **고정**한다(lock) — 어느 회사에 붙일지는
    * 이미 정해진 자리라 바꿀 수 있으면 실수만 는다.
    */
-  const openAddCustomer = (lock = false) => {
-    const preset = view === 'list' ? selectedCompanyId : null
-    setCustomerForm(prev => ({ ...prev, parent_customer_id: preset }))
+  const openAddCustomer = (lock = false, mode: 'site' | 'agency' = 'site') => {
+    const preset = mode === 'site' && view === 'list' ? selectedCompanyId : null
+    // 대리점 모드는 회사·사업장명·대리점 칸을 쓰지 않으므로 그 값들을 비워 연다.
+    setCustomerForm(prev => ({
+      ...prev,
+      parent_customer_id: preset,
+      company_name: '',
+      site_name: '',
+      agency_customer_id: null,
+    }))
     setLockAddCompany(lock && preset != null)
+    setAddMode(mode)
     setIsAddCustomerModalOpen(true)
+  }
+
+  /** 대리점 모드의 저장 — 사업장 등록과 길이 다르다(lib/addAgency.ts). */
+  const saveAgency = async () => {
+    setIsSavingCustomer(true)
+    try {
+      const made = await addAgency({
+        name: customerForm.company_name,
+        address: customerForm.address,
+        status: customerForm.status,
+      })
+      invalidateAgencies()
+      setIsAddCustomerModalOpen(false)
+      resetForms()
+      await fetchData()
+      toast.success(`${made.company_name} 대리점을 등록했습니다`)
+    } catch (e) {
+      toast.error((e as Error)?.message || '대리점을 등록하지 못했습니다')
+    } finally {
+      setIsSavingCustomer(false)
+    }
   }
 
   const toggleExpand = (companyId: number) => {
@@ -739,7 +874,6 @@ useEffect(() => {
               counts={{ company: listTree.groups.length, agency: agencyCount, unlinked: listTree.unlinkedCount }}
               filter={listFilter}
               setFilter={setListFilter}
-              regionOptions={regionOptions}
               sort={listSort}
               setSort={setListSort}
               groups={listTree.groups}
@@ -750,6 +884,25 @@ useEffect(() => {
               selectedSiteId={selectedSiteId}
               onSelectCompany={id => { setSelectedCompanyId(id); setSelectedSiteId(null) }}
               onSelectSite={(cid, sid) => { setSelectedCompanyId(cid); setSelectedSiteId(sid) }}
+              onAddSite={() => openAddCustomer(false, 'site')}
+              onAddAgency={() => openAddCustomer(false, 'agency')}
+              checkedCompanies={checkedCompanies}
+              toggleCompanyCheck={id => setCheckedCompanies(prev => {
+                const next = new Set(prev)
+                if (next.has(id)) next.delete(id); else next.add(id)
+                return next
+              })}
+              clearCompanyChecks={() => setCheckedCompanies(new Set())}
+              onBulkIndustry={v => void bulkIndustry(v)}
+              cleanup={cleanup}
+              cleanupBucket={cleanupBucket}
+              setCleanupBucket={setCleanupBucket}
+              onDeleteCompany={(id, name) => void deleteEmptyCompany(id, name)}
+              agencies={agencyList}
+              agencySiteCount={agencySiteCount}
+              onPickAgency={id => { setAgencyFilterId(id); setListTab('company'); setSelectedCompanyId(null); setSelectedSiteId(null) }}
+              agencyFilterId={agencyFilterId}
+              clearAgencyFilter={() => setAgencyFilterId(null)}
               loading={isLoading}
             />
           </div>
@@ -786,13 +939,16 @@ useEffect(() => {
               </div>
             ) : selectedGroup ? (
               <CompanyPane
+                key={selectedGroup.companyId}
                 group={selectedGroup}
                 engineerName={id => (id == null ? '' : engineerNameMap.get(id) ?? '')}
-                onSaved={() => { void fetchData() }}
+                onSaved={() => { invalidateParents(); loadParents().then(setCompanies); void fetchData() }}
                 onError={msg => toast.error(msg)}
                 onToast={msg => toast.success(msg)}
                 onOpenSite={id => setSelectedSiteId(id)}
                 onAddSite={() => openAddCustomer(true)}
+                onCompanyGone={() => { setSelectedCompanyId(null); setSelectedSiteId(null); loadParents().then(setCompanies) }}
+                canEditCompany={isSuperAdmin(me)}
               />
             ) : (
               <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: TEXT_MUTED, fontSize: 13, background: '#fff', border: '1px solid #ebebeb', borderRadius: 8 }}>
@@ -858,6 +1014,7 @@ onAddClick={() => setIsAddCustomerModalOpen(true)}
         <AddCustomerModal
           isOpen={isAddCustomerModalOpen}
           lockCompany={lockAddCompany}
+          mode={addMode}
           isSavingCustomer={isSavingCustomer}
           customerForm={customerForm}
           setCustomerForm={setCustomerForm}
@@ -869,6 +1026,7 @@ onAddClick={() => setIsAddCustomerModalOpen(true)}
           removeDeviceFormCard={removeDeviceFormCard}
           onClose={() => setIsAddCustomerModalOpen(false)}
          onSave={async () => {
+  if (addMode === 'agency') { await saveAgency(); return }
   try {
     const ok = await addCustomer({
       customerForm,

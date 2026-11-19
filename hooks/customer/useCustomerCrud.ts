@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { customerLabel } from '@/lib/customerLabel'
+import { normalizeRegion } from '@/lib/region'
 import { invalidateParents } from '@/components/customer/ParentPicker'
 import type { Customer, CustomerEditFormData } from '@/components/customer/types'
 import { deleteServiceAttachments } from '@/components/customer/attachments'
@@ -92,6 +93,8 @@ export function useCustomerCrud({ customer, fetchDetail }: Args) {
 
       const { error } = await supabase.from('customers').update({
         company_name: combined, site_name: siteName || null, address: form.address.trim(),
+        // 주소가 바뀌면 지역1 도 따라간다 — 늘 같은 함수를 지난다(lib/region.ts).
+        region1: normalizeRegion(customer.region1 ?? null, form.address),
         // 대리점은 줄을 가리킨다(lib/customerAgency.ts). 옛 agency 텍스트 칸은 쓰지 않는다.
         agency_customer_id: form.agency_customer_id ?? null,
         status: form.status,

@@ -5,9 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { INITIALS_TAKEN_MESSAGE, isInitialsTaken } from '@/lib/initials'
-import { invalidateParents } from '@/components/customer/ParentPicker'
 import { josa } from '@/lib/josa'
-import { INDUSTRIES } from '@/lib/leadOptions'
 import { downsizeImage } from '@/lib/leadCardImage'
 import {
   NOTICE_MAX_IMAGES, NOTICE_TITLE_MAX, NOTICE_BODY_MAX,
@@ -58,14 +56,6 @@ type Engineer = {
 }
 
 /** 소속회사 한 줄 — 목록에 필요한 것만. childCount 는 살아있는 사업장 수다. */
-type ParentRow = {
-  customer_id: number
-  company_name: string
-  /** 분류(산업군) — 리드 등록과 같은 목록이다(lib/leadOptions.ts). 옛 회사 줄은 비어 있다. */
-  industry: string | null
-  created_at: string | null
-  childCount: number
-}
 
 type SalesTarget = {
   target_id: number
@@ -201,14 +191,6 @@ function AdminPageInner() {
   // ── 소속회사 관리 ──
   // 소속회사(customers.is_parent = true)는 여러 업체를 묶는 껍데기 행이라 주소·장비가 없다.
   // 만들기만 하고 지울 수단이 없어 오타 행이 쌓이던 것을 여기서 정리한다.
-  const [showParentModal, setShowParentModal] = useState(false)
-  const [parentRows, setParentRows] = useState<ParentRow[]>([])
-  const [parentLoading, setParentLoading] = useState(false)
-  const [parentSearch, setParentSearch] = useState('')
-  const [parentOnlyEmpty, setParentOnlyEmpty] = useState(false)
-  const [parentBusy, setParentBusy] = useState<number | null>(null)
-  // 이름 수정 중인 행과 입력값. 한 번에 한 행만 고친다.
-  const [parentEditing, setParentEditing] = useState<{ id: number; name: string; industry: string } | null>(null)
 
   // ── 사무실 관리 ──
   // 값은 offices 테이블이 정본이다. 직원 등록·수정의 사무실 드롭다운도 같은 목록을 쓴다.
@@ -713,81 +695,6 @@ function AdminPageInner() {
   // ── 소속회사 관리 ──────────────────────────────────────────────────────────
   // 사업장 수는 자식 행을 한 번에 읽어 화면에서 센다. 소속회사가 수백 개라
   // 회사마다 count 질의를 날리면 요청이 그만큼 늘어난다(삭제 직전 판정은 서버가 다시 한다).
-  const fetchParents = async () => {
-    setParentLoading(true)
-    const [{ data: parents, error: pErr }, { data: children, error: cErr }] = await Promise.all([
-      supabase.from('customers')
-        .select('customer_id, company_name, industry, created_at')
-        .eq('is_parent', true).is('deleted_at', null),
-      supabase.from('customers')
-        .select('parent_customer_id')
-        .not('parent_customer_id', 'is', null).is('deleted_at', null),
-    ])
-    if (pErr || cErr) console.error('[admin] 소속회사 조회 실패', pErr ?? cErr)
-    const count: Record<number, number> = {}
-    for (const c of (children ?? []) as { parent_customer_id: number }[]) {
-      count[c.parent_customer_id] = (count[c.parent_customer_id] ?? 0) + 1
-    }
-    setParentRows(((parents ?? []) as { customer_id: number; company_name: string | null; industry: string | null; created_at: string | null }[])
-      .map(p => ({
-        customer_id: p.customer_id,
-        company_name: p.company_name ?? '',
-        industry: p.industry ?? null,
-        created_at: p.created_at,
-        childCount: count[p.customer_id] ?? 0,
-      })))
-    setParentLoading(false)
-  }
-
-  const callParentRoute = async (action: 'rename' | 'delete', parentId: number, name?: string, industry?: string) => {
-    const res = await fetch('/api/parent-company', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, parentId, name, industry }),
-    })
-    const json = await res.json().catch(() => ({}))
-    return res.ok && !json.error ? { ok: true as const } : { ok: false as const, error: json.error ?? `서버 오류 (${res.status})` }
-  }
-
-  const handleParentRename = async () => {
-    if (!parentEditing) return
-    const name = parentEditing.name.trim()
-    if (!name) { toast.error('회사명을 입력해주세요'); return }
-    setParentBusy(parentEditing.id)
-    const r = await callParentRoute('rename', parentEditing.id, name, parentEditing.industry)
-    setParentBusy(null)
-    if (!r.ok) { toast.error(r.error); return }
-    toast.success('회사명을 수정했습니다')
-    setParentEditing(null)
-    // 이름이 바뀌면 ParentPicker 의 캐시도 옛 이름을 들고 있다.
-    invalidateParents()
-    fetchParents()
-  }
-
-  const handleParentDelete = async (row: ParentRow) => {
-    // 화면에서 이미 0곳인 것만 버튼이 열리지만, 최종 판정은 라우트가 다시 센다.
-    const ok = await confirmDialog({
-      title: '회사 삭제',
-      message: `'${row.company_name}'${josa(row.company_name, '을')} 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`,
-      confirmText: '삭제', variant: 'danger',
-    })
-    if (!ok) return
-    setParentBusy(row.customer_id)
-    const r = await callParentRoute('delete', row.customer_id)
-    setParentBusy(null)
-    if (!r.ok) { toast.error(r.error); fetchParents(); return }
-    toast.success(`${row.company_name} 회사를 삭제했습니다`)
-    invalidateParents()
-    fetchParents()
-  }
-
-  // 정리가 필요한 것(사업장 0곳)을 맨 위로, 그다음 이름순.
-  const visibleParents = parentRows
-    .filter(p => !parentOnlyEmpty || p.childCount === 0)
-    .filter(p => !parentSearch.trim() || p.company_name.toLowerCase().includes(parentSearch.trim().toLowerCase()))
-    .sort((a, b) =>
-      (a.childCount === 0 ? 0 : 1) - (b.childCount === 0 ? 0 : 1) ||
-      a.company_name.localeCompare(b.company_name, 'ko'))
 
   // ── 팀 관리 ────────────────────────────────────────────────────────────────
   const fetchTeams = async () => {
@@ -1295,19 +1202,9 @@ function AdminPageInner() {
             </button>
           </div>
 
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ fontSize: 28, marginBottom: 12 }}>🏬</div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>회사 관리</div>
-            <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>여러 사업장을 묶는 회사를 관리합니다. 이름을 고치거나, 사업장이 없는 회사를 정리합니다.</div>
-            {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
-            <div style={{ flex: 1 }} />
-            <button
-              onClick={() => { setShowParentModal(true); setParentSearch(''); setParentOnlyEmpty(false); setParentEditing(null); fetchParents() }}
-              disabled={!isSuperAdmin(currentEngineer)}
-              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
-              관리하기
-            </button>
-          </div>
+          {/* 「회사 관리」 카드는 2026-11-19 에 걷었다 — 고객사 **목록 보기**(/?view=list)가
+              그 일을 한다(회사 트리·분류·이름 변경·병합·정리 필요 탭). 라우트
+              /api/parent-company 는 그대로 쓴다 — 자식 이름 재생성과 서버 재집계가 거기 있다. */}
 
           <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>🧾</div>
@@ -2093,130 +1990,6 @@ function AdminPageInner() {
       )}
 
       {/* ── 소속회사 관리 모달 ── */}
-      {showParentModal && (
-        <ModalOverlay onClose={() => { setShowParentModal(false); setParentEditing(null) }} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 720, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🏬 회사 관리</div>
-              <button onClick={() => { setShowParentModal(false); setParentEditing(null) }}
-                style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
-            </div>
-
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
-              <input value={parentSearch} onChange={e => setParentSearch(e.target.value)}
-                placeholder="회사명 검색" style={{ ...inp, width: 220 }} />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
-                <input type="checkbox" checked={parentOnlyEmpty} onChange={e => setParentOnlyEmpty(e.target.checked)}
-                  style={{ width: 14, height: 14, cursor: 'pointer', accentColor: BLUE }} />
-                <span style={{ fontSize: 12, fontWeight: 700, color: parentOnlyEmpty ? BLUE : GRAY }}>사업장 없음만 보기</span>
-              </label>
-              <span style={{ marginLeft: 'auto', fontSize: 12, color: GRAY }}>
-                {visibleParents.length}개 / 전체 {parentRows.length}개
-              </span>
-            </div>
-
-            <div style={{ overflowY: 'auto', flex: 1, border: `1px solid ${BORDER}`, borderRadius: 10 }}>
-              {parentLoading ? (
-                <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>불러오는 중...</div>
-              ) : visibleParents.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>회사가 없습니다</div>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                  <thead style={{ position: 'sticky', top: 0, background: CARD_BG, zIndex: Z.thead }}>
-                    <tr style={{ borderBottom: `2px solid ${BORDER}` }}>
-                      {['회사명', '분류', '사업장', '등록일', '관리'].map(h => (
-                        <th key={h} style={{ padding: '9px 12px', textAlign: 'left', color: GRAY, fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleParents.map(p => {
-                      const editing = parentEditing?.id === p.customer_id
-                      const busy = parentBusy === p.customer_id
-                      return (
-                        <tr key={p.customer_id} style={{ borderBottom: `1px solid ${BORDER}` }}>
-                          <td style={{ padding: '9px 12px' }}>
-                            {editing ? (
-                              <input
-                                autoFocus
-                                value={parentEditing.name}
-                                onChange={e => setParentEditing({ ...parentEditing, name: e.target.value })}
-                                onKeyDown={e => { if (e.key === 'Enter') handleParentRename(); if (e.key === 'Escape') setParentEditing(null) }}
-                                style={{ ...inp, width: '100%' }}
-                              />
-                            ) : (
-                              <span style={{ color: TEXT, fontWeight: 600 }}>{p.company_name}</span>
-                            )}
-                          </td>
-                          {/* 분류 — 리드 등록의 산업군과 같은 목록. 옛 회사 줄은 비어 있어 여기서 채운다. */}
-                          <td style={{ padding: '9px 12px' }}>
-                            {editing ? (
-                              <select
-                                value={parentEditing.industry}
-                                onChange={e => setParentEditing({ ...parentEditing, industry: e.target.value })}
-                                style={{ ...inp, width: '100%', cursor: 'pointer' }}
-                              >
-                                <option value="">분류 없음</option>
-                                {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
-                              </select>
-                            ) : (
-                              <span style={{ color: p.industry ? TEXT : GRAY, whiteSpace: 'nowrap' }}>{p.industry || '없음'}</span>
-                            )}
-                          </td>
-                          {/* 0곳이면 정리 대상이라는 뜻이라 눈에 띄게 둔다 */}
-                          <td style={{ padding: '9px 12px', whiteSpace: 'nowrap', color: p.childCount === 0 ? GRAY : TEXT, fontWeight: p.childCount === 0 ? 400 : 700 }}>
-                            {p.childCount === 0 ? '없음' : `${p.childCount}곳`}
-                          </td>
-                          <td style={{ padding: '9px 12px', whiteSpace: 'nowrap', color: GRAY }}>{p.created_at?.slice(0, 10) ?? '-'}</td>
-                          <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
-                            <div style={{ display: 'flex', gap: 6 }}>
-                              {editing ? (
-                                <>
-                                  <button onClick={handleParentRename} disabled={busy}
-                                    style={{ padding: '4px 10px', background: BLUE, color: '#fff', border: 'none', borderRadius: 6, cursor: busy ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700 }}>
-                                    {busy ? '저장 중...' : '저장'}
-                                  </button>
-                                  <button onClick={() => setParentEditing(null)} disabled={busy}
-                                    style={{ padding: '4px 10px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
-                                    취소
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <button onClick={() => setParentEditing({ id: p.customer_id, name: p.company_name, industry: p.industry ?? '' })}
-                                    style={{ padding: '4px 10px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
-                                    이름 수정
-                                  </button>
-                                  {/* 사업장이 있으면 지울 수 없다 — 지우면 그 사업장들의 연결이 끊긴다 */}
-                                  <button
-                                    onClick={() => handleParentDelete(p)}
-                                    disabled={p.childCount > 0 || busy}
-                                    title={p.childCount > 0 ? `사업장 ${p.childCount}곳이 연결되어 있습니다` : '삭제'}
-                                    style={{
-                                      padding: '4px 10px', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700,
-                                      background: p.childCount > 0 ? '#f3f4f6' : DANGER,
-                                      color: p.childCount > 0 ? '#9ca3af' : '#fff',
-                                      cursor: p.childCount > 0 || busy ? 'not-allowed' : 'pointer',
-                                    }}>
-                                    {busy ? '처리 중...' : '삭제'}
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            <div style={{ fontSize: 11, color: GRAY, marginTop: 10, lineHeight: 1.6 }}>
-              사업장이 연결된 회사는 삭제할 수 없습니다. 사업장 쪽에서 회사를 해제한 뒤 지워주세요.
-            </div>
-          </div>
-        </ModalOverlay>
-      )}
 
       {/* ── 팀 관리 모달 ── */}
       {showOfficeModal && (

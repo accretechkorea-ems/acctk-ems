@@ -14,6 +14,10 @@ export type Customer = {
   agency_ref?: AgencyJoin
   /** 자유 메모(일본 직수입·이전·사명 변경 같은 한 줄 사정). 상세·수정 폼에서 본다. */
   note?: string | null
+  /** 지역1 — 정본 17개 약칭(lib/region.ts). 저장할 때 늘 normalizeRegion 을 지난다. */
+  region1?: string | null
+  /** 회사 영문명 — 회사 줄(is_parent)에만 적는다. 검색이 한글 이름과 함께 본다. */
+  name_en?: string | null
   // 사업장을 묶는 소속회사. 상세는 select(*) 로 읽으므로 값이 들어온다.
   // 목록·검색용 조회는 이 컬럼을 가져오지 않으므로 선택 속성으로 둔다.
   parent_customer_id?: number | null
