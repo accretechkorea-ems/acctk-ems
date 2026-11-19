@@ -17,7 +17,8 @@ import { createClient } from '@/lib/supabase/client'
 import { canViewCustomers } from '@/lib/permissions'
 import { useMe } from '@/lib/appData/MeProvider'
 import { inSalesStats } from '@/lib/salesScope'
-import { ACTIVITY_TYPES } from '@/lib/activity'
+import { activityTypeOrder } from '@/lib/activity'
+import { loadActivityTypes } from '@/lib/activityTypes'
 import ActivityCard from '@/components/activity/ActivityCard'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
 import DashCard from '@/components/dashboard/DashCard'
@@ -43,6 +44,8 @@ function DashboardPageInner() {
   const [activityYm, setActivityYm] = useState(() => { const n = nowKSTParts(); return { y: n.y, m: n.m } })
   // 활동 요약 건수. 아직 못 받았으면 null(카드를 그리지 않는다).
   const [actCounts, setActCounts] = useState<Record<string, number> | null>(null)
+  /** 카드에 세우는 유형 — 서비스 + 영업 종류(표) + 목록 밖 값. 활동 현황과 같은 규칙이다. */
+  const [actTypes, setActTypes] = useState<string[]>([])
   // 활동 상세 모달이 열려 있는가. 카드에 보이는 달(activityYm)을 그대로 쓴다.
   const [detailOpen, setDetailOpen] = useState(false)
   // 활동 조회 기간: 선택한 달의 1일 ~ 말일. 이번 달이면 1일 ~ 오늘.
@@ -69,7 +72,8 @@ function DashboardPageInner() {
 
   // 본인 활동 건수 집계 — 활동 현황 화면과 같은 규칙이다.
   // 서비스는 참여자 표(service_engineers)를 거쳐 세고, 영업 활동은 engineer_id 로 바로 걸러진다.
-  // 목록(ACTIVITY_TYPES)에 없는 유형은 양쪽 모두 무시한다.
+  // 서비스는 목록에 없는 유형을 무시하고, 영업은 **목록 밖 값도 센다**(종류가 비활성·개명돼도
+  // 과거 줄이 합계에서 빠지면 안 된다 — 활동 현황과 같은 규칙).
   useEffect(() => {
     if (engineerId === null || !showActivity) return
     let cancelled = false
@@ -99,14 +103,19 @@ function DashboardPageInner() {
       ])
       if (cancelled) return
 
+      const typeOrder = activityTypeOrder(await loadActivityTypes())
+      if (cancelled) return
       const counts: Record<string, number> = {}
-      ACTIVITY_TYPES.forEach(t => { counts[t] = 0 })
+      typeOrder.forEach(t => { counts[t] = 0 })
       ;((shRes.data ?? []) as ServiceTypeRow[]).forEach(sh => {
         if (sh.service_type && counts[sh.service_type] !== undefined) counts[sh.service_type]++
       })
       ;((saRes.data ?? []) as SalesTypeRow[]).forEach(a => {
-        if (a.activity_type && counts[a.activity_type] !== undefined) counts[a.activity_type]++
+        if (!a.activity_type) return
+        counts[a.activity_type] = (counts[a.activity_type] ?? 0) + 1
       })
+      // 목록 밖 값도 줄로 세운다 — 세면서 감추면 합계와 줄이 어긋난다.
+      setActTypes([...typeOrder, ...Object.keys(counts).filter(t => !typeOrder.includes(t)).sort()])
       setActCounts(counts)
     }
     loadCounts()
@@ -193,7 +202,7 @@ function DashboardPageInner() {
                 engineer={me}
                 counts={actCounts}
                 total={actTotal}
-                types={ACTIVITY_TYPES}
+                types={actTypes}
                 fitHeight
                 // 카드를 누르면 **그 자리에서** 활동 상세 모달이 열린다 — 홈에서 보던
                 // 달의 내 기록을 보려고 누르는 것이고, 화면을 떠나면 돌아올 때 홈을

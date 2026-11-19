@@ -9,11 +9,14 @@ import { useFieldErrors, FieldError, errBorder } from '@/components/common/field
 import { isClosed } from '../opportunity'
 import type { Contact, SalesActivity, SalesActivityForm, SalesOpportunity } from '../types'
 import { todayKST } from '@/lib/date'
+import { selectableActivityTypes, useActivityTypes } from '@/lib/activityTypes'
 
-// 사람이 고를 수 있는 종류. sales_activities.activity_type CHECK 의 **부분집합**이다 —
-// 「리드 등록」은 리드 전환이 자동으로 남기는 줄 전용이라 여기 넣지 않는다
-// (lib/leadOptions.ts 의 LEAD_CONVERT_ACTIVITY_TYPE).
-export const ACTIVITY_TYPES = ['전화상담', '방문미팅', '사양검토', '경쟁입찰'] as const
+/**
+ * 활동 종류의 **처음 값** — 아직 표를 못 읽었을 때 쓰는 값이고, 표를 읽으면 그 목록의
+ * 첫 줄로 맞춘다. 종류 목록 자체는 `public.activity_types` 가 정본이다
+ * (lib/activityTypes.ts — 전에는 여기 상수 ACTIVITY_TYPES 가 정본이었다).
+ */
+const FALLBACK_TYPE = '방문미팅'
 
 type Props = {
   isOpen: boolean
@@ -37,7 +40,7 @@ const areaStyle: CSSProperties = { ...fieldStyle, resize: 'vertical', lineHeight
 
 
 const emptyForm = (): SalesActivityForm => ({
-  opportunity_id: null, activity_date: todayKST(), activity_type: '방문미팅', contact_id: null, content: '',
+  opportunity_id: null, activity_date: todayKST(), activity_type: FALLBACK_TYPE, contact_id: null, content: '',
 })
 
 export default function SalesActivityModal({ isOpen, activity, contacts, opportunities, isSaving, canDelete, onClose, onSave, onDelete }: Props) {
@@ -54,6 +57,12 @@ export default function SalesActivityModal({ isOpen, activity, contacts, opportu
 
   const [form, setForm] = useState<SalesActivityForm>(emptyForm)
   const { errors, setErrors, clearError, validate } = useFieldErrors<'activity_date' | 'activity_type' | 'content'>()
+  const allTypes = useActivityTypes()
+  /**
+   * 고를 수 있는 종류 — 활성이고 system 이 아닌 것. 지금 값이 비활성이어도 남긴다
+   * (옛 활동을 고치는 창에서 종류가 조용히 바뀌지 않게 — lib/activityTypes.ts).
+   */
+  const typeOptions = selectableActivityTypes(allTypes, form.activity_type)
 
   // 열릴 때마다 폼을 맞춘다 (신규면 오늘 날짜, 수정이면 기존 값)
   useEffect(() => {
@@ -62,6 +71,18 @@ export default function SalesActivityModal({ isOpen, activity, contacts, opportu
     setForm(formOf(activity))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, activity])
+
+  /**
+   * **새 활동**의 기본 종류를 목록에 맞춘다. 처음 값('방문미팅')이 관리 화면에서 비활성
+   * 되거나 이름이 바뀌면 칸에 없는 값이 남아 저장이 FK 에 막힌다. 표를 읽은 뒤 한 번만,
+   * 그리고 **새 활동일 때만** 고친다 — 수정 창의 기존 값은 그대로 두어야 한다.
+   */
+  useEffect(() => {
+    if (!isOpen || activity || allTypes.length === 0) return
+    const pickable = selectableActivityTypes(allTypes)
+    if (pickable.length === 0) return
+    setForm(p => (pickable.some(t => t.label === p.activity_type) ? p : { ...p, activity_type: pickable[0].label }))
+  }, [isOpen, activity, allTypes])
 
   if (!isOpen) return null
 
@@ -120,7 +141,8 @@ export default function SalesActivityModal({ isOpen, activity, contacts, opportu
               <select value={form.activity_type}
                 onChange={(e) => { setForm(p => ({ ...p, activity_type: e.target.value })); clearError('activity_type') }}
                 style={errors.activity_type ? { ...fieldStyle, border: errBorder } : fieldStyle}>
-                {ACTIVITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                {/* 값은 label 이다 — sales_activities.activity_type 이 label 을 참조한다(FK). */}
+                {typeOptions.map(t => <option key={t.code} value={t.label}>{t.label}</option>)}
               </select>
               <FieldError message={errors.activity_type} />
             </div>

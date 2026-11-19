@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
+import { agencyLabelOf } from '@/lib/customerAgency'
 import type { Customer, Device, Contact, ServiceHistory } from './types'
 
 type Props = {
@@ -47,7 +48,8 @@ export default function ServiceReportDoc({ service, device, customer, contact, e
   const infoRows = [
     { label: '엔지니어 이름', value: engineerNames, label2: '사업부', value2: '계측' },
     { label: '장비종류', value: device.device_name ?? '-', label2: '유/무상', value2: service.is_paid ? '유상' : '무상' },
-    { label: '장비명', value: `${device.device_name2 ?? ''} ${device.option ?? ''}`.trim() || '-', label2: '대리점', value2: customer?.agency ?? '-' },
+    // 대리점 — 대리점 줄에서 조인해 온 이름이다. 없으면 「직판」(lib/customerAgency.ts).
+    { label: '장비명', value: `${device.device_name2 ?? ''} ${device.option ?? ''}`.trim() || '-', label2: '대리점', value2: agencyLabelOf(customer) },
     { label: 'SER.NO', value: device.serial_number ?? '-', label2: 'OS Ver.', value2: device.program ?? '-' },
     { label: '작업유형', value: service.service_type ?? '-', label2: '작업시간', value2: service.work_hours ? `${service.work_hours}h` : '-' },
   ]

@@ -23,6 +23,7 @@ import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import LeadExcelButton from '@/components/leads/LeadExcelButton'
 import LeadStatusModal, { type CustomerChoice } from './LeadStatusModal'
 import { kstStamp } from '@/lib/date'
+import { NOT_AGENCY_ONLY } from '@/lib/customerAgency'
 
 import {
   LEAD_STATUS_NEW, LEAD_STATUS_ACTIVE, LEAD_STATUS_CONVERTED, LEAD_STATUS_SKIPPED, LEAD_STATUS_BLOCKED,
@@ -273,7 +274,9 @@ function LeadsPageInner() {
         leadQuery,
         // 직원 목록은 공통 층에서(조회 0회).
         loadEngineers(),
-        supabase.from('customers').select('customer_id, company_name, address').is('deleted_at', null).eq('is_parent', false),
+        // 대리점 전용 줄은 리드를 붙일 고객사가 아니다(lib/customerAgency.ts).
+        supabase.from('customers').select('customer_id, company_name, address')
+          .is('deleted_at', null).eq('is_parent', false).or(NOT_AGENCY_ONLY),
       ])
       if (cancelled) return
       setLeads((ld ?? []) as Lead[])

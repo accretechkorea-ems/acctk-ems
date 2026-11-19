@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { ACTIVITY_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
+import { activityTypeColor } from '@/lib/categoryColors'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import HorizontalScroller from '@/components/common/HorizontalScroller'
 import { buildRoute, type RouteStop } from '@/lib/routeMap'
@@ -10,7 +10,8 @@ import RouteMapView from '@/components/activity/RouteMapView'
 import { useRouter } from 'next/navigation'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import { canViewMenu } from '@/lib/permissions'
-import { ACTIVITY_TYPES, activityHref, byDateDesc, entryKey, type ActivityEntry } from '@/lib/activity'
+import { activityTypeOrder, activityHref, byDateDesc, entryKey, type ActivityEntry } from '@/lib/activity'
+import { remoteActivityTypes, useActivityTypes } from '@/lib/activityTypes'
 
 // 활동 서비스 기록 상세 '본문'(헤더 + 타입 필터 + 목록 + 동선 지도). 상세 조회를 스스로 관리한다.
 // 두 곳에서 공유한다 — **둘 다 모달**이다(ActivityDetailModal 이 오버레이/카드로 감싼다):
@@ -163,20 +164,23 @@ export default function ActivityDetail({ engineer, startDate, endDate, variant, 
   const filteredDetails = filterType === '전체' ? details : details.filter(d => d.type === filterType)
 
   // 유형 칩은 실제로 기록이 있는 유형만 만든다(활동 카드와 같은 규칙).
-  // 순서는 ACTIVITY_TYPES(서비스 6종 → 영업 4종) 를 따르고, 목록에 없는 값은 마지막에 붙인다.
+  // 순서는 서비스 유형 → 영업 종류(activity_types 표) 를 따르고, 목록에 없는 값은 마지막에 붙인다.
   const typeCounts = useMemo(() => {
     const m = new Map<string, number>()
     for (const d of details) if (d.type) m.set(d.type, (m.get(d.type) ?? 0) + 1)
     return m
   }, [details])
+  const salesTypes = useActivityTypes()
+  const typeOrder = useMemo(() => activityTypeOrder(salesTypes), [salesTypes])
   const shownTypes = useMemo(() => {
-    const known = ACTIVITY_TYPES.filter(t => typeCounts.has(t))
-    const unknown = [...typeCounts.keys()].filter(t => !ACTIVITY_TYPES.includes(t)).sort()
+    const known = typeOrder.filter(t => typeCounts.has(t))
+    const unknown = [...typeCounts.keys()].filter(t => !typeOrder.includes(t)).sort()
     return [...known, ...unknown]
-  }, [typeCounts])
+  }, [typeCounts, typeOrder])
 
   // 동선 지도용 stops(비방문 유형 제외). 지도에 찍을 게 없으면 '동선 보기' 버튼 비활성화.
-  const routeResult = buildRoute(details)
+  // 어느 영업 종류가 비방문인지는 표의 is_remote 가 정한다(lib/activityTypes.ts).
+  const routeResult = buildRoute(details, remoteActivityTypes(salesTypes))
 
   // 목록 컨테이너: 모달은 고정 높이 + 숨은 스크롤바 + inset 힌트. 인라인은 남는 높이 채우고 얇은 스크롤바.
   // 목록은 남는 높이만큼만 차지하고 그 안에서 스크롤한다.
@@ -337,7 +341,7 @@ export default function ActivityDetail({ engineer, startDate, endDate, variant, 
           </div>
         ) : (
           filteredDetails.map((d) => {
-            const sc = getCategoryColor(ACTIVITY_TYPE_COLORS, d.type)
+            const sc = activityTypeColor(d.type)
             const href = canOpenCustomer ? activityHref(d) : null
             const rowStyle: CSSProperties = {
               display: 'flex', alignItems: 'flex-start', padding: '11px 12px', gap: 12,

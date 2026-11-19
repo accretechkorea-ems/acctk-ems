@@ -11,6 +11,7 @@ import { loadMe } from '@/lib/appData/me'
 import { loadEngineers } from '@/lib/appData/engineers'
 import { useToast } from '@/components/common/Toast'
 import type { Customer, Device, Contact, ServiceHistory, Engineer, Quote, SalesActivity, SalesOpportunity, Holding } from '@/components/customer/types'
+import { CUSTOMER_AGENCY_SELECT } from '@/lib/customerAgency'
 
 // quotes 는 engineers 를 engineer_id(실적 귀속자)·created_by(작성자) 두 번 참조한다.
 // 관계를 지정하지 않으면 PGRST201(300 Multiple Choices)로 조회 전체가 실패한다.
@@ -89,7 +90,9 @@ export function useCustomerDetail(customerId: number) {
       { data: oppsData, error: oppsErr },
       { data: holdingsData, error: holdingsErr },
     ] = await Promise.all([
-      supabase.from('customers').select('*').is('deleted_at', null).eq('customer_id', customerId).maybeSingle(),
+      // 대리점 이름은 대리점 줄에 있다 — 함께 읽는다(lib/customerAgency.ts).
+      // customers 는 자기 자신을 두 번 참조하므로 임베딩에 칸 이름을 적어야 한다.
+      supabase.from('customers').select(`*, ${CUSTOMER_AGENCY_SELECT}`).is('deleted_at', null).eq('customer_id', customerId).maybeSingle(),
       supabase.from('devices').select('*').is('deleted_at', null).eq('customer_id', customerId).order('device_id', { ascending: true }),
       supabase.from('contacts').select('*').is('deleted_at', null).eq('customer_id', customerId).order('contact_id', { ascending: true }),
       // 첨부파일도 함께 가져온다. service_attachments 에서 service_history 로 가는 FK 가 하나뿐이라

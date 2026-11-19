@@ -16,6 +16,7 @@ import {
   CUSTOMER_EXCEL_SELECT, exportCustomerXlsx, toExcelCustomer,
   type CustomerExcelRow, type ExcelCustomer,
 } from '@/lib/customerExcel'
+import { NOT_AGENCY_ONLY } from '@/lib/customerAgency'
 import { todayKST } from '@/lib/date'
 import { useToast } from '@/components/common/Toast'
 import { usePageGuard } from '@/hooks/usePageGuard'
@@ -105,7 +106,8 @@ const toggleCategory = (category: string) => {
     company_name: '',
     site_name: '',
     address: '',
-    agency: '',
+    // 대리점 — customers 의 대리점 줄(is_agency)을 가리킨다. null 이면 직판.
+    agency_customer_id: null as number | null,
     status: '활성',
     // 사업장을 묶는 소속회사. 고르지 않으면 종전과 같이 단독 업체로 등록된다.
     parent_customer_id: null as number | null,
@@ -229,7 +231,7 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
       company_name: '',
       site_name: '',
       address: '',
-      agency: '',
+      agency_customer_id: null,
       status: '활성',
       parent_customer_id: null,
     })
@@ -314,7 +316,7 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
         (c.company_name || '').toLowerCase().includes(q) ||
         (c.address || '').toLowerCase().includes(q) ||
         (c.status || '').toLowerCase().includes(q) ||
-        (c.agency || '').toLowerCase().includes(q) ||
+        (c.agency_name || '').toLowerCase().includes(q) ||
         deviceLine.includes(q)
       )
     })
@@ -354,7 +356,8 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
     try {
       const [listRes, parentRes] = await Promise.all([
         supabase.from('customers').select(CUSTOMER_EXCEL_SELECT)
-          .is('deleted_at', null).eq('is_parent', false).range(0, 5000),
+          // 화면 목록과 같은 범위라야 한다 — 대리점 전용 줄은 양쪽에서 빠진다.
+          .is('deleted_at', null).eq('is_parent', false).or(NOT_AGENCY_ONLY).range(0, 5000),
         // 소속회사 이름 — 부모 행은 목록·지도에 안 나오므로 따로 읽는다(273행).
         supabase.from('customers').select('customer_id, company_name')
           .eq('is_parent', true).is('deleted_at', null).range(0, 2000),

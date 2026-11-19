@@ -14,6 +14,7 @@ import {
   type Device,
 } from '@/lib/home'
 import { loadOffices, activeOffices, type Office } from '@/lib/offices'
+import { DIRECT_SALE_LABEL } from '@/lib/customerAgency'
 import { useMe } from '@/lib/appData/MeProvider'
 import { useToast } from '@/components/common/Toast'
 import { CATEGORY_OPTIONS } from '@/lib/constants'
@@ -131,7 +132,7 @@ export default function MapView({
             ${c.address ? esc(c.address) : '주소 정보 없음 — 등록 필요'}
           </div>
 
-          <div style="font-size:11px; color:#9ca3af; margin-bottom:8px;">대리점 ${esc(c.agency) || '-'}</div>
+          <div style="font-size:11px; color:#9ca3af; margin-bottom:8px;">대리점 ${esc(c.agency_name ?? DIRECT_SALE_LABEL)}</div>
 
           <div style="display:flex; flex-direction:column; gap:3px;">
             ${deviceLines.length === 1 && deviceLines[0] === '-'

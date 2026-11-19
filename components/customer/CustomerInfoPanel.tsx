@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import BackIconButton from '@/components/common/BackIconButton'
+import MemoPopover, { hasMemo } from '@/components/common/MemoPopover'
+import { agencyLabelOf } from '@/lib/customerAgency'
 import type { Customer } from './types'
 
 const STATUS_CFG: Record<string, string> = {
@@ -118,7 +120,26 @@ export default function CustomerInfoPanel({ customer, onEdit, onBack }: Props) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, color: '#9ca3af', width: 44, flexShrink: 0 }}>대리점</span>
-          <span style={{ fontSize: 13, color: '#111827' }}>{customer?.agency ?? '-'}</span>
+          {/* 이름은 대리점 줄에서 조인해 온다. 없으면 「직판」(lib/customerAgency.ts). */}
+          <span style={{ fontSize: 13, color: '#111827' }}>{agencyLabelOf(customer)}</span>
+        </div>
+
+        {/* 메모 — 「일본 직수입」·「인천 서구 이전」처럼 이 사업장의 한 줄 사정.
+            자리는 늘 둔다(아이콘 색으로 있는지 없는지 알린다 — MemoPopover 규칙).
+            고치는 길은 [정보 수정] 폼이다. 여기서는 읽기만 한다. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: '#9ca3af', width: 44, flexShrink: 0 }}>메모</span>
+          <MemoPopover
+            title={customer?.company_name ?? '사업장'}
+            value={customer?.note}
+            label="사업장 메모"
+          />
+          <span style={{
+            fontSize: 13, color: hasMemo(customer?.note) ? '#111827' : '#d1d5db',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {hasMemo(customer?.note) ? customer?.note : '없음'}
+          </span>
         </div>
       </div>
 

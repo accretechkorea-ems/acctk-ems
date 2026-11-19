@@ -20,6 +20,7 @@ import { useEffect } from 'react'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import AddressField from '@/components/customer/modals/AddressField'
 import ParentPicker from '@/components/customer/ParentPicker'
+import AgencyPicker from '@/components/customer/AgencyPicker'
 
 /** 칸 위의 작은 이름표 — 회사명·사업장명·상태가 나란히 서서 무엇인지 글자로 알려야 한다. */
 const fieldLabelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: '#9ca3af', marginBottom: 4 }
@@ -30,7 +31,8 @@ type CustomerForm = {
   /** 사업장명(선택). 회사명은 고른 회사 줄에 있다. */
   site_name: string
   address: string
-  agency: string
+  /** 대리점 — customers 의 대리점 줄(is_agency). null 이면 직판(lib/customerAgency.ts). */
+  agency_customer_id: number | null
   status: string
   parent_customer_id: number | null
 }
@@ -211,16 +213,14 @@ export default function AddCustomerModal({
             />
             <FieldError message={errors.address} />
 
-            <input
-              value={customerForm.agency}
-              onChange={(e) =>
-                setCustomerForm((prev) => ({
-                  ...prev,
-                  agency: e.target.value,
-                }))
-              }
-              placeholder="대리점(agency)"
-              style={inputStyle}
+            {/* 대리점 — 자유 입력이 아니라 등록된 대리점에서 고른다(AgencyPicker).
+                고르지 않으면 직판이다. */}
+            <div style={fieldLabelStyle}>대리점</div>
+            <AgencyPicker
+              value={customerForm.agency_customer_id}
+              onChange={id => setCustomerForm(prev => ({ ...prev, agency_customer_id: id }))}
+              disabled={isSavingCustomer}
+              inputStyle={inputStyle}
             />
           </div>
         </div>

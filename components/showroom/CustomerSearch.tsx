@@ -15,6 +15,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { useOutsideClick } from '@/hooks/useOutsideClick'
 import { Z } from '@/lib/zIndex'
+import { NOT_AGENCY_ONLY } from '@/lib/customerAgency'
 import { BLUE, BORDER, CARD_BG, TEXT, MUTED } from '@/components/common/ui'
 
 export type CustomerHit = {
@@ -61,6 +62,7 @@ export default function CustomerSearch({ value, onChange, placeholder = '업체�
       .select('customer_id, company_name, address, status')
       .is('deleted_at', null)
       .eq('is_parent', false)
+      .or(NOT_AGENCY_ONLY)   // 대리점 전용 줄은 쇼룸 사용 대상이 아니다
       // 회사명·사업장명 둘 다 — 「현대자동차」로도, 「감마세타」로도 걸려야 한다.
       .or(`company_name.ilike.%${q}%,site_name.ilike.%${q}%`)
       .limit(10)

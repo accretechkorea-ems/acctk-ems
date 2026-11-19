@@ -90,7 +90,7 @@ console.log('\n── 고객사 엑셀 — 폐기는 줄이 되지 않는다 ─
 {
   const row = {
     customer_id: 7, status: '활성', company_name: '가나다', region1: '경기', region2: '화성',
-    address: null, agency: null, parent_customer_id: null,
+    address: null, agency_customer_id: null, parent_customer_id: null,
     devices: [
       { device_name: '쓰는 장비', serial_number: 'A', deleted_at: null, status: '사용중' },
       { device_name: '폐기 장비', serial_number: 'B', deleted_at: null, status: '폐기' },

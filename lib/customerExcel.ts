@@ -16,6 +16,7 @@
 
 /** 장비 한 대 — 엑셀이 읽는 칸만. */
 import { isInUse } from './deviceStatus'
+import { CUSTOMER_AGENCY_SELECT, agencyLabelOf, type AgencyJoin } from './customerAgency'
 
 export type ExcelDevice = {
   device_name: string | null
@@ -33,14 +34,17 @@ export type ExcelCustomer = {
   region1: string | null
   region2: string | null
   address: string | null
-  agency: string | null
+  /** 대리점 — 조인해 온 대리점 줄의 이름(lib/customerAgency.ts). 직판이면 null. */
+  agency_customer_id?: number | null
+  agency_ref?: AgencyJoin
   parent_customer_id: number | null
   devices?: ExcelDevice[] | null
 }
 
 /** 조회할 때 쓰는 select 문자열. 쓰는 열만 읽고, 장비는 임베딩으로 한 번에 받는다. */
 export const CUSTOMER_EXCEL_SELECT =
-  'customer_id, status, company_name, region1, region2, address, agency, parent_customer_id,' +
+  'customer_id, status, company_name, region1, region2, address, parent_customer_id, ' +
+  CUSTOMER_AGENCY_SELECT + ',' +
   ' devices(device_name, device_name2, option, serial_number, install_year, install_date, deleted_at, status)'
 
 /** 조회 결과 한 줄(임베딩 포함). deleted_at 은 걸러내는 데만 쓴다. */
@@ -166,7 +170,8 @@ export function customerRowsAoA(
     const [region1, region2] = regionsOf(c)
     const head = [c.status ?? '', c.company_name ?? '', region1, region2]
     const tail = [
-      c.agency ?? '',
+      // 대리점이 없으면 「직판」 — 빈칸으로 두면 '아직 안 적었다' 와 구별되지 않는다.
+      agencyLabelOf(c),
       parentName(c.parent_customer_id ?? null),
       c.address ?? '',
     ]

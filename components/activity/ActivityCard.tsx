@@ -2,7 +2,7 @@
 
 import { type ReactNode } from 'react'
 import { CARD_BODY_STYLE, CARD_HEAD_STYLE, CountList, CountTotal, type CountRow } from '@/components/common/CountList'
-import { ACTIVITY_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
+import { activityTypeColor } from '@/lib/categoryColors'
 
 // 서비스 유형(단일 소스). 영업 4종까지 합친 전체 목록은 lib/activity.ts 의 ACTIVITY_TYPES.
 // (여기 두는 이유: 상세 모달의 유형 필터가 서비스 유형만 쓴다)
@@ -38,7 +38,8 @@ export default function ActivityCard({ engineer, counts, total, onClick, headerR
   const rows: CountRow[] = types
     .filter(t => (counts[t] ?? 0) > 0)
     .map(t => {
-      const sc = getCategoryColor(ACTIVITY_TYPE_COLORS, t)
+      // 관리 화면에서 더한 종류는 표에 색이 없다 — 영업 기본 한 색으로 떨어진다.
+      const sc = activityTypeColor(t)
       return { key: t, label: t, count: counts[t] ?? 0, color: sc.dot ?? sc.text }
     })
   return (

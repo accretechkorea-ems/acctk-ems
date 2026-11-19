@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { getDeviceLines, type Customer, type Device } from '@/lib/home'
+import { DIRECT_SALE_LABEL } from '@/lib/customerAgency'
 
 const STATUS_COLOR: Record<string, string> = {
   '활성': '#22c55e',
@@ -70,9 +71,10 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
         {customer.address ?? '주소 정보 없음 — 등록 필요'}
       </div>
 
-      {/* 대리점 */}
+      {/* 대리점 — 없으면 「직판」(lib/customerAgency.ts). 전에는 '-' 였는데, 빈칸과
+          「대리점을 안 거친 건」이 구별되지 않아 '-' 가 두 뜻으로 읽혔다. */}
       <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 8 }}>
-        대리점 {customer.agency ?? '-'}
+        대리점 {customer.agency_name ?? DIRECT_SALE_LABEL}
       </div>
 
       {/* 장비 태그 — 최대 4개 표시, 5개 이상은 힌트로 대체 */}

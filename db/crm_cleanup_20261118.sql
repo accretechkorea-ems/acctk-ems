@@ -962,7 +962,9 @@ where activity_type not in (select label from public.activity_types)
 group by 1 order by 2 desc;
 
 -- CHECK → FK. label 에 거는 이유 — sales_activities 의 기존 9줄을 한 줄도 쓰지 않는다.
-alter table public.sales_activities drop constraint sales_activities_activity_type_check;
+-- ※ 제약 이름은 DB 에 있던 실제 이름이다(`sales_activities_type_check`). 처음 쓴
+--   `sales_activities_activity_type_check` 는 틀린 추측이었고, 2026-11-19 적용 때 고쳤다.
+alter table public.sales_activities drop constraint sales_activities_type_check;
 alter table public.sales_activities
   add constraint sales_activities_activity_type_fkey
   foreign key (activity_type) references public.activity_types (label)
@@ -975,7 +977,7 @@ where conrelid = 'public.sales_activities'::regclass and conname like '%activity
 
 
 -- ═══════════════════════════════════════════════════════════════════════
--- ⑦ 마지막 제약 — 회사이거나 대리점이거나 부모가 있어야 한다(결정 10)
+-- ⑦ 마지막 제약 — 닫힌 줄이거나, 회사이거나 대리점이거나 부모가 있어야 한다(결정 10)
 -- ═══════════════════════════════════════════════════════════════════════
 
 -- ⚠ 걸기 전에 이것이 **0건**이어야 한다. 한 줄이라도 나오면 멈추고 그 줄을 먼저 처리하라.
@@ -984,9 +986,11 @@ from public.customers
 where deleted_at is null and not is_parent and not is_agency and parent_customer_id is null
 order by customer_id;
 
+-- 닫은 줄(deleted_at)은 제약에서 뺀다 — 병합으로 닫은 305·1730·1733·1734 와, 앞으로
+-- 닫을 줄들이 부모를 잃어도 제약에 걸리지 않아야 한다. 2026-11-19 적용본의 식이다.
 alter table public.customers
   add constraint customers_parent_or_company
-  check (is_parent or is_agency or parent_customer_id is not null);
+  check (deleted_at is not null or is_parent or is_agency or parent_customer_id is not null);
 
 -- 확인
 select conname, pg_get_constraintdef(oid)
@@ -1031,7 +1035,7 @@ select (select count(*) from public.customers where deleted_at is null) as 살�
 -- -- customer_id 를 다시 305 로 바꾸면 된다(옮긴 줄 수는 ③ 확인 select 에 남는다).
 --
 -- alter table public.sales_activities drop constraint sales_activities_activity_type_fkey;
--- alter table public.sales_activities add constraint sales_activities_activity_type_check
+-- alter table public.sales_activities add constraint sales_activities_type_check
 --   check (activity_type in ('전화상담','방문미팅','사양검토','경쟁입찰','리드 등록'));
 -- drop table public.activity_types;
 -- alter table public.customers drop column note, drop column is_agency, drop column agency_customer_id;

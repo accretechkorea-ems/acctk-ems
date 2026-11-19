@@ -16,7 +16,11 @@ export type Customer = {
   latitude: number | null
   longitude: number | null
   status: string | null
-  agency: string | null
+  /**
+   * 대리점 이름 — `agency_customer_id` 로 묶인 **대리점 줄의 company_name** 이다
+   * (lib/customerAgency.ts). 직판이면 null. 옛 `agency` 텍스트 칸은 읽지 않는다.
+   */
+  agency_name: string | null
   category: string | null
 }
 

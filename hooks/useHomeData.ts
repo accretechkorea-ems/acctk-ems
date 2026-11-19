@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { type Customer, type Device } from '@/lib/home'
 import { loadLastTouchMap, touchValue } from '@/lib/customerLastTouch'
 import { CUSTOMER_NAME_SELECT, customerDisplayName, parentNameOf } from '@/lib/customerLabel'
+import { CUSTOMER_AGENCY_SELECT, NOT_AGENCY_ONLY, agencyNameOf } from '@/lib/customerAgency'
 
 type Params = {
   setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>
@@ -23,10 +24,13 @@ export function useHomeData({
     const [customerRes, deviceRes, lastTouch] = await Promise.all([
       supabase
   .from('customers')
-  .select(`customer_id, ${CUSTOMER_NAME_SELECT}, address, latitude, longitude, status, agency, category`)
+  .select(`customer_id, ${CUSTOMER_NAME_SELECT}, ${CUSTOMER_AGENCY_SELECT}, address, latitude, longitude, status, category`)
         .is('deleted_at', null)
         // 부모 행(회사 묶음)은 지도 마커·업체 목록에 나오면 안 된다
         .eq('is_parent', false)
+        // 대리점 **전용** 줄도 고객사가 아니다(lib/customerAgency.ts). 대리점이면서
+        // 우리 장비를 쓰는 사업장 15곳은 부모가 있으므로 그대로 남는다.
+        .or(NOT_AGENCY_ONLY)
         .order('customer_id', { ascending: false })
         .range(0, 5000),
 
@@ -57,7 +61,8 @@ export function useHomeData({
         latitude: c.latitude == null ? null : Number(c.latitude),
         longitude: c.longitude == null ? null : Number(c.longitude),
    status: c.status ?? null,
-agency: c.agency ?? null,
+// 대리점 이름도 여기서 한 번 꺼낸다 — 카드·지도·검색은 이 칸만 읽는다.
+agency_name: agencyNameOf(c),
 category: c.category ?? null,
       }))
       setCustomers(normalizedCustomers)

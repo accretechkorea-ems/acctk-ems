@@ -33,13 +33,27 @@ export const ACTIVITY_TYPE_COLORS = {
   '리드 등록': SERVICE_TYPE_COLORS['유선기술지원'],
 } as const satisfies Record<string, CategoryColor>;
 
+/**
+ * 활동 유형 색 — 위 표에 없는 유형은 **영업 기본 한 색**으로 떨어진다.
+ *
+ * 영업활동 종류는 관리 화면에서 더할 수 있게 되었다(activity_types 표). 새 종류가
+ * 생길 때마다 여기에 색을 적을 수는 없고, 디자인 규칙상 새 색을 만들지도 않는다.
+ * 그래서 「영업 활동은 한 색」 — 통합 타임라인이 영업 4종을 한 색으로 묶는 것과 같은
+ * 값(액센트)을 쓴다. 서비스 유형은 코드에 고정돼 있어 늘 위 표에서 찾힌다.
+ */
+export function activityTypeColor(type: string | null | undefined): CategoryColor {
+  if (!type) return FALLBACK_COLOR;
+  return (ACTIVITY_TYPE_COLORS as Record<string, CategoryColor>)[type] ?? TIMELINE_KIND_COLORS['영업'];
+}
+
 /* 고객사 상세 통합 타임라인의 항목 종류 dot.
    서비스는 SERVICE_TYPE_COLORS 를 그대로 쓰고, 견적만 여기서 색을 갖는다.
    서비스 6색(파랑·보라·주황·자홍·초록·청록) 어느 것과도 겹치지 않는 중립 슬레이트. */
 export const TIMELINE_KIND_COLORS = {
   '견적': { text: '#475569', bg: '#f3f4f6', dot: '#64748b' },
-  // 영업 활동은 4종(전화상담·방문미팅·사양검토·경쟁입찰)을 한 색으로 묶는다.
+  // 영업 활동은 종류를 가리지 않고 한 색으로 묶는다.
   // 견적이 상태와 무관하게 한 색인 것과 같은 방식이며, 값은 기존 액센트를 그대로 쓴다.
+  // activityTypeColor 의 기본색(SALES_DEFAULT_COLOR)도 이 값이다.
   '영업': { text: '#234ea2', bg: '#eff4ff', dot: '#234ea2' },
   // 홀딩(미해결 이슈) — 견적의 슬레이트보다 흐린 중립. 새 값을 만들지 않고 기존 '흐림' 토큰을 쓴다.
   '홀딩': { text: '#6b7280', bg: '#f3f4f6', dot: '#9ca3af' },

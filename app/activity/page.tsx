@@ -12,7 +12,8 @@ import { withTeamPerms } from '@/lib/teamPerms'
 import { loadMe } from '@/lib/appData/me'
 import { loadEngineers } from '@/lib/appData/engineers'
 import ActivityCard from '@/components/activity/ActivityCard'
-import { ACTIVITY_TYPES } from '@/lib/activity'
+import { activityTypeOrder } from '@/lib/activity'
+import { loadActivityTypes } from '@/lib/activityTypes'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
 import { nowKSTParts, addDays } from '@/lib/date'
 import { countedVisitEnd } from '@/lib/serviceVisit'
@@ -99,6 +100,14 @@ export default function ActivityPage() {
   const [currentUser, setCurrentUser] = useState<Engineer | null>(null)
 
   const [selectedEngineer, setSelectedEngineer] = useState<Engineer | null>(null)
+  /**
+   * 카드에 세로로 세우는 유형 — 서비스 유형 + 영업 종류(activity_types 표) + **목록 밖 값**.
+   *
+   * 영업 종류가 표로 옮겨 가면서 이 목록은 조회할 때 정해진다. 목록 밖 값(관리 화면에서
+   * 비활성·개명된 옛 종류)도 뒤에 붙인다 — 집계에서 세면서 화면에서 감추면 줄과 합계가
+   * 어긋난다.
+   */
+  const [typeList, setTypeList] = useState<string[]>([])
 
   const fetchActivity = async (start: string, end: string) => {
     setLoading(true)
@@ -117,6 +126,10 @@ export default function ActivityPage() {
         setSelectedTeam(me.teams && inSalesStats(me) ? me.teams : '전체')
       }
     }
+
+    // 영업 종류 목록(activity_types 표가 정본). 캐시되어 조회마다 다시 읽히지 않는다.
+    const salesTypes = await loadActivityTypes()
+    const typeOrder = activityTypeOrder(salesTypes)
 
     const { data: seData } = await supabase
       .from('service_engineers')
@@ -155,7 +168,7 @@ export default function ActivityPage() {
 
     const result: ActivityRow[] = sortedEngineers.map((eng) => {
       const counts: Record<string, number> = {}
-      ACTIVITY_TYPES.forEach((t) => { counts[t] = 0 })
+      typeOrder.forEach((t) => { counts[t] = 0 })
 
       // 서비스 — 참여자 표(service_engineers)를 거쳐 사람별로 센다.
       ;(seData ?? [])
@@ -167,18 +180,24 @@ export default function ActivityPage() {
           }
         })
 
-      // 영업 활동 — 목록에 없는 유형은 서비스와 같은 규칙으로 무시한다.
+      // 영업 활동 — **목록에 없는 종류도 센다**. 관리 화면에서 비활성·개명된 종류의
+      // 과거 줄이 합계에서 조용히 빠지면 안 된다(그 값은 아래에서 줄로도 세운다).
       ;((saData ?? []) as SalesActivityRow[])
         .filter(a => a.engineer_id === eng.engineer_id)
         .forEach(a => {
-          if (a.activity_type && counts[a.activity_type] !== undefined) {
-            counts[a.activity_type]++
-          }
+          if (!a.activity_type) return
+          counts[a.activity_type] = (counts[a.activity_type] ?? 0) + 1
         })
 
       const total = Object.values(counts).reduce((a, b) => a + b, 0)
       return { engineer: eng, counts, total }
     })
+
+    // 목록 밖 값을 뒤에 붙인다 — 한 사람에게라도 세어진 종류는 줄로도 보여야 한다.
+    const extra = [...new Set(result.flatMap(r => Object.keys(r.counts)))]
+      .filter(t => !typeOrder.includes(t))
+      .sort()
+    setTypeList([...typeOrder, ...extra])
 
     setRows(result)
     setLoading(false)
@@ -319,7 +338,7 @@ export default function ActivityPage() {
                   engineer={row.engineer}
                   counts={row.counts}
                   total={row.total}
-                  types={ACTIVITY_TYPES}
+                  types={typeList}
                   onClick={() => setSelectedEngineer(row.engineer)}
                 />
               ))

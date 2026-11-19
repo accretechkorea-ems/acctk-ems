@@ -14,6 +14,7 @@
 // 내용만 쓴다. 그 규칙은 서버(/api/quote-duplicate · /api/quote-on-behalf)에 있다.
 
 import { useEffect, useRef } from 'react'
+import { NOT_AGENCY_ONLY } from '@/lib/customerAgency'
 import type { ReadonlyURLSearchParams } from 'next/navigation'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { CustomerResult, ExpenseRow, PriceItem, QuoteRow, RowKind } from '@/app/quote/types'
@@ -342,7 +343,7 @@ export function useQuotePrefill({
     if (customer) {
       setCustomerQuery(customer)
       supabase.from('customers').select('customer_id, company_name, address, status')
-        .is('deleted_at', null).eq('is_parent', false)
+        .is('deleted_at', null).eq('is_parent', false).or(NOT_AGENCY_ONLY)
         .or(`company_name.ilike.%${customer}%,site_name.ilike.%${customer}%`).limit(10)
         .then(({ data }) => {
           if (!data || data.length === 0) return

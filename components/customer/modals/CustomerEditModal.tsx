@@ -1,10 +1,13 @@
 'use client'
 
-import { useEffect, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import type { Customer, CustomerEditFormData } from '../types'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
-import ParentPicker from '@/components/customer/ParentPicker'
+import ParentPicker, { loadParents, type ParentOption } from '@/components/customer/ParentPicker'
+import AgencyPicker from '@/components/customer/AgencyPicker'
+import { INDUSTRIES } from '@/lib/leadOptions'
+import { MEMO_MAX } from '@/components/common/MemoPopover'
 import AddressField from './AddressField'
 
 type Props = {
@@ -27,14 +30,23 @@ const formOf = (c: Customer): CustomerEditFormData => ({
   company_name: c.company_name ?? '',
   site_name: c.site_name ?? '',
   address: c.address ?? '',
-  agency: c.agency ?? '',
+  agency_customer_id: c.agency_customer_id ?? null,
   status: c.status ?? '활성',
   parent_customer_id: c.parent_customer_id ?? null,
+  note: c.note ?? '',
+  new_company_industry: '',
 })
 
+const EMPTY_FORM: CustomerEditFormData = {
+  company_name: '', site_name: '', address: '', agency_customer_id: null,
+  status: '활성', parent_customer_id: null, note: '', new_company_industry: '',
+}
+
 export default function CustomerEditModal({ customer, isSaving, isDeleting, onClose, onSave, onDelete }: Props) {
-  const [form, setForm] = useState<CustomerEditFormData>({ company_name: '', site_name: '', address: '', agency: '', status: '활성', parent_customer_id: null })
-  const { errors, setErrors, clearError, validate } = useFieldErrors<'parent_customer_id' | 'address'>()
+  const [form, setForm] = useState<CustomerEditFormData>(EMPTY_FORM)
+  const { errors, setErrors, clearError, validate } = useFieldErrors<'parent_customer_id' | 'address' | 'new_company_industry'>()
+  /** 회사 목록 — 적어 둔 이름이 **이미 있는 회사인지** 가리는 데만 쓴다(ParentPicker 캐시). */
+  const [companies, setCompanies] = useState<ParentOption[]>([])
 
   useEffect(() => {
     if (customer) {
@@ -43,11 +55,32 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
     }
   }, [customer])
 
+  useEffect(() => {
+    let cancelled = false
+    loadParents().then(list => { if (!cancelled) setCompanies(list) })
+    return () => { cancelled = true }
+  }, [])
+
+  /**
+   * 저장하면 **회사를 새로 만드는가** — 회사를 고르지 않았고, 적혀 있는 이름이 회사
+   * 목록에 없을 때다. 그때는 분류를 받아야 한다(등록 폼·ParentPicker 와 같은 규칙).
+   * 목록에 같은 이름이 있으면 그 줄에 붙으므로 분류를 묻지 않는다.
+   */
+  const typedName = form.company_name.trim()
+  const knownCompany = useMemo(
+    () => companies.some(p => p.company_name.trim() === typedName),
+    [companies, typedName],
+  )
+  const willCreateCompany = form.parent_customer_id == null && !!typedName && !knownCompany
+
   if (!customer) return null
 
   // 검증은 여기(모달)에서 인라인으로 수집 → 통과 시에만 onSave(form)
   const handleSave = () => {
     const ok = validate({
+      new_company_industry: willCreateCompany && !form.new_company_industry
+        ? '새 회사의 분류를 선택해주세요'
+        : null,
       // 회사는 필수, 사업장명은 선택이다.
       // 회사 줄이 아직 없는 사업장(이관 전에 들어온 591곳)은 **이름만 적혀 있다** —
       // 그 이름으로 저장하면 회사를 찾거나 만들어 잇는다(hooks/customer/useCustomerCrud.ts).
@@ -105,6 +138,23 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
             />
             <FieldError message={errors.parent_customer_id} />
           </div>
+          {/* 회사를 새로 만들며 저장하는 경우에만 나타나는 칸 — 분류는 회사 줄에 들어간다.
+              고른 회사가 있거나 같은 이름의 회사가 이미 있으면 묻지 않는다. */}
+          {willCreateCompany && (
+            <div>
+              <label style={labelStyle}>{`「${typedName}」 분류 (새 회사)`}</label>
+              <select
+                value={form.new_company_industry}
+                disabled={isSaving}
+                onChange={e => { setForm(p => ({ ...p, new_company_industry: e.target.value })); clearError('new_company_industry') }}
+                style={errors.new_company_industry ? { ...fieldStyle, border: errBorder, cursor: 'pointer' } : { ...fieldStyle, cursor: 'pointer' }}
+              >
+                <option value="">분류 선택 (필수)</option>
+                {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+              </select>
+              <FieldError message={errors.new_company_industry} />
+            </div>
+          )}
           <div>
             <label style={labelStyle}>사업장명</label>
             <input value={form.site_name} onChange={(e) => setForm(p => ({ ...p, site_name: e.target.value }))} placeholder="ex) 감마세타엔진공장" style={fieldStyle} />
@@ -126,7 +176,29 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
           </div>
           <div>
             <label style={labelStyle}>대리점</label>
-            <input value={form.agency} onChange={(e) => setForm(p => ({ ...p, agency: e.target.value }))} placeholder="대리점" style={fieldStyle} />
+            {/* 자유 입력에서 **고르는 칸**으로 바뀌었다 — 같은 대리점이 여러 표기로
+                들어오던 것을 막는다(lib/customerAgency.ts). 고르지 않으면 직판이다. */}
+            <AgencyPicker
+              value={form.agency_customer_id}
+              onChange={id => setForm(p => ({ ...p, agency_customer_id: id }))}
+              disabled={isSaving}
+            />
+          </div>
+
+          <div>
+            <label style={labelStyle}>메모</label>
+            {/* 이름 칸에 섞여 들어오던 사정(「- 폐업」·「인천 서구 이전」)을 적는 자리다.
+                상세 정보 패널의 「메모」 줄이 이 값을 보여 준다. */}
+            <textarea
+              value={form.note}
+              onChange={e => setForm(p => ({ ...p, note: e.target.value.slice(0, MEMO_MAX) }))}
+              placeholder="ex) 일본 직수입 · 2026-03 충남 아산으로 사옥 이전"
+              rows={3}
+              style={{ ...fieldStyle, resize: 'vertical', fontSize: 13, lineHeight: 1.6, fontFamily: 'inherit' }}
+            />
+            <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4, textAlign: 'right' }}>
+              {`${form.note.length} / ${MEMO_MAX}`}
+            </div>
           </div>
 
           <div>

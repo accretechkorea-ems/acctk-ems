@@ -43,7 +43,8 @@ export const addCustomer = async ({
           company_name: combined,
           site_name: siteName || null,
           address: customerForm.address.trim(),
-          agency: customerForm.agency.trim() || null,
+          // 대리점은 줄을 가리킨다(lib/customerAgency.ts). 옛 agency 텍스트 칸은 쓰지 않는다.
+          agency_customer_id: customerForm.agency_customer_id ?? null,
           status: customerForm.status,
           // 소속회사(선택). 나중에 따로 UPDATE 하면 실패했을 때 연결이 빠진 채 남으므로 함께 넣는다.
           parent_customer_id: customerForm.parent_customer_id ?? null,

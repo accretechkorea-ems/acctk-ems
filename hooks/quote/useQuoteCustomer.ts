@@ -21,6 +21,7 @@ import { useListKeyboard } from '@/hooks/useListKeyboard'
 import type { CustomerResult } from '@/app/quote/types'
 import type { SalesOpportunity } from '@/components/customer/types'
 import { parentCompanyName } from '@/components/customer/ParentPicker'
+import { NOT_AGENCY_ONLY } from '@/lib/customerAgency'
 
 export type UseQuoteCustomerArgs = {
   supabase: SupabaseClient
@@ -62,16 +63,29 @@ export function useQuoteCustomer({ supabase, clearError }: UseQuoteCustomerArgs)
   const customerListRef = useRef<HTMLDivElement | null>(null)
   const euListRef = useRef<HTMLDivElement | null>(null)
 
+  /**
+   * 사명 칸의 검색 — **대리점 체크에 따라 찾는 대상이 다르다**.
+   *
+   *   직판   고객사(사업장). 대리점 전용 줄은 빼고 찾는다.
+   *   대리점 **대리점 줄만**(is_agency). 이 칸의 값이 곧 quotes.dealer_id 가 되므로,
+   *          고객사를 대리점 자리에 넣으면 대리점별 집계가 또 어긋난다.
+   *
+   * 대리점이면서 우리 고객인 사업장(이룸지텍·하나무역 등 15곳)은 양쪽에 다 뜬다 —
+   * 그 줄은 대리점이기도 하고 고객이기도 하다(lib/customerAgency.ts).
+   */
   const handleCustomerSearch = async (q: string) => {
     setCustomerQuery(q)
     if (!q.trim()) { setCustomerResults([]); return }
-    const { data } = await supabase
+    let query = supabase
       .from('customers').select('customer_id, company_name, address, status')
       .is('deleted_at', null)
-      .eq('is_parent', false)   // 부모 행(회사 묶음)은 견적 대상이 아니다
       // 회사명·사업장명 둘 다 건다(합친 이름이 company_name 에 들어 있지만,
       // 사업장명만으로 찾는 사람도 있다).
-      .or(`company_name.ilike.%${q}%,site_name.ilike.%${q}%`).limit(10)
+      .or(`company_name.ilike.%${q}%,site_name.ilike.%${q}%`)
+    query = isDealer
+      ? query.eq('is_agency', true)
+      : query.eq('is_parent', false).or(NOT_AGENCY_ONLY)   // 부모 행(회사 묶음)·대리점 전용 줄 제외
+    const { data } = await query.limit(10)
     setCustomerResults(data || [])
     setCustomerSearchOpen(true)
   }
@@ -126,6 +140,7 @@ export function useQuoteCustomer({ supabase, clearError }: UseQuoteCustomerArgs)
       .from('customers').select('customer_id, company_name, address, status')
       .is('deleted_at', null)
       .eq('is_parent', false)   // 부모 행(회사 묶음)은 견적 대상이 아니다
+      .or(NOT_AGENCY_ONLY)      // 대리점 전용 줄은 최종 사용 업체가 아니다
       .or(`company_name.ilike.%${q}%,site_name.ilike.%${q}%`).limit(10)
     setEuResults(data || [])
     setEuSearchOpen(true)

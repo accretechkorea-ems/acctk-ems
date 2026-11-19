@@ -16,7 +16,7 @@ import { INSTALL_SERVICE_TYPE, prepSummary, type PrepSummary } from '@/lib/insta
 import { countedVisitEnd } from '@/lib/serviceVisit'
 import { todayKST, daysBetween, nowKSTParts, nowHmKST } from '@/lib/date'
 import { SERVICE_TYPES } from '@/components/activity/ActivityCard'
-import { SALES_TYPES } from '@/lib/activity'
+import { loadActivityTypes } from '@/lib/activityTypes'
 import { PENDING_STATUS, quoteExpiry } from '@/lib/quoteStatus'
 import type { Holding, InstallPrep, SalesActivity, SalesOpportunity } from '@/components/customer/types'
 
@@ -208,7 +208,8 @@ export function useDashboard80() {
   const [opportunities, setOpportunities] = useState<SalesOpportunity[]>([])
   const [lastActivityByOpp, setLastActivityByOpp] = useState<Map<number, string>>(new Map())
   const [oppActivities, setOppActivities] = useState<SalesActivity[]>([])
-  const [salesActivity, setSalesActivity] = useState<ActivityStats>(() => emptyActivity(SALES_TYPES))
+  // 영업 종류는 표가 정본이라 처음에는 빈 목록이다(조회가 끝나면 채워진다 — lib/activityTypes.ts).
+  const [salesActivity, setSalesActivity] = useState<ActivityStats>(() => emptyActivity([]))
   const [serviceActivity, setServiceActivity] = useState<ActivityStats>(() => emptyActivity(SERVICE_TYPES))
   const [expiringQuotes, setExpiringQuotes] = useState<ExpiringQuote[]>([])
   const [upcomingVisits, setUpcomingVisits] = useState<UpcomingVisit[]>([])
@@ -310,9 +311,12 @@ export function useDashboard80() {
 
       if (salesRes.error) console.error('[dashboard80] sales activity failed', salesRes.error)
       if (serviceRes.error) console.error('[dashboard80] service activity failed', serviceRes.error)
+      // 사람이 고르는 종류만 기본 줄로 세운다(system 인 「리드 등록」은 자료가 있을 때만 붙는다).
+      const salesLabels = (await loadActivityTypes()).filter(t => !t.is_system).map(t => t.label)
+      if (!alive.current) return false
       setSalesActivity(countByType(
         ((salesRes.data ?? []) as { activity_type: string | null }[]).map(r => ({ type: r.activity_type })),
-        SALES_TYPES,
+        salesLabels,
       ))
       setServiceActivity(countByType(
         ((serviceRes.data ?? []) as { service_type: string | null }[]).map(r => ({ type: r.service_type })),

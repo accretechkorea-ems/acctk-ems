@@ -21,6 +21,7 @@ import { invalidateEngineers } from '@/lib/appData/engineers'
 import { CHECKABLE_MENUS, checkableGroups, MENU_PERMS } from '@/lib/menuPerms'
 import AccessGate from '@/components/common/AccessGate'
 import QuoteCategoryManager from '@/components/admin/QuoteCategoryManager'
+import ActivityTypeManager from '@/components/admin/ActivityTypeManager'
 import PriceListImportModal from '@/components/admin/priceList/PriceListImportModal'
 import { selectableOffices, invalidateOffices, type Office } from '@/lib/offices'
 import { geocodeAddress } from '@/lib/geocode'
@@ -255,6 +256,7 @@ function AdminPageInner() {
   const [showPresetModal, setShowPresetModal] = useState(false)
   // ── 견적 분류 관리 ── 목록·쓰기는 모달 컴포넌트가 들고 있다(RLS 가 권한을 본다).
   const [showCategoryModal, setShowCategoryModal] = useState(false)
+  const [showActivityTypeModal, setShowActivityTypeModal] = useState(false)
   // 가격표 등록 — 종류·엑셀 읽기·서버 호출은 모달 컴포넌트가 들고 있다.
   const [showPriceListModal, setShowPriceListModal] = useState(false)
   const [presets, setPresets] = useState<ExpensePreset[]>([])
@@ -1341,6 +1343,26 @@ function AdminPageInner() {
             </button>
           </div>
 
+          {/* 영업활동 종류 — 견적 분류와 같은 모양(표 + RLS). 아이콘은 선 아이콘을 쓴다. */}
+          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ height: 28, marginBottom: 12, display: 'flex', alignItems: 'center', color: BLUE }}>
+              {/* lucide list-checks */}
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 7 5 9 9 5" /><polyline points="3 17 5 19 9 15" /><line x1="13" y1="7" x2="21" y2="7" /><line x1="13" y1="17" x2="21" y2="17" />
+              </svg>
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>영업활동 종류 관리</div>
+            <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>영업 활동을 적을 때 고르는 종류(전화상담 · 방문미팅 등)를 추가하거나 이름·순서·사용 여부를 바꿉니다.</div>
+            {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
+            <div style={{ flex: 1 }} />
+            <button
+              onClick={() => setShowActivityTypeModal(true)}
+              disabled={!isSuperAdmin(currentEngineer)}
+              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
+              관리하기
+            </button>
+          </div>
+
           <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>📊</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>가격표 등록</div>
@@ -1820,6 +1842,14 @@ function AdminPageInner() {
       {showCategoryModal && (
         <QuoteCategoryManager
           onClose={() => setShowCategoryModal(false)}
+          canEdit={isSuperAdmin(currentEngineer)}
+        />
+      )}
+
+      {/* ── 영업활동 종류 관리 모달 ── 견적 분류와 같은 모양이다(표 + RLS). */}
+      {showActivityTypeModal && (
+        <ActivityTypeManager
+          onClose={() => setShowActivityTypeModal(false)}
           canEdit={isSuperAdmin(currentEngineer)}
         />
       )}

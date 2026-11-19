@@ -1,3 +1,5 @@
+import type { AgencyJoin } from '@/lib/customerAgency'
+
 export type Customer = {
   customer_id: number
   /** 지금 화면에 보이는 이름. 새로 등록한 줄은 「회사명 사업장명」을 합쳐 둔 값이다. */
@@ -6,11 +8,17 @@ export type Customer = {
   site_name?: string | null
   address: string | null
   status: string | null
-  agency: string | null
+  /** 대리점 줄(customers.is_agency)을 가리키는 FK. null 이면 직판. */
+  agency_customer_id?: number | null
+  /** 조인해 온 대리점 이름 — lib/customerAgency.ts 의 CUSTOMER_AGENCY_SELECT 로 읽는다. */
+  agency_ref?: AgencyJoin
+  /** 자유 메모(일본 직수입·이전·사명 변경 같은 한 줄 사정). 상세·수정 폼에서 본다. */
+  note?: string | null
   // 사업장을 묶는 소속회사. 상세는 select(*) 로 읽으므로 값이 들어온다.
   // 목록·검색용 조회는 이 컬럼을 가져오지 않으므로 선택 속성으로 둔다.
   parent_customer_id?: number | null
   is_parent?: boolean | null
+  is_agency?: boolean | null
 }
 
 export type Device = {
@@ -264,7 +272,19 @@ export type CustomerEditFormData = {
   company_name: string
   site_name: string
   address: string
-  agency: string
+  /** 대리점 줄의 id. null 이면 직판. */
+  agency_customer_id: number | null
   status: string
+  /** 사업장을 묶는 소속회사. null 이면 적혀 있는 company_name 으로 찾거나 만든다. */
   parent_customer_id: number | null
+  /** 자유 메모. 빈칸이면 저장할 때 null 로 들어간다. */
+  note: string
+  /**
+   * 회사를 **새로 만들며** 저장할 때의 분류 — 회사 줄에 들어간다.
+   *
+   * 부모 없는 사업장을 고칠 때 회사명을 골라 두지 않으면 적혀 있는 이름으로 회사를
+   * 만든다. 전에는 그 회사에 분류가 비어 있었다(등록 폼·ParentPicker 의 「새 회사로
+   * 등록」은 분류를 받는데, 이 길만 받지 않았다). 그래서 같은 값을 여기서도 받는다.
+   */
+  new_company_industry: string
 }

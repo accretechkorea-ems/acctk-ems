@@ -78,7 +78,8 @@ console.log('\n── 줄 펼치기 ──')
 const sample = [
   {
     customer_id: 1, status: '활성', company_name: '가나다전자', region1: '경기', region2: '화성',
-    address: '경기도 화성시 1', agency: '한빛', parent_customer_id: 9,
+    // 대리점은 조인해 온 줄의 이름이다(lib/customerAgency.ts) — 옛 agency 텍스트가 아니다.
+    address: '경기도 화성시 1', agency_customer_id: 77, agency_ref: { company_name: '한빛' }, parent_customer_id: 9,
     devices: [
       { device_name: 'WAFER', device_name2: 'W-200', option: 'A', serial_number: 'SN2', install_year: '2020', install_date: '5' },
       { device_name: 'PROBER', device_name2: 'P-8', option: null, serial_number: 'SN1', install_year: '2016', install_date: '3' },
@@ -86,7 +87,7 @@ const sample = [
   },
   {
     customer_id: 2, status: '잠재', company_name: '라마바', region1: null, region2: null,
-    address: null, agency: null, parent_customer_id: null, devices: [],
+    address: null, agency_customer_id: null, parent_customer_id: null, devices: [],
   },
 ]
 const aoa = customerRowsAoA(sample, id => (id === 9 ? '가나다홀딩스' : ''))
@@ -95,15 +96,16 @@ eq('첫 줄은 머리글', aoa[0], [...CUSTOMER_EXCEL_HEADER])
 eq('장비는 납입년·월 이른 것부터', [aoa[1][4], aoa[2][4]], ['PROBER', 'WAFER'])
 eq('장비 줄 전체', aoa[1],
   ['활성', '가나다전자', '경기', '화성', 'PROBER', 'P-8', '', 2016, 3, 'SN1', '한빛', '가나다홀딩스', '경기도 화성시 1'])
+// 대리점이 없으면 「직판」이 찍힌다 — 빈칸으로 두면 '아직 안 적었다' 와 구별되지 않는다.
 eq('장비 없는 고객사는 장비 칸 6개가 비고 뒤는 그대로', aoa[3],
-  ['잠재', '라마바', '', '', '', '', '', '', '', '', '', '', ''])
+  ['잠재', '라마바', '', '', '', '', '', '', '', '', '직판', '', ''])
 eq('모든 줄의 칸 수가 열 수와 같다', [...new Set(aoa.map(r => r.length))], [13])
 
 console.log('\n── 지워진 장비는 줄이 되지 않는다 ──')
 {
   const raw = {
     customer_id: 3, status: '활성', company_name: '사아자', region1: '충남', region2: '천안',
-    address: null, agency: null, parent_customer_id: null,
+    address: null, agency_customer_id: null, parent_customer_id: null,
     devices: [
       { device_name: '산 장비', device_name2: null, option: null, serial_number: 'A', install_year: '2020', install_date: '1', deleted_at: null },
       { device_name: '지운 장비', device_name2: null, option: null, serial_number: 'B', install_year: '2021', install_date: '2', deleted_at: '2026-01-01' },

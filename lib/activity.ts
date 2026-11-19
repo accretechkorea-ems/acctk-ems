@@ -7,12 +7,21 @@
 // (기존 카드 집계가 참여자 기준이라 2명이 함께 간 1건은 두 사람에게 각각 1건으로 잡힌다 — 그대로 유지)
 
 import { SERVICE_TYPES } from '@/components/activity/ActivityCard'
-import { ACTIVITY_TYPES as SALES_TYPES } from '@/components/customer/modals/SalesActivityModal'
+import type { ActivityType } from '@/lib/activityTypes'
 
-export { SALES_TYPES }
-
-/** 카드에 세로로 나열하는 순서 — 서비스 6종 다음에 영업 4종. */
-export const ACTIVITY_TYPES: string[] = [...SERVICE_TYPES, ...SALES_TYPES]
+/**
+ * 카드에 세로로 나열하는 순서 — **서비스 유형 다음에 영업 종류**.
+ *
+ * 영업 종류는 더 이상 코드 상수가 아니다(`public.activity_types` 표가 정본 —
+ * lib/activityTypes.ts). 그래서 상수 배열이 아니라 **표를 받아 만드는 함수**다.
+ *
+ * 영업 쪽은 비활성·system 까지 전부 넣는다 — 이 순서는 「고를 수 있는 것」이 아니라
+ * 「집계에 나올 수 있는 것」이고, 비활성 종류의 과거 줄도 집계에 남아야 한다.
+ * 표를 아직 못 읽었으면 서비스 유형만 돌려준다(그 뒤 다시 그려진다).
+ */
+export function activityTypeOrder(salesTypes: ActivityType[]): string[] {
+  return [...SERVICE_TYPES, ...salesTypes.map(t => t.label)]
+}
 
 export type ActivitySource = 'service' | 'sales'
 

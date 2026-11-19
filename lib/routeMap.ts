@@ -23,12 +23,26 @@ export type BuildRouteResult = {
   excluded: ActivityEntry[]   // 비방문(원격·전화)으로 제외한 기록
 }
 
-// 실제 방문이 아닌 유형 — 지도 마커에서 제외한다.
-// 유선기술지원(서비스)·전화상담(영업) 둘 다 원격이다.
-// 사양검토·경쟁입찰은 현장에서 이뤄지는 것으로 보고 포함한다.
-const REMOTE_TYPES = new Set(['유선기술지원', '전화상담'])
+/**
+ * 실제 방문이 아닌 **서비스** 유형 — 지도 마커에서 제외한다. 서비스 유형은 코드에
+ * 고정돼 있으므로(components/activity/ActivityCard.tsx) 여기 둔다.
+ *
+ * 영업 종류는 표가 정한다 — `activity_types.is_remote`. 전에는 여기에 '전화상담' 을
+ * 함께 적어 두었는데, 종류를 관리 화면에서 더할 수 있게 되면서 새 종류가 원격인지를
+ * 코드가 알 길이 없어졌다. 그래서 buildRoute 가 그 목록을 **받는다**.
+ */
+export const REMOTE_SERVICE_TYPES: readonly string[] = ['유선기술지원']
 
-export function buildRoute(entries: ActivityEntry[]): BuildRouteResult {
+/**
+ * @param remoteSalesTypes 비방문 영업 종류의 label. lib/activityTypes.ts 의
+ *   remoteActivityTypes(표) 를 그대로 넘긴다. 빼먹으면 원격 활동이 지도에 찍히므로
+ *   기본값을 두지 않는다(타입이 부르는 쪽을 막는다).
+ */
+export function buildRoute(
+  entries: ActivityEntry[],
+  remoteSalesTypes: readonly string[],
+): BuildRouteResult {
+  const REMOTE_TYPES = new Set<string>([...REMOTE_SERVICE_TYPES, ...remoteSalesTypes])
   // 1) (날짜, 업체) 로 그룹핑 — 같은 날 같은 업체는 마커 1개.
   //    업체가 없는 기록(customerId null)은 지도에 올릴 자리가 없어 건너뛴다.
   const groups = new Map<string, ActivityEntry[]>()

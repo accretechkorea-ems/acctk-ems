@@ -5,6 +5,7 @@ import { loadKakaoMap } from '@/lib/loadKakaoMap'
 import { createClient } from '@/lib/supabase/client'
 import type { RouteStop } from '@/lib/routeMap'
 import { useOffices, findOffice } from '@/lib/offices'
+import { NOT_AGENCY_ONLY } from '@/lib/customerAgency'
 import { Z } from '@/lib/zIndex'
 import { useOverlayEsc } from '@/components/common/overlayStack'
 
@@ -448,6 +449,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
             .select('customer_id, company_name, latitude, longitude')
             .is('deleted_at', null)
             .eq('is_parent', false)   // 부모 행(회사 묶음)은 지도에 찍지 않는다
+            .or(NOT_AGENCY_ONLY)      // 대리점 전용 줄도 고객사가 아니다(lib/customerAgency.ts)
             .not('latitude', 'is', null)
             .not('longitude', 'is', null)
           if (error) throw error

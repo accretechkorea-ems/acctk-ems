@@ -43,8 +43,11 @@ export function useCustomerCrud({ customer, fetchDetail }: Args) {
        * 회사 줄을 정한다.
        *
        * 골라 둔 회사가 있으면 그 줄이고, **없으면 적혀 있는 회사명으로 찾거나 만든다** —
-       * 이관 전에 들어온 사업장(회사 줄이 없는 591곳)을 한 줄씩 손으로 옮기는 길이다.
-       * 여기서 만든 회사에는 분류가 비어 있다(관리자 화면의 「회사 관리」에서 채운다).
+       * 회사 줄이 없는 사업장을 한 줄씩 손으로 옮기는 길이다.
+       *
+       * 새로 만드는 회사에는 **분류를 넣는다**(form.new_company_industry). 전에는 이
+       * 길로 만든 회사만 분류가 비어 있었다 — 등록 폼과 ParentPicker 의 「새 회사로
+       * 등록」은 분류를 받는데 여기만 받지 않아, 분류 없는 회사가 계속 생겼다.
        */
       let parentId = form.parent_customer_id
       let companyName = ''
@@ -64,8 +67,15 @@ export function useCustomerCrud({ customer, fetchDetail }: Args) {
         if (found) {
           parentId = found.customer_id
         } else {
+          const industry = (form.new_company_industry ?? '').trim()
+          if (!industry) {
+            setIsSavingCustomerEdit(false)
+            toast.error('새 회사의 분류를 선택해주세요')
+            return
+          }
           const { data: made, error: makeErr } = await supabase.from('customers')
-            .insert({ company_name: companyName, is_parent: true }).select('customer_id').single()
+            .insert({ company_name: companyName, is_parent: true, industry })
+            .select('customer_id').single()
           if (makeErr || !made) {
             setIsSavingCustomerEdit(false)
             toast.error(makeErr?.message || '회사를 만들지 못했습니다')
@@ -82,7 +92,10 @@ export function useCustomerCrud({ customer, fetchDetail }: Args) {
 
       const { error } = await supabase.from('customers').update({
         company_name: combined, site_name: siteName || null, address: form.address.trim(),
-        agency: form.agency.trim() || null, status: form.status,
+        // 대리점은 줄을 가리킨다(lib/customerAgency.ts). 옛 agency 텍스트 칸은 쓰지 않는다.
+        agency_customer_id: form.agency_customer_id ?? null,
+        status: form.status,
+        note: form.note.trim() || null,
         parent_customer_id: parentId,
         ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : null),
       }).eq('customer_id', customer.customer_id)
