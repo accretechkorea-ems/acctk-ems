@@ -1,607 +1,391 @@
 'use client'
 
-import {
-  CARD_BG,
-  INPUT_BORDER,
-  PANEL_BG,
-  TEXT_PRIMARY,
-  WHITE_BUTTON_BG,
-  WHITE_BUTTON_TEXT,
-  inputStyle,
-  dateInputStyle,
-  sectionCardStyle,
-  isEmptyDeviceForm,
-  isEmptyContactForm,
-  type Contact,
-  type NewDeviceForm,
-} from '@/lib/home'
+/**
+ * 업체 등록 — **한 폼으로 회사·사업장·대리점을 모두 받는다.**
+ *
+ *   ① 종류   고객사 | 대리점
+ *   ② 업체   업체명(한글)·영문명·분류          ← 회사 줄이 된다
+ *   ③ 사업장 사업장명·주소·대리점·상태 (여러 곳) ← 사업장 줄이 된다
+ *   ④ 담당자 선택. 사업장이 여럿이면 어느 곳인지 고른다
+ *
+ * ── 기존 회사면 ② 가 잠긴다 ──────────────────────────────────────────────
+ *   업체명을 적는 동안 회사 목록에서 같은 이름을 찾는다. 있으면 「기존 회사에 사업장
+ *   추가」로 바뀌어 ② 는 읽기 전용이 된다 — 같은 회사가 이름만 조금 달라 두 줄로
+ *   갈리는 것이 이번 정리의 가장 큰 원인이었다.
+ *   회사 카드의 「+ 사업장 추가」로 열면 처음부터 그 모드다.
+ *
+ * 장비 칸은 없다. 장비는 사업장 상세의 장비 탭에서 넣는다 — 등록할 때는 대개 아직
+ * 장비가 정해지지 않았고, 폼만 길어졌다.
+ */
+
+import { useEffect, useMemo, useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
-import { useEffect } from 'react'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import AddressField from '@/components/customer/modals/AddressField'
-import ParentPicker from '@/components/customer/ParentPicker'
 import AgencyPicker from '@/components/customer/AgencyPicker'
+import { loadParents, type ParentOption } from '@/components/customer/ParentPicker'
+import { INDUSTRIES } from '@/lib/leadOptions'
+import { addCustomerEntry, type NewSiteInput } from '@/lib/addCustomer'
 
-/** 칸 위의 작은 이름표 — 회사명·사업장명·상태가 나란히 서서 무엇인지 글자로 알려야 한다. */
-const fieldLabelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: '#9ca3af', marginBottom: 4 }
+const BORDER = '#ebebeb'
+const TEXT = '#111827'
+const SUB = '#6b7280'
+const MUTED = '#9ca3af'
+const BLUE = '#234ea2'
+const NEUTRAL = '#f3f4f6'
 
-type CustomerForm = {
-  /** 회사명 + 사업장명을 합쳐 둔 값. 이관이 끝날 때까지 화면들이 이 칸을 읽는다. */
-  company_name: string
-  /** 사업장명(선택). 회사명은 고른 회사 줄에 있다. */
-  site_name: string
-  address: string
-  /** 대리점 — customers 의 대리점 줄(is_agency). null 이면 직판(lib/customerAgency.ts). */
-  agency_customer_id: number | null
-  status: string
-  parent_customer_id: number | null
+const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: MUTED, marginBottom: 4 }
+const inputStyle: React.CSSProperties = {
+  width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  boxSizing: 'border-box', color: TEXT, background: '#fff', outline: 'none', fontSize: 14,
 }
+const sectionStyle: React.CSSProperties = {
+  border: `1px solid ${BORDER}`, borderRadius: 8, padding: 16, marginBottom: 14, background: '#fff',
+}
+const sectionTitle: React.CSSProperties = { fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 12 }
 
-// 검증 에러 key: 스칼라 3종 + 장비 항목별(device_0, device_1 …) — 인덱스는 템플릿 리터럴로 타입 안전
-type ErrKey = 'parent_customer_id' | 'address' | 'contact_name' | `device_${number}`
+const emptySite = (): NewSiteInput => ({ siteName: '', address: '', agencyId: null, status: '활성' })
+
+type ErrKey = 'companyName' | 'nameEn' | 'industry' | 'contact_name' | `site_${number}`
 
 type Props = {
-  isOpen: boolean
-  isSavingCustomer: boolean
-  /** 회사를 고정한 채 연다(회사 카드의 「+ 사업장 추가」). */
-  lockCompany?: boolean
   /**
-   * **대리점 모드** — 같은 폼으로 대리점 줄을 만든다.
-   *   · 회사명 칸 → 「대리점명」 한 줄(회사를 고르지 않는다 — 대리점은 회사에 묶이지 않는다)
-   *   · 사업장명·대리점 칸은 없다(대리점의 대리점은 없다)
-   *   · 담당자·장비도 받지 않는다 — 대리점은 우리 장비를 쓰는 곳이 아니다. 쓰는 곳이면
-   *     사업장으로도 따로 등록한다(지금 대리점 45곳 중 15곳이 그렇다).
+   * 열자마자 「기존 회사에 사업장 추가」로 둘 회사. 회사 카드의 「+ 사업장 추가」와
+   * 회사를 골라 둔 채 누른 헤더의 「+ 업체 등록」이 이 값을 준다.
+   *
+   * 이 조각은 **열 때만 그려진다**(부르는 쪽이 key 를 준다) — 그래서 열 때마다 칸을
+   * 비우는 effect 가 필요 없다. 처음 값은 useState 의 초기값이 전부다.
    */
-  mode?: 'site' | 'agency'
-  customerForm: CustomerForm
-  setCustomerForm: React.Dispatch<React.SetStateAction<CustomerForm>>
-  contactForm: Contact
-  setContactForm: React.Dispatch<React.SetStateAction<Contact>>
-  deviceForms: NewDeviceForm[]
-  updateDeviceForm: (
-    index: number,
-    field: keyof NewDeviceForm,
-    value: string | File | null
-  ) => void
-  addDeviceFormCard: () => void
-  removeDeviceFormCard: (index: number) => void
+  presetCompanyId?: number | null
   onClose: () => void
-  onSave: () => void
+  /** 저장이 끝났다 — 화면이 목록을 다시 읽고 메시지를 띄운다. */
+  onSaved: (message: string) => void
+  onError: (message: string) => void
 }
 
-export default function AddCustomerModal({
-  isOpen,
-  isSavingCustomer,
-  lockCompany,
-  mode = 'site',
-  customerForm,
-  setCustomerForm,
-  contactForm,
-  setContactForm,
-  deviceForms,
-  updateDeviceForm,
-  addDeviceFormCard,
-  removeDeviceFormCard,
-  onClose,
-  onSave,
-}: Props) {
-  const { errors, setErrors, clearError, validate } = useFieldErrors<ErrKey>()
-  const isAgency = mode === 'agency'
-  // 모달 열림/닫힘(gate=isOpen) 시 에러 초기화
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setErrors({}) }, [isOpen])
+export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, onError }: Props) {
+  const { errors, clearError, validate } = useFieldErrors<ErrKey>()
+  const [kind, setKind] = useState<'customer' | 'agency'>('customer')
+  const [companyName, setCompanyName] = useState('')
+  const [nameEn, setNameEn] = useState('')
+  const [industry, setIndustry] = useState('')
+  const [sites, setSites] = useState<NewSiteInput[]>([emptySite()])
+  const [contact, setContact] = useState({ name: '', department: '', position: '', phone: '', siteIndex: 0 })
+  const [saving, setSaving] = useState(false)
+  const [companies, setCompanies] = useState<ParentOption[]>([])
 
-  if (!isOpen) return null
+  // 회사 목록 — 적은 이름이 **이미 있는 회사인지** 가리는 데 쓴다(ParentPicker 캐시를 함께 쓴다).
+  useEffect(() => {
+    let cancelled = false
+    loadParents().then(list => { if (!cancelled) setCompanies(list) })
+    return () => { cancelled = true }
+  }, [])
 
-  // 장비 카드 삭제 시 인덱스가 밀리므로 device_* 에러는 전부 정리 (스칼라 에러는 유지)
-  const clearDeviceErrors = () => setErrors(prev =>
-    Object.fromEntries(Object.entries(prev).filter(([k]) => !k.startsWith('device_'))) as Partial<Record<ErrKey, string>>
+  /** 고정된 회사(「+ 사업장 추가」로 열었을 때) — 이름·영문명·분류는 그 줄의 값을 보여 준다. */
+  const preset = useMemo(
+    () => (presetCompanyId == null ? null : companies.find(c => c.customer_id === presetCompanyId) ?? null),
+    [companies, presetCompanyId],
   )
 
-  // 사용자 검증은 여기(모달)에서 인라인으로 한꺼번에 수집. 통과해야만 onSave() → addCustomer 호출.
-  // 장비·담당자는 선택 사항이다(신규 영업 업체는 아직 장비도 담당자도 없다).
-  // 다만 뭔가 입력했다면 그 안의 필수 칸은 그대로 검증한다.
-  const handleSave = () => {
-    const rules: Partial<Record<ErrKey, string | null>> = {
-      // 회사는 필수다 — 사업장명은 비워 둘 수 있다(사업장이 한 곳이면 회사명만으로 부른다).
-      parent_customer_id: isAgency
-        ? (customerForm.company_name.trim() ? null : '대리점명을 입력해주세요')
-        : (customerForm.parent_customer_id == null ? '회사명을 선택해주세요' : null),
-      // 대리점은 주소를 **선택**으로 둔다 — 지금 등록된 45곳 중 29곳이 주소가 없다
-      // (이름만으로 부르는 거래처다). 사업장은 지도에 찍어야 하므로 그대로 필수다.
-      address: isAgency || customerForm.address.trim() ? null : '주소를 입력해주세요',
-      contact_name: isEmptyContactForm(contactForm) || contactForm.name.trim()
-        ? null
-        : '고객 담당자 이름을 입력해주세요',
-    }
-    deviceForms.forEach((d, i) => {
-      rules[`device_${i}`] = isEmptyDeviceForm(d) || d.device_name.trim()
-        ? null
-        : '장비 라인업을 입력해주세요'
-    })
-    if (!validate(rules)) return
-    onSave()
+  /** 적은 이름과 **같은 이름의 회사**. 있으면 그 줄에 사업장을 더한다. */
+  const matched = useMemo(() => {
+    const q = companyName.trim().toLowerCase()
+    if (!q) return null
+    return companies.find(c => c.company_name.trim().toLowerCase() === q) ?? null
+  }, [companies, companyName])
+
+  const isAgency = kind === 'agency'
+  /** 이 회사에 사업장만 더하는 중인가 — 고정된 회사이거나, 적은 이름이 이미 있는 회사다. */
+  const company = preset ?? (isAgency ? null : matched)
+  const existing = company != null
+  /** 이름이 비슷한 회사 — 똑같지는 않지만 눌러서 고를 수 있게 보여 준다. */
+  const similar = useMemo(() => {
+    const q = companyName.trim().toLowerCase()
+    if (!q || existing || isAgency) return []
+    return companies.filter(c => c.company_name.toLowerCase().includes(q)).slice(0, 4)
+  }, [companies, companyName, existing, isAgency])
+
+  const setSite = (i: number, patch: Partial<NewSiteInput>) => {
+    setSites(prev => prev.map((s, n) => (n === i ? { ...s, ...patch } : s)))
   }
 
+  const handleSave = async () => {
+    const rules: Partial<Record<ErrKey, string | null>> = {
+      companyName: (company?.company_name ?? companyName).trim() ? null : (isAgency ? '대리점명을 입력해주세요' : '업체명을 입력해주세요'),
+      // 영문명은 **새로 만들 때** 필수다. 기존 회사에 사업장을 더하는 중이면 그 회사 값을 쓴다.
+      nameEn: existing || nameEn.trim() ? null : '영문명을 입력해주세요',
+      industry: isAgency || existing || industry ? null : '분류를 선택해주세요',
+      contact_name: !contact.name.trim() && (contact.department.trim() || contact.position.trim() || contact.phone.trim())
+        ? '고객 담당자 이름을 입력해주세요'
+        : null,
+    }
+    if (isAgency) {
+      // 대리점은 주소를 **선택**으로 둔다 — 등록된 45곳 중 29곳이 이름만으로 부르는 거래처다.
+      rules.site_0 = null
+    } else {
+      sites.forEach((s, i) => { rules[`site_${i}`] = s.address.trim() ? null : '주소를 입력해주세요' })
+    }
+    if (!validate(rules)) return
+
+    setSaving(true)
+    try {
+      const r = await addCustomerEntry({
+        kind,
+        companyName: company ? company.company_name : companyName,
+        nameEn,
+        industry: isAgency ? '' : (existing ? (company?.industry ?? '') : industry),
+        existingCompanyId: existing ? (company?.customer_id ?? null) : null,
+        sites: isAgency ? [sites[0] ?? emptySite()] : sites,
+        contact: contact.name.trim() ? contact : null,
+      })
+      onSaved(r.message)
+    } catch (e) {
+      onError((e as Error)?.message || '등록하지 못했습니다')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const segBtn = (on: boolean): React.CSSProperties => ({
+    height: 32, padding: '0 16px', borderRadius: 6, border: 'none', cursor: 'pointer',
+    background: on ? '#fff' : 'transparent', color: on ? TEXT : MUTED,
+    fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
+  })
+
   return (
-    // 입력 폼 — 바깥 클릭·Esc 때 확인을 받는다. 변경 여부는 넘기지 않는다(폼 상태가
-    // 이 모달 밖 훅에 있어 열었을 때와 비교할 기준이 여기 없다) — 그래서 늘 묻는다.
     <ModalOverlay onClose={onClose} confirmClose>
-      <div
-        onClick={(e) => e.stopPropagation()}
+      <div onClick={e => e.stopPropagation()}
         style={{
-          width: '100%',
-          maxWidth: 780,
-          maxHeight: '90vh',
-          overflowY: 'auto',
-          background: CARD_BG,
-          color: TEXT_PRIMARY,
-          borderRadius: 20,
-          padding: 20,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.45)',
-          border: `1px solid ${INPUT_BORDER}`,
-        }}
-      >
-        <div
-          style={{
-            fontSize: 22,
-            fontWeight: 700,
-            marginBottom: 20,
-            color: TEXT_PRIMARY,
-          }}
-        >
-          {isAgency ? '대리점 등록' : '업체 등록'}
+          width: '100%', maxWidth: 680, maxHeight: '90vh', overflowY: 'auto',
+          background: '#fff', color: TEXT, borderRadius: 8, padding: 22,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
+        }}>
+        <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px', marginBottom: 16 }}>
+          {existing ? '기존 회사에 사업장 추가' : isAgency ? '대리점 등록' : '업체 등록'}
         </div>
 
-        <div style={{ ...sectionCardStyle, marginBottom: 16 }}>
-          <div
-            style={{
-              fontSize: 18,
-              fontWeight: 800,
-              marginBottom: 14,
-              color: TEXT_PRIMARY,
-            }}
-          >
-            {isAgency ? '대리점 정보' : '사업장 정보'}
-          </div>
+        {/* ── ① 종류 ── */}
+        <div style={{ display: 'inline-flex', gap: 3, padding: 3, borderRadius: 8, background: NEUTRAL, marginBottom: 14 }}>
+          <button type="button" onClick={() => setKind('customer')} style={segBtn(!isAgency)}>고객사</button>
+          <button type="button" onClick={() => setKind('agency')} style={segBtn(isAgency)}>대리점</button>
+        </div>
 
+        {/* ── ② 업체 정보 ── */}
+        <section style={sectionStyle}>
+          <div style={sectionTitle}>{isAgency ? '대리점 정보' : '업체 정보'}</div>
+          {existing && (
+            <div style={{ fontSize: 11, color: BLUE, background: '#eff4ff', border: `1px solid #c7d7f8`, borderRadius: 6, padding: '7px 10px', marginBottom: 10 }}>
+              이미 있는 회사입니다 — 아래 사업장만 이 회사에 더합니다.
+            </div>
+          )}
           <div style={{ display: 'grid', gap: 12 }}>
-            {/* 회사명 — **필수**다. 목록에 없으면 그 자리에서 새 회사로 등록한다(분류를 함께 고른다). */}
             <div>
-              <div style={fieldLabelStyle}>{isAgency ? '대리점명' : '회사명'}</div>
-              {isAgency ? (
-                <input
-                  value={customerForm.company_name}
-                  onChange={e => { setCustomerForm(prev => ({ ...prev, company_name: e.target.value })); clearError('parent_customer_id') }}
-                  placeholder={'ex) 젠트'}
-                  style={inputStyle}
-                />
-              ) : (
-              <ParentPicker
-                value={customerForm.parent_customer_id}
-                onChange={id => { setCustomerForm(prev => ({ ...prev, parent_customer_id: id })); clearError('parent_customer_id') }}
-                allowCreate
-                locked={lockCompany}
-                disabled={isSavingCustomer}
-              />
+              <div style={labelStyle}>{isAgency ? '대리점명' : '업체명 (한글)'}</div>
+              <input value={preset ? preset.company_name : companyName} disabled={saving || preset != null}
+                onChange={e => { setCompanyName(e.target.value); clearError('companyName') }}
+                placeholder={isAgency ? 'ex) 젠트' : 'ex) 현대자동차'}
+                style={{
+                  ...inputStyle,
+                  ...(errors.companyName ? { border: errBorder } : null),
+                  ...(preset ? { background: '#f9fafb', color: MUTED } : null),
+                }} />
+              <FieldError message={errors.companyName} />
+              {/* 비슷한 이름 — 눌러서 그 회사에 붙인다(같은 회사가 두 줄로 갈리지 않게). */}
+              {similar.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 7 }}>
+                  <span style={{ fontSize: 11, color: MUTED }}>비슷한 회사:</span>
+                  {similar.map(c => (
+                    <button key={c.customer_id} type="button" onClick={() => setCompanyName(c.company_name)}
+                      style={{ height: 22, padding: '0 8px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: SUB, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                      {c.company_name}
+                    </button>
+                  ))}
+                </div>
               )}
-              <FieldError message={errors.parent_customer_id} />
             </div>
 
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 130px',
-                gap: 10,
-                // 왼쪽 칸 아래 안내·오류 줄이 늘어도 상태 선택 상자가 함께 늘어나지 않게 위로 붙인다
-                // (grid 의 기본 stretch 로는 오른쪽 칸이 왼쪽 높이를 따라간다).
-                alignItems: 'start',
-              }}
-            >
-              {isAgency ? <div /> : (
+            <div style={{ display: 'grid', gridTemplateColumns: isAgency ? '1fr' : '1fr 160px', gap: 10, alignItems: 'start' }}>
               <div>
-                <div style={fieldLabelStyle}>사업장명</div>
-                <input
-                  value={customerForm.site_name}
-                  onChange={(e) => setCustomerForm((prev) => ({ ...prev, site_name: e.target.value }))}
-                  placeholder="ex) 감마세타엔진공장"
-                  style={inputStyle}
-                />
+                <div style={labelStyle}>영문명</div>
+                <input value={existing ? (company?.name_en ?? '') : nameEn} disabled={saving || existing}
+                  onChange={e => { setNameEn(e.target.value); clearError('nameEn') }}
+                  placeholder="ex) HYUNDAI MOTOR"
+                  style={{
+                    ...inputStyle,
+                    ...(errors.nameEn ? { border: errBorder } : null),
+                    ...(existing ? { background: '#f9fafb', color: MUTED } : null),
+                  }} />
+                <FieldError message={errors.nameEn} />
               </div>
+              {!isAgency && (
+                <div>
+                  <div style={labelStyle}>분류</div>
+                  <select value={existing ? (company?.industry ?? '') : industry} disabled={saving || existing}
+                    onChange={e => { setIndustry(e.target.value); clearError('industry') }}
+                    style={{
+                      ...inputStyle, cursor: 'pointer',
+                      ...(errors.industry ? { border: errBorder } : null),
+                      ...(existing ? { background: '#f9fafb', color: MUTED } : null),
+                    }}>
+                    <option value="">분류 선택</option>
+                    {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+                  </select>
+                  <FieldError message={errors.industry} />
+                </div>
               )}
-
-              <div>
-                <div style={fieldLabelStyle}>상태</div>
-                <select
-                value={customerForm.status}
-                onChange={(e) =>
-                  setCustomerForm((prev) => ({
-                    ...prev,
-                    status: e.target.value,
-                  }))
-                }
-                style={inputStyle}
-              >
-                <option value="활성">활성</option>
-                <option value="잠재">잠재</option>
-                <option value="이탈">이탈</option>
-                </select>
-              </div>
             </div>
-
-            {/* 주소 — [주소 검색]으로 정규 주소를 받고, 상세는 따로 입력한다(합쳐서 한 칸에 저장된다).
-                정규 주소를 쓰면 저장 때 도는 좌표 변환(지오코딩) 실패가 대부분 사라진다. */}
-            <AddressField
-              value={customerForm.address}
-              onChange={next => setCustomerForm(prev => ({ ...prev, address: next }))}
-              onTouch={() => clearError('address')}
-              error={errors.address}
-              inputStyle={inputStyle}
-              errorBorder={errBorder}
-              disabled={isSavingCustomer}
-            />
-            <FieldError message={errors.address} />
-
-            {/* 대리점 — 자유 입력이 아니라 등록된 대리점에서 고른다(AgencyPicker).
-                고르지 않으면 직판이다. 대리점을 만드는 중에는 이 칸이 없다. */}
-            {!isAgency && (
-              <>
-                <div style={fieldLabelStyle}>대리점</div>
-                <AgencyPicker
-                  value={customerForm.agency_customer_id}
-                  onChange={id => setCustomerForm(prev => ({ ...prev, agency_customer_id: id }))}
-                  disabled={isSavingCustomer}
-                  inputStyle={inputStyle}
-                />
-              </>
-            )}
           </div>
-        </div>
+        </section>
 
-        {!isAgency && (
-        <div style={{ ...sectionCardStyle, marginBottom: 16 }}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: 14,
-            }}
-          >
-            <div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: TEXT_PRIMARY }}>
-                장비 정보
-              </div>
-              <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
-                선택 사항입니다. 비워두면 등록되지 않고, 나중에 사업장 상세에서 추가할 수 있습니다
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={addDeviceFormCard}
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: '50%',
-                background: WHITE_BUTTON_BG,
-                color: WHITE_BUTTON_TEXT,
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 24,
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                lineHeight: 1,
-              }}
-            >
-              +
-            </button>
+        {/* ── ③ 사업장 ── */}
+        <section style={sectionStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ ...sectionTitle, marginBottom: 0 }}>{isAgency ? '주소 · 상태' : `사업장 ${sites.length}곳`}</div>
+            <span style={{ flex: 1 }} />
+            {!isAgency && (
+              <button type="button" onClick={() => setSites(prev => [...prev, emptySite()])} disabled={saving}
+                style={{ height: 26, padding: '0 10px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: TEXT, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                + 사업장 더 추가
+              </button>
+            )}
           </div>
 
           <div style={{ display: 'grid', gap: 14 }}>
-            {deviceForms.map((device, index) => (
-              <div
-                key={index}
-                style={{
-                  border: `1px solid ${INPUT_BORDER}`,
-                  borderRadius: 14,
-                  padding: 14,
-                  background: CARD_BG,
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 12,
-                  }}
-                >
-                  <div style={{ fontWeight: 700, color: TEXT_PRIMARY }}>
-                    장비 {index + 1}
+            {(isAgency ? sites.slice(0, 1) : sites).map((site, i) => (
+              <div key={i} style={{ display: 'grid', gap: 10, padding: isAgency ? 0 : 12, border: isAgency ? 'none' : `1px solid ${BORDER}`, borderRadius: 8 }}>
+                {!isAgency && (
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <b style={{ fontSize: 12, fontWeight: 700, color: SUB }}>사업장 {i + 1}</b>
+                    <span style={{ flex: 1 }} />
+                    {sites.length > 1 && (
+                      <button type="button" onClick={() => setSites(prev => prev.filter((_, n) => n !== i))} disabled={saving}
+                        style={{ border: 'none', background: 'none', color: MUTED, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        삭제
+                      </button>
+                    )}
                   </div>
+                )}
 
-                  {deviceForms.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => { removeDeviceFormCard(index); clearDeviceErrors() }}
-                      style={{
-                        padding: '6px 10px',
-                        borderRadius: 8,
-                        border: `1px solid ${INPUT_BORDER}`,
-                        background: PANEL_BG,
-                        color: TEXT_PRIMARY,
-                        cursor: 'pointer',
-                        fontWeight: 700,
-                      }}
-                    >
-                      삭제
-                    </button>
-                  )}
+                {!isAgency && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 10 }}>
+                    <div>
+                      <div style={labelStyle}>사업장명 (선택)</div>
+                      <input value={site.siteName} disabled={saving}
+                        onChange={e => setSite(i, { siteName: e.target.value })}
+                        placeholder="ex) 울산공장 · 비우면 회사명만"
+                        style={inputStyle} />
+                    </div>
+                    <div>
+                      <div style={labelStyle}>상태</div>
+                      <select value={site.status} disabled={saving}
+                        onChange={e => setSite(i, { status: e.target.value })}
+                        style={{ ...inputStyle, cursor: 'pointer' }}>
+                        <option value="활성">활성</option>
+                        <option value="잠재">잠재</option>
+                        <option value="이탈">이탈</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <div style={labelStyle}>{isAgency ? '주소 (선택)' : '주소'}</div>
+                  <AddressField
+                    value={site.address}
+                    onChange={next => setSite(i, { address: next })}
+                    onTouch={() => clearError(`site_${i}`)}
+                    error={errors[`site_${i}`]}
+                    inputStyle={inputStyle}
+                    errorBorder={errBorder}
+                    disabled={saving}
+                  />
+                  <FieldError message={errors[`site_${i}`]} />
                 </div>
 
-                <div style={{ display: 'grid', gap: 12 }}>
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr 1fr',
-                      gap: 10,
-                    }}
-                  >
-                    <input
-                      value={device.device_name}
-                      onChange={(e) => { updateDeviceForm(index, 'device_name', e.target.value); clearError(`device_${index}`) }}
-                      placeholder="장비 라인업(ex. SURFCOM)"
-                      style={errors[`device_${index}`] ? { ...inputStyle, fontSize: 12, border: errBorder } : { ...inputStyle, fontSize: 12 }}
-                    />
-
-                    <input
-                      value={device.device_name2}
-                      onChange={(e) =>
-                        updateDeviceForm(index, 'device_name2', e.target.value)
-                      }
-                      placeholder="장비 모델명(ex. 1600D)"
-                      style={{ ...inputStyle, fontSize: 12 }}
-                    />
-
-                    <input
-                      value={device.option}
-                      onChange={(e) =>
-                        updateDeviceForm(index, 'option', e.target.value)
-                      }
-                      placeholder="옵션(ex. -12)"
-                      style={{ ...inputStyle, fontSize: 12 }}
-                    />
-                  </div>
-                  <FieldError message={errors[`device_${index}`]} />
-
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr',
-                      gap: 10,
-                    }}
-                  >
-                    <input
-                      value={device.serial_number}
-                      onChange={(e) =>
-                        updateDeviceForm(index, 'serial_number', e.target.value)
-                      }
-                      placeholder="시리얼넘버(serial_number)"
-                      style={inputStyle}
-                    />
-
-                    <select
-                      value={device.program}
-                      onChange={(e) =>
-                        updateDeviceForm(index, 'program', e.target.value)
-                      }
-                      style={inputStyle}
-                    >
-                      <option value="ACCTee">ACCTee</option>
-                      <option value="Tims">Tims</option>
-                      <option value="CALYPSO">CALYPSO</option>
-                      <option value="없음">없음</option>
+                {isAgency ? (
+                  <div>
+                    <div style={labelStyle}>상태</div>
+                    <select value={site.status} disabled={saving}
+                      onChange={e => setSite(i, { status: e.target.value })}
+                      style={{ ...inputStyle, cursor: 'pointer' }}>
+                      <option value="활성">활성</option>
+                      <option value="잠재">잠재</option>
+                      <option value="이탈">이탈</option>
                     </select>
                   </div>
-
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr',
-                      gap: 10,
-                    }}
-                  >
-                    <input
-                      type="date"
-                      className="white-date date-fit"
-                      value={device.install_date}
-                      onChange={(e) =>
-                        updateDeviceForm(index, 'install_date', e.target.value)
-                      }
-                      style={dateInputStyle}
+                ) : (
+                  <div>
+                    <div style={labelStyle}>대리점</div>
+                    {/* 자유 입력이 아니라 등록된 대리점에서 고른다. 고르지 않으면 직판이다. */}
+                    <AgencyPicker
+                      value={site.agencyId}
+                      onChange={id => setSite(i, { agencyId: id })}
+                      disabled={saving}
+                      inputStyle={inputStyle}
                     />
-
-                    <select
-                      value={device.category}
-                      onChange={(e) =>
-                        updateDeviceForm(index, 'category', e.target.value)
-                      }
-                      style={inputStyle}
-                    >
-                      <option value="20">구분: 20</option>
-                      <option value="81">구분: 81</option>
-                      <option value="83">구분: 83</option>
-                      <option value="84">구분: 84</option>
-                    </select>
                   </div>
-
-                  <label
-                    style={{
-                      ...inputStyle,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      cursor: 'pointer',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <span
-                      style={{
-                        flexShrink: 0,
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: WHITE_BUTTON_TEXT,
-                        background: WHITE_BUTTON_BG,
-                        borderRadius: 7,
-                        padding: '5px 10px',
-                      }}
-                    >
-                      파일 선택
-                    </span>
-                    <span
-                      style={{
-                        flex: 1,
-                        fontSize: 12,
-                        color: device.packing_file ? TEXT_PRIMARY : '#9ca3af',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
-                      {device.packing_file
-                        ? device.packing_file.name
-                        : '납입의사록•패킹리스트 파일 선택'}
-                    </span>
-                    <input
-                      type="file"
-                      accept=".pdf,.xlsx,.xls,.doc,.docx,.png,.jpg,.jpeg"
-                      onChange={(e) =>
-                        updateDeviceForm(
-                          index,
-                          'packing_file',
-                          e.target.files?.[0] ?? null
-                        )
-                      }
-                      style={{ display: 'none' }}
-                    />
-                  </label>
-                </div>
+                )}
               </div>
             ))}
           </div>
-        </div>
-        )}
+        </section>
 
+        {/* ── ④ 담당자 ── */}
         {!isAgency && (
-        <div style={{ ...sectionCardStyle, marginBottom: 16 }}>
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 18, fontWeight: 800, color: TEXT_PRIMARY }}>
-              고객 담당자 정보
-            </div>
-            <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>
-              선택 사항입니다. 나중에 사업장 상세에서 추가할 수 있습니다
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gap: 12 }}>
-            <input
-              value={contactForm.department}
-              onChange={(e) =>
-                setContactForm((prev) => ({
-                  ...prev,
-                  department: e.target.value,
-                }))
-              }
-              placeholder="부서(department)"
-              style={inputStyle}
-            />
-
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: 10,
-              }}
-            >
-              <div>
-                <input
-                  value={contactForm.name}
-                  onChange={(e) => { setContactForm((prev) => ({ ...prev, name: e.target.value })); clearError('contact_name') }}
-                  placeholder="이름(name)"
-                  style={errors.contact_name ? { ...inputStyle, border: errBorder } : inputStyle}
-                />
-                <FieldError message={errors.contact_name} />
+          <section style={sectionStyle}>
+            <div style={sectionTitle}>고객 담당자 <span style={{ fontSize: 11, fontWeight: 500, color: MUTED }}>선택 — 나중에 사업장 상세에서도 더할 수 있습니다</span></div>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {sites.length > 1 && (
+                <div>
+                  <div style={labelStyle}>어느 사업장의 담당자인가요</div>
+                  <select value={contact.siteIndex} disabled={saving}
+                    onChange={e => setContact(p => ({ ...p, siteIndex: Number(e.target.value) }))}
+                    style={{ ...inputStyle, cursor: 'pointer' }}>
+                    {sites.map((s, i) => (
+                      <option key={i} value={i}>{`사업장 ${i + 1}${s.siteName.trim() ? ` · ${s.siteName.trim()}` : ''}`}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <div style={labelStyle}>이름</div>
+                  <input value={contact.name} disabled={saving}
+                    onChange={e => { setContact(p => ({ ...p, name: e.target.value })); clearError('contact_name') }}
+                    placeholder="이름" style={errors.contact_name ? { ...inputStyle, border: errBorder } : inputStyle} />
+                  <FieldError message={errors.contact_name} />
+                </div>
+                <div>
+                  <div style={labelStyle}>부서</div>
+                  <input value={contact.department} disabled={saving}
+                    onChange={e => setContact(p => ({ ...p, department: e.target.value }))}
+                    placeholder="부서" style={inputStyle} />
+                </div>
               </div>
-
-              <input
-                value={contactForm.position}
-                onChange={(e) =>
-                  setContactForm((prev) => ({
-                    ...prev,
-                    position: e.target.value,
-                  }))
-                }
-                placeholder="직책(position)"
-                style={inputStyle}
-              />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <div style={labelStyle}>직책</div>
+                  <input value={contact.position} disabled={saving}
+                    onChange={e => setContact(p => ({ ...p, position: e.target.value }))}
+                    placeholder="직책" style={inputStyle} />
+                </div>
+                <div>
+                  <div style={labelStyle}>전화번호</div>
+                  <input value={contact.phone} disabled={saving}
+                    onChange={e => setContact(p => ({ ...p, phone: e.target.value }))}
+                    placeholder="전화번호" style={inputStyle} />
+                </div>
+              </div>
             </div>
-
-            <input
-              value={contactForm.phone}
-              onChange={(e) =>
-                setContactForm((prev) => ({
-                  ...prev,
-                  phone: e.target.value,
-                }))
-              }
-              placeholder="전화번호(phone)"
-              style={inputStyle}
-            />
-          </div>
-        </div>
+          </section>
         )}
 
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            gap: 10,
-            marginTop: 20,
-          }}
-        >
-          <button
-            onClick={onClose}
-            style={{
-              padding: '10px 14px',
-              background: PANEL_BG,
-              color: TEXT_PRIMARY,
-              borderRadius: 10,
-              border: `1px solid ${INPUT_BORDER}`,
-              cursor: 'pointer',
-              fontWeight: 700,
-            }}
-          >
-            취소
-          </button>
-
-          <button
-            onClick={handleSave}
-            disabled={isSavingCustomer}
-            style={{
-              padding: '10px 14px',
-              background: WHITE_BUTTON_BG,
-              color: WHITE_BUTTON_TEXT,
-              borderRadius: 10,
-              border: `1px solid ${INPUT_BORDER}`,
-              cursor: 'pointer',
-              fontWeight: 700,
-              opacity: isSavingCustomer ? 0.7 : 1,
-            }}
-          >
-            {isSavingCustomer ? '저장 중...' : '저장'}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
+          <button onClick={onClose} disabled={saving}
+            style={{ padding: '10px 15px', background: '#fff', color: SUB, borderRadius: 6, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+          <button onClick={() => void handleSave()} disabled={saving}
+            style={{ padding: '10px 17px', background: BLUE, color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: saving ? 0.6 : 1 }}>
+            {saving ? '저장 중…' : '저장'}
           </button>
         </div>
       </div>

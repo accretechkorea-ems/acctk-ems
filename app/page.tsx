@@ -10,7 +10,6 @@ import Sidebar from '@/components/home/Sidebar'
 import MapView from '@/components/home/MapView'
 import AddCustomerModal from '@/components/home/AddCustomerModal'
 import { useHomeData } from '@/hooks/useHomeData'
-import { addCustomer } from '@/lib/addCustomer'
 import { CATEGORY_OPTIONS } from '@/lib/constants'
 import {
   CUSTOMER_EXCEL_SELECT, exportCustomerXlsx, toExcelCustomer,
@@ -24,8 +23,6 @@ import CustomerDetailBody from '@/components/customer/CustomerDetailBody'
 import { loadEngineers } from '@/lib/appData/engineers'
 import { invalidateParents, loadParents, type ParentOption } from '@/components/customer/ParentPicker'
 import { useOpenQuotes } from '@/hooks/useOpenQuotes'
-import { addAgency } from '@/lib/addAgency'
-import { invalidateAgencies } from '@/lib/customerAgency'
 import {
   buildCompanyTree, EMPTY_FILTER,
   type ListFilter, type SortKey,
@@ -45,12 +42,8 @@ import {
   TEXT_MUTED,
   TEXT_PRIMARY,
   getDeviceLine,
-  createEmptyDeviceForm,
-  type Contact,
   type Customer,
   type Device,
-  type NewDeviceForm,
-  type ServiceHistory,
   toTimeValue,
 } from '@/lib/home'
 
@@ -109,9 +102,9 @@ export default function HomePage() {
   const [companies, setCompanies] = useState<ParentOption[]>([])
   const [lastTouchMap, setLastTouchMap] = useState<Map<number, LastTouch>>(new Map())
   /** 등록 폼의 회사를 고정한 채 열었는가(회사 카드의 「+ 사업장 추가」). */
-  const [lockAddCompany, setLockAddCompany] = useState(false)
+  /** 등록 폼을 「기존 회사에 사업장 추가」로 열 회사(없으면 새 업체 등록). */
+  const [addPresetCompanyId, setAddPresetCompanyId] = useState<number | null>(null)
   /** 등록 폼의 모드 — 사업장 / 대리점. 같은 폼을 쓰고 칸만 달라진다. */
-  const [addMode, setAddMode] = useState<'site' | 'agency'>('site')
   // 진행 견적 수는 **목록 보기를 열 때만** 읽는다(첫 화면 조회를 늘리지 않는다).
   const openQuotes = useOpenQuotes(view === 'list')
   // 대리점 목록 — 캐시를 공유하므로 조회는 앱당 한 번이다(탭의 건수·목록이 같은 값을 본다).
@@ -142,19 +135,6 @@ const toggleCategory = (category: string) => {
 }
   const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
-  const [isSavingCustomer, setIsSavingCustomer] = useState(false)
-
-  const [customerForm, setCustomerForm] = useState({
-    // 저장할 때 「회사명 사업장명」을 합쳐 넣는 칸(lib/addCustomer.ts).
-    company_name: '',
-    site_name: '',
-    address: '',
-    // 대리점 — customers 의 대리점 줄(is_agency)을 가리킨다. null 이면 직판.
-    agency_customer_id: null as number | null,
-    status: '활성',
-    // 사업장을 묶는 소속회사. 고르지 않으면 종전과 같이 단독 업체로 등록된다.
-    parent_customer_id: null as number | null,
-  })
 
   const { fetchData } = useHomeData({
   setCustomers,
@@ -211,14 +191,6 @@ const toggleCategory = (category: string) => {
     return () => clearTimeout(t)
   }, [])
 
-  const [contactForm, setContactForm] = useState<Contact>({
-    name: '',
-    department: '',
-    position: '',
-    phone: '',
-  })
-
-  const [deviceForms, setDeviceForms] = useState<NewDeviceForm[]>([createEmptyDeviceForm()])
 
   const saveHomeState = () => {
     if (typeof window === 'undefined') return
@@ -314,26 +286,6 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
   saveHomeState()
 }, [view, query, selectedStatuses, selectedCategories, mapCenter, mapLevel, openOverlayCustomerId])
 
-  const resetForms = () => {
-    setCustomerForm({
-      company_name: '',
-      site_name: '',
-      address: '',
-      agency_customer_id: null,
-      status: '활성',
-      parent_customer_id: null,
-    })
-
-    setContactForm({
-      name: '',
-      department: '',
-      position: '',
-      phone: '',
-    })
-
-    setDeviceForms([createEmptyDeviceForm()])
-  }
-
   const toggleStatus = (status: string) => {
     setFocusedCustomerId(null)
     setSelectedStatuses((prev) => {
@@ -344,32 +296,6 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
     })
   }
 
-  const updateDeviceForm = (
-    index: number,
-    field: keyof NewDeviceForm,
-    value: string | File | null
-  ) => {
-    setDeviceForms((prev) =>
-      prev.map((item, i) => {
-        if (i !== index) return item
-        return {
-          ...item,
-          [field]: value,
-        }
-      })
-    )
-  }
-
-  const addDeviceFormCard = () => {
-    setDeviceForms((prev) => [...prev, createEmptyDeviceForm()])
-  }
-
-  const removeDeviceFormCard = (index: number) => {
-    setDeviceForms((prev) => {
-      if (prev.length === 1) return prev
-      return prev.filter((_, i) => i !== index)
-    })
-  }
 
 
 
@@ -433,7 +359,7 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
   //   좌 패널의 건수와 우측 표의 줄은 **같은 셈법**을 써야 한다 — 그 셈법은
   //   lib/customerList.ts 에 있고, 여기서는 재료만 모아 넘긴다.
   const companyMap = useMemo(
-    () => new Map(companies.map(c => [c.customer_id, { company_name: c.company_name, industry: c.industry, name_en: c.name_en }])),
+    () => new Map(companies.map(c => [c.customer_id, { company_name: c.company_name, industry: c.industry, name_en: c.name_en, note: c.note }])),
     [companies],
   )
   const today = todayKST()
@@ -556,49 +482,16 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
   )
 
   /**
-   * 업체 등록 폼을 연다. 등록 길은 **하나**다 — 폼 안에서 회사명을 찾고, 없으면 그 자리에서
-   * 새 회사로 만든다(분류를 함께 받는다).
+   * 업체 등록 폼을 연다.
    *
-   * 목록 보기에서 회사를 골라 둔 채 누르면 그 회사가 **미리 채워져** 열린다. 회사 카드의
-   * 「+ 사업장 추가」는 거기에 더해 회사를 **고정**한다(lock) — 어느 회사에 붙일지는
-   * 이미 정해진 자리라 바꿀 수 있으면 실수만 는다.
+   * 회사를 골라 둔 채 열면(목록 보기·회사 카드의 「+ 사업장 추가」) 그 회사로 고정된
+   * 「기존 회사에 사업장 추가」 모드로 열린다 — 어느 회사에 붙일지는 이미 정해진 자리다.
+   * 종류(고객사·대리점)는 폼 맨 위에서 고른다.
    */
-  const openAddCustomer = (lock = false, mode: 'site' | 'agency' = 'site') => {
-    const preset = mode === 'site' && view === 'list' ? selectedCompanyId : null
-    // 대리점 모드는 회사·사업장명·대리점 칸을 쓰지 않으므로 그 값들을 비워 연다.
-    setCustomerForm(prev => ({
-      ...prev,
-      parent_customer_id: preset,
-      company_name: '',
-      site_name: '',
-      agency_customer_id: null,
-    }))
-    setLockAddCompany(lock && preset != null)
-    setAddMode(mode)
+  const openAddCustomer = (useSelectedCompany = false) => {
+    setAddPresetCompanyId(useSelectedCompany && view === 'list' ? selectedCompanyId : null)
     setIsAddCustomerModalOpen(true)
   }
-
-  /** 대리점 모드의 저장 — 사업장 등록과 길이 다르다(lib/addAgency.ts). */
-  const saveAgency = async () => {
-    setIsSavingCustomer(true)
-    try {
-      const made = await addAgency({
-        name: customerForm.company_name,
-        address: customerForm.address,
-        status: customerForm.status,
-      })
-      invalidateAgencies()
-      setIsAddCustomerModalOpen(false)
-      resetForms()
-      await fetchData()
-      toast.success(`${made.company_name} 대리점을 등록했습니다`)
-    } catch (e) {
-      toast.error((e as Error)?.message || '대리점을 등록하지 못했습니다')
-    } finally {
-      setIsSavingCustomer(false)
-    }
-  }
-
   const toggleExpand = (companyId: number) => {
     setExpanded(prev => {
       const next = new Set(prev)
@@ -693,33 +586,6 @@ useEffect(() => {
 
   return () => clearInterval(interval)
 }, [filteredCustomers])
-
-  const geocodeAddress = async (address: string) => {
-    const { geocodeAddress: geocode } = await import('@/lib/geocode')
-    return geocode(address)
-  }
-
-  const uploadPackingList = async (file: File, customerId: number, index: number) => {
-    const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      throw new Error('JPG, PNG, WEBP, GIF, PDF 형식만 업로드 가능합니다.')
-    }
-    if (file.size > 20 * 1024 * 1024) {
-      throw new Error('파일 크기는 20MB 이하여야 합니다.')
-    }
-    const fileExt = file.name.split('.').pop()
-    const fileName = `customer-${customerId}-device-${index + 1}-${Date.now()}.${fileExt}`
-
-    const { error: uploadError } = await supabase.storage
-      .from('packing-lists')
-      .upload(fileName, file, {
-        upsert: true,
-      })
-
-    if (uploadError) throw uploadError
-
-    return fileName
-  }
 
   if (!authorized) return <AccessGate loading={guardLoading} />
 
@@ -884,8 +750,7 @@ useEffect(() => {
               selectedSiteId={selectedSiteId}
               onSelectCompany={id => { setSelectedCompanyId(id); setSelectedSiteId(null) }}
               onSelectSite={(cid, sid) => { setSelectedCompanyId(cid); setSelectedSiteId(sid) }}
-              onAddSite={() => openAddCustomer(false, 'site')}
-              onAddAgency={() => openAddCustomer(false, 'agency')}
+
               checkedCompanies={checkedCompanies}
               toggleCompanyCheck={id => setCheckedCompanies(prev => {
                 const next = new Set(prev)
@@ -997,7 +862,6 @@ useEffect(() => {
 toggleStatus={toggleStatus}
 selectedCategories={selectedCategories}
 toggleCategory={toggleCategory}
-onAddClick={() => setIsAddCustomerModalOpen(true)}
   restoredMapCenter={mapCenter}
   restoredMapLevel={mapLevel}
   restoredOpenOverlayCustomerId={openOverlayCustomerId}
@@ -1011,39 +875,23 @@ onAddClick={() => setIsAddCustomerModalOpen(true)}
         </div>
       )}
 
+        {isAddCustomerModalOpen && (
         <AddCustomerModal
-          isOpen={isAddCustomerModalOpen}
-          lockCompany={lockAddCompany}
-          mode={addMode}
-          isSavingCustomer={isSavingCustomer}
-          customerForm={customerForm}
-          setCustomerForm={setCustomerForm}
-          contactForm={contactForm}
-          setContactForm={setContactForm}
-          deviceForms={deviceForms}
-          updateDeviceForm={updateDeviceForm}
-          addDeviceFormCard={addDeviceFormCard}
-          removeDeviceFormCard={removeDeviceFormCard}
+          key={addPresetCompanyId ?? 'new'}
+          presetCompanyId={addPresetCompanyId}
           onClose={() => setIsAddCustomerModalOpen(false)}
-         onSave={async () => {
-  if (addMode === 'agency') { await saveAgency(); return }
-  try {
-    const ok = await addCustomer({
-      customerForm,
-      contactForm,
-      deviceForms,
-      fetchData,
-      resetForms,
-      setIsSavingCustomer,
-      setIsAddCustomerModalOpen,
-      setQuery,
-    })
-    if (ok) toast.success('사업장이 추가되었습니다')
-  } catch (e: any) {
-    toast.error(e?.message || '에러 발생')
-  }
-}}
+          onError={msg => toast.error(msg)}
+          onSaved={async message => {
+            setIsAddCustomerModalOpen(false)
+            setQuery('')
+            invalidateParents()
+            const list = await loadParents()
+            setCompanies(list)
+            await fetchData()
+            toast.success(message)
+          }}
         />
+        )}
       </div>
     </>
   )

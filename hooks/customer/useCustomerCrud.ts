@@ -5,13 +5,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { geocodeAddress } from '@/lib/geocode'
 import { createClient } from '@/lib/supabase/client'
+import { saveCustomerEdit } from '@/lib/saveCustomerEdit'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
-import { customerLabel } from '@/lib/customerLabel'
-import { normalizeRegion } from '@/lib/region'
-import { invalidateParents } from '@/components/customer/ParentPicker'
 import type { Customer, CustomerEditFormData } from '@/components/customer/types'
 import { deleteServiceAttachments } from '@/components/customer/attachments'
 
@@ -33,86 +30,15 @@ export function useCustomerCrud({ customer, fetchDetail }: Args) {
   const handleUpdateCustomer = async (form: CustomerEditFormData) => {
     if (!customer) return
     // 사용자 검증(업체명/주소)은 CustomerEditModal 에서 인라인으로 처리한다.
+    // 저장 규칙 자체는 lib/saveCustomerEdit.ts 하나다 — 목록 보기의 사업장 표도 같은 길을 쓴다.
     setIsSavingCustomerEdit(true)
-    try {
-      // 주소를 그대로 두고 다른 값만 고친 경우(소속회사 변경 등)에는 좌표를 다시 구하지 않는다.
-      // 좌표는 주소에서만 나오는 값이라, 주소가 같으면 결과도 같다 — 괜히 외부 호출을 하고
-      // 지오코딩이 실패하면 저장 자체가 막힌다.
-      const addressChanged = form.address.trim() !== (customer.address ?? '').trim()
-      const coords = addressChanged ? await geocodeAddress(form.address.trim()) : null
-      /**
-       * 회사 줄을 정한다.
-       *
-       * 골라 둔 회사가 있으면 그 줄이고, **없으면 적혀 있는 회사명으로 찾거나 만든다** —
-       * 회사 줄이 없는 사업장을 한 줄씩 손으로 옮기는 길이다.
-       *
-       * 새로 만드는 회사에는 **분류를 넣는다**(form.new_company_industry). 전에는 이
-       * 길로 만든 회사만 분류가 비어 있었다 — 등록 폼과 ParentPicker 의 「새 회사로
-       * 등록」은 분류를 받는데 여기만 받지 않아, 분류 없는 회사가 계속 생겼다.
-       */
-      let parentId = form.parent_customer_id
-      let companyName = ''
-      if (parentId != null) {
-        const { data: parentRow } = await supabase.from('customers').select('company_name')
-          .eq('customer_id', parentId).maybeSingle()
-        companyName = (parentRow?.company_name ?? '').trim()
-      } else {
-        companyName = form.company_name.trim()
-        if (!companyName) {
-          setIsSavingCustomerEdit(false)
-          toast.error('회사명을 입력해주세요')
-          return
-        }
-        const { data: found } = await supabase.from('customers').select('customer_id')
-          .eq('is_parent', true).is('deleted_at', null).eq('company_name', companyName).maybeSingle()
-        if (found) {
-          parentId = found.customer_id
-        } else {
-          const industry = (form.new_company_industry ?? '').trim()
-          if (!industry) {
-            setIsSavingCustomerEdit(false)
-            toast.error('새 회사의 분류를 선택해주세요')
-            return
-          }
-          const { data: made, error: makeErr } = await supabase.from('customers')
-            .insert({ company_name: companyName, is_parent: true, industry })
-            .select('customer_id').single()
-          if (makeErr || !made) {
-            setIsSavingCustomerEdit(false)
-            toast.error(makeErr?.message || '회사를 만들지 못했습니다')
-            return
-          }
-          parentId = made.customer_id
-          invalidateParents()   // 회사 목록 캐시가 새 회사를 모르고 있다
-        }
-      }
-
-      // 화면·문서·엑셀이 company_name 한 칸만 읽으므로 합친 이름을 넣어 둔다(lib/customerLabel.ts).
-      const siteName = (form.site_name ?? '').trim()
-      const combined = customerLabel(companyName, siteName) || form.company_name.trim()
-
-      const { error } = await supabase.from('customers').update({
-        company_name: combined, site_name: siteName || null, address: form.address.trim(),
-        // 주소가 바뀌면 지역1 도 따라간다 — 늘 같은 함수를 지난다(lib/region.ts).
-        region1: normalizeRegion(customer.region1 ?? null, form.address),
-        // 대리점은 줄을 가리킨다(lib/customerAgency.ts). 옛 agency 텍스트 칸은 쓰지 않는다.
-        agency_customer_id: form.agency_customer_id ?? null,
-        status: form.status,
-        note: form.note.trim() || null,
-        parent_customer_id: parentId,
-        ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : null),
-      }).eq('customer_id', customer.customer_id)
-      setIsSavingCustomerEdit(false)
-      if (error) { toast.error(error.message || '사업장 정보 수정 중 오류가 발생했습니다'); return }
-      toast.success('사업장 정보가 수정되었습니다')
-      setIsEditCustomerModalOpen(false)
-      await fetchDetail()
-    } catch (error: any) {
-      setIsSavingCustomerEdit(false)
-      toast.error(error?.message || '사업장 정보 수정 중 오류가 발생했습니다')
-    }
+    const r = await saveCustomerEdit(customer, form)
+    setIsSavingCustomerEdit(false)
+    if (!r.ok) { toast.error(r.message); return }
+    toast.success('사업장 정보가 수정되었습니다')
+    setIsEditCustomerModalOpen(false)
+    await fetchDetail()
   }
-
   // 업체 삭제 — 견적 이력 유무로 갈린다.
   //   견적 있음 → 매출 기록이므로 숨김(deleted_at)만. 물리 삭제하지 않는다.
   //   견적 없음 → 자식까지 실제 DELETE.

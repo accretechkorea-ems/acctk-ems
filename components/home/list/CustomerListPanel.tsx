@@ -63,10 +63,6 @@ type Props = {
   onSelectCompany: (companyId: number) => void
   onSelectSite: (companyId: number, siteId: number) => void
   loading?: boolean
-  /** 「+ 업체」 — 기존 등록 폼(회사명 검색 → 없으면 새 회사로). */
-  onAddSite: () => void
-  /** 「+ 대리점」 — 같은 폼의 대리점 모드(이름·주소·상태만). */
-  onAddAgency: () => void
   /** 체크한 회사들 — 분류 일괄 지정이 쓴다(3a). */
   checkedCompanies: Set<number>
   toggleCompanyCheck: (companyId: number) => void
@@ -103,14 +99,6 @@ const countStyle = (tone?: 'danger'): CSSProperties => ({
   color: tone === 'danger' ? DANGER : SUB,
 })
 
-/** 탭 줄 오른쪽의 작은 등록 버튼. 탭 글자와 같은 줄에 서야 해서 높이를 26 으로 조인다. */
-const addBtn = (ghost: boolean): CSSProperties => ({
-  height: 26, padding: '0 9px', borderRadius: 6, cursor: 'pointer',
-  border: `1px solid ${ghost ? BORDER : BLUE}`,
-  background: ghost ? '#ffffff' : BLUE,
-  color: ghost ? SUB : '#ffffff',
-  fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', alignSelf: 'center', marginLeft: 4,
-})
 
 const chipStyle = (on: boolean): CSSProperties => ({
   height: 28, padding: '0 10px', borderRadius: 6, cursor: 'pointer',
@@ -167,7 +155,7 @@ function MultiChip({ label, options, value, onChange, allLabel = '전체' }: {
 export default function CustomerListPanel({
   tab, setTab, counts, filter, setFilter, sort, setSort,
   groups, siteCount, expanded, toggleExpand, selectedCompanyId, selectedSiteId,
-  onSelectCompany, onSelectSite, loading, onAddSite, onAddAgency,
+  onSelectCompany, onSelectSite, loading,
   checkedCompanies, toggleCompanyCheck, clearCompanyChecks, onBulkIndustry,
   cleanup, cleanupBucket, setCleanupBucket, onDeleteCompany,
   agencies, agencySiteCount, onPickAgency, agencyFilterId, clearAgencyFilter,
@@ -200,12 +188,6 @@ export default function CustomerListPanel({
           정리 필요 <span style={countStyle(cleanupCount > 0 ? 'danger' : undefined)}>{cleanupCount}</span>
         </button>
         <span style={{ flex: 1, minWidth: 8 }} />
-        {/* 등록 — 탭 줄 오른쪽. **보고 있는 탭의 것** 하나만 세운다.
-            둘을 함께 두면 탭 셋과 합쳐 383px 이 필요한데 패널은 342px 이라 글자가 접혔다.
-            대리점을 더하는 일은 대리점 탭에서 하는 것이 자리에도 맞다. */}
-        {tab === 'agency'
-          ? <button type="button" onClick={onAddAgency} style={addBtn(false)} title="대리점을 등록합니다">+ 대리점</button>
-          : <button type="button" onClick={onAddSite} style={addBtn(false)} title="업체(사업장)를 등록합니다">+ 업체</button>}
       </div>
 
       {/* 필터 칩 */}
@@ -341,10 +323,12 @@ export default function CustomerListPanel({
                   <polyline points="6 9 12 15 18 9" />
                 </svg>
                 <b style={{ fontSize: 13, fontWeight: 700, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.companyName}</b>
-                <span style={{
-                  fontSize: 11, padding: '1px 6px', borderRadius: 6, whiteSpace: 'nowrap', flexShrink: 0,
-                  background: g.industry ? NEUTRAL : '#fffbeb', color: g.industry ? SUB : '#b45309',
-                }}>{g.industry ?? '분류 없음'}</span>
+                {/* 분류 — **있을 때만** 태그를 단다. 없는 회사가 836곳이라 태그를 달면
+                    트리가 「분류 없음」으로 뒤덮여 정작 분류를 읽을 수 없었다.
+                    분류가 비었다는 사실은 「분류 없음」 칩과 정리 필요 탭이 알린다. */}
+                {g.industry && (
+                  <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 6, whiteSpace: 'nowrap', flexShrink: 0, background: NEUTRAL, color: SUB }}>{g.industry}</span>
+                )}
                 <span style={{ flex: 1 }} />
                 <span style={{ fontSize: 12, color: SUB, flexShrink: 0 }}>{g.sites.length}</span>
               </div>

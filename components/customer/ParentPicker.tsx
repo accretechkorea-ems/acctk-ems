@@ -24,6 +24,8 @@ export type ParentOption = {
   industry: string | null
   /** 회사 영문명 — 검색이 한글 이름과 함께 본다(db/customer_name_en_20261119.sql). */
   name_en: string | null
+  /** 회사 메모 — 회사 수정 모달이 읽고 쓴다. */
+  note: string | null
 }
 
 // 부모는 몇 백 행뿐이라 한 번 읽어 캐시하고 화면에서 걸러 쓴다(사무실 목록과 같은 방식).
@@ -33,7 +35,7 @@ export function loadParents(): Promise<ParentOption[]> {
   if (cache) return cache
   cache = (async () => {
     const supabase = createClient()
-    const COLS = 'customer_id, company_name, industry'
+    const COLS = 'customer_id, company_name, industry, note'
     const load = (cols: string) => supabase
       .from('customers')
       .select(cols)
@@ -50,10 +52,10 @@ export function loadParents(): Promise<ParentOption[]> {
       return []
     }
     // select 문자열이 변수라 supabase 가 줄 모양을 추론하지 못한다 — 읽는 칸만 적어 둔 타입으로 받는다.
-    type Row = { customer_id: number; company_name: string | null; industry: string | null; name_en?: string | null }
+    type Row = { customer_id: number; company_name: string | null; industry: string | null; name_en?: string | null; note?: string | null }
     return ((data ?? []) as unknown as Row[]).map(r => ({
       customer_id: r.customer_id, company_name: r.company_name ?? '', industry: r.industry ?? null,
-      name_en: r.name_en ?? null,
+      name_en: r.name_en ?? null, note: r.note ?? null,
     }))
   })()
   return cache
@@ -101,7 +103,7 @@ export async function createParent(companyName: string, industry: string, nameEn
   invalidateParents()
   return {
     customer_id: data.customer_id, company_name: data.company_name ?? name,
-    industry: data.industry ?? industry, name_en: data.name_en ?? null,
+    industry: data.industry ?? industry, name_en: data.name_en ?? null, note: null,
   }
 }
 

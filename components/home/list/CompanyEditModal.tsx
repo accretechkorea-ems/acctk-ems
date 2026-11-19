@@ -1,0 +1,153 @@
+'use client'
+
+/**
+ * 회사 수정 — 목록 보기의 회사 카드에서 「수정」을 누르면 열린다.
+ *
+ * ── 왜 모달인가 ───────────────────────────────────────────────────────────
+ *   전에는 제목 옆 연필(이름·영문명)과 드롭다운(분류)으로 **칸마다 다른 방식**으로
+ *   고쳤다. 사업장 표도 칸을 눌러 고쳤다. 같은 화면에서 고치는 방식이 셋이면 어디를
+ *   눌러야 고쳐지는지 매번 다시 배워야 한다 — 전부 「수정 버튼 → 모달」 하나로 모았다.
+ *
+ * ── 문턱이 둘인 이유 ──────────────────────────────────────────────────────
+ *   회사명·영문명은 그 아래 사업장 이름까지 전부 다시 만든다(라우트가 한다) —
+ *   슈퍼관리자만 바꾼다. 분류·메모는 회사 줄 한 칸이라 고객사 메뉴를 보는 사람이면 된다
+ *   (좌 패널의 「분류 일괄 지정」도 같은 문턱이다).
+ */
+
+import { useState, type CSSProperties } from 'react'
+import ModalOverlay from '@/components/common/ModalOverlay'
+import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
+import { INDUSTRIES } from '@/lib/leadOptions'
+import { MEMO_MAX } from '@/components/common/MemoPopover'
+
+const BORDER = '#ebebeb'
+const TEXT = '#111827'
+const SUB = '#6b7280'
+const MUTED = '#9ca3af'
+const BLUE = '#234ea2'
+
+const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: SUB, marginBottom: 6, display: 'block' }
+const fieldStyle: CSSProperties = {
+  width: '100%', padding: '11px 12px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  boxSizing: 'border-box', color: TEXT, background: '#fff', outline: 'none', fontSize: 14,
+}
+
+export type CompanyEditForm = {
+  name: string
+  nameEn: string
+  industry: string
+  note: string
+}
+
+type Props = {
+  /** 열었을 때의 값. */
+  initial: CompanyEditForm
+  /** 사업장 수 — 이름을 바꾸면 함께 바뀌는 줄 수를 미리 알려 준다. */
+  siteCount: number
+  /** 회사명·영문명을 바꿀 수 있는가(슈퍼관리자). 아니면 그 두 칸만 잠근다. */
+  canRename: boolean
+  isSaving: boolean
+  onClose: () => void
+  onSave: (form: CompanyEditForm) => void
+}
+
+export default function CompanyEditModal({ initial, siteCount, canRename, isSaving, onClose, onSave }: Props) {
+  const [form, setForm] = useState<CompanyEditForm>(initial)
+  const { errors, clearError, validate } = useFieldErrors<'name' | 'nameEn'>()
+
+  const dirty = JSON.stringify(form) !== JSON.stringify(initial)
+  const nameChanged = form.name.trim() !== initial.name.trim()
+
+  const handleSave = () => {
+    const ok = validate({
+      name: form.name.trim() ? null : '회사명을 입력해주세요',
+      // 영문명은 **새로 등록할 때** 필수다. 이미 있는 회사는 비어 있는 줄이 많아
+      // 여기서 막으면 분류 하나 고치러 들어왔다가 영문명을 지어내게 된다.
+      nameEn: null,
+    })
+    if (!ok) return
+    onSave(form)
+  }
+
+  const lockedHint = canRename ? null : '회사명·영문명은 슈퍼관리자만 바꿀 수 있습니다'
+
+  return (
+    <ModalOverlay onClose={onClose} confirmClose dirty={dirty}>
+      <div onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: 520, background: '#fff', borderRadius: 8, padding: 24,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
+        }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px' }}>회사 정보 수정</div>
+          <button onClick={onClose} title="닫기"
+            style={{ width: 28, height: 28, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: SUB }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gap: 14 }}>
+          <div>
+            <label style={labelStyle}>회사명</label>
+            <input value={form.name} disabled={!canRename || isSaving}
+              onChange={e => { setForm(p => ({ ...p, name: e.target.value })); clearError('name') }}
+              placeholder="ex) 현대자동차"
+              style={{
+                ...fieldStyle,
+                ...(errors.name ? { border: errBorder } : null),
+                background: canRename ? '#fff' : '#f9fafb', color: canRename ? TEXT : MUTED,
+              }} />
+            <FieldError message={errors.name} />
+            {nameChanged && siteCount > 0 && (
+              <div style={{ fontSize: 11, color: SUB, marginTop: 5 }}>
+                {`사업장 ${siteCount}곳의 이름도 「새 회사명 사업장명」 으로 함께 바뀝니다.`}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label style={labelStyle}>영문 회사명</label>
+            <input value={form.nameEn} disabled={!canRename || isSaving}
+              onChange={e => setForm(p => ({ ...p, nameEn: e.target.value }))}
+              placeholder="ex) HYUNDAI MOTOR"
+              style={{ ...fieldStyle, background: canRename ? '#fff' : '#f9fafb', color: canRename ? TEXT : MUTED }} />
+            <div style={{ fontSize: 11, color: MUTED, marginTop: 5 }}>
+              {lockedHint ?? '검색이 한글 이름과 함께 봅니다.'}
+            </div>
+          </div>
+
+          <div>
+            <label style={labelStyle}>분류</label>
+            <select value={form.industry} disabled={isSaving}
+              onChange={e => setForm(p => ({ ...p, industry: e.target.value }))}
+              style={{ ...fieldStyle, cursor: 'pointer' }}>
+              <option value="">분류 없음</option>
+              {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label style={labelStyle}>메모</label>
+            <textarea value={form.note} disabled={isSaving}
+              onChange={e => setForm(p => ({ ...p, note: e.target.value.slice(0, MEMO_MAX) }))}
+              placeholder="ex) 2026-03 사명 변경 · 본사 이전"
+              rows={3}
+              style={{ ...fieldStyle, resize: 'vertical', fontSize: 13, lineHeight: 1.6, fontFamily: 'inherit' }} />
+            <div style={{ fontSize: 10, color: MUTED, marginTop: 4, textAlign: 'right' }}>{`${form.note.length} / ${MEMO_MAX}`}</div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+          <button onClick={onClose} disabled={isSaving}
+            style={{ padding: '10px 15px', background: '#fff', color: SUB, borderRadius: 6, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+          <button onClick={handleSave} disabled={isSaving}
+            style={{ padding: '10px 17px', background: BLUE, color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}>
+            {isSaving ? '저장 중…' : '저장'}
+          </button>
+        </div>
+      </div>
+    </ModalOverlay>
+  )
+}

@@ -41,6 +41,8 @@ export type CompanyGroup = {
   industry: string | null
   /** 회사 영문명(있으면). 검색과 회사 카드가 쓴다. */
   nameEn: string | null
+  /** 회사 메모. 회사 수정 모달이 읽고 쓴다. */
+  note: string | null
   sites: SiteRow[]
   /** 묶음 안에서 가장 최근 접점(없으면 null). 정렬이 쓴다. */
   touch: LastTouch | null
@@ -234,7 +236,7 @@ export type BuildInput = {
   /** 목록 조회가 준 사업장 줄(대리점 전용 줄은 이미 빠져 있다). */
   customers: Customer[]
   /** 회사 줄 — id → {이름, 분류}. */
-  companies: Map<number, { company_name: string; industry: string | null; name_en?: string | null }>
+  companies: Map<number, { company_name: string; industry: string | null; name_en?: string | null; note?: string | null }>
   deviceCount: (customerId: number) => number
   deviceCategories: (customerId: number) => string[]
   openQuotes: (customerId: number) => number
@@ -298,6 +300,7 @@ export function buildCompanyTree(input: BuildInput): BuildResult {
       companyName: company?.company_name ?? `회사 #${companyId}`,
       industry: company?.industry ?? null,
       nameEn: company?.name_en ?? null,
+      note: company?.note ?? null,
       // 이름이 겹치는 사업장은 주소로 가려 준다 — 「본사」가 세 줄 나란히 서지 않게.
       sites: sortSites(disambiguateSites(sites), input.sort),
       touch: best,

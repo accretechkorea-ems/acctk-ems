@@ -30,7 +30,7 @@ export function useHomeData({
     const [customerRes, deviceRes, lastTouch] = await Promise.all([
       supabase
   .from('customers')
-  .select(`customer_id, ${CUSTOMER_NAME_SELECT}, ${CUSTOMER_AGENCY_SELECT}, parent_customer_id, region1, address, latitude, longitude, status, category`)
+  .select(`customer_id, ${CUSTOMER_NAME_SELECT}, ${CUSTOMER_AGENCY_SELECT}, parent_customer_id, region1, address, latitude, longitude, status, category, note`)
         .is('deleted_at', null)
         // 부모 행(회사 묶음)은 지도 마커·업체 목록에 나오면 안 된다
         .eq('is_parent', false)
@@ -74,6 +74,8 @@ export function useHomeData({
 agency_name: agencyNameOf(c),
 agency_customer_id: c.agency_customer_id == null ? null : Number(c.agency_customer_id),
 category: c.category ?? null,
+// 메모 — 목록 보기의 사업장 수정 모달이 읽고 쓴다(없이 열면 저장할 때 비워진다).
+note: c.note ?? null,
       }))
       setCustomers(normalizedCustomers)
     }

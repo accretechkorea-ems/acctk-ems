@@ -2,23 +2,25 @@
 
 // 목록 보기의 **오른쪽 — 회사를 골랐을 때**. 회사 카드 + 사업장 표 + 일괄 작업 바.
 //
-// ── 표에서 바로 고치는 칸 ─────────────────────────────────────────────────
-//   이번 회차는 **대리점·상태 둘**뿐이다. 두 칸 모두 기존 저장 경로를 그대로 쓴다
-//   (customers 의 agency_customer_id·status 를 한 줄씩 update). 이름·주소처럼 다른 것을
-//   함께 건드려야 하는 칸은 여기서 고치지 않는다 — 그것은 수정 폼의 일이다.
-//
-// ── 회사 분류 ─────────────────────────────────────────────────────────────
-//   정리 SQL 이 만든 회사 561곳에는 분류가 비어 있다(2026-11-19 실측: 763곳 중 거의 전부).
-//   그래서 카드에서 **바로 고르고 저장**한다 — 관리 화면까지 가지 않게.
+// ── 고치는 방식은 하나다 ──────────────────────────────────────────────────
+//   전에는 회사 제목 옆 연필(이름)·드롭다운(분류)·표의 칸 클릭(사업장명·대리점·상태)으로
+//   **한 화면에서 세 가지 방식**으로 고쳤다. 어디를 눌러야 고쳐지는지 알 수 없고, 잘못
+//   눌러 고쳐지는 일도 생겼다. 이제 둘 뿐이다.
+//     · 회사 → 카드의 「수정」 → 회사 수정 모달(회사명·영문명·분류·메모)
+//     · 사업장 → 줄 끝의 연필 → 사업장 수정 모달(상세 화면과 **같은 모달·같은 저장 규칙**)
+//   여러 줄을 한 번에 바꾸는 일(대리점·상태·회사 이동)만 아래 일괄 바가 맡는다.
 
 import { useState, type CSSProperties } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import CompanySearchModal from '@/components/home/list/CompanySearchModal'
-import { INDUSTRIES } from '@/lib/leadOptions'
+import CompanyEditModal, { type CompanyEditForm } from '@/components/home/list/CompanyEditModal'
+import CustomerEditModal from '@/components/customer/modals/CustomerEditModal'
+import { saveCustomerEdit } from '@/lib/saveCustomerEdit'
 import { invalidateParents } from '@/components/customer/ParentPicker'
 import { DIRECT_SALE_LABEL, useAgencies } from '@/lib/customerAgency'
 import { daysLabel, isStale, regionOf, type CompanyGroup, type SiteRow } from '@/lib/customerList'
+import type { Customer } from '@/components/customer/types'
 
 /** /api/parent-company 한 번. 결과를 한글 메시지로 바꿔 돌려준다. */
 async function callRoute(body: Record<string, unknown>): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; error: string }> {
@@ -68,8 +70,8 @@ export type CompanyPaneProps = {
   /** 회사를 병합·삭제해 사라졌을 때 — 화면이 선택을 푼다. */
   onCompanyGone: () => void
   /**
-   * 슈퍼관리자인가 — **회사 수준**(이름 변경·병합)은 그 사람만 한다.
-   * 사업장 수준(사업장명·대리점·상태·이동)은 고객사 메뉴를 보는 사람이면 된다.
+   * 슈퍼관리자인가 — **회사명·영문명·병합**은 그 사람만 한다(그 아래 사업장 이름까지
+   * 전부 다시 만들기 때문이다). 분류·메모와 사업장 수준의 일은 고객사 메뉴면 된다.
    */
   canEditCompany: boolean
 }
@@ -81,12 +83,10 @@ export default function CompanyPane({
   const agencies = useAgencies()
   const [checked, setChecked] = useState<Set<number>>(new Set())
   const [busy, setBusy] = useState(false)
-  /** 지금 고치고 있는 칸 — `${customerId}:${열}`. 한 번에 한 칸만 연다. */
-  const [editing, setEditing] = useState<string | null>(null)
-  const [industry, setIndustry] = useState(group.industry ?? '')
-  const [savingIndustry, setSavingIndustry] = useState(false)
-  /** 회사 이름·영문명 고치기 — 열려 있을 때만 칸이 보인다. */
-  const [editCompany, setEditCompany] = useState<{ name: string; nameEn: string } | null>(null)
+  /** 회사 수정 모달. */
+  const [editCompanyOpen, setEditCompanyOpen] = useState(false)
+  /** 사업장 수정 모달 — 고친 줄. */
+  const [editSite, setEditSite] = useState<Customer | null>(null)
   /** 「다른 회사로 이동」·「회사 병합」의 고르는 창. */
   const [moveOpen, setMoveOpen] = useState(false)
   const [mergeTarget, setMergeTarget] = useState<{ id: number; name: string } | null>(null)
@@ -104,43 +104,68 @@ export default function CompanyPane({
     })
   }
 
-  /** 사업장 한 줄(또는 고른 여러 줄)의 칸 하나를 고친다. */
+  /** 고른 여러 줄의 칸 하나를 한 번에 바꾼다(일괄 바 전용). */
   const saveCell = async (ids: number[], patch: Record<string, unknown>, done: string) => {
     if (busy || ids.length === 0) return
     setBusy(true)
     const { error } = await supabase.from('customers').update(patch).in('customer_id', ids)
     setBusy(false)
-    setEditing(null)
     if (error) { onError(error.message || '저장하지 못했습니다'); return }
     onToast(done)
     onSaved()
   }
 
-  const saveIndustry = async (next: string) => {
-    if (!next || next === group.industry) return
-    setSavingIndustry(true)
-    const { error } = await supabase.from('customers').update({ industry: next }).eq('customer_id', group.companyId)
-    setSavingIndustry(false)
-    if (error) { onError(error.message || '분류를 저장하지 못했습니다'); return }
-    invalidateParents()   // 회사 목록 캐시가 옛 분류를 들고 있다
-    onToast(`${group.companyName} 분류를 「${next}」로 바꿨습니다`)
+  /**
+   * 회사 수정 저장 — **두 길로 나뉜다.**
+   *   · 회사명·영문명 … 라우트(superadmin). 사업장 이름을 전부 다시 만들기 때문이다.
+   *   · 분류·메모 … 회사 줄 한 칸이라 바로 쓴다(좌 패널의 분류 일괄 지정과 같은 문턱).
+   * 그래서 슈퍼관리자가 아니어도 분류·메모는 고칠 수 있고, 이름 칸만 잠겨 보인다.
+   */
+  const saveCompany = async (form: CompanyEditForm) => {
+    if (busy) return
+    const name = form.name.trim()
+    if (!name) { onError('회사명을 입력해주세요'); return }
+    const nameChanged = name !== group.companyName.trim()
+    const enChanged = form.nameEn.trim() !== (group.nameEn ?? '').trim()
+    const industryChanged = form.industry !== (group.industry ?? '')
+    const noteChanged = form.note.trim() !== (group.note ?? '').trim()
+    if (!nameChanged && !enChanged && !industryChanged && !noteChanged) { setEditCompanyOpen(false); return }
+
+    setBusy(true)
+    let renamed = 0
+    if (nameChanged || enChanged) {
+      const r = await callRoute({
+        action: 'rename', parentId: group.companyId, name,
+        industry: form.industry, nameEn: form.nameEn.trim(),
+      })
+      if (!r.ok) { setBusy(false); onError(r.error); return }
+      renamed = (r.data.renamedSites as number) ?? 0
+    }
+    if (industryChanged || noteChanged) {
+      const patch: Record<string, unknown> = {}
+      if (industryChanged) patch.industry = form.industry || null
+      if (noteChanged) patch.note = form.note.trim() || null
+      const { error } = await supabase.from('customers').update(patch).eq('customer_id', group.companyId)
+      if (error) { setBusy(false); onError(error.message || '회사 정보를 저장하지 못했습니다'); return }
+    }
+    setBusy(false)
+    invalidateParents()   // 회사 목록 캐시가 옛 이름·분류를 들고 있다
+    setEditCompanyOpen(false)
+    onToast(nameChanged && renamed > 0
+      ? `회사 정보를 수정했습니다 (사업장 ${renamed}곳 이름도 함께)`
+      : '회사 정보를 수정했습니다')
     onSaved()
   }
 
-  /** 회사 이름·영문명 — 라우트가 자식 사업장 이름도 다시 만든다. */
-  const saveCompanyName = async () => {
-    if (!editCompany || busy) return
-    const name = editCompany.name.trim()
-    if (!name) { onError('회사명을 입력해주세요'); return }
+  /** 사업장 수정 — 상세 화면과 **같은 모달·같은 저장 규칙**(lib/saveCustomerEdit.ts). */
+  const saveSite = async (form: Parameters<typeof saveCustomerEdit>[1]) => {
+    if (!editSite || busy) return
     setBusy(true)
-    const r = await callRoute({
-      action: 'rename', parentId: group.companyId, name,
-      industry: group.industry ?? '', nameEn: editCompany.nameEn.trim(),
-    })
+    const r = await saveCustomerEdit(editSite, form)
     setBusy(false)
-    if (!r.ok) { onError(r.error); return }
-    setEditCompany(null)
-    onToast(`회사 이름을 바꿨습니다 (사업장 ${(r.data.renamedSites as number) ?? 0}곳도 함께)`)
+    if (!r.ok) { onError(r.message); return }
+    setEditSite(null)
+    onToast('사업장 정보를 수정했습니다')
     onSaved()
   }
 
@@ -170,18 +195,6 @@ export default function CompanyPane({
     onSaved()
   }
 
-  /** 사업장명 — site_name 을 고치고 company_name 을 다시 만든다(라우트). */
-  const saveSiteName = async (siteId: number, next: string) => {
-    if (busy) return
-    setBusy(true)
-    const r = await callRoute({ action: 'rename-site', siteId, siteName: next.trim() })
-    setBusy(false)
-    setEditing(null)
-    if (!r.ok) { onError(r.error); return }
-    onToast('사업장명을 바꿨습니다')
-    onSaved()
-  }
-
   const selected = [...checked]
 
   return (
@@ -189,59 +202,12 @@ export default function CompanyPane({
 
       {/* ── 회사 카드 ── */}
       <section style={{ ...card, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 200 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            {editCompany ? (
-              <>
-                <input value={editCompany.name} autoFocus disabled={busy}
-                  onChange={e => setEditCompany({ ...editCompany, name: e.target.value })}
-                  onKeyDown={e => { if (e.key === 'Enter') void saveCompanyName(); if (e.key === 'Escape') setEditCompany(null) }}
-                  placeholder="회사명"
-                  style={{ height: 30, width: 190, padding: '0 8px', borderRadius: 6, border: `1px solid ${BLUE}`, fontSize: 15, fontWeight: 700, outline: 'none' }} />
-                <input value={editCompany.nameEn} disabled={busy}
-                  onChange={e => setEditCompany({ ...editCompany, nameEn: e.target.value })}
-                  onKeyDown={e => { if (e.key === 'Enter') void saveCompanyName(); if (e.key === 'Escape') setEditCompany(null) }}
-                  placeholder="영문 회사명 (선택)"
-                  style={{ height: 30, width: 170, padding: '0 8px', borderRadius: 6, border: `1px solid ${BORDER}`, fontSize: 12, outline: 'none' }} />
-                <button type="button" onClick={() => void saveCompanyName()} disabled={busy}
-                  style={{ ...btn, background: BLUE, borderColor: BLUE, color: '#fff' }}>저장</button>
-                <button type="button" onClick={() => setEditCompany(null)} disabled={busy} style={btn}>취소</button>
-              </>
-            ) : (
-              <>
-                <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: TEXT, letterSpacing: '-0.5px' }}>{group.companyName}</h1>
-                {group.nameEn && <span style={{ fontSize: 12, color: MUTED }}>{group.nameEn}</span>}
-                <button type="button" aria-label="회사 정보 수정" disabled={!canEditCompany}
-                  title={canEditCompany ? '회사명·영문명 수정' : '회사명 수정은 슈퍼관리자만 할 수 있습니다'}
-                  onClick={() => setEditCompany({ name: group.companyName, nameEn: group.nameEn ?? '' })}
-                  style={{ width: 26, height: 26, padding: 0, borderRadius: 6, border: 'none', background: 'transparent', color: MUTED, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = NEUTRAL; e.currentTarget.style.color = TEXT }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = MUTED }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" /></svg>
-                </button>
-              </>
-            )}
-            {/* 분류 — 비어 있는 회사가 많아 여기서 바로 고른다. */}
-            <select
-              value={industry}
-              disabled={savingIndustry}
-              onChange={e => { setIndustry(e.target.value); void saveIndustry(e.target.value) }}
-              aria-label="회사 분류"
-              style={{
-                height: 26, padding: '0 6px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                border: `1px solid ${group.industry ? BORDER : '#fcd34d'}`,
-                background: group.industry ? NEUTRAL : '#fffbeb',
-                color: group.industry ? SUB : '#b45309',
-                outline: 'none',
-              }}
-            >
-              <option value="">분류 없음</option>
-              {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
-            </select>
-          </div>
-          <div style={{ fontSize: 11, color: MUTED }}>
-            담당자는 업체가 아니라 건(리드·견적·수리)에 붙습니다
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 200 }}>
+          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: TEXT, letterSpacing: '-0.5px' }}>{group.companyName}</h1>
+          {group.nameEn && <span style={{ fontSize: 12, color: MUTED }}>{group.nameEn}</span>}
+          {group.industry && (
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: NEUTRAL, color: SUB }}>{group.industry}</span>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 22 }}>
@@ -265,7 +231,7 @@ export default function CompanyPane({
 
         <span style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={onAddSite} style={btn}>+ 사업장 추가</button>
+          <button type="button" onClick={() => setEditCompanyOpen(true)} style={btn}>수정</button>
           {/* 병합 — **되돌릴 수 없다.** 슈퍼관리자만 누를 수 있다(라우트도 같은 문턱이다). */}
           <button type="button" disabled={!canEditCompany} title={canEditCompany ? '다른 회사로 합칩니다' : '회사 병합은 슈퍼관리자만 할 수 있습니다'}
             onClick={() => setMergeOpen(true)}
@@ -277,7 +243,10 @@ export default function CompanyPane({
       <section style={{ ...card, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: `1px solid ${BORDER}` }}>
           <b style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>사업장 {group.sites.length}곳</b>
-          <span style={{ fontSize: 11, color: MUTED }}>대리점·상태는 칸을 눌러 바로 고칩니다</span>
+          <span style={{ fontSize: 11, color: MUTED }}>줄 끝의 연필로 고칩니다</span>
+          <span style={{ flex: 1 }} />
+          {/* 사업장을 더하는 자리는 **표 머리줄**이다 — 더할 대상(이 표)의 바로 위다. */}
+          <button type="button" onClick={onAddSite} style={btn}>+ 사업장 추가</button>
         </div>
 
         <div style={{ overflowX: 'auto' }}>
@@ -296,7 +265,7 @@ export default function CompanyPane({
                 <th style={{ ...th, textAlign: 'right' }}>장비</th>
                 <th style={th}>최근 활동 · 작성자</th>
                 <th style={{ ...th, textAlign: 'right' }}>진행 견적</th>
-                <th style={{ ...th, width: 52 }} />
+                <th style={{ ...th, width: 86 }} />
               </tr>
             </thead>
             <tbody>
@@ -309,69 +278,15 @@ export default function CompanyPane({
                     <td style={td}>
                       <input type="checkbox" checked={on} onChange={() => toggle(id)} aria-label={`${s.siteName} 선택`} />
                     </td>
-                    <td style={{ ...td, fontWeight: 600 }}>
-                      {editing === `${id}:site` ? (
-                        <input autoFocus defaultValue={s.customer.site_name ?? ''} disabled={busy}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') void saveSiteName(id, (e.target as HTMLInputElement).value)
-                            if (e.key === 'Escape') setEditing(null)
-                          }}
-                          onBlur={e => void saveSiteName(id, e.target.value)}
-                          placeholder="사업장명 (비우면 회사명만)"
-                          style={{ height: 26, width: 170, borderRadius: 6, border: `1px solid ${BLUE}`, fontSize: 12, padding: '0 6px', outline: 'none' }} />
-                      ) : (
-                        <button type="button" onClick={() => setEditing(`${id}:site`)}
-                          style={{ border: '1px solid transparent', background: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: TEXT, padding: '3px 6px', borderRadius: 6, fontFamily: 'inherit' }}
-                          onMouseEnter={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.background = '#fff' }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = 'none' }}>
-                          {s.siteName}
-                        </button>
-                      )}
-                    </td>
+                    <td style={{ ...td, fontWeight: 600 }}>{s.siteName}</td>
                     <td style={{ ...td, color: SUB }}>{regionOf(s.customer) || '-'}</td>
-
-                    {/* 대리점 — 눌러서 고른다 */}
+                    <td style={{ ...td, color: s.customer.agency_name ? TEXT : MUTED }}>{s.customer.agency_name ?? DIRECT_SALE_LABEL}</td>
                     <td style={td}>
-                      {editing === `${id}:agency` ? (
-                        <select autoFocus defaultValue={s.customer.agency_customer_id ?? ''}
-                          disabled={busy}
-                          onChange={e => void saveCell([id], { agency_customer_id: e.target.value ? Number(e.target.value) : null }, '대리점을 바꿨습니다')}
-                          onBlur={() => setEditing(null)}
-                          style={{ height: 26, borderRadius: 6, border: `1px solid ${BLUE}`, fontSize: 12, padding: '0 4px', outline: 'none' }}>
-                          <option value="">{DIRECT_SALE_LABEL}</option>
-                          {agencies.map(a => <option key={a.customer_id} value={a.customer_id}>{a.company_name}</option>)}
-                        </select>
-                      ) : (
-                        <button type="button" onClick={() => setEditing(`${id}:agency`)}
-                          style={{ border: '1px solid transparent', background: 'none', cursor: 'pointer', fontSize: 12, color: s.customer.agency_name ? TEXT : MUTED, padding: '3px 6px', borderRadius: 6, fontFamily: 'inherit' }}
-                          onMouseEnter={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.background = '#fff' }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = 'none' }}>
-                          {s.customer.agency_name ?? DIRECT_SALE_LABEL}
-                        </button>
-                      )}
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_DOT[s.customer.status ?? ''] ?? MUTED }} />
+                        {s.customer.status ?? '-'}
+                      </span>
                     </td>
-
-                    {/* 상태 — 눌러서 고른다 */}
-                    <td style={td}>
-                      {editing === `${id}:status` ? (
-                        <select autoFocus defaultValue={s.customer.status ?? ''}
-                          disabled={busy}
-                          onChange={e => void saveCell([id], { status: e.target.value }, '상태를 바꿨습니다')}
-                          onBlur={() => setEditing(null)}
-                          style={{ height: 26, borderRadius: 6, border: `1px solid ${BLUE}`, fontSize: 12, padding: '0 4px', outline: 'none' }}>
-                          {STATUSES.map(v => <option key={v} value={v}>{v}</option>)}
-                        </select>
-                      ) : (
-                        <button type="button" onClick={() => setEditing(`${id}:status`)}
-                          style={{ border: '1px solid transparent', background: 'none', cursor: 'pointer', fontSize: 12, color: TEXT, padding: '3px 6px', borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: 'inherit' }}
-                          onMouseEnter={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.background = '#fff' }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = 'none' }}>
-                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_DOT[s.customer.status ?? ''] ?? MUTED }} />
-                          {s.customer.status ?? '-'}
-                        </button>
-                      )}
-                    </td>
-
                     <td style={{ ...td, textAlign: 'right' }}>{s.deviceCount}</td>
                     <td style={{ ...td, color: late ? DANGER : SUB }}>
                       {s.touch ? (
@@ -385,10 +300,20 @@ export default function CompanyPane({
                     </td>
                     <td style={{ ...td, textAlign: 'right', color: s.openQuotes > 0 ? BLUE : TEXT, fontWeight: s.openQuotes > 0 ? 700 : 400 }}>{s.openQuotes}</td>
                     <td style={{ ...td, textAlign: 'right' }}>
-                      <button type="button" onClick={() => onOpenSite(id)}
-                        style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: BLUE, fontFamily: 'inherit', padding: 0 }}>
-                        상세
-                      </button>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {/* 연필 — 이 줄을 수정 모달로 연다(상세 화면의 그 모달이다). */}
+                        <button type="button" aria-label={`${s.siteName} 수정`} title="사업장 정보 수정"
+                          onClick={() => setEditSite(s.customer)}
+                          style={{ width: 26, height: 26, padding: 0, borderRadius: 6, border: 'none', background: 'transparent', color: MUTED, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = NEUTRAL; e.currentTarget.style.color = TEXT }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = MUTED }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" /></svg>
+                        </button>
+                        <button type="button" onClick={() => onOpenSite(id)}
+                          style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: BLUE, fontFamily: 'inherit', padding: 0 }}>
+                          상세
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
@@ -445,6 +370,33 @@ export default function CompanyPane({
           </div>
         )}
       </section>
+
+      {/* 회사 수정 */}
+      {editCompanyOpen && (
+        <CompanyEditModal
+          initial={{
+            name: group.companyName,
+            nameEn: group.nameEn ?? '',
+            industry: group.industry ?? '',
+            note: group.note ?? '',
+          }}
+          siteCount={group.sites.length}
+          canRename={canEditCompany}
+          isSaving={busy}
+          onClose={() => setEditCompanyOpen(false)}
+          onSave={form => void saveCompany(form)}
+        />
+      )}
+
+      {/* 사업장 수정 — 상세 화면이 쓰는 그 모달 그대로 */}
+      {editSite && (
+        <CustomerEditModal
+          customer={editSite}
+          isSaving={busy}
+          onClose={() => setEditSite(null)}
+          onSave={form => void saveSite(form)}
+        />
+      )}
 
       {/* 다른 회사로 이동 — 고르면 바로 옮긴다(참조는 사업장에 붙어 있어 그대로 따라간다). */}
       {moveOpen && (

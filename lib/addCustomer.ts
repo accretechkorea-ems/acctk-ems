@@ -1,139 +1,185 @@
+'use client'
+
+/**
+ * 업체 등록 — **회사 한 줄 + 사업장 여러 줄 + 담당자 한 명**을 한 번에 만든다.
+ *
+ * ── 왜 이렇게 바뀌었나 ───────────────────────────────────────────────────
+ *   전에는 폼이 사업장 한 줄만 만들었고, 회사는 「회사명」 칸 안의 작은 링크로 따로
+ *   만들었다. 그래서 회사·사업장·대리점이 서로 다른 길로 들어왔고 영문명·분류가 빈
+ *   회사가 계속 생겼다. 이제 등록은 한 길이다 —
+ *     ① 종류(고객사·대리점) → ② 업체 정보(한글명·영문명·분류) → ③ 사업장 ④ 담당자
+ *
+ * ── 실패하면 되돌린다 ────────────────────────────────────────────────────
+ *   사업장 둘째 줄에서 실패했는데 회사와 첫 줄만 남으면 그게 더 나쁜 상태다.
+ *   이 함수가 **이번에 만든 줄만** 적어 두었다가 거꾸로 지운다.
+ *
+ * ⚠ 영문명(name_en)은 db/customer_name_en_20261119.sql 로 더하는 칸이다. 칸이 아직
+ *   없으면 lib/nameEn.ts 의 되돌이길로 **그 칸 없이** 저장한다(이름·분류는 그대로 들어간다).
+ */
+
 import { createClient } from '@/lib/supabase/client'
-import { createEmptyDeviceForm, isEmptyDeviceForm, isEmptyContactForm, type NewDeviceForm } from '@/lib/home'
 import { customerLabel } from '@/lib/customerLabel'
 import { normalizeRegion } from '@/lib/region'
+import { withNameEnFallback } from '@/lib/nameEn'
+import { invalidateParents } from '@/components/customer/ParentPicker'
+import { invalidateAgencies } from '@/lib/customerAgency'
 
-export const addCustomer = async ({
-  customerForm,
-  contactForm,
-  deviceForms,
-  fetchData,
-  resetForms,
-  setIsSavingCustomer,
-  setIsAddCustomerModalOpen,
-  setQuery,
-}: any) => {
+export type NewSiteInput = {
+  siteName: string
+  address: string
+  /** 대리점 줄(customers.is_agency). null 이면 직판. */
+  agencyId: number | null
+  status: string
+}
+
+export type NewContactInput = {
+  name: string
+  department: string
+  position: string
+  phone: string
+  /** 사업장이 여럿이면 몇 번째 사업장의 담당자인가. */
+  siteIndex: number
+}
+
+export type AddCustomerInput = {
+  kind: 'customer' | 'agency'
+  /** 업체명(한글). 기존 회사에 붙일 때도 그 회사 이름이 들어온다. */
+  companyName: string
+  nameEn: string
+  /** 고객사만. 대리점은 빈 문자열. */
+  industry: string
+  /** 기존 회사에 사업장만 더하는 경우 그 회사 id. 새로 만들면 null. */
+  existingCompanyId: number | null
+  sites: NewSiteInput[]
+  contact: NewContactInput | null
+}
+
+export type AddCustomerResult = {
+  companyId: number
+  siteIds: number[]
+  /** 토스트에 쓸 한 줄. */
+  message: string
+}
+
+export async function addCustomerEntry(input: AddCustomerInput): Promise<AddCustomerResult> {
   const supabase = createClient()
+  const name = input.companyName.trim()
+  const nameEn = input.nameEn.trim()
+  if (!name) throw new Error(input.kind === 'agency' ? '대리점명을 입력해주세요' : '업체명을 입력해주세요')
 
-  // 사용자 검증은 호출 컴포넌트(AddCustomerModal)에서 인라인으로 처리한다.
-  // 여기서는 방어용 최소 가드만 둔다 (throw → 호출부 catch 에서 toast.error 로 표면화).
-  if (customerForm.parent_customer_id == null) throw new Error('회사명을 선택해주세요')
+  /** 이번에 만든 줄 — 실패하면 거꾸로 지운다. */
+  const made: number[] = []
+  const rollback = async () => {
+    for (const id of [...made].reverse()) {
+      await supabase.from('customers').delete().eq('customer_id', id)
+    }
+  }
 
-  setIsSavingCustomer(true)
+  // ── 대리점 — 한 줄이면 끝난다 ───────────────────────────────────────────
+  if (input.kind === 'agency') {
+    const { data: dup } = await supabase.from('customers').select('customer_id')
+      .eq('is_agency', true).is('deleted_at', null).eq('company_name', name).maybeSingle()
+    if (dup) throw new Error('같은 이름의 대리점이 이미 있습니다')
 
-  let insertedCustomerId = 0
+    const site = input.sites[0] ?? { siteName: '', address: '', agencyId: null, status: '활성' }
+    const { data, error } = await withNameEnFallback(useEn => supabase.from('customers')
+      .insert({
+        company_name: name,
+        is_agency: true,
+        is_parent: false,
+        parent_customer_id: null,
+        address: site.address.trim() || null,
+        region1: normalizeRegion(null, site.address),
+        status: site.status || '활성',
+        ...(useEn && nameEn ? { name_en: nameEn } : null),
+      })
+      .select('customer_id').single())
+    if (error || !data) throw new Error(error?.message || '대리점을 만들지 못했습니다')
+    invalidateAgencies()
+    return { companyId: data.customer_id, siteIds: [], message: `${name} 대리점을 등록했습니다` }
+  }
+
+  // ── 고객사 ──────────────────────────────────────────────────────────────
+  if (input.sites.length === 0) throw new Error('사업장을 한 곳 이상 입력해주세요')
 
   try {
-    const { geocodeAddress } = await import('@/lib/geocode')
-    const coords = await geocodeAddress(customerForm.address)
-
-    // 회사 이름은 고른 회사 줄에서 읽는다 — 폼에는 id 만 있다.
-    const { data: parentRow } = await supabase
-      .from('customers').select('company_name')
-      .eq('customer_id', customerForm.parent_customer_id).maybeSingle()
-    const siteName = (customerForm.site_name ?? '').trim()
-    // company_name 에는 **합친 이름**을 넣는다. 이관이 끝날 때까지 화면·문서·엑셀이
-    // 아직 이 칸만 읽기 때문이다(2단계에서 customerLabel 로 옮긴다).
-    const combined = customerLabel(parentRow?.company_name ?? '', siteName)
-    if (!combined) throw new Error('회사명을 선택해주세요')
-
-    const { data: insertedCustomer, error: customerError } = await supabase
-      .from('customers')
-      .insert([
-        {
-          company_name: combined,
-          site_name: siteName || null,
-          address: customerForm.address.trim(),
-          // 지역1 은 주소에서 뽑아 **정본 약칭**으로 넣는다(lib/region.ts). 전에는 이 칸을
-          // 아예 쓰지 않아 새로 등록한 줄의 지역이 늘 비어 있었다.
-          region1: normalizeRegion(null, customerForm.address),
-          // 대리점은 줄을 가리킨다(lib/customerAgency.ts). 옛 agency 텍스트 칸은 쓰지 않는다.
-          agency_customer_id: customerForm.agency_customer_id ?? null,
-          status: customerForm.status,
-          // 소속회사(선택). 나중에 따로 UPDATE 하면 실패했을 때 연결이 빠진 채 남으므로 함께 넣는다.
-          parent_customer_id: customerForm.parent_customer_id ?? null,
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-        },
-      ])
-      .select('customer_id')
-      .single()
-
-    if (customerError || !insertedCustomer) {
-      throw customerError || new Error('customers 저장 실패')
-    }
-
-    insertedCustomerId = insertedCustomer.customer_id
-
-    // 아무것도 입력하지 않은 장비 카드는 걸러낸다 (장비 없는 신규 업체도 등록 가능).
-    const filledDevices: NewDeviceForm[] = deviceForms.filter((d: NewDeviceForm) => !isEmptyDeviceForm(d))
-    const devicePayload = []
-    for (let i = 0; i < filledDevices.length; i++) {
-      const d = filledDevices[i]
-
-      // 납입의사록·패킹리스트 파일이 있으면 packing-lists(비공개) 버킷에 업로드.
-      // DB에는 전체 URL이 아니라 "저장 경로(파일명)"만 보관 → 열 때 서명 URL 발급.
-      let packingPath: string | null = null
-      if (d.packing_file) {
-        const ext = d.packing_file.name.split('.').pop()
-        const fileName = `packing-${insertedCustomerId}-${i}-${Date.now()}.${ext}`
-        const { error: upErr } = await supabase.storage
-          .from('packing-lists')
-          .upload(fileName, d.packing_file, { upsert: true })
-        if (!upErr) {
-          packingPath = fileName
-        }
+    // ① 회사 줄 — 고른 회사가 있으면 그 줄, 없으면 만든다.
+    let companyId = input.existingCompanyId
+    let companyName = name
+    if (companyId != null) {
+      const { data: row } = await supabase.from('customers').select('company_name')
+        .eq('customer_id', companyId).maybeSingle()
+      companyName = (row?.company_name ?? name).trim()
+    } else {
+      const { data: dup } = await supabase.from('customers').select('customer_id')
+        .eq('is_parent', true).is('deleted_at', null).eq('company_name', name).maybeSingle()
+      if (dup) {
+        // 폼이 못 걸러낸 동명 회사 — 새로 만들지 않고 그 줄에 붙인다.
+        companyId = dup.customer_id
+      } else {
+        const { data, error } = await withNameEnFallback(useEn => supabase.from('customers')
+          .insert({
+            company_name: name,
+            is_parent: true,
+            is_agency: false,
+            parent_customer_id: null,
+            industry: input.industry || null,
+            ...(useEn && nameEn ? { name_en: nameEn } : null),
+          })
+          .select('customer_id').single())
+        if (error || !data) throw new Error(error?.message || '회사를 만들지 못했습니다')
+        companyId = data.customer_id
+        made.push(data.customer_id)
+        invalidateParents()
       }
+    }
 
-      devicePayload.push({
-        customer_id: insertedCustomerId,
-        device_name: d.device_name.trim(),
-        device_name2: d.device_name2.trim() || null,
-        option: d.option.trim() || null,
-        serial_number: d.serial_number.trim() || null,
-        program: d.program,
-        install_date: d.install_date || null,
-        category: d.category,
-        packing_list_url: packingPath,
+    // ② 사업장 줄들 — 주소에서 좌표와 지역을 뽑는다.
+    const { geocodeAddress } = await import('@/lib/geocode')
+    const siteIds: number[] = []
+    for (const site of input.sites) {
+      const address = site.address.trim()
+      const coords = await geocodeAddress(address)
+      const siteName = site.siteName.trim()
+      const { data, error } = await supabase.from('customers').insert({
+        // company_name 에는 **합친 이름**을 넣는다 — 화면·문서·엑셀이 아직 이 칸만 읽는다.
+        company_name: customerLabel(companyName, siteName),
+        site_name: siteName || null,
+        address,
+        region1: normalizeRegion(null, address),
+        agency_customer_id: site.agencyId ?? null,
+        status: site.status || '활성',
+        parent_customer_id: companyId,
+        is_parent: false,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+      }).select('customer_id').single()
+      if (error || !data) throw new Error(error?.message || '사업장을 만들지 못했습니다')
+      siteIds.push(data.customer_id)
+      made.push(data.customer_id)
+    }
+
+    // ③ 담당자 — 고른 사업장에 붙인다(선택).
+    const contact = input.contact
+    if (contact && contact.name.trim()) {
+      const target = siteIds[contact.siteIndex] ?? siteIds[0]
+      const { error } = await supabase.from('contacts').insert({
+        customer_id: target,
+        name: contact.name.trim(),
+        department: contact.department.trim() || null,
+        position: contact.position.trim() || null,
+        phone: contact.phone.trim() || null,
       })
+      // 담당자 한 줄 때문에 회사·사업장을 되돌리지는 않는다 — 나중에 상세에서 더할 수 있다.
+      if (error) console.error('[addCustomer] 담당자 저장 실패', error)
     }
 
-    // 남은 것이 없으면 insert 자체를 건너뛴다.
-    if (devicePayload.length > 0) {
-      const { error: deviceError } = await supabase.from('devices').insert(devicePayload)
-      if (deviceError) throw deviceError
-    }
-
-    // 담당자도 선택 사항 — 아무것도 입력하지 않았으면 넣지 않는다.
-    if (!isEmptyContactForm(contactForm)) {
-      const { error: contactError } = await supabase.from('contacts').insert([
-        {
-          customer_id: insertedCustomerId,
-          name: contactForm.name.trim(),
-          department: contactForm.department.trim() || null,
-          position: contactForm.position.trim() || null,
-          phone: contactForm.phone.trim() || null,
-        },
-      ])
-      if (contactError) throw contactError
-    }
-
-    resetForms()
-    setIsAddCustomerModalOpen(false)
-    setQuery('')
-
-    await fetchData()
-    return true // 성공 여부를 반환 → 호출 컴포넌트에서 토스트 표시
-  } catch (error: any) {
-    console.error(error)
-
-    if (insertedCustomerId) {
-      await supabase.from('customers').delete().eq('customer_id', insertedCustomerId)
-    }
-
-    // 훅을 쓸 수 없는 모듈이므로 에러를 호출부로 전파 → 컴포넌트에서 toast.error 표시
-    throw error
-  } finally {
-    setIsSavingCustomer(false)
+    const message = input.existingCompanyId != null
+      ? `${companyName} 에 사업장 ${siteIds.length}곳을 더했습니다`
+      : `${companyName} 와 사업장 ${siteIds.length}곳을 등록했습니다`
+    return { companyId: companyId as number, siteIds, message }
+  } catch (e) {
+    await rollback()
+    throw e
   }
 }

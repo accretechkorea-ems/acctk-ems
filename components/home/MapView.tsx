@@ -28,7 +28,6 @@ type Props = {
   toggleStatus: (status: string) => void
   selectedCategories: string[]
   toggleCategory: (category: string) => void
-  onAddClick: () => void
   restoredMapCenter: { lat: number; lng: number } | null
   restoredMapLevel: number | null
   restoredOpenOverlayCustomerId: number | null
@@ -44,7 +43,6 @@ export default function MapView({
   toggleStatus,
   selectedCategories,
   toggleCategory,
-  onAddClick,
   restoredMapCenter,
   restoredMapLevel,
   restoredOpenOverlayCustomerId,
@@ -547,9 +545,8 @@ useEffect(() => {
         </div>
       </div>
 
-      {/* 「업체 등록」 버튼은 **화면 맨 위 헤더**로 옮겼다(2026-11-19).
-          목록 보기에서는 지도를 내리므로, 지도 안에 두면 그 버튼이 함께 사라진다.
-          components/home/ListHeader.tsx 가 두 보기에서 같은 자리에 낸다. */}
+      {/* 「업체 등록」 버튼은 **화면 맨 위 헤더**로 옮겼다(2026-11-19). 지도 보기·목록 보기가
+          같은 자리에서 같은 폼을 연다 — components/home/ListHeader.tsx. 지도 안에는 등록 진입이 없다. */}
 
       {/* 지도 */}
      <div
