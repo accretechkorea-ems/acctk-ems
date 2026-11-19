@@ -11,7 +11,8 @@
 --
 -- ── 무엇을 하나 ───────────────────────────────────────────────────────────
 --   조회: 로그인 사용자 전체(기존 `activity_types_read` 를 역할 지정된 것으로 갈아탄다).
---   쓰기: superadmin 만. 종류는 sales_activities 가 이름으로 참조하는 기준 자료라,
+--   쓰기: superadmin 만(추가·이름 변경·활성·삭제). 종류는 sales_activities 가 이름으로
+--         참조하는 기준 자료라,
 --         일반 사용자가 anon 키로 고치면 참조 무결성과 과거 집계가 함께 깨진다.
 --
 --   모양은 quote_category_template_schema.sql:188-224 를 그대로 따른다.
@@ -42,15 +43,22 @@ on public.activity_types for update to authenticated
 using ((select public.is_superadmin()))
 with check ((select public.is_superadmin()));
 
--- 삭제 정책은 **두지 않는다.** sales_activities 가 이름을 참조하므로 지울 수 없고,
--- 관리 화면에도 삭제 버튼이 없다(쓰지 않게 된 종류는 비활성한다).
+-- 삭제 — **superadmin 만**. 쓰는 활동이 있으면 FK 가 막는다(23503), 그래서 지워지는 것은
+-- 아무 활동도 쓰지 않는 종류뿐이다(잘못 만든 종류를 되돌리는 길). 관리 화면도 쓰임새를
+-- 세어 0건일 때만 버튼을 낸다 — 이 정책은 그 뒤의 마지막 문턱이다.
+--   ※ 2026-11-19 에 **나중에 더했다.** 이 파일을 먼저 돌린 뒤라면 다시 한 번 돌린다
+--     (전부 drop … if exists 라 재실행에 안전하다).
+drop policy if exists "activity_types_delete_superadmin" on public.activity_types;
+create policy "activity_types_delete_superadmin"
+on public.activity_types for delete to authenticated
+using ((select public.is_superadmin()));
 
 grant select on public.activity_types to authenticated;
-grant insert, update on public.activity_types to authenticated;
+grant insert, update, delete on public.activity_types to authenticated;
 -- ↑ 쓰기 GRANT 를 주는 이유: 관리 화면이 anon 키(authenticated 역할)로 고친다. 실제 통제는
 --   위 정책(superadmin 만)이 한다. GRANT 를 빼면 superadmin 도 42501 로 막힌다.
 
--- 확인 — 정책 3개(select·insert·update)가 나와야 한다.
+-- 확인 — 정책 4개(select·insert·update·delete)가 나와야 한다.
 select policyname, cmd, roles
 from pg_policies
 where schemaname = 'public' and tablename = 'activity_types'

@@ -547,24 +547,9 @@ useEffect(() => {
         </div>
       </div>
 
-      {/* 우측 상단 업체 등록 */}
-      <div style={{ position: 'absolute', top: 14, right: 14, zIndex: Z.inPage }}>
-        <button
-          onClick={onAddClick}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px 14px', borderRadius: 6, border: 'none',
-            background: '#234ea2', color: '#ffffff',
-            fontWeight: 700, fontSize: 13, cursor: 'pointer',
-          }}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          업체 등록
-        </button>
-      </div>
+      {/* 「업체 등록」 버튼은 **화면 맨 위 헤더**로 옮겼다(2026-11-19).
+          목록 보기에서는 지도를 내리므로, 지도 안에 두면 그 버튼이 함께 사라진다.
+          components/home/ListHeader.tsx 가 두 보기에서 같은 자리에 낸다. */}
 
       {/* 지도 */}
      <div

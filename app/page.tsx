@@ -16,13 +16,24 @@ import {
   CUSTOMER_EXCEL_SELECT, exportCustomerXlsx, toExcelCustomer,
   type CustomerExcelRow, type ExcelCustomer,
 } from '@/lib/customerExcel'
-import { NOT_AGENCY_ONLY } from '@/lib/customerAgency'
+import { NOT_AGENCY_ONLY, useAgencies } from '@/lib/customerAgency'
+import ListHeader, { type HomeView } from '@/components/home/ListHeader'
+import CustomerListPanel, { type ListTab } from '@/components/home/list/CustomerListPanel'
+import CompanyPane from '@/components/home/list/CompanyPane'
+import CustomerDetailBody from '@/components/customer/CustomerDetailBody'
+import { loadEngineers } from '@/lib/appData/engineers'
+import { loadParents, type ParentOption } from '@/components/customer/ParentPicker'
+import { useOpenQuotes } from '@/hooks/useOpenQuotes'
+import {
+  buildCompanyTree, regionOf, EMPTY_FILTER,
+  type ListFilter, type SortKey,
+} from '@/lib/customerList'
+import type { LastTouch } from '@/lib/customerLastTouch'
 import { todayKST } from '@/lib/date'
 import { useToast } from '@/components/common/Toast'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canViewQuote, isSuperAdmin } from '@/lib/permissions'
-import { useQuotePdf } from '@/hooks/customer/useQuotePdf'
+import { isSuperAdmin } from '@/lib/permissions'
 
 
 import {
@@ -48,12 +59,8 @@ import {
 export default function HomePage() {
   const supabase = createClient()
   const { engineer: me, loading: guardLoading, authorized } = usePageGuard()
-  // 이 화면은 고객사 권한으로 들어오지만, 부품 검색은 견적 내용을 보여주므로 견적 권한을 따로 본다.
-  const canSearchParts = canViewQuote(me)
   // 엑셀 내보내기는 관리자만 — 팀 관리·목표 관리 버튼과 같은 판정(permission_level).
   const canExportExcel = isSuperAdmin(me)
-  // 부품 결과의 PDF 아이콘 — 업체 상세와 같은 방식(서명 URL + 조회 기록)을 그대로 쓴다.
-  const quotePdf = useQuotePdf({ customer: null, engineerId: me?.engineer_id ?? null })
   const toast = useToast()
 
   const listScrollRef = useRef<HTMLDivElement | null>(null)
@@ -69,6 +76,36 @@ export default function HomePage() {
   const [mapLevel, setMapLevel] = useState<number | null>(null)
   const [openOverlayCustomerId, setOpenOverlayCustomerId] = useState<number | null>(null)
   const [mobileTab, setMobileTab] = useState<'list' | 'map'>('list')
+  /**
+   * 보기 — 지도 / 목록. 주소의 `?view=list` 와 세션 저장(HOME_STATE_KEY)에 함께 남긴다.
+   *
+   * 라우트를 가르지 않는 이유 — 조회(useHomeData)·필터·검색·스크롤 복원이 전부 이
+   * 화면에 있다. 라우트를 나누면 그 네 가지가 두 벌이 되고, 메뉴 권한도 새 key 가
+   * 필요하다(lib/menuPerms.ts 의 customers 는 path '/' 다). 주소로 공유하는 길만
+   * 쿼리로 남긴다(CRM 보강 1차 보고의 결정 9).
+   */
+  const [view, setView] = useState<HomeView>('map')
+  // 목록 보기 상태 — 탭·필터·정렬·펼침·선택.
+  const [listTab, setListTab] = useState<ListTab>('company')
+  const [listFilter, setListFilter] = useState<ListFilter>({
+    ...EMPTY_FILTER,
+    statuses: ['활성', '잠재'],
+    categories: [...CATEGORY_OPTIONS],
+  })
+  const [listSort, setListSort] = useState<SortKey>('touch')
+  const [expanded, setExpanded] = useState<Set<number>>(new Set())
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null)
+  const [selectedSiteId, setSelectedSiteId] = useState<number | null>(null)
+  const [companies, setCompanies] = useState<ParentOption[]>([])
+  const [lastTouchMap, setLastTouchMap] = useState<Map<number, LastTouch>>(new Map())
+  /** 등록 폼의 회사를 고정한 채 열었는가(회사 카드의 「+ 사업장 추가」). */
+  const [lockAddCompany, setLockAddCompany] = useState(false)
+  // 진행 견적 수는 **목록 보기를 열 때만** 읽는다(첫 화면 조회를 늘리지 않는다).
+  const openQuotes = useOpenQuotes(view === 'list')
+  // 대리점 탭의 건수 — 목록은 캐시를 공유하므로 조회는 앱당 한 번이다.
+  const agencyCount = useAgencies().length
+  /** 작성자 id → 이름. 직원 목록은 공통 층에서 받는다(조회 0회).  */
+  const [engineerNameMap, setEngineerNameMap] = useState<Map<number, string>>(new Map())
 
 useEffect(() => {
   const handleVisibilityChange = () => {
@@ -80,15 +117,8 @@ useEffect(() => {
   return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
 }, [])
   const [query, setQuery] = useState('')
-  // 검색 모드 — 업체(기본) / 부품. 저장하지 않으므로 화면을 새로 열면 늘 업체로 시작한다.
-  const [searchMode, setSearchMode] = useState<'업체' | '부품'>('업체')
-  const [partQuery, setPartQuery] = useState('')
-  // 업체명과 품번은 성격이 달라 이어 쓸 일이 없다. 모드를 바꾸면 양쪽 검색어를 비운다.
-  const changeSearchMode = (next: '업체' | '부품') => {
-    setSearchMode(next)
-    setQuery('')
-    setPartQuery('')
-  }
+  // 「업체 | 부품」 모드 토글은 걷었다(2026-11-19) — 부품 사용 이력 검색은 견적 작성
+  // 화면으로 옮긴다. 조회·상태 코드는 그대로 남아 있다(lib/partSearch.ts).
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['활성', '잠재'])
 const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS])
 
@@ -117,7 +147,47 @@ const toggleCategory = (category: string) => {
   setCustomers,
   setDeviceMap,
   setLatestServiceDateMap,
+  setLastTouchMap,
 })
+
+  /**
+   * 주소의 `?view=list` — 들어올 때 읽고, 토글할 때 바꾼다.
+   *
+   * useSearchParams 를 쓰지 않는 이유: 이 화면은 Suspense 경계가 없어 그 훅을 들이면
+   * 경계를 새로 둘러야 한다. 읽기는 한 번뿐이고 쓰기는 주소만 갈아 끼우면 되므로
+   * history.replaceState 로 충분하다(뒤로 가기 기록을 늘리지 않는다).
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (new URLSearchParams(window.location.search).get('view') === 'list') setView('list')
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    if (view === 'list') url.searchParams.set('view', 'list')
+    else url.searchParams.delete('view')
+    if (url.toString() !== window.location.href) window.history.replaceState(null, '', url.toString())
+  }, [view])
+
+  // 작성자 이름 — 목록 보기의 표가 쓴다.
+  useEffect(() => {
+    if (view !== 'list') return
+    let cancelled = false
+    loadEngineers().then(list => {
+      if (cancelled) return
+      setEngineerNameMap(new Map((list as { engineer_id: number; name: string | null }[]).map(e => [e.engineer_id, e.name ?? ''])))
+    })
+    return () => { cancelled = true }
+  }, [view])
+
+  // 회사 줄(is_parent)은 목록 보기에서만 쓴다 — 캐시를 공유하므로 조회는 한 번이다.
+  useEffect(() => {
+    if (view !== 'list') return
+    let cancelled = false
+    loadParents().then(list => { if (!cancelled) setCompanies(list) })
+    return () => { cancelled = true }
+  }, [view])
 
   useEffect(() => {
     if (customers.length > 0) setIsLoading(false)
@@ -144,6 +214,7 @@ const toggleCategory = (category: string) => {
   query,
   selectedStatuses,
   selectedCategories,
+  view,
   listScrollTop: listScrollRef.current?.scrollTop ?? 0,
   mapCenter,
   mapLevel,
@@ -192,6 +263,10 @@ if (navType.type !== 'back_forward') {
   setSelectedCategories(parsed.selectedCategories)
 }
 
+      if (parsed.view === 'list' || parsed.view === 'map') {
+        setView(parsed.view)
+      }
+
       if (typeof parsed.listScrollTop === 'number') {
         pendingListScrollTopRef.current = parsed.listScrollTop
       }
@@ -224,7 +299,7 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
   useEffect(() => {
   if (!restoredHomeStateRef.current) return
   saveHomeState()
-}, [query, selectedStatuses, selectedCategories, mapCenter, mapLevel, openOverlayCustomerId])
+}, [view, query, selectedStatuses, selectedCategories, mapCenter, mapLevel, openOverlayCustomerId])
 
   const resetForms = () => {
     setCustomerForm({
@@ -340,6 +415,63 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
       return bLatest - aLatest
     })
   }, [customers, query, selectedStatuses, selectedCategories, deviceMap, latestServiceDateMap])
+
+  // ── 목록 보기의 트리 ─────────────────────────────────────────────────────
+  //   좌 패널의 건수와 우측 표의 줄은 **같은 셈법**을 써야 한다 — 그 셈법은
+  //   lib/customerList.ts 에 있고, 여기서는 재료만 모아 넘긴다.
+  const companyMap = useMemo(
+    () => new Map(companies.map(c => [c.customer_id, { company_name: c.company_name, industry: c.industry }])),
+    [companies],
+  )
+  const today = todayKST()
+  const listTree = useMemo(() => buildCompanyTree({
+    customers,
+    companies: companyMap,
+    deviceCount: id => (deviceMap.get(id) ?? []).length,
+    deviceCategories: id => (deviceMap.get(id) ?? []).map(d => d.category).filter((x): x is string => !!x),
+    openQuotes: id => openQuotes.get(id) ?? 0,
+    touchOf: id => lastTouchMap.get(id) ?? null,
+    today,
+    filter: { ...listFilter, query },
+    allCategories: CATEGORY_OPTIONS,
+    sort: listSort,
+  }), [customers, companyMap, deviceMap, openQuotes, lastTouchMap, today, listFilter, query, listSort])
+
+  /** 지역 칩의 후보 — 데이터에 실제로 있는 값만(빈 값은 뺀다). */
+  const regionOptions = useMemo(
+    () => [...new Set(customers.map(c => regionOf(c)).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko')),
+    [customers],
+  )
+
+  /** 지금 고른 회사 묶음. */
+  const selectedGroup = useMemo(
+    () => listTree.groups.find(g => g.companyId === selectedCompanyId) ?? null,
+    [listTree, selectedCompanyId],
+  )
+
+  /**
+   * 업체 등록 폼을 연다. 등록 길은 **하나**다 — 폼 안에서 회사명을 찾고, 없으면 그 자리에서
+   * 새 회사로 만든다(분류를 함께 받는다).
+   *
+   * 목록 보기에서 회사를 골라 둔 채 누르면 그 회사가 **미리 채워져** 열린다. 회사 카드의
+   * 「+ 사업장 추가」는 거기에 더해 회사를 **고정**한다(lock) — 어느 회사에 붙일지는
+   * 이미 정해진 자리라 바꿀 수 있으면 실수만 는다.
+   */
+  const openAddCustomer = (lock = false) => {
+    const preset = view === 'list' ? selectedCompanyId : null
+    setCustomerForm(prev => ({ ...prev, parent_customer_id: preset }))
+    setLockAddCompany(lock && preset != null)
+    setIsAddCustomerModalOpen(true)
+  }
+
+  const toggleExpand = (companyId: number) => {
+    setExpanded(prev => {
+      const next = new Set(prev)
+      if (next.has(companyId)) next.delete(companyId)
+      else next.add(companyId)
+      return next
+    })
+  }
 
 /**
    * 지금 목록을 엑셀로 내려받는다 — **화면이 거른 범위·순서 그대로** 쓴다.
@@ -502,7 +634,10 @@ useEffect(() => {
       >
 
        <style>{`
+        /* 왼쪽 열의 검색칸은 **좁은 화면 전용**이다 — 넓은 화면은 맨 위 헤더가 맡는다. */
+        .sidebar-search { display: none; }
         @media (max-width: 768px) {
+  .sidebar-search { display: block !important; }
   .home-grid { grid-template-columns: 1fr !important; grid-template-rows: 1fr !important; }
   .mobile-tab-bar { display: flex !important; }
   .mobile-hide { display: none !important; }
@@ -511,8 +646,24 @@ useEffect(() => {
   .home-grid > div { height: 100% !important; min-height: 0 !important; min-width: 0 !important; overflow: hidden !important; }
   .home-grid > div > div { height: 100% !important; }
   body { overflow-x: hidden !important; }
+  /* 좁은 화면은 예전 「업체 목록 | 지도」 탭이 맡는다 — 토글이 둘이면 뜻이 겹친다. */
+  .home-header { display: none !important; }
 }
       `}</style>
+
+      {/* 맨 위 한 줄 — 보기 토글·검색·엑셀·등록. 두 보기가 함께 쓴다. */}
+      <ListHeader
+        view={view}
+        setView={setView}
+        query={query}
+        setQuery={setQuery}
+        count={view === 'list' ? listTree.siteCount : filteredCustomers.length}
+        loading={isLoading}
+        onExport={handleExportExcel}
+        exporting={isExporting}
+        canExport={canExportExcel}
+        onAdd={() => openAddCustomer()}
+      />
 
       {/* 모바일 탭 */}
       <div
@@ -574,6 +725,83 @@ useEffect(() => {
         </button>
       </div>
 
+      {view === 'list' ? (
+        /* ── 목록 보기 — 좌 360px 트리 + 우 상세 ──────────────────────────
+           조회·필터·검색은 지도 보기와 **같은 상태**를 쓴다(화면만 다르다). */
+        <div
+          className="home-grid"
+          style={{ display: 'grid', gridTemplateColumns: '360px minmax(0, 1fr)', gap: 12, alignItems: 'stretch', flex: 1, minHeight: 0 }}
+        >
+          <div className={mobileTab === 'map' ? 'mobile-hide' : ''} style={{ minHeight: 0, minWidth: 0, height: '100%' }}>
+            <CustomerListPanel
+              tab={listTab}
+              setTab={setListTab}
+              counts={{ company: listTree.groups.length, agency: agencyCount, unlinked: listTree.unlinkedCount }}
+              filter={listFilter}
+              setFilter={setListFilter}
+              regionOptions={regionOptions}
+              sort={listSort}
+              setSort={setListSort}
+              groups={listTree.groups}
+              siteCount={listTree.siteCount}
+              expanded={expanded}
+              toggleExpand={toggleExpand}
+              selectedCompanyId={selectedCompanyId}
+              selectedSiteId={selectedSiteId}
+              onSelectCompany={id => { setSelectedCompanyId(id); setSelectedSiteId(null) }}
+              onSelectSite={(cid, sid) => { setSelectedCompanyId(cid); setSelectedSiteId(sid) }}
+              loading={isLoading}
+            />
+          </div>
+          <div style={{ minHeight: 0, minWidth: 0, height: '100%', overflowY: 'auto' }}>
+            {selectedSiteId != null ? (
+              /* 사업장을 골랐을 때 — **상세 페이지와 같은 본문**이다(컴포넌트 하나를 나눠 쓴다). */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
+                {/* 경로 줄 — 회사로 돌아가는 길과 새 창 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: TEXT_MUTED }}>
+                  <button type="button" onClick={() => setSelectedSiteId(null)}
+                    style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#234ea2', fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3, padding: 0, fontFamily: 'inherit' }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+                    {selectedGroup?.companyName ?? '회사'} (회사 보기)
+                  </button>
+                  <span>›</span>
+                  <span style={{ color: TEXT_PRIMARY, fontWeight: 600 }}>
+                    {selectedGroup?.sites.find(s => s.customer.customer_id === selectedSiteId)?.siteName ?? ''}
+                  </span>
+                  <span style={{ flex: 1 }} />
+                  <a href={`/customer/${selectedSiteId}`} target="_blank" rel="noreferrer"
+                    style={{ color: TEXT_MUTED, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none' }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6" />
+                    </svg>
+                    새 창
+                  </a>
+                </div>
+                <CustomerDetailBody
+                  key={selectedSiteId}
+                  customerId={selectedSiteId}
+                  embedded
+                  onBack={() => setSelectedSiteId(null)}
+                />
+              </div>
+            ) : selectedGroup ? (
+              <CompanyPane
+                group={selectedGroup}
+                engineerName={id => (id == null ? '' : engineerNameMap.get(id) ?? '')}
+                onSaved={() => { void fetchData() }}
+                onError={msg => toast.error(msg)}
+                onToast={msg => toast.success(msg)}
+                onOpenSite={id => setSelectedSiteId(id)}
+                onAddSite={() => openAddCustomer(true)}
+              />
+            ) : (
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: TEXT_MUTED, fontSize: 13, background: '#fff', border: '1px solid #ebebeb', borderRadius: 8 }}>
+                왼쪽에서 회사나 사업장을 고르세요
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
       <div
         className="home-grid"
         style={{
@@ -587,17 +815,8 @@ useEffect(() => {
       >
 <div className={mobileTab === 'map' ? 'mobile-hide' : ''} style={{ minHeight: 0, minWidth: 0, height: '100%', overflow: 'hidden' }}>
           <Sidebar
-            canSearchParts={canSearchParts}
-            onOpenQuotePdf={quotePdf.openQuotePdfByUrl}
-            searchMode={searchMode}
-            setSearchMode={changeSearchMode}
-            partQuery={partQuery}
-            setPartQuery={setPartQuery}
             query={query}
             setQuery={setQuery}
-            selectedStatuses={selectedStatuses}
-            toggleStatus={toggleStatus}
-            onAddClick={() => setIsAddCustomerModalOpen(true)}
             customers={filteredCustomers}
             deviceMap={deviceMap}
             onMove={(customer) => setFocusedCustomerId(Number(customer.customer_id))}
@@ -605,9 +824,6 @@ useEffect(() => {
             listScrollRef={listScrollRef}
             onScrollSave={saveHomeState}
             isLoading={isLoading}
-            onExport={handleExportExcel}
-            exporting={isExporting}
-            canExport={canExportExcel}
           />
           </div>
 
@@ -637,9 +853,11 @@ onAddClick={() => setIsAddCustomerModalOpen(true)}
 />
 </div>
         </div>
+      )}
 
         <AddCustomerModal
           isOpen={isAddCustomerModalOpen}
+          lockCompany={lockAddCompany}
           isSavingCustomer={isSavingCustomer}
           customerForm={customerForm}
           setCustomerForm={setCustomerForm}

@@ -37,18 +37,36 @@ eq('날짜가 아니면 null', T.touchDate('미정'), null)
 console.log('\n── 네 갈래 중 최신 ──')
 eq('가장 최근 것을 고른다',
   T.pickLastTouch({ activity: ['2026-01-02'], service: ['2026-03-04'], quote: ['2026-02-02'] }),
-  { date: '2026-03-04', source: '서비스' })
+  { date: '2026-03-04', source: '서비스', actorId: null })
 eq('영업활동만 있어도 잡힌다',
-  T.pickLastTouch({ activity: ['2026-05-06'] }), { date: '2026-05-06', source: '영업활동' })
+  T.pickLastTouch({ activity: ['2026-05-06'] }), { date: '2026-05-06', source: '영업활동', actorId: null })
 eq('견적만 있어도 잡힌다 — 예전 정렬이 놓치던 자리',
-  T.pickLastTouch({ quote: ['2026-07-08'] }), { date: '2026-07-08', source: '견적' })
+  T.pickLastTouch({ quote: ['2026-07-08'] }), { date: '2026-07-08', source: '견적', actorId: null })
 eq('수리만 있어도 잡힌다',
-  T.pickLastTouch({ repair: ['2026-09-10'] }), { date: '2026-09-10', source: '수리' })
+  T.pickLastTouch({ repair: ['2026-09-10'] }), { date: '2026-09-10', source: '수리', actorId: null })
 eq('같은 날이면 사람이 적은 기록이 먼저',
   T.pickLastTouch({ activity: ['2026-06-01'], quote: ['2026-06-01'] }),
-  { date: '2026-06-01', source: '영업활동' })
+  { date: '2026-06-01', source: '영업활동', actorId: null })
 eq('아무것도 없으면 null', T.pickLastTouch({}), null)
 eq('빈 날짜만 있으면 null', T.pickLastTouch({ service: [null, '', '미정'] }), null)
+
+console.log('\n── 작성자(그 일을 한 우리 쪽 사람) ──')
+// 목록 보기의 「최근 활동 · 작성자」 칸이 쓴다. 날짜만 넘기던 옛 호출도 그대로 돈다.
+eq('{date, actorId} 를 넘기면 사람이 함께 나온다',
+  T.pickLastTouch({ activity: [{ date: '2026-05-06', actorId: 7 }] }),
+  { date: '2026-05-06', source: '영업활동', actorId: 7 })
+eq('이긴 갈래의 사람이 나온다',
+  T.pickLastTouch({ activity: [{ date: '2026-01-02', actorId: 7 }], quote: [{ date: '2026-03-04', actorId: 9 }] }),
+  { date: '2026-03-04', source: '견적', actorId: 9 })
+eq('날짜 문자열과 섞여 있어도 된다',
+  T.pickLastTouch({ service: ['2026-02-01', { date: '2026-04-01', actorId: 3 }] }),
+  { date: '2026-04-01', source: '서비스', actorId: 3 })
+eq('사람을 모르면 null',
+  T.pickLastTouch({ repair: [{ date: '2026-09-10' }] }),
+  { date: '2026-09-10', source: '수리', actorId: null })
+eq('같은 날이면 앞선 갈래의 사람이 이긴다',
+  T.pickLastTouch({ activity: [{ date: '2026-06-01', actorId: 7 }], quote: [{ date: '2026-06-01', actorId: 9 }] }),
+  { date: '2026-06-01', source: '영업활동', actorId: 7 })
 
 console.log('\n── 정렬 값 ──')
 const a = T.pickLastTouch({ activity: ['2026-11-17'] })

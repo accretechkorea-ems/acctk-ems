@@ -1,23 +1,26 @@
 'use client'
 
+// 지도 보기의 **왼쪽 열** — 검색칸(좁은 화면 전용) + 업체 카드 목록.
+//
+// ── 검색칸이 둘이 아닌 이유 ───────────────────────────────────────────────
+//   검색은 화면 맨 위 한 줄(components/home/ListHeader.tsx)로 올라갔다 — 목록 보기에는
+//   왼쪽이 트리라 검색칸을 둘 자리가 없고, 두 보기가 같은 검색어를 쓴다.
+//   다만 **좁은 화면에서는 그 헤더를 감추므로**(모바일은 예전 「업체 목록 | 지도」 탭을
+//   쓴다) 여기 칸이 남아 있어야 검색을 할 수 있다. 그래서 이 칸은 `.sidebar-search`
+//   클래스로 **넓은 화면에서만 숨긴다**(app/page.tsx 의 미디어 쿼리). 상태(query)는
+//   한 벌이라 어느 칸에 쳐도 같은 값이다.
+//
+// ── 「업체 | 부품」 토글은 걷었다 ─────────────────────────────────────────
+//   부품 사용 이력 검색은 **견적 작성 화면**으로 옮긴다(다음 회차). 조회·상태 코드는
+//   그대로 둔다 — lib/partSearch.ts · hooks/usePartSearch.ts · components/home/PartResults.tsx.
+
 import { useState } from 'react'
 import CustomerList from './CustomerList'
-import PartResults from './PartResults'
-import { usePartSearch } from '@/hooks/usePartSearch'
-import { TEXT_MUTED, TEXT_PRIMARY, type Customer, type Device } from '@/lib/home'
-
-const STATUS_CONFIG = {
-  '활성': { color: '#16a34a', activeBg: '#16a34a' },
-  '잠재': { color: '#f59e0b', activeBg: '#f59e0b' },
-  '이탈': { color: '#ef4444', activeBg: '#ef4444' },
-} as const
+import { TEXT_PRIMARY, type Customer, type Device } from '@/lib/home'
 
 type Props = {
   query: string
   setQuery: (v: string) => void
-  selectedStatuses: string[]
-  toggleStatus: (status: string) => void
-  onAddClick: () => void
   customers: Customer[]
   deviceMap: Map<number, Device[]>
   onMove: (customer: Customer) => void
@@ -25,26 +28,11 @@ type Props = {
   listScrollRef: React.RefObject<HTMLDivElement | null>
   onScrollSave: () => void
   isLoading?: boolean
-  // 부품 사용 이력 검색 — 견적 권한이 있는 팀에만 열어준다
-  canSearchParts: boolean
-  onOpenQuotePdf: (pdfUrl: string | null, quoteNumber: string) => void
-  searchMode: '업체' | '부품'
-  setSearchMode: (v: '업체' | '부품') => void
-  partQuery: string
-  setPartQuery: (v: string) => void
-  /** 지금 목록(필터·검색이 걸린 범위)을 엑셀로 내려받는다. */
-  onExport: () => void
-  exporting: boolean
-  /** 엑셀 내보내기를 보여 줄지 — superadmin 만. 꺼져 있으면 버튼 자체가 없다. */
-  canExport: boolean
 }
 
 export default function Sidebar({
   query,
   setQuery,
-  selectedStatuses,
-  toggleStatus,
-  onAddClick,
   customers,
   deviceMap,
   onMove,
@@ -52,35 +40,14 @@ export default function Sidebar({
   listScrollRef,
   onScrollSave,
   isLoading = false,
-  canSearchParts,
-  onOpenQuotePdf,
-  searchMode,
-  setSearchMode,
-  partQuery,
-  setPartQuery,
-  onExport,
-  exporting,
-  canExport,
 }: Props) {
   const [searchFocused, setSearchFocused] = useState(false)
-  // 기본값 꺼짐 = 전체(견적만 낸 건 포함). 아직 발주 이상이 거의 없어 조이면 늘 0건이 된다.
-  const [deliveredOnly, setDeliveredOnly] = useState(false)
-
-  // 권한이 없으면 토글을 아예 숨기고 업체 모드로 고정한다.
-  const mode = canSearchParts ? searchMode : '업체'
-  const partMode = mode === '부품'
-  // 부품 조회는 부품 모드에서만 나간다(업체 검색 중에는 요청이 아예 없다).
-  const part = usePartSearch(partQuery, partMode, deliveredOnly)
-  // 엑셀 내보내기 아이콘을 검색줄에 둘지. 입력칸 여백 계산과 버튼이 같은 값을 봐야
-  // 긴 검색어가 아이콘 밑으로 흘러들어가지 않는다.
-  const showExport = canExport && !partMode
-  const exportOff = exporting || isLoading || customers.length === 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%', gap: 12 }}>
 
-      {/* 검색창 — 모드 토글을 입력칸 안에 넣어 세로 공간을 더 쓰지 않는다 */}
-      <div style={{ position: 'relative' }}>
+      {/* 검색창 — 좁은 화면에서만 보인다(넓은 화면은 맨 위 헤더가 맡는다). */}
+      <div className="sidebar-search" style={{ position: 'relative' }}>
         <div style={{
           position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
           pointerEvents: 'none', display: 'flex', alignItems: 'center',
@@ -94,15 +61,14 @@ export default function Sidebar({
           </svg>
         </div>
         <input
-          value={partMode ? partQuery : query}
-          onChange={(e) => (partMode ? setPartQuery(e.target.value) : setQuery(e.target.value))}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setSearchFocused(true)}
           onBlur={() => setSearchFocused(false)}
-          placeholder={partMode ? "품번, 품명 검색" : "회사명, 주소, 대리점 검색"}
+          placeholder="회사명, 주소, 대리점 검색"
           style={{
             width: '100%',
-            // 오른쪽 여백은 [지우기/건수] + [토글] + [엑셀] 이 차지하는 만큼 확보한다.
-            padding: `11px ${36 + (canSearchParts ? 60 : 0) + (showExport ? 34 : 0)}px 11px 34px`,
+            padding: '11px 56px 11px 34px',
             border: `1px solid ${searchFocused ? '#234ea2' : '#ebebeb'}`,
             borderRadius: 6,
             background: '#ffffff',
@@ -113,14 +79,13 @@ export default function Sidebar({
             transition: 'border-color 0.15s ease',
           }}
         />
-        {/* 입력칸 오른쪽 묶음 — 지우기(또는 건수) + 모드 토글 + 엑셀. 절대 배치라 줄 높이를 늘리지 않는다. */}
         <div style={{
           position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
           display: 'flex', alignItems: 'center', gap: 6,
         }}>
-          {(partMode ? partQuery : query) ? (
+          {query ? (
             <button
-              onClick={() => (partMode ? setPartQuery('') : setQuery(''))}
+              onClick={() => setQuery('')}
               aria-label="검색어 지우기"
               style={{
                 width: 20, height: 20, borderRadius: '50%', border: 'none',
@@ -131,89 +96,13 @@ export default function Sidebar({
             >
               ✕
             </button>
-          ) : partMode ? null : (
-            <span style={{
-              fontSize: 12, color: '#9ca3af', fontWeight: 600, pointerEvents: 'none',
-              // 오른쪽은 토글·엑셀 아이콘이 쓰므로 건수는 그 왼쪽에 붙어 한 줄을 지킨다.
-              whiteSpace: 'nowrap', paddingRight: canSearchParts || showExport ? 0 : 6,
-            }}>
+          ) : (
+            <span style={{ fontSize: 12, color: '#9ca3af', fontWeight: 600, pointerEvents: 'none', whiteSpace: 'nowrap', paddingRight: 6 }}>
               {isLoading ? '-' : `${customers.length}개`}
             </span>
           )}
-
-          {/* 모드 토글 — 활성 쪽만 흰 배경으로 띄운다(다중 선택 pill 과 같은 톤) */}
-          {canSearchParts && (
-            <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 6, padding: 2, flexShrink: 0 }}>
-              {(['업체', '부품'] as const).map(m => {
-                const on = mode === m
-                return (
-                  <button
-                    key={m}
-                    onClick={() => setSearchMode(m)}
-                    title={`${m} 검색`}
-                    style={{
-                      padding: '3px 7px', borderRadius: 4, border: 'none', cursor: 'pointer',
-                      fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
-                      background: on ? '#ffffff' : 'transparent',
-                      color: on ? '#111827' : '#9ca3af',
-                      boxShadow: on ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
-                      transition: 'color 0.15s ease, background 0.15s ease',
-                    }}
-                  >
-                    {m}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          {/* 엑셀 내보내기 — 토글과 같은 줄, 세로 가운데. superadmin 전용(canExport)이고
-              부품 모드에서는 아래가 고객 목록이 아니라 숨긴다. 조회가 화면에서 나가므로
-              서버 가드는 없다 — 버튼을 숨기는 것일 뿐, 목록을 볼 수 있는 사람이 같은
-              조회를 하는 것까지 막지는 않는다. */}
-          {showExport && (
-            <button
-              onClick={onExport}
-              disabled={exportOff}
-              aria-label="엑셀 내보내기"
-              title={exporting
-                ? '내보내는 중...'
-                : customers.length > 0
-                  ? `엑셀 내보내기 — 지금 목록 ${customers.length}개를 고객사 × 장비 한 줄로`
-                  : '엑셀 내보내기 — 내보낼 고객사가 없습니다'}
-              style={{
-                width: 28, height: 28, flexShrink: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                border: '1px solid #ebebeb', borderRadius: 6, background: '#ffffff',
-                color: TEXT_MUTED, padding: 0,
-                cursor: exportOff ? 'default' : 'pointer',
-                opacity: exportOff ? 0.5 : 1,
-                transition: 'opacity 0.15s ease',
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-            </button>
-          )}
         </div>
       </div>
-
-      {/* 부품 사용 이력 — 부품 모드에서 검색어를 2자 이상 쳤을 때만 나타난다 */}
-      {partMode && (
-        <PartResults
-          rows={part.rows}
-          loading={part.loading}
-          error={part.error}
-          searched={part.searched}
-          deliveredOnly={deliveredOnly}
-          onToggleDelivered={setDeliveredOnly}
-          onOpenPdf={onOpenQuotePdf}
-        />
-      )}
 
       {/* 고객 리스트 */}
       <CustomerList

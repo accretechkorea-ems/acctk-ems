@@ -105,6 +105,11 @@ type Props = {
   allowCreate?: boolean
   /** 저장 중 등으로 잠글 때 */
   disabled?: boolean
+  /**
+   * **회사를 고정한다** — 회사 카드의 「+ 사업장 추가」처럼 어느 회사에 붙일지가
+   * 이미 정해진 자리에서 쓴다. 이름은 보이되 [해제] 를 내지 않는다.
+   */
+  locked?: boolean
   onError?: (message: string) => void
   /**
    * **부모가 없는 줄을 고칠 때** 칸에 미리 채워 두는 이름(그 줄의 company_name).
@@ -117,7 +122,7 @@ type Props = {
   onNameChange?: (name: string) => void
 }
 
-export default function ParentPicker({ value, onChange, allowCreate, disabled, onError, nameValue, onNameChange }: Props) {
+export default function ParentPicker({ value, onChange, allowCreate, disabled, locked, onError, nameValue, onNameChange }: Props) {
   const [parents, setParents] = useState<ParentOption[]>([])
   const [ownQuery, setOwnQuery] = useState('')
   // 바깥에서 이름을 주면 그 값이 칸의 내용이다(부모 없는 줄을 고치는 경우).
@@ -177,7 +182,9 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, o
           {picked ? picked.company_name : `회사 #${value}`}
           {picked?.industry ? <span style={{ fontSize: 12, color: '#9ca3af' }}>{`  ${picked.industry}`}</span> : null}
         </div>
-        <button type="button" disabled={disabled} onClick={() => { onChange(null); setQuery('') }} style={ghostBtn}>해제</button>
+        {!locked && (
+          <button type="button" disabled={disabled} onClick={() => { onChange(null); setQuery('') }} style={ghostBtn}>해제</button>
+        )}
       </div>
     )
   }

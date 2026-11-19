@@ -43,6 +43,8 @@ type ErrKey = 'parent_customer_id' | 'address' | 'contact_name' | `device_${numb
 type Props = {
   isOpen: boolean
   isSavingCustomer: boolean
+  /** 회사를 고정한 채 연다(회사 카드의 「+ 사업장 추가」). */
+  lockCompany?: boolean
   customerForm: CustomerForm
   setCustomerForm: React.Dispatch<React.SetStateAction<CustomerForm>>
   contactForm: Contact
@@ -62,6 +64,7 @@ type Props = {
 export default function AddCustomerModal({
   isOpen,
   isSavingCustomer,
+  lockCompany,
   customerForm,
   setCustomerForm,
   contactForm,
@@ -156,6 +159,7 @@ export default function AddCustomerModal({
                 value={customerForm.parent_customer_id}
                 onChange={id => { setCustomerForm(prev => ({ ...prev, parent_customer_id: id })); clearError('parent_customer_id') }}
                 allowCreate
+                locked={lockCompany}
                 disabled={isSavingCustomer}
               />
               <FieldError message={errors.parent_customer_id} />

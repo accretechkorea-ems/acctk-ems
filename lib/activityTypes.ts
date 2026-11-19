@@ -254,6 +254,60 @@ export async function setActivityTypeActive(code: string, isActive: boolean): Pr
   return { ok: true }
 }
 
+/**
+ * 종류마다 **그 종류를 쓰는 활동 수**. 관리 화면이 「지울 수 있는가」를 가리는 데 쓴다.
+ *
+ * 한 종류씩 head+count 로 센다 — 활동 줄을 받아오지 않는다. 종류가 몇 개뿐이라
+ * 요청 수가 적고, group by 를 흉내 내려고 전체 줄을 긁는 것보다 가볍다.
+ */
+export async function countActivityTypeUsage(list: ActivityType[]): Promise<Record<string, number>> {
+  const supabase = createClient()
+  const entries = await Promise.all(list.map(async t => {
+    const { count, error } = await supabase
+      .from('sales_activities')
+      .select('activity_id', { count: 'exact', head: true })
+      .eq('activity_type', t.label)
+    if (error) {
+      console.error('[activityTypes] usage count failed', { code: t.code, error })
+      // 세지 못했으면 **쓰는 것으로 본다** — 모르는 채로 삭제 버튼을 내주지 않는다.
+      return [t.code, -1] as const
+    }
+    return [t.code, count ?? 0] as const
+  }))
+  return Object.fromEntries(entries)
+}
+
+/**
+ * 지울 수 있는가 — **쓰는 활동이 0건이고 자동(system) 줄이 아닐 때**만.
+ * 세지 못한 종류(-1)는 지울 수 없다.
+ */
+export function canDeleteActivityType(type: ActivityType, usage: number | undefined): boolean {
+  if (type.is_system) return false
+  return usage === 0
+}
+
+/**
+ * 종류 한 줄을 **지운다**. 쓰는 활동이 있으면 FK 가 막는다(23503) — 화면도 그 버튼을
+ * 내주지 않지만, 누르는 사이에 활동이 하나 들어올 수 있어 DB 가 마지막 문턱이다.
+ */
+export async function deleteActivityType(code: string): Promise<TypeResult> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('activity_types')
+    .delete()
+    .eq('code', code)
+    .select('code')
+  if (error) {
+    console.error('[activityTypes] delete failed', { code, error })
+    return { ok: false, error: typeErrorMessage(error) }
+  }
+  if (!data || data.length === 0) {
+    return { ok: false, error: typeErrorMessage({ code: '42501' }) }
+  }
+  invalidateActivityTypes()
+  return { ok: true }
+}
+
 /** 비방문(원격) 여부 전환 — 동선 지도에서 뺄지. */
 export async function setActivityTypeRemote(code: string, isRemote: boolean): Promise<TypeResult> {
   const supabase = createClient()

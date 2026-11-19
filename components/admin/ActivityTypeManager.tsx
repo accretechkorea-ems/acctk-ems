@@ -11,8 +11,9 @@
 //   추가 · 이름 변경 · 활성/비활성 전환 · 순서 이동 · 비방문(원격) 전환.
 //
 // ── 할 수 없는 것 ──────────────────────────────────────────────────────────
-//   **삭제가 없다.** sales_activities 가 이름을 참조한다(FK) — 지우면 과거 활동이
-//   없는 종류를 가리킨다. 쓰지 않게 된 종류는 비활성한다.
+//   **쓰는 활동이 있으면 지울 수 없다.** sales_activities 가 이름을 참조한다(FK) —
+//   지우면 과거 활동이 없는 종류를 가리킨다. 그때는 비활성만 된다.
+//   **0건일 때만 삭제 버튼이 나온다**(잘못 만든 종류를 되돌리는 길이다).
 //   **code 변경도 없다.** PK 다.
 //   **system 줄(「리드 등록」)은 손대지 못한다.** 리드 전환이 자동으로 남기는 줄이라
 //   이름이 바뀌면 /api/lead-manage 가 넣는 값과 어긋나고, 비활성해도 그 줄은 계속 생긴다.
@@ -26,7 +27,8 @@ import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { inputStyle, BLUE, BORDER, CARD_BG, DANGER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT } from '@/components/common/ui'
 import {
-  addActivityType, moveActivityType, nextSortOrder, renameActivityType,
+  addActivityType, canDeleteActivityType, countActivityTypeUsage, deleteActivityType,
+  moveActivityType, nextSortOrder, renameActivityType,
   setActivityTypeActive, setActivityTypeRemote, useActivityTypesAdmin,
   validateNewCode, validateNewLabel, type ActivityType,
 } from '@/lib/activityTypes'
@@ -58,8 +60,19 @@ export default function ActivityTypeManager({ onClose, canEdit }: ActivityTypeMa
   const [editCode, setEditCode] = useState<string | null>(null)
   const [editLabel, setEditLabel] = useState('')
 
+  /** 종류마다 그것을 쓰는 활동 수 — 0건일 때만 삭제 버튼을 낸다. */
+  const [usage, setUsage] = useState<Record<string, number>>({})
+
   // 모달을 닫으면 열려 있던 폼을 접는다(다시 열 때 지난 입력이 남지 않게).
   useEffect(() => () => { setAddOpen(false); setEditCode(null) }, [])
+
+  // 목록이 바뀔 때마다 쓰임새를 다시 센다(추가·삭제 뒤에도 맞아야 한다).
+  useEffect(() => {
+    if (types.length === 0) return
+    let cancelled = false
+    countActivityTypeUsage(types).then(u => { if (!cancelled) setUsage(u) })
+    return () => { cancelled = true }
+  }, [types])
 
   /** 쓰기 한 번 — 결과를 토스트로 알리고 목록을 다시 읽는다. */
   const run = async (fn: () => Promise<{ ok: true } | { ok: false; error: string }>, done: string) => {
@@ -110,6 +123,17 @@ export default function ActivityTypeManager({ onClose, canEdit }: ActivityTypeMa
     await run(() => setActivityTypeActive(t.code, true), '다시 사용하도록 바꿨습니다')
   }
 
+  const handleDelete = async (t: ActivityType) => {
+    const ok = await confirmDialog({
+      title: '활동 종류 삭제',
+      message: `${t.label} 을(를) 지웁니다. 이 종류를 쓰는 활동이 없어 지울 수 있습니다. 되돌릴 수 없습니다.`,
+      confirmText: '삭제',
+      variant: 'danger',
+    })
+    if (!ok) return
+    await run(() => deleteActivityType(t.code), '활동 종류를 지웠습니다')
+  }
+
   const handleRemote = (t: ActivityType) =>
     run(() => setActivityTypeRemote(t.code, !t.is_remote),
       t.is_remote ? '방문으로 바꿨습니다' : '비방문으로 바꿨습니다')
@@ -136,6 +160,7 @@ export default function ActivityTypeManager({ onClose, canEdit }: ActivityTypeMa
           이미 쓴 활동의 종류 표기와 집계는 그대로 남습니다.
           <br />「비방문」은 실제로 가지 않은 활동입니다 — 동선 지도에서 빠집니다(전화상담처럼).
           <br />자동 줄(리드 등록)은 리드 전환이 남기는 종류라 고칠 수 없습니다.
+          <br />쓰는 활동이 **한 건도 없는** 종류에만 [삭제]가 나옵니다 — 그 밖에는 비활성만 됩니다.
         </div>
 
         {/* 추가 폼 — 어쩌다 한 번 쓰므로 접어 둔다(견적 분류 관리와 같은 방식). */}
@@ -215,7 +240,9 @@ export default function ActivityTypeManager({ onClose, canEdit }: ActivityTypeMa
                 )}
                 <div>{t.sort_order}</div>
                 <div>{t.is_active ? '사용' : '중지'}</div>
-                <div>{t.is_remote ? '비방문' : '방문'}</div>
+                <div title={usage[t.code] === undefined ? '세는 중' : `활동 ${usage[t.code]}건`}>
+                  {t.is_remote ? '비방문' : '방문'}
+                </div>
                 <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                   {editCode === t.code ? (
                     <>
@@ -243,6 +270,13 @@ export default function ActivityTypeManager({ onClose, canEdit }: ActivityTypeMa
                       <button onClick={() => void handleToggle(t)} disabled={rowLocked} title={rowMsg}
                         style={{ padding: '5px 10px', background: t.is_active ? DANGER : NEUTRAL_BG, color: t.is_active ? '#ffffff' : (rowLocked ? MUTED : TEXT), border: 'none', borderRadius: 6, cursor: rowLocked ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', opacity: rowLocked ? 0.6 : 1 }}>
                         {t.is_active ? '비활성화' : '다시 사용'}</button>
+                      {/* 삭제 — **쓰는 활동이 0건일 때만** 나온다. 쓰는 줄이 있으면
+                          버튼 자체가 없다(비활성만 된다). */}
+                      {canDeleteActivityType(t, usage[t.code]) && (
+                        <button onClick={() => void handleDelete(t)} disabled={locked} title={lockMsg ?? '쓰는 활동이 없어 지울 수 있습니다'}
+                          style={{ padding: '5px 10px', background: CARD_BG, color: locked ? MUTED : DANGER, border: `1px solid ${locked ? BORDER : DANGER}`, borderRadius: 6, cursor: locked ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          삭제</button>
+                      )}
                     </>
                   )}
                 </div>

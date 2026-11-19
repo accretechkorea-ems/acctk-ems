@@ -12,6 +12,10 @@ export type Customer = {
   site_name?: string | null
   /** 회사명만 — 사업장이 여럿인 회사를 묶어 셀 때 쓴다. */
   company_only?: string | null
+  /** 이 사업장을 묶는 회사 줄의 id. 없으면 「미연결」이다(목록 보기의 탭). */
+  parent_customer_id?: number | null
+  /** 지역1 — 목록 보기의 지역 칩이 쓴다. 비면 주소 앞 토큰으로 떨어진다. */
+  region1?: string | null
   address: string | null
   latitude: number | null
   longitude: number | null
@@ -21,6 +25,8 @@ export type Customer = {
    * (lib/customerAgency.ts). 직판이면 null. 옛 `agency` 텍스트 칸은 읽지 않는다.
    */
   agency_name: string | null
+  /** 고른 대리점 줄의 id — 목록 보기의 표가 그 자리에서 고칠 때 쓴다. */
+  agency_customer_id?: number | null
   category: string | null
 }
 

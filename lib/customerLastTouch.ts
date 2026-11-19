@@ -18,7 +18,20 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export type TouchSource = '영업활동' | '서비스' | '견적' | '수리'
 
-export type LastTouch = { date: string; source: TouchSource }
+/**
+ * 마지막 접점 한 건. `actorId` 는 **그 일을 한 우리 쪽 사람**이다(활동 등록자·견적
+ * 작성자·서비스 엔지니어·수리 등록자). 이름이 아니라 id 를 들고 있는다 — 이름은
+ * lib/appData/engineers 의 캐시가 이미 들고 있어, 여기서 또 읽으면 조회가 는다.
+ */
+export type LastTouch = { date: string; source: TouchSource; actorId: number | null }
+
+/** 날짜 하나 + 그 일을 한 사람. 날짜만 넘겨도 된다(사람을 모르는 자리). */
+export type TouchEntry = { date: string | null | undefined; actorId?: number | null }
+export type TouchInput = string | TouchEntry | null | undefined
+
+/** 문자열이든 {date, actorId} 든 같은 모양으로 편다. */
+const entryOf = (raw: TouchInput): TouchEntry =>
+  (raw == null || typeof raw === 'string') ? { date: raw ?? null, actorId: null } : raw
 
 /** 'YYYY-MM-DD' 로 자른다. 빈 값·엉뚱한 값은 null. */
 export function touchDate(value: string | null | undefined): string | null {
@@ -32,12 +45,12 @@ export function touchDate(value: string | null | undefined): string | null {
  * (영업활동 → 서비스 → 견적 → 수리 — 사람이 직접 적은 기록을 먼저 본다).
  */
 export function pickLastTouch(input: {
-  activity?: (string | null | undefined)[]
-  service?: (string | null | undefined)[]
-  quote?: (string | null | undefined)[]
-  repair?: (string | null | undefined)[]
+  activity?: TouchInput[]
+  service?: TouchInput[]
+  quote?: TouchInput[]
+  repair?: TouchInput[]
 }): LastTouch | null {
-  const groups: [TouchSource, (string | null | undefined)[]][] = [
+  const groups: [TouchSource, TouchInput[]][] = [
     ['영업활동', input.activity ?? []],
     ['서비스', input.service ?? []],
     ['견적', input.quote ?? []],
@@ -46,9 +59,10 @@ export function pickLastTouch(input: {
   let best: LastTouch | null = null
   for (const [source, list] of groups) {
     for (const raw of list) {
-      const date = touchDate(raw)
+      const entry = entryOf(raw)
+      const date = touchDate(entry.date)
       if (!date) continue
-      if (best === null || date > best.date) best = { date, source }
+      if (best === null || date > best.date) best = { date, source, actorId: entry.actorId ?? null }
     }
   }
   return best
@@ -65,19 +79,20 @@ export function touchValue(touch: LastTouch | null | undefined): number {
 //   업체마다 질의를 날리지 않는다 — 네 표를 한 번씩 통째로 읽어 화면에서 묶는다
 //   (업체 1,200곳 × 4질의 = 4,800번이 될 자리다).
 
-type Rows = { customer_id: number | null; date: string | null }[]
+type Rows = { customer_id: number | null; date: string | null; actorId?: number | null }[]
 
-/** 한 표를 읽어 (업체 → 날짜 목록) 으로 바꾼다. */
-function group(rows: Rows): Map<number, string[]> {
-  const map = new Map<number, string[]>()
+/** 한 표를 읽어 (업체 → 접점 목록) 으로 바꾼다. */
+function group(rows: Rows): Map<number, TouchEntry[]> {
+  const map = new Map<number, TouchEntry[]>()
   for (const r of rows) {
     const id = Number(r.customer_id)
     if (!Number.isFinite(id)) continue
     const date = touchDate(r.date)
     if (!date) continue
+    const entry: TouchEntry = { date, actorId: r.actorId ?? null }
     const list = map.get(id)
-    if (list) list.push(date)
-    else map.set(id, [date])
+    if (list) list.push(entry)
+    else map.set(id, [entry])
   }
   return map
 }
@@ -90,18 +105,31 @@ export async function loadLastTouchMap(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sb: SupabaseClient<any, any, any>,
 ): Promise<Map<number, LastTouch>> {
-  const [act, svc, quo, rep] = await Promise.all([
-    sb.from('sales_activities').select('customer_id, activity_date').range(0, 5000),
-    sb.from('service_history').select('customer_id, visit_date').range(0, 5000),
-    sb.from('quotes').select('customer_id, quote_date').range(0, 5000),
-    sb.from('repairs').select('customer_id, received_date, shipped_date').range(0, 5000),
+  // 작성자도 함께 읽는다 — 목록 보기의 「최근 활동 · 작성자」 칸이 쓴다.
+  //   영업활동 engineer_id · 견적 engineer_id(실적 귀속자) · 수리 created_by
+  //   서비스는 참여자가 다대다라 service_engineers 를 한 번 더 읽어 **첫 사람**을 쓴다.
+  const [act, svc, quo, rep, se] = await Promise.all([
+    sb.from('sales_activities').select('customer_id, activity_date, engineer_id').range(0, 5000),
+    sb.from('service_history').select('customer_id, visit_date, service_id').range(0, 5000),
+    sb.from('quotes').select('customer_id, quote_date, engineer_id').range(0, 5000),
+    sb.from('repairs').select('customer_id, received_date, shipped_date, created_by').range(0, 5000),
+    sb.from('service_engineers').select('service_id, engineer_id').range(0, 5000),
   ])
+  // 서비스 한 건의 첫 참여자(id 가 작은 쪽 — 같은 건이면 늘 같은 사람이 나온다).
+  const firstEngineer = new Map<number, number>()
+  for (const r of (se.data ?? []) as { service_id: number | null; engineer_id: number | null }[]) {
+    const sid = Number(r.service_id); const eid = Number(r.engineer_id)
+    if (!Number.isFinite(sid) || !Number.isFinite(eid)) continue
+    const cur = firstEngineer.get(sid)
+    if (cur === undefined || eid < cur) firstEngineer.set(sid, eid)
+  }
+
   const byId = new Map<number, LastTouch>()
-  const activity = group((act.data ?? []).map(r => ({ customer_id: r.customer_id, date: r.activity_date })))
-  const service = group((svc.data ?? []).map(r => ({ customer_id: r.customer_id, date: r.visit_date })))
-  const quote = group((quo.data ?? []).map(r => ({ customer_id: r.customer_id, date: r.quote_date })))
+  const activity = group((act.data ?? []).map(r => ({ customer_id: r.customer_id, date: r.activity_date, actorId: r.engineer_id })))
+  const service = group((svc.data ?? []).map(r => ({ customer_id: r.customer_id, date: r.visit_date, actorId: firstEngineer.get(Number(r.service_id)) ?? null })))
+  const quote = group((quo.data ?? []).map(r => ({ customer_id: r.customer_id, date: r.quote_date, actorId: r.engineer_id })))
   // 수리는 출고일이 있으면 그날, 없으면 입고일이 마지막 움직임이다.
-  const repair = group((rep.data ?? []).map(r => ({ customer_id: r.customer_id, date: r.shipped_date ?? r.received_date })))
+  const repair = group((rep.data ?? []).map(r => ({ customer_id: r.customer_id, date: r.shipped_date ?? r.received_date, actorId: r.created_by })))
 
   const ids = new Set<number>([...activity.keys(), ...service.keys(), ...quote.keys(), ...repair.keys()])
   for (const id of ids) {

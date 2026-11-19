@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { IN_USE_FILTER } from '@/lib/deviceStatus'
 import { createClient } from '@/lib/supabase/client'
 import { type Customer, type Device } from '@/lib/home'
-import { loadLastTouchMap, touchValue } from '@/lib/customerLastTouch'
+import { loadLastTouchMap, touchValue, type LastTouch } from '@/lib/customerLastTouch'
 import { CUSTOMER_NAME_SELECT, customerDisplayName, parentNameOf } from '@/lib/customerLabel'
 import { CUSTOMER_AGENCY_SELECT, NOT_AGENCY_ONLY, agencyNameOf } from '@/lib/customerAgency'
 
@@ -11,12 +11,18 @@ type Params = {
   setDeviceMap: React.Dispatch<React.SetStateAction<Map<number, Device[]>>>
   /** 업체 → 마지막 접점 시각(영업활동·서비스·견적·수리 중 최신). 목록 정렬이 쓴다. */
   setLatestServiceDateMap: React.Dispatch<React.SetStateAction<Map<number, number>>>
+  /**
+   * 업체 → 마지막 접점 **그 자체**(날짜·갈래·작성자). 목록 보기가 「최근 활동 · 작성자」
+   * 칸에 쓴다. 지도 보기는 시각만 있으면 되므로 선택이다.
+   */
+  setLastTouchMap?: React.Dispatch<React.SetStateAction<Map<number, LastTouch>>>
 }
 
 export function useHomeData({
   setCustomers,
   setDeviceMap,
   setLatestServiceDateMap,
+  setLastTouchMap,
 }: Params) {
   const supabase = createClient()
 
@@ -24,7 +30,7 @@ export function useHomeData({
     const [customerRes, deviceRes, lastTouch] = await Promise.all([
       supabase
   .from('customers')
-  .select(`customer_id, ${CUSTOMER_NAME_SELECT}, ${CUSTOMER_AGENCY_SELECT}, address, latitude, longitude, status, category`)
+  .select(`customer_id, ${CUSTOMER_NAME_SELECT}, ${CUSTOMER_AGENCY_SELECT}, parent_customer_id, region1, address, latitude, longitude, status, category`)
         .is('deleted_at', null)
         // 부모 행(회사 묶음)은 지도 마커·업체 목록에 나오면 안 된다
         .eq('is_parent', false)
@@ -57,12 +63,16 @@ export function useHomeData({
         company_name: customerDisplayName(c),
         site_name: c.site_name ?? null,
         company_only: parentNameOf(c.parent) ?? (c.company_name ?? null),
+        // 목록 보기가 회사로 묶는 기준. 없으면 「미연결」이다.
+        parent_customer_id: c.parent_customer_id == null ? null : Number(c.parent_customer_id),
+        region1: c.region1 ?? null,
         address: c.address ?? null,
         latitude: c.latitude == null ? null : Number(c.latitude),
         longitude: c.longitude == null ? null : Number(c.longitude),
    status: c.status ?? null,
 // 대리점 이름도 여기서 한 번 꺼낸다 — 카드·지도·검색은 이 칸만 읽는다.
 agency_name: agencyNameOf(c),
+agency_customer_id: c.agency_customer_id == null ? null : Number(c.agency_customer_id),
 category: c.category ?? null,
       }))
       setCustomers(normalizedCustomers)
@@ -102,6 +112,8 @@ category: c.category ?? null,
     const touchMap = new Map<number, number>()
     for (const [customerId, touch] of lastTouch) touchMap.set(customerId, touchValue(touch))
     setLatestServiceDateMap(touchMap)
+    // 목록 보기는 날짜·갈래·작성자가 다 필요하다 — 받은 것을 그대로 넘긴다.
+    setLastTouchMap?.(lastTouch)
   }
 
   useEffect(() => {

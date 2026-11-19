@@ -144,6 +144,19 @@ eq('이미 있는 이름(이름이 FK 대상이라 유일해야 한다)',
 eq('빈 이름', T.validateNewLabel(LIST, '  '), '이름을 입력해주세요')
 eq('괜찮은 이름', T.validateNewLabel(LIST, '데모 시연'), null)
 
+console.log('\n── 삭제 — 쓰는 활동이 0건일 때만 ──')
+{
+  const demo = type('DEMO', '데모 시연', 100)
+  const visit = LIST[1]
+  const lead = LIST[4]
+  eq('쓰는 활동이 0건이면 지울 수 있다', T.canDeleteActivityType(demo, 0), true)
+  eq('한 건이라도 있으면 못 지운다', T.canDeleteActivityType(demo, 1), false)
+  eq('아직 세지 못했으면 못 지운다(버튼을 내주지 않는다)', T.canDeleteActivityType(demo, undefined), false)
+  eq('세다가 실패했으면(-1) 못 지운다', T.canDeleteActivityType(demo, -1), false)
+  eq('system 줄은 0건이어도 못 지운다', T.canDeleteActivityType(lead, 0), false)
+  eq('쓰는 줄이 있는 기본 종류도 못 지운다', T.canDeleteActivityType(visit, 7), false)
+}
+
 console.log('\n── 순서 ──')
 eq('다음 순서는 맨 아래', T.nextSortOrder(LIST), 100)
 eq('빈 목록이면 10', T.nextSortOrder([]), 10)
