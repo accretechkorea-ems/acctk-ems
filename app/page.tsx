@@ -814,6 +814,7 @@ useEffect(() => {
                 onAddSite={() => openAddCustomer(true)}
                 onCompanyGone={() => { setSelectedCompanyId(null); setSelectedSiteId(null); loadParents().then(setCompanies) }}
                 canEditCompany={isSuperAdmin(me)}
+                me={{ engineer_id: me?.engineer_id ?? null, permission_level: me?.permission_level ?? null }}
               />
             ) : (
               <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: TEXT_MUTED, fontSize: 13, background: '#fff', border: '1px solid #ebebeb', borderRadius: 8 }}>

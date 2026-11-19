@@ -28,6 +28,14 @@ type Props = {
   onClose: () => void
   onSave: (form: SalesActivityForm) => void
   onDelete: () => void
+  /**
+   * **회사 화면에서 열 때** 고를 사업장 목록. 영업 활동은 사업장 줄에 붙으므로
+   * 회사 전체 타임라인에서 적을 때는 어느 사업장인지 반드시 골라야 한다.
+   * 사업장 상세에서는 주지 않는다(그 사업장으로 정해져 있다).
+   */
+  sites?: { id: number; name: string }[]
+  siteId?: number | null
+  onSiteChange?: (id: number) => void
 }
 
 const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
@@ -43,7 +51,7 @@ const emptyForm = (): SalesActivityForm => ({
   opportunity_id: null, activity_date: todayKST(), activity_type: FALLBACK_TYPE, contact_id: null, content: '',
 })
 
-export default function SalesActivityModal({ isOpen, activity, contacts, opportunities, isSaving, canDelete, onClose, onSave, onDelete }: Props) {
+export default function SalesActivityModal({ isOpen, activity, contacts, opportunities, isSaving, canDelete, onClose, onSave, onDelete, sites, siteId, onSiteChange }: Props) {
   /** 열었을 때의 값 — 폼의 시작값이자 **변경 여부의 기준**이다(한 곳에서 만든다). */
   const formOf = (a: typeof activity): SalesActivityForm => (a
     ? {
@@ -128,6 +136,17 @@ export default function SalesActivityModal({ isOpen, activity, contacts, opportu
         </div>
 
         <div style={{ display: 'grid', gap: 14 }}>
+          {/* 사업장 — 회사 화면에서 적을 때만. 기본값은 가장 최근에 움직인 사업장이다. */}
+          {sites && sites.length > 0 && (
+            <div>
+              <label style={labelStyle}>사업장 *</label>
+              <select value={siteId ?? sites[0].id} disabled={isSaving}
+                onChange={e => onSiteChange?.(Number(e.target.value))}
+                style={{ ...fieldStyle, cursor: 'pointer' }}>
+                {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div>
               <label style={labelStyle}>활동일 *</label>

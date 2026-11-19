@@ -12,7 +12,7 @@
 //     지우기 직전에 서버가 다시 세어 0 이 아니면 거부한다.
 //   · service role 로 세야 RLS·필터에 가려 실제보다 적게 세는 일이 없다.
 import { adminClient } from '@/lib/supabase/admin'
-import { colsWithNameEn, withNameEnFallback } from '@/lib/nameEn'
+import { withNameEnFallback } from '@/lib/nameEn'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
@@ -56,6 +56,41 @@ async function rebuildChildNames(parentId: number, companyName: string): Promise
 }
 
 /**
+ * 줄 합치기는 **DB 함수 한 번**이다(db/merge_customer_sites_20261119.sql).
+ *
+ * customers 를 가리키는 표가 12개라, 화면이나 라우트가 표를 하나씩 옮기면 중간에 끊겼을 때
+ * 절반만 옮겨진 상태가 남는다. 함수 한 번은 한 트랜잭션이라 전부 되거나 전부 안 된다.
+ * 회사 병합도 사업장 병합도 **같은 함수**를 쓴다 — 규칙을 둘로 두지 않는다.
+ */
+type MergeReport = {
+  keep_id: number
+  from_ids: number[]
+  dry_run: boolean
+  /** 표.칸 → 옮긴(또는 옮길) 줄 수. */
+  moved: Record<string, number>
+  /** 남길 줄에 이미 같은 짝이 있어 지운 줄(showroom_sites 처럼 customer_id 가 기본키인 표). */
+  dropped?: Record<string, number>
+  /** 비어 있어 from 값으로 채운 칸. */
+  filled?: string[]
+  total: number
+}
+
+async function mergeRows(keepId: number, fromIds: number[], dryRun: boolean): Promise<{ ok: true; report: MergeReport } | { ok: false; message: string; status: number }> {
+  const { data, error } = await supabaseAdmin.rpc('merge_customer_sites', {
+    keep_id: keepId, from_ids: fromIds, dry_run: dryRun,
+  })
+  if (error) {
+    console.error('[parent-company] merge rpc failed', { keepId, fromIds, dryRun, error })
+    // 함수를 아직 적용하지 않았으면 PostgREST 가 못 찾는다 — 무엇을 해야 하는지 알려 준다.
+    if (error.code === 'PGRST202' || /function .*merge_customer_sites/i.test(error.message ?? '')) {
+      return { ok: false, status: 501, message: 'DB 함수 merge_customer_sites 가 아직 없습니다 (db/merge_customer_sites_20261119.sql 적용 필요)' }
+    }
+    return { ok: false, status: 400, message: error.message || '합치지 못했습니다' }
+  }
+  return { ok: true, report: data as MergeReport }
+}
+
+/**
  * 액션마다 문턱이 다르다.
  *
  *   **사업장 수준**(rename-site · move) — 고객사 메뉴를 보는 사람이면 된다.
@@ -63,7 +98,8 @@ async function rebuildChildNames(parentId: number, companyName: string): Promise
  *     이 둘이 라우트를 거치는 이유는 권한이 아니라 **company_name 을 다시 만들기 위해서**다 —
  *     여기서 superadmin 을 요구하면 평소 하던 수정이 막힌다(2026-11-19 실측에서 403 이었다).
  *
- *   **회사 수준**(rename · merge · delete) — superadmin.
+ *   **회사 수준**(rename · merge · merge-sites · delete) — superadmin.
+ *     사업장 병합도 여기다 — 되돌릴 수 없고 다른 표의 기록까지 옮긴다.
  *     회사 한 줄에 사업장 여럿이 물려 있어, 이름·병합·삭제는 그 전부에 닿는다.
  */
 const SITE_LEVEL = new Set(['rename-site', 'move'])
@@ -156,6 +192,40 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, moved })
   }
 
+  // ── 사업장 병합 ────────────────────────────────────────────────────────
+  //   같은 회사 안의 사업장 여러 줄을 한 줄로 합친다. 회사 병합과 **같은 함수**다.
+  //   dryRun=true 면 표별 건수만 세어 돌려준다 — 확인 창이 그 숫자를 보여 준다.
+  if (action === 'merge-sites') {
+    const keepId = Number(body?.keepId)
+    const fromIds: number[] = Array.isArray(body?.fromIds) ? body.fromIds.map(Number).filter(Number.isInteger) : []
+    if (!Number.isInteger(keepId) || keepId <= 0) return bad('남길 사업장을 고르세요.')
+    if (fromIds.length === 0) return bad('합칠 사업장을 고르세요.')
+    if (fromIds.includes(keepId)) return bad('남길 사업장이 합칠 목록에 들어 있습니다.')
+
+    const dryRun = body?.dryRun === true
+    const r = await mergeRows(keepId, fromIds, dryRun)
+    if (!r.ok) return bad(r.message, r.status)
+    if (dryRun) return NextResponse.json({ success: true, report: r.report })
+
+    // 남길 사업장의 이름 — 넘어온 값이 있으면 그것으로, 없으면 지금 값 그대로.
+    const siteName = typeof body?.siteName === 'string' ? body.siteName.trim() : null
+    const { data: keep } = await supabaseAdmin
+      .from('customers').select('customer_id, site_name, parent_customer_id').eq('customer_id', keepId).maybeSingle()
+    const parentOfKeep = keep?.parent_customer_id ?? null
+    if (parentOfKeep != null) {
+      const { data: parentRow } = await supabaseAdmin
+        .from('customers').select('company_name').eq('customer_id', parentOfKeep).maybeSingle()
+      const company = (parentRow?.company_name ?? '').trim()
+      const nextSite = siteName != null ? siteName : (keep?.site_name ?? '').trim()
+      const { error: upErr } = await supabaseAdmin.from('customers').update({
+        site_name: nextSite || null,
+        company_name: nextSite ? `${company} ${nextSite}` : company,
+      }).eq('customer_id', keepId)
+      if (upErr) console.error('[parent-company] merge-sites rename failed', { keepId, error: upErr })
+    }
+    console.log('[parent-company] merge-sites', { keepId, fromIds, report: r.report, by: caller.email })
+    return NextResponse.json({ success: true, report: r.report })
+  }
   const parentId = Number(body?.parentId)
   if (!Number.isInteger(parentId) || parentId <= 0) return bad('회사를 지정해주세요.')
 
@@ -215,55 +285,25 @@ export async function POST(req: Request) {
   //       (살아 있는 값을 덮지 않는다).
   //     · 지워지는 회사 줄은 **soft delete**(deleted_at) — 되돌리기는 없다고 알린다.
   if (action === 'merge') {
-    // select 문자열이 변수라 supabase 가 줄 모양을 추론하지 못한다 — 읽는 칸만 적어 둔다.
-    type MergeRow = {
-      customer_id?: number; company_name?: string | null; is_parent?: boolean | null
-      deleted_at?: string | null; industry?: string | null; name_en?: string | null; note?: string | null
-    }
     const intoId = Number(body?.intoParentId)
     if (!Number.isInteger(intoId) || intoId <= 0) return bad('합칠 회사를 지정해주세요.')
     if (intoId === parentId) return bad('같은 회사끼리는 합칠 수 없습니다.')
 
-    // 영문명 칸이 아직 없는 DB 라면 그 칸만 빼고 읽는다 — 한 칸 때문에 병합이 막히지 않게.
-    const { data: into } = await withNameEnFallback(useEn => supabaseAdmin
-      .from('customers')
-      .select(colsWithNameEn('customer_id, company_name, is_parent, deleted_at, industry, note', useEn))
-      .eq('customer_id', intoId).maybeSingle<MergeRow>())
+    const { data: into } = await supabaseAdmin
+      .from('customers').select('customer_id, company_name, is_parent, deleted_at')
+      .eq('customer_id', intoId).maybeSingle()
     if (!into || into.deleted_at) return bad('합칠 회사를 찾을 수 없습니다.', 404)
     if (!into.is_parent) return bad('합칠 대상이 회사가 아닙니다.')
 
-    const { data: from } = await withNameEnFallback(useEn => supabaseAdmin
-      .from('customers').select(colsWithNameEn('industry, note', useEn))
-      .eq('customer_id', parentId).maybeSingle<MergeRow>())
+    // 자식 이동·빈 칸 채우기·soft delete 를 DB 함수가 한 트랜잭션으로 한다.
+    const r = await mergeRows(intoId, [parentId], body?.dryRun === true)
+    if (!r.ok) return bad(r.message, r.status)
+    if (r.report.dry_run) return NextResponse.json({ success: true, report: r.report })
 
-    // 자식 옮기기 → 이름 다시 만들기
-    const { error: moveErr } = await supabaseAdmin
-      .from('customers').update({ parent_customer_id: intoId }).eq('parent_customer_id', parentId)
-    if (moveErr) {
-      console.error('[parent-company] merge move failed', { parentId, intoId, error: moveErr })
-      return bad('사업장을 옮기지 못했습니다.', 500)
-    }
+    // 옮겨 온 사업장의 이름을 받는 회사 이름으로 다시 만든다.
     const renamed = await rebuildChildNames(intoId, (into.company_name ?? '').trim())
-
-    // 빈 칸만 채운다.
-    const patch: Record<string, unknown> = {}
-    const empty = (v: unknown) => v == null || String(v).trim() === ''
-    if (empty(into.industry) && !empty(from?.industry)) patch.industry = from?.industry
-    if (empty(into.name_en) && !empty(from?.name_en)) patch.name_en = from?.name_en
-    if (empty(into.note) && !empty(from?.note)) patch.note = from?.note
-    if (Object.keys(patch).length > 0) {
-      const { error: pErr } = await supabaseAdmin.from('customers').update(patch).eq('customer_id', intoId)
-      if (pErr) console.error('[parent-company] merge patch failed', { intoId, error: pErr })
-    }
-
-    const { error: delErr } = await supabaseAdmin
-      .from('customers').update({ deleted_at: new Date().toISOString() }).eq('customer_id', parentId)
-    if (delErr) {
-      console.error('[parent-company] merge close failed', { parentId, error: delErr })
-      return bad('합친 뒤 옛 회사 줄을 닫지 못했습니다.', 500)
-    }
-    console.log('[parent-company] merge', { from: parentId, into: intoId, renamed, patch, by: caller.email })
-    return NextResponse.json({ success: true, movedSites: renamed, filled: Object.keys(patch) })
+    console.log('[parent-company] merge', { from: parentId, into: intoId, renamed, report: r.report, by: caller.email })
+    return NextResponse.json({ success: true, movedSites: renamed, report: r.report })
   }
 
   // ── 삭제 ──

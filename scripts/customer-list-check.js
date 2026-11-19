@@ -82,21 +82,26 @@ eq('주소가 없으면 빈 값', L.addressHint('  '), '')
       row(2, '본사', '경기 화성시 동탄 1'),
     ]).map(s => s.siteName),
     ['본사 · 진주시 정촌면', '본사 · 화성시 동탄'])
-  eq('주소까지 같으면 id 로 가른다(사실상 중복 등록이다)',
+  // id 꼬리(#3014)는 뗐다 — 화면에서 아무 뜻도 없는 번호였다(2026-11-19).
+  // 주소까지 같은 두 줄은 **합칠 후보**이고, 그 일은 사업장 병합이 맡는다.
+  eq('주소까지 같으면 같은 글자로 둔다(합칠 후보다)',
     L.disambiguateSites([
       row(1, '본사', '경남 진주시 산업로 30'),
       row(2, '본사', '경남 진주시 산업로 30'),
     ]).map(s => s.siteName),
-    ['본사 · 진주시 산업로', '본사 · 진주시 산업로 #2'])
-  eq('주소가 없는 줄도 id 로 가른다',
+    ['본사 · 진주시 산업로', '본사 · 진주시 산업로'])
+  eq('주소가 없는 줄도 번호를 붙이지 않는다',
     L.disambiguateSites([row(1, '본사', ''), row(2, '본사', '')]).map(s => s.siteName),
-    ['본사 #1', '본사 #2'])
+    ['본사', '본사'])
 }
 
 console.log('\n── 지역 ──')
+// 거르는 값·보이는 값은 **정본 17 + 「없음」** 어휘만 쓴다(lib/region.ts).
 eq('region1 이 있으면 그것', L.regionOf({ region1: '경기', address: '경기도 화성시 1' }), '경기')
-eq('비면 주소 앞 토큰', L.regionOf({ region1: '', address: '충남 아산시 둔포면' }), '충남')
-eq('주소도 없으면 빈 값', L.regionOf({ region1: null, address: null }), '')
+eq('비면 주소에서 뽑는다', L.regionOf({ region1: '', address: '충남 아산시 둔포면' }), '충남')
+eq('긴 이름도 약칭으로', L.regionOf({ region1: '경기도', address: null }), '경기')
+eq('정본에 없는 값은 주소를 본다', L.regionOf({ region1: '남부', address: '울산광역시 북구 1' }), '울산')
+eq('둘 다 없으면 「없음」', L.regionOf({ region1: null, address: null }), '없음')
 
 // ── 묶기 ─────────────────────────────────────────────────────────────────
 const site = (id, name, extra = {}) => ({

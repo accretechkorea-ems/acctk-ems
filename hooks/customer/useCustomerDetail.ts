@@ -16,7 +16,8 @@ import { CUSTOMER_AGENCY_SELECT } from '@/lib/customerAgency'
 // quotes 는 engineers 를 engineer_id(실적 귀속자)·created_by(작성자) 두 번 참조한다.
 // 관계를 지정하지 않으면 PGRST201(300 Multiple Choices)로 조회 전체가 실패한다.
 // 거래 이력에 보여줄 담당자는 실적 귀속자다.
-const QUOTE_SELECT = '*, engineers!quotes_engineer_id_fkey(name, position), quote_items(product_name, price_list(model_jp))'
+/** 견적 한 줄에 필요한 칸 — 회사 전체 타임라인(hooks/useCompanyTimeline.ts)도 같은 모양으로 읽는다. */
+export const QUOTE_SELECT = '*, engineers!quotes_engineer_id_fkey(name, position), quote_items(product_name, price_list(model_jp))'
 
 export function useCustomerDetail(customerId: number) {
   const supabase = createClient()

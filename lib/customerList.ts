@@ -97,8 +97,12 @@ export function addressHint(address: string | null | undefined): string {
  * 한 회사 안에서 **이름이 겹치는 사업장**을 가려 준다.
  *
  * 사업장명이 비어 있는 줄이 많아(실측 2026-11-19: 227개 회사·742 사업장) 그대로 두면
- * 「본사」가 세 줄 나란히 서고 어느 것을 고를지 알 수 없다. 겹치는 줄에만 주소 꼬리를
- * 붙이고, 주소까지 같으면 마지막에 id 를 붙인다 — 겹치지 않는 줄은 손대지 않는다.
+ * 「본사」가 세 줄 나란히 서고 어느 것을 고를지 알 수 없다. 겹치는 줄에만 **주소 꼬리**를
+ * 붙인다 — 겹치지 않는 줄은 손대지 않는다.
+ *
+ * 주소까지 같은 줄에는 전에 「#3014」처럼 id 를 붙였는데, 그 번호는 화면에서 아무 뜻도
+ * 없고(고치는 사람에게 보이는 값이 아니다) 트리를 어지럽히기만 했다. 이제 같은 글자로
+ * 둔다 — 주소까지 같은 두 줄은 **합칠 후보**이고, 그 일은 사업장 병합이 맡는다.
  */
 export function disambiguateSites(sites: SiteRow[]): SiteRow[] {
   const count = new Map<string, number>()
@@ -110,10 +114,8 @@ export function disambiguateSites(sites: SiteRow[]): SiteRow[] {
     if ((count.get(s.siteName) ?? 0) <= 1) return s
     const hint = addressHint(s.customer.address)
     const label = hint ? `${s.siteName} · ${hint}` : s.siteName
-    const seen = (used.get(label) ?? 0) + 1
-    used.set(label, seen)
-    // 주소까지 같은 줄이 또 있으면 id 로 가른다(그 줄은 사실상 중복 등록이다).
-    return { ...s, siteName: seen > 1 || !hint ? `${label} #${s.customer.customer_id}` : label }
+    used.set(label, (used.get(label) ?? 0) + 1)
+    return { ...s, siteName: label }
   })
 }
 
@@ -177,13 +179,15 @@ export function matchesSite(
   return hay.includes(q)
 }
 
-/** 지역 한 조각 — region1 이 비면 주소 앞 토큰. 둘 다 없으면 빈 문자열. */
+/**
+ * 지역 한 조각 — **정본 17개 중 하나, 아니면 「없음」**(lib/region.ts).
+ *
+ * 전에는 region1 을 그대로 쓰고, 비면 주소의 첫 토막을 그대로 썼다. 그래서 칩에
+ * 「경기도」·「서울특별시」·「남부」가 섞여 같은 지역이 여러 칸으로 갈렸다.
+ * 거르는 값과 보이는 값이 늘 같은 어휘를 쓰도록 한 함수를 지난다.
+ */
 export function regionOf(c: Pick<Customer, 'address'> & { region1?: string | null }): string {
-  const r = (c.region1 ?? '').trim()
-  if (r) return r
-  const addr = (c.address ?? '').trim()
-  if (!addr) return ''
-  return addr.split(/\s+/)[0] ?? ''
+  return regionKey(c.region1, c.address)
 }
 
 // ── 세우기 ────────────────────────────────────────────────────────────────

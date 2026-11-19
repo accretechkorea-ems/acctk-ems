@@ -34,6 +34,11 @@ type Props = {
   focusKey?: string | null
   /** 찾아가기가 끝났을 때(없는 행이어도) 한 번 부른다 — 부르는 쪽이 주소를 정리한다. */
   onFocused?: () => void
+  /**
+   * **회사 전체 모드** — 이 값을 주면 줄마다 사업장을 보여 주고 위에 사업장 칩 필터가 선다.
+   * 사업장 상세는 주지 않는다(지금과 똑같이 그려진다).
+   */
+  sites?: { id: number; name: string }[]
 }
 
 type Kind = '서비스' | '견적' | '영업' | '홀딩'
@@ -59,6 +64,7 @@ type Item = {
   onEdit?: () => void    // 영업 활동에만 있다 (호버 시 나타나는 연필)
   sortAt: number         // 정렬 키 — 등록 시각(epoch ms). 종류와 무관하게 이 값만으로 순서가 정해진다
   sortId: number         // 등록 시각까지 같을 때만 쓰는 보조 키 (id 큰 것이 위)
+  siteId?: number | null // 어느 사업장의 기록인가 — 회사 전체 모드에서만 쓴다
 }
 
 /**
@@ -144,7 +150,7 @@ function SizedCell({ sizer, style, children }: { sizer: string; style: React.CSS
 const FOCUS_BG = SERVICE_TYPE_COLORS['신규설치'].bg
 const FOCUS_MS = 1500
 
-function TimelineRow({ item, first, focused }: { item: Item; first: boolean; focused?: boolean }) {
+function TimelineRow({ item, first, focused, siteName }: { item: Item; first: boolean; focused?: boolean; siteName?: string }) {
   const [expanded, setExpanded] = useState(false)
   const [hovered, setHovered] = useState(false)
   const body = item.body.trim()
@@ -167,6 +173,17 @@ function TimelineRow({ item, first, focused }: { item: Item; first: boolean; foc
       onMouseLeave={e => { setHovered(false); if (clickable) e.currentTarget.style.background = '' }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+
+        {/* 사업장 — 회사 전체 모드에서만. 한 칸 폭을 못 박아 아래위 줄의 종류가 같은 x 에서 시작한다. */}
+        {siteName !== undefined && (
+          <span title={siteName}
+            style={{
+              width: 96, flexShrink: 0, fontSize: 12, color: '#6b7280', paddingTop: 1,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+            {siteName || '-'}
+          </span>
+        )}
 
         {/* 왼쪽 — 종류·제목 / 내용 */}
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -276,9 +293,16 @@ function TimelineRow({ item, first, focused }: { item: Item; first: boolean; foc
   )
 }
 
-export default function ActivityTimeline({ history, devices, quotes, activities, holdings, customerId, onOpenQuotePdf, onOpenHolding, onAddActivity, onEditActivity, canEditActivity, focusKey, onFocused }: Props) {
+export default function ActivityTimeline({ history, devices, quotes, activities, holdings, customerId, onOpenQuotePdf, onOpenHolding, onAddActivity, onEditActivity, canEditActivity, focusKey, onFocused, sites }: Props) {
   const [filter, setFilter] = useState<Filter>('전체')
   const [showUndated, setShowUndated] = useState(false)
+  /** 회사 전체 모드의 사업장 칩 — 비어 있으면 전체다(복수 선택). */
+  const [pickedSites, setPickedSites] = useState<Set<number>>(new Set())
+  const [siteQuery, setSiteQuery] = useState('')
+  const siteNameOf = useMemo(() => {
+    const m = new Map((sites ?? []).map(s => [s.id, s.name]))
+    return (id?: number | null) => (id == null ? '' : m.get(id) ?? '')
+  }, [sites])
   // 활동 요약에서 넘어온 행. 한 번 찾아가고 나면 다시 하지 않는다(필터를 바꿔도 되풀이되지 않게).
   const [focusedKey, setFocusedKey] = useState<string | null>(null)
   const focusDoneRef = useRef<string | null>(null)
@@ -301,6 +325,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
     const serviceItems: Item[] = history.map(h => ({
       key: timelineKey('service', h.service_id),
       kind: '서비스' as const,
+      siteId: h.customer_id ?? null,
       date: h.visit_date,
       label: h.service_type ?? '-',
       dot: getCategoryColor(SERVICE_TYPE_COLORS, h.service_type).dot ?? '#9ca3af',
@@ -318,6 +343,8 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
     const quoteItems: Item[] = quotes.map(q => ({
       key: `q-${q.quote_id}`,
       kind: '견적' as const,
+      // 수요처가 이 회사 밖(대리점으로 낀 건)이면 대리점 쪽 줄이 이 회사의 사업장이다.
+      siteId: q.customer_id ?? q.dealer_id ?? null,
       date: q.quote_date,
       label: '견적',
       dot: TIMELINE_KIND_COLORS['견적'].dot,
@@ -333,6 +360,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
     const salesItems: Item[] = activities.map(a => ({
       key: timelineKey('sales', a.activity_id),
       kind: '영업' as const,
+      siteId: a.customer_id ?? null,
       date: a.activity_date,
       label: a.activity_type,
       dot: TIMELINE_KIND_COLORS['영업'].dot,
@@ -353,6 +381,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
     const holdingItems: Item[] = holdings.map(h => ({
       key: `h-${h.holding_id}`,
       kind: '홀딩' as const,
+      siteId: h.customer_id ?? null,
       date: h.started_at,
       label: '홀딩',
       dot: TIMELINE_KIND_COLORS['홀딩'].dot,
@@ -370,13 +399,19 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
     return [...serviceItems, ...quoteItems, ...salesItems, ...holdingItems]
   }, [history, quotes, activities, holdings, customerId, deviceNameOf, disposedIds, onOpenQuotePdf, onOpenHolding, onEditActivity, canEditActivity])
 
+  /** 사업장 칩으로 한 번 거른 묶음 — 종류 건수도 이 묶음에서 센다. */
+  const scoped = useMemo(
+    () => (pickedSites.size === 0 ? items : items.filter(i => i.siteId != null && pickedSites.has(i.siteId))),
+    [items, pickedSites],
+  )
+
   const counts = useMemo(() => ({
-    '전체': items.length,
-    '영업': items.filter(i => i.kind === '영업').length,
-    '서비스': items.filter(i => i.kind === '서비스').length,
-    '견적': items.filter(i => i.kind === '견적').length,
-    '홀딩': items.filter(i => i.kind === '홀딩').length,
-  }), [items])
+    '전체': scoped.length,
+    '영업': scoped.filter(i => i.kind === '영업').length,
+    '서비스': scoped.filter(i => i.kind === '서비스').length,
+    '견적': scoped.filter(i => i.kind === '견적').length,
+    '홀딩': scoped.filter(i => i.kind === '홀딩').length,
+  }), [scoped])
 
   // 날짜 있는 것만 내림차순으로 월별 묶음, 날짜 없는 것은 따로 모은다.
   // 전 구간 내림차순 — 달도, 날도, 같은 날 안도 최신이 위다. 종류(견적/영업/홀딩/서비스)에 따른
@@ -387,7 +422,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
   // (홀딩은 started_at 을 표시하는데 등록 시각이 그보다 한참 뒤일 수 있어 실제로 벌어진다)
   // 같은 날짜 안에서는 sortAt 만 보므로, 요청하신 '등록 시각 내림차순'과 결과가 같다.
   const { months, undated } = useMemo(() => {
-    const shown = filter === '전체' ? items : items.filter(i => i.kind === filter)
+    const shown = filter === '전체' ? scoped : scoped.filter(i => i.kind === filter)
     const dated = shown.filter(i => i.date)
     const undated = shown.filter(i => !i.date)
     dated.sort((a, b) => {
@@ -404,7 +439,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
       else months.push({ label, rows: [it] })
     }
     return { months, undated }
-  }, [items, filter])
+  }, [scoped, filter])
 
   // 활동 요약에서 넘어온 행 찾아가기 — 자료가 다 그려진 뒤 한 번만.
   //   · 필터가 「전체」가 아니면 대상이 가려질 수 있어 먼저 되돌린다(다음 렌더에서 이어서 한다).
@@ -453,6 +488,48 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
         </button>
       </div>
 
+      {/* 사업장 칩 — 회사 전체 모드에서만. 복수 선택이고, 많으면 검색으로 좁힌다. */}
+      {sites && sites.length > 1 && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+            <input value={siteQuery} onChange={e => setSiteQuery(e.target.value)}
+              placeholder={`사업장 ${sites.length}곳 — 이름으로 좁히기`}
+              style={{ height: 26, width: 190, padding: '0 9px', borderRadius: 6, border: '1px solid #ebebeb', fontSize: 12, color: '#111827', outline: 'none' }} />
+            {pickedSites.size > 0 && (
+              <button onClick={() => setPickedSites(new Set())}
+                style={{ border: 'none', background: 'none', color: '#6b7280', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {`사업장 ${pickedSites.size}곳 선택 — 해제`}
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 76, overflowY: 'auto' }}>
+            {sites
+              .filter(s => !siteQuery.trim() || s.name.toLowerCase().includes(siteQuery.trim().toLowerCase()))
+              .map(s => {
+                const on = pickedSites.has(s.id)
+                return (
+                  <button key={s.id}
+                    onClick={() => setPickedSites(prev => {
+                      const next = new Set(prev)
+                      if (next.has(s.id)) next.delete(s.id)
+                      else next.add(s.id)
+                      return next
+                    })}
+                    style={{
+                      height: 24, padding: '0 9px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
+                      border: `1px solid ${on ? '#234ea2' : '#ebebeb'}`,
+                      background: on ? '#eff4ff' : '#ffffff',
+                      color: on ? '#234ea2' : '#6b7280',
+                      fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
+                    }}>
+                    {s.name}
+                  </button>
+                )
+              })}
+          </div>
+        </div>
+      )}
+
       {months.length === 0 && undated.length === 0 ? (
         <div style={{ padding: '28px 16px', textAlign: 'center', fontSize: 13, color: '#9ca3af' }}>
           {filter === '영업' ? '영업 활동 기록이 없습니다' : '기록이 없습니다'}
@@ -466,7 +543,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
                 <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>{m.rows.length}건</span>
                 <span style={{ flex: 1, height: 1, background: '#ebebeb' }} />
               </div>
-              {m.rows.map((it, i) => <TimelineRow key={it.key} item={it} first={i === 0} focused={it.key === focusedKey} />)}
+              {m.rows.map((it, i) => <TimelineRow key={it.key} item={it} first={i === 0} focused={it.key === focusedKey} siteName={sites ? siteNameOf(it.siteId) : undefined} />)}
             </div>
           ))}
 
@@ -483,7 +560,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
                 </button>
                 <span style={{ flex: 1, height: 1, background: '#ebebeb' }} />
               </div>
-              {showUndated && undated.map((it, i) => <TimelineRow key={it.key} item={it} first={i === 0} focused={it.key === focusedKey} />)}
+              {showUndated && undated.map((it, i) => <TimelineRow key={it.key} item={it} first={i === 0} focused={it.key === focusedKey} siteName={sites ? siteNameOf(it.siteId) : undefined} />)}
             </div>
           )}
         </>

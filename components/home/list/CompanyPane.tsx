@@ -10,12 +10,19 @@
 //     · 사업장 → 줄 끝의 연필 → 사업장 수정 모달(상세 화면과 **같은 모달·같은 저장 규칙**)
 //   여러 줄을 한 번에 바꾸는 일(대리점·상태·회사 이동)만 아래 일괄 바가 맡는다.
 
-import { useState, type CSSProperties } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import CompanySearchModal from '@/components/home/list/CompanySearchModal'
 import CompanyEditModal, { type CompanyEditForm } from '@/components/home/list/CompanyEditModal'
 import CustomerEditModal from '@/components/customer/modals/CustomerEditModal'
+import SalesActivityModal from '@/components/customer/modals/SalesActivityModal'
+import SiteMergeModal, { type MergeReport } from '@/components/home/list/SiteMergeModal'
+import ActivityTimeline from '@/components/customer/ActivityTimeline'
+import { useCompanyTimeline } from '@/hooks/useCompanyTimeline'
+import { useQuotePdf } from '@/hooks/customer/useQuotePdf'
+import { isSuperAdmin } from '@/lib/permissions'
+import type { Holding, Quote, SalesActivity, SalesActivityForm } from '@/components/customer/types'
 import { saveCustomerEdit } from '@/lib/saveCustomerEdit'
 import { invalidateParents } from '@/components/customer/ParentPicker'
 import { DIRECT_SALE_LABEL, useAgencies } from '@/lib/customerAgency'
@@ -74,10 +81,14 @@ export type CompanyPaneProps = {
    * 전부 다시 만들기 때문이다). 분류·메모와 사업장 수준의 일은 고객사 메뉴면 된다.
    */
   canEditCompany: boolean
+  /** 지금 사람 — 영업 기록의 작성자이고, 자기 글만 고칠 수 있다. */
+  me: { engineer_id: number | null; permission_level: string | null }
+  /** 견적 PDF 를 열 때. 회사 전체 타임라인의 견적 줄이 쓴다. */
+  onOpenQuote?: (quote: Quote) => void
 }
 
 export default function CompanyPane({
-  group, engineerName, onSaved, onError, onToast, onOpenSite, onAddSite, onCompanyGone, canEditCompany,
+  group, engineerName, onSaved, onError, onToast, onOpenSite, onAddSite, onCompanyGone, canEditCompany, me, onOpenQuote,
 }: CompanyPaneProps) {
   const supabase = createClient()
   const agencies = useAgencies()
@@ -91,6 +102,29 @@ export default function CompanyPane({
   const [moveOpen, setMoveOpen] = useState(false)
   const [mergeTarget, setMergeTarget] = useState<{ id: number; name: string } | null>(null)
   const [mergeOpen, setMergeOpen] = useState(false)
+  /** 사업장 병합 창. */
+  const [siteMergeOpen, setSiteMergeOpen] = useState(false)
+  /** 영업 기록 창 — 회사 화면에서는 어느 사업장인지 함께 고른다. */
+  const [activityOpen, setActivityOpen] = useState(false)
+  const [editingActivity, setEditingActivity] = useState<SalesActivity | null>(null)
+  const [activitySiteId, setActivitySiteId] = useState<number | null>(null)
+  const [savingActivity, setSavingActivity] = useState(false)
+
+  /** 회사 전체 활동 — 사업장 전부를 한 번에 읽는다(hooks/useCompanyTimeline.ts). */
+  const siteIds = useMemo(() => group.sites.map(s => s.customer.customer_id), [group.sites])
+  const timeline = useCompanyTimeline(siteIds)
+  // 견적 PDF — 상세 화면과 같은 훅(서명 URL + 조회 기록).
+  const { openQuotePdf } = useQuotePdf({ customer: null, engineerId: me.engineer_id })
+  /** 타임라인의 사업장 칩·열이 쓰는 이름표. */
+  const siteOptions = useMemo(
+    () => group.sites.map(s => ({ id: s.customer.customer_id, name: s.siteName })),
+    [group.sites],
+  )
+  /** 가장 최근에 움직인 사업장 — 영업 기록의 기본값이다. */
+  const recentSiteId = useMemo(() => {
+    const best = [...group.sites].sort((a, b) => (b.touch?.date ?? '').localeCompare(a.touch?.date ?? ''))[0]
+    return best?.customer.customer_id ?? null
+  }, [group.sites])
 
   // 회사를 바꿔 고르면 이 조각은 **통째로 다시 그려진다** — 부르는 쪽이 key 에 회사 id 를
   // 준다(app/page.tsx). 그래서 앞 회사의 선택·편집 상태를 effect 로 털 필요가 없다.
@@ -168,6 +202,65 @@ export default function CompanyPane({
     onToast('사업장 정보를 수정했습니다')
     onSaved()
   }
+
+  /** 사업장 병합 — ① 먼저 세어 보고(dry run) ② 확인을 받은 뒤 실행한다. */
+  const siteMergeDryRun = async (keepId: number, fromIds: number[]): Promise<MergeReport | null> => {
+    const r = await callRoute({ action: 'merge-sites', keepId, fromIds, dryRun: true })
+    if (!r.ok) { onError(r.error); return null }
+    return r.data.report as MergeReport
+  }
+
+  const runSiteMerge = async (keepId: number, fromIds: number[], siteName: string) => {
+    if (busy) return
+    setBusy(true)
+    const r = await callRoute({ action: 'merge-sites', keepId, fromIds, siteName: siteName || undefined })
+    setBusy(false)
+    if (!r.ok) { onError(r.error); return }
+    const report = r.data.report as MergeReport
+    setSiteMergeOpen(false)
+    setChecked(new Set())
+    onToast(`사업장 ${fromIds.length}곳을 합쳤습니다 (기록 ${report?.total ?? 0}건 이동)`)
+    onSaved()
+    timeline.reload()
+  }
+
+  /** 영업 기록 — 회사 화면에서는 사업장을 골라 그 줄에 붙인다. */
+  const saveActivity = async (form: SalesActivityForm) => {
+    const siteId = activitySiteId ?? recentSiteId
+    if (!siteId) { onError('사업장을 고르세요'); return }
+    if (!me.engineer_id) { onError('사용자 정보를 불러오는 중입니다'); return }
+    setSavingActivity(true)
+    const nowIso = new Date().toISOString()
+    const { error } = editingActivity
+      ? await supabase.from('sales_activities').update({
+          opportunity_id: form.opportunity_id,
+          activity_date: form.activity_date,
+          activity_type: form.activity_type,
+          contact_id: form.contact_id,
+          content: form.content.trim(),
+          updated_at: nowIso,
+        }).eq('activity_id', editingActivity.activity_id)
+      : await supabase.from('sales_activities').insert({
+          customer_id: siteId,
+          engineer_id: me.engineer_id,
+          opportunity_id: form.opportunity_id,
+          activity_date: form.activity_date,
+          activity_type: form.activity_type,
+          contact_id: form.contact_id,
+          content: form.content.trim(),
+        })
+    setSavingActivity(false)
+    if (error) { onError(error.message || '영업 기록을 저장하지 못했습니다'); return }
+    setActivityOpen(false)
+    setEditingActivity(null)
+    onToast(editingActivity ? '영업 기록을 수정했습니다' : '영업 기록을 추가했습니다')
+    timeline.reload()
+    onSaved()
+  }
+
+  /** 자기가 쓴 기록이거나 슈퍼관리자면 고칠 수 있다(상세 화면과 같은 규칙). */
+  const canEditActivity = (a: SalesActivity) =>
+    isSuperAdmin({ permission_level: me.permission_level }) || (me.engineer_id != null && a.engineer_id === me.engineer_id)
 
   /** 고른 사업장을 다른 회사로 옮긴다. 참조는 사업장에 붙어 있어 그대로 따라간다. */
   const moveSites = async (toId: number, toName: string) => {
@@ -362,6 +455,16 @@ export default function CompanyPane({
               style={{ height: 26, padding: '0 10px', borderRadius: 6, border: '1px solid #374151', background: 'transparent', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
               다른 회사로 이동
             </button>
+
+            {/* 사업장 병합 — 두 곳 이상 골랐을 때만. 되돌릴 수 없어 슈퍼관리자만 누른다. */}
+            {selected.length > 1 && (
+              <button type="button" disabled={busy || !canEditCompany}
+                title={canEditCompany ? '고른 사업장을 한 줄로 합칩니다' : '사업장 병합은 슈퍼관리자만 할 수 있습니다'}
+                onClick={() => setSiteMergeOpen(true)}
+                style={{ height: 26, padding: '0 10px', borderRadius: 6, border: '1px solid #374151', background: 'transparent', color: canEditCompany ? '#fff' : MUTED, fontSize: 12, fontWeight: 700, cursor: canEditCompany ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>
+                사업장 병합
+              </button>
+            )}
             <span style={{ flex: 1 }} />
             <button type="button" onClick={() => setChecked(new Set())}
               style={{ border: 'none', background: 'none', color: MUTED, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -369,6 +472,30 @@ export default function CompanyPane({
             </button>
           </div>
         )}
+      </section>
+
+      {/* ── 회사 전체 활동 ── */}
+      <section style={{ ...card, padding: '14px 16px', minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <b style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>회사 전체 활동</b>
+          <span style={{ fontSize: 11, color: MUTED }}>
+            {timeline.loading ? '읽는 중…' : `사업장 ${group.sites.length}곳 · 조회 ${timeline.ms}ms`}
+          </span>
+        </div>
+        <ActivityTimeline
+          history={timeline.history}
+          devices={timeline.devices}
+          quotes={timeline.quotes}
+          activities={timeline.activities}
+          holdings={timeline.holdings}
+          customerId={group.companyId}
+          sites={siteOptions}
+          onOpenQuotePdf={q => { if (onOpenQuote) onOpenQuote(q); else void openQuotePdf(q) }}
+          onOpenHolding={(h: Holding) => { const id = h.customer_id; if (id) onOpenSite(id) }}
+          onAddActivity={() => { setEditingActivity(null); setActivitySiteId(recentSiteId); setActivityOpen(true) }}
+          onEditActivity={a => { setEditingActivity(a); setActivitySiteId(a.customer_id ?? recentSiteId); setActivityOpen(true) }}
+          canEditActivity={canEditActivity}
+        />
       </section>
 
       {/* 회사 수정 */}
@@ -395,6 +522,35 @@ export default function CompanyPane({
           isSaving={busy}
           onClose={() => setEditSite(null)}
           onSave={form => void saveSite(form)}
+        />
+      )}
+
+      {/* 사업장 병합 — ① 남길 줄 고르기 → ② 건수 확인 → 실행 */}
+      {siteMergeOpen && (
+        <SiteMergeModal
+          rows={group.sites.filter(s => checked.has(s.customer.customer_id))}
+          busy={busy}
+          onDryRun={siteMergeDryRun}
+          onRun={(keepId, fromIds, siteName) => void runSiteMerge(keepId, fromIds, siteName)}
+          onClose={() => setSiteMergeOpen(false)}
+        />
+      )}
+
+      {/* 영업 기록 — 회사 화면에서는 사업장을 함께 고른다 */}
+      {activityOpen && (
+        <SalesActivityModal
+          isOpen
+          activity={editingActivity}
+          contacts={timeline.contacts.filter(c => c.customer_id === (activitySiteId ?? recentSiteId))}
+          opportunities={timeline.opportunities.filter(o => o.customer_id === (activitySiteId ?? recentSiteId))}
+          isSaving={savingActivity}
+          canDelete={false}
+          sites={siteOptions}
+          siteId={activitySiteId ?? recentSiteId}
+          onSiteChange={id => setActivitySiteId(id)}
+          onClose={() => { setActivityOpen(false); setEditingActivity(null) }}
+          onSave={form => void saveActivity(form)}
+          onDelete={() => {}}
         />
       )}
 
