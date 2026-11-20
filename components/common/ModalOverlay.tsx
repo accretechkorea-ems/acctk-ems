@@ -25,10 +25,22 @@
 //   대부분이라, 그때까지 확인을 받으면 성가신 쪽이 이긴다). 못 주는 모달은 confirmClose
 //   만 켜 둔다 — 그런 모달은 늘 묻는다.
 
-import { useRef, type CSSProperties, type ReactNode } from 'react'
+import { createContext, useContext, useRef, type CSSProperties, type ReactNode } from 'react'
 import { modalOverlayStyle } from '../customer/constants'
 import { useConfirmOptional } from './confirmContext'
 import { useOverlayEsc } from './overlayStack'
+
+/**
+ * **닫기 요청** — Esc·바깥 클릭이 지나는 그 함수를 자식에게 그대로 내려 준다.
+ *
+ * 우상단 ✕ 가 onClose 를 직접 부르면 confirmClose 를 지나치게 된다(Esc 로는 묻고 ✕
+ * 로는 안 묻는 모달이 생긴다). 공용 카드(ModalCard)의 ✕ 는 이것을 쓴다 — 세 길이
+ * 한 함수다. 바깥에서 ModalOverlay 없이 쓰이면 null 이다(그때는 제 onClose 를 쓴다).
+ */
+const RequestCloseContext = createContext<(() => void) | null>(null)
+
+/** 떠 있는 모달의 닫기 요청. ModalOverlay 안이 아니면 null. */
+export const useRequestClose = (): (() => void) | null => useContext(RequestCloseContext)
 
 /** 닫는 길. 'both' = Esc + 바깥 클릭(기본) · 'backdrop' = 바깥 클릭만 · 'none' = 둘 다 막는다. */
 export type CloseOn = 'both' | 'backdrop' | 'none'
@@ -91,7 +103,9 @@ export default function ModalOverlay({
         if (onBg && backdropOk) void requestClose()
       }}
     >
-      {children}
+      <RequestCloseContext.Provider value={() => { void requestClose() }}>
+        {children}
+      </RequestCloseContext.Provider>
     </div>
   )
 }

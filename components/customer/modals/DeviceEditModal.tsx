@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Device, DeviceForm } from '../types'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { useToast } from '@/components/common/Toast'
 import { getDefaultImageUrl } from '../utils'
@@ -135,15 +136,10 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
     // 사진은 저장 버튼과 무관하게 이미 반영됐으므로 변경 여부에 넣지 않는다 —
     // 칸의 글자와 고른 패킹 파일만 본다.
     <ModalOverlay onClose={onClose} confirmClose dirty={dirty}>
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '100%', maxWidth: 720, background: '#ffffff', borderRadius: R.control, padding: 24,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb',
-          animation: 'modal-in 0.18s ease',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      <ModalCard
+        width={720}
+        footStyle={{ justifyContent: 'space-between' }}
+        title={<>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>장비 수정</div>
             {/* 폐기된 장비임을 먼저 알린다 — 칸을 고치러 들어왔는데 목록에 없는 이유가 여기 있다. */}
@@ -153,19 +149,39 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
               </span>
             )}
           </div>
-          <button
-            onClick={onClose}
-            title="닫기"
-            onMouseEnter={(e) => (e.currentTarget.style.color = '#111827')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = '#6b7280')}
-            style={{ width: 28, height: 28, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', transition: 'color 0.15s ease' }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
+        </>}
+        footer={<>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={onDelete}
+              disabled={isSaving}
+              style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}
+            >삭제</button>
+            {/* 폐기는 되돌릴 수 있어 빨강을 쓰지 않는다 — 삭제와 한눈에 갈라야 한다. */}
+            <button
+              onClick={disposed ? onRestore : onDispose}
+              disabled={isSaving}
+              title={disposed ? '상태를 「사용중」으로 되돌립니다' : '목록에서 숨기고 이력은 남깁니다'}
+              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}
+            >{disposed ? '폐기 취소' : '폐기 처리'}</button>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={onClose}
+              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+            >취소</button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
+              onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
+              style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
+            >
+              {isSaving ? '저장 중...' : '저장'}
+            </button>
+          </div>
+        </>}
+      >
 
         <div style={{ display: 'grid', gap: 14 }}>
           <div>
@@ -311,38 +327,7 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 24 }}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={onDelete}
-              disabled={isSaving}
-              style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}
-            >삭제</button>
-            {/* 폐기는 되돌릴 수 있어 빨강을 쓰지 않는다 — 삭제와 한눈에 갈라야 한다. */}
-            <button
-              onClick={disposed ? onRestore : onDispose}
-              disabled={isSaving}
-              title={disposed ? '상태를 「사용중」으로 되돌립니다' : '목록에서 숨기고 이력은 남깁니다'}
-              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}
-            >{disposed ? '폐기 취소' : '폐기 처리'}</button>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={onClose}
-              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
-            >취소</button>
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
-              onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
-              style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
-            >
-              {isSaving ? '저장 중...' : '저장'}
-            </button>
-          </div>
-        </div>
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }

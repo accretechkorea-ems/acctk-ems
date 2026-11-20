@@ -16,6 +16,7 @@
 
 import { useEffect, useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { TABLE_LABEL } from '@/components/home/list/SiteMergeModal'
 import { R } from '@/lib/radius'
 
@@ -44,7 +45,6 @@ export type ConvertReport = {
   follows_total?: number
 }
 
-const cardStyle = { background: '#fff', borderRadius: R.control, border: `1px solid ${BORDER}`, boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }
 const btnGhost = (busy: boolean) => ({
   padding: '9px 15px', background: '#fff', color: SUB, borderRadius: R.icon,
   border: `1px solid ${BORDER}`, cursor: busy ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 13,
@@ -87,8 +87,22 @@ export default function ConvertAgencyModal({
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ ...cardStyle, width: '100%', maxWidth: 480, padding: 22 }}>
-        <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, marginBottom: 12 }}>대리점으로 전환</div>
+      {/* 구조는 공용 카드가 든다 — 머리줄 고정 / 본문 스크롤 / 바닥줄 고정. */}
+      <ModalCard
+        width={480}
+        title="대리점으로 전환"
+        footer={<>
+          <button onClick={onClose} disabled={busy} style={btnGhost(busy)}>닫기</button>
+          <button onClick={onRun} disabled={busy || !can}
+            style={{
+              padding: '9px 17px', background: can ? BLUE : NEUTRAL, color: can ? '#fff' : MUTED,
+              borderRadius: R.icon, border: 'none', cursor: busy || !can ? 'not-allowed' : 'pointer',
+              fontWeight: 700, fontSize: 13, opacity: busy ? 0.6 : 1,
+            }}>
+            {busy ? '전환 중…' : '전환'}
+          </button>
+        </>}
+      >
 
         <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.9 }}>
           <b>{companyName}</b>
@@ -165,18 +179,7 @@ export default function ConvertAgencyModal({
           <li><b style={{ color: DANGER }}>되돌리기는 자동으로 없습니다.</b> 전환 뒤에는 목록의 대리점 탭에서 보입니다.</li>
         </ul>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-          <button onClick={onClose} disabled={busy} style={btnGhost(busy)}>닫기</button>
-          <button onClick={onRun} disabled={busy || !can}
-            style={{
-              padding: '9px 17px', background: can ? BLUE : NEUTRAL, color: can ? '#fff' : MUTED,
-              borderRadius: R.icon, border: 'none', cursor: busy || !can ? 'not-allowed' : 'pointer',
-              fontWeight: 700, fontSize: 13, opacity: busy ? 0.6 : 1,
-            }}>
-            {busy ? '전환 중…' : '전환'}
-          </button>
-        </div>
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }

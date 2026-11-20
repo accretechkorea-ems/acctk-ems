@@ -1,0 +1,153 @@
+/**
+ * 모달의 **공통 구조** — 머리줄 고정 / 본문 스크롤 / 바닥줄 고정 (2026-11-21).
+ *
+ * 지키는 약속
+ *   ① 바탕은 ModalOverlay 한 곳이다(2026-11-02부터). 거기에 **속 카드**를 더했다 —
+ *     ModalCard. 카드가 스스로 overflow: hidden 을 들고 본문만 구른다.
+ *   ② 닫는 길 셋이 **한 함수**다 — Esc·바깥 클릭(ModalOverlay)과 ✕(ModalCard 가
+ *     useRequestClose 로 받는다). ✕ 가 onClose 를 직접 부르면 confirmClose 를 지나친다.
+ *   ③ 모션은 한 가지다 — `.ems-modal-card` (150ms fade + 살짝 커짐, app/globals.css).
+ *   ④ 바탕을 **직접 그리는 세 곳**은 이 규칙 밖이다(ModalOverlay 를 쓰지 않는다):
+ *     app/approval/doc/[id] · RouteMapView · XlsxPreviewModal.
+ *
+ * ⑤ 아직 옮기지 않은 모달은 **목록으로 못 박아 둔다**. 그 목록이 늘어나면 실패한다 —
+ *   새 모달이 공용 카드를 지나치는 것을 막는다. 줄어들면(옮기면) 숫자를 고친다.
+ */
+const load = module.require.bind(module)
+const path = load('path')
+const fs = load('fs')
+const ROOT = path.resolve(__dirname, '..')
+
+const files = []
+const walk = d => {
+  for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+    const p = path.join(d, e.name)
+    if (e.isDirectory()) { if (!/node_modules|\.next/.test(p)) walk(p) }
+    else if (e.name.endsWith('.tsx')) files.push(p)
+  }
+}
+walk(path.join(ROOT, 'app'))
+walk(path.join(ROOT, 'components'))
+
+/**
+ * 아직 공용 카드로 옮기지 않은 자리 — **머리·바닥 모양이 제각각**이라 손으로 옮긴다.
+ * (스타일 객체로 된 머리줄, ✕ 가 없는 자리, 한 파일에 모달이 둘·셋인 자리)
+ */
+const PENDING_BESPOKE = [
+  'app/contact/semi/page.tsx',
+  'app/purchase/page.tsx',
+  'app/quote/page.tsx',
+  'components/activity/ActivityDetailModal.tsx',
+  'components/common/ConfirmDialog.tsx',
+  'components/common/SessionManager.tsx',
+  'components/customer/modals/AddressField.tsx',
+  'components/dashboard/MyQuotesPanel.tsx',
+  'components/home/CustomerFilterModal.tsx',
+  'components/home/list/SiteMergeModal.tsx',
+  'components/inquiry/bulk/BulkImportModal.tsx',
+  'components/quote/ConfirmQuoteModal.tsx',
+  'components/quote/equip/SaveTemplateDialog.tsx'
+]
+
+/**
+ * 이미 머리·바닥 구조가 갖춰져 있던 자리 — 2차 조사의 26개 **밖**이다.
+ * 공용 카드로 옮기는 것은 겉모양이 바뀔 수 있어 따로 정해야 한다(보고에 적었다).
+ */
+const PENDING_STRUCTURED = [
+  'app/admin/page.tsx',
+  'app/contact/semi/[projectId]/page.tsx',
+  'app/inquiries/[id]/page.tsx',
+  'app/inquiries/page.tsx',
+  'app/inventory/page.tsx',
+  'app/leads/page.tsx',
+  'app/repair/page.tsx',
+  'app/sales/page.tsx',
+  'app/suggestions/page.tsx',
+  'components/admin/ActivityTypeManager.tsx',
+  'components/admin/QuoteCategoryManager.tsx',
+  'components/admin/priceList/PriceListImportModal.tsx',
+  'components/approval/DelegationModal.tsx',
+  'components/approval/LinePickerModal.tsx',
+  'components/common/NoticePopup.tsx',
+  'components/customer/TimelineFilterModal.tsx',
+  'components/customer/modals/HoldingModal.tsx',
+  'components/customer/modals/OpportunityModal.tsx',
+  'components/customer/modals/QuoteHistoryModal.tsx',
+  'components/customer/modals/RecordAddModal.tsx',
+  'components/customer/modals/ServiceAddModal.tsx',
+  'components/customer/modals/ServiceEditModal.tsx',
+  'components/dashboard/MyQuoteCard.tsx',
+  'components/home/list/CompanySearchModal.tsx',
+  'components/inquiry/DeskGuideModal.tsx',
+  'components/quote/AssigneePicker.tsx',
+  'components/repair/RepairEditModal.tsx',
+  'components/sales/EngineerChartModal.tsx',
+  'components/showroom/DeviceSettingsModal.tsx',
+  'components/showroom/PeriodPickerModal.tsx',
+  'components/showroom/UsageModal.tsx'
+]
+
+const PENDING = [...PENDING_BESPOKE, ...PENDING_STRUCTURED]
+
+let fail = 0
+const ok = (name, cond, hint) => {
+  if (cond) console.log(`OK   ${name}`)
+  else { fail++; console.error(`FAIL ${name}${hint ? `  — ${hint}` : ''}`) }
+}
+
+const rel = f => path.relative(ROOT, f).split(path.sep).join('/')
+const users = []      // ModalOverlay 를 쓰는 파일
+const onCard = []     // 공용 카드로 옮긴 파일
+for (const f of files) {
+  const s = fs.readFileSync(f, 'utf8')
+  if (!/<ModalOverlay/.test(s)) continue
+  users.push(rel(f))
+  if (/<ModalCard/.test(s)) onCard.push(rel(f))
+}
+
+console.log(`── 모달 ${users.length}파일 · 공용 카드 ${onCard.length} · 남은 ${users.length - onCard.length} ──`)
+
+console.log('\n── ① 공용 카드의 구조 ──')
+const CARD = fs.readFileSync(path.join(ROOT, 'components', 'common', 'ModalCard.tsx'), 'utf8')
+ok('카드가 스스로 구르지 않는다(overflow: hidden)', /overflow: 'hidden',/.test(CARD),
+  '이 줄이 없으면 공용 CSS 가 카드를 구르게 해 머리·바닥이 흘러간다')
+ok('세로 flex · 본문만 구른다',
+  /flexDirection: 'column'/.test(CARD) && /flex: 1, minHeight: 0, overflowY: 'auto'/.test(CARD))
+ok('머리줄·바닥줄은 줄지 않는다', (CARD.match(/flexShrink: 0/g) || []).length >= 2)
+
+console.log('\n── ② 닫는 길 셋이 한 함수 ──')
+const OVERLAY = fs.readFileSync(path.join(ROOT, 'components', 'common', 'ModalOverlay.tsx'), 'utf8')
+ok('오버레이가 닫기 요청을 내려 준다', /RequestCloseContext\.Provider value=\{\(\) => \{ void requestClose\(\) \}\}/.test(OVERLAY))
+ok('Esc·바깥 클릭이 그 함수를 지난다',
+  /useOverlayEsc\(closeOn === 'both', \(\) => \{ void requestClose\(\) \}\)/.test(OVERLAY)
+  && /if \(onBg && backdropOk\) void requestClose\(\)/.test(OVERLAY))
+ok('✕ 가 같은 함수를 쓴다', /const requestClose = useRequestClose\(\)/.test(CARD)
+  && /const close = onClose \?\? requestClose \?\? undefined/.test(CARD))
+
+console.log('\n── ③ 모션은 한 가지 ──')
+const CSS = fs.readFileSync(path.join(ROOT, 'app', 'globals.css'), 'utf8')
+ok('공용 키프레임이 있다', /@keyframes ems-modal-in/.test(CSS) && /\.ems-modal-card \{ animation: ems-modal-in 0\.15s ease; \}/.test(CSS))
+ok('모션을 줄이길 원하는 사용자에게는 끈다', /prefers-reduced-motion: reduce[\s\S]{0,80}\.ems-modal-card \{ animation: none; \}/.test(CSS))
+ok('카드가 그 class 를 붙인다', /className=\{className \? `ems-modal-card \$\{className\}` : 'ems-modal-card'\}/.test(CARD))
+
+console.log('\n── ④ 바탕을 직접 그리는 세 곳은 규칙 밖 ──')
+for (const f of ['app/approval/doc/[id]/page.tsx', 'components/sales/RouteMapView.tsx', 'components/common/XlsxPreviewModal.tsx']) {
+  const full = path.join(ROOT, f)
+  const exists = fs.existsSync(full)
+  ok(`${f} — ModalOverlay 를 쓰지 않는다(예외)`,
+    !exists || !/<ModalOverlay/.test(fs.readFileSync(full, 'utf8')),
+    '이 셋은 제 바탕을 직접 그린다 — 공용 규칙을 걸지 않는다')
+}
+
+console.log('\n── ⑤ 남은 자리는 목록 그대로 ──')
+const pendingNow = users.filter(f => !onCard.includes(f)).sort()
+const extra = pendingNow.filter(f => !PENDING.includes(f))
+const gone = PENDING.filter(f => !pendingNow.includes(f))
+ok('목록에 없는 모달이 공용 카드를 지나치지 않았다', extra.length === 0,
+  extra.join(' · ') + ' — 새 모달은 ModalCard 를 쓴다')
+ok('옮긴 것은 목록에서 빠졌다', gone.length === 0,
+  gone.join(' · ') + ' — 이 파일은 옮겼으니 PENDING 에서 지워라')
+console.log(`   남은 ${pendingNow.length}파일: ${pendingNow.join(', ')}`)
+
+console.log(fail === 0 ? '\n전부 통과' : `\n${fail}건 실패`)
+process.exit(fail === 0 ? 0 : 1)

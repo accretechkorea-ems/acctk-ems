@@ -7,6 +7,7 @@
 
 import { useState, type CSSProperties } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { elapsedLabel } from '../holding'
 import type { Holding } from '../types'
 import { todayKST } from '@/lib/date'
@@ -44,34 +45,31 @@ function ResolveForm({ holding, notice, isSaving, onClose, onResolve }: Omit<Pro
 
   return (
     <ModalOverlay onClose={onClose} confirmClose dirty={note.trim() !== '' || resolvedAt !== today}>
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '100%', maxWidth: 460, background: '#ffffff', borderRadius: R.control, padding: 24,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb',
-          animation: 'modal-in 0.18s ease',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 18 }}>
+      <ModalCard
+        width={460}
+        title={<>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>홀딩 해제</div>
             {notice && (
               <div style={{ fontSize: 12, color: '#6b7280', marginTop: 5 }}>{notice}</div>
             )}
           </div>
+        </>}
+        footer={<>
+          <button onClick={onClose}
+            style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+          >{notice ? '나중에' : '취소'}</button>
           <button
-            onClick={onClose}
-            title="닫기"
-            onMouseEnter={(e) => (e.currentTarget.style.color = '#111827')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = '#6b7280')}
-            style={{ width: 28, height: 28, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', transition: 'color 0.15s ease', flexShrink: 0 }}
+            onClick={() => onResolve(holding.holding_id, note, resolvedAt)}
+            disabled={isSaving}
+            onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
+            onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
+            style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            {isSaving ? '처리 중...' : '해제'}
           </button>
-        </div>
+        </>}
+      >
 
         {/* 어떤 홀딩을 해제하는지 */}
         <div style={{ padding: '10px 12px', background: '#f8fafc', border: '1px solid #ebebeb', borderRadius: R.control, marginBottom: 14 }}>
@@ -99,21 +97,7 @@ function ResolveForm({ holding, notice, isSaving, onClose, onResolve }: Omit<Pro
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-          <button onClick={onClose}
-            style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
-          >{notice ? '나중에' : '취소'}</button>
-          <button
-            onClick={() => onResolve(holding.holding_id, note, resolvedAt)}
-            disabled={isSaving}
-            onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
-            onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
-            style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
-          >
-            {isSaving ? '처리 중...' : '해제'}
-          </button>
-        </div>
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }

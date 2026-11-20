@@ -1,0 +1,171 @@
+'use client'
+
+/**
+ * 모달의 **속 카드** — 머리줄 고정 / 본문 스크롤 / 바닥줄 고정 (2026-11-21).
+ *
+ * ── 왜 ───────────────────────────────────────────────────────────────────
+ *   바탕(ModalOverlay)은 2026-11-02에 한 곳으로 모았는데, **카드 속**은 모달마다
+ *   달랐다. 2차 조사에서 「머리·바닥이 고정되지 않은 모달 26개」가 나왔다 — 그 모달은
+ *   내용이 길어지면 카드 전체가 구르면서 제목과 저장 버튼이 화면 밖으로 사라진다
+ *   (공용 CSS 가 `.ems-modal-overlay > *` 에 overflow-y: auto 를 걸어 두기 때문이다).
+ *   이 카드는 스스로 `overflow: hidden` 을 들고(인라인이라 그 규칙을 이긴다) 본문만
+ *   구른다. 머리줄과 바닥줄은 늘 같은 자리다.
+ *
+ * ── 닫는 길 셋이 한 함수다 ─────────────────────────────────────────────────
+ *   Esc · 바깥 클릭 · 우상단 ✕. 앞의 둘은 ModalOverlay 가 받고, ✕ 는 그 오버레이가
+ *   내려 준 **같은 함수**(useRequestClose)를 쓴다. 그래서 confirmClose 를 켠 모달은
+ *   세 길 모두 「저장하지 않고 닫을까요?」를 지난다. 전에는 ✕ 만 그냥 닫혔다.
+ *
+ * ── 모션 ────────────────────────────────────────────────────────────────
+ *   `.ems-modal-card` 한 줄(app/globals.css) — 150ms fade + 살짝 커짐. 화면마다
+ *   적혀 있던 @keyframes modal-in 아홉 벌을 대신한다.
+ *
+ * ── 쓰는 법 ─────────────────────────────────────────────────────────────
+ *     <ModalOverlay onClose={close} confirmClose dirty={dirty}>
+ *       <ModalCard title="사업장 수정" width={1100} footer={<>…버튼…</>}>
+ *         …본문…
+ *       </ModalCard>
+ *     </ModalOverlay>
+ *
+ *   겉모양은 그대로 둔다 — 폭·여백·버튼은 부르는 쪽이 정한다. 이 부품이 정하는 것은
+ *   **구조 셋**(머리·본문·바닥)과 닫는 길, 그리고 모션뿐이다.
+ *
+ *   한 가지는 모인다: **제목 글자 18/700**(지금 가장 많은 값 — 13자리). 17/800 이던
+ *   10자리와 20/800 이던 3자리가 이 값으로 바뀐다. 제목을 다르게 두어야 하는 자리는
+ *   title 에 글자 대신 조각을 넘긴다(그 자리는 이 부품이 손대지 않는다).
+ */
+
+import type { CSSProperties, ReactNode, RefObject } from 'react'
+import { useRequestClose } from '@/components/common/ModalOverlay'
+import { R } from '@/lib/radius'
+
+const BORDER = '#ebebeb'
+const TEXT = '#111827'
+const SUB = '#6b7280'
+const MUTED = '#9ca3af'
+
+/** 머리줄·바닥줄의 좌우 여백. 본문 기본 여백과 같은 값이라 글자가 한 줄로 선다. */
+const PAD_X = 22
+
+export type ModalCardProps = {
+  /** 머리줄의 제목. 글자 대신 조각을 넣어도 된다(두 줄 제목·뱃지…). */
+  title?: ReactNode
+  /** 제목 아래 작은 줄. */
+  subtitle?: ReactNode
+  /** 제목 오른쪽(✕ 왼쪽)에 붙는 것 — 건수 뱃지·세그먼트 같은 것. */
+  titleExtra?: ReactNode
+  /** 카드 최대 폭(px). 좁은 화면에서는 92vw 로 줄어든다. */
+  width?: number
+  /** 바닥줄 — 버튼 묶음. 주지 않으면 바닥줄을 그리지 않는다. */
+  footer?: ReactNode
+  children: ReactNode
+  /** ✕ 를 둘까. 기본은 둔다. 확인 창처럼 길이 버튼뿐인 자리는 false. */
+  closeX?: boolean
+  /**
+   * ✕ 를 눌렀을 때. 보통은 주지 않는다 — 오버레이의 닫기 요청(Esc·바깥 클릭과 같은
+   * 함수)을 쓴다. 오버레이 밖에서 쓰거나 다른 일을 해야 할 때만 준다.
+   */
+  onClose?: () => void
+  /** 카드 전체 스타일(배경·그림자는 기본값이 있다). */
+  style?: CSSProperties
+  /** 본문 스타일 — 여백을 0 으로 두고 표를 꽉 채우는 모달이 있다. */
+  bodyStyle?: CSSProperties
+  /** 머리줄 스타일. */
+  headStyle?: CSSProperties
+  /** 바닥줄 스타일. */
+  footStyle?: CSSProperties
+  /** 본문 칸의 ref — 스크롤 힌트·자동 스크롤이 쓴다. */
+  bodyRef?: RefObject<HTMLDivElement | null>
+  className?: string
+}
+
+export default function ModalCard({
+  title, subtitle, titleExtra, width = 480, footer, children,
+  closeX = true, onClose, style, bodyStyle, headStyle, footStyle, bodyRef, className,
+}: ModalCardProps) {
+  const requestClose = useRequestClose()
+  const close = onClose ?? requestClose ?? undefined
+
+  return (
+    <div
+      className={className ? `ems-modal-card ${className}` : 'ems-modal-card'}
+      /* 바탕까지 눌림이 올라가면 바깥 클릭으로 닫힌다 — 카드 안의 클릭은 여기서 멈춘다. */
+      onClick={e => e.stopPropagation()}
+      style={{
+        width: `min(92vw, ${width}px)`, maxWidth: `min(92vw, ${width}px)`,
+        display: 'flex', flexDirection: 'column', minHeight: 0,
+        // 인라인이라 `.ems-modal-overlay > * { overflow-y: auto }` 를 이긴다 —
+        // 카드가 구르지 않아야 머리·바닥이 고정된다.
+        overflow: 'hidden',
+        background: '#ffffff', borderRadius: R.modal, border: `1px solid ${BORDER}`,
+        boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
+        ...style,
+      }}>
+
+      {/* ── 머리줄 — 늘 같은 자리 ── */}
+      {(title || titleExtra || closeX) && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 10, flexShrink: 0,
+          padding: `18px ${PAD_X}px 12px`, ...headStyle,
+        }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            {typeof title === 'string'
+              ? <div style={{ fontSize: 18, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px' }}>{title}</div>
+              : title}
+            {subtitle && <div style={{ fontSize: 12, color: SUB, lineHeight: 1.7, marginTop: 3 }}>{subtitle}</div>}
+          </div>
+          {titleExtra}
+          {closeX && close && (
+            <button type="button" onClick={close} title="닫기" aria-label="닫기"
+              style={{
+                width: 28, height: 28, borderRadius: '50%', background: '#f3f4f6', border: 'none',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: SUB, flexShrink: 0,
+              }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── 본문 — 여기만 구른다 ── */}
+      <div ref={bodyRef} className="stable-scroll ems-modal-body"
+        style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: `0 ${PAD_X}px`, ...bodyStyle }}>
+        {children}
+      </div>
+
+      {/* ── 바닥줄 — 늘 같은 자리 ── */}
+      {footer && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexShrink: 0,
+          padding: `14px ${PAD_X}px 18px`, ...footStyle,
+        }}>
+          {footer}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** 바닥줄의 회색 버튼 — 모달마다 다시 적지 않게 한 벌 둔다. */
+export const modalGhostButton = (busy = false): CSSProperties => ({
+  padding: '10px 15px', background: '#fff', color: SUB, borderRadius: R.icon,
+  border: `1px solid ${BORDER}`, cursor: busy ? 'not-allowed' : 'pointer',
+  fontWeight: 600, fontSize: 13, fontFamily: 'inherit',
+})
+
+/** 바닥줄의 파란 버튼. */
+export const modalPrimaryButton = (busy = false): CSSProperties => ({
+  padding: '10px 17px', background: '#234ea2', color: '#fff', borderRadius: R.icon,
+  border: 'none', cursor: busy ? 'not-allowed' : 'pointer',
+  fontWeight: 700, fontSize: 13, opacity: busy ? 0.6 : 1, fontFamily: 'inherit',
+})
+
+/** 되돌릴 수 없는 일(삭제·합치기)의 붉은 버튼. */
+export const modalDangerButton = (busy = false): CSSProperties => ({
+  ...modalPrimaryButton(busy), background: '#ef4444',
+})
+
+export { MUTED as MODAL_MUTED }

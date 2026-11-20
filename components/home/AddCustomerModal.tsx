@@ -21,6 +21,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import FormFocusStyle from '@/components/common/FormFocusStyle'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import AddressField from '@/components/customer/modals/AddressField'
@@ -215,21 +216,12 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
 
   return (
     <ModalOverlay onClose={onClose} confirmClose>
-      <div
+      {/* 구조는 공용 카드가 든다 — 머리줄 고정 / 본문 스크롤 / 바닥줄 고정.
+          ✕ 는 Esc·바깥 클릭과 **같은 함수**를 지난다(ModalCard). */}
+      <ModalCard
+        width={1100}
         className="acc-form"
-        onClick={e => e.stopPropagation()}
-        style={{
-          // 폭은 PDF 뷰어와 같은 규칙 — 화면이 좁으면 92%, 넓어도 1100px 을 넘지 않는다.
-          width: 'min(92vw, 1100px)', maxWidth: 'min(92vw, 1100px)',
-          maxHeight: '96vh', overflowY: 'auto',
-          background: '#fff', color: TEXT, borderRadius: R.modal, padding: 22,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
-          animation: 'modal-in 0.18s ease',
-        }}>
-        <FormFocusStyle />
-        {/* ── ① 제목과 종류 — **한 줄**. 종류는 오른쪽 끝에 선다(지도·목록 토글과 같은 모양).
-            가운데에 따로 한 줄을 두었더니 제목 위에 뜬금없는 줄이 하나 더 있는 꼴이었다. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        title={<>
           <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px' }}>
             {existing ? '기존 회사에 사업장 추가' : isAgency ? '대리점 등록' : '업체 등록'}
           </div>
@@ -241,7 +233,17 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
               <button type="button" onClick={() => setKind('agency')} style={segBtn(isAgency)}>대리점</button>
             </div>
           )}
-        </div>
+        </>}
+        footer={<>
+          <button onClick={onClose} disabled={saving}
+            style={{ padding: '10px 15px', background: '#fff', color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+          <button onClick={() => void handleSave()} disabled={saving}
+            style={{ padding: '10px 17px', background: BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: saving ? 0.6 : 1 }}>
+            {saving ? '저장 중…' : '저장'}
+          </button>
+        </>}
+      >
+        <FormFocusStyle />
 
         {/* ── ② 업체 정보 — 한 줄 세 칸 ── */}
         <section style={sectionStyle}>
@@ -471,15 +473,7 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
           </div>
         </section>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-          <button onClick={onClose} disabled={saving}
-            style={{ padding: '10px 15px', background: '#fff', color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
-          <button onClick={() => void handleSave()} disabled={saving}
-            style={{ padding: '10px 17px', background: BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: saving ? 0.6 : 1 }}>
-            {saving ? '저장 중…' : '저장'}
-          </button>
-        </div>
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }

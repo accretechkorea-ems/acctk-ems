@@ -24,10 +24,11 @@
 
 import { useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import {
   CARD_BG, BORDER, TEXT, SUB, MUTED, NEUTRAL_BG, DANGER,
-  cardHeader, cardTitle, btnPrimary, btnGhost, btnDanger,
+  cardTitle, btnPrimary, btnGhost, btnDanger,
 } from '@/components/common/ui'
 import { LEAD_STATUS_BLOCKED, MAX_LEN, SKIP_REASON_MIN } from '@/lib/leadOptions'
 import { findCustomerCandidates, type CustomerLike } from '@/lib/leadCustomer'
@@ -138,13 +139,45 @@ export default function LeadStatusModal({
   return (
     // 상태·메모를 적는 폼 — 확인 뒤 닫는다.
     <ModalOverlay onClose={onClose} confirmClose>
-      <div style={{
-        background: CARD_BG, borderRadius: R.control, padding: '14px 16px', width: '100%', maxWidth: 460,
-        maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
-      }}>
-        <div style={cardHeader}>
+      {/* 구조는 공용 카드가 든다 — 머리줄 고정 / 본문 스크롤 / 바닥줄 고정.
+          ✕ 는 Esc·바깥 클릭과 **같은 함수**를 지난다(ModalCard). */}
+      <ModalCard
+        width={460}
+        title={<>
           <span style={cardTitle}>상태 변경</span>
-        </div>
+        </>}
+        footer={<>
+          <button type="button" onClick={onClose} disabled={busy} style={{ ...btnGhost(busy), flex: 1 }}>
+            닫기
+          </button>
+          {kind === 'assign' && (
+            <button
+              type="button" onClick={submit} disabled={busy || !assignReady}
+              style={{ ...btnPrimary(busy || !assignReady), flex: 1 }}
+            >
+              {busy ? '처리 중...' : assignLabel}
+            </button>
+          )}
+          {kind === 'block' && (
+            <button
+              type="button" onClick={submit} disabled={busy || !blockReady}
+              style={{ ...btnDanger(busy || !blockReady), flex: 1 }}
+            >
+              {busy ? '처리 중...' : '배정 불가 처리'}
+            </button>
+          )}
+          {/* 해제는 되돌리는 동작이지 파괴하는 동작이 아니다 — 붉은색을 쓰지 않는다. */}
+          {kind === 'unblock' && (
+            <button
+              type="button" onClick={submit} disabled={busy}
+              style={{ ...btnPrimary(busy), flex: 1 }}
+            >
+              {busy ? '처리 중...' : '배정 불가 해제'}
+            </button>
+          )}
+        </>}
+        footStyle={{ gap: 8 }}
+      >
 
         {/* 지금 상태 한 줄 — 무엇을 바꾸려는 것인지가 선택지보다 먼저 보여야 한다. */}
         <div style={{
@@ -293,37 +326,7 @@ export default function LeadStatusModal({
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={onClose} disabled={busy} style={{ ...btnGhost(busy), flex: 1 }}>
-            닫기
-          </button>
-          {kind === 'assign' && (
-            <button
-              type="button" onClick={submit} disabled={busy || !assignReady}
-              style={{ ...btnPrimary(busy || !assignReady), flex: 1 }}
-            >
-              {busy ? '처리 중...' : assignLabel}
-            </button>
-          )}
-          {kind === 'block' && (
-            <button
-              type="button" onClick={submit} disabled={busy || !blockReady}
-              style={{ ...btnDanger(busy || !blockReady), flex: 1 }}
-            >
-              {busy ? '처리 중...' : '배정 불가 처리'}
-            </button>
-          )}
-          {/* 해제는 되돌리는 동작이지 파괴하는 동작이 아니다 — 붉은색을 쓰지 않는다. */}
-          {kind === 'unblock' && (
-            <button
-              type="button" onClick={submit} disabled={busy}
-              style={{ ...btnPrimary(busy), flex: 1 }}
-            >
-              {busy ? '처리 중...' : '배정 불가 해제'}
-            </button>
-          )}
-        </div>
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }

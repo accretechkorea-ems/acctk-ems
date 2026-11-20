@@ -16,6 +16,7 @@
 
 import { useState, type CSSProperties } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import FormFocusStyle from '@/components/common/FormFocusStyle'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { INDUSTRIES } from '@/lib/leadOptions'
@@ -104,25 +105,44 @@ export default function CompanyEditModal({
 
   return (
     <ModalOverlay onClose={onClose} confirmClose dirty={dirty}>
-      <div className="acc-form" onClick={e => e.stopPropagation()}
-        style={{
-          // 폭·높이는 등록 폼과 같은 규칙이다.
-          width: 'min(92vw, 1100px)', maxWidth: 'min(92vw, 1100px)',
-          maxHeight: '96vh', overflowY: 'auto',
-          background: '#fff', borderRadius: R.control, padding: 24,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
-          animation: 'modal-in 0.18s ease',
-        }}>
-        <FormFocusStyle />
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      {/* 구조는 공용 카드가 든다 — 머리줄 고정 / 본문 스크롤 / 바닥줄 고정.
+          ✕ 는 Esc·바깥 클릭과 **같은 함수**를 지난다(ModalCard). */}
+      <ModalCard
+        width={1100}
+        className="acc-form"
+        footStyle={{ flexWrap: 'wrap' }}
+        title={<>
           <div style={{ fontSize: 18, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px' }}>{agency ? '대리점 정보 수정' : '회사 정보 수정'}</div>
-          <button onClick={onClose} title="닫기"
-            style={{ width: 28, height: 28, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: SUB }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+        </>}
+        footer={<>
+          {/* 대리점으로 전환 — 왼쪽 끝에 글자 버튼으로 둔다(저장과 성격이 다른 일이다.
+              의뢰서 상세의 「이 번호 취소」와 같은 자리·같은 모양이다).
+              살아있는 사업장이 정확히 1곳인 회사에서만 켜진다 — 이유는 툴팁에 있다. */}
+          {!agency && onConvertAgency && (
+            <button
+              type="button"
+              onClick={onConvertAgency}
+              disabled={isSaving || !!convertBlockedReason}
+              title={convertBlockedReason ?? '이 회사를 대리점 한 줄로 바꿉니다'}
+              style={{
+                border: 'none', background: 'transparent', padding: 0,
+                color: convertBlockedReason ? MUTED : '#c2410c',
+                fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
+                cursor: isSaving || convertBlockedReason ? 'not-allowed' : 'pointer',
+              }}>
+              대리점으로 전환
+            </button>
+          )}
+          <span style={{ flex: 1 }} />
+          <button onClick={onClose} disabled={isSaving}
+            style={{ padding: '10px 15px', background: '#fff', color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+          <button onClick={handleSave} disabled={isSaving}
+            style={{ padding: '10px 17px', background: BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}>
+            {isSaving ? '저장 중…' : '저장'}
           </button>
-        </div>
+        </>}
+      >
+        <FormFocusStyle />
 
         <div style={{ display: 'grid', gap: 14 }}>
           {/* 한 줄 세 칸 — 등록 폼의 업체 정보와 같은 리듬. */}
@@ -196,34 +216,7 @@ export default function CompanyEditModal({
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
-          {/* 대리점으로 전환 — 왼쪽 끝에 글자 버튼으로 둔다(저장과 성격이 다른 일이다.
-              의뢰서 상세의 「이 번호 취소」와 같은 자리·같은 모양이다).
-              살아있는 사업장이 정확히 1곳인 회사에서만 켜진다 — 이유는 툴팁에 있다. */}
-          {!agency && onConvertAgency && (
-            <button
-              type="button"
-              onClick={onConvertAgency}
-              disabled={isSaving || !!convertBlockedReason}
-              title={convertBlockedReason ?? '이 회사를 대리점 한 줄로 바꿉니다'}
-              style={{
-                border: 'none', background: 'transparent', padding: 0,
-                color: convertBlockedReason ? MUTED : '#c2410c',
-                fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
-                cursor: isSaving || convertBlockedReason ? 'not-allowed' : 'pointer',
-              }}>
-              대리점으로 전환
-            </button>
-          )}
-          <span style={{ flex: 1 }} />
-          <button onClick={onClose} disabled={isSaving}
-            style={{ padding: '10px 15px', background: '#fff', color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
-          <button onClick={handleSave} disabled={isSaving}
-            style={{ padding: '10px 17px', background: BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}>
-            {isSaving ? '저장 중…' : '저장'}
-          </button>
-        </div>
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }

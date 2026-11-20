@@ -135,6 +135,21 @@ body {
    폰(≤640)에서는 **전체 화면 시트**다 — 현장에서 서비스 레포트를 쓰는 화면이라
    가장자리 여백과 둥근 모서리가 쓸 자리를 깎는다.
    ============================================================ */
+/* 모달이 떠오르는 모션 — **한 가지**다(2026-11-21).
+   전에는 @keyframes modal-in 이 화면마다 따로 적혀 있었다(아홉 곳, 값이 조금씩 달랐다:
+   0.18s·0.2s, translateY 8·10px). 공용 카드(components/common/ModalCard.tsx)는 이것만 쓴다.
+   150ms fade + 아주 살짝 커지는 것 하나. 닫힘에는 모션을 두지 않는다 — 닫는 순간
+   React 가 그 요소를 떼므로 끝까지 재생되지 않고, 애니메이션을 기다리게 만들면
+   「닫았는데 아직 있다」가 된다. */
+@keyframes ems-modal-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+.ems-modal-card { animation: ems-modal-in 0.15s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .ems-modal-card { animation: none; }
+}
+
 .ems-modal-overlay {
   align-items: flex-start;
   padding-top: 6vh;

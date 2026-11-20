@@ -26,10 +26,11 @@
 
 import { useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { useToast } from '@/components/common/Toast'
 import {
   CARD_BG, BORDER, TEXT, SUB, MUTED, NEUTRAL_BG, BLUE,
-  cardHeader, cardTitle, btnPrimary, btnGhost,
+  cardTitle, btnPrimary, btnGhost,
 } from '@/components/common/ui'
 import { todayKST } from '@/lib/date'
 import { errorInfo } from '@/lib/errorInfo'
@@ -154,13 +155,26 @@ export default function CompleteModal({
   return (
     // 입력 폼 — 확인 뒤 닫는다(상태가 여러 갈래라 변경 여부는 넘기지 않는다).
     <ModalOverlay onClose={onClose} confirmClose>
-      <div style={{
-        background: CARD_BG, borderRadius: R.control, padding: '14px 16px', width: '100%', maxWidth: 520,
-        maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
-      }}>
-        <div style={cardHeader}>
+      {/* 구조는 공용 카드가 든다 — 머리줄 고정 / 본문 스크롤 / 바닥줄 고정.
+          ✕ 는 Esc·바깥 클릭과 **같은 함수**를 지난다(ModalCard). */}
+      <ModalCard
+        width={520}
+        title={<>
           <span style={cardTitle}>작성 완료</span>
-        </div>
+        </>}
+        footer={<>
+          <button type="button" onClick={onClose} disabled={busy} style={{ ...btnGhost(busy), flex: 1 }}>
+            닫기
+          </button>
+          <button
+            type="button" onClick={submit} disabled={busy || !ready}
+            style={{ ...btnPrimary(busy || !ready), flex: 1 }}
+          >
+            {busy ? '처리 중...' : '작성 완료'}
+          </button>
+        </>}
+        footStyle={{ gap: 8 }}
+      >
 
         {/* 어느 번호를 끝내는지 — 목록에서 바로 열 수 있으므로 번호가 크게 보여야 한다. */}
         <div style={{
@@ -208,18 +222,7 @@ export default function CompleteModal({
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={onClose} disabled={busy} style={{ ...btnGhost(busy), flex: 1 }}>
-            닫기
-          </button>
-          <button
-            type="button" onClick={submit} disabled={busy || !ready}
-            style={{ ...btnPrimary(busy || !ready), flex: 1 }}
-          >
-            {busy ? '처리 중...' : '작성 완료'}
-          </button>
-        </div>
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }

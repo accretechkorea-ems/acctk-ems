@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import type { Customer, CustomerEditFormData } from '../types'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import FormFocusStyle from '@/components/common/FormFocusStyle'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import ParentPicker, { loadParents, type ParentOption } from '@/components/customer/ParentPicker'
@@ -125,35 +126,43 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
 
   return (
     <ModalOverlay onClose={onClose} confirmClose dirty={dirty}>
-      <div
+      {/* 구조는 공용 카드가 든다 — 머리줄 고정 / 본문 스크롤 / 바닥줄 고정.
+          ✕ 는 Esc·바깥 클릭과 **같은 함수**를 지난다(ModalCard). */}
+      <ModalCard
         className="acc-form"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          // 폭·높이는 등록 폼과 같은 규칙이다(PDF 뷰어와 같은 min 규칙).
-          width: 'min(92vw, 1100px)', maxWidth: 'min(92vw, 1100px)',
-          maxHeight: '96vh', overflowY: 'auto',
-          background: '#ffffff', borderRadius: R.control, padding: 24,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb',
-          animation: 'modal-in 0.18s ease',
-        }}
+        width={1100}
+        footStyle={{ justifyContent: 'space-between' }}
+        title={<>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>사업장 정보 수정</div>
+        </>}
+        footer={<>
+          {onDelete ? (
+            <button
+              onClick={onDelete}
+              disabled={isDeleting}
+              style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isDeleting ? 0.6 : 1 }}
+            >
+              {isDeleting ? '삭제 중...' : '삭제'}
+            </button>
+          ) : <span />}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={onClose}
+              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+            >취소</button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
+              onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
+              style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
+            >
+              {isSaving ? '저장 중...' : '저장'}
+            </button>
+          </div>
+        </>}
       >
         <FormFocusStyle />
-        {/* 헤더 */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>사업장 정보 수정</div>
-          <button
-            onClick={onClose}
-            title="닫기"
-            onMouseEnter={(e) => (e.currentTarget.style.color = '#111827')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = '#6b7280')}
-            style={{ width: 28, height: 28, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', transition: 'color 0.15s ease' }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
 
         <div style={{ display: 'grid', gap: 14 }}>
           {/* 회사명 — **필수**. 목록에 없으면 그 자리에서 새 회사로 등록한다(분류를 함께 고른다).
@@ -265,33 +274,7 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
 
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 24 }}>
-          {onDelete ? (
-            <button
-              onClick={onDelete}
-              disabled={isDeleting}
-              style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isDeleting ? 0.6 : 1 }}
-            >
-              {isDeleting ? '삭제 중...' : '삭제'}
-            </button>
-          ) : <span />}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={onClose}
-              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
-            >취소</button>
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
-              onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
-              style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
-            >
-              {isSaving ? '저장 중...' : '저장'}
-            </button>
-          </div>
-        </div>
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }
