@@ -18,6 +18,7 @@ import { isDisposed } from '@/lib/deviceStatus'
 import type { Device, Holding, Quote, SalesActivity, SalesOpportunity, ServiceHistory } from './types'
 import {
   TIMELINE_KINDS, allSelected, applyFilter, countBySite, countByKind, dropChip, filterChips,
+  recallFilter, rememberFilter,
   type TimelineFilter, type TimelineKind,
 } from '@/lib/timelineFilter'
 import { whenLabel, ownerLabel } from '@/lib/companyForecast'
@@ -326,14 +327,28 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
     [sites],
   )
   /**
-   * 필터는 **종류·사업장·기간 한 덩어리**다. 처음에는 전부 고른 상태 —
-   * 사업장 화면에서 ← 로 돌아왔을 때만 그 사업장 하나로 좁혀 둔다(보던 자리를 잃지 않게).
+   * 필터는 **종류·사업장·기간 한 덩어리**다. 처음 상태를 정하는 순서가 셋이다.
+   *   ① initialSiteIds — 활동 현황에서 「그 줄로 가기」로 들어온 길. 가리키는 사업장이
+   *     있으므로 그것이 가장 세다.
+   *   ② 기억해 둔 것 — 이 화면을 떠날 때의 필터(lib/timelineFilter.ts). 사업장에
+   *     들어갔다 돌아오면 pane 이 새로 그려지는데, 사람이 고른 것은 그대로여야 한다.
+   *   ③ 전부 고른 상태.
    */
   const [filter, setFilter] = useState<TimelineFilter>(() => {
-    const base = allSelected(TIMELINE_KINDS, (sites ?? []).map(s => s.id))
-    return initialSiteIds && initialSiteIds.length > 0 ? { ...base, siteIds: [...initialSiteIds] } : base
+    const siteIds = (sites ?? []).map(s => s.id)
+    const base = allSelected(TIMELINE_KINDS, siteIds)
+    if (initialSiteIds && initialSiteIds.length > 0) return { ...base, siteIds: [...initialSiteIds] }
+    return recallFilter(customerId, { kinds: TIMELINE_KINDS, siteIds }) ?? base
   })
   const [filterOpen, setFilterOpen] = useState(false)
+  /**
+   * 고른 필터를 **그때그때 적어 둔다** — 이 화면이 사라진 뒤 다시 그려질 때 되살린다.
+   * 떠나는 순간에 적지 않는 까닭: 정리 함수는 자료가 이미 비워진 뒤에 돌 수 있어
+   * 「무엇을 고를 수 있었는지」(available)를 잃는다.
+   */
+  useEffect(() => {
+    rememberFilter(customerId, filter, available)
+  }, [customerId, filter, available])
 
   const siteNameOf = useMemo(() => {
     const m = new Map((sites ?? []).map(s => [s.id, s.name]))

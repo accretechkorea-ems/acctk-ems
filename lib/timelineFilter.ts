@@ -142,3 +142,58 @@ export function dropChip(
   const siteIds = f.siteIds.filter(s => s !== id)
   return { ...f, siteIds: siteIds.length === 0 ? [...available.siteIds] : siteIds }
 }
+
+// ── 떠날 때의 필터를 기억한다 ─────────────────────────────────────────────
+//
+// 회사 화면에서 사업장으로 들어가면 그 화면(CompanyPane)은 **아예 사라진다** — 우측
+// pane 을 사업장 화면으로 갈아 끼우기 때문이다. 돌아오면 새로 그려지므로 필터는
+// 처음 상태로 되돌아갔다.
+//
+// 전에는 그 자리를 「돌아올 때 그 사업장 칩을 자동으로 거는」 것으로 메웠다. 보던 자리를
+// 지켜 주려던 것인데, 돌아오면 늘 한 사업장으로 좁혀진 이력이 떠서 회사 전체를 다시
+// 보려면 매번 필터를 풀어야 했다(2026-11-21에 걷었다). 대신 **떠날 때의 필터 그대로**
+// 되살린다 — 사람이 고른 것은 사람이 풀 때까지 그대로다.
+//
+// 기억은 **이 세션(탭)에서만** 산다. 새로고침하면 처음 상태다 — 저장해 두면 어제 걸어
+// 둔 필터 때문에 「왜 이 회사는 기록이 없나」를 다시 겪는다. 열쇠는 업체 번호이므로
+// 회사와 사업장, 다른 회사끼리 서로 섞이지 않는다.
+
+const memory = new Map<number, TimelineFilter>()
+
+/** 그 화면의 필터를 기억해 둔다. 좁히지 않은 상태면 기억을 지운다(처음 상태가 곧 기본이다). */
+export function rememberFilter(
+  customerId: number | null | undefined,
+  f: TimelineFilter,
+  available: { kinds: readonly TimelineKind[]; siteIds: readonly number[] },
+): void {
+  if (customerId == null) return
+  const narrowed = narrowsKind(f, available.kinds) || narrowsSite(f, available.siteIds) || narrowsPeriod(f)
+  if (narrowed) memory.set(customerId, { ...f, kinds: [...f.kinds], siteIds: [...f.siteIds] })
+  else memory.delete(customerId)
+}
+
+/**
+ * 기억해 둔 필터. 없으면 null.
+ * 사업장 목록이 그 사이에 바뀌었으면(사업장을 지웠다·더했다) **없는 사업장은 떨어낸다** —
+ * 없는 번호가 남으면 0건이 뜬다. 떨어내고 하나도 남지 않으면 그 묶음은 전부 고른 상태다.
+ */
+export function recallFilter(
+  customerId: number | null | undefined,
+  available: { kinds: readonly TimelineKind[]; siteIds: readonly number[] },
+): TimelineFilter | null {
+  if (customerId == null) return null
+  const f = memory.get(customerId)
+  if (!f) return null
+  const siteIds = f.siteIds.filter(id => available.siteIds.includes(id))
+  const kinds = f.kinds.filter(k => available.kinds.includes(k))
+  return {
+    ...f,
+    kinds: kinds.length > 0 ? kinds : [...available.kinds],
+    siteIds: siteIds.length > 0 ? siteIds : [...available.siteIds],
+  }
+}
+
+/** 기억을 비운다 — 하네스가 쓴다(화면은 부르지 않는다). */
+export function clearFilterMemory(): void {
+  memory.clear()
+}
