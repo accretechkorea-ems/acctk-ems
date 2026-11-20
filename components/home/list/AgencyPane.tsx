@@ -199,11 +199,9 @@ export default function AgencyPane({
             </span>
           </div>
 
-          {/* 3줄 — 거래 사업장 수. 표 제목과 같은 수치지만, 카드만 보고도 규모를 알 수 있게 둔다. */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 13, color: '#374151', minWidth: 0 }}>
-            <span style={{ color: MUTED, flexShrink: 0 }}>거래 사업장</span>
-            <span>{`${all.length}곳`}</span>
-          </div>
+          {/* 3줄은 두지 않는다(2026-11-21) — 「거래 사업장 N곳」을 적어 두었더니 바로 아래
+              표 제목의 「거래 사업장 N」과 같은 수를 두 번 말하는 꼴이었다. 카드는
+              「제목 줄 / 주소」 두 줄이다. */}
         </>}
       />
 
