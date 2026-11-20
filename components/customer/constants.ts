@@ -39,7 +39,14 @@ export const iconButtonStyle: CSSProperties = {
   fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
 }
 
+/**
+ * 모달 바탕. **윗변을 화면 위 6vh 에 못 박는다** — 세로 가운데 정렬이던 때는
+ * 칸을 하나 펼칠 때마다 모달 전체가 위로 밀려 제목 줄이 움직였다.
+ * 늘어나는 쪽은 아래로만 간다(최대 높이 88vh 와 폰의 전체 화면 시트는
+ * app/globals.css 의 `.ems-modal-overlay` 가 맡는다).
+ */
 export const modalOverlayStyle: CSSProperties = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: Z.modal, padding: 20,
+  display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: Z.modal,
+  padding: '6vh 20px', overflowY: 'auto',
 }

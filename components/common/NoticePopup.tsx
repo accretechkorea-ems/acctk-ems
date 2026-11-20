@@ -86,7 +86,7 @@ export default function NoticePopup() {
   const images = (notice.image_urls ?? []).filter(Boolean)
 
   return (
-    <ModalOverlay onClose={close} style={{ background: 'rgba(0,0,0,0.5)', padding: 16 }}>
+    <ModalOverlay onClose={close} style={{ background: 'rgba(0,0,0,0.5)', padding: '6vh 16px' }}>
       <div
         style={{
           // 640 은 이미 관리자 모달들이 쓰는 폭이다(새 값이 아니다).

@@ -12,6 +12,7 @@ import { loadEngineers } from '@/lib/appData/engineers'
 import { useToast } from '@/components/common/Toast'
 import type { Customer, Device, Contact, ServiceHistory, Engineer, Quote, SalesActivity, SalesOpportunity, Holding } from '@/components/customer/types'
 import { CUSTOMER_AGENCY_SELECT } from '@/lib/customerAgency'
+import { sortServiceHistory } from '@/lib/serviceSort'
 
 // quotes 는 engineers 를 engineer_id(실적 귀속자)·created_by(작성자) 두 번 참조한다.
 // 관계를 지정하지 않으면 PGRST201(300 Multiple Choices)로 조회 전체가 실패한다.
@@ -168,6 +169,9 @@ export function useCustomerDetail(customerId: number) {
       arr.push(h)
       map.set(Number(h.device_id), arr)
     })
+    // 보여 주는 순서는 lib/serviceSort.ts 가 정한다 — 방문일 내림차순, 같은 날은 나중에 적은 것이 위.
+    // 조회는 service_id 내림차순이라 그것만으로는 11-19 → 11-06 → 11-18 처럼 섞인다.
+    for (const [k, v] of map) map.set(k, sortServiceHistory(v))
     return map
   }, [devices, history])
 

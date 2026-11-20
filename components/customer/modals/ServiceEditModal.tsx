@@ -137,7 +137,7 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
 
   return (
     <ModalOverlay
-      onClose={onClose} confirmClose style={{ padding: 12 }}
+      onClose={onClose} confirmClose style={{ padding: '6vh 12px' }}
       // 불러온 값과 같고 새로 붙인 보고서도 없으면 확인 없이 닫힌다.
       dirty={JSON.stringify([form, selectedEngineerIds]) !== JSON.stringify([formOf(service), idsOf(service)]) || reportFile !== null}
     >

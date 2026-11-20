@@ -80,6 +80,9 @@ export default function ModalOverlay({
 
   return (
     <div
+      /* 공용 규칙은 app/globals.css 의 .ems-modal-overlay 가 들고 있다 —
+         윗변 6vh 고정 · 최대 높이 88vh · 폰에서는 전체 화면 시트. */
+      className="ems-modal-overlay"
       style={{ ...modalOverlayStyle, ...style }}
       onMouseDown={(e) => { downOnOverlay.current = e.target === e.currentTarget }}
       onMouseUp={(e) => {

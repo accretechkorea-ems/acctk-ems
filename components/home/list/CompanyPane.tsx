@@ -18,6 +18,7 @@ import CustomerEditModal from '@/components/customer/modals/CustomerEditModal'
 import { AddIconButton, EditIconButton } from '@/components/common/IconButton'
 import SalesActivityModal from '@/components/customer/modals/SalesActivityModal'
 import RecordAddModal, { type HoldingDraft } from '@/components/customer/modals/RecordAddModal'
+import QuoteHistoryModal from '@/components/customer/modals/QuoteHistoryModal'
 import SiteMergeModal, { type MergeReport } from '@/components/home/list/SiteMergeModal'
 import ActivityTimeline from '@/components/customer/ActivityTimeline'
 import { useCompanyTimeline } from '@/hooks/useCompanyTimeline'
@@ -73,27 +74,39 @@ const TILE_BG = '#fafafa'
  * 수치 타일 하나 — 라벨은 위 가운데 작게, 값은 정중앙 크게. 네 칸의 높이가 같다.
  * 「최근 활동」만 값이 날짜(열 자리)라 글자를 줄이고 아래에 유형·작성자를 붙인다.
  */
-function StatTile({ label, value, unit, note, color = TEXT, valueSize = 24 }: {
+function StatTile({ label, value, unit, note, color = TEXT, valueSize = 24, onClick, title }: {
   label: string
   value: string
   unit?: string
+  /** 누를 수 있는 타일이면 준다 — 누르면 그 수치의 속을 연다(진행 견적 → 견적 이력). */
+  onClick?: () => void
+  title?: string
   note?: string
   color?: string
   valueSize?: number
 }) {
+  const Tag = onClick ? 'button' : 'div'
   return (
-    <div style={{
-      position: 'relative', minHeight: 92, padding: '26px 8px 8px', boxSizing: 'border-box',
-      background: TILE_BG, border: `1px solid ${BORDER}`, borderRadius: R.tile,
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
-    }}>
+    <Tag
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      title={title}
+      onMouseEnter={onClick ? (e => { e.currentTarget.style.borderColor = BLUE }) : undefined}
+      onMouseLeave={onClick ? (e => { e.currentTarget.style.borderColor = BORDER }) : undefined}
+      style={{
+        position: 'relative', minHeight: 92, width: '100%', padding: '26px 8px 8px', boxSizing: 'border-box',
+        background: TILE_BG, border: `1px solid ${BORDER}`, borderRadius: R.tile,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
+        cursor: onClick ? 'pointer' : 'default', fontFamily: 'inherit',
+        transition: 'border-color 0.15s ease',
+      }}>
       <span style={{ position: 'absolute', top: 8, left: 0, right: 0, textAlign: 'center', fontSize: 11, color: MUTED }}>{label}</span>
       <span className="num" style={{ display: 'flex', alignItems: 'baseline', fontSize: valueSize, fontWeight: 700, lineHeight: 1, color }}>
         {value}
         {unit && <span style={{ fontSize: 12, fontWeight: 500, color: MUTED, marginLeft: 3 }}>{unit}</span>}
       </span>
       {note && <span style={{ fontSize: 11, color: MUTED, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{note}</span>}
-    </div>
+    </Tag>
   )
 }
 
@@ -140,6 +153,8 @@ export default function CompanyPane({
   const [moveOpen, setMoveOpen] = useState(false)
   /** 「+ 기록」 창 — 영업 활동·포캐스트·홀딩을 한 창에서 고른다. */
   const [recordOpen, setRecordOpen] = useState(false)
+  /** 견적 이력 창 — 「진행 견적」 타일을 누르면 열린다(끝난 건까지 전부). */
+  const [quoteHistoryOpen, setQuoteHistoryOpen] = useState(false)
   /** 「전체 보기」를 누른 횟수 — 활동 이력을 포캐스트만으로 걸러 달라는 신호다. */
   const [forecastOnly, setForecastOnly] = useState(0)
   /** 사업장 병합 창. */
@@ -395,7 +410,9 @@ export default function CompanyPane({
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
             <StatTile label="사업장" value={String(group.sites.length)} unit="곳" />
             <StatTile label="장비" value={String(group.deviceCount)} unit="대" />
-            <StatTile label="진행 견적" value={String(group.openQuotes)} unit="건" color={group.openQuotes > 0 ? BLUE : TEXT} />
+            <StatTile label="진행 견적" value={String(group.openQuotes)} unit="건" color={group.openQuotes > 0 ? BLUE : TEXT}
+              onClick={() => setQuoteHistoryOpen(true)}
+              title={`견적 이력 — 이 회사 전체 ${timeline.quotes.length}건(끝난 건 포함)`} />
             <StatTile
               label="최근 활동"
               value={group.touch ? group.touch.date : '-'}
@@ -647,6 +664,19 @@ export default function CompanyPane({
           onDryRun={siteMergeDryRun}
           onRun={(keepId, fromIds, siteName) => void runSiteMerge(keepId, fromIds, siteName)}
           onClose={() => setSiteMergeOpen(false)}
+        />
+      )}
+
+      {/* 견적 이력 — 회사 전체(사업장 전부)의 견적을 최신순으로. 진행 중만이 아니라 끝난 건도 넣는다:
+          「이 회사와 얼마나 거래했나」를 보는 창이라 끝난 건을 빼면 뜻이 없다. */}
+      {quoteHistoryOpen && (
+        <QuoteHistoryModal
+          isOpen
+          customer={null}
+          quotes={timeline.quotes}
+          family={{ name: group.companyName, siteCount: group.sites.length }}
+          onOpenPdf={q => { if (onOpenQuote) onOpenQuote(q); else void openQuotePdf(q) }}
+          onClose={() => setQuoteHistoryOpen(false)}
         />
       )}
 

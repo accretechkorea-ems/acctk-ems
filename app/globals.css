@@ -120,3 +120,43 @@ body {
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
 }
+
+/* ============================================================
+   모달 공통 — 윗변 고정 · 폰에서는 전체 화면 시트
+   ------------------------------------------------------------
+   바탕(components/common/ModalOverlay.tsx)이 이 클래스를 단다.
+   세로 가운데 정렬이던 때는 내용이 늘어날 때마다 모달 윗변이 위로 올라가,
+   칸을 하나 더 펼치면 제목 줄이 움직였다. 윗변을 6vh 에 못 박고 늘어나는 쪽을
+   아래로만 보낸다. 최대 높이는 100vh - 12vh = 88vh 이고, 그보다 길면 모달 안이 구른다.
+
+   max-height 에 !important 를 쓰는 까닭: 모달마다 인라인 style 로 제 높이를 들고 있어
+   (calc(100dvh - 32px) 꼴) 클래스 규칙으로는 덮이지 않는다. 한 자리에서 못 박는다.
+
+   폰(≤640)에서는 **전체 화면 시트**다 — 현장에서 서비스 레포트를 쓰는 화면이라
+   가장자리 여백과 둥근 모서리가 쓸 자리를 깎는다.
+   ============================================================ */
+.ems-modal-overlay {
+  align-items: flex-start;
+  padding-top: 6vh;
+  padding-bottom: 6vh;
+  overflow-y: auto;
+}
+.ems-modal-overlay > * {
+  max-height: 88vh !important;
+  overflow-y: auto;
+}
+@media (max-width: 640px) {
+  .ems-modal-overlay {
+    padding: 0 !important;
+    align-items: stretch;
+  }
+  .ems-modal-overlay > * {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: 100dvh !important;
+    min-height: 100dvh;
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+  }
+}

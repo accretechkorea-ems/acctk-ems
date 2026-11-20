@@ -431,7 +431,7 @@ export default function UsageModal({
 
   return (
     // 쇼룸 사용 신청 — 칸이 많다. 확인 뒤 닫는다(상태가 27갈래라 변경 여부는 넘기지 않는다).
-    <ModalOverlay onClose={onClose} confirmClose style={{ padding: 12 }}>
+    <ModalOverlay onClose={onClose} confirmClose style={{ padding: '6vh 12px' }}>
       <div onClick={e => e.stopPropagation()} style={{
         width: 'min(900px, 90vw)', maxHeight: 'calc(100dvh - 32px)',
         background: CARD_BG, borderRadius: R.control, boxSizing: 'border-box',

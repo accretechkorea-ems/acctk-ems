@@ -102,7 +102,7 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
 
   return (
     <ModalOverlay
-      onClose={onClose} confirmClose style={{ padding: 12 }}
+      onClose={onClose} confirmClose style={{ padding: '6vh 12px' }}
       // 열었을 때와 같고 붙인 파일도 없으면 확인 없이 닫힌다.
       dirty={
         JSON.stringify([form, selectedEngineerIds])

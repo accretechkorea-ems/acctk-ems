@@ -27,9 +27,7 @@ import { isSuperAdmin } from '@/lib/permissions'
 import type { Device, ServiceHistory } from '@/components/customer/types'
 import { PAGE_BG, TEXT_MUTED } from '@/components/customer/constants'
 
-import { AddIconButton } from '@/components/common/IconButton'
-import CustomerInfoPanel from '@/components/customer/CustomerInfoPanel'
-import ContactSection from '@/components/customer/ContactSection'
+import SiteHeaderBand from '@/components/customer/SiteHeaderBand'
 import DeviceSection from '@/components/customer/DeviceSection'
 import { inUseOnly } from '@/lib/deviceStatus'
 import HoldingModal from '@/components/customer/modals/HoldingModal'
@@ -44,7 +42,6 @@ import ServiceEditModal from '@/components/customer/modals/ServiceEditModal'
 import SignModal from '@/components/customer/modals/SignModal'
 import DeviceImageModal from '@/components/customer/modals/DeviceImageModal'
 import { R } from '@/lib/radius'
-import { TITLE } from '@/lib/textTokens'
 
 export type CustomerDetailBodyProps = {
   customerId: number
@@ -113,71 +110,35 @@ export default function CustomerDetailBody({
     }
     @keyframes sk-pulse { 0%,100% { opacity:1 } 50% { opacity:0.45 } }
 
-    /* 2단 레이아웃 — 좌(업체·담당자·요약) / 우(활동 이력·장비 탭).
-       왼쪽은 폭이 고정이고 오른쪽이 남는 공간을 전부 갖는다(화면이 넓을수록 장비가 더 보인다).
-       왼쪽만 sticky 로 붙여두고 페이지 스크롤 시 오른쪽이 흐른다.
-       오른쪽 상한 1600px — 그 이상은 장비 카드(300px)가 다섯 장을 넘어 한눈에 안 들어오고,
-       초광폭에서 카드 하나가 화면을 가로지르게 되므로 거기서 멈추고 판 전체를 가운데 정렬한다. */
-    .cust-grid {
-      display: grid;
-      grid-template-columns: 340px minmax(0, 1600px);
-      grid-template-areas: "left center";
-      gap: 16px;
-      align-items: start;
-      justify-content: center;
-    }
-    .cust-left { grid-area: left; display: flex; flex-direction: column; gap: 12px; }
-    /* 카드 사이 간격은 이 열의 gap(12) 하나로만 정한다.
-       카드 컴포넌트가 제 아래 여백을 들고 있으면(업체 정보 카드의 marginBottom: 16) 그 카드 밑만
-       28px 이 되어 줄이 어긋난다. 인라인 style 이라 !important 가 있어야 덮인다.
+    /* 한 단이다 — 맨 위 가로 띠(업체·장비 수·담당자) 아래를 장비가 전부 쓴다.
+       전에는 왼쪽 300~340px 열에 업체·담당자 카드를 세로로 쌓았는데, 그 열이 가져간
+       자리만큼 장비 카드가 좁아 1366 에서 두 대만 보였다(2026-11-20 실측). */
+    .site-wrap { display: flex; flex-direction: column; gap: 12px; max-width: 1920px; margin: 0 auto; }
+    .cust-center { min-width: 0; }
 
-       flex-shrink: 0 — **카드는 줄어들지 않는다. 넘치면 이 열이 스크롤한다.**
-       이 열은 세로 flex 에 max-height 가 걸려 있어(아래 sticky), 카드 높이의 합이 그 선을
-       넘으면 flex 가 카드를 눌러 줄인다. 보통은 「자동 최소 크기」가 내용 높이 밑으로는
-       못 줄이게 막아 주는데, 그 보호는 **overflow 가 visible 인 항목에만** 적용된다.
-       담당자 카드는 둥근 모서리 때문에 overflow: hidden 이라(ContactSection) 최소 높이가
-       0 으로 풀려 눌렸고, 넘침을 숨기는 쪽이라 스크롤도 못 하고 **그냥 잘렸다** —
-       담당자를 펼치면 세 번째 사람 이름이 반쯤 잘렸고, 창이 낮으면 접은 상태에서도 잘렸다.
-       (측정 2026-10-28, 1500×700: 펼침 265 → 219px · 1500×560: 접음 203 → 79px) */
-    .cust-left > * { margin-bottom: 0 !important; flex-shrink: 0; }
-    .cust-center { grid-area: center; min-width: 0; }
-    .cust-left {
-      position: sticky;
-      /* 헤더가 없어져 본문 위쪽 여백(20)만 비우면 된다 */
-      top: 20px;
-      max-height: calc(100vh - 40px);
-      overflow-y: auto;
-    }
-    /* 본문이 900px 밑으로 좁아지면 1단으로 내린다(왼쪽 카드 → 활동 이력 순서).
-       사이드바가 232px 를 가져가므로 화면 기준으로는 900 + 232 = 1132px 이 경계다.
-       768px 이하에서는 사이드바가 숨어 본문이 화면 폭 그대로지만, 그 폭은 이미 900 미만이라
-       같은 규칙에 걸린다. */
-    @media (max-width: 1131px) {
-      .cust-grid {
-        grid-template-columns: minmax(0, 1fr);
-        grid-template-areas: "left" "center";
-      }
-      .cust-left {
-        position: static;
-        max-height: none;
-        overflow-y: visible;
-      }
-    }
-    /* 분할 보기(칸 안)에서는 **칸 폭**을 기준으로 접는다 — 화면 폭으로 접으면 1366 에서도
-       오른쪽 칸은 600px 남짓인데 2단을 고집해 글이 눌린다. 컨테이너 쿼리라 칸이 좁아지면
-       한 단으로 내려간다. 라우트에서는 이 클래스가 붙지 않아 영향이 없다. */
+    /* 장비 그리드 — 1920 에서 4열, 1366 에서 3열, 좁으면 2열, 폰에서는 1열.
+       auto-fill 로 두면 폭에 따라 열이 들쭉날쭉해 카드 크기가 화면마다 달랐다.
+       열 수를 눈으로 정한다. */
+    .dev-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; align-items: start; }
+    @media (max-width: 1700px) { .dev-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (max-width: 1180px) { .dev-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 640px)  { .dev-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; } }
+
+    /* 분할 보기(칸 안) — 화면이 아니라 **칸 폭**으로 센다. 1366 화면에서 이 칸은
+       700px 남짓이라 화면 기준으로 세면 4열을 고집해 카드가 눌린다. */
     .cust-embed { container-type: inline-size; }
-    /* 칸 안에서는 왼쪽 열을 300px 로 조인다 — 1366 화면에서 이 칸은 722px 남짓이라
-       340 을 고집하면 오른쪽 타임라인이 눌린다(실측 2026-11-19). */
-    .cust-embed .cust-grid { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 12px; }
-    .cust-embed .cust-left { position: static; max-height: none; overflow-y: visible; }
-    /* 700px — 1366 화면의 오른쪽 칸(722px)은 2단을 지킨다. 그보다 좁아지면(사이드바를
-       펼친 1280 이하 등) 한 단으로 내려 글이 눌리지 않게 한다. */
-    @container (max-width: 700px) {
-      .cust-grid {
-        grid-template-columns: minmax(0, 1fr);
-        grid-template-areas: "left" "center";
-      }
+    /* 칸 폭으로 센다 — 카드 하나가 300px 밑으로 내려가지 않는 선에서 가장 많은 열을 고른다. */
+    @container (max-width: 1239px) { .dev-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @container (max-width: 939px)  { .dev-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @container (max-width: 639px)  { .dev-grid { grid-template-columns: minmax(0, 1fr); } }
+
+    /* 폰(≤640) — 현장에서 쓰는 화면이다. 누르는 것은 44px 이상으로 키운다.
+       서비스 레포트 추가는 한 줄을 다 쓰고, 기록 토글은 그 아래 같은 높이로 선다. */
+    @media (max-width: 640px) {
+      .site-wrap { gap: 10px; }
+      .dev-actions { flex-wrap: wrap; }
+      .dev-actions > button:first-child { flex: 1 0 100%; height: 44px !important; font-size: 14px; }
+      .dev-actions > button:last-child { flex: 1 0 100%; height: 44px !important; font-size: 13px; }
     }
   `
 
@@ -262,45 +223,25 @@ export default function CustomerDetailBody({
 
       <div className={wrapClass} style={wrapStyle}>
 
-        {/* 경로 줄(「고객사 / 회사명」)은 걷었다 — 회사명은 바로 아래 정보 카드의 제목이고,
-            목록으로 가는 길은 그 제목 앞 화살표가 맡는다(의뢰서 상세와 같은 방식).
-            48px 한 줄을 돌려받아 본문이 그만큼 위로 올라온다. */}
-        <div className="cust-grid">
+        {/* 맨 위 가로 띠 — 업체 · 장비 수 · 담당자. 그 아래를 장비가 전부 쓴다.
+            세로 카드 둘을 왼쪽에 쌓던 때는 그 열이 가져간 300px 만큼 장비가 좁았다. */}
+        <div className="site-wrap">
+          <SiteHeaderBand
+            customer={customer}
+            companyName={family?.name ?? null}
+            contacts={contacts}
+            deviceCount={activeDevices.length}
+            onBack={onBack}
+            /* 회사명을 누르는 것과 ← 는 같은 곳으로 간다(분할 보기의 회사 화면).
+               둘 다 두는 까닭: ← 는 「돌아가기」, 회사명은 「이 사업장이 어느 회사인가」다. */
+            onOpenCompany={embedded ? onBack : undefined}
+            onEdit={() => customerCrud.setIsEditCustomerModalOpen(true)}
+            onAddContact={() => contact.setIsAddContactModalOpen(true)}
+            onEditContact={contact.setSelectedContact}
+          />
 
-          {/* ── 좌: 업체 정보 · 담당자 · 요약 ── */}
-          <div className="cust-left">
-            <CustomerInfoPanel
-              customer={customer}
-              companyName={family?.name ?? null}
-              onEdit={() => customerCrud.setIsEditCustomerModalOpen(true)}
-              onBack={onBack}
-              /* 회사명을 누르는 것과 ← 는 같은 곳으로 간다(분할 보기의 회사 화면).
-                 둘 다 두는 까닭: ← 는 「돌아가기」, 회사명은 「이 사업장이 어느 회사인가」다. */
-              onOpenCompany={embedded ? onBack : undefined}
-            />
-
-            <ContactSection
-              contacts={contacts}
-              onAdd={() => contact.setIsAddContactModalOpen(true)}
-              onEdit={contact.setSelectedContact}
-            />
-          </div>
-
-          {/* ── 우: 장비 ── */}
+          {/* 장비 — 머리줄을 두지 않는다. 장비 수는 띠에 있고, 더하는 자리는 그리드 끝 점선 카드다. */}
           <div className="cust-center" ref={deviceCardRef}>
-
-        {/* 가운데 열 — **장비**. 활동은 회사 화면의 전체 타임라인이 맡는다. */}
-        <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.card, overflow: 'hidden' }}>
-          <div style={{ padding: '9px 14px', borderBottom: '1px solid #ebebeb', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <b style={{ ...TITLE }}>장비</b>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '1px 7px' }}>{activeDevices.length}</span>
-            <span style={{ flex: 1 }} />
-            {/* 더하는 자리는 머리줄의 + 하나다 — 아래 점선 카드와 같은 일을 한다(둘 다 둔다:
-                장비가 많으면 맨 아래 점선 카드까지 가지 않고 여기서 누른다). */}
-            <AddIconButton label="장비 추가" onClick={() => device.setIsAddDeviceModalOpen(true)} />
-          </div>
-
-        <div style={{ padding: '12px 14px' }}>
         <DeviceSection
           devices={devices}
           companyName={customer?.company_name ?? null}
@@ -324,9 +265,6 @@ export default function CustomerDetailBody({
           onAddHolding={holding.openNewHolding}
           onOpenHolding={holding.openHolding}
         />
-        </div>
-
-        </div>
           </div>
         </div>
 

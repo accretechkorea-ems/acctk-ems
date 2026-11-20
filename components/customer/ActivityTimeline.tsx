@@ -100,6 +100,10 @@ type Item = {
  * service_history 에는 created_at 컬럼이 아예 없다(스키마는 건드리지 않는다).
  * 그런 소스는 표시 날짜의 KST 자정으로 대신한다 — 같은 날에 다른 종류와 섞이면
  * 서비스가 그날의 맨 아래로 내려간다. 종전에도 서비스는 맨 아래였으므로 보이는 결과는 같다.
+ *
+ * ⚠ 서비스 기록만 떼어 보면 **lib/serviceSort.ts 와 같은 순서**다 — 날짜 내림차순이
+ *   먼저고, 같은 날 안에서는 sortId(= service_id) 가 큰 것이 위다. 규칙의 출처는
+ *   그 파일이고, 여기서는 종류를 섞어 늘어놓느라 제 비교자를 쓸 뿐이다.
  */
 const sortKey = (createdAt: string | null | undefined, fallbackDate: string | null): number => {
   if (createdAt) {

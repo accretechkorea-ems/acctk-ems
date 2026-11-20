@@ -20,9 +20,14 @@ type Props = {
    * 같은 회사의 다른 업체 건까지 섞이면 기준이 없어져 표시가 틀리게 된다.
    */
   family?: { name: string; siteCount: number } | null
+  /**
+   * 견적번호를 눌러 PDF 를 연다. 주지 않으면 번호는 그냥 글자다
+   * (전에는 이 창에서 PDF 를 열 길이 없어 번호를 보고 견적 화면에서 다시 찾아야 했다).
+   */
+  onOpenPdf?: (q: Quote) => void
 }
 
-export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, family }: Props) {
+export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, family, onOpenPdf }: Props) {
   if (!isOpen) return null
 
   const totalQuoteAmt = quotes.reduce((s, q) => s + (q.total_supply || 0), 0)
@@ -45,7 +50,8 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, f
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 1100, maxHeight: '90vh', background: CARD_BG, borderRadius: R.modal, padding: 24, boxShadow: '0 12px 40px rgba(0,0,0,0.35)', border: `1px solid ${INPUT_BORDER}`, display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
-            <div style={{ fontSize: 20, fontWeight: 800, color: TEXT_PRIMARY, marginBottom: 4 }}>📋 거래 이력</div>
+            {/* 이모지는 UI 아이콘으로 쓰지 않는다(.claude/rules/design-system.md). */}
+            <div style={{ fontSize: 20, fontWeight: 800, color: TEXT_PRIMARY, marginBottom: 4 }}>거래 이력</div>
             <div style={{ fontSize: 13, color: TEXT_SECONDARY }}>
               {family ? `${family.name} (사업장 ${family.siteCount}곳)` : customer?.company_name}
             </div>
@@ -89,7 +95,12 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, f
                       onMouseLeave={e => (e.currentTarget.style.background = '')}>
                       {/* 번호 옆 작은 표 — 지난 날짜로 넣은 건이다(홈 목록·실적 현황과 같은 부품). */}
                       <td style={{ padding: '10px 12px', fontWeight: 700, color: WHITE_BUTTON_BG, whiteSpace: 'nowrap' }}>
-                        {q.quote_number}
+                        {onOpenPdf ? (
+                          <button type="button" onClick={() => onOpenPdf(q)} title="견적서 PDF 열기"
+                            style={{ padding: 0, background: 'none', border: 'none', cursor: 'pointer', font: 'inherit', color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 3 }}>
+                            {q.quote_number}
+                          </button>
+                        ) : q.quote_number}
                         <BackdatedMark quoteDate={q.quote_date} createdAt={q.created_at} color={TEXT_SECONDARY} />
                       </td>
                       {!family && (
