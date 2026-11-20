@@ -8,6 +8,7 @@ import { getInstallDisplay, getDefaultImageUrl } from './utils'
 import { deviceImageWidthFor } from '@/lib/deviceImage'
 import { isDisposed, disposedLabel, inUseOnly, disposedOnly } from '@/lib/deviceStatus'
 import { useDeviceImageUrls, type StorageImageLookup } from '@/hooks/useStorageImageUrls'
+import { R } from '@/lib/radius'
 
 /** 카드 사진을 받을 폭(px) — 장비 카드 폭에 맞춘다. */
 const CARD_IMG_W = 240
@@ -49,7 +50,7 @@ function ServiceCard({ h, d, companyName, onEdit, onPrint, onOpenReport, reportB
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        width: '100%', background: '#fff', borderRadius: 8, padding: '12px 14px 12px 17px',
+        width: '100%', background: '#fff', borderRadius: R.control, padding: '12px 14px 12px 17px',
         border: `1px solid ${hovered ? '#c7d7f8' : '#ebebeb'}`,
         boxSizing: 'border-box', transition: 'border-color 0.15s ease',
         position: 'relative', overflow: 'hidden',
@@ -72,12 +73,12 @@ function ServiceCard({ h, d, companyName, onEdit, onPrint, onOpenReport, reportB
           {/* 홀딩이 걸린 레포트는 배지를, 없으면 호버 시 등록 진입점을 보여준다 */}
           {holding ? (
             <button onClick={onOpenHolding} title={holding.title}
-              style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               {holding.resolved_at ? '홀딩 해제됨' : '홀딩 중'}
             </button>
           ) : (
             <button onClick={onAddHolding} title="이 건으로 홀딩"
-              style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', background: 'none', border: '1px solid #ebebeb', borderRadius: 99, padding: '1px 8px', cursor: 'pointer', whiteSpace: 'nowrap', visibility: hovered ? 'visible' : 'hidden' }}>
+              style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', background: 'none', border: '1px solid #ebebeb', borderRadius: R.pill, padding: '1px 8px', cursor: 'pointer', whiteSpace: 'nowrap', visibility: hovered ? 'visible' : 'hidden' }}>
               홀딩
             </button>
           )}
@@ -127,7 +128,7 @@ function ServiceCard({ h, d, companyName, onEdit, onPrint, onOpenReport, reportB
               disabled={reportBusy}
               style={{
                 padding: '4px 10px', background: '#fff', color: '#6b7280',
-                borderRadius: 6, border: '1px solid #ebebeb',
+                borderRadius: R.icon, border: '1px solid #ebebeb',
                 cursor: reportBusy ? 'default' : 'pointer', fontWeight: 600, fontSize: 12,
                 flexShrink: 0, whiteSpace: 'nowrap', opacity: reportBusy ? 0.5 : 1,
               }}
@@ -175,8 +176,8 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
 
   return (
     <div style={{
-      minWidth: 300, maxWidth: 300, background: disposed ? '#fafafa' : '#ffffff', borderRadius: 8, padding: '14px 16px',
-      border: '1px solid #ebebeb', flex: '0 0 auto', position: 'relative',
+      minWidth: 0, background: disposed ? '#fafafa' : '#ffffff', borderRadius: R.card, padding: '14px 16px',
+      border: '1px solid #ebebeb', position: 'relative',
       alignSelf: 'flex-start',
     }}>
       {/* 수정 버튼 */}
@@ -185,7 +186,7 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
 
       {/* 이미지 영역 — 사진 변경·삭제는 장비 수정 모달에서 한다(카드 우측 위는 수정 아이콘 자리다) */}
       <div style={{
-        aspectRatio: '4 / 3', borderRadius: 6, background: 'transparent',
+        aspectRatio: '4 / 3', borderRadius: R.icon, background: 'transparent',
         border: hasPhoto ? 'none' : '1px dashed #ebebeb',
         overflow: 'hidden',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -228,7 +229,7 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
       {/* 폐기 뱃지 — 폐기일까지 보여 준다(언제 뺀 장비인지가 곧 이력이다). */}
       {disposed && (
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '3px 10px', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '3px 10px', whiteSpace: 'nowrap' }}>
             {disposedLabel(d)}
           </span>
         </div>
@@ -238,7 +239,7 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
       {activeHolding && (
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 6 }}>
           <button onClick={() => onOpenHolding(activeHolding)} title={activeHolding.title}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', border: 'none', borderRadius: 99, padding: '3px 10px', cursor: 'pointer' }}>
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', border: 'none', borderRadius: R.pill, padding: '3px 10px', cursor: 'pointer' }}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
               <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
             </svg>
@@ -299,7 +300,7 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
         onClick={onAddService}
         style={{
           width: '100%', padding: '8px 12px', background: '#234ea2', color: '#fff',
-          borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, marginBottom: 12,
+          borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, marginBottom: 12,
         }}
       >
         서비스 레포트 추가
@@ -309,7 +310,7 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {deviceHistory.length === 0 ? (
           <div style={{
-            background: '#f8f9fb', borderRadius: 10, padding: '14px 13px',
+            background: '#f8f9fb', borderRadius: R.tile, padding: '14px 13px',
             border: `1px solid ${INPUT_BORDER}`, textAlign: 'center',
           }}>
             <div style={{ fontSize: 12, color: TEXT_MUTED }}>서비스 기록 없음</div>
@@ -362,7 +363,7 @@ export default function DeviceSection({ devices, companyName, historyByDevice, o
           <button
             onClick={() => setShowDisposed(v => !v)}
             style={{
-              fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: 6, cursor: 'pointer',
+              fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: R.icon, cursor: 'pointer',
               background: showDisposed ? '#f3f4f6' : '#fff',
               border: '1px solid #ebebeb',
               color: showDisposed ? '#111827' : '#9ca3af',
@@ -373,7 +374,9 @@ export default function DeviceSection({ devices, companyName, historyByDevice, o
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 4, alignItems: 'flex-start' }}>
+      {/* 가로로 밀던 것을 **줄바꿈 그리드**로 바꿨다(2026-11-20) — 밀린 카드는
+          스크롤하기 전까지 없는 것과 같았다. 칸은 최소 300px, 남는 자리를 고루 나눈다. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16, alignItems: 'start' }}>
         {shown.map((d) => (
           <DeviceCard
             key={d.device_id}
@@ -402,11 +405,11 @@ export default function DeviceSection({ devices, companyName, historyByDevice, o
         <button
           onClick={onAddDevice}
           style={{
-            minWidth: 300, minHeight: 460, flex: '0 0 auto',
+            minWidth: 0, minHeight: 260,
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
-            background: 'transparent', border: '1px dashed #d1d5db', borderRadius: 8,
+            background: 'transparent', border: '1px dashed #d1d5db', borderRadius: R.card,
             cursor: 'pointer', color: '#6b7280', fontSize: 13, fontWeight: 600,
-            transition: 'all 0.15s ease', alignSelf: 'flex-start',
+            transition: 'all 0.15s ease',
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.borderColor = '#9ca3af'

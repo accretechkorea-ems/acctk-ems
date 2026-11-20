@@ -21,26 +21,19 @@ import { useServiceCrud } from '@/hooks/customer/useServiceCrud'
 import { useContactCrud } from '@/hooks/customer/useContactCrud'
 import { useDeviceCrud } from '@/hooks/customer/useDeviceCrud'
 import { useCustomerCrud } from '@/hooks/customer/useCustomerCrud'
-import { useQuotePdf } from '@/hooks/customer/useQuotePdf'
-import { useSalesActivityCrud } from '@/hooks/customer/useSalesActivityCrud'
-import { useOpportunityCrud } from '@/hooks/customer/useOpportunityCrud'
 import { useHoldingCrud } from '@/hooks/customer/useHoldingCrud'
 import { isSuperAdmin } from '@/lib/permissions'
 
 import type { Device, ServiceHistory } from '@/components/customer/types'
 import { PAGE_BG, TEXT_MUTED } from '@/components/customer/constants'
 
-import HorizontalScroller from '@/components/common/HorizontalScroller'
+import { AddIconButton } from '@/components/common/IconButton'
 import CustomerInfoPanel from '@/components/customer/CustomerInfoPanel'
 import ContactSection from '@/components/customer/ContactSection'
 import DeviceSection from '@/components/customer/DeviceSection'
 import { inUseOnly } from '@/lib/deviceStatus'
-import SummaryPanel from '@/components/customer/SummaryPanel'
-import SalesActivityModal from '@/components/customer/modals/SalesActivityModal'
-import OpportunityModal from '@/components/customer/modals/OpportunityModal'
 import HoldingModal from '@/components/customer/modals/HoldingModal'
 import HoldingResolveModal from '@/components/customer/modals/HoldingResolveModal'
-import QuoteHistoryModal from '@/components/customer/modals/QuoteHistoryModal'
 import CustomerEditModal from '@/components/customer/modals/CustomerEditModal'
 import ContactAddModal from '@/components/customer/modals/ContactAddModal'
 import ContactEditModal from '@/components/customer/modals/ContactEditModal'
@@ -50,6 +43,8 @@ import ServiceAddModal from '@/components/customer/modals/ServiceAddModal'
 import ServiceEditModal from '@/components/customer/modals/ServiceEditModal'
 import SignModal from '@/components/customer/modals/SignModal'
 import DeviceImageModal from '@/components/customer/modals/DeviceImageModal'
+import { R } from '@/lib/radius'
+import { TITLE } from '@/lib/textTokens'
 
 export type CustomerDetailBodyProps = {
   customerId: number
@@ -70,7 +65,7 @@ export default function CustomerDetailBody({
 
   const detail = useCustomerDetail(customerId)
   const {
-    customer, devices, contacts, history, quotes, activities, opportunities, engineers,
+    customer, devices, contacts, history, engineers,
     family, childSites,
     holdings, activeHoldingByDevice, holdingByService,
     loading, currentUserEngineerId, currentUserRole,
@@ -89,18 +84,13 @@ export default function CustomerDetailBody({
   const contact = useContactCrud({ customerId, fetchDetail })
   const device = useDeviceCrud({ customerId, fetchDetail })
   const customerCrud = useCustomerCrud({ customer, fetchDetail })
-  const quotePdf = useQuotePdf({ customer, engineerId: currentUserEngineerId })
-  const activity = useSalesActivityCrud({ customerId, engineerId: currentUserEngineerId, role: currentUserRole, fetchDetail })
-  const opp = useOpportunityCrud({ customerId, engineerId: currentUserEngineerId, role: currentUserRole, fetchDetail })
 
   // ── 이 화면에서만 쓰는 상태 ──
   // 활동 이력 탭은 걷었다(2026-11-20). 활동은 **회사 화면의 전체 타임라인**에서 본다 —
   // 한 사업장만 떼어 보면 같은 고객사의 다른 사업장에서 벌어진 일이 보이지 않고,
   // 같은 타임라인을 두 곳에서 따로 고쳐야 했다. 여기는 장비만 남는다.
-  // 거래 이력은 두 기준으로 열린다 — 이 업체만(site), 같은 회사 전체(family).
   /** 요약의 「장비」 숫자를 누르면 이 카드로 내려간다(전에는 탭을 바꿨다). */
   const deviceCardRef = useRef<HTMLDivElement | null>(null)
-  const [quoteScope, setQuoteScope] = useState<'site' | 'family' | null>(null)
   const [isSignModalOpen, setIsSignModalOpen] = useState(false)
   const [pendingReportService, setPendingReportService] = useState<ServiceHistory | null>(null)
   const [pendingReportDevice, setPendingReportDevice] = useState<Device | null>(null)
@@ -198,7 +188,7 @@ export default function CustomerDetailBody({
         <div className={wrapClass} style={wrapStyle}>
           {[{ h: 130, mb: 24 }, { h: 120, mb: 24 }, { h: 400, mb: 0 }].map(({ h, mb }, i) => (
             <div key={i} style={{
-              background: '#ffffff', borderRadius: 20, height: h, marginBottom: mb,
+              background: '#ffffff', borderRadius: R.modal, height: h, marginBottom: mb,
               border: '1px solid #e5e7eb',
               animation: 'sk-pulse 1.6s ease-in-out infinite',
               animationDelay: `${i * 0.15}s`,
@@ -217,7 +207,7 @@ export default function CustomerDetailBody({
         <style jsx global>{globalCss}</style>
         <div className={wrapClass} style={wrapStyle}>
           <div style={{ maxWidth: 720, margin: '0 auto' }}>
-            <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, padding: '14px 16px' }}>
+            <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.control, padding: '14px 16px' }}>
               <div style={{ fontSize: 17, fontWeight: 800, color: '#111827', letterSpacing: '-0.3px', marginBottom: 6 }}>
                 {customer.company_name}
               </div>
@@ -226,10 +216,10 @@ export default function CustomerDetailBody({
               </div>
             </div>
 
-            <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, padding: '14px 16px', marginTop: 12 }}>
+            <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.control, padding: '14px 16px', marginTop: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>사업장</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>
                   {childSites.length}곳
                 </span>
               </div>
@@ -284,6 +274,9 @@ export default function CustomerDetailBody({
               companyName={family?.name ?? null}
               onEdit={() => customerCrud.setIsEditCustomerModalOpen(true)}
               onBack={onBack}
+              /* 회사명을 누르는 것과 ← 는 같은 곳으로 간다(분할 보기의 회사 화면).
+                 둘 다 두는 까닭: ← 는 「돌아가기」, 회사명은 「이 사업장이 어느 회사인가」다. */
+              onOpenCompany={embedded ? onBack : undefined}
             />
 
             <ContactSection
@@ -291,38 +284,23 @@ export default function CustomerDetailBody({
               onAdd={() => contact.setIsAddContactModalOpen(true)}
               onEdit={contact.setSelectedContact}
             />
-            <SummaryPanel
-              quotes={quotes}
-              deviceCount={activeDevices.length}
-              history={history}
-              activityDates={activities.map(a => a.activity_date ?? null)}
-              customerId={customerId}
-              opportunities={opportunities}
-              onAddOpportunity={opp.openNewOpp}
-              onOpenOpportunity={opp.openEditOpp}
-              onChangeStage={opp.changeStage}
-              canEditOpportunity={opp.canEditOpp}
-              holdings={holdings}
-              onOpenHolding={holding.openHolding}
-              onQuoteHistoryOpen={() => setQuoteScope('site')}
-              onDeviceOpen={() => deviceCardRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })}
-              family={family ? { name: family.name, siteCount: family.siteCount, quoteCount: family.quotes.length } : null}
-              onFamilyQuoteHistoryOpen={() => setQuoteScope('family')}
-            />
           </div>
 
           {/* ── 우: 장비 ── */}
           <div className="cust-center" ref={deviceCardRef}>
 
         {/* 가운데 열 — **장비**. 활동은 회사 화면의 전체 타임라인이 맡는다. */}
-        <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.card, overflow: 'hidden' }}>
           <div style={{ padding: '9px 14px', borderBottom: '1px solid #ebebeb', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <b style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>장비</b>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '1px 7px' }}>{activeDevices.length}</span>
+            <b style={{ ...TITLE }}>장비</b>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '1px 7px' }}>{activeDevices.length}</span>
+            <span style={{ flex: 1 }} />
+            {/* 더하는 자리는 머리줄의 + 하나다 — 아래 점선 카드와 같은 일을 한다(둘 다 둔다:
+                장비가 많으면 맨 아래 점선 카드까지 가지 않고 여기서 누른다). */}
+            <AddIconButton label="장비 추가" onClick={() => device.setIsAddDeviceModalOpen(true)} />
           </div>
 
         <div style={{ padding: '12px 14px' }}>
-        <HorizontalScroller>
         <DeviceSection
           devices={devices}
           companyName={customer?.company_name ?? null}
@@ -346,7 +324,6 @@ export default function CustomerDetailBody({
           onAddHolding={holding.openNewHolding}
           onOpenHolding={holding.openHolding}
         />
-        </HorizontalScroller>
         </div>
 
         </div>
@@ -354,13 +331,6 @@ export default function CustomerDetailBody({
         </div>
 
         {/* ── 모달 ── */}
-        <QuoteHistoryModal
-          isOpen={quoteScope !== null}
-          customer={customer}
-          quotes={quoteScope === 'family' && family ? family.quotes : quotes}
-          family={quoteScope === 'family' && family ? { name: family.name, siteCount: family.siteCount } : null}
-          onClose={() => setQuoteScope(null)}
-        />
         <CustomerEditModal
           customer={customerCrud.isEditCustomerModalOpen ? customer : null}
           isSaving={customerCrud.isSavingCustomerEdit}
@@ -435,34 +405,6 @@ export default function CustomerDetailBody({
             setPendingReportService(null)
             setPendingReportDevice(null)
           }}
-        />
-        <SalesActivityModal
-          isOpen={activity.isActivityModalOpen}
-          activity={activity.editingActivity}
-          contacts={contacts}
-          opportunities={opportunities}
-          isSaving={activity.isSavingActivity}
-          canDelete={!!activity.editingActivity && activity.canEditActivity(activity.editingActivity)}
-          onClose={activity.closeActivityModal}
-          onSave={activity.handleSaveActivity}
-          onDelete={activity.handleDeleteActivity}
-        />
-        <OpportunityModal
-          isOpen={opp.isOppModalOpen}
-          opportunity={opp.editingOpp}
-          activities={activities}
-          customers={[]}
-          lockedCustomerName={customer?.company_name ?? null}
-          engineers={engineers}
-          isSaving={opp.isSavingOpp}
-          canEdit={!opp.editingOpp || opp.canEditOpp(opp.editingOpp)}
-          currentUserEngineerId={currentUserEngineerId}
-          canPickEngineer={isSuperAdmin({ permission_level: currentUserRole })}
-          onClose={opp.closeOppModal}
-          onSave={opp.handleSaveOpp}
-          onDelete={opp.handleDeleteOpp}
-          onOpenQuotePdf={quotePdf.openQuotePdfByUrl}
-          onSetClosed={opp.setClosed}
         />
         <HoldingModal
           isOpen={holding.isHoldingModalOpen}

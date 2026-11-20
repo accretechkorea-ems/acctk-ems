@@ -6,6 +6,7 @@ import BackIconButton from '@/components/common/BackIconButton'
 import MemoPopover, { hasMemo } from '@/components/common/MemoPopover'
 import { agencyLabelOf } from '@/lib/customerAgency'
 import type { Customer } from './types'
+import { R } from '@/lib/radius'
 
 const STATUS_CFG: Record<string, string> = {
   '활성': '#22c55e',
@@ -32,9 +33,11 @@ type Props = {
    * 들어 있으면 제목이 길어져 어디까지가 회사 이름인지 알 수 없었다.
    */
   companyName?: string | null
+  /** 회사 보기로 — 제목(회사명)을 누르면 부른다. 분할 보기에서만 넘어온다. */
+  onOpenCompany?: () => void
 }
 
-export default function CustomerInfoPanel({ customer, onEdit, onBack, companyName }: Props) {
+export default function CustomerInfoPanel({ customer, onEdit, onBack, companyName, onOpenCompany }: Props) {
   const [copied, setCopied] = useState(false)
   const sc = STATUS_CFG[customer?.status ?? ''] ?? '#9ca3af'
   // 대리점 경유 견적이 섞여 있을 때만 내역을 덧붙인다 (직판만 있으면 군더더기라 감춘다)
@@ -49,7 +52,7 @@ export default function CustomerInfoPanel({ customer, onEdit, onBack, companyNam
   return (
     // 카드 사이 간격은 이 카드가 아니라 왼쪽 열의 gap(app/customer/[id]/page.tsx .cust-left)이 정한다.
     <div style={{
-      background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8,
+      background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.card,
       padding: '14px 16px', position: 'relative',
     }}>
       {/* 수정 — 아이콘만. 라벨 없이도 뜻이 통하고 좁은 열에서 회사명 자리를 덜 뺏는다 */}
@@ -59,18 +62,26 @@ export default function CustomerInfoPanel({ customer, onEdit, onBack, companyNam
       {/* 화살표 + 회사명 + 상태 배지 — 좁은 열에서 수정 버튼과 겹치지 않도록 오른쪽을 비워둔다.
           화살표는 줄바꿈에 끌려가지 않게 flexWrap 바깥(첫 칸)에 둔다. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap', paddingRight: 34 }}>
-        {onBack && <BackIconButton onClick={onBack} label="고객사 목록으로" />}
-        <h1 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#111827', lineHeight: 1.3, letterSpacing: '-0.3px', wordBreak: 'break-all' }}>
-          {companyName?.trim() || customer?.company_name || '사업장 정보 없음'}
-        </h1>
-        {customer?.status && (
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            fontSize: 12, color: '#6b7280', flexShrink: 0,
-          }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: sc, flexShrink: 0 }} />
-            {customer.status}
-          </span>
+        {onBack && <BackIconButton onClick={onBack} label="이전 화면으로" />}
+        {/* 회사명은 **회사 보기로 가는 길**이다 — 점선 밑줄과 › 로 누를 수 있음을 알린다.
+            돌아갈 곳이 없으면(상세 페이지 단독) 그냥 제목으로 둔다. */}
+        {onOpenCompany ? (
+          <button type="button" onClick={onOpenCompany} title="회사 보기"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4, padding: 0,
+              background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+            }}>
+            <h1 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#111827', lineHeight: 1.3, letterSpacing: '-0.3px', wordBreak: 'break-all', borderBottom: '1px dashed #d1d5db' }}>
+              {companyName?.trim() || customer?.company_name || '사업장 정보 없음'}
+            </h1>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </button>
+        ) : (
+          <h1 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#111827', lineHeight: 1.3, letterSpacing: '-0.3px', wordBreak: 'break-all' }}>
+            {companyName?.trim() || customer?.company_name || '사업장 정보 없음'}
+          </h1>
         )}
       </div>
 
@@ -81,14 +92,21 @@ export default function CustomerInfoPanel({ customer, onEdit, onBack, companyNam
           <span style={{ fontSize: 12, color: '#9ca3af', width: 44, flexShrink: 0 }}>사업장</span>
           {customer?.site_name?.trim() ? (
             <span style={{
-              fontSize: 13, minWidth: 0, color: '#111827',
+              fontSize: 13, minWidth: 0, color: '#111827', fontWeight: 600,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>
               {customer.site_name.trim()}
             </span>
           ) : (
             /* 비면 빨간 태그 — 적어야 할 칸이라는 뜻이다(주소 없음과 같은 결). */
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', background: '#fef2f2', borderRadius: 6, padding: '2px 7px' }}>입력 필요</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', background: '#fef2f2', borderRadius: R.tag, padding: '2px 7px' }}>입력 필요</span>
+          )}
+          {/* 상태는 **사업장 줄**에 붙는다 — 상태를 갖는 것은 회사가 아니라 사업장이다. */}
+          {customer?.status && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#6b7280', flexShrink: 0 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: sc, flexShrink: 0 }} />
+              {customer.status}
+            </span>
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>

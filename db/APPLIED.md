@@ -11,7 +11,7 @@ SQL 파일은 지금 **저장소 루트**에 있다(`db/` 가 아니다 — 아�
 
 ---
 
-## 적용 확인된 것 — 39개
+## 적용 확인된 것 — 45개
 
 표·컬럼·함수가 **실제로 DB 에 있는지** 읽기 전용으로 확인했다(2026-10-23).
 확인 방법은 PostgREST OpenAPI 문서(= 노출 스키마의 정본)와 컬럼 조회다.
@@ -153,6 +153,12 @@ select currency, count(*) from public.quote_items group by 1 order by 2 desc;
 | `db/quote_repair_photos_bucket.sql` | **미적용** | — | 사진 버킷과 정책 4개. 버킷은 대시보드(또는 파일 안의 insert)로 먼저 만들고 정책을 돌린다. 2026-11-16 읽기로 버킷이 없음을 확인했다 |
 | `db/activity_types_rls.sql` | 2026-11-19 | 본인(사용자) | `activity_types` 의 **쓰기 정책·GRANT**. 위 파일 ⑥ 은 읽기 정책만 걸었고 쓰기 정책은 주석으로만 적혀 있었다 — RLS 가 켜진 표에 쓰기 정책이 없으면 **superadmin 도 42501 로 막힌다**(적용 전 실측으로 확인). 2026-11-19 적용 뒤 읽기 전용 확인: ⒜ 로그인 사용자 읽기 5줄 ⒝ superadmin 이 아닌 로그인 사용자의 insert 는 `42501` 로 막힘(정책이 뜻대로 도는 것) ⒞ **비로그인 읽기 0줄** — 읽기 정책을 `to authenticated` 로 좁혔기 때문이다. 앱은 늘 로그인 상태에서 읽으므로 영향 없다(공개 페이지 `/lead` 는 이 표를 읽지 않는다). superadmin 쪽 쓰기는 사용자가 /admin 화면에서 직접 확인한다. 재실행 안전(drop policy if exists). ⚠ **2026-11-19 늦게 삭제 정책()과 delete GRANT 를 이 파일에 더했다** — 관리 화면의 「삭제」(쓰는 활동 0건일 때만 뜬다)를 쓰려면 **한 번 더 돌린다**(재실행 안전) |
 | `db/crm_cleanup_20261118.sql` | 2026-11-19 | 본인(사용자) | **CRM 정리 — 대리점 한 줄화 · 회사/사업장 묶기 · 활동 종류 표.** 단계 ⓞ~⑦ 을 차례로 돌렸다. 2026-11-19 읽기로 확인: 살아있는 줄 **2,237** = 회사 841 + 사업장 1,366 + 대리점 전용 30(JNB 1847·1848 은 같은 날 사용자가 등록 — 파일의 기대값 2,235/840/1,365 보다 둘 많다), 대리점 깃발 **45**, `agency_customer_id` **541**, `note` **14**, 닫은 줄 4(305·1730·1733·1734), `activity_types` 5줄, 제약 위반 0. ⚠ **파일과 다르게 적용된 두 곳을 파일에 반영했다**: ⑥ 의 옛 제약 이름은 `sales_activities_type_check` 였고(파일은 `..._activity_type_check` 로 틀렸다), ⑦ 의 제약식에는 `deleted_at is not null or` 가 **들어간다** — 닫은 줄이 부모를 잃어도 걸리지 않게. ⚠ 재실행 금지(create table·add column·add constraint). 되돌리기는 파일 끝 주석 + 백업 3표(`customers_backup_20261118`·`sales_activities_backup_20261118`·`quotes_backup_20261118`)와 임시 표 2개(`agency_map_20261118`·`site_promote_20261118`) |
+| `db/customer_name_en_20261119.sql` | 2026-11-19 | 본인(사용자) | 회사 **영문명** 칸(`customers.name_en`). 2026-11-20 읽기 확인: 칸이 PostgREST 로 조회된다. ⚠ 적용 직후에는 스키마 캐시가 옛 것이라 `42703` 이 났다 — `notify pgrst, 'reload schema'` 를 돌려야 보인다(화면에는 `lib/nameEn.ts` 가 **칸이 없을 때 한 번 더 조회하는 길**을 두어 그동안도 목록이 열렸다). 재실행 안전(`add column if not exists`) |
+| `db/region1_normalize_20261119.sql` | 2026-11-19 | 본인(사용자) | 지역(`region1`)을 **정본 17개**로 맞춘다. 적용 뒤 사용자 확인: 분포가 정본 17 + 빈값 42, 백업 대비 바뀐 줄 **357**(예상 143보다 많았다 — 「경기도」→「경기」 꼴의 표기 차이가 예상보다 흔했다). 2026-11-20 읽기로 `region1` 조회됨. 되돌리기는 파일 안 백업표 |
+| `db/company_industry_from_leads_20261119.sql` | 2026-11-19 | 본인(사용자) | 리드의 분류를 회사 줄로 올린다. 적용 뒤 사용자 확인: 「분류 없음」 838 → **835**(3줄이 채워졌다 — 리드에 분류가 적힌 회사가 그만큼뿐이었다) |
+| `db/customer_events_20261120.sql` | 2026-11-20 | 본인(사용자) | **고객 사건 로그** — 표 `customer_events` + 인덱스 2 + 읽기 전용 RLS + `lead_registered` 부분 유니크 인덱스, 그리고 `activity_types` 의 `LEAD_REG` 비활성화(사람이 손으로 적는 종류가 아니다). 2026-11-20 읽기 확인: 표가 조회되고 **0줄**(실측으로 만든 줄은 같은 날 지웠다). 쓰기는 service role 라우트만 — RLS 에 쓰기 정책이 없다(일부러 그렇게 뒀다). ⚠ 재실행 금지(create table·create policy) |
+| `db/merge_customer_sites_20261119.sql` | 2026-11-19 / 2026-11-20(2회 더) | 본인(사용자) | **사업장 병합 함수**(`merge_customer_sites`). ⚠ 세 번 돌렸다: ① 11-19 최초 ② 11-20 `array_append` 고침 — 「채운 칸」 목록을 글자 이어붙이기로 만들어 운영에서 `22P02 malformed array literal: "agency_customer_id"` 로 멈췄다(한 트랜잭션이라 잃은 자료는 없다) ③ 11-20 `region2` 를 채우기 목록에 추가. 2026-11-20 읽기 확인: RPC 가 응답한다(없는 id 로 dry-run → `P0001 남길 줄을 찾을 수 없습니다`). 적용 뒤 **반드시** `notify pgrst, 'reload schema'` + `grant execute … to authenticator`(없으면 `PGRST202` 로 안 보인다). `create or replace` 라 재실행 안전 |
+| `db/service_history_empty_cleanup_20261120.sql` | 2026-11-20 | 본인(사용자) | **빈 서비스 기록 정리** — 날짜 말고는 아무 내용이 없는 줄 130개를 지웠다(옛 자료 이관의 자국: 128줄은 `service_id = customer_id` 였다). 2026-11-20 읽기 확인: 백업표 `service_history_empty_backup_20261120` **130줄**, `service_history` **358줄**, **남은 빈 줄 0**. ⚠ 고객사 86곳은 이 줄이 유일한 접점이어서 「최근 활동」이 `-` 가 된다(지우기 전에 센 값이다). 되돌리기는 파일 ③ 한 문장. ④ 의 CHECK 제약(`service_history_not_empty`)은 함께 걸었는지 확인하지 않았다 — 걸지 않았다면 파일 ④ 만 따로 돌리면 된다. ⚠ 재실행 금지(백업표를 drop 하고 다시 만든다) |
 
 ---
 

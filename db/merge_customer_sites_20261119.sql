@@ -42,6 +42,15 @@
 -- ── 권한 ─────────────────────────────────────────────────────────────────
 --   service_role 만 실행한다. 화면에서는 /api/parent-company 라우트(슈퍼관리자)가 부른다.
 --
+-- ── 2026-11-20 고침 ─────────────────────────────────────────────────────
+--   「채운 칸」 목록(filled)에 **글자를 그대로 이어 붙이다** 터졌다.
+--     filled := filled || 'agency_customer_id';   -- ← 22P02 malformed array literal
+--   postgres 는 `anyarray || anyarray` 를 먼저 보므로, 타입이 정해지지 않은 글자를
+--   **배열 리터럴로** 읽으려 한다. 운영에서 일진글로벌 3줄을 합칠 때 여기서 멈췄다
+--   (남길 줄의 대리점이 비어 있어 그 경로를 지났다. 함수가 한 트랜잭션이라
+--    줄은 그대로 남았고 잃은 자료는 없다).
+--   이제 전부 array_append 로 더한다 — 무엇을 더하는지 한눈에 보이고 타입이 분명하다.
+--
 -- 적용 뒤 **반드시** 스키마 캐시를 다시 읽혀야 RPC 로 보인다:
 --     notify pgrst, 'reload schema';
 
@@ -138,7 +147,8 @@ begin
   end if;
 
   -- ── ③ 채움 — keep 이 비어 있는 칸만 ──────────────────────────────────
-  foreach col_name in array array['site_name','address','region1','note','industry','name_en']
+  -- region2(시·군·구)도 함께 채운다 — 화면이 「경기 화성시」로 두 단계를 찍는다(lib/region.ts).
+  foreach col_name in array array['site_name','address','region1','region2','note','industry','name_en']
   loop
     execute format(
       'select nullif(btrim(coalesce(%I::text, '''')), '''') from customers where customer_id = $1',
@@ -153,7 +163,7 @@ begin
       if val is not null then
         execute format('update customers set %I = $1 where customer_id = $2', col_name)
           using val, keep_id;
-        filled := filled || col_name;
+        filled := array_append(filled, col_name);
       end if;
     end if;
   end loop;
@@ -166,7 +176,7 @@ begin
              where customer_id = any(srcs) and agency_customer_id is not null
              order by customer_id limit 1) f
      where k.customer_id = keep_id;
-    if found then filled := filled || 'agency_customer_id'; end if;
+    if found then filled := array_append(filled, 'agency_customer_id'); end if;
   end if;
 
   if keep.latitude is null or keep.longitude is null then
@@ -176,7 +186,7 @@ begin
              where customer_id = any(srcs) and latitude is not null and longitude is not null
              order by customer_id limit 1) f
      where k.customer_id = keep_id;
-    if found then filled := filled || 'latitude/longitude'; end if;
+    if found then filled := array_append(filled, 'latitude/longitude'); end if;
   end if;
 
   -- ── ④ 닫음 ───────────────────────────────────────────────────────────

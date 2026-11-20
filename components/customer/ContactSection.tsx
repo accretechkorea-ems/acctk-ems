@@ -21,6 +21,8 @@
 import { useState } from 'react'
 import { AddIconButton, EditIconButton } from '@/components/common/IconButton'
 import type { Contact } from './types'
+import { R } from '@/lib/radius'
+import { TITLE } from '@/lib/textTokens'
 
 /** 접었을 때 보이는 담당자 수. 이보다 많을 때만 더 보기 줄이 생긴다. */
 const VISIBLE = 2
@@ -126,7 +128,7 @@ export default function ContactSection({ contacts, onAdd, onEdit }: Props) {
   const shown = expanded ? contacts : contacts.slice(0, VISIBLE)
 
   return (
-    <div style={{ background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
+    <div style={{ background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: R.control, overflow: 'hidden' }}>
 
       {/* 제목 줄 — 추가는 오른쪽 끝 아이콘 하나다. 카드 맨 아래 한 줄을 쓰던 버튼을
           여기로 들였다: 추가는 이 카드에 대한 동작이라 제목과 같은 줄이 제 자리고,
@@ -139,7 +141,7 @@ export default function ContactSection({ contacts, onAdd, onEdit }: Props) {
         display: 'flex', alignItems: 'center', gap: 8,
         padding: `9px 14px ${GAP}px`, borderBottom: `1px solid ${BORDER}`,
       }}>
-        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#111827' }}>고객 담당자</h2>
+        <h2 style={{ margin: 0, ...TITLE }}>고객 담당자</h2>
         {contacts.length > 0 && (
           <span style={{ fontSize: 12, color: '#9ca3af' }}>총 {contacts.length}명</span>
         )}
