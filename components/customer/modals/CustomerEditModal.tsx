@@ -19,6 +19,15 @@ type Props = {
   onClose: () => void
   onSave: (form: CustomerEditFormData) => void
   onDelete?: () => void
+  /**
+   * 「폐기 포함」 보기 — 장비 목록에 폐기된 것도 낼까.
+   * **저장과 무관한 보기 설정**이라 누르는 즉시 반영된다(모달을 닫지 않아도 바뀐다).
+   * 전에는 장비 목록 위에 늘 떠 있는 스위치였는데, 자주 쓰는 것이 아니라 여기로 옮겼다(2026-11-20).
+   */
+  showDisposed?: boolean
+  onToggleDisposed?: () => void
+  /** 폐기된 장비 수 — 0 이면 체크 자체를 내지 않는다(끌 것이 없는 스위치다). */
+  disposedCount?: number
 }
 
 const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
@@ -44,7 +53,7 @@ const EMPTY_FORM: CustomerEditFormData = {
   status: '활성', parent_customer_id: null, note: '', new_company_industry: '',
 }
 
-export default function CustomerEditModal({ customer, isSaving, isDeleting, onClose, onSave, onDelete }: Props) {
+export default function CustomerEditModal({ customer, isSaving, isDeleting, onClose, onSave, onDelete, showDisposed = false, onToggleDisposed, disposedCount = 0 }: Props) {
   const [form, setForm] = useState<CustomerEditFormData>(EMPTY_FORM)
   const { errors, setErrors, clearError, validate } = useFieldErrors<'parent_customer_id' | 'address' | 'new_company_industry' | 'agency' | 'site_name'>()
   /** 대리점 칸에 **적기만 하고 고르지 않은** 글자. 그대로 저장하면 조용히 직판이 된다. */
@@ -244,6 +253,15 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
               {`${form.note.length} / ${MEMO_MAX}`}
             </div>
           </div>
+
+          {/* 보기 설정 — 저장 단추와 무관하다. 누르면 그 자리에서 장비 목록이 바뀐다. */}
+          {disposedCount > 0 && onToggleDisposed && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#374151', cursor: 'pointer' }}>
+              <input type="checkbox" checked={showDisposed} onChange={onToggleDisposed} />
+              폐기 장비도 보기
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '1px 7px' }}>{disposedCount}</span>
+            </label>
+          )}
 
         </div>
 

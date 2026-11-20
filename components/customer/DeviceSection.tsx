@@ -11,6 +11,25 @@ import { R } from '@/lib/radius'
 
 /** 카드 사진을 받을 폭(px) — 장비 카드 폭에 맞춘다. */
 const CARD_IMG_W = 240
+
+/**
+ * 장비 카드의 **고정 폭**과 사진 높이(4:3).
+ *
+ * 왜 고정인가: 폭을 남는 자리에 맞춰 늘리면 한 줄에 몇 장이 서느냐에 따라 카드가
+ * 매번 달라져, 같은 장비가 화면마다 다른 크기로 보였다. 폭을 못 박고 왼쪽부터
+ * 채우면 어느 화면에서나 카드는 같고 줄 수만 바뀐다.
+ */
+const CARD_W = 340
+const PHOTO_H = Math.round((CARD_W * 3) / 4)   // 255
+
+/** 패킹리스트 클립. 이모지는 UI 아이콘으로 쓰지 않는다(.claude/rules/design-system.md). */
+function PaperclipGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
+  )
+}
 import { elapsedLabel } from './holding'
 import { SERVICE_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import { ServiceFilesButton, reportDownloadName } from './ServiceAttachments'
@@ -38,6 +57,8 @@ type Props = {
   holdingByService: Map<number, Holding>
   onAddHolding: (deviceId: number, serviceId?: number | null) => void
   onOpenHolding: (h: Holding) => void
+  /** 폐기 장비도 보여 줄까 — 값은 사업장 수정 모달의 체크가 들고 있다. */
+  showDisposed?: boolean
 }
 
 function ServiceCard({ h, d, companyName, onEdit, onPrint, onOpenReport, reportBusy, holding, onAddHolding, onOpenHolding }: { h: ServiceHistory; d: Device; companyName: string | null; onEdit: () => void; onPrint: () => void; onOpenReport: () => void; reportBusy: boolean; holding: Holding | undefined; onAddHolding: () => void; onOpenHolding: () => void }) {
@@ -178,29 +199,35 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
   const disposed = isDisposed(d)
 
   return (
-    <div style={{
-      minWidth: 0, background: disposed ? '#fafafa' : '#ffffff', borderRadius: R.card, padding: '14px 16px',
-      border: '1px solid #ebebeb', position: 'relative',
-      alignSelf: 'flex-start',
+    <article style={{
+      width: CARD_W, display: 'flex', flexDirection: 'column', flex: '0 0 auto',
+      background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.card, overflow: 'hidden',
+      position: 'relative',
+      // 폐기 장비는 **지워진 것이 아니라 쓰지 않는 것**이다 — 카드를 죽여 두되 그대로 둔다
+      // (지난 레포트를 열어 볼 일이 남아 있다).
+      opacity: disposed ? 0.6 : 1,
     }}>
-      {/* 수정 버튼 */}
+      {/* 수정 — 사진 위 오른쪽. 사진이 없을 때도 같은 자리다. */}
       <EditIconButton size={24} label="장비 수정" onClick={onEditDevice}
-        style={{ position: 'absolute', top: 12, right: 12, zIndex: 2 }} />
+        style={{ position: 'absolute', top: 10, right: 10, zIndex: 2 }} />
 
-      {/* 이미지 영역 — 사진 변경·삭제는 장비 수정 모달에서 한다(카드 우측 위는 수정 아이콘 자리다) */}
+      {/* 사진 — 카드 폭에 4:3. 사진이 있으면 **눌러 크게 본다**(사진 창이 열린다).
+          없으면 점선 「사진 등록」 — 같은 창이 열려 거기서 올린다. */}
       <div style={{
-        height: 150, borderRadius: R.icon, background: 'transparent',
-        border: hasPhoto ? 'none' : '1px dashed #ebebeb',
-        overflow: 'hidden',
+        width: '100%', height: PHOTO_H, boxSizing: 'border-box', overflow: 'hidden',
+        ...(hasPhoto
+          ? { background: '#f3f4f6' }
+          : { margin: '10px 10px 0', width: 'auto', height: PHOTO_H - 10, border: '1px dashed #ebebeb', borderRadius: R.icon, background: '#fafafa' }),
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        {/* 카드 폭만큼 줄여 받는다 — 서명 주소에 변환(width)을 붙여서(lib/deviceImage.ts).
-            원본은 수정 모달이 쓴다. 주소를 받기 전에는 빈 칸으로 둔다. */}
         {hasPhoto ? (
           shownSrc ? (
-            <img src={shownSrc} alt={deviceTitle || 'device'}
-              loading="lazy" decoding="async"
-              style={{ width: '100%', height: '100%', objectFit: 'fill' }} />
+            <button type="button" onClick={onImageUpload} title="사진 크게 보기"
+              style={{ width: '100%', height: '100%', padding: 0, border: 'none', background: 'none', cursor: 'zoom-in' }}>
+              <img src={shownSrc} alt={deviceTitle || 'device'}
+                loading="lazy" decoding="async"
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            </button>
           ) : null
         ) : (
           <button
@@ -220,108 +247,93 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
         )}
       </div>
 
-      {/* 장비명 — 왼쪽 맞춤. 가운데 맞춤은 이름이 길어지면 아래 제원 줄과 축이 어긋났다. */}
-      <div style={{
-        fontSize: 15, fontWeight: 700, color: disposed ? '#6b7280' : '#111827',
-        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 10,
-      }} title={deviceTitle || '-'}>
-        {deviceTitle || '-'}
-      </div>
-
-      {/* 폐기·홀딩 배지 — 있을 때만. */}
-      {(disposed || activeHolding) && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-          {disposed && (
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '3px 10px', whiteSpace: 'nowrap' }}>
+      <div style={{ padding: '12px 14px' }}>
+        {/* 폐기 태그 — 모델명 위. 언제 뺀 장비인지가 곧 이력이다. */}
+        {disposed && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', height: 22, padding: '0 8px', borderRadius: R.tag, background: '#fee2e2', color: '#b91c1c', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
               {disposedLabel(d)}
             </span>
-          )}
-          {activeHolding && (
-            <button onClick={() => onOpenHolding(activeHolding)} title={activeHolding.title}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', border: 'none', borderRadius: R.pill, padding: '3px 10px', cursor: 'pointer' }}>
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-              </svg>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>홀딩 · {activeHolding.title}</span>
-              <span style={{ flexShrink: 0, color: '#9ca3af' }}>{elapsedLabel(activeHolding)}</span>
-            </button>
-          )}
+          </div>
+        )}
+
+        {/* ① 모델명 */}
+        <b style={{
+          fontSize: 15, fontWeight: 700, color: '#111827', display: 'block', textAlign: 'center',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }} title={deviceTitle || '-'}>
+          {deviceTitle || '-'}
+        </b>
+
+        {/* ② 납입 | S/N | 소프트웨어 */}
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 6, fontSize: 12, color: '#4b5563', minWidth: 0 }}>
+          <span style={{ whiteSpace: 'nowrap' }}>납입 <b style={{ fontWeight: 600, color: '#111827' }}>{getInstallDisplay(d)}</b></span>
+          <span style={{ color: '#d1d5db' }}>|</span>
+          <span style={{ whiteSpace: 'nowrap' }}>S/N <b style={{ fontWeight: 600, color: '#111827' }}>{d.serial_number ?? '-'}</b></span>
+          <span style={{ color: '#d1d5db' }}>|</span>
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.program ?? '-'}</span>
         </div>
-      )}
 
-      {/* 제원 한 줄 — S/N · 소프트웨어 · 납입일. 패킹리스트는 그 뒤에 붙는다(기능 그대로). */}
-      <div style={{ fontSize: 12, color: '#4b5563', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-        <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          S/N {d.serial_number ?? '-'}
-          <span style={{ color: '#d1d5db' }}>{' · '}</span>{d.program ?? '-'}
-          <span style={{ color: '#d1d5db' }}>{' · '}</span>납입 {getInstallDisplay(d)}
-        </span>
-        {d.packing_list_url ? (
-          <button onClick={onOpenPacking} title="패킹리스트 열기"
-            style={{ padding: 2, background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3, color: '#234ea2' }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-            </svg>
-            <span style={{ fontSize: 11 }}>패킹리스트</span>
-          </button>
-        ) : (
-          <>
-            <input ref={packingInputRef} type="file" accept=".pdf,.xlsx,.xls,.doc,.docx,.png,.jpg,.jpeg"
-              style={{ display: 'none' }}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadPacking(f); e.target.value = '' }} />
-            <button onClick={() => packingInputRef.current?.click()} title="납입의사록·패킹리스트 업로드"
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#234ea2')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = '#9ca3af')}
-              style={{ padding: 2, background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3, color: '#9ca3af', transition: 'color 0.15s ease' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-              </svg>
-              <span style={{ fontSize: 11 }}>패킹리스트 등록</span>
+        {/* ③ 패킹리스트 | 최근 서비스 */}
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 4, fontSize: 12, color: '#6b7280', minWidth: 0 }}>
+          {d.packing_list_url ? (
+            <button onClick={onOpenPacking} title="패킹리스트 열기"
+              style={{ padding: 0, background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3, color: '#234ea2', whiteSpace: 'nowrap' }}>
+              <PaperclipGlyph />패킹리스트
             </button>
-          </>
-        )}
+          ) : (
+            <>
+              <input ref={packingInputRef} type="file" accept=".pdf,.xlsx,.xls,.doc,.docx,.png,.jpg,.jpeg"
+                style={{ display: 'none' }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadPacking(f); e.target.value = '' }} />
+              <button onClick={() => packingInputRef.current?.click()} title="납입의사록·패킹리스트 업로드"
+                onMouseEnter={(e) => (e.currentTarget.style.color = '#234ea2')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = '#9ca3af')}
+                style={{ padding: 0, background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3, color: '#9ca3af', transition: 'color 0.15s ease', whiteSpace: 'nowrap' }}>
+                <PaperclipGlyph />패킹리스트 등록
+              </button>
+            </>
+          )}
+          <span style={{ color: '#d1d5db' }}>|</span>
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {latest
+              ? <>최근 서비스 <b style={{ fontWeight: 600, color: '#111827' }}>{latest.visit_date ?? '날짜 미상'}{latest.service_type ? ` · ${latest.service_type}` : ''}</b></>
+              : <span style={{ color: '#9ca3af' }}>서비스 기록 없음</span>}
+          </span>
+        </div>
       </div>
 
-      {/* 최근 서비스 한 줄 — 카드를 펼치지 않고도 「언제 무엇을 했나」를 알 수 있다. */}
-      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
-        {latest ? (
-          <>
-            최근 서비스{' '}
-            <b style={{ fontWeight: 600, color: '#111827' }}>
-              {latest.visit_date ?? '날짜 미상'}{latest.service_type ? ` · ${latest.service_type}` : ''}
-            </b>
-          </>
-        ) : (
-          <span style={{ color: '#9ca3af' }}>서비스 기록 없음</span>
-        )}
-      </div>
-
-      {/* 누르는 줄 — 주 버튼이 남는 자리를 전부 쓰고 기록 토글은 오른쪽에 붙는다. */}
-      <div className="dev-actions" style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+      {/* 푸터 — 윗선 하나에 반반. 테두리·배경 없이 글자만 둔다(카드 안의 두 길이다). */}
+      <div className="dev-actions" style={{ display: 'flex', borderTop: '1px solid #f1f5f9', marginTop: 'auto' }}>
         <button onClick={onAddService}
+          onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
           style={{
-            flex: 1, minWidth: 0, height: 34, padding: '0 12px', background: '#234ea2', color: '#fff',
-            borderRadius: R.control, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, fontFamily: 'inherit',
+            flex: 1, height: 40, border: 'none', background: 'transparent', cursor: 'pointer',
+            fontSize: 13, fontWeight: 600, color: '#234ea2', fontFamily: 'inherit',
+            transition: 'background 0.15s ease',
           }}>
-          서비스 레포트 추가
+          ＋ 서비스 레포트
         </button>
+        <span style={{ width: 1, background: '#f1f5f9', margin: '8px 0' }} />
         {/* 기록 0건이면 펼칠 것이 없다 — 누를 수 없게 둔다(눌러도 아무 일이 없으면 고장으로 보인다). */}
         <button onClick={() => setOpenHistory(v => !v)} disabled={deviceHistory.length === 0}
           aria-expanded={openHistory}
+          onMouseEnter={e => { if (deviceHistory.length > 0) e.currentTarget.style.background = '#f8fafc' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
           style={{
-            flexShrink: 0, height: 34, padding: '0 10px', background: '#ffffff',
-            color: deviceHistory.length === 0 ? '#9ca3af' : '#4b5563',
-            border: '1px solid #ebebeb', borderRadius: R.control, fontWeight: 700, fontSize: 12, fontFamily: 'inherit',
-            cursor: deviceHistory.length === 0 ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+            flex: 1, height: 40, border: 'none', background: 'transparent', fontFamily: 'inherit',
+            fontSize: 13, fontWeight: 500, color: deviceHistory.length === 0 ? '#9ca3af' : '#374151',
+            cursor: deviceHistory.length === 0 ? 'not-allowed' : 'pointer', transition: 'background 0.15s ease',
           }}>
           기록 {deviceHistory.length}{deviceHistory.length > 0 ? (openHistory ? ' ▴' : ' ▾') : ''}
         </button>
       </div>
 
-      {/* 서비스 기록 — **기본은 접힘**. 카드 넷이 한 화면에 들어오려면 기록이 접혀 있어야 한다.
-          펼친 줄의 기능은 그대로다(종류·유무상·홀딩·날짜·담당자·내용·수정·레포트 작성). */}
+      {/* 서비스 기록 — **기본은 접힘**. 펼친 줄의 기능은 그대로다
+          (종류·유무상·홀딩·날짜·담당자·내용·수정·레포트 작성). */}
       {openHistory && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 14px 14px', borderTop: '1px solid #f1f5f9' }}>
           {deviceHistory.map((h) => (
             <ServiceCard
               key={`${d.device_id}-${h.service_id}`}
@@ -342,17 +354,34 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
           ))}
         </div>
       )}
-    </div>
+
+      {/* 진행 중 홀딩 — 카드 맨 아래 한 줄. 어느 장비가 멈춰 있는지가 먼저 보여야 한다. */}
+      {activeHolding && (
+        <div style={{ padding: '0 14px 12px' }}>
+          <button onClick={() => onOpenHolding(activeHolding)} title={activeHolding.title}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', border: 'none', borderRadius: R.pill, padding: '3px 10px', cursor: 'pointer' }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+            </svg>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>홀딩 · {activeHolding.title}</span>
+            <span style={{ flexShrink: 0, color: '#9ca3af' }}>{elapsedLabel(activeHolding)}</span>
+          </button>
+        </div>
+      )}
+    </article>
   )
 }
 
-export default function DeviceSection({ devices, companyName, historyByDevice, onAddDevice, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, reportBusyId, onUploadPacking, onOpenPacking, activeHoldingByDevice, holdingByService, onAddHolding, onOpenHolding }: Props) {
+export default function DeviceSection({ devices, companyName, historyByDevice, onAddDevice, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, reportBusyId, onUploadPacking, onOpenPacking, activeHoldingByDevice, holdingByService, onAddHolding, onOpenHolding, showDisposed = false }: Props) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  // 폐기 장비를 **이 목록에서만** 다시 볼 수 있다(다른 화면은 전부 사용중만 본다).
-  // 기본은 꺼짐 — 쓰는 장비만 보이는 것이 평소의 모습이다.
-  const [showDisposed, setShowDisposed] = useState(false)
-  const disposedCount = disposedOnly(devices).length
-  const shown = showDisposed ? devices : inUseOnly(devices)
+  /**
+   * 보여 줄 장비 — 폐기된 것은 **살아 있는 것 뒤**에 세운다(쓰는 장비가 먼저다).
+   * 「폐기 포함」 스위치는 이 자리에 있었는데 **사업장 수정 모달 안의 체크**로 옮겼다
+   * (2026-11-20) — 장비를 훑는 자리에 늘 떠 있을 만큼 자주 쓰는 스위치가 아니다.
+   */
+  const shown = showDisposed
+    ? [...inUseOnly(devices), ...disposedOnly(devices)]
+    : inUseOnly(devices)
   // 장비 사진 — 카드마다 서명을 받으면 요청이 장비 수만큼 늘어난다. 여기서 **한 번에** 받는다
   // (올린 사진 + 기종 카탈로그 사진 둘 다).
   const imageUrl = useDeviceImageUrls(
@@ -365,25 +394,10 @@ export default function DeviceSection({ devices, companyName, historyByDevice, o
   return (
     <div>
 
-      {/* 폐기 포함 토글 — 폐기된 장비가 하나도 없으면 두지 않는다(끌 것이 없는 스위치다). */}
-      {disposedCount > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-          <button
-            onClick={() => setShowDisposed(v => !v)}
-            style={{
-              fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: R.icon, cursor: 'pointer',
-              background: showDisposed ? '#f3f4f6' : '#fff',
-              border: '1px solid #ebebeb',
-              color: showDisposed ? '#111827' : '#9ca3af',
-            }}
-          >
-            폐기 포함 {disposedCount}
-          </button>
-        </div>
-      )}
-
-      {/* 가로로 밀던 것을 **줄바꿈 그리드**로 바꿨다(2026-11-20) — 밀린 카드는
-          스크롤하기 전까지 없는 것과 같았다. 칸은 최소 300px, 남는 자리를 고루 나눈다. */}
+      {/* 카드는 **폭이 고정**이고 왼쪽부터 채운다(2026-11-20).
+          늘리지 않는 까닭: 한 줄에 몇 장이 서느냐에 따라 카드 크기가 달라지면
+          같은 장비가 화면마다 다르게 보인다. align-items: flex-start 라
+          한 줄 안에서 키 큰 카드를 따라 늘어나지도 않는다. */}
       <div className="dev-grid">
         {shown.map((d) => (
           <DeviceCard
@@ -413,7 +427,7 @@ export default function DeviceSection({ devices, companyName, historyByDevice, o
         <button
           onClick={onAddDevice}
           style={{
-            minWidth: 0, minHeight: 260,
+            width: CARD_W, flex: '0 0 auto', minHeight: PHOTO_H + 137,
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
             background: 'transparent', border: '1px dashed #d1d5db', borderRadius: R.card,
             cursor: 'pointer', color: '#6b7280', fontSize: 13, fontWeight: 600,

@@ -71,7 +71,12 @@ export default function CustomerDetailBody({
 
   // 건수·요약은 **쓰는 장비만** 센다. 목록(DeviceSection)과 타임라인은 폐기까지 받아 간다 —
   // 목록은 「폐기 포함」 토글을 갖고, 타임라인은 지난 기록의 장비 이름을 여기서 찾는다.
-  const activeDevices = inUseOnly(devices)
+  /**
+   * 폐기 장비도 볼까 — 스위치는 **사업장 수정 모달 안의 체크**다(2026-11-20).
+   * 값은 이 화면이 들고 있어, 모달을 닫아도 보던 대로 남는다.
+   */
+  const [showDisposed, setShowDisposed] = useState(false)
+  const disposedCount = devices.length - inUseOnly(devices).length
 
   const holding = useHoldingCrud({ customerId, holdings, engineerId: currentUserEngineerId, fetchDetail, activeHoldingByDevice, role: currentUserRole })
   const service = useServiceCrud({
@@ -116,21 +121,17 @@ export default function CustomerDetailBody({
     .site-wrap { display: flex; flex-direction: column; gap: 12px; max-width: 1920px; margin: 0 auto; }
     .cust-center { min-width: 0; }
 
-    /* 장비 그리드 — 1920 에서 4열, 1366 에서 3열, 좁으면 2열, 폰에서는 1열.
-       auto-fill 로 두면 폭에 따라 열이 들쭉날쭉해 카드 크기가 화면마다 달랐다.
-       열 수를 눈으로 정한다. */
-    .dev-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; align-items: start; }
-    @media (max-width: 1700px) { .dev-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-    @media (max-width: 1180px) { .dev-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 640px)  { .dev-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; } }
-
-    /* 분할 보기(칸 안) — 화면이 아니라 **칸 폭**으로 센다. 1366 화면에서 이 칸은
-       700px 남짓이라 화면 기준으로 세면 4열을 고집해 카드가 눌린다. */
+    /* 장비 카드는 **폭 340 고정**이다. 남는 자리에 맞춰 늘리지 않고 왼쪽부터 채운다 —
+       한 줄에 몇 장이 서느냐에 따라 카드가 달라지면 같은 장비가 화면마다 다르게 보인다.
+       align-items: flex-start 라 한 줄 안에서 키 큰 카드를 따라 늘어나지도 않는다
+       (기록을 펼친 카드 옆의 카드가 함께 길어지던 자리다). */
+    .dev-grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; align-content: flex-start; }
     .cust-embed { container-type: inline-size; }
-    /* 칸 폭으로 센다 — 카드 하나가 300px 밑으로 내려가지 않는 선에서 가장 많은 열을 고른다. */
-    @container (max-width: 1239px) { .dev-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-    @container (max-width: 939px)  { .dev-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @container (max-width: 639px)  { .dev-grid { grid-template-columns: minmax(0, 1fr); } }
+    /* 폰에서는 폭을 화면에 맞춘다 — 340 을 고집하면 가로로 넘친다. */
+    @media (max-width: 640px) {
+      .dev-grid { gap: 10px }
+      .dev-grid > * { width: 100% !important; }
+    }
 
     /* 폰(≤640) — 현장에서 쓰는 화면이다. 누르는 것은 44px 이상으로 키운다.
        서비스 레포트 추가는 한 줄을 다 쓰고, 기록 토글은 그 아래 같은 높이로 선다. */
@@ -230,7 +231,6 @@ export default function CustomerDetailBody({
             customer={customer}
             companyName={family?.name ?? null}
             contacts={contacts}
-            deviceCount={activeDevices.length}
             onBack={onBack}
             /* 회사명을 누르는 것과 ← 는 같은 곳으로 간다(분할 보기의 회사 화면).
                둘 다 두는 까닭: ← 는 「돌아가기」, 회사명은 「이 사업장이 어느 회사인가」다. */
@@ -264,12 +264,16 @@ export default function CustomerDetailBody({
           holdingByService={holdingByService}
           onAddHolding={holding.openNewHolding}
           onOpenHolding={holding.openHolding}
+          showDisposed={showDisposed}
         />
           </div>
         </div>
 
         {/* ── 모달 ── */}
         <CustomerEditModal
+          showDisposed={showDisposed}
+          onToggleDisposed={() => setShowDisposed(v => !v)}
+          disposedCount={disposedCount}
           customer={customerCrud.isEditCustomerModalOpen ? customer : null}
           isSaving={customerCrud.isSavingCustomerEdit}
           isDeleting={customerCrud.isDeletingCustomer}
