@@ -14,8 +14,13 @@
 // 참조하는 곳
 //   · components/common/HeaderWrapper.tsx — 들어가면 메인 사이드바를 임시로 접는다
 
-/** 자체 레일이 있는 화면의 최상위 경로. 하위 경로도 같이 본다. */
-export const RAIL_PATHS = ['/approval', '/inquiries'] as const
+/**
+ * 자체 레일이 있는 화면의 최상위 경로. 하위 경로도 같이 본다.
+ *
+ * '/' — 고객사 화면(2026-11-20). 왼쪽에 폭 340 짜리 좌 패널이 서므로 전자결재·의뢰서와
+ * 같은 성격이다. '/' 는 **정확히 그 경로일 때만** 걸린다(아래 startsWith 는 '//' 를 찾는다).
+ */
+export const RAIL_PATHS = ['/approval', '/inquiries', '/'] as const
 
 /**
  * 그 경로이거나 그 아래인지. '/approval' 과 '/approval/123' 둘 다 true 다.

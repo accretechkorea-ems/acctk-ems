@@ -100,9 +100,14 @@ export default function HeaderWrapper({ children }: { children: ReactNode }) {
   // Ctrl + \ — 입력칸에 있을 때는 무시한다.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!e.ctrlKey || e.metaKey || e.altKey) return
-      if (e.key !== '\\') return
+      // Ctrl+B(맥은 ⌘B). Ctrl+\ 도 그대로 둔다 — 쓰던 사람이 있다.
+      const mod = e.ctrlKey || e.metaKey
+      if (!mod || e.altKey) return
+      const k = e.key.toLowerCase()
+      if (k !== 'b' && k !== '\\') return
+      // 글을 쓰는 중이면 아무 일도 하지 않는다.
       if (isTyping(e.target)) return
+      // 파이어폭스는 Ctrl+B 가 북마크 사이드바를 연다 — 기본 동작을 막는다.
       e.preventDefault()
       toggle()
     }
