@@ -390,10 +390,15 @@ export default function CompanyPane({
         .site-edit-cell { position: sticky; right: 0; background: #ffffff }
         .site-row:hover .site-edit-cell { background: #fafafa }
         .site-row.on .site-edit-cell { background: #fafafa }
+        /* 회사 카드의 ✎·＋ — 사업장 카드와 같은 규칙이다. 호버·포커스에서만 보이고
+           자리는 늘 차지한다(나타날 때 제목이 밀리지 않게). 폰에는 호버가 없어 늘 보인다. */
+        .company-card .card-act { opacity: 0; transition: opacity 0.15s ease }
+        .company-card:hover .card-act, .company-card:focus-within .card-act { opacity: 1 }
+        @media (max-width: 640px) { .company-card .card-act { opacity: 1 } }
       `}</style>
 
       {/* ── 회사 카드 ── 1줄: 이름·분류·버튼 / 2줄: 수치 타일 + 포캐스트 ── */}
-      <section style={{ ...card, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+      <section className="company-card" style={{ ...card, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: TEXT, letterSpacing: '-0.5px' }}>{group.companyName}</h1>
           {group.nameEn && <span style={{ fontSize: 13, color: MUTED }}>{group.nameEn}</span>}
@@ -401,8 +406,10 @@ export default function CompanyPane({
             <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: R.tag, background: NEUTRAL, color: SUB }}>{group.industry}</span>
           )}
           <span style={{ flex: 1 }} />
-          <EditIconButton label="회사 정보 수정" onClick={() => setEditCompanyOpen(true)} />
-          <AddIconButton label="사업장 추가" onClick={onAddSite} />
+          <span className="card-act" style={{ display: 'inline-flex', gap: 8 }}>
+            <EditIconButton label="회사 정보 수정" onClick={() => setEditCompanyOpen(true)} />
+            <AddIconButton label="사업장 추가" onClick={onAddSite} />
+          </span>
         </div>
 
         {/* 좌 440px 에 수치 네 칸, 남는 자리에 포캐스트. 좁으면 아래로 쌓인다. */}

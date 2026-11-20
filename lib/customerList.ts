@@ -265,22 +265,23 @@ export function sortGroups(groups: CompanyGroup[], key: SortKey): CompanyGroup[]
   return list
 }
 
-/** 묶음 안의 사업장도 같은 기준으로 세운다. */
-export function sortSites(sites: SiteRow[], key: SortKey): SiteRow[] {
-  const list = [...sites]
-  if (key === 'name') {
-    list.sort((a, b) => a.siteName.localeCompare(b.siteName, 'ko'))
-    return list
-  }
-  list.sort((a, b) => {
-    const ad = a.touch?.date ?? ''
-    const bd = b.touch?.date ?? ''
-    if (ad === bd) return a.siteName.localeCompare(b.siteName, 'ko')
-    if (!ad) return 1
-    if (!bd) return -1
-    return ad < bd ? 1 : -1
-  })
-  return list
+/**
+ * **사업장 이름 비교** — 숫자는 자릿수가 아니라 값으로 센다.
+ * 「예산1공장 · 예산2공장 · 예산4공장 · 예산10공장」이 그 순서로 선다
+ * (글자로만 비교하면 10공장이 1공장 바로 뒤에 붙는다).
+ */
+export const compareSiteName = (a: string, b: string): number =>
+  a.localeCompare(b, 'ko', { numeric: true, sensitivity: 'base' })
+
+/**
+ * 묶음 안의 사업장은 **늘 이름 순**이다(2026-11-20).
+ *
+ * 전에는 바깥 목록과 같은 「최근 활동순」을 따랐다. 그런데 한 회사의 사업장은
+ * 보통 같은 이름에 번호만 다른 줄이라(예산1·2·4공장), 최근에 다녀온 순서로 세우면
+ * 찾으려는 공장이 매번 다른 자리에 있었다. 이름 순은 늘 같은 자리다.
+ */
+export function sortSites(sites: SiteRow[]): SiteRow[] {
+  return [...sites].sort((a, b) => compareSiteName(a.siteName, b.siteName))
 }
 
 // ── 묶기 ──────────────────────────────────────────────────────────────────
@@ -357,7 +358,7 @@ export function buildCompanyTree(input: BuildInput): BuildResult {
       nameEn: company?.name_en ?? null,
       note: company?.note ?? null,
       // 이름이 겹치는 사업장은 주소로 가려 준다 — 「본사」가 세 줄 나란히 서지 않게.
-      sites: sortSites(disambiguateSites(sites), input.sort),
+      sites: sortSites(disambiguateSites(sites)),
       touch: best,
       deviceCount: sites.reduce((n, s) => n + s.deviceCount, 0),
       openQuotes: sites.reduce((n, s) => n + s.openQuotes, 0),

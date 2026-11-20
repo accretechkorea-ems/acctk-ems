@@ -216,7 +216,14 @@ console.log('\n── 세우기 ──')
     sorted.map(x => x.companyName), ['다', '나', '가'])
   eq('이름순은 가나다', L.sortGroups([g('다', null), g('가', null), g('나', null)], 'name').map(x => x.companyName), ['가', '나', '다'])
   const s = (name, date) => ({ siteName: name, touch: date ? { date, source: '견적', actorId: null } : null })
-  eq('사업장도 같은 기준', L.sortSites([s('나', '2026-02-02'), s('가', '2026-09-09')], 'touch').map(x => x.siteName), ['가', '나'])
+  // 사업장은 **늘 이름 순**이다(2026-11-20) — 바깥 목록이 최근 활동순이어도 그렇다.
+  // 한 회사의 사업장은 이름에 번호만 다른 줄이 많아, 활동순으로 세우면 매번 자리가 바뀐다.
+  eq('사업장은 접점과 무관하게 이름 순',
+    L.sortSites([s('나', '2026-09-09'), s('가', '2026-02-02')]).map(x => x.siteName), ['가', '나'])
+  // 숫자는 값으로 센다 — 글자 비교면 10공장이 1공장 바로 뒤에 붙는다.
+  eq('번호는 자연 순서',
+    L.sortSites([s('예산10공장', null), s('예산2공장', null), s('예산1공장', null), s('예산4공장', null)]).map(x => x.siteName),
+    ['예산1공장', '예산2공장', '예산4공장', '예산10공장'])
 }
 
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
