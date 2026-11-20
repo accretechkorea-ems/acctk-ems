@@ -68,9 +68,8 @@ type Props = {
   agencies: AgencyOption[]
   agencySiteCount: (agencyId: number) => number
   onPickAgency: (agencyId: number) => void
-  /** 지금 걸린 대리점 — 회사 탭 위에 「대리점: ○○」 줄로 알린다. */
-  agencyFilterId: number | null
-  clearAgencyFilter: () => void
+  /** 지금 고른 대리점 — 그 줄을 켜 둔다(우측에 그 대리점 화면이 서 있다). */
+  selectedAgencyId: number | null
 }
 
 // 탭 — 글자는 **한 줄로** 선다. 좁은 패널에서 flex 가 눌러 「대 리 점」처럼 접히면
@@ -94,7 +93,7 @@ export default function CustomerListPanel({
   onSelectCompany, onSelectSite, loading,
   checkedCompanies, toggleCompanyCheck, clearCompanyChecks, onBulkIndustry,
   cleanup, cleanupBucket, setCleanupBucket, onDeleteCompany,
-  agencies, agencySiteCount, onPickAgency, agencyFilterId, clearAgencyFilter,
+  agencies, agencySiteCount, onPickAgency, selectedAgencyId,
 }: Props) {
   /** 트리가 구르는 요소 — 위·아래 힌트가 이것을 본다. */
   const treeRef = useRef<HTMLElement | null>(null)
@@ -108,15 +107,6 @@ export default function CustomerListPanel({
       <div style={{ padding: '8px 14px 4px', fontSize: 12, color: SUB, flexShrink: 0 }}>
         조건 일치 <b style={{ color: TEXT }}>{siteCount}</b>곳 · 회사 <b style={{ color: TEXT }}>{groups.length}</b>
       </div>
-      {/* 대리점으로 걸러 보고 있을 때 — 어디서 온 목록인지 알린다(7). */}
-      {tab === 'company' && agencyFilterId != null && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', background: '#eff4ff', fontSize: 12, color: BLUE }}>
-          <b style={{ fontWeight: 700 }}>대리점: {agencies.find(a => a.customer_id === agencyFilterId)?.company_name ?? agencyFilterId}</b>
-          <span style={{ flex: 1 }} />
-          <button type="button" onClick={clearAgencyFilter}
-            style={{ border: 'none', background: 'none', color: SUB, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>해제</button>
-        </div>
-      )}
 
       {/* 트리 — 위·아래 스크롤 힌트를 함께 둔다(스크롤바를 숨겨 두었다). */}
       <ScrollHints scrollRef={treeRef} top={34} bottom={10} />
@@ -125,19 +115,22 @@ export default function CustomerListPanel({
           /* ── 대리점 탭(7) — 누르면 회사 탭이 그 대리점의 사업장만 거른다 ── */
           agencies.length === 0 ? (
             <div style={{ padding: '36px 16px', textAlign: 'center', color: MUTED, fontSize: 13 }}>등록된 대리점이 없습니다</div>
-          ) : agencies.map(a => (
-            <div key={a.customer_id} role="button" tabIndex={0}
+          ) : agencies.map(a => {
+            /* 고른 줄은 켜 둔다 — 우측에 그 대리점 화면이 서 있다(회사 트리와 같은 규칙). */
+            const on = a.customer_id === selectedAgencyId
+            return (
+            <div key={a.customer_id} role="button" tabIndex={0} aria-current={on ? 'true' : undefined}
               onClick={() => onPickAgency(a.customer_id)}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPickAgency(a.customer_id) } }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, height: 38, padding: '0 10px', borderRadius: R.icon, cursor: 'pointer', fontSize: 13 }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#fafafa' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 8, height: 38, padding: '0 10px', borderRadius: R.icon, cursor: 'pointer', fontSize: 13, background: on ? '#eff4ff' : 'transparent' }}
+              onMouseEnter={e => { if (!on) e.currentTarget.style.background = '#fafafa' }}
+              onMouseLeave={e => { if (!on) e.currentTarget.style.background = 'transparent' }}>
               <b style={{ fontWeight: 700, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.company_name}</b>
               <span style={{ fontSize: 11, color: MUTED }}>{a.address ? a.address.split(/\s+/).slice(0, 2).join(' ') : ''}</span>
               <span style={{ flex: 1 }} />
               <span style={{ fontSize: 12, color: SUB }}>{agencySiteCount(a.customer_id)}</span>
             </div>
-          ))
+          )})
         ) : tab === 'cleanup' ? (
           /* ── 정리 필요 탭(4) — 묶음 넷 ── */
           <div>
@@ -249,7 +242,7 @@ export default function CustomerListPanel({
           <select defaultValue=""
             onChange={e => { if (e.target.value) { onBulkIndustry(e.target.value); e.target.value = '' } }}
             style={{ height: 26, borderRadius: R.icon, border: 'none', fontSize: 12, padding: '0 6px', maxWidth: 170 }}>
-            <option value="">분류 일괄 지정</option>
+            <option value="" disabled hidden>분류 일괄 지정</option>
             {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
           </select>
           <span style={{ flex: 1 }} />

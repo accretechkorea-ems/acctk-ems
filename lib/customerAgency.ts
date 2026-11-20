@@ -22,6 +22,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { colsWithNameEn, withNameEnFallback } from '@/lib/nameEn'
 
 /** 「직판」 — 대리점이 없는 건의 표시 글자. 한 곳에서 정한다. */
 /**
@@ -77,9 +78,13 @@ export type AgencyOption = {
   customer_id: number
   company_name: string
   address: string | null
+  /** 영문명 — 대리점 화면의 제목 줄에 작게 붙는다(비어 있는 줄이 많다). */
+  name_en: string | null
+  /** 메모 — 대리점 화면이 글자로 보여 준다(사업장과 같은 note 칸이다). */
+  note: string | null
 }
 
-const COLUMNS = 'customer_id, company_name, address'
+
 
 let cache: Promise<AgencyOption[]> | null = null
 
@@ -88,22 +93,32 @@ export function loadAgencies(): Promise<AgencyOption[]> {
   if (cache) return cache
   cache = (async () => {
     const supabase = createClient()
-    const { data, error } = await supabase
+    // 영문명 칸이 아직 없는 DB 에서도 목록은 서야 한다 — 그 칸만 빼고 한 번 더 읽는다
+    // (lib/nameEn.ts). 이 목록은 필터 모달·좌 패널 탭이 함께 쓰므로 멈추면 안 된다.
+    const { data, error } = await withNameEnFallback(useEn => supabase
       .from('customers')
-      .select(COLUMNS)
+      .select(colsWithNameEn('customer_id, company_name, address, note', useEn))
       .eq('is_agency', true)
       .is('deleted_at', null)
-      .order('company_name')
+      .order('company_name'))
     if (error) {
       // 실패하면 캐시를 비워 다음 호출에서 다시 시도한다.
       console.error('[agencies] load failed', error)
       cache = null
       return []
     }
-    return (data ?? []).map(r => ({
+    // select 문자열이 변수라 supabase 가 줄 모양을 추론하지 못한다 — 읽는 칸만 적어 둔
+    // 타입으로 받는다(ParentPicker 와 같은 방식). 영문명은 칸이 없으면 아예 오지 않는다.
+    type Row = {
+      customer_id: number; company_name: string | null; address: string | null
+      note?: string | null; name_en?: string | null
+    }
+    return ((data ?? []) as unknown as Row[]).map(r => ({
       customer_id: Number(r.customer_id),
       company_name: (r.company_name ?? '').trim(),
       address: r.address ?? null,
+      name_en: r.name_en ?? null,
+      note: r.note ?? null,
     }))
   })()
   return cache

@@ -25,6 +25,7 @@ import CustomerFilterModal from '@/components/home/CustomerFilterModal'
 import { customerFilterChips, defaultFilter, type FilterOptions } from '@/lib/customerFilterChips'
 import CustomerListPanel, { type CleanupBucket, type CleanupRow, type ListTab } from '@/components/home/list/CustomerListPanel'
 import CompanyPane from '@/components/home/list/CompanyPane'
+import AgencyPane from '@/components/home/list/AgencyPane'
 import CustomerDetailBody from '@/components/customer/CustomerDetailBody'
 import { loadEngineers } from '@/lib/appData/engineers'
 import { invalidateParents, loadParents, type ParentOption } from '@/components/customer/ParentPicker'
@@ -105,11 +106,14 @@ export default function HomePage() {
   const [checkedCompanies, setCheckedCompanies] = useState<Set<number>>(new Set())
   /** 정리 필요 탭에서 보고 있는 묶음(4). */
   const [cleanupBucket, setCleanupBucket] = useState<CleanupBucket>('industry')
-  /** 대리점 탭에서 고른 대리점 — 회사 탭이 그 대리점의 사업장만 보여 준다(7). */
-  const [agencyFilterId, setAgencyFilterId] = useState<number | null>(null)
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null)
   const [selectedSiteId, setSelectedSiteId] = useState<number | null>(null)
+  /**
+   * 고른 대리점 — 우측 pane 에 **대리점 화면**이 선다(2026-11-21).
+   * 회사·사업장과 같은 자리를 쓰므로 서로 비운다(한 번에 한 화면이다).
+   */
+  const [selectedAgencyId, setSelectedAgencyId] = useState<number | null>(null)
   const [companies, setCompanies] = useState<ParentOption[]>([])
   const [lastTouchMap, setLastTouchMap] = useState<Map<number, LastTouch>>(new Map())
   /** 등록 폼의 회사를 고정한 채 열었는가(회사 카드의 「+ 사업장 추가」). */
@@ -181,6 +185,15 @@ useEffect(() => {
       setSelectedSiteId(null)
       setExpanded(prev => new Set(prev).add(company))
     }
+    /** 대리점 화면 — 회사와 같은 방식이다(?view=list&agency=ID). */
+    const ag = Number(q.get('agency'))
+    if (Number.isInteger(ag) && ag > 0) {
+      setView('list')
+      setListTab('agency')
+      setSelectedAgencyId(ag)
+      setSelectedCompanyId(null)
+      setSelectedSiteId(null)
+    }
     // 활동 현황에서 넘어온 길 — 그 사업장의 **회사**를 펴고 칩을 켠 뒤 그 줄로 내려간다.
     const site = Number(q.get('site'))
     if (Number.isInteger(site) && site > 0) {
@@ -211,10 +224,13 @@ useEffect(() => {
     // 고른 회사는 주소에 남긴다 — 새로고침해도 그 회사가 열린 채다(목록 보기의 주소다).
     if (view === 'list' && selectedCompanyId != null) url.searchParams.set('company', String(selectedCompanyId))
     else url.searchParams.delete('company')
+    // 고른 대리점도 같은 규칙이다.
+    if (view === 'list' && selectedAgencyId != null) url.searchParams.set('agency', String(selectedAgencyId))
+    else url.searchParams.delete('agency')
     // 찾아가기 값은 한 번 쓰고 주소에서 턴다 — 새로고침·뒤로가기에 다시 뜨지 않게.
     if (timelineFocusKey == null) { url.searchParams.delete('site'); url.searchParams.delete('focus') }
     if (url.toString() !== window.location.href) window.history.replaceState(null, '', url.toString())
-  }, [view, timelineFocusKey, selectedCompanyId])
+  }, [view, timelineFocusKey, selectedCompanyId, selectedAgencyId])
 
   // 작성자 이름 — 목록 보기의 표가 쓴다.
   useEffect(() => {
@@ -402,11 +418,25 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
     [companies],
   )
   const today = todayKST()
-  /** 대리점으로 걸러 볼 때는 그 대리점을 쓰는 사업장만 넘긴다(7). */
-  const treeCustomers = useMemo(
-    () => (agencyFilterId == null ? customers : customers.filter(c => c.agency_customer_id === agencyFilterId)),
-    [customers, agencyFilterId],
+  /** 고른 대리점 줄 — 우측 pane 의 대리점 화면이 쓴다. */
+  const selectedAgency = useMemo(
+    () => agencyList.find(a => a.customer_id === selectedAgencyId) ?? null,
+    [agencyList, selectedAgencyId],
   )
+  /**
+   * 폰에서 pane 이 폭을 다 쓰는 때 — 회사·사업장·대리점 중 하나를 고른 상태다.
+   * 회사는 **고른 번호**로 본다(트리 묶음 selectedGroup 은 필터·검색에 따라 없어질 수
+   * 있는데, 그때 pane 은 「왼쪽에서 고르세요」를 띄우므로 폭을 다 쓸 이유가 없다).
+   */
+  const detailOpen = selectedSiteId != null || selectedAgencyId != null || selectedCompanyId != null
+  /**
+    * 트리에 넘기는 사업장 — 목록 조회가 준 것 그대로다.
+    *
+    * 전에는 대리점 탭에서 고른 대리점의 사업장만 걸러 넘겼다(옛 agencyFilterId).
+    * 그 길은 2026-11-21에 걷었다 — 대리점을 누르면 **대리점 화면**이 열리고,
+    * 대리점으로 거르는 일은 필터 모달의 「대리점」 조건이 맡는다(listFilter.agencies).
+    */
+  const treeCustomers = customers
 
   const listTree = useMemo(() => buildCompanyTree({
     customers: treeCustomers,
@@ -777,7 +807,19 @@ useEffect(() => {
   body { overflow-x: hidden !important; }
   /* 좁은 화면은 예전 「업체 목록 | 지도」 탭이 맡는다 — 토글이 둘이면 뜻이 겹친다. */
   .home-header { display: none !important; }
+
+  /* ── 폰의 분할 보기 ──────────────────────────────────────────────────
+     넓은 화면은 좌 패널과 우측 pane 이 나란히 선다. 폰에서는 둘을 나란히 둘 폭이
+     없어, 좌 패널 자리만큼(372px) 밀린 pane 이 화면 밖으로 나가 있었다
+     (2026-11-21 실측: 회사 카드가 x=384·폭 38 로 접혔다).
+     고른 것이 있으면 **pane 이 폭을 다 쓰고 좌 패널은 숨는다.** 목록으로
+     돌아가는 길은 pane 머리의 ← 다(.pane-back — 폰에서만 보인다). */
+  .home-grid.detail-open .side-panel { display: none !important; }
+  .home-grid.detail-open .pane { margin-left: 0 !important; padding-right: 0 !important; }
+  .pane-back { display: inline-flex !important; }
 }
+/* ← 는 폰에서만 쓴다 — 넓은 화면에서는 좌 패널이 늘 옆에 있다. */
+.pane-back { display: none; }
       `}</style>
 
       {/* 맨 위 한 줄(ListHeader)은 걷었다(2026-11-20) — 토글·검색·필터는 좌 패널 머리줄로
@@ -847,7 +889,7 @@ useEffect(() => {
         /* ── 목록 보기 — **지도 보기와 같은 좌 패널** + 우 상세 ────────────
            패널의 자리 계산은 components/home/SidePanel.tsx 한 곳이다(좌 16 · 폭 340).
            보기를 바꿔도 패널이 움직이지 않는다. */
-        <div className="home-grid" style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0 }}>
+        <div className={detailOpen ? 'home-grid detail-open' : 'home-grid'} style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0 }}>
           <SidePanel hidden={mobileTab === 'map'} header={panelHeader}>
             <CustomerListPanel
               tab={listTab}
@@ -874,14 +916,16 @@ useEffect(() => {
               onDeleteCompany={(id, name) => void deleteEmptyCompany(id, name)}
               agencies={agencyList}
               agencySiteCount={agencySiteCount}
-              onPickAgency={id => { setAgencyFilterId(id); setListTab('company'); setSelectedCompanyId(null); setSelectedSiteId(null) }}
-              agencyFilterId={agencyFilterId}
-              clearAgencyFilter={() => setAgencyFilterId(null)}
+              /* 대리점을 누르면 **우측에 대리점 화면**이 선다(2026-11-21).
+                 전에는 회사 탭으로 옮겨 가며 그 대리점의 사업장만 걸렀다 — 거르기는
+                 필터 모달의 「대리점」 조건이 하는 일이라 두 길이 겹쳤다. */
+              onPickAgency={id => { setSelectedAgencyId(id); setSelectedCompanyId(null); setSelectedSiteId(null) }}
+              selectedAgencyId={selectedAgencyId}
               loading={isLoading}
             />
           </SidePanel>
           {/* 우측 본문 — 패널을 피해 시작한다(PANEL_SPACE). 엑셀·업체 등록은 탭 줄로 갔다. */}
-          <div className="stable-scroll" style={{ marginLeft: PANEL_SPACE, height: '100%', minWidth: 0, overflowY: 'auto', padding: '16px 16px 16px 0', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="stable-scroll pane" style={{ marginLeft: PANEL_SPACE, height: '100%', minWidth: 0, overflowY: 'auto', padding: '16px 16px 16px 0', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 10 }}>
             {selectedSiteId != null ? (
               /* 사업장을 골랐을 때 — **상세 페이지와 같은 본문**이다(컴포넌트 하나를 나눠 쓴다). */
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
@@ -891,10 +935,33 @@ useEffect(() => {
                   key={selectedSiteId}
                   customerId={selectedSiteId}
                   embedded
-                  // ← 는 회사 보기로 — **그 사업장 칩이 켜진 채** 열린다(보던 자리를 잃지 않게).
-                  onBack={() => { setTimelineFocusSiteId(selectedSiteId); setSelectedSiteId(null) }}
+                  /* ← 는 **왔던 화면**으로 돌아간다(회사 또는 대리점).
+                     전에는 돌아갈 때 그 사업장 칩을 활동 이력에 자동으로 걸었다. 보던
+                     자리를 지켜 주려던 것인데, 돌아오면 늘 한 사업장으로 좁혀진 이력이
+                     떠서 「회사 전체」를 다시 보려면 매번 필터를 풀어야 했다(2026-11-21에
+                     걷었다). 떠날 때의 필터는 그대로 되살아난다 —
+                     lib/timelineFilter.ts 의 기억이 맡는다. */
+                  onBack={() => { setSelectedSiteId(null) }}
                 />
               </div>
+            ) : selectedAgency ? (
+              /* 대리점을 골랐을 때 — 회사 화면과 같은 급이다(components/home/list/AgencyPane.tsx). */
+              <AgencyPane
+                key={selectedAgency.customer_id}
+                agency={selectedAgency}
+                customers={customers}
+                companyName={id => companyMap.get(id)?.company_name ?? null}
+                deviceCount={id => deviceMap.get(id)?.length ?? 0}
+                openQuotes={id => openQuotes.get(id) ?? 0}
+                touchOf={id => lastTouchMap.get(id) ?? null}
+                today={today}
+                me={{ engineer_id: me?.engineer_id ?? null }}
+                onOpenSite={id => setSelectedSiteId(id)}
+                onBackToList={() => setSelectedAgencyId(null)}
+                onSaved={() => { void fetchData() }}
+                onError={msg => toast.error(msg)}
+                onToast={msg => toast.success(msg)}
+              />
             ) : selectedGroup ? (
               <CompanyPane
                 key={selectedGroup.companyId}
@@ -910,6 +977,7 @@ useEffect(() => {
                 focusSiteId={timelineFocusSiteId}
                 focusKey={timelineFocusKey}
                 onFocused={() => setTimelineFocusKey(null)}
+                onBackToList={() => setSelectedCompanyId(null)}
               />
             ) : (
               <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: TEXT_MUTED, fontSize: 13, background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control }}>

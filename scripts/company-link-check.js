@@ -81,7 +81,8 @@ ok('company 는 한 번 쓰고 털어 내는 값이 아니다',
   "site·focus 와 함께 지우면 새로고침에 회사가 풀린다")
 ok('주소를 갈아 끼울 때 뒤로가기 기록을 늘리지 않는다(replaceState)',
   /window\.history\.replaceState\(null, '', url\.toString\(\)\)/.test(HOME))
-ok('효과가 고른 회사를 함께 본다', /\}, \[view, timelineFocusKey, selectedCompanyId\]\)/.test(HOME))
+ok('효과가 고른 회사·대리점을 함께 본다',
+  /\}, \[view, timelineFocusKey, selectedCompanyId, selectedAgencyId\]\)/.test(HOME))
 
 console.log('\n── ⑤ 회사 카드의 견적 타일 ──')
 ok('진행 0 이면 큰 숫자는 회색', /color=\{group\.openQuotes > 0 \? BLUE : MUTED\}/.test(PANE))

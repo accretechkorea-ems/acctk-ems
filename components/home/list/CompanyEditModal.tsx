@@ -39,11 +39,25 @@ export type CompanyEditForm = {
   nameEn: string
   industry: string
   note: string
+  /** 주소 — **대리점 모드에서만** 쓴다(회사 줄은 주소를 갖지 않는다). */
+  address?: string
 }
+
+/**
+ * 어느 줄을 고치는가 — 같은 창을 **대리점**도 쓴다(2026-11-21).
+ *
+ *   company 회사(부모) 줄. 분류가 필수고, 이름을 바꾸면 아래 사업장 이름이 전부 바뀐다.
+ *   agency  대리점 줄. **분류 칸이 없고 주소 칸이 있다.** 이름을 바꿔도 따라 바뀌는
+ *           줄이 없다 — 사업장은 FK(agency_customer_id)로 가리키므로 이름을 베껴 두지
+ *           않는다. 그래서 이름 문턱(canRename)도 걸지 않는다.
+ */
+export type CompanyEditKind = 'company' | 'agency'
 
 type Props = {
   /** 열었을 때의 값. */
   initial: CompanyEditForm
+  /** 무엇을 고치는가. 없으면 회사다(옛 호출부 그대로). */
+  kind?: CompanyEditKind
   /** 사업장 수 — 이름을 바꾸면 함께 바뀌는 줄 수를 미리 알려 준다. */
   siteCount: number
   /** 회사명·영문명을 바꿀 수 있는가(슈퍼관리자). 아니면 그 두 칸만 잠근다. */
@@ -53,25 +67,30 @@ type Props = {
   onSave: (form: CompanyEditForm) => void
 }
 
-export default function CompanyEditModal({ initial, siteCount, canRename, isSaving, onClose, onSave }: Props) {
+export default function CompanyEditModal({ initial, kind = 'company', siteCount, canRename, isSaving, onClose, onSave }: Props) {
   const [form, setForm] = useState<CompanyEditForm>(initial)
   const { errors, clearError, validate } = useFieldErrors<'name' | 'nameEn' | 'industry'>()
+
+  const agency = kind === 'agency'
+  // 대리점 이름은 따라 바뀌는 줄이 없다 — 문턱을 걸지 않는다(위 CompanyEditKind).
+  const editName = agency || canRename
 
   const dirty = JSON.stringify(form) !== JSON.stringify(initial)
   const nameChanged = form.name.trim() !== initial.name.trim()
 
   const handleSave = () => {
     const ok = validate({
-      name: form.name.trim() ? null : '회사명을 입력해주세요',
+      name: form.name.trim() ? null : (agency ? '대리점명을 입력해주세요' : '회사명을 입력해주세요'),
       // 비어 있는 줄이 많지만, 고치러 들어온 김에 채우게 한다 — 이름을 다루는 자리다.
-      nameEn: canRename && !form.nameEn.trim() ? '영문명을 입력해주세요' : null,
-      industry: form.industry ? null : '분류를 선택해주세요',
+      // 대리점은 45곳 모두 영문명이 비어 있어(2026-11-21 실측) 강요하지 않는다.
+      nameEn: !agency && canRename && !form.nameEn.trim() ? '영문명을 입력해주세요' : null,
+      industry: agency || form.industry ? null : '분류를 선택해주세요',
     })
     if (!ok) return
     onSave(form)
   }
 
-  const lockedHint = canRename ? null : '회사명·영문명은 슈퍼관리자만 바꿀 수 있습니다'
+  const lockedHint = editName ? null : '회사명·영문명은 슈퍼관리자만 바꿀 수 있습니다'
 
   return (
     <ModalOverlay onClose={onClose} confirmClose dirty={dirty}>
@@ -86,7 +105,7 @@ export default function CompanyEditModal({ initial, siteCount, canRename, isSavi
         }}>
         <FormFocusStyle />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px' }}>회사 정보 수정</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px' }}>{agency ? '대리점 정보 수정' : '회사 정보 수정'}</div>
           <button onClick={onClose} title="닫기"
             style={{ width: 28, height: 28, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: SUB }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -99,51 +118,68 @@ export default function CompanyEditModal({ initial, siteCount, canRename, isSavi
           {/* 한 줄 세 칸 — 등록 폼의 업체 정보와 같은 리듬. */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, alignItems: 'start' }}>
           <div>
-            <label style={labelStyle}>회사명</label>
-            <input value={form.name} disabled={!canRename || isSaving}
+            <label style={labelStyle}>{agency ? '대리점명' : '회사명'}</label>
+            <input value={form.name} disabled={!editName || isSaving}
               onChange={e => { setForm(p => ({ ...p, name: e.target.value })); clearError('name') }}
-              placeholder="ex) 현대자동차"
+              placeholder={agency ? 'ex) 젠트' : 'ex) 현대자동차'}
               style={{
                 ...fieldStyle,
                 ...(errors.name ? { border: errBorder } : null),
-                background: canRename ? '#fff' : '#f9fafb', color: canRename ? TEXT : MUTED,
+                background: editName ? '#fff' : '#f9fafb', color: editName ? TEXT : MUTED,
               }} />
             <FieldError message={errors.name} />
+            {/* 회사는 이름이 아래 사업장까지 번진다. 대리점은 번지지 않으므로 그 대신
+                몇 곳이 이 대리점을 거치는지 알린다(합치거나 지울 때 가늠이 된다). */}
             {nameChanged && siteCount > 0 && (
               <div style={{ fontSize: 11, color: SUB, marginTop: 5 }}>
-                {`사업장 ${siteCount}곳의 이름도 「새 회사명 사업장명」 으로 함께 바뀝니다.`}
+                {agency
+                  ? `거래 사업장 ${siteCount}곳의 이름은 그대로입니다(대리점을 번호로 가리킵니다).`
+                  : `사업장 ${siteCount}곳의 이름도 「새 회사명 사업장명」 으로 함께 바뀝니다.`}
               </div>
             )}
           </div>
 
           <div>
-            <label style={labelStyle}>영문 회사명</label>
-            <input value={form.nameEn} disabled={!canRename || isSaving}
+            <label style={labelStyle}>{agency ? '영문 대리점명' : '영문 회사명'}</label>
+            <input value={form.nameEn} disabled={!editName || isSaving}
               onChange={e => setForm(p => ({ ...p, nameEn: e.target.value }))}
-              placeholder="ex) HYUNDAI MOTOR"
-              style={{ ...fieldStyle, background: canRename ? '#fff' : '#f9fafb', color: canRename ? TEXT : MUTED }} />
+              placeholder={agency ? 'ex) ZENT' : 'ex) HYUNDAI MOTOR'}
+              style={{ ...fieldStyle, background: editName ? '#fff' : '#f9fafb', color: editName ? TEXT : MUTED }} />
             <div style={{ fontSize: 11, color: MUTED, marginTop: 5 }}>
               {lockedHint ?? '검색이 한글 이름과 함께 봅니다.'}
             </div>
           </div>
 
-          <div>
-            <label style={labelStyle}>분류</label>
-            <select value={form.industry} disabled={isSaving}
-              onChange={e => { setForm(p => ({ ...p, industry: e.target.value })); clearError('industry') }}
-              style={errors.industry ? { ...fieldStyle, border: errBorder, cursor: 'pointer' } : { ...fieldStyle, cursor: 'pointer' }}>
-              <option value="">분류 선택</option>
-              {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
-            </select>
-            <FieldError message={errors.industry} />
-          </div>
+          {/* 셋째 칸 — 회사는 분류, 대리점은 주소다(대리점에 분류는 뜻이 없고,
+              주소는 45곳 중 31곳이 비어 있어 채울 자리가 필요하다). */}
+          {agency ? (
+            <div>
+              <label style={labelStyle}>주소</label>
+              <input value={form.address ?? ''} disabled={isSaving}
+                onChange={e => setForm(p => ({ ...p, address: e.target.value }))}
+                placeholder="ex) 대구 달서구 성서공단로 11길 32"
+                style={fieldStyle} />
+              <div style={{ fontSize: 11, color: MUTED, marginTop: 5 }}>대리점 화면의 둘째 줄에 그대로 보입니다.</div>
+            </div>
+          ) : (
+            <div>
+              <label style={labelStyle}>분류</label>
+              <select value={form.industry} disabled={isSaving}
+                onChange={e => { setForm(p => ({ ...p, industry: e.target.value })); clearError('industry') }}
+                style={errors.industry ? { ...fieldStyle, border: errBorder, cursor: 'pointer' } : { ...fieldStyle, cursor: 'pointer' }}>
+                <option value="" disabled hidden>분류 선택</option>
+                {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+              </select>
+              <FieldError message={errors.industry} />
+            </div>
+          )}
           </div>
 
           <div>
             <label style={labelStyle}>메모</label>
             <textarea value={form.note} disabled={isSaving}
               onChange={e => setForm(p => ({ ...p, note: e.target.value.slice(0, MEMO_MAX) }))}
-              placeholder="ex) 2026-03 사명 변경 · 본사 이전"
+              placeholder={agency ? 'ex) 월말 정산 · 견적서는 대표가 직접 수신' : 'ex) 2026-03 사명 변경 · 본사 이전'}
               rows={3}
               style={{ ...fieldStyle, resize: 'vertical', fontSize: 13, lineHeight: 1.6, fontFamily: 'inherit' }} />
             <div style={{ fontSize: 10, color: MUTED, marginTop: 4, textAlign: 'right' }}>{`${form.note.length} / ${MEMO_MAX}`}</div>
