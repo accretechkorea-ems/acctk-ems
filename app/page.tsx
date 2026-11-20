@@ -16,7 +16,11 @@ import {
   type CustomerExcelRow, type ExcelCustomer,
 } from '@/lib/customerExcel'
 import { NOT_AGENCY_ONLY, useAgencies } from '@/lib/customerAgency'
-import ListHeader, { type HomeView } from '@/components/home/ListHeader'
+import { REGION_FILTER_OPTIONS } from '@/lib/region'
+import { DIRECT_SALE } from '@/lib/customerList'
+import PanelHeader, { type HomeView } from '@/components/home/PanelHeader'
+import CustomerFilterModal from '@/components/home/CustomerFilterModal'
+import { customerFilterChips, defaultFilter, type FilterOptions } from '@/lib/customerFilterChips'
 import CustomerListPanel, { type CleanupBucket, type CleanupRow, type ListTab } from '@/components/home/list/CustomerListPanel'
 import CompanyPane from '@/components/home/list/CompanyPane'
 import CustomerDetailBody from '@/components/customer/CustomerDetailBody'
@@ -131,14 +135,9 @@ useEffect(() => {
   const [query, setQuery] = useState('')
   // 「업체 | 부품」 모드 토글은 걷었다(2026-11-19) — 부품 사용 이력 검색은 견적 작성
   // 화면으로 옮긴다. 조회·상태 코드는 그대로 남아 있다(lib/partSearch.ts).
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['활성', '잠재'])
-const [selectedCategories, setSelectedCategories] = useState<string[]>([...CATEGORY_OPTIONS])
+  // 지도와 목록은 **같은 필터 상태**를 쓴다(listFilter). 전에는 지도가 selectedStatuses·
+  // selectedCategories 를 따로 들고 있어, 지도에서 켠 조건이 목록으로 넘어가지 않았다.
 
-const toggleCategory = (category: string) => {
-  setSelectedCategories((prev) =>
-    prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]
-  )
-}
   const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
 
@@ -226,8 +225,8 @@ const toggleCategory = (category: string) => {
 
    const payload = {
   query,
-  selectedStatuses,
-  selectedCategories,
+  listFilter,
+  listSort,
   view,
   listScrollTop: listScrollRef.current?.scrollTop ?? 0,
   mapCenter,
@@ -263,19 +262,13 @@ if (navType.type !== 'back_forward') {
       }
 
 
-      if (
-        Array.isArray(parsed.selectedStatuses) &&
-        parsed.selectedStatuses.every((item: unknown) => typeof item === 'string')
-      ) {
-        setSelectedStatuses(parsed.selectedStatuses)
+      // 필터는 통째로 저장한다 — 칸이 늘 때마다 복원 코드를 더하지 않게.
+      // 모양이 어긋난 저장본은 **버리고 기본값을 쓴다**(옛 저장본이 들어 있어도 화면이 선다).
+      if (parsed.listFilter && typeof parsed.listFilter === 'object'
+        && Array.isArray(parsed.listFilter.statuses) && Array.isArray(parsed.listFilter.categories)) {
+        setListFilter({ ...EMPTY_FILTER, ...parsed.listFilter, query: '' })
       }
-
-     if (
-  Array.isArray(parsed.selectedCategories) &&
-  parsed.selectedCategories.every((item: unknown) => typeof item === 'string')
-) {
-  setSelectedCategories(parsed.selectedCategories)
-}
+      if (parsed.listSort === 'touch' || parsed.listSort === 'name') setListSort(parsed.listSort)
 
       if (parsed.view === 'list' || parsed.view === 'map') {
         setView(parsed.view)
@@ -313,17 +306,9 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
   useEffect(() => {
   if (!restoredHomeStateRef.current) return
   saveHomeState()
-}, [view, query, selectedStatuses, selectedCategories, mapCenter, mapLevel, openOverlayCustomerId])
+}, [view, query, listFilter, listSort, mapCenter, mapLevel, openOverlayCustomerId])
 
-  const toggleStatus = (status: string) => {
-    setFocusedCustomerId(null)
-    setSelectedStatuses((prev) => {
-      if (prev.includes(status)) {
-        return prev.filter((s) => s !== status)
-      }
-      return [...prev, status]
-    })
-  }
+
 
 
 
@@ -335,7 +320,7 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
 
     const filtered = customers.filter((c) => {
       const statusMatched =
-        selectedStatuses.length === 0 ? false : selectedStatuses.includes(c.status ?? '')
+        listFilter.statuses.length === 0 ? false : listFilter.statuses.includes(c.status ?? '')
 
       if (!statusMatched) return false
       const devices = deviceMap.get(Number(c.customer_id)) || []
@@ -345,9 +330,9 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
       )
 
       const categoryMatched =
-        selectedCategories.length === 0 ? false :
+        listFilter.categories.length === 0 ? false :
         !hasFilterable ? true :
-        cats.some((cat) => selectedCategories.includes(cat))
+        cats.some((cat) => listFilter.categories.includes(cat))
 
       if (!categoryMatched) return false
 
@@ -382,7 +367,7 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
 
       return bLatest - aLatest
     })
-  }, [customers, query, selectedStatuses, selectedCategories, deviceMap, latestServiceDateMap])
+  }, [customers, query, listFilter, deviceMap, latestServiceDateMap])
 
   // ── 목록 보기의 트리 ─────────────────────────────────────────────────────
   //   좌 패널의 건수와 우측 표의 줄은 **같은 셈법**을 써야 한다 — 그 셈법은
@@ -410,6 +395,54 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
     allCategories: CATEGORY_OPTIONS,
     sort: listSort,
   }), [treeCustomers, companyMap, deviceMap, openQuotes, lastTouchMap, today, listFilter, query, listSort])
+
+  // ── 필터 ─────────────────────────────────────────────────────────────────
+  //   지도·목록이 **한 상태**를 본다. 고르는 자리는 모달 하나다
+  //   (components/home/CustomerFilterModal.tsx).
+  const [filterOpen, setFilterOpen] = useState(false)
+  const filterOptions = useMemo<FilterOptions>(() => ({
+    statuses: ['활성', '잠재', '이탈'],
+    categories: CATEGORY_OPTIONS,
+    regions: REGION_FILTER_OPTIONS,
+    agencies: [
+      { id: DIRECT_SALE, name: 'ACCT-K' },
+      ...agencyList.map(a => ({ id: a.customer_id, name: a.company_name })),
+    ],
+  }), [agencyList])
+  const filterChips = useMemo(
+    () => customerFilterChips(listFilter, filterOptions),
+    [listFilter, filterOptions],
+  )
+
+  /**
+   * 모달 안의 「조건 일치 N곳」. 보고 있는 화면의 셈법을 그대로 쓴다 —
+   * 목록이면 사업장 수, 지도면 지도에 설 업체 수다.
+   */
+  const countFor = (next: ListFilter): number => {
+    if (view === 'list') {
+      return buildCompanyTree({
+        customers: treeCustomers,
+        companies: companyMap,
+        deviceCount: id => (deviceMap.get(id) ?? []).length,
+        deviceCategories: id => (deviceMap.get(id) ?? []).map(d => d.category).filter((x): x is string => !!x),
+        openQuotes: id => openQuotes.get(id) ?? 0,
+        touchOf: id => lastTouchMap.get(id) ?? null,
+        today,
+        filter: { ...next, query },
+        allCategories: CATEGORY_OPTIONS,
+        sort: listSort,
+      }).siteCount
+    }
+    return customers.filter(c => {
+      if (next.statuses.length === 0 || !next.statuses.includes(c.status ?? '')) return false
+      const devices = deviceMap.get(Number(c.customer_id)) || []
+      const cats = devices.map(d => d.category).filter((x): x is string => Boolean(x))
+      const known = cats.filter(x => (CATEGORY_OPTIONS as readonly string[]).includes(x))
+      if (next.categories.length === 0) return false
+      if (known.length > 0 && !known.some(x => next.categories.includes(x))) return false
+      return true
+    }).length
+  }
 
   // ── 정리 필요 탭의 네 묶음(4) ────────────────────────────────────────────
   //   조건을 각 조각에 흩지 않고 여기서 한 번에 만든다 — 건수와 줄이 같은 셈법이어야 한다.
@@ -620,6 +653,41 @@ useEffect(() => {
   return () => clearInterval(interval)
 }, [filteredCustomers])
 
+  const panelHeader = (
+    <PanelHeader
+      view={view}
+      setView={setView}
+      query={query}
+      setQuery={setQuery}
+      count={view === 'list' ? listTree.siteCount : filteredCustomers.length}
+      loading={isLoading}
+      filterCount={filterChips.length}
+      chips={filterChips}
+      onOpenFilter={() => setFilterOpen(true)}
+      onDropChip={c => setListFilter(prev => c.drop(prev))}
+      onClearChips={() => setListFilter(prev => defaultFilter(filterOptions, prev))}
+      sort={view === 'list' ? listSort : undefined}
+      setSort={view === 'list' ? setListSort : undefined}
+      rightSlot={view === 'map' ? (
+        /* 지도 보기에는 우측 pane 이 없다(지도가 다 쓴다) — 엑셀·등록은 여기 선다.
+           목록 보기에서는 우측 pane 우상단으로 간다. */
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <button type="button" onClick={handleExportExcel} disabled={!canExportExcel || isExporting}
+            title="엑셀 내보내기" aria-label="엑셀 내보내기"
+            style={{ width: 34, height: 34, borderRadius: R.control, border: '1px solid #ebebeb', background: '#fff', color: '#6b7280', cursor: canExportExcel ? 'pointer' : 'not-allowed', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v3h16v-3" />
+            </svg>
+          </button>
+          <button type="button" onClick={() => openAddCustomer()} title="업체 등록" aria-label="업체 등록"
+            style={{ width: 34, height: 34, borderRadius: R.control, border: 'none', background: '#234ea2', color: '#fff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+        </div>
+      ) : undefined}
+    />
+  )
+
   if (!authorized) return <AccessGate loading={guardLoading} />
 
   return (
@@ -655,7 +723,9 @@ useEffect(() => {
 
       <div
         style={{
-          padding: 20,
+          // 지도 보기는 **여백 없이** 꽉 채운다 — 지도가 좌 패널 오른쪽을 최상단부터 끝까지 쓴다.
+          // 목록 보기는 카드가 서는 화면이라 20 여백을 둔다.
+          padding: view === 'map' ? 0 : 20,
           // 높이는 .home-wrapper 규칙이 정한다 — PC 는 상단 바가 없고 모바일만 그만큼 뺀다.
           height: '100vh',
           boxSizing: 'border-box',
@@ -685,19 +755,8 @@ useEffect(() => {
 }
       `}</style>
 
-      {/* 맨 위 한 줄 — 보기 토글·검색·엑셀·등록. 두 보기가 함께 쓴다. */}
-      <ListHeader
-        view={view}
-        setView={setView}
-        query={query}
-        setQuery={setQuery}
-        count={view === 'list' ? listTree.siteCount : filteredCustomers.length}
-        loading={isLoading}
-        onExport={handleExportExcel}
-        exporting={isExporting}
-        canExport={canExportExcel}
-        onAdd={() => openAddCustomer()}
-      />
+      {/* 맨 위 한 줄(ListHeader)은 걷었다(2026-11-20) — 토글·검색·필터는 좌 패널 머리줄로
+          내려갔고(components/home/PanelHeader.tsx), 지도는 그만큼 위로 올라와 칸을 가득 쓴다. */}
 
       {/* 모바일 탭 */}
       <div
@@ -771,10 +830,7 @@ useEffect(() => {
               tab={listTab}
               setTab={setListTab}
               counts={{ company: listTree.groups.length, agency: agencyCount, unlinked: listTree.unlinkedCount }}
-              filter={listFilter}
-              setFilter={setListFilter}
-              sort={listSort}
-              setSort={setListSort}
+              header={panelHeader}
               groups={listTree.groups}
               siteCount={listTree.siteCount}
               expanded={expanded}
@@ -804,7 +860,21 @@ useEffect(() => {
               loading={isLoading}
             />
           </div>
-          <div style={{ minHeight: 0, minWidth: 0, height: '100%', overflowY: 'auto' }}>
+          <div style={{ minHeight: 0, minWidth: 0, height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {/* 엑셀·업체 등록 — 맨 위 상단 바를 걷으면서 **우측 pane 우상단**으로 왔다. */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
+              <button type="button" onClick={handleExportExcel} disabled={!canExportExcel || isExporting}
+                style={{ height: 34, padding: '0 12px', display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: R.control, border: '1px solid #ebebeb', background: '#fff', color: '#374151', fontSize: 13, fontWeight: 600, cursor: canExportExcel && !isExporting ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v3h16v-3" />
+                </svg>
+                {isExporting ? '내보내는 중…' : '엑셀'}
+              </button>
+              <button type="button" onClick={() => openAddCustomer()}
+                style={{ height: 34, padding: '0 14px', borderRadius: R.control, border: 'none', background: '#234ea2', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                + 업체 등록
+              </button>
+            </div>
             {selectedSiteId != null ? (
               /* 사업장을 골랐을 때 — **상세 페이지와 같은 본문**이다(컴포넌트 하나를 나눠 쓴다). */
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
@@ -846,14 +916,15 @@ useEffect(() => {
         className="home-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: '360px 1fr',
-          gap: 12,
+          gridTemplateColumns: '340px 1fr',
+          gap: 0,
           alignItems: 'stretch',
           flex: 1,
           minHeight: 0,
         }}
       >
-<div className={mobileTab === 'map' ? 'mobile-hide' : ''} style={{ minHeight: 0, minWidth: 0, height: '100%', overflow: 'hidden' }}>
+<div className={mobileTab === 'map' ? 'mobile-hide' : ''} style={{ minHeight: 0, minWidth: 0, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#fff', borderRight: '1px solid #ebebeb' }}>
+          {panelHeader}
           <Sidebar
             query={query}
             setQuery={setQuery}
@@ -877,10 +948,6 @@ useEffect(() => {
   customers={filteredCustomers}
   deviceMap={deviceMap}
   focusedCustomerId={focusedCustomerId}
-  selectedStatuses={selectedStatuses}
-toggleStatus={toggleStatus}
-selectedCategories={selectedCategories}
-toggleCategory={toggleCategory}
   restoredMapCenter={mapCenter}
   restoredMapLevel={mapLevel}
   restoredOpenOverlayCustomerId={openOverlayCustomerId}
@@ -893,6 +960,16 @@ toggleCategory={toggleCategory}
 </div>
         </div>
       )}
+
+        {filterOpen && (
+          <CustomerFilterModal
+            value={listFilter}
+            options={filterOptions}
+            matchCount={countFor}
+            onApply={next => { setListFilter(next); setFilterOpen(false) }}
+            onClose={() => setFilterOpen(false)}
+          />
+        )}
 
         {isAddCustomerModalOpen && (
         <AddCustomerModal

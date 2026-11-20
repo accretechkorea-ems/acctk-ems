@@ -48,7 +48,7 @@ type Props = {
   onQueryChange?: (query: string) => void
   /**
    * 지금 값이 **사람이 고른 값**인가. 대리점은 필수 선택이라 「아직 안 골랐다」와
-   * 「ACCT-K(직판)를 골랐다」를 구별해야 한다 — 둘 다 값은 null 이기 때문이다.
+   * 「ACCT-K를 골랐다」를 구별해야 한다 — 둘 다 값은 null 이기 때문이다.
    * 고른 적이 없으면 칸을 비워 두고, 저장할 때 부르는 쪽이 막는다.
    */
   chosen?: boolean

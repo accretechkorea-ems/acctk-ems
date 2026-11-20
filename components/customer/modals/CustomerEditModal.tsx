@@ -104,7 +104,7 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
       agency: agencyQuery.trim() && !agencyChosen
         ? '대리점을 목록에서 고르세요'
         : !agencyChosen
-          ? '대리점을 고르세요 (거치지 않으면 ACCT-K(직판))'
+          ? '대리점을 고르세요 (거치지 않으면 ACCT-K)'
           : null,
     })
     if (!ok) return

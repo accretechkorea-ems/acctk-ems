@@ -3,12 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadKakaoMap } from '@/lib/loadKakaoMap'
 import {
-  CARD_BG,
   PANEL_BG,
-  TEXT_PRIMARY,
-  TEXT_SECONDARY,
-  WHITE_BUTTON_BG,
-  WHITE_BUTTON_TEXT,
   getDeviceLines,
   type Customer,
   type Device,
@@ -17,18 +12,12 @@ import { loadOffices, activeOffices, type Office } from '@/lib/offices'
 import { DIRECT_SALE_LABEL } from '@/lib/customerAgency'
 import { useMe } from '@/lib/appData/MeProvider'
 import { useToast } from '@/components/common/Toast'
-import { CATEGORY_OPTIONS } from '@/lib/constants'
-import { Z } from '@/lib/zIndex'
 import { R } from '@/lib/radius'
 
 type Props = {
   customers: Customer[]
   deviceMap: Map<number, Device[]>
   focusedCustomerId: number | null
-  selectedStatuses: string[]
-  toggleStatus: (status: string) => void
-  selectedCategories: string[]
-  toggleCategory: (category: string) => void
   restoredMapCenter: { lat: number; lng: number } | null
   restoredMapLevel: number | null
   restoredOpenOverlayCustomerId: number | null
@@ -40,10 +29,6 @@ export default function MapView({
   customers,
   deviceMap,
   focusedCustomerId,
-  selectedStatuses,
-  toggleStatus,
-  selectedCategories,
-  toggleCategory,
   restoredMapCenter,
   restoredMapLevel,
   restoredOpenOverlayCustomerId,
@@ -490,61 +475,9 @@ useEffect(() => {
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-      {/* 좌측 상단 필터 */}
-      <div style={{ position: 'absolute', top: 14, left: 14, zIndex: Z.inPage, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
-        {/* 1행: 상태 필터 */}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {([
-            { label: '활성', color: '#22c55e', shadow: 'rgba(22,163,74,0.30)' },
-            { label: '잠재', color: '#f59e0b', shadow: 'rgba(245,158,11,0.30)' },
-            { label: '이탈', color: '#f43f5e', shadow: 'rgba(239,68,68,0.30)' },
-          ] as const).map(({ label, color }) => {
-            const active = selectedStatuses.includes(label)
-            return (
-              <button key={label} onClick={() => toggleStatus(label)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 5,
-                  padding: '6px 12px', borderRadius: R.icon,
-                  border: `1px solid ${active ? '#d1d5db' : 'rgba(235,235,235,0.8)'}`,
-                  background: active ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.65)',
-                  color: active ? '#111827' : '#9ca3af',
-                  fontWeight: 700, fontSize: 12, cursor: 'pointer',
-                  backdropFilter: 'blur(4px)',
-                  transition: 'all 0.15s ease',
-                }}>
-                <span style={{
-                  width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                  background: color,
-                  opacity: active ? 1 : 0.35,
-                  transition: 'opacity 0.15s ease',
-                }} />
-                {label}
-              </button>
-            )
-          })}
-        </div>
-
-        {/* 2행: 계열 필터 */}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {CATEGORY_OPTIONS.map(cat => {
-            const active = selectedCategories.includes(cat)
-            return (
-              <button key={cat} onClick={() => toggleCategory(cat)}
-                style={{
-                  padding: '6px 12px', borderRadius: R.icon, cursor: 'pointer', fontSize: 12,
-                  border: `1px solid ${active ? '#d1d5db' : 'rgba(235,235,235,0.8)'}`,
-                  background: active ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.65)',
-                  color: active ? '#111827' : '#9ca3af',
-                  fontWeight: 700,
-                  backdropFilter: 'blur(4px)',
-                  transition: 'all 0.15s ease',
-                }}>
-                {cat}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      {/* 지도 위 오버레이 칩(상태·계열)은 걷었다(2026-11-20) — 고르는 자리는 좌 패널의
+          [필터] 하나다. 지도에 떠 있던 두 줄은 같은 조건을 **두 번째로** 고르는 자리였고,
+          지도에서 켠 것이 목록으로 넘어가지도 않았다(상태가 따로였다). */}
 
       {/* 「업체 등록」 버튼은 **화면 맨 위 헤더**로 옮겼다(2026-11-19). 지도 보기·목록 보기가
           같은 자리에서 같은 폼을 연다 — components/home/ListHeader.tsx. 지도 안에는 등록 진입이 없다. */}
@@ -555,8 +488,8 @@ useEffect(() => {
         className="kakao-map-container"
         style={{
           width: '100%', height: '100%', minHeight: 0,
-          borderRadius: R.control, overflow: 'hidden',
-          border: `1px solid #ebebeb`,
+          // 테두리·둥근 모서리를 뺐다 — 지도는 칸을 **가득** 쓴다(2026-11-20).
+          overflow: 'hidden',
           boxSizing: 'border-box', background: PANEL_BG,
         }}
       />

@@ -9,15 +9,11 @@
 //   「회사」 탭만 돈다. 「대리점」·「미연결」은 **자리와 건수만** 둔다 — 누르면
 //   「다음 회차」라고 알린다. 건수는 진짜 값이라 지금도 규모를 알 수 있다.
 
-import { useMemo, useState, type CSSProperties } from 'react'
-import Popover from '@/components/common/Popover'
-import { useRef } from 'react'
-import { CATEGORY_OPTIONS } from '@/lib/constants'
+import { useMemo, type CSSProperties } from 'react'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import type { AgencyOption } from '@/lib/customerAgency'
-import { REGION_FILTER_OPTIONS } from '@/lib/region'
 import {
-  daysLabel, isStale, type CompanyGroup, type ListFilter, type SortKey,
+  daysLabel, isStale, type CompanyGroup, 
 } from '@/lib/customerList'
 import { R } from '@/lib/radius'
 
@@ -25,7 +21,6 @@ const BORDER = '#ebebeb'
 const TEXT = '#111827'
 const SUB = '#6b7280'
 const MUTED = '#9ca3af'
-const FAINT = '#d1d5db'
 const BLUE = '#234ea2'
 const NEUTRAL = '#f3f4f6'
 const DANGER = '#ef4444'
@@ -50,10 +45,8 @@ type Props = {
   tab: ListTab
   setTab: (t: ListTab) => void
   counts: { company: number; agency: number; unlinked: number }
-  filter: ListFilter
-  setFilter: (next: ListFilter) => void
-  sort: SortKey
-  setSort: (s: SortKey) => void
+  /** 패널 맨 위에 그대로 끼워 넣는다 — 보기 토글·검색·필터 줄(PanelHeader). */
+  header?: React.ReactNode
   groups: CompanyGroup[]
   siteCount: number
   /** 펼친 회사 id 집합. */
@@ -110,62 +103,15 @@ const chipStyle = (on: boolean): CSSProperties => ({
   whiteSpace: 'nowrap',
 })
 
-/** 여러 값을 고르는 칩 — 눌러서 목록을 펼친다(지역·분류·상태가 같은 모양이다). */
-function MultiChip({ label, options, value, onChange, allLabel = '전체' }: {
-  label: string
-  options: readonly string[]
-  value: string[]
-  onChange: (next: string[]) => void
-  allLabel?: string
-}) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  const all = value.length === options.length
-  const text = all ? allLabel : value.length === 0 ? '없음' : value.length <= 2 ? value.join('·') : `${value.length}개`
-  return (
-    <div ref={ref} style={{ display: 'inline-flex' }}>
-      <button type="button" onClick={() => setOpen(o => !o)} style={chipStyle(!all)}>
-        {label} <b style={{ fontWeight: 700, color: all ? TEXT : BLUE }}>{text}</b>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9" /></svg>
-      </button>
-      <Popover anchorRef={ref} open={open} onClose={() => setOpen(false)} maxHeight={280}
-        style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.control, boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: 6, minWidth: 150 }}>
-        <button type="button"
-          onMouseDown={e => { e.preventDefault(); onChange(all ? [] : [...options]) }}
-          style={{ width: '100%', textAlign: 'left', padding: '7px 9px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: BLUE, borderBottom: `1px solid ${BORDER}` }}>
-          {all ? '모두 끄기' : '모두 켜기'}
-        </button>
-        {options.map(o => {
-          const on = value.includes(o)
-          return (
-            <button key={o} type="button"
-              onMouseDown={e => { e.preventDefault(); onChange(on ? value.filter(v => v !== o) : [...value, o]) }}
-              style={{ width: '100%', textAlign: 'left', padding: '7px 9px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: on ? TEXT : MUTED, display: 'flex', alignItems: 'center', gap: 7 }}>
-              <span style={{ width: 13, height: 13, borderRadius: R.tag, border: `1px solid ${on ? BLUE : FAINT}`, background: on ? BLUE : '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                {on && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>}
-              </span>
-              {o || '(없음)'}
-            </button>
-          )
-        })}
-      </Popover>
-    </div>
-  )
-}
 
 export default function CustomerListPanel({
-  tab, setTab, counts, filter, setFilter, sort, setSort,
+  tab, setTab, counts, header,
   groups, siteCount, expanded, toggleExpand, selectedCompanyId, selectedSiteId,
   onSelectCompany, onSelectSite, loading,
   checkedCompanies, toggleCompanyCheck, clearCompanyChecks, onBulkIndustry,
   cleanup, cleanupBucket, setCleanupBucket, onDeleteCompany,
   agencies, agencySiteCount, onPickAgency, agencyFilterId, clearAgencyFilter,
 }: Props) {
-  const sortRef = useRef<HTMLDivElement>(null)
-  const [sortOpen, setSortOpen] = useState(false)
-  const sortLabel = sort === 'touch' ? '최근 활동순' : '이름순'
-
-  const statusOptions = useMemo(() => ['활성', '잠재', '이탈'], [])
   /** 정리 필요 배지 — 네 묶음에 든 회사 수(겹치면 한 번만). */
   const cleanupCount = useMemo(
     () => new Set(Object.values(cleanup).flat().map(r => r.companyId)).size,
@@ -173,7 +119,10 @@ export default function CustomerListPanel({
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.control, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.card, overflow: 'hidden' }}>
+
+      {/* 패널 머리줄 — 보기 토글·검색·필터 줄. 지도 보기와 같은 부품이다. */}
+      {header}
 
       {/* 탭 — 이번 회차는 회사 탭만 돈다 */}
       <div style={{ display: 'flex', borderBottom: `1px solid ${BORDER}`, padding: '0 8px', flexShrink: 0 }}>
@@ -191,47 +140,10 @@ export default function CustomerListPanel({
         <span style={{ flex: 1, minWidth: 8 }} />
       </div>
 
-      {/* 필터 칩 */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '10px 12px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
-        {/* 지역 — 데이터에 무엇이 들어 있든 **정본 17개 + 없음** 고정이다(lib/region.ts).
-            전에는 데이터에서 긁어 와 「경기도」·「갈산리」까지 칩이 됐다. */}
-        <MultiChip label="지역" options={REGION_FILTER_OPTIONS} value={filter.regions.length ? filter.regions : [...REGION_FILTER_OPTIONS]}
-          onChange={next => setFilter({ ...filter, regions: next.length === REGION_FILTER_OPTIONS.length ? [] : next })} />
-        <MultiChip label="분류" options={CATEGORY_OPTIONS} value={filter.categories}
-          onChange={next => setFilter({ ...filter, categories: next })} />
-        <MultiChip label="상태" options={statusOptions} value={filter.statuses}
-          onChange={next => setFilter({ ...filter, statuses: next })} />
-        <button type="button" style={chipStyle(filter.staleOnly)}
-          onClick={() => setFilter({ ...filter, staleOnly: !filter.staleOnly })}>90일 활동 없음</button>
-        <button type="button" style={chipStyle(filter.openQuotesOnly)}
-          onClick={() => setFilter({ ...filter, openQuotesOnly: !filter.openQuotesOnly })}>진행 견적</button>
-        {/* 분류가 비어 있는 회사만 — 정리 SQL 이 만든 회사 대부분이 그렇다. 채우러 가는 길이다. */}
-        <button type="button" style={chipStyle(filter.noIndustryOnly)}
-          onClick={() => setFilter({ ...filter, noIndustryOnly: !filter.noIndustryOnly })}>분류 없음</button>
+      {/* 건수 — 정렬은 패널 머리줄(PanelHeader)로 옮겼다. */}
+      <div style={{ padding: '8px 14px 4px', fontSize: 12, color: SUB, flexShrink: 0 }}>
+        조건 일치 <b style={{ color: TEXT }}>{siteCount}</b>곳 · 회사 <b style={{ color: TEXT }}>{groups.length}</b>
       </div>
-
-      {/* 건수 · 정렬 */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px 4px', fontSize: 12, color: SUB, flexShrink: 0 }}>
-        <span>조건 일치 <b style={{ color: TEXT }}>{siteCount}</b>곳 · 회사 <b style={{ color: TEXT }}>{groups.length}</b></span>
-        <div ref={sortRef} style={{ display: 'inline-flex' }}>
-          <button type="button" onClick={() => setSortOpen(o => !o)}
-            style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: SUB, display: 'inline-flex', alignItems: 'center', gap: 3, padding: 0 }}>
-            {sortLabel}
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9" /></svg>
-          </button>
-          <Popover anchorRef={sortRef} open={sortOpen} onClose={() => setSortOpen(false)} align="end"
-            style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.control, boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: 4, minWidth: 120 }}>
-            {([['touch', '최근 활동순'], ['name', '이름순']] as const).map(([k, label]) => (
-              <button key={k} type="button"
-                onMouseDown={e => { e.preventDefault(); setSort(k); setSortOpen(false) }}
-                style={{ width: '100%', textAlign: 'left', padding: '7px 9px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: sort === k ? BLUE : TEXT, fontWeight: sort === k ? 700 : 500 }}>
-                {label}
-              </button>
-            ))}
-          </Popover>
-        </div>
-      </div>
-
       {/* 대리점으로 걸러 보고 있을 때 — 어디서 온 목록인지 알린다(7). */}
       {tab === 'company' && agencyFilterId != null && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', background: '#eff4ff', fontSize: 12, color: BLUE }}>

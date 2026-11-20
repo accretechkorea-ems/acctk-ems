@@ -150,11 +150,37 @@ export type ListFilter = {
    * 보는 조건이라 묶은 뒤에 거른다.
    */
   noIndustryOnly: boolean
+  /**
+   * 대리점(customers.agency_customer_id). 빈 배열이면 전체 —
+   * 「좁히지 않음」은 **빈 배열**이다(상태·분류와 달리 0이 「아무것도 아님」이 아니다).
+   * 직판은 `DIRECT_SALE` 로 고른다.
+   */
+  agencies: number[]
+  /** 최근 활동 — 하나만 고른다. 'any' 가 좁히지 않음이다. */
+  recent: RecentKey
+}
+
+/** 최근 활동 조건. 날짜 계산은 `matchesRecent` 한 곳에서 한다. */
+export const RECENT_KEYS = ['any', 'in30', 'no90', 'no365'] as const
+export type RecentKey = (typeof RECENT_KEYS)[number]
+export const RECENT_LABEL: Record<RecentKey, string> = {
+  any: '전체', in30: '30일 이내', no90: '90일 없음', no365: '1년 없음',
+}
+
+/** 직판을 고르는 열쇠 — 대리점 id 가 아니라서 음수로 둔다(실제 id 와 겹치지 않는다). */
+export const DIRECT_SALE = -1
+
+/** 접점 경과일이 조건에 맞는가. 접점이 아예 없으면 「없음」 쪽 조건에 맞는 것으로 본다. */
+export function matchesRecent(days: number | null, key: RecentKey): boolean {
+  if (key === 'any') return true
+  if (key === 'in30') return days !== null && days <= 30
+  if (key === 'no90') return days === null || days >= 90
+  return days === null || days >= 365
 }
 
 export const EMPTY_FILTER: ListFilter = {
   query: '', regions: [], categories: [], statuses: [], staleOnly: false, openQuotesOnly: false,
-  noIndustryOnly: false,
+  noIndustryOnly: false, agencies: [], recent: 'any',
 }
 
 /** 한 사업장이 조건에 맞는가. 분류는 **그 사업장의 장비 분류**를 본다. */
@@ -178,7 +204,12 @@ export function matchesSite(
   if (known.length > 0 && !known.some(x => filter.categories.includes(x))) return false
 
   if (filter.staleOnly && !isStale(site.days)) return false
+  if (!matchesRecent(site.days, filter.recent)) return false
   if (filter.openQuotesOnly && site.openQuotes === 0) return false
+  if (filter.agencies.length > 0) {
+    const a = c.agency_customer_id ?? DIRECT_SALE
+    if (!filter.agencies.includes(a)) return false
+  }
 
   const q = filter.query.trim().toLowerCase()
   if (!q) return true

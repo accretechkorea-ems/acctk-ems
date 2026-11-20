@@ -160,10 +160,10 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
       rules[`site_${i}`] = isAgency || s.address.trim() ? null : '주소를 입력해주세요'
       rules[`siteName_${i}`] = isAgency || s.siteName.trim() ? null : '사업장명을 입력해주세요'
       // 대리점은 **고르는 칸**이다. 적기만 한 글자는 저장되지 않고, 고르지 않으면 넘어가지 못한다
-      // — 거치지 않는 건이면 ACCT-K(직판)를 고른다(비워 두는 것과 뜻이 다르다).
+      // — 거치지 않는 건이면 ACCT-K를 고른다(비워 두는 것과 뜻이 다르다).
       rules[`agency_${i}`] = isAgency ? null
         : s.agencyQuery.trim() && !s.agencyChosen ? '대리점을 목록에서 고르세요'
-        : !s.agencyChosen ? '대리점을 고르세요 (거치지 않으면 ACCT-K(직판))'
+        : !s.agencyChosen ? '대리점을 고르세요 (거치지 않으면 ACCT-K)'
         : null
       s.contacts.forEach((c, ci) => {
         // 담당자 블록은 **선택**이다. 한 칸이라도 적었으면 이름·전화는 있어야 연락이 된다.
@@ -198,9 +198,10 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
   }
 
   const segBtn = (on: boolean): React.CSSProperties => ({
-    height: 32, padding: '0 16px', borderRadius: R.icon, border: 'none', cursor: 'pointer',
+    height: 28, padding: '0 14px', borderRadius: R.icon, border: 'none', cursor: 'pointer',
     background: on ? '#fff' : 'transparent', color: on ? TEXT : MUTED,
-    fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
+    fontSize: 13, fontWeight: on ? 700 : 500, fontFamily: 'inherit',
+    boxShadow: on ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
   })
   const smallBtn: React.CSSProperties = {
     height: 26, padding: '0 10px', borderRadius: R.icon, border: `1px solid ${BORDER}`,
@@ -216,21 +217,24 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
           // 폭은 PDF 뷰어와 같은 규칙 — 화면이 좁으면 92%, 넓어도 1100px 을 넘지 않는다.
           width: 'min(92vw, 1100px)', maxWidth: 'min(92vw, 1100px)',
           maxHeight: '96vh', overflowY: 'auto',
-          background: '#fff', color: TEXT, borderRadius: R.control, padding: 22,
+          background: '#fff', color: TEXT, borderRadius: R.modal, padding: 22,
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
           animation: 'modal-in 0.18s ease',
         }}>
         <FormFocusStyle />
-        {/* ── ① 종류 — 맨 위, **모달 폭 기준 가운데**. 무엇을 만드는지가 첫 결정이다. */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-          <div style={{ display: 'inline-flex', gap: 3, padding: 3, borderRadius: R.control, background: NEUTRAL }}>
-            <button type="button" onClick={() => setKind('customer')} style={segBtn(!isAgency)}>고객사</button>
-            <button type="button" onClick={() => setKind('agency')} style={segBtn(isAgency)}>대리점</button>
+        {/* ── ① 제목과 종류 — **한 줄**. 종류는 오른쪽 끝에 선다(지도·목록 토글과 같은 모양).
+            가운데에 따로 한 줄을 두었더니 제목 위에 뜬금없는 줄이 하나 더 있는 꼴이었다. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px' }}>
+            {existing ? '기존 회사에 사업장 추가' : isAgency ? '대리점 등록' : '업체 등록'}
           </div>
-        </div>
-
-        <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px', marginBottom: 16 }}>
-          {existing ? '기존 회사에 사업장 추가' : isAgency ? '대리점 등록' : '업체 등록'}
+          <span style={{ flex: 1 }} />
+          {!existing && (
+            <div style={{ display: 'inline-flex', gap: 2, padding: 3, borderRadius: R.control, background: NEUTRAL }}>
+              <button type="button" onClick={() => setKind('customer')} style={segBtn(!isAgency)}>고객사</button>
+              <button type="button" onClick={() => setKind('agency')} style={segBtn(isAgency)}>대리점</button>
+            </div>
+          )}
         </div>
 
         {/* ── ② 업체 정보 — 한 줄 세 칸 ── */}

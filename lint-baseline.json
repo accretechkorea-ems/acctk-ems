@@ -1,6 +1,6 @@
 {
-  "comment": "eslint 경고 기준선. 이 수를 넘으면 CI 가 막는다(scripts/lint-baseline.js). 경고를 줄였으면 이 값도 같이 내린다 — 내리지 않으면 다시 늘어나도 아무도 모른다. 133→135 는 하네스 scripts/icon-button-check.js 가 더해진 몫(CJS require 2줄)이다.",
-  "maxWarnings": 135,
+  "comment": "eslint 경고 기준선. 이 수를 넘으면 CI 가 막는다(scripts/lint-baseline.js). 경고를 줄였으면 이 값도 같이 내린다 — 내리지 않으면 다시 늘어나도 아무도 모른다. 135→130 은 상단 바(ListHeader)와 지도 오버레이 칩을 걷으면서 쓰지 않게 된 import 5건 몫이다(2026-11-20).",
+  "maxWarnings": 130,
   "maxErrors": 0,
-  "updated": "2026-11-19"
+  "updated": "2026-11-20"
 }
