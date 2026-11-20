@@ -166,6 +166,21 @@ useEffect(() => {
     if (typeof window === 'undefined') return
     const q = new URLSearchParams(window.location.search)
     if (q.get('view') === 'list') setView('list')
+    /**
+     * 사업장 화면의 회사명을 눌러 들어온 길(`?company=`) — 목록 보기로 서면서 **그 회사가
+     * 골라진 채** 열린다(components/customer/CompanyLink.tsx).
+     *
+     * `site` 와 달리 주소에서 털지 않는다 — 새로고침해도 그 회사가 그대로 열려야 한다.
+     * 아래 replaceState 효과가 고른 회사와 이 값을 맞춰 둔다.
+     */
+    const company = Number(q.get('company'))
+    if (Number.isInteger(company) && company > 0) {
+      setView('list')
+      setListTab('company')
+      setSelectedCompanyId(company)
+      setSelectedSiteId(null)
+      setExpanded(prev => new Set(prev).add(company))
+    }
     // 활동 현황에서 넘어온 길 — 그 사업장의 **회사**를 펴고 칩을 켠 뒤 그 줄로 내려간다.
     const site = Number(q.get('site'))
     if (Number.isInteger(site) && site > 0) {
@@ -193,10 +208,13 @@ useEffect(() => {
     const url = new URL(window.location.href)
     if (view === 'list') url.searchParams.set('view', 'list')
     else url.searchParams.delete('view')
+    // 고른 회사는 주소에 남긴다 — 새로고침해도 그 회사가 열린 채다(목록 보기의 주소다).
+    if (view === 'list' && selectedCompanyId != null) url.searchParams.set('company', String(selectedCompanyId))
+    else url.searchParams.delete('company')
     // 찾아가기 값은 한 번 쓰고 주소에서 턴다 — 새로고침·뒤로가기에 다시 뜨지 않게.
     if (timelineFocusKey == null) { url.searchParams.delete('site'); url.searchParams.delete('focus') }
     if (url.toString() !== window.location.href) window.history.replaceState(null, '', url.toString())
-  }, [view, timelineFocusKey])
+  }, [view, timelineFocusKey, selectedCompanyId])
 
   // 작성자 이름 — 목록 보기의 표가 쓴다.
   useEffect(() => {

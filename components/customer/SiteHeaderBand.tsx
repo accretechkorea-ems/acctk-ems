@@ -25,8 +25,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { AddIconButton, EditIconButton } from '@/components/common/IconButton'
 import BackIconButton from '@/components/common/BackIconButton'
-import MemoPopover, { hasMemo } from '@/components/common/MemoPopover'
+import { hasMemo } from '@/components/common/MemoPopover'
+import MemoHoverText from '@/components/common/MemoHoverText'
 import { agencyLabelOf } from '@/lib/customerAgency'
+import CompanyLink from '@/components/customer/CompanyLink'
 import { R } from '@/lib/radius'
 import type { Contact, Customer } from './types'
 
@@ -39,6 +41,16 @@ const DANGER = '#ef4444'
 
 const STATUS_DOT: Record<string, string> = { '활성': '#16a34a', '잠재': '#f59e0b', '이탈': '#ef4444' }
 
+/**
+ * 사업장명 글자 크기 — 회사명(20)보다 **한 단 작다**.
+ *
+ * 디자인 시스템의 스케일(11·12·13·14·15·16·17·20)에는 없는 값이다. 두 이름을 한 줄에
+ * 세우려면 20 과 17 은 차이가 약해 「회사 » 사업장」의 층이 보이지 않았고, 17 아래로는
+ * 사업장명이 주소줄과 섞였다. 2026-11-20 사용자 지시로 이 자리에만 둔다
+ * (.claude/rules/design-system.md 의 예외 항목에 적었다).
+ */
+const SITE_NAME_SIZE = 18
+
 /** 담당자 칩 한 줄 높이와 사이 간격. 두 줄까지 보이는 높이를 이 값으로 셈한다. */
 const CHIP_H = 30
 const CHIP_GAP = 8
@@ -50,7 +62,10 @@ type Props = {
   companyName?: string | null
   contacts: Contact[]
   onBack?: () => void
-  /** 회사 보기로. 없으면 회사명을 그냥 글자로 둔다(상세 페이지 단독). */
+  /**
+   * 회사 보기로 — **분할 보기 안에서만** 온다(우측 pane 을 갈아 끼운다).
+   * 상세 페이지에서는 이것이 없고, 대신 회사 id 로 목록 보기로 옮겨 간다(CompanyLink).
+   */
   onOpenCompany?: () => void
   onEdit: () => void
   onAddContact: () => void
@@ -99,6 +114,8 @@ export default function SiteHeaderBand({
 
   const dot = STATUS_DOT[customer?.status ?? ''] ?? MUTED
   const title = companyName?.trim() || customer?.company_name || '사업장 정보 없음'
+  /** 묶인 회사의 id — 상세 페이지에서 회사 보기로 가는 길이 이 값이다(없으면 단독 업체다). */
+  const companyId = customer?.parent_customer_id ?? null
 
   /**
    * 두 줄 밖으로 밀린 칩이 몇 개인가 — **그려 본 뒤**에만 알 수 있다.
@@ -149,6 +166,8 @@ export default function SiteHeaderBand({
           .site-band .band-rule { display: none }
           .site-band .band-right { border-top: 1px solid ${BORDER}; padding-top: 12px }
           .site-band .edit1, .site-band .edit2 { opacity: 1 }
+          /* 폰에는 호버가 없다 — 메모는 줄여 두지 않고 전부 보여 준다. */
+          .site-band .band-memo { white-space: pre-wrap !important; overflow: visible !important; word-break: break-word }
         }
       `}</style>
 
@@ -157,21 +176,24 @@ export default function SiteHeaderBand({
         <EditIconButton label="사업장 정보 수정" onClick={onEdit} />
       </span>
 
-      {/* ── 좌: 누구인가 ── */}
+      {/* ── 좌: 누구인가 — 세 줄이다(이름 / 주소 / 대리점) ── */}
       <div style={{ minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', minWidth: 0 }}>
-          {onBack && <BackIconButton onClick={onBack} label="이전 화면으로" />}
-          {onOpenCompany ? (
-            <button type="button" onClick={onOpenCompany} title="회사 보기"
-              style={{ padding: 0, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-              <span style={{ fontSize: 17, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px', borderBottom: `1px dashed ${MUTED}` }}>{title}</span>
-            </button>
-          ) : (
-            <span style={{ fontSize: 17, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px' }}>{title}</span>
+        {/* 1줄 — 회사명 20 » 사업장명 18 · 상태.
+            기준선(baseline)으로 맞춘다 — 크기가 다른 두 이름이 **글자 밑선**에서 만나야
+            한 이름처럼 읽힌다. 상태 dot·글자도 그 줄(사업장명 기준선)에 선다.
+            「»」만 세로 중앙이다 — 글자 밑선에 맞추면 두 이름 사이에서 아래로 처진다. */}
+        <div className="band-name" style={{ display: 'flex', alignItems: 'baseline', gap: 7, flexWrap: 'wrap', minWidth: 0 }}>
+          {onBack && (
+            <span style={{ alignSelf: 'center', display: 'inline-flex' }}>
+              <BackIconButton onClick={onBack} label="이전 화면으로" />
+            </span>
           )}
-          <span aria-hidden style={{ color: MUTED, fontWeight: 700 }}>»</span>
+          {/* 분할 보기 안이면 pane 을 갈아 끼우고, 상세 페이지에서는 목록 보기로 옮겨 간다 —
+              한 부품이 두 경우를 맡는다(components/customer/CompanyLink.tsx). */}
+          <CompanyLink name={title} companyId={companyId} onOpen={onOpenCompany} />
+          <span aria-hidden style={{ alignSelf: 'center', fontSize: 15, color: MUTED, fontWeight: 700 }}>»</span>
           {customer?.site_name?.trim()
-            ? <b style={{ fontSize: 17, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px' }}>{customer.site_name.trim()}</b>
+            ? <b style={{ fontSize: SITE_NAME_SIZE, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px' }}>{customer.site_name.trim()}</b>
             : <span style={{ fontSize: 11, fontWeight: 700, color: DANGER, background: '#fef2f2', borderRadius: R.tag, padding: '2px 7px' }}>사업장명 입력 필요</span>}
           {customer?.status && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, color: SUB }}>
@@ -181,25 +203,29 @@ export default function SiteHeaderBand({
           )}
         </div>
 
-        {/* 주소·대리점 — 좁아지면 대리점이 아랫줄로 내려간다(칸 밖으로 나가지 않는다). */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px 16px', flexWrap: 'wrap', marginTop: 10, paddingLeft: 38, fontSize: 13, color: LABEL, minWidth: 0 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-            <span style={{ color: MUTED }}>주소</span>
-            <span style={{ color: customer?.address ? LABEL : DANGER, fontWeight: customer?.address ? 400 : 600, wordBreak: 'break-all' }}>
-              {customer?.address ?? '주소 없음 — 수정 필요'}
-            </span>
-            {customer?.address && (
-              <button onClick={copy} title="주소 복사" aria-label="주소 복사"
-                style={{ padding: 2, background: 'none', border: 'none', cursor: 'pointer', color: copied ? '#16a34a' : MUTED, display: 'inline-flex' }}>
-                {copied ? (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                ) : (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
-                )}
-              </button>
-            )}
+        {/* 2줄 — 주소 ⧉. 한 줄을 다 쓴다(대리점과 나란히 두던 때는 긴 주소가 대리점을
+            밀어 아랫줄로 보냈고, 그때마다 카드 높이가 들쭉날쭉했다). */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 10, paddingLeft: 38, fontSize: 13, color: LABEL, minWidth: 0 }}>
+          <span style={{ color: MUTED, flexShrink: 0 }}>주소</span>
+          <span style={{ color: customer?.address ? LABEL : DANGER, fontWeight: customer?.address ? 400 : 600, wordBreak: 'break-all', minWidth: 0 }}>
+            {customer?.address ?? '주소 없음 — 수정 필요'}
           </span>
-          <span style={{ whiteSpace: 'nowrap' }}><span style={{ color: MUTED, marginRight: 4 }}>대리점</span>{agencyLabelOf(customer)}</span>
+          {customer?.address && (
+            <button onClick={copy} title="주소 복사" aria-label="주소 복사"
+              style={{ padding: 2, background: 'none', border: 'none', cursor: 'pointer', color: copied ? '#16a34a' : MUTED, display: 'inline-flex', flexShrink: 0 }}>
+              {copied ? (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+              ) : (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+              )}
+            </button>
+          )}
+        </div>
+
+        {/* 3줄 — 대리점. 직판이면 「ACCT-K」다(lib/customerAgency.ts 의 DIRECT_SALE_LABEL). */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6, paddingLeft: 38, fontSize: 13, color: LABEL, minWidth: 0 }}>
+          <span style={{ color: MUTED, flexShrink: 0 }}>대리점</span>
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agencyLabelOf(customer)}</span>
         </div>
       </div>
 
@@ -232,14 +258,18 @@ export default function SiteHeaderBand({
         </div>
 
         {/* 메모 — 같은 열 정렬. 없으면 **라벨만** 둔다(없다는 것을 아이콘으로 말하지 않는다).
-            있으면 기존 MemoPopover 가 그대로 뜬다(읽기 전용 — 고치는 길은 사업장 수정 모달이다). */}
+            아이콘은 걷었다(2026-11-20) — 읽는 자리라 글자가 바로 서는 편이 빠르다.
+            한 줄로 줄이고, 손을 300ms 올리면 기존 메모 판과 **같은 모양**으로 전부 뜬다.
+            폰(≤640)에서는 떠오르는 판이 손에 안 맞으므로 줄바꿈으로 다 보여 준다. */}
         <div style={{ display: 'grid', gridTemplateColumns: '44px minmax(0, 1fr)', gap: '0 8px', alignItems: 'start', fontSize: 13, color: LABEL }}>
           <span style={{ color: MUTED }}>메모</span>
           {hasMemo(memo) ? (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-              <MemoPopover title={customer?.company_name ?? '사업장'} value={memo} label="사업장 메모" />
-              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{memo}</span>
-            </span>
+            <MemoHoverText
+              className="band-memo"
+              title={customer?.company_name ?? '사업장'}
+              value={memo}
+              style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: LABEL, outline: 'none', cursor: 'default' }}
+            />
           ) : <span />}
         </div>
       </div>

@@ -35,6 +35,20 @@ const BORDER = '#ebebeb'
 const MUTED = '#9ca3af'
 const TEXT = '#111827'
 
+/**
+ * 떠오르는 판의 **생김새** — 메모를 보여 주는 자리는 전부 이것을 쓴다
+ * (이 파일의 팝오버와, 아이콘 없이 글자로 보여 주는 MemoHoverText).
+ * 폭은 부르는 쪽이 정한다(편집 중에는 360).
+ */
+export const MEMO_PANEL_STYLE: React.CSSProperties = {
+  background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.control,
+  boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '10px 12px',
+  minWidth: 220, maxWidth: 380, textAlign: 'left',
+  // 편집 중에는 글상자를 눌러야 하므로 손을 받아야 한다. 읽기만 할 때도
+  // 판 위에서 손이 머물면 닫히지 않게 둔다(아래 onMouseEnter).
+  pointerEvents: 'auto',
+}
+
 /** 메모가 있는가 — 공백만 있는 값은 없는 것으로 본다(아이콘 색 판정). */
 export const hasMemo = (value: string | null | undefined): boolean => !!(value ?? '').trim()
 
@@ -172,14 +186,7 @@ export default function MemoPopover({
         gap={6}
         width={editing ? 360 : undefined}
         maxHeight={MEMO_MAX_HEIGHT}
-        style={{
-          background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.control,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '10px 12px',
-          minWidth: 220, maxWidth: 380, textAlign: 'left',
-          // 편집 중에는 글상자를 눌러야 하므로 손을 받아야 한다. 읽기만 할 때도
-          // 팝오버 위에서 손이 머물면 닫히지 않게 둔다(아래 onMouseEnter).
-          pointerEvents: 'auto',
-        }}
+        style={MEMO_PANEL_STYLE}
       >
         <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => { if (!pinned) setHovered(false) }}>
           {/* 제목 — 어느 건의 메모인지 */}
