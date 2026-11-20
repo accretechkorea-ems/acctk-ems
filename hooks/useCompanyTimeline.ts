@@ -26,14 +26,38 @@ export type CompanyTimelineData = {
   opportunities: SalesOpportunity[]
   /** 고객 사건 로그(db/customer_events_20261120.sql). 표가 아직 없으면 빈 배열이다. */
   events: CustomerEvent[]
+  /** 이 사업장들에 걸린 의뢰서. customer_id 칸이 없으면 빈 배열이다. */
+  inquiries: InquiryRow[]
   loading: boolean
   /** 마지막 조회에 걸린 밀리초. */
   ms: number
   reload: () => void
 }
 
+/** 활동 이력에 쓰는 의뢰서 칸만. */
+export type InquiryRow = {
+  id: string
+  customer_id: number | null
+  device_id: number | null
+  inquiry_no: string | null
+  inquiry_type: string | null
+  title: string | null
+  status: string | null
+  issued_date: string | null
+  created_by: number | null
+  created_at: string | null
+}
+
+/**
+ * 의뢰서에 customer_id 칸이 있는가. **한 번 실패하면 그 세션에서는 다시 묻지 않는다** —
+ * 칸이 없는 DB(= SQL 적용 전)에서 회사를 고를 때마다 400 이 쌓이기 때문이다.
+ * 칸을 더하고 새로고침하면 다시 참이 된다(db/inquiry_customer_device_20261120.sql).
+ */
+let inquiryLinked = true
+
 const EMPTY: Omit<CompanyTimelineData, 'reload'> = {
   history: [], quotes: [], activities: [], holdings: [], devices: [], contacts: [], opportunities: [], events: [],
+  inquiries: [],
   loading: false, ms: 0,
 }
 
@@ -75,13 +99,24 @@ export function useCompanyTimeline(siteIds: number[]): CompanyTimelineData {
       supabase.from('customer_events')
         .select('id, customer_id, event_type, occurred_at, actor_engineer_id, payload')
         .in('customer_id', ids).order('occurred_at', { ascending: false }),
-    ]).then(([h, q, a, hold, d, c, o, ev]) => {
+      // 의뢰서 — customer_id 칸은 2026-11-20 에 더했다. 칸이 없으면 한 번만 묻고 접는다.
+      inquiryLinked
+        ? supabase.from('inquiries')
+          .select('id, customer_id, device_id, inquiry_no, inquiry_type, title, status, issued_date, created_by, created_at')
+          .in('customer_id', ids).order('issued_date', { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
+    ]).then(([h, q, a, hold, d, c, o, ev, iq]) => {
       if (cancelled) return
       for (const r of [h, q, a, hold, d, c, o]) {
         if (r.error) console.error('[companyTimeline] 조회 실패', r.error)
       }
       // 사건 표가 아직 없을 수 있다(SQL 적용 전) — 그때는 사건만 비고 나머지는 그대로 보인다.
       if (ev.error) console.warn('[companyTimeline] 사건 로그를 읽지 못했다 (db/customer_events_20261120.sql)', ev.error.message)
+      // 의뢰서의 customer_id 칸도 마찬가지다(db/inquiry_customer_device_20261120.sql).
+      if (iq.error) {
+        inquiryLinked = false
+        console.warn('[companyTimeline] 의뢰서를 읽지 못했다 — 이 세션에서는 더 묻지 않는다 (db/inquiry_customer_device_20261120.sql)', iq.error.message)
+      }
       setData({
         history: (h.data as ServiceHistory[]) ?? [],
         quotes: (q.data as Quote[]) ?? [],
@@ -91,6 +126,7 @@ export function useCompanyTimeline(siteIds: number[]): CompanyTimelineData {
         contacts: (c.data as Contact[]) ?? [],
         opportunities: (o.data as SalesOpportunity[]) ?? [],
         events: (ev.data as CustomerEvent[]) ?? [],
+        inquiries: (iq.data as InquiryRow[]) ?? [],
         loading: false,
         ms: Math.round(performance.now() - started),
       })

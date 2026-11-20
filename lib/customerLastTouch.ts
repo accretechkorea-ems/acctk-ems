@@ -16,7 +16,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-export type TouchSource = '영업활동' | '서비스' | '견적' | '수리'
+export type TouchSource = '영업활동' | '서비스' | '견적' | '수리' | '의뢰'
 
 /**
  * 마지막 접점 한 건. `actorId` 는 **그 일을 한 우리 쪽 사람**이다(활동 등록자·견적
@@ -49,12 +49,15 @@ export function pickLastTouch(input: {
   service?: TouchInput[]
   quote?: TouchInput[]
   repair?: TouchInput[]
+  /** 의뢰서 — 사업장이 걸린 건만 들어온다(db/inquiry_customer_device_20261120.sql). */
+  inquiry?: TouchInput[]
 }): LastTouch | null {
   const groups: [TouchSource, TouchInput[]][] = [
     ['영업활동', input.activity ?? []],
     ['서비스', input.service ?? []],
     ['견적', input.quote ?? []],
     ['수리', input.repair ?? []],
+    ['의뢰', input.inquiry ?? []],
   ]
   let best: LastTouch | null = null
   for (const [source, list] of groups) {
@@ -101,6 +104,12 @@ function group(rows: Rows): Map<number, TouchEntry[]> {
  * 모든 업체의 마지막 접점. 네 표를 한 번씩 읽는다(각 5,000줄까지).
  * supabase 클라이언트는 화면용·service role 어느 쪽이든 된다.
  */
+/**
+ * 의뢰서에 customer_id 칸이 있는가. 한 번 실패하면 그 세션에서는 다시 묻지 않는다
+ * (칸을 더하기 전에는 목록을 열 때마다 400 이 쌓인다).
+ */
+let inquiryLinked = true
+
 export async function loadLastTouchMap(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sb: SupabaseClient<any, any, any>,
@@ -108,13 +117,23 @@ export async function loadLastTouchMap(
   // 작성자도 함께 읽는다 — 목록 보기의 「최근 활동 · 작성자」 칸이 쓴다.
   //   영업활동 engineer_id · 견적 engineer_id(실적 귀속자) · 수리 created_by
   //   서비스는 참여자가 다대다라 service_engineers 를 한 번 더 읽어 **첫 사람**을 쓴다.
-  const [act, svc, quo, rep, se] = await Promise.all([
+  const [act, svc, quo, rep, se, inq] = await Promise.all([
     sb.from('sales_activities').select('customer_id, activity_date, engineer_id').range(0, 5000),
     sb.from('service_history').select('customer_id, visit_date, service_id').range(0, 5000),
     sb.from('quotes').select('customer_id, quote_date, engineer_id').range(0, 5000),
     sb.from('repairs').select('customer_id, received_date, shipped_date, created_by').range(0, 5000),
     sb.from('service_engineers').select('service_id, engineer_id').range(0, 5000),
+    // 의뢰서 — customer_id 칸은 2026-11-20 에 더했다(db/inquiry_customer_device_20261120.sql).
+    // **칸이 아직 없는 DB 에서도 나머지는 돌아야 한다** — 실패하면 빈 묶음으로 둔다
+    // (name_en 때와 같은 방식이다. 칸이 없으면 42703, 캐시가 옛 것이면 PGRST204 가 온다).
+    inquiryLinked
+      ? sb.from('inquiries').select('customer_id, issued_date, created_by').range(0, 5000)
+      : Promise.resolve({ data: [], error: null }),
   ])
+  if (inq.error) {
+    inquiryLinked = false
+    console.warn('[lastTouch] 의뢰서는 건너뛴다 — 이 세션에서는 더 묻지 않는다', inq.error.code, inq.error.message)
+  }
   // 서비스 한 건의 첫 참여자(id 가 작은 쪽 — 같은 건이면 늘 같은 사람이 나온다).
   const firstEngineer = new Map<number, number>()
   for (const r of (se.data ?? []) as { service_id: number | null; engineer_id: number | null }[]) {
@@ -130,11 +149,13 @@ export async function loadLastTouchMap(
   const quote = group((quo.data ?? []).map(r => ({ customer_id: r.customer_id, date: r.quote_date, actorId: r.engineer_id })))
   // 수리는 출고일이 있으면 그날, 없으면 입고일이 마지막 움직임이다.
   const repair = group((rep.data ?? []).map(r => ({ customer_id: r.customer_id, date: r.shipped_date ?? r.received_date, actorId: r.created_by })))
+  const inquiry = group((inq.data ?? []).map(r => ({ customer_id: r.customer_id, date: r.issued_date, actorId: r.created_by })))
 
-  const ids = new Set<number>([...activity.keys(), ...service.keys(), ...quote.keys(), ...repair.keys()])
+  const ids = new Set<number>([...activity.keys(), ...service.keys(), ...quote.keys(), ...repair.keys(), ...inquiry.keys()])
   for (const id of ids) {
     const touch = pickLastTouch({
       activity: activity.get(id), service: service.get(id), quote: quote.get(id), repair: repair.get(id),
+      inquiry: inquiry.get(id),
     })
     if (touch) byId.set(id, touch)
   }

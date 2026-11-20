@@ -29,6 +29,7 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useToast } from '@/components/common/Toast'
+import SitePicker, { type PickedDevice, type PickedSite } from '@/components/inquiry/SitePicker'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, NEUTRAL_BG, BLUE, ROW_HOVER_BG,
@@ -519,6 +520,9 @@ function CreateModal({
   const [error, setError] = useState('')
   const [made, setMade] = useState<MadeInquiry | null>(null)
   const [copied, setCopied] = useState(false)
+  /** 어느 사업장·장비의 의뢰인가 — 둘 다 선택이다(db/inquiry_customer_device_20261120.sql). */
+  const [site, setSite] = useState<PickedSite>(null)
+  const [device, setDevice] = useState<PickedDevice>(null)
 
   // 장비 계열은 80 의뢰서에서만 고른다. 20 의뢰서는 '20' 하나뿐이라 서버가 강제하고,
   // 나머지 종류는 번호에 쓰이지 않아 서버가 null 로 지운다.
@@ -534,7 +538,10 @@ function CreateModal({
       const res = await fetch('/api/inquiry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create', type, equipment_series: needsSeries ? series : undefined, title }),
+        body: JSON.stringify({
+          action: 'create', type, equipment_series: needsSeries ? series : undefined, title,
+          customer_id: site?.id, device_id: device?.id,
+        }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) { setError(json.error || `발급에 실패했습니다 (${res.status})`); return }
@@ -624,6 +631,16 @@ function CreateModal({
                 onChange={e => setTitle(e.target.value)} style={field}
               />
             </div>
+
+            {/* 사업장·장비 — 골라 두면 그 사업장의 활동 이력에 이 의뢰서가 뜬다.
+                업체명(글자)은 그대로 둔다 — 사업장을 고르지 않는 건도 있어서다.
+                비어 있을 때만 고른 사업장 이름을 업체명에 채워 준다(덮어쓰지 않는다). */}
+            <SitePicker
+              site={site}
+              setSite={v => { setSite(v); if (v && !title.trim()) setTitle(v.name) }}
+              device={device}
+              setDevice={setDevice}
+            />
 
 
             {error && (

@@ -189,6 +189,18 @@ async function handle(req: NextRequest) {
 
   const title = (typeof body.title === 'string' ? body.title : '').trim().slice(0, TITLE_MAX)
 
+  /**
+   * 어느 사업장·장비의 의뢰인가(db/inquiry_customer_device_20261120.sql).
+   * 둘 다 **선택**이다 — 업체가 정해지지 않은 채 번호부터 받는 일이 있다.
+   * 장비만 고르고 사업장을 비우는 일은 없다(화면이 사업장을 고른 뒤에만 장비를 낸다).
+   */
+  const asId = (v: unknown): number | null => {
+    const n = Number(v)
+    return Number.isInteger(n) && n > 0 ? n : null
+  }
+  const customerId = asId(body.customer_id)
+  const deviceId = customerId === null ? null : asId(body.device_id)
+
   // 발행일·연도는 KST 로 고정한다. 서버(Vercel)는 UTC 라 new Date() 를 그대로 쓰면
   // 한국 시간 아침 9시 전에 하루가 밀린다(lib/date.ts 머리말 참고).
   const issuedDate = todayKST()
@@ -237,6 +249,9 @@ async function handle(req: NextRequest) {
         created_by: caller.engineer_id,
         issued_date: issuedDate,
         is_backfill: false,
+        // 칸이 아직 없는 DB 에서도 발급은 되어야 한다 — 값이 있을 때만 넣는다.
+        ...(customerId === null ? {} : { customer_id: customerId }),
+        ...(deviceId === null ? {} : { device_id: deviceId }),
       })
       .select('id, inquiry_no, inquiry_type, period_key, seq, equipment_series, title, status, issued_date, created_by')
       .single()

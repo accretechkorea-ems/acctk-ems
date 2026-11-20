@@ -21,6 +21,8 @@ import {
   type TimelineFilter, type TimelineKind,
 } from '@/lib/timelineFilter'
 import { whenLabel, ownerLabel } from '@/lib/companyForecast'
+import { INQUIRY_TYPE_LABEL, inquiryTypeOf } from '@/lib/inquiries'
+import type { InquiryRow } from '@/hooks/useCompanyTimeline'
 import { isFutureVisit } from '@/lib/serviceVisit'
 import { timelineKey } from '@/lib/activity'
 import { eventLine, type CustomerEvent } from '@/lib/customerEventView'
@@ -55,6 +57,8 @@ type Props = {
   events?: CustomerEvent[]
   /** 영업 기회 — 「포캐스트」 종류의 줄을 만든다(만든 날·마지막 고침·종료). */
   opportunities?: SalesOpportunity[]
+  /** 이 사업장들에 걸린 의뢰서 — 「의뢰」 종류의 줄이 된다. 연결되지 않은 과거 건은 오지 않는다. */
+  inquiries?: InquiryRow[]
   /**
    * 회사 카드의 「전체 보기」를 누른 횟수. 값이 바뀌면 필터를 **포캐스트만**으로 맞춘다
    * (파이프라인 화면으로 떠나지 않고 이 카드에서 바로 본다).
@@ -313,7 +317,7 @@ function TimelineRow({ item, first, focused, siteName }: { item: Item; first: bo
   )
 }
 
-export default function ActivityTimeline({ history, devices, quotes, activities, holdings, customerId, onOpenQuotePdf, onOpenHolding, onAddRecord, onEditActivity, canEditActivity, focusKey, onFocused, sites, events, opportunities, forecastOnlyAt, initialSiteIds, title }: Props) {
+export default function ActivityTimeline({ history, devices, quotes, activities, holdings, customerId, onOpenQuotePdf, onOpenHolding, onAddRecord, onEditActivity, canEditActivity, focusKey, onFocused, sites, events, opportunities, inquiries, forecastOnlyAt, initialSiteIds, title }: Props) {
   const [showUndated, setShowUndated] = useState(false)
 
   /** 고를 수 있는 것 전부 — 「좁히지 않음」의 기준이다(lib/timelineFilter.ts). */
@@ -486,6 +490,29 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
       return rows
     })
 
+    /**
+     * 의뢰 — 의뢰서가 **그 사업장에 걸려 있을 때만** 나온다
+     * (db/inquiry_customer_device_20261120.sql 로 더한 customer_id).
+     * 과거에 쌓인 의뢰서는 그 값이 없어 여기 뜨지 않는다 — 맞춰 넣지 않는다(백필 금지).
+     */
+    const inquiryItems: Item[] = (inquiries ?? []).map(q => ({
+      key: `iq-${q.id}`,
+      kind: '의뢰' as const,
+      siteId: q.customer_id ?? null,
+      date: q.issued_date,
+      label: '의뢰',
+      labelSuffix: INQUIRY_TYPE_LABEL[inquiryTypeOf(q.inquiry_type) ?? 'req20'],
+      dot: '#64748b',
+      title: q.inquiry_no ?? '(번호 없음)',
+      body: (q.title ?? '').trim(),
+      badge: q.status === 'cancelled' ? '취소' : q.status === 'drafting' ? '작성 중' : undefined,
+      owner: '',
+      onClick: () => { window.location.href = `/inquiries/${q.id}` },
+      sortAt: sortKey(q.created_at, q.issued_date),
+      // 의뢰서 id 는 uuid 라 숫자 보조키가 없다 — 같은 시각이면 날짜만으로 가른다.
+      sortId: 0,
+    }))
+
     // 사건 — 회색 톤으로, 고칠 수 없는 줄이다(사람이 쓰지 않는다).
     const eventItems: Item[] = (events ?? []).map(e => {
       const line = eventLine(e)
@@ -504,8 +531,8 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
       }
     })
 
-    return [...serviceItems, ...quoteItems, ...salesItems, ...holdingItems, ...forecastItems, ...eventItems]
-  }, [history, quotes, activities, holdings, events, opportunities, customerId, deviceNameOf, disposedIds, onOpenQuotePdf, onOpenHolding, onEditActivity, canEditActivity])
+    return [...serviceItems, ...quoteItems, ...salesItems, ...holdingItems, ...forecastItems, ...inquiryItems, ...eventItems]
+  }, [history, quotes, activities, holdings, events, opportunities, inquiries, customerId, deviceNameOf, disposedIds, onOpenQuotePdf, onOpenHolding, onEditActivity, canEditActivity])
 
   /** 필터를 모두 걸어 남은 줄. */
   const scoped = useMemo(() => applyFilter(items, filter, available), [items, filter, available])

@@ -617,6 +617,7 @@ export default function CompanyPane({
           sites={siteOptions}
           events={timeline.events}
           opportunities={timeline.opportunities}
+          inquiries={timeline.inquiries}
           forecastOnlyAt={forecastOnly}
           initialSiteIds={focusSiteId != null ? [focusSiteId] : undefined}
           focusKey={focusKey}
