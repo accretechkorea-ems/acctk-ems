@@ -201,7 +201,7 @@ export default function RecordAddModal({
               <select value={siteId ?? ''} disabled={sites.length <= 1}
                 onChange={e => { setSiteId(e.target.value ? Number(e.target.value) : null); setDeviceId(null); setContactId(null); setOppId(null) }}
                 style={{ ...fieldStyle, color: siteId == null ? MUTED : TEXT }}>
-                <option value="">고르기</option>
+                <option value="" disabled hidden>고르기</option>
                 {sites.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
@@ -295,7 +295,7 @@ export default function RecordAddModal({
                 <label style={labelStyle}>장비 <Req /></label>
                 <select value={deviceId ?? ''} onChange={e => setDeviceId(e.target.value ? Number(e.target.value) : null)}
                   style={{ ...fieldStyle, color: deviceId == null ? MUTED : TEXT }}>
-                  <option value="">{siteDevices.length > 0 ? '장비 선택 (고른 사업장 기준)' : '등록된 장비 없음'}</option>
+                  <option value="" disabled hidden>{siteDevices.length > 0 ? '장비 선택 (고른 사업장 기준)' : '등록된 장비 없음'}</option>
                   {siteDevices.map(d => (
                     <option key={d.device_id} value={d.device_id}>
                       {[d.device_name, d.device_name2].filter(Boolean).join(' ') || `장비 ${d.device_id}`}

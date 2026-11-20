@@ -296,7 +296,7 @@ export default function LinePickerModal({
             onChange={e => { const v = Number(e.target.value); if (v) loadPreset(v); e.currentTarget.value = '' }}
             style={{ ...inputStyle, minWidth: 160, cursor: 'pointer' }}
           >
-            <option value="">개인 결재선 불러오기</option>
+            <option value="" disabled hidden>개인 결재선 불러오기</option>
             {presets.map(p => <option key={p.preset_id} value={p.preset_id}>{p.name}</option>)}
           </select>
           <input
@@ -322,7 +322,7 @@ export default function LinePickerModal({
             onChange={e => { const v = e.target.value; if (v) addTeamCc(v); e.currentTarget.value = '' }}
             style={{ ...inputStyle, minWidth: 200, cursor: loading ? 'default' : 'pointer' }}
           >
-            <option value="">팀으로 참조 추가</option>
+            <option value="" disabled hidden>팀으로 참조 추가</option>
             {teams.map(t => (
               <option key={t} value={t}>{t} ({teamCounts.get(t) ?? 0}명)</option>
             ))}

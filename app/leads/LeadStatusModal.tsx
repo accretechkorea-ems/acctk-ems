@@ -189,7 +189,7 @@ export default function LeadStatusModal({
               id="lsm-owner" value={pick} disabled={busy} style={field}
               onChange={e => setPick(e.target.value ? Number(e.target.value) : '')}
             >
-              <option value="">고르기</option>
+              <option value="" disabled hidden>고르기</option>
               {options.map(o => (
                 <option key={o.id} value={o.id}>
                   {/* 지금 배정된 사람에게는 표시를 붙인다 — 고르면 확정이 켜지지 않는 이유가 보이게. */}

@@ -272,7 +272,7 @@ export default function OpportunityModal({
                 <select value={form.lost_reason} disabled={!canEdit}
                   onChange={(e) => { setForm(p => ({ ...p, lost_reason: e.target.value })); clearError('lost_reason') }}
                   style={errors.lost_reason ? { ...fieldStyle, border: errBorder } : fieldStyle}>
-                  <option value="">사유 선택</option>
+                  <option value="" disabled hidden>사유 선택</option>
                   {LOST_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
                 <FieldError message={errors.lost_reason} />

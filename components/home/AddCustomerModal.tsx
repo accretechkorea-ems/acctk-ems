@@ -288,7 +288,7 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
                     ...(errors.industry ? { border: errBorder } : null),
                     ...(existing ? { background: '#f9fafb', color: MUTED } : null),
                   }}>
-                  <option value="">분류 선택</option>
+                  <option value="" disabled hidden>분류 선택</option>
                   {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
                 </select>
                 <FieldError message={errors.industry} />

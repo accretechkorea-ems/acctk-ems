@@ -234,7 +234,7 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, l
             onChange={e => setNewIndustry(e.target.value)}
             style={{ ...fieldStyle, flex: 1, minWidth: 0, cursor: 'pointer' }}
           >
-            <option value="">분류 선택 (필수)</option>
+            <option value="" disabled hidden>분류 선택 (필수)</option>
             {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
           </select>
           <button type="button" disabled={creating || !newIndustry}

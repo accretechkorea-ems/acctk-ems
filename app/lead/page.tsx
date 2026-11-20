@@ -383,7 +383,7 @@ export default function LeadPage() {
               <label style={labelStyle}>관심 제품<span style={{ color: DANGER }}> *</span></label>
               <select value={form.interest_product} onChange={e => set('interest_product', e.target.value)}
                 style={errors.interest_product ? errorFieldStyle : fieldStyle}>
-                <option value="">선택해주세요</option>
+                <option value="" disabled hidden>선택해주세요</option>
                 {INTEREST_PRODUCTS.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
               <FieldError message={errors.interest_product} style={{ marginTop: 3, fontSize: 11 }} />
@@ -392,7 +392,7 @@ export default function LeadPage() {
               <label style={labelStyle}>예산<span style={{ color: DANGER }}> *</span></label>
               <select value={form.budget_status} onChange={e => set('budget_status', e.target.value)}
                 style={errors.budget_status ? errorFieldStyle : fieldStyle}>
-                <option value="">선택해주세요</option>
+                <option value="" disabled hidden>선택해주세요</option>
                 {BUDGET_STATUSES.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
               <FieldError message={errors.budget_status} style={{ marginTop: 3, fontSize: 11 }} />
@@ -401,7 +401,7 @@ export default function LeadPage() {
               <label style={labelStyle}>예상 구매 기간<span style={{ color: DANGER }}> *</span></label>
               <select value={form.purchase_period} onChange={e => set('purchase_period', e.target.value)}
                 style={errors.purchase_period ? errorFieldStyle : fieldStyle}>
-                <option value="">선택해주세요</option>
+                <option value="" disabled hidden>선택해주세요</option>
                 {PURCHASE_PERIODS.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
               <FieldError message={errors.purchase_period} style={{ marginTop: 3, fontSize: 11 }} />
@@ -449,7 +449,7 @@ export default function LeadPage() {
               <label style={labelStyle}>산업군<span style={{ color: DANGER }}> *</span></label>
               <select value={form.industry} onChange={e => set('industry', e.target.value)}
                 style={errors.industry ? errorFieldStyle : fieldStyle}>
-                <option value="">선택해주세요</option>
+                <option value="" disabled hidden>선택해주세요</option>
                 {INDUSTRY_GROUPS.map(g => (
                   g.items.length
                     ? <optgroup key={g.group} label={g.group}>

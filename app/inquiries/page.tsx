@@ -431,7 +431,7 @@ function RegisterModal({
             <div>
               <label style={labelStyle} htmlFor="rg-series">장비 계열</label>
               <select id="rg-series" value={series} onChange={e => setSeries(e.target.value)} style={fieldStyle}>
-                <option value="">고르기</option>
+                <option value="" disabled hidden>고르기</option>
                 {REQ80_SERIES.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
@@ -449,7 +449,7 @@ function RegisterModal({
           <select id="rg-owner" value={createdBy} style={fieldStyle}
             onChange={e => setOwnerPick(e.target.value ? Number(e.target.value) : '')}>
             {/* 자기 자신이 들어간 뒤에는 빈 값을 고를 일이 없다 — 담당자 없는 의뢰서는 만들지 않는다. */}
-            {createdBy === '' && <option value="">고르기</option>}
+            {createdBy === '' && <option value="" disabled hidden>고르기</option>}
             {selectable.map(e => (
               <option key={e.engineer_id} value={e.engineer_id}>{engineerLabel(e)}</option>
             ))}
@@ -618,7 +618,7 @@ function CreateModal({
               <div style={{ marginBottom: 12 }}>
                 <label style={label} htmlFor="iq-series">장비 계열</label>
                 <select id="iq-series" value={series} onChange={e => setSeries(e.target.value)} style={field}>
-                  <option value="">계열을 골라주세요</option>
+                  <option value="" disabled hidden>계열을 골라주세요</option>
                   {REQ80_SERIES.map(v => <option key={v} value={v}>{v}</option>)}
                 </select>
               </div>

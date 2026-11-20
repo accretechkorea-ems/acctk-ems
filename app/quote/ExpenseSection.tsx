@@ -56,7 +56,7 @@ export default function ExpenseSection({
               onChange={e => selectExpensePreset(exp.id, e.target.value)}
               style={{ ...inp, flex: 1, minWidth: 0, cursor: 'pointer' }}
             >
-              <option value="">항목 선택</option>
+              <option value="" disabled hidden>항목 선택</option>
               {expensePresets.map(p => (
                 <option key={p.item_name} value={p.item_name}>{p.item_name}</option>
               ))}

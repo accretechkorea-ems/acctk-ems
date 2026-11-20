@@ -1594,7 +1594,7 @@ function AdminPageInner() {
                 <div>
                   <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>팀 *</div>
                   <select value={addForm.teams} onChange={e => { setAddForm(p => ({ ...p, teams: e.target.value })); addEngErr.clearError('teams') }} style={addEngErr.errors.teams ? { ...inp, border: errBorder } : inp}>
-                    <option value="" disabled>팀 선택</option>
+                    <option value="" disabled hidden>팀 선택</option>
                     {teamsOptions.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                   <FieldError message={addEngErr.errors.teams} />
@@ -1665,7 +1665,7 @@ function AdminPageInner() {
                 <div>
                   <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>팀 *</div>
                   <select value={editForm.teams} onChange={e => { setEditForm(p => ({ ...p, teams: e.target.value })); editEngErr.clearError('teams') }} style={editEngErr.errors.teams ? { ...inp, border: errBorder } : inp}>
-                    <option value="" disabled>팀 선택</option>
+                    <option value="" disabled hidden>팀 선택</option>
                     {teamsOptions.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                   <FieldError message={editEngErr.errors.teams} />

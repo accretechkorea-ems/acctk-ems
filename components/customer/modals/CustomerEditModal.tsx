@@ -181,7 +181,7 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
                 onChange={e => { setForm(p => ({ ...p, new_company_industry: e.target.value })); clearError('new_company_industry') }}
                 style={errors.new_company_industry ? { ...fieldStyle, border: errBorder, cursor: 'pointer' } : { ...fieldStyle, cursor: 'pointer' }}
               >
-                <option value="">분류 선택 (필수)</option>
+                <option value="" disabled hidden>분류 선택 (필수)</option>
                 {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
               </select>
               <FieldError message={errors.new_company_industry} />

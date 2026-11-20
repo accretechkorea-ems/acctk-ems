@@ -485,7 +485,7 @@ export default function BulkImportModal({
                 onChange={e => { if (e.target.value) applyOwnerAll(Number(e.target.value)) }}
                 style={{ ...field, width: 180 }}
               >
-                <option value="">고르기</option>
+                <option value="" disabled hidden>고르기</option>
                 {selectable.map(e => (
                   <option key={e.engineer_id} value={e.engineer_id}>{engineerLabel(e)}</option>
                 ))}
@@ -553,7 +553,7 @@ export default function BulkImportModal({
                             {r.type === 'req80' && (
                               <select value={r.series ?? ''} disabled={running} style={{ ...field, width: 64 }}
                                 onChange={e => patchNo(r.id, { series: e.target.value })}>
-                                <option value="">계열</option>
+                                <option value="" disabled hidden>계열</option>
                                 {REQ80_SERIES.map(v => <option key={v} value={v}>{v}</option>)}
                               </select>
                             )}
@@ -612,7 +612,7 @@ export default function BulkImportModal({
                         <td style={td}>
                           <select value={r.createdBy} disabled={running} style={field}
                             onChange={e => patch(r.id, { createdBy: e.target.value ? Number(e.target.value) : '' })}>
-                            <option value="">고르기</option>
+                            <option value="" disabled hidden>고르기</option>
                             {selectable.map(e => (
                               <option key={e.engineer_id} value={e.engineer_id}>{engineerLabel(e)}</option>
                             ))}
@@ -638,7 +638,7 @@ export default function BulkImportModal({
                                       style={{ ...field, width: 90, flexShrink: 0 }}
                                       onChange={e => { if (e.target.value) move(r.id, i, e.target.value) }}
                                     >
-                                      <option value="">이동</option>
+                                      <option value="" disabled hidden>이동</option>
                                       {rows.filter(x => x.id !== r.id).map(x => (
                                         <option key={x.id} value={x.id}>{x.no || x.auto.no}</option>
                                       ))}
@@ -704,7 +704,7 @@ export default function BulkImportModal({
                     </span>
                     <select value={p.choice} disabled={running} style={{ ...field, width: 200 }}
                       onChange={e => setPending(prev => prev.map((x, k) => (k === i ? { ...x, choice: e.target.value } : x)))}>
-                      <option value="">고르기</option>
+                      <option value="" disabled hidden>고르기</option>
                       <option value="skip">제외</option>
                       <optgroup label="이 번호에 붙이기">
                         {rows.map(r => <option key={r.id} value={`row:${r.id}`}>{r.no || r.auto.no}</option>)}
@@ -715,13 +715,13 @@ export default function BulkImportModal({
                       <>
                         <select value={p.newType} disabled={running} style={{ ...field, width: 130 }}
                           onChange={e => setPending(prev => prev.map((x, k) => (k === i ? { ...x, newType: e.target.value as InquiryType } : x)))}>
-                          <option value="">종류</option>
+                          <option value="" disabled hidden>종류</option>
                           {INQUIRY_TYPE_ITEMS.map(t => <option key={t.type} value={t.type}>{t.label}</option>)}
                         </select>
                         {p.newType === 'req80' && (
                           <select value={p.newSeries} disabled={running} style={{ ...field, width: 80 }}
                             onChange={e => setPending(prev => prev.map((x, k) => (k === i ? { ...x, newSeries: e.target.value } : x)))}>
-                            <option value="">계열</option>
+                            <option value="" disabled hidden>계열</option>
                             {REQ80_SERIES.map(s => <option key={s} value={s}>{s}</option>)}
                           </select>
                         )}

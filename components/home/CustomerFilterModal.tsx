@@ -131,7 +131,7 @@ export default function CustomerFilterModal({ value, options, matchCount, onAppl
               ))}
               <select value="" onChange={e => { if (e.target.value) toggleNum('agencies', Number(e.target.value)) }}
                 style={{ height: 32, border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '0 10px', fontSize: 13, color: MUTED, background: '#fff', fontFamily: 'inherit' }}>
-                <option value="">대리점 더하기…</option>
+                <option value="" disabled hidden>대리점 더하기…</option>
                 {options.agencies.filter(a => a.id !== DIRECT_SALE && !draft.agencies.includes(a.id))
                   .map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>

@@ -341,7 +341,7 @@ export default function DelegationModal({
                   onChange={e => { setDelegateId(Number(e.target.value) || null); setFormError('') }}
                   style={{ ...inputStyle, width: '100%', cursor: 'pointer' }}
                 >
-                  <option value="">선택하세요</option>
+                  <option value="" disabled hidden>선택하세요</option>
                   {candidates.map(p => (
                     <option key={p.engineer_id} value={p.engineer_id}>{personLabel(p)}</option>
                   ))}

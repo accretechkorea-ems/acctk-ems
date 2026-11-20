@@ -512,7 +512,7 @@ export default function UsageModal({
                   <label style={labelStyle}>장비</label>
                   <select value={deviceId ?? ''} onChange={e => { setDeviceId(e.target.value ? Number(e.target.value) : null); clearError('device') }}
                     style={errors.device ? { ...fieldStyle, border: errBorder } : fieldStyle}>
-                    <option value="">장비 선택</option>
+                    <option value="" disabled hidden>장비 선택</option>
                     {devices.map(d => (
                       <option key={d.device_id} value={d.device_id}>
                         {deviceTitle(d)}{d.serial_number ? ` (${d.serial_number})` : ''}

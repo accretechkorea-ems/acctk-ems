@@ -231,7 +231,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
             onChange={e => { setCategoryValue(e.target.value); clearError('category') }}
             style={{ color: categoryValue ? '#111827' : '#9ca3af', cursor: 'pointer' }}
           >
-            <option value="">{categoriesLoading ? '불러오는 중...' : '분류 선택 (필수)'}</option>
+            <option value="" disabled hidden>{categoriesLoading ? '불러오는 중...' : '분류 선택 (필수)'}</option>
             {categories.map(c => (
               <option key={c.code} value={c.code}>{c.label}</option>
             ))}
@@ -247,7 +247,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
             onChange={e => { setFormKind(e.target.value); clearError('form') }}
             style={{ color: formKind ? '#111827' : '#9ca3af', cursor: 'pointer' }}
           >
-            <option value="">양식 선택 (필수)</option>
+            <option value="" disabled hidden>양식 선택 (필수)</option>
             {FORM_KINDS.map(k => (
               <option key={k} value={k}>{FORM_LABELS[k]}</option>
             ))}
@@ -444,7 +444,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
           onChange={e => setRecipientContactId(e.target.value === '' ? null : Number(e.target.value))}
           style={{ cursor: recipientCustomerId == null || contacts.length === 0 ? 'not-allowed' : 'pointer', color: recipientContactId == null ? '#9ca3af' : '#111827' }}
         >
-          <option value="">
+          <option value="" disabled hidden>
             {recipientCustomerId == null ? '고객사를 먼저 선택하세요'
               : contactsLoading ? '담당자 불러오는 중…'
               : contacts.length === 0 ? '등록된 담당자가 없습니다'

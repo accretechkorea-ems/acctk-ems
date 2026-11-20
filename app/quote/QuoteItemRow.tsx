@@ -500,7 +500,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
               }}
             >
               {/* 상단 분류를 아직 안 골랐으면 빈 값도 고를 수 있다(그때는 견적 분류를 따른다). */}
-              {!quoteCategory && <option value="">분류</option>}
+              {!quoteCategory && <option value="" disabled hidden>분류</option>}
               {categories.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
             </select>
           )
