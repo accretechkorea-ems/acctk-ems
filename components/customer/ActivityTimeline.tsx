@@ -9,16 +9,23 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { EditIconButton } from '@/components/common/IconButton'
-import SegmentedControl from '@/components/common/SegmentedControl'
+import TimelineFilterModal from '@/components/customer/TimelineFilterModal'
 import { SERVICE_TYPE_COLORS, TIMELINE_KIND_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import { numKR } from './constants'
 import { isDealerQuote } from './utils'
 import { deviceLabel, elapsedLabel } from './holding'
 import { isDisposed } from '@/lib/deviceStatus'
-import type { Device, Holding, Quote, SalesActivity, ServiceHistory } from './types'
+import type { Device, Holding, Quote, SalesActivity, SalesOpportunity, ServiceHistory } from './types'
+import {
+  TIMELINE_KINDS, allSelected, applyFilter, countBySite, countByKind, dropChip, filterChips,
+  type TimelineFilter, type TimelineKind,
+} from '@/lib/timelineFilter'
+import { whenLabel, ownerLabel } from '@/lib/companyForecast'
 import { isFutureVisit } from '@/lib/serviceVisit'
 import { timelineKey } from '@/lib/activity'
 import { eventLine, type CustomerEvent } from '@/lib/customerEventView'
+import { R } from '@/lib/radius'
+import { TITLE } from '@/lib/textTokens'
 
 type Props = {
   history: ServiceHistory[]
@@ -29,7 +36,8 @@ type Props = {
   customerId: number
   onOpenQuotePdf: (q: Quote) => void
   onOpenHolding: (h: Holding) => void
-  onAddActivity: () => void
+  /** 「+ 기록」 — 영업 활동·포캐스트·홀딩을 한 창에서 고르는 모달을 연다. */
+  onAddRecord: () => void
   onEditActivity: (a: SalesActivity) => void
   canEditActivity: (a: SalesActivity) => boolean
   /** 활동 요약에서 넘어온 행 id(lib/activity.ts timelineKey). 그 줄로 스크롤하고 잠깐 밝힌다. */
@@ -45,6 +53,13 @@ type Props = {
   title?: string
   /** 고객 사건 로그. 회사 전체 모드에서만 넘어온다. */
   events?: CustomerEvent[]
+  /** 영업 기회 — 「포캐스트」 종류의 줄을 만든다(만든 날·마지막 고침·종료). */
+  opportunities?: SalesOpportunity[]
+  /**
+   * 회사 카드의 「전체 보기」를 누른 횟수. 값이 바뀌면 필터를 **포캐스트만**으로 맞춘다
+   * (파이프라인 화면으로 떠나지 않고 이 카드에서 바로 본다).
+   */
+  forecastOnlyAt?: number
   /**
    * 처음에 켜 둘 사업장 칩. 사업장 화면에서 ← 로 돌아왔을 때 **그 사업장이 켜진 채** 열린다
    * — 보던 자리를 잃지 않게. 사람이 칩을 끄면 그때부터는 사람이 고른 대로 둔다.
@@ -52,10 +67,10 @@ type Props = {
   initialSiteIds?: number[]
 }
 
-type Kind = '서비스' | '견적' | '영업' | '홀딩' | '사건'
+// 종류는 lib/timelineFilter.ts 가 정본이다 — 필터 모달과 줄 만들기가 같은 목록을 본다.
 // 「사건」은 사람이 적지 않는다 — 리드 등록·담당 배정처럼 **벌어진 일**이다(lib/customerEvents.ts).
-const FILTERS = ['전체', '영업', '서비스', '견적', '홀딩', '사건'] as const
-type Filter = typeof FILTERS[number]
+// 「포캐스트」도 사람이 직접 적는 줄이 아니라 영업 기회가 생기고 바뀐 자국이다.
+type Kind = TimelineKind
 
 type Item = {
   key: string
@@ -221,12 +236,12 @@ function TimelineRow({ item, first, focused, siteName }: { item: Item; first: bo
             </SizedCell>
             <span style={{ fontSize: 12, color: '#234ea2', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{item.title}</span>
             {item.titleBadge && (
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>
                 {item.titleBadge}
               </span>
             )}
             {item.badge && (
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>
                 {item.badge}
               </span>
             )}
@@ -294,11 +309,24 @@ function TimelineRow({ item, first, focused, siteName }: { item: Item; first: bo
   )
 }
 
-export default function ActivityTimeline({ history, devices, quotes, activities, holdings, customerId, onOpenQuotePdf, onOpenHolding, onAddActivity, onEditActivity, canEditActivity, focusKey, onFocused, sites, events, initialSiteIds, title }: Props) {
-  const [filter, setFilter] = useState<Filter>('전체')
+export default function ActivityTimeline({ history, devices, quotes, activities, holdings, customerId, onOpenQuotePdf, onOpenHolding, onAddRecord, onEditActivity, canEditActivity, focusKey, onFocused, sites, events, opportunities, forecastOnlyAt, initialSiteIds, title }: Props) {
   const [showUndated, setShowUndated] = useState(false)
-  /** 회사 전체 모드의 사업장 칩 — 비어 있으면 전체다(복수 선택). */
-  const [pickedSites, setPickedSites] = useState<Set<number>>(() => new Set(initialSiteIds ?? []))
+
+  /** 고를 수 있는 것 전부 — 「좁히지 않음」의 기준이다(lib/timelineFilter.ts). */
+  const available = useMemo(
+    () => ({ kinds: TIMELINE_KINDS, siteIds: (sites ?? []).map(s => s.id) }),
+    [sites],
+  )
+  /**
+   * 필터는 **종류·사업장·기간 한 덩어리**다. 처음에는 전부 고른 상태 —
+   * 사업장 화면에서 ← 로 돌아왔을 때만 그 사업장 하나로 좁혀 둔다(보던 자리를 잃지 않게).
+   */
+  const [filter, setFilter] = useState<TimelineFilter>(() => {
+    const base = allSelected(TIMELINE_KINDS, (sites ?? []).map(s => s.id))
+    return initialSiteIds && initialSiteIds.length > 0 ? { ...base, siteIds: [...initialSiteIds] } : base
+  })
+  const [filterOpen, setFilterOpen] = useState(false)
+
   const siteNameOf = useMemo(() => {
     const m = new Map((sites ?? []).map(s => [s.id, s.name]))
     return (id?: number | null) => (id == null ? '' : m.get(id) ?? '')
@@ -396,6 +424,64 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
       sortId: h.holding_id,
     }))
 
+    /**
+     * 포캐스트 — 영업 기회가 **생기고 바뀐 자국**을 날짜순으로 낸다.
+     *
+     * ⚠ 단계가 언제 어떻게 바뀌었는지는 **알 수 없다** — 단계 이력을 담는 표가 없고
+     *   sales_opportunities 에 created_at·updated_at·closed_at 셋만 있다. 그래서
+     *   「단계 변경」이라고 적지 않고 **「고침」**이라고 적는다(없는 것을 있는 척하지 않는다).
+     *   줄 셋이 나올 수 있다: 만든 날 · 마지막 고침(날이 다를 때만) · 종료(closed_at).
+     */
+    const forecastItems: Item[] = (opportunities ?? []).flatMap(o => {
+      const money = o.expected_amount ? `₩${numKR(o.expected_amount)}` : '금액 미정'
+      const when = whenLabel(o.expected_close)
+      const body = [money, when ? `${when} 예정` : ''].filter(Boolean).join(' · ')
+      const owner = ownerLabel(o.engineers)
+      const base = {
+        kind: '포캐스트' as const,
+        siteId: o.customer_id ?? null,
+        dot: '#f59e0b',
+        title: (o.title ?? '').trim() || '(제목 없음)',
+        owner,
+        sortId: o.opportunity_id,
+      }
+      const madeOn = (o.created_at ?? '').slice(0, 10) || null
+      const rows: Item[] = [{
+        ...base,
+        key: `op-${o.opportunity_id}`,
+        date: madeOn,
+        label: '포캐스트',
+        labelSuffix: o.stage,
+        body,
+        sortAt: sortKey(o.created_at, madeOn),
+      }]
+      const closedOn = (o.closed_at ?? '').slice(0, 10) || null
+      const touchedOn = (o.updated_at ?? '').slice(0, 10) || null
+      if (touchedOn && touchedOn !== madeOn && touchedOn !== closedOn) {
+        rows.push({
+          ...base,
+          key: `op-${o.opportunity_id}-up`,
+          date: touchedOn,
+          label: '포캐스트',
+          labelSuffix: '고침',
+          body: `지금 단계 ${o.stage} · ${body}`,
+          sortAt: sortKey(o.updated_at, touchedOn),
+        })
+      }
+      if (closedOn) {
+        rows.push({
+          ...base,
+          key: `op-${o.opportunity_id}-cl`,
+          date: closedOn,
+          label: '포캐스트',
+          labelSuffix: o.stage === '실주' ? '실주' : '종료',
+          body: o.lost_reason ? `${o.lost_reason}${o.lost_note ? ` — ${o.lost_note}` : ''}` : body,
+          sortAt: sortKey(o.closed_at, closedOn),
+        })
+      }
+      return rows
+    })
+
     // 사건 — 회색 톤으로, 고칠 수 없는 줄이다(사람이 쓰지 않는다).
     const eventItems: Item[] = (events ?? []).map(e => {
       const line = eventLine(e)
@@ -414,23 +500,26 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
       }
     })
 
-    return [...serviceItems, ...quoteItems, ...salesItems, ...holdingItems, ...eventItems]
-  }, [history, quotes, activities, holdings, events, customerId, deviceNameOf, disposedIds, onOpenQuotePdf, onOpenHolding, onEditActivity, canEditActivity])
+    return [...serviceItems, ...quoteItems, ...salesItems, ...holdingItems, ...forecastItems, ...eventItems]
+  }, [history, quotes, activities, holdings, events, opportunities, customerId, deviceNameOf, disposedIds, onOpenQuotePdf, onOpenHolding, onEditActivity, canEditActivity])
 
-  /** 사업장 칩으로 한 번 거른 묶음 — 종류 건수도 이 묶음에서 센다. */
-  const scoped = useMemo(
-    () => (pickedSites.size === 0 ? items : items.filter(i => i.siteId != null && pickedSites.has(i.siteId))),
-    [items, pickedSites],
+  /** 필터를 모두 걸어 남은 줄. */
+  const scoped = useMemo(() => applyFilter(items, filter, available), [items, filter, available])
+
+  /**
+   * 모달에 붙는 건수. 종류 건수는 **사업장·기간만 걸고** 세고, 사업장 건수는
+   * **종류·기간만 걸고** 센다 — 자기 자신으로 걸러 센 건수는 고를 때 쓸모가 없다
+   * (「서비스 6」만 켜 두면 다른 종류가 전부 0으로 보인다).
+   */
+  const kindCounts = useMemo(
+    () => countByKind(applyFilter(items, { ...filter, kinds: [...TIMELINE_KINDS] }, available)),
+    [items, filter, available],
   )
-
-  const counts = useMemo(() => ({
-    '전체': scoped.length,
-    '영업': scoped.filter(i => i.kind === '영업').length,
-    '서비스': scoped.filter(i => i.kind === '서비스').length,
-    '견적': scoped.filter(i => i.kind === '견적').length,
-    '홀딩': scoped.filter(i => i.kind === '홀딩').length,
-    '사건': scoped.filter(i => i.kind === '사건').length,
-  }), [scoped])
+  const siteCounts = useMemo(
+    () => countBySite(applyFilter(items, { ...filter, siteIds: available.siteIds }, available)),
+    [items, filter, available],
+  )
+  const chips = useMemo(() => filterChips(filter, available, siteNameOf), [filter, available, siteNameOf])
 
   // 날짜 있는 것만 내림차순으로 월별 묶음, 날짜 없는 것은 따로 모은다.
   // 전 구간 내림차순 — 달도, 날도, 같은 날 안도 최신이 위다. 종류(견적/영업/홀딩/서비스)에 따른
@@ -441,9 +530,8 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
   // (홀딩은 started_at 을 표시하는데 등록 시각이 그보다 한참 뒤일 수 있어 실제로 벌어진다)
   // 같은 날짜 안에서는 sortAt 만 보므로, 요청하신 '등록 시각 내림차순'과 결과가 같다.
   const { months, undated } = useMemo(() => {
-    const shown = filter === '전체' ? scoped : scoped.filter(i => i.kind === filter)
-    const dated = shown.filter(i => i.date)
-    const undated = shown.filter(i => !i.date)
+    const dated = scoped.filter(i => i.date)
+    const undated = scoped.filter(i => !i.date)
     dated.sort((a, b) => {
       if (a.date! !== b.date!) return a.date! < b.date! ? 1 : -1
       if (a.sortAt !== b.sortAt) return b.sortAt - a.sortAt
@@ -458,10 +546,10 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
       else months.push({ label, rows: [it] })
     }
     return { months, undated }
-  }, [scoped, filter])
+  }, [scoped])
 
   // 활동 요약에서 넘어온 행 찾아가기 — 자료가 다 그려진 뒤 한 번만.
-  //   · 필터가 「전체」가 아니면 대상이 가려질 수 있어 먼저 되돌린다(다음 렌더에서 이어서 한다).
+  //   · 필터가 걸려 있으면 대상이 가려질 수 있어 먼저 전부 보이게 되돌린다(다음 렌더에서 이어서 한다).
   //   · 없는 행(지워진 기록 등)이면 아무 일도 하지 않는다 — 오류를 띄우지 않는다.
   //   · 모션을 줄이길 원하는 사용자에게는 부드러운 스크롤 없이 자리만 옮긴다.
   useEffect(() => {
@@ -469,7 +557,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
     if (items.length === 0) return                       // 아직 불러오는 중
     const done = () => { focusDoneRef.current = focusKey; onFocused?.() }
     if (!items.some(i => i.key === focusKey)) { done(); return }
-    if (filter !== '전체') { setFilter('전체'); return }
+    if (scoped.length !== items.length) { setFilter(allSelected(available.kinds, available.siteIds)); return }
     const el = document.getElementById(focusKey)
     if (!el) return                                      // 접힌 묶음 등 — 다음 렌더에서 다시 본다
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
@@ -481,75 +569,103 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusKey, items, filter])
 
-  // 단일 선택 필터라 슬라이딩 인디케이터(SegmentedControl)로 둔다. 건수는 라벨 옆 suffix.
-  // 사건 줄이 아예 없으면 「사건」 탭은 내지 않는다 — 사업장 상세처럼 사건을 읽지 않는 화면도 있다.
-  const filterOptions = FILTERS.filter(f => f !== '사건' || (events?.length ?? 0) > 0)
-    .map(f => ({ label: f, value: f, suffix: String(counts[f]) }))
+  /**
+   * 회사 카드의 「전체 보기」 — 포캐스트만 켠다. 누른 횟수가 바뀔 때만 움직이므로
+   * 사람이 그 뒤에 필터를 다시 고치면 그대로 둔다.
+   */
+  const forecastClickRef = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    if (forecastOnlyAt === undefined) return
+    if (forecastClickRef.current === forecastOnlyAt) return
+    forecastClickRef.current = forecastOnlyAt
+    if (forecastOnlyAt === 0) return                      // 처음 그릴 때는 아무것도 하지 않는다
+    setFilter(f => ({ ...f, kinds: ['포캐스트'] }))
+  }, [forecastOnlyAt])
 
   return (
     <div>
       {/**
-       * 머리줄 하나 — 제목 · 종류 탭 · 사업장 칩 · 「+ 영업 기록」.
+       * 머리줄 — 제목·건수 / [필터] [+ 기록]. 그 아래에 **적용된 필터만** 칩으로 남는다.
        *
-       * 셋으로 나눠 쌓았더니 카드 위쪽이 머리글만 세 줄이었다. 칩은 남는 자리를 차지하고
-       * 넘치면 **옆으로 민다**(검색칸은 걷었다 — 칩을 훑는 편이 빠르고 줄도 아낀다).
+       * 전에는 종류 세그먼트와 사업장 칩이 머리줄에 함께 섰다. 사업장이 여섯 곳을 넘으면
+       * 줄이 옆으로 밀렸고, 종류는 하나만 고를 수 있었다. 고르는 일은 모달로 옮기고
+       * 머리줄에는 **지금 걸린 것**만 남긴다(모달: components/customer/TimelineFilterModal.tsx).
        */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap', marginBottom: 10, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: chips.length > 0 ? 6 : 10, minWidth: 0 }}>
         {title && (
-          <b style={{ fontSize: 13, fontWeight: 700, color: TEXT_PRIMARY, flexShrink: 0 }}>{title}</b>
+          <b style={{ ...TITLE, flexShrink: 0 }}>{title}</b>
         )}
-        <div style={{ flexShrink: 0 }}>
-          <SegmentedControl
-            options={filterOptions}
-            value={filter}
-            onChange={v => setFilter(v as Filter)}
-          />
-        </div>
+        <span style={{ fontSize: 11, fontWeight: 700, color: TEXT_DIM, background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', flexShrink: 0 }}>{scoped.length}</span>
+        <span style={{ flex: 1 }} />
 
-        {/* 사업장 칩 — 회사 전체 모드에서만. 남는 자리를 쓰고, 넘치면 옆으로 민다. */}
-        {sites && sites.length > 1 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0, overflowX: 'auto' }}>
-            {sites.map(s => {
-              const on = pickedSites.has(s.id)
-              return (
-                <button key={s.id}
-                  onClick={() => setPickedSites(prev => {
-                    const next = new Set(prev)
-                    if (next.has(s.id)) next.delete(s.id)
-                    else next.add(s.id)
-                    return next
-                  })}
-                  style={{
-                    height: 24, padding: '0 9px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
-                    border: `1px solid ${on ? '#234ea2' : '#ebebeb'}`,
-                    background: on ? '#eff4ff' : '#ffffff',
-                    color: on ? '#234ea2' : TEXT_LABEL,
-                    fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
-                  }}>
-                  {s.name}
-                </button>
-              )
-            })}
-          </div>
-        )}
-
-        <button
-          onClick={onAddActivity}
+        <button type="button" onClick={() => setFilterOpen(true)}
           onMouseEnter={e => { e.currentTarget.style.borderColor = '#234ea2' }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = '#ebebeb' }}
           style={{
-            marginLeft: 'auto', flexShrink: 0, padding: '5px 12px', borderRadius: 6, border: '1px solid #ebebeb',
-            background: '#ffffff', color: '#234ea2', cursor: 'pointer',
-            fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-            transition: 'border-color 0.15s ease',
-          }}
-        >
-          + 영업 기록
+            display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
+            height: 30, padding: '0 11px', borderRadius: R.control, border: '1px solid #ebebeb',
+            background: '#ffffff', color: TEXT_LABEL, cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', transition: 'border-color 0.15s ease',
+          }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M3 5h18l-7 8v6l-4-2v-4z" />
+          </svg>
+          필터
+          {chips.length > 0 && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#234ea2', background: '#eff4ff', borderRadius: R.pill, padding: '1px 7px' }}>{chips.length}</span>
+          )}
+        </button>
+
+        <button type="button" onClick={onAddRecord}
+          onMouseEnter={e => { e.currentTarget.style.background = '#1c3e87' }}
+          onMouseLeave={e => { e.currentTarget.style.background = '#234ea2' }}
+          style={{
+            flexShrink: 0, height: 30, padding: '0 12px', borderRadius: R.control, border: 'none',
+            background: '#234ea2', color: '#ffffff', cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', transition: 'background 0.15s ease',
+          }}>
+          + 기록
         </button>
       </div>
+
+      {/* 적용된 필터 — 칩 하나를 ✕ 로 바로 뗀다. 마지막 하나를 떼면 그 묶음은 전체로 돌아간다. */}
+      {chips.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          {chips.map(c => (
+            <button key={c.key} type="button" onClick={() => setFilter(f => dropChip(f, c, available))}
+              title={`${c.label} 필터 해제`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5, height: 24, padding: '0 9px',
+                borderRadius: R.pill, border: '1px solid #c7d7f8', background: '#eff4ff', color: '#234ea2',
+                fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+              }}>
+              {c.label}
+              <span aria-hidden style={{ color: '#9ca3af' }}>✕</span>
+            </button>
+          ))}
+          <button type="button" onClick={() => setFilter(allSelected(available.kinds, available.siteIds))}
+            style={{ border: 'none', background: 'none', padding: 0, color: TEXT_DIM, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+            전체 해제
+          </button>
+        </div>
+      )}
+
+      {filterOpen && (
+        <TimelineFilterModal
+          value={filter}
+          available={{ kinds: [...available.kinds], siteIds: available.siteIds }}
+          kindCounts={kindCounts}
+          siteCounts={siteCounts}
+          siteName={siteNameOf}
+          matchCount={next => applyFilter(items, next, available).length}
+          onApply={next => { setFilter(next); setFilterOpen(false) }}
+          onClose={() => setFilterOpen(false)}
+        />
+      )}
+
       {months.length === 0 && undated.length === 0 ? (
         <div style={{ padding: '28px 16px', textAlign: 'center', fontSize: 13, color: '#9ca3af' }}>
-          {filter === '영업' ? '영업 활동 기록이 없습니다' : filter === '사건' ? '사건 기록이 없습니다' : '기록이 없습니다'}
+          {chips.length > 0 ? '조건에 맞는 기록이 없습니다' : '기록이 없습니다'}
         </div>
       ) : (
         <>
@@ -557,7 +673,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
             <div key={m.label} style={{ marginTop: mi === 0 ? 0 : 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>{m.label}</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>{m.rows.length}건</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{m.rows.length}건</span>
                 <span style={{ flex: 1, height: 1, background: '#ebebeb' }} />
               </div>
               {m.rows.map((it, i) => <TimelineRow key={it.key} item={it} first={i === 0} focused={it.key === focusedKey} siteName={sites ? siteNameOf(it.siteId) : undefined} />)}
@@ -572,7 +688,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
                   style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}
                 >
                   <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>날짜 미상</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>{undated.length}건</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{undated.length}건</span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: '#234ea2' }}>{showUndated ? '접기' : '펼치기'}</span>
                 </button>
                 <span style={{ flex: 1, height: 1, background: '#ebebeb' }} />

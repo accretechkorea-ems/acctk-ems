@@ -10,18 +10,20 @@
 //     · 사업장 → 줄 끝의 연필 → 사업장 수정 모달(상세 화면과 **같은 모달·같은 저장 규칙**)
 //   여러 줄을 한 번에 바꾸는 일(대리점·상태·회사 이동)만 아래 일괄 바가 맡는다.
 
-import { useMemo, useState, type CSSProperties } from 'react'
+import { Fragment, useMemo, useState, type CSSProperties } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import ModalOverlay from '@/components/common/ModalOverlay'
 import CompanySearchModal from '@/components/home/list/CompanySearchModal'
 import CompanyEditModal, { type CompanyEditForm } from '@/components/home/list/CompanyEditModal'
 import CustomerEditModal from '@/components/customer/modals/CustomerEditModal'
-import { EditIconButton } from '@/components/common/IconButton'
+import { AddIconButton, EditIconButton } from '@/components/common/IconButton'
 import SalesActivityModal from '@/components/customer/modals/SalesActivityModal'
+import RecordAddModal, { type HoldingDraft } from '@/components/customer/modals/RecordAddModal'
 import SiteMergeModal, { type MergeReport } from '@/components/home/list/SiteMergeModal'
 import ActivityTimeline from '@/components/customer/ActivityTimeline'
 import { useCompanyTimeline } from '@/hooks/useCompanyTimeline'
 import { useQuotePdf } from '@/hooks/customer/useQuotePdf'
+import { useOpportunityCrud } from '@/hooks/customer/useOpportunityCrud'
+import { createHolding } from '@/lib/holdingCreate'
 import { isSuperAdmin } from '@/lib/permissions'
 import type { Holding, Quote, SalesActivity, SalesActivityForm } from '@/components/customer/types'
 import { saveCustomerEdit } from '@/lib/saveCustomerEdit'
@@ -29,6 +31,10 @@ import { invalidateParents } from '@/components/customer/ParentPicker'
 import { DIRECT_SALE_LABEL, useAgencies } from '@/lib/customerAgency'
 import { daysLabel, isStale, regionTextOf, type CompanyGroup, type SiteRow } from '@/lib/customerList'
 import type { Customer } from '@/components/customer/types'
+import { companyForecast } from '@/lib/companyForecast'
+import { numKR } from '@/components/customer/constants'
+import { R } from '@/lib/radius'
+import { TITLE } from '@/lib/textTokens'
 
 /** /api/parent-company 한 번. 결과를 한글 메시지로 바꿔 돌려준다. */
 async function callRoute(body: Record<string, unknown>): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; error: string }> {
@@ -52,16 +58,44 @@ const DANGER = '#ef4444'
 const STATUS_DOT: Record<string, string> = { '활성': '#16a34a', '잠재': '#f59e0b', '이탈': '#ef4444' }
 const STATUSES = ['활성', '잠재', '이탈']
 
-const card: CSSProperties = { background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: 8 }
-const btn: CSSProperties = {
-  height: 30, padding: '0 11px', borderRadius: 6, border: `1px solid ${BORDER}`,
-  background: '#ffffff', color: TEXT, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
-}
+// 카드·패널은 역할대로 R.card 다(이 화면은 역할까지 맞췄다 — 전체 치환은 값만 옮겼다).
+const card: CSSProperties = { background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: R.card }
 const th: CSSProperties = {
   fontSize: 11, fontWeight: 700, color: SUB, textAlign: 'left', height: 36, padding: '0 10px',
   borderBottom: `1px solid ${BORDER}`, background: '#fafafa', whiteSpace: 'nowrap',
 }
-const td: CSSProperties = { height: 42, padding: '0 10px', borderBottom: `1px solid ${BORDER}`, whiteSpace: 'nowrap', fontSize: 12, color: TEXT }
+const td: CSSProperties = { height: 44, padding: '0 10px', borderBottom: `1px solid ${BORDER}`, whiteSpace: 'nowrap', fontSize: 13, color: TEXT }
+
+/** 수치 타일·포캐스트 블록의 바탕. 카드 안의 한 단 들어간 면이다. */
+const TILE_BG = '#fafafa'
+
+/**
+ * 수치 타일 하나 — 라벨은 위 가운데 작게, 값은 정중앙 크게. 네 칸의 높이가 같다.
+ * 「최근 활동」만 값이 날짜(열 자리)라 글자를 줄이고 아래에 유형·작성자를 붙인다.
+ */
+function StatTile({ label, value, unit, note, color = TEXT, valueSize = 24 }: {
+  label: string
+  value: string
+  unit?: string
+  note?: string
+  color?: string
+  valueSize?: number
+}) {
+  return (
+    <div style={{
+      position: 'relative', minHeight: 92, padding: '26px 8px 8px', boxSizing: 'border-box',
+      background: TILE_BG, border: `1px solid ${BORDER}`, borderRadius: R.tile,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
+    }}>
+      <span style={{ position: 'absolute', top: 8, left: 0, right: 0, textAlign: 'center', fontSize: 11, color: MUTED }}>{label}</span>
+      <span className="num" style={{ display: 'flex', alignItems: 'baseline', fontSize: valueSize, fontWeight: 700, lineHeight: 1, color }}>
+        {value}
+        {unit && <span style={{ fontSize: 12, fontWeight: 500, color: MUTED, marginLeft: 3 }}>{unit}</span>}
+      </span>
+      {note && <span style={{ fontSize: 11, color: MUTED, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{note}</span>}
+    </div>
+  )
+}
 
 export type CompanyPaneProps = {
   group: CompanyGroup
@@ -75,8 +109,6 @@ export type CompanyPaneProps = {
   onOpenSite: (siteId: number) => void
   /** 「+ 사업장 추가」 — 이 회사로 고정된 등록 폼을 연다. */
   onAddSite: () => void
-  /** 회사를 병합·삭제해 사라졌을 때 — 화면이 선택을 푼다. */
-  onCompanyGone: () => void
   /**
    * 슈퍼관리자인가 — **회사명·영문명·병합**은 그 사람만 한다(그 아래 사업장 이름까지
    * 전부 다시 만들기 때문이다). 분류·메모와 사업장 수준의 일은 고객사 메뉴면 된다.
@@ -94,7 +126,7 @@ export type CompanyPaneProps = {
 }
 
 export default function CompanyPane({
-  group, engineerName, onSaved, onError, onToast, onOpenSite, onAddSite, onCompanyGone, canEditCompany, me, onOpenQuote, focusSiteId, focusKey, onFocused,
+  group, engineerName, onSaved, onError, onToast, onOpenSite, onAddSite, canEditCompany, me, onOpenQuote, focusSiteId, focusKey, onFocused,
 }: CompanyPaneProps) {
   const supabase = createClient()
   const agencies = useAgencies()
@@ -104,10 +136,12 @@ export default function CompanyPane({
   const [editCompanyOpen, setEditCompanyOpen] = useState(false)
   /** 사업장 수정 모달 — 고친 줄. */
   const [editSite, setEditSite] = useState<Customer | null>(null)
-  /** 「다른 회사로 이동」·「회사 병합」의 고르는 창. */
+  /** 「다른 회사로 이동」의 고르는 창. */
   const [moveOpen, setMoveOpen] = useState(false)
-  const [mergeTarget, setMergeTarget] = useState<{ id: number; name: string } | null>(null)
-  const [mergeOpen, setMergeOpen] = useState(false)
+  /** 「+ 기록」 창 — 영업 활동·포캐스트·홀딩을 한 창에서 고른다. */
+  const [recordOpen, setRecordOpen] = useState(false)
+  /** 「전체 보기」를 누른 횟수 — 활동 이력을 포캐스트만으로 걸러 달라는 신호다. */
+  const [forecastOnly, setForecastOnly] = useState(0)
   /** 사업장 병합 창. */
   const [siteMergeOpen, setSiteMergeOpen] = useState(false)
   /** 영업 기록 창 — 회사 화면에서는 어느 사업장인지 함께 고른다. */
@@ -128,6 +162,15 @@ export default function CompanyPane({
     () => group.sites.map(s => ({ id: s.customer.customer_id, name: s.siteName || '(이름 없음)' })),
     [group.sites],
   )
+  /** 회사 카드의 포캐스트 블록 — 진행 중인 건만(lib/companyForecast.ts). */
+  const forecast = useMemo(() => {
+    const nameOf = new Map(siteOptions.map(s => [s.id, s.name]))
+    return companyForecast({
+      opportunities: timeline.opportunities,
+      siteName: id => (id == null ? '' : nameOf.get(id) ?? ''),
+    })
+  }, [timeline.opportunities, siteOptions])
+
   /** 가장 최근에 움직인 사업장 — 영업 기록의 기본값이다. */
   const recentSiteId = useMemo(() => {
     const best = [...group.sites].sort((a, b) => (b.touch?.date ?? '').localeCompare(a.touch?.date ?? ''))[0]
@@ -233,8 +276,8 @@ export default function CompanyPane({
   }
 
   /** 영업 기록 — 회사 화면에서는 사업장을 골라 그 줄에 붙인다. */
-  const saveActivity = async (form: SalesActivityForm) => {
-    const siteId = activitySiteId ?? recentSiteId
+  const saveActivity = async (form: SalesActivityForm, siteIdArg?: number) => {
+    const siteId = siteIdArg ?? activitySiteId ?? recentSiteId
     if (!siteId) { onError('사업장을 고르세요'); return }
     if (!me.engineer_id) { onError('사용자 정보를 불러오는 중입니다'); return }
     setSavingActivity(true)
@@ -260,8 +303,42 @@ export default function CompanyPane({
     setSavingActivity(false)
     if (error) { onError(error.message || '영업 기록을 저장하지 못했습니다'); return }
     setActivityOpen(false)
+    setRecordOpen(false)
     setEditingActivity(null)
     onToast(editingActivity ? '영업 기록을 수정했습니다' : '영업 기록을 추가했습니다')
+    timeline.reload()
+    onSaved()
+  }
+
+  /**
+   * 포캐스트 — 저장은 상세·파이프라인과 **같은 훅**이 한다
+   * (hooks/customer/useOpportunityCrud.ts). 업체를 폼에서 고르는 길을 쓰므로
+   * customerId 는 null 로 두고 고른 사업장을 form.customer_id 에 넣는다.
+   */
+  const oppCrud = useOpportunityCrud({
+    customerId: null,
+    engineerId: me.engineer_id,
+    role: me.permission_level,
+    fetchDetail: async () => { timeline.reload(); onSaved(); setRecordOpen(false); return true },
+  })
+
+  /** 홀딩 — insert 는 장비 카드와 같은 함수다(lib/holdingCreate.ts). */
+  const saveHolding = async (draft: HoldingDraft) => {
+    if (!me.engineer_id) { onError('사용자 정보를 불러오는 중입니다'); return }
+    setSavingActivity(true)
+    const r = await createHolding(supabase, {
+      customerId: draft.customerId,
+      deviceId: draft.deviceId,
+      title: draft.title,
+      startedAt: draft.startedAt,
+      firstNote: draft.firstNote,
+      engineerId: me.engineer_id,
+    })
+    setSavingActivity(false)
+    if (!r.ok) { onError(r.message); return }
+    if (r.noteFailed) onError('홀딩은 등록됐지만 메모 저장에 실패했습니다')
+    setRecordOpen(false)
+    onToast('홀딩을 등록했습니다')
     timeline.reload()
     onSaved()
   }
@@ -283,74 +360,100 @@ export default function CompanyPane({
     onSaved()
   }
 
-  /** 이 회사를 다른 회사로 합친다. **되돌릴 수 없다.** */
-  const doMerge = async () => {
-    if (!mergeTarget || busy) return
-    setBusy(true)
-    const r = await callRoute({ action: 'merge', parentId: group.companyId, intoParentId: mergeTarget.id })
-    setBusy(false)
-    if (!r.ok) { onError(r.error); return }
-    setMergeTarget(null)
-    onToast(`「${group.companyName}」 를 「${mergeTarget.name}」 로 합쳤습니다`)
-    onCompanyGone()
-    onSaved()
-  }
-
   const selected = [...checked]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
 
-      {/* ── 회사 카드 ── */}
-      <section style={{ ...card, padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 200 }}>
+      {/* 줄 호버에서만 보이는 연필 — 평소에는 표가 글자만으로 조용하다.
+          키보드로 올 때도 보여야 하므로 :focus-within 을 함께 둔다. */}
+      <style>{`
+        .site-row .site-edit { opacity: 0; transition: opacity 0.12s ease }
+        .site-row:hover .site-edit, .site-row:focus-within .site-edit { opacity: 1 }
+        /* 좁은 화면에서 표가 옆으로 밀려도 연필은 오른쪽 끝에 붙어 있다 —
+           스크롤해야 나타나면 「고치기」를 못 찾는다. */
+        .site-edit-cell { position: sticky; right: 0; background: #ffffff }
+        .site-row:hover .site-edit-cell { background: #fafafa }
+        .site-row.on .site-edit-cell { background: #fafafa }
+      `}</style>
+
+      {/* ── 회사 카드 ── 1줄: 이름·분류·버튼 / 2줄: 수치 타일 + 포캐스트 ── */}
+      <section style={{ ...card, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: TEXT, letterSpacing: '-0.5px' }}>{group.companyName}</h1>
-          {group.nameEn && <span style={{ fontSize: 12, color: MUTED }}>{group.nameEn}</span>}
+          {group.nameEn && <span style={{ fontSize: 13, color: MUTED }}>{group.nameEn}</span>}
           {group.industry && (
-            <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: NEUTRAL, color: SUB }}>{group.industry}</span>
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: R.tag, background: NEUTRAL, color: SUB }}>{group.industry}</span>
           )}
-        </div>
-
-        <div style={{ display: 'flex', gap: 22 }}>
-          {([
-            ['사업장', String(group.sites.length), TEXT],
-            ['장비', String(group.deviceCount), TEXT],
-            ['진행 견적', String(group.openQuotes), group.openQuotes > 0 ? BLUE : TEXT],
-            ['최근 활동', group.touch ? group.touch.date : '-', TEXT],
-          ] as const).map(([label, value, color]) => (
-            <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <b style={{ fontSize: 17, fontWeight: 700, color, letterSpacing: '-0.3px' }}>{value}</b>
-              <span style={{ fontSize: 11, color: MUTED }}>
-                {label}
-                {label === '최근 활동' && group.touch
-                  ? ` (${group.touch.source}${engineerName(group.touch.actorId) ? ` · ${engineerName(group.touch.actorId)}` : ''})`
-                  : ''}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        <span style={{ flex: 1 }} />
-        <div style={{ display: 'flex', gap: 8 }}>
+          <span style={{ flex: 1 }} />
           <EditIconButton label="회사 정보 수정" onClick={() => setEditCompanyOpen(true)} />
-          {/* 병합 — **되돌릴 수 없다.** 슈퍼관리자만 누를 수 있다(라우트도 같은 문턱이다). */}
-          <button type="button" disabled={!canEditCompany} title={canEditCompany ? '다른 회사로 합칩니다' : '회사 병합은 슈퍼관리자만 할 수 있습니다'}
-            onClick={() => setMergeOpen(true)}
-            style={{ ...btn, color: canEditCompany ? TEXT : MUTED, cursor: canEditCompany ? 'pointer' : 'not-allowed' }}>회사 병합</button>
+          <AddIconButton label="사업장 추가" onClick={onAddSite} />
+        </div>
+
+        {/* 좌 440px 에 수치 네 칸, 남는 자리에 포캐스트. 좁으면 아래로 쌓인다. */}
+        <div style={{ display: 'grid', gridTemplateColumns: '440px minmax(0, 1fr)', gap: 12, alignItems: 'stretch' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+            <StatTile label="사업장" value={String(group.sites.length)} unit="곳" />
+            <StatTile label="장비" value={String(group.deviceCount)} unit="대" />
+            <StatTile label="진행 견적" value={String(group.openQuotes)} unit="건" color={group.openQuotes > 0 ? BLUE : TEXT} />
+            <StatTile
+              label="최근 활동"
+              value={group.touch ? group.touch.date : '-'}
+              /* 날짜는 열 자리라 24px 로 두면 타일을 넘는다 — 이 칸만 15px 다. */
+              valueSize={15}
+              note={group.touch
+                ? `${group.touch.source}${engineerName(group.touch.actorId) ? ` · ${engineerName(group.touch.actorId)}` : ''}`
+                : ''}
+            />
+          </div>
+
+          {/* 포캐스트 — 진행 중인 영업 기회 요약(lib/companyForecast.ts). 별색은 쓰지 않는다. */}
+          <div style={{ background: TILE_BG, border: `1px solid ${BORDER}`, borderRadius: R.tile, padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center', minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <span style={{ fontSize: 11, color: MUTED }}>포캐스트</span>
+              <b style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>{forecast.count}</b>
+              {forecast.count > 0 && (
+                <span style={{ fontSize: 12, color: SUB }}>합계 <b style={{ fontWeight: 700, color: TEXT }}>₩{numKR(forecast.total)}</b></span>
+              )}
+              <span style={{ flex: 1 }} />
+              {forecast.count > 0 && (
+                <button type="button" onClick={() => setForecastOnly(c => c + 1)}
+                  style={{ border: 'none', background: 'none', padding: 0, color: BLUE, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  전체 보기 ›
+                </button>
+              )}
+            </div>
+            {forecast.count === 0 ? (
+              <div style={{ fontSize: 12, color: MUTED }}>진행 중인 포캐스트가 없습니다</div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto minmax(0, auto) auto', columnGap: 12, rowGap: 6, fontSize: 12, alignItems: 'center' }}>
+                {forecast.lines.map(l => (
+                  <Fragment key={l.id}>
+                    <span style={{ color: TEXT, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {l.title || '(제목 없음)'}
+                      {l.siteName && <span style={{ fontWeight: 400, color: SUB }}>{` · ${l.siteName}`}</span>}
+                    </span>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: R.tag, background: NEUTRAL, color: SUB, justifySelf: 'center' }}>{l.stage}</span>
+                    <span style={{ color: SUB, whiteSpace: 'nowrap' }}>{l.when || '-'}</span>
+                    <span className="num" style={{ textAlign: 'right', fontWeight: 700, color: TEXT, whiteSpace: 'nowrap' }}>{l.amount ? `₩${numKR(l.amount)}` : '-'}</span>
+                    <span style={{ color: SUB, textAlign: 'right', whiteSpace: 'nowrap' }}>{l.owner || '-'}</span>
+                  </Fragment>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </section>
 
       {/* ── 사업장 표 ── */}
       <section style={{ ...card, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: `1px solid ${BORDER}` }}>
-          <b style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>사업장 {group.sites.length}곳</b>
-          <span style={{ flex: 1 }} />
-          {/* 사업장을 더하는 자리는 **표 머리줄**이다 — 더할 대상(이 표)의 바로 위다. */}
-          <button type="button" onClick={onAddSite} style={btn}>+ 사업장 추가</button>
+          {/* 머리줄은 제목만 둔다 — 사업장을 더하는 일은 회사 카드의 + 아이콘 하나로 모았다. */}
+          <b style={{ ...TITLE }}>사업장 {group.sites.length}</b>
         </div>
 
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 760 }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 700 }}>
             <thead>
               <tr>
                 <th style={{ ...th, width: 34 }}>
@@ -366,8 +469,8 @@ export default function CompanyPane({
                 <th style={th}>상태</th>
                 <th style={{ ...th, textAlign: 'right', width: 64 }}>장비</th>
                 <th style={{ ...th, textAlign: 'right', width: 86 }}>진행 견적</th>
-                <th style={th}>최근 활동 · 작성자</th>
-                <th style={{ ...th, width: 52 }} />
+                <th style={th}>최근 활동</th>
+                <th className="site-edit-cell" style={{ ...th, width: 52, background: "#fafafa" }} />
               </tr>
             </thead>
             <tbody>
@@ -378,9 +481,9 @@ export default function CompanyPane({
                 return (
                   /* 줄 아무 곳이나 누르면 그 사업장이 열린다 — 「상세」 버튼을 따로 두지 않는다.
                      체크박스·연필은 그 자리에서 멈춘다(아래 stopPropagation). */
-                  <tr key={id}
+                  <tr key={id} className={on ? "site-row on" : "site-row"}
                     onClick={() => onOpenSite(id)}
-                    style={{ background: on ? '#f8fafc' : undefined, cursor: 'pointer' }}
+                    style={{ background: on ? '#fafafa' : undefined, cursor: 'pointer' }}
                     onMouseEnter={e => { if (!on) e.currentTarget.style.background = '#fafafa' }}
                     onMouseLeave={e => { if (!on) e.currentTarget.style.background = '' }}>
                     <td style={td} onClick={e => e.stopPropagation()}>
@@ -388,8 +491,8 @@ export default function CompanyPane({
                     </td>
                     <td style={{ ...td, fontWeight: 600 }}>
                       {s.needsName
-                        ? <span style={{ fontSize: 11, fontWeight: 700, color: DANGER, background: '#fef2f2', borderRadius: 6, padding: '2px 7px' }}>입력 필요</span>
-                        : s.siteName}
+                        ? <span style={{ fontSize: 11, fontWeight: 700, color: DANGER, background: '#fef2f2', borderRadius: R.tag, padding: '2px 7px' }}>입력 필요</span>
+                        : <div style={{ maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.siteName}</div>}
                     </td>
                     <td style={{ ...td, color: SUB }}>{regionTextOf(s.customer) || '-'}</td>
                     <td style={{ ...td, color: s.customer.agency_name ? TEXT : MUTED }}>{s.customer.agency_name ?? DIRECT_SALE_LABEL}</td>
@@ -401,18 +504,22 @@ export default function CompanyPane({
                     </td>
                     <td style={{ ...td, textAlign: 'right', width: 64 }}>{s.deviceCount}</td>
                     <td style={{ ...td, textAlign: 'right', width: 86, color: s.openQuotes > 0 ? BLUE : TEXT, fontWeight: s.openQuotes > 0 ? 700 : 400 }}>{s.openQuotes}</td>
-                    <td style={{ ...td, color: late ? DANGER : SUB }}>
+                    {/* 날짜가 먼저 읽히게 **날짜만 굵게** 두고, 경과·유형·작성자는 회색으로 뒤에 붙인다.
+                        이 칸만 길어서 좁은 화면에서 줄 끝(연필)을 밀어냈다 — 여기서 말줄임한다. */}
+                    <td style={td}>
                       {s.touch ? (
-                        <>
-                          {s.touch.date}
-                          <span style={{ color: late ? DANGER : MUTED }}>
-                            {` (${daysLabel(s.days)} · ${s.touch.source}${engineerName(s.touch.actorId) ? ` · ${engineerName(s.touch.actorId)}` : ''})`}
+                        <div style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <b style={{ fontWeight: 600, color: late ? DANGER : TEXT }}>{s.touch.date}</b>
+                          <span style={{ color: late ? DANGER : SUB }}>
+                            {` ${daysLabel(s.days)} · ${s.touch.source}${engineerName(s.touch.actorId) ? ` · ${engineerName(s.touch.actorId)}` : ''}`}
                           </span>
-                        </>
+                        </div>
                       ) : <span style={{ color: FAINT }}>-</span>}
                     </td>
-                    <td style={{ ...td, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                      <EditIconButton size={24} label={`${s.siteName || '이름 없는 사업장'} 수정`} onClick={() => setEditSite(s.customer)} />
+                    <td className="site-edit-cell" style={{ ...td, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                      <span className="site-edit">
+                        <EditIconButton size={24} label={`${s.siteName || '이름 없는 사업장'} 수정`} onClick={() => setEditSite(s.customer)} />
+                      </span>
                     </td>
                   </tr>
                 )
@@ -436,7 +543,7 @@ export default function CompanyPane({
                   void saveCell(selected, { agency_customer_id: v }, `${selected.length}곳의 대리점을 바꿨습니다`)
                   e.target.value = ''
                 }}
-                style={{ height: 26, borderRadius: 6, border: 'none', fontSize: 12, padding: '0 6px' }}>
+                style={{ height: 26, borderRadius: R.icon, border: 'none', fontSize: 12, padding: '0 6px' }}>
                 <option value="">고르기</option>
                 <option value="none">{DIRECT_SALE_LABEL}</option>
                 {agencies.map(a => <option key={a.customer_id} value={a.customer_id}>{a.company_name}</option>)}
@@ -451,14 +558,14 @@ export default function CompanyPane({
                   void saveCell(selected, { status: e.target.value }, `${selected.length}곳의 상태를 바꿨습니다`)
                   e.target.value = ''
                 }}
-                style={{ height: 26, borderRadius: 6, border: 'none', fontSize: 12, padding: '0 6px' }}>
+                style={{ height: 26, borderRadius: R.icon, border: 'none', fontSize: 12, padding: '0 6px' }}>
                 <option value="">고르기</option>
                 {STATUSES.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
             </label>
 
             <button type="button" disabled={busy} onClick={() => setMoveOpen(true)}
-              style={{ height: 26, padding: '0 10px', borderRadius: 6, border: '1px solid #374151', background: 'transparent', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              style={{ height: 26, padding: '0 10px', borderRadius: R.icon, border: '1px solid #374151', background: 'transparent', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
               다른 회사로 이동
             </button>
 
@@ -467,7 +574,7 @@ export default function CompanyPane({
               <button type="button" disabled={busy || !canEditCompany}
                 title={canEditCompany ? '고른 사업장을 한 줄로 합칩니다' : '사업장 병합은 슈퍼관리자만 할 수 있습니다'}
                 onClick={() => setSiteMergeOpen(true)}
-                style={{ height: 26, padding: '0 10px', borderRadius: 6, border: '1px solid #374151', background: 'transparent', color: canEditCompany ? '#fff' : MUTED, fontSize: 12, fontWeight: 700, cursor: canEditCompany ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>
+                style={{ height: 26, padding: '0 10px', borderRadius: R.icon, border: '1px solid #374151', background: 'transparent', color: canEditCompany ? '#fff' : MUTED, fontSize: 12, fontWeight: 700, cursor: canEditCompany ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>
                 사업장 병합
               </button>
             )}
@@ -492,12 +599,14 @@ export default function CompanyPane({
           customerId={group.companyId}
           sites={siteOptions}
           events={timeline.events}
+          opportunities={timeline.opportunities}
+          forecastOnlyAt={forecastOnly}
           initialSiteIds={focusSiteId != null ? [focusSiteId] : undefined}
           focusKey={focusKey}
           onFocused={onFocused}
           onOpenQuotePdf={q => { if (onOpenQuote) onOpenQuote(q); else void openQuotePdf(q) }}
           onOpenHolding={(h: Holding) => { const id = h.customer_id; if (id) onOpenSite(id) }}
-          onAddActivity={() => { setEditingActivity(null); setActivitySiteId(recentSiteId); setActivityOpen(true) }}
+          onAddRecord={() => { setEditingActivity(null); setActivitySiteId(recentSiteId); setRecordOpen(true) }}
           onEditActivity={a => { setEditingActivity(a); setActivitySiteId(a.customer_id ?? recentSiteId); setActivityOpen(true) }}
           canEditActivity={canEditActivity}
         />
@@ -541,7 +650,25 @@ export default function CompanyPane({
         />
       )}
 
-      {/* 영업 기록 — 회사 화면에서는 사업장을 함께 고른다 */}
+      {/* 기록 추가 — 영업 활동·포캐스트·홀딩 한 창 */}
+      {recordOpen && (
+        <RecordAddModal
+          companyName={group.companyName}
+          sites={siteOptions}
+          defaultSiteId={recentSiteId}
+          contacts={timeline.contacts}
+          devices={timeline.devices}
+          opportunities={timeline.opportunities}
+          myEngineerId={me.engineer_id}
+          isSaving={savingActivity || oppCrud.isSavingOpp}
+          onClose={() => setRecordOpen(false)}
+          onSaveActivity={(siteId, form) => void saveActivity(form, siteId)}
+          onSaveOpportunity={(siteId, form) => void oppCrud.handleSaveOpp({ ...form, customer_id: siteId })}
+          onSaveHolding={draft => void saveHolding(draft)}
+        />
+      )}
+
+      {/* 영업 기록 **수정** — 줄 끝 연필. 추가는 위 「기록 추가」가 맡는다. */}
       {activityOpen && (
         <SalesActivityModal
           isOpen
@@ -571,44 +698,6 @@ export default function CompanyPane({
         />
       )}
 
-      {/* 회사 병합 — ① 대상 고르기 → ② 확인 */}
-      {mergeOpen && (
-        <CompanySearchModal
-          title="회사 병합"
-          hint={`「${group.companyName}」 의 사업장 ${group.sites.length}곳을 어느 회사로 합칠지 고릅니다.`}
-          excludeId={group.companyId}
-          confirmText="다음"
-          onPick={(id, name) => { setMergeOpen(false); setMergeTarget({ id, name }) }}
-          onClose={() => setMergeOpen(false)}
-        />
-      )}
-      {mergeTarget && (
-        <ModalOverlay onClose={() => setMergeTarget(null)}>
-          <div onClick={e => e.stopPropagation()}
-            style={{ width: '100%', maxWidth: 440, background: '#fff', borderRadius: 8, padding: 22, border: `1px solid ${BORDER}`, boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }}>
-            <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, marginBottom: 12 }}>회사 병합 — 한 번 더 확인</div>
-            <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.9 }}>
-              <b>{group.companyName}</b>
-              <span style={{ color: SUB }}>{` (사업장 ${group.sites.length}곳 · 장비 ${group.deviceCount} · 진행 견적 ${group.openQuotes})`}</span>
-              <br />↓
-              <br /><b>{mergeTarget.name}</b> 로 합칩니다.
-            </div>
-            <ul style={{ fontSize: 12, color: SUB, lineHeight: 1.9, marginTop: 12, paddingLeft: 18 }}>
-              <li>사업장이 전부 옮겨 가고 이름이 「{mergeTarget.name} 사업장명」 으로 다시 만들어집니다.</li>
-              <li>분류·영문명·메모는 <b>받는 회사가 비어 있을 때만</b> 가져옵니다.</li>
-              <li><b style={{ color: DANGER }}>되돌리기는 없습니다.</b> 합친 회사 줄은 닫히고(삭제 표시) 목록에서 사라집니다.</li>
-            </ul>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-              <button onClick={() => setMergeTarget(null)} disabled={busy}
-                style={{ padding: '9px 15px', background: '#fff', color: SUB, borderRadius: 6, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
-              <button onClick={() => void doMerge()} disabled={busy}
-                style={{ padding: '9px 17px', background: DANGER, color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: busy ? 0.6 : 1 }}>
-                {busy ? '합치는 중…' : '합치기'}
-              </button>
-            </div>
-          </div>
-        </ModalOverlay>
-      )}
     </div>
   )
 }

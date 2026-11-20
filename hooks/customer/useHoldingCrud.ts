@@ -18,6 +18,7 @@ import { josa } from '@/lib/josa'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { isSuperAdmin } from '@/lib/permissions'
+import { createHolding } from '@/lib/holdingCreate'
 import type { HoldingReport } from '@/components/customer/holding'
 import type { Holding, HoldingForm, HoldingNote } from '@/components/customer/types'
 
@@ -172,34 +173,22 @@ export function useHoldingCrud({ customerId, holdings, engineerId, fetchDetail, 
     }
 
     setIsSavingHolding(true)
-    const { data: inserted, error } = await supabase.from('holdings').insert({
-      customer_id: customerId,
-      device_id: newHoldingTarget.deviceId,
-      service_id: newHoldingTarget.serviceId,
-      title: form.title.trim(),
-      started_at: form.started_at,
-      created_by: engineerId,
-    }).select('holding_id').single()
-
-    if (error || !inserted) {
+    // insert 는 lib/holdingCreate.ts 하나다 — 회사 화면의 「+ 기록」 모달도 같은 길로 넣는다.
+    const r = await createHolding(supabase, {
+      customerId,
+      deviceId: newHoldingTarget.deviceId,
+      serviceId: newHoldingTarget.serviceId,
+      title: form.title,
+      startedAt: form.started_at,
+      firstNote: form.first_note,
+      engineerId,
+    })
+    if (!r.ok) {
       setIsSavingHolding(false)
-      console.error('[customer] create holding failed', error)
-      toast.error(error?.message || '홀딩 등록 중 오류가 발생했습니다')
+      toast.error(r.message)
       return
     }
-
-    // 최초 메모는 선택 사항. 실패해도 홀딩 자체는 남으므로 안내만 하고 넘어간다.
-    if (form.first_note.trim()) {
-      const { error: noteErr } = await supabase.from('holding_notes').insert({
-        holding_id: inserted.holding_id,
-        engineer_id: engineerId,
-        content: form.first_note.trim(),
-      })
-      if (noteErr) {
-        console.error('[customer] create holding note failed', noteErr)
-        toast.error('홀딩은 등록됐지만 메모 저장에 실패했습니다')
-      }
-    }
+    if (r.noteFailed) toast.error('홀딩은 등록됐지만 메모 저장에 실패했습니다')
     setIsSavingHolding(false)
     closeHoldingModal()
     if (await fetchDetail()) toast.success('홀딩이 등록되었습니다')

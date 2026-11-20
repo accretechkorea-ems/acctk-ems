@@ -45,6 +45,7 @@ import {
   type Device,
   toTimeValue,
 } from '@/lib/home'
+import { R } from '@/lib/radius'
 
 
 
@@ -705,7 +706,7 @@ useEffect(() => {
           display: 'none',
           marginBottom: 12,
           border: `1px solid #e5e7eb`,
-          borderRadius: 12,
+          borderRadius: R.card,
           overflow: 'hidden',
           flexShrink: 0,
         }}
@@ -827,7 +828,6 @@ useEffect(() => {
                 onToast={msg => toast.success(msg)}
                 onOpenSite={id => setSelectedSiteId(id)}
                 onAddSite={() => openAddCustomer(true)}
-                onCompanyGone={() => { setSelectedCompanyId(null); setSelectedSiteId(null); loadParents().then(setCompanies) }}
                 canEditCompany={isSuperAdmin(me)}
                 me={{ engineer_id: me?.engineer_id ?? null, permission_level: me?.permission_level ?? null }}
                 focusSiteId={timelineFocusSiteId}
@@ -835,7 +835,7 @@ useEffect(() => {
                 onFocused={() => setTimelineFocusKey(null)}
               />
             ) : (
-              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: TEXT_MUTED, fontSize: 13, background: '#fff', border: '1px solid #ebebeb', borderRadius: 8 }}>
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: TEXT_MUTED, fontSize: 13, background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control }}>
                 왼쪽에서 회사나 사업장을 고르세요
               </div>
             )}
