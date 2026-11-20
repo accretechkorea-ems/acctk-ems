@@ -93,7 +93,11 @@ export default function ModalCard({
       onClick={e => e.stopPropagation()}
       style={{
         width: `min(92vw, ${width}px)`, maxWidth: `min(92vw, ${width}px)`,
-        display: 'flex', flexDirection: 'column', minHeight: 0,
+        display: 'flex', flexDirection: 'column',
+        // minHeight 는 **인라인으로 두지 않는다** — 폰에서 공용 CSS 가 카드를
+        // 전체 화면 시트로 늘리는데(min-height: 100dvh), 인라인 0 이 그것을 이겨
+        // 반쪽 카드가 떴다(2026-11-21 실측: 390 에서 높이 458). 본문 쪽 minHeight 0
+        // 하나로 스크롤은 그대로 된다.
         // 인라인이라 `.ems-modal-overlay > * { overflow-y: auto }` 를 이긴다 —
         // 카드가 구르지 않아야 머리·바닥이 고정된다.
         overflow: 'hidden',
