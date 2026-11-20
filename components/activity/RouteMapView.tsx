@@ -8,7 +8,7 @@ import { useOffices, findOffice } from '@/lib/offices'
 import { NOT_AGENCY_ONLY } from '@/lib/customerAgency'
 import { Z } from '@/lib/zIndex'
 import { useOverlayEsc } from '@/components/common/overlayStack'
-import { R as RAD } from '@/lib/radius'
+import { R as RAD, R } from '@/lib/radius'
 
 // 엔지니어 동선 지도(전체 화면 오버레이). 방문지 마커 + 연결선 + 사무실 마커.
 // 연결선 모드는 지도 안 토글로 전환한다(기본 visits, 열 때마다 초기화):
@@ -157,7 +157,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
         // 정보창은 문자열 대신 DOM 으로 만들어 업체명을 textContent 로 안전하게 삽입.
         const box = document.createElement('div')
         box.style.cssText =
-          'padding:10px 12px;background:#fff;border:1px solid #ebebeb;border-radius:8px;box-shadow:0 16px 40px rgba(0,0,0,0.18);white-space:nowrap'
+          `padding:10px 12px;background:#fff;border:1px solid #ebebeb;border-radius:${R.control}px;box-shadow:0 16px 40px rgba(0,0,0,0.18);white-space:nowrap`
         const name = document.createElement('div')
         name.textContent = s.companyName
         name.style.cssText = 'font-size:13px;font-weight:700;color:#111827'
@@ -181,14 +181,14 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
         const dot = document.createElement('div')
         dot.style.cssText = 'position:absolute;left:0;top:0;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid #234ea2;box-shadow:0 2px 6px rgba(0,0,0,0.3);cursor:pointer'
         const pill = document.createElement('div')
-        pill.style.cssText = 'position:absolute;left:0;top:0;transform:translate(-50%,calc(-100% - 13px));padding:2px 7px;background:#234ea2;color:#fff;border-radius:6px;font-size:11px;font-weight:600;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.3);cursor:pointer;display:inline-flex;align-items:center'
+        pill.style.cssText = `position:absolute;left:0;top:0;transform:translate(-50%,calc(-100% - 13px));padding:2px 7px;background:#234ea2;color:#fff;border-radius:${R.icon}px;font-size:11px;font-weight:600;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.3);cursor:pointer;display:inline-flex;align-items:center`
         const dateSpan = document.createElement('span')
         dateSpan.textContent = label
         pill.appendChild(dateSpan)
         if (moreCount > 0) {
           const badge = document.createElement('span')
           badge.textContent = `+${moreCount}건`
-          badge.style.cssText = 'margin-left:5px;padding:0 4px;background:#fff;color:#234ea2;border-radius:5px;font-weight:700'
+          badge.style.cssText = `margin-left:5px;padding:0 4px;background:#fff;color:#234ea2;border-radius:${R.tag}px;font-weight:700`
           pill.appendChild(badge)
         }
         const handler = (e: Event) => { e.stopPropagation(); onClick() }
@@ -202,7 +202,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
       const openClusterInfo = (pos: any, items: RouteStop[]) => {
         if (infoRef.current) infoRef.current.setMap(null)
         const box = document.createElement('div')
-        box.style.cssText = 'background:#fff;border:1px solid #ebebeb;border-radius:8px;box-shadow:0 16px 40px rgba(0,0,0,0.18);max-height:240px;overflow:auto;min-width:180px'
+        box.style.cssText = `background:#fff;border:1px solid #ebebeb;border-radius:${R.control}px;box-shadow:0 16px 40px rgba(0,0,0,0.18);max-height:240px;overflow:auto;min-width:180px`
         items.forEach((s, i) => {
           const row = document.createElement('div')
           row.style.cssText = `padding:8px 12px;white-space:nowrap;${i > 0 ? 'border-top:1px solid #f3f4f6;' : ''}`
@@ -306,9 +306,9 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
         wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center'
         const pill = document.createElement('div')
         pill.textContent = `${officeInfo.label} 사무실`
-        pill.style.cssText = 'padding:2px 8px;background:#fff;border:1px solid #d1d5db;color:#374151;border-radius:6px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.3);margin-bottom:2px'
+        pill.style.cssText = `padding:2px 8px;background:#fff;border:1px solid #d1d5db;color:#374151;border-radius:${R.icon}px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.3);margin-bottom:2px`
         const badge = document.createElement('div')
-        badge.style.cssText = 'width:22px;height:22px;border-radius:6px;background:#374151;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center'
+        badge.style.cssText = `width:22px;height:22px;border-radius:${R.icon}px;background:#374151;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center`
         badge.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>'
         wrap.append(pill, badge)
         const officeOv = new kakao.maps.CustomOverlay({ position: new kakao.maps.LatLng(officePoint.lat, officePoint.lng), yAnchor: 1, zIndex: 4, content: wrap })
@@ -370,7 +370,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
       const openNearbyTooltip = (pos: any, name: string) => {
         if (infoRef.current) infoRef.current.setMap(null)
         const box = document.createElement('div')
-        box.style.cssText = 'padding:6px 10px;background:#fff;border:1px solid #ebebeb;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.15);white-space:nowrap;font-size:12px;font-weight:700;color:#374151'
+        box.style.cssText = `padding:6px 10px;background:#fff;border:1px solid #ebebeb;border-radius:${R.icon}px;box-shadow:0 8px 24px rgba(0,0,0,0.15);white-space:nowrap;font-size:12px;font-weight:700;color:#374151`
         box.textContent = name
         const info = new kakao.maps.CustomOverlay({ position: pos, yAnchor: 1.6, zIndex: 6, content: box })
         info.setMap(map)

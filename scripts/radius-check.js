@@ -18,8 +18,11 @@
  *   · 값이 **계산**인 자리(`borderRadius: height`, `radius`, `changed ? 0 : undefined`)
  *   · `borderRadius: 0` — 각지게 하는 것은 토큰이 아니다.
  *   · 아래 ALLOW 에 적힌 한 줄(2px 선의 끝 1px 하나)
- *   · 지도 마커·메일 HTML 처럼 **CSS 문자열**로 만드는 자리(`border-radius:8px`)
- *     — 리터럴 문자열이라 토큰을 끼울 수 없다. 이 검사는 인라인 style 만 본다.
+ *   · **메일 HTML**(lib/leadMail.ts) — 받는 쪽이 메일 클라이언트라 토큰을 끼울 수 없다.
+ *   · 스크롤바 썸(`::-webkit-scrollbar-thumb`) — 막대 굵기의 절반이지 카드 모서리가 아니다.
+ *
+ * ⚠ **지도 마커는 더 이상 예외가 아니다**(2026-11-20) — CSS 문자열도 템플릿 문자열이라
+ *   토큰을 끼울 수 있다. "끼울 수 없다"고 적어 둔 것이 틀렸다.
  */
 // 맨 require() 는 eslint 경고를 남긴다(no-require-imports). 이 파일은 node 로 직접
 // 돌리는 CJS 하네스라 그렇게 불러올 수밖에 없으니, run-checks.js 와 같은 방식으로
@@ -115,6 +118,30 @@ for (const f of files) {
   })
 }
 if (direct === 0) console.log('  ✓ 0건')
+
+// ── ③-2 CSS 문자열로 적은 모서리 ─────────────────────────────────────────
+//   지도 마커·정보창처럼 DOM 을 글자로 만드는 자리도 **템플릿 문자열**이라
+//   `${R.icon}px` 로 토큰을 끼울 수 있다. 2026-11-20 에 예외에서 뺐다.
+console.log('[radius] CSS 문자열의 직접 값')
+{
+  /** 메일 HTML 은 받는 쪽이 메일 클라이언트라 토큰을 끼울 수 없다. */
+  const CSS_ALLOW = ['lib/leadMail.ts']
+  let bad2 = 0
+  for (const f of files) {
+    if (CSS_ALLOW.includes(rel(f))) continue
+    const lines = fs.readFileSync(f, 'utf8').split('\n')
+    lines.forEach((text, i) => {
+      const m = text.match(/border-radius:\s*(\d+)(px|%)?/)
+      if (!m) return
+      if (m[1] === '0') return                      // 각지게 하는 것은 토큰이 아니다
+      if (m[2] === '%') return                      // 원형(50%)은 토큰이 아니다
+      if (/scrollbar-thumb/.test(text)) return      // 막대 굵기의 절반이지 카드 모서리가 아니다
+      bad(f, i + 1, `border-radius: ${m[1]}${m[2] ?? ''} — 토큰을 끼운다`)
+      bad2++
+    })
+  }
+  if (bad2 === 0) console.log('  ✓ 0건')
+}
 
 // ── ④ 바꾸다 만 것이 아닌가 ───────────────────────────────────────────────
 console.log('[radius] 토큰을 쓰는 파일')

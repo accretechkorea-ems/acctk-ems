@@ -50,6 +50,7 @@ import {
   toTimeValue,
 } from '@/lib/home'
 import { R } from '@/lib/radius'
+import { Z } from '@/lib/zIndex'
 
 
 
@@ -668,23 +669,7 @@ useEffect(() => {
       onClearChips={() => setListFilter(prev => defaultFilter(filterOptions, prev))}
       sort={view === 'list' ? listSort : undefined}
       setSort={view === 'list' ? setListSort : undefined}
-      rightSlot={view === 'map' ? (
-        /* 지도 보기에는 우측 pane 이 없다(지도가 다 쓴다) — 엑셀·등록은 여기 선다.
-           목록 보기에서는 우측 pane 우상단으로 간다. */
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button type="button" onClick={handleExportExcel} disabled={!canExportExcel || isExporting}
-            title="엑셀 내보내기" aria-label="엑셀 내보내기"
-            style={{ width: 34, height: 34, borderRadius: R.control, border: '1px solid #ebebeb', background: '#fff', color: '#6b7280', cursor: canExportExcel ? 'pointer' : 'not-allowed', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v3h16v-3" />
-            </svg>
-          </button>
-          <button type="button" onClick={() => openAddCustomer()} title="업체 등록" aria-label="업체 등록"
-            style={{ width: 34, height: 34, borderRadius: R.control, border: 'none', background: '#234ea2', color: '#fff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-          </button>
-        </div>
-      ) : undefined}
+      bordered={view === 'list'}
     />
   )
 
@@ -912,19 +897,41 @@ useEffect(() => {
           </div>
         </div>
       ) : (
-      <div
-        className="home-grid"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '340px 1fr',
-          gap: 0,
-          alignItems: 'stretch',
-          flex: 1,
-          minHeight: 0,
-        }}
-      >
-<div className={mobileTab === 'map' ? 'mobile-hide' : ''} style={{ minHeight: 0, minWidth: 0, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#fff', borderRight: '1px solid #ebebeb' }}>
-          {panelHeader}
+      /* ── 지도 보기 — 지도가 화면 전부를 쓰고, 그 위에 **띠 하나**가 뜬다 ──────
+         흰 좌 패널을 두던 때는 지도가 패널만큼 좁았고, 패널과 지도 사이에 선이 하나
+         더 있었다. 띠를 띄우면 지도는 끝까지 이어지고 카드 사이로도 지도가 보인다.
+
+         띠 **바깥**은 지도 그대로다(드래그·휠). 띠 **안의 카드 틈**은 지도 이벤트를
+         막는다 — 카드를 스크롤하려다 지도가 끌려가면 목록을 못 읽는다. 틈이 좁아
+         거기를 노려 지도를 잡는 사람은 없다고 보고 하나로 정했다. */
+      <div style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0 }}>
+        <div style={{ position: 'absolute', inset: 0 }}>
+          <MapView
+            customers={filteredCustomers}
+            deviceMap={deviceMap}
+            focusedCustomerId={focusedCustomerId}
+            restoredMapCenter={mapCenter}
+            restoredMapLevel={mapLevel}
+            restoredOpenOverlayCustomerId={openOverlayCustomerId}
+            onMapStateChange={(center, level) => {
+              setMapCenter(center)
+              setMapLevel(level)
+            }}
+            onOpenOverlayChange={setOpenOverlayCustomerId}
+          />
+        </div>
+
+        <div
+          className={mobileTab === 'map' ? 'mobile-hide map-band' : 'map-band'}
+          style={{
+            position: 'absolute', left: 16, top: 16, bottom: 16, width: 340,
+            display: 'flex', flexDirection: 'column', gap: 10,
+            zIndex: Z.inPage, minHeight: 0,
+          }}
+        >
+          <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.card, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', overflow: 'hidden', flexShrink: 0 }}>
+            {panelHeader}
+          </div>
           <Sidebar
             query={query}
             setQuery={setQuery}
@@ -936,29 +943,8 @@ useEffect(() => {
             onScrollSave={saveHomeState}
             isLoading={isLoading}
           />
-          </div>
-
-         <div style={{
-  minHeight: 0,
-  height: '100%',
-  display: 'flex',
-  flexDirection: 'column',
-}}>
-         <MapView
-  customers={filteredCustomers}
-  deviceMap={deviceMap}
-  focusedCustomerId={focusedCustomerId}
-  restoredMapCenter={mapCenter}
-  restoredMapLevel={mapLevel}
-  restoredOpenOverlayCustomerId={openOverlayCustomerId}
-  onMapStateChange={(center, level) => {
-    setMapCenter(center)
-    setMapLevel(level)
-  }}
-  onOpenOverlayChange={setOpenOverlayCustomerId}
-/>
-</div>
         </div>
+      </div>
       )}
 
         {filterOpen && (

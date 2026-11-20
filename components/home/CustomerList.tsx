@@ -58,9 +58,7 @@ export default function CustomerList({
   return (
     <div style={{
       position: 'relative',
-      borderRadius: R.control,
-      background: '#fafafa',
-      border: '1px solid #ebebeb',
+      // 바탕·테두리를 두지 않는다 — 카드는 지도 위에 떠 있고 카드 사이로 지도가 보인다(2026-11-20).
       flex: 1, minHeight: 0, boxSizing: 'border-box', overflow: 'hidden',
     }}>
       <style>{`
@@ -84,7 +82,11 @@ export default function CustomerList({
           setMoreBelow(prev => (prev === next ? prev : next))
         }}
         className="customer-list-scroll"
-        style={{ height: '100%', overflowY: 'auto', overflowX: 'hidden', padding: '8px', boxSizing: 'border-box' }}
+        style={{
+          height: '100%', overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box',
+          // 카드 사이 간격 10 — 그림자가 서로 먹지 않는 최소 간격이다.
+          display: 'flex', flexDirection: 'column', gap: 10, padding: '0 0 4px',
+        }}
       >
         {isLoading ? (
           Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)

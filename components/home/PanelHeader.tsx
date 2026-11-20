@@ -41,8 +41,11 @@ type Props = {
   /** 정렬 — 목록 보기에서만 준다(지도는 늘 최근 활동순이다). */
   sort?: 'touch' | 'name'
   setSort?: (v: 'touch' | 'name') => void
-  /** 지도 보기에서는 여기에 엑셀·등록 버튼이 선다(목록은 우측 pane 우상단). */
-  rightSlot?: React.ReactNode
+  /**
+   * 아래 테두리를 그릴까. 목록 보기에서는 탭과 가르는 선이 필요하지만,
+   * 지도 보기의 **떠 있는 카드** 안에서는 카드 테두리와 겹쳐 두 줄로 보인다.
+   */
+  bordered?: boolean
 }
 
 const MapGlyph = () => (
@@ -58,7 +61,7 @@ const ListGlyph = () => (
 
 export default function PanelHeader({
   view, setView, query, setQuery, count, loading, filterCount, chips,
-  onOpenFilter, onDropChip, onClearChips, sort, setSort, rightSlot,
+  onOpenFilter, onDropChip, onClearChips, sort, setSort, bordered = true,
 }: Props) {
   const [focused, setFocused] = useState(false)
 
@@ -105,11 +108,10 @@ export default function PanelHeader({
             </span>
           )}
         </label>
-        {rightSlot}
       </div>
 
       {/* ② 필터 줄 — [필터 N] + 걸린 조건 칩 + 정렬 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px 10px', borderBottom: `1px solid ${BORDER}`, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px 10px', borderBottom: bordered ? `1px solid ${BORDER}` : 'none', flexWrap: 'wrap' }}>
         <button type="button" onClick={onOpenFilter}
           onMouseEnter={e => { e.currentTarget.style.borderColor = BLUE }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER }}

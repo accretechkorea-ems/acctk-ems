@@ -14,6 +14,9 @@ import { useMe } from '@/lib/appData/MeProvider'
 import { useToast } from '@/components/common/Toast'
 import { R } from '@/lib/radius'
 
+/** 클러스터 숫자 박스의 세 크기(px). 건수가 많을수록 큰 상자를 쓴다. */
+const CLUSTER_SIZES = [36, 44, 52] as const
+
 type Props = {
   customers: Customer[]
   deviceMap: Map<number, Device[]>
@@ -93,7 +96,7 @@ export default function MapView({
         width:296px;
         background:#ffffff;
         color:#111827;
-        border-radius:8px;
+        border-radius:${R.control}px;
         border:1px solid #ebebeb;
         box-sizing:border-box;
         word-break:break-word;
@@ -147,7 +150,7 @@ export default function MapView({
 
       const detailBtn = document.createElement('button')
       detailBtn.textContent = '상세보기'
-      detailBtn.style.cssText = 'width:100%;text-align:center;padding:8px 14px;background:#234ea2;color:#ffffff;border-radius:6px;font-size:13px;font-weight:700;border:none;cursor:pointer;'
+      detailBtn.style.cssText = `width:100%;text-align:center;padding:8px 14px;background:#234ea2;color:#ffffff;border-radius:${R.icon}px;font-size:13px;font-weight:700;border:none;cursor:pointer;`
       // touchstart에서 stopPropagation — 카카오맵이 터치 시퀀스 자체를 가로채지 못하도록
       detailBtn.addEventListener('touchstart', (e) => { e.stopPropagation() }, { passive: true })
       detailBtn.addEventListener('touchend', (e) => { e.stopPropagation(); e.preventDefault(); goDetail() })
@@ -155,7 +158,7 @@ export default function MapView({
       detailBtn.addEventListener('click', (e) => { e.stopPropagation(); goDetail() })
 
       // 출발지 버튼 하나 — 한 줄을 n 등분한다(flex:1). 자택까지 넷이면 4분할이다.
-      const NAV_CSS = 'flex:1 1 0;min-width:0;text-align:center;padding:7px 0;background:#ffffff;border:1px solid #ebebeb;border-radius:6px;font-size:12px;text-decoration:none;font-weight:700;'
+      const NAV_CSS = `flex:1 1 0;min-width:0;text-align:center;padding:7px 0;background:#ffffff;border:1px solid #ebebeb;border-radius:${R.icon}px;font-size:12px;text-decoration:none;font-weight:700;`
       const makeNavLink = (href: string, label: string) => {
         const a = document.createElement('a')
         a.href = href
@@ -349,32 +352,16 @@ useEffect(() => {
             minLevel: 7,
             disableClickZoom: false,
             markers: [],
-            styles: [
-              {
-                width: '48px', height: '48px',
-                background: 'rgba(255,255,255,0.82)', color: '#111113',
-                textAlign: 'center', lineHeight: '48px', borderRadius: R.control,
-                fontSize: '14px', fontWeight: '700',
-                border: '1px solid rgba(255,255,255,0.95)',
-                boxShadow: '0 6px 16px rgba(0,0,0,0.35)',
-              },
-              {
-                width: '56px', height: '56px',
-                background: 'rgba(245,245,245,0.88)', color: '#111113',
-                textAlign: 'center', lineHeight: '56px', borderRadius: R.control,
-                fontSize: '15px', fontWeight: '700',
-                border: '1px solid rgba(255,255,255,0.95)',
-                boxShadow: '0 6px 16px rgba(0,0,0,0.35)',
-              },
-              {
-                width: '64px', height: '64px',
-                background: 'rgba(230,230,230,0.9)', color: '#111113',
-                textAlign: 'center', lineHeight: '64px', borderRadius: R.control,
-                fontSize: '16px', fontWeight: '700',
-                border: '1px solid rgba(255,255,255,0.95)',
-                boxShadow: '0 6px 16px rgba(0,0,0,0.35)',
-              },
-            ],
+            // 숫자 박스 — 건수에 따라 36 / 44 / 52. 크기가 곧 「얼마나 모였나」다.
+            // 카카오에는 **객체**로 넘기므로 토큰을 글자로 끼운다(lib/radius.ts 가 정본이다).
+            styles: CLUSTER_SIZES.map(size => ({
+              width: `${size}px`, height: `${size}px`,
+              background: 'rgba(255,255,255,0.95)', color: '#111113',
+              textAlign: 'center', lineHeight: `${size}px`, borderRadius: `${R.tile}px`,
+              fontSize: size >= 52 ? '16px' : size >= 44 ? '15px' : '14px', fontWeight: '700',
+              border: '1px solid #ebebeb',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            })),
           })
         }
 

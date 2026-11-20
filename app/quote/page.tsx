@@ -794,7 +794,7 @@ function QuotePageInner() {
           position: relative;
           background: #fff;
           border: 1px solid #ebebeb;
-          border-radius: 6px;
+          border-radius: ${R.icon}px;
           transition: border-color 0.15s ease, box-shadow 0.15s ease;
         }
         .q-box:focus-within {
@@ -868,7 +868,7 @@ function QuotePageInner() {
           box-sizing: border-box;
           padding: 6px 9px;
           border: 1px solid #ebebeb;
-          border-radius: 6px;
+          border-radius: ${R.icon}px;
           outline: none;
           background: #ffffff;
           font-family: inherit;

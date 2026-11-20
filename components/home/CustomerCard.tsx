@@ -31,10 +31,12 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
       onMouseLeave={() => setHovered(false)}
       style={{
         width: '100%',
-        marginBottom: 8,
-        borderRadius: R.control,
+        // 카드 사이 간격은 **목록의 gap** 이 정한다 — 여기서 margin 을 주면 그림자가 겹친다.
+        borderRadius: R.card,
         border: `1px solid ${hovered ? '#c7d7f8' : '#ebebeb'}`,
         background: '#ffffff',
+        // 지도 위에 떠 있는 카드라 그림자로 띄운다(2026-11-20).
+        boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
         cursor: 'pointer',
         boxSizing: 'border-box',
         padding: '14px 16px',
@@ -78,9 +80,11 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
         대리점 {customer.agency_name ?? DIRECT_SALE_LABEL}
       </div>
 
-      {/* 장비 태그 — 최대 4개 표시, 5개 이상은 힌트로 대체 */}
+      {/* 장비 태그 — 최대 4개, 5개 이상은 「외 N대 더」. **마지막 줄 오른쪽 끝**에
+          「상세보기 ›」를 같은 높이로 붙여 한 줄을 아낀다(2026-11-20). */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, minWidth: 0 }}>
       <div style={{
-        display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 2,
+        flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3,
       }}>
         {hasNoDevice ? (
           <span style={{ fontSize: 11, color: '#d1d5db', fontStyle: 'italic' }}>장비 없음</span>
@@ -103,18 +107,15 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
           </>
         )}
       </div>
-
-      {/* 상세보기 버튼 — 유일한 브랜드색 액센트 */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <a
           href={`/customer/${customer.customer_id}`}
           onClick={(e) => { e.stopPropagation(); onDetailClick() }}
-          onMouseEnter={(e) => { const el = e.currentTarget; el.style.color = '#234ea2'; el.style.transform = 'scale(1.06)' }}
-          onMouseLeave={(e) => { const el = e.currentTarget; el.style.color = '#111827'; el.style.transform = 'scale(1)' }}
+          onMouseEnter={(e) => { const el = e.currentTarget; el.style.color = '#1c3e87'; el.style.transform = 'scale(1.06)' }}
+          onMouseLeave={(e) => { const el = e.currentTarget; el.style.color = '#234ea2'; el.style.transform = 'scale(1)' }}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 3,
-            fontSize: 12, fontWeight: 600, color: '#111827',
-            whiteSpace: 'nowrap',
+            fontSize: 12, fontWeight: 600, color: '#234ea2',
+            whiteSpace: 'nowrap', flexShrink: 0,
             padding: '2px 4px',
             transformOrigin: 'right center',
             transition: 'color 0.15s ease, transform 0.15s ease',
