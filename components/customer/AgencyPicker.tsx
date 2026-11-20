@@ -37,11 +37,19 @@ type Props = {
   disabled?: boolean
   /** 입력칸 치수를 폼에 맞출 때(등록 폼은 11px 글자를 쓴다). */
   inputStyle?: CSSProperties
+  /**
+   * **고르지 않고 적기만 한 글자**를 알린다.
+   *
+   * 이 칸은 글자를 저장하지 않는다 — 고른 줄의 id 만 저장한다. 그래서 「젠트」라고 적어 두고
+   * 저장하면 조용히 직판이 된다. 부르는 쪽이 그 상태를 알아야 저장을 막고 알려 줄 수 있다.
+   */
+  onQueryChange?: (query: string) => void
 }
 
-export default function AgencyPicker({ value, onChange, disabled, inputStyle }: Props) {
+export default function AgencyPicker({ value, onChange, disabled, inputStyle, onQueryChange }: Props) {
   const agencies = useAgencies()
-  const [query, setQuery] = useState('')
+  const [query, setQueryState] = useState('')
+  const setQuery = (q: string) => { setQueryState(q); onQueryChange?.(q) }
   const [open, setOpen] = useState(false)
   const anchorRef = useRef<HTMLDivElement>(null)
   const style = { ...fieldStyle, ...inputStyle }

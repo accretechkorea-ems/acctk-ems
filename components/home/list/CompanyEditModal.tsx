@@ -16,6 +16,7 @@
 
 import { useState, type CSSProperties } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import FormFocusStyle from '@/components/common/FormFocusStyle'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import { MEMO_MAX } from '@/components/common/MemoPopover'
@@ -73,11 +74,16 @@ export default function CompanyEditModal({ initial, siteCount, canRename, isSavi
 
   return (
     <ModalOverlay onClose={onClose} confirmClose dirty={dirty}>
-      <div onClick={e => e.stopPropagation()}
+      <div className="acc-form" onClick={e => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: 520, background: '#fff', borderRadius: 8, padding: 24,
+          // 폭·높이는 등록 폼과 같은 규칙이다.
+          width: 'min(92vw, 1100px)', maxWidth: 'min(92vw, 1100px)',
+          maxHeight: '96vh', overflowY: 'auto',
+          background: '#fff', borderRadius: 8, padding: 24,
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
+          animation: 'modal-in 0.18s ease',
         }}>
+        <FormFocusStyle />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px' }}>회사 정보 수정</div>
           <button onClick={onClose} title="닫기"
@@ -89,6 +95,8 @@ export default function CompanyEditModal({ initial, siteCount, canRename, isSavi
         </div>
 
         <div style={{ display: 'grid', gap: 14 }}>
+          {/* 한 줄 세 칸 — 등록 폼의 업체 정보와 같은 리듬. */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, alignItems: 'start' }}>
           <div>
             <label style={labelStyle}>회사명</label>
             <input value={form.name} disabled={!canRename || isSaving}
@@ -126,6 +134,7 @@ export default function CompanyEditModal({ initial, siteCount, canRename, isSavi
               <option value="">분류 없음</option>
               {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
             </select>
+          </div>
           </div>
 
           <div>

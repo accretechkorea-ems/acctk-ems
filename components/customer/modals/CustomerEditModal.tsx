@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import type { Customer, CustomerEditFormData } from '../types'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import FormFocusStyle from '@/components/common/FormFocusStyle'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import ParentPicker, { loadParents, type ParentOption } from '@/components/customer/ParentPicker'
 import AgencyPicker from '@/components/customer/AgencyPicker'
@@ -44,7 +45,9 @@ const EMPTY_FORM: CustomerEditFormData = {
 
 export default function CustomerEditModal({ customer, isSaving, isDeleting, onClose, onSave, onDelete }: Props) {
   const [form, setForm] = useState<CustomerEditFormData>(EMPTY_FORM)
-  const { errors, setErrors, clearError, validate } = useFieldErrors<'parent_customer_id' | 'address' | 'new_company_industry'>()
+  const { errors, setErrors, clearError, validate } = useFieldErrors<'parent_customer_id' | 'address' | 'new_company_industry' | 'agency'>()
+  /** 대리점 칸에 **적기만 하고 고르지 않은** 글자. 그대로 저장하면 조용히 직판이 된다. */
+  const [agencyQuery, setAgencyQuery] = useState('')
   /** 회사 목록 — 적어 둔 이름이 **이미 있는 회사인지** 가리는 데만 쓴다(ParentPicker 캐시). */
   const [companies, setCompanies] = useState<ParentOption[]>([])
 
@@ -88,6 +91,9 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
         ? '회사명을 입력해주세요'
         : null,
       address: form.address.trim() ? null : '주소를 입력해주세요',
+      agency: form.agency_customer_id == null && agencyQuery.trim()
+        ? '대리점을 목록에서 고르세요 (거치지 않으면 「없음(직판)」)'
+        : null,
     })
     if (!ok) return
     onSave(form)
@@ -99,13 +105,18 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
   return (
     <ModalOverlay onClose={onClose} confirmClose dirty={dirty}>
       <div
+        className="acc-form"
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: 560, background: '#ffffff', borderRadius: 8, padding: 24,
+          // 폭·높이는 등록 폼과 같은 규칙이다(PDF 뷰어와 같은 min 규칙).
+          width: 'min(92vw, 1100px)', maxWidth: 'min(92vw, 1100px)',
+          maxHeight: '96vh', overflowY: 'auto',
+          background: '#ffffff', borderRadius: 8, padding: 24,
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb',
           animation: 'modal-in 0.18s ease',
         }}
       >
+        <FormFocusStyle />
         {/* 헤더 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>사업장 정보 수정</div>
@@ -155,9 +166,35 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
               <FieldError message={errors.new_company_industry} />
             </div>
           )}
-          <div>
-            <label style={labelStyle}>사업장명</label>
-            <input value={form.site_name} onChange={(e) => setForm(p => ({ ...p, site_name: e.target.value }))} placeholder="ex) 감마세타엔진공장" style={fieldStyle} />
+          {/* 한 줄 세 칸 — 등록 폼의 사업장 블록과 같은 리듬. */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, alignItems: 'start' }}>
+            <div>
+              <label style={labelStyle}>사업장명</label>
+              <input value={form.site_name} onChange={(e) => setForm(p => ({ ...p, site_name: e.target.value }))} placeholder="ex) 감마세타엔진공장" style={fieldStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>대리점</label>
+              {/* 자유 입력에서 **고르는 칸**으로 바뀌었다 — 같은 대리점이 여러 표기로
+                  들어오던 것을 막는다(lib/customerAgency.ts). 고르지 않으면 직판이다.
+                  적기만 하고 고르지 않으면 저장할 때 막는다. */}
+              <AgencyPicker
+                value={form.agency_customer_id}
+                onChange={id => { setForm(p => ({ ...p, agency_customer_id: id })); setAgencyQuery(''); clearError('agency') }}
+                onQueryChange={q => { setAgencyQuery(q); clearError('agency') }}
+                disabled={isSaving}
+              />
+              <FieldError message={errors.agency} />
+            </div>
+            <div>
+              <label style={labelStyle}>상태</label>
+              <select value={form.status} disabled={isSaving}
+                onChange={e => setForm(p => ({ ...p, status: e.target.value }))}
+                style={{ ...fieldStyle, cursor: 'pointer' }}>
+                <option value="활성">활성</option>
+                <option value="잠재">잠재</option>
+                <option value="이탈">이탈</option>
+              </select>
+            </div>
           </div>
           <div>
             <label style={labelStyle}>주소</label>
@@ -173,16 +210,6 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
               disabled={isSaving}
             />
             <FieldError message={errors.address} />
-          </div>
-          <div>
-            <label style={labelStyle}>대리점</label>
-            {/* 자유 입력에서 **고르는 칸**으로 바뀌었다 — 같은 대리점이 여러 표기로
-                들어오던 것을 막는다(lib/customerAgency.ts). 고르지 않으면 직판이다. */}
-            <AgencyPicker
-              value={form.agency_customer_id}
-              onChange={id => setForm(p => ({ ...p, agency_customer_id: id }))}
-              disabled={isSaving}
-            />
           </div>
 
           <div>
@@ -201,14 +228,6 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
             </div>
           </div>
 
-          <div>
-            <label style={labelStyle}>상태</label>
-            <select value={form.status} onChange={(e) => setForm(p => ({ ...p, status: e.target.value }))} style={fieldStyle}>
-              <option value="활성">활성</option>
-              <option value="잠재">잠재</option>
-              <option value="이탈">이탈</option>
-            </select>
-          </div>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 24 }}>

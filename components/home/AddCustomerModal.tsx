@@ -4,28 +4,30 @@
  * 업체 등록 — **한 폼으로 회사·사업장·대리점을 모두 받는다.**
  *
  *   ① 종류   고객사 | 대리점
- *   ② 업체   업체명(한글)·영문명·분류          ← 회사 줄이 된다
- *   ③ 사업장 사업장명·주소·대리점·상태 (여러 곳) ← 사업장 줄이 된다
- *   ④ 담당자 선택. 사업장이 여럿이면 어느 곳인지 고른다
+ *   ② 업체   업체명(한글) · 영문명 · 분류          ← 한 줄 세 칸. 회사 줄이 된다
+ *   ③ 사업장 사업장명 · 대리점 · 상태 / 주소 / **그 사업장의 고객 담당자**
+ *            「+ 사업장 더 추가」로 여러 곳, 사업장마다 담당자 여럿
+ *
+ * ── 담당자를 사업장 블록 안에 둔 이유 ────────────────────────────────────
+ *   전에는 담당자 칸이 폼 맨 아래 따로 있고 「어느 사업장의 담당자인가요」를 또 골라야 했다.
+ *   사업장을 적는 자리에서 바로 그 사업장의 사람을 적는 편이 짧고, 고를 일이 없어 틀릴 일도 없다.
  *
  * ── 기존 회사면 ② 가 잠긴다 ──────────────────────────────────────────────
- *   업체명을 적는 동안 회사 목록에서 같은 이름을 찾는다. 있으면 「기존 회사에 사업장
- *   추가」로 바뀌어 ② 는 읽기 전용이 된다 — 같은 회사가 이름만 조금 달라 두 줄로
- *   갈리는 것이 이번 정리의 가장 큰 원인이었다.
- *   회사 카드의 「+ 사업장 추가」로 열면 처음부터 그 모드다.
+ *   업체명을 적는 동안 회사 목록에서 같은 이름을 찾는다. 있으면 「기존 회사에 사업장 추가」로
+ *   바뀌어 ② 는 읽기 전용이 된다 — 같은 회사가 이름만 조금 달라 두 줄로 갈리는 것을 막는다.
  *
- * 장비 칸은 없다. 장비는 사업장 상세의 장비 탭에서 넣는다 — 등록할 때는 대개 아직
- * 장비가 정해지지 않았고, 폼만 길어졌다.
+ * 장비 칸은 없다. 장비는 사업장 상세의 장비 탭에서 넣는다.
  */
 
 import { useEffect, useMemo, useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import FormFocusStyle from '@/components/common/FormFocusStyle'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import AddressField from '@/components/customer/modals/AddressField'
 import AgencyPicker from '@/components/customer/AgencyPicker'
 import { loadParents, type ParentOption } from '@/components/customer/ParentPicker'
 import { INDUSTRIES } from '@/lib/leadOptions'
-import { addCustomerEntry, type NewSiteInput } from '@/lib/addCustomer'
+import { addCustomerEntry, type NewContactInput, type NewSiteInput } from '@/lib/addCustomer'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
@@ -43,10 +45,18 @@ const sectionStyle: React.CSSProperties = {
   border: `1px solid ${BORDER}`, borderRadius: 8, padding: 16, marginBottom: 14, background: '#fff',
 }
 const sectionTitle: React.CSSProperties = { fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 12 }
+/** 한 줄 세 칸 — 업체 정보와 사업장 첫 줄이 같은 리듬을 쓴다. */
+const row3: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, alignItems: 'start' }
 
-const emptySite = (): NewSiteInput => ({ siteName: '', address: '', agencyId: null, status: '활성' })
+const emptyContact = (): NewContactInput => ({ name: '', position: '', department: '', phone: '', email: '' })
+const emptySite = (): SiteDraft => ({ siteName: '', address: '', agencyId: null, agencyQuery: '', status: '활성', contacts: [emptyContact()] })
 
-type ErrKey = 'companyName' | 'nameEn' | 'industry' | 'contact_name' | `site_${number}`
+/** 화면에서 다루는 사업장 한 블록. agencyQuery 는 **고르지 않고 적기만 한 글자**를 붙잡아 둔다. */
+type SiteDraft = NewSiteInput & { agencyQuery: string }
+
+type ErrKey =
+  | 'companyName' | 'nameEn' | 'industry'
+  | `site_${number}` | `agency_${number}` | `contact_${number}_${number}`
 
 type Props = {
   /**
@@ -69,8 +79,7 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
   const [companyName, setCompanyName] = useState('')
   const [nameEn, setNameEn] = useState('')
   const [industry, setIndustry] = useState('')
-  const [sites, setSites] = useState<NewSiteInput[]>([emptySite()])
-  const [contact, setContact] = useState({ name: '', department: '', position: '', phone: '', siteIndex: 0 })
+  const [sites, setSites] = useState<SiteDraft[]>([emptySite()])
   const [saving, setSaving] = useState(false)
   const [companies, setCompanies] = useState<ParentOption[]>([])
 
@@ -105,9 +114,16 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
     return companies.filter(c => c.company_name.toLowerCase().includes(q)).slice(0, 4)
   }, [companies, companyName, existing, isAgency])
 
-  const setSite = (i: number, patch: Partial<NewSiteInput>) => {
+  const setSite = (i: number, patch: Partial<SiteDraft>) => {
     setSites(prev => prev.map((s, n) => (n === i ? { ...s, ...patch } : s)))
   }
+  const setContact = (si: number, ci: number, patch: Partial<NewContactInput>) => {
+    setSites(prev => prev.map((s, n) => (n === si
+      ? { ...s, contacts: s.contacts.map((c, m) => (m === ci ? { ...c, ...patch } : c)) }
+      : s)))
+  }
+  const contactFilled = (c: NewContactInput) =>
+    [c.name, c.position, c.department, c.phone, c.email].some(v => v.trim())
 
   const handleSave = async () => {
     const rules: Partial<Record<ErrKey, string | null>> = {
@@ -115,16 +131,22 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
       // 영문명은 **새로 만들 때** 필수다. 기존 회사에 사업장을 더하는 중이면 그 회사 값을 쓴다.
       nameEn: existing || nameEn.trim() ? null : '영문명을 입력해주세요',
       industry: isAgency || existing || industry ? null : '분류를 선택해주세요',
-      contact_name: !contact.name.trim() && (contact.department.trim() || contact.position.trim() || contact.phone.trim())
-        ? '고객 담당자 이름을 입력해주세요'
-        : null,
     }
-    if (isAgency) {
+    const shown = isAgency ? sites.slice(0, 1) : sites
+    shown.forEach((s, i) => {
       // 대리점은 주소를 **선택**으로 둔다 — 등록된 45곳 중 29곳이 이름만으로 부르는 거래처다.
-      rules.site_0 = null
-    } else {
-      sites.forEach((s, i) => { rules[`site_${i}`] = s.address.trim() ? null : '주소를 입력해주세요' })
-    }
+      rules[`site_${i}`] = isAgency || s.address.trim() ? null : '주소를 입력해주세요'
+      // 적기만 하고 고르지 않은 대리점은 저장하지 않는다 — 글자로 들어온 대리점이
+      // 「ACCT-K」/「ACCTK」처럼 갈리던 것이 이번 정리의 시작이었다.
+      rules[`agency_${i}`] = !isAgency && s.agencyId == null && s.agencyQuery.trim()
+        ? '대리점을 목록에서 고르세요 (거치지 않으면 「없음(직판)」)'
+        : null
+      s.contacts.forEach((c, ci) => {
+        rules[`contact_${i}_${ci}`] = contactFilled(c) && !c.name.trim()
+          ? '담당자 이름을 입력해주세요'
+          : null
+      })
+    })
     if (!validate(rules)) return
 
     setSaving(true)
@@ -135,8 +157,13 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
         nameEn,
         industry: isAgency ? '' : (existing ? (company?.industry ?? '') : industry),
         existingCompanyId: existing ? (company?.customer_id ?? null) : null,
-        sites: isAgency ? [sites[0] ?? emptySite()] : sites,
-        contact: contact.name.trim() ? contact : null,
+        sites: shown.map(s => ({
+          siteName: s.siteName,
+          address: s.address,
+          agencyId: s.agencyId,
+          status: s.status,
+          contacts: s.contacts.filter(contactFilled),
+        })),
       })
       onSaved(r.message)
     } catch (e) {
@@ -151,15 +178,25 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
     background: on ? '#fff' : 'transparent', color: on ? TEXT : MUTED,
     fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
   })
+  const smallBtn: React.CSSProperties = {
+    height: 26, padding: '0 10px', borderRadius: 6, border: `1px solid ${BORDER}`,
+    background: '#fff', color: TEXT, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+  }
 
   return (
     <ModalOverlay onClose={onClose} confirmClose>
-      <div onClick={e => e.stopPropagation()}
+      <div
+        className="acc-form"
+        onClick={e => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: 680, maxHeight: '90vh', overflowY: 'auto',
+          // 폭은 PDF 뷰어와 같은 규칙 — 화면이 좁으면 92%, 넓어도 1100px 을 넘지 않는다.
+          width: 'min(92vw, 1100px)', maxWidth: 'min(92vw, 1100px)',
+          maxHeight: '96vh', overflowY: 'auto',
           background: '#fff', color: TEXT, borderRadius: 8, padding: 22,
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
+          animation: 'modal-in 0.18s ease',
         }}>
+        <FormFocusStyle />
         <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px', marginBottom: 16 }}>
           {existing ? '기존 회사에 사업장 추가' : isAgency ? '대리점 등록' : '업체 등록'}
         </div>
@@ -170,15 +207,15 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
           <button type="button" onClick={() => setKind('agency')} style={segBtn(isAgency)}>대리점</button>
         </div>
 
-        {/* ── ② 업체 정보 ── */}
+        {/* ── ② 업체 정보 — 한 줄 세 칸 ── */}
         <section style={sectionStyle}>
           <div style={sectionTitle}>{isAgency ? '대리점 정보' : '업체 정보'}</div>
           {existing && (
-            <div style={{ fontSize: 11, color: BLUE, background: '#eff4ff', border: `1px solid #c7d7f8`, borderRadius: 6, padding: '7px 10px', marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: BLUE, background: '#eff4ff', border: '1px solid #c7d7f8', borderRadius: 6, padding: '7px 10px', marginBottom: 10 }}>
               이미 있는 회사입니다 — 아래 사업장만 이 회사에 더합니다.
             </div>
           )}
-          <div style={{ display: 'grid', gap: 12 }}>
+          <div style={isAgency ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'start' } : row3}>
             <div>
               <div style={labelStyle}>{isAgency ? '대리점명' : '업체명 (한글)'}</div>
               <input value={preset ? preset.company_name : companyName} disabled={saving || preset != null}
@@ -190,51 +227,51 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
                   ...(preset ? { background: '#f9fafb', color: MUTED } : null),
                 }} />
               <FieldError message={errors.companyName} />
-              {/* 비슷한 이름 — 눌러서 그 회사에 붙인다(같은 회사가 두 줄로 갈리지 않게). */}
-              {similar.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 7 }}>
-                  <span style={{ fontSize: 11, color: MUTED }}>비슷한 회사:</span>
-                  {similar.map(c => (
-                    <button key={c.customer_id} type="button" onClick={() => setCompanyName(c.company_name)}
-                      style={{ height: 22, padding: '0 8px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: SUB, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                      {c.company_name}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: isAgency ? '1fr' : '1fr 160px', gap: 10, alignItems: 'start' }}>
-              <div>
-                <div style={labelStyle}>영문명</div>
-                <input value={existing ? (company?.name_en ?? '') : nameEn} disabled={saving || existing}
-                  onChange={e => { setNameEn(e.target.value); clearError('nameEn') }}
-                  placeholder="ex) HYUNDAI MOTOR"
-                  style={{
-                    ...inputStyle,
-                    ...(errors.nameEn ? { border: errBorder } : null),
-                    ...(existing ? { background: '#f9fafb', color: MUTED } : null),
-                  }} />
-                <FieldError message={errors.nameEn} />
-              </div>
-              {!isAgency && (
-                <div>
-                  <div style={labelStyle}>분류</div>
-                  <select value={existing ? (company?.industry ?? '') : industry} disabled={saving || existing}
-                    onChange={e => { setIndustry(e.target.value); clearError('industry') }}
-                    style={{
-                      ...inputStyle, cursor: 'pointer',
-                      ...(errors.industry ? { border: errBorder } : null),
-                      ...(existing ? { background: '#f9fafb', color: MUTED } : null),
-                    }}>
-                    <option value="">분류 선택</option>
-                    {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
-                  </select>
-                  <FieldError message={errors.industry} />
-                </div>
-              )}
+            <div>
+              <div style={labelStyle}>영문명</div>
+              <input value={existing ? (company?.name_en ?? '') : nameEn} disabled={saving || existing}
+                onChange={e => { setNameEn(e.target.value); clearError('nameEn') }}
+                placeholder="ex) HYUNDAI MOTOR"
+                style={{
+                  ...inputStyle,
+                  ...(errors.nameEn ? { border: errBorder } : null),
+                  ...(existing ? { background: '#f9fafb', color: MUTED } : null),
+                }} />
+              <FieldError message={errors.nameEn} />
             </div>
+
+            {!isAgency && (
+              <div>
+                <div style={labelStyle}>분류</div>
+                <select value={existing ? (company?.industry ?? '') : industry} disabled={saving || existing}
+                  onChange={e => { setIndustry(e.target.value); clearError('industry') }}
+                  style={{
+                    ...inputStyle, cursor: 'pointer',
+                    ...(errors.industry ? { border: errBorder } : null),
+                    ...(existing ? { background: '#f9fafb', color: MUTED } : null),
+                  }}>
+                  <option value="">분류 선택</option>
+                  {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
+                </select>
+                <FieldError message={errors.industry} />
+              </div>
+            )}
           </div>
+
+          {/* 비슷한 이름 — 눌러서 그 회사에 붙인다(같은 회사가 두 줄로 갈리지 않게). */}
+          {similar.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>
+              <span style={{ fontSize: 11, color: MUTED, lineHeight: '22px' }}>비슷한 회사:</span>
+              {similar.map(c => (
+                <button key={c.customer_id} type="button" onClick={() => setCompanyName(c.company_name)}
+                  style={{ ...smallBtn, height: 22, color: SUB }}>
+                  {c.company_name}
+                </button>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* ── ③ 사업장 ── */}
@@ -243,8 +280,7 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
             <div style={{ ...sectionTitle, marginBottom: 0 }}>{isAgency ? '주소 · 상태' : `사업장 ${sites.length}곳`}</div>
             <span style={{ flex: 1 }} />
             {!isAgency && (
-              <button type="button" onClick={() => setSites(prev => [...prev, emptySite()])} disabled={saving}
-                style={{ height: 26, padding: '0 10px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: TEXT, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+              <button type="button" onClick={() => setSites(prev => [...prev, emptySite()])} disabled={saving} style={smallBtn}>
                 + 사업장 더 추가
               </button>
             )}
@@ -266,14 +302,27 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
                   </div>
                 )}
 
+                {/* 첫 줄 — 사업장명 · 대리점 · 상태 */}
                 {!isAgency && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: 10 }}>
+                  <div style={row3}>
                     <div>
                       <div style={labelStyle}>사업장명 (선택)</div>
                       <input value={site.siteName} disabled={saving}
                         onChange={e => setSite(i, { siteName: e.target.value })}
                         placeholder="ex) 울산공장 · 비우면 회사명만"
                         style={inputStyle} />
+                    </div>
+                    <div>
+                      <div style={labelStyle}>대리점</div>
+                      {/* 자유 입력이 아니라 **고르는 칸**이다. 적기만 하면 저장 때 막힌다. */}
+                      <AgencyPicker
+                        value={site.agencyId}
+                        onChange={id => { setSite(i, { agencyId: id, agencyQuery: '' }); clearError(`agency_${i}`) }}
+                        onQueryChange={q => { setSite(i, { agencyQuery: q }); clearError(`agency_${i}`) }}
+                        disabled={saving}
+                        inputStyle={errors[`agency_${i}`] ? { ...inputStyle, border: errBorder } : inputStyle}
+                      />
+                      <FieldError message={errors[`agency_${i}`]} />
                     </div>
                     <div>
                       <div style={labelStyle}>상태</div>
@@ -288,6 +337,7 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
                   </div>
                 )}
 
+                {/* 둘째 줄 — 주소 */}
                 <div>
                   <div style={labelStyle}>{isAgency ? '주소 (선택)' : '주소'}</div>
                   <AddressField
@@ -302,8 +352,8 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
                   <FieldError message={errors[`site_${i}`]} />
                 </div>
 
-                {isAgency ? (
-                  <div>
+                {isAgency && (
+                  <div style={{ maxWidth: 220 }}>
                     <div style={labelStyle}>상태</div>
                     <select value={site.status} disabled={saving}
                       onChange={e => setSite(i, { status: e.target.value })}
@@ -313,72 +363,75 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
                       <option value="이탈">이탈</option>
                     </select>
                   </div>
-                ) : (
-                  <div>
-                    <div style={labelStyle}>대리점</div>
-                    {/* 자유 입력이 아니라 등록된 대리점에서 고른다. 고르지 않으면 직판이다. */}
-                    <AgencyPicker
-                      value={site.agencyId}
-                      onChange={id => setSite(i, { agencyId: id })}
-                      disabled={saving}
-                      inputStyle={inputStyle}
-                    />
+                )}
+
+                {/* 셋째 — 이 사업장의 고객 담당자 */}
+                {!isAgency && (
+                  <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+                      <b style={{ fontSize: 12, fontWeight: 700, color: SUB }}>고객 담당자</b>
+                      <span style={{ fontSize: 11, color: MUTED, marginLeft: 6 }}>선택 — 이 사업장의 사람입니다</span>
+                      <span style={{ flex: 1 }} />
+                      <button type="button" disabled={saving} style={smallBtn}
+                        onClick={() => setSites(prev => prev.map((s, n) => (n === i ? { ...s, contacts: [...s.contacts, emptyContact()] } : s)))}>
+                        + 담당자 더 추가
+                      </button>
+                    </div>
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      {site.contacts.map((c, ci) => (
+                        <div key={ci} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 26px', gap: 8, alignItems: 'start' }}>
+                          <div>
+                            {ci === 0 && <div style={labelStyle}>이름</div>}
+                            <input value={c.name} disabled={saving}
+                              onChange={e => { setContact(i, ci, { name: e.target.value }); clearError(`contact_${i}_${ci}`) }}
+                              placeholder="이름"
+                              style={errors[`contact_${i}_${ci}`] ? { ...inputStyle, border: errBorder } : inputStyle} />
+                            <FieldError message={errors[`contact_${i}_${ci}`]} />
+                          </div>
+                          <div>
+                            {ci === 0 && <div style={labelStyle}>직급</div>}
+                            <input value={c.position} disabled={saving}
+                              onChange={e => setContact(i, ci, { position: e.target.value })}
+                              placeholder="직급" style={inputStyle} />
+                          </div>
+                          <div>
+                            {ci === 0 && <div style={labelStyle}>부서</div>}
+                            <input value={c.department} disabled={saving}
+                              onChange={e => setContact(i, ci, { department: e.target.value })}
+                              placeholder="부서" style={inputStyle} />
+                          </div>
+                          <div>
+                            {ci === 0 && <div style={labelStyle}>전화</div>}
+                            <input value={c.phone} disabled={saving}
+                              onChange={e => setContact(i, ci, { phone: e.target.value })}
+                              placeholder="전화번호" style={inputStyle} />
+                          </div>
+                          <div>
+                            {ci === 0 && <div style={labelStyle}>이메일</div>}
+                            <input value={c.email} disabled={saving} type="email"
+                              onChange={e => setContact(i, ci, { email: e.target.value })}
+                              placeholder="이메일" style={inputStyle} />
+                          </div>
+                          <div style={{ paddingTop: ci === 0 ? 19 : 0 }}>
+                            {site.contacts.length > 1 && (
+                              <button type="button" disabled={saving} aria-label="담당자 삭제" title="담당자 삭제"
+                                onClick={() => setSites(prev => prev.map((s, n) => (n === i ? { ...s, contacts: s.contacts.filter((_, m) => m !== ci) } : s)))}
+                                style={{ width: 26, height: 38, padding: 0, border: 'none', background: 'none', color: MUTED, cursor: 'pointer' }}>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
             ))}
           </div>
         </section>
-
-        {/* ── ④ 담당자 ── */}
-        {!isAgency && (
-          <section style={sectionStyle}>
-            <div style={sectionTitle}>고객 담당자 <span style={{ fontSize: 11, fontWeight: 500, color: MUTED }}>선택 — 나중에 사업장 상세에서도 더할 수 있습니다</span></div>
-            <div style={{ display: 'grid', gap: 10 }}>
-              {sites.length > 1 && (
-                <div>
-                  <div style={labelStyle}>어느 사업장의 담당자인가요</div>
-                  <select value={contact.siteIndex} disabled={saving}
-                    onChange={e => setContact(p => ({ ...p, siteIndex: Number(e.target.value) }))}
-                    style={{ ...inputStyle, cursor: 'pointer' }}>
-                    {sites.map((s, i) => (
-                      <option key={i} value={i}>{`사업장 ${i + 1}${s.siteName.trim() ? ` · ${s.siteName.trim()}` : ''}`}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div>
-                  <div style={labelStyle}>이름</div>
-                  <input value={contact.name} disabled={saving}
-                    onChange={e => { setContact(p => ({ ...p, name: e.target.value })); clearError('contact_name') }}
-                    placeholder="이름" style={errors.contact_name ? { ...inputStyle, border: errBorder } : inputStyle} />
-                  <FieldError message={errors.contact_name} />
-                </div>
-                <div>
-                  <div style={labelStyle}>부서</div>
-                  <input value={contact.department} disabled={saving}
-                    onChange={e => setContact(p => ({ ...p, department: e.target.value }))}
-                    placeholder="부서" style={inputStyle} />
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div>
-                  <div style={labelStyle}>직책</div>
-                  <input value={contact.position} disabled={saving}
-                    onChange={e => setContact(p => ({ ...p, position: e.target.value }))}
-                    placeholder="직책" style={inputStyle} />
-                </div>
-                <div>
-                  <div style={labelStyle}>전화번호</div>
-                  <input value={contact.phone} disabled={saving}
-                    onChange={e => setContact(p => ({ ...p, phone: e.target.value }))}
-                    placeholder="전화번호" style={inputStyle} />
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
           <button onClick={onClose} disabled={saving}

@@ -24,21 +24,23 @@ import { withNameEnFallback } from '@/lib/nameEn'
 import { invalidateParents } from '@/components/customer/ParentPicker'
 import { invalidateAgencies } from '@/lib/customerAgency'
 
+/** 고객 담당자 한 사람 — **그 사업장 줄에 붙는다**(어느 사업장인지 따로 고르지 않는다). */
+export type NewContactInput = {
+  name: string
+  position: string
+  department: string
+  phone: string
+  email: string
+}
+
 export type NewSiteInput = {
   siteName: string
   address: string
   /** 대리점 줄(customers.is_agency). null 이면 직판. */
   agencyId: number | null
   status: string
-}
-
-export type NewContactInput = {
-  name: string
-  department: string
-  position: string
-  phone: string
-  /** 사업장이 여럿이면 몇 번째 사업장의 담당자인가. */
-  siteIndex: number
+  /** 이 사업장의 고객 담당자들. 비어 있을 수 있다. */
+  contacts: NewContactInput[]
 }
 
 export type AddCustomerInput = {
@@ -51,7 +53,6 @@ export type AddCustomerInput = {
   /** 기존 회사에 사업장만 더하는 경우 그 회사 id. 새로 만들면 null. */
   existingCompanyId: number | null
   sites: NewSiteInput[]
-  contact: NewContactInput | null
 }
 
 export type AddCustomerResult = {
@@ -81,7 +82,7 @@ export async function addCustomerEntry(input: AddCustomerInput): Promise<AddCust
       .eq('is_agency', true).is('deleted_at', null).eq('company_name', name).maybeSingle()
     if (dup) throw new Error('같은 이름의 대리점이 이미 있습니다')
 
-    const site = input.sites[0] ?? { siteName: '', address: '', agencyId: null, status: '활성' }
+    const site = input.sites[0] ?? { siteName: '', address: '', agencyId: null, status: '활성', contacts: [] }
     const { data, error } = await withNameEnFallback(useEn => supabase.from('customers')
       .insert({
         company_name: name,
@@ -157,21 +158,21 @@ export async function addCustomerEntry(input: AddCustomerInput): Promise<AddCust
       if (error || !data) throw new Error(error?.message || '사업장을 만들지 못했습니다')
       siteIds.push(data.customer_id)
       made.push(data.customer_id)
-    }
 
-    // ③ 담당자 — 고른 사업장에 붙인다(선택).
-    const contact = input.contact
-    if (contact && contact.name.trim()) {
-      const target = siteIds[contact.siteIndex] ?? siteIds[0]
-      const { error } = await supabase.from('contacts').insert({
-        customer_id: target,
-        name: contact.name.trim(),
-        department: contact.department.trim() || null,
-        position: contact.position.trim() || null,
-        phone: contact.phone.trim() || null,
-      })
-      // 담당자 한 줄 때문에 회사·사업장을 되돌리지는 않는다 — 나중에 상세에서 더할 수 있다.
-      if (error) console.error('[addCustomer] 담당자 저장 실패', error)
+      // ③ 이 사업장의 담당자들 — 사업장 블록에서 함께 적은 사람들이다.
+      const people = (site.contacts ?? []).filter(c => c.name.trim())
+      if (people.length > 0) {
+        const { error: cErr } = await supabase.from('contacts').insert(people.map(c => ({
+          customer_id: data.customer_id,
+          name: c.name.trim(),
+          position: c.position.trim() || null,
+          department: c.department.trim() || null,
+          phone: c.phone.trim() || null,
+          email: c.email.trim() || null,
+        })))
+        // 담당자 때문에 회사·사업장을 되돌리지는 않는다 — 나중에 상세에서 더할 수 있다.
+        if (cErr) console.error('[addCustomer] 담당자 저장 실패', cErr)
+      }
     }
 
     const message = input.existingCompanyId != null
