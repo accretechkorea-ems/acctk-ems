@@ -9,7 +9,8 @@
 //   「회사」 탭만 돈다. 「대리점」·「미연결」은 **자리와 건수만** 둔다 — 누르면
 //   「다음 회차」라고 알린다. 건수는 진짜 값이라 지금도 규모를 알 수 있다.
 
-import { useMemo, type CSSProperties } from 'react'
+import { useRef, type CSSProperties } from 'react'
+import ScrollHints from '@/components/common/ScrollHints'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import type { AgencyOption } from '@/lib/customerAgency'
 import {
@@ -22,7 +23,6 @@ const TEXT = '#111827'
 const SUB = '#6b7280'
 const MUTED = '#9ca3af'
 const BLUE = '#234ea2'
-const NEUTRAL = '#f3f4f6'
 const DANGER = '#ef4444'
 
 const STATUS_DOT: Record<string, string> = { '활성': '#16a34a', '잠재': '#f59e0b', '이탈': '#ef4444' }
@@ -43,10 +43,6 @@ export type CleanupRow = { companyId: number; companyName: string; hint: string 
 
 type Props = {
   tab: ListTab
-  setTab: (t: ListTab) => void
-  counts: { company: number; agency: number; unlinked: number }
-  /** 패널 맨 위에 그대로 끼워 넣는다 — 보기 토글·검색·필터 줄(PanelHeader). */
-  header?: React.ReactNode
   groups: CompanyGroup[]
   siteCount: number
   /** 펼친 회사 id 집합. */
@@ -79,19 +75,7 @@ type Props = {
 
 // 탭 — 글자는 **한 줄로** 선다. 좁은 패널에서 flex 가 눌러 「대 리 점」처럼 접히면
 // 줄 높이가 무너지고 배지가 글자 위로 올라탄다(2026-11-19 실측).
-const tabStyle = (on: boolean): CSSProperties => ({
-  height: 40, padding: '0 8px', border: 'none', background: 'transparent',
-  fontSize: 13, fontWeight: 600, color: on ? TEXT : MUTED,
-  borderBottom: `2px solid ${on ? BLUE : 'transparent'}`,
-  display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-  whiteSpace: 'nowrap', flexShrink: 0,
-})
 
-const countStyle = (tone?: 'danger'): CSSProperties => ({
-  fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: R.pill,
-  background: tone === 'danger' ? '#fef2f2' : NEUTRAL,
-  color: tone === 'danger' ? DANGER : SUB,
-})
 
 
 const chipStyle = (on: boolean): CSSProperties => ({
@@ -105,40 +89,20 @@ const chipStyle = (on: boolean): CSSProperties => ({
 
 
 export default function CustomerListPanel({
-  tab, setTab, counts, header,
+  tab,
   groups, siteCount, expanded, toggleExpand, selectedCompanyId, selectedSiteId,
   onSelectCompany, onSelectSite, loading,
   checkedCompanies, toggleCompanyCheck, clearCompanyChecks, onBulkIndustry,
   cleanup, cleanupBucket, setCleanupBucket, onDeleteCompany,
   agencies, agencySiteCount, onPickAgency, agencyFilterId, clearAgencyFilter,
 }: Props) {
-  /** 정리 필요 배지 — 네 묶음에 든 회사 수(겹치면 한 번만). */
-  const cleanupCount = useMemo(
-    () => new Set(Object.values(cleanup).flat().map(r => r.companyId)).size,
-    [cleanup],
-  )
+  /** 트리가 구르는 요소 — 위·아래 힌트가 이것을 본다. */
+  const treeRef = useRef<HTMLElement | null>(null)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.card, overflow: 'hidden' }}>
-
-      {/* 패널 머리줄 — 보기 토글·검색·필터 줄. 지도 보기와 같은 부품이다. */}
-      {header}
-
-      {/* 탭 — 이번 회차는 회사 탭만 돈다 */}
-      <div style={{ display: 'flex', borderBottom: `1px solid ${BORDER}`, padding: '0 8px', flexShrink: 0 }}>
-        <button type="button" onClick={() => setTab('company')} style={tabStyle(tab === 'company')}>
-          회사 <span style={countStyle()}>{counts.company}</span>
-        </button>
-        <button type="button" onClick={() => setTab('agency')} style={tabStyle(tab === 'agency')}>
-          대리점 <span style={countStyle()}>{counts.agency}</span>
-        </button>
-        {/* 「미연결」은 지난 회차의 제약 덕에 0 이 됐다 — 이제 **정리 필요**가 그 자리를 쓴다.
-            배지는 네 묶음에 든 **회사 수**다(겹치는 회사는 한 번만 센다). */}
-        <button type="button" onClick={() => setTab('cleanup')} style={tabStyle(tab === 'cleanup')}>
-          정리 필요 <span style={countStyle(cleanupCount > 0 ? 'danger' : undefined)}>{cleanupCount}</span>
-        </button>
-        <span style={{ flex: 1, minWidth: 8 }} />
-      </div>
+    /* 탭 줄은 **상단 카드**로 올라갔다(components/home/list/ListTabs.tsx) —
+       이 카드는 건수 한 줄과 트리만 들고 있다. */
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.card, boxShadow: '0 4px 16px rgba(0,0,0,0.10)', overflow: 'hidden' }}>
 
       {/* 건수 — 정렬은 패널 머리줄(PanelHeader)로 옮겼다. */}
       <div style={{ padding: '8px 14px 4px', fontSize: 12, color: SUB, flexShrink: 0 }}>
@@ -154,8 +118,9 @@ export default function CustomerListPanel({
         </div>
       )}
 
-      {/* 트리 */}
-      <nav aria-label="회사 목록" style={{ flex: 1, overflowY: 'auto', padding: '4px 8px 12px', minHeight: 0 }}>
+      {/* 트리 — 위·아래 스크롤 힌트를 함께 둔다(스크롤바를 숨겨 두었다). */}
+      <ScrollHints scrollRef={treeRef} top={34} bottom={10} />
+      <nav ref={treeRef} aria-label="회사 목록" className="stable-scroll" style={{ flex: 1, overflowY: 'auto', padding: '4px 8px 12px', minHeight: 0 }}>
         {tab === 'agency' ? (
           /* ── 대리점 탭(7) — 누르면 회사 탭이 그 대리점의 사업장만 거른다 ── */
           agencies.length === 0 ? (
@@ -236,12 +201,8 @@ export default function CustomerListPanel({
                   <polyline points="6 9 12 15 18 9" />
                 </svg>
                 <b style={{ fontSize: 13, fontWeight: 700, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.companyName}</b>
-                {/* 분류 — **있을 때만** 태그를 단다. 없는 회사가 836곳이라 태그를 달면
-                    트리가 「분류 없음」으로 뒤덮여 정작 분류를 읽을 수 없었다.
-                    분류가 비었다는 사실은 「분류 없음」 칩과 정리 필요 탭이 알린다. */}
-                {g.industry && (
-                  <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: R.icon, whiteSpace: 'nowrap', flexShrink: 0, background: NEUTRAL, color: SUB }}>{g.industry}</span>
-                )}
+                {/* 분류(생산품) 뱃지는 걷었다(2026-11-20) — 트리에서 읽어야 하는 것은
+                    **회사 이름과 사업장 수**다. 분류는 회사 카드와 필터가 맡는다. */}
                 <span style={{ flex: 1 }} />
                 <span style={{ fontSize: 12, color: SUB, flexShrink: 0 }}>{g.sites.length}</span>
               </div>

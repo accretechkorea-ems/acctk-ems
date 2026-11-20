@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+
 import { type Customer, type Device } from '@/lib/home'
 import CustomerCard from './CustomerCard'
 import { R } from '@/lib/radius'
+import ScrollHints from '@/components/common/ScrollHints'
 
 type Props = {
   customers: Customer[]
@@ -46,14 +47,7 @@ export default function CustomerList({
   onScrollSave,
   isLoading = false,
 }: Props) {
-  const [moreBelow, setMoreBelow] = useState(false)
-
-  // 스크롤 위치에 따라 "아래로 더 있음" 힌트 표시 여부 갱신
-  useEffect(() => {
-    const el = listScrollRef.current
-    const next = !!el && el.scrollTop + el.clientHeight < el.scrollHeight - 1
-    setMoreBelow(prev => (prev === next ? prev : next))
-  }, [customers, isLoading, listScrollRef])
+  // 위·아래 스크롤 힌트는 공용 부품이 맡는다(components/common/ScrollHints.tsx).
 
   return (
     <div style={{
@@ -75,17 +69,13 @@ export default function CustomerList({
       `}</style>
       <div
         ref={listScrollRef}
-        onScroll={(e) => {
-          onScrollSave?.()
-          const el = e.currentTarget
-          const next = el.scrollTop + el.clientHeight < el.scrollHeight - 1
-          setMoreBelow(prev => (prev === next ? prev : next))
-        }}
+        onScroll={() => onScrollSave?.()}
         className="customer-list-scroll"
         style={{
           height: '100%', overflowY: 'auto', overflowX: 'hidden', boxSizing: 'border-box',
           // 카드 사이 간격 10 — 그림자가 서로 먹지 않는 최소 간격이다.
-          display: 'flex', flexDirection: 'column', gap: 10, padding: '0 0 4px',
+          // 위로 4px 띄운다 — 호버 그림자가 맨 위 카드에서 잘리지 않게.
+          display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 4px 8px', margin: '-4px -4px 0',
         }}
       >
         {isLoading ? (
@@ -119,25 +109,8 @@ export default function CustomerList({
         )}
       </div>
 
-      {/* 스크롤 힌트 — 아래로 더 있을 때만 표시 */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute', left: '50%', bottom: 12,
-          transform: 'translateX(-50%)',
-          pointerEvents: 'none',
-          opacity: moreBelow ? 1 : 0,
-          transition: 'opacity 0.2s ease',
-          width: 24, height: 24, borderRadius: R.pill,
-          background: '#ffffff', border: '1px solid #ebebeb',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2"
-          style={{ animation: 'hint-bob 1.4s ease-in-out infinite' }}>
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </div>
+      {/* 위·아래 스크롤 힌트 — 공용 부품이 맡는다(components/common/ScrollHints.tsx). */}
+      <ScrollHints scrollRef={listScrollRef} top={4} bottom={6} />
     </div>
   )
 }

@@ -36,13 +36,14 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
         border: `1px solid ${hovered ? '#c7d7f8' : '#ebebeb'}`,
         background: '#ffffff',
         // 지도 위에 떠 있는 카드라 그림자로 띄운다(2026-11-20).
-        boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+        // 호버에 **움직임을 주지 않는다** — 구르는 칸이 위를 잘라 맨 위 카드만 잘려 보였다.
+        // 떠오르는 느낌은 그림자를 키워 낸다.
+        boxShadow: hovered ? '0 8px 24px rgba(0,0,0,0.16)' : '0 4px 16px rgba(0,0,0,0.10)',
         cursor: 'pointer',
         boxSizing: 'border-box',
         padding: '14px 16px',
         minWidth: 0,
-        transform: hovered ? 'translateY(-2px)' : '',
-        transition: 'transform 0.15s ease, border-color 0.15s ease',
+        transition: 'box-shadow 0.15s ease, border-color 0.15s ease',
       }}
     >
       {/* 헤더: 회사명 + 상태 */}

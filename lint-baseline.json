@@ -1,5 +1,5 @@
 {
-  "comment": "eslint 경고 기준선. 이 수를 넘으면 CI 가 막는다(scripts/lint-baseline.js). 경고를 줄였으면 이 값도 같이 내린다 — 내리지 않으면 다시 늘어나도 아무도 모른다. 135→130 은 상단 바(ListHeader)와 지도 오버레이 칩을 걷으면서 쓰지 않게 된 import 5건 몫이다(2026-11-20).",
+  "comment": "eslint 경고 기준선. 이 수를 넘으면 CI 가 막는다(scripts/lint-baseline.js). 경고를 줄였으면 이 값도 같이 내린다. 135→130 은 상단 바·지도 오버레이 칩을 걷은 몫. 2026-11-20 좌 패널 공용화로 import 둘이 빠지고(−2), 지도 복귀 자리 맞추기에서 타입 없는 kakao 경계가 하나 늘어(+1) 130 으로 돌아왔다.",
   "maxWarnings": 130,
   "maxErrors": 0,
   "updated": "2026-11-20"

@@ -19,6 +19,8 @@ import { NOT_AGENCY_ONLY, useAgencies } from '@/lib/customerAgency'
 import { REGION_FILTER_OPTIONS } from '@/lib/region'
 import { DIRECT_SALE } from '@/lib/customerList'
 import PanelHeader, { type HomeView } from '@/components/home/PanelHeader'
+import SidePanel, { PANEL_SPACE } from '@/components/home/SidePanel'
+import ListTabs from '@/components/home/list/ListTabs'
 import CustomerFilterModal from '@/components/home/CustomerFilterModal'
 import { customerFilterChips, defaultFilter, type FilterOptions } from '@/lib/customerFilterChips'
 import CustomerListPanel, { type CleanupBucket, type CleanupRow, type ListTab } from '@/components/home/list/CustomerListPanel'
@@ -50,7 +52,6 @@ import {
   toTimeValue,
 } from '@/lib/home'
 import { R } from '@/lib/radius'
-import { Z } from '@/lib/zIndex'
 
 
 
@@ -75,6 +76,11 @@ export default function HomePage() {
   const [focusedCustomerId, setFocusedCustomerId] = useState<number | null>(null)
   const [latestServiceDateMap, setLatestServiceDateMap] = useState<Map<number, number>>(new Map())
   const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | null>(null)
+  /**
+   * 지도로 **돌아올 때마다** 1씩 는다. 지도는 이 값이 바뀌면 보던 자리를 다시 맞춘다
+   * (목록에서 보던 사업장·회사가 있으면 그쪽으로, 없으면 전국 보기).
+   */
+  const [mapReturnNonce, setMapReturnNonce] = useState(0)
   const [mapLevel, setMapLevel] = useState<number | null>(null)
   const [openOverlayCustomerId, setOpenOverlayCustomerId] = useState<number | null>(null)
   const [mobileTab, setMobileTab] = useState<'list' | 'map'>('list')
@@ -657,7 +663,7 @@ useEffect(() => {
   const panelHeader = (
     <PanelHeader
       view={view}
-      setView={setView}
+      setView={next => { if (next === 'map') setMapReturnNonce(n => n + 1); setView(next) }}
       query={query}
       setQuery={setQuery}
       count={view === 'list' ? listTree.siteCount : filteredCustomers.length}
@@ -669,7 +675,22 @@ useEffect(() => {
       onClearChips={() => setListFilter(prev => defaultFilter(filterOptions, prev))}
       sort={view === 'list' ? listSort : undefined}
       setSort={view === 'list' ? setListSort : undefined}
-      bordered={view === 'list'}
+      bordered={false}
+      tabs={view === 'list' ? (
+        <ListTabs
+          tab={listTab}
+          setTab={setListTab}
+          counts={{
+            company: listTree.groups.length,
+            agency: agencyCount,
+            cleanup: new Set(Object.values(cleanup).flat().map(r => r.companyId)).size,
+          }}
+          onExport={handleExportExcel}
+          canExport={canExportExcel}
+          exporting={isExporting}
+          onAdd={() => openAddCustomer()}
+        />
+      ) : undefined}
     />
   )
 
@@ -708,9 +729,10 @@ useEffect(() => {
 
       <div
         style={{
-          // 지도 보기는 **여백 없이** 꽉 채운다 — 지도가 좌 패널 오른쪽을 최상단부터 끝까지 쓴다.
-          // 목록 보기는 카드가 서는 화면이라 20 여백을 둔다.
-          padding: view === 'map' ? 0 : 20,
+          // **두 보기가 같은 여백**이다 — 0. 좌 패널의 자리는 SidePanel 혼자 정하고
+          // (좌 16 · 위아래 16), 목록 보기의 우측 본문은 제 여백을 따로 갖는다.
+          // 보기마다 다른 padding 을 주던 때는 세그먼트를 누를 때 패널이 20px 씩 움직였다.
+          padding: 0,
           // 높이는 .home-wrapper 규칙이 정한다 — PC 는 상단 바가 없고 모바일만 그만큼 뺀다.
           height: '100vh',
           boxSizing: 'border-box',
@@ -804,18 +826,13 @@ useEffect(() => {
       </div>
 
       {view === 'list' ? (
-        /* ── 목록 보기 — 좌 360px 트리 + 우 상세 ──────────────────────────
-           조회·필터·검색은 지도 보기와 **같은 상태**를 쓴다(화면만 다르다). */
-        <div
-          className="home-grid"
-          style={{ display: 'grid', gridTemplateColumns: '360px minmax(0, 1fr)', gap: 12, alignItems: 'stretch', flex: 1, minHeight: 0 }}
-        >
-          <div className={mobileTab === 'map' ? 'mobile-hide' : ''} style={{ minHeight: 0, minWidth: 0, height: '100%' }}>
+        /* ── 목록 보기 — **지도 보기와 같은 좌 패널** + 우 상세 ────────────
+           패널의 자리 계산은 components/home/SidePanel.tsx 한 곳이다(좌 16 · 폭 340).
+           보기를 바꿔도 패널이 움직이지 않는다. */
+        <div className="home-grid" style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0 }}>
+          <SidePanel hidden={mobileTab === 'map'} header={panelHeader}>
             <CustomerListPanel
               tab={listTab}
-              setTab={setListTab}
-              counts={{ company: listTree.groups.length, agency: agencyCount, unlinked: listTree.unlinkedCount }}
-              header={panelHeader}
               groups={listTree.groups}
               siteCount={listTree.siteCount}
               expanded={expanded}
@@ -844,22 +861,9 @@ useEffect(() => {
               clearAgencyFilter={() => setAgencyFilterId(null)}
               loading={isLoading}
             />
-          </div>
-          <div style={{ minHeight: 0, minWidth: 0, height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {/* 엑셀·업체 등록 — 맨 위 상단 바를 걷으면서 **우측 pane 우상단**으로 왔다. */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
-              <button type="button" onClick={handleExportExcel} disabled={!canExportExcel || isExporting}
-                style={{ height: 34, padding: '0 12px', display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: R.control, border: '1px solid #ebebeb', background: '#fff', color: '#374151', fontSize: 13, fontWeight: 600, cursor: canExportExcel && !isExporting ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v3h16v-3" />
-                </svg>
-                {isExporting ? '내보내는 중…' : '엑셀'}
-              </button>
-              <button type="button" onClick={() => openAddCustomer()}
-                style={{ height: 34, padding: '0 14px', borderRadius: R.control, border: 'none', background: '#234ea2', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                + 업체 등록
-              </button>
-            </div>
+          </SidePanel>
+          {/* 우측 본문 — 패널을 피해 시작한다(PANEL_SPACE). 엑셀·업체 등록은 탭 줄로 갔다. */}
+          <div className="stable-scroll" style={{ marginLeft: PANEL_SPACE, height: '100%', minWidth: 0, overflowY: 'auto', padding: '16px 16px 16px 0', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 10 }}>
             {selectedSiteId != null ? (
               /* 사업장을 골랐을 때 — **상세 페이지와 같은 본문**이다(컴포넌트 하나를 나눠 쓴다). */
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
@@ -913,6 +917,12 @@ useEffect(() => {
             restoredMapCenter={mapCenter}
             restoredMapLevel={mapLevel}
             restoredOpenOverlayCustomerId={openOverlayCustomerId}
+            focusSiteIds={
+              selectedSiteId != null ? [selectedSiteId]
+                : selectedGroup ? selectedGroup.sites.map(x => x.customer.customer_id)
+                  : []
+            }
+            focusNonce={mapReturnNonce}
             onMapStateChange={(center, level) => {
               setMapCenter(center)
               setMapLevel(level)
@@ -921,17 +931,7 @@ useEffect(() => {
           />
         </div>
 
-        <div
-          className={mobileTab === 'map' ? 'mobile-hide map-band' : 'map-band'}
-          style={{
-            position: 'absolute', left: 16, top: 16, bottom: 16, width: 340,
-            display: 'flex', flexDirection: 'column', gap: 10,
-            zIndex: Z.inPage, minHeight: 0,
-          }}
-        >
-          <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.card, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', overflow: 'hidden', flexShrink: 0 }}>
-            {panelHeader}
-          </div>
+        <SidePanel hidden={mobileTab === 'map'} header={panelHeader}>
           <Sidebar
             query={query}
             setQuery={setQuery}
@@ -943,7 +943,7 @@ useEffect(() => {
             onScrollSave={saveHomeState}
             isLoading={isLoading}
           />
-        </div>
+        </SidePanel>
       </div>
       )}
 

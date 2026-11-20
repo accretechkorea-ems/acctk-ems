@@ -45,7 +45,8 @@ export default function Sidebar({
   const [searchFocused, setSearchFocused] = useState(false)
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%', gap: 12 }}>
+    /* 바탕은 **완전 투명**이다 — 카드 사이로 지도가 그대로 보여야 한다. */
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1, gap: 12, background: 'transparent' }}>
 
       {/* 검색창 — 좁은 화면에서만 보인다(넓은 화면은 맨 위 헤더가 맡는다). */}
       <div className="sidebar-search" style={{ position: 'relative' }}>

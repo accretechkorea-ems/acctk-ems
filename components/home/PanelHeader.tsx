@@ -46,6 +46,8 @@ type Props = {
    * 지도 보기의 **떠 있는 카드** 안에서는 카드 테두리와 겹쳐 두 줄로 보인다.
    */
   bordered?: boolean
+  /** 목록 보기의 탭 줄 — 상단 카드의 셋째 줄로 들어간다(지도 보기에는 없다). */
+  tabs?: React.ReactNode
 }
 
 const MapGlyph = () => (
@@ -61,7 +63,7 @@ const ListGlyph = () => (
 
 export default function PanelHeader({
   view, setView, query, setQuery, count, loading, filterCount, chips,
-  onOpenFilter, onDropChip, onClearChips, sort, setSort, bordered = true,
+  onOpenFilter, onDropChip, onClearChips, sort, setSort, bordered = true, tabs,
 }: Props) {
   const [focused, setFocused] = useState(false)
 
@@ -112,11 +114,12 @@ export default function PanelHeader({
 
       {/* ② 필터 줄 — [필터 N] + 걸린 조건 칩 + 정렬 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px 10px', borderBottom: bordered ? `1px solid ${BORDER}` : 'none', flexWrap: 'wrap' }}>
-        <button type="button" onClick={onOpenFilter}
+        {/* 필터 — 글자 없이 아이콘과 숫자만. 칩이 그 옆에 서므로 「필터」 글자는 군더더기다. */}
+        <button type="button" onClick={onOpenFilter} title="필터" aria-label="필터"
           onMouseEnter={e => { e.currentTarget.style.borderColor = BLUE }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER }}
           style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6, height: 30, padding: '0 10px',
+            display: 'inline-flex', alignItems: 'center', gap: 5, height: 30, padding: '0 8px',
             border: `1px solid ${BORDER}`, borderRadius: R.control, background: '#ffffff',
             color: '#374151', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
             transition: 'border-color 0.15s ease', flexShrink: 0,
@@ -124,7 +127,6 @@ export default function PanelHeader({
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M3 5h18l-7 8v6l-4-2v-4z" />
           </svg>
-          필터
           {filterCount > 0 && (
             <span style={{ fontSize: 11, fontWeight: 700, color: BLUE, background: '#eff4ff', borderRadius: R.pill, padding: '1px 7px' }}>{filterCount}</span>
           )}
@@ -158,6 +160,9 @@ export default function PanelHeader({
           </select>
         )}
       </div>
+
+      {/* ③ 탭 줄 — 목록 보기에만. 지도 보기에서는 이 줄이 통째로 없다. */}
+      {tabs}
     </div>
   )
 }

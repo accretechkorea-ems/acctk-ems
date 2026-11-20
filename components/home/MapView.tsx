@@ -24,9 +24,24 @@ type Props = {
   restoredMapCenter: { lat: number; lng: number } | null
   restoredMapLevel: number | null
   restoredOpenOverlayCustomerId: number | null
+  /**
+   * **돌아왔을 때 볼 자리.** 목록에서 보던 사업장(하나) 또는 회사의 사업장 전부다.
+   * 빈 배열·null 이면 전국 보기로 되돌린다. 값이 같아도 `focusNonce` 가 바뀌면 다시 맞춘다.
+   */
+  focusSiteIds?: number[] | null
+  focusNonce?: number
   onMapStateChange: (center: { lat: number; lng: number }, level: number) => void
   onOpenOverlayChange: (customerId: number | null) => void
 }
+
+/** 창에 올라온 kakao 네임스페이스. 타입이 없는 전역이라 한 곳에서만 꺼낸다. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const kakaoGlobal = (): any => (window as any).kakao
+
+/** 전국 보기 — 처음 들어왔을 때와 「볼 곳이 없을 때」가 같은 자리다. */
+const NATIONAL_LEVEL = 12
+const nationalCenter = (): [number, number] =>
+  (typeof window !== 'undefined' && window.innerWidth <= 768 ? [38.6, 128.0] : [36.5, 127.8])
 
 export default function MapView({
   customers,
@@ -35,6 +50,8 @@ export default function MapView({
   restoredMapCenter,
   restoredMapLevel,
   restoredOpenOverlayCustomerId,
+  focusSiteIds,
+  focusNonce,
   onMapStateChange,
   onOpenOverlayChange,
 }: Props) {
@@ -233,14 +250,24 @@ useEffect(() => {
       if (!kakaoMapRef.current) {
        const isMobile = window.innerWidth <= 768
         kakaoMapRef.current = new kakao.maps.Map(mapRef.current, {
-          center: new kakao.maps.LatLng(isMobile ? 38.6 : 36.5, isMobile ? 128.0 : 127.8),
-          level: isMobile ? 12 : 12,
+          center: new kakao.maps.LatLng(...nationalCenter()),
+          level: NATIONAL_LEVEL,
         })
 
          ;(window as any).__kakaoMapInstance = kakaoMapRef.current
 
+        /**
+         * 칸 크기가 바뀌면 relayout 한다. **그 뒤에 중심을 다시 잡아야 한다** —
+         * kakao 는 relayout 에서 「왼쪽 위」를 붙잡으므로, 0×0 으로 만들어졌다가
+         * 커지는 순간(보기를 바꿔 돌아올 때가 그렇다) 보던 자리가 북서쪽으로 밀린다.
+         * 목록에서 지도로 돌아올 때 베이징 근처가 나오던 원인이 이것이다(2026-11-20).
+         */
         const resizeObserver = new ResizeObserver(() => {
-          kakaoMapRef.current?.relayout()
+          const m = kakaoMapRef.current
+          if (!m) return
+          const keep = m.getCenter()
+          m.relayout()
+          m.setCenter(keep)
         })
         resizeObserver.observe(mapRef.current!)
 
@@ -413,6 +440,38 @@ useEffect(() => {
 
     restoredMapStateAppliedRef.current = true
   }, [isMapReady, customers, restoredMapCenter, restoredMapLevel, restoredOpenOverlayCustomerId])
+
+  /**
+   * **돌아왔을 때 볼 자리.** 목록에서 보던 사업장이 있으면 그 핀으로, 회사면 그 회사의
+   * 사업장이 전부 들어오게, 아무것도 없으면 전국 보기로 되돌린다.
+   * 핀 좌표는 customers 에서 찾는다 — 지오코딩하지 않는다.
+   */
+  useEffect(() => {
+    if (!isMapReady || focusNonce === undefined) return
+    const kakao = kakaoGlobal()
+    const map = kakaoMapRef.current
+    if (!kakao?.maps || !map) return
+
+    const pts = (focusSiteIds ?? [])
+      .map(id => customers.find(c => Number(c.customer_id) === id))
+      .filter(c => c && c.latitude != null && c.longitude != null)
+      .map(c => new kakao.maps.LatLng(Number(c!.latitude), Number(c!.longitude)))
+
+    if (pts.length === 0) {
+      map.setLevel(NATIONAL_LEVEL)
+      map.setCenter(new kakao.maps.LatLng(...nationalCenter()))
+      return
+    }
+    if (pts.length === 1) {
+      map.setLevel(5)
+      map.setCenter(pts[0])
+      return
+    }
+    const bounds = new kakao.maps.LatLngBounds()
+    for (const pt of pts) bounds.extend(pt)
+    map.setBounds(bounds)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusNonce, isMapReady])
 
   // 업체 포커스
   useEffect(() => {
