@@ -177,6 +177,29 @@ ok('사업장에서 돌아올 때 칩을 자동으로 걸지 않는다',
 ok('활동 현황에서 넘어온 길(?site=)은 그대로다',
   /setPendingFocusSiteId\(site\)/.test(HOME) && /setTimelineFocusSiteId\(site\)/.test(HOME))
 
+console.log('\n── 회사·대리점·사업장 선택은 서로 배타다(2026-11-21 7차 버그) ──')
+ok('고르는 길이 한 자리에 모여 있다',
+  /const openCompany = \(id: number \| null\) => \{/.test(HOME)
+  && /const openAgency = \(id: number \| null\) => \{/.test(HOME)
+  && /const openSiteUnderCompany = \(companyId: number, siteId: number\) => \{/.test(HOME))
+ok('회사를 고르면 대리점이 풀린다',
+  /const openCompany[\s\S]{0,120}setSelectedAgencyId\(null\)/.test(HOME),
+  '이 줄이 없으면 대리점 pane 이 그대로 남는다 — 그것이 그 버그였다')
+ok('대리점을 고르면 회사가 풀린다',
+  /const openAgency[\s\S]{0,120}setSelectedCompanyId\(null\)/.test(HOME))
+ok('트리에서 사업장을 고르면 그 사업장의 회사가 뒤에 선다',
+  /const openSiteUnderCompany[\s\S]{0,160}setSelectedAgencyId\(null\)[\s\S]{0,80}setSelectedCompanyId\(companyId\)/.test(HOME))
+ok('pane 안에서 사업장을 열 때는 뒤를 건드리지 않는다(← 가 돌아갈 자리다)',
+  /const openSite = \(siteId: number\) => setSelectedSiteId\(siteId\)/.test(HOME))
+ok('트리·탭이 그 길만 쓴다',
+  /onSelectCompany=\{id => openCompany\(id\)\}/.test(HOME)
+  && /onSelectSite=\{\(cid, sid\) => openSiteUnderCompany\(cid, sid\)\}/.test(HOME)
+  && /onPickAgency=\{id => openAgency\(id\)\}/.test(HOME))
+ok('주소에는 하나만 남는다',
+  /url\.searchParams\.delete\('company'\)\s*\n\s*url\.searchParams\.delete\('agency'\)\s*\n\s*if \(view === 'list' && selectedAgencyId != null\)[\s\S]{0,120}else if \(view === 'list' && selectedCompanyId != null\)/.test(HOME))
+ok('주소에 둘이 함께 와도 하나만 받는다',
+  /\} else if \(Number\.isInteger\(company\) && company > 0\) \{/.test(HOME))
+
 // ── 상단 카드의 작은 규칙 셋(2026-11-21 6차) ──────────────────────────────
 const SITE = read(path.join('components', 'customer', 'SiteHeaderBand.tsx'))
 const PANE_CO = read(path.join('components', 'home', 'list', 'CompanyPane.tsx'))

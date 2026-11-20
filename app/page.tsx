@@ -178,21 +178,21 @@ useEffect(() => {
      * 아래 replaceState 효과가 고른 회사와 이 값을 맞춰 둔다.
      */
     const company = Number(q.get('company'))
-    if (Number.isInteger(company) && company > 0) {
-      setView('list')
-      setListTab('company')
-      setSelectedCompanyId(company)
-      setSelectedSiteId(null)
-      setExpanded(prev => new Set(prev).add(company))
-    }
     /** 대리점 화면 — 회사와 같은 방식이다(?view=list&agency=ID). */
     const ag = Number(q.get('agency'))
+    // 둘은 배타다. 주소에 둘이 함께 들어 있으면(옛 주소·손으로 적은 주소) **대리점을** 받는다.
     if (Number.isInteger(ag) && ag > 0) {
       setView('list')
       setListTab('agency')
       setSelectedAgencyId(ag)
       setSelectedCompanyId(null)
       setSelectedSiteId(null)
+    } else if (Number.isInteger(company) && company > 0) {
+      setView('list')
+      setListTab('company')
+      setSelectedCompanyId(company)
+      setSelectedSiteId(null)
+      setExpanded(prev => new Set(prev).add(company))
     }
     // 활동 현황에서 넘어온 길 — 그 사업장의 **회사**를 펴고 칩을 켠 뒤 그 줄로 내려간다.
     const site = Number(q.get('site'))
@@ -221,12 +221,15 @@ useEffect(() => {
     const url = new URL(window.location.href)
     if (view === 'list') url.searchParams.set('view', 'list')
     else url.searchParams.delete('view')
-    // 고른 회사는 주소에 남긴다 — 새로고침해도 그 회사가 열린 채다(목록 보기의 주소다).
-    if (view === 'list' && selectedCompanyId != null) url.searchParams.set('company', String(selectedCompanyId))
-    else url.searchParams.delete('company')
-    // 고른 대리점도 같은 규칙이다.
+    /**
+     * 고른 것은 주소에 남긴다 — 새로고침해도 그 화면이 열린 채다(목록 보기의 주소다).
+     * 회사와 대리점은 배타이므로 **둘 중 하나만** 쓴다. 상태가 어쩌다 둘 다 들어 있어도
+     * 주소에는 하나만 남게 해 둔다(새로고침이 다시 한쪽으로 모아 준다).
+     */
+    url.searchParams.delete('company')
+    url.searchParams.delete('agency')
     if (view === 'list' && selectedAgencyId != null) url.searchParams.set('agency', String(selectedAgencyId))
-    else url.searchParams.delete('agency')
+    else if (view === 'list' && selectedCompanyId != null) url.searchParams.set('company', String(selectedCompanyId))
     // 찾아가기 값은 한 번 쓰고 주소에서 턴다 — 새로고침·뒤로가기에 다시 뜨지 않게.
     if (timelineFocusKey == null) { url.searchParams.delete('site'); url.searchParams.delete('focus') }
     if (url.toString() !== window.location.href) window.history.replaceState(null, '', url.toString())
@@ -418,6 +421,37 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
     [companies],
   )
   const today = todayKST()
+  /**
+   * ── 우측 pane 에 무엇을 띄울지 **한 자리에서** 정한다 ───────────────────
+   *
+   * 회사와 대리점은 **서로 배타**다. 전에는 대리점을 고른 뒤 회사를 고르면
+   * selectedAgencyId 가 그대로 남아, pane 판정이 대리점을 먼저 보기 때문에 화면이
+   * 바뀌지 않았다(2026-11-21 버그). 주소에도 company 와 agency 가 함께 남았다.
+   *
+   * 사업장은 그 **위에 얹히는 층**이다 — 어디서 들어왔는지(회사·대리점)를 그대로 둬야
+   * ← 가 그 자리로 돌아간다(5차에서 정한 동작). 그래서 사업장을 열 때는 뒤에 있는
+   * 선택을 건드리지 않는다. 트리에서 사업장을 고를 때만 그 사업장의 회사로 갈아 끼운다.
+   */
+  const openCompany = (id: number | null) => {
+    setSelectedAgencyId(null)
+    setSelectedSiteId(null)
+    setSelectedCompanyId(id)
+    setTimelineFocusSiteId(null)
+  }
+  const openAgency = (id: number | null) => {
+    setSelectedCompanyId(null)
+    setSelectedSiteId(null)
+    setSelectedAgencyId(id)
+  }
+  /** 트리에서 사업장을 고를 때 — 그 사업장의 회사가 뒤에 선다. */
+  const openSiteUnderCompany = (companyId: number, siteId: number) => {
+    setSelectedAgencyId(null)
+    setSelectedCompanyId(companyId)
+    setSelectedSiteId(siteId)
+  }
+  /** 이미 선 화면(회사·대리점) 안에서 사업장을 열 때 — 뒤는 그대로 둔다. */
+  const openSite = (siteId: number) => setSelectedSiteId(siteId)
+
   /** 고른 대리점 줄 — 우측 pane 의 대리점 화면이 쓴다. */
   const selectedAgency = useMemo(
     () => agencyList.find(a => a.customer_id === selectedAgencyId) ?? null,
@@ -899,8 +933,8 @@ useEffect(() => {
               toggleExpand={toggleExpand}
               selectedCompanyId={selectedCompanyId}
               selectedSiteId={selectedSiteId}
-              onSelectCompany={id => { setSelectedCompanyId(id); setSelectedSiteId(null); setTimelineFocusSiteId(null) }}
-              onSelectSite={(cid, sid) => { setSelectedCompanyId(cid); setSelectedSiteId(sid) }}
+              onSelectCompany={id => openCompany(id)}
+              onSelectSite={(cid, sid) => openSiteUnderCompany(cid, sid)}
 
               checkedCompanies={checkedCompanies}
               toggleCompanyCheck={id => setCheckedCompanies(prev => {
@@ -919,7 +953,7 @@ useEffect(() => {
               /* 대리점을 누르면 **우측에 대리점 화면**이 선다(2026-11-21).
                  전에는 회사 탭으로 옮겨 가며 그 대리점의 사업장만 걸렀다 — 거르기는
                  필터 모달의 「대리점」 조건이 하는 일이라 두 길이 겹쳤다. */
-              onPickAgency={id => { setSelectedAgencyId(id); setSelectedCompanyId(null); setSelectedSiteId(null) }}
+              onPickAgency={id => openAgency(id)}
               selectedAgencyId={selectedAgencyId}
               loading={isLoading}
             />
@@ -956,7 +990,7 @@ useEffect(() => {
                 touchOf={id => lastTouchMap.get(id) ?? null}
                 today={today}
                 me={{ engineer_id: me?.engineer_id ?? null }}
-                onOpenSite={id => setSelectedSiteId(id)}
+                onOpenSite={id => openSite(id)}
                 onBackToList={() => setSelectedAgencyId(null)}
                 onSaved={() => { void fetchData() }}
                 onError={msg => toast.error(msg)}
@@ -970,7 +1004,7 @@ useEffect(() => {
                 onSaved={() => { invalidateParents(); loadParents().then(setCompanies); void fetchData() }}
                 onError={msg => toast.error(msg)}
                 onToast={msg => toast.success(msg)}
-                onOpenSite={id => setSelectedSiteId(id)}
+                onOpenSite={id => openSite(id)}
                 onAddSite={() => openAddCustomer(true)}
                 canEditCompany={isSuperAdmin(me)}
                 me={{ engineer_id: me?.engineer_id ?? null, permission_level: me?.permission_level ?? null }}
