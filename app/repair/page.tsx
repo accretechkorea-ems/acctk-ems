@@ -74,7 +74,6 @@ type Category = '게이지' | '앰프'
 const CATEGORIES: Category[] = ['게이지', '앰프']
 
 // ── 날짜 유틸 ──
-const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
 const monthKey = (dateStr: string | null) => (dateStr ? dateStr.slice(0, 7) : '') // YYYY-MM
 const fmtMonthLabel = (ym: string) => `${Number(ym.slice(5, 7))}월`
 const shiftMonth = (ym: string, delta: number) => {
@@ -167,7 +166,8 @@ export default function RepairPage() {
   const [importYear, setImportYear] = useState(nowKSTParts().y)
   const [importCategory, setImportCategory] = useState<Category>('게이지')
   // PDF 를 여는 중인 견적 id — 연타 방지 + 그 줄만 흐리게.
-  const [pdfBusyId, setPdfBusyId] = useState<number | null>(null)
+  // 여는 중 판정은 ref 가 한다(연타 방지). 상태는 **다시 그리기 위한 신호**로만 쓴다.
+  const [, setPdfBusyId] = useState<number | null>(null)
   const pdfBusyRef = useRef(false)
   const [isImporting, setIsImporting] = useState(false)
   const [importResult, setImportResult] = useState<{ ok: number; fail: number } | null>(null)

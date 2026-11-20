@@ -48,7 +48,7 @@ async function main() {
   try {
     const imgId = wb.addImage({ filename: path.join(__dirname, '..', 'public', 'quotelogo.png'), extension: 'png' })
     ws.addImage(imgId, { tl: { col: 6.15, row: 0.28 }, ext: { width: 120, height: 28 } })
-  } catch (e) {
+  } catch {
     setCell('G1', 'ACCRETECH', { size: 9, bold: true })
   }
 

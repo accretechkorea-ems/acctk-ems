@@ -98,7 +98,7 @@ function geocode(address) {
           } else {
             resolve(null);
           }
-        } catch(e) {
+        } catch {
           resolve(null);
         }
       });

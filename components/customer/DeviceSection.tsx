@@ -61,7 +61,7 @@ type Props = {
   showDisposed?: boolean
 }
 
-function ServiceCard({ h, d, companyName, onEdit, onPrint, onOpenReport, reportBusy, holding, onAddHolding, onOpenHolding }: { h: ServiceHistory; d: Device; companyName: string | null; onEdit: () => void; onPrint: () => void; onOpenReport: () => void; reportBusy: boolean; holding: Holding | undefined; onAddHolding: () => void; onOpenHolding: () => void }) {
+function ServiceCard({ h, companyName, onEdit, onPrint, onOpenReport, reportBusy, holding, onAddHolding, onOpenHolding }: { h: ServiceHistory; companyName: string | null; onEdit: () => void; onPrint: () => void; onOpenReport: () => void; reportBusy: boolean; holding: Holding | undefined; onAddHolding: () => void; onOpenHolding: () => void }) {
   const [hovered, setHovered] = useState(false)
   const sc = getCategoryColor(SERVICE_TYPE_COLORS, h.service_type)
 
@@ -224,6 +224,10 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
           shownSrc ? (
             <button type="button" onClick={onImageUpload} title="사진 크게 보기"
               style={{ width: '100%', height: '100%', padding: 0, border: 'none', background: 'none', cursor: 'zoom-in' }}>
+              {/* 저장소(Supabase)의 장비 사진이다 — next/image 로 보내려면 원격 도메인을 설정에
+                  등록해야 하고, 그 최적화는 **이 자리**에 이득이 없다(목록 썸네일 한 장, 이미
+                  loading=lazy·decoding=async 다). 규칙만 이 줄에서 끈다. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={shownSrc} alt={deviceTitle || 'device'}
                 loading="lazy" decoding="async"
                 style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
@@ -338,7 +342,6 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
             <ServiceCard
               key={`${d.device_id}-${h.service_id}`}
               h={h}
-              d={d}
               companyName={companyName}
               onEdit={() => onEditService(h)}
               reportBusy={reportBusyId === h.service_id}

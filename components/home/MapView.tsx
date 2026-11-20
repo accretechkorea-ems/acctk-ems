@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { loadKakaoMap } from '@/lib/loadKakaoMap'
+import { loadKakaoMap, type KakaoClusterer, type KakaoMap, type KakaoNamespace, type KakaoOverlay, type KakaoWindow } from '@/lib/loadKakaoMap'
 import {
   PANEL_BG,
   getDeviceLines,
@@ -36,7 +36,7 @@ type Props = {
 
 /** 창에 올라온 kakao 네임스페이스. 타입이 없는 전역이라 한 곳에서만 꺼낸다. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const kakaoGlobal = (): any => (window as any).kakao
+const kakaoGlobal = (): any => (window as KakaoWindow).kakao
 
 /** 전국 보기 — 처음 들어왔을 때와 「볼 곳이 없을 때」가 같은 자리다. */
 const NATIONAL_LEVEL = 12
@@ -56,10 +56,10 @@ export default function MapView({
   onOpenOverlayChange,
 }: Props) {
   const mapRef = useRef<HTMLDivElement | null>(null)
-  const kakaoMapRef = useRef<any>(null)
-  const markerMapRef = useRef<Map<number, any>>(new Map())
-  const openInfoWindowRef = useRef<{ id: number; iw: any } | null>(null)
-  const clustererRef = useRef<any>(null)
+  const kakaoMapRef = useRef<KakaoMap>(null)
+  const markerMapRef = useRef<Map<number, KakaoOverlay>>(new Map())
+  const openInfoWindowRef = useRef<{ id: number; iw: KakaoOverlay } | null>(null)
+  const clustererRef = useRef<KakaoClusterer>(null)
   const customerMapRef = useRef<Map<number, Customer>>(new Map())
   const [isMapReady, setIsMapReady] = useState(false)
   const restoredMapStateAppliedRef = useRef(false)
@@ -95,7 +95,7 @@ export default function MapView({
     (s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 
   // 오버레이 동적 생성 함수
-  const createOverlay = (c: Customer, map: any, kakao: any) => {
+  const createOverlay = (c: Customer, map: KakaoMap, kakao: KakaoNamespace) => {
     const devices = deviceMap.get(Number(c.customer_id)) || []
     const deviceLines = getDeviceLines(devices)
     const makeNavUrl = (o: { lat: number; lng: number; name: string }) =>
@@ -248,13 +248,12 @@ useEffect(() => {
       officesRef.current = await loadOffices()
 
       if (!kakaoMapRef.current) {
-       const isMobile = window.innerWidth <= 768
         kakaoMapRef.current = new kakao.maps.Map(mapRef.current, {
           center: new kakao.maps.LatLng(...nationalCenter()),
           level: NATIONAL_LEVEL,
         })
 
-         ;(window as any).__kakaoMapInstance = kakaoMapRef.current
+         ;(window as KakaoWindow).__kakaoMapInstance = kakaoMapRef.current
 
         /**
          * 칸 크기가 바뀌면 relayout 한다. **그 뒤에 중심을 다시 잡아야 한다** —
@@ -333,7 +332,7 @@ useEffect(() => {
         if (!markerMapRef.current.has(c.customer_id)) toAdd.push(c)
       })
 
-      const newMarkers: any[] = []
+      const newMarkers: KakaoOverlay[] = []
 
       toAdd.forEach((c) => {
         if (c.latitude == null || c.longitude == null) return
@@ -371,7 +370,7 @@ useEffect(() => {
       customerMapRef.current = newCustomerMap
 
       // 클러스터러에 새 마커만 추가
-      if ((window as any).kakao?.maps?.MarkerClusterer) {
+      if ((window as KakaoWindow).kakao?.maps?.MarkerClusterer) {
         if (!clustererRef.current) {
           clustererRef.current = new kakao.maps.MarkerClusterer({
             map,
@@ -395,7 +394,7 @@ useEffect(() => {
         if (toDelete.length > 0) {
           // 삭제된 마커 클러스터에서 제거
           clustererRef.current.clear()
-          const allMarkers: any[] = []
+          const allMarkers: KakaoOverlay[] = []
           markerMapRef.current.forEach((marker) => allMarkers.push(marker))
           clustererRef.current.addMarkers(allMarkers)
         } else if (newMarkers.length > 0) {
@@ -416,7 +415,7 @@ useEffect(() => {
     if (restoredMapStateAppliedRef.current) return
     if (customers.length === 0) return
 
-    const kakao = (window as any).kakao
+    const kakao = (window as KakaoWindow).kakao
     if (!kakao?.maps) return
 
     const map = kakaoMapRef.current
@@ -498,7 +497,7 @@ useEffect(() => {
 
     // 마커를 화면 정중앙이 아니라 "중앙보다 살짝 아래"에 두어, 위쪽에 뜨는
     // 설명 카드가 잘리지 않도록 지도 중심을 마커보다 위(북쪽)로 픽셀만큼 이동
-    const kakaoNS = (window as any).kakao.maps
+    const kakaoNS = (window as KakaoWindow).kakao.maps
     const targetLatLng = new kakaoNS.LatLng(lat, lng)
     try {
       const OFFSET_Y = 100 // px — 클수록 마커가 더 아래로 내려감

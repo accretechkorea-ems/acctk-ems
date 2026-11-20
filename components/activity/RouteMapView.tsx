@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { loadKakaoMap } from '@/lib/loadKakaoMap'
+import { loadKakaoMap, type KakaoLatLng, type KakaoMap, type KakaoOverlay } from '@/lib/loadKakaoMap'
 import { createClient } from '@/lib/supabase/client'
 import type { RouteStop } from '@/lib/routeMap'
 import { useOffices, findOffice } from '@/lib/offices'
@@ -47,15 +47,15 @@ type NearbyCustomer = { lat: number; lng: number; name: string }
 export default function RouteMapView({ stops, onClose, engineerName, startDate, endDate, officeCode, excludedCount = 0 }: Props) {
   const supabase = useMemo(() => createClient(), [])
   const mapRef = useRef<HTMLDivElement>(null)
-  const infoRef = useRef<any>(null) // 현재 열린 정보창(하나만 유지)
-  const polylinesRef = useRef<any[]>([]) // 구간별 연결선(모드 전환·언마운트 시 정리)
-  const markerOverlaysRef = useRef<any[]>([]) // 클러스터 마커(줌 변경 시 다시 그림)
-  const officeOverlayRef = useRef<any>(null) // 사무실 마커(1회 생성, 언마운트 시 정리)
-  const mapObjRef = useRef<any>(null) // 카카오 지도 인스턴스(토글 효과에서 사용)
+  const infoRef = useRef<KakaoOverlay>(null) // 현재 열린 정보창(하나만 유지)
+  const polylinesRef = useRef<KakaoOverlay[]>([]) // 구간별 연결선(모드 전환·언마운트 시 정리)
+  const markerOverlaysRef = useRef<KakaoOverlay[]>([]) // 클러스터 마커(줌 변경 시 다시 그림)
+  const officeOverlayRef = useRef<KakaoOverlay>(null) // 사무실 마커(1회 생성, 언마운트 시 정리)
+  const mapObjRef = useRef<KakaoMap>(null) // 카카오 지도 인스턴스(토글 효과에서 사용)
   const drawPolylinesRef = useRef<((m: 'visits' | 'office') => void) | null>(null)
   const drawNearbyRef = useRef<(() => void) | null>(null)
   const clearNearbyRef = useRef<(() => void) | null>(null)
-  const nearbyOverlaysRef = useRef<any[]>([]) // 주변 업체 회색 점
+  const nearbyOverlaysRef = useRef<KakaoOverlay[]>([]) // 주변 업체 회색 점
   const nearbyCacheRef = useRef<NearbyCustomer[] | null>(null) // null = 아직 미조회(첫 켤 때만 조회)
 
   // 지도 안 토글 상태. 기본값은 둘 다 켜짐(office 모드 + 주변 업체). 사무실 미지정이면 office 는 시각상 visits 로 처리된다.
@@ -152,7 +152,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
         map.setBounds(bounds)
       }
 
-      const openInfo = (pos: any, s: RouteStop) => {
+      const openInfo = (pos: KakaoLatLng, s: RouteStop) => {
         if (infoRef.current) infoRef.current.setMap(null)
         // 정보창은 문자열 대신 DOM 으로 만들어 업체명을 textContent 로 안전하게 삽입.
         const box = document.createElement('div')
@@ -199,7 +199,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
       }
 
       // 여러 방문이 한 좌표에 모였을 때(축소 상태) 전체를 목록으로 보여주는 정보창.
-      const openClusterInfo = (pos: any, items: RouteStop[]) => {
+      const openClusterInfo = (pos: KakaoLatLng, items: RouteStop[]) => {
         if (infoRef.current) infoRef.current.setMap(null)
         const box = document.createElement('div')
         box.style.cssText = `background:#fff;border:1px solid #ebebeb;border-radius:${R.control}px;box-shadow:0 16px 40px rgba(0,0,0,0.18);max-height:240px;overflow:auto;min-width:180px`
@@ -367,7 +367,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
       drawPolylines(mode)
 
       // 주변 업체(회색 점) — 라벨 없이 8px 회색 점. 클릭 시 업체명 툴팁. 분산 없이 원좌표에 그대로.
-      const openNearbyTooltip = (pos: any, name: string) => {
+      const openNearbyTooltip = (pos: KakaoLatLng, name: string) => {
         if (infoRef.current) infoRef.current.setMap(null)
         const box = document.createElement('div')
         box.style.cssText = `padding:6px 10px;background:#fff;border:1px solid #ebebeb;border-radius:${R.icon}px;box-shadow:0 8px 24px rgba(0,0,0,0.15);white-space:nowrap;font-size:12px;font-weight:700;color:#374151`

@@ -565,13 +565,17 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
 
 /** 접촉 이력 — 최신순, 해가 바뀌는 자리에 연도 구분선. 항목 앞에 차수(#n). */
 function Timeline({ views, selectedId, onSelect }: { views: ReportView[]; selectedId: number | null; onSelect: (id: number) => void }) {
-  let lastYear = ''
+  /**
+   * 연도 머리줄을 어디에 넣을지 — **앞 줄과 비교**해서 정한다.
+   * 전에는 렌더 안에서 바깥 변수(lastYear)를 고쳐 가며 셌다. 렌더는 여러 번 돌 수 있어
+   * 그렇게 둔 값은 믿을 수 없다(react-hooks/immutability 가 짚는 자리다).
+   */
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {views.map(v => {
+      {views.map((v, i) => {
         const year = v.input.contact_date.slice(0, 4)
-        const showYear = year !== lastYear
-        lastYear = year
+        const prevYear = i > 0 ? views[i - 1].input.contact_date.slice(0, 4) : ''
+        const showYear = year !== prevYear
         const on = v.id === selectedId
         const n = v.changed.size
         return (

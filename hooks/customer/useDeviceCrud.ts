@@ -14,6 +14,7 @@ import { downsizeImage } from '@/lib/leadCardImage'
 import { disposePatch, restorePatch, isDisposed } from '@/lib/deviceStatus'
 import { todayKST } from '@/lib/date'
 import type { Device, DeviceForm } from '@/components/customer/types'
+import { errMessage } from '@/lib/errMessage'
 
 // ── 장비 사진 ──
 // 카드의 사진 아이콘과 「사진 등록」 모달이 같은 경로를 쓰도록 훅 바깥에 둔다.
@@ -182,8 +183,8 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
       toast.success('장비가 추가되었습니다')
       setIsAddDeviceModalOpen(false)
       await fetchDetail()
-    } catch (error: any) {
-      toast.error(error?.message || '장비 추가 중 오류가 발생했습니다')
+    } catch (error) {
+      toast.error(errMessage(error, '장비 추가 중 오류가 발생했습니다'))
     } finally {
       setIsSavingDevice(false)
     }
@@ -218,8 +219,8 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
       toast.success('장비 정보가 수정되었습니다')
       setSelectedDevice(null)
       await fetchDetail()
-    } catch (error: any) {
-      toast.error(error?.message || '장비 수정 중 오류가 발생했습니다')
+    } catch (error) {
+      toast.error(errMessage(error, '장비 수정 중 오류가 발생했습니다'))
     } finally {
       setIsSavingDeviceEdit(false)
     }
@@ -346,9 +347,9 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
         // 팝업이 차단된 경우 현재 탭에서 열기
         window.open(data.signedUrl, '_blank')
       }
-    } catch (error: any) {
+    } catch (error) {
       if (win) win.close()
-      toast.error(error?.message || '파일을 여는 중 오류가 발생했습니다')
+      toast.error(errMessage(error, '파일을 여는 중 오류가 발생했습니다'))
     } finally {
       openBusyRef.current = false   // 실패해도 다시 누를 수 있어야 한다
     }
@@ -361,8 +362,8 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
       if (error) throw error
       toast.success('납입의사록·패킹리스트가 등록되었습니다')
       await fetchDetail()
-    } catch (error: any) {
-      toast.error(error?.message || '파일 업로드 중 오류가 발생했습니다')
+    } catch (error) {
+      toast.error(errMessage(error, '파일 업로드 중 오류가 발생했습니다'))
     }
   }
 

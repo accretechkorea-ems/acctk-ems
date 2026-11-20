@@ -53,6 +53,7 @@ import {
   toTimeValue,
 } from '@/lib/home'
 import { R } from '@/lib/radius'
+import type { KakaoWindow } from '@/lib/loadKakaoMap'
 
 
 
@@ -892,7 +893,7 @@ useEffect(() => {
           onClick={() => {
             setMobileTab('map')
             setTimeout(() => {
-              const kakao = (window as any).kakao
+              const kakao = (window as KakaoWindow).kakao
               if (kakao?.maps) {
                 const container = document.querySelector('.kakao-map-container')
                 if (container) {
@@ -900,7 +901,7 @@ useEffect(() => {
                 }
               }
               // relayout 직접 호출
-              const mapInstance = (window as any).__kakaoMapInstance
+              const mapInstance = (window as KakaoWindow).__kakaoMapInstance
               if (mapInstance) mapInstance.relayout()
             }, 200)
           }}

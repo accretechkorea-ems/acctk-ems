@@ -16,6 +16,7 @@ import { deleteServiceAttachments, uploadAttachments } from '@/components/custom
 import { reportDownloadName } from '@/components/customer/ServiceAttachments'
 
 import type { Customer, Device, Contact, ServiceHistory, Engineer, ServiceForm, Holding } from '@/components/customer/types'
+import { errMessage } from '@/lib/errMessage'
 
 type Args = {
   customerId: number
@@ -132,8 +133,8 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
       toast.success('서비스 기록이 수정되었습니다')
       setSelectedService(null)
       await fetchDetail()
-    } catch (error: any) {
-      toast.error(error?.message || '서비스 기록 수정 중 오류가 발생했습니다')
+    } catch (error) {
+      toast.error(errMessage(error, '서비스 기록 수정 중 오류가 발생했습니다'))
     } finally {
       setIsSavingServiceEdit(false)
     }
@@ -202,8 +203,8 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
 
       toast.success('레포트가 저장되었습니다')
       await fetchDetail()
-    } catch (error: any) {
-      toast.error(error?.message || '레포트 저장 중 오류가 발생했습니다')
+    } catch (error) {
+      toast.error(errMessage(error, '레포트 저장 중 오류가 발생했습니다'))
     } finally {
       reportBusyRef.current = false
       setReportBusyId(null)   // 실패해도 원래대로 돌아온다
@@ -230,8 +231,8 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
       // 서명 URL 이 attachment 로 내려오므로 이 페이지는 그대로 있고 내려받기만 시작된다.
       // 새 탭을 열면 빈 탭만 남아 탭을 쓰지 않는다.
       window.location.href = data.signedUrl
-    } catch (error: any) {
-      toast.error(error?.message || '레포트를 여는 중 오류가 발생했습니다')
+    } catch (error) {
+      toast.error(errMessage(error, '레포트를 여는 중 오류가 발생했습니다'))
     } finally {
       reportBusyRef.current = false
       setReportBusyId(null)
@@ -251,8 +252,8 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
       setSelectedService(prev => prev ? { ...prev, report_url: null } : prev)
       await fetchDetail()
       toast.success('레포트가 삭제되었습니다')
-    } catch (error: any) {
-      toast.error(error?.message || '레포트 삭제 중 오류가 발생했습니다')
+    } catch (error) {
+      toast.error(errMessage(error, '레포트 삭제 중 오류가 발생했습니다'))
     }
   }
 

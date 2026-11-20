@@ -132,10 +132,14 @@ export default function ActivityPage() {
     const salesTypes = await loadActivityTypes()
     const typeOrder = activityTypeOrder(salesTypes)
 
+    /** 참여자 줄 — 읽는 칸만 적는다(select 가 그 둘이다). */
+    type ServiceEngineerRow = { engineer_id: number; service_id: number }
     const { data: seData } = await supabase
       .from('service_engineers')
       .select('engineer_id, service_id')
 
+    /** 서비스 기록 줄 — 센 것은 유형과 방문일이다. */
+    type ServiceHistoryRow = { service_id: number; service_type: string; visit_date: string }
     const { data: shData } = await supabase
       .from('service_history')
       .select('service_id, service_type, visit_date')
@@ -152,15 +156,15 @@ export default function ActivityPage() {
       .lte('activity_date', end)
 
     const shMap: Record<number, { service_type: string; visit_date: string }> = {}
-    ;(shData ?? []).forEach((sh: any) => {
+    ;(shData as ServiceHistoryRow[] ?? []).forEach((sh) => {
       shMap[sh.service_id] = { service_type: sh.service_type, visit_date: sh.visit_date }
     })
 
     const positionOrder: Record<string, number> = { '수석': 0, '책임': 1, '선임': 2, '사원': 3 }
     const sortedEngineers = (engineers ?? [])
-      .filter((e: any) => inSalesStats(e))
+      .filter(e => inSalesStats(e))
       // 퇴사자는 조회 기간 시작일까지 재직했을 때만 표시 (7/10 퇴사 → 8월 조회 시 숨김)
-      .filter((e: any) => isActiveInPeriod(e.resigned_date, start))
+      .filter(e => isActiveInPeriod(e.resigned_date, start))
       .sort((a, b) => {
         const aOrder = positionOrder[a.position ?? ''] ?? 99
         const bOrder = positionOrder[b.position ?? ''] ?? 99
@@ -172,9 +176,9 @@ export default function ActivityPage() {
       typeOrder.forEach((t) => { counts[t] = 0 })
 
       // 서비스 — 참여자 표(service_engineers)를 거쳐 사람별로 센다.
-      ;(seData ?? [])
-        .filter((se: any) => se.engineer_id === eng.engineer_id)
-        .forEach((se: any) => {
+      ;(seData as ServiceEngineerRow[] ?? [])
+        .filter(se => se.engineer_id === eng.engineer_id)
+        .forEach(se => {
           const sh = shMap[se.service_id]
           if (sh && sh.service_type && counts[sh.service_type] !== undefined) {
             counts[sh.service_type]++

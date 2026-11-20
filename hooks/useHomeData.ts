@@ -3,8 +3,8 @@ import { IN_USE_FILTER } from '@/lib/deviceStatus'
 import { createClient } from '@/lib/supabase/client'
 import { type Customer, type Device } from '@/lib/home'
 import { loadLastTouchMap, touchValue, type LastTouch } from '@/lib/customerLastTouch'
-import { CUSTOMER_NAME_SELECT, customerDisplayName, parentNameOf } from '@/lib/customerLabel'
-import { CUSTOMER_AGENCY_SELECT, NOT_AGENCY_ONLY, agencyNameOf } from '@/lib/customerAgency'
+import { CUSTOMER_NAME_SELECT, customerDisplayName, parentNameOf, type ParentNameJoin } from '@/lib/customerLabel'
+import { CUSTOMER_AGENCY_SELECT, NOT_AGENCY_ONLY, agencyNameOf, type AgencyJoin } from '@/lib/customerAgency'
 
 type Params = {
   setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>
@@ -57,7 +57,29 @@ export function useHomeData({
     if (customerRes.error) {
       console.warn('customers 조회 오류:', customerRes.error)
     } else {
-      const normalizedCustomers: Customer[] = (customerRes.data || []).map((c: any) => ({
+      /**
+       * 조회해 온 한 줄 — select 문에 적은 칸 그대로다. 이름(parent)·대리점(agency_ref)은
+       * 임베드라 한 줄로도 배열로도 올 수 있어, 그 두 함수(customerLabel·customerAgency)가
+       * 가려 읽는다. 그래서 그 둘만 느슨하게 둔다.
+       */
+      type CustomerQueryRow = {
+        customer_id: number | string
+        company_name?: string | null
+        site_name?: string | null
+        parent_customer_id?: number | string | null
+        region1?: string | null
+        address?: string | null
+        latitude?: number | string | null
+        longitude?: number | string | null
+        status?: string | null
+        category?: string | null
+        note?: string | null
+        // 숫자로만 온다(bigint) — agencyNameOf 가 그 모양을 요구한다.
+        agency_customer_id?: number | null
+        parent?: ParentNameJoin
+        agency_ref?: AgencyJoin
+      }
+      const normalizedCustomers: Customer[] = (customerRes.data || []).map((c: CustomerQueryRow) => ({
         customer_id: Number(c.customer_id),
         // 이름은 여기서 한 번 만든다 — 화면 조각마다 회사·사업장을 다시 잇지 않게.
         company_name: customerDisplayName(c),
@@ -85,7 +107,20 @@ note: c.note ?? null,
     } else {
       const map = new Map<number, Device[]>()
 
-      ;(deviceRes.data || []).forEach((d: any) => {
+      /** 장비 한 줄 — select 문에 적은 칸 그대로. */
+      type DeviceQueryRow = {
+        device_id?: number | string
+        customer_id: number | string
+        device_name?: string | null
+        device_name2?: string | null
+        option?: string | null
+        serial_number?: string | null
+        program?: string | null
+        install_date?: string | null
+        category?: string | null
+        packing_list_url?: string | null
+      }
+      ;(deviceRes.data || []).forEach((d: DeviceQueryRow) => {
         const customerId = Number(d.customer_id)
         if (Number.isNaN(customerId)) return
 

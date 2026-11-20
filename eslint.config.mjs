@@ -23,7 +23,31 @@ const eslintConfig = defineConfig([
       "react-hooks/static-components": "warn",
       "react-hooks/immutability": "warn",
       "@typescript-eslint/no-require-imports": "warn",
+      /**
+       * 이름이 `_` 로 시작하는 인자·변수는 **일부러 쓰지 않는 것**이다(2026-11-21).
+       *   const [_rid, value] = entry      // 앞자리는 안 쓴다는 표시
+       *   .sort(([_sortKey, a], [, b]) => …)
+       * 그 표시를 규칙이 몰라서 경고가 났다. 표시를 아는 규칙으로 바꾼다 —
+       * 쓰지 않는 값을 지우는 것과 **이름으로 그렇다고 적어 두는 것**은 다른 일이다.
+       */
+      "@typescript-eslint/no-unused-vars": ["warn", {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_",
+        destructuredArrayIgnorePattern: "^_",
+      }],
     },
+  },
+  /**
+   * **CommonJS 로 돌리는 파일** — 하네스(scripts/*.js)와 한 번 쓰는 도구(루트의 .js).
+   *
+   * node 로 직접 돌리므로 require() 가 유일한 길이다(import 로 바꾸면 돌지 않는다).
+   * 하네스는 그 경고를 피하려고 `const load = module.require.bind(module)` 같은 우회를
+   * 쓰고 있었는데, 규칙을 파일 갈래로 끄는 것이 그 우회보다 정직하다.
+   */
+  {
+    files: ["scripts/**/*.js", "scripts/**/*.mjs", "*.js"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
   },
 ]);
 

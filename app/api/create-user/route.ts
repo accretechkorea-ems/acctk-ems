@@ -35,7 +35,7 @@ export async function POST(req: Request) {
   }
 
   // 1. Auth 계정 생성
-  const { data: authData, error: authError } = await sb.auth.admin.createUser({
+  const { error: authError } = await sb.auth.admin.createUser({
     email: email.trim(),
     password,
     email_confirm: true,

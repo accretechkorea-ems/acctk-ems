@@ -757,6 +757,8 @@ export const QuotePDFDoc = React.memo(function QuotePDFDoc({
             </View>
           </View>
           <View style={S.hdRight}>
+            {/* react-pdf 의 Image 는 alt 를 받지 않는다 — PDF 에는 대체 텍스트가 없다 */}
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
             <Image src="/pdflogo.png" style={S.logo} />
             <Text style={S.rightText}>화성시 동탄대로 24길 31-8</Text>
             <Text style={S.rightText}>Accretech Korea Co., Ltd.</Text>

@@ -27,7 +27,6 @@ const TEXT = '#111113'
 const GRAY = '#6b7280'
 const MUTED = '#9ca3af'
 const GREEN = '#15803d'
-const ORANGE = '#d97706'
 
 type PurchaseQuote = {
   quote_id: number
@@ -65,10 +64,6 @@ type Engineer = {
 }
 
 const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
-const fmtDate = (s: string | null) => {
-  if (!s) return '-'
-  return new Date(s).toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/\. /g, '.').slice(0, -1)
-}
 const fmtShort = (s: string | null) => {
   if (!s) return '-'
   return s.slice(0, 10)
@@ -343,7 +338,8 @@ export default function PurchasePage() {
               <tbody>
                 {filtered.map(q => {
                   const company = custMap[q.customer_id ?? 0] ?? '-'
-                  const eng = q.engineers as any
+                  // 임베드는 한 줄로도 배열로도 올 수 있다 — 읽는 칸은 이름·직급 둘이다.
+                  const eng = q.engineers as { name?: string | null; position?: string | null } | null
                   const engName = eng ? [eng.name, eng.position].filter(Boolean).join(' ') : '-'
                   const sc = getCategoryColor(SALES_STATUS_COLORS, q.status)
                   const dc = getCategoryColor(DELIVERY_METHOD_COLORS, q.delivery_method)

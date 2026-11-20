@@ -37,6 +37,7 @@ import { fetchRepairInfoStates, type RepairInfoRow, type RepairInfoState } from 
 import BackdatedMark from '@/components/quote/BackdatedMark'
 import { nowKSTParts, todayKST } from '@/lib/date'
 import { R } from '@/lib/radius'
+import { errMessage } from '@/lib/errMessage'
 
 // 대시보드 '내 견적' 패널. 실적 현황 EngineerQuoteModal 의 표시 + 관리 기능을 동일하게 구현한다.
 // mutation 은 lib/quoteMutations.ts 공용 함수 사용(직접 supabase.update/fetch 안 씀).
@@ -256,7 +257,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
     // 장애를 알아챌 수 없었다 — 실패는 콘솔과 화면 양쪽에 남긴다.
     if (error) console.error('[myQuotes] 견적 조회 실패', error)
     setLoadError(!!error)
-    const list = (qs ?? []) as any[]
+    const list = (qs ?? [])
     // 고객사/대리점명: customers 별도 조회 후 병합(고객사 열람 권한이 없어 막히면 '-'/null).
     const ids = [...new Set(list.flatMap(q => [q.customer_id, q.dealer_id]).filter(Boolean))]
     const custMap: Record<number, string> = {}
@@ -271,7 +272,9 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
       ...q,
       company_name: (q.customer_id != null && custMap[q.customer_id]) || '-',
       dealer_name: (q.dealer_id != null && custMap[q.dealer_id]) || null,
-    })) as Quote[])
+      // 조회 칸이 Quote 보다 적다(임베드 모양도 다르다) — 화면이 쓰는 칸은 다 들어 있다.
+      // 그래서 한 번 unknown 을 지난다. any 를 쓰지 않는 쪽을 골랐다.
+    })) as unknown as Quote[])
     setTargetsByYear(tmap)
 
     // 「결재 올리기」 판정용 — 내가 쓴 견적만 물어본다(남의 견적에는 버튼이 나오지 않는다).
@@ -527,8 +530,8 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
       toast.success(editStatus === '견적중' ? '견적중으로 되돌렸습니다' : `${editStatus} 처리되었습니다`)
       setEditQuote(null)
       await loadData()
-    } catch (e: any) {
-      toast.error(`처리 실패: ${e?.message ?? '오류'}`)
+    } catch (e) {
+      toast.error(`처리 실패: ${errMessage(e, '오류')}`)
     } finally {
       setSaving(false)
     }

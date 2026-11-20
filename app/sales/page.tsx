@@ -14,7 +14,7 @@ import { SALES_STATUS_COLORS, TEAM_COLORS, getCategoryColor, salesStatusLabel } 
 import EngineerStatCard, { AnimatedGauge } from '@/components/sales/EngineerStatCard'
 import EngineerChartModal from '@/components/sales/EngineerChartModal'
 import {
-  engineerStat, fiscalYearOf,
+  engineerStat,
   inOrderPeriod as inOrderPeriodOf, inRevenuePeriod as inRevenuePeriodOf,
   matchPeriod as matchPeriodOf,
   unitBars, yearSummary, type ChartUnit,
@@ -369,8 +369,11 @@ function TeamCard({ teamId, engineers, filteredQuotes, orderQuotes, revenueQuote
 
 // ── 개인 견적 모달 ────────────────────────────────────────────────────────────
 // 상태 변경 창의 선택지. 되돌리기(견적중)는 실패한 건에만 붙는다.
+/** 사람 + 그 사람의 실적 수치 — 차트 창이 받는 모양이다. */
+type EngineerWithStats = Engineer & { quotedAmt: number; orderedAmt: number; revenueAmt: number; profitAmt: number; profitRate: number | null; targetAmt: number; achieve: number | null; orderTargetAmt: number; orderAchieve: number | null }
+
 function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, onClose, onStatusSave, onDeleted }: {
-  engineer: Engineer & { quotedAmt: number; orderedAmt: number; revenueAmt: number; profitAmt: number; profitRate: number | null; targetAmt: number; achieve: number | null; orderTargetAmt: number; orderAchieve: number | null }
+  engineer: EngineerWithStats
   quotes: Quote[]
   currentEngineerId: number | null
   engineers: Engineer[]
@@ -1302,7 +1305,11 @@ export default function SalesPage() {
   const [mode, setMode] = useState<PeriodMode>('month')
   const [month, setMonth] = useState(thisMonth)
   const [teamFilter, setTeamFilter] = useState<string | null>(null)
-  const [selectedEngineer, setSelectedEngineer] = useState<any | null>(null)
+  /**
+   * 차트 창에 띄울 사람 — **그 창이 받는 그 타입**이다(아래 EngineerQuoteModal 의 engineer).
+   * 실적 수치가 함께 붙어 있어 Engineer 만으로는 모자란다.
+   */
+  const [selectedEngineer, setSelectedEngineer] = useState<EngineerWithStats | null>(null)
   const [chartEngineer, setChartEngineer] = useState<Engineer | null>(null)
   const [showChart, setShowChart] = useState(false)
   const [currentEngineer, setCurrentEngineer] = useState<Engineer | null>(null)
@@ -1331,7 +1338,7 @@ export default function SalesPage() {
     setLoadError(!!qErr)
     const custMap: Record<number, string> = {}
     for (const c of custData || []) custMap[c.customer_id] = c.company_name
-    const merged = (qData || []).map((q: any) => ({
+    const merged = (qData ?? []).map(q => ({
       ...q,
       customers: q.customer_id ? { company_name: custMap[q.customer_id] ?? null } : null,
       dealer: q.dealer_id ? { company_name: custMap[q.dealer_id] ?? null } : null,
@@ -1549,7 +1556,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
               { label: '전년 동기 대비', value: yoyChange !== null ? `${yoyChange >= 0 ? '+' : ''}${yoyChange.toFixed(1)}%` : '—', color: yoyChange !== null ? (yoyChange >= 0 ? '#15803d' : '#b91c1c') : GRAY },
               { label: '수주 달성률', value: totalOrderAchieve !== null ? `${totalOrderAchieve.toFixed(1)}%` : '미설정', sub: totalOrderTargetAmt > 0 ? `목표 ₩${numKR(totalOrderTargetAmt)}` : null, color: totalOrderAchieveColor },
               { label: '매출 달성률', value: totalAchieve !== null ? `${totalAchieve.toFixed(1)}%` : '미설정', sub: totalTargetAmt > 0 ? `목표 ₩${numKR(totalTargetAmt)}` : null, color: totalAchieveColor },
-            ].map(({ label, value, sub, color }: any) => (
+            ].map(({ label, value, sub, color }) => (
               <div key={label} style={{ background: '#f8fafc', borderRadius: R.control, padding: '13px 15px' }}>
                 <div style={{ fontSize: 10, fontWeight: 600, color: MUTED, marginBottom: 5, letterSpacing: '0.2px' }}>{label}</div>
                 <div className="num" style={{ fontSize: 16, fontWeight: 800, color: color || TEXT, letterSpacing: '-0.3px', lineHeight: 1 }}>{value}</div>
@@ -1628,11 +1635,11 @@ const visibleEngineers = sortedEngineers.filter(e => {
           onClose={() => setSelectedEngineer(null)}
           onStatusSave={async (q, status, failReason) => {
             await handleStatusSave(q, status, failReason)
-            setSelectedEngineer((prev: any) => prev ? { ...prev } : null)
+            setSelectedEngineer(prev => prev ? { ...prev } : null)
           }}
           onDeleted={async () => {
             await fetchAll()
-            setSelectedEngineer((prev: any) => prev ? { ...prev } : null)
+            setSelectedEngineer(prev => prev ? { ...prev } : null)
           }}
         />
       )}

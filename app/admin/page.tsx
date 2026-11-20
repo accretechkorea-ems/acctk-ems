@@ -233,7 +233,16 @@ function AdminPageInner() {
   // 권한 편집 모달 — 팀 하나의 메뉴를 고르고 저장 버튼으로 한 번에 보낸다.
   const [permEditTeam, setPermEditTeam] = useState<Team | null>(null)
   const [permEditKeys, setPermEditKeys] = useState<string[]>([])
-  const [logs, setLogs] = useState<any[]>([])
+  /** 견적 열람·내려받기 기록 한 줄 — 표가 읽는 칸만 적는다. */
+  type QuoteAccessLogRow = {
+    log_id: number
+    downloaded_at: string
+    action: string | null
+    quote_number: string | null
+    company_name: string | null
+    engineers: { name: string | null } | null
+  }
+  const [logs, setLogs] = useState<QuoteAccessLogRow[]>([])
   const [logLoading, setLogLoading] = useState(false)
 
   const [showPresetModal, setShowPresetModal] = useState(false)
@@ -502,7 +511,7 @@ function AdminPageInner() {
       setShowAddEngineer(false)
       setAddForm({ name: '', position: '사원', teams: '', email: '', initials: '', password: '', office: '', scope: 'team' })
       fetchEngineers()
-    } catch (e) {
+    } catch {
       toast.error('오류가 발생했습니다')
     }
     setAddLoading(false)
@@ -578,7 +587,7 @@ function AdminPageInner() {
       // 퇴사 처리는 됐는데 로그인 계정만 안 지워진 경우 — 목록은 갱신하되 성공으로 넘기지 않는다.
       if (result.warning) toast.error(result.warning)
       else toast.success(`${name} 직원이 삭제되었습니다`)
-    } catch (e) {
+    } catch {
       toast.error('오류가 발생했습니다')
     }
     setDeleteLoading(false)

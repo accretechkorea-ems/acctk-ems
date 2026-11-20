@@ -166,7 +166,12 @@ export function useQuoteRows({
     }
   }, [rates, terms, setTerms, category, rowDefaults])
 
-  const updateRow = useCallback((rowId: string, field: keyof QuoteRow, value: any) =>
+  /**
+   * 품목 한 칸을 고친다. 칸마다 값의 종류가 달라(글자·숫자·배열·null) 바깥에서는
+   * unknown 으로 받는다(QuoteRowsActions 가 그렇게 적혀 있다 — 그 쪽이 정본이다).
+   * 넣을 때 **그 칸의 종류**로 좁힌다. any 는 쓰지 않는다.
+   */
+  const updateRow = useCallback((rowId: string, field: keyof QuoteRow, value: unknown) =>
     setRows(prev => prev.map(r => {
       if (r.id !== rowId) return r
       // 이익률을 사람이 고치면 표시해 둔다 — 분류를 바꿀 때 이 줄은 건드리지 않는다.

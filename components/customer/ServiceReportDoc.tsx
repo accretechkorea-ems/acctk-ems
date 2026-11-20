@@ -37,7 +37,6 @@ function fitFontSize(text: string, innerW: number, innerH: number, base = 9, min
 }
 
 export default function ServiceReportDoc({ service, device, customer, contact, engineerNames, firstEngineerName, engineerSignDataUrl, customerSignDataUrl }: Props) {
-  const deviceTitle = `${device.device_name ?? ''} ${device.device_name2 ?? ''} ${device.option ?? ''}`.replace(/\s+/g, ' ').trim()
   const fontFamily = 'NotoSansCJK'
 
   // 내용 칸: 고정 높이 안에 다 들어가도록 폰트 크기 자동 축소
@@ -68,6 +67,8 @@ export default function ServiceReportDoc({ service, device, customer, contact, e
             </View>
             <View style={{ flex: 1, alignItems: 'flex-end' }}>
               {/* 높이는 로고 원본 비율(6.4:1)에 맞춘 값이다 — 110 ÷ 6.4. */}
+              {/* react-pdf 의 Image 는 alt 를 받지 않는다 — PDF 에는 대체 텍스트가 없다 */}
+              {/* eslint-disable-next-line jsx-a11y/alt-text */}
               <Image src="/pdflogo.png" style={{ width: 110, height: 17.19 }} />
             </View>
           </View>
@@ -136,6 +137,8 @@ export default function ServiceReportDoc({ service, device, customer, contact, e
                 </View>
                 <View style={{ width: 36, justifyContent: 'center', alignItems: 'center' }}>
                   <Text style={{ fontSize: 8, fontFamily, textAlign: 'center' }}>{'서\n명'}</Text>
+                  {/* react-pdf 의 Image — 서명 그림이다(대체 텍스트 자리가 없다) */}
+                  {/* eslint-disable-next-line jsx-a11y/alt-text */}
                   {customerSignDataUrl && <Image src={customerSignDataUrl} style={{ position: 'absolute', width: 34, height: 68, objectFit: 'contain' }} />}
                 </View>
               </View>
@@ -148,6 +151,8 @@ export default function ServiceReportDoc({ service, device, customer, contact, e
                 </View>
                 <View style={{ width: 36, justifyContent: 'center', alignItems: 'center' }}>
                   <Text style={{ fontSize: 8, fontFamily, textAlign: 'center' }}>{'서\n명'}</Text>
+                  {/* react-pdf 의 Image — 서명 그림이다(대체 텍스트 자리가 없다) */}
+                  {/* eslint-disable-next-line jsx-a11y/alt-text */}
                   {engineerSignDataUrl && <Image src={engineerSignDataUrl} style={{ position: 'absolute', width: 34, height: 68, objectFit: 'contain' }} />}
                 </View>
               </View>

@@ -61,6 +61,27 @@ type Engineer = {
   tel: string | null
 }
 
+/** 저장 결과 한 줄 — 성공·실패 두 가지. */
+type Msg = { type: 'success' | 'error'; text: string } | null
+
+/**
+ * 결과 알림 상자. **화면 함수 밖**에 둔다 — 렌더 안에서 만들면 매번 새 종류의
+ * 컴포넌트가 되어(react-hooks/static-components) 그 안의 상태·포커스가 날아간다.
+ */
+const MessageBox = ({ message }: { message: Msg }) => {
+  if (!message) return null
+  return (
+    <div style={{
+      marginTop: 16, padding: '12px 16px', borderRadius: R.tile,
+      background: message.type === 'success' ? '#f0fdf4' : '#fef2f2',
+      color: message.type === 'success' ? '#166534' : DANGER_BG,
+      fontSize: 14, fontWeight: 600,
+    }}>
+      {message.text}
+    </div>
+  )
+}
+
 export default function AccountPage() {
   const supabase = createClient()
   const router = useRouter()
@@ -335,19 +356,6 @@ export default function AccountPage() {
     setConfirmPassword('')
   }
 
-  const MessageBox = ({ message }: { message: { type: 'success' | 'error'; text: string } | null }) => {
-    if (!message) return null
-    return (
-      <div style={{
-        marginTop: 16, padding: '12px 16px', borderRadius: R.tile,
-        background: message.type === 'success' ? '#f0fdf4' : '#fef2f2',
-        color: message.type === 'success' ? '#166534' : DANGER_BG,
-        fontSize: 14, fontWeight: 600,
-      }}>
-        {message.text}
-      </div>
-    )
-  }
 
   return (
     <main style={{ padding: 24, background: PAGE_BG, minHeight: '100vh' }}>

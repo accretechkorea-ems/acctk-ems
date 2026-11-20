@@ -23,10 +23,12 @@ export async function geocodeAddress(address: string): Promise<Coords> {
 
   const geocoder = new kakao.maps.services.Geocoder()
 
+  /** 카카오 검색이 돌려주는 줄 — 쓰는 칸은 좌표 둘뿐이다(x: 경도, y: 위도). */
+  type GeocodeHit = { x: string; y: string }
   // 카카오 콜백이 (도메인 제한/네트워크 오류 등으로) 영영 호출되지 않아
   // 저장이 무한 대기에 빠지는 것을 막기 위해 각 검색에 타임아웃을 둔다.
   const withTimeout = (
-    fn: (cb: (result: any[], status: string) => void) => void
+    fn: (cb: (result: GeocodeHit[], status: string) => void) => void
   ) =>
     new Promise<Coords | null>((resolve) => {
       let settled = false
@@ -36,7 +38,7 @@ export async function geocodeAddress(address: string): Promise<Coords> {
         resolve(coords)
       }
       const timer = setTimeout(() => done(null), 7000)
-      fn((result: any[], status: string) => {
+      fn((result: GeocodeHit[], status: string) => {
         clearTimeout(timer)
         if (status === kakao.maps.services.Status.OK && result[0]) {
           done({ latitude: Number(result[0].y), longitude: Number(result[0].x) })
