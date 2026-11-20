@@ -7,32 +7,26 @@
  *   세로 카드 둘을 왼쪽에 쌓던 때는 그 열이 가져간 300px 만큼 장비가 좁았다.
  *   가로로 눕히고 나서도 「주소·대리점·메모·장비 수·담당자」가 한 줄에 몰려
  *   줄이 어디서 끊길지 알 수 없었다. 이제 **두 칸**이다 —
- *     좌: 누구인가(회사 » 사업장 · 상태 / 주소 · 대리점)
+ *     좌: 누구인가(회사 » 사업장 · 상태 / 주소 / 대리점)
  *     우: 누구와 일하는가(담당자 칩 / 메모)
- *   가운데 세로선은 카드 **위에서 아래까지** 긋는다(안쪽 여백까지 가로질러야
- *   두 칸이 하나의 카드를 나눈 것으로 보인다).
+ *
+ *   틀·우 칸·높이는 **대리점 화면과 같은 부품**이다(components/customer/HeaderBand.tsx).
+ *   이 파일은 좌 칸 세 줄만 그린다.
  *
  * 구분자는 » 다 — › 는 「다음」이고 » 는 「안으로」다. 회사 안의 사업장이라는 뜻.
- *
- * 연필은 **호버·포커스에서만** 보이고 **자리는 늘 차지한다**(opacity 만 바뀐다).
- * 평소에는 글자만 남아 조용하고, 눌러야 할 때는 늘 같은 자리에 있다.
- * 폰(≤640)에서는 호버가 없으므로 항상 보인다.
  *
  * 「장비 N」과 「폐기 포함」 토글은 여기 두지 않는다 — 장비 수는 카드를 세면
  * 보이고, 폐기 포함은 **사업장 수정 모달 안의 체크**로 옮겼다(2026-11-20).
  */
 
-import { useEffect, useRef, useState } from 'react'
-import { AddIconButton, EditIconButton } from '@/components/common/IconButton'
+import { useState } from 'react'
 import BackIconButton from '@/components/common/BackIconButton'
-import { hasMemo } from '@/components/common/MemoPopover'
-import MemoHoverText from '@/components/common/MemoHoverText'
+import HeaderBand from '@/components/customer/HeaderBand'
 import { agencyLabelOf } from '@/lib/customerAgency'
 import CompanyLink from '@/components/customer/CompanyLink'
 import { R } from '@/lib/radius'
 import type { Contact, Customer } from './types'
 
-const BORDER = '#ebebeb'
 const TEXT = '#111827'
 const LABEL = '#374151'
 const SUB = '#6b7280'
@@ -51,11 +45,6 @@ const STATUS_DOT: Record<string, string> = { '활성': '#16a34a', '잠재': '#f5
  */
 const SITE_NAME_SIZE = 18
 
-/** 담당자 칩 한 줄 높이와 사이 간격. 두 줄까지 보이는 높이를 이 값으로 셈한다. */
-const CHIP_H = 30
-const CHIP_GAP = 8
-const TWO_ROWS = CHIP_H * 2 + CHIP_GAP
-
 type Props = {
   customer: Customer | null
   /** 회사 이름 — 카드의 첫 글자이자 회사 보기로 가는 길이다. */
@@ -72,74 +61,15 @@ type Props = {
   onEditContact: (c: Contact) => void
 }
 
-/**
- * 담당자 한 칸 — 「이름 직급 · 부서 전화 ✎」. 부서가 없으면 직급만 적는다.
- * 이메일은 넣지 않는다(칩이 한 줄을 넘는다) — 도움말과 수정 창에 그대로 있다.
- */
-function ContactChip({ c, onEdit }: { c: Contact; onEdit: () => void }) {
-  const tip = [c.name, c.position, c.department, c.phone, c.email].filter(Boolean).join(' · ')
-  const role = [c.position, c.department].map(v => (v ?? '').trim()).filter(Boolean).join(' · ')
-  return (
-    <span className="chip-c" title={tip}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6, height: CHIP_H, padding: '0 6px 0 10px',
-        border: `1px solid ${BORDER}`, borderRadius: R.control, background: '#fafafa',
-        fontSize: 13, whiteSpace: 'nowrap',
-      }}>
-      <b style={{ fontWeight: 600, color: TEXT }}>{c.name?.trim() || '이름 없음'}</b>
-      {role && <span style={{ fontSize: 12, color: SUB }}>{role}</span>}
-      {c.phone && (
-        <a href={`tel:${c.phone.replace(/[^0-9+]/g, '')}`} onClick={e => e.stopPropagation()}
-          style={{ fontSize: 12, color: '#234ea2', textDecoration: 'none' }}>
-          {c.phone}
-        </a>
-      )}
-      <span className="edit2">
-        <EditIconButton size={22} label={`${c.name ?? '담당자'} 수정`} onClick={onEdit}
-          style={{ border: 'none', background: 'transparent' }} />
-      </span>
-    </span>
-  )
-}
-
 export default function SiteHeaderBand({
   customer, companyName, contacts, onBack, onOpenCompany, onEdit, onAddContact, onEditContact,
 }: Props) {
   const [copied, setCopied] = useState(false)
-  /** 담당자 칩을 전부 펼쳤는가. 접힌 상태에서는 두 줄까지만 보인다. */
-  const [openContacts, setOpenContacts] = useState(false)
-  /** 접었을 때 가려지는 칩 수 — 「더보기 +N」 의 N. 0 이면 버튼을 내지 않는다. */
-  const [hidden, setHidden] = useState(0)
-  const chipsRef = useRef<HTMLDivElement | null>(null)
 
   const dot = STATUS_DOT[customer?.status ?? ''] ?? MUTED
   const title = companyName?.trim() || customer?.company_name || '사업장 정보 없음'
   /** 묶인 회사의 id — 상세 페이지에서 회사 보기로 가는 길이 이 값이다(없으면 단독 업체다). */
   const companyId = customer?.parent_customer_id ?? null
-
-  /**
-   * 두 줄 밖으로 밀린 칩이 몇 개인가 — **그려 본 뒤**에만 알 수 있다.
-   * 칸 폭이 바뀌면 다시 센다(ResizeObserver). setState 는 rAF 안에서 부른다 —
-   * 효과 안에서 곧바로 부르면 한 번 그린 것을 그 자리에서 다시 그리게 된다.
-   */
-  useEffect(() => {
-    const box = chipsRef.current
-    if (!box) return
-    let raf = 0
-    const count = () => {
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => {
-        const chips = [...box.querySelectorAll<HTMLElement>('[data-chip]')]
-        if (chips.length === 0) { setHidden(0); return }
-        const top0 = chips[0].offsetTop
-        setHidden(chips.filter(el => el.offsetTop - top0 > CHIP_H + CHIP_GAP).length)
-      })
-    }
-    count()
-    const ro = new ResizeObserver(count)
-    ro.observe(box)
-    return () => { cancelAnimationFrame(raf); ro.disconnect() }
-  }, [contacts, openContacts])
 
   const copy = () => {
     if (!customer?.address) return
@@ -148,36 +78,17 @@ export default function SiteHeaderBand({
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const memo = customer?.note
-
   return (
-    <section className="site-band" style={{ background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: R.card, padding: '14px 18px 12px', position: 'relative' }}>
-      <style>{`
-        .site-band { display: grid; grid-template-columns: minmax(0, 1fr) 1px minmax(0, 1fr); gap: 0 18px; align-items: start }
-        /* 세로선은 카드의 안쪽 여백까지 가로질러 위·아래 끝에 닿는다. */
-        .site-band .band-rule { background: ${BORDER}; align-self: stretch; margin: -14px 0 -12px }
-        /* 연필은 자리를 늘 차지하고 보이기만 바뀐다 — 나타날 때 글자가 밀리지 않게. */
-        .site-band .edit1, .site-band .edit2 { opacity: 0; transition: opacity 0.15s ease }
-        .site-band:hover .edit1, .site-band:focus-within .edit1 { opacity: 1 }
-        .site-band .chip-c:hover .edit2, .site-band .chip-c:focus-within .edit2 { opacity: 1 }
-        @media (max-width: 640px) {
-          /* 폰에는 호버가 없다 — 늘 보인다. */
-          .site-band { grid-template-columns: minmax(0, 1fr); gap: 12px }
-          .site-band .band-rule { display: none }
-          .site-band .band-right { border-top: 1px solid ${BORDER}; padding-top: 12px }
-          .site-band .edit1, .site-band .edit2 { opacity: 1 }
-          /* 폰에는 호버가 없다 — 메모는 줄여 두지 않고 전부 보여 준다. */
-          .site-band .band-memo { white-space: pre-wrap !important; overflow: visible !important; word-break: break-word }
-        }
-      `}</style>
-
-      {/* 사업장 수정 — 카드 우상단. 호버·포커스에서만 보인다(자리는 늘 있다). */}
-      <span className="edit1" style={{ position: 'absolute', top: 12, right: 12, zIndex: 1 }}>
-        <EditIconButton label="사업장 정보 수정" onClick={onEdit} />
-      </span>
-
-      {/* ── 좌: 누구인가 — 세 줄이다(이름 / 주소 / 대리점) ── */}
-      <div style={{ minWidth: 0 }}>
+    <HeaderBand
+      className="site-band"
+      contacts={contacts}
+      memoTitle={customer?.company_name ?? '사업장'}
+      memo={customer?.note}
+      onEdit={onEdit}
+      editLabel="사업장 정보 수정"
+      onAddContact={onAddContact}
+      onEditContact={onEditContact}
+      left={<>
         {/* 1줄 — 회사명 20 » 사업장명 18 · 상태.
             기준선(baseline)으로 맞춘다 — 크기가 다른 두 이름이 **글자 밑선**에서 만나야
             한 이름처럼 읽힌다. 상태 dot·글자도 그 줄(사업장명 기준선)에 선다.
@@ -227,52 +138,7 @@ export default function SiteHeaderBand({
           <span style={{ color: MUTED, flexShrink: 0 }}>대리점</span>
           <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{agencyLabelOf(customer)}</span>
         </div>
-      </div>
-
-      <div className="band-rule" />
-
-      {/* ── 우: 누구와 일하는가 — 라벨 열을 고정해 칩 시작 x 를 맞춘다 ── */}
-      <div className="band-right" style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, paddingRight: 36 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '44px minmax(0, 1fr)', gap: '0 8px', alignItems: 'start', fontSize: 13 }}>
-          <span style={{ color: MUTED, lineHeight: `${CHIP_H}px` }}>담당자</span>
-          <div ref={chipsRef}
-            style={{
-              display: 'flex', flexWrap: 'wrap', gap: CHIP_GAP, minWidth: 0,
-              maxHeight: openContacts ? undefined : TWO_ROWS, overflow: openContacts ? undefined : 'hidden',
-            }}>
-            {contacts.length === 0 && <span style={{ fontSize: 12, color: MUTED, lineHeight: `${CHIP_H}px` }}>없음</span>}
-            {contacts.map(c => (
-              <span key={c.contact_id} data-chip style={{ display: 'inline-flex' }}>
-                <ContactChip c={c} onEdit={() => onEditContact(c)} />
-              </span>
-            ))}
-            {/* 더보기 — 두 줄 밖으로 밀린 칩이 있을 때만. 펼치면 접기로 바뀐다. */}
-            {(hidden > 0 || openContacts) && (
-              <button type="button" onClick={() => setOpenContacts(v => !v)}
-                style={{ height: CHIP_H, padding: '0 10px', border: `1px solid ${BORDER}`, borderRadius: R.control, background: '#ffffff', color: SUB, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                {openContacts ? '접기' : `더보기 +${hidden}`}
-              </button>
-            )}
-            <AddIconButton size={CHIP_H} label="담당자 추가" onClick={onAddContact} />
-          </div>
-        </div>
-
-        {/* 메모 — 같은 열 정렬. 없으면 **라벨만** 둔다(없다는 것을 아이콘으로 말하지 않는다).
-            아이콘은 걷었다(2026-11-20) — 읽는 자리라 글자가 바로 서는 편이 빠르다.
-            한 줄로 줄이고, 손을 300ms 올리면 기존 메모 판과 **같은 모양**으로 전부 뜬다.
-            폰(≤640)에서는 떠오르는 판이 손에 안 맞으므로 줄바꿈으로 다 보여 준다. */}
-        <div style={{ display: 'grid', gridTemplateColumns: '44px minmax(0, 1fr)', gap: '0 8px', alignItems: 'start', fontSize: 13, color: LABEL }}>
-          <span style={{ color: MUTED }}>메모</span>
-          {hasMemo(memo) ? (
-            <MemoHoverText
-              className="band-memo"
-              title={customer?.company_name ?? '사업장'}
-              value={memo}
-              style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: LABEL, outline: 'none', cursor: 'default' }}
-            />
-          ) : <span />}
-        </div>
-      </div>
-    </section>
+      </>}
+    />
   )
 }

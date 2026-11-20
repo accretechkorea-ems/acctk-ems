@@ -36,6 +36,8 @@ import { companyForecast } from '@/lib/companyForecast'
 import { numKR } from '@/components/customer/constants'
 import { R } from '@/lib/radius'
 import { TITLE } from '@/lib/textTokens'
+import { TOP_CARD_FIXED_MIN_WIDTH, TOP_CARD_HEIGHT } from '@/components/home/SidePanel'
+import BackIconButton from '@/components/common/BackIconButton'
 
 /** /api/parent-company 한 번. 결과를 한글 메시지로 바꿔 돌려준다. */
 async function callRoute(body: Record<string, unknown>): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; error: string }> {
@@ -74,6 +76,12 @@ const TILE_BG = '#fafafa'
  * 수치 타일 하나 — 라벨은 위 가운데 작게, 값은 정중앙 크게. 네 칸의 높이가 같다.
  * 「최근 활동」만 값이 날짜(열 자리)라 글자를 줄이고 아래에 유형·작성자를 붙인다.
  */
+/**
+ * 수치 타일 — 높이는 **카드가 정한다**(그 안에서 남는 높이를 나눠 쓴다).
+ * 라벨을 절대 위치로 띄워 두므로 위 여백(22)이 그 자리다. 전에는 minHeight 92 였는데,
+ * 카드 높이를 좌 패널과 맞추면서(137) 그만큼이 남지 않는다 — 2026-11-21 실측으로
+ * 타일 75px 에서 라벨·숫자·아래줄이 다 들어간다.
+ */
 function StatTile({ label, value, unit, note, color = TEXT, valueSize = 24, onClick, title }: {
   label: string
   value: string
@@ -94,7 +102,7 @@ function StatTile({ label, value, unit, note, color = TEXT, valueSize = 24, onCl
       onMouseEnter={onClick ? (e => { e.currentTarget.style.borderColor = BLUE }) : undefined}
       onMouseLeave={onClick ? (e => { e.currentTarget.style.borderColor = BORDER }) : undefined}
       style={{
-        position: 'relative', minHeight: 92, width: '100%', padding: '26px 8px 8px', boxSizing: 'border-box',
+        position: 'relative', minHeight: 70, height: '100%', width: '100%', padding: '22px 8px 8px', boxSizing: 'border-box',
         background: TILE_BG, border: `1px solid ${BORDER}`, borderRadius: R.tile,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
         cursor: onClick ? 'pointer' : 'default', fontFamily: 'inherit',
@@ -136,10 +144,15 @@ export type CompanyPaneProps = {
   me: { engineer_id: number | null; permission_level: string | null }
   /** 견적 PDF 를 열 때. 회사 전체 타임라인의 견적 줄이 쓴다. */
   onOpenQuote?: (quote: Quote) => void
+  /**
+   * 목록으로 — **폰에서만** 쓰는 길이다(app/page.tsx 의 .pane-back).
+   * 폰에서는 pane 이 폭을 다 쓰고 좌 패널이 숨으므로 돌아갈 문이 하나 있어야 한다.
+   */
+  onBackToList?: () => void
 }
 
 export default function CompanyPane({
-  group, engineerName, onSaved, onError, onToast, onOpenSite, onAddSite, canEditCompany, me, onOpenQuote, focusSiteId, focusKey, onFocused,
+  group, engineerName, onSaved, onError, onToast, onOpenSite, onAddSite, canEditCompany, me, onOpenQuote, focusSiteId, focusKey, onFocused, onBackToList,
 }: CompanyPaneProps) {
   const supabase = createClient()
   const agencies = useAgencies()
@@ -183,6 +196,9 @@ export default function CompanyPane({
     return companyForecast({
       opportunities: timeline.opportunities,
       siteName: id => (id == null ? '' : nameOf.get(id) ?? ''),
+      // 카드 안에는 **두 줄까지**. 카드 높이를 좌 패널과 맞추면서(137px) 세 줄이
+      // 들어가지 않는다 — 나머지는 「전체 보기 ›」가 활동 이력에서 펼친다.
+      limit: 2,
     })
   }, [timeline.opportunities, siteOptions])
 
@@ -403,11 +419,23 @@ export default function CompanyPane({
           .company-card .stat-row { grid-template-columns: minmax(0, 1fr) !important }
           .company-card .stat-tiles { grid-template-columns: repeat(2, 1fr) !important }
         }
+        /* 좌 패널의 상단 카드와 같은 높이 — 두 카드의 윗선·아랫선이 맞는다. */
+        @media (min-width: ${TOP_CARD_FIXED_MIN_WIDTH}px) {
+          .company-card { height: ${TOP_CARD_HEIGHT}px; overflow: hidden }
+        }
       `}</style>
 
       {/* ── 회사 카드 ── 1줄: 이름·분류·버튼 / 2줄: 수치 타일 + 포캐스트 ── */}
-      <section className="company-card" style={{ ...card, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+      {/* 카드 높이는 좌 패널의 상단 카드와 **같은 값**이다(TOP_CARD_HEIGHT) —
+          사업장·대리점 화면도 같은 높이라 보기를 바꿀 때 카드 아랫선이 움직이지 않는다.
+          그 높이에 맞춰 안쪽 여백 16→12, 줄 사이 12→8 로 줄였다. 폰에서는 고정을 푼다. */}
+      <section className="company-card" style={{ ...card, padding: '12px 18px', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0, boxSizing: 'border-box' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
+          {onBackToList && (
+            <span className="pane-back">
+              <BackIconButton onClick={onBackToList} label="목록으로" />
+            </span>
+          )}
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: TEXT, letterSpacing: '-0.5px' }}>{group.companyName}</h1>
           {group.nameEn && <span style={{ fontSize: 13, color: MUTED }}>{group.nameEn}</span>}
           {group.industry && (
@@ -421,8 +449,8 @@ export default function CompanyPane({
         </div>
 
         {/* 좌 440px 에 수치 네 칸, 남는 자리에 포캐스트. 좁으면 아래로 쌓인다. */}
-        <div className="stat-row" style={{ display: 'grid', gridTemplateColumns: '440px minmax(0, 1fr)', gap: 12, alignItems: 'stretch' }}>
-          <div className="stat-tiles" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+        <div className="stat-row" style={{ display: 'grid', gridTemplateColumns: '440px minmax(0, 1fr)', gap: 12, alignItems: 'stretch', flex: 1, minHeight: 0 }}>
+          <div className="stat-tiles" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, minHeight: 0 }}>
             <StatTile label="사업장" value={String(group.sites.length)} unit="곳" />
             <StatTile label="장비" value={String(group.deviceCount)} unit="대" />
             {/* 진행 견적 — 큰 숫자는 **진행 중(견적중)**이고, 그 아래 회색 줄이 **회사 전체**
@@ -582,7 +610,7 @@ export default function CompanyPane({
                   e.target.value = ''
                 }}
                 style={{ height: 26, borderRadius: R.icon, border: 'none', fontSize: 12, padding: '0 6px' }}>
-                <option value="">고르기</option>
+                <option value="" disabled hidden>고르기</option>
                 <option value="none">{DIRECT_SALE_LABEL}</option>
                 {agencies.map(a => <option key={a.customer_id} value={a.customer_id}>{a.company_name}</option>)}
               </select>
@@ -597,7 +625,7 @@ export default function CompanyPane({
                   e.target.value = ''
                 }}
                 style={{ height: 26, borderRadius: R.icon, border: 'none', fontSize: 12, padding: '0 6px' }}>
-                <option value="">고르기</option>
+                <option value="" disabled hidden>고르기</option>
                 {STATUSES.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
             </label>
