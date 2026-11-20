@@ -16,7 +16,7 @@
 
 import type { Customer } from '@/lib/home'
 import type { LastTouch } from '@/lib/customerLastTouch'
-import { regionKey } from '@/lib/region'
+import { regionKey, regionLabel2 } from '@/lib/region'
 
 /** 오래 손대지 않았다고 보는 기준(일). 칩·빨간 글씨가 같은 값을 쓴다. */
 export const STALE_DAYS = 90
@@ -24,8 +24,16 @@ export const STALE_DAYS = 90
 /** 한 사업장 줄 — 화면이 그리는 데 필요한 것만 추려 둔다. */
 export type SiteRow = {
   customer: Customer
-  /** 사업장명. 없으면 그 줄의 이름에서 회사명을 뗀 나머지, 그것도 없으면 '본사'. */
+  /** 사업장명. 없으면 그 줄의 이름에서 회사명을 뗀 나머지. **비어 있을 수 있다.** */
   siteName: string
+  /**
+   * 사업장명이 **비어 있는가** — 화면이 빨간 「입력 필요」로 알린다.
+   *
+   * 전에는 빈 이름을 「본사」로 적어 두었다. 그러면 줄은 채워 보이지만 그 줄이 정말
+   * 본사인지 이름을 안 적은 것인지 알 수 없고(742곳이 그랬다), 한 회사에 「본사」가
+   * 셋 나란히 서기도 했다. 이제 비면 비었다고 말한다.
+   */
+  needsName: boolean
   deviceCount: number
   openQuotes: number
   touch: LastTouch | null
@@ -66,7 +74,8 @@ export const isStale = (days: number | null): boolean => days === null || days >
  * 사업장명 한 조각 — 트리와 표에 쓰는 **짧은 이름**이다.
  *
  * `site_name` 이 있으면 그것, 없으면 그 줄의 이름에서 회사명을 떼어 본다. 떼고 나서도
- * 남는 글자가 없으면 「본사」로 적는다 — 빈칸을 두면 줄이 비어 보여 어느 사업장인지
+ * 남는 글자가 없으면 **빈 문자열**이다 — 부르는 쪽이 「입력 필요」로 알린다(2026-11-20).
+ * 예전 주석: 빈칸을 두면 줄이 비어 보여 어느 사업장인지
  * 가릴 수가 없다(회사 아래 사업장이 하나뿐인 곳이 대부분이라 흔한 자리다).
  */
 export function shortSiteName(row: Pick<Customer, 'company_name' | 'site_name'>, companyName: string): string {
@@ -78,7 +87,7 @@ export function shortSiteName(row: Pick<Customer, 'company_name' | 'site_name'>,
     const rest = own.slice(company.length).trim()
     if (rest) return rest
   }
-  return own && own !== company ? own : '본사'
+  return own && own !== company ? own : ''
 }
 
 /**
@@ -113,7 +122,8 @@ export function disambiguateSites(sites: SiteRow[]): SiteRow[] {
   return sites.map(s => {
     if ((count.get(s.siteName) ?? 0) <= 1) return s
     const hint = addressHint(s.customer.address)
-    const label = hint ? `${s.siteName} · ${hint}` : s.siteName
+    // 이름이 비어 있으면 주소만 적어 둔다 — 「 · 화성시」처럼 앞이 비지 않게.
+    const label = hint ? (s.siteName ? `${s.siteName} · ${hint}` : hint) : s.siteName
     used.set(label, (used.get(label) ?? 0) + 1)
     return { ...s, siteName: label }
   })
@@ -188,6 +198,14 @@ export function matchesSite(
  */
 export function regionOf(c: Pick<Customer, 'address'> & { region1?: string | null }): string {
   return regionKey(c.region1, c.address)
+}
+
+/**
+ * 화면에 찍는 지역 — **두 단계**다(「경기 화성시」). 거르기는 여전히 시도 하나로 한다
+ * (regionOf) — 칩이 17개를 넘지 않아야 하고, 시·군·구까지 칩으로 두면 고를 수 없다.
+ */
+export function regionTextOf(c: Pick<Customer, 'address'> & { region1?: string | null; region2?: string | null }): string {
+  return regionLabel2(c.region1, c.region2, c.address)
 }
 
 // ── 세우기 ────────────────────────────────────────────────────────────────
@@ -276,9 +294,11 @@ export function buildCompanyTree(input: BuildInput): BuildResult {
     const company = companies.get(parentId)
     const companyName = company?.company_name ?? (c.company_only ?? c.company_name ?? '')
     const touch = input.touchOf(c.customer_id)
+    const named = shortSiteName(c, companyName)
     const row: SiteRow = {
       customer: c,
-      siteName: shortSiteName(c, companyName),
+      siteName: named,
+      needsName: !named,
       deviceCount: input.deviceCount(c.customer_id),
       openQuotes: input.openQuotes(c.customer_id),
       touch,

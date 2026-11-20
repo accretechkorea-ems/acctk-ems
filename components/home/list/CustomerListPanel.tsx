@@ -39,7 +39,7 @@ export type CleanupBucket = 'industry' | 'dupName' | 'blankSites' | 'emptyCompan
 export const CLEANUP_LABEL: Record<CleanupBucket, string> = {
   industry: '분류 없는 회사',
   dupName: '이름 중복 의심',
-  blankSites: '사업장명이 비어 겹치는 회사',
+  blankSites: '사업장명 입력 필요',
   emptyCompany: '사업장 0곳 회사',
 }
 
@@ -350,7 +350,12 @@ export default function CustomerListPanel({
                     onMouseLeave={e => { if (!on) e.currentTarget.style.background = 'transparent' }}
                   >
                     <span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_DOT[s.customer.status ?? ''] ?? MUTED, flexShrink: 0 }} />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.siteName}</span>
+                    {/* 이름이 비면 빨간 「입력 필요」 — 「본사」로 채워 두면 적은 것과 구별되지 않는다. */}
+                    {s.needsName ? (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: DANGER, background: '#fef2f2', borderRadius: 6, padding: '1px 6px', flexShrink: 0 }}>입력 필요</span>
+                    ) : (
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.siteName}</span>
+                    )}
                     <span style={{ flex: 1 }} />
                     <span style={{ fontSize: 11, flexShrink: 0, color: on ? '#dbe4f7' : late ? DANGER : MUTED }}>
                       {daysLabel(s.days)}

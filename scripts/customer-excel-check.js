@@ -66,12 +66,16 @@ eq('월이 0 이나 13 이면 버린다', [installYearMonth('2020', '0'), instal
 eq('연도가 네 자리가 아니면 버린다', installYearMonth('16', '3'), { year: '', month: 3 })
 
 console.log('\n── 지역 (저장된 컬럼이 정본) ──')
-eq('저장된 값이 있으면 그대로', regionsOf({ region1: '중부', region2: '화성', address: '경기도 수원시 …' }), ['중부', '화성'])
-eq('비었으면 주소 앞 두 토큰에서', regionsOf({ region1: null, region2: null, address: '경기도 화성시 동탄' }), ['경기', '화성'])
-eq('긴 시도 이름', regionsOf({ region1: '', region2: '', address: '경상남도 창원시 성산구' }), ['경남', '창원'])
-eq('광역시', regionsOf({ region1: '', region2: '', address: '부산광역시 강서구 녹산' }), ['부산', '강서'])
+// 2026-11-20: 화면과 **같은 함수**(lib/region.ts)를 지난다.
+//   · region1 은 정본 17개만 — 「중부」 같은 사내 구역은 주소에서 다시 뽑는다.
+//   · region2 는 시·군·구 꼴만 — 「화성」처럼 꼬리를 뗀 값은 주소에서 다시 뽑는다.
+eq('사내 구역은 주소에서 다시', regionsOf({ region1: '중부', region2: '화성', address: '경기도 수원시 영통구 1' }), ['경기', '수원시'])
+eq('저장된 시·군·구는 그대로', regionsOf({ region1: '경기', region2: '화성시', address: '경기도 화성시 동탄' }), ['경기', '화성시'])
+eq('비었으면 주소에서', regionsOf({ region1: null, region2: null, address: '경기도 화성시 동탄' }), ['경기', '화성시'])
+eq('긴 시도 이름', regionsOf({ region1: '', region2: '', address: '경상남도 창원시 성산구' }), ['경남', '창원시'])
+eq('광역시', regionsOf({ region1: '', region2: '', address: '부산광역시 강서구 녹산' }), ['부산', '강서구'])
 eq('표에 없는 꼴은 꼬리만 뗀다', regionsOf({ region1: '', region2: '', address: '부산시 북구' }), ['부산', '북구'])
-eq('한쪽만 비면 그쪽만 채운다', regionsOf({ region1: '남부', region2: '', address: '경남 김해시 주촌' }), ['남부', '김해'])
+eq('사내 구역·꼬리 뗀 값은 주소에서 다시', regionsOf({ region1: '남부', region2: '', address: '경남 김해시 주촌' }), ['경남', '김해시'])
 eq('주소가 없으면 빈칸', regionsOf({ region1: null, region2: null, address: null }), ['', ''])
 
 console.log('\n── 줄 펼치기 ──')
@@ -95,10 +99,10 @@ eq('머리글 + 장비 2대 + 장비 없는 고객사 1줄 = 4줄', aoa.length, 
 eq('첫 줄은 머리글', aoa[0], [...CUSTOMER_EXCEL_HEADER])
 eq('장비는 납입년·월 이른 것부터', [aoa[1][4], aoa[2][4]], ['PROBER', 'WAFER'])
 eq('장비 줄 전체', aoa[1],
-  ['활성', '가나다전자', '경기', '화성', 'PROBER', 'P-8', '', 2016, 3, 'SN1', '한빛', '가나다홀딩스', '경기도 화성시 1'])
+  ['활성', '가나다전자', '경기', '화성시', 'PROBER', 'P-8', '', 2016, 3, 'SN1', '한빛', '가나다홀딩스', '경기도 화성시 1'])
 // 대리점이 없으면 「직판」이 찍힌다 — 빈칸으로 두면 '아직 안 적었다' 와 구별되지 않는다.
 eq('장비 없는 고객사는 장비 칸 6개가 비고 뒤는 그대로', aoa[3],
-  ['잠재', '라마바', '', '', '', '', '', '', '', '', '직판', '', ''])
+  ['잠재', '라마바', '', '', '', '', '', '', '', '', 'ACCT-K(직판)', '', ''])
 eq('모든 줄의 칸 수가 열 수와 같다', [...new Set(aoa.map(r => r.length))], [13])
 
 console.log('\n── 지워진 장비는 줄이 되지 않는다 ──')

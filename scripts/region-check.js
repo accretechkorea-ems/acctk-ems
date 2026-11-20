@@ -73,5 +73,23 @@ eq('사내 구역도 「없음」으로 묶인다', R.regionLabel('중부'), '�
 eq('필터 키 — 주소까지 본다', R.regionKey(null, '울산광역시 북구'), '울산')
 eq('필터 키 — 못 잡으면 「없음」', R.regionKey('남부', '녹동일반 산업단지 내'), '없음')
 
+
+console.log('\n── 지역2(시·군·구) ──')
+eq('주소에서 시를 뽑는다', R.districtOf('경기도 화성시 동탄기흥로 590'), '화성시')
+eq('구도 뽑는다', R.districtOf('서울특별시 강남구 테헤란로 152'), '강남구')
+eq('군도 뽑는다', R.districtOf('경기도 양평군 양평읍 1'), '양평군')
+eq('시도가 빠진 주소도 본다', R.districtOf('화성시 동탄기흥로 590'), '화성시')
+eq('세종처럼 시·군·구가 없으면 null', R.districtOf('세종특별자치시 한누리대로 2130'), null)
+eq('주소가 없으면 null', R.districtOf(''), null)
+
+eq('저장된 지역2 가 시·군·구면 쓴다', R.usableRegion2('화성시'), '화성시')
+eq('시도를 또 적어 둔 값은 버린다', R.usableRegion2('울산'), null)
+
+eq('두 단계로 찍는다', R.regionLabel2('경기', null, '경기도 화성시 동탄기흥로 590'), '경기 화성시')
+eq('저장된 지역2 를 쓴다', R.regionLabel2('서울', '강남구', '서울특별시 강남구 1'), '서울 강남구')
+eq('믿을 수 없는 지역2 는 주소로 대신한다', R.regionLabel2('울산', '울산', '울산광역시 북구 양정동 700'), '울산 북구')
+eq('시·군·구를 모르면 시도만', R.regionLabel2('세종', null, '세종특별자치시 한누리대로'), '세종')
+eq('둘 다 없으면 없음', R.regionLabel2(null, null, null), '없음')
+
 console.log(fails === 0 ? '\n모두 통과' : `\n실패 ${fails}건`)
 process.exit(fails === 0 ? 0 : 1)

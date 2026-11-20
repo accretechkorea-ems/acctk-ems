@@ -87,3 +87,53 @@ export const regionKey = (
 
 /** 필터 칩의 고정 목록 — 데이터에 무엇이 들어 있든 늘 같다(17 + 없음). */
 export const REGION_FILTER_OPTIONS: readonly string[] = [...REGIONS, NO_REGION]
+
+// ── 지역2 — 시·군·구 한 토막 ──────────────────────────────────────────────
+//
+// 화면은 지역을 **두 단계**로 보여 준다(「경기 화성시」·「서울 강남구」). 시도만으로는
+// 경기 안에서 화성인지 파주인지 알 수 없어, 목록에서 지역을 보는 뜻이 옅었다.
+//
+// 저장된 customers.region2 를 그냥 믿지는 않는다 — 1,272줄 중 상당수가 「울산/울산」처럼
+// 시도를 한 번 더 적어 둔 값이다(2026-11-20 실측). 시·군·구로 끝나는 값만 쓰고,
+// 아니면 주소에서 다시 뽑는다.
+
+/** 시·군·구로 끝나는 토막인가. 「화성시」·「북구」·「양평군」. */
+const isDistrict = (token: string): boolean => /[시군구]$/.test(token) && token.length >= 2
+
+/**
+ * **저장할 지역2** — 주소의 시·군·구 한 토막. 없으면 null.
+ *
+ * 「경기도 화성시 동탄기흥로 590」 → 「화성시」
+ * 「서울특별시 강남구 테헤란로 152」 → 「강남구」
+ * 「세종특별자치시 한누리대로」 → null (세종은 시도가 곧 시다)
+ */
+export function districtOf(address?: string | null): string | null {
+  const tokens = (address ?? '').trim().split(/\s+/).filter(Boolean)
+  // 첫 토막이 시도면 둘째를, 아니면 첫 토막부터 본다(「화성시 동탄…」처럼 시도가 빠진 주소).
+  const start = regionOfToken(tokens[0]) ? 1 : 0
+  for (const t of tokens.slice(start, start + 2)) {
+    if (isDistrict(t)) return t
+  }
+  return null
+}
+
+/** 저장된 지역2 가 쓸 만한가 — 시·군·구 꼴이어야 한다(「울산」처럼 시도를 또 적은 값은 버린다). */
+export function usableRegion2(region2: string | null | undefined): string | null {
+  const t = (region2 ?? '').trim()
+  return t && isDistrict(t) ? t : null
+}
+
+/**
+ * 화면에 찍는 **두 단계 지역** — 「경기 화성시」. 시·군·구를 모르면 시도만, 둘 다 없으면 「없음」.
+ * 목록·표·카드·엑셀이 같은 글자를 쓴다.
+ */
+export function regionLabel2(
+  region1: string | null | undefined,
+  region2: string | null | undefined,
+  address?: string | null,
+): string {
+  const base = regionKey(region1, address)
+  const district = usableRegion2(region2) ?? districtOf(address)
+  if (base === NO_REGION) return district ?? NO_REGION
+  return district ? `${base} ${district}` : base
+}

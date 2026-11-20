@@ -19,7 +19,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { geocodeAddress } from '@/lib/geocode'
 import { customerLabel } from '@/lib/customerLabel'
-import { normalizeRegion } from '@/lib/region'
+import { districtOf, normalizeRegion } from '@/lib/region'
 import { invalidateParents } from '@/components/customer/ParentPicker'
 import type { Customer, CustomerEditFormData } from '@/components/customer/types'
 
@@ -64,6 +64,8 @@ export async function saveCustomerEdit(customer: Customer, form: CustomerEditFor
       site_name: siteName || null,
       address: form.address.trim(),
       region1: normalizeRegion(customer.region1 ?? null, form.address),
+      // 주소가 바뀌면 시·군·구도 따라간다 — 화면은 둘을 붙여 「경기 화성시」로 찍는다.
+      region2: districtOf(form.address),
       agency_customer_id: form.agency_customer_id ?? null,
       status: form.status,
       note: form.note.trim() || null,

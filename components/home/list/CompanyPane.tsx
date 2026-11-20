@@ -26,7 +26,7 @@ import type { Holding, Quote, SalesActivity, SalesActivityForm } from '@/compone
 import { saveCustomerEdit } from '@/lib/saveCustomerEdit'
 import { invalidateParents } from '@/components/customer/ParentPicker'
 import { DIRECT_SALE_LABEL, useAgencies } from '@/lib/customerAgency'
-import { daysLabel, isStale, regionOf, type CompanyGroup, type SiteRow } from '@/lib/customerList'
+import { daysLabel, isStale, regionTextOf, type CompanyGroup, type SiteRow } from '@/lib/customerList'
 import type { Customer } from '@/components/customer/types'
 
 /** /api/parent-company 한 번. 결과를 한글 메시지로 바꿔 돌려준다. */
@@ -122,7 +122,9 @@ export default function CompanyPane({
   const { openQuotePdf } = useQuotePdf({ customer: null, engineerId: me.engineer_id })
   /** 타임라인의 사업장 칩·열이 쓰는 이름표. */
   const siteOptions = useMemo(
-    () => group.sites.map(s => ({ id: s.customer.customer_id, name: s.siteName })),
+    // 이름이 비어 있는 사업장도 칩·사업장 열에 **이름이 있어야** 고를 수 있다.
+    // 표·트리는 빨간 「입력 필요」로 알리고, 여기서는 고르는 이름이 필요해 괄호로 적는다.
+    () => group.sites.map(s => ({ id: s.customer.customer_id, name: s.siteName || '(이름 없음)' })),
     [group.sites],
   )
   /** 가장 최근에 움직인 사업장 — 영업 기록의 기본값이다. */
@@ -376,8 +378,12 @@ export default function CompanyPane({
                     <td style={td}>
                       <input type="checkbox" checked={on} onChange={() => toggle(id)} aria-label={`${s.siteName} 선택`} />
                     </td>
-                    <td style={{ ...td, fontWeight: 600 }}>{s.siteName}</td>
-                    <td style={{ ...td, color: SUB }}>{regionOf(s.customer) || '-'}</td>
+                    <td style={{ ...td, fontWeight: 600 }}>
+                      {s.needsName
+                        ? <span style={{ fontSize: 11, fontWeight: 700, color: DANGER, background: '#fef2f2', borderRadius: 6, padding: '2px 7px' }}>입력 필요</span>
+                        : s.siteName}
+                    </td>
+                    <td style={{ ...td, color: SUB }}>{regionTextOf(s.customer) || '-'}</td>
                     <td style={{ ...td, color: s.customer.agency_name ? TEXT : MUTED }}>{s.customer.agency_name ?? DIRECT_SALE_LABEL}</td>
                     <td style={td}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -482,10 +488,8 @@ export default function CompanyPane({
       {/* ── 회사 전체 활동 ── */}
       <section style={{ ...card, padding: '14px 16px', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <b style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>회사 전체 활동</b>
-          <span style={{ fontSize: 11, color: MUTED }}>
-            {timeline.loading ? '읽는 중…' : `사업장 ${group.sites.length}곳 · 조회 ${timeline.ms}ms`}
-          </span>
+          <b style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>활동 이력</b>
+          {timeline.loading && <span style={{ fontSize: 11, color: MUTED }}>읽는 중…</span>}
         </div>
         <ActivityTimeline
           history={timeline.history}

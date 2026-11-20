@@ -95,12 +95,17 @@ export default function CustomerInfoPanel({ customer, onEdit, onBack, companyNam
         {/* 사업장명 — 비어 있는 줄이 많아 자리를 늘 둔다(있는지 없는지가 정보다). */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, color: '#9ca3af', width: 44, flexShrink: 0 }}>사업장</span>
-          <span style={{
-            fontSize: 13, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            color: customer?.site_name?.trim() ? '#111827' : '#9ca3af',
-          }}>
-            {customer?.site_name?.trim() || '(사업장명 없음)'}
-          </span>
+          {customer?.site_name?.trim() ? (
+            <span style={{
+              fontSize: 13, minWidth: 0, color: '#111827',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {customer.site_name.trim()}
+            </span>
+          ) : (
+            /* 비면 빨간 태그 — 적어야 할 칸이라는 뜻이다(주소 없음과 같은 결). */
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', background: '#fef2f2', borderRadius: 6, padding: '2px 7px' }}>입력 필요</span>
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
           <span style={{ fontSize: 12, color: '#9ca3af', width: 44, flexShrink: 0, lineHeight: '20px' }}>주소</span>

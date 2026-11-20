@@ -19,7 +19,7 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { customerLabel } from '@/lib/customerLabel'
-import { normalizeRegion } from '@/lib/region'
+import { districtOf, normalizeRegion } from '@/lib/region'
 import { withNameEnFallback } from '@/lib/nameEn'
 import { invalidateParents } from '@/components/customer/ParentPicker'
 import { invalidateAgencies } from '@/lib/customerAgency'
@@ -91,6 +91,7 @@ export async function addCustomerEntry(input: AddCustomerInput): Promise<AddCust
         parent_customer_id: null,
         address: site.address.trim() || null,
         region1: normalizeRegion(null, site.address),
+        region2: districtOf(site.address),
         status: site.status || '활성',
         ...(useEn && nameEn ? { name_en: nameEn } : null),
       })
@@ -148,6 +149,8 @@ export async function addCustomerEntry(input: AddCustomerInput): Promise<AddCust
         site_name: siteName || null,
         address,
         region1: normalizeRegion(null, address),
+        // 지역2 — 시·군·구 한 토막. 화면이 「경기 화성시」로 두 단계를 찍는다(lib/region.ts).
+        region2: districtOf(address),
         agency_customer_id: site.agencyId ?? null,
         status: site.status || '활성',
         parent_customer_id: companyId,

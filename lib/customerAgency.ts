@@ -24,7 +24,11 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 /** 「직판」 — 대리점이 없는 건의 표시 글자. 한 곳에서 정한다. */
-export const DIRECT_SALE_LABEL = '직판'
+/**
+ * 대리점을 거치지 않는 건의 이름. 값은 여전히 **null** 이고 글자만 이것이다.
+ * 우리가 직접 파는 주체가 ACCT-K 이므로 화면에도 그렇게 적는다(2026-11-20).
+ */
+export const DIRECT_SALE_LABEL = 'ACCT-K(직판)'
 
 // ── 조회에서 대리점 이름을 읽는 법 ─────────────────────────────────────────
 //   이름은 **대리점 줄**에 있으므로 함께 읽어야 한다. customers 는 자기 자신을 두 번

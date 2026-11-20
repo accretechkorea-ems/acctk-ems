@@ -33,10 +33,12 @@ const BORDER = '#ebebeb'
 const TEXT = '#111827'
 const SUB = '#6b7280'
 const MUTED = '#9ca3af'
+const LABEL = '#374151'
 const BLUE = '#234ea2'
 const NEUTRAL = '#f3f4f6'
 
-const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: MUTED, marginBottom: 4 }
+/** 칸 이름 — 읽히라고 있는 글자다. 회색이 너무 옅어 안 보이던 것을 진하게 바꿨다(2026-11-20). */
+const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: LABEL, marginBottom: 4 }
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 6,
   boxSizing: 'border-box', color: TEXT, background: '#fff', outline: 'none', fontSize: 14,
@@ -197,14 +199,16 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
           animation: 'modal-in 0.18s ease',
         }}>
         <FormFocusStyle />
-        <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px', marginBottom: 16 }}>
-          {existing ? '기존 회사에 사업장 추가' : isAgency ? '대리점 등록' : '업체 등록'}
+        {/* ── ① 종류 — 맨 위, **모달 폭 기준 가운데**. 무엇을 만드는지가 첫 결정이다. */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+          <div style={{ display: 'inline-flex', gap: 3, padding: 3, borderRadius: 8, background: NEUTRAL }}>
+            <button type="button" onClick={() => setKind('customer')} style={segBtn(!isAgency)}>고객사</button>
+            <button type="button" onClick={() => setKind('agency')} style={segBtn(isAgency)}>대리점</button>
+          </div>
         </div>
 
-        {/* ── ① 종류 ── */}
-        <div style={{ display: 'inline-flex', gap: 3, padding: 3, borderRadius: 8, background: NEUTRAL, marginBottom: 14 }}>
-          <button type="button" onClick={() => setKind('customer')} style={segBtn(!isAgency)}>고객사</button>
-          <button type="button" onClick={() => setKind('agency')} style={segBtn(isAgency)}>대리점</button>
+        <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.3px', marginBottom: 16 }}>
+          {existing ? '기존 회사에 사업장 추가' : isAgency ? '대리점 등록' : '업체 등록'}
         </div>
 
         {/* ── ② 업체 정보 — 한 줄 세 칸 ── */}
@@ -217,7 +221,7 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
           )}
           <div style={isAgency ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'start' } : row3}>
             <div>
-              <div style={labelStyle}>{isAgency ? '대리점명' : '업체명 (한글)'}</div>
+              <div style={labelStyle}>{isAgency ? '대리점명' : '업체명'}</div>
               <input value={preset ? preset.company_name : companyName} disabled={saving || preset != null}
                 onChange={e => { setCompanyName(e.target.value); clearError('companyName') }}
                 placeholder={isAgency ? 'ex) 젠트' : 'ex) 현대자동차'}
@@ -281,7 +285,7 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
             <span style={{ flex: 1 }} />
             {!isAgency && (
               <button type="button" onClick={() => setSites(prev => [...prev, emptySite()])} disabled={saving} style={smallBtn}>
-                + 사업장 더 추가
+                + 사업장
               </button>
             )}
           </div>
@@ -291,7 +295,7 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
               <div key={i} style={{ display: 'grid', gap: 10, padding: isAgency ? 0 : 12, border: isAgency ? 'none' : `1px solid ${BORDER}`, borderRadius: 8 }}>
                 {!isAgency && (
                   <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <b style={{ fontSize: 12, fontWeight: 700, color: SUB }}>사업장 {i + 1}</b>
+                    <b style={{ fontSize: 12, fontWeight: 700, color: LABEL }}>사업장 {i + 1}</b>
                     <span style={{ flex: 1 }} />
                     {sites.length > 1 && (
                       <button type="button" onClick={() => setSites(prev => prev.filter((_, n) => n !== i))} disabled={saving}
@@ -369,12 +373,11 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
                 {!isAgency && (
                   <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 10 }}>
                     <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-                      <b style={{ fontSize: 12, fontWeight: 700, color: SUB }}>고객 담당자</b>
-                      <span style={{ fontSize: 11, color: MUTED, marginLeft: 6 }}>선택 — 이 사업장의 사람입니다</span>
+                      <b style={{ fontSize: 12, fontWeight: 700, color: LABEL }}>고객 담당자</b>
                       <span style={{ flex: 1 }} />
                       <button type="button" disabled={saving} style={smallBtn}
                         onClick={() => setSites(prev => prev.map((s, n) => (n === i ? { ...s, contacts: [...s.contacts, emptyContact()] } : s)))}>
-                        + 담당자 더 추가
+                        + 담당자
                       </button>
                     </div>
                     <div style={{ display: 'grid', gap: 8 }}>

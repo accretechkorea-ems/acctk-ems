@@ -102,6 +102,12 @@ const monthLabel = (d: string) => `${d.slice(0, 4)}년 ${Number(d.slice(5, 7))}�
 // 그보다 많으면 말줄임 → 마우스를 올리면 전체가 보인다.
 const RIGHT_COL_MAX = 210
 
+// 글자색 — 라벨·값·흐림 셋만 쓴다(디자인 토큰). 전에는 한 줄 안에서 #6b7280 과
+// #9ca3af 가 섞여 종류·내용·날짜가 모두 비슷하게 옅었다(2026-11-20).
+const TEXT_PRIMARY = '#111827'
+const TEXT_LABEL = '#374151'
+const TEXT_DIM = '#6b7280'
+
 // 왼쪽 첫 줄의 종류·유무상 칸은 px 로 못 박지 않고, 가장 긴 값을 보이지 않게 깔아
 // 그 폭에 맞춘다(SizedCell). 폰트나 값이 바뀌어도 잘리지 않고 뒤 요소의 x 도 흔들리지 않으며,
 // 짐작한 px 값 때문에 생기던 불필요한 여백도 없다.
@@ -187,7 +193,7 @@ function TimelineRow({ item, first, focused, siteName }: { item: Item; first: bo
         {siteName !== undefined && (
           <span title={siteName}
             style={{
-              width: 96, flexShrink: 0, fontSize: 12, color: '#6b7280', paddingTop: 1,
+              width: 96, flexShrink: 0, fontSize: 12, color: TEXT_LABEL, paddingTop: 1,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>
             {siteName || '-'}
@@ -200,10 +206,10 @@ function TimelineRow({ item, first, focused, siteName }: { item: Item; first: bo
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.dot, flexShrink: 0 }} />
             {/* 종류·유무상·제목의 간격은 이 줄의 gap(6) 하나로 같다.
                 앞의 두 칸은 폭이 고정이라 종류가 무엇이든 제목이 늘 같은 x 에서 시작한다. */}
-            <SizedCell sizer={LONGEST_LABEL} style={{ fontSize: 13, fontWeight: 500, color: '#111827' }}>
+            <SizedCell sizer={LONGEST_LABEL} style={{ fontSize: 13, fontWeight: 500, color: TEXT_PRIMARY }}>
               {item.label}
             </SizedCell>
-            <SizedCell sizer={LONGEST_PAID} style={{ fontSize: 12, color: '#6b7280' }}>
+            <SizedCell sizer={LONGEST_PAID} style={{ fontSize: 12, color: TEXT_DIM }}>
               {item.labelSuffix && (
                 <>
                   <span style={{ color: '#d1d5db' }}>{'· '}</span>{item.labelSuffix}
@@ -226,7 +232,7 @@ function TimelineRow({ item, first, focused, siteName }: { item: Item; first: bo
           {/* 펼친 상태에서는 내용이 여러 줄이 되므로, 접기 버튼이 마지막 줄 끝에 오도록 아래로 맞춘다 */}
           <div style={{ display: 'flex', alignItems: expanded ? 'flex-end' : 'baseline', gap: 5, marginTop: 3, minWidth: 0 }}>
             <span style={{
-              fontSize: 12, color: '#6b7280', lineHeight: '18px', minWidth: 0,
+              fontSize: 12, color: TEXT_LABEL, lineHeight: '18px', minWidth: 0,
               ...(expanded
                 ? { whiteSpace: 'pre-wrap', wordBreak: 'break-word' }
                 : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }),
@@ -261,13 +267,13 @@ function TimelineRow({ item, first, focused, siteName }: { item: Item; first: bo
         {/* 오른쪽 — 날짜 / 담당자. 둘 다 오른쪽 정렬이라 항목마다 끝선이 맞는다.
             수정 아이콘은 자리를 따로 잡지 않고 호버 때 이 위에 겹쳐 뜬다. */}
         <div style={{ flexShrink: 0, maxWidth: RIGHT_COL_MAX, textAlign: 'right' }}>
-          <div style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>{item.date ?? '-'}</div>
+          <div style={{ fontSize: 12, color: TEXT_LABEL, whiteSpace: 'nowrap' }}>{item.date ?? '-'}</div>
           {/* 여러 명이면 쉼표로 이어 붙고, 넘치면 말줄임 — 전체 이름은 title 로 확인한다.
               날짜와 같은 층위의 메타데이터라 색도 같게 둔다(위계는 위아래 순서로 이미 잡힌다) */}
           <div
             title={item.owner || undefined}
             style={{
-              fontSize: 12, color: '#6b7280', marginTop: 3,
+              fontSize: 12, color: TEXT_DIM, marginTop: 3,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}
           >
@@ -497,18 +503,22 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+      {/* 종류 탭과 「+ 영업 기록」은 **한 줄**이다 — 1366 에서도 접히지 않게 묶음은 줄이지 않고
+          남는 자리를 버튼이 가져간다(좁으면 탭 줄만 옆으로 밀린다). */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', marginBottom: 10 }}>
+        <div style={{ minWidth: 0, overflowX: 'auto' }}>
         <SegmentedControl
           options={filterOptions}
           value={filter}
           onChange={v => setFilter(v as Filter)}
         />
+        </div>
         <button
           onClick={onAddActivity}
           onMouseEnter={e => { e.currentTarget.style.borderColor = '#234ea2' }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = '#ebebeb' }}
           style={{
-            marginLeft: 'auto', padding: '5px 12px', borderRadius: 6, border: '1px solid #ebebeb',
+            marginLeft: 'auto', flexShrink: 0, padding: '5px 12px', borderRadius: 6, border: '1px solid #ebebeb',
             background: '#ffffff', color: '#234ea2', cursor: 'pointer',
             fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
             transition: 'border-color 0.15s ease',
@@ -518,21 +528,11 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
         </button>
       </div>
 
-      {/* 사업장 칩 — 회사 전체 모드에서만. 복수 선택이고, 많으면 검색으로 좁힌다. */}
+      {/* 사업장 칩 — 회사 전체 모드에서만. **한 줄**로 세운다(안내 칩은 두지 않는다).
+          칩이 많은 회사(47곳짜리가 있다)에서만 줄 끝에 좁히기 칸이 붙는다. */}
       {sites && sites.length > 1 && (
         <div style={{ marginBottom: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-            <input value={siteQuery} onChange={e => setSiteQuery(e.target.value)}
-              placeholder={`사업장 ${sites.length}곳 — 이름으로 좁히기`}
-              style={{ height: 26, width: 190, padding: '0 9px', borderRadius: 6, border: '1px solid #ebebeb', fontSize: 12, color: '#111827', outline: 'none' }} />
-            {pickedSites.size > 0 && (
-              <button onClick={() => setPickedSites(new Set())}
-                style={{ border: 'none', background: 'none', color: '#6b7280', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-                {`사업장 ${pickedSites.size}곳 선택 — 해제`}
-              </button>
-            )}
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, maxHeight: 76, overflowY: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflowX: 'auto', paddingBottom: 2 }}>
             {sites
               .filter(s => !siteQuery.trim() || s.name.toLowerCase().includes(siteQuery.trim().toLowerCase()))
               .map(s => {
@@ -556,6 +556,18 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
                   </button>
                 )
               })}
+            {/* 좁히기 — 칩이 여덟을 넘을 때만. 그 아래에서는 칩을 눈으로 훑는 편이 빠르다. */}
+            {sites.length > 8 && (
+              <input value={siteQuery} onChange={e => setSiteQuery(e.target.value)}
+                placeholder="사업장 좁히기"
+                style={{ height: 24, width: 130, flexShrink: 0, padding: '0 9px', borderRadius: 6, border: '1px solid #ebebeb', fontSize: 11, color: TEXT_PRIMARY, outline: 'none' }} />
+            )}
+            {pickedSites.size > 0 && (
+              <button onClick={() => setPickedSites(new Set())}
+                style={{ border: 'none', background: 'none', color: TEXT_LABEL, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                {`${pickedSites.size}곳 선택 — 해제`}
+              </button>
+            )}
           </div>
         </div>
       )}

@@ -445,8 +445,12 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
         emptyCompany.push({ companyId: p.customer_id, companyName: p.company_name, hint: '묶인 사업장이 없습니다 — 지울 수 있습니다' })
       }
       const blanks = sites.filter(c => !(c.site_name ?? '').trim()).length
-      if (blanks >= 2) {
-        blankSites.push({ companyId: p.customer_id, companyName: p.company_name, hint: `사업장 ${sites.length}곳 중 ${blanks}곳이 이름 없음 — 사업장명을 적으세요` })
+      // 한 곳만 비어도 든다 — 겹칠 때만 세던 전에는 「이름 없는 사업장 한 곳」이 끝내 안 보였다.
+      if (blanks >= 1) {
+        blankSites.push({
+          companyId: p.customer_id, companyName: p.company_name,
+          hint: `사업장 ${sites.length}곳 중 ${blanks}곳이 이름 없음 — 사업장명을 적으세요`,
+        })
       }
     }
     for (const [, list] of byNorm) {

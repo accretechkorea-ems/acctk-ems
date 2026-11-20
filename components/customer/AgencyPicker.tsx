@@ -84,7 +84,7 @@ export default function AgencyPicker({ value, onChange, disabled, inputStyle, on
         disabled={disabled}
         onChange={e => { setQuery(e.target.value); setOpen(true) }}
         onFocus={() => setOpen(true)}
-        placeholder={`대리점 검색 — 없으면 ${DIRECT_SALE_LABEL}`}
+        placeholder={`대리점 검색 — 고르지 않으면 ${DIRECT_SALE_LABEL}`}
         style={style}
       />
       {/* 모달 안에서 열려도 잘리지 않도록 포털로 띄운다 */}
@@ -103,7 +103,7 @@ export default function AgencyPicker({ value, onChange, disabled, inputStyle, on
           onMouseEnter={e => { e.currentTarget.style.background = '#f5f5f5' }}
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
         >
-          {`없음(${DIRECT_SALE_LABEL})`}
+          {DIRECT_SALE_LABEL}
         </div>
         {matches.map(a => (
           <div key={a.customer_id}

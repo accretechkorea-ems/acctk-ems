@@ -16,6 +16,7 @@
 
 /** 장비 한 대 — 엑셀이 읽는 칸만. */
 import { isInUse } from './deviceStatus'
+import { districtOf, normalizeRegion, usableRegion2 } from '@/lib/region'
 import { CUSTOMER_AGENCY_SELECT, agencyLabelOf, type AgencyJoin } from './customerAgency'
 
 export type ExcelDevice = {
@@ -106,14 +107,17 @@ export function shortCity(token: string): string {
  * 지역1·지역2 — 저장된 컬럼이 정본이고, 비어 있을 때만 주소 앞 두 토큰에서 만든다.
  * 한쪽만 비어 있어도 그쪽만 채운다.
  */
+/**
+ * 지역1·지역2 — **화면과 같은 규칙**을 쓴다(lib/region.ts).
+ *
+ * 전에는 저장된 값을 먼저 믿었는데, region1 에는 「남부」 같은 사내 구역이, region2 에는
+ * 「울산/울산」처럼 시도를 한 번 더 적어 둔 값이 섞여 있었다. 엑셀만 다른 글자를 내면
+ * 「화면과 다른 값이 나왔다」가 된다 — 그래서 같은 함수를 지난다.
+ */
 export function regionsOf(c: Pick<ExcelCustomer, 'region1' | 'region2' | 'address'>): [string, string] {
-  const r1 = (c.region1 ?? '').trim()
-  const r2 = (c.region2 ?? '').trim()
-  if (r1 && r2) return [r1, r2]
-  const tokens = (c.address ?? '').trim().split(/\s+/).filter(Boolean)
   return [
-    r1 || (tokens[0] ? shortSido(tokens[0]) : ''),
-    r2 || (tokens[1] ? shortCity(tokens[1]) : ''),
+    normalizeRegion(c.region1, c.address) ?? '',
+    usableRegion2(c.region2) ?? districtOf(c.address) ?? '',
   ]
 }
 
