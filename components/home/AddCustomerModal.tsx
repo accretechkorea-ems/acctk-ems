@@ -111,7 +111,12 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
     return companies.find(c => c.company_name.trim().toLowerCase() === q) ?? null
   }, [companies, companyName])
 
-  const isAgency = kind === 'agency'
+  /**
+   * 대리점 양식인가. **「기존 회사에 사업장 추가」로 열었으면 늘 고객사 양식**이다
+   * (2026-11-20) — 회사 카드의 + 로 들어온 길에서는 대리점을 만들 수 없는데도,
+   * 세그먼트가 대리점에 가 있으면 「대리점 정보 / 대리점명」 라벨이 나왔다.
+   */
+  const isAgency = kind === 'agency' && presetCompanyId == null
   /** 이 회사에 사업장만 더하는 중인가 — 고정된 회사이거나, 적은 이름이 이미 있는 회사다. */
   const company = preset ?? (isAgency ? null : matched)
   const existing = company != null
@@ -229,7 +234,8 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
             {existing ? '기존 회사에 사업장 추가' : isAgency ? '대리점 등록' : '업체 등록'}
           </div>
           <span style={{ flex: 1 }} />
-          {!existing && (
+          {/* 종류 세그먼트는 **새 업체 등록**에서만 낸다 — 사업장을 더하는 길에는 고를 것이 없다. */}
+          {presetCompanyId == null && (
             <div style={{ display: 'inline-flex', gap: 2, padding: 3, borderRadius: R.control, background: NEUTRAL }}>
               <button type="button" onClick={() => setKind('customer')} style={segBtn(!isAgency)}>고객사</button>
               <button type="button" onClick={() => setKind('agency')} style={segBtn(isAgency)}>대리점</button>
