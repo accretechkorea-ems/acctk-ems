@@ -19,6 +19,7 @@
 //     전화·메일을 누르는 자리라 작아지면 안 된다.
 
 import { useState } from 'react'
+import { AddIconButton, EditIconButton } from '@/components/common/IconButton'
 import type { Contact } from './types'
 
 /** 접었을 때 보이는 담당자 수. 이보다 많을 때만 더 보기 줄이 생긴다. */
@@ -45,7 +46,6 @@ const GAP = 10
 
 function ContactRow({ contact, onEdit, first }: { contact: Contact; onEdit: () => void; first: boolean }) {
   const [hovered, setHovered] = useState(false)
-  const [btnHover, setBtnHover] = useState(false)
 
   const position = contact.position?.trim()
   const department = contact.department?.trim()
@@ -66,25 +66,9 @@ function ContactRow({ contact, onEdit, first }: { contact: Contact; onEdit: () =
       }}
     >
       {/* 수정 — 행에 마우스를 올렸을 때만 보인다(자리는 유지되므로 높이가 흔들리지 않는다) */}
-      <button
-        onClick={onEdit}
-        onMouseEnter={() => setBtnHover(true)}
-        onMouseLeave={() => setBtnHover(false)}
-        aria-label="고객 담당자 수정"
-        style={{
-          position: 'absolute', top: first ? GAP : 7, right: 14,
-          padding: 0, background: 'none', border: 'none', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          visibility: hovered ? 'visible' : 'hidden',
-          color: btnHover ? '#234ea2' : '#9ca3af',
-          transition: 'color 0.15s ease',
-        }}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-        </svg>
-      </button>
+      <EditIconButton size={24} label="고객 담당자 수정" onClick={onEdit}
+        // 연필은 **그 줄에 마우스를 올렸을 때만** 보인다 — 담당자가 여럿이면 연필이 줄줄이 선다.
+        style={{ position: 'absolute', top: 10, right: 10, opacity: hovered ? 1 : 0, transition: 'opacity 0.15s ease' }} />
 
       {/* 이름 · 직급 · 부서를 한 줄로 합쳐 줄 수를 줄인다 */}
       <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', paddingRight: 26, display: 'flex', alignItems: 'baseline', gap: 5, flexWrap: 'wrap' }}>
@@ -159,25 +143,7 @@ export default function ContactSection({ contacts, onAdd, onEdit }: Props) {
         {contacts.length > 0 && (
           <span style={{ fontSize: 12, color: '#9ca3af' }}>총 {contacts.length}명</span>
         )}
-        <button
-          onClick={onAdd}
-          aria-label="담당자 추가" title="담당자 추가"
-          style={{
-            marginLeft: 'auto', flexShrink: 0,
-            width: 28, height: 28, padding: 0, boxSizing: 'border-box',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 6,
-            cursor: 'pointer', color: '#234ea2',
-            transition: 'background 0.15s ease, border-color 0.15s ease',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = '#fafafa'; e.currentTarget.style.borderColor = '#234ea2' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = BORDER }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-        </button>
+        <AddIconButton label="담당자 추가" onClick={onAdd} style={{ marginLeft: 'auto' }} />
       </div>
 
       {/* 펼쳤을 때만 높이를 준다 — 접힌 두 줄은 그대로 흐른다(스크롤 자리를 만들지 않는다). */}

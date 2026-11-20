@@ -45,9 +45,14 @@ const EMPTY_FORM: CustomerEditFormData = {
 
 export default function CustomerEditModal({ customer, isSaving, isDeleting, onClose, onSave, onDelete }: Props) {
   const [form, setForm] = useState<CustomerEditFormData>(EMPTY_FORM)
-  const { errors, setErrors, clearError, validate } = useFieldErrors<'parent_customer_id' | 'address' | 'new_company_industry' | 'agency'>()
+  const { errors, setErrors, clearError, validate } = useFieldErrors<'parent_customer_id' | 'address' | 'new_company_industry' | 'agency' | 'site_name'>()
   /** 대리점 칸에 **적기만 하고 고르지 않은** 글자. 그대로 저장하면 조용히 직판이 된다. */
   const [agencyQuery, setAgencyQuery] = useState('')
+  /**
+   * 대리점을 **골랐는가**. 전에 저장된 줄은 비어 있는 채로 들어오는데, 그 비어 있음이
+   * 「직판이다」인지 「아직 안 정했다」인지 알 수 없다. 그래서 값이 없으면 고르게 한다.
+   */
+  const [agencyChosen, setAgencyChosen] = useState(false)
   /** 회사 목록 — 적어 둔 이름이 **이미 있는 회사인지** 가리는 데만 쓴다(ParentPicker 캐시). */
   const [companies, setCompanies] = useState<ParentOption[]>([])
 
@@ -55,6 +60,9 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
     if (customer) {
       setForm(formOf(customer))
       setErrors({})
+      // 이미 대리점이 붙어 있는 줄은 고른 것으로 본다(값이 곧 선택이다).
+      setAgencyChosen(customer.agency_customer_id != null)
+      setAgencyQuery('')
     }
   }, [customer])
 
@@ -91,9 +99,12 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
         ? '회사명을 입력해주세요'
         : null,
       address: form.address.trim() ? null : '주소를 입력해주세요',
-      agency: form.agency_customer_id == null && agencyQuery.trim()
-        ? '대리점을 목록에서 고르세요 (거치지 않으면 「없음(직판)」)'
-        : null,
+      site_name: form.site_name.trim() ? null : '사업장명을 입력해주세요',
+      agency: agencyQuery.trim() && !agencyChosen
+        ? '대리점을 목록에서 고르세요'
+        : !agencyChosen
+          ? '대리점을 고르세요 (거치지 않으면 ACCT-K(직판))'
+          : null,
     })
     if (!ok) return
     onSave(form)
@@ -170,7 +181,11 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, alignItems: 'start' }}>
             <div>
               <label style={labelStyle}>사업장명</label>
-              <input value={form.site_name} onChange={(e) => setForm(p => ({ ...p, site_name: e.target.value }))} placeholder="ex) 감마세타엔진공장" style={fieldStyle} />
+              <input value={form.site_name}
+                onChange={e => { setForm(p => ({ ...p, site_name: e.target.value })); clearError('site_name') }}
+                placeholder="ex) 본사, A공장, 지명"
+                style={errors.site_name ? { ...fieldStyle, border: errBorder } : fieldStyle} />
+              <FieldError message={errors.site_name} />
             </div>
             <div>
               <label style={labelStyle}>대리점</label>
@@ -179,7 +194,8 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
                   적기만 하고 고르지 않으면 저장할 때 막는다. */}
               <AgencyPicker
                 value={form.agency_customer_id}
-                onChange={id => { setForm(p => ({ ...p, agency_customer_id: id })); setAgencyQuery(''); clearError('agency') }}
+                chosen={agencyChosen}
+                onChange={(id, picked) => { setForm(p => ({ ...p, agency_customer_id: id })); setAgencyChosen(picked !== false); setAgencyQuery(''); clearError('agency') }}
                 onQueryChange={q => { setAgencyQuery(q); clearError('agency') }}
                 disabled={isSaving}
               />

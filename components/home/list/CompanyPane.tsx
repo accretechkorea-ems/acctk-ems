@@ -16,6 +16,7 @@ import ModalOverlay from '@/components/common/ModalOverlay'
 import CompanySearchModal from '@/components/home/list/CompanySearchModal'
 import CompanyEditModal, { type CompanyEditForm } from '@/components/home/list/CompanyEditModal'
 import CustomerEditModal from '@/components/customer/modals/CustomerEditModal'
+import { EditIconButton } from '@/components/common/IconButton'
 import SalesActivityModal from '@/components/customer/modals/SalesActivityModal'
 import SiteMergeModal, { type MergeReport } from '@/components/home/list/SiteMergeModal'
 import ActivityTimeline from '@/components/customer/ActivityTimeline'
@@ -331,7 +332,7 @@ export default function CompanyPane({
 
         <span style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={() => setEditCompanyOpen(true)} style={btn}>수정</button>
+          <EditIconButton label="회사 정보 수정" onClick={() => setEditCompanyOpen(true)} />
           {/* 병합 — **되돌릴 수 없다.** 슈퍼관리자만 누를 수 있다(라우트도 같은 문턱이다). */}
           <button type="button" disabled={!canEditCompany} title={canEditCompany ? '다른 회사로 합칩니다' : '회사 병합은 슈퍼관리자만 할 수 있습니다'}
             onClick={() => setMergeOpen(true)}
@@ -343,7 +344,6 @@ export default function CompanyPane({
       <section style={{ ...card, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: `1px solid ${BORDER}` }}>
           <b style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>사업장 {group.sites.length}곳</b>
-          <span style={{ fontSize: 11, color: MUTED }}>줄 끝의 연필로 고칩니다</span>
           <span style={{ flex: 1 }} />
           {/* 사업장을 더하는 자리는 **표 머리줄**이다 — 더할 대상(이 표)의 바로 위다. */}
           <button type="button" onClick={onAddSite} style={btn}>+ 사업장 추가</button>
@@ -358,14 +358,16 @@ export default function CompanyPane({
                     checked={checked.size > 0 && checked.size === group.sites.length}
                     onChange={e => setChecked(e.target.checked ? new Set(group.sites.map(s => s.customer.customer_id)) : new Set())} />
                 </th>
+                {/* 열 순서는 **회사 카드의 수치 순서**와 같다 — 사업장·장비·진행 견적·최근 활동.
+                    숫자 열은 폭을 못 박고 오른쪽으로 민다(자릿수가 달라도 끝선이 맞는다). */}
                 <th style={th}>사업장명</th>
                 <th style={th}>지역</th>
                 <th style={th}>대리점</th>
                 <th style={th}>상태</th>
-                <th style={{ ...th, textAlign: 'right' }}>장비</th>
+                <th style={{ ...th, textAlign: 'right', width: 64 }}>장비</th>
+                <th style={{ ...th, textAlign: 'right', width: 86 }}>진행 견적</th>
                 <th style={th}>최근 활동 · 작성자</th>
-                <th style={{ ...th, textAlign: 'right' }}>진행 견적</th>
-                <th style={{ ...th, width: 86 }} />
+                <th style={{ ...th, width: 52 }} />
               </tr>
             </thead>
             <tbody>
@@ -374,9 +376,15 @@ export default function CompanyPane({
                 const late = isStale(s.days)
                 const on = checked.has(id)
                 return (
-                  <tr key={id} style={{ background: on ? '#f8fafc' : undefined }}>
-                    <td style={td}>
-                      <input type="checkbox" checked={on} onChange={() => toggle(id)} aria-label={`${s.siteName} 선택`} />
+                  /* 줄 아무 곳이나 누르면 그 사업장이 열린다 — 「상세」 버튼을 따로 두지 않는다.
+                     체크박스·연필은 그 자리에서 멈춘다(아래 stopPropagation). */
+                  <tr key={id}
+                    onClick={() => onOpenSite(id)}
+                    style={{ background: on ? '#f8fafc' : undefined, cursor: 'pointer' }}
+                    onMouseEnter={e => { if (!on) e.currentTarget.style.background = '#fafafa' }}
+                    onMouseLeave={e => { if (!on) e.currentTarget.style.background = '' }}>
+                    <td style={td} onClick={e => e.stopPropagation()}>
+                      <input type="checkbox" checked={on} onChange={() => toggle(id)} aria-label={`${s.siteName || '이름 없는 사업장'} 선택`} />
                     </td>
                     <td style={{ ...td, fontWeight: 600 }}>
                       {s.needsName
@@ -391,7 +399,8 @@ export default function CompanyPane({
                         {s.customer.status ?? '-'}
                       </span>
                     </td>
-                    <td style={{ ...td, textAlign: 'right' }}>{s.deviceCount}</td>
+                    <td style={{ ...td, textAlign: 'right', width: 64 }}>{s.deviceCount}</td>
+                    <td style={{ ...td, textAlign: 'right', width: 86, color: s.openQuotes > 0 ? BLUE : TEXT, fontWeight: s.openQuotes > 0 ? 700 : 400 }}>{s.openQuotes}</td>
                     <td style={{ ...td, color: late ? DANGER : SUB }}>
                       {s.touch ? (
                         <>
@@ -402,22 +411,8 @@ export default function CompanyPane({
                         </>
                       ) : <span style={{ color: FAINT }}>-</span>}
                     </td>
-                    <td style={{ ...td, textAlign: 'right', color: s.openQuotes > 0 ? BLUE : TEXT, fontWeight: s.openQuotes > 0 ? 700 : 400 }}>{s.openQuotes}</td>
-                    <td style={{ ...td, textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        {/* 연필 — 이 줄을 수정 모달로 연다(상세 화면의 그 모달이다). */}
-                        <button type="button" aria-label={`${s.siteName} 수정`} title="사업장 정보 수정"
-                          onClick={() => setEditSite(s.customer)}
-                          style={{ width: 26, height: 26, padding: 0, borderRadius: 6, border: 'none', background: 'transparent', color: MUTED, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = NEUTRAL; e.currentTarget.style.color = TEXT }}
-                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = MUTED }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" /></svg>
-                        </button>
-                        <button type="button" onClick={() => onOpenSite(id)}
-                          style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: BLUE, fontFamily: 'inherit', padding: 0 }}>
-                          상세
-                        </button>
-                      </div>
+                    <td style={{ ...td, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                      <EditIconButton size={24} label={`${s.siteName || '이름 없는 사업장'} 수정`} onClick={() => setEditSite(s.customer)} />
                     </td>
                   </tr>
                 )
@@ -487,11 +482,8 @@ export default function CompanyPane({
 
       {/* ── 회사 전체 활동 ── */}
       <section style={{ ...card, padding: '14px 16px', minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <b style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>활동 이력</b>
-          {timeline.loading && <span style={{ fontSize: 11, color: MUTED }}>읽는 중…</span>}
-        </div>
         <ActivityTimeline
+          title="활동 이력"
           history={timeline.history}
           devices={timeline.devices}
           quotes={timeline.quotes}

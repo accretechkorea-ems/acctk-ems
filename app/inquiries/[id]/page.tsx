@@ -30,6 +30,7 @@
 // 화면은 어느 쪽인지 미리 단정하지 않는다.
 
 import { useCallback, useEffect, useState } from 'react'
+import { EditIconButton } from '@/components/common/IconButton'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { loadMe } from '@/lib/appData/me'
@@ -248,32 +249,6 @@ type Message = {
 const MESSAGE_COLUMNS =
   'id, entry_date, body, direction, created_by, engineers!inquiry_messages_created_by_fkey(name, position)'
 
-/**
- * 수정 아이콘 버튼.
- *
- * 고객사 정보 패널(components/customer/CustomerInfoPanel.tsx:38)의 것과 같은 모양이다 —
- * 같은 뜻의 버튼이 화면마다 달라 보이지 않게 치수·색·hover 를 그대로 가져왔다.
- * lucide 의 square-pen 을 인라인 SVG 로 둔다(lucide-react 는 설치되어 있지 않다).
- */
-function EditIconButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button" onClick={onClick} aria-label={label} title={label}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = BLUE; e.currentTarget.style.color = BLUE }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED }}
-      style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 6, flexShrink: 0,
-        background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 6,
-        cursor: 'pointer', color: MUTED, transition: 'border-color 0.15s ease, color 0.15s ease',
-      }}
-    >
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-        <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-        <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-      </svg>
-    </button>
-  )
-}
 
 /**
  * 편집 중인 카드가 부모에게서 받는 한 벌.

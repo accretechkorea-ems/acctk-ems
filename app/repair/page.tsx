@@ -2,6 +2,7 @@
 
 // 모바일 상단 바 높이 — 화면 높이를 계산하는 곳은 이 상수 하나를 본다(PC 는 상단 바가 없다).
 import { TOPBAR_HEIGHT } from '@/components/layout/Sidebar'
+import { EditIconButton } from '@/components/common/IconButton'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -677,15 +678,7 @@ export default function RepairPage() {
         </div>
       </td>
       <td style={{ ...td, textAlign: 'center' }}>
-        <button onClick={() => setEditing(r)} title="수정"
-          onMouseEnter={(e) => (e.currentTarget.style.color = '#234ea2')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = '#9ca3af')}
-          style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#9ca3af', display: 'inline-flex', alignItems: 'center', padding: 0, transition: 'color 0.15s ease' }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-          </svg>
-        </button>
+        <EditIconButton size={24} label="수리 기록 수정" onClick={() => setEditing(r)} />
       </td>
     </tr>
     )

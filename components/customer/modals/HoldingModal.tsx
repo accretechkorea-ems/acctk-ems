@@ -11,6 +11,7 @@
 // 재방문 내용을 레포트와 메모에 두 번 적지 않게 하려는 것이 목적이다.
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { EditIconButton } from '@/components/common/IconButton'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { elapsedLabel, type HoldingReport } from '../holding'
@@ -94,15 +95,7 @@ function TimelineRow({
         <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {showTools && (
             <>
-              <button onClick={onStartEdit} title="수정" aria-label="메모 수정"
-                style={{ padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'inline-flex' }}
-                onMouseEnter={e => { e.currentTarget.style.color = '#234ea2' }}
-                onMouseLeave={e => { e.currentTarget.style.color = '#9ca3af' }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                  <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-              </button>
+              <EditIconButton size={24} label="메모 수정" onClick={() => onStartEdit?.()} />
               <button onClick={onDelete} title="삭제" aria-label="메모 삭제"
                 style={{ padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'inline-flex' }}
                 onMouseEnter={e => { e.currentTarget.style.color = '#ef4444' }}

@@ -54,7 +54,7 @@ type Props = {
 
 export default function CompanyEditModal({ initial, siteCount, canRename, isSaving, onClose, onSave }: Props) {
   const [form, setForm] = useState<CompanyEditForm>(initial)
-  const { errors, clearError, validate } = useFieldErrors<'name' | 'nameEn'>()
+  const { errors, clearError, validate } = useFieldErrors<'name' | 'nameEn' | 'industry'>()
 
   const dirty = JSON.stringify(form) !== JSON.stringify(initial)
   const nameChanged = form.name.trim() !== initial.name.trim()
@@ -62,9 +62,9 @@ export default function CompanyEditModal({ initial, siteCount, canRename, isSavi
   const handleSave = () => {
     const ok = validate({
       name: form.name.trim() ? null : '회사명을 입력해주세요',
-      // 영문명은 **새로 등록할 때** 필수다. 이미 있는 회사는 비어 있는 줄이 많아
-      // 여기서 막으면 분류 하나 고치러 들어왔다가 영문명을 지어내게 된다.
-      nameEn: null,
+      // 비어 있는 줄이 많지만, 고치러 들어온 김에 채우게 한다 — 이름을 다루는 자리다.
+      nameEn: canRename && !form.nameEn.trim() ? '영문명을 입력해주세요' : null,
+      industry: form.industry ? null : '분류를 선택해주세요',
     })
     if (!ok) return
     onSave(form)
@@ -129,11 +129,12 @@ export default function CompanyEditModal({ initial, siteCount, canRename, isSavi
           <div>
             <label style={labelStyle}>분류</label>
             <select value={form.industry} disabled={isSaving}
-              onChange={e => setForm(p => ({ ...p, industry: e.target.value }))}
-              style={{ ...fieldStyle, cursor: 'pointer' }}>
-              <option value="">분류 없음</option>
+              onChange={e => { setForm(p => ({ ...p, industry: e.target.value })); clearError('industry') }}
+              style={errors.industry ? { ...fieldStyle, border: errBorder, cursor: 'pointer' } : { ...fieldStyle, cursor: 'pointer' }}>
+              <option value="">분류 선택</option>
               {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
             </select>
+            <FieldError message={errors.industry} />
           </div>
           </div>
 

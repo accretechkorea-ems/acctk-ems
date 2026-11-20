@@ -8,6 +8,7 @@
 // 맨 아래 "날짜 미상"으로 접어둔다. 견적은 quote_date 가 항상 있어 여기 해당하지 않는다.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { EditIconButton } from '@/components/common/IconButton'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import { SERVICE_TYPE_COLORS, TIMELINE_KIND_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import { numKR } from './constants'
@@ -40,6 +41,8 @@ type Props = {
    * 사업장 상세는 주지 않는다(지금과 똑같이 그려진다).
    */
   sites?: { id: number; name: string }[]
+  /** 카드 제목 — 머리줄 맨 앞에 선다(회사 화면의 「활동 이력」). */
+  title?: string
   /** 고객 사건 로그. 회사 전체 모드에서만 넘어온다. */
   events?: CustomerEvent[]
   /**
@@ -284,36 +287,18 @@ function TimelineRow({ item, first, focused, siteName }: { item: Item; first: bo
 
       {/* 수정 — 영업 활동에만. 호버 때 오른쪽 위에 또렷하게 떠서 날짜를 가려도 된다 */}
       {item.onEdit && hovered && (
-        <button
-          onClick={e => { e.stopPropagation(); item.onEdit!() }}
-          title="수정"
-          aria-label="영업 기록 수정"
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#234ea2' }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = '#ebebeb' }}
-          style={{
-            position: 'absolute', top: 6, right: 4, zIndex: 1,
-            width: 24, height: 24, padding: 0,
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 6,
-            cursor: 'pointer', color: '#234ea2', transition: 'border-color 0.15s ease',
-          }}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-          </svg>
-        </button>
+        <EditIconButton size={24} label="영업 기록 수정" onClick={() => item.onEdit!()}
+          style={{ position: 'absolute', top: 6, right: 4, zIndex: 1 }} />
       )}
     </div>
   )
 }
 
-export default function ActivityTimeline({ history, devices, quotes, activities, holdings, customerId, onOpenQuotePdf, onOpenHolding, onAddActivity, onEditActivity, canEditActivity, focusKey, onFocused, sites, events, initialSiteIds }: Props) {
+export default function ActivityTimeline({ history, devices, quotes, activities, holdings, customerId, onOpenQuotePdf, onOpenHolding, onAddActivity, onEditActivity, canEditActivity, focusKey, onFocused, sites, events, initialSiteIds, title }: Props) {
   const [filter, setFilter] = useState<Filter>('전체')
   const [showUndated, setShowUndated] = useState(false)
   /** 회사 전체 모드의 사업장 칩 — 비어 있으면 전체다(복수 선택). */
   const [pickedSites, setPickedSites] = useState<Set<number>>(() => new Set(initialSiteIds ?? []))
-  const [siteQuery, setSiteQuery] = useState('')
   const siteNameOf = useMemo(() => {
     const m = new Map((sites ?? []).map(s => [s.id, s.name]))
     return (id?: number | null) => (id == null ? '' : m.get(id) ?? '')
@@ -503,16 +488,51 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
 
   return (
     <div>
-      {/* 종류 탭과 「+ 영업 기록」은 **한 줄**이다 — 1366 에서도 접히지 않게 묶음은 줄이지 않고
-          남는 자리를 버튼이 가져간다(좁으면 탭 줄만 옆으로 밀린다). */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', marginBottom: 10 }}>
-        <div style={{ minWidth: 0, overflowX: 'auto' }}>
-        <SegmentedControl
-          options={filterOptions}
-          value={filter}
-          onChange={v => setFilter(v as Filter)}
-        />
+      {/**
+       * 머리줄 하나 — 제목 · 종류 탭 · 사업장 칩 · 「+ 영업 기록」.
+       *
+       * 셋으로 나눠 쌓았더니 카드 위쪽이 머리글만 세 줄이었다. 칩은 남는 자리를 차지하고
+       * 넘치면 **옆으로 민다**(검색칸은 걷었다 — 칩을 훑는 편이 빠르고 줄도 아낀다).
+       */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'nowrap', marginBottom: 10, minWidth: 0 }}>
+        {title && (
+          <b style={{ fontSize: 13, fontWeight: 700, color: TEXT_PRIMARY, flexShrink: 0 }}>{title}</b>
+        )}
+        <div style={{ flexShrink: 0 }}>
+          <SegmentedControl
+            options={filterOptions}
+            value={filter}
+            onChange={v => setFilter(v as Filter)}
+          />
         </div>
+
+        {/* 사업장 칩 — 회사 전체 모드에서만. 남는 자리를 쓰고, 넘치면 옆으로 민다. */}
+        {sites && sites.length > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0, overflowX: 'auto' }}>
+            {sites.map(s => {
+              const on = pickedSites.has(s.id)
+              return (
+                <button key={s.id}
+                  onClick={() => setPickedSites(prev => {
+                    const next = new Set(prev)
+                    if (next.has(s.id)) next.delete(s.id)
+                    else next.add(s.id)
+                    return next
+                  })}
+                  style={{
+                    height: 24, padding: '0 9px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
+                    border: `1px solid ${on ? '#234ea2' : '#ebebeb'}`,
+                    background: on ? '#eff4ff' : '#ffffff',
+                    color: on ? '#234ea2' : TEXT_LABEL,
+                    fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
+                  }}>
+                  {s.name}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         <button
           onClick={onAddActivity}
           onMouseEnter={e => { e.currentTarget.style.borderColor = '#234ea2' }}
@@ -527,51 +547,6 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
           + 영업 기록
         </button>
       </div>
-
-      {/* 사업장 칩 — 회사 전체 모드에서만. **한 줄**로 세운다(안내 칩은 두지 않는다).
-          칩이 많은 회사(47곳짜리가 있다)에서만 줄 끝에 좁히기 칸이 붙는다. */}
-      {sites && sites.length > 1 && (
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, overflowX: 'auto', paddingBottom: 2 }}>
-            {sites
-              .filter(s => !siteQuery.trim() || s.name.toLowerCase().includes(siteQuery.trim().toLowerCase()))
-              .map(s => {
-                const on = pickedSites.has(s.id)
-                return (
-                  <button key={s.id}
-                    onClick={() => setPickedSites(prev => {
-                      const next = new Set(prev)
-                      if (next.has(s.id)) next.delete(s.id)
-                      else next.add(s.id)
-                      return next
-                    })}
-                    style={{
-                      height: 24, padding: '0 9px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
-                      border: `1px solid ${on ? '#234ea2' : '#ebebeb'}`,
-                      background: on ? '#eff4ff' : '#ffffff',
-                      color: on ? '#234ea2' : '#6b7280',
-                      fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
-                    }}>
-                    {s.name}
-                  </button>
-                )
-              })}
-            {/* 좁히기 — 칩이 여덟을 넘을 때만. 그 아래에서는 칩을 눈으로 훑는 편이 빠르다. */}
-            {sites.length > 8 && (
-              <input value={siteQuery} onChange={e => setSiteQuery(e.target.value)}
-                placeholder="사업장 좁히기"
-                style={{ height: 24, width: 130, flexShrink: 0, padding: '0 9px', borderRadius: 6, border: '1px solid #ebebeb', fontSize: 11, color: TEXT_PRIMARY, outline: 'none' }} />
-            )}
-            {pickedSites.size > 0 && (
-              <button onClick={() => setPickedSites(new Set())}
-                style={{ border: 'none', background: 'none', color: TEXT_LABEL, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                {`${pickedSites.size}곳 선택 — 해제`}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
       {months.length === 0 && undated.length === 0 ? (
         <div style={{ padding: '28px 16px', textAlign: 'center', fontSize: 13, color: '#9ca3af' }}>
           {filter === '영업' ? '영업 활동 기록이 없습니다' : filter === '사건' ? '사건 기록이 없습니다' : '기록이 없습니다'}

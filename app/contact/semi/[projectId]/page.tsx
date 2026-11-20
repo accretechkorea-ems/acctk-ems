@@ -19,6 +19,7 @@
 // 주소의 ?report= 가 있으면 그 보고서를 고른 채 연다(수정 화면에서 돌아올 때).
 
 import { Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { EditIconButton, PencilGlyph } from '@/components/common/IconButton'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -407,9 +408,7 @@ function SemiProjectDetailInner() {
             <span className="num" style={countBadge}>{project.project_no}</span>
             <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
               {canManageProject && (
-                <button type="button" onClick={() => setEditingProject(true)} title="Project 정보 수정" aria-label="Project 정보 수정" style={iconBtn}>
-                  <PencilIcon />
-                </button>
+                <EditIconButton size={30} label="Project 정보 수정" onClick={() => setEditingProject(true)} />
               )}
               {views.length > 0 && (
                 <ExcelButton title="Excel 출력" busy={exporting === 'history'} disabled={exporting !== null}
@@ -842,13 +841,9 @@ const iconBtn: CSSProperties = {
   textDecoration: 'none',
 }
 
+/** 연필 — 모양은 공용에서 가져온다(components/common/IconButton.tsx). */
 function PencilIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-    </svg>
-  )
+  return <PencilGlyph size={15} />
 }
 
 /** Excel 출력 — 배경·테두리 없는 초록 문서(접힌 모서리) 아이콘에 흰 글자 XLS. */

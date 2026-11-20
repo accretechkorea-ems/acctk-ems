@@ -51,14 +51,19 @@ const sectionTitle: React.CSSProperties = { fontSize: 13, fontWeight: 700, color
 const row3: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, alignItems: 'start' }
 
 const emptyContact = (): NewContactInput => ({ name: '', position: '', department: '', phone: '', email: '' })
-const emptySite = (): SiteDraft => ({ siteName: '', address: '', agencyId: null, agencyQuery: '', status: '활성', contacts: [emptyContact()] })
+const emptySite = (): SiteDraft => ({ siteName: '', address: '', agencyId: null, agencyChosen: false, agencyQuery: '', status: '활성', contacts: [emptyContact()] })
 
 /** 화면에서 다루는 사업장 한 블록. agencyQuery 는 **고르지 않고 적기만 한 글자**를 붙잡아 둔다. */
-type SiteDraft = NewSiteInput & { agencyQuery: string }
+/**
+ * 화면에서 다루는 사업장 한 블록.
+ *   agencyQuery  … 고르지 않고 **적기만 한** 글자(그대로 저장하면 조용히 직판이 된다).
+ *   agencyChosen … 대리점을 **골랐는가**. 직판도 골라야 한다 — 둘 다 값이 null 이라 이 칸이 가른다.
+ */
+type SiteDraft = NewSiteInput & { agencyQuery: string; agencyChosen: boolean }
 
 type ErrKey =
   | 'companyName' | 'nameEn' | 'industry'
-  | `site_${number}` | `agency_${number}` | `contact_${number}_${number}`
+  | `site_${number}` | `siteName_${number}` | `agency_${number}` | `contact_${number}_${number}`
 
 type Props = {
   /**
@@ -127,6 +132,20 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
   const contactFilled = (c: NewContactInput) =>
     [c.name, c.position, c.department, c.phone, c.email].some(v => v.trim())
 
+  /**
+   * 첫 오류 칸으로 데려간다 — 폼이 길어(사업장 여럿·담당자 여럿) 어디가 비었는지
+   * 화면 밖일 수 있다. 빨간 테두리만 세우고 끝내면 저장이 안 되는 이유를 못 찾는다.
+   */
+  const scrollToFirstError = () => {
+    requestAnimationFrame(() => {
+      const box = document.querySelector('.acc-form')
+      const bad = box?.querySelector<HTMLElement>('[data-err="1"]')
+      if (!bad) return
+      bad.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      bad.focus?.()
+    })
+  }
+
   const handleSave = async () => {
     const rules: Partial<Record<ErrKey, string | null>> = {
       companyName: (company?.company_name ?? companyName).trim() ? null : (isAgency ? '대리점명을 입력해주세요' : '업체명을 입력해주세요'),
@@ -138,18 +157,20 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
     shown.forEach((s, i) => {
       // 대리점은 주소를 **선택**으로 둔다 — 등록된 45곳 중 29곳이 이름만으로 부르는 거래처다.
       rules[`site_${i}`] = isAgency || s.address.trim() ? null : '주소를 입력해주세요'
-      // 적기만 하고 고르지 않은 대리점은 저장하지 않는다 — 글자로 들어온 대리점이
-      // 「ACCT-K」/「ACCTK」처럼 갈리던 것이 이번 정리의 시작이었다.
-      rules[`agency_${i}`] = !isAgency && s.agencyId == null && s.agencyQuery.trim()
-        ? '대리점을 목록에서 고르세요 (거치지 않으면 「없음(직판)」)'
+      rules[`siteName_${i}`] = isAgency || s.siteName.trim() ? null : '사업장명을 입력해주세요'
+      // 대리점은 **고르는 칸**이다. 적기만 한 글자는 저장되지 않고, 고르지 않으면 넘어가지 못한다
+      // — 거치지 않는 건이면 ACCT-K(직판)를 고른다(비워 두는 것과 뜻이 다르다).
+      rules[`agency_${i}`] = isAgency ? null
+        : s.agencyQuery.trim() && !s.agencyChosen ? '대리점을 목록에서 고르세요'
+        : !s.agencyChosen ? '대리점을 고르세요 (거치지 않으면 ACCT-K(직판))'
         : null
       s.contacts.forEach((c, ci) => {
-        rules[`contact_${i}_${ci}`] = contactFilled(c) && !c.name.trim()
-          ? '담당자 이름을 입력해주세요'
-          : null
+        // 담당자 블록은 **선택**이다. 한 칸이라도 적었으면 이름·전화는 있어야 연락이 된다.
+        const need = contactFilled(c) ? (!c.name.trim() ? '담당자 이름을 입력해주세요' : !c.phone.trim() ? '담당자 전화번호를 입력해주세요' : null) : null
+        rules[`contact_${i}_${ci}`] = need
       })
     })
-    if (!validate(rules)) return
+    if (!validate(rules)) { scrollToFirstError(); return }
 
     setSaving(true)
     try {
@@ -220,7 +241,7 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
             </div>
           )}
           <div style={isAgency ? { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'start' } : row3}>
-            <div>
+            <div data-err={errors.companyName ? '1' : undefined}>
               <div style={labelStyle}>{isAgency ? '대리점명' : '업체명'}</div>
               <input value={preset ? preset.company_name : companyName} disabled={saving || preset != null}
                 onChange={e => { setCompanyName(e.target.value); clearError('companyName') }}
@@ -233,7 +254,7 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
               <FieldError message={errors.companyName} />
             </div>
 
-            <div>
+            <div data-err={errors.nameEn ? '1' : undefined}>
               <div style={labelStyle}>영문명</div>
               <input value={existing ? (company?.name_en ?? '') : nameEn} disabled={saving || existing}
                 onChange={e => { setNameEn(e.target.value); clearError('nameEn') }}
@@ -247,7 +268,7 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
             </div>
 
             {!isAgency && (
-              <div>
+              <div data-err={errors.industry ? '1' : undefined}>
                 <div style={labelStyle}>분류</div>
                 <select value={existing ? (company?.industry ?? '') : industry} disabled={saving || existing}
                   onChange={e => { setIndustry(e.target.value); clearError('industry') }}
@@ -309,19 +330,21 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
                 {/* 첫 줄 — 사업장명 · 대리점 · 상태 */}
                 {!isAgency && (
                   <div style={row3}>
-                    <div>
-                      <div style={labelStyle}>사업장명 (선택)</div>
+                    <div data-err={errors[`siteName_${i}`] ? '1' : undefined}>
+                      <div style={labelStyle}>사업장명</div>
                       <input value={site.siteName} disabled={saving}
-                        onChange={e => setSite(i, { siteName: e.target.value })}
-                        placeholder="ex) 울산공장 · 비우면 회사명만"
-                        style={inputStyle} />
+                        onChange={e => { setSite(i, { siteName: e.target.value }); clearError(`siteName_${i}`) }}
+                        placeholder="ex) 본사, A공장, 지명"
+                        style={errors[`siteName_${i}`] ? { ...inputStyle, border: errBorder } : inputStyle} />
+                      <FieldError message={errors[`siteName_${i}`]} />
                     </div>
-                    <div>
+                    <div data-err={errors[`agency_${i}`] ? '1' : undefined}>
                       <div style={labelStyle}>대리점</div>
                       {/* 자유 입력이 아니라 **고르는 칸**이다. 적기만 하면 저장 때 막힌다. */}
                       <AgencyPicker
                         value={site.agencyId}
-                        onChange={id => { setSite(i, { agencyId: id, agencyQuery: '' }); clearError(`agency_${i}`) }}
+                        chosen={site.agencyChosen}
+                        onChange={(id, picked) => { setSite(i, { agencyId: id, agencyChosen: picked !== false, agencyQuery: '' }); clearError(`agency_${i}`) }}
                         onQueryChange={q => { setSite(i, { agencyQuery: q }); clearError(`agency_${i}`) }}
                         disabled={saving}
                         inputStyle={errors[`agency_${i}`] ? { ...inputStyle, border: errBorder } : inputStyle}
@@ -342,7 +365,7 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
                 )}
 
                 {/* 둘째 줄 — 주소 */}
-                <div>
+                <div data-err={errors[`site_${i}`] ? '1' : undefined}>
                   <div style={labelStyle}>{isAgency ? '주소 (선택)' : '주소'}</div>
                   <AddressField
                     value={site.address}
@@ -383,7 +406,7 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
                     <div style={{ display: 'grid', gap: 8 }}>
                       {site.contacts.map((c, ci) => (
                         <div key={ci} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 26px', gap: 8, alignItems: 'start' }}>
-                          <div>
+                          <div data-err={errors[`contact_${i}_${ci}`] ? '1' : undefined}>
                             {ci === 0 && <div style={labelStyle}>이름</div>}
                             <input value={c.name} disabled={saving}
                               onChange={e => { setContact(i, ci, { name: e.target.value }); clearError(`contact_${i}_${ci}`) }}
@@ -406,8 +429,9 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
                           <div>
                             {ci === 0 && <div style={labelStyle}>전화</div>}
                             <input value={c.phone} disabled={saving}
-                              onChange={e => setContact(i, ci, { phone: e.target.value })}
-                              placeholder="전화번호" style={inputStyle} />
+                              onChange={e => { setContact(i, ci, { phone: e.target.value }); clearError(`contact_${i}_${ci}`) }}
+                              placeholder="전화번호"
+                              style={errors[`contact_${i}_${ci}`]?.includes('전화') ? { ...inputStyle, border: errBorder } : inputStyle} />
                           </div>
                           <div>
                             {ci === 0 && <div style={labelStyle}>이메일</div>}

@@ -14,6 +14,7 @@
 
 // 모바일 상단 바 높이 — 표 머리가 붙는 위치를 이 상수 하나로 맞춘다.
 import { TOPBAR_HEIGHT } from '@/components/layout/Sidebar'
+import { EditIconButton } from '@/components/common/IconButton'
 import { customerDisplayName } from '@/lib/customerLabel'
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react'
 import { getCategoryColor } from '@/lib/categoryColors'
@@ -289,15 +290,7 @@ export default function UsageList({
                     </svg>
                   </button>
                   {editable && (<>
-                    <button title="수정" disabled={busy} onClick={() => { clearConfirm(); onEdit(r) }}
-                      style={iconBtn(MUTED)}
-                      onMouseEnter={e => (e.currentTarget.style.color = BLUE)}
-                      onMouseLeave={e => (e.currentTarget.style.color = MUTED)}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                      </svg>
-                    </button>
+                    <EditIconButton size={24} label="쇼룸 사용 기록 수정" disabled={busy} onClick={() => { clearConfirm(); onEdit(r) }} />
                     {armed ? (
                       <button disabled={busy} onClick={() => handleDelete(r)}
                         style={{ padding: '3px 9px', borderRadius: 6, border: 'none', background: DANGER, color: CARD_BG, fontSize: 11, fontWeight: 700, cursor: busy ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>

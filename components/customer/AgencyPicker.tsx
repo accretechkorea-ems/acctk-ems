@@ -33,7 +33,8 @@ const SHOWN = 12
 type Props = {
   /** 고른 대리점(customers.agency_customer_id). 직판이면 null. */
   value: number | null
-  onChange: (agencyCustomerId: number | null) => void
+  /** 고른 값. 둘째 인자는 **사람이 고른 것인가**(「다시 고르기」면 false). */
+  onChange: (agencyCustomerId: number | null, chosen?: boolean) => void
   disabled?: boolean
   /** 입력칸 치수를 폼에 맞출 때(등록 폼은 11px 글자를 쓴다). */
   inputStyle?: CSSProperties
@@ -44,9 +45,15 @@ type Props = {
    * 저장하면 조용히 직판이 된다. 부르는 쪽이 그 상태를 알아야 저장을 막고 알려 줄 수 있다.
    */
   onQueryChange?: (query: string) => void
+  /**
+   * 지금 값이 **사람이 고른 값**인가. 대리점은 필수 선택이라 「아직 안 골랐다」와
+   * 「ACCT-K(직판)를 골랐다」를 구별해야 한다 — 둘 다 값은 null 이기 때문이다.
+   * 고른 적이 없으면 칸을 비워 두고, 저장할 때 부르는 쪽이 막는다.
+   */
+  chosen?: boolean
 }
 
-export default function AgencyPicker({ value, onChange, disabled, inputStyle, onQueryChange }: Props) {
+export default function AgencyPicker({ value, onChange, disabled, inputStyle, onQueryChange, chosen = true }: Props) {
   const agencies = useAgencies()
   const [query, setQueryState] = useState('')
   const setQuery = (q: string) => { setQueryState(q); onQueryChange?.(q) }
@@ -65,14 +72,14 @@ export default function AgencyPicker({ value, onChange, disabled, inputStyle, on
     return agencies.filter(a => a.company_name.toLowerCase().includes(q)).slice(0, SHOWN)
   }, [agencies, query])
 
-  // 이미 고른 상태 — 이름과 해제 버튼만.
-  if (value != null) {
+  // 이미 고른 상태 — 이름과 해제 버튼만. 직판(null)도 **고른 것**이면 여기로 온다.
+  if (value != null || chosen) {
     return (
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <div style={{ ...style, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: '#f9fafb' }}>
-          {picked ? picked.company_name : `대리점 #${value}`}
+          {value == null ? DIRECT_SALE_LABEL : picked ? picked.company_name : `대리점 #${value}`}
         </div>
-        <button type="button" disabled={disabled} onClick={() => { onChange(null); setQuery('') }} style={ghostBtn}>해제</button>
+        <button type="button" disabled={disabled} onClick={() => { onChange(null, false); setQuery('') }} style={ghostBtn}>다시 고르기</button>
       </div>
     )
   }
@@ -98,7 +105,7 @@ export default function AgencyPicker({ value, onChange, disabled, inputStyle, on
       >
         {/* 직판 — 비우는 것과 같은 값이지만, 고를 수 있어야 뜻이 분명해진다 */}
         <div
-          onMouseDown={e => { e.preventDefault(); onChange(null); setQuery(''); setOpen(false) }}
+          onMouseDown={e => { e.preventDefault(); onChange(null, true); setQuery(''); setOpen(false) }}
           style={{ padding: '8px 11px', cursor: 'pointer', fontSize: 13, color: '#6b7280', fontWeight: 700, borderBottom: matches.length ? '1px solid #ebebeb' : undefined }}
           onMouseEnter={e => { e.currentTarget.style.background = '#f5f5f5' }}
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
@@ -107,7 +114,7 @@ export default function AgencyPicker({ value, onChange, disabled, inputStyle, on
         </div>
         {matches.map(a => (
           <div key={a.customer_id}
-            onMouseDown={e => { e.preventDefault(); onChange(a.customer_id); setQuery(''); setOpen(false) }}
+            onMouseDown={e => { e.preventDefault(); onChange(a.customer_id, true); setQuery(''); setOpen(false) }}
             style={{ padding: '8px 11px', cursor: 'pointer', fontSize: 13, color: '#111827' }}
             onMouseEnter={e => { e.currentTarget.style.background = '#f5f5f5' }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
