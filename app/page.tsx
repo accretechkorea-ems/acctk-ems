@@ -1012,6 +1012,9 @@ useEffect(() => {
                 focusKey={timelineFocusKey}
                 onFocused={() => setTimelineFocusKey(null)}
                 onBackToList={() => setSelectedCompanyId(null)}
+                /* 대리점으로 전환한 뒤 — 대리점 탭의 그 줄로 옮겨 간다. 회사 줄은 닫혀
+                   목록에서 사라지므로, 여기 머물면 빈 화면만 남는다. */
+                onConverted={agencyId => { setListTab('agency'); openAgency(agencyId) }}
               />
             ) : (
               <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: TEXT_MUTED, fontSize: 13, background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control }}>

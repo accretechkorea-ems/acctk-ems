@@ -65,9 +65,19 @@ type Props = {
   isSaving: boolean
   onClose: () => void
   onSave: (form: CompanyEditForm) => void
+  /**
+   * 「대리점으로 전환」 — 회사 모드에서만 둔다(2026-11-21).
+   * 주지 않으면 버튼 자체가 없다. 조건에 안 맞으면 jsx 가 잠그고 이유를 툴팁으로 말한다.
+   */
+  onConvertAgency?: () => void
+  /** 잠근 이유. 비어 있으면 누를 수 있다. */
+  convertBlockedReason?: string | null
 }
 
-export default function CompanyEditModal({ initial, kind = 'company', siteCount, canRename, isSaving, onClose, onSave }: Props) {
+export default function CompanyEditModal({
+  initial, kind = 'company', siteCount, canRename, isSaving, onClose, onSave,
+  onConvertAgency, convertBlockedReason,
+}: Props) {
   const [form, setForm] = useState<CompanyEditForm>(initial)
   const { errors, clearError, validate } = useFieldErrors<'name' | 'nameEn' | 'industry'>()
 
@@ -186,7 +196,26 @@ export default function CompanyEditModal({ initial, kind = 'company', siteCount,
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
+          {/* 대리점으로 전환 — 왼쪽 끝에 글자 버튼으로 둔다(저장과 성격이 다른 일이다.
+              의뢰서 상세의 「이 번호 취소」와 같은 자리·같은 모양이다).
+              살아있는 사업장이 정확히 1곳인 회사에서만 켜진다 — 이유는 툴팁에 있다. */}
+          {!agency && onConvertAgency && (
+            <button
+              type="button"
+              onClick={onConvertAgency}
+              disabled={isSaving || !!convertBlockedReason}
+              title={convertBlockedReason ?? '이 회사를 대리점 한 줄로 바꿉니다'}
+              style={{
+                border: 'none', background: 'transparent', padding: 0,
+                color: convertBlockedReason ? MUTED : '#c2410c',
+                fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
+                cursor: isSaving || convertBlockedReason ? 'not-allowed' : 'pointer',
+              }}>
+              대리점으로 전환
+            </button>
+          )}
+          <span style={{ flex: 1 }} />
           <button onClick={onClose} disabled={isSaving}
             style={{ padding: '10px 15px', background: '#fff', color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
           <button onClick={handleSave} disabled={isSaving}

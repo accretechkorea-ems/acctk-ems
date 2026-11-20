@@ -29,7 +29,7 @@ import { isSuperAdmin } from '@/lib/permissions'
 import type { Holding, Quote, SalesActivity, SalesActivityForm } from '@/components/customer/types'
 import { saveCustomerEdit } from '@/lib/saveCustomerEdit'
 import { invalidateParents } from '@/components/customer/ParentPicker'
-import { DIRECT_SALE_LABEL, useAgencies } from '@/lib/customerAgency'
+import { DIRECT_SALE_LABEL, invalidateAgencies, useAgencies } from '@/lib/customerAgency'
 import { daysLabel, isStale, regionTextOf, type CompanyGroup, type SiteRow } from '@/lib/customerList'
 import type { Customer } from '@/components/customer/types'
 import { companyForecast } from '@/lib/companyForecast'
@@ -38,6 +38,7 @@ import { R } from '@/lib/radius'
 import { TITLE } from '@/lib/textTokens'
 import { TOP_CARD_FIXED_MIN_WIDTH, TOP_CARD_HEIGHT } from '@/components/home/SidePanel'
 import BackIconButton from '@/components/common/BackIconButton'
+import ConvertAgencyModal, { type ConvertReport } from '@/components/home/list/ConvertAgencyModal'
 
 /** /api/parent-company 한 번. 결과를 한글 메시지로 바꿔 돌려준다. */
 async function callRoute(body: Record<string, unknown>): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; error: string }> {
@@ -145,6 +146,11 @@ export type CompanyPaneProps = {
   /** 견적 PDF 를 열 때. 회사 전체 타임라인의 견적 줄이 쓴다. */
   onOpenQuote?: (quote: Quote) => void
   /**
+   * 대리점으로 전환이 끝났을 때 — 그 대리점 화면으로 옮겨 간다(2026-11-21).
+   * 주지 않으면 전환 버튼을 두지 않는다(갈 곳이 없는 전환은 하지 않는다).
+   */
+  onConverted?: (agencyId: number) => void
+  /**
    * 목록으로 — **폰에서만** 쓰는 길이다(app/page.tsx 의 .pane-back).
    * 폰에서는 pane 이 폭을 다 쓰고 좌 패널이 숨으므로 돌아갈 문이 하나 있어야 한다.
    */
@@ -152,7 +158,7 @@ export type CompanyPaneProps = {
 }
 
 export default function CompanyPane({
-  group, engineerName, onSaved, onError, onToast, onOpenSite, onAddSite, canEditCompany, me, onOpenQuote, focusSiteId, focusKey, onFocused, onBackToList,
+  group, engineerName, onSaved, onError, onToast, onOpenSite, onAddSite, canEditCompany, me, onOpenQuote, focusSiteId, focusKey, onFocused, onBackToList, onConverted,
 }: CompanyPaneProps) {
   const supabase = createClient()
   const agencies = useAgencies()
@@ -160,6 +166,8 @@ export default function CompanyPane({
   const [busy, setBusy] = useState(false)
   /** 회사 수정 모달. */
   const [editCompanyOpen, setEditCompanyOpen] = useState(false)
+  /** 대리점 전환 확인 창. */
+  const [convertOpen, setConvertOpen] = useState(false)
   /** 사업장 수정 모달 — 고친 줄. */
   const [editSite, setEditSite] = useState<Customer | null>(null)
   /** 「다른 회사로 이동」의 고르는 창. */
@@ -271,6 +279,43 @@ export default function CompanyPane({
       ? `회사 정보를 수정했습니다 (사업장 ${renamed}곳 이름도 함께)`
       : '회사 정보를 수정했습니다')
     onSaved()
+  }
+
+  /**
+   * 대리점으로 전환할 수 없는 이유 — 없으면 null(버튼이 켜진다).
+   *
+   * 살아있는 사업장이 **정확히 1곳**일 때만 한다. 2곳 이상이면 어느 줄이 대리점인지
+   * 사람이 정해야 하고, 0곳이면 전환할 줄이 없다. 서버(DB 함수)도 같은 것을 다시 보므로
+   * 여기서는 **버튼을 잠그고 이유를 말하는** 일만 한다.
+   */
+  const convertReason = !canEditCompany
+    // 라우트가 superadmin 을 요구한다(회사 수준 작업이다 — 이름·병합·삭제와 같은 문턱).
+    // 화면에서도 같은 말을 해 둔다: 그냥 누르면 「Forbidden」만 돌아온다(2026-11-21 실측).
+    ? '슈퍼관리자만 전환할 수 있습니다'
+    : (group.sites.length === 1
+      ? null
+      : (group.sites.length === 0
+        ? '사업장이 없는 회사는 전환할 수 없습니다'
+        : `사업장이 ${group.sites.length}곳입니다 — 1곳일 때만 전환할 수 있습니다`))
+
+  /**
+   * 전환을 실행한다. 끝나면 **대리점 화면으로** 옮겨 간다 — 방금 만든 줄이 어디에
+   * 있는지 바로 보여야 한다(회사 줄은 닫혀 목록에서 사라진다).
+   */
+  const runConvert = async () => {
+    if (busy) return
+    setBusy(true)
+    const r = await callRoute({ action: 'convert-agency', parentId: group.companyId, dryRun: false })
+    setBusy(false)
+    if (!r.ok) { onError(r.error); return }
+    const report = r.data.report as ConvertReport
+    if (!report?.ok) { onError('전환하지 못했습니다 — 막는 기록이 있습니다'); return }
+    setConvertOpen(false)
+    invalidateParents()    // 회사 목록 캐시가 닫힌 회사를 들고 있다
+    invalidateAgencies()   // 대리점 목록 캐시에 새 줄이 없다
+    onToast(`${group.companyName} 를 대리점으로 바꿨습니다`)
+    onSaved()
+    onConverted?.(report.site_id)
   }
 
   /** 사업장 수정 — 상세 화면과 **같은 모달·같은 저장 규칙**(lib/saveCustomerEdit.ts). */
@@ -683,6 +728,23 @@ export default function CompanyPane({
       </section>
 
       {/* 회사 수정 */}
+      {/* 대리점으로 전환 — dry run 으로 막는 것·따라가는 것을 보여 준 뒤에만 실행한다.
+          판정은 전부 DB 함수가 한다(db/convert_company_to_agency_20261121.sql). */}
+      {convertOpen && (
+        <ConvertAgencyModal
+          companyName={group.companyName}
+          siteCount={group.sites.length}
+          busy={busy}
+          onDryRun={async () => {
+            const r = await callRoute({ action: 'convert-agency', parentId: group.companyId, dryRun: true })
+            if (!r.ok) return { ok: false as const, error: r.error }
+            return { ok: true as const, report: r.data.report as ConvertReport }
+          }}
+          onRun={() => void runConvert()}
+          onClose={() => setConvertOpen(false)}
+        />
+      )}
+
       {editCompanyOpen && (
         <CompanyEditModal
           initial={{
@@ -696,6 +758,8 @@ export default function CompanyPane({
           isSaving={busy}
           onClose={() => setEditCompanyOpen(false)}
           onSave={form => void saveCompany(form)}
+          onConvertAgency={onConverted ? () => { setEditCompanyOpen(false); setConvertOpen(true) } : undefined}
+          convertBlockedReason={convertReason}
         />
       )}
 

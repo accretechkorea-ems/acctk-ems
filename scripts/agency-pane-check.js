@@ -133,8 +133,8 @@ eq('전체·진행을 함께 센다',
 eq('한 건도 없으면 0·0', agencyQuoteCounts([], PENDING_STATUS), { all: 0, pending: 0 })
 
 console.log('\n── 화면이 그 규칙을 쓰는가 ──')
-ok('대리점을 누르면 화면이 열린다(거르지 않는다)',
-  /onPickAgency=\{id => \{ setSelectedAgencyId\(id\); setSelectedCompanyId\(null\); setSelectedSiteId\(null\) \}\}/.test(HOME))
+// 고르는 길은 7차에서 openAgency 한 자리로 모았다(위 「배타」 묶음이 그 안을 본다).
+ok('대리점을 누르면 화면이 열린다(거르지 않는다)', /onPickAgency=\{id => openAgency\(id\)\}/.test(HOME))
 ok('옛 「대리점으로 거르기」는 없다 — 상태도, 걸린 줄 안내도',
   !/setAgencyFilterId/.test(HOME) && !/clearAgencyFilter/.test(HOME) && !/agencyFilterId/.test(PANEL),
   '거르기는 필터 모달의 대리점 조건이 맡는다(없앴다는 설명은 주석으로 남겨 둔다)')

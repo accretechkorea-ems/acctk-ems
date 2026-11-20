@@ -26,7 +26,7 @@ const NEUTRAL = '#f3f4f6'
 const DANGER = '#ef4444'
 
 /** 표 이름을 사람 말로. 모르는 표는 그대로 보여 준다(새 표가 생겨도 숫자는 보인다). */
-const TABLE_LABEL: Record<string, string> = {
+export const TABLE_LABEL: Record<string, string> = {
   'quotes.customer_id': '견적(수요처)',
   'quotes.dealer_id': '견적(대리점)',
   'devices.customer_id': '장비',

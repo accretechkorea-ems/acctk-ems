@@ -306,6 +306,38 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, movedSites: renamed, report: r.report })
   }
 
+  /**
+   * ── 대리점으로 전환 ──
+   *
+   * 회사 줄을 닫고 그 **하나뿐인 사업장 줄**을 대리점으로 바꾼다. 판정과 바꾸기를
+   * DB 함수 한 번(한 트랜잭션)이 한다 — db/convert_company_to_agency_20261121.sql.
+   * 라우트가 다시 세지 않는 이유: 그 함수가 service role 로 **자기 트랜잭션 안에서**
+   * 세므로, 여기서 센 값과 어긋날 틈이 없다.
+   *
+   *   dryRun: true  — 검사만. 막히면 막는 참조 목록을, 괜찮으면 따라갈 것들의 건수를.
+   *   dryRun: false — 전환. 돌아온 값에 새 대리점의 id(site_id)가 있다.
+   */
+  if (action === 'convert-agency') {
+    const dryRun = body?.dryRun !== false
+    const { data, error } = await supabaseAdmin.rpc('convert_company_to_agency', {
+      p_company_id: parentId, p_dry_run: dryRun,
+    })
+    if (error) {
+      console.error('[parent-company] convert rpc failed', { parentId, dryRun, error })
+      // 함수를 아직 적용하지 않았으면 PostgREST 가 못 찾는다 — 무엇을 해야 하는지 알려 준다.
+      if (error.code === 'PGRST202' || /function .*convert_company_to_agency/i.test(error.message ?? '')) {
+        return bad('DB 함수 convert_company_to_agency 가 아직 없습니다 (db/convert_company_to_agency_20261121.sql 적용 필요)', 501)
+      }
+      // 함수가 raise 한 사유(사업장이 2곳 이상·이미 대리점…)를 그대로 올린다.
+      return bad(error.message || '전환하지 못했습니다', 400)
+    }
+    const report = data as { ok?: boolean; site_id?: number }
+    if (!dryRun && report?.ok) {
+      console.log('[parent-company] convert-agency', { parentId, siteId: report.site_id, by: caller.email })
+    }
+    return NextResponse.json({ success: true, report })
+  }
+
   // ── 삭제 ──
   if (action === 'delete') {
     let children: number
