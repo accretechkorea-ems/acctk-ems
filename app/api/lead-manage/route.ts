@@ -24,22 +24,29 @@
 // leads.blocked_by/blocked_at 은 CHECK(leads_blocked_actor_check)가 지킨다:
 // 상태가 '배정불가' 가 아니면 둘 다 null 이어야 한다. 상태를 되돌릴 때 반드시 함께 비운다.
 import { adminClient } from '@/lib/supabase/admin'
+import { hasLeadRegistered, leadAssignmentEvents, writeCustomerEvents } from '@/lib/customerEvents'
 import { isOwner, loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 import { todayKST } from '@/lib/date'
 import {
-  findCustomerCandidates, leadActivityContent, leadForecastTitle, nextMonthEnd,
+  findCustomerCandidates, leadForecastTitle, nextMonthEnd,
   type CustomerLike,
 } from '@/lib/leadCustomer'
 import { adminEngineerIds, notifyLead } from '@/lib/leadNotify'
 import { sendPartnerAssignMail } from '@/lib/leadMail'
 import {
   LEAD_STATUS_NEW, LEAD_STATUS_ACTIVE, LEAD_STATUS_SKIPPED, LEAD_STATUS_BLOCKED,
-  LEAD_CONVERT_ACTIVITY_TYPE, MAX_LEN, SKIP_REASON_MIN, isLeadClosed, leadNoTag,
+  MAX_LEN, SKIP_REASON_MIN, isLeadClosed, leadNoTag,
 } from '@/lib/leadOptions'
 
 const supabaseAdmin = adminClient()
+
+/** 직원 이름 한 번 — 사건 payload 의 「누구에게서」에 쓴다. */
+async function engineerNameOf(engineerId: number): Promise<string | null> {
+  const { data } = await adminClient().from('engineers').select('name').eq('engineer_id', engineerId).maybeSingle()
+  return data?.name ?? null
+}
 
 const bad = (message: string, status = 400) => NextResponse.json({ error: message }, { status })
 
@@ -339,26 +346,10 @@ export async function POST(req: Request) {
       opportunityId = opp.opportunity_id
       madeForecast = true
 
-      // ③ 첫 활동 — 회의록·요청사항을 그대로 남긴다. 맨 앞 줄이 **출처(리드 번호)** 다
-      //    (sales_opportunities 에 메모 칸이 없어 이 기록이 그 자리를 대신한다).
-      //    마지막 줄에는 **담당자 배정**을 적는다 — 활동일이 리드가 처음 등록된 날이라
-      //    배정 사실이 이 기록 어디에도 남지 않기 때문이다.
-      const content = leadActivityContent({
-        leadNo: lead.lead_no,
-        meetingNote: lead.meeting_note,
-        requestNote: lead.request_note,
-        engineerName: assigneeName,
-        assignedDate: new Date().toISOString().slice(0, 10),
-      })
-      const { error: actErr } = await supabaseAdmin.from('sales_activities').insert({
-        opportunity_id: opportunityId,
-        customer_id: customerId,
-        engineer_id: assignedTo,
-        activity_date: lead.created_at.slice(0, 10),
-        activity_type: LEAD_CONVERT_ACTIVITY_TYPE,
-        content,
-      })
-      if (actErr) console.error('[lead-manage] activity insert failed', { leadId, opportunityId, error: actErr })
+      // ③ 여기서 sales_activities 에 「리드 등록」 한 줄을 자동으로 넣던 것은 **걷었다**(2026-11-20).
+      //    그 표는 사람이 적는 영업 활동이라, 자동 줄이 섞이면 건수·종류 통계가 부풀고
+      //    사람이 고치거나 지울 수 있었다. 이제 **고객 사건 로그**(customer_events)에 적는다
+      //    — 아래 배정 기록 한 곳에서 한다(lib/customerEvents.ts). 과거 줄은 그대로 둔다.
     }
 
     // 배정자 = 이 배정을 실행한 사람. 세션에서 판정한 caller 만 쓴다(요청 본문의 값은 읽지 않는다).
@@ -378,6 +369,29 @@ export async function POST(req: Request) {
         return bad('leads.customer_id 칸이 없습니다. 관리자에게 알려주세요(스키마 적용 필요).', 500)
       }
       return fail('assign update failed', error)
+    }
+
+    // ── 고객 사건 로그 ────────────────────────────────────────────────
+    //   고객사가 붙은 뒤에만 적는다(사건은 고객사 줄에 달린다). 회수처럼 고객사가
+    //   아직 없는 경우에는 적을 곳이 없으므로 건너뛴다.
+    //   표가 없거나 실패해도 **배정 자체는 막지 않는다** — 로그만 남는다.
+    if (customerId != null) {
+      const previousName = lead.assigned_to == null ? null : await engineerNameOf(lead.assigned_to)
+      const events = leadAssignmentEvents({
+        lead: {
+          lead_id: lead.lead_id, lead_no: lead.lead_no, industry: lead.industry,
+          created_at: lead.created_at, meeting_note: lead.meeting_note,
+          request_note: lead.request_note, assigned_to: lead.assigned_to,
+        },
+        customerId,
+        assignedTo,
+        assigneeName,
+        previousName,
+        actorId: caller.engineer_id,
+        alreadyRegistered: await hasLeadRegistered(supabaseAdmin, lead.lead_id),
+        now: new Date().toISOString(),
+      })
+      await writeCustomerEvents(supabaseAdmin, events)
     }
 
     // 누가 누구에게 넘겼는지. 리드 행에는 「지금 담당자」만 남아 이전 담당자는 여기서만 확인된다.

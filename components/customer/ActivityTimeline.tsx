@@ -17,6 +17,7 @@ import { isDisposed } from '@/lib/deviceStatus'
 import type { Device, Holding, Quote, SalesActivity, ServiceHistory } from './types'
 import { isFutureVisit } from '@/lib/serviceVisit'
 import { timelineKey } from '@/lib/activity'
+import { eventLine, type CustomerEvent } from '@/lib/customerEventView'
 
 type Props = {
   history: ServiceHistory[]
@@ -39,10 +40,18 @@ type Props = {
    * 사업장 상세는 주지 않는다(지금과 똑같이 그려진다).
    */
   sites?: { id: number; name: string }[]
+  /** 고객 사건 로그. 회사 전체 모드에서만 넘어온다. */
+  events?: CustomerEvent[]
+  /**
+   * 처음에 켜 둘 사업장 칩. 사업장 화면에서 ← 로 돌아왔을 때 **그 사업장이 켜진 채** 열린다
+   * — 보던 자리를 잃지 않게. 사람이 칩을 끄면 그때부터는 사람이 고른 대로 둔다.
+   */
+  initialSiteIds?: number[]
 }
 
-type Kind = '서비스' | '견적' | '영업' | '홀딩'
-const FILTERS = ['전체', '영업', '서비스', '견적', '홀딩'] as const
+type Kind = '서비스' | '견적' | '영업' | '홀딩' | '사건'
+// 「사건」은 사람이 적지 않는다 — 리드 등록·담당 배정처럼 **벌어진 일**이다(lib/customerEvents.ts).
+const FILTERS = ['전체', '영업', '서비스', '견적', '홀딩', '사건'] as const
 type Filter = typeof FILTERS[number]
 
 type Item = {
@@ -293,11 +302,11 @@ function TimelineRow({ item, first, focused, siteName }: { item: Item; first: bo
   )
 }
 
-export default function ActivityTimeline({ history, devices, quotes, activities, holdings, customerId, onOpenQuotePdf, onOpenHolding, onAddActivity, onEditActivity, canEditActivity, focusKey, onFocused, sites }: Props) {
+export default function ActivityTimeline({ history, devices, quotes, activities, holdings, customerId, onOpenQuotePdf, onOpenHolding, onAddActivity, onEditActivity, canEditActivity, focusKey, onFocused, sites, events, initialSiteIds }: Props) {
   const [filter, setFilter] = useState<Filter>('전체')
   const [showUndated, setShowUndated] = useState(false)
   /** 회사 전체 모드의 사업장 칩 — 비어 있으면 전체다(복수 선택). */
-  const [pickedSites, setPickedSites] = useState<Set<number>>(new Set())
+  const [pickedSites, setPickedSites] = useState<Set<number>>(() => new Set(initialSiteIds ?? []))
   const [siteQuery, setSiteQuery] = useState('')
   const siteNameOf = useMemo(() => {
     const m = new Map((sites ?? []).map(s => [s.id, s.name]))
@@ -396,8 +405,26 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
       sortId: h.holding_id,
     }))
 
-    return [...serviceItems, ...quoteItems, ...salesItems, ...holdingItems]
-  }, [history, quotes, activities, holdings, customerId, deviceNameOf, disposedIds, onOpenQuotePdf, onOpenHolding, onEditActivity, canEditActivity])
+    // 사건 — 회색 톤으로, 고칠 수 없는 줄이다(사람이 쓰지 않는다).
+    const eventItems: Item[] = (events ?? []).map(e => {
+      const line = eventLine(e)
+      return {
+        key: `ev-${e.id}`,
+        kind: '사건' as const,
+        siteId: e.customer_id ?? null,
+        date: (e.occurred_at ?? '').slice(0, 10) || null,
+        label: line.label,
+        dot: '#d1d5db',
+        title: line.title,
+        body: line.body,
+        owner: line.owner,
+        sortAt: sortKey(e.occurred_at, (e.occurred_at ?? '').slice(0, 10) || null),
+        sortId: e.id,
+      }
+    })
+
+    return [...serviceItems, ...quoteItems, ...salesItems, ...holdingItems, ...eventItems]
+  }, [history, quotes, activities, holdings, events, customerId, deviceNameOf, disposedIds, onOpenQuotePdf, onOpenHolding, onEditActivity, canEditActivity])
 
   /** 사업장 칩으로 한 번 거른 묶음 — 종류 건수도 이 묶음에서 센다. */
   const scoped = useMemo(
@@ -411,6 +438,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
     '서비스': scoped.filter(i => i.kind === '서비스').length,
     '견적': scoped.filter(i => i.kind === '견적').length,
     '홀딩': scoped.filter(i => i.kind === '홀딩').length,
+    '사건': scoped.filter(i => i.kind === '사건').length,
   }), [scoped])
 
   // 날짜 있는 것만 내림차순으로 월별 묶음, 날짜 없는 것은 따로 모은다.
@@ -463,7 +491,9 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
   }, [focusKey, items, filter])
 
   // 단일 선택 필터라 슬라이딩 인디케이터(SegmentedControl)로 둔다. 건수는 라벨 옆 suffix.
-  const filterOptions = FILTERS.map(f => ({ label: f, value: f, suffix: String(counts[f]) }))
+  // 사건 줄이 아예 없으면 「사건」 탭은 내지 않는다 — 사업장 상세처럼 사건을 읽지 않는 화면도 있다.
+  const filterOptions = FILTERS.filter(f => f !== '사건' || (events?.length ?? 0) > 0)
+    .map(f => ({ label: f, value: f, suffix: String(counts[f]) }))
 
   return (
     <div>
@@ -532,7 +562,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
 
       {months.length === 0 && undated.length === 0 ? (
         <div style={{ padding: '28px 16px', textAlign: 'center', fontSize: 13, color: '#9ca3af' }}>
-          {filter === '영업' ? '영업 활동 기록이 없습니다' : '기록이 없습니다'}
+          {filter === '영업' ? '영업 활동 기록이 없습니다' : filter === '사건' ? '사건 기록이 없습니다' : '기록이 없습니다'}
         </div>
       ) : (
         <>

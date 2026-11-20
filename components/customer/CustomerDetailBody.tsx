@@ -14,8 +14,7 @@
 //   분할 보기는 **칸 안**이라 칸 폭을 기준으로 접힌다 — 화면 폭으로 접으면 1366 에서도
 //   오른쪽 칸은 600px 인데 2단을 고집하게 된다. 그래서 그때만 컨테이너 쿼리를 쓴다.
 
-import { useState } from 'react'
-import { isMobileViewport } from '@/lib/viewport'
+import { useRef, useState } from 'react'
 
 import { useCustomerDetail } from '@/hooks/customer/useCustomerDetail'
 import { useServiceCrud } from '@/hooks/customer/useServiceCrud'
@@ -31,13 +30,11 @@ import { isSuperAdmin } from '@/lib/permissions'
 import type { Device, ServiceHistory } from '@/components/customer/types'
 import { PAGE_BG, TEXT_MUTED } from '@/components/customer/constants'
 
-import SegmentedControl from '@/components/common/SegmentedControl'
 import HorizontalScroller from '@/components/common/HorizontalScroller'
 import CustomerInfoPanel from '@/components/customer/CustomerInfoPanel'
 import ContactSection from '@/components/customer/ContactSection'
 import DeviceSection from '@/components/customer/DeviceSection'
 import { inUseOnly } from '@/lib/deviceStatus'
-import ActivityTimeline from '@/components/customer/ActivityTimeline'
 import SummaryPanel from '@/components/customer/SummaryPanel'
 import SalesActivityModal from '@/components/customer/modals/SalesActivityModal'
 import OpportunityModal from '@/components/customer/modals/OpportunityModal'
@@ -56,10 +53,6 @@ import DeviceImageModal from '@/components/customer/modals/DeviceImageModal'
 
 export type CustomerDetailBodyProps = {
   customerId: number
-  /** 활동 요약에서 넘어온 행 id(?focus=). 없으면 null. */
-  focusKey?: string | null
-  /** 찾아가기가 끝났을 때 — 라우트는 주소를 정리하고, 분할 보기는 아무것도 하지 않는다. */
-  onFocused?: () => void
   /** 제목 앞 화살표 — 라우트는 목록으로 가고, 분할 보기는 회사 보기로 돌아간다. */
   onBack?: () => void
   /** 칸 안에 끼워 그릴 때(분할 보기). 바깥 여백과 접히는 기준만 달라진다. */
@@ -67,7 +60,7 @@ export type CustomerDetailBodyProps = {
 }
 
 export default function CustomerDetailBody({
-  customerId, focusKey = null, onFocused, onBack, embedded = false,
+  customerId, onBack, embedded = false,
 }: CustomerDetailBodyProps) {
   // 바깥 틀 — 라우트는 화면 전체, 분할 보기는 칸 안이다.
   const wrapClass = embedded ? 'cust-embed' : ''
@@ -101,16 +94,12 @@ export default function CustomerDetailBody({
   const opp = useOpportunityCrud({ customerId, engineerId: currentUserEngineerId, role: currentUserRole, fetchDetail })
 
   // ── 이 화면에서만 쓰는 상태 ──
-  // 모바일(현장)에서는 장비를 먼저 본다. 데스크톱은 기존대로 활동 이력.
-  // 첫 렌더는 서버에서도 도는데 그때는 false(데스크톱)라, 화면에 나오는 것은
-  // 어차피 로딩 스켈레톤이므로 hydration 이 어긋나지 않는다.
-  // 주소로 들어온 탭이 있으면 그것을 따른다 — 휴대폰 기본값(장비)보다 우선한다.
-  //   (찾아갈 행 id 가 있으면 그 행은 활동 이력에 있다)
-  // (첫 렌더는 서버에서도 도는데 그때 보이는 것은 로딩 스켈레톤이라 hydration 이 어긋나지 않는다)
-  const [tab, setTab] = useState<'활동 이력' | '장비'>(
-    () => (focusKey ? '활동 이력' : isMobileViewport() ? '장비' : '활동 이력'),
-  )
+  // 활동 이력 탭은 걷었다(2026-11-20). 활동은 **회사 화면의 전체 타임라인**에서 본다 —
+  // 한 사업장만 떼어 보면 같은 고객사의 다른 사업장에서 벌어진 일이 보이지 않고,
+  // 같은 타임라인을 두 곳에서 따로 고쳐야 했다. 여기는 장비만 남는다.
   // 거래 이력은 두 기준으로 열린다 — 이 업체만(site), 같은 회사 전체(family).
+  /** 요약의 「장비」 숫자를 누르면 이 카드로 내려간다(전에는 탭을 바꿨다). */
+  const deviceCardRef = useRef<HTMLDivElement | null>(null)
   const [quoteScope, setQuoteScope] = useState<'site' | 'family' | null>(null)
   const [isSignModalOpen, setIsSignModalOpen] = useState(false)
   const [pendingReportService, setPendingReportService] = useState<ServiceHistory | null>(null)
@@ -292,6 +281,7 @@ export default function CustomerDetailBody({
           <div className="cust-left">
             <CustomerInfoPanel
               customer={customer}
+              companyName={family?.name ?? null}
               onEdit={() => customerCrud.setIsEditCustomerModalOpen(true)}
               onBack={onBack}
             />
@@ -315,53 +305,22 @@ export default function CustomerDetailBody({
               holdings={holdings}
               onOpenHolding={holding.openHolding}
               onQuoteHistoryOpen={() => setQuoteScope('site')}
-              onDeviceOpen={() => setTab('장비')}
+              onDeviceOpen={() => deviceCardRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })}
               family={family ? { name: family.name, siteCount: family.siteCount, quoteCount: family.quotes.length } : null}
               onFamilyQuoteHistoryOpen={() => setQuoteScope('family')}
             />
           </div>
 
-          {/* ── 우: 활동 이력 · 장비 탭 ── */}
-          <div className="cust-center">
+          {/* ── 우: 장비 ── */}
+          <div className="cust-center" ref={deviceCardRef}>
 
-        {/* 활동 이력 · 장비 탭 — 같은 서비스 기록이 양쪽에 보이는 것은 의도된 동작이다
-            (장비 탭은 장비별로, 활동 이력 탭은 시간순으로 본다) */}
-        {/* 가운데 열은 카드 하나. 탭이 그 카드의 헤더가 되어 좌·우 열의 카드와 같은 y 에서 시작한다.
-            건수는 탭 라벨에 붙인다 — 탭 아래에 제목을 또 두면 탭 이름과 중복이다.
-            활동 이력은 타임라인이 필터별 건수를 보여주므로 라벨에 넣지 않는다. */}
+        {/* 가운데 열 — **장비**. 활동은 회사 화면의 전체 타임라인이 맡는다. */}
         <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, overflow: 'hidden' }}>
-          <div style={{ padding: '9px 14px', borderBottom: '1px solid #ebebeb', display: 'flex', justifyContent: 'center' }}>
-            <SegmentedControl
-              options={['활동 이력', { label: '장비', value: '장비', suffix: String(activeDevices.length) }]}
-              value={tab}
-              onChange={v => setTab(v as '활동 이력' | '장비')}
-            />
+          <div style={{ padding: '9px 14px', borderBottom: '1px solid #ebebeb', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <b style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>장비</b>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '1px 7px' }}>{activeDevices.length}</span>
           </div>
 
-        {tab === '활동 이력' && (
-          // 장비 탭과 달리 여기는 글줄이라, 카드가 넓어져도 한 줄이 끝없이 길어지지 않게 폭을 제한한다.
-          // (탭이 카드 가운데에 있으므로 본문도 가운데 정렬)
-          <div style={{ padding: '12px 14px', maxWidth: 1100, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>
-            <ActivityTimeline
-              focusKey={focusKey}
-              // 찾아가기가 끝나면 주소를 원래대로 — 새로고침·뒤로가기에 강조가 다시 뜨지 않게 한다.
-              onFocused={onFocused}
-              history={history}
-              devices={devices}
-              quotes={quotes}
-              activities={activities}
-              holdings={holdings}
-              customerId={customerId}
-              onOpenQuotePdf={quotePdf.openQuotePdf}
-              onOpenHolding={holding.openHolding}
-              onAddActivity={activity.openNewActivity}
-              onEditActivity={activity.openEditActivity}
-              canEditActivity={activity.canEditActivity}
-            />
-          </div>
-        )}
-
-        {tab === '장비' && (
         <div style={{ padding: '12px 14px' }}>
         <HorizontalScroller>
         <DeviceSection
@@ -389,7 +348,6 @@ export default function CustomerDetailBody({
         />
         </HorizontalScroller>
         </div>
-        )}
 
         </div>
           </div>

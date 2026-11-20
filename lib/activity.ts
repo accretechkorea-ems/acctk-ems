@@ -61,10 +61,16 @@ export const timelineKeyOf = (e: Pick<ActivityEntry, 'source' | 'id'>): string =
 /** 고객사 상세에서 활동 이력 탭을 여는 주소 값(?tab=). 한글을 주소에 싣지 않는다. */
 export const HISTORY_TAB_PARAM = 'history'
 
-/** 활동 한 줄 → 고객사 상세 주소. 고객사가 없는 기록(customerId null)은 갈 곳이 없어 null. */
+/**
+ * 활동 한 줄 → **회사 타임라인**의 그 줄.
+ *
+ * 2026-11-20 전에는 사업장 상세의 활동 이력 탭으로 갔다. 그 탭을 걷고 활동을 회사 화면
+ * 하나로 모았으므로, 이제 목록 보기를 열어 그 사업장의 회사를 펴고 사업장 칩을 켠 채
+ * 해당 줄로 내려간다. 고객사가 없는 기록(customerId null)은 갈 곳이 없어 null.
+ */
 export function activityHref(e: Pick<ActivityEntry, 'source' | 'id' | 'customerId'>): string | null {
   if (e.customerId == null) return null
-  return `/customer/${e.customerId}?tab=${HISTORY_TAB_PARAM}&focus=${timelineKeyOf(e)}`
+  return `/?view=list&site=${e.customerId}&focus=${timelineKeyOf(e)}`
 }
 
 // 날짜에 시각이 없어 하루 안의 실제 순서는 알 수 없고, 두 테이블의 id 는 서로 비교할 의미가 없다.

@@ -25,9 +25,15 @@ type Props = {
    */
   /** 분할 보기에서는 회사 보기로 돌아간다. 돌아갈 곳이 없으면 화살표를 내지 않는다. */
   onBack?: () => void
+  /**
+   * 회사 이름 — 제목은 **회사명**이고 사업장명은 아래 한 줄로 내린다.
+   * 전에는 제목이 「회사명 사업장명」을 합친 값이라, 사업장명이 비면 회사명만 보이고
+   * 들어 있으면 제목이 길어져 어디까지가 회사 이름인지 알 수 없었다.
+   */
+  companyName?: string | null
 }
 
-export default function CustomerInfoPanel({ customer, onEdit, onBack }: Props) {
+export default function CustomerInfoPanel({ customer, onEdit, onBack, companyName }: Props) {
   const [copied, setCopied] = useState(false)
   const sc = STATUS_CFG[customer?.status ?? ''] ?? '#9ca3af'
   // 대리점 경유 견적이 섞여 있을 때만 내역을 덧붙인다 (직판만 있으면 군더더기라 감춘다)
@@ -71,7 +77,7 @@ export default function CustomerInfoPanel({ customer, onEdit, onBack }: Props) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap', paddingRight: 34 }}>
         {onBack && <BackIconButton onClick={onBack} label="고객사 목록으로" />}
         <h1 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#111827', lineHeight: 1.3, letterSpacing: '-0.3px', wordBreak: 'break-all' }}>
-          {customer?.company_name ?? '사업장 정보 없음'}
+          {companyName?.trim() || customer?.company_name || '사업장 정보 없음'}
         </h1>
         {customer?.status && (
           <span style={{
@@ -86,6 +92,16 @@ export default function CustomerInfoPanel({ customer, onEdit, onBack }: Props) {
 
       {/* 정보 행 */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* 사업장명 — 비어 있는 줄이 많아 자리를 늘 둔다(있는지 없는지가 정보다). */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: '#9ca3af', width: 44, flexShrink: 0 }}>사업장</span>
+          <span style={{
+            fontSize: 13, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            color: customer?.site_name?.trim() ? '#111827' : '#9ca3af',
+          }}>
+            {customer?.site_name?.trim() || '(사업장명 없음)'}
+          </span>
+        </div>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
           <span style={{ fontSize: 12, color: '#9ca3af', width: 44, flexShrink: 0, lineHeight: '20px' }}>주소</span>
           <span style={{

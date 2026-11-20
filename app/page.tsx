@@ -40,7 +40,6 @@ import {
   HOME_STATE_KEY,
   PAGE_BG,
   TEXT_MUTED,
-  TEXT_PRIMARY,
   getDeviceLine,
   type Customer,
   type Device,
@@ -104,6 +103,12 @@ export default function HomePage() {
   /** 등록 폼의 회사를 고정한 채 열었는가(회사 카드의 「+ 사업장 추가」). */
   /** 등록 폼을 「기존 회사에 사업장 추가」로 열 회사(없으면 새 업체 등록). */
   const [addPresetCompanyId, setAddPresetCompanyId] = useState<number | null>(null)
+  /** 회사 타임라인에서 처음에 켜 둘 사업장 — 사업장 화면에서 ← 로 돌아올 때 넘어온다. */
+  const [timelineFocusSiteId, setTimelineFocusSiteId] = useState<number | null>(null)
+  /** 활동 현황에서 넘어온 줄(?focus=). 한 번 찾아가고 나면 비운다. */
+  const [timelineFocusKey, setTimelineFocusKey] = useState<string | null>(null)
+  /** 아직 회사를 못 찾은 ?site= — 목록 자료가 들어온 뒤에 편다. */
+  const [pendingFocusSiteId, setPendingFocusSiteId] = useState<number | null>(null)
   /** 등록 폼의 모드 — 사업장 / 대리점. 같은 폼을 쓰고 칸만 달라진다. */
   // 진행 견적 수는 **목록 보기를 열 때만** 읽는다(첫 화면 조회를 늘리지 않는다).
   const openQuotes = useOpenQuotes(view === 'list')
@@ -152,16 +157,39 @@ const toggleCategory = (category: string) => {
    */
   useEffect(() => {
     if (typeof window === 'undefined') return
-    if (new URLSearchParams(window.location.search).get('view') === 'list') setView('list')
+    const q = new URLSearchParams(window.location.search)
+    if (q.get('view') === 'list') setView('list')
+    // 활동 현황에서 넘어온 길 — 그 사업장의 **회사**를 펴고 칩을 켠 뒤 그 줄로 내려간다.
+    const site = Number(q.get('site'))
+    if (Number.isInteger(site) && site > 0) {
+      setView('list')
+      setPendingFocusSiteId(site)
+      setTimelineFocusSiteId(site)
+      setTimelineFocusKey(q.get('focus'))
+    }
   }, [])
+
+  // 사업장 번호로 회사를 찾는 일은 목록 자료가 들어온 뒤에야 된다.
+  useEffect(() => {
+    if (pendingFocusSiteId == null || customers.length === 0) return
+    const site = customers.find(c => c.customer_id === pendingFocusSiteId)
+    const parent = site?.parent_customer_id ?? null
+    if (parent != null) {
+      setSelectedCompanyId(parent)
+      setExpanded(prev => new Set(prev).add(parent))
+    }
+    setPendingFocusSiteId(null)
+  }, [pendingFocusSiteId, customers])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     const url = new URL(window.location.href)
     if (view === 'list') url.searchParams.set('view', 'list')
     else url.searchParams.delete('view')
+    // 찾아가기 값은 한 번 쓰고 주소에서 턴다 — 새로고침·뒤로가기에 다시 뜨지 않게.
+    if (timelineFocusKey == null) { url.searchParams.delete('site'); url.searchParams.delete('focus') }
     if (url.toString() !== window.location.href) window.history.replaceState(null, '', url.toString())
-  }, [view])
+  }, [view, timelineFocusKey])
 
   // 작성자 이름 — 목록 보기의 표가 쓴다.
   useEffect(() => {
@@ -748,7 +776,7 @@ useEffect(() => {
               toggleExpand={toggleExpand}
               selectedCompanyId={selectedCompanyId}
               selectedSiteId={selectedSiteId}
-              onSelectCompany={id => { setSelectedCompanyId(id); setSelectedSiteId(null) }}
+              onSelectCompany={id => { setSelectedCompanyId(id); setSelectedSiteId(null); setTimelineFocusSiteId(null) }}
               onSelectSite={(cid, sid) => { setSelectedCompanyId(cid); setSelectedSiteId(sid) }}
 
               checkedCompanies={checkedCompanies}
@@ -775,31 +803,14 @@ useEffect(() => {
             {selectedSiteId != null ? (
               /* 사업장을 골랐을 때 — **상세 페이지와 같은 본문**이다(컴포넌트 하나를 나눠 쓴다). */
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
-                {/* 경로 줄 — 회사로 돌아가는 길과 새 창 */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: TEXT_MUTED }}>
-                  <button type="button" onClick={() => setSelectedSiteId(null)}
-                    style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#234ea2', fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3, padding: 0, fontFamily: 'inherit' }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
-                    {selectedGroup?.companyName ?? '회사'} (회사 보기)
-                  </button>
-                  <span>›</span>
-                  <span style={{ color: TEXT_PRIMARY, fontWeight: 600 }}>
-                    {selectedGroup?.sites.find(s => s.customer.customer_id === selectedSiteId)?.siteName ?? ''}
-                  </span>
-                  <span style={{ flex: 1 }} />
-                  <a href={`/customer/${selectedSiteId}`} target="_blank" rel="noreferrer"
-                    style={{ color: TEXT_MUTED, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none' }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6" />
-                    </svg>
-                    새 창
-                  </a>
-                </div>
+                {/* 경로 줄·「새 창」은 걷었다(2026-11-20) — 회사로 가는 길은 카드 제목 앞의
+                    화살표가 맡고, 같은 주소를 새 창으로 여는 길은 쓰이지 않았다. */}
                 <CustomerDetailBody
                   key={selectedSiteId}
                   customerId={selectedSiteId}
                   embedded
-                  onBack={() => setSelectedSiteId(null)}
+                  // ← 는 회사 보기로 — **그 사업장 칩이 켜진 채** 열린다(보던 자리를 잃지 않게).
+                  onBack={() => { setTimelineFocusSiteId(selectedSiteId); setSelectedSiteId(null) }}
                 />
               </div>
             ) : selectedGroup ? (
@@ -815,6 +826,9 @@ useEffect(() => {
                 onCompanyGone={() => { setSelectedCompanyId(null); setSelectedSiteId(null); loadParents().then(setCompanies) }}
                 canEditCompany={isSuperAdmin(me)}
                 me={{ engineer_id: me?.engineer_id ?? null, permission_level: me?.permission_level ?? null }}
+                focusSiteId={timelineFocusSiteId}
+                focusKey={timelineFocusKey}
+                onFocused={() => setTimelineFocusKey(null)}
               />
             ) : (
               <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: TEXT_MUTED, fontSize: 13, background: '#fff', border: '1px solid #ebebeb', borderRadius: 8 }}>

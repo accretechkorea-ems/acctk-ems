@@ -81,6 +81,11 @@ export type CompanyPaneProps = {
    * 전부 다시 만들기 때문이다). 분류·메모와 사업장 수준의 일은 고객사 메뉴면 된다.
    */
   canEditCompany: boolean
+  /** 사업장 화면에서 ← 로 돌아왔을 때 타임라인에 켜 둘 사업장. */
+  focusSiteId?: number | null
+  /** 활동 현황에서 넘어온 줄 — 그 줄로 내려가 잠깐 밝힌다(lib/activity.ts). */
+  focusKey?: string | null
+  onFocused?: () => void
   /** 지금 사람 — 영업 기록의 작성자이고, 자기 글만 고칠 수 있다. */
   me: { engineer_id: number | null; permission_level: string | null }
   /** 견적 PDF 를 열 때. 회사 전체 타임라인의 견적 줄이 쓴다. */
@@ -88,7 +93,7 @@ export type CompanyPaneProps = {
 }
 
 export default function CompanyPane({
-  group, engineerName, onSaved, onError, onToast, onOpenSite, onAddSite, onCompanyGone, canEditCompany, me, onOpenQuote,
+  group, engineerName, onSaved, onError, onToast, onOpenSite, onAddSite, onCompanyGone, canEditCompany, me, onOpenQuote, focusSiteId, focusKey, onFocused,
 }: CompanyPaneProps) {
   const supabase = createClient()
   const agencies = useAgencies()
@@ -490,6 +495,10 @@ export default function CompanyPane({
           holdings={timeline.holdings}
           customerId={group.companyId}
           sites={siteOptions}
+          events={timeline.events}
+          initialSiteIds={focusSiteId != null ? [focusSiteId] : undefined}
+          focusKey={focusKey}
+          onFocused={onFocused}
           onOpenQuotePdf={q => { if (onOpenQuote) onOpenQuote(q); else void openQuotePdf(q) }}
           onOpenHolding={(h: Holding) => { const id = h.customer_id; if (id) onOpenSite(id) }}
           onAddActivity={() => { setEditingActivity(null); setActivitySiteId(recentSiteId); setActivityOpen(true) }}

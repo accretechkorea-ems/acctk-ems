@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { QUOTE_SELECT } from '@/hooks/customer/useCustomerDetail'
 import type { Contact, Device, Holding, Quote, SalesActivity, SalesOpportunity, ServiceHistory } from '@/components/customer/types'
+import type { CustomerEvent } from '@/lib/customerEventView'
 
 export type CompanyTimelineData = {
   history: ServiceHistory[]
@@ -23,6 +24,8 @@ export type CompanyTimelineData = {
   devices: Device[]
   contacts: Contact[]
   opportunities: SalesOpportunity[]
+  /** 고객 사건 로그(db/customer_events_20261120.sql). 표가 아직 없으면 빈 배열이다. */
+  events: CustomerEvent[]
   loading: boolean
   /** 마지막 조회에 걸린 밀리초. */
   ms: number
@@ -30,7 +33,7 @@ export type CompanyTimelineData = {
 }
 
 const EMPTY: Omit<CompanyTimelineData, 'reload'> = {
-  history: [], quotes: [], activities: [], holdings: [], devices: [], contacts: [], opportunities: [],
+  history: [], quotes: [], activities: [], holdings: [], devices: [], contacts: [], opportunities: [], events: [],
   loading: false, ms: 0,
 }
 
@@ -68,11 +71,17 @@ export function useCompanyTimeline(siteIds: number[]): CompanyTimelineData {
       supabase.from('sales_opportunities')
         .select('*, engineers(name, position)')
         .in('customer_id', ids).order('created_at', { ascending: false }),
-    ]).then(([h, q, a, hold, d, c, o]) => {
+      // 사건 로그 — 사람이 적는 활동과 달리 자동으로만 쌓인다(lib/customerEvents.ts).
+      supabase.from('customer_events')
+        .select('id, customer_id, event_type, occurred_at, actor_engineer_id, payload')
+        .in('customer_id', ids).order('occurred_at', { ascending: false }),
+    ]).then(([h, q, a, hold, d, c, o, ev]) => {
       if (cancelled) return
       for (const r of [h, q, a, hold, d, c, o]) {
         if (r.error) console.error('[companyTimeline] 조회 실패', r.error)
       }
+      // 사건 표가 아직 없을 수 있다(SQL 적용 전) — 그때는 사건만 비고 나머지는 그대로 보인다.
+      if (ev.error) console.warn('[companyTimeline] 사건 로그를 읽지 못했다 (db/customer_events_20261120.sql)', ev.error.message)
       setData({
         history: (h.data as ServiceHistory[]) ?? [],
         quotes: (q.data as Quote[]) ?? [],
@@ -81,6 +90,7 @@ export function useCompanyTimeline(siteIds: number[]): CompanyTimelineData {
         devices: (d.data as Device[]) ?? [],
         contacts: (c.data as Contact[]) ?? [],
         opportunities: (o.data as SalesOpportunity[]) ?? [],
+        events: (ev.data as CustomerEvent[]) ?? [],
         loading: false,
         ms: Math.round(performance.now() - started),
       })
