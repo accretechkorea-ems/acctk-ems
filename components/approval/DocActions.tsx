@@ -27,6 +27,7 @@ import { MUTED, NEUTRAL_BG, SUB, btnDanger, btnGhost, btnPrimary, inputStyle } f
 import { APPROVE_LABEL, approveLabelOf, canRejectDocument, DOC_TYPES } from '@/lib/approval/docTypes'
 import { ownerActions, processedCount, type ActionDoc, type OwnerActions } from '@/lib/approval/docActions'
 import { sendDocSignal, type DocAction } from '@/lib/approval/docSignal'
+import { R } from '@/lib/radius'
 
 /** 「회수」는 두 번 눌러야 실행된다. 쇼룸·첨부와 같은 3초다. */
 const CONFIRM_MS = 3000
@@ -188,7 +189,7 @@ export default function DocActions({
           {/* 위임받아 들어온 건 — 누구를 대신해 누르는지 먼저 알린다. 기록에는 「대결」로 남고
               결재란에는 원래 결재자의 칸에 내 이름이 찍힌다. */}
           {delegated && currentApproverId != null && (
-            <div style={{ fontSize: 12, color: SUB, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>
+            <div style={{ fontSize: 12, color: SUB, background: NEUTRAL_BG, borderRadius: R.icon, padding: '6px 10px' }}>
               {nameOf(currentApproverId)}님을 대신하여 결재합니다
             </div>
           )}
@@ -221,7 +222,7 @@ export default function DocActions({
           {/* 결재가 이미 시작된 문서를 회수하려 할 때 — 무엇이 무효가 되는지 먼저 말한다.
               시작 전(처리 0명) 회수는 지금까지와 같이 버튼의 2단 확인만 둔다. */}
           {owner.withdraw && confirmWithdraw && processed > 0 && (
-            <span style={{ width: '100%', fontSize: 12, color: SUB, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>
+            <span style={{ width: '100%', fontSize: 12, color: SUB, background: NEUTRAL_BG, borderRadius: R.icon, padding: '6px 10px' }}>
               이미 {processed}명이 결재했습니다. 회수하면 결재자에게 알림이 가고 결재가 중단됩니다
             </span>
           )}
@@ -242,7 +243,7 @@ export default function DocActions({
           {owner.deleteClosed && (
             <>
               {confirmDelete && (
-                <span style={{ width: '100%', fontSize: 12, color: SUB, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>
+                <span style={{ width: '100%', fontSize: 12, color: SUB, background: NEUTRAL_BG, borderRadius: R.icon, padding: '6px 10px' }}>
                   {owner.deleteClosed.confirmText}
                 </span>
               )}
@@ -254,7 +255,7 @@ export default function DocActions({
           )}
           {/* 반려 문서는 기록으로 남는다 — 치우는 버튼도, 지우는 버튼도 두지 않는다. */}
           {owner.rejectedNotice && (
-            <span style={{ fontSize: 12, color: MUTED, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 10px' }}>
+            <span style={{ fontSize: 12, color: MUTED, background: NEUTRAL_BG, borderRadius: R.icon, padding: '6px 10px' }}>
               {owner.rejectedNotice}
             </span>
           )}

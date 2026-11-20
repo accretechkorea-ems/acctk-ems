@@ -19,6 +19,7 @@ import { REGION_FILTER_OPTIONS } from '@/lib/region'
 import {
   daysLabel, isStale, type CompanyGroup, type ListFilter, type SortKey,
 } from '@/lib/customerList'
+import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
@@ -94,14 +95,14 @@ const tabStyle = (on: boolean): CSSProperties => ({
 })
 
 const countStyle = (tone?: 'danger'): CSSProperties => ({
-  fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 99,
+  fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: R.pill,
   background: tone === 'danger' ? '#fef2f2' : NEUTRAL,
   color: tone === 'danger' ? DANGER : SUB,
 })
 
 
 const chipStyle = (on: boolean): CSSProperties => ({
-  height: 28, padding: '0 10px', borderRadius: 6, cursor: 'pointer',
+  height: 28, padding: '0 10px', borderRadius: R.icon, cursor: 'pointer',
   border: `1px solid ${on ? BLUE : BORDER}`,
   background: on ? '#eff4ff' : '#ffffff',
   color: on ? BLUE : SUB,
@@ -128,7 +129,7 @@ function MultiChip({ label, options, value, onChange, allLabel = '전체' }: {
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9" /></svg>
       </button>
       <Popover anchorRef={ref} open={open} onClose={() => setOpen(false)} maxHeight={280}
-        style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: 6, minWidth: 150 }}>
+        style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.control, boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: 6, minWidth: 150 }}>
         <button type="button"
           onMouseDown={e => { e.preventDefault(); onChange(all ? [] : [...options]) }}
           style={{ width: '100%', textAlign: 'left', padding: '7px 9px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: BLUE, borderBottom: `1px solid ${BORDER}` }}>
@@ -140,7 +141,7 @@ function MultiChip({ label, options, value, onChange, allLabel = '전체' }: {
             <button key={o} type="button"
               onMouseDown={e => { e.preventDefault(); onChange(on ? value.filter(v => v !== o) : [...value, o]) }}
               style={{ width: '100%', textAlign: 'left', padding: '7px 9px', border: 'none', background: 'none', cursor: 'pointer', fontSize: 13, color: on ? TEXT : MUTED, display: 'flex', alignItems: 'center', gap: 7 }}>
-              <span style={{ width: 13, height: 13, borderRadius: 3, border: `1px solid ${on ? BLUE : FAINT}`, background: on ? BLUE : '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <span style={{ width: 13, height: 13, borderRadius: R.tag, border: `1px solid ${on ? BLUE : FAINT}`, background: on ? BLUE : '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 {on && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>}
               </span>
               {o || '(없음)'}
@@ -172,7 +173,7 @@ export default function CustomerListPanel({
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.control, overflow: 'hidden' }}>
 
       {/* 탭 — 이번 회차는 회사 탭만 돈다 */}
       <div style={{ display: 'flex', borderBottom: `1px solid ${BORDER}`, padding: '0 8px', flexShrink: 0 }}>
@@ -219,7 +220,7 @@ export default function CustomerListPanel({
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9" /></svg>
           </button>
           <Popover anchorRef={sortRef} open={sortOpen} onClose={() => setSortOpen(false)} align="end"
-            style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: 4, minWidth: 120 }}>
+            style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.control, boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: 4, minWidth: 120 }}>
             {([['touch', '최근 활동순'], ['name', '이름순']] as const).map(([k, label]) => (
               <button key={k} type="button"
                 onMouseDown={e => { e.preventDefault(); setSort(k); setSortOpen(false) }}
@@ -251,7 +252,7 @@ export default function CustomerListPanel({
             <div key={a.customer_id} role="button" tabIndex={0}
               onClick={() => onPickAgency(a.customer_id)}
               onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPickAgency(a.customer_id) } }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, height: 38, padding: '0 10px', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, height: 38, padding: '0 10px', borderRadius: R.icon, cursor: 'pointer', fontSize: 13 }}
               onMouseEnter={e => { e.currentTarget.style.background = '#fafafa' }}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
               <b style={{ fontWeight: 700, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.company_name}</b>
@@ -274,7 +275,7 @@ export default function CustomerListPanel({
               <div style={{ padding: '28px 16px', textAlign: 'center', color: MUTED, fontSize: 13 }}>정리할 것이 없습니다</div>
             ) : cleanup[cleanupBucket].map(r => (
               <div key={r.companyId}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '0 8px', borderRadius: 6 }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '0 8px', borderRadius: R.icon }}
                 onMouseEnter={e => { e.currentTarget.style.background = '#fafafa' }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
                 <button type="button" onClick={() => onSelectCompany(r.companyId)}
@@ -284,7 +285,7 @@ export default function CustomerListPanel({
                 </button>
                 {cleanupBucket === 'emptyCompany' && (
                   <button type="button" onClick={() => onDeleteCompany(r.companyId, r.companyName)}
-                    style={{ height: 24, padding: '0 8px', borderRadius: 6, border: `1px solid ${DANGER}`, background: '#fff', color: DANGER, fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+                    style={{ height: 24, padding: '0 8px', borderRadius: R.icon, border: `1px solid ${DANGER}`, background: '#fff', color: DANGER, fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
                     삭제
                   </button>
                 )}
@@ -307,7 +308,7 @@ export default function CustomerListPanel({
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpand(g.companyId); onSelectCompany(g.companyId) } }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8, height: 38, padding: '0 10px 0 6px',
-                  borderRadius: 6, cursor: 'pointer', background: sel ? '#eff4ff' : 'transparent',
+                  borderRadius: R.icon, cursor: 'pointer', background: sel ? '#eff4ff' : 'transparent',
                 }}
                 onMouseEnter={e => { if (!sel) e.currentTarget.style.background = '#fafafa' }}
                 onMouseLeave={e => { if (!sel) e.currentTarget.style.background = 'transparent' }}
@@ -327,7 +328,7 @@ export default function CustomerListPanel({
                     트리가 「분류 없음」으로 뒤덮여 정작 분류를 읽을 수 없었다.
                     분류가 비었다는 사실은 「분류 없음」 칩과 정리 필요 탭이 알린다. */}
                 {g.industry && (
-                  <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 6, whiteSpace: 'nowrap', flexShrink: 0, background: NEUTRAL, color: SUB }}>{g.industry}</span>
+                  <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: R.icon, whiteSpace: 'nowrap', flexShrink: 0, background: NEUTRAL, color: SUB }}>{g.industry}</span>
                 )}
                 <span style={{ flex: 1 }} />
                 <span style={{ fontSize: 12, color: SUB, flexShrink: 0 }}>{g.sites.length}</span>
@@ -343,7 +344,7 @@ export default function CustomerListPanel({
                     onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelectSite(g.companyId, s.customer.customer_id) } }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8, height: 32, padding: '0 10px 0 30px',
-                      borderRadius: 6, cursor: 'pointer', fontSize: 13,
+                      borderRadius: R.icon, cursor: 'pointer', fontSize: 13,
                       background: on ? BLUE : 'transparent', color: on ? '#fff' : '#374151',
                     }}
                     onMouseEnter={e => { if (!on) e.currentTarget.style.background = '#fafafa' }}
@@ -352,7 +353,7 @@ export default function CustomerListPanel({
                     <span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_DOT[s.customer.status ?? ''] ?? MUTED, flexShrink: 0 }} />
                     {/* 이름이 비면 빨간 「입력 필요」 — 「본사」로 채워 두면 적은 것과 구별되지 않는다. */}
                     {s.needsName ? (
-                      <span style={{ fontSize: 11, fontWeight: 700, color: DANGER, background: '#fef2f2', borderRadius: 6, padding: '1px 6px', flexShrink: 0 }}>입력 필요</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: DANGER, background: '#fef2f2', borderRadius: R.icon, padding: '1px 6px', flexShrink: 0 }}>입력 필요</span>
                     ) : (
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.siteName}</span>
                     )}
@@ -374,7 +375,7 @@ export default function CustomerListPanel({
           <b style={{ fontWeight: 700 }}>{checkedCompanies.size}곳</b>
           <select defaultValue=""
             onChange={e => { if (e.target.value) { onBulkIndustry(e.target.value); e.target.value = '' } }}
-            style={{ height: 26, borderRadius: 6, border: 'none', fontSize: 12, padding: '0 6px', maxWidth: 170 }}>
+            style={{ height: 26, borderRadius: R.icon, border: 'none', fontSize: 12, padding: '0 6px', maxWidth: 170 }}>
             <option value="">분류 일괄 지정</option>
             {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
           </select>

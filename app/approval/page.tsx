@@ -51,6 +51,7 @@ import { PAGE_SIZE, clampPage, pageRange, pageWindow, totalPages } from '@/lib/p
 import { openApprovalDoc } from '@/lib/approval/docWindow'
 import { listenDocSignal } from '@/lib/approval/docSignal'
 import { isMobileViewport } from '@/lib/viewport'
+import { R } from '@/lib/radius'
 
 const APPROVAL_PATH = '/approval'
 
@@ -522,7 +523,7 @@ function ApprovalPageInner() {
                       onClick={() => go(item.source, item.scope)}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 6, width: '100%',
-                        padding: '8px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                        padding: '8px 10px', borderRadius: R.icon, border: 'none', cursor: 'pointer',
                         background: on ? NEUTRAL_BG : 'transparent',
                         color: on ? TEXT : SUB,
                         fontSize: 13, fontWeight: on ? 700 : 600, fontFamily: 'inherit', textAlign: 'left',
@@ -552,7 +553,7 @@ function ApprovalPageInner() {
                 onClick={() => setDelegationOpen(true)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6, width: '100%',
-                  padding: '8px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                  padding: '8px 10px', borderRadius: R.icon, border: 'none', cursor: 'pointer',
                   background: 'transparent', color: SUB,
                   fontSize: 13, fontWeight: 600, fontFamily: 'inherit', textAlign: 'left',
                   whiteSpace: 'nowrap',
@@ -697,7 +698,7 @@ function ApprovalPageInner() {
                             {d.delegated && (
                               <span
                                 title={owner?.name ? `${owner.name}님을 대신하여 결재` : '위임받아 대신 결재'}
-                                style={{ fontSize: 11, fontWeight: 700, color: SUB, background: NEUTRAL_BG, borderRadius: 99, padding: '1px 7px', flexShrink: 0 }}>
+                                style={{ fontSize: 11, fontWeight: 700, color: SUB, background: NEUTRAL_BG, borderRadius: R.pill, padding: '1px 7px', flexShrink: 0 }}>
                                 대결
                               </span>
                             )}
@@ -735,7 +736,7 @@ function ApprovalPageInner() {
                         })}
                         style={{
                           flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          width: 24, height: 24, marginTop: 1, padding: 0, border: 'none', borderRadius: 6,
+                          width: 24, height: 24, marginTop: 1, padding: 0, border: 'none', borderRadius: R.icon,
                           background: 'transparent', color: MUTED, cursor: 'pointer', fontFamily: 'inherit',
                         }}
                       >
@@ -784,7 +785,7 @@ function ApprovalPageInner() {
                               aria-current={pg === pageNo ? 'page' : undefined}
                               onClick={() => setPage(pg)}
                               style={{
-                                border: 'none', borderRadius: 6, padding: '5px 10px', fontSize: 12,
+                                border: 'none', borderRadius: R.icon, padding: '5px 10px', fontSize: 12,
                                 fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer',
                                 background: pg === pageNo ? BLUE : NEUTRAL_BG,
                                 color: pg === pageNo ? '#ffffff' : SUB,

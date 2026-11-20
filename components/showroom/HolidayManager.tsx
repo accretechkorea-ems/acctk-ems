@@ -10,6 +10,7 @@ import {
   BLUE, BORDER, TEXT, MUTED, SUB, DANGER, FAINT, NEUTRAL_BG,
   cardStyle, countBadge, rowStyle, btnPrimary, inputStyle, skeletonBlock,
 } from '@/components/common/ui'
+import { R } from '@/lib/radius'
 
 const DOW = ['일', '월', '화', '수', '목', '금', '토']
 /** 삭제는 두 번 눌러야 실행된다(사용 기록과 같은 방식). */
@@ -175,14 +176,14 @@ export default function HolidayManager({ year, onChanged }: { year: number; onCh
                       <span style={{ fontSize: 12, color: dow === 0 || dow === 6 ? FAINT : MUTED, width: 16, flexShrink: 0 }}>{DOW[dow]}</span>
                       <span style={{ fontSize: 13, color: TEXT, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.name}</span>
                       <span style={{
-                        fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, flexShrink: 0,
+                        fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: R.pill, flexShrink: 0,
                         background: NEUTRAL_BG, color: h.is_manual ? BLUE : SUB,
                       }}>
                         {h.is_manual ? '수동' : '자동'}
                       </span>
                       {armed ? (
                         <button disabled={busy} onClick={() => remove(h.holiday_date)}
-                          style={{ padding: '3px 9px', borderRadius: 6, border: 'none', background: DANGER, color: '#fff', fontSize: 11, fontWeight: 700, cursor: busy ? 'default' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                          style={{ padding: '3px 9px', borderRadius: R.icon, border: 'none', background: DANGER, color: '#fff', fontSize: 11, fontWeight: 700, cursor: busy ? 'default' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
                           삭제 확정
                         </button>
                       ) : (

@@ -37,6 +37,7 @@ import ModalOverlay from '@/components/common/ModalOverlay'
 import { defaultTermsFor, normalizeTerms, termKeysFor, type SetTerms, type Terms } from '@/lib/quoteTerms'
 import { defaultRemarksFor } from '@/lib/quoteRemarks'
 import { normalizeSubLines } from '@/lib/quoteSubLines'
+import { R } from '@/lib/radius'
 
 /**
  * 비고 기본 문구. 내용은 그대로 두고, 사용자가 손댔는지 비교하려고 상수로 뺐다.
@@ -948,11 +949,11 @@ function QuotePageInner() {
           </div>
 
           {/* 품목 */}
-          <div style={{ background: '#fff', borderRadius: 8, padding: '20px 20px', border: '1px solid #ebebeb', position: 'relative' }}>
+          <div style={{ background: '#fff', borderRadius: R.control, padding: '20px 20px', border: '1px solid #ebebeb', position: 'relative' }}>
             {/* 워터마크 — 농도·크기·간격은 컴포넌트 한 곳에 있다(components/quote/Watermark.tsx). */}
             <Watermark name={engineerName} rows={14} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-              <div style={{ width: 3, height: 16, background: '#234ea2', borderRadius: 6, flexShrink: 0 }} />
+              <div style={{ width: 3, height: 16, background: '#234ea2', borderRadius: R.icon, flexShrink: 0 }} />
               <span style={{ fontWeight: 800, fontSize: 14, color: '#111827' }}>품목</span>
               {itemCount > 0 && (
                 <span style={{ fontSize: 12, color: '#9ca3af' }}>총 {itemCount}개</span>
@@ -1037,12 +1038,12 @@ function QuotePageInner() {
       {/* 임시저장 안내 — 저장분이 있을 때만. 답하기 전에는 자동 저장이 시작되지 않는다. */}
       {draftAsk && engineer && (
         <ModalOverlay onClose={() => {}} closeOn="none" style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: '#fff', borderRadius: 8, padding: 32, width: '100%', maxWidth: 440, boxShadow: '0 24px 64px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
+          <div style={{ background: '#fff', borderRadius: R.control, padding: 32, width: '100%', maxWidth: 440, boxShadow: '0 24px 64px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 4, letterSpacing: '-0.3px' }}>작성 중이던 내용이 있습니다</div>
             <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, fontWeight: 500 }}>
               {draftSavedLabel(draftAsk.savedAt)} 까지 쓴 내용{draftAsk.company.trim() ? ` · ${draftAsk.company.trim()}` : ''}
             </div>
-            <div style={{ background: '#eff4ff', border: '1px solid #c7d7f8', borderRadius: 8, padding: '12px 14px', marginBottom: 24 }}>
+            <div style={{ background: '#eff4ff', border: '1px solid #c7d7f8', borderRadius: R.control, padding: '12px 14px', marginBottom: 24 }}>
               <div style={{ fontSize: 12, color: '#234ea2', lineHeight: 1.8 }}>
                 이어서 쓰거나, 새로 시작할 수 있습니다. <b>새로 쓰기를 고르면 저장분은 사라집니다.</b>
               </div>
@@ -1050,12 +1051,12 @@ function QuotePageInner() {
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button
                 onClick={() => { clearDraft(engineer.engineer_id); setDraftAsk(null); setDraftReady(true) }}
-                style={{ padding: '11px 20px', background: '#fff', color: '#6b7280', border: '1px solid #ebebeb', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                style={{ padding: '11px 20px', background: '#fff', color: '#6b7280', border: '1px solid #ebebeb', borderRadius: R.icon, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
                 새로 쓰기
               </button>
               <button
                 onClick={() => { applyDraft(draftAsk) }}
-                style={{ padding: '11px 24px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                style={{ padding: '11px 24px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
                 이어쓰기
               </button>
             </div>

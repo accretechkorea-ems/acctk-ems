@@ -4,6 +4,7 @@ import { useState, type CSSProperties } from 'react'
 import type { ContactForm } from '../types'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
+import { R } from '@/lib/radius'
 
 type Props = {
   isOpen: boolean
@@ -15,7 +16,7 @@ type Props = {
 const emptyForm: ContactForm = { name: '', department: '', position: '', phone: '', email: '' }
 const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
-  width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: 6,
+  width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
 }
 
@@ -42,7 +43,7 @@ export default function ContactAddModal({ isOpen, isSaving, onClose, onSave }: P
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: 480, background: '#ffffff', borderRadius: 8, padding: 24,
+          width: '100%', maxWidth: 480, background: '#ffffff', borderRadius: R.control, padding: 24,
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb',
           animation: 'modal-in 0.18s ease',
         }}
@@ -92,14 +93,14 @@ export default function ContactAddModal({ isOpen, isSaving, onClose, onSave }: P
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 24 }}>
           <button
             onClick={handleClose}
-            style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: 6, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+            style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
           >취소</button>
           <button
             onClick={handleSave}
             disabled={isSaving}
             onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
             onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
-            style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
+            style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
           >
             {isSaving ? '저장 중...' : '저장'}
           </button>

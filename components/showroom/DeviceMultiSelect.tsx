@@ -11,6 +11,7 @@ import { useOutsideClick } from '@/hooks/useOutsideClick'
 import { Z } from '@/lib/zIndex'
 import { compareDevices, deviceTitle, type ShowroomDevice, type ShowroomSite } from '@/lib/showroom'
 import { BLUE, BORDER, CARD_BG, TEXT, MUTED, ROW_HOVER_BG, inputStyle } from '@/components/common/ui'
+import { R } from '@/lib/radius'
 
 const CSS = `
   .sr-dms-row { transition: background 0.15s ease; }
@@ -71,7 +72,7 @@ export default function DeviceMultiSelect({ devices, sites, selected, onChange }
         <div role="group" aria-label="장비 선택" style={{
           position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: Z.popover,
           width: 300, maxHeight: 360, overflowY: 'auto', padding: '6px 0',
-          background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8,
+          background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control,
           boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
         }}>
           <label className="sr-dms-row" style={{ ...rowStyle, fontWeight: 700 }}>

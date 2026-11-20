@@ -8,6 +8,7 @@ import { useOffices, findOffice } from '@/lib/offices'
 import { NOT_AGENCY_ONLY } from '@/lib/customerAgency'
 import { Z } from '@/lib/zIndex'
 import { useOverlayEsc } from '@/components/common/overlayStack'
+import { R as RAD } from '@/lib/radius'
 
 // 엔지니어 동선 지도(전체 화면 오버레이). 방문지 마커 + 연결선 + 사무실 마커.
 // 연결선 모드는 지도 안 토글로 전환한다(기본 visits, 열 때마다 초기화):
@@ -482,7 +483,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
 
   // 지도 안 토글(pill) 공통 스타일
   const pillStyle = (active: boolean, disabled: boolean): CSSProperties => ({
-    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 99,
+    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: RAD.pill,
     fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
     border: `1px solid ${disabled ? '#ebebeb' : active ? '#234ea2' : '#d1d5db'}`,
     background: disabled ? '#f3f4f6' : active ? '#234ea2' : '#fff',
@@ -505,7 +506,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
         onClick={e => e.stopPropagation()}
         style={{
           position: 'relative', width: '95vw', height: '92vh',
-          background: '#fff', borderRadius: 8, overflow: 'hidden',
+          background: '#fff', borderRadius: RAD.control, overflow: 'hidden',
           border: '1px solid #ebebeb', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
         }}
       >
@@ -514,7 +515,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
           position: 'absolute', top: 12, left: 16, zIndex: 2,
           display: 'flex', alignItems: 'center', gap: 8,
           background: 'rgba(255,255,255,0.95)', border: '1px solid #ebebeb',
-          borderRadius: 8, padding: '7px 12px',
+          borderRadius: RAD.control, padding: '7px 12px',
         }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>
             {engineerName ? `${engineerName} 동선` : '동선'}
@@ -526,7 +527,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
         {isOffice && stops.length > 0 && (
           <div style={{
             position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 2,
-            background: 'rgba(255,255,255,0.95)', border: '1px solid #ebebeb', borderRadius: 8,
+            background: 'rgba(255,255,255,0.95)', border: '1px solid #ebebeb', borderRadius: RAD.control,
             padding: '7px 12px', fontSize: 12, fontWeight: 600, color: '#9ca3af', whiteSpace: 'nowrap',
             boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
           }}>
@@ -579,7 +580,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
               </button>
             </div>
             {officeHint && (
-              <span style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', background: 'rgba(255,255,255,0.92)', border: '1px solid #ebebeb', borderRadius: 6, padding: '2px 7px' }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', background: 'rgba(255,255,255,0.92)', border: '1px solid #ebebeb', borderRadius: RAD.icon, padding: '2px 7px' }}>
                 {officeHint}
               </span>
             )}
@@ -592,7 +593,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
           stops.length > 0 && (
             <div style={{
               position: 'absolute', bottom: 16, left: 16, zIndex: 2,
-              background: '#fff', border: '1px solid #ebebeb', borderRadius: 8,
+              background: '#fff', border: '1px solid #ebebeb', borderRadius: RAD.control,
               padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -610,7 +611,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
           hasSameDaySegment && (
             <div style={{
               position: 'absolute', bottom: 16, left: 16, zIndex: 2,
-              background: '#fff', border: '1px solid #ebebeb', borderRadius: 8,
+              background: '#fff', border: '1px solid #ebebeb', borderRadius: RAD.control,
               padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8,
             }}>
               <span style={{ display: 'inline-block', width: 22, borderTop: '3px solid #234ea2', opacity: 0.7 }} />
@@ -623,7 +624,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
         {excludedCount > 0 && (
           <div style={{
             position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 2,
-            background: '#fff', border: '1px solid #ebebeb', borderRadius: 8, padding: '6px 12px',
+            background: '#fff', border: '1px solid #ebebeb', borderRadius: RAD.control, padding: '6px 12px',
             fontSize: 11, fontWeight: 600, color: '#9ca3af', boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
           }}>
             비방문 {excludedCount}건 제외

@@ -20,6 +20,7 @@ import {
   MAX_PHOTOS, REPAIR_INFO_DOT, REPAIR_INFO_LABEL, canAddPhoto, repairDate, repairInfoState, shippedLabel,
   type RepairBrief, type RepairInfoFields, type RepairPhoto,
 } from '@/lib/quoteRepairInfo'
+import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const MUTED = '#9ca3af'
@@ -84,7 +85,7 @@ function Field({
         rows={3}
         style={{
           width: '100%', boxSizing: 'border-box', resize: 'vertical',
-          padding: '7px 9px', borderRadius: 6, border: `1px solid ${BORDER}`,
+          padding: '7px 9px', borderRadius: R.icon, border: `1px solid ${BORDER}`,
           fontSize: 12, lineHeight: 1.5, color: TEXT, outline: 'none', fontFamily: 'inherit',
           background: disabled ? '#f8fafc' : '#fff',
         }}
@@ -110,7 +111,7 @@ export default function RepairInfoPanel({
       {repair && (
         <div style={{
           display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8,
-          padding: '9px 10px', borderRadius: 6, background: '#fafbfc', border: `1px solid ${BORDER}`,
+          padding: '9px 10px', borderRadius: R.icon, background: '#fafbfc', border: `1px solid ${BORDER}`,
           marginBottom: 10,
         }}>
           <ReadCell label="구분" value={(repair.item_type ?? '').trim() || '-'} />
@@ -145,7 +146,7 @@ export default function RepairInfoPanel({
               disabled={!canAddPhoto(photos.length)}
               title={canAddPhoto(photos.length) ? '사진을 고릅니다' : `사진은 ${MAX_PHOTOS}장까지 올릴 수 있습니다`}
               style={{
-                height: 24, padding: '0 9px', borderRadius: 6, border: `1px solid ${BORDER}`,
+                height: 24, padding: '0 9px', borderRadius: R.icon, border: `1px solid ${BORDER}`,
                 background: '#fff', color: canAddPhoto(photos.length) ? '#234ea2' : MUTED,
                 fontSize: 11, fontWeight: 700,
                 cursor: canAddPhoto(photos.length) ? 'pointer' : 'not-allowed',
@@ -167,25 +168,25 @@ export default function RepairInfoPanel({
         />
 
         {mode === 'draft' ? (
-          <div style={{ fontSize: 11, color: MUTED, padding: '8px 10px', borderRadius: 6, background: '#fafbfc', border: `1px solid ${BORDER}` }}>
+          <div style={{ fontSize: 11, color: MUTED, padding: '8px 10px', borderRadius: R.icon, background: '#fafbfc', border: `1px solid ${BORDER}` }}>
             견적 확정 후 사진을 올릴 수 있습니다
           </div>
         ) : photos.length === 0 ? (
-          <div style={{ fontSize: 11, color: MUTED, padding: '8px 10px', borderRadius: 6, background: '#fafbfc', border: `1px solid ${BORDER}` }}>
+          <div style={{ fontSize: 11, color: MUTED, padding: '8px 10px', borderRadius: R.icon, background: '#fafbfc', border: `1px solid ${BORDER}` }}>
             올린 사진이 없습니다{canEdit ? ' — 「사진 추가」로 올립니다' : ''}
           </div>
         ) : (
           <div style={{ display: 'grid', gap: 6 }}>
             {photos.map((ph, i) => (
-              <div key={ph.photo_id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: 6, borderRadius: 6, border: `1px solid ${BORDER}` }}>
+              <div key={ph.photo_id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: 6, borderRadius: R.icon, border: `1px solid ${BORDER}` }}>
                 {/* 미리보기 — 버킷이 비공개라 1시간 서명 URL 이다(라우트가 만든다). */}
                 {/* 저장소에서 파일이 사라진 줄 — 빈 네모 대신 **「파일 없음」**이라고 적는다.
                     (옆의 ✕ 로 그 줄을 지울 수 있다 — 줄만 남아 떠도는 것을 사람이 치우게.) */}
                 {ph.url
                   // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={ph.url} alt={`수리 사진 ${i + 1}`} style={{ width: 76, height: 76, objectFit: 'cover', borderRadius: 4, flexShrink: 0, background: '#f3f4f6' }} />
+                  ? <img src={ph.url} alt={`수리 사진 ${i + 1}`} style={{ width: 76, height: 76, objectFit: 'cover', borderRadius: R.tag, flexShrink: 0, background: '#f3f4f6' }} />
                   : (
-                    <div style={{ width: 76, height: 76, borderRadius: 4, background: '#f3f4f6', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: MUTED, textAlign: 'center', lineHeight: 1.3 }}>
+                    <div style={{ width: 76, height: 76, borderRadius: R.tag, background: '#f3f4f6', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: MUTED, textAlign: 'center', lineHeight: 1.3 }}>
                       파일 없음
                     </div>
                   )}
@@ -196,7 +197,7 @@ export default function RepairInfoPanel({
                     disabled={!canEdit}
                     placeholder="사진 설명(선택)"
                     style={{
-                      width: '100%', boxSizing: 'border-box', border: `1px solid ${BORDER}`, borderRadius: 6,
+                      width: '100%', boxSizing: 'border-box', border: `1px solid ${BORDER}`, borderRadius: R.icon,
                       padding: '5px 8px', fontSize: 12, color: TEXT, outline: 'none', fontFamily: 'inherit',
                       background: canEdit ? '#fff' : '#f8fafc',
                     }}
@@ -206,11 +207,11 @@ export default function RepairInfoPanel({
                 {canEdit && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
                     <button onClick={() => onMovePhoto?.(ph.photo_id, -1)} disabled={i === 0} title="위로"
-                      style={{ width: 22, height: 20, borderRadius: 4, border: `1px solid ${BORDER}`, background: '#fff', color: i === 0 ? '#d1d5db' : GRAY, cursor: i === 0 ? 'not-allowed' : 'pointer', fontSize: 10, lineHeight: 1 }}>▲</button>
+                      style={{ width: 22, height: 20, borderRadius: R.tag, border: `1px solid ${BORDER}`, background: '#fff', color: i === 0 ? '#d1d5db' : GRAY, cursor: i === 0 ? 'not-allowed' : 'pointer', fontSize: 10, lineHeight: 1 }}>▲</button>
                     <button onClick={() => onMovePhoto?.(ph.photo_id, 1)} disabled={i === photos.length - 1} title="아래로"
-                      style={{ width: 22, height: 20, borderRadius: 4, border: `1px solid ${BORDER}`, background: '#fff', color: i === photos.length - 1 ? '#d1d5db' : GRAY, cursor: i === photos.length - 1 ? 'not-allowed' : 'pointer', fontSize: 10, lineHeight: 1 }}>▼</button>
+                      style={{ width: 22, height: 20, borderRadius: R.tag, border: `1px solid ${BORDER}`, background: '#fff', color: i === photos.length - 1 ? '#d1d5db' : GRAY, cursor: i === photos.length - 1 ? 'not-allowed' : 'pointer', fontSize: 10, lineHeight: 1 }}>▼</button>
                     <button onClick={() => onDeletePhoto?.(ph.photo_id)} title="사진 지우기"
-                      style={{ width: 22, height: 20, borderRadius: 4, border: `1px solid ${BORDER}`, background: '#fff', color: MUTED, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      style={{ width: 22, height: 20, borderRadius: R.tag, border: `1px solid ${BORDER}`, background: '#fff', color: MUTED, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                     </button>
                   </div>
@@ -240,7 +241,7 @@ export default function RepairInfoPanel({
             }}
             disabled={saving}
             style={{
-              height: 30, padding: '0 14px', borderRadius: 6, border: 'none',
+              height: 30, padding: '0 14px', borderRadius: R.icon, border: 'none',
               background: '#234ea2', color: '#fff', fontSize: 12, fontWeight: 700,
               cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1,
             }}

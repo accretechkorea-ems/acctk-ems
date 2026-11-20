@@ -13,6 +13,7 @@
 
 import type { ReactNode } from 'react'
 import { CARD_BODY_STYLE, CARD_HEAD_STYLE } from '@/components/common/CountList'
+import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
@@ -35,7 +36,7 @@ export default function DashCard({ title, onClick, error, errorMessage, loading,
     <section
       onClick={onClick}
       style={{
-        background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8,
+        background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.control,
         display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, overflow: 'hidden',
         cursor: onClick ? 'pointer' : 'default',
         transition: 'transform 0.15s ease, border-color 0.15s ease',

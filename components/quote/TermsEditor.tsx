@@ -12,6 +12,7 @@ import {
   TERM_LABELS, TERM_MAX_LEN, defaultTermsFor,
   termKeysFor, type SetTerms, type Terms,
 } from '@/lib/quoteTerms'
+import { R } from '@/lib/radius'
 
 export type TermsEditorProps = {
   termsOpen: boolean
@@ -33,7 +34,7 @@ export default function TermsEditor({ termsOpen, terms, setTerms, formKind }: Te
   >
     <div className="q-terms-inner">
       <div style={{
-        marginTop: 8, border: '1px solid #ebebeb', borderRadius: 8, padding: '10px 12px',
+        marginTop: 8, border: '1px solid #ebebeb', borderRadius: R.control, padding: '10px 12px',
         display: 'flex', flexDirection: 'column', gap: 6,
       }}>
         {termKeysFor(formKind).map(key => (

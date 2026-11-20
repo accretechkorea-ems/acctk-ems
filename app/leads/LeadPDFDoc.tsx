@@ -4,6 +4,7 @@ import React from 'react'
 // Image 를 그대로 쓰면 a11y 규칙(alt 필요)이 걸린다. PDF 그림은 HTML img 가 아니고
 // react-pdf 의 Image 는 alt 를 받지 않으므로 이름을 바꿔 쓴다.
 import { Document, Page, Text, View, StyleSheet, Image as PdfImage, Font } from '@react-pdf/renderer'
+import { R } from '@/lib/radius'
 
 // 리드 상세 출력물. 관리자가 배정된 담당자에게 메일로 보내는 용도다.
 // 화면 상세에 있는 항목과 배정된 담당자까지 담는다(상태·메모·미진행 사유 같은 관리 정보는 넣지 않는다).
@@ -49,9 +50,9 @@ const S = StyleSheet.create({
   // 카드 사이 간격. 마지막 카드는 아래 여백을 빼서 노트 칸과 바닥이 맞는다.
   cardGap: { marginBottom: 8 },
 
-  card: { borderWidth: 0.5, borderColor: BORDER, borderRadius: 4, padding: 7 },
+  card: { borderWidth: 0.5, borderColor: BORDER, borderRadius: R.tag, padding: 7 },
   // 노트 칸은 왼쪽 네 장을 합한 높이만큼 늘어난다(짧아도 그 높이를 지킨다).
-  noteCard: { borderWidth: 0.5, borderColor: BORDER, borderRadius: 4, padding: 7, flexGrow: 1 },
+  noteCard: { borderWidth: 0.5, borderColor: BORDER, borderRadius: R.tag, padding: 7, flexGrow: 1 },
   cardTitle: { fontSize: 10, color: BLUE, marginBottom: 5, paddingBottom: 4, borderBottomWidth: 0.5, borderBottomColor: BORDER },
   row: { flexDirection: 'row', marginBottom: 3 },
   key: { width: 46, color: FAINT, fontSize: 8 },

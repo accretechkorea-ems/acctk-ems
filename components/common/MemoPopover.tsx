@@ -22,6 +22,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Popover from '@/components/common/Popover'
 import { useConfirmOptional } from '@/components/common/confirmContext'
+import { R } from '@/lib/radius'
 
 /** 메모 길이 상한 — 화면이 여기서 막고, 서버도 같은 값으로 자른다. */
 export const MEMO_MAX = 1000
@@ -172,7 +173,7 @@ export default function MemoPopover({
         width={editing ? 360 : undefined}
         maxHeight={MEMO_MAX_HEIGHT}
         style={{
-          background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8,
+          background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.control,
           boxShadow: '0 4px 12px rgba(0,0,0,0.08)', padding: '10px 12px',
           minWidth: 220, maxWidth: 380, textAlign: 'left',
           // 편집 중에는 글상자를 눌러야 하므로 손을 받아야 한다. 읽기만 할 때도
@@ -198,7 +199,7 @@ export default function MemoPopover({
                 placeholder={placeholder}
                 rows={5}
                 style={{
-                  width: '100%', boxSizing: 'border-box', padding: '8px 9px', borderRadius: 6,
+                  width: '100%', boxSizing: 'border-box', padding: '8px 9px', borderRadius: R.icon,
                   border: `1px solid ${BORDER}`, outline: 'none', resize: 'vertical',
                   fontSize: 12, lineHeight: 1.6, color: TEXT, fontFamily: 'inherit',
                 }}
@@ -207,11 +208,11 @@ export default function MemoPopover({
                 <span style={{ fontSize: 10, color: MUTED }}>{`${draft.length} / ${maxLength}`}</span>
                 <span style={{ flex: 1 }} />
                 <button type="button" onClick={closeAll} disabled={saving}
-                  style={{ padding: '4px 9px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: MUTED, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                  style={{ padding: '4px 9px', borderRadius: R.icon, border: `1px solid ${BORDER}`, background: '#fff', color: MUTED, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
                   취소
                 </button>
                 <button type="button" onClick={() => void save()} disabled={saving}
-                  style={{ padding: '4px 10px', borderRadius: 6, border: 'none', background: BLUE, color: '#fff', fontSize: 11, fontWeight: 700, cursor: saving ? 'progress' : 'pointer' }}>
+                  style={{ padding: '4px 10px', borderRadius: R.icon, border: 'none', background: BLUE, color: '#fff', fontSize: 11, fontWeight: 700, cursor: saving ? 'progress' : 'pointer' }}>
                   {saving ? '저장 중…' : '저장'}
                 </button>
               </div>

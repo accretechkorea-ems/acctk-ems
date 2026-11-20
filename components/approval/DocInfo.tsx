@@ -8,6 +8,7 @@
 import type { ApprovalLine } from '@/lib/approval/types'
 import { BORDER, CARD_BG, NEUTRAL_BG, SUB, TEXT } from '@/components/common/ui'
 import type { ProgressPerson } from './ApprovalTable'
+import { R } from '@/lib/radius'
 
 const dayText = (iso: string | null): string => {
   if (!iso) return '-'
@@ -42,7 +43,7 @@ export default function DocInfo({
   ]
 
   return (
-    <div style={{ border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden', background: CARD_BG, minWidth: 260 }}>
+    <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.icon, overflow: 'hidden', background: CARD_BG, minWidth: 260 }}>
       {rows.map((r, i) => (
         <div key={r.label} style={{ display: 'flex', borderTop: i === 0 ? 'none' : `1px solid ${BORDER}` }}>
           <div style={{

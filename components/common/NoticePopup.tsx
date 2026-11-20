@@ -15,6 +15,7 @@ import { createClient } from '@/lib/supabase/client'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { dismissNotice, isDismissed, noticePhase, type DismissKind, type Notice } from '@/lib/notices'
 import { todayKST } from '@/lib/date'
+import { R } from '@/lib/radius'
 
 /** 팝업을 이미 띄운 로그인 세션의 id. 화면 이동 때 저장소를 다시 읽지 않으려는 캐시다. */
 let shownFor: string | null = null
@@ -90,7 +91,7 @@ export default function NoticePopup() {
         style={{
           // 640 은 이미 관리자 모달들이 쓰는 폭이다(새 값이 아니다).
           // 이미지가 세로로 쌓이므로 넘치는 만큼은 아래 본체가 세로로 스크롤한다.
-          background: '#ffffff', borderRadius: 14, width: '100%', maxWidth: 640,
+          background: '#ffffff', borderRadius: R.modal, width: '100%', maxWidth: 640,
           maxHeight: '86vh', display: 'flex', flexDirection: 'column',
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
         }}
@@ -122,7 +123,7 @@ export default function NoticePopup() {
             // 세로 flex 안에서는 stretch 로 폭이 늘어날 수 있어 alignSelf 로 막고 가운데 둔다.
             // eslint-disable-next-line @next/next/no-img-element
             <img key={url} src={url} alt={`공지 이미지 ${i + 1}`}
-              style={{ maxWidth: '100%', height: 'auto', alignSelf: 'center', display: 'block', borderRadius: 8, border: '1px solid #ebebeb' }} />
+              style={{ maxWidth: '100%', height: 'auto', alignSelf: 'center', display: 'block', borderRadius: R.control, border: '1px solid #ebebeb' }} />
           ))}
           {notice.body?.trim() && (
             <div style={{ fontSize: 13, color: '#111827', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
@@ -144,7 +145,7 @@ export default function NoticePopup() {
             </button>
           ))}
           <button onClick={close}
-            style={{ marginLeft: 'auto', padding: '8px 16px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+            style={{ marginLeft: 'auto', padding: '8px 16px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
             {index < list.length - 1 ? '다음' : '확인'}
           </button>
         </div>

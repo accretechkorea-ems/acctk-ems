@@ -29,6 +29,7 @@ import { createClient } from '@/lib/supabase/client'
 import { isPublicPath } from '@/lib/publicPaths'
 import ModalOverlay from './ModalOverlay'
 import { Z } from '@/lib/zIndex'
+import { R } from '@/lib/radius'
 
 /** 로그아웃까지의 무활동 시간. */
 const IDLE_MS = 30 * 60 * 1000
@@ -172,7 +173,7 @@ export default function SessionManager() {
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: 400, background: '#ffffff', borderRadius: 8, padding: 24,
+          width: '100%', maxWidth: 400, background: '#ffffff', borderRadius: R.control, padding: 24,
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb',
           animation: 'session-warn-in 0.18s ease',
         }}
@@ -190,7 +191,7 @@ export default function SessionManager() {
             onMouseEnter={e => { e.currentTarget.style.background = '#1c3e87' }}
             onMouseLeave={e => { e.currentTarget.style.background = '#234ea2' }}
             style={{
-              padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: 6,
+              padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon,
               border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13,
               fontFamily: 'inherit', transition: 'background 0.15s ease',
             }}

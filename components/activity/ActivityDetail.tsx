@@ -12,6 +12,7 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import { canViewMenu } from '@/lib/permissions'
 import { activityTypeOrder, activityHref, byDateDesc, entryKey, type ActivityEntry } from '@/lib/activity'
 import { remoteActivityTypes, useActivityTypes } from '@/lib/activityTypes'
+import { R } from '@/lib/radius'
 
 // 활동 서비스 기록 상세 '본문'(헤더 + 타입 필터 + 목록 + 동선 지도). 상세 조회를 스스로 관리한다.
 // 두 곳에서 공유한다 — **둘 다 모달**이다(ActivityDetailModal 이 오버레이/카드로 감싼다):
@@ -219,7 +220,7 @@ export default function ActivityDetail({ engineer, startDate, endDate, variant, 
               <span style={{ fontSize: 20, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>{engineer.name}</span>
               <span style={{ fontSize: 12, color: GRAY, fontWeight: 500 }}>{engineer.position}</span>
               {engineer.teams && (
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: '#f3f4f6', color: '#6b7280' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: R.pill, background: '#f3f4f6', color: '#6b7280' }}>
                   {engineer.teams}
                 </span>
               )}
@@ -231,7 +232,7 @@ export default function ActivityDetail({ engineer, startDate, endDate, variant, 
               </svg>
               <span>{startDate.replace(/-/g, '.')} ~ {endDate.replace(/-/g, '.')}</span>
               {!detailLoading && (
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 99, background: '#f3f4f6', color: BLUE }}>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: R.pill, background: '#f3f4f6', color: BLUE }}>
                   총 {details.length}건
                 </span>
               )}
@@ -250,7 +251,7 @@ export default function ActivityDetail({ engineer, startDate, endDate, variant, 
                   title={routeResult.stops.length === 0 ? '표시할 방문 기록이 없습니다' : '동선 지도 보기'}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 6,
-                    padding: '6px 12px', borderRadius: 6, border: 'none',
+                    padding: '6px 12px', borderRadius: R.icon, border: 'none',
                     fontSize: 13, fontWeight: 700,
                     background: noStops ? '#f3f4f6' : BLUE,
                     color: noStops ? '#9ca3af' : '#fff',
@@ -319,12 +320,12 @@ export default function ActivityDetail({ engineer, startDate, endDate, variant, 
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: `1px solid ${BORDER}` }}>
                 <div>
-                  <div style={{ width: 130, height: 14, background: '#e5e7eb', borderRadius: 6, marginBottom: 8, animation: 'pulse 1.5s ease-in-out infinite' }} />
-                  <div style={{ width: 200, height: 11, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
+                  <div style={{ width: 130, height: 14, background: '#e5e7eb', borderRadius: R.icon, marginBottom: 8, animation: 'pulse 1.5s ease-in-out infinite' }} />
+                  <div style={{ width: 200, height: 11, background: '#e5e7eb', borderRadius: R.icon, animation: 'pulse 1.5s ease-in-out infinite' }} />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 7 }}>
-                  <div style={{ width: 58, height: 20, background: '#e5e7eb', borderRadius: 99, animation: 'pulse 1.5s ease-in-out infinite' }} />
-                  <div style={{ width: 72, height: 11, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
+                  <div style={{ width: 58, height: 20, background: '#e5e7eb', borderRadius: R.pill, animation: 'pulse 1.5s ease-in-out infinite' }} />
+                  <div style={{ width: 72, height: 11, background: '#e5e7eb', borderRadius: R.icon, animation: 'pulse 1.5s ease-in-out infinite' }} />
                 </div>
               </div>
             ))}

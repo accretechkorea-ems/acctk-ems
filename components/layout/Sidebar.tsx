@@ -28,6 +28,7 @@ import { useNotificationStore } from '@/lib/appData/notifications'
 import { useApprovalInbox } from '@/lib/appData/approvalInbox'
 import { Z } from '@/lib/zIndex'
 import { useOverlayEsc } from '@/components/common/overlayStack'
+import { R } from '@/lib/radius'
 
 /** 사이드바 폭. 본문 margin-left 와 같아야 한다(HeaderWrapper 가 같은 값을 쓴다). */
 export const SIDEBAR_WIDTH = 232
@@ -131,7 +132,7 @@ function Caret({ open }: { open: boolean }) {
 
 /** 로고 마크. <img> 대신 배경으로 깐다(next/image 경고를 늘리지 않는다). */
 const logoMark = (size: number): CSSProperties => ({
-  width: size, height: size, borderRadius: 7, flexShrink: 0,
+  width: size, height: size, borderRadius: R.control, flexShrink: 0,
   backgroundImage: 'url(/logo-mark.png)', backgroundSize: 'cover', backgroundPosition: 'center',
 })
 
@@ -377,7 +378,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
         </button>
         <Popover anchorRef={anchor} open={open} onClose={() => setDivisionOpen(null)} width={160}
           style={{
-            background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: 8, padding: 6,
+            background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: R.control, padding: 6,
             boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
           }}>
           <div role="menu" aria-label="사업부">
@@ -388,7 +389,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
                   style={{
                     display: 'block', width: '100%', textAlign: 'left', padding: '9px 10px', border: 'none',
                     background: on ? ACTIVE_BG : 'transparent', color: on ? BLUE : TEXT,
-                    fontWeight: on ? 700 : 600, fontSize: 13, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
+                    fontWeight: on ? 700 : 600, fontSize: 13, borderRadius: R.icon, cursor: 'pointer', fontFamily: 'inherit',
                   }}>
                   {DIVISION_LABEL[d]}
                 </button>
@@ -426,7 +427,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
   const itemStyle = (active: boolean, big: boolean): CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: big ? 12 : 10,
     height: big ? 44 : 32, padding: big ? '0 12px' : '0 10px',
-    borderRadius: big ? 8 : 6, cursor: 'pointer', width: '100%', boxSizing: 'border-box',
+    borderRadius: big ? R.control : R.icon, cursor: 'pointer', width: '100%', boxSizing: 'border-box',
     border: 'none', textAlign: 'left', fontFamily: 'inherit',
     fontSize: big ? 15 : 13, fontWeight: active ? 700 : 500,
     background: active ? ACTIVE_BG : 'transparent',
@@ -474,11 +475,11 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
         {badge > 0 && (
           mini
             // 접히면 숫자가 들어갈 자리가 없다 — 아이콘 오른쪽 위에 점으로만 알린다.
-            ? <span style={{ position: 'absolute', top: 5, right: 12, width: 7, height: 7, borderRadius: 99, background: BLUE }} />
+            ? <span style={{ position: 'absolute', top: 5, right: 12, width: 7, height: 7, borderRadius: R.pill, background: BLUE }} />
             : (
               <span style={{
                 marginLeft: 'auto', minWidth: big ? 20 : 18, height: big ? 20 : 18, padding: '0 6px', boxSizing: 'border-box',
-                borderRadius: 99, background: BLUE, color: '#ffffff', fontSize: 11, fontWeight: 700,
+                borderRadius: R.pill, background: BLUE, color: '#ffffff', fontSize: 11, fontWeight: 700,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
                 {badge > 99 ? '99+' : badge}
@@ -557,7 +558,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
   const profile = (big: boolean) => (
     <>
       <span style={{
-        width: big ? 32 : 30, height: big ? 32 : 30, borderRadius: 99, background: BLUE, color: '#ffffff',
+        width: big ? 32 : 30, height: big ? 32 : 30, borderRadius: R.pill, background: BLUE, color: '#ffffff',
         fontSize: big ? 13 : 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
       }}>{initial}</span>
       <span style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, minWidth: 0 }}>
@@ -590,7 +591,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
           style={{ width: 44, height: 44, border: 0, background: 'transparent', color: TEXT, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8" /><path d="M10 21a2 2 0 0 0 4 0" /></svg>
           {unreadCount > 0 && (
-            <span style={{ position: 'absolute', top: 9, right: 9, width: 8, height: 8, borderRadius: 99, background: BLUE, border: '2px solid #ffffff' }} />
+            <span style={{ position: 'absolute', top: 9, right: 9, width: 8, height: 8, borderRadius: R.pill, background: BLUE, border: '2px solid #ffffff' }} />
           )}
         </button>
       </header>
@@ -609,7 +610,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
             <button type="button" aria-label="사이드바 펼치기"
               onMouseEnter={showTip('사이드바 펼치기')} onMouseLeave={hideTip}
               onClick={onToggle}
-              style={{ width: 28, height: 28, border: 0, background: 'transparent', borderRadius: 6, color: MUTED, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              style={{ width: 28, height: 28, border: 0, background: 'transparent', borderRadius: R.icon, color: MUTED, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /></svg>
             </button>
           </div>
@@ -623,7 +624,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
               {renderDivision('pc')}
             </div>
             <button type="button" aria-label="사이드바 접기" onClick={onToggle}
-              style={{ width: 28, height: 28, border: 0, background: 'transparent', borderRadius: 6, color: MUTED, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              style={{ width: 28, height: 28, border: 0, background: 'transparent', borderRadius: R.icon, color: MUTED, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /></svg>
             </button>
           </div>
@@ -635,7 +636,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
           style={{
             display: 'flex', alignItems: 'center', gap: 8, height: 32,
             padding: collapsed ? 0 : '0 10px', justifyContent: collapsed ? 'center' : 'flex-start',
-            borderRadius: 6, border: '1px solid #e3e5e9', background: '#ffffff', color: MUTED,
+            borderRadius: R.icon, border: '1px solid #e3e5e9', background: '#ffffff', color: MUTED,
             fontSize: 13, fontFamily: 'inherit', cursor: 'default', width: '100%', boxSizing: 'border-box',
             whiteSpace: 'nowrap', flexShrink: 0,
           }}>
@@ -643,7 +644,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
           {!collapsed && (
             <>
               <span>검색</span>
-              <span style={{ marginLeft: 'auto', fontSize: 11, color: MUTED, border: '1px solid #e3e5e9', borderRadius: 4, padding: '1px 5px' }}>Ctrl K</span>
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: MUTED, border: '1px solid #e3e5e9', borderRadius: R.tag, padding: '1px 5px' }}>Ctrl K</span>
             </>
           )}
         </button>
@@ -688,13 +689,13 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
             onMouseEnter={showTip(meLabel)} onMouseLeave={hideTip}
             style={{
               display: 'flex', alignItems: 'center', gap: 10, width: '100%', border: 0,
-              background: 'transparent', padding: 6, borderRadius: 8, fontFamily: 'inherit',
+              background: 'transparent', padding: 6, borderRadius: R.control, fontFamily: 'inherit',
               cursor: 'pointer', textAlign: 'left', boxSizing: 'border-box',
               justifyContent: collapsed ? 'center' : 'flex-start',
             }}>
             {collapsed ? (
               <span style={{
-                width: 30, height: 30, borderRadius: 99, background: BLUE, color: '#ffffff',
+                width: 30, height: 30, borderRadius: R.pill, background: BLUE, color: '#ffffff',
                 fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
               }}>{initial}</span>
             ) : (
@@ -708,15 +709,15 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
           {meOpen && (
             <div style={{
               position: 'absolute', bottom: '100%', left: 0, marginBottom: 6, zIndex: Z.sidebarPanel,
-              background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: 8, padding: 6,
+              background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: R.control, padding: 6,
               width: 160, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
             }}>
               <button type="button" onClick={() => { setMeOpen(false); router.push('/account') }}
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 10px', border: 'none', background: 'transparent', color: TEXT, fontWeight: 600, fontSize: 13, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 10px', border: 'none', background: 'transparent', color: TEXT, fontWeight: 600, fontSize: 13, borderRadius: R.icon, cursor: 'pointer', fontFamily: 'inherit' }}>
                 정보 수정
               </button>
               <button type="button" onClick={handleLogout}
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 10px', border: 'none', background: 'transparent', color: '#dc2626', fontWeight: 600, fontSize: 13, borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 10px', border: 'none', background: 'transparent', color: '#dc2626', fontWeight: 600, fontSize: 13, borderRadius: R.icon, cursor: 'pointer', fontFamily: 'inherit' }}>
                 로그아웃
               </button>
             </div>
@@ -729,7 +730,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
         <div role="tooltip" style={{
           position: 'fixed', left: SIDEBAR_COLLAPSED_WIDTH + 6, top: tip.top, transform: 'translateY(-50%)',
           zIndex: Z.sidebarPanel, pointerEvents: 'none',
-          background: '#111827', color: '#ffffff', borderRadius: 6, padding: '5px 9px',
+          background: '#111827', color: '#ffffff', borderRadius: R.icon, padding: '5px 9px',
           fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
         }}>
           {tip.label}
@@ -771,7 +772,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
           <button type="button" aria-label="검색" disabled
             style={{
               display: 'flex', alignItems: 'center', gap: 8, height: 44, padding: '0 12px',
-              borderRadius: 8, border: '1px solid #e3e5e9', background: '#ffffff', color: MUTED,
+              borderRadius: R.control, border: '1px solid #e3e5e9', background: '#ffffff', color: MUTED,
               fontSize: 14, fontFamily: 'inherit', cursor: 'default', width: '100%', boxSizing: 'border-box', textAlign: 'left',
             }}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
@@ -793,11 +794,11 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
           </div>
           <div style={{ display: 'flex', gap: 6, padding: '6px 2px 2px' }}>
             <button type="button" onClick={() => { setDrawerOpen(false); router.push('/account') }}
-              style={{ flex: 1, height: 40, border: `1px solid ${BORDER}`, background: '#ffffff', color: TEXT, fontWeight: 600, fontSize: 13, borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit' }}>
+              style={{ flex: 1, height: 40, border: `1px solid ${BORDER}`, background: '#ffffff', color: TEXT, fontWeight: 600, fontSize: 13, borderRadius: R.control, cursor: 'pointer', fontFamily: 'inherit' }}>
               정보 수정
             </button>
             <button type="button" onClick={handleLogout}
-              style={{ flex: 1, height: 40, border: `1px solid ${BORDER}`, background: '#ffffff', color: '#dc2626', fontWeight: 600, fontSize: 13, borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit' }}>
+              style={{ flex: 1, height: 40, border: `1px solid ${BORDER}`, background: '#ffffff', color: '#dc2626', fontWeight: 600, fontSize: 13, borderRadius: R.control, cursor: 'pointer', fontFamily: 'inherit' }}>
               로그아웃
             </button>
           </div>

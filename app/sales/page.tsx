@@ -54,6 +54,7 @@ import { isGeneral20Form } from '@/lib/quoteForms'
 import RepairInfoModal from '@/components/quote/RepairInfoModal'
 import { fetchRepairInfoStates, type RepairInfoRow, type RepairInfoState } from '@/lib/quoteRepairInfo'
 import { todayKST, nowKSTParts, daysBetween, kstYmd, ymdParts } from '@/lib/date'
+import { R } from '@/lib/radius'
 
 // 기간 필터 모드 — 회계연도(4월 시작) 기준. h1=상반기(4~9월), h2=하반기(10~다음해 3월)
 type PeriodMode = 'year' | 'h1' | 'h2' | 'q1' | 'q2' | 'q3' | 'q4' | 'month'
@@ -243,10 +244,10 @@ function PerformanceChart({ quotes, fy, targets, engineerIds }: {
   const unitLabel = unit === 'month' ? '월 목표' : unit === 'quarter' ? '분기 목표' : '연간 목표'
 
   return (
-    <div style={{ background: CARD_BG, borderRadius: 14, padding: '20px 22px', marginBottom: 20, border: `1px solid ${BORDER}` }}>
+    <div style={{ background: CARD_BG, borderRadius: R.modal, padding: '20px 22px', marginBottom: 20, border: `1px solid ${BORDER}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          <div style={{ width: 3, height: 16, background: BLUE, borderRadius: 2 }} />
+          <div style={{ width: 3, height: 16, background: BLUE, borderRadius: R.tag }} />
           <span style={{ fontSize: 14, fontWeight: 800, color: TEXT, whiteSpace: 'nowrap' }}>실적 추이</span>
           <span style={{ fontSize: 12, color: MUTED, fontWeight: 400 }}>FY{fy}</span>
           <span style={{ fontSize: 11, color: MUTED }}>· 집계 대상 {engineerIds.length}명</span>
@@ -254,10 +255,10 @@ function PerformanceChart({ quotes, fy, targets, engineerIds }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
           {/* 범례 — 개인 그래프와 같은 글자·같은 색이다. */}
           <ChartLegend />
-          <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 10, padding: 3, gap: 1 }}>
+          <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: R.tile, padding: 3, gap: 1 }}>
             {([['month', '월별'], ['quarter', '분기별'], ['year', '연도별']] as [ChartUnit, string][]).map(([v, label]) => (
               <button key={v} onClick={() => setUnit(v)}
-                style={{ padding: '5px 12px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: unit === v ? '#fff' : 'transparent', color: unit === v ? TEXT : GRAY, boxShadow: unit === v ? '0 1px 3px rgba(0,0,0,0.10)' : 'none', transition: 'all 0.15s ease' }}>
+                style={{ padding: '5px 12px', borderRadius: R.control, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: unit === v ? '#fff' : 'transparent', color: unit === v ? TEXT : GRAY, boxShadow: unit === v ? '0 1px 3px rgba(0,0,0,0.10)' : 'none', transition: 'all 0.15s ease' }}>
                 {label}
               </button>
             ))}
@@ -306,7 +307,7 @@ function TeamCard({ teamId, engineers, filteredQuotes, orderQuotes, revenueQuote
 
   return (
     <div onClick={() => onCardClick(teamId)} style={{
-      background: CARD_BG, borderRadius: 8, padding: '16px 18px',
+      background: CARD_BG, borderRadius: R.control, padding: '16px 18px',
       border: `1px solid ${isSelected ? BLUE : BORDER}`,
       cursor: 'pointer', transition: 'transform 0.15s ease, border-color 0.15s ease',
     }}
@@ -316,7 +317,7 @@ function TeamCard({ teamId, engineers, filteredQuotes, orderQuotes, revenueQuote
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 16, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>{teamId}</span>
-          <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 99, background: '#f3f4f6', color: GRAY, fontWeight: 700 }}>{teamEngIds.length}명</span>
+          <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: R.pill, background: '#f3f4f6', color: GRAY, fontWeight: 700 }}>{teamEngIds.length}명</span>
         </div>
         {achieve !== null && (
           <span className="num" style={{ fontSize: 13, fontWeight: 800, color: achieveColor }}>
@@ -332,7 +333,7 @@ function TeamCard({ teamId, engineers, filteredQuotes, orderQuotes, revenueQuote
           { label: '매출완료', value: `₩${numKR(revenueAmt)}`, color: revenueAmt > 0 ? TEXT : MUTED },
           { label: '순이익', value: profitAmt > 0 ? `₩${numKR(profitAmt)}` : '-', color: profitAmt > 0 ? '#15803d' : MUTED, sub: profitRate !== null && profitAmt > 0 ? `${profitRate.toFixed(1)}%` : undefined },
         ].map(({ label, value, color, sub }) => (
-          <div key={label} style={{ background: '#f8fafc', borderRadius: 8, padding: '9px 11px' }}>
+          <div key={label} style={{ background: '#f8fafc', borderRadius: R.control, padding: '9px 11px' }}>
             <div style={{ fontSize: 10, color: MUTED, marginBottom: 3, fontWeight: 500 }}>{label}</div>
             <div className="num" style={{ fontSize: 13, fontWeight: 700, color }}>{value}</div>
             {sub && <div className="num" style={{ fontSize: 10, color: '#15803d', fontWeight: 700, marginTop: 1 }}>{sub}</div>}
@@ -501,7 +502,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   const sel = useQuoteSelection(filtered.map(q => q.quote_id))
   const pagedIds = paged.map(q => q.quote_id)
   const allPagedSelected = pagedIds.length > 0 && pagedIds.every(id => sel.isSelected(id))
-  const inp: React.CSSProperties ={ padding: '6px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' }
+  const inp: React.CSSProperties ={ padding: '6px 10px', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' }
   // 삭제는 사유가 있어야 한다 — 본인 삭제든 결재든 왜 지웠는지가 남아야 한다.
   const reasonRequired = editStatus === '취소요청'
   const reasonMissing = reasonRequired && !editFailReason.trim()
@@ -717,14 +718,14 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
           상태 칩을 누를 때마다 모달이 들썩이고, 표의 머리줄·쪽 넘김 버튼 자리가 옮겨
           다음에 누를 것을 눈으로 다시 찾아야 한다. 개인 그래프 모달과 같은 방식이다
           (components/sales/EngineerChartModal.tsx — 그쪽은 min(760px, 90vh)). */}
-      <div style={{ background: CARD_BG, borderRadius: 18, width: '100%', minWidth: 900, maxWidth: 1200, height: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', position: 'relative' }}>
+      <div style={{ background: CARD_BG, borderRadius: R.modal, width: '100%', minWidth: 900, maxWidth: 1200, height: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', position: 'relative' }}>
         <div style={{ padding: '18px 24px', borderBottom: `1px solid ${BORDER}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <span style={{ fontSize: 20, fontWeight: 800, color: TEXT }}>{engineer.name}</span>
                 <span style={{ fontSize: 12, color: GRAY }}>{engineer.position}</span>
-                {engineer.teams && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: tc.bg, color: tc.text, fontWeight: 700 }}>{engineer.teams}</span>}
+                {engineer.teams && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: R.modal, background: tc.bg, color: tc.text, fontWeight: 700 }}>{engineer.teams}</span>}
               </div>
               <div style={{ display: 'flex', gap: 20, fontSize: 13 }}>
                 <div><span style={{ color: GRAY, fontSize: 11 }}>견적 제출</span><div className="num" style={{ fontWeight: 700, color: TEXT }}>₩{numKR(engineer.quotedAmt)}</div></div>
@@ -759,11 +760,11 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
             const dealers = Object.values(dealerMap).sort((a, b) => b.supply - a.supply)
             if (dealers.length === 0) return null
             return (
-              <div style={{ marginBottom: 10, padding: '8px 12px', background: '#fff7ed', borderRadius: 10, border: '1px solid #fed7aa' }}>
+              <div style={{ marginBottom: 10, padding: '8px 12px', background: '#fff7ed', borderRadius: R.tile, border: '1px solid #fed7aa' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#c2410c', marginBottom: 6 }}>대리점별 현황</div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {dealers.map(d => (
-                    <div key={d.name} style={{ background: '#fff', border: '1px solid #fed7aa', borderRadius: 7, padding: '4px 10px', fontSize: 11 }}>
+                    <div key={d.name} style={{ background: '#fff', border: '1px solid #fed7aa', borderRadius: R.control, padding: '4px 10px', fontSize: 11 }}>
                       <span style={{ fontWeight: 700, color: '#c2410c' }}>{d.name}</span>
                       <span className="num" style={{ color: GRAY, marginLeft: 6 }}>₩{numKR(d.supply)}</span>
                       <span style={{ color: MUTED, marginLeft: 4, fontSize: 10 }}>({d.count}건)</span>
@@ -778,7 +779,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
             {/* 상태 목록은 lib/quoteStatus.ts 한 곳에서 온다. 「전체」만 여기서 앞에 붙인다. */}
             {['전체', ...STATUS_FILTER_TABS].map(s => (
               <button key={s} onClick={() => { setStatusFilter(s); setPage(1) }}
-                style={{ padding: '5px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: statusFilter === s ? (s === '전체' ? BLUE : getCategoryColor(SALES_STATUS_COLORS, s).text) : '#f3f4f6', color: statusFilter === s ? '#fff' : TEXT }}>
+                style={{ padding: '5px 10px', borderRadius: R.control, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: statusFilter === s ? (s === '전체' ? BLUE : getCategoryColor(SALES_STATUS_COLORS, s).text) : '#f3f4f6', color: statusFilter === s ? '#fff' : TEXT }}>
                 {salesStatusLabel(s)}
               </button>
             ))}
@@ -787,7 +788,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
               quoteIds={sel.selected}
               engineerId={currentEngineerId}
               onDone={sel.clear}
-              style={{ padding: '5px 12px', borderRadius: 8, border: 'none', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: BLUE, color: '#fff' }}
+              style={{ padding: '5px 12px', borderRadius: R.control, border: 'none', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: BLUE, color: '#fff' }}
             />
           </div>
         </div>
@@ -863,7 +864,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                       <td style={{ padding: '8px 10px', color: MUTED, whiteSpace: 'nowrap', fontSize: 11, textAlign: 'center' }}>{q.quote_date}</td>
                       <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                         {q.dealer?.company_name
-                          ? <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#fff7ed', color: '#c2410c', fontWeight: 700, border: '1px solid #fed7aa' }}>{q.dealer.company_name}</span>
+                          ? <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: R.tag, background: '#fff7ed', color: '#c2410c', fontWeight: 700, border: '1px solid #fed7aa' }}>{q.dealer.company_name}</span>
                           : <span style={{ fontSize: 11, color: MUTED }}>직판</span>}
                       </td>
                       <td style={{ padding: '8px 10px', fontWeight: 600, whiteSpace: 'nowrap', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{q.customers?.company_name || '-'}</td>
@@ -874,7 +875,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                       </td>
                       <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
-                          <span style={{ padding: '3px 7px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text, whiteSpace: 'nowrap', alignSelf: 'center' }}>
+                          <span style={{ padding: '3px 7px', borderRadius: R.icon, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text, whiteSpace: 'nowrap', alignSelf: 'center' }}>
                             {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : salesStatusLabel(q.status)}
                           </span>
                           {/* 반려 사유는 **결재 문서**에 있다 — 목록에 사유 문자열을 내려받지 않는다(게이트 응답에
@@ -913,7 +914,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                                     onClose={() => setHoveredMemoId(null)}
                                     align="center"
                                     gap={6}
-                                    style={{ background: '#1e293b', color: '#e2e8f0', borderRadius: 9, padding: '8px 12px', fontSize: 11, minWidth: 180, maxWidth: 260, lineHeight: 1.6, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', pointerEvents: 'none' }}
+                                    style={{ background: '#1e293b', color: '#e2e8f0', borderRadius: R.control, padding: '8px 12px', fontSize: 11, minWidth: 180, maxWidth: 260, lineHeight: 1.6, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', pointerEvents: 'none' }}
                                   >
                                     <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginBottom: 4 }}>처리 담당자</div>
                                     <div style={{ fontWeight: 700, color: '#e2e8f0', marginBottom: (q.order_memo || q.order_request_memo) ? 8 : 0 }}>
@@ -946,7 +947,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                           {canSubmitFor(q) && (
                             <button onClick={() => { setApprovalError(null); setApprovalQuote(q) }}
                               title="결재선을 지정해 이 견적을 결재로 올립니다"
-                              style={{ padding: '3px 7px', background: '#eff6ff', border: '1px solid #c7d7f8', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#0369a1' }}>
+                              style={{ padding: '3px 7px', background: '#eff6ff', border: '1px solid #c7d7f8', borderRadius: R.icon, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#0369a1' }}>
                               결재 올리기
                             </button>
                           )}
@@ -954,13 +955,13 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                               수주 전환·계산서 요청은 승인 게이트가 허용할 때만 낸다(서버도 409 로 막는다). */}
                           {q.status === '견적중' && q.quote_type !== 'repair_domestic' && allowsFor(q) && (
                             <button onClick={() => { setPoQuote(q); setPoFile(null); setPoMemo('') }}
-                              style={{ padding: '3px 7px', background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#7c3aed' }}>
+                              style={{ padding: '3px 7px', background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: R.icon, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#7c3aed' }}>
                               발주서 등록
                             </button>
                           )}
                           {(q.status === '주문완료' || (q.quote_type === 'repair_domestic' && q.status === '수리중' && allowsFor(q))) && (
                             <button onClick={() => { setTaxQuote(q); setTaxDate(q.tax_invoice_date || '') }}
-                              style={{ padding: '3px 7px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#b45309' }}>
+                              style={{ padding: '3px 7px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: R.icon, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#b45309' }}>
                               계산서 요청
                             </button>
                           )}
@@ -998,7 +999,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                           ) : (
                             <button
                               onClick={() => { setEditQuote(q); setEditStatus('취소요청'); setEditFailReason(q.fail_reason || '') }}
-                              style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 13, color: MUTED, lineHeight: 1, flexShrink: 0 }}
+                              style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: `1px solid ${BORDER}`, borderRadius: R.icon, cursor: 'pointer', fontSize: 13, color: MUTED, lineHeight: 1, flexShrink: 0 }}
                               onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#fef2f2'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#fecdd3'; (e.currentTarget as HTMLButtonElement).style.color = '#be123c' }}
                               onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.borderColor = BORDER; (e.currentTarget as HTMLButtonElement).style.color = MUTED }}
                             >⋮</button>
@@ -1014,18 +1015,18 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
         </div>
         {totalPages > 1 && (
           <div style={{ padding: '12px 24px', borderTop: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${BORDER}`, background: '#fff', cursor: page === 1 ? 'not-allowed' : 'pointer', opacity: page === 1 ? 0.4 : 1, fontWeight: 700 }}>‹</button>
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={{ padding: '6px 12px', borderRadius: R.control, border: `1px solid ${BORDER}`, background: '#fff', cursor: page === 1 ? 'not-allowed' : 'pointer', opacity: page === 1 ? 0.4 : 1, fontWeight: 700 }}>‹</button>
             {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-              <button key={p} onClick={() => setPage(p)} style={{ width: 32, height: 32, borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, background: page === p ? BLUE : '#f3f4f6', color: page === p ? '#fff' : TEXT }}>{p}</button>
+              <button key={p} onClick={() => setPage(p)} style={{ width: 32, height: 32, borderRadius: R.control, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, background: page === p ? BLUE : '#f3f4f6', color: page === p ? '#fff' : TEXT }}>{p}</button>
             ))}
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${BORDER}`, background: '#fff', cursor: page === totalPages ? 'not-allowed' : 'pointer', opacity: page === totalPages ? 0.4 : 1, fontWeight: 700 }}>›</button>
+            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={{ padding: '6px 12px', borderRadius: R.control, border: `1px solid ${BORDER}`, background: '#fff', cursor: page === totalPages ? 'not-allowed' : 'pointer', opacity: page === totalPages ? 0.4 : 1, fontWeight: 700 }}>›</button>
             <span style={{ fontSize: 12, color: GRAY, marginLeft: 8 }}>{filtered.length}건 중 {(page - 1) * PAGE_SIZE + 1}~{Math.min(page * PAGE_SIZE, filtered.length)}건</span>
           </div>
         )}
         {/* 발주서 등록 모달 */}
         {poQuote && (
           <ModalOverlay onClose={() => { setPoQuote(null); setPoFile(null); setPoMemo('') }} confirmClose closeOn={poUploading ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, padding: 0 }}>
-            <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
+            <div style={{ background: '#fff', borderRadius: R.modal, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>발주서 등록</div>
               <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{poQuote.quote_number}</div>
               <div style={{ marginBottom: 14 }}>
@@ -1033,7 +1034,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                 <div style={{ display: 'flex', gap: 8 }}>
                   {(['직납', '택배발송'] as const).map(m => (
                     <button key={m} onClick={() => setPoDelivery(m)}
-                      style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: `1.5px solid ${poDelivery === m ? '#7c3aed' : BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: poDelivery === m ? '#f5f3ff' : '#f9fafb', color: poDelivery === m ? '#7c3aed' : GRAY, transition: 'all 0.12s' }}>
+                      style={{ flex: 1, padding: '8px 0', borderRadius: R.control, border: `1.5px solid ${poDelivery === m ? '#7c3aed' : BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: poDelivery === m ? '#f5f3ff' : '#f9fafb', color: poDelivery === m ? '#7c3aed' : GRAY, transition: 'all 0.12s' }}>
                       {m}
                     </button>
                   ))}
@@ -1047,7 +1048,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                       <select
                         value={poContactId}
                         onChange={e => setPoContactId(e.target.value ? Number(e.target.value) : '')}
-                        style={{ width: '100%', padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, outline: 'none', background: '#fff', boxSizing: 'border-box' }}>
+                        style={{ width: '100%', padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 12, outline: 'none', background: '#fff', boxSizing: 'border-box' }}>
                         <option value=''>-- 담당자 선택 (선택사항) --</option>
                         {poContacts.map(c => {
                           const label = [c.name, c.position || c.department].filter(Boolean).join(' · ')
@@ -1061,7 +1062,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                     <select
                       value={poAddressMode}
                       onChange={e => { setPoAddressMode(e.target.value as 'company' | 'direct'); setPoAddress('') }}
-                      style={{ width: '100%', padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, outline: 'none', background: '#fff', boxSizing: 'border-box', marginBottom: 6 }}>
+                      style={{ width: '100%', padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 12, outline: 'none', background: '#fff', boxSizing: 'border-box', marginBottom: 6 }}>
                       {poCompanyAddress && <option value="company">🏢 회사 주소: {poCompanyAddress}</option>}
                       <option value="direct">✏️ 직접 입력</option>
                     </select>
@@ -1071,11 +1072,11 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                         onChange={e => setPoAddress(e.target.value)}
                         placeholder="배송받을 주소를 입력하세요"
                         rows={2}
-                        style={{ width: '100%', padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box', fontFamily: 'inherit' }}
+                        style={{ width: '100%', padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 12, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box', fontFamily: 'inherit' }}
                       />
                     )}
                     {poAddressMode === 'company' && poCompanyAddress && (
-                      <div style={{ padding: '6px 10px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, fontSize: 12, color: '#15803d', lineHeight: 1.5 }}>
+                      <div style={{ padding: '6px 10px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: R.control, fontSize: 12, color: '#15803d', lineHeight: 1.5 }}>
                         {poCompanyAddress}
                       </div>
                     )}
@@ -1094,7 +1095,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                     if (f && f.type === 'application/pdf') setPoFile(f)
                   }}
                   onClick={() => poFileRef.current?.click()}
-                  style={{ border: `2px dashed ${poIsDragging ? '#7c3aed' : poFile ? '#7c3aed' : BORDER}`, borderRadius: 10, padding: '18px 12px', textAlign: 'center', cursor: 'pointer', background: poIsDragging ? '#f5f3ff' : poFile ? '#faf5ff' : '#fafafa', transition: 'all 0.15s' }}>
+                  style={{ border: `2px dashed ${poIsDragging ? '#7c3aed' : poFile ? '#7c3aed' : BORDER}`, borderRadius: R.tile, padding: '18px 12px', textAlign: 'center', cursor: 'pointer', background: poIsDragging ? '#f5f3ff' : poFile ? '#faf5ff' : '#fafafa', transition: 'all 0.15s' }}>
                   {poFile ? (
                     <>
                       <div style={{ fontSize: 20, marginBottom: 4 }}>📄</div>
@@ -1122,13 +1123,13 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                 <textarea value={poMemo} onChange={e => setPoMemo(e.target.value.slice(0, PO_MEMO_MAX))} rows={3}
                   maxLength={PO_MEMO_MAX}
                   placeholder="납기 요청, 고객 특이사항 등 영업관리에 전달할 내용"
-                  style={{ width: '100%', padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                  style={{ width: '100%', padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 12, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box', fontFamily: 'inherit' }} />
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => { setPoQuote(null); setPoFile(null); setPoMemo('') }} disabled={poUploading}
-                  style={{ flex: 1, padding: 9, background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>취소</button>
+                  style={{ flex: 1, padding: 9, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700 }}>취소</button>
                 <button onClick={handlePoUpload} disabled={poUploading || !poFile}
-                  style={{ flex: 1, padding: 9, background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, opacity: (poUploading || !poFile) ? 0.6 : 1 }}>
+                  style={{ flex: 1, padding: 9, background: '#7c3aed', color: '#fff', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, opacity: (poUploading || !poFile) ? 0.6 : 1 }}>
                   {poUploading ? '업로드 중...' : '등록'}
                 </button>
               </div>
@@ -1139,20 +1140,20 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
         {/* 세금계산서 요청 모달 */}
         {taxQuote && (
           <ModalOverlay onClose={() => { setTaxQuote(null); setTaxDate('') }} confirmClose closeOn={taxSending ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, padding: 0 }}>
-            <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 340, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
+            <div style={{ background: '#fff', borderRadius: R.modal, padding: 24, width: 340, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>세금계산서 발행 요청</div>
               <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{taxQuote.quote_number}</div>
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, color: GRAY, marginBottom: 6, fontWeight: 600 }}>요청 발행일 <span style={{ color: '#dc2626' }}>*</span></div>
                 <input type="date" className="date-fit" value={taxDate} onChange={e => { setTaxDate(e.target.value); clearError('taxDate') }}
-                  style={{ width: '100%', padding: '7px 10px', border: errors.taxDate ? errBorder : `1px solid ${taxDate ? BORDER : '#fca5a5'}`, borderRadius: 8, fontSize: 13, outline: 'none', colorScheme: 'light', boxSizing: 'border-box' }} />
+                  style={{ width: '100%', padding: '7px 10px', border: errors.taxDate ? errBorder : `1px solid ${taxDate ? BORDER : '#fca5a5'}`, borderRadius: R.control, fontSize: 13, outline: 'none', colorScheme: 'light', boxSizing: 'border-box' }} />
                 <FieldError message={errors.taxDate} />
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => { setTaxQuote(null); setTaxDate('') }} disabled={taxSending}
-                  style={{ flex: 1, padding: 9, background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>취소</button>
+                  style={{ flex: 1, padding: 9, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700 }}>취소</button>
                 <button onClick={handleTaxRequest} disabled={taxSending || !taxDate}
-                  style={{ flex: 1, padding: 9, background: '#b45309', color: '#fff', border: 'none', borderRadius: 8, cursor: taxDate ? 'pointer' : 'not-allowed', fontWeight: 700, opacity: (taxSending || !taxDate) ? 0.45 : 1 }}>
+                  style={{ flex: 1, padding: 9, background: '#b45309', color: '#fff', border: 'none', borderRadius: R.control, cursor: taxDate ? 'pointer' : 'not-allowed', fontWeight: 700, opacity: (taxSending || !taxDate) ? 0.45 : 1 }}>
                   {taxSending ? '요청 중...' : '발행 요청'}
                 </button>
               </div>
@@ -1162,7 +1163,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
 
         {editQuote && (
           <ModalOverlay onClose={() => setEditQuote(null)} confirmClose style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, padding: 0 }}>
-            <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
+            <div style={{ background: '#fff', borderRadius: R.modal, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 4 }}>삭제 / 실패 처리</div>
               <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{editQuote.quote_number} · {editQuote.customers?.company_name || ''}</div>
 
@@ -1173,7 +1174,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
               <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
                 {editStatusesFor(editQuote.status, isAutoFailed(editQuote.status, editQuote.fail_reason)).map(s => (
                   <button key={s} onClick={() => setEditStatus(s)}
-                    style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: `1.5px solid ${editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).bg : '#f9fafb', color: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : GRAY, transition: 'all 0.12s' }}>
+                    style={{ flex: 1, padding: '9px 0', borderRadius: R.control, border: `1.5px solid ${editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).bg : '#f9fafb', color: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : GRAY, transition: 'all 0.12s' }}>
                     {s === '취소요청' ? '삭제' : salesStatusLabel(s)}
                   </button>
                 ))}
@@ -1181,14 +1182,14 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
 
               {/* 되돌릴 수 없는 건이면 왜 선택지가 없는지 알려준다 */}
               {isAutoFailed(editQuote.status, editQuote.fail_reason) && (
-                <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, color: GRAY, lineHeight: 1.6, marginBottom: 12 }}>
+                <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 12, color: GRAY, lineHeight: 1.6, marginBottom: 12 }}>
                   {AUTO_FAIL_NOTICE}
                 </div>
               )}
 
               <div style={{ marginBottom: 6 }}>
                 {editStatus === '견적중' ? (
-                  <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, color: GRAY, lineHeight: 1.6 }}>
+                  <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 12, color: GRAY, lineHeight: 1.6 }}>
                     {REVERT_NOTICE}
                   </div>
                 ) : (
@@ -1198,7 +1199,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                     </div>
                     <textarea value={editFailReason} onChange={e => setEditFailReason(e.target.value)} rows={3}
                       placeholder={editStatus === '취소요청' ? '삭제 요청 사유를 입력하세요' : '미수주 사유를 입력하세요'}
-                      style={{ width: '100%', padding: '8px 10px', border: reasonMissing ? errBorder : `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
+                      style={{ width: '100%', padding: '8px 10px', border: reasonMissing ? errBorder : `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
                     <FieldError message={reasonMissing ? '삭제 사유를 입력해주세요' : undefined} />
                   </>
                 )}
@@ -1208,7 +1209,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                   누르고 나서 알게 되면 늦다. 색은 기존 '취소요청' 토큰을 그대로 쓴다. */}
               {reasonRequired && (
                 <div style={{
-                  fontSize: 12, lineHeight: 1.6, borderRadius: 8, padding: '8px 10px', marginTop: 10,
+                  fontSize: 12, lineHeight: 1.6, borderRadius: R.control, padding: '8px 10px', marginTop: 10,
                   border: `1px solid ${BORDER}`,
                   background: selfDelete ? getCategoryColor(SALES_STATUS_COLORS, '취소요청').bg : '#f3f4f6',
                   color: selfDelete ? getCategoryColor(SALES_STATUS_COLORS, '취소요청').text : GRAY,
@@ -1225,9 +1226,9 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-                <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
+                <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
                 <button onClick={handleSave} disabled={saving || reasonMissing || deleteWaiting || requestBlocked}
-                  style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 0.7 : 1 }}>
+                  style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: R.control, cursor: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 0.7 : 1 }}>
                   {saving ? '처리 중...'
                     : requestBlocked ? '삭제 불가'
                     : deleteWaiting ? '확인 중...'
@@ -1455,7 +1456,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
     await fetchAll()
   }
 
-  const inp: React.CSSProperties = { padding: '6px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' }
+  const inp: React.CSSProperties = { padding: '6px 10px', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box' }
 
   if (!authorized) return <AccessGate loading={guardLoading} />
 
@@ -1470,13 +1471,13 @@ const visibleEngineers = sortedEngineers.filter(e => {
 
         {/* 조회 실패는 "실적 0" 과 구분해서 알린다 — 숫자가 0 으로 보이면 장애를 알아챌 수 없다. */}
         {loadError && (
-          <div style={{ background: '#fef2f2', border: '1px solid #fecdd3', borderRadius: 8, padding: '12px 16px', marginBottom: 16, color: '#be123c', fontSize: 13, fontWeight: 700 }}>
+          <div style={{ background: '#fef2f2', border: '1px solid #fecdd3', borderRadius: R.control, padding: '12px 16px', marginBottom: 16, color: '#be123c', fontSize: 13, fontWeight: 700 }}>
             데이터를 불러오지 못했습니다
           </div>
         )}
 
         {/* 필터 */}
-        <div style={{ background: CARD_BG, borderRadius: 14, padding: '12px 16px', marginBottom: 20, border: `1px solid ${BORDER}` }}>
+        <div style={{ background: CARD_BG, borderRadius: R.modal, padding: '12px 16px', marginBottom: 20, border: `1px solid ${BORDER}` }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <select value={fy} onChange={e => setFy(Number(e.target.value))} style={{ ...inp, width: 100, fontWeight: 700 }}>
               {[currentFY + 1, currentFY, currentFY - 1].map(y => <option key={y} value={y}>FY{y}</option>)}
@@ -1508,7 +1509,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
             )}
             <span style={{ fontSize: 12, color: MUTED, fontWeight: 500 }}>{getPeriodLabel(mode, fy, month)}</span>
             {remainingLabel && (
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#b91c1c', background: '#fef2f2', padding: '3px 10px', borderRadius: 99, border: '1px solid #fecaca' }}>{remainingLabel}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#b91c1c', background: '#fef2f2', padding: '3px 10px', borderRadius: R.pill, border: '1px solid #fecaca' }}>{remainingLabel}</span>
             )}
             <div style={{ flex: 1 }} />
             <div style={{ width: 1, height: 20, background: BORDER }} />
@@ -1522,7 +1523,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
         </div>
 
         {/* 사업부 전체 요약 */}
-        <div style={{ background: CARD_BG, borderRadius: 8, padding: '20px 22px', marginBottom: 20, border: `1px solid ${BORDER}` }}>
+        <div style={{ background: CARD_BG, borderRadius: R.control, padding: '20px 22px', marginBottom: 20, border: `1px solid ${BORDER}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 16, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>
@@ -1531,7 +1532,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
               <span style={{ fontSize: 12, color: MUTED, fontWeight: 400 }}>{getPeriodLabel(mode, fy, month)}</span>
             </div>
             <button onClick={() => setShowChart(p => !p)}
-              style={{ padding: '6px 14px', borderRadius: 9, border: `1px solid ${showChart ? '#c7d7f8' : BORDER}`, background: showChart ? '#eff4ff' : '#f8fafc', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: showChart ? BLUE : GRAY, display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, transition: 'all 0.15s ease' }}>
+              style={{ padding: '6px 14px', borderRadius: R.control, border: `1px solid ${showChart ? '#c7d7f8' : BORDER}`, background: showChart ? '#eff4ff' : '#f8fafc', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: showChart ? BLUE : GRAY, display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, transition: 'all 0.15s ease' }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
               실적 추이
             </button>
@@ -1549,7 +1550,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
               { label: '수주 달성률', value: totalOrderAchieve !== null ? `${totalOrderAchieve.toFixed(1)}%` : '미설정', sub: totalOrderTargetAmt > 0 ? `목표 ₩${numKR(totalOrderTargetAmt)}` : null, color: totalOrderAchieveColor },
               { label: '매출 달성률', value: totalAchieve !== null ? `${totalAchieve.toFixed(1)}%` : '미설정', sub: totalTargetAmt > 0 ? `목표 ₩${numKR(totalTargetAmt)}` : null, color: totalAchieveColor },
             ].map(({ label, value, sub, color }: any) => (
-              <div key={label} style={{ background: '#f8fafc', borderRadius: 8, padding: '13px 15px' }}>
+              <div key={label} style={{ background: '#f8fafc', borderRadius: R.control, padding: '13px 15px' }}>
                 <div style={{ fontSize: 10, fontWeight: 600, color: MUTED, marginBottom: 5, letterSpacing: '0.2px' }}>{label}</div>
                 <div className="num" style={{ fontSize: 16, fontWeight: 800, color: color || TEXT, letterSpacing: '-0.3px', lineHeight: 1 }}>{value}</div>
                 {sub && <div style={{ fontSize: 10, color: MUTED, marginTop: 4 }}>{sub}</div>}

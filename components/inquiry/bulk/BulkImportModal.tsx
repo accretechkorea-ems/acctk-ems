@@ -37,6 +37,7 @@ import {
   revertRow, moveFile, sortRows, touched, needsYear, chunk, fileYmd,
   QUERY_CHUNK, type Row,
 } from './plan'
+import { R } from '@/lib/radius'
 
 /** 한 번에 받는 파일 수 상한. 미리보기 표가 읽을 수 있는 선. */
 const MAX_PICK = 200
@@ -63,7 +64,7 @@ type Pending = {
 }
 
 const field: React.CSSProperties = {
-  padding: '5px 8px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  padding: '5px 8px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   fontSize: 12, color: TEXT, background: CARD_BG, outline: 'none',
   boxSizing: 'border-box', fontFamily: 'inherit', width: '100%',
 }
@@ -431,7 +432,7 @@ export default function BulkImportModal({
     // 붙여 넣은 표가 들어 있을 수 있다 — 확인 뒤 닫는다.
     <ModalOverlay onClose={close} confirmClose>
       <div style={{
-        background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 1100,
+        background: CARD_BG, borderRadius: R.control, padding: '14px 16px', width: '100%', maxWidth: 1100,
         maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
       }}>
         <div style={cardHeader}>
@@ -456,7 +457,7 @@ export default function BulkImportModal({
               onDragOver={e => e.preventDefault()}
               onDrop={e => { e.preventDefault(); take(e.dataTransfer.files) }}
               style={{
-                display: 'block', width: '100%', border: `1px dashed ${BORDER}`, borderRadius: 8,
+                display: 'block', width: '100%', border: `1px dashed ${BORDER}`, borderRadius: R.control,
                 padding: '40px 16px', background: CARD_BG, textAlign: 'center',
                 fontSize: 13, color: MUTED, fontFamily: 'inherit', cursor: 'pointer', lineHeight: 1.7,
               }}
@@ -472,7 +473,7 @@ export default function BulkImportModal({
             {error && (
               <div style={{
                 fontSize: 12, lineHeight: 1.6, color: '#be123c', background: '#fef2f2',
-                border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px', marginBottom: 12,
+                border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '8px 10px', marginBottom: 12,
               }}>{error}</div>
             )}
 
@@ -493,7 +494,7 @@ export default function BulkImportModal({
 
             {/* 미리보기 표 — 번호는 종류·계열·일련번호·연도로 조립한 파생값이라 읽기 전용이다.
                 고치는 것은 그 재료들이다(buildInquiryNo 를 거친다). */}
-            <div style={{ overflowX: 'auto', border: `1px solid ${BORDER}`, borderRadius: 8, marginBottom: 12 }}>
+            <div style={{ overflowX: 'auto', border: `1px solid ${BORDER}`, borderRadius: R.control, marginBottom: 12 }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1180 }}>
                 <thead>
                   <tr>
@@ -530,7 +531,7 @@ export default function BulkImportModal({
                           {edited && (
                             <div style={{ fontSize: 11, color: MUTED, marginTop: 3 }}>
                               <span style={{
-                                background: NEUTRAL_BG, borderRadius: 99, padding: '1px 6px', fontWeight: 700,
+                                background: NEUTRAL_BG, borderRadius: R.pill, padding: '1px 6px', fontWeight: 700,
                               }} title={`자동 인식: ${INQUIRY_TYPE_LABEL[r.auto.type]} ${r.auto.no}`}>
                                 수정함
                               </span>
@@ -688,7 +689,7 @@ export default function BulkImportModal({
 
             {/* 확인 필요·미분류 */}
             {pending.length > 0 && (
-              <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+              <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '10px 12px', marginBottom: 12 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: MUTED, marginBottom: 8 }}>
                   확인 필요 · 미분류 {pending.length}개
                   <span style={{ fontWeight: 500 }}> — 고르지 않은 파일은 등록에서 빠집니다</span>

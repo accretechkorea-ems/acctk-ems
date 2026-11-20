@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { INPUT_BORDER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY, WHITE_BUTTON_BG, WHITE_BUTTON_TEXT, modalOverlayStyle } from '../constants'
+import { R } from '@/lib/radius'
 
 type Props = {
   isOpen: boolean
@@ -47,7 +48,7 @@ export default function SignModal({ isOpen, onClose, onComplete }: Props) {
     <div style={{ ...modalOverlayStyle, alignItems: 'flex-start', overflowY: 'auto' }}>
       <div style={{
         margin: 'auto', width: '100%', maxWidth: 260,
-        background: '#ffffff', borderRadius: 16, padding: 16,
+        background: '#ffffff', borderRadius: R.modal, padding: 16,
         boxShadow: '0 16px 48px rgba(0,0,0,0.22)', border: `1px solid ${INPUT_BORDER}`,
         animation: 'modal-in 0.18s ease',
       }}>
@@ -69,7 +70,7 @@ export default function SignModal({ isOpen, onClose, onComplete }: Props) {
                 <div style={{
                   height: 2, flex: 1, margin: '0 6px',
                   background: signStep === 2 ? WHITE_BUTTON_BG : '#e5e7eb',
-                  borderRadius: 2, transition: 'background 0.2s ease',
+                  borderRadius: R.tag, transition: 'background 0.2s ease',
                 }} />
               )}
             </div>
@@ -96,7 +97,7 @@ export default function SignModal({ isOpen, onClose, onComplete }: Props) {
               width={456}
               height={912}
               style={{
-                width: 228, height: 456, borderRadius: 10, background: '#fafafa',
+                width: 228, height: 456, borderRadius: R.tile, background: '#fafafa',
                 border: `2px solid ${INPUT_BORDER}`, cursor: 'crosshair', touchAction: 'none',
                 display: signStep === step ? 'block' : 'none',
               }}
@@ -131,7 +132,7 @@ export default function SignModal({ isOpen, onClose, onComplete }: Props) {
           style={{
             marginTop: 8, padding: '4px 11px',
             background: '#f4f5f7', border: `1px solid ${INPUT_BORDER}`,
-            borderRadius: 7, cursor: 'pointer', fontSize: 11, fontWeight: 600, color: TEXT_SECONDARY,
+            borderRadius: R.control, cursor: 'pointer', fontSize: 11, fontWeight: 600, color: TEXT_SECONDARY,
           }}
         >
           지우기
@@ -142,7 +143,7 @@ export default function SignModal({ isOpen, onClose, onComplete }: Props) {
             onClick={handleBack}
             style={{
               padding: '9px 16px', background: '#f4f5f7', border: `1px solid ${INPUT_BORDER}`,
-              borderRadius: 9, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT_PRIMARY,
+              borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT_PRIMARY,
             }}
           >
             {signStep === 2 ? '← 이전' : '취소'}
@@ -151,7 +152,7 @@ export default function SignModal({ isOpen, onClose, onComplete }: Props) {
             onClick={handleNext}
             style={{
               padding: '9px 22px', background: WHITE_BUTTON_BG, color: WHITE_BUTTON_TEXT,
-              border: 'none', borderRadius: 9, cursor: 'pointer', fontWeight: 700, fontSize: 13,
+              border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13,
             }}
           >
             {signStep === 1 ? '다음 →' : 'PDF 생성'}

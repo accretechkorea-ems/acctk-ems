@@ -33,6 +33,7 @@ import { Z } from '@/lib/zIndex'
 import { useOverlayEsc } from '@/components/common/overlayStack'
 import { PDF_VIEW_PARAMS, VIEWER_BG, VIEWER_HEADER_H, pdfViewerBox } from '@/lib/pdfViewer'
 import type { PdfDoc } from '@/lib/pdfViewer'
+import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const MUTED = '#9ca3af'
@@ -140,7 +141,7 @@ export default function PdfViewerModal({ doc, onClose }: PdfViewerModalProps) {
   const open = shown && !closing
   const motion = reduced ? 'none' : undefined
   const linkStyle: React.CSSProperties = {
-    padding: '4px 9px', border: `1px solid ${BORDER}`, borderRadius: 6,
+    padding: '4px 9px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
     fontSize: 11, fontWeight: 700, color: '#234ea2', textDecoration: 'none',
     background: '#fff', cursor: 'pointer',
   }
@@ -162,7 +163,7 @@ export default function PdfViewerModal({ doc, onClose }: PdfViewerModalProps) {
       <div
         style={{
           // 가로세로가 A4 를 따른다 — 그래야 뷰어가 좌우를 제 배경색으로 채우지 않는다.
-          width: box.width, height: box.height, background: VIEWER_BG, borderRadius: 8,
+          width: box.width, height: box.height, background: VIEWER_BG, borderRadius: R.control,
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
           opacity: open ? 1 : 0,

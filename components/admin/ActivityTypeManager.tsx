@@ -32,6 +32,7 @@ import {
   setActivityTypeActive, setActivityTypeRemote, useActivityTypesAdmin,
   validateNewCode, validateNewLabel, type ActivityType,
 } from '@/lib/activityTypes'
+import { R } from '@/lib/radius'
 
 /** 코드 · 이름 · 순서 · 활성 · 방문 · 버튼. 견적 분류 표와 같은 방식이다. */
 const GRID = '120px minmax(130px, 1fr) 48px 48px 64px 210px'
@@ -147,7 +148,7 @@ export default function ActivityTypeManager({ onClose, canEdit }: ActivityTypeMa
   return (
     // 이 화면은 줄마다 즉시 저장한다 — 확인이 필요한 때는 **이름을 고치는 중**일 때뿐이다.
     <ModalOverlay onClose={onClose} confirmClose dirty={editCode !== null}>
-      <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 820, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }}>
+      <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 820, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>영업활동 종류 관리</div>
           <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: NEUTRAL_BG, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: SUB }}>
@@ -166,11 +167,11 @@ export default function ActivityTypeManager({ onClose, canEdit }: ActivityTypeMa
         {/* 추가 폼 — 어쩌다 한 번 쓰므로 접어 둔다(견적 분류 관리와 같은 방식). */}
         {!addOpen ? (
           <button onClick={() => setAddOpen(true)} disabled={locked} title={lockMsg}
-            style={{ padding: '9px 16px', background: NEUTRAL_BG, color: locked ? MUTED : TEXT, border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: locked ? 'not-allowed' : 'pointer', marginBottom: 16, alignSelf: 'flex-start' }}>
+            style={{ padding: '9px 16px', background: NEUTRAL_BG, color: locked ? MUTED : TEXT, border: 'none', borderRadius: R.control, fontWeight: 700, fontSize: 13, cursor: locked ? 'not-allowed' : 'pointer', marginBottom: 16, alignSelf: 'flex-start' }}>
             + 새 종류 추가
           </button>
         ) : (
-          <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.card, padding: 16, marginBottom: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: TEXT, marginBottom: 12 }}>새 종류</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
               <div>
@@ -200,16 +201,16 @@ export default function ActivityTypeManager({ onClose, canEdit }: ActivityTypeMa
             </label>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
               <button onClick={() => { setAddOpen(false); setNewCode(''); setNewLabel(''); setNewRemote(false) }} disabled={busy}
-                style={{ padding: '9px 16px', background: CARD_BG, color: SUB, borderRadius: 8, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+                style={{ padding: '9px 16px', background: CARD_BG, color: SUB, borderRadius: R.control, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
               <button onClick={() => void handleAdd()} disabled={locked} title={lockMsg}
-                style={{ padding: '9px 18px', background: locked ? MUTED : BLUE, color: '#ffffff', borderRadius: 8, border: 'none', cursor: locked ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 13 }}>
+                style={{ padding: '9px 18px', background: locked ? MUTED : BLUE, color: '#ffffff', borderRadius: R.control, border: 'none', cursor: locked ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 13 }}>
                 {busy ? '저장 중...' : '추가'}</button>
             </div>
           </div>
         )}
 
         {/* 목록 */}
-        <div style={{ overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: 12 }}>
+        <div style={{ overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: R.card }}>
           <div style={{ display: 'grid', gridTemplateColumns: GRID, alignItems: 'center', gap: 8, padding: '10px 14px', background: '#fafafa', borderBottom: `1px solid ${BORDER}`, fontSize: 11, fontWeight: 700, color: SUB }}>
             <div>코드</div><div>이름</div><div>순서</div><div>활성</div><div>방문</div><div />
           </div>
@@ -247,34 +248,34 @@ export default function ActivityTypeManager({ onClose, canEdit }: ActivityTypeMa
                   {editCode === t.code ? (
                     <>
                       <button onClick={() => setEditCode(null)} disabled={busy}
-                        style={{ padding: '5px 10px', background: CARD_BG, color: SUB, border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>취소</button>
+                        style={{ padding: '5px 10px', background: CARD_BG, color: SUB, border: `1px solid ${BORDER}`, borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>취소</button>
                       <button onClick={() => void handleRename(t)} disabled={rowLocked} title={rowMsg}
-                        style={{ padding: '5px 10px', background: rowLocked ? MUTED : BLUE, color: '#ffffff', border: 'none', borderRadius: 6, cursor: rowLocked ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700 }}>저장</button>
+                        style={{ padding: '5px 10px', background: rowLocked ? MUTED : BLUE, color: '#ffffff', border: 'none', borderRadius: R.icon, cursor: rowLocked ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700 }}>저장</button>
                     </>
                   ) : (
                     <>
                       {/* 순서 이동 — 맨 위·맨 아래에서는 눌리지 않는다(자동 줄도 옮길 수 있다). */}
                       <button onClick={() => void handleMove(t, -1)} disabled={locked || i === 0} title={lockMsg ?? '위로'}
-                        style={{ width: 26, height: 26, padding: 0, background: NEUTRAL_BG, color: (locked || i === 0) ? FAINT : SUB, border: 'none', borderRadius: 6, cursor: (locked || i === 0) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        style={{ width: 26, height: 26, padding: 0, background: NEUTRAL_BG, color: (locked || i === 0) ? FAINT : SUB, border: 'none', borderRadius: R.icon, cursor: (locked || i === 0) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15" /></svg>
                       </button>
                       <button onClick={() => void handleMove(t, 1)} disabled={locked || i === types.length - 1} title={lockMsg ?? '아래로'}
-                        style={{ width: 26, height: 26, padding: 0, background: NEUTRAL_BG, color: (locked || i === types.length - 1) ? FAINT : SUB, border: 'none', borderRadius: 6, cursor: (locked || i === types.length - 1) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        style={{ width: 26, height: 26, padding: 0, background: NEUTRAL_BG, color: (locked || i === types.length - 1) ? FAINT : SUB, border: 'none', borderRadius: R.icon, cursor: (locked || i === types.length - 1) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
                       </button>
                       <button onClick={() => void handleRemote(t)} disabled={rowLocked} title={rowMsg ?? '동선 지도에 찍을지'}
-                        style={{ padding: '5px 10px', background: NEUTRAL_BG, color: rowLocked ? MUTED : TEXT, border: 'none', borderRadius: 6, cursor: rowLocked ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        style={{ padding: '5px 10px', background: NEUTRAL_BG, color: rowLocked ? MUTED : TEXT, border: 'none', borderRadius: R.icon, cursor: rowLocked ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
                         {t.is_remote ? '방문으로' : '비방문으로'}</button>
                       <button onClick={() => { setEditCode(t.code); setEditLabel(t.label) }} disabled={rowLocked} title={rowMsg}
-                        style={{ padding: '5px 10px', background: NEUTRAL_BG, color: rowLocked ? MUTED : TEXT, border: 'none', borderRadius: 6, cursor: rowLocked ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>이름 변경</button>
+                        style={{ padding: '5px 10px', background: NEUTRAL_BG, color: rowLocked ? MUTED : TEXT, border: 'none', borderRadius: R.icon, cursor: rowLocked ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>이름 변경</button>
                       <button onClick={() => void handleToggle(t)} disabled={rowLocked} title={rowMsg}
-                        style={{ padding: '5px 10px', background: t.is_active ? DANGER : NEUTRAL_BG, color: t.is_active ? '#ffffff' : (rowLocked ? MUTED : TEXT), border: 'none', borderRadius: 6, cursor: rowLocked ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', opacity: rowLocked ? 0.6 : 1 }}>
+                        style={{ padding: '5px 10px', background: t.is_active ? DANGER : NEUTRAL_BG, color: t.is_active ? '#ffffff' : (rowLocked ? MUTED : TEXT), border: 'none', borderRadius: R.icon, cursor: rowLocked ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', opacity: rowLocked ? 0.6 : 1 }}>
                         {t.is_active ? '비활성화' : '다시 사용'}</button>
                       {/* 삭제 — **쓰는 활동이 0건일 때만** 나온다. 쓰는 줄이 있으면
                           버튼 자체가 없다(비활성만 된다). */}
                       {canDeleteActivityType(t, usage[t.code]) && (
                         <button onClick={() => void handleDelete(t)} disabled={locked} title={lockMsg ?? '쓰는 활동이 없어 지울 수 있습니다'}
-                          style={{ padding: '5px 10px', background: CARD_BG, color: locked ? MUTED : DANGER, border: `1px solid ${locked ? BORDER : DANGER}`, borderRadius: 6, cursor: locked ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          style={{ padding: '5px 10px', background: CARD_BG, color: locked ? MUTED : DANGER, border: `1px solid ${locked ? BORDER : DANGER}`, borderRadius: R.icon, cursor: locked ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
                           삭제</button>
                       )}
                     </>

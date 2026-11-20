@@ -25,6 +25,7 @@ import type { CustomerResult } from '@/app/quote/types'
 import type { QuoteCategory } from '@/lib/quoteCategories'
 import { FORM_KINDS, FORM_LABELS } from '@/lib/quoteForms'
 import type { SalesOpportunity } from '@/components/customer/types'
+import { R } from '@/lib/radius'
 
 
 /**
@@ -199,9 +200,9 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
       .map(k => `${TERM_LABELS[k]} 「${terms[k]}」`)
 
   return (
-  <div style={{ background: '#fff', borderRadius: 8, padding: '14px 16px', marginBottom: 14, border: '1px solid #ebebeb' }}>
+  <div style={{ background: '#fff', borderRadius: R.control, padding: '14px 16px', marginBottom: 14, border: '1px solid #ebebeb' }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-      <div style={{ width: 3, height: 14, background: '#234ea2', borderRadius: 6, flexShrink: 0 }} />
+      <div style={{ width: 3, height: 14, background: '#234ea2', borderRadius: R.icon, flexShrink: 0 }} />
       <span style={{ fontWeight: 800, fontSize: 13, color: '#111827' }}>기본 정보</span>
     </div>
 
@@ -315,7 +316,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
           </div>
           <FieldError message={errors.company} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 2, whiteSpace: 'nowrap' }} />
           {customerSearchOpen && customerResults.length > 0 && (
-            <div ref={customerListRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #234ea2', borderRadius: 8, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
+            <div ref={customerListRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #234ea2', borderRadius: R.control, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
               {customerResults.map((c, i) => (
                 <div key={c.customer_id} onClick={() => handleCustomerSelect(c)}
                   style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 12, transition: 'background 0.15s ease', background: customerKeys.active === i ? '#f0f4ff' : '#fff' }}
@@ -370,7 +371,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
               </div>
             )}
             {euSearchOpen && euResults.length > 0 && (
-              <div ref={euListRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #c2410c', borderRadius: 8, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(194,65,12,0.12)' }}>
+              <div ref={euListRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #c2410c', borderRadius: R.control, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(194,65,12,0.12)' }}>
                 {euResults.map((c, i) => (
                   <div key={c.customer_id} onClick={() => handleEUSelect(c)}
                     style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 12, transition: 'background 0.15s ease', background: euKeys.active === i ? '#fff7ed' : '#fff' }}
@@ -495,7 +496,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
           title={`${pendingTerms.join(' · ')} — 누르면 조건 변경을 켜고 반영합니다`}
           style={{
             fontSize: 11, fontWeight: 700, color: '#234ea2', background: '#eff4ff',
-            border: 'none', borderRadius: 99, padding: '2px 8px', cursor: 'pointer', whiteSpace: 'nowrap',
+            border: 'none', borderRadius: R.pill, padding: '2px 8px', cursor: 'pointer', whiteSpace: 'nowrap',
           }}
         >
           납기 반영 가능

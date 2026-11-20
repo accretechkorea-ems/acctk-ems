@@ -36,6 +36,7 @@ import RepairInfoModal from '@/components/quote/RepairInfoModal'
 import { fetchRepairInfoStates, type RepairInfoRow, type RepairInfoState } from '@/lib/quoteRepairInfo'
 import BackdatedMark from '@/components/quote/BackdatedMark'
 import { nowKSTParts, todayKST } from '@/lib/date'
+import { R } from '@/lib/radius'
 
 // 대시보드 '내 견적' 패널. 실적 현황 EngineerQuoteModal 의 표시 + 관리 기능을 동일하게 구현한다.
 // mutation 은 lib/quoteMutations.ts 공용 함수 사용(직접 supabase.update/fetch 안 씀).
@@ -629,11 +630,11 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
     await loadData()
   }
 
-  const inp: CSSProperties = { padding: '6px 10px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box', colorScheme: 'light' }
+  const inp: CSSProperties = { padding: '6px 10px', border: `1px solid ${BORDER}`, borderRadius: R.icon, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box', colorScheme: 'light' }
 
   return (
     <div
-      style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden',
+      style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.control, overflow: 'hidden',
         ...(fitToHeight ? { flex: 1, display: 'flex', flexDirection: 'column' } as const : null) }}>
       {/* 제목 + KPI */}
       <div style={{ padding: '14px 16px', borderBottom: `1px solid ${BORDER}` }}>
@@ -712,7 +713,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
       <div style={{ padding: '8px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'thin' }}>
         {STATUS_TABS.map(s => (
           <button key={s} onClick={() => { setStatusFilter(s); setPage(1) }}
-            style={{ padding: '4px 9px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0, background: statusFilter === s ? (s === '전체' ? BLUE : getCategoryColor(SALES_STATUS_COLORS, s).text) : '#f3f4f6', color: statusFilter === s ? '#fff' : TEXT }}>
+            style={{ padding: '4px 9px', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0, background: statusFilter === s ? (s === '전체' ? BLUE : getCategoryColor(SALES_STATUS_COLORS, s).text) : '#f3f4f6', color: statusFilter === s ? '#fff' : TEXT }}>
             {salesStatusLabel(s)}
           </button>
         ))}
@@ -721,7 +722,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
           quoteIds={quoteSel.selected}
           engineerId={engineerId}
           onDone={quoteSel.clear}
-          style={{ padding: '4px 10px', borderRadius: 6, border: 'none', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: BLUE, color: '#fff' }}
+          style={{ padding: '4px 10px', borderRadius: R.icon, border: 'none', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: BLUE, color: '#fff' }}
         />
       </div>
 
@@ -820,7 +821,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                     </td>
                     <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
-                        <span style={{ padding: '3px 7px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text, whiteSpace: 'nowrap', alignSelf: 'center' }}>
+                        <span style={{ padding: '3px 7px', borderRadius: R.icon, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text, whiteSpace: 'nowrap', alignSelf: 'center' }}>
                           {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : salesStatusLabel(q.status)}
                         </span>
                         {/* 반려 사유는 **결재 문서**에 있다 — 목록에 사유 문자열을 내려받지 않는다(게이트 응답에
@@ -835,7 +836,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                         {/* 유효기간이 지났는데 아직 견적중인 건 — 자동 실주 전이거나 판단이 남은 건이다.
                             80 대시보드의 「만료」와 같은 색(실패 상태색)을 쓴다. */}
                         {isOverdue(q) && (
-                          <span style={{ padding: '2px 6px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, FAIL_STATUS).bg, color: getCategoryColor(SALES_STATUS_COLORS, FAIL_STATUS).text, whiteSpace: 'nowrap' }}>
+                          <span style={{ padding: '2px 6px', borderRadius: R.icon, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, FAIL_STATUS).bg, color: getCategoryColor(SALES_STATUS_COLORS, FAIL_STATUS).text, whiteSpace: 'nowrap' }}>
                             만료
                           </span>
                         )}
@@ -878,7 +879,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                         {canSubmitFor(q) && (
                           <button onClick={() => { setApprovalError(null); setApprovalQuote(q) }}
                             title="결재선을 지정해 이 견적을 결재로 올립니다"
-                            style={{ padding: '3px 7px', background: '#eff6ff', border: '1px solid #c7d7f8', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#0369a1' }}>
+                            style={{ padding: '3px 7px', background: '#eff6ff', border: '1px solid #c7d7f8', borderRadius: R.icon, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#0369a1' }}>
                             결재 올리기
                           </button>
                         )}
@@ -887,13 +888,13 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                             — 발주 이후 상태는 라우트가 막지 않으므로 화면도 같은 기준으로 둔다. */}
                         {q.status === '견적중' && q.quote_type !== 'repair_domestic' && allowsFor(q) && (
                           <button onClick={() => { setPoQuote(q); setPoFile(null) }}
-                            style={{ padding: '3px 7px', background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#7c3aed' }}>
+                            style={{ padding: '3px 7px', background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: R.icon, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#7c3aed' }}>
                             발주서 등록
                           </button>
                         )}
                         {(q.status === '주문완료' || (q.quote_type === 'repair_domestic' && q.status === '수리중' && allowsFor(q))) && (
                           <button onClick={() => { setTaxQuote(q); setTaxDate(q.tax_invoice_date || '') }}
-                            style={{ padding: '3px 7px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#b45309' }}>
+                            style={{ padding: '3px 7px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: R.icon, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#b45309' }}>
                             계산서 요청
                           </button>
                         )}
@@ -928,7 +929,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                           <button
                             onClick={() => setMenuQuoteId(prev => prev === q.quote_id ? null : q.quote_id)}
                             title="행 동작"
-                            style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: menuQuoteId === q.quote_id ? '#f3f4f6' : 'none', border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 13, color: MUTED, lineHeight: 1, flexShrink: 0 }}
+                            style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: menuQuoteId === q.quote_id ? '#f3f4f6' : 'none', border: `1px solid ${BORDER}`, borderRadius: R.icon, cursor: 'pointer', fontSize: 13, color: MUTED, lineHeight: 1, flexShrink: 0 }}
                           >⋮</button>
                           {/* 목록이 표 안이라 메뉴가 잘린다 — 메모 팝오버와 같은 포털(Popover)로 띄운다. */}
                           <Popover
@@ -938,14 +939,14 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                             align="end"
                             gap={4}
                             width={150}
-                            style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, padding: 4, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}
+                            style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.control, padding: 4, boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}
                           >
                             {/* 다시쓰기 — 원본은 그대로 두고 같은 내용으로 새 견적을 쓴다. 본인 견적만. */}
                             <button
                               onClick={() => { setMenuQuoteId(null); router.push(`/quote?duplicate=${q.quote_id}`) }}
                               disabled={!canRequestDelete(q)}
                               title={canRequestDelete(q) ? '같은 내용으로 새 견적을 씁니다(원본은 그대로)' : '본인이 작성한 견적만 다시 쓸 수 있습니다'}
-                              style={{ width: '100%', textAlign: 'left', padding: '8px 10px', background: 'none', border: 'none', borderRadius: 6, cursor: canRequestDelete(q) ? 'pointer' : 'not-allowed', fontSize: 12, fontWeight: 700, color: canRequestDelete(q) ? TEXT : MUTED, fontFamily: 'inherit' }}
+                              style={{ width: '100%', textAlign: 'left', padding: '8px 10px', background: 'none', border: 'none', borderRadius: R.icon, cursor: canRequestDelete(q) ? 'pointer' : 'not-allowed', fontSize: 12, fontWeight: 700, color: canRequestDelete(q) ? TEXT : MUTED, fontFamily: 'inherit' }}
                             >다시쓰기</button>
                             {/* 결재가 도는 중이면 상태 변경·삭제 요청·본인 삭제를 아예 내지 않는다
                                 — 그 창의 모든 동작이 updateQuoteStatus 를 지나고, 그 함수는
@@ -963,7 +964,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                             ) : (
                               <button
                                 onClick={() => { setMenuQuoteId(null); setEditQuote(q); setEditStatus(canRequestDelete(q) ? '취소요청' : FAIL_STATUS); setEditFailReason(q.fail_reason || '') }}
-                                style={{ width: '100%', textAlign: 'left', padding: '8px 10px', background: 'none', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: TEXT, fontFamily: 'inherit' }}
+                                style={{ width: '100%', textAlign: 'left', padding: '8px 10px', background: 'none', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: TEXT, fontFamily: 'inherit' }}
                               >상태 변경·삭제 요청</button>
                             )}
                           </Popover>
@@ -988,17 +989,17 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
       {!loading && filtered.length > pageSize && (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, padding: '10px 16px', borderTop: `1px solid ${BORDER}` }}>
           <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={pageSafe <= 1}
-            style={{ padding: '5px 12px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', cursor: pageSafe <= 1 ? 'default' : 'pointer', color: pageSafe <= 1 ? MUTED : TEXT, fontSize: 12, fontWeight: 700 }}>이전</button>
+            style={{ padding: '5px 12px', borderRadius: R.icon, border: `1px solid ${BORDER}`, background: '#fff', cursor: pageSafe <= 1 ? 'default' : 'pointer', color: pageSafe <= 1 ? MUTED : TEXT, fontSize: 12, fontWeight: 700 }}>이전</button>
           <span style={{ fontSize: 12, color: GRAY, fontWeight: 700 }}>{pageSafe} / {totalPages}</span>
           <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={pageSafe >= totalPages}
-            style={{ padding: '5px 12px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', cursor: pageSafe >= totalPages ? 'default' : 'pointer', color: pageSafe >= totalPages ? MUTED : TEXT, fontSize: 12, fontWeight: 700 }}>다음</button>
+            style={{ padding: '5px 12px', borderRadius: R.icon, border: `1px solid ${BORDER}`, background: '#fff', cursor: pageSafe >= totalPages ? 'default' : 'pointer', color: pageSafe >= totalPages ? MUTED : TEXT, fontSize: 12, fontWeight: 700 }}>다음</button>
         </div>
       )}
 
       {/* ── 발주서 등록 서브모달 ── */}
       {poQuote && (
         <ModalOverlay onClose={() => { setPoQuote(null); setPoFile(null) }} confirmClose closeOn={poUploading ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: SUBMODAL_Z, padding: 0 }}>
-          <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: '#fff', borderRadius: R.modal, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>발주서 등록</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{poQuote.quote_number}</div>
             <div style={{ marginBottom: 14 }}>
@@ -1006,7 +1007,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
               <div style={{ display: 'flex', gap: 8 }}>
                 {(['직납', '택배발송'] as const).map(m => (
                   <button key={m} onClick={() => setPoDelivery(m)}
-                    style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: `1.5px solid ${poDelivery === m ? '#7c3aed' : BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: poDelivery === m ? '#f5f3ff' : '#f9fafb', color: poDelivery === m ? '#7c3aed' : GRAY, transition: 'all 0.12s' }}>
+                    style={{ flex: 1, padding: '8px 0', borderRadius: R.control, border: `1.5px solid ${poDelivery === m ? '#7c3aed' : BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: poDelivery === m ? '#f5f3ff' : '#f9fafb', color: poDelivery === m ? '#7c3aed' : GRAY, transition: 'all 0.12s' }}>
                     {m}
                   </button>
                 ))}
@@ -1018,7 +1019,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                   <div style={{ marginBottom: 14 }}>
                     <div style={{ fontSize: 11, color: GRAY, marginBottom: 6, fontWeight: 600 }}>받는 담당자</div>
                     <select value={poContactId} onChange={e => setPoContactId(e.target.value ? Number(e.target.value) : '')}
-                      style={{ width: '100%', padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, outline: 'none', background: '#fff', boxSizing: 'border-box' }}>
+                      style={{ width: '100%', padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 12, outline: 'none', background: '#fff', boxSizing: 'border-box' }}>
                       <option value=''>-- 담당자 선택 (선택사항) --</option>
                       {poContacts.map(c => {
                         const label = [c.name, c.position || c.department].filter(Boolean).join(' · ')
@@ -1030,16 +1031,16 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                 <div style={{ marginBottom: 14 }}>
                   <div style={{ fontSize: 11, color: GRAY, marginBottom: 6, fontWeight: 600 }}>배송 주소</div>
                   <select value={poAddressMode} onChange={e => { setPoAddressMode(e.target.value as 'company' | 'direct'); setPoAddress('') }}
-                    style={{ width: '100%', padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, outline: 'none', background: '#fff', boxSizing: 'border-box', marginBottom: 6 }}>
+                    style={{ width: '100%', padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 12, outline: 'none', background: '#fff', boxSizing: 'border-box', marginBottom: 6 }}>
                     {poCompanyAddress && <option value="company">🏢 회사 주소: {poCompanyAddress}</option>}
                     <option value="direct">✏️ 직접 입력</option>
                   </select>
                   {poAddressMode === 'direct' && (
                     <textarea value={poAddress} onChange={e => setPoAddress(e.target.value)} placeholder="배송받을 주소를 입력하세요" rows={2}
-                      style={{ width: '100%', padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+                      style={{ width: '100%', padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 12, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box', fontFamily: 'inherit' }} />
                   )}
                   {poAddressMode === 'company' && poCompanyAddress && (
-                    <div style={{ padding: '6px 10px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, fontSize: 12, color: '#15803d', lineHeight: 1.5 }}>
+                    <div style={{ padding: '6px 10px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: R.control, fontSize: 12, color: '#15803d', lineHeight: 1.5 }}>
                       {poCompanyAddress}
                     </div>
                   )}
@@ -1053,7 +1054,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                 onDragLeave={() => setPoIsDragging(false)}
                 onDrop={e => { e.preventDefault(); setPoIsDragging(false); const f = e.dataTransfer.files[0]; if (f && f.type === 'application/pdf') setPoFile(f) }}
                 onClick={() => poFileRef.current?.click()}
-                style={{ border: `2px dashed ${poIsDragging ? '#7c3aed' : poFile ? '#7c3aed' : BORDER}`, borderRadius: 10, padding: '18px 12px', textAlign: 'center', cursor: 'pointer', background: poIsDragging ? '#f5f3ff' : poFile ? '#faf5ff' : '#fafafa', transition: 'all 0.15s' }}>
+                style={{ border: `2px dashed ${poIsDragging ? '#7c3aed' : poFile ? '#7c3aed' : BORDER}`, borderRadius: R.tile, padding: '18px 12px', textAlign: 'center', cursor: 'pointer', background: poIsDragging ? '#f5f3ff' : poFile ? '#faf5ff' : '#fafafa', transition: 'all 0.15s' }}>
                 {poFile ? (
                   <>
                     <div style={{ fontSize: 20, marginBottom: 4 }}>📄</div>
@@ -1077,9 +1078,9 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => { setPoQuote(null); setPoFile(null) }} disabled={poUploading}
-                style={{ flex: 1, padding: 9, background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>취소</button>
+                style={{ flex: 1, padding: 9, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700 }}>취소</button>
               <button onClick={handlePoUpload} disabled={poUploading || !poFile}
-                style={{ flex: 1, padding: 9, background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, opacity: (poUploading || !poFile) ? 0.6 : 1 }}>
+                style={{ flex: 1, padding: 9, background: '#7c3aed', color: '#fff', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, opacity: (poUploading || !poFile) ? 0.6 : 1 }}>
                 {poUploading ? '업로드 중...' : '등록'}
               </button>
             </div>
@@ -1090,20 +1091,20 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
       {/* ── 세금계산서 요청 서브모달 ── */}
       {taxQuote && (
         <ModalOverlay onClose={() => { setTaxQuote(null); setTaxDate('') }} confirmClose closeOn={taxSending ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: SUBMODAL_Z, padding: 0 }}>
-          <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 340, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: '#fff', borderRadius: R.modal, padding: 24, width: 340, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>세금계산서 발행 요청</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{taxQuote.quote_number}</div>
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 11, color: GRAY, marginBottom: 6, fontWeight: 600 }}>요청 발행일 <span style={{ color: '#dc2626' }}>*</span></div>
               <input type="date" className="date-fit" value={taxDate} onChange={e => { setTaxDate(e.target.value); clearError('taxDate') }}
-                style={{ width: '100%', padding: '7px 10px', border: errors.taxDate ? errBorder : `1px solid ${taxDate ? BORDER : '#fca5a5'}`, borderRadius: 8, fontSize: 13, outline: 'none', colorScheme: 'light', boxSizing: 'border-box' }} />
+                style={{ width: '100%', padding: '7px 10px', border: errors.taxDate ? errBorder : `1px solid ${taxDate ? BORDER : '#fca5a5'}`, borderRadius: R.control, fontSize: 13, outline: 'none', colorScheme: 'light', boxSizing: 'border-box' }} />
               <FieldError message={errors.taxDate} />
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => { setTaxQuote(null); setTaxDate('') }} disabled={taxSending}
-                style={{ flex: 1, padding: 9, background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>취소</button>
+                style={{ flex: 1, padding: 9, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700 }}>취소</button>
               <button onClick={handleTaxRequest} disabled={taxSending || !taxDate}
-                style={{ flex: 1, padding: 9, background: '#b45309', color: '#fff', border: 'none', borderRadius: 8, cursor: taxDate ? 'pointer' : 'not-allowed', fontWeight: 700, opacity: (taxSending || !taxDate) ? 0.45 : 1 }}>
+                style={{ flex: 1, padding: 9, background: '#b45309', color: '#fff', border: 'none', borderRadius: R.control, cursor: taxDate ? 'pointer' : 'not-allowed', fontWeight: 700, opacity: (taxSending || !taxDate) ? 0.45 : 1 }}>
                 {taxSending ? '요청 중...' : '발행 요청'}
               </button>
             </div>
@@ -1114,7 +1115,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
       {/* ── 취소 / 실패 처리 서브모달 ── */}
       {editQuote && (
         <ModalOverlay onClose={() => setEditQuote(null)} confirmClose style={{ background: 'rgba(0,0,0,0.6)', zIndex: SUBMODAL_Z, padding: 0 }}>
-          <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: '#fff', borderRadius: R.modal, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 4 }}>삭제 / 실패 처리</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{editQuote.quote_number} · {editQuote.company_name || ''}</div>
             {/* 되돌리기(견적중)는 사람이 손으로 실패시킨 건에만 연다.
@@ -1128,27 +1129,27 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                 .filter(s => s !== '취소요청' || canRequestDelete(editQuote))
                 .map(s => (
                 <button key={s} onClick={() => setEditStatus(s)}
-                  style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: `1.5px solid ${editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).bg : '#f9fafb', color: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : GRAY, transition: 'all 0.12s' }}>
+                  style={{ flex: 1, padding: '9px 0', borderRadius: R.control, border: `1.5px solid ${editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13, background: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).bg : '#f9fafb', color: editStatus === s ? getCategoryColor(SALES_STATUS_COLORS, s).text : GRAY, transition: 'all 0.12s' }}>
                   {s === '취소요청' ? '삭제' : salesStatusLabel(s)}
                 </button>
               ))}
             </div>
             {/* 삭제 선택지가 왜 없는지 알려준다 */}
             {!canRequestDelete(editQuote) && (
-              <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, color: GRAY, lineHeight: 1.6, marginBottom: 12 }}>
+              <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 12, color: GRAY, lineHeight: 1.6, marginBottom: 12 }}>
                 대신 작성된 견적입니다. 삭제 요청은 작성한 사람이 할 수 있습니다.
               </div>
             )}
             {/* 되돌릴 수 없는 건이면 왜 선택지가 없는지 알려준다 */}
             {isAutoFailed(editQuote.status, editQuote.fail_reason) && (
-              <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, color: GRAY, lineHeight: 1.6, marginBottom: 12 }}>
+              <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 12, color: GRAY, lineHeight: 1.6, marginBottom: 12 }}>
                 {AUTO_FAIL_NOTICE}
               </div>
             )}
 
             <div style={{ marginBottom: 6 }}>
               {editStatus === '견적중' ? (
-                <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 12, color: GRAY, lineHeight: 1.6 }}>
+                <div style={{ padding: '10px 12px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 12, color: GRAY, lineHeight: 1.6 }}>
                   {REVERT_NOTICE}
                 </div>
               ) : (
@@ -1158,7 +1159,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                   </div>
                   <textarea value={editFailReason} onChange={e => setEditFailReason(e.target.value)} rows={3}
                     placeholder={editStatus === '취소요청' ? '삭제 요청 사유를 입력하세요' : '미수주 사유를 입력하세요'}
-                    style={{ width: '100%', padding: '8px 10px', border: reasonMissing ? errBorder : `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
+                    style={{ width: '100%', padding: '8px 10px', border: reasonMissing ? errBorder : `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
                   <FieldError message={reasonMissing ? '삭제 사유를 입력해주세요' : undefined} />
                 </>
               )}
@@ -1166,7 +1167,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
             {/* 삭제는 견적 상태에 따라 갈린다. 어느 길로 가는지 버튼 위에 한 줄로 알린다 —
                 누르고 나서 알게 되면 늦다. */}
             {reasonRequired && (
-              <div style={{ fontSize: 12, lineHeight: 1.6, borderRadius: 8, padding: '8px 10px', marginTop: 10,
+              <div style={{ fontSize: 12, lineHeight: 1.6, borderRadius: R.control, padding: '8px 10px', marginTop: 10,
                 border: `1px solid ${BORDER}`,
                 background: selfDelete ? getCategoryColor(SALES_STATUS_COLORS, '취소요청').bg : '#f8fafc',
                 color: selfDelete ? getCategoryColor(SALES_STATUS_COLORS, '취소요청').text : GRAY }}>
@@ -1182,9 +1183,9 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
               </div>
             )}
             <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-              <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
+              <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
               <button onClick={handleSave} disabled={saving || reasonMissing || deleteWaiting || requestBlocked}
-                style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: 8, cursor: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 0.7 : 1 }}>
+                style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: R.control, cursor: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 0.7 : 1 }}>
                 {saving ? '처리 중...'
                   : requestBlocked ? '삭제 불가'
                   : deleteWaiting ? '확인 중...'

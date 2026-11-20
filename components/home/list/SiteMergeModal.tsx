@@ -15,6 +15,7 @@
 import { useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import type { SiteRow } from '@/lib/customerList'
+import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
@@ -63,7 +64,7 @@ type Props = {
   onClose: () => void
 }
 
-const cardStyle = { background: '#fff', borderRadius: 8, border: `1px solid ${BORDER}`, boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }
+const cardStyle = { background: '#fff', borderRadius: R.control, border: `1px solid ${BORDER}`, boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }
 
 export default function SiteMergeModal({ rows, busy, onDryRun, onRun, onClose }: Props) {
   const [keepId, setKeepId] = useState<number>(rows[0]?.customer.customer_id ?? 0)
@@ -98,10 +99,10 @@ export default function SiteMergeModal({ rows, busy, onDryRun, onRun, onClose }:
             <span style={{ color: SUB }}> 로 합칩니다.</span>
           </div>
 
-          <div style={{ marginTop: 14, border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ marginTop: 14, border: `1px solid ${BORDER}`, borderRadius: R.control, overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#fafafa', borderBottom: `1px solid ${BORDER}` }}>
               <b style={{ fontSize: 12, fontWeight: 700, color: TEXT }}>옮겨 갈 기록</b>
-              <span style={{ fontSize: 11, fontWeight: 700, color: SUB, background: NEUTRAL, borderRadius: 99, padding: '1px 7px' }}>{report.total}건</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: SUB, background: NEUTRAL, borderRadius: R.pill, padding: '1px 7px' }}>{report.total}건</span>
             </div>
             {moved.length === 0 && dropped.length === 0 ? (
               <div style={{ padding: '14px 12px', fontSize: 12, color: MUTED }}>옮길 기록이 없습니다 — 줄만 합쳐집니다.</div>
@@ -132,9 +133,9 @@ export default function SiteMergeModal({ rows, busy, onDryRun, onRun, onClose }:
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
             <button onClick={() => setReport(null)} disabled={busy}
-              style={{ padding: '9px 15px', background: '#fff', color: SUB, borderRadius: 6, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>뒤로</button>
+              style={{ padding: '9px 15px', background: '#fff', color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>뒤로</button>
             <button onClick={() => onRun(keepId, fromIds, siteName.trim())} disabled={busy}
-              style={{ padding: '9px 17px', background: DANGER, color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: busy ? 0.6 : 1 }}>
+              style={{ padding: '9px 17px', background: DANGER, color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: busy ? 0.6 : 1 }}>
               {busy ? '합치는 중…' : '합치기'}
             </button>
           </div>
@@ -152,7 +153,7 @@ export default function SiteMergeModal({ rows, busy, onDryRun, onRun, onClose }:
           {`고른 ${rows.length}곳을 한 줄로 합칩니다. 남길 줄을 고르세요 — 나머지 줄의 기록이 그 줄로 옮겨 갑니다.`}
         </div>
 
-        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.control, overflow: 'hidden' }}>
           {rows.map(r => {
             const id = r.customer.customer_id
             const on = id === keepId
@@ -179,14 +180,14 @@ export default function SiteMergeModal({ rows, busy, onDryRun, onRun, onClose }:
           <div style={{ fontSize: 11, fontWeight: 600, color: MUTED, marginBottom: 4 }}>남길 사업장명</div>
           <input value={siteName} onChange={e => setSiteName(e.target.value)} disabled={busy || checking}
             placeholder={keep?.customer.site_name?.trim() || '비우면 지금 이름 그대로'}
-            style={{ width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 6, boxSizing: 'border-box', fontSize: 14, color: TEXT, outline: 'none' }} />
+            style={{ width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: R.icon, boxSizing: 'border-box', fontSize: 14, color: TEXT, outline: 'none' }} />
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
           <button onClick={onClose} disabled={busy || checking}
-            style={{ padding: '9px 15px', background: '#fff', color: SUB, borderRadius: 6, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+            style={{ padding: '9px 15px', background: '#fff', color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
           <button onClick={() => void next()} disabled={busy || checking || fromIds.length === 0}
-            style={{ padding: '9px 17px', background: BLUE, color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: checking ? 0.6 : 1 }}>
+            style={{ padding: '9px 17px', background: BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: checking ? 0.6 : 1 }}>
             {checking ? '세는 중…' : '다음'}
           </button>
         </div>

@@ -17,6 +17,7 @@ import { showroomRows } from './summary'
 import { FormRow } from './formStyles'
 import { openApprovalPdf } from '@/components/showroom/openApprovalPdf'
 import type { DocFormBodyProps } from './panels'
+import { R } from '@/lib/radius'
 
 /** 사후 신청인가 — 요약의 위 칸과 payload 둘 다 본다(옛 문서는 한쪽만 있다). */
 function isRetroactive(summary: Record<string, unknown>): boolean {
@@ -63,7 +64,7 @@ export default function ShowroomFormBody({ doc }: DocFormBodyProps) {
         </span>
       )}
 
-      <div style={{ border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden', background: CARD_BG }}>
+      <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.icon, overflow: 'hidden', background: CARD_BG }}>
         {rows.length === 0 ? (
           <FormRow label="내　　용" first>
             <span style={{ color: MUTED }}>신청 내용을 읽지 못했습니다</span>

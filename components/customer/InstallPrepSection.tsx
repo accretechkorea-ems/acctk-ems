@@ -17,6 +17,7 @@ import {
   PREP_DONE, PREP_ITEMS, PREP_PENDING, prepSummary, type PrepItem,
 } from '@/lib/installPrep'
 import type { InstallPrep } from './types'
+import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
@@ -28,19 +29,19 @@ const BOX_BG = '#f8f9fb'
 const DONE_DOT = '#16a34a'
 
 const boxStyle: CSSProperties = {
-  border: `1px solid ${BORDER}`, borderRadius: 8, padding: 14, background: BOX_BG,
+  border: `1px solid ${BORDER}`, borderRadius: R.control, padding: 14, background: BOX_BG,
 }
 /** 모바일에서 iOS 자동 확대가 걸리지 않게 입력 글자는 16 으로 둔다(이 모달의 다른 칸과 같다). */
 const inputStyle: CSSProperties = {
-  width: '100%', height: 40, padding: '0 10px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  width: '100%', height: 40, padding: '0 10px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   boxSizing: 'border-box', color: TEXT, background: '#fff', outline: 'none', fontSize: 16,
 }
 const cellStyle: CSSProperties = {
-  border: `1px solid ${BORDER}`, borderRadius: 6, background: '#fff', padding: 10,
+  border: `1px solid ${BORDER}`, borderRadius: R.icon, background: '#fff', padding: 10,
   display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0,
 }
 const btnStyle = (busy: boolean): CSSProperties => ({
-  padding: '7px 12px', borderRadius: 6, border: 'none', background: '#f3f4f6',
+  padding: '7px 12px', borderRadius: R.icon, border: 'none', background: '#f3f4f6',
   color: busy ? MUTED : SUB, fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
   cursor: busy ? 'not-allowed' : 'pointer', alignSelf: 'flex-start',
 })
@@ -157,7 +158,7 @@ export default function InstallPrepSection({
       <style>{CSS}</style>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: SUB }}>설치 준비</span>
-        <span style={{ fontSize: 11, fontWeight: 700, color: SUB, background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: SUB, background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>
           {rows === null ? '...' : `${summary.done}/${summary.total}`}
         </span>
         {readOnly && <span style={{ fontSize: 11, color: MUTED }}>방문일이 지나 기록만 남습니다</span>}

@@ -43,6 +43,7 @@ import {
 import { contactSequence, seqLabel } from '@/lib/semiContact/sequence'
 import { nextContactShown, nextContactTbdOf } from '@/lib/semiContact/storage'
 import { layoutOf } from '@/lib/semiContact/layout'
+import { R } from '@/lib/radius'
 
 // ── 배치(작성 화면과 같다) ──────────────────────────────────────────────
 const CONTACT_KEYS: FieldKey[] = ['contact_date', 'contact_method', 'customer_contact', 'purpose']
@@ -348,7 +349,7 @@ function SemiProjectDetailInner() {
     <select value={a.status} disabled={savingStatus.has(a.id)} aria-label={ACTION_LABELS.status}
       onChange={e => changeStatus(a.id, e.target.value)}
       style={{
-        padding: '4px 8px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 12, color: TEXT,
+        padding: '4px 8px', border: `1px solid ${BORDER}`, borderRadius: R.icon, fontSize: 12, color: TEXT,
         background: CARD_BG, fontFamily: 'inherit', colorScheme: 'light', cursor: savingStatus.has(a.id) ? 'wait' : 'pointer',
       }}>
       {ACTION_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -586,7 +587,7 @@ function Timeline({ views, selectedId, onSelect }: { views: ReportView[]; select
               onMouseLeave={e => { if (!on) e.currentTarget.style.background = 'transparent' }}
               style={{
                 display: 'block', width: '100%', textAlign: 'left', padding: '10px 10px', marginBottom: 2,
-                border: 'none', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit',
+                border: 'none', borderRadius: R.icon, cursor: 'pointer', fontFamily: 'inherit',
                 background: on ? NEUTRAL_BG : 'transparent',
               }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -706,7 +707,7 @@ function ReportDetail({ view, actions, statusCell, buttons }: {
             const isOpen = open.has(g.section.no)
             const n = g.fields.filter(f => view.changed.has(f.key as FieldKey)).length
             return (
-              <div key={g.section.no} style={{ border: `1px solid ${BORDER}`, borderRadius: 8 }}>
+              <div key={g.section.no} style={{ border: `1px solid ${BORDER}`, borderRadius: R.control }}>
                 <button type="button" aria-expanded={isOpen}
                   onClick={() => setOpen(o => { const s = new Set(o); if (s.has(g.section.no)) s.delete(g.section.no); else s.add(g.section.no); return s })}
                   style={{
@@ -760,7 +761,7 @@ function Box({ title, badge, right, children }: { title: string; badge?: ReactNo
 /** 「변경」 pill — 채운 액센트, 흰 글자. */
 function ChangedPill() {
   return (
-    <span style={{ fontSize: 11, fontWeight: 700, color: CARD_BG, background: BLUE, borderRadius: 99, padding: '1px 7px', lineHeight: 1.6, flexShrink: 0 }}>
+    <span style={{ fontSize: 11, fontWeight: 700, color: CARD_BG, background: BLUE, borderRadius: R.pill, padding: '1px 7px', lineHeight: 1.6, flexShrink: 0 }}>
       변경
     </span>
   )
@@ -794,7 +795,7 @@ function ReadField({ def, value, changed, prevValue, big }: {
           flex: 1, minWidth: 0,
           fontSize: big ? 14 : 13, color: empty ? FAINT : TEXT, lineHeight: 1.7,
           whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-          ...(big ? { background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '10px 12px', minHeight: 60 } : null),
+          ...(big ? { background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.icon, padding: '10px 12px', minHeight: 60 } : null),
         }}>
           {empty ? '-' : value}
         </div>
@@ -837,7 +838,7 @@ function InheritRow({ def, value, changed, prevValue, first }: {
 /** 30×30 아이콘 버튼(연필 등) — 중립 배경 #f3f4f6, 글자 #6b7280, 반지름 6. */
 const iconBtn: CSSProperties = {
   width: 30, height: 30, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-  border: 'none', borderRadius: 6, background: NEUTRAL_BG, color: SUB, cursor: 'pointer', padding: 0,
+  border: 'none', borderRadius: R.icon, background: NEUTRAL_BG, color: SUB, cursor: 'pointer', padding: 0,
   textDecoration: 'none',
 }
 
@@ -869,7 +870,7 @@ function ExcelButton({ title, onClick, disabled, busy }: { title: string; onClic
 // 길이 상한 PROJECT_TEXT_MAX). 번호도 고칠 수 있다 — 겹치면(대소문자 무시, 자기 자신 제외) 서버가 번호 칸 오류로 돌려준다.
 
 const fieldStyle: CSSProperties = {
-  width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   fontSize: 13, color: TEXT, background: CARD_BG, outline: 'none', boxSizing: 'border-box',
   fontFamily: 'inherit',
 }
@@ -947,7 +948,7 @@ function ProjectEditModal({ project, onClose, onSaved, onDelete, deleting }: {
     // 저장 중에는 닫히지 않는다(closeOn 'none'). 그 밖에는 확인 뒤 닫는다.
     <ModalOverlay onClose={onClose} closeOn={busy ? 'none' : 'both'} confirmClose>
       <div style={{
-        background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 500,
+        background: CARD_BG, borderRadius: R.control, padding: '14px 16px', width: '100%', maxWidth: 500,
         maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
       }}>
         <div style={cardHeader}>
@@ -981,7 +982,7 @@ function ProjectEditModal({ project, onClose, onSaved, onDelete, deleting }: {
         {error && (
           <div style={{
             fontSize: 12, lineHeight: 1.6, color: '#be123c', background: '#fef2f2',
-            border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px', marginBottom: 12,
+            border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '8px 10px', marginBottom: 12,
           }}>
             {error}
           </div>

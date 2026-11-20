@@ -8,6 +8,7 @@
 import { useMemo, useState, type CSSProperties } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useParents } from '@/components/home/list/useParents'
+import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
@@ -16,7 +17,7 @@ const MUTED = '#9ca3af'
 const BLUE = '#234ea2'
 
 const fieldStyle: CSSProperties = {
-  width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   boxSizing: 'border-box', color: TEXT, background: '#fff', outline: 'none', fontSize: 14,
 }
 
@@ -51,7 +52,7 @@ export default function CompanySearchModal({
   return (
     <ModalOverlay onClose={onClose}>
       <div onClick={e => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 460, background: '#fff', borderRadius: 8, padding: 22, border: `1px solid ${BORDER}`, boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease', display: 'flex', flexDirection: 'column', maxHeight: '76vh' }}>
+        style={{ width: '100%', maxWidth: 460, background: '#fff', borderRadius: R.control, padding: 22, border: `1px solid ${BORDER}`, boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease', display: 'flex', flexDirection: 'column', maxHeight: '76vh' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>{title}</div>
           <button onClick={onClose} title="닫기"
@@ -64,7 +65,7 @@ export default function CompanySearchModal({
         <input value={query} autoFocus onChange={e => setQuery(e.target.value)}
           placeholder="회사명 · 영문 회사명" style={fieldStyle} />
 
-        <div style={{ marginTop: 10, overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: 6, flex: 1, minHeight: 120 }}>
+        <div style={{ marginTop: 10, overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: R.icon, flex: 1, minHeight: 120 }}>
           {matches.length === 0 ? (
             <div style={{ padding: 28, textAlign: 'center', color: MUTED, fontSize: 13 }}>찾는 회사가 없습니다</div>
           ) : matches.map(c => {
@@ -89,11 +90,11 @@ export default function CompanySearchModal({
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
           <button onClick={onClose}
-            style={{ padding: '9px 15px', background: '#fff', color: SUB, borderRadius: 6, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+            style={{ padding: '9px 15px', background: '#fff', color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
           <button
             disabled={!pickedRow}
             onClick={() => { if (pickedRow) onPick(pickedRow.customer_id, pickedRow.company_name) }}
-            style={{ padding: '9px 17px', background: pickedRow ? BLUE : '#e5e7eb', color: pickedRow ? '#fff' : MUTED, borderRadius: 6, border: 'none', cursor: pickedRow ? 'pointer' : 'not-allowed', fontWeight: 700, fontSize: 13 }}>
+            style={{ padding: '9px 17px', background: pickedRow ? BLUE : '#e5e7eb', color: pickedRow ? '#fff' : MUTED, borderRadius: R.icon, border: 'none', cursor: pickedRow ? 'pointer' : 'not-allowed', fontWeight: 700, fontSize: 13 }}>
             {confirmText}
           </button>
         </div>

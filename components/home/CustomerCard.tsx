@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { getDeviceLines, type Customer, type Device } from '@/lib/home'
 import { DIRECT_SALE_LABEL } from '@/lib/customerAgency'
+import { R } from '@/lib/radius'
 
 const STATUS_COLOR: Record<string, string> = {
   '활성': '#22c55e',
@@ -31,7 +32,7 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
       style={{
         width: '100%',
         marginBottom: 8,
-        borderRadius: 8,
+        borderRadius: R.control,
         border: `1px solid ${hovered ? '#c7d7f8' : '#ebebeb'}`,
         background: '#ffffff',
         cursor: 'pointer',

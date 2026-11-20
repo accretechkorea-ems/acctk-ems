@@ -13,6 +13,7 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { isSuperAdmin } from '@/lib/permissions'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import { R } from '@/lib/radius'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#f4f5f7'
@@ -438,19 +439,19 @@ export default function SuggestionsPage() {
   }
 
   const inp: React.CSSProperties = {
-    padding: '8px 11px', border: `1px solid ${BORDER}`, borderRadius: 6,
+    padding: '8px 11px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
     background: CARD_BG, color: TEXT, fontSize: 13, outline: 'none',
     fontFamily: 'inherit', boxSizing: 'border-box',
   }
   // 상태·분류 공용 뱃지. 배경은 회색 pill 하나로 통일하고, 상태만 글자색을 달리 한다
   // (분류는 STATUS_TEXT 에 없으므로 기본 GRAY 로 떨어진다).
   const badge = (label: string) => (
-    <span style={{ padding: '3px 9px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: '#f3f4f6', color: STATUS_TEXT[label] ?? GRAY, whiteSpace: 'nowrap' }}>{label}</span>
+    <span style={{ padding: '3px 9px', borderRadius: R.pill, fontSize: 11, fontWeight: 700, background: '#f3f4f6', color: STATUS_TEXT[label] ?? GRAY, whiteSpace: 'nowrap' }}>{label}</span>
   )
 
   const filterLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap' }
   const tabBtn = (active: boolean): React.CSSProperties => ({
-    padding: '5px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
+    padding: '5px 12px', borderRadius: R.control, border: 'none', cursor: 'pointer',
     fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap',
     background: active ? BLUE : '#f3f4f6', color: active ? '#fff' : TEXT,
   })
@@ -473,7 +474,7 @@ export default function SuggestionsPage() {
         </div>
 
         {/* 필터 카드 */}
-        <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '14px 16px', marginBottom: 12 }}>
+        <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '14px 16px', marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}
               placeholder="제목 / 내용 / 작성자 검색" style={{ ...inp, flex: 1, minWidth: 200 }} />
@@ -483,7 +484,7 @@ export default function SuggestionsPage() {
               </button>
             ))}
             <button onClick={openNew}
-              style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', background: BLUE, color: '#fff' }}>
+              style={{ padding: '6px 14px', borderRadius: R.control, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', background: BLUE, color: '#fff' }}>
               + 건의사항 작성
             </button>
           </div>
@@ -500,7 +501,7 @@ export default function SuggestionsPage() {
         </div>
 
         {/* 목록 */}
-        <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control, overflow: 'hidden' }}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: 40, color: MUTED, fontSize: 13 }}>불러오는 중...</div>
           ) : paged.length === 0 ? (
@@ -554,10 +555,10 @@ export default function SuggestionsPage() {
         {totalPages > 1 && (
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 12 }}>
             <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={pageSafe === 1}
-              style={{ padding: '5px 12px', borderRadius: 6, border: `1px solid ${BORDER}`, background: CARD_BG, color: pageSafe === 1 ? MUTED : TEXT, cursor: pageSafe === 1 ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700 }}>이전</button>
+              style={{ padding: '5px 12px', borderRadius: R.icon, border: `1px solid ${BORDER}`, background: CARD_BG, color: pageSafe === 1 ? MUTED : TEXT, cursor: pageSafe === 1 ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700 }}>이전</button>
             <span style={{ fontSize: 12, color: GRAY }}>{pageSafe} / {totalPages}</span>
             <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={pageSafe === totalPages}
-              style={{ padding: '5px 12px', borderRadius: 6, border: `1px solid ${BORDER}`, background: CARD_BG, color: pageSafe === totalPages ? MUTED : TEXT, cursor: pageSafe === totalPages ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700 }}>다음</button>
+              style={{ padding: '5px 12px', borderRadius: R.icon, border: `1px solid ${BORDER}`, background: CARD_BG, color: pageSafe === totalPages ? MUTED : TEXT, cursor: pageSafe === totalPages ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700 }}>다음</button>
           </div>
         )}
       </div>
@@ -565,7 +566,7 @@ export default function SuggestionsPage() {
       {/* ── 작성·수정 모달 ── */}
       {formOpen && (
         <ModalOverlay onClose={() => setFormOpen(false)} confirmClose closeOn={saving ? 'none' : 'both'} dirty={formTitle.trim() !== '' || formContent.trim() !== '' || formImages.length > 0} style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: 8, padding: 24, width: '100%', maxWidth: 560, boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.control, padding: 24, width: '100%', maxWidth: 560, boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
               <div style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>{editing ? '건의사항 수정' : '건의사항 작성'}</div>
               <button onClick={() => setFormOpen(false)} style={{ width: 30, height: 30, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 14, color: GRAY }}>✕</button>
@@ -600,7 +601,7 @@ export default function SuggestionsPage() {
               <button type="button" onClick={() => shotInputRef.current?.click()}
                 disabled={shotBusy || existingImages.length + formImages.length >= MAX_IMAGES}
                 style={{
-                  padding: '7px 12px', borderRadius: 6, border: `1px solid ${BORDER}`, background: CARD_BG,
+                  padding: '7px 12px', borderRadius: R.icon, border: `1px solid ${BORDER}`, background: CARD_BG,
                   color: (shotBusy || existingImages.length + formImages.length >= MAX_IMAGES) ? MUTED : GRAY,
                   fontWeight: 700, fontSize: 12,
                   cursor: (shotBusy || existingImages.length + formImages.length >= MAX_IMAGES) ? 'not-allowed' : 'pointer',
@@ -618,7 +619,7 @@ export default function SuggestionsPage() {
                       role="img"
                       aria-label="스크린샷"
                       style={{
-                        width: '100%', aspectRatio: '4 / 3', borderRadius: 6, border: `1px solid ${BORDER}`,
+                        width: '100%', aspectRatio: '4 / 3', borderRadius: R.icon, border: `1px solid ${BORDER}`,
                         background: '#f8fafc', backgroundSize: 'cover', backgroundPosition: 'center',
                         backgroundImage: shotUrls[name] ? `url("${shotUrls[name]}")` : undefined,
                       }}
@@ -626,7 +627,7 @@ export default function SuggestionsPage() {
                     <button type="button" disabled={shotRemoving === name}
                       onClick={() => { if (shotConfirm === name) void removeExistingShot(name); else armShotRemove(name) }}
                       style={{
-                        width: '100%', marginTop: 4, padding: '4px 0', borderRadius: 6, border: 'none',
+                        width: '100%', marginTop: 4, padding: '4px 0', borderRadius: R.icon, border: 'none',
                         cursor: shotRemoving === name ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 11,
                         background: (shotConfirm === name || shotRemoving === name) ? '#dc2626' : '#f3f4f6',
                         color: (shotConfirm === name || shotRemoving === name) ? '#fff' : GRAY,
@@ -642,14 +643,14 @@ export default function SuggestionsPage() {
                       aria-label={img.name}
                       title={img.name}
                       style={{
-                        width: '100%', aspectRatio: '4 / 3', borderRadius: 6, border: `1px solid ${BORDER}`,
+                        width: '100%', aspectRatio: '4 / 3', borderRadius: R.icon, border: `1px solid ${BORDER}`,
                         background: '#f8fafc', backgroundSize: 'cover', backgroundPosition: 'center',
                         backgroundImage: `url("${img.dataUrl}")`,
                       }}
                     />
                     <button type="button" onClick={() => setFormImages(prev => prev.filter((_, idx) => idx !== i))}
                       style={{
-                        width: '100%', marginTop: 4, padding: '4px 0', borderRadius: 6, border: 'none',
+                        width: '100%', marginTop: 4, padding: '4px 0', borderRadius: R.icon, border: 'none',
                         cursor: 'pointer', fontWeight: 700, fontSize: 11, background: '#f3f4f6', color: GRAY,
                       }}>
                       제거
@@ -674,9 +675,9 @@ export default function SuggestionsPage() {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
               <button onClick={() => setFormOpen(false)}
-                style={{ padding: '9px 16px', background: '#f3f4f6', color: TEXT, border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>취소</button>
+                style={{ padding: '9px 16px', background: '#f3f4f6', color: TEXT, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>취소</button>
               <button onClick={handleSave} disabled={saving}
-                style={{ padding: '9px 18px', background: BLUE, color: '#fff', border: 'none', borderRadius: 6, cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 13, opacity: saving ? 0.7 : 1 }}>
+                style={{ padding: '9px 18px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.icon, cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 13, opacity: saving ? 0.7 : 1 }}>
                 {saving ? '저장 중...' : (editing ? '수정' : '등록')}
               </button>
             </div>
@@ -687,7 +688,7 @@ export default function SuggestionsPage() {
       {/* ── 상세 모달 ── */}
       {detail && (
         <ModalOverlay onClose={() => setDetail(null)} style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: 8, padding: 24, width: '100%', maxWidth: 640, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.control, padding: 24, width: '100%', maxWidth: 640, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 6 }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, wordBreak: 'break-all' }}>
@@ -705,7 +706,7 @@ export default function SuggestionsPage() {
             </div>
 
             <div style={{ overflowY: 'auto', flex: 1, marginTop: 12 }}>
-              <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.8, whiteSpace: 'pre-wrap', padding: '14px 16px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: 8 }}>
+              <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.8, whiteSpace: 'pre-wrap', padding: '14px 16px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: R.control }}>
                 {detail.content}
               </div>
 
@@ -721,7 +722,7 @@ export default function SuggestionsPage() {
                       disabled={!shotUrls[name]}
                       onClick={() => { const u = shotUrls[name]; if (u) window.open(u, '_blank', 'noopener') }}
                       style={{
-                        width: 132, aspectRatio: '4 / 3', padding: 0, borderRadius: 6,
+                        width: 132, aspectRatio: '4 / 3', padding: 0, borderRadius: R.icon,
                         border: `1px solid ${BORDER}`, background: '#f8fafc',
                         backgroundSize: 'cover', backgroundPosition: 'center',
                         backgroundImage: shotUrls[name] ? `url("${shotUrls[name]}")` : undefined,
@@ -735,7 +736,7 @@ export default function SuggestionsPage() {
               {/* 관리자 답변 */}
               <div style={{ marginTop: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <div style={{ width: 3, height: 14, background: BLUE, borderRadius: 6 }} />
+                  <div style={{ width: 3, height: 14, background: BLUE, borderRadius: R.icon }} />
                   <span style={{ fontSize: 13, fontWeight: 800, color: TEXT }}>관리자 답변</span>
                   {detail.replied_at && <span style={{ fontSize: 11, color: MUTED }}>{fmtDateTime(detail.replied_at)}</span>}
                 </div>
@@ -746,7 +747,7 @@ export default function SuggestionsPage() {
                       <span style={{ fontSize: 12, color: GRAY, fontWeight: 700 }}>상태</span>
                       {ADMIN_STATUSES.map(s => (
                         <button key={s} onClick={() => setReplyStatus(s)}
-                          style={{ padding: '4px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, background: replyStatus === s ? BLUE : '#f3f4f6', color: replyStatus === s ? '#fff' : TEXT }}>
+                          style={{ padding: '4px 10px', borderRadius: R.control, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, background: replyStatus === s ? BLUE : '#f3f4f6', color: replyStatus === s ? '#fff' : TEXT }}>
                           {s}
                         </button>
                       ))}
@@ -757,17 +758,17 @@ export default function SuggestionsPage() {
                     <FieldError message={replyErr.errors.reply} />
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
                       <button onClick={handleReplySave} disabled={replySaving}
-                        style={{ padding: '7px 16px', background: BLUE, color: '#fff', border: 'none', borderRadius: 6, cursor: replySaving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 12, opacity: replySaving ? 0.7 : 1 }}>
+                        style={{ padding: '7px 16px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.icon, cursor: replySaving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 12, opacity: replySaving ? 0.7 : 1 }}>
                         {replySaving ? '저장 중...' : (detail.admin_reply ? '답변 저장' : '답변 등록')}
                       </button>
                     </div>
                   </>
                 ) : detail.admin_reply ? (
-                  <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.8, whiteSpace: 'pre-wrap', padding: '14px 16px', background: '#f0f4ff', border: '1px solid #c7d7f8', borderRadius: 8 }}>
+                  <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.8, whiteSpace: 'pre-wrap', padding: '14px 16px', background: '#f0f4ff', border: '1px solid #c7d7f8', borderRadius: R.control }}>
                     {detail.admin_reply}
                   </div>
                 ) : (
-                  <div style={{ fontSize: 12, color: MUTED, padding: '14px 16px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: 8 }}>
+                  <div style={{ fontSize: 12, color: MUTED, padding: '14px 16px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: R.control }}>
                     아직 답변이 등록되지 않았습니다
                   </div>
                 )}
@@ -779,11 +780,11 @@ export default function SuggestionsPage() {
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${BORDER}` }}>
                 {canEdit(detail) && (
                   <button onClick={() => { const d = detail; setDetail(null); openEdit(d) }}
-                    style={{ padding: '8px 14px', background: '#f3f4f6', color: TEXT, border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>수정</button>
+                    style={{ padding: '8px 14px', background: '#f3f4f6', color: TEXT, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>수정</button>
                 )}
                 {canDelete(detail) && (
                   <button onClick={() => handleDelete(detail)}
-                    style={{ padding: '8px 14px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>삭제</button>
+                    style={{ padding: '8px 14px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>삭제</button>
                 )}
               </div>
             )}

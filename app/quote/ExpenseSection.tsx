@@ -5,6 +5,7 @@ import MoneyInput from '@/components/common/MoneyInput'
 import type { ExpensePreset, ExpenseRow, QuoteRow } from './types'
 import { numKR } from './format'
 import { inp } from './styles'
+import { R } from '@/lib/radius'
 
 /**
  * 일수는 반일(0.5) 단위까지 받는다. 0.5 단위로 맞춰 두면 DB 의 CHECK(days * 2 = floor(days * 2))와
@@ -36,7 +37,7 @@ export default function ExpenseSection({
 }: ExpenseSectionProps) {
   // 부대비용 내역 — 서비스비 행의 원가. 한 단계 들여써서 소속을 드러낸다.
   return (
-    <div style={{ marginTop: 12, marginLeft: 44, padding: '12px 14px', background: '#fafafa', border: '1px solid #ebebeb', borderRadius: 8 }}>
+    <div style={{ marginTop: 12, marginLeft: 44, padding: '12px 14px', background: '#fafafa', border: '1px solid #ebebeb', borderRadius: R.control }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>부대비용 내역</span>
         <span style={{ fontSize: 11, fontWeight: 600, color: '#dc2626' }}>내부 관리용 · PDF에는 표시되지 않습니다</span>
@@ -47,7 +48,7 @@ export default function ExpenseSection({
       )}
 
       {row.expenses.map(exp => (
-        <div key={exp.id} style={{ background: '#fff', borderRadius: 8, padding: '10px 12px', marginBottom: 8, border: '1px solid #ebebeb' }}>
+        <div key={exp.id} style={{ background: '#fff', borderRadius: R.control, padding: '10px 12px', marginBottom: 8, border: '1px solid #ebebeb' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <select
               className="q-input"
@@ -104,7 +105,7 @@ export default function ExpenseSection({
       <button
         onClick={addExpense}
         disabled={presetError}
-        style={{ width: '100%', padding: '9px', background: '#fff', color: presetError ? '#9ca3af' : '#234ea2', border: '1px solid #ebebeb', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: presetError ? 'not-allowed' : 'pointer', transition: 'background 0.15s ease' }}
+        style={{ width: '100%', padding: '9px', background: '#fff', color: presetError ? '#9ca3af' : '#234ea2', border: '1px solid #ebebeb', borderRadius: R.icon, fontWeight: 700, fontSize: 12, cursor: presetError ? 'not-allowed' : 'pointer', transition: 'background 0.15s ease' }}
         onMouseEnter={e => { if (!presetError) (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6' }}
         onMouseLeave={e => { if (!presetError) (e.currentTarget as HTMLButtonElement).style.background = '#fff' }}
       >

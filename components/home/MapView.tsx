@@ -19,6 +19,7 @@ import { useMe } from '@/lib/appData/MeProvider'
 import { useToast } from '@/components/common/Toast'
 import { CATEGORY_OPTIONS } from '@/lib/constants'
 import { Z } from '@/lib/zIndex'
+import { R } from '@/lib/radius'
 
 type Props = {
   customers: Customer[]
@@ -367,7 +368,7 @@ useEffect(() => {
               {
                 width: '48px', height: '48px',
                 background: 'rgba(255,255,255,0.82)', color: '#111113',
-                textAlign: 'center', lineHeight: '48px', borderRadius: '8px',
+                textAlign: 'center', lineHeight: '48px', borderRadius: R.control,
                 fontSize: '14px', fontWeight: '700',
                 border: '1px solid rgba(255,255,255,0.95)',
                 boxShadow: '0 6px 16px rgba(0,0,0,0.35)',
@@ -375,7 +376,7 @@ useEffect(() => {
               {
                 width: '56px', height: '56px',
                 background: 'rgba(245,245,245,0.88)', color: '#111113',
-                textAlign: 'center', lineHeight: '56px', borderRadius: '8px',
+                textAlign: 'center', lineHeight: '56px', borderRadius: R.control,
                 fontSize: '15px', fontWeight: '700',
                 border: '1px solid rgba(255,255,255,0.95)',
                 boxShadow: '0 6px 16px rgba(0,0,0,0.35)',
@@ -383,7 +384,7 @@ useEffect(() => {
               {
                 width: '64px', height: '64px',
                 background: 'rgba(230,230,230,0.9)', color: '#111113',
-                textAlign: 'center', lineHeight: '64px', borderRadius: '8px',
+                textAlign: 'center', lineHeight: '64px', borderRadius: R.control,
                 fontSize: '16px', fontWeight: '700',
                 border: '1px solid rgba(255,255,255,0.95)',
                 boxShadow: '0 6px 16px rgba(0,0,0,0.35)',
@@ -503,7 +504,7 @@ useEffect(() => {
               <button key={label} onClick={() => toggleStatus(label)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 5,
-                  padding: '6px 12px', borderRadius: 6,
+                  padding: '6px 12px', borderRadius: R.icon,
                   border: `1px solid ${active ? '#d1d5db' : 'rgba(235,235,235,0.8)'}`,
                   background: active ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.65)',
                   color: active ? '#111827' : '#9ca3af',
@@ -530,7 +531,7 @@ useEffect(() => {
             return (
               <button key={cat} onClick={() => toggleCategory(cat)}
                 style={{
-                  padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12,
+                  padding: '6px 12px', borderRadius: R.icon, cursor: 'pointer', fontSize: 12,
                   border: `1px solid ${active ? '#d1d5db' : 'rgba(235,235,235,0.8)'}`,
                   background: active ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.65)',
                   color: active ? '#111827' : '#9ca3af',
@@ -554,7 +555,7 @@ useEffect(() => {
         className="kakao-map-container"
         style={{
           width: '100%', height: '100%', minHeight: 0,
-          borderRadius: 8, overflow: 'hidden',
+          borderRadius: R.control, overflow: 'hidden',
           border: `1px solid #ebebeb`,
           boxSizing: 'border-box', background: PANEL_BG,
         }}

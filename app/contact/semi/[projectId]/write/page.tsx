@@ -48,6 +48,7 @@ import { NEXT_CONTACT_TBD_LABEL, nextContactTbdOf } from '@/lib/semiContact/stor
 import { layoutOf } from '@/lib/semiContact/layout'
 import { clearDraftAt, loadDraftAt, saveDraftAt, semiDraftKey, semiEditDraftKey } from '@/lib/semiContact/draft'
 import { seqLabel } from '@/lib/semiContact/sequence'
+import { R } from '@/lib/radius'
 
 // ── 배치 ─────────────────────────────────────────────────────────────
 /** 「이번 접촉」 상자. */
@@ -76,7 +77,7 @@ type ActionRow = ActionInput & { rid: number; action_id?: number }
 type ActionErrors = Record<number, Partial<Record<ActionField, string>>>
 
 const fieldStyle: CSSProperties = {
-  width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   fontSize: 13, color: TEXT, background: CARD_BG, outline: 'none', boxSizing: 'border-box',
   fontFamily: 'inherit', colorScheme: 'light',
 }
@@ -101,7 +102,7 @@ const wrapStyle = (changed: boolean): CSSProperties => ({
   background: changed ? CHANGED_WRAP_BG : 'transparent',
 })
 const pillStyle = (filled: boolean): CSSProperties => ({
-  fontSize: 11, fontWeight: 700, borderRadius: 99, padding: '1px 8px', whiteSpace: 'nowrap',
+  fontSize: 11, fontWeight: 700, borderRadius: R.pill, padding: '1px 8px', whiteSpace: 'nowrap',
   background: filled ? BLUE : NEUTRAL_BG, color: filled ? '#ffffff' : SUB,
 })
 
@@ -767,7 +768,7 @@ function SemiReportWriteInner() {
               const open = openGroups.has(g.section.no)
               const n = groupChangeCount(g.fields)
               return (
-                <div key={g.section.no} style={{ border: `1px solid ${BORDER}`, borderRadius: 8 }}>
+                <div key={g.section.no} style={{ border: `1px solid ${BORDER}`, borderRadius: R.control }}>
                   <button type="button" aria-expanded={open}
                     onClick={() => setOpenGroups(o => { const s = new Set(o); if (s.has(g.section.no)) s.delete(g.section.no); else s.add(g.section.no); return s })}
                     style={{

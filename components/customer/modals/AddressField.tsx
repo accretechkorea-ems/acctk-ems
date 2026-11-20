@@ -41,6 +41,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { Z } from '@/lib/zIndex'
+import { R } from '@/lib/radius'
 
 /** 카카오 우편번호 서비스. 키 발급·신청이 필요 없고 무료다. */
 const POSTCODE_SRC = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js'
@@ -233,7 +234,7 @@ export default function AddressField({
       style={{
         flexShrink: 0, padding: '0 14px', height: 'auto', alignSelf: 'stretch',
         background: '#f3f4f6', color: btnOff ? '#9ca3af' : '#6b7280',
-        border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 700,
+        border: 'none', borderRadius: R.icon, fontSize: 13, fontWeight: 700,
         cursor: btnOff ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit',
       }}
     >
@@ -264,7 +265,7 @@ export default function AddressField({
         flexShrink: 0, width: 36, alignSelf: 'stretch',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: '#ffffff', color: '#9ca3af',
-        border: '1px solid #ebebeb', borderRadius: 6,
+        border: '1px solid #ebebeb', borderRadius: R.icon,
         cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
         transition: 'color 0.15s ease',
       }}
@@ -317,7 +318,7 @@ export default function AddressField({
             style={{
               width: 500, maxWidth: '90vw', height: 500, maxHeight: '80vh',
               display: 'flex', flexDirection: 'column',
-              background: '#ffffff', borderRadius: 8, border: '1px solid #ebebeb',
+              background: '#ffffff', borderRadius: R.control, border: '1px solid #ebebeb',
               boxShadow: '0 20px 60px rgba(0,0,0,0.22)', overflow: 'hidden',
             }}
           >
@@ -331,7 +332,7 @@ export default function AddressField({
                 onClick={() => setBoxOpen(false)}
                 style={{
                   padding: '4px 10px', background: '#f3f4f6', color: '#6b7280',
-                  border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700,
+                  border: 'none', borderRadius: R.icon, fontSize: 12, fontWeight: 700,
                   cursor: 'pointer', fontFamily: 'inherit',
                 }}
               >

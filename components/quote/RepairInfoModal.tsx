@@ -30,6 +30,7 @@ import {
   repairInfoState, saveRepairInfo, uploadRepairPhotos, MAX_PHOTOS,
   type RepairBrief, type RepairInfoFields, type RepairInfoState, type RepairPhoto,
 } from '@/lib/quoteRepairInfo'
+import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const MUTED = '#9ca3af'
@@ -174,7 +175,7 @@ export default function RepairInfoModal({ quoteId, quoteNumber, onClose, onSaved
         style={{
           // 사진 넉 장이 들어간 상태의 높이다(머리줄 52 + 읽기 줄 60 + 입력 셋 300 +
           // 사진 넉 줄 4×92 + 저장 줄 51 ≒ 830). 화면이 그보다 낮으면 90% 로 줄인다.
-          width: 720, maxWidth: '100%', height: 'min(830px, 90vh)', background: '#fff', borderRadius: 8,
+          width: 720, maxWidth: '100%', height: 'min(830px, 90vh)', background: '#fff', borderRadius: R.control,
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
           opacity: open ? 1 : 0,
@@ -184,7 +185,7 @@ export default function RepairInfoModal({ quoteId, quoteNumber, onClose, onSaved
       >
         {/* 머리줄 — 고정 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 16px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
-          <div style={{ width: 3, height: 14, background: '#234ea2', borderRadius: 6, flexShrink: 0 }} />
+          <div style={{ width: 3, height: 14, background: '#234ea2', borderRadius: R.icon, flexShrink: 0 }} />
           <span style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>수리 정보</span>
           <span style={{ fontSize: 12, color: MUTED }}>{quoteNumber}</span>
           <span style={{ flex: 1 }} />
@@ -224,12 +225,12 @@ export default function RepairInfoModal({ quoteId, quoteNumber, onClose, onSaved
           </span>
           <span style={{ flex: 1 }} />
           <button onClick={() => closeRef.current()}
-            style={{ height: 30, padding: '0 14px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: '#6b7280', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            style={{ height: 30, padding: '0 14px', borderRadius: R.icon, border: `1px solid ${BORDER}`, background: '#fff', color: '#6b7280', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
             닫기
           </button>
           {canEdit && (
             <button onClick={() => void save()} disabled={loading}
-              style={{ height: 30, padding: '0 16px', borderRadius: 6, border: 'none', background: '#234ea2', color: '#fff', fontSize: 12, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1 }}>
+              style={{ height: 30, padding: '0 16px', borderRadius: R.icon, border: 'none', background: '#234ea2', color: '#fff', fontSize: 12, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1 }}>
               저장
             </button>
           )}

@@ -5,6 +5,7 @@ import type { Device } from '../types'
 import { INPUT_BORDER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY, WHITE_BUTTON_BG, WHITE_BUTTON_TEXT, inputStyle } from '../constants'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
+import { R } from '@/lib/radius'
 
 type Props = {
   device: Device | null
@@ -34,7 +35,7 @@ export default function DeviceImageModal({ device, isSaving, onClose, onSave }: 
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: 480, background: '#ffffff', borderRadius: 20, padding: 28,
+          width: '100%', maxWidth: 480, background: '#ffffff', borderRadius: R.modal, padding: 28,
           boxShadow: '0 16px 48px rgba(0,0,0,0.22)', border: `1px solid ${INPUT_BORDER}`,
           animation: 'modal-in 0.18s ease',
         }}
@@ -58,8 +59,8 @@ export default function DeviceImageModal({ device, isSaving, onClose, onSave }: 
         )}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 24 }}>
-          <button onClick={handleClose} style={{ padding: '10px 16px', background: '#f4f5f7', color: TEXT_PRIMARY, borderRadius: 10, border: `1px solid ${INPUT_BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
-          <button onClick={handleSave} disabled={isSaving} style={{ padding: '10px 20px', background: WHITE_BUTTON_BG, color: WHITE_BUTTON_TEXT, borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.7 : 1 }}>
+          <button onClick={handleClose} style={{ padding: '10px 16px', background: '#f4f5f7', color: TEXT_PRIMARY, borderRadius: R.tile, border: `1px solid ${INPUT_BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+          <button onClick={handleSave} disabled={isSaving} style={{ padding: '10px 20px', background: WHITE_BUTTON_BG, color: WHITE_BUTTON_TEXT, borderRadius: R.tile, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.7 : 1 }}>
             {isSaving ? '업로드 중...' : '저장'}
           </button>
         </div>

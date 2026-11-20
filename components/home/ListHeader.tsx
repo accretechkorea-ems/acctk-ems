@@ -13,6 +13,7 @@
 
 import { useState, type CSSProperties } from 'react'
 import SegmentedControl from '@/components/common/SegmentedControl'
+import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
@@ -39,7 +40,7 @@ type Props = {
 }
 
 const btn: CSSProperties = {
-  height: 34, padding: '0 12px', borderRadius: 6, border: `1px solid ${BORDER}`,
+  height: 34, padding: '0 12px', borderRadius: R.icon, border: `1px solid ${BORDER}`,
   background: '#ffffff', color: TEXT, fontSize: 13, fontWeight: 700, cursor: 'pointer',
   display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
 }
@@ -75,7 +76,7 @@ export default function ListHeader({
           placeholder="회사명, 사업장명, 주소, 대리점 검색"
           style={{
             width: '100%', height: 34, boxSizing: 'border-box', padding: '0 68px 0 32px',
-            border: `1px solid ${focused ? BLUE : BORDER}`, borderRadius: 6, background: '#ffffff',
+            border: `1px solid ${focused ? BLUE : BORDER}`, borderRadius: R.icon, background: '#ffffff',
             color: TEXT, fontSize: 13, outline: 'none', transition: 'border-color 0.15s ease',
           }}
         />

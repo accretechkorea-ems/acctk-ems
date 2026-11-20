@@ -18,6 +18,7 @@ import { unitBars, yearSummary, type StatQuote, type StatTarget } from '@/lib/sa
 import {
   ChartLegend, ChartPanel, SummaryBoxes, axisMaxOf, numKR,
 } from '@/components/sales/salesChart'
+import { R } from '@/lib/radius'
 
 const CARD_BG = '#ffffff'
 const BORDER = '#ebebeb'
@@ -45,7 +46,7 @@ export default function EngineerChartModal({ engineer, quotes, targets, fy, onCl
   return (
     <ModalOverlay onClose={onClose} style={{ background: 'rgba(0,0,0,0.5)' }}>
       <div style={{
-        background: CARD_BG, borderRadius: 18,
+        background: CARD_BG, borderRadius: R.modal,
         // 1366×768 노트북에서 스크롤이 생기지 않는 높이다(90vh = 691 > 쌓인 617).
         width: 'min(1400px, 94vw)', height: 'min(760px, 90vh)',
         display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
@@ -55,7 +56,7 @@ export default function EngineerChartModal({ engineer, quotes, targets, fy, onCl
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <span style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>{engineer.name}</span>
               <span style={{ fontSize: 12, color: GRAY }}>{engineer.position}</span>
-              {engineer.teams && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: tc.bg, color: tc.text, fontWeight: 700 }}>{engineer.teams}</span>}
+              {engineer.teams && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: R.modal, background: tc.bg, color: tc.text, fontWeight: 700 }}>{engineer.teams}</span>}
             </div>
             {/* 머리에는 **연간** 목표만 적는다. 월 목표는 목표선 끝에 붙어 있다. */}
             <div className="num" style={{ fontSize: 12, color: GRAY, whiteSpace: 'nowrap' }}>

@@ -24,6 +24,7 @@ import {
 } from '@/lib/showroom'
 import { BLUE, BORDER, CARD_BG, TEXT, MUTED, SUB, FAINT, NEUTRAL_BG } from '@/components/common/ui'
 import { fmtPct, fmtHours } from './utilParts'
+import { R } from '@/lib/radius'
 
 // 하단 박스 — 고객사 상세의 서비스 기록 박스와 같은 값(components/customer/constants.ts).
 const BOX_BORDER = '#e2e4e9'
@@ -149,7 +150,7 @@ export default function ShowroomDeviceCard({
 
   return (
     <div style={{
-      background: CARD_BG, borderRadius: 8, padding: '14px 16px',
+      background: CARD_BG, borderRadius: R.control, padding: '14px 16px',
       border: `1px solid ${BORDER}`, position: 'relative', alignSelf: 'flex-start',
       opacity: inactive ? 0.55 : 1,
     }}>
@@ -161,7 +162,7 @@ export default function ShowroomDeviceCard({
 
       {/* 이미지 — 쇼룸에서는 사진을 올리지 않는다(빈 자리는 고객사 상세와 같은 모양) */}
       <div style={{
-        aspectRatio: '4 / 3', borderRadius: 6, background: 'transparent',
+        aspectRatio: '4 / 3', borderRadius: R.icon, background: 'transparent',
         border: hasPhoto ? 'none' : `1px dashed ${BORDER}`,
         overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
@@ -202,7 +203,7 @@ export default function ShowroomDeviceCard({
         </span>
         {device.device_status !== '가동' && (
           <span style={{
-            fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+            fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: R.pill,
             background: NEUTRAL_BG, color: SUB, flexShrink: 0,
           }}>
             {device.device_status}
@@ -210,7 +211,7 @@ export default function ShowroomDeviceCard({
         )}
         {inactive && (
           <span style={{
-            fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+            fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: R.pill,
             background: NEUTRAL_BG, color: SUB, flexShrink: 0,
           }}>
             미사용
@@ -230,7 +231,7 @@ export default function ShowroomDeviceCard({
       <button onClick={onAddUsage}
         style={{
           width: '100%', padding: '8px 12px', background: BLUE, color: '#fff',
-          borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, marginBottom: 12,
+          borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, marginBottom: 12,
         }}>
         사용 신청
       </button>
@@ -240,7 +241,7 @@ export default function ShowroomDeviceCard({
       <div onClick={onOpenUsages} title="사용 기록 보기"
         style={{
           height: BOX_H, boxSizing: 'border-box',
-          background: BOX_BG, borderRadius: 10, padding: '0 13px',
+          background: BOX_BG, borderRadius: R.tile, padding: '0 13px',
           border: `1px solid ${BOX_BORDER}`, cursor: 'pointer',
           display: 'flex', alignItems: 'center', gap: 14,
         }}>

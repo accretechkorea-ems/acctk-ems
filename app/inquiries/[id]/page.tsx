@@ -59,6 +59,7 @@ import {
   INQUIRY_STATUS_DOT, INQUIRY_TYPE_LABEL,
   directionOf, inquiryOneLine, inquiryStatusLabel, type InquiryDirection, type InquiryType,
 } from '@/lib/inquiries'
+import { R } from '@/lib/radius'
 
 const TITLE_MAX = 200
 
@@ -137,7 +138,7 @@ const msgItem = (first: boolean, editing: boolean, dir: InquiryDirection): React
   padding: '12px',
   borderTop: first ? 'none' : `1px solid ${BORDER}`,
   background: editing ? NEUTRAL_BG : undefined,
-  borderRadius: editing ? 8 : undefined,
+  borderRadius: editing ? R.control : undefined,
   borderLeft: `3px solid ${INQUIRY_DIRECTION_COLOR[dir].dot}`,
   // 막대가 3px 를 먹으므로 왼쪽 여백에서 그만큼 뺀다 — 글자 왼쪽 선이 흔들리지 않게.
   paddingLeft: 9,
@@ -148,7 +149,7 @@ function DirectionBadge({ dir }: { dir: InquiryDirection }) {
   const c = INQUIRY_DIRECTION_COLOR[dir]
   return (
     <span style={{
-      flexShrink: 0, background: c.bg, color: c.text, borderRadius: 99,
+      flexShrink: 0, background: c.bg, color: c.text, borderRadius: R.pill,
       padding: '1px 8px', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
     }}>
       {INQUIRY_DIRECTION_LABEL[dir]}
@@ -164,7 +165,7 @@ const DIR_TAB_W = 50
 
 /** 내용 기록의 입력 칸 — 추가 모달과 카드 편집이 같은 모양을 쓴다. */
 const msgField: React.CSSProperties = {
-  width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   fontSize: 13, color: TEXT, background: CARD_BG, outline: 'none', boxSizing: 'border-box',
   fontFamily: 'inherit',
 }
@@ -179,7 +180,7 @@ const msgLabel: React.CSSProperties = {
  */
 const editStyle: React.CSSProperties = {
   width: '100%', padding: '8px 10px', border: `1px solid ${BORDER}`,
-  borderRadius: 6, fontSize: 13, color: TEXT, background: CARD_BG,
+  borderRadius: R.icon, fontSize: 13, color: TEXT, background: CARD_BG,
   outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
 }
 
@@ -365,7 +366,7 @@ function MessageCard({
               {files.map(a => (
                 <div key={a.id} style={{
                   display: 'flex', alignItems: 'center', gap: 8,
-                  border: `1px solid ${BORDER}`, borderRadius: 6, background: CARD_BG, padding: '6px 10px',
+                  border: `1px solid ${BORDER}`, borderRadius: R.icon, background: CARD_BG, padding: '6px 10px',
                 }}>
                   <span style={{
                     flex: 1, minWidth: 0, fontSize: 12, color: TEXT,
@@ -449,7 +450,7 @@ function MessageCard({
                   key={a.id} type="button" onClick={() => onOpenFile(a)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                    border: `1px solid ${BORDER}`, borderRadius: 6, background: CARD_BG,
+                    border: `1px solid ${BORDER}`, borderRadius: R.icon, background: CARD_BG,
                     padding: '6px 10px', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
                   }}
                 >
@@ -550,7 +551,7 @@ function MessageModal({
     // 입력 폼 — 확인 뒤 닫는다.
     <ModalOverlay onClose={onClose} confirmClose>
       <div style={{
-        background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 520,
+        background: CARD_BG, borderRadius: R.control, padding: '14px 16px', width: '100%', maxWidth: 520,
         maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
       }}>
         <div style={cardHeader}>
@@ -593,7 +594,7 @@ function MessageModal({
         {error && (
           <div style={{
             fontSize: 12, lineHeight: 1.6, color: '#be123c', background: '#fef2f2',
-            border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px', marginBottom: 12,
+            border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '8px 10px', marginBottom: 12,
           }}>
             {error}
           </div>
@@ -1129,7 +1130,7 @@ export default function InquiryDetailPage() {
                     줄바꿈은 막는다 — 번호가 두 줄로 갈라지면 받아 적다 틀린다. 그래도 넘치면
                     말줄임으로 자르고 title 로 전문을 남긴다(실제 번호 형식은 전부 이 폭에 들어온다). */}
                 <div style={{
-                  background: NEUTRAL_BG, borderRadius: 8, padding: '12px 14px', display: 'flex',
+                  background: NEUTRAL_BG, borderRadius: R.control, padding: '12px 14px', display: 'flex',
                   alignItems: 'center', gap: 10,
                 }}>
                   <span title={row.inquiry_no} style={{
@@ -1161,7 +1162,7 @@ export default function InquiryDetailPage() {
                 {cancelled && (
                   <div style={{
                     marginTop: 12, fontSize: 12, lineHeight: 1.7, color: MUTED,
-                    background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px',
+                    background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '8px 10px',
                   }}>
                     취소된 의뢰서입니다. 번호는 재사용되지 않으며 내용을 고칠 수 없습니다.
                   </div>

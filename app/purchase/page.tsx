@@ -17,6 +17,7 @@ import MemoPopover from '@/components/common/MemoPopover'
 import { saveQuoteMemo } from '@/lib/quoteMutations'
 import { useToast } from '@/components/common/Toast'
 import AssigneePicker from '@/components/quote/AssigneePicker'
+import { R } from '@/lib/radius'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#f4f5f7'
@@ -256,7 +257,7 @@ export default function PurchasePage() {
     await fetchAll()
   }
 
-  const inp: React.CSSProperties = { padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box', width: '100%' }
+  const inp: React.CSSProperties = { padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box', width: '100%' }
 
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', fontSize: 16, color: GRAY }}>불러오는 중...</div>
@@ -280,7 +281,7 @@ export default function PurchasePage() {
             return (
             <div key={key}
               onClick={() => setStatusFilter(statusFilter === key ? '전체' : key)}
-              style={{ background: CARD_BG, borderRadius: 12, padding: '14px 16px', border: `1.5px solid ${statusFilter === key ? cc.text : BORDER}`, cursor: 'pointer', transition: 'all 0.15s' }}>
+              style={{ background: CARD_BG, borderRadius: R.card, padding: '14px 16px', border: `1.5px solid ${statusFilter === key ? cc.text : BORDER}`, cursor: 'pointer', transition: 'all 0.15s' }}>
               <div style={{ fontSize: 11, color: GRAY, marginBottom: 6, fontWeight: 600 }}>{label}</div>
               <div style={{ fontSize: 26, fontWeight: 800, color: cc.text }}>{counts[key]}</div>
               <div style={{ fontSize: 10, color: MUTED, marginTop: 2 }}>건</div>
@@ -290,13 +291,13 @@ export default function PurchasePage() {
         </div>
 
         {/* 검색 + 필터 */}
-        <div style={{ background: CARD_BG, borderRadius: 12, padding: '12px 16px', marginBottom: 16, border: `1px solid ${BORDER}`, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ background: CARD_BG, borderRadius: R.card, padding: '12px 16px', marginBottom: 16, border: `1px solid ${BORDER}`, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="견적번호 / 고객사 검색"
             style={{ ...inp, width: 240 }} />
-          <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 10, padding: 3, gap: 1 }}>
+          <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: R.tile, padding: 3, gap: 1 }}>
             {['전체', '발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료'].map(s => (
               <button key={s} onClick={() => setStatusFilter(s)}
-                style={{ padding: '5px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: statusFilter === s ? (s === '전체' ? BLUE : getCategoryColor(SALES_STATUS_COLORS, s).text) : 'transparent', color: statusFilter === s ? '#fff' : GRAY, transition: 'all 0.12s' }}>
+                style={{ padding: '5px 10px', borderRadius: R.control, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: statusFilter === s ? (s === '전체' ? BLUE : getCategoryColor(SALES_STATUS_COLORS, s).text) : 'transparent', color: statusFilter === s ? '#fff' : GRAY, transition: 'all 0.12s' }}>
                 {s}
               </button>
             ))}
@@ -304,7 +305,7 @@ export default function PurchasePage() {
           {/* 발주서만 먼저 오는 건은 견적이 없어 등록할 수 없다. 영업관리가 대신 견적을 쓰고
               실적은 원래 담당자에게 남긴다. 담당자를 고르면 견적 작성 화면으로 넘어간다. */}
           <button onClick={() => setAssigneeOpen(true)}
-            style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 8, border: `1px solid ${BORDER}`, background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 12, color: GRAY, whiteSpace: 'nowrap' }}
+            style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: R.control, border: `1px solid ${BORDER}`, background: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 12, color: GRAY, whiteSpace: 'nowrap' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = BLUE; e.currentTarget.style.color = BLUE }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = GRAY }}>
             견적서 대필
@@ -314,12 +315,12 @@ export default function PurchasePage() {
             quoteIds={sel.selected}
             engineerId={me?.engineer_id ?? null}
             onDone={sel.clear}
-            style={{ padding: '6px 12px', borderRadius: 8, border: 'none', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', background: BLUE, color: '#fff' }}
+            style={{ padding: '6px 12px', borderRadius: R.control, border: 'none', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', background: BLUE, color: '#fff' }}
           />
         </div>
 
         {/* 테이블 */}
-        <div style={{ background: CARD_BG, borderRadius: 14, border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
+        <div style={{ background: CARD_BG, borderRadius: R.modal, border: `1px solid ${BORDER}`, overflow: 'hidden' }}>
           {loadError ? (
             // 빈 목록과 조회 실패는 구분해서 보여준다 — 둘 다 빈 화면이면 장애를 알아챌 수 없다.
             <div style={{ textAlign: 'center', padding: 60, color: '#ef4444', fontSize: 14, fontWeight: 700 }}>데이터를 불러오지 못했습니다</div>
@@ -372,7 +373,7 @@ export default function PurchasePage() {
                           <div ref={addressPopupId === q.quote_id ? addressAnchorRef : null} style={{ display: 'inline-block' }}>
                             <span
                               onClick={() => isParcel && q.delivery_info ? setAddressPopupId(addressPopupId === q.quote_id ? null : q.quote_id) : undefined}
-                              style={{ fontSize: 10, padding: '3px 8px', borderRadius: 5, fontWeight: 700, background: dc.bg, color: dc.text, cursor: isParcel && q.delivery_info ? 'pointer' : 'default', userSelect: 'none' }}>
+                              style={{ fontSize: 10, padding: '3px 8px', borderRadius: R.tag, fontWeight: 700, background: dc.bg, color: dc.text, cursor: isParcel && q.delivery_info ? 'pointer' : 'default', userSelect: 'none' }}>
                               {q.delivery_method}
                             </span>
                             {q.delivery_info && (
@@ -382,7 +383,7 @@ export default function PurchasePage() {
                                 onClose={() => setAddressPopupId(null)}
                                 gap={6}
                                 width={280}
-                                style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '12px 14px', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}
+                                style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.tile, padding: '12px 14px', boxShadow: '0 4px 20px rgba(0,0,0,0.15)' }}
                               >
                                 <div>
                                   <div style={{ fontSize: 10, color: MUTED, fontWeight: 700, marginBottom: 8 }}>배송 정보</div>
@@ -406,7 +407,7 @@ export default function PurchasePage() {
                                       setCopiedId(q.quote_id)
                                       setTimeout(() => setCopiedId(null), 1500)
                                     }}
-                                    style={{ width: '100%', padding: '5px 0', background: copiedId === q.quote_id ? '#f0fdf4' : '#f3f4f6', border: `1px solid ${copiedId === q.quote_id ? '#bbf7d0' : BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: copiedId === q.quote_id ? GREEN : GRAY, transition: 'all 0.2s' }}>
+                                    style={{ width: '100%', padding: '5px 0', background: copiedId === q.quote_id ? '#f0fdf4' : '#f3f4f6', border: `1px solid ${copiedId === q.quote_id ? '#bbf7d0' : BORDER}`, borderRadius: R.icon, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: copiedId === q.quote_id ? GREEN : GRAY, transition: 'all 0.2s' }}>
                                     {copiedId === q.quote_id ? '✓ 복사됨' : '주소 복사'}
                                   </button>
                                 </div>
@@ -448,7 +449,7 @@ export default function PurchasePage() {
                       </td>
                       <td style={{ padding: '9px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'center' }}>
-                          <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>
+                          <span style={{ padding: '3px 8px', borderRadius: R.icon, fontSize: 10, fontWeight: 700, background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>
                             {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : salesStatusLabel(q.status)}
                           </span>
                           {q.status === '세금계산서 요청' && q.tax_invoice_date && (
@@ -473,7 +474,7 @@ export default function PurchasePage() {
                       <td style={{ padding: '9px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                         {q.purchase_order_url ? (
                           <button onClick={() => handleViewPO(q)} disabled={pdfBusyId !== null}
-                            style={{ padding: '4px 9px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: 7, cursor: pdfBusyId === null ? 'pointer' : 'default', fontSize: 11, fontWeight: 700, color: TEXT, opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
+                            style={{ padding: '4px 9px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: R.control, cursor: pdfBusyId === null ? 'pointer' : 'default', fontSize: 11, fontWeight: 700, color: TEXT, opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
                             {pdfBusyId === q.quote_id ? '여는 중…' : 'PDF'}
                           </button>
                         ) : <span style={{ color: MUTED, fontSize: 11 }}>-</span>}
@@ -483,24 +484,24 @@ export default function PurchasePage() {
                           {q.status === '발주(주문 대기)' && (
                             <button
                               onClick={() => { setOrderModal(q); setShippingDate(q.shipping_date || ''); setOrderMemo(q.order_memo || '') }}
-                              style={{ padding: '4px 10px', background: '#7c3aed', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#fff' }}>
+                              style={{ padding: '4px 10px', background: '#7c3aed', border: 'none', borderRadius: R.control, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#fff' }}>
                               주문완료 처리
                             </button>
                           )}
                           {q.status === '세금계산서 요청' && (
                             <button
                               onClick={() => setTaxModal(q)}
-                              style={{ padding: '4px 10px', background: '#b45309', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#fff' }}>
+                              style={{ padding: '4px 10px', background: '#b45309', border: 'none', borderRadius: R.control, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#fff' }}>
                               발행완료 처리
                             </button>
                           )}
                           {(q.status === '주문완료' || q.status === '매출완료') && (
-                            <span style={{ fontSize: 10, color: MUTED, padding: '3px 8px', borderRadius: 6, border: `1px solid ${BORDER}`, fontWeight: 600 }}>처리완료</span>
+                            <span style={{ fontSize: 10, color: MUTED, padding: '3px 8px', borderRadius: R.icon, border: `1px solid ${BORDER}`, fontWeight: 600 }}>처리완료</span>
                           )}
                         </div>
                         <button
                           onClick={() => { setEditScheduleModal(q); setEditShippingDate(q.shipping_date || '') }}
-                          style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 13, color: MUTED }}
+                          style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: `1px solid ${BORDER}`, borderRadius: R.icon, cursor: 'pointer', fontSize: 13, color: MUTED }}
                           onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#f3f4f6'; (e.currentTarget as HTMLButtonElement).style.color = GRAY }}
                           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.color = MUTED }}>
                           ⋮
@@ -526,7 +527,7 @@ export default function PurchasePage() {
 
       {orderModal && (
         <ModalOverlay onClose={() => setOrderModal(null)} confirmClose closeOn={processing ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.55)' }}>
-          <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 400, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
+          <div style={{ background: '#fff', borderRadius: R.modal, width: '100%', maxWidth: 400, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>주문완료 처리</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 20 }}>{orderModal.quote_number} · {custMap[orderModal.customer_id ?? 0] ?? '-'}</div>
 
@@ -544,11 +545,11 @@ export default function PurchasePage() {
 
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setOrderModal(null)} disabled={processing}
-                style={{ flex: 1, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                style={{ flex: 1, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
                 취소
               </button>
               <button onClick={handleCompleteOrder} disabled={processing}
-                style={{ flex: 1, padding: 10, background: BLUE, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: processing ? 0.7 : 1 }}>
+                style={{ flex: 1, padding: 10, background: BLUE, color: '#fff', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: processing ? 0.7 : 1 }}>
                 {processing ? '처리 중...' : '주문완료 확정'}
               </button>
             </div>
@@ -559,11 +560,11 @@ export default function PurchasePage() {
       {/* 세금계산서 발행완료 모달 */}
       {taxModal && (
         <ModalOverlay onClose={() => setTaxModal(null)} confirmClose closeOn={taxProcessing ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.55)' }}>
-          <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 380, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
+          <div style={{ background: '#fff', borderRadius: R.modal, width: '100%', maxWidth: 380, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>세금계산서 발행 완료</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{taxModal.quote_number} · {custMap[taxModal.customer_id ?? 0] ?? '-'}</div>
 
-            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 14px', marginBottom: 20 }}>
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: R.tile, padding: '12px 14px', marginBottom: 20 }}>
               <div style={{ fontSize: 11, color: '#92400e', fontWeight: 700, marginBottom: 4 }}>요청 내용</div>
               <div style={{ fontSize: 12, color: '#78350f' }}>
                 {taxModal.tax_invoice_date ? `요청일: ${fmtShort(taxModal.tax_invoice_date)}` : '요청일 미지정'}
@@ -576,11 +577,11 @@ export default function PurchasePage() {
 
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setTaxModal(null)} disabled={taxProcessing}
-                style={{ flex: 1, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                style={{ flex: 1, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
                 취소
               </button>
               <button onClick={handleCompleteTax} disabled={taxProcessing}
-                style={{ flex: 1, padding: 10, background: GREEN, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: taxProcessing ? 0.7 : 1 }}>
+                style={{ flex: 1, padding: 10, background: GREEN, color: '#fff', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: taxProcessing ? 0.7 : 1 }}>
                 {taxProcessing ? '처리 중...' : '발행완료 확정'}
               </button>
             </div>
@@ -591,7 +592,7 @@ export default function PurchasePage() {
       {/* 출하일정/메모 편집 모달 */}
       {editScheduleModal && (
         <ModalOverlay onClose={() => setEditScheduleModal(null)} confirmClose closeOn={editSaving ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.55)' }}>
-          <div style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 400, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
+          <div style={{ background: '#fff', borderRadius: R.modal, width: '100%', maxWidth: 400, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>출하 일정 수정</div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 20 }}>{editScheduleModal.quote_number} · {custMap[editScheduleModal.customer_id ?? 0] ?? '-'}</div>
             <div style={{ marginBottom: 14 }}>
@@ -605,11 +606,11 @@ export default function PurchasePage() {
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setEditScheduleModal(null)} disabled={editSaving}
-                style={{ flex: 1, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                style={{ flex: 1, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
                 취소
               </button>
               <button onClick={handleEditSchedule} disabled={editSaving}
-                style={{ flex: 1, padding: 10, background: BLUE, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: editSaving ? 0.7 : 1 }}>
+                style={{ flex: 1, padding: 10, background: BLUE, color: '#fff', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: editSaving ? 0.7 : 1 }}>
                 {editSaving ? '저장 중...' : '저장'}
               </button>
             </div>

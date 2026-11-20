@@ -10,6 +10,7 @@
 import { isCurrentlyEmployed } from '@/lib/engineers'
 import { todayKST } from '@/lib/date'
 import { BLUE, BORDER, CARD_BG, TEXT, SUB } from '@/components/common/ui'
+import { R } from '@/lib/radius'
 
 export type PickerEngineer = {
   engineer_id: number
@@ -35,7 +36,7 @@ export default function EngineerPicker({ engineers, selectedIds, onChange, expan
   return (
     <div style={{
       border: invalid ? '1px solid #dc2626' : `1px solid ${BORDER}`,
-      borderRadius: 8, padding: 14, background: '#f8f9fb',
+      borderRadius: R.control, padding: 14, background: '#f8f9fb',
     }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 7 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: SUB, marginRight: 4 }}>참여 엔지니어</span>
@@ -45,7 +46,7 @@ export default function EngineerPicker({ engineers, selectedIds, onChange, expan
           return (
             <button key={id} type="button" onClick={() => onChange(selectedIds.filter(i => i !== id))}
               style={{
-                padding: '7px 12px', borderRadius: 20, border: `1px solid ${BLUE}`, background: BLUE,
+                padding: '7px 12px', borderRadius: R.modal, border: `1px solid ${BLUE}`, background: BLUE,
                 color: '#ffffff', fontWeight: 700, fontSize: 12, cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, minWidth: 96,
               }}>
@@ -56,7 +57,7 @@ export default function EngineerPicker({ engineers, selectedIds, onChange, expan
         })}
         <button type="button" onClick={() => onToggleExpand(!expanded)}
           style={{
-            padding: '7px 12px', borderRadius: 20, border: `1px solid ${BORDER}`,
+            padding: '7px 12px', borderRadius: R.modal, border: `1px solid ${BORDER}`,
             background: expanded ? '#eff4ff' : CARD_BG, color: BLUE,
             fontWeight: 700, fontSize: 12, cursor: 'pointer',
           }}>
@@ -73,7 +74,7 @@ export default function EngineerPicker({ engineers, selectedIds, onChange, expan
             <button key={eng.engineer_id} type="button"
               onClick={() => { onChange([...selectedIds, eng.engineer_id]); onToggleExpand(false) }}
               style={{
-                padding: '6px 12px', borderRadius: 20, border: `1px solid ${BORDER}`, background: CARD_BG,
+                padding: '6px 12px', borderRadius: R.modal, border: `1px solid ${BORDER}`, background: CARD_BG,
                 color: TEXT, fontWeight: 600, fontSize: 12, cursor: 'pointer', minWidth: 96, textAlign: 'center',
               }}>
               {eng.name} {eng.position || ''}

@@ -8,6 +8,7 @@ import { invalidateMe, loadMe } from '@/lib/appData/me'
 import { canViewCustomers } from '@/lib/permissions'
 import { DIVISION_HOME, canSwitchDivision, readSavedDivision, teamDivisionOf } from '@/lib/division'
 import { IDLE_REASON } from '@/components/common/SessionManager'
+import { R } from '@/lib/radius'
 
 function LoginPageInner() {
   const router = useRouter()
@@ -90,7 +91,7 @@ function LoginPageInner() {
           maxWidth: 380,
           padding: 32,
           background: '#1c1c1c',
-          borderRadius: 16,
+          borderRadius: R.modal,
           border: '0.5px solid #2a2a2a',
         }}
       >
@@ -114,7 +115,7 @@ function LoginPageInner() {
           <div
             style={{
               marginBottom: 16, padding: '10px 12px', background: '#111',
-              border: '0.5px solid #2a2a2a', borderRadius: 10,
+              border: '0.5px solid #2a2a2a', borderRadius: R.tile,
               fontSize: 12, lineHeight: 1.6, color: '#9ca3af', textAlign: 'center',
             }}
           >
@@ -132,7 +133,7 @@ function LoginPageInner() {
               padding: '12px 14px',
               background: '#111',
               border: '0.5px solid #2a2a2a',
-              borderRadius: 10,
+              borderRadius: R.tile,
               color: '#f0f0f0',
               fontSize: 14,
               boxSizing: 'border-box',
@@ -151,7 +152,7 @@ function LoginPageInner() {
               padding: '12px 14px',
               background: '#111',
               border: '0.5px solid #2a2a2a',
-              borderRadius: 10,
+              borderRadius: R.tile,
               color: '#f0f0f0',
               fontSize: 14,
               boxSizing: 'border-box',
@@ -174,7 +175,7 @@ function LoginPageInner() {
               background: '#fff',
               color: '#111',
               border: 'none',
-              borderRadius: 10,
+              borderRadius: R.tile,
               fontSize: 14,
               fontWeight: 500,
               cursor: 'pointer',

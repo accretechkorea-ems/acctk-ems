@@ -25,6 +25,7 @@ import {
   expandTeamCc, summarizeTeamCc, TEAM_CC_MAX, TEAM_CC_OVER_MESSAGE, TEAM_CC_PRESET_NOTICE,
 } from '@/lib/approval/teamCc'
 import type { LineInput, LineKind } from '@/lib/approval/types'
+import { R } from '@/lib/radius'
 
 /** 직급 순서. 유지보수 화면과 같은 표를 쓴다(없는 직급은 맨 뒤). */
 const POSITION_ORDER: Record<string, number> = {
@@ -40,7 +41,7 @@ type Preset = { preset_id: number; name: string; doc_type: string | null; lines:
 function SuperBadge() {
   return (
     <span style={{
-      flexShrink: 0, background: NEUTRAL_BG, borderRadius: 99, padding: '1px 7px',
+      flexShrink: 0, background: NEUTRAL_BG, borderRadius: R.pill, padding: '1px 7px',
       fontSize: 11, fontWeight: 700, color: SUB, whiteSpace: 'nowrap',
     }}>
       {SUPERADMIN_LABEL}
@@ -276,7 +277,7 @@ export default function LinePickerModal({
           다음에 누를 자리가 매번 달라진다.
           작은 화면에서는 vw·vh 상한으로만 줄어든다(그때도 가운데 칸이 줄어들 뿐 줄 구성은 같다). */}
       <div style={{
-        background: CARD_BG, borderRadius: 8, padding: 20,
+        background: CARD_BG, borderRadius: R.control, padding: 20,
         width: 1000, maxWidth: '94vw',
         height: 720, maxHeight: '92vh',
         display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
@@ -338,7 +339,7 @@ export default function LinePickerModal({
         {notice && (
           <div style={{
             flexShrink: 0,
-            marginBottom: 12, padding: '8px 10px', borderRadius: 6,
+            marginBottom: 12, padding: '8px 10px', borderRadius: R.icon,
             background: NEUTRAL_BG, fontSize: 12, fontWeight: 600,
             color: ruleFailing ? DANGER : SUB,
           }}>
@@ -351,7 +352,7 @@ export default function LinePickerModal({
         {serverError && (
           <div style={{
             flexShrink: 0,
-            marginBottom: 12, padding: '8px 10px', borderRadius: 6,
+            marginBottom: 12, padding: '8px 10px', borderRadius: R.icon,
             background: NEUTRAL_BG, fontSize: 12, fontWeight: 600, color: DANGER,
           }}>
             {serverError}
@@ -367,7 +368,7 @@ export default function LinePickerModal({
           gap: 12, flex: 1, minHeight: 0,
         }}>
           {/* 왼쪽 — 팀 → 사람 */}
-          <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, display: 'flex', minHeight: 0 }}>
+          <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.control, display: 'flex', minHeight: 0 }}>
             <div style={{ width: 110, borderRight: `1px solid ${BORDER}`, overflowY: 'auto' }}>
               {loading ? (
                 <div style={{ padding: 12, fontSize: 12, color: MUTED }}>불러오는 중...</div>
@@ -408,7 +409,7 @@ export default function LinePickerModal({
           </div>
 
           {/* 오른쪽 — 지정한 결재선 */}
-          <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, overflowY: 'auto', minHeight: 0 }}>
+          <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.control, overflowY: 'auto', minHeight: 0 }}>
             {picked.length === 0 ? (
               <div style={{ padding: 12, fontSize: 12, color: MUTED }}>왼쪽에서 사람을 골라 추가하세요</div>
             ) : picked.map((l, i) => (

@@ -53,6 +53,7 @@ import DeskGuideModal from '@/components/inquiry/DeskGuideModal'
 import BulkImportModal from '@/components/inquiry/bulk/BulkImportModal'
 // TEMP-BULK-IMPORT ↑
 import { errorInfo } from '@/lib/errorInfo'
+import { R } from '@/lib/radius'
 
 /** 결재 화면과 같은 전환 기준. 두 화면의 레일이 다르게 움직이면 어색하다. */
 const MOTION_MS = 140
@@ -219,7 +220,7 @@ const PEEK_NOTICE =
   + '점유하면 번호가 다른 사람에게 나가지 않습니다.'
 
 const fieldStyle: React.CSSProperties = {
-  width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   fontSize: 13, color: TEXT, background: CARD_BG, outline: 'none', boxSizing: 'border-box',
   fontFamily: 'inherit',
 }
@@ -388,7 +389,7 @@ function RegisterModal({
     // 입력 폼 — 확인 뒤 닫는다.
     <ModalOverlay onClose={onClose} confirmClose>
       <div style={{
-        background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 500,
+        background: CARD_BG, borderRadius: R.control, padding: '14px 16px', width: '100%', maxWidth: 500,
         maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
       }}>
         {/* 종류는 카드에서 정해져 들어온다 — 모달 안에서 고르지 않고 머리글로 보여 준다. */}
@@ -398,7 +399,7 @@ function RegisterModal({
 
         {/* 등록될 번호 띠 — 맨 위다. 무엇을 만드는 중인지가 입력보다 먼저 보여야 한다. */}
         <div style={{
-          background: NEUTRAL_BG, borderRadius: 8, padding: '12px 14px', marginBottom: 12,
+          background: NEUTRAL_BG, borderRadius: R.control, padding: '12px 14px', marginBottom: 12,
           textAlign: 'center',
         }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 4 }}>등록될 번호</div>
@@ -462,7 +463,7 @@ function RegisterModal({
         {error && (
           <div style={{
             fontSize: 12, lineHeight: 1.6, color: '#be123c', background: '#fef2f2',
-            border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px', marginBottom: 12,
+            border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '8px 10px', marginBottom: 12,
           }}>
             {error}
           </div>
@@ -565,7 +566,7 @@ function CreateModal({
   }
 
   const field: React.CSSProperties = {
-    width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: 6,
+    width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
     fontSize: 13, color: TEXT, background: CARD_BG, outline: 'none', boxSizing: 'border-box',
     fontFamily: 'inherit',
   }
@@ -575,7 +576,7 @@ function CreateModal({
     // 입력 폼 — 확인 뒤 닫는다.
     <ModalOverlay onClose={close} confirmClose>
       <div style={{
-        background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 420,
+        background: CARD_BG, borderRadius: R.control, padding: '14px 16px', width: '100%', maxWidth: 420,
         boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
       }}>
         <div style={cardHeader}>
@@ -588,7 +589,7 @@ function CreateModal({
           <>
             {/* 발급된 번호. 사람이 받아 적는 값이라 크게 보인다. */}
             <div style={{
-              background: NEUTRAL_BG, borderRadius: 8, padding: '18px 16px', textAlign: 'center',
+              background: NEUTRAL_BG, borderRadius: R.control, padding: '18px 16px', textAlign: 'center',
               fontSize: 20, fontWeight: 800, color: BLUE, letterSpacing: '-0.5px', wordBreak: 'break-all',
             }}>
               {made.inquiry_no}
@@ -628,7 +629,7 @@ function CreateModal({
             {error && (
               <div style={{
                 fontSize: 12, lineHeight: 1.6, color: '#be123c', background: '#fef2f2',
-                border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px', marginBottom: 12,
+                border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '8px 10px', marginBottom: 12,
               }}>
                 {error}
               </div>
@@ -672,7 +673,7 @@ function NextNoCard({
 }) {
   return (
     <div style={{
-      background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8,
+      background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control,
       padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 8,
     }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: MUTED }}>{label}</div>
@@ -1022,7 +1023,7 @@ function InquiriesPageInner() {
                 onClick={() => setDeskOpen(true)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 6, width: '100%',
-                  padding: '8px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                  padding: '8px 10px', borderRadius: R.icon, border: 'none', cursor: 'pointer',
                   background: 'transparent', color: SUB,
                   fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
                 }}
@@ -1049,7 +1050,7 @@ function InquiriesPageInner() {
                   onClick={() => go(item.type)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 6, width: '100%',
-                    padding: '8px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                    padding: '8px 10px', borderRadius: R.icon, border: 'none', cursor: 'pointer',
                     background: on ? NEUTRAL_BG : 'transparent',
                     color: on ? TEXT : SUB,
                     fontSize: 13, fontWeight: on ? 700 : 600, fontFamily: 'inherit', textAlign: 'left',
@@ -1078,7 +1079,7 @@ function InquiriesPageInner() {
                   type="button" onClick={() => setBulkOpen(true)}
                   style={{
                     flexShrink: 0, border: `1px solid ${BORDER}`, background: CARD_BG,
-                    borderRadius: 6, padding: '5px 10px', fontSize: 12, fontWeight: 700,
+                    borderRadius: R.icon, padding: '5px 10px', fontSize: 12, fontWeight: 700,
                     color: MUTED, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
                   }}
                 >
@@ -1308,7 +1309,7 @@ function InquiriesPageInner() {
                               // 라벨 바로 뒤다(오른쪽 끝으로 밀지 않는다) — 눈이 '작성 중' 을 읽은 자리에서
                               // 바로 누를 수 있다. 칸 안 gap(6) 에 2 를 더해 8 로 띄운다.
                               marginLeft: 2, flexShrink: 0, cursor: 'pointer',
-                              background: BLUE, color: '#ffffff', borderRadius: 6,
+                              background: BLUE, color: '#ffffff', borderRadius: R.icon,
                               padding: '3px 8px', fontSize: 11, fontWeight: 700, lineHeight: '16px',
                             }}
                           >
@@ -1326,7 +1327,7 @@ function InquiriesPageInner() {
                           <span style={{ fontSize: 12, color: FAINT }}>-</span>
                         ) : (<>
                           <span style={{
-                            flexShrink: 0, borderRadius: 99, padding: '1px 8px',
+                            flexShrink: 0, borderRadius: R.pill, padding: '1px 8px',
                             background: REPLY_COLOR.bg, color: REPLY_COLOR.text,
                             fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
                           }}>
@@ -1390,7 +1391,7 @@ function InquiriesPageInner() {
                               aria-current={p === page ? 'page' : undefined}
                               onClick={() => push({ ...query, page: p })}
                               style={{
-                                border: 'none', borderRadius: 6, padding: '5px 10px', fontSize: 12,
+                                border: 'none', borderRadius: R.icon, padding: '5px 10px', fontSize: 12,
                                 fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer',
                                 background: p === page ? BLUE : NEUTRAL_BG,
                                 color: p === page ? '#ffffff' : SUB,

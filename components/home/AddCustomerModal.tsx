@@ -28,6 +28,7 @@ import AgencyPicker from '@/components/customer/AgencyPicker'
 import { loadParents, type ParentOption } from '@/components/customer/ParentPicker'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import { addCustomerEntry, type NewContactInput, type NewSiteInput } from '@/lib/addCustomer'
+import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
@@ -40,11 +41,11 @@ const NEUTRAL = '#f3f4f6'
 /** 칸 이름 — 읽히라고 있는 글자다. 회색이 너무 옅어 안 보이던 것을 진하게 바꿨다(2026-11-20). */
 const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: LABEL, marginBottom: 4 }
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   boxSizing: 'border-box', color: TEXT, background: '#fff', outline: 'none', fontSize: 14,
 }
 const sectionStyle: React.CSSProperties = {
-  border: `1px solid ${BORDER}`, borderRadius: 8, padding: 16, marginBottom: 14, background: '#fff',
+  border: `1px solid ${BORDER}`, borderRadius: R.control, padding: 16, marginBottom: 14, background: '#fff',
 }
 const sectionTitle: React.CSSProperties = { fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 12 }
 /** 한 줄 세 칸 — 업체 정보와 사업장 첫 줄이 같은 리듬을 쓴다. */
@@ -197,12 +198,12 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
   }
 
   const segBtn = (on: boolean): React.CSSProperties => ({
-    height: 32, padding: '0 16px', borderRadius: 6, border: 'none', cursor: 'pointer',
+    height: 32, padding: '0 16px', borderRadius: R.icon, border: 'none', cursor: 'pointer',
     background: on ? '#fff' : 'transparent', color: on ? TEXT : MUTED,
     fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
   })
   const smallBtn: React.CSSProperties = {
-    height: 26, padding: '0 10px', borderRadius: 6, border: `1px solid ${BORDER}`,
+    height: 26, padding: '0 10px', borderRadius: R.icon, border: `1px solid ${BORDER}`,
     background: '#fff', color: TEXT, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
   }
 
@@ -215,14 +216,14 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
           // 폭은 PDF 뷰어와 같은 규칙 — 화면이 좁으면 92%, 넓어도 1100px 을 넘지 않는다.
           width: 'min(92vw, 1100px)', maxWidth: 'min(92vw, 1100px)',
           maxHeight: '96vh', overflowY: 'auto',
-          background: '#fff', color: TEXT, borderRadius: 8, padding: 22,
+          background: '#fff', color: TEXT, borderRadius: R.control, padding: 22,
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
           animation: 'modal-in 0.18s ease',
         }}>
         <FormFocusStyle />
         {/* ── ① 종류 — 맨 위, **모달 폭 기준 가운데**. 무엇을 만드는지가 첫 결정이다. */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-          <div style={{ display: 'inline-flex', gap: 3, padding: 3, borderRadius: 8, background: NEUTRAL }}>
+          <div style={{ display: 'inline-flex', gap: 3, padding: 3, borderRadius: R.control, background: NEUTRAL }}>
             <button type="button" onClick={() => setKind('customer')} style={segBtn(!isAgency)}>고객사</button>
             <button type="button" onClick={() => setKind('agency')} style={segBtn(isAgency)}>대리점</button>
           </div>
@@ -236,7 +237,7 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
         <section style={sectionStyle}>
           <div style={sectionTitle}>{isAgency ? '대리점 정보' : '업체 정보'}</div>
           {existing && (
-            <div style={{ fontSize: 11, color: BLUE, background: '#eff4ff', border: '1px solid #c7d7f8', borderRadius: 6, padding: '7px 10px', marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: BLUE, background: '#eff4ff', border: '1px solid #c7d7f8', borderRadius: R.icon, padding: '7px 10px', marginBottom: 10 }}>
               이미 있는 회사입니다 — 아래 사업장만 이 회사에 더합니다.
             </div>
           )}
@@ -313,7 +314,7 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
 
           <div style={{ display: 'grid', gap: 14 }}>
             {(isAgency ? sites.slice(0, 1) : sites).map((site, i) => (
-              <div key={i} style={{ display: 'grid', gap: 10, padding: isAgency ? 0 : 12, border: isAgency ? 'none' : `1px solid ${BORDER}`, borderRadius: 8 }}>
+              <div key={i} style={{ display: 'grid', gap: 10, padding: isAgency ? 0 : 12, border: isAgency ? 'none' : `1px solid ${BORDER}`, borderRadius: R.control }}>
                 {!isAgency && (
                   <div style={{ display: 'flex', alignItems: 'center' }}>
                     <b style={{ fontSize: 12, fontWeight: 700, color: LABEL }}>사업장 {i + 1}</b>
@@ -462,9 +463,9 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
           <button onClick={onClose} disabled={saving}
-            style={{ padding: '10px 15px', background: '#fff', color: SUB, borderRadius: 6, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+            style={{ padding: '10px 15px', background: '#fff', color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
           <button onClick={() => void handleSave()} disabled={saving}
-            style={{ padding: '10px 17px', background: BLUE, color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: saving ? 0.6 : 1 }}>
+            style={{ padding: '10px 17px', background: BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: saving ? 0.6 : 1 }}>
             {saving ? '저장 중…' : '저장'}
           </button>
         </div>

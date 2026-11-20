@@ -13,6 +13,7 @@ import { BORDER, CARD_BG, DANGER, MUTED } from '@/components/common/ui'
 import { summaryRows } from './summary'
 import { FormRow } from './formStyles'
 import type { DocFormBodyProps } from './panels'
+import { R } from '@/lib/radius'
 
 export default function QuoteDeleteFormBody({ doc }: DocFormBodyProps) {
   // 유형 이름을 적지 않는다 — 문서가 들고 있는 doc_type 을 그대로 넘긴다.
@@ -27,7 +28,7 @@ export default function QuoteDeleteFormBody({ doc }: DocFormBodyProps) {
         </span>
       )}
 
-      <div style={{ border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden', background: CARD_BG }}>
+      <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.icon, overflow: 'hidden', background: CARD_BG }}>
         {rows.length === 0 ? (
           <FormRow label="내　　용" first>
             <span style={{ color: MUTED }}>요청 내용을 읽지 못했습니다</span>

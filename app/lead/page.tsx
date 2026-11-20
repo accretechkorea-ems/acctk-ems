@@ -13,6 +13,7 @@ import {
 import { downsizeImage } from '@/lib/leadCardImage'
 import { errText, errBorder, FieldError } from '@/components/common/fieldErrors'
 import AddressField from '@/components/customer/modals/AddressField'
+import { R } from '@/lib/radius'
 
 const ACCENT = '#234ea2'
 // 필수 표시(*)에 쓰는 색. 에러 문구·테두리는 공용 errText / errBorder 를 그대로 쓴다.
@@ -53,7 +54,7 @@ const emptyForm = (): Form => ({
 type FieldKey = keyof Form
 
 const fieldStyle: CSSProperties = {
-  width: '100%', padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  width: '100%', padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   fontSize: 13, color: INK, background: '#fff', outline: 'none', fontFamily: 'inherit',
   // 포커스 표시는 아래 <style> 의 .lead-page 규칙이 담당한다(견적·재고·고객사 상세와 같은 값).
   transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
@@ -62,11 +63,11 @@ const errorFieldStyle: CSSProperties = { ...fieldStyle, border: errBorder }
 const labelStyle: CSSProperties = { fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 4, display: 'block' }
 // 명함 첨부·교체·삭제 버튼. 폼 안의 보조 동작이라 회색 고스트로 둔다.
 const cardBtnStyle: CSSProperties = {
-  padding: '8px 12px', background: '#f3f4f6', border: 'none', borderRadius: 6,
+  padding: '8px 12px', background: '#f3f4f6', border: 'none', borderRadius: R.icon,
   cursor: 'pointer', fontSize: 12, fontWeight: 700, color: MUTED, whiteSpace: 'nowrap',
 }
 const sectionStyle: CSSProperties = {
-  background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, padding: 16, marginBottom: 12,
+  background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.control, padding: 16, marginBottom: 12,
 }
 const sectionTitleStyle: CSSProperties = {
   fontSize: 13, fontWeight: 700, color: INK, marginBottom: 12,
@@ -311,7 +312,7 @@ export default function LeadPage() {
             onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
             style={{
               marginTop: 20, padding: '9px 16px', background: '#fff', color: MUTED,
-              border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer',
+              border: `1px solid ${BORDER}`, borderRadius: R.icon, cursor: 'pointer',
               fontSize: 13, fontWeight: 600, fontFamily: 'inherit', transition: 'background 0.15s ease',
             }}
           >추가 등록하기</button>
@@ -503,7 +504,7 @@ export default function LeadPage() {
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={card.dataUrl} alt="첨부한 명함"
-                  style={{ width: 180, maxHeight: 120, objectFit: 'contain', border: `1px solid ${BORDER}`, borderRadius: 6, background: '#fff' }} />
+                  style={{ width: 180, maxHeight: 120, objectFit: 'contain', border: `1px solid ${BORDER}`, borderRadius: R.icon, background: '#fff' }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <span style={{ fontSize: 11, color: FAINT }}>{card.name} · {(card.bytes / 1024).toFixed(0)}KB</span>
                   <div style={{ display: 'flex', gap: 6 }}>
@@ -545,7 +546,7 @@ export default function LeadPage() {
           onMouseEnter={e => { if (!submitting) e.currentTarget.style.background = ACCENT_HOVER }}
           onMouseLeave={e => { if (!submitting) e.currentTarget.style.background = ACCENT }}
           style={{
-            width: '100%', padding: '12px 0', border: 'none', borderRadius: 8,
+            width: '100%', padding: '12px 0', border: 'none', borderRadius: R.control,
             background: submitting ? FAINT : ACCENT, color: '#fff',
             fontSize: 13, fontWeight: 700, cursor: submitting ? 'default' : 'pointer', fontFamily: 'inherit',
             transition: 'background 0.15s ease',

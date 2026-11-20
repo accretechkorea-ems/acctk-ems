@@ -39,12 +39,22 @@ paths:
 
 ## Radius
 
-| 종류 | 값 | 사용처 |
+**정본은 `lib/radius.ts` 의 `R` 이다.** 숫자를 직접 적지 않는다
+(`scripts/radius-check.js` 가 막는다). CSS 쪽 짝은 `app/globals.css` 의 `--radius-*`.
+
+| 토큰 | 값 | 사용처 |
 |---|---|---|
-| 카드·컨테이너·모달·팝업·지도·스켈레톤 | `8` | 전부 |
-| 버튼·입력·칩·배지·필터·인디케이터 | `6` | 조회/등록/상세/출발 버튼, 입력, 건수 배지 |
-| pill(캡슐 배지) | `99` | 팀 배지·총 N건·스크롤 힌트 |
-| 원형 | `50%` | dot, 닫기 버튼, 아바타 |
+| `R.tag` | `4` | 태그(분류·상태 꼬리표) |
+| `R.icon` | `6` | 아이콘 버튼 |
+| `R.control` | `8` | 버튼·입력칸·셀렉트·드롭다운 |
+| `R.tile` | `10` | 통계 타일 |
+| `R.card` | `12` | 카드·패널 |
+| `R.modal` | `14` | 모달 |
+| `R.pill` | `999` | 칩(필터)·숫자 배지 |
+| `'50%'` | — | dot, 닫기 버튼, 아바타 (토큰 밖 예외) |
+
+2026-11-20 전수 치환(1,050건/147파일) 전에는 카드 8·버튼 6 이었다. 역할별로
+갈라 두었으니, 값이 같아도(`control` 8 과 옛 카드 8) 역할 이름을 골라 쓴다.
 
 ## 타이포 스케일 (역할 → size / weight / color)
 
@@ -83,7 +93,7 @@ paths:
 
 ## 카드 구조
 
-- 테두리 `1px #ebebeb`, 배경 `#ffffff`, radius `8`, padding `14px 16px`.
+- 테두리 `1px #ebebeb`, 배경 `#ffffff`, radius `R.card`, padding `14px 16px`.
 - **hover**: 배경 변경 없음. `transform: translateY(-2px)` + 테두리 `#c7d7f8`.
   `transition: transform 0.15s ease, border-color 0.15s ease`
   (CustomerCard, activity 카드 — 동일).
@@ -92,17 +102,17 @@ paths:
 
 - **dot + 텍스트** (상태·서비스 유형): 색을 죽이는 기본 방식. 7~9px 원형 dot만
   색을 갖고 텍스트는 중립(`#6b7280`/`#111827`). 카드·정보창·상세행에 사용.
-- **pill 배지** (`99`, 배경 `#f3f4f6`): 카운트/분류 라벨 전용(팀·총 N건).
+- **pill 배지** (`R.pill`, 배경 `#f3f4f6`): 카운트/분류 라벨 전용(팀·총 N건).
   틴트 배경(`${color}1a`)은 쓰지 않는다.
 - **칩(텍스트)**: 장비명은 배경·테두리 없이 `#234ea2` 텍스트만.
 
 ## 필터 패러다임
 
 - **비활성 필터 텍스트는 패러다임과 무관하게 `#9ca3af`** (SegmentedControl·pill 공통).
-- **단일 선택 = SegmentedControl** (activity): 트랙 `#f3f4f6`/radius 8/padding 3,
-  흰 인디케이터가 슬라이드(radius 6, `transition: left/width 0.25s cubic-bezier(0.4,0,0.2,1)`).
+- **단일 선택 = SegmentedControl** (activity): 트랙 `#f3f4f6`/radius `R.control`/padding 3,
+  흰 인디케이터가 슬라이드(radius `R.icon`, `transition: left/width 0.25s cubic-bezier(0.4,0,0.2,1)`).
   버튼 12/700, 활성 `#111827` / 비활성 `#9ca3af`.
-- **다중 선택 = pill 토글** (MapView 지도 필터): radius 6, 12/700, `blur(4px)` 유지.
+- **다중 선택 = pill 토글** (MapView 지도 필터): radius `R.icon`, 12/700, `blur(4px)` 유지.
   - 활성: bg `rgba(255,255,255,0.95)`, 테두리 `#d1d5db`, `#111827`.
   - 비활성: bg `rgba(255,255,255,0.65)`, 테두리 `rgba(235,235,235,0.8)`, `#9ca3af`.
 
@@ -123,7 +133,7 @@ paths:
 
 ## 금지 사항
 
-- 표에 없는 hex·size·radius 신규 생성 금지.
+- 표에 없는 hex·size 신규 생성 금지. radius 는 `lib/radius.ts` 의 `R` 만 쓴다(숫자 직접 금지).
 - 그라데이션 금지. 모달/팝업 외 box-shadow 금지.
 - 이모지를 UI 아이콘으로 쓰지 않는다.
   lucide 스타일 인라인 SVG를 사용한다 (stroke-width 2, 선 아이콘).

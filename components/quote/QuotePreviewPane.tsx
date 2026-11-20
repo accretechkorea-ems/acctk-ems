@@ -22,6 +22,7 @@ import type { Terms } from '@/lib/quoteTerms'
 import type { OnBehalfAssignee } from '@/lib/quoteMutations'
 import { NO_INITIALS_MESSAGE } from '@/hooks/quote/useQuoteSubmit'
 import type { useToast } from '@/components/common/Toast'
+import { R } from '@/lib/radius'
 
 /** PDF 엔진(약 1.4MB)은 이 칸을 그릴 때 받아 온다 — /quote 첫 로드에 얹지 않는다. */
 const QuotePreviewCanvas = dynamic(() => import('./QuotePreviewCanvas'), {
@@ -87,7 +88,7 @@ export default function QuotePreviewPane({
   // PDF 미리보기 — 480px 밑으로 눌리면 글자가 읽히지 않아 그 전에 아래로 내려간다
   return (
 <div style={{ flex: '1 1 480px', minWidth: 0 }}>
-  <div style={{ background: '#f3f4f6', borderRadius: 8, overflow: 'hidden', border: '1px solid #ebebeb', height: 'calc(100vh - 40px)', position: 'sticky', top: 20, display: 'flex', flexDirection: 'column' }}>
+  <div style={{ background: '#f3f4f6', borderRadius: R.control, overflow: 'hidden', border: '1px solid #ebebeb', height: 'calc(100vh - 40px)', position: 'sticky', top: 20, display: 'flex', flexDirection: 'column' }}>
 
     {/* 헤더 */}
     <div style={{ background: '#234ea2', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
@@ -97,7 +98,7 @@ export default function QuotePreviewPane({
         {/* 조회가 실패했으면 번호 대신 그 사실을 낸다 — 잘못된 번호를 그럴듯하게 보여주지 않는다.
             파란 헤더 위라 붉은 글씨는 읽히지 않으므로, 흰 글씨에 반투명 테두리로 구분한다(기존 대필 배지와 같은 방식). */}
         {missingInitials || seqLoadError ? (
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 6, background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.5)' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: R.icon, background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.5)' }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
@@ -122,7 +123,7 @@ export default function QuotePreviewPane({
           onChange={e => onQuoteDate(e.target.value)}
           aria-label="견적 날짜"
           style={{
-            padding: '2px 8px', borderRadius: 6, fontSize: 12, fontWeight: 700,
+            padding: '2px 8px', borderRadius: R.icon, fontSize: 12, fontWeight: 700,
             background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.5)',
             color: '#ffffff', colorScheme: 'dark', cursor: 'pointer',
           }}
@@ -141,7 +142,7 @@ export default function QuotePreviewPane({
           화면 맨 위에 띠로 두면 작성하다 스크롤하면 사라졌다 — 확정 버튼 옆이면 늘 보인다. */}
       {repairChip && (
         <span style={{
-          display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: 6,
+          display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: R.icon,
           background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.5)',
           color: '#ffffff', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
           maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis',
@@ -153,14 +154,14 @@ export default function QuotePreviewPane({
       )}
       {/* 대필 중임을 작성하는 내내 보이게 둔다 — 남의 실적으로 저장되는 화면이라 헷갈리면 안 된다. */}
       {onBehalf && (
-        <span style={{ padding: '4px 10px', borderRadius: 99, background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.5)', color: '#ffffff', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
+        <span style={{ padding: '4px 10px', borderRadius: R.pill, background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.5)', color: '#ffffff', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
           {`${onBehalf.name} ${onBehalf.position || ''}`.trim()} 대신 작성 중
         </span>
       )}
       {/* 견적 분류·양식을 안 골랐으면 확정을 **막고 그 자리에서 이유를 알린다.**
           품목 입력은 막지 않는다 — 금액을 먼저 잡아 보는 흐름을 끊지 않으려고 여기 한 곳에서만 막는다. */}
       {categoryMissing && (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.5)', color: '#ffffff', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: R.icon, background: 'rgba(255,255,255,0.16)', border: '1px solid rgba(255,255,255,0.5)', color: '#ffffff', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
@@ -185,7 +186,7 @@ export default function QuotePreviewPane({
               background: locked ? 'transparent' : '#ffffff',
               color: locked ? '#ffffff' : '#234ea2',
               border: locked ? '1px solid #ffffff' : 'none',
-              borderRadius: 6, fontWeight: 600, fontSize: 13,
+              borderRadius: R.icon, fontWeight: 600, fontSize: 13,
               cursor: locked ? 'not-allowed' : 'pointer',
               transition: 'background 0.15s ease',
             }}

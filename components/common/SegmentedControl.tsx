@@ -1,6 +1,7 @@
 'use client'
 
 import { useLayoutEffect, useRef, useState } from 'react'
+import { R } from '@/lib/radius'
 
 /**
  * 슬라이딩 인디케이터 세그먼트 컨트롤 (단일 선택).
@@ -72,7 +73,7 @@ export default function SegmentedControl({ options, value, onChange, equal = fal
   //   아니라 **꺼진 버튼**처럼 보였다(견적 줄의 「이익률 | 판매가」가 그랬다).
   const containerStyle: React.CSSProperties = {
     position: 'relative', background: '#ffffff', border: '1px solid #d1d5db',
-    boxSizing: 'border-box', borderRadius: 8, padding: 3, gap: 0,
+    boxSizing: 'border-box', borderRadius: R.control, padding: 3, gap: 0,
     ...(equal
       ? { display: 'grid', gridTemplateColumns: `repeat(${opts.length}, minmax(${minItemWidth != null ? `${minItemWidth}px` : 0}, 1fr))` }
       : { display: 'inline-flex' }),
@@ -85,7 +86,7 @@ export default function SegmentedControl({ options, value, onChange, equal = fal
         <div style={{
           position: 'absolute', top: 3, bottom: 3, left: 0, width: ind.width,
           transform: `translateX(${ind.left}px)`,
-          background: '#f3f4f6', borderRadius: 6,
+          background: '#f3f4f6', borderRadius: R.icon,
           pointerEvents: 'none',
           transition: animate
             ? 'transform 200ms cubic-bezier(0.4, 0, 0.2, 1), width 200ms cubic-bezier(0.4, 0, 0.2, 1)'
@@ -99,7 +100,7 @@ export default function SegmentedControl({ options, value, onChange, equal = fal
             disabled={o.disabled}
             style={{
               position: 'relative', zIndex: 1, height: height != null ? '100%' : 30,
-              padding: equal ? 0 : '0 12px', textAlign: 'center', borderRadius: 6,
+              padding: equal ? 0 : '0 12px', textAlign: 'center', borderRadius: R.icon,
               fontSize: 13, background: 'transparent', border: 'none', whiteSpace: 'nowrap',
               cursor: o.disabled ? 'not-allowed' : 'pointer',
               color: o.disabled ? '#d1d5db' : active ? '#111827' : '#9ca3af',

@@ -27,6 +27,7 @@
 
 import { useEffect, useState } from 'react'
 import type { UnitBar, YearSummary } from '@/lib/salesStats'
+import { R } from '@/lib/radius'
 
 export const CHART_BLUE = '#234ea2'
 export const CHART_GREEN = '#16a34a'
@@ -295,8 +296,8 @@ export function Legend({ color, label, line }: { color: string; label: string; l
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
       {line
-        ? <div style={{ width: 16, height: 2, background: color, borderRadius: 1 }} />
-        : <div style={{ width: 11, height: 11, borderRadius: 2, background: color }} />}
+        ? <div style={{ width: 16, height: 2, background: color, borderRadius: 1 /* 2px 선의 끝 — 토큰 밖 예외 */ }} />
+        : <div style={{ width: 11, height: 11, borderRadius: R.tag, background: color }} />}
       {label}
     </div>
   )
@@ -316,7 +317,7 @@ export function ChartLegend() {
 /** 보조 지표 한 칸 — 높이 70px 로 눌러 담는다(스크롤을 만들지 않으려고). */
 function Box({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
-    <div style={{ background: '#f8fafc', borderRadius: 8, padding: '8px 10px', border: `1px solid ${BORDER}`, minWidth: 0, height: 70, boxSizing: 'border-box', overflow: 'hidden' }}>
+    <div style={{ background: '#f8fafc', borderRadius: R.control, padding: '8px 10px', border: `1px solid ${BORDER}`, minWidth: 0, height: 70, boxSizing: 'border-box', overflow: 'hidden' }}>
       <div style={{ fontSize: 10, color: GRAY, marginBottom: 3 }}>{label}</div>
       <div className="num" style={{ fontSize: 13, fontWeight: 800, color: color || TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
       {sub && <div className="num" style={{ fontSize: 10, color: MUTED, fontWeight: 600, marginTop: 3, lineHeight: '13px' }}>{sub}</div>}

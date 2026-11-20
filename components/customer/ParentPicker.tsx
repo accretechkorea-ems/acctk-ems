@@ -5,6 +5,7 @@ import { colsWithNameEn, withNameEnFallback } from '@/lib/nameEn'
 import { createClient } from '@/lib/supabase/client'
 import Popover from '@/components/common/Popover'
 import { INDUSTRIES } from '@/lib/leadOptions'
+import { R } from '@/lib/radius'
 
 /**
  * 소속회사(부모) 선택 칸.
@@ -108,11 +109,11 @@ export async function createParent(companyName: string, industry: string, nameEn
 }
 
 const fieldStyle: CSSProperties = {
-  width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: 6,
+  width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
 }
 const ghostBtn: CSSProperties = {
-  padding: '9px 12px', background: '#f3f4f6', border: 'none', borderRadius: 6,
+  padding: '9px 12px', background: '#f3f4f6', border: 'none', borderRadius: R.icon,
   cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#6b7280', flexShrink: 0, whiteSpace: 'nowrap',
 }
 
@@ -265,7 +266,7 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, l
         onClose={() => setOpen(false)}
         matchAnchorWidth
         maxHeight={240}
-        style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+        style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.icon, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
       >
         {matches.map(p => (
           <div key={p.customer_id}

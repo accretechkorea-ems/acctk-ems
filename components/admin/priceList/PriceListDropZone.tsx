@@ -12,6 +12,7 @@
 import { useRef, useState } from 'react'
 import { BLUE, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT } from '@/components/common/ui'
 import { HEADER_NAMES, REQUIRED_HEADERS } from '@/lib/priceListParse'
+import { R } from '@/lib/radius'
 
 export type PriceListDropZoneProps = {
   /** 열려 있는가(80/20 중 하나를 골랐는가). */
@@ -75,7 +76,7 @@ export default function PriceListDropZone(props: PriceListDropZoneProps) {
           style={{
             marginTop: 10,
             border: `1px dashed ${over ? BLUE : '#c7d7f8'}`,
-            borderRadius: 8,
+            borderRadius: R.control,
             background: over ? BG_OVER : BG,
             padding: '14px 16px',
             cursor: disabled ? 'not-allowed' : 'pointer',
@@ -114,7 +115,7 @@ export default function PriceListDropZone(props: PriceListDropZoneProps) {
                 disabled={busy}
                 style={{
                   fontSize: 11, fontWeight: 700, color: busy ? FAINT : SUB, background: NEUTRAL_BG,
-                  border: 'none', borderRadius: 6, padding: '5px 10px', cursor: busy ? 'not-allowed' : 'pointer',
+                  border: 'none', borderRadius: R.icon, padding: '5px 10px', cursor: busy ? 'not-allowed' : 'pointer',
                 }}
               >
                 다른 파일

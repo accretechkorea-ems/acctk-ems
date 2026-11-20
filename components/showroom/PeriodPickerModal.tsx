@@ -18,6 +18,7 @@ import {
 import {
   BLUE, BORDER, CARD_BG, TEXT, MUTED, SUB, DANGER, NEUTRAL_BG, ROW_HOVER_BG, btnPrimary, inputStyle,
 } from '@/components/common/ui'
+import { R } from '@/lib/radius'
 
 const RECENT_YEARS = 5
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
@@ -34,7 +35,7 @@ const CELL_CSS = `
 `
 
 const cell = (selected: boolean, dim: boolean): CSSProperties => ({
-  height: 44, borderRadius: 6, fontFamily: 'inherit', cursor: 'pointer',
+  height: 44, borderRadius: R.icon, fontFamily: 'inherit', cursor: 'pointer',
   border: selected ? `1px solid ${BLUE}` : `1px solid ${BORDER}`,
   background: selected ? BLUE : CARD_BG,
   color: selected ? '#ffffff' : dim ? MUTED : TEXT,
@@ -47,7 +48,7 @@ const cellSub = (selected: boolean): CSSProperties => ({
 })
 
 const navBtn: CSSProperties = {
-  width: 30, height: 30, border: `1px solid ${BORDER}`, borderRadius: 6, background: CARD_BG,
+  width: 30, height: 30, border: `1px solid ${BORDER}`, borderRadius: R.icon, background: CARD_BG,
   color: SUB, cursor: 'pointer', fontSize: 13, fontWeight: 700,
 }
 
@@ -193,7 +194,7 @@ export default function PeriodPickerModal({ period, onPick, onClose }: Props) {
     <ModalOverlay onClose={onClose} confirmClose style={{ padding: 12 }}>
       <div ref={panelRef} onClick={e => e.stopPropagation()} role="dialog" aria-label="기간 선택" style={{
         width: 'calc(100vw - 24px)', maxWidth: 380, maxHeight: 'calc(100dvh - 32px)',
-        background: CARD_BG, borderRadius: 8, boxSizing: 'border-box',
+        background: CARD_BG, borderRadius: R.control, boxSizing: 'border-box',
         boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
         animation: 'modal-in 0.18s ease', display: 'flex', flexDirection: 'column',
       }}>

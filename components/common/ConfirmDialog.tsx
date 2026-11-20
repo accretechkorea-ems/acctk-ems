@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import ModalOverlay from './ModalOverlay'
 import { ConfirmContext, useConfirm, type ConfirmFn, type ConfirmOptions } from './confirmContext'
 import { Z } from '@/lib/zIndex'
+import { R } from '@/lib/radius'
 
 // 문맥·훅은 components/common/confirmContext.tsx 에 있다(순환 import 를 피한다 — 그 파일
 // 머리말 참고). 부르는 곳이 바뀌지 않게 여기서 그대로 다시 내보낸다.
@@ -70,7 +71,7 @@ function ConfirmDialog({ options, onClose }: { options: ConfirmOptions; onClose:
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: 400, background: '#ffffff', borderRadius: 8, padding: 24,
+          width: '100%', maxWidth: 400, background: '#ffffff', borderRadius: R.control, padding: 24,
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb', animation: 'modal-in 0.18s ease',
         }}
       >
@@ -78,13 +79,13 @@ function ConfirmDialog({ options, onClose }: { options: ConfirmOptions; onClose:
         <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.6, whiteSpace: 'pre-line', marginBottom: 22 }}>{options.message}</div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button onClick={() => onClose(false)}
-            style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: 6, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+            style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
             {options.cancelText ?? '취소'}
           </button>
           <button ref={confirmBtnRef} onClick={() => onClose(true)}
             onMouseEnter={(e) => (e.currentTarget.style.background = confirmHover)}
             onMouseLeave={(e) => (e.currentTarget.style.background = confirmBg)}
-            style={{ padding: '9px 18px', background: confirmBg, color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, transition: 'background 0.15s ease' }}>
+            style={{ padding: '9px 18px', background: confirmBg, color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, transition: 'background 0.15s ease' }}>
             {options.confirmText ?? '확인'}
           </button>
         </div>

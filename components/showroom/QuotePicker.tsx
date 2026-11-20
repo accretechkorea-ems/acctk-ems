@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { numKR } from '@/components/customer/constants'
 import { BLUE, BORDER, CARD_BG, TEXT, MUTED, SUB, FAINT, NEUTRAL_BG } from '@/components/common/ui'
+import { R } from '@/lib/radius'
 
 const LIMIT = 20
 
@@ -72,7 +73,7 @@ export default function QuotePicker({ customerId, value, onChange }: Props) {
     return (
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        border: `1px solid ${BORDER}`, borderRadius: 6, padding: '10px 12px', background: CARD_BG,
+        border: `1px solid ${BORDER}`, borderRadius: R.icon, padding: '10px 12px', background: CARD_BG,
       }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: BLUE, flexShrink: 0 }}>{value.quote_number ?? '-'}</span>
         <span style={{ fontSize: 12, color: MUTED, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -98,7 +99,7 @@ export default function QuotePicker({ customerId, value, onChange }: Props) {
     <div>
       <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="견적번호로 좁히기"
         style={{
-          width: '100%', height: 40, padding: '0 12px', border: `1px solid ${BORDER}`, borderRadius: 6,
+          width: '100%', height: 40, padding: '0 12px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
           boxSizing: 'border-box', color: TEXT, background: CARD_BG, outline: 'none', fontSize: 14,
           fontFamily: 'inherit', marginBottom: 8,
         }} />
@@ -109,7 +110,7 @@ export default function QuotePicker({ customerId, value, onChange }: Props) {
           {rows.length === 0 ? '이 업체의 견적이 없습니다' : '조건에 맞는 견적이 없습니다'}
         </div>
       ) : (
-        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, maxHeight: 200, overflowY: 'auto' }}>
+        <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.control, maxHeight: 200, overflowY: 'auto' }}>
           {shown.map((r, i) => (
             <div key={r.quote_id} onClick={() => onChange(r)}
               style={{

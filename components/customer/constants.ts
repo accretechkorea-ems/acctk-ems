@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import { Z } from '@/lib/zIndex'
+import { R } from '@/lib/radius'
 
 export const PAGE_BG = '#f4f5f7'
 export const PANEL_BG = '#ffffff'
@@ -17,17 +18,17 @@ export const DANGER_BG = '#dc2626'
 export const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
 
 export const inputStyle: CSSProperties = {
-  width: '100%', padding: 12, border: `1px solid ${INPUT_BORDER}`, borderRadius: 10,
+  width: '100%', padding: 12, border: `1px solid ${INPUT_BORDER}`, borderRadius: R.tile,
   boxSizing: 'border-box', color: TEXT_PRIMARY, background: INPUT_BG, outline: 'none',
 }
 
 export const dateInputStyle: CSSProperties = {
-  width: '100%', padding: 12, border: `1px solid ${INPUT_BORDER}`, borderRadius: 10,
+  width: '100%', padding: 12, border: `1px solid ${INPUT_BORDER}`, borderRadius: R.tile,
   boxSizing: 'border-box', color: '#111113', background: '#ffffff', outline: 'none', colorScheme: 'light',
 }
 
 export const textareaStyle: CSSProperties = {
-  width: '100%', padding: 12, border: `1px solid ${INPUT_BORDER}`, borderRadius: 10,
+  width: '100%', padding: 12, border: `1px solid ${INPUT_BORDER}`, borderRadius: R.tile,
   resize: 'vertical', color: TEXT_PRIMARY, boxSizing: 'border-box', lineHeight: 1.5,
   background: INPUT_BG, outline: 'none',
 }

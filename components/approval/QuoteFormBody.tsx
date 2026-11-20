@@ -19,6 +19,7 @@ import { reviewCache } from '@/lib/quoteReviewCache'
 import { openQuotePdfById } from '@/lib/openQuotePdf'
 import type { DocFormBodyProps } from './panels'
 import { FormRow, SCROLL_CLASS, formTable, formTd, formTh, scrollBox } from './formStyles'
+import { R } from '@/lib/radius'
 
 /** 금액 한 줄 — 「12,345,678원」. 값이 없으면 '-'(comma 가 '-' 를 낸다). */
 const won = (v: number | null): string => (v === null ? '-' : `${comma(v)}원`)
@@ -53,7 +54,7 @@ function LoadFailed({ message, onRetry }: { message: string; onRetry: () => void
   return (
     <div className="ad-noprint" style={{
       display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-      border: `1px solid ${BORDER}`, borderRadius: 8, padding: '10px 12px',
+      border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '10px 12px',
     }}>
       <span style={{ fontSize: 12, color: DANGER, fontWeight: 600 }}>{message}</span>
       <button type="button" onClick={onRetry} style={{ ...btnGhost(), padding: '4px 10px', fontSize: 12 }}>
@@ -120,8 +121,8 @@ export default function QuoteFormBody({ doc }: DocFormBodyProps) {
   if (loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div style={{ height: 160, background: SKELETON, borderRadius: 6 }} />
-        <div style={{ height: 80, background: SKELETON, borderRadius: 6 }} />
+        <div style={{ height: 160, background: SKELETON, borderRadius: R.icon }} />
+        <div style={{ height: 80, background: SKELETON, borderRadius: R.icon }} />
       </div>
     )
   }
@@ -134,7 +135,7 @@ export default function QuoteFormBody({ doc }: DocFormBodyProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* ── 본문 표 ── 라벨 칸 + 값 칸. 옛 품의서 본문과 같은 줄 구성이다. */}
-      <div style={{ border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden', background: CARD_BG }}>
+      <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.icon, overflow: 'hidden', background: CARD_BG }}>
         <FormRow label="매출처명" first>{sellerText(data)}</FormRow>
         <FormRow label="품　　명">{itemsLabel(data)}</FormRow>
         <FormRow label="견 적 가">

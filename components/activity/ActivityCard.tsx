@@ -3,6 +3,7 @@
 import { type ReactNode } from 'react'
 import { CARD_BODY_STYLE, CARD_HEAD_STYLE, CountList, CountTotal, type CountRow } from '@/components/common/CountList'
 import { activityTypeColor } from '@/lib/categoryColors'
+import { R } from '@/lib/radius'
 
 // 서비스 유형(단일 소스). 영업 4종까지 합친 전체 목록은 lib/activity.ts 의 ACTIVITY_TYPES.
 // (여기 두는 이유: 상세 모달의 유형 필터가 서비스 유형만 쓴다)
@@ -46,7 +47,7 @@ export default function ActivityCard({ engineer, counts, total, onClick, headerR
     <div
       onClick={onClick}
       style={{
-        background: CARD_BG, borderRadius: 8,
+        background: CARD_BG, borderRadius: R.control,
         border: `1px solid ${BORDER}`, cursor: clickable ? 'pointer' : 'default',
         transition: 'transform 0.15s ease, border-color 0.15s ease',
         // 칸 높이에 맞출 때만 세로 flex — 목록이 남는 높이를 갖고 합계가 바닥에 남는다.
@@ -80,7 +81,7 @@ export default function ActivityCard({ engineer, counts, total, onClick, headerR
           </div>
           {headerRight ?? (engineer.teams && (
             <span style={{
-              fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, flexShrink: 0,
+              fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: R.pill, flexShrink: 0,
               background: '#f3f4f6',
               color: '#6b7280',
             }}>

@@ -27,6 +27,7 @@ import {
   cardStyle, cardHeader, cardTitle, countBadge, btnPrimary,
 } from '@/components/common/ui'
 import { Delta, UtilBar, HBar, fmtPct, fmtNum, fmtHours, fmtWon } from './utilParts'
+import { R } from '@/lib/radius'
 
 type Props = {
   stats: ShowroomStats
@@ -52,7 +53,7 @@ const hintStyle: CSSProperties = { fontSize: 11, color: MUTED, fontWeight: 500 }
 const sideHeader: CSSProperties = { ...cardHeader, paddingBottom: 8, marginBottom: 8 }
 const sideTitle: CSSProperties = { fontSize: 15, fontWeight: 700, color: TEXT }
 const chip = (active: boolean): CSSProperties => ({
-  fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+  fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: R.pill,
   background: NEUTRAL_BG, color: active ? BLUE : FAINT, whiteSpace: 'nowrap',
 })
 
@@ -96,7 +97,7 @@ function RangeInfo({ lines }: { lines: string[] }) {
       {open && (
         <div role="note" style={{
           position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: Z.popover, width: 260,
-          background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 6,
+          background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.icon,
           boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: '8px 10px',
           fontSize: 12, fontWeight: 500, color: TEXT, lineHeight: 1.6,
         }}>

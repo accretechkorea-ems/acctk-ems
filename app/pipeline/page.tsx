@@ -10,6 +10,7 @@
 
 // 모바일 상단 바 높이 — 화면 높이를 계산하는 곳은 이 상수 하나를 본다(PC 는 상단 바가 없다).
 import { TOPBAR_HEIGHT } from '@/components/layout/Sidebar'
+import { R } from '@/lib/radius'
 
 /**
  * 판 전체의 하한. 열에는 최소 폭을 두지 않고(남은 폭을 5등분한다) 판에만 하한을 둔다 —
@@ -63,7 +64,7 @@ type OwnerPick = number | 'all' | null
 
 /** 내보내기 팝오버의 선택칸 — 화면 다른 곳의 입력칸과 같은 모양이다. */
 const popSel: React.CSSProperties = {
-  padding: '7px 10px', border: '1px solid #ebebeb', borderRadius: 6,
+  padding: '7px 10px', border: '1px solid #ebebeb', borderRadius: R.icon,
   background: '#fff', color: '#111827', fontSize: 12, fontWeight: 600,
   fontFamily: 'inherit', cursor: 'pointer', outline: 'none', width: '100%', boxSizing: 'border-box',
 }
@@ -121,7 +122,7 @@ function DroppableColumn({ stage, isOver, children }: { stage: string; isOver: b
         display: 'flex', flexDirection: 'column', gap: 8,
         // padding 을 음수 margin 으로 되돌리던 것을 없앴다 — 그 4px 이 판 오른쪽을 넘겨
         // 1900 창에서도 가로 스크롤바를 만들고 있었다(카드가 8px 좁아지는 대신 스크롤이 사라진다).
-        borderRadius: 8, padding: 4,
+        borderRadius: R.control, padding: 4,
         // 놓을 열 강조 — 새 색 없이 기존 중립 배경과 hover 테두리만 쓴다
         background: isOver ? '#f3f4f6' : 'transparent',
         outline: isOver ? '1px dashed #c7d7f8' : '1px dashed transparent',
@@ -338,7 +339,7 @@ export default function PipelinePage() {
         {/* 머리줄 — **제목도 이 박스 안에 있다**(의뢰서 목록과 같은 식). 페이지 맨 위에
             제목만 있는 줄을 따로 두면 20px + 여백 12px 을 제목 한 단어에 쓰게 되고,
             칸반은 그만큼 아래로 내려간다. 제목 · 담당자 · 검색 · 단추가 한 줄이다. */}
-        <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, padding: '14px 16px', marginBottom: 12, flexShrink: 0 }}>
+        <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.control, padding: '14px 16px', marginBottom: 12, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ ...cardTitle, fontSize: 20, flexShrink: 0, marginRight: 4 }}>포캐스트</span>
             {/* 담당자 — 「내 포캐스트 | 전체」 토글을 대신한다. 사람이 늘면 토글로는 남의
@@ -350,7 +351,7 @@ export default function PipelinePage() {
               title="담당자"
               style={{
                 flexShrink: 0, height: 34, padding: '0 8px', border: '1px solid #ebebeb',
-                borderRadius: 6, background: '#fff', color: '#111827', fontSize: 13, fontWeight: 600,
+                borderRadius: R.icon, background: '#fff', color: '#111827', fontSize: 13, fontWeight: 600,
                 fontFamily: 'inherit', cursor: 'pointer', outline: 'none', maxWidth: 180,
               }}
             >
@@ -363,27 +364,27 @@ export default function PipelinePage() {
               placeholder="업체명 / 제목 검색"
               style={{
                 width: 220, padding: '8px 11px', border: '1px solid #ebebeb',
-                borderRadius: 6, background: '#fff', color: '#111827', fontSize: 13,
+                borderRadius: R.icon, background: '#fff', color: '#111827', fontSize: 13,
                 outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
               }}
             />
             <button ref={exportRef} onClick={() => setExportOpen(v => !v)}
               onMouseEnter={e => { e.currentTarget.style.background = '#f3f4f6' }}
               onMouseLeave={e => { e.currentTarget.style.background = '#fff' }}
-              style={{ marginLeft: 'auto', padding: '8px 14px', background: '#fff', color: '#234ea2', border: '1px solid #ebebeb', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, transition: 'background 0.15s ease' }}>
+              style={{ marginLeft: 'auto', padding: '8px 14px', background: '#fff', color: '#234ea2', border: '1px solid #ebebeb', borderRadius: R.icon, cursor: 'pointer', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, transition: 'background 0.15s ease' }}>
               엑셀 내보내기
             </button>
             <button onClick={opp.openNewOpp}
               onMouseEnter={e => { e.currentTarget.style.background = '#1c3e87' }}
               onMouseLeave={e => { e.currentTarget.style.background = '#234ea2' }}
-              style={{ padding: '8px 16px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, transition: 'background 0.15s ease' }}>
+              style={{ padding: '8px 16px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, transition: 'background 0.15s ease' }}>
               + 포캐스트
             </button>
           </div>
         </div>
 
         {loading ? (
-          <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 8, padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+          <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
             불러오는 중...
           </div>
         ) : (
@@ -422,7 +423,7 @@ export default function PipelinePage() {
                       {/* 단계·건수·금액을 한 줄에 둔다 — 열이 좁아 두 줄을 쓰면 판이 그만큼 낮아진다 */}
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
                         <span style={{ fontSize: 13, fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>{col.stage}</span>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px', flexShrink: 0 }}>{col.rows.length}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', flexShrink: 0 }}>{col.rows.length}</span>
                         {col.sum > 0 && (
                           <>
                             <span style={{ fontSize: 11, color: '#d1d5db', flexShrink: 0 }}>·</span>
@@ -435,7 +436,7 @@ export default function PipelinePage() {
                     </div>
                     <DroppableColumn stage={col.stage} isOver={overStage === col.stage}>
                       {col.rows.length === 0
-                        ? <div style={{ border: '1px dashed #ebebeb', borderRadius: 8, padding: '18px 0', textAlign: 'center', fontSize: 12, color: '#d1d5db', flexShrink: 0 }}>
+                        ? <div style={{ border: '1px dashed #ebebeb', borderRadius: R.control, padding: '18px 0', textAlign: 'center', fontSize: 12, color: '#d1d5db', flexShrink: 0 }}>
                             {overStage === col.stage ? '여기에 놓기' : '없음'}
                           </div>
                         : col.rows.map(cardOf)}
@@ -453,7 +454,7 @@ export default function PipelinePage() {
                   <button onClick={() => setShowLost(v => !v)}
                     style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: '#6b7280' }}>끝난 건</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>{done.length}건</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{done.length}건</span>
                     <span style={{ fontSize: 11, color: '#9ca3af' }}>
                       실주 {done.filter(o => o.stage === '실주').length} · 종료 {done.filter(o => o.stage !== '실주').length}
                     </span>
@@ -470,7 +471,7 @@ export default function PipelinePage() {
             )}
 
             {filtered.length === 0 && (
-              <div style={{ marginTop: 12, background: '#fff', border: '1px solid #ebebeb', borderRadius: 8, padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+              <div style={{ marginTop: 12, background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
                 조건에 맞는 포캐스트가 없습니다
               </div>
             )}
@@ -478,7 +479,7 @@ export default function PipelinePage() {
             {/* 끌고 다니는 동안 커서를 따라다니는 미리보기 */}
             <DragOverlay dropAnimation={null}>
               {activeOpp && (
-                <div style={{ width: 260, cursor: 'grabbing', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', borderRadius: 8 }}>
+                <div style={{ width: 260, cursor: 'grabbing', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', borderRadius: R.control }}>
                   <OpportunityCard
                     opp={activeOpp}
                     canEdit={false}
@@ -497,7 +498,7 @@ export default function PipelinePage() {
           회계연도와 (전체일 때) 팀만 고른다. 검색어는 반영하지 않는다 — 보고용 숫자는
           화면에 보이는 카드가 아니라 집계 규칙이 정한 줄에서 나온다(lib/forecast.ts). */}
       <Popover anchorRef={exportRef} open={exportOpen} onClose={() => setExportOpen(false)} align="end" width={260}
-        style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 8, boxShadow: '0 16px 40px rgba(0,0,0,0.18)', padding: 14 }}>
+        style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, boxShadow: '0 16px 40px rgba(0,0,0,0.18)', padding: 14 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span style={{ fontSize: 13, fontWeight: 800, color: '#111827', letterSpacing: '-0.3px' }}>엑셀 내보내기</span>
           <span style={{ fontSize: 11, color: '#9ca3af', lineHeight: 1.6 }}>
@@ -522,7 +523,7 @@ export default function PipelinePage() {
           )}
           <button type="button" onClick={() => void runExport()} disabled={fc.loading}
             style={{
-              marginTop: 2, padding: '8px 14px', borderRadius: 6, border: 'none', cursor: fc.loading ? 'default' : 'pointer',
+              marginTop: 2, padding: '8px 14px', borderRadius: R.icon, border: 'none', cursor: fc.loading ? 'default' : 'pointer',
               background: fc.loading ? '#f3f4f6' : '#234ea2', color: fc.loading ? '#9ca3af' : '#fff',
               fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
             }}>

@@ -20,10 +20,11 @@ import { comma, rateText, type QuoteReview } from '@/lib/approval/quoteReview'
 import { useToast } from '@/components/common/Toast'
 import { openQuotePdfById } from '@/lib/openQuotePdf'
 import { reviewCache } from '@/lib/quoteReviewCache'
+import { R } from '@/lib/radius'
 
 /** 표가 좁은 화면에서 **자기 상자 안에서만** 가로로 스크롤되게 한다(페이지가 옆으로 밀리지 않게). */
 const scrollBox: CSSProperties = {
-  border: `1px solid ${BORDER}`, borderRadius: 8, overflowX: 'auto', maxWidth: '100%',
+  border: `1px solid ${BORDER}`, borderRadius: R.control, overflowX: 'auto', maxWidth: '100%',
 }
 
 const table: CSSProperties = { width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 560 }
@@ -43,7 +44,7 @@ function StatCard({ label, value, muted }: { label: string; value: string; muted
   return (
     <div style={{
       flex: '1 1 110px', minWidth: 104, background: CARD_BG,
-      border: `1px solid ${BORDER}`, borderRadius: 8, padding: '9px 11px',
+      border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '9px 11px',
     }}>
       <div style={{ fontSize: 11, color: MUTED, fontWeight: 600, marginBottom: 3 }}>{label}</div>
       <div className="num" style={{ fontSize: 14, fontWeight: 800, color: muted ? MUTED : TEXT, whiteSpace: 'nowrap' }}>
@@ -61,7 +62,7 @@ function LoadFailed({ message, onRetry }: { message: string; onRetry: () => void
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-      border: `1px solid ${BORDER}`, borderRadius: 8, padding: '10px 12px',
+      border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '10px 12px',
     }}>
       <span style={{ fontSize: 12, color: DANGER, fontWeight: 600 }}>{message}</span>
       <button type="button" onClick={onRetry} style={{ ...btnGhost(), padding: '4px 10px', fontSize: 12 }}>
@@ -146,10 +147,10 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
         {/* 자리표시 — 높이를 미리 잡아 두어 내용이 들어올 때 아래 버튼이 튀지 않게 한다. */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
           {[0, 1, 2, 3, 4].map(i => (
-            <div key={i} style={{ flex: '1 1 110px', minWidth: 104, height: 52, background: SKELETON, borderRadius: 8 }} />
+            <div key={i} style={{ flex: '1 1 110px', minWidth: 104, height: 52, background: SKELETON, borderRadius: R.control }} />
           ))}
         </div>
-        <div style={{ height: 80, background: SKELETON, borderRadius: 8 }} />
+        <div style={{ height: 80, background: SKELETON, borderRadius: R.control }} />
       </div>
     )
   }
@@ -232,7 +233,7 @@ export default function QuoteReviewPanel({ documentId }: { documentId: number })
       {data.termsChanged.length > 0 && (
         <div style={{
           display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap',
-          border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px', marginBottom: 12,
+          border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '8px 10px', marginBottom: 12,
         }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: DANGER, whiteSpace: 'nowrap' }}>조건 변경</span>
           <span style={{ fontSize: 12, color: TEXT, wordBreak: 'break-word' }}>

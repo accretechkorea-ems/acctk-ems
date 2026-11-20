@@ -14,6 +14,7 @@ import type { Customer, Engineer, OpportunityForm, SalesActivity, SalesOpportuni
 import Popover from '@/components/common/Popover'
 import { salesStatusLabel } from '@/lib/categoryColors'
 import { todayKST } from '@/lib/date'
+import { R } from '@/lib/radius'
 
 type Props = {
   isOpen: boolean
@@ -37,7 +38,7 @@ type Props = {
 
 const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
-  width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: 6,
+  width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
 }
 const monthFieldStyle: CSSProperties = { ...fieldStyle, colorScheme: 'light' }
@@ -116,7 +117,7 @@ export default function OpportunityModal({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: 520, maxHeight: '88vh', background: '#ffffff', borderRadius: 8,
+          width: '100%', maxWidth: 520, maxHeight: '88vh', background: '#ffffff', borderRadius: R.control,
           padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb',
           animation: 'modal-in 0.18s ease', display: 'flex', flexDirection: 'column',
         }}
@@ -125,7 +126,7 @@ export default function OpportunityModal({
           <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>
             {opportunity ? (canEdit ? '포캐스트 수정' : '포캐스트') : '포캐스트 등록'}
             {opportunity && isClosed(opportunity) && (
-              <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '3px 9px', verticalAlign: 'middle' }}>
+              <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '3px 9px', verticalAlign: 'middle' }}>
                 {opportunity.stage === '실주' ? '실주' : '종료'}
                 {opportunity.closed_at ? ' · ' + opportunity.closed_at.slice(0, 10) : ''}
               </span>
@@ -167,7 +168,7 @@ export default function OpportunityModal({
                   </div>
                   <button
                     onClick={() => { setForm(p => ({ ...p, customer_id: null })); setCustQuery(''); setCustOpen(true) }}
-                    style={{ padding: '9px 12px', background: '#f3f4f6', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#6b7280', flexShrink: 0 }}
+                    style={{ padding: '9px 12px', background: '#f3f4f6', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#6b7280', flexShrink: 0 }}
                   >변경</button>
                 </div>
               ) : (
@@ -188,7 +189,7 @@ export default function OpportunityModal({
                 onClose={() => setCustOpen(false)}
                 matchAnchorWidth
                 maxHeight={240}
-                style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.icon, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
               >
                   {custMatches.map(c => (
                     <div key={c.customer_id}
@@ -265,7 +266,7 @@ export default function OpportunityModal({
 
           {/* 실주로 바꿨을 때만 사유를 받는다 */}
           {form.stage === '실주' && (
-            <div style={{ display: 'grid', gap: 10, padding: '12px 14px', background: '#f8fafc', border: '1px solid #ebebeb', borderRadius: 8 }}>
+            <div style={{ display: 'grid', gap: 10, padding: '12px 14px', background: '#f8fafc', border: '1px solid #ebebeb', borderRadius: R.control }}>
               <div>
                 <label style={labelStyle}>실주 사유 *</label>
                 <select value={form.lost_reason} disabled={!canEdit}
@@ -290,7 +291,7 @@ export default function OpportunityModal({
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>연결된 견적</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>{linkedQuotes.length}건</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{linkedQuotes.length}건</span>
               </div>
               {linkedQuotes.length === 0 ? (
                 <div style={{ fontSize: 12, color: '#9ca3af' }}>연결된 견적이 없습니다. 견적서를 쓸 때 이 포캐스트를 고르면 여기 모입니다.</div>
@@ -300,7 +301,7 @@ export default function OpportunityModal({
                     <button key={q.quote_id}
                       onClick={() => onOpenQuotePdf?.(q.pdf_url, q.quote_number)}
                       style={{
-                        border: '1px solid #ebebeb', borderRadius: 6, padding: '8px 10px', textAlign: 'left',
+                        border: '1px solid #ebebeb', borderRadius: R.icon, padding: '8px 10px', textAlign: 'left',
                         background: '#fff', cursor: q.pdf_url ? 'pointer' : 'default', width: '100%',
                       }}
                       onMouseEnter={e => { if (q.pdf_url) e.currentTarget.style.borderColor = '#c7d7f8' }}
@@ -308,7 +309,7 @@ export default function OpportunityModal({
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontSize: 12, fontWeight: 600, color: '#234ea2' }}>{q.quote_number}</span>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>{salesStatusLabel(q.status)}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{salesStatusLabel(q.status)}</span>
                         <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9ca3af' }}>{q.quote_date}</span>
                       </div>
                       <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>₩{numKR(q.total_supply || 0)}</div>
@@ -324,14 +325,14 @@ export default function OpportunityModal({
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>연결된 활동</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>{linked.length}건</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{linked.length}건</span>
               </div>
               {linked.length === 0 ? (
                 <div style={{ fontSize: 12, color: '#9ca3af' }}>연결된 활동이 없습니다. 활동 기록에서 이 포캐스트를 고르면 여기 모입니다.</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {linked.map(a => (
-                    <div key={a.activity_id} style={{ border: '1px solid #ebebeb', borderRadius: 6, padding: '8px 10px' }}>
+                    <div key={a.activity_id} style={{ border: '1px solid #ebebeb', borderRadius: R.icon, padding: '8px 10px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{a.activity_type}</span>
                         <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9ca3af' }}>{a.activity_date ?? '-'}</span>
@@ -352,11 +353,11 @@ export default function OpportunityModal({
             ? (
               <>
               <button onClick={onDelete} disabled={isSaving}
-                style={{ padding: '9px 14px', background: '#fff', color: '#dc2626', borderRadius: 6, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}
+                style={{ padding: '9px 14px', background: '#fff', color: '#dc2626', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}
               >삭제</button>
               {onSetClosed && opportunity.stage !== '실주' && (
                 <button onClick={() => onSetClosed(opportunity, !opportunity.closed_at)} disabled={isSaving}
-                  style={{ marginLeft: 8, padding: '9px 14px', background: '#fff', color: '#6b7280', borderRadius: 6, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                  style={{ marginLeft: 8, padding: '9px 14px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
                   {opportunity.closed_at ? '종료 해제' : '종료'}
                 </button>
               )}
@@ -365,13 +366,13 @@ export default function OpportunityModal({
             : <span />}
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={onClose}
-              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: 6, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
             >{canEdit ? '취소' : '닫기'}</button>
             {canEdit && (
               <button onClick={handleSave} disabled={isSaving}
                 onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
                 onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
-                style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}>
+                style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}>
                 {isSaving ? '저장 중...' : '저장'}
               </button>
             )}

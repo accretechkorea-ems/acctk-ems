@@ -9,6 +9,7 @@ import { getDefaultImageUrl } from '../utils'
 import { useDeviceImageUrls } from '@/hooks/useStorageImageUrls'
 import { removeDeviceImage, uploadDeviceImage } from '@/hooks/customer/useDeviceCrud'
 import { isDisposed, disposedLabel } from '@/lib/deviceStatus'
+import { R } from '@/lib/radius'
 
 /** 사진 삭제 확정 대기 시간. */
 const IMG_CONFIRM_MS = 3000
@@ -30,7 +31,7 @@ type Props = {
 
 const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
-  width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: 6,
+  width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
 }
 const dateStyle: CSSProperties = { ...fieldStyle, colorScheme: 'light' }
@@ -137,7 +138,7 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: 720, background: '#ffffff', borderRadius: 8, padding: 24,
+          width: '100%', maxWidth: 720, background: '#ffffff', borderRadius: R.control, padding: 24,
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb',
           animation: 'modal-in 0.18s ease',
         }}
@@ -147,7 +148,7 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
             <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>장비 수정</div>
             {/* 폐기된 장비임을 먼저 알린다 — 칸을 고치러 들어왔는데 목록에 없는 이유가 여기 있다. */}
             {disposed && (
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '3px 9px', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '3px 9px', whiteSpace: 'nowrap' }}>
                 {disposedLabel(device)}
               </span>
             )}
@@ -228,7 +229,7 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
                 cursor: 'pointer', overflow: 'hidden',
               }}
             >
-              <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: '#fff', background: '#234ea2', borderRadius: 6, padding: '5px 10px' }}>
+              <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: '#fff', background: '#234ea2', borderRadius: R.icon, padding: '5px 10px' }}>
                 파일 선택
               </span>
               <span style={{ flex: 1, fontSize: 13, color: packingFile ? '#111827' : '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -256,7 +257,7 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
                 role="img"
                 aria-label={shownImage ? '장비 사진 미리보기' : '등록된 사진 없음'}
                 style={{
-                  width: 96, flexShrink: 0, aspectRatio: '4 / 3', borderRadius: 6, overflow: 'hidden',
+                  width: 96, flexShrink: 0, aspectRatio: '4 / 3', borderRadius: R.icon, overflow: 'hidden',
                   border: shownImage ? '1px solid #ebebeb' : '1px dashed #ebebeb',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff',
                   backgroundImage: shownImage ? `url("${shownImage}")` : undefined,
@@ -276,7 +277,7 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
                     disabled={imgBusy}
                     onClick={() => imageInputRef.current?.click()}
                     style={{
-                      border: '1px solid #ebebeb', borderRadius: 6, background: '#fff',
+                      border: '1px solid #ebebeb', borderRadius: R.icon, background: '#fff',
                       color: imgBusy ? '#d1d5db' : '#6b7280', fontSize: 13, fontWeight: 600,
                       padding: '7px 12px', cursor: imgBusy ? 'default' : 'pointer', whiteSpace: 'nowrap',
                     }}
@@ -290,8 +291,8 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
                       disabled={imgBusy || imgRemoving}
                       onClick={() => { if (confirmRemove) void handleImageRemove(); else armRemove() }}
                       style={confirmRemove || imgRemoving
-                        ? { border: 'none', borderRadius: 6, background: '#ef4444', color: '#fff', fontSize: 13, fontWeight: 700, padding: '8px 13px', cursor: imgRemoving ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: imgRemoving ? 0.6 : 1 }
-                        : { border: '1px solid #ebebeb', borderRadius: 6, background: '#fff', color: '#9ca3af', fontSize: 13, fontWeight: 600, padding: '7px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        ? { border: 'none', borderRadius: R.icon, background: '#ef4444', color: '#fff', fontSize: 13, fontWeight: 700, padding: '8px 13px', cursor: imgRemoving ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: imgRemoving ? 0.6 : 1 }
+                        : { border: '1px solid #ebebeb', borderRadius: R.icon, background: '#fff', color: '#9ca3af', fontSize: 13, fontWeight: 600, padding: '7px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }}
                     >
                       {imgRemoving ? '삭제 중...' : confirmRemove ? '삭제 확인' : '사진 삭제'}
                     </button>
@@ -315,27 +316,27 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
             <button
               onClick={onDelete}
               disabled={isSaving}
-              style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}
+              style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}
             >삭제</button>
             {/* 폐기는 되돌릴 수 있어 빨강을 쓰지 않는다 — 삭제와 한눈에 갈라야 한다. */}
             <button
               onClick={disposed ? onRestore : onDispose}
               disabled={isSaving}
               title={disposed ? '상태를 「사용중」으로 되돌립니다' : '목록에서 숨기고 이력은 남깁니다'}
-              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: 6, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}
+              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}
             >{disposed ? '폐기 취소' : '폐기 처리'}</button>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={onClose}
-              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: 6, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
             >취소</button>
             <button
               onClick={handleSave}
               disabled={isSaving}
               onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
               onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
-              style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
+              style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
             >
               {isSaving ? '저장 중...' : '저장'}
             </button>

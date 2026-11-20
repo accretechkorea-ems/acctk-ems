@@ -13,6 +13,7 @@ import { withTeamPerms } from '@/lib/teamPerms'
 import { loadMe } from '@/lib/appData/me'
 import { loadEngineers } from '@/lib/appData/engineers'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import { R } from '@/lib/radius'
 
 const BLUE = '#234ea2'
 const ORANGE = '#d97706'
@@ -460,7 +461,7 @@ function InventoryPage() {
   const floor2Count = items.filter(i => i.location === '2층').length
 
   const inp: React.CSSProperties = {
-    width: '100%', padding: '9px 12px', border: `1.5px solid ${BORDER}`, borderRadius: 9,
+    width: '100%', padding: '9px 12px', border: `1.5px solid ${BORDER}`, borderRadius: R.control,
     fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box', color: TEXT,
     fontFamily: 'inherit', transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
   }
@@ -499,7 +500,7 @@ function InventoryPage() {
   const ModalHeader = ({ title, accentColor, onClose }: { title: string; accentColor: string; onClose: () => void }) => (
     <div style={{ padding: '20px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 3, height: 18, background: accentColor, borderRadius: 2 }} />
+        <div style={{ width: 3, height: 18, background: accentColor, borderRadius: R.tag }} />
         <span style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>{title}</span>
       </div>
       <CloseBtn onClick={onClose} />
@@ -509,7 +510,7 @@ function InventoryPage() {
   // ── 부품코드 태그 ──
   const PartTag = ({ code }: { code: string | null }) =>
     code
-      ? <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 5, background: '#eff4ff', color: BLUE, letterSpacing: '0.2px', whiteSpace: 'nowrap' }}>{code}</span>
+      ? <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: R.tag, background: '#eff4ff', color: BLUE, letterSpacing: '0.2px', whiteSpace: 'nowrap' }}>{code}</span>
       : <span style={{ color: MUTED }}>-</span>
 
   if (!authorized) return <AccessGate loading={guardLoading} />
@@ -545,10 +546,10 @@ function InventoryPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(148px, 1fr))', gap: 12, marginBottom: 20 }}>
 
           {/* 총 품목 수 */}
-          <div className="sum-card" style={{ background: CARD_BG, borderRadius: 16, padding: '18px 20px', border: `1px solid ${BORDER}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', transition: 'box-shadow 0.15s ease, transform 0.15s ease' }}>
+          <div className="sum-card" style={{ background: CARD_BG, borderRadius: R.modal, padding: '18px 20px', border: `1px solid ${BORDER}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', transition: 'box-shadow 0.15s ease, transform 0.15s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: MUTED, letterSpacing: '0.3px' }}>총 품목 수</span>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 30, height: 30, borderRadius: R.control, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={GRAY} strokeWidth="2" strokeLinecap="round">
                   <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
                   <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
@@ -562,10 +563,10 @@ function InventoryPage() {
           </div>
 
           {/* 총 재고 수량 */}
-          <div className="sum-card" style={{ background: '#eff4ff', borderRadius: 16, padding: '18px 20px', border: `1px solid #c7d7f8`, boxShadow: '0 2px 8px rgba(35,78,162,0.07)', transition: 'box-shadow 0.15s ease, transform 0.15s ease' }}>
+          <div className="sum-card" style={{ background: '#eff4ff', borderRadius: R.modal, padding: '18px 20px', border: `1px solid #c7d7f8`, boxShadow: '0 2px 8px rgba(35,78,162,0.07)', transition: 'box-shadow 0.15s ease, transform 0.15s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: '#6b8fce', letterSpacing: '0.3px' }}>총 재고 수량</span>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: '#dce9ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 30, height: 30, borderRadius: R.control, background: '#dce9ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={BLUE} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 2L2 7l10 5 10-5-10-5M2 17l10 5 10-5M2 12l10 5 10-5"/>
                 </svg>
@@ -580,14 +581,14 @@ function InventoryPage() {
           {/* 대기 중 요청 */}
           <div className="sum-card" style={{
             background: pendingRequests.length > 0 ? '#fffbeb' : CARD_BG,
-            borderRadius: 16, padding: '18px 20px',
+            borderRadius: R.modal, padding: '18px 20px',
             border: `1px solid ${pendingRequests.length > 0 ? '#fde68a' : BORDER}`,
             boxShadow: pendingRequests.length > 0 ? '0 2px 8px rgba(217,119,6,0.08)' : '0 2px 8px rgba(0,0,0,0.05)',
             transition: 'box-shadow 0.15s ease, transform 0.15s ease',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: pendingRequests.length > 0 ? ORANGE : MUTED, letterSpacing: '0.3px' }}>대기 중 요청</span>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: pendingRequests.length > 0 ? '#fef3c7' : '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 30, height: 30, borderRadius: R.control, background: pendingRequests.length > 0 ? '#fef3c7' : '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={pendingRequests.length > 0 ? ORANGE : GRAY} strokeWidth="2" strokeLinecap="round">
                   <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
                 </svg>
@@ -606,10 +607,10 @@ function InventoryPage() {
           </div>
 
           {/* 1층 보관 */}
-          <div className="sum-card" style={{ background: CARD_BG, borderRadius: 16, padding: '18px 20px', border: `1px solid ${BORDER}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', transition: 'box-shadow 0.15s ease, transform 0.15s ease' }}>
+          <div className="sum-card" style={{ background: CARD_BG, borderRadius: R.modal, padding: '18px 20px', border: `1px solid ${BORDER}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', transition: 'box-shadow 0.15s ease, transform 0.15s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: MUTED, letterSpacing: '0.3px' }}>1층 보관</span>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: '#eff4ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 30, height: 30, borderRadius: R.control, background: '#eff4ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={BLUE} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
                   <polyline points="9 22 9 12 15 12 15 22"/>
@@ -623,10 +624,10 @@ function InventoryPage() {
           </div>
 
           {/* 2층 보관 */}
-          <div className="sum-card" style={{ background: CARD_BG, borderRadius: 16, padding: '18px 20px', border: `1px solid ${BORDER}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', transition: 'box-shadow 0.15s ease, transform 0.15s ease' }}>
+          <div className="sum-card" style={{ background: CARD_BG, borderRadius: R.modal, padding: '18px 20px', border: `1px solid ${BORDER}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', transition: 'box-shadow 0.15s ease, transform 0.15s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: MUTED, letterSpacing: '0.3px' }}>2층 보관</span>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 30, height: 30, borderRadius: R.control, background: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="2" y="7" width="20" height="14" rx="2"/>
                   <path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/>
@@ -659,7 +660,7 @@ function InventoryPage() {
                 {label}
                 {count !== undefined && count > 0 && (
                   <span style={{
-                    fontSize: 10, fontWeight: 800, minWidth: 18, height: 18, borderRadius: 99,
+                    fontSize: 10, fontWeight: 800, minWidth: 18, height: 18, borderRadius: R.pill,
                     background: urgent ? RED : BLUE, color: '#fff',
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px',
                   }}>
@@ -673,7 +674,7 @@ function InventoryPage() {
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 7, padding: '0 6px 12px' }}>
               <span style={{ fontSize: 13, color: GRAY, fontWeight: 600 }}>{currentEngineer.name}</span>
               {isManager && (
-                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: '#eff4ff', color: BLUE, fontWeight: 700, border: `1px solid #c7d7f8` }}>
+                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: R.pill, background: '#eff4ff', color: BLUE, fontWeight: 700, border: `1px solid #c7d7f8` }}>
                   관리자
                 </span>
               )}
@@ -700,11 +701,11 @@ function InventoryPage() {
                 </div>
 
                 {/* 보관장소 필터 */}
-                <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 10, padding: 3, gap: 1 }}>
+                <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: R.tile, padding: 3, gap: 1 }}>
                   {['전체', '1층', '2층'].map(loc => (
                     <button key={loc} onClick={() => setLocationFilter(loc)}
                       style={{
-                        padding: '5px 14px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                        padding: '5px 14px', borderRadius: R.control, border: 'none', cursor: 'pointer',
                         fontWeight: 700, fontSize: 12,
                         background: locationFilter === loc ? '#fff' : 'transparent',
                         color: locationFilter === loc ? TEXT : GRAY,
@@ -723,7 +724,7 @@ function InventoryPage() {
                 {isManager && (
                   <button onClick={() => { setShowExcelModal(true); setExcelRows([]); setExcelResults(null); setExcelFileName('') }}
                     style={{
-                      padding: '7px 14px', borderRadius: 8, border: `1px solid #c7d7f8`, cursor: 'pointer',
+                      padding: '7px 14px', borderRadius: R.control, border: `1px solid #c7d7f8`, cursor: 'pointer',
                       fontWeight: 700, fontSize: 12, background: '#eff4ff', color: BLUE, whiteSpace: 'nowrap',
                       display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s ease',
                     }}
@@ -781,7 +782,7 @@ function InventoryPage() {
                           </td>
                           <td style={{ padding: '11px 14px', whiteSpace: 'nowrap' }}>
                             {loc
-                              ? <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: loc.bg, color: loc.color }}>{item.location}</span>
+                              ? <span style={{ padding: '3px 10px', borderRadius: R.modal, fontSize: 11, fontWeight: 700, background: loc.bg, color: loc.color }}>{item.location}</span>
                               : <span style={{ color: MUTED }}>-</span>}
                           </td>
                           <td style={{ padding: '11px 14px', color: GRAY, fontSize: 12, whiteSpace: 'nowrap' }}>{item.received_date ?? '-'}</td>
@@ -789,7 +790,7 @@ function InventoryPage() {
                             <button className="req-btn"
                               onClick={() => { setRequestItem(item); setRequestQty(1); setRequestReason(''); setRequestOutletCompany(''); setRequestNote('') }}
                               style={{
-                                padding: '5px 13px', border: `1px solid #c7d7f8`, borderRadius: 7,
+                                padding: '5px 13px', border: `1px solid #c7d7f8`, borderRadius: R.control,
                                 fontWeight: 700, fontSize: 12, cursor: 'pointer',
                                 background: '#eff4ff', color: BLUE, transition: 'all 0.15s ease',
                               }}>
@@ -841,7 +842,7 @@ function InventoryPage() {
                         </td>
                         <td style={{ padding: '11px 14px', whiteSpace: 'nowrap' }}>
                           <span style={{
-                            padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700,
+                            padding: '3px 10px', borderRadius: R.modal, fontSize: 11, fontWeight: 700,
                             background: isIn ? '#f0fdf4' : '#fef2f2',
                             color: isIn ? '#15803d' : RED,
                             border: `1px solid ${isIn ? '#bbf7d0' : '#fecaca'}`,
@@ -870,11 +871,11 @@ function InventoryPage() {
                         <td style={{ padding: '11px 14px', whiteSpace: 'nowrap' }}>
                           {!isIn && (
                             log.is_restocked
-                              ? <span style={{ fontSize: 11, color: MUTED, fontWeight: 600, padding: '3px 10px', borderRadius: 20, background: '#f3f4f6' }}>재입고 완료</span>
+                              ? <span style={{ fontSize: 11, color: MUTED, fontWeight: 600, padding: '3px 10px', borderRadius: R.modal, background: '#f3f4f6' }}>재입고 완료</span>
                               : <button className="restock-btn"
                                   onClick={() => { setSelectedLog(log); setRestockQty(log.quantity_out); setRestockReason('') }}
                                   style={{
-                                    padding: '5px 12px', border: `1px solid #bbf7d0`, borderRadius: 7,
+                                    padding: '5px 12px', border: `1px solid #bbf7d0`, borderRadius: R.control,
                                     fontWeight: 700, fontSize: 12, cursor: 'pointer',
                                     background: '#f0fdf4', color: '#15803d', transition: 'all 0.15s ease',
                                   }}
@@ -931,7 +932,7 @@ function InventoryPage() {
                         <td style={{ padding: '11px 14px', fontWeight: 700, color: TEXT, whiteSpace: 'nowrap' }}>{req.quantity}개</td>
                         <td style={{ padding: '11px 14px', color: GRAY, fontSize: 12, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{req.reason ?? '-'}</td>
                         <td style={{ padding: '11px 14px', whiteSpace: 'nowrap' }}>
-                          <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: st.bg, color: st.color, border: `1px solid ${st.border}` }}>
+                          <span style={{ padding: '3px 10px', borderRadius: R.modal, fontSize: 11, fontWeight: 700, background: st.bg, color: st.color, border: `1px solid ${st.border}` }}>
                             {req.status}
                           </span>
                         </td>
@@ -985,12 +986,12 @@ function InventoryPage() {
                         </td>
                         <td style={{ padding: '11px 14px', whiteSpace: 'nowrap' }}>
                           {loc
-                            ? <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: loc.bg, color: loc.color }}>{req.inventory_items?.location}</span>
+                            ? <span style={{ padding: '3px 10px', borderRadius: R.modal, fontSize: 11, fontWeight: 700, background: loc.bg, color: loc.color }}>{req.inventory_items?.location}</span>
                             : <span style={{ color: MUTED }}>-</span>}
                         </td>
                         <td style={{ padding: '11px 14px', whiteSpace: 'nowrap' }}>
                           {stockShort ? (
-                            <span style={{ fontWeight: 800, color: RED, fontSize: 13, background: '#fef2f2', padding: '3px 9px', borderRadius: 6, border: '1px solid #fecaca' }}>
+                            <span style={{ fontWeight: 800, color: RED, fontSize: 13, background: '#fef2f2', padding: '3px 9px', borderRadius: R.icon, border: '1px solid #fecaca' }}>
                               {item?.quantity ?? 0}개 ⚠
                             </span>
                           ) : (
@@ -1004,7 +1005,7 @@ function InventoryPage() {
                           <div style={{ display: 'flex', gap: 6 }}>
                             <button onClick={() => handleApprove(req)} disabled={isProcessing}
                               style={{
-                                padding: '6px 16px', border: 'none', borderRadius: 7,
+                                padding: '6px 16px', border: 'none', borderRadius: R.control,
                                 fontWeight: 700, fontSize: 12, cursor: isProcessing ? 'wait' : 'pointer',
                                 background: '#15803d', color: '#fff', opacity: isProcessing ? 0.6 : 1,
                                 transition: 'background 0.15s ease, opacity 0.15s ease',
@@ -1015,7 +1016,7 @@ function InventoryPage() {
                             </button>
                             <button onClick={() => { setRejectingRequest(req); setRejectReason('') }} disabled={isProcessing}
                               style={{
-                                padding: '6px 16px', border: `1px solid #fecaca`, borderRadius: 7,
+                                padding: '6px 16px', border: `1px solid #fecaca`, borderRadius: R.control,
                                 fontWeight: 700, fontSize: 12, cursor: isProcessing ? 'wait' : 'pointer',
                                 background: '#fef2f2', color: RED, opacity: isProcessing ? 0.6 : 1,
                                 transition: 'all 0.15s ease',
@@ -1039,12 +1040,12 @@ function InventoryPage() {
       {/* ══ 출고 요청 모달 ══ */}
       {requestItem && (
         <ModalOverlay onClose={() => { setRequestItem(null); setRequestOutletCompany(''); setRequestReason(''); setRequestNote('') }} confirmClose style={{ background: 'rgba(0,0,0,0.55)' }}>
-          <div className="modal-box" style={{ background: CARD_BG, borderRadius: 20, width: '100%', maxWidth: 460, boxShadow: '0 24px 80px rgba(0,0,0,0.22)', maxHeight: '92vh', overflowY: 'auto', border: `1px solid ${BORDER}` }}>
+          <div className="modal-box" style={{ background: CARD_BG, borderRadius: R.modal, width: '100%', maxWidth: 460, boxShadow: '0 24px 80px rgba(0,0,0,0.22)', maxHeight: '92vh', overflowY: 'auto', border: `1px solid ${BORDER}` }}>
             <ModalHeader title="출고 요청" accentColor={BLUE} onClose={() => { setRequestItem(null); setRequestOutletCompany(''); setRequestReason(''); setRequestNote('') }} />
 
             <div style={{ padding: '22px 24px 0' }}>
               {/* 품목 정보 카드 */}
-              <div style={{ background: '#f8fafc', borderRadius: 14, padding: '16px 18px', marginBottom: 22, border: `1px solid ${BORDER}` }}>
+              <div style={{ background: '#f8fafc', borderRadius: R.modal, padding: '16px 18px', marginBottom: 22, border: `1px solid ${BORDER}` }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: MUTED, letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 8 }}>품목 정보</div>
                 <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, marginBottom: 14, letterSpacing: '-0.3px' }}>{requestItem.item_name ?? '-'}</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -1057,7 +1058,7 @@ function InventoryPage() {
                     {(() => {
                       const loc = LOC_STYLE[requestItem.location ?? ''] ?? null
                       return loc
-                        ? <span style={{ fontSize: 12, padding: '2px 9px', borderRadius: 20, background: loc.bg, color: loc.color, fontWeight: 700 }}>{requestItem.location}</span>
+                        ? <span style={{ fontSize: 12, padding: '2px 9px', borderRadius: R.modal, background: loc.bg, color: loc.color, fontWeight: 700 }}>{requestItem.location}</span>
                         : <span style={{ fontSize: 12, color: GRAY, fontWeight: 600 }}>{requestItem.location ?? '-'}</span>
                     })()}
                   </div>
@@ -1125,9 +1126,9 @@ function InventoryPage() {
 
             <div style={{ padding: '0 24px 24px', display: 'flex', gap: 8 }}>
               <button className="cancel-btn" onClick={() => { setRequestItem(null); setRequestOutletCompany(''); setRequestReason(''); setRequestNote('') }}
-                style={{ flex: 1, padding: '12px', background: '#f4f5f7', border: 'none', borderRadius: 11, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT, transition: 'background 0.15s ease' }}>취소</button>
+                style={{ flex: 1, padding: '12px', background: '#f4f5f7', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT, transition: 'background 0.15s ease' }}>취소</button>
               <button onClick={handleRequest} disabled={isSavingRequest || requestQty < 1}
-                style={{ flex: 2, padding: '12px', background: BLUE, color: '#fff', border: 'none', borderRadius: 11, cursor: isSavingRequest ? 'wait' : 'pointer', fontWeight: 700, fontSize: 13, opacity: isSavingRequest ? 0.7 : 1, transition: 'opacity 0.15s ease' }}>
+                style={{ flex: 2, padding: '12px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.tile, cursor: isSavingRequest ? 'wait' : 'pointer', fontWeight: 700, fontSize: 13, opacity: isSavingRequest ? 0.7 : 1, transition: 'opacity 0.15s ease' }}>
                 {isSavingRequest ? '요청 중...' : `${requestQty}개 출고 요청`}
               </button>
             </div>
@@ -1138,12 +1139,12 @@ function InventoryPage() {
       {/* ══ 재입고 모달 ══ */}
       {selectedLog && (
         <ModalOverlay onClose={() => setSelectedLog(null)} confirmClose style={{ background: 'rgba(0,0,0,0.55)' }}>
-          <div className="modal-box" style={{ background: CARD_BG, borderRadius: 20, width: '100%', maxWidth: 460, boxShadow: '0 24px 80px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}` }}>
+          <div className="modal-box" style={{ background: CARD_BG, borderRadius: R.modal, width: '100%', maxWidth: 460, boxShadow: '0 24px 80px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}` }}>
             <ModalHeader title="재입고 처리" accentColor="#15803d" onClose={() => setSelectedLog(null)} />
 
             <div style={{ padding: '22px 24px 0' }}>
               {/* 원래 출고 이력 카드 */}
-              <div style={{ background: '#f0fdf4', borderRadius: 14, padding: '16px 18px', marginBottom: 22, border: '1px solid #bbf7d0' }}>
+              <div style={{ background: '#f0fdf4', borderRadius: R.modal, padding: '16px 18px', marginBottom: 22, border: '1px solid #bbf7d0' }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: '#15803d', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 8 }}>원래 출고 이력</div>
                 <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 12, letterSpacing: '-0.3px' }}>{selectedLog.inventory_items?.item_name ?? '-'}</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -1195,9 +1196,9 @@ function InventoryPage() {
 
             <div style={{ padding: '0 24px 24px', display: 'flex', gap: 8 }}>
               <button className="cancel-btn" onClick={() => setSelectedLog(null)}
-                style={{ flex: 1, padding: '12px', background: '#f4f5f7', border: 'none', borderRadius: 11, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT, transition: 'background 0.15s ease' }}>취소</button>
+                style={{ flex: 1, padding: '12px', background: '#f4f5f7', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT, transition: 'background 0.15s ease' }}>취소</button>
               <button onClick={handleRestock} disabled={isRestocking}
-                style={{ flex: 2, padding: '12px', background: '#15803d', color: '#fff', border: 'none', borderRadius: 11, cursor: isRestocking ? 'wait' : 'pointer', fontWeight: 700, fontSize: 13, opacity: isRestocking ? 0.7 : 1, transition: 'background 0.15s ease, opacity 0.15s ease' }}
+                style={{ flex: 2, padding: '12px', background: '#15803d', color: '#fff', border: 'none', borderRadius: R.tile, cursor: isRestocking ? 'wait' : 'pointer', fontWeight: 700, fontSize: 13, opacity: isRestocking ? 0.7 : 1, transition: 'background 0.15s ease, opacity 0.15s ease' }}
                 onMouseEnter={e => { if (!isRestocking) (e.currentTarget as HTMLButtonElement).style.background = '#14532d' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#15803d' }}>
                 {isRestocking ? '처리 중...' : `${restockQty}개 재입고 확인`}
@@ -1210,12 +1211,12 @@ function InventoryPage() {
       {/* ══ 반려 모달 ══ */}
       {rejectingRequest && (
         <ModalOverlay onClose={() => setRejectingRequest(null)} confirmClose dirty={rejectReason.trim() !== ''} style={{ background: 'rgba(0,0,0,0.55)' }}>
-          <div className="modal-box" style={{ background: CARD_BG, borderRadius: 20, width: '100%', maxWidth: 440, boxShadow: '0 24px 80px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}` }}>
+          <div className="modal-box" style={{ background: CARD_BG, borderRadius: R.modal, width: '100%', maxWidth: 440, boxShadow: '0 24px 80px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}` }}>
             <ModalHeader title="출고 요청 반려" accentColor={RED} onClose={() => setRejectingRequest(null)} />
 
             <div style={{ padding: '22px 24px 0' }}>
               {/* 요청 정보 카드 */}
-              <div style={{ background: '#fef2f2', borderRadius: 14, padding: '16px 18px', marginBottom: 22, border: '1px solid #fecaca' }}>
+              <div style={{ background: '#fef2f2', borderRadius: R.modal, padding: '16px 18px', marginBottom: 22, border: '1px solid #fecaca' }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: RED, letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 8 }}>요청 정보</div>
                 <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 10, letterSpacing: '-0.3px' }}>{rejectingRequest.inventory_items?.item_name ?? '-'}</div>
                 <div style={{ display: 'flex', gap: 16, fontSize: 12, flexWrap: 'wrap' }}>
@@ -1249,9 +1250,9 @@ function InventoryPage() {
 
             <div style={{ padding: '0 24px 24px', display: 'flex', gap: 8 }}>
               <button className="cancel-btn" onClick={() => setRejectingRequest(null)}
-                style={{ flex: 1, padding: '12px', background: '#f4f5f7', border: 'none', borderRadius: 11, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT, transition: 'background 0.15s ease' }}>취소</button>
+                style={{ flex: 1, padding: '12px', background: '#f4f5f7', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT, transition: 'background 0.15s ease' }}>취소</button>
               <button onClick={handleReject} disabled={isProcessing || !rejectReason.trim()}
-                style={{ flex: 2, padding: '12px', background: RED, color: '#fff', border: 'none', borderRadius: 11, cursor: isProcessing ? 'wait' : 'pointer', fontWeight: 700, fontSize: 13, opacity: (isProcessing || !rejectReason.trim()) ? 0.45 : 1, transition: 'opacity 0.15s ease, background 0.15s ease' }}
+                style={{ flex: 2, padding: '12px', background: RED, color: '#fff', border: 'none', borderRadius: R.tile, cursor: isProcessing ? 'wait' : 'pointer', fontWeight: 700, fontSize: 13, opacity: (isProcessing || !rejectReason.trim()) ? 0.45 : 1, transition: 'opacity 0.15s ease, background 0.15s ease' }}
                 onMouseEnter={e => { if (!isProcessing && rejectReason.trim()) (e.currentTarget as HTMLButtonElement).style.background = '#b91c1c' }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = RED }}>
                 {isProcessing ? '처리 중...' : '반려 확인'}
@@ -1264,7 +1265,7 @@ function InventoryPage() {
       {/* ══ 엑셀 일괄 처리 모달 ══ */}
       {showExcelModal && (
         <ModalOverlay onClose={() => setShowExcelModal(false)} confirmClose style={{ background: 'rgba(0,0,0,0.55)' }}>
-          <div className="modal-box" style={{ background: CARD_BG, borderRadius: 20, width: '100%', maxWidth: 840, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}` }}>
+          <div className="modal-box" style={{ background: CARD_BG, borderRadius: R.modal, width: '100%', maxWidth: 840, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}` }}>
 
             <ModalHeader title="엑셀 일괄 처리" accentColor={BLUE} onClose={() => setShowExcelModal(false)} />
 
@@ -1273,11 +1274,11 @@ function InventoryPage() {
               {/* 처리 유형 */}
               <div style={{ marginBottom: 22 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: TEXT, marginBottom: 10 }}>처리 유형</div>
-                <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 11, padding: 4, gap: 2, width: 'fit-content' }}>
+                <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: R.tile, padding: 4, gap: 2, width: 'fit-content' }}>
                   {(['out', 'in'] as const).map(t => (
                     <button key={t} onClick={() => { setExcelType(t); setExcelRows([]); setExcelResults(null); setExcelFileName('') }}
                       style={{
-                        padding: '8px 28px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13,
+                        padding: '8px 28px', borderRadius: R.control, border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: 13,
                         background: excelType === t ? '#fff' : 'transparent',
                         color: excelType === t ? (t === 'out' ? RED : '#15803d') : GRAY,
                         boxShadow: excelType === t ? '0 2px 6px rgba(0,0,0,0.10)' : 'none',
@@ -1304,12 +1305,12 @@ function InventoryPage() {
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                     padding: '36px 20px',
                     border: `2px dashed ${excelFileName ? BLUE : '#d1d5db'}`,
-                    borderRadius: 14,
+                    borderRadius: R.modal,
                     background: excelFileName ? '#eff4ff' : '#fafafa',
                     cursor: 'pointer', gap: 12,
                     transition: 'border-color 0.15s ease, background 0.15s ease',
                   }}>
-                  <div style={{ width: 52, height: 52, borderRadius: 14, background: excelFileName ? '#dce9ff' : '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s ease' }}>
+                  <div style={{ width: 52, height: 52, borderRadius: R.modal, background: excelFileName ? '#dce9ff' : '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s ease' }}>
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={excelFileName ? BLUE : MUTED} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
                       <polyline points="14 2 14 8 20 8"/>
@@ -1331,7 +1332,7 @@ function InventoryPage() {
               </div>
 
               {/* 필드 안내 */}
-              <div style={{ marginBottom: 18, padding: '12px 16px', background: '#f8fafc', borderRadius: 10, border: `1px solid ${BORDER}` }}>
+              <div style={{ marginBottom: 18, padding: '12px 16px', background: '#f8fafc', borderRadius: R.tile, border: `1px solid ${BORDER}` }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: TEXT, marginBottom: 6 }}>
                   {excelType === 'out' ? '출고 엑셀 컬럼' : '입고 엑셀 컬럼'}
                 </div>
@@ -1352,7 +1353,7 @@ function InventoryPage() {
                     미리보기
                     <span style={{ fontWeight: 400, color: MUTED, marginLeft: 6 }}>— {excelRows.length}행 중 최대 10행</span>
                   </div>
-                  <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${BORDER}` }}>
+                  <div style={{ overflowX: 'auto', borderRadius: R.tile, border: `1px solid ${BORDER}` }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                       <thead>
                         <tr style={{ background: '#f8fafc', borderBottom: `1px solid ${BORDER}` }}>
@@ -1368,7 +1369,7 @@ function InventoryPage() {
                         {excelRows.slice(0, 10).map((row, i) => (
                           <tr key={i} style={{ borderBottom: `1px solid #f3f4f6` }}>
                             <td style={{ padding: '8px 12px' }}>
-                              <span style={{ fontWeight: 700, padding: '2px 7px', borderRadius: 5, background: '#eff4ff', color: BLUE, fontSize: 11 }}>{String(row['부품코드'] ?? '-')}</span>
+                              <span style={{ fontWeight: 700, padding: '2px 7px', borderRadius: R.tag, background: '#eff4ff', color: BLUE, fontSize: 11 }}>{String(row['부품코드'] ?? '-')}</span>
                             </td>
                             {excelType === 'out' ? (
                               <>
@@ -1403,12 +1404,12 @@ function InventoryPage() {
                 <div>
                   {/* 성공/실패 요약 */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18 }}>
-                    <div style={{ padding: '20px 24px', background: '#f0fdf4', borderRadius: 14, border: '1px solid #bbf7d0', textAlign: 'center' }}>
+                    <div style={{ padding: '20px 24px', background: '#f0fdf4', borderRadius: R.modal, border: '1px solid #bbf7d0', textAlign: 'center' }}>
                       <div style={{ fontSize: 11, fontWeight: 700, color: '#15803d', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 8 }}>성공</div>
                       <div style={{ fontSize: 36, fontWeight: 800, color: '#15803d', lineHeight: 1, letterSpacing: '-1px' }}>{excelResults.filter(r => r.success).length}</div>
                       <div style={{ fontSize: 12, color: '#15803d', marginTop: 4, fontWeight: 600 }}>건 처리 완료</div>
                     </div>
-                    <div style={{ padding: '20px 24px', background: '#fef2f2', borderRadius: 14, border: '1px solid #fecaca', textAlign: 'center' }}>
+                    <div style={{ padding: '20px 24px', background: '#fef2f2', borderRadius: R.modal, border: '1px solid #fecaca', textAlign: 'center' }}>
                       <div style={{ fontSize: 11, fontWeight: 700, color: RED, letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 8 }}>실패</div>
                       <div style={{ fontSize: 36, fontWeight: 800, color: RED, lineHeight: 1, letterSpacing: '-1px' }}>{excelResults.filter(r => !r.success).length}</div>
                       <div style={{ fontSize: 12, color: RED, marginTop: 4, fontWeight: 600 }}>건 처리 실패</div>
@@ -1416,7 +1417,7 @@ function InventoryPage() {
                   </div>
 
                   {/* 결과 상세 테이블 */}
-                  <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${BORDER}` }}>
+                  <div style={{ overflowX: 'auto', borderRadius: R.tile, border: `1px solid ${BORDER}` }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                       <thead>
                         <tr style={{ background: '#f8fafc', borderBottom: `1px solid ${BORDER}` }}>
@@ -1429,7 +1430,7 @@ function InventoryPage() {
                         {excelResults.map((r, i) => (
                           <tr key={i} style={{ borderBottom: `1px solid #f3f4f6`, background: r.success ? '#f8fffe' : '#fff' }}>
                             <td style={{ padding: '9px 12px' }}>
-                              <span style={{ fontWeight: 700, padding: '2px 7px', borderRadius: 5, background: '#eff4ff', color: BLUE, fontSize: 11 }}>{r.partCode}</span>
+                              <span style={{ fontWeight: 700, padding: '2px 7px', borderRadius: R.tag, background: '#eff4ff', color: BLUE, fontSize: 11 }}>{r.partCode}</span>
                             </td>
                             <td style={{ padding: '9px 12px', color: TEXT, fontWeight: 500 }}>{r.itemName ?? '-'}</td>
                             <td style={{ padding: '9px 12px', fontWeight: 700, color: TEXT }}>{r.qty}</td>
@@ -1456,7 +1457,7 @@ function InventoryPage() {
             {/* 하단 버튼 */}
             <div style={{ padding: '16px 24px', borderTop: `1px solid ${BORDER}`, display: 'flex', gap: 8, flexShrink: 0 }}>
               <button className="cancel-btn" onClick={() => setShowExcelModal(false)}
-                style={{ flex: 1, padding: '12px', background: '#f4f5f7', border: 'none', borderRadius: 11, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT, transition: 'background 0.15s ease' }}>
+                style={{ flex: 1, padding: '12px', background: '#f4f5f7', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT, transition: 'background 0.15s ease' }}>
                 {excelResults ? '닫기' : '취소'}
               </button>
               {!excelResults && (
@@ -1465,7 +1466,7 @@ function InventoryPage() {
                   style={{
                     flex: 2, padding: '12px',
                     background: excelType === 'out' ? RED : '#15803d',
-                    color: '#fff', border: 'none', borderRadius: 11,
+                    color: '#fff', border: 'none', borderRadius: R.tile,
                     cursor: (isProcessingExcel || excelRows.length === 0) ? 'not-allowed' : 'pointer',
                     fontWeight: 700, fontSize: 13,
                     opacity: (isProcessingExcel || excelRows.length === 0) ? 0.5 : 1,
@@ -1476,7 +1477,7 @@ function InventoryPage() {
               )}
               {excelResults && excelResults.some(r => !r.success) && (
                 <button onClick={() => { setExcelRows([]); setExcelResults(null); setExcelFileName('') }}
-                  style={{ flex: 2, padding: '12px', background: BLUE, color: '#fff', border: 'none', borderRadius: 11, cursor: 'pointer', fontWeight: 700, fontSize: 13, transition: 'opacity 0.15s ease' }}
+                  style={{ flex: 2, padding: '12px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13, transition: 'opacity 0.15s ease' }}
                   onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85' }}
                   onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1' }}>
                   다시 업로드

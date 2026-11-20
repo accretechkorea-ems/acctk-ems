@@ -30,6 +30,7 @@ import { apiErrorText, emptyInput, FIELD_BY_KEY, type FieldKey, validateReport }
 import {
   PROJECT_KEYS, PROJECT_NO_KEY, PROJECT_NO_LABEL, PROJECT_NO_MAX, PROJECT_TEXT_MAX, validateProjectNo,
 } from '@/lib/semiContact/project'
+import { R } from '@/lib/radius'
 
 /**
  * 열 폭. 머리 줄과 행이 같은 grid-template-columns(.cs-grid)를 쓴다 — 머리/행이 어긋나지 않게.
@@ -307,11 +308,11 @@ function TeamToggle({ teams, value, onChange }: {
   return (
     <div role="tablist" aria-label="팀" style={{
       position: 'relative', display: 'inline-grid', gridTemplateColumns: `repeat(${items.length}, ${cell}px)`,
-      background: NEUTRAL_BG, borderRadius: 6, padding: 3, flexShrink: 0,
+      background: NEUTRAL_BG, borderRadius: R.icon, padding: 3, flexShrink: 0,
     }}>
       <span aria-hidden style={{
         position: 'absolute', top: 3, bottom: 3, left: 3, width: cell,
-        background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 5, boxSizing: 'border-box',
+        background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.tag, boxSizing: 'border-box',
         transform: `translateX(${idx * cell}px)`, transition: 'transform 0.2s ease',
       }} />
       {items.map((it, i) => {
@@ -424,7 +425,7 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
     // 저장 중에는 닫히지 않는다(closeOn 'none'). 그 밖에는 확인 뒤 닫는다.
     <ModalOverlay onClose={onClose} closeOn={busy ? 'none' : 'both'} confirmClose>
       <div style={{
-        background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 500,
+        background: CARD_BG, borderRadius: R.control, padding: '14px 16px', width: '100%', maxWidth: 500,
         maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
       }}>
         <div style={cardHeader}>
@@ -455,7 +456,7 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
         {error && (
           <div style={{
             fontSize: 12, lineHeight: 1.6, color: '#be123c', background: '#fef2f2',
-            border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px', marginBottom: 12,
+            border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '8px 10px', marginBottom: 12,
           }}>
             {error}
           </div>

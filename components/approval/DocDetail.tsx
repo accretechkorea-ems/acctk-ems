@@ -21,6 +21,7 @@ import { panelOf } from './panels'
 import { nextPendingLine } from '@/lib/approval/engine'
 import { DOC_TYPES } from '@/lib/approval/docTypes'
 import type { ApprovalLine, ApprovalDocument } from '@/lib/approval/types'
+import { R } from '@/lib/radius'
 
 export type ApprovalDoc = ApprovalDocument & {
   approval_lines: ApprovalLine[]
@@ -163,7 +164,7 @@ export default function DocDetail({
 
       {/* 반려 사유는 눈에 띄게 따로 */}
       {doc.status === '반려' && rejectedLine?.comment && (
-        <div style={{ marginTop: 12, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '8px 10px' }}>
+        <div style={{ marginTop: 12, border: `1px solid ${BORDER}`, borderRadius: R.icon, padding: '8px 10px' }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: DANGER }}>반려 사유</span>
           <div style={{ fontSize: 13, color: TEXT, marginTop: 3, wordBreak: 'break-word' }}>{rejectedLine.comment}</div>
         </div>

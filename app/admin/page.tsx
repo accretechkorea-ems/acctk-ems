@@ -32,6 +32,7 @@ import AutocompleteInput from '@/components/common/AutocompleteInput'
 import { Z } from '@/lib/zIndex'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { todayKST, nowKSTParts } from '@/lib/date'
+import { R } from '@/lib/radius'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#f4f5f7'
@@ -781,7 +782,7 @@ function AdminPageInner() {
                     <label key={m.key}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
-                        padding: '8px 10px', borderRadius: 6, border: `1px solid ${BORDER}`,
+                        padding: '8px 10px', borderRadius: R.icon, border: `1px solid ${BORDER}`,
                         background: checked ? '#f3f4f6' : CARD_BG,
                       }}>
                       <input type="checkbox" checked={checked}
@@ -1063,7 +1064,7 @@ function AdminPageInner() {
   const teamsOptions = teamsList.map(t => t.name)
 
   const inp: React.CSSProperties = {
-    padding: '8px 12px', border: `1px solid ${BORDER}`, borderRadius: 8,
+    padding: '8px 12px', border: `1px solid ${BORDER}`, borderRadius: R.control,
     fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box', width: '100%',
   }
 
@@ -1124,17 +1125,17 @@ function AdminPageInner() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
 
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>🎯</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>목표 금액 관리</div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>연간 목표 금액을 개인별 / 팀별로 설정하고 수정합니다.</div>
             {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
             <div style={{ flex: 1 }} />
-            <button style={{ width: '100%', padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+            <button style={{ width: '100%', padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.tile, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
               onClick={() => { setShowTargetModal(true); setEditingTarget(null); fetchTargetData() }}>관리하기</button>
           </div>
 
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>🗑️</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <div style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>견적서 삭제</div>
@@ -1142,11 +1143,11 @@ function AdminPageInner() {
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>결재함으로 옮겼습니다. 삭제 요청은 결재선을 거쳐 처리됩니다.</div>
             {/* 설명 길이가 카드마다 달라 남는 높이를 여기서 먹는다 — 같은 행의 버튼이 나란해진다. */}
             <div style={{ flex: 1 }} />
-            <button style={{ width: '100%', padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+            <button style={{ width: '100%', padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.tile, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
               onClick={() => setShowQuoteModal(true)}>어디서 처리하나요?</button>
           </div>
 
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>👥</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>직원 관리</div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>직원 등록, 정보 수정, 관리자 권한, 계정 삭제를 관리합니다.</div>
@@ -1155,12 +1156,12 @@ function AdminPageInner() {
             <button
               onClick={() => { setShowEngineerModal(true); fetchEngineers(); fetchTeams(); fetchOffices() }}
               disabled={!isSuperAdmin(currentEngineer)}
-              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
+              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: R.tile, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
               관리하기
             </button>
           </div>
 
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>🏢</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>사무실 관리</div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>사무실 주소와 좌표를 관리합니다. 길찾기 출발지·동선 지도·직원 소속이 이 값을 함께 씁니다.</div>
@@ -1169,12 +1170,12 @@ function AdminPageInner() {
             <button
               onClick={() => { setShowOfficeModal(true); fetchOffices() }}
               disabled={!isSuperAdmin(currentEngineer)}
-              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
+              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: R.tile, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
               관리하기
             </button>
           </div>
 
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>🏷️</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>팀 관리</div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>팀을 추가하거나 삭제합니다. 직원 등록·수정 시 팀 목록에 즉시 반영됩니다.</div>
@@ -1183,12 +1184,12 @@ function AdminPageInner() {
             <button
               onClick={() => { setShowTeamModal(true); fetchTeams() }}
               disabled={!isSuperAdmin(currentEngineer)}
-              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
+              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: R.tile, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
               관리하기
             </button>
           </div>
 
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>📢</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>공지 관리</div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>로그인 후 팝업으로 뜨는 공지를 작성하고 게시 기간을 관리합니다.</div>
@@ -1197,7 +1198,7 @@ function AdminPageInner() {
             <button
               onClick={() => { setShowNoticeModal(true); setNoticeTab('active'); setNoticeEditing(null); fetchNotices() }}
               disabled={!isSuperAdmin(currentEngineer)}
-              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
+              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: R.tile, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
               관리하기
             </button>
           </div>
@@ -1206,7 +1207,7 @@ function AdminPageInner() {
               그 일을 한다(회사 트리·분류·이름 변경·병합·정리 필요 탭). 라우트
               /api/parent-company 는 그대로 쓴다 — 자식 이름 재생성과 서버 재집계가 거기 있다. */}
 
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>🧾</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>부대비용 단가</div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>견적서 서비스비의 부대비용 표준 항목과 단가를 관리합니다.</div>
@@ -1215,14 +1216,14 @@ function AdminPageInner() {
             <button
               onClick={() => { setShowPresetModal(true); setEditingPreset(null); setNewPreset({ itemName: '', unitPrice: '' }); fetchPresets() }}
               disabled={!isSuperAdmin(currentEngineer)}
-              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
+              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: R.tile, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
               관리하기
             </button>
           </div>
 
           {/* 견적 분류 — 아이콘은 이모지 대신 선 아이콘을 쓴다(디자인 규칙).
               주변 카드는 이모지를 쓰던 옛 모양이라 이 카드만 다르다. */}
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ height: 28, marginBottom: 12, display: 'flex', alignItems: 'center', color: BLUE }}>
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 7V5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v2" /><path d="M3 7h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -1235,13 +1236,13 @@ function AdminPageInner() {
             <button
               onClick={() => setShowCategoryModal(true)}
               disabled={!isSuperAdmin(currentEngineer)}
-              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
+              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: R.tile, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
               관리하기
             </button>
           </div>
 
           {/* 영업활동 종류 — 견적 분류와 같은 모양(표 + RLS). 아이콘은 선 아이콘을 쓴다. */}
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ height: 28, marginBottom: 12, display: 'flex', alignItems: 'center', color: BLUE }}>
               {/* lucide list-checks */}
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1255,12 +1256,12 @@ function AdminPageInner() {
             <button
               onClick={() => setShowActivityTypeModal(true)}
               disabled={!isSuperAdmin(currentEngineer)}
-              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
+              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: R.tile, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
               관리하기
             </button>
           </div>
 
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>📊</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>가격표 등록</div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>본사 가격표 엑셀을 종류별로 올려 가격표를 갱신합니다. 같은 품번은 덮어쓰고, 파일에 없는 품목과 지난 견적의 금액은 그대로 둡니다.</div>
@@ -1269,17 +1270,17 @@ function AdminPageInner() {
             <button
               onClick={() => setShowPriceListModal(true)}
               disabled={!isSuperAdmin(currentEngineer)}
-              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
+              style={{ width: '100%', padding: '10px', background: isSuperAdmin(currentEngineer) ? BLUE : '#9ca3af', color: '#fff', border: 'none', borderRadius: R.tile, fontWeight: 700, fontSize: 13, cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed' }}>
               등록하기
             </button>
           </div>
 
- <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+ <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>📋</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>다운로드 로그</div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>견적서 PDF 다운로드 이력을 조회합니다.</div>
             <div style={{ flex: 1 }} />
-            <button style={{ width: '100%', padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+            <button style={{ width: '100%', padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.tile, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
               onClick={() => { setShowLogModal(true); fetchLogs() }}>조회하기</button>
           </div>
 
@@ -1289,7 +1290,7 @@ function AdminPageInner() {
       {/* ── 목표 금액 모달 ── */}
       {showTargetModal && (
         <ModalOverlay onClose={() => setShowTargetModal(false)} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 680, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 680, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🎯 목표 금액 관리</div>
               <button onClick={() => setShowTargetModal(false)} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
@@ -1301,7 +1302,7 @@ function AdminPageInner() {
               </select>
               <span style={{ fontSize: 12, color: GRAY }}>연간 목표 기준 (월/분기는 자동 계산)</span>
             </div>
-            <div style={{ background: '#eff6ff', borderRadius: 10, padding: '12px 16px', marginBottom: 16, border: '1px solid #bfdbfe', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ background: '#eff6ff', borderRadius: R.tile, padding: '12px 16px', marginBottom: 16, border: '1px solid #bfdbfe', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: BLUE }}>계측부 전체 목표</span>
               <span style={{ fontSize: 14, fontWeight: 800, color: BLUE }}>수주 ₩{numKR(totalAllOrder)} · 매출 ₩{numKR(totalAllTarget)}</span>
             </div>
@@ -1344,11 +1345,11 @@ function AdminPageInner() {
                                   placeholder="선택 입력" style={targetErr.errors.amount ? { ...inp, width: '100%', border: errBorder } : { ...inp, width: '100%' }} autoFocus />
                               </div>
                               <button onClick={handleSaveTarget} disabled={savingTarget}
-                                style={{ padding: '6px 14px', background: BLUE, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', opacity: savingTarget ? 0.7 : 1, whiteSpace: 'nowrap' }}>
+                                style={{ padding: '6px 14px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.control, fontWeight: 700, fontSize: 12, cursor: 'pointer', opacity: savingTarget ? 0.7 : 1, whiteSpace: 'nowrap' }}>
                                 {savingTarget ? '...' : '저장'}
                               </button>
                               <button onClick={() => setEditingTarget(null)}
-                                style={{ padding: '6px 10px', background: '#f3f4f6', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>취소</button>
+                                style={{ padding: '6px 10px', background: '#f3f4f6', border: 'none', borderRadius: R.control, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>취소</button>
                               <FieldError message={targetErr.errors.amount} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 2, whiteSpace: 'nowrap' }} />
                             </div>
                           ) : (
@@ -1372,7 +1373,7 @@ function AdminPageInner() {
                                 ) : <span style={{ fontSize: 13, color: '#d1d5db' }}>미설정</span>}
                               </div>
                               <button onClick={() => setEditingTarget({ engineerId: eng.engineer_id, amount: target?.target_amount != null ? String(target.target_amount) : '', orderAmount: target?.order_target_amount != null ? String(target.order_target_amount) : '' })}
-                                style={{ padding: '5px 12px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap' }}>
+                                style={{ padding: '5px 12px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: R.control, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap' }}>
                                 {target ? '수정' : '설정'}
                               </button>
                             </>
@@ -1391,7 +1392,7 @@ function AdminPageInner() {
                   <button onClick={() => setShowExcluded(v => !v)}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '8px 10px',
-                      background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer',
+                      background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer',
                       fontSize: 12, fontWeight: 700, color: GRAY,
                     }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
@@ -1427,12 +1428,12 @@ function AdminPageInner() {
       {/* 견적서 삭제 안내 — 이 화면에는 삭제 기능이 없다. 결재함으로 보내는 길만 알려 준다. */}
       {showQuoteModal && (
         <ModalOverlay onClose={closeQuoteModal} style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 520, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 520, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🗑️ 견적서 삭제</div>
               <button onClick={closeQuoteModal} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
             </div>
-            <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.8, background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: 10, padding: '14px 16px' }}>
+            <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.8, background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: R.tile, padding: '14px 16px' }}>
               견적서 삭제는 <b>결재함에서 처리합니다.</b><br />
               삭제 요청이 올라오면 결재선을 따라 진행되고, 결재가 완료된 시점에 견적이 지워집니다.
               반려·회수하면 요청 직전 상태로 돌아갑니다.
@@ -1443,9 +1444,9 @@ function AdminPageInner() {
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
               <button onClick={closeQuoteModal}
-                style={{ flex: 1, padding: '10px', background: '#f3f4f6', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>닫기</button>
+                style={{ flex: 1, padding: '10px', background: '#f3f4f6', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>닫기</button>
               <button type="button" onClick={() => { closeQuoteModal(); router.push(APPROVAL_PATH) }}
-                style={{ flex: 1, padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>결재함 열기</button>
+                style={{ flex: 1, padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>결재함 열기</button>
             </div>
           </div>
         </ModalOverlay>
@@ -1454,7 +1455,7 @@ function AdminPageInner() {
       {/* ── 다운로드 로그 모달 ── */}
       {showLogModal && (
         <ModalOverlay onClose={() => setShowLogModal(false)} style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 1100, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 1100, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>📋 다운로드 로그</div>
               <button onClick={() => setShowLogModal(false)} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
@@ -1486,7 +1487,7 @@ function AdminPageInner() {
                         <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>{log.company_name || '-'}</td>
                         <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
   <span style={{
-    padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700,
+    padding: '3px 10px', borderRadius: R.modal, fontSize: 12, fontWeight: 700,
     background: log.action === 'view' ? '#eff6ff' : '#f0fdf4',
     color: log.action === 'view' ? '#234ea2' : '#16a34a',
   }}>
@@ -1507,12 +1508,12 @@ function AdminPageInner() {
       {/* ── 직원 관리 모달 ── */}
       {showEngineerModal && (
         <ModalOverlay onClose={() => setShowEngineerModal(false)} style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
              <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>👥 직원 관리</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setShowAddEngineer(true)}
-                  style={{ padding: '7px 16px', background: BLUE, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>+ 직원 등록</button>
+                  style={{ padding: '7px 16px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.control, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>+ 직원 등록</button>
                 <button onClick={() => setShowEngineerModal(false)}
                   style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
               </div>
@@ -1548,7 +1549,7 @@ function AdminPageInner() {
                               const roleLabel = level === 'superadmin' ? '관리자' : '팀원'
                               const badges: { label: string; bg: string; color: string }[] = [{ label: roleLabel, bg: rc.bg, color: rc.text }]
                               return badges.map(b => (
-                                <span key={b.label} style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: b.bg, color: b.color, whiteSpace: 'nowrap' }}>
+                                <span key={b.label} style={{ padding: '3px 10px', borderRadius: R.modal, fontSize: 12, fontWeight: 700, background: b.bg, color: b.color, whiteSpace: 'nowrap' }}>
                                   {b.label}
                                 </span>
                               ))
@@ -1557,11 +1558,11 @@ function AdminPageInner() {
                         </td>
                         <td style={{ padding: '10px 12px' }}>
                           <button onClick={() => { setEditEngineer(eng); setEditForm(editFormOf(eng)) }}
-                            style={{ padding: '4px 12px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>수정</button>
+                            style={{ padding: '4px 12px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>수정</button>
                         </td>
                         <td style={{ padding: '10px 12px' }}>
                           <button onClick={() => { setResignDate(todayKST()); setDeleteEngineer(eng) }}
-                            style={{ padding: '4px 12px', background: DANGER, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>삭제</button>
+                            style={{ padding: '4px 12px', background: DANGER, color: '#fff', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>삭제</button>
                         </td>
                       </tr>
                     ))}
@@ -1576,7 +1577,7 @@ function AdminPageInner() {
       {/* ── 직원 등록 모달 ── */}
       {showAddEngineer && (
         <ModalOverlay onClose={() => { setShowAddEngineer(false); setAddForm(emptyAddForm()) }} confirmClose dirty={JSON.stringify(addForm) !== JSON.stringify(emptyAddForm())} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal }}>
-          <div style={{ background: CARD_BG, borderRadius: 18, padding: 28, width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 28, width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, marginBottom: 20 }}>직원 등록</div>
             <div style={{ display: 'grid', gap: 12 }}>
               <div>
@@ -1634,9 +1635,9 @@ function AdminPageInner() {
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
               <button onClick={() => { setShowAddEngineer(false); setAddForm({ name: '', position: '사원', teams: '', email: '', initials: '', password: '', office: '', scope: 'team' }) }}
-                style={{ flex: 1, padding: '11px', background: '#f3f4f6', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>취소</button>
+                style={{ flex: 1, padding: '11px', background: '#f3f4f6', border: 'none', borderRadius: R.tile, fontWeight: 700, cursor: 'pointer' }}>취소</button>
               <button onClick={handleAddEngineer} disabled={addLoading}
-                style={{ flex: 1, padding: '11px', background: BLUE, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer', opacity: addLoading ? 0.7 : 1 }}>
+                style={{ flex: 1, padding: '11px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.tile, fontWeight: 700, cursor: 'pointer', opacity: addLoading ? 0.7 : 1 }}>
                 {addLoading ? '등록 중...' : '등록'}
               </button>
             </div>
@@ -1647,7 +1648,7 @@ function AdminPageInner() {
       {/* ── 직원 수정 모달 ── */}
       {editEngineer && (
         <ModalOverlay onClose={() => setEditEngineer(null)} confirmClose dirty={editEngineer ? JSON.stringify(editForm) !== JSON.stringify(editFormOf(editEngineer)) : false} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal }}>
-          <div style={{ background: CARD_BG, borderRadius: 18, padding: 28, width: '100%', maxWidth: 640, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 28, width: '100%', maxWidth: 640, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, marginBottom: 20 }}>직원 정보 수정</div>
             <div style={{ display: 'grid', gap: 12 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
@@ -1708,7 +1709,7 @@ function AdminPageInner() {
                       const checked = editForm.permission_level === key
                       const rc = getCategoryColor(ROLE_COLORS, key)
                       return (
-                        <label key={key} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', padding: '11px 12px', background: checked ? rc.bg : '#f8fafc', borderRadius: 8, transition: 'all 0.15s' }}>
+                        <label key={key} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', padding: '11px 12px', background: checked ? rc.bg : '#f8fafc', borderRadius: R.control, transition: 'all 0.15s' }}>
                           <input type="checkbox" checked={checked}
                             onChange={e => setEditForm(p => ({ ...p, permission_level: e.target.checked ? key : 'member' }))}
                             style={{ width: 15, height: 15, accentColor: rc.text, cursor: 'pointer', marginTop: 2, flexShrink: 0 }} />
@@ -1725,9 +1726,9 @@ function AdminPageInner() {
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
               <button onClick={() => setEditEngineer(null)}
-                style={{ flex: 1, padding: '11px', background: '#f3f4f6', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>취소</button>
+                style={{ flex: 1, padding: '11px', background: '#f3f4f6', border: 'none', borderRadius: R.tile, fontWeight: 700, cursor: 'pointer' }}>취소</button>
               <button onClick={handleUpdateEngineer} disabled={editLoading}
-                style={{ flex: 1, padding: '11px', background: BLUE, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer', opacity: editLoading ? 0.7 : 1 }}>
+                style={{ flex: 1, padding: '11px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.tile, fontWeight: 700, cursor: 'pointer', opacity: editLoading ? 0.7 : 1 }}>
                 {editLoading ? '저장 중...' : '저장'}
               </button>
             </div>
@@ -1762,14 +1763,14 @@ function AdminPageInner() {
       {/* ── 부대비용 단가 모달 ── */}
       {showPresetModal && (
         <ModalOverlay onClose={() => { setShowPresetModal(false); setEditingPreset(null) }} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🧾 부대비용 단가</div>
               <button onClick={() => { setShowPresetModal(false); setEditingPreset(null) }} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
             </div>
 
             {/* 항목 추가 폼 */}
-            <div style={{ background: '#f8fafc', borderRadius: 12, padding: '14px 16px', marginBottom: 16, border: `1px solid ${BORDER}` }}>
+            <div style={{ background: '#f8fafc', borderRadius: R.card, padding: '14px 16px', marginBottom: 16, border: `1px solid ${BORDER}` }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 10 }}>새 항목 추가</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
                 <input value={newPreset.itemName}
@@ -1781,7 +1782,7 @@ function AdminPageInner() {
                   onKeyDown={e => e.key === 'Enter' && handleAddPreset()}
                   placeholder="단가(선택)" style={{ ...inp, width: 130, textAlign: 'right' }} />
                 <button onClick={handleAddPreset} disabled={addPresetLoading || !newPreset.itemName.trim()}
-                  style={{ padding: '8px 18px', background: BLUE, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', opacity: (addPresetLoading || !newPreset.itemName.trim()) ? 0.6 : 1 }}>
+                  style={{ padding: '8px 18px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.control, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', opacity: (addPresetLoading || !newPreset.itemName.trim()) ? 0.6 : 1 }}>
                   {addPresetLoading ? '...' : '추가'}
                 </button>
               </div>
@@ -1809,11 +1810,11 @@ function AdminPageInner() {
                           onKeyDown={e => e.key === 'Enter' && handleSavePreset()}
                           placeholder="0" style={{ ...inp, width: 120, textAlign: 'right' }} />
                         <button onClick={handleSavePreset} disabled={savingPreset}
-                          style={{ padding: '6px 14px', background: BLUE, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', opacity: savingPreset ? 0.7 : 1, whiteSpace: 'nowrap' }}>
+                          style={{ padding: '6px 14px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.control, fontWeight: 700, fontSize: 12, cursor: 'pointer', opacity: savingPreset ? 0.7 : 1, whiteSpace: 'nowrap' }}>
                           {savingPreset ? '...' : '저장'}
                         </button>
                         <button onClick={() => setEditingPreset(null)}
-                          style={{ padding: '6px 10px', background: '#f3f4f6', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>취소</button>
+                          style={{ padding: '6px 10px', background: '#f3f4f6', border: 'none', borderRadius: R.control, fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>취소</button>
                         <FieldError message={presetEditErr.errors.itemName} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 2, whiteSpace: 'nowrap' }} />
                       </div>
                     ) : (
@@ -1831,7 +1832,7 @@ function AdminPageInner() {
                             : <span style={{ fontSize: 13, color: GRAY }}>미정</span>}
                         </div>
                         <button onClick={() => handleDeletePreset(preset)} disabled={deletingPreset === preset.preset_id}
-                          style={{ padding: '4px 14px', background: DANGER, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, flexShrink: 0, opacity: deletingPreset === preset.preset_id ? 0.6 : 1 }}>
+                          style={{ padding: '4px 14px', background: DANGER, color: '#fff', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 700, flexShrink: 0, opacity: deletingPreset === preset.preset_id ? 0.6 : 1 }}>
                           {deletingPreset === preset.preset_id ? '삭제 중...' : '삭제'}
                         </button>
                       </>
@@ -1848,7 +1849,7 @@ function AdminPageInner() {
       {/* ── 공지 관리 모달 ── */}
       {showNoticeModal && (
         <ModalOverlay onClose={() => { setShowNoticeModal(false); setNoticeEditing(null) }} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 760, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 760, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>📢 공지 관리</div>
               <button onClick={() => { setShowNoticeModal(false); setNoticeEditing(null) }}
@@ -1859,25 +1860,25 @@ function AdminPageInner() {
               <>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
                   {/* 기간이 지나도 지우지 않는다 — 탭으로만 나눈다. 시작 전 건은 손볼 대상이라 따로 뺀다. */}
-                  <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 8, padding: 3, gap: 1 }}>
+                  <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: R.control, padding: 3, gap: 1 }}>
                     {([
                       { key: 'active' as const, label: '게시중' },
                       { key: 'upcoming' as const, label: '시작 전' },
                       { key: 'ended' as const, label: '종료됨' },
                     ]).map(t => (
                       <button key={t.key} onClick={() => setNoticeTab(t.key)}
-                        style={{ padding: '5px 12px', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: noticeTab === t.key ? '#fff' : 'transparent', color: noticeTab === t.key ? TEXT : '#9ca3af' }}>
+                        style={{ padding: '5px 12px', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: noticeTab === t.key ? '#fff' : 'transparent', color: noticeTab === t.key ? TEXT : '#9ca3af' }}>
                         {t.label} {notices.filter(n => noticePhase(n) === t.key).length}
                       </button>
                     ))}
                   </div>
                   <button onClick={() => openNoticeForm(null)}
-                    style={{ marginLeft: 'auto', padding: '7px 14px', background: BLUE, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+                    style={{ marginLeft: 'auto', padding: '7px 14px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
                     + 새 공지
                   </button>
                 </div>
 
-                <div style={{ overflowY: 'auto', flex: 1, border: `1px solid ${BORDER}`, borderRadius: 10 }}>
+                <div style={{ overflowY: 'auto', flex: 1, border: `1px solid ${BORDER}`, borderRadius: R.tile }}>
                   {noticeLoading ? (
                     <div style={{ textAlign: 'center', padding: 40, color: GRAY }}>불러오는 중...</div>
                   ) : visibleNotices.length === 0 ? (
@@ -1901,9 +1902,9 @@ function AdminPageInner() {
                             <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
                               <div style={{ display: 'flex', gap: 6 }}>
                                 <button onClick={() => openNoticeForm(n)}
-                                  style={{ padding: '4px 10px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>수정</button>
+                                  style={{ padding: '4px 10px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>수정</button>
                                 <button onClick={() => deleteNotice(n)}
-                                  style={{ padding: '4px 10px', background: DANGER, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>삭제</button>
+                                  style={{ padding: '4px 10px', background: DANGER, color: '#fff', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>삭제</button>
                               </div>
                             </td>
                           </tr>
@@ -1929,17 +1930,17 @@ function AdminPageInner() {
                   <div style={{ fontSize: 12, color: GRAY, marginBottom: 5 }}>이미지 (최대 {NOTICE_MAX_IMAGES}장)</div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
                     {noticeImages.map((src, i) => (
-                      <div key={i} style={{ width: 110, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 6, display: 'grid', gap: 5 }}>
+                      <div key={i} style={{ width: 110, border: `1px solid ${BORDER}`, borderRadius: R.control, padding: 6, display: 'grid', gap: 5 }}>
                         {/* 미리보기 — data URL 이거나 스토리지 공개 URL 이라 next/image 를 쓰지 않는다 */}
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={src} alt={`이미지 ${i + 1}`} style={{ width: '100%', height: 70, objectFit: 'cover', borderRadius: 4, display: 'block' }} />
+                        <img src={src} alt={`이미지 ${i + 1}`} style={{ width: '100%', height: 70, objectFit: 'cover', borderRadius: R.tag, display: 'block' }} />
                         <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
                           <button onClick={() => moveNoticeImage(i, i - 1)} disabled={i === 0} title="앞으로"
-                            style={{ padding: '2px 6px', background: '#f3f4f6', border: 'none', borderRadius: 4, cursor: i === 0 ? 'not-allowed' : 'pointer', fontSize: 11, color: GRAY }}>←</button>
+                            style={{ padding: '2px 6px', background: '#f3f4f6', border: 'none', borderRadius: R.tag, cursor: i === 0 ? 'not-allowed' : 'pointer', fontSize: 11, color: GRAY }}>←</button>
                           <button onClick={() => moveNoticeImage(i, i + 1)} disabled={i === noticeImages.length - 1} title="뒤로"
-                            style={{ padding: '2px 6px', background: '#f3f4f6', border: 'none', borderRadius: 4, cursor: i === noticeImages.length - 1 ? 'not-allowed' : 'pointer', fontSize: 11, color: GRAY }}>→</button>
+                            style={{ padding: '2px 6px', background: '#f3f4f6', border: 'none', borderRadius: R.tag, cursor: i === noticeImages.length - 1 ? 'not-allowed' : 'pointer', fontSize: 11, color: GRAY }}>→</button>
                           <button onClick={() => setNoticeImages(prev => prev.filter((_, k) => k !== i))} title="삭제"
-                            style={{ padding: '2px 6px', background: '#f3f4f6', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, color: DANGER }}>✕</button>
+                            style={{ padding: '2px 6px', background: '#f3f4f6', border: 'none', borderRadius: R.tag, cursor: 'pointer', fontSize: 11, color: DANGER }}>✕</button>
                         </div>
                       </div>
                     ))}
@@ -1977,9 +1978,9 @@ function AdminPageInner() {
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                   <button onClick={() => setNoticeEditing(null)} disabled={noticeSaving}
-                    style={{ flex: 1, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: GRAY }}>취소</button>
+                    style={{ flex: 1, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: GRAY }}>취소</button>
                   <button onClick={saveNotice} disabled={noticeSaving}
-                    style={{ flex: 1, padding: 10, background: BLUE, color: '#fff', border: 'none', borderRadius: 8, cursor: noticeSaving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 13, opacity: noticeSaving ? 0.7 : 1 }}>
+                    style={{ flex: 1, padding: 10, background: BLUE, color: '#fff', border: 'none', borderRadius: R.control, cursor: noticeSaving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 13, opacity: noticeSaving ? 0.7 : 1 }}>
                     {noticeSaving ? '저장 중...' : noticeEditing ? '수정' : '등록'}
                   </button>
                 </div>
@@ -1994,7 +1995,7 @@ function AdminPageInner() {
       {/* ── 팀 관리 모달 ── */}
       {showOfficeModal && (
         <ModalOverlay onClose={() => { setShowOfficeModal(false); closeOfficeForm() }} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🏢 사무실 관리</div>
               <button onClick={() => { setShowOfficeModal(false); closeOfficeForm() }} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
@@ -2003,11 +2004,11 @@ function AdminPageInner() {
             {/* 추가·수정 폼 — 어쩌다 한 번 쓰므로 접어 둔다. */}
             {!officeAddOpen ? (
               <button onClick={openOfficeAdd} disabled={!isSuperAdmin(currentEngineer)}
-                style={{ padding: '9px 16px', background: '#f3f4f6', color: TEXT, border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 16, alignSelf: 'flex-start' }}>
+                style={{ padding: '9px 16px', background: '#f3f4f6', color: TEXT, border: 'none', borderRadius: R.control, fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 16, alignSelf: 'flex-start' }}>
                 + 새 사무실 추가
               </button>
             ) : (
-              <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+              <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.card, padding: 16, marginBottom: 16 }}>
                 <div style={{ fontSize: 13, fontWeight: 800, color: TEXT, marginBottom: 12 }}>
                   {officeEditing ? `${officeEditing.label} 수정` : '새 사무실'}
                 </div>
@@ -2040,7 +2041,7 @@ function AdminPageInner() {
                     <input value={officeForm.address} onChange={e => setOfficeForm(f => ({ ...f, address: e.target.value }))}
                       placeholder="도로명 또는 지번 주소" style={{ ...inp, flex: 1 }} />
                     <button onClick={runGeocode} disabled={geoState.busy}
-                      style={{ padding: '9px 14px', background: geoState.busy ? '#9ca3af' : '#f3f4f6', color: geoState.busy ? '#fff' : TEXT, border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: geoState.busy ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+                      style={{ padding: '9px 14px', background: geoState.busy ? '#9ca3af' : '#f3f4f6', color: geoState.busy ? '#fff' : TEXT, border: 'none', borderRadius: R.control, fontWeight: 700, fontSize: 13, cursor: geoState.busy ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
                       {geoState.busy ? '변환 중...' : '좌표 찾기'}
                     </button>
                   </div>
@@ -2063,16 +2064,16 @@ function AdminPageInner() {
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
                   <button onClick={closeOfficeForm} disabled={officeSaving}
-                    style={{ padding: '9px 16px', background: '#fff', color: GRAY, borderRadius: 8, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+                    style={{ padding: '9px 16px', background: '#fff', color: GRAY, borderRadius: R.control, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
                   <button onClick={saveOffice} disabled={officeSaving}
-                    style={{ padding: '9px 18px', background: officeSaving ? '#9ca3af' : BLUE, color: '#fff', borderRadius: 8, border: 'none', cursor: officeSaving ? 'default' : 'pointer', fontWeight: 700, fontSize: 13 }}>
+                    style={{ padding: '9px 18px', background: officeSaving ? '#9ca3af' : BLUE, color: '#fff', borderRadius: R.control, border: 'none', cursor: officeSaving ? 'default' : 'pointer', fontWeight: 700, fontSize: 13 }}>
                     {officeSaving ? '저장 중...' : '저장'}</button>
                 </div>
               </div>
             )}
 
             {/* 목록 */}
-            <div style={{ overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: 12 }}>
+            <div style={{ overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: R.card }}>
               <div style={{ display: 'grid', gridTemplateColumns: OFFICE_GRID, alignItems: 'center', gap: 8, padding: '10px 14px', background: '#f8fafc', borderBottom: `1px solid ${BORDER}`, fontSize: 11, fontWeight: 700, color: GRAY }}>
                 <div>코드</div><div>이름</div><div>주소</div><div>좌표</div><div>순서</div><div>사용</div><div />
               </div>
@@ -2092,9 +2093,9 @@ function AdminPageInner() {
                   <div>{o.is_active ? '사용' : '중지'}</div>
                   <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                     <button onClick={() => openOfficeEdit(o)} disabled={officeSaving}
-                      style={{ padding: '5px 10px', background: '#f3f4f6', color: TEXT, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>수정</button>
+                      style={{ padding: '5px 10px', background: '#f3f4f6', color: TEXT, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>수정</button>
                     <button onClick={() => toggleOfficeActive(o)} disabled={officeSaving}
-                      style={{ padding: '5px 10px', background: o.is_active ? DANGER : '#f3f4f6', color: o.is_active ? '#fff' : TEXT, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                      style={{ padding: '5px 10px', background: o.is_active ? DANGER : '#f3f4f6', color: o.is_active ? '#fff' : TEXT, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
                       {o.is_active ? '비활성화' : '다시 사용'}</button>
                   </div>
                 </div>
@@ -2107,7 +2108,7 @@ function AdminPageInner() {
       {showTeamModal && (
         <ModalOverlay onClose={closeTeamModal} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
           {/* 팀 목록이 본체라 다른 모달보다 넓게 쓴다(이 모달에만 적용) */}
-          <div style={{ background: CARD_BG, borderRadius: 18, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🏷️ 팀 관리</div>
               <button onClick={closeTeamModal} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
@@ -2118,14 +2119,14 @@ function AdminPageInner() {
               <button onClick={() => setAddTeamOpen(true)} disabled={!isSuperAdmin(currentEngineer)}
                 style={{
                   alignSelf: 'flex-start', marginBottom: 14, padding: '7px 14px',
-                  background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: 6,
+                  background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: R.icon,
                   cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed',
                   fontSize: 12, fontWeight: 700, opacity: isSuperAdmin(currentEngineer) ? 1 : 0.6,
                 }}>
                 + 새 팀 추가
               </button>
             ) : (
-            <div style={{ background: '#f8fafc', borderRadius: 12, padding: '14px 16px', marginBottom: 16, border: `1px solid ${BORDER}` }}>
+            <div style={{ background: '#f8fafc', borderRadius: R.card, padding: '14px 16px', marginBottom: 16, border: `1px solid ${BORDER}` }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 10 }}>새 팀 추가</div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
                 <input value={newTeamName} onChange={e => { setNewTeamName(e.target.value); teamErr.clearError('teamName') }}
@@ -2138,7 +2139,7 @@ function AdminPageInner() {
                   실적 집계 대상
                 </label>
                 <button onClick={handleAddTeam} disabled={addTeamLoading || !newTeamName.trim() || !isSuperAdmin(currentEngineer)}
-                  style={{ padding: '8px 18px', background: BLUE, color: '#fff', border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', opacity: (addTeamLoading || !newTeamName.trim() || !isSuperAdmin(currentEngineer)) ? 0.6 : 1 }}>
+                  style={{ padding: '8px 18px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.control, fontWeight: 700, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', opacity: (addTeamLoading || !newTeamName.trim() || !isSuperAdmin(currentEngineer)) ? 0.6 : 1 }}>
                   {addTeamLoading ? '...' : '추가'}
                 </button>
               </div>
@@ -2149,7 +2150,7 @@ function AdminPageInner() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
                 <button onClick={() => { setAddTeamOpen(false); setNewTeamName(''); setNewTeamPerm([]); teamErr.clearError('teamName') }}
-                  style={{ padding: '6px 14px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+                  style={{ padding: '6px 14px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
                   취소
                 </button>
               </div>
@@ -2196,7 +2197,7 @@ function AdminPageInner() {
                         </span>
                         <span style={{ display: 'flex', justifyContent: 'center' }}>
                           <span style={{
-                            background: '#f3f4f6', borderRadius: 99, padding: '2px 8px',
+                            background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px',
                             fontSize: 11, fontWeight: 700, color: keys.size > 0 ? BLUE : '#9ca3af', whiteSpace: 'nowrap',
                           }}>
                             {keys.size}개
@@ -2208,14 +2209,14 @@ function AdminPageInner() {
                         <span style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
                           <button onClick={() => openPermEdit(team)} disabled={!isSuperAdmin(currentEngineer) || savingTeamId === team.id}
                             style={{
-                              padding: '4px 12px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: 6,
+                              padding: '4px 12px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: R.icon,
                               cursor: isSuperAdmin(currentEngineer) ? 'pointer' : 'not-allowed', fontSize: 12, fontWeight: 700,
                               opacity: isSuperAdmin(currentEngineer) ? 1 : 0.6, whiteSpace: 'nowrap',
                             }}>
                             편집
                           </button>
                           <button onClick={() => handleDeleteTeam(team)} disabled={deletingTeam === team.id}
-                            style={{ padding: '4px 12px', background: DANGER, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, opacity: deletingTeam === team.id ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+                            style={{ padding: '4px 12px', background: DANGER, color: '#fff', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 700, opacity: deletingTeam === team.id ? 0.6 : 1, whiteSpace: 'nowrap' }}>
                             {deletingTeam === team.id ? '삭제 중...' : '삭제'}
                           </button>
                         </span>
@@ -2236,7 +2237,7 @@ function AdminPageInner() {
       {/* ── 팀 권한 편집 모달 ── */}
       {permEditTeam && (
         <ModalOverlay onClose={() => setPermEditTeam(null)} confirmClose closeOn={savingTeamId === permEditTeam.id ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal }}>
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 24, width: '100%', maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>{permEditTeam.name} 권한</div>
               <span style={{ fontSize: 12, color: GRAY }}>{permEditKeys.length} / {CHECKABLE_MENUS.length}개 선택</span>
@@ -2247,7 +2248,7 @@ function AdminPageInner() {
             {/* 집계 대상 — **메뉴와 무관한 값**이다. 메뉴를 켜고 끄는 것이 실적 집계를 바꾸지 않는다. */}
             <label style={{
               display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 14,
-              background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '10px 12px',
+              background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '10px 12px',
             }}>
               <input type="checkbox" checked={permEditStats} onChange={e => setPermEditStats(e.target.checked)}
                 style={{ width: 14, height: 14, accentColor: BLUE, cursor: 'pointer' }} />
@@ -2261,12 +2262,12 @@ function AdminPageInner() {
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
               <button onClick={() => setPermEditTeam(null)} disabled={savingTeamId === permEditTeam.id}
-                style={{ padding: '8px 18px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
+                style={{ padding: '8px 18px', background: '#f3f4f6', color: GRAY, border: 'none', borderRadius: R.control, cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>
                 취소
               </button>
               <button onClick={handleSaveTeamPerm} disabled={savingTeamId === permEditTeam.id || !isSuperAdmin(currentEngineer)}
                 style={{
-                  padding: '8px 18px', background: BLUE, color: '#fff', border: 'none', borderRadius: 8,
+                  padding: '8px 18px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.control,
                   cursor: 'pointer', fontSize: 13, fontWeight: 700,
                   opacity: (savingTeamId === permEditTeam.id || !isSuperAdmin(currentEngineer)) ? 0.6 : 1,
                 }}>
@@ -2279,7 +2280,7 @@ function AdminPageInner() {
       {/* ── 직원 삭제 모달 ── */}
       {deleteEngineer && (
         <ModalOverlay onClose={() => setDeleteEngineer(null)} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal }}>
-          <div style={{ background: CARD_BG, borderRadius: 16, padding: 28, width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 28, width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, marginBottom: 12 }}>직원 삭제</div>
             <div style={{ fontSize: 14, color: GRAY, lineHeight: 1.8, marginBottom: 16 }}>
               <b style={{ color: TEXT }}>{deleteEngineer.name}</b> ({deleteEngineer.position}) 직원을 삭제하시겠습니까?<br />
@@ -2297,9 +2298,9 @@ function AdminPageInner() {
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setDeleteEngineer(null)}
-                style={{ flex: 1, padding: '11px', background: '#f3f4f6', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer' }}>취소</button>
+                style={{ flex: 1, padding: '11px', background: '#f3f4f6', border: 'none', borderRadius: R.tile, fontWeight: 700, cursor: 'pointer' }}>취소</button>
               <button onClick={handleDeleteEngineer} disabled={deleteLoading}
-                style={{ flex: 1, padding: '11px', background: DANGER, color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer', opacity: deleteLoading ? 0.7 : 1 }}>
+                style={{ flex: 1, padding: '11px', background: DANGER, color: '#fff', border: 'none', borderRadius: R.tile, fontWeight: 700, cursor: 'pointer', opacity: deleteLoading ? 0.7 : 1 }}>
                 {deleteLoading ? '처리 중...' : '삭제'}
               </button>
             </div>

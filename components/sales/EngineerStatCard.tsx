@@ -15,6 +15,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { TEAM_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import type { EngineerStat } from '@/lib/salesStats'
+import { R } from '@/lib/radius'
 
 const BLUE = '#234ea2'
 const CARD_BG = '#ffffff'
@@ -85,7 +86,7 @@ export default function EngineerStatCard({
     <div
       onClick={onClick}
       style={{
-        background: CARD_BG, borderRadius: 8, padding: pad, border: `1px solid ${BORDER}`,
+        background: CARD_BG, borderRadius: R.control, padding: pad, border: `1px solid ${BORDER}`,
         cursor: onClick ? 'pointer' : 'default', position: 'relative',
         transition: 'transform 0.15s ease, border-color 0.15s ease',
         ...(compact ? { height: '100%', boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column' as const } : null),
@@ -114,28 +115,28 @@ export default function EngineerStatCard({
               <span style={{ fontSize: 15, fontWeight: 800, color: TEXT }}>{engineer.name}</span>
               <span style={{ fontSize: 12, color: GRAY, marginLeft: 6 }}>{engineer.position}</span>
             </div>
-            {engineer.teams && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: tc.bg, color: tc.text }}>{engineer.teams}</span>}
+            {engineer.teams && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: R.modal, background: tc.bg, color: tc.text }}>{engineer.teams}</span>}
           </>
         )}
         {stat.achieve !== null && <span className="num" style={{ fontSize: 13, fontWeight: 800, color: achieveColor, marginLeft: 'auto' }}>{stat.achieve.toFixed(0)}%</span>}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10, flexShrink: 0 }}>
-        <div style={{ background: '#f8fafc', borderRadius: 8, padding: boxPad }}>
+        <div style={{ background: '#f8fafc', borderRadius: R.control, padding: boxPad }}>
           <div style={{ fontSize: 10, color: MUTED, marginBottom: 2, fontWeight: 500 }}>견적 제출</div>
           <div className="num" style={{ fontSize: 13, fontWeight: 700, color: stat.quotedAmt > 0 ? TEXT : MUTED }}>₩{numKR(stat.quotedAmt)}</div>
           <div style={{ fontSize: 10, color: MUTED }}>{stat.quotedCnt}건</div>
         </div>
-        <div style={{ background: '#f8fafc', borderRadius: 8, padding: boxPad }}>
+        <div style={{ background: '#f8fafc', borderRadius: R.control, padding: boxPad }}>
           <div style={{ fontSize: 10, color: MUTED, marginBottom: 2, fontWeight: 500 }}>수주</div>
           <div className="num" style={{ fontSize: 13, fontWeight: 700, color: stat.orderedAmt > 0 ? TEXT : MUTED }}>₩{numKR(stat.orderedAmt)}</div>
           <div style={{ fontSize: 10, color: MUTED }}>{stat.orderedCnt}건</div>
         </div>
-        <div style={{ background: '#f8fafc', borderRadius: 8, padding: boxPad }}>
+        <div style={{ background: '#f8fafc', borderRadius: R.control, padding: boxPad }}>
           <div style={{ fontSize: 10, color: MUTED, marginBottom: 2, fontWeight: 500 }}>매출 완료</div>
           <div className="num" style={{ fontSize: 13, fontWeight: 700, color: stat.revenueAmt > 0 ? TEXT : MUTED }}>₩{numKR(stat.revenueAmt)}</div>
         </div>
-        <div style={{ background: '#f8fafc', borderRadius: 8, padding: boxPad }}>
+        <div style={{ background: '#f8fafc', borderRadius: R.control, padding: boxPad }}>
           <div style={{ fontSize: 10, color: MUTED, marginBottom: 2, fontWeight: 500 }}>순이익</div>
           <div className="num" style={{ fontSize: 13, fontWeight: 700, color: stat.profitAmt > 0 ? '#16a34a' : MUTED }}>{stat.profitAmt > 0 ? `₩${numKR(stat.profitAmt)}` : '-'}</div>
           {stat.profitRate !== null && stat.profitAmt > 0 && <div className="num" style={{ fontSize: 10, color: '#16a34a', fontWeight: 700 }}>{stat.profitRate.toFixed(1)}%</div>}

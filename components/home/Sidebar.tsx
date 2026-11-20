@@ -17,6 +17,7 @@
 import { useState } from 'react'
 import CustomerList from './CustomerList'
 import { TEXT_PRIMARY, type Customer, type Device } from '@/lib/home'
+import { R } from '@/lib/radius'
 
 type Props = {
   query: string
@@ -70,7 +71,7 @@ export default function Sidebar({
             width: '100%',
             padding: '11px 56px 11px 34px',
             border: `1px solid ${searchFocused ? '#234ea2' : '#ebebeb'}`,
-            borderRadius: 6,
+            borderRadius: R.icon,
             background: '#ffffff',
             color: TEXT_PRIMARY,
             fontSize: 13,

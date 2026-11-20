@@ -10,6 +10,7 @@ import ModalOverlay from '@/components/common/ModalOverlay'
 import { elapsedLabel } from '../holding'
 import type { Holding } from '../types'
 import { todayKST } from '@/lib/date'
+import { R } from '@/lib/radius'
 
 type Props = {
   isOpen: boolean
@@ -22,7 +23,7 @@ type Props = {
 
 const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
-  width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: 6,
+  width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
 }
 const dateFieldStyle: CSSProperties = { ...fieldStyle, colorScheme: 'light' }
@@ -46,7 +47,7 @@ function ResolveForm({ holding, notice, isSaving, onClose, onResolve }: Omit<Pro
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: 460, background: '#ffffff', borderRadius: 8, padding: 24,
+          width: '100%', maxWidth: 460, background: '#ffffff', borderRadius: R.control, padding: 24,
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb',
           animation: 'modal-in 0.18s ease',
         }}
@@ -73,7 +74,7 @@ function ResolveForm({ holding, notice, isSaving, onClose, onResolve }: Omit<Pro
         </div>
 
         {/* 어떤 홀딩을 해제하는지 */}
-        <div style={{ padding: '10px 12px', background: '#f8fafc', border: '1px solid #ebebeb', borderRadius: 8, marginBottom: 14 }}>
+        <div style={{ padding: '10px 12px', background: '#f8fafc', border: '1px solid #ebebeb', borderRadius: R.control, marginBottom: 14 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', wordBreak: 'break-all' }}>{holding.title}</div>
           <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <span>{holding.devices?.device_name ?? '-'}</span>
@@ -100,14 +101,14 @@ function ResolveForm({ holding, notice, isSaving, onClose, onResolve }: Omit<Pro
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
           <button onClick={onClose}
-            style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: 6, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+            style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
           >{notice ? '나중에' : '취소'}</button>
           <button
             onClick={() => onResolve(holding.holding_id, note, resolvedAt)}
             disabled={isSaving}
             onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
             onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
-            style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
+            style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
           >
             {isSaving ? '처리 중...' : '해제'}
           </button>

@@ -10,6 +10,7 @@
 
 import type { CSSProperties, ReactNode } from 'react'
 import { BORDER, CARD_BG, NEUTRAL_BG, SUB, TEXT } from '@/components/common/ui'
+import { R } from '@/lib/radius'
 
 /** 라벨 칸 폭 — DocInfo 와 같은 값(78)보다 넓다. 양식 본문의 라벨이 「예상매출이익(율)」처럼 길다. */
 const LABEL_W = 104
@@ -19,7 +20,7 @@ export const SCROLL_CLASS = 'ad-scroll'
 
 /** 표가 좁은 화면에서 **자기 상자 안에서만** 가로로 스크롤되게 한다(페이지가 옆으로 밀리지 않게). */
 export const scrollBox: CSSProperties = {
-  border: `1px solid ${BORDER}`, borderRadius: 6, overflowX: 'auto', maxWidth: '100%', background: CARD_BG,
+  border: `1px solid ${BORDER}`, borderRadius: R.icon, overflowX: 'auto', maxWidth: '100%', background: CARD_BG,
 }
 
 export const formTable: CSSProperties = {

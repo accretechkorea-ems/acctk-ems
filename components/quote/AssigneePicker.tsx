@@ -5,6 +5,7 @@ import { loadEngineers } from '@/lib/appData/engineers'
 import { canViewQuote } from '@/lib/permissions'
 import { withTeamPerms } from '@/lib/teamPerms'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import { R } from '@/lib/radius'
 
 /**
  * 견적 대필 — 실적을 받을 담당자를 고르는 모달.
@@ -21,7 +22,7 @@ export type Assignee = { engineer_id: number; name: string; position: string | n
 const TEXT = '#111827', GRAY = '#6b7280', MUTED = '#9ca3af', BORDER = '#ebebeb'
 
 const inputStyle: CSSProperties = {
-  width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   boxSizing: 'border-box', color: TEXT, background: '#fff', outline: 'none', fontSize: 14,
 }
 
@@ -70,7 +71,7 @@ function Panel({ onClose, onPick }: Omit<Props, 'open'>) {
   return (
     <ModalOverlay onClose={onClose} confirmClose dirty={query.trim() !== ''} style={{ background: 'rgba(0,0,0,0.55)' }}>
       <div onClick={e => e.stopPropagation()}
-        style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 400, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
+        style={{ background: '#fff', borderRadius: R.modal, width: '100%', maxWidth: 400, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
         <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>견적서 대필</div>
         <div style={{ fontSize: 12, color: GRAY, marginBottom: 16, lineHeight: 1.6 }}>
           실적을 받을 담당자를 고르면 견적 작성 화면으로 넘어갑니다.<br />
@@ -85,7 +86,7 @@ function Panel({ onClose, onPick }: Omit<Props, 'open'>) {
           style={inputStyle}
         />
 
-        <div style={{ flex: 1, minHeight: 120, overflowY: 'auto', marginTop: 12, border: `1px solid ${BORDER}`, borderRadius: 6 }}>
+        <div style={{ flex: 1, minHeight: 120, overflowY: 'auto', marginTop: 12, border: `1px solid ${BORDER}`, borderRadius: R.icon }}>
           {loading ? (
             <div style={{ padding: 24, textAlign: 'center', fontSize: 13, color: MUTED }}>불러오는 중...</div>
           ) : matches.length === 0 ? (
@@ -107,7 +108,7 @@ function Panel({ onClose, onPick }: Omit<Props, 'open'>) {
         </div>
 
         <button onClick={onClose}
-          style={{ marginTop: 16, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: GRAY }}>
+          style={{ marginTop: 16, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: GRAY }}>
           취소
         </button>
       </div>

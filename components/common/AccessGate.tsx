@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { R } from '@/lib/radius'
 
 /**
  * 페이지 진입 가드 공용 화면.
@@ -32,7 +33,7 @@ export default function AccessGate({
       <div style={{ fontSize: 14 }}>{message}</div>
       <button
         onClick={() => router.back()}
-        style={{ marginTop: 8, padding: '8px 18px', border: 'none', borderRadius: 8, background: '#234ea2', color: '#fff', fontWeight: 700, cursor: 'pointer' }}
+        style={{ marginTop: 8, padding: '8px 18px', border: 'none', borderRadius: R.control, background: '#234ea2', color: '#fff', fontWeight: 700, cursor: 'pointer' }}
       >
         이전으로
       </button>

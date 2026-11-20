@@ -14,6 +14,7 @@ import { kindOf } from '@/lib/priceListKinds'
 import { CURRENCY_LABEL, CURRENCY_SYMBOL } from '@/lib/quoteCurrency'
 import type { SheetPlan } from './priceListImport'
 import type { SheetOutcome } from './usePriceListImport'
+import { R } from '@/lib/radius'
 
 export type PriceListSheetTableProps = {
   sheets: SheetPlan[]
@@ -30,7 +31,7 @@ export default function PriceListSheetTable({ sheets, outcomes }: PriceListSheet
   const byName = new Map(outcomes.map(o => [o.sheetName, o]))
 
   return (
-    <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
+    <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.control, overflow: 'hidden' }}>
       <div style={{ display: 'grid', gridTemplateColumns: GRID, gap: 8, padding: '7px 12px', background: NEUTRAL_BG }}>
         <div style={{ ...head, textAlign: 'left' }}>시트</div>
         <div style={head}>품목</div>

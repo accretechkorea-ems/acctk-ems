@@ -3,6 +3,7 @@
 import ModalOverlay from '@/components/common/ModalOverlay'
 import ActivityDetail, { type DetailEngineer } from '@/components/activity/ActivityDetail'
 import { Z } from '@/lib/zIndex'
+import { R } from '@/lib/radius'
 
 // 활동 서비스 기록 상세 모달. 본문은 ActivityDetail(variant="modal")에 위임하고,
 // 여기서는 오버레이 + 카드 래퍼 + 애니메이션만 담당한다. (개인 대시보드는 같은 본문을 인라인으로 씀)
@@ -27,7 +28,7 @@ export default function ActivityDetailModal({ engineer, startDate, endDate, onCl
         style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: Z.modal, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
         <div onClick={e => e.stopPropagation()}
           style={{
-            background: CARD_BG, borderRadius: 8, width: '100%', maxWidth: 700,
+            background: CARD_BG, borderRadius: R.control, width: '100%', maxWidth: 700,
             // 오버레이 위아래 여백(24+24)을 뺀 만큼까지 늘어난다. 내용이 짧으면 그만큼만.
             // overflow: hidden 이 있어야 목록이 둥근 모서리 밖으로 새지 않는다.
             maxHeight: 'calc(100vh - 48px)', overflow: 'hidden',

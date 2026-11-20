@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Z } from '@/lib/zIndex'
+import { R } from '@/lib/radius'
 
 /**
  * 토스트 알림 시스템 (Context 기반).
@@ -94,7 +95,7 @@ function ToastCard({ toast, onClose }: { toast: ToastItem; onClose: () => void }
       pointerEvents: 'auto',
       display: 'flex', alignItems: 'stretch',
       minWidth: 260, maxWidth: 360,
-      background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8,
+      background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.control,
       boxShadow: '0 8px 24px rgba(0,0,0,0.12)', overflow: 'hidden',
       animation: toast.leaving ? `toast-out ${EXIT_MS}ms ease forwards` : 'toast-in 0.22s cubic-bezier(0.4, 0, 0.2, 1)',
     }}>

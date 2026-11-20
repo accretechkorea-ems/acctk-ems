@@ -20,6 +20,7 @@ import type { QuoteRow } from '@/app/quote/types'
 import { isEquipReplaceable } from './equipLines'
 import type { EquipAddMode } from './equipLines'
 import EquipConfigModal from './EquipConfigModal'
+import { R } from '@/lib/radius'
 
 export type EquipConfigLauncherProps = {
   formKind: string
@@ -62,7 +63,7 @@ export default function EquipConfigLauncher(props: EquipConfigLauncherProps) {
         title="기종 구성을 골라 품목을 한 번에 넣습니다"
         style={{
           marginLeft: 'auto', padding: '6px 12px', background: '#fff', color: '#234ea2',
-          border: '1px solid #ebebeb', borderRadius: 6, fontWeight: 700, fontSize: 12,
+          border: '1px solid #ebebeb', borderRadius: R.icon, fontWeight: 700, fontSize: 12,
           cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background 0.15s ease',
         }}
         onMouseEnter={e => (e.currentTarget.style.background = '#f3f4f6')}

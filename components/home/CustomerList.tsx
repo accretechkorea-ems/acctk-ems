@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { type Customer, type Device } from '@/lib/home'
 import CustomerCard from './CustomerCard'
+import { R } from '@/lib/radius'
 
 type Props = {
   customers: Customer[]
@@ -17,20 +18,20 @@ type Props = {
 function SkeletonCard() {
   return (
     <div style={{
-      marginBottom: 8, borderRadius: 8,
+      marginBottom: 8, borderRadius: R.control,
       border: '1px solid #ebebeb', background: '#ffffff',
       padding: '14px 16px',
       animation: 'sk-pulse 1.6s ease-in-out infinite',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
-        <div style={{ width: '50%', height: 16, borderRadius: 6, background: '#e5e7eb' }} />
-        <div style={{ width: 34, height: 16, borderRadius: 99, background: '#e5e7eb' }} />
+        <div style={{ width: '50%', height: 16, borderRadius: R.icon, background: '#e5e7eb' }} />
+        <div style={{ width: 34, height: 16, borderRadius: R.pill, background: '#e5e7eb' }} />
       </div>
-      <div style={{ width: '76%', height: 12, borderRadius: 6, background: '#e5e7eb', marginBottom: 5 }} />
-      <div style={{ width: '36%', height: 11, borderRadius: 6, background: '#e5e7eb', marginBottom: 9 }} />
+      <div style={{ width: '76%', height: 12, borderRadius: R.icon, background: '#e5e7eb', marginBottom: 5 }} />
+      <div style={{ width: '36%', height: 11, borderRadius: R.icon, background: '#e5e7eb', marginBottom: 9 }} />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div style={{ width: 130, height: 11, borderRadius: 6, background: '#e5e7eb' }} />
-        <div style={{ width: 104, height: 11, borderRadius: 6, background: '#e5e7eb' }} />
+        <div style={{ width: 130, height: 11, borderRadius: R.icon, background: '#e5e7eb' }} />
+        <div style={{ width: 104, height: 11, borderRadius: R.icon, background: '#e5e7eb' }} />
       </div>
     </div>
   )
@@ -57,7 +58,7 @@ export default function CustomerList({
   return (
     <div style={{
       position: 'relative',
-      borderRadius: 8,
+      borderRadius: R.control,
       background: '#fafafa',
       border: '1px solid #ebebeb',
       flex: 1, minHeight: 0, boxSizing: 'border-box', overflow: 'hidden',
@@ -125,7 +126,7 @@ export default function CustomerList({
           pointerEvents: 'none',
           opacity: moreBelow ? 1 : 0,
           transition: 'opacity 0.2s ease',
-          width: 24, height: 24, borderRadius: 9999,
+          width: 24, height: 24, borderRadius: R.pill,
           background: '#ffffff', border: '1px solid #ebebeb',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}

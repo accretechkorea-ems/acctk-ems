@@ -34,6 +34,7 @@ import {
 import { todayKST } from '@/lib/date'
 import { errorInfo } from '@/lib/errorInfo'
 import FilePicker, { failText, uploadFiles } from './files'
+import { R } from '@/lib/radius'
 
 /** 내용 길이 상한. 내용 기록 본문과 같은 값이어야 한다(/api/inquiry 의 BODY_MAX). */
 const BODY_MAX = 20000
@@ -55,7 +56,7 @@ export function canSubmit(content: string): boolean {
 }
 
 const field: React.CSSProperties = {
-  width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   fontSize: 13, color: TEXT, background: CARD_BG, outline: 'none', boxSizing: 'border-box',
   fontFamily: 'inherit',
 }
@@ -154,7 +155,7 @@ export default function CompleteModal({
     // 입력 폼 — 확인 뒤 닫는다(상태가 여러 갈래라 변경 여부는 넘기지 않는다).
     <ModalOverlay onClose={onClose} confirmClose>
       <div style={{
-        background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 520,
+        background: CARD_BG, borderRadius: R.control, padding: '14px 16px', width: '100%', maxWidth: 520,
         maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
       }}>
         <div style={cardHeader}>
@@ -163,7 +164,7 @@ export default function CompleteModal({
 
         {/* 어느 번호를 끝내는지 — 목록에서 바로 열 수 있으므로 번호가 크게 보여야 한다. */}
         <div style={{
-          background: NEUTRAL_BG, borderRadius: 8, padding: '12px 14px', marginBottom: 12,
+          background: NEUTRAL_BG, borderRadius: R.control, padding: '12px 14px', marginBottom: 12,
         }}>
           <div style={{
             fontSize: 17, fontWeight: 800, letterSpacing: '-0.3px', color: BLUE,
@@ -200,7 +201,7 @@ export default function CompleteModal({
         {error && (
           <div style={{
             fontSize: 12, lineHeight: 1.6, color: '#be123c', background: '#fef2f2',
-            border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px', marginBottom: 12,
+            border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '8px 10px', marginBottom: 12,
             whiteSpace: 'pre-line', wordBreak: 'break-word',
           }}>
             {error}

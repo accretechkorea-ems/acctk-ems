@@ -24,6 +24,7 @@ import { createPortal } from 'react-dom'
 import { Z } from '@/lib/zIndex'
 import { useOverlayEsc } from '@/components/common/overlayStack'
 import { pdfViewerBox } from '@/lib/pdfViewer'
+import { R } from '@/lib/radius'
 
 /** 미리보기로 열 수 있는 형식. 그 밖(.xls·.csv·.eml …)은 받아서 봐야 한다. */
 const PREVIEWABLE = /\.(xlsx|xlsm)$/i
@@ -230,7 +231,7 @@ export default function XlsxPreviewModal({ doc, onClose }: { doc: XlsxDoc; onClo
   const motion = reduced ? 'none' : undefined
   const sheet = sheets?.[active] ?? null
   const linkStyle: React.CSSProperties = {
-    padding: '4px 9px', border: `1px solid ${BORDER}`, borderRadius: 6,
+    padding: '4px 9px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
     fontSize: 11, fontWeight: 700, color: '#234ea2', textDecoration: 'none', background: '#fff', cursor: 'pointer',
   }
 
@@ -251,7 +252,7 @@ export default function XlsxPreviewModal({ doc, onClose }: { doc: XlsxDoc; onClo
       <div
         style={{
           // 치수는 PDF 뷰어와 같다. 모션만 수리 정보 모달 그대로다.
-          width: box.width, height: box.height, maxWidth: '100%', background: '#fff', borderRadius: 8,
+          width: box.width, height: box.height, maxWidth: '100%', background: '#fff', borderRadius: R.control,
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
           opacity: open ? 1 : 0,

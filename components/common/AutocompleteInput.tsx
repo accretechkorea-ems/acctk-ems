@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { Z } from '@/lib/zIndex'
+import { R } from '@/lib/radius'
 
 /**
  * 자동완성 입력창.
@@ -94,7 +95,7 @@ export default function AutocompleteInput({ value, onChange, suggestions, placeh
       {isOpen && (
         <div ref={listRef} style={{
           position: 'absolute', top: '100%', left: 0, width: '100%', marginTop: 4,
-          background: '#fff', border: '1px solid #ebebeb', borderRadius: 6,
+          background: '#fff', border: '1px solid #ebebeb', borderRadius: R.icon,
           boxShadow: '0 4px 12px rgba(0,0,0,0.08)', maxHeight: 240, overflowY: 'auto', zIndex: Z.inPage,
         }}>
           {/* 마우스 hover 와 키보드 선택이 같은 표시를 쓴다 — hover 는 색을 직접 칠하지 않고

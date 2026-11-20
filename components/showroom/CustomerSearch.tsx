@@ -18,6 +18,7 @@ import { useOutsideClick } from '@/hooks/useOutsideClick'
 import { Z } from '@/lib/zIndex'
 import { NOT_AGENCY_ONLY } from '@/lib/customerAgency'
 import { BLUE, BORDER, CARD_BG, TEXT, MUTED } from '@/components/common/ui'
+import { R } from '@/lib/radius'
 
 export type CustomerHit = {
   customer_id: number
@@ -76,7 +77,7 @@ export default function CustomerSearch({ value, onChange, placeholder = '업체�
   const fieldStyle = {
     width: '100%', height, padding: '0 12px',
     border: invalid ? '1px solid #dc2626' : `1px solid ${BORDER}`,
-    borderRadius: 6, boxSizing: 'border-box' as const,
+    borderRadius: R.icon, boxSizing: 'border-box' as const,
     color: TEXT, background: CARD_BG, outline: 'none', fontSize: 16, fontFamily: 'inherit',
   }
 
@@ -110,7 +111,7 @@ export default function CustomerSearch({ value, onChange, placeholder = '업체�
       {open && results.length > 0 && (
         <div ref={listRef} style={{
           position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage,
-          background: CARD_BG, border: `1px solid ${BLUE}`, borderRadius: 8,
+          background: CARD_BG, border: `1px solid ${BLUE}`, borderRadius: R.control,
           maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)',
         }}>
           {results.map((c, i) => (

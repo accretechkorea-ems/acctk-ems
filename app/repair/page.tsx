@@ -27,6 +27,7 @@ import { fetchRepairInfoStates, type RepairInfoRow, type RepairInfoState } from 
 import { openPdf, pdfNameOf } from '@/lib/pdfViewer'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { todayKST, nowKSTParts } from '@/lib/date'
+import { R } from '@/lib/radius'
 
 // ── 색상 (기존 페이지 컨벤션과 동일) ──
 const BLUE = '#234ea2'
@@ -516,8 +517,8 @@ export default function RepairPage() {
   // ── 렌더 게이트 ──
   if (!authorized) return <AccessGate loading={guardLoading} />
 
-  const card: React.CSSProperties = { background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '14px 16px' }
-  const inp: React.CSSProperties = { width: '100%', height: 36, padding: '0 11px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 14, outline: 'none', background: '#fff', color: TEXT, boxSizing: 'border-box' }
+  const card: React.CSSProperties = { background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '14px 16px' }
+  const inp: React.CSSProperties = { width: '100%', height: 36, padding: '0 11px', border: `1px solid ${BORDER}`, borderRadius: R.icon, fontSize: 14, outline: 'none', background: '#fff', color: TEXT, boxSizing: 'border-box' }
   const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: MUTED }
   const fieldGroup: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4 }
 
@@ -536,7 +537,7 @@ export default function RepairPage() {
     if (r.special_type === '본사수리') {
       return (
         <span title={r.special_type ?? undefined}
-          style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, lineHeight: 1.1, color: b.color, background: b.bg, padding: '1px 6px', borderRadius: 8, whiteSpace: 'nowrap' }}>
+          style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, lineHeight: 1.1, color: b.color, background: b.bg, padding: '1px 6px', borderRadius: R.control, whiteSpace: 'nowrap' }}>
           <span>일본</span>
           <span>본사</span>
         </span>
@@ -544,7 +545,7 @@ export default function RepairPage() {
     }
     return (
       <span title={r.special_type ?? undefined}
-        style={{ fontSize: 11, fontWeight: 700, color: b.color, background: b.bg, padding: '2px 7px', borderRadius: 99, whiteSpace: 'nowrap' }}>
+        style={{ fontSize: 11, fontWeight: 700, color: b.color, background: b.bg, padding: '2px 7px', borderRadius: R.pill, whiteSpace: 'nowrap' }}>
         {b.short}
       </span>
     )
@@ -643,7 +644,7 @@ export default function RepairPage() {
               if (isHqOut) {
                 return (
                   <button onClick={() => openHqReturn(r)}
-                    style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#f5f3ff', color: '#7c3aed', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    style={{ padding: '4px 10px', borderRadius: R.icon, border: `1px solid ${BORDER}`, background: '#f5f3ff', color: '#7c3aed', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                     한국 도착
                   </button>
                 )
@@ -651,7 +652,7 @@ export default function RepairPage() {
               if (!isTerminal && NEXT_ACTION[r.status]) {
                 return (
                   <button onClick={() => advanceStatus(r, NEXT_ACTION[r.status]!.next)}
-                    style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: GRAY, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    style={{ padding: '4px 10px', borderRadius: R.icon, border: `1px solid ${BORDER}`, background: '#fff', color: GRAY, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                     {NEXT_ACTION[r.status]!.label}
                   </button>
                 )
@@ -765,7 +766,7 @@ export default function RepairPage() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>입고 등록</div>
             <button onClick={openImport} tabIndex={-1}
-              style={{ padding: '6px 12px', border: `1px solid ${BORDER}`, borderRadius: 6, background: '#fff', color: GRAY, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+              style={{ padding: '6px 12px', border: `1px solid ${BORDER}`, borderRadius: R.icon, background: '#fff', color: GRAY, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
               엑셀 일괄 등록
             </button>
           </div>
@@ -804,11 +805,11 @@ export default function RepairPage() {
             </div>
             {/* 메모(선택) — 입고 등록 버튼 왼쪽. 클릭 시 아래 textarea 를 펼친다 */}
             <button onClick={() => setMemoOpen(o => !o)} tabIndex={-1}
-              style={{ height: 36, padding: '0 14px', flexShrink: 0, border: `1px solid ${memoOpen ? BLUE : BORDER}`, borderRadius: 6, background: '#fff', color: memoOpen ? BLUE : GRAY, fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              style={{ height: 36, padding: '0 14px', flexShrink: 0, border: `1px solid ${memoOpen ? BLUE : BORDER}`, borderRadius: R.icon, background: '#fff', color: memoOpen ? BLUE : GRAY, fontSize: 14, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
               메모
             </button>
             <button onClick={handleSubmit} disabled={isSaving} tabIndex={4}
-              style={{ height: 36, padding: '0 18px', flexShrink: 0, border: 'none', borderRadius: 6, background: isSaving ? MUTED : BLUE, color: '#fff', fontSize: 14, fontWeight: 700, cursor: isSaving ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+              style={{ height: 36, padding: '0 18px', flexShrink: 0, border: 'none', borderRadius: R.icon, background: isSaving ? MUTED : BLUE, color: '#fff', fontSize: 14, fontWeight: 700, cursor: isSaving ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
               {isSaving ? '등록 중...' : '입고 등록'}
             </button>
           </div>
@@ -817,7 +818,7 @@ export default function RepairPage() {
           <div style={{ overflow: 'hidden', maxHeight: memoOpen ? 130 : 0, opacity: memoOpen ? 1 : 0, marginTop: memoOpen ? 12 : 0, transition: 'max-height 0.2s ease-out, opacity 0.2s ease-out, margin-top 0.2s ease-out' }}>
             <label style={{ ...label, display: 'block', marginBottom: 4 }}>메모</label>
             <textarea value={memoContent} onChange={e => setMemoContent(e.target.value)} placeholder="자유 메모 (선택)" rows={3} tabIndex={-1}
-              style={{ width: '100%', padding: '9px 11px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 14, outline: 'none', background: '#fff', color: TEXT, boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.5, fontFamily: 'inherit' }} />
+              style={{ width: '100%', padding: '9px 11px', border: `1px solid ${BORDER}`, borderRadius: R.icon, fontSize: 14, outline: 'none', background: '#fff', color: TEXT, boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.5, fontFamily: 'inherit' }} />
           </div>
         </div>
 
@@ -854,7 +855,7 @@ export default function RepairPage() {
                 style={{
                   position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                   padding: 4, border: 'none', cursor: 'pointer',
-                  background: searchOpen ? ACTIVE_BG : 'transparent', borderRadius: 6,
+                  background: searchOpen ? ACTIVE_BG : 'transparent', borderRadius: R.icon,
                   color: searchOpen ? BLUE : MUTED, transition: 'color 0.15s ease, background 0.15s ease',
                 }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -883,18 +884,18 @@ export default function RepairPage() {
                 onChange={e => setSearchInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') applySearch() }}
                 placeholder="회사명 · 제품 구분 · 시리얼번호 검색"
-                style={{ width: 260, height: 32, boxSizing: 'border-box', padding: '0 10px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 13, color: TEXT, outline: 'none' }}
+                style={{ width: 260, height: 32, boxSizing: 'border-box', padding: '0 10px', border: `1px solid ${BORDER}`, borderRadius: R.icon, fontSize: 13, color: TEXT, outline: 'none' }}
               />
               <button
                 onClick={applySearch}
-                style={{ height: 32, boxSizing: 'border-box', padding: '0 12px', borderRadius: 6, border: `1px solid ${searchPending ? BLUE : BORDER}`, background: searchPending ? BLUE : '#fff', color: searchPending ? '#fff' : GRAY, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                style={{ height: 32, boxSizing: 'border-box', padding: '0 12px', borderRadius: R.icon, border: `1px solid ${searchPending ? BLUE : BORDER}`, background: searchPending ? BLUE : '#fff', color: searchPending ? '#fff' : GRAY, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
                 검색
               </button>
             </div>
 
             {/* 날짜 그룹 */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ display: 'flex', height: 32, border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', height: 32, border: `1px solid ${BORDER}`, borderRadius: R.icon, overflow: 'hidden' }}>
                 {([['received', '입고'], ['shipped', '출고']] as const).map(([val, txt]) => {
                   const active = dateBasis === val
                   return (
@@ -906,10 +907,10 @@ export default function RepairPage() {
                 })}
               </div>
               <input type="month" value={dateMonth} onChange={e => setDateMonth(e.target.value)}
-                style={{ height: 32, boxSizing: 'border-box', padding: '0 8px', border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 13, color: TEXT, colorScheme: 'light' }} />
+                style={{ height: 32, boxSizing: 'border-box', padding: '0 8px', border: `1px solid ${BORDER}`, borderRadius: R.icon, fontSize: 13, color: TEXT, colorScheme: 'light' }} />
               <button
                 onClick={resetSearchAndDate}
-                style={{ height: 32, boxSizing: 'border-box', padding: '0 13px', borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: GRAY, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                style={{ height: 32, boxSizing: 'border-box', padding: '0 13px', borderRadius: R.icon, border: `1px solid ${BORDER}`, background: '#fff', color: GRAY, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
                 초기화
               </button>
             </div>
@@ -928,7 +929,7 @@ export default function RepairPage() {
                   <div style={{ fontSize: 13, fontWeight: 800, color: ORANGE, marginBottom: 8 }}>
                     수리 진행 중 <span style={{ color: MUTED }}>({repairingList.length})</span>
                   </div>
-                  <div style={{ border: `1px solid #fde68a`, borderRadius: 10, overflow: 'hidden', background: '#fffdf7' }}>
+                  <div style={{ border: `1px solid #fde68a`, borderRadius: R.tile, overflow: 'hidden', background: '#fffdf7' }}>
                     {renderTable(repairingList)}
                   </div>
                 </div>
@@ -940,7 +941,7 @@ export default function RepairPage() {
                   <div style={{ fontSize: 13, fontWeight: 800, color: '#15803d', marginBottom: 8 }}>
                     출고 대기 <span style={{ color: MUTED }}>({waitingList.length})</span>
                   </div>
-                  <div style={{ border: `1px solid #bbf7d0`, borderRadius: 10, overflow: 'hidden', background: '#f8fffe' }}>
+                  <div style={{ border: `1px solid #bbf7d0`, borderRadius: R.tile, overflow: 'hidden', background: '#f8fffe' }}>
                     {renderTable(waitingList)}
                   </div>
                 </div>
@@ -955,10 +956,10 @@ export default function RepairPage() {
                   {totalPages > 1 && (
                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginTop: 16 }}>
                       <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={pageSafe === 0}
-                        style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${BORDER}`, background: pageSafe === 0 ? '#f8f9fb' : '#fff', color: pageSafe === 0 ? MUTED : GRAY, fontSize: 13, fontWeight: 700, cursor: pageSafe === 0 ? 'default' : 'pointer' }}>이전</button>
+                        style={{ padding: '6px 14px', borderRadius: R.control, border: `1px solid ${BORDER}`, background: pageSafe === 0 ? '#f8f9fb' : '#fff', color: pageSafe === 0 ? MUTED : GRAY, fontSize: 13, fontWeight: 700, cursor: pageSafe === 0 ? 'default' : 'pointer' }}>이전</button>
                       <span style={{ fontSize: 13, fontWeight: 700, color: GRAY }}>{pageSafe + 1} / {totalPages}</span>
                       <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={pageSafe >= totalPages - 1}
-                        style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${BORDER}`, background: pageSafe >= totalPages - 1 ? '#f8f9fb' : '#fff', color: pageSafe >= totalPages - 1 ? MUTED : GRAY, fontSize: 13, fontWeight: 700, cursor: pageSafe >= totalPages - 1 ? 'default' : 'pointer' }}>다음</button>
+                        style={{ padding: '6px 14px', borderRadius: R.control, border: `1px solid ${BORDER}`, background: pageSafe >= totalPages - 1 ? '#f8f9fb' : '#fff', color: pageSafe >= totalPages - 1 ? MUTED : GRAY, fontSize: 13, fontWeight: 700, cursor: pageSafe >= totalPages - 1 ? 'default' : 'pointer' }}>다음</button>
                     </div>
                   )}
                 </>
@@ -979,7 +980,7 @@ export default function RepairPage() {
       {hqReturning && (
         <ModalOverlay onClose={() => setHqReturning(null)} confirmClose closeOn={isHqSaving ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.5)', zIndex: Z.subModal }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background: CARD_BG, borderRadius: 10, width: '100%', maxWidth: 360, padding: 22, border: `1px solid ${BORDER}`, boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }}>
+            style={{ background: CARD_BG, borderRadius: R.tile, width: '100%', maxWidth: 360, padding: 22, border: `1px solid ${BORDER}`, boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>본사 복귀 처리</div>
             <div style={{ fontSize: 13, color: GRAY, marginBottom: 16 }}>
               {hqReturning.customer_name ?? ''} · {hqReturning.serial_number ?? '-'} — 복귀 시 <b style={{ color: TEXT }}>출고대기</b>로 전환됩니다.
@@ -989,9 +990,9 @@ export default function RepairPage() {
               style={{ ...inp, marginTop: 4, colorScheme: 'light' }} />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
               <button onClick={() => setHqReturning(null)} disabled={isHqSaving}
-                style={{ padding: '9px 16px', background: '#fff', color: GRAY, borderRadius: 6, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+                style={{ padding: '9px 16px', background: '#fff', color: GRAY, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
               <button onClick={confirmHqReturn} disabled={isHqSaving || !hqReturnDate}
-                style={{ padding: '9px 18px', background: (isHqSaving || !hqReturnDate) ? MUTED : BLUE, color: '#fff', borderRadius: 6, border: 'none', cursor: (isHqSaving || !hqReturnDate) ? 'default' : 'pointer', fontWeight: 700, fontSize: 13 }}>
+                style={{ padding: '9px 18px', background: (isHqSaving || !hqReturnDate) ? MUTED : BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: (isHqSaving || !hqReturnDate) ? 'default' : 'pointer', fontWeight: 700, fontSize: 13 }}>
                 {isHqSaving ? '처리 중...' : '복귀 확정'}
               </button>
             </div>
@@ -1002,7 +1003,7 @@ export default function RepairPage() {
       {/* ── 엑셀 일괄 등록 모달 ── */}
       {showImport && (
         <ModalOverlay onClose={() => setShowImport(false)} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: 14, width: '100%', maxWidth: 920, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', border: `1px solid ${BORDER}` }}>
+          <div style={{ background: CARD_BG, borderRadius: R.modal, width: '100%', maxWidth: 920, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', border: `1px solid ${BORDER}` }}>
             {/* 헤더 */}
             <div style={{ padding: '16px 20px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>엑셀 일괄 등록</div>
@@ -1015,7 +1016,7 @@ export default function RepairPage() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <label style={{ fontSize: 13, fontWeight: 700, color: GRAY }}>구분</label>
-                <div style={{ display: 'flex', border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', border: `1px solid ${BORDER}`, borderRadius: R.control, overflow: 'hidden' }}>
                   {CATEGORIES.map(c => (
                     <button key={c} type="button" onClick={() => setImportCategory(c)}
                       style={{ padding: '8px 16px', border: 'none', background: importCategory === c ? BLUE : '#fff', color: importCategory === c ? '#fff' : GRAY, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
@@ -1025,8 +1026,8 @@ export default function RepairPage() {
                 </div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: GRAY }}>연도</label>
                 <input type="number" value={importYear} onChange={e => setImportYear(Number(e.target.value) || importYear)}
-                  style={{ width: 100, padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: 8, fontSize: 14, color: TEXT, outline: 'none', boxSizing: 'border-box' }} />
-                <label style={{ padding: '8px 14px', border: `1px solid ${BLUE}`, borderRadius: 8, background: '#fff', color: BLUE, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                  style={{ width: 100, padding: '8px 10px', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 14, color: TEXT, outline: 'none', boxSizing: 'border-box' }} />
+                <label style={{ padding: '8px 14px', border: `1px solid ${BLUE}`, borderRadius: R.control, background: '#fff', color: BLUE, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
                   엑셀 파일 선택
                   <input type="file" accept=".xlsx,.xls" style={{ display: 'none' }}
                     onChange={e => { const f = e.target.files?.[0]; if (f) handleImportFile(f); e.target.value = '' }} />
@@ -1035,7 +1036,7 @@ export default function RepairPage() {
               </div>
 
               {importPreview.length > 0 && (
-                <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden' }}>
+                <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.tile, overflow: 'hidden' }}>
                   <div style={{ maxHeight: 340, overflowY: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                       <thead>
@@ -1073,9 +1074,9 @@ export default function RepairPage() {
               <span style={{ fontSize: 13, color: GRAY }}>{importPreview.length > 0 ? `${importValidCount}건 등록 가능 / 총 ${importPreview.length}행` : ''}</span>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setShowImport(false)}
-                  style={{ padding: '9px 16px', background: '#fff', color: GRAY, borderRadius: 8, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>닫기</button>
+                  style={{ padding: '9px 16px', background: '#fff', color: GRAY, borderRadius: R.control, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>닫기</button>
                 <button onClick={handleImport} disabled={isImporting || importValidCount === 0}
-                  style={{ padding: '9px 18px', background: (isImporting || importValidCount === 0) ? MUTED : BLUE, color: '#fff', borderRadius: 8, border: 'none', cursor: (isImporting || importValidCount === 0) ? 'default' : 'pointer', fontWeight: 800, fontSize: 13 }}>
+                  style={{ padding: '9px 18px', background: (isImporting || importValidCount === 0) ? MUTED : BLUE, color: '#fff', borderRadius: R.control, border: 'none', cursor: (isImporting || importValidCount === 0) ? 'default' : 'pointer', fontWeight: 800, fontSize: 13 }}>
                   {isImporting ? '등록 중...' : `${importValidCount}건 가져오기`}
                 </button>
               </div>
@@ -1109,7 +1110,7 @@ const td: React.CSSProperties = { padding: '7px 10px', color: TEXT, verticalAlig
 // ── 서브 컴포넌트 ──
 function KpiCard({ title, value, unit, sub }: { title: string; value: number; unit: string; sub?: string }) {
   return (
-    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '14px 16px' }}>
+    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '14px 16px' }}>
       <div style={{ fontSize: 12, color: MUTED, fontWeight: 600, marginBottom: 6 }}>{title}</div>
       <div style={{ fontSize: 24, fontWeight: 700, color: TEXT, lineHeight: 1 }}>
         {value}<span style={{ fontSize: 13, fontWeight: 700, color: MUTED, marginLeft: 3 }}>{unit}</span>
@@ -1122,7 +1123,7 @@ function KpiCard({ title, value, unit, sub }: { title: string; value: number; un
 function MonthBtn({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
   return (
     <button onClick={onClick} tabIndex={-1}
-      style={{ width: 22, height: 22, borderRadius: 6, border: `1px solid ${BORDER}`, background: '#fff', color: GRAY, cursor: 'pointer', fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+      style={{ width: 22, height: 22, borderRadius: R.icon, border: `1px solid ${BORDER}`, background: '#fff', color: GRAY, cursor: 'pointer', fontSize: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
       {children}
     </button>
   )

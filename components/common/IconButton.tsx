@@ -17,6 +17,7 @@
  */
 
 import type { CSSProperties } from 'react'
+import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const MUTED = '#6b7280'
@@ -36,7 +37,7 @@ export type IconButtonProps = {
 const base = (size: number, color: string, style?: CSSProperties): CSSProperties => ({
   width: size, height: size, padding: 0, boxSizing: 'border-box', flexShrink: 0,
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-  background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: 6,
+  background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   cursor: 'pointer', color,
   transition: 'border-color 0.15s ease, color 0.15s ease, background 0.15s ease',
   ...style,

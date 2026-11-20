@@ -24,6 +24,7 @@ import {
   BLUE, BORDER, CARD_BG, DANGER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT,
   btnGhost, btnPrimary, inputStyle,
 } from '@/components/common/ui'
+import { R } from '@/lib/radius'
 
 /** 직급 순서. 결재선 지정 모달(LinePickerModal)과 같은 표를 쓴다(없는 직급은 맨 뒤). */
 const POSITION_ORDER: Record<string, number> = {
@@ -68,7 +69,7 @@ function StatusBadge({ status }: { status: DelegationStatus }) {
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0,
-      background: NEUTRAL_BG, borderRadius: 99, padding: '1px 8px',
+      background: NEUTRAL_BG, borderRadius: R.pill, padding: '1px 8px',
       fontSize: 11, fontWeight: 700, color: SUB,
     }}>
       <span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_DOT[status], flexShrink: 0 }} />
@@ -272,7 +273,7 @@ export default function DelegationModal({
   return (
     <ModalOverlay onClose={onClose} confirmClose style={{ background: 'rgba(0,0,0,0.6)' }}>
       <div style={{
-        background: CARD_BG, borderRadius: 8, padding: 20, width: '100%', maxWidth: 560,
+        background: CARD_BG, borderRadius: R.control, padding: 20, width: '100%', maxWidth: 560,
         maxHeight: '86vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -306,7 +307,7 @@ export default function DelegationModal({
             <div style={sectionTitle}>
               {isSuper && effectiveOwner !== myId ? '맡긴 위임' : '내가 맡긴 위임'}
             </div>
-            <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.control, overflow: 'hidden' }}>
               {loading ? (
                 <div style={{ padding: 12, fontSize: 12, color: MUTED }}>불러오는 중...</div>
               ) : given.length === 0 ? (
@@ -408,7 +409,7 @@ export default function DelegationModal({
             <div style={sectionTitle}>
               {isSuper && effectiveOwner !== myId ? '대리 결재를 맡은 위임' : '내가 대리 결재를 맡은 위임'}
             </div>
-            <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.control, overflow: 'hidden' }}>
               {loading ? (
                 <div style={{ padding: 12, fontSize: 12, color: MUTED }}>불러오는 중...</div>
               ) : received.length === 0 ? (

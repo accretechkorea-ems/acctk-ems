@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import { R } from '@/lib/radius'
 
 export type Customer = {
   customer_id: number
@@ -80,7 +81,7 @@ export const TEXT_SECONDARY = '#555555'
 export const TEXT_MUTED = '#888888'
 export const WHITE_BUTTON_BG = '#f4f4f5'
 export const WHITE_BUTTON_TEXT = '#111113'
-export const RADIUS = 12
+export const RADIUS = R.card
 
 // 사무실 좌표·주소는 public.offices 테이블이 정본이다(lib/offices.ts 가 읽어 온다).
 
@@ -89,7 +90,7 @@ export const inputStyle: CSSProperties = {
   width: '100%',
   padding: 12,
   border: `1px solid ${INPUT_BORDER}`,
-  borderRadius: 10,
+  borderRadius: R.tile,
   background: INPUT_BG,
   color: TEXT_PRIMARY,
   boxSizing: 'border-box',
@@ -108,7 +109,7 @@ export const dateInputStyle: CSSProperties = {
 
 export const sectionCardStyle: CSSProperties = {
   border: `1px solid ${INPUT_BORDER}`,
-  borderRadius: 16,
+  borderRadius: R.modal,
   padding: 16,
   background: PANEL_BG,
 }

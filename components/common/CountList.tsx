@@ -14,6 +14,7 @@
 // 격자가 어긋난다. 그래서 **높이를 못 박고** 내용은 그 안에서 가운데 정렬한다.
 
 import { type CSSProperties } from 'react'
+import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
@@ -67,7 +68,7 @@ function RowInner({ row }: { row: CountRow }) {
       <span style={{
         fontSize: 12, fontWeight: 600, flexShrink: 0,
         color: row.color,
-        background: '#f3f4f6', borderRadius: 6, padding: '2px 8px',
+        background: '#f3f4f6', borderRadius: R.icon, padding: '2px 8px',
       }}>
         {row.count}<span style={{ color: MUTED }}>건</span>
       </span>
@@ -120,7 +121,7 @@ export function CountList({ rows, emptyText, fitHeight = false }: {
                   onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
                   style={{
                     ...rowStyle,
-                    padding: 0, borderRadius: 6, width: '100%',
+                    padding: 0, borderRadius: R.icon, width: '100%',
                     background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                     transition: 'background 0.15s ease',
                   }}

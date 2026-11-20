@@ -12,6 +12,7 @@ import { todayKST } from '@/lib/date'
 import { ServiceAttachmentEditor, type ReportSlot } from '../ServiceAttachments'
 import InstallPrepSection from '../InstallPrepSection'
 import { isInstallPrepReadOnly, isInstallPrepTarget } from '@/lib/installPrep'
+import { R } from '@/lib/radius'
 
 type Props = {
   service: ServiceHistory | null
@@ -30,20 +31,20 @@ type Props = {
 const labelStyle = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' } as const
 // 모바일: iOS 자동 확대 방지를 위해 입력 요소 fontSize 16, 터치 타깃 44px
 const fieldStyle: CSSProperties = {
-  width: '100%', height: 44, padding: '0 12px', border: '1px solid #ebebeb', borderRadius: 6,
+  width: '100%', height: 44, padding: '0 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 16,
 }
 const dateFieldStyle: CSSProperties = { ...fieldStyle, colorScheme: 'light' }
 const areaStyle: CSSProperties = {
-  width: '100%', padding: '10px 12px', border: '1px solid #ebebeb', borderRadius: 6,
+  width: '100%', padding: '10px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 16,
   resize: 'vertical', lineHeight: 1.5,
 }
 // 작업시간 스테퍼 UI 스타일 (계산 로직은 @/lib/workHours 공용)
 // 크기(width·height)는 .svc-step 에 있다 — 모바일에서만 키워야 해서 미디어 쿼리가 필요하고,
 // 인라인 스타일이 남아 있으면 그 쿼리를 이기지 못한다.
-const stepBtnStyle: CSSProperties = { border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6', cursor: 'pointer', fontSize: 13, fontWeight: 700, flexShrink: 0 }
-const timeBoxStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 4, background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, padding: '0 6px', height: 44, boxSizing: 'border-box' }
+const stepBtnStyle: CSSProperties = { border: '1px solid #ebebeb', borderRadius: R.icon, background: '#f3f4f6', cursor: 'pointer', fontSize: 13, fontWeight: 700, flexShrink: 0 }
+const timeBoxStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 4, background: '#fff', border: '1px solid #ebebeb', borderRadius: R.icon, padding: '0 6px', height: 44, boxSizing: 'border-box' }
 
 /**
  * 열었을 때의 폼 값 — 폼의 시작값이자 **변경 여부의 기준**이다(한 곳에서 만든다).
@@ -144,7 +145,7 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 'calc(100vw - 24px)', maxWidth: 560, maxHeight: 'calc(100dvh - 32px)',
-          background: '#ffffff', borderRadius: 8, boxSizing: 'border-box',
+          background: '#ffffff', borderRadius: R.control, boxSizing: 'border-box',
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb',
           animation: 'modal-in 0.18s ease',
           display: 'flex', flexDirection: 'column',
@@ -242,11 +243,11 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
             {/* 유무상 */}
             <div>
               <label style={labelStyle}>유무상</label>
-              <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: 6, padding: 3, height: 44, boxSizing: 'border-box' }}>
+              <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: R.icon, padding: 3, height: 44, boxSizing: 'border-box' }}>
                 <button type="button" onClick={() => setForm(p => ({ ...p, is_paid: true }))}
-                  style={{ flex: 1, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 700, background: form.is_paid ? '#ffffff' : 'transparent', color: form.is_paid ? '#111827' : '#9ca3af', transition: 'color 0.15s ease' }}>유상</button>
+                  style={{ flex: 1, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 14, fontWeight: 700, background: form.is_paid ? '#ffffff' : 'transparent', color: form.is_paid ? '#111827' : '#9ca3af', transition: 'color 0.15s ease' }}>유상</button>
                 <button type="button" onClick={() => setForm(p => ({ ...p, is_paid: false }))}
-                  style={{ flex: 1, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 700, background: !form.is_paid ? '#ffffff' : 'transparent', color: !form.is_paid ? '#111827' : '#9ca3af', transition: 'color 0.15s ease' }}>무상</button>
+                  style={{ flex: 1, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 14, fontWeight: 700, background: !form.is_paid ? '#ffffff' : 'transparent', color: !form.is_paid ? '#111827' : '#9ca3af', transition: 'color 0.15s ease' }}>무상</button>
               </div>
             </div>
             {/* 시작시간 */}
@@ -277,7 +278,7 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
                     align="end"
                     gap={6}
                     width={200}
-                    style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: '8px 10px', fontSize: 12, fontWeight: 500, color: '#111827', lineHeight: 1.5 }}
+                    style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.icon, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', padding: '8px 10px', fontSize: 12, fontWeight: 500, color: '#111827', lineHeight: 1.5 }}
                   >
                     이동시간 + 작업 시간으로 기재 부탁드립니다
                   </Popover>
@@ -304,7 +305,7 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
             <InstallPrepSection serviceId={service.service_id} readOnly={prepReadOnly} />
           )}
 
-          <div style={{ border: errors.engineers ? errBorder : '1px solid #ebebeb', borderRadius: 8, padding: 14, background: '#f8f9fb' }}>
+          <div style={{ border: errors.engineers ? errBorder : '1px solid #ebebeb', borderRadius: R.control, padding: 14, background: '#f8f9fb' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 7 }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', marginRight: 4 }}>방문 엔지니어</span>
               {selectedEngineerIds.map(id => {
@@ -312,7 +313,7 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
                 if (!eng) return null
                 return (
                   <button key={id} onClick={() => setSelectedEngineerIds(p => p.filter(i => i !== id))}
-                    style={{ padding: '7px 12px', borderRadius: 20, border: '1px solid #234ea2', background: '#234ea2', color: '#ffffff', fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, minWidth: 96 }}>
+                    style={{ padding: '7px 12px', borderRadius: R.modal, border: '1px solid #234ea2', background: '#234ea2', color: '#ffffff', fontWeight: 700, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, minWidth: 96 }}>
                     {eng.name} {eng.position || ''}
                     <span style={{ fontSize: 12, opacity: 0.8 }}>✕</span>
                   </button>
@@ -323,7 +324,7 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
                 setShowExtraEngineers(willExpand)
                 if (willExpand) requestAnimationFrame(() => { const el = scrollBodyRef.current; if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }) })
               }}
-                style={{ padding: '7px 12px', borderRadius: 20, border: '1px solid #ebebeb', background: showExtraEngineers ? '#eff4ff' : '#fff', color: '#234ea2', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                style={{ padding: '7px 12px', borderRadius: R.modal, border: '1px solid #ebebeb', background: showExtraEngineers ? '#eff4ff' : '#fff', color: '#234ea2', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                 + 추가
               </button>
             </div>
@@ -332,7 +333,7 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
                 {/* '+추가' 후보는 현재 재직 중(삭제 안 됨)만. 이미 배정된 직원은 이 목록엔 없고(선택칩으로 유지) 과거 기록도 그대로 보존. */}
                 {engineers.filter(e => !selectedEngineerIds.includes(e.engineer_id) && isCurrentlyEmployed(e.resigned_date, todayKST())).map(eng => (
                   <button key={eng.engineer_id} onClick={() => { setSelectedEngineerIds(p => [...p, eng.engineer_id]); setShowExtraEngineers(false); clearError('engineers') }}
-                    style={{ padding: '6px 12px', borderRadius: 20, border: '1px solid #ebebeb', background: '#fff', color: '#111827', fontWeight: 600, fontSize: 12, cursor: 'pointer', minWidth: 96, textAlign: 'center' }}>
+                    style={{ padding: '6px 12px', borderRadius: R.modal, border: '1px solid #ebebeb', background: '#fff', color: '#111827', fontWeight: 600, fontSize: 12, cursor: 'pointer', minWidth: 96, textAlign: 'center' }}>
                     {eng.name} {eng.position || ''}
                   </button>
                 ))}
@@ -365,13 +366,13 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
 
         {/* 푸터 — 고정 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', flexShrink: 0, borderTop: '1px solid #ebebeb' }}>
-          <button onClick={onDelete} disabled={isSaving} style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}>삭제</button>
+          <button onClick={onDelete} disabled={isSaving} style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}>삭제</button>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={onClose} style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: 6, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+            <button onClick={onClose} style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
             <button onClick={handleSave} disabled={isSaving || !timeValid}
               onMouseEnter={(e) => { if (!isSaving && timeValid) e.currentTarget.style.background = '#1c3e87' }}
               onMouseLeave={(e) => { if (!isSaving && timeValid) e.currentTarget.style.background = '#234ea2' }}
-              style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: 6, border: 'none', cursor: (isSaving || !timeValid) ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, opacity: (isSaving || !timeValid) ? 0.6 : 1, transition: 'background 0.15s ease' }}>
+              style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: (isSaving || !timeValid) ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, opacity: (isSaving || !timeValid) ? 0.6 : 1, transition: 'background 0.15s ease' }}>
               {isSaving ? '저장 중...' : '저장'}
             </button>
           </div>

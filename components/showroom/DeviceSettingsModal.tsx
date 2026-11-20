@@ -9,10 +9,11 @@ import {
   DEVICE_STATUSES, MAX_DAILY_HOURS, deviceTitle, type ShowroomDevice,
 } from '@/lib/showroom'
 import { BLUE, BLUE_HOVER, BORDER, CARD_BG, TEXT, SUB, MUTED, DANGER, NEUTRAL_BG } from '@/components/common/ui'
+import { R } from '@/lib/radius'
 
 const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: SUB, marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
-  width: '100%', height: 44, padding: '0 12px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  width: '100%', height: 44, padding: '0 12px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   boxSizing: 'border-box', color: TEXT, background: CARD_BG, outline: 'none', fontSize: 16, fontFamily: 'inherit',
 }
 
@@ -68,7 +69,7 @@ export default function DeviceSettingsModal({ device, onClose, onSubmit }: Props
     <ModalOverlay onClose={onClose} confirmClose style={{ padding: 12 }}>
       <div onClick={e => e.stopPropagation()} style={{
         width: 'calc(100vw - 24px)', maxWidth: 460, maxHeight: 'calc(100dvh - 32px)',
-        background: CARD_BG, borderRadius: 8, boxSizing: 'border-box',
+        background: CARD_BG, borderRadius: R.control, boxSizing: 'border-box',
         boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
         animation: 'modal-in 0.18s ease', display: 'flex', flexDirection: 'column',
       }}>
@@ -115,11 +116,11 @@ export default function DeviceSettingsModal({ device, onClose, onSubmit }: Props
 
           <div>
             <label style={labelStyle}>사용여부</label>
-            <div style={{ display: 'flex', background: NEUTRAL_BG, borderRadius: 6, padding: 3, height: 44, boxSizing: 'border-box' }}>
+            <div style={{ display: 'flex', background: NEUTRAL_BG, borderRadius: R.icon, padding: 3, height: 44, boxSizing: 'border-box' }}>
               <button type="button" onClick={() => setIsActive(true)}
-                style={{ flex: 1, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 700, background: isActive ? CARD_BG : 'transparent', color: isActive ? TEXT : MUTED, transition: 'color 0.15s ease' }}>사용</button>
+                style={{ flex: 1, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 14, fontWeight: 700, background: isActive ? CARD_BG : 'transparent', color: isActive ? TEXT : MUTED, transition: 'color 0.15s ease' }}>사용</button>
               <button type="button" onClick={() => setIsActive(false)}
-                style={{ flex: 1, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 700, background: !isActive ? CARD_BG : 'transparent', color: !isActive ? TEXT : MUTED, transition: 'color 0.15s ease' }}>미사용</button>
+                style={{ flex: 1, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 14, fontWeight: 700, background: !isActive ? CARD_BG : 'transparent', color: !isActive ? TEXT : MUTED, transition: 'color 0.15s ease' }}>미사용</button>
             </div>
             <div style={{ marginTop: 6, fontSize: 12, color: MUTED }}>
               미사용으로 두면 가동률 집계와 일반 사용자 목록에서 빠진다
@@ -142,13 +143,13 @@ export default function DeviceSettingsModal({ device, onClose, onSubmit }: Props
           {error && <div style={{ marginBottom: 10, fontSize: 12, fontWeight: 600, color: DANGER }}>{error}</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <button onClick={onClose} disabled={saving}
-              style={{ padding: '9px 16px', background: CARD_BG, color: SUB, borderRadius: 6, border: `1px solid ${BORDER}`, cursor: saving ? 'default' : 'pointer', fontWeight: 600, fontSize: 13 }}>
+              style={{ padding: '9px 16px', background: CARD_BG, color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: saving ? 'default' : 'pointer', fontWeight: 600, fontSize: 13 }}>
               취소
             </button>
             <button onClick={handleSave} disabled={saving}
               onMouseEnter={e => { if (!saving) e.currentTarget.style.background = BLUE_HOVER }}
               onMouseLeave={e => { if (!saving) e.currentTarget.style.background = BLUE }}
-              style={{ padding: '9px 18px', background: BLUE, color: '#fff', borderRadius: 6, border: 'none', cursor: saving ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, opacity: saving ? 0.6 : 1, transition: 'background 0.15s ease' }}>
+              style={{ padding: '9px 18px', background: BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: saving ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, opacity: saving ? 0.6 : 1, transition: 'background 0.15s ease' }}>
               {saving ? '저장 중...' : '저장'}
             </button>
           </div>

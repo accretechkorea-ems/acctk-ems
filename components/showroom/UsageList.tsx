@@ -25,6 +25,7 @@ import {
   TEXT, MUTED, SUB, DANGER, FAINT, BLUE, BORDER, CARD_BG, NEUTRAL_BG, ROW_HOVER_BG, skeletonBlock, countBadge,
 } from '@/components/common/ui'
 import { openApprovalPdf } from './openApprovalPdf'
+import { R } from '@/lib/radius'
 
 /** 삭제는 두 번 눌러야 실행된다. 첫 클릭 뒤 이 시간이 지나면 원래대로 돌아간다(결재 회수와 같은 방식). */
 const CONFIRM_MS = 3000
@@ -186,7 +187,7 @@ export default function UsageList({
       {/* 표 머리 — PC 는 화면 맨 위, 모바일은 상단 바 아래에 붙는다(.sr-ut-head) */}
       <div className="sr-ut-row sr-ut-head" style={{
         zIndex: Z.thead,
-        height: 32, background: NEUTRAL_BG, borderRadius: 6,
+        height: 32, background: NEUTRAL_BG, borderRadius: R.icon,
       }}>
         <span style={headCell}>날짜</span>
         <span className="sr-ut-purpose" style={headCell}>목적</span>
@@ -270,7 +271,7 @@ export default function UsageList({
                 </span>
                 <span className="sr-ut-result" style={{ minWidth: 0, display: 'flex' }}>
                   {r.result_category ? (
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: NEUTRAL_BG, color: SUB, ...ellipsis }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: R.pill, background: NEUTRAL_BG, color: SUB, ...ellipsis }}>
                       {r.result_category}
                     </span>
                   ) : (
@@ -293,7 +294,7 @@ export default function UsageList({
                     <EditIconButton size={24} label="쇼룸 사용 기록 수정" disabled={busy} onClick={() => { clearConfirm(); onEdit(r) }} />
                     {armed ? (
                       <button disabled={busy} onClick={() => handleDelete(r)}
-                        style={{ padding: '3px 9px', borderRadius: 6, border: 'none', background: DANGER, color: CARD_BG, fontSize: 11, fontWeight: 700, cursor: busy ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
+                        style={{ padding: '3px 9px', borderRadius: R.icon, border: 'none', background: DANGER, color: CARD_BG, fontSize: 11, fontWeight: 700, cursor: busy ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>
                         {busy ? '삭제 중' : '확정'}
                       </button>
                     ) : (

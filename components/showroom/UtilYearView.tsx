@@ -15,6 +15,7 @@ import {
   cardStyle, cardHeader, cardTitle, countBadge,
 } from '@/components/common/ui'
 import { fmtPct, fmtNum } from './utilParts'
+import { R } from '@/lib/radius'
 
 const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
 const CELL_H = 34
@@ -90,7 +91,7 @@ export default function UtilYearView({ yearly, selectedMonth, onPickMonth }: {
   /** 한 칸. 부품 컴포넌트가 아니라 그리는 함수다(렌더 중에 컴포넌트를 새로 만들지 않기 위해). */
   const renderCell = (key: string, rate: number | null, isFuture: boolean, label: string, month: number | null, strong = false) => {
     const base = {
-      height: CELL_H, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      height: CELL_H, borderRadius: R.icon, display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: 12, fontWeight: strong ? 800 : 700,
     } as const
     if (isFuture) return <div key={key} style={{ height: CELL_H }} />

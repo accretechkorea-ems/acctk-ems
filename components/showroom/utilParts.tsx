@@ -7,6 +7,7 @@
 import { SERVICE_TYPE_COLORS } from '@/lib/categoryColors'
 import { UTIL_BAND_COLORS, utilBand, round1 } from '@/lib/showroom'
 import { NEUTRAL_BG, MUTED } from '@/components/common/ui'
+import { R } from '@/lib/radius'
 
 /** 증가 색 — 교육 초록의 글자색(배경 위에서 읽히는 쪽). */
 const UP_COLOR = SERVICE_TYPE_COLORS['교육'].text
@@ -74,8 +75,8 @@ export function UtilBar({ rate, height = 8, radius = 4 }: { rate: number | null;
 export function HBar({ value, max, color, height = 8 }: { value: number; max: number; color: string; height?: number }) {
   const fill = max > 0 ? Math.min(1, value / max) : 0
   return (
-    <div style={{ height, background: NEUTRAL_BG, borderRadius: 4, overflow: 'hidden' }}>
-      {fill > 0 && <div style={{ width: `${fill * 100}%`, height: '100%', background: color, borderRadius: 4 }} />}
+    <div style={{ height, background: NEUTRAL_BG, borderRadius: R.tag, overflow: 'hidden' }}>
+      {fill > 0 && <div style={{ width: `${fill * 100}%`, height: '100%', background: color, borderRadius: R.tag }} />}
     </div>
   )
 }

@@ -19,6 +19,7 @@ import { prepSummaryShort } from '@/lib/installPrep'
 import { STAGES, compactKRW } from '@/components/customer/opportunity'
 import { numKR } from '@/components/customer/constants'
 import type { SalesOpportunity } from '@/components/customer/types'
+import { R } from '@/lib/radius'
 
 const PAGE_BG = '#f4f5f7'
 // 고객사 상세의 가운데 열과 같은 상한. 넓은 화면에서 한 줄이 끝없이 길어지지 않게 한다.
@@ -39,7 +40,7 @@ const DANGER = '#ef4444' // 기존 상태 표시에서 쓰던 빨강
 const BOARD_STAGES = STAGES.filter(s => s !== '실주')
 
 const cardStyle: React.CSSProperties = {
-  background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8,
+  background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.control,
   padding: '14px 16px', display: 'flex', flexDirection: 'column',
 }
 
@@ -112,7 +113,7 @@ function CardHead({ title, right }: { title: string; right?: React.ReactNode }) 
 
 function Count({ children }: { children: React.ReactNode }) {
   return (
-    <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px', whiteSpace: 'nowrap' }}>
+    <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', whiteSpace: 'nowrap' }}>
       {children}
     </span>
   )
@@ -127,7 +128,7 @@ function Empty({ text }: { text: string }) {
 // 목록 한 줄 — 배경 호버만 있는 버튼. 세 카드가 같은 모양을 쓴다.
 const rowStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
-  padding: '7px 8px', background: 'none', border: 'none', borderRadius: 6,
+  padding: '7px 8px', background: 'none', border: 'none', borderRadius: R.icon,
   cursor: 'pointer', transition: 'background 0.15s ease',
 }
 const rowHover = {
@@ -380,7 +381,7 @@ export default function Dashboard80Page() {
                   {Array.from({ length: gridSlots(holdingItems.length, TOP_HOLDINGS) }).map((_, i) => {
                     const u = holdingItems[i]
                     if (!u) {
-                      return <div key={`empty-${i}`} style={{ border: '1px dashed #ebebeb', borderRadius: 6 }} />
+                      return <div key={`empty-${i}`} style={{ border: '1px dashed #ebebeb', borderRadius: R.icon }} />
                     }
                     return (
                       <button key={u.key}
@@ -388,7 +389,7 @@ export default function Dashboard80Page() {
                         style={{
                           display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, overflow: 'hidden',
                           textAlign: 'left', padding: '8px 10px', background: '#ffffff',
-                          border: '1px solid #ebebeb', borderRadius: 6, cursor: 'pointer',
+                          border: '1px solid #ebebeb', borderRadius: R.icon, cursor: 'pointer',
                           transition: 'border-color 0.15s ease',
                         }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = '#c7d7f8' }}
@@ -406,7 +407,7 @@ export default function Dashboard80Page() {
                           </span>
                           {/* 폐기된 장비를 가리키는 홀딩 — 장비 목록에는 없는 이름이라 알려 둔다. */}
                           {u.titleBadge && (
-                            <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', background: '#f3f4f6', borderRadius: 99, padding: '1px 7px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', background: '#f3f4f6', borderRadius: R.pill, padding: '1px 7px', flexShrink: 0, whiteSpace: 'nowrap' }}>
                               {u.titleBadge}
                             </span>
                           )}
@@ -437,14 +438,14 @@ export default function Dashboard80Page() {
                   {Array.from({ length: gridSlots(upcomingVisits.length, TOP_UPCOMING) }).map((_, i) => {
                     const v = upcomingVisits[i]
                     if (!v) {
-                      return <div key={`up-empty-${i}`} style={{ border: '1px dashed #ebebeb', borderRadius: 6 }} />
+                      return <div key={`up-empty-${i}`} style={{ border: '1px dashed #ebebeb', borderRadius: R.icon }} />
                     }
                     return (
                       <div key={v.serviceId}
                         style={{
                           display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, overflow: 'hidden',
                           textAlign: 'left', padding: '8px 10px', background: '#ffffff',
-                          border: '1px solid #ebebeb', borderRadius: 6,
+                          border: '1px solid #ebebeb', borderRadius: R.icon,
                         }}
                       >
                         <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>

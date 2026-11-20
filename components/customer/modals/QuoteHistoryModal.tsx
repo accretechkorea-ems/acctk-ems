@@ -7,6 +7,7 @@ import ModalOverlay from '@/components/common/ModalOverlay'
 import { SALES_STATUS_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import { isOrdered, REVENUE_STATUS } from '@/lib/quoteStatus'
 import BackdatedMark from '@/components/quote/BackdatedMark'
+import { R } from '@/lib/radius'
 
 type Props = {
   isOpen: boolean
@@ -41,7 +42,7 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, f
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 1100, maxHeight: '90vh', background: CARD_BG, borderRadius: 18, padding: 24, boxShadow: '0 12px 40px rgba(0,0,0,0.35)', border: `1px solid ${INPUT_BORDER}`, display: 'flex', flexDirection: 'column' }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 1100, maxHeight: '90vh', background: CARD_BG, borderRadius: R.modal, padding: 24, boxShadow: '0 12px 40px rgba(0,0,0,0.35)', border: `1px solid ${INPUT_BORDER}`, display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
             <div style={{ fontSize: 20, fontWeight: 800, color: TEXT_PRIMARY, marginBottom: 4 }}>📋 거래 이력</div>
@@ -54,7 +55,7 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, f
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 16 }}>
           {summaryCards.map(({ label, value, sub, color }) => (
-            <div key={label} style={{ background: '#fff', borderRadius: 10, padding: '12px 14px', border: `1px solid ${INPUT_BORDER}`, textAlign: 'center' }}>
+            <div key={label} style={{ background: '#fff', borderRadius: R.tile, padding: '12px 14px', border: `1px solid ${INPUT_BORDER}`, textAlign: 'center' }}>
               <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 4 }}>{label}</div>
               <div style={{ fontSize: 15, fontWeight: 800, color }}>{value}</div>
               <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 2 }}>{sub}</div>
@@ -93,7 +94,7 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, f
                       </td>
                       {!family && (
                         <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                          <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: '#f3f4f6', color: TEXT_SECONDARY }}>
+                          <span style={{ padding: '3px 10px', borderRadius: R.modal, fontSize: 12, fontWeight: 700, background: '#f3f4f6', color: TEXT_SECONDARY }}>
                             {isDealerQuote(q, customer?.customer_id ?? -1) ? '대리점' : '직판'}
                           </span>
                         </td>
@@ -113,7 +114,7 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, f
                           : <span style={{ color: '#d1d5db' }}>-</span>}
                       </td>
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                        <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text }}>
+                        <span style={{ padding: '3px 10px', borderRadius: R.modal, fontSize: 12, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text }}>
                           {salesStatusLabel(q.status)}
                         </span>
                       </td>

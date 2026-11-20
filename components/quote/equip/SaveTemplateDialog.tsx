@@ -14,13 +14,14 @@ import { Z } from '@/lib/zIndex'
 import { TEMPLATE_NAME_MAX } from '@/lib/quoteTemplates'
 import type { QuoteTemplate } from '@/lib/quoteTemplates'
 import { C, S } from './equipStyles'
+import { R } from '@/lib/radius'
 
 const box = {
   position: 'fixed' as const, inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.subModal,
   display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
 }
 const panel = {
-  background: '#fff', borderRadius: 8, padding: 24, width: '100%', maxWidth: 440,
+  background: '#fff', borderRadius: R.control, padding: 24, width: '100%', maxWidth: 440,
   boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease',
 }
 const head = { fontSize: 17, fontWeight: 800, color: C.INK, letterSpacing: '-0.3px', marginBottom: 4 }

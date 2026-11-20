@@ -9,6 +9,7 @@
 import { useRef, useState } from 'react'
 import { BORDER, CARD_BG, TEXT, MUTED, NEUTRAL_BG, BLUE, FAINT } from '@/components/common/ui'
 import { errorInfo } from '@/lib/errorInfo'
+import { R } from '@/lib/radius'
 
 /** 내용 기록 하나에 올릴 수 있는 파일 수. 서버(/api/inquiry-attachment)와 같은 값이어야 한다. */
 const MAX_FILES = 10
@@ -147,7 +148,7 @@ export default function FilePicker({
         onDrop={e => { e.preventDefault(); setOver(false); if (!disabled) add(e.dataTransfer.files) }}
         style={{
           display: 'block', width: '100%',
-          border: `1px dashed ${over ? BLUE : BORDER}`, borderRadius: 8,
+          border: `1px dashed ${over ? BLUE : BORDER}`, borderRadius: R.control,
           padding: compact ? '10px 12px' : '14px 16px',
           background: over ? '#eff4ff' : CARD_BG, textAlign: 'center',
           fontSize: 12, color: MUTED, lineHeight: compact ? 1.5 : 1.7, fontFamily: 'inherit',
@@ -174,7 +175,7 @@ export default function FilePicker({
           {files.map((f, i) => (
             <div key={`${f.name}-${i}`} style={{
               display: 'flex', alignItems: 'center', gap: 8,
-              fontSize: 12, color: TEXT, background: NEUTRAL_BG, borderRadius: 6, padding: '6px 8px',
+              fontSize: 12, color: TEXT, background: NEUTRAL_BG, borderRadius: R.icon, padding: '6px 8px',
             }}>
               <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {f.name}

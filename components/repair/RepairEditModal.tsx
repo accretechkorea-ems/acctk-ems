@@ -8,6 +8,7 @@ import { useToast } from '@/components/common/Toast'
 import { openPdf, pdfNameOf } from '@/lib/pdfViewer'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { todayKST } from '@/lib/date'
+import { R } from '@/lib/radius'
 
 /**
  * 수리품 수정 모달.
@@ -51,7 +52,7 @@ type Props = {
 
 const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
-  width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: 6,
+  width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
 }
 // 레이아웃 헬퍼: 2열 그리드 / 섹션 제목(작은 회색) / 섹션 구분선(얇은 상단선).
@@ -231,7 +232,7 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: 640, background: '#ffffff', borderRadius: 8, padding: 24,
+          width: '100%', maxWidth: 640, background: '#ffffff', borderRadius: R.control, padding: 24,
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb', animation: 'modal-in 0.18s ease',
           display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 40px)',
         }}
@@ -261,7 +262,7 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
               <div style={twoCol}>
                 <div>
                   <label style={labelStyle}>구분</label>
-                  <div style={{ display: 'flex', border: '1px solid #ebebeb', borderRadius: 6, overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', border: '1px solid #ebebeb', borderRadius: R.icon, overflow: 'hidden' }}>
                     {CATEGORIES.map(c => (
                       <button key={c} type="button" onClick={() => setItemType(c)}
                         style={{ flex: 1, padding: '10px 0', border: 'none', background: itemType === c ? '#234ea2' : '#fff', color: itemType === c ? '#fff' : '#6b7280', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
@@ -323,7 +324,7 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
             {/* 본사 발송/복귀 (본사수리일 때만) — max-height+opacity 로 부드럽게 펼침/접힘.
                 그리드 밖에 두고 marginTop 까지 함께 트랜지션해, 접히면 여백까지 사라져 출렁임이 없다. */}
             <div style={{ overflow: 'hidden', maxHeight: isHq ? 120 : 0, opacity: isHq ? 1 : 0, marginTop: isHq ? 12 : 0, transition: 'max-height 0.22s ease-out, opacity 0.22s ease-out, margin-top 0.22s ease-out' }}>
-              <div style={{ ...twoCol, gap: 10, padding: 10, background: '#f5f3ff', border: '1px solid #ebebeb', borderRadius: 6 }}>
+              <div style={{ ...twoCol, gap: 10, padding: 10, background: '#f5f3ff', border: '1px solid #ebebeb', borderRadius: R.icon }}>
                 <div>
                   <label style={labelStyle}>본사 발송일</label>
                   <input type="date" className="date-fit" value={hqRequestedAt} onChange={e => setHqRequestedAt(e.target.value)}
@@ -367,18 +368,18 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
                     <div style={{ fontSize: 13, color: '#111827', marginTop: 2 }}>청구 금액 <b>₩{numKR(linkedSummary.total_supply ?? 0)}</b></div>
                   </div>
                   <button type="button" onClick={openQuotePdf} disabled={pdfBusy}
-                    style={{ padding: '7px 12px', border: '1px solid #ebebeb', borderRadius: 6, background: '#fff', color: '#6b7280', fontSize: 13, fontWeight: 700, cursor: pdfBusy ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: pdfBusy ? 0.5 : 1 }}>{pdfBusy ? '여는 중…' : '견적서 보기'}</button>
+                    style={{ padding: '7px 12px', border: '1px solid #ebebeb', borderRadius: R.icon, background: '#fff', color: '#6b7280', fontSize: 13, fontWeight: 700, cursor: pdfBusy ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: pdfBusy ? 0.5 : 1 }}>{pdfBusy ? '여는 중…' : '견적서 보기'}</button>
                   <button type="button" onClick={unlinkQuote}
-                    style={{ padding: '7px 12px', border: '1px solid #fecdd3', borderRadius: 6, background: '#fff', color: '#be123c', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>연결 해제</button>
+                    style={{ padding: '7px 12px', border: '1px solid #fecdd3', borderRadius: R.icon, background: '#fff', color: '#be123c', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>연결 해제</button>
                 </>
               ) : quoteId != null ? (
                 // 연결은 돼 있으나 요약을 못 읽음(권한/네트워크). PDF·해제는 가능.
                 <>
                   <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: '#9ca3af' }}>견적 #{quoteId} · 요약을 불러올 수 없습니다</div>
                   <button type="button" onClick={openQuotePdf} disabled={pdfBusy}
-                    style={{ padding: '7px 12px', border: '1px solid #ebebeb', borderRadius: 6, background: '#fff', color: '#6b7280', fontSize: 13, fontWeight: 700, cursor: pdfBusy ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: pdfBusy ? 0.5 : 1 }}>{pdfBusy ? '여는 중…' : '견적서 보기'}</button>
+                    style={{ padding: '7px 12px', border: '1px solid #ebebeb', borderRadius: R.icon, background: '#fff', color: '#6b7280', fontSize: 13, fontWeight: 700, cursor: pdfBusy ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: pdfBusy ? 0.5 : 1 }}>{pdfBusy ? '여는 중…' : '견적서 보기'}</button>
                   <button type="button" onClick={unlinkQuote}
-                    style={{ padding: '7px 12px', border: '1px solid #fecdd3', borderRadius: 6, background: '#fff', color: '#be123c', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>연결 해제</button>
+                    style={{ padding: '7px 12px', border: '1px solid #fecdd3', borderRadius: R.icon, background: '#fff', color: '#be123c', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>연결 해제</button>
                 </>
               ) : null}
             </div>
@@ -391,19 +392,19 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
           <button
             onClick={() => onDelete(repair)}
             disabled={isSaving}
-            style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}
+            style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}
           >삭제</button>
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={onClose}
-              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: 6, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
             >취소</button>
             <button
               onClick={handleSave}
               disabled={isSaving}
               onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
               onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
-              style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
+              style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
             >
               {isSaving ? '저장 중...' : '저장'}
             </button>

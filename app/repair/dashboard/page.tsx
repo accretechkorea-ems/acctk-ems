@@ -23,6 +23,7 @@ import {
   avgRepairDuration, countRepairDurationSamples,
   excludeSpecial, isAtHq, hqAvgTurnaround, hqMonthCounts,
 } from '@/lib/repairStats'
+import { R } from '@/lib/radius'
 
 // ── 색상: EMS 팔레트(lib/categoryColors.ts 기존 값)만 사용 ──
 // 차트 그래픽 전용 팔레트 (활동 현황 dot 색)
@@ -48,7 +49,7 @@ const RANK_COLORS = [CHART_COLORS.blue, CHART_COLORS.violet, CHART_COLORS.amber,
 // recharts 공통
 const AXIS_TICK = { fontSize: 11, fill: MUTED } as const // 축 글자(폰트 규칙상 최소 11px 유지)
 const CHART_MARGIN = { top: 24, right: 8, bottom: 0, left: 0 } as const       // Legend 있는 차트 (상단 값 라벨 여유)
-const TOOLTIP_STYLE: React.CSSProperties = { fontSize: 12, borderRadius: 8, border: `1px solid ${BORDER}` }
+const TOOLTIP_STYLE: React.CSSProperties = { fontSize: 12, borderRadius: R.control, border: `1px solid ${BORDER}` }
 const ANIM_MS = 800 // 진입 애니메이션 기본 길이
 const CHART_H = 220 // 빈 상태 최소 높이
 const CARD_H = 300 // 모든 시각화 카드 고정 높이 (적체 Top5 표가 들어가는 기준)
@@ -59,7 +60,7 @@ const listTd: React.CSSProperties = { padding: '9px 10px', fontSize: 13, color: 
 const listEmpty: React.CSSProperties = { fontSize: 13, color: MUTED, textAlign: 'center', padding: '24px 0' }
 
 const cardStyle: React.CSSProperties = {
-  background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '12px 14px', boxSizing: 'border-box',
+  background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '12px 14px', boxSizing: 'border-box',
   display: 'flex', flexDirection: 'column', height: '100%',
 }
 // 시각화 카드(차트·표·도넛): 고정 높이로 통일
@@ -102,9 +103,9 @@ function Kpi({ label, value, unit, sub, valueColor, noData, noDataSub, noSub }: 
 function KpiSkeleton() {
   return (
     <div style={kpiCardStyle}>
-      <div style={{ height: 11, width: '48%', background: SKELETON, borderRadius: 6 }} />
-      <div style={{ height: 22, width: '34%', background: SKELETON, borderRadius: 6, marginTop: 8 }} />
-      <div style={{ height: 11, width: '40%', background: SKELETON, borderRadius: 6, marginTop: 8 }} />
+      <div style={{ height: 11, width: '48%', background: SKELETON, borderRadius: R.icon }} />
+      <div style={{ height: 22, width: '34%', background: SKELETON, borderRadius: R.icon, marginTop: 8 }} />
+      <div style={{ height: 11, width: '40%', background: SKELETON, borderRadius: R.icon, marginTop: 8 }} />
     </div>
   )
 }
@@ -123,7 +124,7 @@ function ChartSkeleton({ title }: { title: string; height?: number }) {
   return (
     <div style={chartCardStyle}>
       <div style={{ ...sectionTitle, marginBottom: 8, minHeight: 20, textAlign: 'center' }}>{title}</div>
-      <div style={{ ...chartArea, background: SKELETON, borderRadius: 8 }} />
+      <div style={{ ...chartArea, background: SKELETON, borderRadius: R.control }} />
     </div>
   )
 }
@@ -601,7 +602,7 @@ export default function RepairDashboardPage() {
           <Link href="/repair"
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = MUTED; (e.currentTarget as HTMLElement).style.background = PAGE_BG }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = BORDER; (e.currentTarget as HTMLElement).style.background = CARD_BG }}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: `1px solid ${BORDER}`, borderRadius: 8, background: CARD_BG, color: SUB, fontSize: 13, fontWeight: 700, textDecoration: 'none', transition: 'border-color 0.15s ease, background 0.15s ease' }}>
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', border: `1px solid ${BORDER}`, borderRadius: R.control, background: CARD_BG, color: SUB, fontSize: 13, fontWeight: 700, textDecoration: 'none', transition: 'border-color 0.15s ease, background 0.15s ease' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
             </svg>

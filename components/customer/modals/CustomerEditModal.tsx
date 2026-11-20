@@ -10,6 +10,7 @@ import AgencyPicker from '@/components/customer/AgencyPicker'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import { MEMO_MAX } from '@/components/common/MemoPopover'
 import AddressField from './AddressField'
+import { R } from '@/lib/radius'
 
 type Props = {
   customer: Customer | null
@@ -22,7 +23,7 @@ type Props = {
 
 const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
-  width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: 6,
+  width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
 }
 
@@ -122,7 +123,7 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
           // 폭·높이는 등록 폼과 같은 규칙이다(PDF 뷰어와 같은 min 규칙).
           width: 'min(92vw, 1100px)', maxWidth: 'min(92vw, 1100px)',
           maxHeight: '96vh', overflowY: 'auto',
-          background: '#ffffff', borderRadius: 8, padding: 24,
+          background: '#ffffff', borderRadius: R.control, padding: 24,
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb',
           animation: 'modal-in 0.18s ease',
         }}
@@ -251,7 +252,7 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
             <button
               onClick={onDelete}
               disabled={isDeleting}
-              style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isDeleting ? 0.6 : 1 }}
+              style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isDeleting ? 0.6 : 1 }}
             >
               {isDeleting ? '삭제 중...' : '삭제'}
             </button>
@@ -259,14 +260,14 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={onClose}
-              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: 6, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
             >취소</button>
             <button
               onClick={handleSave}
               disabled={isSaving}
               onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
               onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
-              style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
+              style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
             >
               {isSaving ? '저장 중...' : '저장'}
             </button>

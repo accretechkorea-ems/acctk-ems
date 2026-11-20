@@ -28,6 +28,7 @@ import EquipTemplateList from './EquipTemplateList'
 import EquipGroupTable from './EquipGroupTable'
 import EquipSummary from './EquipSummary'
 import { DeleteTemplateDialog, SaveTemplateDialog } from './SaveTemplateDialog'
+import { R } from '@/lib/radius'
 
 export type EquipConfigModalProps = {
   onClose: () => void
@@ -233,7 +234,7 @@ export default function EquipConfigModal(props: EquipConfigModalProps) {
           <div
             onClick={e => e.stopPropagation()}
             style={{
-              background: '#fff', borderRadius: 8, padding: 24, width: '100%', maxWidth: 440,
+              background: '#fff', borderRadius: R.control, padding: 24, width: '100%', maxWidth: 440,
               boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease',
             }}
           >

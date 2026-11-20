@@ -11,6 +11,7 @@ import { useState } from 'react'
 import { BORDER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT } from '@/components/common/ui'
 import { headerGuide } from '@/lib/priceListParse'
 import type { HeaderGuideItem } from '@/lib/priceListParse'
+import { R } from '@/lib/radius'
 
 export type PriceListHeaderGuideProps = {
   /** 열을 못 찾았을 때는 펼친 채로 보여 준다(그때 가장 필요한 안내다). */
@@ -31,7 +32,7 @@ export default function PriceListHeaderGuide({ defaultOpen = false }: PriceListH
   const g = headerGuide()
 
   return (
-    <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, background: NEUTRAL_BG, padding: '8px 12px' }}>
+    <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.control, background: NEUTRAL_BG, padding: '8px 12px' }}>
       <button
         type="button"
         onClick={() => setOpen(v => !v)}

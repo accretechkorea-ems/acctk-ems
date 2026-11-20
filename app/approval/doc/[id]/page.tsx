@@ -38,6 +38,7 @@ import { ccSummary, isSettled, type FormResponse } from '@/lib/approval/formDoc'
 import { DOC_TYPES } from '@/lib/approval/docTypes'
 import { nextPendingLine } from '@/lib/approval/engine'
 import { APPROVAL_PATH } from '@/lib/approval/types'
+import { R } from '@/lib/radius'
 
 type HistoryRow = {
   history_id: number
@@ -212,7 +213,7 @@ function DocPageInner() {
   if (badId) {
     return (
       <Shell popup={popup}>
-        <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '18px 20px' }}>
+        <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '18px 20px' }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: DANGER, marginBottom: 8 }}>
             문서 번호가 올바르지 않습니다
           </div>
@@ -227,9 +228,9 @@ function DocPageInner() {
     return (
       <Shell popup={popup}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ height: 28, width: 180, background: SKELETON, borderRadius: 6 }} />
-          <div style={{ height: 150, background: SKELETON, borderRadius: 8 }} />
-          <div style={{ height: 220, background: SKELETON, borderRadius: 8 }} />
+          <div style={{ height: 28, width: 180, background: SKELETON, borderRadius: R.icon }} />
+          <div style={{ height: 150, background: SKELETON, borderRadius: R.control }} />
+          <div style={{ height: 220, background: SKELETON, borderRadius: R.control }} />
         </div>
       </Shell>
     )
@@ -239,7 +240,7 @@ function DocPageInner() {
     const retryable = state.kind === 'error'
     return (
       <Shell popup={popup}>
-        <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '18px 20px' }}>
+        <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '18px 20px' }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: DANGER, marginBottom: 8 }}>{state.message}</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {retryable && (
@@ -311,7 +312,7 @@ function DocPageInner() {
       {/* 끝난 문서는 상태를 한 줄로 알린다 — 지금 할 수 있는 일이 없다는 뜻이다. */}
       {settled && (
         <div style={{
-          border: `1px solid ${BORDER}`, borderRadius: 8, background: NEUTRAL_BG,
+          border: `1px solid ${BORDER}`, borderRadius: R.control, background: NEUTRAL_BG,
           padding: '8px 12px', marginBottom: 12, fontSize: 12, fontWeight: 700, color: SUB,
         }}>
           {statusLine}
@@ -319,7 +320,7 @@ function DocPageInner() {
         </div>
       )}
 
-      <div className="ad-card" style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '16px 18px' }}>
+      <div className="ad-card" style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '16px 18px' }}>
         {/* ── 머리 ── 왼쪽 문서 정보 표, 오른쪽 결재란. 좁으면 결재란이 아래로 내려간다.
             **두 쪽의 높이를 맞춘다** — 합의자가 있으면 결재란이 두 칸으로 높아지는데, 예전에는
             왼쪽 표가 네 줄 높이에 그대로 멈춰 아래가 휑하게 비었다. grid 두 열 + stretch 로
@@ -332,7 +333,7 @@ function DocPageInner() {
             gap: 12, alignItems: 'stretch',
           }}
         >
-          <div className="ad-head-rows" style={{ minWidth: 0, border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden' }}>
+          <div className="ad-head-rows" style={{ minWidth: 0, border: `1px solid ${BORDER}`, borderRadius: R.icon, overflow: 'hidden' }}>
             <FormRow label="문서번호" first>{doc.doc_no}</FormRow>
             <FormRow label="작성일시">{when(doc.submitted_at ?? doc.created_at)}</FormRow>
             <FormRow label="기안부서">{people[doc.requester_id]?.teams?.trim() || '-'}</FormRow>
@@ -354,7 +355,7 @@ function DocPageInner() {
         {/* ── 수신및참조 · 제목 ──
             합의자는 **결재란의 합의 줄에만** 나온다. 예전에는 여기에도 이름을 글자로 나열해
             같은 정보가 두 번 보였다(결재란의 도장 + 이 줄). 수신및참조가 늘 첫 줄이다. */}
-        <div className="ad-block" style={{ marginTop: 12, border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden' }}>
+        <div className="ad-block" style={{ marginTop: 12, border: `1px solid ${BORDER}`, borderRadius: R.icon, overflow: 'hidden' }}>
           <FormRow
             label="수신및참조"
             first
@@ -395,7 +396,7 @@ function DocPageInner() {
         </div>
 
         {/* ── 첨부 ── 요약에 담긴 파일 수. 유형별 본문이 자기 첨부를 따로 그리기도 한다. */}
-        <div style={{ marginTop: 12, border: `1px solid ${BORDER}`, borderRadius: 6, overflow: 'hidden' }}>
+        <div style={{ marginTop: 12, border: `1px solid ${BORDER}`, borderRadius: R.icon, overflow: 'hidden' }}>
           <FormRow label="첨　　부" first>
             {files > 0 ? `${files}건` : '없음'}
           </FormRow>

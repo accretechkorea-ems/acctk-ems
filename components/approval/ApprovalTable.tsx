@@ -27,6 +27,7 @@ import type { ApprovalLine } from '@/lib/approval/types'
 // 칸 규칙(어느 줄이 칸이 되는가 · 어느 칸에 도장이 찍히는가)은 순수 모듈 하나에 모여 있다.
 // 진행 표기(boxes.ts 의 statusText)가 같은 함수를 봐야 「결재란 3칸 · 도장 2개」와 「진행(2/3)」이 어긋나지 않는다.
 import { isStamped, requesterStamped, tableLines } from '@/lib/approval/tableCells'
+import { R } from '@/lib/radius'
 
 export type ProgressPerson = { name: string | null; position: string | null; teams?: string | null }
 
@@ -221,7 +222,7 @@ export default function ApprovalTable({
     <div style={{ overflowX: 'auto', paddingBottom: 2 }}>
       <div style={{
         display: 'inline-flex', flexDirection: 'column',
-        border: `1px solid ${BORDER}`, borderTop: 'none', borderRadius: 6, overflow: 'hidden', background: CARD_BG,
+        border: `1px solid ${BORDER}`, borderTop: 'none', borderRadius: R.icon, overflow: 'hidden', background: CARD_BG,
       }}>
         {approve.length > 0 && <CellRow label="결재" cells={approve} />}
         {/* 합의에는 기안자 칸을 두지 않는다 — 기안은 결재 줄에서 한 번만 나온다. */}

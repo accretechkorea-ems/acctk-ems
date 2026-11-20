@@ -27,6 +27,7 @@ import MyQuoteCard from '@/components/dashboard/MyQuoteCard'
 import { useDashboardCards } from '@/hooks/dashboard/useDashboardCards'
 import { nowKSTParts } from '@/lib/date'
 import { countedVisitEnd } from '@/lib/serviceVisit'
+import { R } from '@/lib/radius'
 
 // 활동 요약에 필요한 최소 필드.
 type ServiceLink = { service_id: number }
@@ -126,7 +127,7 @@ function DashboardPageInner() {
   const actTotal = actCounts ? Object.values(actCounts).reduce((a, b) => a + b, 0) : 0
   // 월 이동 버튼 — 활동 카드의 머리 오른쪽에 놓는다(카드 안에는 넣지 않는다).
   const stepBtn = (disabled: boolean) => ({
-    width: 24, height: 24, border: '1px solid #ebebeb', borderRadius: 6, background: '#f3f4f6',
+    width: 24, height: 24, border: '1px solid #ebebeb', borderRadius: R.icon, background: '#f3f4f6',
     cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 700,
     color: disabled ? '#d1d5db' : '#111827', flexShrink: 0, padding: 0,
   })

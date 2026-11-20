@@ -9,6 +9,7 @@
 
 import type { CSSProperties } from 'react'
 import { Z } from '@/lib/zIndex'
+import { R } from '@/lib/radius'
 
 
 const LINE = '#ebebeb'
@@ -26,7 +27,7 @@ export const S: Record<string, CSSProperties> = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
   },
   modal: {
-    background: '#fff', borderRadius: 8, width: '100%', maxWidth: 1240,
+    background: '#fff', borderRadius: R.control, width: '100%', maxWidth: 1240,
     height: 'min(820px, 92vh)', display: 'flex', flexDirection: 'column', overflow: 'hidden',
     boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease',
   },
@@ -52,37 +53,37 @@ export const S: Record<string, CSSProperties> = {
 
   // ── 입력 ──
   input: {
-    width: '100%', padding: '7px 9px', border: `1px solid ${LINE}`, borderRadius: 6,
+    width: '100%', padding: '7px 9px', border: `1px solid ${LINE}`, borderRadius: R.icon,
     fontSize: 13, fontWeight: 500, color: INK, background: '#fff', font: 'inherit',
   },
   num: {
-    width: 98, padding: '3px 6px', border: `1px solid ${LINE}`, borderRadius: 6,
+    width: 98, padding: '3px 6px', border: `1px solid ${LINE}`, borderRadius: R.icon,
     fontSize: 12, textAlign: 'right', color: INK, background: '#fff',
   },
   numSmall: {
-    width: 64, padding: '4px 6px', border: `1px solid ${LINE}`, borderRadius: 6,
+    width: 64, padding: '4px 6px', border: `1px solid ${LINE}`, borderRadius: R.icon,
     fontSize: 12, textAlign: 'right', color: INK, background: '#fff',
   },
   qty: {
-    width: 46, padding: '3px 4px', border: `1px solid ${LINE}`, borderRadius: 6,
+    width: 46, padding: '3px 4px', border: `1px solid ${LINE}`, borderRadius: R.icon,
     fontSize: 12, textAlign: 'center', color: INK, background: '#fff',
   },
 
   // ── 왼쪽(기종·템플릿) ──
   family: { margin: '12px 0 4px', fontSize: 11, fontWeight: 700, color: DIM },
   tpl: {
-    padding: '8px 9px', borderRadius: 6, cursor: 'pointer', border: '1px solid transparent',
+    padding: '8px 9px', borderRadius: R.icon, cursor: 'pointer', border: '1px solid transparent',
     background: 'transparent', width: '100%', textAlign: 'left', display: 'block',
   },
   tplOn: {
-    padding: '8px 9px', borderRadius: 6, cursor: 'pointer', border: '1px solid #c7d7f8',
+    padding: '8px 9px', borderRadius: R.icon, cursor: 'pointer', border: '1px solid #c7d7f8',
     background: '#f3f4f6', width: '100%', textAlign: 'left', display: 'block',
   },
   tplName: { display: 'block', fontSize: 13, fontWeight: 600, color: INK },
   tplMeta: { display: 'block', fontSize: 11, fontWeight: 500, color: DIM, marginTop: 3 },
 
   // ── 가운데(묶음 표) ──
-  sec: { margin: '12px 16px 0', border: `1px solid ${LINE}`, borderRadius: 8, overflow: 'hidden' },
+  sec: { margin: '12px 16px 0', border: `1px solid ${LINE}`, borderRadius: R.control, overflow: 'hidden' },
   secHead: {
     display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
     background: '#f3f4f6', fontSize: 13, fontWeight: 700, color: INK,
@@ -90,7 +91,7 @@ export const S: Record<string, CSSProperties> = {
   secHint: { fontSize: 11, fontWeight: 500, color: MUT },
   miniBtn: {
     fontSize: 11, fontWeight: 700, border: `1px solid ${LINE}`, background: '#fff',
-    borderRadius: 6, padding: '2px 8px', cursor: 'pointer', color: PRI,
+    borderRadius: R.icon, padding: '2px 8px', cursor: 'pointer', color: PRI,
   },
   table: { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' },
   th: {
@@ -111,7 +112,7 @@ export const S: Record<string, CSSProperties> = {
   addRow: { display: 'flex', gap: 8, alignItems: 'center' },
   hint: { fontSize: 11, fontWeight: 500, color: DIM, whiteSpace: 'nowrap' },
   dropdown: {
-    marginTop: 8, background: '#fff', border: `1px solid ${LINE}`, borderRadius: 8,
+    marginTop: 8, background: '#fff', border: `1px solid ${LINE}`, borderRadius: R.control,
     maxHeight: 260, overflowY: 'auto',
   },
   dropItem: {
@@ -122,7 +123,7 @@ export const S: Record<string, CSSProperties> = {
   // ── 오른쪽(요약) ──
   rightLabel: { margin: '0 0 8px', fontSize: 11, fontWeight: 600, color: DIM },
   pill: {
-    padding: '6px 10px', borderRadius: 6, background: '#fff', border: `1px solid ${LINE}`,
+    padding: '6px 10px', borderRadius: R.icon, background: '#fff', border: `1px solid ${LINE}`,
     margin: '8px 0', fontSize: 12, fontWeight: 500, color: INK,
   },
   kv: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', fontSize: 12, color: INK },
@@ -133,15 +134,15 @@ export const S: Record<string, CSSProperties> = {
 
   // ── 버튼 ──
   btn: {
-    padding: '8px 18px', borderRadius: 6, border: `1px solid ${LINE}`, background: '#fff',
+    padding: '8px 18px', borderRadius: R.icon, border: `1px solid ${LINE}`, background: '#fff',
     fontSize: 13, fontWeight: 700, color: PRI, cursor: 'pointer',
   },
   btnPri: {
-    padding: '8px 18px', borderRadius: 6, border: 'none', background: PRI,
+    padding: '8px 18px', borderRadius: R.icon, border: 'none', background: PRI,
     fontSize: 13, fontWeight: 700, color: '#fff', cursor: 'pointer',
   },
   btnOff: {
-    padding: '8px 18px', borderRadius: 6, border: `1px solid ${LINE}`, background: '#fff',
+    padding: '8px 18px', borderRadius: R.icon, border: `1px solid ${LINE}`, background: '#fff',
     fontSize: 13, fontWeight: 700, color: DIM, cursor: 'not-allowed',
   },
 }

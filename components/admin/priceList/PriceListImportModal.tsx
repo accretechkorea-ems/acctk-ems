@@ -29,6 +29,7 @@ import PriceListHistory from './PriceListHistory'
 import PriceListDropZone from './PriceListDropZone'
 import PriceListLatest from './PriceListLatest'
 import { usePriceListImport } from './usePriceListImport'
+import { R } from '@/lib/radius'
 
 export type PriceListImportModalProps = {
   onClose: () => void
@@ -83,7 +84,7 @@ export default function PriceListImportModal({ onClose, canEdit }: PriceListImpo
     <ModalOverlay onClose={onClose}>
       <div
         style={{
-          background: CARD_BG, borderRadius: 18, width: '100%', maxWidth: 1100,
+          background: CARD_BG, borderRadius: R.modal, width: '100%', maxWidth: 1100,
           // 크기 고정 — 내용이 늘어도 모달은 그대로 있고 가운데만 스크롤한다.
           height: '85vh',
           display: 'flex', flexDirection: 'column',
@@ -113,7 +114,7 @@ export default function PriceListImportModal({ onClose, canEdit }: PriceListImpo
                   title={lockMsg ?? ch.note}
                   aria-pressed={on}
                   style={{
-                    padding: '14px 16px', borderRadius: 10, textAlign: 'left',
+                    padding: '14px 16px', borderRadius: R.tile, textAlign: 'left',
                     cursor: locked ? 'not-allowed' : 'pointer',
                     border: `1px solid ${on ? '#c7d7f8' : BORDER}`,
                     background: on ? NEUTRAL_BG : CARD_BG,
@@ -143,7 +144,7 @@ export default function PriceListImportModal({ onClose, canEdit }: PriceListImpo
           />
 
           {c.error && (
-            <div style={{ marginTop: 10, border: `1px solid ${DANGER}`, borderRadius: 8, padding: '8px 12px', fontSize: 12, color: DANGER, lineHeight: 1.7 }}>
+            <div style={{ marginTop: 10, border: `1px solid ${DANGER}`, borderRadius: R.control, padding: '8px 12px', fontSize: 12, color: DANGER, lineHeight: 1.7 }}>
               {c.error}
             </div>
           )}

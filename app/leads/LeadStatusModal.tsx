@@ -31,6 +31,7 @@ import {
 } from '@/components/common/ui'
 import { LEAD_STATUS_BLOCKED, MAX_LEN, SKIP_REASON_MIN } from '@/lib/leadOptions'
 import { findCustomerCandidates, type CustomerLike } from '@/lib/leadCustomer'
+import { R } from '@/lib/radius'
 
 /** 경고 상자 배경 — 리드 화면·관리자 화면이 쓰던 값과 같다(새로 만든 색이 아니다). */
 const DANGER_BG = '#fef2f2'
@@ -51,7 +52,7 @@ export type CustomerChoice =
   | { kind: 'new' }
 
 const field: React.CSSProperties = {
-  width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  width: '100%', padding: '9px 10px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   fontSize: 13, color: TEXT, background: CARD_BG, outline: 'none', boxSizing: 'border-box',
   fontFamily: 'inherit',
 }
@@ -138,7 +139,7 @@ export default function LeadStatusModal({
     // 상태·메모를 적는 폼 — 확인 뒤 닫는다.
     <ModalOverlay onClose={onClose} confirmClose>
       <div style={{
-        background: CARD_BG, borderRadius: 8, padding: '14px 16px', width: '100%', maxWidth: 460,
+        background: CARD_BG, borderRadius: R.control, padding: '14px 16px', width: '100%', maxWidth: 460,
         maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
       }}>
         <div style={cardHeader}>
@@ -147,7 +148,7 @@ export default function LeadStatusModal({
 
         {/* 지금 상태 한 줄 — 무엇을 바꾸려는 것인지가 선택지보다 먼저 보여야 한다. */}
         <div style={{
-          background: NEUTRAL_BG, borderRadius: 8, padding: '10px 12px', marginBottom: 12,
+          background: NEUTRAL_BG, borderRadius: R.control, padding: '10px 12px', marginBottom: 12,
           fontSize: 13, color: SUB, lineHeight: 1.6, wordBreak: 'break-word',
         }}>
           <span style={{ fontWeight: 700, color: TEXT }}>{lead.customer_company}</span>
@@ -203,13 +204,13 @@ export default function LeadStatusModal({
 
             {/* ── 고객사 — 배정이 곧 전환이라 여기서 함께 정한다 ── */}
             {alreadyMade ? (
-              <div style={{ marginTop: 10, background: NEUTRAL_BG, borderRadius: 8, padding: '10px 12px', fontSize: 12, color: SUB, lineHeight: 1.7 }}>
+              <div style={{ marginTop: 10, background: NEUTRAL_BG, borderRadius: R.control, padding: '10px 12px', fontSize: 12, color: SUB, lineHeight: 1.7 }}>
                 이미 포캐스트가 만들어진 리드입니다. 고객사는 그대로 두고 담당자만 바뀝니다.
               </div>
             ) : needsChoice ? (
               <div style={{ marginTop: 10 }}>
                 <label style={label}>고객사 — 같은 이름이 {candidates.length}건 있습니다</label>
-                <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.control, overflow: 'hidden' }}>
                   {candidates.map(c => (
                     <label key={c.customer_id}
                       style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '9px 10px', cursor: 'pointer', borderBottom: `1px solid ${BORDER}` }}>
@@ -232,7 +233,7 @@ export default function LeadStatusModal({
                 </div>
               </div>
             ) : (
-              <div style={{ marginTop: 10, background: NEUTRAL_BG, borderRadius: 8, padding: '10px 12px', fontSize: 12, color: SUB, lineHeight: 1.7 }}>
+              <div style={{ marginTop: 10, background: NEUTRAL_BG, borderRadius: R.control, padding: '10px 12px', fontSize: 12, color: SUB, lineHeight: 1.7 }}>
                 같은 이름의 고객사가 없습니다 — <span style={{ color: TEXT, fontWeight: 700 }}>{lead.customer_company}</span> 를 새 고객사로 등록하고
                 포캐스트(단계 상담 · 금액 0 · 예상월 다음 달)를 만듭니다.
               </div>
@@ -244,7 +245,7 @@ export default function LeadStatusModal({
           <div style={{ marginBottom: 12 }}>
             {/* 문구는 서버(app/api/lead-manage/route.ts 의 action === 'block')가 실제로 하는 일 그대로다. */}
             <div style={{
-              background: DANGER_BG, border: `1px solid ${BORDER}`, borderRadius: 8,
+              background: DANGER_BG, border: `1px solid ${BORDER}`, borderRadius: R.control,
               padding: '10px 12px', marginBottom: 10, fontSize: 13, color: TEXT, lineHeight: 1.7,
             }}>
               담당자를 붙이지 않고 이 리드를 닫습니다. 상태가 「배정불가」가 되고 사유·처리자·시각이 남습니다.
@@ -268,7 +269,7 @@ export default function LeadStatusModal({
 
         {kind === 'unblock' && (
           <div style={{
-            background: NEUTRAL_BG, borderRadius: 8, padding: '10px 12px', marginBottom: 12,
+            background: NEUTRAL_BG, borderRadius: R.control, padding: '10px 12px', marginBottom: 12,
             fontSize: 13, color: TEXT, lineHeight: 1.7,
           }}>
             이 리드를 신규·미배정 상태로 되돌립니다. 이전 배정 불가 사유와 처리 기록은 감사 기록에 남습니다.
@@ -286,7 +287,7 @@ export default function LeadStatusModal({
         {error && (
           <div style={{
             fontSize: 12, lineHeight: 1.6, color: DANGER, background: DANGER_BG,
-            border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px', marginBottom: 12,
+            border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '8px 10px', marginBottom: 12,
           }}>
             {error}
           </div>

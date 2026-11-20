@@ -11,6 +11,7 @@ import { numKR } from './format'
 import {
   belowMinOperatingMessage, isBelowMinOperating, minOperatingMarginOf, profitBreakdownOfLines,
 } from '@/lib/quoteProfit'
+import { R } from '@/lib/radius'
 
 export type ProfitPanelProps = {
   rows: QuoteRow[]
@@ -77,7 +78,7 @@ const rateUnit: React.CSSProperties = { fontSize: 12, color: '#6b7280', fontWeig
 /** 환율을 손으로 고치는 칸. */
 const rateEditBox: React.CSSProperties = {
   fontSize: 15, fontWeight: 700, color: '#234ea2', border: '1px solid #234ea2',
-  borderRadius: 6, padding: '1px 5px', outline: 'none',
+  borderRadius: R.icon, padding: '1px 5px', outline: 'none',
 }
 
 export default function ProfitPanel({
@@ -223,7 +224,7 @@ export default function ProfitPanel({
     .filter(({ row, no }) => no !== null && (row.supply_price !== 0 || hasContent(row)))
 
   return (
-    <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #ebebeb', marginBottom: 14, overflow: 'hidden' }}>
+    <div style={{ background: '#fff', borderRadius: R.control, border: '1px solid #ebebeb', marginBottom: 14, overflow: 'hidden' }}>
       {/* 머리줄 — 한 줄에 **세 덩어리**다: 제목 · 환율 묶음 · 오른쪽 끝 이익률.
           환율 묶음은 「¥ 10.0000원 ↻」 하나로 읽힌다 — 숫자·단위·새로고침을 한 덩어리로
           붙여 **그 버튼이 이 숫자를 다시 받는 버튼**임을 자리로 알린다(예전에는 오른쪽 끝
@@ -231,7 +232,7 @@ export default function ProfitPanel({
           줄이는 것은 출처 글자 하나뿐이다 — 제목·환율·이익률은 flexShrink 0 으로 묶는다. */}
       <div style={{ background: '#fff', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #ebebeb' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          <div style={{ width: 3, height: 14, background: '#234ea2', borderRadius: 6, flexShrink: 0 }} />
+          <div style={{ width: 3, height: 14, background: '#234ea2', borderRadius: R.icon, flexShrink: 0 }} />
           <span style={{ fontSize: 13, fontWeight: 800, color: '#111827', whiteSpace: 'nowrap' }}>수익 분석</span>
         </div>
         {/* 환율 묶음 + 출처 — 이 묶음만 줄어든다(minWidth 0 이 없으면 flex 항목은 내용 밑으로 줄지 않는다). */}
@@ -357,7 +358,7 @@ export default function ProfitPanel({
           // 제목 줄 금액의 끝선이 아래 합계 금액 열과 **같은 자리**에 서게 한다.
           <div key={r.id} style={{
             background: vi % 2 === 0 ? '#fafbfc' : '#fff',
-            borderRadius: 6, padding: '7px 8px', margin: '0 -8px 2px',
+            borderRadius: R.icon, padding: '7px 8px', margin: '0 -8px 2px',
           }}>
             {/* 제목 줄 — 번호 · 품명 · ×수량 ……… 공급가(단가 × 수량). */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -472,7 +473,7 @@ export default function ProfitPanel({
                     rows={2}
                     style={{
                       width: '100%', boxSizing: 'border-box', resize: 'vertical',
-                      padding: '7px 9px', borderRadius: 6, border: `1px solid ${operatingReason.trim() ? '#ebebeb' : '#dc2626'}`,
+                      padding: '7px 9px', borderRadius: R.icon, border: `1px solid ${operatingReason.trim() ? '#ebebeb' : '#dc2626'}`,
                       fontSize: 12, lineHeight: 1.5, color: '#111827', outline: 'none', fontFamily: 'inherit',
                     }}
                   />

@@ -5,6 +5,7 @@
 // 기존 화면은 각자 인라인 상수를 그대로 둔다 — 이 파일로 교체하지 마라.
 // (.claude/rules/design-system.md 의 표에 있는 값만 들어 있다)
 import type { CSSProperties } from 'react'
+import { R } from '@/lib/radius'
 
 // ── 색 ────────────────────────────────────────────────────────────
 export const BLUE = '#234ea2'
@@ -28,7 +29,7 @@ export const SKELETON = '#e5e7eb'
 export const cardStyle: CSSProperties = {
   background: CARD_BG,
   border: `1px solid ${BORDER}`,
-  borderRadius: 8,
+  borderRadius: R.control,
   padding: '14px 16px',
 }
 
@@ -53,7 +54,7 @@ export const countBadge: CSSProperties = {
   fontSize: 11,
   fontWeight: 700,
   padding: '3px 9px',
-  borderRadius: 99,
+  borderRadius: R.pill,
   background: NEUTRAL_BG,
   color: SUB,
   flexShrink: 0,
@@ -76,7 +77,7 @@ export const rowSub: CSSProperties = { fontSize: 12, color: MUTED, lineHeight: 1
 // 세 종류 모두 치수가 같다. disabled 는 색만 바뀐다.
 const btnBase: CSSProperties = {
   padding: '7px 16px',
-  borderRadius: 6,
+  borderRadius: R.icon,
   fontSize: 13,
   fontWeight: 700,
   border: 'none',
@@ -109,7 +110,7 @@ export const skeletonBlock = (width: number | string, height: number): CSSProper
   width,
   height,
   background: SKELETON,
-  borderRadius: 6,
+  borderRadius: R.icon,
   animation: 'pulse 1.5s ease-in-out infinite',
 })
 
@@ -117,7 +118,7 @@ export const skeletonBlock = (width: number | string, height: number): CSSProper
 export const inputStyle: CSSProperties = {
   padding: '8px 11px',
   border: `1px solid ${BORDER}`,
-  borderRadius: 6,
+  borderRadius: R.icon,
   background: CARD_BG,
   color: TEXT,
   fontSize: 13,

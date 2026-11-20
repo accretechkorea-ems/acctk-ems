@@ -23,6 +23,7 @@ import {
   deskMailto, deskSubject,
   type DeskPerson, type DeskProduct, type DeskRow, type DeskText,
 } from '@/lib/inquiryDesk'
+import { R } from '@/lib/radius'
 
 /** 표시 모드. 기본은 둘 다 보여 주는 「한·일」. */
 type Mode = 'both' | 'ko' | 'ja'
@@ -55,7 +56,7 @@ function CopyBtn({ text, what, onCopy }: { text: string; what: string; onCopy: (
     <button
       type="button" onClick={() => onCopy(text, what)} aria-label={`${what} 복사`} title={`${what} 복사`}
       style={{
-        border: `1px solid ${BORDER}`, background: CARD_BG, borderRadius: 6, padding: '2px 7px',
+        border: `1px solid ${BORDER}`, background: CARD_BG, borderRadius: R.icon, padding: '2px 7px',
         fontSize: 11, fontWeight: 700, color: MUTED, cursor: 'pointer', fontFamily: 'inherit',
         flexShrink: 0, whiteSpace: 'nowrap',
       }}
@@ -131,7 +132,7 @@ export default function DeskGuideModal({ onClose }: { onClose: () => void }) {
   }
 
   const box: React.CSSProperties = {
-    border: `1px solid ${BORDER}`, borderRadius: 8, padding: '12px 14px', marginBottom: 12,
+    border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '12px 14px', marginBottom: 12,
   }
 
   return (
@@ -140,7 +141,7 @@ export default function DeskGuideModal({ onClose }: { onClose: () => void }) {
         ref={panelRef} tabIndex={-1}
         role="dialog" aria-modal="true" aria-labelledby="dg-title"
         style={{
-          background: CARD_BG, borderRadius: 8, width: '100%', maxWidth: 980, maxHeight: '90vh',
+          background: CARD_BG, borderRadius: R.control, width: '100%', maxWidth: 980, maxHeight: '90vh',
           display: 'flex', flexDirection: 'column', outline: 'none',
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
         }}
@@ -206,7 +207,7 @@ export default function DeskGuideModal({ onClose }: { onClose: () => void }) {
 
             <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <T mode={mode} v={DESK_TEXT.subjectExample} size={12} />
-              <span style={{ ...mono, background: NEUTRAL_BG, borderRadius: 6, padding: '4px 8px' }}>{SUBJECT_EXAMPLE}</span>
+              <span style={{ ...mono, background: NEUTRAL_BG, borderRadius: R.icon, padding: '4px 8px' }}>{SUBJECT_EXAMPLE}</span>
               <CopyBtn onCopy={copy} text={SUBJECT_EXAMPLE} what="예시 제목" />
             </div>
           </div>
@@ -280,7 +281,7 @@ export default function DeskGuideModal({ onClose }: { onClose: () => void }) {
               <div key={`${product.key}-${row.code ?? 'qc'}-${i}`}>
                 {band && (
                   <div style={{
-                    background: NEUTRAL_BG, borderRadius: 6, padding: '5px 10px', marginTop: 8,
+                    background: NEUTRAL_BG, borderRadius: R.icon, padding: '5px 10px', marginTop: 8,
                     fontSize: 12, color: SUB, lineHeight: 1.6,
                   }}>
                     <T mode={mode} v={band} size={12} />
@@ -310,7 +311,7 @@ export default function DeskGuideModal({ onClose }: { onClose: () => void }) {
                     <a
                       href={deskMailto(product, row)}
                       style={{
-                        border: `1px solid ${BORDER}`, background: CARD_BG, borderRadius: 6,
+                        border: `1px solid ${BORDER}`, background: CARD_BG, borderRadius: R.icon,
                         padding: '4px 9px', fontSize: 11, fontWeight: 700, color: BLUE,
                         textDecoration: 'none', whiteSpace: 'nowrap',
                       }}

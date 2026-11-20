@@ -21,6 +21,7 @@ import { CountList, CountTotal, type CountRow } from '@/components/common/CountL
 import { quoteStatusCounts, type CardQuote } from '@/lib/homeCards'
 import { SALES_STATUS_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import type { Slot } from '@/hooks/dashboard/useDashboardCards'
+import { R } from '@/lib/radius'
 
 const TEXT = '#111827'
 const GRAY = '#6b7280'
@@ -89,7 +90,7 @@ export default function MyQuoteCard({ engineerId, slot, initialTab, onReload }: 
           <div
             onClick={e => e.stopPropagation()}
             style={{
-              background: '#fff', borderRadius: 8, width: '90vw', height: '85vh',
+              background: '#fff', borderRadius: R.control, width: '90vw', height: '85vh',
               display: 'flex', flexDirection: 'column', overflow: 'hidden',
               boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
             }}

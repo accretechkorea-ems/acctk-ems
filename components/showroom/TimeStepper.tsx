@@ -9,16 +9,17 @@
 import type { CSSProperties } from 'react'
 import { stepTime } from '@/lib/workHours'
 import { BORDER, NEUTRAL_BG, CARD_BG, TEXT } from '@/components/common/ui'
+import { R } from '@/lib/radius'
 
 const STEP_MIN = 30
 
 const boxStyle: CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 4,
-  background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 6,
+  background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.icon,
   padding: '0 6px', height: 44, boxSizing: 'border-box',
 }
 const btnStyle: CSSProperties = {
-  border: `1px solid ${BORDER}`, borderRadius: 6, background: NEUTRAL_BG,
+  border: `1px solid ${BORDER}`, borderRadius: R.icon, background: NEUTRAL_BG,
   cursor: 'pointer', fontSize: 13, fontWeight: 700, flexShrink: 0, color: TEXT,
 }
 

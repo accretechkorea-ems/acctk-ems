@@ -8,6 +8,7 @@
 
 import { BORDER, FAINT, MUTED, SUB, TEXT } from '@/components/common/ui'
 import type { LatestFile } from './priceListImport'
+import { R } from '@/lib/radius'
 
 export type PriceListLatestProps = {
   latest: Record<'80' | '20', LatestFile | null>
@@ -21,7 +22,7 @@ const LINES: readonly { line: '80' | '20'; label: string }[] = [
 
 export default function PriceListLatest({ latest, loading }: PriceListLatestProps) {
   return (
-    <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 12px' }}>
+    <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '8px 12px' }}>
       <div style={{ fontSize: 11, fontWeight: 600, color: MUTED, marginBottom: 4 }}>지금 등록된 파일</div>
       {LINES.map(({ line, label }) => {
         const l = latest[line]

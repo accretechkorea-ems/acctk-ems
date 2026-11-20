@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { SALES_STATUS_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import type { PartHit } from '@/lib/partSearch'
+import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 
@@ -34,7 +35,7 @@ export default function PartResults({
   if (!loading && !error && !searched) return null
 
   return (
-    <div style={{ background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+    <div style={{ background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: R.control, overflow: 'hidden', flexShrink: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px' }}>
         <button
           onClick={() => setOpen(v => !v)}
@@ -45,7 +46,7 @@ export default function PartResults({
             <polyline points="9 18 15 12 9 6" />
           </svg>
           <span style={{ fontSize: 13, fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>이 부품이 나간 업체</span>
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>
             {loading ? '...' : `${rows.length}건`}
           </span>
         </button>
@@ -88,7 +89,7 @@ export default function PartResults({
                   </span>
                   {r.viaDealer && (
                     <span title={r.dealerName ?? undefined}
-                      style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 7px', flexShrink: 0 }}>
+                      style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 7px', flexShrink: 0 }}>
                       대리점
                     </span>
                   )}
@@ -96,7 +97,7 @@ export default function PartResults({
                     {(() => {
                       const sc = getCategoryColor(SALES_STATUS_COLORS, r.status)
                       return (
-                        <span style={{ fontSize: 11, fontWeight: 700, color: sc.text, background: sc.bg, borderRadius: 99, padding: '2px 8px', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: sc.text, background: sc.bg, borderRadius: R.pill, padding: '2px 8px', whiteSpace: 'nowrap' }}>
                           {salesStatusLabel(r.status)}
                         </span>
                       )

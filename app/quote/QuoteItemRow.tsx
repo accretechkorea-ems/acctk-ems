@@ -18,6 +18,7 @@ import { DISCOUNT_LABELS } from './types'
 import { inp } from './styles'
 import ExpenseSection from './ExpenseSection'
 import { Z } from '@/lib/zIndex'
+import { R } from '@/lib/radius'
 
 // 후보가 없을 때 쓰는 고정 빈 배열 — 렌더마다 새 배열을 만들지 않기 위해 모듈 상수로 둔다.
 const EMPTY_ITEMS: PriceItem[] = []
@@ -56,7 +57,7 @@ const GAP = 4           // 칸 사이·단 사이 여백
  */
 const boxBase: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, boxSizing: 'border-box',
-  border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', padding: '0 8px',
+  border: '1px solid #d1d5db', borderRadius: R.icon, background: '#fff', padding: '0 8px',
 }
 /** 칸 안 접두 글자 — 「품번」「품명」「¥」. 바깥 라벨을 대신한다. */
 const prefix: React.CSSProperties = {
@@ -97,7 +98,7 @@ const stepVal: React.CSSProperties = {
  */
 const badge: React.CSSProperties = {
   fontSize: 11, fontWeight: 700, color: '#234ea2', background: '#f3f4f6',
-  borderRadius: 99, padding: '1px 7px', whiteSpace: 'nowrap', flexShrink: 0,
+  borderRadius: R.pill, padding: '1px 7px', whiteSpace: 'nowrap', flexShrink: 0,
   border: '1px solid transparent', boxSizing: 'border-box',
 }
 /** 결과 줄의 숫자 — 그 줄에서 사람이 가장 자주 보는 값이라 한 급 크다. */
@@ -404,7 +405,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
               onKeyDown={e => {
                 if (e.key === 'Enter' || e.key === 'Escape') (e.target as HTMLInputElement).blur()
               }}
-              style={{ ...bare, textAlign: 'center', fontWeight: 500, border: '1px solid #234ea2', borderRadius: 6, padding: '1px 2px' }}
+              style={{ ...bare, textAlign: 'center', fontWeight: 500, border: '1px solid #234ea2', borderRadius: R.icon, padding: '1px 2px' }}
             />
           ) : (
             <span
@@ -427,7 +428,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
    */
   if (row.row_kind === 'title') {
     return (
-      <div style={{ background: '#f8fafc', borderRadius: 8, padding: '4px 8px', marginBottom: 6, border: '1px solid #e5e7eb' }}>
+      <div style={{ background: '#f8fafc', borderRadius: R.control, padding: '4px 8px', marginBottom: 6, border: '1px solid #e5e7eb' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: GAP, height: 17 }}>
           <span style={badge}>{ROW_KIND_LABEL[row.row_kind]}</span>
           <span style={{ flex: 1 }} />
@@ -453,11 +454,11 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
   }
 
   return (
-    <div style={{ background: '#f8fafc', borderRadius: 8, padding: '4px 8px', marginBottom: 6, border: '1px solid #e5e7eb' }}>
+    <div style={{ background: '#f8fafc', borderRadius: R.control, padding: '4px 8px', marginBottom: 6, border: '1px solid #e5e7eb' }}>
       {/* ── 머리줄 — 번호 · 종류 · 통화 · 줄 추가 · 삭제 ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: GAP, height: 17 }}>
         {rowCount > 1 && itemNo !== null && (
-          <span style={{ width: 17, height: 17, borderRadius: 999, background: '#234ea2', color: '#fff', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}>{itemNo}</span>
+          <span style={{ width: 17, height: 17, borderRadius: R.pill, background: '#234ea2', color: '#fff', fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, flexShrink: 0 }}>{itemNo}</span>
         )}
         <span style={badge}>{ROW_KIND_LABEL[row.row_kind]}</span>
 
@@ -565,7 +566,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
             오른쪽 끝 뱃지(재고·납기·최근 판매). 뱃지를 아래 줄 오른쪽 끝에 **한 줄로** 묶어
             두면 폭이 좁아도 세로로 깨지지 않는다. 줄 높이를 낮춰 한 번에 보이는 수를 늘렸다. */}
         {row.row_kind === 'price_list' && searchOpen[row.id] && itemResults.length > 0 && (
-          <div ref={itemListRef} style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #234ea2', borderRadius: 8, maxHeight: 300, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
+          <div ref={itemListRef} style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #234ea2', borderRadius: R.control, maxHeight: 300, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
             {itemResults.map((item, i) => {
               const isym = CURRENCY_SYMBOL[toCurrency(item.currency)]
               const sale = recentSale(item.id, item.item_code)
@@ -579,7 +580,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden' }}>
                     <span style={{ fontWeight: 700, color: '#234ea2', flexShrink: 0 }}>{item.item_code}</span>
                     {/* 종류 배지 — 같은 품번이 SFG/CMM 양쪽에 있거나 묶음 제목으로 나뉠 때 어느 줄인지 보인다. */}
-                    <span style={{ fontSize: 10, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '0 5px', flexShrink: 0 }}>{item.sheet_name}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '0 5px', flexShrink: 0 }}>{item.sheet_name}</span>
                     <span style={{ color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.item_name_jp}</span>
                     {item.model_jp && <span style={{ color: '#9ca3af', flexShrink: 0 }}>({item.model_jp})</span>}
                   </div>
@@ -595,20 +596,20 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
                     {/* 최근 판매 — 같은 고객사에 마지막으로 판 단가. 없으면 내지 않는다. */}
                     {sale && (
                       <span title={`${sale.quoteNumber} · ${sale.quoteDate}`}
-                        style={{ fontSize: 10, fontWeight: 700, padding: '0 5px', borderRadius: 6, background: '#e6ecf8', color: '#234ea2', flexShrink: 0 }}>
+                        style={{ fontSize: 10, fontWeight: 700, padding: '0 5px', borderRadius: R.icon, background: '#e6ecf8', color: '#234ea2', flexShrink: 0 }}>
                         최근 ₩{numKR(sale.unitPrice)}
                       </span>
                     )}
                     {hasStock ? (
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: '0 5px', borderRadius: 6, background: '#dcfce7', color: '#15803d', flexShrink: 0 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '0 5px', borderRadius: R.icon, background: '#dcfce7', color: '#15803d', flexShrink: 0 }}>
                         재고 {item.stock_quantity}개
                       </span>
                     ) : hasDelivery ? (
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: '0 5px', borderRadius: 6, background: '#fef9c3', color: '#854d0e', flexShrink: 0 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '0 5px', borderRadius: R.icon, background: '#fef9c3', color: '#854d0e', flexShrink: 0 }}>
                         발주 후 {item.delivery_time}주
                       </span>
                     ) : (
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: '0 5px', borderRadius: 6, background: '#fee2e2', color: '#b91c1c', flexShrink: 0 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '0 5px', borderRadius: R.icon, background: '#fee2e2', color: '#b91c1c', flexShrink: 0 }}>
                         담당자 납기 문의
                       </span>
                     )}
@@ -806,7 +807,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
             )}
             {/* 자주 쓰는 이름 — 고르면 그 글자가 그대로 들어간다(값이 아니라 글자다). */}
             {discountMenu && !editingDiscountName && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #234ea2', borderRadius: 6, boxShadow: '0 8px 24px rgba(35,78,162,0.12)', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #234ea2', borderRadius: R.icon, boxShadow: '0 8px 24px rgba(35,78,162,0.12)', overflow: 'hidden' }}>
                 {DISCOUNT_LABELS.map(label => (
                   <button
                     key={label}

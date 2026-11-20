@@ -12,6 +12,7 @@
 import { numKR } from '@/app/quote/format'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import type { useToast } from '@/components/common/Toast'
+import { R } from '@/lib/radius'
 
 export type ConfirmQuoteModalProps = {
   quoteNo: string
@@ -38,25 +39,25 @@ export default function ConfirmQuoteModal({
   // 배경은 종전 값(0.5)을 그대로 넘긴다 — 공용 오버레이 기본은 0.65 다.
   return (
     <ModalOverlay onClose={() => setShowConfirmModal(false)} style={{ background: 'rgba(0,0,0,0.5)' }}>
-  <div style={{ background: '#fff', borderRadius: 8, padding: 32, width: '100%', maxWidth: 440, boxShadow: '0 24px 64px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
+  <div style={{ background: '#fff', borderRadius: R.control, padding: 32, width: '100%', maxWidth: 440, boxShadow: '0 24px 64px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
     <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 4, letterSpacing: '-0.3px' }}>견적 확정</div>
     <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, fontWeight: 500 }}>{quoteNo} <span style={{ color: '#9ca3af' }}>(예상 번호 — 확정할 때 발급)</span></div>
-    <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: '12px 14px', marginBottom: 20 }}>
+    <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: R.control, padding: '12px 14px', marginBottom: 20 }}>
       <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.8 }}>
         확정하면 <b>견적번호가 발급되고 실적으로 기록됩니다.</b>
         <br />견적서 PDF 가 바로 만들어져 내려받아집니다.
       </div>
     </div>
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 24 }}>
-      <div style={{ background: '#eff4ff', borderRadius: 8, padding: '12px 14px', border: '1px solid #c7d7f8', textAlign: 'center' }}>
+      <div style={{ background: '#eff4ff', borderRadius: R.control, padding: '12px 14px', border: '1px solid #c7d7f8', textAlign: 'center' }}>
         <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, fontWeight: 500 }}>공급가</div>
         <div style={{ fontSize: 14, fontWeight: 800, color: '#234ea2' }}>₩{numKR(totalSupply)}</div>
       </div>
-      <div style={{ background: '#f3f4f6', borderRadius: 8, padding: '12px 14px', border: '1px solid #ebebeb', textAlign: 'center' }}>
+      <div style={{ background: '#f3f4f6', borderRadius: R.control, padding: '12px 14px', border: '1px solid #ebebeb', textAlign: 'center' }}>
         <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, fontWeight: 500 }}>원가</div>
         <div style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>₩{numKR(totalCost)}</div>
       </div>
-      <div style={{ background: totalProfitRate >= 40 ? '#f0fdf4' : '#fef2f2', borderRadius: 8, padding: '12px 14px', border: `1px solid ${totalProfitRate >= 40 ? '#bbf7d0' : '#fecaca'}`, textAlign: 'center' }}>
+      <div style={{ background: totalProfitRate >= 40 ? '#f0fdf4' : '#fef2f2', borderRadius: R.control, padding: '12px 14px', border: `1px solid ${totalProfitRate >= 40 ? '#bbf7d0' : '#fecaca'}`, textAlign: 'center' }}>
         <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, fontWeight: 500 }}>순이익</div>
         <div style={{ fontSize: 13, fontWeight: 800, color: totalProfitRate >= 40 ? '#16a34a' : '#dc2626' }}>
           ₩{numKR(totalProfit)}<br />
@@ -69,7 +70,7 @@ export default function ConfirmQuoteModal({
       const messages = [errors.company, errors.eu, errors.items, errors.expenses].filter(Boolean)
       if (messages.length === 0) return null
       return (
-        <div style={{ marginBottom: 10, padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6 }}>
+        <div style={{ marginBottom: 10, padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: R.icon }}>
           {messages.map((m, i) => (
             <div key={i} style={{ fontSize: 12, color: '#dc2626', lineHeight: 1.6 }}>{m}</div>
           ))}
@@ -79,7 +80,7 @@ export default function ConfirmQuoteModal({
     <div style={{ display: 'flex', gap: 10 }}>
       <button onClick={() => setShowConfirmModal(false)}
         disabled={isSubmitting}
-        style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: isSubmitting ? 'not-allowed' : 'pointer', color: '#111827', opacity: isSubmitting ? 0.6 : 1 }}>
+        style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: R.icon, fontWeight: 700, fontSize: 14, cursor: isSubmitting ? 'not-allowed' : 'pointer', color: '#111827', opacity: isSubmitting ? 0.6 : 1 }}>
         취소
       </button>
       {/* 여기서 바로 확정한다 — 결재선을 받는 단계는 없앴다(runConfirm 설명). */}
@@ -90,7 +91,7 @@ export default function ConfirmQuoteModal({
         void runConfirm()
       }}
         disabled={isSubmitting}
-        style={{ flex: 1, padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 14, cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.6 : 1 }}>
+        style={{ flex: 1, padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: R.icon, fontWeight: 700, fontSize: 14, cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.6 : 1 }}>
         {isSubmitting ? '저장 중...' : '확인'}
       </button>
     </div>

@@ -17,6 +17,7 @@ import { loadActivityTypes } from '@/lib/activityTypes'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
 import { nowKSTParts, addDays } from '@/lib/date'
 import { countedVisitEnd } from '@/lib/serviceVisit'
+import { R } from '@/lib/radius'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#fafafa'
@@ -52,24 +53,24 @@ type ActivityRow = {
 
 function SkeletonCard() {
   return (
-    <div style={{ background: CARD_BG, borderRadius: 8, padding: '14px 16px', border: `1px solid ${BORDER}` }}>
+    <div style={{ background: CARD_BG, borderRadius: R.control, padding: '14px 16px', border: `1px solid ${BORDER}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14, paddingBottom: 12, borderBottom: `1px solid ${BORDER}` }}>
         <div>
-          <div style={{ width: 68, height: 16, background: '#e5e7eb', borderRadius: 6, marginBottom: 7, animation: 'pulse 1.5s ease-in-out infinite' }} />
-          <div style={{ width: 36, height: 11, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
+          <div style={{ width: 68, height: 16, background: '#e5e7eb', borderRadius: R.icon, marginBottom: 7, animation: 'pulse 1.5s ease-in-out infinite' }} />
+          <div style={{ width: 36, height: 11, background: '#e5e7eb', borderRadius: R.icon, animation: 'pulse 1.5s ease-in-out infinite' }} />
         </div>
-        <div style={{ width: 34, height: 20, background: '#e5e7eb', borderRadius: 99, animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div style={{ width: 34, height: 20, background: '#e5e7eb', borderRadius: R.pill, animation: 'pulse 1.5s ease-in-out infinite' }} />
       </div>
       {/* 유형 6줄 자리 — 카드 목록 영역이 6줄 높이로 고정돼 있다 */}
       {Array.from({ length: 6 }).map((_, i) => (
         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 9 }}>
-          <div style={{ width: 52, height: 11, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
-          <div style={{ width: 30, height: 11, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
+          <div style={{ width: 52, height: 11, background: '#e5e7eb', borderRadius: R.icon, animation: 'pulse 1.5s ease-in-out infinite' }} />
+          <div style={{ width: 30, height: 11, background: '#e5e7eb', borderRadius: R.icon, animation: 'pulse 1.5s ease-in-out infinite' }} />
         </div>
       ))}
       <div style={{ marginTop: 12, padding: '5px 0', display: 'flex', justifyContent: 'space-between' }}>
-        <div style={{ width: 24, height: 13, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
-        <div style={{ width: 44, height: 18, background: '#e5e7eb', borderRadius: 6, animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div style={{ width: 24, height: 13, background: '#e5e7eb', borderRadius: R.icon, animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div style={{ width: 44, height: 18, background: '#e5e7eb', borderRadius: R.icon, animation: 'pulse 1.5s ease-in-out infinite' }} />
       </div>
     </div>
   )
@@ -250,7 +251,7 @@ export default function ActivityPage() {
   const teamOptions = ['전체', ...[...new Set(rows.map(r => r.engineer.teams).filter(Boolean))].sort() as string[]]
 
   const inp: React.CSSProperties = {
-    padding: '8px 11px', border: `1px solid ${BORDER}`, borderRadius: 6,
+    padding: '8px 11px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
     background: CARD_BG, color: TEXT, fontSize: 13, outline: 'none',
     fontFamily: 'inherit', colorScheme: 'light' as const,
   }
@@ -276,7 +277,7 @@ export default function ActivityPage() {
 
         {/* 필터 카드 */}
         <div style={{
-          background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8,
+          background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control,
           padding: '14px 16px', marginBottom: 12,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -294,7 +295,7 @@ export default function ActivityPage() {
             <button onClick={handleSearch}
               style={{
                 padding: '7px 16px', background: BLUE, color: '#fff', border: 'none',
-                borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                borderRadius: R.icon, fontWeight: 700, fontSize: 13, cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: 5, transition: 'background 0.15s ease',
               }}
               onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = '#1c3e87'}

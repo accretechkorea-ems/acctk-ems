@@ -17,6 +17,7 @@
 
 import { STAGES, compactKRW, dateToMonth } from '@/components/customer/opportunity'
 import type { SalesOpportunity } from '@/components/customer/types'
+import { R } from '@/lib/radius'
 
 type Props = {
   opp: SalesOpportunity
@@ -44,7 +45,7 @@ export default function OpportunityCard({ opp, canEdit, onOpen, onChangeStage, o
     <div
       className="pl-card"
       style={{
-        background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8,
+        background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.control,
         padding: 12, transition: 'border-color 0.15s ease',
       }}
       onMouseEnter={e => { e.currentTarget.style.borderColor = '#c7d7f8' }}
@@ -111,7 +112,7 @@ export default function OpportunityCard({ opp, canEdit, onOpen, onChangeStage, o
               onPointerDown={e => e.stopPropagation()}
               onClick={onWriteQuote}
               title="이 포캐스트로 견적서를 작성합니다"
-              style={{ padding: '1px 6px', background: 'none', color: '#234ea2', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+              style={{ padding: '1px 6px', background: 'none', color: '#234ea2', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap' }}
             >
               견적 쓰기
             </button>
@@ -131,7 +132,7 @@ export default function OpportunityCard({ opp, canEdit, onOpen, onChangeStage, o
             }}
             title={canEdit ? '단계 변경' : '담당자만 바꿀 수 있습니다'}
             style={{
-              maxWidth: 76, padding: '2px 4px', borderRadius: 6,
+              maxWidth: 76, padding: '2px 4px', borderRadius: R.icon,
               border: '1px solid #ebebeb', background: canEdit ? '#fff' : '#f9fafb',
               color: canEdit ? '#6b7280' : MUTED,
               fontSize: 11, fontWeight: 700, outline: 'none',
@@ -147,7 +148,7 @@ export default function OpportunityCard({ opp, canEdit, onOpen, onChangeStage, o
               onPointerDown={e => e.stopPropagation()}
               onClick={onClose}
               title="이 포캐스트를 종료합니다"
-              style={{ padding: '1px 6px', background: '#f3f4f6', color: '#6b7280', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit' }}
+              style={{ padding: '1px 6px', background: '#f3f4f6', color: '#6b7280', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit' }}
             >
               종료
             </button>

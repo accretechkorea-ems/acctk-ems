@@ -42,16 +42,17 @@ import TimeStepper from './TimeStepper'
 import EngineerPicker, { type PickerEngineer } from './EngineerPicker'
 import CustomerSearch, { type CustomerHit } from './CustomerSearch'
 import QuotePicker, { type QuoteHit } from './QuotePicker'
+import { R } from '@/lib/radius'
 
 const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: SUB, marginBottom: 6, display: 'block' }
 // 모바일에서 iOS 자동 확대를 막으려면 입력 글자가 16 이어야 한다(기존 모달과 같은 값).
 const fieldStyle: CSSProperties = {
-  width: '100%', height: 44, padding: '0 12px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  width: '100%', height: 44, padding: '0 12px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   boxSizing: 'border-box', color: TEXT, background: CARD_BG, outline: 'none', fontSize: 16, fontFamily: 'inherit',
 }
 const dateFieldStyle: CSSProperties = { ...fieldStyle, colorScheme: 'light' }
 const areaStyle: CSSProperties = {
-  width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   boxSizing: 'border-box', color: TEXT, background: CARD_BG, outline: 'none', fontSize: 16,
   resize: 'vertical', lineHeight: 1.5, fontFamily: 'inherit',
 }
@@ -73,7 +74,7 @@ const LAYOUT_CSS = `
 function SectionTitle({ children, spaced }: { children: ReactNode; spaced?: boolean }) {
   return (
     <div data-section="" style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: spaced ? 12 : 4 }}>
-      <div style={{ width: 3, height: 14, background: BLUE, borderRadius: 6, flexShrink: 0 }} />
+      <div style={{ width: 3, height: 14, background: BLUE, borderRadius: R.icon, flexShrink: 0 }} />
       <span style={{ fontWeight: 800, fontSize: 13, color: TEXT }}>{children}</span>
     </div>
   )
@@ -409,7 +410,7 @@ export default function UsageModal({
   }
 
   const toggleBtn = (on: boolean): CSSProperties => ({
-    flex: 1, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 700,
+    flex: 1, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 14, fontWeight: 700,
     background: on ? CARD_BG : 'transparent', color: on ? TEXT : MUTED, transition: 'color 0.15s ease',
   })
 
@@ -433,7 +434,7 @@ export default function UsageModal({
     <ModalOverlay onClose={onClose} confirmClose style={{ padding: 12 }}>
       <div onClick={e => e.stopPropagation()} style={{
         width: 'min(900px, 90vw)', maxHeight: 'calc(100dvh - 32px)',
-        background: CARD_BG, borderRadius: 8, boxSizing: 'border-box',
+        background: CARD_BG, borderRadius: R.control, boxSizing: 'border-box',
         boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
         animation: 'modal-in 0.18s ease', display: 'flex', flexDirection: 'column',
       }}>
@@ -457,7 +458,7 @@ export default function UsageModal({
 
           {/* 재작성 — 반려 사유를 먼저 보인다 */}
           {rewriting && (
-            <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', background: NEUTRAL_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 10px' }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', background: NEUTRAL_BG, border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '8px 10px' }}>
               <span style={{ fontSize: 11, fontWeight: 800, color: DANGER, whiteSpace: 'nowrap' }}>반려 사유</span>
               <span style={{ fontSize: 12, color: TEXT, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.6 }}>{rewrite?.comment ?? '-'}</span>
             </div>
@@ -477,7 +478,7 @@ export default function UsageModal({
                   <button key={p} type="button" role="radio" aria-checked={on} disabled={disabled} title={why}
                     onClick={() => choosePurpose(p)}
                     style={{
-                      height: 36, padding: '0 14px', borderRadius: 6, fontFamily: 'inherit',
+                      height: 36, padding: '0 14px', borderRadius: R.icon, fontFamily: 'inherit',
                       cursor: disabled ? 'not-allowed' : 'pointer',
                       border: on ? `1px solid ${color}` : errors.purpose ? errBorder : `1px solid ${BORDER}`,
                       background: on ? color : CARD_BG, color: on ? '#ffffff' : disabled ? FAINT : TEXT,
@@ -619,7 +620,7 @@ export default function UsageModal({
             <div className="sr-mcol">
               {!chosen ? (
                 <div style={{
-                  minHeight: 180, border: `1px dashed ${BORDER}`, borderRadius: 8,
+                  minHeight: 180, border: `1px dashed ${BORDER}`, borderRadius: R.control,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 13, fontWeight: 600, color: MUTED, textAlign: 'center', padding: 16,
                 }}>
@@ -659,7 +660,7 @@ export default function UsageModal({
                       {has('carried_out') && (
                         <div>
                           <label style={labelStyle}>외부반출</label>
-                          <div style={{ display: 'flex', background: NEUTRAL_BG, borderRadius: 6, padding: 3, height: 44, boxSizing: 'border-box' }}>
+                          <div style={{ display: 'flex', background: NEUTRAL_BG, borderRadius: R.icon, padding: 3, height: 44, boxSizing: 'border-box' }}>
                             <button type="button" onClick={() => setCarriedOut(false)} style={toggleBtn(!carriedOut)}>없음</button>
                             <button type="button" onClick={() => setCarriedOut(true)} style={toggleBtn(carriedOut)}>있음</button>
                           </div>
@@ -739,13 +740,13 @@ export default function UsageModal({
           )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <button onClick={onClose} disabled={saving}
-              style={{ padding: '9px 16px', background: CARD_BG, color: SUB, borderRadius: 6, border: `1px solid ${BORDER}`, cursor: saving ? 'default' : 'pointer', fontWeight: 600, fontSize: 13 }}>
+              style={{ padding: '9px 16px', background: CARD_BG, color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: saving ? 'default' : 'pointer', fontWeight: 600, fontSize: 13 }}>
               취소
             </button>
             <button onClick={handleSave} disabled={saving || !timeValid}
               onMouseEnter={e => { if (!saving && timeValid) e.currentTarget.style.background = BLUE_HOVER }}
               onMouseLeave={e => { if (!saving && timeValid) e.currentTarget.style.background = BLUE }}
-              style={{ padding: '9px 18px', background: BLUE, color: '#fff', borderRadius: 6, border: 'none', cursor: (saving || !timeValid) ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, opacity: (saving || !timeValid) ? 0.6 : 1, transition: 'background 0.15s ease' }}>
+              style={{ padding: '9px 18px', background: BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: (saving || !timeValid) ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, opacity: (saving || !timeValid) ? 0.6 : 1, transition: 'background 0.15s ease' }}>
               {saveLabel}
             </button>
           </div>

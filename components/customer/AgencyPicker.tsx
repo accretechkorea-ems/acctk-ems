@@ -18,13 +18,14 @@
 import { useMemo, useRef, useState, type CSSProperties } from 'react'
 import Popover from '@/components/common/Popover'
 import { DIRECT_SALE_LABEL, useAgencies, type AgencyOption } from '@/lib/customerAgency'
+import { R } from '@/lib/radius'
 
 const fieldStyle: CSSProperties = {
-  width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: 6,
+  width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
 }
 const ghostBtn: CSSProperties = {
-  padding: '9px 12px', background: '#f3f4f6', border: 'none', borderRadius: 6,
+  padding: '9px 12px', background: '#f3f4f6', border: 'none', borderRadius: R.icon,
   cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#6b7280', flexShrink: 0, whiteSpace: 'nowrap',
 }
 /** 후보로 한 번에 보여 주는 수. 45곳뿐이라 검색 없이도 훑을 수 있게 넉넉히 둔다. */
@@ -101,7 +102,7 @@ export default function AgencyPicker({ value, onChange, disabled, inputStyle, on
         onClose={() => setOpen(false)}
         matchAnchorWidth
         maxHeight={260}
-        style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+        style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.icon, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
       >
         {/* 직판 — 비우는 것과 같은 값이지만, 고를 수 있어야 뜻이 분명해진다 */}
         <div

@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation'
 import { INITIALS_TAKEN_MESSAGE, isInitialsTaken, isInitialsUniqueViolation, normalizeInitials } from '@/lib/initials'
 import AddressField from '@/components/customer/modals/AddressField'
 import { geocodeAddress } from '@/lib/geocode'
+import { R } from '@/lib/radius'
 
 /**
  * 갈아 끼운 뒤 남은 **옛 프로필 사진**을 버킷에서 지운다.
@@ -110,7 +111,7 @@ export default function AccountPage() {
     width: '100%',
     padding: 12,
     border: `1px solid ${INPUT_BORDER}`,
-    borderRadius: 10,
+    borderRadius: R.tile,
     background: PAGE_BG,
     color: TEXT_PRIMARY,
     boxSizing: 'border-box' as const,
@@ -338,7 +339,7 @@ export default function AccountPage() {
     if (!message) return null
     return (
       <div style={{
-        marginTop: 16, padding: '12px 16px', borderRadius: 10,
+        marginTop: 16, padding: '12px 16px', borderRadius: R.tile,
         background: message.type === 'success' ? '#f0fdf4' : '#fef2f2',
         color: message.type === 'success' ? '#166534' : DANGER_BG,
         fontSize: 14, fontWeight: 600,
@@ -362,7 +363,7 @@ export default function AccountPage() {
         </div>
 
         {/* 프로필 카드 */}
-        <div style={{ background: PANEL_BG, border: `1px solid ${INPUT_BORDER}`, borderRadius: 16, padding: 24, marginBottom: 16 }}>
+        <div style={{ background: PANEL_BG, border: `1px solid ${INPUT_BORDER}`, borderRadius: R.modal, padding: 24, marginBottom: 16 }}>
           <h2 style={{ fontSize: 16, fontWeight: 700, color: TEXT_PRIMARY, margin: '0 0 20px 0' }}>프로필</h2>
 
           {/* 프로필 사진 */}
@@ -479,7 +480,7 @@ export default function AccountPage() {
             style={{
               width: '100%', marginTop: 20, padding: '12px 0',
               background: BLUE_BG, color: BLUE_TEXT, border: 'none',
-              borderRadius: 10, fontWeight: 700, fontSize: 15,
+              borderRadius: R.tile, fontWeight: 700, fontSize: 15,
               cursor: 'pointer', opacity: isSavingProfile ? 0.7 : 1,
             }}
           >
@@ -488,7 +489,7 @@ export default function AccountPage() {
         </div>
 
         {/* 비밀번호 카드 */}
-        <div style={{ background: PANEL_BG, border: `1px solid ${INPUT_BORDER}`, borderRadius: 16, padding: 24 }}>
+        <div style={{ background: PANEL_BG, border: `1px solid ${INPUT_BORDER}`, borderRadius: R.modal, padding: 24 }}>
           <h2 style={{ fontSize: 16, fontWeight: 700, color: TEXT_PRIMARY, margin: '0 0 16px 0' }}>비밀번호 변경</h2>
 
           <div style={{ display: 'grid', gap: 12 }}>
@@ -514,7 +515,7 @@ export default function AccountPage() {
             style={{
               width: '100%', marginTop: 20, padding: '12px 0',
               background: BLUE_BG, color: BLUE_TEXT, border: 'none',
-              borderRadius: 10, fontWeight: 700, fontSize: 15,
+              borderRadius: R.tile, fontWeight: 700, fontSize: 15,
               cursor: 'pointer', opacity: isSavingPassword ? 0.7 : 1,
             }}
           >

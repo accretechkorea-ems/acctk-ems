@@ -13,6 +13,7 @@ import { useHoldingCrud } from '@/hooks/customer/useHoldingCrud'
 import { useHoldingList } from '@/hooks/holding/useHoldingList'
 import { deviceLabel, elapsedDays, elapsedLabel, isHoldingDeviceDisposed } from '@/components/customer/holding'
 import type { Holding } from '@/components/customer/types'
+import { R } from '@/lib/radius'
 
 const PAGE_BG = '#f4f5f7'
 const STALE_DAYS = 30
@@ -35,7 +36,7 @@ function HoldingCard({ h, onOpen, onResolve }: { h: Holding; onOpen: () => void;
 
   return (
     <div
-      style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, padding: '12px 14px', transition: 'border-color 0.15s ease' }}
+      style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.control, padding: '12px 14px', transition: 'border-color 0.15s ease' }}
       onMouseEnter={e => { e.currentTarget.style.borderColor = '#c7d7f8' }}
       onMouseLeave={e => { e.currentTarget.style.borderColor = '#ebebeb' }}
     >
@@ -51,7 +52,7 @@ function HoldingCard({ h, onOpen, onResolve }: { h: Holding; onOpen: () => void;
           {/* 폐기된 장비를 가리키는 홀딩 — 줄은 그대로 두고 이름 옆에 알린다(그 장비는
               장비 목록에서 숨겨져 있어 찾아도 안 나온다). 타임라인과 같은 뱃지다. */}
           {isHoldingDeviceDisposed(h) && (
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>폐기</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>폐기</span>
           )}
         </button>
         {stale && (
@@ -95,12 +96,12 @@ function HoldingCard({ h, onOpen, onResolve }: { h: Holding; onOpen: () => void;
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexShrink: 0 }}>
           {!h.resolved_at && (
             <button onClick={onResolve}
-              style={{ padding: '4px 10px', background: '#fff', color: '#6b7280', border: '1px solid #ebebeb', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
+              style={{ padding: '4px 10px', background: '#fff', color: '#6b7280', border: '1px solid #ebebeb', borderRadius: R.icon, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
               해제
             </button>
           )}
           <button onClick={onOpen}
-            style={{ padding: '4px 10px', background: '#f3f4f6', color: '#6b7280', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
+            style={{ padding: '4px 10px', background: '#f3f4f6', color: '#6b7280', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
             상세
           </button>
         </div>
@@ -152,12 +153,12 @@ export default function HoldingsPage() {
           </p>
         </div>
 
-        <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: 8, padding: '14px 16px', marginBottom: 12 }}>
+        <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.control, padding: '14px 16px', marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             {TABS.map(t => (
               <button key={t} onClick={() => setTab(t)}
                 style={{
-                  padding: '5px 12px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                  padding: '5px 12px', borderRadius: R.icon, border: 'none', cursor: 'pointer',
                   fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
                   background: tab === t ? '#234ea2' : '#f3f4f6', color: tab === t ? '#ffffff' : '#9ca3af',
                 }}>
@@ -170,7 +171,7 @@ export default function HoldingsPage() {
               placeholder="업체 / 장비 / 제목 검색"
               style={{
                 flex: 1, minWidth: 180, padding: '8px 11px', border: '1px solid #ebebeb',
-                borderRadius: 6, background: '#fff', color: '#111827', fontSize: 13,
+                borderRadius: R.icon, background: '#fff', color: '#111827', fontSize: 13,
                 outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
               }}
             />
@@ -178,21 +179,21 @@ export default function HoldingsPage() {
         </div>
 
         {loading ? (
-          <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 8, padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+          <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
             불러오는 중...
           </div>
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{tab}</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: 99, padding: '2px 8px' }}>{rows.length}건</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{rows.length}건</span>
               {tab !== '진행 중' && openCount > 0 && (
                 <span style={{ fontSize: 11, color: '#9ca3af' }}>진행 중 {openCount}건</span>
               )}
             </div>
 
             {rows.length === 0 ? (
-              <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 8, padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+              <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
                 조건에 맞는 홀딩이 없습니다
               </div>
             ) : (

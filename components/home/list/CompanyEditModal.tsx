@@ -20,6 +20,7 @@ import FormFocusStyle from '@/components/common/FormFocusStyle'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import { MEMO_MAX } from '@/components/common/MemoPopover'
+import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
@@ -29,7 +30,7 @@ const BLUE = '#234ea2'
 
 const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: SUB, marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
-  width: '100%', padding: '11px 12px', border: `1px solid ${BORDER}`, borderRadius: 6,
+  width: '100%', padding: '11px 12px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   boxSizing: 'border-box', color: TEXT, background: '#fff', outline: 'none', fontSize: 14,
 }
 
@@ -79,7 +80,7 @@ export default function CompanyEditModal({ initial, siteCount, canRename, isSavi
           // 폭·높이는 등록 폼과 같은 규칙이다.
           width: 'min(92vw, 1100px)', maxWidth: 'min(92vw, 1100px)',
           maxHeight: '96vh', overflowY: 'auto',
-          background: '#fff', borderRadius: 8, padding: 24,
+          background: '#fff', borderRadius: R.control, padding: 24,
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
           animation: 'modal-in 0.18s ease',
         }}>
@@ -151,9 +152,9 @@ export default function CompanyEditModal({ initial, siteCount, canRename, isSavi
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
           <button onClick={onClose} disabled={isSaving}
-            style={{ padding: '10px 15px', background: '#fff', color: SUB, borderRadius: 6, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+            style={{ padding: '10px 15px', background: '#fff', color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
           <button onClick={handleSave} disabled={isSaving}
-            style={{ padding: '10px 17px', background: BLUE, color: '#fff', borderRadius: 6, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}>
+            style={{ padding: '10px 17px', background: BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}>
             {isSaving ? '저장 중…' : '저장'}
           </button>
         </div>

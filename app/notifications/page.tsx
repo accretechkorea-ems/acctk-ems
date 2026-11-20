@@ -15,6 +15,7 @@ import { NOTI_GROUPS, notiGroupOf } from '@/lib/notificationGroups'
 import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, BLUE, NEUTRAL_BG, inputStyle,
 } from '@/components/common/ui'
+import { R } from '@/lib/radius'
 
 // 유형 묶음 규칙은 lib/notificationGroups.ts 에 있다 — 홈의 알림 카드가 같은 규칙으로 센다.
 const TYPE_TABS = ['전체', ...NOTI_GROUPS]
@@ -84,7 +85,7 @@ export default function NotificationsPage() {
             onClick={markAllAsRead}
             disabled={unreadCount === 0}
             style={{
-              padding: '8px 14px', borderRadius: 6, border: `1px solid ${BORDER}`, background: CARD_BG,
+              padding: '8px 14px', borderRadius: R.icon, border: `1px solid ${BORDER}`, background: CARD_BG,
               color: unreadCount === 0 ? MUTED : BLUE, fontWeight: 700, fontSize: 13,
               cursor: unreadCount === 0 ? 'default' : 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit',
             }}
@@ -95,7 +96,7 @@ export default function NotificationsPage() {
 
         {/* 필터 — 읽음 여부는 조회 조건, 유형은 표시 필터다 */}
         <div style={{
-          background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '14px 16px',
+          background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '14px 16px',
           marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
         }}>
           <SegmentedControl options={['전체', '안 읽음']} value={readTab} onChange={setReadTab} />
@@ -109,7 +110,7 @@ export default function NotificationsPage() {
           </select>
         </div>
 
-        <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control, overflow: 'hidden' }}>
           {loading ? (
             <div style={{ padding: '40px 0', textAlign: 'center', color: MUTED, fontSize: 13 }}>불러오는 중...</div>
           ) : buckets.length === 0 ? (
@@ -136,7 +137,7 @@ export default function NotificationsPage() {
               type="button"
               onClick={loadMore}
               style={{
-                padding: '9px 18px', borderRadius: 6, border: `1px solid ${BORDER}`, background: CARD_BG,
+                padding: '9px 18px', borderRadius: R.icon, border: `1px solid ${BORDER}`, background: CARD_BG,
                 color: TEXT, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
               }}
             >

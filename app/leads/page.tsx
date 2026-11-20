@@ -30,6 +30,7 @@ import {
   LEAD_STATUS_NEW, LEAD_STATUS_ACTIVE, LEAD_STATUS_CONVERTED, LEAD_STATUS_SKIPPED, LEAD_STATUS_BLOCKED,
   COMPETITOR_OTHER, MAX_LEN, SKIP_REASON_MIN, isLeadClosed,
 } from '@/lib/leadOptions'
+import { R } from '@/lib/radius'
 
 const BLUE = '#234ea2'
 const TEXT = '#111827'
@@ -102,7 +103,7 @@ const td: CSSProperties = { padding: '10px 10px', fontSize: 12, color: TEXT, whi
 
 // ── 아래 다섯 개는 활동 현황 화면의 규칙을 그대로 옮긴 것이다(새 값 없음) ──
 // 카드: 활동 카드와 같은 흰 바탕 · 1px 테두리 · radius 8 · padding 14/16
-const cardStyle: CSSProperties = { background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '14px 16px' }
+const cardStyle: CSSProperties = { background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '14px 16px' }
 // 카드 제목: 활동 카드의 이름 줄(17/800/-0.3px) + 아래 구분선(paddingBottom 12, marginBottom 14)
 const cardTitle: CSSProperties = {
   fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px', lineHeight: 1.2,
@@ -114,21 +115,21 @@ const cardRows: CSSProperties = { display: 'grid', gap: 7 }
 const dividerTop: CSSProperties = { marginTop: 12, paddingTop: 12, borderTop: `1px solid ${BORDER}` }
 // 입력칸: 활동 현황 필터 카드의 input 과 같은 값
 const inpStyle: CSSProperties = {
-  padding: '8px 11px', border: `1px solid ${BORDER}`, borderRadius: 6, background: CARD_BG,
+  padding: '8px 11px', border: `1px solid ${BORDER}`, borderRadius: R.icon, background: CARD_BG,
   color: TEXT, fontSize: 13, outline: 'none', fontFamily: 'inherit',
 }
 // 날짜·월 입력은 브라우저 기본 배색을 따라가지 않도록 활동 현황과 같은 값을 함께 준다.
 const dateInpStyle: CSSProperties = { ...inpStyle, colorScheme: 'light' }
 // 실행 버튼: 활동 현황의 조회 버튼(파랑) / 비활성은 동선 보기 버튼의 회색 규칙
 const primaryBtn = (disabled: boolean): CSSProperties => ({
-  padding: '7px 16px', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 700,
+  padding: '7px 16px', border: 'none', borderRadius: R.icon, fontSize: 13, fontWeight: 700,
   fontFamily: 'inherit', whiteSpace: 'nowrap', transition: 'background 0.15s ease',
   background: disabled ? '#f3f4f6' : BLUE, color: disabled ? FAINT : '#fff',
   cursor: disabled ? 'not-allowed' : 'pointer',
 })
 // 취소 버튼: 상세 모달 닫기 버튼과 같은 회색 조합
 const ghostBtn: CSSProperties = {
-  padding: '7px 16px', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 700,
+  padding: '7px 16px', border: 'none', borderRadius: R.icon, fontSize: 13, fontWeight: 700,
   fontFamily: 'inherit', whiteSpace: 'nowrap', background: '#f3f4f6', color: MUTED, cursor: 'pointer',
 }
 
@@ -211,7 +212,7 @@ function LeadCardThumb({ path, onOpen }: { path: string; onOpen: (url: string) =
         alt="명함"
         onClick={() => onOpen(url)}
         title="클릭하면 크게 볼 수 있습니다"
-        style={{ width: '100%', maxWidth: 220, maxHeight: 140, objectFit: 'contain', border: `1px solid ${BORDER}`, borderRadius: 6, background: '#fff', cursor: 'zoom-in', display: 'block' }}
+        style={{ width: '100%', maxWidth: 220, maxHeight: 140, objectFit: 'contain', border: `1px solid ${BORDER}`, borderRadius: R.icon, background: '#fff', cursor: 'zoom-in', display: 'block' }}
       />
     </div>
   )
@@ -705,7 +706,7 @@ function LeadsPageInner() {
                   pill 모양과 상태색이 스스로 구분되므로 필터로 오해되지 않는다. */}
               {newCount > 0 && (
                 <span style={{
-                  fontSize: 11, fontWeight: 700, borderRadius: 99, padding: '2px 9px', whiteSpace: 'nowrap',
+                  fontSize: 11, fontWeight: 700, borderRadius: R.pill, padding: '2px 9px', whiteSpace: 'nowrap',
                   background: leadStatusColor(LEAD_STATUS_NEW).bg, color: leadStatusColor(LEAD_STATUS_NEW).text,
                 }}>
                   미처리 {newCount}
@@ -752,7 +753,7 @@ function LeadsPageInner() {
           </div>
         )}
 
-        <div style={{ background: CARD_BG, borderRadius: 8, border: `1px solid ${BORDER}`, overflowX: 'auto' }}>
+        <div style={{ background: CARD_BG, borderRadius: R.control, border: `1px solid ${BORDER}`, overflowX: 'auto' }}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: 60, color: MUTED, fontSize: 13 }}>불러오는 중...</div>
           ) : sorted.length === 0 ? (
@@ -860,7 +861,7 @@ function LeadsPageInner() {
                           </span>
                         </td>
                         <td style={td}>
-                          <span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: sc.bg, color: sc.text }}>
+                          <span style={{ padding: '3px 10px', borderRadius: R.pill, fontSize: 11, fontWeight: 700, background: sc.bg, color: sc.text }}>
                             {lead.status}
                           </span>
                         </td>
@@ -1052,7 +1053,7 @@ function LeadsPageInner() {
                               {/* 종결된 리드는 무엇으로 끝났는지와 그 사유를 여기서 밝힌다(버튼은 잠겨 있다). */}
                               {closed && (
                                 <div style={{ ...dividerTop, display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
-                                  <span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: sc.bg, color: sc.text, flexShrink: 0 }}>
+                                  <span style={{ padding: '3px 10px', borderRadius: R.pill, fontSize: 11, fontWeight: 700, background: sc.bg, color: sc.text, flexShrink: 0 }}>
                                     {lead.status}
                                   </span>
                                   <span style={{ flex: '1 1 240px', minWidth: 0, fontSize: 13, color: MUTED, lineHeight: '20px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
@@ -1198,7 +1199,7 @@ function LeadsPageInner() {
       {cardViewer && (
         <ModalOverlay onClose={() => setCardViewer(null)} style={{ background: 'rgba(0,0,0,0.8)', zIndex: Z.fullscreen, padding: 32, cursor: 'zoom-out' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={cardViewer} alt="명함" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8, background: '#fff' }} />
+          <img src={cardViewer} alt="명함" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: R.control, background: '#fff' }} />
         </ModalOverlay>
       )}
     </div>

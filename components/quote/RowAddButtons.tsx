@@ -19,6 +19,7 @@ import {
   type RowDefaults,
 } from '@/app/quote/calc'
 import { ROW_KIND_HINT, ROW_KIND_LABEL, ROW_KIND_ORDER } from '@/lib/quoteRowKinds'
+import { R } from '@/lib/radius'
 
 export type RowAddButtonsProps = {
   setRows: React.Dispatch<React.SetStateAction<QuoteRow[]>>
@@ -84,7 +85,7 @@ export default function RowAddButtons({ setRows, serviceRow, discountRow, catego
               // (품목 패널 412 − 좌우 여백 42 … 칼럼 폭이 430 으로 고정이라 흔들리지 않는다).
               // 제목줄이 더해지기 전 다섯이던 때의 기준(340px 한 줄)은 이제 지킬 수 없다 —
               // 여백·글자를 더 줄여도(11px·여백 2) 334 가 바닥이다.
-              height: 28, padding: '0 4px', borderRadius: 6, flex: '1 1 auto', minWidth: 0,
+              height: 28, padding: '0 4px', borderRadius: R.icon, flex: '1 1 auto', minWidth: 0,
               background: '#fff',
               color: locked ? '#9ca3af' : '#234ea2',
               border: '1px solid #ebebeb',

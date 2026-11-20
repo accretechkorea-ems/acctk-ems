@@ -11,6 +11,7 @@ import {
   ATTACH_ACCEPT, ATTACH_MAX, UPLOAD_TRIES,
   deleteAttachment, openAttachment, uploadAttachments,
 } from './attachments'
+import { R } from '@/lib/radius'
 
 /** 「삭제」는 두 번 눌러야 실행된다. 쇼룸·결재 회수와 같은 3초다. */
 const CONFIRM_MS = 3000
@@ -53,7 +54,7 @@ export function reportDownloadName({ visitDate, companyName, serviceType, stored
 export function AttachmentListBox({ children, maxHeight = LIST_MAX_HEIGHT }: { children: ReactNode; maxHeight?: number }) {
   return (
     <div style={{
-      border: '1px solid #ebebeb', borderRadius: 6, background: '#fff',
+      border: '1px solid #ebebeb', borderRadius: R.icon, background: '#fff',
       maxHeight, overflowY: 'auto', marginBottom: 8,
     }}>
       {children}
@@ -79,7 +80,7 @@ export function AttachmentRow({ badge, name, meta, title, actions, divider, onCl
     <>
       {badge && (
         <span style={{
-          flexShrink: 0, padding: '2px 7px', borderRadius: 99, background: '#f3f4f6',
+          flexShrink: 0, padding: '2px 7px', borderRadius: R.pill, background: '#f3f4f6',
           fontSize: 11, fontWeight: 700, color: '#6b7280',
         }}>
           {badge}
@@ -115,16 +116,16 @@ const byOrder = (a: ServiceAttachment, b: ServiceAttachment) =>
   (a.sort_order - b.sort_order) || a.created_at.localeCompare(b.created_at)
 
 const rowBtn: CSSProperties = {
-  border: '1px solid #ebebeb', borderRadius: 6, background: '#fff', color: '#6b7280',
+  border: '1px solid #ebebeb', borderRadius: R.icon, background: '#fff', color: '#6b7280',
   fontSize: 12, fontWeight: 600, padding: '4px 9px', cursor: 'pointer', whiteSpace: 'nowrap',
 }
 /** 확정 대기 상태의 삭제 버튼 — 쇼룸과 같은 채운 danger 버튼이다. */
 const dangerBtn: CSSProperties = {
-  border: 'none', borderRadius: 6, background: '#ef4444', color: '#fff',
+  border: 'none', borderRadius: R.icon, background: '#ef4444', color: '#fff',
   fontSize: 12, fontWeight: 700, padding: '5px 10px', cursor: 'pointer', whiteSpace: 'nowrap',
 }
 export const footerBtn: CSSProperties = {
-  border: '1px solid #ebebeb', borderRadius: 6, background: '#fff', color: '#6b7280',
+  border: '1px solid #ebebeb', borderRadius: R.icon, background: '#fff', color: '#6b7280',
   fontSize: 13, fontWeight: 600, padding: '7px 12px', cursor: 'pointer',
 }
 
@@ -346,7 +347,7 @@ export function ServiceFilesButton({ attachments, report, trailing }: {
             onClick={(e) => { e.stopPropagation(); setOpen(v => !v) }}
             style={{
               padding: '4px 10px', background: '#fff', color: '#111827',
-              borderRadius: 6, border: '1px solid #ebebeb', cursor: 'pointer',
+              borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer',
               fontWeight: 600, fontSize: 12, flexShrink: 0, whiteSpace: 'nowrap',
             }}
           >

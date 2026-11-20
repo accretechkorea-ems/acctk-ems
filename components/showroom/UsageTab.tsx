@@ -36,6 +36,7 @@ import type { UsageSheetContext } from '@/lib/showroomExcel'
 import type { PickerEngineer } from './EngineerPicker'
 import { loadPeriodUsages, loadUsageApprovals, callShowroomApi, saveSubmission, editInitial, copyInitial, outcomeOf, type SubmitOutcome } from './showroomData'
 import { SEARCH_MAX, type UsageQuery } from './usageQuery'
+import { R } from '@/lib/radius'
 
 const PAGE_SIZE = 30
 const SEARCH_DEBOUNCE_MS = 300
@@ -80,7 +81,7 @@ function pageItems(page: number, total: number): (number | '…')[] {
 }
 
 const pageBtn = (active: boolean, disabled = false): CSSProperties => ({
-  minWidth: 30, height: 30, padding: '0 8px', borderRadius: 6, fontFamily: 'inherit',
+  minWidth: 30, height: 30, padding: '0 8px', borderRadius: R.icon, fontFamily: 'inherit',
   border: active ? `1px solid ${BLUE}` : `1px solid ${BORDER}`,
   background: active ? BLUE : CARD_BG, color: active ? CARD_BG : disabled ? MUTED : SUB,
   fontSize: 12, fontWeight: 700, cursor: active || disabled ? 'default' : 'pointer',

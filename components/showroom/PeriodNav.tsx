@@ -11,6 +11,7 @@ import { useState, type CSSProperties } from 'react'
 import { periodLabel, shiftPeriod, type Period } from '@/lib/showroom'
 import { BORDER, CARD_BG, TEXT, MUTED, SUB, NEUTRAL_BG } from '@/components/common/ui'
 import PeriodPickerModal from './PeriodPickerModal'
+import { R } from '@/lib/radius'
 
 const CSS = `
   .sr-period { transition: background 0.15s ease; }
@@ -18,12 +19,12 @@ const CSS = `
 `
 
 const navBtn: CSSProperties = {
-  width: 30, height: 30, border: `1px solid ${BORDER}`, borderRadius: 6, background: CARD_BG,
+  width: 30, height: 30, border: `1px solid ${BORDER}`, borderRadius: R.icon, background: CARD_BG,
   color: SUB, cursor: 'pointer', fontSize: 13, fontWeight: 700, flexShrink: 0,
 }
 
 const periodBtn: CSSProperties = {
-  height: 30, minWidth: 120, padding: '0 10px', border: 'none', borderRadius: 6, background: 'transparent',
+  height: 30, minWidth: 120, padding: '0 10px', border: 'none', borderRadius: R.icon, background: 'transparent',
   color: TEXT, fontSize: 13, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap', cursor: 'pointer',
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
 }
