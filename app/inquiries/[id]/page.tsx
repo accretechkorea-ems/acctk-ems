@@ -60,6 +60,7 @@ import {
   directionOf, inquiryOneLine, inquiryStatusLabel, type InquiryDirection, type InquiryType,
 } from '@/lib/inquiries'
 import { R } from '@/lib/radius'
+import SitePicker, { deviceLabel, siteLabel, type PickedDevice, type PickedSite } from '@/components/inquiry/SitePicker'
 
 const TITLE_MAX = 200
 
@@ -200,6 +201,12 @@ type Detail = {
   cancelled_at: string | null
   created_by: number | null
   engineers: { name: string | null; position: string | null } | null
+  /** 어느 사업장·장비의 의뢰인가(db/inquiry_customer_device_20261120.sql). 비어 있을 수 있다. */
+  customer_id: number | null
+  device_id: number | null
+  /** 이름은 함께 읽어 온다 — 화면에 번호를 보여 줄 수는 없다. */
+  customers: { company_name: string | null; site_name: string | null } | null
+  devices: { device_name: string | null; device_name2: string | null; serial_number: string | null } | null
 }
 
 /** 담당자 고르기 — 목록 화면과 같은 모양(engineer_id·name·position·resigned_date). */
@@ -208,7 +215,11 @@ type PickEngineer = { engineer_id: number; name: string | null; position: string
 // 목록과 같은 이유로 제약 이름을 명시한다(engineers 를 여러 번 참조하게 될 표다).
 const SELECT_COLUMNS =
   'id, inquiry_no, inquiry_type, equipment_series, title, status, issued_date, cancelled_at, created_by,'
-  + ' engineers!inquiries_created_by_fkey(name, position)'
+  + ' engineers!inquiries_created_by_fkey(name, position),'
+  // 사업장·장비는 **이름까지** 함께 읽는다(조회를 더 하지 않는다). inquiries 는 두 표를
+  // 각각 한 번만 참조하므로 제약 이름을 적지 않아도 된다.
+  + ' customer_id, device_id, customers(company_name, site_name),'
+  + ' devices(device_name, device_name2, serial_number)'
 
 const dateText = (ymd: string | null): string => (ymd ? ymd.replace(/-/g, '.') : '')
 
@@ -618,6 +629,32 @@ function MessageModal({
  * 320px 왼쪽 열로 들어오면서 값 자리가 190px 밖에 남지 않아 입력·드롭다운이 다 눌렸다.
  * 세로로 쌓으면 값이 카드 폭을 그대로 쓴다.
  */
+/**
+ * 연결된 사업장·장비의 **이름** — 발급 모달의 후보 목록과 같은 규칙으로 짓는다
+ * (components/inquiry/SitePicker.tsx 의 siteLabel·deviceLabel). 연결이 없으면 빈 글자.
+ */
+const siteNameOf = (d: Detail): string =>
+  d.customer_id == null ? '' : siteLabel({
+    customer_id: d.customer_id,
+    company_name: d.customers?.company_name ?? null,
+    site_name: d.customers?.site_name ?? null,
+    address: null,
+  })
+
+const deviceNameOf = (d: Detail): string =>
+  d.device_id == null ? '' : deviceLabel({
+    device_id: d.device_id,
+    device_name: d.devices?.device_name ?? null,
+    device_name2: d.devices?.device_name2 ?? null,
+    serial_number: d.devices?.serial_number ?? null,
+  })
+
+/** 읽어 온 줄 → 고르는 칸의 값. */
+const pickedSiteOf = (d: Detail): PickedSite =>
+  d.customer_id == null ? null : { id: d.customer_id, name: siteNameOf(d) }
+const pickedDeviceOf = (d: Detail): PickedDevice =>
+  d.device_id == null ? null : { id: d.device_id, name: deviceNameOf(d) }
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     // 위아래 7 — 좁은 카드에 네댓 줄이 들어가므로 한 줄이라도 낮춰야 한 화면에 여유 있게 담긴다.
@@ -650,6 +687,9 @@ export default function InquiryDetailPage() {
   const [issuedDate, setIssuedDate] = useState('')
   const [engineerList, setEngineerList] = useState<PickEngineer[]>([])
   const [status, setStatus] = useState('')
+  /** 고치는 중의 사업장·장비. 읽어 온 값으로 되돌릴 수 있게 따로 들고 있는다. */
+  const [site, setSite] = useState<PickedSite>(null)
+  const [device, setDevice] = useState<PickedDevice>(null)
   /** 정보 카드가 편집 모드인가. 평소에는 읽기 전용으로 보여 준다. */
   const [infoEdit, setInfoEdit] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -694,6 +734,8 @@ export default function InquiryDetailPage() {
     setOwnerId(d.created_by ?? '')
     setIssuedDate(d.issued_date)
     setStatus(d.status)
+    setSite(pickedSiteOf(d))
+    setDevice(pickedDeviceOf(d))
     setState('ready')
   }, [id])
 
@@ -750,12 +792,23 @@ export default function InquiryDetailPage() {
   // 읽어 온 값과 다른 칸만 모은다. 하나도 없으면 저장 버튼이 꺼진다.
   // 상태도 여기에 들어간다 — 예전에는 고르는 즉시 저장했는데, 한 카드 안에서 어떤 칸은
   // 즉시 저장되고 어떤 칸은 버튼을 눌러야 하는 것이 헷갈렸다.
-  const edited: { title?: string; created_by?: number; issued_date?: string; status?: string } = {}
+  const edited: {
+    title?: string; created_by?: number; issued_date?: string; status?: string
+    customer_id?: number | null; device_id?: number | null
+  } = {}
   if (row) {
     if (title.trim() !== (row.title ?? '').trim()) edited.title = title.trim()
     if (ownerId !== '' && ownerId !== row.created_by) edited.created_by = ownerId
     if (issuedDate && issuedDate !== row.issued_date) edited.issued_date = issuedDate
     if (status && status !== row.status) edited.status = status
+    // 사업장·장비 — 둘은 **함께** 보낸다. 사업장을 바꾸면 장비도 그 사업장 것이어야 하고,
+    // 사업장을 끊으면 장비도 끊긴다(서버가 다시 본다 — app/api/inquiry/route.ts).
+    const nextSite = site?.id ?? null
+    const nextDevice = device?.id ?? null
+    if (nextSite !== (row.customer_id ?? null) || nextDevice !== (row.device_id ?? null)) {
+      edited.customer_id = nextSite
+      edited.device_id = nextSite == null ? null : nextDevice
+    }
   }
   const dirty = Object.keys(edited).length > 0
 
@@ -801,6 +854,7 @@ export default function InquiryDetailPage() {
    */
   const save = async (patch: {
     title?: string; status?: string; created_by?: number; issued_date?: string
+    customer_id?: number | null; device_id?: number | null
   }) => {
     if (Object.keys(patch).length === 0) return
     if (!row || cancelled || busy) return
@@ -902,6 +956,8 @@ export default function InquiryDetailPage() {
       setOwnerId(row.created_by ?? '')
       setIssuedDate(row.issued_date)
       setStatus(row.status)
+      setSite(pickedSiteOf(row))
+      setDevice(pickedDeviceOf(row))
     }
     setInfoEdit(false)
   }
@@ -1202,6 +1258,31 @@ export default function InquiryDetailPage() {
                     )}
                   </Field>
 
+                  {/* 사업장·장비 — **발급한 뒤에도 고친다**(2026-11-21). 업체명(글자)과는 다른 칸이다:
+                      글자는 서류에 찍히는 이름이고, 이쪽은 고객사 화면과 잇는 연결이다.
+                      고르는 부품은 발급 모달과 **같은 것**이다(components/inquiry/SitePicker.tsx). */}
+                  {infoEditing ? (
+                    <div style={{ padding: '7px 0', borderTop: `1px solid ${BORDER}` }}>
+                      <SitePicker site={site} setSite={setSite} device={device} setDevice={setDevice} />
+                      <span style={{ display: 'block', fontSize: 11, color: MUTED, lineHeight: 1.6 }}>
+                        고객사 화면의 활동 이력에 이 의뢰서가 뜹니다. 업체명 글자는 그대로 둡니다.
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <Field label="사업장">
+                        <span style={{ color: row.customer_id != null ? TEXT : MUTED }}>
+                          {siteNameOf(row) || '연결 없음'}
+                        </span>
+                      </Field>
+                      <Field label="장비">
+                        <span style={{ color: row.device_id != null ? TEXT : MUTED }}>
+                          {deviceNameOf(row) || '연결 없음'}
+                        </span>
+                      </Field>
+                    </>
+                  )}
+
                   {/* 내용 — 가장 최근 내용 기록의 본문 한 줄. **읽기 전용이다**(편집 모드에서도).
                       고치는 자리는 오른쪽 「내용 기록」 카드 하나뿐이다 — 같은 값을 두 자리에서 고치면
                       어느 쪽이 맞는지 알 수 없고, 기록은 날짜·구분·첨부가 함께 붙은 한 덩어리라
@@ -1230,7 +1311,7 @@ export default function InquiryDetailPage() {
                         onChange={e => setOwnerId(e.target.value ? Number(e.target.value) : '')}
                       >
                         {/* 담당자 없는 의뢰서는 만들지 않는다 — 값이 들어간 뒤에는 빈 칸을 고를 수 없다. */}
-                        {ownerId === '' && <option value="">고르기</option>}
+                        {ownerId === '' && <option value="" disabled hidden>고르기</option>}
                         {ownerOptions.map(e => (
                           <option key={e.engineer_id} value={e.engineer_id}>{engineerLabel(e)}</option>
                         ))}

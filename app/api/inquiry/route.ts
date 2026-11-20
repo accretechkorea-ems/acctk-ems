@@ -194,10 +194,6 @@ async function handle(req: NextRequest) {
    * 둘 다 **선택**이다 — 업체가 정해지지 않은 채 번호부터 받는 일이 있다.
    * 장비만 고르고 사업장을 비우는 일은 없다(화면이 사업장을 고른 뒤에만 장비를 낸다).
    */
-  const asId = (v: unknown): number | null => {
-    const n = Number(v)
-    return Number.isInteger(n) && n > 0 ? n : null
-  }
   const customerId = asId(body.customer_id)
   const deviceId = customerId === null ? null : asId(body.device_id)
 
@@ -293,6 +289,15 @@ const idOf = (v: unknown): string | null =>
 //
 // 번호(inquiry_no)와 종류는 받지 않는다 — 번호는 채번의 결과라 고치면 카운터와 어긋난다.
 // 발행일을 고쳐도 번호는 그대로다(80 스페어파츠는 번호에 날짜가 박혀 있어 화면이 그 점을 알린다).
+/**
+ * 양수 정수인 id 만 받는다. 아니면 null — 발급(create)과 수정(update)이 **같은 판정**을
+ * 쓴다(사업장·장비 연결은 두 곳에서 들어온다).
+ */
+const asId = (v: unknown): number | null => {
+  const n = Number(v)
+  return Number.isInteger(n) && n > 0 ? n : null
+}
+
 async function update(sb: ReturnType<typeof admin>, caller: Caller, body: Record<string, unknown>) {
   const id = idOf(body.id)
   if (!id) return bad('의뢰서를 지정해주세요.')
@@ -300,7 +305,7 @@ async function update(sb: ReturnType<typeof admin>, caller: Caller, body: Record
   // 바뀐 칸만 감사 기록에 남기려면 이전 값이 필요하다. 권한·상태도 여기서 함께 본다.
   const { data: before, error: readErr } = await sb
     .from('inquiries')
-    .select('inquiry_no, title, status, created_by, issued_date')
+    .select('inquiry_no, title, status, created_by, issued_date, customer_id, device_id')
     .eq('id', id)
     .maybeSingle()
   if (readErr) {
@@ -311,6 +316,7 @@ async function update(sb: ReturnType<typeof admin>, caller: Caller, body: Record
   const prev = before as {
     inquiry_no: string; title: string | null; status: string
     created_by: number | null; issued_date: string
+    customer_id: number | null; device_id: number | null
   }
   if (prev.status === 'cancelled') return bad('이미 취소된 의뢰서입니다.', 409)
 
@@ -357,6 +363,45 @@ async function update(sb: ReturnType<typeof admin>, caller: Caller, body: Record
     patch.created_by = next
     touched = true
   }
+  /**
+   * 어느 사업장·장비의 의뢰인가 — **발급한 뒤에도 고칠 수 있다**(2026-11-21).
+   *
+   * 번호를 받을 때 업체가 정해지지 않은 건이 있는데, 그때 비워 둔 것을 뒤늦게 채우는
+   * 길이 없었다(발급 모달에만 그 칸이 있었다). 고치는 것은 **이 의뢰서 한 줄**뿐이다 —
+   * 백필·일괄 변경은 없다.
+   *
+   *   customer_id: null  연결을 끊는다. 장비도 함께 끊는다(사업장 없는 장비는 없다).
+   *   device_id 는 그 사업장의 장비여야 한다 — 사업장을 바꾸면서 옛 장비를 그대로
+   *   두면 다른 업체의 장비를 가리키게 된다. 화면은 사업장을 고른 뒤에만 장비를 내지만
+   *   서버도 한 번 더 본다(여기가 마지막 문이다).
+   */
+  if (body.customer_id !== undefined || body.device_id !== undefined) {
+    const nextCustomer = body.customer_id === null ? null : asId(body.customer_id)
+    const nextDevice = body.device_id === null || body.device_id === undefined ? null : asId(body.device_id)
+    if (body.customer_id !== undefined && body.customer_id !== null && nextCustomer === null) {
+      return bad('사업장을 올바르게 골라주세요.')
+    }
+    if (nextCustomer === null) {
+      patch.customer_id = null
+      patch.device_id = null
+    } else {
+      patch.customer_id = nextCustomer
+      patch.device_id = nextDevice
+      if (nextDevice !== null) {
+        const { data: dev, error: devErr } = await sb
+          .from('devices').select('device_id, customer_id').eq('device_id', nextDevice).maybeSingle()
+        if (devErr) {
+          console.error(`[${TAG}] device lookup failed`, { nextDevice, error: devErr })
+          return bad('장비를 확인하지 못했습니다.', 500)
+        }
+        if (!dev) return bad('장비를 찾을 수 없습니다.')
+        if (Number((dev as { customer_id: number | null }).customer_id) !== nextCustomer) {
+          return bad('그 사업장의 장비가 아닙니다.')
+        }
+      }
+    }
+    touched = true
+  }
   if (!touched) return bad('바꿀 내용이 없습니다.')
 
   const { data: done, error } = await sb
@@ -364,7 +409,7 @@ async function update(sb: ReturnType<typeof admin>, caller: Caller, body: Record
     .update(patch)
     .eq('id', id)
     .neq('status', 'cancelled')
-    .select('id, inquiry_no, title, status, created_by, issued_date')
+    .select('id, inquiry_no, title, status, created_by, issued_date, customer_id, device_id')
   if (error) {
     console.error(`[${TAG}] update failed`, { id, error })
     return bad('수정하지 못했습니다.', 500)
@@ -374,7 +419,7 @@ async function update(sb: ReturnType<typeof admin>, caller: Caller, body: Record
   const row = done[0] as typeof prev & { id: string }
   // 바뀐 칸만 이전·이후로 남긴다. 손대지 않은 칸까지 적으면 무엇이 달라졌는지 읽기 어렵다.
   const changed: Record<string, { from: unknown; to: unknown }> = {}
-  for (const key of ['title', 'status', 'created_by', 'issued_date'] as const) {
+  for (const key of ['title', 'status', 'created_by', 'issued_date', 'customer_id', 'device_id'] as const) {
     if (patch[key] !== undefined && patch[key] !== prev[key]) {
       changed[key] = { from: prev[key], to: patch[key] }
     }

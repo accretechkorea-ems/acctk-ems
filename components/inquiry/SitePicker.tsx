@@ -26,12 +26,12 @@ const BLUE = '#234ea2'
 export type PickedSite = { id: number; name: string } | null
 export type PickedDevice = { id: number; name: string } | null
 
-type SiteRow = { customer_id: number; company_name: string | null; site_name: string | null; address: string | null }
-type DeviceRow = { device_id: number; device_name: string | null; device_name2: string | null; serial_number: string | null }
+export type SiteRow = { customer_id: number; company_name: string | null; site_name: string | null; address: string | null }
+export type DeviceRow = { device_id: number; device_name: string | null; device_name2: string | null; serial_number: string | null }
 
 // customers.company_name 은 이미 「회사명 사업장명」을 합친 값이다(crm_cleanup 이후).
 // 그래서 site_name 을 또 붙이면 「일진글로벌 경주공장 경주공장」이 된다 — 끝이 같으면 붙이지 않는다.
-const siteLabel = (r: SiteRow) => {
+export const siteLabel = (r: SiteRow) => {
   const full = (r.company_name ?? '').trim()
   const site = (r.site_name ?? '').trim()
   if (!full) return site || `사업장 ${r.customer_id}`
@@ -39,7 +39,7 @@ const siteLabel = (r: SiteRow) => {
   return `${full} ${site}`
 }
 
-const deviceLabel = (d: DeviceRow) =>
+export const deviceLabel = (d: DeviceRow) =>
   [[d.device_name, d.device_name2].map(v => (v ?? '').trim()).filter(Boolean).join(' '), d.serial_number]
     .filter(Boolean).join(' · ') || `장비 ${d.device_id}`
 
