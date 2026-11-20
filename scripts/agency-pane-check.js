@@ -177,5 +177,44 @@ ok('사업장에서 돌아올 때 칩을 자동으로 걸지 않는다',
 ok('활동 현황에서 넘어온 길(?site=)은 그대로다',
   /setPendingFocusSiteId\(site\)/.test(HOME) && /setTimelineFocusSiteId\(site\)/.test(HOME))
 
+// ── 상단 카드의 작은 규칙 셋(2026-11-21 6차) ──────────────────────────────
+const SITE = read(path.join('components', 'customer', 'SiteHeaderBand.tsx'))
+const PANE_CO = read(path.join('components', 'home', 'list', 'CompanyPane.tsx'))
+const MEMO = read(path.join('components', 'common', 'MemoHoverText.tsx'))
+
+console.log('\n── 상태 뱃지는 좌 칸 우상단에 붙어 있다 ──')
+ok('흐름에서 빼 둔다(absolute)', /position: 'absolute', top: 0,/.test(BAND))
+ok('세로선과의 여백은 12 — 칸 밖으로 6 만큼 내민다',
+  /const COL_GAP = 18/.test(BAND) && /const STATUS_RULE_GAP = 12/.test(BAND)
+  && /right: -\(COL_GAP - STATUS_RULE_GAP\)/.test(BAND))
+ok('폰에서는 세로선이 없으므로 칸 오른쪽 끝', /\.band-status \{ right: 0 !important \}/.test(BAND))
+ok('두 화면이 상태를 넘겨 준다',
+  /status=\{customer\?\.status\}/.test(SITE) && /status=\{agency\.status\}/.test(PANE))
+ok('제목 줄은 뱃지 자리만큼 비워 둔다(경고 태그가 길어도 글자가 밑으로 흐르지 않게)',
+  /paddingRight: STATUS_RESERVE/.test(SITE) && /paddingRight: STATUS_RESERVE/.test(PANE))
+ok('제목 줄 흐름에 상태 dot 를 다시 넣지 않았다',
+  !/background: dot \}/.test(SITE), 'HeaderBand 가 한 곳에서 그린다')
+
+console.log('\n── 사업장 표 머리줄에는 숫자가 없다 ──')
+ok('「사업장」만', /<b style=\{\{ \.\.\.TITLE \}\}>사업장<\/b>/.test(PANE_CO),
+  '건수는 바로 위 타일에 「사업장 N곳」으로 있다')
+ok('「활동 이력」의 건수는 그대로(필터 적용 건수라 타일과 다르다)',
+  /title="활동 이력"/.test(PANE_CO))
+
+console.log('\n── 메모는 남는 높이만큼 줄바꿈한다 ──')
+ok('담당자 줄을 재서 줄 수를 셈한다',
+  /const avail = TOP_CARD_HEIGHT - 14 - 12 - row\.getBoundingClientRect\(\)\.height - 10/.test(BAND)
+  && /setMemoLines\(Math\.max\(1, Math\.floor\(\(avail \+ 1\) \/ lh\)\)\)/.test(BAND))
+ok('줄 높이는 재서 쓴다(글꼴이 바뀌어도 어긋나지 않게)',
+  /parseFloat\(getComputedStyle\(memo\)\.lineHeight\)/.test(BAND))
+ok('line-clamp 로 자른다', /WebkitLineClamp: memoLines > 0 \? memoLines : undefined/.test(BAND))
+ok('폰에서는 전부 펼친다', /-webkit-line-clamp: unset !important/.test(BAND))
+ok('넘칠 때만 호버로 전체를 본다',
+  /setMemoOver\(memo\.scrollHeight > memo\.clientHeight \+ 1\)/.test(BAND)
+  && /hover=\{memoOver\}/.test(BAND))
+ok('판을 쓰지 않을 때는 손을 받지 않는다', /if \(!hover\) \{/.test(MEMO))
+ok('재는 ref 는 함수로 받는다(prop 의 .current 를 고치지 않는다)',
+  /textRef\?: \(el: HTMLSpanElement \| null\) => void/.test(MEMO))
+
 console.log(fail === 0 ? '\n전부 통과' : `\n${fail}건 실패`)
 process.exit(fail === 0 ? 0 : 1)

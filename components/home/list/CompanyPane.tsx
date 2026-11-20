@@ -514,8 +514,11 @@ export default function CompanyPane({
       {/* ── 사업장 표 ── */}
       <section style={{ ...card, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: `1px solid ${BORDER}` }}>
-          {/* 머리줄은 제목만 둔다 — 사업장을 더하는 일은 회사 카드의 + 아이콘 하나로 모았다. */}
-          <b style={{ ...TITLE }}>사업장 {group.sites.length}</b>
+          {/* 머리줄은 제목만 둔다 — 사업장을 더하는 일은 회사 카드의 + 아이콘 하나로 모았다.
+              **건수는 적지 않는다**(2026-11-21) — 바로 위 타일에 「사업장 N곳」이 있어
+              같은 수를 두 번 말하고 있었다. 「활동 이력 N」은 필터가 걸린 뒤의 건수라
+              타일과 다른 수치이므로 그대로 둔다. */}
+          <b style={{ ...TITLE }}>사업장</b>
         </div>
 
         <div style={{ overflowX: 'auto' }}>

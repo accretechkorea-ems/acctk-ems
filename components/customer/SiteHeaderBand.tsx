@@ -21,7 +21,7 @@
 
 import { useState } from 'react'
 import BackIconButton from '@/components/common/BackIconButton'
-import HeaderBand from '@/components/customer/HeaderBand'
+import HeaderBand, { STATUS_RESERVE } from '@/components/customer/HeaderBand'
 import { agencyLabelOf } from '@/lib/customerAgency'
 import CompanyLink from '@/components/customer/CompanyLink'
 import { R } from '@/lib/radius'
@@ -29,11 +29,9 @@ import type { Contact, Customer } from './types'
 
 const TEXT = '#111827'
 const LABEL = '#374151'
-const SUB = '#6b7280'
 const MUTED = '#9ca3af'
 const DANGER = '#ef4444'
 
-const STATUS_DOT: Record<string, string> = { '활성': '#16a34a', '잠재': '#f59e0b', '이탈': '#ef4444' }
 
 /**
  * 사업장명 글자 크기 — 회사명(20)보다 **한 단 작다**.
@@ -66,7 +64,6 @@ export default function SiteHeaderBand({
 }: Props) {
   const [copied, setCopied] = useState(false)
 
-  const dot = STATUS_DOT[customer?.status ?? ''] ?? MUTED
   const title = companyName?.trim() || customer?.company_name || '사업장 정보 없음'
   /** 묶인 회사의 id — 상세 페이지에서 회사 보기로 가는 길이 이 값이다(없으면 단독 업체다). */
   const companyId = customer?.parent_customer_id ?? null
@@ -84,16 +81,20 @@ export default function SiteHeaderBand({
       contacts={contacts}
       memoTitle={customer?.company_name ?? '사업장'}
       memo={customer?.note}
+      status={customer?.status}
       onEdit={onEdit}
       editLabel="사업장 정보 수정"
       onAddContact={onAddContact}
       onEditContact={onEditContact}
       left={<>
-        {/* 1줄 — 회사명 20 » 사업장명 18 · 상태.
+        {/* 1줄 — 회사명 20 » 사업장명 18.
             기준선(baseline)으로 맞춘다 — 크기가 다른 두 이름이 **글자 밑선**에서 만나야
-            한 이름처럼 읽힌다. 상태 dot·글자도 그 줄(사업장명 기준선)에 선다.
-            「»」만 세로 중앙이다 — 글자 밑선에 맞추면 두 이름 사이에서 아래로 처진다. */}
-        <div className="band-name" style={{ display: 'flex', alignItems: 'baseline', gap: 7, flexWrap: 'wrap', minWidth: 0 }}>
+            한 이름처럼 읽힌다. 「»」만 세로 중앙이다 — 글자 밑선에 맞추면 두 이름 사이에서
+            아래로 처진다.
+            상태(「● 활성」)는 이 줄에 없다 — 좌 칸 우상단에 붙어 있다(HeaderBand).
+            그 자리만큼 오른쪽을 비워 둬야 「사업장명 입력 필요」 같은 경고 태그가 길어도
+            글자가 뱃지 밑으로 흘러들지 않는다(STATUS_RESERVE). */}
+        <div className="band-name" style={{ display: 'flex', alignItems: 'baseline', gap: 7, flexWrap: 'wrap', minWidth: 0, paddingRight: STATUS_RESERVE }}>
           {onBack && (
             <span style={{ alignSelf: 'center', display: 'inline-flex' }}>
               <BackIconButton onClick={onBack} label="이전 화면으로" />
@@ -106,12 +107,6 @@ export default function SiteHeaderBand({
           {customer?.site_name?.trim()
             ? <b style={{ fontSize: SITE_NAME_SIZE, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px' }}>{customer.site_name.trim()}</b>
             : <span style={{ fontSize: 11, fontWeight: 700, color: DANGER, background: '#fef2f2', borderRadius: R.tag, padding: '2px 7px' }}>사업장명 입력 필요</span>}
-          {customer?.status && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, color: SUB }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot }} />
-              {customer.status}
-            </span>
-          )}
         </div>
 
         {/* 2줄 — 주소 ⧉. 한 줄을 다 쓴다(대리점과 나란히 두던 때는 긴 주소가 대리점을

@@ -82,6 +82,8 @@ export type AgencyOption = {
   name_en: string | null
   /** 메모 — 대리점 화면이 글자로 보여 준다(사업장과 같은 note 칸이다). */
   note: string | null
+  /** 상태 — 대리점 화면의 좌 칸 우상단 뱃지다(43곳이 활성, 2곳은 빈 칸이다). */
+  status: string | null
 }
 
 
@@ -97,7 +99,7 @@ export function loadAgencies(): Promise<AgencyOption[]> {
     // (lib/nameEn.ts). 이 목록은 필터 모달·좌 패널 탭이 함께 쓰므로 멈추면 안 된다.
     const { data, error } = await withNameEnFallback(useEn => supabase
       .from('customers')
-      .select(colsWithNameEn('customer_id, company_name, address, note', useEn))
+      .select(colsWithNameEn('customer_id, company_name, address, note, status', useEn))
       .eq('is_agency', true)
       .is('deleted_at', null)
       .order('company_name'))
@@ -111,7 +113,7 @@ export function loadAgencies(): Promise<AgencyOption[]> {
     // 타입으로 받는다(ParentPicker 와 같은 방식). 영문명은 칸이 없으면 아예 오지 않는다.
     type Row = {
       customer_id: number; company_name: string | null; address: string | null
-      note?: string | null; name_en?: string | null
+      note?: string | null; name_en?: string | null; status?: string | null
     }
     return ((data ?? []) as unknown as Row[]).map(r => ({
       customer_id: Number(r.customer_id),
@@ -119,6 +121,7 @@ export function loadAgencies(): Promise<AgencyOption[]> {
       address: r.address ?? null,
       name_en: r.name_en ?? null,
       note: r.note ?? null,
+      status: r.status ?? null,
     }))
   })()
   return cache

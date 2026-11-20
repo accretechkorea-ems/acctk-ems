@@ -23,7 +23,7 @@
 import { useMemo, useRef, useState } from 'react'
 import BackIconButton from '@/components/common/BackIconButton'
 import ScrollHints from '@/components/common/ScrollHints'
-import HeaderBand from '@/components/customer/HeaderBand'
+import HeaderBand, { STATUS_RESERVE } from '@/components/customer/HeaderBand'
 import ContactAddModal from '@/components/customer/modals/ContactAddModal'
 import ContactEditModal from '@/components/customer/modals/ContactEditModal'
 import QuoteHistoryModal from '@/components/customer/modals/QuoteHistoryModal'
@@ -153,13 +153,16 @@ export default function AgencyPane({
         contacts={contacts}
         memoTitle={agency.company_name}
         memo={agency.note}
+        status={agency.status}
         onEdit={() => setEditOpen(true)}
         editLabel="대리점 정보 수정"
         onAddContact={() => contact.setIsAddContactModalOpen(true)}
         onEditContact={contact.setSelectedContact}
         left={<>
-          {/* 1줄 — 대리점명 20 · 「대리점」 태그 · 영문명, 우측에 견적 배지 */}
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, flexWrap: 'wrap', minWidth: 0 }}>
+          {/* 1줄 — 대리점명 20 · 「대리점」 태그 · 영문명, 우측에 견적 배지.
+              상태(「● 활성」)는 이 줄에 없다 — 좌 칸 우상단에 붙어 있다(HeaderBand).
+              그 자리만큼 오른쪽을 비워 둔다(STATUS_RESERVE). */}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, flexWrap: 'wrap', minWidth: 0, paddingRight: STATUS_RESERVE }}>
             {onBackToList && (
               <span className="pane-back" style={{ alignSelf: 'center' }}>
                 <BackIconButton onClick={onBackToList} label="목록으로" />
