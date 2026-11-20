@@ -1,6 +1,7 @@
 // 견적서 화면·PDF 공용 타입.
 
 import type { Currency } from '@/lib/quoteCurrency'
+import type { CustomerRole } from '@/lib/quoteCustomerPick'
 
 export type Engineer = {
   engineer_id: number
@@ -45,6 +46,12 @@ export type CustomerResult = {
   company_name: string
   address: string | null
   status: string | null
+  /**
+   * 사명 칸의 통합 검색에서 이 줄이 **어느 역할로** 떴는지. 'agency' 면 대리점이고,
+   * 고르면 그 id 가 quotes.dealer_id 로 간다(lib/quoteCustomerPick.ts).
+   * 비어 있으면 사업장으로 본다 — 대리점을 찾지 않는 다른 조회들은 이 칸을 채우지 않는다.
+   */
+  role?: CustomerRole
 }
 
 // 품목 행 종류.

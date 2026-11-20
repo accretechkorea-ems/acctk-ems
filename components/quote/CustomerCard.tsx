@@ -15,6 +15,7 @@ import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { isClosed } from '@/components/customer/opportunity'
 import { euDisplayName } from '@/lib/quoteEuName'
 import { contactOptionLabel } from '@/lib/quoteRecipient'
+import { type RecipientSource, groupRecipients, isAgencyPick, pickKey } from '@/lib/quoteCustomerPick'
 import type { Contact } from '@/components/customer/types'
 import { Z } from '@/lib/zIndex'
 import { type SetTerms, type Terms, TERM_LABELS, defaultTermsFor, termKeysFor } from '@/lib/quoteTerms'
@@ -34,7 +35,13 @@ import { R } from '@/lib/radius'
  */
 type ListKeys = ReturnType<typeof useListKeyboard<CustomerResult>>
 
-/** 사명 칸 — 검색·선택·해제와 대리점 체크박스. 대리점 체크가 이 칸 안에 있어 함께 둔다. */
+/**
+ * 사명 칸 — 검색·선택·해제.
+ *
+ * 「대리점」 체크박스는 없다(2026-11-20에 걷었다). 검색이 사업장과 대리점을 함께 돌려주고
+ * **고른 줄의 역할**이 그 체크를 대신한다 — isDealer 는 받아서 **보여 주기만** 한다
+ * (뱃지와 E.U 칸의 등장). 역할을 정하는 자리는 hooks/quote/useQuoteCustomer.ts 다.
+ */
 export type CustomerCardCustomer = {
   selectedCustomer: CustomerResult | null
   customerQuery: string
@@ -49,14 +56,12 @@ export type CustomerCardCustomer = {
   handleCustomerClear: () => void
   prefillNotice: string | null
   setPrefillNotice: (v: string | null) => void
-  customerId: number | null
+  /** 고른 줄이 대리점인가 — 뱃지와 E.U 칸을 가른다. 이 카드에서 바꾸지 않는다. */
   isDealer: boolean
-  setIsDealer: (v: boolean) => void
 }
 
-/** E.U(최종 사용 업체) 칸 — 대리점 체크를 켰을 때만 그려진다. */
+/** E.U(최종 사용 업체) 칸 — **사명 칸에서 대리점을 고르면** 그려진다. */
 export type CustomerCardEu = {
-  euCustomerId: number | null
   euQuery: string
   euResults: CustomerResult[]
   euSearchOpen: boolean
@@ -73,7 +78,6 @@ export type CustomerCardEu = {
 
 /** 영업기회 연결 — 고를 것이 있을 때만 칸이 나타난다. */
 export type CustomerCardOpportunity = {
-  loadOpportunities: (cid: number | null) => void
   opportunities: SalesOpportunity[]
   opportunityId: number | null
   setOpportunityId: (v: number | null) => void
@@ -93,6 +97,11 @@ export type CustomerCardRecipient = {
   loading: boolean
   /** 고객사를 아직 안 골랐으면 고를 거리가 없다 — 칸을 잠근다. */
   customerId: number | null
+  /**
+   * 후보를 묶는 업체들 — **대리점 건이면 둘**(대리점 · E.U)이다. 둘일 때만 묶음 제목을
+   * 그린다(lib/quoteCustomerPick.ts 의 groupRecipients).
+   */
+  sources: RecipientSource[]
   /** 옛 견적을 다시 쓸 때만 찬다 — 「이전 수신인: …」 안내로만 쓴다. */
   legacyText: string
 }
@@ -155,19 +164,21 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
     selectedCustomer, customerQuery, customerResults, customerSearchOpen, setCustomerSearchOpen,
     customerKeys, customerSearchRef, customerListRef,
     handleCustomerSearch, handleCustomerSelect, handleCustomerClear,
-    prefillNotice, setPrefillNotice, customerId, isDealer, setIsDealer,
+    prefillNotice, setPrefillNotice, isDealer,
   } = customer
   const {
-    euCustomerId, euQuery, euResults, euSearchOpen, setEuSearchOpen, euKeys,
+    euQuery, euResults, euSearchOpen, setEuSearchOpen, euKeys,
     euSearchRef, euListRef, selectedEU, euParentName,
     handleEUSearch, handleEUSelect, handleEUClear,
   } = eu
-  const { loadOpportunities, opportunities, opportunityId, setOpportunityId } = opportunity
+  const { opportunities, opportunityId, setOpportunityId } = opportunity
   const {
     contactId: recipientContactId, setContactId: setRecipientContactId,
     contacts, loading: contactsLoading,
-    customerId: recipientCustomerId, legacyText: legacyRecipient,
+    customerId: recipientCustomerId, sources: recipientSources, legacyText: legacyRecipient,
   } = recipient
+  // 후보를 업체별로 묶는다 — 담당자가 없는 묶음은 빠진다(lib/quoteCustomerPick.ts).
+  const recipientGroups = groupRecipients(contacts, recipientSources)
   const {
     remarks, setRemarks, remarksOpen, setRemarksOpen, defaultRemarks,
     showSignature, setShowSignature, termsOpen, setTermsOpen, terms, setTerms,
@@ -265,7 +276,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
 
     <LockedSection locked={locked}>
 
-    {/* 사명 + 대리점 체크박스 */}
+    {/* 사명 — 사업장·대리점 통합 검색 */}
     <div style={{ marginBottom: errors.company ? 8 + 18 : 8 }}>
       <div ref={customerSearchRef} className="q-box" style={{ border: errors.company ? errBorder : undefined }}>
         <span className="q-box-label">사명</span>
@@ -277,6 +288,13 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
               <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: '#111827' }}>
                 {customerQuery}
               </span>
+              {/* 대리점을 골랐다는 표시 — 체크박스가 있던 자리를 이 뱃지가 대신한다.
+                  이 줄이 켜져 있으면 고른 id 가 quotes.dealer_id 로 가고, 아래 E.U 칸이 열린다. */}
+              {isDealer && (
+                <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: '#c2410c', background: '#f3f4f6', borderRadius: R.tag, padding: '1px 5px' }}>
+                  대리점
+                </span>
+              )}
               <span title="등록된 업체와 연결됨" style={{ display: 'flex', alignItems: 'center', color: '#234ea2', flexShrink: 0 }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
               </span>
@@ -288,10 +306,12 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
               onChange={e => { handleCustomerSearch(e.target.value); clearError('company'); setPrefillNotice(null) }}
               onFocus={() => customerResults.length > 0 && setCustomerSearchOpen(true)}
               onKeyDown={customerKeys.onKeyDown}
-              placeholder="업체명 검색 (사전 등록 필요)"
+              placeholder="업체·대리점 검색 (사전 등록 필요)"
             />
           )}
-          {/* 상자 오른쪽 끝 — 지우기 × 와 대리점 체크박스 */}
+          {/* 상자 오른쪽 끝 — 지우기 ×.
+              「대리점」 체크박스는 걷었다(2026-11-20). 검색이 사업장과 대리점을 함께 돌려주고,
+              고른 줄의 역할이 그 체크를 대신한다(lib/quoteCustomerPick.ts). */}
           <div className="q-box-tail">
             {selectedCustomer && (
               <button onClick={handleCustomerClear}
@@ -299,29 +319,25 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             )}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              <input
-                type="checkbox"
-                checked={isDealer}
-                onChange={e => {
-                  setIsDealer(e.target.checked)
-                  if (!e.target.checked) { handleEUClear() }
-                  // 견적이 붙는 업체가 바뀌므로 영업기회 후보도 다시 잡는다
-                  loadOpportunities(e.target.checked ? euCustomerId : customerId)
-                }}
-                style={{ width: 14, height: 14, cursor: 'pointer', accentColor: '#234ea2' }}
-              />
-              <span style={{ fontSize: 11, fontWeight: 700, color: isDealer ? '#234ea2' : '#6b7280' }}>대리점</span>
-            </label>
           </div>
           <FieldError message={errors.company} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 2, whiteSpace: 'nowrap' }} />
           {customerSearchOpen && customerResults.length > 0 && (
             <div ref={customerListRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #234ea2', borderRadius: R.control, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
+              {/* 한 목록에 사업장과 대리점이 함께 있다 — 대리점 줄에만 꼬리표를 붙인다.
+                  대리점이면서 우리 고객인 15곳은 **같은 이름이 두 줄**로 뜬다(역할이 다르다).
+                  key 에 역할을 함께 넣는 까닭이 그것이다(lib/quoteCustomerPick.ts). */}
               {customerResults.map((c, i) => (
-                <div key={c.customer_id} onClick={() => handleCustomerSelect(c)}
+                <div key={pickKey(c)} onClick={() => handleCustomerSelect(c)}
                   style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 12, transition: 'background 0.15s ease', background: customerKeys.active === i ? '#f0f4ff' : '#fff' }}
                   onMouseEnter={() => customerKeys.setActive(i)}>
-                  <div style={{ fontWeight: 700, color: '#234ea2' }}>{c.company_name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                    <span style={{ fontWeight: 700, color: isAgencyPick(c) ? '#c2410c' : '#234ea2', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.company_name}</span>
+                    {isAgencyPick(c) && (
+                      <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: '#c2410c', background: '#f3f4f6', borderRadius: R.tag, padding: '1px 5px' }}>
+                        대리점
+                      </span>
+                    )}
+                  </div>
                   <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{c.address ?? ''}{c.status ? ` · ${c.status}` : ''}</div>
                 </div>
               ))}
@@ -344,7 +360,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
       )}
     </div>
 
-    {/* E.U 필드 (대리점 체크 시 표시) */}
+    {/* E.U 필드 — 사명 칸에서 대리점을 고르면 나타난다(대리점 건의 수요처가 곧 E.U 다) */}
     {isDealer && (
       <div style={{ marginBottom: 8, animation: 'modal-in 0.15s ease' }}>
         {/* E.U 상자 — 대리점 건이라 테두리만 주황 계열을 유지한다(기존 색). */}
@@ -434,9 +450,19 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
               : contacts.length === 0 ? '등록된 담당자가 없습니다'
               : '담당자 선택'}
           </option>
-          {contacts.map(c => (
-            <option key={c.contact_id} value={c.contact_id}>{contactOptionLabel(c)}</option>
-          ))}
+          {/* 대리점 건은 **양쪽 담당자**에서 고른다 — 묶음 제목으로 어느 쪽 사람인지 밝힌다.
+              직판은 묶음이 하나뿐이라 제목 없이 평평하게 둔다(없던 줄을 만들지 않는다). */}
+          {recipientGroups.length > 1
+            ? recipientGroups.map(g => (
+              <optgroup key={g.customerId} label={g.label}>
+                {g.contacts.map(c => (
+                  <option key={c.contact_id} value={c.contact_id}>{contactOptionLabel(c)}</option>
+                ))}
+              </optgroup>
+            ))
+            : contacts.map(c => (
+              <option key={c.contact_id} value={c.contact_id}>{contactOptionLabel(c)}</option>
+            ))}
         </select>
       </div>
       <FieldError message={errors.recipient} />

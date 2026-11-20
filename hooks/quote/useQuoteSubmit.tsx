@@ -31,6 +31,7 @@ import { notifyOnBehalf, type OnBehalfAssignee } from '@/lib/quoteMutations'
 import type { CustomerResult } from '@/app/quote/types'
 import type { SalesOpportunity } from '@/components/customer/types'
 import type { useToast } from '@/components/common/Toast'
+import { quoteCustomerColumns } from '@/lib/quoteCustomerPick'
 
 /** 검증 대상 입력 칸 — useFieldErrors 에 넘기는 키와 같다(page.tsx 의 useFieldErrors). */
 export type QuoteFieldKey = 'category' | 'company' | 'eu' | 'items' | 'expenses'
@@ -449,8 +450,11 @@ export function useQuoteSubmit({
       const { data, error } = await supabase.rpc('create_quote', {
         p_date: dateStr,
         p_quote: {
-          customer_id: isDealer ? euCustomerId : customerId,
-          dealer_id: isDealer ? customerId : null,
+          // 고객·대리점 두 칸 — 규칙은 lib/quoteCustomerPick.ts 한 곳에 있다
+          //   직판   customer_id = 고른 사업장,   dealer_id = null
+          //   대리점 customer_id = **E.U 사업장**, dealer_id = 고른 대리점
+          // (E.U 전용 컬럼은 없다. 2026-11-20 이전 158건도 이 규칙으로 저장돼 있다)
+          ...quoteCustomerColumns({ isDealer, customerId, euCustomerId }),
           opportunity_id: opportunityId,
           // 납기 칸이 있던 자리 — 조건 1번 「납품일정」 값을 담는다(발주·결재 검토표가 읽는다).
           // termsResult 는 조건 블록이 꺼져 있으면 기본값(「담당자와 협의」)을 돌려준다.

@@ -23,6 +23,7 @@ import type { CustomerResult } from '@/app/quote/types'
 import type { SalesOpportunity } from '@/components/customer/types'
 import { parentCompanyName } from '@/components/customer/ParentPicker'
 import { NOT_AGENCY_ONLY } from '@/lib/customerAgency'
+import { type CustomerRole, isAgencyPick, mergeCustomerPicks } from '@/lib/quoteCustomerPick'
 
 export type UseQuoteCustomerArgs = {
   supabase: SupabaseClient
@@ -58,6 +59,8 @@ export function useQuoteCustomer({ supabase, clearError }: UseQuoteCustomerArgs)
 
   // 사명·E.U 검색 드롭다운 — 바깥 클릭(및 ESC)으로 닫는다(품목 검색창과 동일 방식).
   // 드롭다운이 ref 안쪽에 있어 항목 클릭은 '바깥'으로 판정되지 않는다.
+  // 사명 검색은 조회를 둘(사업장·대리점) 보낸다 — 늦게 온 답을 버리는 데 쓴다.
+  const customerSearchReqRef = useRef(0)
   const customerSearchRef = useRef<HTMLDivElement | null>(null)
   const euSearchRef = useRef<HTMLDivElement | null>(null)
   // 후보 목록의 ↓/↑·Enter. 닫기(Esc·바깥 클릭)는 아래 useOutsideClick 이 이미 맡고 있다.
@@ -65,31 +68,40 @@ export function useQuoteCustomer({ supabase, clearError }: UseQuoteCustomerArgs)
   const euListRef = useRef<HTMLDivElement | null>(null)
 
   /**
-   * 사명 칸의 검색 — **대리점 체크에 따라 찾는 대상이 다르다**.
+   * 사명 칸의 검색 — **사업장과 대리점을 한 번에 찾는다**(2026-11-20).
    *
-   *   직판   고객사(사업장). 대리점 전용 줄은 빼고 찾는다.
-   *   대리점 **대리점 줄만**(is_agency). 이 칸의 값이 곧 quotes.dealer_id 가 되므로,
-   *          고객사를 대리점 자리에 넣으면 대리점별 집계가 또 어긋난다.
+   * 전에는 옆의 「대리점」 체크가 검색 대상을 갈랐다(직판이면 사업장, 켜면 대리점 줄만).
+   * 고르려는 곳이 대리점인지 **먼저 알아야** 검색이 되는 순서였다. 이제는 두 조회를 함께
+   * 보내 한 목록으로 세우고, 대리점 줄에 꼬리표를 붙여 **고른 줄이 역할을 말하게** 한다.
    *
-   * 대리점이면서 우리 고객인 사업장(이룸지텍·하나무역 등 15곳)은 양쪽에 다 뜬다 —
-   * 그 줄은 대리점이기도 하고 고객이기도 하다(lib/customerAgency.ts).
+   *   사업장 조회  is_parent=false + 대리점 전용 줄 제외(NOT_AGENCY_ONLY)
+   *   대리점 조회  is_agency=true
+   *
+   * 조회 조건은 둘 다 **체크박스 시절 그대로**다 — 뜨는 줄의 범위는 바뀌지 않는다.
+   * 대리점이면서 우리 고객인 사업장(이룸지텍·하나무역 등 15곳)은 양쪽에 다 걸려
+   * **역할 두 줄**로 뜬다. 같은 줄이라도 들어가는 컬럼이 달라 고르는 사람이 정해야 한다
+   * (lib/quoteCustomerPick.ts).
    */
   const handleCustomerSearch = async (q: string) => {
     setCustomerQuery(q)
     if (!q.trim()) { setCustomerResults([]); return }
+    // 조회가 둘이라 답이 엇갈릴 수 있다 — 마지막으로 보낸 글자의 답만 받는다.
+    const req = ++customerSearchReqRef.current
     // 회사명·사업장명·영문명을 함께 본다(사업장명만으로 찾는 사람도 있다).
     // 영문명 칸이 아직 없는 DB 면 그 칸만 빼고 한 번 더 읽는다 — lib/nameEn.ts.
-    const { data } = await withNameEnFallback(useEn => {
-      let query = supabase
+    const run = (kind: CustomerRole) => withNameEnFallback(useEn => {
+      const base = supabase
         .from('customers').select('customer_id, company_name, address, status')
         .is('deleted_at', null)
         .or(searchOr(q, useEn))
-      query = isDealer
-        ? query.eq('is_agency', true)
-        : query.eq('is_parent', false).or(NOT_AGENCY_ONLY)   // 부모 행(회사 묶음)·대리점 전용 줄 제외
+      const query = kind === 'agency'
+        ? base.eq('is_agency', true)
+        : base.eq('is_parent', false).or(NOT_AGENCY_ONLY)   // 부모 행(회사 묶음)·대리점 전용 줄 제외
       return query.limit(10)
     })
-    setCustomerResults(data || [])
+    const [sites, agencies] = await Promise.all([run('site'), run('agency')])
+    if (customerSearchReqRef.current !== req) return
+    setCustomerResults(mergeCustomerPicks(sites.data ?? [], agencies.data ?? []))
     setCustomerSearchOpen(true)
   }
 
@@ -106,34 +118,6 @@ export function useQuoteCustomer({ supabase, clearError }: UseQuoteCustomerArgs)
       .order('created_at', { ascending: false })
     if (error) { console.error('[quote] load opportunities failed', error); setOpportunities([]); return }
     setOpportunities((data as SalesOpportunity[]) ?? [])
-  }
-
-  // company 는 화면 입력칸이 아니라 PDF 의 「○○ 귀하」 한 줄에만 쓰는 값이다.
-  // 업체가 회사(부모) 아래 묶여 있으면 수신처는 회사 이름이어야 한다
-  // — 「현대트랜시스(성연공장) 귀하」 는 문서로 나가기에 어색하다.
-  // 검색·선택·저장은 종전대로 업체(customer_id) 기준이라 내부에서 어느 업체인지는 그대로 보인다.
-  // 대리점 건이면 이 칸이 대리점이므로 같은 규칙이 대리점에도 적용된다. E.U 는 손대지 않는다.
-  const handleCustomerSelect = (c: CustomerResult) => {
-    setSelectedCustomer(c)
-    setCustomerId(c.customer_id)
-    setCompany(c.company_name)
-    setCustomerQuery(c.company_name)
-    setCustomerSearchOpen(false)
-    setCustomerResults([])
-    clearError('company')
-    if (!isDealer) loadOpportunities(c.customer_id)
-    // 회사 이름은 뒤늦게 와도 된다 — 미리보기·저장 모두 이 값을 그때 읽는다.
-    parentCompanyName(c.customer_id)
-      .then(name => { if (name) setCompany(name) })
-      .catch(e => console.error('[quote] parent lookup failed', e))
-  }
-
-  const handleCustomerClear = () => {
-    setSelectedCustomer(null)
-    setCustomerId(null)
-    setCustomerQuery('')
-    setCompany('')
-    if (!isDealer) loadOpportunities(null)
   }
 
   const handleEUSearch = async (q: string) => {
@@ -166,6 +150,55 @@ export function useQuoteCustomer({ supabase, clearError }: UseQuoteCustomerArgs)
       .catch(e => console.error('[quote] E.U 소속 회사 조회 실패', { customerId, error: e }))
   }
 
+  /** E.U 칸을 비운다 — 사명 칸에서 사업장을 고르면(= 직판) 남아 있을 자리가 없다. */
+  const clearEu = () => {
+    setSelectedEU(null)
+    setEuCustomerId(null)
+    setEuQuery('')
+    resolveEuParent(null)
+  }
+
+  // company 는 화면 입력칸이 아니라 PDF 의 「○○ 귀하」 한 줄에만 쓰는 값이다.
+  // 업체가 회사(부모) 아래 묶여 있으면 수신처는 회사 이름이어야 한다
+  // — 「현대트랜시스(성연공장) 귀하」 는 문서로 나가기에 어색하다.
+  // 검색·선택·저장은 종전대로 업체(customer_id) 기준이라 내부에서 어느 업체인지는 그대로 보인다.
+  // 대리점 건이면 이 칸이 대리점이므로 같은 규칙이 대리점에도 적용된다. E.U 는 손대지 않는다.
+  //
+  // **고른 줄의 역할이 대리점 체크박스를 대신한다**(2026-11-20) — 대리점 줄을 고르면
+  // isDealer 가 켜져 E.U 칸이 열리고, 사업장 줄을 고르면 꺼지며 E.U 를 비운다.
+  // 역할이 없는 줄(포캐스트·수리 prefill 의 조회)은 사업장으로 본다.
+  const handleCustomerSelect = (c: CustomerResult) => {
+    const asAgency = isAgencyPick(c)
+    setIsDealer(asAgency)
+    setSelectedCustomer(c)
+    setCustomerId(c.customer_id)
+    setCompany(c.company_name)
+    setCustomerQuery(c.company_name)
+    setCustomerSearchOpen(false)
+    setCustomerResults([])
+    clearError('company')
+    // 영업기회 후보는 **견적이 실제로 붙는 업체**(대리점 건이면 E.U) 기준이다.
+    // 대리점을 고른 순간 E.U 는 아직 비어 있으므로 후보도 비운다.
+    if (asAgency) { clearEu(); loadOpportunities(null) }
+    else loadOpportunities(c.customer_id)
+    // 회사 이름은 뒤늦게 와도 된다 — 미리보기·저장 모두 이 값을 그때 읽는다.
+    parentCompanyName(c.customer_id)
+      .then(name => { if (name) setCompany(name) })
+      .catch(e => console.error('[quote] parent lookup failed', e))
+  }
+
+  // 사명을 비우면 **고른 역할도 함께 풀린다** — 대리점 뱃지와 E.U 칸이 남으면
+  // 무엇으로 저장될지 화면이 말해 주지 못한다.
+  const handleCustomerClear = () => {
+    setSelectedCustomer(null)
+    setCustomerId(null)
+    setCustomerQuery('')
+    setCompany('')
+    setIsDealer(false)
+    clearEu()
+    loadOpportunities(null)
+  }
+
   const handleEUSelect = (c: CustomerResult) => {
     setSelectedEU(c)
     setEuCustomerId(c.customer_id)
@@ -177,11 +210,8 @@ export function useQuoteCustomer({ supabase, clearError }: UseQuoteCustomerArgs)
   }
 
   const handleEUClear = () => {
-    setSelectedEU(null)
-    setEuCustomerId(null)
-    setEuQuery('')
+    clearEu()
     loadOpportunities(null)
-    resolveEuParent(null)
   }
 
   useOutsideClick(customerSearchRef, useCallback(() => setCustomerSearchOpen(false), []), customerSearchOpen)

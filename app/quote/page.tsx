@@ -70,6 +70,7 @@ import { nowHmKST, todayKST } from '@/lib/date'
 import { RATE_SOURCE } from '@/lib/exchangeRate'
 import { CURRENCIES, USD_DEFAULT_RATE, type Currency, type Rates } from '@/lib/quoteCurrency'
 import { loadQuoteUserDefaults } from '@/lib/quoteUserDefaults'
+import { type RecipientSource, recipientCustomerIds } from '@/lib/quoteCustomerPick'
 import {
   compactYmd, differsInMonth, displayYmd, isBackdated, monthOf, safeQuoteDate,
 } from '@/lib/quoteDate'
@@ -308,13 +309,16 @@ function QuotePageInner() {
   const keepContactRef = useRef(false)
   useEffect(() => {
     const req = ++contactReqRef.current
+    // 대리점 건이면 **양쪽**(대리점·E.U)의 담당자를 후보로 삼는다 — 청구는 대리점에 하지만
+    // 문서를 받는 사람은 E.U 쪽일 때도 있다(lib/quoteCustomerPick.ts).
+    const ids = recipientCustomerIds({ isDealer, customerId, euCustomerId })
     if (!keepContactRef.current) setRecipientContactId(null)
     keepContactRef.current = false
-    if (customerId == null) { setContacts([]); return }
+    if (ids.length === 0) { setContacts([]); return }
     setContactsLoading(true)
     supabase.from('contacts')
       .select('contact_id, customer_id, name, department, position, phone, email')
-      .is('deleted_at', null).eq('customer_id', customerId)
+      .is('deleted_at', null).in('customer_id', ids)
       .order('contact_id', { ascending: true })
       .then(({ data }) => {
         // 사이에 고객사를 또 바꿨으면 늦게 온 답은 버린다.
@@ -323,7 +327,20 @@ function QuotePageInner() {
         setContactsLoading(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerId])
+  }, [customerId, euCustomerId, isDealer])
+
+  /**
+   * 수신인 후보의 묶음 — 대리점 건이면 **둘**이다(대리점 담당자 · E.U 담당자).
+   * 직판이면 하나뿐이라 카드가 묶음 제목을 그리지 않는다.
+   */
+  const recipientSources: RecipientSource[] = [
+    ...(customerId != null
+      ? [{ customerId, label: isDealer ? `대리점 · ${customerQuery}` : customerQuery }]
+      : []),
+    ...(isDealer && euCustomerId != null
+      ? [{ customerId: euCustomerId, label: `E.U · ${euQuery}` }]
+      : []),
+  ]
 
 
   // 영업이익 하한 미만일 때 적는 사유 — quotes.note 끝에 한 줄로 저장된다.
@@ -504,9 +521,8 @@ function QuotePageInner() {
   const runValidation = () => validate({
     category: categoryMissing ? '견적 분류를 선택해주세요' : null,
     form: formMissing ? '견적서 양식을 선택해주세요' : null,
-    company: customerId
-      ? null
-      : (isDealer ? '등록된 대리점을 검색해서 선택해주세요' : '등록된 고객사를 검색해서 선택해주세요'),
+    // 사명 칸은 사업장과 대리점을 함께 찾는다(2026-11-20) — 안 고른 상태의 문구도 하나다.
+    company: customerId ? null : '등록된 업체·대리점을 검색해서 선택해주세요',
     eu: isDealer && !euCustomerId ? '최종 사용 업체를 검색해서 선택해주세요' : null,
     // 수신인 — **옛 견적을 다시 쓸 때도 고르게 한다.** 그 글자가 누구인지 담당자 표에서
     // 짚어 주지 않으면 새 견적에도 글자만 남아, 옮기려던 일이 한 건씩 늘어날 뿐이다.
@@ -916,20 +932,21 @@ function QuotePageInner() {
               selectedCustomer, customerQuery, customerResults, customerSearchOpen, setCustomerSearchOpen,
               customerKeys, customerSearchRef, customerListRef,
               handleCustomerSearch, handleCustomerSelect, handleCustomerClear,
-              prefillNotice, setPrefillNotice, customerId, isDealer, setIsDealer,
+              prefillNotice, setPrefillNotice, isDealer,
             }}
             eu={{
-              euCustomerId, euQuery, euResults, euSearchOpen, setEuSearchOpen, euKeys,
+              euQuery, euResults, euSearchOpen, setEuSearchOpen, euKeys,
               euSearchRef, euListRef, selectedEU, euParentName,
               handleEUSearch, handleEUSelect, handleEUClear,
             }}
-            opportunity={{ loadOpportunities, opportunities, opportunityId, setOpportunityId }}
+            opportunity={{ opportunities, opportunityId, setOpportunityId }}
             recipient={{
               contactId: recipientContactId,
               setContactId: v => { setRecipientContactId(v); clearError('recipient') },
               contacts,
               loading: contactsLoading,
               customerId,
+              sources: recipientSources,
               legacyText: legacyRecipient,
             }}
             doc={{
