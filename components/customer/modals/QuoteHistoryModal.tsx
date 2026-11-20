@@ -5,7 +5,7 @@ import { CARD_BG, INPUT_BORDER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY, WHITE_
 import { isDealerQuote } from '../utils'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { SALES_STATUS_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
-import { isOrdered, REVENUE_STATUS } from '@/lib/quoteStatus'
+import { isOrdered, PENDING_STATUS, REVENUE_STATUS } from '@/lib/quoteStatus'
 import BackdatedMark from '@/components/quote/BackdatedMark'
 import { R } from '@/lib/radius'
 
@@ -30,6 +30,8 @@ type Props = {
 export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, family, onOpenPdf }: Props) {
   if (!isOpen) return null
 
+  /** 진행 중 = 「견적중」. 회사 카드의 「진행 견적」 타일과 **같은 판정**이다(hooks/useOpenQuotes.ts). */
+  const pendingCount = quotes.filter(q => q.status === PENDING_STATUS).length
   const totalQuoteAmt = quotes.reduce((s, q) => s + (q.total_supply || 0), 0)
   const totalOrderAmt = quotes.filter(q => isOrdered(q.status)).reduce((s, q) => s + (q.total_supply || 0), 0)
   const totalRevenueAmt = quotes.filter(q => q.status === REVENUE_STATUS).reduce((s, q) => s + (q.total_supply || 0), 0)
@@ -50,8 +52,13 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, f
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 1100, maxHeight: '90vh', background: CARD_BG, borderRadius: R.modal, padding: 24, boxShadow: '0 12px 40px rgba(0,0,0,0.35)', border: `1px solid ${INPUT_BORDER}`, display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
           <div>
-            {/* 이모지는 UI 아이콘으로 쓰지 않는다(.claude/rules/design-system.md). */}
-            <div style={{ fontSize: 20, fontWeight: 800, color: TEXT_PRIMARY, marginBottom: 4 }}>거래 이력</div>
+            {/* 이모지는 UI 아이콘으로 쓰지 않는다(.claude/rules/design-system.md).
+                제목에 **건수와 진행 수**를 적는다(2026-11-20) — 이 창은 「진행 견적」 타일에서
+                열리는데 안에는 끝난 건까지 들어 있어, 진행 2건으로 들어와 11줄을 보면
+                무엇을 보고 있는지 어긋났다. 회사 카드의 타일과 같은 두 수치다. */}
+            <div style={{ fontSize: 20, fontWeight: 800, color: TEXT_PRIMARY, marginBottom: 4 }}>
+              {`견적 이력 ${quotes.length}건 · 진행 ${pendingCount}`}
+            </div>
             <div style={{ fontSize: 13, color: TEXT_SECONDARY }}>
               {family ? `${family.name} (사업장 ${family.siteCount}곳)` : customer?.company_name}
             </div>

@@ -395,6 +395,14 @@ export default function CompanyPane({
         .company-card .card-act { opacity: 0; transition: opacity 0.15s ease }
         .company-card:hover .card-act, .company-card:focus-within .card-act { opacity: 1 }
         @media (max-width: 640px) { .company-card .card-act { opacity: 1 } }
+        /* 수치 네 칸 + 포캐스트 — 좁으면 **아래로 쌓인다.**
+           좌 칸을 440px 로 못 박아 두었더니 폰(390)에서는 그 한 칸만으로 화면을 넘어
+           카드 안쪽이 오른쪽으로 잘렸다(2026-11-20 실측: 넘치는 요소 29개).
+           두 칸을 한 칸으로 돌리고 타일은 2×2 로 접는다. */
+        @media (max-width: 760px) {
+          .company-card .stat-row { grid-template-columns: minmax(0, 1fr) !important }
+          .company-card .stat-tiles { grid-template-columns: repeat(2, 1fr) !important }
+        }
       `}</style>
 
       {/* ── 회사 카드 ── 1줄: 이름·분류·버튼 / 2줄: 수치 타일 + 포캐스트 ── */}
@@ -413,11 +421,17 @@ export default function CompanyPane({
         </div>
 
         {/* 좌 440px 에 수치 네 칸, 남는 자리에 포캐스트. 좁으면 아래로 쌓인다. */}
-        <div style={{ display: 'grid', gridTemplateColumns: '440px minmax(0, 1fr)', gap: 12, alignItems: 'stretch' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+        <div className="stat-row" style={{ display: 'grid', gridTemplateColumns: '440px minmax(0, 1fr)', gap: 12, alignItems: 'stretch' }}>
+          <div className="stat-tiles" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
             <StatTile label="사업장" value={String(group.sites.length)} unit="곳" />
             <StatTile label="장비" value={String(group.deviceCount)} unit="대" />
-            <StatTile label="진행 견적" value={String(group.openQuotes)} unit="건" color={group.openQuotes > 0 ? BLUE : TEXT}
+            {/* 진행 견적 — 큰 숫자는 **진행 중(견적중)**이고, 그 아래 회색 줄이 **회사 전체**
+                (사업장 전부 · 끝난 건 포함) 건수다. 숫자만 있을 때는 0 이 「거래가 없다」로
+                읽혔다 — 지난 거래가 있는 회사와 아예 없는 회사를 그 줄이 가른다.
+                진행이 0 이면 큰 숫자를 회색으로 죽인다(눈이 먼저 가는 자리가 아니다). */}
+            <StatTile label="진행 견적" value={String(group.openQuotes)} unit="건"
+              color={group.openQuotes > 0 ? BLUE : MUTED}
+              note={`전체 ${timeline.quotes.length}건`}
               onClick={() => setQuoteHistoryOpen(true)}
               title={`견적 이력 — 이 회사 전체 ${timeline.quotes.length}건(끝난 건 포함)`} />
             <StatTile
