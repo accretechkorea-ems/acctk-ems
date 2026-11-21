@@ -105,7 +105,8 @@ export async function loadRestoreTarget(sb: SupabaseClient, quoteId: number): Pr
 /**
  * 스토리지에 있는 견적 PDF 를 지운다. 견적 행이 지워진 뒤에 부른다.
  *
- * 경로 파싱은 /api/delete-quote-pdf 와 똑같이 한다 — 별도 규칙을 만들지 않는다.
+ * 경로 파싱 규칙은 옛 /api/delete-quote-pdf 라우트에서 그대로 가져왔다(그 라우트는
+ * 부르는 곳이 없어 2026-11-21 에 지웠다 — 지금은 이 함수가 그 일을 한다).
  * 버킷 이름을 떼고 trim → '..' 제거 → 앞쪽 '/' 제거. 남은 값이 비었거나 폴더 구분자가 있으면
  * 잘못된 경로로 보고 지우지 않는다(경로 순회 방지).
  */

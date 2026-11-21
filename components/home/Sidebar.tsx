@@ -11,8 +11,11 @@
 //   한 벌이라 어느 칸에 쳐도 같은 값이다.
 //
 // ── 「업체 | 부품」 토글은 걷었다 ─────────────────────────────────────────
-//   부품 사용 이력 검색은 **견적 작성 화면**으로 옮긴다(다음 회차). 조회·상태 코드는
-//   그대로 둔다 — lib/partSearch.ts · hooks/usePartSearch.ts · components/home/PartResults.tsx.
+//   부품 사용 이력 검색은 **견적 작성 화면**으로 옮긴다(다음 회차). 남은 조각은
+//   lib/partSearch.ts 하나다 — 조회와 상태 코드가 거기 있다.
+//   화면 쪽 조각(hooks/usePartSearch.ts · components/home/PartResults.tsx)은
+//   2026-11-21 에 지웠다. 부르는 곳이 없어 죽은 코드였고, 되살릴 때는 git 에서
+//   꺼내 쓰면 된다(커밋 「죽은 코드 지우기」).
 
 import { useState } from 'react'
 import CustomerList from './CustomerList'
