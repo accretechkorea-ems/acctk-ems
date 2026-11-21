@@ -1,5 +1,15 @@
 // 고객사 목록 엑셀 — 옛 관리 엑셀 양식(고객사 × 장비 한 줄)을 그대로 따른다.
 //
+// ※ 2026-11-22 — **화면의 엑셀 단추는 더 이상 이 파일을 쓰지 않는다.** 네 시트 양식
+//   (사업장·회사·대리점·장비)으로 바뀌었고 그쪽은 서버에서 만든다:
+//     lib/customerExportSheets.ts(열·순서) · lib/customerExportData.ts(조회) ·
+//     app/api/customer-export/route.ts(권한·서식).
+//   이 파일을 지우지 않은 이유 둘 —
+//     ① 받는 쪽이 쓰던 **옛 양식**이라 되돌릴 일이 생길 수 있다(열 순서가 여기 적혀 있다),
+//     ② 지역·납입년월 해석(regionsOf · installYearMonth)은 **새 양식도 이 파일 것을 쓴다**.
+//   양식 자체(customerRowsAoA · exportCustomerXlsx · CUSTOMER_EXCEL_SELECT)를 부르는 곳은
+//   지금 하네스(scripts/customer-excel-check.js) 하나뿐이다.
+//
 // 받는 쪽이 쓰던 양식이 기준이라 열 순서·이름을 여기서 바꾸지 않는다. 화면이 거르고 난
 // 목록을 그대로 받아 적는다(포캐스트 엑셀과 같은 원칙 — 화면과 다른 줄이 나오는 것이
 // 가장 나쁜 사고다). 집계·재계산은 하지 않는다.

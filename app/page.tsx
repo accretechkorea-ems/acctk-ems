@@ -11,11 +11,7 @@ import MapView from '@/components/home/MapView'
 import AddCustomerModal from '@/components/home/AddCustomerModal'
 import { useHomeData } from '@/hooks/useHomeData'
 import { CATEGORY_OPTIONS } from '@/lib/constants'
-import {
-  CUSTOMER_EXCEL_SELECT, exportCustomerXlsx, toExcelCustomer,
-  type CustomerExcelRow, type ExcelCustomer,
-} from '@/lib/customerExcel'
-import { NOT_AGENCY_ONLY, useAgencies } from '@/lib/customerAgency'
+import { useAgencies } from '@/lib/customerAgency'
 import { REGION_FILTER_OPTIONS } from '@/lib/region'
 import { DIRECT_SALE } from '@/lib/customerList'
 import PanelHeader, { type HomeView } from '@/components/home/PanelHeader'
@@ -660,49 +656,47 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
 /**
    * 지금 목록을 엑셀로 내려받는다 — **화면이 거른 범위·순서 그대로** 쓴다.
    *
-   * 목록 상태(customers·deviceMap)를 그대로 쓰지 않는 이유 — 양식에 들어가는 지역·
-   * 소속회사·고객 담당자를 목록 조회가 읽지 않는다(목록이 가벼워야 해서 뺀 열들이다).
-   * 그래서 누를 때 양식에 쓰는 열만 한 번 더 읽고, 장비·담당자는 임베딩으로 같이 받는다.
-   * 1,354행 · 529KB · 1.7초(2026-10-23 실측)라 한 번에 받는다.
+   * 만드는 일은 서버가 한다(/api/customer-export). 화면은 **사업장 id 목록**만 보낸다 —
+   * 필터를 서버에서 다시 구현하면 화면과 다른 줄이 나오는 날이 온다. 네 시트
+   * (사업장·회사·대리점·장비)와 담당자 열은 그 라우트와 lib/customerExportSheets.ts 가 만든다.
+   *
+   * 전에는 브라우저에서 xlsx 로 시트 하나를 만들었다(고객사 × 장비 한 줄). 2,000줄을
+   * 넘기면 만드는 동안 화면이 섰고, 머리줄 고정도 되지 않았다.
    */
   const handleExportExcel = async () => {
     if (isExporting) return
-    if (filteredCustomers.length === 0) { toast.error('내보낼 고객사가 없습니다'); return }
+    // 내보내는 범위는 **목록 보기의 트리**다 — 화면 오른쪽 위의 「조건 일치 N곳」과 같은 수다.
+    const siteIds = listTree.groups.flatMap(g => g.sites.map(s => Number(s.customer.customer_id)))
+    if (siteIds.length === 0) { toast.error('내보낼 고객사가 없습니다'); return }
     setIsExporting(true)
     try {
-      const [listRes, parentRes] = await Promise.all([
-        supabase.from('customers').select(CUSTOMER_EXCEL_SELECT)
-          // 화면 목록과 같은 범위라야 한다 — 대리점 전용 줄은 양쪽에서 빠진다.
-          .is('deleted_at', null).eq('is_parent', false).or(NOT_AGENCY_ONLY).range(0, 5000),
-        // 소속회사 이름 — 부모 행은 목록·지도에 안 나오므로 따로 읽는다(273행).
-        supabase.from('customers').select('customer_id, company_name')
-          .eq('is_parent', true).is('deleted_at', null).range(0, 2000),
-      ])
-      if (listRes.error || parentRes.error) {
-        console.warn('엑셀 조회 오류:', listRes.error ?? parentRes.error)
-        toast.error('목록을 읽지 못했습니다')
+      const res = await fetch('/api/customer-export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ siteIds }),
+      })
+      if (!res.ok) {
+        const msg = await res.json().catch(() => null)
+        toast.error(msg?.error ?? '엑셀을 만들지 못했습니다')
         return
       }
-      // select 문자열이 변수라 supabase 가 줄 모양을 추론하지 못한다 — 양식이 읽는
-      // 열만 들어 있는 타입(CustomerExcelRow)으로 한 번 못 박고 쓴다.
-      const rawRows = (listRes.data ?? []) as unknown as CustomerExcelRow[]
-      const parentRows = (parentRes.data ?? []) as { customer_id: number; company_name: string | null }[]
-      const byId = new Map<number, ExcelCustomer>(
-        rawRows.map(r => [Number(r.customer_id), toExcelCustomer(r)]),
+      const counts = (() => {
+        try { return JSON.parse(res.headers.get('X-Export-Counts') ?? '{}') } catch { return {} }
+      })() as { sites?: number; companies?: number; agencies?: number; devices?: number }
+      const blob = await res.blob()
+      // 파일 이름은 서버가 Content-Disposition 에 담아 보낸다(한글이라 filename* 쪽을 읽는다).
+      const cd = res.headers.get('Content-Disposition') ?? ''
+      const star = /filename\*=UTF-8''([^;]+)/.exec(cd)
+      const name = star ? decodeURIComponent(star[1]) : '고객사.xlsx'
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = name
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success(
+        `사업장 ${counts.sites ?? 0} · 회사 ${counts.companies ?? 0} · 대리점 ${counts.agencies ?? 0} · 장비 ${counts.devices ?? 0}줄을 내려받았습니다`,
       )
-      const parentNames = new Map<number, string>(
-        parentRows.map(r => [Number(r.customer_id), r.company_name ?? '']),
-      )
-      // 화면 순서대로 꺼낸다. 그 사이에 지워진 업체는 조회에서 빠지므로 건너뛴다.
-      const rows = filteredCustomers
-        .map((c) => byId.get(Number(c.customer_id)))
-        .filter((r): r is ExcelCustomer => !!r)
-      const lines = await exportCustomerXlsx({
-        customers: rows,
-        parentName: (id) => (id == null ? '' : parentNames.get(id) ?? ''),
-        today: todayKST(),
-      })
-      toast.success(`고객사 ${rows.length}개 · ${lines}줄을 내려받았습니다`)
     } catch (e) {
       console.warn('엑셀 내보내기 실패:', e)
       toast.error(e instanceof Error ? e.message : '엑셀을 만들지 못했습니다')
