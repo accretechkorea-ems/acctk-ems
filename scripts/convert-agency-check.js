@@ -9,8 +9,10 @@
  *   ⑤ 창은 열면서 dry_run 을 돌리고, 막는 것이 있으면 「전환」이 켜지지 않는다.
  *   ⑥ 전환 뒤에는 두 캐시를 비우고 **대리점 탭의 그 줄로** 옮겨 간다.
  *
- * ⚠ 이 하네스는 **글(코드·SQL)만** 본다. 함수가 운영 DB 에 적용되기 전에는 dry_run 을
- *   돌려 볼 수 없다(2026-11-21: 아직 적용 전 · 실측 계정은 member 라 라우트가 403).
+ * ⚠ 이 하네스는 **글(코드·SQL)만** 본다 — 키 없이 어디서나 돌아야 하기 때문이다.
+ *   운영 DB 에 붙어 dry_run 을 **실제로** 불러 보는 쪽은 scripts/convert-agency-dryrun.js
+ *   다(손으로 돌린다). 돌아오는 칸 목록(SHAPES)은 그쪽에 한 벌만 두고 여기서도 쓴다 —
+ *   두 군데에 적으면 한쪽만 고쳐지고 서로 다른 것을 지키게 된다.
  */
 const load = module.require.bind(module)
 const path = load('path')
@@ -24,6 +26,7 @@ const PANE = read(path.join('components', 'home', 'list', 'CompanyPane.tsx'))
 const MODAL = read(path.join('components', 'home', 'list', 'ConvertAgencyModal.tsx'))
 const EDIT = read(path.join('components', 'home', 'list', 'CompanyEditModal.tsx'))
 const HOME = read(path.join('app', 'page.tsx'))
+const { SHAPES } = load(path.join(__dirname, 'convert-agency-dryrun.js'))
 
 let fail = 0
 const ok = (name, cond, hint) => {
@@ -79,6 +82,22 @@ ok('막는 것이 있으면 「전환」이 꺼진다',
 ok('막는 목록을 보여 준다', /회사 줄에 붙어 있어 먼저 옮겨야 하는 기록/.test(MODAL))
 ok('따라가는 것도 보여 준다', /그대로 따라가는 기록/.test(MODAL))
 ok('표 이름은 사업장 병합 창과 같은 표를 쓴다', /import \{ TABLE_LABEL \}/.test(MODAL))
+
+console.log('\n── ⑦ 돌아오는 칸(응답 모양) ──')
+// SQL 의 jsonb_build_object 세 덩이가 실측 도구와 **같은 칸**을 말하는지 본다.
+const built = [...SQL.matchAll(/jsonb_build_object\(\n([\s\S]*?)\n\s*\);/g)].map(m => m[1])
+ok('반환 덩이가 셋이다(막힘 · 검사만 · 전환 완료)', built.length === 3, `${built.length}덩이`)
+const keysIn = txt => [...txt.matchAll(/'([a-z_]+)',/g)].map(m => m[1])
+const blocked = built.find(t => /'blockers'/.test(t))
+const okDry = built.find(t => /'agency_name'/.test(t) && /'dry_run', true/.test(t))
+ok('막힘 응답의 칸이 실측 도구의 SHAPES.blocked 와 같다',
+  blocked != null && [...keysIn(blocked)].sort().join(',') === [...SHAPES.blocked].sort().join(','),
+  blocked ? keysIn(blocked).join(',') : '(못 찾음)')
+ok('검사만(dry_run) 응답의 칸이 SHAPES.ok 와 같다',
+  okDry != null && [...keysIn(okDry)].sort().join(',') === [...SHAPES.ok].sort().join(','),
+  okDry ? keysIn(okDry).join(',') : '(못 찾음)')
+ok('세는 값과 합이 짝으로 온다', /'blockers', v_refs, 'blocker_total', v_total/.test(SQL) && /'follows', v_follows, 'follows_total', v_follows_n/.test(SQL))
+ok('자식 사업장은 막는 사유로 세지 않는다', /if r\.tbl = 'customers' and r\.col = 'parent_customer_id' then\s*\n\s*continue;/.test(SQL))
 
 console.log('\n── ⑥ 전환 뒤 ──')
 ok('두 캐시를 비운다', /invalidateParents\(\)[\s\S]{0,80}invalidateAgencies\(\)/.test(PANE))
