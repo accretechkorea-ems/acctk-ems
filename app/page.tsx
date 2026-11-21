@@ -13,6 +13,8 @@ import { useHomeData } from '@/hooks/useHomeData'
 import { CATEGORY_OPTIONS } from '@/lib/constants'
 import { useAgencies } from '@/lib/customerAgency'
 import { REGION_FILTER_OPTIONS } from '@/lib/region'
+import ExportModal from '@/components/home/ExportModal'
+import { UNIT_LABEL, type ExportUnit } from '@/lib/customerExportSheets'
 import { DIRECT_SALE } from '@/lib/customerList'
 import PanelHeader, { type HomeView } from '@/components/home/PanelHeader'
 import SidePanel, { PANEL_SPACE } from '@/components/home/SidePanel'
@@ -148,6 +150,10 @@ useEffect(() => {
 
   const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  /** 엑셀 단위 고르는 창. */
+  const [exportOpen, setExportOpen] = useState(false)
+  /** 단위별 예상 줄 수 — 창이 열릴 때 서버에서 한 번 받는다. */
+  const [exportCounts, setExportCounts] = useState<Record<ExportUnit, number> | null>(null)
 
   const { fetchData } = useHomeData({
   setCustomers,
@@ -654,26 +660,50 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
   }
 
 /**
-   * 지금 목록을 엑셀로 내려받는다 — **화면이 거른 범위·순서 그대로** 쓴다.
+   * 엑셀 내보내기 — **창을 먼저 연다**(components/home/ExportModal.tsx).
    *
-   * 만드는 일은 서버가 한다(/api/customer-export). 화면은 **사업장 id 목록**만 보낸다 —
-   * 필터를 서버에서 다시 구현하면 화면과 다른 줄이 나오는 날이 온다. 네 시트
-   * (사업장·회사·대리점·장비)와 담당자 열은 그 라우트와 lib/customerExportSheets.ts 가 만든다.
+   * 전에는 단추를 누르면 바로 네 시트짜리 파일이 내려왔다. 받는 사람은 그 중 한 장만
+   * 쓰는데 나머지가 늘 따라왔다. 이제 창에서 **단위**(회사·사업장·사업장×장비·대리점)와
+   * 담당자 열 포함 여부를 고르고, 그 시트 하나만 받는다.
    *
-   * 전에는 브라우저에서 xlsx 로 시트 하나를 만들었다(고객사 × 장비 한 줄). 2,000줄을
-   * 넘기면 만드는 동안 화면이 섰고, 머리줄 고정도 되지 않았다.
+   * 범위는 **화면이 거른 목록 그대로**다 — 사업장 id 를 순서까지 그대로 보낸다.
+   * 서버에서 필터를 다시 구현하면 화면과 다른 줄이 나오는 날이 온다.
    */
-  const handleExportExcel = async () => {
+  /** 내보낼 사업장 id — 목록 보기 트리의 사업장(화면의 「조건 일치 N곳」과 같은 수). */
+  const exportSiteIds = useMemo(
+    () => listTree.groups.flatMap(g => g.sites.map(s => Number(s.customer.customer_id))),
+    [listTree],
+  )
+
+  const openExport = () => {
+    if (exportSiteIds.length === 0) { toast.error('내보낼 고객사가 없습니다'); return }
+    setExportCounts(null)
+    setExportOpen(true)
+    // 「예상 N줄」 — **파일과 같은 함수**로 센 값을 서버에서 받는다(창이 따로 세지 않는다).
+    void (async () => {
+      try {
+        const res = await fetch('/api/customer-export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ siteIds: exportSiteIds, estimate: true }),
+        })
+        if (!res.ok) return
+        const json = await res.json()
+        if (json?.counts) setExportCounts(json.counts as Record<ExportUnit, number>)
+      } catch (e) {
+        console.warn('예상 줄 수를 세지 못했습니다:', e)
+      }
+    })()
+  }
+
+  const runExport = async (unit: ExportUnit, withContacts: boolean) => {
     if (isExporting) return
-    // 내보내는 범위는 **목록 보기의 트리**다 — 화면 오른쪽 위의 「조건 일치 N곳」과 같은 수다.
-    const siteIds = listTree.groups.flatMap(g => g.sites.map(s => Number(s.customer.customer_id)))
-    if (siteIds.length === 0) { toast.error('내보낼 고객사가 없습니다'); return }
     setIsExporting(true)
     try {
       const res = await fetch('/api/customer-export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ siteIds }),
+        body: JSON.stringify({ siteIds: exportSiteIds, unit, contacts: withContacts }),
       })
       if (!res.ok) {
         const msg = await res.json().catch(() => null)
@@ -682,7 +712,7 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
       }
       const counts = (() => {
         try { return JSON.parse(res.headers.get('X-Export-Counts') ?? '{}') } catch { return {} }
-      })() as { sites?: number; siteLines?: number; companies?: number; agencies?: number }
+      })() as { unit?: string; lines?: number; cols?: number }
       const blob = await res.blob()
       // 파일 이름은 서버가 Content-Disposition 에 담아 보낸다(한글이라 filename* 쪽을 읽는다).
       const cd = res.headers.get('Content-Disposition') ?? ''
@@ -694,9 +724,8 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
       a.download = name
       a.click()
       URL.revokeObjectURL(url)
-      toast.success(
-        `사업장 ${counts.sites ?? 0}곳(${counts.siteLines ?? 0}줄) · 회사 ${counts.companies ?? 0} · 대리점 ${counts.agencies ?? 0}을 내려받았습니다`,
-      )
+      setExportOpen(false)
+      toast.success(`${UNIT_LABEL[unit]} ${(counts.lines ?? 0).toLocaleString('ko-KR')}줄을 내려받았습니다`)
     } catch (e) {
       console.warn('엑셀 내보내기 실패:', e)
       toast.error(e instanceof Error ? e.message : '엑셀을 만들지 못했습니다')
@@ -762,7 +791,7 @@ useEffect(() => {
             agency: agencyCount,
             cleanup: new Set(Object.values(cleanup).flat().map(r => r.companyId)).size,
           }}
-          onExport={handleExportExcel}
+          onExport={openExport}
           canExport={canExportExcel}
           exporting={isExporting}
           onAdd={() => openAddCustomer()}
@@ -1064,6 +1093,19 @@ useEffect(() => {
         </SidePanel>
       </div>
       )}
+
+        {exportOpen && (
+          <ExportModal
+            tab={listTab}
+            /* 지금 걸린 조건 — 필터 칩과 **같은 글자**다(화면 위의 칩 줄과 창이 어긋나지 않게). */
+            filterText={filterChips.length === 0 ? '조건 없음' : filterChips.map(c => c.label).join(' · ')}
+            siteCount={exportSiteIds.length}
+            counts={exportCounts}
+            busy={isExporting}
+            onClose={() => setExportOpen(false)}
+            onDownload={(unit, withContacts) => { void runExport(unit, withContacts) }}
+          />
+        )}
 
         {filterOpen && (
           <CustomerFilterModal

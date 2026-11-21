@@ -228,7 +228,15 @@ export async function gatherCustomerExport(
     const row = byId.get(cid)
     const list = sitesByCompany.get(cid) ?? []
     // 회사 줄 자신에 붙은 견적·접점도 센다 — 옛 자료에 회사 줄로 들어간 건이 있다.
-    const touchDates = [touchMap.get(cid)?.date ?? '', ...list.map(s => s.touchDate)].filter(Boolean)
+    // 「최근 활동일」은 그 중 가장 늦은 날이고, 「최근 활동 종류」는 **그 날을 만든 갈래**다.
+    const own = touchMap.get(cid)
+    const touches: { date: string; source: string }[] = [
+      ...(own ? [{ date: own.date, source: own.source as string }] : []),
+      ...list.filter(s => s.touchDate).map(s => ({ date: s.touchDate, source: s.touchSource })),
+    ]
+    // 같은 날이 여럿이면 먼저 나온 것을 쓴다(사업장 순서 = 화면 순서).
+    const latest = touches.reduce<{ date: string; source: string } | null>(
+      (best, t) => (best === null || t.date > best.date ? t : best), null)
     return {
       companyId: cid,
       companyName: (row?.company_name ?? '').trim(),
@@ -238,7 +246,8 @@ export async function gatherCustomerExport(
       deviceCount: list.reduce((n, s) => n + s.deviceCount, 0),
       openQuotes: (openQ.get(cid) ?? 0) + list.reduce((n, s) => n + s.openQuotes, 0),
       totalQuotes: (allQ.get(cid) ?? 0) + list.reduce((n, s) => n + s.totalQuotes, 0),
-      touchDate: touchDates.sort().at(-1) ?? '',
+      touchDate: latest?.date ?? '',
+      touchSource: latest?.source ?? '',
       note: row?.note ?? '',
     }
   })
