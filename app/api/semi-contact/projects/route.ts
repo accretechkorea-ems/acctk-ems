@@ -11,10 +11,26 @@
 //
 // 행마다 돌려주는 값: 번호·고객사·사업장/부서·안건·생성일, 접촉 횟수, 최근 접촉(가장 늦은 contact_date,
 // 같은 날이면 report_id 가 큰 보고서)의 날짜·작성자 이름·직책(engineers.position). 정렬은 최근 접촉 내림차순, 보고서가 없으면 생성일로 견준다.
+//
+// ── 거르기 (2026-11-22) ────────────────────────────────────────────────────
+//   q      글자 찾기. Project 칸(번호·고객사·사업장/부서·안건)과 **보고서 본문 전문**을 본다 —
+//          보고서의 글자 칸 전부(접촉방법·고객 담당자·목적·FACT·detail 의 모든 값)다.
+//          보고서 본문은 화면에 없는 자료라 **서버에서** 걸러야 한다(그래서 이 라우트가 받는다).
+//   from·to 접촉일(semi_contact_reports.contact_date) 범위. 'YYYY-MM-DD', 양끝 포함.
+//          ※ 지시의 말은 「작성일」이었다. 이 표에서 보고서의 날짜는 **접촉일**이고 화면도
+//            그 값을 「최근 접촉」으로 보여 준다 — 사람이 고르는 기간도 그것이라 보았다.
+//            넣은 날짜(created_at)로 걸러야 하면 아래 reportInRange 한 줄만 바꾸면 된다.
+//   author 보고서 작성자(engineers.engineer_id). 응답의 authors 목록에서 고른다.
+//
+//   기간·작성자는 **보고서 단위** 조건이다 — 그 조건을 지나는 보고서가 한 건이라도 있는
+//   Project 가 남는다. q 는 Project 칸에 걸리거나, 그 조건을 지난 보고서 본문에 걸리면 남는다.
+//   돌려주는 접촉 횟수·최근 접촉은 **거르기 전 전체**다(Project 의 성질이지 검색 결과가 아니다).
 import { adminClient, adminEnvReady } from '@/lib/supabase/admin'
 import { NextRequest, NextResponse } from 'next/server'
 import { loadCaller } from '@/lib/apiCaller'
 import { kstYmd } from '@/lib/date'
+// 거르기는 순수 모듈에 있다 — 하네스(scripts/semi-search-check.js)가 같은 함수를 시험한다.
+import { authorOptions, filterProjects, ymd, type SearchFilter } from '@/lib/semiContact/search'
 
 const TAG = 'semi-contact/projects'
 
@@ -35,6 +51,13 @@ type ReportRow = {
   report_id: number
   project_id: number
   contact_date: string
+  author_id: number | null
+  /** 본문 — 글자 칸들. 전문 찾기가 본다. */
+  contact_method: string | null
+  customer_contact: string | null
+  purpose: string | null
+  fact: string | null
+  detail: Record<string, unknown> | null
   author: { name: string | null; position: string | null; teams: string | null } | null
 }
 
@@ -70,8 +93,16 @@ async function handle(req: NextRequest) {
   // 화면이 만든다(lib/semiContact.ts 의 apiErrorText).
   const auth = await loadCaller({ kind: 'semi' }, { tag: TAG, method: 'GET' })
   if (auth.error) return auth.error
-  const teamParam = new URL(req.url).searchParams.get('team')
+  const sp = new URL(req.url).searchParams
+  const teamParam = sp.get('team')
   const team = teamParam === null ? null : teamParam.trim()
+  const authorRaw = Number(sp.get('author'))
+  const filter: SearchFilter = {
+    q: (sp.get('q') ?? '').trim().toLowerCase(),
+    from: ymd(sp.get('from')),
+    to: ymd(sp.get('to')),
+    author: Number.isInteger(authorRaw) && authorRaw > 0 ? authorRaw : null,
+  }
 
   const sb = admin()
 
@@ -93,7 +124,7 @@ async function handle(req: NextRequest) {
     sb.from('semi_projects')
       .select('project_id, project_no, customer_name, site_dept, title, created_at, creator:engineers!semi_projects_created_by_fkey(teams)'),
     sb.from('semi_contact_reports')
-      .select('report_id, project_id, contact_date, author:engineers!semi_contact_reports_author_fkey(name, position, teams)'),
+      .select('report_id, project_id, contact_date, author_id, contact_method, customer_contact, purpose, fact, detail, author:engineers!semi_contact_reports_author_fkey(name, position, teams)'),
   ])
   if (p.error || r.error) {
     console.error(`[${TAG}] lookup failed`, { error: p.error ?? r.error })
@@ -118,7 +149,12 @@ async function handle(req: NextRequest) {
     return pr.creator?.teams?.trim() === team || byProject.get(pr.project_id)?.teamAuthor === true
   }
 
-  const items: (ProjectListItem & { sortKey: string })[] = projects.filter(inScope).map(pr => {
+  const authors = authorOptions(reports)
+  const scoped = projects.filter(inScope)
+  // 거르기는 순수 모듈이 한다(하네스가 같은 함수를 시험한다).
+  const kept = new Set(filterProjects(scoped, reports, filter).map(pr => pr.project_id))
+
+  const items: (ProjectListItem & { sortKey: string })[] = scoped.filter(pr => kept.has(pr.project_id)).map(pr => {
     const agg = byProject.get(pr.project_id)
     const last = agg?.last ?? null
     return {
@@ -144,6 +180,10 @@ async function handle(req: NextRequest) {
   return NextResponse.json({
     team,
     teams: semiTeams,
+    // 작성자 칸은 **거르기 전 전체**에서 만든다 — 고른 뒤 목록이 비어도 칸이 사라지면 안 된다.
+    authors,
+    // 거르기 전 Project 수 — 화면이 「전체 N건 중 M건」을 적는 데 쓴다.
+    total: scoped.length,
     projects: items.map(({ sortKey: _sortKey, ...rest }) => rest),
   })
 }

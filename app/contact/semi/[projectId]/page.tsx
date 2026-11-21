@@ -36,7 +36,7 @@ import {
 } from '@/components/common/ui'
 import { daysBetween, todayKST } from '@/lib/date'
 import { errorInfo } from '@/lib/errorInfo'
-import { ACTION_LABELS, ACTION_STATUSES, actionFromStorage, apiErrorText, AUTHOR_FIELD, changedFields, emptyInput, FIELD_BY_KEY, FIELDS, fromStorage, SECTIONS, type ActionInput, type FieldDef, type FieldKey, type ReportInput, validateReport } from '@/lib/semiContact'
+import { ACTION_LABELS, ACTION_STATUSES, actionFromStorage, apiErrorText, AUTHOR_FIELD, changedFields, emptyInput, FIELD_BY_KEY, FIELDS, fromStorage, isSectionShown, SECTIONS, type ActionInput, type FieldDef, type FieldKey, type ReportInput, validateReport } from '@/lib/semiContact'
 import {
   PROJECT_KEYS, PROJECT_NO_KEY, PROJECT_NO_LABEL, PROJECT_NO_MAX, PROJECT_TEXT_MAX, validateProjectNo,
 } from '@/lib/semiContact/project'
@@ -51,7 +51,14 @@ const CONTACT_KEYS: FieldKey[] = ['contact_date', 'contact_method', 'customer_co
 const NOTE_KEYS: FieldKey[] = ['meeting_content', 'fact']
 const NEXT_KEYS: FieldKey[] = ['next_contact_date']
 const PLACED = new Set<FieldKey>([...PROJECT_KEYS, ...CONTACT_KEYS, ...NOTE_KEYS, ...NEXT_KEYS])
+/**
+ * 이어받은 항목의 섹션 묶음. **읽는 화면에서 가리는 섹션은 여기서 뺀다** —
+ * isSectionShown(lib/semiContact/fields.ts 의 HIDE_SALES_JUDGEMENT). 칸만 빼면 빈 머리줄이
+ * 남아 「무언가 가렸다」가 그대로 보이므로 섹션을 통째로 뺀다.
+ * 자료·입력 폼·저장·PDF·엑셀·API 는 그대로다 — 가리는 것은 이 화면 하나뿐이다.
+ */
 const REST_GROUPS = SECTIONS
+  .filter(s => isSectionShown(s.no))
   .map(s => ({ section: s, fields: (FIELDS as readonly FieldDef[]).filter(f => f.section === s.no && !PLACED.has(f.key as FieldKey)) }))
   .filter(g => g.fields.length > 0)
 

@@ -27,6 +27,27 @@ export const SECTIONS: readonly { no: SectionNo; label: string }[] = [
   { no: 6, label: '미확인 사항·Next Action' },
 ]
 
+/**
+ * 「당사 판단·영업전략」 섹션(5) — **화면에서만 가린다** (2026-11-22 지시).
+ *
+ * 가리는 것은 **보는 자리 하나**뿐이다. 자료·입력 폼·저장·PDF·엑셀·API 는 **그대로**다 —
+ * 보고서를 쓰는 사람은 전처럼 적고, 내보내기에도 전처럼 실린다. 읽는 화면에서만 빠진다.
+ *
+ * 되돌리려면 이 값을 false 로 바꾸면 된다. 그 한 줄 말고 고칠 곳은 없다.
+ */
+export const HIDE_SALES_JUDGEMENT = true
+
+/** 가리는 섹션 번호 — 「당사 판단·영업전략」(Assessment · Why Win · Why Lose · 영업전략 · 회사/HQ 지원 필요). */
+export const SALES_JUDGEMENT_SECTION: SectionNo = 5
+
+/**
+ * 읽는 화면에 그릴 섹션인가. **접히는 머리줄까지 통째로** 빠져야 하므로, 칸을 거르는 것이
+ * 아니라 섹션을 통째로 거른다(빈 머리줄이 남으면 「무언가 가렸다」가 그대로 보인다).
+ */
+export function isSectionShown(no: SectionNo): boolean {
+  return !(HIDE_SALES_JUDGEMENT && no === SALES_JUDGEMENT_SECTION)
+}
+
 export type FieldKind = 'text' | 'longtext' | 'date' | 'select'
 export type FieldStorage = 'column' | 'project' | 'detail'
 

@@ -5,7 +5,13 @@
 // 위에서 아래로: 제목 「접촉 보고서」 + Project 건수 + 「+ 새 Project」 → 필터 줄(팀 토글 · 검색 · 결과 건수) → 목록.
 // 디자인은 components/common/ui.ts 토큰(cardStyle·cardTitle·countBadge·rowStyle·btn*·inputStyle)을 따른다.
 //
-// 데이터 — GET /api/semi-contact/projects[?team=<팀 이름>] 하나로 읽는다. 팀 판정(만든 사람 또는 보고서 작성자 중
+// 거르기(2026-11-22) — 검색어·기간·작성자는 **서버가 거른다**. 검색어는 Project 칸뿐 아니라
+// **보고서 본문 전문**(접촉방법·고객 담당자·목적·FACT·detail 의 모든 글자)을 보는데, 그 글자는
+// 화면에 없는 자료라 서버에서 찾아야 한다. 네 조건(팀·검색어·기간·작성자)은 **URL 쿼리**에
+// 그대로 남는다 — 새로고침해도, Project 를 열었다 뒤로 와도 보던 화면이 그대로다.
+// 검색어만 300ms 디바운스를 둔다(한 글자마다 서버를 부르지 않게). 기간·작성자는 고르는 즉시다.
+//
+// 데이터 — GET /api/semi-contact/projects[?team=&q=&from=&to=&author=] 하나로 읽는다. 팀 판정(만든 사람 또는 보고서 작성자 중
 // 그 팀 소속이 있는가)은 서버가 하고, 화면은 결과만 받는다. 토글 칸(「전체」 + 사업부가 반도체인 팀, display_order 순)도
 // 같은 응답의 teams 로 만든다 — 팀이 늘면 칸도 저절로 는다. 최근 접촉·접촉 횟수·정렬(최근 접촉 내림차순, 없으면
 // 생성일)도 서버가 계산한다. 검색은 받은 목록(토글로 거른 뒤)을 화면에서 거른다(번호·고객사·사업장/부서·안건, 대소문자 무시).
@@ -13,7 +19,7 @@
 // 행을 누르면 Project 상세로, 행 끝의 「보고서 작성」은 작성 화면으로 간다(클릭이 행으로 번지지 않게 막는다).
 // 진입 — 메뉴 키 contact_semi(lib/menuPerms.ts). usePageGuard 가 판정하고 권한이 없으면 AccessGate 를 그린다.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { usePageGuard } from '@/hooks/usePageGuard'
@@ -89,17 +95,75 @@ export default function ContactSemiPage() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [q, setQ] = useState('')
+  /** 서버로 보내는 검색어 — 300ms 디바운스. 칸의 글자(q)와 따로 둔다. */
+  const [debouncedQ, setDebouncedQ] = useState('')
+  /** 접촉일 기간 — 'YYYY-MM-DD'. 빈 글자면 그쪽 끝은 열려 있다. */
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  /** 작성자 — engineers.engineer_id. '' 면 전체. */
+  const [author, setAuthor] = useState('')
+  /** 작성자 칸 — 보고서를 쓴 사람 목록(서버가 준다). */
+  const [authors, setAuthors] = useState<{ engineer_id: number; name: string }[]>([])
+  /** 거르기 전 Project 수 — 「전체 N건 중」. */
+  const [total, setTotal] = useState<number | null>(null)
+  /**
+   * URL 쿼리를 읽기 전에는 조회하지 않는다. 서버에서 그린 첫 화면과 글자가 달라지지
+   * 않게 상태는 빈 값으로 시작하고, 붙은 뒤(마운트)에 주소에서 한 번 채운다.
+   */
+  const [ready, setReady] = useState(false)
   const [creating, setCreating] = useState(false)
   /** 올리면 목록을 다시 읽는다(새 Project 를 만든 뒤). */
   const [reloadKey, setReloadKey] = useState(0)
 
+  // 주소 → 상태 (한 번). 뒤로 가기로 돌아와도 이 자리를 지난다(그때는 화면이 다시 붙는다).
   useEffect(() => {
-    if (!authorized) return
+    const sp = new URLSearchParams(window.location.search)
+    const t = sp.get('team')
+    if (t) setTeam(t)
+    const q0 = sp.get('q') ?? ''
+    setQ(q0); setDebouncedQ(q0)
+    setFrom(sp.get('from') ?? '')
+    setTo(sp.get('to') ?? '')
+    setAuthor(sp.get('author') ?? '')
+    setReady(true)
+  }, [])
+
+  // 검색어 디바운스 — 300ms 동안 더 치지 않으면 그때 보낸다.
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQ(q), 300)
+    return () => clearTimeout(id)
+  }, [q])
+
+  /**
+   * 상태 → 주소. **replaceState** 다 — 글자를 칠 때마다 뒤로 가기 기록을 쌓지 않는다.
+   * Project 를 열었다 뒤로 오면 이 주소로 돌아오므로 보던 조건이 그대로다.
+   */
+  useEffect(() => {
+    if (!ready) return
+    const sp = new URLSearchParams()
+    if (team) sp.set('team', team)
+    if (debouncedQ.trim()) sp.set('q', debouncedQ.trim())
+    if (from) sp.set('from', from)
+    if (to) sp.set('to', to)
+    if (author) sp.set('author', author)
+    const qs = sp.toString()
+    window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
+  }, [ready, team, debouncedQ, from, to, author])
+
+  useEffect(() => {
+    if (!authorized || !ready) return
     let cancelled = false
     const load = async () => {
       setBusy(true)
       try {
-        const res = await fetch(`/api/semi-contact/projects${team ? `?team=${encodeURIComponent(team)}` : ''}`)
+        const sp = new URLSearchParams()
+        if (team) sp.set('team', team)
+        if (debouncedQ.trim()) sp.set('q', debouncedQ.trim())
+        if (from) sp.set('from', from)
+        if (to) sp.set('to', to)
+        if (author) sp.set('author', author)
+        const qs = sp.toString()
+        const res = await fetch(`/api/semi-contact/projects${qs ? `?${qs}` : ''}`)
         const json = await res.json().catch(() => ({}))
         if (cancelled) return
         if (!res.ok) {
@@ -111,6 +175,8 @@ export default function ContactSemiPage() {
         setLoadError(null)
         setRows((json.projects ?? []) as ProjectRow[])
         setTeams(Array.isArray(json.teams) ? (json.teams as unknown[]).filter((t): t is string => typeof t === 'string') : [])
+        setAuthors(Array.isArray(json.authors) ? (json.authors as { engineer_id: number; name: string }[]) : [])
+        setTotal(typeof json.total === 'number' ? json.total : null)
       } catch (e) {
         if (cancelled) return
         console.error('[contact/semi] Project 목록 조회 실패', errorInfo(e))
@@ -122,21 +188,21 @@ export default function ContactSemiPage() {
     }
     load()
     return () => { cancelled = true }
-  }, [authorized, team, reloadKey])
+  }, [authorized, ready, team, debouncedQ, from, to, author, reloadKey])
 
-  // 검색 — 번호·고객사·사업장/부서·안건 부분 일치, 대소문자 무시. 서버가 정한 순서는 그대로 둔다.
-  const words = q.trim().toLowerCase()
-  const shown = useMemo(() => {
-    if (!rows) return []
-    if (!words) return rows
-    return rows.filter(r =>
-      [r.project_no, r.customer_name, r.site_dept ?? '', r.title].some(v => v.toLowerCase().includes(words)))
-  }, [rows, words])
+  /**
+   * 거르기는 **서버가 한다**(검색어는 보고서 본문 전문까지 본다 — 화면에 없는 자료다).
+   * 그래서 받은 목록이 곧 보여 줄 목록이다. 순서도 서버가 정한 대로 둔다.
+   */
+  const shown = rows ?? []
+  const words = debouncedQ.trim()
+  /** 조건이 하나라도 걸려 있는가 — 「조건을 지웁니다」 단추와 빈 목록 안내가 쓴다. */
+  const narrowed = words !== '' || from !== '' || to !== '' || author !== ''
+  const clearAll = () => { setQ(''); setFrom(''); setTo(''); setAuthor('') }
 
 
   if (!authorized) return <AccessGate loading={guardLoading} />
 
-  const total = rows?.length ?? null
   const openProject = (id: number) => router.push(`/contact/semi/${id}`)
 
   return (
@@ -153,14 +219,15 @@ export default function ContactSemiPage() {
           </button>
         </div>
 
-        {/* ── 필터 줄 — 팀 토글 · 검색 · 결과 건수 ── */}
+        {/* ── 필터 줄 — 팀 토글 · 검색 · 접촉일 기간 · 작성자 · 결과 건수 ──
+            좁은 화면에서는 줄바꿈으로 흐른다(flexWrap). 검색 칸이 남는 폭을 먹는다. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
           <TeamToggle teams={teams} value={team} onChange={setTeam} />
           <span style={{ position: 'relative', flex: '1 1 240px', minWidth: 200 }}>
             <input
               value={q}
               onChange={e => setQ(e.target.value)}
-              placeholder="Project 번호, 고객사, 사업장/부서, 안건 검색"
+              placeholder="번호·고객사·사업장/부서·안건·보고서 본문 검색"
               aria-label="검색"
               style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', paddingRight: q ? 30 : undefined }}
             />
@@ -175,9 +242,33 @@ export default function ContactSemiPage() {
               </button>
             )}
           </span>
+
+          {/* 접촉일 기간 — 양끝 포함. 한쪽만 적어도 된다(그쪽 끝만 막힌다). */}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+            <input type="date" className="date-fit" value={from} onChange={e => setFrom(e.target.value)}
+              aria-label="접촉일 시작" title="접촉일 시작"
+              style={{ ...inputStyle, width: 140, colorScheme: 'light' }} />
+            <span style={{ fontSize: 12, color: MUTED }}>~</span>
+            <input type="date" className="date-fit" value={to} onChange={e => setTo(e.target.value)}
+              aria-label="접촉일 끝" title="접촉일 끝"
+              style={{ ...inputStyle, width: 140, colorScheme: 'light' }} />
+          </span>
+
+          {/* 작성자 — 보고서를 쓴 사람만 칸에 선다(서버가 준 목록). */}
+          <select value={author} onChange={e => setAuthor(e.target.value)} aria-label="작성자"
+            style={{ ...inputStyle, width: 120, flexShrink: 0 }}>
+            <option value="">작성자 전체</option>
+            {authors.map(a => <option key={a.engineer_id} value={String(a.engineer_id)}>{a.name}</option>)}
+          </select>
+
+          {narrowed && (
+            <button type="button" onClick={clearAll}
+              style={{ ...btnGhost(), padding: '0 10px', height: 32, flexShrink: 0 }}>조건 지우기</button>
+          )}
+
           {rows !== null && (
             <span className="num" style={{ marginLeft: 'auto', fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>
-              결과 {shown.length}건
+              {narrowed && total !== null ? `전체 ${total}건 중 ` : ''}결과 {shown.length}건
             </span>
           )}
         </div>
