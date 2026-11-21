@@ -34,6 +34,7 @@ import ConfirmQuoteModal from '@/components/quote/ConfirmQuoteModal'
 import QuoteItemRow from './QuoteItemRow'
 import { useRecentSales } from '@/hooks/quote/useRecentSales'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import { defaultTermsFor, normalizeTerms, termKeysFor, type SetTerms, type Terms } from '@/lib/quoteTerms'
 import { defaultRemarksFor } from '@/lib/quoteRemarks'
 import { normalizeSubLines } from '@/lib/quoteSubLines'
@@ -1055,17 +1056,23 @@ function QuotePageInner() {
       {/* 임시저장 안내 — 저장분이 있을 때만. 답하기 전에는 자동 저장이 시작되지 않는다. */}
       {draftAsk && engineer && (
         <ModalOverlay onClose={() => {}} closeOn="none" style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: '#fff', borderRadius: R.control, padding: 32, width: '100%', maxWidth: 440, boxShadow: '0 24px 64px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
-            <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 4, letterSpacing: '-0.3px' }}>작성 중이던 내용이 있습니다</div>
-            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, fontWeight: 500 }}>
-              {draftSavedLabel(draftAsk.savedAt)} 까지 쓴 내용{draftAsk.company.trim() ? ` · ${draftAsk.company.trim()}` : ''}
-            </div>
-            <div style={{ background: '#eff4ff', border: '1px solid #c7d7f8', borderRadius: R.control, padding: '12px 14px', marginBottom: 24 }}>
-              <div style={{ fontSize: 12, color: '#234ea2', lineHeight: 1.8 }}>
-                이어서 쓰거나, 새로 시작할 수 있습니다. <b>새로 쓰기를 고르면 저장분은 사라집니다.</b>
+          {/* 구조는 공용 카드가 든다 — 머리줄 고정 / 본문 스크롤 / 바닥줄 고정.
+              겉모양(제목 20/800 · 설명 13 · 여백 32 · 버튼)은 옛 값 그대로다.
+              ✕ 는 두지 않는다 — 이 창은 **답해야 지나간다**(오버레이의 closeOn='none':
+              Esc·바깥 클릭으로 닫히지 않는다). 길은 「새로 쓰기」와 「이어쓰기」 둘이다.
+              머리 간격 0 — 설명 줄의 marginBottom 20 이 본문까지의 거리를 들고 있다.
+              바닥 간격 0 — 본문 안내 칸의 marginBottom 24 가 버튼까지의 거리를 든다. */}
+          <ModalCard
+            width={440}
+            closeX={false}
+            {...keepPads({ x: 32, top: 32, bottom: 32 }, 0, 0)}
+            title={<>
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 4, letterSpacing: '-0.3px' }}>작성 중이던 내용이 있습니다</div>
+              <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, fontWeight: 500 }}>
+                {draftSavedLabel(draftAsk.savedAt)} 까지 쓴 내용{draftAsk.company.trim() ? ` · ${draftAsk.company.trim()}` : ''}
               </div>
-            </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            </>}
+            footer={<>
               <button
                 onClick={() => { clearDraft(engineer.engineer_id); setDraftAsk(null); setDraftReady(true) }}
                 style={{ padding: '11px 20px', background: '#fff', color: '#6b7280', border: '1px solid #ebebeb', borderRadius: R.icon, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
@@ -1076,8 +1083,14 @@ function QuotePageInner() {
                 style={{ padding: '11px 24px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
                 이어쓰기
               </button>
+            </>}
+          >
+            <div style={{ background: '#eff4ff', border: '1px solid #c7d7f8', borderRadius: R.control, padding: '12px 14px', marginBottom: 24 }}>
+              <div style={{ fontSize: 12, color: '#234ea2', lineHeight: 1.8 }}>
+                이어서 쓰거나, 새로 시작할 수 있습니다. <b>새로 쓰기를 고르면 저장분은 사라집니다.</b>
+              </div>
             </div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
 

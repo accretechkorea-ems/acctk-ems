@@ -77,11 +77,20 @@ export type ModalCardProps = {
   /** 본문 칸의 ref — 스크롤 힌트·자동 스크롤이 쓴다. */
   bodyRef?: RefObject<HTMLDivElement | null>
   className?: string
+  /**
+   * 보조 기술에 「이것은 대화창이다」를 알리는 세 칸. 옮기기 전에 이 표시를 달고 있던
+   * 모달이 있어 그대로 넘길 길을 둔다 — 달려 있던 것을 떨어뜨리지 않는다.
+   * (기본은 주지 않는다. 지금 이 표시가 없는 모달 쪽 동작까지 바꾸지 않으려는 것이다.)
+   */
+  role?: string
+  ariaModal?: boolean
+  ariaLabel?: string
 }
 
 export default function ModalCard({
   title, subtitle, titleExtra, width = 480, footer, children,
   closeX = true, onClose, style, bodyStyle, headStyle, footStyle, bodyRef, className,
+  role, ariaModal, ariaLabel,
 }: ModalCardProps) {
   const requestClose = useRequestClose()
   const close = onClose ?? requestClose ?? undefined
@@ -89,6 +98,9 @@ export default function ModalCard({
   return (
     <div
       className={className ? `ems-modal-card ${className}` : 'ems-modal-card'}
+      role={role}
+      aria-modal={ariaModal}
+      aria-label={ariaLabel}
       /* 바탕까지 눌림이 올라가면 바깥 클릭으로 닫힌다 — 카드 안의 클릭은 여기서 멈춘다. */
       onClick={e => e.stopPropagation()}
       style={{
@@ -154,6 +166,32 @@ export default function ModalCard({
 }
 
 /** 바닥줄의 회색 버튼 — 모달마다 다시 적지 않게 한 벌 둔다. */
+/**
+ * **옛 여백을 그대로** 지키며 옮길 때 쓰는 세 묶음 (2026-11-21).
+ *
+ * 공용 카드의 기본 여백(머리 18/22/12 · 본문 0/22 · 바닥 14/22/18)으로 모으면 모달마다
+ * 겉모양이 조금씩 바뀐다. 구조만 옮기고 **보이는 것은 그대로** 두어야 하는 자리에서는
+ * 옛 카드의 padding 과 머리·바닥 간격(marginBottom·marginTop)을 그대로 넘긴다.
+ *
+ *     <ModalCard {...keepPads({ x: 24, top: 24, bottom: 24 }, 20, 24)} … >
+ *
+ *   x      좌우 여백(옛 카드 padding 의 좌우)
+ *   top    위 여백 · bottom 아래 여백
+ *   headGap  머리줄과 본문 사이(옛 머리줄의 marginBottom)
+ *   footGap  본문과 바닥줄 사이(옛 바닥줄의 marginTop)
+ */
+export function keepPads(
+  pad: { x: number; top: number; bottom: number },
+  headGap: number,
+  footGap: number,
+): Pick<ModalCardProps, 'headStyle' | 'bodyStyle' | 'footStyle'> {
+  return {
+    headStyle: { padding: `${pad.top}px ${pad.x}px ${headGap}px` },
+    bodyStyle: { padding: `0 ${pad.x}px` },
+    footStyle: { padding: `${footGap}px ${pad.x}px ${pad.bottom}px` },
+  }
+}
+
 export const modalGhostButton = (busy = false): CSSProperties => ({
   padding: '10px 15px', background: '#fff', color: SUB, borderRadius: R.icon,
   border: `1px solid ${BORDER}`, cursor: busy ? 'not-allowed' : 'pointer',

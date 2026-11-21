@@ -17,12 +17,13 @@
 
 import { useMemo, useRef, useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { createClient } from '@/lib/supabase/client'
 import {
   CARD_BG, BORDER, TEXT, SUB, MUTED, NEUTRAL_BG, BLUE, FAINT,
-  cardHeader, cardTitle, btnPrimary, btnGhost,
+  cardTitle, btnPrimary, btnGhost,
 } from '@/components/common/ui'
 import { engineerLabel, isCurrentlyEmployed } from '@/lib/engineers'
 import { todayKST } from '@/lib/date'
@@ -431,19 +432,50 @@ export default function BulkImportModal({
   return (
     // 붙여 넣은 표가 들어 있을 수 있다 — 확인 뒤 닫는다.
     <ModalOverlay onClose={close} confirmClose>
-      <div style={{
-        background: CARD_BG, borderRadius: R.control, padding: '14px 16px', width: '100%', maxWidth: 1100,
-        maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
-      }}>
-        <div style={cardHeader}>
+      {/* 구조는 공용 카드가 든다 — 머리줄 고정 / 본문 스크롤 / 바닥줄 고정.
+          전에는 카드 자체가 구르는 칸이었다(maxHeight 88vh + overflowY auto) — 미리보기 표가
+          길어지면 제목과 「N건 등록」이 같이 화면 밖으로 밀렸다. 이제 본문만 구른다.
+          겉모양은 옛 값 그대로다: 여백 14/16 · 머리줄 아래 구분선(cardHeader 의 12+14) ·
+          제목 17/800(cardTitle) · 버튼 묶음은 왼쪽 정렬에 marginLeft:'auto' 로 밀던 그대로.
+          ✕ 는 두지 않는다 — 길은 [닫기]·Esc·바깥 클릭 셋이고 모두 같은 함수(close)다.
+          바닥줄은 **고르는 단계에는 없었다** — 그 단계에서는 주지 않는다. */}
+      <ModalCard
+        width={1100}
+        closeX={false}
+        headStyle={{ alignItems: 'center', gap: 8, padding: '14px 16px 12px', marginBottom: 14, borderBottom: `1px solid ${BORDER}` }}
+        bodyStyle={{ padding: '0 16px' }}
+        footStyle={{ justifyContent: 'flex-start', flexWrap: 'wrap', padding: '0 16px 14px' }}
+        title={<>
           <span style={cardTitle}>일괄 등록 <span style={{ fontSize: 12, fontWeight: 600, color: MUTED }}>(임시 기능)</span></span>
-          {step === 'preview' && (
-            <span style={{ marginLeft: 'auto', fontSize: 12, color: MUTED }}>
-              {rows.length}건 · 등록 대상 {targets.length}건
-              {checking && ' · 확인 중...'}
-            </span>
+        </>}
+        titleExtra={step === 'preview' ? (
+          <span style={{ fontSize: 12, color: MUTED, flexShrink: 0 }}>
+            {rows.length}건 · 등록 대상 {targets.length}건
+            {checking && ' · 확인 중...'}
+          </span>
+        ) : undefined}
+        footer={step === 'pick' ? undefined : (<>
+          <button type="button" onClick={close} style={{ ...btnGhost(), flex: '0 0 auto' }}>닫기</button>
+          {running ? (
+            <button type="button" onClick={() => { stopRef.current = true }}
+              style={{ ...btnGhost(), marginLeft: 'auto' }}>중단</button>
+          ) : (
+            <>
+              {counts.failed > 0 && (
+                <button type="button" onClick={retryFailed} style={{ ...btnGhost(), marginLeft: 'auto' }}>
+                  실패한 행만 다시 시도
+                </button>
+              )}
+              <button
+                type="button" onClick={start} disabled={checking || targets.length === 0}
+                style={{ ...btnPrimary(checking || targets.length === 0), marginLeft: counts.failed > 0 ? 0 : 'auto' }}
+              >
+                {targets.length}건 등록
+              </button>
+            </>
           )}
-        </div>
+        </>)}
+      >
 
         {step === 'pick' ? (
           <>
@@ -743,30 +775,9 @@ export default function BulkImportModal({
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button type="button" onClick={close} style={{ ...btnGhost(), flex: '0 0 auto' }}>닫기</button>
-              {running ? (
-                <button type="button" onClick={() => { stopRef.current = true }}
-                  style={{ ...btnGhost(), marginLeft: 'auto' }}>중단</button>
-              ) : (
-                <>
-                  {counts.failed > 0 && (
-                    <button type="button" onClick={retryFailed} style={{ ...btnGhost(), marginLeft: 'auto' }}>
-                      실패한 행만 다시 시도
-                    </button>
-                  )}
-                  <button
-                    type="button" onClick={start} disabled={checking || targets.length === 0}
-                    style={{ ...btnPrimary(checking || targets.length === 0), marginLeft: counts.failed > 0 ? 0 : 'auto' }}
-                  >
-                    {targets.length}건 등록
-                  </button>
-                </>
-              )}
-            </div>
           </>
         )}
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }

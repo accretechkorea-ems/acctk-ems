@@ -12,6 +12,7 @@ import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import AccessGate from '@/components/common/AccessGate'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import Popover from '@/components/common/Popover'
 import MemoPopover from '@/components/common/MemoPopover'
 import { saveQuoteMemo } from '@/lib/quoteMutations'
@@ -68,6 +69,13 @@ const fmtShort = (s: string | null) => {
   if (!s) return '-'
   return s.slice(0, 10)
 }
+
+/**
+ * 모달 셋이 함께 쓰는 여백 — 옛 카드의 padding 28 그대로다.
+ * 머리 간격 0: 제목 아래 둘째 줄이 스스로 marginBottom(20·16)을 들고 있다.
+ * 바닥 간격 0: 본문 마지막 줄의 marginBottom 20 이 버튼까지의 거리를 든다.
+ */
+const MODAL_PADS = keepPads({ x: 28, top: 28, bottom: 28 }, 0, 0)
 
 export default function PurchasePage() {
   const supabase = createClient()
@@ -523,9 +531,28 @@ export default function PurchasePage() {
 
       {orderModal && (
         <ModalOverlay onClose={() => setOrderModal(null)} confirmClose closeOn={processing ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.55)' }}>
-          <div style={{ background: '#fff', borderRadius: R.modal, width: '100%', maxWidth: 400, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>주문완료 처리</div>
-            <div style={{ fontSize: 12, color: GRAY, marginBottom: 20 }}>{orderModal.quote_number} · {custMap[orderModal.customer_id ?? 0] ?? '-'}</div>
+          {/* 구조는 공용 카드가 든다 — 머리줄 고정 / 본문 스크롤 / 바닥줄 고정.
+              겉모양(제목 16/800 · 둘째 줄 12 · 여백 28 · 버튼 둘이 반씩)은 옛 값 그대로다.
+              ✕ 는 두지 않는다 — 길은 [취소]·Esc·바깥 클릭 셋이고 처리 중에는 셋 다 막힌다. */}
+          <ModalCard
+            width={400}
+            closeX={false}
+            {...MODAL_PADS}
+            title={<>
+              <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>주문완료 처리</div>
+              <div style={{ fontSize: 12, color: GRAY, marginBottom: 20 }}>{orderModal.quote_number} · {custMap[orderModal.customer_id ?? 0] ?? '-'}</div>
+            </>}
+            footer={<>
+              <button onClick={() => setOrderModal(null)} disabled={processing}
+                style={{ flex: 1, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                취소
+              </button>
+              <button onClick={handleCompleteOrder} disabled={processing}
+                style={{ flex: 1, padding: 10, background: BLUE, color: '#fff', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: processing ? 0.7 : 1 }}>
+                {processing ? '처리 중...' : '주문완료 확정'}
+              </button>
+            </>}
+          >
 
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 11, color: GRAY, marginBottom: 5, fontWeight: 600 }}>출하 예정일</div>
@@ -539,26 +566,33 @@ export default function PurchasePage() {
                 style={{ ...inp, resize: 'vertical', lineHeight: 1.5 }} />
             </div>
 
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setOrderModal(null)} disabled={processing}
-                style={{ flex: 1, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
-                취소
-              </button>
-              <button onClick={handleCompleteOrder} disabled={processing}
-                style={{ flex: 1, padding: 10, background: BLUE, color: '#fff', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: processing ? 0.7 : 1 }}>
-                {processing ? '처리 중...' : '주문완료 확정'}
-              </button>
-            </div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
 
       {/* 세금계산서 발행완료 모달 */}
       {taxModal && (
         <ModalOverlay onClose={() => setTaxModal(null)} confirmClose closeOn={taxProcessing ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.55)' }}>
-          <div style={{ background: '#fff', borderRadius: R.modal, width: '100%', maxWidth: 380, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>세금계산서 발행 완료</div>
-            <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{taxModal.quote_number} · {custMap[taxModal.customer_id ?? 0] ?? '-'}</div>
+          {/* 같은 공용 카드. 겉모양은 옛 값 그대로다(폭 380 · 여백 28). */}
+          <ModalCard
+            width={380}
+            closeX={false}
+            {...MODAL_PADS}
+            title={<>
+              <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>세금계산서 발행 완료</div>
+              <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{taxModal.quote_number} · {custMap[taxModal.customer_id ?? 0] ?? '-'}</div>
+            </>}
+            footer={<>
+              <button onClick={() => setTaxModal(null)} disabled={taxProcessing}
+                style={{ flex: 1, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                취소
+              </button>
+              <button onClick={handleCompleteTax} disabled={taxProcessing}
+                style={{ flex: 1, padding: 10, background: GREEN, color: '#fff', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: taxProcessing ? 0.7 : 1 }}>
+                {taxProcessing ? '처리 중...' : '발행완료 확정'}
+              </button>
+            </>}
+          >
 
             <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: R.tile, padding: '12px 14px', marginBottom: 20 }}>
               <div style={{ fontSize: 11, color: '#92400e', fontWeight: 700, marginBottom: 4 }}>요청 내용</div>
@@ -571,26 +605,33 @@ export default function PurchasePage() {
               세금계산서 발행 완료 처리 시 상태가 <strong style={{ color: GREEN }}>매출완료</strong>로 변경되고 견적 발행자에게 알림이 전송됩니다.
             </p>
 
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setTaxModal(null)} disabled={taxProcessing}
-                style={{ flex: 1, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
-                취소
-              </button>
-              <button onClick={handleCompleteTax} disabled={taxProcessing}
-                style={{ flex: 1, padding: 10, background: GREEN, color: '#fff', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: taxProcessing ? 0.7 : 1 }}>
-                {taxProcessing ? '처리 중...' : '발행완료 확정'}
-              </button>
-            </div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
 
       {/* 출하일정/메모 편집 모달 */}
       {editScheduleModal && (
         <ModalOverlay onClose={() => setEditScheduleModal(null)} confirmClose closeOn={editSaving ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.55)' }}>
-          <div style={{ background: '#fff', borderRadius: R.modal, width: '100%', maxWidth: 400, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)' }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>출하 일정 수정</div>
-            <div style={{ fontSize: 12, color: GRAY, marginBottom: 20 }}>{editScheduleModal.quote_number} · {custMap[editScheduleModal.customer_id ?? 0] ?? '-'}</div>
+          {/* 같은 공용 카드. 겉모양은 옛 값 그대로다(폭 400 · 여백 28). */}
+          <ModalCard
+            width={400}
+            closeX={false}
+            {...MODAL_PADS}
+            title={<>
+              <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>출하 일정 수정</div>
+              <div style={{ fontSize: 12, color: GRAY, marginBottom: 20 }}>{editScheduleModal.quote_number} · {custMap[editScheduleModal.customer_id ?? 0] ?? '-'}</div>
+            </>}
+            footer={<>
+              <button onClick={() => setEditScheduleModal(null)} disabled={editSaving}
+                style={{ flex: 1, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                취소
+              </button>
+              <button onClick={handleEditSchedule} disabled={editSaving}
+                style={{ flex: 1, padding: 10, background: BLUE, color: '#fff', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: editSaving ? 0.7 : 1 }}>
+                {editSaving ? '저장 중...' : '저장'}
+              </button>
+            </>}
+          >
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 11, color: GRAY, marginBottom: 5, fontWeight: 600 }}>출하 예정일</div>
               <input type="date" className="date-fit" value={editShippingDate} onChange={e => setEditShippingDate(e.target.value)}
@@ -600,17 +641,7 @@ export default function PurchasePage() {
             <div style={{ marginBottom: 20, fontSize: 11, color: GRAY, lineHeight: 1.6 }}>
               메모는 목록의 메모 아이콘에서 적고 고칩니다.
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setEditScheduleModal(null)} disabled={editSaving}
-                style={{ flex: 1, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
-                취소
-              </button>
-              <button onClick={handleEditSchedule} disabled={editSaving}
-                style={{ flex: 1, padding: 10, background: BLUE, color: '#fff', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: editSaving ? 0.7 : 1 }}>
-                {editSaving ? '저장 중...' : '저장'}
-              </button>
-            </div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
     </div>

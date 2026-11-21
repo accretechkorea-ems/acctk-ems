@@ -28,6 +28,7 @@ import {
 import { achieveColorOf } from '@/lib/fiscal'
 import { Z } from '@/lib/zIndex'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import Popover from '@/components/common/Popover'
 import QuoteRowIcons from '@/components/quote/QuoteRowIcons'
 import { openRepairDoc } from '@/lib/repairDocFlow'
@@ -126,6 +127,13 @@ type Quote = {
 type EditStatus = QuoteStatus
 // fitToHeight: 카드가 (옆 열에 맞춰) 늘어난 높이를 목록 줄 수로 채운다.
 // 끄면 지금까지처럼 10줄 고정이다.
+/**
+ * 서브모달 셋이 함께 쓰는 여백 — 옛 카드의 padding 24 그대로다.
+ * 머리 간격 0: 제목 아래 번호 줄이 스스로 marginBottom 16 을 들고 있다.
+ * 바닥 간격 0: 본문 마지막 줄의 marginBottom 이 버튼까지의 거리를 든다.
+ */
+const SUB_PADS = keepPads({ x: 24, top: 24, bottom: 24 }, 0, 0)
+
 export default function MyQuotesPanel({ engineerId, fitToHeight = false, initialStatus }: {
   engineerId: number
   fitToHeight?: boolean
@@ -1002,9 +1010,27 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
       {/* ── 발주서 등록 서브모달 ── */}
       {poQuote && (
         <ModalOverlay onClose={() => { setPoQuote(null); setPoFile(null) }} confirmClose closeOn={poUploading ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: SUBMODAL_Z, padding: 0 }}>
-          <div style={{ background: '#fff', borderRadius: R.modal, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>발주서 등록</div>
-            <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{poQuote.quote_number}</div>
+          {/* 구조는 공용 카드가 든다 — 머리줄 고정 / 본문 스크롤 / 바닥줄 고정.
+              겉모양(제목 15/800 · 번호 줄 12 · 여백 24 · 버튼)은 옛 값 그대로다.
+              ✕ 는 두지 않는다 — 길은 [취소]·Esc·바깥 클릭 셋이고 올리는 중에는 셋 다 막힌다
+              (오버레이의 closeOn='none'). */}
+          <ModalCard
+            width={360}
+            closeX={false}
+            {...SUB_PADS}
+            title={<>
+              <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>발주서 등록</div>
+              <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{poQuote.quote_number}</div>
+            </>}
+            footer={<>
+              <button onClick={() => { setPoQuote(null); setPoFile(null) }} disabled={poUploading}
+                style={{ flex: 1, padding: 9, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700 }}>취소</button>
+              <button onClick={handlePoUpload} disabled={poUploading || !poFile}
+                style={{ flex: 1, padding: 9, background: '#7c3aed', color: '#fff', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, opacity: (poUploading || !poFile) ? 0.6 : 1 }}>
+                {poUploading ? '업로드 중...' : '등록'}
+              </button>
+            </>}
+          >
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 11, color: GRAY, marginBottom: 6, fontWeight: 600 }}>배송 방법</div>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -1079,48 +1105,67 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
             <div style={{ marginBottom: 16, fontSize: 11, color: MUTED, lineHeight: 1.6 }}>
               요청 메모는 등록 뒤 목록의 메모 아이콘에서 적고 고칩니다.
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => { setPoQuote(null); setPoFile(null) }} disabled={poUploading}
-                style={{ flex: 1, padding: 9, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700 }}>취소</button>
-              <button onClick={handlePoUpload} disabled={poUploading || !poFile}
-                style={{ flex: 1, padding: 9, background: '#7c3aed', color: '#fff', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, opacity: (poUploading || !poFile) ? 0.6 : 1 }}>
-                {poUploading ? '업로드 중...' : '등록'}
-              </button>
-            </div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
 
       {/* ── 세금계산서 요청 서브모달 ── */}
       {taxQuote && (
         <ModalOverlay onClose={() => { setTaxQuote(null); setTaxDate('') }} confirmClose closeOn={taxSending ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: SUBMODAL_Z, padding: 0 }}>
-          <div style={{ background: '#fff', borderRadius: R.modal, padding: 24, width: 340, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>세금계산서 발행 요청</div>
-            <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{taxQuote.quote_number}</div>
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 11, color: GRAY, marginBottom: 6, fontWeight: 600 }}>요청 발행일 <span style={{ color: '#dc2626' }}>*</span></div>
-              <input type="date" className="date-fit" value={taxDate} onChange={e => { setTaxDate(e.target.value); clearError('taxDate') }}
-                style={{ width: '100%', padding: '7px 10px', border: errors.taxDate ? errBorder : `1px solid ${taxDate ? BORDER : '#fca5a5'}`, borderRadius: R.control, fontSize: 13, outline: 'none', colorScheme: 'light', boxSizing: 'border-box' }} />
-              <FieldError message={errors.taxDate} />
-            </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+          {/* 같은 공용 카드. 겉모양은 옛 값 그대로다(폭 340 · 여백 24). */}
+          <ModalCard
+            width={340}
+            closeX={false}
+            {...SUB_PADS}
+            title={<>
+              <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>세금계산서 발행 요청</div>
+              <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{taxQuote.quote_number}</div>
+            </>}
+            footer={<>
               <button onClick={() => { setTaxQuote(null); setTaxDate('') }} disabled={taxSending}
                 style={{ flex: 1, padding: 9, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700 }}>취소</button>
               <button onClick={handleTaxRequest} disabled={taxSending || !taxDate}
                 style={{ flex: 1, padding: 9, background: '#b45309', color: '#fff', border: 'none', borderRadius: R.control, cursor: taxDate ? 'pointer' : 'not-allowed', fontWeight: 700, opacity: (taxSending || !taxDate) ? 0.45 : 1 }}>
                 {taxSending ? '요청 중...' : '발행 요청'}
               </button>
+            </>}
+          >
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, color: GRAY, marginBottom: 6, fontWeight: 600 }}>요청 발행일 <span style={{ color: '#dc2626' }}>*</span></div>
+              <input type="date" className="date-fit" value={taxDate} onChange={e => { setTaxDate(e.target.value); clearError('taxDate') }}
+                style={{ width: '100%', padding: '7px 10px', border: errors.taxDate ? errBorder : `1px solid ${taxDate ? BORDER : '#fca5a5'}`, borderRadius: R.control, fontSize: 13, outline: 'none', colorScheme: 'light', boxSizing: 'border-box' }} />
+              <FieldError message={errors.taxDate} />
             </div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
 
       {/* ── 취소 / 실패 처리 서브모달 ── */}
       {editQuote && (
         <ModalOverlay onClose={() => setEditQuote(null)} confirmClose style={{ background: 'rgba(0,0,0,0.6)', zIndex: SUBMODAL_Z, padding: 0 }}>
-          <div style={{ background: '#fff', borderRadius: R.modal, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 4 }}>삭제 / 실패 처리</div>
-            <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{editQuote.quote_number} · {editQuote.company_name || ''}</div>
+          {/* 같은 공용 카드. 바닥줄 위 간격만 14 다(옛 버튼 줄의 marginTop). */}
+          <ModalCard
+            width={360}
+            closeX={false}
+            {...keepPads({ x: 24, top: 24, bottom: 24 }, 0, 14)}
+            title={<>
+              <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 4 }}>삭제 / 실패 처리</div>
+              <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{editQuote.quote_number} · {editQuote.company_name || ''}</div>
+            </>}
+            footer={<>
+              <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
+              <button onClick={handleSave} disabled={saving || reasonMissing || deleteWaiting || requestBlocked}
+                style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: R.control, cursor: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 0.7 : 1 }}>
+                {saving ? '처리 중...'
+                  : requestBlocked ? '삭제 불가'
+                  : deleteWaiting ? '확인 중...'
+                  : selfDelete ? (confirmDelete ? '한 번 더 누르면 삭제' : '삭제')
+                  : editStatus === '취소요청' ? '결재선 지정'
+                  : editStatus === '견적중' ? '견적중으로 되돌리기'
+                  : `${editStatus} 확정`}
+              </button>
+            </>}
+          >
             {/* 되돌리기(견적중)는 사람이 손으로 실패시킨 건에만 연다.
                 자동 실주 건은 견적일이 이미 한 달을 넘겨, 되살리면 고객에게 나간 PDF 의
                 유효기간과 어긋나므로 선택지 자체를 만들지 않는다. */}
@@ -1185,20 +1230,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                     : `${deleteVerdict && !deleteVerdict.ok ? deleteVerdict.message + ' ' : ''}결재선을 지정하면 삭제 요청이 결재로 올라갑니다.`}
               </div>
             )}
-            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-              <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
-              <button onClick={handleSave} disabled={saving || reasonMissing || deleteWaiting || requestBlocked}
-                style={{ flex: 1, padding: '9px', background: getCategoryColor(SALES_STATUS_COLORS, editStatus).text, color: '#fff', border: 'none', borderRadius: R.control, cursor: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: (saving || reasonMissing || deleteWaiting || requestBlocked) ? 0.7 : 1 }}>
-                {saving ? '처리 중...'
-                  : requestBlocked ? '삭제 불가'
-                  : deleteWaiting ? '확인 중...'
-                  : selfDelete ? (confirmDelete ? '한 번 더 누르면 삭제' : '삭제')
-                  : editStatus === '취소요청' ? '결재선 지정'
-                  : editStatus === '견적중' ? '견적중으로 되돌리기'
-                  : `${editStatus} 확정`}
-              </button>
-            </div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
 

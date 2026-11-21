@@ -10,20 +10,23 @@
 
 import { useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import { Z } from '@/lib/zIndex'
 import { TEMPLATE_NAME_MAX } from '@/lib/quoteTemplates'
 import type { QuoteTemplate } from '@/lib/quoteTemplates'
 import { C, S } from './equipStyles'
-import { R } from '@/lib/radius'
 
 const box = {
   position: 'fixed' as const, inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: Z.subModal,
   display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
 }
-const panel = {
-  background: '#fff', borderRadius: R.control, padding: 24, width: '100%', maxWidth: 440,
-  boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease',
-}
+/**
+ * 카드의 생김새는 공용 카드(ModalCard)가 든다 — 폭·배경·그림자·모서리·모션.
+ * 옛 panel 에서 남는 것은 **여백 값**뿐이고, 그것은 keepPads 로 넘긴다(padding 24).
+ */
+// 머리 간격 0 — 제목과 설명은 title 조각 안에 그대로 있고, 설명의 marginBottom 16 이
+// 본문까지의 거리를 옛 그대로 들기 때문이다(머리줄에 또 4를 주면 20 이 된다).
+const PADS = keepPads({ x: 24, top: 24, bottom: 24 }, 0, 20)
 const head = { fontSize: 17, fontWeight: 800, color: C.INK, letterSpacing: '-0.3px', marginBottom: 4 }
 const sub = { fontSize: 12, fontWeight: 500, color: C.MUT, marginBottom: 16 }
 
@@ -86,12 +89,30 @@ export function SaveTemplateDialog(props: SaveTemplateDialogProps) {
 
   return (
     <ModalOverlay onClose={onClose} confirmClose dirty={name.trim() !== ''} style={box}>
-      <div style={panel} onClick={e => e.stopPropagation()}>
-        <div style={head}>구성을 템플릿으로 저장</div>
-        <div style={sub}>
-          체크 여부·수량·판매단가가 함께 저장됩니다. 가격표 품목의 구입가는 열 때 다시 계산하고, 직접 적은 줄의 구입가·원가는 그대로 저장합니다.
-        </div>
-
+      {/* 구조는 공용 카드가 든다 — 머리줄 고정 / 본문 스크롤 / 바닥줄 고정.
+          제목·설명 글자와 여백은 옛 값 그대로다(head·sub·PADS). */}
+      <ModalCard
+        width={440}
+        closeX={false}
+        {...PADS}
+        title={<>
+          <div style={head}>구성을 템플릿으로 저장</div>
+          <div style={sub}>
+            체크 여부·수량·판매단가가 함께 저장됩니다. 가격표 품목의 구입가는 열 때 다시 계산하고, 직접 적은 줄의 구입가·원가는 그대로 저장합니다.
+          </div>
+        </>}
+        footer={<>
+          <button type="button" onClick={onClose} style={{ ...S.btn, color: C.MUT }}>취소</button>
+          {picked && (
+            <button type="button" disabled={busy} onClick={() => void run('overwrite')} style={busy ? S.btnOff : S.btn}>
+              원본 수정
+            </button>
+          )}
+          <button type="button" disabled={busy} onClick={() => void run('copy')} style={busy ? S.btnOff : S.btnPri}>
+            {picked && !mine ? '내 이름으로 복사 저장' : '새 구성으로 저장'}
+          </button>
+        </>}
+      >
         <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: C.DIM, marginBottom: 4 }}>
           기종 (필수)
         </label>
@@ -116,18 +137,7 @@ export function SaveTemplateDialog(props: SaveTemplateDialogProps) {
 
         {err && <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: C.RED }}>{err}</div>}
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
-          <button type="button" onClick={onClose} style={{ ...S.btn, color: C.MUT }}>취소</button>
-          {picked && (
-            <button type="button" disabled={busy} onClick={() => void run('overwrite')} style={busy ? S.btnOff : S.btn}>
-              원본 수정
-            </button>
-          )}
-          <button type="button" disabled={busy} onClick={() => void run('copy')} style={busy ? S.btnOff : S.btnPri}>
-            {picked && !mine ? '내 이름으로 복사 저장' : '새 구성으로 저장'}
-          </button>
-        </div>
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }
@@ -143,15 +153,16 @@ export function DeleteTemplateDialog({ target, busy, onDelete, onClose }: Delete
   const [err, setErr] = useState('')
   return (
     <ModalOverlay onClose={onClose} style={box}>
-      <div style={panel} onClick={e => e.stopPropagation()}>
-        <div style={head}>이 구성을 삭제할까요?</div>
-        <div style={sub}>목록에서 사라집니다. 이미 만든 견적서는 그대로 남습니다.</div>
-        <div style={{ ...S.pill, margin: '0 0 4px' }}>
-          <b style={{ fontWeight: 700 }}>{target.name}</b>
-          <span style={{ color: C.MUT }}>{` · 만든 사람 ${target.owner_name}`}</span>
-        </div>
-        {err && <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: C.RED }}>{err}</div>}
-        <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
+      {/* 같은 공용 카드. 겉모양(제목·설명·여백)은 옛 값 그대로다. */}
+      <ModalCard
+        width={440}
+        closeX={false}
+        {...PADS}
+        title={<>
+          <div style={head}>이 구성을 삭제할까요?</div>
+          <div style={sub}>목록에서 사라집니다. 이미 만든 견적서는 그대로 남습니다.</div>
+        </>}
+        footer={<>
           <button type="button" onClick={onClose} style={{ ...S.btn, color: C.MUT }}>취소</button>
           <button
             type="button"
@@ -161,8 +172,14 @@ export function DeleteTemplateDialog({ target, busy, onDelete, onClose }: Delete
           >
             삭제
           </button>
+        </>}
+      >
+        <div style={{ ...S.pill, margin: '0 0 4px' }}>
+          <b style={{ fontWeight: 700 }}>{target.name}</b>
+          <span style={{ color: C.MUT }}>{` · 만든 사람 ${target.owner_name}`}</span>
         </div>
-      </div>
+        {err && <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: C.RED }}>{err}</div>}
+      </ModalCard>
     </ModalOverlay>
   )
 }

@@ -28,6 +28,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { isPublicPath } from '@/lib/publicPaths'
 import ModalOverlay from './ModalOverlay'
+import ModalCard, { keepPads } from './ModalCard'
 import { Z } from '@/lib/zIndex'
 import { R } from '@/lib/radius'
 
@@ -169,22 +170,20 @@ export default function SessionManager() {
   // 바깥을 눌러도 「계속 사용」으로 본다 — 누른 것 자체가 활동이다.
   return (
     <ModalOverlay onClose={touch} style={{ zIndex: Z.confirm }}>
-      <style>{`@keyframes session-warn-in { from { opacity: 0; transform: scale(0.97) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }`}</style>
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          width: '100%', maxWidth: 400, background: '#ffffff', borderRadius: R.control, padding: 24,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb',
-          animation: 'session-warn-in 0.18s ease',
-        }}
-      >
-        <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', letterSpacing: '-0.2px', marginBottom: 10 }}>
-          1분 뒤 자동 로그아웃됩니다
-        </div>
-        <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.6, marginBottom: 22 }}>
-          30분 동안 활동이 없었습니다. 계속 사용하시겠습니까?
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      {/* 구조는 공용 카드가 든다. ✕ 는 두지 않는다 — 이 창의 길은 「계속 사용」 하나이고,
+          바깥을 누르거나 Esc 를 눌러도 같은 일(touch)을 한다.
+          여백·글자는 옛 값 그대로(padding 24 · 머리 10 · 바닥 0).
+          모션도 공용 한 가지를 쓴다 — 여기만 따로 두었던 session-warn-in 은 걷었다. */}
+      <ModalCard
+        width={400}
+        closeX={false}
+        {...keepPads({ x: 24, top: 24, bottom: 24 }, 10, 0)}
+        title={<>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', letterSpacing: '-0.2px' }}>
+            1분 뒤 자동 로그아웃됩니다
+          </div>
+        </>}
+        footer={<>
           <button
             autoFocus
             onClick={touch}
@@ -198,8 +197,12 @@ export default function SessionManager() {
           >
             계속 사용
           </button>
+        </>}
+      >
+        <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.6, marginBottom: 22 }}>
+          30분 동안 활동이 없었습니다. 계속 사용하시겠습니까?
         </div>
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }

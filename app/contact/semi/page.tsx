@@ -19,6 +19,7 @@ import { useRouter } from 'next/navigation'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { useToast } from '@/components/common/Toast'
 import { FieldError, errBorder, useFieldErrors } from '@/components/common/fieldErrors'
 import {
@@ -424,13 +425,28 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
   return (
     // 저장 중에는 닫히지 않는다(closeOn 'none'). 그 밖에는 확인 뒤 닫는다.
     <ModalOverlay onClose={onClose} closeOn={busy ? 'none' : 'both'} confirmClose>
-      <div style={{
-        background: CARD_BG, borderRadius: R.control, padding: '14px 16px', width: '100%', maxWidth: 500,
-        maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
-      }}>
-        <div style={cardHeader}>
+      {/* 구조는 공용 카드가 든다 — 머리줄 고정 / 본문 스크롤 / 바닥줄 고정.
+          전에는 카드 자체가 구르는 칸이었다(maxHeight 86vh + overflowY auto) — 칸이 많아지면
+          제목과 [저장]이 같이 밀렸다. 이제 본문만 구른다.
+          겉모양은 옛 값 그대로다: 여백 14/16 · 머리줄 아래 구분선(cardHeader 의 12+14) ·
+          제목 17/800(cardTitle) · 버튼 둘이 반씩(flex: 1).
+          ✕ 는 두지 않는다 — 길은 [닫기]·Esc·바깥 클릭 셋이고 저장 중에는 셋 다 막힌다. */}
+      <ModalCard
+        width={500}
+        closeX={false}
+        headStyle={{ alignItems: 'center', gap: 8, padding: '14px 16px 12px', marginBottom: 14, borderBottom: `1px solid ${BORDER}` }}
+        bodyStyle={{ padding: '0 16px' }}
+        footStyle={{ padding: '0 16px 14px' }}
+        title={<>
           <span style={cardTitle}>새 Project</span>
-        </div>
+        </>}
+        footer={<>
+          <button type="button" onClick={onClose} disabled={busy} style={{ ...btnGhost(busy), flex: 1 }}>닫기</button>
+          <button type="button" onClick={submit} disabled={busy} style={{ ...btnPrimary(busy), flex: 1 }}>
+            {busy ? '저장 중...' : '저장'}
+          </button>
+        </>}
+      >
 
         <div style={{ marginBottom: 12 }}>
           <label style={labelStyle} htmlFor="np-project_no">{PROJECT_NO_LABEL}</label>
@@ -462,13 +478,7 @@ function NewProjectModal({ onClose, onCreated }: { onClose: () => void; onCreate
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={onClose} disabled={busy} style={{ ...btnGhost(busy), flex: 1 }}>닫기</button>
-          <button type="button" onClick={submit} disabled={busy} style={{ ...btnPrimary(busy), flex: 1 }}>
-            {busy ? '저장 중...' : '저장'}
-          </button>
-        </div>
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }

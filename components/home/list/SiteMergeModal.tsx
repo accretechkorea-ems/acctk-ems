@@ -14,6 +14,7 @@
 
 import { useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import type { SiteRow } from '@/lib/customerList'
 import { R } from '@/lib/radius'
 
@@ -64,7 +65,12 @@ type Props = {
   onClose: () => void
 }
 
-const cardStyle = { background: '#fff', borderRadius: R.control, border: `1px solid ${BORDER}`, boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }
+/**
+ * 카드의 바탕·테두리·그림자는 공용 카드(ModalCard)가 든다. 여기 남는 것은 **여백**뿐이다 —
+ * 옛 카드의 padding 22, 그리고 바닥줄 위 간격 18(옛 버튼 줄의 marginTop)이다.
+ * 머리 간격은 0 이다 — 제목 줄이 스스로 marginBottom(12 · 6→14)을 들고 있다.
+ */
+const PADS = keepPads({ x: 22, top: 22, bottom: 22 }, 0, 18)
 
 export default function SiteMergeModal({ rows, busy, onDryRun, onRun, onClose }: Props) {
   const [keepId, setKeepId] = useState<number>(rows[0]?.customer.customer_id ?? 0)
@@ -88,8 +94,25 @@ export default function SiteMergeModal({ rows, busy, onDryRun, onRun, onClose }:
     const dropped = Object.entries(report.dropped ?? {})
     return (
       <ModalOverlay onClose={() => setReport(null)}>
-        <div onClick={e => e.stopPropagation()} style={{ ...cardStyle, width: '100%', maxWidth: 480, padding: 22 }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, marginBottom: 12 }}>사업장 병합 — 한 번 더 확인</div>
+        {/* 구조는 공용 카드가 든다 — 머리줄 고정 / 본문 스크롤 / 바닥줄 고정.
+            겉모양(제목 17/800 · 여백 22 · 버튼)은 옛 값 그대로다.
+            ✕ 는 두지 않는다 — 길은 [뒤로]·Esc·바깥 클릭 셋이고 모두 앞 단계로 돌아간다. */}
+        <ModalCard
+          width={480}
+          closeX={false}
+          {...PADS}
+          title={<>
+            <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, marginBottom: 12 }}>사업장 병합 — 한 번 더 확인</div>
+          </>}
+          footer={<>
+            <button onClick={() => setReport(null)} disabled={busy}
+              style={{ padding: '9px 15px', background: '#fff', color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>뒤로</button>
+            <button onClick={() => onRun(keepId, fromIds, siteName.trim())} disabled={busy}
+              style={{ padding: '9px 17px', background: DANGER, color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: busy ? 0.6 : 1 }}>
+              {busy ? '합치는 중…' : '합치기'}
+            </button>
+          </>}
+        >
           <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.9 }}>
             {rows.filter(r => r.customer.customer_id !== keepId).map(r => (
               <div key={r.customer.customer_id} style={{ color: SUB }}>{r.siteName || '(이름 없음)'}</div>
@@ -131,15 +154,7 @@ export default function SiteMergeModal({ rows, busy, onDryRun, onRun, onClose }:
             <li><b style={{ color: DANGER }}>되돌리기는 없습니다.</b> 합쳐진 줄은 닫히고 목록에서 사라집니다.</li>
           </ul>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-            <button onClick={() => setReport(null)} disabled={busy}
-              style={{ padding: '9px 15px', background: '#fff', color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>뒤로</button>
-            <button onClick={() => onRun(keepId, fromIds, siteName.trim())} disabled={busy}
-              style={{ padding: '9px 17px', background: DANGER, color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: busy ? 0.6 : 1 }}>
-              {busy ? '합치는 중…' : '합치기'}
-            </button>
-          </div>
-        </div>
+        </ModalCard>
       </ModalOverlay>
     )
   }
@@ -147,11 +162,26 @@ export default function SiteMergeModal({ rows, busy, onDryRun, onRun, onClose }:
   // ── ① 남길 줄 고르기 ──
   return (
     <ModalOverlay onClose={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ ...cardStyle, width: '100%', maxWidth: 480, padding: 22 }}>
-        <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, marginBottom: 6 }}>사업장 병합</div>
-        <div style={{ fontSize: 12, color: SUB, marginBottom: 14 }}>
-          {`고른 ${rows.length}곳을 한 줄로 합칩니다. 남길 줄을 고르세요 — 나머지 줄의 기록이 그 줄로 옮겨 갑니다.`}
-        </div>
+      {/* 같은 공용 카드. 겉모양(제목 17/800 · 설명 12 · 여백 22 · 버튼)은 옛 값 그대로다. */}
+      <ModalCard
+        width={480}
+        closeX={false}
+        {...PADS}
+        title={<>
+          <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, marginBottom: 6 }}>사업장 병합</div>
+          <div style={{ fontSize: 12, color: SUB, marginBottom: 14 }}>
+            {`고른 ${rows.length}곳을 한 줄로 합칩니다. 남길 줄을 고르세요 — 나머지 줄의 기록이 그 줄로 옮겨 갑니다.`}
+          </div>
+        </>}
+        footer={<>
+          <button onClick={onClose} disabled={busy || checking}
+            style={{ padding: '9px 15px', background: '#fff', color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+          <button onClick={() => void next()} disabled={busy || checking || fromIds.length === 0}
+            style={{ padding: '9px 17px', background: BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: checking ? 0.6 : 1 }}>
+            {checking ? '세는 중…' : '다음'}
+          </button>
+        </>}
+      >
 
         <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.control, overflow: 'hidden' }}>
           {rows.map(r => {
@@ -183,15 +213,7 @@ export default function SiteMergeModal({ rows, busy, onDryRun, onRun, onClose }:
             style={{ width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: R.icon, boxSizing: 'border-box', fontSize: 14, color: TEXT, outline: 'none' }} />
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 18 }}>
-          <button onClick={onClose} disabled={busy || checking}
-            style={{ padding: '9px 15px', background: '#fff', color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
-          <button onClick={() => void next()} disabled={busy || checking || fromIds.length === 0}
-            style={{ padding: '9px 17px', background: BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: checking ? 0.6 : 1 }}>
-            {checking ? '세는 중…' : '다음'}
-          </button>
-        </div>
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }

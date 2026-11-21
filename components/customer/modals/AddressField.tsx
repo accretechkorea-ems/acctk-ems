@@ -40,6 +40,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { Z } from '@/lib/zIndex'
 import { R } from '@/lib/radius'
 
@@ -313,35 +314,42 @@ export default function AddressField({
       */}
       {boxOpen && typeof document !== 'undefined' && createPortal(
         <ModalOverlay onClose={() => setBoxOpen(false)} confirmClose dirty={false} style={{ zIndex: Z.subModal }}>
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              width: 500, maxWidth: '90vw', height: 500, maxHeight: '80vh',
-              display: 'flex', flexDirection: 'column',
-              background: '#ffffff', borderRadius: R.control, border: '1px solid #ebebeb',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.22)', overflow: 'hidden',
-            }}
-          >
-            <div style={{
-              flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '14px 16px', borderBottom: '1px solid #ebebeb',
-            }}>
+          {/*
+            구조는 공용 카드가 든다 — 머리줄 고정 / 본문 / 바닥줄 없음.
+            겉모양은 옛 값 그대로다: 높이 500(최대 80vh) · 머리줄 여백 14/16 · 아래 구분선 ·
+            제목 16/700 · 「닫기」는 ✕ 가 아니라 **글자 단추**라 titleExtra 로 둔다
+            (closeX={false} — 둘을 같이 두면 닫는 단추가 둘이 된다).
+
+            본문은 **구르지 않는다** — 안에 드는 것이 주소 검색 화면(embed)이고 그쪽이
+            스스로 제 높이를 채우며 자기 스크롤을 갖는다. 그래서 공용 본문의 overflow 를
+            hidden 으로 덮는다(여기만의 예외다).
+          */}
+          <ModalCard
+            width={500}
+            closeX={false}
+            style={{ height: 500, maxHeight: '80vh' }}
+            headStyle={{ alignItems: 'center', padding: '14px 16px', borderBottom: '1px solid #ebebeb' }}
+            bodyStyle={{ padding: 0, display: 'flex', overflow: 'hidden' }}
+            title={<>
               <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', letterSpacing: '-0.2px' }}>주소 검색</div>
+            </>}
+            titleExtra={
               <button
                 type="button"
                 onClick={() => setBoxOpen(false)}
                 style={{
                   padding: '4px 10px', background: '#f3f4f6', color: '#6b7280',
                   border: 'none', borderRadius: R.icon, fontSize: 12, fontWeight: 700,
-                  cursor: 'pointer', fontFamily: 'inherit',
+                  cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
                 }}
               >
                 닫기
               </button>
-            </div>
+            }
+          >
             {/* 남은 높이를 검색 화면이 채운다. minHeight 0 이 없으면 flex 항목이 줄지 않아 넘친다. */}
             <div ref={boxRef} style={{ flex: 1, minHeight: 0, width: '100%' }} />
-          </div>
+          </ModalCard>
         </ModalOverlay>,
         document.body,
       )}

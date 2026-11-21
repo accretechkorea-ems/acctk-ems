@@ -33,21 +33,7 @@ walk(path.join(ROOT, 'components'))
  * 아직 공용 카드로 옮기지 않은 자리 — **머리·바닥 모양이 제각각**이라 손으로 옮긴다.
  * (스타일 객체로 된 머리줄, ✕ 가 없는 자리, 한 파일에 모달이 둘·셋인 자리)
  */
-const PENDING_BESPOKE = [
-  'app/contact/semi/page.tsx',
-  'app/purchase/page.tsx',
-  'app/quote/page.tsx',
-  'components/activity/ActivityDetailModal.tsx',
-  'components/common/ConfirmDialog.tsx',
-  'components/common/SessionManager.tsx',
-  'components/customer/modals/AddressField.tsx',
-  'components/dashboard/MyQuotesPanel.tsx',
-  'components/home/CustomerFilterModal.tsx',
-  'components/home/list/SiteMergeModal.tsx',
-  'components/inquiry/bulk/BulkImportModal.tsx',
-  'components/quote/ConfirmQuoteModal.tsx',
-  'components/quote/equip/SaveTemplateDialog.tsx'
-]
+const PENDING_BESPOKE = []
 
 /**
  * 이미 머리·바닥 구조가 갖춰져 있던 자리 — 2차 조사의 26개 **밖**이다.

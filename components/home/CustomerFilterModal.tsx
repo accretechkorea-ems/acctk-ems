@@ -14,6 +14,7 @@
 
 import { useMemo, useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { R } from '@/lib/radius'
 import { RECENT_KEYS, RECENT_LABEL, DIRECT_SALE, type ListFilter, type RecentKey } from '@/lib/customerList'
 import { defaultFilter, type FilterOptions } from '@/lib/customerFilterChips'
@@ -72,17 +73,41 @@ export default function CustomerFilterModal({ value, options, matchCount, onAppl
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div role="dialog" aria-modal="true" aria-label="고객사 필터" onClick={e => e.stopPropagation()}
-        style={{
-          width: '100%', maxWidth: 520, background: '#ffffff', borderRadius: R.modal,
-          border: `1px solid ${BORDER}`, boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
-          display: 'flex', flexDirection: 'column',
-        }}>
-        <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: `1px solid ${BORDER}` }}>
+      {/* 구조는 공용 카드가 든다 — 머리줄 고정 / 본문 스크롤 / 바닥줄 고정.
+          겉모양은 옛 값 그대로다: 폭 520 · 머리줄 16/20 + 아래 구분선 · 제목 15/700 ·
+          본문 18/20 에 세로 gap 18 · 바닥줄 14/20 + 위 구분선 + 바탕 #fafafa.
+          ✕ 는 두지 않는다 — 길은 [취소]·Esc·바깥 클릭 셋이고 모두 같은 함수다.
+          대화창 표시(role·aria-modal·aria-label)는 그대로 카드에 넘긴다. */}
+      <ModalCard
+        width={520}
+        closeX={false}
+        role="dialog"
+        ariaModal
+        ariaLabel="고객사 필터"
+        headStyle={{ alignItems: 'center', padding: '16px 20px', borderBottom: `1px solid ${BORDER}` }}
+        bodyStyle={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}
+        footStyle={{ padding: '14px 20px', borderTop: `1px solid ${BORDER}`, background: '#fafafa' }}
+        title={<>
           <b style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>필터</b>
-        </div>
-
-        <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        </>}
+        footer={<>
+          <button type="button" onClick={() => setDraft(d => defaultFilter(options, d))}
+            style={{ border: 'none', background: 'none', padding: 0, fontSize: 13, fontWeight: 600, color: SUB, cursor: 'pointer', fontFamily: 'inherit' }}>
+            초기화
+          </button>
+          <span style={{ flex: 1, textAlign: 'right', fontSize: 12, color: SUB }}>
+            조건 일치 <b className="num" style={{ color: TEXT, fontWeight: 700 }}>{match.toLocaleString('ko-KR')}</b>곳
+          </span>
+          <button type="button" onClick={onClose}
+            style={{ height: 34, padding: '0 14px', background: '#ffffff', color: SUB, borderRadius: R.control, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13, fontFamily: 'inherit' }}>
+            취소
+          </button>
+          <button type="button" onClick={() => onApply(draft)}
+            style={{ height: 34, padding: '0 16px', background: BLUE, color: '#ffffff', borderRadius: R.control, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, fontFamily: 'inherit' }}>
+            적용
+          </button>
+        </>}
+      >
           {/* 상태 */}
           <div>
             <div style={labelStyle}>
@@ -167,26 +192,7 @@ export default function CustomerFilterModal({ value, options, matchCount, onAppl
               <Pick on={draft.noIndustryOnly} onClick={() => setDraft(d => ({ ...d, noIndustryOnly: !d.noIndustryOnly }))}>분류 없음</Pick>
             </div>
           </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 20px', borderTop: `1px solid ${BORDER}`, background: '#fafafa' }}>
-          <button type="button" onClick={() => setDraft(d => defaultFilter(options, d))}
-            style={{ border: 'none', background: 'none', padding: 0, fontSize: 13, fontWeight: 600, color: SUB, cursor: 'pointer', fontFamily: 'inherit' }}>
-            초기화
-          </button>
-          <span style={{ flex: 1, textAlign: 'right', fontSize: 12, color: SUB }}>
-            조건 일치 <b className="num" style={{ color: TEXT, fontWeight: 700 }}>{match.toLocaleString('ko-KR')}</b>곳
-          </span>
-          <button type="button" onClick={onClose}
-            style={{ height: 34, padding: '0 14px', background: '#ffffff', color: SUB, borderRadius: R.control, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13, fontFamily: 'inherit' }}>
-            취소
-          </button>
-          <button type="button" onClick={() => onApply(draft)}
-            style={{ height: 34, padding: '0 16px', background: BLUE, color: '#ffffff', borderRadius: R.control, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, fontFamily: 'inherit' }}>
-            적용
-          </button>
-        </div>
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }

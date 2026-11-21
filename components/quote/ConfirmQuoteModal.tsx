@@ -11,8 +11,12 @@
 
 import { numKR } from '@/app/quote/format'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import type { useToast } from '@/components/common/Toast'
 import { R } from '@/lib/radius'
+
+/** 옛 카드의 여백 32 를 그대로 — 머리·바닥 간격은 본문 줄이 들고 있어 0 이다. */
+const PADS = keepPads({ x: 32, top: 32, bottom: 32 }, 0, 0)
 
 export type ConfirmQuoteModalProps = {
   quoteNo: string
@@ -39,9 +43,39 @@ export default function ConfirmQuoteModal({
   // 배경은 종전 값(0.5)을 그대로 넘긴다 — 공용 오버레이 기본은 0.65 다.
   return (
     <ModalOverlay onClose={() => setShowConfirmModal(false)} style={{ background: 'rgba(0,0,0,0.5)' }}>
-  <div style={{ background: '#fff', borderRadius: R.control, padding: 32, width: '100%', maxWidth: 440, boxShadow: '0 24px 64px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
-    <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 4, letterSpacing: '-0.3px' }}>견적 확정</div>
-    <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, fontWeight: 500 }}>{quoteNo} <span style={{ color: '#9ca3af' }}>(예상 번호 — 확정할 때 발급)</span></div>
+  {/* 구조는 공용 카드가 든다 — 머리줄 고정 / 본문 스크롤 / 바닥줄 고정.
+      ✕ 는 두지 않는다 — 길은 [취소]·Esc·바깥 클릭 셋이고 모두 같은 함수다.
+      제목 20/800 · 설명 13 · 여백 32 와 버튼은 **옛 값 그대로** 둔다.
+      머리 간격 0 — 설명 줄의 marginBottom 20 이 본문까지의 거리를 들고 있다.
+      바닥 간격 0 — 본문 마지막 줄(요약 칸 24 · 막힌 이유 10)이 그 자리를 든다. */}
+  <ModalCard
+    width={440}
+    closeX={false}
+    {...PADS}
+    footStyle={{ ...PADS.footStyle, gap: 10 }}
+    title={<>
+      <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 4, letterSpacing: '-0.3px' }}>견적 확정</div>
+      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, fontWeight: 500 }}>{quoteNo} <span style={{ color: '#9ca3af' }}>(예상 번호 — 확정할 때 발급)</span></div>
+    </>}
+    footer={<>
+      <button onClick={() => setShowConfirmModal(false)}
+        disabled={isSubmitting}
+        style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: R.icon, fontWeight: 700, fontSize: 14, cursor: isSubmitting ? 'not-allowed' : 'pointer', color: '#111827', opacity: isSubmitting ? 0.6 : 1 }}>
+        취소
+      </button>
+      {/* 여기서 바로 확정한다 — 결재선을 받는 단계는 없앴다(runConfirm 설명). */}
+      <button onClick={() => {
+        if (isSubmitting) return
+        // 작성자 정보(담당자 줄·대필 판정)가 PDF 에 들어가므로 먼저 있어야 한다.
+        if (!engineer) { toast.error('엔지니어 정보를 불러오는 중입니다'); return }
+        void runConfirm()
+      }}
+        disabled={isSubmitting}
+        style={{ flex: 1, padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: R.icon, fontWeight: 700, fontSize: 14, cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.6 : 1 }}>
+        {isSubmitting ? '저장 중...' : '확인'}
+      </button>
+    </>}
+  >
     <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: R.control, padding: '12px 14px', marginBottom: 20 }}>
       <div style={{ fontSize: 12, color: '#92400e', lineHeight: 1.8 }}>
         확정하면 <b>견적번호가 발급되고 실적으로 기록됩니다.</b>
@@ -77,25 +111,7 @@ export default function ConfirmQuoteModal({
         </div>
       )
     })()}
-    <div style={{ display: 'flex', gap: 10 }}>
-      <button onClick={() => setShowConfirmModal(false)}
-        disabled={isSubmitting}
-        style={{ flex: 1, padding: '12px', background: '#f3f4f6', border: 'none', borderRadius: R.icon, fontWeight: 700, fontSize: 14, cursor: isSubmitting ? 'not-allowed' : 'pointer', color: '#111827', opacity: isSubmitting ? 0.6 : 1 }}>
-        취소
-      </button>
-      {/* 여기서 바로 확정한다 — 결재선을 받는 단계는 없앴다(runConfirm 설명). */}
-      <button onClick={() => {
-        if (isSubmitting) return
-        // 작성자 정보(담당자 줄·대필 판정)가 PDF 에 들어가므로 먼저 있어야 한다.
-        if (!engineer) { toast.error('엔지니어 정보를 불러오는 중입니다'); return }
-        void runConfirm()
-      }}
-        disabled={isSubmitting}
-        style={{ flex: 1, padding: '12px', background: '#16a34a', color: '#fff', border: 'none', borderRadius: R.icon, fontWeight: 700, fontSize: 14, cursor: isSubmitting ? 'not-allowed' : 'pointer', opacity: isSubmitting ? 0.6 : 1 }}>
-        {isSubmitting ? '저장 중...' : '확인'}
-      </button>
-    </div>
-  </div>
+  </ModalCard>
 </ModalOverlay>
   )
 }
