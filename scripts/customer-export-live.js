@@ -55,7 +55,7 @@ const ok = (name, cond, hint) => {
   const { createClient } = await import('file://' + path.join(ROOT, 'node_modules/@supabase/supabase-js/dist/index.mjs').split(path.sep).join('/'))
   const ExcelJS = load(path.join(ROOT, 'node_modules/exceljs'))
   const { gatherCustomerExport } = load(path.join(ROOT, 'lib/customerExportData.ts'))
-  const { buildCustomerSheets, customerExportFileName, sheetWidths } = load(path.join(ROOT, 'lib/customerExportSheets.ts'))
+  const { buildCustomerSheets, customerExportFileName, sheetWidths, siteRowCount } = load(path.join(ROOT, 'lib/customerExportSheets.ts'))
 
   const sb = createClient(url, key)
 
@@ -79,12 +79,17 @@ const ok = (name, cond, hint) => {
 
   console.log('\n── 시트별 줄 수(머리줄 뺀 수) ──')
   for (const s of sheets) console.log(`     ${s.name.padEnd(4)} ${String(s.rows.length - 1).padStart(5)}줄 · ${s.rows[0].length}열`)
-  ok('사업장 줄 수가 보낸 id 수와 같다', sheets[0].rows.length - 1 === siteIds.length,
-    `${sheets[0].rows.length - 1} ≠ ${siteIds.length}`)
+  // 「사업장」 시트는 사업장 × 장비다 — 줄 수는 사업장마다 max(장비 수, 1) 의 합이다.
+  const want = siteRowCount(got.data.sites)
+  ok('사업장 줄 수 = 사업장마다 max(장비 수, 1) 의 합', sheets[0].rows.length - 1 === want,
+    `${sheets[0].rows.length - 1} ≠ ${want}`)
+  const withDev = got.data.sites.filter(x => x.devices.length > 0).length
+  const devTotal = got.data.sites.reduce((n, x) => n + x.devices.length, 0)
+  console.log(`     사업장 ${got.data.sites.length}곳 중 장비 있는 곳 ${withDev} · 장비 ${devTotal}대 → ${want}줄`)
   ok('모든 시트에서 줄마다 열 수가 같다',
     sheets.every(s => s.rows.every(r => r.length === s.rows[0].length)))
 
-  const contactCols = sheets[0].rows[0].length - 18
+  const contactCols = sheets[0].rows[0].length - 16
   console.log(`     사업장 담당자 열 ${contactCols}개 = 가장 많은 줄 ${contactCols / 5}명 × 5`)
   ok('담당자 열은 5의 배수', contactCols % 5 === 0)
 
@@ -108,14 +113,14 @@ const ok = (name, cond, hint) => {
   // 다시 읽어 본다 — 쓴 것이 읽히는지(서식이 깨지지 않았는지).
   const back = new ExcelJS.Workbook()
   await back.xlsx.readFile(out)
-  ok('시트 넷이 그대로 읽힌다', back.worksheets.map(w => w.name).join(',') === '사업장,회사,대리점,장비',
+  ok('시트 셋이 그대로 읽힌다', back.worksheets.map(w => w.name).join(',') === '사업장,회사,대리점',
     back.worksheets.map(w => w.name).join(','))
   const site = back.getWorksheet('사업장')
   ok('머리줄이 고정되어 있다', site.views?.[0]?.state === 'frozen' && site.views?.[0]?.ySplit === 1)
   ok('머리줄이 굵다', site.getRow(1).font?.bold === true)
-  const dateCell = site.getRow(2).getCell(13).value
+  const dateCell = site.getRow(2).getCell(15).value
   console.log(`     보기 — 첫 줄: ${site.getRow(2).values.slice(1, 6).join(' · ')}`)
-  console.log(`     최근 활동일 칸 형식: ${dateCell instanceof Date ? 'Date' : typeof dateCell} (${dateCell ?? '빈 칸'})`)
+  console.log(`     납입일 칸 형식: ${dateCell instanceof Date ? 'Date' : typeof dateCell} (${dateCell ?? '빈 칸'})`)
 
   console.log(fail === 0 ? '\n전부 통과' : `\n${fail}건 실패`)
   process.exit(fail === 0 ? 0 : 1)

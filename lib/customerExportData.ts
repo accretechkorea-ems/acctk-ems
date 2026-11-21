@@ -7,10 +7,10 @@
 // ── 범위 ───────────────────────────────────────────────────────────────────
 //   화면이 거르고 난 **사업장 id 목록**을 받는다(순서까지 그대로 쓴다). 서버에서 필터를
 //   다시 구현하지 않는다.
-//     사업장 = 받은 id 그대로
-//     회사   = 그 사업장들이 속한 회사(먼저 나온 순서)
-//     장비   = 그 사업장들의 장비. **폐기도 넣는다**(상태·폐기일 열이 있다).
-//              사업장 시트의 「장비 수」는 화면과 같게 폐기를 뺀 수다.
+//     사업장 = 받은 id 그대로. **한 줄 = 사업장 × 장비** 라 장비를 그 줄에 붙여 넘긴다
+//              (폐기도 넣고 「폐기」 열에 폐기일을 적는다. 장비가 없으면 빈 칸 한 줄).
+//     회사   = 그 사업장들이 속한 회사(먼저 나온 순서). 합계(사업장 수·장비 수·견적)는
+//              사업장에서 더해 만든다 — 그 수는 화면과 같게 **폐기를 뺀** 장비 수다.
 //     대리점 = 대리점 줄 전부. 숫자는 **내보낸 사업장 안에서** 센다 — 대리점은 사업장
 //              필터의 대상이 아니라 거래 상대라, 필터로 지우지 않는다.
 //
@@ -21,7 +21,7 @@ import { isInUse } from './deviceStatus'
 import { PENDING_STATUS } from './quoteStatus'
 import { shortSiteName } from './customerList'
 import { loadLastTouchMap } from './customerLastTouch'
-import { regionCells, type ExportAgency, type ExportCompany, type ExportContact, type ExportDeviceRow, type ExportInput, type ExportSite } from './customerExportSheets'
+import { regionCells, type ExportAgency, type ExportCompany, type ExportContact, type ExportInput, type ExportSite, type ExportSiteDevice } from './customerExportSheets'
 
 /**
  * 직판 표시 글자. lib/customerAgency.ts 의 DIRECT_SALE_LABEL 과 **같은 값**이다 —
@@ -70,6 +70,41 @@ export type ContactRow = {
   email: string | null
 }
 
+/** 조회 줄 → 「사업장」 시트의 장비 칸. 저장 칸 그대로 옮긴다(합치지 않는다). */
+function toSiteDevice(d: DeviceRow): ExportSiteDevice {
+  return {
+    lineup: d.device_name ?? '',
+    model: d.device_name2 ?? '',
+    option: d.option ?? '',
+    serial: d.serial_number ?? '',
+    program: d.program ?? '',
+    installYear: d.install_year ?? null,
+    installDate: d.install_date ?? null,
+    disposedAt: d.disposed_at ?? null,
+  }
+}
+
+/**
+ * 한 사업장 안의 장비 순서 — 납입이 이른 것부터, 값이 없는 것은 뒤로.
+ * 조회가 준 순서는 보장되지 않는다. 옛 엑셀(lib/customerExcel.ts)과 같은 규칙이다.
+ */
+function sortDevices(list: DeviceRow[]): DeviceRow[] {
+  const key = (d: DeviceRow) => {
+    const y = String(d.install_year ?? '').trim()
+    const date = String(d.install_date ?? '').trim()
+    const full = /^(\d{4})-(\d{1,2})/.exec(date)
+    const year = /^\d{4}$/.test(y) ? Number(y) : full ? Number(full[1]) : null
+    if (year == null) return Number.MAX_SAFE_INTEGER
+    const monthOnly = /^(\d{1,2})$/.exec(date)
+    const month = full ? Number(full[2]) : monthOnly ? Number(monthOnly[1]) : 0
+    return year * 100 + (month >= 1 && month <= 12 ? month : 0)
+  }
+  return [...list].sort((a, b) =>
+    key(a) - key(b)
+    || (a.device_name ?? '').localeCompare(b.device_name ?? '', 'ko')
+    || (a.serial_number ?? '').localeCompare(b.serial_number ?? '', 'ko'))
+}
+
 export type GatherResult = { data: ExportInput } | { error: string }
 
 /** 네 시트의 자료를 한 번에 모은다. 쓰기는 하지 않는다. */
@@ -78,7 +113,7 @@ export async function gatherCustomerExport(
   sb: SupabaseClient<any, any, any>,
   siteIds: number[],
 ): Promise<GatherResult> {
-  const [cus, dev, con, quo, svc, eng, touchMap] = await Promise.all([
+  const [cus, dev, con, quo, eng, touchMap] = await Promise.all([
     sb.from('customers')
       .select('customer_id, parent_customer_id, agency_customer_id, is_parent, is_agency, company_name, site_name, name_en, industry, status, region1, region2, address, note')
       .is('deleted_at', null).range(0, PAGE),
@@ -89,11 +124,10 @@ export async function gatherCustomerExport(
       .select('customer_id, name, position, department, phone, email')
       .is('deleted_at', null).order('contact_id', { ascending: true }).range(0, PAGE),
     sb.from('quotes').select('customer_id, status').range(0, PAGE),
-    sb.from('service_history').select('device_id, visit_date, service_type').range(0, PAGE),
     sb.from('engineers').select('engineer_id, name').range(0, PAGE),
     loadLastTouchMap(sb),
   ])
-  const firstErr = cus.error ?? dev.error ?? con.error ?? quo.error ?? svc.error ?? eng.error
+  const firstErr = cus.error ?? dev.error ?? con.error ?? quo.error ?? eng.error
   if (firstErr) return { error: firstErr.message }
 
   const customers = (cus.data ?? []) as unknown as CustomerRow[]
@@ -132,16 +166,6 @@ export async function gatherCustomerExport(
     const list = devicesOf.get(id)
     if (list) list.push(d); else devicesOf.set(id, [d])
     if (isInUse(d)) liveCount.set(id, (liveCount.get(id) ?? 0) + 1)
-  }
-
-  // ── 서비스 — 장비마다 **가장 최근** 방문 한 건 ──
-  const lastService = new Map<number, { date: string; type: string }>()
-  for (const s of (svc.data ?? []) as { device_id: number | null; visit_date: string | null; service_type: string | null }[]) {
-    const id = Number(s.device_id)
-    const date = (s.visit_date ?? '').slice(0, 10)
-    if (!Number.isFinite(id) || !date) continue
-    const cur = lastService.get(id)
-    if (!cur || date > cur.date) lastService.set(id, { date, type: s.service_type ?? '' })
   }
 
   /** 그 사업장을 묶는 회사 줄(없으면 null — 미연결 사업장이다). */
@@ -185,6 +209,9 @@ export async function gatherCustomerExport(
       touchActor: touch?.actorId == null ? '' : engineerName.get(Number(touch.actorId)) ?? '',
       note: row.note ?? '',
       contacts: contactsOf.get(id) ?? [],
+      // 장비 — 저장 칸 그대로 넘긴다(합치지 않는다). 폐기도 넣는다.
+      // 줄 순서는 납입이 이른 것부터, 값이 없는 것은 뒤로(사람이 읽는 순서다).
+      devices: sortDevices(devicesOf.get(id) ?? []).map(toSiteDevice),
     }
   })
 
@@ -240,29 +267,5 @@ export async function gatherCustomerExport(
       }
     })
 
-  // ── 시트 ④ 장비 — 내보낸 사업장의 장비(폐기 포함) ──
-  const deviceRows: ExportDeviceRow[] = []
-  for (const s of sites) {
-    for (const d of devicesOf.get(s.customerId) ?? []) {
-      const svcLast = lastService.get(Number(d.device_id))
-      deviceRows.push({
-        deviceId: Number(d.device_id),
-        companyName: s.companyName,
-        siteName: s.siteName,
-        lineup: d.device_name ?? '',
-        model: d.device_name2 ?? '',
-        option: d.option ?? '',
-        serial: d.serial_number ?? '',
-        program: d.program ?? '',
-        installYear: d.install_year ?? null,
-        installDate: d.install_date ?? null,
-        status: d.status ?? '',
-        disposedAt: d.disposed_at ?? null,
-        lastServiceDate: svcLast?.date ?? '',
-        lastServiceType: svcLast?.type ?? '',
-      })
-    }
-  }
-
-  return { data: { sites, companies, agencies, devices: deviceRows } }
+  return { data: { sites, companies, agencies } }
 }

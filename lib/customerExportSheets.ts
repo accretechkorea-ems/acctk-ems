@@ -7,7 +7,14 @@
 //   장비가 두 대면 사업장이 두 줄이 되어 **사업장을 세는 일**(필터 결과와 맞춰 보기)이
 //   되지 않았고, 메모·담당자·견적 수·최근 활동은 아예 없었다.
 //
-//   이제 **보는 단위마다 시트 하나**다 — 사업장 · 회사 · 대리점 · 장비. 한 줄이 한 개다.
+//   이제 시트가 셋이다 — 사업장 · 회사 · 대리점.
+//
+//   「사업장」 시트는 **사업장 × 장비**로 편다(2026-11-22 수정). 장비 세 대면 사업장
+//   정보가 세 줄 반복되고, 장비가 없는 사업장도 장비 칸만 비운 채 한 줄 남는다.
+//   줄 수 = 사업장마다 max(장비 수, 1) 을 더한 값이다. **폐기한 장비도 넣고** 「폐기」 열에
+//   폐기일을 적는다 — 그 자리에서 폐기인지 아닌지 보이게.
+//   장비 칸은 devices 의 저장 칸 **그대로**다(라인업·모델·옵션을 한 칸에 합치지 않는다).
+//   따로 두었던 「장비」 시트는 같은 내용이 겹쳐 걷었다.
 //   옛 양식은 lib/customerExcel.ts 에 그대로 남아 있다(지우지 않았다. 지역·납입일
 //   계산은 그 파일 것을 여기서도 쓴다 — 화면·두 양식이 같은 글자를 내야 한다).
 //
@@ -35,7 +42,28 @@ export type ExportContact = {
   email: string | null
 }
 
-/** 사업장 한 줄. */
+/** 사업장에 붙은 장비 한 대 — 「사업장」 시트의 뒤 일곱 칸. */
+export type ExportSiteDevice = {
+  /** 라인업 — devices.device_name. */
+  lineup: string
+  /** 모델 — devices.device_name2. */
+  model: string
+  option: string
+  serial: string
+  /** 소프트웨어 — devices.program. */
+  program: string
+  installYear: string | number | null
+  installDate: string | null
+  /** 폐기일. 쓰고 있으면 null — 그 칸이 비어 있으면 쓰는 장비다. */
+  disposedAt: string | null
+}
+
+/**
+ * 사업장 한 줄.
+ *
+ * deviceCount·openQuotes·totalQuotes·touch*·note 는 「사업장」 시트에 **나가지 않는다**
+ * (2026-11-22 에 그 아홉 열을 걷었다). 「회사」 시트의 합계가 이 값들로 만들어지므로 남긴다.
+ */
 export type ExportSite = {
   customerId: number
   companyId: number | null
@@ -61,6 +89,8 @@ export type ExportSite = {
   touchActor: string
   note: string
   contacts: ExportContact[]
+  /** 그 사업장의 장비(폐기 포함). 비어 있으면 장비 칸이 빈 한 줄이 된다. */
+  devices: ExportSiteDevice[]
 }
 
 /** 회사 한 줄. */
@@ -90,37 +120,17 @@ export type ExportAgency = {
   contacts: ExportContact[]
 }
 
-/** 장비 한 줄. */
-export type ExportDeviceRow = {
-  deviceId: number
-  companyName: string
-  siteName: string
-  /** 라인업 — devices.device_name. */
-  lineup: string
-  /** 모델 — devices.device_name2. */
-  model: string
-  option: string
-  serial: string
-  /** 소프트웨어 — devices.program. */
-  program: string
-  installYear: string | number | null
-  installDate: string | null
-  status: string
-  disposedAt: string | null
-  lastServiceDate: string
-  lastServiceType: string
-}
-
-/** 네 시트의 이름. 순서가 곧 통합 문서의 탭 순서다. */
-export const SHEET_NAMES = ['사업장', '회사', '대리점', '장비'] as const
+/** 세 시트의 이름. 순서가 곧 통합 문서의 탭 순서다. */
+export const SHEET_NAMES = ['사업장', '회사', '대리점'] as const
 export type SheetName = (typeof SHEET_NAMES)[number]
 
-/** 담당자를 뺀 머리글. 담당자 열은 buildContactHeader 가 뒤에 붙인다. */
+/**
+ * 담당자를 뺀 머리글. 담당자 열은 buildContactHeader 가 뒤에 붙인다.
+ * 앞 아홉은 사업장, 뒤 일곱은 **그 줄의 장비**다(장비가 없으면 빈 칸).
+ */
 export const SITE_HEADER = [
   '회사명', '영문명', '분류', '사업장명', '상태', '지역1', '지역2', '주소', '대리점',
-  '장비 수', '진행 견적 수', '전체 견적 수',
-  '최근 활동일', '최근 활동 종류', '최근 활동 작성자',
-  '메모', '회사 id', '사업장 id',
+  '라인업', '모델', '옵션', 'S/N', '소프트웨어', '납입일', '폐기',
 ] as const
 
 export const COMPANY_HEADER = [
@@ -130,11 +140,6 @@ export const COMPANY_HEADER = [
 
 export const AGENCY_HEADER = [
   '대리점명', '영문명', '주소', '거래 사업장 수', '진행 견적', '전체 견적', '메모', 'id',
-] as const
-
-export const DEVICE_HEADER = [
-  '회사명', '사업장명', '라인업', '모델', '옵션', 'S/N', '소프트웨어', '납입일',
-  '상태', '폐기일', '최근 서비스일', '최근 서비스 종류', '장비 id',
 ] as const
 
 /** 담당자 한 사람이 차지하는 칸 수. */
@@ -195,7 +200,11 @@ export type ExportInput = {
   sites: ExportSite[]
   companies: ExportCompany[]
   agencies: ExportAgency[]
-  devices: ExportDeviceRow[]
+}
+
+/** 「사업장」 시트의 줄 수(머리줄 뺀 수) — 사업장마다 max(장비 수, 1). */
+export function siteRowCount(sites: { devices: ExportSiteDevice[] }[]): number {
+  return sites.reduce((n, s) => n + Math.max(1, s.devices.length), 0)
 }
 
 /** 가장 담당자가 많은 줄의 사람 수. 담당자가 하나도 없으면 0(담당자 열이 없다). */
@@ -210,13 +219,21 @@ export function buildCustomerSheets(input: ExportInput): Sheet[] {
 
   const siteRows: Cellish[][] = [[...SITE_HEADER, ...buildContactHeader(siteContacts)]]
   for (const s of input.sites) {
-    siteRows.push([
-      s.companyName, s.nameEn, s.industry, s.siteName, s.status, s.region1, s.region2, s.address, s.agency,
-      s.deviceCount, s.openQuotes, s.totalQuotes,
-      dateCell(s.touchDate), s.touchSource, s.touchActor,
-      s.note, s.companyId ?? '', s.customerId,
-      ...contactCells(s.contacts, siteContacts),
-    ])
+    const head = [s.companyName, s.nameEn, s.industry, s.siteName, s.status, s.region1, s.region2, s.address, s.agency]
+    const tail = contactCells(s.contacts, siteContacts)
+    if (s.devices.length === 0) {
+      // 장비가 없는 사업장도 한 줄 남긴다 — 장비 칸만 비운다.
+      siteRows.push([...head, '', '', '', '', '', '', '', ...tail])
+      continue
+    }
+    for (const d of s.devices) {
+      siteRows.push([
+        ...head,
+        d.lineup, d.model, d.option, d.serial, d.program,
+        installCell(d.installYear, d.installDate), dateCell(d.disposedAt),
+        ...tail,
+      ])
+    }
   }
 
   const companyRows: Cellish[][] = [[...COMPANY_HEADER]]
@@ -235,21 +252,10 @@ export function buildCustomerSheets(input: ExportInput): Sheet[] {
     ])
   }
 
-  const deviceRows: Cellish[][] = [[...DEVICE_HEADER]]
-  for (const d of input.devices) {
-    deviceRows.push([
-      d.companyName, d.siteName, d.lineup, d.model, d.option, d.serial, d.program,
-      installCell(d.installYear, d.installDate),
-      d.status, dateCell(d.disposedAt), dateCell(d.lastServiceDate), d.lastServiceType,
-      d.deviceId,
-    ])
-  }
-
   return [
     { name: '사업장', rows: siteRows },
     { name: '회사', rows: companyRows },
     { name: '대리점', rows: agencyRows },
-    { name: '장비', rows: deviceRows },
   ]
 }
 

@@ -682,7 +682,7 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
       }
       const counts = (() => {
         try { return JSON.parse(res.headers.get('X-Export-Counts') ?? '{}') } catch { return {} }
-      })() as { sites?: number; companies?: number; agencies?: number; devices?: number }
+      })() as { sites?: number; siteLines?: number; companies?: number; agencies?: number }
       const blob = await res.blob()
       // 파일 이름은 서버가 Content-Disposition 에 담아 보낸다(한글이라 filename* 쪽을 읽는다).
       const cd = res.headers.get('Content-Disposition') ?? ''
@@ -695,7 +695,7 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
       a.click()
       URL.revokeObjectURL(url)
       toast.success(
-        `사업장 ${counts.sites ?? 0} · 회사 ${counts.companies ?? 0} · 대리점 ${counts.agencies ?? 0} · 장비 ${counts.devices ?? 0}줄을 내려받았습니다`,
+        `사업장 ${counts.sites ?? 0}곳(${counts.siteLines ?? 0}줄) · 회사 ${counts.companies ?? 0} · 대리점 ${counts.agencies ?? 0}을 내려받았습니다`,
       )
     } catch (e) {
       console.warn('엑셀 내보내기 실패:', e)

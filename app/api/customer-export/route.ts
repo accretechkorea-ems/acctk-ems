@@ -19,7 +19,7 @@ import ExcelJS from 'exceljs'
 import { NextResponse } from 'next/server'
 import { loadCaller } from '@/lib/apiCaller'
 import { gatherCustomerExport } from '@/lib/customerExportData'
-import { buildCustomerSheets, customerExportFileName, sheetWidths } from '@/lib/customerExportSheets'
+import { buildCustomerSheets, customerExportFileName, sheetWidths, siteRowCount } from '@/lib/customerExportSheets'
 
 const TAG = 'customer-export'
 const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -53,7 +53,9 @@ export async function POST(req: Request) {
     console.error(`[${TAG}] 조회 실패`, got.error)
     return bad('목록을 읽지 못했습니다.', 500)
   }
-  const { sites, companies, agencies, devices } = got.data
+  const { sites, companies, agencies } = got.data
+  // 「사업장」 시트의 줄 수 — 사업장마다 max(장비 수, 1). 화면 토스트가 이 수를 적는다.
+  const siteLines = siteRowCount(sites)
 
   const sheets = buildCustomerSheets(got.data)
   const wb = new ExcelJS.Workbook()
@@ -83,7 +85,7 @@ export async function POST(req: Request) {
   const fileName = customerExportFileName()
   console.log(`[${TAG}] 내려받기`, {
     by: caller.engineer_id,
-    사업장: sites.length, 회사: companies.length, 대리점: agencies.length, 장비: devices.length,
+    사업장: sites.length, 사업장줄: siteLines, 회사: companies.length, 대리점: agencies.length,
   })
   return new NextResponse(buffer as ArrayBuffer, {
     status: 200,
@@ -93,7 +95,7 @@ export async function POST(req: Request) {
       'Cache-Control': 'no-store',
       // 화면이 토스트에 쓴다 — 본문은 파일이라 숫자를 머리에 싣는다.
       'X-Export-Counts': JSON.stringify({
-        sites: sites.length, companies: companies.length, agencies: agencies.length, devices: devices.length,
+        sites: sites.length, siteLines, companies: companies.length, agencies: agencies.length,
       }),
     },
   })
