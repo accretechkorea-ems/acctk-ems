@@ -320,15 +320,24 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
           ＋ 서비스 레포트
         </button>
         <span style={{ width: 1, background: '#f1f5f9', margin: '8px 0' }} />
-        {/* 기록 0건이면 펼칠 것이 없다 — 누를 수 없게 둔다(눌러도 아무 일이 없으면 고장으로 보인다). */}
+        {/*
+          기록 0건이면 펼칠 것이 없다 — 누를 수 없게 둔다(눌러도 아무 일이 없으면 고장으로 보인다).
+
+          있을 때와 없을 때의 **생김새가 분명히 달라야** 한다(2026-11-22).
+            1건 이상 — 왼쪽 「＋ 서비스 레포트」와 **같은 파랑 600**. 둘 다 누를 수 있는 길이다.
+            0건      — 가장 흐린 회색(#d1d5db · 「빈 값」 자리의 색). 커서는 기본,
+                       호버도 없다 — 누를 수 있는 것처럼 보이지 않게.
+        */}
         <button onClick={() => setOpenHistory(v => !v)} disabled={deviceHistory.length === 0}
           aria-expanded={openHistory}
           onMouseEnter={e => { if (deviceHistory.length > 0) e.currentTarget.style.background = '#f8fafc' }}
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
           style={{
             flex: 1, height: 40, border: 'none', background: 'transparent', fontFamily: 'inherit',
-            fontSize: 13, fontWeight: 500, color: deviceHistory.length === 0 ? '#9ca3af' : '#374151',
-            cursor: deviceHistory.length === 0 ? 'not-allowed' : 'pointer', transition: 'background 0.15s ease',
+            fontSize: 13,
+            fontWeight: deviceHistory.length === 0 ? 500 : 600,
+            color: deviceHistory.length === 0 ? '#d1d5db' : '#234ea2',
+            cursor: deviceHistory.length === 0 ? 'default' : 'pointer', transition: 'background 0.15s ease',
           }}>
           기록 {deviceHistory.length}{deviceHistory.length > 0 ? (openHistory ? ' ▴' : ' ▾') : ''}
         </button>
