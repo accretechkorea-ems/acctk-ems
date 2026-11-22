@@ -6,17 +6,28 @@
 //   최근에 움직여도 목록 아래에 깔렸다. 상세 요약의 숫자 칸도 서비스 리포트만 봤다.
 //   두 자리가 같은 값을 쓰도록 판정을 여기 하나로 모은다.
 //
-// ── 무엇을 보는가 ─────────────────────────────────────────────────────────
+// ── 무엇을 보는가 — **활동 이력에 줄로 나오는 종류만** ────────────────────
 //   영업활동 sales_activities.activity_date
 //   서비스   service_history.visit_date
 //   견적     quotes.quote_date
 //   수리     repairs 의 출고일 → 입고일(출고가 없으면 입고일이 마지막 움직임이다)
+//   의뢰     inquiries.issued_date
+//   포캐스트 sales_opportunities 의 **등록일·종료일**(created_at·closed_at)
+//   홀딩     holdings 의 **시작일·해결일**(started_at·resolved_at)
 //
-//   날짜는 전부 'YYYY-MM-DD' 라 **문자열 비교**로 충분하다(시각·표준시 문제가 없다).
+// ── 무엇을 보지 않는가 (2026-11-22) ───────────────────────────────────────
+//   **고친 시각(updated_at)은 어디에서도 보지 않는다.** 업체·사업장·담당자·장비 정보
+//   수정, 메모 수정, 병합·이동은 활동이 아니다 — 사람이 밖으로 나가 한 일만 활동이다.
+//   그래서 포캐스트·홀딩도 **등록·시작·종료한 날**로 센다(제목만 고쳐도 올라오면 안 된다).
+//   업체 표(customers)에는 updated_at 칸 자체가 없다(2026-11-22 확인).
+//
+//   날짜는 'YYYY-MM-DD' 로 맞춰 **문자열 비교**로 센다. 시각(timestamptz)으로 저장된
+//   칸은 한국 날짜로 읽는다(kstYmd) — UTC 로 자르면 밤에 넣은 건이 하루 앞서 보인다.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { kstYmd } from './date'
 
-export type TouchSource = '영업활동' | '서비스' | '견적' | '수리' | '의뢰'
+export type TouchSource = '영업활동' | '서비스' | '견적' | '수리' | '의뢰' | '포캐스트' | '홀딩'
 
 /**
  * 마지막 접점 한 건. `actorId` 는 **그 일을 한 우리 쪽 사람**이다(활동 등록자·견적
@@ -41,8 +52,8 @@ export function touchDate(value: string | null | undefined): string | null {
 }
 
 /**
- * 네 갈래 중 **가장 최근** 것. 같은 날이면 앞선 갈래가 이긴다
- * (영업활동 → 서비스 → 견적 → 수리 — 사람이 직접 적은 기록을 먼저 본다).
+ * 일곱 갈래 중 **가장 최근** 것. 같은 날이면 앞선 갈래가 이긴다
+ * (영업활동 → 서비스 → 견적 → 수리 → 의뢰 → 포캐스트 → 홀딩 — 사람이 직접 적은 기록을 먼저 본다).
  */
 export function pickLastTouch(input: {
   activity?: TouchInput[]
@@ -51,6 +62,10 @@ export function pickLastTouch(input: {
   repair?: TouchInput[]
   /** 의뢰서 — 사업장이 걸린 건만 들어온다(db/inquiry_customer_device_20261120.sql). */
   inquiry?: TouchInput[]
+  /** 포캐스트 — 등록일·종료일. 고친 시각은 넣지 않는다. */
+  forecast?: TouchInput[]
+  /** 홀딩 — 시작일·해결일. */
+  holding?: TouchInput[]
 }): LastTouch | null {
   const groups: [TouchSource, TouchInput[]][] = [
     ['영업활동', input.activity ?? []],
@@ -58,6 +73,8 @@ export function pickLastTouch(input: {
     ['견적', input.quote ?? []],
     ['수리', input.repair ?? []],
     ['의뢰', input.inquiry ?? []],
+    ['포캐스트', input.forecast ?? []],
+    ['홀딩', input.holding ?? []],
   ]
   let best: LastTouch | null = null
   for (const [source, list] of groups) {
@@ -84,6 +101,16 @@ export function touchValue(touch: LastTouch | null | undefined): number {
 
 type Rows = { customer_id: number | null; date: string | null; actorId?: number | null }[]
 
+/**
+ * 날짜 하나로 맞춘다. 시각이면 **한국 날짜**로 읽고(kstYmd), 날짜면 그대로 둔다.
+ * 빈 값은 빈 글자 — group 이 걸러 낸다.
+ */
+function dayOf(value: string | null | undefined): string {
+  const s = (value ?? '').trim()
+  if (!s) return ''
+  return s.length > 10 ? kstYmd(s) : s
+}
+
 /** 한 표를 읽어 (업체 → 접점 목록) 으로 바꾼다. */
 function group(rows: Rows): Map<number, TouchEntry[]> {
   const map = new Map<number, TouchEntry[]>()
@@ -101,7 +128,7 @@ function group(rows: Rows): Map<number, TouchEntry[]> {
 }
 
 /**
- * 모든 업체의 마지막 접점. 네 표를 한 번씩 읽는다(각 5,000줄까지).
+ * 모든 업체의 마지막 접점. 갈래마다 표를 한 번씩 읽는다(각 5,000줄까지).
  * supabase 클라이언트는 화면용·service role 어느 쪽이든 된다.
  */
 /**
@@ -117,7 +144,7 @@ export async function loadLastTouchMap(
   // 작성자도 함께 읽는다 — 목록 보기의 「최근 활동 · 작성자」 칸이 쓴다.
   //   영업활동 engineer_id · 견적 engineer_id(실적 귀속자) · 수리 created_by
   //   서비스는 참여자가 다대다라 service_engineers 를 한 번 더 읽어 **첫 사람**을 쓴다.
-  const [act, svc, quo, rep, se, inq] = await Promise.all([
+  const [act, svc, quo, rep, se, inq, fc, hold] = await Promise.all([
     sb.from('sales_activities').select('customer_id, activity_date, engineer_id').range(0, 5000),
     sb.from('service_history').select('customer_id, visit_date, service_id').range(0, 5000),
     sb.from('quotes').select('customer_id, quote_date, engineer_id').range(0, 5000),
@@ -129,6 +156,10 @@ export async function loadLastTouchMap(
     inquiryLinked
       ? sb.from('inquiries').select('customer_id, issued_date, created_by').range(0, 5000)
       : Promise.resolve({ data: [], error: null }),
+    // 포캐스트·홀딩 — **활동 이력에 줄로 나오는 종류**라 함께 센다(2026-11-22).
+    // 고친 시각(updated_at)은 읽지 않는다 — 제목만 고친 것은 활동이 아니다.
+    sb.from('sales_opportunities').select('customer_id, created_at, closed_at, engineer_id').range(0, 5000),
+    sb.from('holdings').select('customer_id, started_at, resolved_at, created_by').range(0, 5000),
   ])
   if (inq.error) {
     inquiryLinked = false
@@ -150,12 +181,26 @@ export async function loadLastTouchMap(
   // 수리는 출고일이 있으면 그날, 없으면 입고일이 마지막 움직임이다.
   const repair = group((rep.data ?? []).map(r => ({ customer_id: r.customer_id, date: r.shipped_date ?? r.received_date, actorId: r.created_by })))
   const inquiry = group((inq.data ?? []).map(r => ({ customer_id: r.customer_id, date: r.issued_date, actorId: r.created_by })))
+  // 포캐스트는 한 줄에서 **두 날**이 나온다(등록·종료). 홀딩도 둘이다(시작·해결).
+  const fcRows = (fc.data ?? []) as { customer_id: number | null; created_at: string | null; closed_at: string | null; engineer_id: number | null }[]
+  const forecast = group([
+    ...fcRows.map(r => ({ customer_id: r.customer_id, date: dayOf(r.created_at), actorId: r.engineer_id })),
+    ...fcRows.map(r => ({ customer_id: r.customer_id, date: dayOf(r.closed_at), actorId: r.engineer_id })),
+  ])
+  const holdRows = (hold.data ?? []) as { customer_id: number | null; started_at: string | null; resolved_at: string | null; created_by: number | null }[]
+  const holding = group([
+    ...holdRows.map(r => ({ customer_id: r.customer_id, date: dayOf(r.started_at), actorId: r.created_by })),
+    ...holdRows.map(r => ({ customer_id: r.customer_id, date: dayOf(r.resolved_at), actorId: r.created_by })),
+  ])
 
-  const ids = new Set<number>([...activity.keys(), ...service.keys(), ...quote.keys(), ...repair.keys(), ...inquiry.keys()])
+  const ids = new Set<number>([
+    ...activity.keys(), ...service.keys(), ...quote.keys(), ...repair.keys(), ...inquiry.keys(),
+    ...forecast.keys(), ...holding.keys(),
+  ])
   for (const id of ids) {
     const touch = pickLastTouch({
       activity: activity.get(id), service: service.get(id), quote: quote.get(id), repair: repair.get(id),
-      inquiry: inquiry.get(id),
+      inquiry: inquiry.get(id), forecast: forecast.get(id), holding: holding.get(id),
     })
     if (touch) byId.set(id, touch)
   }

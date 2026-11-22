@@ -48,7 +48,6 @@ import {
   getDeviceLine,
   type Customer,
   type Device,
-  toTimeValue,
 } from '@/lib/home'
 import { R } from '@/lib/radius'
 import type { KakaoWindow } from '@/lib/loadKakaoMap'
@@ -396,23 +395,19 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
       )
     })
 
+    /**
+     * 「최근 활동순」 — **활동만** 본다(lib/customerLastTouch.ts 가 정본이다, 2026-11-22).
+     *
+     * 전에는 **장비 납입일**과 customer_id 를 접점과 섞어 가장 큰 값으로 세웠다. 그래서
+     * 장비를 새로 넣거나 납입일을 고치면 활동이 없는 업체가 위로 올라왔고, 날짜가 하나도
+     * 없는 업체끼리는 나중에 등록한 순(customer_id)으로 섰다 — 둘 다 활동이 아니다.
+     * 이제 활동이 없는 업체는 **맨 아래**, 그 안에서는 이름순이다(목록 보기와 같은 규칙).
+     */
     return [...filtered].sort((a, b) => {
-      const aDevices = deviceMap.get(a.customer_id) || []
-      const bDevices = deviceMap.get(b.customer_id) || []
-
-      const aLatestDevice = Math.max(0, ...aDevices.map((d) => toTimeValue(d.install_date)))
-      const bLatestDevice = Math.max(0, ...bDevices.map((d) => toTimeValue(d.install_date)))
-
-      // 마지막 접점 — 영업활동·서비스·견적·수리 중 최신(lib/customerLastTouch.ts).
-      // 예전에는 서비스 리포트만 봐서, 견적·수리만 있는 업체가 아래로 깔렸다.
-      const aLatestTouch = latestServiceDateMap.get(a.customer_id) ?? 0
-      const bLatestTouch = latestServiceDateMap.get(b.customer_id) ?? 0
-
-      // customer_id 는 날짜가 하나도 없는 업체끼리의 차례를 정하는 꼬리표다(나중에 등록한 것이 위).
-      const aLatest = Math.max(aLatestDevice, aLatestTouch, a.customer_id)
-      const bLatest = Math.max(bLatestDevice, bLatestTouch, b.customer_id)
-
-      return bLatest - aLatest
+      const at = latestServiceDateMap.get(a.customer_id) ?? 0
+      const bt = latestServiceDateMap.get(b.customer_id) ?? 0
+      if (at !== bt) return bt - at
+      return (a.company_name || '').localeCompare(b.company_name || '', 'ko')
     })
   }, [customers, query, listFilter, deviceMap, latestServiceDateMap])
 
