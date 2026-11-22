@@ -56,7 +56,7 @@ type Props = {
   title?: string
   /** 고객 사건 로그. 회사 전체 모드에서만 넘어온다. */
   events?: CustomerEvent[]
-  /** 영업 기회 — 「포캐스트」 종류의 줄을 만든다(만든 날·마지막 고침·종료). */
+  /** 영업 기회 — 「포캐스트」 종류의 줄을 만든다(만든 날·종료, 두 줄). */
   opportunities?: SalesOpportunity[]
   /** 이 사업장들에 걸린 의뢰서 — 「의뢰」 종류의 줄이 된다. 연결되지 않은 과거 건은 오지 않는다. */
   inquiries?: InquiryRow[]
@@ -448,12 +448,13 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
     }))
 
     /**
-     * 포캐스트 — 영업 기회가 **생기고 바뀐 자국**을 날짜순으로 낸다.
+     * 포캐스트 — 영업 기회를 **만든 날**과 **끝난 날**, 두 줄이다.
      *
-     * ⚠ 단계가 언제 어떻게 바뀌었는지는 **알 수 없다** — 단계 이력을 담는 표가 없고
-     *   sales_opportunities 에 created_at·updated_at·closed_at 셋만 있다. 그래서
-     *   「단계 변경」이라고 적지 않고 **「고침」**이라고 적는다(없는 것을 있는 척하지 않는다).
-     *   줄 셋이 나올 수 있다: 만든 날 · 마지막 고침(날이 다를 때만) · 종료(closed_at).
+     * 전에는 「고침」 줄을 하나 더 냈다(updated_at 이 만든 날·끝난 날과 다를 때). 그런데
+     * 그 시각은 **제목이나 금액만 고쳐도 올라간다** — 밖으로 나가 한 일이 아닌데 활동 이력에
+     * 줄로 섰다. 활동이 아닌 것은 줄로 내지 않는다(2026-11-22 지시, lib/customerLastTouch.ts
+     * 가 최근 활동을 세는 규칙과 같다). 단계가 언제 바뀌었는지는 담는 표가 없어 여전히 알 수
+     * 없고, 지금 단계는 만든 줄의 꼬리표(labelSuffix)가 보여 준다.
      */
     const forecastItems: Item[] = (opportunities ?? []).flatMap(o => {
       const money = o.expected_amount ? `₩${numKR(o.expected_amount)}` : '금액 미정'
@@ -479,18 +480,6 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
         sortAt: sortKey(o.created_at, madeOn),
       }]
       const closedOn = (o.closed_at ?? '').slice(0, 10) || null
-      const touchedOn = (o.updated_at ?? '').slice(0, 10) || null
-      if (touchedOn && touchedOn !== madeOn && touchedOn !== closedOn) {
-        rows.push({
-          ...base,
-          key: `op-${o.opportunity_id}-up`,
-          date: touchedOn,
-          label: '포캐스트',
-          labelSuffix: '고침',
-          body: `지금 단계 ${o.stage} · ${body}`,
-          sortAt: sortKey(o.updated_at, touchedOn),
-        })
-      }
       if (closedOn) {
         rows.push({
           ...base,

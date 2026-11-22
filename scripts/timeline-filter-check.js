@@ -99,6 +99,30 @@ eq('사업장 칩을 지우면 사업장은 전부로', F.narrowsSite(afterSite,
 eq('기간 칩을 지우면 기간이 빈다',
   F.dropChip({ ...all, from: '2026-01-01', to: '2026-12-31' }, { key: 'period', label: '', drop: { period: true } }, avail).from, '')
 
+console.log('\n── 포캐스트 줄 — 생성·종료 둘뿐 ──')
+// 영업 기회 한 건은 활동 이력에 **두 줄**을 낼 수 있다: 만든 날, 끝난 날.
+// 전에는 「고침」 줄(updated_at)이 하나 더 있었다 — 제목·금액만 고쳐도 올라가는 시각이라
+// 활동이 아닌데 줄로 섰다(2026-11-22 에 걷었다). 집계·필터는 줄을 세므로 함께 맞는다.
+const TL = fs.readFileSync(path.join(ROOT, 'components', 'customer', 'ActivityTimeline.tsx'), 'utf8')
+const code = TL.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+eq('포캐스트 줄에 updated_at 을 쓰지 않는다', /updated_at/.test(code), false)
+eq('「고침」 꼬리표가 없다', /고침/.test(code), false)
+eq('만든 줄이 있다', code.includes('key: `op-${o.opportunity_id}`'), true)
+eq('종료 줄이 있다', code.includes('key: `op-${o.opportunity_id}-cl`'), true)
+eq('고침 줄은 없다', code.includes('-up`'), false)
+
+// 두 줄짜리 포캐스트 한 건이 집계·필터에 어떻게 잡히는가.
+const fcRows = [
+  { kind: '포캐스트', date: '2026-03-02', siteId: 11 },  // 만든 날
+  { kind: '포캐스트', date: '2026-09-09', siteId: 11 },  // 끝난 날
+  { kind: '서비스', date: '2026-05-05', siteId: 11 },
+]
+eq('종류별 건수 — 포캐스트 2', F.countByKind(fcRows).포캐스트, 2)
+eq('활동 이력 N — 좁히지 않으면 셋', F.applyFilter(fcRows, F.allSelected(KINDS, SITES), avail).length, 3)
+eq('포캐스트만 고르면 둘', F.applyFilter(fcRows, { ...F.allSelected(KINDS, SITES), kinds: ['포캐스트'] }, avail).length, 2)
+eq('기간으로 끝난 날만 남기면 하나',
+  F.applyFilter(fcRows, { ...F.allSelected(KINDS, SITES), from: '2026-06-01', to: '2026-12-31' }, avail)
+    .filter(r => r.kind === '포캐스트').length, 1)
 console.log('\n── 포캐스트 블록 ──')
 const op = (id, stage, amount, close, closedAt) => ({
   opportunity_id: id, customer_id: 11, engineer_id: 1, title: `건 ${id}`, stage,
