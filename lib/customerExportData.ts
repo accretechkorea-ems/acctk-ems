@@ -20,7 +20,6 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { isInUse } from './deviceStatus'
 import { PENDING_STATUS } from './quoteStatus'
 import { shortSiteName } from './customerList'
-import { loadLastTouchMap } from './customerLastTouch'
 import { regionCells, type ExportAgency, type ExportCompany, type ExportContact, type ExportInput, type ExportSite, type ExportSiteDevice } from './customerExportSheets'
 
 /**
@@ -113,7 +112,10 @@ export async function gatherCustomerExport(
   sb: SupabaseClient<any, any, any>,
   siteIds: number[],
 ): Promise<GatherResult> {
-  const [cus, dev, con, quo, eng, touchMap] = await Promise.all([
+  // 최근 활동(lib/customerLastTouch.ts)은 **읽지 않는다** — 2026-11-22 에 네 시트에서
+  // 그 열을 걷으면서 쓰는 자리가 없어졌다. 다섯 표를 더 읽던 조회가 통째로 빠진다.
+  // 작성자(engineers)도 「최근 활동 작성자」 칸 하나 때문에 읽던 것이라 같이 걷었다.
+  const [cus, dev, con, quo] = await Promise.all([
     sb.from('customers')
       .select('customer_id, parent_customer_id, agency_customer_id, is_parent, is_agency, company_name, site_name, name_en, industry, status, region1, region2, address, note')
       .is('deleted_at', null).range(0, PAGE),
@@ -124,20 +126,14 @@ export async function gatherCustomerExport(
       .select('customer_id, name, position, department, phone, email')
       .is('deleted_at', null).order('contact_id', { ascending: true }).range(0, PAGE),
     sb.from('quotes').select('customer_id, status').range(0, PAGE),
-    sb.from('engineers').select('engineer_id, name').range(0, PAGE),
-    loadLastTouchMap(sb),
   ])
-  const firstErr = cus.error ?? dev.error ?? con.error ?? quo.error ?? eng.error
+  const firstErr = cus.error ?? dev.error ?? con.error ?? quo.error
   if (firstErr) return { error: firstErr.message }
 
   const customers = (cus.data ?? []) as unknown as CustomerRow[]
   const devices = (dev.data ?? []) as unknown as DeviceRow[]
   const contacts = (con.data ?? []) as unknown as ContactRow[]
   const byId = new Map<number, CustomerRow>(customers.map(c => [Number(c.customer_id), c]))
-  const engineerName = new Map<number, string>(
-    ((eng.data ?? []) as { engineer_id: number; name: string | null }[])
-      .map(e => [Number(e.engineer_id), e.name ?? '']),
-  )
 
   // ── 담당자 — 업체별로 묶는다(읽은 순서 = contact_id 오름차순 그대로) ──
   const contactsOf = new Map<number, ExportContact[]>()
@@ -187,7 +183,6 @@ export async function gatherCustomerExport(
     const company = companyOf(row)
     const companyName = (company?.company_name ?? row.company_name ?? '').trim()
     const [region1, region2] = regionCells(row)
-    const touch = touchMap.get(id) ?? null
     const agencyRow = row.agency_customer_id == null ? null : byId.get(Number(row.agency_customer_id))
     return {
       customerId: id,
@@ -204,9 +199,6 @@ export async function gatherCustomerExport(
       deviceCount: liveCount.get(id) ?? 0,
       openQuotes: openQ.get(id) ?? 0,
       totalQuotes: allQ.get(id) ?? 0,
-      touchDate: touch?.date ?? '',
-      touchSource: touch?.source ?? '',
-      touchActor: touch?.actorId == null ? '' : engineerName.get(Number(touch.actorId)) ?? '',
       note: row.note ?? '',
       contacts: contactsOf.get(id) ?? [],
       // 장비 — 저장 칸 그대로 넘긴다(합치지 않는다). 폐기도 넣는다.
@@ -227,16 +219,7 @@ export async function gatherCustomerExport(
   const companies: ExportCompany[] = companyOrder.map(cid => {
     const row = byId.get(cid)
     const list = sitesByCompany.get(cid) ?? []
-    // 회사 줄 자신에 붙은 견적·접점도 센다 — 옛 자료에 회사 줄로 들어간 건이 있다.
-    // 「최근 활동일」은 그 중 가장 늦은 날이고, 「최근 활동 종류」는 **그 날을 만든 갈래**다.
-    const own = touchMap.get(cid)
-    const touches: { date: string; source: string }[] = [
-      ...(own ? [{ date: own.date, source: own.source as string }] : []),
-      ...list.filter(s => s.touchDate).map(s => ({ date: s.touchDate, source: s.touchSource })),
-    ]
-    // 같은 날이 여럿이면 먼저 나온 것을 쓴다(사업장 순서 = 화면 순서).
-    const latest = touches.reduce<{ date: string; source: string } | null>(
-      (best, t) => (best === null || t.date > best.date ? t : best), null)
+    // 회사 줄 자신에 붙은 견적도 센다 — 옛 자료에 회사 줄로 들어간 건이 있다.
     return {
       companyId: cid,
       companyName: (row?.company_name ?? '').trim(),
@@ -246,8 +229,6 @@ export async function gatherCustomerExport(
       deviceCount: list.reduce((n, s) => n + s.deviceCount, 0),
       openQuotes: (openQ.get(cid) ?? 0) + list.reduce((n, s) => n + s.openQuotes, 0),
       totalQuotes: (allQ.get(cid) ?? 0) + list.reduce((n, s) => n + s.totalQuotes, 0),
-      touchDate: latest?.date ?? '',
-      touchSource: latest?.source ?? '',
       note: row?.note ?? '',
     }
   })

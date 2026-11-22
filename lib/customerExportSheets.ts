@@ -77,10 +77,6 @@ export type ExportSite = {
   deviceCount: number
   openQuotes: number
   totalQuotes: number
-  /** 마지막 접점 — 날짜·갈래·우리 쪽 사람 이름. */
-  touchDate: string
-  touchSource: string
-  touchActor: string
   note: string
   contacts: ExportContact[]
   /** 그 사업장의 장비(폐기 포함). 「사업장 × 장비」 단위가 쓴다. */
@@ -97,9 +93,6 @@ export type ExportCompany = {
   deviceCount: number
   openQuotes: number
   totalQuotes: number
-  touchDate: string
-  /** 그 날짜를 만든 갈래(영업활동·서비스·견적·수리·의뢰). */
-  touchSource: string
   note: string
 }
 

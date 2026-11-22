@@ -63,7 +63,6 @@ const site = (id, contacts, devices = []) => ({
   customerId: id, companyId: 100, companyName: '가나공업', nameEn: 'GANA', industry: '3.자동차 - 완성차',
   siteName: `${id}공장`, status: '활성', region1: '경기', region2: '화성', address: '경기 화성시 1',
   agency: 'ACCT-K', deviceCount: 2, openQuotes: 1, totalQuotes: 3,
-  touchDate: '2026-11-20', touchSource: '영업활동', touchActor: '홍길동',
   note: '메모다', contacts, devices,
 })
 const input = {
@@ -76,7 +75,7 @@ const input = {
   companies: [{
     companyId: 100, companyName: '가나공업', nameEn: 'GANA', industry: '3.자동차 - 완성차',
     siteCount: 3, deviceCount: 6, openQuotes: 3, totalQuotes: 9,
-    touchDate: '2026-11-20', touchSource: '영업활동', note: '회사 메모',
+    note: '회사 메모',
   }],
   agencies: [{
     agencyId: 500, name: '한빛', nameEn: 'HANBIT', address: '서울', siteCount: 2,
@@ -222,5 +221,13 @@ ok('장비는 폐기도 담는다(조회에서 is_in_use 로 거르지 않는다
   /from\('devices'\)[\s\S]{0,260}\.is\('deleted_at', null\)\.range/.test(DATA))
 ok('사업장 줄에 장비를 붙여 넘긴다', /devices: sortDevices\(devicesOf\.get\(id\) \?\? \[\]\)\.map\(toSiteDevice\)/.test(DATA))
 
+ok('최근 활동은 읽지 않는다(어느 시트도 쓰지 않는다 — 2026-11-22)',
+  !DATA.includes('loadLastTouchMap(') && !DATA.includes("from './customerLastTouch'"))
+ok('작성자(engineers)도 읽지 않는다', !/from\('engineers'\)/.test(DATA))
+eq('읽는 표는 넷뿐 — 업체·장비·담당자·견적',
+  (DATA.match(/sb\.from\('[a-z_]+'\)/g) ?? []),
+  ["sb.from('customers')", "sb.from('devices')", "sb.from('contacts')", "sb.from('quotes')"])
+ok('시트에도 최근 활동 열이 없다',
+  EXPORT_UNITS.every(u => sheet(u).rows[0].every(h => !/활동/.test(h))))
 console.log(fails === 0 ? '\n전부 통과' : `\n${fails}건 실패`)
 process.exit(fails === 0 ? 0 : 1)
