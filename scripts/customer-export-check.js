@@ -99,30 +99,29 @@ eq('기본은 사업장(있으면)', ['company', 'agency', 'cleanup'].map(defaul
 
 console.log('\n── ③ 「회사」 단위 ──')
 eq('열 이름·순서', sheet('company').rows[0], [
-  '회사명', '영문명', '분류', '사업장 수', '장비 수', '진행 견적', '전체 견적',
-  '최근 활동일', '최근 활동 종류', '메모',
+  '회사명', '영문명', '분류', '사업장 수', '장비 수',
 ])
 eq('줄 수 = 회사 수', sheet('company').rows.length - 1, 1)
 ok('담당자 열이 없다(켜도 붙지 않는다)', UNIT_HAS_CONTACTS.company === false
-  && sheet('company', true).rows[0].length === 10)
-ok('최근 활동일은 날짜(Date)', sheet('company').rows[1][7] instanceof Date)
-eq('최근 활동 종류', sheet('company').rows[1][8], '영업활동')
+  && sheet('company', true).rows[0].length === 5)
+ok('견적·활동·메모 열은 없다', sheet('company').rows[0].every(h => !/견적|활동|메모/.test(h)))
+eq('줄의 칸 수도 다섯', sheet('company').rows[1].length, 5)
 
 console.log('\n── ④ 「사업장」 단위 ──')
-eq('앞 16열 이름·순서', sheet('site').rows[0].slice(0, 16), [
+eq('앞 10열 이름·순서', sheet('site').rows[0].slice(0, 10), [
   '회사명', '영문명', '분류', '사업장명', '상태', '지역1', '지역2', '주소', '대리점',
-  '장비 수', '진행 견적', '전체 견적',
-  '최근 활동일', '최근 활동 종류', '최근 활동 작성자', '메모',
+  '장비 수',
 ])
+ok('견적·활동·메모 열은 없다', sheet('site').rows[0].every(h => !/견적|활동|메모/.test(h)))
 eq('줄 수 = 사업장 수(장비로 펴지 않는다)', sheet('site').rows.length - 1, 3)
-eq('담당자 켬 — 가장 많은 줄(2명) 기준 10열', sheet('site').rows[0].slice(16), [
+eq('담당자 켬 — 가장 많은 줄(2명) 기준 10열', sheet('site').rows[0].slice(10), [
   '담당자1 이름', '담당자1 직급', '담당자1 부서', '담당자1 전화', '담당자1 이메일',
   '담당자2 이름', '담당자2 직급', '담당자2 부서', '담당자2 전화', '담당자2 이메일',
 ])
-eq('담당자 끔 — 16열뿐', sheet('site', false).rows[0].length, 16)
+eq('담당자 끔 — 10열뿐', sheet('site', false).rows[0].length, 10)
 eq('담당자 끔은 줄 수를 바꾸지 않는다', sheet('site', false).rows.length - 1, 3)
-eq('담당자 없는 줄은 빈 칸 10개', sheet('site').rows[2].slice(16), ['', '', '', '', '', '', '', '', '', ''])
-eq('담당자 하나인 줄은 뒤 다섯이 빈 칸', sheet('site').rows[3].slice(16),
+eq('담당자 없는 줄은 빈 칸 10개', sheet('site').rows[2].slice(10), ['', '', '', '', '', '', '', '', '', ''])
+eq('담당자 하나인 줄은 뒤 다섯이 빈 칸', sheet('site').rows[3].slice(10),
   ['담당1', '과장', '품질', '010-0000-0001', 'a1@x.com', '', '', '', '', ''])
 eq('장비 수는 화면과 같은 수(폐기 뺀 수)', sheet('site').rows[1][9], 2)
 
@@ -191,7 +190,7 @@ eq('단위마다 다른 이름', EXPORT_UNITS.map(u => customerExportFileName(u,
     '고객사_사업장×장비_20261122_1023.xlsx', '고객사_대리점_20261122_1023.xlsx'])
 
 console.log('\n── ⑫ 열 폭 ──')
-eq('열마다 하나씩', sheetWidths(sheet('company').rows).length, 10)
+eq('열마다 하나씩', sheetWidths(sheet('company').rows).length, 5)
 ok('가장 좁아도 6, 가장 넓어도 40', sheetWidths(sheet('site').rows).every(w => w >= 6 && w <= 40))
 
 console.log('\n── ⑬ 라우트·화면·창이 같은 약속을 지키는가(글자 검사) ──')

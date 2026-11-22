@@ -4,8 +4,8 @@
 //   화면의 엑셀 단추는 바로 내려받지 않고 창을 띄운다. 거기서 **무엇을 한 줄로 볼지**를
 //   고르고, 파일에는 그 시트 하나만 담긴다.
 //
-//     회사          회사 한 줄 — 사업장 수·장비 수·견적·최근 활동 합계
-//     사업장        사업장 한 줄 — 주소·대리점·장비 수·진행 견적·최근 활동
+//     회사          회사 한 줄 — 사업장 수·장비 수
+//     사업장        사업장 한 줄 — 주소·대리점·장비 수
 //     사업장 × 장비  장비 한 대가 한 줄 — 라인업·모델·옵션·S/N·납입일·폐기
 //     대리점        대리점 한 줄 — 거래 사업장 수·견적
 //
@@ -139,8 +139,8 @@ export const UNIT_LABEL: Record<ExportUnit, string> = {
 
 /** 창의 라디오 아래 한 줄 설명 — 어떤 열이 나오는지. */
 export const UNIT_DESC: Record<ExportUnit, string> = {
-  company: '회사 한 줄 — 사업장 수·장비 수·견적·최근 활동 합계',
-  site: '사업장 한 줄 — 주소·대리점·장비 수·진행 견적·최근 활동',
+  company: '회사 한 줄 — 회사명·영문명·분류·사업장 수·장비 수',
+  site: '사업장 한 줄 — 사업장명·상태·지역·주소·대리점·장비 수',
   device: '장비 한 대가 한 줄 — 라인업·모델·옵션·S/N·납입일·폐기',
   agency: '대리점 한 줄 — 거래 사업장 수·견적',
 }
@@ -171,14 +171,12 @@ export function defaultUnitForTab(tab: ExportTab): ExportUnit {
 
 /** 담당자를 뺀 머리글. 담당자 열은 buildContactHeader 가 뒤에 붙인다. */
 export const COMPANY_HEADER = [
-  '회사명', '영문명', '분류', '사업장 수', '장비 수', '진행 견적', '전체 견적',
-  '최근 활동일', '최근 활동 종류', '메모',
+  '회사명', '영문명', '분류', '사업장 수', '장비 수',
 ] as const
 
 export const SITE_HEADER = [
   '회사명', '영문명', '분류', '사업장명', '상태', '지역1', '지역2', '주소', '대리점',
-  '장비 수', '진행 견적', '전체 견적',
-  '최근 활동일', '최근 활동 종류', '최근 활동 작성자', '메모',
+  '장비 수',
 ] as const
 
 /** 사업장 × 장비 — 앞 아홉은 사업장, 뒤 일곱은 **그 줄의 장비**다(장비가 없으면 빈 칸). */
@@ -295,10 +293,7 @@ export function buildCustomerSheet(input: ExportInput, unit: ExportUnit, withCon
   if (unit === 'company') {
     const rows: Cellish[][] = [[...COMPANY_HEADER]]
     for (const c of input.companies) {
-      rows.push([
-        c.companyName, c.nameEn, c.industry, c.siteCount, c.deviceCount, c.openQuotes, c.totalQuotes,
-        dateCell(c.touchDate), c.touchSource, c.note,
-      ])
+      rows.push([c.companyName, c.nameEn, c.industry, c.siteCount, c.deviceCount])
     }
     return { name, rows }
   }
@@ -322,8 +317,7 @@ export function buildCustomerSheet(input: ExportInput, unit: ExportUnit, withCon
     for (const s of input.sites) {
       rows.push([
         s.companyName, s.nameEn, s.industry, s.siteName, s.status, s.region1, s.region2, s.address, s.agency,
-        s.deviceCount, s.openQuotes, s.totalQuotes,
-        dateCell(s.touchDate), s.touchSource, s.touchActor, s.note,
+        s.deviceCount,
         ...contactCells(s.contacts, n),
       ])
     }
