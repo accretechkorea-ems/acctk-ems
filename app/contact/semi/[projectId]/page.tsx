@@ -18,7 +18,7 @@
 //   · Action 상태 → PATCH /api/semi-contact/action (접근 권한만 있으면 누구나 — 담당이 팀이다)
 // 주소의 ?report= 가 있으면 그 보고서를 고른 채 연다(수정 화면에서 돌아올 때).
 
-import { Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { EditIconButton, PencilGlyph } from '@/components/common/IconButton'
 import Link from 'next/link'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
@@ -32,7 +32,7 @@ import { FieldError, errBorder, useFieldErrors } from '@/components/common/field
 import { isSuperAdmin } from '@/lib/permissions'
 import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, FAINT, BLUE, NEUTRAL_BG, ROW_HOVER_BG,
-  cardStyle, cardHeader, cardTitle, countBadge, btnPrimary, btnGhost, btnDanger,
+  cardStyle, cardHeader, cardTitle, countBadge, btnPrimary, btnGhost, btnDanger, inputStyle,
 } from '@/components/common/ui'
 import { daysBetween, todayKST } from '@/lib/date'
 import { errorInfo } from '@/lib/errorInfo'
@@ -40,6 +40,9 @@ import { ACTION_LABELS, ACTION_STATUSES, actionFromStorage, apiErrorText, AUTHOR
 import {
   PROJECT_KEYS, PROJECT_NO_KEY, PROJECT_NO_LABEL, PROJECT_NO_MAX, PROJECT_TEXT_MAX, validateProjectNo,
 } from '@/lib/semiContact/project'
+import {
+  filterReports, normQuery, reportMatchCount, sectionHasHit, splitHits,
+} from '@/lib/semiContact/reportSearch'
 import { contactSequence, seqLabel } from '@/lib/semiContact/sequence'
 import { nextContactShown, nextContactTbdOf } from '@/lib/semiContact/storage'
 import { layoutOf } from '@/lib/semiContact/layout'
@@ -114,6 +117,10 @@ const SHELL_CSS = `
   .sp-left-card { position: absolute; inset: 0; display: flex; flex-direction: column; }
   .sp-right { grid-column: 2 / span 3; min-width: 0; }
   .sp-timeline { flex: 1; min-height: 0; overflow-y: auto; }
+  /* 검색 일치 — 노란 바탕(디자인 표에 없는 값이라 2026-11-22 지시의 #fef3c7).
+     지금 보고 있는 일치만 액센트 테두리를 더해 구별한다(새 색을 만들지 않는다). */
+  .sem-hit { background: #fef3c7; color: inherit; border-radius: ${R.tag}px; padding: 0 1px; }
+  .sem-hit-on { outline: 1px solid ${BLUE}; }
   @container (max-width: 900px) {
     .sp-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .sp-cols { grid-template-columns: minmax(0, 1fr); }
@@ -161,6 +168,55 @@ function SemiProjectDetailInner() {
   /** 상태를 저장 중인 Action id — 그 셀렉트만 막는다. */
   const [savingStatus, setSavingStatus] = useState<Set<number>>(() => new Set())
   const [editingProject, setEditingProject] = useState(false)
+  /** 이 Project 안에서의 검색 — 친 글자와 300ms 뒤의 값. */
+  const [qInput, setQInput] = useState('')
+  const [qDebounced, setQDebounced] = useState('')
+  /** 주소의 q= 를 읽어 넣었는가 — 넣기 전에는 주소를 고치지 않는다. */
+  const [qReady, setQReady] = useState(false)
+  /** 지금 보고 있는 일치의 번호. 그림에 쓰지 않으므로 ref 다(상태로 두면 효과에서 고쳐야 한다). */
+  const hitAt = useRef(0)
+
+  // 주소 → 검색어(새로고침·뒤로 가기에서 그대로 돌아온다).
+  useEffect(() => {
+    const q0 = new URLSearchParams(window.location.search).get('q') ?? ''
+    setQInput(q0); setQDebounced(q0); setQReady(true)
+  }, [])
+
+  // 검색어 디바운스 — 300ms 동안 더 치지 않으면 그때 거른다.
+  useEffect(() => {
+    const id = setTimeout(() => setQDebounced(qInput), 300)
+    return () => clearTimeout(id)
+  }, [qInput])
+
+  /** 검색어 → 주소. report= 는 그대로 두고 q= 만 넣고 뺀다(replaceState — 기록을 쌓지 않는다). */
+  useEffect(() => {
+    if (!qReady) return
+    const sp = new URLSearchParams(window.location.search)
+    const v = qDebounced.trim()
+    if (v) sp.set('q', v); else sp.delete('q')
+    const qs = sp.toString()
+    window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
+  }, [qReady, qDebounced])
+
+  /**
+   * ▲▼ 이동 — 그려 놓은 mark 를 **DOM 순서**로 집는다. 그리는 쪽에서 번호를 세지 않는다
+   * (렌더가 여러 번 돌 수 있어 렌더 중에 센 번호는 믿을 수 없다).
+   */
+  const focusHit = useCallback((i: number) => {
+    const list = Array.from(detailRef.current?.querySelectorAll<HTMLElement>('mark[data-sem-hit]') ?? [])
+    if (list.length === 0) return
+    const n = ((i % list.length) + list.length) % list.length
+    hitAt.current = n
+    for (const el of list) el.classList.remove('sem-hit-on')
+    list[n].classList.add('sem-hit-on')
+    list[n].scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [])
+
+  // 검색어가 바뀌면 첫 일치로 간다(효과는 그린 뒤에 돈다 — mark 가 이미 있다).
+  useEffect(() => {
+    hitAt.current = 0
+    if (normQuery(qDebounced)) focusHit(0)
+  }, [qDebounced, focusHit])
 
   useEffect(() => {
     if (!authorized) return
@@ -388,7 +444,27 @@ function SemiProjectDetailInner() {
 
   const writeHref = `/contact/semi/${project.project_id}/write`
   const latest = views[0] ?? null
-  const selected = views.find(v => v.id === selectedId) ?? latest
+
+  // ── 이 Project 안에서의 검색 ──
+  // 거르기·세기는 모두 순수 모듈이 한다(lib/semiContact/reportSearch.ts). 「다음 Contact 예정일」은
+  // 화면에 보이는 글자(미정 포함)를 넘긴다 — 세는 값과 보이는 값이 달라지면 안 된다.
+  const q = normQuery(qDebounced)
+  const items = views.map(v => {
+    const rep = {
+      view: v,
+      input: { ...v.input, next_contact_date: nextContactShown(v.input.next_contact_date, v.nextTbd) },
+      authorName: v.authorName,
+      actions: actionsByReport.get(v.id) ?? [],
+    }
+    return { ...rep, hits: reportMatchCount(rep, q) }
+  })
+  const shown = filterReports(items, q)
+  // 고른 보고서가 걸러져 사라졌으면 남은 것의 첫 줄을 연다(아무것도 안 걸리면 전처럼 둔다).
+  const selected = shown.find(x => x.view.id === selectedId)?.view
+    ?? (q ? shown[0]?.view : undefined)
+    ?? views.find(v => v.id === selectedId)
+    ?? latest
+  const selectedHits = items.find(x => x.view.id === selected?.id)?.hits ?? 0
   // 수정·삭제 버튼은 권한이 있는 사람에게만 보인다(서버가 같은 규칙으로 다시 막는다).
   const isSuper = isSuperAdmin(engineer)
   const myId = engineer?.engineer_id ?? null
@@ -397,6 +473,9 @@ function SemiProjectDetailInner() {
 
   const select = (id: number) => {
     setSelectedId(id)
+    hitAt.current = 0
+    // 검색 중이면 그 보고서의 첫 일치로 간다(그려진 뒤에 찾아야 하므로 한 틱 뒤).
+    if (q) { setTimeout(() => focusHit(0), 0); return }
     // 위아래로 쌓인 좁은 화면에서는 상세가 아래에 있으니 그쪽으로 옮겨 준다.
     if (detailRef.current && window.innerWidth <= 900) detailRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
@@ -504,19 +583,72 @@ function SemiProjectDetailInner() {
                 <div style={cardHeader}>
                   <span style={cardTitle}>접촉 이력</span>
                   <span style={countBadge}>{views.length}건</span>
+                  {q !== '' && (
+                    <span className="num" style={{ marginLeft: 'auto', fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>
+                      결과 {shown.length}건
+                    </span>
+                  )}
                 </div>
+
+                {/* ── 검색 — **이 Project 의 보고서 안에서만** 찾는다 ──
+                    대상은 보고서의 글자 칸 전부(가린 섹션·Project 칸은 뺀다 — reportSearch.ts). */}
+                <div style={{ position: 'relative', marginBottom: 8 }}>
+                  <input value={qInput} onChange={e => setQInput(e.target.value)}
+                    placeholder="이 Project 의 보고서 검색"
+                    aria-label="이 Project 의 보고서 검색"
+                    style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', paddingRight: qInput ? 30 : undefined }} />
+                  {qInput && (
+                    <button type="button" aria-label="검색어 지우기" onClick={() => setQInput('')}
+                      style={{
+                        position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                        border: 'none', background: 'transparent', color: MUTED, cursor: 'pointer', padding: 0,
+                        display: 'flex', alignItems: 'center',
+                      }}>
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                    </button>
+                  )}
+                </div>
+
                 <div className="sp-timeline">
-                  <Timeline views={views} selectedId={selected?.id ?? null} onSelect={select} />
+                  {q !== '' && shown.length === 0 ? (
+                    <div style={{ fontSize: 13, color: MUTED, padding: '12px 2px', lineHeight: 1.7 }}>
+                      일치하는 보고서가 없습니다
+                    </div>
+                  ) : (
+                    <Timeline items={shown} selectedId={selected?.id ?? null} onSelect={select} q={q} />
+                  )}
                 </div>
               </section>
             </div>
 
             {/* ── 우: 선택한 보고서 ── */}
             <div className="sp-right" ref={detailRef}>
+              {/* ── 일치 띠 — 「N곳 일치 · ▲ ▼」. 세는 수는 물들이는 수와 같은 함수다. ── */}
+              {q !== '' && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12,
+                  padding: '8px 12px', background: NEUTRAL_BG, borderRadius: R.control, border: `1px solid ${BORDER}`,
+                }}>
+                  <span className="num" style={{ fontSize: 12, fontWeight: 600, color: selectedHits > 0 ? TEXT : MUTED }}>
+                    {selectedHits > 0 ? `${selectedHits}곳 일치` : '이 보고서에는 일치가 없습니다'}
+                  </span>
+                  {selectedHits > 0 && (
+                    <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 4 }}>
+                      <button type="button" aria-label="이전 일치" title="이전 일치" onClick={() => focusHit(hitAt.current - 1)} style={iconBtn}>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6" /></svg>
+                      </button>
+                      <button type="button" aria-label="다음 일치" title="다음 일치" onClick={() => focusHit(hitAt.current + 1)} style={iconBtn}>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                      </button>
+                    </span>
+                  )}
+                </div>
+              )}
               {selected && (
                 <ReportDetail
                   key={selected.id}
                   view={selected}
+                  q={q}
                   actions={actionsByReport.get(selected.id) ?? []}
                   statusCell={statusSelect}
                   buttons={(
@@ -570,29 +702,32 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
   )
 }
 
-/** 접촉 이력 — 최신순, 해가 바뀌는 자리에 연도 구분선. 항목 앞에 차수(#n). */
-function Timeline({ views, selectedId, onSelect }: { views: ReportView[]; selectedId: number | null; onSelect: (id: number) => void }) {
-  /**
-   * 연도 머리줄을 어디에 넣을지 — **앞 줄과 비교**해서 정한다.
-   * 전에는 렌더 안에서 바깥 변수(lastYear)를 고쳐 가며 셌다. 렌더는 여러 번 돌 수 있어
-   * 그렇게 둔 값은 믿을 수 없다(react-hooks/immutability 가 짚는 자리다).
-   */
+/**
+ * 접촉 이력 — 최신순. 항목 앞에 차수(#n).
+ *
+ * 연도는 **적지 않는다**(2026-11-22 지시) — 최신 연도부터 내려오고 줄마다 날짜가 적혀 있어
+ * 「2026」 머리줄은 같은 말을 두 번 하는 것이었다. 해가 바뀌는 자리에만 **글자 없는 얇은 줄** 하나를
+ * 두어 끊어 보인다.
+ */
+function Timeline({ items, selectedId, onSelect, q }: {
+  items: { view: ReportView; hits: number }[]
+  selectedId: number | null
+  onSelect: (id: number) => void
+  /** 다듬은 검색어(빈 글자면 검색 중이 아니다). */
+  q: string
+}) {
+  /** 연도 구분선을 어디에 둘지 — **앞 줄과 비교**해서 정한다(렌더 중에 바깥 변수를 세지 않는다). */
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {views.map((v, i) => {
+      {items.map(({ view: v, hits }, i) => {
         const year = v.input.contact_date.slice(0, 4)
-        const prevYear = i > 0 ? views[i - 1].input.contact_date.slice(0, 4) : ''
-        const showYear = year !== prevYear
+        const prevYear = i > 0 ? items[i - 1].view.input.contact_date.slice(0, 4) : year
+        const yearBreak = year !== prevYear
         const on = v.id === selectedId
         const n = v.changed.size
         return (
           <div key={v.id}>
-            {showYear && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '8px 0 6px' }}>
-                <span className="num" style={{ fontSize: 11, fontWeight: 700, color: MUTED }}>{year}</span>
-                <span style={{ flex: 1, height: 1, background: BORDER }} />
-              </div>
-            )}
+            {yearBreak && <div style={{ height: 1, background: BORDER, margin: '8px 0 7px' }} />}
             <button type="button" onClick={() => onSelect(v.id)} aria-current={on ? 'true' : undefined}
               onMouseEnter={e => { if (!on) e.currentTarget.style.background = ROW_HOVER_BG }}
               onMouseLeave={e => { if (!on) e.currentTarget.style.background = 'transparent' }}
@@ -607,11 +742,16 @@ function Timeline({ views, selectedId, onSelect }: { views: ReportView[]; select
                 <span style={{ fontSize: 12, color: SUB }}>{v.input.contact_method}</span>
                 <span style={{ fontSize: 12, color: FAINT }}>·</span>
                 <span style={{ fontSize: 12, color: MUTED }}>{v.authorName}</span>
-                {n > 0 && <span style={{ ...countBadge, color: BLUE, marginLeft: 'auto' }}>변경 {n}건</span>}
+                {(n > 0 || q !== '') && (
+                  <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    {n > 0 && <span style={{ ...countBadge, color: BLUE }}>변경 {n}건</span>}
+                    {q !== '' && <span className="num" style={{ ...countBadge, color: BLUE }}>일치 {hits}곳</span>}
+                  </span>
+                )}
               </div>
               {v.input.purpose.trim() && (
                 <div style={{ fontSize: 13, color: TEXT, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {v.input.purpose}
+                  <Hi text={v.input.purpose} q={q} />
                 </div>
               )}
               {v.input.meeting_content.trim() && (
@@ -619,7 +759,7 @@ function Timeline({ views, selectedId, onSelect }: { views: ReportView[]; select
                   fontSize: 12, color: MUTED, marginTop: 2, lineHeight: 1.5,
                   display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
                 }}>
-                  {v.input.meeting_content}
+                  <Hi text={v.input.meeting_content} q={q} />
                 </div>
               )}
             </button>
@@ -631,9 +771,11 @@ function Timeline({ views, selectedId, onSelect }: { views: ReportView[]; select
 }
 
 /** 선택한 보고서 한 장. 상자 사이 간격은 gap 으로만 둔다 — 마지막 상자 아래 여백이 없어야 좌 이력 상자와 끝이 맞는다. */
-function ReportDetail({ view, actions, statusCell, buttons }: {
+function ReportDetail({ view, actions, statusCell, buttons, q }: {
   view: ReportView
   actions: ActionView[]
+  /** 다듬은 검색어 — 걸린 자리를 물들인다(빈 글자면 그냥 글자다). */
+  q: string
   /** Action 상태 칸 — 바로 바꾸는 셀렉트(저장은 부모가 한다). */
   statusCell: (a: ActionView) => ReactNode
   /** 엑셀·수정 아이콘 — 권한·진행 상태는 부모가 들고 있다. */
@@ -642,7 +784,7 @@ function ReportDetail({ view, actions, statusCell, buttons }: {
   // 이어받은 항목은 처음에 모두 펼쳐 둔다(접기는 그대로 쓸 수 있다).
   const [open, setOpen] = useState<Set<number>>(() => new Set(REST_GROUPS.map(g => g.section.no)))
   const value = (k: FieldKey, opts?: { big?: boolean }) => (
-    <ReadField key={k} def={FIELD_BY_KEY[k]}
+    <ReadField key={k} def={FIELD_BY_KEY[k]} q={q}
       value={k === 'next_contact_date' ? nextContactShown(view.input[k], view.nextTbd) : view.input[k]}
       changed={view.changed.has(k)} prevValue={view.prevInput ? view.prevInput[k] : ''} big={opts?.big} />
   )
@@ -652,7 +794,7 @@ function ReportDetail({ view, actions, statusCell, buttons }: {
       <section style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span className="num" style={cardTitle}>{`${seqLabel(view.seq)} · ${view.input.contact_date}`}</span>
-          <span style={{ fontSize: 12, color: MUTED }}>{AUTHOR_FIELD.label} {view.authorName}</span>
+          <span style={{ fontSize: 12, color: MUTED }}>{AUTHOR_FIELD.label} <Hi text={view.authorName} q={q} /></span>
           <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>{buttons}</span>
         </div>
       </section>
@@ -688,12 +830,12 @@ function ReportDetail({ view, actions, statusCell, buttons }: {
               <tbody>
                 {actions.map(a => (
                   <tr key={a.id} style={{ borderTop: `1px solid ${BORDER}`, fontSize: 13, color: TEXT }}>
-                    <td style={td}>{a.what}</td>
-                    <td style={{ ...td, color: SUB }}>{a.owner}</td>
-                    <td className="num" style={{ ...td, color: SUB, whiteSpace: 'nowrap' }}>{a.due_date}</td>
+                    <td style={td}><Hi text={a.what} q={q} /></td>
+                    <td style={{ ...td, color: SUB }}><Hi text={a.owner} q={q} /></td>
+                    <td className="num" style={{ ...td, color: SUB, whiteSpace: 'nowrap' }}><Hi text={a.due_date} q={q} /></td>
                     <td style={{ ...td, whiteSpace: 'nowrap' }}>{statusCell(a)}</td>
-                    <td style={{ ...td, color: SUB, whiteSpace: 'nowrap' }}>{a.priority}</td>
-                    <td style={{ ...td, color: SUB }}>{a.note || '-'}</td>
+                    <td style={{ ...td, color: SUB, whiteSpace: 'nowrap' }}><Hi text={a.priority} q={q} /></td>
+                    <td style={{ ...td, color: SUB }}>{a.note ? <Hi text={a.note} q={q} /> : '-'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -715,7 +857,8 @@ function ReportDetail({ view, actions, statusCell, buttons }: {
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {REST_GROUPS.map(g => {
-            const isOpen = open.has(g.section.no)
+            // 일치가 든 섹션은 접혀 있어도 펴 둔다 — 「N곳 일치」라 적고서 감추면 안 된다.
+            const isOpen = open.has(g.section.no) || sectionHasHit(view.input, g.fields.map(f => f.key), q)
             const n = g.fields.filter(f => view.changed.has(f.key as FieldKey)).length
             return (
               <div key={g.section.no} style={{ border: `1px solid ${BORDER}`, borderRadius: R.control }}>
@@ -736,7 +879,7 @@ function ReportDetail({ view, actions, statusCell, buttons }: {
                 {isOpen && (
                   <div style={{ borderTop: `1px solid ${BORDER}` }}>
                     {layoutOf(g.section.no, g.fields).map(({ def: f }, i) => (
-                      <InheritRow key={f.key} first={i === 0} def={f} value={view.input[f.key as FieldKey]}
+                      <InheritRow key={f.key} first={i === 0} def={f} q={q} value={view.input[f.key as FieldKey]}
                         changed={view.changed.has(f.key as FieldKey)}
                         prevValue={view.prevInput ? view.prevInput[f.key as FieldKey] : ''} />
                     ))}
@@ -793,9 +936,27 @@ const changedFrame = (changed: boolean): CSSProperties => ({
   background: changed ? CHANGED_BG : 'transparent',
 })
 
+/**
+ * 검색어가 걸린 자리를 물들인다. 토막 나누기는 순수 모듈이 한다(splitHits) — **세는 함수와
+ * 물들이는 함수가 같은 규칙**을 봐야 「N곳 일치」가 맞는다. ▲▼ 이동은 여기서 그린 mark 를
+ * DOM 순서로 집는다(data-sem-hit).
+ */
+function Hi({ text, q }: { text: string; q: string }) {
+  if (!q) return <>{text}</>
+  return (
+    <>
+      {splitHits(text, q).map((part, i) => (
+        part.hit
+          ? <mark key={i} data-sem-hit="1" className="sem-hit">{part.text}</mark>
+          : <span key={i}>{part.text}</span>
+      ))}
+    </>
+  )
+}
+
 /** 읽기 전용 칸 하나(이번 접촉·새롭게 확인된 내용·다음 Contact 예정일). */
-function ReadField({ def, value, changed, prevValue, big }: {
-  def: FieldDef; value: string; changed: boolean; prevValue: string; big?: boolean
+function ReadField({ def, value, changed, prevValue, big, q }: {
+  def: FieldDef; value: string; changed: boolean; prevValue: string; big?: boolean; q: string
 }) {
   const empty = !value.trim()
   return (
@@ -808,7 +969,7 @@ function ReadField({ def, value, changed, prevValue, big }: {
           whiteSpace: 'pre-wrap', wordBreak: 'break-word',
           ...(big ? { background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.icon, padding: '10px 12px', minHeight: 60 } : null),
         }}>
-          {empty ? '-' : value}
+          {empty ? '-' : <Hi text={value} q={q} />}
         </div>
         {changed && <ChangedPill />}
       </div>
@@ -818,8 +979,8 @@ function ReadField({ def, value, changed, prevValue, big }: {
 }
 
 /** 이어받은 항목 한 줄 — 「항목명 | 값」. 좁으면 값이 아래로 내려간다. */
-function InheritRow({ def, value, changed, prevValue, first }: {
-  def: FieldDef; value: string; changed: boolean; prevValue: string; first: boolean
+function InheritRow({ def, value, changed, prevValue, first, q }: {
+  def: FieldDef; value: string; changed: boolean; prevValue: string; first: boolean; q: string
 }) {
   const empty = !value.trim()
   return (
@@ -834,7 +995,7 @@ function InheritRow({ def, value, changed, prevValue, first }: {
       <div style={{ flex: '1 1 240px', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
           <span style={{ minWidth: 0, fontSize: 13, color: empty ? FAINT : TEXT, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            {empty ? '-' : value}
+            {empty ? '-' : <Hi text={value} q={q} />}
           </span>
           {changed && <ChangedPill />}
         </div>
