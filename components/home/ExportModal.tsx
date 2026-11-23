@@ -30,14 +30,8 @@ import {
   type ExportTab, type ExportUnit,
 } from '@/lib/customerExportSheets'
 
-const BORDER = '#ebebeb'
-const TEXT = '#111827'
-const SUB = '#6b7280'
-const MUTED = '#9ca3af'
-const BLUE = '#234ea2'
-const BLUE_TINT = '#eff4ff'
-const BLUE_BORDER = '#c7d7f8'
-const BAND_BG = '#f8fafc'
+// 색은 공용 한 벌에서 온다(components/common/ui.ts) — 같은 값을 창마다 적지 않는다.
+import { BAND_BG, BLUE, BLUE_BORDER, BLUE_TINT, BORDER, CARD_BG, MUTED, SUB, TEXT } from '@/components/common/ui'
 
 export type ExportModalProps = {
   /** 지금 보고 있는 탭 — 고를 수 있는 단위를 정한다. */
@@ -88,7 +82,7 @@ export default function ExportModal({
           <button type="button" onClick={onClose} disabled={busy}
             style={{
               height: 34, padding: '0 12px', borderRadius: R.control, border: `1px solid ${BORDER}`,
-              background: '#ffffff', color: SUB, fontSize: 13, fontWeight: 600,
+              background: CARD_BG, color: SUB, fontSize: 13, fontWeight: 600,
               cursor: busy ? 'not-allowed' : 'pointer', fontFamily: 'inherit', flexShrink: 0,
             }}>
             취소
@@ -96,7 +90,7 @@ export default function ExportModal({
           <button type="button" onClick={() => onDownload(unit, withContacts && contactsAvailable)} disabled={busy}
             style={{
               height: 34, padding: '0 14px', borderRadius: R.control, border: 'none',
-              background: BLUE, color: '#ffffff', fontSize: 13, fontWeight: 700,
+              background: BLUE, color: CARD_BG, fontSize: 13, fontWeight: 700,
               cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1,
               fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
             }}>
@@ -118,7 +112,7 @@ export default function ExportModal({
                   style={{
                     display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px',
                     border: `1px solid ${on ? BLUE_BORDER : BORDER}`, borderRadius: R.control,
-                    background: on ? BLUE_TINT : '#ffffff', cursor: 'pointer',
+                    background: on ? BLUE_TINT : CARD_BG, cursor: 'pointer',
                   }}>
                   <input type="radio" name="export-unit" checked={on} onChange={() => setUnit(u)}
                     style={{ marginTop: 3, accentColor: BLUE }} />

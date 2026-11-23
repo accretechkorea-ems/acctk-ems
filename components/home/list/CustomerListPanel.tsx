@@ -9,7 +9,7 @@
 //   「회사」 탭만 돈다. 「대리점」·「미연결」은 **자리와 건수만** 둔다 — 누르면
 //   「다음 회차」라고 알린다. 건수는 진짜 값이라 지금도 규모를 알 수 있다.
 
-import { useRef, type CSSProperties } from 'react'
+import { useRef, type CSSProperties, useState } from 'react'
 import ScrollHints from '@/components/common/ScrollHints'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import type { AgencyOption } from '@/lib/customerAgency'
@@ -17,6 +17,9 @@ import {
   daysLabel, isStale, type CompanyGroup, 
 } from '@/lib/customerList'
 import { R } from '@/lib/radius'
+import BulkBar from '@/components/home/list/BulkBar'
+import BulkApplyModal from '@/components/home/list/BulkApplyModal'
+import { currentValueCounts } from '@/lib/bulkActions'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
@@ -97,6 +100,8 @@ export default function CustomerListPanel({
 }: Props) {
   /** 트리가 구르는 요소 — 위·아래 힌트가 이것을 본다. */
   const treeRef = useRef<HTMLElement | null>(null)
+  /** 「분류 지정」 적용 모달이 떠 있는가. */
+  const [industryOpen, setIndustryOpen] = useState(false)
 
   return (
     /* 탭 줄은 **상단 카드**로 올라갔다(components/home/list/ListTabs.tsx) —
@@ -235,20 +240,29 @@ export default function CustomerListPanel({
         })}
       </nav>
 
-      {/* 분류 일괄 지정(3a) — 회사를 체크했을 때만 뜬다. */}
-      {tab === 'company' && checkedCompanies.size > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 12px', background: '#111827', color: '#fff', fontSize: 12, flexShrink: 0 }}>
-          <b style={{ fontWeight: 700 }}>{checkedCompanies.size}곳</b>
-          <select defaultValue=""
-            onChange={e => { if (e.target.value) { onBulkIndustry(e.target.value); e.target.value = '' } }}
-            style={{ height: 26, borderRadius: R.icon, border: 'none', fontSize: 12, padding: '0 6px', maxWidth: 170 }}>
-            <option value="" disabled hidden>분류 일괄 지정</option>
-            {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
-          </select>
-          <span style={{ flex: 1 }} />
-          <button type="button" onClick={clearCompanyChecks}
-            style={{ border: 'none', background: 'none', color: MUTED, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>선택 해제</button>
-        </div>
+      {/* 일괄 작업 바 — 회사를 체크했을 때. 우측 사업장 표의 바와 **같은 부품**이다. */}
+      {tab === 'company' && (
+        <BulkBar
+          scope="company"
+          count={checkedCompanies.size}
+          onClear={clearCompanyChecks}
+          onAction={key => { if (key === 'industry') setIndustryOpen(true) }}
+        />
+      )}
+      {industryOpen && (
+        <BulkApplyModal
+          actionKey="industry"
+          title="분류 지정"
+          count={checkedCompanies.size}
+          current={currentValueCounts(
+            groups.filter(g => checkedCompanies.has(g.companyId)).map(g => g.industry),
+            '분류 없음',
+          )}
+          options={INDUSTRIES.map(i => ({ value: i, label: i }))}
+          mode="search"
+          onClose={() => setIndustryOpen(false)}
+          onApply={value => { setIndustryOpen(false); onBulkIndustry(value) }}
+        />
       )}
     </div>
   )

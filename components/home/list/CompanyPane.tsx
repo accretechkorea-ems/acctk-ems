@@ -20,6 +20,11 @@ import SalesActivityModal from '@/components/customer/modals/SalesActivityModal'
 import RecordAddModal, { type HoldingDraft } from '@/components/customer/modals/RecordAddModal'
 import QuoteHistoryModal from '@/components/customer/modals/QuoteHistoryModal'
 import SiteMergeModal, { type MergeReport } from '@/components/home/list/SiteMergeModal'
+import BulkBar from '@/components/home/list/BulkBar'
+import BulkApplyModal from '@/components/home/list/BulkApplyModal'
+import {
+  DIRECT_SALE_OPTION_LABEL, DIRECT_SALE_VALUE, bulkDoneText, currentValueCounts,
+} from '@/lib/bulkActions'
 import ActivityTimeline from '@/components/customer/ActivityTimeline'
 import { useCompanyTimeline } from '@/hooks/useCompanyTimeline'
 import { useQuotePdf } from '@/hooks/customer/useQuotePdf'
@@ -172,6 +177,8 @@ export default function CompanyPane({
   const [editSite, setEditSite] = useState<Customer | null>(null)
   /** 「다른 회사로 이동」의 고르는 창. */
   const [moveOpen, setMoveOpen] = useState(false)
+  /** 열려 있는 적용 모달 — 대리점·상태만 이 창을 쓴다(이동·병합은 자기 창이 있다). */
+  const [bulkOpen, setBulkOpen] = useState<'agency' | 'status' | null>(null)
   /** 「+ 기록」 창 — 영업 활동·포캐스트·홀딩을 한 창에서 고른다. */
   const [recordOpen, setRecordOpen] = useState(false)
   /** 견적 이력 창 — 「진행 견적」 타일을 누르면 열린다(끝난 건까지 전부). */
@@ -437,6 +444,8 @@ export default function CompanyPane({
   }
 
   const selected = [...checked]
+  /** 고른 **줄**(지금 값을 보여 주려면 id 만으로는 모자란다). */
+  const pickedRows = group.sites.filter(s => checked.has(s.customer.customer_id))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
@@ -642,63 +651,21 @@ export default function CompanyPane({
           </table>
         </div>
 
-        {/* ── 일괄 작업 바 — 고른 줄이 있을 때만 ── */}
-        {selected.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', background: '#111827', color: '#fff', fontSize: 12, flexWrap: 'wrap' }}>
-            <b style={{ fontWeight: 700 }}>{selected.length}곳 선택</b>
-            <span style={{ width: 1, height: 16, background: '#374151', margin: '0 4px' }} />
-
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ color: '#d1d5db' }}>대리점 변경</span>
-              <select defaultValue="" disabled={busy}
-                onChange={e => {
-                  if (e.target.value === '') return
-                  const v = e.target.value === 'none' ? null : Number(e.target.value)
-                  void saveCell(selected, { agency_customer_id: v }, `${selected.length}곳의 대리점을 바꿨습니다`)
-                  e.target.value = ''
-                }}
-                style={{ height: 26, borderRadius: R.icon, border: 'none', fontSize: 12, padding: '0 6px' }}>
-                <option value="" disabled hidden>고르기</option>
-                <option value="none">{DIRECT_SALE_LABEL}</option>
-                {agencies.map(a => <option key={a.customer_id} value={a.customer_id}>{a.company_name}</option>)}
-              </select>
-            </label>
-
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ color: '#d1d5db' }}>상태 변경</span>
-              <select defaultValue="" disabled={busy}
-                onChange={e => {
-                  if (e.target.value === '') return
-                  void saveCell(selected, { status: e.target.value }, `${selected.length}곳의 상태를 바꿨습니다`)
-                  e.target.value = ''
-                }}
-                style={{ height: 26, borderRadius: R.icon, border: 'none', fontSize: 12, padding: '0 6px' }}>
-                <option value="" disabled hidden>고르기</option>
-                {STATUSES.map(v => <option key={v} value={v}>{v}</option>)}
-              </select>
-            </label>
-
-            <button type="button" disabled={busy} onClick={() => setMoveOpen(true)}
-              style={{ height: 26, padding: '0 10px', borderRadius: R.icon, border: '1px solid #374151', background: 'transparent', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-              다른 회사로 이동
-            </button>
-
-            {/* 사업장 병합 — 두 곳 이상 골랐을 때만. 되돌릴 수 없어 슈퍼관리자만 누른다. */}
-            {selected.length > 1 && (
-              <button type="button" disabled={busy || !canEditCompany}
-                title={canEditCompany ? '고른 사업장을 한 줄로 합칩니다' : '사업장 병합은 슈퍼관리자만 할 수 있습니다'}
-                onClick={() => setSiteMergeOpen(true)}
-                style={{ height: 26, padding: '0 10px', borderRadius: R.icon, border: '1px solid #374151', background: 'transparent', color: canEditCompany ? '#fff' : MUTED, fontSize: 12, fontWeight: 700, cursor: canEditCompany ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>
-                사업장 병합
-              </button>
-            )}
-            <span style={{ flex: 1 }} />
-            <button type="button" onClick={() => setChecked(new Set())}
-              style={{ border: 'none', background: 'none', color: MUTED, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
-              선택 해제
-            </button>
-          </div>
-        )}
+        {/* ── 일괄 작업 바 — 고른 줄이 있을 때만. 버튼만 둔다(드롭다운은 2026-11-23 에 걷었다) ── */}
+        <BulkBar
+          scope="site"
+          count={selected.length}
+          /* 이 화면의 사업장은 모두 한 회사 것이다 — 병합 조건을 늘 만족한다. */
+          sameCompany
+          canMergeSites={canEditCompany}
+          busy={busy}
+          onClear={() => setChecked(new Set())}
+          onAction={key => {
+            if (key === 'move') { setMoveOpen(true); return }
+            if (key === 'merge') { setSiteMergeOpen(true); return }
+            if (key === 'agency' || key === 'status') setBulkOpen(key)
+          }}
+        />
       </section>
 
       {/* ── 회사 전체 활동 ── */}
@@ -830,6 +797,44 @@ export default function CompanyPane({
           onClose={() => { setActivityOpen(false); setEditingActivity(null) }}
           onSave={form => void saveActivity(form)}
           onDelete={() => {}}
+        />
+      )}
+
+      {/* ── 일괄 적용(대리점·상태) — 지금 값을 보여 주고 바꾼다 ── */}
+      {bulkOpen === 'status' && (
+        <BulkApplyModal
+          actionKey="status"
+          title="상태 변경"
+          count={selected.length}
+          current={currentValueCounts(pickedRows.map(s => s.customer.status))}
+          options={STATUSES.map(v => ({ value: v, label: v }))}
+          mode="chips"
+          busy={busy}
+          onClose={() => setBulkOpen(null)}
+          onApply={value => {
+            setBulkOpen(null)
+            void saveCell(selected, { status: value }, bulkDoneText(selected.length))
+          }}
+        />
+      )}
+      {bulkOpen === 'agency' && (
+        <BulkApplyModal
+          actionKey="agency"
+          title="대리점 변경"
+          count={selected.length}
+          current={currentValueCounts(pickedRows.map(s => s.customer.agency_name ?? DIRECT_SALE_LABEL))}
+          options={[
+            { value: DIRECT_SALE_VALUE, label: DIRECT_SALE_OPTION_LABEL },
+            ...agencies.map(a => ({ value: String(a.customer_id), label: a.company_name })),
+          ]}
+          mode="search"
+          busy={busy}
+          onClose={() => setBulkOpen(null)}
+          onApply={value => {
+            setBulkOpen(null)
+            const v = value === DIRECT_SALE_VALUE ? null : Number(value)
+            void saveCell(selected, { agency_customer_id: v }, bulkDoneText(selected.length))
+          }}
         />
       )}
 
