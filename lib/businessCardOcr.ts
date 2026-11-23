@@ -79,50 +79,65 @@ export function fieldsFromText(text: string): OcrFields {
   const lines = toLines(text)
   const used = new Set<number>()
   const out: OcrFields = {}
-  const take = (i: number, field: CardField, value: string) => {
+  /**
+   * 칸 하나를 집는다. consume 이 참일 때만 그 줄을 **다 쓴 것으로** 친다.
+   *
+   * 연락처(이메일·홈페이지·번호)는 **한 줄에 둘이 같이 있는 일이 흔하다** —
+   * 「M. 010-… ⟨여백⟩ hong@…」 같은 2단 명함이다. 그 줄을 다 쓴 것으로 치면
+   * 둘 중 하나를 놓친다(2026-11-23 실측에서 휴대폰이 빠졌다).
+   * 이름·회사·부서·직급·주소는 줄 하나를 통째로 쓰므로 칠한다.
+   */
+  const take = (i: number, field: CardField, value: string, consume = true) => {
     if (out[field] != null) return
     const v = clean(value)
     if (!v) return
     out[field] = v
-    used.add(i)
+    if (consume) used.add(i)
   }
   const free = () => lines.map((l, i) => [l, i] as const).filter(([, i]) => !used.has(i))
 
-  // ① 이메일 · 홈페이지
+  // ① 이메일 · 홈페이지 — **줄을 다 쓴 것으로 치지 않는다**(2단 명함 때문에).
+  //    OCR 은 「hong @gana.co.kr」처럼 @ 앞뒤에 공백을 넣기도 한다 — 털고 본다.
   lines.forEach((l, i) => {
-    const m = l.match(/[\w.+-]+@[\w-]+\.[\w.-]+/)
-    if (m) take(i, 'email', m[0])
+    const m = l.replace(/\s*@\s*/g, '@').match(/[\w.+-]+@[\w-]+\.[\w.-]+/)
+    if (m) take(i, 'email', m[0], false)
   })
   lines.forEach((l, i) => {
-    if (used.has(i)) return
     const m = l.match(/(https?:\/\/[^\s]+|www\.[^\s]+)/i)
-    if (m) take(i, 'website', m[1])
+    if (m) take(i, 'website', m[1], false)
   })
 
   // ② 팩스 → 휴대폰 → 전화. 팩스를 먼저 집어야 전화로 새지 않는다.
+  //    셋 다 줄을 다 쓴 것으로 치지 않는다 — 한 줄에 번호와 메일이 같이 선다.
   lines.forEach((l, i) => {
-    if (used.has(i)) return
     if (!/\b(fax|f)\s*[.:]/i.test(l) && !l.includes('팩스')) return
     const n = numberIn(l)
-    if (n) take(i, 'fax', n)
+    if (n) take(i, 'fax', n, false)
   })
   lines.forEach((l, i) => {
-    if (used.has(i)) return
     // 010-…(국내) · +82-10-…(영문 뒷면) · 「Mobile」·「M.」·「휴대폰」이 적힌 줄
     const kr = l.match(/01[016789][\s.-]?\d{3,4}[\s.-]?\d{4}/)
-    if (kr) { take(i, 'mobile', kr[0].replace(/[\s.]/g, '-').replace(/-+/g, '-')); return }
+    if (kr) { take(i, 'mobile', kr[0].replace(/[\s.]/g, '-').replace(/-+/g, '-'), false); return }
     const intl = l.match(/\+82[\s.-]?10[\s.-]?\d{3,4}[\s.-]?\d{4}/)
-    if (intl) { take(i, 'mobile', intl[0].replace(/[\s.]/g, '-').replace(/-+/g, '-')); return }
+    if (intl) { take(i, 'mobile', intl[0].replace(/[\s.]/g, '-').replace(/-+/g, '-'), false); return }
     if (/\b(mobile|cell|m)\s*[.:]/i.test(l) || l.includes('휴대폰') || l.includes('핸드폰')) {
       const n = numberIn(l)
-      if (n) take(i, 'mobile', n)
+      if (n) take(i, 'mobile', n, false)
     }
   })
   lines.forEach((l, i) => {
-    if (used.has(i)) return
     if (out.phone != null) return
+    // 이미 휴대폰·팩스로 집은 번호와 같은 줄이면 그 번호는 건너뛴다.
     const n = numberIn(l)
-    if (n && /^(\+?82|0\d)/.test(n.replace(/\s/g, ''))) take(i, 'phone', n)
+    if (!n) return
+    if (n === out.mobile || n === out.fax) return
+    if (/^(\+?82|0\d)/.test(n.replace(/\s/g, ''))) take(i, 'phone', n, false)
+  })
+
+  // 연락처가 든 줄은 **그다음 칸들이 쓰지 못하게** 여기서 칠한다 —
+  // 회사·이름이 「M. 010-…」 줄을 집어 가지 않게.
+  lines.forEach((l, i) => {
+    if (/@|https?:\/\/|www\./i.test(l) || numberIn(l)) used.add(i)
   })
 
   // ③ 주소

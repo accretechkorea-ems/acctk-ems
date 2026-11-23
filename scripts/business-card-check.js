@@ -146,6 +146,19 @@ const f4 = O.fieldsFromText('GANA PRECISION Co., Ltd.\nSales Team\nGil-dong Hong
 eq('④ 영문 뒷면', [f4.company, f4.department, f4.mobile, f4.email],
   ['GANA PRECISION Co., Ltd.', 'Sales Team', '+82-10-1234-5678', 'hong@gana.co.kr'])
 
+// 2단 명함 — 한 줄에 번호와 메일이 같이 선다. 2026-11-23 실측(진짜 OCR 글자)에서
+// 이메일이 그 줄을 다 쓴 것으로 쳐 **휴대폰을 놓쳤다**. 그 자리를 다시 밟는다.
+const f6 = O.fieldsFromText(
+  '주식회사 가나정밀\n영업1팀\n홍길동 과장\n' +
+  'M. 010-1234-5678                 hong @gana.co.kr\n' +
+  'T. 031-123-4567                  www.gana.co.kr\n' +
+  'F. 031-123-4568\n경기도 화성시 동탄대로 123')
+eq('⑥ 한 줄에 둘이 있어도 다 집는다',
+  [f6.mobile, f6.email, f6.phone, f6.website, f6.fax, f6.name, f6.company, f6.department, f6.position, f6.address],
+  ['010-1234-5678', 'hong@gana.co.kr', '031-123-4567', 'www.gana.co.kr', '031-123-4568',
+    '홍길동', '주식회사 가나정밀', '영업1팀', '과장', '경기도 화성시 동탄대로 123'])
+ok('OCR 이 @ 앞뒤에 넣은 공백을 턴다', f6.email === 'hong@gana.co.kr')
+
 const f5 = O.fieldsFromText('박민수\n010-2222-3333')
 eq('⑤ 짧은 명함 — 못 읽은 칸은 비운다', [f5.name, f5.mobile, f5.company ?? null, f5.email ?? null],
   ['박민수', '010-2222-3333', null, null])
