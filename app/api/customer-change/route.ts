@@ -168,6 +168,11 @@ export async function POST(req: Request) {
     if ('note' in (body.patch as Record<string, unknown> ?? {})) {
       patch.note = String((body.patch as Record<string, unknown>).note ?? '').trim() || null
     }
+    // 영문명 — **회사 줄 한 칸**이다. 회사명과 달리 사업장 이름을 다시 만들지 않으므로
+    // 이름 바꾸기(슈퍼관리자)와 같은 문턱에 둘 까닭이 없다(2026-11-23).
+    if ('name_en' in (body.patch as Record<string, unknown> ?? {})) {
+      patch.name_en = String((body.patch as Record<string, unknown>).name_en ?? '').trim() || null
+    }
     if (Object.keys(patch).length === 0) return bad('바꿀 값이 없습니다')
 
     const { data: before, error: readErr } = await sb

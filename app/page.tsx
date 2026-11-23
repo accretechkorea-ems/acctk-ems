@@ -25,6 +25,7 @@ import { customerChange } from '@/lib/customerChange'
 import { customerDelete } from '@/lib/customerDelete.client'
 import { EMPTY_COUNTS, type DeleteCounts, type DeleteTarget } from '@/lib/customerDelete'
 import DeleteCustomerModal from '@/components/home/list/DeleteCustomerModal'
+import DeleteRequestModal from '@/components/home/list/DeleteRequestModal'
 import CustomerListPanel, { type CleanupBucket, type CleanupRow, type ListTab } from '@/components/home/list/CustomerListPanel'
 import CompanyPane from '@/components/home/list/CompanyPane'
 import AgencyPane from '@/components/home/list/AgencyPane'
@@ -105,6 +106,11 @@ export default function HomePage() {
   const [checkedCompanies, setCheckedCompanies] = useState<Set<number>>(new Set())
   /** 정리 필요 탭에서 보고 있는 묶음(4). */
   const [cleanupBucket, setCleanupBucket] = useState<CleanupBucket>('industry')
+  /** 「삭제 요청」 창이 열린 회사. 지울 수 없는 사람이 지워 달라고 할 때 뜬다. */
+  const [requestTarget, setRequestTarget] = useState<{ id: number; name: string } | null>(null)
+  const [requesting, setRequesting] = useState(false)
+  /** 이미 요청이 들어온 회사들 — 정리 필요 탭이 「삭제 요청됨」을 붙인다. */
+  const [deleteRequested, setDeleteRequested] = useState<Set<number>>(new Set())
   /** 지우기 창 — 무엇을 지우려는가(없으면 닫혀 있다). */
   const [deleteTarget, setDeleteTarget] = useState<{ target: DeleteTarget; id: number; name: string } | null>(null)
   const [deleteCounts, setDeleteCounts] = useState<DeleteCounts | null>(null)
@@ -664,6 +670,30 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
     toast.success(`회사 ${ids.length}곳의 분류를 「${value}」 로 바꿨습니다`)
   }
 
+  /** 이미 들어온 삭제 요청 — 정리 필요 탭을 열 때 한 번 읽는다. */
+  const loadDeleteRequests = useCallback(async () => {
+    const r = await customerDelete({ action: 'list-requests' })
+    if (!r.ok) return
+    const rows = (r.data.rows ?? []) as { customer_id: number }[]
+    setDeleteRequested(new Set(rows.map(x => Number(x.customer_id))))
+  }, [])
+
+  useEffect(() => {
+    if (listTab === 'cleanup') void loadDeleteRequests()
+  }, [listTab, loadDeleteRequests])
+
+  /** 「삭제 요청 보내기」 — 지우지 않는다. 자국과 알림만 남는다. */
+  const sendDeleteRequest = async (reason: string) => {
+    if (!requestTarget) return
+    setRequesting(true)
+    const r = await customerDelete({ action: 'request', target: 'company', id: requestTarget.id, reason })
+    setRequesting(false)
+    if (!r.ok) { toast.error(r.error); return }
+    setDeleteRequested(prev => new Set(prev).add(requestTarget.id))
+    setRequestTarget(null)
+    toast.success(`「${requestTarget.name}」 삭제를 요청했습니다 — 슈퍼관리자에게 알림이 갑니다`)
+  }
+
   /**
    * 사업장 0곳 회사를 지운다(정리 필요 탭) — **숨기기다**(deleted_at).
    * 창이 연결 기록 수와 까닭을 받는다. 라우트가 지우기 직전에 사업장 수를 다시 센다.
@@ -1060,8 +1090,12 @@ useEffect(() => {
               cleanup={cleanup}
               cleanupBucket={cleanupBucket}
               setCleanupBucket={setCleanupBucket}
-              onDeleteCompany={(id, name) => deleteEmptyCompany(id, name)}
-              /* 되돌리기는 슈퍼관리자만 — 버튼 자체를 내주지 않는다(라우트도 같은 문턱이다). */
+              /* 지우기는 슈퍼관리자만 — 버튼 자체를 내주지 않는다(라우트도 같은 문턱이다).
+                 그 밖의 사람에게는 「삭제 요청」이 그 자리에 선다(2026-11-23). */
+              onDeleteCompany={isSuperAdmin(me) ? ((id, name) => deleteEmptyCompany(id, name)) : undefined}
+              onRequestDelete={(id, name) => setRequestTarget({ id, name })}
+              deleteRequested={deleteRequested}
+              /* 되돌리기도 슈퍼관리자만. */
               onRestore={canExportExcel ? ((id, name) => void restoreCustomer(id, name)) : undefined}
               agencies={agencyList}
               agencySiteCount={agencySiteCount}
@@ -1200,6 +1234,17 @@ useEffect(() => {
             busy={deleting}
             onClose={() => setDeleteTarget(null)}
             onDelete={reason => void runDelete(reason)}
+          />
+        )}
+
+        {/* ── 삭제 요청 창 — 지울 수 없는 사람이 지워 달라고 한다 ── */}
+        {requestTarget && (
+          <DeleteRequestModal
+            key={requestTarget.id}
+            name={requestTarget.name}
+            busy={requesting}
+            onClose={() => setRequestTarget(null)}
+            onSend={reason => void sendDeleteRequest(reason)}
           />
         )}
 

@@ -28,6 +28,8 @@ export type CustomerEventType =
   | 'company_industry_changed' | 'site_edited' | 'contact_edited' | 'device_edited'
   // 지우기·되돌리기 — 소프트 삭제다(deleted_at). 어느 줄을 왜 지웠는지 payload 에 담는다.
   | 'customer_deleted' | 'customer_restored'
+  // 지울 수 없는 사람이 지워 달라고 한 자국(lib/customerDelete.ts).
+  | 'company_delete_requested'
   // 리드 — 번호를 반납하고 되찾는다(lib/leadRecall.ts)와 **상태가 바뀐 자국**.
   | 'lead_recalled' | 'lead_restored'
   | 'lead_unassignable' | 'lead_converted' | 'lead_status_changed'

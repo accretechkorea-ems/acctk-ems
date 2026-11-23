@@ -148,6 +148,14 @@ ${full}` : head,
       }
     case 'lead_restored':
       return { label: '리드 복구', title: leadNo, body: '번호를 되돌렸습니다', owner: '' }
+    // 지울 수 없는 사람이 지워 달라고 한 자국. **아무것도 지워지지 않았다.**
+    case 'company_delete_requested':
+      return {
+        label: '삭제 요청',
+        title: str(p.name),
+        body: str(p.reason) || '까닭 없음',
+        owner: '',
+      }
     case 'customer_deleted': {
       const kind = str(p.kind) || '줄'
       const why = str(p.reason)

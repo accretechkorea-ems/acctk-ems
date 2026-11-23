@@ -102,7 +102,9 @@ export default function CompanyEditModal({
     onSave(form)
   }
 
-  const lockedHint = editName ? null : '회사명·영문명은 슈퍼관리자만 바꿀 수 있습니다'
+  // 영문명은 **회사 줄 한 칸**이라 누구나 고친다(2026-11-23). 잠기는 것은 회사명뿐이다 —
+  // 그 이름은 아래 사업장 이름을 전부 다시 만든다.
+  const lockedHint = editName ? null : '회사명은 슈퍼관리자만 바꿀 수 있습니다'
 
   return (
     <ModalOverlay onClose={onClose} confirmClose dirty={dirty}>
@@ -172,10 +174,10 @@ export default function CompanyEditModal({
 
           <div>
             <label style={labelStyle}>{agency ? '영문 대리점명' : '영문 회사명'}</label>
-            <input value={form.nameEn} disabled={!editName || isSaving}
+            <input value={form.nameEn} disabled={isSaving}
               onChange={e => setForm(p => ({ ...p, nameEn: e.target.value }))}
               placeholder={agency ? 'ex) ZENT' : 'ex) HYUNDAI MOTOR'}
-              style={{ ...fieldStyle, background: editName ? '#fff' : '#f9fafb', color: editName ? TEXT : MUTED }} />
+              style={fieldStyle} />
             <div style={{ fontSize: 11, color: MUTED, marginTop: 5 }}>
               {lockedHint ?? '검색이 한글 이름과 함께 봅니다.'}
             </div>

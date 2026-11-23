@@ -12,8 +12,13 @@
 //   필요 없는 모양으로 만든 것이다(DB 함수를 더하지 않았다).
 //
 // ── 누가 ─────────────────────────────────────────────────────────────────
-//   **슈퍼관리자만.** 바꾸는 일은 전원에게 열었지만(/api/customer-change) 지우는 일은 아니다.
-//   복구(deleted_at 비우기)도 같은 문턱이다.
+//   지우기·복구는 **슈퍼관리자만**이다. 바꾸는 일은 전원에게 열었지만(/api/customer-change)
+//   지우는 일은 아니다.
+//
+//   **삭제 요청(request·list-requests)은 고객사를 보는 사람이면 된다**(2026-11-23).
+//   사업장 0곳 회사를 찾아내는 사람은 자기 회사를 정리하는 담당자인데, 전에는 그 사람에게
+//   「삭제」 버튼이 보이고 누르면 403 이었다. 이제 까닭을 적어 **요청**하면 슈퍼관리자에게
+//   알림이 가고, 정리 필요 탭의 그 줄에 「삭제 요청됨」이 붙는다.
 //
 // ── 사유는 받는다 ────────────────────────────────────────────────────────
 //   지운 까닭을 적지 않으면 나중에 남는 것은 「누군가 지웠다」뿐이다. 사유는 **필수**이고
@@ -36,13 +41,19 @@ const TABLE: Record<DeleteTarget, { table: string; key: string }> = {
   device: { table: 'devices', key: 'device_id' },
 }
 
-export async function POST(req: Request) {
-  const { error: authError, caller, sb } = await loadCaller({ kind: 'superadmin' }, { tag: TAG, req, method: 'POST' })
-  if (authError) return authError
+/** 고객사를 보는 사람이면 되는 작업 — 지우지 않는 것들. */
+const MEMBER_ACTIONS = new Set(['request', 'list-requests'])
 
+export async function POST(req: Request) {
   const body = await req.json().catch(() => null) as Record<string, unknown> | null
   if (!body) return bad('요청을 읽지 못했습니다')
   const action = String(body.action ?? '')
+
+  // 문턱은 **작업마다** 다르다(위 「누가」).
+  const { error: authError, caller, sb } = MEMBER_ACTIONS.has(action)
+    ? await loadCaller({ kind: 'menu', keys: ['customers'] }, { tag: TAG, req, method: 'POST' })
+    : await loadCaller({ kind: 'superadmin' }, { tag: TAG, req, method: 'POST' })
+  if (authError) return authError
   const target = String(body.target ?? '') as DeleteTarget
   // ── 숨겨진 줄 목록 — 「삭제됨」 소탭이 읽는다 ─────────────────────────
   //   화면 조회는 지워진 줄을 보지 않으므로(.is('deleted_at', null)) 여기서 읽어 준다.
@@ -62,6 +73,30 @@ export async function POST(req: Request) {
         hint: `${r.is_parent ? '회사' : '사업장'} · ${String(r.deleted_at ?? '').slice(0, 10)} 숨김`,
       })),
     })
+  }
+
+  // ── 요청된 회사 목록 — 정리 필요 탭이 「삭제 요청됨」을 붙이는 데 쓴다 ──
+  if (action === 'list-requests') {
+    const { data, error } = await sb
+      .from('customer_events')
+      .select('customer_id, occurred_at, payload')
+      .eq('event_type', 'company_delete_requested')
+      .order('occurred_at', { ascending: false })
+      .limit(500)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    // 같은 회사가 두 번 요청됐으면 **가장 최근 것**만 돌려준다.
+    const seen = new Map<number, { customer_id: number; occurred_at: string; reason: string | null }>()
+    for (const r of data ?? []) {
+      const cid = Number(r.customer_id)
+      if (seen.has(cid)) continue
+      const payload = (r.payload ?? {}) as { reason?: unknown }
+      seen.set(cid, {
+        customer_id: cid,
+        occurred_at: String(r.occurred_at ?? ''),
+        reason: typeof payload.reason === 'string' ? payload.reason : null,
+      })
+    }
+    return NextResponse.json({ ok: true, rows: [...seen.values()] })
   }
 
   const id = Number(body.id)
@@ -177,6 +212,55 @@ export async function POST(req: Request) {
     }])
     console.log(`[${TAG}] delete`, { target, id, by: caller.email })
     return NextResponse.json({ ok: true, events: written })
+  }
+
+  // ── 삭제 요청 — 지우지 않는다. 자국과 알림만 남긴다 ────────────────────
+  if (action === 'request') {
+    const reason = String(body.reason ?? '').trim()
+    if (!reason) return bad('지워야 하는 까닭을 적어주세요')
+    if (reason.length > DELETE_REASON_MAX) return bad(`까닭은 ${DELETE_REASON_MAX}자까지 적을 수 있습니다`)
+    if (target !== 'company') return bad('회사만 삭제 요청할 수 있습니다')
+
+    const { data: row, error: readErr } = await sb
+      .from('customers').select('customer_id, company_name, is_parent, deleted_at').eq('customer_id', id).maybeSingle()
+    if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 })
+    if (!row || row.deleted_at) return bad('회사를 찾지 못했습니다')
+    if (!row.is_parent) return bad('회사가 아닙니다')
+
+    // 지우는 쪽과 **같은 기준**으로 다시 센다 — 사업장이 생겼으면 요청할 일이 아니다.
+    const { count } = await sb.from('customers')
+      .select('customer_id', { count: 'exact', head: true })
+      .eq('parent_customer_id', id).is('deleted_at', null)
+    if ((count ?? 0) > 0) return bad(`사업장 ${count}곳이 묶여 있습니다 — 먼저 옮기거나 지우세요`, 409)
+
+    const { written } = await writeCustomerEvents(sb, [{
+      customer_id: id,
+      event_type: 'company_delete_requested',
+      occurred_at: new Date().toISOString(),
+      actor_engineer_id: caller.engineer_id,
+      payload: { kind: 'company', name: (row.company_name ?? '').trim() || null, reason },
+    }])
+
+    // 슈퍼관리자 전원에게 알림. 알림이 실패해도 요청(사건)은 남는다 —
+    // 「요청했는데 아무 자국이 없다」가 가장 나쁘다.
+    const { data: admins } = await sb
+      .from('engineers').select('engineer_id')
+      .eq('permission_level', 'superadmin').is('resigned_date', null)
+    const targets = (admins ?? []).map(a => Number(a.engineer_id)).filter(n => Number.isInteger(n))
+    if (targets.length > 0) {
+      const { error: notiErr } = await sb.from('notifications').insert(targets.map(engineer_id => ({
+        engineer_id,
+        title: '회사 삭제 요청',
+        message: `${(row.company_name ?? '').trim() || '회사'} — ${reason}`,
+        type: 'company_delete_request',
+        link: '/',
+        is_read: false,
+        created_at: new Date().toISOString(),
+      })))
+      if (notiErr) console.error(`[${TAG}] 알림을 넣지 못했다`, notiErr)
+    }
+    console.log(`[${TAG}] request`, { id, by: caller.email, admins: targets.length })
+    return NextResponse.json({ ok: true, events: written, notified: targets.length })
   }
 
   return bad('모르는 작업입니다')

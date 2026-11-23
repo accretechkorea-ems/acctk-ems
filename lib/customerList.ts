@@ -19,6 +19,23 @@ import type { LastTouch } from '@/lib/customerLastTouch'
 import { regionKey, regionLabel2 } from '@/lib/region'
 import { matchesCompany } from '@/lib/companySearch'
 
+// ── 사업장 병합 — 고르기 전에 한 줄, 실행 전에 한 줄 (2026-11-23) ─────────
+// 되돌릴 수 없는 일이다. 무엇을 보고 고르면 되는지 먼저 말해 주고, 실행 직전에
+// **몇 곳이 몇 곳이 되는지**와 **무엇이 옮겨 가는지**를 숫자로 보여 준다.
+
+/** 고르는 단계의 한 줄. */
+export const MERGE_ADVICE =
+  '장비가 많은 줄을 남기고, 이름이 더 정확한 쪽으로 이름을 맞추세요. 병합은 되돌릴 수 없습니다.'
+
+/** 실행 직전의 한 줄 — 「3곳 → 1곳, 장비 2대·기록 17건 이동」. */
+export function mergeSummary(fromCount: number, deviceCount: number, recordCount: number): string {
+  const head = `${fromCount + 1}곳 → 1곳`
+  const parts: string[] = []
+  if (deviceCount > 0) parts.push(`장비 ${deviceCount}대`)
+  if (recordCount > 0) parts.push(`기록 ${recordCount}건`)
+  return parts.length === 0 ? `${head}, 옮길 기록 없음` : `${head}, ${parts.join('·')} 이동`
+}
+
 /** 오래 손대지 않았다고 보는 기준(일). 칩·빨간 글씨가 같은 값을 쓴다. */
 export const STALE_DAYS = 90
 

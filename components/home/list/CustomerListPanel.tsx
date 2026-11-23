@@ -17,6 +17,7 @@ import {
   daysLabel, isStale, type CompanyGroup, 
 } from '@/lib/customerList'
 import { R } from '@/lib/radius'
+import { DELETE_REQUEST_LABEL, DELETE_REQUESTED_LABEL } from '@/lib/customerDelete'
 import BulkBar from '@/components/home/list/BulkBar'
 import BulkApplyModal from '@/components/home/list/BulkApplyModal'
 import { currentValueCounts } from '@/lib/bulkActions'
@@ -27,6 +28,7 @@ const SUB = '#4b5563'
 const MUTED = '#6b7280'
 const BLUE = '#234ea2'
 const DANGER = '#ef4444'
+const NEUTRAL_BG = '#f3f4f6'
 
 const STATUS_DOT: Record<string, string> = { '활성': '#16a34a', '잠재': '#f59e0b', '이탈': '#ef4444' }
 
@@ -68,8 +70,14 @@ type Props = {
   cleanup: Record<CleanupBucket, CleanupRow[]>
   cleanupBucket: CleanupBucket
   setCleanupBucket: (b: CleanupBucket) => void
-  /** 사업장 0곳 회사를 지운다(그 묶음에서만 나온다). */
-  onDeleteCompany: (companyId: number, companyName: string) => void
+  /**
+   * 사업장 0곳 회사를 **지운다** — 슈퍼관리자에게만 넘어온다. 없으면 그 자리에 「삭제 요청」이 선다.
+   */
+  onDeleteCompany?: (companyId: number, companyName: string) => void
+  /** 지울 수 없는 사람이 **지워 달라고** 한다(lib/customerDelete.ts). */
+  onRequestDelete: (companyId: number, companyName: string) => void
+  /** 이미 삭제 요청이 들어온 회사들 — 그 줄에 꼬리표를 붙인다. */
+  deleteRequested: Set<number>
   /** 지워진 줄을 되돌린다(슈퍼관리자에게만 넘어온다 — 없으면 버튼도 없다). */
   onRestore?: (customerId: number, name: string) => void
   /** 대리점 목록(7). 누르면 회사 탭이 그 대리점의 사업장만 거른다. */
@@ -100,7 +108,7 @@ export default function CustomerListPanel({
   groups, siteCount, expanded, toggleExpand, selectedCompanyId, selectedSiteId,
   onSelectCompany, onSelectSite, loading,
   checkedCompanies, toggleCompanyCheck, clearCompanyChecks, onBulkIndustry,
-  cleanup, cleanupBucket, setCleanupBucket, onDeleteCompany, onRestore,
+  cleanup, cleanupBucket, setCleanupBucket, onDeleteCompany, onRequestDelete, deleteRequested, onRestore,
   agencies, agencySiteCount, onPickAgency, selectedAgencyId,
 }: Props) {
   /** 트리가 구르는 요소 — 위·아래 힌트가 이것을 본다. */
@@ -163,11 +171,28 @@ export default function CustomerListPanel({
                   <div style={{ fontSize: 13, fontWeight: 700, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.companyName}</div>
                   <div style={{ fontSize: 11, color: MUTED, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.hint}</div>
                 </button>
+{/* 사업장 0곳 회사 — 지울 수 있으면 「삭제」, 아니면 「삭제 요청」.
+                    전에는 누구에게나 「삭제」가 보였고 슈퍼관리자가 아니면 눌러도 403 이었다(2026-11-23). */}
                 {cleanupBucket === 'emptyCompany' && (
-                  <button type="button" onClick={() => onDeleteCompany(r.companyId, r.companyName)}
-                    style={{ height: 24, padding: '0 8px', borderRadius: R.icon, border: `1px solid ${DANGER}`, background: '#fff', color: DANGER, fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
-                    삭제
-                  </button>
+                  deleteRequested.has(r.companyId) ? (
+                    <span style={{
+                      height: 24, padding: '0 8px', borderRadius: R.icon, border: `1px solid ${BORDER}`,
+                      background: NEUTRAL_BG, color: SUB, fontSize: 11, fontWeight: 700,
+                      display: 'inline-flex', alignItems: 'center', flexShrink: 0,
+                    }}>
+                      {DELETE_REQUESTED_LABEL}
+                    </span>
+                  ) : onDeleteCompany ? (
+                    <button type="button" onClick={() => onDeleteCompany(r.companyId, r.companyName)}
+                      style={{ height: 24, padding: '0 8px', borderRadius: R.icon, border: `1px solid ${DANGER}`, background: '#fff', color: DANGER, fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+                      삭제
+                    </button>
+                  ) : (
+                    <button type="button" onClick={() => onRequestDelete(r.companyId, r.companyName)}
+                      style={{ height: 24, padding: '0 8px', borderRadius: R.icon, border: `1px solid ${BLUE}`, background: '#fff', color: BLUE, fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+                      {DELETE_REQUEST_LABEL}
+                    </button>
+                  )
                 )}
                 {cleanupBucket === 'deleted' && onRestore && (
                   <button type="button" onClick={() => onRestore(r.companyId, r.companyName)}

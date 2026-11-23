@@ -262,9 +262,9 @@ export default function CompanyPane({
 
   /**
    * 회사 수정 저장 — **두 길로 나뉜다.**
-   *   · 회사명·영문명 … 라우트(superadmin). 사업장 이름을 전부 다시 만들기 때문이다.
-   *   · 분류·메모 … 회사 줄 한 칸이라 바로 쓴다(좌 패널의 분류 일괄 지정과 같은 문턱).
-   * 그래서 슈퍼관리자가 아니어도 분류·메모는 고칠 수 있고, 이름 칸만 잠겨 보인다.
+   *   · 회사명 … 라우트(superadmin). 사업장 이름을 전부 다시 만들기 때문이다.
+   *   · 영문명·분류·메모 … 회사 줄 한 칸이라 바꾸는 라우트로 간다(고객사를 보는 사람이면 된다).
+   * 그래서 슈퍼관리자가 아니어도 영문명·분류·메모는 고칠 수 있고, **회사명 칸만** 잠겨 보인다(2026-11-23).
    */
   const saveCompany = async (form: CompanyEditForm) => {
     if (busy) return
@@ -278,7 +278,7 @@ export default function CompanyPane({
 
     setBusy(true)
     let renamed = 0
-    if (nameChanged || enChanged) {
+    if (nameChanged) {
       const r = await callRoute({
         action: 'rename', parentId: group.companyId, name,
         industry: form.industry, nameEn: form.nameEn.trim(),
@@ -286,10 +286,11 @@ export default function CompanyPane({
       if (!r.ok) { setBusy(false); onError(r.error); return }
       renamed = (r.data.renamedSites as number) ?? 0
     }
-    if (industryChanged || noteChanged) {
+    if (industryChanged || noteChanged || (enChanged && !nameChanged)) {
       const patch: Record<string, unknown> = {}
       if (industryChanged) patch.industry = form.industry || null
       if (noteChanged) patch.note = form.note.trim() || null
+      if (enChanged && !nameChanged) patch.name_en = form.nameEn.trim() || null
       // 라우트가 저장하고 분류가 바뀐 때 사건도 적는다(2026-11-23).
       const r = await customerChange({ action: 'company-edit', id: group.companyId, patch })
       if (!r.ok) { setBusy(false); onError(r.error); return }

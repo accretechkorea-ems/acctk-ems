@@ -15,6 +15,7 @@
 import { useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import ModalCard, { keepPads } from '@/components/common/ModalCard'
+import { MERGE_ADVICE, mergeSummary } from '@/lib/customerList'
 import type { SiteRow } from '@/lib/customerList'
 import { R } from '@/lib/radius'
 
@@ -113,6 +114,13 @@ export default function SiteMergeModal({ rows, busy, onDryRun, onRun, onClose }:
             </button>
           </>}
         >
+          {/* 몇 곳이 몇 곳이 되고 무엇이 옮겨 가는지 — 숫자 한 줄(lib/customerList.ts). */}
+          <div style={{
+            fontSize: 13, fontWeight: 700, color: TEXT, background: NEUTRAL, border: `1px solid ${BORDER}`,
+            borderRadius: R.control, padding: '9px 12px', marginBottom: 12,
+          }}>
+            {mergeSummary(fromIds.length, report.moved?.['devices.customer_id'] ?? 0, report.total)}
+          </div>
           <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.9 }}>
             {rows.filter(r => r.customer.customer_id !== keepId).map(r => (
               <div key={r.customer.customer_id} style={{ color: SUB }}>{r.siteName || '입력 필요'}</div>
@@ -169,8 +177,12 @@ export default function SiteMergeModal({ rows, busy, onDryRun, onRun, onClose }:
         {...PADS}
         title={<>
           <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, marginBottom: 6 }}>사업장 병합</div>
-          <div style={{ fontSize: 12, color: SUB, marginBottom: 14 }}>
+          <div style={{ fontSize: 12, color: SUB, marginBottom: 6 }}>
             {`고른 ${rows.length}곳을 한 줄로 합칩니다. 남길 줄을 고르세요 — 나머지 줄의 기록이 그 줄로 옮겨 갑니다.`}
+          </div>
+          {/* 무엇을 보고 고르면 되는지 — 되돌릴 수 없는 일이라 먼저 말해 준다(lib/customerList.ts). */}
+          <div style={{ fontSize: 12, color: TEXT, fontWeight: 600, lineHeight: 1.7, marginBottom: 14 }}>
+            {MERGE_ADVICE}
           </div>
         </>}
         footer={<>
