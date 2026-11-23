@@ -261,9 +261,12 @@ export default function CardFormModal({ initial, existing, defaultDivision, busy
       >
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           {row('name', true)}
+          {/* 영문은 한글 칸 **바로 아래**에 선다. 선택 입력이다 — 영문이 없는 명함이 더 많다. */}
+          {row('name_en', true)}
           {row('position')}
           {row('department')}
           {row('company', true)}
+          {row('company_en', true)}
           {row('mobile')}
           {row('phone')}
           {row('email', true)}

@@ -27,13 +27,13 @@ export const OCR_READING = '명함을 읽는 중…'
 export type OcrFields = Partial<Record<CardField, string>>
 
 /**
- * 모델이 돌려주는 칸 이름. business_cards 의 칸 이름과 같게 맞춘다 —
- * `name_en`·`company_en`·`memo_hint` 는 **아직 표에 없는 칸**이라 화면이 버린다
- * (보고에 적었다. 칸을 늘릴지는 사장님 판단이다).
+ * 모델이 돌려주는 칸 이름 — **열둘**. business_cards 의 칸 이름과 같다.
+ * 영문 둘(`name_en`·`company_en`)은 db/business_cards_en_20261123.sql 로 더한다.
+ * 그 SQL 을 아직 돌리지 않았어도 화면은 돈다 — 라우트가 **없는 칸을 빼고** 담는다.
  */
 export const OCR_KEYS = [
   'name', 'name_en', 'position', 'department', 'company', 'company_en',
-  'phone', 'mobile', 'fax', 'email', 'address', 'website', 'memo_hint',
+  'phone', 'mobile', 'fax', 'email', 'address', 'website',
 ] as const
 export type OcrKey = typeof OCR_KEYS[number]
 

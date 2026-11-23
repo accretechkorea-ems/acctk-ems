@@ -62,7 +62,12 @@ ok('그래도 안 되면 reason:parse', /reason: 'parse'/.test(R))
 ok('열쇠가 없으면 500 이 아니라 no_key', /reason: 'no_key'/.test(R) && !/no_key[\s\S]{0,80}status: 500/.test(R))
 
 const LIB = read('lib/businessCardOcr.ts')
-eq('칸 이름 열셋', (LIB.match(/'(name|name_en|position|department|company|company_en|phone|mobile|fax|email|address|website|memo_hint)'/g) || []).length >= 13, true)
+// 칸 이름 열둘 — business_cards 의 칸과 같다. memo_hint 는 2026-11-23 에 뺐다
+// (담을 칸이 없고, 모델이 지어내기 쉬운 자리였다).
+eq('칸 이름 열둘', (LIB.match(/OCR_KEYS = \[([\s\S]*?)\]/)?.[1].match(/'[a-z_]+'/g) || []).length, 12)
+ok('memo_hint 가 라이브러리에 없다', !/memo_hint/.test(LIB))
+ok('memo_hint 가 지시문에 없다', !/memo_hint/.test(R))
+ok('영문 둘을 읽어 온다', /"name_en"/.test(R) && /"company_en"/.test(R))
 ok('번호 다듬기가 라이브러리에 있다', /export function normalizePhone/.test(LIB))
 ok('라우트가 그것을 쓴다', /fieldsFromJson/.test(R))
 

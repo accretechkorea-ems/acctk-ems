@@ -35,8 +35,16 @@ import { BLUE, BORDER, CARD_BG, MUTED, PAGE_BG, SUB, TEXT } from '@/components/c
 import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 import { R } from '@/lib/radius'
 
-const SELECT = 'card_id, name, company, department, position, mobile, phone, fax, email, address, website, memo, ' +
+/**
+ * 읽는 칸. 영문 둘은 db/business_cards_en_20261123.sql 로 더한다 —
+ * **그 SQL 을 돌리기 전에는 이 select 가 통째로 42703 으로 거절된다.**
+ * 그래서 영문 없는 짧은 목록을 함께 두고, 42703 이면 그것으로 다시 읽는다
+ * (lib/division.ts 의 TEAM_PERM_COLUMNS_LEGACY 와 같은 길이다 — 칸 하나 때문에
+ *  화면 전체가 비는 일을 한 번 겪었다).
+ */
+const SELECT_BASE = 'card_id, name, company, department, position, mobile, phone, fax, email, address, website, memo, ' +
   'division, registered_at, verified_at, input_method, engineer_id, registered_name, registered_team, registered_div, deleted_at'
+const SELECT = `${SELECT_BASE}, name_en, company_en`
 
 const btn = (primary = false): React.CSSProperties => ({
   height: 34, padding: '0 12px', borderRadius: R.control, cursor: 'pointer', fontFamily: 'inherit',
@@ -48,6 +56,16 @@ const th: React.CSSProperties = {
   padding: '10px 14px', fontSize: 12, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, textAlign: 'left', whiteSpace: 'nowrap',
 }
 const td: React.CSSProperties = { padding: '0 14px', fontSize: 13, color: TEXT, whiteSpace: 'nowrap' }
+
+/**
+ * 영문 값 — 한글 옆에 **작은 글씨**로. 값이 없으면 **아무것도 그리지 않는다**(자리도 안 쓴다).
+ * 색은 안내 글자 토큰 SUB — lib/textTokens.ts 의 TEXT_NOTE 다(값을 직접 적지 않는다).
+ */
+function En({ value }: { value?: string | null }) {
+  const v = String(value ?? '').trim()
+  if (!v) return null
+  return <span style={{ fontSize: 11, color: SUB, fontWeight: 400, marginLeft: 5 }}>{v}</span>
+}
 
 /** 나이 꼬리표 — 색 점 + 글자(틴트 배경은 쓰지 않는다). */
 function AgeTag({ registeredAt, today }: { registeredAt: string; today: string }) {
@@ -89,11 +107,14 @@ function CardsPageInner() {
   }, [])
 
   const load = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('business_cards').select(SELECT)
+    const read = (cols: string) => supabase
+      .from('business_cards').select(cols)
       .is('deleted_at', null)
       .order('registered_at', { ascending: false })
       .limit(2000)
+    let { data, error } = await read(SELECT)
+    // 영문 칸이 아직 없다 — 그 둘만 빼고 다시 읽는다(목록이 비지 않게).
+    if (error?.code === '42703') ({ data, error } = await read(SELECT_BASE))
     if (error) {
       // 표가 아직 없으면 화면이 깨지는 대신 무엇을 돌려야 하는지 말해 준다.
       if (error.code === '42P01' || error.code === 'PGRST205') setSchemaMissing(true)
@@ -255,13 +276,14 @@ function CardsPageInner() {
                 display: 'flex', flexDirection: 'column', gap: 3, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
               }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <b style={{ fontSize: 15, color: TEXT }}>{c.name}</b>
+                <b style={{ fontSize: 15, color: TEXT }}>{c.name}<En value={c.name_en} /></b>
                 <span style={{ fontSize: 12, color: SUB }}>{c.position ?? ''}</span>
                 <span style={{ flex: 1 }} />
                 <AgeTag registeredAt={c.registered_at} today={today} />
               </div>
               <div style={{ fontSize: 13, color: TEXT_LABEL }}>
                 {[c.company, c.department].filter(Boolean).join(' · ') || '—'}
+                <En value={c.company_en} />
               </div>
               <div style={{ fontSize: 12, color: SUB, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {c.mobile && <span style={{ color: BLUE }}>{c.mobile}</span>}
@@ -287,8 +309,11 @@ function CardsPageInner() {
               {shown.map(c => (
                 <tr key={c.card_id} style={{ height: 44, borderTop: `1px solid ${BORDER}`, cursor: 'pointer' }}
                   onClick={() => openCard(c)}>
-                  <td style={td}><b>{c.name}</b></td>
-                  <td style={{ ...td, whiteSpace: 'normal' }}>{[c.company, c.department].filter(Boolean).join(' · ') || '—'}</td>
+                  <td style={td}><b>{c.name}</b><En value={c.name_en} /></td>
+                  <td style={{ ...td, whiteSpace: 'normal' }}>
+                    {[c.company, c.department].filter(Boolean).join(' · ') || '—'}
+                    <En value={c.company_en} />
+                  </td>
                   <td style={td}>{c.position ?? '—'}</td>
                   <td style={{ ...td, color: BLUE }}>
                     {c.mobile ? <a href={`tel:${c.mobile}`} onClick={e => e.stopPropagation()} style={{ color: BLUE, textDecoration: 'none' }}>{c.mobile}</a> : '—'}

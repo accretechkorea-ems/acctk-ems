@@ -150,14 +150,15 @@ const g = O.fieldsFromJson({
   name: '홍길동', name_en: 'Gil-dong Hong', position: '과장', department: '영업1팀',
   company: '주식회사 가나정밀', company_en: null, phone: '+82-31-123-4567',
   mobile: '010 1234 5678', fax: '-', email: 'hong@gana.co.kr',
-  address: '경기도 화성시 동탄대로 123', website: 'www.gana.co.kr', memo_hint: 'N/A',
+  address: '경기도 화성시 동탄대로 123', website: 'www.gana.co.kr', memo_hint: '지어낸 칸',
   셋째줄: '모르는 칸',
 })
 eq('⑧ 칸에 담으며 번호를 다듬는다', [g.name, g.phone, g.mobile, g.email, g.website],
   ['홍길동', '031-123-4567', '010-1234-5678', 'hong@gana.co.kr', 'www.gana.co.kr'])
-eq('⑨ 「없음」을 뜻하는 값은 빈 칸', [g.fax, g.company_en, g.memo_hint], ['', '', ''])
+eq('⑨ 「없음」을 뜻하는 값은 빈 칸', [g.fax, g.company_en], ['', ''])
+eq('⑨-2 memo_hint 는 더 이상 받지 않는다', g.memo_hint ?? null, null)
 eq('⑩ 모르는 칸은 들어오지 않는다', Object.keys(g).filter(k => !O.OCR_KEYS.includes(k)), [])
-eq('⑪ 칸 이름 열셋', O.OCR_KEYS.length, 13)
+eq('⑪ 칸 이름 열둘', O.OCR_KEYS.length, 12)
 
 const merged = O.mergeBack(
   { name: '홍길동', company: '주식회사 가나정밀', email: '' },
@@ -191,7 +192,7 @@ ok('명함 라우트는 파일을 받지 않는다', !/formData\(\)/.test(ROUTE)
 ok('그 사실을 코드에 적어 두었다', /PHOTO_IS_NEVER_STORED/.test(read('lib/businessCardOcr.ts')))
 
 console.log('\n── ⑧ 칸·검색·엑셀 ──')
-eq('칸 열한 개', C.CARD_FIELDS.length, 11)
+eq('칸 열세 개', C.CARD_FIELDS.length, 13)
 eq('이름만 필수', [...C.REQUIRED_FIELDS], ['name'])
 eq('폰 키패드', [C.FIELD_INPUT_TYPE.mobile, C.FIELD_INPUT_TYPE.email, C.FIELD_INPUT_TYPE.website],
   ['tel', 'email', 'url'])
@@ -206,6 +207,37 @@ ok('번호는 숫자만 비교한다(01012345678 로도 걸린다)', C.matchesCa
 ok('엑셀에 등록자 이름·팀·사업부가 있다',
   ['registered_name', 'registered_team', 'registered_div'].every(k => C.EXCEL_COLUMNS.some(c => c.key === k)))
 eq('등록자 글자', C.registrarLabel({ registered_name: '권재원', registered_team: '80CS' }), '권재원 · 80CS')
+
+// ── ⑨ 영문 둘 — 2026-11-23. 표의 칸은 db/business_cards_en_20261123.sql 로 더한다 ──
+console.log('\n── ⑨ 영문 이름·회사명 ──')
+eq('한글 칸 바로 아래에 선다',
+  [C.CARD_FIELDS.indexOf('name_en') - C.CARD_FIELDS.indexOf('name'),
+    C.CARD_FIELDS.indexOf('company_en') - C.CARD_FIELDS.indexOf('company')], [1, 1])
+eq('칸 이름', [C.FIELD_LABEL.name_en, C.FIELD_LABEL.company_en], ['영문 이름', '영문 회사명'])
+eq('선택 입력이다(필수는 이름뿐)', [...C.REQUIRED_FIELDS], ['name'])
+eq('빈 폼에도 자리가 있다', [C.EMPTY_CARD_FORM.name_en, C.EMPTY_CARD_FORM.company_en], ['', ''])
+eq('아직 없을 수 있는 칸', [...C.EN_FIELDS], ['name_en', 'company_en'])
+eq('엑셀 열 둘', ['name_en', 'company_en'].map(k => C.EXCEL_COLUMNS.some(c => c.key === k)), [true, true])
+ok('영문으로도 찾아진다',
+  C.matchesCard({ ...card, name_en: 'Gil-dong Hong', company_en: 'GANA PRECISION' }, 'gana precision'))
+// 모델이 읽어 온 영문도 그대로 칸에 담긴다(라우트는 표에 칸이 없으면 뺀다).
+const en = O.fieldsFromJson({ name: '홍길동', name_en: 'Gil-dong Hong', company_en: 'GANA PRECISION Co., Ltd.' })
+eq('모델이 준 영문을 담는다', [en.name_en, en.company_en], ['Gil-dong Hong', 'GANA PRECISION Co., Ltd.'])
+const enMerged = O.mergeBack({ name: '홍길동', name_en: '' }, { name_en: 'Gil-dong Hong', company_en: 'GANA' })
+eq('뒷면에서 영문만 채운다', [enMerged.name, enMerged.name_en, enMerged.company_en],
+  ['홍길동', 'Gil-dong Hong', 'GANA'])
+eq('채운 칸 목록에도 든다', O.filledFields({ name: '홍길동', name_en: 'Gil-dong Hong', company_en: '' }),
+  ['name', 'name_en'])
+ok('SQL 파일이 있다', fs.existsSync(path.join(ROOT, 'db/business_cards_en_20261123.sql')))
+const EN_SQL = read('db/business_cards_en_20261123.sql')
+ok('두 칸을 더하고 스키마를 깨운다',
+  /add column if not exists name_en\s+text/.test(EN_SQL)
+  && /add column if not exists company_en text/.test(EN_SQL)
+  && /notify pgrst, 'reload schema'/.test(EN_SQL))
+ok('칸이 없어도 담기가 깨지지 않는다(라우트가 뺀다)',
+  /dropMissingColumns/.test(ROUTE) && /PGRST204/.test(ROUTE))
+ok('칸이 없어도 목록이 비지 않는다(짧은 select 로 다시 읽는다)',
+  /SELECT_BASE/.test(read('app/cards/page.tsx')) && /error\?\.code === '42703'/.test(read('app/cards/page.tsx')))
 
 console.log(fails === 0 ? '\n전부 통과' : `\n${fails}건 실패`)
 process.exit(fails === 0 ? 0 : 1)

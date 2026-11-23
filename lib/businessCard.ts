@@ -15,16 +15,26 @@ import { toDivision } from './division'
 
 // ── 칸 ────────────────────────────────────────────────────────────────────
 
-/** 명함에 적는 글자 칸 — 화면의 차례 그대로다. */
+/**
+ * 명함에 적는 글자 칸 — 화면의 차례 그대로다.
+ *
+ * 영문 둘(`name_en`·`company_en`)은 **한글 칸 바로 아래**에 선다.
+ * 표의 칸은 db/business_cards_en_20261123.sql 로 더한다 — 아직 돌리지 않았어도
+ * 화면은 돈다(라우트가 없는 칸을 빼고 담고, 목록은 영문 없이 읽는다).
+ */
 export const CARD_FIELDS = [
-  'name', 'company', 'department', 'position',
+  'name', 'name_en', 'company', 'company_en', 'department', 'position',
   'mobile', 'phone', 'fax', 'email', 'address', 'website', 'memo',
 ] as const
 export type CardField = (typeof CARD_FIELDS)[number]
 
+/** 표에 **아직 없을 수 있는** 칸 — SQL 적용 전에는 라우트·목록이 이 칸을 뺀다. */
+export const EN_FIELDS: readonly CardField[] = ['name_en', 'company_en']
+
 /** 칸 이름 — 폼·엑셀·하네스가 같은 말을 쓴다. */
 export const FIELD_LABEL: Record<CardField, string> = {
-  name: '이름', company: '회사', department: '부서', position: '직급',
+  name: '이름', name_en: '영문 이름', company: '회사', company_en: '영문 회사명',
+  department: '부서', position: '직급',
   mobile: '휴대폰', phone: '전화', fax: '팩스', email: '이메일',
   address: '주소', website: '홈페이지', memo: '메모',
 }
@@ -59,7 +69,11 @@ export function isInputMethod(v: unknown): v is InputMethod {
 export type BusinessCard = {
   card_id: number
   name: string
+  /** 영문 이름 — 표에 칸이 없을 수 있다(db/business_cards_en_20261123.sql). */
+  name_en?: string | null
   company?: string | null
+  /** 영문 회사명 — 위와 같다. */
+  company_en?: string | null
   department?: string | null
   position?: string | null
   mobile?: string | null
@@ -88,7 +102,7 @@ export type CardForm = Record<CardField, string> & {
 }
 
 export const EMPTY_CARD_FORM: CardForm = {
-  name: '', company: '', department: '', position: '',
+  name: '', name_en: '', company: '', company_en: '', department: '', position: '',
   mobile: '', phone: '', fax: '', email: '', address: '', website: '', memo: '',
   division: '계측', input_method: 'manual',
 }
@@ -236,7 +250,8 @@ export function registrarLabel(card: Pick<BusinessCard, 'registered_name' | 'reg
 // ── 찾기 ──────────────────────────────────────────────────────────────────
 
 /** 검색이 보는 칸 — 이름·회사·부서·전화·이메일. */
-export const SEARCH_FIELDS: readonly CardField[] = ['name', 'company', 'department', 'mobile', 'phone', 'email']
+export const SEARCH_FIELDS: readonly CardField[] =
+  ['name', 'name_en', 'company', 'company_en', 'department', 'mobile', 'phone', 'email']
 
 /** 그 명함이 검색어에 걸리는가. 번호는 숫자만 비교한다(「010-1234」로도 걸린다). */
 export function matchesCard(card: BusinessCard, query: string): boolean {

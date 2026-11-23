@@ -23,7 +23,7 @@ import { NextResponse } from 'next/server'
 import { adminClient, loadCaller } from '@/lib/apiCaller'
 import { isDivision } from '@/lib/division'
 import {
-  CARD_FIELDS, FIELD_MAX, MEMO_MAX, cardBlockedReason, isInputMethod, snapshotOf,
+  CARD_FIELDS, EN_FIELDS, FIELD_MAX, MEMO_MAX, cardBlockedReason, isInputMethod, snapshotOf,
   type CardField,
 } from '@/lib/businessCard'
 
@@ -44,6 +44,37 @@ function pickFields(patch: unknown): Record<string, string | null> {
     const s = String(v ?? '').trim().slice(0, max)
     out[k] = s || null
   }
+  return out
+}
+
+/**
+ * 표에 **아직 없는 칸은 빼고** 담는다 (2026-11-23).
+ *
+ * 영문 둘(`name_en`·`company_en`)은 db/business_cards_en_20261123.sql 로 더하는데,
+ * 그 SQL 은 사람이 돌린다. 돌리기 전에 그 칸을 같이 보내면 PostgREST 가
+ * `PGRST204`(칸을 못 찾음)로 **담기 전체를 거절한다** — 영문 때문에 명함을 못 담는 일은
+ * 없어야 한다. 그래서 한 번 물어보고(아래) 없으면 조용히 뺀다.
+ *
+ * 한 번만 물어본다 — 과정이 사는 동안 기억한다. SQL 을 돌린 뒤에는 배포(또는 재시작)로
+ * 다시 물어본다. 틀려도 손해가 없는 쪽으로 기운다(모르면 **있다**고 보고, 실패하면 뺀다).
+ */
+let enColumnsKnown: boolean | null = null
+async function hasEnColumns(): Promise<boolean> {
+  if (enColumnsKnown != null) return enColumnsKnown
+  const { error } = await supabaseAdmin.from('business_cards').select('name_en').limit(1)
+  const missing = error != null && (error.code === '42703' || error.code === 'PGRST204' || error.code === 'PGRST205')
+  enColumnsKnown = !missing
+  if (missing) {
+    console.warn(`[${TAG}] 영문 칸이 아직 없다 — db/business_cards_en_20261123.sql 을 돌리기 전까지 빼고 담는다`)
+  }
+  return enColumnsKnown
+}
+
+/** 없는 칸을 뺀 사본. */
+async function dropMissingColumns(fields: Record<string, string | null>) {
+  if (await hasEnColumns()) return fields
+  const out = { ...fields }
+  for (const f of EN_FIELDS) delete out[f]
   return out
 }
 
@@ -96,7 +127,7 @@ export async function POST(req: Request) {
 
     const { data: made, error } = await supabaseAdmin
       .from('business_cards')
-      .insert({ ...fields, division, input_method: method, registered_at: now, ...snap })
+      .insert({ ...(await dropMissingColumns(fields)), division, input_method: method, registered_at: now, ...snap })
       .select('card_id')
       .single()
     if (error || !made) {
@@ -132,7 +163,7 @@ export async function POST(req: Request) {
     const blocked = cardBlockedReason({ name, memo })
     if (blocked) return bad(blocked)
 
-    const patch: Record<string, unknown> = { ...fields }
+    const patch: Record<string, unknown> = { ...(await dropMissingColumns(fields)) }
     // 사업부는 폼에서 바꿀 수 있다. 등록일은 **보내도 무시한다**(트리거도 막는다).
     if (isDivision(body.division)) patch.division = body.division
     if (Object.keys(patch).length === 0) return bad('바꿀 값이 없습니다')
