@@ -76,7 +76,8 @@ ok('안내 option 은 전부 disabled hidden 이다', bad.length === 0,
 const hinted = found.filter(o => o.hidden)
 console.log(`   disabled hidden ${hinted.length}자리 · 열어 둔 자리 ${found.length - hinted.length}`)
 // 2026-11-23: 일괄 작업 바의 드롭다운 셋을 걷어 38 → 35 가 됐다(버튼 + 적용 모달로 바꿨다).
-ok('손으로 센 수와 맞는다(35자리)', hinted.length === 35,
+// 2026-11-23: 사후 실적 입력 창의 셋(양식·담당자·상태)이 늘어 35 → 38.
+ok('손으로 센 수와 맞는다(38자리)', hinted.length === 38,
   `지금 ${hinted.length} — 자리를 더하거나 줄였으면 이 숫자를 고쳐라`)
 
 console.log('\n── 사용자가 짚은 두 자리 ──')
