@@ -127,41 +127,37 @@ eq('글자', [C.ageLabel(0), C.ageLabel(12), C.ageLabel(90), C.ageLabel(400), C.
 eq('날짜 수 세기', C.daysBetween('2026-11-01T00:00:00Z', '2026-11-23T00:00:00Z'), 22)
 eq('확인 꼬리표', [C.verifiedLabel('2026-11-23T05:00:00Z'), C.verifiedLabel(null)], ['확인 2026-11', ''])
 
-console.log('\n── ⑥ OCR 칸 배치 ──')
-const S1 = '주식회사 가나정밀\n영업1팀\n홍길동 과장\nM. 010-1234-5678\nT. 031-123-4567\nF. 031-123-4568\nhong@gana.co.kr\n경기도 화성시 동탄대로 123\nwww.gana.co.kr'
-const f1 = O.fieldsFromText(S1)
-eq('① 흔한 한글 명함', [f1.name, f1.company, f1.department, f1.position, f1.mobile, f1.phone, f1.fax, f1.email, f1.website, f1.address],
-  ['홍길동', '주식회사 가나정밀', '영업1팀', '과장', '010-1234-5678', '031-123-4567', '031-123-4568',
-    'hong@gana.co.kr', 'www.gana.co.kr', '경기도 화성시 동탄대로 123'])
+// 글자를 줄로 끊어 칸을 맞추던 규칙은 2026-11-23 에 **모델**로 넘어갔다(app/api/cards/ocr).
+// 여기서는 모델이 돌려준 값을 **믿지 않고 다듬는 쪽**만 본다.
+console.log('\n── ⑥ 모델이 돌려준 값 다듬기 ──')
+eq('① 국가번호는 0 으로',
+  ['+82-10-1234-5678', '+82 2 6124 6500', '0082-31-123-4567'].map(O.normalizePhone),
+  ['010-1234-5678', '02-6124-6500', '031-123-4567'])
+eq('② 숫자·하이픈만 남긴다',
+  ['T. 031 123 4567', '(031)123-4568', 'Mobile: 010.2222.3333'].map(O.normalizePhone),
+  ['031-123-4567', '031-123-4568', '010-2222-3333'])
+eq('③ 번호가 아니면 버린다', ['', '내선 7', '-', 'none'].map(O.normalizePhone), ['', '', '', ''])
 
-const f2 = O.fieldsFromText('㈜대한기계\n기술지원팀\n김철수 책임\n휴대폰 010-9876-5432\n전화 02-555-1234\nkim@daehan.com')
-eq('② 이름과 직급이 한 줄', [f2.name, f2.position, f2.company, f2.department, f2.mobile, f2.phone],
-  ['김철수', '책임', '㈜대한기계', '기술지원팀', '010-9876-5432', '02-555-1234'])
+eq('④ 코드펜스를 벗긴다',
+  O.parseOcrJson('```json\n{"name":"홍길동"}\n```'), { name: '홍길동' })
+eq('⑤ 앞뒤 군더더기를 걷는다',
+  O.parseOcrJson('네, 읽었습니다.\n{"name":"홍길동"}\n도움이 되었길.'), { name: '홍길동' })
+eq('⑥ JSON 이 아니면 null', O.parseOcrJson('읽지 못했습니다'), null)
+// 모델이 배열로 감싸 보내도 **안의 객체**를 꺼낸다 — 중괄호 사이만 읽기 때문이다.
+eq('⑦ 배열로 감싸 와도 꺼낸다', O.parseOcrJson('[{"name":"홍길동"}]'), { name: '홍길동' })
 
-const f3 = O.fieldsFromText('아크레텍코리아\nFax. 02-6124-6501\nTel. 02-6124-6500\n이영희\n대리\nlee@acctk.co.kr')
-eq('③ 팩스가 전화보다 먼저 나와도 안 섞인다', [f3.fax, f3.phone, f3.name, f3.position],
-  ['02-6124-6501', '02-6124-6500', '이영희', '대리'])
-
-const f4 = O.fieldsFromText('GANA PRECISION Co., Ltd.\nSales Team\nGil-dong Hong / Manager\nMobile +82-10-1234-5678\nhong@gana.co.kr')
-eq('④ 영문 뒷면', [f4.company, f4.department, f4.mobile, f4.email],
-  ['GANA PRECISION Co., Ltd.', 'Sales Team', '+82-10-1234-5678', 'hong@gana.co.kr'])
-
-// 2단 명함 — 한 줄에 번호와 메일이 같이 선다. 2026-11-23 실측(진짜 OCR 글자)에서
-// 이메일이 그 줄을 다 쓴 것으로 쳐 **휴대폰을 놓쳤다**. 그 자리를 다시 밟는다.
-const f6 = O.fieldsFromText(
-  '주식회사 가나정밀\n영업1팀\n홍길동 과장\n' +
-  'M. 010-1234-5678                 hong @gana.co.kr\n' +
-  'T. 031-123-4567                  www.gana.co.kr\n' +
-  'F. 031-123-4568\n경기도 화성시 동탄대로 123')
-eq('⑥ 한 줄에 둘이 있어도 다 집는다',
-  [f6.mobile, f6.email, f6.phone, f6.website, f6.fax, f6.name, f6.company, f6.department, f6.position, f6.address],
-  ['010-1234-5678', 'hong@gana.co.kr', '031-123-4567', 'www.gana.co.kr', '031-123-4568',
-    '홍길동', '주식회사 가나정밀', '영업1팀', '과장', '경기도 화성시 동탄대로 123'])
-ok('OCR 이 @ 앞뒤에 넣은 공백을 턴다', f6.email === 'hong@gana.co.kr')
-
-const f5 = O.fieldsFromText('박민수\n010-2222-3333')
-eq('⑤ 짧은 명함 — 못 읽은 칸은 비운다', [f5.name, f5.mobile, f5.company ?? null, f5.email ?? null],
-  ['박민수', '010-2222-3333', null, null])
+const g = O.fieldsFromJson({
+  name: '홍길동', name_en: 'Gil-dong Hong', position: '과장', department: '영업1팀',
+  company: '주식회사 가나정밀', company_en: null, phone: '+82-31-123-4567',
+  mobile: '010 1234 5678', fax: '-', email: 'hong@gana.co.kr',
+  address: '경기도 화성시 동탄대로 123', website: 'www.gana.co.kr', memo_hint: 'N/A',
+  셋째줄: '모르는 칸',
+})
+eq('⑧ 칸에 담으며 번호를 다듬는다', [g.name, g.phone, g.mobile, g.email, g.website],
+  ['홍길동', '031-123-4567', '010-1234-5678', 'hong@gana.co.kr', 'www.gana.co.kr'])
+eq('⑨ 「없음」을 뜻하는 값은 빈 칸', [g.fax, g.company_en, g.memo_hint], ['', '', ''])
+eq('⑩ 모르는 칸은 들어오지 않는다', Object.keys(g).filter(k => !O.OCR_KEYS.includes(k)), [])
+eq('⑪ 칸 이름 열셋', O.OCR_KEYS.length, 13)
 
 const merged = O.mergeBack(
   { name: '홍길동', company: '주식회사 가나정밀', email: '' },
@@ -185,9 +181,13 @@ const walk = (d) => {
 for (const d of ['app', 'components', 'lib', 'hooks']) walk(d)
 const cardFiles = files.filter(f => /business-?[Cc]ard|\/cards\//.test(f))
 ok('명함 코드가 있다', cardFiles.length > 0)
-const uploaders = cardFiles.filter(f => /storage\.from\(|\.upload\(|formData\(\)/.test(read(f)))
+// 사진을 **받는** 자리는 읽는 라우트 하나뿐이다(app/api/cards/ocr) — 거기서도 메모리에서만 쓴다.
+const OCR_ROUTE_PATH = 'app/api/cards/ocr/route.ts'
+const uploaders = cardFiles
+  .filter(f => f !== OCR_ROUTE_PATH)
+  .filter(f => /storage\.from\(|\.upload\(|formData\(\)/.test(read(f)))
 eq('사진을 올리거나 저장하는 자리', uploaders, [])
-ok('라우트가 파일을 받지 않는다', !/formData\(\)/.test(ROUTE) && !/storage\./.test(ROUTE))
+ok('명함 라우트는 파일을 받지 않는다', !/formData\(\)/.test(ROUTE) && !/storage\./.test(ROUTE))
 ok('그 사실을 코드에 적어 두었다', /PHOTO_IS_NEVER_STORED/.test(read('lib/businessCardOcr.ts')))
 
 console.log('\n── ⑧ 칸·검색·엑셀 ──')

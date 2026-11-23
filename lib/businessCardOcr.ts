@@ -1,26 +1,19 @@
 /**
- * 명함에서 읽은 글자를 **칸에 나눠 담는다** (2026-11-23).
+ * 명함 사진에서 뽑아 온 값을 **칸에 담을 수 있게 다듬는다** (2026-11-23).
  *
- * 글자를 읽는 일(tesseract.js)은 브라우저가 하고, 이 파일은 **그 결과 글자만** 받는다.
- * 그래서 사진이 없어도 돌릴 수 있고, 하네스가 샘플 글자로 규칙을 지킨다.
+ * ── 누가 읽나 ─────────────────────────────────────────────────────────────
+ * 2026-11-23 까지는 브라우저에서 돌리는 공개 OCR 패키지가 읽었다. 실제 사진 4장에서 쓸 수 없는
+ * 수준이라 **Claude 비전**(app/api/cards/ocr)으로 바꿨다. 글자를 줄로 끊어 칸을
+ * 맞추던 규칙(직급 사전·부서 꼬리말·회사 표시…)은 모델이 하므로 전부 걷었다.
  *
- * ── 어떻게 나누나 ─────────────────────────────────────────────────────────
- * 줄 단위로 본다. 확실한 것부터 집어 가며 그 줄을 **쓴 것으로 표시**한다 —
- * 한 줄이 두 칸에 들어가지 않게.
- *   ① 이메일 · 홈페이지 — 모양이 뚜렷하다
- *   ② 팩스 → 휴대폰 → 전화 — 팩스를 먼저 집어야 전화로 새지 않는다
- *   ③ 주소 — 시·구·로·길이 들어간 줄
- *   ④ 직급 — 사전에 있는 낱말
- *   ⑤ 부서 — 팀·파트·실·부·그룹·본부로 끝나는 줄
- *   ⑥ 회사 — ㈜·(주)·Co.·Ltd·Inc 가 든 줄, 없으면 **가장 긴 남은 줄**
- *   ⑦ 이름 — 한글 2~4자만 있는 줄
+ * 남은 것은 **모델이 돌려준 값을 믿지 않고 다듬는 쪽**이다 —
+ *   · 전화·휴대폰·팩스 → 숫자와 하이픈만, +82 는 0 으로
+ *   · 모델 응답 글자 → JSON (```json 울타리·앞뒤 말 제거)
+ *   · 뒷면 합치기(빈 칸만)
+ * 이 함수들은 **서버 라우트가 쓴다.** 브라우저는 사진만 보내고 값을 받는다.
  *
- * ── 못 읽은 칸은 비운다 ──────────────────────────────────────────────────
- * 억지로 채우지 않는다. 자동으로 채운 칸은 화면이 **파란 바탕 + 「사진에서 읽음 · 확인 필요」**
- * 띠로 표시하고, 사람이 보고 고친다.
- *
- * ── 뒷면 ─────────────────────────────────────────────────────────────────
- * 영문 뒷면은 한 번 더 읽어 **빈 칸만** 채운다(mergeBack) — 앞면 값을 덮지 않는다.
+ * ── 사진은 남기지 않는다 ─────────────────────────────────────────────────
+ * 라우트는 사진을 메모리에서만 쓰고 버린다. 저장하는 곳도, 로그에 남기는 곳도 없다.
  */
 
 import type { CardField } from './businessCard'
@@ -28,154 +21,84 @@ import type { CardField } from './businessCard'
 /** 자동으로 채운 칸의 안내. */
 export const OCR_NOTICE = '사진에서 읽음 · 확인 필요'
 
-/** 직급 사전 — 명함에 흔한 것부터. 긴 낱말을 먼저 둔다(「대표이사」가 「이사」로 잡히지 않게). */
-export const POSITIONS = [
-  '대표이사', '부사장', '전무이사', '상무이사', '본부장', '연구소장', '공장장',
-  '팀장', '파트장', '실장', '그룹장', '센터장', '지점장', '소장',
-  '회장', '사장', '전무', '상무', '이사', '부장', '차장', '과장', '대리', '주임', '사원',
-  '책임', '선임', '수석', '프로', '매니저', '반장', '기장', '기사', '대표',
-] as const
-
-/** 부서 줄의 끝말. 영문 뒷면도 보므로 영어 꼬리도 둔다. */
-const DEPT_TAILS = [
-  '팀', '파트', '실', '부', '그룹', '본부', '센터', '지원실', '연구소',
-  'Team', 'team', 'Dept', 'Dept.', 'Division', 'Group',
-]
-
-/** 회사 줄의 표시. */
-const COMPANY_MARKS = ['㈜', '(주)', '（주）', '주식회사', '(유)', '㈲', 'Co.', 'Co,', 'Ltd', 'LTD', 'Inc', 'INC', 'Corp', 'CORP', 'GmbH']
-
-/** 주소 줄의 표시. */
-const ADDRESS_MARKS = ['시 ', '시,', '군 ', '구 ', '로 ', '길 ', '동 ', '읍 ', '면 ', '층', '번지', '단지', '산업단지', '테크노']
+/** 화면에 보여 줄 진행 문구 — 한 군데서만 적는다. */
+export const OCR_READING = '명함을 읽는 중…'
 
 export type OcrFields = Partial<Record<CardField, string>>
 
+/**
+ * 모델이 돌려주는 칸 이름. business_cards 의 칸 이름과 같게 맞춘다 —
+ * `name_en`·`company_en`·`memo_hint` 는 **아직 표에 없는 칸**이라 화면이 버린다
+ * (보고에 적었다. 칸을 늘릴지는 사장님 판단이다).
+ */
+export const OCR_KEYS = [
+  'name', 'name_en', 'position', 'department', 'company', 'company_en',
+  'phone', 'mobile', 'fax', 'email', 'address', 'website', 'memo_hint',
+] as const
+export type OcrKey = typeof OCR_KEYS[number]
+
+/** 번호 칸 — 다듬는 규칙이 다르다. */
+const PHONE_KEYS: readonly OcrKey[] = ['phone', 'mobile', 'fax']
+
 /** 한 줄로 다듬는다 — 앞뒤 공백·가운뎃점·콜론을 턴다. */
-const clean = (s: string) => s.replace(/[ \t]+/g, ' ').replace(/^[\s·:|/\-—]+|[\s·:|/\-—]+$/g, '').trim()
-
-/** 읽은 글자를 줄로. 빈 줄과 글자 한 개짜리 줄은 버린다(잡티다). */
-export function toLines(text: string): string[] {
-  return String(text ?? '')
-    .split(/\r?\n/)
-    .map(clean)
-    .filter(l => l.length >= 2)
-}
-
-/** 전화 꼴에서 번호만 — 「T. 02-1234-5678」 → 「02-1234-5678」. */
-function numberIn(line: string): string | null {
-  const m = line.match(/(\+?\d[\d\s().-]{7,})/)
-  if (!m) return null
-  const raw = m[1].trim().replace(/[\s().]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')
-  return raw.replace(/\D/g, '').length >= 8 ? raw : null
-}
-
-const hasAny = (line: string, marks: readonly string[]) => marks.some(m => line.includes(m))
+const clean = (s: string) => s.replace(/[ \t]+/g, ' ').replace(/^[\s·:|/\-—]+|[\s·:|/\-—]+$/g, '').trim()
 
 /**
- * 읽은 글자 → 칸.
- * 집어 간 줄은 다시 쓰지 않는다(used). 못 집은 칸은 넣지 않는다(빈 칸으로 남는다).
+ * 전화번호를 숫자와 하이픈만 남긴다.
+ *   「+82-10-1234-5678」 → 「010-1234-5678」 · 「T. 031 123 4567」 → 「031-123-4567」
+ * 숫자가 8개가 안 되면 번호가 아니라고 보고 버린다(빈 글자를 돌려준다).
  */
-export function fieldsFromText(text: string): OcrFields {
-  const lines = toLines(text)
-  const used = new Set<number>()
-  const out: OcrFields = {}
-  /**
-   * 칸 하나를 집는다. consume 이 참일 때만 그 줄을 **다 쓴 것으로** 친다.
-   *
-   * 연락처(이메일·홈페이지·번호)는 **한 줄에 둘이 같이 있는 일이 흔하다** —
-   * 「M. 010-… ⟨여백⟩ hong@…」 같은 2단 명함이다. 그 줄을 다 쓴 것으로 치면
-   * 둘 중 하나를 놓친다(2026-11-23 실측에서 휴대폰이 빠졌다).
-   * 이름·회사·부서·직급·주소는 줄 하나를 통째로 쓰므로 칠한다.
-   */
-  const take = (i: number, field: CardField, value: string, consume = true) => {
-    if (out[field] != null) return
-    const v = clean(value)
-    if (!v) return
-    out[field] = v
-    if (consume) used.add(i)
+export function normalizePhone(raw: string): string {
+  let s = String(raw ?? '').trim()
+  if (!s) return ''
+  // 국가번호 — +82 2 … / 0082-10-… 둘 다 0 으로 바꾼다.
+  s = s.replace(/^\s*(?:\+|00)82[\s.-]*/, '0')
+  // 「0(0)2」처럼 0 이 겹치면 하나로.
+  s = s.replace(/^00+/, '0')
+  // 괄호 안 지역번호 — (031) 123-4567
+  s = s.replace(/[()]/g, '-')
+  // 숫자·하이픈만 남기고(공백·점은 하이픈으로), 하이픈을 정리한다.
+  s = s.replace(/[\s.]+/g, '-').replace(/[^\d-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '')
+  return s.replace(/\D/g, '').length >= 8 ? s : ''
+}
+
+/**
+ * 모델이 돌려준 글자에서 **JSON 만** 꺼낸다.
+ * ```json 울타리, 앞뒤 인사말, 중괄호 밖의 군더더기를 걷어 낸다. 실패하면 null.
+ */
+export function parseOcrJson(text: string): Record<string, unknown> | null {
+  let s = String(text ?? '').trim()
+  if (!s) return null
+  // ``` 또는 ```json 울타리
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  if (fence) s = fence[1].trim()
+  // 중괄호 바깥의 말
+  const open = s.indexOf('{')
+  const close = s.lastIndexOf('}')
+  if (open < 0 || close <= open) return null
+  s = s.slice(open, close + 1)
+  try {
+    const got: unknown = JSON.parse(s)
+    return got && typeof got === 'object' && !Array.isArray(got) ? got as Record<string, unknown> : null
+  } catch {
+    return null
   }
-  const free = () => lines.map((l, i) => [l, i] as const).filter(([, i]) => !used.has(i))
+}
 
-  // ① 이메일 · 홈페이지 — **줄을 다 쓴 것으로 치지 않는다**(2단 명함 때문에).
-  //    OCR 은 「hong @gana.co.kr」처럼 @ 앞뒤에 공백을 넣기도 한다 — 털고 본다.
-  lines.forEach((l, i) => {
-    const m = l.replace(/\s*@\s*/g, '@').match(/[\w.+-]+@[\w-]+\.[\w.-]+/)
-    if (m) take(i, 'email', m[0], false)
-  })
-  lines.forEach((l, i) => {
-    const m = l.match(/(https?:\/\/[^\s]+|www\.[^\s]+)/i)
-    if (m) take(i, 'website', m[1], false)
-  })
+/**
+ * 파싱한 JSON → 칸. 모르는 칸은 버리고, 번호는 다듬고, 「없음」을 뜻하는 값은 비운다.
+ * 모델이 null·'null'·'-'·'N/A' 로 돌려줄 수 있어 전부 빈 칸으로 본다.
+ */
+const EMPTYISH = new Set(['', '-', '–', 'null', 'none', 'n/a', 'na', '없음', '미상', 'unknown'])
 
-  // ② 팩스 → 휴대폰 → 전화. 팩스를 먼저 집어야 전화로 새지 않는다.
-  //    셋 다 줄을 다 쓴 것으로 치지 않는다 — 한 줄에 번호와 메일이 같이 선다.
-  lines.forEach((l, i) => {
-    if (!/\b(fax|f)\s*[.:]/i.test(l) && !l.includes('팩스')) return
-    const n = numberIn(l)
-    if (n) take(i, 'fax', n, false)
-  })
-  lines.forEach((l, i) => {
-    // 010-…(국내) · +82-10-…(영문 뒷면) · 「Mobile」·「M.」·「휴대폰」이 적힌 줄
-    const kr = l.match(/01[016789][\s.-]?\d{3,4}[\s.-]?\d{4}/)
-    if (kr) { take(i, 'mobile', kr[0].replace(/[\s.]/g, '-').replace(/-+/g, '-'), false); return }
-    const intl = l.match(/\+82[\s.-]?10[\s.-]?\d{3,4}[\s.-]?\d{4}/)
-    if (intl) { take(i, 'mobile', intl[0].replace(/[\s.]/g, '-').replace(/-+/g, '-'), false); return }
-    if (/\b(mobile|cell|m)\s*[.:]/i.test(l) || l.includes('휴대폰') || l.includes('핸드폰')) {
-      const n = numberIn(l)
-      if (n) take(i, 'mobile', n, false)
-    }
-  })
-  lines.forEach((l, i) => {
-    if (out.phone != null) return
-    // 이미 휴대폰·팩스로 집은 번호와 같은 줄이면 그 번호는 건너뛴다.
-    const n = numberIn(l)
-    if (!n) return
-    if (n === out.mobile || n === out.fax) return
-    if (/^(\+?82|0\d)/.test(n.replace(/\s/g, ''))) take(i, 'phone', n, false)
-  })
-
-  // 연락처가 든 줄은 **그다음 칸들이 쓰지 못하게** 여기서 칠한다 —
-  // 회사·이름이 「M. 010-…」 줄을 집어 가지 않게.
-  lines.forEach((l, i) => {
-    if (/@|https?:\/\/|www\./i.test(l) || numberIn(l)) used.add(i)
-  })
-
-  // ③ 주소
-  for (const [l, i] of free()) {
-    if (l.length >= 8 && hasAny(l, ADDRESS_MARKS)) { take(i, 'address', l); break }
-  }
-
-  // ④ 직급 — 사전에 있는 낱말. 그 줄에 이름이 함께 있으면 이름도 집는다.
-  for (const [l, i] of free()) {
-    const hit = POSITIONS.find(p => l.includes(p))
-    if (!hit) continue
-    take(i, 'position', hit)
-    const rest = clean(l.replace(hit, ''))
-    if (/^[가-힣]{2,4}$/.test(rest)) out.name ??= rest
-    break
-  }
-
-  // ⑤ 부서
-  for (const [l, i] of free()) {
-    if (l.length <= 12 && DEPT_TAILS.some(t => l.endsWith(t))) { take(i, 'department', l); break }
-  }
-
-  // ⑥ 회사 — 표시가 있는 줄, 없으면 남은 줄 중 가장 긴 것
-  let company: number | null = null
-  for (const [l, i] of free()) {
-    if (hasAny(l, COMPANY_MARKS)) { company = i; break }
-  }
-  if (company == null) {
-    const rest = free().filter(([l]) => !/^[가-힣]{2,4}$/.test(l))
-    if (rest.length > 0) company = rest.reduce((a, b) => (b[0].length > a[0].length ? b : a))[1]
-  }
-  if (company != null) take(company, 'company', lines[company])
-
-  // ⑦ 이름 — 한글 2~4자만 있는 줄
-  if (out.name == null) {
-    for (const [l, i] of free()) {
-      if (/^[가-힣]{2,4}$/.test(l)) { take(i, 'name', l); break }
-    }
+export function fieldsFromJson(json: Record<string, unknown>): Record<OcrKey, string> {
+  const out = {} as Record<OcrKey, string>
+  for (const key of OCR_KEYS) {
+    const raw = json[key]
+    if (raw == null) { out[key] = ''; continue }
+    const v = clean(String(raw))
+    if (EMPTYISH.has(v.toLowerCase())) { out[key] = ''; continue }
+    out[key] = PHONE_KEYS.includes(key) ? normalizePhone(v) : v
   }
   return out
 }
@@ -198,10 +121,11 @@ export function filledFields(f: OcrFields): CardField[] {
   return (Object.keys(f) as CardField[]).filter(k => String(f[k] ?? '').trim() !== '')
 }
 
-// ── 사진은 서버로 가지 않는다 ─────────────────────────────────────────────
+// ── 사진은 저장하지 않는다 ───────────────────────────────────────────────
 /**
- * 명함 사진은 **브라우저 메모리에서만** 쓴다. 올리는 길도 저장하는 곳도 만들지 않았다.
- * 개인정보를 모아 두지 않기 위해서다 — 남는 것은 사람이 확인한 **글자뿐**이다.
- * (scripts/business-card-check.js 가 「업로드 라우트 없음 · Storage 쓰기 없음」을 지킨다)
+ * 명함 사진은 **읽는 동안만** 쓴다. 브라우저가 줄여서 보내고, 라우트가 모델에 넘기고,
+ * 응답을 돌려준 뒤 버린다. 디스크·Storage·로그 어디에도 남기지 않는다 —
+ * 남는 것은 사람이 확인한 **글자뿐**이다.
+ * (scripts/card-ocr-check.js 가 「저장하는 자리 없음」을 계속 지킨다)
  */
 export const PHOTO_IS_NEVER_STORED = true

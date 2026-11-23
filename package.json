@@ -12,10 +12,10 @@
     "test": "node scripts/run-checks.js",
     "lint:ci": "node scripts/lint-baseline.js",
     "check": "npx tsc --noEmit && npm run lint:ci && npm test && npm run build",
-    "backup": "node scripts/backup/run.js",
-    "postinstall": "node scripts/copy-ocr-assets.js"
+    "backup": "node scripts/backup/run.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.12.0",
     "@dnd-kit/core": "^6.3.1",
     "@react-pdf/renderer": "^4.5.1",
     "@supabase/ssr": "^0.9.0",
@@ -28,7 +28,6 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "recharts": "^3.10.1",
-    "tesseract.js": "^6.0.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

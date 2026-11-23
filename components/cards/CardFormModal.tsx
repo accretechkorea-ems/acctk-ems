@@ -227,7 +227,7 @@ export default function CardFormModal({ initial, existing, defaultDivision, busy
             )}
           </div>
           {/* 읽는 중 — 진행률을 한 줄로 */}
-          {(ocr.phase === 'loading' || ocr.phase === 'reading') && (
+          {ocr.phase === 'reading' && (
             <div style={{ marginTop: 8, padding: '7px 10px', background: BLUE_TINT, borderRadius: R.control, fontSize: 12, fontWeight: 700, color: BLUE }}>
               {ocr.message}
             </div>

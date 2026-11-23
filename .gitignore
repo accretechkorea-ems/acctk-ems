@@ -45,8 +45,3 @@ next-env.d.ts
 # 백업 폴더(npm run backup) — 고객 자료가 들어 있다. 저장소에 올리지 않는다.
 /ems-backup/
 ems-backup/
-
-# 명함 OCR — 워커·코어는 node_modules 에서 복사한다(scripts/copy-ocr-assets.js).
-# 언어 데이터(kor·eng traineddata.gz)는 어느 패키지에도 없어 저장소에 둔다.
-/public/ocr/worker.min.js
-/public/ocr/tesseract-core-*.js

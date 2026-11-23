@@ -118,22 +118,18 @@ ok('등록일은 고칠 수 없다(자동)', FORM.includes('(자동)'))
 ok('사업부 기본값은 등록자 팀의 사업부', /defaultDivision=\{defaultDivision\(me\)\}/.test(PAGE))
 ok('지우기는 슈퍼관리자에게만 보인다', /isSuperAdmin\(me\) && \([\s\S]{0,400}삭제/.test(PAGE))
 
-console.log('\n── ④ OCR 은 우리 서버에서 ──')
+// 읽는 쪽(모델·라우트)은 scripts/card-ocr-check.js 가 본다. 여기서는 **화면 흐름**만.
+console.log('\n── ④ 사진은 줄여서 우리 라우트로 ──')
 const HOOK = read('components/cards/useCardOcr.ts')
-ok('워커·코어·언어 데이터를 우리가 내준다',
-  /workerPath: `\$\{OCR_BASE\}/.test(HOOK) && /corePath: OCR_BASE/.test(HOOK) && /langPath: OCR_BASE/.test(HOOK))
+ok('우리 라우트로 보낸다', /fetch\('\/api\/cards\/ocr'/.test(HOOK))
 // 주석에는 설명이 있을 수 있다 — 코드 줄만 본다.
 const hookCode = HOOK.split(/\r?\n/).filter(l => !/^\s*(\*|\/\/|\/\*)/.test(l)).join('\n')
-ok('바깥 주소를 부르지 않는다', !/https?:\/\//.test(hookCode), 'CDN 주소가 남아 있다')
-ok('언어는 한국어+영어', /const LANGS = 'kor\+eng'/.test(HOOK))
-for (const f of ['kor.traineddata.gz', 'eng.traineddata.gz']) {
-  ok(`언어 데이터 ${f}`, fs.existsSync(path.join(ROOT, 'public/ocr', f)))
-}
-ok('워커·코어를 옮기는 스크립트가 있다', fs.existsSync(path.join(ROOT, 'scripts/copy-ocr-assets.js')))
-ok('설치 뒤 저절로 돈다', /"postinstall": "node scripts\/copy-ocr-assets\.js"/.test(read('package.json')))
-ok('워커·코어는 저장소에 두지 않는다',
-  /public\/ocr\/worker\.min\.js/.test(read('.gitignore')) && /public\/ocr\/tesseract-core-\*/.test(read('.gitignore')))
-ok('패키지를 미리 내리지 않는다(누를 때 불러온다)', /await import\('tesseract\.js'\)/.test(HOOK))
+ok('바깥 주소를 부르지 않는다', !/https?:\/\//.test(hookCode), '바깥 주소가 남아 있다')
+ok('보내기 전에 줄인다(긴 변 1,200 · jpg 80)',
+  /const MAX_EDGE = 1200/.test(HOOK) && /const QUALITY = 0\.8/.test(HOOK) && /toBlob\(res, 'image\/jpeg', QUALITY\)/.test(HOOK))
+ok('진행 문구는 한 군데서', /message: OCR_READING/.test(HOOK) && /OCR_READING = '명함을 읽는 중…'/.test(read('lib/businessCardOcr.ts')))
+ok('열쇠가 없으면 안내하고 직접 입력으로', /no_key: 'OCR 설정이 안 되어 있습니다/.test(HOOK))
+ok('실패해도 직접 입력이 남는다', /phase: 'error'/.test(HOOK) && /직접 입력/.test(HOOK))
 
 console.log(fails === 0 ? '\n전부 통과' : `\n${fails}건 실패`)
 process.exit(fails === 0 ? 0 : 1)

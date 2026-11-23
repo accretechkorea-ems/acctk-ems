@@ -1,117 +1,119 @@
 'use client'
 
 /**
- * 명함 사진에서 글자를 읽는다 — **브라우저에서만** (2026-11-23).
+ * 명함 사진을 읽는다 — 줄여서 **우리 서버**로 보내고, 칸을 받아 온다 (2026-11-23).
  *
- * ── 사진은 아무 데도 가지 않는다 ─────────────────────────────────────────
- * 파일을 서버로 보내지 않는다. tesseract.js 가 브라우저 안에서 읽고, 끝나면 그 객체를
- * 버린다. 남는 것은 사람이 확인한 **글자뿐**이다. 올리는 라우트도 저장하는 곳도 없다.
+ * ── 흐름 ─────────────────────────────────────────────────────────────────
+ *   찍기/고르기 → 캔버스로 축소(긴 변 1,200px · jpg 80) → /api/cards/ocr → 칸 채움
  *
- * ── 바깥 CDN 도 쓰지 않는다 ─────────────────────────────────────────────
- * tesseract.js 는 기본값으로 워커·코어·언어 데이터를 바깥에서 받아 온다. 개인정보를
- * 다루는 자리라 전부 **우리 서버**에서 내준다(public/ocr/, scripts/copy-ocr-assets.js).
+ * ── 왜 서버인가 ──────────────────────────────────────────────────────────
+ *   2026-11-23 까지는 브라우저에서 돌리는 공개 OCR 패키지가 읽었다. 실제 사진에서 쓸 수 없어
+ *   Claude 비전으로 바꿨고, 열쇠는 서버에만 둔다 — 브라우저에 열쇠를 내려보내지 않는다.
  *
- * ── 일꾼은 한 번만 만든다 ───────────────────────────────────────────────
- * 언어 데이터를 읽는 데 몇 초가 걸린다. 화면이 떠 있는 동안 한 번 만들어 두고 다시 쓴다.
- * 창을 닫으면 치운다(terminate) — 탭에 일꾼이 쌓이지 않게.
+ * ── 사진은 남지 않는다 ───────────────────────────────────────────────────
+ *   줄인 사진을 한 번 보내고 버린다. 라우트도 메모리에서만 쓴다(app/api/cards/ocr).
+ *   저장하는 곳도, 로그에 적는 곳도 없다.
+ *
+ * ── 실패하면 ─────────────────────────────────────────────────────────────
+ *   읽지 못해도 창은 닫히지 않는다. 안내 한 줄을 띄우고 **직접 입력**으로 그대로 간다.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { fieldsFromText, type OcrFields } from '@/lib/businessCardOcr'
+import { useCallback, useRef, useState } from 'react'
+import { OCR_READING, type OcrFields } from '@/lib/businessCardOcr'
+import { CARD_FIELDS, type CardField } from '@/lib/businessCard'
 
-/** 우리 서버가 내주는 자리. 바깥 주소가 아니다. */
-const OCR_BASE = '/ocr'
-const LANGS = 'kor+eng'
+/** 보내기 전에 줄이는 크기 — 긴 변 기준. */
+const MAX_EDGE = 1200
+/** jpg 품질. */
+const QUALITY = 0.8
 
-export type OcrPhase = 'idle' | 'loading' | 'reading' | 'done' | 'error'
+export type OcrPhase = 'idle' | 'reading' | 'done' | 'error'
 
 export type OcrState = {
   phase: OcrPhase
-  /** 0~100. 「읽는 중 … N%」 */
-  percent: number
   /** 사람에게 보여 줄 한 줄. */
   message: string
-  /** 읽은 글자(원문). 칸 배치가 빗나갔을 때 사람이 보고 고칠 수 있게 들고 있는다. */
-  text: string
-  /** 칸에 나눈 결과. */
+  /** 칸에 담은 결과. */
   fields: OcrFields
   /** 몇 초 걸렸나(보고용). */
   seconds: number
 }
 
-const EMPTY: OcrState = { phase: 'idle', percent: 0, message: '', text: '', fields: {}, seconds: 0 }
+const EMPTY: OcrState = { phase: 'idle', message: '', fields: {}, seconds: 0 }
 
-/** tesseract 가 돌려주는 진행 단계 → 사람 말. */
-function phraseOf(status: string): string {
-  if (status.includes('loading language')) return '언어 데이터를 읽는 중'
-  if (status.includes('initializing')) return '준비하는 중'
-  if (status.includes('recognizing')) return '글자를 읽는 중'
-  return '읽는 중'
+const SAY: Record<string, string> = {
+  no_key: 'OCR 설정이 안 되어 있습니다. 관리자에게 문의해 주세요 — 직접 입력할 수 있습니다',
+  too_big: '사진이 너무 큽니다 — 다시 찍어 주세요',
+  bad_type: '읽을 수 없는 형식입니다 — jpg·png 로 찍어 주세요',
+  parse: '사진에서 글자를 읽지 못했습니다 — 직접 입력해 주세요',
+}
+const SAY_DEFAULT = '사진에서 글자를 읽지 못했습니다 — 직접 입력해 주세요'
+
+/**
+ * 사진을 긴 변 1,200px·jpg 로 줄인다. 큰 사진을 그대로 올리면 느리고 비싸다.
+ * 줄이지 못하면(캔버스를 못 쓰는 환경) 원본을 그대로 보낸다 — 라우트가 10MB 에서 막는다.
+ */
+async function shrink(file: File): Promise<Blob> {
+  try {
+    const bitmap = await createImageBitmap(file)
+    const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height))
+    const w = Math.max(1, Math.round(bitmap.width * scale))
+    const h = Math.max(1, Math.round(bitmap.height * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return file
+    ctx.drawImage(bitmap, 0, 0, w, h)
+    bitmap.close()
+    const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/jpeg', QUALITY))
+    return blob ?? file
+  } catch {
+    return file
+  }
+}
+
+/** 라우트가 돌려준 칸 중 **표에 있는 것만** 남긴다(name_en 같은 칸은 아직 표에 없다). */
+function pickKnown(got: Record<string, unknown>): OcrFields {
+  const out: OcrFields = {}
+  for (const f of CARD_FIELDS) {
+    const v = String(got[f] ?? '').trim()
+    if (v) out[f as CardField] = v
+  }
+  return out
 }
 
 export function useCardOcr() {
   const [state, setState] = useState<OcrState>(EMPTY)
-  /** 만들어 둔 일꾼. 타입은 tesseract 의 Worker 지만 import 를 미루려고 unknown 으로 둔다. */
-  const workerRef = useRef<{ recognize: (f: File) => Promise<{ data: { text: string } }>; terminate: () => Promise<unknown> } | null>(null)
-  const aliveRef = useRef(true)
+  /** 창이 닫힌 뒤에 응답이 와도 상태를 건드리지 않게. */
+  const seq = useRef(0)
 
-  useEffect(() => {
-    aliveRef.current = true
-    return () => {
-      aliveRef.current = false
-      const w = workerRef.current
-      workerRef.current = null
-      if (w) void w.terminate().catch(() => {})
-    }
-  }, [])
+  const reset = useCallback(() => { seq.current += 1; setState(EMPTY) }, [])
 
-  const reset = useCallback(() => setState(EMPTY), [])
-
-  /**
-   * 사진 한 장을 읽는다. 끝나면 칸에 나눈 결과를 돌려준다(실패하면 null).
-   * 패키지는 **누를 때** 불러온다 — 명함 화면을 열기만 한 사람에게 1.6MB 를 내리지 않는다.
-   */
   const read = useCallback(async (file: File): Promise<OcrFields | null> => {
+    const mine = ++seq.current
     const started = Date.now()
-    setState({ ...EMPTY, phase: 'loading', message: '준비하는 중' })
+    setState({ ...EMPTY, phase: 'reading', message: OCR_READING })
     try {
-      if (!workerRef.current) {
-        const { createWorker } = await import('tesseract.js')
-        const worker = await createWorker(LANGS, 1, {
-          workerPath: `${OCR_BASE}/worker.min.js`,
-          corePath: OCR_BASE,
-          langPath: OCR_BASE,
-          // gzip 으로 두고 그대로 읽는다(파일이 셋 다 .gz 다).
-          gzip: true,
-          logger: (m: { status?: string; progress?: number }) => {
-            if (!aliveRef.current) return
-            const pct = Math.round((m.progress ?? 0) * 100)
-            setState(s => ({
-              ...s,
-              phase: (m.status ?? '').includes('recognizing') ? 'reading' : 'loading',
-              percent: pct,
-              message: `${phraseOf(m.status ?? '')} … ${pct}%`,
-            }))
-          },
-        })
-        if (!aliveRef.current) { void worker.terminate().catch(() => {}); return null }
-        workerRef.current = worker as unknown as typeof workerRef.current
+      const small = await shrink(file)
+      const body = new FormData()
+      body.append('image', small, 'card.jpg')
+      const res = await fetch('/api/cards/ocr', { method: 'POST', body })
+      const got = await res.json().catch(() => null) as
+        { ok?: boolean; reason?: string; fields?: Record<string, unknown> } | null
+      if (mine !== seq.current) return null
+
+      if (!got?.ok || !got.fields) {
+        setState({ ...EMPTY, phase: 'error', message: SAY[String(got?.reason ?? '')] ?? SAY_DEFAULT })
+        return null
       }
-
-      setState(s => ({ ...s, phase: 'reading', message: '글자를 읽는 중 … 0%' }))
-      const res = await workerRef.current!.recognize(file)
-      if (!aliveRef.current) return null
-
-      const text = res?.data?.text ?? ''
-      const fields = fieldsFromText(text)
+      const fields = pickKnown(got.fields)
       const seconds = Math.round((Date.now() - started) / 100) / 10
-      setState({ phase: 'done', percent: 100, message: `${seconds}초 걸렸습니다`, text, fields, seconds })
+      setState({ phase: 'done', message: `${seconds}초 걸렸습니다`, fields, seconds })
       return fields
     } catch (e) {
       console.error('[card] 사진을 읽지 못했다', e)
-      if (aliveRef.current) {
-        setState({ ...EMPTY, phase: 'error', message: '사진에서 글자를 읽지 못했습니다 — 직접 입력해 주세요' })
-      }
+      if (mine === seq.current) setState({ ...EMPTY, phase: 'error', message: SAY_DEFAULT })
       return null
     }
   }, [])
