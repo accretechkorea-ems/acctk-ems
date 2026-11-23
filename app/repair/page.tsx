@@ -28,6 +28,7 @@ import { openPdf, pdfNameOf } from '@/lib/pdfViewer'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { todayKST, nowKSTParts } from '@/lib/date'
 import { R } from '@/lib/radius'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
 // ── 색상 (기존 페이지 컨벤션과 동일) ──
 const BLUE = '#234ea2'
@@ -519,7 +520,7 @@ export default function RepairPage() {
 
   const card: React.CSSProperties = { background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '14px 16px' }
   const inp: React.CSSProperties = { width: '100%', height: 36, padding: '0 11px', border: `1px solid ${BORDER}`, borderRadius: R.icon, fontSize: 14, outline: 'none', background: '#fff', color: TEXT, boxSizing: 'border-box' }
-  const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: MUTED }
+  const label: React.CSSProperties = { fontSize: 12, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL }
   const fieldGroup: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4 }
 
   // 특이사항 배지 — special_type 있으면 상태와 무관하게 항상 표시. 좁은 칸이라 짧게(한 줄),

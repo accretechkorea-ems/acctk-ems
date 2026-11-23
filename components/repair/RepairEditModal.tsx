@@ -9,6 +9,7 @@ import { openPdf, pdfNameOf } from '@/lib/pdfViewer'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { todayKST } from '@/lib/date'
 import { R } from '@/lib/radius'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
 /**
  * 수리품 수정 모달.
@@ -50,7 +51,7 @@ type Props = {
   onDelete: (r: Repair) => void
 }
 
-const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#4b5563', marginBottom: 6, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 13, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
   width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,

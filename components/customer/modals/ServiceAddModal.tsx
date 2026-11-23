@@ -12,6 +12,7 @@ import { todayKST } from '@/lib/date'
 import { ATTACH_ACCEPT, ATTACH_MAX } from '../attachments'
 import { AttachmentListBox, AttachmentRow, footerBtn, formatBytes } from '../ServiceAttachments'
 import { R } from '@/lib/radius'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
 type Props = {
   deviceId: number | null
@@ -24,7 +25,7 @@ type Props = {
   onSave: (form: ServiceForm, engineerIds: number[], files: File[]) => void
 }
 
-const labelStyle = { fontSize: 13, fontWeight: 600, color: '#4b5563', marginBottom: 6, display: 'block' } as const
+const labelStyle = { fontSize: 13, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, marginBottom: 6, display: 'block' } as const
 // 모바일: iOS 자동 확대 방지를 위해 입력 요소 fontSize 16, 터치 타깃 44px
 const fieldStyle: CSSProperties = {
   width: '100%', height: 44, padding: '0 12px', border: '1px solid #ebebeb', borderRadius: R.icon,

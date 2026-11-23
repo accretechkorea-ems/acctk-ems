@@ -22,6 +22,7 @@ import { useFieldErrors, FieldError, errBorder } from '@/components/common/field
 import { INDUSTRIES } from '@/lib/leadOptions'
 import { MEMO_MAX } from '@/components/common/MemoPopover'
 import { R } from '@/lib/radius'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
@@ -29,7 +30,7 @@ const SUB = '#4b5563'
 const MUTED = '#6b7280'
 const BLUE = '#234ea2'
 
-const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: SUB, marginBottom: 6, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 13, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
   width: '100%', padding: '11px 12px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   boxSizing: 'border-box', color: TEXT, background: '#fff', outline: 'none', fontSize: 14,

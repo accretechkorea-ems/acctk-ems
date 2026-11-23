@@ -29,10 +29,10 @@ import { isClosed } from '../opportunity'
 import { STAGES } from '../opportunity'
 import { R } from '@/lib/radius'
 import type { Contact, Device, OpportunityForm, SalesActivityForm, SalesOpportunity } from '../types'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
-const LABEL = '#374151'
 const SUB = '#4b5563'
 const MUTED = '#6b7280'
 const BLUE = '#234ea2'
@@ -69,7 +69,7 @@ type Props = {
   onSaveHolding: (draft: HoldingDraft) => void
 }
 
-const labelStyle = { fontSize: 12, fontWeight: 700, color: LABEL, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 } as const
+const labelStyle = { fontSize: 12, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 } as const
 
 const fieldStyle = {
   width: '100%', height: 38, padding: '0 11px', border: `1px solid ${BORDER}`, borderRadius: R.control,

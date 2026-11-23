@@ -47,6 +47,7 @@ import { contactSequence, seqLabel } from '@/lib/semiContact/sequence'
 import { nextContactShown, nextContactTbdOf } from '@/lib/semiContact/storage'
 import { layoutOf } from '@/lib/semiContact/layout'
 import { R } from '@/lib/radius'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
 // ── 배치(작성 화면과 같다) ──────────────────────────────────────────────
 const CONTACT_KEYS: FieldKey[] = ['contact_date', 'contact_method', 'customer_contact', 'purpose']
@@ -131,7 +132,7 @@ const SHELL_CSS = `
   }
 `
 
-const labelStyle: CSSProperties = { fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 5, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 11, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, marginBottom: 5, display: 'block' }
 const gridStyle: CSSProperties = { display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }
 const boxStyle: CSSProperties = { ...cardStyle, marginBottom: 12 }
 

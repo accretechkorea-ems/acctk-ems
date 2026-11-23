@@ -18,6 +18,7 @@ import ModalCard from '@/components/common/ModalCard'
 import { R } from '@/lib/radius'
 import { RECENT_KEYS, RECENT_LABEL, DIRECT_SALE, type ListFilter, type RecentKey } from '@/lib/customerList'
 import { defaultFilter, type FilterOptions } from '@/lib/customerFilterChips'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
@@ -36,7 +37,7 @@ type Props = {
   onClose: () => void
 }
 
-const labelStyle = { fontSize: 12, fontWeight: 700, color: '#374151', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 } as const
+const labelStyle = { fontSize: 12, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 } as const
 const linkStyle = { border: 'none', background: 'none', padding: 0, fontSize: 12, fontWeight: 500, color: BLUE, cursor: 'pointer', fontFamily: 'inherit' } as const
 
 /** 고르는 칸 하나 — 켜지면 테두리·바탕이 액센트로 바뀐다. */

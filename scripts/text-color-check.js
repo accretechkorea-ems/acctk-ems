@@ -124,6 +124,22 @@ for (const f of files) {
 }
 eq('남은 자리', offenders, [])
 
+console.log('\n── ③-ⓑ 라벨 뭉치는 토큰을 쓴다 ──')
+// 화면마다 `const labelStyle = { … color: MUTED }` 를 따로 적어 두어, 전역 규칙이 닿지 않았다.
+const LABEL_DECL = /\bconst\s+(?:label|labelStyle|labelCell|label12|lbl)[A-Za-z0-9_]*\s*(?::[^=\n]*)?=\s*\{([^}\n]*)\}/g
+const handLabels = []
+for (const f of files) {
+  const src = fs.readFileSync(path.join(ROOT, f), 'utf8')
+  if (/@react-pdf\/renderer/.test(src)) continue
+  for (const m of src.matchAll(LABEL_DECL)) {
+    const body = m[1]
+    if (!/color:/.test(body)) continue
+    if (/color:\s*TEXT_LABEL/.test(body)) continue
+    handLabels.push(`${f} :: ${m[0].trim().slice(0, 80)}`)
+  }
+}
+eq('손으로 적은 라벨 색', handLabels, [])
+
 console.log('\n── ④ CSS 가 아니면 닿지 않는 자리 ──')
 const CSS = fs.readFileSync(path.join(ROOT, 'app/globals.css'), 'utf8')
 ok('placeholder 를 칠한다', /input::placeholder,[\s\S]{0,80}color: var\(--color-text-muted\)/.test(CSS))

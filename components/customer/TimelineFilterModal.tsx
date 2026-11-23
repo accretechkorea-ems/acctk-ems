@@ -18,10 +18,10 @@ import { useMemo, useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { R } from '@/lib/radius'
 import type { TimelineFilter, TimelineKind } from '@/lib/timelineFilter'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
-const LABEL = '#374151'
 const SUB = '#4b5563'
 const MUTED = '#6b7280'
 const BLUE = '#234ea2'
@@ -38,7 +38,7 @@ type Props = {
   onClose: () => void
 }
 
-const labelStyle = { fontSize: 12, fontWeight: 700, color: LABEL, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 } as const
+const labelStyle = { fontSize: 12, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 } as const
 
 const linkStyle = { border: 'none', background: 'none', padding: 0, fontSize: 12, fontWeight: 500, color: BLUE, cursor: 'pointer', fontFamily: 'inherit' } as const
 

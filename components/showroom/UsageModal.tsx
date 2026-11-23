@@ -43,8 +43,9 @@ import EngineerPicker, { type PickerEngineer } from './EngineerPicker'
 import CustomerSearch, { type CustomerHit } from './CustomerSearch'
 import QuotePicker, { type QuoteHit } from './QuotePicker'
 import { R } from '@/lib/radius'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
-const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: SUB, marginBottom: 6, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 13, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, marginBottom: 6, display: 'block' }
 // 모바일에서 iOS 자동 확대를 막으려면 입력 글자가 16 이어야 한다(기존 모달과 같은 값).
 const fieldStyle: CSSProperties = {
   width: '100%', height: 44, padding: '0 12px', border: `1px solid ${BORDER}`, borderRadius: R.icon,

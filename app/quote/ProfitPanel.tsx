@@ -12,6 +12,7 @@ import {
   belowMinOperatingMessage, isBelowMinOperating, minOperatingMarginOf, profitBreakdownOfLines,
 } from '@/lib/quoteProfit'
 import { R } from '@/lib/radius'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
 export type ProfitPanelProps = {
   rows: QuoteRow[]
@@ -47,7 +48,7 @@ const ROW_GRID = '62px 1fr auto'
 /** 금액 칸 — 늘 오른쪽 끝에 붙고 자릿수가 고정폭이다(.num = tabular-nums). */
 const amountCell: React.CSSProperties = { textAlign: 'right', whiteSpace: 'nowrap', fontSize: 12 }
 /** 라벨 칸. */
-const labelCell: React.CSSProperties = { fontSize: 12, color: '#4b5563', whiteSpace: 'nowrap' }
+const labelCell: React.CSSProperties = { fontSize: 12, color: TEXT_LABEL, fontWeight: LABEL_WEIGHT, whiteSpace: 'nowrap' }
 /**
  * 식 줄 — 원가가 어떻게 나왔고 얼마가 남나. **왼쪽 정렬**이고 번호 뱃지 폭만큼 들여 쓴다
  * (제목 줄의 품명과 같은 선에서 시작한다). 금액은 제목 줄 오른쪽 끝으로 옮겼으므로

@@ -31,6 +31,7 @@ import { matchesCompanyPick } from '@/lib/companySearch'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import { addCustomerEntry, type NewContactInput, type NewSiteInput } from '@/lib/addCustomer'
 import { R } from '@/lib/radius'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
@@ -41,7 +42,7 @@ const BLUE = '#234ea2'
 const NEUTRAL = '#f3f4f6'
 
 /** 칸 이름 — 읽히라고 있는 글자다. 회색이 너무 옅어 안 보이던 것을 진하게 바꿨다(2026-11-20). */
-const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: LABEL, marginBottom: 4 }
+const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, marginBottom: 4 }
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
   boxSizing: 'border-box', color: TEXT, background: '#fff', outline: 'none', fontSize: 14,

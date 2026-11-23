@@ -98,8 +98,8 @@ console.log('\n── ③ 토큰과 같은 값의 직접 표기는 늘지 않는
  *   그 값이 토큰이 되면서 세는 대상에 들어왔다. 역할 토큰을 적어 둔 두 파일(lib/textTokens.ts ·
  *   scripts/text-color-check.js)도 그 값을 들고 있어 파일 수가 148 → 150 이 됐다.
  */
-const BASELINE = 1921
-const BASELINE_FILES = 150
+const BASELINE = 1904
+const BASELINE_FILES = 149
 const byValue = new Map()
 const byFile = new Map()
 const tokenValues = new Map()      // 값 → 토큰 이름(여럿이면 첫 번째)

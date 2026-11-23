@@ -14,6 +14,7 @@ import { downsizeImage } from '@/lib/leadCardImage'
 import { errText, errBorder, FieldError } from '@/components/common/fieldErrors'
 import AddressField from '@/components/customer/modals/AddressField'
 import { R } from '@/lib/radius'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
 const ACCENT = '#234ea2'
 // 필수 표시(*)에 쓰는 색. 에러 문구·테두리는 공용 errText / errBorder 를 그대로 쓴다.
@@ -60,7 +61,7 @@ const fieldStyle: CSSProperties = {
   transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
 }
 const errorFieldStyle: CSSProperties = { ...fieldStyle, border: errBorder }
-const labelStyle: CSSProperties = { fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 4, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 11, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, marginBottom: 4, display: 'block' }
 // 명함 첨부·교체·삭제 버튼. 폼 안의 보조 동작이라 회색 고스트로 둔다.
 const cardBtnStyle: CSSProperties = {
   padding: '8px 12px', background: '#f3f4f6', border: 'none', borderRadius: R.icon,

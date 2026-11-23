@@ -30,6 +30,7 @@ import AccessGate from '@/components/common/AccessGate'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useToast } from '@/components/common/Toast'
 import SitePicker, { type PickedDevice, type PickedSite } from '@/components/inquiry/SitePicker'
+import { SITE_PICK_NOTE, SITE_REQUIRED_MESSAGE } from '@/lib/inquirySite'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, NEUTRAL_BG, BLUE, ROW_HOVER_BG,
@@ -55,6 +56,7 @@ import BulkImportModal from '@/components/inquiry/bulk/BulkImportModal'
 // TEMP-BULK-IMPORT ↑
 import { errorInfo } from '@/lib/errorInfo'
 import { R } from '@/lib/radius'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
 /** 결재 화면과 같은 전환 기준. 두 화면의 레일이 다르게 움직이면 어색하다. */
 const MOTION_MS = 140
@@ -500,9 +502,10 @@ function RegisterModal({
  *
  * 순수 함수다 — 버튼의 disabled 와 submit 맨 앞 방어가 같은 함수를 보고, 스크립트로 돌려 볼 수 있다.
  */
-export function canIssue(v: { type: InquiryType; series: string; title: string }): boolean {
+export function canIssue(v: { type: InquiryType; series: string; customerId: number | null }): boolean {
   const seriesOk = v.type !== 'req80' || REQ80_SERIES.includes(v.series)
-  return seriesOk && v.title.trim().length > 0
+  // 업체명은 **고른 사업장에서 나온다** — 자유 입력 칸을 걷었다(2026-11-23).
+  return seriesOk && v.customerId != null
 }
 
 function CreateModal({
@@ -515,19 +518,20 @@ function CreateModal({
 }) {
   const toast = useToast()
   const [series, setSeries] = useState('')
-  const [title, setTitle] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [made, setMade] = useState<MadeInquiry | null>(null)
   const [copied, setCopied] = useState(false)
-  /** 어느 사업장·장비의 의뢰인가 — 둘 다 선택이다(db/inquiry_customer_device_20261120.sql). */
+  /** 어느 사업장·장비의 의뢰인가 — **사업장은 필수**, 장비는 선택이다(lib/inquirySite.ts). */
   const [site, setSite] = useState<PickedSite>(null)
   const [device, setDevice] = useState<PickedDevice>(null)
+  /** 서류에 찍히는 업체명 — 고른 사업장의 이름이다(따로 적지 않는다). */
+  const title = site?.name ?? ''
 
   // 장비 계열은 80 의뢰서에서만 고른다. 20 의뢰서는 '20' 하나뿐이라 서버가 강제하고,
   // 나머지 종류는 번호에 쓰이지 않아 서버가 null 로 지운다.
   const needsSeries = type === 'req80'
-  const ready = canIssue({ type, series, title })
+  const ready = canIssue({ type, series, customerId: site?.id ?? null })
 
   const submit = async () => {
     // busy 를 먼저 본다 — 한 번 누를 때 번호가 정확히 한 번만 나가야 한다.
@@ -577,7 +581,7 @@ function CreateModal({
     fontSize: 13, color: TEXT, background: CARD_BG, outline: 'none', boxSizing: 'border-box',
     fontFamily: 'inherit',
   }
-  const label: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 5, display: 'block' }
+  const label: React.CSSProperties = { fontSize: 11, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, marginBottom: 5, display: 'block' }
 
   return (
     // 입력 폼 — 확인 뒤 닫는다.
@@ -624,23 +628,13 @@ function CreateModal({
               </div>
             )}
 
-            <div style={{ marginBottom: 12 }}>
-              <label style={label} htmlFor="iq-title">업체명 (필수)</label>
-              <input
-                id="iq-title" value={title} maxLength={200} placeholder="업체명을 입력해주세요"
-                onChange={e => setTitle(e.target.value)} style={field}
-              />
-            </div>
+            {/* 회사 → 사업장 → 장비. **업체명 칸은 없다** — 고른 사업장의 이름이 그대로 서류에 적힌다.
+                전에는 글자로 적는 칸이 따로 있어 연결과 어긋났다(lib/inquirySite.ts). */}
+            <SitePicker site={site} setSite={setSite} device={device} setDevice={setDevice} />
 
-            {/* 사업장·장비 — 골라 두면 그 사업장의 활동 이력에 이 의뢰서가 뜬다.
-                업체명(글자)은 그대로 둔다 — 사업장을 고르지 않는 건도 있어서다.
-                비어 있을 때만 고른 사업장 이름을 업체명에 채워 준다(덮어쓰지 않는다). */}
-            <SitePicker
-              site={site}
-              setSite={v => { setSite(v); if (v && !title.trim()) setTitle(v.name) }}
-              device={device}
-              setDevice={setDevice}
-            />
+            <div style={{ fontSize: 12, color: SUB, lineHeight: 1.7, marginBottom: 12 }}>
+              {SITE_PICK_NOTE}
+            </div>
 
 
             {error && (
@@ -656,6 +650,10 @@ function CreateModal({
               누르면 번호가 바로 발급됩니다. 취소할 때 그 번호가 마지막으로 발급된 번호이면
               반환되어 다음 작성 때 다시 쓰이고, 이후 번호가 이미 발급됐다면 취소 상태로 남습니다.
             </div>
+            {/* 왜 눌리지 않는지 적어 둔다 — 비활성 버튼만 두면 까닭을 찾아 헤맨다. */}
+            {!ready && !busy && (
+              <div style={{ fontSize: 12, color: SUB, marginTop: 10 }}>{SITE_REQUIRED_MESSAGE}</div>
+            )}
             <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
               <button type="button" onClick={close} style={{ ...btnGhost(), flex: 1 }}>닫기</button>
               <button type="button" onClick={submit} disabled={busy || !ready} style={{ ...btnPrimary(busy || !ready), flex: 1 }}>

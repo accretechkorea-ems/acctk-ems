@@ -25,6 +25,7 @@ import {
   btnGhost, btnPrimary, inputStyle,
 } from '@/components/common/ui'
 import { R } from '@/lib/radius'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
 /** 직급 순서. 결재선 지정 모달(LinePickerModal)과 같은 표를 쓴다(없는 직급은 맨 뒤). */
 const POSITION_ORDER: Record<string, number> = {
@@ -58,7 +59,7 @@ const STATUS_DOT: Record<DelegationStatus, string> = {
   '종료': MUTED,
 }
 
-const label12 = { fontSize: 12, fontWeight: 600, color: SUB } as const
+const label12 = { fontSize: 12, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL } as const
 const caption = { fontSize: 11, fontWeight: 600, color: MUTED } as const
 const sectionTitle = { fontSize: 12, fontWeight: 700, color: MUTED, marginBottom: 6 } as const
 

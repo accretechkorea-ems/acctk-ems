@@ -11,6 +11,7 @@ import { useDeviceImageUrls } from '@/hooks/useStorageImageUrls'
 import { removeDeviceImage, uploadDeviceImage } from '@/hooks/customer/useDeviceCrud'
 import { isDisposed, disposedLabel } from '@/lib/deviceStatus'
 import { R } from '@/lib/radius'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
 /** 사진 삭제 확정 대기 시간. */
 const IMG_CONFIRM_MS = 3000
@@ -31,7 +32,7 @@ type Props = {
   onImageChanged?: () => void
 }
 
-const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#4b5563', marginBottom: 6, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 13, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
   width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,

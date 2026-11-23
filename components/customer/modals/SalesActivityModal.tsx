@@ -12,6 +12,7 @@ import type { Contact, SalesActivity, SalesActivityForm, SalesOpportunity } from
 import { todayKST } from '@/lib/date'
 import { selectableActivityTypes, useActivityTypes } from '@/lib/activityTypes'
 import { R } from '@/lib/radius'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
 /**
  * 활동 종류의 **처음 값** — 아직 표를 못 읽었을 때 쓰는 값이고, 표를 읽으면 그 목록의
@@ -40,7 +41,7 @@ type Props = {
   onSiteChange?: (id: number) => void
 }
 
-const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#4b5563', marginBottom: 6, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 13, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
   width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,

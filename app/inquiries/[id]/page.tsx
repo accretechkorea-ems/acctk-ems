@@ -61,8 +61,8 @@ import {
 } from '@/lib/inquiries'
 import { R } from '@/lib/radius'
 import SitePicker, { deviceLabel, siteLabel, type PickedDevice, type PickedSite } from '@/components/inquiry/SitePicker'
+import { SITE_MISSING_BANNER, SITE_PICK_NOTE } from '@/lib/inquirySite'
 
-const TITLE_MAX = 200
 
 /** 내용 기록 본문 길이 상한. 서버(/api/inquiry 의 BODY_MAX)와 같은 값이어야 한다. */
 const BODY_MAX = 20000
@@ -638,7 +638,6 @@ const siteNameOf = (d: Detail): string =>
     customer_id: d.customer_id,
     company_name: d.customers?.company_name ?? null,
     site_name: d.customers?.site_name ?? null,
-    address: null,
   })
 
 const deviceNameOf = (d: Detail): string =>
@@ -1245,17 +1244,12 @@ export default function InquiryDetailPage() {
                     ) : dateText(row.issued_date)}
                   </Field>
 
+                  {/* 업체명은 **적는 칸이 아니다**(2026-11-23) — 고른 사업장의 이름이 그대로 적힌다.
+                      글자와 연결이 어긋나던 자리라 한쪽(연결)만 고치게 했다. */}
                   <Field label="업체명">
-                    {infoEditing ? (
-                      <input
-                        value={title} maxLength={TITLE_MAX} placeholder="업체명을 입력하세요"
-                        onChange={e => setTitle(e.target.value)} style={editStyle}
-                      />
-                    ) : (
-                      <span style={{ color: row.title?.trim() ? TEXT : MUTED }}>
-                        {row.title?.trim() || '(업체명 없음)'}
-                      </span>
-                    )}
+                    <span style={{ color: (infoEditing ? title : row.title ?? '').trim() ? TEXT : SUB }}>
+                      {(infoEditing ? title : row.title ?? '').trim() || '사업장을 고르면 적힙니다'}
+                    </span>
                   </Field>
 
                   {/* 사업장·장비 — **발급한 뒤에도 고친다**(2026-11-21). 업체명(글자)과는 다른 칸이다:
@@ -1263,17 +1257,38 @@ export default function InquiryDetailPage() {
                       고르는 부품은 발급 모달과 **같은 것**이다(components/inquiry/SitePicker.tsx). */}
                   {infoEditing ? (
                     <div style={{ padding: '7px 0', borderTop: `1px solid ${BORDER}` }}>
-                      <SitePicker site={site} setSite={setSite} device={device} setDevice={setDevice} />
-                      <span style={{ display: 'block', fontSize: 11, color: MUTED, lineHeight: 1.6 }}>
-                        고객사 화면의 활동 이력에 이 의뢰서가 뜹니다. 업체명 글자는 그대로 둡니다.
+                      {row.customer_id == null && (
+                        <div style={{
+                          fontSize: 12, fontWeight: 700, color: '#b45309', background: '#fffbeb',
+                          border: '1px solid #fde68a', borderRadius: R.control, padding: '8px 10px', marginBottom: 10,
+                        }}>
+                          {SITE_MISSING_BANNER}
+                        </div>
+                      )}
+                      <SitePicker
+                        site={site}
+                        setSite={v => { setSite(v); setTitle(v ? v.name : '') }}
+                        device={device} setDevice={setDevice}
+                      />
+                      <span style={{ display: 'block', fontSize: 11, color: SUB, lineHeight: 1.6 }}>
+                        {SITE_PICK_NOTE}
                       </span>
                     </div>
                   ) : (
                     <>
                       <Field label="사업장">
-                        <span style={{ color: row.customer_id != null ? TEXT : MUTED }}>
-                          {siteNameOf(row) || '연결 없음'}
-                        </span>
+                        {row.customer_id != null ? (
+                          <span style={{ color: TEXT }}>{siteNameOf(row)}</span>
+                        ) : (
+                          /* 옛 건은 사업장이 비어 있다 — **채워 넣지 않았다**(어느 사업장인지 글자만으로는
+                             알 수 없다). 고칠 때 고르라고 띠로 알린다(lib/inquirySite.ts). */
+                          <span style={{
+                            display: 'inline-block', fontSize: 12, fontWeight: 700, color: '#b45309',
+                            background: '#fffbeb', border: '1px solid #fde68a', borderRadius: R.tag, padding: '2px 8px',
+                          }}>
+                            {SITE_MISSING_BANNER}
+                          </span>
+                        )}
                       </Field>
                       <Field label="장비">
                         <span style={{ color: row.device_id != null ? TEXT : MUTED }}>

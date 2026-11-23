@@ -49,6 +49,7 @@ import { layoutOf } from '@/lib/semiContact/layout'
 import { clearDraftAt, loadDraftAt, saveDraftAt, semiDraftKey, semiEditDraftKey } from '@/lib/semiContact/draft'
 import { seqLabel } from '@/lib/semiContact/sequence'
 import { R } from '@/lib/radius'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
 // ── 배치 ─────────────────────────────────────────────────────────────
 /** 「이번 접촉」 상자. */
@@ -81,7 +82,7 @@ const fieldStyle: CSSProperties = {
   fontSize: 13, color: TEXT, background: CARD_BG, outline: 'none', boxSizing: 'border-box',
   fontFamily: 'inherit', colorScheme: 'light',
 }
-const labelStyle: CSSProperties = { fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 5, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 11, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, marginBottom: 5, display: 'block' }
 const gridStyle: CSSProperties = { display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }
 /** 이어받은 항목 그룹 안 — 2열. */
 const grid2Style: CSSProperties = { display: 'grid', gap: 12, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }

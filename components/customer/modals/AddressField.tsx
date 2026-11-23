@@ -43,6 +43,7 @@ import ModalOverlay from '@/components/common/ModalOverlay'
 import ModalCard from '@/components/common/ModalCard'
 import { Z } from '@/lib/zIndex'
 import { R } from '@/lib/radius'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
 /** 카카오 우편번호 서비스. 키 발급·신청이 필요 없고 무료다. */
 const POSTCODE_SRC = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js'
@@ -124,7 +125,7 @@ function pickAddress(r: PostcodeResult): string {
   return building ? `${base} (${building})` : base
 }
 
-const labelStyle: CSSProperties = { fontSize: 12, color: '#6b7280', marginBottom: 4, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 12, color: TEXT_LABEL, fontWeight: LABEL_WEIGHT, marginBottom: 4, display: 'block' }
 
 export default function AddressField({
   value, onChange, onTouch, error, inputStyle, errorBorder, disabled, clearable,
