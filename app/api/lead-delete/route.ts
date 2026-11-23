@@ -1,97 +1,21 @@
-// 리드 삭제(하드 삭제) — **더 이상 쓰지 않는다. 입구에서 막혀 있다.**
+// 리드 삭제 — **없앴다**(2026-11-23). 지우는 대신 **회수**한다.
 //
-// 진행하지 않기로 한 리드도 지우지 않고 「배정 불가 + 사유」로 남기기로 했다
-// (/api/lead-manage 의 action === 'block'). 어디서(파트너사) 들어온 리드를 왜 진행하지
-// 않았는지가 기록으로 남아야 하기 때문이다. 화면(/leads)의 삭제 버튼도 함께 없앴다.
+// 이 길은 이미 2026-10-xx 에 스위치(DISABLED)로 막혀 있었다. 막아 둔 채로 코드를 남겨 둔
+// 까닭은 「되살릴 때 권한·확인 문구·명함 파일 정리 순서를 다시 짜야 한다」였는데,
+// 되살릴 일이 없어졌다 — 그 자리를 **/api/lead-recall** 이 대신한다.
+//   · 지우지 않는다. 행과 내용(고객사·관심제품·담당·배정 이력)은 그대로 남는다.
+//   · 번호만 반납한다. 그 해 다음 리드가 그 번호를 받는다.
+//   · 사유가 남고, 되돌릴 수 있다.
 //
-// 코드는 지우지 않고 남겨 둔다 — 아래 DISABLED 상수만 false 로 되돌리면 예전 동작이 그대로
-// 살아난다. 지워 버리면 되살릴 때 권한·확인 문구·명함 파일 정리 순서를 다시 짜야 한다.
-//
-// 아래는 막히기 전의 설명이다:
-// 화면(/leads)에서도 superadmin 에게만 버튼을 보이지만, 그것만으로는 막을 수 없어
-// 권한과 확인 문구를 여기서 다시 검증한다. 화면을 거치지 않고 이 라우트를 직접 부르는 경우가 방어 대상이다.
-// leads 를 참조하는 FK 는 없으므로 행 하나만 지우면 되고, 전환된 영업기회·활동 기록은 건드리지 않는다.
-import { adminClient } from '@/lib/supabase/admin'
-import { loadCaller } from '@/lib/apiCaller'
+// 주소는 받아 준다 — 옛 호출이 404 로 조용히 실패하지 않게 **무엇을 쓰라고 말해 준다**.
+// (화면에는 이 길을 부르는 자리가 없다. 2026-11-23 전수 확인.)
+
 import { NextResponse } from 'next/server'
-import { CARD_BUCKET } from '@/lib/leadOptions'
 
-const supabaseAdmin = adminClient()
-
-/**
- * 삭제를 막아 둔 스위치. false 로 바꾸면 아래 코드가 예전처럼 동작한다.
- * 되살릴 일이 생기면 화면의 진입점(app/leads/page.tsx)도 함께 되돌려야 한다.
- */
-const DISABLED = true
-
-export async function POST(req: Request) {
-  // 권한을 보기 전에 막는다 — 누가 부르든 답이 같아야 하고, 막힌 이유도 같아야 한다.
-  // 410 Gone: 있던 기능을 의도적으로 걷어냈다는 뜻이다(404 는 「원래 없다」로 읽혀 오해를 부른다).
-  if (DISABLED) {
-    return NextResponse.json(
-      { error: '삭제는 더 이상 지원하지 않습니다. 배정 불가로 처리해 주세요.' },
-      { status: 410 },
-    )
-  }
-
-  // 리드 삭제는 되돌릴 수 없어 관리자로 제한한다(팀 권한 플래그와 무관 — Need 가 그 뜻이다).
-  const { error: authErr, caller } = await loadCaller({ kind: 'superadmin' }, { tag: 'lead-delete', req })
-  if (authErr) return authErr
-
-  let body: { leadId?: unknown; confirmText?: unknown }
-  try {
-    body = await req.json()
-  } catch {
-    return NextResponse.json({ error: '요청을 읽을 수 없습니다.' }, { status: 400 })
-  }
-
-  const leadId = Number(body.leadId)
-  if (!Number.isInteger(leadId) || leadId <= 0) {
-    return NextResponse.json({ error: '리드를 지정해주세요.' }, { status: 400 })
-  }
-
-  const { data: lead, error: leadErr } = await supabaseAdmin
-    .from('leads')
-    .select('lead_id, customer_company, converted_opportunity_id, business_card_url')
-    .eq('lead_id', leadId)
-    .single()
-  if (leadErr || !lead) return NextResponse.json({ error: '리드를 찾을 수 없습니다.' }, { status: 404 })
-
-  // 되돌릴 수 없는 하드 삭제라, 전환 여부와 상관없이 모든 리드에 확인 문구를 요구한다.
-  // 문구는 「<고객사명> 삭제 확인」 — 고객사명만 받으면 목록에서 눈으로 베껴 넣기 쉬워 실수를 거르지 못한다.
-  // 화면에서도 같은 검사를 하지만, 화면을 거치지 않는 호출을 막는 것은 이 검사다.
-  const phrase = `${(lead.customer_company ?? '').trim()} 삭제 확인`
-  const typed = typeof body.confirmText === 'string' ? body.confirmText.trim() : ''
-  if (typed !== phrase) {
-    return NextResponse.json({ error: `확인 문구가 일치하지 않습니다. 「${phrase}」 를 그대로 입력해주세요.` }, { status: 400 })
-  }
-
-  // 명함 파일을 리드보다 먼저 지운다. 행이 사라지면 파일명을 알 길이 없어 아무도 못 찾는 파일이 남는다.
-  //
-  // remove() 는 없는 키를 지워도 error 없이 data: [] 를 돌려준다. 그래서 셋을 구분한다.
-  //   error 있음        → 정말 실패다. 리드를 지우지 않고 여기서 멈춘다.
-  //   data 가 빈 배열   → 파일이 이미 없다. 지울 것이 없으니 그대로 진행한다.
-  //   data 에 항목 있음 → 지웠다.
-  const cardPath = (lead.business_card_url ?? '').trim()
-  if (cardPath) {
-    const { data: removed, error: rmErr } = await supabaseAdmin.storage.from(CARD_BUCKET).remove([cardPath])
-    if (rmErr) {
-      console.error('[lead-delete] 명함 파일 삭제 실패 — 리드를 지우지 않는다', { leadId, cardPath, error: rmErr })
-      return NextResponse.json({ error: '명함 파일을 지우지 못해 삭제를 중단했습니다.' }, { status: 500 })
-    }
-    if (!removed || removed.length === 0) {
-      console.error('[lead-delete] 명함 파일이 이미 없다 — 그대로 진행', { leadId, cardPath })
-    } else {
-      console.log('[lead-delete] 명함 파일 삭제', { leadId, cardPath })
-    }
-  }
-
-  const { error: delErr } = await supabaseAdmin.from('leads').delete().eq('lead_id', leadId)
-  if (delErr) {
-    console.error('[lead-delete] delete failed', { leadId, error: delErr })
-    return NextResponse.json({ error: '삭제하지 못했습니다.' }, { status: 500 })
-  }
-
-  console.log('[lead-delete]', { leadId, callerId: caller.engineer_id, callerEmail: caller.email, converted: lead.converted_opportunity_id })
-  return NextResponse.json({ success: true })
+/** 410 Gone — 있던 기능을 의도적으로 걷었다는 뜻이다(404 는 「원래 없다」로 읽힌다). */
+export async function POST() {
+  return NextResponse.json(
+    { error: '리드는 삭제하지 않습니다. 회수(/api/lead-recall)로 번호를 반납하거나 배정 불가로 처리해 주세요.' },
+    { status: 410 },
+  )
 }

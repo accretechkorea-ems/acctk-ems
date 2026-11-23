@@ -39,13 +39,15 @@ const PENDING_BESPOKE = []
  * 이미 머리·바닥 구조가 갖춰져 있던 자리 — 2차 조사의 26개 **밖**이다.
  * 공용 카드로 옮기는 것은 겉모양이 바뀔 수 있어 따로 정해야 한다(보고에 적었다).
  */
+// 2026-11-23: app/leads/page.tsx 가 빠졌다 — **회수 창 하나를** 공용 카드로 만들면서
+// 「카드가 하나도 없는 파일」이 아니게 됐다. 그 파일의 다른 창(상태 변경 등)은 아직 옛 모양이다.
+// 이 목록은 파일 단위 래칫이라 거기까지는 세지 못한다.
 const PENDING_STRUCTURED = [
   'app/admin/page.tsx',
   'app/contact/semi/[projectId]/page.tsx',
   'app/inquiries/[id]/page.tsx',
   'app/inquiries/page.tsx',
   'app/inventory/page.tsx',
-  'app/leads/page.tsx',
   'app/repair/page.tsx',
   'app/sales/page.tsx',
   'app/suggestions/page.tsx',

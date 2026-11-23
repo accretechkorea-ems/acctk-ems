@@ -28,6 +28,8 @@ export type CustomerEventType =
   | 'company_industry_changed' | 'site_edited' | 'contact_edited' | 'device_edited'
   // 지우기·되돌리기 — 소프트 삭제다(deleted_at). 어느 줄을 왜 지웠는지 payload 에 담는다.
   | 'customer_deleted' | 'customer_restored'
+  // 리드 — 번호를 반납하고 되찾는다(lib/leadRecall.ts).
+  | 'lead_recalled' | 'lead_restored'
 
 /** 「고친 일」 묶음 — 활동 이력이 이 묶음을 「변경」으로 접어 둔다. */
 export const CHANGE_EVENT_TYPES: readonly CustomerEventType[] = [

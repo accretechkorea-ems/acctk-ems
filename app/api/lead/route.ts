@@ -23,6 +23,7 @@ import {
   LEAD_NO_PREFIX, leadNoTag, CARD_MAX_BYTES, CARD_BUCKET,
 } from '@/lib/leadOptions'
 import { josa } from '@/lib/josa'
+import { isMissingRecallColumn, nextLeadNo as nextLeadNoFrom } from '@/lib/leadRecall'
 import { parseDataUrlImage } from '@/lib/imageUpload'
 import { todayKST } from '@/lib/date'
 
@@ -70,16 +71,20 @@ function leadNoPrefix(): string {
  * 세 자리로 채우되 999 를 넘으면 자릿수가 자연히 늘어난다.
  */
 async function nextLeadNo(prefix: string): Promise<string> {
-  const { data, error } = await supabaseAdmin
-    .from('leads')
-    .select('lead_no')
-    .like('lead_no', `${prefix}%`)
-  if (error) console.error('[lead] 번호 조회 실패', error)
-  const max = ((data ?? []) as { lead_no: string | null }[]).reduce((m, r) => {
-    const n = Number(String(r.lead_no ?? '').slice(prefix.length))
-    return Number.isInteger(n) && n > m ? n : m
-  }, 0)
-  return prefix + String(max + 1).padStart(3, '0')
+  // 쓰고 있는 번호와 **반납된 번호**를 함께 읽는다. 반납이 있으면 가장 작은 것부터 쓴다
+  // (lib/leadRecall.ts 의 nextLeadNo — 하네스가 그 규칙을 지킨다).
+  const [live, back] = await Promise.all([
+    supabaseAdmin.from('leads').select('lead_no').like('lead_no', `${prefix}%`),
+    // 회수 칸이 아직 없는 DB 에서도 발급은 돌아야 한다 — 실패하면 반납 없음으로 본다.
+    supabaseAdmin.from('leads').select('recalled_no').is('lead_no', null).like('recalled_no', `${prefix}%`),
+  ])
+  if (live.error) console.error('[lead] 번호 조회 실패', live.error)
+  if (back.error && !isMissingRecallColumn(back.error)) console.error('[lead] 반납 번호 조회 실패', back.error)
+  return nextLeadNoFrom(
+    prefix,
+    ((live.data ?? []) as { lead_no: string | null }[]).map(r => r.lead_no),
+    ((back.data ?? []) as { recalled_no: string | null }[]).map(r => r.recalled_no),
+  )
 }
 
 // 명함 이미지 검증은 공지 이미지와 같은 규칙이라 lib/imageUpload.ts 로 뺐다.

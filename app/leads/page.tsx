@@ -11,6 +11,9 @@ import { createClient } from '@/lib/supabase/client'
 import { loadEngineers } from '@/lib/appData/engineers'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import { canViewLeads, isSuperAdmin } from '@/lib/permissions'
+import {
+  RECALL_REASON_MAX, RECALL_REASON_MIN, isRecalled, recallLabel, recalledCount, visibleLeads,
+} from '@/lib/leadRecall'
 import { withTeamPerm } from '@/lib/teamPerms'
 import AccessGate from '@/components/common/AccessGate'
 import { useToast } from '@/components/common/Toast'
@@ -19,6 +22,7 @@ import { getCategoryColor, SALES_STATUS_COLORS, type CategoryColor } from '@/lib
 import SegmentedControl from '@/components/common/SegmentedControl'
 import { Z } from '@/lib/zIndex'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { useLeadFilters, ALL, NONE } from '@/hooks/leads/useLeadFilters'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import LeadExcelButton from '@/components/leads/LeadExcelButton'
@@ -66,6 +70,11 @@ const leadStatusColor = (status: string): CategoryColor =>
 type Lead = {
   lead_id: number
   lead_no: string | null
+  /** 회수된 리드의 원래 번호(lib/leadRecall.ts). 번호를 반납하면 lead_no 가 비고 이 값이 찬다. */
+  recalled_no?: string | null
+  recalled_at?: string | null
+  recalled_by?: number | null
+  recall_reason?: string | null
   partner_company: string; partner_name: string; partner_contact: string | null
   /** 파트너사 담당자 메일. 칸이 생기기 전 등록분은 null 이다(고객사 담당자 메일 contact_email 과 다른 값). */
   partner_email: string | null
@@ -325,8 +334,20 @@ function LeadsPageInner() {
     return e ? [e.name, e.position].filter(Boolean).join(' ') : '-'
   }
 
+  /**
+   * 회수된 리드는 **기본으로 숨긴다**(2026-11-23). 번호를 반납한 줄이라 목록·집계에서 빠진다.
+   * 토글을 켜면 회색 취소선으로 보인다 — 「왜 027 이 없지」를 여기서 확인한다.
+   */
+  const [includeRecalled, setIncludeRecalled] = useState(false)
+  /** 회수 창이 보고 있는 리드. */
+  const [recallFor, setRecallFor] = useState<number | null>(null)
+  const [recallReason, setRecallReason] = useState('')
+  const [recallBusy, setRecallBusy] = useState(false)
+
+  // 회수를 먼저 거르고 그 뒤에 필터가 돈다 — 건수·집계가 모두 같은 모집단을 본다.
+  const shownLeads = useMemo(() => visibleLeads(leads, includeRecalled), [leads, includeRecalled])
   // 필터·검색·페이지는 훅이 맡는다(전체 조회 → 메모리 filter → slice, 수리 화면과 같은 방식).
-  const f = useLeadFilters(leads, engName)
+  const f = useLeadFilters(shownLeads, engName)
 
   // 신규 건을 위로, 각 묶음 안에서는 등록 최신순. 거른 뒤에 정렬한다(규칙은 그대로다).
   const sorted = useMemo(() => {
@@ -625,6 +646,43 @@ function LeadsPageInner() {
   }
 
   /**
+   * **회수** — 지우지 않고 번호만 반납한다(db/lead_recall_20261123.sql).
+   * 행과 내용(고객사·관심제품·배정 이력)은 그대로 남고 목록에서만 숨는다.
+   * 배정불가와 다르다 — 그쪽은 상태일 뿐 번호를 그대로 쓴다.
+   */
+  const recallLead = async (leadId: number, reason: string) => {
+    setRecallBusy(true)
+    const res = await fetch('/api/lead-recall', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'recall', leadId, reason }),
+    })
+    const json = await res.json().catch(() => ({}))
+    setRecallBusy(false)
+    if (!res.ok || json?.error) { toast.error(json?.error ?? `서버 오류 (${res.status})`); return }
+    setRecallFor(null)
+    setLeads(prev => prev.map(l => (l.lead_id === leadId
+      ? { ...l, lead_no: null, recalled_no: json.recalled_no ?? l.lead_no, recall_reason: reason, recalled_at: new Date().toISOString(), recalled_by: me?.engineer_id ?? null } as Lead
+      : l)))
+    toast.success(`${json.recalled_no ?? ''} 번호를 반납했습니다`)
+  }
+
+  /** 되돌리기 — 그 번호를 아직 아무도 쓰지 않았을 때만 된다(라우트가 다시 본다). */
+  const restoreLead = async (leadId: number) => {
+    setRecallBusy(true)
+    const res = await fetch('/api/lead-recall', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'restore', leadId }),
+    })
+    const json = await res.json().catch(() => ({}))
+    setRecallBusy(false)
+    if (!res.ok || json?.error) { toast.error(json?.error ?? `서버 오류 (${res.status})`); return }
+    setLeads(prev => prev.map(l => (l.lead_id === leadId
+      ? { ...l, lead_no: json.lead_no ?? null, recalled_no: null, recall_reason: null, recalled_at: null, recalled_by: null } as Lead
+      : l)))
+    toast.success(`${json.lead_no ?? ''} 번호를 되돌렸습니다`)
+  }
+
+  /**
    * 배정 불가 해제 — '신규'·미배정으로 되돌린다. 서버가 사유·처리자·시각을 함께 비운다.
    *
    * 화면 값도 같이 비워야 한다. 하나라도 남겨 두면 카드가 「신규인데 배정 불가 처리 기록이 있는」
@@ -739,6 +797,14 @@ function LeadsPageInner() {
               }}>
                 <span style={{ fontSize: 12, color: FAINT, whiteSpace: 'nowrap' }}>{f.filtered.length}건</span>
                 <button onClick={f.reset} style={ghostBtn}>초기화</button>
+                {/* 회수 포함 — 번호를 반납한 줄을 보여 준다. 숨어 있는 줄이 몇인지 옆에 적는다. */}
+                {recalledCount(leads) > 0 && (
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: MUTED, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    <input type="checkbox" checked={includeRecalled} onChange={e => setIncludeRecalled(e.target.checked)}
+                      style={{ width: 14, height: 14, accentColor: BLUE, cursor: 'pointer' }} />
+                    회수 포함 <b className="num" style={{ fontWeight: 700 }}>{recalledCount(leads)}</b>
+                  </label>
+                )}
               </div>
               {/* 엑셀 — 줄 맨 오른쪽 끝. 걸러서(왼쪽) → 고르고(표) → 내보낸다(여기)는 흐름의 끝이고,
                   자리를 늘 지키는 초기화 슬롯 바깥이라 나타났다 사라져도 다른 칸을 밀지 않는다.
@@ -841,11 +907,22 @@ function LeadsPageInner() {
                             style={{ cursor: 'pointer' }}
                           />
                         </td>
-                        {/* 번호가 없는 리드(발급 실패)는 자리를 비우지 않고 - 로 채운다 */}
+                        {/* 번호가 없는 리드(발급 실패)는 자리를 비우지 않고 - 로 채운다.
+                            회수된 줄은 **원래 번호를 취소선으로** 보여 준다 — 번호가 사라진 것이
+                            아니라 반납됐다는 뜻이다(lib/leadRecall.ts). */}
                         <td style={{ ...td, fontWeight: 700, color: lead.lead_no ? BLUE : FAINT }}>
-                          {lead.lead_no ?? '-'}
+                          {isRecalled(lead)
+                            ? <s style={{ color: MUTED }}>{lead.recalled_no}</s>
+                            : (lead.lead_no ?? '-')}
                         </td>
-                        <td style={{ ...td, color: MUTED }}>{lead.created_at.slice(0, 10)}</td>
+                        <td style={{ ...td, color: MUTED }}>
+                          {lead.created_at.slice(0, 10)}
+                          {isRecalled(lead) && (
+                            <div style={{ fontSize: 11, color: MUTED, marginTop: 2, whiteSpace: 'nowrap' }}>
+                              {recallLabel(lead, engName(lead.recalled_by ?? null))}
+                            </div>
+                          )}
+                        </td>
                         <td style={{ ...td, fontWeight: 700 }}>{lead.partner_company}</td>
                         <td style={td}>{lead.customer_company}</td>
                         <td style={{ ...td, color: MUTED }}>{lead.interest_product}</td>
@@ -1130,6 +1207,25 @@ function LeadsPageInner() {
                                       disabled={busy || lockedClosed}
                                       style={primaryBtn(busy || lockedClosed)}
                                     >상태 변경</button>
+                                    {/* ── 회수 / 되돌리기 ──
+                                        지우지 않는다. 번호만 반납하고 내용은 그대로 둔다
+                                        (lib/leadRecall.ts · db/lead_recall_20261123.sql).
+                                        되돌리기는 그 번호가 아직 비어 있을 때만 된다 — 라우트가 다시 본다. */}
+                                    {isRecalled(lead) ? (
+                                      <button
+                                        onClick={() => void restoreLead(lead.lead_id)}
+                                        disabled={busy || recallBusy}
+                                        title={`${lead.recalled_no} 번호를 되찾습니다`}
+                                        style={ghostBtn}
+                                      >번호 되돌리기</button>
+                                    ) : (
+                                      <button
+                                        onClick={() => { setRecallFor(lead.lead_id); setRecallReason('') }}
+                                        disabled={busy || recallBusy || !lead.lead_no}
+                                        title={lead.lead_no ? '번호를 반납하고 목록에서 숨깁니다(행은 남습니다)' : '번호가 없는 리드입니다'}
+                                        style={ghostBtn}
+                                      >회수</button>
+                                    )}
                                   </div>
                                 </div>
                               )}
@@ -1173,6 +1269,59 @@ function LeadsPageInner() {
 
       {/* 상태 변경 — 담당자 지정·변경과 배정 불가. 목록 바깥에 한 번만 그린다
           (행마다 그리면 열린 행이 바뀔 때 모달이 다시 마운트된다). */}
+      {/* ── 회수 창 — 사유를 받는다(필수) ── */}
+      {recallFor !== null && (() => {
+        const target = leads.find(l => l.lead_id === recallFor)
+        if (!target) return null
+        const tooShort = recallReason.trim().length < RECALL_REASON_MIN
+        return (
+          <ModalOverlay onClose={() => { if (!recallBusy) setRecallFor(null) }} closeOn={recallBusy ? 'none' : 'both'} confirmClose dirty={recallReason.trim().length > 0}>
+            <ModalCard
+              width={460}
+              closeX
+              title={<span style={{ fontSize: 15, fontWeight: 700, color: TEXT }}>리드 회수</span>}
+              footer={<>
+                <span style={{ fontSize: 12, color: MUTED }}>
+                  {tooShort ? `사유를 ${RECALL_REASON_MIN}자 이상 적어주세요` : '번호가 반납되어 다음 리드가 씁니다'}
+                </span>
+                <span style={{ flex: 1 }} />
+                <button type="button" onClick={() => setRecallFor(null)} disabled={recallBusy} style={ghostBtn}>취소</button>
+                <button type="button" disabled={recallBusy || tooShort}
+                  onClick={() => void recallLead(target.lead_id, recallReason.trim())}
+                  style={primaryBtn(recallBusy || tooShort)}>
+                  {recallBusy ? '회수 중…' : '회수'}
+                </button>
+              </>}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.7 }}>
+                  <b style={{ fontWeight: 700 }}>{target.lead_no}</b> · {target.customer_company || '-'}
+                  <div style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>
+                    지우지 않습니다 — 내용은 그대로 남고 **번호만** 반납합니다. 목록에서는 숨겨지고
+                    「회수 포함」을 켜면 보입니다. 진행하지 않기로 한 것이라면 회수가 아니라
+                    「배정 불가」로 처리하세요(번호는 그대로 씁니다).
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: MUTED, marginBottom: 6 }}>회수 사유 *</div>
+                  <textarea value={recallReason} onChange={e => setRecallReason(e.target.value.slice(0, RECALL_REASON_MAX))}
+                    rows={2} placeholder="예: 중복 등록 · 시험 등록"
+                    style={{
+                      width: '100%', boxSizing: 'border-box', padding: '9px 11px',
+                      border: `1px solid ${BORDER}`, borderRadius: R.control, color: TEXT,
+                      background: CARD_BG, fontSize: 13, outline: 'none', fontFamily: 'inherit',
+                      resize: 'vertical', lineHeight: 1.6,
+                    }} />
+                  <div className="num" style={{ fontSize: 11, color: MUTED, textAlign: 'right', marginTop: 2 }}>
+                    {recallReason.length} / {RECALL_REASON_MAX}
+                  </div>
+                </div>
+              </div>
+            </ModalCard>
+          </ModalOverlay>
+        )
+      })()}
+
       {statusModalLead && (
         <LeadStatusModal
           lead={statusModalLead}
