@@ -93,6 +93,7 @@ console.log('\n── ③ 토큰과 같은 값의 직접 표기는 늘지 않는
  * PDF(react-pdf)는 var() 를 모르므로 세지 않는다.
  *
  * 2026-11-21 … 1895
+ * 2026-11-23 … 1914 — 명함 화면(목록·등록 창)이 든 표의 값 넷.
  * 2026-11-23 … 1910 — 명함 하네스도 그 색 셋을 기대값으로 들고 있다(scripts/business-card-check.js).
  * 2026-11-23 … 1907 — 명함의 나이 꼬리표 색 셋(초록·주황·빨강, lib/businessCard.ts).
  *   표의 상태색 그대로다. 그 셋을 내보내는 공용 자리가 없어 그 파일에 적었다.
@@ -101,8 +102,8 @@ console.log('\n── ③ 토큰과 같은 값의 직접 표기는 늘지 않는
  *   그 값이 토큰이 되면서 세는 대상에 들어왔다. 역할 토큰을 적어 둔 두 파일(lib/textTokens.ts ·
  *   scripts/text-color-check.js)도 그 값을 들고 있어 파일 수가 148 → 150 이 됐다.
  */
-const BASELINE = 1910
-const BASELINE_FILES = 151
+const BASELINE = 1914
+const BASELINE_FILES = 153
 const byValue = new Map()
 const byFile = new Map()
 const tokenValues = new Map()      // 값 → 토큰 이름(여럿이면 첫 번째)

@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // 명함 OCR 이 쓰는 남의 파일(tesseract.js 워커·코어) — 우리가 쓰지 않은 코드다.
+    "public/ocr/**",
   ]),
   // 스타일 규칙은 배포를 막지 않도록 warn 으로 낮춘다(동작 문제 아님).
   {
