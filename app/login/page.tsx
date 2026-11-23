@@ -8,6 +8,7 @@ import { invalidateMe, loadMe } from '@/lib/appData/me'
 import { canViewCustomers } from '@/lib/permissions'
 import { DIVISION_HOME, canSwitchDivision, readSavedDivision, teamDivisionOf } from '@/lib/division'
 import { IDLE_REASON } from '@/components/common/SessionManager'
+import { RESIGNED_MESSAGE, RESIGNED_REASON } from '@/lib/accountRules'
 import { R } from '@/lib/radius'
 
 function LoginPageInner() {
@@ -26,7 +27,10 @@ function LoginPageInner() {
    * 있어 잠깐 뜨고 사라지는 안내는 못 본다. 로그인에 성공하면 이 화면을 떠나므로
    * 따로 지울 일이 없다.
    */
-  const idleLogout = useSearchParams().get('reason') === IDLE_REASON
+  const reason = useSearchParams().get('reason')
+  const idleLogout = reason === IDLE_REASON
+  /** 퇴사 계정이라 끊겨 돌아온 것인가 — 미들웨어가 ?reason=resigned 로 보낸다. */
+  const resignedOut = reason === RESIGNED_REASON
 
   const handleLogin = async () => {
     setError('')
@@ -59,7 +63,16 @@ function LoginPageInner() {
     invalidateMe()
     let target = '/dashboard'
     if (data.user?.email) {
-      const { me } = await loadMe()
+      const { me, error: meError } = await loadMe()
+      // 퇴사 처리된 계정 — 비밀번호가 맞아도 들여보내지 않는다. 세션을 바로 지운다
+      // (지우지 않으면 쿠키가 남아 미들웨어가 매 이동마다 돌려보내는 모양이 된다).
+      if (meError === RESIGNED_MESSAGE) {
+        await supabase.auth.signOut()
+        invalidateMe()
+        setLoading(false)
+        setError(RESIGNED_MESSAGE)
+        return
+      }
       const teamDivision = teamDivisionOf(me)
       const division = me && canSwitchDivision(me)
         ? (readSavedDivision(me.engineer_id) ?? teamDivision)
@@ -120,6 +133,18 @@ function LoginPageInner() {
             }}
           >
             30분 동안 활동이 없어 자동 로그아웃되었습니다.
+          </div>
+        )}
+        {/* 퇴사로 끊겨 돌아온 경우 — 무활동 안내와 같은 자리·같은 모양이다. */}
+        {resignedOut && (
+          <div
+            style={{
+              marginBottom: 16, padding: '10px 12px', background: '#111',
+              border: '0.5px solid #2a2a2a', borderRadius: R.tile,
+              fontSize: 12, lineHeight: 1.6, color: '#9ca3af', textAlign: 'center',
+            }}
+          >
+            퇴사 처리된 계정입니다. 관리자에게 문의해 주세요.
           </div>
         )}
 

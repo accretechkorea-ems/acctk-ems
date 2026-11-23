@@ -1,5 +1,6 @@
 import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
+import { PASSWORD_SHORT_MESSAGE, isPasswordLongEnough } from '@/lib/accountRules'
 import { INITIALS_TAKEN_MESSAGE, isInitialsTaken, isInitialsUniqueViolation, normalizeInitials } from '@/lib/initials'
 
 export async function POST(req: Request) {
@@ -15,8 +16,8 @@ export async function POST(req: Request) {
   if (!email?.trim() || !password?.trim() || !name?.trim()) {
     return NextResponse.json({ error: 'email, password, name은 필수입니다.' }, { status: 400 })
   }
-  if (password.length < 8) {
-    return NextResponse.json({ error: '비밀번호는 8자 이상이어야 합니다.' }, { status: 400 })
+  if (!isPasswordLongEnough(password)) {
+    return NextResponse.json({ error: PASSWORD_SHORT_MESSAGE }, { status: 400 })
   }
 
   // 이니셜 중복은 Auth 계정을 만들기 전에 본다.

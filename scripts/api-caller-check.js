@@ -207,12 +207,12 @@ const run = async () => {
   {
     const s = stub({ row: ROW({ resigned_date: '2026-10-31' }) })
     const r = await A.loadCaller({ kind: 'login' }, { tag: 't', req: req('POST'), deps: s.deps })
-    eq('**퇴사자는 403**(모든 라우트 공통 — 종전에는 8/53 만 보았다)', (await shape(r.error)).status, 403)
+    eq('**퇴사자는 401**(2026-11-23 — 403 에서 올렸다. 계정이 끝난 것이라 로그인으로 돌려보낸다)', (await shape(r.error)).status, 401)
   }
   {
     const s = stub({ row: ROW({ resigned_date: '2026-10-31', permission_level: 'superadmin' }) })
     const r = await A.loadCaller({ kind: 'login' }, { tag: 't', req: req('POST'), deps: s.deps })
-    eq('퇴사한 superadmin 도 막는다', (await shape(r.error)).status, 403)
+    eq('퇴사한 superadmin 도 막는다', (await shape(r.error)).status, 401)
   }
 
   console.log('\n── loadCaller — 신선도가 실제로 넘어가는가 ──')

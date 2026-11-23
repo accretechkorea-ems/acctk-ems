@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { isPublicPath, isPublicAsset } from '@/lib/publicPaths'
+import { RESIGNED_REASON, isResigned } from '@/lib/accountRules'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -44,6 +45,36 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)
+  }
+
+  /**
+   * 퇴사 처리된 계정은 **다음 화면 이동에서 끊긴다**(2026-11-23).
+   *
+   * 왜 여기인가 — 서버 라우트는 이미 막혀 있었지만(lib/apiCaller.ts) 화면은 그대로 열렸다.
+   * 로그인한 채 켜 둔 탭이 있으면 퇴사 처리를 해도 그 사람은 어제처럼 목록을 읽는다.
+   * 로그인 문(app/login)·세션 갱신(lib/appData/me.ts)과 함께 네 자리를 다 막는다.
+   *
+   * 비용 — **화면 이동 한 번에 조회 한 번**이 는다. /api 와 정적 파일은 위에서 이미 빠졌고,
+   * 미로그인도 빠지므로 늘어나는 것은 로그인한 사람의 페이지 이동뿐이다. 자리를 줄이려면
+   * 토큰 클레임에 재직 여부를 심어야 하는데, 그러려면 퇴사 처리가 토큰을 갱신해야 한다
+   * (지금 구조에 없다) — 그 교환은 하지 않았다.
+   *
+   * 조회가 실패하면 **그대로 들여보낸다**. 판정 자료를 못 읽었다고 재직자를 쫓아내지 않는다
+   * (쓰기는 어차피 라우트가 다시 막는다 — 그쪽은 fail-closed 다).
+   */
+  if (user?.email) {
+    const { data } = await supabase
+      .from('engineers')
+      .select('resigned_date')
+      .eq('email', user.email)
+      .maybeSingle()
+    if (isResigned(data)) {
+      await supabase.auth.signOut()
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      url.search = `?reason=${RESIGNED_REASON}`
+      return NextResponse.redirect(url)
+    }
   }
 
   return supabaseResponse

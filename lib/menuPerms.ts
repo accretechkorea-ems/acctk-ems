@@ -294,13 +294,30 @@ export function deriveTeamColumns(menus: Set<string>): Record<string, boolean> {
  */
 export const CHECKABLE_MENUS: MenuPerm[] = MENU_PERMS.filter(m => !m.public && !m.permKey && !m.hidden)
 
-/** 체크 대상이 있는 묶음만, 묶음 순서대로. 팀 관리 화면이 이 순서로 그린다. */
-export function checkableGroups(): { group: MenuGroup; title: string; items: MenuPerm[] }[] {
+/**
+ * 체크 대상이 있는 묶음만, 묶음 순서대로. 팀 관리 화면이 이 순서로 그린다.
+ *
+ * division 을 주면 **그 사업부 메뉴와 공통 메뉴만** 남긴다(2026-11-23). 주지 않으면 전부다.
+ *
+ * 왜 거르는가 — 거르지 않으면 계측 팀의 권한을 고치는 화면에 반도체 전용 「접촉 보고서」가
+ * 「영업」 묶음 안에 리드·포캐스트·견적서와 나란히 선다. 사업부 표시도 없어서, 실수로 켜 주면
+ * 그 팀에 반도체 자료가 열린다(semi_* 의 RLS 는 teams 컬럼이 아니라 team_permissions 를
+ * 직접 보는 has_menu_perm('contact_semi') 로 판정한다 — 아래 contact_semi 줄 주석).
+ * 사이드바(visibleMenus)는 이미 같은 규칙으로 거르고 있었다 — 권한 화면만 빠져 있었다.
+ */
+export function checkableGroups(division?: Division): { group: MenuGroup; title: string; items: MenuPerm[] }[] {
   return MENU_GROUPS
     .map(g => ({
       group: g.group,
       title: g.title ?? g.group,
-      items: CHECKABLE_MENUS.filter(m => m.group === g.group).sort((a, b) => a.order - b.order),
+      items: CHECKABLE_MENUS
+        .filter(m => m.group === g.group)
+        .filter(m => {
+          if (!division) return true
+          const d = menuDivision(m)
+          return d === '공통' || d === division
+        })
+        .sort((a, b) => a.order - b.order),
     }))
     .filter(g => g.items.length > 0)
 }

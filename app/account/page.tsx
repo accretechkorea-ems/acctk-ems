@@ -14,6 +14,7 @@ import { INITIALS_TAKEN_MESSAGE, isInitialsTaken, isInitialsUniqueViolation, nor
 import AddressField from '@/components/customer/modals/AddressField'
 import { geocodeAddress } from '@/lib/geocode'
 import { R } from '@/lib/radius'
+import { PASSWORD_MIN, PASSWORD_SHORT_MESSAGE, isPasswordLongEnough } from '@/lib/accountRules'
 
 /**
  * 갈아 끼운 뒤 남은 **옛 프로필 사진**을 버킷에서 지운다.
@@ -319,8 +320,8 @@ export default function AccountPage() {
       setPasswordMessage({ type: 'error', text: '새 비밀번호를 입력해주세요.' })
       return
     }
-    if (newPassword.length < 6) {
-      setPasswordMessage({ type: 'error', text: '새 비밀번호는 6자 이상이어야 합니다.' })
+    if (!isPasswordLongEnough(newPassword)) {
+      setPasswordMessage({ type: 'error', text: `새 ${PASSWORD_SHORT_MESSAGE}` })
       return
     }
     if (newPassword !== confirmPassword) {
@@ -507,7 +508,7 @@ export default function AccountPage() {
             </div>
             <div>
               <div style={{ fontSize: 13, color: TEXT_SECONDARY, marginBottom: 6 }}>새 비밀번호</div>
-              <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="새 비밀번호 입력 (6자 이상)" style={inputStyle} />
+              <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder={`새 비밀번호 입력 (${PASSWORD_MIN}자 이상)`} style={inputStyle} />
             </div>
             <div>
               <div style={{ fontSize: 13, color: TEXT_SECONDARY, marginBottom: 6 }}>새 비밀번호 확인</div>

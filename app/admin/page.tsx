@@ -16,7 +16,7 @@ import { inSalesStats, scopeChoiceOf, scopeValueOf, SCOPE_LABELS, type SalesScop
 import { loadMe, invalidateMe } from '@/lib/appData/me'
 import { invalidateEngineers } from '@/lib/appData/engineers'
 // 팀 권한은 메뉴 단위다. 목록·묶음·파생 규칙은 모두 이 파일 한곳에서 온다.
-import { CHECKABLE_MENUS, checkableGroups, MENU_PERMS } from '@/lib/menuPerms'
+import { checkableGroups, MENU_PERMS } from '@/lib/menuPerms'
 import AccessGate from '@/components/common/AccessGate'
 import QuoteCategoryManager from '@/components/admin/QuoteCategoryManager'
 import ActivityTypeManager from '@/components/admin/ActivityTypeManager'
@@ -24,6 +24,7 @@ import PriceListImportModal from '@/components/admin/priceList/PriceListImportMo
 import { selectableOffices, invalidateOffices, type Office } from '@/lib/offices'
 import { geocodeAddress } from '@/lib/geocode'
 import { ROLE_COLORS, getCategoryColor } from '@/lib/categoryColors'
+import { toDivision, type Division } from '@/lib/division'
 import { useToast } from '@/components/common/Toast'
 import { APPROVAL_PATH } from '@/lib/approval/types'
 import { useConfirm } from '@/components/common/ConfirmDialog'
@@ -72,6 +73,8 @@ type Team = {
   name: string
   is_special: boolean
   display_order: number
+  /** 팀의 사업부(teams.division). 비면 계측이다 — 권한 체크 목록을 이 값으로 거른다. */
+  division: string | null
   /** 실적·활동 집계에 넣는 팀인가(판정은 lib/salesScope.ts). 개인 값으로 덮을 수 있다. */
   in_sales_stats: boolean
 }
@@ -762,7 +765,11 @@ function AdminPageInner() {
   // ── 팀 권한 편집 ──
   // 추가 폼과 편집 모달이 같은 체크박스 묶음을 쓴다(두 벌 만들지 않는다).
   // 전원 공개 메뉴(홈·알림·건의사항)는 체크 대상이 아니라 목록에 넣지 않는다.
-  const permCheckboxes = (value: string[], onChange: Dispatch<SetStateAction<string[]>>) => {
+  /**
+   * 메뉴 권한 체크 목록. division 을 받아 **그 사업부 메뉴만** 그린다(2026-11-23).
+   * 새 팀은 계측으로 만들어지므로(teams.division 기본값) 추가 폼도 계측으로 그린다.
+   */
+  const permCheckboxes = (value: string[], onChange: Dispatch<SetStateAction<string[]>>, division?: Division) => {
     const picked = new Set(value)
     const toggle = (key: string, on: boolean) =>
       onChange(prev => (on ? [...new Set([...prev, key])] : prev.filter(k => k !== key)))
@@ -770,7 +777,7 @@ function AdminPageInner() {
       onChange(prev => (on ? [...new Set([...prev, ...keys])] : prev.filter(k => !keys.includes(k))))
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {checkableGroups().map(g => {
+        {checkableGroups(division).map(g => {
           const keys = g.items.map(i => i.key)
           const allOn = keys.every(k => picked.has(k))
           return (
@@ -2155,7 +2162,7 @@ function AdminPageInner() {
               <FieldError message={teamErr.errors.teamName} />
               {/* 메뉴가 14개라 그대로 펼치면 모달을 넘긴다 — 추가 폼에서는 이 안에서만 스크롤한다. */}
               <div style={{ maxHeight: 260, overflowY: 'auto' }}>
-                {permCheckboxes(newTeamPerm, setNewTeamPerm)}
+                {permCheckboxes(newTeamPerm, setNewTeamPerm, '계측')}
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
                 <button onClick={() => { setAddTeamOpen(false); setNewTeamName(''); setNewTeamPerm([]); teamErr.clearError('teamName') }}
@@ -2249,10 +2256,16 @@ function AdminPageInner() {
           <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>{permEditTeam.name} 권한</div>
-              <span style={{ fontSize: 12, color: GRAY }}>{permEditKeys.length} / {CHECKABLE_MENUS.length}개 선택</span>
+              {/* 분모는 **이 사업부에서 고를 수 있는 수**다 — 전체 수를 적으면 거른 뒤와 어긋난다. */}
+              <span style={{ fontSize: 12, color: GRAY }}>
+                {permEditKeys.length} / {checkableGroups(toDivision(permEditTeam.division)).reduce((n, g) => n + g.items.length, 0)}개 선택
+              </span>
             </div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 14 }}>
               체크한 메뉴만 이 팀에 보입니다. 데이터 접근 권한은 메뉴에서 자동으로 정해집니다.
+              {/* 사업부를 적어 둔다 — 적지 않으면 「접촉 보고서가 왜 없지」가 된다(목록을 사업부로 거른다). */}
+              <span style={{ color: TEXT, fontWeight: 700 }}>{' '}사업부 {toDivision(permEditTeam.division)}</span>
+              {' '}메뉴만 보입니다.
             </div>
             {/* 집계 대상 — **메뉴와 무관한 값**이다. 메뉴를 켜고 끄는 것이 실적 집계를 바꾸지 않는다. */}
             <label style={{
@@ -2267,7 +2280,7 @@ function AdminPageInner() {
               </span>
             </label>
             <div style={{ overflowY: 'auto', flex: 1, paddingRight: 2 }}>
-              {permCheckboxes(permEditKeys, setPermEditKeys)}
+              {permCheckboxes(permEditKeys, setPermEditKeys, toDivision(permEditTeam.division))}
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
               <button onClick={() => setPermEditTeam(null)} disabled={savingTeamId === permEditTeam.id}

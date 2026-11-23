@@ -14,6 +14,7 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { attachTeamPerm, loadTeamPerms } from '@/lib/teamPerms'
+import { RESIGNED_MESSAGE, isResigned } from '@/lib/accountRules'
 import type { TeamPerm } from '@/lib/permissions'
 
 /**
@@ -141,6 +142,13 @@ export function loadMe(): Promise<MeResult> {
       return { email, me: null, error: error.message || '본인 정보를 읽지 못했습니다' }
     }
     if (!data) return { email, me: null, error: null }
+    // 퇴사 처리된 계정 — **본인 정보를 주지 않는다**(2026-11-23). me 가 null 이면 화면 가드가
+    // 모두 막히고(usePageGuard), 다음 화면 이동에서 미들웨어가 /login 으로 돌려보낸다.
+    // 캐시도 두지 않는다 — 복직 처리하면 다음 조회에서 바로 살아난다.
+    if (isResigned(data as { resigned_date?: string | null })) {
+      cache = null
+      return { email, me: null, error: RESIGNED_MESSAGE }
+    }
     // 메뉴 권한은 팀 플래그로 판정한다(팀 이름을 코드에 두지 않기 위해).
     // loadTeamPerms 도 모듈 캐시라 여기서 한 번 읽으면 앱 전체가 그 값을 쓴다.
     const map = await permsPromise

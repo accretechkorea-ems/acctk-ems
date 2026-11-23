@@ -16,7 +16,7 @@
 //   ① engineers 는 **service role 로 읽는다.** 판정 자료가 RLS·GRANT 에 막혀 비면
 //      「권한 없음」으로 떨어지는데, 그것은 판정이 아니라 사고다(옛 lib/semiContactServer.ts 가
 //      이미 같은 선택을 하고 그 이유를 적어 두었다).
-//   ② **퇴사자는 기본 차단.** 결재 계열 8개만 보던 검사를 전체 기준으로 올린다.
+//   ② **퇴사자는 기본 차단(401).** 결재 계열 8개만 보던 검사를 전체 기준으로 올린다.
 //      퇴사 처리는 email 을 null 로 지우므로(app/api/delete-user) 조회 자체가 비는 것이
 //      보통이지만, 그것은 **우연히 안전한 것**이라 규칙으로 둔다.
 //   ③ **신선도는 메서드가 정한다** — 쓰기는 새로 읽고(fresh), GET 은 캐시(30초).
@@ -35,6 +35,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { adminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { canViewMenu, isSuperAdmin, type EngineerLike } from '@/lib/permissions'
+import { RESIGNED_MESSAGE, isResigned } from '@/lib/accountRules'
 import { canAccessSemiContact } from '@/lib/division'
 import { sessionEmailForRead } from '@/lib/sessionEmail'
 import { withTeamPerm as realWithTeamPerm } from '@/lib/teamPermsServer'
@@ -123,6 +124,12 @@ export type LoadOk = { error: null; caller: Caller; sb: SupabaseClient }
 export type LoadCron = { error: null; caller: null; sb: SupabaseClient }
 
 const unauthorized = (): NextResponse => NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+/**
+ * 퇴사자 — **401 이다**(2026-11-23). 종전에는 403 이었는데, 403 은 「이 일을 할 권한이 없다」라
+ * 화면이 그대로 머문다. 퇴사는 계정 자체가 끝난 것이라 화면이 로그인으로 돌려보내야 한다.
+ * 글자는 lib/accountRules.ts 하나에서 온다(로그인 화면과 같은 말).
+ */
+const resignedOut = (): NextResponse => NextResponse.json({ error: RESIGNED_MESSAGE }, { status: 401 })
 const forbidden = (): NextResponse => NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
 /** 읽기만 하는 메서드 — 이때만 팀 권한 캐시를 쓴다. */
@@ -225,7 +232,7 @@ export async function loadCaller<N extends Need>(
   if (!row) return out(fail(forbidden()))
   // 퇴사자는 막는다. 퇴사 처리가 email 을 지우므로 보통은 위에서 이미 비지만,
   // 그것은 우연히 안전한 것이라 여기서 규칙으로 둔다.
-  if (row.resigned_date) return out(fail(forbidden()))
+  if (isResigned(row)) return out(fail(resignedOut()))
 
   const caller = await deps.withTeamPerm(row, { fresh })
   if (!caller) return out(fail(forbidden()))
