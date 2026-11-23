@@ -77,6 +77,12 @@ type Team = {
   division: string | null
   /** 실적·활동 집계에 넣는 팀인가(판정은 lib/salesScope.ts). 개인 값으로 덮을 수 있다. */
   in_sales_stats: boolean
+  /**
+   * 사업부 전환 가능(teams.can_switch_division, 2026-11-23). 이 팀 사람은 사이드바에서
+   * 계측/반도체를 고르고 어느 사업부에 있든 관리·실적 메뉴를 본다.
+   * 칸을 아직 넣지 않은 DB 에서는 undefined 로 온다 — 저장할 때 503 이 그 사실을 알려 준다.
+   */
+  can_switch_division?: boolean | null
 }
 
 // 팀 관리 표의 열 폭 — 팀 이름(남는 폭) · 권한 개수 · 묶음별 요약(남는 폭) · 버튼 두 개.
@@ -223,6 +229,8 @@ function AdminPageInner() {
   const [newTeamStats, setNewTeamStats] = useState(false)
   /** 편집 모달의 「실적 집계 대상」. 권한과 함께 저장한다(권한 라우트는 손대지 않는다). */
   const [permEditStats, setPermEditStats] = useState(false)
+  /** 편집 모달의 「사업부 전환 가능」. 집계 대상과 같은 자리(teams)라 한 번의 저장으로 묶는다. */
+  const [permEditSwitch, setPermEditSwitch] = useState(false)
   // 새 팀에 켤 메뉴 키. 저장은 라우트가 하고, 화면은 키 목록만 들고 있는다.
   const [newTeamPerm, setNewTeamPerm] = useState<string[]>([])
   const [addTeamLoading, setAddTeamLoading] = useState(false)
@@ -727,20 +735,16 @@ function AdminPageInner() {
   const handleAddTeam = async () => {
     if (!teamErr.validate({ teamName: newTeamName.trim() ? null : '팀 이름을 입력해주세요' })) return
     setAddTeamLoading(true)
-    const maxOrder = teamsList.length > 0 ? Math.max(...teamsList.map(t => t.display_order)) : 0
-    // 팀 자체는 종전처럼 여기서 만들고, 권한은 만들어진 뒤 저장 라우트로 보낸다
-    // (권한은 team_permissions 와 teams 컬럼 두 곳을 함께 맞춰야 해서 라우트가 맡는다).
-    const { data: created, error } = await supabase.from('teams').insert({
-      name: newTeamName.trim(),
-      display_order: maxOrder + 1,
-      in_sales_stats: newTeamStats,
-    }).select('id').single()
-    if (error || !created) {
+    // 팀 추가는 **서버 라우트**가 한다(2026-11-23) — 브라우저 열쇠로는 teams 에 쓰지 않는다.
+    // 순서(display_order)도 서버가 정한다. 화면이 센 값은 다른 사람이 방금 만든 팀을 모른다.
+    // 권한은 만들어진 뒤 저장 라우트로 따로 보낸다(team_permissions 와 teams 컬럼을 함께 맞춘다).
+    const created = await teamWrite('POST', { name: newTeamName.trim(), in_sales_stats: newTeamStats })
+    if (!created.ok) {
       setAddTeamLoading(false)
-      toast.error(error?.message ?? '팀 추가에 실패했습니다')
+      toast.error(created.error)
       return
     }
-    const permErr = newTeamPerm.length > 0 ? await saveTeamPermKeys(created.id, newTeamPerm) : null
+    const permErr = newTeamPerm.length > 0 ? await saveTeamPermKeys(created.team.id, newTeamPerm) : null
     setAddTeamLoading(false)
     if (permErr) {
       // 팀은 만들어졌다 — 권한만 못 들어간 상태라 그대로 알리고 목록은 새로 읽는다.
@@ -946,6 +950,29 @@ function AdminPageInner() {
     } catch (e) { console.error('[admin] 팀 권한 서버 캐시 무효화 실패', e) }
   }
 
+  /**
+   * 팀 자체(이름·순서·집계 대상·전환 가능)를 바꾸는 한 길 — /api/team (2026-11-23).
+   * 쓰기는 service role 라우트에서만 한다. 브라우저 열쇠로 teams 에 직접 쓰지 않는다.
+   */
+  const teamWrite = async (
+    method: 'POST' | 'PATCH' | 'DELETE',
+    body: Record<string, unknown>,
+  ): Promise<{ ok: true; team: Team } | { ok: false; error: string }> => {
+    try {
+      const res = await fetch('/api/team', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) return { ok: false, error: (json?.error as string | undefined) ?? `저장 실패 (${res.status})` }
+      return { ok: true, team: json?.team as Team }
+    } catch (e) {
+      console.error('[admin] team write failed', method, e)
+      return { ok: false, error: '네트워크 오류로 저장하지 못했습니다' }
+    }
+  }
+
   // 팀 권한 저장은 서버 라우트가 맡는다 — team_permissions 와 teams.can_view_* 두 곳을
   // 파생 규칙으로 함께 맞춰야 하고, 실패하면 되돌려야 하기 때문이다.
   /** 성공하면 null, 실패하면 화면에 보여줄 메시지를 돌려준다. */
@@ -969,19 +996,25 @@ function AdminPageInner() {
     setPermEditTeam(team)
     setPermEditKeys([...(teamMenus.get(team.name) ?? new Set<string>())])
     setPermEditStats(team.in_sales_stats)
+    setPermEditSwitch(team.can_switch_division === true)
   }
 
   const handleSaveTeamPerm = async () => {
     if (!permEditTeam) return
     setSavingTeamId(permEditTeam.id)
-    // 집계 대상은 **권한과 다른 자료**다 — teams 를 여기서 바로 고친다(권한 라우트는 메뉴와
-    // can_view_* 만 다룬다). 둘을 한 번의 저장으로 묶어 사용자에게는 한 동작으로 보인다.
-    if (permEditStats !== permEditTeam.in_sales_stats) {
-      const { error: statsErr } = await supabase.from('teams')
-        .update({ in_sales_stats: permEditStats }).eq('id', permEditTeam.id)
-      if (statsErr) {
+    // 집계 대상·전환 가능은 **권한과 다른 자료**다(teams 의 칸). 권한 라우트는 메뉴와
+    // can_view_* 만 다루므로 /api/team 으로 따로 보낸다. 둘을 한 번의 저장으로 묶어
+    // 사용자에게는 한 동작으로 보인다.
+    const statsChanged = permEditStats !== permEditTeam.in_sales_stats
+    const switchChanged = permEditSwitch !== (permEditTeam.can_switch_division === true)
+    if (statsChanged || switchChanged) {
+      const patch: Record<string, unknown> = { teamId: permEditTeam.id }
+      if (statsChanged) patch.in_sales_stats = permEditStats
+      if (switchChanged) patch.can_switch_division = permEditSwitch
+      const saved = await teamWrite('PATCH', patch)
+      if (!saved.ok) {
         setSavingTeamId(null)
-        toast.error(`집계 대상 저장에 실패했습니다 (${statsErr.code || statsErr.message})`)
+        toast.error(saved.error)
         return
       }
     }
@@ -996,7 +1029,8 @@ function AdminPageInner() {
   }
 
   const handleDeleteTeam = async (team: Team) => {
-    // 퇴사자는 팀 소속이 남아 있어도(과거 실적 집계용) 인원으로 세지 않는다.
+    // 재직 인원은 **서버도 다시 센다**(라우트가 막는다). 여기서 먼저 세는 것은 확인 창을
+    // 띄우기 전에 알려 주기 위해서다 — 퇴사자는 팀 이름이 남아 있어도 인원으로 세지 않는다.
     const { count } = await supabase
       .from('engineers')
       .select('engineer_id', { count: 'exact', head: true })
@@ -1009,11 +1043,10 @@ function AdminPageInner() {
     const ok = await confirmDialog({ title: '팀 삭제', message: `'${team.name}' 팀을 삭제하시겠습니까?`, confirmText: '삭제', variant: 'danger' })
     if (!ok) return
     setDeletingTeam(team.id)
-    const { error } = await supabase.from('teams').delete().eq('id', team.id)
+    const removed = await teamWrite('DELETE', { teamId: team.id })
     setDeletingTeam(null)
-    if (error) {
-      console.error('[admin] delete team failed', error)
-      toast.error(`팀 삭제에 실패했습니다 (${error.code || error.message})`)
+    if (!removed.ok) {
+      toast.error(removed.error)
       return
     }
     dropTeamPermCache()
@@ -2277,6 +2310,18 @@ function AdminPageInner() {
               <span style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>실적 집계 대상</span>
               <span style={{ fontSize: 11, color: GRAY }}>
                 실적 현황·활동 현황·포캐스트에 이 팀 사람들을 넣는다(개인별로 덮을 수 있다)
+              </span>
+            </label>
+            {/* 사업부 전환 — 권한과도, 집계와도 다른 자료다. 사람이 아니라 **팀**이 가진다(2026-11-23). */}
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 14,
+              background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '10px 12px',
+            }}>
+              <input type="checkbox" checked={permEditSwitch} onChange={e => setPermEditSwitch(e.target.checked)}
+                style={{ width: 14, height: 14, accentColor: BLUE, cursor: 'pointer' }} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>사업부 전환 가능</span>
+              <span style={{ fontSize: 11, color: GRAY }}>
+                사이드바에서 계측/반도체를 고를 수 있고, 어느 사업부에 있든 관리·실적 메뉴가 보인다
               </span>
             </label>
             <div style={{ overflowY: 'auto', flex: 1, paddingRight: 2 }}>

@@ -69,12 +69,11 @@ export type Caller = EngineerLike & {
   position: string | null
   email: string
   resigned_date: string | null
-  can_switch_division: boolean | null
 }
 
 /** 호출자 행에서 읽는 칸 — 판정에 필요한 것만. */
 export const CALLER_COLUMNS =
-  'engineer_id, name, position, email, permission_level, teams, resigned_date, can_switch_division'
+  'engineer_id, name, position, email, permission_level, teams, resigned_date'
 
 /** 최소한의 요청 모양 — NextRequest 를 그대로 넘기면 된다(시험에서는 가짜를 넘긴다). */
 export type RequestLike = {

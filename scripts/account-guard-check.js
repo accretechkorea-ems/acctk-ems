@@ -62,7 +62,7 @@ eq('돌아가는 주소의 까닭', A.RESIGNED_REASON, 'resigned')
 console.log('\n── ② 서버 라우트 — 퇴사 계정 401 ──')
 const ROW = (over) => ({
   engineer_id: 7, name: '홍길동', position: '선임', email: 'a@x.com',
-  permission_level: 'member', teams: '영업', resigned_date: null, can_switch_division: null,
+  permission_level: 'member', teams: '영업', resigned_date: null,
   ...over,
 })
 const stub = (row) => ({
@@ -70,7 +70,7 @@ const stub = (row) => ({
   admin: () => ({
     from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: row, error: null }) }) }) }),
   }),
-  withTeamPerm: async (r) => ({ ...r, perm: { menus: new Set(['customers']), division: '계측', inSalesStats: true } }),
+  withTeamPerm: async (r) => ({ ...r, perm: { menus: new Set(['customers']), division: '계측', inSalesStats: true, canSwitchDivision: false } }),
   cronSecret: () => 'secret',
 })
 const req = (method) => ({ method, headers: { get: () => null } })

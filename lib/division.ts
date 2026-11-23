@@ -7,7 +7,7 @@
 // 사업부를 바꿔도 볼 수 있는 데이터는 달라지지 않고, 사이드바에 섞여 보이던 메뉴만 갈린다.
 //
 // 현재 사업부(사이드바가 정한다)
-//   · 전환 권한자(superadmin + engineers.can_switch_division) — 사이드바에서 고른 값(계정별로 이 브라우저에 저장).
+//   · 전환 가능 팀(teams.can_switch_division) 사람 — 사이드바에서 고른 값(계정별로 이 브라우저에 저장).
 //     고른 적이 없으면 본인 팀의 사업부.
 //   · 그 밖의 모든 사람 — 본인 팀의 사업부로 고정. 전환 버튼이 없다.
 // 메뉴의 사업부는 lib/menuPerms.ts 의 menuDivision 이 정한다. 공통 메뉴는 건의사항뿐이다.
@@ -15,20 +15,32 @@
 //
 // 값은 한글 그대로 둔다 — 결재 문서의 사업부 칸(approval_documents.division default '계측')과 같다.
 
-import { canViewMenu, isSuperAdmin, type EngineerLike } from './permissions'
+import { canViewMenu, type EngineerLike } from './permissions'
 
 export type Division = '계측' | '반도체'
 
-/** 판정에 쓰는 직원 값 — engineers.can_switch_division 을 함께 읽어 넘긴다(못 읽었으면 비워 둔다 = false). */
-export type DivisionUser = EngineerLike & { can_switch_division?: boolean | null }
+/**
+ * 판정에 쓰는 직원 값 — 소속 팀의 권한(perm)만 본다.
+ * 2026-11-23 전에는 engineers.can_switch_division 을 함께 읽어 넘겼다. 그 칸은 더 이상 읽지 않는다.
+ */
+export type DivisionUser = EngineerLike
 
 /**
- * 사업부를 자유롭게 바꿀 수 있는가 — superadmin 이면서 engineers.can_switch_division = true 인 사람만.
- * 그 밖의 모든 사람(전환 권한이 없는 superadmin 포함)은 본인 팀의 사업부로 고정된다:
+ * 사업부를 자유롭게 바꿀 수 있는가 — **소속 팀이 전환 가능 팀일 때만**(teams.can_switch_division).
+ *
+ * 2026-11-23 에 사람(engineers.can_switch_division)에서 팀으로 옮겼다. 켜 줄 화면이 없어 SQL 로만
+ * 넣히던 값이라 두 사람만 가진 채 굳어 있었고, 그 두 사람이 빠지면 아무도 못 바꾸는 자리였다.
+ * 팀 관리 모달의 체크 하나가 정본이며, 팀을 옮기면 전환 권한도 따라 움직인다.
+ *
+ * **등급(superadmin)은 보지 않는다** — 전환은 「무엇을 할 수 있는가」가 아니라 「어느 사업부를
+ * 보는가」의 문제다. 볼 수 있는 자료는 종전처럼 메뉴 권한과 RLS 가 정한다(사업부를 바꿔도
+ * 권한 없는 메뉴는 보이지 않는다).
+ *
+ * 전환 가능 팀이 아닌 사람(superadmin 포함)은 본인 팀의 사업부로 고정된다:
  * 고르기 버튼이 없고, 저장된 선택값을 읽지 않고, 주소로 들어와도 사업부가 바뀌지 않는다.
  */
 export function canSwitchDivision(u?: DivisionUser | null): boolean {
-  return !!u && isSuperAdmin(u) && u.can_switch_division === true
+  return u?.perm?.canSwitchDivision === true
 }
 
 /** 본인 팀의 사업부. 팀이 없거나 비었으면 계측. */
@@ -42,8 +54,8 @@ export const SEMI_CONTACT_KEY = 'contact_semi'
 /**
  * 접촉 보고서(화면 /contact/semi, 라우트 /api/semi-contact/*)를 쓸 수 있는가. 화면 가드와 서버가 함께 쓴다.
  *   (a) 본인 팀의 사업부가 반도체이고 contact_semi 메뉴 권한이 있다(superadmin 은 메뉴 권한이 늘 통과한다), 또는
- *   (b) 사업부를 바꿀 수 있는 superadmin(canSwitchDivision).
- * 그래서 전환 권한이 없는 superadmin 이 계측 팀 소속이면 막힌다.
+ *   (b) 전환 가능 팀(canSwitchDivision) 소속이다.
+ * 그래서 전환 가능 팀이 아닌 superadmin 이 계측 팀 소속이면 막힌다.
  */
 export function canAccessSemiContact(u?: DivisionUser | null): boolean {
   if (!u) return false
@@ -64,6 +76,23 @@ export const DIVISION_LABEL: Readonly<Record<Division, string>> = {
 export const DIVISION_HOME: Readonly<Record<Division, string>> = {
   '계측': '/dashboard',
   '반도체': '/contact/semi',
+}
+
+// ── teams 조회의 열 목록 ──────────────────────────────────────────────
+// can_switch_division 은 2026-11-23 에 생긴 칸이다. **아직 없는 DB 가 있다** —
+// 없는 칸을 select 에 적으면 PostgREST 가 42703 으로 **조회 전체를 거절한다**. 그러면
+// 팀 권한 맵이 비고, 모든 직원의 메뉴가 사라진다(superadmin 만 멀쩡해 보여 더 위험하다).
+// 그래서 두 벌을 두고, 거절당하면 옛 열 목록으로 한 번 더 읽는다(그 경우 전환은 전원 false).
+// db/team_division_switch_20261123.sql 을 적용하면 첫 번째가 그대로 통과한다.
+
+export const TEAM_PERM_COLUMNS = 'id, name, division, in_sales_stats, can_switch_division'
+export const TEAM_PERM_COLUMNS_LEGACY = 'id, name, division, in_sales_stats'
+
+/** 그 오류가 「전환 칸이 아직 없다」인가. */
+export function isMissingSwitchColumn(err?: { code?: string | null; message?: string | null } | null): boolean {
+  if (!err) return false
+  if (err.code === '42703' || err.code === 'PGRST204') return true
+  return typeof err.message === 'string' && err.message.includes('can_switch_division')
 }
 
 /** 사업부 값인지. */

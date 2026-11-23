@@ -202,9 +202,9 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
   const teamPerm: TeamPerm | null = me?.perm ?? null
   /** 팀 권한(과 팀 사업부)을 다 읽었는지. 팀이 없는 사람은 teamPerm 이 null 로 끝나므로 따로 둔다. */
   const permsReady = !meLoading
-  /** 사업부를 바꿀 수 있는 사람인지(superadmin + engineers.can_switch_division). 못 읽었으면 false. */
+  /** 사업부를 바꿀 수 있는 사람인지(소속 팀의 teams.can_switch_division). 못 읽었으면 false. */
   const canSwitch = canSwitchDivision(me)
-  /** 전환 권한자가 고른 사업부(계정별 저장값). 고른 적이 없으면 null — 본인 팀의 사업부를 쓴다. */
+  /** 전환 가능 팀 사람이 고른 사업부(계정별 저장값). 고른 적이 없으면 null — 본인 팀의 사업부를 쓴다. */
   // 사람이 고른 값이 있으면 그것, 없으면 브라우저에 저장된 값. 저장값은 렌더 중에 읽어도
   // 안전하다 — 본인이 확인되기 전(canSwitch=false)에는 읽지 않으므로 수화 시점에는 null 이다.
   const [pickedDivision, setPickedDivision] = useState<Division | null>(null)
@@ -304,21 +304,30 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
   const engineer: EngineerLike | null = email ? { permission_level: permissionLevel, teams, perm: teamPerm } : null
 
   // ── 현재 사업부 ──
-  //   전환 권한자(superadmin + can_switch_division, lib/division.ts 의 canSwitchDivision) — 고른 값,
+  //   전환 가능 팀(teams.can_switch_division, lib/division.ts 의 canSwitchDivision) — 고른 값,
   //     고른 적이 없으면 본인 팀의 사업부.
-  //   그 밖의 모든 사람(전환 권한이 없는 superadmin 포함) — 본인 팀의 사업부(팀이 없거나 비었으면 계측). 고를 수 없다.
+  //   그 밖의 모든 사람(전환 가능 팀이 아닌 superadmin 포함) — 본인 팀의 사업부(팀이 없거나 비었으면 계측). 고를 수 없다.
   //   팀 권한을 다 읽기 전에는 null — 그동안은 공통 메뉴(건의사항)만 보인다.
   //   superadmin 은 권한 없이도 모든 메뉴를 통과하므로, 이 대기가 없으면 두 사업부 메뉴가 잠깐 섞여 보인다.
   const teamDivision: Division = teamPerm?.division ?? '계측'
   const currentDivision: Division | null = !permsReady ? null : canSwitch ? (savedDivision ?? teamDivision) : teamDivision
 
-  /** 한 묶음의 보이는 메뉴. 사업부가 정해지기 전에는 공통 메뉴만. */
-  const menusOf = (group: MenuGroup): MenuPerm[] =>
-    currentDivision
+/**
+   * 한 묶음의 보이는 메뉴. 사업부가 정해지기 전에는 공통 메뉴만.
+   *
+   * 「관리」 묶음(실적 현황·관리)만 예외다 — **전환 가능 팀은 사업부와 무관하게 본다**(2026-11-23).
+   * 두 메뉴는 사업부 표시가 없어 계측으로 읽히는데, 그래서 사업부를 반도체로 바꾸면 관리 화면이
+   * 사이드바에서 사라졌다(주소로 들어가면 열렸다 — 가드는 메뉴 권한만 본다).
+   * 관리는 회사 하나를 운영하는 일이라 사업부를 타지 않는다. 볼 자격은 종전대로 메뉴 권한이 정한다.
+   */
+  const menusOf = (group: MenuGroup): MenuPerm[] => {
+    if (canSwitch && group === '관리') return visibleMenus(group, engineer)
+    return currentDivision
       ? visibleMenus(group, engineer, currentDivision)
       : visibleMenus(group, engineer).filter(m => menuDivision(m) === '공통')
+  }
 
-  /** 전환 권한자가 사업부를 고른다 — 저장하고, 그 사업부의 시작 화면으로 옮겨 간다. */
+  /** 전환 가능 팀 사람이 사업부를 고른다 — 저장하고, 그 사업부의 시작 화면으로 옮겨 간다. */
   const chooseDivision = (d: Division) => {
     setDivisionOpen(null)
     if (engineerId == null || d === currentDivision) return
@@ -328,7 +337,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
     navigate(DIVISION_HOME[d])
   }
 
-  // 전환 권한자가 주소로 다른 사업부의 메뉴 화면에 들어오면 그 사업부로 맞춘다(화면은 옮기지 않는다).
+  // 전환 가능 팀 사람이 주소로 다른 사업부의 메뉴 화면에 들어오면 그 사업부로 맞춘다(화면은 옮기지 않는다).
   // 메뉴가 섞여 보이지 않게 하려는 것이다. 공통 화면(건의사항)·메뉴에 없는 경로(/account 등)는 그대로 둔다.
   // 홈(/dashboard)도 계측 메뉴라 반도체를 보다가 홈에 들어오면 계측으로 바뀐다.
   useEffect(() => {
@@ -347,14 +356,14 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
 
   // 반도체 직원은 계측 홈(/·/dashboard)을 쓰지 않는다 — 들어오면 반도체 시작 화면으로 보낸다.
   // 로그인 직후의 이동은 app/login/page.tsx 가 먼저 그쪽으로 보내고, 이것은 주소로 직접 들어온 경우를 받는다.
-  // 그 밖의 경로(건의사항 등)는 막지 않는다. 전환 권한자는 위의 자동 전환을 따른다(보내지 않는다). 전환 권한이 없는 superadmin 은 팀 사업부로 고정이라 직원과 같다.
+  // 그 밖의 경로(건의사항 등)는 막지 않는다. 전환 가능 팀은 위의 자동 전환을 따른다(보내지 않는다). 전환 가능 팀이 아닌 superadmin 은 팀 사업부로 고정이라 직원과 같다.
   useEffect(() => {
     if (canSwitch || currentDivision !== '반도체') return
     if (pathname === '/' || pathname === '/dashboard') router.replace(DIVISION_HOME['반도체'])
   }, [pathname, canSwitch, currentDivision, router])
 
   /**
-   * 브랜드 아래 사업부 이름. 전환 권한자는 화살표가 붙은 버튼이고 누르면 고르기 패널이 뜬다.
+   * 브랜드 아래 사업부 이름. 전환 가능 팀 사람은 화살표가 붙은 버튼이고 누르면 고르기 패널이 뜬다.
    * 그 밖의 사람은 이름만(고를 수 없다). 사업부가 정해지기 전에는 자리만 둔다(줄 높이가 출렁이지 않게).
    * 패널은 Popover 로 body 에 띄운다 — 사이드바가 overflow: hidden 이라 안에 두면 잘린다.
    */

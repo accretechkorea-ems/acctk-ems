@@ -31,6 +31,13 @@ export type TeamPerm = {
    * 판정은 lib/salesScope.ts 의 inSalesStats 하나를 지난다.
    */
   inSalesStats: boolean
+  /**
+   * 사업부 전환 가능(teams.can_switch_division, 2026-11-23).
+   * 이 팀 사람은 사이드바에서 계측/반도체를 고르고, **어느 사업부에 있든 관리·실적 메뉴를 본다**.
+   * 예전에는 사람에게 붙어 있었다(engineers.can_switch_division) — 켜 줄 화면이 없어 SQL 로만 넣었고
+   * 그래서 두 사람만 가진 채 굳어 있었다. 판정은 lib/division.ts 의 canSwitchDivision 하나를 지난다.
+   */
+  canSwitchDivision: boolean
 }
 
 // 판정 함수에 넘기는 최소 형태. 실제 engineer 객체(추가 필드 다수)를 그대로 넘길 수 있도록 느슨하게 둔다.

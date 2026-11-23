@@ -16,10 +16,10 @@
 
 import { adminClient } from '@/lib/supabase/admin'
 import type { EngineerLike, TeamPerm } from '@/lib/permissions'
-import { toDivision } from '@/lib/division'
+import { isMissingSwitchColumn, TEAM_PERM_COLUMNS, TEAM_PERM_COLUMNS_LEGACY, toDivision } from '@/lib/division'
 
 // division — 팀의 사업부(teams.division). 비면 '계측'. 클라이언트 로더(lib/teamPerms.ts)와 같은 모양으로 맞춘다.
-type TeamRow = { id: number | null; name: string | null; division: string | null; in_sales_stats?: boolean | null }
+type TeamRow = { id: number | null; name: string | null; division: string | null; in_sales_stats?: boolean | null; can_switch_division?: boolean | null }
 type PermRow = { team_id: number | null; perm_key: string | null }
 
 /** 캐시 유효 시간(ms). 짧게 잡아 권한 변경이 오래 묵지 않게 한다. */
@@ -38,7 +38,12 @@ function buildMap(teams: TeamRow[] | null, perms: PermRow[] | null): Map<string,
   for (const t of teams ?? []) {
     if (t.id == null || !t.name) continue
     nameOf.set(t.id, t.name)
-    map.set(t.name, { menus: new Set<string>(), division: toDivision(t.division), inSalesStats: t.in_sales_stats === true })
+    map.set(t.name, {
+      menus: new Set<string>(),
+      division: toDivision(t.division),
+      inSalesStats: t.in_sales_stats === true,
+      canSwitchDivision: t.can_switch_division === true,
+    })
   }
   for (const p of perms ?? []) {
     if (p.team_id == null || !p.perm_key) continue
@@ -55,10 +60,14 @@ function buildMap(teams: TeamRow[] | null, perms: PermRow[] | null): Map<string,
 export async function loadTeamPerms(opts?: { fresh?: boolean }): Promise<Map<string, TeamPerm>> {
   if (!opts?.fresh && cache && Date.now() - cache.at < TTL_MS) return cache.map
   const supabaseAdmin = adminClient()
-  const [teamsRes, permsRes] = await Promise.all([
-    supabaseAdmin.from('teams').select('id, name, division, in_sales_stats'),
+  // 전환 칸이 아직 없는 DB 면 옛 열 목록으로 한 번 더 읽는다(lib/division.ts).
+  const [first, permsRes] = await Promise.all([
+    supabaseAdmin.from('teams').select(TEAM_PERM_COLUMNS),
     supabaseAdmin.from('team_permissions').select('team_id, perm_key'),
   ])
+  const teamsRes = first.error && isMissingSwitchColumn(first.error)
+    ? await supabaseAdmin.from('teams').select(TEAM_PERM_COLUMNS_LEGACY)
+    : first
   const error = teamsRes.error ?? permsRes.error
   if (error) {
     // 실패는 캐시하지 않는다 — 빈 맵을 30초 들고 있으면 그동안 전원이 권한 없음이 된다.

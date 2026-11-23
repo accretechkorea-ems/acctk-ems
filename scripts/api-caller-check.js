@@ -47,11 +47,11 @@ const eq = (name, got, want) => {
 /** 그 사람의 engineers 한 행. */
 const ROW = (over = {}) => ({
   engineer_id: 7, name: '홍길동', position: '책임', email: 'me@acctk.co.kr',
-  permission_level: 'member', teams: '영업', resigned_date: null, can_switch_division: null,
+  permission_level: 'member', teams: '영업', resigned_date: null,
   ...over,
 })
 /** 팀 권한 한 벌. */
-const PERM = (menus, division = '계측') => ({ menus: new Set(menus), division, inSalesStats: true })
+const PERM = (menus, division = '계측') => ({ menus: new Set(menus), division, inSalesStats: true, canSwitchDivision: false })
 
 /**
  * 바깥을 전부 가짜로. 무엇이 어떻게 불렸는지 log 에 쌓아 두고 뒤에서 확인한다.

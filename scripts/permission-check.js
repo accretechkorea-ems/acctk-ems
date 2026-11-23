@@ -239,8 +239,10 @@ eq('menuDivision — 적지 않으면 계측', [
 
 // ════════════════════════════════════════════════════════════════
 console.log('\n── 사업부(division) ──')
-const semiTeam = { menus: new Set(['contact_semi']), division: '반도체', inSalesStats: true }
-const gaugeTeam = { menus: new Set(['contact_semi']), division: '계측', inSalesStats: true }
+const semiTeam = { menus: new Set(['contact_semi']), division: '반도체', inSalesStats: true, canSwitchDivision: false }
+const gaugeTeam = { menus: new Set(['contact_semi']), division: '계측', inSalesStats: true, canSwitchDivision: false }
+// 전환 가능 팀 — 계측에 있으면서 사업부를 바꿀 수 있다(2026-11-23, teams.can_switch_division).
+const switchTeam = { ...gaugeTeam, canSwitchDivision: true }
 eq('toDivision — 아는 값은 그대로', [D.toDivision('계측'), D.toDivision('반도체')], ['계측', '반도체'])
 eq('toDivision — 모르는 값·빈 값은 계측', [
   D.toDivision(null), D.toDivision(undefined), D.toDivision(''), D.toDivision('영업'), D.toDivision(3),
@@ -250,20 +252,27 @@ eq('teamDivisionOf — 팀의 사업부', D.teamDivisionOf({ perm: semiTeam }), 
 eq('teamDivisionOf — 팀이 없으면 계측', [
   D.teamDivisionOf({ perm: null }), D.teamDivisionOf({}), D.teamDivisionOf(null),
 ], ['계측', '계측', '계측'])
-eq('canSwitchDivision — superadmin + 전환 권한', [
-  D.canSwitchDivision({ permission_level: 'superadmin', can_switch_division: true }),
-  D.canSwitchDivision({ permission_level: 'superadmin', can_switch_division: false }),
+// 전환은 **팀**이 가진다 — 등급(superadmin)과 무관하고, 사람 칸(engineers.can_switch_division)은 보지 않는다.
+eq('canSwitchDivision — 전환 가능 팀이면 참', [
+  D.canSwitchDivision({ permission_level: 'member', perm: switchTeam }),
+  D.canSwitchDivision({ permission_level: 'superadmin', perm: switchTeam }),
+], [true, true])
+eq('canSwitchDivision — 그 밖에는 거짓', [
+  D.canSwitchDivision({ permission_level: 'superadmin', perm: gaugeTeam }),
+  D.canSwitchDivision({ permission_level: 'superadmin', perm: null }),
   D.canSwitchDivision({ permission_level: 'superadmin' }),
-  D.canSwitchDivision({ permission_level: 'member', can_switch_division: true }),
-], [true, false, false, false])
+  D.canSwitchDivision(null),
+], [false, false, false, false])
+eq('옛 사람 칸은 더 이상 쓰이지 않는다',
+  D.canSwitchDivision({ permission_level: 'superadmin', can_switch_division: true, perm: gaugeTeam }), false)
 eq('접촉 보고서 — 반도체 팀 + 메뉴 권한', D.canAccessSemiContact({ permission_level: 'member', perm: semiTeam }), true)
 eq('반도체 팀인데 메뉴를 안 켰으면 거짓',
   D.canAccessSemiContact({ permission_level: 'member', perm: { ...semiTeam, menus: new Set() } }), false)
 eq('계측 팀은 메뉴를 켜도 거짓', D.canAccessSemiContact({ permission_level: 'member', perm: gaugeTeam }), false)
-eq('**전환 권한 없는 superadmin 이 계측 팀이면 막힌다**',
+eq('**전환 가능 팀이 아닌 superadmin 이 계측 팀이면 막힌다**',
   D.canAccessSemiContact({ permission_level: 'superadmin', perm: gaugeTeam }), false)
-eq('전환 권한 있는 superadmin 은 팀과 무관하게 통과',
-  D.canAccessSemiContact({ permission_level: 'superadmin', can_switch_division: true, perm: gaugeTeam }), true)
+eq('전환 가능 팀은 계측에 있어도 통과',
+  D.canAccessSemiContact({ permission_level: 'member', perm: switchTeam }), true)
 eq('반도체 팀 superadmin 은 메뉴 권한이 늘 통과라 열린다',
   D.canAccessSemiContact({ permission_level: 'superadmin', perm: { ...semiTeam, menus: new Set() } }), true)
 eq('사람이 없으면 거짓', [D.canAccessSemiContact(null), D.canAccessSemiContact(undefined)], [false, false])

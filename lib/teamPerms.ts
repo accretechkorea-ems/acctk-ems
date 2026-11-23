@@ -12,10 +12,10 @@
 
 import { createClient } from '@/lib/supabase/client'
 import type { EngineerLike, TeamPerm } from '@/lib/permissions'
-import { toDivision } from '@/lib/division'
+import { isMissingSwitchColumn, TEAM_PERM_COLUMNS, TEAM_PERM_COLUMNS_LEGACY, toDivision } from '@/lib/division'
 
 // division — 팀의 사업부(teams.division). 사이드바가 현재 사업부를 정하는 데 쓴다. 비면 '계측'.
-type TeamRow = { id: number | null; name: string | null; division: string | null; in_sales_stats?: boolean | null }
+type TeamRow = { id: number | null; name: string | null; division: string | null; in_sales_stats?: boolean | null; can_switch_division?: boolean | null }
 type PermRow = { team_id: number | null; perm_key: string | null }
 
 // 진행 중인 요청을 공유해, 여러 화면이 동시에 떠도 조회는 한 번만 나간다.
@@ -33,11 +33,14 @@ export function loadTeamPerms(): Promise<Map<string, TeamPerm>> {
 
     // 한 번에 읽어 본다 — team_permissions.team_id 가 teams.id 를 가리키므로 임베딩이 된다.
     // 모든 화면이 이 둘을 읽으므로(사이드바 권한 판정) 요청 하나가 줄어든다.
-    const one = await supabase.from('teams').select('id, name, division, in_sales_stats, team_permissions(perm_key)')
+    // 전환 칸이 아직 없는 DB 면 옛 열 목록으로 한 번 더 읽는다(lib/division.ts).
+    const embed = (cols: string) => supabase.from('teams').select(`${cols}, team_permissions(perm_key)`)
+    let one = await embed(TEAM_PERM_COLUMNS)
+    if (one.error && isMissingSwitchColumn(one.error)) one = await embed(TEAM_PERM_COLUMNS_LEGACY)
     if (!one.error) {
       type Nested = TeamRow & { team_permissions: { perm_key: string | null }[] | null }
       const rows = (one.data ?? []) as unknown as Nested[]
-      const teams: TeamRow[] = rows.map(r => ({ id: r.id, name: r.name, division: r.division, in_sales_stats: r.in_sales_stats }))
+      const teams: TeamRow[] = rows.map(r => ({ id: r.id, name: r.name, division: r.division, in_sales_stats: r.in_sales_stats, can_switch_division: r.can_switch_division }))
       const perms: PermRow[] = rows.flatMap(r =>
         (r.team_permissions ?? []).map(p => ({ team_id: r.id, perm_key: p.perm_key })))
       return buildMap(teams, perms)
@@ -45,10 +48,13 @@ export function loadTeamPerms(): Promise<Map<string, TeamPerm>> {
 
     // 관계를 못 찾으면(FK 가 없는 경우 PGRST200) 예전처럼 두 번 읽는다 — 판정이 멈추지 않게.
     console.warn('[teamPerms] 임베딩 조회 실패 — 두 번 읽기로 떨어진다', one.error.code)
-    const [teamsRes, permsRes] = await Promise.all([
-      supabase.from('teams').select('id, name, division, in_sales_stats'),
+    const [first, permsRes] = await Promise.all([
+      supabase.from('teams').select(TEAM_PERM_COLUMNS),
       supabase.from('team_permissions').select('team_id, perm_key'),
     ])
+    const teamsRes = first.error && isMissingSwitchColumn(first.error)
+      ? await supabase.from('teams').select(TEAM_PERM_COLUMNS_LEGACY)
+      : first
     const error = teamsRes.error ?? permsRes.error
     if (error) {
       // 실패하면 캐시를 비워 다음 호출에서 다시 시도한다. 그동안은 권한 없음으로 취급된다.
@@ -68,7 +74,12 @@ function buildMap(teams: TeamRow[] | null, perms: PermRow[] | null): Map<string,
   for (const t of teams ?? []) {
     if (t.id == null || !t.name) continue
     nameOf.set(t.id, t.name)
-    map.set(t.name, { menus: new Set<string>(), division: toDivision(t.division), inSalesStats: t.in_sales_stats === true })
+    map.set(t.name, {
+      menus: new Set<string>(),
+      division: toDivision(t.division),
+      inSalesStats: t.in_sales_stats === true,
+      canSwitchDivision: t.can_switch_division === true,
+    })
   }
   for (const p of perms ?? []) {
     if (p.team_id == null || !p.perm_key) continue
