@@ -9,7 +9,7 @@
 // 「좁히지 않음」의 뜻: 묶음을 **전부** 고른 상태다. 전부 고른 것과 아무것도 고르지
 // 않은 것을 같게 보지 않는다 — 아무것도 고르지 않으면 0건이 맞다(사람이 그렇게 골랐다).
 
-export const TIMELINE_KINDS = ['영업', '서비스', '견적', '의뢰', '포캐스트', '홀딩', '사건', '변경'] as const
+export const TIMELINE_KINDS = ['영업', '서비스', '견적', '의뢰', '포캐스트', '홀딩', '리드', '사건', '변경'] as const
 export type TimelineKind = (typeof TIMELINE_KINDS)[number]
 
 /**

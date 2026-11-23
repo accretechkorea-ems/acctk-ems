@@ -24,7 +24,7 @@
 // leads.blocked_by/blocked_at 은 CHECK(leads_blocked_actor_check)가 지킨다:
 // 상태가 '배정불가' 가 아니면 둘 다 null 이어야 한다. 상태를 되돌릴 때 반드시 함께 비운다.
 import { adminClient } from '@/lib/supabase/admin'
-import { hasLeadRegistered, leadAssignmentEvents, writeCustomerEvents } from '@/lib/customerEvents'
+import { hasLeadRegistered, leadAssignmentEvents, writeCustomerEvents, type CustomerEventType } from '@/lib/customerEvents'
 import { isOwner, loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
@@ -53,6 +53,8 @@ const bad = (message: string, status = 400) => NextResponse.json({ error: messag
 type LeadRow = {
   lead_id: number
   lead_no: string | null
+  /** 파트너사 — 리드 등록 사건의 요약 줄에 쓴다. */
+  partner_company: string | null
   partner_name: string | null
   /** 파트너사 담당자 메일. 칸이 생기기 전 등록분은 null 이라 그때는 메일을 보내지 않는다. */
   partner_email: string | null
@@ -162,13 +164,34 @@ export async function POST(req: Request) {
   }
 
   const action = typeof body.action === 'string' ? body.action : ''
+
+  /**
+   * 리드 상태가 바뀐 자국을 남긴다(2026-11-23).
+   * **고객사가 붙어 있을 때만** 적는다 — customer_events 는 customer_id 가 필수다.
+   * 실패해도 상태 변경을 되돌리지 않는다(기록은 일을 막지 않는다).
+   */
+  const logLeadEvent = async (
+    type: CustomerEventType,
+    customerId: number | null | undefined,
+    payload: Record<string, unknown>,
+  ) => {
+    const id = Number(customerId)
+    if (!Number.isInteger(id) || id <= 0) return
+    await writeCustomerEvents(supabaseAdmin, [{
+      customer_id: id,
+      event_type: type,
+      occurred_at: new Date().toISOString(),
+      actor_engineer_id: caller.engineer_id,
+      payload,
+    }])
+  }
   const leadId = Number(body.leadId)
   if (!Number.isInteger(leadId) || leadId <= 0) return bad('리드를 지정해주세요.')
 
   // 권한 판정은 화면이 보낸 값이 아니라 DB 의 현재 값으로 한다.
   const { data: lead, error: leadErr } = await supabaseAdmin
     .from('leads')
-    .select('lead_id, lead_no, partner_name, partner_email, customer_company, industry, interest_product, expected_purchase, meeting_note, request_note, status, assigned_to, block_reason, blocked_by, blocked_at, converted_opportunity_id, customer_id, created_at, address, city, contact_name, contact_dept, contact_title, contact_email, contact_office_tel, contact_mobile')
+    .select('lead_id, lead_no, partner_company, partner_name, partner_email, customer_company, industry, interest_product, expected_purchase, meeting_note, request_note, status, assigned_to, block_reason, blocked_by, blocked_at, converted_opportunity_id, customer_id, created_at, address, city, contact_name, contact_dept, contact_title, contact_email, contact_office_tel, contact_mobile')
     .eq('lead_id', leadId)
     .single<LeadRow>()
   if (leadErr || !lead) return bad('리드를 찾을 수 없습니다.', 404)
@@ -453,6 +476,9 @@ export async function POST(req: Request) {
       type: 'lead_skipped',
       leadId,
     })
+    await logLeadEvent('lead_status_changed', lead.customer_id, {
+      lead_id: leadId, lead_no: lead.lead_no, from: lead.status, to: LEAD_STATUS_SKIPPED, reason,
+    })
     return NextResponse.json({ success: true, status: LEAD_STATUS_SKIPPED })
   }
 
@@ -497,6 +523,9 @@ export async function POST(req: Request) {
         leadId,
       })
     }
+    await logLeadEvent('lead_unassignable', lead.customer_id, {
+      lead_id: leadId, lead_no: lead.lead_no, reason, previous_assignee: previousAssignee,
+    })
     return NextResponse.json({ success: true, status: LEAD_STATUS_BLOCKED, unassigned: previousAssignee != null })
   }
 
@@ -539,6 +568,9 @@ export async function POST(req: Request) {
         blocked_at: lead.blocked_at,
       },
       newData: { status: LEAD_STATUS_NEW, assigned_to: null },
+    })
+    await logLeadEvent('lead_status_changed', lead.customer_id, {
+      lead_id: leadId, lead_no: lead.lead_no, from: LEAD_STATUS_BLOCKED, to: LEAD_STATUS_NEW,
     })
     return NextResponse.json({ success: true, status: LEAD_STATUS_NEW })
   }

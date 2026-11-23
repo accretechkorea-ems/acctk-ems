@@ -26,7 +26,7 @@ import { INQUIRY_TYPE_LABEL, inquiryTypeOf } from '@/lib/inquiries'
 import type { InquiryRow } from '@/hooks/useCompanyTimeline'
 import { isFutureVisit } from '@/lib/serviceVisit'
 import { timelineKey } from '@/lib/activity'
-import { isChangeEvent } from '@/lib/customerEvents'
+import { isChangeEvent, isLeadEvent } from '@/lib/customerEvents'
 import { eventLine, type CustomerEvent } from '@/lib/customerEventView'
 import { R } from '@/lib/radius'
 import { TITLE } from '@/lib/textTokens'
@@ -527,7 +527,11 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
       const line = eventLine(e)
       return {
         key: `ev-${e.id}`,
-        kind: isChangeEvent(e.event_type) ? ('변경' as const) : ('사건' as const),
+        // 리드는 **밖에서 들어온 일**이라 활동으로 읽힌다 — 따로 세우고 기본으로 켜 둔다.
+        // 고친 자국(변경)만 꺼 둔다(2026-11-23).
+        kind: isLeadEvent(e.event_type)
+          ? ('리드' as const)
+          : isChangeEvent(e.event_type) ? ('변경' as const) : ('사건' as const),
         siteId: e.customer_id ?? null,
         date: (e.occurred_at ?? '').slice(0, 10) || null,
         label: line.label,

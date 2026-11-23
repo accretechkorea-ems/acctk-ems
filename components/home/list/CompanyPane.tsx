@@ -207,8 +207,9 @@ export default function CompanyPane({
   /** 타임라인의 사업장 칩·열이 쓰는 이름표. */
   const siteOptions = useMemo(
     // 이름이 비어 있는 사업장도 칩·사업장 열에 **이름이 있어야** 고를 수 있다.
-    // 표·트리는 빨간 「입력 필요」로 알리고, 여기서는 고르는 이름이 필요해 괄호로 적는다.
-    () => group.sites.map(s => ({ id: s.customer.customer_id, name: s.siteName || '(이름 없음)' })),
+    // 글자는 표·트리와 **같은 말**을 쓴다(2026-11-23) — 한 화면에서 같은 빈칸을
+    // 「(이름 없음)」과 「입력 필요」로 다르게 부르면 다른 것처럼 읽힌다.
+    () => group.sites.map(s => ({ id: s.customer.customer_id, name: s.siteName || '입력 필요' })),
     [group.sites],
   )
   /** 회사 카드의 포캐스트 블록 — 진행 중인 건만(lib/companyForecast.ts). */

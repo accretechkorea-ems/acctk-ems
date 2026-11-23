@@ -115,10 +115,10 @@ export default function SiteMergeModal({ rows, busy, onDryRun, onRun, onClose }:
         >
           <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.9 }}>
             {rows.filter(r => r.customer.customer_id !== keepId).map(r => (
-              <div key={r.customer.customer_id} style={{ color: SUB }}>{r.siteName || '(이름 없음)'}</div>
+              <div key={r.customer.customer_id} style={{ color: SUB }}>{r.siteName || '입력 필요'}</div>
             ))}
             <div style={{ color: MUTED }}>↓</div>
-            <b>{siteName.trim() || keep?.siteName || '(이름 없음)'}</b>
+            <b>{siteName.trim() || keep?.siteName || '입력 필요'}</b>
             <span style={{ color: SUB }}> 로 합칩니다.</span>
           </div>
 
@@ -196,7 +196,7 @@ export default function SiteMergeModal({ rows, busy, onDryRun, onRun, onClose }:
                 }}>
                 <input type="radio" name="keep-site" checked={on} onChange={() => setKeepId(id)} />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: on ? 700 : 600, color: r.siteName ? TEXT : MUTED, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.siteName || '(이름 없음)'}</div>
+                  <div style={{ fontSize: 13, fontWeight: on ? 700 : 600, color: r.siteName ? TEXT : MUTED, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.siteName || '입력 필요'}</div>
                   <div style={{ fontSize: 11, color: MUTED, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {[r.customer.address, `장비 ${r.deviceCount}`, `진행 견적 ${r.openQuotes}`].filter(Boolean).join(' · ')}
                   </div>

@@ -65,8 +65,11 @@ console.log('[customer-events] ① 처음 배정')
   eq('두 줄이 생긴다', rows.map(r => r.event_type), ['lead_registered', 'lead_assigned'])
   eq('최초 등록은 리드가 들어온 날', rows[0].occurred_at, LEAD.created_at)
   eq('최초 등록에는 실행자를 적지 않는다', rows[0].actor_engineer_id, null)
+  // 2026-11-23: 요약 줄(관심 제품 · 파트너사)을 쓰려고 두 칸을 payload 에 더했다.
+  // 본보기 리드에는 그 값이 없어 null 로 들어간다 — 옛 줄도 같은 모양이라 화면은 업종으로 떨어진다.
   eq('최초 등록 payload', rows[0].payload, {
     lead_id: 77, lead_no: 'L-2026-077', industry: '2.자동차',
+    interest_product: null, partner_company: null,
     note: '첫 미팅에서 설비 교체를 검토 중이라고 했다.',
   })
   eq('배정은 지금 시각', rows[1].occurred_at, NOW)

@@ -57,11 +57,18 @@ export function eventLine(e: CustomerEvent): EventLine {
 
   switch (e.event_type) {
     case 'lead_registered': {
-      const bits = [str(p.industry), str(p.note)].filter(Boolean)
+      // **한 줄 요약이 먼저**다 — 관심 제품 · 파트너사(2026-11-23).
+      // 전문(회의록)은 줄바꿈 뒤에 둔다. 줄은 기본으로 한 줄만 보이고 누르면 펼쳐진다
+      // (TimelineRow 의 clampable). 옛 줄에는 둘이 없어 업종으로 떨어진다.
+      const head = [str(p.interest_product), str(p.partner_company)].filter(Boolean).join(' · ')
+        || str(p.industry)
+        || '리드가 등록되었습니다'
+      const full = str(p.note)
       return {
         label: '리드 등록',
         title: leadNo,
-        body: bits.join(' · ') || '리드가 등록되었습니다',
+        body: full ? `${head}
+${full}` : head,
         owner: '',
       }
     }
@@ -116,6 +123,31 @@ export function eventLine(e: CustomerEvent): EventLine {
         body: p.mode === 'add' ? '장비를 추가했습니다' : changeText(p.changes),
         owner: '',
       }
+    case 'lead_unassignable':
+      return {
+        label: '배정 불가',
+        title: leadNo,
+        body: str(p.reason) || '배정 불가로 처리되었습니다',
+        owner: '',
+      }
+    case 'lead_converted':
+      return { label: '리드 전환', title: leadNo, body: '고객사로 전환되었습니다', owner: '' }
+    case 'lead_status_changed':
+      return {
+        label: '리드 상태',
+        title: leadNo,
+        body: [arrow(p.from, p.to), str(p.reason)].filter(Boolean).join(' · '),
+        owner: '',
+      }
+    case 'lead_recalled':
+      return {
+        label: '리드 회수',
+        title: leadNo,
+        body: `번호를 반납했습니다${str(p.reason) ? ` — ${str(p.reason)}` : ''}`,
+        owner: '',
+      }
+    case 'lead_restored':
+      return { label: '리드 복구', title: leadNo, body: '번호를 되돌렸습니다', owner: '' }
     case 'customer_deleted': {
       const kind = str(p.kind) || '줄'
       const why = str(p.reason)

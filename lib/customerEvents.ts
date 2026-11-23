@@ -28,8 +28,24 @@ export type CustomerEventType =
   | 'company_industry_changed' | 'site_edited' | 'contact_edited' | 'device_edited'
   // 지우기·되돌리기 — 소프트 삭제다(deleted_at). 어느 줄을 왜 지웠는지 payload 에 담는다.
   | 'customer_deleted' | 'customer_restored'
-  // 리드 — 번호를 반납하고 되찾는다(lib/leadRecall.ts).
+  // 리드 — 번호를 반납하고 되찾는다(lib/leadRecall.ts)와 **상태가 바뀐 자국**.
   | 'lead_recalled' | 'lead_restored'
+  | 'lead_unassignable' | 'lead_converted' | 'lead_status_changed'
+
+/**
+ * 「리드」 묶음 — 활동 이력이 이 묶음을 **「리드」 종류**로 세운다(기본 켜짐).
+ * 고친 자국(변경)과 다르다 — 리드는 **밖에서 들어온 일**이라 활동으로 읽힌다.
+ */
+export const LEAD_EVENT_TYPES: readonly CustomerEventType[] = [
+  'lead_registered', 'lead_assigned', 'lead_reassigned',
+  'lead_unassignable', 'lead_converted', 'lead_status_changed',
+  'lead_recalled', 'lead_restored',
+]
+
+/** 그 사건이 리드 줄인가. */
+export function isLeadEvent(type: string): boolean {
+  return (LEAD_EVENT_TYPES as readonly string[]).includes(type)
+}
 
 /** 「고친 일」 묶음 — 활동 이력이 이 묶음을 「변경」으로 접어 둔다. */
 export const CHANGE_EVENT_TYPES: readonly CustomerEventType[] = [
@@ -98,6 +114,9 @@ export type LeadLike = {
   lead_id: number
   lead_no: string | null
   industry: string | null
+  /** 요약 줄이 쓰는 둘 — 「관심 제품 · 파트너사」. */
+  interest_product?: string | null
+  partner_company?: string | null
   created_at: string
   meeting_note?: string | null
   request_note?: string | null
@@ -141,6 +160,9 @@ export function leadAssignmentEvents(input: {
       payload: {
         ...base,
         industry: lead.industry ?? null,
+        // 요약 줄(한 줄)에 쓰는 둘. 전문은 note 에 그대로 둔다 — 펼치면 보인다.
+        interest_product: lead.interest_product ?? null,
+        partner_company: lead.partner_company ?? null,
         note: briefNote(lead.meeting_note ?? lead.request_note),
       },
     })

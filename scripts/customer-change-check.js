@@ -159,5 +159,23 @@ ok('일괄 작업은 낙관적으로 먼저 고친다', /onPatchLocal\?\.\(selec
 ok('낙관적 반영은 아는 칸만 고친다',
   /patchCustomersLocally = useCallback\(\(ids: number\[\], patch: Partial<Customer>\)/.test(PAGE))
 
+console.log('\n── ⑧ 리드 사건은 「리드」 종류다(기본 켜짐) ──')
+eq('리드 묶음 여덟 가지', E.LEAD_EVENT_TYPES.length, 8)
+ok('리드는 「고친 일」이 아니다', E.LEAD_EVENT_TYPES.every(t => !E.isChangeEvent(t)))
+ok('「리드」 종류가 목록에 있다', T.TIMELINE_KINDS.includes('리드'))
+ok('리드는 기본으로 켜져 있다', !T.DEFAULT_OFF_KINDS.includes('리드'))
+const TL = fs.readFileSync(path.join(ROOT, 'components/customer/ActivityTimeline.tsx'), 'utf8')
+ok('타임라인이 리드를 따로 세운다', /isLeadEvent\(e\.event_type\)/.test(TL))
+eq('배정 불가 한 줄', V.eventLine({ id: 1, customer_id: 1, event_type: 'lead_unassignable', occurred_at: 'x', actor_engineer_id: 1, payload: { lead_no: 'LD-26-003', reason: '예산 없음' } }).body, '예산 없음')
+eq('상태 바뀜 한 줄', V.eventLine({ id: 1, customer_id: 1, event_type: 'lead_status_changed', occurred_at: 'x', actor_engineer_id: 1, payload: { lead_no: 'LD-26-003', from: '신규', to: '미진행', reason: '연락 두절' } }).body, '신규 → 미진행 · 연락 두절')
+eq('회수 한 줄', V.eventLine({ id: 1, customer_id: 1, event_type: 'lead_recalled', occurred_at: 'x', actor_engineer_id: 1, payload: { lead_no: 'LD-26-003', reason: '중복 등록' } }).label, '리드 회수')
+eq('등록 줄은 요약이 먼저다(전문은 줄바꿈 뒤)', V.eventLine({ id: 1, customer_id: 1, event_type: 'lead_registered', occurred_at: 'x', actor_engineer_id: 1, payload: { lead_no: 'LD-26-003', interest_product: 'CMM', partner_company: '가나상사', note: '긴 회의록' } }).body.split(String.fromCharCode(10))[0], 'CMM · 가나상사')
+eq('전문도 들고 있다', V.eventLine({ id: 1, customer_id: 1, event_type: 'lead_registered', occurred_at: 'x', actor_engineer_id: 1, payload: { lead_no: 'LD-26-003', interest_product: 'CMM', partner_company: '가나상사', note: '긴 회의록' } }).body.split(String.fromCharCode(10))[1], '긴 회의록')
+eq('옛 줄은 업종으로 떨어진다', V.eventLine({ id: 1, customer_id: 1, event_type: 'lead_registered', occurred_at: 'x', actor_engineer_id: 1, payload: { lead_no: 'LD-26-003', industry: '3.자동차' } }).body, '3.자동차')
+const PANE2 = fs.readFileSync(path.join(ROOT, 'components/home/list/CompanyPane.tsx'), 'utf8')
+const MERGE2 = fs.readFileSync(path.join(ROOT, 'components/home/list/SiteMergeModal.tsx'), 'utf8')
+ok('빈 사업장 이름은 다른 곳과 같은 말을 쓴다',
+  !/'\\(이름 없음\\)'/.test(PANE2) && !/'\\(이름 없음\\)'/.test(MERGE2))
+
 console.log(fails === 0 ? '\n전부 통과' : `\n${fails}건 실패`)
 process.exit(fails === 0 ? 0 : 1)
