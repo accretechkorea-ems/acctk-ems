@@ -39,6 +39,7 @@ import { invalidateAgencies, type AgencyOption } from '@/lib/customerAgency'
 import { isStale } from '@/lib/customerList'
 import { PENDING_STATUS } from '@/lib/quoteStatus'
 import { createClient } from '@/lib/supabase/client'
+import DeleteCustomerModal from '@/components/home/list/DeleteCustomerModal'
 import { R } from '@/lib/radius'
 import type { LastTouch } from '@/lib/customerLastTouch'
 import type { Customer } from '@/lib/home'
@@ -75,6 +76,8 @@ export type AgencyPaneProps = {
   today: string
   /** 본인 — 견적 PDF 를 열 때 조회 기록에 남는다(회사 화면과 같다). */
   me: { engineer_id: number | null }
+  /** 담당자를 지울 수 있는가(슈퍼관리자). 없으면 버튼을 내지 않는다. */
+  canDeleteContact?: boolean
   /** 표의 줄을 누르면 그 사업장 화면으로. 돌아오면 이 대리점 화면이다. */
   onOpenSite: (siteId: number) => void
   /** 폰에서 목록으로 돌아가는 ← (넓은 화면에서는 CSS 가 감춘다). */
@@ -88,7 +91,7 @@ export type AgencyPaneProps = {
 }
 
 export default function AgencyPane({
-  agency, customers, companyName, deviceCount, openQuotes, touchOf, today, me,
+  agency, customers, companyName, deviceCount, openQuotes, touchOf, today, me, canDeleteContact = false,
   onOpenSite, onBackToList, onSaved, onError, onToast, onOpenQuote,
 }: AgencyPaneProps) {
   const supabase = createClient()
@@ -329,8 +332,19 @@ export default function AgencyPane({
         isSaving={contact.isSavingContactEdit}
         onClose={() => contact.setSelectedContact(null)}
         onSave={contact.handleUpdateContact}
-        onDelete={contact.handleDeleteContact}
+        onDelete={canDeleteContact ? contact.openDeleteContact : undefined}
       />
+      {contact.deleteContactOpen && contact.selectedContact && (
+        <DeleteCustomerModal
+          key={`contact-${contact.selectedContact.contact_id}`}
+          target="contact"
+          name={contact.selectedContact.name ?? ''}
+          counts={null}
+          busy={contact.isSavingContactEdit}
+          onClose={() => contact.setDeleteContactOpen(false)}
+          onDelete={(reason: string) => void contact.confirmDeleteContact(reason)}
+        />
+      )}
 
       {/* 견적 이력 — 이 대리점을 거친 견적 전부(끝난 건 포함). 제목에 두 수치가 적힌다. */}
       {quoteHistoryOpen && (

@@ -33,6 +33,8 @@ export const BLUE_TINT = '#eff4ff'
 export const BLUE_BORDER = '#c7d7f8'
 /** 안내 띠·푸터의 옅은 바탕. */
 export const BAND_BG = '#f8fafc'
+/** 위험 안내의 옅은 바탕 — globals.css 의 --color-danger-tint 와 같은 값이다. */
+export const DANGER_TINT = '#fef2f2'
 
 // ── 카드 ──────────────────────────────────────────────────────────
 // 그림자 없음. 구분은 테두리로만 한다(모달·팝업에만 그림자 허용).

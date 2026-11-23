@@ -21,6 +21,9 @@ import ListTabs from '@/components/home/list/ListTabs'
 import CustomerFilterModal from '@/components/home/CustomerFilterModal'
 import { customerFilterChips, defaultFilter, type FilterOptions } from '@/lib/customerFilterChips'
 import { customerChange } from '@/lib/customerChange'
+import { customerDelete } from '@/lib/customerDelete.client'
+import { EMPTY_COUNTS, type DeleteCounts, type DeleteTarget } from '@/lib/customerDelete'
+import DeleteCustomerModal from '@/components/home/list/DeleteCustomerModal'
 import CustomerListPanel, { type CleanupBucket, type CleanupRow, type ListTab } from '@/components/home/list/CustomerListPanel'
 import CompanyPane from '@/components/home/list/CompanyPane'
 import AgencyPane from '@/components/home/list/AgencyPane'
@@ -35,7 +38,6 @@ import {
 import type { LastTouch } from '@/lib/customerLastTouch'
 import { todayKST } from '@/lib/date'
 import { useToast } from '@/components/common/Toast'
-import { useConfirm } from '@/components/common/ConfirmDialog'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { isSuperAdmin } from '@/lib/permissions'
@@ -62,7 +64,6 @@ export default function HomePage() {
   // 엑셀 내보내기는 관리자만 — 팀 관리·목표 관리 버튼과 같은 판정(permission_level).
   const canExportExcel = isSuperAdmin(me)
   const toast = useToast()
-  const confirmDialog = useConfirm()
 
   const listScrollRef = useRef<HTMLDivElement | null>(null)
   const restoredHomeStateRef = useRef(false)
@@ -103,6 +104,12 @@ export default function HomePage() {
   const [checkedCompanies, setCheckedCompanies] = useState<Set<number>>(new Set())
   /** 정리 필요 탭에서 보고 있는 묶음(4). */
   const [cleanupBucket, setCleanupBucket] = useState<CleanupBucket>('industry')
+  /** 지우기 창 — 무엇을 지우려는가(없으면 닫혀 있다). */
+  const [deleteTarget, setDeleteTarget] = useState<{ target: DeleteTarget; id: number; name: string } | null>(null)
+  const [deleteCounts, setDeleteCounts] = useState<DeleteCounts | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  /** 「삭제됨」 소탭의 줄 — 숨긴 사업장·회사다. */
+  const [deletedRows, setDeletedRows] = useState<{ customer_id: number; company_name: string; hint: string }[]>([])
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null)
   const [selectedSiteId, setSelectedSiteId] = useState<number | null>(null)
@@ -555,6 +562,10 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
     const dupName: CleanupRow[] = []
     const blankSites: CleanupRow[] = []
     const emptyCompany: CleanupRow[] = []
+    // 「삭제됨」은 화면 조회에 없는 줄이라(지워진 줄은 안 읽는다) 라우트가 준 목록을 그대로 쓴다.
+    const deleted: CleanupRow[] = deletedRows.map(r => ({
+      companyId: r.customer_id, companyName: r.company_name, hint: r.hint,
+    }))
 
     for (const p of companies) {
       const sites = sitesByParent.get(p.customer_id) ?? []
@@ -586,8 +597,10 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
     return {
       industry: industry.sort(byName), dupName: dupName.sort(byName),
       blankSites: blankSites.sort(byName), emptyCompany: emptyCompany.sort(byName),
+      // 삭제됨은 라우트가 준 순서 그대로다(지운 때의 역순).
+      deleted,
     }
-  }, [companies, customers])
+  }, [companies, customers, deletedRows])
 
   /** 대리점 하나가 몇 곳에 붙어 있나(대리점 탭의 오른쪽 수). */
   const agencySiteCount = useCallback(
@@ -608,25 +621,67 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
     toast.success(`회사 ${ids.length}곳의 분류를 「${value}」 로 바꿨습니다`)
   }
 
-  /** 사업장 0곳 회사를 지운다(정리 필요 탭). 라우트가 지우기 직전에 다시 센다. */
-  const deleteEmptyCompany = async (companyId: number, companyName: string) => {
-    const ok = await confirmDialog({
-      title: '회사 삭제',
-      message: `'${companyName}' 회사 줄을 지웁니다. 묶인 사업장이 없을 때만 지워지며, 되돌릴 수 없습니다.`,
-      confirmText: '삭제', variant: 'danger',
+  /**
+   * 사업장 0곳 회사를 지운다(정리 필요 탭) — **숨기기다**(deleted_at).
+   * 창이 연결 기록 수와 까닭을 받는다. 라우트가 지우기 직전에 사업장 수를 다시 센다.
+   */
+  const deleteEmptyCompany = (companyId: number, companyName: string) => {
+    setDeleteTarget({ target: 'company', id: companyId, name: companyName })
+  }
+
+  /** 창이 뜨면 연결 기록을 센다 — 무엇이 함께 숨는지 보여 주려고. */
+  useEffect(() => {
+    if (!deleteTarget) { setDeleteCounts(null); return }
+    let cancelled = false
+    void (async () => {
+      const r = await customerDelete({ action: 'counts', target: deleteTarget.target, id: deleteTarget.id })
+      if (cancelled) return
+      setDeleteCounts(r.ok ? (r.data.counts as DeleteCounts) : EMPTY_COUNTS)
+    })()
+    return () => { cancelled = true }
+  }, [deleteTarget])
+
+  /** 창의 「삭제」 — 한 문장으로 숨기고 사건을 남긴다. */
+  const runDelete = async (reason: string) => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    const r = await customerDelete({
+      action: 'delete', target: deleteTarget.target, id: deleteTarget.id, reason,
+      counts: deleteCounts ?? undefined,
     })
-    if (!ok) return
-    const res = await fetch('/api/parent-company', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'delete', parentId: companyId }),
-    })
-    const json = await res.json().catch(() => ({}))
-    if (!res.ok || json?.error) { toast.error(json?.error ?? `서버 오류 (${res.status})`); return }
+    setDeleting(false)
+    if (!r.ok) { toast.error(r.error); return }
+    const { id, name } = deleteTarget
+    setDeleteTarget(null)
     invalidateParents()
     loadParents().then(setCompanies)
-    if (selectedCompanyId === companyId) { setSelectedCompanyId(null); setSelectedSiteId(null) }
-    toast.success(`${companyName} 회사를 지웠습니다`)
+    if (selectedCompanyId === id) { setSelectedCompanyId(null); setSelectedSiteId(null) }
+    void fetchData()
+    void loadDeletedRows()
+    toast.success(`${name} 을(를) 숨겼습니다`)
   }
+
+  /** 「삭제됨」 소탭 목록 — 라우트가 service role 로 읽어 준다(화면 조회는 지워진 줄을 보지 않는다). */
+  const loadDeletedRows = useCallback(async () => {
+    const r = await customerDelete({ action: 'list-deleted' })
+    setDeletedRows(r.ok ? (r.data.rows as { customer_id: number; company_name: string; hint: string }[]) : [])
+  }, [])
+
+  /** 되돌리기 — 슈퍼관리자만 버튼을 받는다. */
+  const restoreCustomer = async (customerId: number, name: string) => {
+    const r = await customerDelete({ action: 'restore', target: 'site', id: customerId })
+    if (!r.ok) { toast.error(r.error); return }
+    invalidateParents()
+    loadParents().then(setCompanies)
+    void fetchData()
+    void loadDeletedRows()
+    toast.success(`${name} 을(를) 되돌렸습니다`)
+  }
+
+  // 「삭제됨」 소탭을 열 때만 읽는다 — 평소에는 조회를 늘리지 않는다.
+  useEffect(() => {
+    if (listTab === 'cleanup' && cleanupBucket === 'deleted') void loadDeletedRows()
+  }, [listTab, cleanupBucket, loadDeletedRows])
 
   /** 지금 고른 회사 묶음. */
   const selectedGroup = useMemo(
@@ -966,7 +1021,9 @@ useEffect(() => {
               cleanup={cleanup}
               cleanupBucket={cleanupBucket}
               setCleanupBucket={setCleanupBucket}
-              onDeleteCompany={(id, name) => void deleteEmptyCompany(id, name)}
+              onDeleteCompany={(id, name) => deleteEmptyCompany(id, name)}
+              /* 되돌리기는 슈퍼관리자만 — 버튼 자체를 내주지 않는다(라우트도 같은 문턱이다). */
+              onRestore={canExportExcel ? ((id, name) => void restoreCustomer(id, name)) : undefined}
               agencies={agencyList}
               agencySiteCount={agencySiteCount}
               /* 대리점을 누르면 **우측에 대리점 화면**이 선다(2026-11-21).
@@ -1009,6 +1066,7 @@ useEffect(() => {
                 touchOf={id => lastTouchMap.get(id) ?? null}
                 today={today}
                 me={{ engineer_id: me?.engineer_id ?? null }}
+                canDeleteContact={canExportExcel}
                 onOpenSite={id => openSite(id)}
                 onBackToList={() => setSelectedAgencyId(null)}
                 onSaved={() => { void fetchData() }}
@@ -1088,6 +1146,20 @@ useEffect(() => {
         </SidePanel>
       </div>
       )}
+
+        {/* ── 지우기 창 — 무엇이 함께 숨는지 보여 주고 까닭을 받는다 ── */}
+        {deleteTarget && (
+          <DeleteCustomerModal
+            /* 대상이 바뀌면 창을 새로 만든다 — 앞서 적던 까닭이 남지 않게. */
+            key={`${deleteTarget.target}-${deleteTarget.id}`}
+            target={deleteTarget.target}
+            name={deleteTarget.name}
+            counts={deleteCounts}
+            busy={deleting}
+            onClose={() => setDeleteTarget(null)}
+            onDelete={reason => void runDelete(reason)}
+          />
+        )}
 
         {exportOpen && (
           <ExportModal

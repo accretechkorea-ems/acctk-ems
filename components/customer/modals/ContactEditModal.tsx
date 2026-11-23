@@ -12,7 +12,8 @@ type Props = {
   isSaving: boolean
   onClose: () => void
   onSave: (form: ContactForm) => void
-  onDelete: () => void
+  /** 지우기 — 권한이 없으면 넘어오지 않는다(버튼도 내지 않는다). */
+  onDelete?: () => void
 }
 
 const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
@@ -59,11 +60,13 @@ export default function ContactEditModal({ contact, isSaving, onClose, onSave, o
         width={480}
         footStyle={{ justifyContent: 'space-between' }}
         footer={<>
+          {onDelete && (
           <button
             onClick={onDelete}
             disabled={isSaving}
             style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}
           >삭제</button>
+          )}
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={onClose}

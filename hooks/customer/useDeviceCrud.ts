@@ -8,11 +8,12 @@ import { useRef, useState } from 'react'
 import { isPdfName, openPdf, pdfNameOf } from '@/lib/pdfViewer'
 import { createClient } from '@/lib/supabase/client'
 import { customerChange } from '@/lib/customerChange'
+import { customerDelete } from '@/lib/customerDelete.client'
 import { useToast } from '@/components/common/Toast'
 import { DEVICE_BUCKET, deviceImagePath, isDefaultDeviceImage } from '@/lib/deviceImage'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { downsizeImage } from '@/lib/leadCardImage'
-import { disposePatch, restorePatch, isDisposed } from '@/lib/deviceStatus'
+import { disposePatch, restorePatch } from '@/lib/deviceStatus'
 import { todayKST } from '@/lib/date'
 import type { Device, DeviceForm } from '@/components/customer/types'
 import { errMessage } from '@/lib/errMessage'
@@ -235,32 +236,25 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
     }
   }
 
-  const handleDeleteDevice = async () => {
+  /**
+   * 장비 삭제 — **숨기기다**(deleted_at). 라우트가 한다(2026-11-23).
+   * 슈퍼관리자만 할 수 있고, 까닭을 받아 사건으로 남긴다.
+   * 쓰던 장비라면 삭제가 아니라 「폐기 처리」가 맞다 — 창이 그 말을 먼저 한다.
+   */
+  const [deleteDeviceOpen, setDeleteDeviceOpen] = useState(false)
+  const openDeleteDevice = () => { if (selectedDevice) setDeleteDeviceOpen(true) }
+  const confirmDeleteDevice = async (reason: string) => {
     if (!selectedDevice) return
-    // 삭제는 지난 기록에서 장비 이름까지 사라지게 한다 — 수명이 끝난 장비는 폐기 처리가 맞다.
-    const ok = await confirmDialog({
-      title: '장비 삭제',
-      message: isDisposed(selectedDevice)
-        ? '이 장비를 삭제하시겠습니까?\n이미 폐기 처리된 장비입니다 — 삭제하면 지난 기록에서 장비 이름도 사라집니다.'
-        : '이 장비를 삭제하시겠습니까?\n실제로 쓰던 장비라면 삭제보다 「폐기 처리」를 권장합니다 — 목록에서는 숨겨지고 지난 기록은 남습니다.',
-      confirmText: '삭제', variant: 'danger',
-    })
-    if (!ok) return
     setIsSavingDeviceEdit(true)
-    const { error } = await supabase.from('devices').update({ deleted_at: new Date().toISOString() }).eq('device_id', selectedDevice.device_id)
+    const r = await customerDelete({ action: 'delete', target: 'device', id: selectedDevice.device_id, reason })
     setIsSavingDeviceEdit(false)
-    if (error) { toast.error(error.message || '장비 삭제 중 오류가 발생했습니다'); return }
-    toast.success('장비가 삭제되었습니다')
+    if (!r.ok) { toast.error(r.error); return }
+    setDeleteDeviceOpen(false)
+    toast.success('장비를 숨겼습니다')
     setSelectedDevice(null)
     await fetchDetail()
   }
 
-  /**
-   * 폐기 처리 — 목록에서 숨기고 **이력은 남긴다**(지난 레포트·홀딩·쇼룸 기록은 그대로
-   * 이 장비를 가리킨다). 삭제(deleted_at)와 달리 되돌릴 수 있다.
-   *
-   * 날짜는 한국 기준 오늘이다 — 자정 무렵에 UTC 로 적으면 하루 전으로 찍힌다.
-   */
   const handleDisposeDevice = async () => {
     if (!selectedDevice) return
     const ok = await confirmDialog({
@@ -381,7 +375,9 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
     selectedDevice, setSelectedDevice,
     selectedImageDevice, setSelectedImageDevice,
     isSavingDevice, isSavingDeviceEdit, isSavingDeviceImage,
-    handleAddDevice, handleUpdateDevice, handleDeleteDevice,
+    handleAddDevice, handleUpdateDevice,
+    // 삭제 — 창을 열고(openDeleteDevice), 창이 까닭과 함께 부른다.
+    deleteDeviceOpen, setDeleteDeviceOpen, openDeleteDevice, confirmDeleteDevice,
     handleDisposeDevice, handleRestoreDevice,
     handleUploadDeviceImage, handleOpenPacking, handleUploadPacking,
   }

@@ -33,6 +33,7 @@ import { inUseOnly } from '@/lib/deviceStatus'
 import HoldingModal from '@/components/customer/modals/HoldingModal'
 import HoldingResolveModal from '@/components/customer/modals/HoldingResolveModal'
 import CustomerEditModal from '@/components/customer/modals/CustomerEditModal'
+import DeleteCustomerModal from '@/components/home/list/DeleteCustomerModal'
 import ContactAddModal from '@/components/customer/modals/ContactAddModal'
 import ContactEditModal from '@/components/customer/modals/ContactEditModal'
 import DeviceAddModal from '@/components/customer/modals/DeviceAddModal'
@@ -279,8 +280,43 @@ export default function CustomerDetailBody({
           isDeleting={customerCrud.isDeletingCustomer}
           onClose={() => customerCrud.setIsEditCustomerModalOpen(false)}
           onSave={customerCrud.handleUpdateCustomer}
-          onDelete={isSuperAdmin({ permission_level: currentUserRole }) ? customerCrud.handleDeleteCustomer : undefined}
+          onDelete={isSuperAdmin({ permission_level: currentUserRole }) ? customerCrud.openDeleteCustomer : undefined}
         />
+        {/* 담당자·장비 지우기 창 — 사업장 창과 같은 부품이다. */}
+        {contact.deleteContactOpen && contact.selectedContact && (
+          <DeleteCustomerModal
+            key={`contact-${contact.selectedContact.contact_id}`}
+            target="contact"
+            name={contact.selectedContact.name ?? ''}
+            counts={null}
+            busy={contact.isSavingContactEdit}
+            onClose={() => contact.setDeleteContactOpen(false)}
+            onDelete={reason => void contact.confirmDeleteContact(reason)}
+          />
+        )}
+        {device.deleteDeviceOpen && device.selectedDevice && (
+          <DeleteCustomerModal
+            key={`device-${device.selectedDevice.device_id}`}
+            target="device"
+            name={[device.selectedDevice.device_name, device.selectedDevice.device_name2].filter(Boolean).join(' ')}
+            counts={null}
+            busy={device.isSavingDeviceEdit}
+            onClose={() => device.setDeleteDeviceOpen(false)}
+            onDelete={reason => void device.confirmDeleteDevice(reason)}
+          />
+        )}
+
+        {/* 지우기 창 — 무엇이 함께 숨는지 보여 주고 까닭을 받는다(2026-11-23). */}
+        {customerCrud.deleteOpen && customer && (
+          <DeleteCustomerModal
+            target="site"
+            name={customer.company_name ?? ''}
+            counts={customerCrud.deleteCounts}
+            busy={customerCrud.isDeletingCustomer}
+            onClose={() => customerCrud.setDeleteOpen(false)}
+            onDelete={reason => void customerCrud.confirmDeleteCustomer(reason)}
+          />
+        )}
         <ContactAddModal
           isOpen={contact.isAddContactModalOpen}
           isSaving={contact.isSavingContact}
@@ -292,7 +328,7 @@ export default function CustomerDetailBody({
           isSaving={contact.isSavingContactEdit}
           onClose={() => contact.setSelectedContact(null)}
           onSave={contact.handleUpdateContact}
-          onDelete={contact.handleDeleteContact}
+          onDelete={isSuperAdmin({ permission_level: currentUserRole }) ? contact.openDeleteContact : undefined}
         />
         <DeviceAddModal
           isOpen={device.isAddDeviceModalOpen}
@@ -305,7 +341,7 @@ export default function CustomerDetailBody({
           isSaving={device.isSavingDeviceEdit}
           onClose={() => device.setSelectedDevice(null)}
           onSave={device.handleUpdateDevice}
-          onDelete={device.handleDeleteDevice}
+          onDelete={isSuperAdmin({ permission_level: currentUserRole }) ? device.openDeleteDevice : undefined}
           onDispose={device.handleDisposeDevice}
           onRestore={device.handleRestoreDevice}
           onOpenPacking={() => device.selectedDevice && device.handleOpenPacking(device.selectedDevice)}

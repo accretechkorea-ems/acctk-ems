@@ -392,13 +392,23 @@ export async function POST(req: Request) {
     // 화면에서 이미 걸렀더라도 여기서 다시 센다 — 그 사이에 업체가 연결됐을 수 있다.
     if (children > 0) return bad(`사업장 ${children}곳이 연결되어 있습니다.`, 409)
 
+    // **숨기기다**(2026-11-23). 전에는 진짜 DELETE 였다 — 되돌릴 수 없고, 그 회사를
+    // 가리키던 옛 줄(견적·사건)이 끊겼다. 화면은 /api/customer-delete 를 쓰고 이 길은
+    // 옛 호출을 위해 남겨 둔다 — 둘 다 같은 일을 한다(한 문장으로 deleted_at 을 채운다).
     const { error } = await supabaseAdmin
-      .from('customers').delete().eq('customer_id', parentId)
+      .from('customers').update({ deleted_at: new Date().toISOString() }).eq('customer_id', parentId)
     if (error) {
       console.error('[parent-company] delete failed', { parentId, error })
       return bad('삭제하지 못했습니다.', 500)
     }
-    console.log('[parent-company] delete', { parentId, name: target.company_name, by: caller.email })
+    await writeCustomerEvents(supabaseAdmin, [{
+      customer_id: parentId,
+      event_type: 'customer_deleted' as const,
+      occurred_at: new Date().toISOString(),
+      actor_engineer_id: caller.engineer_id,
+      payload: { kind: 'company', name: (target.company_name ?? '').trim() || null, reason: '사업장 0곳 회사 정리' },
+    }])
+    console.log('[parent-company] delete(soft)', { parentId, name: target.company_name, by: caller.email })
     return NextResponse.json({ success: true })
   }
 

@@ -4,10 +4,9 @@
 // 핸들러가 그 상태를 그대로 읽으므로 상태와 핸들러를 같은 곳에 둔다.
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { customerChange } from '@/lib/customerChange'
+import { customerDelete } from '@/lib/customerDelete.client'
 import { useToast } from '@/components/common/Toast'
-import { useConfirm } from '@/components/common/ConfirmDialog'
 import type { Contact, ContactForm } from '@/components/customer/types'
 
 type Args = {
@@ -25,9 +24,7 @@ const contactPatch = (form: ContactForm) => ({
 })
 
 export function useContactCrud({ customerId, fetchDetail }: Args) {
-  const supabase = createClient()
   const toast = useToast()
-  const confirmDialog = useConfirm()
 
   const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false)
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
@@ -55,15 +52,20 @@ export function useContactCrud({ customerId, fetchDetail }: Args) {
     await fetchDetail()
   }
 
-  const handleDeleteContact = async () => {
+  /**
+   * 담당자 삭제 — **숨기기다**(deleted_at). 라우트가 한다(2026-11-23).
+   * 슈퍼관리자만 할 수 있고, 까닭을 받아 사건으로 남긴다. 창은 부르는 화면이 띄운다.
+   */
+  const [deleteContactOpen, setDeleteContactOpen] = useState(false)
+  const openDeleteContact = () => { if (selectedContact) setDeleteContactOpen(true) }
+  const confirmDeleteContact = async (reason: string) => {
     if (!selectedContact) return
-    const ok = await confirmDialog({ title: '고객 담당자 삭제', message: '이 고객 담당자를 삭제하시겠습니까?', confirmText: '삭제', variant: 'danger' })
-    if (!ok) return
     setIsSavingContactEdit(true)
-    const { error } = await supabase.from('contacts').update({ deleted_at: new Date().toISOString() }).eq('contact_id', selectedContact.contact_id)
+    const r = await customerDelete({ action: 'delete', target: 'contact', id: selectedContact.contact_id, reason })
     setIsSavingContactEdit(false)
-    if (error) { toast.error(error.message || '고객 담당자 삭제 중 오류가 발생했습니다'); return }
-    toast.success('고객 담당자가 삭제되었습니다')
+    if (!r.ok) { toast.error(r.error); return }
+    setDeleteContactOpen(false)
+    toast.success('담당자를 숨겼습니다')
     setSelectedContact(null)
     await fetchDetail()
   }
@@ -72,6 +74,8 @@ export function useContactCrud({ customerId, fetchDetail }: Args) {
     isAddContactModalOpen, setIsAddContactModalOpen,
     selectedContact, setSelectedContact,
     isSavingContact, isSavingContactEdit,
-    handleAddContact, handleUpdateContact, handleDeleteContact,
+    handleAddContact, handleUpdateContact,
+    // 삭제 — 창을 열고(openDeleteContact), 창이 까닭과 함께 부른다.
+    deleteContactOpen, setDeleteContactOpen, openDeleteContact, confirmDeleteContact,
   }
 }

@@ -20,7 +20,8 @@ type Props = {
   isSaving: boolean
   onClose: () => void
   onSave: (form: DeviceForm, packingFile: File | null) => void
-  onDelete: () => void
+  /** 지우기 — 권한이 없으면 넘어오지 않는다(버튼도 내지 않는다). */
+  onDelete?: () => void
   /** 폐기 처리 — 확인창부터 저장까지 훅이 한다(useDeviceCrud). */
   onDispose: () => void
   /** 폐기 취소 — 상태를 「사용중」으로 되돌린다. */
@@ -152,11 +153,13 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
         </>}
         footer={<>
           <div style={{ display: 'flex', gap: 8 }}>
+            {onDelete && (
             <button
               onClick={onDelete}
               disabled={isSaving}
               style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}
             >삭제</button>
+            )}
             {/* 폐기는 되돌릴 수 있어 빨강을 쓰지 않는다 — 삭제와 한눈에 갈라야 한다. */}
             <button
               onClick={disposed ? onRestore : onDispose}

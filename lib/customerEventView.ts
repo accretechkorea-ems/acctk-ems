@@ -34,6 +34,10 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' 
 const arrow = (before: unknown, after: unknown): string =>
   `${str(before) || '없음'} → ${str(after) || '없음'}`
 
+/** 지운 대상의 한글 이름. 모르는 값은 그대로 쓴다. */
+const kindLabel = (kind: string): string =>
+  ({ site: '사업장', company: '회사', agency: '대리점', contact: '담당자', device: '장비' } as Record<string, string>)[kind] ?? kind
+
 /** 바뀐 칸 여럿을 한 줄로 — 「상태 활성 → 이탈 · 메모 없음 → …」. */
 function changeText(raw: unknown): string {
   if (!Array.isArray(raw) || raw.length === 0) return '수정했습니다'
@@ -112,6 +116,18 @@ export function eventLine(e: CustomerEvent): EventLine {
         body: p.mode === 'add' ? '장비를 추가했습니다' : changeText(p.changes),
         owner: '',
       }
+    case 'customer_deleted': {
+      const kind = str(p.kind) || '줄'
+      const why = str(p.reason)
+      return {
+        label: '삭제',
+        title: str(p.name),
+        body: why ? `${kindLabel(kind)} 숨김 — ${why}` : `${kindLabel(kind)}을 숨겼습니다`,
+        owner: '',
+      }
+    }
+    case 'customer_restored':
+      return { label: '복구', title: str(p.name), body: `${kindLabel(str(p.kind))}을 되돌렸습니다`, owner: '' }
     default:
       // 모르는 종류 — 줄은 남기고 payload 를 그대로 보여 준다.
       return {

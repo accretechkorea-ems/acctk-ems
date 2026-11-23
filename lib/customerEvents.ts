@@ -26,11 +26,14 @@ export type CustomerEventType =
   | 'lead_registered' | 'lead_assigned' | 'lead_reassigned'
   | 'site_status_changed' | 'site_agency_changed' | 'site_moved' | 'sites_merged'
   | 'company_industry_changed' | 'site_edited' | 'contact_edited' | 'device_edited'
+  // 지우기·되돌리기 — 소프트 삭제다(deleted_at). 어느 줄을 왜 지웠는지 payload 에 담는다.
+  | 'customer_deleted' | 'customer_restored'
 
 /** 「고친 일」 묶음 — 활동 이력이 이 묶음을 「변경」으로 접어 둔다. */
 export const CHANGE_EVENT_TYPES: readonly CustomerEventType[] = [
   'site_status_changed', 'site_agency_changed', 'site_moved', 'sites_merged',
   'company_industry_changed', 'site_edited', 'contact_edited', 'device_edited',
+  'customer_deleted', 'customer_restored',
 ]
 
 /** 그 사건이 「고친 일」인가. 모르는 종류는 아니라고 본다(옛 줄이 섞여도 종전처럼 보인다). */

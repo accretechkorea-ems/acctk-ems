@@ -33,13 +33,16 @@ const STATUS_DOT: Record<string, string> = { '활성': '#16a34a', '잠재': '#f5
 export type ListTab = 'company' | 'agency' | 'cleanup'
 
 /** 「정리 필요」 탭의 묶음 — 넷 다 **손으로 고쳐야 하는 것**이다. */
-export type CleanupBucket = 'industry' | 'dupName' | 'blankSites' | 'emptyCompany'
+export type CleanupBucket = 'industry' | 'dupName' | 'blankSites' | 'emptyCompany' | 'deleted'
 
 export const CLEANUP_LABEL: Record<CleanupBucket, string> = {
   industry: '분류 없는 회사',
   dupName: '이름 중복 의심',
   blankSites: '사업장명 입력 필요',
   emptyCompany: '사업장 0곳 회사',
+  // 2026-11-23 — 지우기가 **숨기기**가 되면서 되돌릴 자리가 필요해졌다.
+  // 슈퍼관리자만 이 소탭에서 복구한다(목록은 라우트가 service role 로 읽어 준다).
+  deleted: '삭제됨',
 }
 
 export type CleanupRow = { companyId: number; companyName: string; hint: string }
@@ -67,6 +70,8 @@ type Props = {
   setCleanupBucket: (b: CleanupBucket) => void
   /** 사업장 0곳 회사를 지운다(그 묶음에서만 나온다). */
   onDeleteCompany: (companyId: number, companyName: string) => void
+  /** 지워진 줄을 되돌린다(슈퍼관리자에게만 넘어온다 — 없으면 버튼도 없다). */
+  onRestore?: (customerId: number, name: string) => void
   /** 대리점 목록(7). 누르면 회사 탭이 그 대리점의 사업장만 거른다. */
   agencies: AgencyOption[]
   agencySiteCount: (agencyId: number) => number
@@ -95,7 +100,7 @@ export default function CustomerListPanel({
   groups, siteCount, expanded, toggleExpand, selectedCompanyId, selectedSiteId,
   onSelectCompany, onSelectSite, loading,
   checkedCompanies, toggleCompanyCheck, clearCompanyChecks, onBulkIndustry,
-  cleanup, cleanupBucket, setCleanupBucket, onDeleteCompany,
+  cleanup, cleanupBucket, setCleanupBucket, onDeleteCompany, onRestore,
   agencies, agencySiteCount, onPickAgency, selectedAgencyId,
 }: Props) {
   /** 트리가 구르는 요소 — 위·아래 힌트가 이것을 본다. */
@@ -153,8 +158,8 @@ export default function CustomerListPanel({
                 style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '0 8px', borderRadius: R.icon }}
                 onMouseEnter={e => { e.currentTarget.style.background = '#fafafa' }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
-                <button type="button" onClick={() => onSelectCompany(r.companyId)}
-                  style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', padding: '7px 0', fontFamily: 'inherit' }}>
+                <button type="button" onClick={() => { if (cleanupBucket !== 'deleted') onSelectCompany(r.companyId) }}
+                  style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 'none', background: 'none', cursor: cleanupBucket === 'deleted' ? 'default' : 'pointer', padding: '7px 0', fontFamily: 'inherit' }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.companyName}</div>
                   <div style={{ fontSize: 11, color: MUTED, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.hint}</div>
                 </button>
@@ -162,6 +167,12 @@ export default function CustomerListPanel({
                   <button type="button" onClick={() => onDeleteCompany(r.companyId, r.companyName)}
                     style={{ height: 24, padding: '0 8px', borderRadius: R.icon, border: `1px solid ${DANGER}`, background: '#fff', color: DANGER, fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
                     삭제
+                  </button>
+                )}
+                {cleanupBucket === 'deleted' && onRestore && (
+                  <button type="button" onClick={() => onRestore(r.companyId, r.companyName)}
+                    style={{ height: 24, padding: '0 8px', borderRadius: R.icon, border: `1px solid ${BLUE}`, background: '#fff', color: BLUE, fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+                    복구
                   </button>
                 )}
               </div>
