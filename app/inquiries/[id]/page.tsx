@@ -29,7 +29,7 @@
 //   abandoned — 뒤에 이미 다른 번호가 나가 버렸다. 취소 상태로 남는다 → 그대로 다시 읽는다.
 // 화면은 어느 쪽인지 미리 단정하지 않는다.
 
-import { useCallback, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useState } from 'react'
 import { EditIconButton } from '@/components/common/IconButton'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -664,7 +664,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-export default function InquiryDetailPage() {
+function InquiryDetailPageInner() {
   const { loading: guardLoading, authorized } = usePageGuard()
   const router = useRouter()
   const params = useParams<{ id: string }>()
@@ -1477,5 +1477,14 @@ export default function InquiryDetailPage() {
         />
       )}
     </main>
+  )
+}
+
+// useSearchParams 는 **Suspense 경계 안에서만** 쓸 수 있다(의뢰서 목록·결재함과 같은 방식).
+export default function InquiryDetailPage() {
+  return (
+    <Suspense fallback={null}>
+      <InquiryDetailPageInner />
+    </Suspense>
   )
 }

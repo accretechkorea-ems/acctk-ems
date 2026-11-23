@@ -15,7 +15,7 @@
  * 조건은 주소에 남는다(lib/businessCardQuery.ts) — 찾아 둔 목록을 그대로 보낼 수 있게.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { usePageGuard } from '@/hooks/usePageGuard'
@@ -61,7 +61,7 @@ function AgeTag({ registeredAt, today }: { registeredAt: string; today: string }
   )
 }
 
-export default function CardsPage() {
+function CardsPageInner() {
   const { engineer: me, loading: guardLoading, authorized } = usePageGuard()
   const supabase = createClient()
   const router = useRouter()
@@ -352,5 +352,15 @@ export default function CardsPage() {
         />
       )}
     </main>
+  )
+}
+
+// useSearchParams 는 **Suspense 경계 안에서만** 쓸 수 있다 — 없으면 빌드가 멈춘다
+// (prerender 중 "should be wrapped in a suspense boundary"). 다른 화면과 같은 패턴이다.
+export default function CardsPage() {
+  return (
+    <Suspense fallback={null}>
+      <CardsPageInner />
+    </Suspense>
   )
 }

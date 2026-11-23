@@ -11,7 +11,7 @@
     "perf:dev": "node scripts/perf/measure.ts --dev",
     "test": "node scripts/run-checks.js",
     "lint:ci": "node scripts/lint-baseline.js",
-    "check": "npx tsc --noEmit && npm run lint:ci && npm test",
+    "check": "npx tsc --noEmit && npm run lint:ci && npm test && npm run build",
     "backup": "node scripts/backup/run.js",
     "postinstall": "node scripts/copy-ocr-assets.js"
   },
