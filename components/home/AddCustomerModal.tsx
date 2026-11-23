@@ -27,6 +27,7 @@ import { useFieldErrors, FieldError, errBorder } from '@/components/common/field
 import AddressField from '@/components/customer/modals/AddressField'
 import AgencyPicker from '@/components/customer/AgencyPicker'
 import { loadParents, type ParentOption } from '@/components/customer/ParentPicker'
+import { matchesCompany } from '@/lib/companySearch'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import { addCustomerEntry, type NewContactInput, type NewSiteInput } from '@/lib/addCustomer'
 import { R } from '@/lib/radius'
@@ -125,7 +126,7 @@ export default function AddCustomerModal({ presetCompanyId, onClose, onSaved, on
   const similar = useMemo(() => {
     const q = companyName.trim().toLowerCase()
     if (!q || existing || isAgency) return []
-    return companies.filter(c => c.company_name.toLowerCase().includes(q)).slice(0, 4)
+    return companies.filter(c => matchesCompany(c, companyName)).slice(0, 4)
   }, [companies, companyName, existing, isAgency])
 
   const setSite = (i: number, patch: Partial<SiteDraft>) => {

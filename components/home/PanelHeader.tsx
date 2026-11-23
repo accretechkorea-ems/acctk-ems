@@ -15,6 +15,7 @@
 
 import { useState } from 'react'
 import { R } from '@/lib/radius'
+import { COMPANY_SEARCH_PLACEHOLDER } from '@/lib/companySearch'
 import type { CustomerChip } from '@/lib/customerFilterChips'
 
 const BORDER = '#ebebeb'
@@ -97,7 +98,7 @@ export default function PanelHeader({
           </svg>
           <input value={query} onChange={e => setQuery(e.target.value)}
             onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-            placeholder="회사·사업장·주소·대리점"
+            placeholder={COMPANY_SEARCH_PLACEHOLDER}
             style={{ border: 'none', outline: 'none', flex: 1, minWidth: 0, fontSize: 13, color: TEXT, background: 'transparent', fontFamily: 'inherit' }} />
           {query ? (
             <button type="button" onClick={() => setQuery('')} aria-label="검색어 지우기"

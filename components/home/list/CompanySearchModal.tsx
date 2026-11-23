@@ -8,6 +8,7 @@
 import { useMemo, useState, type CSSProperties } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useParents } from '@/components/home/list/useParents'
+import { matchesCompany } from '@/lib/companySearch'
 import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
@@ -40,10 +41,9 @@ export default function CompanySearchModal({
   const [picked, setPicked] = useState<number | null>(null)
 
   const matches = useMemo(() => {
-    const q = query.trim().toLowerCase()
     return companies
       .filter(c => c.customer_id !== excludeId)
-      .filter(c => !q || c.company_name.toLowerCase().includes(q) || (c.name_en ?? '').toLowerCase().includes(q))
+      .filter(c => matchesCompany(c, query))
       .slice(0, 50)
   }, [companies, query, excludeId])
 

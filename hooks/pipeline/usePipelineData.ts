@@ -39,7 +39,9 @@ export function usePipelineData() {
       // 신규 등록 시 업체를 고르기 위한 목록 (숨김 처리된 업체는 제외)
       // 대리점 전용 줄은 영업기회의 대상이 아니다(lib/customerAgency.ts).
       // agency 텍스트는 읽지 않는다 — 이 목록은 이름·주소만 쓴다.
-      supabase.from('customers').select('customer_id, company_name, address, status')
+      // parent_customer_id·site_name 도 읽는다 — 업체 검색이 **영문명**(회사 줄에 있다)과
+      // 사업장명으로도 걸려야 한다(lib/companySearch.ts, 2026-11-23).
+      supabase.from('customers').select('customer_id, company_name, site_name, parent_customer_id, address, status')
         .is('deleted_at', null).eq('is_parent', false).or(NOT_AGENCY_ONLY).order('company_name'),
     ])
     setLoading(false)

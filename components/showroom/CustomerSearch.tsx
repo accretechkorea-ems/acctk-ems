@@ -2,22 +2,19 @@
 
 // 대상 고객사 검색 — 등록된 업체를 골라 customer_id 를 돌려준다.
 //
-// 기존 고객사 검색은 독립 컴포넌트가 아니라 app/quote/page.tsx 안에 인라인으로 박혀 있다
-// (:1112-1174 마크업, :368-375 조회). 그래서 같은 방식으로 새로 만들되,
-// 조회 조건·키보드 조작·목록 모양은 그쪽과 똑같이 맞춘다.
-//   · 조회: customers 에서 deleted_at is null, is_parent=false, 회사명·사업장명 ilike, 최대 10건
-//   · ↑↓ 이동 / Enter 선택 / Esc 닫기 — useListKeyboard 공용 훅
-//   · 바깥 클릭 시 닫힘 — useOutsideClick 공용 훅
-// AutocompleteInput 은 문자열만 돌려주므로 여기서는 쓸 수 없다(customer_id 가 필요하다).
+// 조작(↑↓·Enter·Esc·Tab·마우스 혼용)은 **공용 콤보박스**가 맡는다
+// (components/common/SearchSelect.tsx, 2026-11-23). 전에는 이 파일이 목록과 키보드를
+// 직접 그렸고, 자리마다 조금씩 달랐다.
+// 찾는 칸도 공용이다 — 회사명·영문명·사업장명·주소(lib/companySearch.ts).
+// 조회: customers 에서 deleted_at is null, is_parent=false, 대리점 전용 줄 제외, 최대 10건.
 
-import { useRef, useState } from 'react'
-import { searchOr, withNameEnFallback } from '@/lib/nameEn'
+import { useState } from 'react'
+import { colsWithNameEn, withNameEnFallback } from '@/lib/nameEn'
+import { companySearchOr, COMPANY_SEARCH_PLACEHOLDER } from '@/lib/companySearch'
 import { createClient } from '@/lib/supabase/client'
-import { useListKeyboard } from '@/hooks/useListKeyboard'
-import { useOutsideClick } from '@/hooks/useOutsideClick'
-import { Z } from '@/lib/zIndex'
+import SearchSelect, { CompanyOption } from '@/components/common/SearchSelect'
 import { NOT_AGENCY_ONLY } from '@/lib/customerAgency'
-import { BLUE, BORDER, CARD_BG, TEXT, MUTED } from '@/components/common/ui'
+import { BORDER, CARD_BG, TEXT, MUTED } from '@/components/common/ui'
 import { R } from '@/lib/radius'
 
 export type CustomerHit = {
@@ -25,6 +22,8 @@ export type CustomerHit = {
   company_name: string
   address: string | null
   status: string | null
+  /** 영문 회사명 — 결과 줄에 회색으로 나란히 둔다. 칸이 없는 DB 면 비어 온다. */
+  name_en?: string | null
 }
 
 type Props = {
@@ -36,42 +35,33 @@ type Props = {
   height?: number
 }
 
-export default function CustomerSearch({ value, onChange, placeholder = '업체명 검색', invalid, height = 44 }: Props) {
+export default function CustomerSearch({ value, onChange, placeholder = COMPANY_SEARCH_PLACEHOLDER, invalid, height = 44 }: Props) {
   const supabase = createClient()
-  const wrapRef = useRef<HTMLDivElement>(null)
-  const listRef = useRef<HTMLDivElement | null>(null)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<CustomerHit[]>([])
-  const [open, setOpen] = useState(false)
-
-  useOutsideClick(wrapRef, () => setOpen(false), open)
 
   const select = (c: CustomerHit) => {
     onChange(c)
     setQuery('')
     setResults([])
-    setOpen(false)
   }
-
-  const keys = useListKeyboard(results, open && results.length > 0, listRef, select)
 
   const search = async (q: string) => {
     setQuery(q)
-    if (!q.trim()) { setResults([]); setOpen(false); return }
+    if (!q.trim()) { setResults([]); return }
     // 부모 행(회사 묶음)은 사용 대상이 아니다 — 견적 화면과 같은 조건.
     // 회사명·사업장명·영문명 — 「현대자동차」로도, 「감마세타」로도, 「HYUNDAI」로도 걸려야 한다.
     // 영문명 칸이 없는 DB 면 그 칸만 빼고 다시 읽는다(lib/nameEn.ts).
     const { data, error } = await withNameEnFallback(useEn => supabase
       .from('customers')
-      .select('customer_id, company_name, address, status')
+      .select(colsWithNameEn('customer_id, company_name, address, status', useEn))
       .is('deleted_at', null)
       .eq('is_parent', false)
       .or(NOT_AGENCY_ONLY)   // 대리점 전용 줄은 쇼룸 사용 대상이 아니다
-      .or(searchOr(q, useEn))
+      .or(companySearchOr(q, useEn))
       .limit(10))
     if (error) { console.error('[showroom] customer search failed', error); return }
-    setResults((data ?? []) as CustomerHit[])
-    setOpen(true)
+    setResults((data ?? []) as unknown as CustomerHit[])
   }
 
   const fieldStyle = {
@@ -99,36 +89,23 @@ export default function CustomerSearch({ value, onChange, placeholder = '업체�
   }
 
   return (
-    <div ref={wrapRef} style={{ position: 'relative' }}>
-      <input
-        value={query}
-        onChange={e => search(e.target.value)}
-        onFocus={() => { if (results.length > 0) setOpen(true) }}
-        onKeyDown={keys.onKeyDown}
-        placeholder={placeholder}
-        style={fieldStyle}
-      />
-      {open && results.length > 0 && (
-        <div ref={listRef} style={{
-          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage,
-          background: CARD_BG, border: `1px solid ${BLUE}`, borderRadius: R.control,
-          maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)',
-        }}>
-          {results.map((c, i) => (
-            <div key={c.customer_id} onClick={() => select(c)}
-              onMouseEnter={() => keys.setActive(i)}
-              style={{
-                padding: '9px 12px', cursor: 'pointer', borderBottom: `1px solid ${BORDER}`, fontSize: 12,
-                background: keys.active === i ? '#f0f4ff' : CARD_BG, transition: 'background 0.15s ease',
-              }}>
-              <div style={{ fontWeight: 700, color: BLUE }}>{c.company_name}</div>
-              <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
-                {c.address ?? ''}{c.status ? ` · ${c.status}` : ''}
-              </div>
-            </div>
-          ))}
-        </div>
+    <SearchSelect<CustomerHit>
+      items={results}
+      itemKey={c => c.customer_id}
+      renderItem={c => (
+        <CompanyOption
+          name={c.company_name}
+          nameEn={c.name_en}
+          sub={`${c.address ?? ''}${c.status ? ` · ${c.status}` : ''}`}
+        />
       )}
-    </div>
+      onSelect={select}
+      query={query}
+      onQueryChange={q => void search(q)}
+      placeholder={placeholder}
+      inputStyle={fieldStyle}
+      maxHeight={220}
+      emptyText="맞는 업체가 없습니다"
+    />
   )
 }

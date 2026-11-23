@@ -10,6 +10,7 @@ import MapView from '@/components/home/MapView'
 import AddCustomerModal from '@/components/home/AddCustomerModal'
 import { useHomeData } from '@/hooks/useHomeData'
 import { CATEGORY_OPTIONS } from '@/lib/constants'
+import { matchesCompany } from '@/lib/companySearch'
 import { useAgencies } from '@/lib/customerAgency'
 import { REGION_FILTER_OPTIONS } from '@/lib/region'
 import ExportModal from '@/components/home/ExportModal'
@@ -284,13 +285,18 @@ useEffect(() => {
     return () => { cancelled = true }
   }, [view])
 
-  // 회사 줄(is_parent)은 목록 보기에서만 쓴다 — 캐시를 공유하므로 조회는 한 번이다.
+  /**
+   * 회사 줄(is_parent) — 목록 보기의 트리가 쓰고, **검색이 영문명을 보려면** 카드·지도에서도 필요하다
+   * (영문명은 회사 줄에만 있다, 2026-11-23). 그렇다고 홈에 들어오기만 해도 읽으면 조회가 한 벌 는다.
+   * 그래서 **글자를 적기 시작할 때** 읽는다 — 캐시를 공유하므로 조회는 그래도 한 번이다.
+   */
+  const needParents = view === 'list' || query.trim() !== ''
   useEffect(() => {
-    if (view !== 'list') return
+    if (!needParents) return
     let cancelled = false
     loadParents().then(list => { if (!cancelled) setCompanies(list) })
     return () => { cancelled = true }
-  }, [view])
+  }, [needParents])
 
   useEffect(() => {
     if (customers.length > 0) setIsLoading(false)
@@ -397,6 +403,15 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
 
 
 
+  /**
+   * 회사 줄(껍데기)의 이름·영문명. 카드 보기의 검색이 **영문명으로도** 걸리려면 여기가 필요하다 —
+   * 사업장 줄에는 영문명이 없다(회사 줄에만 있다). 목록 보기의 트리도 같은 맵을 받는다.
+   */
+  const companyMap = useMemo(
+    () => new Map(companies.map(c => [c.customer_id, { company_name: c.company_name, industry: c.industry, name_en: c.name_en, note: c.note }])),
+    [companies],
+  )
+
   const filteredCustomers = useMemo(() => {
     const q = query.trim().toLowerCase()
 
@@ -422,12 +437,13 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
 
       if (!q) return true
 
-      return (
-        (c.company_name || '').toLowerCase().includes(q) ||
-        (c.address || '').toLowerCase().includes(q) ||
-        (c.status || '').toLowerCase().includes(q) ||
-        (c.agency_name || '').toLowerCase().includes(q) ||
-        deviceLine.includes(q)
+      // 찾는 칸은 **공용 함수 하나**가 본다(lib/companySearch.ts) — 회사명·영문명·사업장명·주소·대리점명.
+      // 이 자리만 더 보는 것: 상태와 장비 줄.
+      const parent = c.parent_customer_id != null ? companyMap.get(c.parent_customer_id) : undefined
+      return matchesCompany(
+        { ...c, name_en: parent?.name_en ?? null },
+        query,
+        [c.status, deviceLine],
       )
     })
 
@@ -445,15 +461,11 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
       if (at !== bt) return bt - at
       return (a.company_name || '').localeCompare(b.company_name || '', 'ko')
     })
-  }, [customers, query, listFilter, deviceMap, latestServiceDateMap])
+  }, [customers, query, listFilter, deviceMap, latestServiceDateMap, companyMap])
 
   // ── 목록 보기의 트리 ─────────────────────────────────────────────────────
   //   좌 패널의 건수와 우측 표의 줄은 **같은 셈법**을 써야 한다 — 그 셈법은
   //   lib/customerList.ts 에 있고, 여기서는 재료만 모아 넘긴다.
-  const companyMap = useMemo(
-    () => new Map(companies.map(c => [c.customer_id, { company_name: c.company_name, industry: c.industry, name_en: c.name_en, note: c.note }])),
-    [companies],
-  )
   const today = todayKST()
   /**
    * ── 우측 pane 에 무엇을 띄울지 **한 자리에서** 정한다 ───────────────────

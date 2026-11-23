@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { SALES_STATUS_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
+import { matchesCompany } from '@/lib/companySearch'
 import { useToast } from '@/components/common/Toast'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
@@ -385,9 +386,8 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
   }, [fitToHeight])
 
   const filtered = dateFiltered.filter(q => {
-    const matchSearch = !search.trim() ||
-      q.quote_number.toLowerCase().includes(search.toLowerCase()) ||
-      q.company_name.toLowerCase().includes(search.toLowerCase())
+    // 회사 쪽은 공용 함수가 본다(lib/companySearch.ts). 이 자리만 더 보는 것: 견적번호.
+    const matchSearch = matchesCompany({ company_name: q.company_name }, search, [q.quote_number])
     return matchSearch && (statusFilter === '전체' || q.status === statusFilter)
   })
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))

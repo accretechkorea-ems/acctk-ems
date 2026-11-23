@@ -1,9 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { colsWithNameEn, withNameEnFallback } from '@/lib/nameEn'
 import { createClient } from '@/lib/supabase/client'
-import Popover from '@/components/common/Popover'
+import SearchSelect, { CompanyOption } from '@/components/common/SearchSelect'
+import { COMPANY_SEARCH_PLACEHOLDER, matchesCompany } from '@/lib/companySearch'
+import { BLUE } from '@/components/common/ui'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import { R } from '@/lib/radius'
 
@@ -152,14 +154,12 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, l
     (v: string) => { if (controlled) onNameChange?.(v); else setOwnQuery(v) },
     [controlled, onNameChange],
   )
-  const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   /** 「새 회사로 등록」을 누른 뒤의 칸 — 분류를 고르기 전에는 만들지 않는다. */
   const [newName, setNewName] = useState<string | null>(null)
   const [newIndustry, setNewIndustry] = useState('')
   /** 영문 회사명 — 선택 입력이다(없으면 비워 둔다). */
   const [newNameEn, setNewNameEn] = useState('')
-  const anchorRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -169,11 +169,12 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, l
 
   const picked = useMemo(() => parents.find(p => p.customer_id === value) ?? null, [parents, value])
 
-  const matches = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return parents.slice(0, 8)
-    return parents.filter(p => p.company_name.toLowerCase().includes(q)).slice(0, 8)
-  }, [parents, query])
+  // 찾는 칸은 공용이다 — 회사명·영문명·사업장명·주소·대리점명(lib/companySearch.ts).
+  // 회사 줄에는 사업장명·주소·대리점이 없으므로 사실상 이름과 영문명으로 걸린다.
+  const matches = useMemo(
+    () => parents.filter(p => matchesCompany(p, query)).slice(0, 8),
+    [parents, query],
+  )
 
   // 이름이 똑같은 부모가 이미 있으면 "새로 만들기" 를 내지 않는다(중복 생성 방지).
   const exact = useMemo(
@@ -188,7 +189,7 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, l
       const made = await createParent(name, industry, nameEn)
       setParents(await loadParents())
       onChange(made.customer_id)
-      setQuery(''); setOpen(false); setNewName(null); setNewIndustry(''); setNewNameEn('')
+      setQuery(''); setNewName(null); setNewIndustry(''); setNewNameEn('')
     } catch (e) {
       onError?.((e as Error).message || '회사를 만들지 못했습니다')
     } finally {
@@ -250,47 +251,23 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, l
   }
 
   return (
-    <div ref={anchorRef}>
-      <input
-        value={query}
-        disabled={disabled || creating}
-        onChange={e => { setQuery(e.target.value); setOpen(true) }}
-        onFocus={() => setOpen(true)}
-        placeholder="ex) (주)현대자동차"
-        style={fieldStyle}
-      />
-      {/* 모달 안에서 열려도 잘리지 않도록 포털로 띄운다 */}
-      <Popover
-        anchorRef={anchorRef}
-        open={open && (matches.length > 0 || canCreate)}
-        onClose={() => setOpen(false)}
-        matchAnchorWidth
-        maxHeight={240}
-        style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.icon, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-      >
-        {matches.map(p => (
-          <div key={p.customer_id}
-            onMouseDown={e => { e.preventDefault(); onChange(p.customer_id); setQuery(''); setOpen(false) }}
-            style={{ padding: '8px 11px', cursor: 'pointer', fontSize: 13, color: '#111827' }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#f5f5f5' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-          >
-            {p.company_name}
-            {/* 회사 줄에는 주소가 없다(껍데기 행이다) — 같은 이름을 가려 주는 것은 분류다. */}
-            {p.industry ? <span style={{ fontSize: 12, color: '#9ca3af' }}>{`  — ${p.industry}`}</span> : null}
-          </div>
-        ))}
-        {canCreate && (
-          <div
-            onMouseDown={e => { e.preventDefault(); setNewName(query.trim()); setOpen(false) }}
-            style={{ padding: '8px 11px', cursor: 'pointer', fontSize: 13, color: '#234ea2', fontWeight: 700, borderTop: matches.length ? '1px solid #ebebeb' : undefined }}
-            onMouseEnter={e => { e.currentTarget.style.background = '#f5f5f5' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-          >
-            {`「${query.trim()}」 새 회사로 등록`}
-          </div>
-        )}
-      </Popover>
-    </div>
+    <SearchSelect<ParentOption>
+      items={matches}
+      itemKey={p => p.customer_id}
+      /* 회사 줄에는 주소가 없다(껍데기 행이다) — 같은 이름을 가려 주는 것은 분류다. */
+      renderItem={p => <CompanyOption name={p.company_name} nameEn={p.name_en} sub={p.industry ?? undefined} />}
+      onSelect={p => { onChange(p.customer_id); setQuery('') }}
+      query={query}
+      onQueryChange={setQuery}
+      disabled={disabled || creating}
+      placeholder={`ex) (주)현대자동차 — ${COMPANY_SEARCH_PLACEHOLDER}`}
+      inputStyle={fieldStyle}
+      /* 「새 회사로 등록」도 키보드로 닿는다 — 목록 맨 아래 한 줄이다. */
+      extras={canCreate ? [{
+        key: 'create',
+        node: <span style={{ color: BLUE, fontWeight: 700 }}>{`「${query.trim()}」 새 회사로 등록`}</span>,
+        onSelect: () => setNewName(query.trim()),
+      }] : undefined}
+    />
   )
 }

@@ -17,6 +17,7 @@
 import type { Customer } from '@/lib/home'
 import type { LastTouch } from '@/lib/customerLastTouch'
 import { regionKey, regionLabel2 } from '@/lib/region'
+import { matchesCompany } from '@/lib/companySearch'
 
 /** 오래 손대지 않았다고 보는 기준(일). 칩·빨간 글씨가 같은 값을 쓴다. */
 export const STALE_DAYS = 90
@@ -211,13 +212,19 @@ export function matchesSite(
     if (!filter.agencies.includes(a)) return false
   }
 
-  const q = filter.query.trim().toLowerCase()
-  if (!q) return true
-  const hay = [
-    companyName, companyNameEn ?? '', c.company_name ?? '', site.siteName,
-    c.address ?? '', c.agency_name ?? '',
-  ].join(' ').toLowerCase()
-  return hay.includes(q)
+  // 찾는 칸은 **공용 함수 하나**가 본다(lib/companySearch.ts) — 회사명·영문명·사업장명·주소·대리점명.
+  // c.company_name 을 따로 더하는 까닭: 그 줄에는 「회사명 사업장명」이 합쳐 들어 있는 옛 자료가 있다.
+  return matchesCompany(
+    {
+      company_name: companyName,
+      name_en: companyNameEn,
+      site_name: site.siteName,
+      address: c.address,
+      agency_name: c.agency_name,
+    },
+    filter.query,
+    [c.company_name],
+  )
 }
 
 /**

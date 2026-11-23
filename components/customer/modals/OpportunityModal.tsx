@@ -4,14 +4,16 @@
 // 기존 기회를 열면 아래에 그 기회에 묶인 활동 목록을 읽기 전용으로 함께 보여준다
 // (타임라인은 업체 전체를 시간순으로 보는 곳이라, 한 건의 흐름만 모아 보려면 여기가 필요하다).
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { isCurrentlyEmployed } from '@/lib/engineers'
 import { STAGES, LOST_REASONS, dateToMonth, compactKRW, isClosed } from '../opportunity'
 import { numKR } from '../constants'
 import type { Customer, Engineer, OpportunityForm, SalesActivity, SalesOpportunity } from '../types'
-import Popover from '@/components/common/Popover'
+import SearchSelect, { CompanyOption } from '@/components/common/SearchSelect'
+import { COMPANY_SEARCH_PLACEHOLDER, matchesCompany } from '@/lib/companySearch'
+import { useParents } from '@/components/home/list/useParents'
 import { salesStatusLabel } from '@/lib/categoryColors'
 import { todayKST } from '@/lib/date'
 import { R } from '@/lib/radius'
@@ -70,16 +72,29 @@ export default function OpportunityModal({
   const [form, setForm] = useState<OpportunityForm>(() => emptyForm(currentUserEngineerId))
   const { errors, setErrors, clearError, validate } = useFieldErrors<'title' | 'lost_reason' | 'customer_id'>()
   const [custQuery, setCustQuery] = useState('')
-  const [custOpen, setCustOpen] = useState(false)
-  // 모달 본문이 스크롤 상자라 검색 결과를 포털로 띄운다. 그 기준이 되는 입력칸.
-  const custAnchorRef = useRef<HTMLDivElement>(null)
+
+  /**
+   * 업체를 고르는 화면일 때만 회사 줄을 읽는다 — **영문명은 회사 줄에만 있다**(2026-11-23).
+   * 사업장 줄로만 거르면 「HYUNDAI」로 현대트랜시스를 못 찾는다. 상세 화면에서 열면
+   * 업체가 잠겨 있어 고를 일이 없으므로 읽지 않는다(조회가 한 벌 늘지 않게).
+   */
+  const pickingCustomer = !lockedCustomerName && !opportunity
+  const parents = useParents(isOpen && pickingCustomer)
+  const nameEnOf = useMemo(
+    () => new Map(parents.map(p => [p.customer_id, p.name_en])),
+    [parents],
+  )
+  /** 그 사업장 줄에 회사의 영문명을 얹어 준다. 검색과 결과 줄이 같은 값을 본다. */
+  const withNameEn = (c: Customer) => ({
+    ...c,
+    name_en: c.name_en ?? (c.parent_customer_id != null ? nameEnOf.get(c.parent_customer_id) ?? null : null),
+  })
 
   useEffect(() => {
     if (!isOpen) return
     setErrors({})
     setForm(formOf(opportunity))
     setCustQuery('')
-    setCustOpen(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, opportunity])
 
@@ -98,8 +113,9 @@ export default function OpportunityModal({
   const needCustomerPick = !lockedCustomerName && !opportunity
   const pickedCustomer = customers.find(c => c.customer_id === form.customer_id) ?? null
   // 업체명이 겹치는 곳이 많아 주소를 함께 보여줘야 구분된다
+  // 찾는 칸은 공용이다 — 회사명·영문명·사업장명·주소·대리점명(lib/companySearch.ts).
   const custMatches = custQuery.trim()
-    ? customers.filter(c => (c.company_name ?? '').toLowerCase().includes(custQuery.trim().toLowerCase())).slice(0, 8)
+    ? customers.filter(c => matchesCompany(withNameEn(c), custQuery)).slice(0, 8)
     : []
 
   const handleSave = () => {
@@ -156,7 +172,7 @@ export default function OpportunityModal({
               </div>
             </div>
           ) : (
-            <div ref={custAnchorRef}>
+            <div>
               <label style={labelStyle}>업체 *</label>
               {form.customer_id ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -167,51 +183,35 @@ export default function OpportunityModal({
                     )}
                   </div>
                   <button
-                    onClick={() => { setForm(p => ({ ...p, customer_id: null })); setCustQuery(''); setCustOpen(true) }}
+                    onClick={() => { setForm(p => ({ ...p, customer_id: null })); setCustQuery('') }}
                     style={{ padding: '9px 12px', background: '#f3f4f6', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#6b7280', flexShrink: 0 }}
                   >변경</button>
                 </div>
               ) : (
-                <input
-                  value={custQuery}
-                  onChange={(e) => { setCustQuery(e.target.value); setCustOpen(true); clearError('customer_id') }}
-                  onFocus={() => setCustOpen(true)}
-                  placeholder="업체명으로 검색"
-                  style={errors.customer_id ? { ...fieldStyle, border: errBorder } : fieldStyle}
+                /* 조작(↑↓·Enter·Esc·Tab·마우스 혼용)은 공용 콤보박스가 맡는다.
+                   모달 본문이 overflowY: auto 라 목록은 포털로 뜬다. */
+                <SearchSelect<Customer>
+                  items={custMatches}
+                  itemKey={c => c.customer_id}
+                  renderItem={c => (
+                    <CompanyOption
+                      name={c.company_name ?? '-'}
+                      nameEn={withNameEn(c).name_en}
+                      sub={c.address ?? '주소 없음'}
+                    />
+                  )}
+                  onSelect={c => {
+                    setForm(p => ({ ...p, customer_id: c.customer_id }))
+                    clearError('customer_id')
+                  }}
+                  query={custQuery}
+                  onQueryChange={q => { setCustQuery(q); clearError('customer_id') }}
+                  placeholder={COMPANY_SEARCH_PLACEHOLDER}
+                  inputStyle={errors.customer_id ? { ...fieldStyle, border: errBorder } : fieldStyle}
+                  emptyText="맞는 업체가 없습니다"
                 />
               )}
               <FieldError message={errors.customer_id} />
-
-              {/* 모달 본문이 overflowY: auto 라 안에 두면 잘린다 — 포털로 띄운다 */}
-              <Popover
-                anchorRef={custAnchorRef}
-                open={custOpen && !form.customer_id && custMatches.length > 0}
-                onClose={() => setCustOpen(false)}
-                matchAnchorWidth
-                maxHeight={240}
-                style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.icon, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-              >
-                  {custMatches.map(c => (
-                    <div key={c.customer_id}
-                      onMouseDown={(e) => {
-                        e.preventDefault()
-                        setForm(p => ({ ...p, customer_id: c.customer_id }))
-                        setCustOpen(false)
-                        clearError('customer_id')
-                      }}
-                      style={{ padding: '8px 11px', cursor: 'pointer' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = '#f5f5f5' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-                    >
-                      <div style={{ fontSize: 13, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {c.company_name ?? '-'}
-                      </div>
-                      <div style={{ fontSize: 11, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {c.address ?? '주소 없음'}
-                      </div>
-                    </div>
-                  ))}
-              </Popover>
             </div>
           )}
 

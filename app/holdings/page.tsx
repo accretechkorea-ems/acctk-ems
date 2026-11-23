@@ -14,6 +14,7 @@ import { useHoldingList } from '@/hooks/holding/useHoldingList'
 import { deviceLabel, elapsedDays, elapsedLabel, isHoldingDeviceDisposed } from '@/components/customer/holding'
 import type { Holding } from '@/components/customer/types'
 import { R } from '@/lib/radius'
+import { matchesCompany } from '@/lib/companySearch'
 
 const PAGE_BG = '#f4f5f7'
 const STALE_DAYS = 30
@@ -125,9 +126,8 @@ export default function HoldingsPage() {
       if (tab === '진행 중' && h.resolved_at) return false
       if (tab === '해제됨' && !h.resolved_at) return false
       if (!q) return true
-      return (h.customers?.company_name ?? '').toLowerCase().includes(q)
-        || deviceLabel(h).toLowerCase().includes(q)
-        || h.title.toLowerCase().includes(q)
+      // 회사 쪽은 공용 함수가 본다(lib/companySearch.ts). 이 자리만 더 보는 것: 장비 줄·제목.
+      return matchesCompany({ company_name: h.customers?.company_name }, search, [deviceLabel(h), h.title])
     })
     // 진행 중은 오래된 것이 위로, 해제된 것은 최근 해제가 위로
     return matched.sort((a, b) => {

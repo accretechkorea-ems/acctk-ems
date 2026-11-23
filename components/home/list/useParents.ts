@@ -6,12 +6,14 @@
 import { useEffect, useState } from 'react'
 import { loadParents, type ParentOption } from '@/components/customer/ParentPicker'
 
-export function useParents(): ParentOption[] {
+/** enabled 가 거짓이면 읽지 않는다 — 쓰지 않는 화면에서 조회가 한 벌 늘지 않게. */
+export function useParents(enabled: boolean = true): ParentOption[] {
   const [list, setList] = useState<ParentOption[]>([])
   useEffect(() => {
+    if (!enabled) return
     let cancelled = false
     loadParents().then(rows => { if (!cancelled) setList(rows) })
     return () => { cancelled = true }
-  }, [])
+  }, [enabled])
   return list
 }

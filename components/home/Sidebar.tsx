@@ -21,6 +21,7 @@ import { useState } from 'react'
 import CustomerList from './CustomerList'
 import { TEXT_PRIMARY, type Customer, type Device } from '@/lib/home'
 import { R } from '@/lib/radius'
+import { COMPANY_SEARCH_PLACEHOLDER } from '@/lib/companySearch'
 
 type Props = {
   query: string
@@ -70,7 +71,7 @@ export default function Sidebar({
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setSearchFocused(true)}
           onBlur={() => setSearchFocused(false)}
-          placeholder="회사명, 주소, 대리점 검색"
+          placeholder={`${COMPANY_SEARCH_PLACEHOLDER} 검색`}
           style={{
             width: '100%',
             padding: '11px 56px 11px 34px',

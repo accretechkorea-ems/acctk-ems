@@ -11,6 +11,7 @@
 // 모바일 상단 바 높이 — 화면 높이를 계산하는 곳은 이 상수 하나를 본다(PC 는 상단 바가 없다).
 import { TOPBAR_HEIGHT } from '@/components/layout/Sidebar'
 import { R } from '@/lib/radius'
+import { matchesCompany } from '@/lib/companySearch'
 
 /**
  * 판 전체의 하한. 열에는 최소 폭을 두지 않고(남은 폭을 5등분한다) 판에만 하한을 둔다 —
@@ -195,8 +196,8 @@ export default function PipelinePage() {
     return opportunities.filter(o => {
       if (ownerValue !== 'all' && o.engineer_id !== ownerValue) return false
       if (!q) return true
-      return o.title.toLowerCase().includes(q)
-        || (o.customers?.company_name ?? '').toLowerCase().includes(q)
+      // 회사 쪽은 공용 함수가 본다(lib/companySearch.ts). 이 자리만 더 보는 것: 기회 제목.
+      return matchesCompany({ company_name: o.customers?.company_name }, search, [o.title])
     })
   }, [opportunities, ownerValue, search])
 

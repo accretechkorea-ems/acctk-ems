@@ -36,6 +36,7 @@ import LinePickerModal from '@/components/approval/LinePickerModal'
 import { canSubmitApproval, loadQuoteApprovalDocIds, fetchQuoteGates, gateFor, docIdFor, docHistoryFor, type QuoteGateTable } from '@/lib/quoteApprovalDocs'
 import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice } from '@/lib/approval/quoteApprovalKeys'
 import { openQuotePdf } from '@/lib/openQuotePdf'
+import { matchesCompany } from '@/lib/companySearch'
 import { approvalDocPath, type LineInput } from '@/lib/approval/types'
 import {
   isAutoFailed, REVERT_NOTICE, AUTO_FAIL_NOTICE,
@@ -494,9 +495,8 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   const achieveColor = achieveColorOf(engineer.achieve)
   const orderAchieveColor = achieveColorOf(engineer.orderAchieve)
   const filtered = quotes.filter(q => {
-    const matchSearch = !search.trim() ||
-      q.quote_number.toLowerCase().includes(search.toLowerCase()) ||
-      (q.customers?.company_name || '').toLowerCase().includes(search.toLowerCase())
+    // 회사 쪽은 공용 함수가 본다(lib/companySearch.ts). 이 자리만 더 보는 것: 견적번호.
+    const matchSearch = matchesCompany({ company_name: q.customers?.company_name }, search, [q.quote_number])
     return matchSearch && (statusFilter === '전체' || q.status === statusFilter)
   })
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
