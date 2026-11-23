@@ -14,7 +14,7 @@
 //   분할 보기는 **칸 안**이라 칸 폭을 기준으로 접힌다 — 화면 폭으로 접으면 1366 에서도
 //   오른쪽 칸은 600px 인데 2단을 고집하게 된다. 그래서 그때만 컨테이너 쿼리를 쓴다.
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useCallback } from 'react'
 
 import { useCustomerDetail } from '@/hooks/customer/useCustomerDetail'
 import { useServiceCrud } from '@/hooks/customer/useServiceCrud'
@@ -48,12 +48,14 @@ export type CustomerDetailBodyProps = {
   customerId: number
   /** 제목 앞 화살표 — 라우트는 목록으로 가고, 분할 보기는 회사 보기로 돌아간다. */
   onBack?: () => void
+  /** 이 화면에서 무언가 고쳤다 — 바깥 화면(목록 보기)이 자기 자료를 다시 읽게 한다. */
+  onChanged?: () => void
   /** 칸 안에 끼워 그릴 때(분할 보기). 바깥 여백과 접히는 기준만 달라진다. */
   embedded?: boolean
 }
 
 export default function CustomerDetailBody({
-  customerId, onBack, embedded = false,
+  customerId, onBack, onChanged, embedded = false,
 }: CustomerDetailBodyProps) {
   // 바깥 틀 — 라우트는 화면 전체, 분할 보기는 칸 안이다.
   const wrapClass = embedded ? 'cust-embed' : ''
@@ -84,9 +86,20 @@ export default function CustomerDetailBody({
     customerId, customer, contacts, engineers, fetchDetail,
     onActiveHoldingFound: h => holding.openResolve(h, '이 장비에 홀딩 중인 건이 있습니다. 해제할까요?'),
   })
-  const contact = useContactCrud({ customerId, fetchDetail })
-  const device = useDeviceCrud({ customerId, fetchDetail })
-  const customerCrud = useCustomerCrud({ customer, fetchDetail })
+  /**
+   * **고친 뒤 다시 읽기 — 한 길**(2026-11-23).
+   * 이 화면 자기 자료(fetchDetail)를 읽고, 이어서 바깥 화면에도 알린다(onChanged).
+   * 목록 보기 가운데 pane 으로 떠 있을 때 좌측 트리·지도·건수 배지가 그 알림으로 따라온다.
+   * 훅마다 따로 알리지 않는다 — 한 함수를 넷이 나눠 쓴다.
+   */
+  const refreshAll = useCallback(async () => {
+    const r = await fetchDetail()
+    onChanged?.()
+    return r
+  }, [fetchDetail, onChanged])
+  const contact = useContactCrud({ customerId, fetchDetail: refreshAll })
+  const device = useDeviceCrud({ customerId, fetchDetail: refreshAll })
+  const customerCrud = useCustomerCrud({ customer, fetchDetail: refreshAll })
 
   // ── 이 화면에서만 쓰는 상태 ──
   // 활동 이력 탭은 걷었다(2026-11-20). 활동은 **회사 화면의 전체 타임라인**에서 본다 —

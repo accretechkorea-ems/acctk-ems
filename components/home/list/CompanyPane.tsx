@@ -142,6 +142,11 @@ export type CompanyPaneProps = {
    * 전부 다시 만들기 때문이다). 분류·메모와 사업장 수준의 일은 고객사 메뉴면 된다.
    */
   canEditCompany: boolean
+  /**
+   * 저장이 끝나기 전에 화면의 줄을 먼저 고친다(낙관적). 다시 읽기가 곧 덮는다.
+   * 일괄 작업처럼 **무엇이 어떻게 바뀌는지 확실한** 자리에서만 쓴다.
+   */
+  onPatchLocal?: (ids: number[], patch: Record<string, unknown>) => void
   /** 사업장 화면에서 ← 로 돌아왔을 때 타임라인에 켜 둘 사업장. */
   focusSiteId?: number | null
   /** 활동 현황에서 넘어온 줄 — 그 줄로 내려가 잠깐 밝힌다(lib/activity.ts). */
@@ -164,7 +169,7 @@ export type CompanyPaneProps = {
 }
 
 export default function CompanyPane({
-  group, engineerName, onSaved, onError, onToast, onOpenSite, onAddSite, canEditCompany, me, onOpenQuote, focusSiteId, focusKey, onFocused, onBackToList, onConverted,
+  group, engineerName, onSaved, onError, onToast, onOpenSite, onAddSite, canEditCompany, me, onOpenQuote, focusSiteId, focusKey, onFocused, onBackToList, onConverted, onPatchLocal,
 }: CompanyPaneProps) {
   const supabase = createClient()
   const agencies = useAgencies()
@@ -242,12 +247,14 @@ export default function CompanyPane({
    * **라우트가 한다**(2026-11-23) — 브라우저가 표를 직접 고치면 사건(customer_events)을
    * 적을 수 없다. 그 표는 service role 만 쓸 수 있기 때문이다.
    */
-  const saveBulk = async (body: Record<string, unknown>, done: string) => {
+  const saveBulk = async (body: Record<string, unknown>, done: string, optimistic?: Record<string, unknown>) => {
     if (busy || selected.length === 0) return
     setBusy(true)
     const r = await customerChange({ ...body, ids: selected })
     setBusy(false)
     if (!r.ok) { onError(r.error); return }
+    // 바꾼 값을 **먼저** 화면에 넣는다 — 다시 읽기(300ms 안팎)를 기다리지 않게.
+    if (optimistic) onPatchLocal?.(selected, optimistic)
     onToast(done)
     onSaved()
   }
@@ -822,7 +829,7 @@ export default function CompanyPane({
           onClose={() => setBulkOpen(null)}
           onApply={value => {
             setBulkOpen(null)
-            void saveBulk({ action: 'site-status', status: value }, bulkDoneText(selected.length))
+            void saveBulk({ action: 'site-status', status: value }, bulkDoneText(selected.length), { status: value })
           }}
         />
       )}
@@ -842,7 +849,11 @@ export default function CompanyPane({
           onApply={value => {
             setBulkOpen(null)
             const v = value === DIRECT_SALE_VALUE ? null : Number(value)
-            void saveBulk({ action: 'site-agency', agencyId: v }, bulkDoneText(selected.length))
+            void saveBulk({ action: 'site-agency', agencyId: v }, bulkDoneText(selected.length), {
+              agency_customer_id: v,
+              // 화면이 읽는 이름 칸도 같이 고친다 — id 만 바꾸면 표에 옛 이름이 남는다.
+              agency_name: v == null ? null : (agencies.find(a => a.customer_id === v)?.company_name ?? null),
+            })
           }}
         />
       )}

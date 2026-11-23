@@ -168,6 +168,36 @@ useEffect(() => {
 })
 
   /**
+   * **고객사 데이터 다시 읽기 — 이 화면의 한 길**(2026-11-23).
+   *
+   * 전에는 저장 경로마다 제각각이었다. 어디는 fetchData 만, 어디는 회사 목록만, 사업장
+   * 상세(가운데 pane)는 **자기 자리만** 다시 읽었다. 그래서 사업장명·대리점·상태·담당자·
+   * 장비를 고쳐도 좌측 트리·지도 카드·건수 배지는 새로고침 전까지 옛 값이었다.
+   *
+   * 이제 저장한 쪽은 이 함수 하나만 부른다. 읽는 것은 셋이다.
+   *   ① 회사 목록 캐시(ParentPicker) — 회사 이름·분류가 여기 산다
+   *   ② 업체·장비·최근 활동(useHomeData) — 좌측 트리·지도·건수 배지가 이것을 본다
+   *   ③ 고른 사업장/회사 pane 은 자기 자료를 따로 들고 있다(fetchDetail) — 그쪽은 그대로 둔다
+   */
+  const refreshCustomers = useCallback(async () => {
+    invalidateParents()
+    const [list] = await Promise.all([loadParents(), fetchData()])
+    setCompanies(list)
+  }, [fetchData])
+
+  /**
+   * **낙관적 반영** — 다시 읽기를 기다리지 않고 화면의 줄을 먼저 고친다.
+   *
+   * 다시 읽기는 네 표를 읽어 300ms 안팎이 걸린다. 그동안 방금 바꾼 값이 옛 값으로 남아
+   * 있으면 「저장이 안 됐나」가 된다. 그래서 **아는 칸만** 먼저 고쳐 두고 곧 재조회가 덮는다.
+   * 모르는 칸(이름 재생성·좌표 등)은 손대지 않는다 — 틀린 값을 잠깐 보여 주는 것이 더 나쁘다.
+   */
+  const patchCustomersLocally = useCallback((ids: number[], patch: Partial<Customer>) => {
+    const want = new Set(ids.map(Number))
+    setCustomers(prev => prev.map(c => (want.has(Number(c.customer_id)) ? { ...c, ...patch } : c)))
+  }, [])
+
+  /**
    * 주소의 `?view=list` — 들어올 때 읽고, 토글할 때 바꾼다.
    *
    * useSearchParams 를 쓰지 않는 이유: 이 화면은 Suspense 경계가 없어 그 훅을 들이면
@@ -615,9 +645,10 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
     // 라우트가 저장하고 사건도 함께 적는다(2026-11-23).
     const r = await customerChange({ action: 'company-industry', ids, industry: value })
     if (!r.ok) { toast.error(r.error); return }
-    invalidateParents()
-    loadParents().then(setCompanies)
+    // 먼저 화면을 고치고(낙관적), 곧 다시 읽어 덮는다.
+    patchCustomersLocally(ids, { industry: value } as Partial<Customer>)
     setCheckedCompanies(new Set())
+    void refreshCustomers()
     toast.success(`회사 ${ids.length}곳의 분류를 「${value}」 로 바꿨습니다`)
   }
 
@@ -653,10 +684,8 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
     if (!r.ok) { toast.error(r.error); return }
     const { id, name } = deleteTarget
     setDeleteTarget(null)
-    invalidateParents()
-    loadParents().then(setCompanies)
     if (selectedCompanyId === id) { setSelectedCompanyId(null); setSelectedSiteId(null) }
-    void fetchData()
+    void refreshCustomers()
     void loadDeletedRows()
     toast.success(`${name} 을(를) 숨겼습니다`)
   }
@@ -671,9 +700,7 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
   const restoreCustomer = async (customerId: number, name: string) => {
     const r = await customerDelete({ action: 'restore', target: 'site', id: customerId })
     if (!r.ok) { toast.error(r.error); return }
-    invalidateParents()
-    loadParents().then(setCompanies)
-    void fetchData()
+    void refreshCustomers()
     void loadDeletedRows()
     toast.success(`${name} 을(를) 되돌렸습니다`)
   }
@@ -1052,6 +1079,8 @@ useEffect(() => {
                      걷었다). 떠날 때의 필터는 그대로 되살아난다 —
                      lib/timelineFilter.ts 의 기억이 맡는다. */
                   onBack={() => { setSelectedSiteId(null) }}
+                  /* 가운데 pane 에서 고친 것(담당자·장비·사업장 정보)도 좌측 트리·지도에 바로 든다. */
+                  onChanged={() => { void refreshCustomers() }}
                 />
               </div>
             ) : selectedAgency ? (
@@ -1069,7 +1098,7 @@ useEffect(() => {
                 canDeleteContact={canExportExcel}
                 onOpenSite={id => openSite(id)}
                 onBackToList={() => setSelectedAgencyId(null)}
-                onSaved={() => { void fetchData() }}
+                onSaved={() => { void refreshCustomers() }}
                 onError={msg => toast.error(msg)}
                 onToast={msg => toast.success(msg)}
               />
@@ -1078,7 +1107,8 @@ useEffect(() => {
                 key={selectedGroup.companyId}
                 group={selectedGroup}
                 engineerName={id => (id == null ? '' : engineerNameMap.get(id) ?? '')}
-                onSaved={() => { invalidateParents(); loadParents().then(setCompanies); void fetchData() }}
+                onSaved={() => { void refreshCustomers() }}
+                onPatchLocal={patchCustomersLocally}
                 onError={msg => toast.error(msg)}
                 onToast={msg => toast.success(msg)}
                 onOpenSite={id => openSite(id)}
@@ -1193,10 +1223,7 @@ useEffect(() => {
           onSaved={async message => {
             setIsAddCustomerModalOpen(false)
             setQuery('')
-            invalidateParents()
-            const list = await loadParents()
-            setCompanies(list)
-            await fetchData()
+            await refreshCustomers()
             toast.success(message)
           }}
         />

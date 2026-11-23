@@ -141,5 +141,23 @@ ok('장비 추가·수정도 라우트를 지난다',
 ok('분류 일괄 지정도 라우트를 지난다', PAGE.includes("action: 'company-industry'"))
 ok('병합 버튼이 슈퍼관리자 전용이 아니다', !/canMergeSites=\{canEditCompany\}/.test(PANE))
 
+console.log('\n── ⑦ 저장 뒤 다시 읽기는 **한 길**이다 ──')
+const BODY = fs.readFileSync(path.join(ROOT, 'components/customer/CustomerDetailBody.tsx'), 'utf8')
+ok('다시 읽기 함수가 하나 있다', /const refreshCustomers = useCallback\(async \(\) => \{/.test(PAGE))
+ok('그 함수가 회사 목록과 업체 자료를 함께 읽는다',
+  /invalidateParents\(\)[\s\S]{0,200}loadParents\(\), fetchData\(\)/.test(PAGE))
+ok('저장 경로가 제각각 읽지 않는다 — loadParents 직접 호출이 남아 있지 않다',
+  (PAGE.match(/loadParents\(\)\.then\(setCompanies\)/g) ?? []).length === 0,
+  '예전 방식(개별 호출)이 남아 있다')
+ok('회사·대리점 pane 이 그 함수를 부른다',
+  (PAGE.match(/onSaved=\{\(\) => \{ void refreshCustomers\(\) \}\}/g) ?? []).length >= 2)
+ok('가운데 pane 도 알린다', /onChanged=\{\(\) => \{ void refreshCustomers\(\) \}\}/.test(PAGE))
+ok('사업장 상세는 세 훅에 **같은 함수**를 넘긴다',
+  (BODY.match(/fetchDetail: refreshAll/g) ?? []).length === 3 && /const refreshAll = useCallback/.test(BODY))
+ok('그 함수가 바깥에도 알린다', /onChanged\?\.\(\)/.test(BODY))
+ok('일괄 작업은 낙관적으로 먼저 고친다', /onPatchLocal\?\.\(selected, optimistic\)/.test(PANE))
+ok('낙관적 반영은 아는 칸만 고친다',
+  /patchCustomersLocally = useCallback\(\(ids: number\[\], patch: Partial<Customer>\)/.test(PAGE))
+
 console.log(fails === 0 ? '\n전부 통과' : `\n${fails}건 실패`)
 process.exit(fails === 0 ? 0 : 1)
