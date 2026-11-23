@@ -3,7 +3,10 @@
 //   node scripts/division-switch-check.js
 //
 // 지키는 약속
-//   ① 판정은 소속 팀의 teams.can_switch_division 하나다. 등급(superadmin)은 보지 않는다.
+//   ① 판정은 **함수 하나**(lib/division.ts canSwitchDivision)다 —
+//      슈퍼관리자면 참, 아니면 소속 팀의 teams.can_switch_division.
+//      can_switch_division 을 **직접 읽어 판정하는 자리**가 그 함수 밖에 없어야 한다
+//      (칸을 저장·표시하는 자리 — 팀 관리 화면·팀 라우트·팀 로더 — 는 판정이 아니다).
 //   ② 사람 칸(engineers.can_switch_division)은 **어느 조회의 열 목록에도 없다** — 코드가 읽지 않는다.
 //   ③ 전환 가능 팀은 어느 사업부에 있든 관리·실적 메뉴를 본다(사이드바의 「관리」 묶음 예외).
 //   ④ 팀 추가·수정·삭제는 service role 라우트에서만. 화면은 teams 에 직접 쓰지 않는다.
@@ -50,18 +53,62 @@ const ok = (name, cond, hint) => {
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8')
 const team = (over) => ({ menus: new Set(), division: '계측', inSalesStats: false, canSwitchDivision: false, ...over })
 
-console.log('\n── ① 판정은 팀 하나다 ──')
+console.log('\n── ① 판정은 함수 하나다 ──')
+// 슈퍼관리자 — 팀과 무관하게 참 (2026-11-23). 전사를 보려고 팀을 옮겨 앉던 일을 없앴다.
+ok('슈퍼관리자는 팀이 꺼져 있어도 참',
+  D.canSwitchDivision({ permission_level: 'superadmin', perm: team() }))
+ok('슈퍼관리자는 팀이 없어도 참',
+  D.canSwitchDivision({ permission_level: 'superadmin', perm: null }))
+// 그 밖에는 팀이 정한다.
 ok('전환 가능 팀이면 참', D.canSwitchDivision({ permission_level: 'member', perm: team({ canSwitchDivision: true }) }))
-ok('꺼진 팀이면 거짓', D.canSwitchDivision({ permission_level: 'superadmin', perm: team() }) === false)
-ok('팀이 없으면 거짓', D.canSwitchDivision({ permission_level: 'superadmin', perm: null }) === false)
-ok('등급만으로는 안 된다 — superadmin 도 팀이 꺼져 있으면 거짓',
-  D.canSwitchDivision({ permission_level: 'superadmin', perm: team() }) === false)
-ok('사람 칸을 들고 와도 보지 않는다',
-  D.canSwitchDivision({ permission_level: 'superadmin', can_switch_division: true, perm: team() }) === false)
-ok('판정 함수가 perm 만 본다(글자 검사)',
-  /return u\?\.perm\?\.canSwitchDivision === true/.test(read('lib/division.ts')))
-ok('lib/division.ts 는 사람 칸 이름을 더 쓰지 않는다',
-  !/u\.can_switch_division/.test(read('lib/division.ts')))
+ok('꺼진 팀의 일반 사용자는 거짓',
+  D.canSwitchDivision({ permission_level: 'member', perm: team() }) === false)
+ok('꺼진 팀의 admin(슈퍼 아님)도 거짓',
+  D.canSwitchDivision({ permission_level: 'admin', perm: team() }) === false)
+ok('팀이 없는 일반 사용자는 거짓',
+  D.canSwitchDivision({ permission_level: 'member', perm: null }) === false)
+ok('아무도 아니면 거짓', D.canSwitchDivision(null) === false)
+ok('사람 칸(engineers.can_switch_division)은 여전히 보지 않는다',
+  D.canSwitchDivision({ permission_level: 'member', can_switch_division: true, perm: team() }) === false)
+
+const DIV_SRC = read('lib/division.ts')
+ok('판정 함수에 슈퍼관리자 분기가 있다',
+  /export function canSwitchDivision[\s\S]{0,200}isSuperAdmin\(u\)/.test(DIV_SRC))
+ok('등급 판정은 공용 헬퍼로만 — 이름을 코드에 적지 않는다',
+  /import \{[^}]*isSuperAdmin[^}]*\} from '\.\/permissions'/.test(DIV_SRC)
+  && !/'superadmin'/.test(DIV_SRC)
+  && !/권재원|이상철/.test(DIV_SRC.split('\n').filter(l => !/^\s*(\*|\/\/)/.test(l)).join('\n')))
+ok('그 밖에는 팀 값을 본다(글자 검사)',
+  /return u\?\.perm\?\.canSwitchDivision === true/.test(DIV_SRC))
+ok('lib/division.ts 는 사람 칸 이름을 더 쓰지 않는다', !/u\.can_switch_division/.test(DIV_SRC))
+
+// ── 판정하는 자리는 전부 이 함수를 지난다 ──
+// can_switch_division 을 직접 읽어도 되는 곳은 **칸을 저장·표시하는 세 자리**뿐이다.
+console.log('\n── ①-2 can_switch_division 직접 참조 ──')
+const ALLOWED = new Set([
+  'lib/division.ts',            // 열 목록(TEAM_PERM_COLUMNS)과 42703 판정
+  'lib/teamPerms.ts',           // 칸 → TeamPerm.canSwitchDivision
+  'lib/teamPermsServer.ts',     // 같은 일(서버)
+  'lib/permissions.ts',         // TeamPerm 타입 주석
+  'app/admin/page.tsx',         // 팀 관리 모달의 체크 하나(저장 화면)
+  'app/api/team/route.ts',      // 그 저장을 받는 라우트
+])
+const SKIP_DIR = new Set(['node_modules', '.next', '.next-perf', '.git', 'docs', 'db', 'scripts', 'ems-backup'])
+const users = []
+const walk = (d) => {
+  for (const e of fs.readdirSync(path.join(ROOT, d || '.'), { withFileTypes: true })) {
+    const rel = d ? `${d}/${e.name}` : e.name
+    if (e.isDirectory()) { if (!SKIP_DIR.has(e.name)) walk(rel); continue }
+    if (!/\.(ts|tsx)$/.test(e.name)) continue
+    const src = fs.readFileSync(path.join(ROOT, rel), 'utf8')
+    // 주석은 설명이다 — 코드 줄만 본다.
+    const code = src.split(/\r?\n/).filter(l => !/^\s*(\*|\/\/|\/\*)/.test(l)).join('\n')
+    if (/can_switch_division/.test(code)) users.push(rel)
+  }
+}
+walk('')
+eq('함수 밖에서 칸을 읽는 자리', users.filter(f => !ALLOWED.has(f)), [])
+console.log(`     칸을 다루는 자리 ${users.length}개 — ${users.join(' · ')}`)
 
 console.log('\n── ② 사람 칸을 읽는 조회가 없다 ──')
 for (const [label, file] of [

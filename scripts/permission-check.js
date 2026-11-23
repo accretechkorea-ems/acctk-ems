@@ -252,25 +252,35 @@ eq('teamDivisionOf — 팀의 사업부', D.teamDivisionOf({ perm: semiTeam }), 
 eq('teamDivisionOf — 팀이 없으면 계측', [
   D.teamDivisionOf({ perm: null }), D.teamDivisionOf({}), D.teamDivisionOf(null),
 ], ['계측', '계측', '계측'])
-// 전환은 **팀**이 가진다 — 등급(superadmin)과 무관하고, 사람 칸(engineers.can_switch_division)은 보지 않는다.
+// 전환은 **슈퍼관리자 또는 전환 가능 팀**이다 (2026-11-23).
+// 사람 칸(engineers.can_switch_division)은 여전히 보지 않는다.
 eq('canSwitchDivision — 전환 가능 팀이면 참', [
   D.canSwitchDivision({ permission_level: 'member', perm: switchTeam }),
   D.canSwitchDivision({ permission_level: 'superadmin', perm: switchTeam }),
 ], [true, true])
-eq('canSwitchDivision — 그 밖에는 거짓', [
+eq('canSwitchDivision — 슈퍼관리자는 팀과 무관하게 참', [
   D.canSwitchDivision({ permission_level: 'superadmin', perm: gaugeTeam }),
   D.canSwitchDivision({ permission_level: 'superadmin', perm: null }),
   D.canSwitchDivision({ permission_level: 'superadmin' }),
+], [true, true, true])
+eq('canSwitchDivision — 그 밖에는 거짓', [
+  D.canSwitchDivision({ permission_level: 'member', perm: gaugeTeam }),
+  D.canSwitchDivision({ permission_level: 'admin', perm: gaugeTeam }),
+  D.canSwitchDivision({ permission_level: 'member', perm: null }),
   D.canSwitchDivision(null),
 ], [false, false, false, false])
 eq('옛 사람 칸은 더 이상 쓰이지 않는다',
-  D.canSwitchDivision({ permission_level: 'superadmin', can_switch_division: true, perm: gaugeTeam }), false)
+  D.canSwitchDivision({ permission_level: 'member', can_switch_division: true, perm: gaugeTeam }), false)
 eq('접촉 보고서 — 반도체 팀 + 메뉴 권한', D.canAccessSemiContact({ permission_level: 'member', perm: semiTeam }), true)
 eq('반도체 팀인데 메뉴를 안 켰으면 거짓',
   D.canAccessSemiContact({ permission_level: 'member', perm: { ...semiTeam, menus: new Set() } }), false)
 eq('계측 팀은 메뉴를 켜도 거짓', D.canAccessSemiContact({ permission_level: 'member', perm: gaugeTeam }), false)
-eq('**전환 가능 팀이 아닌 superadmin 이 계측 팀이면 막힌다**',
-  D.canAccessSemiContact({ permission_level: 'superadmin', perm: gaugeTeam }), false)
+// 2026-11-23 — 슈퍼관리자가 사업부를 바꿀 수 있게 되면서 여기도 함께 열렸다.
+// (메뉴 권한은 어차피 늘 통과라, 막아 두면 「계측 팀에 앉은 슈퍼관리자」만 못 보는 꼴이었다)
+eq('**계측 팀 superadmin 도 열린다 — 전환이 등급을 따르므로**',
+  D.canAccessSemiContact({ permission_level: 'superadmin', perm: gaugeTeam }), true)
+eq('계측 팀 admin(슈퍼 아님)은 여전히 막힌다',
+  D.canAccessSemiContact({ permission_level: 'admin', perm: gaugeTeam }), false)
 eq('전환 가능 팀은 계측에 있어도 통과',
   D.canAccessSemiContact({ permission_level: 'member', perm: switchTeam }), true)
 eq('반도체 팀 superadmin 은 메뉴 권한이 늘 통과라 열린다',

@@ -110,7 +110,9 @@ const run = async () => {
   ], [false, true])
   eq('semi — 반도체 팀 + 메뉴', A.meetsNeed({ kind: 'semi' }, semi), true)
   eq('semi — 계측 팀은 거짓', A.meetsNeed({ kind: 'semi' }, member), false)
-  eq('semi — 전환 권한 없는 superadmin 이 계측 팀이면 거짓', A.meetsNeed({ kind: 'semi' }, superA), false)
+  // 2026-11-23 — 슈퍼관리자는 팀과 무관하게 사업부를 바꾼다(lib/division.ts canSwitchDivision).
+  // 접촉 보고서도 그 판정을 지나므로 계측 팀에 앉아 있어도 열린다.
+  eq('semi — 계측 팀 superadmin 도 참(전환이 등급을 따른다)', A.meetsNeed({ kind: 'semi' }, superA), true)
   eq('cron 은 사람 판정이 아니다 — 여기서는 늘 거짓', A.meetsNeed({ kind: 'cron' }, superA), false)
 
   console.log('\n── freshFor — 신선도 기본값 ──')

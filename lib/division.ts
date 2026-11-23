@@ -7,15 +7,15 @@
 // 사업부를 바꿔도 볼 수 있는 데이터는 달라지지 않고, 사이드바에 섞여 보이던 메뉴만 갈린다.
 //
 // 현재 사업부(사이드바가 정한다)
-//   · 전환 가능 팀(teams.can_switch_division) 사람 — 사이드바에서 고른 값(계정별로 이 브라우저에 저장).
-//     고른 적이 없으면 본인 팀의 사업부.
+//   · 슈퍼관리자와 전환 가능 팀(teams.can_switch_division) 사람 — 사이드바에서 고른 값
+//     (계정별로 이 브라우저에 저장). 고른 적이 없으면 본인 팀의 사업부.
 //   · 그 밖의 모든 사람 — 본인 팀의 사업부로 고정. 전환 버튼이 없다.
 // 메뉴의 사업부는 lib/menuPerms.ts 의 menuDivision 이 정한다. 공통 메뉴는 건의사항뿐이다.
 // 로그인 직후 첫 화면은 사업부의 시작 화면(DIVISION_HOME)이다(app/login/page.tsx).
 //
 // 값은 한글 그대로 둔다 — 결재 문서의 사업부 칸(approval_documents.division default '계측')과 같다.
 
-import { canViewMenu, type EngineerLike } from './permissions'
+import { canViewMenu, isSuperAdmin, type EngineerLike } from './permissions'
 
 export type Division = '계측' | '반도체'
 
@@ -26,20 +26,26 @@ export type Division = '계측' | '반도체'
 export type DivisionUser = EngineerLike
 
 /**
- * 사업부를 자유롭게 바꿀 수 있는가 — **소속 팀이 전환 가능 팀일 때만**(teams.can_switch_division).
+ * 사업부를 자유롭게 바꿀 수 있는가 — **판정은 여기 하나다.**
  *
- * 2026-11-23 에 사람(engineers.can_switch_division)에서 팀으로 옮겼다. 켜 줄 화면이 없어 SQL 로만
- * 넣히던 값이라 두 사람만 가진 채 굳어 있었고, 그 두 사람이 빠지면 아무도 못 바꾸는 자리였다.
- * 팀 관리 모달의 체크 하나가 정본이며, 팀을 옮기면 전환 권한도 따라 움직인다.
+ *   ① **슈퍼관리자는 늘 바꿀 수 있다** — 팀과 무관하다.
+ *   ② 그 밖에는 소속 팀이 전환 가능 팀일 때만(teams.can_switch_division).
  *
- * **등급(superadmin)은 보지 않는다** — 전환은 「무엇을 할 수 있는가」가 아니라 「어느 사업부를
- * 보는가」의 문제다. 볼 수 있는 자료는 종전처럼 메뉴 권한과 RLS 가 정한다(사업부를 바꿔도
- * 권한 없는 메뉴는 보이지 않는다).
+ * ── 왜 ①이 생겼나 (2026-11-23) ──────────────────────────────────────────
+ * 처음에는 팀만 보게 했다. 그랬더니 전사를 봐야 하는 슈퍼관리자가 **전환되는 팀으로
+ * 옮겨 앉아야** 했고, 등록자 표시가 그 팀 이름으로 남았다(명함의 「권재원 · 임원」).
+ * 보던 범위를 팀 이동으로 흉내 내게 만든 것이 잘못이라, 등급을 판정에 넣는다.
+ * 팀 체크(②)는 그대로다 — 슈퍼관리자가 아닌 사람에게 전사 보기를 주는 길이다.
  *
- * 전환 가능 팀이 아닌 사람(superadmin 포함)은 본인 팀의 사업부로 고정된다:
- * 고르기 버튼이 없고, 저장된 선택값을 읽지 않고, 주소로 들어와도 사업부가 바뀌지 않는다.
+ * 등급 판정은 **isSuperAdmin 하나**를 쓴다(lib/permissions.ts). 이름을 코드에 적지 않는다.
+ *
+ * 둘 다 아닌 사람은 본인 팀의 사업부로 고정된다: 고르기 버튼이 없고, 저장된 선택값을
+ * 읽지 않고, 주소로 들어와도 사업부가 바뀌지 않는다.
+ *
+ * ※ 바뀌는 것은 **보는 범위**다. 볼 수 있는 자료는 종전처럼 메뉴 권한과 RLS 가 정한다.
  */
 export function canSwitchDivision(u?: DivisionUser | null): boolean {
+  if (isSuperAdmin(u)) return true
   return u?.perm?.canSwitchDivision === true
 }
 
@@ -54,8 +60,10 @@ export const SEMI_CONTACT_KEY = 'contact_semi'
 /**
  * 접촉 보고서(화면 /contact/semi, 라우트 /api/semi-contact/*)를 쓸 수 있는가. 화면 가드와 서버가 함께 쓴다.
  *   (a) 본인 팀의 사업부가 반도체이고 contact_semi 메뉴 권한이 있다(superadmin 은 메뉴 권한이 늘 통과한다), 또는
- *   (b) 전환 가능 팀(canSwitchDivision) 소속이다.
- * 그래서 전환 가능 팀이 아닌 superadmin 이 계측 팀 소속이면 막힌다.
+ *   (b) 사업부를 바꿀 수 있다(canSwitchDivision) — **슈퍼관리자**이거나 전환 가능 팀 소속이다.
+ *
+ * 2026-11-23 에 (b) 에 슈퍼관리자가 들어오면서, 계측 팀에 앉은 슈퍼관리자도 열린다.
+ * 전사를 봐야 하는 자리라 막을 까닭이 없다(메뉴 권한은 어차피 늘 통과한다).
  */
 export function canAccessSemiContact(u?: DivisionUser | null): boolean {
   if (!u) return false
