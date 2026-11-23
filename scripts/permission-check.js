@@ -222,15 +222,15 @@ eq('permKey 가 가리키는 키는 등록표에 있다',
   M.MENU_PERMS.filter(m => m.permKey && !M.MENU_BY_KEY[m.permKey]).map(m => m.key), [])
 eq('체크 대상 — 공개·숨김·permKey 를 뺀 것', M.CHECKABLE_MENUS.map(m => m.key),
   ['approvals', 'repair_dashboard', 'dashboard_80', 'activity', 'customers', 'repair', 'showroom',
-    'inquiries', 'leads', 'pipeline', 'quote', 'contact_semi', 'purchase', 'sales', 'admin'])
+    'inquiries', 'leads', 'pipeline', 'quote', 'contact_semi', 'purchase', 'business_cards', 'sales', 'admin'])
 eq('menuPublic(전자결재)은 체크 대상에 남는다 — 「전체 결재 조회」를 잠근다',
   M.CHECKABLE_MENUS.some(m => m.key === 'approvals'), true)
 eq('공개 메뉴(홈·알림·건의사항)는 체크 대상이 아니다',
   M.CHECKABLE_MENUS.filter(m => ['home', 'notifications', 'suggestions'].includes(m.key)), [])
 eq('묶음별 체크 목록은 묶음 순서대로, 빈 묶음은 빠진다', M.checkableGroups().map(g => g.group),
-  ['주 메뉴', '대시보드', '고객', '영업', '주문', '관리'])
+  ['주 메뉴', '대시보드', '고객', '영업', '주문', '전사', '관리'])
 eq('묶음 안은 order 순', M.checkableGroups().map(g => g.items.map(i => i.order).every((v, i, a) => i === 0 || a[i - 1] <= v)),
-  [true, true, true, true, true, true])
+  [true, true, true, true, true, true, true])
 eq('data 영역 이름은 세 가지뿐(RLS 가 묻는 것)',
   [...new Set(M.MENU_PERMS.flatMap(m => m.data))].sort(), ['customers', 'quote', 'sales_mgmt'])
 eq('menuDivision — 적지 않으면 계측', [

@@ -21,7 +21,7 @@ import type { Division } from './division'
 export type DataArea = 'customers' | 'quote' | 'sales_mgmt'
 
 /** 사이드바 묶음. 순서는 MENU_GROUPS 가 정한다. */
-export type MenuGroup = '주 메뉴' | '대시보드' | '고객' | '영업' | '주문' | '하단' | '관리'
+export type MenuGroup = '주 메뉴' | '대시보드' | '고객' | '영업' | '주문' | '전사' | '하단' | '관리'
 
 export type MenuPerm = {
   /** 권한 키. team_permissions.perm_key 가 될 값이다. */
@@ -91,6 +91,8 @@ export const MENU_GROUPS: {
   { group: '고객', key: 'customer', title: '고객', placement: 'main' },
   { group: '영업', key: 'sales', title: '영업', placement: 'main' },
   { group: '주문', key: 'order', title: '주문', placement: 'main' },
+  // 전사 — **사업부를 타지 않는** 메뉴(2026-11-23). 계측에 있든 반도체에 있든 보인다.
+  { group: '전사', key: 'company', title: '전사', placement: 'main' },
   { group: '하단', key: 'bottom', title: null, placement: 'bottom' },
   { group: '관리', key: 'admin', title: '관리', placement: 'bottom' },
 ]
@@ -175,6 +177,11 @@ export const MENU_PERMS: MenuPerm[] = [
   { key: 'inventory', label: '재고', group: '주문', path: '/inventory', icon: 'archive', order: 20, data: ['sales_mgmt'], hidden: true, permKey: 'purchase' },
 
   // ── 하단 — 전원 공개 ──
+  // ── 전사 — 사업부 공통 ──
+  // 명함은 계측·반도체가 같이 본다. 사업부로 거르는 것은 **명함의 사업부 칸**이지
+  // 메뉴가 아니다(lib/businessCard.ts 의 visibleDivisions).
+  { key: 'business_cards', label: '명함', group: '전사', path: '/cards', icon: 'userPlus', order: 10, data: [], division: '공통' },
+
   { key: 'suggestions', label: '건의사항', group: '하단', path: '/suggestions', icon: 'message', order: 10, data: [], public: true, division: '공통' },
 
   // ── 관리 ──
