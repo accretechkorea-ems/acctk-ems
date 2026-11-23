@@ -44,7 +44,7 @@ export default function RemarksEditor({
           <span style={{ fontSize: 11, fontWeight: 700, color: '#234ea2', flexShrink: 0 }}>수정됨</span>
         )}
         {!remarksOpen && (
-          <span style={{ fontSize: 11, color: '#9ca3af', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 11, color: '#6b7280', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {remarksPreview}
           </span>
         )}
@@ -62,7 +62,7 @@ export default function RemarksEditor({
         <textarea className="q-box-area" value={remarks} onChange={e => setRemarks(e.target.value)} rows={3} />
         {/* 길이 안내 — 막지 않는다. PDF 하단 블록이 품목 표와 같은 칸을 나눠 쓰기 때문이다. */}
         {remarksLineCount > REMARKS_HINT_LINES && (
-          <div style={{ padding: '0 11px 8px', fontSize: 11, color: '#9ca3af', lineHeight: 1.6 }}>
+          <div style={{ padding: '0 11px 8px', fontSize: 11, color: '#6b7280', lineHeight: 1.6 }}>
             비고가 {remarksLineCount}줄입니다. 비고가 길면 표가 줄어듭니다
           </div>
         )}

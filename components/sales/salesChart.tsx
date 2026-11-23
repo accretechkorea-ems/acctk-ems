@@ -35,8 +35,8 @@ export const CHART_GREEN = '#16a34a'
 export const CHART_ORANGE = '#d97706'
 const BORDER = '#ebebeb'
 const TEXT = '#111113'
-const GRAY = '#6b7280'
-const MUTED = '#9ca3af'
+const GRAY = '#4b5563'
+const MUTED = '#6b7280'
 /** 현재 칸 세로 띠 — 기존 연한 파랑(가격표 드롭존·버튼 hover 와 같은 값). */
 const NOW_BAND = '#eff4ff'
 

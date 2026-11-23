@@ -30,7 +30,7 @@ type Props = {
   onWriteQuote?: () => void
 }
 
-const MUTED = '#9ca3af'
+const MUTED = '#6b7280'
 const FADE = '#d1d5db'
 
 export default function OpportunityCard({ opp, canEdit, onOpen, onChangeStage, onPickLost, onClose, onWriteQuote }: Props) {
@@ -79,7 +79,7 @@ export default function OpportunityCard({ opp, canEdit, onOpen, onChangeStage, o
         <div
           title={opp.title}
           style={{
-            fontSize: 12, color: '#6b7280', lineHeight: '16px', marginTop: 2,
+            fontSize: 12, color: '#4b5563', lineHeight: '16px', marginTop: 2,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}
         >
@@ -102,7 +102,7 @@ export default function OpportunityCard({ opp, canEdit, onOpen, onChangeStage, o
         {quoteCount > 0 && (
           <>
             <span style={{ color: FADE, flexShrink: 0 }}>·</span>
-            <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 600, flexShrink: 0 }}>견적 {quoteCount}건</span>
+            <span style={{ fontSize: 11, color: '#4b5563', fontWeight: 600, flexShrink: 0 }}>견적 {quoteCount}건</span>
           </>
         )}
 
@@ -134,7 +134,7 @@ export default function OpportunityCard({ opp, canEdit, onOpen, onChangeStage, o
             style={{
               maxWidth: 76, padding: '2px 4px', borderRadius: R.icon,
               border: '1px solid #ebebeb', background: canEdit ? '#fff' : '#f9fafb',
-              color: canEdit ? '#6b7280' : MUTED,
+              color: canEdit ? '#4b5563' : MUTED,
               fontSize: 11, fontWeight: 700, outline: 'none',
               cursor: canEdit ? 'pointer' : 'not-allowed',
             }}
@@ -148,7 +148,7 @@ export default function OpportunityCard({ opp, canEdit, onOpen, onChangeStage, o
               onPointerDown={e => e.stopPropagation()}
               onClick={onClose}
               title="이 포캐스트를 종료합니다"
-              style={{ padding: '1px 6px', background: '#f3f4f6', color: '#6b7280', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit' }}
+              style={{ padding: '1px 6px', background: '#f3f4f6', color: '#4b5563', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 11, fontWeight: 700, fontFamily: 'inherit' }}
             >
               종료
             </button>

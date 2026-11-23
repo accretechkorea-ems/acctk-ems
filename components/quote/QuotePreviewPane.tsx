@@ -28,7 +28,7 @@ import { R } from '@/lib/radius'
 const QuotePreviewCanvas = dynamic(() => import('./QuotePreviewCanvas'), {
   ssr: false,
   loading: () => (
-    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#9ca3af' }}>
+    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#6b7280' }}>
       PDF 준비 중...
     </div>
   ),

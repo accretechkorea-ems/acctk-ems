@@ -6,6 +6,7 @@
 // (.claude/rules/design-system.md 의 표에 있는 값만 들어 있다)
 import type { CSSProperties } from 'react'
 import { R } from '@/lib/radius'
+import { TEXT_DISABLED, TEXT_NOTE, TEXT_PLACEHOLDER } from '@/lib/textTokens'
 
 // ── 색 ────────────────────────────────────────────────────────────
 export const BLUE = '#234ea2'
@@ -14,13 +15,17 @@ export const PAGE_BG = '#fafafa'
 export const CARD_BG = '#ffffff'
 export const BORDER = '#ebebeb'
 export const TEXT = '#111827'
-export const MUTED = '#9ca3af'
-export const SUB = '#6b7280'
+// 2026-11-23 — 글자색을 **한 단씩 진하게**. 흰 바탕에서 #9ca3af 는 2.8:1 로 읽히지 않는데
+// 라벨·날짜·힌트가 모두 그 값이었다. 역할별 정본은 lib/textTokens.ts 다.
+//   MUTED #9ca3af → #6b7280 (4.8:1) · SUB #6b7280 → #4b5563 (7.5:1) · FAINT #d1d5db → #9ca3af
+// 토큰을 쓰던 800여 자리는 고치지 않아도 함께 진해진다.
+export const MUTED = TEXT_PLACEHOLDER
+export const SUB = TEXT_NOTE
 export const DANGER = '#dc2626'
 /** 배지·칩·트랙의 중립 배경. */
 export const NEUTRAL_BG = '#f3f4f6'
-/** 구분점 ` · ` 처럼 가장 흐린 글자. */
-export const FAINT = '#d1d5db'
+/** 구분점 ` · ` 처럼 가장 흐린 글자 — **비활성과 같은 급**이다(읽어야 하는 글자에는 쓰지 않는다). */
+export const FAINT = TEXT_DISABLED
 /** 스켈레톤 플레이스홀더. */
 export const SKELETON = '#e5e7eb'
 

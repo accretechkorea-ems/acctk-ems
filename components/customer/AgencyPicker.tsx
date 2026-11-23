@@ -20,7 +20,7 @@
 
 import { useMemo, useState, type CSSProperties } from 'react'
 import SearchSelect, { CompanyOption } from '@/components/common/SearchSelect'
-import { COMPANY_SEARCH_PLACEHOLDER, matchesCompany } from '@/lib/companySearch'
+import { COMPANY_PICK_PLACEHOLDER, matchesCompanyPick } from '@/lib/companySearch'
 import { DIRECT_SALE_LABEL, useAgencies, type AgencyOption } from '@/lib/customerAgency'
 import { SUB } from '@/components/common/ui'
 import { R } from '@/lib/radius'
@@ -31,7 +31,7 @@ const fieldStyle: CSSProperties = {
 }
 const ghostBtn: CSSProperties = {
   padding: '9px 12px', background: '#f3f4f6', border: 'none', borderRadius: R.icon,
-  cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#6b7280', flexShrink: 0, whiteSpace: 'nowrap',
+  cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#4b5563', flexShrink: 0, whiteSpace: 'nowrap',
 }
 /** 후보로 한 번에 보여 주는 수. 45곳뿐이라 검색 없이도 훑을 수 있게 넉넉히 둔다. */
 const SHOWN = 12
@@ -70,9 +70,9 @@ export default function AgencyPicker({ value, onChange, disabled, inputStyle, on
     [agencies, value],
   )
 
-  // 찾는 칸은 공용이다 — 회사명·영문명·사업장명·주소·대리점명(lib/companySearch.ts).
+  // 고르는 칸이라 **이름 둘**만 본다 — 회사명·영문명(lib/companySearch.ts ⓑ).
   const matches = useMemo(
-    () => agencies.filter(a => matchesCompany(a, query)).slice(0, SHOWN),
+    () => agencies.filter(a => matchesCompanyPick(a, query)).slice(0, SHOWN),
     [agencies, query],
   )
 
@@ -97,7 +97,7 @@ export default function AgencyPicker({ value, onChange, disabled, inputStyle, on
       query={query}
       onQueryChange={setQuery}
       disabled={disabled}
-      placeholder={`대리점 검색 — ${COMPANY_SEARCH_PLACEHOLDER}`}
+      placeholder={`대리점 검색 — ${COMPANY_PICK_PLACEHOLDER}`}
       inputStyle={style}
       maxHeight={260}
       openWhenEmpty

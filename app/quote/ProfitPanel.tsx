@@ -47,7 +47,7 @@ const ROW_GRID = '62px 1fr auto'
 /** 금액 칸 — 늘 오른쪽 끝에 붙고 자릿수가 고정폭이다(.num = tabular-nums). */
 const amountCell: React.CSSProperties = { textAlign: 'right', whiteSpace: 'nowrap', fontSize: 12 }
 /** 라벨 칸. */
-const labelCell: React.CSSProperties = { fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }
+const labelCell: React.CSSProperties = { fontSize: 12, color: '#4b5563', whiteSpace: 'nowrap' }
 /**
  * 식 줄 — 원가가 어떻게 나왔고 얼마가 남나. **왼쪽 정렬**이고 번호 뱃지 폭만큼 들여 쓴다
  * (제목 줄의 품명과 같은 선에서 시작한다). 금액은 제목 줄 오른쪽 끝으로 옮겼으므로
@@ -55,7 +55,7 @@ const labelCell: React.CSSProperties = { fontSize: 12, color: '#6b7280', whiteSp
  * 줄마다 좌우로 움직인다. 접지 않는다(넘치면 식만 말줄임으로 끊는다).
  */
 const itemLine: React.CSSProperties = {
-  fontSize: 12, color: '#9ca3af', lineHeight: 1.6, paddingLeft: 22,
+  fontSize: 12, color: '#6b7280', lineHeight: 1.6, paddingLeft: 22,
   // **두 토막**이다 — 넘칠 때 왼쪽(식)만 줄어든다.
   display: 'flex', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden',
 }
@@ -69,12 +69,12 @@ const numBadge: React.CSSProperties = {
  * 환율 묶음 — 「¥ 10.0000원」. **숫자만 크고**(17/700) 통화 기호와 「원」은 회색 곁글이다.
  * 점선 밑줄은 걷었다 — 링크처럼 보여 한 번 눌러 보게 만들었는데, 고치는 길은 더블클릭이다.
  */
-const ratePrefix: React.CSSProperties = { fontSize: 11, color: '#6b7280', fontWeight: 600 }
+const ratePrefix: React.CSSProperties = { fontSize: 11, color: '#4b5563', fontWeight: 600 }
 const rateNum: React.CSSProperties = {
   fontSize: 17, color: '#111827', fontWeight: 700, cursor: 'text', lineHeight: 1.2,
   whiteSpace: 'nowrap', letterSpacing: '-0.3px',
 }
-const rateUnit: React.CSSProperties = { fontSize: 12, color: '#6b7280', fontWeight: 600, letterSpacing: 0 }
+const rateUnit: React.CSSProperties = { fontSize: 12, color: '#4b5563', fontWeight: 600, letterSpacing: 0 }
 /** 환율을 손으로 고치는 칸. */
 const rateEditBox: React.CSSProperties = {
   fontSize: 15, fontWeight: 700, color: '#234ea2', border: '1px solid #234ea2',
@@ -178,14 +178,14 @@ export default function ProfitPanel({
         return (
           <>
             {CURRENCY_SYMBOL[r.currency]}{r.cost_price_jpy.toLocaleString()}
-            <span style={{ color: '#d1d5db' }}> × </span>{r.tariff_rate}
-            <span style={{ color: '#d1d5db' }}> × </span>{r.exchange_rate.toFixed(2)}
+            <span style={{ color: '#6b7280' }}> × </span>{r.tariff_rate}
+            <span style={{ color: '#6b7280' }}> × </span>{r.exchange_rate.toFixed(2)}
           </>
         )
       case 'service':
         return <>부대비용 {r.expenses.length}건</>
       case 'domestic':
-        return <>₩{numKR(r.cost_price_jpy)}<span style={{ color: '#d1d5db' }}> × </span>{r.quantity}</>
+        return <>₩{numKR(r.cost_price_jpy)}<span style={{ color: '#6b7280' }}> × </span>{r.quantity}</>
       default:
         return null
     }
@@ -253,7 +253,7 @@ export default function ProfitPanel({
               <span onDoubleClick={() => startEdit('JPY')} title="더블클릭하여 수동 입력" style={rateNum}>
                 {rates.JPY
                   ? <>{rates.JPY.toFixed(4)}<span style={rateUnit}>원</span></>
-                  : <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280' }}>환율 로딩중...</span>}
+                  : <span style={{ fontSize: 11, fontWeight: 500, color: '#4b5563' }}>환율 로딩중...</span>}
               </span>
             )}
             {/* 새로고침 — **환율 묶음 안**이다(위 주석). 동작은 종전 그대로: 저장값을 보지 않고
@@ -310,7 +310,7 @@ export default function ProfitPanel({
           {/* 출처 — 「한국수출입은행 · 11-03」 한 줄(위 rateNote). 숫자를 고치는 중에는 내지
               않는다(그 순간의 출처는 아직 모른다). 손으로 넣은 환율에는 출처가 없어 빈 글이다. */}
           {editing !== 'JPY' && note && (
-            <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+            <span style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
               {note}
             </span>
           )}
@@ -320,7 +320,7 @@ export default function ProfitPanel({
           {savedDefaultsApplied && (
             <span
               title="이 분류로 마지막에 확정할 때 쓴 환율·관세·이익률을 들여왔습니다"
-              style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap', borderLeft: '1px solid #ebebeb', paddingLeft: 6, flexShrink: 0 }}
+              style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap', borderLeft: '1px solid #ebebeb', paddingLeft: 6, flexShrink: 0 }}
             >
               내 설정 불러옴
             </span>
@@ -366,7 +366,7 @@ export default function ProfitPanel({
               <span style={{ fontSize: 11, color: '#111827', fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemLabel(r)}</span>
               {/* 수량 — 할인 줄에는 수량이 없다(0 이다). */}
               {r.quantity > 0 && (
-                <span className="num" style={{ fontSize: 12, color: '#9ca3af', whiteSpace: 'nowrap', flexShrink: 0 }}>×{r.quantity}</span>
+                <span className="num" style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap', flexShrink: 0 }}>×{r.quantity}</span>
               )}
               <span style={{ flex: 1 }} />
               {!waiting && (
@@ -378,21 +378,21 @@ export default function ProfitPanel({
             </div>
             {/* 식 줄 — 할인에는 없다(제목 줄의 금액이 그 줄의 전부다). */}
             {!isDiscount && (waiting ? (
-              <div style={itemLine}><span style={{ color: '#9ca3af' }}>판매가 미입력</span></div>
+              <div style={itemLine}><span style={{ color: '#6b7280' }}>판매가 미입력</span></div>
             ) : (
               // 넘치면 **식만** 줄인다. 매출이익은 이 줄에서 가장 중요한 값이라 끝까지
               // 남겨야 한다(원가보다 싸게 판 줄의 「(-24364.8%)」가 잘리면 그 줄이 멀쩡해 보인다).
               <div className="num" style={itemLine}>
                 <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {expr}
-                  <span style={{ color: '#d1d5db' }}> = </span>
+                  <span style={{ color: '#6b7280' }}> = </span>
                   {/* 원가 — 「(원가)」라는 글자는 떼었다. 식이 「구입가 × 관세 × 환율 =」로
                       끝나므로 그 결과가 원가라는 것은 식 자체가 말하고, 그 네 글자가
                       좁은 폭(실측 412px)에서 앞의 **원가 숫자를 말줄임으로 먹었다**. */}
                   <span style={{ color: '#374151', fontWeight: 500 }}>₩{numKR(r.product_price)}</span>
                 </span>
                 <span style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-                  <span style={{ color: '#d1d5db' }}> · </span>
+                  <span style={{ color: '#6b7280' }}> · </span>
                   매출이익{' '}
                   <span style={{ color: profitColor, fontWeight: 500 }}>₩{numKR(r.profit)}</span>
                   {/* **실현** 이익률(매출이익 ÷ 공급가)이다 — 이익률 칸의 목표가 아니다. */}
@@ -426,12 +426,12 @@ export default function ProfitPanel({
           {domesticCost > 0 && (
             <>
               <span style={{ ...labelCell, gridColumn: '1 / 3' }}>{ROW_KIND_LABEL.domestic}</span>
-              <span className="num" style={{ ...amountCell, fontSize: 13, color: '#6b7280', fontWeight: 600 }}>₩{numKR(domesticCost)}</span>
+              <span className="num" style={{ ...amountCell, fontSize: 13, color: '#4b5563', fontWeight: 600 }}>₩{numKR(domesticCost)}</span>
             </>
           )}
 
           <span style={{ ...labelCell, gridColumn: '1 / 3' }}>
-            매출이익 합계 <span style={{ color: '#9ca3af' }}>({profitPct.toFixed(1)}%)</span>
+            매출이익 합계 <span style={{ color: '#6b7280' }}>({profitPct.toFixed(1)}%)</span>
           </span>
           {/* 매출이익이 **음수면 빨강**이다 — 원가가 매출을 넘은 견적을 초록으로 적으면
               가장 큰 사고를 가장 안심되는 색으로 알리는 꼴이 된다(품목 줄과 같은 규칙). */}
@@ -440,12 +440,12 @@ export default function ProfitPanel({
           {breakdown.hasSga && (
             <>
               <span style={{ ...labelCell, gridColumn: '1 / 3' }}>
-                판관비 <span style={{ color: '#9ca3af' }}>({sgaNote})</span>
+                판관비 <span style={{ color: '#6b7280' }}>({sgaNote})</span>
               </span>
               <span className="num" style={{ ...amountCell, fontSize: 13, color: '#dc2626', fontWeight: 500 }}>−₩{numKR(breakdown.sga)}</span>
 
               <span style={{ ...labelCell, gridColumn: '1 / 3', color: '#111827', fontWeight: 700, borderTop: '1px solid #ebebeb', paddingTop: 6, marginTop: 1 }}>
-                영업이익 <span style={{ color: '#9ca3af', fontWeight: 500 }}>({breakdown.operatingRate.toFixed(1)}%)</span>
+                영업이익 <span style={{ color: '#6b7280', fontWeight: 500 }}>({breakdown.operatingRate.toFixed(1)}%)</span>
               </span>
               <span className="num" style={{ ...amountCell, fontSize: 13, fontWeight: 700, color: breakdown.operatingProfit >= 0 ? '#16a34a' : '#dc2626', borderTop: '1px solid #ebebeb', paddingTop: 6, marginTop: 1 }}>
                 ₩{numKR(breakdown.operatingProfit)}
@@ -477,7 +477,7 @@ export default function ProfitPanel({
                       fontSize: 12, lineHeight: 1.5, color: '#111827', outline: 'none', fontFamily: 'inherit',
                     }}
                   />
-                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3 }}>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginTop: 3 }}>
                     고객 견적서에는 나가지 않습니다. 사유가 없어도 확정은 됩니다.
                   </div>
                 </div>

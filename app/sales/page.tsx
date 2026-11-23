@@ -66,8 +66,8 @@ const PAGE_BG = '#f4f5f7'
 const CARD_BG = '#ffffff'
 const BORDER = '#ebebeb'
 const TEXT = '#111113'
-const GRAY = '#6b7280'
-const MUTED = '#9ca3af'
+const GRAY = '#4b5563'
+const MUTED = '#6b7280'
 // 달성률 색 — 달성 여부만 구분(100%+ 초록 / 미만 검정). 기간 중 대부분 100% 미만이라 중간 경고색(앰버·빨강) 제거.
 const achieveColorOf = (v: number | null): string => v === null ? GRAY : v >= 100 ? '#16a34a' : '#111827'
 const ORANGE = '#d97706'
@@ -919,20 +919,20 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                                     gap={6}
                                     style={{ background: '#1e293b', color: '#e2e8f0', borderRadius: R.control, padding: '8px 12px', fontSize: 11, minWidth: 180, maxWidth: 260, lineHeight: 1.6, boxShadow: '0 4px 20px rgba(0,0,0,0.3)', pointerEvents: 'none' }}
                                   >
-                                    <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginBottom: 4 }}>처리 담당자</div>
+                                    <div style={{ fontSize: 10, color: '#6b7280', fontWeight: 700, marginBottom: 4 }}>처리 담당자</div>
                                     <div style={{ fontWeight: 700, color: '#e2e8f0', marginBottom: (q.order_memo || q.order_request_memo) ? 8 : 0 }}>
                                       {processor}
                                     </div>
                                     {/* 메모는 두 칸이다 — 누가 쓴 것인지 라벨로 구분한다. */}
                                     {q.order_request_memo && (
                                       <>
-                                        <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginBottom: 3 }}>작성자 요청</div>
+                                        <div style={{ fontSize: 10, color: '#6b7280', fontWeight: 700, marginBottom: 3 }}>작성자 요청</div>
                                         <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', marginBottom: q.order_memo ? 8 : 0 }}>{q.order_request_memo}</div>
                                       </>
                                     )}
                                     {q.order_memo && (
                                       <>
-                                        <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, marginBottom: 3 }}>영업관리 메모</div>
+                                        <div style={{ fontSize: 10, color: '#6b7280', fontWeight: 700, marginBottom: 3 }}>영업관리 메모</div>
                                         <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{q.order_memo}</div>
                                       </>
                                     )}

@@ -11,7 +11,7 @@
 // marginLeft 음수는 버튼 안쪽 여백만큼 당겨 화살표를 카드 왼쪽 선에 맞춘다 —
 // 이 버튼은 카드 머리줄의 **첫 칸**에 들어간다고 보고 만들었다.
 
-const MUTED = '#6b7280'
+const MUTED = '#4b5563'
 const BLUE = '#234ea2'
 
 export type BackIconButtonProps = {

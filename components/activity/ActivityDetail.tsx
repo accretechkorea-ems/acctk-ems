@@ -29,8 +29,8 @@ import { R } from '@/lib/radius'
 const BLUE = '#234ea2'
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
-const GRAY = '#6b7280'
-const MUTED = '#9ca3af'
+const GRAY = '#4b5563'
+const MUTED = '#6b7280'
 /** 목록 행 hover 배경 — 고객사 타임라인 행과 같은 값. */
 const ROW_HOVER = '#fafafa'
 
@@ -220,7 +220,7 @@ export default function ActivityDetail({ engineer, startDate, endDate, variant, 
               <span style={{ fontSize: 20, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>{engineer.name}</span>
               <span style={{ fontSize: 12, color: GRAY, fontWeight: 500 }}>{engineer.position}</span>
               {engineer.teams && (
-                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: R.pill, background: '#f3f4f6', color: '#6b7280' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: R.pill, background: '#f3f4f6', color: '#4b5563' }}>
                   {engineer.teams}
                 </span>
               )}
@@ -369,7 +369,7 @@ export default function ActivityDetail({ engineer, startDate, endDate, variant, 
                   <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', lineHeight: '22px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {d.customerName}
                   </div>
-                  <div style={{ fontSize: 12, fontWeight: 400, color: '#9ca3af', lineHeight: '16px', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div style={{ fontSize: 12, fontWeight: 400, color: '#6b7280', lineHeight: '16px', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {d.notes || ' '}
                   </div>
                 </div>
@@ -384,11 +384,11 @@ export default function ActivityDetail({ engineer, startDate, endDate, variant, 
                     {/* 유·무상은 서비스 기록에만 있다. 영업 활동이면 이 자리가 비고 날짜만 남는다. */}
                     {d.isPaid !== null && (
                       <>
-                        <span style={{ color: '#6b7280' }}>{d.isPaid ? '유상' : '무상'}</span>
-                        <span style={{ color: '#d1d5db' }}> · </span>
+                        <span style={{ color: '#4b5563' }}>{d.isPaid ? '유상' : '무상'}</span>
+                        <span style={{ color: '#6b7280' }}> · </span>
                       </>
                     )}
-                    <span style={{ color: '#9ca3af' }}>{d.date ? d.date.replace(/-/g, '.') : '-'}</span>
+                    <span style={{ color: '#6b7280' }}>{d.date ? d.date.replace(/-/g, '.') : '-'}</span>
                   </div>
                 </div>
               </div>

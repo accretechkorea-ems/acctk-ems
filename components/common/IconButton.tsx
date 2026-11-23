@@ -20,7 +20,7 @@ import type { CSSProperties } from 'react'
 import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
-const MUTED = '#6b7280'
+const MUTED = '#4b5563'
 const BLUE = '#234ea2'
 
 export type IconButtonProps = {

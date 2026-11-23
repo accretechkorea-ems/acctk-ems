@@ -129,7 +129,7 @@ function DashboardPageInner() {
   const stepBtn = (disabled: boolean) => ({
     width: 24, height: 24, border: '1px solid #ebebeb', borderRadius: R.icon, background: '#f3f4f6',
     cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 11, fontWeight: 700,
-    color: disabled ? '#d1d5db' : '#111827', flexShrink: 0, padding: 0,
+    color: disabled ? '#9ca3af' : '#111827', flexShrink: 0, padding: 0,
   })
 
   return (
@@ -162,7 +162,7 @@ function DashboardPageInner() {
           <h1 style={{ fontSize: 20, fontWeight: 800, color: '#111827', letterSpacing: '-0.3px', margin: 0 }}>
             {loading ? ' ' : greeting}
           </h1>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>{todayLabel}</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#4b5563' }}>{todayLabel}</span>
         </div>
 
         <div className="home-grid">

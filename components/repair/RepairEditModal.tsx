@@ -50,7 +50,7 @@ type Props = {
   onDelete: (r: Repair) => void
 }
 
-const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#4b5563', marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
   width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
@@ -245,7 +245,7 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
             title="닫기"
             onMouseEnter={(e) => (e.currentTarget.style.color = '#111827')}
             onMouseLeave={(e) => (e.currentTarget.style.color = '#6b7280')}
-            style={{ width: 28, height: 28, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', transition: 'color 0.15s ease' }}
+            style={{ width: 28, height: 28, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563', transition: 'color 0.15s ease' }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -265,7 +265,7 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
                   <div style={{ display: 'flex', border: '1px solid #ebebeb', borderRadius: R.icon, overflow: 'hidden' }}>
                     {CATEGORIES.map(c => (
                       <button key={c} type="button" onClick={() => setItemType(c)}
-                        style={{ flex: 1, padding: '10px 0', border: 'none', background: itemType === c ? '#234ea2' : '#fff', color: itemType === c ? '#fff' : '#6b7280', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                        style={{ flex: 1, padding: '10px 0', border: 'none', background: itemType === c ? '#234ea2' : '#fff', color: itemType === c ? '#fff' : '#4b5563', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
                         {c}
                       </button>
                     ))}
@@ -317,7 +317,7 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
                   <input type="date" className="date-fit" disabled={!isShipped}
                     value={isShipped ? shippedDate : ''}
                     onChange={e => setShippedDate(e.target.value)}
-                    style={{ ...fieldStyle, colorScheme: 'light', background: !isShipped ? '#f3f4f6' : '#fff', color: !isShipped ? '#9ca3af' : '#111827', cursor: !isShipped ? 'not-allowed' : 'auto' }} />
+                    style={{ ...fieldStyle, colorScheme: 'light', background: !isShipped ? '#f3f4f6' : '#fff', color: !isShipped ? '#6b7280' : '#111827', cursor: !isShipped ? 'not-allowed' : 'auto' }} />
                 </div>
               </div>
             </div>
@@ -363,21 +363,21 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#234ea2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {linkedSummary.quote_number}
-                      {linkedSummary.company_name && <span style={{ fontSize: 12, fontWeight: 500, color: '#6b7280', marginLeft: 6 }}>{linkedSummary.company_name}</span>}
+                      {linkedSummary.company_name && <span style={{ fontSize: 12, fontWeight: 500, color: '#4b5563', marginLeft: 6 }}>{linkedSummary.company_name}</span>}
                     </div>
                     <div style={{ fontSize: 13, color: '#111827', marginTop: 2 }}>청구 금액 <b>₩{numKR(linkedSummary.total_supply ?? 0)}</b></div>
                   </div>
                   <button type="button" onClick={openQuotePdf} disabled={pdfBusy}
-                    style={{ padding: '7px 12px', border: '1px solid #ebebeb', borderRadius: R.icon, background: '#fff', color: '#6b7280', fontSize: 13, fontWeight: 700, cursor: pdfBusy ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: pdfBusy ? 0.5 : 1 }}>{pdfBusy ? '여는 중…' : '견적서 보기'}</button>
+                    style={{ padding: '7px 12px', border: '1px solid #ebebeb', borderRadius: R.icon, background: '#fff', color: '#4b5563', fontSize: 13, fontWeight: 700, cursor: pdfBusy ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: pdfBusy ? 0.5 : 1 }}>{pdfBusy ? '여는 중…' : '견적서 보기'}</button>
                   <button type="button" onClick={unlinkQuote}
                     style={{ padding: '7px 12px', border: '1px solid #fecdd3', borderRadius: R.icon, background: '#fff', color: '#be123c', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>연결 해제</button>
                 </>
               ) : quoteId != null ? (
                 // 연결은 돼 있으나 요약을 못 읽음(권한/네트워크). PDF·해제는 가능.
                 <>
-                  <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: '#9ca3af' }}>견적 #{quoteId} · 요약을 불러올 수 없습니다</div>
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: '#6b7280' }}>견적 #{quoteId} · 요약을 불러올 수 없습니다</div>
                   <button type="button" onClick={openQuotePdf} disabled={pdfBusy}
-                    style={{ padding: '7px 12px', border: '1px solid #ebebeb', borderRadius: R.icon, background: '#fff', color: '#6b7280', fontSize: 13, fontWeight: 700, cursor: pdfBusy ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: pdfBusy ? 0.5 : 1 }}>{pdfBusy ? '여는 중…' : '견적서 보기'}</button>
+                    style={{ padding: '7px 12px', border: '1px solid #ebebeb', borderRadius: R.icon, background: '#fff', color: '#4b5563', fontSize: 13, fontWeight: 700, cursor: pdfBusy ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: pdfBusy ? 0.5 : 1 }}>{pdfBusy ? '여는 중…' : '견적서 보기'}</button>
                   <button type="button" onClick={unlinkQuote}
                     style={{ padding: '7px 12px', border: '1px solid #fecdd3', borderRadius: R.icon, background: '#fff', color: '#be123c', fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>연결 해제</button>
                 </>
@@ -397,7 +397,7 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={onClose}
-              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+              style={{ padding: '9px 16px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
             >취소</button>
             <button
               onClick={handleSave}

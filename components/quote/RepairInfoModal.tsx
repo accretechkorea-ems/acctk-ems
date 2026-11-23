@@ -33,7 +33,7 @@ import {
 import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
-const MUTED = '#9ca3af'
+const MUTED = '#6b7280'
 
 export type RepairInfoModalProps = {
   quoteId: number
@@ -225,7 +225,7 @@ export default function RepairInfoModal({ quoteId, quoteNumber, onClose, onSaved
           </span>
           <span style={{ flex: 1 }} />
           <button onClick={() => closeRef.current()}
-            style={{ height: 30, padding: '0 14px', borderRadius: R.icon, border: `1px solid ${BORDER}`, background: '#fff', color: '#6b7280', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+            style={{ height: 30, padding: '0 14px', borderRadius: R.icon, border: `1px solid ${BORDER}`, background: '#fff', color: '#4b5563', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
             닫기
           </button>
           {canEdit && (

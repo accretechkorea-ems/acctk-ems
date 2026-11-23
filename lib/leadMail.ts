@@ -157,7 +157,7 @@ export function leadMailHtml(d: LeadMailData): string {
   const tr = rows(d)
     .map(([k, v]) => `
       <tr>
-        <td style="padding:7px 12px;background:#f3f4f6;color:#6b7280;font-size:13px;font-weight:700;white-space:nowrap;border-bottom:1px solid #ebebeb;">${esc(k)}</td>
+        <td style="padding:7px 12px;background:#f3f4f6;color:#4b5563;font-size:13px;font-weight:700;white-space:nowrap;border-bottom:1px solid #ebebeb;">${esc(k)}</td>
         <td style="padding:7px 12px;color:#111827;font-size:13px;border-bottom:1px solid #ebebeb;">${esc(v)}</td>
       </tr>`)
     .join('')
@@ -165,21 +165,21 @@ export function leadMailHtml(d: LeadMailData): string {
   <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #ebebeb;border-radius:8px;overflow:hidden;">
     <div style="padding:18px 20px;border-bottom:1px solid #ebebeb;">
       <div style="font-size:16px;font-weight:800;color:#111827;">신규 리드가 등록되었습니다</div>
-      <div style="font-size:12px;color:#6b7280;margin-top:4px;">아크레텍코리아 계측사업부</div>
+      <div style="font-size:12px;color:#4b5563;margin-top:4px;">아크레텍코리아 계측사업부</div>
     </div>
     <div style="padding:18px 20px;">
       <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;">${tr}</table>
       <div style="margin-top:18px;">
-        <div style="font-size:13px;font-weight:700;color:#6b7280;margin-bottom:6px;">회의록</div>
+        <div style="font-size:13px;font-weight:700;color:#4b5563;margin-bottom:6px;">회의록</div>
         <div style="font-size:13px;color:#111827;line-height:1.7;white-space:pre-wrap;word-break:break-word;background:#fafafa;border:1px solid #ebebeb;border-radius:6px;padding:12px 14px;">${esc(note.text)}${note.cut ? '\n\n… 이하 생략. 아래 링크에서 전문을 확인해주세요.' : ''}</div>
       </div>
       <div style="margin-top:22px;text-align:center;">
         <a href="${esc(url)}" style="display:inline-block;padding:11px 22px;background:#234ea2;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;border-radius:6px;">리드 관리 화면에서 열기</a>
       </div>
-      <div style="margin-top:12px;font-size:11px;color:#9ca3af;text-align:center;word-break:break-all;">${esc(url)}</div>
+      <div style="margin-top:12px;font-size:11px;color:#6b7280;text-align:center;word-break:break-all;">${esc(url)}</div>
     </div>
   </div>
-  <div style="max-width:640px;margin:12px auto 0;font-size:11px;color:#9ca3af;text-align:center;">
+  <div style="max-width:640px;margin:12px auto 0;font-size:11px;color:#6b7280;text-align:center;">
     이 메일은 리드가 등록될 때 자동으로 발송됩니다. 명함 이미지는 링크에서 확인해주세요.
   </div>
 </div>`
@@ -304,7 +304,7 @@ function partnerMailHtml(args: {
   const tr = args.rows
     .map(([k, v]) => `
       <tr>
-        <td style="padding:7px 12px;background:#f3f4f6;color:#6b7280;font-size:13px;font-weight:700;white-space:nowrap;border-bottom:1px solid #ebebeb;">${esc(k)}</td>
+        <td style="padding:7px 12px;background:#f3f4f6;color:#4b5563;font-size:13px;font-weight:700;white-space:nowrap;border-bottom:1px solid #ebebeb;">${esc(k)}</td>
         <td style="padding:7px 12px;color:#111827;font-size:13px;border-bottom:1px solid #ebebeb;">${esc(v)}</td>
       </tr>`)
     .join('')
@@ -313,7 +313,7 @@ function partnerMailHtml(args: {
   <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #ebebeb;border-radius:8px;overflow:hidden;">
     <div style="padding:18px 20px;border-bottom:1px solid #ebebeb;">
       <div style="font-size:16px;font-weight:800;color:#111827;">${esc(args.heading)}</div>
-      <div style="font-size:12px;color:#6b7280;margin-top:4px;">아크레텍코리아 계측사업부</div>
+      <div style="font-size:12px;color:#4b5563;margin-top:4px;">아크레텍코리아 계측사업부</div>
     </div>
     <div style="padding:18px 20px;">
       <div style="font-size:13px;color:#111827;line-height:1.8;font-weight:700;">${esc(args.greeting)}</div>
@@ -322,7 +322,7 @@ function partnerMailHtml(args: {
       <div style="margin-top:16px;">${args.closing.map(para).join('')}</div>
     </div>
   </div>
-  <div style="max-width:640px;margin:12px auto 0;font-size:11px;color:#9ca3af;text-align:center;">
+  <div style="max-width:640px;margin:12px auto 0;font-size:11px;color:#6b7280;text-align:center;">
     이 메일은 리드 등록·담당자 배정 시 자동으로 발송됩니다. 회신은 담당자에게 직접 부탁드립니다.
   </div>
 </div>`

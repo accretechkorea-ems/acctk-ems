@@ -95,7 +95,7 @@ export default function Sidebar({
               aria-label="검색어 지우기"
               style={{
                 width: 20, height: 20, borderRadius: '50%', border: 'none',
-                background: '#f3f4f6', color: '#6b7280',
+                background: '#f3f4f6', color: '#4b5563',
                 fontSize: 10, fontWeight: 800, cursor: 'pointer', flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
@@ -103,7 +103,7 @@ export default function Sidebar({
               ✕
             </button>
           ) : (
-            <span style={{ fontSize: 12, color: '#9ca3af', fontWeight: 600, pointerEvents: 'none', whiteSpace: 'nowrap', paddingRight: 6 }}>
+            <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, pointerEvents: 'none', whiteSpace: 'nowrap', paddingRight: 6 }}>
               {isLoading ? '-' : `${customers.length}개`}
             </span>
           )}

@@ -24,7 +24,7 @@ import type { Slot } from '@/hooks/dashboard/useDashboardCards'
 import { R } from '@/lib/radius'
 
 const TEXT = '#111827'
-const GRAY = '#6b7280'
+const GRAY = '#4b5563'
 
 export type MyQuoteCardProps = {
   engineerId: number

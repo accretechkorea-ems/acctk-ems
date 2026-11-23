@@ -449,7 +449,7 @@ export default function AccountPage() {
               고객사 지도의 「자택 출발」에만 쓰이고 다른 사람에게는 보이지 않는다. */}
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 13, color: TEXT_SECONDARY, marginBottom: 6 }}>
-              자택 주소 <span style={{ color: '#9ca3af' }}>(선택 · 고객사 지도의 「자택 출발」에 쓰입니다)</span>
+              자택 주소 <span style={{ color: '#6b7280' }}>(선택 · 고객사 지도의 「자택 출발」에 쓰입니다)</span>
             </div>
             <AddressField
               value={homeAddress}

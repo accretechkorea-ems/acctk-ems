@@ -83,7 +83,7 @@ export default function HorizontalScroller({ children, step = 312 }: Props) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'rgba(255,255,255,0.95)', border: '1px solid #ebebeb',
         boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
-        cursor: 'pointer', color: '#6b7280', padding: 0,
+        cursor: 'pointer', color: '#4b5563', padding: 0,
       }}
       onMouseEnter={e => { e.currentTarget.style.color = '#111827' }}
       onMouseLeave={e => { e.currentTarget.style.color = '#6b7280' }}

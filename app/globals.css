@@ -27,8 +27,12 @@
 
   /* ── Text / Ink ── */
   --color-ink:            #111827;             /* 본문 진함 — 표 값 */
-  --color-text-secondary: #6b7280;             /* secondary (36회) */
-  --color-text-muted:     #9ca3af;             /* muted (37회) */
+  /* 2026-11-23 — 글자색을 한 단씩 진하게. 흰 바탕에서 #9ca3af 는 2.8:1 이라 읽히지 않는다.
+     역할별 정본은 lib/textTokens.ts 다. 값은 .claude/rules/design-system.md 의 표와 같다. */
+  --color-text-label:     #374151;             /* 라벨 · 표 머리줄 · 묶음 머리 (10.3:1) */
+  --color-text-secondary: #4b5563;             /* 안내문 · 보조 글자 (7.5:1) */
+  --color-text-muted:     #6b7280;             /* placeholder 급 (4.8:1) */
+  --color-text-disabled:  #9ca3af;             /* 비활성 — 읽어야 하는 글자에는 쓰지 않는다 */
 
   /* ── Surface / Background ── */
   --color-white:     #ffffff;
@@ -128,6 +132,46 @@ body {
   }
   input[type="date"].date-fit::-webkit-date-and-time-value { text-align: left; }
 }
+/* ── 글자색 규칙 — CSS 가 아니면 닿지 않는 자리 (2026-11-23) ─────────────────────
+   placeholder 와 native select 의 option·optgroup 은 **브라우저 기본색**이 따로 있다.
+   인라인 style 로 input 에 color 를 줘도 그 둘에는 내려가지 않아, 적지 않은 칸과
+   드롭다운 항목만 유난히 연하게 보였다. 한 곳에서 칠한다.
+   값의 정본은 lib/textTokens.ts 이고, 토큰은 위 @theme 에 있다. */
+/* 칸 이름 — 색을 따로 적지 않은 <label> 은 라벨 급으로. 인라인 style 이 있으면 그쪽이 이긴다. */
+label {
+  color: var(--color-text-label);
+  font-weight: 600;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;                 /* 파이어폭스는 기본 opacity 가 1 미만이라 더 연해진다 */
+}
+input:disabled::placeholder,
+textarea:disabled::placeholder {
+  color: var(--color-text-disabled);
+}
+/* 닫힌 select 에 적힌 글자와 펼친 목록의 항목 — 같은 값으로 */
+select,
+select option {
+  color: var(--color-ink);
+}
+select optgroup {
+  color: var(--color-text-label);
+  font-weight: 600;
+}
+select:disabled,
+select option:disabled,
+select optgroup:disabled {
+  color: var(--color-text-disabled);
+}
+/* 「골라 주세요」처럼 **값이 아닌** 첫 항목은 placeholder 와 같은 급이다.
+   화면 쪽에서 value="" 로 두는 자리를 그대로 집는다. */
+select option[value=""] {
+  color: var(--color-text-muted);
+}
+
 .num {
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;

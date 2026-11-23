@@ -22,7 +22,7 @@ type Props = {
   onResolve: (holdingId: number, note: string, resolvedAt: string) => void
 }
 
-const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#4b5563', marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
   width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
@@ -51,13 +51,13 @@ function ResolveForm({ holding, notice, isSaving, onClose, onResolve }: Omit<Pro
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>홀딩 해제</div>
             {notice && (
-              <div style={{ fontSize: 12, color: '#6b7280', marginTop: 5 }}>{notice}</div>
+              <div style={{ fontSize: 12, color: '#4b5563', marginTop: 5 }}>{notice}</div>
             )}
           </div>
         </>}
         footer={<>
           <button onClick={onClose}
-            style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+            style={{ padding: '9px 16px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
           >{notice ? '나중에' : '취소'}</button>
           <button
             onClick={() => onResolve(holding.holding_id, note, resolvedAt)}
@@ -74,11 +74,11 @@ function ResolveForm({ holding, notice, isSaving, onClose, onResolve }: Omit<Pro
         {/* 어떤 홀딩을 해제하는지 */}
         <div style={{ padding: '10px 12px', background: '#f8fafc', border: '1px solid #ebebeb', borderRadius: R.control, marginBottom: 14 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', wordBreak: 'break-all' }}>{holding.title}</div>
-          <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 3, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 11, color: '#6b7280', marginTop: 3, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <span>{holding.devices?.device_name ?? '-'}</span>
-            <span style={{ color: '#d1d5db' }}>·</span>
+            <span style={{ color: '#6b7280' }}>·</span>
             <span>시작 {holding.started_at}</span>
-            <span style={{ color: '#d1d5db' }}>·</span>
+            <span style={{ color: '#6b7280' }}>·</span>
             <span>{elapsedLabel(holding)}</span>
           </div>
         </div>

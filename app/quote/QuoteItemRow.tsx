@@ -61,7 +61,7 @@ const boxBase: React.CSSProperties = {
 }
 /** 칸 안 접두 글자 — 「품번」「품명」「¥」. 바깥 라벨을 대신한다. */
 const prefix: React.CSSProperties = {
-  fontSize: 11, fontWeight: 700, color: '#9ca3af', flexShrink: 0, whiteSpace: 'nowrap',
+  fontSize: 11, fontWeight: 700, color: '#6b7280', flexShrink: 0, whiteSpace: 'nowrap',
 }
 /**
  * 테두리를 상자에 넘긴 입력 — **사람이 넣은 값**이라 가장 진하다(#111827 · 500).
@@ -75,7 +75,7 @@ const bare: React.CSSProperties = {
 /** 스테퍼의 −/+ 단추. */
 const stepBtn: React.CSSProperties = {
   width: 18, height: 18, border: 'none', background: 'none', cursor: 'pointer', fontSize: 13,
-  color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0,
+  color: '#4b5563', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, padding: 0,
 }
 /** 스테퍼 가운데 값. */
 const stepVal: React.CSSProperties = {
@@ -248,7 +248,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
     // 품목도 금액도 없는 **아직 아무것도 아닌 줄**에만 줄을 내지 않는다(그때는 어느
     // 모드에서도 안 내므로 모드를 오가도 높이가 같다).
     if (row.supply_price <= 0) {
-      return hasContent ? <>판매단가 <span style={{ ...resultNum, color: '#9ca3af' }}>—</span></> : null
+      return hasContent ? <>판매단가 <span style={{ ...resultNum, color: '#6b7280' }}>—</span></> : null
     }
     return (
       <>
@@ -265,9 +265,9 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
         )}
         {row.quantity > 1 && (
           <>
-            <span style={{ color: '#d1d5db' }}> · </span>
+            <span style={{ color: '#6b7280' }}> · </span>
             공급가 <b style={resultNum}>₩{numKR(row.supply_price)}</b>
-            <span style={{ color: '#9ca3af' }}> (× {row.quantity})</span>
+            <span style={{ color: '#6b7280' }}> (× {row.quantity})</span>
           </>
         )}
       </>
@@ -326,7 +326,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
         onFocus={opts.onFocus}
         onKeyDown={opts.onKeyDown}
         placeholder={opts.placeholder}
-        style={{ ...bare, color: opts.muted ? '#6b7280' : '#111827' }} />
+        style={{ ...bare, color: opts.muted ? '#4b5563' : '#111827' }} />
       {opts.extra}
     </label>
   )
@@ -435,7 +435,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
           {rowCount > 1 && (
             <button onClick={() => removeRow(row.id)}
               title="줄 삭제"
-              style={{ width: 20, height: 20, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'color 0.15s ease' }}
+              style={{ width: 20, height: 20, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'color 0.15s ease' }}
               onMouseEnter={e => (e.currentTarget.style.color = '#dc2626')}
               onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
@@ -515,7 +515,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
         {canAddSubLine && (
           <button onClick={() => addSubLine(row.id)}
             title="품명 아래에 상세 설명 줄을 하나 더합니다"
-            style={{ height: 18, padding: '0 5px', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, transition: 'color 0.15s ease' }}
+            style={{ height: 18, padding: '0 5px', background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, transition: 'color 0.15s ease' }}
             onMouseEnter={e => (e.currentTarget.style.color = '#234ea2')}
             onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
             + 줄 추가
@@ -524,7 +524,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
         {rowCount > 1 && (
           <button onClick={() => removeRow(row.id)}
             title="줄 삭제"
-            style={{ width: 20, height: 20, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'color 0.15s ease' }}
+            style={{ width: 20, height: 20, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'color 0.15s ease' }}
             onMouseEnter={e => (e.currentTarget.style.color = '#dc2626')}
             onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
@@ -552,7 +552,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
               extra: row.selectedItem ? (
                 <button onClick={() => clearItem(row.id)}
                   title="품목 해제"
-                  style={{ width: 16, height: 16, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                  style={{ width: 16, height: 16, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                   onMouseEnter={e => (e.currentTarget.style.color = '#dc2626')}
                   onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
@@ -580,16 +580,16 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden' }}>
                     <span style={{ fontWeight: 700, color: '#234ea2', flexShrink: 0 }}>{item.item_code}</span>
                     {/* 종류 배지 — 같은 품번이 SFG/CMM 양쪽에 있거나 묶음 제목으로 나뉠 때 어느 줄인지 보인다. */}
-                    <span style={{ fontSize: 10, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '0 5px', flexShrink: 0 }}>{item.sheet_name}</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '0 5px', flexShrink: 0 }}>{item.sheet_name}</span>
                     <span style={{ color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.item_name_jp}</span>
-                    {item.model_jp && <span style={{ color: '#9ca3af', flexShrink: 0 }}>({item.model_jp})</span>}
+                    {item.model_jp && <span style={{ color: '#6b7280', flexShrink: 0 }}>({item.model_jp})</span>}
                   </div>
                   {/* 2줄 — 왼쪽 금액, 오른쪽 끝 뱃지. 금액은 **그 가격표 줄의 통화**로 적는다
                       (달러 가격표가 섞여 있어, 기호 없이 숫자만 보면 150배를 잘못 읽는다). */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 1, fontSize: 10, color: '#9ca3af', whiteSpace: 'nowrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 1, fontSize: 10, color: '#6b7280', whiteSpace: 'nowrap' }}>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       정가 {item.price_jpy == null ? '-' : `${isym}${item.price_jpy.toLocaleString()}`}
-                      <span style={{ color: '#d1d5db' }}> · </span>
+                      <span style={{ color: '#6b7280' }}> · </span>
                       구입가 {item.cost_jpy == null ? '-' : `${isym}${item.cost_jpy.toLocaleString()}`}
                     </span>
                     <span style={{ flex: 1 }} />
@@ -672,7 +672,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
               <button onClick={() => removeSubLine(row.id, li)}
                 title="이 설명 줄 지우기"
                 // 누르는 자리는 24px 로 넉넉히 두고, 보이는 아이콘만 작다.
-                style={{ width: 24, height: 24, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'color 0.15s ease' }}
+                style={{ width: 24, height: 24, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'color 0.15s ease' }}
                 onMouseEnter={e => (e.currentTarget.style.color = '#6b7280')}
                 onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12" /></svg>
@@ -691,7 +691,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
             value={row.group_kind ?? ''}
             onChange={e => setRowGroupKind(row.id, e.target.value)}
             title="장비 구성 묶음"
-            style={{ ...inp, height: H_CELL, padding: '0 8px', flex: 1, minWidth: 0, cursor: 'pointer', color: row.group_kind ? '#111827' : '#9ca3af' }}
+            style={{ ...inp, height: H_CELL, padding: '0 8px', flex: 1, minWidth: 0, cursor: 'pointer', color: row.group_kind ? '#111827' : '#6b7280' }}
           >
             <option value="">묶음 없음</option>
             {GROUP_KINDS.map(k => (
@@ -728,7 +728,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
             extra: costEdited ? (
               <button onClick={() => updateRow(row.id, 'cost_jpy_override', null)}
                 title={`가격표 값(${sym}${listCostJpy == null ? '-' : numKR(listCostJpy)})으로 되돌리기`}
-                style={{ width: 16, height: 16, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                style={{ width: 16, height: 16, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                 onMouseEnter={e => (e.currentTarget.style.color = '#234ea2')}
                 onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -751,14 +751,14 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
 
           <div title="수량" style={{ ...boxBase, height: H_CELL, padding: '0 5px' }}>
             <button onClick={() => updateRow(row.id, 'quantity', Math.max(1, row.quantity - 1))} style={stepBtn}>−</button>
-            <span style={stepVal}>{row.quantity}<span style={{ color: '#9ca3af', fontWeight: 400 }}>개</span></span>
+            <span style={stepVal}>{row.quantity}<span style={{ color: '#6b7280', fontWeight: 400 }}>개</span></span>
             <button onClick={() => updateRow(row.id, 'quantity', row.quantity + 1)} style={stepBtn}>+</button>
           </div>
 
           {!isDomestic && (
             <div title="관세율" style={{ ...boxBase, height: H_CELL, padding: '0 5px' }}>
               <button onClick={() => updateRow(row.id, 'tariff_rate', parseFloat((row.tariff_rate - 0.01).toFixed(2)))} style={stepBtn}>−</button>
-              <span style={stepVal}><span style={{ color: '#9ca3af', fontWeight: 400 }}>×</span>{row.tariff_rate.toFixed(2)}</span>
+              <span style={stepVal}><span style={{ color: '#6b7280', fontWeight: 400 }}>×</span>{row.tariff_rate.toFixed(2)}</span>
               <button onClick={() => updateRow(row.id, 'tariff_rate', parseFloat((row.tariff_rate + 0.01).toFixed(2)))} style={stepBtn}>+</button>
             </div>
           )}
@@ -801,7 +801,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
                 <button
                   onClick={() => setDiscountMenu(v => !v)}
                   title="자주 쓰는 이름"
-                  style={{ width: 16, height: 16, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 10, lineHeight: 1, flexShrink: 0 }}
+                  style={{ width: 16, height: 16, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: 10, lineHeight: 1, flexShrink: 0 }}
                 >▾</button>
               </div>
             )}
@@ -817,7 +817,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
                 ))}
                 <button
                   onClick={() => { setDiscountMenu(false); setEditingDiscountName(true) }}
-                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '5px 8px', border: 'none', borderTop: '1px solid #ebebeb', background: '#fff', cursor: 'pointer', fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap' }}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '5px 8px', border: 'none', borderTop: '1px solid #ebebeb', background: '#fff', cursor: 'pointer', fontSize: 11, color: '#4b5563', whiteSpace: 'nowrap' }}
                 >직접 쓰기…</button>
               </div>
             )}
@@ -874,13 +874,13 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
           )}
           {mySale && (
             <span title={`${mySale.quoteNumber} · ${mySale.quoteDate}`}
-              style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+              style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
               최근 판매 <span style={{ color: '#234ea2', fontWeight: 600 }}>₩{numKR(mySale.unitPrice)}</span>
             </span>
           )}
           <span style={{ flex: 1 }} />
           {result && (
-            <span className="num" style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            <span className="num" style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap', flexShrink: 0 }}>
               {result}
             </span>
           )}

@@ -29,7 +29,7 @@ import type { Contact, Customer } from './types'
 
 const TEXT = '#111827'
 const LABEL = '#374151'
-const MUTED = '#9ca3af'
+const MUTED = '#6b7280'
 const DANGER = '#ef4444'
 
 

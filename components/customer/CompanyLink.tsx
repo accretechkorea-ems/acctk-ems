@@ -19,7 +19,7 @@
 import Link from 'next/link'
 
 const TEXT = '#111827'
-const MUTED = '#9ca3af'
+const MUTED = '#6b7280'
 
 /** 목록 보기에서 한 회사를 고른 채 여는 주소. 읽는 쪽은 app/page.tsx 의 `?company=` 다. */
 export function companyListHref(companyId: number): string {

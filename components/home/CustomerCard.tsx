@@ -56,7 +56,7 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
         </div>
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 5,
-          fontSize: 11, fontWeight: 600, color: '#6b7280',
+          fontSize: 11, fontWeight: 600, color: '#4b5563',
           flexShrink: 0, whiteSpace: 'nowrap',
         }}>
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
@@ -67,7 +67,7 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
       {/* 주소 */}
       <div style={{
         fontSize: 12,
-        color: customer.address ? '#6b7280' : '#ef4444',
+        color: customer.address ? '#4b5563' : '#ef4444',
         fontWeight: customer.address ? 400 : 600,
         lineHeight: 1.45, marginBottom: 4,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -77,7 +77,7 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
 
       {/* 대리점 — 없으면 「직판」(lib/customerAgency.ts). 전에는 '-' 였는데, 빈칸과
           「대리점을 안 거친 건」이 구별되지 않아 '-' 가 두 뜻으로 읽혔다. */}
-      <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 8 }}>
+      <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 8 }}>
         대리점 {customer.agency_name ?? DIRECT_SALE_LABEL}
       </div>
 
@@ -88,7 +88,7 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
         flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3,
       }}>
         {hasNoDevice ? (
-          <span style={{ fontSize: 11, color: '#d1d5db', fontStyle: 'italic' }}>장비 없음</span>
+          <span style={{ fontSize: 11, color: '#6b7280', fontStyle: 'italic' }}>장비 없음</span>
         ) : (
           <>
             {deviceLines.slice(0, 4).map((line, i) => (
@@ -101,7 +101,7 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
               </span>
             ))}
             {deviceLines.length > 4 && (
-              <span style={{ fontSize: 11, fontWeight: 500, color: '#9ca3af' }}>
+              <span style={{ fontSize: 11, fontWeight: 500, color: '#6b7280' }}>
                 외 {deviceLines.length - 4}대 더
               </span>
             )}

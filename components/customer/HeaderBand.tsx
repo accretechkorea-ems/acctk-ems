@@ -33,8 +33,8 @@ import type { Contact } from './types'
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
 const LABEL = '#374151'
-const SUB = '#6b7280'
-const MUTED = '#9ca3af'
+const SUB = '#4b5563'
+const MUTED = '#6b7280'
 
 /** 담당자 칩 한 줄 높이와 사이 간격. 두 줄까지 보이는 높이를 이 값으로 셈한다. */
 const CHIP_H = 30

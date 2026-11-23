@@ -28,11 +28,17 @@ export type CompanyLike = {
   agency_name?: string | null
 }
 
-/** 사람이 읽는 칸 이름 — 안내 글과 하네스가 같은 말을 쓰게. */
+/** ⓐ 통합 검색이 보는 칸 — 사람이 읽는 이름(안내 글과 하네스가 같은 말을 쓰게). */
 export const COMPANY_SEARCH_FIELDS = ['회사명', '영문명', '사업장명', '주소', '대리점명'] as const
 
-/** 입력칸 안내 글 — 어디서 찾는지 적어 둔다. */
+/** ⓑ 회사 고르기가 보는 칸 — 둘뿐이다. */
+export const COMPANY_PICK_FIELDS = ['회사명', '영문명'] as const
+
+/** ⓐ 통합 검색 입력칸의 안내 글. */
 export const COMPANY_SEARCH_PLACEHOLDER = '회사명 · 영문명 · 사업장명 · 주소 · 대리점'
+
+/** ⓑ 회사 고르기 입력칸의 안내 글. */
+export const COMPANY_PICK_PLACEHOLDER = '회사명 · 영문명'
 
 /** 다섯 칸을 한 줄로 모은다(소문자). 빈 칸은 건너뛴다. */
 export function companyHaystack(c: CompanyLike): string {
@@ -54,9 +60,31 @@ export function matchesCompany(c: CompanyLike, query: string, extra?: (string | 
   return companyHaystack(c).includes(q) || (extraHay !== '' && extraHay.includes(q))
 }
 
+/** ⓑ 회사 고르기가 보는 한 줄 — 이름 둘뿐이다. */
+export function companyPickHaystack(c: CompanyLike): string {
+  return [c.company_name, c.name_en]
+    .map(v => (v ?? '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+}
+
 /**
- * PostgREST 의 or 조건 — 서버에서 찾을 때.
- * withNameEn 이 거짓이면 영문명만 빼고 나머지 넷을 본다(칸이 아직 없는 DB).
+ * ⓑ **회사를 고를 때** 쓰는 판정 — 회사명과 영문명만 본다.
+ *
+ * 왜 ⓐ 와 다른가: 고르는 칸은 「이 이름이 맞나」를 묻는 자리다. 주소·대리점명까지 보면
+ * 「지곡면」을 적었을 때 그 동네의 **남의 회사**가 후보로 올라와, 엉뚱한 줄을 고르기 쉽다.
+ * 넓게 찾는 일(ⓐ)은 목록 화면이 한다.
+ */
+export function matchesCompanyPick(c: CompanyLike, query: string): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  return companyPickHaystack(c).includes(q)
+}
+
+/**
+ * ⓐ PostgREST 의 or 조건 — 서버에서 **넓게** 찾을 때.
+ * withNameEn 이 거짓이면 영문명만 빼고 나머지 셋을 본다(칸이 아직 없는 DB).
  *
  * ※ 대리점명은 **다른 줄의 이름**이라 한 번의 or 로 걸 수 없다 — 그 줄을 따로 읽어
  *   화면에서 matchesCompany 로 거른다(쓰는 자리는 고객사 목록뿐이다).
@@ -65,5 +93,13 @@ export function companySearchOr(query: string, withNameEn: boolean): string {
   const q = query.trim()
   const base = [`company_name.ilike.%${q}%`, `site_name.ilike.%${q}%`, `address.ilike.%${q}%`]
   if (withNameEn) base.splice(1, 0, `name_en.ilike.%${q}%`)
+  return base.join(',')
+}
+
+/** ⓑ 서버에서 **회사를 고를** 때의 or 조건 — 이름 둘뿐이다. */
+export function companyPickOr(query: string, withNameEn: boolean): string {
+  const q = query.trim()
+  const base = [`company_name.ilike.%${q}%`]
+  if (withNameEn) base.push(`name_en.ilike.%${q}%`)
   return base.join(',')
 }

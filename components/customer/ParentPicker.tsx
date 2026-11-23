@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'r
 import { colsWithNameEn, withNameEnFallback } from '@/lib/nameEn'
 import { createClient } from '@/lib/supabase/client'
 import SearchSelect, { CompanyOption } from '@/components/common/SearchSelect'
-import { COMPANY_SEARCH_PLACEHOLDER, matchesCompany } from '@/lib/companySearch'
+import { COMPANY_PICK_PLACEHOLDER, matchesCompanyPick } from '@/lib/companySearch'
 import { BLUE } from '@/components/common/ui'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import { R } from '@/lib/radius'
@@ -116,7 +116,7 @@ const fieldStyle: CSSProperties = {
 }
 const ghostBtn: CSSProperties = {
   padding: '9px 12px', background: '#f3f4f6', border: 'none', borderRadius: R.icon,
-  cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#6b7280', flexShrink: 0, whiteSpace: 'nowrap',
+  cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#4b5563', flexShrink: 0, whiteSpace: 'nowrap',
 }
 
 type Props = {
@@ -169,10 +169,9 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, l
 
   const picked = useMemo(() => parents.find(p => p.customer_id === value) ?? null, [parents, value])
 
-  // 찾는 칸은 공용이다 — 회사명·영문명·사업장명·주소·대리점명(lib/companySearch.ts).
-  // 회사 줄에는 사업장명·주소·대리점이 없으므로 사실상 이름과 영문명으로 걸린다.
+  // 고르는 칸이라 **이름 둘**만 본다 — 회사명·영문명(lib/companySearch.ts ⓑ).
   const matches = useMemo(
-    () => parents.filter(p => matchesCompany(p, query)).slice(0, 8),
+    () => parents.filter(p => matchesCompanyPick(p, query)).slice(0, 8),
     [parents, query],
   )
 
@@ -203,7 +202,7 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, l
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <div style={{ ...fieldStyle, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', background: '#f9fafb' }}>
           {picked ? picked.company_name : `회사 #${value}`}
-          {picked?.industry ? <span style={{ fontSize: 12, color: '#9ca3af' }}>{`  ${picked.industry}`}</span> : null}
+          {picked?.industry ? <span style={{ fontSize: 12, color: '#6b7280' }}>{`  ${picked.industry}`}</span> : null}
         </div>
         {!locked && (
           <button type="button" disabled={disabled} onClick={() => { onChange(null); setQuery('') }} style={ghostBtn}>해제</button>
@@ -240,7 +239,7 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, l
           </select>
           <button type="button" disabled={creating || !newIndustry}
             onClick={() => void create(newName, newIndustry, newNameEn)}
-            style={{ ...ghostBtn, background: newIndustry ? '#234ea2' : '#f3f4f6', color: newIndustry ? '#fff' : '#9ca3af', cursor: newIndustry ? 'pointer' : 'not-allowed' }}>
+            style={{ ...ghostBtn, background: newIndustry ? '#234ea2' : '#f3f4f6', color: newIndustry ? '#fff' : '#6b7280', cursor: newIndustry ? 'pointer' : 'not-allowed' }}>
             {creating ? '등록 중...' : '등록'}
           </button>
           <button type="button" disabled={creating}
@@ -260,7 +259,7 @@ export default function ParentPicker({ value, onChange, allowCreate, disabled, l
       query={query}
       onQueryChange={setQuery}
       disabled={disabled || creating}
-      placeholder={`ex) (주)현대자동차 — ${COMPANY_SEARCH_PLACEHOLDER}`}
+      placeholder={`ex) (주)현대자동차 — ${COMPANY_PICK_PLACEHOLDER}`}
       inputStyle={fieldStyle}
       /* 「새 회사로 등록」도 키보드로 닿는다 — 목록 맨 아래 한 줄이다. */
       extras={canCreate ? [{

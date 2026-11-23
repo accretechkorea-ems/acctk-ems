@@ -23,8 +23,8 @@ import {
 import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
-const MUTED = '#9ca3af'
-const GRAY = '#6b7280'
+const MUTED = '#6b7280'
+const GRAY = '#4b5563'
 const TEXT = '#111827'
 
 export type RepairInfoPanelProps = {
@@ -207,9 +207,9 @@ export default function RepairInfoPanel({
                 {canEdit && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0 }}>
                     <button onClick={() => onMovePhoto?.(ph.photo_id, -1)} disabled={i === 0} title="위로"
-                      style={{ width: 22, height: 20, borderRadius: R.tag, border: `1px solid ${BORDER}`, background: '#fff', color: i === 0 ? '#d1d5db' : GRAY, cursor: i === 0 ? 'not-allowed' : 'pointer', fontSize: 10, lineHeight: 1 }}>▲</button>
+                      style={{ width: 22, height: 20, borderRadius: R.tag, border: `1px solid ${BORDER}`, background: '#fff', color: i === 0 ? '#9ca3af' : GRAY, cursor: i === 0 ? 'not-allowed' : 'pointer', fontSize: 10, lineHeight: 1 }}>▲</button>
                     <button onClick={() => onMovePhoto?.(ph.photo_id, 1)} disabled={i === photos.length - 1} title="아래로"
-                      style={{ width: 22, height: 20, borderRadius: R.tag, border: `1px solid ${BORDER}`, background: '#fff', color: i === photos.length - 1 ? '#d1d5db' : GRAY, cursor: i === photos.length - 1 ? 'not-allowed' : 'pointer', fontSize: 10, lineHeight: 1 }}>▼</button>
+                      style={{ width: 22, height: 20, borderRadius: R.tag, border: `1px solid ${BORDER}`, background: '#fff', color: i === photos.length - 1 ? '#9ca3af' : GRAY, cursor: i === photos.length - 1 ? 'not-allowed' : 'pointer', fontSize: 10, lineHeight: 1 }}>▼</button>
                     <button onClick={() => onDeletePhoto?.(ph.photo_id)} title="사진 지우기"
                       style={{ width: 22, height: 20, borderRadius: R.tag, border: `1px solid ${BORDER}`, background: '#fff', color: MUTED, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>

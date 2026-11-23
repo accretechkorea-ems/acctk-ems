@@ -22,8 +22,8 @@ const PAGE_BG = '#f4f5f7'
 const CARD_BG = '#ffffff'
 const BORDER = '#e2e4e9'
 const TEXT = '#111113'
-const GRAY = '#6b7280'
-const MUTED = '#9ca3af'
+const GRAY = '#4b5563'
+const MUTED = '#6b7280'
 
 type InventoryItem = {
   item_id: number

@@ -40,7 +40,7 @@ type Props = {
   onSiteChange?: (id: number) => void
 }
 
-const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#4b5563', marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
   width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
@@ -132,7 +132,7 @@ export default function SalesActivityModal({ isOpen, activity, contacts, opportu
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={onClose}
-              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+              style={{ padding: '9px 16px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
             >취소</button>
             <button
               onClick={handleSave}
@@ -189,7 +189,7 @@ export default function SalesActivityModal({ isOpen, activity, contacts, opportu
                 <option key={o.opportunity_id} value={o.opportunity_id}>{o.title}</option>
               ))}
             </select>
-            <div style={{ marginTop: 5, fontSize: 11, color: '#9ca3af' }}>진행 중인 포캐스트만 고를 수 있습니다</div>
+            <div style={{ marginTop: 5, fontSize: 11, color: '#6b7280' }}>진행 중인 포캐스트만 고를 수 있습니다</div>
           </div>
 
           <div>

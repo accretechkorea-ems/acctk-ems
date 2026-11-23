@@ -25,8 +25,8 @@ import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
-const SUB = '#6b7280'
-const MUTED = '#9ca3af'
+const SUB = '#4b5563'
+const MUTED = '#6b7280'
 const BLUE = '#234ea2'
 
 const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: SUB, marginBottom: 6, display: 'block' }

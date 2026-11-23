@@ -100,7 +100,7 @@ export default function NoticePopup() {
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '16px 18px 12px', borderBottom: '1px solid #ebebeb' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             {list.length > 1 && (
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', marginBottom: 4 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 4 }}>
                 {index + 1} / {list.length}
               </div>
             )}
@@ -111,7 +111,7 @@ export default function NoticePopup() {
           <button
             onClick={close}
             aria-label="닫기"
-            style={{ width: 30, height: 30, flexShrink: 0, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 15, color: '#6b7280', lineHeight: 1 }}
+            style={{ width: 30, height: 30, flexShrink: 0, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 15, color: '#4b5563', lineHeight: 1 }}
           >✕</button>
         </div>
 
@@ -140,7 +140,7 @@ export default function NoticePopup() {
             { kind: 'forever' as const, label: '다시 보지 않기' },
           ]).map(o => (
             <button key={o.kind} onClick={() => dismiss(o.kind)}
-              style={{ padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#6b7280', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+              style={{ padding: '7px 10px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#4b5563', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
               {o.label}
             </button>
           ))}

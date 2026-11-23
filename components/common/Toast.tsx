@@ -121,7 +121,7 @@ function ToastCard({ toast, onClose }: { toast: ToastItem; onClose: () => void }
         <button onClick={onClose} title="닫기"
           onMouseEnter={(e) => (e.currentTarget.style.color = '#111827')}
           onMouseLeave={(e) => (e.currentTarget.style.color = '#9ca3af')}
-          style={{ flexShrink: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#9ca3af', display: 'inline-flex', alignItems: 'center', transition: 'color 0.15s ease' }}>
+          style={{ flexShrink: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#6b7280', display: 'inline-flex', alignItems: 'center', transition: 'color 0.15s ease' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
           </svg>

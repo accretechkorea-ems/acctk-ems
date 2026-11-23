@@ -187,7 +187,7 @@ export default function CustomerDetailBody({
               <div style={{ fontSize: 17, fontWeight: 800, color: '#111827', letterSpacing: '-0.3px', marginBottom: 6 }}>
                 {customer.company_name}
               </div>
-              <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.7 }}>
+              <div style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.7 }}>
                 사업장을 묶는 회사입니다.
               </div>
             </div>
@@ -195,12 +195,12 @@ export default function CustomerDetailBody({
             <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.control, padding: '14px 16px', marginTop: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>사업장</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>
                   {childSites.length}곳
                 </span>
               </div>
               {childSites.length === 0 ? (
-                <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 12, color: '#9ca3af' }}>
+                <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 12, color: '#6b7280' }}>
                   묶인 사업장이 없습니다
                 </div>
               ) : (
@@ -220,7 +220,7 @@ export default function CustomerDetailBody({
                       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {c.company_name ?? '-'}
                       </span>
-                      <span style={{ color: '#9ca3af', flexShrink: 0 }}>→</span>
+                      <span style={{ color: '#6b7280', flexShrink: 0 }}>→</span>
                     </a>
                   ))}
                 </div>

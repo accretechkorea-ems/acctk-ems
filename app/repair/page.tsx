@@ -38,8 +38,8 @@ const PAGE_BG = '#f4f5f7'
 const CARD_BG = '#ffffff'
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
-const GRAY = '#6b7280'
-const MUTED = '#9ca3af'
+const GRAY = '#4b5563'
+const MUTED = '#6b7280'
 const ACTIVE_BG = '#f1f1f1' // 필터 활성 배경 (중립)
 
 // 목록 컬럼 폭 (한 곳에만 정의 — 수리 진행 중 블록·전체 목록이 동일하게 참조).
@@ -527,7 +527,7 @@ export default function RepairPage() {
   const SPECIAL_BADGE: Record<string, { short: string; color: string; bg: string }> = {
     '본사수리':     { short: '본사', color: '#7c3aed', bg: '#f5f3ff' },
     '수리불가':     { short: '불가', color: '#b91c1c', bg: '#fef2f2' },
-    '수리진행안함': { short: '안함', color: '#6b7280', bg: '#f3f4f6' },
+    '수리진행안함': { short: '안함', color: '#4b5563', bg: '#f3f4f6' },
   }
   const specialBadge = (r: Repair) => {
     const b = r.special_type ? SPECIAL_BADGE[r.special_type] : undefined

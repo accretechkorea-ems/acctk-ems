@@ -129,7 +129,7 @@ function LoginPageInner() {
             style={{
               marginBottom: 16, padding: '10px 12px', background: '#111',
               border: '0.5px solid #2a2a2a', borderRadius: R.tile,
-              fontSize: 12, lineHeight: 1.6, color: '#9ca3af', textAlign: 'center',
+              fontSize: 12, lineHeight: 1.6, color: '#6b7280', textAlign: 'center',
             }}
           >
             30분 동안 활동이 없어 자동 로그아웃되었습니다.
@@ -141,7 +141,7 @@ function LoginPageInner() {
             style={{
               marginBottom: 16, padding: '10px 12px', background: '#111',
               border: '0.5px solid #2a2a2a', borderRadius: R.tile,
-              fontSize: 12, lineHeight: 1.6, color: '#9ca3af', textAlign: 'center',
+              fontSize: 12, lineHeight: 1.6, color: '#6b7280', textAlign: 'center',
             }}
           >
             퇴사 처리된 계정입니다. 관리자에게 문의해 주세요.

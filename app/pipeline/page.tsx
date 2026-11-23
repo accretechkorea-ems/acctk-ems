@@ -385,7 +385,7 @@ export default function PipelinePage() {
         </div>
 
         {loading ? (
-          <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+          <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, padding: 40, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
             불러오는 중...
           </div>
         ) : (
@@ -424,11 +424,11 @@ export default function PipelinePage() {
                       {/* 단계·건수·금액을 한 줄에 둔다 — 열이 좁아 두 줄을 쓰면 판이 그만큼 낮아진다 */}
                       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
                         <span style={{ fontSize: 13, fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>{col.stage}</span>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', flexShrink: 0 }}>{col.rows.length}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', flexShrink: 0 }}>{col.rows.length}</span>
                         {col.sum > 0 && (
                           <>
-                            <span style={{ fontSize: 11, color: '#d1d5db', flexShrink: 0 }}>·</span>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <span style={{ fontSize: 11, color: '#6b7280', flexShrink: 0 }}>·</span>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: '#4b5563', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {compactKRW(col.sum)}
                             </span>
                           </>
@@ -437,7 +437,7 @@ export default function PipelinePage() {
                     </div>
                     <DroppableColumn stage={col.stage} isOver={overStage === col.stage}>
                       {col.rows.length === 0
-                        ? <div style={{ border: '1px dashed #ebebeb', borderRadius: R.control, padding: '18px 0', textAlign: 'center', fontSize: 12, color: '#d1d5db', flexShrink: 0 }}>
+                        ? <div style={{ border: '1px dashed #ebebeb', borderRadius: R.control, padding: '18px 0', textAlign: 'center', fontSize: 12, color: '#6b7280', flexShrink: 0 }}>
                             {overStage === col.stage ? '여기에 놓기' : '없음'}
                           </div>
                         : col.rows.map(cardOf)}
@@ -454,9 +454,9 @@ export default function PipelinePage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   <button onClick={() => setShowLost(v => !v)}
                     style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#6b7280' }}>끝난 건</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{done.length}건</span>
-                    <span style={{ fontSize: 11, color: '#9ca3af' }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#4b5563' }}>끝난 건</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{done.length}건</span>
+                    <span style={{ fontSize: 11, color: '#6b7280' }}>
                       실주 {done.filter(o => o.stage === '실주').length} · 종료 {done.filter(o => o.stage !== '실주').length}
                     </span>
                     <span style={{ fontSize: 12, fontWeight: 600, color: '#234ea2' }}>{showLost ? '접기' : '펼치기'}</span>
@@ -472,7 +472,7 @@ export default function PipelinePage() {
             )}
 
             {filtered.length === 0 && (
-              <div style={{ marginTop: 12, background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+              <div style={{ marginTop: 12, background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, padding: 40, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
                 조건에 맞는 포캐스트가 없습니다
               </div>
             )}
@@ -502,7 +502,7 @@ export default function PipelinePage() {
         style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, boxShadow: '0 16px 40px rgba(0,0,0,0.18)', padding: 14 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <span style={{ fontSize: 13, fontWeight: 800, color: '#111827', letterSpacing: '-0.3px' }}>엑셀 내보내기</span>
-          <span style={{ fontSize: 11, color: '#9ca3af', lineHeight: 1.6 }}>
+          <span style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.6 }}>
             월별 요약과 안건 목록을 시트 두 장으로 내려받습니다.
           </span>
           <select value={xFy} onChange={e => setXFy(Number(e.target.value))} aria-label="회계연도" style={popSel}>
@@ -518,7 +518,7 @@ export default function PipelinePage() {
               {teamNames.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           ) : (
-            <span style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.6 }}>
+            <span style={{ fontSize: 11, color: '#4b5563', lineHeight: 1.6 }}>
               담당자 <b style={{ color: '#111827' }}>{ownerLabel}</b> — 화면 위에서 고른 사람입니다.
             </span>
           )}

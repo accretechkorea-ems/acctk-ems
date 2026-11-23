@@ -134,7 +134,7 @@ const RIGHT_COL_MAX = 210
 // #9ca3af 가 섞여 종류·내용·날짜가 모두 비슷하게 옅었다(2026-11-20).
 const TEXT_PRIMARY = '#111827'
 const TEXT_LABEL = '#374151'
-const TEXT_DIM = '#6b7280'
+const TEXT_DIM = '#4b5563'
 
 // 왼쪽 첫 줄의 종류·유무상 칸은 px 로 못 박지 않고, 가장 긴 값을 보이지 않게 깔아
 // 그 폭에 맞춘다(SizedCell). 폰트나 값이 바뀌어도 잘리지 않고 뒤 요소의 x 도 흔들리지 않으며,
@@ -240,18 +240,18 @@ function TimelineRow({ item, first, focused, siteName }: { item: Item; first: bo
             <SizedCell sizer={LONGEST_PAID} style={{ fontSize: 12, color: TEXT_DIM }}>
               {item.labelSuffix && (
                 <>
-                  <span style={{ color: '#d1d5db' }}>{'· '}</span>{item.labelSuffix}
+                  <span style={{ color: '#6b7280' }}>{'· '}</span>{item.labelSuffix}
                 </>
               )}
             </SizedCell>
             <span style={{ fontSize: 12, color: '#234ea2', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{item.title}</span>
             {item.titleBadge && (
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>
                 {item.titleBadge}
               </span>
             )}
             {item.badge && (
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>
                 {item.badge}
               </span>
             )}
@@ -270,14 +270,14 @@ function TimelineRow({ item, first, focused, siteName }: { item: Item; first: bo
             {/* 만난 담당자 — 내용에 딸린 정보라 흐린 색. 길면 여기서 말줄임된다 */}
             {item.bodySuffix && (
               <span style={{
-                fontSize: 12, color: '#9ca3af', flexShrink: 1, minWidth: 0, maxWidth: '45%',
+                fontSize: 12, color: '#6b7280', flexShrink: 1, minWidth: 0, maxWidth: '45%',
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
                 {item.bodySuffix}
               </span>
             )}
             {item.note && (
-              <span style={{ fontSize: 12, color: '#9ca3af', flexShrink: 0, whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 12, color: '#6b7280', flexShrink: 0, whiteSpace: 'nowrap' }}>
                 {' · '}{item.note}
               </span>
             )}
@@ -684,7 +684,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
                 fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
               }}>
               {c.label}
-              <span aria-hidden style={{ color: '#9ca3af' }}>✕</span>
+              <span aria-hidden style={{ color: '#6b7280' }}>✕</span>
             </button>
           ))}
           <button type="button" onClick={() => setFilter(allSelected(available.kinds, available.siteIds))}
@@ -708,7 +708,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
       )}
 
       {months.length === 0 && undated.length === 0 ? (
-        <div style={{ padding: '28px 16px', textAlign: 'center', fontSize: 13, color: '#9ca3af' }}>
+        <div style={{ padding: '28px 16px', textAlign: 'center', fontSize: 13, color: '#6b7280' }}>
           {chips.length > 0 ? '조건에 맞는 기록이 없습니다' : '기록이 없습니다'}
         </div>
       ) : (
@@ -716,8 +716,8 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
           {months.map((m, mi) => (
             <div key={m.label} style={{ marginTop: mi === 0 ? 0 : 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>{m.label}</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{m.rows.length}건</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#4b5563', whiteSpace: 'nowrap' }}>{m.label}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{m.rows.length}건</span>
                 <span style={{ flex: 1, height: 1, background: '#ebebeb' }} />
               </div>
               {m.rows.map((it, i) => <TimelineRow key={it.key} item={it} first={i === 0} focused={it.key === focusedKey} siteName={sites ? siteNameOf(it.siteId) : undefined} />)}
@@ -731,8 +731,8 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
                   onClick={() => setShowUndated(v => !v)}
                   style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}
                 >
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap' }}>날짜 미상</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{undated.length}건</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#4b5563', whiteSpace: 'nowrap' }}>날짜 미상</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{undated.length}건</span>
                   <span style={{ fontSize: 12, fontWeight: 600, color: '#234ea2' }}>{showUndated ? '접기' : '펼치기'}</span>
                 </button>
                 <span style={{ flex: 1, height: 1, background: '#ebebeb' }} />

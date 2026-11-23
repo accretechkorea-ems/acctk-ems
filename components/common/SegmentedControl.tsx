@@ -103,13 +103,13 @@ export default function SegmentedControl({ options, value, onChange, equal = fal
               padding: equal ? 0 : '0 12px', textAlign: 'center', borderRadius: R.icon,
               fontSize: 13, background: 'transparent', border: 'none', whiteSpace: 'nowrap',
               cursor: o.disabled ? 'not-allowed' : 'pointer',
-              color: o.disabled ? '#d1d5db' : active ? '#111827' : '#9ca3af',
+              color: o.disabled ? '#9ca3af' : active ? '#111827' : '#6b7280',
               // 고른 쪽은 **굵게** — 바탕 차이(흰색 ↔ 연회색)만으로는 약하다.
               fontWeight: active ? 700 : 500,
               transition: 'color 200ms',
             }}>
             {o.label}
-            {o.suffix != null && <span style={{ marginLeft: 4, fontSize: 11, color: '#9ca3af' }}>{o.suffix}</span>}
+            {o.suffix != null && <span style={{ marginLeft: 4, fontSize: 11, color: '#6b7280' }}>{o.suffix}</span>}
           </button>
         )
       })}

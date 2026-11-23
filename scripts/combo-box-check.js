@@ -92,6 +92,36 @@ eq('칸 이름 다섯', S.COMPANY_SEARCH_FIELDS.length, 5)
 ok('안내 글이 다섯 칸을 적어 둔다',
   ['회사명', '영문명', '사업장명', '주소', '대리점'].every(w => S.COMPANY_SEARCH_PLACEHOLDER.includes(w)))
 
+console.log('\n── ①-ⓑ 회사를 **고를** 때는 이름 둘만 본다 ──')
+// 고르는 칸에서 주소까지 보면 「지곡면」으로 그 동네의 남의 회사가 후보에 오른다.
+eq('이름 둘로는 걸린다', [
+  S.matchesCompanyPick(hyundai, '현대'),
+  S.matchesCompanyPick(hyundai, 'HYUNDAI'),
+], [true, true])
+eq('주소·사업장명·대리점명으로는 안 걸린다', [
+  S.matchesCompanyPick(hyundai, '지곡면'),
+  S.matchesCompanyPick(hyundai, '감마세타'),
+  S.matchesCompanyPick({ company_name: '가나', site_name: '서산공장' }, '서산공장'),
+], [false, false, false])
+ok('검색어가 비면 전부 통과', S.matchesCompanyPick(hyundai, '  '))
+eq('칸 이름 둘', S.COMPANY_PICK_FIELDS.length, 2)
+eq('고르기 안내 글', S.COMPANY_PICK_PLACEHOLDER, '회사명 · 영문명')
+eq('서버 조건도 이름 둘', S.companyPickOr('현대', true), 'company_name.ilike.%현대%,name_en.ilike.%현대%')
+eq('영문명 칸이 없으면 하나', S.companyPickOr('현대', false), 'company_name.ilike.%현대%')
+// 고르는 자리가 ⓐ(넓은 검색)를 쓰면 안 된다.
+const PICKERS = [
+  'components/customer/AgencyPicker.tsx',
+  'components/customer/ParentPicker.tsx',
+  'components/customer/modals/OpportunityModal.tsx',
+  'components/showroom/CustomerSearch.tsx',
+  'components/home/list/CompanySearchModal.tsx',
+  'components/home/AddCustomerModal.tsx',
+]
+eq('고르는 자리는 모두 ⓑ 를 쓴다',
+  PICKERS.filter(f => !/matchesCompanyPick\(|companyPickOr\(/.test(read(f))), [])
+eq('고르는 자리에 ⓐ 가 섞이지 않았다',
+  PICKERS.filter(f => /matchesCompany\(|companySearchOr\(/.test(read(f))), [])
+
 console.log('\n── ② 서버 조회 조건 ──')
 eq('영문명 칸이 있을 때', S.companySearchOr('현대', true),
   'company_name.ilike.%현대%,name_en.ilike.%현대%,site_name.ilike.%현대%,address.ilike.%현대%')

@@ -21,8 +21,8 @@ import { defaultFilter, type FilterOptions } from '@/lib/customerFilterChips'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
-const SUB = '#6b7280'
-const MUTED = '#9ca3af'
+const SUB = '#4b5563'
+const MUTED = '#6b7280'
 const BLUE = '#234ea2'
 
 const STATUS_DOT: Record<string, string> = { '활성': '#16a34a', '잠재': '#f59e0b', '이탈': '#ef4444' }

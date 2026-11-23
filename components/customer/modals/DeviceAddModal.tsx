@@ -15,7 +15,7 @@ type Props = {
 }
 
 const emptyForm: DeviceForm = { device_name: '', device_name2: '', option: '', serial_number: '', program: 'ACCTee', install_date: '', category: '20' }
-const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#4b5563', marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
   width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
@@ -50,7 +50,7 @@ export default function DeviceAddModal({ isOpen, isSaving, onClose, onSave }: Pr
         footer={<>
           <button
             onClick={handleClose}
-            style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+            style={{ padding: '9px 16px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
           >취소</button>
           <button
             onClick={handleSave}
@@ -113,7 +113,7 @@ export default function DeviceAddModal({ isOpen, isSaving, onClose, onSave }: Pr
               <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: '#fff', background: '#234ea2', borderRadius: R.icon, padding: '5px 10px' }}>
                 파일 선택
               </span>
-              <span style={{ flex: 1, fontSize: 13, color: packingFile ? '#111827' : '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <span style={{ flex: 1, fontSize: 13, color: packingFile ? '#111827' : '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {packingFile ? packingFile.name : '납입의사록•패킹리스트 파일 선택'}
               </span>
               <input

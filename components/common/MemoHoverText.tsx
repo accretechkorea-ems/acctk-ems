@@ -18,7 +18,7 @@ import { useEffect, useRef, useState } from 'react'
 import Popover from '@/components/common/Popover'
 import { MEMO_MAX_HEIGHT, MEMO_PANEL_STYLE } from '@/components/common/MemoPopover'
 
-const MUTED = '#9ca3af'
+const MUTED = '#6b7280'
 const TEXT = '#111827'
 
 /** 떠오르기까지 기다리는 시간(ms). */

@@ -21,14 +21,14 @@ export default function AccessGate({
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', fontSize: 16, color: '#6b7280' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', fontSize: 16, color: '#4b5563' }}>
         확인 중...
       </div>
     )
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'center', alignItems: 'center', height: '60vh', color: '#6b7280' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'center', alignItems: 'center', height: '60vh', color: '#4b5563' }}>
       <div style={{ fontSize: 18, fontWeight: 800, color: '#111827' }}>{title}</div>
       <div style={{ fontSize: 14 }}>{message}</div>
       <button

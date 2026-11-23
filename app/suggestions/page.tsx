@@ -20,8 +20,8 @@ const PAGE_BG = '#f4f5f7'
 const CARD_BG = '#ffffff'
 const BORDER = '#ebebeb'
 const TEXT = '#111113'
-const GRAY = '#6b7280'
-const MUTED = '#9ca3af'
+const GRAY = '#4b5563'
+const MUTED = '#6b7280'
 
 const STATUSES = ['접수', '검토중', '완료', '보류'] as const
 type Status = typeof STATUSES[number]

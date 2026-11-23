@@ -16,7 +16,7 @@ import { useEffect, useState, type RefObject } from 'react'
 import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
-const SUB = '#6b7280'
+const SUB = '#4b5563'
 
 type Props = {
   /** 구르는 요소. 이 요소의 스크롤 위치로 위·아래를 가른다. */

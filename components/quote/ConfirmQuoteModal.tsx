@@ -55,7 +55,7 @@ export default function ConfirmQuoteModal({
     footStyle={{ ...PADS.footStyle, gap: 10 }}
     title={<>
       <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 4, letterSpacing: '-0.3px' }}>견적 확정</div>
-      <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, fontWeight: 500 }}>{quoteNo} <span style={{ color: '#9ca3af' }}>(예상 번호 — 확정할 때 발급)</span></div>
+      <div style={{ fontSize: 13, color: '#4b5563', marginBottom: 20, fontWeight: 500 }}>{quoteNo} <span style={{ color: '#6b7280' }}>(예상 번호 — 확정할 때 발급)</span></div>
     </>}
     footer={<>
       <button onClick={() => setShowConfirmModal(false)}
@@ -84,15 +84,15 @@ export default function ConfirmQuoteModal({
     </div>
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 24 }}>
       <div style={{ background: '#eff4ff', borderRadius: R.control, padding: '12px 14px', border: '1px solid #c7d7f8', textAlign: 'center' }}>
-        <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, fontWeight: 500 }}>공급가</div>
+        <div style={{ fontSize: 10, color: '#4b5563', marginBottom: 4, fontWeight: 500 }}>공급가</div>
         <div style={{ fontSize: 14, fontWeight: 800, color: '#234ea2' }}>₩{numKR(totalSupply)}</div>
       </div>
       <div style={{ background: '#f3f4f6', borderRadius: R.control, padding: '12px 14px', border: '1px solid #ebebeb', textAlign: 'center' }}>
-        <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, fontWeight: 500 }}>원가</div>
+        <div style={{ fontSize: 10, color: '#4b5563', marginBottom: 4, fontWeight: 500 }}>원가</div>
         <div style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>₩{numKR(totalCost)}</div>
       </div>
       <div style={{ background: totalProfitRate >= 40 ? '#f0fdf4' : '#fef2f2', borderRadius: R.control, padding: '12px 14px', border: `1px solid ${totalProfitRate >= 40 ? '#bbf7d0' : '#fecaca'}`, textAlign: 'center' }}>
-        <div style={{ fontSize: 10, color: '#6b7280', marginBottom: 4, fontWeight: 500 }}>순이익</div>
+        <div style={{ fontSize: 10, color: '#4b5563', marginBottom: 4, fontWeight: 500 }}>순이익</div>
         <div style={{ fontSize: 13, fontWeight: 800, color: totalProfitRate >= 40 ? '#16a34a' : '#dc2626' }}>
           ₩{numKR(totalProfit)}<br />
           <span style={{ fontSize: 11 }}>({totalProfitRate.toFixed(1)}%)</span>

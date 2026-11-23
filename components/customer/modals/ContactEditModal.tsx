@@ -16,7 +16,7 @@ type Props = {
   onDelete?: () => void
 }
 
-const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#4b5563', marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
   width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
@@ -70,7 +70,7 @@ export default function ContactEditModal({ contact, isSaving, onClose, onSave, o
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={onClose}
-              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+              style={{ padding: '9px 16px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
             >취소</button>
             <button
               onClick={handleSave}

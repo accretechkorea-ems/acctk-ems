@@ -81,7 +81,7 @@ function ConfirmDialog({ options, onClose }: { options: ConfirmOptions; onClose:
         </>}
         footer={<>
           <button onClick={() => onClose(false)}
-            style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+            style={{ padding: '9px 16px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
             {options.cancelText ?? '취소'}
           </button>
           <button ref={confirmBtnRef} onClick={() => onClose(true)}
@@ -92,7 +92,7 @@ function ConfirmDialog({ options, onClose }: { options: ConfirmOptions; onClose:
           </button>
         </>}
       >
-        <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.6, whiteSpace: 'pre-line', marginBottom: 22 }}>{options.message}</div>
+        <div style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.6, whiteSpace: 'pre-line', marginBottom: 22 }}>{options.message}</div>
       </ModalCard>
     </ModalOverlay>
   )

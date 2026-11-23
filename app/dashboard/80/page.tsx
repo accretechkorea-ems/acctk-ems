@@ -113,7 +113,7 @@ function CardHead({ title, right }: { title: string; right?: React.ReactNode }) 
 
 function Count({ children }: { children: React.ReactNode }) {
   return (
-    <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', whiteSpace: 'nowrap' }}>
+    <span style={{ fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', whiteSpace: 'nowrap' }}>
       {children}
     </span>
   )
@@ -121,7 +121,7 @@ function Count({ children }: { children: React.ReactNode }) {
 
 function Empty({ text }: { text: string }) {
   return (
-    <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 12, color: '#9ca3af' }}>{text}</div>
+    <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 12, color: '#6b7280' }}>{text}</div>
   )
 }
 
@@ -140,10 +140,10 @@ const rowHover = {
 // 전월 대비 증감. 같으면 아무것도 내지 않는다.
 function Delta({ now, before, suffix }: { now: number; before: number; suffix: string }) {
   const diff = now - before
-  if (diff === 0) return <span style={{ fontSize: 11, color: '#9ca3af' }}>전월과 같음</span>
+  if (diff === 0) return <span style={{ fontSize: 11, color: '#6b7280' }}>전월과 같음</span>
   const sign = diff > 0 ? '▲' : '▼'
   const label = suffix === '원' ? compactKRW(Math.abs(diff)) : `${numKR(Math.abs(diff))}${suffix}`
-  return <span style={{ fontSize: 11, color: '#9ca3af' }}>전월 대비 {sign} {label}</span>
+  return <span style={{ fontSize: 11, color: '#6b7280' }}>전월 대비 {sign} {label}</span>
 }
 
 export default function Dashboard80Page() {
@@ -264,10 +264,10 @@ export default function Dashboard80Page() {
                 { label: 'C/S 활동', value: `${numKR(serviceActivity.total)}건`, sub: null },
               ].map(m => (
                 <div key={m.label} style={{ padding: '14px 16px' }}>
-                  <div style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>{m.label}</div>
+                  <div style={{ fontSize: 12, color: '#4b5563', whiteSpace: 'nowrap' }}>{m.label}</div>
                   <div style={{ fontSize: 20, fontWeight: 700, color: '#111827', marginTop: 4, letterSpacing: '-0.5px', whiteSpace: 'nowrap' }}>{m.value}</div>
                   {/* 보조 줄 — 넣을 것이 없어도 자리를 비워 다섯 칸의 높이를 맞춘다 */}
-                  <div style={{ marginTop: 2, fontSize: 11, color: '#9ca3af' }}>{m.sub ?? '\u00a0'}</div>
+                  <div style={{ marginTop: 2, fontSize: 11, color: '#6b7280' }}>{m.sub ?? '\u00a0'}</div>
                 </div>
               ))}
             </div>
@@ -283,8 +283,8 @@ export default function Dashboard80Page() {
               right={
                 <>
                   <Count>{opportunities.length}건</Count>
-                  {staleIds.size > 0 && <span style={{ fontSize: 11, color: '#9ca3af' }}>정체 {staleIds.size}</span>}
-                  {dueIds.size > 0 && <span style={{ fontSize: 11, color: '#9ca3af' }}>마감 임박 {dueIds.size}</span>}
+                  {staleIds.size > 0 && <span style={{ fontSize: 11, color: '#6b7280' }}>정체 {staleIds.size}</span>}
+                  {dueIds.size > 0 && <span style={{ fontSize: 11, color: '#6b7280' }}>마감 임박 {dueIds.size}</span>}
                 </>
               }
             />
@@ -300,7 +300,7 @@ export default function Dashboard80Page() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
                     {stageCounts.map((s, i) => (
                       <span key={s.stage} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        {i > 0 && <span style={{ color: '#d1d5db' }}>·</span>}
+                        {i > 0 && <span style={{ color: '#6b7280' }}>·</span>}
                         <span style={{ fontSize: 13, color: '#111827', whiteSpace: 'nowrap' }}>
                           {s.stage} <span style={{ fontWeight: 700 }}>{s.count}</span>
                         </span>
@@ -330,10 +330,10 @@ export default function Dashboard80Page() {
                         </span>
                         {flagged && <Count>{statusOf.get(o.opportunity_id)}</Count>}
                         {/* 담당자 — 단계 앞에 흐린 글씨로. 카드 아래 집계 줄을 대신한다 */}
-                        <span style={{ fontSize: 11, color: '#9ca3af', flexShrink: 0, whiteSpace: 'nowrap', maxWidth: 72, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <span style={{ fontSize: 11, color: '#6b7280', flexShrink: 0, whiteSpace: 'nowrap', maxWidth: 72, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {o.engineers?.name ?? '-'}
                         </span>
-                        <span style={{ fontSize: 12, color: '#6b7280', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: 12, color: '#4b5563', flexShrink: 0, whiteSpace: 'nowrap' }}>
                           {o.stage}
                         </span>
                         <span style={{ fontSize: 12, fontWeight: 600, color: '#111827', flexShrink: 0, whiteSpace: 'nowrap', minWidth: 64, textAlign: 'right' }}>
@@ -342,7 +342,7 @@ export default function Dashboard80Page() {
                         {/* 마감은 월 단위로 잡으므로 연월까지만 보여준다 */}
                         <span style={{
                           fontSize: 12, flexShrink: 0, whiteSpace: 'nowrap', minWidth: 76, textAlign: 'right',
-                          color: o.expected_close ? DANGER : '#9ca3af',
+                          color: o.expected_close ? DANGER : '#6b7280',
                           fontWeight: o.expected_close ? 700 : 400,
                         }}>
                           {o.expected_close ? o.expected_close.slice(0, 7) : '마감일 없음'}
@@ -351,7 +351,7 @@ export default function Dashboard80Page() {
                     )
                   })}
                   {oppRows.length > TOP_OPPS && (
-                    <div style={{ padding: '6px 8px', fontSize: 11, color: '#9ca3af' }}>
+                    <div style={{ padding: '6px 8px', fontSize: 11, color: '#6b7280' }}>
                       외 {oppRows.length - TOP_OPPS}건
                     </div>
                   )}
@@ -407,15 +407,15 @@ export default function Dashboard80Page() {
                           </span>
                           {/* 폐기된 장비를 가리키는 홀딩 — 장비 목록에는 없는 이름이라 알려 둔다. */}
                           {u.titleBadge && (
-                            <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', background: '#f3f4f6', borderRadius: R.pill, padding: '1px 7px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '1px 7px', flexShrink: 0, whiteSpace: 'nowrap' }}>
                               {u.titleBadge}
                             </span>
                           )}
                         </span>
-                        <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <span style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {u.owner}
-                          <span style={{ color: '#d1d5db' }}> · </span>
-                          <span style={{ color: '#6b7280', fontWeight: 700 }}>{u.status}</span>
+                          <span style={{ color: '#6b7280' }}> · </span>
+                          <span style={{ color: '#4b5563', fontWeight: 700 }}>{u.status}</span>
                         </span>
                       </button>
                     )
@@ -460,11 +460,11 @@ export default function Dashboard80Page() {
                         {/* 칸이 좁아 세 조각이 다 들어가지 않을 때가 있다(폭 123px, 긴 조합은 158px 필요).
                             한 줄로 두면 맨 뒤의 D-N 부터 잘려서, 정작 급한 정보가 먼저 사라진다.
                             유형과 D-N 은 폭을 지키게 하고 담당자만 줄여 ... 로 접는다. */}
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#9ca3af', minWidth: 0 }}>
-                          <span style={{ color: '#6b7280', fontWeight: 700, flexShrink: 0 }}>{v.serviceType}</span>
-                          <span style={{ color: '#d1d5db', flexShrink: 0 }}>·</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#6b7280', minWidth: 0 }}>
+                          <span style={{ color: '#4b5563', fontWeight: 700, flexShrink: 0 }}>{v.serviceType}</span>
+                          <span style={{ color: '#6b7280', flexShrink: 0 }}>·</span>
                           <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.owner}</span>
-                          <span style={{ color: '#d1d5db', flexShrink: 0 }}>·</span>
+                          <span style={{ color: '#6b7280', flexShrink: 0 }}>·</span>
                           {/* 오늘 건은 D-0 대신 「오늘」. 오늘 가야 하는 일이라 흐린 회색에 묻히지 않게
                               액센트로 낸다(만료 경고의 빨강과는 성격이 달라 DANGER 는 쓰지 않는다). */}
                           <span style={{ flexShrink: 0, ...(v.daysLeft === 0 ? { color: '#234ea2', fontWeight: 700 } : null) }}>
@@ -476,12 +476,12 @@ export default function Dashboard80Page() {
                             항목 이름만 줄여 ... 로 접고 「준비 n/4」는 폭을 지키게 한다
                             — 위의 담당자 줄과 같은 규칙이다. 색은 dot 에만 준다. */}
                         {v.prep && (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#9ca3af', minWidth: 0 }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#6b7280', minWidth: 0 }}>
                             <span style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: v.prep.allDone ? '#16a34a' : '#d1d5db' }} />
                             <span style={{ flexShrink: 0 }}>{prepSummaryShort(v.prep)}</span>
                             {!v.prep.allDone && v.prep.firstPending && (
                               <>
-                                <span style={{ color: '#d1d5db', flexShrink: 0 }}>·</span>
+                                <span style={{ color: '#6b7280', flexShrink: 0 }}>·</span>
                                 <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.prep.firstPending}</span>
                               </>
                             )}
@@ -513,11 +513,11 @@ export default function Dashboard80Page() {
                         <span style={{ fontSize: 13, fontWeight: 600, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
                           {q.companyName}
                         </span>
-                        <span style={{ fontSize: 12, color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>
+                        <span style={{ fontSize: 12, color: '#4b5563', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>
                           {q.quoteNumber}
                         </span>
                         {/* 며칠까지인지 날짜로도 보여준다 — D-day 만으로는 언제까지인지 알 수 없다 */}
-                        <span style={{ fontSize: 12, color: '#9ca3af', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: 12, color: '#6b7280', flexShrink: 0, whiteSpace: 'nowrap' }}>
                           {q.expiry}
                         </span>
                         {/* 유효기간은 지나면 다시 뽑아야 하므로 여유가 있어도 눈에 띄게 둔다 */}
@@ -533,7 +533,7 @@ export default function Dashboard80Page() {
                     )
                   })}
                   {expiringQuotes.length > TOP_EXPIRING && (
-                    <div style={{ padding: '6px 8px', fontSize: 11, color: '#9ca3af' }}>
+                    <div style={{ padding: '6px 8px', fontSize: 11, color: '#6b7280' }}>
                       외 {expiringQuotes.length - TOP_EXPIRING}건
                     </div>
                   )}

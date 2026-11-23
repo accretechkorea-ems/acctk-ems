@@ -53,7 +53,7 @@ function HoldingCard({ h, onOpen, onResolve }: { h: Holding; onOpen: () => void;
           {/* 폐기된 장비를 가리키는 홀딩 — 줄은 그대로 두고 이름 옆에 알린다(그 장비는
               장비 목록에서 숨겨져 있어 찾아도 안 나온다). 타임라인과 같은 뱃지다. */}
           {isHoldingDeviceDisposed(h) && (
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>폐기</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>폐기</span>
           )}
         </button>
         {stale && (
@@ -61,10 +61,10 @@ function HoldingCard({ h, onOpen, onResolve }: { h: Holding; onOpen: () => void;
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
             </svg>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>30일 초과</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280' }}>30일 초과</span>
           </span>
         )}
-        <span style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', flexShrink: 0, whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#4b5563', flexShrink: 0, whiteSpace: 'nowrap' }}>
           {elapsedLabel(h)}
         </span>
       </div>
@@ -75,21 +75,21 @@ function HoldingCard({ h, onOpen, onResolve }: { h: Holding; onOpen: () => void;
           {h.title}
         </div>
         {note && (
-          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 12, color: '#4b5563', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             최근 메모: {note.content}
-            <span style={{ color: '#9ca3af' }}> ({fmtDate(note.created_at)})</span>
+            <span style={{ color: '#6b7280' }}> ({fmtDate(note.created_at)})</span>
           </div>
         )}
       </button>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-        <span style={{ fontSize: 11, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+        <span style={{ fontSize: 11, color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
           {h.engineers?.name ?? '-'}
-          <span style={{ color: '#d1d5db' }}> · </span>
+          <span style={{ color: '#6b7280' }}> · </span>
           시작 {h.started_at}
           {h.resolved_at && (
             <>
-              <span style={{ color: '#d1d5db' }}> · </span>
+              <span style={{ color: '#6b7280' }}> · </span>
               해제 {h.resolved_at}
             </>
           )}
@@ -97,12 +97,12 @@ function HoldingCard({ h, onOpen, onResolve }: { h: Holding; onOpen: () => void;
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexShrink: 0 }}>
           {!h.resolved_at && (
             <button onClick={onResolve}
-              style={{ padding: '4px 10px', background: '#fff', color: '#6b7280', border: '1px solid #ebebeb', borderRadius: R.icon, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
+              style={{ padding: '4px 10px', background: '#fff', color: '#4b5563', border: '1px solid #ebebeb', borderRadius: R.icon, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
               해제
             </button>
           )}
           <button onClick={onOpen}
-            style={{ padding: '4px 10px', background: '#f3f4f6', color: '#6b7280', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
+            style={{ padding: '4px 10px', background: '#f3f4f6', color: '#4b5563', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>
             상세
           </button>
         </div>
@@ -148,7 +148,7 @@ export default function HoldingsPage() {
 
         <div style={{ marginBottom: 16 }}>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: '#111827', margin: 0, letterSpacing: '-0.3px' }}>홀딩 현황</h1>
-          <p style={{ fontSize: 13, color: '#6b7280', marginTop: 6 }}>
+          <p style={{ fontSize: 13, color: '#4b5563', marginTop: 6 }}>
             현장에서 바로 해결되지 않은 건을 모아 봅니다. 새 홀딩은 업체 상세의 장비 카드에서 겁니다.
           </p>
         </div>
@@ -160,7 +160,7 @@ export default function HoldingsPage() {
                 style={{
                   padding: '5px 12px', borderRadius: R.icon, border: 'none', cursor: 'pointer',
                   fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
-                  background: tab === t ? '#234ea2' : '#f3f4f6', color: tab === t ? '#ffffff' : '#9ca3af',
+                  background: tab === t ? '#234ea2' : '#f3f4f6', color: tab === t ? '#ffffff' : '#6b7280',
                 }}>
                 {t}
               </button>
@@ -179,21 +179,21 @@ export default function HoldingsPage() {
         </div>
 
         {loading ? (
-          <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+          <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, padding: 40, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
             불러오는 중...
           </div>
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{tab}</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{rows.length}건</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{rows.length}건</span>
               {tab !== '진행 중' && openCount > 0 && (
-                <span style={{ fontSize: 11, color: '#9ca3af' }}>진행 중 {openCount}건</span>
+                <span style={{ fontSize: 11, color: '#6b7280' }}>진행 중 {openCount}건</span>
               )}
             </div>
 
             {rows.length === 0 ? (
-              <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+              <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, padding: 40, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
                 조건에 맞는 홀딩이 없습니다
               </div>
             ) : (

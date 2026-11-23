@@ -86,19 +86,19 @@ function ServiceCard({ h, companyName, onEdit, onPrint, onOpenReport, reportBusy
             {h.service_type ?? '-'}
           </span>
           {h.is_paid !== null && (
-            <span style={{ fontSize: 12, color: '#9ca3af' }}>
-              <span style={{ color: '#d1d5db' }}> · </span>{h.is_paid ? '유상' : '무상'}
+            <span style={{ fontSize: 12, color: '#6b7280' }}>
+              <span style={{ color: '#6b7280' }}> · </span>{h.is_paid ? '유상' : '무상'}
             </span>
           )}
           {/* 홀딩이 걸린 레포트는 배지를, 없으면 호버 시 등록 진입점을 보여준다 */}
           {holding ? (
             <button onClick={onOpenHolding} title={holding.title}
-              style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              style={{ fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               {holding.resolved_at ? '홀딩 해제됨' : '홀딩 중'}
             </button>
           ) : (
             <button onClick={onAddHolding} title="이 건으로 홀딩"
-              style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', background: 'none', border: '1px solid #ebebeb', borderRadius: R.pill, padding: '1px 8px', cursor: 'pointer', whiteSpace: 'nowrap', visibility: hovered ? 'visible' : 'hidden' }}>
+              style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: 'none', border: '1px solid #ebebeb', borderRadius: R.pill, padding: '1px 8px', cursor: 'pointer', whiteSpace: 'nowrap', visibility: hovered ? 'visible' : 'hidden' }}>
               홀딩
             </button>
           )}
@@ -116,7 +116,7 @@ function ServiceCard({ h, companyName, onEdit, onPrint, onOpenReport, reportBusy
 
       {/* 아랫줄: 날짜·참여자 한 줄 / 버튼은 그 아래 줄 */}
       <div style={{ marginTop: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, fontSize: 12, color: '#9ca3af' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, fontSize: 12, color: '#6b7280' }}>
           <span style={{ flexShrink: 0 }}>{h.visit_date ?? '-'}</span>
           {(() => {
             const names = h.service_engineers && h.service_engineers.length > 0
@@ -124,7 +124,7 @@ function ServiceCard({ h, companyName, onEdit, onPrint, onOpenReport, reportBusy
               : (h.visitor ?? '-')
             return (
               <>
-                <span style={{ color: '#d1d5db', flexShrink: 0 }}>·</span>
+                <span style={{ color: '#6b7280', flexShrink: 0 }}>·</span>
                 {/* 이름이 길면 한 줄로 자른다. 전체는 title 로 본다 */}
                 <span title={names} style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{names}</span>
               </>
@@ -147,7 +147,7 @@ function ServiceCard({ h, companyName, onEdit, onPrint, onOpenReport, reportBusy
               onClick={onPrint}
               disabled={reportBusy}
               style={{
-                padding: '4px 10px', background: '#fff', color: '#6b7280',
+                padding: '4px 10px', background: '#fff', color: '#4b5563',
                 borderRadius: R.icon, border: '1px solid #ebebeb',
                 cursor: reportBusy ? 'default' : 'pointer', fontWeight: 600, fontSize: 12,
                 flexShrink: 0, whiteSpace: 'nowrap', opacity: reportBusy ? 0.5 : 1,
@@ -246,7 +246,7 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
               <circle cx="8.5" cy="8.5" r="1.5" />
               <polyline points="21 15 16 10 5 21" />
             </svg>
-            <span style={{ fontSize: 12, color: '#9ca3af', fontWeight: 600 }}>사진 등록</span>
+            <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 600 }}>사진 등록</span>
           </button>
         )}
       </div>
@@ -272,14 +272,14 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
         {/* ② 납입 | S/N | 소프트웨어 */}
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 6, fontSize: 12, color: '#4b5563', minWidth: 0 }}>
           <span style={{ whiteSpace: 'nowrap' }}>납입 <b style={{ fontWeight: 600, color: '#111827' }}>{getInstallDisplay(d)}</b></span>
-          <span style={{ color: '#d1d5db' }}>|</span>
+          <span style={{ color: '#6b7280' }}>|</span>
           <span style={{ whiteSpace: 'nowrap' }}>S/N <b style={{ fontWeight: 600, color: '#111827' }}>{d.serial_number ?? '-'}</b></span>
-          <span style={{ color: '#d1d5db' }}>|</span>
+          <span style={{ color: '#6b7280' }}>|</span>
           <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.program ?? '-'}</span>
         </div>
 
         {/* ③ 패킹리스트 | 최근 서비스 */}
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 4, fontSize: 12, color: '#6b7280', minWidth: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 4, fontSize: 12, color: '#4b5563', minWidth: 0 }}>
           {d.packing_list_url ? (
             <button onClick={onOpenPacking} title="패킹리스트 열기"
               style={{ padding: 0, background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3, color: '#234ea2', whiteSpace: 'nowrap' }}>
@@ -293,16 +293,16 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
               <button onClick={() => packingInputRef.current?.click()} title="납입의사록·패킹리스트 업로드"
                 onMouseEnter={(e) => (e.currentTarget.style.color = '#234ea2')}
                 onMouseLeave={(e) => (e.currentTarget.style.color = '#9ca3af')}
-                style={{ padding: 0, background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3, color: '#9ca3af', transition: 'color 0.15s ease', whiteSpace: 'nowrap' }}>
+                style={{ padding: 0, background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3, color: '#6b7280', transition: 'color 0.15s ease', whiteSpace: 'nowrap' }}>
                 <PaperclipGlyph />패킹리스트 등록
               </button>
             </>
           )}
-          <span style={{ color: '#d1d5db' }}>|</span>
+          <span style={{ color: '#6b7280' }}>|</span>
           <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {latest
               ? <>최근 서비스 <b style={{ fontWeight: 600, color: '#111827' }}>{latest.visit_date ?? '날짜 미상'}{latest.service_type ? ` · ${latest.service_type}` : ''}</b></>
-              : <span style={{ color: '#9ca3af' }}>서비스 기록 없음</span>}
+              : <span style={{ color: '#6b7280' }}>서비스 기록 없음</span>}
           </span>
         </div>
       </div>
@@ -336,7 +336,7 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
             flex: 1, height: 40, border: 'none', background: 'transparent', fontFamily: 'inherit',
             fontSize: 13,
             fontWeight: deviceHistory.length === 0 ? 500 : 600,
-            color: deviceHistory.length === 0 ? '#d1d5db' : '#234ea2',
+            color: deviceHistory.length === 0 ? '#9ca3af' : '#234ea2',
             cursor: deviceHistory.length === 0 ? 'default' : 'pointer', transition: 'background 0.15s ease',
           }}>
           기록 {deviceHistory.length}{deviceHistory.length > 0 ? (openHistory ? ' ▴' : ' ▾') : ''}
@@ -371,12 +371,12 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
       {activeHolding && (
         <div style={{ padding: '0 14px 12px' }}>
           <button onClick={() => onOpenHolding(activeHolding)} title={activeHolding.title}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', border: 'none', borderRadius: R.pill, padding: '3px 10px', cursor: 'pointer' }}>
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%', fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', border: 'none', borderRadius: R.pill, padding: '3px 10px', cursor: 'pointer' }}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
               <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
             </svg>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>홀딩 · {activeHolding.title}</span>
-            <span style={{ flexShrink: 0, color: '#9ca3af' }}>{elapsedLabel(activeHolding)}</span>
+            <span style={{ flexShrink: 0, color: '#6b7280' }}>{elapsedLabel(activeHolding)}</span>
           </button>
         </div>
       )}
@@ -442,7 +442,7 @@ export default function DeviceSection({ devices, companyName, historyByDevice, o
             width: CARD_W, flex: '0 0 auto', minHeight: PHOTO_H + 137,
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
             background: 'transparent', border: '1px dashed #d1d5db', borderRadius: R.card,
-            cursor: 'pointer', color: '#6b7280', fontSize: 13, fontWeight: 600,
+            cursor: 'pointer', color: '#4b5563', fontSize: 13, fontWeight: 600,
             transition: 'all 0.15s ease',
           }}
           onMouseEnter={(e) => {

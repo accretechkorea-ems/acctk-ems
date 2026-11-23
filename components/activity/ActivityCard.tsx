@@ -16,7 +16,7 @@ export const SERVICE_TYPES = ['신규설치', '이전설치', '장비교정', 'A
 const CARD_BG = '#ffffff'
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
-const MUTED = '#9ca3af'
+const MUTED = '#6b7280'
 
 type Props = {
   engineer: { name: string | null; position: string | null; teams: string | null }
@@ -83,7 +83,7 @@ export default function ActivityCard({ engineer, counts, total, onClick, headerR
             <span style={{
               fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: R.pill, flexShrink: 0,
               background: '#f3f4f6',
-              color: '#6b7280',
+              color: '#4b5563',
             }}>
               {engineer.teams}
             </span>

@@ -40,7 +40,7 @@ const PAGE_BG = '#f4f5f7'
 const CARD_BG = '#ffffff'
 const BORDER = '#e5e7eb'
 const TEXT = '#111113'
-const GRAY = '#6b7280'
+const GRAY = '#4b5563'
 const DANGER = '#dc2626'
 
 type Engineer = {
@@ -787,7 +787,7 @@ function AdminPageInner() {
           return (
             <div key={g.group}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>{g.title}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280' }}>{g.title}</span>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: GRAY }}>
                   <input type="checkbox" checked={allOn}
                     onChange={e => toggleGroup(keys, e.target.checked)}
@@ -810,7 +810,7 @@ function AdminPageInner() {
                         style={{ width: 14, height: 14, accentColor: BLUE, cursor: 'pointer', flexShrink: 0 }} />
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 700, color: checked ? BLUE : TEXT }}>{m.label}</div>
-                        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{m.path}</div>
+                        <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{m.path}</div>
                       </div>
                     </label>
                   )
@@ -819,7 +819,7 @@ function AdminPageInner() {
             </div>
           )
         })}
-        <div style={{ fontSize: 11, color: '#9ca3af', lineHeight: 1.7 }}>
+        <div style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.7 }}>
           * {MENU_PERMS.filter(m => m.public).map(m => m.label).join(' · ')}은(는) 전원 공개라 체크 대상이 아닙니다
         </div>
       </div>
@@ -1410,16 +1410,16 @@ function AdminPageInner() {
                                       <span style={{ fontSize: 11, color: GRAY, marginRight: 6 }}>수주</span>
                                       {target.order_target_amount != null
                                         ? <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>₩{numKR(target.order_target_amount)}</span>
-                                        : <span style={{ fontSize: 12, color: '#d1d5db' }}>미설정</span>}
+                                        : <span style={{ fontSize: 12, color: '#6b7280' }}>미설정</span>}
                                     </div>
                                     <div>
                                       <span style={{ fontSize: 11, color: GRAY, marginRight: 6 }}>매출</span>
                                       {target.target_amount != null
                                         ? <><span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>₩{numKR(target.target_amount)}</span><span style={{ fontSize: 11, color: GRAY, marginLeft: 8 }}>월 ₩{numKR(Math.round(target.target_amount / 12))}</span></>
-                                        : <span style={{ fontSize: 12, color: '#d1d5db' }}>미설정</span>}
+                                        : <span style={{ fontSize: 12, color: '#6b7280' }}>미설정</span>}
                                     </div>
                                   </div>
-                                ) : <span style={{ fontSize: 13, color: '#d1d5db' }}>미설정</span>}
+                                ) : <span style={{ fontSize: 13, color: '#6b7280' }}>미설정</span>}
                               </div>
                               <button onClick={() => setEditingTarget({ engineerId: eng.engineer_id, amount: target?.target_amount != null ? String(target.target_amount) : '', orderAmount: target?.order_target_amount != null ? String(target.order_target_amount) : '' })}
                                 style={{ padding: '5px 12px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: R.control, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap' }}>
@@ -1461,7 +1461,7 @@ function AdminPageInner() {
                         disabled: savingScope === eng.engineer_id,
                         hint: scopeHint(eng),
                       })}
-                      <span style={{ flex: 1, fontSize: 12, color: '#9ca3af', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <span style={{ flex: 1, fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {eng.teams ?? '팀 미배정'} · 목표를 넣어도 실적 현황에 잡히지 않습니다
                       </span>
                     </div>
@@ -1916,7 +1916,7 @@ function AdminPageInner() {
                       { key: 'ended' as const, label: '종료됨' },
                     ]).map(t => (
                       <button key={t.key} onClick={() => setNoticeTab(t.key)}
-                        style={{ padding: '5px 12px', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: noticeTab === t.key ? '#fff' : 'transparent', color: noticeTab === t.key ? TEXT : '#9ca3af' }}>
+                        style={{ padding: '5px 12px', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, background: noticeTab === t.key ? '#fff' : 'transparent', color: noticeTab === t.key ? TEXT : '#6b7280' }}>
                         {t.label} {notices.filter(n => noticePhase(n) === t.key).length}
                       </button>
                     ))}
@@ -2135,7 +2135,7 @@ function AdminPageInner() {
                   <div style={{ fontWeight: 700 }}>{o.code}</div>
                   <div>{o.label}</div>
                   <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={o.address}>{o.address}</div>
-                  <div style={{ color: o.latitude == null ? '#9ca3af' : undefined }}>
+                  <div style={{ color: o.latitude == null ? '#6b7280' : undefined }}>
                     {o.latitude == null || o.longitude == null ? '좌표 없음' : `${o.latitude}, ${o.longitude}`}
                   </div>
                   <div>{o.sort_order}</div>
@@ -2221,10 +2221,10 @@ function AdminPageInner() {
                     padding: '0 4px 8px', borderBottom: `1px solid ${BORDER}`,
                     position: 'sticky', top: 0, background: CARD_BG, zIndex: Z.thead,
                   }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>팀</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textAlign: 'center' }} title="실적·활동 집계에 넣는 팀">집계</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textAlign: 'center' }}>권한</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>묶음별</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280' }}>팀</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textAlign: 'center' }} title="실적·활동 집계에 넣는 팀">집계</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textAlign: 'center' }}>권한</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280' }}>묶음별</span>
                     <span />
                   </div>
 
@@ -2240,19 +2240,19 @@ function AdminPageInner() {
                           {team.name}
                         </span>
                         {/* 집계 대상 — 켜져 있으면 ○, 아니면 —. 개인 값으로 덮인 사람은 목표 관리창에서 본다. */}
-                        <span style={{ textAlign: 'center', fontSize: 13, fontWeight: 700, color: team.in_sales_stats ? BLUE : '#d1d5db' }}
+                        <span style={{ textAlign: 'center', fontSize: 13, fontWeight: 700, color: team.in_sales_stats ? BLUE : '#6b7280' }}
                           title={team.in_sales_stats ? '실적 집계 대상' : '집계에서 제외'}>
                           {team.in_sales_stats ? '○' : '—'}
                         </span>
                         <span style={{ display: 'flex', justifyContent: 'center' }}>
                           <span style={{
                             background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px',
-                            fontSize: 11, fontWeight: 700, color: keys.size > 0 ? BLUE : '#9ca3af', whiteSpace: 'nowrap',
+                            fontSize: 11, fontWeight: 700, color: keys.size > 0 ? BLUE : '#6b7280', whiteSpace: 'nowrap',
                           }}>
                             {keys.size}개
                           </span>
                         </span>
-                        <span style={{ fontSize: 12, color: summary ? GRAY : '#d1d5db', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <span style={{ fontSize: 12, color: summary ? GRAY : '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {summary || '권한 없음'}
                         </span>
                         <span style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>

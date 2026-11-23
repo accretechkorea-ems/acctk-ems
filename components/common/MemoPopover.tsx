@@ -32,7 +32,7 @@ export const MEMO_MAX_HEIGHT = 320
 const BLUE = '#234ea2'
 const DIM = '#c0c4cc'
 const BORDER = '#ebebeb'
-const MUTED = '#9ca3af'
+const MUTED = '#6b7280'
 const TEXT = '#111827'
 
 /**

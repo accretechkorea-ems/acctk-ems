@@ -5,12 +5,12 @@
 // 조작(↑↓·Enter·Esc·Tab·마우스 혼용)은 **공용 콤보박스**가 맡는다
 // (components/common/SearchSelect.tsx, 2026-11-23). 전에는 이 파일이 목록과 키보드를
 // 직접 그렸고, 자리마다 조금씩 달랐다.
-// 찾는 칸도 공용이다 — 회사명·영문명·사업장명·주소(lib/companySearch.ts).
+// 고르는 칸이라 **이름 둘**만 본다 — 회사명·영문명(lib/companySearch.ts ⓑ).
 // 조회: customers 에서 deleted_at is null, is_parent=false, 대리점 전용 줄 제외, 최대 10건.
 
 import { useState } from 'react'
 import { colsWithNameEn, withNameEnFallback } from '@/lib/nameEn'
-import { companySearchOr, COMPANY_SEARCH_PLACEHOLDER } from '@/lib/companySearch'
+import { companyPickOr, COMPANY_PICK_PLACEHOLDER } from '@/lib/companySearch'
 import { createClient } from '@/lib/supabase/client'
 import SearchSelect, { CompanyOption } from '@/components/common/SearchSelect'
 import { NOT_AGENCY_ONLY } from '@/lib/customerAgency'
@@ -35,7 +35,7 @@ type Props = {
   height?: number
 }
 
-export default function CustomerSearch({ value, onChange, placeholder = COMPANY_SEARCH_PLACEHOLDER, invalid, height = 44 }: Props) {
+export default function CustomerSearch({ value, onChange, placeholder = COMPANY_PICK_PLACEHOLDER, invalid, height = 44 }: Props) {
   const supabase = createClient()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<CustomerHit[]>([])
@@ -58,7 +58,7 @@ export default function CustomerSearch({ value, onChange, placeholder = COMPANY_
       .is('deleted_at', null)
       .eq('is_parent', false)
       .or(NOT_AGENCY_ONLY)   // 대리점 전용 줄은 쇼룸 사용 대상이 아니다
-      .or(companySearchOr(q, useEn))
+      .or(companyPickOr(q, useEn))
       .limit(10))
     if (error) { console.error('[showroom] customer search failed', error); return }
     setResults((data ?? []) as unknown as CustomerHit[])

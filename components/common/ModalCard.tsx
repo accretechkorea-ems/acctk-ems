@@ -41,8 +41,8 @@ import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
-const SUB = '#6b7280'
-const MUTED = '#9ca3af'
+const SUB = '#4b5563'
+const MUTED = '#6b7280'
 
 /** 머리줄·바닥줄의 좌우 여백. 본문 기본 여백과 같은 값이라 글자가 한 줄로 선다. */
 const PAD_X = 22

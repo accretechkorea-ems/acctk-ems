@@ -199,7 +199,7 @@ export default function SessionManager() {
           </button>
         </>}
       >
-        <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.6, marginBottom: 22 }}>
+        <div style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.6, marginBottom: 22 }}>
           30분 동안 활동이 없었습니다. 계속 사용하시겠습니까?
         </div>
       </ModalCard>

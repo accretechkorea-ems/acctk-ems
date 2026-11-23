@@ -87,7 +87,7 @@ export default function RowAddButtons({ setRows, serviceRow, discountRow, catego
               // 여백·글자를 더 줄여도(11px·여백 2) 334 가 바닥이다.
               height: 28, padding: '0 4px', borderRadius: R.icon, flex: '1 1 auto', minWidth: 0,
               background: '#fff',
-              color: locked ? '#9ca3af' : '#234ea2',
+              color: locked ? '#6b7280' : '#234ea2',
               border: '1px solid #ebebeb',
               fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap',
               cursor: locked ? 'not-allowed' : 'pointer', transition: 'background 0.15s ease',

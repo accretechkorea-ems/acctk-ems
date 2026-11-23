@@ -28,7 +28,7 @@ type Props = {
   onAttachmentsChanged?: () => void
 }
 
-const labelStyle = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' } as const
+const labelStyle = { fontSize: 13, fontWeight: 600, color: '#4b5563', marginBottom: 6, display: 'block' } as const
 // 모바일: iOS 자동 확대 방지를 위해 입력 요소 fontSize 16, 터치 타깃 44px
 const fieldStyle: CSSProperties = {
   width: '100%', height: 44, padding: '0 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
@@ -183,7 +183,7 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
             title="닫기"
             onMouseEnter={(e) => (e.currentTarget.style.color = '#111827')}
             onMouseLeave={(e) => (e.currentTarget.style.color = '#6b7280')}
-            style={{ width: 30, height: 30, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', transition: 'color 0.15s ease' }}
+            style={{ width: 30, height: 30, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563', transition: 'color 0.15s ease' }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -245,9 +245,9 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
               <label style={labelStyle}>유무상</label>
               <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: R.icon, padding: 3, height: 44, boxSizing: 'border-box' }}>
                 <button type="button" onClick={() => setForm(p => ({ ...p, is_paid: true }))}
-                  style={{ flex: 1, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 14, fontWeight: 700, background: form.is_paid ? '#ffffff' : 'transparent', color: form.is_paid ? '#111827' : '#9ca3af', transition: 'color 0.15s ease' }}>유상</button>
+                  style={{ flex: 1, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 14, fontWeight: 700, background: form.is_paid ? '#ffffff' : 'transparent', color: form.is_paid ? '#111827' : '#6b7280', transition: 'color 0.15s ease' }}>유상</button>
                 <button type="button" onClick={() => setForm(p => ({ ...p, is_paid: false }))}
-                  style={{ flex: 1, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 14, fontWeight: 700, background: !form.is_paid ? '#ffffff' : 'transparent', color: !form.is_paid ? '#111827' : '#9ca3af', transition: 'color 0.15s ease' }}>무상</button>
+                  style={{ flex: 1, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 14, fontWeight: 700, background: !form.is_paid ? '#ffffff' : 'transparent', color: !form.is_paid ? '#111827' : '#6b7280', transition: 'color 0.15s ease' }}>무상</button>
               </div>
             </div>
             {/* 시작시간 */}
@@ -262,10 +262,10 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
             {/* 종료시간 (+ 안내 팝오버) */}
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>종료시간</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#4b5563' }}>종료시간</span>
                 <div ref={hintRef} style={{ display: 'flex' }}>
                   <button type="button" onClick={() => setShowHint(s => !s)}
-                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: showHint ? '#234ea2' : '#9ca3af', display: 'inline-flex', alignItems: 'center' }}>
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: showHint ? '#234ea2' : '#6b7280', display: 'inline-flex', alignItems: 'center' }}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
                     </svg>
@@ -294,7 +294,7 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
               ) : workHours <= 0 ? (
                 <div style={{ marginTop: 6, fontSize: 12, color: '#dc2626' }}>점심시간을 제외하면 작업시간이 0입니다</div>
               ) : (
-                <div style={{ marginTop: 6, fontSize: 12, color: '#9ca3af' }}>작업시간 {workHours}h{lunchHours > 0 ? ` (점심 ${lunchHours}h 제외)` : ''}</div>
+                <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280' }}>작업시간 {workHours}h{lunchHours > 0 ? ` (점심 ${lunchHours}h 제외)` : ''}</div>
               )}
             </div>
           </div>
@@ -307,7 +307,7 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
 
           <div style={{ border: errors.engineers ? errBorder : '1px solid #ebebeb', borderRadius: R.control, padding: 14, background: '#f8f9fb' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 7 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', marginRight: 4 }}>방문 엔지니어</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#4b5563', marginRight: 4 }}>방문 엔지니어</span>
               {selectedEngineerIds.map(id => {
                 const eng = engineers.find(e => e.engineer_id === id)
                 if (!eng) return null
@@ -368,7 +368,7 @@ export default function ServiceEditModal({ service, contacts, engineers, isSavin
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', flexShrink: 0, borderTop: '1px solid #ebebeb' }}>
           <button onClick={onDelete} disabled={isSaving} style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}>삭제</button>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={onClose} style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+            <button onClick={onClose} style={{ padding: '9px 16px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
             <button onClick={handleSave} disabled={isSaving || !timeValid}
               onMouseEnter={(e) => { if (!isSaving && timeValid) e.currentTarget.style.background = '#1c3e87' }}
               onMouseLeave={(e) => { if (!isSaving && timeValid) e.currentTarget.style.background = '#234ea2' }}

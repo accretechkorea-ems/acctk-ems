@@ -124,12 +124,12 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, f
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                         {q.status === '매출완료' && q.total_profit
                           ? <span style={{ fontWeight: 700, color: '#16a34a' }}>₩{numKR(q.total_profit)}</span>
-                          : <span style={{ color: '#d1d5db' }}>-</span>}
+                          : <span style={{ color: '#6b7280' }}>-</span>}
                       </td>
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                         {q.status === '매출완료' && q.profit_rate
                           ? <span style={{ fontWeight: 700, color: q.profit_rate >= 40 ? '#16a34a' : '#f59e0b' }}>{q.profit_rate.toFixed(1)}%</span>
-                          : <span style={{ color: '#d1d5db' }}>-</span>}
+                          : <span style={{ color: '#6b7280' }}>-</span>}
                       </td>
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                         <span style={{ padding: '3px 10px', borderRadius: R.modal, fontSize: 12, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text }}>

@@ -18,7 +18,7 @@ import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
-const MUTED = '#9ca3af'
+const MUTED = '#6b7280'
 const BLUE = '#234ea2'
 const FADE = '#d1d5db'
 

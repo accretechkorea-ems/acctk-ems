@@ -57,7 +57,7 @@ const BORDER = '#ebebeb'
 const BG = '#f5f6f8'
 const TEXT = '#111827'
 const ITEM = '#374151'
-const MUTED = '#6b7280'
+const MUTED = '#4b5563'
 const BLUE = '#234ea2'
 const ACTIVE_BG = '#e6ecf8'
 

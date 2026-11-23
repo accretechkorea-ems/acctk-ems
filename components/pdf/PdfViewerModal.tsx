@@ -36,7 +36,7 @@ import type { PdfDoc } from '@/lib/pdfViewer'
 import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
-const MUTED = '#9ca3af'
+const MUTED = '#6b7280'
 
 /** 내려받기 + 그리기가 이 시간 안에 안 끝나면 새 탭으로 보낸다. */
 const LOAD_TIMEOUT = 12000

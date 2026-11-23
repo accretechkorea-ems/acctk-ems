@@ -81,7 +81,7 @@ export function AttachmentRow({ badge, name, meta, title, actions, divider, onCl
       {badge && (
         <span style={{
           flexShrink: 0, padding: '2px 7px', borderRadius: R.pill, background: '#f3f4f6',
-          fontSize: 11, fontWeight: 700, color: '#6b7280',
+          fontSize: 11, fontWeight: 700, color: '#4b5563',
         }}>
           {badge}
         </span>
@@ -92,7 +92,7 @@ export function AttachmentRow({ badge, name, meta, title, actions, divider, onCl
       }}>
         {name}
       </span>
-      {meta && <span className="num" style={{ flexShrink: 0, fontSize: 11, fontWeight: 500, color: '#9ca3af' }}>{meta}</span>}
+      {meta && <span className="num" style={{ flexShrink: 0, fontSize: 11, fontWeight: 500, color: '#6b7280' }}>{meta}</span>}
       {actions && <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>{actions}</span>}
     </>
   )
@@ -116,7 +116,7 @@ const byOrder = (a: ServiceAttachment, b: ServiceAttachment) =>
   (a.sort_order - b.sort_order) || a.created_at.localeCompare(b.created_at)
 
 const rowBtn: CSSProperties = {
-  border: '1px solid #ebebeb', borderRadius: R.icon, background: '#fff', color: '#6b7280',
+  border: '1px solid #ebebeb', borderRadius: R.icon, background: '#fff', color: '#4b5563',
   fontSize: 12, fontWeight: 600, padding: '4px 9px', cursor: 'pointer', whiteSpace: 'nowrap',
 }
 /** 확정 대기 상태의 삭제 버튼 — 쇼룸과 같은 채운 danger 버튼이다. */
@@ -125,7 +125,7 @@ const dangerBtn: CSSProperties = {
   fontSize: 12, fontWeight: 700, padding: '5px 10px', cursor: 'pointer', whiteSpace: 'nowrap',
 }
 export const footerBtn: CSSProperties = {
-  border: '1px solid #ebebeb', borderRadius: R.icon, background: '#fff', color: '#6b7280',
+  border: '1px solid #ebebeb', borderRadius: R.icon, background: '#fff', color: '#4b5563',
   fontSize: 13, fontWeight: 600, padding: '7px 12px', cursor: 'pointer',
 }
 
@@ -224,8 +224,8 @@ export function ServiceAttachmentEditor({ serviceId, initial, report, onPickRepo
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>서비스 레포트 및 첨부파일</span>
-        <span className="num" style={{ fontSize: 12, color: '#9ca3af' }}>첨부 {list.length} / {ATTACH_MAX}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#4b5563' }}>서비스 레포트 및 첨부파일</span>
+        <span className="num" style={{ fontSize: 12, color: '#6b7280' }}>첨부 {list.length} / {ATTACH_MAX}</span>
       </div>
 
       {(report || list.length > 0) && (
@@ -240,7 +240,7 @@ export function ServiceAttachmentEditor({ serviceId, initial, report, onPickRepo
                 <>
                   {report.canOpen && <button type="button" onClick={report.onOpen} style={rowBtn}>열기</button>}
                   <button type="button" onClick={report.onReplace} style={rowBtn}>교체</button>
-                  <button type="button" onClick={report.onDelete} style={{ ...rowBtn, color: '#9ca3af' }}>삭제</button>
+                  <button type="button" onClick={report.onDelete} style={{ ...rowBtn, color: '#6b7280' }}>삭제</button>
                 </>
               }
               divider={list.length > 0}
@@ -266,7 +266,7 @@ export function ServiceAttachmentEditor({ serviceId, initial, report, onPickRepo
                       onClick={() => { if (armed) void handleDelete(a); else armConfirm(a.attachment_id) }}
                       style={armed || busy
                         ? { ...dangerBtn, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }
-                        : { ...rowBtn, color: '#9ca3af' }}
+                        : { ...rowBtn, color: '#6b7280' }}
                     >
                       {busy ? '삭제 중...' : armed ? '삭제 확인' : '삭제'}
                     </button>
@@ -284,7 +284,7 @@ export function ServiceAttachmentEditor({ serviceId, initial, report, onPickRepo
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={uploading || full}
-          style={{ ...footerBtn, color: (uploading || full) ? '#d1d5db' : '#6b7280', cursor: (uploading || full) ? 'default' : 'pointer' }}
+          style={{ ...footerBtn, color: (uploading || full) ? '#9ca3af' : '#4b5563', cursor: (uploading || full) ? 'default' : 'pointer' }}
         >
           {uploading ? `올리는 중... (${attempt}/${UPLOAD_TRIES})` : full ? '최대 10개' : '첨부 추가'}
         </button>

@@ -20,8 +20,8 @@ import type { CustomerChip } from '@/lib/customerFilterChips'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
-const SUB = '#6b7280'
-const MUTED = '#9ca3af'
+const SUB = '#4b5563'
+const MUTED = '#6b7280'
 const BLUE = '#234ea2'
 
 export type HomeView = 'map' | 'list'

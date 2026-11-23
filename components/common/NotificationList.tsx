@@ -19,7 +19,7 @@ type Props = {
 
 export default function NotificationList({ notifications, onItemClick, emptyText = '알림이 없습니다', compact = false }: Props) {
   if (notifications.length === 0) {
-    return <div style={{ padding: '32px 0', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>{emptyText}</div>
+    return <div style={{ padding: '32px 0', textAlign: 'center', color: '#6b7280', fontSize: 13 }}>{emptyText}</div>
   }
   return (
     <>
@@ -40,11 +40,11 @@ export default function NotificationList({ notifications, onItemClick, emptyText
                 {!notif.is_read && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#234ea2', flexShrink: 0, display: 'inline-block' }} />}
                 <span style={compact ? ONE_LINE : undefined}>{notif.title}</span>
               </div>
-              <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.4, ...(compact ? ONE_LINE : null) }}>
+              <div style={{ fontSize: 12, color: '#4b5563', lineHeight: 1.4, ...(compact ? ONE_LINE : null) }}>
                 {notif.message}
               </div>
             </div>
-            <div style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap', flexShrink: 0, marginTop: 1 }}>
+            <div style={{ fontSize: 11, color: '#6b7280', whiteSpace: 'nowrap', flexShrink: 0, marginTop: 1 }}>
               {formatTime(notif.created_at)}
             </div>
           </div>

@@ -31,7 +31,7 @@ type Props = {
   disposedCount?: number
 }
 
-const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#4b5563', marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
   width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
@@ -148,7 +148,7 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={onClose}
-              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+              style={{ padding: '9px 16px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
             >취소</button>
             <button
               onClick={handleSave}
@@ -258,7 +258,7 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
               rows={3}
               style={{ ...fieldStyle, resize: 'vertical', fontSize: 13, lineHeight: 1.6, fontFamily: 'inherit' }}
             />
-            <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4, textAlign: 'right' }}>
+            <div style={{ fontSize: 10, color: '#6b7280', marginTop: 4, textAlign: 'right' }}>
               {`${form.note.length} / ${MEMO_MAX}`}
             </div>
           </div>
@@ -268,7 +268,7 @@ export default function CustomerEditModal({ customer, isSaving, isDeleting, onCl
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#374151', cursor: 'pointer' }}>
               <input type="checkbox" checked={showDisposed} onChange={onToggleDisposed} />
               폐기 장비도 보기
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '1px 7px' }}>{disposedCount}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '1px 7px' }}>{disposedCount}</span>
             </label>
           )}
 

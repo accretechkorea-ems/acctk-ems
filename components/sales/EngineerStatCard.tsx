@@ -21,8 +21,8 @@ const BLUE = '#234ea2'
 const CARD_BG = '#ffffff'
 const BORDER = '#ebebeb'
 const TEXT = '#111113'
-const GRAY = '#6b7280'
-const MUTED = '#9ca3af'
+const GRAY = '#4b5563'
+const MUTED = '#6b7280'
 const achieveColorOf = (v: number | null): string => v === null ? GRAY : v >= 100 ? '#16a34a' : '#111827'
 
 const RANK_MEDAL = ['#b8860b', '#64748b', '#92400e'] as const

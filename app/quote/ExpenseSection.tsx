@@ -63,7 +63,7 @@ export default function ExpenseSection({
             </select>
             <button onClick={() => removeExpense(exp.id)}
               title="삭제"
-              style={{ width: 24, height: 24, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'color 0.15s ease' }}
+              style={{ width: 24, height: 24, padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'color 0.15s ease' }}
               onMouseEnter={e => (e.currentTarget.style.color = '#dc2626')}
               onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
@@ -71,9 +71,9 @@ export default function ExpenseSection({
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, marginBottom: 4 }}>
-            <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>단가</div>
-            <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>인원</div>
-            <div style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>일수</div>
+            <div style={{ fontSize: 11, color: '#6b7280', textAlign: 'center' }}>단가</div>
+            <div style={{ fontSize: 11, color: '#6b7280', textAlign: 'center' }}>인원</div>
+            <div style={{ fontSize: 11, color: '#6b7280', textAlign: 'center' }}>일수</div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
             {/* 단가만 쉼표를 넣는다 — 인원·일수는 한두 자리라 넣을 것이 없다.
@@ -93,7 +93,7 @@ export default function ExpenseSection({
               placeholder="0" style={{ ...inp, width: '100%', minWidth: 0, textAlign: 'center' }} />
           </div>
 
-          <div style={{ marginTop: 8, fontSize: 12, color: '#6b7280' }}>
+          <div style={{ marginTop: 8, fontSize: 12, color: '#4b5563' }}>
             금액 <b>₩{numKR(exp.amount)}</b>
           </div>
           {errors.expenses && invalidExpenseIds.has(exp.id) && (
@@ -114,15 +114,15 @@ export default function ExpenseSection({
 
       <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid #ebebeb' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-          <span style={{ fontSize: 12, color: '#6b7280' }}>원가 합계</span>
+          <span style={{ fontSize: 12, color: '#4b5563' }}>원가 합계</span>
           <span className="num" style={{ fontSize: 12, color: '#111827', fontWeight: 600 }}>₩{numKR(totalExpense)}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-          <span style={{ fontSize: 12, color: '#6b7280' }}>이익</span>
+          <span style={{ fontSize: 12, color: '#4b5563' }}>이익</span>
           <span className="num" style={{ fontSize: 12, color: row.profit >= 0 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>₩{numKR(row.profit)}</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-          <span style={{ fontSize: 12, color: '#6b7280' }}>이익률</span>
+          <span style={{ fontSize: 12, color: '#4b5563' }}>이익률</span>
           <span className="num" style={{ fontSize: 12, color: row.profit_rate >= 40 ? '#16a34a' : '#dc2626', fontWeight: 600 }}>{row.profit_rate.toFixed(1)}%</span>
         </div>
       </div>

@@ -19,8 +19,8 @@ const ACCENT = '#234ea2'
 // 필수 표시(*)에 쓰는 색. 에러 문구·테두리는 공용 errText / errBorder 를 그대로 쓴다.
 const DANGER = errText.color as string
 const BORDER = '#ebebeb'
-const MUTED = '#6b7280'
-const FAINT = '#9ca3af'
+const MUTED = '#4b5563'
+const FAINT = '#6b7280'
 const INK = '#111827'
 const PAGE_BG = '#fafafa'
 

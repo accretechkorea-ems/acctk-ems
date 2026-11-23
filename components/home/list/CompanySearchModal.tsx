@@ -8,13 +8,13 @@
 import { useMemo, useState, type CSSProperties } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useParents } from '@/components/home/list/useParents'
-import { matchesCompany } from '@/lib/companySearch'
+import { matchesCompanyPick } from '@/lib/companySearch'
 import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
-const SUB = '#6b7280'
-const MUTED = '#9ca3af'
+const SUB = '#4b5563'
+const MUTED = '#6b7280'
 const BLUE = '#234ea2'
 
 const fieldStyle: CSSProperties = {
@@ -43,7 +43,7 @@ export default function CompanySearchModal({
   const matches = useMemo(() => {
     return companies
       .filter(c => c.customer_id !== excludeId)
-      .filter(c => matchesCompany(c, query))
+      .filter(c => matchesCompanyPick(c, query))
       .slice(0, 50)
   }, [companies, query, excludeId])
 

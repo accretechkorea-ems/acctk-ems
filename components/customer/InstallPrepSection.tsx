@@ -21,9 +21,9 @@ import { R } from '@/lib/radius'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
-const SUB = '#6b7280'
-const MUTED = '#9ca3af'
-const FAINT = '#d1d5db'
+const SUB = '#4b5563'
+const MUTED = '#6b7280'
+const FAINT = '#9ca3af'
 const BOX_BG = '#f8f9fb'
 /** 상태 dot — 완료는 활성 초록, 미확인은 가장 흐린 회색. 글자는 중립으로 둔다. */
 const DONE_DOT = '#16a34a'

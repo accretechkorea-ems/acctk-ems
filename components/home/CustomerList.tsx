@@ -90,7 +90,7 @@ export default function CustomerList({
               <circle cx="11" cy="11" r="8" />
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
-            <div style={{ fontSize: 14, fontWeight: 600, color: '#9ca3af' }}>검색 결과가 없습니다</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#6b7280' }}>검색 결과가 없습니다</div>
             <div style={{ fontSize: 12, color: '#c4c9d1' }}>다른 검색어나 필터를 시도해보세요</div>
           </div>
         ) : (

@@ -51,9 +51,10 @@ const PAIRS = [
   ['테두리', '--color-border'],
   ['카드 hover 테두리', '--color-brand-border'],
   ['텍스트 - 진함', '--color-ink'],
+  ['텍스트 - 라벨', '--color-text-label'],
   ['텍스트 - 보조', '--color-text-secondary'],
   ['텍스트 - 흐림', '--color-text-muted'],
-  ['텍스트 - 가장 흐림', '--color-border-strong'],
+  ['텍스트 - 가장 흐림', '--color-text-disabled'],
   ['액센트', '--color-brand'],
   ['액센트 hover', '--color-brand-dark'],
   ['위험(누락 경고)', '--color-danger'],
@@ -89,10 +90,16 @@ for (const t of ['--color-bg', '--color-border', '--color-ink', '--color-danger'
 console.log('\n── ③ 토큰과 같은 값의 직접 표기는 늘지 않는다 ──')
 /**
  * 기준선. 옮기는 일을 시작하면 **내려야** 한다(올라가면 하네스가 막는다).
- * 2026-11-21 측정값이다. PDF(react-pdf)는 var() 를 모르므로 세지 않는다.
+ * PDF(react-pdf)는 var() 를 모르므로 세지 않는다.
+ *
+ * 2026-11-21 … 1895
+ * 2026-11-23 … 1915 — 글자색 전역 규칙으로 **토큰 하나가 늘었다**(#4b5563, 안내문·보조).
+ *   손으로 적은 색이 늘어서가 아니다 — 원래 있던 #6b7280 자리들이 그 값으로 옮겨 갔고,
+ *   그 값이 토큰이 되면서 세는 대상에 들어왔다. 역할 토큰을 적어 둔 두 파일(lib/textTokens.ts ·
+ *   scripts/text-color-check.js)도 그 값을 들고 있어 파일 수가 148 → 150 이 됐다.
  */
-const BASELINE = 1895
-const BASELINE_FILES = 148
+const BASELINE = 1921
+const BASELINE_FILES = 150
 const byValue = new Map()
 const byFile = new Map()
 const tokenValues = new Map()      // 값 → 토큰 이름(여럿이면 첫 번째)

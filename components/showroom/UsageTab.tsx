@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { customerDisplayName } from '@/lib/customerLabel'
 import { isDisposed, inUseOnly } from '@/lib/deviceStatus'
+import { TEXT_DISABLED } from '@/lib/textTokens'
 import type { createClient } from '@/lib/supabase/client'
 import {
   USAGE_PURPOSES, deviceTitle, periodFromRange, periodRange, round1,
@@ -83,7 +84,7 @@ function pageItems(page: number, total: number): (number | '…')[] {
 const pageBtn = (active: boolean, disabled = false): CSSProperties => ({
   minWidth: 30, height: 30, padding: '0 8px', borderRadius: R.icon, fontFamily: 'inherit',
   border: active ? `1px solid ${BLUE}` : `1px solid ${BORDER}`,
-  background: active ? BLUE : CARD_BG, color: active ? CARD_BG : disabled ? MUTED : SUB,
+  background: active ? BLUE : CARD_BG, color: active ? CARD_BG : disabled ? TEXT_DISABLED : SUB,
   fontSize: 12, fontWeight: 700, cursor: active || disabled ? 'default' : 'pointer',
 })
 

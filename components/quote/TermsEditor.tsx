@@ -39,7 +39,7 @@ export default function TermsEditor({ termsOpen, terms, setTerms, formKind }: Te
       }}>
         {termKeysFor(formKind).map(key => (
           <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ width: 56, flexShrink: 0, fontSize: 11, fontWeight: 700, color: '#6b7280' }}>
+            <span style={{ width: 56, flexShrink: 0, fontSize: 11, fontWeight: 700, color: '#4b5563' }}>
               {TERM_LABELS[key]}
             </span>
             <input
@@ -53,7 +53,7 @@ export default function TermsEditor({ termsOpen, terms, setTerms, formKind }: Te
           </div>
         ))}
         {/* 견적유효 아래 보조 글씨 — 문구를 고쳐도 만료 판정은 바뀌지 않는다. */}
-        <span style={{ fontSize: 11, color: '#9ca3af', lineHeight: 1.6, paddingLeft: 64 }}>
+        <span style={{ fontSize: 11, color: '#6b7280', lineHeight: 1.6, paddingLeft: 64 }}>
           문구만 바뀝니다. 자동 만료 판정은 작성일로부터 1개월 기준입니다.
         </span>
       </div>

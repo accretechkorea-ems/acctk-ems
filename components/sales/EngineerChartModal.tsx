@@ -23,8 +23,8 @@ import { R } from '@/lib/radius'
 const CARD_BG = '#ffffff'
 const BORDER = '#ebebeb'
 const TEXT = '#111113'
-const GRAY = '#6b7280'
-const MUTED = '#9ca3af'
+const GRAY = '#4b5563'
+const MUTED = '#6b7280'
 
 export type ChartEngineer = { engineer_id: number; name: string | null; position: string | null; teams: string | null }
 

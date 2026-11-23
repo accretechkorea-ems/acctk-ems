@@ -24,7 +24,7 @@ const PAGE_BG = '#fafafa'
 const CARD_BG = '#ffffff'
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
-const MUTED = '#9ca3af'
+const MUTED = '#6b7280'
 
 type Engineer = {
   engineer_id: number

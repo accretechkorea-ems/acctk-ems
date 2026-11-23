@@ -126,22 +126,22 @@ export default function MapView({
             <div style="font-weight:800; font-size:17px; color:#111827; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0;">
               ${esc(c.company_name)}
             </div>
-            <span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:#6b7280; flex-shrink:0; white-space:nowrap;">
+            <span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:#4b5563; flex-shrink:0; white-space:nowrap;">
               <span style="width:7px; height:7px; border-radius:50%; background:${statusColor}; flex-shrink:0;"></span>
               ${esc(c.status) || '-'}
             </span>
           </div>
 
-          <div style="font-size:12px; color:${c.address ? '#6b7280' : '#ef4444'}; font-weight:${c.address ? '400' : '600'}; line-height:1.45; margin-bottom:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+          <div style="font-size:12px; color:${c.address ? '#4b5563' : '#ef4444'}; font-weight:${c.address ? '400' : '600'}; line-height:1.45; margin-bottom:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
             ${c.address ? esc(c.address) : '주소 정보 없음 — 등록 필요'}
           </div>
 
-          <div style="font-size:11px; color:#9ca3af; margin-bottom:8px;">대리점 ${esc(c.agency_name ?? DIRECT_SALE_LABEL)}</div>
+          <div style="font-size:11px; color:#6b7280; margin-bottom:8px;">대리점 ${esc(c.agency_name ?? DIRECT_SALE_LABEL)}</div>
 
           <div style="display:flex; flex-direction:column; gap:3px;">
             ${deviceLines.length === 1 && deviceLines[0] === '-'
-              ? `<span style="font-size:11px; color:#d1d5db; font-style:italic;">장비 없음</span>`
-              : `${deviceLines.slice(0, 4).map(l => `<span style="font-size:11px; color:#234ea2; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(l)}</span>`).join('')}${deviceLines.length > 4 ? `<span style="font-size:11px; font-weight:500; color:#9ca3af;">외 ${deviceLines.length - 4}대 더</span>` : ''}`}
+              ? `<span style="font-size:11px; color:#6b7280; font-style:italic;">장비 없음</span>`
+              : `${deviceLines.slice(0, 4).map(l => `<span style="font-size:11px; color:#234ea2; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(l)}</span>`).join('')}${deviceLines.length > 4 ? `<span style="font-size:11px; font-weight:500; color:#6b7280;">외 ${deviceLines.length - 4}대 더</span>` : ''}`}
           </div>
 
           <div style="margin-top:12px; padding-top:12px; border-top:1px solid #ebebeb; display:flex; flex-direction:column; gap:7px;">
@@ -182,7 +182,7 @@ export default function MapView({
         a.target = '_blank'
         a.rel = 'noopener noreferrer'
         a.textContent = label
-        a.style.cssText = NAV_CSS + 'color:#6b7280;'
+        a.style.cssText = NAV_CSS + 'color:#4b5563;'
         a.addEventListener('touchstart', (e) => { e.stopPropagation() }, { passive: true })
         a.addEventListener('click', (e) => { e.stopPropagation() })
         return a
@@ -202,7 +202,7 @@ export default function MapView({
         b.type = 'button'
         b.textContent = '자택'
         b.title = '내 정보에서 자택 주소를 등록하면 쓸 수 있습니다'
-        b.style.cssText = NAV_CSS + 'color:#d1d5db;cursor:pointer;font-family:inherit;'
+        b.style.cssText = NAV_CSS + 'color:#6b7280;cursor:pointer;font-family:inherit;'
         const warn = (e: Event) => {
           e.stopPropagation()
           toastRef.current.error('내 정보에서 자택 주소를 등록하세요')

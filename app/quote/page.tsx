@@ -974,7 +974,7 @@ function QuotePageInner() {
               <div style={{ width: 3, height: 16, background: '#234ea2', borderRadius: R.icon, flexShrink: 0 }} />
               <span style={{ fontWeight: 800, fontSize: 14, color: '#111827' }}>품목</span>
               {itemCount > 0 && (
-                <span style={{ fontSize: 12, color: '#9ca3af' }}>총 {itemCount}개</span>
+                <span style={{ fontSize: 12, color: '#6b7280' }}>총 {itemCount}개</span>
               )}
               {/* 장비 구성 선택 — 장비 양식에서만 나온다(그 밖의 양식에서는 아무것도 그리지 않는다) */}
               <EquipConfigLauncher
@@ -1068,14 +1068,14 @@ function QuotePageInner() {
             {...keepPads({ x: 32, top: 32, bottom: 32 }, 0, 0)}
             title={<>
               <div style={{ fontSize: 20, fontWeight: 800, color: '#111827', marginBottom: 4, letterSpacing: '-0.3px' }}>작성 중이던 내용이 있습니다</div>
-              <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 20, fontWeight: 500 }}>
+              <div style={{ fontSize: 13, color: '#4b5563', marginBottom: 20, fontWeight: 500 }}>
                 {draftSavedLabel(draftAsk.savedAt)} 까지 쓴 내용{draftAsk.company.trim() ? ` · ${draftAsk.company.trim()}` : ''}
               </div>
             </>}
             footer={<>
               <button
                 onClick={() => { clearDraft(engineer.engineer_id); setDraftAsk(null); setDraftReady(true) }}
-                style={{ padding: '11px 20px', background: '#fff', color: '#6b7280', border: '1px solid #ebebeb', borderRadius: R.icon, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                style={{ padding: '11px 20px', background: '#fff', color: '#4b5563', border: '1px solid #ebebeb', borderRadius: R.icon, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
                 새로 쓰기
               </button>
               <button

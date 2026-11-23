@@ -46,7 +46,7 @@ type Props = {
   onDeleteNote?: (noteId: number) => void
 }
 
-const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#4b5563', marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
   width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
@@ -89,8 +89,8 @@ function TimelineRow({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap', minWidth: 76 }}>{row.date || '-'}</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: row.kind === '레포트' ? '#234ea2' : '#6b7280', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 12, color: '#4b5563', whiteSpace: 'nowrap', minWidth: 76 }}>{row.date || '-'}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: row.kind === '레포트' ? '#234ea2' : '#4b5563', whiteSpace: 'nowrap' }}>
           {KIND_LABEL[row.kind]}
         </span>
         <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -98,7 +98,7 @@ function TimelineRow({
             <>
               <EditIconButton size={24} label="메모 수정" onClick={() => onStartEdit?.()} />
               <button onClick={onDelete} title="삭제" aria-label="메모 삭제"
-                style={{ padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'inline-flex' }}
+                style={{ padding: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', display: 'inline-flex' }}
                 onMouseEnter={e => { e.currentTarget.style.color = '#ef4444' }}
                 onMouseLeave={e => { e.currentTarget.style.color = '#9ca3af' }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -107,7 +107,7 @@ function TimelineRow({
               </button>
             </>
           )}
-          <span style={{ fontSize: 12, color: '#9ca3af', whiteSpace: 'nowrap', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.who}</span>
+          <span style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.who}</span>
         </span>
       </div>
 
@@ -117,7 +117,7 @@ function TimelineRow({
             style={{ width: '100%', padding: '9px 10px', border: '1px solid #ebebeb', borderRadius: R.icon, boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 13, resize: 'vertical', lineHeight: 1.6, fontFamily: 'inherit' }} />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 6 }}>
             <button onClick={onCancelEdit}
-              style={{ padding: '6px 12px', background: '#f3f4f6', color: '#6b7280', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>취소</button>
+              style={{ padding: '6px 12px', background: '#f3f4f6', color: '#4b5563', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>취소</button>
             <button onClick={onSaveEdit} disabled={isSaving || !editing.trim()}
               style={{ padding: '6px 12px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: R.icon, cursor: editing.trim() ? 'pointer' : 'default', fontSize: 12, fontWeight: 700, opacity: editing.trim() ? 1 : 0.5 }}>저장</button>
           </div>
@@ -126,11 +126,11 @@ function TimelineRow({
         <button onClick={onOpenReport} title="레포트 열기"
           onMouseEnter={e => { e.currentTarget.style.color = '#234ea2' }}
           onMouseLeave={e => { e.currentTarget.style.color = '#6b7280' }}
-          style={{ display: 'block', width: '100%', textAlign: 'left', padding: 0, marginTop: 3, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#6b7280', whiteSpace: 'pre-wrap', wordBreak: 'break-word', transition: 'color 0.15s ease' }}>
+          style={{ display: 'block', width: '100%', textAlign: 'left', padding: 0, marginTop: 3, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#4b5563', whiteSpace: 'pre-wrap', wordBreak: 'break-word', transition: 'color 0.15s ease' }}>
           {row.body}
         </button>
       ) : (
-        <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{row.body}</div>
+        <div style={{ fontSize: 12, color: '#4b5563', marginTop: 3, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{row.body}</div>
       )}
     </div>
   )
@@ -230,12 +230,12 @@ export default function HoldingModal({
             <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>
               {holding ? '홀딩' : '홀딩 등록'}
             </div>
-            <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 5, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 5, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <span>{holding ? (holding.devices?.device_name ?? '-') : targetDeviceName}</span>
               {holding && (
                 <>
-                  <span style={{ color: '#d1d5db' }}>·</span>
-                  <span style={{ fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', fontSize: 11 }}>
+                  <span style={{ color: '#6b7280' }}>·</span>
+                  <span style={{ fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', fontSize: 11 }}>
                     {done ? '해제됨' : '진행 중'}
                   </span>
                   <span>{elapsedLabel(holding)}</span>
@@ -248,7 +248,7 @@ export default function HoldingModal({
             title="닫기"
             onMouseEnter={(e) => (e.currentTarget.style.color = '#111827')}
             onMouseLeave={(e) => (e.currentTarget.style.color = '#6b7280')}
-            style={{ width: 28, height: 28, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', transition: 'color 0.15s ease', flexShrink: 0 }}
+            style={{ width: 28, height: 28, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563', transition: 'color 0.15s ease', flexShrink: 0 }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -284,10 +284,10 @@ export default function HoldingModal({
               </div>
               {linkedService && (
                 <div style={{ padding: '10px 12px', background: '#f8fafc', border: '1px solid #ebebeb', borderRadius: R.control }}>
-                  <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 3 }}>연결되는 서비스 레포트</div>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 3 }}>연결되는 서비스 레포트</div>
                   <div style={{ fontSize: 12, color: '#111827' }}>
                     {linkedService.service_type ?? '-'}
-                    <span style={{ color: '#d1d5db' }}> · </span>
+                    <span style={{ color: '#6b7280' }}> · </span>
                     {linkedService.visit_date ?? '-'}
                   </div>
                 </div>
@@ -315,7 +315,7 @@ export default function HoldingModal({
                     style={{
                       padding: '11px 14px', background: '#f3f4f6', border: 'none', borderRadius: R.icon,
                       cursor: dirty ? 'pointer' : 'default',
-                      fontSize: 12, fontWeight: 700, color: '#6b7280', flexShrink: 0,
+                      fontSize: 12, fontWeight: 700, color: '#4b5563', flexShrink: 0,
                       opacity: dirty ? 1 : 0.5,
                     }}
                   >저장</button>
@@ -324,9 +324,9 @@ export default function HoldingModal({
 
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12 }}>
                 {holding.resolved_at && (
-                  <span style={{ color: '#9ca3af' }}>해제 <span style={{ color: '#111827', fontWeight: 600 }}>{holding.resolved_at}</span></span>
+                  <span style={{ color: '#6b7280' }}>해제 <span style={{ color: '#111827', fontWeight: 600 }}>{holding.resolved_at}</span></span>
                 )}
-                <span style={{ color: '#9ca3af' }}>등록 <span style={{ color: '#111827', fontWeight: 600 }}>{holding.engineers?.name ?? '-'}</span></span>
+                <span style={{ color: '#6b7280' }}>등록 <span style={{ color: '#111827', fontWeight: 600 }}>{holding.engineers?.name ?? '-'}</span></span>
               </div>
 
 
@@ -334,9 +334,9 @@ export default function HoldingModal({
               {/* 경과 — 등록 · 메모 · 서비스 레포트 · 해제를 시간순으로 */}
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>경과</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{rows.length}건</span>
-                  {reportsLoading && <span style={{ fontSize: 11, color: '#9ca3af' }}>레포트 불러오는 중...</span>}
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#4b5563' }}>경과</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{rows.length}건</span>
+                  {reportsLoading && <span style={{ fontSize: 11, color: '#6b7280' }}>레포트 불러오는 중...</span>}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 10 }}>
@@ -385,13 +385,13 @@ export default function HoldingModal({
               ? onReopen && (
                 <button
                   onClick={() => onReopen(holding)}
-                  style={{ padding: '9px 14px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}
+                  style={{ padding: '9px 14px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}
                 >해제 취소</button>
               )
               : (
                 <button
                   onClick={() => onRequestResolve(holding)}
-                  style={{ padding: '9px 14px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}
+                  style={{ padding: '9px 14px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}
                 >홀딩 해제</button>
               ))}
             {holding && canDelete && onDeleteHolding && (
@@ -400,13 +400,13 @@ export default function HoldingModal({
                 disabled={isSaving}
                 onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444' }}
                 onMouseLeave={(e) => { e.currentTarget.style.color = '#9ca3af' }}
-                style={{ padding: '9px 6px', background: 'none', color: '#9ca3af', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, transition: 'color 0.15s ease' }}
+                style={{ padding: '9px 6px', background: 'none', color: '#6b7280', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, transition: 'color 0.15s ease' }}
               >삭제</button>
             )}
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={onClose}
-              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+              style={{ padding: '9px 16px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
             >닫기</button>
             {!holding && (
               <button onClick={handleCreate} disabled={isSaving}

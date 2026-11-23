@@ -124,7 +124,7 @@ function pickAddress(r: PostcodeResult): string {
   return building ? `${base} (${building})` : base
 }
 
-const labelStyle: CSSProperties = { fontSize: 12, color: '#9ca3af', marginBottom: 4, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 12, color: '#6b7280', marginBottom: 4, display: 'block' }
 
 export default function AddressField({
   value, onChange, onTouch, error, inputStyle, errorBorder, disabled, clearable,
@@ -234,7 +234,7 @@ export default function AddressField({
       disabled={btnOff}
       style={{
         flexShrink: 0, padding: '0 14px', height: 'auto', alignSelf: 'stretch',
-        background: '#f3f4f6', color: btnOff ? '#9ca3af' : '#6b7280',
+        background: '#f3f4f6', color: btnOff ? '#6b7280' : '#4b5563',
         border: 'none', borderRadius: R.icon, fontSize: 13, fontWeight: 700,
         cursor: btnOff ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit',
       }}
@@ -265,7 +265,7 @@ export default function AddressField({
       style={{
         flexShrink: 0, width: 36, alignSelf: 'stretch',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: '#ffffff', color: '#9ca3af',
+        background: '#ffffff', color: '#6b7280',
         border: '1px solid #ebebeb', borderRadius: R.icon,
         cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
         transition: 'color 0.15s ease',
@@ -338,7 +338,7 @@ export default function AddressField({
                 type="button"
                 onClick={() => setBoxOpen(false)}
                 style={{
-                  padding: '4px 10px', background: '#f3f4f6', color: '#6b7280',
+                  padding: '4px 10px', background: '#f3f4f6', color: '#4b5563',
                   border: 'none', borderRadius: R.icon, fontSize: 12, fontWeight: 700,
                   cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
                 }}

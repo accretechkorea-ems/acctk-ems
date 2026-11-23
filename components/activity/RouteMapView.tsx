@@ -163,7 +163,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
         name.style.cssText = 'font-size:13px;font-weight:700;color:#111827'
         const cnt = document.createElement('div')
         cnt.textContent = `작업 ${s.serviceCount}건`
-        cnt.style.cssText = 'font-size:11px;font-weight:500;color:#6b7280;margin-top:3px'
+        cnt.style.cssText = 'font-size:11px;font-weight:500;color:#4b5563;margin-top:3px'
         box.append(name, cnt)
         const info = new kakao.maps.CustomOverlay({ position: pos, yAnchor: 1.4, zIndex: 5, content: box })
         info.setMap(map)
@@ -211,7 +211,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
           name.style.cssText = 'font-size:13px;font-weight:700;color:#111827'
           const meta = document.createElement('div')
           meta.textContent = `${mmdd(s.date)} · 작업 ${s.serviceCount}건`
-          meta.style.cssText = 'font-size:11px;font-weight:500;color:#6b7280;margin-top:2px'
+          meta.style.cssText = 'font-size:11px;font-weight:500;color:#4b5563;margin-top:2px'
           row.append(name, meta)
           box.appendChild(row)
         })
@@ -528,7 +528,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
           <div style={{
             position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 2,
             background: 'rgba(255,255,255,0.95)', border: '1px solid #ebebeb', borderRadius: RAD.control,
-            padding: '7px 12px', fontSize: 12, fontWeight: 600, color: '#9ca3af', whiteSpace: 'nowrap',
+            padding: '7px 12px', fontSize: 12, fontWeight: 600, color: '#6b7280', whiteSpace: 'nowrap',
             boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
           }}>
             사무실에서 출발·복귀했다고 가정한 경로입니다
@@ -543,7 +543,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
             position: 'absolute', top: 12, right: 16, zIndex: 2,
             width: 32, height: 32, borderRadius: '50%',
             background: '#fff', border: '1px solid #ebebeb', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563',
             boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
           }}
         >
@@ -553,7 +553,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
         </button>
 
         {stops.length === 0 ? (
-          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: 14, fontWeight: 600 }}>
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 14, fontWeight: 600 }}>
             표시할 방문 기록이 없습니다
           </div>
         ) : (
@@ -580,7 +580,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
               </button>
             </div>
             {officeHint && (
-              <span style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af', background: 'rgba(255,255,255,0.92)', border: '1px solid #ebebeb', borderRadius: RAD.icon, padding: '2px 7px' }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', background: 'rgba(255,255,255,0.92)', border: '1px solid #ebebeb', borderRadius: RAD.icon, padding: '2px 7px' }}>
                 {officeHint}
               </span>
             )}
@@ -598,11 +598,11 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ display: 'inline-block', width: 22, borderTop: '3px solid #234ea2', opacity: 0.9 }} />
-                <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280' }}>방문지 간 이동</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#4b5563' }}>방문지 간 이동</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ display: 'inline-block', width: 22, borderTop: '2px dashed #234ea2', opacity: 0.65 }} />
-                <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280' }}>사무실 출발·복귀 (가정)</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#4b5563' }}>사무실 출발·복귀 (가정)</span>
               </div>
             </div>
           )
@@ -615,7 +615,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
               padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8,
             }}>
               <span style={{ display: 'inline-block', width: 22, borderTop: '3px solid #234ea2', opacity: 0.7 }} />
-              <span style={{ fontSize: 11, fontWeight: 600, color: '#6b7280' }}>같은 날 이동</span>
+              <span style={{ fontSize: 11, fontWeight: 600, color: '#4b5563' }}>같은 날 이동</span>
             </div>
           )
         )}
@@ -625,7 +625,7 @@ export default function RouteMapView({ stops, onClose, engineerName, startDate, 
           <div style={{
             position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 2,
             background: '#fff', border: '1px solid #ebebeb', borderRadius: RAD.control, padding: '6px 12px',
-            fontSize: 11, fontWeight: 600, color: '#9ca3af', boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+            fontSize: 11, fontWeight: 600, color: '#6b7280', boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
           }}>
             비방문 {excludedCount}건 제외
           </div>

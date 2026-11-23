@@ -33,12 +33,12 @@ const C_AMBER = CHART_COLORS.amber // 도넛 수리중
 const C_ROSE = CHART_COLORS.rose   // 히스토 15일+
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
-const MUTED = '#9ca3af'  // 회색: 축·라벨 등 중립 텍스트
+const MUTED = '#6b7280'  // 회색: 축·라벨 등 중립 텍스트
 const PAGE_BG = '#fafafa'
 const CARD_BG = '#ffffff'
 const SKELETON = '#e5e7eb'
 const NEUTRAL_BG = '#f3f4f6'
-const SUB = '#6b7280'    // 표 헤더 · 경과일<14
+const SUB = '#4b5563'    // 표 헤더 · 경과일<14
 const WARN2 = '#b45309'  // 앰버: 경과일 14+ · 도넛 수리중 · 히스토 8-14일
 const WARN = '#be123c'   // 로즈: 경과일 30+ · 재입고 경고 · 히스토 15일+ · 추이 악화
 // 소요일 분포 구간별 색 (0-3 / 4-7 / 8-14 / 15+ — 오래 걸릴수록 경고)

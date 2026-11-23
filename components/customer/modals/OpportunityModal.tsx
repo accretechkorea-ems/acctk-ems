@@ -12,7 +12,7 @@ import { STAGES, LOST_REASONS, dateToMonth, compactKRW, isClosed } from '../oppo
 import { numKR } from '../constants'
 import type { Customer, Engineer, OpportunityForm, SalesActivity, SalesOpportunity } from '../types'
 import SearchSelect, { CompanyOption } from '@/components/common/SearchSelect'
-import { COMPANY_SEARCH_PLACEHOLDER, matchesCompany } from '@/lib/companySearch'
+import { COMPANY_PICK_PLACEHOLDER, matchesCompanyPick } from '@/lib/companySearch'
 import { useParents } from '@/components/home/list/useParents'
 import { salesStatusLabel } from '@/lib/categoryColors'
 import { todayKST } from '@/lib/date'
@@ -38,7 +38,7 @@ type Props = {
   onSetClosed?: (o: SalesOpportunity, close: boolean) => void
 }
 
-const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#6b7280', marginBottom: 6, display: 'block' }
+const labelStyle: CSSProperties = { fontSize: 13, fontWeight: 600, color: '#4b5563', marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
   width: '100%', padding: '11px 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
   boxSizing: 'border-box', color: '#111827', background: '#fff', outline: 'none', fontSize: 14,
@@ -113,9 +113,9 @@ export default function OpportunityModal({
   const needCustomerPick = !lockedCustomerName && !opportunity
   const pickedCustomer = customers.find(c => c.customer_id === form.customer_id) ?? null
   // 업체명이 겹치는 곳이 많아 주소를 함께 보여줘야 구분된다
-  // 찾는 칸은 공용이다 — 회사명·영문명·사업장명·주소·대리점명(lib/companySearch.ts).
+  // 고르는 칸이라 **이름 둘**만 본다 — 회사명·영문명(lib/companySearch.ts ⓑ).
   const custMatches = custQuery.trim()
-    ? customers.filter(c => matchesCompany(withNameEn(c), custQuery)).slice(0, 8)
+    ? customers.filter(c => matchesCompanyPick(withNameEn(c), custQuery)).slice(0, 8)
     : []
 
   const handleSave = () => {
@@ -142,7 +142,7 @@ export default function OpportunityModal({
           <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>
             {opportunity ? (canEdit ? '포캐스트 수정' : '포캐스트') : '포캐스트 등록'}
             {opportunity && isClosed(opportunity) && (
-              <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '3px 9px', verticalAlign: 'middle' }}>
+              <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '3px 9px', verticalAlign: 'middle' }}>
                 {opportunity.stage === '실주' ? '실주' : '종료'}
                 {opportunity.closed_at ? ' · ' + opportunity.closed_at.slice(0, 10) : ''}
               </span>
@@ -153,7 +153,7 @@ export default function OpportunityModal({
             title="닫기"
             onMouseEnter={(e) => (e.currentTarget.style.color = '#111827')}
             onMouseLeave={(e) => (e.currentTarget.style.color = '#6b7280')}
-            style={{ width: 28, height: 28, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', transition: 'color 0.15s ease' }}
+            style={{ width: 28, height: 28, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563', transition: 'color 0.15s ease' }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -167,7 +167,7 @@ export default function OpportunityModal({
           {(lockedCustomerName || opportunity) ? (
             <div>
               <label style={labelStyle}>업체</label>
-              <div style={{ ...fieldStyle, background: '#f9fafb', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ ...fieldStyle, background: '#f9fafb', color: '#4b5563', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {lockedCustomerName ?? opportunity?.customers?.company_name ?? '-'}
               </div>
             </div>
@@ -179,12 +179,12 @@ export default function OpportunityModal({
                   <div style={{ ...fieldStyle, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {pickedCustomer?.company_name ?? '-'}
                     {pickedCustomer?.address && (
-                      <span style={{ marginLeft: 6, fontSize: 12, color: '#9ca3af' }}>{pickedCustomer.address}</span>
+                      <span style={{ marginLeft: 6, fontSize: 12, color: '#6b7280' }}>{pickedCustomer.address}</span>
                     )}
                   </div>
                   <button
                     onClick={() => { setForm(p => ({ ...p, customer_id: null })); setCustQuery('') }}
-                    style={{ padding: '9px 12px', background: '#f3f4f6', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#6b7280', flexShrink: 0 }}
+                    style={{ padding: '9px 12px', background: '#f3f4f6', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#4b5563', flexShrink: 0 }}
                   >변경</button>
                 </div>
               ) : (
@@ -206,7 +206,7 @@ export default function OpportunityModal({
                   }}
                   query={custQuery}
                   onQueryChange={q => { setCustQuery(q); clearError('customer_id') }}
-                  placeholder={COMPANY_SEARCH_PLACEHOLDER}
+                  placeholder={COMPANY_PICK_PLACEHOLDER}
                   inputStyle={errors.customer_id ? { ...fieldStyle, border: errBorder } : fieldStyle}
                   emptyText="맞는 업체가 없습니다"
                 />
@@ -251,7 +251,7 @@ export default function OpportunityModal({
               <input value={form.expected_amount} disabled={!canEdit} inputMode="numeric"
                 onChange={(e) => setForm(p => ({ ...p, expected_amount: e.target.value.replace(/[^\d]/g, '') }))}
                 placeholder="예: 150000000" style={fieldStyle} />
-              <div style={{ marginTop: 5, fontSize: 11, color: '#9ca3af' }}>
+              <div style={{ marginTop: 5, fontSize: 11, color: '#6b7280' }}>
                 {amountNum > 0 ? `₩${numKR(amountNum)} · ${compactKRW(amountNum)}` : '숫자만 입력'}
               </div>
             </div>
@@ -260,7 +260,7 @@ export default function OpportunityModal({
               <input type="month" value={form.expected_close} disabled={!canEdit}
                 onChange={(e) => setForm(p => ({ ...p, expected_close: e.target.value }))}
                 style={monthFieldStyle} />
-              <div style={{ marginTop: 5, fontSize: 11, color: '#9ca3af' }}>월 단위로 기록합니다</div>
+              <div style={{ marginTop: 5, fontSize: 11, color: '#6b7280' }}>월 단위로 기록합니다</div>
             </div>
           </div>
 
@@ -290,11 +290,11 @@ export default function OpportunityModal({
           {opportunity && (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>연결된 견적</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{linkedQuotes.length}건</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#4b5563' }}>연결된 견적</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{linkedQuotes.length}건</span>
               </div>
               {linkedQuotes.length === 0 ? (
-                <div style={{ fontSize: 12, color: '#9ca3af' }}>연결된 견적이 없습니다. 견적서를 쓸 때 이 포캐스트를 고르면 여기 모입니다.</div>
+                <div style={{ fontSize: 12, color: '#6b7280' }}>연결된 견적이 없습니다. 견적서를 쓸 때 이 포캐스트를 고르면 여기 모입니다.</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {linkedQuotes.map(q => (
@@ -309,10 +309,10 @@ export default function OpportunityModal({
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontSize: 12, fontWeight: 600, color: '#234ea2' }}>{q.quote_number}</span>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{salesStatusLabel(q.status)}</span>
-                        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9ca3af' }}>{q.quote_date}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{salesStatusLabel(q.status)}</span>
+                        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#6b7280' }}>{q.quote_date}</span>
                       </div>
-                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>₩{numKR(q.total_supply || 0)}</div>
+                      <div style={{ fontSize: 12, color: '#4b5563', marginTop: 2 }}>₩{numKR(q.total_supply || 0)}</div>
                     </button>
                   ))}
                 </div>
@@ -324,20 +324,20 @@ export default function OpportunityModal({
           {opportunity && (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#6b7280' }}>연결된 활동</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{linked.length}건</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#4b5563' }}>연결된 활동</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{linked.length}건</span>
               </div>
               {linked.length === 0 ? (
-                <div style={{ fontSize: 12, color: '#9ca3af' }}>연결된 활동이 없습니다. 활동 기록에서 이 포캐스트를 고르면 여기 모입니다.</div>
+                <div style={{ fontSize: 12, color: '#6b7280' }}>연결된 활동이 없습니다. 활동 기록에서 이 포캐스트를 고르면 여기 모입니다.</div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {linked.map(a => (
                     <div key={a.activity_id} style={{ border: '1px solid #ebebeb', borderRadius: R.icon, padding: '8px 10px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontSize: 12, fontWeight: 600, color: '#111827' }}>{a.activity_type}</span>
-                        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9ca3af' }}>{a.activity_date ?? '-'}</span>
+                        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#6b7280' }}>{a.activity_date ?? '-'}</span>
                       </div>
-                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: 12, color: '#4b5563', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {a.content ?? '-'}
                       </div>
                     </div>
@@ -357,7 +357,7 @@ export default function OpportunityModal({
               >삭제</button>
               {onSetClosed && opportunity.stage !== '실주' && (
                 <button onClick={() => onSetClosed(opportunity, !opportunity.closed_at)} disabled={isSaving}
-                  style={{ marginLeft: 8, padding: '9px 14px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                  style={{ marginLeft: 8, padding: '9px 14px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
                   {opportunity.closed_at ? '종료 해제' : '종료'}
                 </button>
               )}
@@ -366,7 +366,7 @@ export default function OpportunityModal({
             : <span />}
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={onClose}
-              style={{ padding: '9px 16px', background: '#fff', color: '#6b7280', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+              style={{ padding: '9px 16px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
             >{canEdit ? '취소' : '닫기'}</button>
             {canEdit && (
               <button onClick={handleSave} disabled={isSaving}

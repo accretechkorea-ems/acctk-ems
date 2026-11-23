@@ -15,7 +15,7 @@ import { R } from '@/lib/radius'
 const LINE = '#ebebeb'
 const INK = '#111827'
 const MUT = '#6b7280'
-const DIM = '#9ca3af'
+const DIM = '#6b7280'
 const PRI = '#234ea2'
 
 export const C = { LINE, INK, MUT, DIM, PRI, FAINT: '#d1d5db', NEUTRAL: '#f3f4f6', PAGE: '#fafafa', RED: '#dc2626', OK: '#16a34a' } as const

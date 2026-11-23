@@ -229,7 +229,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
             value={categoryValue}
             disabled={categoriesLoading}
             onChange={e => { setCategoryValue(e.target.value); clearError('category') }}
-            style={{ color: categoryValue ? '#111827' : '#9ca3af', cursor: 'pointer' }}
+            style={{ color: categoryValue ? '#111827' : '#6b7280', cursor: 'pointer' }}
           >
             <option value="" disabled hidden>{categoriesLoading ? '불러오는 중...' : '분류 선택 (필수)'}</option>
             {categories.map(c => (
@@ -245,7 +245,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
             className="q-box-field"
             value={formKind}
             onChange={e => { setFormKind(e.target.value); clearError('form') }}
-            style={{ color: formKind ? '#111827' : '#9ca3af', cursor: 'pointer' }}
+            style={{ color: formKind ? '#111827' : '#6b7280', cursor: 'pointer' }}
           >
             <option value="" disabled hidden>양식 선택 (필수)</option>
             {FORM_KINDS.map(k => (
@@ -259,7 +259,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
           줄마다 다른 분류는 이제 **줄 머리줄의 뱃지**에서 고른다(「분류 나누기」 토글은 걷었다 —
           켜고 끄는 단계가 없어도 되는 일이었고, 끌 때 지정한 값이 사라지는 함정이 있었다). */}
       {!categoriesLoading && categories.length === 0 && (
-        <div style={{ marginTop: 4, marginLeft: 10, fontSize: 11, color: '#9ca3af' }}>
+        <div style={{ marginTop: 4, marginLeft: 10, fontSize: 11, color: '#6b7280' }}>
           분류 목록을 불러오지 못했습니다. 새로고침하거나 관리자에게 문의해주세요
         </div>
       )}
@@ -269,7 +269,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
         이익률·분류·가격표 검색 범위와 PDF 열 구성을 정하기 때문이다
         (이유는 components/quote/LockedSection.tsx 에 적어 두었다). */}
     {locked && (
-      <div style={{ marginTop: 6, marginLeft: 10, fontSize: 11, color: '#9ca3af' }}>
+      <div style={{ marginTop: 6, marginLeft: 10, fontSize: 11, color: '#6b7280' }}>
         분류와 양식을 먼저 선택하세요
       </div>
     )}
@@ -315,7 +315,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
           <div className="q-box-tail">
             {selectedCustomer && (
               <button onClick={handleCustomerClear}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 0, display: 'flex', alignItems: 'center' }}>
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', padding: 0, display: 'flex', alignItems: 'center' }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             )}
@@ -338,7 +338,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{c.address ?? ''}{c.status ? ` · ${c.status}` : ''}</div>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{c.address ?? ''}{c.status ? ` · ${c.status}` : ''}</div>
                 </div>
               ))}
             </div>
@@ -349,7 +349,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
           미선택 상태도 시작 상태일 뿐이라 배지로 강조하지 않는다(안 고르면 검증이 붉게 막는다). */}
       {!selectedCustomer && customerGuide && (
         <div style={{ marginTop: 4, marginLeft: 10, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, color: '#9ca3af' }}>{customerGuide}</span>
+          <span style={{ fontSize: 11, color: '#6b7280' }}>{customerGuide}</span>
           {showCustomerLink && (
             <a href="/" target="_blank" rel="noopener noreferrer"
               style={{ fontSize: 11, color: '#234ea2', fontWeight: 600, textDecoration: 'none' }}>
@@ -381,7 +381,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
                 </span>
                 <button onClick={handleEUClear}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: 0, display: 'flex', alignItems: 'center' }}>
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', padding: 0, display: 'flex', alignItems: 'center' }}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
               </div>
@@ -393,7 +393,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
                     style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 12, transition: 'background 0.15s ease', background: euKeys.active === i ? '#fff7ed' : '#fff' }}
                     onMouseEnter={() => euKeys.setActive(i)}>
                     <div style={{ fontWeight: 700, color: '#c2410c' }}>{c.company_name}</div>
-                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{c.address ?? ''}{c.status ? ` · ${c.status}` : ''}</div>
+                    <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{c.address ?? ''}{c.status ? ` · ${c.status}` : ''}</div>
                   </div>
                 ))}
               </div>
@@ -402,7 +402,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
         {/* 고른 사업장이 회사 아래 묶여 있으면 견적서에는 **회사 이름**이 찍힌다.
             입력칸에는 고른 사업장이 그대로 보이므로, 무엇이 나가는지 여기서 알린다. */}
         {selectedEU && euParentName && (
-          <div style={{ marginLeft: 10, marginTop: 4, fontSize: 11, color: '#9ca3af', lineHeight: 1.6 }}>
+          <div style={{ marginLeft: 10, marginTop: 4, fontSize: 11, color: '#6b7280', lineHeight: 1.6 }}>
             견적서 표기: {euDisplayName({ siteName: euQuery, parentName: euParentName })}
           </div>
         )}
@@ -442,7 +442,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
           value={recipientContactId ?? ''}
           disabled={recipientCustomerId == null || contacts.length === 0}
           onChange={e => setRecipientContactId(e.target.value === '' ? null : Number(e.target.value))}
-          style={{ cursor: recipientCustomerId == null || contacts.length === 0 ? 'not-allowed' : 'pointer', color: recipientContactId == null ? '#9ca3af' : '#111827' }}
+          style={{ cursor: recipientCustomerId == null || contacts.length === 0 ? 'not-allowed' : 'pointer', color: recipientContactId == null ? '#6b7280' : '#111827' }}
         >
           <option value="" disabled hidden>
             {recipientCustomerId == null ? '고객사를 먼저 선택하세요'
@@ -470,7 +470,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
           쓰던 견적을 두고 떠나지 않게). */}
       {recipientCustomerId != null && !contactsLoading && contacts.length === 0 && (
         <div style={{ marginTop: 4, marginLeft: 10, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, color: '#9ca3af' }}>고객사 상세에서 담당자를 먼저 등록하세요</span>
+          <span style={{ fontSize: 11, color: '#6b7280' }}>고객사 상세에서 담당자를 먼저 등록하세요</span>
           <a href={`/customer/${recipientCustomerId}`} target="_blank" rel="noopener noreferrer"
             style={{ fontSize: 11, color: '#234ea2', fontWeight: 600, textDecoration: 'none' }}>
             고객사 상세 열기 →
@@ -480,7 +480,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
       {/* 옛 견적을 다시 쓰는 중 — 그 견적에는 담당자가 아니라 글자만 있었다.
           누구였는지 보여 주고 고르게 한다(그 글자는 새 견적으로 옮기지 않는다). */}
       {legacyRecipient.trim() !== '' && recipientContactId == null && (
-        <div style={{ marginTop: 4, marginLeft: 10, fontSize: 11, color: '#9ca3af' }}>
+        <div style={{ marginTop: 4, marginLeft: 10, fontSize: 11, color: '#6b7280' }}>
           이전 수신인: {legacyRecipient.trim()} — 담당자를 선택하세요
         </div>
       )}
@@ -510,7 +510,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
           }}
           style={{ width: 14, height: 14, cursor: 'pointer', accentColor: '#234ea2' }}
         />
-        <span style={{ fontSize: 11, fontWeight: 700, color: termsOpen ? '#234ea2' : '#6b7280', whiteSpace: 'nowrap' }}>조건 변경</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: termsOpen ? '#234ea2' : '#4b5563', whiteSpace: 'nowrap' }}>조건 변경</span>
       </label>
       {/* 가격표 납기가 조건 칸에 들어와 있는데 체크가 꺼져 있다 — 그대로 두면 저장·PDF 가
           기본 문구를 쓰므로 그 값이 조용히 버려진다. **대신 눌러 주지는 않는다**(체크는 사람이
@@ -535,7 +535,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
           onChange={e => setShowSignature(e.target.checked)}
           style={{ width: 14, height: 14, cursor: 'pointer', accentColor: '#234ea2' }}
         />
-        <span style={{ fontSize: 11, fontWeight: 700, color: showSignature ? '#234ea2' : '#6b7280', whiteSpace: 'nowrap' }}>고객사 서명란 추가</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: showSignature ? '#234ea2' : '#4b5563', whiteSpace: 'nowrap' }}>고객사 서명란 추가</span>
       </label>
     </div>
 
