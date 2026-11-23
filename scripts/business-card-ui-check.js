@@ -102,7 +102,11 @@ ok('폰 우하단에 고정 버튼', /position: 'fixed', right: 16, bottom: 16[\
 ok('전화·이메일은 바로 걸고 보낸다', PAGE.includes('tel:') && PAGE.includes('mailto:'))
 ok('나이 꼬리표에 틴트 배경을 쓰지 않는다(디자인 규칙)',
   /borderRadius: '50%', background: AGE_TONES\[tone\]/.test(PAGE), '배지에 상태색 틴트를 깔았다')
-ok('방식 셋', ['📷 사진 촬영', '🖼 사진 올리기', '✎ 직접 입력'].every(t => FORM.includes(t)))
+ok('방식 셋', ['사진 촬영', '사진 올리기', '직접 입력'].every(t => FORM.includes(t)))
+// 디자인 규칙 — 이모지를 아이콘으로 쓰지 않는다. 셋 다 인라인 SVG 다.
+ok('방식 아이콘은 이모지가 아니라 인라인 SVG',
+  /ICON = \{/.test(FORM) && /<svg /.test(FORM) && !/[\u{1F300}-\u{1FAFF}\u{2700}-\u{27BF}\u{2600}-\u{26FF}]/u.test(FORM),
+  '이모지가 남아 있다')
 ok('폰에서는 촬영이 바로 카메라', /capture="environment"/.test(FORM))
 eq('입력 칸 높이 44', /const INPUT_H = (\d+)/.exec(FORM)?.[1], '44')
 ok('자동으로 채운 칸만 파랗다', /field\(autoFilled\.has\(f\)\)/.test(FORM))

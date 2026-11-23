@@ -3,7 +3,7 @@
 /**
  * 명함 등록·수정 창 — 보드 「명함 시안 · 모바일」의 ②③ 그대로 (2026-11-23).
  *
- *   ② 방식 고르기 — 📷 사진 촬영 / 🖼 사진 올리기 / ✎ 직접 입력
+ *   ② 방식 고르기 — 사진 촬영 / 사진 올리기 / 직접 입력 (아이콘은 인라인 SVG)
  *   ③ 확인·저장   — 셋 다 **같은 폼**이다. 사진에서 읽은 칸만 파랗게(.in.auto) 칠하고
  *                   위에 「사진에서 읽음 · 확인 필요」 칩을 단다.
  *
@@ -15,7 +15,7 @@
  * 폰에서 한 손으로 — 입력칸 높이 44 · 전화·이메일은 알맞은 키패드 · 하단 고정 바.
  */
 
-import { useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import { BLUE, BLUE_BORDER, BLUE_TINT, BORDER, CARD_BG, MUTED, SUB, TEXT } from '@/components/common/ui'
@@ -46,9 +46,29 @@ const labelStyle: CSSProperties = {
 const PADS = keepPads({ x: 16, top: 14, bottom: 10 }, 10, 12)
 
 const bigBtn: CSSProperties = {
-  height: 88, width: '100%', border: `1px solid ${BORDER}`, borderRadius: R.card, background: CARD_BG,
+  // 폰(390)에서는 설명이 두 줄로 접힌다 — 높이를 고정하면 글자가 테두리에 닿는다(2026-11-23 실측).
+  minHeight: 88, width: '100%', padding: '12px 14px', boxSizing: 'border-box',
+  border: `1px solid ${BORDER}`, borderRadius: R.card, background: CARD_BG,
   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
   fontSize: 14, fontWeight: 700, color: TEXT, cursor: 'pointer', fontFamily: 'inherit',
+}
+/** 큰 버튼의 첫 줄 — 아이콘 + 이름. */
+const bigBtnHead: CSSProperties = { display: 'flex', alignItems: 'center', gap: 7 }
+
+/**
+ * 방식 셋의 아이콘 — **lucide 모양 인라인 SVG**다(디자인 규칙: 이모지를 아이콘으로 쓰지 않는다).
+ * lucide-react 는 미설치라 import 하지 않고 path 를 직접 적는다. stroke-width 2 · 18px.
+ */
+const svg = (children: ReactNode) => (
+  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={BLUE}
+    strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    {children}
+  </svg>
+)
+const ICON = {
+  camera: svg(<><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z" /><circle cx="12" cy="13" r="3" /></>),
+  image: svg(<><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" /></>),
+  pen: svg(<><path d="M12 20h9" /><path d="M16.4 3.6a1 1 0 0 1 3 3L7.4 18.6a2 2 0 0 1-.9.5l-2.8.8a.5.5 0 0 1-.6-.6l.8-2.8a2 2 0 0 1 .5-.9Z" /></>),
 }
 
 type Mode = 'pick' | 'form'
@@ -151,15 +171,15 @@ export default function CardFormModal({ initial, existing, defaultDivision, busy
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <button type="button" style={bigBtn} onClick={() => cameraRef.current?.click()}>
-              📷 사진 촬영
+              <span style={bigBtnHead}>{ICON.camera}사진 촬영</span>
               <span style={{ fontSize: 12, color: SUB, fontWeight: 400 }}>명함을 찍으면 글자를 읽어 칸을 채웁니다 · 사진은 저장하지 않습니다</span>
             </button>
             <button type="button" style={bigBtn} onClick={() => uploadRef.current?.click()}>
-              🖼 사진 올리기
+              <span style={bigBtnHead}>{ICON.image}사진 올리기</span>
               <span style={{ fontSize: 12, color: SUB, fontWeight: 400 }}>이미 찍어 둔 사진에서 읽기</span>
             </button>
             <button type="button" style={bigBtn} onClick={() => { setFromPhoto(false); setMode('form') }}>
-              ✎ 직접 입력
+              <span style={bigBtnHead}>{ICON.pen}직접 입력</span>
               <span style={{ fontSize: 12, color: SUB, fontWeight: 400 }}>명함을 보고 칸에 입력</span>
             </button>
             <div style={{ fontSize: 12, color: SUB, padding: '4px 2px', lineHeight: 1.7 }}>
