@@ -26,6 +26,7 @@ import { INQUIRY_TYPE_LABEL, inquiryTypeOf } from '@/lib/inquiries'
 import type { InquiryRow } from '@/hooks/useCompanyTimeline'
 import { isFutureVisit } from '@/lib/serviceVisit'
 import { timelineKey } from '@/lib/activity'
+import { isChangeEvent } from '@/lib/customerEvents'
 import { eventLine, type CustomerEvent } from '@/lib/customerEventView'
 import { R } from '@/lib/radius'
 import { TITLE } from '@/lib/textTokens'
@@ -518,11 +519,15 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
     }))
 
     // 사건 — 회색 톤으로, 고칠 수 없는 줄이다(사람이 쓰지 않는다).
+    //
+    // 2026-11-23 — 고친 자국(상태·대리점·분류·사업장·담당자·장비 수정, 이동·병합)은 같은 표에
+    // 쌓이지만 **「변경」 종류**로 따로 선다. 활동이 아니라서 기본 필터에서 꺼져 있고
+    // (lib/timelineFilter.ts 의 DEFAULT_OFF_KINDS), 최근 활동도 이 줄을 보지 않는다.
     const eventItems: Item[] = (events ?? []).map(e => {
       const line = eventLine(e)
       return {
         key: `ev-${e.id}`,
-        kind: '사건' as const,
+        kind: isChangeEvent(e.event_type) ? ('변경' as const) : ('사건' as const),
         siteId: e.customer_id ?? null,
         date: (e.occurred_at ?? '').slice(0, 10) || null,
         label: line.label,

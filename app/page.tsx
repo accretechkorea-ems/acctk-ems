@@ -3,7 +3,6 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 // 모바일 상단 바 높이 — 화면 높이를 계산하는 곳은 이 상수 하나를 본다(PC 는 상단 바가 없다).
 import { TOPBAR_HEIGHT } from '@/components/layout/Sidebar'
 import Sidebar from '@/components/home/Sidebar'
@@ -21,6 +20,7 @@ import SidePanel, { PANEL_SPACE } from '@/components/home/SidePanel'
 import ListTabs from '@/components/home/list/ListTabs'
 import CustomerFilterModal from '@/components/home/CustomerFilterModal'
 import { customerFilterChips, defaultFilter, type FilterOptions } from '@/lib/customerFilterChips'
+import { customerChange } from '@/lib/customerChange'
 import CustomerListPanel, { type CleanupBucket, type CleanupRow, type ListTab } from '@/components/home/list/CustomerListPanel'
 import CompanyPane from '@/components/home/list/CompanyPane'
 import AgencyPane from '@/components/home/list/AgencyPane'
@@ -58,7 +58,6 @@ import type { KakaoWindow } from '@/lib/loadKakaoMap'
 
 
 export default function HomePage() {
-  const supabase = createClient()
   const { engineer: me, loading: guardLoading, authorized } = usePageGuard()
   // 엑셀 내보내기는 관리자만 — 팀 관리·목표 관리 버튼과 같은 판정(permission_level).
   const canExportExcel = isSuperAdmin(me)
@@ -600,8 +599,9 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
   const bulkIndustry = async (value: string) => {
     const ids = [...checkedCompanies]
     if (ids.length === 0 || !value) return
-    const { error } = await supabase.from('customers').update({ industry: value }).in('customer_id', ids)
-    if (error) { toast.error(error.message || '분류를 저장하지 못했습니다'); return }
+    // 라우트가 저장하고 사건도 함께 적는다(2026-11-23).
+    const r = await customerChange({ action: 'company-industry', ids, industry: value })
+    if (!r.ok) { toast.error(r.error); return }
     invalidateParents()
     loadParents().then(setCompanies)
     setCheckedCompanies(new Set())

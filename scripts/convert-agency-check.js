@@ -60,8 +60,11 @@ ok('되돌리는 방법을 적어 두었다', /되돌리기/.test(SQL) && /updat
 console.log('\n── ③ 라우트 ──')
 ok('action 이 있다', /if \(action === 'convert-agency'\)/.test(ROUTE))
 ok('dry_run 이 기본이다(명시적으로 false 일 때만 실행)', /const dryRun = body\?\.dryRun !== false/.test(ROUTE))
+// 2026-11-23: 사업장 병합이 SITE_LEVEL 로 내려갔다. 대리점 전환은 **그대로 슈퍼관리자**다 —
+// 그래서 목록 글자를 그대로 비교하지 않고 「전환이 그 목록에 없다」를 본다.
 ok('superadmin 문턱 — SITE_LEVEL 에 넣지 않았다',
-  /const SITE_LEVEL = new Set\(\['rename-site', 'move'\]\)/.test(ROUTE))
+  /const SITE_LEVEL = new Set\(\[[^\]]*\]\)/.test(ROUTE)
+  && !/const SITE_LEVEL = new Set\(\[[^\]]*convert-agency/.test(ROUTE))
 ok('RPC 를 부른다', /rpc\('convert_company_to_agency', \{\s*p_company_id: parentId, p_dry_run: dryRun,/.test(ROUTE))
 ok('함수가 아직 없으면 무엇을 해야 하는지 알려 준다',
   /PGRST202/.test(ROUTE) && /convert_company_to_agency_20261121\.sql 적용 필요/.test(ROUTE))

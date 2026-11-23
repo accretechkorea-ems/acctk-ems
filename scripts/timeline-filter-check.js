@@ -40,7 +40,8 @@ const eq = (name, got, want) => {
   else { fail++; console.error(`FAIL ${name}  got=${JSON.stringify(got)} want=${JSON.stringify(want)}`) }
 }
 
-const KINDS = ['영업', '서비스', '견적', '의뢰', '포캐스트', '홀딩', '사건']
+// 2026-11-23: 「변경」 종류가 늘었다(화면에서 고친 자국). 기본 필터에서는 꺼져 있다.
+const KINDS = ['영업', '서비스', '견적', '의뢰', '포캐스트', '홀딩', '사건', '변경']
 const SITES = [11, 22, 33]
 const siteName = id => ({ 11: '제천 1공장', 22: '경주공장', 33: '제천 2공장' })[id] ?? ''
 const rows = [
@@ -67,7 +68,7 @@ eq('서비스만', F.applyFilter(rows, onlyService, avail).length, 3)
 eq('칩 하나', F.filterChips(onlyService, avail, siteName).map(c => c.label), ['서비스'])
 eq('둘 고르면 둘 다 센다', F.applyFilter(rows, { ...all, kinds: ['서비스', '견적'] }, avail).length, 4)
 eq('아무것도 고르지 않으면 0건', F.applyFilter(rows, { ...all, kinds: [] }, avail).length, 0)
-eq('종류별 건수', F.countByKind(rows), { 영업: 1, 서비스: 3, 견적: 1, 의뢰: 0, 포캐스트: 1, 홀딩: 0, 사건: 1 })
+eq('종류별 건수', F.countByKind(rows), { 영업: 1, 서비스: 3, 견적: 1, 의뢰: 0, 포캐스트: 1, 홀딩: 0, 사건: 1, 변경: 0 })
 
 console.log('\n── 사업장 ──')
 const onlySite11 = { ...all, siteIds: [11] }

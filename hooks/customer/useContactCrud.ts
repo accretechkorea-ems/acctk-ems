@@ -5,6 +5,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { customerChange } from '@/lib/customerChange'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import type { Contact, ContactForm } from '@/components/customer/types'
@@ -13,6 +14,15 @@ type Args = {
   customerId: number
   fetchDetail: () => Promise<boolean>
 }
+
+/** 담당자 칸 한 벌 — 추가·수정이 같은 모양을 보낸다(라우트의 흰 목록과 짝이다). */
+const contactPatch = (form: ContactForm) => ({
+  name: form.name.trim(),
+  department: form.department.trim() || null,
+  position: form.position.trim() || null,
+  phone: form.phone.trim() || null,
+  email: form.email.trim() || null,
+})
 
 export function useContactCrud({ customerId, fetchDetail }: Args) {
   const supabase = createClient()
@@ -26,9 +36,9 @@ export function useContactCrud({ customerId, fetchDetail }: Args) {
 
   const handleAddContact = async (form: ContactForm) => {
     setIsSavingContact(true)
-    const { error } = await supabase.from('contacts').insert([{ customer_id: customerId, name: form.name.trim(), department: form.department.trim() || null, position: form.position.trim() || null, phone: form.phone.trim() || null, email: form.email.trim() || null }])
+    const r = await customerChange({ action: 'contact-add', customerId, patch: contactPatch(form) })
     setIsSavingContact(false)
-    if (error) { toast.error(error.message || '고객 담당자 추가 중 오류가 발생했습니다'); return }
+    if (!r.ok) { toast.error(r.error || '고객 담당자 추가 중 오류가 발생했습니다'); return }
     toast.success('고객 담당자가 추가되었습니다')
     setIsAddContactModalOpen(false)
     await fetchDetail()
@@ -37,9 +47,9 @@ export function useContactCrud({ customerId, fetchDetail }: Args) {
   const handleUpdateContact = async (form: ContactForm) => {
     if (!selectedContact) return
     setIsSavingContactEdit(true)
-    const { error } = await supabase.from('contacts').update({ name: form.name.trim(), department: form.department.trim() || null, position: form.position.trim() || null, phone: form.phone.trim() || null, email: form.email.trim() || null }).eq('contact_id', selectedContact.contact_id)
+    const r = await customerChange({ action: 'contact-edit', id: selectedContact.contact_id, patch: contactPatch(form) })
     setIsSavingContactEdit(false)
-    if (error) { toast.error(error.message || '고객 담당자 수정 중 오류가 발생했습니다'); return }
+    if (!r.ok) { toast.error(r.error || '고객 담당자 수정 중 오류가 발생했습니다'); return }
     toast.success('고객 담당자 정보가 수정되었습니다')
     setSelectedContact(null)
     await fetchDetail()

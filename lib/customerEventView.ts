@@ -30,6 +30,21 @@ export type EventLine = {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v))
 
+/** 「전 → 후」 한 줄. 빈 값은 「없음」으로 적는다(빈칸이면 무엇이 바뀌었는지 모른다). */
+const arrow = (before: unknown, after: unknown): string =>
+  `${str(before) || '없음'} → ${str(after) || '없음'}`
+
+/** 바뀐 칸 여럿을 한 줄로 — 「상태 활성 → 이탈 · 메모 없음 → …」. */
+function changeText(raw: unknown): string {
+  if (!Array.isArray(raw) || raw.length === 0) return '수정했습니다'
+  return raw
+    .map(c => {
+      const one = c as { label?: unknown; before?: unknown; after?: unknown }
+      return `${str(one.label)} ${arrow(one.before, one.after)}`
+    })
+    .join(' · ')
+}
+
 export function eventLine(e: CustomerEvent): EventLine {
   const p = e.payload ?? {}
   const leadNo = str(p.lead_no) || (p.lead_id != null ? `#${str(p.lead_id)}` : '')
@@ -61,6 +76,41 @@ export function eventLine(e: CustomerEvent): EventLine {
           ? `${from || '없음'} → ${to}`
           : `${from || '담당'} → 없음 (회수)`,
         owner: to,
+      }
+    // ── 고친 자국(2026-11-23) ──────────────────────────────────────────
+    // 「무엇을 무엇으로」가 한 줄에 다 보여야 한다 — 열어 보지 않고도 읽히게.
+    case 'site_status_changed':
+      return { label: '상태 변경', title: str(p.site_name), body: arrow(p.before, p.after), owner: '' }
+    case 'site_agency_changed':
+      return { label: '대리점 변경', title: str(p.site_name), body: arrow(p.before, p.after), owner: '' }
+    case 'company_industry_changed':
+      return { label: '분류 지정', title: str(p.company_name), body: arrow(p.before, p.after), owner: '' }
+    case 'site_moved':
+      return { label: '회사 이동', title: str(p.site_name), body: arrow(p.before, p.after), owner: '' }
+    case 'sites_merged': {
+      const n = Number(p.merged_count ?? 0)
+      return {
+        label: '사업장 병합',
+        title: str(p.kept),
+        body: n > 0 ? `사업장 ${n}곳을 이 줄로 합쳤습니다` : '사업장을 합쳤습니다',
+        owner: '',
+      }
+    }
+    case 'site_edited':
+      return { label: '사업장 수정', title: str(p.site_name), body: changeText(p.changes), owner: '' }
+    case 'contact_edited':
+      return {
+        label: p.mode === 'add' ? '담당자 추가' : '담당자 수정',
+        title: str(p.name),
+        body: p.mode === 'add' ? '담당자를 추가했습니다' : changeText(p.changes),
+        owner: '',
+      }
+    case 'device_edited':
+      return {
+        label: p.mode === 'add' ? '장비 추가' : '장비 수정',
+        title: str(p.device),
+        body: p.mode === 'add' ? '장비를 추가했습니다' : changeText(p.changes),
+        owner: '',
       }
     default:
       // 모르는 종류 — 줄은 남기고 payload 를 그대로 보여 준다.

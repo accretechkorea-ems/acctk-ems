@@ -21,6 +21,7 @@ import { geocodeAddress } from '@/lib/geocode'
 import { customerLabel } from '@/lib/customerLabel'
 import { districtOf, normalizeRegion } from '@/lib/region'
 import { invalidateParents } from '@/components/customer/ParentPicker'
+import { customerChange } from '@/lib/customerChange'
 import type { Customer, CustomerEditFormData } from '@/components/customer/types'
 
 export type SaveResult = { ok: true } | { ok: false; message: string }
@@ -59,20 +60,26 @@ export async function saveCustomerEdit(customer: Customer, form: CustomerEditFor
     const siteName = (form.site_name ?? '').trim()
     const combined = customerLabel(companyName, siteName) || form.company_name.trim()
 
-    const { error } = await supabase.from('customers').update({
-      company_name: combined,
-      site_name: siteName || null,
-      address: form.address.trim(),
-      region1: normalizeRegion(customer.region1 ?? null, form.address),
-      // 주소가 바뀌면 시·군·구도 따라간다 — 화면은 둘을 붙여 「경기 화성시」로 찍는다.
-      region2: districtOf(form.address),
-      agency_customer_id: form.agency_customer_id ?? null,
-      status: form.status,
-      note: form.note.trim() || null,
-      parent_customer_id: parentId,
-      ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : null),
-    }).eq('customer_id', customer.customer_id)
-    if (error) return { ok: false, message: error.message || '사업장 정보 수정 중 오류가 발생했습니다' }
+    // 저장은 **라우트가** 한다(2026-11-23) — 바뀐 칸을 사건으로 함께 적는다.
+    // 좌표·회사 줄 정하기처럼 브라우저만 할 수 있는 일은 여기서 하고, 쓰기만 넘긴다.
+    const r = await customerChange({
+      action: 'site-edit',
+      id: customer.customer_id,
+      patch: {
+        company_name: combined,
+        site_name: siteName || null,
+        address: form.address.trim(),
+        region1: normalizeRegion(customer.region1 ?? null, form.address),
+        // 주소가 바뀌면 시·군·구도 따라간다 — 화면은 둘을 붙여 「경기 화성시」로 찍는다.
+        region2: districtOf(form.address),
+        agency_customer_id: form.agency_customer_id ?? null,
+        status: form.status,
+        note: form.note.trim() || null,
+        parent_customer_id: parentId,
+        ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : null),
+      },
+    })
+    if (!r.ok) return { ok: false, message: r.error }
     return { ok: true }
   } catch (e) {
     return { ok: false, message: (e as Error)?.message || '사업장 정보 수정 중 오류가 발생했습니다' }

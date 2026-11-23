@@ -21,6 +21,7 @@ import RecordAddModal, { type HoldingDraft } from '@/components/customer/modals/
 import QuoteHistoryModal from '@/components/customer/modals/QuoteHistoryModal'
 import SiteMergeModal, { type MergeReport } from '@/components/home/list/SiteMergeModal'
 import BulkBar from '@/components/home/list/BulkBar'
+import { customerChange } from '@/lib/customerChange'
 import BulkApplyModal from '@/components/home/list/BulkApplyModal'
 import {
   DIRECT_SALE_OPTION_LABEL, DIRECT_SALE_VALUE, bulkDoneText, currentValueCounts,
@@ -235,13 +236,18 @@ export default function CompanyPane({
     })
   }
 
-  /** 고른 여러 줄의 칸 하나를 한 번에 바꾼다(일괄 바 전용). */
-  const saveCell = async (ids: number[], patch: Record<string, unknown>, done: string) => {
-    if (busy || ids.length === 0) return
+/**
+   * 고른 여러 줄을 한 번에 바꾼다(일괄 바 전용).
+   *
+   * **라우트가 한다**(2026-11-23) — 브라우저가 표를 직접 고치면 사건(customer_events)을
+   * 적을 수 없다. 그 표는 service role 만 쓸 수 있기 때문이다.
+   */
+  const saveBulk = async (body: Record<string, unknown>, done: string) => {
+    if (busy || selected.length === 0) return
     setBusy(true)
-    const { error } = await supabase.from('customers').update(patch).in('customer_id', ids)
+    const r = await customerChange({ ...body, ids: selected })
     setBusy(false)
-    if (error) { onError(error.message || '저장하지 못했습니다'); return }
+    if (!r.ok) { onError(r.error); return }
     onToast(done)
     onSaved()
   }
@@ -276,8 +282,9 @@ export default function CompanyPane({
       const patch: Record<string, unknown> = {}
       if (industryChanged) patch.industry = form.industry || null
       if (noteChanged) patch.note = form.note.trim() || null
-      const { error } = await supabase.from('customers').update(patch).eq('customer_id', group.companyId)
-      if (error) { setBusy(false); onError(error.message || '회사 정보를 저장하지 못했습니다'); return }
+      // 라우트가 저장하고 분류가 바뀐 때 사건도 적는다(2026-11-23).
+      const r = await customerChange({ action: 'company-edit', id: group.companyId, patch })
+      if (!r.ok) { setBusy(false); onError(r.error); return }
     }
     setBusy(false)
     invalidateParents()   // 회사 목록 캐시가 옛 이름·분류를 들고 있다
@@ -657,7 +664,9 @@ export default function CompanyPane({
           count={selected.length}
           /* 이 화면의 사업장은 모두 한 회사 것이다 — 병합 조건을 늘 만족한다. */
           sameCompany
-          canMergeSites={canEditCompany}
+          /* 2026-11-23 — 병합은 **로그인 전원**이 한다. 라우트도 같은 문턱으로 내렸고(SITE_LEVEL),
+             누가 합쳤는지는 사건(sites_merged)으로 남는다. 지우는 쪽만 슈퍼관리자다. */
+          canMergeSites
           busy={busy}
           onClear={() => setChecked(new Set())}
           onAction={key => {
@@ -813,7 +822,7 @@ export default function CompanyPane({
           onClose={() => setBulkOpen(null)}
           onApply={value => {
             setBulkOpen(null)
-            void saveCell(selected, { status: value }, bulkDoneText(selected.length))
+            void saveBulk({ action: 'site-status', status: value }, bulkDoneText(selected.length))
           }}
         />
       )}
@@ -833,7 +842,7 @@ export default function CompanyPane({
           onApply={value => {
             setBulkOpen(null)
             const v = value === DIRECT_SALE_VALUE ? null : Number(value)
-            void saveCell(selected, { agency_customer_id: v }, bulkDoneText(selected.length))
+            void saveBulk({ action: 'site-agency', agencyId: v }, bulkDoneText(selected.length))
           }}
         />
       )}

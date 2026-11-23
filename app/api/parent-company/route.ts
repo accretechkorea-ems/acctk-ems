@@ -15,6 +15,7 @@ import { adminClient } from '@/lib/supabase/admin'
 import { withNameEnFallback } from '@/lib/nameEn'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import { loadCaller } from '@/lib/apiCaller'
+import { writeCustomerEvents } from '@/lib/customerEvents'
 import { NextResponse } from 'next/server'
 
 const supabaseAdmin = adminClient()
@@ -98,11 +99,16 @@ async function mergeRows(keepId: number, fromIds: number[], dryRun: boolean): Pr
  *     이 둘이 라우트를 거치는 이유는 권한이 아니라 **company_name 을 다시 만들기 위해서**다 —
  *     여기서 superadmin 을 요구하면 평소 하던 수정이 막힌다(2026-11-19 실측에서 403 이었다).
  *
- *   **회사 수준**(rename · merge · merge-sites · delete) — superadmin.
- *     사업장 병합도 여기다 — 되돌릴 수 없고 다른 표의 기록까지 옮긴다.
+ *   **회사 수준**(rename · merge · delete · convert-agency) — superadmin.
  *     회사 한 줄에 사업장 여럿이 물려 있어, 이름·병합·삭제는 그 전부에 닿는다.
+ *
+ *   2026-11-23 — **사업장 병합(merge-sites)을 사업장 수준으로 내렸다.** 고객사를 볼 수 있는
+ *   사람이면 합칠 수 있다. 되돌릴 수 없는 일이지만 그 때문에 한 사람에게 몰리면 현장이
+ *   잘못 들어온 줄을 그대로 두고 쓴다 — 지금까지 「정리 필요 820곳」이 쌓인 까닭이다.
+ *   대신 **누가 합쳤는지 사건으로 남긴다**(customer_events 의 sites_merged).
+ *   지우는 쪽(delete·convert-agency)은 그대로 superadmin 이다.
  */
-const SITE_LEVEL = new Set(['rename-site', 'move'])
+const SITE_LEVEL = new Set(['rename-site', 'move', 'merge-sites'])
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}))
@@ -173,8 +179,10 @@ export async function POST(req: Request) {
 
     // 회사 줄을 사업장처럼 옮기려는 요청은 막는다(순환이 생긴다).
     const { data: targets } = await supabaseAdmin
-      .from('customers').select('customer_id, is_parent, site_name').in('customer_id', siteIds)
+      .from('customers').select('customer_id, is_parent, site_name, parent_customer_id').in('customer_id', siteIds)
     if ((targets ?? []).some(t => t.is_parent)) return bad('회사 줄은 옮길 수 없습니다.')
+    // 옮기기 **전** 소속 — 사건의 before 다(고친 뒤에는 읽을 수 없다).
+    const targetsBefore = targets
 
     const companyName = (to.company_name ?? '').trim()
     let moved = 0
@@ -188,6 +196,27 @@ export async function POST(req: Request) {
       if (error) console.error('[parent-company] move failed', { site: t.customer_id, error })
       else moved++
     }
+    // 사건 — 어느 회사에서 어느 회사로 옮겼는지. 옮긴 사업장 줄마다 한 줄이다.
+    const fromIdsOfMove = new Map<number, number | null>()
+    for (const t of targetsBefore ?? []) fromIdsOfMove.set(Number(t.customer_id), t.parent_customer_id ?? null)
+    const fromNames = new Map<number, string>()
+    const fromSet = [...new Set([...fromIdsOfMove.values()].filter((v): v is number => v != null))]
+    if (fromSet.length > 0) {
+      const { data: fromRows } = await supabaseAdmin
+        .from('customers').select('customer_id, company_name').in('customer_id', fromSet)
+      for (const f of fromRows ?? []) fromNames.set(Number(f.customer_id), (f.company_name ?? '').trim())
+    }
+    await writeCustomerEvents(supabaseAdmin, (targets ?? []).map(t => ({
+      customer_id: Number(t.customer_id),
+      event_type: 'site_moved' as const,
+      occurred_at: new Date().toISOString(),
+      actor_engineer_id: caller.engineer_id,
+      payload: {
+        site_name: (t.site_name ?? '').trim() || null,
+        before: fromNames.get(Number(fromIdsOfMove.get(Number(t.customer_id)) ?? -1)) ?? null,
+        after: companyName,
+      },
+    })))
     console.log('[parent-company] move', { toParentId, siteIds, moved, by: caller.email })
     return NextResponse.json({ success: true, moved })
   }
@@ -223,6 +252,19 @@ export async function POST(req: Request) {
       }).eq('customer_id', keepId)
       if (upErr) console.error('[parent-company] merge-sites rename failed', { keepId, error: upErr })
     }
+    // 사건 — **남은 줄에** 한 줄 적는다. 합쳐진 줄은 사라지므로 거기에 적으면 읽을 수 없다.
+    await writeCustomerEvents(supabaseAdmin, [{
+      customer_id: keepId,
+      event_type: 'sites_merged' as const,
+      occurred_at: new Date().toISOString(),
+      actor_engineer_id: caller.engineer_id,
+      payload: {
+        kept: (keep?.site_name ?? '').trim() || null,
+        merged_ids: fromIds,
+        merged_count: fromIds.length,
+        moved: r.report ?? null,
+      },
+    }])
     console.log('[parent-company] merge-sites', { keepId, fromIds, report: r.report, by: caller.email })
     return NextResponse.json({ success: true, report: r.report })
   }

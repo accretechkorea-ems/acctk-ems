@@ -7,6 +7,7 @@
 import { useRef, useState } from 'react'
 import { isPdfName, openPdf, pdfNameOf } from '@/lib/pdfViewer'
 import { createClient } from '@/lib/supabase/client'
+import { customerChange } from '@/lib/customerChange'
 import { useToast } from '@/components/common/Toast'
 import { DEVICE_BUCKET, deviceImagePath, isDefaultDeviceImage } from '@/lib/deviceImage'
 import { useConfirm } from '@/components/common/ConfirmDialog'
@@ -146,6 +147,17 @@ type Args = {
   fetchDetail: () => Promise<boolean>
 }
 
+/** 장비 칸 한 벌 — 추가·수정이 같은 모양을 보낸다(라우트의 흰 목록과 짝이다). */
+const devicePatch = (form: DeviceForm) => ({
+  device_name: form.device_name.trim(),
+  device_name2: form.device_name2.trim() || null,
+  option: form.option.trim() || null,
+  serial_number: form.serial_number.trim() || null,
+  program: form.program,
+  install_date: form.install_date || null,
+  category: form.category,
+})
+
 export function useDeviceCrud({ customerId, fetchDetail }: Args) {
   const supabase = createClient()
   const toast = useToast()
@@ -165,13 +177,10 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
     setIsSavingDevice(true)
     try {
       // 장비를 먼저 등록하고 device_id를 받아온다 (패킹 파일명에 사용)
-      const { data: inserted, error } = await supabase.from('devices').insert([{
-        customer_id: customerId, device_name: form.device_name.trim(),
-        device_name2: form.device_name2.trim() || null, option: form.option.trim() || null,
-        serial_number: form.serial_number.trim() || null, program: form.program,
-        install_date: form.install_date || null, install_year: null, category: form.category,
-      }]).select('device_id').single()
-      if (error || !inserted) throw error || new Error('장비 추가 실패')
+      // 저장은 **라우트가** 한다(2026-11-23) — 바뀐 칸을 사건으로 함께 적는다.
+      const r = await customerChange({ action: 'device-add', customerId, patch: devicePatch(form) })
+      if (!r.ok) throw new Error(r.error)
+      const inserted = { device_id: Number(r.data.device_id) }
 
       // 납입의사록·패킹리스트 파일이 있으면 업로드 후 경로 연결
       if (packingFile) {
@@ -194,19 +203,19 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
     if (!selectedDevice) return
     setIsSavingDeviceEdit(true)
     try {
-      const updatePayload: Record<string, unknown> = {
-        device_name: form.device_name.trim(), device_name2: form.device_name2.trim() || null,
-        option: form.option.trim() || null, serial_number: form.serial_number.trim() || null,
-        program: form.program, install_date: form.install_date || null, install_year: null, category: form.category,
-      }
-      // 새 납입의사록·패킹리스트 파일이 선택됐으면 업로드 후 경로 갱신
+      // 새 납입의사록·패킹리스트 파일이 선택됐으면 업로드 후 경로 갱신.
+      // 파일 경로는 **저장소를 거치는 값**이라 라우트의 흰 목록에 없다 — 여기서 따로 쓴다.
       let newPackingPath: string | null = null
       if (packingFile) {
         newPackingPath = await uploadPackingFile(selectedDevice.device_id, packingFile)
-        updatePayload.packing_list_url = newPackingPath
       }
-      const { error } = await supabase.from('devices').update(updatePayload).eq('device_id', selectedDevice.device_id)
-      if (error) throw error
+      const r = await customerChange({ action: 'device-edit', id: selectedDevice.device_id, patch: devicePatch(form) })
+      if (!r.ok) throw new Error(r.error)
+      if (newPackingPath) {
+        const { error: pathErr } = await supabase.from('devices')
+          .update({ packing_list_url: newPackingPath }).eq('device_id', selectedDevice.device_id)
+        if (pathErr) throw pathErr
+      }
 
       // 교체 성공 후 기존 파일은 스토리지에서 삭제 (버킷에 고아 파일이 남지 않도록)
       if (newPackingPath && selectedDevice.packing_list_url) {

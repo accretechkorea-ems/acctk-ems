@@ -9,8 +9,18 @@
 // 「좁히지 않음」의 뜻: 묶음을 **전부** 고른 상태다. 전부 고른 것과 아무것도 고르지
 // 않은 것을 같게 보지 않는다 — 아무것도 고르지 않으면 0건이 맞다(사람이 그렇게 골랐다).
 
-export const TIMELINE_KINDS = ['영업', '서비스', '견적', '의뢰', '포캐스트', '홀딩', '사건'] as const
+export const TIMELINE_KINDS = ['영업', '서비스', '견적', '의뢰', '포캐스트', '홀딩', '사건', '변경'] as const
 export type TimelineKind = (typeof TIMELINE_KINDS)[number]
+
+/**
+ * **처음에 꺼 두는 종류**(2026-11-23).
+ *
+ * 「변경」은 사람이 밖에서 한 일이 아니라 **화면에서 고친 자국**이다(상태·대리점·분류·
+ * 사업장·담당자·장비 수정, 이동·병합). 찾을 수 있어야 하지만 평소 이력을 덮으면 안 된다 —
+ * 그래서 목록에는 있고 **기본 필터에서는 꺼져 있다**. 모달에서 켜면 보인다.
+ * 최근 활동(lib/customerLastTouch.ts)은 이 줄을 아예 보지 않는다.
+ */
+export const DEFAULT_OFF_KINDS: readonly TimelineKind[] = ['변경']
 
 export type TimelineFilter = {
   kinds: TimelineKind[]
@@ -27,16 +37,25 @@ export type FilterableRow = {
   siteId?: number | null
 }
 
-/** 처음 상태 — 종류·사업장을 **전부** 고른 채로 둔다. */
+/**
+ * 처음 상태 — 종류·사업장을 **전부** 고른 채로 둔다.
+ * 다만 기본으로 꺼 두는 종류(DEFAULT_OFF_KINDS)는 빼고 시작한다.
+ */
 export const allSelected = (kinds: readonly TimelineKind[], siteIds: readonly number[]): TimelineFilter =>
-  ({ kinds: [...kinds], siteIds: [...siteIds], from: '', to: '' })
+  ({ kinds: kinds.filter(k => !DEFAULT_OFF_KINDS.includes(k)), siteIds: [...siteIds], from: '', to: '' })
 
 export const sameSet = (a: readonly (string | number)[], b: readonly (string | number)[]): boolean =>
   a.length === b.length && new Set(a).size === new Set([...a, ...b]).size
 
-/** 종류를 좁혔는가 — 고를 수 있는 전부를 고른 상태면 아니다. */
+/**
+ * 종류를 좁혔는가 — **처음 상태와 같으면 아니다**.
+ *
+ * 기준이 「고를 수 있는 전부」가 아니라 **처음 상태**(allSelected)인 까닭: 기본으로 꺼 두는
+ * 종류(변경)가 생기면서, 아무것도 건드리지 않은 화면이 「좁혀진 상태」로 보이고 칩이
+ * 일곱 개 깔렸다. 사람이 고른 것이 아니면 칩을 내지 않는다.
+ */
 export const narrowsKind = (f: TimelineFilter, available: readonly TimelineKind[]): boolean =>
-  !sameSet(f.kinds, available)
+  !sameSet(f.kinds, available.filter(k => !DEFAULT_OFF_KINDS.includes(k)))
 
 export const narrowsSite = (f: TimelineFilter, available: readonly number[]): boolean =>
   available.length > 0 && !sameSet(f.siteIds, available)
@@ -54,7 +73,9 @@ export function applyFilter<T extends FilterableRow>(
   f: TimelineFilter,
   available: { kinds: readonly TimelineKind[]; siteIds: readonly number[] },
 ): T[] {
-  const byKind = narrowsKind(f, available.kinds)
+  // 거르기는 **실제로 고른 집합**을 본다 — 칩(narrowsKind)과 기준이 다르다.
+  // 기본으로 꺼 둔 종류(변경)는 「사람이 좁힌 것」은 아니지만 **걸러지기는 해야 한다**.
+  const byKind = !sameSet(f.kinds, available.kinds)
   const bySite = narrowsSite(f, available.siteIds)
   const byPeriod = narrowsPeriod(f)
   if (!byKind && !bySite && !byPeriod) return rows
@@ -136,7 +157,9 @@ export function dropChip(
   if ('kind' in chip.drop) {
     const gone = chip.drop.kind
     const kinds = f.kinds.filter(k => k !== gone)
-    return { ...f, kinds: kinds.length === 0 ? [...available.kinds] : kinds }
+    // 마지막 하나를 지우면 **처음 상태**로 돌아간다(0건이 되지 않게). 기본으로 꺼 두는
+    // 종류는 그대로 꺼진 채다 — 지웠더니 안 보이던 것이 켜지면 사람이 놀란다.
+    return { ...f, kinds: kinds.length === 0 ? allSelected(available.kinds, []).kinds : kinds }
   }
   const id = chip.drop.siteId
   const siteIds = f.siteIds.filter(s => s !== id)

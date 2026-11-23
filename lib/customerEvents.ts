@@ -14,8 +14,59 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-/** 사건 종류 — 늘어나면 여기 한 줄만 더한다(스키마는 그대로다). */
-export type CustomerEventType = 'lead_registered' | 'lead_assigned' | 'lead_reassigned'
+/**
+ * 사건 종류 — 늘어나면 여기 한 줄만 더한다(스키마는 그대로다).
+ *
+ * 2026-11-23 에 **고친 일**도 사건으로 적기 시작했다. 누가 무엇을 무엇으로 바꿨는지가
+ * 아무 데도 남지 않아, 「어제까지 활성이었는데」를 확인할 길이 없었다.
+ * ⚠ 이 줄들은 **활동이 아니다** — 최근 활동(lib/customerLastTouch.ts)은 보지 않는다.
+ *   활동 이력에서도 「변경」 묶음으로 따로 서고 기본 필터에서 꺼져 있다.
+ */
+export type CustomerEventType =
+  | 'lead_registered' | 'lead_assigned' | 'lead_reassigned'
+  | 'site_status_changed' | 'site_agency_changed' | 'site_moved' | 'sites_merged'
+  | 'company_industry_changed' | 'site_edited' | 'contact_edited' | 'device_edited'
+
+/** 「고친 일」 묶음 — 활동 이력이 이 묶음을 「변경」으로 접어 둔다. */
+export const CHANGE_EVENT_TYPES: readonly CustomerEventType[] = [
+  'site_status_changed', 'site_agency_changed', 'site_moved', 'sites_merged',
+  'company_industry_changed', 'site_edited', 'contact_edited', 'device_edited',
+]
+
+/** 그 사건이 「고친 일」인가. 모르는 종류는 아니라고 본다(옛 줄이 섞여도 종전처럼 보인다). */
+export function isChangeEvent(type: string): boolean {
+  return (CHANGE_EVENT_TYPES as readonly string[]).includes(type)
+}
+
+/** 칸 하나가 바뀐 자국 — payload.changes 에 이 모양으로 담는다. */
+export type FieldChange = { field: string; label: string; before: string | null; after: string | null }
+
+/** 두 값이 다른가 — 빈 값·null·공백만 있는 값은 같은 것으로 본다. */
+const sameValue = (a: unknown, b: unknown): boolean =>
+  String(a ?? '').trim() === String(b ?? '').trim()
+
+/**
+ * 바뀐 칸만 골라 자국을 만든다. 하나도 안 바뀌었으면 빈 배열이다
+ * (빈 배열이면 부르는 쪽이 사건을 적지 않는다 — 「저장만 누른」 줄을 남기지 않는다).
+ */
+export function fieldChanges(
+  before: Record<string, unknown> | null | undefined,
+  after: Record<string, unknown>,
+  labels: Record<string, string>,
+): FieldChange[] {
+  const out: FieldChange[] = []
+  for (const [field, next] of Object.entries(after)) {
+    const prev = before?.[field]
+    if (sameValue(prev, next)) continue
+    out.push({
+      field,
+      label: labels[field] ?? field,
+      before: prev == null || String(prev).trim() === '' ? null : String(prev),
+      after: next == null || String(next).trim() === '' ? null : String(next),
+    })
+  }
+  return out
+}
 
 export type CustomerEventRow = {
   customer_id: number
