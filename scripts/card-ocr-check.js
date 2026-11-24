@@ -35,30 +35,34 @@ const ROUTE_PATH = 'app/api/cards/ocr/route.ts'
 console.log('\n── ① 읽는 라우트 ──')
 ok('라우트가 있다', has(ROUTE_PATH))
 const R = has(ROUTE_PATH) ? read(ROUTE_PATH) : ''
+// 2026-11-24 — 읽는 규칙은 lib/cardOcrServer.ts 하나로 모았다(한 장·여러 장 라우트가 같이 쓴다).
+const S = read('lib/cardOcrServer.ts')
 ok('POST 다', /export async function POST\(/.test(R))
 ok('로그인한 사람만', /loadCaller\(\{ kind: 'login' \}/.test(R))
-ok('모델은 claude-haiku-5-5', /const MODEL = 'claude-haiku-5-5'/.test(R))
+ok('읽는 규칙은 한 곳에서', /readCard\(/.test(R) && /export async function readCard/.test(S))
+ok('모델은 claude-haiku-5-5', /export const MODEL = 'claude-haiku-5-5'/.test(S))
 ok('열쇠는 ANTHROPIC_API_KEY 에서', /process\.env\.ANTHROPIC_API_KEY/.test(R))
-ok('공식 SDK 로 부른다', /from '@anthropic-ai\/sdk'/.test(R))
-ok('max_tokens 600', /max_tokens: MAX_TOKENS/.test(R) && /const MAX_TOKENS = 600/.test(R))
-ok('사진은 base64 로 넘긴다', /type: 'base64'/.test(R) && /type: 'image'/.test(R))
-ok('10MB 를 넘으면 받지 않는다', /const MAX_BYTES = 10 \* 1024 \* 1024/.test(R) && /reason: 'too_big'/.test(R))
-ok('이미지가 아니면 받지 않는다', /reason: 'bad_type'/.test(R))
+ok('공식 SDK 로 부른다', /from '@anthropic-ai\/sdk'/.test(S))
+ok('max_tokens 600', /max_tokens: MAX_TOKENS/.test(S) && /export const MAX_TOKENS = 600/.test(S))
+ok('사진은 base64 로 넘긴다', /type: 'base64'/.test(S) && /type: 'image'/.test(S))
+ok('PDF 는 document 블록으로', /type: 'document'/.test(S))
+ok('10MB 를 넘으면 받지 않는다', /export const MAX_BYTES = 10 \* 1024 \* 1024/.test(S) && /reason: 'too_big'/.test(S))
+ok('읽을 수 없는 형식은 받지 않는다', /reason: 'bad_type'/.test(S))
 
 // temperature 는 **보내면 안 된다** — 이 모델은 기본값이 아닌 temperature 를 400 으로 거절한다.
 // 대신 사고를 꺼서 흔들림을 줄이고, 600 토큰을 전부 JSON 에 쓴다.
 // 주석에는 까닭을 적어 둔다 — **코드 줄만** 본다.
-const Rcode = R.split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
-ok('temperature 를 보내지 않는다', !/temperature/.test(Rcode),
+const noComment = (src) => src.split(/\r?\n/).filter(l => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n')
+ok('temperature 를 보내지 않는다', !/temperature/.test(noComment(S)),
   'claude-haiku-5-5 는 기본값이 아닌 temperature 를 400 으로 거절한다')
-ok('사고는 꺼 둔다(600 토큰을 JSON 에 쓴다)', /thinking: \{ type: 'disabled' \}/.test(R))
+ok('사고는 꺼 둔다(600 토큰을 JSON 에 쓴다)', /thinking: \{ type: 'disabled' \}/.test(S))
 
 console.log('\n── ② JSON 으로 받는다 ──')
-ok('안내문은 지시대로', R.includes('명함 이미지에서 정보를 추출해 JSON 만 반환한다. 추측하지 말고 없는 값은 null.'))
-ok('칸 이름은 한 군데서(lib/businessCardOcr.ts)', /OCR_KEYS/.test(R))
-ok('펜스를 벗겨 파싱한다', /parseOcrJson/.test(R))
-ok('한 번만 더 묻는다', /attempt <= 2/.test(R))
-ok('그래도 안 되면 reason:parse', /reason: 'parse'/.test(R))
+ok('안내문은 지시대로', S.includes('명함 이미지에서 정보를 추출해 JSON 만 반환한다. 추측하지 말고 없는 값은 null.'))
+ok('칸 이름은 한 군데서(lib/businessCardOcr.ts)', /OCR_KEYS/.test(S))
+ok('펜스를 벗겨 파싱한다', /parseOcrJson/.test(S))
+ok('한 번만 더 묻는다', /attempt <= 2/.test(S))
+ok('그래도 안 되면 reason:parse', /reason: 'parse'/.test(S))
 ok('열쇠가 없으면 500 이 아니라 no_key', /reason: 'no_key'/.test(R) && !/no_key[\s\S]{0,80}status: 500/.test(R))
 
 const LIB = read('lib/businessCardOcr.ts')
@@ -66,19 +70,22 @@ const LIB = read('lib/businessCardOcr.ts')
 // (담을 칸이 없고, 모델이 지어내기 쉬운 자리였다).
 eq('칸 이름 열둘', (LIB.match(/OCR_KEYS = \[([\s\S]*?)\]/)?.[1].match(/'[a-z_]+'/g) || []).length, 12)
 ok('memo_hint 가 라이브러리에 없다', !/memo_hint/.test(LIB))
-ok('memo_hint 가 지시문에 없다', !/memo_hint/.test(R))
-ok('영문 둘을 읽어 온다', /"name_en"/.test(R) && /"company_en"/.test(R))
+ok('memo_hint 가 지시문에 없다', !/memo_hint/.test(S))
+ok('영문 둘을 읽어 온다', /"name_en"/.test(S) && /"company_en"/.test(S))
 ok('번호 다듬기가 라이브러리에 있다', /export function normalizePhone/.test(LIB))
-ok('라우트가 그것을 쓴다', /fieldsFromJson/.test(R))
+ok('읽는 쪽이 그것을 쓴다', /fieldsFromJson/.test(S))
 
 console.log('\n── ③ 사진은 남기지 않는다 ──')
-ok('디스크에 쓰지 않는다', !/writeFile|createWriteStream|fs\./.test(R))
-ok('Storage 에 올리지 않는다', !/storage\.|\.upload\(/.test(R))
+ok('디스크에 쓰지 않는다', !/writeFile|createWriteStream|fs\./.test(R + S))
+ok('Storage 에 올리지 않는다', !/storage\.|\.upload\(/.test(R + S))
 // 로그는 토큰 수만. base64·파일 이름·읽은 값을 찍지 않는다.
-const logs = (R.match(/console\.(log|warn|error)\([\s\S]*?\)\n/g) || []).join('\n')
-ok('로그에 사진·값이 없다', !/base64|file\.name|fields\b(?!\.)/.test(logs),
-  '로그에 사진이나 읽은 값이 들어갔다')
-ok('로그에 토큰 수는 남는다', /input, output/.test(logs))
+const logs = ((R + S).match(/console\.(log|warn|error)\([\s\S]*?\)\n/g) || []).join('\n')
+ok('로그에 사진이 없다', !/base64|\bdata\b|file\.name/.test(logs), '로그에 사진이 들어갔다')
+// 읽은 값은 **개수만** 남긴다 — fields 를 통째로 찍는 자리가 없어야 한다.
+ok('읽은 값은 개수만 남긴다',
+  !/fields(?!\s*\))/.test(logs) && (!/fields/.test(logs) || /filledCount\(/.test(logs)),
+  '로그에 읽은 값이 들어갔다')
+ok('로그에 토큰 수는 남는다', /usage/.test(logs))
 ok('그 사실을 코드에 적어 두었다', /PHOTO_IS_NEVER_STORED/.test(LIB))
 
 console.log('\n── ④ 옛 엔진의 흔적 ──')

@@ -44,7 +44,7 @@ const EMPTY: OcrState = { phase: 'idle', message: '', fields: {}, seconds: 0 }
 const SAY: Record<string, string> = {
   no_key: 'OCR 설정이 안 되어 있습니다. 관리자에게 문의해 주세요 — 직접 입력할 수 있습니다',
   too_big: '사진이 너무 큽니다 — 다시 찍어 주세요',
-  bad_type: '읽을 수 없는 형식입니다 — jpg·png 로 찍어 주세요',
+  bad_type: '읽을 수 없는 형식입니다 — 사진(jpg·png)이나 PDF 로 올려 주세요',
   parse: '사진에서 글자를 읽지 못했습니다 — 직접 입력해 주세요',
 }
 const SAY_DEFAULT = '사진에서 글자를 읽지 못했습니다 — 직접 입력해 주세요'
@@ -52,8 +52,12 @@ const SAY_DEFAULT = '사진에서 글자를 읽지 못했습니다 — 직접 �
 /**
  * 사진을 긴 변 1,200px·jpg 로 줄인다. 큰 사진을 그대로 올리면 느리고 비싸다.
  * 줄이지 못하면(캔버스를 못 쓰는 환경) 원본을 그대로 보낸다 — 라우트가 10MB 에서 막는다.
+ *
+ * **PDF 는 줄이지 않는다**(2026-11-24) — 캔버스가 PDF 를 열지 못해 아래 catch 로
+ * 떨어지지만, 뜻이 드러나게 먼저 돌려보낸다. 모델이 document 블록으로 그대로 읽는다.
  */
 async function shrink(file: File): Promise<Blob> {
+  if (file.type === 'application/pdf') return file
   try {
     const bitmap = await createImageBitmap(file)
     const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height))
@@ -97,7 +101,8 @@ export function useCardOcr() {
     try {
       const small = await shrink(file)
       const body = new FormData()
-      body.append('image', small, 'card.jpg')
+      // 이름은 꼬리표일 뿐이다 — 라우트는 형식(type)을 본다. 그래도 맞춰 둔다.
+      body.append('image', small, small.type === 'application/pdf' ? 'card.pdf' : 'card.jpg')
       const res = await fetch('/api/cards/ocr', { method: 'POST', body })
       const got = await res.json().catch(() => null) as
         { ok?: boolean; reason?: string; fields?: Record<string, unknown> } | null

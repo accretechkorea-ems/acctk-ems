@@ -52,11 +52,23 @@ export const FIELD_MAX = 200
 
 // ── 넣는 방식 ─────────────────────────────────────────────────────────────
 
-export const INPUT_METHODS = ['camera', 'upload', 'manual'] as const
+export const INPUT_METHODS = ['camera', 'upload', 'manual', 'bulk'] as const
 export type InputMethod = (typeof INPUT_METHODS)[number]
 
 export const METHOD_LABEL: Record<InputMethod, string> = {
-  camera: '사진 촬영', upload: '사진 올리기', manual: '직접 입력',
+  camera: '사진 촬영', upload: '사진 올리기', manual: '직접 입력', bulk: '여러 장 등록',
+}
+
+/**
+ * 담은 방식이 **사람이 보고 넣은 것**인가.
+ *
+ * 한 장씩 담으면(촬영·올리기·직접 입력) 그 자리에서 눈으로 보고 고친다 —
+ * 담은 날이 곧 확인한 날이다. 일괄(bulk)은 아무도 보지 않았으므로 **확인 전**으로 둔다.
+ * 라우트가 verified_at 을 채울지 비울지 이 함수로 가른다.
+ * 표의 칸 이름은 `verified_at` 이다(db/business_cards_bulk_20261124.sql 참고).
+ */
+export function checkedOnEntry(method: InputMethod): boolean {
+  return method !== 'bulk'
 }
 
 export function isInputMethod(v: unknown): v is InputMethod {
@@ -212,6 +224,23 @@ export function ageLabel(days: number): string {
 }
 
 /** 「확인 2026-11」 — 확인한 적이 없으면 빈 글자. */
+/**
+ * 목록에 적는 「마지막 확인」 한 줄 (2026-11-24).
+ *
+ *   · 비어 있으면 **「확인 전」** — 여러 장 등록으로 담겨 아무도 보지 않은 줄이다.
+ *   · 등록일과 같은 날이면 **「확인 등록일과 같음」**이 아니라 그냥 등록일을 되풀이하지
+ *     않는다 — 한 장씩 담으면 늘 같은 날이라, 같은 날짜가 두 번 서면 읽히지 않는다.
+ *   · 그 밖에는 확인한 달을 적는다(verifiedLabel).
+ */
+export function checkedLabel(
+  card: Pick<BusinessCard, 'verified_at' | 'registered_at'>,
+): string {
+  const v = String(card.verified_at ?? '').trim()
+  if (!v) return '확인 전'
+  if (v.slice(0, 10) === String(card.registered_at ?? '').slice(0, 10)) return ''
+  return verifiedLabel(v)
+}
+
 export function verifiedLabel(verifiedAt: string | null | undefined): string {
   const v = String(verifiedAt ?? '').trim()
   return v ? `확인 ${v.slice(0, 7)}` : ''

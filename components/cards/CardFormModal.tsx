@@ -188,7 +188,7 @@ export default function CardFormModal({ initial, existing, defaultDivision, busy
             {/* 폰에서는 capture 가 바로 카메라를 연다. PC 에서는 파일 고르기로 떨어진다. */}
             <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden
               onChange={e => void pickPhoto(e.target.files?.[0], 'camera')} />
-            <input ref={uploadRef} type="file" accept="image/*" hidden
+            <input ref={uploadRef} type="file" accept="image/*,application/pdf" hidden
               onChange={e => void pickPhoto(e.target.files?.[0], 'upload')} />
           </div>
         </ModalCard>
@@ -303,7 +303,7 @@ export default function CardFormModal({ initial, existing, defaultDivision, busy
             }}>
             뒷면 추가로 읽기
           </button>
-          <input ref={backRef} type="file" accept="image/*" hidden onChange={e => void readBack(e.target.files?.[0])} />
+          <input ref={backRef} type="file" accept="image/*,application/pdf" hidden onChange={e => void readBack(e.target.files?.[0])} />
 
           {blocked && <div style={{ gridColumn: '1 / -1', fontSize: 12, color: SUB }}>{blocked}</div>}
           <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden

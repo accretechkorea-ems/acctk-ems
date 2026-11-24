@@ -26,11 +26,12 @@ import { canSwitchDivision, teamDivisionOf, DIVISIONS } from '@/lib/division'
 import { isSuperAdmin } from '@/lib/permissions'
 import {
   AGE_TONES, ageLabel, ageTone, daysBetween, defaultDivision, registrarLabel,
-  verifiedLabel, visibleDivisions, type BusinessCard, type CardForm,
+  checkedLabel, visibleDivisions, type BusinessCard, type CardForm,
 } from '@/lib/businessCard'
-import { applyCardFilter, filterFromQuery, queryFromFilter, type CardFilter } from '@/lib/businessCardQuery'
+import { applyCardFilter, countUnchecked, filterFromQuery, isUnchecked, queryFromFilter, type CardFilter } from '@/lib/businessCardQuery'
 import { exportCardXlsx } from '@/lib/businessCardExcel'
 import CardFormModal from '@/components/cards/CardFormModal'
+import BulkImportModal from '@/components/cards/BulkImportModal'
 import { BLUE, BORDER, CARD_BG, MUTED, PAGE_BG, SUB, TEXT } from '@/components/common/ui'
 import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 import { R } from '@/lib/radius'
@@ -93,6 +94,8 @@ function CardsPageInner() {
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<BusinessCard | null>(null)
   const [busy, setBusy] = useState(false)
+  /** 여러 장 등록 창 — PDF·사진 묶음을 읽어 바로 담는다(2026-11-24). */
+  const [bulkOpen, setBulkOpen] = useState(false)
   const [narrow, setNarrow] = useState(false)
 
   const filter = useMemo(() => filterFromQuery(params), [params])
@@ -134,6 +137,8 @@ function CardsPageInner() {
     [canSwitch, me],
   )
   const shown = useMemo(() => applyCardFilter(rows, filter, allowed), [rows, filter, allowed])
+  /** 확인 전 몇 건 — 조건과 무관하게 「이 사람에게 몇 건 남았나」를 센다. */
+  const unchecked = useMemo(() => countUnchecked(rows, allowed), [rows, allowed])
 
   /** 조건을 주소에 적는다 — 새로고침·공유에도 같은 화면이 뜬다. */
   const setFilter = (next: Partial<CardFilter>) => {
@@ -244,14 +249,32 @@ function CardsPageInner() {
         <option value="">등록자 전체</option>
         {registrars.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
       </select>
+      {/* 확인 전 — 여러 장 등록으로 담은 줄이 여기 모인다. 0건이면 칩을 두지 않는다. */}
+      {unchecked > 0 && (
+        <button type="button"
+          onClick={() => setFilter({ checked: filter.checked === 'none' ? '' : 'none' })}
+          style={{
+            ...btn(), borderRadius: R.pill,
+            border: `1px solid ${filter.checked === 'none' ? BLUE : BORDER}`,
+            color: filter.checked === 'none' ? BLUE : SUB,
+            fontWeight: 700,
+          }}>
+          확인 전 {unchecked}건
+        </button>
+      )}
       {!narrow && (
         <>
           <input type="date" value={filter.from} onChange={e => setFilter({ from: e.target.value })} style={{ ...btn(), padding: '0 8px' }} />
           <span style={{ color: MUTED, fontSize: 12 }}>~</span>
           <input type="date" value={filter.to} onChange={e => setFilter({ to: e.target.value })} style={{ ...btn(), padding: '0 8px' }} />
           <button type="button" style={btn()} onClick={() => void exportCardXlsx(shown, today)}>⬇ 엑셀</button>
+          <button type="button" style={btn()} onClick={() => setBulkOpen(true)}>여러 장 등록</button>
           <button type="button" style={btn(true)} onClick={openNew}>＋ 명함 등록</button>
         </>
+      )}
+      {/* 폰에서도 열 수 있게 — 날짜·엑셀은 넓은 화면에서만이지만 이 길은 둔다. */}
+      {narrow && (
+        <button type="button" style={btn()} onClick={() => setBulkOpen(true)}>여러 장 등록</button>
       )}
     </div>
   )
@@ -289,7 +312,8 @@ function CardsPageInner() {
                 {c.mobile && <span style={{ color: BLUE }}>{c.mobile}</span>}
                 <span>등록 {String(c.registered_at).slice(0, 10)}</span>
                 <span>{c.division}</span>
-                {verifiedLabel(c.verified_at) && <span>{verifiedLabel(c.verified_at)}</span>}
+                {/* 확인 전이면 그 사실을, 확인한 날이 등록일과 다르면 그 달을. 같으면 적지 않는다. */}
+                {checkedLabel(c) && <span>{checkedLabel(c)}</span>}
               </div>
             </button>
           ))}
@@ -326,8 +350,13 @@ function CardsPageInner() {
                     {String(c.registered_at).slice(0, 10)}{' '}
                     <AgeTag registeredAt={c.registered_at} today={today} />
                   </td>
-                  <td style={{ ...td, color: c.verified_at ? TEXT : SUB }}>
-                    {c.verified_at ? String(c.verified_at).slice(0, 10) : '—'}
+                  {/* 확인 전이면 그렇게 적는다. 등록일과 같은 날이면 날짜를 되풀이하지 않는다. */}
+                  <td style={{ ...td, color: SUB }}>
+                    {isUnchecked(c)
+                      ? '확인 전'
+                      : String(c.verified_at).slice(0, 10) === String(c.registered_at).slice(0, 10)
+                        ? '등록일과 같음'
+                        : String(c.verified_at).slice(0, 10)}
                   </td>
                   <td style={td}>{registrarLabel(c)}</td>
                   <td style={{ ...td, textAlign: 'right' }}>
@@ -374,6 +403,15 @@ function CardsPageInner() {
           onSave={form => void save(form)}
           onOpenExisting={c => { setEditing(c) }}
           onClose={() => { setFormOpen(false); setEditing(null) }}
+        />
+      )}
+
+      {bulkOpen && (
+        <BulkImportModal
+          division={filter.division || teamDivisionOf(me)}
+          onClose={() => setBulkOpen(false)}
+          onDone={t => { if (t.saved > 0) void load() }}
+          onShowUnchecked={() => setFilter({ checked: 'none' })}
         />
       )}
     </main>

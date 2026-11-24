@@ -23,7 +23,7 @@ import { NextResponse } from 'next/server'
 import { adminClient, loadCaller } from '@/lib/apiCaller'
 import { isDivision } from '@/lib/division'
 import {
-  CARD_FIELDS, EN_FIELDS, FIELD_MAX, MEMO_MAX, cardBlockedReason, isInputMethod, snapshotOf,
+  CARD_FIELDS, EN_FIELDS, FIELD_MAX, MEMO_MAX, cardBlockedReason, checkedOnEntry, isInputMethod, snapshotOf,
   type CardField,
 } from '@/lib/businessCard'
 
@@ -125,9 +125,16 @@ export async function POST(req: Request) {
     const method = isInputMethod(body.input_method) ? body.input_method : 'manual'
     const snap = snapshotOf(caller, division)
 
+    // 한 장씩 담은 명함은 **담은 날이 곧 확인한 날**이다 — 그 자리에서 눈으로 보고 넣었다.
+    // 일괄(bulk)로 담은 줄만 비워 둔다(= 확인 전). /api/cards/ocr-bulk 가 그 길이다.
+    const verified = checkedOnEntry(method) ? now : null
+
     const { data: made, error } = await supabaseAdmin
       .from('business_cards')
-      .insert({ ...(await dropMissingColumns(fields)), division, input_method: method, registered_at: now, ...snap })
+      .insert({
+        ...(await dropMissingColumns(fields)),
+        division, input_method: method, registered_at: now, verified_at: verified, ...snap,
+      })
       .select('card_id')
       .single()
     if (error || !made) {

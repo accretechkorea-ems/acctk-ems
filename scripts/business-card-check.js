@@ -182,10 +182,11 @@ const walk = (d) => {
 for (const d of ['app', 'components', 'lib', 'hooks']) walk(d)
 const cardFiles = files.filter(f => /business-?[Cc]ard|\/cards\//.test(f))
 ok('명함 코드가 있다', cardFiles.length > 0)
-// 사진을 **받는** 자리는 읽는 라우트 하나뿐이다(app/api/cards/ocr) — 거기서도 메모리에서만 쓴다.
-const OCR_ROUTE_PATH = 'app/api/cards/ocr/route.ts'
+// 사진을 **받는** 자리는 읽는 라우트 둘뿐이다(한 장 · 여러 장) — 거기서도 메모리에서만 쓴다.
+// 받은 파일을 어디에도 남기지 않는 것은 scripts/card-ocr-check.js 와 card-bulk-check.js 가 본다.
+const OCR_ROUTES = new Set(['app/api/cards/ocr/route.ts', 'app/api/cards/ocr-bulk/route.ts'])
 const uploaders = cardFiles
-  .filter(f => f !== OCR_ROUTE_PATH)
+  .filter(f => !OCR_ROUTES.has(f))
   .filter(f => /storage\.from\(|\.upload\(|formData\(\)/.test(read(f)))
 eq('사진을 올리거나 저장하는 자리', uploaders, [])
 ok('명함 라우트는 파일을 받지 않는다', !/formData\(\)/.test(ROUTE) && !/storage\./.test(ROUTE))
