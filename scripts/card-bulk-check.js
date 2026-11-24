@@ -101,8 +101,8 @@ eq('집계', B.addLines(B.EMPTY_TALLY, [
   { index: 0, ok: true, card_id: 1 },
   { index: 1, ok: false, reason: 'dup', card_id: 1 },
   { index: 2, ok: false, reason: 'parse' },
-]), { done: 3, saved: 1, dup: 1, failed: 1 })
-eq('요약 글자', B.summaryLabel({ done: 3, saved: 1, dup: 1, failed: 1 }), '등록 1 · 중복 1 · 실패 1')
+]), { done: 3, saved: 1, dup: 1, failed: 1, merged: 0, noPerson: 0 })
+eq('요약 글자', B.summaryLabel({ done: 3, saved: 1, dup: 1, failed: 1, merged: 0, noPerson: 0 }), '등록 1 · 중복 1 · 실패 1')
 eq('진행 글자', B.progressLabel(137, 300), '137 / 300')
 eq('진행률', [B.progressPercent(137, 300), B.progressPercent(0, 0), B.progressPercent(9, 3)], [46, 0, 100])
 ok('중단 물음이 **담긴 것은 남는다**를 먼저 적는다', B.stopQuestion(12).startsWith('지금까지 읽힌 12건은 저장되어 있습니다'))
@@ -139,6 +139,117 @@ ok('단건 파일 고르기가 PDF 를 받는다',
 ok('단건 안내 문구가 PDF 를 말한다',
   /읽을 수 없는 형식입니다 — 사진\(jpg·png\)이나 PDF 로 올려 주세요/.test(read('components/cards/useCardOcr.ts')))
 ok('PDF 는 줄이지 않는다', /file\.type === 'application\/pdf'\) return file/.test(read('components/cards/useCardOcr.ts')))
+
+// ── 쪽 순서 처리 — 2026-11-24. 실제 스캐너 PDF 35쪽에서 21건 중 5건이 쓰레기였다 ──
+console.log('\n── ⑧ 뒷면·사람 없는 면 ──')
+// 읽는 규칙은 위에서 이미 읽어 두었다(const OCR).
+ok('지시문이 is_back_side 를 받는다', /"is_back_side": false/.test(OCR))
+ok('뒷면이 무엇인지 적어 두었다', /로고·슬로건·본사 주소·계좌번호·예금주/.test(OCR))
+ok('계좌·사업자번호는 어느 칸에도 넣지 않는다', /계좌번호·사업자등록번호·법인번호는 \*\*어떤 칸에도 넣지 않는다\*\*/.test(OCR))
+ok('이름 칸은 사람 이름만', /name 은 \*\*사람 이름만\*\* 넣는다/.test(OCR))
+ok('한글·로마자를 나눠 담는다', /name = 한글 이름, name_en = 로마자 이름/.test(OCR))
+ok('한 쪽에 앞뒤가 같이 있으면 한 장', /한 쪽에 앞뒤가 같이 찍혔으면\(돌아가 있어도\) 둘을 합쳐/.test(OCR))
+ok('읽은 값에서 뒷면 깃발을 꺼낸다', /export function backSideFromJson/.test(read('lib/businessCardOcr.ts')))
+ok('모르면 뒷면이 아니라고 본다(명함을 잃지 않는 쪽)',
+  /return String\(v \?\? ''\)\.trim\(\)\.toLowerCase\(\) === 'true'/.test(read('lib/businessCardOcr.ts')))
+
+eq('뒷면이면 사람 없는 면', B.isNoPerson({ name: '홍길동', company: '가나' }, true), true)
+eq('이름이 없으면 사람 없는 면', B.isNoPerson({ name: '', company: '가나정밀' }, false), true)
+eq('이름이 회사명과 같으면 사람 없는 면',
+  [B.isNoPerson({ name: '㈜가나정밀', company: '(주) 가나정밀' }, false),
+    B.isNoPerson({ name: '가나정밀', company: '가나정밀' }, false)], [true, true])
+eq('사람 이름이 있으면 아니다', B.isNoPerson({ name: '홍길동', company: '가나정밀' }, false), false)
+
+// 사람 없는 면을 **앞 명함에 붙일 수 있나** — 2026-11-24 실측에서 부동산 사무실 면이
+// 앞 명함에 붙어 전화·주소를 덮었다. 뒷면과 남의 명함을 가르는 것은 제 연락처다.
+const prevCo = { company: '주식회사 다라상사', company_en: null }
+eq('뒷면 — 회사명이 영문뿐이고 연락처가 없다(계좌번호는 칸에 안 들어온다)',
+  B.canMergeBack(prevCo, { company: 'DARA TRADING' }), true)
+eq('남의 명함 — 회사가 다르고 제 전화가 있다',
+  B.canMergeBack(prevCo, { company: '마바부동산 공인중개사사무소', phone: '031-777-0500' }), false)
+eq('회사명이 이어지면 연락처가 있어도 뒷면',
+  B.canMergeBack(prevCo, { company: '다라상사', phone: '031-1' }), true)
+eq('㈜ 표기 차이는 같은 회사로 본다',
+  B.canMergeBack({ company: '㈜가나정밀' }, { company: '(주) 가나정밀', phone: '031-1' }), true)
+eq('회사명이 없으면 뒷면으로 본다', B.canMergeBack(prevCo, { company: '' }), true)
+eq('영문 칸과 이어져도 뒷면', B.canMergeBack({ company: '다라', company_en: 'DARA TRADING' },
+  { company: 'DARA TRADING', phone: '031-1' }), true)
+ok('라우트가 그 판정을 지난다', /canMergeBack\(prevRow/.test(R))
+
+console.log('\n── ⑨ 한글 우선 교정 ──')
+eq('한글이 섞였나', [B.hasHangul('홍길동'), B.hasHangul('Hong'), B.hasHangul('')], [true, false, false])
+eq('로마자뿐인가', [B.isRomanOnly('Hong Gil-dong'), B.isRomanOnly('홍길동'), B.isRomanOnly('010-1')], [true, false, false])
+eq('로마자 이름 + 한글 면 → 바꿔 넣는다',
+  B.hangulPatch({ name: 'Hong Gil-dong', name_en: '', company: 'GANA Co.', company_en: '' },
+    { name: '홍길동', company: '주식회사 가나정밀' }),
+  { name: '홍길동', name_en: 'Hong Gil-dong', company: '주식회사 가나정밀', company_en: 'GANA Co.' })
+eq('영문 칸이 이미 차 있으면 덮지 않는다',
+  B.hangulPatch({ name: 'Hong', name_en: 'Gil-dong Hong', company: 'GANA', company_en: 'GANA PRECISION' },
+    { name: '홍길동', company: '가나정밀' }),
+  { name: '홍길동', company: '가나정밀' })
+eq('이미 한글이면 그대로',
+  B.hangulPatch({ name: '홍길동', name_en: '', company: '가나정밀', company_en: '' },
+    { name: 'Hong Gil-dong', company: 'GANA' }), {})
+eq('이번 면이 로마자뿐이면 그대로',
+  B.hangulPatch({ name: 'Hong', name_en: '', company: 'GANA', company_en: '' },
+    { name: 'Gil-dong Hong', company: 'GANA Co.' }), {})
+eq('빈 칸만 채운다',
+  B.fillBlanks({ name: '홍길동', company: '', fax: null }, { name: '다른이름', company: '가나정밀', fax: '031-1' },
+    ['name', 'company', 'fax']),
+  { company: '가나정밀', fax: '031-1' })
+
+console.log('\n── ⑩ 쪽 순서를 라우트가 지킨다 ──')
+ok('직전 명함을 받는다', /form\.get\('prev_card_id'\)/.test(R))
+ok('다음 요청에 넘겨준다', /last_card_id: prevId/.test(R))
+ok('ⓐ 사람 없는 면', /if \(isNoPerson\(row, got\.back\)\)/.test(R))
+ok('ⓐ 직전이 없으면 no_person', /reason: 'no_person'/.test(R))
+ok('ⓑ 직전과 같은 명함이면 합친다', /hit\.card_id === prevId/.test(R))
+ok('ⓒ 기존 명함도 한글 교정은 해 준다',
+  /reason: 'dup'/.test(R) && /await mergeInto\(hit\.card_id/.test(R))
+ok('ⓓ 담은 쪽이 다음 쪽의 직전이 된다', /prevId = cardId/.test(R))
+ok('합치기는 빈 칸 채우기 + 한글 교정', /fillBlanks\(targetRow, row, WRITE_FIELDS\)/.test(R) && /hangulPatch\(/.test(R))
+ok('바뀐 것이 없으면 쓰지 않는다', /if \(Object\.keys\(patch\)\.length === 0\) return targetRow/.test(R))
+eq('사건 이름 둘', [B.EVENT_MERGED, B.EVENT_HANGUL], ['card_merged_back', 'card_hangul_fixed'])
+ok('그 이름으로 사건을 남긴다', /EVENT_MERGED/.test(R) && /EVENT_HANGUL/.test(R))
+ok('화면은 앞 응답을 받은 뒤 다음 요청을 보낸다',
+  /let prevCardId: number \| null = null/.test(read(MODAL))
+  && /body\.append\('prev_card_id', String\(prevCardId\)\)/.test(read(MODAL)))
+
+console.log('\n── ⑪ 집계와 읽기 비용 ──')
+eq('집계에 뒷면·사람없음이 든다', B.addLines(B.EMPTY_TALLY, [
+  { index: 0, ok: true, card_id: 1 },
+  { index: 1, ok: false, reason: 'merged', card_id: 1, merged_into: 1 },
+  { index: 2, ok: false, reason: 'no_person' },
+  { index: 3, ok: false, reason: 'dup', card_id: 1 },
+  { index: 4, ok: false, reason: 'parse' },
+]), { done: 5, saved: 1, dup: 1, failed: 1, merged: 1, noPerson: 1 })
+eq('요약 글자', B.summaryLabel({ done: 5, saved: 1, dup: 1, failed: 1, merged: 1, noPerson: 1 }),
+  '등록 1 · 중복 1 · 뒷면 합침 1 · 사람 이름 없음 1 · 실패 1')
+eq('0인 항목은 적지 않는다', B.summaryLabel({ done: 1, saved: 1, dup: 0, failed: 0, merged: 0, noPerson: 0 }),
+  '등록 1 · 중복 0 · 실패 0')
+eq('환산 상수는 입력·출력 따로', Object.keys(B.WON_PER_MTOK).sort(), ['input', 'output'])
+eq('비용', B.costWon({ input: 1_000_000, output: 1_000_000 }), B.WON_PER_MTOK.input + B.WON_PER_MTOK.output)
+eq('35쪽쯤의 비용', B.costWon({ input: 45_000, output: 5_000 }), 10)
+ok('마지막 줄에 적는다', /읽기 비용 약 /.test(B.costLabel({ input: 1000, output: 100 })))
+ok('화면이 그 줄을 쓴다', /costLabel\(usage\)/.test(read(MODAL)))
+ok('쪽마다 토큰을 남긴다', /\[\$\{TAG\}\] page`, \{ index: i, input: usage\.input, output: usage\.output \}/.test(R))
+ok('건별 토큰을 응답에 담는다', /lines\.push\(\{ index: i, ok: true, card_id: cardId, usage \}\)/.test(R))
+
+console.log('\n── ⑫ 실제 명함 PDF 는 저장소에 들이지 않는다 ──')
+const GI = read('.gitignore')
+ok('이름에 「명함」이 든 PDF 를 막는다', /명함.*\.pdf/.test(GI))
+eq('저장소에 들어온 명함 PDF', (() => {
+  const hits = []
+  const seek = (d) => {
+    for (const e of fs.readdirSync(path.join(ROOT, d || '.'), { withFileTypes: true })) {
+      const rel = d ? `${d}/${e.name}` : e.name
+      if (e.isDirectory()) { if (!['node_modules', '.next', '.next-perf', '.git'].includes(e.name)) seek(rel); continue }
+      if (/명함.*\.pdf$/i.test(e.name)) hits.push(rel)
+    }
+  }
+  seek('')
+  return hits
+})(), [])
 
 console.log('\n── ⑦ 「확인 전」 보기 ──')
 const rows = [

@@ -22,7 +22,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
-import { OCR_KEYS, fieldsFromJson, parseOcrJson, type OcrKey } from '@/lib/businessCardOcr'
+import { OCR_KEYS, backSideFromJson, fieldsFromJson, parseOcrJson, type OcrKey } from '@/lib/businessCardOcr'
 
 /** 받는 파일의 한도. */
 export const MAX_BYTES = 10 * 1024 * 1024
@@ -68,20 +68,40 @@ const ASK = [
   '  "fax": "팩스",',
   '  "email": "이메일",',
   '  "address": "주소",',
-  '  "website": "홈페이지"',
+  '  "website": "홈페이지",',
+  '  "is_back_side": false',
   '}',
   '',
   '규칙',
   '· 명함에 없는 값은 null. 추측하지 말 것.',
   '· 전화·휴대폰·팩스는 숫자와 하이픈만. 국가번호 +82 는 0 으로 바꾼다(+82-10-… → 010-…).',
-  '· 한국어·영어·일본어 명함 모두 같은 칸에 담는다. 앞뒤 양면이 한 장에 있으면 둘 다 본다.',
+  '· 한국어·영어·일본어 명함 모두 같은 칸에 담는다.',
   '· 한 줄에 두 값이 있으면(「M. 010-… hong@…」) 각자의 칸으로 나눈다.',
+  '',
+  'name 은 **사람 이름만** 넣는다',
+  '· 회사명·부서명·슬로건·광고 문구를 name 에 넣지 않는다. 사람 이름이 없으면 name 은 null.',
+  '· 「예금주 홍길동」·「대표 홍길동」의 홍길동은 그 면의 주인이 아닐 수 있다 —',
+  '  명함의 주인으로 적힌 이름이 아니면 name 에 넣지 않는다.',
+  '· 계좌번호·사업자등록번호·법인번호는 **어떤 칸에도 넣지 않는다**(전화·팩스에도 아니다).',
+  '',
+  '한글과 로마자가 같이 있으면 나눠 담는다',
+  '· name = 한글 이름, name_en = 로마자 이름.',
+  '· company = 한글 회사명, company_en = 로마자 회사명.',
+  '· 한쪽만 있으면 있는 쪽만 채우고 나머지는 null.',
+  '',
+  'is_back_side — 이 면이 **명함의 뒷면·보조면**인가',
+  '· true: 사람 이름도 휴대폰도 이메일도 없고, 로고·슬로건·본사 주소·계좌번호·예금주·',
+  '  취급 품목 같은 보조 정보만 있는 면.',
+  '· false: 사람의 연락처가 있는 면. 한 쪽에 앞뒤가 같이 찍혔으면(돌아가 있어도) 둘을 합쳐',
+  '  한 장으로 보고 false.',
+  '· 빈 면·무늬만 있는 면·광고 스티커는 읽지 않는다 — name 과 company 를 둘 다 null 로 둔다.',
 ].join('\n')
 
 export type OcrUsage = { input: number; output: number }
 export type ReadFail = 'no_key' | 'no_file' | 'too_big' | 'bad_type' | 'parse' | 'api'
 export type ReadResult =
-  | { ok: true; fields: Record<OcrKey, string>; usage: OcrUsage }
+  /** `back` 이 참이면 **명함의 뒷면·보조면**이다 — 새 명함으로 담지 않는다. */
+  | { ok: true; fields: Record<OcrKey, string>; back: boolean; usage: OcrUsage }
   | { ok: false; reason: ReadFail; usage: OcrUsage }
 
 const NO_USAGE: OcrUsage = { input: 0, output: 0 }
@@ -122,7 +142,7 @@ export async function readCard(file: unknown, apiKey: string): Promise<ReadResul
       usage.input += res.usage.input_tokens
       usage.output += res.usage.output_tokens
       const json = parseOcrJson(textOf(res))
-      if (json) return { ok: true, fields: fieldsFromJson(json), usage }
+      if (json) return { ok: true, fields: fieldsFromJson(json), back: backSideFromJson(json), usage }
       console.warn('[cards-ocr] JSON 으로 읽지 못했다', { attempt, kind })
     }
     return { ok: false, reason: 'parse', usage }

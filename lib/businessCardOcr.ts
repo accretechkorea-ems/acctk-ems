@@ -91,6 +91,18 @@ export function parseOcrJson(text: string): Record<string, unknown> | null {
  */
 const EMPTYISH = new Set(['', '-', '–', 'null', 'none', 'n/a', 'na', '없음', '미상', 'unknown'])
 
+/**
+ * 모델이 「이 면은 뒷면·보조면이다」라고 했나 (2026-11-24).
+ *
+ * 글자 `'true'` 로 오는 일도 있어 둘 다 받는다. 모르면 **false** 로 본다 —
+ * 뒷면이 아닌 것을 뒷면으로 보면 **멀쩡한 명함이 사라진다**. 반대쪽 실수가 덜 아프다.
+ */
+export function backSideFromJson(json: Record<string, unknown>): boolean {
+  const v = json.is_back_side
+  if (typeof v === 'boolean') return v
+  return String(v ?? '').trim().toLowerCase() === 'true'
+}
+
 export function fieldsFromJson(json: Record<string, unknown>): Record<OcrKey, string> {
   const out = {} as Record<OcrKey, string>
   for (const key of OCR_KEYS) {

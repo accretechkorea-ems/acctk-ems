@@ -29,7 +29,10 @@ import {
 } from '@/lib/businessCard'
 import type { OcrKey } from '@/lib/businessCardOcr'
 import { readCard } from '@/lib/cardOcrServer'
-import { BULK_METHOD, MAX_PER_REQUEST, type BulkLine } from '@/lib/businessCardBulk'
+import {
+  BULK_METHOD, EVENT_HANGUL, EVENT_MERGED, MAX_PER_REQUEST,
+  canMergeBack, fillBlanks, hangulPatch, isNoPerson, type BulkLine,
+} from '@/lib/businessCardBulk'
 
 const supabaseAdmin = adminClient()
 const TAG = 'cards-ocr-bulk'
@@ -107,27 +110,103 @@ export async function POST(req: Request) {
   let usedIn = 0
   let usedOut = 0
 
-  // 담기는 **차례대로** 한다 — 같은 묶음 안에 같은 명함이 둘 있으면 뒤가 중복으로 걸린다.
+  /** 직전 명함 — 같은 요청의 앞 쪽, 없으면 지난 요청이 넘겨준 prev_card_id. */
+  let prevId: number | null = Number(form.get('prev_card_id')) || null
+  /** 그 명함의 지금 값(합칠 때 빈 칸을 보려면 필요하다). */
+  let prevRow: Record<string, unknown> | null = null
+  if (prevId) {
+    const { data } = await supabaseAdmin.from('business_cards').select('*').eq('card_id', prevId).maybeSingle()
+    prevRow = data ?? null
+    if (!prevRow) prevId = null
+  }
+
+  /** 담을 수 있는 칸 이름 — 영문 칸이 없는 DB 에서는 뺀다. */
+  const WRITE_FIELDS = CARD_FIELDS.filter(f => enabled || !(EN_FIELDS as readonly string[]).includes(f))
+
+  /** 사건 한 줄. 실패해도 일을 되돌리지 않는다. */
+  const logEvent = async (cardId: number, type: string, payload: Record<string, unknown>) => {
+    const { error } = await supabaseAdmin.from('business_card_events').insert({
+      card_id: cardId, event_type: type, occurred_at: now,
+      actor_engineer_id: caller.engineer_id, payload,
+    })
+    if (error && error.code !== '42P01' && error.code !== 'PGRST205') {
+      console.error(`[${TAG}] 자국을 남기지 못했다`, { cardId, type, code: error.code })
+    }
+  }
+
+  /**
+   * 기존 줄에 **빈 칸 채우기 + 한글 우선 교정**을 얹는다.
+   * 바뀐 것이 없으면 쓰지 않는다 — 건드리지 않아도 될 줄을 쓰지 않는다.
+   */
+  const mergeInto = async (
+    target: number, targetRow: Record<string, unknown>, row: Record<string, string | null>,
+  ): Promise<Record<string, unknown>> => {
+    const fill = fillBlanks(targetRow, row, WRITE_FIELDS)
+    const fix = hangulPatch(targetRow as Parameters<typeof hangulPatch>[0], row)
+    const patch = { ...fill, ...fix }
+    if (Object.keys(patch).length === 0) return targetRow
+    const { error } = await supabaseAdmin.from('business_cards').update(patch).eq('card_id', target)
+    if (error) {
+      console.error(`[${TAG}] 합치지 못했다`, { target, code: error.code })
+      return targetRow
+    }
+    if (Object.keys(fill).length > 0) {
+      await logEvent(target, EVENT_MERGED, { filled: Object.keys(fill) })
+    }
+    if (Object.keys(fix).length > 0) {
+      await logEvent(target, EVENT_HANGUL, { fixed: Object.keys(fix) })
+    }
+    return { ...targetRow, ...patch }
+  }
+
+  // 담기는 **차례대로** 한다 — 쪽 순서가 곧 앞면·뒷면의 순서다.
   for (let i = 0; i < read.length; i++) {
     const got = read[i]
     usedIn += got.usage.input
     usedOut += got.usage.output
-    if (!got.ok) { lines.push({ index: i, ok: false, reason: got.reason }); continue }
+    const usage = got.usage
+    // 쪽마다 얼마나 들었는지 — 값은 남기지 않고 숫자만.
+    console.log(`[${TAG}] page`, { index: i, input: usage.input, output: usage.output })
+    if (!got.ok) { lines.push({ index: i, ok: false, reason: got.reason, usage }); continue }
 
     const row = toRow(got.fields, enabled)
-    if (!row.name && !row.company) { lines.push({ index: i, ok: false, reason: 'empty' }); continue }
+    if (!row.name && !row.company) { lines.push({ index: i, ok: false, reason: 'empty', usage }); continue }
 
     const phone = digitsOf(row.mobile)
     const mail = String(row.email ?? '').trim().toLowerCase()
-    const hit = (phone && byPhone.get(phone)) || (mail && byMail.get(mail)) || null
-    if (hit) {
-      lines.push({ index: i, ok: false, reason: 'dup', card_id: hit.card_id, name: hit.name })
+
+    // ── ⓐ 사람이 없는 면(뒷면·이름 없음·이름이 회사명) ──
+    if (isNoPerson(row, got.back)) {
+      // 앞 명함의 뒷면일 때만 붙인다 — 사람 이름 없는 **남의 명함**이 붙으면
+      // 전화·주소가 덮인다(2026-11-24 실측에서 부동산 사무실 면이 그렇게 붙었다).
+      if (prevId && prevRow && canMergeBack(prevRow as Parameters<typeof canMergeBack>[0], row)) {
+        prevRow = await mergeInto(prevId, prevRow, row)
+        lines.push({ index: i, ok: false, reason: 'merged', card_id: prevId, merged_into: prevId, usage })
+      } else {
+        lines.push({ index: i, ok: false, reason: 'no_person', name: row.company ?? row.name, usage })
+      }
       continue
     }
 
-    // 이름이 비면 표의 CHECK 에 걸린다 — 회사만 읽혔으면 회사명을 이름 자리에 둔다.
-    if (!row.name) row.name = row.company
+    const hit = (phone && byPhone.get(phone)) || (mail && byMail.get(mail)) || null
 
+    // ── ⓑ 직전 명함의 **다른 면** — 합치고 한글을 앞으로 ──
+    if (hit && prevId && hit.card_id === prevId && prevRow) {
+      prevRow = await mergeInto(prevId, prevRow, row)
+      lines.push({ index: i, ok: false, reason: 'merged', card_id: prevId, merged_into: prevId, usage })
+      continue
+    }
+
+    // ── ⓒ 직전이 아닌 기존 명함과 같다 — 중복. 한글 교정만 해 준다 ──
+    if (hit) {
+      const { data: old } = await supabaseAdmin
+        .from('business_cards').select('*').eq('card_id', hit.card_id).maybeSingle()
+      if (old) await mergeInto(hit.card_id, old as Record<string, unknown>, row)
+      lines.push({ index: i, ok: false, reason: 'dup', card_id: hit.card_id, name: hit.name, usage })
+      continue
+    }
+
+    // ── ⓓ 새 명함 ──
     const { data: made, error } = await supabaseAdmin
       .from('business_cards')
       .insert({
@@ -144,34 +223,35 @@ export async function POST(req: Request) {
       // 23514 = CHECK 제약. 표가 아직 'bulk' 를 모른다 — 무엇을 돌려야 하는지 따로 말해 준다.
       const why = error?.code === '23514' ? 'schema' : 'save'
       console.error(`[${TAG}] insert failed`, { index: i, code: error?.code, why })
-      lines.push({ index: i, ok: false, reason: why })
+      lines.push({ index: i, ok: false, reason: why, usage })
       continue
     }
 
     const cardId = Number(made.card_id)
-    lines.push({ index: i, ok: true, card_id: cardId })
+    lines.push({ index: i, ok: true, card_id: cardId, usage })
     // 같은 묶음 안의 다음 장이 같은 명함이면 중복으로 걸리게 바로 넣는다.
     if (phone) byPhone.set(phone, { card_id: cardId, name: row.name })
     if (mail) byMail.set(mail, { card_id: cardId, name: row.name })
+    // 이 쪽이 다음 쪽의 「직전 명함」이 된다 — 뒷면은 여기에 붙는다.
+    prevId = cardId
+    prevRow = { card_id: cardId, ...row }
 
-    // 자국 한 줄. 실패해도 담기를 되돌리지 않는다.
-    const { error: evErr } = await supabaseAdmin.from('business_card_events').insert({
-      card_id: cardId, event_type: 'card_created', occurred_at: now,
-      actor_engineer_id: caller.engineer_id, payload: { name: row.name, method: INPUT_METHOD },
-    })
-    if (evErr && evErr.code !== '42P01' && evErr.code !== 'PGRST205') {
-      console.error(`[${TAG}] 자국을 남기지 못했다`, { cardId, code: evErr.code })
-    }
+    await logEvent(cardId, 'card_created', { name: row.name, method: INPUT_METHOD })
   }
 
-  const saved = lines.filter(l => l.ok).length
-  const dup = lines.filter(l => !l.ok && l.reason === 'dup').length
+  const count = (r: string) => lines.filter(l => !l.ok && l.reason === r).length
   // 남기는 것은 숫자뿐이다 — 파일도, 읽은 값도 적지 않는다.
-  console.log(`[${TAG}] done`, { 받음: files.length, 담음: saved, 중복: dup, input: usedIn, output: usedOut })
+  console.log(`[${TAG}] done`, {
+    받음: files.length, 담음: lines.filter(l => l.ok).length,
+    중복: count('dup'), 뒷면합침: count('merged'), 사람없음: count('no_person'),
+    input: usedIn, output: usedOut,
+  })
 
   return NextResponse.json({
     ok: true,
     lines,
     usage: { input: usedIn, output: usedOut },
+    // 다음 요청이 prev_card_id 로 되돌려 보낸다 — 묶음을 넘어가는 뒷면이 붙게.
+    last_card_id: prevId,
   })
 }

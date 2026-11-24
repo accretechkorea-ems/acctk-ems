@@ -31,7 +31,7 @@ import { BLUE, BLUE_BORDER, BLUE_TINT, BORDER, CARD_BG, MUTED, SUB, TEXT } from 
 import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 import { R } from '@/lib/radius'
 import {
-  BULK_REASON_LABEL, BULK_SQL_FILE, EMPTY_TALLY, MAX_PER_REQUEST, addLines, chunk,
+  BULK_REASON_LABEL, BULK_SQL_FILE, EMPTY_TALLY, MAX_PER_REQUEST, addLines, chunk, costLabel,
   progressLabel, progressPercent, stopQuestion, summaryLabel,
   type BulkLine, type BulkReason, type BulkTally,
 } from '@/lib/businessCardBulk'
@@ -40,7 +40,11 @@ import {
 type Piece = { file: File; label: string }
 
 /** 끝난 뒤 보여 줄 한 줄. */
-type Done = { label: string; ok: boolean; reason?: BulkReason; name?: string | null }
+type Done = {
+  label: string; ok: boolean; reason?: BulkReason; name?: string | null
+  /** 뒷면이면 **어느 명함에 합쳐졌나**. */
+  mergedInto?: number
+}
 
 const PADS = keepPads({ x: 16, top: 14, bottom: 10 }, 10, 12)
 const BTN_H = 40
@@ -111,8 +115,10 @@ export default function BulkImportModal({ division, onClose, onDone, onShowUnche
   const [total, setTotal] = useState(0)
   const [tally, setTally] = useState<BulkTally>(EMPTY_TALLY)
   const [rows, setRows] = useState<Done[]>([])
-  const [openList, setOpenList] = useState<'dup' | 'failed' | null>(null)
+  const [openList, setOpenList] = useState<'dup' | 'failed' | 'merged' | 'noPerson' | null>(null)
   const [note, setNote] = useState('')
+  /** 지금까지 쓴 토큰 — 끝에 「읽기 비용 약 N원」으로 적는다. */
+  const [usage, setUsage] = useState({ input: 0, output: 0 })
   const pickRef = useRef<HTMLInputElement>(null)
   /** 중단 눌림 — 돌고 있는 반복이 다음 묶음 전에 본다. */
   const stop = useRef(false)
@@ -146,10 +152,19 @@ export default function BulkImportModal({ division, onClose, onDone, onShowUnche
 
     let acc = EMPTY_TALLY
     const done: Done[] = []
+    const used = { input: 0, output: 0 }
+    /**
+     * 직전 요청에서 마지막으로 담기거나 합쳐진 명함.
+     * 묶음을 넘어가는 뒷면(3쪽에서 끊기고 4쪽이 그 뒷면)이 제자리를 찾게 넘겨 준다.
+     * 그래서 요청은 **앞 응답이 온 뒤에** 보낸다 — 나란히 보내면 순서가 뒤섞인다.
+     */
+    let prevCardId: number | null = null
+
     for (const group of chunk(pieces, MAX_PER_REQUEST)) {
       if (stop.current) break
       const body = new FormData()
       body.append('division', division)
+      if (prevCardId) body.append('prev_card_id', String(prevCardId))
       for (const p of group) body.append('files', p.file, p.file.name)
 
       /** 한 번 더 보낸다 — 네트워크가 한 번 흔들렸다고 묶음을 버리지 않는다. */
@@ -157,9 +172,16 @@ export default function BulkImportModal({ division, onClose, onDone, onShowUnche
       for (let attempt = 1; attempt <= 2 && !lines; attempt++) {
         try {
           const res = await fetch('/api/cards/ocr-bulk', { method: 'POST', body })
-          const json = await res.json() as { ok?: boolean; lines?: BulkLine[]; reason?: string }
-          if (json?.ok && Array.isArray(json.lines)) lines = json.lines
-          else if (attempt === 2) {
+          const json = await res.json() as {
+            ok?: boolean; lines?: BulkLine[]; reason?: string
+            usage?: { input: number; output: number }; last_card_id?: number | null
+          }
+          if (json?.ok && Array.isArray(json.lines)) {
+            lines = json.lines
+            used.input += json.usage?.input ?? 0
+            used.output += json.usage?.output ?? 0
+            prevCardId = json.last_card_id ?? prevCardId
+          } else if (attempt === 2) {
             lines = group.map((_, i) => ({
               index: i, ok: false as const, reason: (json?.reason ?? 'api') as BulkReason,
             }))
@@ -175,10 +197,14 @@ export default function BulkImportModal({ division, onClose, onDone, onShowUnche
         const p = group[l.index]
         done.push(l.ok
           ? { label: p?.label ?? '', ok: true }
-          : { label: p?.label ?? '', ok: false, reason: l.reason, name: l.name })
+          : {
+            label: p?.label ?? '', ok: false, reason: l.reason,
+            name: l.name, mergedInto: l.merged_into,
+          })
       }
       setTally(acc)
       setRows([...done])
+      setUsage({ ...used })
     }
 
     setPhase('finished')
@@ -205,8 +231,39 @@ export default function BulkImportModal({ division, onClose, onDone, onShowUnche
   }
 
   const dupRows = rows.filter(r => !r.ok && r.reason === 'dup')
-  const failRows = rows.filter(r => !r.ok && r.reason !== 'dup')
+  const mergedRows = rows.filter(r => !r.ok && r.reason === 'merged')
+  const noPersonRows = rows.filter(r => !r.ok && r.reason === 'no_person')
+  const failRows = rows.filter(r => !r.ok && !['dup', 'merged', 'no_person'].includes(r.reason ?? ''))
   const pct = progressPercent(tally.done, total)
+
+  /** 펼침 단추 하나 — 묶음 이름과 줄들. */
+  const foldable = (
+    key: 'dup' | 'merged' | 'noPerson' | 'failed',
+    title: string,
+    list: readonly Done[],
+    line: (r: Done) => string,
+  ) => list.length === 0 ? null : (
+    <>
+      <button type="button" onClick={() => setOpenList(openList === key ? null : key)}
+        style={{
+          height: 32, border: `1px solid ${BORDER}`, borderRadius: R.control, background: CARD_BG,
+          color: TEXT_LABEL, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+          textAlign: 'left', padding: '0 10px',
+        }}>
+        {title} {list.length}건 {openList === key ? '접기' : '펼치기'}
+      </button>
+      {openList === key && (
+        <div style={{
+          maxHeight: 160, overflowY: 'auto', border: `1px solid ${BORDER}`,
+          borderRadius: R.control, padding: '6px 10px',
+        }}>
+          {list.map((r, i) => (
+            <div key={i} style={{ fontSize: 12, color: SUB, padding: '3px 0' }}>{line(r)}</div>
+          ))}
+        </div>
+      )}
+    </>
+  )
 
   return (
     <ModalOverlay onClose={tryClose}>
@@ -308,46 +365,25 @@ export default function BulkImportModal({ division, onClose, onDone, onShowUnche
               </div>
             )}
 
-            {phase === 'finished' && (dupRows.length > 0 || failRows.length > 0) && (
+            {phase === 'finished' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {dupRows.length > 0 && (
-                  <button type="button" onClick={() => setOpenList(openList === 'dup' ? null : 'dup')}
-                    style={{
-                      height: 32, border: `1px solid ${BORDER}`, borderRadius: R.control, background: CARD_BG,
-                      color: TEXT_LABEL, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-                      textAlign: 'left', padding: '0 10px',
-                    }}>
-                    중복 {dupRows.length}건 {openList === 'dup' ? '접기' : '펼치기'}
-                  </button>
-                )}
-                {openList === 'dup' && (
-                  <div style={{ maxHeight: 160, overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '6px 10px' }}>
-                    {dupRows.map((r, i) => (
-                      <div key={i} style={{ fontSize: 12, color: SUB, padding: '3px 0' }}>
-                        {r.label} — 이미 있는 명함{r.name ? ` · ${r.name}` : ''}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {failRows.length > 0 && (
-                  <button type="button" onClick={() => setOpenList(openList === 'failed' ? null : 'failed')}
-                    style={{
-                      height: 32, border: `1px solid ${BORDER}`, borderRadius: R.control, background: CARD_BG,
-                      color: TEXT_LABEL, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-                      textAlign: 'left', padding: '0 10px',
-                    }}>
-                    실패 {failRows.length}건 {openList === 'failed' ? '접기' : '펼치기'}
-                  </button>
-                )}
-                {openList === 'failed' && (
-                  <div style={{ maxHeight: 160, overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: R.control, padding: '6px 10px' }}>
-                    {failRows.map((r, i) => (
-                      <div key={i} style={{ fontSize: 12, color: SUB, padding: '3px 0' }}>
-                        {r.label} — {BULK_REASON_LABEL[r.reason ?? 'api']}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {foldable('merged', '뒷면 합침', mergedRows,
+                  r => `${r.label} → ${r.mergedInto ? `${r.mergedInto}번 ` : ''}명함에 합침`)}
+                {foldable('dup', '중복', dupRows,
+                  r => `${r.label} — 이미 있는 명함${r.name ? ` · ${r.name}` : ''}`)}
+                {foldable('noPerson', '사람 이름 없음', noPersonRows,
+                  r => `${r.label} — 사람 이름 없음${r.name ? `(${r.name})` : ''}`)}
+                {foldable('failed', '실패', failRows,
+                  r => `${r.label} — ${BULK_REASON_LABEL[r.reason ?? 'api']}`)}
+              </div>
+            )}
+
+            {/* 읽기 비용 — 마지막 줄. 토큰이 0이면 적지 않는다. */}
+            {phase === 'finished' && usage.input + usage.output > 0 && (
+              <div style={{ fontSize: 12, color: SUB }}>
+                {costLabel(usage)} <span style={{ color: MUTED }}>
+                  (입력 {usage.input.toLocaleString('ko-KR')} · 출력 {usage.output.toLocaleString('ko-KR')} 토큰)
+                </span>
               </div>
             )}
 
