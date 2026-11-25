@@ -114,5 +114,15 @@ ok('만들면 바로 연결한다', /setOpportunityId\(made\.opportunity_id\)/.t
 ok('후보도 없고 업체도 없으면 칸을 내지 않는다',
   /selectableOpportunities\.length > 0 \|\| \(onCreate && customerPicked\)/.test(CARD))
 
-console.log(fails === 0 ? '\n전부 통과' : `\n${fails}건 실패`)
-process.exit(fails === 0 ? 0 : 1)
+console.log(String.fromCharCode(10) + '── ⑦ 목록에서 걸고 풀기(C2) ──')
+const LINK = read('components/quote/ForecastLink.tsx')
+const PANEL = read('components/dashboard/MyQuotesPanel.tsx')
+ok('라우트에 걸고 푸는 길이 있다', /action === 'quote-forecast-link'/.test(CHANGE))
+ok('다른 업체의 포캐스트에는 못 건다', /다른 업체의 포캐스트입니다/.test(CHANGE))
+ok('바꾸면 옛 쪽·새 쪽을 모두 다시 셈한다', CHANGE.includes('for (const id of [before, next])'))
+ok('사건으로 남는다', CHANGE.includes("'quote_forecast_linked'"))
+ok('부품은 공용 콤보박스·공용 카드', /<SearchSelect<SalesOpportunity>/.test(LINK) && /<ModalCard/.test(LINK))
+ok('진행 중인 것만 고른다', LINK.includes('!isClosed(o) || o.opportunity_id === opportunityId'))
+ok('내 견적 목록에 그 단추가 있다', /<ForecastLink/.test(PANEL) && /opportunity_id/.test(PANEL))
+
+console.log(fails === 0 ? String.fromCharCode(10) + '전부 통과' : String.fromCharCode(10) + fails + '건 실패')

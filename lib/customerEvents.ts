@@ -33,6 +33,8 @@ export type CustomerEventType =
   // 리드 — 번호를 반납하고 되찾는다(lib/leadRecall.ts)와 **상태가 바뀐 자국**.
   | 'lead_recalled' | 'lead_restored'
   | 'lead_unassignable' | 'lead_converted' | 'lead_status_changed'
+  // 견적을 포캐스트에 걸거나 푼 자국(2026-11-26).
+  | 'quote_forecast_linked'
 
 /**
  * 「리드」 묶음 — 활동 이력이 이 묶음을 **「리드」 종류**로 세운다(기본 켜짐).
@@ -53,7 +55,7 @@ export function isLeadEvent(type: string): boolean {
 export const CHANGE_EVENT_TYPES: readonly CustomerEventType[] = [
   'site_status_changed', 'site_agency_changed', 'site_moved', 'sites_merged',
   'company_industry_changed', 'site_edited', 'contact_edited', 'device_edited',
-  'customer_deleted', 'customer_restored',
+  'customer_deleted', 'customer_restored', 'quote_forecast_linked',
 ]
 
 /** 그 사건이 「고친 일」인가. 모르는 종류는 아니라고 본다(옛 줄이 섞여도 종전처럼 보인다). */

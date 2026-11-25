@@ -148,6 +148,16 @@ ${full}` : head,
       }
     case 'lead_restored':
       return { label: '리드 복구', title: leadNo, body: '번호를 되돌렸습니다', owner: '' }
+    // 견적을 포캐스트에 걸거나 풀었다 — 그 포캐스트의 금액·단계가 함께 다시 셈해진다.
+    case 'quote_forecast_linked': {
+      const to = str(p.forecast)
+      return {
+        label: to ? '포캐스트 연결' : '포캐스트 해제',
+        title: str(p.quote_no),
+        body: to ? `${to} 에 걸었습니다` : '연결을 풀었습니다',
+        owner: '',
+      }
+    }
     // 지울 수 없는 사람이 지워 달라고 한 자국. **아무것도 지워지지 않았다.**
     case 'company_delete_requested':
       return {

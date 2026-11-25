@@ -51,10 +51,12 @@ const ok = (name, cond, hint) => {
 }
 
 console.log('\n── ① 사건 종류 ──')
-eq('고친 일 열 가지(지우기·되돌리기 포함 — 2026-11-23)', [...E.CHANGE_EVENT_TYPES], [
+// 2026-11-26 — 열한 가지. 견적을 포캐스트에 걸고 푸는 일도 **고친 일**이다
+// (그 포캐스트의 금액·단계가 함께 움직인다).
+eq('고친 일 열한 가지', [...E.CHANGE_EVENT_TYPES], [
   'site_status_changed', 'site_agency_changed', 'site_moved', 'sites_merged',
   'company_industry_changed', 'site_edited', 'contact_edited', 'device_edited',
-  'customer_deleted', 'customer_restored',
+  'customer_deleted', 'customer_restored', 'quote_forecast_linked',
 ])
 ok('리드 사건은 「고친 일」이 아니다',
   ['lead_registered', 'lead_assigned', 'lead_reassigned'].every(t => !E.isChangeEvent(t)))

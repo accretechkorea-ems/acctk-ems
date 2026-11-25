@@ -486,6 +486,60 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, changed: true, patch })
   }
 
+  // ── 견적 ↔ 포캐스트 **걸고 풀기** (2026-11-26) ────────────────────────
+  //
+  // 견적을 쓴 뒤에 생각나는 일이 더 많다 — 목록에서도 걸고 푼다.
+  // 바꾼 뒤에는 **옛 포캐스트와 새 포캐스트 둘 다** 다시 셈한다(금액이 옮겨 간다).
+  if (action === 'quote-forecast-link') {
+    const quoteId = Number(body.quoteId)
+    if (!Number.isInteger(quoteId) || quoteId <= 0) return bad('견적을 찾지 못했습니다')
+    const raw = body.opportunityId
+    const next = raw == null ? null : Number(raw)
+    if (next !== null && (!Number.isInteger(next) || next <= 0)) return bad('포캐스트를 찾지 못했습니다')
+
+    const { data: q, error: readErr } = await sb
+      .from('quotes').select('quote_id, quote_number, customer_id, opportunity_id').eq('quote_id', quoteId).maybeSingle()
+    if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 })
+    if (!q) return bad('견적을 찾지 못했습니다')
+    const before = q.opportunity_id == null ? null : Number(q.opportunity_id)
+    if (before === next) return NextResponse.json({ ok: true, changed: false })
+
+    // 거는 포캐스트는 **그 견적의 업체 것**이어야 한다(남의 회사 딜에 걸리지 않게).
+    let nextTitle: string | null = null
+    if (next !== null) {
+      const { data: opp } = await sb.from('sales_opportunities')
+        .select('opportunity_id, customer_id, title').eq('opportunity_id', next).maybeSingle()
+      if (!opp) return bad('포캐스트를 찾지 못했습니다')
+      if (Number(opp.customer_id) !== Number(q.customer_id)) return bad('다른 업체의 포캐스트입니다')
+      nextTitle = (opp.title as string) ?? null
+    }
+
+    const { error } = await sb.from('quotes').update({ opportunity_id: next }).eq('quote_id', quoteId)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // 옛 쪽·새 쪽 모두 다시 셈한다. 하나는 금액이 빠지고 하나는 더해진다.
+    for (const id of [before, next]) {
+      if (id == null) continue
+      const [{ data: opp }, { data: linked }] = await Promise.all([
+        sb.from('sales_opportunities').select('opportunity_id, stage, expected_amount, closed_at').eq('opportunity_id', id).maybeSingle(),
+        sb.from('quotes').select('quote_id, status, total_supply, purchase_order_at').eq('opportunity_id', id),
+      ])
+      if (!opp) continue
+      const patch = forecastPatch(opp as ForecastNow, (linked ?? []) as LinkedQuote[])
+      if (Object.keys(patch).length > 0) await sb.from('sales_opportunities').update(patch).eq('opportunity_id', id)
+    }
+
+    const customerId = Number(q.customer_id)
+    const { written } = Number.isInteger(customerId) && customerId > 0
+      ? await writeCustomerEvents(sb, [event(customerId, 'quote_forecast_linked', {
+        quote_id: quoteId, quote_no: q.quote_number ?? null,
+        before, after: next, forecast: nextTitle,
+      })])
+      : { written: 0 }
+    console.log(`[${TAG}] quote-forecast-link`, { quoteId, before, next, by: caller.email })
+    return NextResponse.json({ ok: true, changed: true, events: written })
+  }
+
   return bad('모르는 작업입니다')
 }
 

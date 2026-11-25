@@ -37,6 +37,7 @@ import ModalOverlay from '@/components/common/ModalOverlay'
 import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import Popover from '@/components/common/Popover'
 import QuoteRowIcons from '@/components/quote/QuoteRowIcons'
+import ForecastLink from '@/components/quote/ForecastLink'
 import { openRepairDoc } from '@/lib/repairDocFlow'
 import { isGeneral20Form } from '@/lib/quoteForms'
 import RepairInfoModal from '@/components/quote/RepairInfoModal'
@@ -109,6 +110,8 @@ type Quote = {
   /** 견적서 양식 — 수리·문서 단추를 20 견적서 행에만 내려고 읽는다. */
   form_kind: string | null
   customer_id: number | null
+  /** 걸린 포캐스트(sales_opportunities). 없으면 null. */
+  opportunity_id?: number | null
   dealer_id: number | null
   pdf_url: string | null
   shipping_date: string | null
@@ -268,7 +271,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
      * **되돌리기·사후입력 칸은 아직 없을 수 있다**(db/quote_revive_20261125.sql 미적용).
      * 함께 읽어 보고 42703 이면 빼고 한 번 더 읽는다 — 패널이 통째로 비지 않게.
      */
-    const BASE = 'quote_id, quote_number, quote_date, created_at, total_supply, total_profit, profit_rate, status, quote_type, form_kind, customer_id, dealer_id, pdf_url, shipping_date, order_memo, order_request_memo, order_completed_by, tax_completed_by, tax_invoice_date, fail_reason, purchase_order_at, tax_invoice_completed_at, engineer_id, created_by, quote_items(product_name, row_kind, price_list(model_jp))'
+    const BASE = 'quote_id, quote_number, quote_date, created_at, total_supply, total_profit, profit_rate, status, quote_type, form_kind, customer_id, opportunity_id, dealer_id, pdf_url, shipping_date, order_memo, order_request_memo, order_completed_by, tax_completed_by, tax_invoice_date, fail_reason, purchase_order_at, tax_invoice_completed_at, engineer_id, created_by, quote_items(product_name, row_kind, price_list(model_jp))'
     const read = (cols: string) => supabase
       .from('quotes')
       // created_at — 결재 도입 경계를 가르는 값이다(견적일이 아니다. lib/quoteStatus.ts 설명).
@@ -899,6 +902,15 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                         {/* 메모 둘 — **발주서가 올라간 건이면 상태와 무관하게** 낸다.
                             전에는 주문완료 뒤에만 보여서, 발주 직후에는 자기가 쓴 요청 메모조차
                             다시 볼 수 없었다. 요청 메모는 작성자 본인이 여기서 바로 고친다. */}
+                        {/* 포캐스트 연결/해제 — 쓴 뒤에 생각나는 일이라 **목록에서도** 건다(2026-11-26).
+                            같은 회사의 진행 중 포캐스트만 후보다(components/quote/ForecastLink.tsx). */}
+                        <ForecastLink
+                          quoteId={q.quote_id}
+                          customerId={q.customer_id}
+                          opportunityId={q.opportunity_id ?? null}
+                          title={`${q.quote_number} · ${q.company_name}`}
+                          onChanged={loadData}
+                        />
                         {q.purchase_order_at && (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                             <MemoPopover
