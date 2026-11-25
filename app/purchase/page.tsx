@@ -20,6 +20,7 @@ import { useToast } from '@/components/common/Toast'
 import AssigneePicker from '@/components/quote/AssigneePicker'
 import Pager from '@/components/common/Pager'
 import { PAGE_SIZE, pageRange } from '@/lib/pager'
+import { canEditOrderMemo, canEditRequestMemo } from '@/lib/memoPerm'
 import { companyPickOr } from '@/lib/companySearch'
 import { withNameEnFallback } from '@/lib/nameEn'
 import { R } from '@/lib/radius'
@@ -284,6 +285,8 @@ export default function PurchasePage() {
   }, [page])
 
   const isAllowed = canViewMenu(me, 'purchase')
+  /** 메모를 누가 고치나 — 판정은 lib/memoPerm.ts 한 곳이다(서버도 같은 함수를 쓴다). */
+  const memoUser = { engineerId: me?.engineer_id ?? null, isPurchaseTeam: isAllowed }
 
   // 거르기·검색은 **서버가** 한다(2026-11-26) — 받아 온 줄이 곧 이 쪽의 목록이다.
   // 전에는 전부 받아 놓고 여기서 걸렀다. 줄이 늘수록 첫 화면이 그만큼 느려졌다.
@@ -551,16 +554,16 @@ export default function PurchasePage() {
                       </td>
                       <td style={{ padding: '9px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                         {/* 메모 둘 — 공용 부품으로 본다(components/common/MemoPopover.tsx).
-                            여기는 발주를 처리하는 화면이라 둘 다 고칠 수 있다:
-                            요청 메모는 작성자 본인 또는 영업관리, 영업관리 메모는 영업관리만
-                            (서버가 lib/memoPerm.ts 와 같은 기준으로 다시 본다). */}
+                            **누가 고치는지는 lib/memoPerm.ts 한 곳이 정한다**(2026-11-26) —
+                            화면에 참을 박아 두면 규칙이 두 벌이 된다(서버도 같은 함수를 본다).
+                            요청 메모는 작성자 본인 또는 영업관리, 영업관리 메모는 영업관리만. */}
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                           <MemoPopover
                             title={`${q.quote_number} · ${customerName(q)}`}
                             value={q.order_request_memo}
                             badge="요청"
                             label="요청 메모"
-                            canEdit
+                            canEdit={canEditRequestMemo(memoUser, q.engineer_id)}
                             onSave={text => saveMemo(q.quote_id, { requestMemo: text })}
                           />
                           <MemoPopover
@@ -568,7 +571,7 @@ export default function PurchasePage() {
                             value={q.order_memo}
                             badge="영업관리"
                             label="영업관리 메모"
-                            canEdit
+                            canEdit={canEditOrderMemo(memoUser)}
                             onSave={text => saveMemo(q.quote_id, { orderMemo: text })}
                           />
                         </span>
