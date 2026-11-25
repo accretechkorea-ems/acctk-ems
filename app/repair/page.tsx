@@ -27,6 +27,7 @@ import RepairInfoModal from '@/components/quote/RepairInfoModal'
 import { fetchRepairInfoStates, type RepairInfoRow, type RepairInfoState } from '@/lib/quoteRepairInfo'
 import { openPdf, pdfNameOf } from '@/lib/pdfViewer'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import { todayKST, nowKSTParts } from '@/lib/date'
 import { R } from '@/lib/radius'
 import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
@@ -1001,38 +1002,63 @@ export default function RepairPage() {
       {/* ── 본사 복귀 처리 다이얼로그 (복귀일 입력 → 출고대기) ── */}
       {hqReturning && (
         <ModalOverlay onClose={() => setHqReturning(null)} confirmClose closeOn={isHqSaving ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.5)', zIndex: Z.subModal }}>
-          <div onClick={e => e.stopPropagation()}
-            style={{ background: CARD_BG, borderRadius: R.tile, width: '100%', maxWidth: 360, padding: 22, border: `1px solid ${BORDER}`, boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>본사 복귀 처리</div>
-            <div style={{ fontSize: 13, color: GRAY, marginBottom: 16 }}>
-              {hqReturning.customer_name ?? ''} · {hqReturning.serial_number ?? '-'} — 복귀 시 <b style={{ color: TEXT }}>출고대기</b>로 전환됩니다.
-            </div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: MUTED }}>복귀일</label>
-            <input type="date" className="date-fit" value={hqReturnDate} onChange={e => setHqReturnDate(e.target.value)}
-              style={{ ...inp, marginTop: 4, colorScheme: 'light' }} />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+              한 함수를 지난다(처리 중에는 셋 다 막힌다). 겉모양은 그대로다: 폭 360 ·
+              radius tile · 여백 22 · 제목 16/800 · 머리 아래 16 · 바닥 위 20.
+              ✕ 는 두지 않는다 — 길은 [취소]·Esc·바깥 클릭 셋이고 옛 창과 같다. */}
+          <ModalCard
+            width={360}
+            closeX={false}
+            {...keepPads({ x: 22, top: 22, bottom: 22 }, 16, 20)}
+            style={{ borderRadius: R.tile, border: `1px solid ${BORDER}` }}
+            title={<>
+              <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>본사 복귀 처리</div>
+              <div style={{ fontSize: 13, color: GRAY }}>
+                {hqReturning.customer_name ?? ''} · {hqReturning.serial_number ?? '-'} — 복귀 시 <b style={{ color: TEXT }}>출고대기</b>로 전환됩니다.
+              </div>
+            </>}
+            footer={<>
               <button onClick={() => setHqReturning(null)} disabled={isHqSaving}
                 style={{ padding: '9px 16px', background: '#fff', color: GRAY, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
               <button onClick={confirmHqReturn} disabled={isHqSaving || !hqReturnDate}
                 style={{ padding: '9px 18px', background: (isHqSaving || !hqReturnDate) ? MUTED : BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: (isHqSaving || !hqReturnDate) ? 'default' : 'pointer', fontWeight: 700, fontSize: 13 }}>
                 {isHqSaving ? '처리 중...' : '복귀 확정'}
               </button>
-            </div>
-          </div>
+            </>}
+          >
+            <>
+            <label style={{ fontSize: 12, fontWeight: 600, color: MUTED }}>복귀일</label>
+            <input type="date" className="date-fit" value={hqReturnDate} onChange={e => setHqReturnDate(e.target.value)}
+              style={{ ...inp, marginTop: 4, colorScheme: 'light' }} />
+            </>
+          </ModalCard>
         </ModalOverlay>
       )}
 
       {/* ── 엑셀 일괄 등록 모달 ── */}
       {showImport && (
         <ModalOverlay onClose={() => setShowImport(false)} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: R.modal, width: '100%', maxWidth: 920, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', border: `1px solid ${BORDER}` }}>
-            {/* 헤더 */}
-            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>엑셀 일괄 등록</div>
-              <button onClick={() => setShowImport(false)} style={{ width: 30, height: 30, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 15, color: GRAY }}>✕</button>
-            </div>
-            {/* 본문 */}
-            <div style={{ padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+              한 함수를 지난다(고른 파일이 있으면 「저장하지 않고 닫을까요?」를 지난다).
+              겉모양은 그대로다: 폭 920 · 최대 높이 88vh · 머리·발의 선과 여백 · 제목 16/800. */}
+          <ModalCard
+            width={920}
+            style={{ maxHeight: '88vh', border: `1px solid ${BORDER}`, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+            headStyle={{ padding: '16px 20px', borderBottom: `1px solid ${BORDER}`, alignItems: 'center' }}
+            bodyStyle={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}
+            footStyle={{ padding: '14px 20px', borderTop: `1px solid ${BORDER}`, gap: 10, justifyContent: 'flex-start' }}
+            title={<div style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>엑셀 일괄 등록</div>}
+            footer={<>
+              <span style={{ flex: 1, fontSize: 13, color: GRAY }}>{importPreview.length > 0 ? `${importValidCount}건 등록 가능 / 총 ${importPreview.length}행` : ''}</span>
+              <button onClick={() => setShowImport(false)}
+                style={{ padding: '9px 16px', background: '#fff', color: GRAY, borderRadius: R.control, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>닫기</button>
+              <button onClick={handleImport} disabled={isImporting || importValidCount === 0}
+                style={{ padding: '9px 18px', background: (isImporting || importValidCount === 0) ? MUTED : BLUE, color: '#fff', borderRadius: R.control, border: 'none', cursor: (isImporting || importValidCount === 0) ? 'default' : 'pointer', fontWeight: 800, fontSize: 13 }}>
+                {isImporting ? '등록 중...' : `${importValidCount}건 가져오기`}
+              </button>
+            </>}
+          >
+            <>
               <div style={{ fontSize: 13, color: GRAY, lineHeight: 1.7 }}>
                 엑셀 첫 시트의 컬럼: <b style={{ color: TEXT }}>입고일 · 회사명 · 제품 구분 · 시리얼번호 · 출고일</b> (순번·월-주차는 자동 계산). 날짜가 &quot;1월 5일&quot;처럼 연도가 없으면 아래 <b style={{ color: TEXT }}>연도</b>로 채웁니다. <b style={{ color: TEXT }}>출고일이 있으면 출고완료</b>, 없으면 <b style={{ color: TEXT }}>입고</b> 상태로, 아래에서 고른 <b style={{ color: TEXT }}>구분</b>으로 일괄 등록됩니다.
               </div>
@@ -1090,20 +1116,8 @@ export default function RepairPage() {
                   완료: {importResult.ok}건 등록{importResult.fail ? ` · ${importResult.fail}건 건너뜀 (입고일/회사명 누락)` : ''}
                 </div>
               )}
-            </div>
-            {/* 푸터 */}
-            <div style={{ padding: '14px 20px', borderTop: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 13, color: GRAY }}>{importPreview.length > 0 ? `${importValidCount}건 등록 가능 / 총 ${importPreview.length}행` : ''}</span>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setShowImport(false)}
-                  style={{ padding: '9px 16px', background: '#fff', color: GRAY, borderRadius: R.control, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>닫기</button>
-                <button onClick={handleImport} disabled={isImporting || importValidCount === 0}
-                  style={{ padding: '9px 18px', background: (isImporting || importValidCount === 0) ? MUTED : BLUE, color: '#fff', borderRadius: R.control, border: 'none', cursor: (isImporting || importValidCount === 0) ? 'default' : 'pointer', fontWeight: 800, fontSize: 13 }}>
-                  {isImporting ? '등록 중...' : `${importValidCount}건 가져오기`}
-                </button>
-              </div>
-            </div>
-          </div>
+            </>
+          </ModalCard>
         </ModalOverlay>
       )}
 

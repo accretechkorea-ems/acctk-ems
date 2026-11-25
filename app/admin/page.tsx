@@ -32,6 +32,7 @@ import { useFieldErrors, FieldError, errBorder } from '@/components/common/field
 import AutocompleteInput from '@/components/common/AutocompleteInput'
 import { Z } from '@/lib/zIndex'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { todayKST, nowKSTParts } from '@/lib/date'
 import { R } from '@/lib/radius'
 
@@ -1351,7 +1352,16 @@ function AdminPageInner() {
       {/* ── 목표 금액 모달 ── */}
       {showTargetModal && (
         <ModalOverlay onClose={() => setShowTargetModal(false)} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 680, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭이
+              한 함수를 지난다. **겉 상자만** 바꿨다: 폭 680 · 여백 24 · 최대 높이 88vh ·
+              속 구조(머리줄·단추 줄)는 옛 모습 그대로다. 카드의 ✕ 는 두지 않는다 —
+              이 창은 제 ✕ 를 들고 있다. */}
+          <ModalCard
+            width={680}
+            closeX={false}
+            style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.2)', maxHeight: '88vh' }}
+            bodyStyle={{ padding: 24, display: 'flex', flexDirection: 'column' }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🎯 목표 금액 관리</div>
               <button onClick={() => setShowTargetModal(false)} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
@@ -1482,14 +1492,23 @@ function AdminPageInner() {
               )}
             </div>
             <div style={{ marginTop: 12, fontSize: 12, color: GRAY }}>* 수주·매출 목표는 각각 선택 입력이며, 둘 다 비운 채 저장하면 해당 목표가 삭제됩니다</div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
 
       {/* 견적서 삭제 안내 — 이 화면에는 삭제 기능이 없다. 결재함으로 보내는 길만 알려 준다. */}
       {showQuoteModal && (
         <ModalOverlay onClose={closeQuoteModal} style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 520, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭이
+              한 함수를 지난다. **겉 상자만** 바꿨다: 폭 520 · 여백 24 ·
+              속 구조(머리줄·단추 줄)는 옛 모습 그대로다. 카드의 ✕ 는 두지 않는다 —
+              이 창은 제 ✕ 를 들고 있다. */}
+          <ModalCard
+            width={520}
+            closeX={false}
+            style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+            bodyStyle={{ padding: 24 }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🗑️ 견적서 삭제</div>
               <button onClick={closeQuoteModal} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
@@ -1509,14 +1528,23 @@ function AdminPageInner() {
               <button type="button" onClick={() => { closeQuoteModal(); router.push(APPROVAL_PATH) }}
                 style={{ flex: 1, padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>결재함 열기</button>
             </div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
 
       {/* ── 다운로드 로그 모달 ── */}
       {showLogModal && (
         <ModalOverlay onClose={() => setShowLogModal(false)} style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 1100, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭이
+              한 함수를 지난다. **겉 상자만** 바꿨다: 폭 1100 · 여백 24 · 최대 높이 85vh ·
+              속 구조(머리줄·단추 줄)는 옛 모습 그대로다. 카드의 ✕ 는 두지 않는다 —
+              이 창은 제 ✕ 를 들고 있다. */}
+          <ModalCard
+            width={1100}
+            closeX={false}
+            style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.2)', maxHeight: '85vh' }}
+            bodyStyle={{ padding: 24, display: 'flex', flexDirection: 'column' }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>📋 다운로드 로그</div>
               <button onClick={() => setShowLogModal(false)} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
@@ -1562,14 +1590,23 @@ function AdminPageInner() {
               )}
             </div>
             <div style={{ marginTop: 12, fontSize: 12, color: GRAY }}>* 최근 7일 이내 · 최대 1000건 표시 / 전체 기록은 Supabase에 보관됩니다</div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
 
       {/* ── 직원 관리 모달 ── */}
       {showEngineerModal && (
         <ModalOverlay onClose={() => setShowEngineerModal(false)} style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭이
+              한 함수를 지난다. **겉 상자만** 바꿨다: 폭 1000 · 여백 24 · 최대 높이 88vh ·
+              속 구조(머리줄·단추 줄)는 옛 모습 그대로다. 카드의 ✕ 는 두지 않는다 —
+              이 창은 제 ✕ 를 들고 있다. */}
+          <ModalCard
+            width={1000}
+            closeX={false}
+            style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.2)', maxHeight: '88vh' }}
+            bodyStyle={{ padding: 24, display: 'flex', flexDirection: 'column' }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
              <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>👥 직원 관리</div>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -1631,14 +1668,23 @@ function AdminPageInner() {
                 </table>
               )}
             </div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
 
       {/* ── 직원 등록 모달 ── */}
       {showAddEngineer && (
         <ModalOverlay onClose={() => { setShowAddEngineer(false); setAddForm(emptyAddForm()) }} confirmClose dirty={JSON.stringify(addForm) !== JSON.stringify(emptyAddForm())} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal }}>
-          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 28, width: '100%', maxWidth: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭이
+              한 함수를 지난다. **겉 상자만** 바꿨다: 폭 480 · 여백 28 ·
+              속 구조(머리줄·단추 줄)는 옛 모습 그대로다. 카드의 ✕ 는 두지 않는다 —
+              이 창은 제 ✕ 를 들고 있다. */}
+          <ModalCard
+            width={480}
+            closeX={false}
+            style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+            bodyStyle={{ padding: 28 }}
+          >
             <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, marginBottom: 20 }}>직원 등록</div>
             <div style={{ display: 'grid', gap: 12 }}>
               <div>
@@ -1702,14 +1748,23 @@ function AdminPageInner() {
                 {addLoading ? '등록 중...' : '등록'}
               </button>
             </div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
 
       {/* ── 직원 수정 모달 ── */}
       {editEngineer && (
         <ModalOverlay onClose={() => setEditEngineer(null)} confirmClose dirty={editEngineer ? JSON.stringify(editForm) !== JSON.stringify(editFormOf(editEngineer)) : false} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal }}>
-          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 28, width: '100%', maxWidth: 640, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭이
+              한 함수를 지난다. **겉 상자만** 바꿨다: 폭 640 · 여백 28 ·
+              속 구조(머리줄·단추 줄)는 옛 모습 그대로다. 카드의 ✕ 는 두지 않는다 —
+              이 창은 제 ✕ 를 들고 있다. */}
+          <ModalCard
+            width={640}
+            closeX={false}
+            style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+            bodyStyle={{ padding: 28 }}
+          >
             <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, marginBottom: 20 }}>직원 정보 수정</div>
             <div style={{ display: 'grid', gap: 12 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
@@ -1793,7 +1848,7 @@ function AdminPageInner() {
                 {editLoading ? '저장 중...' : '저장'}
               </button>
             </div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
 
@@ -1824,7 +1879,16 @@ function AdminPageInner() {
       {/* ── 부대비용 단가 모달 ── */}
       {showPresetModal && (
         <ModalOverlay onClose={() => { setShowPresetModal(false); setEditingPreset(null) }} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭이
+              한 함수를 지난다. **겉 상자만** 바꿨다: 폭 560 · 여백 24 · 최대 높이 80vh ·
+              속 구조(머리줄·단추 줄)는 옛 모습 그대로다. 카드의 ✕ 는 두지 않는다 —
+              이 창은 제 ✕ 를 들고 있다. */}
+          <ModalCard
+            width={560}
+            closeX={false}
+            style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.2)', maxHeight: '80vh' }}
+            bodyStyle={{ padding: 24, display: 'flex', flexDirection: 'column' }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🧾 부대비용 단가</div>
               <button onClick={() => { setShowPresetModal(false); setEditingPreset(null) }} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
@@ -1903,14 +1967,23 @@ function AdminPageInner() {
               })}
             </div>
             <div style={{ marginTop: 12, fontSize: 11, color: GRAY }}>* 항목명이나 단가를 클릭하면 바로 수정할 수 있습니다. 단가를 바꿔도 이미 저장된 견적서 금액은 변하지 않습니다</div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
 
       {/* ── 공지 관리 모달 ── */}
       {showNoticeModal && (
         <ModalOverlay onClose={() => { setShowNoticeModal(false); setNoticeEditing(null) }} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 760, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭이
+              한 함수를 지난다. **겉 상자만** 바꿨다: 폭 760 · 여백 24 · 최대 높이 85vh ·
+              속 구조(머리줄·단추 줄)는 옛 모습 그대로다. 카드의 ✕ 는 두지 않는다 —
+              이 창은 제 ✕ 를 들고 있다. */}
+          <ModalCard
+            width={760}
+            closeX={false}
+            style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.2)', maxHeight: '85vh' }}
+            bodyStyle={{ padding: 24, display: 'flex', flexDirection: 'column' }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>📢 공지 관리</div>
               <button onClick={() => { setShowNoticeModal(false); setNoticeEditing(null) }}
@@ -2047,7 +2120,7 @@ function AdminPageInner() {
                 </div>
               </div>
             )}
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
 
@@ -2056,7 +2129,16 @@ function AdminPageInner() {
       {/* ── 팀 관리 모달 ── */}
       {showOfficeModal && (
         <ModalOverlay onClose={() => { setShowOfficeModal(false); closeOfficeForm() }} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭이
+              한 함수를 지난다. **겉 상자만** 바꿨다: 폭 1000 · 여백 24 · 최대 높이 80vh ·
+              속 구조(머리줄·단추 줄)는 옛 모습 그대로다. 카드의 ✕ 는 두지 않는다 —
+              이 창은 제 ✕ 를 들고 있다. */}
+          <ModalCard
+            width={1000}
+            closeX={false}
+            style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.2)', maxHeight: '80vh' }}
+            bodyStyle={{ padding: 24, display: 'flex', flexDirection: 'column' }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🏢 사무실 관리</div>
               <button onClick={() => { setShowOfficeModal(false); closeOfficeForm() }} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
@@ -2162,14 +2244,23 @@ function AdminPageInner() {
                 </div>
               ))}
             </div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
 
       {showTeamModal && (
         <ModalOverlay onClose={closeTeamModal} confirmClose style={{ background: 'rgba(0,0,0,0.5)' }}>
           {/* 팀 목록이 본체라 다른 모달보다 넓게 쓴다(이 모달에만 적용) */}
-          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 1000, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭이
+              한 함수를 지난다. **겉 상자만** 바꿨다: 폭 1000 · 여백 24 · 최대 높이 80vh ·
+              속 구조(머리줄·단추 줄)는 옛 모습 그대로다. 카드의 ✕ 는 두지 않는다 —
+              이 창은 제 ✕ 를 들고 있다. */}
+          <ModalCard
+            width={1000}
+            closeX={false}
+            style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.2)', maxHeight: '80vh' }}
+            bodyStyle={{ padding: 24, display: 'flex', flexDirection: 'column' }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>🏷️ 팀 관리</div>
               <button onClick={closeTeamModal} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
@@ -2291,14 +2382,23 @@ function AdminPageInner() {
               * 재직 중인 직원이 배정된 팀은 삭제할 수 없습니다<br />
               * 권한 변경은 저장 즉시 서버(API·RLS)에 반영됩니다. 다만 화면 메뉴는 브라우저가 팀 권한을 세션당 한 번만 읽어 두므로, 해당 팀 사용자는 새로고침 후 적용됩니다
             </div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
 
       {/* ── 팀 권한 편집 모달 ── */}
       {permEditTeam && (
         <ModalOverlay onClose={() => setPermEditTeam(null)} confirmClose closeOn={savingTeamId === permEditTeam.id ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal }}>
-          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 560, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭이
+              한 함수를 지난다. **겉 상자만** 바꿨다: 폭 560 · 여백 24 · 최대 높이 80vh ·
+              속 구조(머리줄·단추 줄)는 옛 모습 그대로다. 카드의 ✕ 는 두지 않는다 —
+              이 창은 제 ✕ 를 들고 있다. */}
+          <ModalCard
+            width={560}
+            closeX={false}
+            style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.2)', maxHeight: '80vh' }}
+            bodyStyle={{ padding: 24, display: 'flex', flexDirection: 'column' }}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>{permEditTeam.name} 권한</div>
               {/* 분모는 **이 사업부에서 고를 수 있는 수**다 — 전체 수를 적으면 거른 뒤와 어긋난다. */}
@@ -2355,13 +2455,22 @@ function AdminPageInner() {
                 {savingTeamId === permEditTeam.id ? '저장 중...' : '저장'}
               </button>
             </div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
       {/* ── 직원 삭제 모달 ── */}
       {deleteEngineer && (
         <ModalOverlay onClose={() => setDeleteEngineer(null)} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal }}>
-          <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 28, width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭이
+              한 함수를 지난다. **겉 상자만** 바꿨다: 폭 400 · 여백 28 ·
+              속 구조(머리줄·단추 줄)는 옛 모습 그대로다. 카드의 ✕ 는 두지 않는다 —
+              이 창은 제 ✕ 를 들고 있다. */}
+          <ModalCard
+            width={400}
+            closeX={false}
+            style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}
+            bodyStyle={{ padding: 28 }}
+          >
             <div style={{ fontSize: 18, fontWeight: 800, color: TEXT, marginBottom: 12 }}>직원 삭제</div>
             <div style={{ fontSize: 14, color: GRAY, lineHeight: 1.8, marginBottom: 16 }}>
               <b style={{ color: TEXT }}>{deleteEngineer.name}</b> ({deleteEngineer.position}) 직원을 삭제하시겠습니까?<br />
@@ -2385,7 +2494,7 @@ function AdminPageInner() {
                 {deleteLoading ? '처리 중...' : '삭제'}
               </button>
             </div>
-          </div>
+          </ModalCard>
         </ModalOverlay>
       )}
     </div>

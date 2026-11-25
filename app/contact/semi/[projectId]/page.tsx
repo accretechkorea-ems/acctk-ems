@@ -26,6 +26,7 @@ import { createClient } from '@/lib/supabase/client'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { FieldError, errBorder, useFieldErrors } from '@/components/common/fieldErrors'
@@ -1120,13 +1121,28 @@ function ProjectEditModal({ project, onClose, onSaved, onDelete, deleting }: {
   return (
     // 저장 중에는 닫히지 않는다(closeOn 'none'). 그 밖에는 확인 뒤 닫는다.
     <ModalOverlay onClose={onClose} closeOn={busy ? 'none' : 'both'} confirmClose>
-      <div style={{
-        background: CARD_BG, borderRadius: R.control, padding: '14px 16px', width: '100%', maxWidth: 500,
-        maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
-      }}>
-        <div style={cardHeader}>
-          <span style={cardTitle}>Project 정보 수정</span>
-        </div>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+          한 함수를 지난다(저장 중에는 셋 다 막히고, 고치던 것이 있으면 확인을 지난다).
+          겉모양은 그대로다: 폭 500 · 최대 높이 86vh · 여백 14/16 · 머리줄은 공용 cardHeader.
+          전에는 **카드 전체가** 구르고 단추 줄도 함께 올라갔다 — 이제 본문만 구르고
+          단추가 늘 바닥에 있는다(그 점만 달라졌다). */}
+      <ModalCard
+        width={500}
+        closeX={false}
+        {...keepPads({ x: 16, top: 14, bottom: 14 }, 0, 12)}
+        style={{ borderRadius: R.control, maxHeight: '86vh' }}
+        title={<div style={cardHeader}><span style={cardTitle}>Project 정보 수정</span></div>}
+        footer={<>
+          <button type="button" onClick={onDelete} disabled={busy || deleting} style={btnDanger(busy || deleting)}>
+            {deleting ? '삭제 중...' : 'Project 삭제'}
+          </button>
+          <button type="button" onClick={onClose} disabled={busy || deleting} style={{ ...btnGhost(busy || deleting), flex: 1 }}>닫기</button>
+          <button type="button" onClick={submit} disabled={busy || deleting} style={{ ...btnPrimary(busy || deleting), flex: 1 }}>
+            {busy ? '저장 중...' : '저장'}
+          </button>
+        </>}
+      >
+        <>
         <div style={{ marginBottom: 12 }}>
           <label style={labelStyle} htmlFor="pe-project_no">{PROJECT_NO_LABEL}</label>
           <input id="pe-project_no" value={projectNo} maxLength={PROJECT_NO_MAX} disabled={busy}
@@ -1160,16 +1176,8 @@ function ProjectEditModal({ project, onClose, onSaved, onDelete, deleting }: {
             {error}
           </div>
         )}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={onDelete} disabled={busy || deleting} style={btnDanger(busy || deleting)}>
-            {deleting ? '삭제 중...' : 'Project 삭제'}
-          </button>
-          <button type="button" onClick={onClose} disabled={busy || deleting} style={{ ...btnGhost(busy || deleting), flex: 1 }}>닫기</button>
-          <button type="button" onClick={submit} disabled={busy || deleting} style={{ ...btnPrimary(busy || deleting), flex: 1 }}>
-            {busy ? '저장 중...' : '저장'}
-          </button>
-        </div>
-      </div>
+        </>
+      </ModalCard>
     </ModalOverlay>
   )
 }

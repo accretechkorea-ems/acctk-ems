@@ -13,6 +13,7 @@ import { withTeamPerms } from '@/lib/teamPerms'
 import { loadMe } from '@/lib/appData/me'
 import { loadEngineers } from '@/lib/appData/engineers'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { R } from '@/lib/radius'
 
 const BLUE = '#234ea2'
@@ -523,10 +524,9 @@ function InventoryPage() {
         .inv-tr:hover td { background: #f8fafc !important; }
         .inv-tr-in { background: #f8fffe; }
         .inv-tr-in:hover td { background: #f0fdf4 !important; }
-        @keyframes modal-in { from { opacity: 0; transform: scale(0.97) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        /* modal-in·.modal-box 는 2026-11-26 에 걷었다 — 창은 공용 카드가 띄운다(지시 P). */
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-        .modal-box { animation: modal-in 0.18s ease both; }
         .qty-btn:hover { border-color: ${BLUE} !important; background: #eff4ff !important; color: ${BLUE} !important; }
         .qty-btn:active { transform: scale(0.93); }
         .cancel-btn:hover { background: #e5e7eb !important; }
@@ -1040,10 +1040,28 @@ function InventoryPage() {
       {/* ══ 출고 요청 모달 ══ */}
       {requestItem && (
         <ModalOverlay onClose={() => { setRequestItem(null); setRequestOutletCompany(''); setRequestReason(''); setRequestNote('') }} confirmClose style={{ background: 'rgba(0,0,0,0.55)' }}>
-          <div className="modal-box" style={{ background: CARD_BG, borderRadius: R.modal, width: '100%', maxWidth: 460, boxShadow: '0 24px 80px rgba(0,0,0,0.22)', maxHeight: '92vh', overflowY: 'auto', border: `1px solid ${BORDER}` }}>
-            <ModalHeader title="출고 요청" accentColor={BLUE} onClose={() => { setRequestItem(null); setRequestOutletCompany(''); setRequestReason(''); setRequestNote('') }} />
-
-            <div style={{ padding: '22px 24px 0' }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms(이 파일의
+              .modal-box 애니메이션 0.18s 를 대신한다) · Esc·바깥 클릭·✕ 가 한 함수를
+              지난다. 겉모양은 그대로다: 폭·여백·머리줄(ModalHeader) 그대로이고, 카드
+              자체의 ✕ 는 두지 않는다(머리줄이 닫기를 들고 있다). */}
+          <ModalCard
+            width={460}
+            closeX={false}
+            style={{ boxShadow: '0 24px 80px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`, maxHeight: '92vh' }}
+            headStyle={{ padding: 0, display: 'block' }}
+            bodyStyle={{ padding: '22px 24px 0' }}
+            footStyle={{ padding: '0 24px 24px', gap: 8, justifyContent: 'flex-start' }}
+            title={<ModalHeader title="출고 요청" accentColor={BLUE} onClose={() => { setRequestItem(null); setRequestOutletCompany(''); setRequestReason(''); setRequestNote('') }} />}
+            footer={<>
+                <button className="cancel-btn" onClick={() => { setRequestItem(null); setRequestOutletCompany(''); setRequestReason(''); setRequestNote('') }}
+                  style={{ flex: 1, padding: '12px', background: '#f4f5f7', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT, transition: 'background 0.15s ease' }}>취소</button>
+                <button onClick={handleRequest} disabled={isSavingRequest || requestQty < 1}
+                  style={{ flex: 2, padding: '12px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.tile, cursor: isSavingRequest ? 'wait' : 'pointer', fontWeight: 700, fontSize: 13, opacity: isSavingRequest ? 0.7 : 1, transition: 'opacity 0.15s ease' }}>
+                  {isSavingRequest ? '요청 중...' : `${requestQty}개 출고 요청`}
+                </button>
+            </>}
+          >
+            <>
               {/* 품목 정보 카드 */}
               <div style={{ background: '#f8fafc', borderRadius: R.modal, padding: '16px 18px', marginBottom: 22, border: `1px solid ${BORDER}` }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: MUTED, letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 8 }}>품목 정보</div>
@@ -1122,27 +1140,38 @@ function InventoryPage() {
                   placeholder="추가로 전달할 내용이 있으면 입력하세요" rows={2}
                   style={{ ...inp, resize: 'vertical', lineHeight: 1.6, fontFamily: 'inherit' }} />
               </div>
-            </div>
-
-            <div style={{ padding: '0 24px 24px', display: 'flex', gap: 8 }}>
-              <button className="cancel-btn" onClick={() => { setRequestItem(null); setRequestOutletCompany(''); setRequestReason(''); setRequestNote('') }}
-                style={{ flex: 1, padding: '12px', background: '#f4f5f7', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT, transition: 'background 0.15s ease' }}>취소</button>
-              <button onClick={handleRequest} disabled={isSavingRequest || requestQty < 1}
-                style={{ flex: 2, padding: '12px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.tile, cursor: isSavingRequest ? 'wait' : 'pointer', fontWeight: 700, fontSize: 13, opacity: isSavingRequest ? 0.7 : 1, transition: 'opacity 0.15s ease' }}>
-                {isSavingRequest ? '요청 중...' : `${requestQty}개 출고 요청`}
-              </button>
-            </div>
-          </div>
+            </>
+          </ModalCard>
         </ModalOverlay>
       )}
 
       {/* ══ 재입고 모달 ══ */}
       {selectedLog && (
         <ModalOverlay onClose={() => setSelectedLog(null)} confirmClose style={{ background: 'rgba(0,0,0,0.55)' }}>
-          <div className="modal-box" style={{ background: CARD_BG, borderRadius: R.modal, width: '100%', maxWidth: 460, boxShadow: '0 24px 80px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}` }}>
-            <ModalHeader title="재입고 처리" accentColor="#15803d" onClose={() => setSelectedLog(null)} />
-
-            <div style={{ padding: '22px 24px 0' }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms(이 파일의
+              .modal-box 애니메이션 0.18s 를 대신한다) · Esc·바깥 클릭·✕ 가 한 함수를
+              지난다. 겉모양은 그대로다: 폭·여백·머리줄(ModalHeader) 그대로이고, 카드
+              자체의 ✕ 는 두지 않는다(머리줄이 닫기를 들고 있다). */}
+          <ModalCard
+            width={460}
+            closeX={false}
+            style={{ boxShadow: '0 24px 80px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}` }}
+            headStyle={{ padding: 0, display: 'block' }}
+            bodyStyle={{ padding: '22px 24px 0' }}
+            footStyle={{ padding: '0 24px 24px', gap: 8, justifyContent: 'flex-start' }}
+            title={<ModalHeader title="재입고 처리" accentColor="#15803d" onClose={() => setSelectedLog(null)} />}
+            footer={<>
+                <button className="cancel-btn" onClick={() => setSelectedLog(null)}
+                  style={{ flex: 1, padding: '12px', background: '#f4f5f7', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT, transition: 'background 0.15s ease' }}>취소</button>
+                <button onClick={handleRestock} disabled={isRestocking}
+                  style={{ flex: 2, padding: '12px', background: '#15803d', color: '#fff', border: 'none', borderRadius: R.tile, cursor: isRestocking ? 'wait' : 'pointer', fontWeight: 700, fontSize: 13, opacity: isRestocking ? 0.7 : 1, transition: 'background 0.15s ease, opacity 0.15s ease' }}
+                  onMouseEnter={e => { if (!isRestocking) (e.currentTarget as HTMLButtonElement).style.background = '#14532d' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#15803d' }}>
+                  {isRestocking ? '처리 중...' : `${restockQty}개 재입고 확인`}
+                </button>
+            </>}
+          >
+            <>
               {/* 원래 출고 이력 카드 */}
               <div style={{ background: '#f0fdf4', borderRadius: R.modal, padding: '16px 18px', marginBottom: 22, border: '1px solid #bbf7d0' }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: '#15803d', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 8 }}>원래 출고 이력</div>
@@ -1192,29 +1221,38 @@ function InventoryPage() {
                   placeholder="재입고 사유를 입력하세요" rows={2}
                   style={{ ...inp, resize: 'vertical', lineHeight: 1.6, fontFamily: 'inherit' }} />
               </div>
-            </div>
-
-            <div style={{ padding: '0 24px 24px', display: 'flex', gap: 8 }}>
-              <button className="cancel-btn" onClick={() => setSelectedLog(null)}
-                style={{ flex: 1, padding: '12px', background: '#f4f5f7', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT, transition: 'background 0.15s ease' }}>취소</button>
-              <button onClick={handleRestock} disabled={isRestocking}
-                style={{ flex: 2, padding: '12px', background: '#15803d', color: '#fff', border: 'none', borderRadius: R.tile, cursor: isRestocking ? 'wait' : 'pointer', fontWeight: 700, fontSize: 13, opacity: isRestocking ? 0.7 : 1, transition: 'background 0.15s ease, opacity 0.15s ease' }}
-                onMouseEnter={e => { if (!isRestocking) (e.currentTarget as HTMLButtonElement).style.background = '#14532d' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#15803d' }}>
-                {isRestocking ? '처리 중...' : `${restockQty}개 재입고 확인`}
-              </button>
-            </div>
-          </div>
+            </>
+          </ModalCard>
         </ModalOverlay>
       )}
 
       {/* ══ 반려 모달 ══ */}
       {rejectingRequest && (
         <ModalOverlay onClose={() => setRejectingRequest(null)} confirmClose dirty={rejectReason.trim() !== ''} style={{ background: 'rgba(0,0,0,0.55)' }}>
-          <div className="modal-box" style={{ background: CARD_BG, borderRadius: R.modal, width: '100%', maxWidth: 440, boxShadow: '0 24px 80px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}` }}>
-            <ModalHeader title="출고 요청 반려" accentColor={RED} onClose={() => setRejectingRequest(null)} />
-
-            <div style={{ padding: '22px 24px 0' }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms(이 파일의
+              .modal-box 애니메이션 0.18s 를 대신한다) · Esc·바깥 클릭·✕ 가 한 함수를
+              지난다. 겉모양은 그대로다: 폭·여백·머리줄(ModalHeader) 그대로이고, 카드
+              자체의 ✕ 는 두지 않는다(머리줄이 닫기를 들고 있다). */}
+          <ModalCard
+            width={440}
+            closeX={false}
+            style={{ boxShadow: '0 24px 80px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}` }}
+            headStyle={{ padding: 0, display: 'block' }}
+            bodyStyle={{ padding: '22px 24px 0' }}
+            footStyle={{ padding: '0 24px 24px', gap: 8, justifyContent: 'flex-start' }}
+            title={<ModalHeader title="출고 요청 반려" accentColor={RED} onClose={() => setRejectingRequest(null)} />}
+            footer={<>
+                <button className="cancel-btn" onClick={() => setRejectingRequest(null)}
+                  style={{ flex: 1, padding: '12px', background: '#f4f5f7', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT, transition: 'background 0.15s ease' }}>취소</button>
+                <button onClick={handleReject} disabled={isProcessing || !rejectReason.trim()}
+                  style={{ flex: 2, padding: '12px', background: RED, color: '#fff', border: 'none', borderRadius: R.tile, cursor: isProcessing ? 'wait' : 'pointer', fontWeight: 700, fontSize: 13, opacity: (isProcessing || !rejectReason.trim()) ? 0.45 : 1, transition: 'opacity 0.15s ease, background 0.15s ease' }}
+                  onMouseEnter={e => { if (!isProcessing && rejectReason.trim()) (e.currentTarget as HTMLButtonElement).style.background = '#b91c1c' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = RED }}>
+                  {isProcessing ? '처리 중...' : '반려 확인'}
+                </button>
+            </>}
+          >
+            <>
               {/* 요청 정보 카드 */}
               <div style={{ background: '#fef2f2', borderRadius: R.modal, padding: '16px 18px', marginBottom: 22, border: '1px solid #fecaca' }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: RED, letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 8 }}>요청 정보</div>
@@ -1246,30 +1284,57 @@ function InventoryPage() {
                   style={rejErr.errors.reason ? { ...inp, resize: 'vertical', lineHeight: 1.6, fontFamily: 'inherit', border: errBorder } : { ...inp, resize: 'vertical', lineHeight: 1.6, fontFamily: 'inherit' }} />
                 <FieldError message={rejErr.errors.reason} />
               </div>
-            </div>
-
-            <div style={{ padding: '0 24px 24px', display: 'flex', gap: 8 }}>
-              <button className="cancel-btn" onClick={() => setRejectingRequest(null)}
-                style={{ flex: 1, padding: '12px', background: '#f4f5f7', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT, transition: 'background 0.15s ease' }}>취소</button>
-              <button onClick={handleReject} disabled={isProcessing || !rejectReason.trim()}
-                style={{ flex: 2, padding: '12px', background: RED, color: '#fff', border: 'none', borderRadius: R.tile, cursor: isProcessing ? 'wait' : 'pointer', fontWeight: 700, fontSize: 13, opacity: (isProcessing || !rejectReason.trim()) ? 0.45 : 1, transition: 'opacity 0.15s ease, background 0.15s ease' }}
-                onMouseEnter={e => { if (!isProcessing && rejectReason.trim()) (e.currentTarget as HTMLButtonElement).style.background = '#b91c1c' }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = RED }}>
-                {isProcessing ? '처리 중...' : '반려 확인'}
-              </button>
-            </div>
-          </div>
+            </>
+          </ModalCard>
         </ModalOverlay>
       )}
 
       {/* ══ 엑셀 일괄 처리 모달 ══ */}
       {showExcelModal && (
         <ModalOverlay onClose={() => setShowExcelModal(false)} confirmClose style={{ background: 'rgba(0,0,0,0.55)' }}>
-          <div className="modal-box" style={{ background: CARD_BG, borderRadius: R.modal, width: '100%', maxWidth: 840, maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 80px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}` }}>
-
-            <ModalHeader title="엑셀 일괄 처리" accentColor={BLUE} onClose={() => setShowExcelModal(false)} />
-
-            <div style={{ padding: '22px 24px', overflowY: 'auto', flex: 1 }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms(이 파일의
+              .modal-box 애니메이션 0.18s 를 대신한다) · Esc·바깥 클릭·✕ 가 한 함수를
+              지난다. 겉모양은 그대로다: 폭·여백·머리줄(ModalHeader) 그대로이고, 카드
+              자체의 ✕ 는 두지 않는다(머리줄이 닫기를 들고 있다). */}
+          <ModalCard
+            width={840}
+            closeX={false}
+            style={{ boxShadow: '0 24px 80px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`, maxHeight: '92vh' }}
+            headStyle={{ padding: 0, display: 'block' }}
+            bodyStyle={{ padding: '22px 24px 0' }}
+            footStyle={{ padding: '16px 24px', borderTop: `1px solid ${BORDER}`, gap: 8, justifyContent: 'flex-start' }}
+            title={<ModalHeader title="엑셀 일괄 처리" accentColor={BLUE} onClose={() => setShowExcelModal(false)} />}
+            footer={<>
+                <button className="cancel-btn" onClick={() => setShowExcelModal(false)}
+                  style={{ flex: 1, padding: '12px', background: '#f4f5f7', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT, transition: 'background 0.15s ease' }}>
+                  {excelResults ? '닫기' : '취소'}
+                </button>
+                {!excelResults && (
+                  <button onClick={handleProcessExcel}
+                    disabled={isProcessingExcel || excelRows.length === 0}
+                    style={{
+                      flex: 2, padding: '12px',
+                      background: excelType === 'out' ? RED : '#15803d',
+                      color: '#fff', border: 'none', borderRadius: R.tile,
+                      cursor: (isProcessingExcel || excelRows.length === 0) ? 'not-allowed' : 'pointer',
+                      fontWeight: 700, fontSize: 13,
+                      opacity: (isProcessingExcel || excelRows.length === 0) ? 0.5 : 1,
+                      transition: 'opacity 0.15s ease',
+                    }}>
+                    {isProcessingExcel ? '처리 중...' : `${excelRows.length}행 ${excelType === 'out' ? '출고' : '입고'} 처리`}
+                  </button>
+                )}
+                {excelResults && excelResults.some(r => !r.success) && (
+                  <button onClick={() => { setExcelRows([]); setExcelResults(null); setExcelFileName('') }}
+                    style={{ flex: 2, padding: '12px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13, transition: 'opacity 0.15s ease' }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1' }}>
+                    다시 업로드
+                  </button>
+                )}
+            </>}
+          >
+            <>
 
               {/* 처리 유형 */}
               <div style={{ marginBottom: 22 }}>
@@ -1452,39 +1517,8 @@ function InventoryPage() {
                   </div>
                 </div>
               )}
-            </div>
-
-            {/* 하단 버튼 */}
-            <div style={{ padding: '16px 24px', borderTop: `1px solid ${BORDER}`, display: 'flex', gap: 8, flexShrink: 0 }}>
-              <button className="cancel-btn" onClick={() => setShowExcelModal(false)}
-                style={{ flex: 1, padding: '12px', background: '#f4f5f7', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: TEXT, transition: 'background 0.15s ease' }}>
-                {excelResults ? '닫기' : '취소'}
-              </button>
-              {!excelResults && (
-                <button onClick={handleProcessExcel}
-                  disabled={isProcessingExcel || excelRows.length === 0}
-                  style={{
-                    flex: 2, padding: '12px',
-                    background: excelType === 'out' ? RED : '#15803d',
-                    color: '#fff', border: 'none', borderRadius: R.tile,
-                    cursor: (isProcessingExcel || excelRows.length === 0) ? 'not-allowed' : 'pointer',
-                    fontWeight: 700, fontSize: 13,
-                    opacity: (isProcessingExcel || excelRows.length === 0) ? 0.5 : 1,
-                    transition: 'opacity 0.15s ease',
-                  }}>
-                  {isProcessingExcel ? '처리 중...' : `${excelRows.length}행 ${excelType === 'out' ? '출고' : '입고'} 처리`}
-                </button>
-              )}
-              {excelResults && excelResults.some(r => !r.success) && (
-                <button onClick={() => { setExcelRows([]); setExcelResults(null); setExcelFileName('') }}
-                  style={{ flex: 2, padding: '12px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.tile, cursor: 'pointer', fontWeight: 700, fontSize: 13, transition: 'opacity 0.15s ease' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.85' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1' }}>
-                  다시 업로드
-                </button>
-              )}
-            </div>
-          </div>
+            </>
+          </ModalCard>
         </ModalOverlay>
       )}
     </div>

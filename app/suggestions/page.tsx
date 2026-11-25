@@ -13,6 +13,7 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { isSuperAdmin } from '@/lib/permissions'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { R } from '@/lib/radius'
 
 const BLUE = '#234ea2'
@@ -566,11 +567,27 @@ export default function SuggestionsPage() {
       {/* ── 작성·수정 모달 ── */}
       {formOpen && (
         <ModalOverlay onClose={() => setFormOpen(false)} confirmClose closeOn={saving ? 'none' : 'both'} dirty={formTitle.trim() !== '' || formContent.trim() !== '' || formImages.length > 0} style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: R.control, padding: 24, width: '100%', maxWidth: 560, boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-              <div style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>{editing ? '건의사항 수정' : '건의사항 작성'}</div>
-              <button onClick={() => setFormOpen(false)} style={{ width: 30, height: 30, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 14, color: GRAY }}>✕</button>
-            </div>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms(이 파일에 적혀 있던
+              modal-in 0.18s 를 대신한다) · Esc·바깥 클릭·✕ 가 한 함수를 지난다(적던 것이
+              있으면 「저장하지 않고 닫을까요?」를 지나고, 저장 중에는 셋 다 막힌다).
+              겉모양은 그대로다: 폭 560 · 여백 24 · 제목 16/800 · 머리 아래 18 · 바닥 위 20. */}
+          <ModalCard
+            width={560}
+            style={{ borderRadius: R.control }}
+            headStyle={{ padding: '24px 24px 18px', alignItems: 'center' }}
+            bodyStyle={{ padding: '0 24px' }}
+            footStyle={{ padding: '20px 24px 24px' }}
+            title={<div style={{ fontSize: 16, fontWeight: 800, color: TEXT }}>{editing ? '건의사항 수정' : '건의사항 작성'}</div>}
+            footer={<>
+              <button onClick={() => setFormOpen(false)}
+                style={{ padding: '9px 16px', background: '#f3f4f6', color: TEXT, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>취소</button>
+              <button onClick={handleSave} disabled={saving}
+                style={{ padding: '9px 18px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.icon, cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 13, opacity: saving ? 0.7 : 1 }}>
+                {saving ? '저장 중...' : (editing ? '수정' : '등록')}
+              </button>
+            </>}
+          >
+            <>
 
             <label style={{ fontSize: 12, fontWeight: 700, color: GRAY, display: 'block', marginBottom: 4 }}>분류</label>
             <select value={formCategory} onChange={e => setFormCategory(e.target.value as Category)}
@@ -673,23 +690,25 @@ export default function SuggestionsPage() {
               style={{ display: 'none' }}
             />
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-              <button onClick={() => setFormOpen(false)}
-                style={{ padding: '9px 16px', background: '#f3f4f6', color: TEXT, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>취소</button>
-              <button onClick={handleSave} disabled={saving}
-                style={{ padding: '9px 18px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.icon, cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 13, opacity: saving ? 0.7 : 1 }}>
-                {saving ? '저장 중...' : (editing ? '수정' : '등록')}
-              </button>
-            </div>
-          </div>
+            </>
+          </ModalCard>
         </ModalOverlay>
       )}
 
       {/* ── 상세 모달 ── */}
       {detail && (
         <ModalOverlay onClose={() => setDetail(null)} style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ background: CARD_BG, borderRadius: R.control, padding: 24, width: '100%', maxWidth: 640, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 6 }}>
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+              한 함수를 지난다. 겉모양은 그대로다: 폭 640 · 최대 높이 85vh · 여백 24 ·
+              제목 16/800 · 머리 아래 6 + 본문 위 12. 수정·삭제 줄은 **바닥줄**에 둔다
+              (전에는 본문 맨 아래에 있어 긴 글에서는 굴려 내려가야 보였다). */}
+          <ModalCard
+            width={640}
+            style={{ borderRadius: R.control, maxHeight: '85vh' }}
+            headStyle={{ padding: '24px 24px 6px', gap: 12 }}
+            bodyStyle={{ padding: '12px 24px 24px' }}
+            footStyle={{ padding: '14px 24px 24px', borderTop: `1px solid ${BORDER}` }}
+            title={<>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, wordBreak: 'break-all' }}>
                   {detail.title}
@@ -702,10 +721,19 @@ export default function SuggestionsPage() {
                   <span>{fmtDateTime(detail.created_at)}</span>
                 </div>
               </div>
-              <button onClick={() => setDetail(null)} style={{ width: 30, height: 30, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 14, color: GRAY, flexShrink: 0 }}>✕</button>
-            </div>
-
-            <div style={{ overflowY: 'auto', flex: 1, marginTop: 12 }}>
+            </>}
+            footer={(canEdit(detail) || canDelete(detail)) ? <>
+              {canEdit(detail) && (
+                <button onClick={() => { const d = detail; setDetail(null); openEdit(d) }}
+                  style={{ padding: '8px 14px', background: '#f3f4f6', color: TEXT, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>수정</button>
+              )}
+              {canDelete(detail) && (
+                <button onClick={() => handleDelete(detail)}
+                  style={{ padding: '8px 14px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>삭제</button>
+              )}
+            </> : undefined}
+          >
+            <>
               <div style={{ fontSize: 13, color: TEXT, lineHeight: 1.8, whiteSpace: 'pre-wrap', padding: '14px 16px', background: '#f8fafc', border: `1px solid ${BORDER}`, borderRadius: R.control }}>
                 {detail.content}
               </div>
@@ -772,23 +800,11 @@ export default function SuggestionsPage() {
                     아직 답변이 등록되지 않았습니다
                   </div>
                 )}
-              </div>
             </div>
 
             {/* 작성자 · 관리자 액션 */}
-            {(canEdit(detail) || canDelete(detail)) && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${BORDER}` }}>
-                {canEdit(detail) && (
-                  <button onClick={() => { const d = detail; setDetail(null); openEdit(d) }}
-                    style={{ padding: '8px 14px', background: '#f3f4f6', color: TEXT, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>수정</button>
-                )}
-                {canDelete(detail) && (
-                  <button onClick={() => handleDelete(detail)}
-                    style={{ padding: '8px 14px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>삭제</button>
-                )}
-              </div>
-            )}
-          </div>
+            </>
+          </ModalCard>
         </ModalOverlay>
       )}
     </main>

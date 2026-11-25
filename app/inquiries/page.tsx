@@ -28,6 +28,7 @@ import { loadEngineers } from '@/lib/appData/engineers'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import { useToast } from '@/components/common/Toast'
 import SitePicker, { type PickedDevice, type PickedSite } from '@/components/inquiry/SitePicker'
 import { SITE_PICK_NOTE, SITE_REQUIRED_MESSAGE } from '@/lib/inquirySite'
@@ -391,14 +392,25 @@ function RegisterModal({
   return (
     // 입력 폼 — 확인 뒤 닫는다.
     <ModalOverlay onClose={onClose} confirmClose>
-      <div style={{
-        background: CARD_BG, borderRadius: R.control, padding: '14px 16px', width: '100%', maxWidth: 500,
-        maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
-      }}>
-        {/* 종류는 카드에서 정해져 들어온다 — 모달 안에서 고르지 않고 머리글로 보여 준다. */}
-        <div style={cardHeader}>
-          <span style={cardTitle}>기존 번호 등록 — {INQUIRY_TYPE_LABEL[type]}</span>
-        </div>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+          한 함수를 지난다(적던 것이 있으면 확인을 지난다). 겉모양은 그대로다: 폭 500 ·
+          최대 높이 86vh · 여백 14/16 · 머리줄은 공용 cardHeader(종류는 카드에서 정해져
+          들어온다 — 창 안에서 고르지 않는다). 전에는 카드 전체가 굴렀다 — 이제 본문만 구른다. */}
+      <ModalCard
+        width={500}
+        closeX={false}
+        {...keepPads({ x: 16, top: 14, bottom: 14 }, 0, 12)}
+        style={{ borderRadius: R.control, maxHeight: '86vh' }}
+        title={<div style={cardHeader}><span style={cardTitle}>기존 번호 등록 — {INQUIRY_TYPE_LABEL[type]}</span></div>}
+        footer={<>
+          <button type="button" onClick={onClose} style={{ ...btnGhost(), flex: 1 }}>닫기</button>
+          <button type="button" onClick={submit} disabled={busy || !ready}
+            style={{ ...btnPrimary(busy || !ready), flex: 1 }}>
+            {busy ? '등록 중...' : '등록'}
+          </button>
+        </>}
+      >
+        <>
 
         {/* 등록될 번호 띠 — 맨 위다. 무엇을 만드는 중인지가 입력보다 먼저 보여야 한다. */}
         <div style={{
@@ -472,14 +484,8 @@ function RegisterModal({
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={onClose} style={{ ...btnGhost(), flex: 1 }}>닫기</button>
-          <button type="button" onClick={submit} disabled={busy || !ready}
-            style={{ ...btnPrimary(busy || !ready), flex: 1 }}>
-            {busy ? '등록 중...' : '등록'}
-          </button>
-        </div>
-      </div>
+        </>
+      </ModalCard>
     </ModalOverlay>
   )
 }
@@ -586,15 +592,22 @@ function CreateModal({
   return (
     // 입력 폼 — 확인 뒤 닫는다.
     <ModalOverlay onClose={close} confirmClose>
-      <div style={{
-        background: CARD_BG, borderRadius: R.control, padding: '14px 16px', width: '100%', maxWidth: 420,
-        boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
-      }}>
-        <div style={cardHeader}>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+          한 함수를 지난다. 겉모양은 그대로다: 폭 420 · 여백 14/16 · 머리줄은 공용 cardHeader.
+          **단추 줄은 본문에 그대로 둔다** — 발급 전과 뒤로 단추가 갈려서(갈래마다 다르다)
+          바닥줄 하나로 모으면 그 갈래가 보이지 않는다. */}
+      <ModalCard
+        width={420}
+        closeX={false}
+        {...keepPads({ x: 16, top: 14, bottom: 14 }, 0, 0)}
+        style={{ borderRadius: R.control }}
+        title={<div style={cardHeader}>
           <span style={cardTitle}>
             {made ? '번호가 발급되었습니다' : `새로 작성하기 — ${INQUIRY_TYPE_LABEL[type]}`}
           </span>
-        </div>
+        </div>}
+      >
+        <>
 
         {made ? (
           <>
@@ -662,7 +675,8 @@ function CreateModal({
             </div>
           </>
         )}
-      </div>
+        </>
+      </ModalCard>
     </ModalOverlay>
   )
 }

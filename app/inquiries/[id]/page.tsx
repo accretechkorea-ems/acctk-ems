@@ -42,6 +42,7 @@ import SegmentedControl from '@/components/common/SegmentedControl'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useToast } from '@/components/common/Toast'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import { isPdfName, openPdf } from '@/lib/pdfViewer'
 import XlsxPreviewModal, { type XlsxDoc } from '@/components/xlsx/XlsxPreviewModal'
 import FilePicker, { failText, sizeText, uploadFiles } from '@/components/inquiry/files'
@@ -561,13 +562,25 @@ function MessageModal({
   return (
     // 입력 폼 — 확인 뒤 닫는다.
     <ModalOverlay onClose={onClose} confirmClose>
-      <div style={{
-        background: CARD_BG, borderRadius: R.control, padding: '14px 16px', width: '100%', maxWidth: 520,
-        maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
-      }}>
-        <div style={cardHeader}>
-          <span style={cardTitle}>내용 추가</span>
-        </div>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+          한 함수를 지난다(적던 것이 있으면 확인을 지난다). 겉모양은 그대로다: 폭 520 ·
+          최대 높이 86vh · 여백 14/16 · 머리줄은 공용 cardHeader.
+          전에는 **카드 전체가** 구르고 단추 줄도 함께 올라갔다 — 이제 본문만 구른다. */}
+      <ModalCard
+        width={520}
+        closeX={false}
+        {...keepPads({ x: 16, top: 14, bottom: 14 }, 0, 12)}
+        style={{ borderRadius: R.control, maxHeight: '86vh' }}
+        title={<div style={cardHeader}><span style={cardTitle}>내용 추가</span></div>}
+        footer={<>
+          <button type="button" onClick={onClose} style={{ ...btnGhost(), flex: 1 }}>닫기</button>
+          <button type="button" onClick={submit} disabled={busy || !ready}
+            style={{ ...btnPrimary(busy || !ready), flex: 1 }}>
+            {busy ? '저장 중...' : '저장'}
+          </button>
+        </>}
+      >
+        <>
 
         {/* 맨 윗줄 — 왼쪽 구분(고정 폭), 오른쪽 날짜(남는 폭). 둘 다 위에 작은 라벨을 둔다. */}
         <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -611,14 +624,8 @@ function MessageModal({
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={onClose} style={{ ...btnGhost(), flex: 1 }}>닫기</button>
-          <button type="button" onClick={submit} disabled={busy || !ready}
-            style={{ ...btnPrimary(busy || !ready), flex: 1 }}>
-            {busy ? '저장 중...' : '저장'}
-          </button>
-        </div>
-      </div>
+        </>
+      </ModalCard>
     </ModalOverlay>
   )
 }

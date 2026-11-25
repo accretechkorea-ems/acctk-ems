@@ -52,6 +52,7 @@ import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import { Z } from '@/lib/zIndex'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import Popover from '@/components/common/Popover'
 import BackdatedMark from '@/components/quote/BackdatedMark'
 import QuoteRowIcons from '@/components/quote/QuoteRowIcons'
@@ -738,8 +739,21 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, me
           다음에 누를 것을 눈으로 다시 찾아야 한다. 개인 그래프 모달과 같은 방식이다
           (components/sales/EngineerChartModal.tsx — 그쪽은 min(760px, 90vh)).
           minWidth 900 은 폰(390)에서 그대로 510px 넘쳤다(2026-11-25) — min() 으로 둔다. */}
-      <div style={{ background: CARD_BG, borderRadius: R.modal, width: '100%', minWidth: 'min(900px, 100%)', maxWidth: 1200, height: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', position: 'relative' }}>
-        <div style={{ padding: '18px 24px', borderBottom: `1px solid ${BORDER}` }}>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+          한 함수를 지난다. 겉모양은 그대로다: 폭 min(900px,100%)~1200 · 높이 92vh 고정
+          (내용에 맞춰 늘었다 줄었다 하면 상태 칩을 누를 때마다 창이 들썩이고 표의
+          머리줄·쪽 넘김 자리가 옮겨 다음에 누를 것을 눈으로 다시 찾아야 한다) ·
+          머리줄 아래 선 · 쪽 넘김 줄은 바닥에 고정. 작은 창 셋(발주서·계산서·상태)은
+          본문 끝에 그대로 둔다 — 열리면 제 층(Z.subModal)으로 덮는다. */}
+      <ModalCard
+        style={{
+          borderRadius: R.modal, width: '100%', minWidth: 'min(900px, 100%)', maxWidth: 1200,
+          height: '92vh', position: 'relative',
+        }}
+        headStyle={{ padding: '18px 24px', borderBottom: `1px solid ${BORDER}`, flexDirection: 'column', alignItems: 'stretch' }}
+        bodyStyle={{ padding: 0, display: paged.length === 0 ? 'flex' : 'block' }}
+        footStyle={{ padding: 0, display: 'block' }}
+        title={<>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -765,7 +779,6 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, me
                 )}
               </div>
             </div>
-            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16, flexShrink: 0 }}>✕</button>
           </div>
           {/* 대리점별 현황 */}
           {(() => {
@@ -811,8 +824,21 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, me
               style={{ padding: '5px 12px', borderRadius: R.control, border: 'none', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: BLUE, color: '#fff' }}
             />
           </div>
-        </div>
-        <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, display: paged.length === 0 ? 'flex' : 'block' }}>
+        </>}
+        footer={<>
+          {totalPages > 1 && (
+            <div style={{ padding: '12px 24px', borderTop: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={{ padding: '6px 12px', borderRadius: R.control, border: `1px solid ${BORDER}`, background: '#fff', cursor: page === 1 ? 'not-allowed' : 'pointer', opacity: page === 1 ? 0.4 : 1, fontWeight: 700 }}>‹</button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                <button key={p} onClick={() => setPage(p)} style={{ width: 32, height: 32, borderRadius: R.control, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, background: page === p ? BLUE : '#f3f4f6', color: page === p ? '#fff' : TEXT }}>{p}</button>
+              ))}
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={{ padding: '6px 12px', borderRadius: R.control, border: `1px solid ${BORDER}`, background: '#fff', cursor: page === totalPages ? 'not-allowed' : 'pointer', opacity: page === totalPages ? 0.4 : 1, fontWeight: 700 }}>›</button>
+              <span style={{ fontSize: 12, color: GRAY, marginLeft: 8 }}>{filtered.length}건 중 {(page - 1) * PAGE_SIZE + 1}~{Math.min(page * PAGE_SIZE, filtered.length)}건</span>
+            </div>
+          )}
+        </>}
+      >
+        <>
           {paged.length === 0 ? (
             // 높이가 고정이라 빈 자리가 넓다 — 글을 위에 붙여 두면 아래가 텅 빈 칸으로 남는다.
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: GRAY, fontSize: 13 }}>견적이 없습니다</div>
@@ -1052,23 +1078,24 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, me
               </tbody>
             </table>
           )}
-        </div>
-        {totalPages > 1 && (
-          <div style={{ padding: '12px 24px', borderTop: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={{ padding: '6px 12px', borderRadius: R.control, border: `1px solid ${BORDER}`, background: '#fff', cursor: page === 1 ? 'not-allowed' : 'pointer', opacity: page === 1 ? 0.4 : 1, fontWeight: 700 }}>‹</button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-              <button key={p} onClick={() => setPage(p)} style={{ width: 32, height: 32, borderRadius: R.control, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, background: page === p ? BLUE : '#f3f4f6', color: page === p ? '#fff' : TEXT }}>{p}</button>
-            ))}
-            <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={{ padding: '6px 12px', borderRadius: R.control, border: `1px solid ${BORDER}`, background: '#fff', cursor: page === totalPages ? 'not-allowed' : 'pointer', opacity: page === totalPages ? 0.4 : 1, fontWeight: 700 }}>›</button>
-            <span style={{ fontSize: 12, color: GRAY, marginLeft: 8 }}>{filtered.length}건 중 {(page - 1) * PAGE_SIZE + 1}~{Math.min(page * PAGE_SIZE, filtered.length)}건</span>
-          </div>
-        )}
         {/* 발주서 등록 모달 */}
         {poQuote && (
           <ModalOverlay onClose={() => { setPoQuote(null); setPoFile(null); setPoMemo('') }} confirmClose closeOn={poUploading ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, padding: 0 }}>
-            <div style={{ background: '#fff', borderRadius: R.modal, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>발주서 등록</div>
-              <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{poQuote.quote_number}</div>
+            {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥
+                클릭·✕ 가 한 함수를 지난다(처리 중에는 셋 다 막힌다). 겉모양은 그대로다:
+                폭·여백 24 · 제목 15/800 · 두 번째 줄. 단추 줄은 본문 맨 아래에 그대로 둔다. */}
+            <ModalCard
+              width={360}
+              closeX={false}
+              style={{ boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}
+              headStyle={{ padding: '24px 24px 16px' }}
+              bodyStyle={{ padding: '0 24px 24px' }}
+              title={<>
+                <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>발주서 등록</div>
+                <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{poQuote.quote_number}</div>
+              </>}
+            >
+              <>
               <div style={{ marginBottom: 14 }}>
                 <div style={{ fontSize: 11, color: GRAY, marginBottom: 6, fontWeight: 600 }}>배송 방법</div>
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -1173,16 +1200,29 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, me
                   {poUploading ? '업로드 중...' : '등록'}
                 </button>
               </div>
-            </div>
+              </>
+            </ModalCard>
           </ModalOverlay>
         )}
 
         {/* 세금계산서 요청 모달 */}
         {taxQuote && (
           <ModalOverlay onClose={() => { setTaxQuote(null); setTaxDate('') }} confirmClose closeOn={taxSending ? 'none' : 'both'} style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, padding: 0 }}>
-            <div style={{ background: '#fff', borderRadius: R.modal, padding: 24, width: 340, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>세금계산서 발행 요청</div>
-              <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{taxQuote.quote_number}</div>
+            {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥
+                클릭·✕ 가 한 함수를 지난다(처리 중에는 셋 다 막힌다). 겉모양은 그대로다:
+                폭·여백 24 · 제목 15/800 · 두 번째 줄. 단추 줄은 본문 맨 아래에 그대로 둔다. */}
+            <ModalCard
+              width={340}
+              closeX={false}
+              style={{ boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}
+              headStyle={{ padding: '24px 24px 16px' }}
+              bodyStyle={{ padding: '0 24px 24px' }}
+              title={<>
+                <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 6 }}>세금계산서 발행 요청</div>
+                <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{taxQuote.quote_number}</div>
+              </>}
+            >
+              <>
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, color: GRAY, marginBottom: 6, fontWeight: 600 }}>요청 발행일 <span style={{ color: '#dc2626' }}>*</span></div>
                 <input type="date" className="date-fit" value={taxDate} onChange={e => { setTaxDate(e.target.value); clearError('taxDate') }}
@@ -1197,15 +1237,28 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, me
                   {taxSending ? '요청 중...' : '발행 요청'}
                 </button>
               </div>
-            </div>
+              </>
+            </ModalCard>
           </ModalOverlay>
         )}
 
         {editQuote && (
           <ModalOverlay onClose={() => setEditQuote(null)} confirmClose style={{ background: 'rgba(0,0,0,0.6)', zIndex: Z.subModal, padding: 0 }}>
-            <div style={{ background: '#fff', borderRadius: R.modal, padding: 24, width: 360, boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 4 }}>삭제 / 실패 처리</div>
-              <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{editQuote.quote_number} · {editQuote.customers?.company_name || ''}</div>
+            {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥
+                클릭·✕ 가 한 함수를 지난다(처리 중에는 셋 다 막힌다). 겉모양은 그대로다:
+                폭·여백 24 · 제목 15/800 · 두 번째 줄. 단추 줄은 본문 맨 아래에 그대로 둔다. */}
+            <ModalCard
+              width={360}
+              closeX={false}
+              style={{ boxShadow: '0 10px 40px rgba(0,0,0,0.2)' }}
+              headStyle={{ padding: '24px 24px 16px' }}
+              bodyStyle={{ padding: '0 24px 24px' }}
+              title={<>
+                <div style={{ fontSize: 15, fontWeight: 800, color: TEXT, marginBottom: 4 }}>삭제 / 실패 처리</div>
+                <div style={{ fontSize: 12, color: GRAY, marginBottom: 16 }}>{editQuote.quote_number} · {editQuote.customers?.company_name || ''}</div>
+              </>}
+            >
+              <>
 
               {/* 선택지는 lib/quoteStatus.ts 의 editStatusesFor 하나가 정한다(내 견적 목록과 같은 함수).
                   되돌리기(견적중)는 사람이 손으로 실패시킨 건에만 열리고, 자동 실주 건은 견적일이 이미
@@ -1291,7 +1344,8 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, me
                     : `${editStatus} 확정`}
                 </button>
               </div>
-            </div>
+              </>
+            </ModalCard>
           </ModalOverlay>
         )}
 
@@ -1363,7 +1417,8 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, me
           serverError={approvalError}
           busy={approvalChecking}
         />
-      </div>
+        </>
+      </ModalCard>
     </ModalOverlay>
   )
 }
