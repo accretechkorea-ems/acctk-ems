@@ -31,6 +31,8 @@ import Watermark from '@/components/quote/Watermark'
 import EquipConfigLauncher from '@/components/quote/equip/EquipConfigLauncher'
 import QuotePreviewPane from '@/components/quote/QuotePreviewPane'
 import ConfirmQuoteModal from '@/components/quote/ConfirmQuoteModal'
+import QuoteSavedModal from '@/components/quote/QuoteSavedModal'
+import type { MailParts } from '@/lib/quoteMail'
 import QuoteItemRow from './QuoteItemRow'
 import { useRecentSales } from '@/hooks/quote/useRecentSales'
 import ModalOverlay from '@/components/common/ModalOverlay'
@@ -188,6 +190,8 @@ function QuotePageInner() {
 
   /** 고른 담당자 한 줄. 목록이 바뀌어 사라졌으면 null 이다. */
   const selectedContact = contacts.find(c => c.contact_id === recipientContactId) ?? null
+  /** 확정 직후 뜨는 메일 창의 값 — 화면을 비우기 전에 담아 둔다. */
+  const [savedMail, setSavedMail] = useState<MailParts | null>(null)
   /** 문서에 찍히는 수신인 — 담당자가 있으면 그 이름, 없으면 옛 글자(lib/quoteRecipient.ts). */
   const receiver = displayRecipient(selectedContact, legacyRecipient)
   // 비고 — **손댄 글자만** 상태로 들고, 손대지 않았으면 양식의 기본 문구를 그대로 보여 준다.
@@ -550,6 +554,16 @@ function QuotePageInner() {
     termsResult, subLinesResult, normalizedSubLines, withNormalizedSubLines,
     runValidation, setErrors,
     repairId, hasUrlPrefill, setParamsCleared, setPreviewSeq,
+    // 확정이 끝나면 **화면을 비우기 전에** 메일 창에 쓸 값을 받아 둔다.
+    onSaved: (no: string) => setSavedMail({
+      quoteNo: no,
+      toEmail: selectedContact?.email ?? null,
+      toName: selectedContact?.name ?? null,
+      toPosition: selectedContact?.position ?? null,
+      company,
+      firstItem: rows.find(r => (r.itemText ?? '').trim())?.itemText ?? null,
+      fromName: engineerName,
+    }),
     setCompany, setCustomerId, setCustomerQuery, setCustomerResults, setCustomerSearchOpen,
     setSelectedCustomer, setPrefillNotice, setIsDealer,
     setEuCustomerId, setEuQuery, setEuResults, setEuSearchOpen, setSelectedEU, resolveEuParent,
@@ -1092,6 +1106,10 @@ function QuotePageInner() {
             </div>
           </ModalCard>
         </ModalOverlay>
+      )}
+
+      {savedMail && (
+        <QuoteSavedModal parts={savedMail} onClose={() => setSavedMail(null)} />
       )}
 
       {showConfirmModal && (

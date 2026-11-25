@@ -10,6 +10,7 @@
 // 상태는 하나도 들고 있지 않다. 전부 화면(page.tsx)의 값과 setter 를 받아 쓴다.
 // 비고·조건 묶음은 다음 단계(3a-7·3a-8)에서 다시 RemarksEditor·TermsEditor 로 나눈다.
 
+import { useEffect } from 'react'
 import { FieldError, errBorder } from '@/components/common/fieldErrors'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { isClosed } from '@/components/customer/opportunity'
@@ -27,6 +28,7 @@ import type { QuoteCategory } from '@/lib/quoteCategories'
 import { FORM_KINDS, FORM_LABELS } from '@/lib/quoteForms'
 import type { SalesOpportunity } from '@/components/customer/types'
 import { R } from '@/lib/radius'
+import { advanceQuoteFocus, focusQuoteStep, onlyContactId, registerQuoteFocus } from '@/lib/quoteFocus'
 
 
 /**
@@ -179,6 +181,18 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
   } = recipient
   // 후보를 업체별로 묶는다 — 담당자가 없는 묶음은 빠진다(lib/quoteCustomerPick.ts).
   const recipientGroups = groupRecipients(contacts, recipientSources)
+
+  /**
+   * 담당자가 **한 사람뿐이면** 고를 것이 없다 — 그 사람으로 정하고 다음 칸으로 넘어간다.
+   * 사람이 이미 고른 뒤에는 건드리지 않는다.
+   */
+  useEffect(() => {
+    if (recipientContactId != null || contactsLoading) return
+    const only = onlyContactId(contacts)
+    if (only == null) return
+    setRecipientContactId(only)
+    focusQuoteStep('priceSearch')
+  }, [contacts, contactsLoading, recipientContactId, setRecipientContactId])
   const {
     remarks, setRemarks, remarksOpen, setRemarksOpen, defaultRemarks,
     showSignature, setShowSignature, termsOpen, setTermsOpen, terms, setTerms,
@@ -327,7 +341,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
                   대리점이면서 우리 고객인 15곳은 **같은 이름이 두 줄**로 뜬다(역할이 다르다).
                   key 에 역할을 함께 넣는 까닭이 그것이다(lib/quoteCustomerPick.ts). */}
               {customerResults.map((c, i) => (
-                <div key={pickKey(c)} onClick={() => handleCustomerSelect(c)}
+                <div key={pickKey(c)} onClick={() => { handleCustomerSelect(c); advanceQuoteFocus('company', { isDealer: isAgencyPick(c) }) }}
                   style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 12, transition: 'background 0.15s ease', background: customerKeys.active === i ? '#f0f4ff' : '#fff' }}
                   onMouseEnter={() => customerKeys.setActive(i)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
@@ -372,6 +386,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
               onChange={e => { handleEUSearch(e.target.value); clearError('eu') }}
               onFocus={() => euResults.length > 0 && setEuSearchOpen(true)}
               onKeyDown={euKeys.onKeyDown}
+              ref={el => registerQuoteFocus('eu', el)}
               placeholder="최종 사용 업체 검색 (사전 등록 필요)"
             />
             {/* 고른 뒤에는 상자 안 오른쪽 끝에 체크(= 거래이력 연동)와 지우기만 남긴다. */}
@@ -389,7 +404,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
             {euSearchOpen && euResults.length > 0 && (
               <div ref={euListRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #c2410c', borderRadius: R.control, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(194,65,12,0.12)' }}>
                 {euResults.map((c, i) => (
-                  <div key={c.customer_id} onClick={() => handleEUSelect(c)}
+                  <div key={c.customer_id} onClick={() => { handleEUSelect(c); advanceQuoteFocus('eu', { isDealer: true }) }}
                     style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 12, transition: 'background 0.15s ease', background: euKeys.active === i ? '#fff7ed' : '#fff' }}
                     onMouseEnter={() => euKeys.setActive(i)}>
                     <div style={{ fontWeight: 700, color: '#c2410c' }}>{c.company_name}</div>
@@ -440,8 +455,13 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
         <select
           className="q-box-field"
           value={recipientContactId ?? ''}
+          ref={el => registerQuoteFocus('recipient', el)}
           disabled={recipientCustomerId == null || contacts.length === 0}
-          onChange={e => setRecipientContactId(e.target.value === '' ? null : Number(e.target.value))}
+          onChange={e => {
+            setRecipientContactId(e.target.value === '' ? null : Number(e.target.value))
+            // 고른 그 자리에서 품목의 가격표 검색 칸으로 넘어간다.
+            if (e.target.value !== '') focusQuoteStep('priceSearch')
+          }}
           style={{ cursor: recipientCustomerId == null || contacts.length === 0 ? 'not-allowed' : 'pointer', color: recipientContactId == null ? '#6b7280' : '#111827' }}
         >
           <option value="" disabled hidden>

@@ -100,6 +100,8 @@ export default function AgencyPane({
   const contact = useContactCrud({
     customerId: agency.customer_id,
     fetchDetail: async () => { reload(); return true },
+    // 명함첩에도 담을 때 쓰는 밑값 — 사람 쪽은 폼이, 회사·주소는 이 대리점이 준다.
+    site: { company: agency.company_name, address: agency.address },
   })
   const { openQuotePdf } = useQuotePdf({ customer: null, engineerId: me.engineer_id })
 

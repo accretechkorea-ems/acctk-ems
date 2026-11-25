@@ -97,7 +97,11 @@ export default function CustomerDetailBody({
     onChanged?.()
     return r
   }, [fetchDetail, onChanged])
-  const contact = useContactCrud({ customerId, fetchDetail: refreshAll })
+  const contact = useContactCrud({
+    customerId, fetchDetail: refreshAll,
+    // 명함첩에도 담을 때 쓰는 밑값 — 사람 쪽은 폼이, 회사·주소는 이 사업장이 준다.
+    site: { company: customer?.company_name ?? null, address: customer?.address ?? null },
+  })
   const device = useDeviceCrud({ customerId, fetchDetail: refreshAll })
   const customerCrud = useCustomerCrud({ customer, fetchDetail: refreshAll })
 

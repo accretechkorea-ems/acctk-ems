@@ -125,14 +125,25 @@ export async function POST(req: Request) {
     const method = isInputMethod(body.input_method) ? body.input_method : 'manual'
     const snap = snapshotOf(caller, division)
 
-    const { data: made, error } = await supabaseAdmin
+    const columns = await dropMissingColumns(fields)
+    const put = (m: string) => supabaseAdmin
       .from('business_cards')
-      .insert({
-        ...(await dropMissingColumns(fields)),
-        division, input_method: method, registered_at: now, ...snap,
-      })
+      .insert({ ...columns, division, input_method: m, registered_at: now, ...snap })
       .select('card_id')
       .single()
+
+    let { data: made, error } = await put(method)
+    /**
+     * 방식 꼬리표가 표의 CHECK 에 아직 없을 수 있다 — 'contact' 를 더하는 SQL
+     * (db/contacts_fields_20261125.sql)이 적용되기 전이다. 그때는 **담기는 쪽**을 고른다:
+     * 'manual' 로 한 번 더 넣는다(명함은 담기고 꼬리표만 다르다).
+     */
+    if (error?.code === '23514' && method !== 'manual') {
+      console.warn(`[${TAG}] input_method CHECK 에 '${method}' 가 없다 — manual 로 담는다`)
+      const retry = await put('manual')
+      made = retry.data
+      error = retry.error
+    }
     if (error || !made) {
       if (error?.code === '42P01' || error?.code === 'PGRST205') {
         return NextResponse.json({ error: SCHEMA_MESSAGE }, { status: 503 })

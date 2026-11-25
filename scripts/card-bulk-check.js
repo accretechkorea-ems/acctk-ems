@@ -87,7 +87,8 @@ const ONE = read(ONE_PATH)
 ok('한 장씩 담는 라우트에 확인일이 없다', !/verified_at/.test(ONE))
 ok('여러 장 담는 라우트에도 없다', !/verified_at/.test(R))
 ok('지우는 SQL 이 있다', has('db/business_cards_drop_verified_20261125.sql'))
-eq('방식 넷', [...C.INPUT_METHODS], ['camera', 'upload', 'manual', 'bulk'])
+// 2026-11-25: 담당자에서 복사해 담는 길이 생겨 'contact' 가 더해졌다(고객사 담당자 등록).
+eq('방식 다섯', [...C.INPUT_METHODS], ['camera', 'upload', 'manual', 'bulk', 'contact'])
 eq('이름', C.METHOD_LABEL.bulk, '여러 장 등록')
 
 console.log('\n── ④ 중복과 빈 줄 ──')

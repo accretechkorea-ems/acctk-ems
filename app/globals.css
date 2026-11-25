@@ -336,3 +336,15 @@ html::-webkit-scrollbar-track,
   color: var(--color-brand);
   text-decoration: underline;
 }
+/* 견적 품목 카드 — 안의 어느 칸이든 커서가 들어오면 **테마 파랑 테두리**.
+   지금 어느 줄을 고치고 있는지 한눈에 보인다. 색·두께는 줄 호버와 같은 토큰이다.
+
+   테두리를 **여기서** 그린다(2026-11-25 실측). 줄 쪽에 style={{ border }} 로 두었을 때는
+   인라인이 이 규칙을 이겨, 커서가 들어와도 색이 그대로였다. */
+.q-item-card {
+  border: 1px solid #e5e7eb;
+  transition: border-color 0.15s ease;
+}
+.q-item-card:focus-within {
+  border-color: var(--color-brand-border);
+}

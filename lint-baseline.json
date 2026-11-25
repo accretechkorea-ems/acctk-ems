@@ -1,6 +1,6 @@
 {
-  "comment": "eslint 경고 기준선. 이 수를 넘으면 CI 가 막는다(scripts/lint-baseline.js). 경고를 줄였으면 이 값도 같이 내린다. 2026-11-21: 130 → 32. any 52·require 20·미사용 18·이미지 5·그 밖 3 을 없앴다. 남은 32 는 react-hooks(exhaustive-deps 23 · set-state-in-effect 9) — 고치면 effect 가 더 도는 자리라 손대지 않았다. 목록은 docs/lint-left-20261121.md",
-  "maxWarnings": 32,
+  "comment": "eslint 경고 기준선. 이 수를 넘으면 CI 가 막는다(scripts/lint-baseline.js). 경고를 줄였으면 이 값도 같이 내린다. 2026-11-21: 130 → 32. any 52·require 20·미사용 18·이미지 5·그 밖 3 을 없앴다. 남은 32 는 react-hooks(exhaustive-deps 23 · set-state-in-effect 9) — 고치면 effect 가 더 도는 자리라 손대지 않았다. 목록은 docs/lint-left-20261121.md. 2026-11-25: 32 → 31. 담당자 수정 창을 고치며 setErrors 를 쓰는 effect 가 사라졌다(set-state-in-effect 한 건).",
+  "maxWarnings": 31,
   "maxErrors": 0,
-  "updated": "2026-11-21"
+  "updated": "2026-11-25"
 }

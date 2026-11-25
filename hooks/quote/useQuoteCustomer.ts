@@ -24,6 +24,7 @@ import type { SalesOpportunity } from '@/components/customer/types'
 import { parentCompanyName } from '@/components/customer/ParentPicker'
 import { NOT_AGENCY_ONLY } from '@/lib/customerAgency'
 import { type CustomerRole, isAgencyPick, mergeCustomerPicks } from '@/lib/quoteCustomerPick'
+import { advanceQuoteFocus } from '@/lib/quoteFocus'
 
 export type UseQuoteCustomerArgs = {
   supabase: SupabaseClient
@@ -216,8 +217,20 @@ export function useQuoteCustomer({ supabase, clearError }: UseQuoteCustomerArgs)
 
   useOutsideClick(customerSearchRef, useCallback(() => setCustomerSearchOpen(false), []), customerSearchOpen)
   useOutsideClick(euSearchRef, useCallback(() => setEuSearchOpen(false), []), euSearchOpen)
-  const customerKeys = useListKeyboard(customerResults, customerSearchOpen, customerListRef, c => handleCustomerSelect(c))
-  const euKeys = useListKeyboard(euResults, euSearchOpen, euListRef, c => handleEUSelect(c))
+  /**
+   * **키보드로 고른 때도 다음 칸으로 옮긴다**(2026-11-25 실측).
+   * 전에는 줄의 onClick 에만 달려 있어, 화살표·Enter 로 고르면 커서가 제자리에 남았다.
+   * 사람이 고른 두 길(마우스·키보드)에만 달고, prefill 이 부르는 길에는 달지 않는다 —
+   * 화면이 열리는 중에 커서를 빼앗지 않는다.
+   */
+  const customerKeys = useListKeyboard(customerResults, customerSearchOpen, customerListRef, c => {
+    handleCustomerSelect(c)
+    advanceQuoteFocus('company', { isDealer: isAgencyPick(c) })
+  })
+  const euKeys = useListKeyboard(euResults, euSearchOpen, euListRef, c => {
+    handleEUSelect(c)
+    advanceQuoteFocus('eu', { isDealer: true })
+  })
 
   return {
     company, setCompany,

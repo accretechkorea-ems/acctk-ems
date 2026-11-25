@@ -263,12 +263,17 @@ export type DeviceForm = {
   category: string
 }
 
+/** 담당자 폼 — 명함과 같은 칸이다(lib/contactForm.ts CONTACT_FIELDS). */
 export type ContactForm = {
   name: string
+  name_en: string
   department: string
   position: string
+  mobile: string
   phone: string
+  fax: string
   email: string
+  memo: string
 }
 
 export type CustomerEditFormData = {

@@ -20,6 +20,7 @@
 
 import { NextResponse } from 'next/server'
 import { loadCaller } from '@/lib/apiCaller'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   fieldChanges, writeCustomerEvents,
   type CustomerEventRow, type CustomerEventType, type FieldChange,
@@ -44,11 +45,40 @@ const SITE_COLUMNS: Record<string, string> = {
 /** 담당자 칸. */
 const CONTACT_COLUMNS: Record<string, string> = {
   name: '이름', department: '부서', position: '직급', phone: '전화', email: '이메일',
+  // 2026-11-25 — 명함과 같은 칸. db/contacts_fields_20261125.sql 이 더한다.
+  name_en: '영문 이름', mobile: '휴대폰', fax: '팩스', memo: '메모',
 }
+
+/** 아직 없을 수 있는 담당자 칸 — SQL 적용 전에는 빼고 담는다. */
+const CONTACT_NEW = ['name_en', 'mobile', 'fax', 'memo'] as const
 /** 장비 칸 — 사진·패킹리스트는 저장소를 거치므로 여기서 다루지 않는다. */
 const DEVICE_COLUMNS: Record<string, string> = {
   device_name: '라인업', device_name2: '모델', option: '옵션', serial_number: 'S/N',
   program: '소프트웨어', install_date: '납입일', category: '계열',
+}
+
+/**
+ * 담당자 표에 **아직 없는 칸은 빼고** 담는다 (2026-11-25).
+ * db/contacts_fields_20261125.sql 을 돌리기 전에 그 칸을 같이 보내면 PGRST204 로
+ * **담기 전체가 거절된다** — 영문 이름 때문에 담당자를 못 담는 일은 없어야 한다.
+ * 한 번만 물어보고 과정이 사는 동안 기억한다(명함 영문 칸과 같은 길).
+ */
+let contactNewKnown: boolean | null = null
+async function dropMissingContactColumns(
+  patch: Record<string, unknown>,
+  sb: SupabaseClient,
+): Promise<Record<string, unknown>> {
+  if (contactNewKnown == null) {
+    const { error } = await sb.from('contacts').select('name_en').limit(1)
+    contactNewKnown = !(error != null && (error.code === '42703' || error.code === 'PGRST204' || error.code === 'PGRST205'))
+    if (!contactNewKnown) {
+      console.warn('[customer-change] 담당자 새 칸이 아직 없다 — db/contacts_fields_20261125.sql 전까지 빼고 담는다')
+    }
+  }
+  if (contactNewKnown) return patch
+  const out = { ...patch }
+  for (const f of CONTACT_NEW) delete out[f]
+  return out
 }
 
 /** 흰 목록에 있는 칸만 남긴다. */
@@ -220,7 +250,7 @@ export async function POST(req: Request) {
 
   // ── 담당자 추가·수정 ──────────────────────────────────────────────────
   if (action === 'contact-add' || action === 'contact-edit') {
-    const patch = pick(body.patch as Record<string, unknown>, CONTACT_COLUMNS)
+    const patch = await dropMissingContactColumns(pick(body.patch as Record<string, unknown>, CONTACT_COLUMNS), sb)
     if (!String(patch.name ?? '').trim()) return bad('이름을 입력해주세요')
 
     if (action === 'contact-add') {

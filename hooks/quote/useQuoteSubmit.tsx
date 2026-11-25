@@ -101,6 +101,8 @@ export type UseQuoteSubmitArgs = {
   hasUrlPrefill: boolean
   setParamsCleared: React.Dispatch<React.SetStateAction<boolean>>
   setPreviewSeq: React.Dispatch<React.SetStateAction<number>>
+  /** 확정이 끝난 **그 순간** 불린다 — 화면을 비우기 전이라 수신인이 아직 살아 있다. */
+  onSaved?: (quoteNo: string) => void
   /** 비고 기본 문구(page.tsx 의 DEFAULT_REMARKS). resetForm 이 이 값으로 되돌린다. */
 
   setCompany: React.Dispatch<React.SetStateAction<string>>
@@ -167,7 +169,7 @@ export function useQuoteSubmit({
   totalSupply, totalTax, totalAmount, totalCost, totalProfit, totalProfitRate,
   termsResult, subLinesResult, normalizedSubLines, withNormalizedSubLines,
   runValidation, setErrors,
-  repairId, hasUrlPrefill, setParamsCleared, setPreviewSeq,
+  repairId, hasUrlPrefill, setParamsCleared, setPreviewSeq, onSaved,
   setCompany, setCustomerId, setCustomerQuery, setCustomerResults, setCustomerSearchOpen,
   setSelectedCustomer, setPrefillNotice, setIsDealer,
   setEuCustomerId, setEuQuery, setEuResults, setEuSearchOpen, setSelectedEU, resolveEuParent,
@@ -621,6 +623,8 @@ export function useQuoteSubmit({
       )
       // 다음 미리보기는 방금 발급된 순번의 다음이다.
       setPreviewSeq(result.seq + 1)
+      // **화면을 비우기 전에** 메일 창에 쓸 값을 넘긴다 — 비우면 수신인이 사라진다.
+      onSaved?.(result.quoteNo)
       setShowConfirmModal(false)
       // 수리 건 연결이 됐으면 PDF 생성 후 수리 목록으로 이동
       if (result.linked) { router.push('/repair'); return }

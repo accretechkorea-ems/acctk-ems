@@ -19,6 +19,7 @@ import { inp } from './styles'
 import ExpenseSection from './ExpenseSection'
 import { Z } from '@/lib/zIndex'
 import { R } from '@/lib/radius'
+import { registerQuoteFocus } from '@/lib/quoteFocus'
 
 // 후보가 없을 때 쓰는 고정 빈 배열 — 렌더마다 새 배열을 만들지 않기 위해 모듈 상수로 둔다.
 const EMPTY_ITEMS: PriceItem[] = []
@@ -315,6 +316,8 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
     /** 가격표 검색 칸만 쓴다 — 후보 목록을 열고(onFocus) 화살표·Enter 를 받는다(onKeyDown). */
     onFocus?: () => void
     onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>
+    /** 칸을 **이름으로 부를 수 있게** 등록한다(수신인을 고르면 여기로 커서가 온다). */
+    inputRef?: (el: HTMLInputElement | null) => void
   }) => (
     <label title={opts.title} style={{
       ...boxBase, height: H_CELL, flex: `1 1 ${opts.basis}`, cursor: 'text',
@@ -322,6 +325,7 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
     }}>
       <span style={prefix}>{opts.label}</span>
       <input className="q-bare" value={opts.value}
+        ref={opts.inputRef}
         onChange={e => opts.onChange(e.target.value)}
         onFocus={opts.onFocus}
         onKeyDown={opts.onKeyDown}
@@ -428,7 +432,9 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
    */
   if (row.row_kind === 'title') {
     return (
-      <div style={{ background: '#f8fafc', borderRadius: R.control, padding: '4px 8px', marginBottom: 6, border: '1px solid #e5e7eb' }}>
+      // 칸 하나에라도 커서가 들어오면 테두리가 테마 파랑이 된다(.q-item-card:focus-within).
+    <div className="q-item-card"
+      style={{ background: '#f8fafc', borderRadius: R.control, padding: '4px 8px', marginBottom: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: GAP, height: 17 }}>
           <span style={badge}>{ROW_KIND_LABEL[row.row_kind]}</span>
           <span style={{ flex: 1 }} />
@@ -454,7 +460,9 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
   }
 
   return (
-    <div style={{ background: '#f8fafc', borderRadius: R.control, padding: '4px 8px', marginBottom: 6, border: '1px solid #e5e7eb' }}>
+    // 칸 하나에라도 커서가 들어오면 테두리가 테마 파랑이 된다(.q-item-card:focus-within).
+    <div className="q-item-card"
+      style={{ background: '#f8fafc', borderRadius: R.control, padding: '4px 8px', marginBottom: 6 }}>
       {/* ── 머리줄 — 번호 · 종류 · 통화 · 줄 추가 · 삭제 ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: GAP, height: 17 }}>
         {rowCount > 1 && itemNo !== null && (
@@ -549,6 +557,8 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
               basis: is20 ? '110px' : '140px',
               onFocus: () => setSearchOpen(prev => ({ ...prev, [row.id]: true })),
               onKeyDown: itemKeys.onKeyDown,
+              // **첫 줄의** 가격표 칸만 등록한다 — 수신인을 고르면 여기로 커서가 온다.
+              inputRef: itemNo === 1 || rowCount === 1 ? el => registerQuoteFocus('priceSearch', el) : undefined,
               extra: row.selectedItem ? (
                 <button onClick={() => clearItem(row.id)}
                   title="품목 해제"

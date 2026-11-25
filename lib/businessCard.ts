@@ -52,11 +52,17 @@ export const FIELD_MAX = 200
 
 // ── 넣는 방식 ─────────────────────────────────────────────────────────────
 
-export const INPUT_METHODS = ['camera', 'upload', 'manual', 'bulk'] as const
+/**
+ * 'contact' 는 **고객사 담당자에서 복사**해 담은 장이다(2026-11-25).
+ * 표의 CHECK 에 그 값을 더하는 것은 db/contacts_fields_20261125.sql 이다 —
+ * 적용 전에는 라우트가 'manual' 로 떨어뜨려 담는다(명함은 담기고, 꼬리표만 다르다).
+ */
+export const INPUT_METHODS = ['camera', 'upload', 'manual', 'bulk', 'contact'] as const
 export type InputMethod = (typeof INPUT_METHODS)[number]
 
 export const METHOD_LABEL: Record<InputMethod, string> = {
   camera: '사진 촬영', upload: '사진 올리기', manual: '직접 입력', bulk: '여러 장 등록',
+  contact: '담당자에서 복사',
 }
 
 export function isInputMethod(v: unknown): v is InputMethod {
