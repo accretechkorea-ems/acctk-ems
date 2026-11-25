@@ -24,6 +24,7 @@ import { useState, type CSSProperties, type ReactNode } from 'react'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import type { SubmitOutcome } from './showroomData'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { toMin, computeWorkHours, lunchOverlapHours } from '@/lib/workHours'
 import { getCategoryColor } from '@/lib/categoryColors'
@@ -433,29 +434,44 @@ export default function UsageModal({
   return (
     // 쇼룸 사용 신청 — 칸이 많다. 확인 뒤 닫는다(상태가 27갈래라 변경 여부는 넘기지 않는다).
     <ModalOverlay onClose={onClose} confirmClose style={{ padding: '6vh 12px' }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        width: 'min(900px, 90vw)', maxHeight: 'calc(100dvh - 32px)',
-        background: CARD_BG, borderRadius: R.control, boxSizing: 'border-box',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
-        animation: 'modal-in 0.18s ease', display: 'flex', flexDirection: 'column',
-      }}>
-        <style>{LAYOUT_CSS}</style>
-
-        {/* 헤더 — 고정. 제목이 목적에 따라 바뀐다(고객 데모 = 신청) */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', flexShrink: 0, borderBottom: `1px solid ${BORDER}` }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px' }}>{title}</div>
-          <button onClick={onClose} title="닫기"
-            onMouseEnter={e => (e.currentTarget.style.color = TEXT)}
-            onMouseLeave={e => (e.currentTarget.style.color = SUB)}
-            style={{ width: 30, height: 30, borderRadius: '50%', background: NEUTRAL_BG, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: SUB, transition: 'color 0.15s ease' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-
-        {/* 본문 — 스크롤 */}
-        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '16px 20px', display: 'grid', gap: 16 }}>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms(이 파일에만 있던
+          modal-in 0.18s 를 대신한다) · Esc·바깥 클릭·✕ 가 한 함수를 지난다.
+          겉모양은 그대로다: 폭 min(900px, 90vw) · 머리·발의 선과 여백 · 제목 18/700 ·
+          홈바 safe-area. 배치 CSS(LAYOUT_CSS)는 본문 맨 위에 그대로 둔다. */}
+      <ModalCard
+        style={{
+          borderRadius: R.control, width: 'min(900px, 90vw)', maxWidth: 'min(900px, 90vw)',
+          maxHeight: 'calc(100dvh - 32px)', border: `1px solid ${BORDER}`,
+        }}
+        headStyle={{ padding: '16px 20px', borderBottom: `1px solid ${BORDER}`, alignItems: 'center' }}
+        bodyStyle={{ padding: '16px 20px', display: 'grid', gap: 16, WebkitOverflowScrolling: 'touch' }}
+        footStyle={{
+          padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))',
+          borderTop: `1px solid ${BORDER}`, flexWrap: 'wrap',
+        }}
+        title={<div style={{ fontSize: 18, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px' }}>{title}</div>}
+        footer={<>
+            {submitError && (
+              <div style={{ marginBottom: 10, fontSize: 12, fontWeight: 600, color: DANGER, whiteSpace: 'pre-wrap' }}>
+                {submitError}
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button onClick={onClose} disabled={saving}
+                style={{ padding: '9px 16px', background: CARD_BG, color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: saving ? 'default' : 'pointer', fontWeight: 600, fontSize: 13 }}>
+                취소
+              </button>
+              <button onClick={handleSave} disabled={saving || !timeValid}
+                onMouseEnter={e => { if (!saving && timeValid) e.currentTarget.style.background = BLUE_HOVER }}
+                onMouseLeave={e => { if (!saving && timeValid) e.currentTarget.style.background = BLUE }}
+                style={{ padding: '9px 18px', background: BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: (saving || !timeValid) ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, opacity: (saving || !timeValid) ? 0.6 : 1, transition: 'background 0.15s ease' }}>
+                {saveLabel}
+              </button>
+            </div>
+        </>}
+      >
+        <>
+          <style>{LAYOUT_CSS}</style>
 
           {/* 재작성 — 반려 사유를 먼저 보인다 */}
           {rewriting && (
@@ -730,29 +746,8 @@ export default function UsageModal({
               )}
             </div>
           </div>
-        </div>
-
-        {/* 푸터 — 고정. 고객 데모 신청이면 「신청」 */}
-        <div style={{ padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', flexShrink: 0, borderTop: `1px solid ${BORDER}` }}>
-          {submitError && (
-            <div style={{ marginBottom: 10, fontSize: 12, fontWeight: 600, color: DANGER, whiteSpace: 'pre-wrap' }}>
-              {submitError}
-            </div>
-          )}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <button onClick={onClose} disabled={saving}
-              style={{ padding: '9px 16px', background: CARD_BG, color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: saving ? 'default' : 'pointer', fontWeight: 600, fontSize: 13 }}>
-              취소
-            </button>
-            <button onClick={handleSave} disabled={saving || !timeValid}
-              onMouseEnter={e => { if (!saving && timeValid) e.currentTarget.style.background = BLUE_HOVER }}
-              onMouseLeave={e => { if (!saving && timeValid) e.currentTarget.style.background = BLUE }}
-              style={{ padding: '9px 18px', background: BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: (saving || !timeValid) ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, opacity: (saving || !timeValid) ? 0.6 : 1, transition: 'background 0.15s ease' }}>
-              {saveLabel}
-            </button>
-          </div>
-        </div>
-      </div>
+        </>
+      </ModalCard>
 
       {/* 신청은 결재선을 정해야 올라간다 — 저장을 누르면 이 모달이 이어서 열린다. */}
       <LinePickerModal

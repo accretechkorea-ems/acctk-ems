@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { isCurrentlyEmployed } from '@/lib/engineers'
 import { STAGES, LOST_REASONS, dateToMonth, compactKRW, isClosed } from '../opportunity'
@@ -131,15 +132,18 @@ export default function OpportunityModal({
 
   return (
     <ModalOverlay onClose={onClose} confirmClose dirty={JSON.stringify(form) !== JSON.stringify(formOf(opportunity))}>
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '100%', maxWidth: 520, maxHeight: '88vh', background: '#ffffff', borderRadius: R.control,
-          padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb',
-          animation: 'modal-in 0.18s ease', display: 'flex', flexDirection: 'column',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexShrink: 0 }}>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms(이 파일에만 있던
+          modal-in 0.18s 를 대신한다) · Esc·바깥 클릭·✕ 가 한 함수를 지난다(고치던 것이
+          있으면 「저장하지 않고 닫을까요?」를 지난다 — confirmClose 그대로).
+          겉모양은 그대로다: 폭 520 · 최대 높이 88vh · 여백 24 · 제목 18/700 ·
+          머리 아래 20 · 바닥 위 18. */}
+      <ModalCard
+        width={520}
+        style={{ borderRadius: R.control, maxHeight: '88vh', border: '1px solid #ebebeb' }}
+        headStyle={{ padding: '24px 24px 20px', alignItems: 'center' }}
+        bodyStyle={{ padding: '0 24px' }}
+        footStyle={{ padding: '18px 24px 24px', justifyContent: 'flex-start' }}
+        title={<>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>
             {opportunity ? (canEdit ? '포캐스트 수정' : '포캐스트') : '포캐스트 등록'}
             {opportunity && isClosed(opportunity) && (
@@ -161,9 +165,39 @@ export default function OpportunityModal({
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
-        </div>
-
-        <div style={{ overflowY: 'auto', flex: 1, display: 'grid', gap: 14 }}>
+        </>}
+        footer={<>
+          {canEdit && opportunity
+            ? (
+              <>
+              <button onClick={onDelete} disabled={isSaving}
+                style={{ padding: '9px 14px', background: '#fff', color: '#dc2626', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}
+              >삭제</button>
+              {onSetClosed && opportunity.stage !== '실주' && (
+                <button onClick={() => onSetClosed(opportunity, !opportunity.closed_at)} disabled={isSaving}
+                  style={{ marginLeft: 8, padding: '9px 14px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                  {opportunity.closed_at ? '종료 해제' : '종료'}
+                </button>
+              )}
+              </>
+            )
+            : <span />}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onClose}
+              style={{ padding: '9px 16px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+            >{canEdit ? '취소' : '닫기'}</button>
+            {canEdit && (
+              <button onClick={handleSave} disabled={isSaving}
+                onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
+                onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
+                style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}>
+                {isSaving ? '저장 중...' : '저장'}
+              </button>
+            )}
+          </div>
+        </>}
+      >
+        <>
           {/* 업체 — 상세 화면에서 열었으면 잠긴 상태로 보여주고, 파이프라인에서 신규 등록할 때만 고른다 */}
           {(lockedCustomerName || opportunity) ? (
             <div>
@@ -347,39 +381,8 @@ export default function OpportunityModal({
               )}
             </div>
           )}
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 20, flexShrink: 0 }}>
-          {canEdit && opportunity
-            ? (
-              <>
-              <button onClick={onDelete} disabled={isSaving}
-                style={{ padding: '9px 14px', background: '#fff', color: '#dc2626', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}
-              >삭제</button>
-              {onSetClosed && opportunity.stage !== '실주' && (
-                <button onClick={() => onSetClosed(opportunity, !opportunity.closed_at)} disabled={isSaving}
-                  style={{ marginLeft: 8, padding: '9px 14px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
-                  {opportunity.closed_at ? '종료 해제' : '종료'}
-                </button>
-              )}
-              </>
-            )
-            : <span />}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={onClose}
-              style={{ padding: '9px 16px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
-            >{canEdit ? '취소' : '닫기'}</button>
-            {canEdit && (
-              <button onClick={handleSave} disabled={isSaving}
-                onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
-                onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
-                style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}>
-                {isSaving ? '저장 중...' : '저장'}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+        </>
+      </ModalCard>
     </ModalOverlay>
   )
 }

@@ -13,8 +13,9 @@ import { loadEngineers } from '@/lib/appData/engineers'
 import { useToast } from '@/components/common/Toast'
 import { Z } from '@/lib/zIndex'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import {
-  BLUE, BORDER, CARD_BG, DANGER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT,
+  BLUE, BORDER, DANGER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT,
   btnGhost, btnPrimary, inputStyle,
 } from '@/components/common/ui'
 import { isSuperAdmin } from '@/lib/permissions'
@@ -276,18 +277,36 @@ export default function LinePickerModal({
           고른 팀의 인원 수에 따라 창이 커졌다 작아졌다 했다. 사람을 고르는 동안 창이 움직이면
           다음에 누를 자리가 매번 달라진다.
           작은 화면에서는 vw·vh 상한으로만 줄어든다(그때도 가운데 칸이 줄어들 뿐 줄 구성은 같다). */}
-      <div style={{
-        background: CARD_BG, borderRadius: R.control, padding: 20,
-        width: 1000, maxWidth: '94vw',
-        height: 720, maxHeight: '92vh',
-        display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
-      }}>
-        {/* 위쪽 줄들과 아래 줄은 **크기 고정**(flexShrink: 0) — 가운데가 남는 높이를 가져간다.
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+          한 함수를 지난다(처리 중에는 셋 다 막힌다 — closeOn 그대로). 겉모양은 그대로다:
+          1000×720 고정 · 여백 20 · 제목 17/800 · 머리 아래 14 · 바닥 위 14.
+          머리줄의 [닫기]는 그대로 두고 ✕ 는 두지 않는다. */}
+      <ModalCard
+        closeX={false}
+        style={{
+          borderRadius: R.control,
+          width: 1000, maxWidth: '94vw', height: 720, maxHeight: '92vh',
+        }}
+        headStyle={{ padding: '20px 20px 14px', alignItems: 'center' }}
+        bodyStyle={{ padding: '0 20px', display: 'flex', flexDirection: 'column' }}
+        footStyle={{ padding: '14px 20px 20px', justifyContent: 'flex-start' }}
+        title={<div style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>결재선 지정</div>}
+        titleExtra={<button type="button" onClick={onClose} style={{ ...btnGhost(), padding: '5px 12px', flexShrink: 0 }}>닫기</button>}
+        footer={<>
+          <span style={{ fontSize: 12, color: problem ? DANGER : MUTED }}>
+            {problem ?? `결재 ${picked.filter(l => l.kind === 'approve').length}명 · 합의 ${picked.filter(l => l.kind === 'agree').length}명 · 참조 ${picked.filter(l => l.kind === 'cc').length}명`}
+          </span>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+            <button type="button" onClick={onClose} disabled={busy} style={btnGhost(busy)}>취소</button>
+            <button type="button" onClick={confirm} disabled={!!problem || busy} style={btnPrimary(!!problem || busy)}>
+              {busy ? '확인 중...' : '확인'}
+            </button>
+          </div>
+        </>}
+      >
+        {/* 위쪽 줄들은 **크기 고정**(flexShrink: 0) — 가운데가 남는 높이를 가져간다.
             고정하지 않으면 높이가 정해진 상자 안에서 flex 가 이 줄들을 눌러 글자가 잘린다. */}
-        <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>결재선 지정</div>
-          <button type="button" onClick={onClose} style={{ ...btnGhost(), padding: '5px 12px' }}>닫기</button>
-        </div>
+        <>
 
         {/* 개인 결재선 */}
         <div style={{ flexShrink: 0, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
@@ -447,18 +466,8 @@ export default function LinePickerModal({
           </div>
         </div>
 
-        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, marginTop: 14 }}>
-          <span style={{ fontSize: 12, color: problem ? DANGER : MUTED }}>
-            {problem ?? `결재 ${picked.filter(l => l.kind === 'approve').length}명 · 합의 ${picked.filter(l => l.kind === 'agree').length}명 · 참조 ${picked.filter(l => l.kind === 'cc').length}명`}
-          </span>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-            <button type="button" onClick={onClose} disabled={busy} style={btnGhost(busy)}>취소</button>
-            <button type="button" onClick={confirm} disabled={!!problem || busy} style={btnPrimary(!!problem || busy)}>
-              {busy ? '확인 중...' : '확인'}
-            </button>
-          </div>
-        </div>
-      </div>
+        </>
+      </ModalCard>
     </ModalOverlay>
   )
 }

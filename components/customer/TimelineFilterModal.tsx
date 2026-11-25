@@ -16,6 +16,7 @@
 
 import { useMemo, useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { R } from '@/lib/radius'
 import type { TimelineFilter, TimelineKind } from '@/lib/timelineFilter'
 import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
@@ -79,17 +80,36 @@ export default function TimelineFilterModal({ value, available, kindCounts, site
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div role="dialog" aria-modal="true" aria-label="활동 이력 필터" onClick={e => e.stopPropagation()}
-        style={{
-          width: '100%', maxWidth: 520, maxHeight: '92vh', overflowY: 'auto',
-          background: '#ffffff', borderRadius: R.modal, border: `1px solid ${BORDER}`,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.22)', display: 'flex', flexDirection: 'column',
-        }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 22px 0' }}>
-          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>활동 이력 필터</h2>
-        </div>
-
-        <div style={{ padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+          한 함수를 지난다. 겉모양은 그대로다: 폭 520 · 최대 높이 92vh · 제목 17/800 ·
+          바닥줄 위 선. 보조 기술에 알리던 세 칸(role·aria)도 그대로 넘긴다.
+          ✕ 는 두지 않는다 — 길은 [취소]·Esc·바깥 클릭 셋이고 옛 창과 같다. */}
+      <ModalCard
+        width={520}
+        closeX={false}
+        role="dialog" ariaModal ariaLabel="활동 이력 필터"
+        style={{ maxHeight: '92vh', border: `1px solid ${BORDER}` }}
+        headStyle={{ padding: '18px 22px 0', alignItems: 'center', gap: 10 }}
+        bodyStyle={{ padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}
+        footStyle={{ padding: '14px 22px 18px', borderTop: `1px solid ${BORDER}`, justifyContent: 'flex-start' }}
+        title={<h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>활동 이력 필터</h2>}
+        footer={<>
+          <button type="button" onClick={() => setDraft({ kinds: [...available.kinds], siteIds: [...available.siteIds], from: '', to: '' })}
+            style={{ border: 'none', background: 'none', padding: 0, fontSize: 13, fontWeight: 600, color: SUB, cursor: 'pointer', fontFamily: 'inherit' }}>
+            초기화
+          </button>
+          <span style={{ flex: 1, fontSize: 12, color: SUB }}>조건 일치 <b className="num" style={{ color: TEXT, fontWeight: 700 }}>{match}</b>건</span>
+          <button type="button" onClick={onClose}
+            style={{ height: 36, padding: '0 14px', background: '#ffffff', color: SUB, borderRadius: R.control, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13, fontFamily: 'inherit' }}>
+            취소
+          </button>
+          <button type="button" onClick={() => onApply(draft)}
+            style={{ height: 36, padding: '0 16px', background: BLUE, color: '#ffffff', borderRadius: R.control, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, fontFamily: 'inherit' }}>
+            적용
+          </button>
+        </>}
+      >
+        <>
           {/* 종류 */}
           <div>
             <div style={labelStyle}>
@@ -136,24 +156,8 @@ export default function TimelineFilterModal({ value, available, kindCounts, site
                 onChange={e => setDraft(d => ({ ...d, to: e.target.value }))} style={inputStyle} />
             </div>
           </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 22px 18px', borderTop: `1px solid ${BORDER}` }}>
-          <button type="button" onClick={() => setDraft({ kinds: [...available.kinds], siteIds: [...available.siteIds], from: '', to: '' })}
-            style={{ border: 'none', background: 'none', padding: 0, fontSize: 13, fontWeight: 600, color: SUB, cursor: 'pointer', fontFamily: 'inherit' }}>
-            초기화
-          </button>
-          <span style={{ flex: 1, fontSize: 12, color: SUB }}>조건 일치 <b className="num" style={{ color: TEXT, fontWeight: 700 }}>{match}</b>건</span>
-          <button type="button" onClick={onClose}
-            style={{ height: 36, padding: '0 14px', background: '#ffffff', color: SUB, borderRadius: R.control, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13, fontFamily: 'inherit' }}>
-            취소
-          </button>
-          <button type="button" onClick={() => onApply(draft)}
-            style={{ height: 36, padding: '0 16px', background: BLUE, color: '#ffffff', borderRadius: R.control, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, fontFamily: 'inherit' }}>
-            적용
-          </button>
-        </div>
-      </div>
+        </>
+      </ModalCard>
     </ModalOverlay>
   )
 }

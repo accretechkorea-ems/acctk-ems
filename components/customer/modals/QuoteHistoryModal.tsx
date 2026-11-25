@@ -4,6 +4,7 @@ import type { Customer, Quote } from '../types'
 import { CARD_BG, INPUT_BORDER, TEXT_MUTED, TEXT_PRIMARY, TEXT_SECONDARY, WHITE_BUTTON_BG, numKR } from '../constants'
 import { isDealerQuote } from '../utils'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import { SALES_STATUS_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
 import { isOrdered, PENDING_STATUS, REVENUE_STATUS } from '@/lib/quoteStatus'
 import BackdatedMark from '@/components/quote/BackdatedMark'
@@ -49,8 +50,15 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, f
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 1100, maxHeight: '90vh', background: CARD_BG, borderRadius: R.modal, padding: 24, boxShadow: '0 12px 40px rgba(0,0,0,0.35)', border: `1px solid ${INPUT_BORDER}`, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+          한 함수를 지난다. 겉모양은 그대로다: 폭 1100 · 최대 높이 90vh · 여백 24 ·
+          머리줄 아래 16 · 제목 20/800. 요약 타일 다섯은 머리줄에 함께 둔다 — 본문만
+          구르게 하면서 그 다섯이 늘 보이는 것이 옛 모습과 같다. */}
+      <ModalCard
+        width={1100}
+        {...keepPads({ x: 24, top: 24, bottom: 24 }, 16, 0)}
+        style={{ maxHeight: '90vh', boxShadow: '0 12px 40px rgba(0,0,0,0.35)', border: `1px solid ${INPUT_BORDER}` }}
+        title={<>
           <div>
             {/* 이모지는 UI 아이콘으로 쓰지 않는다(.claude/rules/design-system.md).
                 제목에 **건수와 진행 수**를 적는다(2026-11-20) — 이 창은 「진행 견적」 타일에서
@@ -63,20 +71,19 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, f
               {family ? `${family.name} (사업장 ${family.siteCount}곳)` : customer?.company_name}
             </div>
           </div>
-          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-        </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 16 }}>
-          {summaryCards.map(({ label, value, sub, color }) => (
-            <div key={label} style={{ background: '#fff', borderRadius: R.tile, padding: '12px 14px', border: `1px solid ${INPUT_BORDER}`, textAlign: 'center' }}>
-              <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 4 }}>{label}</div>
-              <div style={{ fontSize: 15, fontWeight: 800, color }}>{value}</div>
-              <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 2 }}>{sub}</div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ overflowY: 'auto', overflowX: 'auto', flex: 1 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginTop: 16 }}>
+            {summaryCards.map(({ label, value, sub, color }) => (
+              <div key={label} style={{ background: '#fff', borderRadius: R.tile, padding: '12px 14px', border: `1px solid ${INPUT_BORDER}`, textAlign: 'center' }}>
+                <div style={{ fontSize: 11, color: TEXT_MUTED, marginBottom: 4 }}>{label}</div>
+                <div style={{ fontSize: 15, fontWeight: 800, color }}>{value}</div>
+                <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 2 }}>{sub}</div>
+              </div>
+            ))}
+          </div>
+        </>}
+      >
+        <div style={{ overflowX: 'auto' }}>
           {quotes.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 40, color: TEXT_MUTED, fontSize: 14 }}>견적 이력이 없습니다</div>
           ) : (
@@ -143,7 +150,7 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, f
             </table>
           )}
         </div>
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }

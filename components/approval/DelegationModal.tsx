@@ -17,11 +17,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { loadEngineers } from '@/lib/appData/engineers'
 import { useToast } from '@/components/common/Toast'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import { todayKST } from '@/lib/date'
 import { DOC_TYPES } from '@/lib/approval/docTypes'
 import { REASON_MAX, type DelegationStatus } from '@/lib/approval/delegation'
 import {
-  BLUE, BORDER, CARD_BG, DANGER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT,
+  BLUE, BORDER, DANGER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT,
   btnGhost, btnPrimary, inputStyle,
 } from '@/components/common/ui'
 import { R } from '@/lib/radius'
@@ -273,16 +274,20 @@ export default function DelegationModal({
 
   return (
     <ModalOverlay onClose={onClose} confirmClose style={{ background: 'rgba(0,0,0,0.6)' }}>
-      <div style={{
-        background: CARD_BG, borderRadius: R.control, padding: 20, width: '100%', maxWidth: 560,
-        maxHeight: '86vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>위임 설정</div>
-          <button type="button" onClick={onClose} style={{ ...btnGhost(), padding: '5px 12px' }}>닫기</button>
-        </div>
-
-        <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16, minHeight: 0 }}>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+          한 함수를 지난다(confirmClose 그대로). 겉모양은 그대로다: 폭 560 · 최대 높이 86vh ·
+          여백 20 · 제목 17/800 · 머리 아래 14. 머리줄의 [닫기]는 그대로 두고 ✕ 는 두지 않는다. */}
+      <ModalCard
+        width={560}
+        closeX={false}
+        {...keepPads({ x: 20, top: 20, bottom: 20 }, 14, 0)}
+        style={{ borderRadius: R.control, maxHeight: '86vh' }}
+        headStyle={{ padding: '20px 20px 14px', alignItems: 'center' }}
+        bodyStyle={{ padding: '0 20px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}
+        title={<div style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>위임 설정</div>}
+        titleExtra={<button type="button" onClick={onClose} style={{ ...btnGhost(), padding: '5px 12px', flexShrink: 0 }}>닫기</button>}
+      >
+        <>
 
           {/* superadmin — 누구의 위임을 다룰지 */}
           {isSuper && (
@@ -426,8 +431,8 @@ export default function DelegationModal({
             </div>
             <div style={{ ...caption, marginTop: 4 }}>해제는 맡긴 분이 합니다</div>
           </div>
-        </div>
-      </div>
+        </>
+      </ModalCard>
     </ModalOverlay>
   )
 }

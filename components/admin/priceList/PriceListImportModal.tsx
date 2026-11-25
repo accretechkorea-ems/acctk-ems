@@ -16,6 +16,7 @@
 
 import { useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import {
@@ -82,22 +83,19 @@ export default function PriceListImportModal({ onClose, canEdit }: PriceListImpo
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div
-        style={{
-          background: CARD_BG, borderRadius: R.modal, width: '100%', maxWidth: 1100,
-          // 크기 고정 — 내용이 늘어도 모달은 그대로 있고 가운데만 스크롤한다.
-          height: '85vh',
-          display: 'flex', flexDirection: 'column',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.22)', overflow: 'hidden',
-        }}
-      >
-        {/* ══ 머리(고정) ══ */}
-        <div style={{ padding: '20px 24px 14px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+          한 함수를 지난다. 겉모양은 그대로다: 폭 1100 · 높이 85vh 고정(내용이 늘어도 모달은
+          그대로 있고 가운데만 구른다) · 머리·바닥의 선과 여백 · 제목 18/800.
+          머리줄에는 제목 밑으로 **고를 두 단추와 파일 칸**이 그대로 들어간다(옛 모습이다). */}
+      <ModalCard
+        width={1100}
+        style={{ height: '85vh' }}
+        headStyle={{ padding: '20px 24px 14px', borderBottom: `1px solid ${BORDER}`, flexDirection: 'column', alignItems: 'stretch' }}
+        bodyStyle={{ padding: '14px 24px', display: 'flex', flexDirection: 'column' }}
+        footStyle={{ borderTop: `1px solid ${BORDER}`, padding: '12px 24px', flexWrap: 'wrap', gap: 16, justifyContent: 'flex-start' }}
+        title={<>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>가격표 등록</div>
-            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: NEUTRAL_BG, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: SUB }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-            </button>
           </div>
 
           {/* 큰 버튼 둘 — 가로로 나란히. 누르면 아래 드롭존이 펼쳐진다. */}
@@ -148,13 +146,51 @@ export default function PriceListImportModal({ onClose, canEdit }: PriceListImpo
               {c.error}
             </div>
           )}
-        </div>
-
-        {/* ══ 가운데(여기만 스크롤) ══
+        </>}
+        footer={<>
+          {c.sheets.length > 0 && (
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              {!showResult ? (
+                <>
+                  <Sum label="등록 대상" value={num(c.totals.registered)} accent />
+                  <Sum label="품목 줄" value={num(c.totals.itemRows)} />
+                  <Sum label="구입가 없어 제외" value={num(c.totals.noCost)} />
+                  <Sum label="묶음 제목" value={num(c.totals.sections)} />
+                  <Sum label="건너뜀 시트" value={num(c.totals.skipped)} />
+                </>
+              ) : (
+                <>
+                  <Sum label="신규" value={num(c.resultTotals.inserted)} accent />
+                  <Sum label="변경" value={num(c.resultTotals.updated)} />
+                  <Sum label="동일" value={num(c.resultTotals.unchanged)} />
+                  <Sum label="제외" value={num(c.resultTotals.skipped)} />
+                  <Sum label="실패 시트" value={num(c.resultTotals.failed)} danger={c.resultTotals.failed > 0} />
+                </>
+              )}
+            </div>
+          )}
+          <span style={{ flex: 1, minWidth: 20 }} />
+          <span style={{ fontSize: 11, fontWeight: 500, color: c.progress ? BLUE : MUTED, lineHeight: 1.6, maxWidth: 360 }}>
+            {c.progress
+              ? `${c.progress.done + 1}/${c.progress.total} ${c.progress.sheetName} 등록 중…`
+              : c.blockReason}
+          </span>
+          <button onClick={onClose} style={btnGhost(false)}>닫기</button>
+          <button
+            onClick={() => void handleApply()}
+            disabled={locked || c.blockReason !== ''}
+            title={lockMsg}
+            style={btnPrimary(locked || c.blockReason !== '')}
+          >
+            {showResult ? '다시 등록' : '등록'}
+          </button>
+        </>}
+      >
+        {/* 가운데 — 여기만 구른다.
             flex column 으로 두고 아래 「지금 등록된 파일·이력」에 margin-top:auto 를 줘서
             **바닥에 붙인다.** 표가 없을 때도 가운데가 비고 그 둘은 아래에 있다.
             표가 길어지면 빈 공간이 사라지고 자연히 표 아래로 밀려 내려간다. */}
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 24px', display: 'flex', flexDirection: 'column' }}>
+        <>
           <div style={{ flexShrink: 0 }}>
           {c.sheets.length === 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -208,50 +244,9 @@ export default function PriceListImportModal({ onClose, canEdit }: PriceListImpo
               )}
             </div>
           </div>
-        </div>
 
-        {/* ══ 바닥(고정) — 합계와 버튼 ══ */}
-        <div style={{ borderTop: `1px solid ${BORDER}`, padding: '12px 24px', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-            {c.sheets.length > 0 && (
-              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                {!showResult ? (
-                  <>
-                    <Sum label="등록 대상" value={num(c.totals.registered)} accent />
-                    <Sum label="품목 줄" value={num(c.totals.itemRows)} />
-                    <Sum label="구입가 없어 제외" value={num(c.totals.noCost)} />
-                    <Sum label="묶음 제목" value={num(c.totals.sections)} />
-                    <Sum label="건너뜀 시트" value={num(c.totals.skipped)} />
-                  </>
-                ) : (
-                  <>
-                    <Sum label="신규" value={num(c.resultTotals.inserted)} accent />
-                    <Sum label="변경" value={num(c.resultTotals.updated)} />
-                    <Sum label="동일" value={num(c.resultTotals.unchanged)} />
-                    <Sum label="제외" value={num(c.resultTotals.skipped)} />
-                    <Sum label="실패 시트" value={num(c.resultTotals.failed)} danger={c.resultTotals.failed > 0} />
-                  </>
-                )}
-              </div>
-            )}
-            <span style={{ flex: 1, minWidth: 20 }} />
-            <span style={{ fontSize: 11, fontWeight: 500, color: c.progress ? BLUE : MUTED, lineHeight: 1.6, maxWidth: 360 }}>
-              {c.progress
-                ? `${c.progress.done + 1}/${c.progress.total} ${c.progress.sheetName} 등록 중…`
-                : c.blockReason}
-            </span>
-            <button onClick={onClose} style={btnGhost(false)}>닫기</button>
-            <button
-              onClick={() => void handleApply()}
-              disabled={locked || c.blockReason !== ''}
-              title={lockMsg}
-              style={btnPrimary(locked || c.blockReason !== '')}
-            >
-              {showResult ? '다시 등록' : '등록'}
-            </button>
-          </div>
-        </div>
-      </div>
+        </>
+      </ModalCard>
     </ModalOverlay>
   )
 }

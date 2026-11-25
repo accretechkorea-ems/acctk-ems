@@ -12,6 +12,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import SegmentedControl from '@/components/common/SegmentedControl'
 import { useToast } from '@/components/common/Toast'
 import {
@@ -119,6 +120,8 @@ export default function DeskGuideModal({ onClose }: { onClose: () => void }) {
   // Esc·바깥 클릭은 둘 다 ModalOverlay 가 받는다(2026-11-02 부터 공용 한곳이다).
 
   // 열리면 패널로 포커스를 옮긴다(키보드로 바로 스크롤·Esc 가 되게).
+  // 처음 들어올 때 **본문**에 초점을 준다(2026-11-26) — 겉 div 를 공용 카드가 맡으면서
+  // 그 ref 가 본문 칸을 가리킨다. 키보드로 바로 굴릴 수 있는 것은 그대로다.
   useEffect(() => { panelRef.current?.focus() }, [])
 
   /** 상세 화면의 「번호 복사」와 같은 방식. 실패하면 직접 고르라고 알린다. */
@@ -137,19 +140,19 @@ export default function DeskGuideModal({ onClose }: { onClose: () => void }) {
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div
-        ref={panelRef} tabIndex={-1}
-        role="dialog" aria-modal="true" aria-labelledby="dg-title"
-        style={{
-          background: CARD_BG, borderRadius: R.control, width: '100%', maxWidth: 980, maxHeight: '90vh',
-          display: 'flex', flexDirection: 'column', outline: 'none',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
-        }}
-      >
-        <style>{CSS}</style>
-
-        {/* 머리 — 고정. 본문만 스크롤한다. */}
-        <div style={{ padding: '14px 16px', borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+          한 함수를 지난다. 겉모양은 그대로다: 폭 980 · 최대 높이 90vh · 머리줄 선과 여백 ·
+          제목 17. 본문 CSS(CSS 상수)는 본문 맨 위에 그대로 둔다.
+          ✕ 를 두지 않고 머리줄의 [닫기]를 그대로 쓴다(옛 창과 같다). */}
+      <ModalCard
+        width={980}
+        closeX={false}
+        role="dialog" ariaModal ariaLabel={DESK_TEXT.title.ko}
+        style={{ borderRadius: R.control, maxHeight: '90vh' }}
+        headStyle={{ padding: '14px 16px', borderBottom: `1px solid ${BORDER}`, flexDirection: 'column', alignItems: 'stretch' }}
+        bodyStyle={{ padding: '14px 16px', outline: 'none' }}
+        bodyRef={panelRef}
+        title={<>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div id="dg-title" style={{ ...cardTitle, fontSize: 17 }}>{DESK_TEXT.title.ko}</div>
@@ -172,10 +175,10 @@ export default function DeskGuideModal({ onClose }: { onClose: () => void }) {
               onChange={v => setMode(v as Mode)}
             />
           </div>
-        </div>
-
-        {/* 본문 */}
-        <div className="dg-shell" style={{ padding: '14px 16px', overflowY: 'auto', flex: 1, minHeight: 0 }}>
+        </>}
+      >
+        <div className="dg-shell" tabIndex={-1}>
+          <style>{CSS}</style>
 
           {/* ① 쓰는 법 — 원본에 없는 한국어 전용 안내다. */}
           <div style={{ ...box, background: NEUTRAL_BG, border: 'none' }}>
@@ -325,7 +328,7 @@ export default function DeskGuideModal({ onClose }: { onClose: () => void }) {
             )
           })}
         </div>
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }

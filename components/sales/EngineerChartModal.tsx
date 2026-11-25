@@ -14,6 +14,7 @@
 import { TEAM_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import { todayKST } from '@/lib/date'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { unitBars, yearSummary, type StatQuote, type StatTarget } from '@/lib/salesStats'
 import {
   ChartLegend, ChartPanel, SummaryBoxes, axisMaxOf, numKR,
@@ -45,13 +46,18 @@ export default function EngineerChartModal({ engineer, quotes, targets, fy, onCl
 
   return (
     <ModalOverlay onClose={onClose} style={{ background: 'rgba(0,0,0,0.5)' }}>
-      <div style={{
-        background: CARD_BG, borderRadius: R.modal,
-        // 1366×768 노트북에서 스크롤이 생기지 않는 높이다(90vh = 691 > 쌓인 617).
-        width: 'min(1400px, 94vw)', height: 'min(760px, 90vh)',
-        display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
-      }}>
-        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가 한
+          함수를 지난다. **겉모양은 그대로** 둔다: 폭·높이·머리줄 아래 선·여백을 그대로 넘긴다
+          (1366×768 노트북에서 스크롤이 생기지 않는 높이다 — 90vh = 691 > 쌓인 617). */}
+      <ModalCard
+        style={{
+          background: CARD_BG, borderRadius: R.modal,
+          width: 'min(1400px, 94vw)', maxWidth: 'min(1400px, 94vw)', height: 'min(760px, 90vh)',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+        }}
+        headStyle={{ padding: '14px 20px', borderBottom: `1px solid ${BORDER}`, alignItems: 'center', gap: 16 }}
+        bodyStyle={{ padding: '12px 20px 14px' }}
+        title={
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <span style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>{engineer.name}</span>
@@ -65,19 +71,14 @@ export default function EngineerChartModal({ engineer, quotes, targets, fy, onCl
               매출 {sum.salesTarget > 0 ? `₩${numKR(sum.salesTarget)}` : '미설정'}
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
-            {/* 범례 — 본문에 두면 그만큼 패널이 낮아진다. 여기는 늘 보이는 자리다. */}
-            <ChartLegend />
-            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16, flexShrink: 0 }}>✕</button>
-          </div>
-        </div>
-
-        <div style={{ padding: '12px 20px 14px', overflowY: 'auto', flex: 1, minHeight: 0 }}>
-          <ChartPanel kind="order" bars={bars} axisMax={axisMax} unitLabel="월 목표" />
-          <ChartPanel kind="sales" bars={bars} axisMax={axisMax} unitLabel="월 목표" />
-          <SummaryBoxes sum={sum} />
-        </div>
-      </div>
+        }
+        // 범례 — 본문에 두면 그만큼 패널이 낮아진다. 여기는 늘 보이는 자리다.
+        titleExtra={<span style={{ display: 'inline-flex', alignItems: 'center', marginRight: 6, flexShrink: 0 }}><ChartLegend /></span>}
+      >
+        <ChartPanel kind="order" bars={bars} axisMax={axisMax} unitLabel="월 목표" />
+        <ChartPanel kind="sales" bars={bars} axisMax={axisMax} unitLabel="월 목표" />
+        <SummaryBoxes sum={sum} />
+      </ModalCard>
     </ModalOverlay>
   )
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties, useRef } from 'react'
 import type { Repair, RepairStatus, RepairQuote } from '@/hooks/useRepairs'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useToast } from '@/components/common/Toast'
 import { openPdf, pdfNameOf } from '@/lib/pdfViewer'
@@ -230,16 +231,16 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
   return (
     // 입력 폼 — 확인 뒤 닫는다.
     <ModalOverlay onClose={onClose} confirmClose>
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '100%', maxWidth: 640, background: '#ffffff', borderRadius: R.control, padding: 24,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb', animation: 'modal-in 0.18s ease',
-          display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 40px)',
-        }}
-      >
-        {/* 헤더 — 제목 + 닫기(X). 삭제는 푸터 좌측 하단으로 이동. */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, flexShrink: 0 }}>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms(이 파일에만 있던
+          modal-in 0.18s 를 대신한다) · Esc·바깥 클릭·✕ 가 한 함수를 지난다.
+          겉모양은 그대로다: 폭 640 · 여백 24 · 제목 줄 아래 18 · 바닥 위 18. */}
+      <ModalCard
+        width={640}
+        style={{ borderRadius: R.control, maxHeight: 'calc(100vh - 40px)', border: '1px solid #ebebeb' }}
+        headStyle={{ padding: '24px 24px 18px', alignItems: 'center' }}
+        bodyStyle={{ padding: '0 24px', display: 'grid', gap: 18 }}
+        footStyle={{ padding: '18px 24px 24px', justifyContent: 'flex-start' }}
+        title={<>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>수리품 수정</div>
           <button
             onClick={onClose}
@@ -253,10 +254,31 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
-        </div>
-
-        {/* 본문 — 구분선으로 세 묶음(기본/진행/견적서) 구분 + 접이식 메모. 넘치면 이 영역만 스크롤. */}
-        <div style={{ display: 'grid', gap: 18, overflowY: 'auto', flex: '1 1 auto', minHeight: 0 }}>
+        </>}
+        footer={<>
+          <button
+            onClick={() => onDelete(repair)}
+            disabled={isSaving}
+            style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}
+          >삭제</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={onClose}
+              style={{ padding: '9px 16px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
+            >취소</button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
+              onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
+              style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
+            >
+              {isSaving ? '저장 중...' : '저장'}
+            </button>
+          </div>
+        </>}
+      >
+        <>
           {/* 기본 묶음 */}
           <div>
             <div style={{ display: 'grid', gap: 12 }}>
@@ -386,32 +408,8 @@ export default function RepairEditModal({ repair, isSaving, onClose, onSave, onD
             </div>
           </div>
           )}
-        </div>
-
-        {/* 푸터 — 삭제(좌측 하단) · 취소/저장(우측). 삭제는 저장과 떨어뜨려 오조작 방지. */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 18, flexShrink: 0 }}>
-          <button
-            onClick={() => onDelete(repair)}
-            disabled={isSaving}
-            style={{ padding: '9px 16px', background: '#ef4444', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}
-          >삭제</button>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={onClose}
-              style={{ padding: '9px 16px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}
-            >취소</button>
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              onMouseEnter={(e) => { if (!isSaving) e.currentTarget.style.background = '#1c3e87' }}
-              onMouseLeave={(e) => { if (!isSaving) e.currentTarget.style.background = '#234ea2' }}
-              style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1, transition: 'background 0.15s ease' }}
-            >
-              {isSaving ? '저장 중...' : '저장'}
-            </button>
-          </div>
-        </div>
-      </div>
+        </>
+      </ModalCard>
     </ModalOverlay>
   )
 }

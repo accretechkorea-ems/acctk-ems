@@ -15,6 +15,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import MyQuotesPanel from '@/components/dashboard/MyQuotesPanel'
 import DashCard from './DashCard'
 import { CountList, CountTotal, type CountRow } from '@/components/common/CountList'
@@ -24,7 +25,7 @@ import type { Slot } from '@/hooks/dashboard/useDashboardCards'
 import { R } from '@/lib/radius'
 
 const TEXT = '#111827'
-const GRAY = '#4b5563'
+const BORDER = '#ebebeb'
 
 export type MyQuoteCardProps = {
   engineerId: number
@@ -93,22 +94,17 @@ export default function MyQuoteCard({ engineerId, slot, initialTab, onReload, he
           (필터 줄·10열 표·페이지). 본문만 내려가고 뒤 화면은 잠긴다. */}
       {openTab !== null && (
         <ModalOverlay onClose={close}>
-          <div
-            onClick={e => e.stopPropagation()}
+          {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+              한 함수를 지난다. 겉모양은 그대로다: 90vw × 85vh · radius control · 머리줄
+              아래 선 · 제목 17/800 · 본문 여백 12. */}
+          <ModalCard
             style={{
-              background: '#fff', borderRadius: R.control, width: '90vw', height: '85vh',
-              display: 'flex', flexDirection: 'column', overflow: 'hidden',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
+              borderRadius: R.control, width: '90vw', maxWidth: '90vw', height: '85vh',
             }}
+            headStyle={{ padding: '12px 16px', borderBottom: `1px solid ${BORDER}`, alignItems: 'center', gap: 8 }}
+            bodyStyle={{ padding: 12, overflowX: 'hidden' }}
+            title={<span style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>내 견적</span>}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px', borderBottom: '1px solid #ebebeb', flexShrink: 0 }}>
-              <span style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>내 견적</span>
-              <span style={{ flex: 1 }} />
-              <button type="button" onClick={close} aria-label="닫기"
-                style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', background: '#f3f4f6', color: GRAY, fontSize: 16, cursor: 'pointer', lineHeight: 1 }}>
-                ×
-              </button>
-            </div>
             {/* 본문 — 여기서만 스크롤한다.
                 ⚠ fitToHeight 를 주지 않는다. 그 모드는 **표 상자를 모달 높이에 맞춰 잘라 내고**
                   (overflowY: hidden) 줄 수를 그 높이에 맞추는 방식이라, 필터 줄이 접히거나 줄이
@@ -116,10 +112,8 @@ export default function MyQuoteCard({ engineerId, slot, initialTab, onReload, he
                   두고 넘치는 만큼 이 상자가 내려간다.
                 바깥 상자에 display:flex 를 쓰지 않는 것도 같은 이유다 — flex 자식은 늘어나는
                   대신 눌려서, 넘칠 일이 생기지 않는다(= 스크롤이 생기지 않는다). */}
-            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: 12 }}>
-              <MyQuotesPanel engineerId={engineerId} initialStatus={openTab} />
-            </div>
-          </div>
+            <MyQuotesPanel engineerId={engineerId} initialStatus={openTab} />
+          </ModalCard>
         </ModalOverlay>
       )}
     </>

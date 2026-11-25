@@ -5,6 +5,7 @@
 
 import { useState, type CSSProperties } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import {
   DEVICE_STATUSES, MAX_DAILY_HOURS, deviceTitle, type ShowroomDevice,
 } from '@/lib/showroom'
@@ -68,39 +69,43 @@ export default function DeviceSettingsModal({ device, onClose, onSubmit }: Props
   return (
     // 입력 폼 — 확인 뒤 닫는다.
     <ModalOverlay onClose={onClose} confirmClose style={{ padding: '6vh 12px' }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        width: '100%', maxWidth: 460, maxHeight: 'calc(100dvh - 32px)',
-        background: CARD_BG, borderRadius: R.control, boxSizing: 'border-box',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
-        animation: 'modal-in 0.18s ease', display: 'flex', flexDirection: 'column',
-      }}>
-        <style>{`
-          @keyframes modal-in {
-            from { opacity: 0; transform: scale(0.97) translateY(8px); }
-            to { opacity: 1; transform: scale(1) translateY(0); }
-          }
-        `}</style>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', flexShrink: 0, borderBottom: `1px solid ${BORDER}` }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              장비 설정
-            </div>
-            <div style={{ fontSize: 12, color: MUTED, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {deviceTitle(device)}
-            </div>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms(이 파일에만 있던
+          @keyframes modal-in 0.18s 를 대신한다) · Esc·바깥 클릭·✕ 가 한 함수를 지난다
+          (적던 값이 있으면 「저장하지 않고 닫을까요?」를 지난다 — confirmClose 그대로).
+          겉모양은 그대로다: 폭 460 · 머리·발의 선과 여백 · 제목 18/700 · 홈바 safe-area. */}
+      <ModalCard
+        width={460}
+        style={{ borderRadius: R.control, maxHeight: 'calc(100dvh - 32px)', border: `1px solid ${BORDER}` }}
+        headStyle={{ padding: '16px 20px', borderBottom: `1px solid ${BORDER}`, alignItems: 'center' }}
+        bodyStyle={{ padding: '16px 20px', display: 'grid', gap: 14 }}
+        footStyle={{
+          padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))',
+          borderTop: `1px solid ${BORDER}`, flexWrap: 'wrap',
+        }}
+        title={<>
+          <div style={{ fontSize: 18, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            장비 설정
           </div>
-          <button onClick={onClose} title="닫기"
-            onMouseEnter={e => (e.currentTarget.style.color = TEXT)}
-            onMouseLeave={e => (e.currentTarget.style.color = SUB)}
-            style={{ width: 30, height: 30, borderRadius: '50%', background: NEUTRAL_BG, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: SUB, transition: 'color 0.15s ease', flexShrink: 0 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+          <div style={{ fontSize: 12, color: MUTED, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {deviceTitle(device)}
+          </div>
+        </>}
+        footer={<>
+          {/* 못 저장한 까닭은 단추 **왼쪽**에 둔다(옛 창은 단추 위였다 — 한 줄로 모았다). */}
+          {error && <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: DANGER }}>{error}</div>}
+          <button onClick={onClose} disabled={saving}
+            style={{ padding: '9px 16px', background: CARD_BG, color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: saving ? 'default' : 'pointer', fontWeight: 600, fontSize: 13 }}>
+            취소
           </button>
-        </div>
-
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'grid', gap: 14 }}>
+          <button onClick={handleSave} disabled={saving}
+            onMouseEnter={e => { if (!saving) e.currentTarget.style.background = BLUE_HOVER }}
+            onMouseLeave={e => { if (!saving) e.currentTarget.style.background = BLUE }}
+            style={{ padding: '9px 18px', background: BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: saving ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, opacity: saving ? 0.6 : 1, transition: 'background 0.15s ease' }}>
+            {saving ? '저장 중...' : '저장'}
+          </button>
+        </>}
+      >
+        <>
           <div>
             <label style={labelStyle}>일 가용시간</label>
             <input type="number" min={0.5} max={MAX_DAILY_HOURS} step={0.5} value={dailyHours}
@@ -138,24 +143,8 @@ export default function DeviceSettingsModal({ device, onClose, onSubmit }: Props
             <label style={labelStyle}>비고</label>
             <input value={note} onChange={e => setNote(e.target.value)} placeholder="선택" style={fieldStyle} />
           </div>
-        </div>
-
-        <div style={{ padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', flexShrink: 0, borderTop: `1px solid ${BORDER}` }}>
-          {error && <div style={{ marginBottom: 10, fontSize: 12, fontWeight: 600, color: DANGER }}>{error}</div>}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <button onClick={onClose} disabled={saving}
-              style={{ padding: '9px 16px', background: CARD_BG, color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: saving ? 'default' : 'pointer', fontWeight: 600, fontSize: 13 }}>
-              취소
-            </button>
-            <button onClick={handleSave} disabled={saving}
-              onMouseEnter={e => { if (!saving) e.currentTarget.style.background = BLUE_HOVER }}
-              onMouseLeave={e => { if (!saving) e.currentTarget.style.background = BLUE }}
-              style={{ padding: '9px 18px', background: BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: saving ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, opacity: saving ? 0.6 : 1, transition: 'background 0.15s ease' }}>
-              {saving ? '저장 중...' : '저장'}
-            </button>
-          </div>
-        </div>
-      </div>
+        </>
+      </ModalCard>
     </ModalOverlay>
   )
 }

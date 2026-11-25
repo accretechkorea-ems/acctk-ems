@@ -5,6 +5,7 @@ import { loadEngineers } from '@/lib/appData/engineers'
 import { canViewQuote } from '@/lib/permissions'
 import { withTeamPerms } from '@/lib/teamPerms'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import { R } from '@/lib/radius'
 
 /**
@@ -70,14 +71,29 @@ function Panel({ onClose, onPick }: Omit<Props, 'open'>) {
 
   return (
     <ModalOverlay onClose={onClose} confirmClose dirty={query.trim() !== ''} style={{ background: 'rgba(0,0,0,0.55)' }}>
-      <div onClick={e => e.stopPropagation()}
-        style={{ background: '#fff', borderRadius: R.modal, width: '100%', maxWidth: 400, padding: 28, boxShadow: '0 12px 48px rgba(0,0,0,0.25)', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
-        <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>견적서 대필</div>
-        <div style={{ fontSize: 12, color: GRAY, marginBottom: 16, lineHeight: 1.6 }}>
-          실적을 받을 담당자를 고르면 견적 작성 화면으로 넘어갑니다.<br />
-          견적번호는 작성하는 본인 이니셜로 발급됩니다.
-        </div>
-
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+          한 함수를 지난다(이 창은 적던 검색어가 있으면 「저장하지 않고 닫을까요?」를 지난다).
+          겉모양은 그대로다: 폭 400 · 여백 28 · 최대 높이 80vh · 제목 16/800.
+          ✕ 는 두지 않는다 — 길은 [취소]·Esc·바깥 클릭 셋이고 옛 창과 같다. */}
+      <ModalCard
+        width={400}
+        closeX={false}
+        {...keepPads({ x: 28, top: 28, bottom: 28 }, 16, 16)}
+        style={{ boxShadow: '0 12px 48px rgba(0,0,0,0.25)', maxHeight: '80vh' }}
+        title={<>
+          <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 4 }}>견적서 대필</div>
+          <div style={{ fontSize: 12, color: GRAY, lineHeight: 1.6 }}>
+            실적을 받을 담당자를 고르면 견적 작성 화면으로 넘어갑니다.<br />
+            견적번호는 작성하는 본인 이니셜로 발급됩니다.
+          </div>
+        </>}
+        footer={
+          <button onClick={onClose}
+            style={{ width: '100%', padding: 10, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: GRAY, fontFamily: 'inherit' }}>
+            취소
+          </button>
+        }
+      >
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
@@ -107,11 +123,7 @@ function Panel({ onClose, onPick }: Omit<Props, 'open'>) {
           ))}
         </div>
 
-        <button onClick={onClose}
-          style={{ marginTop: 16, padding: 10, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, fontSize: 13, color: GRAY }}>
-          취소
-        </button>
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }

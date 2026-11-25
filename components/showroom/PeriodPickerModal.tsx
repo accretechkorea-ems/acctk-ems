@@ -4,19 +4,19 @@
 //   모드: 월 / 분기 / 반기 / 연 / 지정
 //   월·분기·반기는 연도를 옮기며 단위를 고르고, 연은 최근 5년 중에서, 지정은 시작일·종료일을 직접 넣는다.
 //   단위를 누르면 바로 적용하고 닫힌다. 지정만 [적용] 을 눌러야 한다(날짜 두 개를 다 넣어야 해서).
-// 바깥 클릭·ESC 는 공용 useOutsideClick 이 닫는다.
+// 바깥 클릭·ESC 는 공용 오버레이(ModalOverlay)가 닫는다 — 적던 값이 있으면 확인을 지난다.
 // 아직 오지 않은 달·분기도 고를 수 있다(흐리게 보인다) — 고르면 '아직 오지 않은 기간' 안내가 나온다.
 
-import { useRef, useState, type CSSProperties } from 'react'
+import { useState, type CSSProperties } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import SegmentedControl from '@/components/common/SegmentedControl'
-import { useOutsideClick } from '@/hooks/useOutsideClick'
 import { nowKSTParts, daysBetween } from '@/lib/date'
 import {
   PERIOD_MODES, MAX_PERIOD_DAYS, periodRange, isValidYmd, type Period, type PeriodMode,
 } from '@/lib/showroom'
 import {
-  BLUE, BORDER, CARD_BG, TEXT, MUTED, SUB, DANGER, NEUTRAL_BG, ROW_HOVER_BG, btnPrimary, inputStyle,
+  BLUE, BORDER, CARD_BG, TEXT, MUTED, SUB, DANGER, ROW_HOVER_BG, btnPrimary, inputStyle,
 } from '@/components/common/ui'
 import { R } from '@/lib/radius'
 
@@ -78,8 +78,9 @@ export default function PeriodPickerModal({ period, onPick, onClose }: Props) {
   const [to, setTo] = useState(initialRange.to)
   const [error, setError] = useState<string | null>(null)
 
-  const panelRef = useRef<HTMLDivElement>(null)
-  useOutsideClick(panelRef, onClose)
+  // 바깥 클릭·Esc 는 **오버레이 하나**가 맡는다(2026-11-26, 지시 P).
+  // 전에는 useOutsideClick 이 따로 걸려 있어, 바깥을 누르면 confirmClose 를 **건너뛰고**
+  // 바로 닫혔다(적던 기간이 그대로 사라졌다). 그 자리를 공용 오버레이로 모았다.
 
   /** 시작 달이 이번 달 뒤면 흐리게. */
   const futureFrom = (y: number, m: number) => y * 12 + m > now.y * 12 + now.m
@@ -192,33 +193,20 @@ export default function PeriodPickerModal({ period, onPick, onClose }: Props) {
   return (
     // 고르던 기간이 날아가지 않게 확인 뒤 닫는다.
     <ModalOverlay onClose={onClose} confirmClose style={{ padding: '6vh 12px' }}>
-      <div ref={panelRef} onClick={e => e.stopPropagation()} role="dialog" aria-label="기간 선택" style={{
-        width: '100%', maxWidth: 380, maxHeight: 'calc(100dvh - 32px)',
-        background: CARD_BG, borderRadius: R.control, boxSizing: 'border-box',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
-        animation: 'modal-in 0.18s ease', display: 'flex', flexDirection: 'column',
-      }}>
-        <style>{`
-          @keyframes modal-in {
-            from { opacity: 0; transform: scale(0.97) translateY(8px); }
-            to { opacity: 1; transform: scale(1) translateY(0); }
-          }
-          ${CELL_CSS}
-        `}</style>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', flexShrink: 0, borderBottom: `1px solid ${BORDER}` }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px' }}>기간 선택</div>
-          <button onClick={onClose} title="닫기"
-            onMouseEnter={e => (e.currentTarget.style.color = TEXT)}
-            onMouseLeave={e => (e.currentTarget.style.color = SUB)}
-            style={{ width: 30, height: 30, borderRadius: '50%', background: NEUTRAL_BG, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: SUB, transition: 'color 0.15s ease', flexShrink: 0 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px 20px' }}>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms(이 파일에만 있던
+          @keyframes modal-in 0.18s 를 대신한다) · Esc·바깥 클릭·✕ 가 한 함수를 지난다
+          (confirmClose 는 그대로). 겉모양은 그대로다: 폭 380 · 머리줄 선과 여백 ·
+          제목 18/700. 칸 CSS(CELL_CSS)는 본문 맨 위에 그대로 둔다. */}
+      <ModalCard
+        width={380}
+        role="dialog" ariaLabel="기간 선택"
+        style={{ borderRadius: R.control, maxHeight: 'calc(100dvh - 32px)', border: `1px solid ${BORDER}` }}
+        headStyle={{ padding: '16px 20px', borderBottom: `1px solid ${BORDER}`, alignItems: 'center' }}
+        bodyStyle={{ padding: '16px 20px 20px' }}
+        title={<div style={{ fontSize: 18, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px' }}>기간 선택</div>}
+      >
+        <>
+          <style>{CELL_CSS}</style>
           <div style={{ marginBottom: 16 }}>
             <SegmentedControl
               equal
@@ -228,8 +216,8 @@ export default function PeriodPickerModal({ period, onPick, onClose }: Props) {
             />
           </div>
           {renderBody()}
-        </div>
-      </div>
+        </>
+      </ModalCard>
     </ModalOverlay>
   )
 }

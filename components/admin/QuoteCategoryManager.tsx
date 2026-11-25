@@ -17,6 +17,7 @@
 
 import { useEffect, useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { inputStyle, BLUE, BORDER, CARD_BG, DANGER, FAINT, MUTED, NEUTRAL_BG, SUB, TEXT } from '@/components/common/ui'
@@ -107,13 +108,24 @@ export default function QuoteCategoryManager({ onClose, canEdit }: QuoteCategory
   return (
     // 이 화면은 줄마다 즉시 저장한다 — 확인이 필요한 때는 **이름을 고치는 중**일 때뿐이다.
     <ModalOverlay onClose={onClose} confirmClose dirty={editCode !== null}>
-      <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, width: '100%', maxWidth: 820, maxHeight: '80vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>견적 분류 관리</div>
-          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', background: NEUTRAL_BG, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: SUB }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-          </button>
-        </div>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+          한 함수를 지난다(고치던 줄이 있으면 「저장하지 않고 닫을까요?」를 지난다).
+          겉모양은 그대로다: 폭 820 · 최대 높이 80vh · 여백 24 · 제목 18/800 · 머리 아래 12.
+          맨 아래 주의 두 줄은 **바닥줄**에 둔다 — 본문이 길어도 늘 보이던 자리다. */}
+      <ModalCard
+        width={820}
+        {...keepPads({ x: 24, top: 24, bottom: 24 }, 12, 12)}
+        style={{ maxHeight: '80vh' }}
+        headStyle={{ padding: '24px 24px 12px', alignItems: 'center' }}
+        title={<div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>견적 분류 관리</div>}
+        footer={
+          <div style={{ flex: 1, fontSize: 11, color: MUTED, lineHeight: 1.7 }}>
+            * 순서 이동은 여러 행을 차례로 고칩니다. 중간에 실패하면 순서가 어중간하게 남을 수 있는데, 다시 누르면 정리됩니다.
+            <br />* 작성 화면은 분류 목록을 세션당 한 번만 읽습니다. 바꾼 내용은 해당 사용자가 새로고침한 뒤에 보입니다.
+          </div>
+        }
+      >
+        <>
 
         <div style={{ fontSize: 12, color: SUB, lineHeight: 1.7, marginBottom: 16 }}>
           비활성 분류는 새 견적에서 고를 수 없고, 이미 쓴 견적의 분류 표기는 그대로 남습니다.
@@ -217,11 +229,8 @@ export default function QuoteCategoryManager({ onClose, canEdit }: QuoteCategory
           ))}
         </div>
 
-        <div style={{ fontSize: 11, color: MUTED, lineHeight: 1.7, marginTop: 12 }}>
-          * 순서 이동은 여러 행을 차례로 고칩니다. 중간에 실패하면 순서가 어중간하게 남을 수 있는데, 다시 누르면 정리됩니다.
-          <br />* 작성 화면은 분류 목록을 세션당 한 번만 읽습니다. 바꾼 내용은 해당 사용자가 새로고침한 뒤에 보입니다.
-        </div>
-      </div>
+        </>
+      </ModalCard>
     </ModalOverlay>
   )
 }

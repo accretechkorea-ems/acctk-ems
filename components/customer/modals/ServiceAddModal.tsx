@@ -5,6 +5,7 @@ import type { Contact, Engineer, ServiceForm } from '../types'
 import { isCurrentlyEmployed } from '@/lib/engineers'
 import { SERVICE_TYPE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { toMin, stepTime, computeWorkHours, lunchOverlapHours } from '@/lib/workHours'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import Popover from '@/components/common/Popover'
@@ -147,42 +148,18 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
         || files.length > 0
       }
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '100%', maxWidth: 560, maxHeight: 'calc(100dvh - 32px)',
-          background: '#ffffff', borderRadius: R.control, boxSizing: 'border-box',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb',
-          animation: 'modal-in 0.18s ease',
-          display: 'flex', flexDirection: 'column',
-        }}
-      >
-        {/* 좁은 화면(768px 미만) 배치. 768px 이상은 기존과 동일한 2열·3열 그대로다.
-            인라인 스타일로는 미디어 쿼리를 쓸 수 없어 이 두 줄만 클래스로 뺐다. */}
-        <style>{`
-          /* 시간 스테퍼 화살표 — PC 는 30×30, 좁은 화면에서는 손가락으로 누를 수 있게 넓힌다.
-             상자 높이(44)는 건드리지 않으므로 세로는 상자 안쪽(44 − 테두리 2 = 42)을 꽉 채운다. */
-          .svc-step { width: 30px; height: 30px; }
-          @media (max-width: 767px) { .svc-step { width: 44px; height: 100%; } }
-          .svc-row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
-          .svc-row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-          @media (max-width: 767px) {
-            /* 고객 담당자 · 방문일자 — 각각 한 줄 전체 */
-            .svc-row2 { grid-template-columns: minmax(0, 1fr); }
-            /* 유무상은 한 줄 전체, 시작·종료시간은 그 아래 두 칸 */
-            .svc-row3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-            .svc-row3 > :first-child { grid-column: 1 / -1; }
-          }
-          /* 더 좁아지면 시작·종료시간도 각각 한 줄. 나란히 두면 칸이 121px 까지 줄어
-             「작업시간 8h (점심 1h 제외)」(글자 폭 136px)가 두 줄로 접힌다.
-             390px 은 칸 156px 로 한 줄에 들어가므로 그대로 나란히 둔다. */
-          @media (max-width: 379px) {
-            .svc-row3 { grid-template-columns: minmax(0, 1fr); }
-            .svc-row3 > :first-child { grid-column: auto; }
-          }
-        `}</style>
-        {/* 헤더 — 고정 */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', flexShrink: 0, borderBottom: '1px solid #ebebeb' }}>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms(이 파일에만 있던
+          modal-in 0.18s 를 대신한다) · Esc·바깥 클릭·✕ 가 한 함수를 지난다(적던 것이
+          있으면 「저장하지 않고 닫을까요?」를 지난다). 겉모양은 그대로다: 폭 560 ·
+          머리·발의 선과 여백 · 홈바 safe-area. */}
+      <ModalCard
+        width={560}
+        bodyRef={scrollBodyRef}
+        style={{ borderRadius: R.control, maxHeight: 'calc(100dvh - 32px)', border: '1px solid #ebebeb' }}
+        headStyle={{ padding: '16px 20px', borderBottom: '1px solid #ebebeb', alignItems: 'center' }}
+        bodyStyle={{ padding: '16px 20px', display: 'grid', gap: 14, WebkitOverflowScrolling: 'touch' }}
+        footStyle={{ padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', borderTop: '1px solid #ebebeb', justifyContent: 'flex-start' }}
+        title={<>
           <div style={{ fontSize: 18, fontWeight: 700, color: '#111827', letterSpacing: '-0.3px' }}>서비스 레포트 추가</div>
           <button
             onClick={onClose}
@@ -196,10 +173,18 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
-        </div>
-
-        {/* 본문 — 스크롤 */}
-        <div ref={scrollBodyRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '16px 20px', display: 'grid', gap: 14 }}>
+        </>}
+        footer={<>
+          <button onClick={onClose} style={{ padding: '9px 16px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+          <button onClick={handleSave} disabled={isSaving || !timeValid}
+            onMouseEnter={(e) => { if (!isSaving && timeValid) e.currentTarget.style.background = '#1c3e87' }}
+            onMouseLeave={(e) => { if (!isSaving && timeValid) e.currentTarget.style.background = '#234ea2' }}
+            style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: (isSaving || !timeValid) ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, opacity: (isSaving || !timeValid) ? 0.6 : 1, transition: 'background 0.15s ease' }}>
+            {isSaving ? '저장 중...' : '저장'}
+          </button>
+        </>}
+      >
+        <>
           <div>
             {/* 라벨 옆 「문구 ▾」 — 담아 둔 글을 커서 자리에 끼운다(문구함, 2026-11-25). */}
             <div style={snippetRow}>
@@ -420,19 +405,8 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
               style={{ display: 'none' }}
             />
           </div>
-        </div>
-
-        {/* 푸터 — 고정 */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', flexShrink: 0, borderTop: '1px solid #ebebeb' }}>
-          <button onClick={onClose} style={{ padding: '9px 16px', background: '#fff', color: '#4b5563', borderRadius: R.icon, border: '1px solid #ebebeb', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
-          <button onClick={handleSave} disabled={isSaving || !timeValid}
-            onMouseEnter={(e) => { if (!isSaving && timeValid) e.currentTarget.style.background = '#1c3e87' }}
-            onMouseLeave={(e) => { if (!isSaving && timeValid) e.currentTarget.style.background = '#234ea2' }}
-            style={{ padding: '9px 18px', background: '#234ea2', color: '#fff', borderRadius: R.icon, border: 'none', cursor: (isSaving || !timeValid) ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, opacity: (isSaving || !timeValid) ? 0.6 : 1, transition: 'background 0.15s ease' }}>
-            {isSaving ? '저장 중...' : '저장'}
-          </button>
-        </div>
-      </div>
+        </>
+      </ModalCard>
     </ModalOverlay>
   )
 }

@@ -7,6 +7,7 @@
 
 import { useMemo, useState, type CSSProperties } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import { useParents } from '@/components/home/list/useParents'
 import { matchesCompanyPick } from '@/lib/companySearch'
 import { R } from '@/lib/radius'
@@ -16,6 +17,9 @@ const TEXT = '#111827'
 const SUB = '#4b5563'
 const MUTED = '#6b7280'
 const BLUE = '#234ea2'
+
+/** 옛 카드의 여백을 그대로 지킨다(padding 22 · 머리 아래 10 · 바닥 위 14). */
+const PADS = keepPads({ x: 22, top: 22, bottom: 22 }, 10, 14)
 
 const fieldStyle: CSSProperties = {
   width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: R.icon,
@@ -51,15 +55,28 @@ export default function CompanySearchModal({
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div onClick={e => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 460, background: '#fff', borderRadius: R.control, padding: 22, border: `1px solid ${BORDER}`, boxShadow: '0 20px 60px rgba(0,0,0,0.22)', animation: 'modal-in 0.18s ease', display: 'flex', flexDirection: 'column', maxHeight: '76vh' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>{title}</div>
-          <button onClick={onClose} title="닫기"
-            style={{ width: 26, height: 26, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: SUB }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-          </button>
-        </div>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms(옛 modal-in 0.18s 를
+          대신한다) · Esc·바깥 클릭·✕ 가 한 함수를 지난다. 겉모양은 그대로다: 폭 460 ·
+          radius control · 여백 22 · 최대 높이 76vh. 제목 17/800 도 그대로 넘긴다. */}
+      <ModalCard
+        width={460}
+        {...PADS}
+        style={{ borderRadius: R.control, maxHeight: '76vh' }}
+        headStyle={{ ...PADS.headStyle, alignItems: 'center' }}
+        title={<div style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>{title}</div>}
+        footer={
+          <>
+            <button onClick={onClose}
+              style={{ padding: '9px 15px', background: '#fff', color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
+            <button
+              disabled={!pickedRow}
+              onClick={() => { if (pickedRow) onPick(pickedRow.customer_id, pickedRow.company_name) }}
+              style={{ padding: '9px 17px', background: pickedRow ? BLUE : '#e5e7eb', color: pickedRow ? '#fff' : MUTED, borderRadius: R.icon, border: 'none', cursor: pickedRow ? 'pointer' : 'not-allowed', fontWeight: 700, fontSize: 13 }}>
+              {confirmText}
+            </button>
+          </>
+        }
+      >
         {hint && <div style={{ fontSize: 12, color: SUB, lineHeight: 1.7, marginBottom: 12 }}>{hint}</div>}
 
         <input value={query} autoFocus onChange={e => setQuery(e.target.value)}
@@ -88,17 +105,7 @@ export default function CompanySearchModal({
           })}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
-          <button onClick={onClose}
-            style={{ padding: '9px 15px', background: '#fff', color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
-          <button
-            disabled={!pickedRow}
-            onClick={() => { if (pickedRow) onPick(pickedRow.customer_id, pickedRow.company_name) }}
-            style={{ padding: '9px 17px', background: pickedRow ? BLUE : '#e5e7eb', color: pickedRow ? '#fff' : MUTED, borderRadius: R.icon, border: 'none', cursor: pickedRow ? 'pointer' : 'not-allowed', fontWeight: 700, fontSize: 13 }}>
-            {confirmText}
-          </button>
-        </div>
-      </div>
+      </ModalCard>
     </ModalOverlay>
   )
 }

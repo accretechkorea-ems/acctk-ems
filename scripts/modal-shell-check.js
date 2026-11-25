@@ -51,28 +51,6 @@ const PENDING_STRUCTURED = [
   'app/repair/page.tsx',
   'app/sales/page.tsx',
   'app/suggestions/page.tsx',
-  'components/admin/ActivityTypeManager.tsx',
-  'components/admin/QuoteCategoryManager.tsx',
-  'components/admin/priceList/PriceListImportModal.tsx',
-  'components/approval/DelegationModal.tsx',
-  'components/approval/LinePickerModal.tsx',
-  'components/common/NoticePopup.tsx',
-  'components/customer/TimelineFilterModal.tsx',
-  'components/customer/modals/HoldingModal.tsx',
-  'components/customer/modals/OpportunityModal.tsx',
-  'components/customer/modals/QuoteHistoryModal.tsx',
-  'components/customer/modals/RecordAddModal.tsx',
-  'components/customer/modals/ServiceAddModal.tsx',
-  'components/customer/modals/ServiceEditModal.tsx',
-  'components/dashboard/MyQuoteCard.tsx',
-  'components/home/list/CompanySearchModal.tsx',
-  'components/inquiry/DeskGuideModal.tsx',
-  'components/quote/AssigneePicker.tsx',
-  'components/repair/RepairEditModal.tsx',
-  'components/sales/EngineerChartModal.tsx',
-  'components/showroom/DeviceSettingsModal.tsx',
-  'components/showroom/PeriodPickerModal.tsx',
-  'components/showroom/UsageModal.tsx'
 ]
 
 /**

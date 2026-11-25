@@ -22,6 +22,7 @@
 
 import { useMemo, useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { useEngineers } from '@/lib/appData/engineers'
 import { selectableActivityTypes, useActivityTypes } from '@/lib/activityTypes'
 import { todayKST } from '@/lib/date'
@@ -166,18 +167,36 @@ export default function RecordAddModal({
 
   return (
     <ModalOverlay onClose={onClose}>
-      <div role="dialog" aria-modal="true" aria-label="기록 추가" onClick={e => e.stopPropagation()}
-        style={{
-          width: '100%', maxWidth: 560, maxHeight: '92vh', overflowY: 'auto',
-          background: '#ffffff', borderRadius: R.modal, border: `1px solid ${BORDER}`,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.22)', display: 'flex', flexDirection: 'column',
-        }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '18px 22px 0' }}>
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+          한 함수를 지난다. 겉모양은 그대로다: 폭 560 · 최대 높이 92vh · 제목 17/800 ·
+          머리·발의 여백과 바닥 선. 전에는 **카드 전체가** 구르고 머리·바닥도 함께 올라갔다 —
+          지금은 본문만 구르고 그 둘이 제자리에 있는다(그 점만 달라졌다).
+          보조 기술에 알리던 세 칸(role·aria)도 그대로 넘긴다. */}
+      <ModalCard
+        width={560}
+        closeX={false}
+        role="dialog" ariaModal ariaLabel="기록 추가"
+        style={{ maxHeight: '92vh', border: `1px solid ${BORDER}` }}
+        headStyle={{ padding: '18px 22px 0', alignItems: 'center', gap: 10 }}
+        bodyStyle={{ padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}
+        footStyle={{ padding: '14px 22px 18px', borderTop: `1px solid ${BORDER}`, justifyContent: 'flex-start' }}
+        title={<>
           <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>기록 추가</h2>
           <span style={{ fontSize: 12, color: SUB }}>{companyName}</span>
-        </div>
-
-        <div style={{ padding: '16px 22px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        </>}
+        footer={<>
+          <span style={{ flex: 1 }} />
+          <button type="button" onClick={onClose} disabled={isSaving}
+            style={{ height: 36, padding: '0 14px', background: '#ffffff', color: SUB, borderRadius: R.control, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13, fontFamily: 'inherit' }}>
+            취소
+          </button>
+          <button type="button" onClick={submit} disabled={isSaving}
+            style={{ height: 36, padding: '0 16px', background: BLUE, color: '#ffffff', borderRadius: R.control, border: 'none', cursor: isSaving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 13, fontFamily: 'inherit', opacity: isSaving ? 0.6 : 1 }}>
+            {isSaving ? '저장 중…' : '저장'}
+          </button>
+        </>}
+      >
+        <>
           {/* 종류 — 고르면 아래 칸이 바뀐다. 공통 칸(사업장·날짜)은 그대로 남는다. */}
           <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: R.control, padding: 3, gap: 2 }}>
             {KINDS.map(k => (
@@ -318,20 +337,8 @@ export default function RecordAddModal({
           )}
 
           {err && <div style={{ fontSize: 12, fontWeight: 600, color: DANGER }}>{err}</div>}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '14px 22px 18px', borderTop: `1px solid ${BORDER}` }}>
-          <span style={{ flex: 1 }} />
-          <button type="button" onClick={onClose} disabled={isSaving}
-            style={{ height: 36, padding: '0 14px', background: '#ffffff', color: SUB, borderRadius: R.control, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13, fontFamily: 'inherit' }}>
-            취소
-          </button>
-          <button type="button" onClick={submit} disabled={isSaving}
-            style={{ height: 36, padding: '0 16px', background: BLUE, color: '#ffffff', borderRadius: R.control, border: 'none', cursor: isSaving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: 13, fontFamily: 'inherit', opacity: isSaving ? 0.6 : 1 }}>
-            {isSaving ? '저장 중…' : '저장'}
-          </button>
-        </div>
-      </div>
+        </>
+      </ModalCard>
     </ModalOverlay>
   )
 }

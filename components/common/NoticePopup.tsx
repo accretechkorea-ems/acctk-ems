@@ -13,6 +13,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import { dismissNotice, isDismissed, noticePhase, type DismissKind, type Notice } from '@/lib/notices'
 import { todayKST } from '@/lib/date'
 import { R } from '@/lib/radius'
@@ -87,53 +88,26 @@ export default function NoticePopup() {
 
   return (
     <ModalOverlay onClose={close} style={{ background: 'rgba(0,0,0,0.5)', padding: '6vh 16px' }}>
-      <div
-        style={{
-          // 640 은 이미 관리자 모달들이 쓰는 폭이다(새 값이 아니다).
-          // 이미지가 세로로 쌓이므로 넘치는 만큼은 아래 본체가 세로로 스크롤한다.
-          background: '#ffffff', borderRadius: R.modal, width: '100%', maxWidth: 640,
-          maxHeight: '86vh', display: 'flex', flexDirection: 'column',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.22)',
-        }}
-      >
-        {/* 머리 — 제목과 (여러 건일 때) 순번 */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '16px 18px 12px', borderBottom: '1px solid #ebebeb' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {list.length > 1 && (
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 4 }}>
-                {index + 1} / {list.length}
-              </div>
-            )}
-            <div style={{ fontSize: 16, fontWeight: 800, color: '#111827', lineHeight: 1.4, wordBreak: 'break-word' }}>
-              {notice.title}
-            </div>
-          </div>
-          <button
-            onClick={close}
-            aria-label="닫기"
-            style={{ width: 30, height: 30, flexShrink: 0, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 15, color: '#4b5563', lineHeight: 1 }}
-          >✕</button>
-        </div>
-
-        {/* 본체 — 이미지는 세로로 쌓고 폭에 맞춰 줄인다. 본문은 줄바꿈을 그대로 살린다. */}
-        <div style={{ overflowY: 'auto', padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {images.map((url, i) => (
-            // 공지 이미지는 크기를 알 수 없어 next/image 대신 img 를 쓴다(외부 스토리지 URL).
-            // width 를 주지 않는 것이 핵심 — 원본보다 크게 늘어나지 않는다.
-            // 세로 flex 안에서는 stretch 로 폭이 늘어날 수 있어 alignSelf 로 막고 가운데 둔다.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img key={url} src={url} alt={`공지 이미지 ${i + 1}`}
-              style={{ maxWidth: '100%', height: 'auto', alignSelf: 'center', display: 'block', borderRadius: R.control, border: '1px solid #ebebeb' }} />
-          ))}
-          {notice.body?.trim() && (
-            <div style={{ fontSize: 13, color: '#111827', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-              {notice.body}
+      {/* 공용 카드로 옮겼다(2026-11-26, 지시 P) — 열림 모션 150ms · Esc·바깥 클릭·✕ 가
+          한 함수를 지난다. 겉모양은 그대로다: 폭 640(관리자 모달들이 쓰는 값) · 최대 높이
+          86vh · 머리·발의 선과 여백 · 제목 16/800. 이미지가 세로로 쌓이므로 본문만 구른다. */}
+      <ModalCard
+        width={640}
+        style={{ maxHeight: '86vh' }}
+        headStyle={{ padding: '16px 18px 12px', borderBottom: '1px solid #ebebeb' }}
+        bodyStyle={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}
+        footStyle={{ borderTop: '1px solid #ebebeb', padding: '12px 18px', flexWrap: 'wrap', justifyContent: 'flex-start' }}
+        title={<>
+          {list.length > 1 && (
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', marginBottom: 4 }}>
+              {index + 1} / {list.length}
             </div>
           )}
-        </div>
-
-        {/* 발 — 보지 않기 선택지와 넘기기 */}
-        <div style={{ borderTop: '1px solid #ebebeb', padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: '#111827', lineHeight: 1.4, wordBreak: 'break-word' }}>
+            {notice.title}
+          </div>
+        </>}
+        footer={<>
           {([
             { kind: 'day' as const, label: '하루 보지 않기' },
             { kind: 'week' as const, label: '1주일 보지 않기' },
@@ -148,8 +122,24 @@ export default function NoticePopup() {
             style={{ marginLeft: 'auto', padding: '8px 16px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
             {index < list.length - 1 ? '다음' : '확인'}
           </button>
-        </div>
-      </div>
+        </>}
+      >
+        <>
+          {images.map((url, i) => (
+            // 공지 이미지는 크기를 알 수 없어 next/image 대신 img 를 쓴다(외부 스토리지 URL).
+            // width 를 주지 않는 것이 핵심 — 원본보다 크게 늘어나지 않는다.
+            // 세로 flex 안에서는 stretch 로 폭이 늘어날 수 있어 alignSelf 로 막고 가운데 둔다.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img key={url} src={url} alt={`공지 이미지 ${i + 1}`}
+              style={{ maxWidth: '100%', height: 'auto', alignSelf: 'center', display: 'block', borderRadius: R.control, border: '1px solid #ebebeb' }} />
+          ))}
+          {notice.body?.trim() && (
+            <div style={{ fontSize: 13, color: '#111827', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {notice.body}
+            </div>
+          )}
+        </>
+      </ModalCard>
     </ModalOverlay>
   )
 }
