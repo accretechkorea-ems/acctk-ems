@@ -16,7 +16,9 @@
 // 않는다. hover 를 지원하지 않는 기기에서는 그 미디어 쿼리가 걸리지 않아 늘 보인다.
 
 import TaskAddButton from '@/components/task/TaskAddButton'
-import { STAGES, compactKRW, dateToMonth } from '@/components/customer/opportunity'
+import { BLUE, NEUTRAL_BG } from '@/components/common/ui'
+import { STAGES, dateToMonth } from '@/components/customer/opportunity'
+import { krwFull, krwShort } from '@/lib/forecastBoard'
 import type { SalesOpportunity } from '@/components/customer/types'
 import { R } from '@/lib/radius'
 
@@ -32,7 +34,6 @@ type Props = {
 }
 
 const MUTED = '#6b7280'
-const FADE = '#d1d5db'
 
 export default function OpportunityCard({ opp, canEdit, onOpen, onChangeStage, onPickLost, onClose, onWriteQuote }: Props) {
   const closeMonth = dateToMonth(opp.expected_close)
@@ -47,7 +48,8 @@ export default function OpportunityCard({ opp, canEdit, onOpen, onChangeStage, o
       className="pl-card"
       style={{
         background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.control,
-        padding: 12, transition: 'border-color 0.15s ease',
+        // 12 → 10 (2026-11-26, K2) — 한 열에 열 장이 넘게 쌓이는 화면이라 2px 이 한 장치다.
+        padding: '10px 12px', transition: 'border-color 0.15s ease',
       }}
       onMouseEnter={e => { e.currentTarget.style.borderColor = '#c7d7f8' }}
       onMouseLeave={e => { e.currentTarget.style.borderColor = '#ebebeb' }}
@@ -72,8 +74,13 @@ export default function OpportunityCard({ opp, canEdit, onOpen, onChangeStage, o
           >
             {company}
           </span>
-          <span style={{ flexShrink: 0, fontSize: 16, fontWeight: 700, color: '#234ea2', lineHeight: '20px' }}>
-            {compactKRW(opp.expected_amount)}
+          {/* 금액 — 「1억 2,600만」까지만 적고 **전체 자릿수는 호버**로 본다(K2).
+              전에는 compactKRW 의 「1.3억」이었는데, 1억 3천만과 1억 2천 5백만이 같게 보였다. */}
+          <span
+            title={krwFull(opp.expected_amount)}
+            style={{ flexShrink: 0, fontSize: 15, fontWeight: 700, color: BLUE, lineHeight: '20px' }}
+          >
+            {krwShort(opp.expected_amount)}
           </span>
         </div>
 
@@ -100,11 +107,18 @@ export default function OpportunityCard({ opp, canEdit, onOpen, onChangeStage, o
         >
           {ownerLine}
         </span>
+        {/* 연결 견적 — **뱃지**다(K4). 글자로 두면 담당자·마감과 섞여 「견적이 걸려 있다」가
+            눈에 들어오지 않았다. 색은 쓰지 않는다(중립 배경 + 액센트 글자). */}
         {quoteCount > 0 && (
-          <>
-            <span style={{ color: FADE, flexShrink: 0 }}>·</span>
-            <span style={{ fontSize: 11, color: '#4b5563', fontWeight: 600, flexShrink: 0 }}>견적 {quoteCount}건</span>
-          </>
+          <span
+            title={`연결된 견적 ${quoteCount}건`}
+            style={{
+              flexShrink: 0, fontSize: 10, fontWeight: 700, color: BLUE,
+              background: NEUTRAL_BG, borderRadius: R.pill, padding: '1px 7px', lineHeight: '16px',
+            }}
+          >
+            견적 {quoteCount}
+          </span>
         )}
 
         <div className="pl-card-action" style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, marginLeft: 'auto' }}>

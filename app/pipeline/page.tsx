@@ -35,7 +35,8 @@ import {
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { isSuperAdmin } from '@/lib/permissions'
-import { cardTitle } from '@/components/common/ui'
+import { BLUE, BLUE_TINT, BORDER, CARD_BG, MUTED, TEXT, cardTitle } from '@/components/common/ui'
+import { TEXT_DISABLED, TEXT_NOTE } from '@/lib/textTokens'
 import OpportunityCard from '@/components/pipeline/OpportunityCard'
 import OpportunityModal from '@/components/customer/modals/OpportunityModal'
 import { useOpportunityCrud } from '@/hooks/customer/useOpportunityCrud'
@@ -47,6 +48,7 @@ import { useQuoteCategories } from '@/lib/quoteCategories'
 import { todayKST } from '@/lib/date'
 import { FORM_LABELS, isFormKind } from '@/lib/quoteForms'
 import { bucketOf, emptyBucket, fiscalMonths, fiscalYearOfMonth, type Bucket } from '@/lib/forecast'
+import { boardSummary, inQuarter, krwFull, krwShort, quarterSlices } from '@/lib/forecastBoard'
 import { exportForecastXlsx } from '@/lib/forecastExcel'
 import { STAGES, compactKRW, isClosed } from '@/components/customer/opportunity'
 import type { SalesOpportunity } from '@/components/customer/types'
@@ -71,6 +73,16 @@ const popSel: React.CSSProperties = {
 }
 
 const PAGE_BG = '#f4f5f7'
+/** 이번 달 마감을 알리는 빨강 — 홈 할 일·장비 카드의 「지남」과 같은 값이다. */
+const LATE_RED = '#b91c1c'
+
+// ── 머리 띠의 칸 셋 — 칸마다 라벨 한 줄 + 값 한 줄 (2026-11-26, K3) ──────────
+const bandCell: React.CSSProperties = {
+  padding: '8px 14px', display: 'flex', flexDirection: 'column', gap: 1,
+  borderRight: `1px solid ${BORDER}`, minWidth: 0,
+}
+const bandLabel: React.CSSProperties = { fontSize: 11, color: MUTED, whiteSpace: 'nowrap' }
+const bandValue: React.CSSProperties = { fontSize: 14, fontWeight: 700, color: TEXT, whiteSpace: 'nowrap' }
 
 // 열 안 정렬 — 마감이 임박한 것부터. 마감일 없는 건은 맨 아래.
 // 같은 날짜(또는 둘 다 마감일 없음)면 등록 순(오래된 것 먼저)으로 고정해 순서가 흔들리지 않게 한다.
@@ -201,6 +213,25 @@ export default function PipelinePage() {
     })
   }, [opportunities, ownerValue, search])
 
+  /**
+   * 고른 분기 — null 이면 **전부**다(K1).
+   *
+   * 기간으로 **거르지 않는** 것이 이 판의 기본이다(마감일 없는 건이 통째로 사라지면 그
+   * 건은 아무도 다시 보지 않는다). 그래서 기간은 거르개가 아니라 **띠의 분포**로 보여 주고,
+   * 누르면 그때만 좁힌다. 한 번 더 누르면 전부로 돌아온다.
+   */
+  const [quarter, setQuarter] = useState<string | null>(null)
+
+  /** 판에 보이는 줄 — 담당자·검색에 분기까지 걸린 것. 띠도 **이 줄을** 센다(어긋나지 않게). */
+  const shown = useMemo(() => filtered.filter(o => inQuarter(o, quarter)), [filtered, quarter])
+
+  /** 분기 분포는 **분기를 고르기 전** 줄에서 센다 — 고른 뒤에도 다른 분기로 옮겨 갈 수 있어야 한다. */
+  const slices = useMemo(() => quarterSlices(filtered.filter(o => !isClosed(o))), [filtered])
+  const summary = useMemo(
+    () => boardSummary(shown.filter(o => !isClosed(o)), BOARD_STAGES, todayKST()),
+    [shown],
+  )
+
   // 낙관적 업데이트 — 저장이 끝나기 전에 화면에서 먼저 옮긴다.
   // 실패하면 이 값만 지우면 원래 단계로 되돌아간다(서버 데이터는 그대로이므로).
   const [pendingStage, setPendingStage] = useState<Map<number, string>>(new Map())
@@ -208,15 +239,15 @@ export default function PipelinePage() {
 
   const columns = useMemo(
     () => BOARD_STAGES.map(stage => {
-      const rows = filtered
+      const rows = shown
         .filter(o => !isClosed(o) && (pendingStage.get(o.opportunity_id) ?? o.stage) === stage)
         .sort(byDueDate)
       return { stage, rows, sum: rows.reduce((s, o) => s + (o.expected_amount ?? 0), 0) }
     }),
-    [filtered, pendingStage]
+    [shown, pendingStage]
   )
   // 끝난 건 = 실주 + 매출 확정 등으로 종료된 것. 판에서 빼고 아래에 접어둔다.
-  const done = useMemo(() => filtered.filter(o => isClosed(o)), [filtered])
+  const done = useMemo(() => shown.filter(o => isClosed(o)), [shown])
 
   const moveTo = async (o: SalesOpportunity, next: string) => {
     if (next === stageOf(o)) return
@@ -383,6 +414,71 @@ export default function PipelinePage() {
             </button>
           </div>
         </div>
+
+        {/* 컴팩트 띠 하나 — 건수·합계·단계별 수·마감 임박·분기 분포 (2026-11-26, K1·K3).
+            판 위에 큰 요약 카드를 두면 칸반이 그만큼 아래로 내려간다. 한 줄에 다 담고,
+            **판에 보이는 줄만** 센다(분포만 분기를 고르기 전 줄에서 센다 — 다른 분기로
+            옮겨 갈 수 있어야 한다). 분기를 누르면 그 분기만, 한 번 더 누르면 전부다. */}
+        {!loading && summary.count > 0 && (
+          <div style={{
+            display: 'flex', alignItems: 'stretch', flexWrap: 'wrap',
+            background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control,
+            marginBottom: 12, flexShrink: 0, overflow: 'hidden', fontSize: 12,
+          }}>
+            <div style={bandCell}>
+              <span style={bandLabel}>진행 중</span>
+              <b style={bandValue} title={krwFull(summary.sum)} className="num">
+                {summary.count}건 · {krwShort(summary.sum)}
+              </b>
+            </div>
+            <div style={bandCell}>
+              <span style={bandLabel}>단계</span>
+              <span style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                {summary.byStage.map(s => (
+                  <span key={s.stage} style={{ fontSize: 12, color: s.count === 0 ? TEXT_DISABLED : TEXT_NOTE, whiteSpace: 'nowrap' }}>
+                    {s.stage} <b style={{ fontWeight: 700, color: s.count === 0 ? TEXT_DISABLED : TEXT }}>{s.count}</b>
+                  </span>
+                ))}
+              </span>
+            </div>
+            <div style={bandCell}>
+              <span style={bandLabel}>이번 달 마감</span>
+              <b style={{ ...bandValue, color: summary.soon === 0 ? TEXT_DISABLED : LATE_RED }}>{summary.soon}건</b>
+            </div>
+            <div style={{ ...bandCell, borderRight: 'none', flex: 1, minWidth: 260 }}>
+              <span style={bandLabel}>
+                예정 분기 <span style={{ fontWeight: 400 }}>(누르면 그 분기만)</span>
+              </span>
+              <span style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                {slices.map(s => {
+                  const on = quarter === s.key
+                  return (
+                    <button
+                      key={s.key || 'none'}
+                      type="button"
+                      onClick={() => setQuarter(on ? null : s.key)}
+                      title={`${s.label} — ${s.count}건 · ${krwFull(s.sum)}`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'baseline', gap: 5, padding: '2px 8px',
+                        borderRadius: R.pill, border: `1px solid ${on ? BLUE : BORDER}`,
+                        background: on ? BLUE_TINT : CARD_BG, cursor: 'pointer', fontFamily: 'inherit',
+                      }}
+                    >
+                      <b style={{ fontSize: 12, fontWeight: 700, color: on ? BLUE : TEXT }}>{s.label}</b>
+                      <span style={{ fontSize: 11, color: on ? BLUE : MUTED }}>{s.count}건 · {krwShort(s.sum)}</span>
+                    </button>
+                  )
+                })}
+                {quarter !== null && (
+                  <button type="button" onClick={() => setQuarter(null)}
+                    style={{ border: 'none', background: 'none', color: BLUE, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    분기 전체
+                  </button>
+                )}
+              </span>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, padding: 40, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
