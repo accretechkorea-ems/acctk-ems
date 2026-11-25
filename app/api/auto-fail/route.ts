@@ -17,6 +17,7 @@ import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { todayKST } from '@/lib/date'
 import { AUTO_FAIL_REASON, FAIL_STATUS, PENDING_STATUS, isExpired } from '@/lib/quoteStatus'
+import { expiryBase } from '@/lib/quoteRevive'
 
 const supabaseAdmin = adminClient()
 
@@ -25,20 +26,45 @@ const SKIP_QUOTE_TYPE = 'repair_domestic'
 
 type SweepResult = { updated: number; checked: number; ids: number[] }
 
+/**
+ * 되돌리기 칸(revived_at)이 표에 있나 — db/quote_revive_20261125.sql 전일 수 있다.
+ * 없으면 작성일만 보고 쓸던 대로 돈다(그때는 되돌린 건을 다음 날 또 실패로 돌린다 —
+ * 그 자리를 고치는 SQL 이 아직 적용되지 않은 것이다).
+ */
+const COLUMNS_WITH_REVIVE = 'quote_id, quote_date, revived_at'
+const COLUMNS_BASE = 'quote_id, quote_date'
+let reviveKnown: boolean | null = null
+
 /** 유효기간이 지난 '견적중' 견적을 미수주로 바꾼다. 실패하면 던진다(부른 쪽이 500 을 낸다). */
 async function sweep(): Promise<SweepResult> {
   const today = todayKST()
 
-  // NULL 을 살리기 위해 neq 대신 or(is null) 로 처리한다.
-  const { data, error } = await supabaseAdmin
+  /**
+   * 기준일은 **coalesce(revived_at, quote_date)** 다(lib/quoteRevive 의 expiryBase).
+   * 되돌린 건은 되돌린 날부터 다시 1개월을 센다 — 그러지 않으면 되돌린 다음 날 또 실패다.
+   */
+  const read = async (withRevive: boolean) => supabaseAdmin
     .from('quotes')
-    .select('quote_id, quote_date')
+    // NULL 을 살리기 위해 neq 대신 or(is null) 로 처리한다.
+    .select(withRevive ? COLUMNS_WITH_REVIVE : COLUMNS_BASE)
     .eq('status', PENDING_STATUS)
     .or(`quote_type.is.null,quote_type.neq.${SKIP_QUOTE_TYPE}`)
+
+  let { data, error } = await read(reviveKnown !== false)
+  if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+    // 칸이 아직 없다 — 한 번만 알아내고 그 뒤로는 바로 작성일만 읽는다.
+    reviveKnown = false
+    console.warn('[auto-fail] revived_at 칸이 아직 없다 — db/quote_revive_20261125.sql 전이다')
+    const again = await read(false)
+    data = again.data
+    error = again.error
+  } else if (!error) {
+    reviveKnown = reviveKnown !== false
+  }
   if (error) throw error
 
-  const rows = (data ?? []) as { quote_id: number; quote_date: string | null }[]
-  const ids = rows.filter(q => isExpired(q.quote_date, today)).map(q => q.quote_id)
+  const rows = (data ?? []) as unknown as { quote_id: number; quote_date: string | null; revived_at?: string | null }[]
+  const ids = rows.filter(q => isExpired(expiryBase(q), today)).map(q => q.quote_id)
   if (ids.length === 0) return { updated: 0, checked: rows.length, ids }
 
   // 그사이 누군가 상태를 바꿨으면 건드리지 않는다(조건부 UPDATE).

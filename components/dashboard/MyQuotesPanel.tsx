@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useMe } from '@/lib/appData/MeProvider'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { SALES_STATUS_COLORS, getCategoryColor, salesStatusLabel } from '@/lib/categoryColors'
@@ -26,6 +27,10 @@ import {
   STATUS_FILTER_TABS, editStatusesFor, REJECTED_STATUS, FAIL_STATUS, PENDING_STATUS,
   type QuoteStatus,
 } from '@/lib/quoteStatus'
+import QuoteReviveModal from '@/components/quote/QuoteReviveModal'
+import {
+  DONE_MESSAGE as REVIVE_DONE, REVIVE_LABEL, canReviveQuote, expiryBase, isRevived, reviveBadge,
+} from '@/lib/quoteRevive'
 import { achieveColorOf } from '@/lib/fiscal'
 import { Z } from '@/lib/zIndex'
 import ModalOverlay from '@/components/common/ModalOverlay'
@@ -142,6 +147,8 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
   initialStatus?: string
 }) {
   const supabase = useMemo(() => createClient(), [])
+  /** 되돌리기 단추는 **관리 메뉴를 가진 사람**에게만 보인다(lib/quoteRevive 의 canReviveQuote). */
+  const { me } = useMe()
   const toast = useToast()
   const [quotes, setQuotes] = useState<Quote[]>([])
   // 결재 문서가 이미 있는 견적 id. null 이면 아직 못 읽었다(또는 실패) — 그때는 「결재 올리기」를
@@ -182,6 +189,9 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
   const [loading, setLoading] = useState(true)
   // 조회가 실패했는지. 빈 목록과 구분해서 알려주기 위한 것이다.
   const [loadError, setLoadError] = useState(false)
+  /** 되돌리기 창 — 미수주 건을 견적중으로(2026-11-25). */
+  const [reviveQuote, setReviveQuote] = useState<Quote | null>(null)
+  const [reviving, setReviving] = useState(false)
   // 실제로 그리는 줄 수 = 페이징 단위. 화면 높이에 따라 달라지므로 상태로 둔다.
   const [pageSize, setPageSize] = useState(PAGE_SIZE)
   const listBoxRef = useRef<HTMLDivElement>(null)   // 표가 들어가는 상자(남는 높이를 받는다)
@@ -254,19 +264,37 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
 
   // 데이터 로드(초기 + mutation 후 refetch). 본인 견적만.
   const loadData = async () => {
-    const { data: qs, error } = await supabase
+    /**
+     * **되돌리기·사후입력 칸은 아직 없을 수 있다**(db/quote_revive_20261125.sql 미적용).
+     * 함께 읽어 보고 42703 이면 빼고 한 번 더 읽는다 — 패널이 통째로 비지 않게.
+     */
+    const BASE = 'quote_id, quote_number, quote_date, created_at, total_supply, total_profit, profit_rate, status, quote_type, form_kind, customer_id, dealer_id, pdf_url, shipping_date, order_memo, order_request_memo, order_completed_by, tax_completed_by, tax_invoice_date, fail_reason, purchase_order_at, tax_invoice_completed_at, engineer_id, created_by, quote_items(product_name, row_kind, price_list(model_jp))'
+    const read = (cols: string) => supabase
       .from('quotes')
       // created_at — 결재 도입 경계를 가르는 값이다(견적일이 아니다. lib/quoteStatus.ts 설명).
-      .select('quote_id, quote_number, quote_date, created_at, total_supply, total_profit, profit_rate, status, quote_type, form_kind, customer_id, dealer_id, pdf_url, shipping_date, order_memo, order_request_memo, order_completed_by, tax_completed_by, tax_invoice_date, fail_reason, purchase_order_at, tax_invoice_completed_at, engineer_id, created_by, quote_items(product_name, row_kind, price_list(model_jp))')
+      .select(cols)
       // 내 실적으로 잡히는 견적(engineer_id) + 내가 남 대신 쓴 견적(created_by).
       // 목록에는 둘 다 실리지만, 아래 실적 요약은 engineer_id 가 나인 것만 센다.
       .or(`engineer_id.eq.${engineerId},created_by.eq.${engineerId}`)
       .order('created_at', { ascending: false })
+
+    let { data: qs, error } = await read(`${BASE}, revived_at, backfilled_at`)
+    if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+      const again = await read(BASE)
+      qs = again.data
+      error = again.error
+    }
     // 조회가 실패해도 빈 배열이 되던 자리다. 그러면 "견적이 없다" 와 구분되지 않아
     // 장애를 알아챌 수 없었다 — 실패는 콘솔과 화면 양쪽에 남긴다.
     if (error) console.error('[myQuotes] 견적 조회 실패', error)
     setLoadError(!!error)
-    const list = (qs ?? [])
+    /**
+     * 칸 목록을 **글자로** 넘기면(위의 두 길) supabase 가 줄 모양을 좁혀 주지 못한다 —
+     * 한 번 unknown 을 지나 이 화면이 쓰는 모양으로 읽는다(any 는 쓰지 않는다).
+     */
+    const list = (qs ?? []) as unknown as (Record<string, unknown> & {
+      quote_id: number; customer_id: number | null; dealer_id: number | null; created_by?: number | null
+    })[]
     // 고객사/대리점명: customers 별도 조회 후 병합(고객사 열람 권한이 없어 막히면 '-'/null).
     const ids = [...new Set(list.flatMap(q => [q.customer_id, q.dealer_id]).filter(Boolean))]
     const custMap: Record<number, string> = {}
@@ -327,7 +355,8 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
     : periodRange(fy, unit, sel)
   const inRangeDate = (q: Quote) => q.quote_date >= rangeStart && q.quote_date <= rangeEnd
   /** 만료됐지만 아직 견적중인 건 — 줄에 「만료」 표를 붙인다(자동 실주 전이거나 판단이 남은 건이다). */
-  const isOverdue = (q: Quote) => q.status === PENDING_STATUS && isExpired(q.quote_date, today)
+  // 기준일은 coalesce(revived_at, quote_date) 다 — 되돌린 건은 되돌린 날부터 다시 1개월이다.
+  const isOverdue = (q: Quote) => q.status === PENDING_STATUS && isExpired(expiryBase(q), today)
   /**
    * 유효 견적 모드의 판정은 lib/quoteStatus.ts 의 inValidQuoteView 다 —
    * 유효기간은 **진행 중인 건에만** 적용하고(견적중·결재중·보류·발주 대기),
@@ -797,6 +826,15 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                             {q.quote_number}
                             {/* 견적 날짜와 실제로 넣은 날이 다르면 작은 표시(지난 날짜로 넣은 건). */}
                             <BackdatedMark quoteDate={q.quote_date} createdAt={q.created_at} color={MUTED} />
+                            {/* 되돌림 — 미수주였다가 견적중으로 되살린 줄. 유효기간은 그 날부터 1개월이다. */}
+                            {isRevived(q) && (
+                              <span style={{
+                                fontSize: 10, padding: '1px 5px', borderRadius: R.tag,
+                                background: '#eff6ff', color: BLUE, fontWeight: 700, whiteSpace: 'nowrap',
+                              }}>
+                                {reviveBadge(q)}
+                              </span>
+                            )}
                             {pdfOpen && (
                               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-label="PDF">
                                 <title>PDF 열기</title>
@@ -1194,6 +1232,19 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                 {AUTO_FAIL_NOTICE}
               </div>
             )}
+            {/* 관리자 되돌리기(2026-11-25) — 미수주 사유가 무엇이든(자동 실주 포함) 견적중으로
+                되살린다. 유효기간은 **되돌린 날부터** 다시 1개월이다(lib/quoteRevive.ts).
+                일반 사용자에게는 이 단추가 없고, 라우트도 같은 문턱을 다시 센다. */}
+            {canReviveQuote(me, editQuote) && (
+              <button onClick={() => { setReviveQuote(editQuote); setEditQuote(null) }}
+                style={{
+                  width: '100%', marginBottom: 12, padding: '9px', background: '#fff', color: BLUE,
+                  border: `1px solid ${BLUE}`, borderRadius: R.control, cursor: 'pointer',
+                  fontWeight: 700, fontSize: 13, fontFamily: 'inherit',
+                }}>
+                {REVIVE_LABEL}
+              </button>
+            )}
 
             <div style={{ marginBottom: 6 }}>
               {editStatus === '견적중' ? (
@@ -1242,6 +1293,35 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
         myId={engineerId}
         docType="quote_delete"
       />
+
+      {/* 되돌리기 — 미수주 건을 견적중으로. 사유가 필수다(2026-11-25). */}
+      {reviveQuote && (
+        <QuoteReviveModal
+          quote={{
+            quote_number: reviveQuote.quote_number,
+            company: reviveQuote.company_name ?? null,
+            fail_reason: reviveQuote.fail_reason,
+          }}
+          busy={reviving}
+          onClose={() => setReviveQuote(null)}
+          onRevive={async (reason) => {
+            setReviving(true)
+            try {
+              const res = await fetch('/api/quote-revive', {
+                method: 'POST', headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ quote_id: reviveQuote.quote_id, reason }),
+              })
+              const json = await res.json().catch(() => null) as { ok?: boolean; error?: string } | null
+              if (!json?.ok) { toast.error(json?.error ?? '되돌리지 못했습니다'); return }
+              toast.success(REVIVE_DONE)
+              setReviveQuote(null)
+              await loadData()
+            } finally {
+              setReviving(false)
+            }
+          }}
+        />
+      )}
 
 
       {/* 수리 정보 — 목록 행의 「수리정보」 단추가 연다. 안은 작성 화면과 같은 패널이다. */}

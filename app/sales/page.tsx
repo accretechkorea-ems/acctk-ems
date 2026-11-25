@@ -38,6 +38,10 @@ import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice } from '@/lib/appr
 import { openQuotePdf } from '@/lib/openQuotePdf'
 import { matchesCompany } from '@/lib/companySearch'
 import { BACKFILL_BADGE, isBackfilled, type BackfillForm } from '@/lib/quoteBackfill'
+import QuoteReviveModal from '@/components/quote/QuoteReviveModal'
+import {
+  DONE_MESSAGE as REVIVE_DONE, REVIVE_LABEL, canReviveQuote, isRevived, reviveBadge,
+} from '@/lib/quoteRevive'
 import BackfillModal from '@/components/sales/BackfillModal'
 import { approvalDocPath, type LineInput } from '@/lib/approval/types'
 import {
@@ -379,15 +383,19 @@ function TeamCard({ teamId, engineers, filteredQuotes, orderQuotes, revenueQuote
 /** 사람 + 그 사람의 실적 수치 — 차트 창이 받는 모양이다. */
 type EngineerWithStats = Engineer & { quotedAmt: number; orderedAmt: number; revenueAmt: number; profitAmt: number; profitRate: number | null; targetAmt: number; achieve: number | null; orderTargetAmt: number; orderAchieve: number | null }
 
-function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, onClose, onStatusSave, onDeleted }: {
+function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, me, onClose, onStatusSave, onDeleted, onRevived }: {
   engineer: EngineerWithStats
   quotes: Quote[]
   currentEngineerId: number | null
   engineers: Engineer[]
+  /** 지금 로그인한 사람 — 되돌리기 단추를 둘지 가른다(관리 메뉴 + superadmin). */
+  me: Engineer | null
   onClose: () => void
   onStatusSave: (q: Quote, status: string, failReason: string) => Promise<void>
   /** 본인 삭제로 견적이 사라진 뒤 목록을 다시 읽는다. */
   onDeleted: () => Promise<void>
+  /** 되돌린 뒤 목록을 다시 읽는다. */
+  onRevived: () => Promise<void>
 })
  {
   const supabase = createClient()
@@ -397,6 +405,9 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
   const [page, setPage] = useState(1)
   const [editQuote, setEditQuote] = useState<Quote | null>(null)
   const [editStatus, setEditStatus] = useState('')
+  /** 되돌리기 창 — 미수주 건을 견적중으로(관리 메뉴 + superadmin 만, 2026-11-25). */
+  const [reviveQuote, setReviveQuote] = useState<Quote | null>(null)
+  const [reviving, setReviving] = useState(false)
   // PDF 를 여는 중인 견적 id — 연타 방지 + 그 줄만 흐리게.
   const [pdfBusyId, setPdfBusyId] = useState<number | null>(null)
   const pdfBusyRef = useRef(false)
@@ -878,6 +889,16 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                               {BACKFILL_BADGE}
                             </span>
                           )}
+                          {/* 되돌림 — 미수주였다가 관리자가 견적중으로 되돌린 줄(lib/quoteRevive.ts).
+                              유효기간은 되돌린 날부터 다시 1개월이다. */}
+                          {isRevived(q) && (
+                            <span style={{
+                              marginLeft: 4, fontSize: 10, padding: '1px 5px', borderRadius: R.tag,
+                              background: '#eff6ff', color: BLUE, fontWeight: 700, whiteSpace: 'nowrap',
+                            }}>
+                              {reviveBadge(q)}
+                            </span>
+                          )}
                         </span>
                       </td>
                       <td style={{ padding: '8px 10px', color: MUTED, whiteSpace: 'nowrap', fontSize: 11, textAlign: 'center' }}>{q.quote_date}</td>
@@ -1244,6 +1265,19 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
                       : `${deleteVerdict && !deleteVerdict.ok ? deleteVerdict.message + ' ' : ''}결재선을 지정하면 삭제 요청이 결재로 올라갑니다.`}
                 </div>
               )}
+              {/* 관리자 되돌리기 — 미수주 사유가 무엇이든(자동 실주 포함) 견적중으로 되살린다.
+                  유효기간은 되돌린 날부터 다시 1개월이다(lib/quoteRevive.ts). 일반 사용자에게는
+                  이 단추가 없다 — 라우트도 같은 문턱을 다시 센다. */}
+              {canReviveQuote(me, editQuote) && (
+                <button onClick={() => { setReviveQuote(editQuote); setEditQuote(null) }}
+                  style={{
+                    width: '100%', marginTop: 10, padding: '9px', background: '#fff', color: BLUE,
+                    border: `1px solid ${BLUE}`, borderRadius: R.control, cursor: 'pointer',
+                    fontWeight: 700, fontSize: 13, fontFamily: 'inherit',
+                  }}>
+                  {REVIVE_LABEL}
+                </button>
+              )}
               <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
                 <button onClick={() => setEditQuote(null)} style={{ flex: 1, padding: '9px', background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700 }}>닫기</button>
                 <button onClick={handleSave} disabled={saving || reasonMissing || deleteWaiting || requestBlocked}
@@ -1259,6 +1293,35 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, on
               </div>
             </div>
           </ModalOverlay>
+        )}
+
+        {/* 되돌리기 — 미수주 건을 견적중으로. 사유가 필수다(2026-11-25). */}
+        {reviveQuote && (
+          <QuoteReviveModal
+            quote={{
+              quote_number: reviveQuote.quote_number,
+              company: reviveQuote.customers?.company_name ?? null,
+              fail_reason: reviveQuote.fail_reason,
+            }}
+            busy={reviving}
+            onClose={() => setReviveQuote(null)}
+            onRevive={async (reason) => {
+              setReviving(true)
+              try {
+                const res = await fetch('/api/quote-revive', {
+                  method: 'POST', headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify({ quote_id: reviveQuote.quote_id, reason }),
+                })
+                const json = await res.json().catch(() => null) as { ok?: boolean; error?: string } | null
+                if (!json?.ok) { toast.error(json?.error ?? '되돌리지 못했습니다'); return }
+                toast.success(REVIVE_DONE)
+                setReviveQuote(null)
+                await onRevived()
+              } finally {
+                setReviving(false)
+              }
+            }}
+          />
         )}
 
         {/* 삭제 요청 결재선. 확정하면 상태 변경과 상신이 이어진다. */}
@@ -1685,12 +1748,17 @@ const visibleEngineers = sortedEngineers.filter(e => {
           quotes={filteredQuotes.filter(q => q.engineer_id === selectedEngineer.engineer_id)}
           currentEngineerId={currentEngineer?.engineer_id ?? null}
           engineers={engineers}
+          me={currentEngineer}
           onClose={() => setSelectedEngineer(null)}
           onStatusSave={async (q, status, failReason) => {
             await handleStatusSave(q, status, failReason)
             setSelectedEngineer(prev => prev ? { ...prev } : null)
           }}
           onDeleted={async () => {
+            await fetchAll()
+            setSelectedEngineer(prev => prev ? { ...prev } : null)
+          }}
+          onRevived={async () => {
             await fetchAll()
             setSelectedEngineer(prev => prev ? { ...prev } : null)
           }}
