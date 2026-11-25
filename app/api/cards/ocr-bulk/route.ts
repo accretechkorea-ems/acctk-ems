@@ -12,9 +12,17 @@
 // ── 담을 때 ──────────────────────────────────────────────────────────────
 //   input_method 는 'bulk'. 등록자는 **세션에서** 만든다 — 화면이 보낸 값을 믿지 않는다.
 //
-// ── 담지 않는 두 경우 ────────────────────────────────────────────────────
-//   · 'dup'   — 읽힌 휴대폰 또는 이메일이 **살아 있는 줄**과 같다. 기존 card_id 를 함께 준다.
-//   · 'empty' — 이름도 회사도 못 읽었다. 빈 줄을 쌓지 않는다.
+// ── 담지 않는 네 경우 (2026-11-25 3차) ───────────────────────────────────
+//   · 'dup'       — 이미 **등록된(active)** 명함과 같은 사람이다. 기존 card_id 를 함께 준다.
+//   · 'merged'    — **이번 묶음의 draft** 와 같은 사람이거나, 바로 앞 draft 의 다른 면이다.
+//                   그 줄에 얹는다(쪽이 떨어져 있어도).
+//   · 'no_person' — 연락처가 없는 면인데 앞 draft 와 회사명이 겹치지 않는다.
+//   · 'empty'     — 이름도 회사도 못 읽었다. 빈 줄을 쌓지 않는다.
+//
+// ── 같은 사람인지 어떻게 아나 ────────────────────────────────────────────
+//   **휴대폰**이 둘 다 있으면 휴대폰, 하나라도 없으면 **이메일**(lib/businessCardBulk 의
+//   samePerson). 회사명은 보지 않는다 — 한글면과 영문면의 회사명이 글자가 달라
+//   「다른 회사」로 보이면서 같은 사람이 두 장으로 쪼개졌다(실제 20쪽에서 4쌍).
 //
 // ── 사진·PDF 는 남기지 않는다 ────────────────────────────────────────────
 //   메모리에서만 쓰고 버린다(lib/cardOcrServer.ts). 남기는 것은 토큰 수뿐이다.
@@ -30,7 +38,7 @@ import { readCard } from '@/lib/cardOcrServer'
 import { STATUS_ACTIVE, STATUS_DRAFT } from '@/lib/cardReview'
 import {
   BULK_METHOD, EVENT_HANGUL, EVENT_MERGED, MAX_PER_REQUEST,
-  canMergeBack, fillBlanks, hasContact, isBatchId, isNoPerson, localScriptPatch, sameCompany,
+  canMergeBack, fillBlanks, hasContact, isBatchId, isNoPerson, priorityPatch, samePerson,
   type BulkLine,
 } from '@/lib/businessCardBulk'
 
@@ -136,21 +144,44 @@ export async function POST(req: Request) {
    */
   const asDraft = await hasDraftColumns()
 
-  // ── 중복을 보려고 **등록된** 줄의 번호·메일을 한 번만 읽는다 ──
-  // 검토 대기(draft)는 중복 판정에 넣지 않는다 — 아직 명함첩에 없는 줄이다.
-  // 다만 **같은 묶음 안의 draft** 끼리는 아래 byPhone·byMail 에 쌓여 서로 걸린다.
+  /**
+   * 같은 사람을 가려낼 **열쇠 한 줄** — 휴대폰·이메일만 본다(회사명은 보지 않는다).
+   * 판정은 samePerson 한 곳에서 한다: 휴대폰이 둘 다 있으면 휴대폰, 하나라도 없으면 이메일.
+   */
+  type Key = { card_id: number; name: string | null; mobile: string | null; email: string | null }
+  const findPerson = (list: readonly Key[], row: { mobile?: string | null; email?: string | null }) =>
+    list.find(c => samePerson(c, row)) ?? null
+
+  // ── ⓒ 중복을 보려고 **등록된(active)** 줄을 한 번만 읽는다 ──
+  // 검토 대기(draft)는 여기 넣지 않는다 — 아직 명함첩에 없는 줄이다.
   let existingQuery = supabaseAdmin
     .from('business_cards').select('card_id, name, mobile, email')
     .is('deleted_at', null)
   if (asDraft) existingQuery = existingQuery.eq('status', STATUS_ACTIVE)
   const { data: existing } = await existingQuery
-  const byPhone = new Map<string, { card_id: number; name: string | null }>()
-  const byMail = new Map<string, { card_id: number; name: string | null }>()
-  for (const r of existing ?? []) {
-    const d = digitsOf(r.mobile)
-    if (d) byPhone.set(d, { card_id: r.card_id, name: r.name })
-    const m = String(r.email ?? '').trim().toLowerCase()
-    if (m) byMail.set(m, { card_id: r.card_id, name: r.name })
+  const actives: Key[] = (existing ?? []).map(r => ({
+    card_id: r.card_id, name: r.name, mobile: r.mobile, email: r.email,
+  }))
+
+  /**
+   * ── ⓑ **이번 묶음에서 내가 담은 줄** — 같은 사람이면 바로 앞 쪽이 아니어도 그 줄에 합친다 ──
+   *
+   * 한 묶음은 세 쪽씩 여러 요청으로 나뉘어 온다. 앞 요청에서 담은 줄과도 맞물려야 하므로
+   * 표에서 읽어 온다(2026-11-25 3차 — 떨어진 쪽의 같은 사람이 중복으로 쌓였다).
+   * 검토 대기 칸이 아직 없는 DB 에서는 이 목록이 **이번 요청에서 담은 줄**만 담는다 —
+   * 그래도 한 요청 안(세 쪽)의 같은 사람은 합쳐진다.
+   */
+  const batchDrafts: Key[] = []
+  if (asDraft && batchId) {
+    const { data: mine } = await supabaseAdmin
+      .from('business_cards').select('card_id, name, mobile, email')
+      .eq('status', STATUS_DRAFT)
+      .eq('import_batch_id', batchId)
+      .eq('engineer_id', caller.engineer_id)
+      .is('deleted_at', null)
+    for (const r of mine ?? []) {
+      batchDrafts.push({ card_id: r.card_id, name: r.name, mobile: r.mobile, email: r.email })
+    }
   }
 
   const lines: Line[] = []
@@ -159,7 +190,11 @@ export async function POST(req: Request) {
 
   /** 직전 명함 — 같은 요청의 앞 쪽, 없으면 지난 요청이 넘겨준 prev_card_id. */
   let prevId: number | null = Number(form.get('prev_card_id')) || null
-  /** 그 명함이 **몇 쪽**이었나 — 뒷면은 바로 다음 쪽일 때만 붙는다. */
+  /**
+   * 그 명함이 **몇 쪽**이었나 — 응답으로 돌려주어 다음 요청이 이어 쓴다.
+   * 2026-11-25 3차부터 **쪽이 붙어 있는지는 보지 않는다** — 합칠지는 열쇠(휴대폰·이메일)와
+   * 회사명이 정한다. 떨어진 쪽의 같은 사람을 중복으로 쌓던 것을 고친 자리다.
+   */
   let prevPage: number | null = Number.isFinite(Number(form.get('prev_page'))) && String(form.get('prev_page') ?? '') !== ''
     ? Number(form.get('prev_page')) : null
   /** 이 묶음의 첫 파일이 전체에서 **몇 쪽**인가(0부터). */
@@ -187,23 +222,38 @@ export async function POST(req: Request) {
   }
 
   /**
-   * 기존 줄에 **빈 칸 채우기 + 한글 우선 교정**을 얹는다.
-   * 바뀐 것이 없으면 쓰지 않는다 — 건드리지 않아도 될 줄을 쓰지 않는다.
+   * 그 줄에 이번 면을 **얹는다**.
+   *
+   *   · `fillBlanks` — 빈 칸을 채운다(어느 경우에나).
+   *   · `priorityPatch` — 한글 > 한자·가나 > 로마자 순으로 **이미 든 값도 교체한다**.
+   *     밀려난 로마자는 영문 칸이 비어 있으면 그리로 간다.
+   *
+   * 교체는 **이번 묶음의 draft** 에만 한다(`priority: true`). 이미 등록된(active) 명함은
+   * 빈 칸만 채운다 — 사람이 쓰고 있는 줄의 값을 가져오기가 바꾸지 않는다(2026-11-25).
+   * 바뀐 것이 없으면 쓰지 않는다.
    */
   const mergeInto = async (
     target: number, targetRow: Record<string, unknown>, row: Record<string, string | null>,
+    opts: { priority: boolean },
   ): Promise<Record<string, unknown>> => {
     const fill = fillBlanks(targetRow, row, WRITE_FIELDS)
-    const fix = localScriptPatch(targetRow as Parameters<typeof localScriptPatch>[0], row)
-    const patch = { ...fill, ...fix }
+    const { patch: fix, replaced } = opts.priority
+      ? priorityPatch(targetRow, row)
+      : { patch: {} as Record<string, string>, replaced: [] }
+    // 표에 없는 칸(영문 칸이 아직 없는 DB)은 빼고 쓴다.
+    const allow = (p: Record<string, string>) => Object.fromEntries(
+      Object.entries(p).filter(([k]) => (WRITE_FIELDS as readonly string[]).includes(k)),
+    )
+    const patch = { ...fill, ...allow(fix) }
     if (Object.keys(patch).length === 0) return targetRow
     const { error } = await supabaseAdmin.from('business_cards').update(patch).eq('card_id', target)
     if (error) {
       console.error(`[${TAG}] 합치지 못했다`, { target, code: error.code })
       return targetRow
     }
-    if (Object.keys(fill).length > 0) {
-      await logEvent(target, EVENT_MERGED, { filled: Object.keys(fill) })
+    // 합친 자국 — **교체 전 값**을 함께 남긴다(되짚어 볼 수 있게).
+    if (Object.keys(fill).length > 0 || replaced.length > 0) {
+      await logEvent(target, EVENT_MERGED, { filled: Object.keys(fill), replaced })
     }
     if (Object.keys(fix).length > 0) {
       await logEvent(target, EVENT_HANGUL, { fixed: Object.keys(fix) })
@@ -229,27 +279,21 @@ export async function POST(req: Request) {
 
     const phone = digitsOf(row.mobile)
     const mail = String(row.email ?? '').trim().toLowerCase()
+    const page = pageBase + i
 
     /**
-     * 이 쪽이 **바로 앞 쪽**에 이어지나 (2026-11-25).
-     * 뒷면은 앞면 **다음 쪽**에 오는 것이라, 차례가 떨어진 면은 붙이지 않는다 —
-     * 돌려 읽느라 밀린 광고면이 엉뚱한 명함에 붙어 회사명을 바꾼 일이 있었다.
+     * ── ⓐ 연락처가 없는 면(뒷면·이름 없음·휴대폰·이메일 둘 다 없음) ──
+     * **바로 앞 draft** 와 회사명이 겹치면 그 명함의 다른 면으로 보고 붙인다.
+     * 겹치지 않으면 남의 면이다 — 담지 않고 목록에 남긴다(2026-11-25 3차).
      */
-    const page = pageBase + i
-    const adjacent = prevId != null && prevPage != null && page === prevPage + 1
-
-    // ── ⓐ 사람이 없는 면(뒷면·이름 없음·이름이 회사명) ──
     if (isNoPerson(row, got.back)) {
-      // 앞 명함의 뒷면일 때만 붙인다 — 사람 이름 없는 **남의 명함**이 붙으면
-      // 전화·주소가 덮인다(2026-11-24 실측에서 부동산 사무실 면이 그렇게 붙었다).
-      if (adjacent && prevRow && canMergeBack(prevRow as Parameters<typeof canMergeBack>[0], row)) {
-        prevRow = await mergeInto(prevId!, prevRow, row)
-        lines.push({ index: i, ok: false, reason: 'merged', card_id: prevId!, merged_into: prevId!, usage, page })
+      if (prevId != null && prevRow
+        && canMergeBack(prevRow as Parameters<typeof canMergeBack>[0], row)) {
+        prevRow = await mergeInto(prevId, prevRow, row, { priority: true })
+        lines.push({ index: i, ok: false, reason: 'merged', card_id: prevId, merged_into: prevId, usage, page })
       } else {
         lines.push({
-          index: i, ok: false,
-          // 붙일 앞면이 **있는데 떨어져 있으면** 그 사실을 따로 말한다.
-          reason: prevId != null && !adjacent ? 'orphan_back' : 'no_person',
+          index: i, ok: false, reason: 'no_person',
           name: row.company ?? row.name, usage, upside_down: got.upsideDown, page,
         })
       }
@@ -262,37 +306,43 @@ export async function POST(req: Request) {
       continue
     }
 
-    const hit = (phone && byPhone.get(phone)) || (mail && byMail.get(mail)) || null
-
     /**
-     * ── ⓑ 직전 명함의 **다른 면** — 합치고 현지 문자를 앞으로 ──
-     * 바로 앞 쪽이어야 하고, **회사가 같아야** 한다. 같은 사람이 회사를 옮기거나
-     * 겸직하면 번호가 같은 명함이 둘 나오는데, 전에는 한 장으로 합쳐 버렸다
-     * (2026-11-25 실측).
+     * ── ⓑ **이번 묶음의 draft** 와 같은 사람 — 그 줄에 합친다 ──
+     * 쪽이 떨어져 있어도 합친다(한글면과 영문면이 몇 쪽 건너 떨어져 있는 PDF 가 흔하다).
+     * 회사명은 보지 않는다 — 번역 관계인 회사명을 「다른 회사」로 보던 2차의 잘못을 지웠다.
      */
-    if (hit && adjacent && hit.card_id === prevId && prevRow) {
-      if (sameCompany(prevRow as Parameters<typeof sameCompany>[0], row)) {
-        prevRow = await mergeInto(prevId!, prevRow, row)
-        lines.push({ index: i, ok: false, reason: 'merged', card_id: prevId!, merged_into: prevId!, usage, page })
+    const draftHit = findPerson(batchDrafts, row)
+    if (draftHit) {
+      const { data: target } = await supabaseAdmin
+        .from('business_cards').select('*').eq('card_id', draftHit.card_id).maybeSingle()
+      if (target) {
+        const merged = await mergeInto(draftHit.card_id, target as Record<string, unknown>, row, { priority: true })
+        // 이 면에만 있던 열쇠도 더해 둔다 — 다음 면이 그 번호·메일로도 걸리게.
+        draftHit.mobile = draftHit.mobile || row.mobile
+        draftHit.email = draftHit.email || row.email
+        // 합쳐 들어간 명함이 이제 **바로 앞 draft** 다(뒷면이 이 줄에 붙는다).
+        prevId = draftHit.card_id
+        prevRow = merged
+        prevPage = page
+        lines.push({
+          index: i, ok: false, reason: 'merged',
+          card_id: draftHit.card_id, merged_into: draftHit.card_id, usage, page,
+        })
         continue
       }
-      // 회사가 다르다 — 같은 사람의 **다른 명함**이다. 아래 ⓓ 로 내려가 새로 담는다.
-    } else if (hit && prevId != null && hit.card_id === prevId) {
-      // 번호는 같은데 차례가 떨어졌다 — 합치지 않고 중복으로 둔다(ⓒ 와 같다).
-      lines.push({ index: i, ok: false, reason: 'dup', card_id: hit.card_id, name: hit.name, usage, page })
-      continue
     }
 
-    // ── ⓒ 기존 명함과 번호가 같다 — 중복. 회사가 같을 때만 손봐 준다 ──
+    /**
+     * ── ⓒ 이미 **등록된(active)** 명함과 같은 사람 — 중복이다 ──
+     * 담지 않고 기존 id 를 알려 준다. 그 줄의 **빈 칸만** 채운다(든 값은 건드리지 않는다).
+     */
+    const hit = findPerson(actives, row)
     if (hit) {
       const { data: old } = await supabaseAdmin
         .from('business_cards').select('*').eq('card_id', hit.card_id).maybeSingle()
-      if (old && sameCompany(old as Parameters<typeof sameCompany>[0], row)) {
-        await mergeInto(hit.card_id, old as Record<string, unknown>, row)
-        lines.push({ index: i, ok: false, reason: 'dup', card_id: hit.card_id, name: hit.name, usage, page })
-        continue
-      }
-      // 회사가 다르면 같은 사람의 **다른 명함**이다 — 아래에서 새로 담는다.
+      if (old) await mergeInto(hit.card_id, old as Record<string, unknown>, row, { priority: false })
+      lines.push({ index: i, ok: false, reason: 'dup', card_id: hit.card_id, name: hit.name, usage, page })
+      continue
     }
 
     // ── ⓓ 새 명함 ──
@@ -320,10 +370,15 @@ export async function POST(req: Request) {
 
     const cardId = Number(made.card_id)
     lines.push({ index: i, ok: true, card_id: cardId, usage, page })
-    // 같은 묶음 안의 다음 장이 같은 명함이면 중복으로 걸리게 바로 넣는다.
-    if (phone) byPhone.set(phone, { card_id: cardId, name: row.name })
-    if (mail) byMail.set(mail, { card_id: cardId, name: row.name })
-    // 이 쪽이 다음 쪽의 「직전 명함」이 된다 — 뒷면은 **바로 다음 쪽**일 때만 붙는다.
+    /**
+     * 같은 묶음의 다음 면이 같은 사람이면 **이 줄에 합쳐지게** 열쇠를 넣어 둔다.
+     * 검토 대기 칸이 없는 DB 에서도 똑같이 합친다 — 방금 **내가 담은 줄**이라
+     * 중복으로 돌려보내면 한 사람이 두 장으로 쪼개진다(그 자리를 고치는 회차다).
+     */
+    if (phone || mail) {
+      batchDrafts.push({ card_id: cardId, name: row.name, mobile: row.mobile, email: row.email })
+    }
+    // 이 쪽이 다음 쪽의 「바로 앞 draft」가 된다 — 연락처 없는 면이 여기에 붙는다.
     prevId = cardId
     prevPage = page
     prevRow = { card_id: cardId, ...row }

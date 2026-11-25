@@ -36,7 +36,7 @@ import {
 import { costLabel } from '@/lib/businessCardBulk'
 import { getSession, clearSession, type ImportPage } from '@/lib/cardImportSession'
 import {
-  REVIEW_LABEL, blockedReason, pageLabel, pageRangeLabel, readFileName,
+  REVIEW_LABEL, blockedReason, discardQuestion, pageLabel, pageRangeLabel, readFileName,
   rowLabel, tallyLabel, tallyOf, type ReviewState,
 } from '@/lib/cardReview'
 
@@ -281,6 +281,33 @@ function ImportReviewInner() {
 
   const leave = () => { clearSession(); router.push('/cards') }
 
+  /**
+   * **이 묶음 버리기** — 읽은 글자를 통째로 버리고 목록으로 나간다 (2026-11-25 3차).
+   * 승인한 줄은 이미 명함첩에 있으므로 남는다. 대기 줄만 사라진다.
+   */
+  const discard = async () => {
+    if (busy || !batchId) return
+    const yes = await confirm({
+      title: '이 묶음을 버릴까요?',
+      message: discardQuestion(tally.wait),
+      confirmText: '버리기', cancelText: '그만두기', variant: 'danger',
+    })
+    if (!yes) return
+    setBusy(true)
+    try {
+      const res = await fetch('/api/cards/import', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'discard', import_batch_id: batchId }),
+      })
+      const json = await res.json() as { ok?: boolean; discarded?: number; error?: string }
+      if (!json?.ok) { toast.error(json?.error ?? '버리지 못했습니다'); return }
+      toast.success(`${json.discarded ?? 0}건을 버렸습니다`)
+      leave()
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (!authorized) return <AccessGate loading={guardLoading} />
 
   if (schemaMissing) {
@@ -319,6 +346,8 @@ function ImportReviewInner() {
           <Line /><Step on>검토</Step><Line /><Step>등록</Step>
         </div>
         <span style={{ flex: 1 }} />
+        <button type="button" style={btn('danger')} disabled={busy || !batchId}
+          onClick={() => void discard()}>이 묶음 버리기</button>
         <button type="button" style={btn('ghost')} onClick={leave}>나중에 이어서</button>
       </div>
 

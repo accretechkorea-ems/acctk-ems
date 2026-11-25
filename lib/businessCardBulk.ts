@@ -164,52 +164,78 @@ const norm = (s: string | null | undefined) =>
     .toLowerCase()
 
 /**
- * 이 면은 **사람이 없는 면**인가 — 새 명함으로 담지 않는다.
+ * 이 면은 **연락처가 없는 면**인가 — 새 명함으로 담지 않는다 (2026-11-25 3차).
  *   ⓐ 모델이 뒷면이라고 했다
  *   ⓑ 사람 이름이 없다
  *   ⓒ 이름 칸에 회사명이 들어왔다(둘이 같다)
+ *   ⓓ **휴대폰도 이메일도 없다** — 같은 사람을 가려낼 열쇠가 없는 면이다.
+ *
+ * ⓓ 를 더한 까닭: 같은 사람 판정이 휴대폰·이메일만 본다. 그 둘이 없는 면을 새 명함으로
+ * 담으면 뒤따르는 같은 사람의 면과 맞물릴 길이 없어 중복이 쌓인다(실제 20쪽에서 4쌍).
+ * 사무실 전화만 있는 면은 **앞 draft 의 다른 면**으로 보고 회사명으로 붙인다.
  */
 export function isNoPerson(
-  card: { name?: string | null; company?: string | null },
+  card: { name?: string | null; company?: string | null; mobile?: string | null; email?: string | null },
   back: boolean,
 ): boolean {
   if (back) return true
   const name = String(card.name ?? '').trim()
   if (!name) return true
   const company = String(card.company ?? '').trim()
-  return company !== '' && norm(name) === norm(company)
+  if (company !== '' && norm(name) === norm(company)) return true
+  return !hasPersonKey(card)
+}
+
+/** 같은 사람을 가려낼 **열쇠**(휴대폰·이메일)가 하나라도 있나. */
+export function hasPersonKey(card: { mobile?: string | null; email?: string | null }): boolean {
+  return String(card.mobile ?? '').trim() !== '' || String(card.email ?? '').trim() !== ''
 }
 
 /**
- * 사람이 없는 이 면을 **직전 명함의 뒷면으로 볼 수 있나** (2026-11-24 실측에서 더했다).
+ * 연락처가 없는 이 면을 **바로 앞 draft 의 다른 면으로 볼 수 있나** (2026-11-25 3차).
  *
- * 처음에는 「사람이 없으면 무조건 앞 명함에 붙인다」로 두었더니, 사람 이름이 없는
- * **남의 명함**(부동산 사무실처럼 회사명과 전화만 있는 단면)이 앞 명함에 붙어
- * 전화·주소를 덮어썼다. 뒷면과 남의 명함을 가르는 것은 **제 연락처가 있는가**다.
+ * 가르는 것은 **회사명뿐**이다 — 회사 표시(㈜·株式会社…)와 공백을 턴 뒤 한쪽이 다른
+ * 쪽을 품으면 같은 명함의 다른 면이고, 아니면 남의 면이다(no_person).
+ * 양쪽 모두 `company` 와 `company_en` 둘을 견준다 — 뒷면에 영문 회사명만 찍힌 일이 흔하다.
  *
- *   · 뒷면 — 로고·슬로건·계좌번호뿐이라 **제 연락처가 없다**. 회사명이 영문으로만
- *     적혀 있어 앞면의 한글 회사명과 글자가 달라도 뒷면이다.
- *   · 남의 명함 — 회사명이 다르고 **제 전화·휴대폰·이메일·홈페이지를 가진다**.
- *
- * 그래서: 회사명이 앞 명함과 이어지면 붙이고, 아니면 **연락처가 하나도 없을 때만** 붙인다.
+ * 2차의 「연락처가 하나도 없을 때만」 조건은 걷었다. 사무실 전화만 있는 뒷면이 그 조건에
+ * 걸려 붙지 못하고 새 명함이 되곤 했다.
  */
 export function canMergeBack(
   prev: { company?: string | null; company_en?: string | null },
-  row: { company?: string | null; mobile?: string | null; phone?: string | null; email?: string | null; website?: string | null },
+  row: { company?: string | null; company_en?: string | null },
 ): boolean {
-  const company = norm(row.company)
-  if (company) {
-    for (const side of [prev.company, prev.company_en]) {
-      const had = norm(side)
-      if (!had) continue
-      if (had === company || had.includes(company) || company.includes(had)) return true
-    }
+  const mine = [row.company, row.company_en].map(norm).filter(Boolean)
+  if (mine.length === 0) return true  // 회사명조차 없는 면 — 앞 명함의 뒷면으로 본다
+  for (const side of [prev.company, prev.company_en]) {
+    const had = norm(side)
+    if (!had) continue
+    if (mine.some(c => had === c || had.includes(c) || c.includes(had))) return true
   }
-  // 회사명이 이어지지 않는다 — 제 연락처가 하나라도 있으면 **남의 명함**이다.
-  const own = [row.mobile, row.phone, row.email, row.website]
-    .some(v => String(v ?? '').trim() !== '')
-  return !own
+  return false
 }
+
+/**
+ * 두 면이 **같은 사람**인가 (2026-11-25 3차).
+ *
+ * 열쇠는 **휴대폰**이다. 둘 중 하나라도 휴대폰이 없으면 **이메일**로 본다.
+ * 회사명은 보지 않는다 — 2차의 「회사명이 다르면 분리」가 한글면과 영문면을 다른 회사로
+ * 보아 같은 사람을 두 장으로 쪼갰다(실제 20쪽에서 4쌍).
+ */
+export function samePerson(
+  a: { mobile?: string | null; email?: string | null },
+  b: { mobile?: string | null; email?: string | null },
+): boolean {
+  const ma = onlyDigits(a.mobile)
+  const mb = onlyDigits(b.mobile)
+  if (ma && mb) return ma === mb
+  const ea = mail(a.email)
+  const eb = mail(b.email)
+  return ea !== '' && ea === eb
+}
+
+const onlyDigits = (v: string | null | undefined) => String(v ?? '').replace(/\D/g, '')
+const mail = (v: string | null | undefined) => String(v ?? '').trim().toLowerCase()
 
 /** 빈 칸만 채우는 조각 — 이미 든 값은 덮지 않는다. */
 export function fillBlanks(
@@ -226,60 +252,68 @@ export function fillBlanks(
   return patch
 }
 
+// ── 어느 면의 글자를 앞에 둘까 ───────────────────────────────────────────
 /**
- * **현지 문자 우선 교정** — 기존 줄의 이름·회사가 로마자뿐인데 이번 면에 현지 문자가
- * 있으면 그것을 앞으로 올리고, 밀려난 로마자는 영문 칸이 비어 있을 때만 그리로 옮긴다.
+ * 글자의 **순위** — 한글 > 일본어·한자 > 로마자 > 그 밖(2026-11-25 3차).
  *
- * 영문면이 먼저 스캔된 명함을 제자리로 돌려놓는 자리다. 기존 영문 칸에 이미 값이
- * 있으면 덮지 않는다 — 사람이 적어 둔 값을 지우지 않는다.
- * 2026-11-25에 한글만 보던 것을 **한자·가나까지** 넓혔다(일본 명함).
+ * 우리 회사 사람이 읽는 명함첩이라 한글이 가장 앞이고, 한글이 없으면 명함에 인쇄된
+ * 현지 문자(한자·가나)가 로마자보다 앞이다. 번역은 하지 않는다 — **고르기만** 한다.
  */
-export function localScriptPatch(
-  prev: { name?: string | null; name_en?: string | null; company?: string | null; company_en?: string | null },
-  next: { name?: string | null; company?: string | null },
-): Record<string, string> {
+export const SCRIPT_RANK = { hangul: 3, cjk: 2, roman: 1, none: 0 } as const
+
+export function scriptRank(s: string | null | undefined): number {
+  const v = String(s ?? '').trim()
+  if (!v) return SCRIPT_RANK.none
+  if (/[가-힣]/.test(v)) return SCRIPT_RANK.hangul
+  if (/[㐀-鿿぀-ゟ゠-ヿ]/.test(v)) return SCRIPT_RANK.cjk
+  if (/[A-Za-z]/.test(v)) return SCRIPT_RANK.roman
+  return SCRIPT_RANK.none
+}
+
+/** 순위를 다투는 칸과, 밀려난 로마자가 갈 영문 칸(없으면 null). */
+export const PRIORITY_FIELDS: readonly [string, string | null][] = [
+  ['name', 'name_en'], ['company', 'company_en'], ['department', null], ['position', null],
+]
+
+/** 바뀐 칸 한 줄 — 사건(card_merged_back)의 detail 에 그대로 적는다. */
+export type Replaced = { field: string; from: string; to: string }
+
+/**
+ * **순위가 높은 면의 값을 앞으로** — 2차의 「현지 문자 우선 교정」을 대신한다(2026-11-25 3차).
+ *
+ * 이미 값이 든 칸이라도 더 높은 순위의 면이 오면 **교체한다**(교체 전 값은 돌려주는
+ * `replaced` 에 담아 사건으로 남긴다). 밀려난 쪽이 로마자뿐이면 name_en·company_en 이
+ * **비어 있을 때만** 그리로 옮긴다 — 사람이 적어 둔 영문 값을 지우지 않는다.
+ *
+ * 밀려나는 쪽은 둘 중 어느 쪽이든 된다. 일본 명함은 한자면이 이기고 로마자면이 영문 칸으로,
+ * 한국 명함은 한글면이 이기고 먼저 들어온 영문면이 영문 칸으로 간다.
+ */
+export function priorityPatch(
+  prev: Record<string, unknown>,
+  next: Record<string, string | null>,
+): { patch: Record<string, string>; replaced: Replaced[] } {
   const patch: Record<string, string> = {}
-  for (const [ko, en] of [['name', 'name_en'], ['company', 'company_en']] as const) {
-    const had = String(prev[ko] ?? '').trim()
-    const got = String(next[ko] ?? '').trim()
-    if (!isRomanOnly(had) || !hasLocalScript(got)) continue
-    patch[ko] = got
-    if (!String(prev[en] ?? '').trim()) patch[en] = had
+  const replaced: Replaced[] = []
+  for (const [main, en] of PRIORITY_FIELDS) {
+    const had = String(prev[main] ?? '').trim()
+    const got = String(next[main] ?? '').trim()
+    if (!got || had === got) continue
+    if (!had) { patch[main] = got; continue }   // 빈 칸은 그냥 채운다
+
+    const rankHad = scriptRank(had)
+    const rankGot = scriptRank(got)
+    // 순위가 같거나 낮으면 들고 있던 값을 지킨다 — 밀려난 쪽은 이번 면의 값이다.
+    const loser = rankGot > rankHad ? had : got
+    if (rankGot > rankHad) {
+      patch[main] = got
+      replaced.push({ field: main, from: had, to: got })
+    }
+    // 밀려난 로마자는 영문 칸이 비어 있으면 그리로.
+    if (en && isRomanOnly(loser) && !String(prev[en] ?? '').trim() && !patch[en]) {
+      patch[en] = loser
+    }
   }
-  return patch
-}
-
-/**
- * 두 면이 **같은 회사**인가 (2026-11-25).
- *
- * 같은 사람이 회사를 옮기거나 겸직하면 휴대폰·이메일이 같은 명함이 둘 나온다.
- * 전에는 그 둘을 한 장으로 합쳐 버렸다. 이제 **회사명이 둘 다 있고 서로 다르면**
- * 합치지 않는다. 한글면/영문면처럼 번역 관계인지는 `company`·`company_en` 네 값을
- * 서로 견주어 **하나라도 같으면** 같은 회사로 본다(모델에게 되묻지 않는다).
- *
- * 한쪽에 회사명이 없으면 **같다고 본다** — 뒷면에는 회사명이 없는 일이 흔하다.
- */
-export function sameCompany(
-  a: { company?: string | null; company_en?: string | null },
-  b: { company?: string | null; company_en?: string | null },
-): boolean {
-  const left = [a.company, a.company_en].map(norm).filter(Boolean)
-  const right = [b.company, b.company_en].map(norm).filter(Boolean)
-  if (left.length === 0 || right.length === 0) return true
-  return left.some(l => right.some(r => sameName(l, r)))
-}
-
-/**
- * 다듬은 회사명 둘이 같은 곳인가.
- *
- * 글자가 같거나 한쪽이 다른 쪽을 품으면 같다. 그 밖에 **앞 두 글자가 같으면**도
- * 같다고 본다 — 한자면의 「가나精密」과 한글면의 「가나정밀」을 이어 주기 위해서다
- * (2026-11-25 실측). 번호·메일이 이미 같고 **바로 앞 쪽**일 때만 쓰이는 판정이라,
- * 이 느슨함이 남의 명함을 삼키지는 않는다.
- */
-function sameName(l: string, r: string): boolean {
-  if (l === r || l.includes(r) || r.includes(l)) return true
-  return l.length >= 2 && r.length >= 2 && l.slice(0, 2) === r.slice(0, 2)
+  return { patch, replaced }
 }
 
 /** 사건 이름 — business_card_events.event_type. */

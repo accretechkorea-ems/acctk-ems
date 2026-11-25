@@ -127,8 +127,20 @@ eq('왼쪽 줄 글자', [
   V.rowLabel({ state: 'merged', mergedInto: 2 }),
   V.rowLabel({ state: 'none' }),
   V.rowLabel({ state: 'empty' }),
-], ['홍길동 · 가나정밀', '↳ 3쪽 뒷면', '사람 없는 면', '빈 면'])
+], ['홍길동 · 가나정밀', '↳ 3쪽에 합침', '사람 없는 면', '빈 면'])
 eq('쪽 글자', [V.pageLabel(13), V.pageRangeLabel(0, 19)], ['14쪽', '1~20쪽'])
+// 2026-11-25 3차 — 앞뒷면만 합치는 것이 아니다. 「뒷면」 대신 **합쳐 들어간 쪽**을 적는다.
+ok('합친 줄에 「뒷면」이라 적지 않는다', !V.rowLabel({ state: 'merged', mergedInto: 2 }).includes('뒷면'))
+
+console.log('\n── ⑧ 이 묶음 버리기 ──')
+ok('검토 화면 상단에 단추가 있다', REVIEW.includes('이 묶음 버리기'))
+ok('묻고 나서 버린다',
+  REVIEW.includes('discardQuestion(tally.wait)') && REVIEW.includes("title: '이 묶음을 버릴까요?'"))
+ok('그 묶음만 버린다', REVIEW.includes("action: 'discard', import_batch_id: batchId"))
+ok('버린 뒤 목록으로 나간다',
+  REVIEW.includes('건을 버렸습니다') && /toast\.success[\s\S]{0,60}leave\(\)/.test(REVIEW))
+ok('라우트에 버리기가 있다', read('app/api/cards/import/route.ts').includes("action === 'discard'"))
+ok('물음이 **되돌릴 수 없다**를 적는다', V.discardQuestion(3).includes('되돌릴 수 없습니다'))
 
 console.log('\n── ⑤ 쪽 이미지는 서버에 가지 않는다 ──')
 ok('메모리에만 둔다(모듈 변수)', read('lib/cardImportSession.ts').includes('let session: ImportSession | null = null'))

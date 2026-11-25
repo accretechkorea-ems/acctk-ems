@@ -61,7 +61,9 @@ export function rowLabel(row: {
   state: ReviewState; name?: string | null; company?: string | null; mergedInto?: number | null
 }): string {
   if (row.state === 'merged') {
-    return row.mergedInto != null ? `↳ ${pageLabel(row.mergedInto)} 뒷면` : '↳ 앞면에 합침'
+    // **합쳐 들어간 쪽 번호**를 적는다(2026-11-25 3차) — 「뒷면」이라는 말은 걷었다.
+    // 앞뒷면만 합치는 것이 아니라, 몇 쪽 떨어진 같은 사람의 면도 합친다.
+    return row.mergedInto != null ? `↳ ${pageLabel(row.mergedInto)}에 합침` : '↳ 앞면에 합침'
   }
   if (row.state === 'none') return '사람 없는 면'
   if (row.state === 'empty') return '빈 면'
