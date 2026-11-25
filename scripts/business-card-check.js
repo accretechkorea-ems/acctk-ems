@@ -294,8 +294,10 @@ ok('직급은 engineers 에서 가져온다',
   CARDS_PAGE.includes("supabase.from('engineers').select('engineer_id, position')")
   && CARDS_PAGE.includes('registrarPosition={editing ? positions.get'))
 ok('회사 열은 최소 220', CARDS_PAGE.includes('minWidth: 220'))
-ok('회사·부서는 두 줄 말줄임', CARDS_PAGE.includes('WebkitLineClamp: 2')
-  && (CARDS_PAGE.match(/style=\{clamp2\}/g) || []).length === 2)
+// 2026-11-25 — 줄 높이를 44 로 되돌리며 **한 줄 말줄임 + 영문 아랫줄**로 바꿨다.
+ok('회사·부서는 한 줄 말줄임',
+  (CARDS_PAGE.match(/style={clamp1}/g) || []).length === 2
+  && CARDS_PAGE.includes("whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'"))
 ok('전체는 호버(title)로 본다', CARDS_PAGE.includes('title={[c.company, c.company_en]'))
 ok('폰 카드에서도 나이 꼬리표를 걷었다', !/AgeTag/.test(CARDS_PAGE))
 
@@ -308,7 +310,7 @@ ok('본칸과 같으면 아랫줄을 적지 않는다',
   CARDS_PAGE.includes("if (!v || v === String(same ?? '').trim()) return null"))
 ok('직급 열은 160 한 줄 말줄임',
   CARDS_PAGE.includes('maxWidth: 160') && CARDS_PAGE.includes("textOverflow: 'ellipsis'"))
-ok('행 높이를 고정했다', /const ROW_H = 56/.test(CARDS_PAGE) && CARDS_PAGE.includes('height: ROW_H'))
+ok('행 높이를 고정했다(44)', /const ROW_H = 44/.test(CARDS_PAGE) && CARDS_PAGE.includes('height: ROW_H'))
 ok('호버는 공용 클래스', CARDS_PAGE.includes('className="ems-row-hover"')
   && /\.ems-row-hover:hover > td/.test(read('app/globals.css')))
 ok('그 색은 고객사 카드 호버와 같은 토큰',

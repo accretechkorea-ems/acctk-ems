@@ -73,15 +73,20 @@ const th: React.CSSProperties = {
 }
 const td: React.CSSProperties = { padding: '0 14px', fontSize: 13, color: TEXT, whiteSpace: 'nowrap' }
 
-/** 줄 높이 — **두 줄 기준으로 고정**한다. 긴 이름이 행마다 들쭉날쭉하지 않게. */
-const ROW_H = 56
+/**
+ * 줄 높이 — **44 고정**. 본칸 13px + 영문 아랫줄 11px 이 그 안에 든다(줄 간격을 좁혔다).
+ * 넘치는 글자는 말줄임으로 자른다 — 전체는 칸의 title 로 본다.
+ */
+const ROW_H = 44
 
-/** 회사·부서 칸 — 줄을 바꿔 쓴다(긴 이름이 표를 밀지 않게). */
-const wrapCell: React.CSSProperties = { whiteSpace: 'normal', verticalAlign: 'middle' }
-/** 두 줄까지만 보여 주고 그 뒤는 말줄임 — 전체는 칸의 title 로 본다. */
-const clamp2: React.CSSProperties = {
-  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-  overflow: 'hidden', lineHeight: 1.45,
+/** 회사·부서·이름 칸 — 본칸 한 줄 + 영문 아랫줄. 넓어지지 않게 폭을 묶는다. */
+const wrapCell: React.CSSProperties = {
+  whiteSpace: 'normal', verticalAlign: 'middle', maxWidth: 260, overflow: 'hidden',
+}
+/** 한 줄만 보여 주고 그 뒤는 말줄임 — 전체는 칸의 title 로 본다. */
+const clamp1: React.CSSProperties = {
+  display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+  lineHeight: 1.25,
 }
 
 /** 대기 줄들이 속한 묶음 — 가장 최근 것 하나. */
@@ -108,7 +113,7 @@ function Under({ value, same }: { value?: string | null; same?: string | null })
   if (!v || v === String(same ?? '').trim()) return null
   return (
     <div style={{
-      fontSize: 11, color: SUB, fontWeight: 400, lineHeight: 1.4,
+      fontSize: 11, color: SUB, fontWeight: 400, lineHeight: 1.15,
       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
     }}>{v}</div>
   )
@@ -618,13 +623,13 @@ function CardsPageInner() {
                       aria-label={`${c.name} 고르기`} style={{ cursor: 'pointer' }} />
                   </td>
                   <td style={{ ...td, color: SUB }}>{shortDay(c.registered_at)}</td>
-                  {/* 회사·부서는 **두 줄까지** 보여 주고 그 뒤는 말줄임. 전체는 호버로. */}
+                  {/* 회사·부서는 한 줄 말줄임 + 영문 아랫줄. 전체는 호버(title)로 본다. */}
                   <td style={{ ...td, ...wrapCell, minWidth: 220 }} title={[c.company, c.company_en].filter(Boolean).join(' ')}>
-                    <span style={clamp2}>{c.company || '—'}</span>
+                    <span style={clamp1}>{c.company || '—'}</span>
                     <Under value={c.company_en} same={c.company} />
                   </td>
                   <td style={{ ...td, ...wrapCell }} title={c.department ?? ''}>
-                    <span style={clamp2}>{c.department || '—'}</span>
+                    <span style={clamp1}>{c.department || '—'}</span>
                   </td>
                   <td style={{ ...td, ...wrapCell }}>
                     <b>{c.name}</b>
