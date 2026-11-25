@@ -194,6 +194,11 @@ export default function CustomerDetailBody({
       접는 기준이 두 벌인 까닭: 상세 페이지(.site-page)는 **화면 폭**으로 접고,
       분할 보기(.cust-embed)는 **칸 폭**으로 접는다(@container). 1366 에서도 오른쪽
       칸은 600px 인데 화면 폭으로 접으면 2단을 고집하다 장비 카드가 칸을 넘친다.
+
+      칸의 문턱은 **1000**이다(2026-11-26). 768 로 두었더니 1280 화면의 분할 보기에서
+      칸이 808px 이라, 좌 열 340 을 빼면 장비 카드가 한 줄에 한 장만 섰다. 열(340) +
+      카드 둘(320·320) + 사이 여백이 들어가는 폭이 1000 쯤이다 — 그보다 좁으면 지난
+      회차의 가로 띠(HeaderBand)로 돌아간다.
     */
     .site-wrap { display: flex; flex-direction: column; gap: 12px; max-width: 1920px; margin: 0 auto; }
     .cust-center { min-width: 0; }
@@ -203,7 +208,7 @@ export default function CustomerDetailBody({
       .site-page .site-col-wrap { display: block; position: sticky; top: 14px; }
       .site-page .site-band-phone { display: none; }
     }
-    @container (min-width: 768px) {
+    @container (min-width: 1000px) {
       .cust-embed .site-wrap { display: grid; grid-template-columns: ${SITE_COL_W}px minmax(0, 1fr); gap: 14px; align-items: start; }
       .cust-embed .site-col-wrap { display: block; position: sticky; top: 14px; }
       .cust-embed .site-band-phone { display: none; }

@@ -39,12 +39,15 @@ const strip = src => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/g
 const COL_CODE = strip(COL)
 
 console.log('\n── ① PC 는 2단 ──')
-ok('열 폭은 장비 카드와 같은 340', /export const SITE_COL_W = 340/.test(COL))
-ok('장비 카드도 340', /const CARD_W = 340/.test(SECTION))
+ok('열 폭은 340', /export const SITE_COL_W = 340/.test(COL))
+// 2026-11-26: 카드만 320 으로 좁혔다(좌 열은 340 그대로) — 1440 에서 한 장 더 선다.
+ok('장비 카드는 320', /const CARD_W = 320/.test(SECTION))
 ok('상세 페이지는 화면 폭으로 접는다',
   /@media \(min-width: 768px\) \{\s*\n\s*\.site-page \.site-wrap \{ display: grid; grid-template-columns: \$\{SITE_COL_W\}px minmax\(0, 1fr\)/.test(BODY))
-ok('분할 보기는 칸 폭으로 접는다',
-  /@container \(min-width: 768px\) \{\s*\n\s*\.cust-embed \.site-wrap \{ display: grid; grid-template-columns: \$\{SITE_COL_W\}px minmax\(0, 1fr\)/.test(BODY))
+// 칸의 문턱은 1000 이다 — 열 340 + 카드 둘(320·320) + 여백이 들어가는 폭(2026-11-26).
+// 768 로 두었더니 1280 화면의 분할 보기(칸 808)에서 카드가 한 줄에 한 장만 섰다.
+ok('분할 보기는 칸 폭으로 접는다(문턱 1000)',
+  /@container \(min-width: 1000px\) \{\s*\n\s*\.cust-embed \.site-wrap \{ display: grid; grid-template-columns: \$\{SITE_COL_W\}px minmax\(0, 1fr\)/.test(BODY))
 ok('칸 폭을 재려면 container 가 켜져 있어야 한다', /\.cust-embed \{ container-type: inline-size; \}/.test(BODY))
 ok('열은 따라 내려온다(sticky top 14)',
   (BODY.match(/\.site-col-wrap \{ display: block; position: sticky; top: 14px; \}/g) || []).length === 2)

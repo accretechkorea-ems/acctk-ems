@@ -20,8 +20,10 @@ const CARD_IMG_W = 240
  * 매번 달라져, 같은 장비가 화면마다 다른 크기로 보였다. 폭을 못 박고 왼쪽부터
  * 채우면 어느 화면에서나 카드는 같고 줄 수만 바뀐다.
  */
-const CARD_W = 340
-const PHOTO_H = Math.round((CARD_W * 3) / 4)   // 255
+// 2026-11-26: 340 → 320. 좌 열(340)은 그대로고 카드만 좁힌다 — 1440 에서 한 줄에
+// 한 장 더 서고, 사진은 4:3 그대로다(PHOTO_H 가 폭에서 나온다).
+const CARD_W = 320
+const PHOTO_H = Math.round((CARD_W * 3) / 4)   // 240
 
 /** 패킹리스트 클립. 이모지는 UI 아이콘으로 쓰지 않는다(.claude/rules/design-system.md). */
 function PaperclipGlyph() {

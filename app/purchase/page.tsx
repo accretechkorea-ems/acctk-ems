@@ -18,6 +18,8 @@ import MemoPopover from '@/components/common/MemoPopover'
 import { saveQuoteMemo } from '@/lib/quoteMutations'
 import { useToast } from '@/components/common/Toast'
 import AssigneePicker from '@/components/quote/AssigneePicker'
+import Pager from '@/components/common/Pager'
+import { PAGE_SIZE, pageRange } from '@/lib/pager'
 import { R } from '@/lib/radius'
 
 const BLUE = '#234ea2'
@@ -64,6 +66,16 @@ type Engineer = {
   perm?: TeamPerm | null
 }
 
+/** 이 화면이 보는 상태 넷 — 조회 조건이자 현황 카드의 차례다. */
+const PURCHASE_STATUSES = ['발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료'] as const
+const EMPTY_COUNTS: Record<string, number> =
+  Object.fromEntries(PURCHASE_STATUSES.map(s => [s, 0]))
+/**
+ * 이름으로 검색할 때 주소에 실어 보낼 고객사 id 의 상한.
+ * 더 많으면(「주」 한 글자 같은 것) 주소가 너무 길어진다 — 그때는 견적번호만으로 좁힌다.
+ */
+const SEARCH_ID_MAX = 300
+
 const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
 const fmtShort = (s: string | null) => {
   if (!s) return '-'
@@ -90,6 +102,28 @@ export default function PurchasePage() {
   const [loadError, setLoadError] = useState(false)
   const [statusFilter, setStatusFilter] = useState<string>('전체')
   const [search, setSearch] = useState('')
+  /** 한 박자 쉬고 서버로 보내는 검색어(아래 효과가 300ms 뒤에 맞춘다). */
+  const [debounced, setDebounced] = useState('')
+  /**
+   * 지금 쪽 — **1부터** 세고 주소의 ?page= 와 같은 수다.
+   * 첫 값은 주소에서 읽는다(새로고침·뒤로가기로 보던 쪽이 그대로 열린다).
+   */
+  const [page, setPage] = useState(() => {
+    if (typeof window === 'undefined') return 1
+    const n = Math.floor(Number(new URLSearchParams(window.location.search).get('page')))
+    return Number.isFinite(n) && n >= 1 ? n : 1
+  })
+  /** 조건에 맞는 **전체** 건수(지금 쪽의 줄 수가 아니다). */
+  const [total, setTotal] = useState(0)
+  /** 현황 카드의 네 숫자 — 상태별 전체 건수. */
+  const [counts, setCounts] = useState<Record<string, number>>(EMPTY_COUNTS)
+  /**
+   * 이름표의 **지금 값**을 조회 함수가 읽는 자리.
+   * 효과의 의존성에 custMap 을 넣으면 이름표가 올 때마다 쪽을 다시 받아 온다.
+   */
+  const custMapRef = useRef<Record<number, string>>({})
+  /** 조회 차례표 — 늦게 온 대답을 버리는 데 쓴다(아래 fetchPage). */
+  const reqRef = useRef(0)
 
   // 주문완료 처리 모달
   const [orderModal, setOrderModal] = useState<PurchaseQuote | null>(null)
@@ -117,60 +151,144 @@ export default function PurchasePage() {
   const [editShippingDate, setEditShippingDate] = useState('')
   const [editSaving, setEditSaving] = useState(false)
 
-  const fetchAll = async () => {
-    setLoading(true)
-    // 본인·직원 목록은 공통 층에서(조회 0회) — 예전에는 engineers 를 두 번 읽었다.
-    const [{ me: meData }, engData, { data: qData, error: qErr }, { data: custData }] = await Promise.all([
-      loadMe(),
-      loadEngineers(),
-      supabase.from('quotes')
-        // quotes 는 engineers 를 engineer_id(실적 귀속자)·created_by(작성자) 두 번 참조한다.
-        // 관계를 지정하지 않으면 PGRST201(300 Multiple Choices)로 조회 전체가 실패한다.
-        // 이 화면의 「담당자」 열과 처리 알림 수신자는 모두 실적 귀속자다.
-        .select('quote_id, quote_number, quote_date, total_supply, status, pdf_url, purchase_order_url, purchase_order_at, shipping_date, order_memo, order_request_memo, order_completed_at, order_completed_by, tax_invoice_date, tax_invoice_requested_at, tax_invoice_completed_at, tax_completed_by, delivery_info, delivery_method, engineer_id, customer_id, engineers!quotes_engineer_id_fkey(name, position)')
-        .in('status', ['발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료'])
-        .order('purchase_order_at', { ascending: false }),
-      supabase.from('customers').select('customer_id, company_name'),
-    ])
-    if (qErr) console.error('[purchase] 발주 목록 조회 실패', qErr)
-    setLoadError(!!qErr)
+  /** 한 번만 읽는 것 — 본인과 직원 이름표. */
+  const fetchBase = async () => {
+    const [{ me: meData }, engData] = await Promise.all([loadMe(), loadEngineers()])
     // 진입 판정(발주 메뉴 권한)에 팀의 메뉴 목록이 필요하다.
     setMe(meData as unknown as Engineer | null)   // perm 은 loadMe 가 이미 붙여 왔다
     const em: Record<string, string> = {}
     for (const e of engData || []) if (e.name && e.position) em[e.name] = e.position
     setEngMap(em)
-    const cm: Record<number, string> = {}
-    for (const c of custData || []) cm[c.customer_id] = c.company_name
-    setCustMap(cm)
-    setQuotes((qData || []) as unknown as PurchaseQuote[])
-    setLoading(false)
   }
 
-  useEffect(() => { fetchAll() }, [])
+  /**
+   * 그 쪽에 **보이는 고객사의 이름만** 받아 둔다.
+   *
+   * 전에는 customers 를 통째로 읽어 두고 이름을 찾았다 — 그 조회에는 PostgREST 의
+   * 기본 상한(1,000줄)이 걸려 있어서, 그 밖의 고객사는 이름이 「-」로 보였고 이름
+   * 검색에도 걸리지 않았다(2026-11-26 실측: 「현대」로 0건). 쪽마다 필요한 id 만 묻는다.
+   */
+  const fetchNames = async (ids: number[]) => {
+    const need = [...new Set(ids.filter(n => Number.isInteger(n) && n > 0))]
+      .filter(id => custMapRef.current[id] === undefined)
+    if (need.length === 0) return
+    const { data } = await supabase.from('customers').select('customer_id, company_name').in('customer_id', need)
+    const next = { ...custMapRef.current }
+    for (const c of data || []) next[c.customer_id] = c.company_name
+    custMapRef.current = next
+    setCustMap(next)
+  }
+
+  /**
+   * 현황 카드의 네 숫자 — **검색·쪽과 무관한 전체 건수**다(종전과 같은 뜻).
+   * 줄을 받아 오지 않고 수만 센다(head: true).
+   */
+  const fetchCounts = async () => {
+    const got = await Promise.all(PURCHASE_STATUSES.map(s =>
+      supabase.from('quotes').select('quote_id', { count: 'exact', head: true }).eq('status', s)))
+    const next = { ...EMPTY_COUNTS }
+    PURCHASE_STATUSES.forEach((s, i) => { next[s] = got[i].count ?? 0 })
+    setCounts(next)
+  }
+
+  /**
+   * 그 쪽의 줄만 받아 온다 — **서버에서 끊는다**(lib/pager.ts 의 range).
+   *
+   * 검색은 견적번호(ilike)와 **고객사 이름**을 함께 본다. 고객사 이름은 quotes 에 없으므로
+   * **customers 를 먼저 물어** 이름이 맞는 id 를 받고 `customer_id.in.(…)` 로 넘긴다.
+   * 그 수는 상한을 둔다 — 「주」 한 글자처럼 수백 곳이 맞으면 주소가 너무 길어진다.
+   */
+  const fetchPage = async (opts: { page: number; status: string; term: string }) => {
+    // **늦게 온 대답은 버린다.** 조건이 잇달아 바뀌면(검색어를 치면 쪽도 1로 돌아간다)
+    // 조회가 둘 이상 날아가는데, 먼저 보낸 쪽이 늦게 오면 화면이 그 옛 결과로 덮인다
+    // (2026-11-26 실측에서 같은 검색이 한 번은 3건, 한 번은 0건으로 보였다).
+    const seq = ++reqRef.current
+    const mine = () => reqRef.current === seq
+    setLoading(true)
+    let q = supabase.from('quotes')
+      // quotes 는 engineers 를 engineer_id(실적 귀속자)·created_by(작성자) 두 번 참조한다.
+      // 관계를 지정하지 않으면 PGRST201(300 Multiple Choices)로 조회 전체가 실패한다.
+      // 이 화면의 「담당자」 열과 처리 알림 수신자는 모두 실적 귀속자다.
+      .select('quote_id, quote_number, quote_date, total_supply, status, pdf_url, purchase_order_url, purchase_order_at, shipping_date, order_memo, order_request_memo, order_completed_at, order_completed_by, tax_invoice_date, tax_invoice_requested_at, tax_invoice_completed_at, tax_completed_by, delivery_info, delivery_method, engineer_id, customer_id, engineers!quotes_engineer_id_fkey(name, position)', { count: 'exact' })
+      .in('status', opts.status === '전체' ? PURCHASE_STATUSES : [opts.status])
+
+    const term = opts.term.trim()
+    if (term) {
+      // ilike 의 와일드카드와 or() 의 구분자를 글자 그대로 넘긴다.
+      const safe = term.replace(/[%,()]/g, ' ')
+      const { data: hits } = await supabase.from('customers')
+        .select('customer_id').ilike('company_name', `%${safe}%`).limit(SEARCH_ID_MAX)
+      const ids = (hits || []).map(h => Number(h.customer_id)).filter(n => Number.isInteger(n))
+      const parts = [`quote_number.ilike.%${safe}%`]
+      if (ids.length > 0) parts.push(`customer_id.in.(${ids.join(',')})`)
+      q = q.or(parts.join(','))
+    }
+
+    const { from, to } = pageRange(opts.page, PAGE_SIZE)
+    const { data, error, count } = await q
+      .order('purchase_order_at', { ascending: false })
+      .range(from, to)
+    if (error) console.error('[purchase] 발주 목록 조회 실패', error)
+    if (!mine()) return                   // 그 사이에 조건이 또 바뀌었다 — 이 대답은 버린다
+    setLoadError(!!error)
+    setTotal(count ?? 0)
+    setQuotes((data || []) as unknown as PurchaseQuote[])
+    setLoading(false)
+    // 이름표는 **그 쪽에 보이는 고객사만** 뒤따라 채운다(줄이 먼저 서고 이름이 든다).
+    void fetchNames((data || []).map(r => Number(r.customer_id)))
+  }
+
+  /** 지금 화면이 보고 있는 조건 — 쪽을 다시 받아 오는 곳들이 함께 쓴다. */
+  const reload = async () => {
+    await Promise.all([fetchCounts(), fetchPage({ page, status: statusFilter, term: debounced })])
+  }
+
+  // 처음 한 번 — 이름표와 현황 숫자. (함수는 매 렌더 새로 만들어지므로 의존성에 두지 않는다)
+  useEffect(() => { void fetchBase() }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void fetchCounts() }, [])
+
+  // 검색은 **한 박자 쉬고** 보낸다 — 글자마다 조회를 보내지 않는다.
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(search), 300)
+    return () => clearTimeout(t)
+  }, [search])
+
+  // 쪽·상태·검색 가운데 하나라도 바뀌면 그 쪽을 다시 받아 온다.
+  useEffect(() => {
+    void fetchPage({ page, status: statusFilter, term: debounced })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, statusFilter, debounced])
+
+  /**
+   * 조건이 바뀌면 **1쪽으로**. 보던 쪽에 머물면 빈 화면이 뜬다.
+   * **처음 한 번은 건너뛴다** — 주소로 들어온 ?page=2 를 그 자리에서 1 로 돌려놓으면
+   * 새로고침·뒤로가기가 늘 첫 쪽으로 떨어진다(2026-11-26 실측에서 그랬다).
+   */
+  const firstRun = useRef(true)
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return }
+    setPage(1)
+  }, [statusFilter, debounced])
+
+  /** 주소에 쪽을 남긴다 — 새로고침·뒤로가기로 그 쪽이 그대로 열린다. */
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (page <= 1) url.searchParams.delete('page')
+    else url.searchParams.set('page', String(page))
+    window.history.replaceState(null, '', url.toString())
+  }, [page])
 
   const isAllowed = canViewMenu(me, 'purchase')
 
-  // 목록(검색·상태 필터)이 바뀌면 화면에서 사라진 견적의 선택은 자동으로 걷힌다.
-  const filtered = quotes.filter(q => {
-    const matchStatus = statusFilter === '전체' || q.status === statusFilter
-    const company = custMap[q.customer_id ?? 0] ?? ''
-    const matchSearch = !search.trim() ||
-      q.quote_number.includes(search) ||
-      company.toLowerCase().includes(search.toLowerCase())
-    return matchStatus && matchSearch
-  })
+  // 거르기·검색은 **서버가** 한다(2026-11-26) — 받아 온 줄이 곧 이 쪽의 목록이다.
+  // 전에는 전부 받아 놓고 여기서 걸렀다. 줄이 늘수록 첫 화면이 그만큼 느려졌다.
+  const filtered = quotes
 
-  // 이 화면은 페이징이 없어 filtered 가 곧 화면에 보이는 목록이다.
+  // 고른 것은 **보이는 쪽 안에서만** 셈한다 — 쪽을 넘기면 그 쪽의 줄이 기준이 된다.
   const visibleIds = filtered.map(q => q.quote_id)
   const sel = useQuoteSelection(visibleIds)
   const allSelected = visibleIds.length > 0 && visibleIds.every(id => sel.isSelected(id))
-
-  const counts = {
-    '발주(주문 대기)': quotes.filter(q => q.status === '발주(주문 대기)').length,
-    '주문완료': quotes.filter(q => q.status === '주문완료').length,
-    '세금계산서 요청': quotes.filter(q => q.status === '세금계산서 요청').length,
-    '매출완료': quotes.filter(q => q.status === '매출완료').length,
-  }
 
   const fmtTaxDate = (s: string | null) => {
     if (!s) return ''
@@ -220,7 +338,7 @@ export default function PurchasePage() {
     setOrderModal(null)
     setShippingDate('')
     setOrderMemo('')
-    await fetchAll()
+    await reload()
   }
 
   const handleCompleteTax = async () => {
@@ -232,7 +350,7 @@ export default function PurchasePage() {
     await fetch('/api/purchase-order', { method: 'POST', body: fd })
     setTaxProcessing(false)
     setTaxModal(null)
-    await fetchAll()
+    await reload()
   }
 
   /** 메모만 저장한다 — 목록의 메모 팝오버가 부른다(보낸 칸만 갱신된다). */
@@ -240,7 +358,7 @@ export default function PurchasePage() {
     const r = await saveQuoteMemo({ quoteId, ...patch })
     if (!r.ok) { toast.error('메모를 저장하지 못했습니다: ' + r.error); return false }
     toast.success('메모를 저장했습니다')
-    await fetchAll()
+    await reload()
     return true
   }
 
@@ -257,7 +375,7 @@ export default function PurchasePage() {
     await fetch('/api/purchase-order', { method: 'POST', body: fd })
     setEditSaving(false)
     setEditScheduleModal(null)
-    await fetchAll()
+    await reload()
   }
 
   const inp: React.CSSProperties = { padding: '7px 10px', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box', width: '100%' }
@@ -517,6 +635,10 @@ export default function PurchasePage() {
                 </tbody>
               </table>
           )}
+          {/* 쪽 나누기 — 공용 부품이다(components/common/Pager.tsx).
+              50줄씩 **서버에서 끊어** 온다(lib/pager.ts). 조건이 바뀌면 1쪽으로 돌아가고,
+              지금 쪽은 주소의 ?page= 에 남아 새로고침·뒤로가기에도 그대로 열린다. */}
+          <Pager page={page} total={total} size={PAGE_SIZE} onChange={setPage} />
         </div>
       </div>
 

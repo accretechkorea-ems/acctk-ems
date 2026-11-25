@@ -1000,11 +1000,8 @@ useEffect(() => {
   .home-grid { height: 100% !important; overflow: hidden !important; }
   .home-grid > div { height: 100% !important; min-height: 0 !important; min-width: 0 !important; overflow: hidden !important; }
   .home-grid > div > div { height: 100% !important; }
-  /* 가로 넘침 가림막 — **덮개가 아니라 보험**이다(2026-11-25 재측정).
-     390 에서 루트 overflow 를 걷어 내고 다시 재 보니 넘치는 요소는 0 이었다(문서 390).
-     그래도 한 줄은 남겨 둔다: 닫힌 드로어가 화면 왼쪽 밖(-304)에 서 있고, iOS 에서
-     고무줄 스크롤 중에 그 자리가 스크롤 폭으로 잡히는 일이 있다. */
-  body { overflow-x: hidden !important; }
+  /* 가로 넘침 가림막은 **app/globals.css 로 옮겼다**(2026-11-26) — 머리 스타일시트에
+     있어야 첫 페인트부터 듣고, 이 화면만의 보험이 아니라 모든 화면의 보험이다. */
   /* 좁은 화면은 예전 「업체 목록 | 지도」 탭이 맡는다 — 토글이 둘이면 뜻이 겹친다. */
   .home-header { display: none !important; }
 
@@ -1015,7 +1012,12 @@ useEffect(() => {
      고른 것이 있으면 **pane 이 폭을 다 쓰고 좌 패널은 숨는다.** 목록으로
      돌아가는 길은 pane 머리의 ← 다(.pane-back — 폰에서만 보인다). */
   .home-grid.detail-open .side-panel { display: none !important; }
-  .home-grid.detail-open .pane { margin-left: 0 !important; padding-right: 0 !important; }
+  /* 좌 패널 자리만큼 밀어 두는 여백은 **폰에서 늘 0**이다(2026-11-26).
+     전에는 「고른 것이 있을 때」(.detail-open)만 풀었다 — 아무것도 고르지 않은 목록
+     보기에서는 빈 pane 이 x=380 에 서서 화면을 6px 넘겼다(WebKit·크로미움 둘 다
+     실측). 가림막이 가려 주고 있었을 뿐이다. 폰에서는 pane 과 패널이 나란히 설 폭이
+     아예 없으니 조건을 둘 까닭이 없다. */
+  .pane { margin-left: 0 !important; padding-right: 0 !important; }
   .pane-back { display: inline-flex !important; }
 }
 /* ← 는 폰에서만 쓴다 — 넓은 화면에서는 좌 패널이 늘 옆에 있다. */

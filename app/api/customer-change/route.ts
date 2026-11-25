@@ -353,6 +353,47 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, events: written })
   }
 
+  // ── 장비 **사진·패킹리스트의 경로** ───────────────────────────────────
+  //
+  // 2026-11-26 에 화면에서 라우트로 옮겼다. 파일 자체는 브라우저가 저장소(Storage)에
+  // 올리고, **devices 의 경로 칸**은 여기서 쓴다. 전에는 브라우저가 그 두 칸을 직접
+  // update 했다 — 「쓰기는 service role 라우트에서만」에서 마지막까지 남아 있던 자리다.
+  //   · 사진을 지울 때는 path 를 null 로 보낸다(그때만 null 을 받는다).
+  //   · 사건은 경로가 아니라 **있다/없다**로 적는다 — 긴 파일 이름은 이력에서 읽히지 않는다.
+  if (action === 'device-photo' || action === 'device-packing') {
+    const id = Number(body.id)
+    if (!Number.isInteger(id) || id <= 0) return bad('장비를 찾지 못했습니다')
+    const photo = action === 'device-photo'
+    const column = photo ? 'image_url' : 'packing_list_url'
+    const raw = body.path
+    const path = raw == null ? null : String(raw).trim()
+    if (path === '') return bad('파일 경로가 없습니다')
+    if (path === null && !photo) return bad('파일 경로가 없습니다')   // 패킹리스트는 비우지 않는다
+    if (path && path.length > 300) return bad('파일 경로가 너무 깁니다')
+
+    const { data: before, error: readErr } = await sb
+      .from('devices').select(`device_id, customer_id, device_name, device_name2, ${column}`)
+      .eq('device_id', id).maybeSingle()
+    if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 })
+    if (!before) return bad('장비를 찾지 못했습니다')
+
+    const { error } = await sb.from('devices').update({ [column]: path }).eq('device_id', id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    const had = !!(before as Record<string, unknown>)[column]
+    const name = [before.device_name, before.device_name2].filter(Boolean).join(' ') || null
+    const { written } = await writeCustomerEvents(sb, [event(Number(before.customer_id), 'device_edited', {
+      mode: photo ? 'photo' : 'packing',
+      device_id: id, device: name,
+      changes: [{
+        field: column, label: photo ? '장비 사진' : '패킹리스트',
+        before: had ? '있음' : null, after: path ? '있음' : null,
+      }],
+    })])
+    console.log(`[${TAG}] ${action}`, { id, by: caller.email, cleared: path === null })
+    return NextResponse.json({ ok: true, events: written })
+  }
+
   return bad('모르는 작업입니다')
 }
 

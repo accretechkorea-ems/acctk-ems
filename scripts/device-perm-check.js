@@ -52,12 +52,32 @@ for (const [what, re] of [
   ['폐기', /customerChange\(\{ action: 'device-dispose'/],
   ['폐기취소', /customerChange\(\{ action: 'device-restore'/],
 ]) ok(`${what} 는 라우트를 부른다`, re.test(CRUD))
-// 사진·패킹리스트는 저장소를 거치는 값이라 아직 브라우저가 직접 쓴다(image_url · packing_list_url).
-// 그 둘만 남았다는 것을 **못 박아** 둔다 — 다른 칸이 늘면 여기서 걸린다.
-const direct = [...CRUD.matchAll(/from\('devices'\)\s*\n?\s*\.update\(\{ ([a-z_]+):/g)].map(m => m[1])
-ok(`브라우저가 직접 쓰는 칸은 사진·패킹리스트뿐 (${direct.join(', ') || '없음'})`,
-  direct.every(c => c === 'image_url' || c === 'packing_list_url'),
-  '새 칸은 라우트에서 쓴다(사건을 함께 남긴다)')
+// 2026-11-26 — **예외가 없어졌다.** 사진·패킹리스트의 경로 칸도 라우트가 쓴다.
+// 파일 자체는 브라우저가 저장소에 올리고, devices 의 칸은 device-photo·device-packing 이 쓴다.
+ok('브라우저가 devices 를 직접 고치지 않는다',
+  !/from\('devices'\)/.test(CRUD),
+  '칸을 쓰는 일은 전부 /api/customer-change 로 보낸다(사건을 함께 남긴다)')
+for (const [what, re] of [
+  ['사진 등록·변경', /customerChange\(\{ action: 'device-photo', id: device\.device_id, path: fileName \}\)/],
+  ['사진 삭제', /customerChange\(\{ action: 'device-photo', id: device\.device_id, path: null \}\)/],
+  ['패킹리스트', /customerChange\(\{ action: 'device-packing'/],
+]) ok(`${what} 도 라우트를 부른다`, re.test(CRUD))
+ok('라우트가 그 두 칸만 쓴다',
+  /const column = photo \? 'image_url' : 'packing_list_url'/.test(CHANGE)
+  && /\.update\(\{ \[column\]: path \}\)/.test(CHANGE))
+ok('패킹리스트는 비우지 않는다(사진만 null 을 받는다)',
+  /if \(path === null && !photo\) return bad/.test(CHANGE))
+ok('사건은 경로가 아니라 있다·없다로 적는다',
+  /before: had \? '있음' : null, after: path \? '있음' : null/.test(CHANGE))
+
+console.log('\n── ②-ⓑ 죽은 코드는 남기지 않는다 ──')
+// 카드 클릭이 **크게 보기**로 바뀌면서 사진 등록 창을 여는 길이 하나도 없어졌다.
+ok('DeviceImageModal 은 지웠다',
+  !fs.existsSync(path.join(ROOT, 'components/customer/modals/DeviceImageModal.tsx')))
+ok('그 창의 상태도 훅에 남아 있지 않다',
+  !/selectedImageDevice|isSavingDeviceImage|handleUploadDeviceImage/.test(CRUD))
+ok('올리는 함수 자체는 남는다(장비 수정 창이 쓴다)',
+  /export async function uploadDeviceImage/.test(CRUD) && /export async function removeDeviceImage/.test(CRUD))
 
 console.log('\n── ③ 삭제는 숨기기다 ──')
 ok('하드 DELETE 가 없다', !/\.delete\(\)/.test(CRUD) && !/\.delete\(\)/.test(DELETE) && !/\.delete\(\)/.test(CHANGE))

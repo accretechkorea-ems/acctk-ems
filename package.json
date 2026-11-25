@@ -9,6 +9,7 @@
     "lint": "eslint",
     "perf": "node scripts/perf/measure.ts",
     "perf:dev": "node scripts/perf/measure.ts --dev",
+    "ios": "node scripts/ios-overflow.js",
     "test": "node scripts/run-checks.js",
     "lint:ci": "node scripts/lint-baseline.js",
     "check": "npx tsc --noEmit && npm run lint:ci && npm test && npm run build",

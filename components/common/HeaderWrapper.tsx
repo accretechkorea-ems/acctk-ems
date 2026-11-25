@@ -154,14 +154,14 @@ export default function HeaderWrapper({ children }: { children: ReactNode }) {
            아니라 스크롤바를 어느 방식으로 그릴지 고르는 단계다). 선언을 지우는 것만이 방법이다. */
         /* 알림 패널 — PC 는 사이드바 오른쪽 */
         .ems-notif { left: ${SIDEBAR_WIDTH + 6}px; top: 72px; width: 340px; }
-        @media (max-width: ${MOBILE_MAX}px) {
-          .ems-sidebar { display: none !important; }
-          .ems-main, .ems-main.collapsed { margin-left: 0; }
-          .ems-topbar { display: flex; }
-          .ems-drawer-wrap { display: block; }
-          /* 모바일은 상단 바 아래 전체 폭 */
-          .ems-notif { left: 8px; right: 8px; top: 60px; width: auto; }
-        }
+        /* ★ 폰(≤${MOBILE_MAX})의 **껍데기 규칙은 여기에 없다** — app/globals.css 에 있다.
+           까닭(2026-11-26): 이 <style> 은 **본문 안에서** 그려진다. 머리의 스타일시트가
+           아니라서, 느린 회선·캐시 miss·스트리밍 지연이면 **그 사이의 첫 페인트가 PC
+           배치**다(.ems-main 의 왼쪽 여백 ${SIDEBAR_WIDTH}px). iOS Safari 는 그 순간 내용이
+           화면보다 넓으면 **레이아웃 뷰포트를 넓힌 채로 둔다** — 그 뒤에 이 규칙이 와도
+           「왼쪽 여백 크고 오른쪽이 잘린」 모습이 남는다(크로미움은 다시 줄여서 티가 안 난다).
+           그래서 **폰으로 접는 세 줄만** 머리 스타일시트로 옮겼다. 여기 다시 쓰지 마라 —
+           scripts/mobile-overflow-check.js 가 두 자리를 함께 본다. */
       `}</style>
       <Sidebar collapsed={shown} onToggle={toggle} onEngineerId={setEngineerId} />
       <div className={`ems-main${shown ? ' collapsed' : ''}`}>{children}</div>

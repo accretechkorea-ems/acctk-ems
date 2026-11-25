@@ -82,6 +82,14 @@ ok('창이 넘겨받을 때만 그 버튼을 낸다', /onLeave\?: \(\) => void/.
 ok('그 버튼은 사유 칸 **아래**다',
   MODAL.indexOf('DELETE_REASON_MAX)') < MODAL.indexOf('{LEAVE_LABEL}'))
 ok('창은 대상마다 다른 말을 한다(adviceFor)', /\{adviceFor\(target\)\}/.test(MODAL))
+// 담당자·장비는 **세는 쪽이 없다** — 그런데도 「연결된 기록을 세는 중…」이 끝까지 떠
+// 있었다(2026-11-25). 세는 대상(업체 셋)일 때만 그 줄을 낸다.
+ok('세지 않는 대상에는 「세는 중」 줄이 없다',
+  /const counting = counts === null && \(target === 'site' \|\| target === 'company' \|\| target === 'agency'\)/.test(MODAL)
+  && /\{counting \? \(/.test(MODAL))
+ok('장비·담당자 창은 counts 를 받지 않는다',
+  (fs.readFileSync(path.join(ROOT, 'components/customer/CustomerDetailBody.tsx'), 'utf8')
+    .match(/counts=\{null\}/g) || []).length === 2)
 const CRUD = fs.readFileSync(path.join(ROOT, 'hooks/customer/useCustomerCrud.ts'), 'utf8')
 ok('이탈은 **상태 바꾸기 라우트**를 쓴다(사건도 그쪽이 남긴다)',
   /action: 'site-status', ids: \[customer\.customer_id\], status: LEAVE_STATUS/.test(CRUD))

@@ -102,9 +102,10 @@ export async function uploadDeviceImage(
 
     step = 'DB 갱신'
     // **경로만** 저장한다 — 공개 주소를 넣으면 비공개 버킷에서 깨진다.
-    const { error: updateError } = await supabase
-      .from('devices').update({ image_url: fileName }).eq('device_id', device.device_id)
-    if (updateError) throw updateError
+    // 쓰기는 **라우트**가 한다(2026-11-26) — 브라우저가 devices 를 직접 고치던 마지막
+    // 두 칸(사진·패킹리스트)을 옮겼다. 사건도 그쪽이 함께 남긴다.
+    const saved = await customerChange({ action: 'device-photo', id: device.device_id, path: fileName })
+    if (!saved.ok) throw new Error(saved.error)
 
     // 옛 파일 정리. 여기서 실패해도 교체 자체는 끝난 것이라 되돌리지 않고 로그만 남긴다.
     const old = deviceImageFileName(device.image_url)
@@ -125,9 +126,9 @@ export async function uploadDeviceImage(
 export async function removeDeviceImage(device: Device): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = createClient()
   try {
-    const { error } = await supabase
-      .from('devices').update({ image_url: null }).eq('device_id', device.device_id)
-    if (error) throw error
+    // 칸을 비우는 것도 라우트가 한다(2026-11-26). 파일은 그 뒤에 저장소에서 지운다.
+    const cleared = await customerChange({ action: 'device-photo', id: device.device_id, path: null })
+    if (!cleared.ok) throw new Error(cleared.error)
 
     const old = deviceImageFileName(device.image_url)
     if (old) {
@@ -166,10 +167,8 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
   // 파일 열기 연타 가드(렌더를 기다리지 않는다). 화면에는 빈 탭이 먼저 떠 반응이 보인다.
   const openBusyRef = useRef(false)
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null)
-  const [selectedImageDevice, setSelectedImageDevice] = useState<Device | null>(null)
   const [isSavingDevice, setIsSavingDevice] = useState(false)
   const [isSavingDeviceEdit, setIsSavingDeviceEdit] = useState(false)
-  const [isSavingDeviceImage, setIsSavingDeviceImage] = useState(false)
 
   // ── 장비 CRUD ──
   const handleAddDevice = async (form: DeviceForm, packingFile: File | null) => {
@@ -184,8 +183,8 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
       // 납입의사록·패킹리스트 파일이 있으면 업로드 후 경로 연결
       if (packingFile) {
         const path = await uploadPackingFile(inserted.device_id, packingFile)
-        const { error: upErr } = await supabase.from('devices').update({ packing_list_url: path }).eq('device_id', inserted.device_id)
-        if (upErr) throw upErr
+        const saved = await customerChange({ action: 'device-packing', id: inserted.device_id, path })
+        if (!saved.ok) throw new Error(saved.error)
       }
 
       toast.success('장비가 추가되었습니다')
@@ -211,9 +210,8 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
       const r = await customerChange({ action: 'device-edit', id: selectedDevice.device_id, patch: devicePatch(form) })
       if (!r.ok) throw new Error(r.error)
       if (newPackingPath) {
-        const { error: pathErr } = await supabase.from('devices')
-          .update({ packing_list_url: newPackingPath }).eq('device_id', selectedDevice.device_id)
-        if (pathErr) throw pathErr
+        const saved = await customerChange({ action: 'device-packing', id: selectedDevice.device_id, path: newPackingPath })
+        if (!saved.ok) throw new Error(saved.error)
       }
 
       // 교체 성공 후 기존 파일은 스토리지에서 삭제 (버킷에 고아 파일이 남지 않도록)
@@ -282,18 +280,9 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
     setSelectedDevice(null)
     await fetchDetail()
   }
-  // ── 장비 사진 업로드 (모달) ──
-  // 실제 업로드는 카드와 공유하는 uploadDeviceImage 가 한다. 여기서는 모달 상태와 목록 갱신만 맡는다.
-  const handleUploadDeviceImage = async (file: File) => {
-    if (!selectedImageDevice) return
-    setIsSavingDeviceImage(true)
-    const r = await uploadDeviceImage(selectedImageDevice, file)
-    setIsSavingDeviceImage(false)
-    if (!r.ok) { toast.error(r.error); return }
-    toast.success('장비 사진이 등록되었습니다')
-    setSelectedImageDevice(null)
-    await fetchDetail()
-  }
+  // 사진 등록 창(DeviceImageModal)과 그 상태는 걷었다(2026-11-26) — 카드 클릭이
+  // **크게 보기**로 바뀌면서 그 창을 여는 길이 하나도 남지 않았다. 올리고 바꾸고
+  // 지우는 일은 장비 수정 창 한 곳이고, 업로드 자체는 위의 uploadDeviceImage 가 한다.
 
   // ── 납입의사록·패킹리스트 (비공개 버킷 + 서명 URL) ──
   // 파일을 packing-lists 버킷에 올리고 "저장 경로(파일명)"를 반환한다.
@@ -360,8 +349,8 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
   const handleUploadPacking = async (device: Device, file: File) => {
     try {
       const path = await uploadPackingFile(device.device_id, file)
-      const { error } = await supabase.from('devices').update({ packing_list_url: path }).eq('device_id', device.device_id)
-      if (error) throw error
+      const saved = await customerChange({ action: 'device-packing', id: device.device_id, path })
+      if (!saved.ok) throw new Error(saved.error)
       toast.success('납입의사록·패킹리스트가 등록되었습니다')
       await fetchDetail()
     } catch (error) {
@@ -372,12 +361,11 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
   return {
     isAddDeviceModalOpen, setIsAddDeviceModalOpen,
     selectedDevice, setSelectedDevice,
-    selectedImageDevice, setSelectedImageDevice,
-    isSavingDevice, isSavingDeviceEdit, isSavingDeviceImage,
+    isSavingDevice, isSavingDeviceEdit,
     handleAddDevice, handleUpdateDevice,
     // 삭제 — 창을 열고(openDeleteDevice), 창이 까닭과 함께 부른다.
     deleteDeviceOpen, setDeleteDeviceOpen, openDeleteDevice, confirmDeleteDevice,
     handleDisposeDevice, handleRestoreDevice,
-    handleUploadDeviceImage, handleOpenPacking, handleUploadPacking,
+    handleOpenPacking, handleUploadPacking,
   }
 }

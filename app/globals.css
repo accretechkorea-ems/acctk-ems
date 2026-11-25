@@ -353,3 +353,32 @@ html::-webkit-scrollbar-track,
 .q-item-card:focus-within {
   border-color: var(--color-brand-border);
 }
+
+/* ══ 폰(≤768)의 껍데기 — **머리 스타일시트에 둔다** (2026-11-26) ══════════
+   iPhone Safari 에서 고객사 화면이 「왼쪽 여백 크고 오른쪽이 잘린」 모습으로 보인다는
+   말이 있었다(11-25). 크로미움 에뮬레이션·Playwright WebKit(390) 에서는 재현되지
+   않았다 — 두 엔진 모두 폰 배치가 제대로 들었다(scripts/ios-overflow.js 로 쟀다).
+
+   재현은 못 했지만 **그 모습이 나올 수 있는 길은 하나**다: 폰으로 접는 규칙이 한 번이라도
+   늦게 들면 그 순간의 배치가 PC(.ems-main 왼쪽 여백 256)다. 그 규칙은 본문 안에서
+   그려지는 <style>(components/common/HeaderWrapper.tsx)에 있었다 — 머리의
+   스타일시트가 아니라 **첫 페인트보다 늦을 수 있는 자리**다. iOS Safari 는 그 순간
+   내용이 화면보다 넓으면 레이아웃 뷰포트를 넓힌 채로 두고 다시 줄이지 않는다.
+
+   그래서 **접는 규칙만** 여기(머리)로 옮겼다. 폭·전환 시간처럼 TS 상수를 쓰는 PC 쪽
+   규칙은 그대로 그 파일에 있다. 두 자리가 어긋나지 않게 하네스가 함께 본다
+   (scripts/mobile-overflow-check.js ⑧). */
+@media (max-width: 768px) {
+  .ems-sidebar { display: none !important; }
+  .ems-main, .ems-main.collapsed { margin-left: 0 !important; }
+  .ems-topbar { display: flex; }
+  .ems-drawer-wrap { display: block; }
+  /* 모바일은 상단 바 아래 전체 폭 */
+  .ems-notif { left: 8px; right: 8px; top: 60px; width: auto; }
+}
+/* 가로 넘침 **가림막은 두지 않는다**(2026-11-26).
+   고객사 화면에 있던 그 한 줄(루트에 가로 넘침을 감추는 규칙)을 모든 화면으로 넓혀 봤다가
+   물렀다 — WebKit 390 측정에서 **발주 목록처럼 일부러 넓은 표**가 있는 화면은 그 줄
+   때문에 오른쪽이 잘린 채 **옆으로 밀 수조차 없게** 됐다(표 폭 1,226px). 덮으면 그
+   화면이 못 쓰게 된다. 고객사 화면 쪽은 덮을 것이 남지 않았다 — 빈 pane 의 6px 을
+   없앴고(app/page.tsx 의 .pane), 두 엔진 모두 넘치는 요소가 0 이다. */

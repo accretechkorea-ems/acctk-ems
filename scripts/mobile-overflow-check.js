@@ -48,11 +48,14 @@ const TOPBAR = read('components/layout/Sidebar.tsx')
 console.log('── ① 넘침을 덮지 않는다 ──')
 // body { overflow-x: hidden } 한 줄은 2026-11-21 부터 있던 것이다(고객사 화면).
 // **늘리지 않는다** — 원인을 고치는 대신 덮는 길이 또 생기지 않게 수를 못 박는다.
+// 2026-11-26 — **한 줄도 남지 않았다.** 고객사 화면의 그 줄을 globals.css 로 옮겨
+// 모든 화면에 걸어 봤다가 물렀다: WebKit 390 측정에서 발주 목록처럼 일부러 넓은 표가
+// 있는 화면이 오른쪽이 잘린 채 **옆으로 밀 수조차 없게** 됐다. 덮지 않고 고친다.
 const hideRoots = [
   ['app/page.tsx', HOME], ['app/quote/page.tsx', QUOTE],
   ['components/customer/CustomerDetailBody.tsx', BODY], ['app/globals.css', CSS],
 ].flatMap(([name, src]) => (src.match(/overflow-x:\s*hidden/g) ?? []).map(() => name))
-eq('overflow-x: hidden 을 쓰는 자리', hideRoots, ['app/page.tsx'])
+eq('overflow-x: hidden 을 쓰는 자리', hideRoots, [])
 
 console.log('\n── ①-2 화면 폭을 100vw 로 재지 않는다 ──')
 // 100vw 는 **세로 스크롤바를 포함한** 폭이다(PC 에서 15px 넘친다). 모바일에서도 고무줄
@@ -142,6 +145,43 @@ ok('입력칸 40px 이상', /\.ems-modal-card input[\s\S]{0,180}min-height: 40px
 ok('전체 화면 시트로 늘리지 않는다', !/min-height: 100dvh;/.test(CSS))
 ok('고정 하단 바는 홈바만큼 띄운다',
   CSS.includes('.ems-bulk-bar {') && /padding-bottom: calc\(9px \+ env\(safe-area-inset-bottom/.test(CSS))
+
+console.log('\n── ⑧ iOS 가 먼저 보는 자리 — 폰 껍데기는 **머리 스타일시트**에 ──')
+// 2026-11-26 — iPhone Safari 에서 고객사 화면이 「왼쪽 여백 크고 오른쪽이 잘린」 모습으로
+// 보인다는 말이 있었다. 그 모습이 나올 수 있는 길은 **폰으로 접는 규칙이 늦게 드는 것**
+// 하나다(.ems-main 의 왼쪽 여백 256 이 남는다). 그래서 그 규칙만 본문 안 <style> 에서
+// globals.css 로 옮겼다 — iOS 는 첫 페인트에 넓어진 레이아웃 뷰포트를 다시 줄이지 않는다.
+const WRAP = read('components/common/HeaderWrapper.tsx')
+ok('머리 스타일시트가 폰에서 사이드바를 접는다',
+  /@media \(max-width: 768px\) \{[\s\S]{0,400}\.ems-sidebar \{ display: none !important; \}/.test(CSS))
+ok('본문 여백도 머리에서 0 으로',
+  /@media \(max-width: 768px\) \{[\s\S]{0,500}\.ems-main, \.ems-main\.collapsed \{ margin-left: 0 !important; \}/.test(CSS))
+ok('상단 바·드로어도 같은 자리에서 켠다',
+  /\.ems-topbar \{ display: flex; \}/.test(CSS) && /\.ems-drawer-wrap \{ display: block; \}/.test(CSS))
+ok('그 규칙을 본문 <style> 에 다시 쓰지 않는다',
+  !/@media \(max-width: \$\{MOBILE_MAX\}px\)/.test(WRAP),
+  'HeaderWrapper 의 <style> 은 본문 안이라 첫 페인트보다 늦을 수 있다')
+ok('PC 쪽 규칙은 그대로 그 파일에 있다(TS 상수를 쓴다)',
+  /\.ems-main \{ margin-left: \$\{SIDEBAR_WIDTH\}px;/.test(WRAP))
+// 좌 패널 자리만큼 밀어 두는 여백 — 폰에서는 **늘** 0 이다(고른 것이 있든 없든).
+ok('폰에서 pane 의 왼쪽 여백은 조건 없이 0',
+  /\n  \.pane \{ margin-left: 0 !important; padding-right: 0 !important; \}/.test(HOME),
+  '.detail-open 에 매어 두면 아무것도 고르지 않았을 때 빈 pane 이 화면을 넘긴다')
+
+console.log('\n── ⑧-2 WebKit 측정 스크립트 ──')
+// 크로미움 에뮬레이션은 **엔진이 크로미움**이라 iOS 전용 차이를 흉내 내지 못한다.
+// 그래서 WebKit 으로도 재는 길을 따로 둔다 — 서버·로그인이 필요해 check 에는 넣지 않는다.
+ok('scripts/ios-overflow.js 가 있다', fs.existsSync(path.join(ROOT, 'scripts/ios-overflow.js')))
+const PKG = JSON.parse(read('package.json'))
+ok('npm run ios 로 부른다', PKG.scripts?.ios === 'node scripts/ios-overflow.js')
+ok('check 에는 들어가지 않는다',
+  !/ios-overflow/.test(PKG.scripts?.check ?? '') && !/ios-overflow/.test(PKG.scripts?.test ?? ''))
+ok('하네스 자동 수집에도 걸리지 않는다(이름이 -check.js 가 아니다)',
+  !fs.existsSync(path.join(ROOT, 'scripts/ios-overflow-check.js')))
+const IOS = read('scripts/ios-overflow.js')
+ok('두 엔진으로 잰다', /\['webkit', playwright\.webkit\], \['chromium', playwright\.chromium\]/.test(IOS))
+ok('삐져나온 요소를 집어낸다', /r\.right <= vw \+ 0\.5/.test(IOS))
+ok('넘치면 종료 코드 1 — 이분 탐색에 바로 쓴다', /process\.exit\(bad === 0 \? 0 : 1\)/.test(IOS))
 
 // ── --live : 실제로 390 에서 재 본다(서버 3100 + .env.local 이 있을 때만) ──
 if (process.argv.includes('--live')) {
