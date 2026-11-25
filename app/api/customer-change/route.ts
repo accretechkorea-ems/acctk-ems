@@ -30,6 +30,12 @@ import {
 
 const TAG = 'customer-change'
 
+/**
+ * 수리 완료가 만드는 **영업활동의 종류**. 목록(activity_types)에도 같은 글자가 있어야
+ * 활동 현황의 거르기·색이 맞는다(db/activity_type_as_20261126.sql).
+ */
+const REPAIR_ACTIVITY_TYPE = 'A/S'
+
 /** 사업장 줄에서 고칠 수 있는 칸. 그 밖의 칸은 버린다. */
 const SITE_COLUMNS: Record<string, string> = {
   company_name: '회사·사업장 이름',
@@ -395,6 +401,58 @@ export async function POST(req: Request) {
     })])
     console.log(`[${TAG}] ${action}`, { id, by: caller.email, cleared: path === null })
     return NextResponse.json({ ok: true, events: written })
+  }
+
+  // ── 수리 완료 ↔ 영업활동 한 줄(A/S) ──────────────────────────────────
+  //
+  // 20 수리의 **수리 완료**(repair_done_at)는 현장에 다녀온 일이다 — 활동 현황에서
+  // 그 일이 보이지 않아 「아무 접점이 없는 업체」로 읽히던 자리다(2026-11-26 지시).
+  // 완료할 때 영업활동 한 줄을 자동으로 만들고, 완료를 취소하면 그 줄을 지운다.
+  //
+  //   · 종류는 'A/S' 하나다(db/activity_type_as_20261126.sql 이 목록에 더한다).
+  //   · 내용 첫 줄의 **[수리 #N]** 이 자국이다 — 지울 때 그 줄만 집는다.
+  //     사람이 쓴 줄은 종류가 다르고(방문미팅 등) 이 자국도 없다.
+  //   · 고객사가 붙지 않은 수리 건은 만들지 않는다(활동은 고객사 줄에 달린다).
+  if (action === 'repair-done' || action === 'repair-undone') {
+    const repairId = Number(body.repairId)
+    if (!Number.isInteger(repairId) || repairId <= 0) return bad('수리 건을 찾지 못했습니다')
+    const { data: rep, error: readErr } = await sb
+      .from('repairs')
+      .select('repair_id, customer_id, customer_name, product_type, item_type, serial_number, repair_done_at, shipped_date, created_by')
+      .eq('repair_id', repairId).maybeSingle()
+    if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 })
+    if (!rep) return bad('수리 건을 찾지 못했습니다')
+
+    const mark = `[수리 #${repairId}]`
+    // 자국이 붙은 **자동 줄만** 지운다 — 먼저 지우고 다시 넣는다(두 번 눌러도 하나다).
+    const { error: delErr } = await sb.from('sales_activities')
+      .delete().eq('activity_type', REPAIR_ACTIVITY_TYPE).like('content', `${mark}%`)
+    if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 })
+
+    if (action === 'repair-undone') {
+      console.log(`[${TAG}] repair-undone`, { repairId, by: caller.email })
+      return NextResponse.json({ ok: true, removed: true })
+    }
+
+    const customerId = Number(rep.customer_id)
+    if (!Number.isInteger(customerId) || customerId <= 0) {
+      // 고객사가 안 붙은 건이다 — 만들지 않는다(막지도 않는다. 수리 자체는 끝났다).
+      return NextResponse.json({ ok: true, skipped: '고객사 없음' })
+    }
+    const model = [rep.product_type, rep.item_type].map(v => String(v ?? '').trim()).filter(Boolean)[0] ?? null
+    const line = [String(rep.customer_name ?? '').trim() || null, model, rep.serial_number ? `S/N ${rep.serial_number}` : null]
+      .filter(Boolean).join(' · ')
+    const when = String(rep.repair_done_at ?? rep.shipped_date ?? '').slice(0, 10) || todayKST()
+    const { error: insErr } = await sb.from('sales_activities').insert({
+      customer_id: customerId,
+      engineer_id: rep.created_by ?? caller.engineer_id,
+      activity_date: when,
+      activity_type: REPAIR_ACTIVITY_TYPE,
+      content: `${mark} ${line}`,
+    })
+    if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 })
+    console.log(`[${TAG}] repair-done`, { repairId, customerId, by: caller.email })
+    return NextResponse.json({ ok: true, made: true })
   }
 
   return bad('모르는 작업입니다')

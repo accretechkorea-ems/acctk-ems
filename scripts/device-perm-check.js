@@ -80,7 +80,14 @@ ok('올리는 함수 자체는 남는다(장비 수정 창이 쓴다)',
   /export async function uploadDeviceImage/.test(CRUD) && /export async function removeDeviceImage/.test(CRUD))
 
 console.log('\n── ③ 삭제는 숨기기다 ──')
-ok('하드 DELETE 가 없다', !/\.delete\(\)/.test(CRUD) && !/\.delete\(\)/.test(DELETE) && !/\.delete\(\)/.test(CHANGE))
+// 2026-11-26 — customer-change 에 `.delete()` 가 하나 생겼다: **수리 완료가 만든
+// 영업활동 줄**을 지우는 자리다(sales_activities, 자국 [수리 #N] 로 집는다).
+// 장비·고객사 쪽에는 여전히 하드 DELETE 가 없다 — 그것만 본다.
+ok('하드 DELETE 가 없다', !/\.delete\(\)/.test(CRUD) && !/\.delete\(\)/.test(DELETE))
+ok('바꾸기 라우트의 delete 는 영업활동 한 자리뿐이다',
+  (CHANGE.match(/\.delete\(\)/g) || []).length === 1
+  && /from\('sales_activities'\)\s*\n?\s*\.delete\(\)\.eq\('activity_type', REPAIR_ACTIVITY_TYPE\)/.test(CHANGE),
+  'devices·customers 를 하드로 지우는 길을 만들지 않는다')
 ok('누가·왜를 그 줄에 적는다',
   /deleted_by: caller\.engineer_id, delete_reason: reason/.test(DELETE))
 ok('까닭이 없으면 400', /지우는 까닭을 적어주세요/.test(DELETE))

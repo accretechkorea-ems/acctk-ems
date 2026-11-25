@@ -16,6 +16,7 @@ import SegmentedControl from '@/components/common/SegmentedControl'
 import AutocompleteInput from '@/components/common/AutocompleteInput'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useToast } from '@/components/common/Toast'
+import { customerChange } from '@/lib/customerChange'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { REPAIR_STATUS_COLORS, REPAIR_MEANING_COLORS } from '@/lib/categoryColors'
 import { isAtHq } from '@/lib/repairStats'
@@ -254,6 +255,18 @@ export default function RepairPage() {
     await refetch()
   }
 
+  /**
+   * 수리 완료 ↔ **영업활동 한 줄**(종류 A/S) — 쓰기는 라우트가 한다(2026-11-26).
+   *
+   * done 이면 만들고(두 번 불러도 하나다), 아니면 지운다. 실패해도 수리 상태 변경은
+   * 되돌리지 않는다 — 기록이 일을 막지 않는다(토스트로만 알린다).
+   * 고객사가 안 붙은 수리 건은 라우트가 조용히 건너뛴다(활동은 고객사 줄에 달린다).
+   */
+  const syncRepairActivity = async (repairId: number, done: boolean) => {
+    const r = await customerChange({ action: done ? 'repair-done' : 'repair-undone', repairId })
+    if (!r.ok) toast.error('활동 기록을 남기지 못했습니다: ' + r.error)
+  }
+
   // ── 상태 전진 + 단계별 시각 기록 ──
   const advanceStatus = async (r: Repair, next: RepairStatus) => {
     const nowIso = new Date().toISOString()
@@ -263,6 +276,9 @@ export default function RepairPage() {
     else if (next === '출고완료') { patch.shipped_date = todayKST() }
     const { error } = await supabase.from('repairs').update(patch).eq('repair_id', r.repair_id)
     if (error) { toast.error('상태 변경 실패: ' + error.message); return }
+    // 수리 완료(출고대기로 넘어가며 repair_done_at 이 찍힌다)는 **영업활동 한 줄**을 남긴다.
+    // 되돌리면 그 줄을 지운다. 쓰기는 라우트가 한다(service role · 2026-11-26).
+    await syncRepairActivity(r.repair_id, next === '출고대기' || next === '출고완료')
     await refetch()
   }
 
@@ -276,6 +292,8 @@ export default function RepairPage() {
       .eq('repair_id', hqReturning.repair_id)
     setIsHqSaving(false)
     if (error) { toast.error('본사 복귀 처리 실패: ' + error.message); return }
+    // 본사에서 돌아와 출고대기가 되는 것도 **수리 완료**다 — 같은 줄을 남긴다.
+    await syncRepairActivity(hqReturning.repair_id, true)
     setHqReturning(null)
     await refetch()
   }
@@ -309,6 +327,9 @@ export default function RepairPage() {
     const { error } = await supabase.from('repairs').update(patch).eq('repair_id', repairId)
     setIsEditSaving(false)
     if (error) { toast.error('수정 실패: ' + error.message); return false }
+    // 수정 창에서도 완료 시각이 붙거나 떨어진다(RepairEditModal 의 buildPatch) —
+    // 그 값이 patch 에 들어 있을 때만 영업활동 줄을 맞춘다. 없으면 건드리지 않는다.
+    if ('repair_done_at' in patch) await syncRepairActivity(repairId, patch.repair_done_at != null)
     setEditing(null)
     await refetch()
     return true
