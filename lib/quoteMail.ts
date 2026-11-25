@@ -26,42 +26,35 @@ export type MailParts = {
 
 const t = (v: string | null | undefined) => String(v ?? '').trim()
 
-/** 제목 — 「[아크레텍코리아] 견적서 {번호} — {회사명}」. 회사명이 없으면 그 뒤를 뗀다. */
+/**
+ * 제목 — 「{회사명}_{첫 품목 품명}_견적서 송부의 건」 (2026-11-25 지시).
+ *
+ *   협진정공_스타일러스_견적서 송부의 건
+ *
+ * 품목이 없으면 「{회사명}_견적서 송부의 건」, 회사명까지 없으면 꼬리만 남는다.
+ * 견적서 번호는 제목에 넣지 않는다 — 첨부한 PDF 에 적혀 있다.
+ */
 export function mailSubject(p: MailParts): string {
-  const head = `[아크레텍코리아] 견적서 ${t(p.quoteNo)}`
-  const company = t(p.company)
-  return company ? `${head} — ${company}` : head
+  return [t(p.company), t(p.firstItem), '견적서 송부의 건'].filter(Boolean).join('_')
 }
 
 /**
- * 본문. 줄바꿈은 **CRLF** 다 — 메일 프로그램이 줄을 그대로 받는다.
- * 이름·직급·품명·작성자가 비어도 문장이 깨지지 않게 다듬는다.
+ * 본문은 **비운다**(2026-11-25 지시) — 사람이 메일 창에서 직접 적는다.
+ * 함수는 남겨 둔다: 화면·하네스가 「본문이 비어 있다」를 이 한 곳에서 본다.
  */
-export function mailBody(p: MailParts): string {
-  const who = [t(p.toName), t(p.toPosition)].filter(Boolean).join(' ')
-  const hello = who ? `${who}님, 안녕하세요.` : '안녕하세요.'
-  const item = t(p.firstItem)
-  const line = item ? `요청하신 ${item} 견적서를 송부드립니다.` : '요청하신 견적서를 송부드립니다.'
-  const from = t(p.fromName)
-  return [
-    hello,
-    line,
-    '첨부 파일 확인 부탁드립니다.',
-    '',
-    '감사합니다.',
-    from ? `${from} 드림` : '',
-  ].filter((l, i, arr) => !(l === '' && i === arr.length - 1)).join('\r\n')
+export function mailBody(_p: MailParts): string {
+  return ''
 }
 
 /**
  * mailto 주소. 받는 사람이 없으면 **null** — 화면은 버튼 대신 안내를 띄운다.
- * 줄바꿈(%0D%0A)을 포함해 encodeURIComponent 가 전부 감싼다.
+ * **body 파라미터 자체를 넣지 않는다** — 빈 body 를 보내면 메일 프로그램이 서명·인용
+ * 기본 본문을 지우고 빈 창을 띄우는 쪽이 있다.
  */
 export function mailtoUrl(p: MailParts): string | null {
   const to = t(p.toEmail)
   if (!to) return null
-  const q = `subject=${encodeURIComponent(mailSubject(p))}&body=${encodeURIComponent(mailBody(p))}`
-  return `mailto:${encodeURIComponent(to)}?${q}`
+  return `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(mailSubject(p))}`
 }
 
 /** 이메일이 없을 때 그 자리에 적는 말. */

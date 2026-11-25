@@ -114,19 +114,21 @@ const PARTS = {
   quoteNo: 'Q-2026-0001', toEmail: 'a@b.co.kr', toName: '홍길동', toPosition: '과장',
   company: '가나정밀', firstItem: 'AFC-1000', fromName: '김기사',
 }
-eq('제목', M.mailSubject(PARTS), '[아크레텍코리아] 견적서 Q-2026-0001 — 가나정밀')
-eq('회사명이 없으면 그 뒤를 뗀다', M.mailSubject({ quoteNo: 'Q-1' }), '[아크레텍코리아] 견적서 Q-1')
-ok('본문이 이름·직급을 부른다', M.mailBody(PARTS).startsWith('홍길동 과장님, 안녕하세요.'))
-ok('본문에 품명 한 줄', M.mailBody(PARTS).includes('요청하신 AFC-1000 견적서를 송부드립니다.'))
-ok('이름이 없어도 문장이 선다', M.mailBody({ quoteNo: 'Q-1' }).startsWith('안녕하세요.'))
-ok('품명이 없어도 문장이 선다',
-  M.mailBody({ quoteNo: 'Q-1' }).includes('요청하신 견적서를 송부드립니다.'))
-ok('줄바꿈은 CRLF', M.mailBody(PARTS).includes('\r\n') && !/[^\r]\n/.test(M.mailBody(PARTS)))
-ok('작성자 이름으로 맺는다', M.mailBody(PARTS).endsWith('김기사 드림'))
-ok('작성자가 없으면 빈 줄로 끝나지 않는다', !M.mailBody({ quoteNo: 'Q-1' }).endsWith('\r\n'))
+// 2026-11-25 지시 — 제목은 「{회사명}_{첫 품목}_견적서 송부의 건」, 본문은 비운다.
+eq('제목', M.mailSubject(PARTS), '가나정밀_AFC-1000_견적서 송부의 건')
+eq('보기 그대로',
+  M.mailSubject({ quoteNo: 'Q-1', company: '협진정공', firstItem: '스타일러스' }),
+  '협진정공_스타일러스_견적서 송부의 건')
+eq('품목이 없으면 회사명만', M.mailSubject({ quoteNo: 'Q-1', company: '협진정공' }),
+  '협진정공_견적서 송부의 건')
+eq('회사명까지 없으면 꼬리만', M.mailSubject({ quoteNo: 'Q-1' }), '견적서 송부의 건')
+ok('제목에 견적 번호는 넣지 않는다 — 첨부한 PDF 에 적혀 있다',
+  !M.mailSubject(PARTS).includes('Q-2026-0001'))
+eq('본문은 비운다', M.mailBody(PARTS), '')
 const URL = M.mailtoUrl(PARTS)
 ok('mailto 로 연다', URL.startsWith('mailto:a%40b.co.kr?'))
-ok('제목·본문을 모두 감싼다', URL.includes('subject=') && URL.includes('&body=') && URL.includes('%0D%0A'))
+ok('제목을 감싼다', URL.includes(`subject=${encodeURIComponent(M.mailSubject(PARTS))}`))
+ok('body 파라미터 자체를 넣지 않는다', !/[?&]body=/.test(URL))
 eq('창 제목', M.savedTitle('Q-2026-0001'), '견적서 Q-2026-0001 저장됨')
 ok('첨부는 사람이 한다고 적는다', M.ATTACH_NOTICE.includes('끌어다 첨부'))
 ok('버튼 아이콘은 이모지가 아니라 인라인 SVG',
