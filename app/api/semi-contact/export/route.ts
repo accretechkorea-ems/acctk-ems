@@ -1,6 +1,10 @@
 // 반도체 고객 접촉 보고 — 엑셀 내려받기.
 //   GET /api/semi-contact/export?project_id=<id>              → 전체 이력(시트: 이력 · Action · 요약)
 //   GET /api/semi-contact/export?project_id=<id>&report_id=<id> → 보고서 한 장(파일명 <Project 번호>_#n_접촉일.xlsx)
+//   GET /api/semi-contact/export?all=1&q=&from=&to=&author=&team= → **전체**(2026-11-26, 지시 M)
+//       목록에 걸린 조건 그대로 모든 Project · 모든 보고서. 시트 = 전체 · Action · 요약 + 건별 양식.
+//       거르기는 목록 라우트와 **같은 순수 모듈**이 한다(lib/semiContact/search.ts) — 화면에
+//       보이는 목록과 파일이 어긋나지 않는다.
 //
 // 접근 검사는 다른 라우트와 같은 공용 호출자다(lib/apiCaller.ts 의 Need 'semi') — 401·403 형식도 같다.
 // 데이터는 service role 로 읽는다(Project 상세 화면과 같은 세 표, 작성자 이름은 author FK 임베드).
@@ -13,9 +17,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { loadCaller } from '@/lib/apiCaller'
 import { todayKST } from '@/lib/date'
 import {
-  buildHistoryWorkbook, buildReportSheet,
-  type ExportAction, type ExportProject, type ExportReport,
+  buildAllWorkbook, buildHistoryWorkbook, buildReportSheet,
+  type ExportAction, type ExportGroup, type ExportProject, type ExportReport,
 } from '@/lib/semiContact/excel'
+import { filterProjects, ymd, type SearchFilter, type SearchReport } from '@/lib/semiContact/search'
 import { contactSequence } from '@/lib/semiContact/sequence'
 
 const TAG = 'semi-contact/export'
@@ -72,6 +77,9 @@ async function handle(req: NextRequest) {
   if (auth.error) return auth.error
 
   const url = new URL(req.url)
+  // 전체 엑셀 — 목록 조건 그대로(지시 M). project_id 를 받지 않는다.
+  if (url.searchParams.get('all') === '1') return handleAll(req, auth.caller.engineer_id)
+
   const projectId = Number(url.searchParams.get('project_id'))
   if (!Number.isInteger(projectId) || projectId <= 0) return bad('Project 가 지정되지 않았습니다.', 400)
   const reportParam = url.searchParams.get('report_id')
@@ -143,3 +151,138 @@ async function handle(req: NextRequest) {
     },
   })
 }
+
+/**
+ * 전체 엑셀 — 목록에 걸린 조건 그대로 **모든 Project · 모든 보고서** (2026-11-26, 지시 M).
+ *
+ * 왜 한 파일인가 — 지금은 Project 하나씩 내려받는다. 반기 보고를 쓰려면 스무 번을 눌러
+ * 스무 파일을 합쳐야 했다.
+ *
+ * 거르기는 목록 라우트(/api/semi-contact/projects)와 **같은 순수 모듈**이 한다
+ * (lib/semiContact/search.ts). 그래서 화면에 보이는 목록과 파일 속 Project 가 어긋나지
+ * 않는다 — 조건을 두 곳에서 따로 적으면 반드시 갈린다.
+ *
+ * 팀(team)도 목록과 같은 규칙으로 좁힌다(만든 사람이 그 팀이거나, 그 팀 사람이 쓴 보고서가 있는 건).
+ */
+async function handleAll(req: NextRequest, byEngineerId: number) {
+  const sp = new URL(req.url).searchParams
+  const teamParam = sp.get('team')
+  const team = teamParam === null ? null : teamParam.trim()
+  const authorRaw = Number(sp.get('author'))
+  const filter: SearchFilter = {
+    q: (sp.get('q') ?? '').trim().toLowerCase(),
+    from: ymd(sp.get('from')),
+    to: ymd(sp.get('to')),
+    author: Number.isInteger(authorRaw) && authorRaw > 0 ? authorRaw : null,
+  }
+
+  const sb = admin()
+  const [p, r, a] = await Promise.all([
+    sb.from('semi_projects')
+      .select('project_id, project_no, customer_name, site_dept, title, creator:engineers!semi_projects_created_by_fkey(teams)'),
+    sb.from('semi_contact_reports')
+      .select('*, author:engineers!semi_contact_reports_author_fkey(name, teams)')
+      .order('contact_date', { ascending: true })
+      .order('report_id', { ascending: true }),
+    sb.from('semi_actions').select('*').order('action_id', { ascending: true }),
+  ])
+  if (p.error || r.error || a.error) {
+    console.error(`[${TAG}] 전체 조회 실패`, { error: p.error ?? r.error ?? a.error })
+    return bad('접촉 보고서를 읽지 못했습니다.', 500)
+  }
+
+  type AllProjectRow = ExportProject & { project_id: number; creator: { teams: string | null } | null }
+  type AllReportRow = Record<string, unknown> & {
+    report_id: number; project_id: number
+    author: { name: string | null; teams: string | null } | null
+  }
+  const projects = (p.data ?? []) as unknown as AllProjectRow[]
+  const reports = (r.data ?? []) as unknown as AllReportRow[]
+  const actions = (a.data ?? []) as unknown as ActionRow[]
+
+  // 팀으로 좁히기 — 목록 라우트와 같은 규칙이다.
+  const teamAuthor = new Set<number>()
+  if (team) {
+    for (const rep of reports) if (rep.author?.teams?.trim() === team) teamAuthor.add(rep.project_id)
+  }
+  const scoped = projects.filter(pr =>
+    team === null || pr.creator?.teams?.trim() === team || teamAuthor.has(pr.project_id))
+
+  // 검색어·기간·작성자 — 순수 모듈이 판정한다(목록과 같은 함수).
+  const searchReports: SearchReport[] = reports.map(rep => ({
+    report_id: rep.report_id,
+    project_id: rep.project_id,
+    contact_date: typeof rep.contact_date === 'string' ? rep.contact_date : null,
+    author_id: typeof rep.author_id === 'number' ? rep.author_id : null,
+    contact_method: typeof rep.contact_method === 'string' ? rep.contact_method : null,
+    customer_contact: typeof rep.customer_contact === 'string' ? rep.customer_contact : null,
+    purpose: typeof rep.purpose === 'string' ? rep.purpose : null,
+    fact: typeof rep.fact === 'string' ? rep.fact : null,
+    detail: (rep.detail ?? null) as Record<string, unknown> | null,
+    author: rep.author ? { name: rep.author.name } : null,
+  }))
+  const kept = filterProjects(
+    scoped.map(pr => ({
+      project_id: pr.project_id, project_no: pr.project_no,
+      customer_name: pr.customer_name, site_dept: pr.site_dept, title: pr.title,
+    })),
+    searchReports, filter)
+  if (kept.length === 0) return bad('조건에 맞는 Project 가 없습니다.', 404)
+
+  // Project 마다 그 보고서·Action 을 모아 넘긴다.
+  // ⚠ 보고서는 **거르지 않는다** — Project 가 남았으면 그 Project 의 이력 전부를 담는다.
+  //   기간을 걸어 놓고 파일을 열었을 때 「그 기간의 보고서만」이 아니라 「그 기간에 움직인
+  //   Project 의 이력 전부」가 보이는 쪽이 보고에 쓰인다(목록의 접촉 횟수도 같은 규칙이다).
+  const keptIds = new Set(kept.map(k => k.project_id))
+  const byProject = new Map<number, AllReportRow[]>()
+  for (const rep of reports) {
+    if (!keptIds.has(rep.project_id)) continue
+    const list = byProject.get(rep.project_id)
+    if (list) list.push(rep); else byProject.set(rep.project_id, [rep])
+  }
+  const actionsByProject = new Map<number, ActionRow[]>()
+  for (const act of actions) {
+    const pid = Number((act as Record<string, unknown>).project_id)
+    if (!keptIds.has(pid)) continue
+    const list = actionsByProject.get(pid)
+    if (list) list.push(act); else actionsByProject.set(pid, [act])
+  }
+
+  const groups: ExportGroup[] = kept.map(k => {
+    const pr = scoped.find(x => x.project_id === k.project_id)!
+    return {
+      projectId: k.project_id,
+      project: { project_no: pr.project_no, customer_name: pr.customer_name, site_dept: pr.site_dept, title: pr.title },
+      reports: (byProject.get(k.project_id) ?? []).map(row => ({
+        report_id: row.report_id, row, authorName: row.author?.name ?? '',
+      })) as ExportReport[],
+      actions: (actionsByProject.get(k.project_id) ?? []).map(row => ({
+        action_id: row.action_id, report_id: row.report_id, row,
+      })) as ExportAction[],
+    }
+  })
+
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'EMS'
+  wb.created = new Date()
+  const made = buildAllWorkbook(wb, { groups, today: todayKST() })
+
+  // 파일명 꼬리 — 무엇을 내보냈는지 파일만 보고 알 수 있게.
+  const tail = [team, filter.from || filter.to ? `${filter.from || '처음'}~${filter.to || '지금'}` : '', filter.q ? `검색` : '']
+    .filter(Boolean).join('_')
+  const fileName = `접촉보고서_전체_${todayKST().replace(/-/g, '')}${tail ? `_${safeName(tail)}` : ''}.xlsx`
+
+  const buffer = await wb.xlsx.writeBuffer()
+  console.log(`[${TAG}] 전체 내려받기`, { ...made, by: byEngineerId, team, ...filter })
+  return new NextResponse(buffer as ArrayBuffer, {
+    status: 200,
+    headers: {
+      'Content-Type': XLSX_TYPE,
+      'Content-Disposition': disposition(fileName),
+      // 화면이 「건별 시트 N장 / M건은 전체 시트에만」을 알려 줄 수 있게 수를 함께 준다.
+      'X-Export-Counts': JSON.stringify(made),
+      'Cache-Control': 'no-store',
+    },
+  })
+}
+

@@ -110,11 +110,21 @@ const A_VALUE_WIDTH = A_COLS.slice(1).reduce((a, b) => a + b, 0)
 
 export function buildReportSheet(
   wb: Workbook,
-  data: { project: ExportProject; report: ExportReport; actions: ExportAction[]; /** 접촉 차수(#n). 모르면 비워 둔다. */ seq?: number },
+  data: {
+    project: ExportProject; report: ExportReport; actions: ExportAction[]
+    /** 접촉 차수(#n). 모르면 비워 둔다. */
+    seq?: number
+    /**
+     * 시트 이름. 주지 않으면 「번호 접촉일」로 만든다.
+     * 전체 엑셀(C)은 **겹치지 않는 이름을 미리 정해** 넘긴다 — exceljs 는 같은 이름을 받으면
+     * 예외를 던지므로(만든 뒤에 고치는 것으로는 늦다) 부르는 쪽이 책임진다.
+     */
+    name?: string
+  },
 ): Worksheet {
   const { project, report } = data
   const input = fromStorage(report.row, projectInput(project))
-  const ws = wb.addWorksheet(sheetNameOf(`${project.project_no} ${input.contact_date}`))
+  const ws = wb.addWorksheet(sheetNameOf(data.name ?? `${project.project_no} ${input.contact_date}`))
   ws.columns = A_COLS.map(width => ({ width }))
 
   /** 섹션 제목 줄(A~G 병합). */
@@ -310,4 +320,187 @@ export function buildHistoryWorkbook(
     put(v, value)
     thin(v); wrapTop(v)
   }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// C. 전체 엑셀 — 필터를 지난 **모든 Project · 모든 보고서** (2026-11-26, 지시 M)
+// ════════════════════════════════════════════════════════════════════
+//
+// 왜 — 지금은 Project 하나씩 내려받는다. 반기 보고를 쓰려면 스무 번을 눌러 스무 파일을
+// 합쳐야 했다. 화면에 걸린 조건 그대로 한 파일로 내보낸다. **건별 엑셀은 그대로 둔다**
+// (한 건을 그 양식으로 보내는 일이 여전히 가장 많다).
+//
+// 시트 — 집계 셋(전체 · Action · 요약) + 건별 양식 시트.
+// 건별 시트는 **상한**이 있다. 보고서가 수백 건이면 파일이 열리지 않을 만큼 커지고,
+// 엑셀 시트 이름은 31자라 이름도 겹친다. 상한을 넘기면 집계 셋만 두고 몇 건을 뺐는지
+// 요약 시트에 적는다 — 조용히 자르지 않는다.
+
+export type ExportGroup = {
+  /** Project id — 같은 번호를 두 Project 가 쓸 수 있어 집계는 id 로 묶는다. */
+  projectId: number
+  project: ExportProject
+  reports: ExportReport[]
+  actions: ExportAction[]
+}
+
+/** 건별 양식 시트의 상한. 넘으면 집계 셋만 나가고 요약에 몇 건을 뺐는지 적는다. */
+export const ALL_SHEET_CAP = 60
+
+export type AllWorkbookResult = { projects: number; reports: number; sheets: number; skipped: number }
+
+export function buildAllWorkbook(
+  wb: Workbook,
+  data: { groups: ExportGroup[]; today: string; sheetCap?: number },
+): AllWorkbookResult {
+  const { today } = data
+  const cap = data.sheetCap ?? ALL_SHEET_CAP
+  // Project 마다 접촉일 오름차순으로 세워 둔다 — 차수·「직전 대비 바뀐 칸」이 그 순서를 쓴다.
+  const groups = data.groups.map(g => {
+    const proj = projectInput(g.project)
+    const asc = [...g.reports]
+      .map(r => ({ r, input: fromStorage(r.row, proj) }))
+      .sort((a, b) => a.input.contact_date.localeCompare(b.input.contact_date) || a.r.report_id - b.r.report_id)
+    const seqOf = contactSequence(asc.map(x => ({ report_id: x.r.report_id, contact_date: x.input.contact_date })))
+    return { ...g, asc, seqOf }
+  })
+  const reportCount = groups.reduce((n, g) => n + g.asc.length, 0)
+
+  // ── 전체 — 보고서 1건 = 1행 ──
+  const hs = wb.addWorksheet('전체')
+  const tailKeys = HISTORY_FIELD_ORDER.slice(2)
+  const headers = [
+    'Project 번호', FIELD_BY_KEY.customer_name.label, FIELD_BY_KEY.site_dept.label, FIELD_BY_KEY.title.label,
+    '차수', FIELD_BY_KEY.contact_date.label, FIELD_BY_KEY.contact_method.label, AUTHOR_FIELD.label,
+    ...tailKeys.map(k => FIELD_BY_KEY[k].label),
+  ]
+  const widths = [16, 20, 18, 28, 7, 12, 12, 10, ...tailKeys.map(k => colWidthOf(FIELD_BY_KEY[k]))]
+  hs.columns = widths.map(width => ({ width }))
+  const hh = hs.addRow(headers)
+  hh.eachCell(c => { c.font = { bold: true }; fill(c, HEAD_BG); thin(c); c.alignment = { wrapText: true, vertical: 'middle' } })
+  hh.height = 30
+  // Project 네 칸까지 고정 — 오른쪽으로 밀어도 어느 건인지 보인다.
+  hs.views = [{ state: 'frozen', xSplit: 4, ySplit: 1 }]
+  hs.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } }
+
+  for (const g of groups) {
+    // 「직전 대비 바뀐 칸」은 **그 Project 안에서만** 견준다(다른 Project 의 값과 견주면 뜻이 없다).
+    let before: ReportInput | null = null
+    for (const { r, input } of g.asc) {
+      const changed = new Set(changedFields(before, input))
+      const values = [
+        g.project.project_no, g.project.customer_name, g.project.site_dept ?? '', g.project.title,
+        seqLabel(g.seqOf.get(r.report_id)), input.contact_date, input.contact_method, r.authorName,
+        ...tailKeys.map(k => (k === 'next_contact_date'
+          ? nextContactShown(input[k], nextContactTbdOf(r.row))
+          : input[k])),
+      ]
+      const row = hs.addRow([])
+      let height = LINE_HEIGHT
+      values.forEach((v, i) => {
+        const cell = row.getCell(i + 1)
+        put(cell, v)
+        thin(cell); wrapTop(cell)
+        height = Math.max(height, heightFor(v, widths[i]))
+        // 칸 i → 등록표 키: 0~3 Project · 4 차수 · 5 접촉일 · 6 접촉방법 · 7 작성자 · 8~ 나머지
+        const key = i === 5 ? 'contact_date' : i === 6 ? 'contact_method' : i <= 7 ? null : tailKeys[i - 8]
+        if (key && changed.has(key as FieldKey)) fill(cell, CHANGED_BG)
+      })
+      row.height = height
+      before = input
+    }
+  }
+
+  // ── Action — Project 번호를 맨 앞에 둔다 ──
+  const as = wb.addWorksheet('Action')
+  const aHead = ['Project 번호', FIELD_BY_KEY.contact_date.label, ACTION_LABELS.what, ACTION_LABELS.owner,
+    ACTION_LABELS.due_date, ACTION_LABELS.status, ACTION_LABELS.priority, ACTION_LABELS.note]
+  const aWidths = [16, 18, 40, 16, 12, 12, 10, 30]
+  as.columns = aWidths.map(width => ({ width }))
+  const ah = as.addRow(aHead)
+  ah.eachCell(c => { c.font = { bold: true }; fill(c, HEAD_BG); thin(c) })
+  as.views = [{ state: 'frozen', ySplit: 1 }]
+  as.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: aHead.length } }
+
+  /** Project 별 미완료 Action 수 — 요약이 쓴다. */
+  const openBy = new Map<number, number>()
+  for (const g of groups) {
+    const dateOf = new Map(g.asc.map(x => [x.r.report_id, x.input.contact_date]))
+    const contactOf = (reportId: number) => {
+      const d = dateOf.get(reportId) ?? ''
+      const n = seqLabel(g.seqOf.get(reportId))
+      return n ? `${n} (${d})` : d
+    }
+    const rows = g.actions
+      .map(a => ({ a, x: actionFromStorage(a.row), date: dateOf.get(a.report_id) ?? '', contact: contactOf(a.report_id) }))
+      .sort((p, q) => p.date.localeCompare(q.date) || p.x.due_date.localeCompare(q.x.due_date) || p.a.action_id - q.a.action_id)
+    let open = 0
+    for (const { x, contact } of rows) {
+      const isOpen = x.status !== DONE_STATUS
+      if (isOpen) open++
+      const overdue = isOpen && !!x.due_date && x.due_date < today
+      const vals = [g.project.project_no, contact, x.what, x.owner, x.due_date, x.status, x.priority, x.note]
+      const row = as.addRow([])
+      vals.forEach((v, i) => {
+        const cell = row.getCell(i + 1)
+        put(cell, v)
+        thin(cell); wrapTop(cell)
+        if (overdue) cell.font = { color: { argb: DANGER } }
+      })
+      row.height = Math.max(heightFor(x.what, aWidths[2]), heightFor(x.note, aWidths[7]))
+    }
+    openBy.set(g.projectId, open)
+  }
+
+  // ── 요약 — Project 1건 = 1행 ──
+  const ss = wb.addWorksheet('요약')
+  const sHead = ['Project 번호', FIELD_BY_KEY.customer_name.label, FIELD_BY_KEY.site_dept.label, FIELD_BY_KEY.title.label,
+    '접촉 횟수', '최근 접촉일', FIELD_BY_KEY.next_contact_date.label, '미완료 Action']
+  const sWidths = [16, 20, 18, 30, 10, 12, 16, 12]
+  ss.columns = sWidths.map(width => ({ width }))
+  const sh = ss.addRow(sHead)
+  sh.eachCell(c => { c.font = { bold: true }; fill(c, HEAD_BG); thin(c) })
+  ss.views = [{ state: 'frozen', ySplit: 1 }]
+  ss.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: sHead.length } }
+  for (const g of groups) {
+    const last = g.asc[g.asc.length - 1] ?? null
+    const vals = [
+      g.project.project_no, g.project.customer_name, g.project.site_dept ?? '', g.project.title,
+      String(g.asc.length), last?.input.contact_date ?? '',
+      last ? nextContactShown(last.input.next_contact_date, nextContactTbdOf(last.r.row)) : '',
+      String(openBy.get(g.projectId) ?? 0),
+    ]
+    const row = ss.addRow([])
+    vals.forEach((v, i) => { const c = row.getCell(i + 1); put(c, v); thin(c); wrapTop(c) })
+  }
+
+  // ── 건별 양식 시트 — 상한까지 ──
+  // 이름이 겹치면(같은 Project 의 같은 날, 또는 31자에서 잘려 같아지면) 꼬리에 번호를 붙인다.
+  const used = new Set<string>(['전체', 'Action', '요약'])
+  let sheets = 0
+  let skipped = 0
+  for (const g of groups) {
+    for (const { r } of g.asc) {
+      if (sheets >= cap) { skipped++; continue }
+      // 이름을 **먼저** 고른다 — exceljs 는 같은 이름의 시트를 받으면 그 자리에서 예외를 던진다.
+      const base = sheetNameOf(`${g.project.project_no} ${fromStorage(r.row, projectInput(g.project)).contact_date}`)
+      let name = base
+      let n = 2
+      while (used.has(name)) { name = sheetNameOf(`${base.slice(0, 27)} ${n}`); n++ }
+      buildReportSheet(wb, {
+        project: g.project, report: r, actions: g.actions, seq: g.seqOf.get(r.report_id), name,
+      })
+      used.add(name)
+      sheets++
+    }
+  }
+
+  // 뺀 건이 있으면 요약 맨 아래에 적는다 — 조용히 자르지 않는다.
+  if (skipped > 0) {
+    ss.addRow([])
+    const r = ss.addRow([`건별 양식 시트는 ${cap}장까지 넣었습니다 — ${skipped}건은 위 「전체」 시트에만 있습니다`])
+    ss.mergeCells(r.number, 1, r.number, sHead.length)
+    r.getCell(1).font = { bold: true, color: { argb: DANGER } }
+  }
+
+  return { projects: groups.length, reports: reportCount, sheets, skipped }
 }

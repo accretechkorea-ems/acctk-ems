@@ -92,6 +92,9 @@ export default function ContactSemiPage() {
   const [rows, setRows] = useState<ProjectRow[] | null>(null)
   /** 토글 칸 — 사업부가 반도체인 팀 이름(display_order 순). 못 읽으면 빈 목록이라 「전체」만 보인다. */
   const [teams, setTeams] = useState<string[]>([])
+  /** 전체 엑셀을 만드는 중인가 — 단추를 잠그고 「만드는 중…」을 보인다(지시 M). */
+  const [exporting, setExporting] = useState(false)
+  const toast = useToast()
   const [loadError, setLoadError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [q, setQ] = useState('')
@@ -200,6 +203,55 @@ export default function ContactSemiPage() {
   const narrowed = words !== '' || from !== '' || to !== '' || author !== ''
   const clearAll = () => { setQ(''); setFrom(''); setTo(''); setAuthor('') }
 
+  /**
+   * 전체 엑셀 — **목록과 같은 조건**을 라우트에 그대로 넘긴다(2026-11-26, 지시 M).
+   *
+   * 거르기는 라우트가 목록과 **같은 순수 모듈**로 다시 한다(lib/semiContact/search.ts) —
+   * 화면이 고른 id 목록을 보내지 않는 이유다. 보내면 쪽이 넘어간 목록·방금 올라온 보고서와
+   * 어긋나고, 조건이 두 곳에 적히면 반드시 갈린다.
+   *
+   * 파일은 라우트가 만들어 보낸다(권한 검사와 service role 읽기를 한 곳에서 한다).
+   */
+  const exportAll = async () => {
+    if (exporting) return
+    setExporting(true)
+    try {
+      const sp = new URLSearchParams({ all: '1' })
+      if (team) sp.set('team', team)
+      if (words) sp.set('q', words)
+      if (from) sp.set('from', from)
+      if (to) sp.set('to', to)
+      if (author) sp.set('author', author)
+      const res = await fetch(`/api/semi-contact/export?${sp.toString()}`)
+      if (!res.ok) {
+        const json = await res.json().catch(() => null) as { error?: string } | null
+        toast.error(json?.error ?? `엑셀을 만들지 못했습니다 (${res.status})`)
+        return
+      }
+      // 파일명은 서버가 정한다(조건이 꼬리에 붙는다) — 헤더에서 꺼낸다.
+      const cd = res.headers.get('Content-Disposition') ?? ''
+      const star = /filename\*=UTF-8''([^;]+)/.exec(cd)
+      const name = star ? decodeURIComponent(star[1]) : '접촉보고서_전체.xlsx'
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = name
+      a.click()
+      URL.revokeObjectURL(url)
+      // 건별 시트를 몇 장 넣었는지 — 상한을 넘겼으면 그 사실까지 말해 준다.
+      const counts = res.headers.get('X-Export-Counts')
+      const made = counts ? JSON.parse(counts) as { projects: number; reports: number; sheets: number; skipped: number } : null
+      toast.success(made
+        ? `Project ${made.projects}건 · 보고서 ${made.reports}건을 받았습니다${made.skipped > 0 ? ` (건별 시트는 ${made.sheets}장, ${made.skipped}건은 「전체」 시트에만)` : ''}`
+        : '엑셀을 받았습니다')
+    } catch (e) {
+      console.error('[semi] 전체 엑셀 실패', e)
+      toast.error('네트워크 오류로 엑셀을 받지 못했습니다')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   if (!authorized) return <AccessGate loading={guardLoading} />
 
@@ -265,6 +317,18 @@ export default function ContactSemiPage() {
             <button type="button" onClick={clearAll}
               style={{ ...btnGhost(), padding: '0 10px', height: 32, flexShrink: 0 }}>조건 지우기</button>
           )}
+
+          {/* 전체 엑셀 — **지금 걸린 조건 그대로** 한 파일로(2026-11-26, 지시 M).
+              Project 하나씩 받던 건별 엑셀은 Project 상세에 그대로 있다. */}
+          <button
+            type="button"
+            onClick={() => { void exportAll() }}
+            disabled={exporting || shown.length === 0}
+            title={shown.length === 0 ? '내보낼 Project 가 없습니다' : '목록에 걸린 조건 그대로 한 파일로 내려받습니다'}
+            style={{ ...btnGhost(exporting || shown.length === 0), padding: '0 10px', height: 32, flexShrink: 0 }}
+          >
+            {exporting ? '만드는 중…' : '전체 엑셀'}
+          </button>
 
           {rows !== null && (
             <span className="num" style={{ marginLeft: 'auto', fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>
