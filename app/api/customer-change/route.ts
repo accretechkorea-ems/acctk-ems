@@ -64,6 +64,34 @@ const CONTACT_NEW = ['name_en', 'mobile', 'fax', 'memo'] as const
 const DEVICE_COLUMNS: Record<string, string> = {
   device_name: '라인업', device_name2: '모델', option: '옵션', serial_number: 'S/N',
   program: '소프트웨어', install_date: '납입일', category: '계열',
+  // 2026-11-26 — 마스터 밖 값으로 적었는가(db/equipment_master_20261126.sql 이 더한다).
+  master_pending: '마스터 밖',
+  // 납품 예정 장비(E) — 설치 예정월. 칸이 없으면 아래 dropMissingDeviceColumns 가 뺀다.
+  install_due_month: '설치 예정월',
+}
+/** 장비 표에 **아직 없을 수 있는** 칸 — SQL 적용 전에는 빼고 담는다. */
+const DEVICE_NEW: readonly string[] = ['master_pending', 'install_due_month']
+let deviceNewKnown: boolean | null = null
+
+/**
+ * 장비의 새 칸이 아직 없으면 빼고 담는다(2026-11-26) — 담당자 쪽과 같은 길이다.
+ * 한 칸 때문에 **장비 등록 전체가 거절되는** 일은 없어야 한다.
+ */
+async function dropMissingDeviceColumns(
+  patch: Record<string, unknown>,
+  sb: SupabaseClient,
+): Promise<Record<string, unknown>> {
+  if (deviceNewKnown == null) {
+    const { error } = await sb.from('devices').select('master_pending').limit(1)
+    deviceNewKnown = !(error != null && (error.code === '42703' || error.code === 'PGRST204' || error.code === 'PGRST205'))
+    if (!deviceNewKnown) {
+      console.warn('[customer-change] 장비 새 칸이 아직 없다 — db/equipment_master_20261126.sql·devices_delivery_20261126.sql 전까지 빼고 담는다')
+    }
+  }
+  if (deviceNewKnown) return patch
+  const out = { ...patch }
+  for (const f of DEVICE_NEW) delete out[f]
+  return out
 }
 
 /**
@@ -294,7 +322,7 @@ export async function POST(req: Request) {
 
   // ── 장비 추가·수정 ────────────────────────────────────────────────────
   if (action === 'device-add' || action === 'device-edit') {
-    const patch = pick(body.patch as Record<string, unknown>, DEVICE_COLUMNS)
+    const patch = await dropMissingDeviceColumns(pick(body.patch as Record<string, unknown>, DEVICE_COLUMNS), sb)
 
     if (action === 'device-add') {
       const customerId = Number(body.customerId)

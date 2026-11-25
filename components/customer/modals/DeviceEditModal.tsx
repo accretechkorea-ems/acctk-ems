@@ -4,12 +4,13 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { Device, DeviceForm } from '../types'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import ModalCard from '@/components/common/ModalCard'
-import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
+import { useFieldErrors, FieldError } from '@/components/common/fieldErrors'
 import { useToast } from '@/components/common/Toast'
 import { getDefaultImageUrl } from '../utils'
 import { useDeviceImageUrls } from '@/hooks/useStorageImageUrls'
 import { removeDeviceImage, uploadDeviceImage } from '@/hooks/customer/useDeviceCrud'
 import { isDisposed, disposedLabel } from '@/lib/deviceStatus'
+import EquipmentPicker from '@/components/customer/modals/EquipmentPicker'
 import { R } from '@/lib/radius'
 import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 
@@ -191,9 +192,21 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
           <div>
             <label style={labelStyle}>장비 라인업 / 모델명 / 옵션</label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-              <input value={form.device_name} onChange={(e) => { setForm(p => ({ ...p, device_name: e.target.value })); clearError('device_name') }} placeholder="라인업" style={errors.device_name ? { ...fieldStyle, fontSize: 13, border: errBorder } : { ...fieldStyle, fontSize: 13 }} />
-              <input value={form.device_name2} onChange={(e) => setForm(p => ({ ...p, device_name2: e.target.value }))} placeholder="모델명" style={{ ...fieldStyle, fontSize: 13 }} />
-              <input value={form.option} onChange={(e) => setForm(p => ({ ...p, option: e.target.value }))} placeholder="옵션" style={{ ...fieldStyle, fontSize: 13 }} />
+              {/* 마스터에서 고르거나 그냥 적는다(2026-11-26) — 등록 창과 같은 부품이다. */}
+              <EquipmentPicker
+                lineup={form.device_name} model={form.device_name2} config={form.option}
+                onChange={next => {
+                  setForm(p => ({
+                    ...p,
+                    device_name: next.lineup ?? p.device_name,
+                    device_name2: next.model ?? p.device_name2,
+                    option: next.config ?? p.option,
+                  }))
+                  if (next.lineup !== undefined) clearError('device_name')
+                }}
+                fieldStyle={{ ...fieldStyle, fontSize: 13 }}
+                lineupInvalid={!!errors.device_name}
+              />
             </div>
             <FieldError message={errors.device_name} />
           </div>

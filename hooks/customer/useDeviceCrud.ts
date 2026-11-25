@@ -15,6 +15,7 @@ import { useConfirm } from '@/components/common/ConfirmDialog'
 import { downsizeImage } from '@/lib/leadCardImage'
 import type { Device, DeviceForm } from '@/components/customer/types'
 import { errMessage } from '@/lib/errMessage'
+import { isMasterPending, loadEquipmentMaster, type EquipmentMaster } from '@/lib/equipmentMaster'
 
 // ── 장비 사진 ──
 // 카드의 사진 아이콘과 「사진 등록」 모달이 같은 경로를 쓰도록 훅 바깥에 둔다.
@@ -147,8 +148,14 @@ type Args = {
   fetchDetail: () => Promise<boolean>
 }
 
-/** 장비 칸 한 벌 — 추가·수정이 같은 모양을 보낸다(라우트의 흰 목록과 짝이다). */
-const devicePatch = (form: DeviceForm) => ({
+/**
+ * 장비 칸 한 벌 — 추가·수정이 같은 모양을 보낸다(라우트의 흰 목록과 짝이다).
+ *
+ * **마스터 밖 값인지**(master_pending)는 저장할 때 센다(2026-11-26) — 폼은 자유 입력을
+ * 받고, 목록에 없는 이름이면 그 줄에 자국을 남긴다. 마스터가 아직 없으면 늘 거짓이다.
+ */
+const devicePatch = (form: DeviceForm, master: EquipmentMaster) => ({
+  master_pending: isMasterPending(master, form.device_name, form.device_name2, form.option),
   device_name: form.device_name.trim(),
   device_name2: form.device_name2.trim() || null,
   option: form.option.trim() || null,
@@ -176,7 +183,7 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
     try {
       // 장비를 먼저 등록하고 device_id를 받아온다 (패킹 파일명에 사용)
       // 저장은 **라우트가** 한다(2026-11-23) — 바뀐 칸을 사건으로 함께 적는다.
-      const r = await customerChange({ action: 'device-add', customerId, patch: devicePatch(form) })
+      const r = await customerChange({ action: 'device-add', customerId, patch: devicePatch(form, await loadEquipmentMaster()) })
       if (!r.ok) throw new Error(r.error)
       const inserted = { device_id: Number(r.data.device_id) }
 
@@ -207,7 +214,7 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
       if (packingFile) {
         newPackingPath = await uploadPackingFile(selectedDevice.device_id, packingFile)
       }
-      const r = await customerChange({ action: 'device-edit', id: selectedDevice.device_id, patch: devicePatch(form) })
+      const r = await customerChange({ action: 'device-edit', id: selectedDevice.device_id, patch: devicePatch(form, await loadEquipmentMaster()) })
       if (!r.ok) throw new Error(r.error)
       if (newPackingPath) {
         const saved = await customerChange({ action: 'device-packing', id: selectedDevice.device_id, path: newPackingPath })
