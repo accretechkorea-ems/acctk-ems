@@ -35,6 +35,8 @@ import AccessGate from '@/components/common/AccessGate'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { FieldError, errBorder } from '@/components/common/fieldErrors'
+import SnippetPicker from '@/components/common/SnippetPicker'
+import { insertAtCursor } from '@/lib/snippets'
 import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, BLUE, NEUTRAL_BG,
   cardStyle, cardHeader, cardTitle, countBadge, btnPrimary, btnGhost, btnDanger,
@@ -864,6 +866,9 @@ function FieldControl({ def, value, onChange, error, changed, prevValue, rows, m
   inactive?: boolean
 }) {
   const id = `sf-${def.key}`
+  /** 본문(회의 내용)에는 라벨 옆에 「문구 ▾」를 둔다 — 문구함, 2026-11-25. */
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null)
+  const withSnippet = def.key === 'meeting_content'
   const style: CSSProperties = {
     ...fieldStyle,
     ...(changed ? { background: CHANGED_INPUT_BG, border: `1px solid ${CHANGED_LINE}` } : null),
@@ -884,7 +889,7 @@ function FieldControl({ def, value, onChange, error, changed, prevValue, rows, m
     control = <input id={id} className={cls} type="date" value={value} disabled={disabled} onChange={e => onChange(e.target.value)} style={style} />
   } else if (def.kind === 'longtext') {
     control = (
-      <textarea id={id} className={cls} value={value} disabled={disabled} autoFocus={autoFocus} rows={rows ?? 4}
+      <textarea ref={bodyRef} id={id} className={cls} value={value} disabled={disabled} autoFocus={autoFocus} rows={rows ?? 4}
         onChange={e => onChange(e.target.value)}
         style={{ ...style, resize: 'vertical', lineHeight: 1.6, ...(minHeight ? { minHeight } : null) }} />
     )
@@ -894,6 +899,8 @@ function FieldControl({ def, value, onChange, error, changed, prevValue, rows, m
   const prevShown = prevValue.trim() ? prevValue : '(비어 있음)'
   return (
     <div data-has-error={error ? 'true' : undefined} style={wrapStyle(changed)}>
+      {/* 본문에는 라벨 오른쪽에 「문구 ▾」 — 라벨 **밖**에 둔다(라벨 안의 단추는 칸을 눌러 버린다). */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
       <label htmlFor={id} style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
         <span style={{ flexShrink: 0 }}>{def.label}{def.required && <span style={{ color: '#dc2626' }}> *</span>}</span>
         {changed && (
@@ -908,6 +915,14 @@ function FieldControl({ def, value, onChange, error, changed, prevValue, rows, m
           </>
         )}
       </label>
+        {withSnippet && (
+          <>
+            <span style={{ flex: 1 }} />
+            <SnippetPicker kind="common" currentValue={value}
+              onPick={text => onChange(insertAtCursor(bodyRef.current, text))} />
+          </>
+        )}
+      </div>
       {control}
       <FieldError message={error} />
     </div>

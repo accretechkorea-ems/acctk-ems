@@ -143,15 +143,34 @@ const PENDING_LIST = ['app/quote/QuoteItemRow.tsx', 'components/quote/CustomerCa
 const ALLOWED = ['components/common/SearchSelect.tsx', 'hooks/useListKeyboard.ts']
 // 엑셀 미리보기는 드롭다운이 아니라 **표**다 — 같은 훅을 쓰지만 고르는 목록이 아니다.
 const NOT_A_DROPDOWN = ['components/xlsx/XlsxPreviewModal.tsx']
+/**
+ * 문구 고르기(2026-11-25)는 **입력칸이 패널 안에** 있다 — 라벨 옆의 「문구 ▾」를 누르면
+ * 검색칸·묶음 머리글(내 문구·공용)·아래 두 줄(다른 용도 보기·지금 내용을 문구로 저장)이
+ * 한 판에 함께 뜬다(시안). 공용 콤보박스는 입력칸을 **밖에** 두고 목록만 띄우는 모양이라
+ * 이 생김새가 들어가지 않는다. 대신 **조작 규칙은 같은 부품**을 쓴다 —
+ * useListKeyboard · useOverlayEsc · IME 가드 · Tab 닫기 · hover 는 고른 자리만 옮기기.
+ * 아래 ⑤ 가 그 다섯을 지킨다.
+ */
+const SAME_RULES = ['components/common/SnippetPicker.tsx']
 
 const handHook = FILES.filter(f => !ALLOWED.includes(f) && /useListKeyboard\(/.test(read(f)))
 eq('키보드를 직접 붙인 파일은 적어 둔 것뿐', handHook.sort(), [...PENDING_HOOK].sort())
 
 // 후보 목록을 **직접 그리는** 파일 — 줄마다 setActive 를 부르는 것이 그 표시다.
 const handList = FILES
-  .filter(f => !ALLOWED.includes(f) && !NOT_A_DROPDOWN.includes(f))
+  .filter(f => !ALLOWED.includes(f) && !NOT_A_DROPDOWN.includes(f) && !SAME_RULES.includes(f))
   .filter(f => /setActive\(/.test(read(f)))
 eq('후보 목록을 직접 그리는 파일도 적어 둔 것뿐', handList.sort(), [...PENDING_LIST].sort())
+
+// 생김새가 달라 공용 컴포넌트에 들어가지 않는 자리는 **조작 규칙을 같은 부품으로** 지킨다.
+for (const f of SAME_RULES) {
+  const src = read(f)
+  ok(`${f} — 같은 키보드 부품을 쓴다`,
+    /useListKeyboard/.test(src) && /useOverlayEsc/.test(src)
+    && /isComposing/.test(src) && /e\.key === 'Tab'/.test(src)
+    && /onMouseEnter=\{\(\) => keys\.setActive/.test(src),
+    'useListKeyboard · useOverlayEsc · IME 가드 · Tab 닫기 · hover=setActive 다섯을 모두 써야 한다')
+}
 
 const MIGRATED = [
   'components/common/AutocompleteInput.tsx',

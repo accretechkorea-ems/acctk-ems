@@ -81,6 +81,20 @@ export default function CustomerDetailBody({
   const [showDisposed, setShowDisposed] = useState(false)
   const disposedCount = devices.length - inUseOnly(devices).length
 
+  /**
+   * 문구함 자리표의 값(2026-11-25) — 사업장·회사·장비·작성자는 **이 화면이** 안다.
+   * 수신인·직급·오늘은 레포트 창이 고른 담당자와 날짜로 채운다.
+   */
+  const snippetCtx = (deviceId: number | null) => {
+    const dev = deviceId != null ? devices.find(d => d.device_id === deviceId) : null
+    return {
+      사업장: customer?.company_name ?? '',
+      회사: customer?.company_name ?? '',
+      장비: [dev?.device_name, dev?.device_name2].filter(Boolean).join(' '),
+      작성자: engineers.find(e => e.engineer_id === currentUserEngineerId)?.name ?? '',
+    }
+  }
+
   const holding = useHoldingCrud({ customerId, holdings, engineerId: currentUserEngineerId, fetchDetail, activeHoldingByDevice, role: currentUserRole })
   const service = useServiceCrud({
     customerId, customer, contacts, engineers, fetchDetail,
@@ -365,6 +379,7 @@ export default function CustomerDetailBody({
           onImageChanged={fetchDetail}
         />
         <ServiceAddModal
+          snippetCtx={snippetCtx(service.selectedDeviceId)}
           deviceId={service.selectedDeviceId}
           contacts={contacts}
           engineers={engineers}
@@ -374,6 +389,7 @@ export default function CustomerDetailBody({
           onSave={service.handleAddService}
         />
         <ServiceEditModal
+          snippetCtx={snippetCtx(service.selectedService?.device_id ?? null)}
           service={service.selectedService}
           onOpenReport={() => service.selectedService && service.handleOpenReport(service.selectedService)}
           onDeleteReport={() => service.selectedService && service.handleDeleteReport(service.selectedService)}

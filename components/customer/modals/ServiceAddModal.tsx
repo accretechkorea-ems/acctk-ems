@@ -13,6 +13,8 @@ import { ATTACH_ACCEPT, ATTACH_MAX } from '../attachments'
 import { AttachmentListBox, AttachmentRow, footerBtn, formatBytes } from '../ServiceAttachments'
 import { R } from '@/lib/radius'
 import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
+import SnippetPicker from '@/components/common/SnippetPicker'
+import { INSERT_HINT, insertAtCursor, type SnippetCtx } from '@/lib/snippets'
 
 type Props = {
   deviceId: number | null
@@ -23,9 +25,16 @@ type Props = {
   onClose: () => void
   /** files — 저장 직후 올릴 첨부파일. 서비스 기록이 생겨야 service_id 가 나오므로 그때까지 브라우저에 둔다. */
   onSave: (form: ServiceForm, engineerIds: number[], files: File[]) => void
+  /**
+   * 문구함 자리표의 값 — 사업장·장비·작성자를 부르는 화면이 준다(문구함, 2026-11-25).
+   * 수신인·직급·오늘은 이 창이 채운다(고른 담당자와 오늘 날짜를 여기서 안다).
+   */
+  snippetCtx?: SnippetCtx
 }
 
 const labelStyle = { fontSize: 13, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, marginBottom: 6, display: 'block' } as const
+/** 라벨 + 「문구 ▾」 한 줄. */
+const snippetRow: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }
 // 모바일: iOS 자동 확대 방지를 위해 입력 요소 fontSize 16, 터치 타깃 44px
 const fieldStyle: CSSProperties = {
   width: '100%', height: 44, padding: '0 12px', border: '1px solid #ebebeb', borderRadius: R.icon,
@@ -53,8 +62,11 @@ const freshForm = (): ServiceForm => ({
   work_hours: '', start_time: '08:30', end_time: '17:30',
 })
 
-export default function ServiceAddModal({ deviceId, contacts, engineers, currentUserEngineerId, isSaving, onClose, onSave }: Props) {
+export default function ServiceAddModal({ deviceId, contacts, engineers, currentUserEngineerId, isSaving, onClose, onSave, snippetCtx }: Props) {
   const [form, setForm] = useState<ServiceForm>(freshForm)
+  /** 문구를 끼울 두 칸 — 커서 자리를 알아야 해서 ref 로 잡는다. */
+  const notesRef = useRef<HTMLTextAreaElement | null>(null)
+  const etcRef = useRef<HTMLTextAreaElement | null>(null)
   const [selectedEngineerIds, setSelectedEngineerIds] = useState<number[]>([])
   const [showExtraEngineers, setShowExtraEngineers] = useState(false)
   const [showHint, setShowHint] = useState(false)
@@ -83,6 +95,15 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
   }, [deviceId, currentUserEngineerId])
 
   if (deviceId === null) return null
+
+  /** 문구의 자리표 값 — 고른 담당자와 오늘을 여기서 채운다. */
+  const picked = contacts.find(c => c.contact_id === form.contact_id)
+  const snipCtx: SnippetCtx = {
+    ...snippetCtx,
+    수신인: picked?.name ?? snippetCtx?.수신인,
+    직급: picked?.position ?? snippetCtx?.직급,
+    오늘: snippetCtx?.오늘 ?? todayKST(),
+  }
 
   // 현재 재직 중인 엔지니어만 신규 배정 대상으로 노출 (퇴사자 제외)
   const todayStr = todayKST()
@@ -165,14 +186,26 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
         {/* 본문 — 스크롤 */}
         <div ref={scrollBodyRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '16px 20px', display: 'grid', gap: 14 }}>
           <div>
-            <label style={labelStyle}>서비스 내용</label>
-            <textarea value={form.service_notes} onChange={(e) => { setForm(p => ({ ...p, service_notes: e.target.value })); clearError('service_notes') }} placeholder="서비스 내용을 입력하세요" rows={5} style={errors.service_notes ? { ...areaStyle, border: errBorder } : areaStyle} />
+            {/* 라벨 옆 「문구 ▾」 — 담아 둔 글을 커서 자리에 끼운다(문구함, 2026-11-25). */}
+            <div style={snippetRow}>
+              <label style={{ ...labelStyle, marginBottom: 0 }}>서비스 내용</label>
+              <span style={{ flex: 1 }} />
+              <SnippetPicker kind="service_content" ctx={snipCtx} currentValue={form.service_notes}
+                onPick={text => { setForm(p => ({ ...p, service_notes: insertAtCursor(notesRef.current, text) })); clearError('service_notes') }} />
+            </div>
+            <textarea ref={notesRef} value={form.service_notes} onChange={(e) => { setForm(p => ({ ...p, service_notes: e.target.value })); clearError('service_notes') }} placeholder="서비스 내용을 입력하세요" rows={5} style={errors.service_notes ? { ...areaStyle, border: errBorder } : areaStyle} />
+            <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>{INSERT_HINT}</div>
             <FieldError message={errors.service_notes} />
           </div>
 
           <div>
-            <label style={labelStyle}>기타사항</label>
-            <textarea value={form.etc_notes} onChange={(e) => setForm(p => ({ ...p, etc_notes: e.target.value }))} placeholder="기타사항 (레포트 하단 '기타사항' 칸에 표시)" rows={2} style={areaStyle} />
+            <div style={snippetRow}>
+              <label style={{ ...labelStyle, marginBottom: 0 }}>기타사항</label>
+              <span style={{ flex: 1 }} />
+              <SnippetPicker kind="service_note" ctx={snipCtx} currentValue={form.etc_notes}
+                onPick={text => setForm(p => ({ ...p, etc_notes: insertAtCursor(etcRef.current, text) }))} />
+            </div>
+            <textarea ref={etcRef} value={form.etc_notes} onChange={(e) => setForm(p => ({ ...p, etc_notes: e.target.value }))} placeholder="기타사항 (레포트 하단 '기타사항' 칸에 표시)" rows={2} style={areaStyle} />
           </div>
 
           <div>

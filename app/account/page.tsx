@@ -15,6 +15,7 @@ import AddressField from '@/components/customer/modals/AddressField'
 import { geocodeAddress } from '@/lib/geocode'
 import { R } from '@/lib/radius'
 import { PASSWORD_MIN, PASSWORD_SHORT_MESSAGE, isPasswordLongEnough } from '@/lib/accountRules'
+import MySnippets, { AccountTab } from '@/components/account/MySnippets'
 
 /**
  * 갈아 끼운 뒤 남은 **옛 프로필 사진**을 버킷에서 지운다.
@@ -94,7 +95,9 @@ export default function AccountPage() {
    * me 는 **옛 값 그대로**였다. 자택 주소를 지워도 지도의 「자택」이 그대로 살아 있었다.
    * refresh() 는 캐시를 버리고 다시 읽어 Provider 상태까지 갈아 준다(MeProvider).
    */
-  const { refresh: refreshMe } = useMe()
+  const { me, refresh: refreshMe } = useMe()
+  /** 어느 탭을 보고 있나 — 기본은 종전 화면(프로필·비밀번호), 「내 문구」가 둘째다(문구함 2026-11-25). */
+  const [tab, setTab] = useState<'basic' | 'snippets'>('basic')
 
   const [engineer, setEngineer] = useState<Engineer | null>(null)
   const [email, setEmail] = useState('')
@@ -371,6 +374,19 @@ export default function AccountPage() {
           <h1 style={{ fontSize: 22, fontWeight: 800, color: TEXT_PRIMARY, margin: 0 }}>정보 수정</h1>
         </div>
 
+        {/* 탭 — 기본(프로필·비밀번호) · 내 문구 */}
+        <div style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${INPUT_BORDER}`, marginBottom: 16 }}>
+          <AccountTab on={tab === 'basic'} onClick={() => setTab('basic')}>기본</AccountTab>
+          <AccountTab on={tab === 'snippets'} onClick={() => setTab('snippets')}>내 문구</AccountTab>
+        </div>
+
+        {tab === 'snippets' && (
+          <div style={{ background: PANEL_BG, border: `1px solid ${INPUT_BORDER}`, borderRadius: R.modal, padding: 20 }}>
+            <MySnippets me={{ engineer_id: me?.engineer_id ?? engineer?.engineer_id ?? null, permission_level: me?.permission_level ?? null }} />
+          </div>
+        )}
+
+        {tab === 'basic' && (<>
         {/* 프로필 카드 */}
         <div style={{ background: PANEL_BG, border: `1px solid ${INPUT_BORDER}`, borderRadius: R.modal, padding: 24, marginBottom: 16 }}>
           <h2 style={{ fontSize: 16, fontWeight: 700, color: TEXT_PRIMARY, margin: '0 0 20px 0' }}>프로필</h2>
@@ -531,6 +547,7 @@ export default function AccountPage() {
             {isSavingPassword ? '변경 중...' : '비밀번호 변경'}
           </button>
         </div>
+        </>)}
       </div>
     </main>
   )

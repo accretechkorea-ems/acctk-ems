@@ -48,13 +48,18 @@ export function mailBody(_p: MailParts): string {
 
 /**
  * mailto 주소. 받는 사람이 없으면 **null** — 화면은 버튼 대신 안내를 띄운다.
- * **body 파라미터 자체를 넣지 않는다** — 빈 body 를 보내면 메일 프로그램이 서명·인용
- * 기본 본문을 지우고 빈 창을 띄우는 쪽이 있다.
+ *
+ * 본문은 **고른 문구가 있을 때만** 붙인다(문구함, 2026-11-25). 빈 body 를 보내면
+ * 메일 프로그램이 서명·인용 기본 본문을 지우고 빈 창을 띄우는 쪽이 있어, 고르지 않으면
+ * body 파라미터 자체를 넣지 않는다. 줄바꿈은 CRLF 로 보내 %0D%0A 가 된다.
  */
-export function mailtoUrl(p: MailParts): string | null {
+export function mailtoUrl(p: MailParts, body?: string | null): string | null {
   const to = t(p.toEmail)
   if (!to) return null
-  return `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(mailSubject(p))}`
+  const q = [`subject=${encodeURIComponent(mailSubject(p))}`]
+  const text = String(body ?? '').trim() === '' ? '' : String(body)
+  if (text) q.push(`body=${encodeURIComponent(text.replace(/\r?\n/g, '\r\n'))}`)
+  return `mailto:${encodeURIComponent(to)}?${q.join('&')}`
 }
 
 /** 이메일이 없을 때 그 자리에 적는 말. */

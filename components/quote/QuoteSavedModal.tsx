@@ -12,10 +12,15 @@
  *   PDF 를 끌어다 첨부해 주세요」를 아래에 적어 둔다.
  */
 
+import { useEffect, useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import ModalCard from '@/components/common/ModalCard'
-import { BLUE, BORDER, CARD_BG, SUB, TEXT } from '@/components/common/ui'
+import { BAND_BG, BLUE, BORDER, CARD_BG, MUTED, SUB, TEXT } from '@/components/common/ui'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 import { R } from '@/lib/radius'
+import { todayKST } from '@/lib/date'
+import { useSnippets } from '@/hooks/useSnippets'
+import { KIND_LABEL, SCOPE_LABEL, applyVars, type SnippetCtx } from '@/lib/snippets'
 import { ATTACH_NOTICE, NO_EMAIL_NOTICE, mailtoUrl, savedTitle, type MailParts } from '@/lib/quoteMail'
 
 /**
@@ -34,7 +39,24 @@ export default function QuoteSavedModal({ parts, onClose }: {
   parts: MailParts
   onClose: () => void
 }) {
-  const href = mailtoUrl(parts)
+  /**
+   * 본문 문구 — 담아 둔 「메일 본문」·「공통」 문구에서 고른다(문구함, 2026-11-25).
+   * 고르지 않으면 본문 없이 보낸다(종전과 같다).
+   */
+  const snippets = useSnippets('mail_body')
+  const { load } = snippets
+  const [picked, setPicked] = useState<number | null>(null)
+  // 열 때 한 번 읽는다 — load 는 상태와 무갈이라 여기서 되돌이가 생기지 않는다(useSnippets).
+  useEffect(() => { void load() }, [load])
+
+  const ctx: SnippetCtx = {
+    수신인: parts.toName, 직급: parts.toPosition, 회사: parts.company,
+    품명: parts.firstItem, 견적번호: parts.quoteNo, 작성자: parts.fromName, 오늘: todayKST(),
+  }
+  const chosen = snippets.rows.find(s => s.snippet_id === picked) ?? null
+  const preview = chosen ? applyVars(chosen.body, ctx) : ''
+
+  const href = mailtoUrl(parts, preview)
   const email = String(parts.toEmail ?? '').trim()
 
   return (
@@ -76,6 +98,41 @@ export default function QuoteSavedModal({ parts, onClose }: {
           ) : (
             <div style={{ fontSize: 13, color: SUB, lineHeight: 1.8 }}>{NO_EMAIL_NOTICE}</div>
           )}
+
+          {/* 본문 문구 — 고르면 자리표가 바뀐 글이 아래에 뜨고, 그 글이 메일 본문이 된다. */}
+          <div>
+            <label htmlFor="quote-mail-snippet"
+              style={{ fontSize: 12, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, marginBottom: 4, display: 'block' }}>
+              본문 문구
+            </label>
+            <select id="quote-mail-snippet" value={picked ?? ''}
+              onChange={e => setPicked(e.target.value === '' ? null : Number(e.target.value))}
+              style={{
+                width: '100%', height: 38, padding: '0 10px', boxSizing: 'border-box',
+                border: `1px solid ${BORDER}`, borderRadius: R.control, background: CARD_BG,
+                fontSize: 13, color: picked == null ? MUTED : TEXT, outline: 'none',
+                fontFamily: 'inherit', cursor: 'pointer',
+              }}>
+              <option value="">본문 없이 보내기</option>
+              {snippets.rows.map(s => (
+                <option key={s.snippet_id} value={s.snippet_id}>
+                  {s.title} ({SCOPE_LABEL[s.scope]}{s.kind !== 'mail_body' ? ` · ${KIND_LABEL[s.kind]}` : ''})
+                </option>
+              ))}
+            </select>
+            {snippets.notice && (
+              <div style={{ fontSize: 11, color: SUB, marginTop: 4, lineHeight: 1.7 }}>{snippets.notice}</div>
+            )}
+            {preview && (
+              <div style={{
+                marginTop: 6, padding: '8px 10px', borderRadius: R.control, background: BAND_BG,
+                fontSize: 12, color: SUB, lineHeight: 1.6, whiteSpace: 'pre-wrap',
+              }}>
+                {preview}
+              </div>
+            )}
+          </div>
+
           <div style={{ fontSize: 12, color: SUB, lineHeight: 1.8 }}>{ATTACH_NOTICE}</div>
         </div>
       </ModalCard>
