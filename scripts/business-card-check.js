@@ -237,6 +237,22 @@ ok('두 칸을 더하고 스키마를 깨운다',
   && /notify pgrst, 'reload schema'/.test(EN_SQL))
 ok('칸이 없어도 담기가 깨지지 않는다(라우트가 뺀다)',
   /dropMissingColumns/.test(ROUTE) && /PGRST204/.test(ROUTE))
+// ── ⑩ 고른 줄 지우기 — 2026-11-25 ──
+console.log('\n── ⑩ 선택 삭제 띠 ──')
+const CARDS_PAGE = read('app/cards/page.tsx')
+ok('줄마다 체크칸', /checked=\{picked\.has\(c\.card_id\)\}/.test(CARDS_PAGE))
+ok('머리글에 전체 고르기', /checked=\{allPicked\} onChange=\{toggleAll\}/.test(CARDS_PAGE))
+ok('고른 것이 있으면 띠가 선다', /\{picked\.size > 0 && \(/.test(CARDS_PAGE))
+ok('고객사 목록과 같은 띠(ems-bulk-bar)', /className="ems-bulk-bar"/.test(CARDS_PAGE))
+ok('띠에 건수·삭제·선택 해제', /selectionTitle\(picked\.size\)/.test(CARDS_PAGE)
+  && /삭제\s*\n?\s*<\/button>/.test(CARDS_PAGE) && /선택 해제/.test(CARDS_PAGE))
+ok('권한 밖은 안내하고 뺀다',
+  /skippedNotice\(skipped\)/.test(CARDS_PAGE) && /canDeleteCard\(me, c\)/.test(CARDS_PAGE))
+ok('지우기는 서버 라우트로', /fetch\('\/api\/cards\/delete'/.test(CARDS_PAGE))
+ok('폰에서는 「선택」 토글로 체크칸이 뜬다',
+  /\{picking \? '선택 끝' : '선택'\}/.test(CARDS_PAGE) && /\{picking && \(/.test(CARDS_PAGE))
+ok('체크칸이 줄 열기를 가로채지 않는다', /onClick=\{e => e\.stopPropagation\(\)\}/.test(CARDS_PAGE))
+
 ok('칸이 없어도 목록이 비지 않는다(짧은 select 로 다시 읽는다)',
   /SELECT_BASE/.test(read('app/cards/page.tsx')) && /error\?\.code === '42703'/.test(read('app/cards/page.tsx')))
 

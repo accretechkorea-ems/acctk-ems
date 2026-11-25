@@ -86,6 +86,8 @@ export type BusinessCard = {
   company?: string | null
   /** 영문 회사명 — 위와 같다. */
   company_en?: string | null
+  /** 여러 장 등록 한 번(묶음)의 id. 칸은 db/business_cards_batch_20261125.sql 이 더한다. */
+  import_batch_id?: string | null
   department?: string | null
   position?: string | null
   mobile?: string | null

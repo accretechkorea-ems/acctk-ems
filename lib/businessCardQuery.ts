@@ -27,14 +27,16 @@ export type CardFilter = {
    * 여러 장 등록으로 담은 줄이 여기에 모인다 — 아무도 눈으로 보지 않았기 때문이다.
    */
   checked: '' | 'none'
+  /** 가져오기 묶음(uuid). 빈 글자면 전체 (2026-11-25). */
+  batch: string
 }
 
 export const EMPTY_FILTER: CardFilter =
-  { q: '', division: '', engineerId: 0, team: '', from: '', to: '', checked: '' }
+  { q: '', division: '', engineerId: 0, team: '', from: '', to: '', checked: '', batch: '' }
 
 /** 주소에 적는 이름 — 짧게 둔다(붙여 넣은 주소가 읽히게). */
 const KEYS = {
-  q: 'q', division: 'div', engineerId: 'by', team: 'team', from: 'from', to: 'to', checked: 'checked',
+  q: 'q', division: 'div', engineerId: 'by', team: 'team', from: 'from', to: 'to', checked: 'checked', batch: 'batch',
 } as const
 
 /** 주소 → 조건. 모르는 값은 기본값으로 떨어진다(깨진 주소로도 화면이 뜬다). */
@@ -53,6 +55,7 @@ export function filterFromQuery(params: URLSearchParams | Record<string, string 
     from: get(KEYS.from),
     to: get(KEYS.to),
     checked: get(KEYS.checked) === 'none' ? 'none' : '',
+    batch: get(KEYS.batch),
   }
 }
 
@@ -66,6 +69,7 @@ export function queryFromFilter(f: CardFilter): string {
   if (f.from) p.set(KEYS.from, f.from)
   if (f.to) p.set(KEYS.to, f.to)
   if (f.checked === 'none') p.set(KEYS.checked, 'none')
+  if (f.batch) p.set(KEYS.batch, f.batch)
   const s = p.toString()
   return s ? `?${s}` : ''
 }
@@ -95,6 +99,7 @@ export function applyCardFilter(
     if (f.from && day < f.from) return false
     if (f.to && day > f.to) return false
     if (f.checked === 'none' && !isUnchecked(c)) return false
+    if (f.batch && String(c.import_batch_id ?? '') !== f.batch) return false
     return matchesCard(c, f.q)
   })
 }

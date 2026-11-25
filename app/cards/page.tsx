@@ -29,9 +29,12 @@ import {
   checkedLabel, visibleDivisions, type BusinessCard, type CardForm,
 } from '@/lib/businessCard'
 import { applyCardFilter, countUnchecked, filterFromQuery, isUnchecked, queryFromFilter, type CardFilter } from '@/lib/businessCardQuery'
+import { canDeleteCard, selectionTitle, skippedNotice } from '@/lib/businessCardBulk'
 import { exportCardXlsx } from '@/lib/businessCardExcel'
 import CardFormModal from '@/components/cards/CardFormModal'
 import BulkImportModal from '@/components/cards/BulkImportModal'
+// 선택 띠의 가름선 — 고객사 목록의 선택 바와 **같은 값**을 그대로 쓴다(새 색을 만들지 않는다).
+import { BAR_LINE } from '@/components/home/list/BulkBar'
 import { BLUE, BORDER, CARD_BG, MUTED, PAGE_BG, SUB, TEXT } from '@/components/common/ui'
 import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 import { R } from '@/lib/radius'
@@ -45,7 +48,15 @@ import { R } from '@/lib/radius'
  */
 const SELECT_BASE = 'card_id, name, company, department, position, mobile, phone, fax, email, address, website, memo, ' +
   'division, registered_at, verified_at, input_method, engineer_id, registered_name, registered_team, registered_div, deleted_at'
-const SELECT = `${SELECT_BASE}, name_en, company_en`
+/**
+ * 읽어 볼 차례 — **긴 것부터**. 42703 이 나면 다음 것으로 내려간다.
+ * 칸이 더 생길 때마다 맨 앞에 한 줄을 더하면 된다(SQL 적용 전에도 목록이 뜬다).
+ */
+const SELECT_TRIES = [
+  `${SELECT_BASE}, name_en, company_en, import_batch_id`,
+  `${SELECT_BASE}, name_en, company_en`,
+  SELECT_BASE,
+] as const
 
 const btn = (primary = false): React.CSSProperties => ({
   height: 34, padding: '0 12px', borderRadius: R.control, cursor: 'pointer', fontFamily: 'inherit',
@@ -97,6 +108,10 @@ function CardsPageInner() {
   /** 여러 장 등록 창 — PDF·사진 묶음을 읽어 바로 담는다(2026-11-24). */
   const [bulkOpen, setBulkOpen] = useState(false)
   const [narrow, setNarrow] = useState(false)
+  /** 고른 명함 — 선택 삭제(2026-11-25). */
+  const [picked, setPicked] = useState<Set<number>>(new Set())
+  /** 폰에서는 체크칸을 늘 두지 않는다 — 「선택」을 눌러야 나온다. */
+  const [picking, setPicking] = useState(false)
 
   const filter = useMemo(() => filterFromQuery(params), [params])
   const today = new Date().toISOString()
@@ -115,9 +130,11 @@ function CardsPageInner() {
       .is('deleted_at', null)
       .order('registered_at', { ascending: false })
       .limit(2000)
-    let { data, error } = await read(SELECT)
-    // 영문 칸이 아직 없다 — 그 둘만 빼고 다시 읽는다(목록이 비지 않게).
-    if (error?.code === '42703') ({ data, error } = await read(SELECT_BASE))
+    // 아직 없는 칸이 섞여 있으면 42703 으로 **조회 전체가 거절된다** — 짧은 것으로 내려간다.
+    let { data, error } = await read(SELECT_TRIES[0])
+    for (let i = 1; i < SELECT_TRIES.length && error?.code === '42703'; i++) {
+      ({ data, error } = await read(SELECT_TRIES[i]))
+    }
     if (error) {
       // 표가 아직 없으면 화면이 깨지는 대신 무엇을 돌려야 하는지 말해 준다.
       if (error.code === '42P01' || error.code === 'PGRST205') setSchemaMissing(true)
@@ -154,6 +171,71 @@ function CardsPageInner() {
     }
     return [...m].sort((a, b) => a[1].localeCompare(b[1], 'ko'))
   }, [rows])
+
+  /** 가져오기 묶음 — 최근 10개(날짜·건수). 묶음 칸이 없으면 빈 목록이다. */
+  const batches = useMemo(() => {
+    const m = new Map<string, { count: number; day: string }>()
+    for (const c of rows) {
+      const id = String(c.import_batch_id ?? '')
+      if (!id) continue
+      const day = String(c.registered_at ?? '').slice(0, 10)
+      const had = m.get(id)
+      if (had) { had.count += 1; if (day > had.day) had.day = day }
+      else m.set(id, { count: 1, day })
+    }
+    return [...m].sort((a, b) => b[1].day.localeCompare(a[1].day)).slice(0, 10)
+  }, [rows])
+
+  /** 고른 줄 가운데 **내가 지울 수 있는 것**과 그렇지 못한 수. */
+  const pickedRows = useMemo(() => shown.filter(c => picked.has(c.card_id)), [shown, picked])
+  const deletable = useMemo(() => pickedRows.filter(c => canDeleteCard(me, c)), [pickedRows, me])
+  const skipped = pickedRows.length - deletable.length
+
+  /** 보이는 줄이 모두 골라졌나 — 머리글 체크칸의 상태. */
+  const allPicked = shown.length > 0 && shown.every(c => picked.has(c.card_id))
+  const toggleAll = () => {
+    setPicked(allPicked ? new Set() : new Set(shown.map(c => c.card_id)))
+  }
+  const togglePick = (id: number) => {
+    setPicked(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  /** 고른 줄을 지운다 — 권한 밖은 빼고, 서버가 한 번 더 센다. */
+  const deletePicked = async () => {
+    if (deletable.length === 0) return
+    const yes = await confirm({
+      title: `명함 ${deletable.length}건을 지울까요?`,
+      message: [
+        '지운 명함은 목록에서 사라집니다.',
+        skippedNotice(skipped),
+      ].filter(Boolean).join('\n'),
+      confirmText: '삭제',
+      cancelText: '그대로 두기',
+      variant: 'danger',
+    })
+    if (!yes) return
+    setBusy(true)
+    try {
+      const res = await fetch('/api/cards/delete', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'cards', card_ids: deletable.map(c => c.card_id) }),
+      })
+      const json = await res.json() as { ok?: boolean; deleted?: number; skipped?: number; error?: string }
+      if (!json?.ok) { toast.error(json?.error ?? '지우지 못했습니다'); return }
+      toast.success(`${json.deleted ?? 0}건을 지웠습니다`)
+      setPicked(new Set())
+      await load()
+    } catch {
+      toast.error('지우지 못했습니다')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const call = async (body: Record<string, unknown>): Promise<boolean> => {
     setBusy(true)
@@ -272,9 +354,24 @@ function CardsPageInner() {
           <button type="button" style={btn(true)} onClick={openNew}>＋ 명함 등록</button>
         </>
       )}
+      {/* 가져오기 묶음 — 최근 10개. 묶음이 없으면 칸을 두지 않는다. */}
+      {batches.length > 0 && (
+        <select value={filter.batch} onChange={e => { setPicked(new Set()); setFilter({ batch: e.target.value }) }} style={btn()}>
+          <option value="">가져오기 전체</option>
+          {batches.map(([id, b]) => (
+            <option key={id} value={id}>{b.day} · {b.count}건</option>
+          ))}
+        </select>
+      )}
       {/* 폰에서도 열 수 있게 — 날짜·엑셀은 넓은 화면에서만이지만 이 길은 둔다. */}
       {narrow && (
-        <button type="button" style={btn()} onClick={() => setBulkOpen(true)}>여러 장 등록</button>
+        <>
+          <button type="button" style={btn()} onClick={() => setBulkOpen(true)}>여러 장 등록</button>
+          <button type="button" style={btn(picking)}
+            onClick={() => { setPicking(v => !v); setPicked(new Set()) }}>
+            {picking ? '선택 끝' : '선택'}
+          </button>
+        </>
       )}
     </div>
   )
@@ -282,6 +379,42 @@ function CardsPageInner() {
   return (
     <main style={{ padding: narrow ? '12px 12px 96px' : 16, background: PAGE_BG, minHeight: '100vh', display: 'flex', flexDirection: 'column', gap: 12 }}>
       {header}
+
+      {/* 고른 것이 있으면 검은 띠 — 고객사 목록의 선택 바와 같은 모양이다. */}
+      {picked.size > 0 && (
+        <div className="ems-bulk-bar"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px',
+            background: TEXT, color: CARD_BG, fontSize: 12, flexWrap: 'wrap', flexShrink: 0,
+            borderRadius: R.control,
+          }}>
+          <b style={{ fontWeight: 700 }}>{selectionTitle(picked.size)}</b>
+          {skipped > 0 && (
+            <span style={{ color: MUTED }}>{skippedNotice(skipped)}</span>
+          )}
+          <span style={{ width: 1, height: 16, background: BAR_LINE, margin: '0 4px' }} />
+          <button type="button" disabled={busy || deletable.length === 0}
+            title={deletable.length === 0 ? '지울 수 있는 명함이 없습니다' : '고른 명함을 지웁니다'}
+            onClick={() => void deletePicked()}
+            style={{
+              height: 26, padding: '0 10px', borderRadius: R.icon,
+              border: `1px solid ${BAR_LINE}`, background: 'transparent',
+              color: busy || deletable.length === 0 ? MUTED : CARD_BG,
+              fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
+              cursor: busy || deletable.length === 0 ? 'not-allowed' : 'pointer',
+            }}>
+            삭제
+          </button>
+          <button type="button" onClick={() => setPicked(new Set())}
+            style={{
+              height: 26, padding: '0 10px', borderRadius: R.icon,
+              border: `1px solid ${BAR_LINE}`, background: 'transparent', color: CARD_BG,
+              fontSize: 12, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer',
+            }}>
+            선택 해제
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div style={{ padding: 40, textAlign: 'center', color: SUB, fontSize: 13 }}>불러오는 중…</div>
@@ -292,9 +425,23 @@ function CardsPageInner() {
       ) : narrow ? (
         /* ── 폰 — 카드 한 줄(보드 ①) ── */
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* 폰에서 「선택」을 켜면 머리줄에 전체 고르기가 선다. */}
+          {picking && shown.length > 0 && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: TEXT_LABEL, padding: '2px 2px' }}>
+              <input type="checkbox" checked={allPicked} onChange={toggleAll} style={{ cursor: 'pointer' }} />
+              모두 고르기
+            </label>
+          )}
           {shown.map(c => (
-            <button key={c.card_id} type="button" onClick={() => openCard(c)}
+            <div key={c.card_id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {picking && (
+                <input type="checkbox" checked={picked.has(c.card_id)}
+                  onChange={() => togglePick(c.card_id)}
+                  aria-label={`${c.name} 고르기`} style={{ cursor: 'pointer', flexShrink: 0 }} />
+              )}
+            <button type="button" onClick={() => openCard(c)}
               style={{
+                flex: 1, minWidth: 0,
                 background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.card, padding: '12px 14px',
                 display: 'flex', flexDirection: 'column', gap: 3, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
               }}>
@@ -316,6 +463,7 @@ function CardsPageInner() {
                 {checkedLabel(c) && <span>{checkedLabel(c)}</span>}
               </div>
             </button>
+            </div>
           ))}
         </div>
       ) : (
@@ -324,6 +472,10 @@ function CardsPageInner() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#f9fafb' }}>
+                <th style={{ ...th, width: 34, paddingRight: 0 }}>
+                  <input type="checkbox" checked={allPicked} onChange={toggleAll}
+                    aria-label="모두 고르기" style={{ cursor: 'pointer' }} />
+                </th>
                 <th style={th}>이름</th><th style={th}>회사 · 부서</th><th style={th}>직급</th>
                 <th style={th}>휴대폰</th><th style={th}>이메일</th><th style={th}>사업부</th>
                 <th style={th}>등록일</th><th style={th}>마지막 확인</th><th style={th}>등록자</th><th style={th} />
@@ -333,6 +485,12 @@ function CardsPageInner() {
               {shown.map(c => (
                 <tr key={c.card_id} style={{ height: 44, borderTop: `1px solid ${BORDER}`, cursor: 'pointer' }}
                   onClick={() => openCard(c)}>
+                  {/* 체크칸은 줄 열기와 섞이지 않게 눌림을 여기서 멈춘다. */}
+                  <td style={{ ...td, paddingRight: 0 }} onClick={e => e.stopPropagation()}>
+                    <input type="checkbox" checked={picked.has(c.card_id)}
+                      onChange={() => togglePick(c.card_id)}
+                      aria-label={`${c.name} 고르기`} style={{ cursor: 'pointer' }} />
+                  </td>
                   <td style={td}><b>{c.name}</b><En value={c.name_en} /></td>
                   <td style={{ ...td, whiteSpace: 'normal' }}>
                     {[c.company, c.department].filter(Boolean).join(' · ') || '—'}

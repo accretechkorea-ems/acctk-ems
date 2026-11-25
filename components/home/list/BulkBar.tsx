@@ -25,7 +25,7 @@ import { bulkActionsFor, bulkBarTitle, type BulkActionKey, type BulkContext } fr
 
 // 바탕은 **글자색 토큰(TEXT)** 을 그대로 쓴다 — 검은 바의 색이 그 값이다.
 // 가름선만 이 바 전용 값이다(토큰 표에 없는 어두운 회색).
-const BAR_LINE = '#374151'
+export const BAR_LINE = '#374151'
 
 export type BulkBarProps = BulkContext & {
   /** 버튼을 눌렀을 때. 잠긴 버튼은 부르지 않는다. */

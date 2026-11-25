@@ -27,11 +27,12 @@ import { useCallback, useRef, useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import ModalCard, { keepPads } from '@/components/common/ModalCard'
-import { BLUE, BLUE_BORDER, BLUE_TINT, BORDER, CARD_BG, MUTED, SUB, TEXT } from '@/components/common/ui'
+import { BLUE, BLUE_BORDER, BLUE_TINT, BORDER, CARD_BG, DANGER, MUTED, SUB, TEXT } from '@/components/common/ui'
 import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 import { R } from '@/lib/radius'
 import {
   BULK_REASON_LABEL, BULK_SQL_FILE, EMPTY_TALLY, MAX_PER_REQUEST, addLines, chunk, costLabel,
+  newBatchId, undoQuestion, worthRetry,
   progressLabel, progressPercent, stopQuestion, summaryLabel,
   type BulkLine, type BulkReason, type BulkTally,
 } from '@/lib/businessCardBulk'
@@ -100,6 +101,39 @@ async function splitPdf(file: File): Promise<Piece[]> {
   return out
 }
 
+/**
+ * 거꾸로 들어간 쪽을 **180° 돌려** 다시 만든다.
+ * 스캐너에 뒤집혀 들어간 명함은 글자가 안 잡혀 「사람 이름 없음」·「빈 면」으로 떨어진다.
+ * PDF 는 쪽을 돌리고(회전값만 더한다), 사진은 캔버스로 돌려 다시 그린다.
+ * 돌리지 못하면 null — 그러면 원래 판정을 그대로 둔다.
+ */
+async function flip(file: File): Promise<File | null> {
+  try {
+    if (file.type === 'application/pdf') {
+      const { PDFDocument, degrees } = await import('pdf-lib')
+      const doc = await PDFDocument.load(await file.arrayBuffer())
+      for (const pg of doc.getPages()) pg.setRotation(degrees((pg.getRotation().angle + 180) % 360))
+      const bytes = await doc.save()
+      const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+      return new File([buf], file.name, { type: 'application/pdf' })
+    }
+    const bitmap = await createImageBitmap(file)
+    const canvas = document.createElement('canvas')
+    canvas.width = bitmap.width
+    canvas.height = bitmap.height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    ctx.translate(bitmap.width / 2, bitmap.height / 2)
+    ctx.rotate(Math.PI)
+    ctx.drawImage(bitmap, -bitmap.width / 2, -bitmap.height / 2)
+    bitmap.close()
+    const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/jpeg', QUALITY))
+    return blob ? new File([blob], file.name, { type: 'image/jpeg' }) : null
+  } catch {
+    return null
+  }
+}
+
 export default function BulkImportModal({ division, onClose, onDone, onShowUnchecked }: {
   /** 담을 사업부 — 목록 화면이 보고 있는 값. */
   division: string
@@ -122,6 +156,11 @@ export default function BulkImportModal({ division, onClose, onDone, onShowUnche
   const pickRef = useRef<HTMLInputElement>(null)
   /** 중단 눌림 — 돌고 있는 반복이 다음 묶음 전에 본다. */
   const stop = useRef(false)
+  /** 이번 가져오기 묶음 — 창을 여는 순간 하나 만들어 둔다(되돌리기가 이것으로 지운다). */
+  const batchId = useRef(newBatchId())
+  /** 되돌리기를 한 번 눌렀나 — 두 번 지우지 않는다. */
+  const [undone, setUndone] = useState<number | null>(null)
+  const [undoing, setUndoing] = useState(false)
 
   const add = (list: FileList | null) => {
     if (!list) return
@@ -160,16 +199,14 @@ export default function BulkImportModal({ division, onClose, onDone, onShowUnche
      */
     let prevCardId: number | null = null
 
-    for (const group of chunk(pieces, MAX_PER_REQUEST)) {
-      if (stop.current) break
-      const body = new FormData()
-      body.append('division', division)
-      if (prevCardId) body.append('prev_card_id', String(prevCardId))
-      for (const p of group) body.append('files', p.file, p.file.name)
-
-      /** 한 번 더 보낸다 — 네트워크가 한 번 흔들렸다고 묶음을 버리지 않는다. */
-      let lines: BulkLine[] | null = null
-      for (let attempt = 1; attempt <= 2 && !lines; attempt++) {
+    /** 한 묶음을 보낸다. 한 번 더 보내 본다 — 네트워크가 흔들렸다고 묶음을 버리지 않는다. */
+    const send = async (group: Piece[]): Promise<BulkLine[]> => {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        const body = new FormData()
+        body.append('division', division)
+        body.append('import_batch_id', batchId.current)
+        if (prevCardId) body.append('prev_card_id', String(prevCardId))
+        for (const p of group) body.append('files', p.file, p.file.name)
         try {
           const res = await fetch('/api/cards/ocr-bulk', { method: 'POST', body })
           const json = await res.json() as {
@@ -177,21 +214,58 @@ export default function BulkImportModal({ division, onClose, onDone, onShowUnche
             usage?: { input: number; output: number }; last_card_id?: number | null
           }
           if (json?.ok && Array.isArray(json.lines)) {
-            lines = json.lines
             used.input += json.usage?.input ?? 0
             used.output += json.usage?.output ?? 0
             prevCardId = json.last_card_id ?? prevCardId
-          } else if (attempt === 2) {
-            lines = group.map((_, i) => ({
+            return json.lines
+          }
+          if (attempt === 2) {
+            return group.map((_, i) => ({
               index: i, ok: false as const, reason: (json?.reason ?? 'api') as BulkReason,
             }))
           }
         } catch {
-          if (attempt === 2) lines = group.map((_, i) => ({ index: i, ok: false as const, reason: 'api' as BulkReason }))
+          if (attempt === 2) {
+            return group.map((_, i) => ({ index: i, ok: false as const, reason: 'api' as BulkReason }))
+          }
+        }
+      }
+      return []
+    }
+
+    for (const group of chunk(pieces, MAX_PER_REQUEST)) {
+      if (stop.current) break
+      let got = await send(group)
+
+      /**
+       * 거꾸로 들어간 쪽을 **한 번 더** — 사람 이름 없음·빈 면만 돌려 보낸다.
+       * 다시 읽어 사람이 나오면 그 결과를 쓰고, 아니면 원래 판정을 그대로 둔다.
+       */
+      const retryAt = got.map((l, i) => (!l.ok && worthRetry(l.reason) ? i : -1)).filter(i => i >= 0)
+      if (retryAt.length > 0 && !stop.current) {
+        const flipped: Piece[] = []
+        const back: number[] = []
+        for (const i of retryAt) {
+          const p = group[got[i].index]
+          if (!p) continue
+          const f = await flip(p.file)
+          if (f) { flipped.push({ file: f, label: p.label }); back.push(i) }
+        }
+        if (flipped.length > 0) {
+          const again = await send(flipped)
+          for (let k = 0; k < again.length; k++) {
+            const slot = back[again[k].index]
+            const now = again[k]
+            if (slot == null || !now) continue
+            // 돌려 읽어 **담겼거나 기존 명함과 맞물렸으면** 그 결과를 쓴다.
+            if (now.ok || now.reason === 'dup' || now.reason === 'merged') {
+              got = got.map((l, i) => (i === slot ? { ...now, index: got[slot].index } : l))
+              acc = { ...acc, flipped: acc.flipped + 1 }
+            }
+          }
         }
       }
 
-      const got = lines ?? []
       acc = addLines(acc, got)
       for (const l of got) {
         const p = group[l.index]
@@ -228,6 +302,36 @@ export default function BulkImportModal({ division, onClose, onDone, onShowUnche
       stop.current = true
       setNote('중단하는 중 — 보내 둔 묶음이 끝나면 멈춥니다')
     })()
+  }
+
+  /** 이번 가져오기를 통째로 무른다 — **새로 담긴 줄만** 지운다. */
+  const undo = async () => {
+    const yes = await confirmDialog({
+      title: '이번 가져오기를 되돌릴까요?',
+      message: undoQuestion(tally.saved),
+      confirmText: '되돌리기',
+      cancelText: '그대로 두기',
+      variant: 'danger',
+    })
+    if (!yes) return
+    setUndoing(true)
+    try {
+      const res = await fetch('/api/cards/delete', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'batch', import_batch_id: batchId.current }),
+      })
+      const json = await res.json() as { ok?: boolean; deleted?: number; error?: string }
+      if (json?.ok) {
+        setUndone(json.deleted ?? 0)
+        onDone({ ...tally, saved: 0 })
+      } else {
+        setNote(json?.error ?? '되돌리지 못했습니다')
+      }
+    } catch {
+      setNote('되돌리지 못했습니다')
+    } finally {
+      setUndoing(false)
+    }
   }
 
   const dupRows = rows.filter(r => !r.ok && r.reason === 'dup')
@@ -387,7 +491,24 @@ export default function BulkImportModal({ division, onClose, onDone, onShowUnche
               </div>
             )}
 
-            {phase === 'finished' && tally.saved > 0 && (
+            {/* 되돌리기 — 새로 담긴 줄만 지운다. 한 번 누르면 더 뜨지 않는다. */}
+            {phase === 'finished' && tally.saved > 0 && undone == null && (
+              <button type="button" onClick={() => void undo()} disabled={undoing}
+                style={{
+                  height: BTN_H, border: `1px solid ${BORDER}`, borderRadius: R.control,
+                  background: CARD_BG, color: DANGER, fontWeight: 700, fontSize: 13,
+                  cursor: undoing ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                }}>
+                {undoing ? '되돌리는 중…' : '이번 가져오기 되돌리기'}
+              </button>
+            )}
+            {undone != null && (
+              <div style={{ fontSize: 12, color: SUB }}>
+                되돌렸습니다 — {undone}건을 지웠습니다. 합쳐진 뒷면·기존 명함은 그대로입니다.
+              </div>
+            )}
+
+            {phase === 'finished' && tally.saved > 0 && undone == null && (
               <button type="button" onClick={() => { onShowUnchecked(); onClose() }}
                 style={{
                   height: BTN_H, border: `1px solid ${BLUE_BORDER}`, borderRadius: R.control,

@@ -31,7 +31,7 @@ import type { OcrKey } from '@/lib/businessCardOcr'
 import { readCard } from '@/lib/cardOcrServer'
 import {
   BULK_METHOD, EVENT_HANGUL, EVENT_MERGED, MAX_PER_REQUEST,
-  canMergeBack, fillBlanks, hangulPatch, isNoPerson, type BulkLine,
+  canMergeBack, fillBlanks, hangulPatch, isBatchId, isNoPerson, type BulkLine,
 } from '@/lib/businessCardBulk'
 
 const supabaseAdmin = adminClient()
@@ -55,13 +55,29 @@ function toRow(fields: Record<OcrKey, string>, enabled: boolean): Record<string,
   return out
 }
 
+/** 그 칸이 아직 없다는 뜻인가. */
+const missing = (err: { code?: string | null } | null) =>
+  err != null && (err.code === '42703' || err.code === 'PGRST204' || err.code === 'PGRST205')
+
 /** 영문 칸이 표에 있나 — db/business_cards_en_20261123.sql 을 아직 안 돌렸을 수 있다. */
 let enColumnsKnown: boolean | null = null
 async function hasEnColumns(): Promise<boolean> {
   if (enColumnsKnown != null) return enColumnsKnown
   const { error } = await supabaseAdmin.from('business_cards').select('name_en').limit(1)
-  enColumnsKnown = !(error != null && (error.code === '42703' || error.code === 'PGRST204' || error.code === 'PGRST205'))
+  enColumnsKnown = !missing(error)
   return enColumnsKnown
+}
+
+/** 묶음 칸이 표에 있나 — db/business_cards_batch_20261125.sql 을 아직 안 돌렸을 수 있다. */
+let batchColumnKnown: boolean | null = null
+async function hasBatchColumn(): Promise<boolean> {
+  if (batchColumnKnown != null) return batchColumnKnown
+  const { error } = await supabaseAdmin.from('business_cards').select('import_batch_id').limit(1)
+  batchColumnKnown = !missing(error)
+  if (!batchColumnKnown) {
+    console.warn(`[${TAG}] 묶음 칸이 아직 없다 — db/business_cards_batch_20261125.sql 전까지 되돌리기를 쓸 수 없다`)
+  }
+  return batchColumnKnown
 }
 
 export async function POST(req: Request) {
@@ -90,6 +106,13 @@ export async function POST(req: Request) {
   const snap = snapshotOf(caller, division)
   const now = new Date().toISOString()
   const enabled = await hasEnColumns()
+
+  /**
+   * 이번 가져오기 묶음 — **새로 담는 줄에만** 적는다.
+   * 합친 뒷면·이미 있던 명함에는 적지 않는다(되돌리기가 남의 줄을 지우지 않게).
+   */
+  const rawBatch = String(form.get('import_batch_id') ?? '')
+  const batchId = isBatchId(rawBatch) && await hasBatchColumn() ? rawBatch : null
 
   // ── 셋을 **동시에** 읽는다 ──
   const read = await Promise.all(files.map(f => readCard(f, key)))
@@ -215,6 +238,7 @@ export async function POST(req: Request) {
         input_method: INPUT_METHOD,
         registered_at: now,
         verified_at: VERIFIED_AT,
+        ...(batchId ? { import_batch_id: batchId } : {}),
         ...snap,
       })
       .select('card_id')

@@ -55,10 +55,10 @@ eq('걸린 것만 적는다',
   '?q=%ED%99%8D%EA%B8%B8%EB%8F%99&div=%EB%B0%98%EB%8F%84%EC%B2%B4&by=7')
 eq('주소를 다시 읽으면 같은 조건',
   Q.filterFromQuery(new URLSearchParams('q=a&div=계측&by=3&team=80CS&from=2026-01-01&to=2026-12-31')),
-  { q: 'a', division: '계측', engineerId: 3, team: '80CS', from: '2026-01-01', to: '2026-12-31', checked: '' })
+  { q: 'a', division: '계측', engineerId: 3, team: '80CS', from: '2026-01-01', to: '2026-12-31', checked: '', batch: '' })
 eq('깨진 값은 기본값으로 떨어진다',
   Q.filterFromQuery(new URLSearchParams('div=물류&by=abc')),
-  { q: '', division: '', engineerId: 0, team: '', from: '', to: '', checked: '' })
+  { q: '', division: '', engineerId: 0, team: '', from: '', to: '', checked: '', batch: '' })
 eq('조건이 걸렸는지', [Q.hasFilter(Q.EMPTY_FILTER), Q.hasFilter({ ...Q.EMPTY_FILTER, q: 'a' })], [false, true])
 
 const CARDS = [

@@ -101,7 +101,7 @@ eq('집계', B.addLines(B.EMPTY_TALLY, [
   { index: 0, ok: true, card_id: 1 },
   { index: 1, ok: false, reason: 'dup', card_id: 1 },
   { index: 2, ok: false, reason: 'parse' },
-]), { done: 3, saved: 1, dup: 1, failed: 1, merged: 0, noPerson: 0 })
+]), { done: 3, saved: 1, dup: 1, failed: 1, merged: 0, noPerson: 0, empty: 0, flipped: 0 })
 eq('요약 글자', B.summaryLabel({ done: 3, saved: 1, dup: 1, failed: 1, merged: 0, noPerson: 0 }), '등록 1 · 중복 1 · 실패 1')
 eq('진행 글자', B.progressLabel(137, 300), '137 / 300')
 eq('진행률', [B.progressPercent(137, 300), B.progressPercent(0, 0), B.progressPercent(9, 3)], [46, 0, 100])
@@ -124,6 +124,7 @@ const walk = (d) => {
 for (const d of SERVER_DIRS) walk(d)
 eq('서버 코드에서 쓰는 자리', serverHits, [])
 const MODAL = 'components/cards/BulkImportModal.tsx'
+const M = read(MODAL)
 ok('화면은 누를 때 불러온다', /await import\('pdf-lib'\)/.test(read(MODAL)))
 ok('그 화면은 브라우저 전용이다', read(MODAL).startsWith("'use client'"))
 ok('브라우저 confirm 을 쓰지 않는다', !/window\.confirm|\balert\(/.test(read(MODAL)))
@@ -222,7 +223,7 @@ eq('집계에 뒷면·사람없음이 든다', B.addLines(B.EMPTY_TALLY, [
   { index: 2, ok: false, reason: 'no_person' },
   { index: 3, ok: false, reason: 'dup', card_id: 1 },
   { index: 4, ok: false, reason: 'parse' },
-]), { done: 5, saved: 1, dup: 1, failed: 1, merged: 1, noPerson: 1 })
+]), { done: 5, saved: 1, dup: 1, failed: 1, merged: 1, noPerson: 1, empty: 0, flipped: 0 })
 eq('요약 글자', B.summaryLabel({ done: 5, saved: 1, dup: 1, failed: 1, merged: 1, noPerson: 1 }),
   '등록 1 · 중복 1 · 뒷면 합침 1 · 사람 이름 없음 1 · 실패 1')
 eq('0인 항목은 적지 않는다', B.summaryLabel({ done: 1, saved: 1, dup: 0, failed: 0, merged: 0, noPerson: 0 }),
@@ -250,6 +251,94 @@ eq('저장소에 들어온 명함 PDF', (() => {
   seek('')
   return hits
 })(), [])
+
+// ── 2026-11-25 ──
+console.log('\n── ⑬ 가져오기 묶음 ──')
+ok('SQL 파일이 있다', has('db/business_cards_batch_20261125.sql'))
+const BSQL = has('db/business_cards_batch_20261125.sql') ? read('db/business_cards_batch_20261125.sql') : ''
+ok('묶음 칸과 인덱스를 더한다',
+  /add column if not exists import_batch_id uuid/.test(BSQL)
+  && /create index if not exists business_cards_import_batch_idx/.test(BSQL))
+ok('스키마를 깨운다', /notify pgrst, 'reload schema'/.test(BSQL))
+ok('APPLIED.md 에 미적용으로 적었다',
+  /business_cards_batch_20261125\.sql[^|]*\|\s*\*\*미적용\*\*/.test(read('db/APPLIED.md')))
+ok('사건 FK 를 건드리지 않은 까닭을 적었다', /on delete cascade/.test(BSQL))
+
+ok('화면이 묶음 id 를 만든다', /newBatchId\(\)/.test(M))
+ok('매 요청에 보낸다', /body\.append\('import_batch_id', batchId\.current\)/.test(M))
+ok('라우트가 **새로 담는 줄에만** 적는다',
+  /\.\.\.\(batchId \? \{ import_batch_id: batchId \} : \{\}\)/.test(R)
+  && !/import_batch_id/.test(R.split('mergeInto')[1]?.split('// 담기는')[0] ?? ''))
+ok('칸이 없으면 빼고 담는다', /hasBatchColumn/.test(R))
+ok('받은 묶음 id 를 믿기 전에 꼴을 본다', /isBatchId\(rawBatch\)/.test(R))
+eq('uuid 꼴만 받는다',
+  ['11111111-2222-4333-8444-555555555555', '아무거나', ''].map(v => B.isBatchId(v)),
+  [true, false, false])
+eq('만들면 uuid 꼴', B.isBatchId(B.newBatchId()), true)
+eq('두 번 만들면 다르다', B.newBatchId() === B.newBatchId(), false)
+ok('되돌리기 물음이 **무엇이 남는지** 적는다',
+  B.undoQuestion(12) === '이번에 새로 담긴 12건을 삭제합니다. 합쳐진 뒷면·기존 명함은 그대로입니다.')
+
+console.log('\n── ⑭ 지우기 라우트 ──')
+const DEL_PATH = 'app/api/cards/delete/route.ts'
+ok('라우트가 있다', has(DEL_PATH))
+const D = has(DEL_PATH) ? read(DEL_PATH) : ''
+ok('POST · 로그인 필수', /export async function POST\(/.test(D) && /loadCaller\(\{ kind: 'login' \}/.test(D))
+ok('card_id 배열을 받는다', /body\.card_ids/.test(D))
+ok('고른 줄은 **소프트** 삭제', /update\(\{ deleted_at: now \}\)\.in\('card_id', ids\)/.test(D))
+ok("사건 'card_deleted' 를 남긴다", /event_type: EVENT_DELETED/.test(D) && B.EVENT_DELETED === 'card_deleted')
+ok('묶음 되돌리기는 진짜 지운다', /action === 'batch'/.test(D) && /\.delete\(\)\.in\('card_id', ids\)/.test(D))
+ok('묶음은 그 묶음 줄만 본다', /\.eq\('import_batch_id', batchId\)/.test(D))
+ok('화면이 보낸 목록을 믿지 않는다 — 다시 읽어 판정한다',
+  /\.select\('card_id, name, engineer_id'\)/.test(D) && /canDeleteCard\(caller, r\)/.test(D))
+ok('묶음 칸이 없으면 무엇을 돌려야 하는지 말한다',
+  /42703/.test(D) && /business_cards_batch_20261125\.sql/.test(D))
+
+console.log('\n── ⑮ 누가 지울 수 있나 ──')
+const me = (level, id) => ({ engineer_id: id, permission_level: level })
+eq('본인이 등록한 줄은 누구나',
+  B.canDeleteCard(me('member', 7), { engineer_id: 7 }), true)
+eq('남의 줄은 member 가 못 지운다',
+  B.canDeleteCard(me('member', 7), { engineer_id: 8 }), false)
+eq('admin 이상은 전체',
+  [B.canDeleteCard(me('admin', 7), { engineer_id: 8 }),
+    B.canDeleteCard(me('superadmin', 7), { engineer_id: 8 })], [true, true])
+eq('등록자가 비면 남의 줄이다', B.canDeleteCard(me('member', 7), { engineer_id: null }), false)
+eq('사람이 없으면 거짓', B.canDeleteCard(null, { engineer_id: 7 }), false)
+eq('제외 안내', [B.skippedNotice(3), B.skippedNotice(0)], ['권한 없는 3건은 제외됩니다', ''])
+eq('선택 띠 글자', B.selectionTitle(5), '5건 선택')
+
+console.log('\n── ⑯ 뒤집어 다시 읽기 ──')
+eq('다시 읽어 볼 판정', ['no_person', 'empty', 'dup', 'parse', undefined].map(r => B.worthRetry(r)),
+  [true, true, false, false, false])
+ok('화면이 180° 돌린다', /async function flip\(/.test(M) && /setRotation\(degrees\(\(pg\.getRotation\(\)\.angle \+ 180\) % 360\)\)/.test(M))
+ok('사진은 캔버스로 돌린다', /ctx\.rotate\(Math\.PI\)/.test(M))
+ok('다시 읽어 사람이 나오면 그 결과를 쓴다', /if \(now\.ok \|\| now\.reason === 'dup' \|\| now\.reason === 'merged'\)/.test(M))
+ok('센다', /flipped: acc\.flipped \+ 1/.test(M))
+ok('지시문에 직함을 회사명으로 쓰지 말라고 적었다',
+  /「코디」·「담당」·「매니저」·「실장」 같은 직함은 \*\*회사명이 아니다\*\*/.test(OCR))
+
+console.log('\n── ⑰ 빈 면 집계 ──')
+eq('빈 면을 따로 센다', B.addLines(B.EMPTY_TALLY, [
+  { index: 0, ok: false, reason: 'empty' },
+  { index: 1, ok: false, reason: 'empty' },
+  { index: 2, ok: false, reason: 'parse' },
+]), { done: 3, saved: 0, dup: 0, failed: 1, merged: 0, noPerson: 0, empty: 2, flipped: 0 })
+eq('요약에 적는다',
+  B.summaryLabel({ done: 4, saved: 1, dup: 0, failed: 0, merged: 0, noPerson: 0, empty: 2, flipped: 1 }),
+  '등록 1 · 중복 0 · 빈 면 2 · 뒤집어 다시 읽음 1 · 실패 0')
+
+console.log('\n── ⑱ 묶음 고르기 ──')
+eq('주소에 남는다', Q.queryFromFilter({ ...Q.EMPTY_FILTER, batch: 'abc' }), '?batch=abc')
+eq('주소에서 읽는다', Q.filterFromQuery(new URLSearchParams('batch=abc')).batch, 'abc')
+eq('묶음으로 거른다', Q.applyCardFilter([
+  { card_id: 1, name: 'ㄱ', division: '계측', registered_at: '2026-11-25', import_batch_id: 'A' },
+  { card_id: 2, name: 'ㄴ', division: '계측', registered_at: '2026-11-25', import_batch_id: 'B' },
+  { card_id: 3, name: 'ㄷ', division: '계측', registered_at: '2026-11-25' },
+], { ...Q.EMPTY_FILTER, batch: 'A' }, ['계측']).map(r => r.card_id), [1])
+const PAGE_SRC = read('app/cards/page.tsx')
+ok('목록에 묶음 칸이 있다', /가져오기 전체/.test(PAGE_SRC))
+ok('최근 열 개만', PAGE_SRC.includes('.slice(0, 10)'))
 
 console.log('\n── ⑦ 「확인 전」 보기 ──')
 const rows = [

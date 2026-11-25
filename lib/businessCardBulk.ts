@@ -88,10 +88,14 @@ export type BulkTally = {
   merged: number
   /** 사람 이름이 없어 담지 않은 쪽. */
   noPerson: number
+  /** 빈 면·무늬만 있는 쪽. */
+  empty: number
+  /** 거꾸로 들어가 다시 읽은 쪽(화면이 센다). */
+  flipped: number
 }
 
 export const EMPTY_TALLY: BulkTally =
-  { done: 0, saved: 0, dup: 0, failed: 0, merged: 0, noPerson: 0 }
+  { done: 0, saved: 0, dup: 0, failed: 0, merged: 0, noPerson: 0, empty: 0, flipped: 0 }
 
 /** 한 묶음의 결과를 집계에 더한다. */
 export function addLines(tally: BulkTally, lines: readonly BulkLine[]): BulkTally {
@@ -102,6 +106,7 @@ export function addLines(tally: BulkTally, lines: readonly BulkLine[]): BulkTall
     if (l.reason === 'dup') t.dup += 1
     else if (l.reason === 'merged') t.merged += 1
     else if (l.reason === 'no_person') t.noPerson += 1
+    else if (l.reason === 'empty') t.empty += 1
     else t.failed += 1
   }
   return t
@@ -222,6 +227,72 @@ export function hangulPatch(
 /** 사건 이름 — business_card_events.event_type. */
 export const EVENT_MERGED = 'card_merged_back'
 export const EVENT_HANGUL = 'card_hangul_fixed'
+export const EVENT_DELETED = 'card_deleted'
+
+// ── 가져오기 묶음 ─────────────────────────────────────────────────────────
+/**
+ * 한 번의 여러 장 등록 = 묶음 하나(uuid). 새로 담은 줄에만 적는다 —
+ * 합쳐진 뒷면과 이미 있던 명함은 **내 것이 아니므로** 적지 않는다.
+ * 그래서 되돌리기가 「이번에 새로 담긴 것」만 지운다.
+ * 칸은 db/business_cards_batch_20261125.sql 이 더한다.
+ */
+export function newBatchId(): string {
+  const c = globalThis.crypto
+  if (c && typeof c.randomUUID === 'function') return c.randomUUID()
+  // 아주 오래된 브라우저 — 묶음 id 는 서로 다르기만 하면 된다.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, ch => {
+    const r = Math.floor(Math.random() * 16)
+    return (ch === 'x' ? r : (r & 0x3) | 0x8).toString(16)
+  })
+}
+
+/** uuid 꼴인가 — 라우트가 받은 값을 믿기 전에 본다. */
+export function isBatchId(v: unknown): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v ?? ''))
+}
+
+/** 되돌리기 전에 묻는 말 — **무엇이 남는지**를 함께 적는다. */
+export function undoQuestion(count: number): string {
+  return `이번에 새로 담긴 ${count}건을 삭제합니다. 합쳐진 뒷면·기존 명함은 그대로입니다.`
+}
+
+// ── 뒤집힌 쪽 ─────────────────────────────────────────────────────────────
+/**
+ * 이 판정이면 **한 번 더 읽어 볼 값어치**가 있다.
+ * 스캐너에 거꾸로 들어간 명함은 글자가 안 잡혀 사람 이름이 없는 면·빈 면으로 떨어진다.
+ * 180° 돌려 다시 보내 본다(화면이 한다).
+ */
+export function worthRetry(reason: BulkReason | undefined): boolean {
+  return reason === 'no_person' || reason === 'empty'
+}
+
+// ── 누가 지울 수 있나 ─────────────────────────────────────────────────────
+/**
+ * 그 명함을 지울 수 있는 사람인가.
+ *   · 본인이 등록한 줄 — 누구나 지운다(자기가 넣은 것을 치우는 길).
+ *   · admin 이상 — 전체.
+ * 판정은 라우트와 화면이 **같은 함수**를 쓴다. 화면이 보낸 값을 라우트가 다시 센다.
+ */
+export function canDeleteCard(
+  me: { engineer_id?: number | null; permission_level?: string | null } | null | undefined,
+  card: { engineer_id?: number | null },
+): boolean {
+  if (!me) return false
+  const level = String(me.permission_level ?? '')
+  if (level === 'admin' || level === 'superadmin') return true
+  const mine = Number(me.engineer_id ?? 0)
+  return mine > 0 && Number(card.engineer_id ?? 0) === mine
+}
+
+/** 「권한 없는 N건은 제외됩니다」 — 0이면 빈 글자(안내를 띄우지 않는다). */
+export function skippedNotice(count: number): string {
+  return count > 0 ? `권한 없는 ${count}건은 제외됩니다` : ''
+}
+
+/** 선택 띠의 왼쪽 글자. */
+export function selectionTitle(count: number): string {
+  return `${count}건 선택`
+}
 
 // ── 읽기 비용 ─────────────────────────────────────────────────────────────
 /**
@@ -257,6 +328,8 @@ export function summaryLabel(t: BulkTally): string {
   const parts = [`등록 ${t.saved}`, `중복 ${t.dup}`]
   if (t.merged > 0) parts.push(`뒷면 합침 ${t.merged}`)
   if (t.noPerson > 0) parts.push(`사람 이름 없음 ${t.noPerson}`)
+  if (t.empty > 0) parts.push(`빈 면 ${t.empty}`)
+  if (t.flipped > 0) parts.push(`뒤집어 다시 읽음 ${t.flipped}`)
   parts.push(`실패 ${t.failed}`)
   return parts.join(' · ')
 }
