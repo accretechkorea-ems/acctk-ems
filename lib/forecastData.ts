@@ -16,6 +16,8 @@ import { inSalesStats } from './salesScope'
 const QUOTE_COLUMNS =
   'quote_id, quote_number, status, quote_date, purchase_order_at, fail_reason, total_supply, '
   + 'category, form_kind, engineer_id, customer_id, dealer_id, opportunity_id, created_at, pdf_url'
+/** 되돌린 날까지 — 칸이 없는 DB(42703)에서는 위 목록으로 한 번 더 읽는다. */
+const QUOTE_COLUMNS_REVIVE = `${QUOTE_COLUMNS}, revived_at`
 
 const OPP_COLUMNS =
   'opportunity_id, stage, expected_close, expected_amount, engineer_id, customer_id, '
@@ -44,14 +46,22 @@ export type LoadForecastArgs = {
 export async function loadForecast(
   sb: SupabaseClient, args: LoadForecastArgs,
 ): Promise<ForecastResult & { errors: string[] }> {
-  const [qRes, oRes, tRes, eRes, teamRes] = await Promise.all([
-    sb.from('quotes').select(QUOTE_COLUMNS),
+  const [qRes0, oRes, tRes, eRes, teamRes] = await Promise.all([
+    sb.from('quotes').select(QUOTE_COLUMNS_REVIVE),
     sb.from('sales_opportunities').select(OPP_COLUMNS),
     sb.from('sales_targets').select('engineer_id, year, quarter, order_target_amount'),
     // 집계 대상 판정에 개인 값(in_sales_stats)과 팀 이름이 필요하다 — 팀 값은 아래 teams 에서.
     sb.from('engineers').select('engineer_id, team_id, teams, in_sales_stats'),
     sb.from('teams').select('name, in_sales_stats'),
   ])
+
+  /**
+   * 되돌리기 칸이 아직 없으면(42703) 그 칸만 빼고 한 번 더 읽는다 —
+   * 포캐스트가 통째로 비지 않게. 그때는 달 계산이 종전처럼 작성일만 본다.
+   */
+  const qRes = (qRes0.error && (qRes0.error.code === '42703' || qRes0.error.code === 'PGRST204'))
+    ? await sb.from('quotes').select(QUOTE_COLUMNS)
+    : qRes0
 
   const errors: string[] = []
   const take = <T>(res: { data: unknown; error: { message: string } | null }, name: string): T[] => {

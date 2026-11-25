@@ -137,3 +137,30 @@ export function pendingBannerLabel(count: number): string {
 export function discardQuestion(count: number): string {
   return `검토 대기 ${count}장을 버립니다. 읽은 글자가 사라지고 되돌릴 수 없습니다.`
 }
+
+// ── 다음 묶음 읽기 ────────────────────────────────────────────────────────
+/**
+ * 「다음 20쪽 읽기」 (2026-11-25).
+ *
+ * 남은 쪽이 20보다 적으면 그 수를 적는다 — 「다음 20쪽」인데 5쪽만 읽히면
+ * 무엇이 잘못된 줄 안다. 읽기는 **올린 파일을 그대로** 쓴다(다시 올리지 않는다).
+ */
+export function nextChunkCount(left: number): number {
+  return Math.min(Math.max(0, left), REVIEW_CHUNK)
+}
+
+export function nextChunkLabel(left: number): string {
+  return `등록하고 다음 ${nextChunkCount(left)}쪽 읽기 →`
+}
+
+export function nextChunkTitle(left: number): string {
+  return `다음 ${nextChunkCount(left)}쪽을 읽을까요?`
+}
+
+export function nextChunkMessage(left: number): string {
+  return `올린 파일에서 ${nextChunkCount(left)}쪽을 이어서 읽습니다. 남은 쪽은 ${Math.max(0, left - REVIEW_CHUNK)}쪽입니다.`
+}
+
+/** 새로고침해서 올린 파일이 사라졌을 때 — 되살릴 길이 없다(서버에 올리지 않는다). */
+export const RELOAD_NOTICE =
+  '올린 파일은 저장하지 않으므로, 남은 쪽을 읽으려면 목록의 「여러 장 등록」에서 그 파일을 다시 올려 주세요.'

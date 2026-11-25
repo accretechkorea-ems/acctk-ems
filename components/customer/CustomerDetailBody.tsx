@@ -14,7 +14,7 @@
 //   분할 보기는 **칸 안**이라 칸 폭을 기준으로 접힌다 — 화면 폭으로 접으면 1366 에서도
 //   오른쪽 칸은 600px 인데 2단을 고집하게 된다. 그래서 그때만 컨테이너 쿼리를 쓴다.
 
-import { useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 
 import { useCustomerDetail } from '@/hooks/customer/useCustomerDetail'
 import { useServiceCrud } from '@/hooks/customer/useServiceCrud'
@@ -52,10 +52,15 @@ export type CustomerDetailBodyProps = {
   onChanged?: () => void
   /** 칸 안에 끼워 그릴 때(분할 보기). 바깥 여백과 접히는 기준만 달라진다. */
   embedded?: boolean
+  /**
+   * 열자마자 **그 담당자 수정 창**을 연다(2026-11-25).
+   * 견적 저장 창의 「담당자 정보에서 추가」가 ?contact=<id> 로 보낸다.
+   */
+  openContactId?: number | null
 }
 
 export default function CustomerDetailBody({
-  customerId, onBack, onChanged, embedded = false,
+  customerId, onBack, onChanged, embedded = false, openContactId = null,
 }: CustomerDetailBodyProps) {
   // 바깥 틀 — 라우트는 화면 전체, 분할 보기는 칸 안이다.
   // 'site-page' — 폰에서 바깥 여백을 12 로 줄이는 자리(아래 globalCss).
@@ -112,11 +117,24 @@ export default function CustomerDetailBody({
     onChanged?.()
     return r
   }, [fetchDetail, onChanged])
+  /**
+   * 주소로 받은 담당자 — 열자마자 **그 담당자 수정 창**을 연다(2026-11-25).
+   * 견적 저장 창의 「담당자 정보에서 추가」가 ?contact=<id> 로 보낸다. 한 번만 연다.
+   */
+  const openedContact = useRef(false)
   const contact = useContactCrud({
     customerId, fetchDetail: refreshAll,
     // 명함첩에도 담을 때 쓰는 밑값 — 사람 쪽은 폼이, 회사·주소는 이 사업장이 준다.
     site: { company: customer?.company_name ?? null, address: customer?.address ?? null },
   })
+  useEffect(() => {
+    if (!openContactId || openedContact.current) return
+    const found = contacts.find(c => c.contact_id === openContactId)
+    if (!found) return
+    openedContact.current = true
+    contact.setSelectedContact(found)
+  }, [openContactId, contacts, contact])
+
   const device = useDeviceCrud({ customerId, fetchDetail: refreshAll })
   const customerCrud = useCustomerCrud({ customer, fetchDetail: refreshAll })
 

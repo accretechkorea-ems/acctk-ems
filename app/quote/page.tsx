@@ -563,6 +563,10 @@ function QuotePageInner() {
       company,
       firstItem: rows.find(r => (r.itemText ?? '').trim())?.itemText ?? null,
       fromName: engineerName,
+      // 이메일이 없을 때 「담당자 정보에서 추가」가 갈 곳 — 수신인이 속한 사업장이다
+      // (대리점 건이면 E.U, 직판이면 그 사업장). 2026-11-25.
+      customerId: euCustomerId ?? customerId,
+      contactId: selectedContact?.contact_id ?? null,
     }),
     setCompany, setCustomerId, setCustomerQuery, setCustomerResults, setCustomerSearchOpen,
     setSelectedCustomer, setPrefillNotice, setIsDealer,

@@ -22,6 +22,10 @@ export type MailParts = {
   firstItem?: string | null
   /** 보내는 사람(작성자). */
   fromName?: string | null
+  /** 수신처 사업장 — 이메일이 없을 때 「담당자 정보에서 추가」가 갈 곳이다. */
+  customerId?: number | null
+  /** 그 수신인 — 사업장 화면에서 **그 담당자 수정 창**이 바로 열린다. */
+  contactId?: number | null
 }
 
 const t = (v: string | null | undefined) => String(v ?? '').trim()
@@ -62,8 +66,23 @@ export function mailtoUrl(p: MailParts, body?: string | null): string | null {
   return `mailto:${encodeURIComponent(to)}?${q.join('&')}`
 }
 
-/** 이메일이 없을 때 그 자리에 적는 말. */
+/** 이메일이 없을 때 그 자리에 적는 말. 「담당자 정보에서 추가」가 링크다. */
 export const NO_EMAIL_NOTICE = '수신인에 이메일이 없습니다 — 담당자 정보에서 추가'
+/** 그 말에서 **링크가 되는 부분**. 화면이 이 글자만 파랗게 띄운다. */
+export const NO_EMAIL_LINK_TEXT = '담당자 정보에서 추가'
+
+/**
+ * 「담당자 정보에서 추가」가 가는 곳.
+ *   · 수신인을 안다 — 그 사업장 화면에서 **그 담당자 수정 창**이 바로 열린다(?contact=).
+ *   · 사업장만 안다 — 사업장 화면으로 간다.
+ *   · 둘 다 모른다 — 링크를 걸지 않는다(null).
+ */
+export function contactHref(p: MailParts): string | null {
+  const id = Number(p.customerId ?? 0)
+  if (!Number.isInteger(id) || id <= 0) return null
+  const contact = Number(p.contactId ?? 0)
+  return contact > 0 ? `/customer/${id}?contact=${contact}` : `/customer/${id}`
+}
 
 /** 창 제목. */
 export function savedTitle(quoteNo: string): string {

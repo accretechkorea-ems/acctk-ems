@@ -60,3 +60,34 @@ export function pageUrl(page: ImportPage | undefined | null): string | null {
   if (!page?.blob) return null
   return URL.createObjectURL(page.blob)
 }
+
+/**
+ * **이어 읽기**에 넘길 값 — 검토 화면의 「다음 20쪽 읽기 →」가 쓴다 (2026-11-25).
+ *
+ * 남은 쪽(rest)은 이미 쪼개 둔 것이라 다시 쪼개지 않는다. 묶음 id 도 그대로 써서
+ * 앞서 담은 줄과 **한 묶음**으로 남는다(되돌리기 한 번에 전부 지워진다).
+ * 새로고침해서 메모리가 비었으면 null 이다 — 그때는 화면이 「목록에서 다시 올려 주세요」를
+ * 띄운다(파일은 서버에 올리지 않으므로 되살릴 길이 없다).
+ */
+export type ResumeInput = {
+  batchId: string
+  pieces: { file: File; label: string }[]
+  /** 그 쪽들이 전체에서 **몇 쪽부터**인가(21쪽이면 20). */
+  pageFrom: number
+  total: number
+  fileName: string
+  usage: { input: number; output: number }
+}
+
+export function resumeFromSession(): ResumeInput | null {
+  const s = session
+  if (!s || s.rest.length === 0) return null
+  return {
+    batchId: s.batchId,
+    pieces: s.rest.map(r => ({ file: r.file, label: r.file.name })),
+    pageFrom: s.rest[0].page,
+    total: s.total,
+    fileName: s.fileName,
+    usage: { ...s.usage },
+  }
+}

@@ -620,11 +620,13 @@ export default function CompanyPane({
                 return (
                   /* 줄 아무 곳이나 누르면 그 사업장이 열린다 — 「상세」 버튼을 따로 두지 않는다.
                      체크박스·연필은 그 자리에서 멈춘다(아래 stopPropagation). */
-                  <tr key={id} className={on ? "site-row on" : "site-row"}
+                  /* 호버·고른 줄의 바탕은 **공용 클래스**가 그린다(.ems-row-hover, 2026-11-25).
+                     전에는 이 줄이 손으로 background 를 칠했고 명함 목록은 다른 모양이라,
+                     같은 「표의 줄」이 화면마다 달랐다. 값(#fafafa)은 그대로다 —
+                     구분선 색만 이 표의 것(#ebebeb)을 --row-line 으로 넘긴다. */
+                  <tr key={id} className={on ? 'site-row ems-row-hover on' : 'site-row ems-row-hover'}
                     onClick={() => onOpenSite(id)}
-                    style={{ background: on ? '#fafafa' : undefined, cursor: 'pointer' }}
-                    onMouseEnter={e => { if (!on) e.currentTarget.style.background = '#fafafa' }}
-                    onMouseLeave={e => { if (!on) e.currentTarget.style.background = '' }}>
+                    style={{ cursor: 'pointer', ['--row-line' as string]: BORDER } as CSSProperties}>
                     <td style={td} onClick={e => e.stopPropagation()}>
                       <input type="checkbox" checked={on} onChange={() => toggle(id)} aria-label={`${s.siteName || '이름 없는 사업장'} 선택`} />
                     </td>

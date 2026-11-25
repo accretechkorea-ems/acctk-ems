@@ -868,7 +868,12 @@ function FieldControl({ def, value, onChange, error, changed, prevValue, rows, m
   const id = `sf-${def.key}`
   /** 본문(회의 내용)에는 라벨 옆에 「문구 ▾」를 둔다 — 문구함, 2026-11-25. */
   const bodyRef = useRef<HTMLTextAreaElement | null>(null)
-  const withSnippet = def.key === 'meeting_content'
+  /**
+   * 「문구 ▾」를 둘 칸 — **긴 글 칸 전부**다(2026-11-25).
+   * 처음에는 회의 내용 하나였는데, FACT·Assessment·영업전략처럼 매번 비슷한 문장을
+   * 쓰는 칸이 그만큼 더 있었다. 한 줄짜리 칸(text·date·select)에는 두지 않는다.
+   */
+  const withSnippet = def.kind === 'longtext'
   const style: CSSProperties = {
     ...fieldStyle,
     ...(changed ? { background: CHANGED_INPUT_BG, border: `1px solid ${CHANGED_LINE}` } : null),

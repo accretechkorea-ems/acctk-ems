@@ -19,7 +19,7 @@
  *   보내고 버린다. 올리는 저장소도, 기록도 없다.
  */
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useConfirm } from '@/components/common/ConfirmDialog'
@@ -133,9 +133,15 @@ async function flip(file: File): Promise<File | null> {
   }
 }
 
-export default function BulkImportModal({ division, onClose, onDone }: {
+export default function BulkImportModal({ division, resume, onClose, onDone }: {
   /** 담을 사업부 — 목록 화면이 보고 있는 값. */
   division: string
+  /**
+   * **이어 읽기**(2026-11-25) — 검토 화면의 「다음 20쪽 읽기 →」가 넘겨 준다.
+   * 쪼개 둔 쪽을 그대로 받으므로 파일을 다시 올리지 않는다. 묶음 id 도 **그대로** 써서
+   * 앞서 담은 줄과 한 묶음으로 남는다(되돌리기 한 번에 전부 지워진다).
+   */
+  resume?: { batchId: string; pieces: Piece[]; pageFrom: number; total: number; fileName: string; usage: { input: number; output: number } } | null
   onClose: () => void
   /** 한 장이라도 담겼으면 목록을 다시 읽게 알린다. */
   onDone: (tally: BulkTally) => void
@@ -155,7 +161,7 @@ export default function BulkImportModal({ division, onClose, onDone }: {
   /** 중단 눌림 — 돌고 있는 반복이 다음 묶음 전에 본다. */
   const stop = useRef(false)
   /** 이번 가져오기 묶음 — 창을 여는 순간 하나 만들어 둔다(되돌리기가 이것으로 지운다). */
-  const batchId = useRef(newBatchId())
+  const batchId = useRef(resume?.batchId ?? newBatchId())
   /** 되돌리기를 한 번 눌렀나 — 두 번 지우지 않는다. */
   const [undone, setUndone] = useState<number | null>(null)
   const [undoing, setUndoing] = useState(false)
@@ -166,13 +172,18 @@ export default function BulkImportModal({ division, onClose, onDone }: {
     setFiles(next)
   }
 
-  const run = useCallback(async () => {
+  /**
+   * `ready` 를 주면 **그 쪽들을 그대로** 읽는다(이어 읽기) — 파일을 다시 쪼개지 않는다.
+   * `pageFrom` 은 그 쪽들이 **전체에서 몇 쪽부터**인가다(21쪽이면 20).
+   */
+  const run = useCallback(async (ready?: Piece[], pageFrom = 0, totalPages?: number) => {
     setPhase('running')
-    setNote('파일을 준비하는 중…')
+    setNote(ready ? '' : '파일을 준비하는 중…')
     stop.current = false
 
-    // ── 쪼개고 줄인다 ──
-    const pieces: Piece[] = []
+    // ── 쪼개고 줄인다(이어 읽기는 이미 쪼개져 있다) ──
+    let pieces: Piece[] = ready ?? []
+    if (!ready) {
     for (const f of files) {
       if (f.type === 'application/pdf') {
         try {
@@ -184,6 +195,8 @@ export default function BulkImportModal({ division, onClose, onDone }: {
         pieces.push({ file: await shrink(f), label: f.name })
       }
     }
+    }
+    pieces = [...pieces]
     // **20쪽씩** 읽고 멈춘다 — 그 뒤는 검토 화면이 이어받는다(사람이 지치지 않는 단위).
     const batch = pieces.slice(0, REVIEW_CHUNK)
     const rest = pieces.slice(REVIEW_CHUNK)
@@ -273,8 +286,8 @@ export default function BulkImportModal({ division, onClose, onDone }: {
     for (let base = 0; base < batch.length; base += MAX_PER_REQUEST) {
       if (stop.current) break
       const group = batch.slice(base, base + MAX_PER_REQUEST)
-      let got = await send(group, { pageBase: base, prevId: prevCardId, prevPage })
-      got.forEach(l => noteResult(base + l.index, l))
+      let got = await send(group, { pageBase: pageFrom + base, prevId: prevCardId, prevPage })
+      got.forEach(l => noteResult(pageFrom + base + l.index, l))
 
       /**
        * 거꾸로 들어간 쪽을 **한 번 더** — 모델이 「글자가 거꾸로 보인다」고 한 쪽만이다.
@@ -283,7 +296,7 @@ export default function BulkImportModal({ division, onClose, onDone }: {
        */
       for (let k = 0; k < got.length && !stop.current; k++) {
         if (!worthRetry(got[k])) continue
-        const page = base + got[k].index
+        const page = pageFrom + base + got[k].index
         const p = group[got[k].index]
         if (!p) continue
         const flipped = await flip(p.file)
@@ -299,8 +312,8 @@ export default function BulkImportModal({ division, onClose, onDone }: {
       }
 
       // 다음 묶음의 「직전 명함」 — **마지막 쪽**의 결과로 잡는다.
-      const lastPage = base + group.length - 1
-      for (let page = lastPage; page >= base; page--) {
+      const lastPage = pageFrom + base + group.length - 1
+      for (let page = lastPage; page >= pageFrom + base; page--) {
         const id = cardByPage.get(page)
         if (id != null) { prevCardId = id; prevPage = page; break }
       }
@@ -322,25 +335,42 @@ export default function BulkImportModal({ division, onClose, onDone }: {
 
     // ── 읽기가 끝났다 — **검토 화면**으로 넘긴다 ──
     // 쪽 이미지는 서버에 보내지 않았다. 브라우저 메모리에만 담아 넘긴다.
+    const name = resume?.fileName || files[0]?.name || ''
     putSession({
       batchId: batchId.current,
-      fileName: files[0]?.name ?? '',
-      total: pieces.length,
+      fileName: name,
+      total: totalPages ?? pieces.length,
       pages: batch.map((p, i) => ({
-        page: i,
+        page: pageFrom + i,
         blob: p.file,
-        reason: reasonOf(i),
-        cardId: lineByPage.get(i)?.card_id ?? null,
-        mergedIntoPage: mergedPageOf(i),
+        reason: reasonOf(pageFrom + i),
+        cardId: lineByPage.get(pageFrom + i)?.card_id ?? null,
+        mergedIntoPage: mergedPageOf(pageFrom + i),
       })),
-      rest: rest.map((p, i) => ({ page: batch.length + i, file: p.file })),
-      usage: { ...used },
+      rest: rest.map((p, i) => ({ page: pageFrom + batch.length + i, file: p.file })),
+      // 비용은 **이어서** 센다 — 앞 20쪽에 쓴 토큰을 잃지 않는다.
+      usage: {
+        input: (resume?.usage.input ?? 0) + used.input,
+        output: (resume?.usage.output ?? 0) + used.output,
+      },
     })
-    if (files[0]?.name) writeFileName(batchId.current, files[0].name)
+    if (name) writeFileName(batchId.current, name)
     setPhase('finished')
     onDone(acc)
     router.push('/cards/import')
-  }, [files, division, onDone, router])
+  }, [files, division, onDone, router, resume])
+
+  /**
+   * 이어 읽기 — 창이 뜨자마자 남은 쪽을 읽는다(파일 고르기를 건너뛴다).
+   * 한 번만 돈다(ref) — run 이 다시 만들어져도 두 번 읽지 않는다.
+   */
+  const resumed = useRef(false)
+  useEffect(() => {
+    if (!resume || resumed.current) return
+    resumed.current = true
+    void run(resume.pieces, resume.pageFrom, resume.total)
+  }, [resume, run])
+
 
   /**
    * 닫기. 돌고 있으면 먼저 묻는다 — **이미 담긴 것은 남는다**는 사실을 앞에 적는다.

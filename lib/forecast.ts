@@ -23,6 +23,7 @@
 
 import { kstYmd } from './date'
 import { quoteExpiry } from './quoteStatus'
+import { expiryBase } from './quoteRevive'
 
 // ── 상태 ────────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,11 @@ export type ForecastQuote = {
   created_at: string | null
   /** 저장된 견적서 PDF 경로. 화면이 번호를 눌렀을 때 연다(집계에는 쓰지 않는다). */
   pdf_url: string | null
+  /**
+   * 미수주에서 되돌린 시각(db/quote_revive_20261125.sql). 칸이 없는 DB 에서는 undefined 다.
+   * 유효기간 기준일이 coalesce(revived_at, quote_date) 라, 포캐스트의 **달**도 이 값을 본다.
+   */
+  revived_at?: string | null
 }
 
 /** sales_opportunities 에서 읽는 칸만. **분류 칸이 없다**(그래서 category 는 늘 null 이다). */
@@ -196,12 +202,14 @@ export function toForecastRow(
       month = monthOfInstant(q.purchase_order_at) || monthOf(q.quote_date)
     } else if (raw === '실패') {
       status = isCancelReason(q.fail_reason) ? '구매취소' : '실주'
-      month = monthOf(quoteExpiry(q.quote_date ?? '')) || monthOf(q.quote_date)
+      // 기준일 = coalesce(revived_at, quote_date) — 되돌린 건은 그 날부터 1개월이다.
+      month = monthOf(quoteExpiry(expiryBase(q) ?? '')) || monthOf(q.quote_date)
     } else {
       // 견적중·수리중·결재중·취소요청·보류 — **아직 살아 있는 건**으로 보고 포캐스트에 넣는다.
       // (반려는 여기 오지 않는다 — buildForecast 가 줄 자체를 만들지 않는다.)
       status = '포캐스트'
-      month = monthOf(quoteExpiry(q.quote_date ?? '')) || monthOf(q.quote_date)
+      // 기준일 = coalesce(revived_at, quote_date) — 되돌린 건은 그 날부터 1개월이다.
+      month = monthOf(quoteExpiry(expiryBase(q) ?? '')) || monthOf(q.quote_date)
     }
     return {
       source: 'quote', id: q.quote_id, no: q.quote_number,

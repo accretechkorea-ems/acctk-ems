@@ -36,7 +36,8 @@ import {
 import { costLabel } from '@/lib/businessCardBulk'
 import { getSession, clearSession, type ImportPage } from '@/lib/cardImportSession'
 import {
-  REVIEW_LABEL, blockedReason, discardQuestion, pageLabel, pageRangeLabel, readFileName,
+  REVIEW_LABEL, RELOAD_NOTICE, blockedReason, discardQuestion, nextChunkLabel, nextChunkMessage,
+  nextChunkTitle, pageLabel, pageRangeLabel, readFileName,
   rowLabel, tallyLabel, tallyOf, type ReviewState,
 } from '@/lib/cardReview'
 
@@ -509,17 +510,35 @@ function ImportReviewInner() {
           onClick={() => void approveAll()}>남은 {tally.wait}건 전부 승인</button>
         <button type="button" style={btn('primary')} disabled={busy || blocked != null}
           onClick={async () => {
-            if (session && session.rest.length > 0) {
+            /**
+             * **이어 읽기**(2026-11-25) — 올린 파일이 브라우저 메모리에 그대로 있으면
+             * 다시 올리지 않고 그 자리에서 남은 쪽을 읽는다(?resume=1 → 읽기 창이 바로 돈다).
+             * 새로고침해서 메모리가 비었으면 예전처럼 목록에서 다시 올려 달라고 안내한다.
+             */
+            const left = session?.rest.length ?? 0
+            if (left > 0) {
               const ok = await confirm({
-                title: '다음 쪽을 읽을까요?',
-                message: '남은 쪽은 이 화면에서 바로 읽을 수 없습니다 — 목록으로 돌아가 「여러 장 등록」에서 나머지 파일을 올려 주세요.',
+                title: nextChunkTitle(left),
+                message: nextChunkMessage(left),
+                confirmText: '읽기', cancelText: '더 검토하기',
+              })
+              if (!ok) return
+              // 세션은 **지우지 않는다** — 읽기 창이 그 안의 남은 쪽을 그대로 쓴다.
+              router.push('/cards?resume=1')
+              return
+            }
+            if (batchId && !session) {
+              // 글자만 보고 검토한 경우(새로고침 뒤) — 남은 쪽이 있는지 알 길이 없다.
+              const ok = await confirm({
+                title: '검토를 끝낼까요?',
+                message: RELOAD_NOTICE,
                 confirmText: '목록으로', cancelText: '더 검토하기',
               })
               if (!ok) return
             }
             leave()
           }}>
-          {session && session.rest.length > 0 ? '등록하고 다음 쪽 읽기 →' : '끝내기'}
+          {(session?.rest.length ?? 0) > 0 ? nextChunkLabel(session!.rest.length) : '끝내기'}
         </button>
       </div>
     </main>

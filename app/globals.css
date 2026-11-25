@@ -312,35 +312,28 @@ html:hover::-webkit-scrollbar-thumb,
 html::-webkit-scrollbar-track,
 .stable-scroll::-webkit-scrollbar-track { background: transparent; }
 
-/* 표의 줄 호버 — 커서가 올라가면 **테마 파랑 테두리**.
-   값은 고객사 카드 호버와 같다(--color-brand-border · 1px).
-   tr·td 의 border 는 border-collapse 와 셀 사이에서 가려지는 일이 있어
-   테두리는 **inset box-shadow** 로 그린다 — 자리를 차지하지 않아 줄 높이도 흔들리지 않는다.
+/* 표의 줄 호버 — **고객사 목록과 같은 값 하나**다(2026-11-25).
+   전에는 명함 목록만 테마 파랑 테두리(inset box-shadow)였고 고객사 목록은 회색
+   바탕(#fafafa)이라, 같은 「표의 줄」인데 올렸을 때 다르게 보였다. 고객사 쪽 값을
+   정본으로 삼아 이 클래스에 넣고 두 화면이 함께 쓴다.
+
+     바탕  #fafafa  (고른 줄 .on 도 같다 — 고객사 목록의 규칙 그대로)
+     구분선 1px     색은 표마다 다르다 — --row-line 으로 받는다
+                    (고객사 #ebebeb · 명함 #f1f5f9. 그 표의 td 가 정하던 값을 지킨다)
+
    공용 이름이다 — 다른 표도 이 클래스를 쓰면 된다. */
+.ems-row-hover {
+  --row-line: #f1f5f9;
+  /* 값은 고객사 목록이 쓰던 것과 같다 — 토큰으로 적는다(같은 값의 직접 표기를 늘리지 않는다). */
+  --row-hover-bg: var(--color-bg);
+}
 .ems-row-hover > td {
-  border-bottom: 1px solid #f1f5f9;
-  transition: box-shadow 0.15s ease;
+  border-bottom: 1px solid var(--row-line);
+  transition: background 0.12s ease;
 }
-.ems-row-hover:hover > td {
-  box-shadow:
-    inset 0 1px 0 var(--color-brand-border),
-    inset 0 -1px 0 var(--color-brand-border);
-}
-.ems-row-hover:hover > td:first-child {
-  box-shadow:
-    inset 0 1px 0 var(--color-brand-border),
-    inset 0 -1px 0 var(--color-brand-border),
-    inset 1px 0 0 var(--color-brand-border);
-  border-top-left-radius: var(--radius-control);
-  border-bottom-left-radius: var(--radius-control);
-}
-.ems-row-hover:hover > td:last-child {
-  box-shadow:
-    inset 0 1px 0 var(--color-brand-border),
-    inset 0 -1px 0 var(--color-brand-border),
-    inset -1px 0 0 var(--color-brand-border);
-  border-top-right-radius: var(--radius-control);
-  border-bottom-right-radius: var(--radius-control);
+.ems-row-hover:hover > td,
+.ems-row-hover.on > td {
+  background: var(--row-hover-bg);
 }
 
 /* 줄 안의 링크(전화·이메일) — 올리면 테마 파랑 + 밑줄. */

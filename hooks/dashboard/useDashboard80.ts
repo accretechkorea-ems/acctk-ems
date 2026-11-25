@@ -18,6 +18,7 @@ import { todayKST, daysBetween, nowKSTParts, nowHmKST } from '@/lib/date'
 import { SERVICE_TYPES } from '@/components/activity/ActivityCard'
 import { loadActivityTypes } from '@/lib/activityTypes'
 import { PENDING_STATUS, quoteExpiry } from '@/lib/quoteStatus'
+import { expiryBase } from '@/lib/quoteRevive'
 import type { Holding, InstallPrep, SalesActivity, SalesOpportunity } from '@/components/customer/types'
 
 export const STALE_DAYS = 30
@@ -54,6 +55,8 @@ export type ExpiringQuote = {
 // 어느 쪽도 "1개월 안에 답을 받아야 하는" 상태가 아니다.
 // 만료 판정은 lib/quoteStatus.ts 의 quoteExpiry 를 쓴다 — 자동 실주·홈 목록과 같은 기준이다.
 const EXPIRY_TARGET_STATUS = PENDING_STATUS
+/** 유효기간 줄이 읽는 칸. 되돌린 날(revived_at)은 **칸이 있을 때만** 덧붙인다. */
+const EXPIRY_COLUMNS = 'quote_id, quote_number, quote_date, customers!quotes_customer_id_fkey(company_name)'
 
 /** 다가오는 일정 한 칸 — 오늘 이후의 방문 예정. */
 export type UpcomingVisit = {
@@ -279,7 +282,7 @@ export function useDashboard80() {
           .lte('visit_date', countedVisitEnd(range.end)),
         // 유효기간이 걸리는 견적(견적중)만. 업체명은 두 FK 를 구분해 임베딩한다.
         supabase.from('quotes')
-          .select('quote_id, quote_number, quote_date, customers!quotes_customer_id_fkey(company_name)')
+          .select(`${EXPIRY_COLUMNS}, revived_at`)
           .eq('status', EXPIRY_TARGET_STATUS),
         // 다가오는 일정 — 오늘 것부터. gte 라서 당일 방문도 남는다
         // (레포트를 미리 쓰는 이유가 잊지 않으려는 것인데, 정작 당일에 목록에서 사라졌었다).
@@ -323,17 +326,32 @@ export function useDashboard80() {
         SERVICE_TYPES,
       ))
 
-      if (expiryRes.error) console.error('[dashboard80] expiring quotes failed', expiryRes.error)
+      /**
+       * 되돌리기 칸(revived_at)이 아직 없는 DB 가 있다 — 그때는 **빼고 한 번 더** 읽는다
+       * (db/quote_revive_20261125.sql 전). 칸이 있으면 D-day 를 되돌린 날부터 센다.
+       */
+      // 두 조회가 **칸 수가 달라** 모양이 갈린다 — 아래에서 QuoteRow 로 한 번 읽는다.
+      let expiryRows: unknown = expiryRes.data
+      if (expiryRes.error && (expiryRes.error.code === '42703' || expiryRes.error.code === 'PGRST204')) {
+        const again = await supabase.from('quotes')
+          .select(EXPIRY_COLUMNS).eq('status', EXPIRY_TARGET_STATUS)
+        expiryRows = again.data
+        if (again.error) console.error('[dashboard80] expiring quotes failed', again.error)
+      } else if (expiryRes.error) {
+        console.error('[dashboard80] expiring quotes failed', expiryRes.error)
+      }
       const today = todayKST()
       type QuoteRow = {
         quote_id: number; quote_number: string; quote_date: string | null
+        revived_at?: string | null
         customers: { company_name: string | null } | null
       }
       setExpiringQuotes(
-        ((expiryRes.data ?? []) as unknown as QuoteRow[])
+        ((expiryRows ?? []) as unknown as QuoteRow[])
           .filter(q => !!q.quote_date)
           .map(q => {
-            const expiry = quoteExpiry(q.quote_date as string)
+            // 기준일 = coalesce(revived_at, quote_date) — 되돌린 건은 그 날부터 1개월이다.
+            const expiry = quoteExpiry(expiryBase(q) as string)
             return {
               quoteId: q.quote_id,
               quoteNumber: q.quote_number,

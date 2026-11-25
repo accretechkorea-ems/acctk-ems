@@ -35,6 +35,7 @@ import {
 import { exportCardXlsx } from '@/lib/businessCardExcel'
 import CardFormModal from '@/components/cards/CardFormModal'
 import BulkImportModal from '@/components/cards/BulkImportModal'
+import { resumeFromSession, type ResumeInput } from '@/lib/cardImportSession'
 import CardFilterModal from '@/components/cards/CardFilterModal'
 // 선택 띠의 가름선 — 고객사 목록의 선택 바와 **같은 값**을 그대로 쓴다(새 색을 만들지 않는다).
 import { BAR_LINE } from '@/components/home/list/BulkBar'
@@ -140,6 +141,21 @@ function CardsPageInner() {
   const supabase = createClient()
   const router = useRouter()
   const params = useSearchParams()
+  /**
+   * **이어 읽기**(2026-11-25) — 검토 화면의 「다음 20쪽 읽기 →」가 ?resume=1 로 돌아온다.
+   * 올린 파일은 브라우저 메모리(cardImportSession)에 그대로 있으므로 다시 고르지 않는다.
+   * 새로고침했으면 메모리가 비어 있다 — 그때는 창을 열지 않고 종전 안내만 남는다.
+   */
+  const [bulkResume, setBulkResume] = useState<ResumeInput | null>(null)
+  useEffect(() => {
+    if (params.get('resume') !== '1') return
+    const next = resumeFromSession()
+    // 주소는 바로 지운다 — 새로고침·뒤로 가기에 또 열리지 않게.
+    router.replace('/cards')
+    if (!next) return
+    setBulkResume(next)
+    setBulkOpen(true)
+  }, [params, router])
   const toast = useToast()
   const confirm = useConfirm()
 
@@ -702,7 +718,8 @@ function CardsPageInner() {
       {bulkOpen && (
         <BulkImportModal
           division={filter.division || teamDivisionOf(me)}
-          onClose={() => setBulkOpen(false)}
+          resume={bulkResume}
+          onClose={() => { setBulkOpen(false); setBulkResume(null) }}
           onDone={t => { if (t.saved > 0) void load() }}
         />
       )}

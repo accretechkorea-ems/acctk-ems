@@ -21,7 +21,9 @@ import { R } from '@/lib/radius'
 import { todayKST } from '@/lib/date'
 import { useSnippets } from '@/hooks/useSnippets'
 import { KIND_LABEL, SCOPE_LABEL, applyVars, type SnippetCtx } from '@/lib/snippets'
-import { ATTACH_NOTICE, NO_EMAIL_NOTICE, mailtoUrl, savedTitle, type MailParts } from '@/lib/quoteMail'
+import {
+  ATTACH_NOTICE, NO_EMAIL_LINK_TEXT, NO_EMAIL_NOTICE, contactHref, mailtoUrl, savedTitle, type MailParts,
+} from '@/lib/quoteMail'
 
 /**
  * 봉투 아이콘 — **lucide 모양 인라인 SVG** 다(디자인 규칙: 이모지를 아이콘으로 쓰지 않는다).
@@ -57,6 +59,8 @@ export default function QuoteSavedModal({ parts, onClose }: {
   const preview = chosen ? applyVars(chosen.body, ctx) : ''
 
   const href = mailtoUrl(parts, preview)
+  /** 이메일이 없을 때 갈 곳 — 그 사업장의 담당자 수정 창. */
+  const fixHref = contactHref(parts)
   const email = String(parts.toEmail ?? '').trim()
 
   return (
@@ -96,7 +100,18 @@ export default function QuoteSavedModal({ parts, onClose }: {
               {email}
             </a>
           ) : (
-            <div style={{ fontSize: 13, color: SUB, lineHeight: 1.8 }}>{NO_EMAIL_NOTICE}</div>
+            /* 「담당자 정보에서 추가」는 **그 담당자 수정 창**으로 바로 간다(2026-11-25).
+               사업장을 모르면 글자만 남는다. */
+            <div style={{ fontSize: 13, color: SUB, lineHeight: 1.8 }}>
+              {fixHref ? (<>
+                {NO_EMAIL_NOTICE.replace(NO_EMAIL_LINK_TEXT, '')}
+                <a href={fixHref} style={{ color: BLUE, fontWeight: 600, textDecoration: 'none' }}
+                  onMouseEnter={e => { e.currentTarget.style.textDecoration = 'underline' }}
+                  onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none' }}>
+                  {NO_EMAIL_LINK_TEXT}
+                </a>
+              </>) : NO_EMAIL_NOTICE}
+            </div>
           )}
 
           {/* 본문 문구 — 고르면 자리표가 바뀐 글이 아래에 뜨고, 그 글이 메일 본문이 된다. */}
