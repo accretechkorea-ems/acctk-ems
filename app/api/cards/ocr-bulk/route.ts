@@ -29,7 +29,8 @@ import type { OcrKey } from '@/lib/businessCardOcr'
 import { readCard } from '@/lib/cardOcrServer'
 import {
   BULK_METHOD, EVENT_HANGUL, EVENT_MERGED, MAX_PER_REQUEST,
-  canMergeBack, fillBlanks, hangulPatch, hasContact, isBatchId, isNoPerson, type BulkLine,
+  canMergeBack, fillBlanks, hasContact, isBatchId, isNoPerson, localScriptPatch, sameCompany,
+  type BulkLine,
 } from '@/lib/businessCardBulk'
 
 const supabaseAdmin = adminClient()
@@ -134,6 +135,11 @@ export async function POST(req: Request) {
 
   /** 직전 명함 — 같은 요청의 앞 쪽, 없으면 지난 요청이 넘겨준 prev_card_id. */
   let prevId: number | null = Number(form.get('prev_card_id')) || null
+  /** 그 명함이 **몇 쪽**이었나 — 뒷면은 바로 다음 쪽일 때만 붙는다. */
+  let prevPage: number | null = Number.isFinite(Number(form.get('prev_page'))) && String(form.get('prev_page') ?? '') !== ''
+    ? Number(form.get('prev_page')) : null
+  /** 이 묶음의 첫 파일이 전체에서 **몇 쪽**인가(0부터). */
+  const pageBase = Number(form.get('page_base')) || 0
   /** 그 명함의 지금 값(합칠 때 빈 칸을 보려면 필요하다). */
   let prevRow: Record<string, unknown> | null = null
   if (prevId) {
@@ -164,7 +170,7 @@ export async function POST(req: Request) {
     target: number, targetRow: Record<string, unknown>, row: Record<string, string | null>,
   ): Promise<Record<string, unknown>> => {
     const fill = fillBlanks(targetRow, row, WRITE_FIELDS)
-    const fix = hangulPatch(targetRow as Parameters<typeof hangulPatch>[0], row)
+    const fix = localScriptPatch(targetRow as Parameters<typeof localScriptPatch>[0], row)
     const patch = { ...fill, ...fix }
     if (Object.keys(patch).length === 0) return targetRow
     const { error } = await supabaseAdmin.from('business_cards').update(patch).eq('card_id', target)
@@ -200,17 +206,27 @@ export async function POST(req: Request) {
     const phone = digitsOf(row.mobile)
     const mail = String(row.email ?? '').trim().toLowerCase()
 
+    /**
+     * 이 쪽이 **바로 앞 쪽**에 이어지나 (2026-11-25).
+     * 뒷면은 앞면 **다음 쪽**에 오는 것이라, 차례가 떨어진 면은 붙이지 않는다 —
+     * 돌려 읽느라 밀린 광고면이 엉뚱한 명함에 붙어 회사명을 바꾼 일이 있었다.
+     */
+    const page = pageBase + i
+    const adjacent = prevId != null && prevPage != null && page === prevPage + 1
+
     // ── ⓐ 사람이 없는 면(뒷면·이름 없음·이름이 회사명) ──
     if (isNoPerson(row, got.back)) {
       // 앞 명함의 뒷면일 때만 붙인다 — 사람 이름 없는 **남의 명함**이 붙으면
       // 전화·주소가 덮인다(2026-11-24 실측에서 부동산 사무실 면이 그렇게 붙었다).
-      if (prevId && prevRow && canMergeBack(prevRow as Parameters<typeof canMergeBack>[0], row)) {
-        prevRow = await mergeInto(prevId, prevRow, row)
-        lines.push({ index: i, ok: false, reason: 'merged', card_id: prevId, merged_into: prevId, usage })
+      if (adjacent && prevRow && canMergeBack(prevRow as Parameters<typeof canMergeBack>[0], row)) {
+        prevRow = await mergeInto(prevId!, prevRow, row)
+        lines.push({ index: i, ok: false, reason: 'merged', card_id: prevId!, merged_into: prevId!, usage, page })
       } else {
         lines.push({
-          index: i, ok: false, reason: 'no_person',
-          name: row.company ?? row.name, usage, upside_down: got.upsideDown,
+          index: i, ok: false,
+          // 붙일 앞면이 **있는데 떨어져 있으면** 그 사실을 따로 말한다.
+          reason: prevId != null && !adjacent ? 'orphan_back' : 'no_person',
+          name: row.company ?? row.name, usage, upside_down: got.upsideDown, page,
         })
       }
       continue
@@ -224,20 +240,35 @@ export async function POST(req: Request) {
 
     const hit = (phone && byPhone.get(phone)) || (mail && byMail.get(mail)) || null
 
-    // ── ⓑ 직전 명함의 **다른 면** — 합치고 한글을 앞으로 ──
-    if (hit && prevId && hit.card_id === prevId && prevRow) {
-      prevRow = await mergeInto(prevId, prevRow, row)
-      lines.push({ index: i, ok: false, reason: 'merged', card_id: prevId, merged_into: prevId, usage })
+    /**
+     * ── ⓑ 직전 명함의 **다른 면** — 합치고 현지 문자를 앞으로 ──
+     * 바로 앞 쪽이어야 하고, **회사가 같아야** 한다. 같은 사람이 회사를 옮기거나
+     * 겸직하면 번호가 같은 명함이 둘 나오는데, 전에는 한 장으로 합쳐 버렸다
+     * (2026-11-25 실측).
+     */
+    if (hit && adjacent && hit.card_id === prevId && prevRow) {
+      if (sameCompany(prevRow as Parameters<typeof sameCompany>[0], row)) {
+        prevRow = await mergeInto(prevId!, prevRow, row)
+        lines.push({ index: i, ok: false, reason: 'merged', card_id: prevId!, merged_into: prevId!, usage, page })
+        continue
+      }
+      // 회사가 다르다 — 같은 사람의 **다른 명함**이다. 아래 ⓓ 로 내려가 새로 담는다.
+    } else if (hit && prevId != null && hit.card_id === prevId) {
+      // 번호는 같은데 차례가 떨어졌다 — 합치지 않고 중복으로 둔다(ⓒ 와 같다).
+      lines.push({ index: i, ok: false, reason: 'dup', card_id: hit.card_id, name: hit.name, usage, page })
       continue
     }
 
-    // ── ⓒ 직전이 아닌 기존 명함과 같다 — 중복. 한글 교정만 해 준다 ──
+    // ── ⓒ 기존 명함과 번호가 같다 — 중복. 회사가 같을 때만 손봐 준다 ──
     if (hit) {
       const { data: old } = await supabaseAdmin
         .from('business_cards').select('*').eq('card_id', hit.card_id).maybeSingle()
-      if (old) await mergeInto(hit.card_id, old as Record<string, unknown>, row)
-      lines.push({ index: i, ok: false, reason: 'dup', card_id: hit.card_id, name: hit.name, usage })
-      continue
+      if (old && sameCompany(old as Parameters<typeof sameCompany>[0], row)) {
+        await mergeInto(hit.card_id, old as Record<string, unknown>, row)
+        lines.push({ index: i, ok: false, reason: 'dup', card_id: hit.card_id, name: hit.name, usage, page })
+        continue
+      }
+      // 회사가 다르면 같은 사람의 **다른 명함**이다 — 아래에서 새로 담는다.
     }
 
     // ── ⓓ 새 명함 ──
@@ -262,12 +293,13 @@ export async function POST(req: Request) {
     }
 
     const cardId = Number(made.card_id)
-    lines.push({ index: i, ok: true, card_id: cardId, usage })
+    lines.push({ index: i, ok: true, card_id: cardId, usage, page })
     // 같은 묶음 안의 다음 장이 같은 명함이면 중복으로 걸리게 바로 넣는다.
     if (phone) byPhone.set(phone, { card_id: cardId, name: row.name })
     if (mail) byMail.set(mail, { card_id: cardId, name: row.name })
-    // 이 쪽이 다음 쪽의 「직전 명함」이 된다 — 뒷면은 여기에 붙는다.
+    // 이 쪽이 다음 쪽의 「직전 명함」이 된다 — 뒷면은 **바로 다음 쪽**일 때만 붙는다.
     prevId = cardId
+    prevPage = page
     prevRow = { card_id: cardId, ...row }
 
     await logEvent(cardId, 'card_created', { name: row.name, method: INPUT_METHOD })
@@ -285,7 +317,8 @@ export async function POST(req: Request) {
     ok: true,
     lines,
     usage: { input: usedIn, output: usedOut },
-    // 다음 요청이 prev_card_id 로 되돌려 보낸다 — 묶음을 넘어가는 뒷면이 붙게.
+    // 다음 요청이 prev_card_id·prev_page 로 되돌려 보낸다 — 묶음을 넘어가는 뒷면이 붙게.
     last_card_id: prevId,
+    last_page: prevPage,
   })
 }

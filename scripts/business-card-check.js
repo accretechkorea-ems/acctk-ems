@@ -205,8 +205,14 @@ eq('검색 — 이름·회사·부서·번호·이메일', [
   C.matchesCard(card, '1234'), C.matchesCard(card, 'hong@'), C.matchesCard(card, '없는말'),
 ], [true, true, true, true, true, false])
 ok('번호는 숫자만 비교한다(01012345678 로도 걸린다)', C.matchesCard(card, '01012345678'))
-ok('엑셀에 등록자 이름·팀·사업부가 있다',
-  ['registered_name', 'registered_team', 'registered_div'].every(k => C.EXCEL_COLUMNS.some(c => c.key === k)))
+// 2026-11-25 — 엑셀 열을 목록과 같은 차례로 다시 세웠다.
+eq('엑셀 열 차례', C.EXCEL_COLUMNS.map(c => c.key), [
+  'registered_at', 'company', 'department', 'name', 'position',
+  'mobile', 'phone', 'email', 'division', 'registered_name',
+  'name_en', 'company_en', 'fax', 'website', 'address', 'memo',
+])
+ok('지난 기간·등록자 팀·등록자 사업부는 뺐다',
+  !C.EXCEL_COLUMNS.some(c => ['registered_team', 'registered_div'].includes(c.key)))
 eq('등록자 글자', C.registrarLabel({ registered_name: '권재원', registered_team: '80CS' }), '권재원 · 80CS')
 
 // ── ⑨ 영문 둘 — 2026-11-23. 표의 칸은 db/business_cards_en_20261123.sql 로 더한다 ──
@@ -276,6 +282,22 @@ ok('취소로 열람에 돌아온다', /if \(editing\) setMode2\('view'\)/.test(
 ok('값은 글자로 보여 준다', /const viewValue/.test(FORM_SRC) && /viewLabel/.test(FORM_SRC))
 ok('넓은 창(760)', /width=\{760\}/.test(FORM_SRC))
 ok('폰은 1단', /narrow \? '1fr' : '1fr 1fr'/.test(FORM_SRC))
+
+// ── 2026-11-25 2차 ──
+ok('열람 하단은 한 줄 — 사업부 | 등록자 | 등록일',
+  FORM_SRC.includes("<div style={viewLabel}>사업부</div>")
+  && FORM_SRC.includes("<div style={viewLabel}>등록자</div>")
+  && FORM_SRC.includes("<div style={viewLabel}>등록일</div>"))
+ok('등록자 팀은 적지 않는다', !/registered_team/.test(FORM_SRC))
+ok('직급을 함께 적는다', FORM_SRC.includes('registrarPosition?.trim()'))
+ok('직급은 engineers 에서 가져온다',
+  CARDS_PAGE.includes("supabase.from('engineers').select('engineer_id, position')")
+  && CARDS_PAGE.includes('registrarPosition={editing ? positions.get'))
+ok('회사 열은 최소 220', CARDS_PAGE.includes('minWidth: 220'))
+ok('회사·부서는 두 줄 말줄임', CARDS_PAGE.includes('WebkitLineClamp: 2')
+  && (CARDS_PAGE.match(/style=\{clamp2\}/g) || []).length === 2)
+ok('전체는 호버(title)로 본다', CARDS_PAGE.includes('title={[c.company, c.company_en]'))
+ok('폰 카드에서도 나이 꼬리표를 걷었다', !/AgeTag/.test(CARDS_PAGE))
 
 // ── ⑪ 휴대폰이 없으면 회사 전화 — 2026-11-25 ──
 console.log('\n── ⑪ 연락처 한 줄 ──')

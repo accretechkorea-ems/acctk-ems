@@ -29,6 +29,11 @@ export type BulkReason =
   | 'merged'
   /** 사람 이름이 없는 면(회사명만·로고만). 담지 않고 목록에 남긴다. */
   | 'no_person'
+  /**
+   * 붙일 앞면이 **바로 앞 쪽이 아니다**. 돌려 읽느라 차례가 밀린 면이 엉뚱한 명함에
+   * 붙어 회사명을 바꿔 버린 일이 있어(2026-11-25 실측), 떨어진 면은 합치지 않는다.
+   */
+  | 'orphan_back'
   | 'no_key' | 'no_file' | 'too_big' | 'bad_type' | 'parse' | 'api'
   /** 읽기는 됐는데 담다가 실패했다. */
   | 'save'
@@ -48,6 +53,7 @@ export const BULK_REASON_LABEL: Record<BulkReason, string> = {
   empty: '이름·회사를 못 읽음',
   merged: '앞 명함의 뒷면 — 합침',
   no_person: '사람 이름 없음',
+  orphan_back: '앞면과 떨어진 뒷면',
   no_key: 'OCR 설정 없음',
   no_file: '파일을 받지 못함',
   too_big: '파일이 너무 큼',
@@ -65,13 +71,15 @@ export const BULK_REASON_LABEL: Record<BulkReason, string> = {
  *   · `usage` — 그 쪽 한 장의 토큰
  */
 export type BulkLine =
-  | { index: number; ok: true; card_id: number; usage?: { input: number; output: number } }
+  | { index: number; ok: true; card_id: number; usage?: { input: number; output: number }; page?: number }
   | {
     index: number; ok: false; reason: BulkReason
     card_id?: number; name?: string | null; merged_into?: number
     usage?: { input: number; output: number }
     /** 글자가 거꾸로 놓여 못 읽었다 — 화면이 이 쪽만 돌려 다시 보낸다. */
     upside_down?: boolean
+    /** 전체에서 **몇 쪽**인가(0부터). 실패 목록에 쪽 번호를 적는다. */
+    page?: number
   }
 
 /** 라우트의 응답. `last_card_id` 는 다음 요청이 `prev_card_id` 로 보내 줄 값이다. */
@@ -80,6 +88,8 @@ export type BulkResponse =
     ok: true; lines: BulkLine[]
     usage: { input: number; output: number }
     last_card_id: number | null
+    /** 그 명함이 몇 쪽이었나 — 다음 요청이 그대로 돌려보낸다. */
+    last_page?: number | null
   }
   | { ok: false; reason: string; max?: number }
 
@@ -107,7 +117,7 @@ export function addLines(tally: BulkTally, lines: readonly BulkLine[]): BulkTall
     if (l.ok) { t.saved += 1; continue }
     if (l.reason === 'dup') t.dup += 1
     else if (l.reason === 'merged') t.merged += 1
-    else if (l.reason === 'no_person') t.noPerson += 1
+    else if (l.reason === 'no_person' || l.reason === 'orphan_back') t.noPerson += 1
     else if (l.reason === 'empty') t.empty += 1
     else t.failed += 1
   }
@@ -127,9 +137,18 @@ export function addLines(tally: BulkTally, lines: readonly BulkLine[]): BulkTall
 /** 한글이 섞여 있나. */
 export const hasHangul = (s: string | null | undefined) => /[가-힣]/.test(String(s ?? ''))
 
-/** 로마자만 있나(한글이 없고 알파벳이 있다). */
+/**
+ * **현지 문자**가 섞여 있나 (2026-11-25).
+ * 한글만 보던 것을 한자·가나까지 넓혔다 — 일본 명함의 한자면이 로마자면과 합쳐질 때
+ * 이름이 로마자로 남는 일이 있었다. 현지 문자가 본칸, 로마자가 영문 칸이다.
+ *   · 한글 가-힣 · CJK 통합한자 一-鿿 · 히라가나 ぁ-ゟ · 가타카나 ゠-ヿ
+ */
+export const hasLocalScript = (s: string | null | undefined) =>
+  /[가-힣㐀-鿿぀-ゟ゠-ヿ]/.test(String(s ?? ''))
+
+/** 로마자만 있나(현지 문자가 없고 알파벳이 있다). */
 export const isRomanOnly = (s: string | null | undefined) =>
-  !hasHangul(s) && /[A-Za-z]/.test(String(s ?? ''))
+  !hasLocalScript(s) && /[A-Za-z]/.test(String(s ?? ''))
 
 /**
  * 견주기 전에 다듬는다 — 회사 표시(㈜·(주)·주식회사…)와 공백·기호를 턴다.
@@ -137,7 +156,10 @@ export const isRomanOnly = (s: string | null | undefined) =>
  */
 const norm = (s: string | null | undefined) =>
   String(s ?? '')
+    // 우리말 표시
     .replace(/㈜|㈲|\(주\)|\（주\）|\(유\)|주식회사|유한회사/g, '')
+    // 일본·중국 표시 — 한자면을 견주려면 이것도 떼야 한다(2026-11-25).
+    .replace(/㈱|㈲|\(株\)|\（株\）|株式会社|株式會社|有限会社|有限會社/g, '')
     .replace(/[\s()|·.,-]/g, '')
     .toLowerCase()
 
@@ -205,13 +227,14 @@ export function fillBlanks(
 }
 
 /**
- * **한글 우선 교정** — 기존 줄의 이름·회사가 로마자뿐인데 이번 면에 한글이 있으면
- * 한글을 앞으로 올리고, 밀려난 로마자는 영문 칸이 비어 있을 때만 그리로 옮긴다.
+ * **현지 문자 우선 교정** — 기존 줄의 이름·회사가 로마자뿐인데 이번 면에 현지 문자가
+ * 있으면 그것을 앞으로 올리고, 밀려난 로마자는 영문 칸이 비어 있을 때만 그리로 옮긴다.
  *
  * 영문면이 먼저 스캔된 명함을 제자리로 돌려놓는 자리다. 기존 영문 칸에 이미 값이
  * 있으면 덮지 않는다 — 사람이 적어 둔 값을 지우지 않는다.
+ * 2026-11-25에 한글만 보던 것을 **한자·가나까지** 넓혔다(일본 명함).
  */
-export function hangulPatch(
+export function localScriptPatch(
   prev: { name?: string | null; name_en?: string | null; company?: string | null; company_en?: string | null },
   next: { name?: string | null; company?: string | null },
 ): Record<string, string> {
@@ -219,11 +242,44 @@ export function hangulPatch(
   for (const [ko, en] of [['name', 'name_en'], ['company', 'company_en']] as const) {
     const had = String(prev[ko] ?? '').trim()
     const got = String(next[ko] ?? '').trim()
-    if (!isRomanOnly(had) || !hasHangul(got)) continue
+    if (!isRomanOnly(had) || !hasLocalScript(got)) continue
     patch[ko] = got
     if (!String(prev[en] ?? '').trim()) patch[en] = had
   }
   return patch
+}
+
+/**
+ * 두 면이 **같은 회사**인가 (2026-11-25).
+ *
+ * 같은 사람이 회사를 옮기거나 겸직하면 휴대폰·이메일이 같은 명함이 둘 나온다.
+ * 전에는 그 둘을 한 장으로 합쳐 버렸다. 이제 **회사명이 둘 다 있고 서로 다르면**
+ * 합치지 않는다. 한글면/영문면처럼 번역 관계인지는 `company`·`company_en` 네 값을
+ * 서로 견주어 **하나라도 같으면** 같은 회사로 본다(모델에게 되묻지 않는다).
+ *
+ * 한쪽에 회사명이 없으면 **같다고 본다** — 뒷면에는 회사명이 없는 일이 흔하다.
+ */
+export function sameCompany(
+  a: { company?: string | null; company_en?: string | null },
+  b: { company?: string | null; company_en?: string | null },
+): boolean {
+  const left = [a.company, a.company_en].map(norm).filter(Boolean)
+  const right = [b.company, b.company_en].map(norm).filter(Boolean)
+  if (left.length === 0 || right.length === 0) return true
+  return left.some(l => right.some(r => sameName(l, r)))
+}
+
+/**
+ * 다듬은 회사명 둘이 같은 곳인가.
+ *
+ * 글자가 같거나 한쪽이 다른 쪽을 품으면 같다. 그 밖에 **앞 두 글자가 같으면**도
+ * 같다고 본다 — 한자면의 「가나精密」과 한글면의 「가나정밀」을 이어 주기 위해서다
+ * (2026-11-25 실측). 번호·메일이 이미 같고 **바로 앞 쪽**일 때만 쓰이는 판정이라,
+ * 이 느슨함이 남의 명함을 삼키지는 않는다.
+ */
+function sameName(l: string, r: string): boolean {
+  if (l === r || l.includes(r) || r.includes(l)) return true
+  return l.length >= 2 && r.length >= 2 && l.slice(0, 2) === r.slice(0, 2)
 }
 
 /** 사건 이름 — business_card_events.event_type. */

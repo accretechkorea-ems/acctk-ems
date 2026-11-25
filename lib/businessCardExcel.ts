@@ -7,15 +7,19 @@
  * 줄 만들기(cardRowsAoA)는 순수 함수다 — 하네스가 돌린다. 파일로 쓰는 일만 브라우저에서 한다.
  */
 
-import { EXCEL_COLUMNS, ageLabel, daysBetween, type BusinessCard } from './businessCard'
+import { EXCEL_COLUMNS, type BusinessCard } from './businessCard'
 
-/** 머리글 — EXCEL_COLUMNS 의 차례 그대로 + 나이 한 칸. */
-export const CARD_EXCEL_HEADER: readonly string[] = [...EXCEL_COLUMNS.map(c => c.label), '지난 기간']
+/** 머리글 — EXCEL_COLUMNS 의 차례 그대로. */
+export const CARD_EXCEL_HEADER: readonly string[] = EXCEL_COLUMNS.map(c => c.label)
 
-const day = (v: unknown): string => String(v ?? '').slice(0, 10)
+/** 등록일은 목록과 같은 **yy-mm-dd**. */
+const day = (v: unknown): string => {
+  const d = String(v ?? '').slice(0, 10)
+  return d.length === 10 ? d.slice(2) : d
+}
 
 /** 줄 묶음 — 머리글 한 줄 + 명함마다 한 줄. */
-export function cardRowsAoA(cards: readonly BusinessCard[], todayIso: string): (string | number)[][] {
+export function cardRowsAoA(cards: readonly BusinessCard[], _todayIso?: string): (string | number)[][] {
   const out: (string | number)[][] = [[...CARD_EXCEL_HEADER]]
   for (const c of cards) {
     const row: (string | number)[] = []
@@ -23,7 +27,6 @@ export function cardRowsAoA(cards: readonly BusinessCard[], todayIso: string): (
       const v = (c as unknown as Record<string, unknown>)[col.key]
       row.push(col.key === 'registered_at' ? day(v) : String(v ?? ''))
     }
-    row.push(ageLabel(daysBetween(c.registered_at, todayIso)))
     out.push(row)
   }
   return out

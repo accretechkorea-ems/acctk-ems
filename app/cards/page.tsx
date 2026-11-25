@@ -24,7 +24,7 @@ import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/confirmContext'
 import { canSwitchDivision, teamDivisionOf } from '@/lib/division'
 import {
-  AGE_TONES, ageLabel, ageTone, daysBetween, defaultDivision, registrarLabel,
+  defaultDivision, registrarLabel,
   COMPANY_PHONE_MARK, displayPhone, visibleDivisions, type BusinessCard, type CardForm,
 } from '@/lib/businessCard'
 import { applyCardFilter, filterFromQuery, queryFromFilter, type CardFilter } from '@/lib/businessCardQuery'
@@ -69,6 +69,14 @@ const th: React.CSSProperties = {
 }
 const td: React.CSSProperties = { padding: '0 14px', fontSize: 13, color: TEXT, whiteSpace: 'nowrap' }
 
+/** 회사·부서 칸 — 줄을 바꿔 쓴다(긴 이름이 표를 밀지 않게). */
+const wrapCell: React.CSSProperties = { whiteSpace: 'normal', verticalAlign: 'middle' }
+/** 두 줄까지만 보여 주고 그 뒤는 말줄임 — 전체는 칸의 title 로 본다. */
+const clamp2: React.CSSProperties = {
+  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+  overflow: 'hidden', lineHeight: 1.45,
+}
+
 /** 등록일 — 목록은 **yy-mm-dd** 로 짧게 적는다(26-11-25). */
 const shortDay = (iso: string | null | undefined): string => {
   const d = String(iso ?? '').slice(0, 10)
@@ -83,18 +91,6 @@ function En({ value }: { value?: string | null }) {
   const v = String(value ?? '').trim()
   if (!v) return null
   return <span style={{ fontSize: 11, color: SUB, fontWeight: 400, marginLeft: 5 }}>{v}</span>
-}
-
-/** 나이 꼬리표 — 색 점 + 글자(틴트 배경은 쓰지 않는다). */
-function AgeTag({ registeredAt, today }: { registeredAt: string; today: string }) {
-  const days = daysBetween(registeredAt, today)
-  const tone = ageTone(days)
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: SUB, whiteSpace: 'nowrap' }}>
-      <span style={{ width: 7, height: 7, borderRadius: '50%', background: AGE_TONES[tone], flexShrink: 0 }} />
-      {ageLabel(days)}
-    </span>
-  )
 }
 
 function CardsPageInner() {
@@ -177,6 +173,23 @@ function CardsPageInner() {
     }
     return [...m].sort((a, b) => a[1].localeCompare(b[1], 'ko'))
   }, [rows])
+
+  /**
+   * 등록자의 **지금 직급** — engineer_id → position. 열람 창의 「등록자 (이름 · 직급)」에 쓴다.
+   * 명함에 박힌 것은 그때의 이름·팀뿐이라 직급은 여기서 조인한다(읽기만).
+   */
+  const [positions, setPositions] = useState<Map<number, string>>(new Map())
+  useEffect(() => {
+    void (async () => {
+      const { data } = await supabase.from('engineers').select('engineer_id, position')
+      const m = new Map<number, string>()
+      for (const r of data ?? []) {
+        const p = String(r.position ?? '').trim()
+        if (p) m.set(Number(r.engineer_id), p)
+      }
+      setPositions(m)
+    })()
+  }, [supabase])
 
   /** 가져오기 묶음 — 최근 10개(날짜·건수). 묶음 칸이 없으면 빈 목록이다. */
   const batches = useMemo(() => {
@@ -461,8 +474,6 @@ function CardsPageInner() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <b style={{ fontSize: 15, color: TEXT }}>{c.name}<En value={c.name_en} /></b>
                 <span style={{ fontSize: 12, color: SUB }}>{c.position ?? ''}</span>
-                <span style={{ flex: 1 }} />
-                <AgeTag registeredAt={c.registered_at} today={today} />
               </div>
               <div style={{ fontSize: 13, color: TEXT_LABEL }}>
                 {[c.company, c.department].filter(Boolean).join(' · ') || '—'}
@@ -516,11 +527,13 @@ function CardsPageInner() {
                       aria-label={`${c.name} 고르기`} style={{ cursor: 'pointer' }} />
                   </td>
                   <td style={{ ...td, color: SUB }}>{shortDay(c.registered_at)}</td>
-                  <td style={{ ...td, whiteSpace: 'normal' }}>
-                    {c.company || '—'}
-                    <En value={c.company_en} />
+                  {/* 회사·부서는 **두 줄까지** 보여 주고 그 뒤는 말줄임. 전체는 호버로. */}
+                  <td style={{ ...td, ...wrapCell, minWidth: 220 }} title={[c.company, c.company_en].filter(Boolean).join(' ')}>
+                    <span style={clamp2}>{c.company || '—'}<En value={c.company_en} /></span>
                   </td>
-                  <td style={{ ...td, whiteSpace: 'normal' }}>{c.department || '—'}</td>
+                  <td style={{ ...td, ...wrapCell }} title={c.department ?? ''}>
+                    <span style={clamp2}>{c.department || '—'}</span>
+                  </td>
                   <td style={td}><b>{c.name}</b><En value={c.name_en} /></td>
                   <td style={td}>{c.position || '—'}</td>
                   {/* 휴대폰이 없으면 회사 전화를 대신 보여 준다(앞에 작은 「회사」). */}
@@ -576,6 +589,7 @@ function CardsPageInner() {
           defaultDivision={defaultDivision(me)}
           busy={busy}
           canDelete={editing ? canDeleteCard(me, editing) : false}
+          registrarPosition={editing ? positions.get(Number(editing.engineer_id ?? 0)) : null}
           onSave={save}
           onOpenExisting={c => { setEditing(c) }}
           onDelete={() => { if (editing) void deleteOne(editing) }}

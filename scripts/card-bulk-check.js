@@ -180,18 +180,18 @@ console.log('\n── ⑨ 한글 우선 교정 ──')
 eq('한글이 섞였나', [B.hasHangul('홍길동'), B.hasHangul('Hong'), B.hasHangul('')], [true, false, false])
 eq('로마자뿐인가', [B.isRomanOnly('Hong Gil-dong'), B.isRomanOnly('홍길동'), B.isRomanOnly('010-1')], [true, false, false])
 eq('로마자 이름 + 한글 면 → 바꿔 넣는다',
-  B.hangulPatch({ name: 'Hong Gil-dong', name_en: '', company: 'GANA Co.', company_en: '' },
+  B.localScriptPatch({ name: 'Hong Gil-dong', name_en: '', company: 'GANA Co.', company_en: '' },
     { name: '홍길동', company: '주식회사 가나정밀' }),
   { name: '홍길동', name_en: 'Hong Gil-dong', company: '주식회사 가나정밀', company_en: 'GANA Co.' })
 eq('영문 칸이 이미 차 있으면 덮지 않는다',
-  B.hangulPatch({ name: 'Hong', name_en: 'Gil-dong Hong', company: 'GANA', company_en: 'GANA PRECISION' },
+  B.localScriptPatch({ name: 'Hong', name_en: 'Gil-dong Hong', company: 'GANA', company_en: 'GANA PRECISION' },
     { name: '홍길동', company: '가나정밀' }),
   { name: '홍길동', company: '가나정밀' })
 eq('이미 한글이면 그대로',
-  B.hangulPatch({ name: '홍길동', name_en: '', company: '가나정밀', company_en: '' },
+  B.localScriptPatch({ name: '홍길동', name_en: '', company: '가나정밀', company_en: '' },
     { name: 'Hong Gil-dong', company: 'GANA' }), {})
 eq('이번 면이 로마자뿐이면 그대로',
-  B.hangulPatch({ name: 'Hong', name_en: '', company: 'GANA', company_en: '' },
+  B.localScriptPatch({ name: 'Hong', name_en: '', company: 'GANA', company_en: '' },
     { name: 'Gil-dong Hong', company: 'GANA Co.' }), {})
 eq('빈 칸만 채운다',
   B.fillBlanks({ name: '홍길동', company: '', fax: null }, { name: '다른이름', company: '가나정밀', fax: '031-1' },
@@ -207,13 +207,14 @@ ok('ⓑ 직전과 같은 명함이면 합친다', /hit\.card_id === prevId/.test
 ok('ⓒ 기존 명함도 한글 교정은 해 준다',
   /reason: 'dup'/.test(R) && /await mergeInto\(hit\.card_id/.test(R))
 ok('ⓓ 담은 쪽이 다음 쪽의 직전이 된다', /prevId = cardId/.test(R))
-ok('합치기는 빈 칸 채우기 + 한글 교정', /fillBlanks\(targetRow, row, WRITE_FIELDS\)/.test(R) && /hangulPatch\(/.test(R))
+ok('합치기는 빈 칸 채우기 + 현지 문자 교정',
+  R.includes('fillBlanks(targetRow, row, WRITE_FIELDS)') && R.includes('localScriptPatch('))
 ok('바뀐 것이 없으면 쓰지 않는다', /if \(Object\.keys\(patch\)\.length === 0\) return targetRow/.test(R))
 eq('사건 이름 둘', [B.EVENT_MERGED, B.EVENT_HANGUL], ['card_merged_back', 'card_hangul_fixed'])
 ok('그 이름으로 사건을 남긴다', /EVENT_MERGED/.test(R) && /EVENT_HANGUL/.test(R))
 ok('화면은 앞 응답을 받은 뒤 다음 요청을 보낸다',
-  /let prevCardId: number \| null = null/.test(read(MODAL))
-  && /body\.append\('prev_card_id', String\(prevCardId\)\)/.test(read(MODAL)))
+  M.includes('let prevCardId: number | null = null')
+  && M.includes("body.append('prev_card_id', String(at.prevId))"))
 
 console.log('\n── ⑪ 집계와 읽기 비용 ──')
 eq('집계에 뒷면·사람없음이 든다', B.addLines(B.EMPTY_TALLY, [
@@ -233,7 +234,7 @@ eq('35쪽쯤의 비용', B.costWon({ input: 45_000, output: 5_000 }), 10)
 ok('마지막 줄에 적는다', /읽기 비용 약 /.test(B.costLabel({ input: 1000, output: 100 })))
 ok('화면이 그 줄을 쓴다', /costLabel\(usage\)/.test(read(MODAL)))
 ok('쪽마다 토큰을 남긴다', /\[\$\{TAG\}\] page`, \{ index: i, input: usage\.input, output: usage\.output \}/.test(R))
-ok('건별 토큰을 응답에 담는다', /lines\.push\(\{ index: i, ok: true, card_id: cardId, usage \}\)/.test(R))
+ok('건별 토큰을 응답에 담는다', R.includes('lines.push({ index: i, ok: true, card_id: cardId, usage, page })'))
 
 console.log('\n── ⑫ 실제 명함 PDF 는 저장소에 들이지 않는다 ──')
 const GI = read('.gitignore')
@@ -322,7 +323,7 @@ ok('뒷면·빈 면이라서 못 읽은 것은 거짓이라고 적었다',
   /뒷면이라서·빈 면이라서 못 읽은 것은 \*\*false\*\* 다/.test(OCR))
 ok('읽은 값에서 그 깃발을 꺼낸다', /export function upsideDownFromJson/.test(read('lib/businessCardOcr.ts')))
 ok('라우트가 쪽마다 그 깃발을 돌려준다', /upside_down: got\.upsideDown/.test(R))
-ok('화면이 그 쪽만 돌린다', /worthRetry\(l\) \? i : -1/.test(M))
+ok('화면이 그 쪽만 돌린다', M.includes('if (!worthRetry(got[k])) continue'))
 ok('다시 읽는 요청임을 알린다', /body\.append\('retry', '1'\)/.test(M) && /const isRetry = String\(form\.get\('retry'\) \?\? ''\) === '1'/.test(R))
 ok('다시 읽기에서는 이름+연락처가 없으면 담지 않는다',
   /if \(isRetry && !hasContact\(row\)\)/.test(R))
@@ -340,7 +341,63 @@ eq('돌려 읽은 결과를 받아들일 때', [
   B.acceptRetry({ ok: false, reason: 'no_person' }),
   B.acceptRetry({ ok: false, reason: 'empty' }),
 ], [true, true, true, false, false])
-ok('화면이 그 판정을 쓴다', /if \(acceptRetry\(now\)\)/.test(M))
+ok('화면이 그 판정을 쓴다', M.includes('if (!now || !acceptRetry(now)) continue'))
+
+// ── 2026-11-25 ──
+console.log('\n── ⑲ 뒷면은 바로 앞 쪽에만 ──')
+ok('쪽 번호를 받는다', R.includes("form.get('page_base')") && R.includes("form.get('prev_page')"))
+ok('바로 앞 쪽인지 본다', R.includes('page === prevPage + 1'))
+ok('떨어진 면은 orphan_back', R.includes("reason: prevId != null && !adjacent ? 'orphan_back' : 'no_person'"))
+ok('쪽 번호를 응답에 담는다', R.includes('usage, page }') || R.includes('usage, page,'))
+ok('다음 요청에 쪽 번호를 넘긴다', R.includes('last_page: prevPage'))
+ok('화면이 쪽을 세어 보낸다',
+  M.includes("body.append('page_base', String(at.pageBase))")
+  && M.includes("body.append('prev_page', String(at.prevPage))"))
+ok('돌려 읽기도 **그 쪽 차례**에서 한다',
+  M.includes('pageBase: page, prevId: cardByPage.get(page - 1) ?? null, prevPage: page - 1, retry: true'))
+eq('떨어진 뒷면도 「사람 이름 없음」에 센다',
+  B.addLines(B.EMPTY_TALLY, [{ index: 0, ok: false, reason: 'orphan_back' }]).noPerson, 1)
+eq('까닭 글자', B.BULK_REASON_LABEL.orphan_back, '앞면과 떨어진 뒷면')
+
+console.log('\n── ⑳ 회사가 다르면 합치지 않는다 ──')
+eq('같은 회사', [
+  B.sameCompany({ company: '주식회사 가나정밀' }, { company: '㈜가나정밀' }),
+  B.sameCompany({ company: '가나정밀', company_en: 'GANA PRECISION' }, { company_en: 'GANA PRECISION Co., Ltd.' }),
+  B.sameCompany({ company: '가나정밀' }, { company: '' }),
+], [true, true, true])
+eq('다른 회사', [
+  B.sameCompany({ company: '가나정밀' }, { company: '다라상사' }),
+  B.sameCompany({ company: '가나정밀', company_en: 'GANA' }, { company: '다라상사', company_en: 'DARA' }),
+], [false, false])
+// 한자면의 「가나精密」과 한글면의 「가나정밀」은 같은 곳으로 본다(앞 두 글자).
+eq('한자 표기도 같은 곳',
+  B.sameCompany({ company: '주식회사 가나정밀' }, { company: '株式會社 가나精密' }), true)
+ok('회사 표시(株式会社·㈱)도 떼고 견준다',
+  B.sameCompany({ company: '㈱가나' }, { company: '株式会社 가나' }))
+ok('ⓑ 가 회사를 본다', R.includes('if (sameCompany(prevRow as Parameters<typeof sameCompany>[0], row))'))
+ok('ⓒ 도 회사를 본다', R.includes('if (old && sameCompany(old as Parameters<typeof sameCompany>[0], row))'))
+
+console.log('\n── ㉑ 현지 문자(한자·가나) ──')
+eq('현지 문자인가', [
+  B.hasLocalScript('홍길동'), B.hasLocalScript('山田'), B.hasLocalScript('やまだ'),
+  B.hasLocalScript('ヤマダ'), B.hasLocalScript('Yamada'),
+], [true, true, true, true, false])
+eq('한자면이 로마자면을 밀어낸다',
+  B.localScriptPatch({ name: 'Taro Yamada', name_en: '', company: 'GANA SEIMITSU', company_en: '' },
+    { name: '山田 太郎', company: '株式会社 ガナ精密' }),
+  { name: '山田 太郎', name_en: 'Taro Yamada', company: '株式会社 ガナ精密', company_en: 'GANA SEIMITSU' })
+eq('가나면도 마찬가지',
+  B.localScriptPatch({ name: 'Taro', name_en: '', company: 'GANA', company_en: '' },
+    { name: 'やまだ たろう', company: 'ガナ' }),
+  { name: 'やまだ たろう', name_en: 'Taro', company: 'ガナ', company_en: 'GANA' })
+eq('현지 문자끼리는 바꾸지 않는다',
+  B.localScriptPatch({ name: '홍길동', name_en: '', company: '가나', company_en: '' },
+    { name: '山田', company: 'ガナ' }), {})
+
+console.log('\n── ㉒ 읽기 지시문 ──')
+ok('범위 번호는 앞 번호만', OCR.includes('**앞 번호만**') && OCR.includes('031-8059-5155~8'))
+ok('이메일 앞부분을 빠뜨리지 않는다', OCR.includes('@ 앞부분을 **빠뜨리지 말고**'))
+ok('이름을 비슷한 글자로 바꾸지 않는다', OCR.includes('**인쇄된 글자 그대로**'))
 
 console.log('\n── ⑯-2 국제번호 ──')
 const O2 = load(path.join(ROOT, 'lib/businessCardOcr.ts'))

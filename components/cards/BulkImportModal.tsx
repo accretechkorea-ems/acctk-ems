@@ -27,7 +27,7 @@ import { BLUE, BLUE_BORDER, BLUE_TINT, BORDER, CARD_BG, DANGER, MUTED, SUB, TEXT
 import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 import { R } from '@/lib/radius'
 import {
-  BULK_REASON_LABEL, BULK_SQL_FILE, EMPTY_TALLY, MAX_PER_REQUEST, addLines, chunk, costLabel,
+  BULK_REASON_LABEL, BULK_SQL_FILE, EMPTY_TALLY, MAX_PER_REQUEST, addLines, costLabel,
   acceptRetry, newBatchId, undoQuestion, worthRetry,
   progressLabel, progressPercent, stopQuestion, summaryLabel,
   type BulkLine, type BulkReason, type BulkTally,
@@ -187,31 +187,37 @@ export default function BulkImportModal({ division, onClose, onDone }: {
     const done: Done[] = []
     const used = { input: 0, output: 0 }
     /**
-     * 직전 요청에서 마지막으로 담기거나 합쳐진 명함.
-     * 묶음을 넘어가는 뒷면(3쪽에서 끊기고 4쪽이 그 뒷면)이 제자리를 찾게 넘겨 준다.
-     * 그래서 요청은 **앞 응답이 온 뒤에** 보낸다 — 나란히 보내면 순서가 뒤섞인다.
+     * 직전 명함과 **그 쪽 번호**. 뒷면은 바로 다음 쪽일 때만 붙으므로 둘을 같이 넘긴다.
+     * 요청은 **앞 응답이 온 뒤에** 보낸다 — 나란히 보내면 순서가 뒤섞인다.
      */
     let prevCardId: number | null = null
+    let prevPage: number | null = null
 
     /** 한 묶음을 보낸다. 한 번 더 보내 본다 — 네트워크가 흔들렸다고 묶음을 버리지 않는다. */
-    const send = async (group: Piece[], retry = false): Promise<BulkLine[]> => {
+    const send = async (
+      group: Piece[],
+      at: { pageBase: number; prevId: number | null; prevPage: number | null; retry?: boolean },
+    ): Promise<BulkLine[]> => {
       for (let attempt = 1; attempt <= 2; attempt++) {
         const body = new FormData()
         body.append('division', division)
         body.append('import_batch_id', batchId.current)
-        if (retry) body.append('retry', '1')
-        if (prevCardId) body.append('prev_card_id', String(prevCardId))
+        if (at.retry) body.append('retry', '1')
+        body.append('page_base', String(at.pageBase))
+        if (at.prevId != null && at.prevPage != null) {
+          body.append('prev_card_id', String(at.prevId))
+          body.append('prev_page', String(at.prevPage))
+        }
         for (const p of group) body.append('files', p.file, p.file.name)
         try {
           const res = await fetch('/api/cards/ocr-bulk', { method: 'POST', body })
           const json = await res.json() as {
             ok?: boolean; lines?: BulkLine[]; reason?: string
-            usage?: { input: number; output: number }; last_card_id?: number | null
+            usage?: { input: number; output: number }
           }
           if (json?.ok && Array.isArray(json.lines)) {
             used.input += json.usage?.input ?? 0
             used.output += json.usage?.output ?? 0
-            prevCardId = json.last_card_id ?? prevCardId
             return json.lines
           }
           if (attempt === 2) {
@@ -228,38 +234,49 @@ export default function BulkImportModal({ division, onClose, onDone }: {
       return []
     }
 
-    for (const group of chunk(pieces, MAX_PER_REQUEST)) {
+    /**
+     * 쪽마다 어떤 명함이 되었나(절대 쪽 번호 → card_id).
+     * 뒷면은 **바로 앞 쪽**에만 붙으므로, 돌려 읽는 쪽도 제 앞 쪽을 찾아 보내야 한다.
+     */
+    const cardByPage = new Map<number, number>()
+    const noteResult = (page: number, line: BulkLine) => {
+      const id = line.ok ? line.card_id : line.card_id
+      if (id != null) cardByPage.set(page, id)
+    }
+
+    for (let base = 0; base < pieces.length; base += MAX_PER_REQUEST) {
       if (stop.current) break
-      let got = await send(group)
+      const group = pieces.slice(base, base + MAX_PER_REQUEST)
+      let got = await send(group, { pageBase: base, prevId: prevCardId, prevPage })
+      got.forEach(l => noteResult(base + l.index, l))
 
       /**
-       * 거꾸로 들어간 쪽을 **한 번 더** — 모델이 「글자가 거꾸로 보인다」고 한 쪽만이다
-       * (2026-11-25에 좁혔다. 전에는 사람 이름 없음·빈 면을 모두 돌려 토큰만 두 배로 썼다).
-       * 다시 읽어 담기거나 기존 명함과 맞물리면 그 결과를 쓰고, 아니면 원래 판정을 그대로 둔다.
+       * 거꾸로 들어간 쪽을 **한 번 더** — 모델이 「글자가 거꾸로 보인다」고 한 쪽만이다.
+       * **그 쪽 차례에서** 바로 처리한다(다음 묶음으로 미루지 않는다) — 미루면 차례가
+       * 밀려 엉뚱한 명함에 붙는다(2026-11-25 실측).
        */
-      const retryAt = got.map((l, i) => (worthRetry(l) ? i : -1)).filter(i => i >= 0)
-      if (retryAt.length > 0 && !stop.current) {
-        const flipped: Piece[] = []
-        const back: number[] = []
-        for (const i of retryAt) {
-          const p = group[got[i].index]
-          if (!p) continue
-          const f = await flip(p.file)
-          if (f) { flipped.push({ file: f, label: p.label }); back.push(i) }
-        }
-        if (flipped.length > 0) {
-          const again = await send(flipped, true)
-          for (let k = 0; k < again.length; k++) {
-            const slot = back[again[k].index]
-            const now = again[k]
-            if (slot == null || !now) continue
-            // 담겼거나 기존 명함과 맞물렸을 때만 바꿔 쓴다(라우트가 이름+연락처를 이미 본다).
-            if (acceptRetry(now)) {
-              got = got.map((l, i) => (i === slot ? { ...now, index: got[slot].index } : l))
-              acc = { ...acc, flipped: acc.flipped + 1 }
-            }
-          }
-        }
+      for (let k = 0; k < got.length && !stop.current; k++) {
+        if (!worthRetry(got[k])) continue
+        const page = base + got[k].index
+        const p = group[got[k].index]
+        if (!p) continue
+        const flipped = await flip(p.file)
+        if (!flipped) continue
+        const again = await send([{ file: flipped, label: p.label }], {
+          pageBase: page, prevId: cardByPage.get(page - 1) ?? null, prevPage: page - 1, retry: true,
+        })
+        const now = again[0]
+        if (!now || !acceptRetry(now)) continue
+        got = got.map((l, i) => (i === k ? { ...now, index: got[k].index } : l))
+        noteResult(page, now)
+        acc = { ...acc, flipped: acc.flipped + 1 }
+      }
+
+      // 다음 묶음의 「직전 명함」 — **마지막 쪽**의 결과로 잡는다.
+      const lastPage = base + group.length - 1
+      for (let page = lastPage; page >= base; page--) {
+        const id = cardByPage.get(page)
+        if (id != null) { prevCardId = id; prevPage = page; break }
       }
 
       acc = addLines(acc, got)

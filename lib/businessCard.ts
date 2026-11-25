@@ -281,11 +281,26 @@ export function matchesCard(card: BusinessCard, query: string): boolean {
 }
 
 /** 엑셀로 내보내는 열 — 등록자 이름·팀·사업부를 함께 낸다(요청). */
+/**
+ * 차례는 **목록과 같게** 둔다 — 등록일·회사·부서·이름·직급·연락처가 먼저 서고,
+ * 영문·팩스·홈페이지·주소·메모는 뒤로 보낸다(2026-11-25에 다시 세웠다).
+ * 「지난 기간」·「등록자 팀」·「등록자 사업부」는 뺐다 — 세어 보지 않는 열이었다.
+ */
 export const EXCEL_COLUMNS: readonly { key: string; label: string }[] = [
-  ...CARD_FIELDS.map(f => ({ key: f, label: FIELD_LABEL[f] })),
-  { key: 'division', label: '사업부' },
   { key: 'registered_at', label: '등록일' },
+  { key: 'company', label: FIELD_LABEL.company },
+  { key: 'department', label: FIELD_LABEL.department },
+  { key: 'name', label: FIELD_LABEL.name },
+  { key: 'position', label: FIELD_LABEL.position },
+  { key: 'mobile', label: FIELD_LABEL.mobile },
+  { key: 'phone', label: FIELD_LABEL.phone },
+  { key: 'email', label: FIELD_LABEL.email },
+  { key: 'division', label: '사업부' },
   { key: 'registered_name', label: '등록자' },
-  { key: 'registered_team', label: '등록자 팀' },
-  { key: 'registered_div', label: '등록자 사업부' },
+  { key: 'name_en', label: FIELD_LABEL.name_en },
+  { key: 'company_en', label: FIELD_LABEL.company_en },
+  { key: 'fax', label: FIELD_LABEL.fax },
+  { key: 'website', label: FIELD_LABEL.website },
+  { key: 'address', label: FIELD_LABEL.address },
+  { key: 'memo', label: FIELD_LABEL.memo },
 ]

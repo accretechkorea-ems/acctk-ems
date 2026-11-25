@@ -22,7 +22,7 @@ import { BLUE, BLUE_BORDER, BLUE_TINT, BORDER, CARD_BG, DANGER, MUTED, SUB, TEXT
 import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 import { DIVISIONS, type Division } from '@/lib/division'
 import {
-  CARD_FIELDS, DUPLICATE_OPEN, DUPLICATE_SAVE, DUPLICATE_TITLE, EMPTY_CARD_FORM, registrarLabel,
+  CARD_FIELDS, DUPLICATE_OPEN, DUPLICATE_SAVE, DUPLICATE_TITLE, EMPTY_CARD_FORM,
   FIELD_INPUT_TYPE, FIELD_LABEL, MEMO_MAX, cardBlockedReason, findDuplicate,
   type BusinessCard, type CardField, type CardForm,
 } from '@/lib/businessCard'
@@ -85,7 +85,8 @@ const ICON = {
 type Mode = 'pick' | 'form'
 
 export default function CardFormModal({
-  initial, existing, defaultDivision, busy, canDelete, onSave, onOpenExisting, onDelete, onBulk, onClose,
+  initial, existing, defaultDivision, busy, canDelete, registrarPosition,
+  onSave, onOpenExisting, onDelete, onBulk, onClose,
 }: {
   /** 고치는 중이면 그 명함. 새로 담는 중이면 null. */
   initial: BusinessCard | null
@@ -96,6 +97,8 @@ export default function CardFormModal({
   busy: boolean
   /** 이 사람이 이 명함을 지울 수 있나 — 열람 모드의 「삭제」를 둘지 정한다. */
   canDelete?: boolean
+  /** 등록자의 **지금 직급** — engineers 에서 찾아 넘긴다. 없으면 이름만 적는다. */
+  registrarPosition?: string | null
   /** 저장한다. 참을 돌려주면 창이 **열람 모드**로 돌아간다. */
   onSave: (form: CardForm) => void | Promise<boolean>
   onOpenExisting: (card: BusinessCard) => void
@@ -290,27 +293,30 @@ export default function CardFormModal({
               {(['mobile', 'phone', 'fax', 'email', 'website', 'address'] as CardField[]).map(show)}
             </div>
             {/* 하 — 언제·누가·메모 */}
+            {/* 하 — 한 줄로: 사업부 | 등록자(이름 · 직급) | 등록일. 팀은 적지 않는다. */}
             <div style={{
-              gridColumn: '1 / -1', display: 'grid', gap: '14px 20px', paddingTop: 12,
-              gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr',
-              borderTop: `1px solid ${BORDER}`,
+              gridColumn: '1 / -1', display: 'flex', gap: narrow ? 14 : 28, paddingTop: 12,
+              flexWrap: 'wrap', borderTop: `1px solid ${BORDER}`,
             }}>
               <div>
                 <div style={viewLabel}>사업부</div>
                 <div style={viewValue}>{form.division}</div>
               </div>
               <div>
+                <div style={viewLabel}>등록자</div>
+                <div style={viewValue}>
+                  {[String(initial?.registered_name ?? '').trim() || '—', registrarPosition?.trim()]
+                    .filter(Boolean).join(' · ')}
+                </div>
+              </div>
+              <div>
                 <div style={viewLabel}>등록일</div>
                 <div style={viewValue}>{String(initial?.registered_at ?? '').slice(0, 10) || '—'}</div>
               </div>
-              <div>
-                <div style={viewLabel}>등록자</div>
-                <div style={viewValue}>{registrarLabel(initial ?? {})}</div>
-              </div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <div style={viewLabel}>메모</div>
-                <div style={{ ...viewValue, whiteSpace: 'pre-wrap' }}>{form.memo.trim() || '—'}</div>
-              </div>
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <div style={viewLabel}>메모</div>
+              <div style={{ ...viewValue, whiteSpace: 'pre-wrap' }}>{form.memo.trim() || '—'}</div>
             </div>
           </div>
         </ModalCard>
