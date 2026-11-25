@@ -83,7 +83,7 @@ ok('공용 바탕값이 있다', !!hoverBg)
 eq('그 값 = 고객사 목록이 쓰던 값', hoverBg, paneHover)
 ok('구분선 색은 표마다 넘긴다(--row-line)', /--row-line:\s*[^;]+;/.test(CSS)
   && /border-bottom: 1px solid var\(--row-line\);/.test(CSS))
-ok('고객사 목록 줄이 그 클래스를 쓴다', /'site-row ems-row-hover on' : 'site-row ems-row-hover'/.test(PANE))
+ok('고객사 목록 줄이 그 클래스를 쓴다', /'site-row ems-row-hover ems-row-brand on' : 'site-row ems-row-hover ems-row-brand'/.test(PANE))
 ok('고객사 줄의 구분선 값은 그대로 — 그 표의 BORDER 를 넘긴다', /\['--row-line' as string\]: BORDER/.test(PANE))
 ok('손으로 칠하던 호버를 걷었다',
   !/onMouseEnter=\{e => \{ if \(!on\) e\.currentTarget\.style\.background/.test(PANE))

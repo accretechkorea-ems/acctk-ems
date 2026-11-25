@@ -1530,10 +1530,8 @@ const visibleEngineers = sortedEngineers.filter(e => {
   const totalOrderCnt = allOrderQuotes.length
   // 전환율 — 분자(수주)는 발주 시점, 분모(견적)는 작성 시점 기준이라 기간이 정확히 겹치지는 않는다.
   const convRate = totalQuoteCnt > 0 ? (totalOrderCnt / totalQuoteCnt * 100) : 0
-  const prevRevenue = quotes
-    .filter(q => inRevenuePeriod(q, fy - 1) && allEngineerIds.includes(q.engineer_id))
-    .reduce((s, q) => s + (q.total_supply || 0), 0)
-  const yoyChange = prevRevenue > 0 ? ((totalRevenueAmt - prevRevenue) / prevRevenue * 100) : null
+  // 「전년 동기 대비」 타일과 그 셈(지난해 같은 기간 매출)은 걷었다(2026-11-26 지시) —
+  // 값이 거의 늘 「—」 였다. 해마다 견주는 일은 실적 추이 차트가 맡는다.
   const sumAllTarget = (key: 'target_amount' | 'order_target_amount') => allEngineers.reduce((s, e) => {
     const t = targets.find(t => t.engineer_id === e.engineer_id && t.year === fy && t.quarter === null)
     return s + (t?.[key] || 0)
@@ -1556,10 +1554,8 @@ const visibleEngineers = sortedEngineers.filter(e => {
     }),
   }))
 
-  const rankedByRevenue = [...engineerStats].sort((a, b) => b.revenueAmt - a.revenueAmt)
-  const revenueRankMap = new Map(
-    rankedByRevenue.filter(e => e.revenueAmt > 0).map((e, i) => [e.engineer_id, i])
-  )
+  // 매출 순위(①②③)는 걷었다(2026-11-26 지시) — 세는 코드도 함께 지운다.
+  // 카드 차례는 그대로다(filteredEngineers 의 순서).
 
   const handleStatusSave = async (q: Quote, status: string, failReason: string) => {
     // 예전에는 오류를 그냥 삼켜서, RLS 등으로 막히면 목록만 새로고침되고 아무 일도 없는 것처럼 보였다.
@@ -1670,7 +1666,6 @@ const visibleEngineers = sortedEngineers.filter(e => {
               { label: '원가 합계', value: totalCostAmt > 0 ? `₩${numKR(totalCostAmt)}` : '—', sub: '매출완료 기준' },
               { label: '순이익', value: totalProfitAmt > 0 ? `₩${numKR(totalProfitAmt)}` : '—', sub: totalProfitRate !== null && totalProfitAmt > 0 ? `이익률 ${totalProfitRate.toFixed(1)}%` : null, color: '#15803d' },
               { label: '수주 전환율', value: `${convRate.toFixed(1)}%`, sub: `${totalOrderCnt} / ${totalQuoteCnt}건` },
-              { label: '전년 동기 대비', value: yoyChange !== null ? `${yoyChange >= 0 ? '+' : ''}${yoyChange.toFixed(1)}%` : '—', color: yoyChange !== null ? (yoyChange >= 0 ? '#15803d' : '#b91c1c') : GRAY },
               { label: '수주 달성률', value: totalOrderAchieve !== null ? `${totalOrderAchieve.toFixed(1)}%` : '미설정', sub: totalOrderTargetAmt > 0 ? `목표 ₩${numKR(totalOrderTargetAmt)}` : null, color: totalOrderAchieveColor },
               { label: '매출 달성률', value: totalAchieve !== null ? `${totalAchieve.toFixed(1)}%` : '미설정', sub: totalTargetAmt > 0 ? `목표 ₩${numKR(totalTargetAmt)}` : null, color: totalAchieveColor },
             ].map(({ label, value, sub, color }) => (
@@ -1733,7 +1728,6 @@ const visibleEngineers = sortedEngineers.filter(e => {
                 key={eng.engineer_id}
                 engineer={eng}
                 stat={eng}
-                rank={revenueRankMap.get(eng.engineer_id)}
                 delay={80 + idx * 40}
                 onClick={() => setSelectedEngineer(eng)}
                 onChart={() => setChartEngineer(eng)}

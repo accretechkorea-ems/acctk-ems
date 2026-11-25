@@ -15,10 +15,11 @@
 import type { CSSProperties } from 'react'
 import { BLUE_BORDER, BORDER, CARD_BG, TEXT } from '@/components/common/ui'
 import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
+import SearchSelect from '@/components/common/SearchSelect'
 import { R } from '@/lib/radius'
 import {
   CONTACT_FIELDS, CONTACT_INPUT_TYPE, CONTACT_LABEL, REQUIRED_CONTACT_FIELDS, REQUIRED_MARK,
-  borderKind, type ContactField, type ContactValues,
+  borderKind, positionMatches, type ContactField, type ContactValues,
 } from '@/lib/contactForm'
 
 /** 비어 있는 필수 칸의 테두리 — 고객사 규칙의 위험색 그대로. */
@@ -57,6 +58,23 @@ export default function ContactFields({ values, onChange }: {
         <textarea id={`ct-${f}`} value={values[f] ?? ''}
           onChange={e => onChange(f, e.target.value)} placeholder="만난 자리 · 특이사항"
           style={{ ...field(values, f), height: 60, padding: '9px 10px', resize: 'vertical' }} />
+      ) : f === 'position' ? (
+        /* 직급은 **고르거나 적는다**(2026-11-26) — 자주 쓰는 값은 목록에서 고르고,
+           없으면 그대로 적으면 된다. 가두지 않는 까닭은 회사마다 직급이 다르기 때문이고,
+           목록을 두는 까닭은 「과장」이 「과장님」·「과 장」으로 갈려 쌓이지 않게 하려는 것이다. */
+        <SearchSelect<string>
+          items={positionMatches(values[f] ?? '')}
+          itemKey={p => p}
+          renderItem={p => <span style={{ fontSize: 13 }}>{p}</span>}
+          onSelect={p => onChange(f, p)}
+          query={values[f] ?? ''}
+          onQueryChange={v => onChange(f, v)}
+          inputId={`ct-${f}`}
+          placeholder="과장 · 대리 …"
+          openWhenEmpty
+          inputStyle={field(values, f)}
+          emptyText="목록에 없는 직급입니다 — 적은 그대로 저장됩니다"
+        />
       ) : (
         <input id={`ct-${f}`} value={values[f] ?? ''} type={CONTACT_INPUT_TYPE[f] ?? 'text'}
           onChange={e => onChange(f, e.target.value)}

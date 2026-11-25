@@ -112,3 +112,25 @@ export function cardPatchFromContact(
   }
   return out
 }
+
+/**
+ * 직급 **고르는 목록** — 자주 쓰는 값이다(2026-11-26).
+ *
+ * 선택지일 뿐 제한이 아니다. 목록에 없으면 그대로 적으면 된다(자유 입력) —
+ * 담당자의 직급은 회사마다 달라 가둘 수 있는 값이 아니다. 목록을 두는 까닭은
+ * 같은 직급이 「과장」·「과장님」·「과 장」으로 갈려 쌓이던 것을 줄이려는 것이다.
+ * 차례는 **위가 높은 쪽**이다 — 고르는 사람이 눈으로 찾는 순서다.
+ */
+export const POSITION_OPTIONS: readonly string[] = [
+  '회장', '부회장', '사장', '부사장', '전무', '상무', '이사', '고문',
+  '본부장', '실장', '공장장', '소장', '센터장', '팀장', '파트장',
+  '부장', '차장', '과장', '대리', '주임', '사원',
+  '수석', '책임', '선임', '연구원', '기사', '기술사', '담당',
+]
+
+/** 적은 글자에 맞는 직급만 — 비어 있으면 전부(고르는 자리에서 처음부터 보여 준다). */
+export function positionMatches(query: string): string[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return [...POSITION_OPTIONS]
+  return POSITION_OPTIONS.filter(p => p.toLowerCase().includes(q))
+}

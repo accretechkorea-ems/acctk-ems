@@ -304,7 +304,7 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
             </button>
           ) : (
             <>
-              <input ref={packingInputRef} type="file" accept=".pdf,.xlsx,.xls,.doc,.docx,.png,.jpg,.jpeg"
+              <input ref={packingInputRef} type="file" accept="application/pdf,.pdf"
                 style={{ display: 'none' }}
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadPacking(f); e.target.value = '' }} />
               <button onClick={() => packingInputRef.current?.click()} title="납입의사록·패킹리스트 업로드"

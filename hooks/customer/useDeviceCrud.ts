@@ -288,16 +288,12 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
   // 파일을 packing-lists 버킷에 올리고 "저장 경로(파일명)"를 반환한다.
   // DB(packing_list_url)에는 전체 URL이 아니라 경로만 저장해, 열 때마다 시간제한 서명 URL을 발급한다.
   const uploadPackingFile = async (deviceId: number, file: File): Promise<string> => {
-    const ALLOWED = [
-      'application/pdf',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/msword',
-      'image/jpeg', 'image/png',
-    ]
-    if (file.type && !ALLOWED.includes(file.type)) {
-      throw new Error('PDF, 엑셀, 워드, 이미지 파일만 업로드 가능합니다.')
+    // **PDF 만** 받는다(2026-11-26 지시). 전에는 엑셀·워드·사진까지 받았는데,
+    // 납입의사록·패킹리스트는 받아 보관하는 문서라 열어 보는 자리(모달 뷰어)가 PDF 뿐이다 —
+    // 다른 형식은 새 탭으로 떨어져 기기마다 열리는 모양이 달랐다.
+    // 확장자도 함께 본다: 브라우저가 type 을 비워 보내는 일이 있다(끌어다 놓기·일부 기기).
+    if ((file.type && file.type !== 'application/pdf') || !/.pdf$/i.test(file.name)) {
+      throw new Error('납입의사록·패킹리스트는 PDF 만 올릴 수 있습니다')
     }
     if (file.size > 20 * 1024 * 1024) {
       throw new Error('파일 크기는 20MB 이하여야 합니다.')

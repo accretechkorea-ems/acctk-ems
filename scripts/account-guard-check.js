@@ -141,8 +141,13 @@ const statusOf = async (res) => res.status
   ok('계측 + 반도체 = 전부(빠지는 메뉴가 없다)',
     new Set([...keysOf(measure), ...keysOf(semi)]).size === CHECKABLE_MENUS.length)
   const ADMIN = fs.readFileSync(path.join(ROOT, 'app/admin/page.tsx'), 'utf8')
+  // 2026-11-26 — 전환 가능한 팀(can_switch_division·사업부 「전사」)은 **거르지 않는다**.
+  // 그 팀은 두 사업부 메뉴를 다 보므로, 권한 화면에서도 둘 다 켤 수 있어야 한다.
   ok('관리 화면이 그 팀의 사업부를 넘긴다',
-    ADMIN.includes('toDivision(permEditTeam.division)'))
+    ADMIN.includes('permCheckboxes(permEditKeys, setPermEditKeys, permDivision(permEditTeam))'))
+  ok('전환 가능한 팀은 두 사업부를 다 보여 준다',
+    ADMIN.includes("team.can_switch_division === true || String(team.division ?? '').trim() === '전사'")
+    && ADMIN.includes('? undefined'))
   ok('새 팀 폼은 계측으로 그린다(teams.division 기본값)',
     ADMIN.includes("permCheckboxes(newTeamPerm, setNewTeamPerm, '계측')"))
 

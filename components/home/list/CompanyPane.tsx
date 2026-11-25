@@ -26,6 +26,8 @@ import BulkApplyModal from '@/components/home/list/BulkApplyModal'
 import {
   DIRECT_SALE_OPTION_LABEL, DIRECT_SALE_VALUE, bulkDoneText, currentValueCounts,
 } from '@/lib/bulkActions'
+import MemoHoverText from '@/components/common/MemoHoverText'
+import { hasMemo } from '@/components/common/MemoPopover'
 import ActivityTimeline from '@/components/customer/ActivityTimeline'
 import { useCompanyTimeline } from '@/hooks/useCompanyTimeline'
 import { useQuotePdf } from '@/hooks/customer/useQuotePdf'
@@ -41,7 +43,6 @@ import type { Customer } from '@/components/customer/types'
 import { companyForecast } from '@/lib/companyForecast'
 import { numKR } from '@/components/customer/constants'
 import { R } from '@/lib/radius'
-import { TITLE } from '@/lib/textTokens'
 import { TOP_CARD_FIXED_MIN_WIDTH, TOP_CARD_HEIGHT } from '@/components/home/SidePanel'
 import BackIconButton from '@/components/common/BackIconButton'
 import ConvertAgencyModal, { type ConvertReport } from '@/components/home/list/ConvertAgencyModal'
@@ -518,6 +519,27 @@ export default function CompanyPane({
           </span>
         </div>
 
+        {/* 메모 한 줄 — 이름 바로 아래(2026-11-26). 비어 있으면 **줄 자체가 없다**
+            (「없음」을 적어 자리를 차지할 만큼 중요한 칸이 아니다). 길면 호버로 펼쳐 보고,
+            누르면 회사 수정 창이 열린다 — 읽다가 고치는 길이 한 번에 이어진다.
+            떠오르는 판은 사업장 화면의 메모와 같은 부품이다(MemoHoverText). */}
+        {hasMemo(group.note) && (
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0, marginTop: -2 }}>
+            <span style={{ fontSize: 12, color: MUTED, flexShrink: 0 }}>메모</span>
+            <span onClick={() => setEditCompanyOpen(true)} style={{ minWidth: 0, cursor: 'pointer' }}>
+              <MemoHoverText
+                title={group.companyName}
+                value={group.note}
+                style={{
+                  display: 'block', fontSize: 12, color: SUB, lineHeight: 1.5,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  outline: 'none',
+                }}
+              />
+            </span>
+          </div>
+        )}
+
         {/* 좌 440px 에 수치 네 칸, 남는 자리에 포캐스트. 좁으면 아래로 쌓인다. */}
         <div className="stat-row" style={{ display: 'grid', gridTemplateColumns: '440px minmax(0, 1fr)', gap: 12, alignItems: 'stretch', flex: 1, minHeight: 0 }}>
           <div className="stat-tiles" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, minHeight: 0 }}>
@@ -583,14 +605,9 @@ export default function CompanyPane({
 
       {/* ── 사업장 표 ── */}
       <section style={{ ...card, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderBottom: `1px solid ${BORDER}` }}>
-          {/* 머리줄은 제목만 둔다 — 사업장을 더하는 일은 회사 카드의 + 아이콘 하나로 모았다.
-              **건수는 적지 않는다**(2026-11-21) — 바로 위 타일에 「사업장 N곳」이 있어
-              같은 수를 두 번 말하고 있었다. 「활동 이력 N」은 필터가 걸린 뒤의 건수라
-              타일과 다른 수치이므로 그대로 둔다. */}
-          <b style={{ ...TITLE }}>사업장</b>
-        </div>
-
+        {/* 머리줄(「사업장」)은 걷었다(2026-11-26 지시) — 바로 위 타일에 「사업장 N곳」이
+            있고, 표의 첫 열 이름도 「사업장명」이라 같은 말이 세 번이었다. 사업장을 더하는
+            일은 회사 카드의 ＋ 아이콘이 맡는다(그 길은 그대로다). */}
         <div style={{ overflowX: 'auto' }}>
           <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 700 }}>
             <thead>
@@ -624,7 +641,7 @@ export default function CompanyPane({
                      전에는 이 줄이 손으로 background 를 칠했고 명함 목록은 다른 모양이라,
                      같은 「표의 줄」이 화면마다 달랐다. 값(#fafafa)은 그대로다 —
                      구분선 색만 이 표의 것(#ebebeb)을 --row-line 으로 넘긴다. */
-                  <tr key={id} className={on ? 'site-row ems-row-hover on' : 'site-row ems-row-hover'}
+                  <tr key={id} className={on ? 'site-row ems-row-hover ems-row-brand on' : 'site-row ems-row-hover ems-row-brand'}
                     onClick={() => onOpenSite(id)}
                     style={{ cursor: 'pointer', ['--row-line' as string]: BORDER } as CSSProperties}>
                     <td style={td} onClick={e => e.stopPropagation()}>

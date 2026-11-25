@@ -370,6 +370,9 @@ export async function POST(req: Request) {
     if (path === '') return bad('파일 경로가 없습니다')
     if (path === null && !photo) return bad('파일 경로가 없습니다')   // 패킹리스트는 비우지 않는다
     if (path && path.length > 300) return bad('파일 경로가 너무 깁니다')
+    // 납입의사록·패킹리스트는 **PDF 만**이다(2026-11-26 지시). 화면도 그렇게 받지만
+    // 서버가 한 번 더 본다 — 라우트를 직접 부르면 화면의 accept 는 지나가지 않는다.
+    if (!photo && path && !/\.pdf$/i.test(path)) return bad('납입의사록·패킹리스트는 PDF 만 올릴 수 있습니다')
 
     const { data: before, error: readErr } = await sb
       .from('devices').select(`device_id, customer_id, device_name, device_name2, ${column}`)

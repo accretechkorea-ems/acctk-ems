@@ -773,6 +773,18 @@ function AdminPageInner() {
    * 메뉴 권한 체크 목록. division 을 받아 **그 사업부 메뉴만** 그린다(2026-11-23).
    * 새 팀은 계측으로 만들어지므로(teams.division 기본값) 추가 폼도 계측으로 그린다.
    */
+  /**
+   * 체크 목록을 **어느 사업부로** 거를까 — 전환 가능한 팀은 거르지 않는다(2026-11-26 지시).
+   *
+   * 사이드바에서 사업부를 오갈 수 있는 팀(teams.can_switch_division)이나 사업부가
+   * 「전사」로 적힌 팀은 두 사업부의 메뉴를 다 본다. 그런데 권한 화면은 팀의 division
+   * 하나로만 걸러, 그 팀에 **반도체 메뉴를 켜 줄 방법이 없었다**(목록에 뜨지 않는다).
+   */
+  const permDivision = (team: { division?: unknown; can_switch_division?: boolean | null }): Division | undefined =>
+    (team.can_switch_division === true || String(team.division ?? '').trim() === '전사')
+      ? undefined
+      : toDivision(team.division)
+
   const permCheckboxes = (value: string[], onChange: Dispatch<SetStateAction<string[]>>, division?: Division) => {
     const picked = new Set(value)
     const toggle = (key: string, on: boolean) =>
@@ -2291,13 +2303,15 @@ function AdminPageInner() {
               <div style={{ fontSize: 18, fontWeight: 800, color: TEXT }}>{permEditTeam.name} 권한</div>
               {/* 분모는 **이 사업부에서 고를 수 있는 수**다 — 전체 수를 적으면 거른 뒤와 어긋난다. */}
               <span style={{ fontSize: 12, color: GRAY }}>
-                {permEditKeys.length} / {checkableGroups(toDivision(permEditTeam.division)).reduce((n, g) => n + g.items.length, 0)}개 선택
+                {permEditKeys.length} / {checkableGroups(permDivision(permEditTeam)).reduce((n, g) => n + g.items.length, 0)}개 선택
               </span>
             </div>
             <div style={{ fontSize: 12, color: GRAY, marginBottom: 14 }}>
               체크한 메뉴만 이 팀에 보입니다. 데이터 접근 권한은 메뉴에서 자동으로 정해집니다.
               {/* 사업부를 적어 둔다 — 적지 않으면 「접촉 보고서가 왜 없지」가 된다(목록을 사업부로 거른다). */}
-              <span style={{ color: TEXT, fontWeight: 700 }}>{' '}사업부 {toDivision(permEditTeam.division)}</span>
+              <span style={{ color: TEXT, fontWeight: 700 }}>
+                {' '}사업부 {permDivision(permEditTeam) ?? '전부(전환 가능 팀)'}
+              </span>
               {' '}메뉴만 보입니다.
             </div>
             {/* 집계 대상 — **메뉴와 무관한 값**이다. 메뉴를 켜고 끄는 것이 실적 집계를 바꾸지 않는다. */}
@@ -2325,7 +2339,7 @@ function AdminPageInner() {
               </span>
             </label>
             <div style={{ overflowY: 'auto', flex: 1, paddingRight: 2 }}>
-              {permCheckboxes(permEditKeys, setPermEditKeys, toDivision(permEditTeam.division))}
+              {permCheckboxes(permEditKeys, setPermEditKeys, permDivision(permEditTeam))}
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
               <button onClick={() => setPermEditTeam(null)} disabled={savingTeamId === permEditTeam.id}

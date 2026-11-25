@@ -25,8 +25,6 @@ const GRAY = '#4b5563'
 const MUTED = '#6b7280'
 const achieveColorOf = (v: number | null): string => v === null ? GRAY : v >= 100 ? '#16a34a' : '#111827'
 
-const RANK_MEDAL = ['#b8860b', '#64748b', '#92400e'] as const
-const RANK_MEDAL_BG = ['#fffbeb', '#f1f5f9', '#fff7ed'] as const
 
 const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
 
@@ -60,8 +58,7 @@ export type EngineerStatCardProps = {
    * 홈은 「내 실적 · FY2026」을 넘긴다 — 오른쪽 달성률 % 는 어느 쪽이든 그대로다.
    */
   title?: ReactNode
-  /** 매출 순위(0=1위). 3위까지만 메달이 붙는다. 주지 않으면 붙지 않는다. */
-  rank?: number
+  // 매출 순위 뱃지(①②③)는 걷었다(2026-11-26 지시) — 정렬은 그대로 매출 내림차순이다.
   /** 막대가 자라기 시작하는 시점 — 카드가 여럿일 때 차례로 보이게 한다. */
   delay?: number
   /** 카드를 눌렀을 때. */
@@ -73,7 +70,7 @@ export type EngineerStatCardProps = {
 }
 
 export default function EngineerStatCard({
-  engineer, stat, title, rank, delay = 0, onClick, onChart, compact = false,
+  engineer, stat, title, delay = 0, onClick, onChart, compact = false,
 }: EngineerStatCardProps) {
   const tc = getCategoryColor(TEAM_COLORS, engineer.teams)
   const achieveColor = achieveColorOf(stat.achieve)
@@ -104,11 +101,6 @@ export default function EngineerStatCard({
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, paddingRight: onChart ? 36 : 0, flexShrink: 0 }}>
-        {rank !== undefined && rank < 3 && (
-          <div style={{ width: 22, height: 22, borderRadius: '50%', background: RANK_MEDAL_BG[rank], border: `1.5px solid ${RANK_MEDAL[rank]}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 11, fontWeight: 800, color: RANK_MEDAL[rank] }}>
-            {rank + 1}
-          </div>
-        )}
         {title ?? (
           <>
             <div>

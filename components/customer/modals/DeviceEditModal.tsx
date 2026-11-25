@@ -261,7 +261,7 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
               </span>
               <input
                 type="file"
-                accept=".pdf,.xlsx,.xls,.doc,.docx,.png,.jpg,.jpeg"
+                accept="application/pdf,.pdf"
                 onChange={(e) => setPackingFile(e.target.files?.[0] ?? null)}
                 style={{ display: 'none' }}
               />

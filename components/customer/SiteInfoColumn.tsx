@@ -192,6 +192,10 @@ export default function SiteInfoColumn({
         .site-col .card-edit, .site-col .ct-edit { opacity: 0; transition: opacity 0.15s ease }
         .site-col .site-info:hover .card-edit, .site-col .site-info:focus-within .card-edit { opacity: 1 }
         .site-col .ct-row:hover .ct-edit, .site-col .ct-row:focus-within .ct-edit { opacity: 1 }
+        /* 전화·이메일은 **누를 수 있는 글자**다 — 올리면 밑줄이 선다(2026-11-26).
+           색은 이미 테마 파랑이라, 움직이는 것은 밑줄 하나다(표의 줄과 같은 규칙:
+           app/globals.css 의 .ems-row-hover a:hover). */
+        .site-col .ct-row a:hover { text-decoration: underline }
       `}</style>
 
       {/* ── 사업장 정보 ── */}

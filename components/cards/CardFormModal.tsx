@@ -245,8 +245,13 @@ export default function CardFormModal({
    * 고치는 창처럼 보였다. 이제 글자로 보여 주고, 「수정」을 눌러야 입력 모드가 된다.
    */
   if (editing && mode2 === 'view') {
+    /**
+     * 열람 한 칸. **팩스는 값이 있을 때만** 자리를 차지한다(2026-11-26 지시) —
+     * 요즘 명함의 열에 아홉은 팩스가 없는데 「팩스 —」가 늘 한 줄을 먹고 있었다.
+     */
     const show = (f: CardField) => {
       const v = String(form[f] ?? '').trim()
+      if (f === 'fax' && !v) return null
       return (
         <div key={f} style={{ minWidth: 0 }}>
           <div style={viewLabel}>{FIELD_LABEL[f]}</div>
@@ -290,7 +295,7 @@ export default function CardFormModal({
             </div>
             {/* 우 — 어떻게 닿는가 */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {(['mobile', 'phone', 'fax', 'email', 'website', 'address'] as CardField[]).map(show)}
+              {(['mobile', 'phone', 'email', 'website', 'address', 'fax'] as CardField[]).map(show)}
             </div>
             {/* 하 — 언제·누가·메모 */}
             {/* 하 — 한 줄로: 사업부 | 등록자(이름 · 직급) | 등록일. 팀은 적지 않는다. */}
@@ -399,8 +404,9 @@ export default function CardFormModal({
           {row('phone')}
           {row('email', true)}
           {row('address', true)}
-          {row('fax')}
           {row('website')}
+          {/* 팩스는 **맨 아래**다(2026-11-26 지시) — 적는 일이 드문 칸이다. */}
+          {row('fax')}
 
           <div>
             <label style={labelStyle} htmlFor="bc-division">사업부</label>
