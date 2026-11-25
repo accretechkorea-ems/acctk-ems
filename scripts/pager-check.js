@@ -102,7 +102,10 @@ const PUR = read('app/purchase/page.tsx')
 ok('전체 건수를 함께 센다', /\{ count: 'exact' \}\)/.test(PUR))
 ok('그 쪽만 받아 온다', /\.range\(from, to\)/.test(PUR) && /pageRange\(opts\.page, PAGE_SIZE\)/.test(PUR))
 ok('현황 숫자는 수만 센다(head)', /\{ count: 'exact', head: true \}/.test(PUR))
-ok('조건이 바뀌면 1쪽', /setPage\(1\)\s*\n\s*\}, \[statusFilter, debounced\]\)/.test(PUR))
+// 2026-11-26 — 그 효과가 「이 조건 전체 선택」도 함께 버린다(지시 O). 조건이 바뀌면 그
+// 선택은 뜻이 없기 때문이다. 그래서 setPage(1) 과 닫는 괄호 사이에 줄이 더 있다.
+ok('조건이 바뀌면 1쪽', /setPage\(1\)[\s\S]{0,400}\}, \[statusFilter, debounced\]\)/.test(PUR))
+ok('그때 조건 전체 선택도 버린다', /setPage\(1\)[\s\S]{0,400}sel\.clear\(\)/.test(PUR))
 ok('검색은 한 박자 쉬고 보낸다', /setTimeout\(\(\) => setDebounced\(search\), 300\)/.test(PUR))
 ok('주소에 쪽을 남긴다',
   /url\.searchParams\.set\('page', String\(page\)\)/.test(PUR)

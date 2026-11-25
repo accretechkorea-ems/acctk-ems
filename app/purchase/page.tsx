@@ -78,6 +78,11 @@ const EMPTY_COUNTS: Record<string, number> =
  * 더 많으면(「주」 한 글자 같은 것) 주소가 너무 길어진다 — 그때는 견적번호만으로 좁힌다.
  */
 const SEARCH_ID_MAX = 300
+/**
+ * 「이 조건 전체 선택」이 한 번에 고르는 상한 (2026-11-26, 지시 O).
+ * 엑셀 한 장에 수천 건을 담는 일은 보고가 아니라 사고다 — 넘으면 조건을 좁히라고 알린다.
+ */
+const SELECT_ALL_MAX = 500
 
 const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
 const fmtShort = (s: string | null) => {
@@ -96,6 +101,8 @@ export default function PurchasePage() {
   const supabase = createClient()
   const router = useRouter()
   const toast = useToast()
+  /** 「이 조건 전체 선택」을 묻는 중인가 — 단추를 잠근다(지시 O). */
+  const [selectingAll, setSelectingAll] = useState(false)
   const [quotes, setQuotes] = useState<PurchaseQuote[]>([])
   const [custMap, setCustMap] = useState<Record<number, string>>({})
   const [engMap, setEngMap] = useState<Record<string, string>>({})
@@ -243,6 +250,43 @@ export default function PurchasePage() {
     void fetchNames((data || []).map(r => Number(r.customer_id)))
   }
 
+  /**
+   * 「이 조건 전체 선택」 (2026-11-26, 지시 O) — 조건에 맞는 **id 전부**를 서버에 다시 묻는다.
+   *
+   * 화면에 보이는 쪽만으로는 알 수 없다(한 쪽은 50건이다). 줄을 받아 오지 않고 **id 하나씩**만
+   * 받으므로 가볍고, 쪽 조회와 **같은 조건**을 쓴다(그래서 목록과 어긋나지 않는다).
+   * 상한을 둔다 — 엑셀 한 장에 수천 건을 담는 일은 보고가 아니라 사고다.
+   */
+  const selectAllMatching = async () => {
+    if (selectingAll) return
+    setSelectingAll(true)
+    try {
+      let q = supabase.from('quotes').select('quote_id')
+        .in('status', statusFilter === '전체' ? PURCHASE_STATUSES : [statusFilter])
+      const term = debounced.trim()
+      if (term) {
+        const safe = term.replace(/[%,()]/g, ' ')
+        const { data: hits } = await withNameEnFallback(useEn => supabase.from('customers')
+          .select('customer_id').or(companyPickOr(safe, useEn)).limit(SEARCH_ID_MAX))
+        const ids = (hits || []).map(h => Number(h.customer_id)).filter(n => Number.isInteger(n))
+        const parts = [`quote_number.ilike.%${safe}%`]
+        if (ids.length > 0) parts.push(`customer_id.in.(${ids.join(',')})`)
+        q = q.or(parts.join(','))
+      }
+      const { data, error } = await q
+        .order('purchase_order_at', { ascending: false })
+        .limit(SELECT_ALL_MAX)
+      if (error) { console.error('[purchase] 조건 전체 선택 실패', error); toast.error('전체를 고르지 못했습니다'); return }
+      const ids = (data || []).map(r => Number(r.quote_id)).filter(n => Number.isInteger(n))
+      sel.selectCondition(ids)
+      if (ids.length >= SELECT_ALL_MAX) {
+        toast.error(`한 번에 ${SELECT_ALL_MAX}건까지 고릅니다 — 조건을 좁혀 나눠 받아주세요`)
+      }
+    } finally {
+      setSelectingAll(false)
+    }
+  }
+
   /** 지금 화면이 보고 있는 조건 — 쪽을 다시 받아 오는 곳들이 함께 쓴다. */
   const reload = async () => {
     await Promise.all([fetchCounts(), fetchPage({ page, status: statusFilter, term: debounced })])
@@ -274,6 +318,10 @@ export default function PurchasePage() {
   useEffect(() => {
     if (firstRun.current) { firstRun.current = false; return }
     setPage(1)
+    // 「이 조건 전체 선택」은 **그 조건**의 목록이다 — 조건이 바뀌면 버린다(지시 O).
+    // 쪽 넘김과 조건 변경을 가릴 수 있는 것은 이 화면뿐이다(훅에서는 둘이 똑같이 보인다).
+    sel.clear()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, debounced])
 
   /** 주소에 쪽을 남긴다 — 새로고침·뒤로가기로 그 쪽이 그대로 열린다. */
@@ -395,10 +443,22 @@ export default function PurchasePage() {
 
   return (
     <div style={{ background: PAGE_BG, minHeight: '100vh', padding: '24px 28px' }}>
+      <style>{`
+        /* 폰(≤768) — 표 대신 **카드 목록**이다 (2026-11-26, 지시 O).
+           표는 열 열한 개라 1,200px 이 넘는다. 폰에서는 옆으로 밀어 보던 것을 한 장씩 읽는
+           쪽이 빠르다(쪽 나누기·선택은 그대로 쓴다). PC 는 종전 표 그대로다.
+           현황 카드도 4열이 들어가지 않으므로 2열로 접는다. */
+        .po-cards { display: none; }
+        @media (max-width: 768px) {
+          .po-table { display: none; }
+          .po-cards { display: flex; flex-direction: column; }
+          .po-counts { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+        }
+      `}</style>
       <div style={{ maxWidth: 1600, margin: '0 auto' }}>
 
         {/* 현황 카드 */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+        <div className="po-counts" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
           {([
             { label: '주문 대기', key: '발주(주문 대기)' },
             { label: '주문 완료', key: '주문완료' },
@@ -438,7 +498,27 @@ export default function PurchasePage() {
             onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = GRAY }}>
             견적서 대필
           </button>
-          {/* 선택한 견적을 이익률 분석표 엑셀로 내보낸다(보이는 행만 선택 가능). */}
+          {/* 「이 조건 전체 선택」 (2026-11-26, 지시 O) — 쪽을 나누면서 「전부 내보내기」가
+              막혔다(쪽을 넘기면 선택이 걷힌다). 조건에 맞는 id 를 서버에 다시 물어 한꺼번에
+              고르고, 그때부터는 쪽을 넘겨도 선택이 남는다. 조건이 바뀌면 버린다. */}
+          {total > visibleIds.length && (
+            <button
+              type="button"
+              onClick={() => { if (sel.wide) sel.clear(); else void selectAllMatching() }}
+              disabled={selectingAll || total === 0}
+              title={sel.wide ? '고른 것을 전부 해제합니다' : `지금 조건에 맞는 ${total}건을 전부 고릅니다(쪽을 넘겨도 남습니다)`}
+              style={{
+                padding: '6px 12px', borderRadius: R.control,
+                border: `1px solid ${sel.wide ? BLUE : BORDER}`,
+                background: sel.wide ? '#eff4ff' : '#fff',
+                color: sel.wide ? BLUE : GRAY,
+                cursor: selectingAll ? 'wait' : 'pointer', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap',
+              }}
+            >
+              {selectingAll ? '고르는 중…' : sel.wide ? `선택 해제 (${sel.count}건)` : `이 조건 전체 선택 (${total}건)`}
+            </button>
+          )}
+          {/* 선택한 견적을 이익률 분석표 엑셀로 내보낸다. 조건 전체 선택이면 쪽 밖의 줄도 들어간다. */}
           <QuoteExcelButton
             quoteIds={sel.selected}
             engineerId={me?.engineer_id ?? null}
@@ -455,7 +535,7 @@ export default function PurchasePage() {
           ) : filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 60, color: MUTED, fontSize: 14 }}>해당 조건의 발주가 없습니다</div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <table className="po-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ background: '#f8fafc', borderBottom: `1px solid ${BORDER}` }}>
                   <th style={{ width: 36, padding: '9px 6px', textAlign: 'center' }}>
@@ -641,6 +721,61 @@ export default function PurchasePage() {
                   })}
                 </tbody>
               </table>
+          )}
+
+          {/* 폰 카드 목록 — 표와 **같은 줄**을 그린다(지시 O). 보이는 것만 다르다.
+              회사 · 번호 · 상태 · 금액 · 발주일 다섯과 체크박스, 그리고 그 상태에서 해야
+              하는 처리 단추 하나다. 쪽 나누기·선택은 표와 같은 것을 쓴다. */}
+          {!loadError && filtered.length > 0 && (
+            <div className="po-cards">
+              {filtered.map(q => {
+                const company = custMap[q.customer_id ?? 0] ?? '-'
+                const sc = getCategoryColor(SALES_STATUS_COLORS, q.status)
+                return (
+                  <div key={q.quote_id} style={{ padding: '12px 14px', borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <input type="checkbox" checked={sel.isSelected(q.quote_id)} onChange={() => sel.toggle(q.quote_id)}
+                      aria-label={`${q.quote_number} 선택`} style={{ cursor: 'pointer', marginTop: 3, flexShrink: 0, width: 18, height: 18 }} />
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+                        <b style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 700, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {company}
+                        </b>
+                        <span style={{ flexShrink: 0, padding: '2px 7px', borderRadius: R.icon, fontSize: 10, fontWeight: 700, background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>
+                          {q.status === '세금계산서 요청' ? '계산서 요청' : salesStatusLabel(q.status)}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0, fontSize: 12 }}>
+                        {/* 번호를 누르면 견적서 PDF — 표와 같은 길이다. */}
+                        <span onClick={() => handleViewQuotePDF(q)}
+                          style={{ color: BLUE, fontWeight: 700, whiteSpace: 'nowrap', cursor: q.pdf_url && pdfBusyId === null ? 'pointer' : 'default', textDecoration: q.pdf_url ? 'underline' : 'none', textUnderlineOffset: 2 }}>
+                          {q.quote_number}
+                        </span>
+                        <span className="num" style={{ marginLeft: 'auto', fontWeight: 700, color: TEXT, whiteSpace: 'nowrap' }}>
+                          ₩{numKR(q.total_supply ?? 0)}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: MUTED }}>
+                        <span style={{ whiteSpace: 'nowrap' }}>발주 {fmtShort(q.purchase_order_at?.slice(0, 10) ?? null)}</span>
+                        <span style={{ flex: 1 }} />
+                        {/* 그 상태에서 해야 하는 일 하나 — 폰에서도 처리할 수 있어야 한다. */}
+                        {q.status === '발주(주문 대기)' && (
+                          <button onClick={() => { setOrderModal(q); setShippingDate(q.shipping_date || ''); setOrderMemo(q.order_memo || '') }}
+                            style={{ minHeight: 32, padding: '0 12px', background: '#7c3aed', border: 'none', borderRadius: R.control, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#fff', fontFamily: 'inherit' }}>
+                            주문완료 처리
+                          </button>
+                        )}
+                        {q.status === '세금계산서 요청' && (
+                          <button onClick={() => setTaxModal(q)}
+                            style={{ minHeight: 32, padding: '0 12px', background: '#b45309', border: 'none', borderRadius: R.control, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#fff', fontFamily: 'inherit' }}>
+                            발행완료 처리
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           )}
           {/* 쪽 나누기 — 공용 부품이다(components/common/Pager.tsx).
               50줄씩 **서버에서 끊어** 온다(lib/pager.ts). 조건이 바뀌면 1쪽으로 돌아가고,
