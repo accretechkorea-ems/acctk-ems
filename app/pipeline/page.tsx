@@ -51,7 +51,7 @@ import { FORM_LABELS, isFormKind } from '@/lib/quoteForms'
 import { bucketOf, emptyBucket, fiscalMonths, fiscalYearOfMonth, type Bucket } from '@/lib/forecast'
 import { boardSummary, inQuarter, krwFull, krwShort, quarterSlices } from '@/lib/forecastBoard'
 import { exportForecastXlsx } from '@/lib/forecastExcel'
-import { STAGES, compactKRW, isClosed } from '@/components/customer/opportunity'
+import { STAGES, isClosed } from '@/components/customer/opportunity'
 import type { SalesOpportunity } from '@/components/customer/types'
 
 // 실주는 열로 두지 않고 판 아래에 접어둔다 (평소엔 시야에서 빼고, 필요할 때만 펼쳐 본다)
@@ -534,8 +534,10 @@ export default function PipelinePage() {
                         {col.sum > 0 && (
                           <>
                             <span style={{ fontSize: 11, color: '#6b7280', flexShrink: 0 }}>·</span>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: '#4b5563', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {compactKRW(col.sum)}
+                            {/* 열 합계도 카드와 **같은 축약**이다(2026-11-26, K2) — 전에는
+                                열 머리만 compactKRW 의 「1.3억」이라 카드와 글자가 달랐다. */}
+                            <span title={krwFull(col.sum)} style={{ fontSize: 12, fontWeight: 600, color: '#4b5563', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {krwShort(col.sum)}
                             </span>
                           </>
                         )}

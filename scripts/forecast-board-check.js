@@ -113,6 +113,9 @@ ok('연결 견적은 뱃지다', /견적 \{quoteCount\}/.test(CARD) && /borderRa
 ok('카드에 「＋ 할 일」이 있다', /<TaskAddButton/.test(CARD) && /type: 'forecast'/.test(CARD))
 ok('「견적 쓰기」는 그대로다', /견적 쓰기/.test(CARD) && /onWriteQuote/.test(CARD))
 ok('카드 높이를 줄였다(패딩 10)', /padding: '10px 12px'/.test(CARD))
+// 주석에는 compactKRW 라는 이름이 남아 있다(왜 바꿨는지 적어 둔 글이다) — **부르는 자리**만 본다.
+ok('열 합계도 같은 축약이다(카드와 글자가 같다)',
+  PAGE.includes('krwShort(col.sum)') && !PAGE.includes('{compactKRW('))
 
 console.log(fails === 0 ? '\n전부 통과' : `\n${fails}건 실패`)
 process.exit(fails === 0 ? 0 : 1)

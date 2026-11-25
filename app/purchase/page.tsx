@@ -482,7 +482,10 @@ export default function PurchasePage() {
         <div style={{ background: CARD_BG, borderRadius: R.card, padding: '12px 16px', marginBottom: 16, border: `1px solid ${BORDER}`, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="견적번호 / 고객사 검색"
             style={{ ...inp, width: 240 }} />
-          <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: R.tile, padding: 3, gap: 1 }}>
+          {/* 상태 띠 — 폰에서 **줄바꿈**한다(2026-11-26 실측: 390 에서 31px 넘쳤다).
+              다섯 칸이 한 줄에 들어가지 않는데 띠가 접히지 않아, 화면 전체가 그만큼
+              옆으로 밀렸다(카드 목록을 만들어도 이 띠 때문에 가로로 밀렸다). */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', background: '#f3f4f6', borderRadius: R.tile, padding: 3, gap: 1, rowGap: 3 }}>
             {['전체', '발주(주문 대기)', '주문완료', '세금계산서 요청', '매출완료'].map(s => (
               <button key={s} onClick={() => setStatusFilter(s)}
                 style={{ padding: '5px 10px', borderRadius: R.control, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: statusFilter === s ? (s === '전체' ? BLUE : getCategoryColor(SALES_STATUS_COLORS, s).text) : 'transparent', color: statusFilter === s ? '#fff' : GRAY, transition: 'all 0.12s' }}>
