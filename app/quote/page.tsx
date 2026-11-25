@@ -814,6 +814,11 @@ function QuotePageInner() {
            상단 바로 바뀌는 모바일에서만 한 칸씩 내린다. */
         @media (max-width: 768px) {
           .q-two { grid-template-columns: 1fr; }
+          /* 입력 열의 430px 고정 — 폰(390)에서는 그 60px 이 그대로 넘쳤다(2026-11-25 실측).
+             좁은 화면에서만 화면 폭에 맞추고, PC 는 430 고정 그대로다. */
+          .quote-left { width: 100% !important; max-width: 430px; min-width: 0; }
+          /* 바깥 여백도 20 → 12 로 줄인다 — 390 에서 좌우 40px 은 입력칸을 350 으로 만든다. */
+          .quote-cols { padding: 12px !important; gap: 12px !important; }
         }
 
         /* 라벨을 입력칸 안에 넣는 상자.
@@ -927,9 +932,9 @@ function QuotePageInner() {
       {/* 폭 상한을 두지 않는다 — 사이드바가 232px 을 가져가므로 남는 폭을 미리보기가 그대로 쓴다.
           입력칸은 430px 고정, 미리보기는 남은 폭. 둘이 함께 들어갈 폭이 안 되면(약 930px 미만)
           미리보기가 아래로 내려간다(flexWrap). */}
-      <div style={{ padding: 20, display: 'flex', flexWrap: 'wrap', gap: 20 }}>
+      <div className="quote-cols" style={{ padding: 20, display: 'flex', flexWrap: 'wrap', gap: 20 }}>
 
-        <div style={{ width: 430, flexShrink: 0 }}>
+        <div className="quote-left" style={{ width: 430, flexShrink: 0 }}>
 
           {/* 묶음 네 개는 여기서 만든다. CustomerCard 는 하나뿐이고 React.memo 를 씌우지
               않았으므로 정체를 유지해도 렌더 횟수가 달라지지 않는다 — useMemo 를 두지 않는다

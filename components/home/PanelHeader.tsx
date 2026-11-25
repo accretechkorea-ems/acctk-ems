@@ -71,8 +71,12 @@ export default function PanelHeader({
   return (
     <div style={{ flexShrink: 0 }}>
       {/* ① 토글 + 검색 */}
+      {/* 폰에서는 보기 토글을 내지 않는다(2026-11-25) — 같은 일을 화면 맨 위의
+          「업체 목록 | 지도」 세그먼트가 한다. 둘을 함께 두면 뜻이 겹치고, 검색칸이
+          159px 까지 좁아졌다(390 실측). 토글을 빼면 검색이 한 줄을 다 쓴다. */}
+      <style>{'@media (max-width: 768px) { .ph-toggle { display: none !important } }'}</style>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 12px 10px' }}>
-        <div style={{ display: 'inline-flex', background: '#f3f4f6', borderRadius: R.control, padding: 3, gap: 2, flexShrink: 0 }}>
+        <div className="ph-toggle" style={{ display: 'inline-flex', background: '#f3f4f6', borderRadius: R.control, padding: 3, gap: 2, flexShrink: 0 }}>
           {([['map', '지도', <MapGlyph key="m" />], ['list', '목록', <ListGlyph key="l" />]] as const).map(([v, label, glyph]) => (
             <button key={v} type="button" onClick={() => setView(v)} aria-label={label} title={label}
               aria-pressed={view === v}

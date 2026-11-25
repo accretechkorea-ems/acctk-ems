@@ -58,7 +58,8 @@ export default function CustomerDetailBody({
   customerId, onBack, onChanged, embedded = false,
 }: CustomerDetailBodyProps) {
   // 바깥 틀 — 라우트는 화면 전체, 분할 보기는 칸 안이다.
-  const wrapClass = embedded ? 'cust-embed' : ''
+  // 'site-page' — 폰에서 바깥 여백을 12 로 줄이는 자리(아래 globalCss).
+  const wrapClass = embedded ? 'cust-embed' : 'site-page'
   const wrapStyle: React.CSSProperties = embedded
     ? { padding: 0, background: 'transparent' }
     : { padding: '20px 24px', background: PAGE_BG, minHeight: '100vh' }
@@ -169,6 +170,12 @@ export default function CustomerDetailBody({
        서비스 레포트 추가는 한 줄을 다 쓰고, 기록 토글은 그 아래 같은 높이로 선다. */
     @media (max-width: 640px) {
       .site-wrap { gap: 10px; }
+      /* 앱바 바로 아래 **12px** 뒤에 카드가 시작한다(2026-11-25 지시). 전에는 20·24 였다. */
+      .site-page { padding: 12px !important; }
+      /* 장비 사진은 카드 폭에 **4:3** — 폭이 340 을 넘는 폰에서는 높이 고정이 어긋난다. */
+      .dev-photo { height: auto !important; aspect-ratio: 4 / 3; }
+      /* 고정 하단 버튼이 있는 화면은 홈바만큼만 띄운다. */
+      .site-wrap { padding-bottom: env(safe-area-inset-bottom); }
       .dev-actions { flex-wrap: wrap; }
       .dev-actions > button:first-child { flex: 1 0 100%; height: 44px !important; font-size: 14px; }
       .dev-actions > button:last-child { flex: 1 0 100%; height: 44px !important; font-size: 13px; }

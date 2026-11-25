@@ -210,7 +210,8 @@ ok('흐름에서 빼 둔다(absolute)', /position: 'absolute', top: 0,/.test(BAN
 ok('세로선과의 여백은 12 — 칸 밖으로 6 만큼 내민다',
   /const COL_GAP = 18/.test(BAND) && /const STATUS_RULE_GAP = 12/.test(BAND)
   && /right: -\(COL_GAP - STATUS_RULE_GAP\)/.test(BAND))
-ok('폰에서는 세로선이 없으므로 칸 오른쪽 끝', /\.band-status \{ right: 0 !important \}/.test(BAND))
+// 2026-11-25 — 오른쪽 끝(0)은 우상단 ✎ 와 겹쳐 「활성」 글자가 잘렸다(390 실측). 연필 왼쪽으로 뺀다.
+ok('폰에서는 ✎ 를 피해 그 왼쪽에 선다', /\.band-status \{ right: 40px !important \}/.test(BAND))
 ok('두 화면이 상태를 넘겨 준다',
   /status=\{customer\?\.status\}/.test(SITE) && /status=\{agency\.status\}/.test(PANE))
 ok('제목 줄은 뱃지 자리만큼 비워 둔다(경고 태그가 길어도 글자가 밑으로 흐르지 않게)',

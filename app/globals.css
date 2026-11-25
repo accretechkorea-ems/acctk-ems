@@ -217,19 +217,31 @@ select option[value=""] {
   overflow-y: auto;
 }
 @media (max-width: 640px) {
+  /* 폰 — **폭은 100%, 윗변은 6vh 그대로**(2026-11-25 지시).
+     전에는 padding 0 · min-height 100dvh 로 전체 화면 시트였다. 창이 어디서 시작하는지
+     보이지 않아 뒤 화면과의 층이 사라졌다. 높이는 거의 화면을 다 쓰되(94dvh) 윗변만
+     남긴다 — 「반쪽 카드」로 보이던 2026-11-21 의 문제도 생기지 않는다.
+     아래는 홈 바(safe-area)만큼만 띄운다. */
   .ems-modal-overlay {
-    padding: 0 !important;
-    align-items: stretch;
+    padding: 6vh 0 env(safe-area-inset-bottom) !important;
+    align-items: flex-start;
   }
   .ems-modal-overlay > * {
     width: 100% !important;
     max-width: none !important;
-    max-height: 100dvh !important;
-    min-height: 100dvh;
-    border-radius: 0 !important;
+    max-height: calc(94dvh - env(safe-area-inset-bottom)) !important;
+    min-height: 0;
     border-left: none !important;
     border-right: none !important;
+    border-bottom: none !important;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
   }
+  /* 입력칸은 **40px 아래로 내려가지 않는다** — 손가락으로 누르는 화면이다.
+     이미 44 로 키워 둔 자리(서비스 레포트 등)는 그대로 둔다(min 이라 줄지 않는다). */
+  .ems-modal-card input:not([type='checkbox']):not([type='radio']),
+  .ems-modal-card select,
+  .ems-modal-card button { min-height: 40px; }
 }
 
 /* ============================================================

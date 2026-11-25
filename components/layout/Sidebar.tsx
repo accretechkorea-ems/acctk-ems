@@ -34,8 +34,8 @@ import { R } from '@/lib/radius'
 export const SIDEBAR_WIDTH = 232
 /** 접었을 때의 폭 — 아이콘만 남는다. */
 export const SIDEBAR_COLLAPSED_WIDTH = 64
-/** 모바일 상단 바 높이. */
-export const TOPBAR_HEIGHT = 52
+/** 모바일 상단 바 높이 — 2026-11-25 에 52 → 48(상단 고정 영역을 100 안에 넣는다). */
+export const TOPBAR_HEIGHT = 48
 /** 모바일 드로어 폭. */
 const DRAWER_WIDTH = 304
 

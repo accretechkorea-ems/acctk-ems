@@ -213,7 +213,7 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
 
       {/* 사진 — 카드 폭에 4:3. 사진이 있으면 **눌러 크게 본다**(사진 창이 열린다).
           없으면 점선 「사진 등록」 — 같은 창이 열려 거기서 올린다. */}
-      <div style={{
+      <div className="dev-photo" style={{
         width: '100%', height: PHOTO_H, boxSizing: 'border-box', overflow: 'hidden',
         ...(hasPhoto
           ? { background: '#f3f4f6' }

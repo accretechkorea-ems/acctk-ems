@@ -86,6 +86,19 @@ export default function HomePage() {
   const [openOverlayCustomerId, setOpenOverlayCustomerId] = useState<number | null>(null)
   const [mobileTab, setMobileTab] = useState<'list' | 'map'>('list')
   /**
+   * 좁은 화면인가(≤768). 폰에서 「업체 목록」 탭일 때 **지도를 그리지 않으려고** 쓴다 —
+   * 전에는 목록 뒤에 지도가 깔린 채였다(보이지 않는 지도가 타일을 받고 손짓도 먹었다).
+   * 서버에서는 false 로 시작한다(첫 그림이 PC 와 같아야 수화가 어긋나지 않는다).
+   */
+  const [narrow, setNarrow] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)')
+    const sync = () => setNarrow(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
+  /**
    * 보기 — 지도 / 목록. 주소의 `?view=list` 와 세션 저장(HOME_STATE_KEY)에 함께 남긴다.
    *
    * 라우트를 가르지 않는 이유 — 조회(useHomeData)·필터·검색·스크롤 복원이 전부 이
@@ -973,11 +986,14 @@ useEffect(() => {
         /* 왼쪽 열의 검색칸은 **좁은 화면 전용**이다 — 넓은 화면은 맨 위 헤더가 맡는다. */
         .sidebar-search { display: none; }
         @media (max-width: 768px) {
-  .sidebar-search { display: block !important; }
+  /* 2026-11-25 — 검색칸은 패널 머리줄(PanelHeader)에 **하나만** 둔다. 지도 열의 칸까지
+     띄우면 폰에서 둘이 위아래로 겹쳤다(실측). 건수는 그 칸 오른쪽의 작은 숫자다. */
+  .sidebar-search { display: none !important; }
   .home-grid { grid-template-columns: 1fr !important; grid-template-rows: 1fr !important; }
   .mobile-tab-bar { display: flex !important; }
   .mobile-hide { display: none !important; }
-  .home-wrapper { height: calc(100dvh - ${TOPBAR_HEIGHT}px) !important; padding: 12px !important; overflow: hidden !important; }
+  /* 상단 고정 영역 = 앱바 48 + 여백 8 + 세그먼트 40 = 96 (지시 ②: 100 이내). */
+  .home-wrapper { height: calc(100dvh - ${TOPBAR_HEIGHT}px) !important; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)) !important; overflow: hidden !important; }
   .home-grid { height: 100% !important; overflow: hidden !important; }
   .home-grid > div { height: 100% !important; min-height: 0 !important; min-width: 0 !important; overflow: hidden !important; }
   .home-grid > div > div { height: 100% !important; }
@@ -1007,7 +1023,9 @@ useEffect(() => {
         className="mobile-tab-bar"
         style={{
           display: 'none',
-          marginBottom: 12,
+          // 40px — 상단 고정 영역(앱바 48 + 여백 8 + 이 줄 40 = 96)을 100 안에 둔다(2026-11-25).
+          height: 40,
+          marginBottom: 8,
           border: `1px solid #e5e7eb`,
           borderRadius: R.card,
           overflow: 'hidden',
@@ -1020,7 +1038,8 @@ useEffect(() => {
           }}
           style={{
             flex: 1,
-            padding: '10px 0',
+            padding: 0,
+            fontFamily: 'inherit',
             fontWeight: 700,
             fontSize: 14,
             border: 'none',
@@ -1049,7 +1068,8 @@ useEffect(() => {
           }}
           style={{
             flex: 1,
-            padding: '10px 0',
+            padding: 0,
+            fontFamily: 'inherit',
             fontWeight: 700,
             fontSize: 14,
             border: 'none',
@@ -1185,7 +1205,10 @@ useEffect(() => {
          막는다 — 카드를 스크롤하려다 지도가 끌려가면 목록을 못 읽는다. 틈이 좁아
          거기를 노려 지도를 잡는 사람은 없다고 보고 하나로 정했다. */
       <div style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0 }}>
-        <div style={{ position: 'absolute', inset: 0 }}>
+        {/* 폰에서 「업체 목록」 탭이면 **지도를 그리지 않는다**(2026-11-25) — 뒤에 깔아 두면
+            보이지도 않는 지도가 타일을 받고, 카드 틈으로 손짓이 새어 들어갔다. */}
+        {(!narrow || mobileTab === 'map') && (
+        <div className="home-map" style={{ position: 'absolute', inset: 0 }}>
           <MapView
             customers={filteredCustomers}
             deviceMap={deviceMap}
@@ -1206,6 +1229,7 @@ useEffect(() => {
             onOpenOverlayChange={setOpenOverlayCustomerId}
           />
         </div>
+        )}
 
         <SidePanel hidden={mobileTab === 'map'} header={panelHeader}>
           <Sidebar

@@ -73,12 +73,22 @@ function ContactChip({ c, onEdit }: { c: Contact; onEdit: () => void }) {
       }}>
       <b style={{ fontWeight: 600, color: TEXT }}>{c.name?.trim() || '이름 없음'}</b>
       {role && <span style={{ fontSize: 12, color: SUB }}>{role}</span>}
-      {c.phone && (
-        <a href={`tel:${c.phone.replace(/[^0-9+]/g, '')}`} onClick={e => e.stopPropagation()}
-          style={{ fontSize: 12, color: '#234ea2', textDecoration: 'none' }}>
-          {c.phone}
-        </a>
-      )}
+      {/* 전화·이메일 — PC 는 이 줄에 이어 붙고, **폰에서는 아랫줄**이 된다(.chip-c 규칙).
+          이메일은 PC 에서 칩을 한 줄 넘기므로 폰에서만 보여 준다(.chip-mail). */}
+      <span className="chip-contact" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        {c.phone && (
+          <a href={`tel:${c.phone.replace(/[^0-9+]/g, '')}`} onClick={e => e.stopPropagation()}
+            style={{ fontSize: 12, color: '#234ea2', textDecoration: 'none' }}>
+            {c.phone}
+          </a>
+        )}
+        {c.email && (
+          <a className="chip-mail" href={`mailto:${c.email}`} onClick={e => e.stopPropagation()}
+            style={{ display: 'none', fontSize: 12, color: '#234ea2', textDecoration: 'none', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {c.email}
+          </a>
+        )}
+      </span>
       <span className="edit2">
         <EditIconButton size={22} label={`${c.name ?? '담당자'} 수정`} onClick={onEdit}
           style={{ border: 'none', background: 'transparent' }} />
@@ -203,8 +213,33 @@ export default function HeaderBand({
             overflow: visible !important; word-break: break-word;
             -webkit-line-clamp: unset !important;
           }
-          /* 세로선이 없으므로 상태는 칸 오른쪽 끝에 붙는다. */
-          .pane-band .band-status { right: 0 !important }
+          /* 세로선이 없으므로 상태는 칸 오른쪽 끝에 붙는다 — 다만 ✎ 자리(우상단)는 피한다
+             (2026-11-25 실측: 390 에서 「활성」 글자가 연필 아래로 들어가 잘렸다). */
+          .pane-band .band-status { right: 40px !important }
+          /* 제목 줄은 **뱃지와 연필 두 자리**만큼 비운다 — 390 에서 사업장명이 뱃지 밑으로
+             흘러 「활성」과 겹쳤다(2026-11-25 실측). 56(뱃지) + 40(연필) = 96. */
+          .pane-band .band-name { padding-right: 96px !important }
+          .pane-band .band-right { padding-right: 0 !important }
+
+          /* ── 담당자는 **세로 목록**이다(2026-11-25) ──────────────────────
+             칩을 가로로 늘어놓으면 두 사람만 있어도 옆으로 밀려 가로 스크롤이 생긴다.
+             한 사람 = 한 칸, 윗줄 「이름 직급 · 부서」 · 아랫줄 「전화 · 이메일」. */
+          .pane-band .chip-list {
+            flex-direction: column !important; align-items: stretch !important;
+            max-height: none !important; overflow: visible !important;
+          }
+          .pane-band .chip-c {
+            width: 100%; height: auto; min-height: 44px; flex-wrap: wrap;
+            white-space: normal; padding: 8px 10px; box-sizing: border-box;
+          }
+          .pane-band .chip-c .chip-contact { flex-basis: 100%; margin-top: 2px }
+          /* ✎ 는 칸 **오른쪽 위**에 붙인다 — 흐름에 두면 아랫줄로 떨어져 줄이 하나 더 생긴다. */
+          .pane-band .chip-c { position: relative; padding-right: 36px }
+          .pane-band .chip-c .edit2 { position: absolute; top: 6px; right: 6px }
+          .pane-band .chip-mail { display: inline-block !important }
+          /* 더보기·＋ 아이콘은 폰에서 쓰지 않는다 — 목록이 접히지 않고, 추가는 아래 버튼이다. */
+          .pane-band .chip-more, .pane-band .chip-add { display: none !important }
+          .pane-band .contact-add-wide { display: flex !important }
         }
       `}</style>
 
@@ -237,7 +272,7 @@ export default function HeaderBand({
       <div className="band-right" style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, paddingRight: 36 }}>
         <div ref={contactRowRef} style={{ display: 'grid', gridTemplateColumns: '44px minmax(0, 1fr)', gap: '0 8px', alignItems: 'start', fontSize: 13 }}>
           <span style={{ color: MUTED, lineHeight: `${CHIP_H}px` }}>담당자</span>
-          <div ref={chipsRef}
+          <div ref={chipsRef} className="chip-list"
             style={{
               display: 'flex', flexWrap: 'wrap', gap: CHIP_GAP, minWidth: 0,
               maxHeight: openContacts ? undefined : TWO_ROWS, overflow: openContacts ? undefined : 'hidden',
@@ -250,12 +285,24 @@ export default function HeaderBand({
             ))}
             {/* 더보기 — 두 줄 밖으로 밀린 칩이 있을 때만. 펼치면 접기로 바뀐다. */}
             {(hidden > 0 || openContacts) && (
-              <button type="button" onClick={() => setOpenContacts(v => !v)}
+              <button type="button" className="chip-more" onClick={() => setOpenContacts(v => !v)}
                 style={{ height: CHIP_H, padding: '0 10px', border: `1px solid ${BORDER}`, borderRadius: R.control, background: '#ffffff', color: SUB, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
                 {openContacts ? '접기' : `더보기 +${hidden}`}
               </button>
             )}
-            <AddIconButton size={CHIP_H} label="담당자 추가" onClick={onAddContact} />
+            <span className="chip-add" style={{ display: 'inline-flex' }}>
+              <AddIconButton size={CHIP_H} label="담당자 추가" onClick={onAddContact} />
+            </span>
+            {/* 폰 — 「＋ 담당자」는 목록 **바로 아래**에 늘 보인다(아이콘 하나로는 찾기 어렵다). */}
+            <button type="button" className="contact-add-wide" onClick={onAddContact}
+              style={{
+                display: 'none', alignItems: 'center', justifyContent: 'center', gap: 6,
+                width: '100%', minHeight: 44, border: `1px dashed ${BORDER}`, borderRadius: R.control,
+                background: '#ffffff', color: SUB, fontSize: 13, fontWeight: 700,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+              ＋ 담당자
+            </button>
           </div>
         </div>
 
