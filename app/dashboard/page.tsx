@@ -95,6 +95,7 @@ function DashboardPageInner() {
     approvals: inbox.docs.map(d => ({ doc_id: d.document_id, title: d.title })),
     devices: today.pendingDevices.data,
     lost: today.lost.data,
+    reasonPending: today.reasonPending.data,
   })
   const stale = staleDeals(today.stale.data, today.today)
   const calibration = calibrationSoon(today.calibration.data, today.today)

@@ -139,6 +139,55 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
     return true
   }
 
+  /**
+   * 실주·종료를 **사유와 함께** 적는다 (2026-11-26, 지시 L2).
+   *
+   * 전에는 단계를 「실주」로 바꾸면 영업기회 수정 창이 통째로 열려, 사유를 적으려고 제목·금액·
+   * 마감까지 다시 보게 됐다. 지금은 사유 창 하나가 이 길로 들어온다
+   * (components/forecast/LostModal.tsx).
+   *
+   * ── 칸이 아직 없을 때 ────────────────────────────────────────────────────
+   *   lost_reason_id · competitor · lost_at 은 db/lost_reasons_20261126.sql 이 더한다.
+   *   없으면(42703) 그 셋을 빼고 **다시 쓴다** — 사유 글자와 메모는 옛 칸에 들어가므로
+   *   적용 전에도 실주 처리가 끝까지 된다.
+   *
+   * close 를 주면 stage 는 그대로 두고 closed_at 만 찍는다(칸반의 「종료」).
+   */
+  const markLost = async (
+    o: SalesOpportunity,
+    patch: { lost_reason: string; lost_reason_id: number | null; lost_note: string | null; competitor: string | null; lost_at: string },
+    opts: { stage?: string; closeOnly?: boolean } = {},
+  ): Promise<boolean> => {
+    if (!canEditOpp(o)) { toast.error('담당자 본인만 바꿀 수 있습니다'); return false }
+    const now = new Date().toISOString()
+    const base: Record<string, unknown> = {
+      lost_reason: patch.lost_reason,
+      lost_note: patch.lost_note,
+      closed_at: o.closed_at ?? now,
+      updated_at: now,
+    }
+    if (!opts.closeOnly && opts.stage) base.stage = opts.stage
+    const full = { ...base, lost_reason_id: patch.lost_reason_id, competitor: patch.competitor, lost_at: patch.lost_at }
+
+    let { error } = await supabase.from('sales_opportunities').update(full).eq('opportunity_id', o.opportunity_id)
+    // 칸이 아직 없으면 셋을 빼고 다시 — 반쪽으로 끝내지 않는다.
+    if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+      console.warn('[opportunity] 실주 사유 칸이 아직 없다 — 글자만 적는다', error.code)
+      ;({ error } = await supabase.from('sales_opportunities').update(base).eq('opportunity_id', o.opportunity_id))
+    }
+    if (error) {
+      console.error('[opportunity] mark lost failed', error)
+      toast.error(error.message || '실주 처리 중 오류가 발생했습니다')
+      return false
+    }
+    if (await fetchDetail()) {
+      toast.success(opts.closeOnly
+        ? `'${o.title}'${josa(o.title, '을')} 종료했습니다`
+        : `'${o.title}'${josa(o.title, '을')} 실주로 처리했습니다`)
+    }
+    return true
+  }
+
   // 수동 종료 / 종료 해제. 종료 여부는 stage 가 아니라 closed_at 하나로 표현한다.
   const setClosed = async (o: SalesOpportunity, close: boolean) => {
     if (!canEditOpp(o)) { toast.error('담당자 본인만 바꿀 수 있습니다'); return false }
@@ -161,7 +210,7 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
 
   return {
     isOppModalOpen, editingOpp, isSavingOpp,
-    canEditOpp, changeStage, setClosed,
+    canEditOpp, changeStage, setClosed, markLost,
     openNewOpp, openEditOpp, closeOppModal,
     handleSaveOpp, handleDeleteOpp,
   }

@@ -18,8 +18,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { addDays, todayKST } from '@/lib/date'
 import { isClosedStage } from '@/components/customer/opportunity'
-import { CALIBRATION_SOON_DAYS, EXPIRY_TASK_STATUSES, type CalibrationDevice, type StaleDeal, type SynthDevice, type SynthLead, type SynthLost, type SynthQuote, type TaskRow } from '@/lib/tasks'
+import { CALIBRATION_SOON_DAYS, EXPIRY_TASK_STATUSES, type CalibrationDevice, type StaleDeal, type SynthDevice, type SynthLead, type SynthLost, type SynthQuote, type SynthReasonPending, type TaskRow } from '@/lib/tasks'
 import { DEVICE_PENDING } from '@/lib/deviceStatus'
+import { isReasonPending } from '@/lib/lostReason'
 
 /** 한 조각의 자료 — 못 읽었으면 error 가 참이고 그 조각만 그 사실을 말한다. */
 export type Piece<T> = { data: T; loading: boolean; error: boolean; message?: string }
@@ -50,6 +51,8 @@ export type TodayData = {
   leads: Piece<SynthLead[]>
   pendingDevices: Piece<SynthDevice[]>
   lost: Piece<SynthLost[]>
+  /** 실패인데 사유가 빈 내 견적(지시 L3) — 안내만 한다. */
+  reasonPending: Piece<SynthReasonPending[]>
   stale: Piece<StaleDeal[]>
   calibration: Piece<CalibrationDevice[]>
   today: string
@@ -79,6 +82,7 @@ export function useToday(engineerId: number | null, opts: { seeUnassignedLeads: 
   const [leads, setLeads] = useState<Piece<SynthLead[]>>(() => idle<SynthLead[]>([]))
   const [pendingDevices, setPendingDevices] = useState<Piece<SynthDevice[]>>(() => idle<SynthDevice[]>([]))
   const [lost, setLost] = useState<Piece<SynthLost[]>>(() => idle<SynthLost[]>([]))
+  const [reasonPending, setReasonPending] = useState<Piece<SynthReasonPending[]>>(() => idle<SynthReasonPending[]>([]))
   const [stale, setStale] = useState<Piece<StaleDeal[]>>(() => idle<StaleDeal[]>([]))
   const [calibration, setCalibration] = useState<Piece<CalibrationDevice[]>>(() => idle<CalibrationDevice[]>([]))
 
@@ -164,6 +168,22 @@ export function useToday(engineerId: number | null, opts: { seeUnassignedLeads: 
       return rows.map(r => ({ ...r, site: r.customer_id ? names.get(Number(r.customer_id)) ?? null : null }))
     })
 
+    // 실패인데 사유가 빈 내 견적 — 「실주 사유 입력 필요」 한 줄로 안내만 한다(L3).
+    // 판정은 lib/lostReason.ts 가 한다(자동 실주가 넣은 「유효기간 만료」는 사유로 세지 않는다).
+    void run<SynthReasonPending[]>('reasonPending', setReasonPending, [], async () => {
+      const rows = unwrap<Array<{ quote_id: number; quote_number: string | null; fail_reason: string | null; lost_reason_id: number | null; customer_id: number | null }>>(
+        await supabase.from('quotes')
+          .select('quote_id, quote_number, fail_reason, lost_reason_id, customer_id')
+          .eq('engineer_id', engineerId).eq('status', '실패'))
+      const want = rows.filter(r => isReasonPending(r))
+      const names = await siteNames(want.map(r => Number(r.customer_id)))
+      return want.map(r => ({
+        quote_id: r.quote_id,
+        quote_number: r.quote_number,
+        company: r.customer_id ? names.get(Number(r.customer_id)) ?? null : null,
+      }))
+    })
+
     // 멈춘 딜 + 실주 사유 미입력 — 내 포캐스트를 한 번 읽어 둘을 함께 만든다.
     void run<StaleDeal[]>('stale', setStale, [], async () => {
       const opps = unwrap<Array<{ opportunity_id: number; title: string | null; stage: string; expected_amount: number | null; closed_at: string | null; created_at: string | null; lost_reason: string | null; customer_id: number | null }>>(
@@ -220,7 +240,7 @@ export function useToday(engineerId: number | null, opts: { seeUnassignedLeads: 
   }, [engineerId, seeLeads])
 
   return {
-    tasks, schemaNote, quotes, leads, pendingDevices, lost, stale, calibration,
+    tasks, schemaNote, quotes, leads, pendingDevices, lost, reasonPending, stale, calibration,
     today, reloadTasks,
   }
 }

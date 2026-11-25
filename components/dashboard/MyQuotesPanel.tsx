@@ -39,6 +39,8 @@ import Popover from '@/components/common/Popover'
 import QuoteRowIcons from '@/components/quote/QuoteRowIcons'
 import ForecastLink from '@/components/quote/ForecastLink'
 import TaskAddButton from '@/components/task/TaskAddButton'
+import LostModal from '@/components/forecast/LostModal'
+import { PENDING_LABEL, isReasonPending } from '@/lib/lostReason'
 import DeliveryDevices from '@/components/quote/DeliveryDevices'
 import { draftsBlocked, draftsFromItems, needsDeliveryDevices, nextMonthKey, type DeliveryDraft } from '@/lib/deliveryPending'
 import { openRepairDoc } from '@/lib/repairDocFlow'
@@ -236,6 +238,15 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
   const [editQuote, setEditQuote] = useState<Quote | null>(null)
   const [editStatus, setEditStatus] = useState<EditStatus>('취소요청')
   const [editFailReason, setEditFailReason] = useState('')
+  /**
+   * 사유 창이 떠 있는 견적 (2026-11-26, L3).
+   *   reasonQuote — 목록의 「실주 사유 입력 필요」를 눌렀을 때. **사유만** 채운다.
+   *   failPicked  — 실패로 바꾸는 창에서 고른 값. 상태 변경과 **함께** 저장된다.
+   */
+  const [reasonQuote, setReasonQuote] = useState<Quote | null>(null)
+  const [reasonBusy, setReasonBusy] = useState(false)
+  const [failPicked, setFailPicked] = useState<{ lost_reason_id: number | null; competitor: string | null; lost_at: string } | null>(null)
+  const [failPickOpen, setFailPickOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   // 삭제 요청은 결재로 올라간다 — 사유를 받은 뒤 이 모달에서 결재선을 지정한다.
   const [lineOpen, setLineOpen] = useState(false)
@@ -587,7 +598,11 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
     try {
       // 되돌릴 때는 미수주 사유를 지운다(빈 문자열 → 공용 함수가 null 로 저장한다).
       const reason = editStatus === '견적중' ? '' : editFailReason
-      await updateQuoteStatus({ quoteId: editQuote.quote_id, status: editStatus, reason })
+      await updateQuoteStatus({
+        quoteId: editQuote.quote_id, status: editStatus, reason,
+        // 실패로 바꿀 때 창에서 고른 사유 카테고리를 함께 적는다(L3).
+        lost: editStatus === FAIL_STATUS && failPicked ? failPicked : undefined,
+      })
       toast.success(editStatus === '견적중' ? '견적중으로 되돌렸습니다' : `${editStatus} 처리되었습니다`)
       setEditQuote(null)
       await loadData()
@@ -916,6 +931,24 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                           <span style={{ padding: '2px 6px', borderRadius: R.icon, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, FAIL_STATUS).bg, color: getCategoryColor(SALES_STATUS_COLORS, FAIL_STATUS).text, whiteSpace: 'nowrap' }}>
                             만료
                           </span>
+                        )}
+                        {/* 「실주 사유 입력 필요」 — 실패인데 사유가 비었거나 자동 실주가 넣은
+                            「유효기간 만료」뿐인 건이다(2026-11-26, L3). **안내만 한다** —
+                            사유가 비었다고 다른 일을 막지 않는다. 누르면 사유 창이 열리고,
+                            고르면 그 줄의 사유만 채운다(상태는 그대로다). */}
+                        {q.status === FAIL_STATUS && isReasonPending(q) && (
+                          <button
+                            type="button"
+                            onClick={() => setReasonQuote(q)}
+                            title="실주 사유를 골라 채웁니다 — 상태는 바뀌지 않습니다"
+                            style={{
+                              padding: '2px 7px', borderRadius: R.pill, fontSize: 10, fontWeight: 700,
+                              border: `1px solid ${BLUE}`, background: '#fff', color: BLUE,
+                              cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {PENDING_LABEL}
+                          </button>
                         )}
                         {/* 출하예정 — 주문 뒤 단계에서만 적힌다. */}
                         {showOrderInfo && q.shipping_date && (
@@ -1311,10 +1344,32 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                   <div style={{ fontSize: 11, color: GRAY, marginBottom: 5, fontWeight: 600 }}>
                     {editStatus === '취소요청' ? '삭제 사유' : '미수주 사유'}
                   </div>
-                  <textarea value={editFailReason} onChange={e => setEditFailReason(e.target.value)} rows={3}
-                    placeholder={editStatus === '취소요청' ? '삭제 요청 사유를 입력하세요' : '미수주 사유를 입력하세요'}
-                    style={{ width: '100%', padding: '8px 10px', border: reasonMissing ? errBorder : `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
-                  <FieldError message={reasonMissing ? '삭제 사유를 입력해주세요' : undefined} />
+                  {/* 실패는 **고르는 사유**다(2026-11-26, L3). 전에는 자유 입력이라 같은 뜻이
+                      「가격」·「가격 차이」·「단가」로 흩어져 「왜 졌나」를 묶어 셀 수 없었다.
+                      창은 포캐스트 실주와 **같은 창**이다. 삭제 사유는 그대로 자유 입력이다
+                      (그것은 분류할 일이 아니라 결재에 적어 보내는 글이다). */}
+                  {editStatus === FAIL_STATUS ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{
+                        flex: 1, minWidth: 0, padding: '8px 10px', border: `1px solid ${BORDER}`,
+                        borderRadius: R.control, fontSize: 13, color: editFailReason ? TEXT : MUTED,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {editFailReason || '사유를 고르세요 (비워 두어도 처리됩니다)'}
+                      </div>
+                      <button type="button" onClick={() => setFailPickOpen(true)}
+                        style={{ padding: '8px 12px', border: `1px solid ${BLUE}`, borderRadius: R.control, background: '#fff', color: BLUE, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                        사유 고르기
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <textarea value={editFailReason} onChange={e => setEditFailReason(e.target.value)} rows={3}
+                        placeholder="삭제 요청 사유를 입력하세요"
+                        style={{ width: '100%', padding: '8px 10px', border: reasonMissing ? errBorder : `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 13, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
+                      <FieldError message={reasonMissing ? '삭제 사유를 입력해주세요' : undefined} />
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -1408,6 +1463,50 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
         serverError={approvalError}
         busy={approvalChecking}
       />
+
+      {/* 실주 사유 — **두 길이 같은 창을 쓴다**(2026-11-26, L3).
+          ① 실패로 바꾸는 창에서 「사유 고르기」 — 고른 값을 들고 있다가 상태 변경과 함께 저장한다.
+          ② 목록의 「실주 사유 입력 필요」 — 그 줄의 사유만 바로 채운다(상태는 그대로다). */}
+      {failPickOpen && editQuote && (
+        <LostModal
+          title={`${editQuote.quote_number} · ${editQuote.company_name}`}
+          what="실패"
+          onClose={() => setFailPickOpen(false)}
+          onSave={patch => {
+            setFailPicked({ lost_reason_id: patch.lost_reason_id, competitor: patch.competitor, lost_at: patch.lost_at })
+            // fail_reason(글자)에는 사유 + 설명을 한 줄로 담는다 — 칸이 아직 없어도 뜻이 남는다.
+            setEditFailReason([patch.lost_reason, patch.competitor, patch.lost_note].filter(Boolean).join(' · '))
+            setFailPickOpen(false)
+          }}
+        />
+      )}
+
+      {reasonQuote && (
+        <LostModal
+          title={`${reasonQuote.quote_number} · ${reasonQuote.company_name}`}
+          what="실패"
+          busy={reasonBusy}
+          onClose={() => setReasonQuote(null)}
+          onSave={async patch => {
+            setReasonBusy(true)
+            try {
+              await updateQuoteStatus({
+                quoteId: reasonQuote.quote_id,
+                status: reasonQuote.status,
+                reason: [patch.lost_reason, patch.competitor, patch.lost_note].filter(Boolean).join(' · '),
+                lost: { lost_reason_id: patch.lost_reason_id, competitor: patch.competitor, lost_at: patch.lost_at },
+              })
+              toast.success('실주 사유를 채웠습니다')
+              setReasonQuote(null)
+              await loadData()
+            } catch (e) {
+              toast.error(`사유를 채우지 못했습니다: ${errMessage(e, '오류')}`)
+            } finally {
+              setReasonBusy(false)
+            }
+          }}
+        />
+      )}
     </div>
   )
 }

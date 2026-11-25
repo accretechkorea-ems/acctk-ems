@@ -279,6 +279,30 @@ export function lostReasonItems(opps: readonly SynthLost[]): TaskItem[] {
   }))
 }
 
+export type SynthReasonPending = {
+  quote_id: number
+  quote_number: string | null
+  company?: string | null
+}
+
+/**
+ * 실패인데 **사유가 비어 있는 견적** — 「{회사} » {번호} — 실주 사유 입력 필요」 (지시 L3).
+ * 안내만 한다. 기한을 매기지 않는다 — 급한 일이 아니고, 재촉하면 아무 사유나 고르게 된다.
+ * 판정은 lib/lostReason.ts 의 isReasonPending 이 하고(부르는 쪽이 이미 걸러 넘긴다),
+ * 여기서는 글자만 만든다.
+ */
+export function reasonPendingItems(quotes: readonly SynthReasonPending[]): TaskItem[] {
+  return quotes.map(q => ({
+    key: `quote-reason:${q.quote_id}`,
+    title: `${q.company ? `${q.company} » ` : ''}${q.quote_number ?? q.quote_id} — 실주 사유 입력 필요`,
+    due: null,
+    kind: 'quote_expiry' as TaskKind,
+    refType: 'quote' as TaskRefType,
+    refId: q.quote_id,
+    real: false,
+  }))
+}
+
 export type SynthInput = {
   today: string
   quotes?: readonly SynthQuote[]
@@ -287,6 +311,8 @@ export type SynthInput = {
   approvals?: readonly SynthApproval[]
   devices?: readonly SynthDevice[]
   lost?: readonly SynthLost[]
+  /** 실패인데 사유가 빈 견적(지시 L3). */
+  reasonPending?: readonly SynthReasonPending[]
 }
 
 /** 합성 줄 전부. 못 읽은 자료는 빼고 넘기면 그 줄만 빠진다(카드가 통째로 비지 않는다). */
@@ -297,6 +323,7 @@ export function synthItems(input: SynthInput): TaskItem[] {
     ...approvalItems(input.approvals ?? []),
     ...deviceItems(input.devices ?? [], input.today),
     ...lostReasonItems(input.lost ?? []),
+    ...reasonPendingItems(input.reasonPending ?? []),
   ]
 }
 

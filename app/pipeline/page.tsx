@@ -39,6 +39,7 @@ import { BLUE, BLUE_TINT, BORDER, CARD_BG, MUTED, TEXT, cardTitle } from '@/comp
 import { TEXT_DISABLED, TEXT_NOTE } from '@/lib/textTokens'
 import OpportunityCard from '@/components/pipeline/OpportunityCard'
 import OpportunityModal from '@/components/customer/modals/OpportunityModal'
+import LostModal from '@/components/forecast/LostModal'
 import { useOpportunityCrud } from '@/hooks/customer/useOpportunityCrud'
 import { useQuotePdf } from '@/hooks/customer/useQuotePdf'
 import { usePipelineData } from '@/hooks/pipeline/usePipelineData'
@@ -214,6 +215,13 @@ export default function PipelinePage() {
   }, [opportunities, ownerValue, search])
 
   /**
+   * 사유 창이 떠 있는 건 — 실주로 바꾸려는 건이거나(실주), 접으려는 건이다(종료).
+   * null 이면 떠 있지 않다. 창은 한 벌이다(components/forecast/LostModal.tsx).
+   */
+  const [lostTarget, setLostTarget] = useState<{ opp: SalesOpportunity; what: '실주' | '종료' } | null>(null)
+  const [lostBusy, setLostBusy] = useState(false)
+
+  /**
    * 고른 분기 — null 이면 **전부**다(K1).
    *
    * 기간으로 **거르지 않는** 것이 이 판의 기본이다(마감일 없는 건이 통째로 사라지면 그
@@ -265,8 +273,10 @@ export default function PipelinePage() {
         canEdit={opp.canEditOpp(o)}
         onOpen={() => opp.openEditOpp(o)}
         onChangeStage={next => moveTo(o, next)}
-        onPickLost={() => opp.openEditOpp(o)}
-        onClose={!isClosed(o) && o.stage === '수주' ? () => opp.setClosed(o, true) : undefined}
+        // 실주·종료는 **사유 창**을 지난다(2026-11-26, L2). 전에는 영업기회 수정 창이
+        // 통째로 열려, 사유 한 줄을 적으려고 제목·금액·마감까지 다시 보게 됐다.
+        onPickLost={() => setLostTarget({ opp: o, what: '실주' })}
+        onClose={!isClosed(o) && o.stage === '수주' ? () => setLostTarget({ opp: o, what: '종료' }) : undefined}
         // 이 기회로 견적을 쓰러 간다 — 견적 화면이 ?opportunity= 를 읽어 고객·기회를 미리 고른다.
         onWriteQuote={() => { window.location.href = `/quote?opportunity=${o.opportunity_id}` }}
       />
@@ -646,6 +656,25 @@ export default function PipelinePage() {
         onOpenQuotePdf={quotePdf.openQuotePdfByUrl}
         onSetClosed={opp.setClosed}
       />
+
+      {/* 실주·종료 사유 — **한 벌인 창**이다(components/forecast/LostModal.tsx).
+          사유를 적고 나면 그 자리에서 단계가 바뀐다(실주) 또는 접힌다(종료).
+          칸이 아직 없으면 사유 글자와 메모만 옛 칸에 들어간다(markLost 의 42703 폴백). */}
+      {lostTarget && (
+        <LostModal
+          title={`${lostTarget.opp.customers?.company_name ?? ''} · ${lostTarget.opp.title}`.replace(/^ · /, '')}
+          what={lostTarget.what}
+          busy={lostBusy}
+          onClose={() => setLostTarget(null)}
+          onSave={async patch => {
+            setLostBusy(true)
+            const ok = await opp.markLost(lostTarget.opp, patch,
+              lostTarget.what === '실주' ? { stage: '실주' } : { closeOnly: true })
+            setLostBusy(false)
+            if (ok) setLostTarget(null)
+          }}
+        />
+      )}
     </main>
   )
 }

@@ -16,6 +16,12 @@ export type UpdateQuoteStatusParams = {
   status: string
   /** 사유. 삭제 요청이면 delete_reason 에, 그 밖의 상태면 fail_reason 에 저장된다. */
   reason?: string
+  /**
+   * 고른 **실주 사유 카테고리**(2026-11-26, 지시 L3). 실패로 바꿀 때 창에서 고른 값이다
+   * (components/forecast/LostModal.tsx). 칸이 아직 없으면 **이 셋만 빼고** 다시 쓴다 —
+   * fail_reason(글자)은 어느 쪽이든 들어가므로 적용 전에도 실패 처리가 끝까지 된다.
+   */
+  lost?: { lost_reason_id: number | null; competitor: string | null; lost_at: string }
 }
 
 // 삭제 요청('취소요청')과 실패는 성격이 달라 사유를 다른 칸에 남긴다.
@@ -31,20 +37,23 @@ const reasonPatch = (status: string, reason?: string) =>
 // 실패 시 throw. (빈 문자열은 null 로 저장 — 실적 현황 기존 동작과 동일.)
 export async function updateQuoteStatus(params: UpdateQuoteStatusParams): Promise<void> {
   const supabase = createClient()
-  const { data, error } = await supabase
+  // order_date · revenue_date 는 더 이상 쓰지 않는다. 수주·매출 시점은
+  // 발주 라우트가 남기는 purchase_order_at · tax_invoice_completed_at 이 정본이다.
+  const base = { status: params.status, ...reasonPatch(params.status, params.reason) }
+  /** 결재가 도는 동안은 사람이 상태를 못 바꾼다(전자결재 6단계 B) — 조건부 UPDATE 로 둔다. */
+  const run = (patch: Record<string, unknown>) => supabase
     .from('quotes')
-    // order_date · revenue_date 는 더 이상 쓰지 않는다. 수주·매출 시점은
-    // 발주 라우트가 남기는 purchase_order_at · tax_invoice_completed_at 이 정본이다.
-    .update({
-      status: params.status,
-      ...reasonPatch(params.status, params.reason),
-    })
+    .update(patch)
     .eq('quote_id', params.quoteId)
-    // 결재가 도는 동안은 사람이 상태를 못 바꾼다(전자결재 6단계 B).
-    // 조건부 UPDATE 로 둔다 — 화면이 버튼을 숨기지만 그것만으로는 서버 쪽 보장이 없다.
-    // 결재 엔진의 되돌리기(onCompleteQuote·onRevertQuote)는 service role 이라 이 조건과 무관하다.
     .neq('status', APPROVAL_STATUS)
     .select('quote_id')
+
+  let { data, error } = await run(params.lost ? { ...base, ...params.lost } : base)
+  // 사유 칸이 아직 없으면(db/lost_reasons_20261126.sql 미적용) 글자만 적는다.
+  if (error && params.lost && (error.code === '42703' || error.code === 'PGRST204')) {
+    console.warn('[quote] 실주 사유 칸이 아직 없다 — 글자만 적는다', error.code)
+    ;({ data, error } = await run(base))
+  }
   if (error) {
     // RLS 로 막히면 화면에는 메시지만 남아 원인을 알기 어렵다. 원본 객체(code·details·hint)를 콘솔에 남긴다.
     console.error('[quote] status update failed', { quoteId: params.quoteId, status: params.status, error })
