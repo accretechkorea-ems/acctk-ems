@@ -4,6 +4,7 @@
 //   - 실패는 throw(상태 변경) 또는 반환값 { ok, error }(발주/세금)로 알린다.
 
 import { createClient } from '@/lib/supabase/client'
+import { customerChange } from '@/lib/customerChange'
 import { APPROVAL_STATUS } from '@/lib/quoteStatus'
 import type { LineInput } from '@/lib/approval/types'
 
@@ -54,6 +55,11 @@ export async function updateQuoteStatus(params: UpdateQuoteStatusParams): Promis
     console.error('[quote] status update 0행', { quoteId: params.quoteId, status: params.status })
     throw new Error('결재 중인 견적은 상태를 바꿀 수 없습니다')
   }
+  // 연결된 포캐스트가 있으면 단계·금액을 맞춘다(2026-11-26) — **올리는 쪽으로만** 간다.
+  // 라우트가 한다(service role): 포캐스트는 남의 것일 수 있어 브라우저로는 못 고친다.
+  // 실패해도 상태 변경은 그대로다 — 맞추기가 일을 막지 않는다(콘솔에만 남긴다).
+  const synced = await customerChange({ action: 'forecast-sync', quoteId: params.quoteId })
+  if (!synced.ok) console.error('[quote] forecast sync failed', { quoteId: params.quoteId, error: synced.error })
 }
 
 /** 발주 요청 메모 길이 상한. app/api/purchase-order 의 REQUEST_MEMO_MAX 와 같아야 한다. */

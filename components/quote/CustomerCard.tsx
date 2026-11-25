@@ -10,7 +10,7 @@
 // 상태는 하나도 들고 있지 않다. 전부 화면(page.tsx)의 값과 setter 를 받아 쓴다.
 // 비고·조건 묶음은 다음 단계(3a-7·3a-8)에서 다시 RemarksEditor·TermsEditor 로 나눈다.
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { FieldError, errBorder } from '@/components/common/fieldErrors'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { isClosed } from '@/components/customer/opportunity'
@@ -20,6 +20,9 @@ import { type RecipientSource, groupRecipients, isAgencyPick, pickKey } from '@/
 import type { Contact } from '@/components/customer/types'
 import { Z } from '@/lib/zIndex'
 import { type SetTerms, type Terms, TERM_LABELS, defaultTermsFor, termKeysFor } from '@/lib/quoteTerms'
+import SearchSelect from '@/components/common/SearchSelect'
+import ModalOverlay from '@/components/common/ModalOverlay'
+import ModalCard from '@/components/common/ModalCard'
 import RemarksEditor from '@/components/quote/RemarksEditor'
 import TermsEditor from '@/components/quote/TermsEditor'
 import LockedSection from '@/components/quote/LockedSection'
@@ -27,6 +30,8 @@ import type { CustomerResult } from '@/app/quote/types'
 import type { QuoteCategory } from '@/lib/quoteCategories'
 import { FORM_KINDS, FORM_LABELS } from '@/lib/quoteForms'
 import type { SalesOpportunity } from '@/components/customer/types'
+import { BLUE, BORDER, CARD_BG, MUTED } from '@/components/common/ui'
+import { TEXT_LABEL } from '@/lib/textTokens'
 import { R } from '@/lib/radius'
 import { advanceQuoteFocus, focusQuoteStep, onlyContactId, registerQuoteFocus } from '@/lib/quoteFocus'
 
@@ -83,6 +88,11 @@ export type CustomerCardOpportunity = {
   opportunities: SalesOpportunity[]
   opportunityId: number | null
   setOpportunityId: (v: number | null) => void
+  /**
+   * 그 자리에서 **새 포캐스트 한 건**을 만든다(2026-11-26). 제목·예상월만 받는다.
+   * 넘기지 않으면 「새 포캐스트 만들기」 줄이 서지 않는다.
+   */
+  onCreate?: (args: { title: string; month: string }) => Promise<{ ok: true } | { ok: false; error: string }>
 }
 
 /**
@@ -173,7 +183,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
     euSearchRef, euListRef, selectedEU, euParentName,
     handleEUSearch, handleEUSelect, handleEUClear,
   } = eu
-  const { opportunities, opportunityId, setOpportunityId } = opportunity
+  const { opportunities, opportunityId, setOpportunityId, onCreate } = opportunity
   const {
     contactId: recipientContactId, setContactId: setRecipientContactId,
     contacts, loading: contactsLoading,
@@ -209,6 +219,16 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
   // 고를 수 있는 영업기회 — 종결된 건은 이미 연결돼 있을 때만 남긴다(선택 유지용).
   // 이 목록이 비면 영업기회 칸 자체를 그리지 않는다.
   const selectableOpportunities = opportunities.filter(o => !isClosed(o) || o.opportunity_id === opportunityId)
+  // 포캐스트 고르기·만들기 칸의 상태(2026-11-26).
+  const [oppQuery, setOppQuery] = useState('')
+  const [oppNewOpen, setOppNewOpen] = useState(false)
+  const [oppTitle, setOppTitle] = useState('')
+  const [oppMonth, setOppMonth] = useState(() => new Date().toISOString().slice(0, 7))
+  const [oppSaving, setOppSaving] = useState(false)
+  /** 지금 걸린 포캐스트 — 칸에 적어 둘 글자. */
+  const picked = opportunities.find(o => o.opportunity_id === opportunityId) ?? null
+  /** 업체를 골랐는가 — 포캐스트가 하나도 없어도 **새로 만들기**는 낼 수 있어야 한다. */
+  const customerPicked = !!(selectedEU || selectedCustomer)
 
 
   // 기본 정보
@@ -430,20 +450,71 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
     {/* 영업기회 연결 — 선택 사항. 내부 정보이며 PDF 에는 나가지 않는다.
         후보가 있는 업체는 몇 곳뿐이라, 고를 것이 있을 때만 칸을 낸다.
         (업체 미선택·기회 없음 상태에서는 안내만 남고 늘 비어 있던 칸이다) */}
-    {selectableOpportunities.length > 0 && (
+    {(selectableOpportunities.length > 0 || (onCreate && customerPicked)) && (
       <div className="q-box" style={{ marginBottom: 8, animation: 'modal-in 0.15s ease' }}>
         <span className="q-box-label">포캐스트</span>
-        <select
-          className="q-box-field"
-          value={opportunityId ?? ''}
-          onChange={e => setOpportunityId(e.target.value ? Number(e.target.value) : null)}
-        >
-          <option value="">연결 안 함</option>
-          {selectableOpportunities.map(o => (
-            <option key={o.opportunity_id} value={o.opportunity_id}>{`${o.stage} · ${o.title}`}</option>
-          ))}
-        </select>
+        {/* 공용 콤보박스로 고른다(SearchSelect) — ↑↓·Enter·Esc 가 다른 칸과 같다.
+            맨 위에 「연결 안 함」, 맨 아래에 「＋ 새 포캐스트 만들기」가 선다.
+            기본값은 **가장 최근 진행 건**이다(hooks/quote/useQuoteCustomer.ts). */}
+        <div className="q-box-field" style={{ padding: 0, border: 'none', minWidth: 0 }}>
+          <SearchSelect<SalesOpportunity>
+            items={selectableOpportunities.filter(o => !oppQuery.trim()
+              || `${o.stage} ${o.title}`.toLowerCase().includes(oppQuery.trim().toLowerCase()))}
+            itemKey={o => o.opportunity_id}
+            renderItem={o => <span style={{ fontSize: 13 }}>{`${o.stage} · ${o.title}`}</span>}
+            onSelect={o => { setOpportunityId(o.opportunity_id); setOppQuery('') }}
+            query={oppQuery || (picked ? `${picked.stage} · ${picked.title}` : '')}
+            onQueryChange={setOppQuery}
+            placeholder="연결 안 함"
+            openWhenEmpty
+            emptyText="맞는 포캐스트가 없습니다"
+            extras={[
+              { key: 'none', where: 'top', node: <span style={{ fontSize: 13, color: MUTED }}>연결 안 함</span>, onSelect: () => { setOpportunityId(null); setOppQuery('') } },
+              ...(onCreate ? [{ key: 'new', node: <span style={{ fontSize: 13, color: BLUE, fontWeight: 700 }}>＋ 새 포캐스트 만들기</span>, onSelect: () => setOppNewOpen(true) }] : []),
+            ]}
+          />
+        </div>
       </div>
+    )}
+
+    {/* 새 포캐스트 — 제목·예상월만 받는다. 나머지는 포캐스트 화면에서 채운다. */}
+    {oppNewOpen && onCreate && (
+      <ModalOverlay onClose={() => setOppNewOpen(false)} confirmClose dirty={oppTitle.trim().length > 0}>
+        <ModalCard
+          width={380}
+          closeX
+          title={<span style={{ fontSize: 15, fontWeight: 700 }}>새 포캐스트</span>}
+          footer={<>
+            <span style={{ flex: 1 }} />
+            <button type="button" onClick={() => setOppNewOpen(false)}
+              style={{ height: 34, padding: '0 12px', borderRadius: R.control, border: `1px solid ${BORDER}`, background: CARD_BG, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>취소</button>
+            <button type="button" disabled={!oppTitle.trim() || oppSaving}
+              onClick={async () => {
+                setOppSaving(true)
+                const r = await onCreate({ title: oppTitle, month: oppMonth })
+                setOppSaving(false)
+                if (r.ok) { setOppNewOpen(false); setOppTitle(''); setOppQuery('') }
+              }}
+              style={{ height: 34, padding: '0 16px', borderRadius: R.control, border: 'none', background: BLUE, color: CARD_BG, fontSize: 13, fontWeight: 700, cursor: oppTitle.trim() ? 'pointer' : 'not-allowed', opacity: oppTitle.trim() ? 1 : 0.5, fontFamily: 'inherit' }}>
+              {oppSaving ? '만드는 중…' : '만들기'}
+            </button>
+          </>}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: TEXT_LABEL }}>
+              제목
+              <input value={oppTitle} onChange={e => setOppTitle(e.target.value)} autoFocus
+                placeholder="예: 진원도 측정기 도입"
+                style={{ width: '100%', boxSizing: 'border-box', marginTop: 4, height: 38, padding: '0 10px', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 13, fontFamily: 'inherit' }} />
+            </label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: TEXT_LABEL }}>
+              예상 월
+              <input type="month" value={oppMonth} onChange={e => setOppMonth(e.target.value)}
+                style={{ width: '100%', boxSizing: 'border-box', marginTop: 4, height: 38, padding: '0 10px', border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 13, fontFamily: 'inherit' }} />
+            </label>
+          </div>
+        </ModalCard>
+      </ModalOverlay>
     )}
 
     {/* 수신인 — **고객사 담당자에서 고른다.** 직접 치지 않는다(위 CustomerCardRecipient).

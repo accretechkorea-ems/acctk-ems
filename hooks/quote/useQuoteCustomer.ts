@@ -25,6 +25,7 @@ import { parentCompanyName } from '@/components/customer/ParentPicker'
 import { NOT_AGENCY_ONLY } from '@/lib/customerAgency'
 import { type CustomerRole, isAgencyPick, mergeCustomerPicks } from '@/lib/quoteCustomerPick'
 import { advanceQuoteFocus } from '@/lib/quoteFocus'
+import { isClosed, monthToDate } from '@/components/customer/opportunity'
 
 export type UseQuoteCustomerArgs = {
   supabase: SupabaseClient
@@ -118,7 +119,33 @@ export function useQuoteCustomer({ supabase, clearError }: UseQuoteCustomerArgs)
       .eq('customer_id', cid)
       .order('created_at', { ascending: false })
     if (error) { console.error('[quote] load opportunities failed', error); setOpportunities([]); return }
-    setOpportunities((data as SalesOpportunity[]) ?? [])
+    const list = (data as SalesOpportunity[]) ?? []
+    setOpportunities(list)
+    // **가장 최근 진행 건을 기본으로 건다**(2026-11-26 지시). 연결을 잊어 포캐스트가
+    // 빈 채로 남는 일이 잦았다 — 아니면 「연결 안 함」을 고르면 된다.
+    const recent = list.find(o => !isClosed(o))
+    if (recent) setOpportunityId(recent.opportunity_id)
+  }
+
+  /**
+   * **새 포캐스트 한 건** — 견적을 쓰다가 그 자리에서 만든다(2026-11-26).
+   * 제목·예상월만 받는다(나머지는 포캐스트 화면에서 채운다). 만들면 바로 연결한다.
+   */
+  const createOpportunity = async (args: { title: string; month: string; engineerId: number }):
+    Promise<{ ok: true } | { ok: false; error: string }> => {
+    const cid = euCustomerId ?? customerId
+    if (!cid) return { ok: false, error: '업체를 먼저 고르세요' }
+    const title = args.title.trim()
+    if (!title) return { ok: false, error: '제목을 적어주세요' }
+    const { data, error } = await supabase.from('sales_opportunities').insert({
+      customer_id: cid, engineer_id: args.engineerId, stage: '상담', title,
+      expected_amount: 0, expected_close: monthToDate(args.month) ?? null,
+    }).select('*').single()
+    if (error) { console.error('[quote] 포캐스트 만들기 실패', error); return { ok: false, error: error.message } }
+    const made = data as SalesOpportunity
+    setOpportunities(prev => [made, ...prev])
+    setOpportunityId(made.opportunity_id)
+    return { ok: true }
   }
 
   const handleEUSearch = async (q: string) => {
@@ -241,7 +268,7 @@ export function useQuoteCustomer({ supabase, clearError }: UseQuoteCustomerArgs)
     customerSearchOpen, setCustomerSearchOpen,
     prefillNotice, setPrefillNotice,
     selectedCustomer, setSelectedCustomer,
-    opportunities, setOpportunities, opportunityId, setOpportunityId,
+    opportunities, setOpportunities, opportunityId, setOpportunityId, createOpportunity,
     euCustomerId, setEuCustomerId,
     euQuery, setEuQuery,
     euResults, setEuResults,

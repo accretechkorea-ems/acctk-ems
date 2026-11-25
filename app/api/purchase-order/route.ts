@@ -1,4 +1,5 @@
 import { adminClient } from '@/lib/supabase/admin'
+import { syncForecastOf } from '@/lib/forecastSync'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { canViewMenu } from '@/lib/permissions'
@@ -118,6 +119,10 @@ export async function POST(req: Request) {
       ...(rawMemo === null ? null : { order_request_memo: requestMemo || null }),
     }).eq('quote_id', Number(quoteId))
     if (updErr) console.error(' quotes update failed', { action, quoteId, error: updErr })
+
+    // 연결된 포캐스트를 **수주**로 올린다(2026-11-26) — 단계·금액·수주일(= 발주일).
+    // 규칙은 lib/forecastSync.ts 한 곳이고 **올리는 쪽으로만** 간다. 실패해도 발주는 그대로다.
+    await syncForecastOf(supabaseAdmin, Number(quoteId))
 
     // 알림에 메모 첫 줄을 덧붙인다 — 목록을 열기 전에 무슨 건인지 보이게.
     const memoPreview = requestMemo.split('\n')[0].trim().slice(0, MEMO_PREVIEW_MAX)

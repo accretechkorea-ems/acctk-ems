@@ -22,6 +22,7 @@ import { NextResponse } from 'next/server'
 import { loadCaller } from '@/lib/apiCaller'
 import { disposePatch, restorePatch } from '@/lib/deviceStatus'
 import { todayKST } from '@/lib/date'
+import { forecastPatch, type ForecastNow, type LinkedQuote } from '@/lib/forecastSync'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   fieldChanges, writeCustomerEvents,
@@ -453,6 +454,36 @@ export async function POST(req: Request) {
     if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 })
     console.log(`[${TAG}] repair-done`, { repairId, customerId, by: caller.email })
     return NextResponse.json({ ok: true, made: true })
+  }
+
+  // ── 포캐스트 ↔ 연결 견적 맞추기 ──────────────────────────────────────
+  //
+  // 견적의 상태가 바뀔 때마다 부른다(lib/quoteMutations.ts · 발주 라우트).
+  // 규칙은 lib/forecastSync.ts 한 곳에 있다 — **올리는 쪽으로만** 간다.
+  // 포캐스트를 못 찾거나 바꿀 것이 없으면 조용히 끝난다(견적 쪽 일을 막지 않는다).
+  if (action === 'forecast-sync') {
+    const quoteId = Number(body.quoteId)
+    const oppFromBody = Number(body.opportunityId)
+    let oppId = Number.isInteger(oppFromBody) && oppFromBody > 0 ? oppFromBody : 0
+    if (!oppId) {
+      if (!Number.isInteger(quoteId) || quoteId <= 0) return bad('견적을 찾지 못했습니다')
+      const { data: q } = await sb.from('quotes').select('opportunity_id').eq('quote_id', quoteId).maybeSingle()
+      oppId = Number(q?.opportunity_id ?? 0)
+    }
+    if (!oppId) return NextResponse.json({ ok: true, skipped: '연결된 포캐스트 없음' })
+
+    const [{ data: opp }, { data: linked }] = await Promise.all([
+      sb.from('sales_opportunities').select('opportunity_id, stage, expected_amount, closed_at').eq('opportunity_id', oppId).maybeSingle(),
+      sb.from('quotes').select('quote_id, status, total_supply, purchase_order_at').eq('opportunity_id', oppId),
+    ])
+    if (!opp) return NextResponse.json({ ok: true, skipped: '포캐스트를 찾지 못함' })
+
+    const patch = forecastPatch(opp as ForecastNow, (linked ?? []) as LinkedQuote[])
+    if (Object.keys(patch).length === 0) return NextResponse.json({ ok: true, changed: false })
+    const { error } = await sb.from('sales_opportunities').update(patch).eq('opportunity_id', oppId)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    console.log(`[${TAG}] forecast-sync`, { oppId, patch, by: caller.email })
+    return NextResponse.json({ ok: true, changed: true, patch })
   }
 
   return bad('모르는 작업입니다')

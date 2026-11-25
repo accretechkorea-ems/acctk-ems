@@ -86,9 +86,15 @@ ok('견적 작성 — 분류', /<option value="" disabled hidden>\{categoriesLoa
 ok('견적 작성 — 양식', /<option value="" disabled hidden>양식 선택 \(필수\)<\/option>/.test(card))
 ok('견적 작성 — 수신인', (card.match(/<option value="" disabled hidden>/g) || []).length >= 3)
 
+// 2026-11-26 — 견적의 포캐스트 칸은 <select> 가 아니라 **공용 콤보박스**(SearchSelect)다.
+// 「연결 안 함」은 목록 맨 위의 줄(extras)이라 option 검사로는 잡히지 않는다 — 글자로 본다.
+console.log('\n── 견적의 포캐스트 칸은 공용 콤보박스 ──')
+ok('SearchSelect 로 고른다', /<SearchSelect<SalesOpportunity>/.test(card))
+ok('목록 맨 위에 「연결 안 함」', /key: 'none', where: 'top'[\s\S]{0,140}연결 안 함/.test(card))
+ok('맨 아래에 「새 포캐스트 만들기」', /＋ 새 포캐스트 만들기/.test(card))
+
 console.log('\n── 뜻이 있는 빈 값은 그대로다 ──')
 for (const [file, label] of [
-  ['components/quote/CustomerCard.tsx', '연결 안 함'],
   ['components/customer/modals/SalesActivityModal.tsx', '연결 안 함'],
   ['app/quote/QuoteItemRow.tsx', '묶음 없음'],
   ['components/repair/RepairEditModal.tsx', '(없음)'],

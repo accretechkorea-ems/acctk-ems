@@ -245,7 +245,7 @@ function QuotePageInner() {
     customerSearchOpen, setCustomerSearchOpen,
     prefillNotice, setPrefillNotice,
     selectedCustomer, setSelectedCustomer,
-    opportunities, setOpportunities, opportunityId, setOpportunityId,
+    opportunities, setOpportunities, opportunityId, setOpportunityId, createOpportunity,
     euCustomerId, setEuCustomerId,
     euQuery, setEuQuery,
     euResults, setEuResults,
@@ -963,7 +963,13 @@ function QuotePageInner() {
               euSearchRef, euListRef, selectedEU, euParentName,
               handleEUSearch, handleEUSelect, handleEUClear,
             }}
-            opportunity={{ opportunities, opportunityId, setOpportunityId }}
+            opportunity={{
+              opportunities, opportunityId, setOpportunityId,
+              /* 실적이 붙는 사람 것으로 만든다 — 대필이면 그 담당자다(onBehalf). */
+              onCreate: engineer
+                ? (args => createOpportunity({ ...args, engineerId: onBehalf?.engineer_id ?? engineer.engineer_id }))
+                : undefined,
+            }}
             recipient={{
               contactId: recipientContactId,
               setContactId: v => { setRecipientContactId(v); clearError('recipient') },
