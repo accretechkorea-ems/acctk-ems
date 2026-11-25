@@ -13,7 +13,7 @@
 // 올리기·삭제 요청·엑셀 내보내기가 전부 그 부품 안에 있어, 옮기지 않고 통째로 띄운다.
 // 닫을 때 카드 숫자를 다시 맞춘다(모달 안에서 상태를 바꿨을 수 있다).
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import MyQuotesPanel from '@/components/dashboard/MyQuotesPanel'
 import DashCard from './DashCard'
@@ -36,9 +36,14 @@ export type MyQuoteCardProps = {
   initialTab?: string | null
   /** 모달을 닫은 뒤 카드 건수를 다시 읽는다. */
   onReload: () => void
+  /**
+   * 제목 줄 오른쪽에 붙는 것 — 2026-11-26 부터 「＋ 사후 실적」이 여기 선다(F6).
+   * 카드 전체가 눌리는 자리라 넣는 쪽이 전파를 막는다(components/dashboard/BackfillButton.tsx).
+   */
+  headerRight?: ReactNode
 }
 
-export default function MyQuoteCard({ engineerId, slot, initialTab, onReload }: MyQuoteCardProps) {
+export default function MyQuoteCard({ engineerId, slot, initialTab, onReload, headerRight }: MyQuoteCardProps) {
   // 열린 모달이 보고 있는 상태 탭. null 이면 닫혀 있다.
   // 주소로 들어온 값은 **처음 상태**로 넣는다(effect 로 열면 화면이 한 번 깜빡인다).
   const [openTab, setOpenTab] = useState<string | null>(initialTab ?? null)
@@ -75,6 +80,7 @@ export default function MyQuoteCard({ engineerId, slot, initialTab, onReload }: 
         loading={slot.loading}
         error={slot.error}
         errorMessage={slot.message}
+        headerRight={headerRight}
       >
         {/* 활동 기록 카드와 같은 틀 — 점 · 이름 · 건수 뱃지 · 바닥 합계.
             매출완료는 세지 않는다(끝난 건이라 쌓이기만 한다. lib/homeCards.ts 참조).

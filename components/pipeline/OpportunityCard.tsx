@@ -15,6 +15,7 @@
 // 담당자·마감이 잘렸다. 대신 그 줄에 minHeight 를 줘, 호버로 단추가 나타나도 카드가 들썩이지
 // 않는다. hover 를 지원하지 않는 기기에서는 그 미디어 쿼리가 걸리지 않아 늘 보인다.
 
+import TaskAddButton from '@/components/task/TaskAddButton'
 import { STAGES, compactKRW, dateToMonth } from '@/components/customer/opportunity'
 import type { SalesOpportunity } from '@/components/customer/types'
 import { R } from '@/lib/radius'
@@ -107,6 +108,18 @@ export default function OpportunityCard({ opp, canEdit, onOpen, onChangeStage, o
         )}
 
         <div className="pl-card-action" style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, marginLeft: 'auto' }}>
+          {/* 「＋ 할 일」 (2026-11-26, F1·K4) — 「목요일에 전화」 같은 약속을 이 카드에서 바로
+              담는다. 창은 홈과 **같은 창**이고 이 건이 박혀 열린다. 끌기 센서가 조작을
+              끌기로 오해하지 않게 pointerdown 을 여기서 끊는다(단계 select 와 같은 이유). */}
+          <span onPointerDown={e => e.stopPropagation()} style={{ display: 'inline-flex' }}>
+            <TaskAddButton
+              preset={{ type: 'forecast', id: opp.opportunity_id, label: `${company} » ${opp.title}` }}
+              kind="forecast"
+              label="＋ 할 일"
+              style={{ height: 'auto', padding: '1px 6px', border: 'none', background: 'none' }}
+            />
+          </span>
+
           {onWriteQuote && (
             <button
               onPointerDown={e => e.stopPropagation()}

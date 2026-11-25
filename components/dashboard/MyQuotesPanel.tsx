@@ -38,6 +38,7 @@ import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import Popover from '@/components/common/Popover'
 import QuoteRowIcons from '@/components/quote/QuoteRowIcons'
 import ForecastLink from '@/components/quote/ForecastLink'
+import TaskAddButton from '@/components/task/TaskAddButton'
 import DeliveryDevices from '@/components/quote/DeliveryDevices'
 import { draftsBlocked, draftsFromItems, needsDeliveryDevices, nextMonthKey, type DeliveryDraft } from '@/lib/deliveryPending'
 import { openRepairDoc } from '@/lib/repairDocFlow'
@@ -934,6 +935,14 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                           opportunityId={q.opportunity_id ?? null}
                           title={`${q.quote_number} · ${q.company_name}`}
                           onChanged={loadData}
+                        />
+                        {/* 「＋ 할 일」 (2026-11-26, F1) — 이 앱에는 견적 **상세 화면**이 따로
+                            없다. 한 건을 들여다보는 자리가 이 줄이라 여기에 둔다(「재견적 회신」
+                            같은 약속을 그 자리에서 담는다). 창은 홈과 같은 창이다. */}
+                        <TaskAddButton
+                          preset={{ type: 'quote', id: q.quote_id, label: `${q.quote_number} · ${q.company_name}` }}
+                          kind="quote_expiry"
+                          label="＋ 할 일"
                         />
                         {q.purchase_order_at && (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>

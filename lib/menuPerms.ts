@@ -147,7 +147,12 @@ export const MENU_PERMS: MenuPerm[] = [
 
   // ── 대시보드 ──
   { key: 'repair_dashboard', label: '20 대시보드', group: '대시보드', path: '/repair/dashboard', icon: 'grid', order: 10, data: ['customers'] },
-  { key: 'dashboard_80', label: '80 대시보드', group: '대시보드', path: '/dashboard/80', icon: 'gauge', order: 20, data: ['customers', 'quote'] },
+  // 80 대시보드 — **2026-11-26 숨김**(지시 F5). 홈이 「내 오늘」로 바뀌며 여기서 보던
+  // 만료 임박 견적·멈춘 딜·활동을 홈이 **내 기준으로** 보여 준다. /dashboard/80 은 홈으로
+  // 보낸다(app/dashboard/80/page.tsx — 화면 코드는 Dashboard80Body 로 그대로 남아 있다).
+  // 키는 **지우지 않는다** — 홀딩 현황(/holdings)의 판정이 이 키를 쓰고(PARENT_MENU),
+  // team_permissions 에 저장된 행도 이 값이다. 20 대시보드는 그대로다.
+  { key: 'dashboard_80', label: '80 대시보드', group: '대시보드', path: '/dashboard/80', icon: 'gauge', order: 20, data: ['customers', 'quote'], hidden: true },
   { key: 'activity', label: '활동 현황', group: '대시보드', path: '/activity', icon: 'activity', order: 30, data: ['customers'] },
 
   // ── 고객 ──
@@ -301,10 +306,20 @@ export function deriveTeamColumns(menus: Set<string>): Record<string, boolean> {
 }
 
 /**
- * 팀별로 켤 수 있는 메뉴 — 전원 공개 항목과 **숨긴 메뉴**는 체크 대상이 아니다.
- * (permKey 를 따르는 메뉴도 빠진다 — 자기 키로 판정하지 않으므로 켜고 끌 것이 없다.)
+ * 팀별로 켤 수 있는 메뉴 — 전원 공개 항목과 **permKey 를 따르는 메뉴**는 체크 대상이 아니다
+ * (자기 키로 판정하지 않으므로 켜고 끌 것이 없다).
+ *
+ * 2026-11-26 — 전에는 `hidden` 도 함께 뺐다. 그러면 **숨긴 메뉴의 권한 행이 사라진다** —
+ * 팀 관리 화면의 저장은 체크된 키만 다시 넣으므로, 목록에 없는 키는 그 팀을 한 번 저장하는
+ * 순간 조용히 빠진다. 80 대시보드를 내릴 때(F5) 그 키로 판정하는 화면이 **홀딩 현황**
+ * (/holdings — PARENT_MENU)이라, 함께 빼면 아무도 들어가지 못하게 된다.
+ *
+ * 그래서 두 깃발을 따로 둔다.
+ *   hidden  — **사이드바에 내지 않는다**(경로로 들어가는 길과 권한은 그대로다).
+ *   permKey — 권한을 **다른 키로** 판정한다(그래서 자기 줄이 체크 목록에 없다).
+ * 재고(hidden + permKey purchase)는 permKey 때문에 여전히 빠진다.
  */
-export const CHECKABLE_MENUS: MenuPerm[] = MENU_PERMS.filter(m => !m.public && !m.permKey && !m.hidden)
+export const CHECKABLE_MENUS: MenuPerm[] = MENU_PERMS.filter(m => !m.public && !m.permKey)
 
 /**
  * 체크 대상이 있는 묶음만, 묶음 순서대로. 팀 관리 화면이 이 순서로 그린다.

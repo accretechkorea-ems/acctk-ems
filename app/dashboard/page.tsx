@@ -23,9 +23,16 @@ import ActivityCard from '@/components/activity/ActivityCard'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
 import DashCard from '@/components/dashboard/DashCard'
 import MySnippetCard from '@/components/dashboard/MySnippetCard'
-import { ApprovalCard, ForecastCard, MyStatCard, NotificationCard } from '@/components/dashboard/HomeCards'
+import { MyStatCard } from '@/components/dashboard/HomeCards'
 import MyQuoteCard from '@/components/dashboard/MyQuoteCard'
+import BackfillButton from '@/components/dashboard/BackfillButton'
+import { CalibrationCard, StaleDealsCard, TaskListCard, TodayTiles, UnassignedLeadsCard } from '@/components/dashboard/TodayCards'
+import TaskAddModal from '@/components/task/TaskAddModal'
 import { useDashboardCards } from '@/hooks/dashboard/useDashboardCards'
+import { useToday } from '@/hooks/dashboard/useToday'
+import { useApprovalInbox } from '@/lib/appData/approvalInbox'
+import { isSuperAdmin } from '@/lib/permissions'
+import { buildTaskList, calibrationSoon, staleDeals, tileCounts, type TaskItem } from '@/lib/tasks'
 import { nowKSTParts } from '@/lib/date'
 import { countedVisitEnd } from '@/lib/serviceVisit'
 import { R } from '@/lib/radius'
@@ -71,6 +78,46 @@ function DashboardPageInner() {
   // 회계연도는 4월 시작 — 실적 현황·포캐스트와 같은 규칙이다.
   const fiscalYear = nowD.m >= 4 ? nowD.y : nowD.y - 1
   const cards = useDashboardCards(engineerId, fiscalYear)
+
+  // ── 내 오늘 (2026-11-26, 시안 Home2) ──────────────────────────────────────
+  // 타일과 목록은 **같은 줄**을 센다(lib/tasks.ts) — 그래서 둘이 어긋나지 않는다.
+  // 미배정 리드는 배정하는 사람에게만 뜻이 있다(지시: superadmin).
+  const seeUnassignedLeads = isSuperAdmin(me)
+  const today = useToday(engineerId, { seeUnassignedLeads })
+  // 결재 미결함은 사이드바 배지와 **같은 스토어**다(조회가 한 벌로 돈다).
+  const inbox = useApprovalInbox(engineerId)
+  const [taskOpen, setTaskOpen] = useState(false)
+
+  const taskItems = buildTaskList(today.tasks.data, {
+    today: today.today,
+    quotes: today.quotes.data,
+    leads: today.leads.data,
+    approvals: inbox.docs.map(d => ({ doc_id: d.document_id, title: d.title })),
+    devices: today.pendingDevices.data,
+    lost: today.lost.data,
+  })
+  const stale = staleDeals(today.stale.data, today.today)
+  const calibration = calibrationSoon(today.calibration.data, today.today)
+  const tiles = tileCounts(taskItems, today.today, {
+    stale: stale.length,
+    lead: today.leads.data.length,
+    calibration: calibration.length,
+    approval: inbox.count,
+  })
+
+  /** 할 일 체크 — 끝낸 것으로 찍고 목록을 다시 읽는다(지우지 않는다). */
+  const finishTask = async (it: TaskItem) => {
+    if (!it.taskId) return
+    try {
+      await fetch('/api/task', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'done', task_id: it.taskId, done: true }),
+      })
+    } catch (e) {
+      console.error('[today] 할 일 완료 실패', e)
+    }
+    void today.reloadTasks()
+  }
 
   // 본인 활동 건수 집계 — 활동 현황 화면과 같은 규칙이다.
   // 서비스는 참여자 표(service_engineers)를 거쳐 세고, 영업 활동은 engineer_id 로 바로 걸러진다.
@@ -156,6 +203,16 @@ function DashboardPageInner() {
            길어지는 본문은 카드가 제 안에서 감추거나 스크롤한다. */
         .home-grid > .home-cell { min-width: 0; min-height: 0; display: flex; }
         .home-grid > .home-cell > * { flex: 1; min-width: 0; }
+        /* 「할 일」은 **두 칸**을 쓴다(지시 F3) — 한 줄짜리 글이 길어서 한 칸에서는 거의 잘린다.
+           1열로 접히면 한 칸이다(span 2 를 그대로 두면 격자가 비뚤어진다). */
+        .home-grid > .home-cell.wide { grid-column: span 2; }
+        @media (max-width: 768px) { .home-grid > .home-cell.wide { grid-column: span 1; } }
+        /* 타일 여섯 — 넓은 화면은 한 줄, 좁아지면 3열 → 2열이다. */
+        .today-tiles {
+          display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-top: 14px;
+        }
+        @media (max-width: 1280px) { .today-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        @media (max-width: 480px)  { .today-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
       `}</style>
       <div style={{ maxWidth: 1600, margin: '0 auto' }}>
         {/* 인사말 + 오늘 날짜 (한 줄) */}
@@ -166,9 +223,24 @@ function DashboardPageInner() {
           <span style={{ fontSize: 13, fontWeight: 600, color: '#4b5563' }}>{todayLabel}</span>
         </div>
 
+        {/* 타일 여섯 — 「지금 무엇이 밀려 있나」. 0 이어도 자리를 지킨다(없는 것과
+            못 읽은 것을 같게 보이지 않게). 누르면 그 목록으로 간다. */}
+        <TodayTiles counts={tiles} go={where => router.push(where)} />
+
         <div className="home-grid">
-          {/* 1행 — 내 실적 · 내 견적 · 활동 기록 · 결재 대기
-              먼저 보는 줄에 「내 성적」과 「내 차례」를 둔다. 포캐스트·알림은 둘째 줄이다. */}
+          {/* 1행 — 할 일(두 칸) · 내 실적 · 내 견적
+              아침에 먼저 읽어야 하는 것이 「오늘 무엇을 하나」다. 성적은 그 옆이다. */}
+          <div className="home-cell wide">
+            <TaskListCard
+              items={taskItems}
+              today={today.today}
+              loading={today.tasks.loading}
+              note={today.schemaNote}
+              onAdd={() => setTaskOpen(true)}
+              onToggle={it => { void finishTask(it) }}
+            />
+          </div>
+
           {/* 내 실적 — **집계 대상자에게만** 보여 준다. 비대상(임원·영업관리 등)에게는
               목표가 없어 0만 찍히므로, 칸을 비워 둔다(격자 정렬은 유지). */}
           <div className="home-cell">
@@ -194,10 +266,15 @@ function DashboardPageInner() {
                 slot={cards.quotes}
                 initialTab={quoteTab}
                 onReload={() => { void cards.reloadQuotes() }}
+                // 「＋ 사후 실적」은 2026-11-26 에 실적 현황에서 여기로 왔다(F6).
+                // 창은 같은 창이고, 슈퍼관리자에게만 선다(단추가 스스로 판정하지 않는다 —
+                // 라우트가 막지만 보이지 않는 단추를 두지 않는다).
+                headerRight={isSuperAdmin(me) ? <BackfillButton onSaved={() => { void cards.reloadQuotes() }} /> : undefined}
               />
             )}
           </div>
 
+          {/* 2행 — 활동 기록 · 멈춘 딜 · 교정·점검 예정 · 미배정 리드 */}
           <div className="home-cell">
             {showActivity && me && actCounts ? (
               <ActivityCard
@@ -226,35 +303,45 @@ function DashboardPageInner() {
             ) : null}
           </div>
 
-          {/* 결재 대기 — **0 건이어도 자리를 지킨다.** 예전에는 내 차례가 없으면 카드를
-              아예 내지 않아, 결재함이 깨진 것과 할 일이 없는 것이 똑같이 보였다. */}
+          {/* 멈춘 딜 — 14일 넘게 활동이 없는 내 포캐스트. 누르면 포캐스트 화면으로. */}
           <div className="home-cell">
-            <ApprovalCard engineerId={engineerId} onOpenAll={() => router.push('/approval')} />
+            <StaleDealsCard rows={stale} onOpen={() => router.push('/pipeline')} />
           </div>
 
-          {/* 2행 — 포캐스트 · 알림 · (빈 자리 둘) */}
+          {/* 교정·점검 예정 — devices.next_calibration_date 30일(db/devices_delivery_20261126.sql).
+              칸이 아직 없으면 0 으로 남는다(조회가 42703 을 조용히 받는다). */}
           <div className="home-cell">
-            <ForecastCard slot={cards.opportunities} onOpen={() => router.push('/pipeline')} />
+            <CalibrationCard rows={calibration} today={today.today} />
           </div>
 
+          {/* 미배정 리드 — 배정하는 사람(superadmin)에게만 자료를 읽어 준다.
+              아닌 사람에게는 칸을 비워 둔다(격자 정렬은 유지). */}
           <div className="home-cell">
-            <NotificationCard engineerId={engineerId} onOpenAll={() => router.push('/notifications')} />
+            {seeUnassignedLeads && (
+              <UnassignedLeadsCard rows={today.leads.data} onOpen={() => router.push('/leads')} />
+            )}
           </div>
 
           {/* 내 문구 — 격자의 **마지막 칸**이다(폰에서는 맨 아래, 2026-11-25).
-              「전체 관리」는 화면을 옮기지 않고 내 정보의 그 탭을 창 안에 그대로 띄운다. */}
+              「전체 관리」는 화면을 옮기지 않고 내 정보의 그 탭을 창 안에 그대로 띄운다.
+              ⚠ 포캐스트·알림·결재 대기 카드는 2026-11-26 에 **뺐다**(지시 F4, 시안 Home2) —
+                포캐스트는 칸반으로, 알림은 상단 종으로, 결재는 타일과 할 일 줄로 간다.
+                카드 부품은 그대로 남아 있다(components/dashboard/HomeCards.tsx). */}
           <div className="home-cell">
             {me && <MySnippetCard me={{ engineer_id: me.engineer_id, permission_level: me.permission_level }} />}
           </div>
-
-          {/* 빈 자리 하나 — 카드 없이 칸만 둔다(격자 정렬). */}
-          <div className="home-cell" />
         </div>
       </div>
 
       {/* 활동 상세 — 활동 현황(/activity)에서 카드를 눌렀을 때 뜨는 **그 모달 그대로**다
           (components/activity/ActivityDetailModal.tsx — 본문은 ActivityDetail). 다른 점은
           누구의 것을 보느냐뿐이다: 여기는 늘 본인(me)이고, 기간은 카드에 보이는 달이다. */}
+      {/* 「＋ 할 일」 — 자리마다 같은 창이다(components/task/TaskAddModal.tsx).
+          홈에서는 연결 대상을 고를 수 있고, 포캐스트 카드·견적 상세에서는 그 건이 박혀 있다. */}
+      {taskOpen && (
+        <TaskAddModal onClose={() => setTaskOpen(false)} onSaved={() => { void today.reloadTasks() }} />
+      )}
+
       {detailOpen && me && (
         <ActivityDetailModal
           engineer={me}

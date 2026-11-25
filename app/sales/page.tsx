@@ -21,7 +21,7 @@ import {
 } from '@/lib/salesStats'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { getViewScope, isSuperAdmin, type TeamPerm } from '@/lib/permissions'
+import { getViewScope, type TeamPerm } from '@/lib/permissions'
 import { inSalesStats } from '@/lib/salesScope'
 import {
   ChartLegend, ChartPanel, SummaryBoxes, axisMaxOf,
@@ -37,12 +37,11 @@ import { canSubmitApproval, loadQuoteApprovalDocIds, fetchQuoteGates, gateFor, d
 import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice } from '@/lib/approval/quoteApprovalKeys'
 import { openQuotePdf } from '@/lib/openQuotePdf'
 import { matchesCompany } from '@/lib/companySearch'
-import { BACKFILL_BADGE, isBackfilled, type BackfillForm } from '@/lib/quoteBackfill'
+import { BACKFILL_BADGE, isBackfilled } from '@/lib/quoteBackfill'
 import QuoteReviveModal from '@/components/quote/QuoteReviveModal'
 import {
   DONE_MESSAGE as REVIVE_DONE, REVIVE_LABEL, canReviveQuote, isRevived, reviveBadge,
 } from '@/lib/quoteRevive'
-import BackfillModal from '@/components/sales/BackfillModal'
 import { approvalDocPath, type LineInput } from '@/lib/approval/types'
 import {
   isAutoFailed, REVERT_NOTICE, AUTO_FAIL_NOTICE,
@@ -1393,37 +1392,6 @@ export default function SalesPage() {
   const [chartEngineer, setChartEngineer] = useState<Engineer | null>(null)
   const [showChart, setShowChart] = useState(false)
   const [currentEngineer, setCurrentEngineer] = useState<Engineer | null>(null)
-  const toast = useToast()
-  /** 사후 실적 입력 창 — 슈퍼관리자만 연다(라우트도 같은 문턱이다). */
-  const [backfillOpen, setBackfillOpen] = useState(false)
-  const [backfillBusy, setBackfillBusy] = useState(false)
-
-  /**
-   * 사후 실적 담기 — PDF 가 함께 가므로 FormData 다.
-   * 담긴 뒤에는 목록을 다시 읽는다. 그래야 뱃지와 숫자가 바로 맞는다.
-   */
-  const saveBackfill = async (form: BackfillForm, pdf: File) => {
-    setBackfillBusy(true)
-    try {
-      const fd = new FormData()
-      fd.append('form', JSON.stringify(form))
-      fd.append('pdf', pdf)
-      const res = await fetch('/api/quote-backfill', { method: 'POST', body: fd })
-      const json = await res.json().catch(() => null)
-      if (!res.ok) { toast.error((json?.error as string) ?? `담지 못했습니다 (${res.status})`); return }
-      setBackfillOpen(false)
-      await fetchAll()
-      // PDF 만 실패했을 수 있다 — 그때도 줄은 담겼다(라우트가 그렇게 알려 준다).
-      if (json?.warning) toast.error(String(json.warning))
-      else toast.success(`${json?.quote_number ?? '실적'} 을 담았습니다`)
-    } catch (e) {
-      console.error('[sales] 사후 실적 담기 실패', e)
-      toast.error('네트워크 오류로 담지 못했습니다')
-    } finally {
-      setBackfillBusy(false)
-    }
-  }
-
   const fetchAll = async () => {
     setLoading(true)
     // 자동 실주는 Vercel Cron(하루 한 번, KST 새벽 3시)이 돌린다. 이 호출은 그 보조다 —
@@ -1466,6 +1434,11 @@ export default function SalesPage() {
   // fetchAll 첫 줄의 setLoading(true) 때문에 「효과 안에서 동기 setState」 경고가 뜬다.
   // 여기서는 의도한 동작이다 — 첫 그림에서 곧바로 「불러오는 중...」으로 바꿔야 하고,
   // 이어지는 렌더는 그 한 번뿐이다(뒤는 전부 await 뒤라 비동기다).
+  //
+  // 2026-11-26 — 전에는 사후 실적 담기(saveBackfill)도 fetchAll 을 불러서 검사기가 이 경고를
+  // 내지 않았다. 그 단추가 홈으로 옮겨가며(F6) 부르는 곳이 이 효과 하나로 줄자 비로소 떴다.
+  // **코드는 그대로다** — 그래서 끄고 이유를 적어 둔다(활동 현황·결재 상세와 같은 방식).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchAll() }, [])
 
   // 팀 필터 목록 — 실적 집계 대상만(teams.in_sales_stats · engineers.in_sales_stats).
@@ -1624,14 +1597,9 @@ const visibleEngineers = sortedEngineers.filter(e => {
               <span style={{ fontSize: 11, fontWeight: 700, color: '#b91c1c', background: '#fef2f2', padding: '3px 10px', borderRadius: R.pill, border: '1px solid #fecaca' }}>{remainingLabel}</span>
             )}
             <div style={{ flex: 1 }} />
-            {/* 사후 실적 입력 — EMS 밖에서 끝난 건을 담는다. 남의 실적을 만드는 일이라
-                슈퍼관리자에게만 버튼이 선다(라우트도 같은 문턱이다, 2026-11-23). */}
-            {isSuperAdmin(currentEngineer) && (
-              <button type="button" onClick={() => setBackfillOpen(true)}
-                style={{ padding: '6px 12px', borderRadius: R.control, border: `1px solid ${BLUE}`, cursor: 'pointer', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', background: '#fff', color: BLUE, flexShrink: 0 }}>
-                + 사후 실적
-              </button>
-            )}
+            {/* 「＋ 사후 실적」은 2026-11-26 에 **홈 「내 견적」 카드 머리로 옮겼다**(지시 F6).
+                이 화면은 모아 보는 자리고, 그 일은 내 견적을 손보는 일이다. 창·검사·라우트는
+                그대로다(components/dashboard/BackfillButton.tsx → components/sales/BackfillModal.tsx). */}
             <div style={{ width: 1, height: 20, background: BORDER }} />
             <span style={{ fontSize: 11, color: MUTED, fontWeight: 600, letterSpacing: '0.2px' }}>팀</span>
             <SegmentedControl
@@ -1764,17 +1732,6 @@ const visibleEngineers = sortedEngineers.filter(e => {
         <EngineerChartModal engineer={chartEngineer} quotes={quotes} targets={targets} fy={fy} onClose={() => setChartEngineer(null)} />
       )}
 
-      {/* 사후 실적 입력 — 담은 뒤에는 목록을 다시 읽어 뱃지가 바로 보이게 한다. */}
-      {backfillOpen && (
-        <BackfillModal
-          engineers={engineers
-            .filter(e => isActiveInPeriod(e.resigned_date, todayKST()))
-            .map(e => ({ engineer_id: e.engineer_id, name: e.name, initials: e.initials ?? null }))}
-          busy={backfillBusy}
-          onClose={() => setBackfillOpen(false)}
-          onSave={(form, pdf) => void saveBackfill(form, pdf)}
-        />
-      )}
     </div>
   )
 }

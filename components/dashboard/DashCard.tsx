@@ -28,10 +28,15 @@ export type DashCardProps = {
   /** 실패한 이유 한 마디. 콘솔만 보고 원인을 찾게 두지 않는다. */
   errorMessage?: string
   loading?: boolean
+  /**
+   * 제목 줄 **오른쪽**에 붙는 것 — 작은 단추 하나 정도다(2026-11-26: 「＋ 사후 실적」).
+   * 카드 전체가 눌리는 자리이므로, 넣는 쪽이 전파를 막는다(stopPropagation).
+   */
+  headerRight?: ReactNode
   children: ReactNode
 }
 
-export default function DashCard({ title, onClick, error, errorMessage, loading, children }: DashCardProps) {
+export default function DashCard({ title, onClick, error, errorMessage, loading, headerRight, children }: DashCardProps) {
   return (
     <section
       onClick={onClick}
@@ -56,6 +61,7 @@ export default function DashCard({ title, onClick, error, errorMessage, loading,
       <div style={CARD_HEAD_STYLE}>
         <span style={{ fontSize: 14, fontWeight: 700, color: TEXT }}>{title}</span>
         <span style={{ flex: 1 }} />
+        {headerRight}
       </div>
       {/* 본문 — 세로 flex 다. 목록이 남는 높이를 갖고 합계가 바닥에 남는다(CountList fitHeight). */}
       <div style={CARD_BODY_STYLE}>

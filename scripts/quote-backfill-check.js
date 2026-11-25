@@ -53,10 +53,18 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8')
 const ROUTE = read('app/api/quote-backfill/route.ts')
 const MODAL = read('components/sales/BackfillModal.tsx')
 const PAGE = read('app/sales/page.tsx')
+// 2026-11-26 — 단추가 **홈 「내 견적」 카드 머리로 옮겨갔다**(지시 F6). 창·검사·라우트는
+// 그대로고, 누르는 자리만 바뀌었다. 뱃지·목록은 여전히 실적 현황(PAGE)이 보여 준다.
+const HOME = read('app/dashboard/page.tsx')
+const BTN = read('components/dashboard/BackfillButton.tsx')
 
 console.log('\n── ① 문턱 ──')
 ok('라우트는 슈퍼관리자만', /loadCaller\(\{ kind: 'superadmin' \}, \{ tag: TAG, method: 'POST' \}\)/.test(ROUTE))
-ok('화면도 슈퍼관리자에게만 버튼을 낸다', /isSuperAdmin\(currentEngineer\) && \([\s\S]{0,600}사후 실적/.test(PAGE))
+ok('화면도 슈퍼관리자에게만 버튼을 낸다', /headerRight=\{isSuperAdmin\(me\) \? <BackfillButton/.test(HOME))
+ok('그 자리는 홈 「내 견적」 카드 머리다', /<MyQuoteCard[\s\S]{0,900}<BackfillButton/.test(HOME))
+ok('실적 현황에는 더 이상 없다', !/\+ 사후 실적/.test(PAGE) && !/<BackfillModal/.test(PAGE))
+ok('창은 **같은 창**이다', /from '@\/components\/sales\/BackfillModal'/.test(BTN))
+ok('재직자는 누를 때 비로소 읽는다', /누를 때 비로소 재직자를 읽는다/.test(BTN))
 ok('적은 사람은 세션에서 넣는다(화면이 보낸 값을 믿지 않는다)',
   /backfilled_by: caller\.engineer_id/.test(ROUTE) && !/backfilled_by: form\./.test(ROUTE))
 ok('담당자는 화면이 고른 사람이다', /engineer_id: owner\.engineer_id/.test(ROUTE))

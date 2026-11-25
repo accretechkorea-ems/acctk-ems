@@ -34,6 +34,7 @@ import {
   LEAD_STATUS_NEW, LEAD_STATUS_ACTIVE, LEAD_STATUS_CONVERTED, LEAD_STATUS_SKIPPED, LEAD_STATUS_BLOCKED,
   COMPETITOR_OTHER, MAX_LEN, SKIP_REASON_MIN, isLeadClosed,
 } from '@/lib/leadOptions'
+import TaskAddButton from '@/components/task/TaskAddButton'
 import { R } from '@/lib/radius'
 
 const BLUE = '#234ea2'
@@ -938,8 +939,18 @@ function LeadsPageInner() {
                           </span>
                         </td>
                         <td style={td}>
-                          <span style={{ padding: '3px 10px', borderRadius: R.pill, fontSize: 11, fontWeight: 700, background: sc.bg, color: sc.text }}>
-                            {lead.status}
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ padding: '3px 10px', borderRadius: R.pill, fontSize: 11, fontWeight: 700, background: sc.bg, color: sc.text }}>
+                              {lead.status}
+                            </span>
+                            {/* 「＋ 할 일」 (2026-11-26, F1) — 「첫 연락」 같은 약속을 이 줄에서 담는다.
+                                창은 홈과 **같은 창**이고 이 리드가 박혀 열린다. 줄을 펼치는 클릭과
+                                섞이지 않게 단추가 전파를 끊는다. */}
+                            <TaskAddButton
+                              preset={{ type: 'lead', id: lead.lead_id, label: `${lead.lead_no ?? `리드 ${lead.lead_id}`}${lead.customer_company ? ` · ${lead.customer_company}` : ''}` }}
+                              kind="lead"
+                              label="＋ 할 일"
+                            />
                           </span>
                         </td>
                       </tr>

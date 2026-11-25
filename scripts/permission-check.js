@@ -216,11 +216,18 @@ eq('모든 메뉴의 묶음이 MENU_GROUPS 에 있다',
   M.MENU_PERMS.filter(m => !M.MENU_GROUPS.some(g => g.group === m.group)).map(m => m.key), [])
 eq('public 과 menuPublic 을 함께 켠 메뉴는 없다',
   M.MENU_PERMS.filter(m => m.public && m.menuPublic).map(m => m.key), [])
-eq('숨긴 메뉴에는 permKey 가 있다(권한 행이 사라져도 막히지 않게)',
-  M.MENU_PERMS.filter(m => m.hidden && !m.permKey).map(m => m.key), [])
+// 2026-11-26 — 전에는 「숨긴 메뉴에는 permKey 가 있다」였다. 숨기면 체크 목록에서도
+// 빠졌기 때문인데(그러면 그 팀을 한 번 저장하는 순간 권한 행이 조용히 사라진다),
+// 지금은 두 깃발이 따로다 — hidden 은 **사이드바에만** 걸린다(lib/menuPerms.ts).
+// 그래서 묻는 것이 바뀌었다: permKey 가 없는 숨긴 메뉴는 **체크 목록에 남아야 한다.**
+eq('permKey 없이 숨긴 메뉴는 체크 목록에 남는다(권한 행이 사라지지 않게)',
+  M.MENU_PERMS.filter(m => m.hidden && !m.permKey && !M.CHECKABLE_MENUS.some(c => c.key === m.key)).map(m => m.key), [])
+eq('숨긴 메뉴는 사이드바에 서지 않는다 — 슈퍼관리자에게도',
+  M.MENU_PERMS.filter(m => m.hidden)
+    .filter(m => M.visibleMenus(m.group, SUPER).some(v => v.key === m.key)).map(m => m.key), [])
 eq('permKey 가 가리키는 키는 등록표에 있다',
   M.MENU_PERMS.filter(m => m.permKey && !M.MENU_BY_KEY[m.permKey]).map(m => m.key), [])
-eq('체크 대상 — 공개·숨김·permKey 를 뺀 것', M.CHECKABLE_MENUS.map(m => m.key),
+eq('체크 대상 — 공개·permKey 를 뺀 것(숨긴 메뉴는 남는다)', M.CHECKABLE_MENUS.map(m => m.key),
   ['approvals', 'repair_dashboard', 'dashboard_80', 'activity', 'customers', 'repair', 'showroom',
     'inquiries', 'leads', 'pipeline', 'quote', 'contact_semi', 'purchase', 'business_cards', 'sales', 'admin'])
 eq('menuPublic(전자결재)은 체크 대상에 남는다 — 「전체 결재 조회」를 잠근다',

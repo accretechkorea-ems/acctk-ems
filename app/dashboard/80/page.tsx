@@ -1,10 +1,16 @@
 'use client'
 
 // 80 대시보드 — 이번 달 성적(띠) · 이번 달 활동 · 영업기회 / 홀딩·만료 임박 견적.
+//
+// ⚠ 2026-11-26 — **메뉴에서 내렸고 이 주소는 홈으로 보낸다**(지시 F5). 홈이 「내 오늘」로
+//   바뀌면서 여기 있던 것(만료 임박 견적·멈춘 딜·활동)을 홈이 내 기준으로 보여 준다.
+//   코드는 **그대로 둔다**(Dashboard80Body) — 전체 기준으로 보는 화면이 다시 필요할 수
+//   있고, 20 대시보드는 그대로다. 되살리려면 아래 기본 내보내기를 Dashboard80Body 로
+//   되돌리고 lib/menuPerms.ts 의 dashboard_80 에서 hidden 을 떼면 된다.
 // 이 화면은 전체 기준이다(본인 것은 개인 페이지에서 본다).
 // 상세·조작은 각 화면에서 하고, 여기서는 보여주고 넘겨주는 역할만 한다.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
@@ -146,7 +152,7 @@ function Delta({ now, before, suffix }: { now: number; before: number; suffix: s
   return <span style={{ fontSize: 11, color: '#6b7280' }}>전월 대비 {sign} {label}</span>
 }
 
-export default function Dashboard80Page() {
+export function Dashboard80Body() {
   const { engineer: me, loading: guardLoading, authorized } = usePageGuard()
   const router = useRouter()
 
@@ -593,4 +599,14 @@ export default function Dashboard80Page() {
       />
     </main>
   )
+}
+
+/**
+ * 이 주소로 들어오면 **홈으로 보낸다**(F5). 메뉴에는 없지만 옛 즐겨찾기·알림이 남아 있어
+ * 404 를 보여 주지 않는다. 위의 Dashboard80Body 는 그대로 남아 있다.
+ */
+export default function Dashboard80Page() {
+  const router = useRouter()
+  useEffect(() => { router.replace('/dashboard') }, [router])
+  return <main style={{ background: PAGE_BG, minHeight: '100vh' }} />
 }

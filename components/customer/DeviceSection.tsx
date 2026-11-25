@@ -10,6 +10,7 @@ import { todayKST } from '@/lib/date'
 import { useDeviceImageUrls, type StorageImageLookup } from '@/hooks/useStorageImageUrls'
 import { R } from '@/lib/radius'
 import { SUB } from '@/components/common/ui'
+import TaskAddButton from '@/components/task/TaskAddButton'
 
 /** 카드 사진을 받을 폭(px) — 장비 카드 폭에 맞춘다. */
 const CARD_IMG_W = 240
@@ -220,9 +221,17 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
       // (지난 레포트를 열어 볼 일이 남아 있다).
       opacity: disposed ? 0.6 : 1,
     }}>
-      {/* 수정 — 사진 위 오른쪽. 사진이 없을 때도 같은 자리다. */}
-      <EditIconButton size={24} label="장비 수정" onClick={onEditDevice}
-        style={{ position: 'absolute', top: 10, right: 10, zIndex: 2 }} />
+      {/* 수정 · 할 일 — 사진 위 오른쪽. 사진이 없을 때도 같은 자리다.
+          「＋ 할 일」은 2026-11-26 에 왔다(F1) — 「랜포트 교체 PC 반입」 같은 약속을 이 장비에
+          걸어 둔다. 창은 홈과 **같은 창**이고 이 장비가 박혀 열린다. */}
+      <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 2, display: 'flex', alignItems: 'center', gap: 5 }}>
+        <TaskAddButton
+          preset={{ type: 'device', id: d.device_id, label: `${companyName ? `${companyName} » ` : ''}${deviceTitle || `장비 ${d.device_id}`}` }}
+          kind="service"
+          label="＋ 할 일"
+        />
+        <EditIconButton size={24} label="장비 수정" onClick={onEditDevice} />
+      </div>
 
       {/*
         사진 — 카드 폭에 4:3.
