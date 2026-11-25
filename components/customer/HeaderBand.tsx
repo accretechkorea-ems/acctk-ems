@@ -22,13 +22,14 @@
  * 폰(≤640)에서는 호버가 없으므로 항상 보인다.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AddIconButton, EditIconButton } from '@/components/common/IconButton'
 import { hasMemo } from '@/components/common/MemoPopover'
 import MemoHoverText from '@/components/common/MemoHoverText'
 import { TOP_CARD_HEIGHT, TOP_CARD_FIXED_MIN_WIDTH } from '@/components/home/SidePanel'
 import { R } from '@/lib/radius'
 import type { Contact } from './types'
+import { DUPE_BADGE, DUPE_BG, DUPE_TEXT, dupeMarks, type DupeMark } from '@/lib/contactDupes'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
@@ -38,6 +39,7 @@ const MUTED = '#6b7280'
 
 /** 담당자 칩 한 줄 높이와 사이 간격. 두 줄까지 보이는 높이를 이 값으로 셈한다. */
 const CHIP_H = 30
+
 const CHIP_GAP = 8
 const TWO_ROWS = CHIP_H * 2 + CHIP_GAP
 
@@ -64,8 +66,9 @@ const MEMO_LINE_FALLBACK = 21
  * 담당자 한 칸 — 「이름 직급 · 부서 전화 ✎」. 부서가 없으면 직급만 적는다.
  * 이메일은 넣지 않는다(칩이 한 줄을 넘는다) — 도움말과 수정 창에 그대로 있다.
  */
-function ContactChip({ c, onEdit }: { c: Contact; onEdit: () => void }) {
-  const tip = [c.name, c.position, c.department, c.phone, c.email].filter(Boolean).join(' · ')
+function ContactChip({ c, onEdit, dupe }: { c: Contact; onEdit: () => void; dupe?: DupeMark }) {
+  // 중복 의심이면 **그 안내를 먼저** 띄운다 — 칩은 호버 글이 하나뿐이다.
+  const tip = dupe ? dupe.hint : [c.name, c.position, c.department, c.phone, c.email].filter(Boolean).join(' · ')
   const role = [c.position, c.department].map(v => (v ?? '').trim()).filter(Boolean).join(' · ')
   return (
     <span className="chip-c" title={tip}
@@ -75,6 +78,15 @@ function ContactChip({ c, onEdit }: { c: Contact; onEdit: () => void }) {
         fontSize: 13, whiteSpace: 'nowrap',
       }}>
       <b style={{ fontWeight: 600, color: TEXT }}>{c.name?.trim() || '이름 없음'}</b>
+      {/* 「중복?」 — 같은 휴대폰·이메일을 쓰는 줄이 또 있다(2026-11-26, 지시 N). 묻기만 한다. */}
+      {dupe && (
+        <span style={{
+          flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: R.tag,
+          background: DUPE_BG, color: DUPE_TEXT,
+        }}>
+          {DUPE_BADGE}
+        </span>
+      )}
       {role && <span style={{ fontSize: 12, color: SUB }}>{role}</span>}
       {/* 전화·이메일 — PC 는 이 줄에 이어 붙고, **폰에서는 아랫줄**이 된다(.chip-c 규칙).
           이메일은 PC 에서 칩을 한 줄 넘기므로 폰에서만 보여 준다(.chip-mail). */}
@@ -129,6 +141,8 @@ export default function HeaderBand({
 }: HeaderBandProps) {
   /** 담당자 칩을 전부 펼쳤는가. 접힌 상태에서는 두 줄까지만 보인다. */
   const [openContacts, setOpenContacts] = useState(false)
+  /** 중복 의심 — 목록에서 한 번 센다(줄마다 세면 n² 번 돈다. lib/contactDupes.ts). */
+  const dupes = useMemo(() => dupeMarks(contacts), [contacts])
   /** 접었을 때 가려지는 칩 수 — 「더보기 +N」 의 N. 0 이면 버튼을 내지 않는다. */
   const [hidden, setHidden] = useState(0)
   /**
@@ -283,7 +297,7 @@ export default function HeaderBand({
             {contacts.length === 0 && <span style={{ fontSize: 12, color: MUTED, lineHeight: `${CHIP_H}px` }}>없음</span>}
             {contacts.map(c => (
               <span key={c.contact_id} data-chip style={{ display: 'inline-flex' }}>
-                <ContactChip c={c} onEdit={() => onEditContact(c)} />
+                <ContactChip c={c} onEdit={() => onEditContact(c)} dupe={dupes.get(c.contact_id)} />
               </span>
             ))}
             {/* 더보기 — 두 줄 밖으로 밀린 칩이 있을 때만. 펼치면 접기로 바뀐다. */}

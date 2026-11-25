@@ -20,7 +20,7 @@
  *   (scripts/site-v8-check.js).
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import BackIconButton from '@/components/common/BackIconButton'
 import { AddIconButton, EditIconButton } from '@/components/common/IconButton'
 import MemoHoverText from '@/components/common/MemoHoverText'
@@ -31,7 +31,9 @@ import { agencyLabelOf } from '@/lib/customerAgency'
 import { R } from '@/lib/radius'
 import { BLUE, BORDER, CARD_BG, MUTED, NEUTRAL_BG, SUB, TEXT } from '@/components/common/ui'
 import { TEXT_LABEL } from '@/lib/textTokens'
+import { DUPE_BADGE, DUPE_BG, DUPE_TEXT, dupeMarks, type DupeMark } from '@/lib/contactDupes'
 import type { Contact, Customer } from './types'
+
 
 /** 열의 폭 — 장비 카드와 같다(그래서 1440 에서 열 + 카드 셋이 딱 선다). */
 export const SITE_COL_W = 340
@@ -94,7 +96,7 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
  *   아랫줄 휴대폰(tel) / 이메일(mailto) — 한 줄에 하나씩이라 손가락·눈이 헷갈리지 않는다.
  * 휴대폰이 없으면 **회사 전화**를 같은 자리에 놓는다(아이콘만 다르다). 이메일이 없으면 「—」.
  */
-function ContactBlock({ c, onEdit }: { c: Contact; onEdit: () => void }) {
+function ContactBlock({ c, onEdit, dupe }: { c: Contact; onEdit: () => void; dupe?: DupeMark }) {
   const [hover, setHover] = useState(false)
   const role = [c.position, c.department].map(v => (v ?? '').trim()).filter(Boolean).join(' · ')
   const mobile = (c.mobile ?? '').trim()
@@ -116,6 +118,20 @@ function ContactBlock({ c, onEdit }: { c: Contact; onEdit: () => void }) {
       }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0, paddingRight: 24 }}>
         <b style={{ fontSize: 13, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap' }}>{c.name?.trim() || '이름 없음'}</b>
+        {/* 「중복?」 — 같은 휴대폰·이메일을 쓰는 줄이 또 있다(2026-11-26, 지시 N).
+            **묻기만 한다** — 합치는 일은 어느 줄의 활동·명함을 어디로 옮기느냐를 정하는
+            일이라 사람이 보고 해야 한다(lib/contactDupes.ts). 호버에 무엇을 할지 적는다. */}
+        {dupe && (
+          <span
+            title={dupe.hint}
+            style={{
+              flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: R.tag,
+              background: DUPE_BG, color: DUPE_TEXT, cursor: 'help',
+            }}
+          >
+            {DUPE_BADGE}
+          </span>
+        )}
         {role && (
           <span style={{ fontSize: 12, color: SUB, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {role}
@@ -172,6 +188,12 @@ export default function SiteInfoColumn({
   customer, companyName, contacts, onBack, onOpenCompany, onEdit, onAddContact, onEditContact,
 }: SiteInfoColumnProps) {
   const [copied, setCopied] = useState(false)
+
+  /**
+   * 중복 의심 — **목록에서 한 번** 센다(줄마다 세면 n² 번 돈다).
+   * 휴대폰·이메일만 본다. 회사 전화는 같은 사무실이면 같은 것이 정상이라 보지 않는다.
+   */
+  const dupes = useMemo(() => dupeMarks(contacts), [contacts])
 
   const title = companyName?.trim() || customer?.company_name || '사업장 정보 없음'
   /** 묶인 회사의 id — 상세 페이지에서 회사 보기로 가는 길이 이 값이다(없으면 단독 업체다). */
@@ -279,7 +301,7 @@ export default function SiteInfoColumn({
         {contacts.length === 0 ? (
           <div style={{ padding: '10px 10px 6px', fontSize: 12, color: MUTED }}>등록된 담당자가 없습니다</div>
         ) : contacts.map(c => (
-          <ContactBlock key={c.contact_id} c={c} onEdit={() => onEditContact(c)} />
+          <ContactBlock key={c.contact_id} c={c} onEdit={() => onEditContact(c)} dupe={dupes.get(c.contact_id)} />
         ))}
       </section>
     </div>
