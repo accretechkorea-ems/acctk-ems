@@ -22,7 +22,9 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
-import { OCR_KEYS, backSideFromJson, fieldsFromJson, parseOcrJson, type OcrKey } from '@/lib/businessCardOcr'
+import {
+  OCR_KEYS, backSideFromJson, fieldsFromJson, parseOcrJson, upsideDownFromJson, type OcrKey,
+} from '@/lib/businessCardOcr'
 
 /** 받는 파일의 한도. */
 export const MAX_BYTES = 10 * 1024 * 1024
@@ -69,7 +71,8 @@ const ASK = [
   '  "email": "이메일",',
   '  "address": "주소",',
   '  "website": "홈페이지",',
-  '  "is_back_side": false',
+  '  "is_back_side": false,',
+  '  "text_upside_down": false',
   '}',
   '',
   '규칙',
@@ -96,13 +99,22 @@ const ASK = [
   '· false: 사람의 연락처가 있는 면. 한 쪽에 앞뒤가 같이 찍혔으면(돌아가 있어도) 둘을 합쳐',
   '  한 장으로 보고 false.',
   '· 빈 면·무늬만 있는 면·광고 스티커는 읽지 않는다 — name 과 company 를 둘 다 null 로 둔다.',
+  '',
+  'text_upside_down — **글자가 거꾸로 놓여** 읽기 어려운가',
+  '· true 는 글자 방향 때문에 못 읽을 때만. 돌려 놓으면 읽히겠다 싶은 면이다.',
+  '· 뒷면이라서·빈 면이라서 못 읽은 것은 **false** 다 — 돌려도 달라지지 않는다.',
+  '· 글자를 읽어 칸을 채웠으면 false.',
+  '',
+  '전화번호의 나라',
+  '· 우리나라 번호(+82)만 0 으로 바꾼다. 다른 나라 번호는 「+81-42-642-1701」처럼 그대로 둔다.',
 ].join('\n')
 
 export type OcrUsage = { input: number; output: number }
 export type ReadFail = 'no_key' | 'no_file' | 'too_big' | 'bad_type' | 'parse' | 'api'
 export type ReadResult =
-  /** `back` 이 참이면 **명함의 뒷면·보조면**이다 — 새 명함으로 담지 않는다. */
-  | { ok: true; fields: Record<OcrKey, string>; back: boolean; usage: OcrUsage }
+  /** `back` 이 참이면 **명함의 뒷면·보조면**이다 — 새 명함으로 담지 않는다.
+   *  `upsideDown` 이 참이면 **글자가 거꾸로** 놓여 읽지 못했다 — 돌려서 다시 읽어 볼 값어치가 있다. */
+  | { ok: true; fields: Record<OcrKey, string>; back: boolean; upsideDown: boolean; usage: OcrUsage }
   | { ok: false; reason: ReadFail; usage: OcrUsage }
 
 const NO_USAGE: OcrUsage = { input: 0, output: 0 }
@@ -143,7 +155,12 @@ export async function readCard(file: unknown, apiKey: string): Promise<ReadResul
       usage.input += res.usage.input_tokens
       usage.output += res.usage.output_tokens
       const json = parseOcrJson(textOf(res))
-      if (json) return { ok: true, fields: fieldsFromJson(json), back: backSideFromJson(json), usage }
+      if (json) {
+        return {
+          ok: true, fields: fieldsFromJson(json),
+          back: backSideFromJson(json), upsideDown: upsideDownFromJson(json), usage,
+        }
+      }
       console.warn('[cards-ocr] JSON 으로 읽지 못했다', { attempt, kind })
     }
     return { ok: false, reason: 'parse', usage }

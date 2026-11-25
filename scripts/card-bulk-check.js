@@ -309,11 +309,52 @@ eq('제외 안내', [B.skippedNotice(3), B.skippedNotice(0)], ['권한 없는 3�
 eq('선택 띠 글자', B.selectionTitle(5), '5건 선택')
 
 console.log('\n── ⑯ 뒤집어 다시 읽기 ──')
-eq('다시 읽어 볼 판정', ['no_person', 'empty', 'dup', 'parse', undefined].map(r => B.worthRetry(r)),
-  [true, true, false, false, false])
+// 2026-11-25 — 조건을 좁혔다. 「사람 이름 없음·빈 면」이면 무조건 돌리던 것을
+// **모델이 거꾸로라고 한 쪽만** 돌리는 것으로 바꿨다(토큰만 두 배로 쓰던 자리다).
+eq('거꾸로라고 한 쪽만 다시 읽는다', [
+  B.worthRetry({ ok: false, reason: 'no_person', upside_down: true }),
+  B.worthRetry({ ok: false, reason: 'empty', upside_down: true }),
+  B.worthRetry({ ok: false, reason: 'no_person' }),
+  B.worthRetry({ ok: false, reason: 'empty', upside_down: false }),
+  B.worthRetry({ ok: true }),
+], [true, true, false, false, false])
+ok('지시문이 text_upside_down 을 받는다', /"text_upside_down": false/.test(OCR))
+ok('뒷면·빈 면이라서 못 읽은 것은 거짓이라고 적었다',
+  /뒷면이라서·빈 면이라서 못 읽은 것은 \*\*false\*\* 다/.test(OCR))
+ok('읽은 값에서 그 깃발을 꺼낸다', /export function upsideDownFromJson/.test(read('lib/businessCardOcr.ts')))
+ok('라우트가 쪽마다 그 깃발을 돌려준다', /upside_down: got\.upsideDown/.test(R))
+ok('화면이 그 쪽만 돌린다', /worthRetry\(l\) \? i : -1/.test(M))
+ok('다시 읽는 요청임을 알린다', /body\.append\('retry', '1'\)/.test(M) && /const isRetry = String\(form\.get\('retry'\) \?\? ''\) === '1'/.test(R))
+ok('다시 읽기에서는 이름+연락처가 없으면 담지 않는다',
+  /if \(isRetry && !hasContact\(row\)\)/.test(R))
+eq('이름 + 연락할 길 하나', [
+  B.hasContact({ name: '홍길동', mobile: '010-1' }),
+  B.hasContact({ name: '홍길동', email: 'a@b.c' }),
+  B.hasContact({ name: '홍길동', phone: '031-1' }),
+  B.hasContact({ name: '홍길동' }),
+  B.hasContact({ mobile: '010-1' }),
+], [true, true, true, false, false])
+eq('돌려 읽은 결과를 받아들일 때', [
+  B.acceptRetry({ ok: true }),
+  B.acceptRetry({ ok: false, reason: 'dup' }),
+  B.acceptRetry({ ok: false, reason: 'merged' }),
+  B.acceptRetry({ ok: false, reason: 'no_person' }),
+  B.acceptRetry({ ok: false, reason: 'empty' }),
+], [true, true, true, false, false])
+ok('화면이 그 판정을 쓴다', /if \(acceptRetry\(now\)\)/.test(M))
+
+console.log('\n── ⑯-2 국제번호 ──')
+const O2 = load(path.join(ROOT, 'lib/businessCardOcr.ts'))
+eq('+82 는 0 으로', O2.normalizePhone('+82-10-1234-5678'), '010-1234-5678')
+eq('82- 도 0 으로', O2.normalizePhone('82-2-6124-6500'), '02-6124-6500')
+eq('+81 은 그대로 둔다', O2.normalizePhone('+81-42-642-1701'), '+81-42-642-1701')
+eq('+ 없이 온 81- 에는 + 를 붙인다', O2.normalizePhone('81-42-642-1701'), '+81-42-642-1701')
+eq('우리 번호는 그대로', O2.normalizePhone('010-7777-0101'), '010-7777-0101')
+eq('대표번호는 나라 번호가 아니다', O2.normalizePhone('1588-1234'), '1588-1234')
+eq('0081 도 +81', O2.normalizePhone('0081-42-642-1701'), '+81-42-642-1701')
+eq('TEL 꼬리표는 턴다', O2.normalizePhone('TEL. 81-42-642-1701'), '+81-42-642-1701')
 ok('화면이 180° 돌린다', /async function flip\(/.test(M) && /setRotation\(degrees\(\(pg\.getRotation\(\)\.angle \+ 180\) % 360\)\)/.test(M))
 ok('사진은 캔버스로 돌린다', /ctx\.rotate\(Math\.PI\)/.test(M))
-ok('다시 읽어 사람이 나오면 그 결과를 쓴다', /if \(now\.ok \|\| now\.reason === 'dup' \|\| now\.reason === 'merged'\)/.test(M))
 ok('센다', /flipped: acc\.flipped \+ 1/.test(M))
 ok('지시문에 직함을 회사명으로 쓰지 말라고 적었다',
   /「코디」·「담당」·「매니저」·「실장」 같은 직함은 \*\*회사명이 아니다\*\*/.test(OCR))

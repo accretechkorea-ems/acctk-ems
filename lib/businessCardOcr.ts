@@ -48,18 +48,37 @@ const clean = (s: string) => s.replace(/[ \t]+/g, ' ').replace(/^[\s·:|/\-—]+
  *   「+82-10-1234-5678」 → 「010-1234-5678」 · 「T. 031 123 4567」 → 「031-123-4567」
  * 숫자가 8개가 안 되면 번호가 아니라고 보고 버린다(빈 글자를 돌려준다).
  */
+/** 맨 앞의 국가번호를 떼어 낸다 — 「82-10-…」·「821012…」 둘 다. */
+function stripCountry(s: string, cc: string): string {
+  const t = s.startsWith(`${cc}-`) ? s.slice(cc.length + 1) : s.slice(cc.length)
+  return t.replace(/^-+/, '')
+}
+
 export function normalizePhone(raw: string): string {
   let s = String(raw ?? '').trim()
   if (!s) return ''
-  // 국가번호 — +82 2 … / 0082-10-… 둘 다 0 으로 바꾼다.
-  s = s.replace(/^\s*(?:\+|00)82[\s.-]*/, '0')
-  // 「0(0)2」처럼 0 이 겹치면 하나로.
-  s = s.replace(/^00+/, '0')
-  // 괄호 안 지역번호 — (031) 123-4567
-  s = s.replace(/[()]/g, '-')
-  // 숫자·하이픈만 남기고(공백·점은 하이픈으로), 하이픈을 정리한다.
-  s = s.replace(/[\s.]+/g, '-').replace(/[^\d-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '')
-  return s.replace(/\D/g, '').length >= 8 ? s : ''
+  // 괄호 안 지역번호·공백·점을 하이픈으로.
+  s = s.replace(/[()]/g, '-').replace(/[\s.]+/g, '-')
+  // 국제전화 접두 00 → + (0082-… · 0081-…)
+  s = s.replace(/^-*\+?00(?=\d)/, '+')
+  const plus = s.trimStart().startsWith('+')
+  // 숫자·하이픈만 남기고 하이픈을 정리한다(+ 는 위에서 기억해 두었다).
+  s = s.replace(/[^\d-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '')
+  if (s.replace(/\D/g, '').length < 8) return ''
+
+  const head = s.split('-')[0]
+
+  // ── 우리나라 — +82 · 82 는 0 으로 ──
+  if (s.startsWith('82') && (plus || head === '82')) {
+    const rest = stripCountry(s, '82').replace(/^0+/, '')
+    return `0${rest}`.replace(/-+/g, '-').replace(/-$/, '')
+  }
+  // ── 그 밖의 나라 — + 를 붙여 **그대로 둔다**(+81-42-642-1701) ──
+  if (plus) return `+${s}`
+  // + 없이 온 국가번호. 앞 토막이 1~3자리이고 0 으로 시작하지 않으면 나라 번호로 본다.
+  // 「1588-1234」·「1544-…」는 앞 토막이 네 자리라 걸리지 않는다(우리 대표번호다).
+  if (/^[1-9]\d{0,2}$/.test(head) && s.includes('-')) return `+${s}`
+  return s
 }
 
 /**
@@ -98,7 +117,19 @@ const EMPTYISH = new Set(['', '-', '–', 'null', 'none', 'n/a', 'na', '없음',
  * 뒷면이 아닌 것을 뒷면으로 보면 **멀쩡한 명함이 사라진다**. 반대쪽 실수가 덜 아프다.
  */
 export function backSideFromJson(json: Record<string, unknown>): boolean {
-  const v = json.is_back_side
+  return boolFromJson(json.is_back_side)
+}
+
+/**
+ * 모델이 「글자가 거꾸로 보인다」고 했나 (2026-11-25).
+ * **이때만** 180° 돌려 다시 읽는다 — 뒷면이나 빈 면은 돌려도 달라지지 않는다.
+ */
+export function upsideDownFromJson(json: Record<string, unknown>): boolean {
+  return boolFromJson(json.text_upside_down)
+}
+
+/** 글자 `'true'` 로 오는 일도 있어 둘 다 받는다. 모르면 거짓. */
+function boolFromJson(v: unknown): boolean {
   if (typeof v === 'boolean') return v
   return String(v ?? '').trim().toLowerCase() === 'true'
 }

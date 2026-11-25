@@ -70,6 +70,8 @@ export type BulkLine =
     index: number; ok: false; reason: BulkReason
     card_id?: number; name?: string | null; merged_into?: number
     usage?: { input: number; output: number }
+    /** 글자가 거꾸로 놓여 못 읽었다 — 화면이 이 쪽만 돌려 다시 보낸다. */
+    upside_down?: boolean
   }
 
 /** 라우트의 응답. `last_card_id` 는 다음 요청이 `prev_card_id` 로 보내 줄 값이다. */
@@ -258,12 +260,35 @@ export function undoQuestion(count: number): string {
 
 // ── 뒤집힌 쪽 ─────────────────────────────────────────────────────────────
 /**
- * 이 판정이면 **한 번 더 읽어 볼 값어치**가 있다.
- * 스캐너에 거꾸로 들어간 명함은 글자가 안 잡혀 사람 이름이 없는 면·빈 면으로 떨어진다.
- * 180° 돌려 다시 보내 본다(화면이 한다).
+ * 이 쪽을 **돌려서 다시 읽어 볼** 값어치가 있나 (2026-11-25에 좁혔다).
+ *
+ * 처음에는 「사람 이름 없음·빈 면」이면 무조건 다시 읽었다. 그런데 그 둘은 대개
+ * **진짜 뒷면이거나 진짜 빈 면**이라, 돌려도 달라지지 않으면서 토큰만 두 배로 썼다.
+ * 이제는 모델이 「글자가 거꾸로 보인다」고 한 쪽만 돌린다(text_upside_down).
  */
-export function worthRetry(reason: BulkReason | undefined): boolean {
-  return reason === 'no_person' || reason === 'empty'
+export function worthRetry(line: { ok: boolean; upside_down?: boolean }): boolean {
+  return !line.ok && line.upside_down === true
+}
+
+/**
+ * 돌려 읽은 결과를 **받아들일까**.
+ *
+ * 받아들이는 것은 담겼거나(ok) 기존 명함과 맞물린(dup·merged) 경우뿐이다.
+ * 「이름 + 연락할 길이 있어야 한다」는 조건은 **라우트가** 본다(값을 들고 있는 쪽이다) —
+ * 다시 읽기(retry)로 온 요청에서 그 조건을 못 넘기면 라우트가 담지 않고 no_person 으로
+ * 돌려주므로, 여기서는 그 결과만 보면 된다.
+ */
+export function acceptRetry(line: { ok: boolean; reason?: BulkReason }): boolean {
+  return line.ok || line.reason === 'dup' || line.reason === 'merged'
+}
+
+/** 담기 전에 — 이 값들이면 사람으로 쳐 준다(이름 + 연락할 길 하나). */
+export function hasContact(row: {
+  name?: string | null; mobile?: string | null; email?: string | null; phone?: string | null
+}): boolean {
+  const name = String(row.name ?? '').trim()
+  if (!name) return false
+  return [row.mobile, row.email, row.phone].some(v => String(v ?? '').trim() !== '')
 }
 
 // ── 누가 지울 수 있나 ─────────────────────────────────────────────────────

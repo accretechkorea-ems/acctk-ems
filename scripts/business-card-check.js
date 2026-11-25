@@ -253,6 +253,25 @@ ok('폰에서는 「선택」 토글로 체크칸이 뜬다',
   /\{picking \? '선택 끝' : '선택'\}/.test(CARDS_PAGE) && /\{picking && \(/.test(CARDS_PAGE))
 ok('체크칸이 줄 열기를 가로채지 않는다', /onClick=\{e => e\.stopPropagation\(\)\}/.test(CARDS_PAGE))
 
+// ── ⑪ 휴대폰이 없으면 회사 전화 — 2026-11-25 ──
+console.log('\n── ⑪ 연락처 한 줄 ──')
+eq('휴대폰이 먼저',
+  C.displayPhone({ mobile: '010-1234-5678', phone: '031-123-4567' }),
+  { number: '010-1234-5678', isCompany: false })
+eq('휴대폰이 없으면 회사 전화',
+  C.displayPhone({ mobile: '', phone: '031-123-4567' }),
+  { number: '031-123-4567', isCompany: true })
+eq('공백만 있어도 없는 것으로',
+  C.displayPhone({ mobile: '   ', phone: '+81-42-642-1701' }),
+  { number: '+81-42-642-1701', isCompany: true })
+eq('둘 다 없으면 null', C.displayPhone({ mobile: null, phone: null }), null)
+eq('표기 글자', C.COMPANY_PHONE_MARK, '회사')
+ok('PC 표가 그 함수를 쓴다', /const got = displayPhone\(c\)/.test(CARDS_PAGE))
+eq('두 자리(표·폰 카드)에서 쓴다', (CARDS_PAGE.match(/displayPhone\(c\)/g) || []).length, 2)
+ok('회사 표기는 안내색', /color: SUB, marginRight: 4/.test(CARDS_PAGE) || /color: SUB, marginRight: 3/.test(CARDS_PAGE))
+ok('엑셀 열은 그대로 둘이다',
+  C.EXCEL_COLUMNS.some(c => c.key === 'mobile') && C.EXCEL_COLUMNS.some(c => c.key === 'phone'))
+
 ok('칸이 없어도 목록이 비지 않는다(짧은 select 로 다시 읽는다)',
   /SELECT_BASE/.test(read('app/cards/page.tsx')) && /error\?\.code === '42703'/.test(read('app/cards/page.tsx')))
 

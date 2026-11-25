@@ -32,7 +32,7 @@ import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 import { R } from '@/lib/radius'
 import {
   BULK_REASON_LABEL, BULK_SQL_FILE, EMPTY_TALLY, MAX_PER_REQUEST, addLines, chunk, costLabel,
-  newBatchId, undoQuestion, worthRetry,
+  acceptRetry, newBatchId, undoQuestion, worthRetry,
   progressLabel, progressPercent, stopQuestion, summaryLabel,
   type BulkLine, type BulkReason, type BulkTally,
 } from '@/lib/businessCardBulk'
@@ -200,11 +200,12 @@ export default function BulkImportModal({ division, onClose, onDone, onShowUnche
     let prevCardId: number | null = null
 
     /** 한 묶음을 보낸다. 한 번 더 보내 본다 — 네트워크가 흔들렸다고 묶음을 버리지 않는다. */
-    const send = async (group: Piece[]): Promise<BulkLine[]> => {
+    const send = async (group: Piece[], retry = false): Promise<BulkLine[]> => {
       for (let attempt = 1; attempt <= 2; attempt++) {
         const body = new FormData()
         body.append('division', division)
         body.append('import_batch_id', batchId.current)
+        if (retry) body.append('retry', '1')
         if (prevCardId) body.append('prev_card_id', String(prevCardId))
         for (const p of group) body.append('files', p.file, p.file.name)
         try {
@@ -238,10 +239,11 @@ export default function BulkImportModal({ division, onClose, onDone, onShowUnche
       let got = await send(group)
 
       /**
-       * 거꾸로 들어간 쪽을 **한 번 더** — 사람 이름 없음·빈 면만 돌려 보낸다.
-       * 다시 읽어 사람이 나오면 그 결과를 쓰고, 아니면 원래 판정을 그대로 둔다.
+       * 거꾸로 들어간 쪽을 **한 번 더** — 모델이 「글자가 거꾸로 보인다」고 한 쪽만이다
+       * (2026-11-25에 좁혔다. 전에는 사람 이름 없음·빈 면을 모두 돌려 토큰만 두 배로 썼다).
+       * 다시 읽어 담기거나 기존 명함과 맞물리면 그 결과를 쓰고, 아니면 원래 판정을 그대로 둔다.
        */
-      const retryAt = got.map((l, i) => (!l.ok && worthRetry(l.reason) ? i : -1)).filter(i => i >= 0)
+      const retryAt = got.map((l, i) => (worthRetry(l) ? i : -1)).filter(i => i >= 0)
       if (retryAt.length > 0 && !stop.current) {
         const flipped: Piece[] = []
         const back: number[] = []
@@ -252,13 +254,13 @@ export default function BulkImportModal({ division, onClose, onDone, onShowUnche
           if (f) { flipped.push({ file: f, label: p.label }); back.push(i) }
         }
         if (flipped.length > 0) {
-          const again = await send(flipped)
+          const again = await send(flipped, true)
           for (let k = 0; k < again.length; k++) {
             const slot = back[again[k].index]
             const now = again[k]
             if (slot == null || !now) continue
-            // 돌려 읽어 **담겼거나 기존 명함과 맞물렸으면** 그 결과를 쓴다.
-            if (now.ok || now.reason === 'dup' || now.reason === 'merged') {
+            // 담겼거나 기존 명함과 맞물렸을 때만 바꿔 쓴다(라우트가 이름+연락처를 이미 본다).
+            if (acceptRetry(now)) {
               got = got.map((l, i) => (i === slot ? { ...now, index: got[slot].index } : l))
               acc = { ...acc, flipped: acc.flipped + 1 }
             }

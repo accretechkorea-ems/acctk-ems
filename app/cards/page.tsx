@@ -26,7 +26,7 @@ import { canSwitchDivision, teamDivisionOf, DIVISIONS } from '@/lib/division'
 import { isSuperAdmin } from '@/lib/permissions'
 import {
   AGE_TONES, ageLabel, ageTone, daysBetween, defaultDivision, registrarLabel,
-  checkedLabel, visibleDivisions, type BusinessCard, type CardForm,
+  checkedLabel, COMPANY_PHONE_MARK, displayPhone, visibleDivisions, type BusinessCard, type CardForm,
 } from '@/lib/businessCard'
 import { applyCardFilter, countUnchecked, filterFromQuery, isUnchecked, queryFromFilter, type CardFilter } from '@/lib/businessCardQuery'
 import { canDeleteCard, selectionTitle, skippedNotice } from '@/lib/businessCardBulk'
@@ -456,7 +456,19 @@ function CardsPageInner() {
                 <En value={c.company_en} />
               </div>
               <div style={{ fontSize: 12, color: SUB, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {c.mobile && <span style={{ color: BLUE }}>{c.mobile}</span>}
+                {/* 휴대폰이 없으면 회사 전화를 대신. 둘 다 없으면 아무것도 적지 않는다. */}
+                {(() => {
+                  const got = displayPhone(c)
+                  if (!got) return null
+                  return (
+                    <span style={{ color: BLUE }}>
+                      {got.isCompany && (
+                        <span style={{ color: SUB, marginRight: 3 }}>{COMPANY_PHONE_MARK}</span>
+                      )}
+                      {got.number}
+                    </span>
+                  )
+                })()}
                 <span>등록 {String(c.registered_at).slice(0, 10)}</span>
                 <span>{c.division}</span>
                 {/* 확인 전이면 그 사실을, 확인한 날이 등록일과 다르면 그 달을. 같으면 적지 않는다. */}
@@ -497,8 +509,21 @@ function CardsPageInner() {
                     <En value={c.company_en} />
                   </td>
                   <td style={td}>{c.position ?? '—'}</td>
+                  {/* 휴대폰이 없으면 회사 전화를 대신 보여 준다(앞에 작은 「회사」). */}
                   <td style={{ ...td, color: BLUE }}>
-                    {c.mobile ? <a href={`tel:${c.mobile}`} onClick={e => e.stopPropagation()} style={{ color: BLUE, textDecoration: 'none' }}>{c.mobile}</a> : '—'}
+                    {(() => {
+                      const got = displayPhone(c)
+                      if (!got) return '—'
+                      return (
+                        <>
+                          {got.isCompany && (
+                            <span style={{ fontSize: 11, color: SUB, marginRight: 4 }}>{COMPANY_PHONE_MARK}</span>
+                          )}
+                          <a href={`tel:${got.number}`} onClick={e => e.stopPropagation()}
+                            style={{ color: BLUE, textDecoration: 'none' }}>{got.number}</a>
+                        </>
+                      )
+                    })()}
                   </td>
                   <td style={td}>
                     {c.email ? <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} style={{ color: TEXT, textDecoration: 'none' }}>{c.email}</a> : '—'}

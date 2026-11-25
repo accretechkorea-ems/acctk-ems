@@ -270,6 +270,26 @@ export function snapshotOf(
   }
 }
 
+/**
+ * 목록에 보여 줄 **연락처 한 줄** (2026-11-25).
+ *
+ * 휴대폰이 먼저다. 없으면 **회사 전화**를 대신 보여 주고 「회사」라고 적어 둔다 —
+ * 전에는 휴대폰이 없는 명함이 `—` 로만 보여, 전화가 적혀 있는데도 연락할 길이
+ * 없는 것처럼 읽혔다. 둘 다 없으면 null.
+ */
+export function displayPhone(
+  card: Pick<BusinessCard, 'mobile' | 'phone'>,
+): { number: string; isCompany: boolean } | null {
+  const mobile = String(card.mobile ?? '').trim()
+  if (mobile) return { number: mobile, isCompany: false }
+  const phone = String(card.phone ?? '').trim()
+  if (phone) return { number: phone, isCompany: true }
+  return null
+}
+
+/** 회사 전화임을 알리는 작은 글자. */
+export const COMPANY_PHONE_MARK = '회사'
+
 /** 목록에 보이는 등록자 — 그때의 글자가 먼저다(지금 소속을 따라가지 않는다). */
 export function registrarLabel(card: Pick<BusinessCard, 'registered_name' | 'registered_team'>): string {
   const name = (card.registered_name ?? '').trim()

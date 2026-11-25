@@ -31,7 +31,7 @@ import type { OcrKey } from '@/lib/businessCardOcr'
 import { readCard } from '@/lib/cardOcrServer'
 import {
   BULK_METHOD, EVENT_HANGUL, EVENT_MERGED, MAX_PER_REQUEST,
-  canMergeBack, fillBlanks, hangulPatch, isBatchId, isNoPerson, type BulkLine,
+  canMergeBack, fillBlanks, hangulPatch, hasContact, isBatchId, isNoPerson, type BulkLine,
 } from '@/lib/businessCardBulk'
 
 const supabaseAdmin = adminClient()
@@ -111,6 +111,9 @@ export async function POST(req: Request) {
    * 이번 가져오기 묶음 — **새로 담는 줄에만** 적는다.
    * 합친 뒷면·이미 있던 명함에는 적지 않는다(되돌리기가 남의 줄을 지우지 않게).
    */
+  /** 돌려서 다시 읽는 요청인가 — 담는 문턱이 한 단계 높다. */
+  const isRetry = String(form.get('retry') ?? '') === '1'
+
   const rawBatch = String(form.get('import_batch_id') ?? '')
   const batchId = isBatchId(rawBatch) && await hasBatchColumn() ? rawBatch : null
 
@@ -193,7 +196,10 @@ export async function POST(req: Request) {
     if (!got.ok) { lines.push({ index: i, ok: false, reason: got.reason, usage }); continue }
 
     const row = toRow(got.fields, enabled)
-    if (!row.name && !row.company) { lines.push({ index: i, ok: false, reason: 'empty', usage }); continue }
+    if (!row.name && !row.company) {
+      lines.push({ index: i, ok: false, reason: 'empty', usage, upside_down: got.upsideDown })
+      continue
+    }
 
     const phone = digitsOf(row.mobile)
     const mail = String(row.email ?? '').trim().toLowerCase()
@@ -206,8 +212,17 @@ export async function POST(req: Request) {
         prevRow = await mergeInto(prevId, prevRow, row)
         lines.push({ index: i, ok: false, reason: 'merged', card_id: prevId, merged_into: prevId, usage })
       } else {
-        lines.push({ index: i, ok: false, reason: 'no_person', name: row.company ?? row.name, usage })
+        lines.push({
+          index: i, ok: false, reason: 'no_person',
+          name: row.company ?? row.name, usage, upside_down: got.upsideDown,
+        })
       }
+      continue
+    }
+
+    // 돌려서 **다시 읽은** 요청이면 문턱을 올린다 — 이름만 덩그러니 나온 쪽을 담지 않는다.
+    if (isRetry && !hasContact(row)) {
+      lines.push({ index: i, ok: false, reason: 'no_person', name: row.name ?? row.company, usage })
       continue
     }
 
