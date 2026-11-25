@@ -42,6 +42,14 @@ export type Device = {
   status: string | null
   /** 폐기한 날(date). 폐기가 아니면 null 이다. */
   disposed_at: string | null
+  /**
+   * 2026-11-26 에 더한 셋(db/devices_delivery_20261126.sql · equipment_master_20261126.sql).
+   * 화면은 `select('*')` 로 읽으므로 SQL 을 돌리면 그대로 들어온다 — 돌리기 전에는 undefined 다.
+   */
+  install_due_month?: string | null
+  next_calibration_date?: string | null
+  source_quote_id?: number | null
+  master_pending?: boolean | null
 }
 
 export type Contact = {

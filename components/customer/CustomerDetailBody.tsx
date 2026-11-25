@@ -32,7 +32,7 @@ import SiteHeaderBand from '@/components/customer/SiteHeaderBand'
 import SiteInfoColumn, { SITE_COL_W } from '@/components/customer/SiteInfoColumn'
 import DeletedDevices from '@/components/customer/DeletedDevices'
 import DeviceSection from '@/components/customer/DeviceSection'
-import { inUseOnly } from '@/lib/deviceStatus'
+import { inUseOnly, isPendingDelivery } from '@/lib/deviceStatus'
 import HoldingModal from '@/components/customer/modals/HoldingModal'
 import HoldingResolveModal from '@/components/customer/modals/HoldingResolveModal'
 import CustomerEditModal from '@/components/customer/modals/CustomerEditModal'
@@ -469,6 +469,13 @@ export default function CustomerDetailBody({
         <ServiceAddModal
           snippetCtx={snippetCtx(service.selectedDeviceId)}
           deviceId={service.selectedDeviceId}
+          /* 그 장비가 **납품 예정**이면 창이 S/N·납입일을 함께 받는다(2026-11-26). */
+          pendingDevice={(() => {
+            const d = devices.find(x => x.device_id === service.selectedDeviceId)
+            return d && isPendingDelivery(d)
+              ? { device_id: d.device_id, label: [d.device_name, d.device_name2].filter(Boolean).join(' ') || '장비' }
+              : null
+          })()}
           contacts={contacts}
           engineers={engineers}
           currentUserEngineerId={currentUserEngineerId}

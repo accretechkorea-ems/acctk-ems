@@ -38,6 +38,8 @@ import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import Popover from '@/components/common/Popover'
 import QuoteRowIcons from '@/components/quote/QuoteRowIcons'
 import ForecastLink from '@/components/quote/ForecastLink'
+import DeliveryDevices from '@/components/quote/DeliveryDevices'
+import { draftsBlocked, draftsFromItems, needsDeliveryDevices, nextMonthKey, type DeliveryDraft } from '@/lib/deliveryPending'
 import { openRepairDoc } from '@/lib/repairDocFlow'
 import { isGeneral20Form } from '@/lib/quoteForms'
 import RepairInfoModal from '@/components/quote/RepairInfoModal'
@@ -245,6 +247,9 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
   const [poAddress, setPoAddress] = useState('')
   const [poAddressMode, setPoAddressMode] = useState<'company' | 'direct'>('company')
   const [poCompanyAddress, setPoCompanyAddress] = useState<string | null>(null)
+  /** 납품 예정 장비(E) — 장비를 파는 견적일 때만 섹션이 선다. */
+  const [poDevices, setPoDevices] = useState<DeliveryDraft[]>([])
+  const [poSites, setPoSites] = useState<{ customer_id: number; label: string }[]>([])
   const [poContacts, setPoContacts] = useState<{ contact_id: number; name: string; phone: string | null; position: string | null; department: string | null }[]>([])
   const [poContactId, setPoContactId] = useState<number | ''>('')
   const [poUploading, setPoUploading] = useState(false)
@@ -345,6 +350,21 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
       setPoCompanyAddress(cust?.address ?? null)
       setPoAddressMode('company')
       setPoAddress('')
+    })
+    // 납품 예정 장비 — **장비를 파는 견적일 때만** 묻는다(lib/deliveryPending.ts).
+    if (!needsDeliveryDevices(poQuote)) { setPoDevices([]); setPoSites([]); return }
+    void Promise.all([
+      supabase.from('quote_items').select('product_name, model, quantity, row_kind, group_kind').eq('quote_id', poQuote.quote_id),
+      supabase.from('customers').select('customer_id, company_name, site_name, parent_customer_id').eq('customer_id', poQuote.customer_id).single(),
+    ]).then(async ([{ data: items }, { data: site }]) => {
+      // 고를 수 있는 사업장 — 그 사업장과 **같은 회사의 형제 사업장**.
+      const parent = site?.parent_customer_id ?? null
+      const sibs = parent
+        ? (await supabase.from('customers').select('customer_id, company_name, site_name').eq('parent_customer_id', parent).is('deleted_at', null).order('site_name')).data
+        : null
+      const list = (sibs && sibs.length > 0 ? sibs : [site].filter(Boolean)) as { customer_id: number; company_name: string | null; site_name: string | null }[]
+      setPoSites(list.map(c => ({ customer_id: Number(c.customer_id), label: [c.company_name, c.site_name].filter(Boolean).join(' » ') })))
+      setPoDevices(draftsFromItems(items ?? [], { customerId: poQuote.customer_id ?? null, month: nextMonthKey() }))
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poQuote])
@@ -621,6 +641,9 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
     }
   }
 
+  /** 납품 예정 장비가 덜 찼으면 등록을 막는다(장비 견적일 때만). */
+  const poBlocked = poQuote && needsDeliveryDevices(poQuote) ? draftsBlocked(poDevices) : null
+
   const handlePoUpload = async () => {
     if (!poQuote || !poFile) return
     setPoUploading(true)
@@ -639,11 +662,12 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
     }
     const result = await uploadPurchaseOrder({
       quoteId: poQuote.quote_id, quoteNumber: poQuote.quote_number, file: poFile, deliveryMethod: poDelivery, deliveryAddress,
+      devices: needsDeliveryDevices(poQuote) ? poDevices : undefined,
     })
     setPoUploading(false)
     if (!result.ok) { toast.error(`발주서 등록 실패: ${result.error}`); return }
     toast.success('발주서가 등록되었습니다')
-    setPoQuote(null); setPoFile(null); setPoAddress(''); setPoAddressMode('company'); setPoCompanyAddress(null); setPoContactId(''); setPoContacts([])
+    setPoQuote(null); setPoFile(null); setPoAddress(''); setPoAddressMode('company'); setPoCompanyAddress(null); setPoContactId(''); setPoContacts([]); setPoDevices([]); setPoSites([]); setPoDevices([]); setPoSites([])
     await loadData()
   }
 
@@ -1075,12 +1099,22 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
             footer={<>
               <button onClick={() => { setPoQuote(null); setPoFile(null) }} disabled={poUploading}
                 style={{ flex: 1, padding: 9, background: '#f3f4f6', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700 }}>취소</button>
-              <button onClick={handlePoUpload} disabled={poUploading || !poFile}
-                style={{ flex: 1, padding: 9, background: '#7c3aed', color: '#fff', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, opacity: (poUploading || !poFile) ? 0.6 : 1 }}>
+              <button onClick={handlePoUpload} disabled={poUploading || !poFile || !!poBlocked}
+                style={{ flex: 1, padding: 9, background: '#7c3aed', color: '#fff', border: 'none', borderRadius: R.control, cursor: 'pointer', fontWeight: 700, opacity: (poUploading || !poFile || !!poBlocked) ? 0.6 : 1 }}>
                 {poUploading ? '업로드 중...' : '등록'}
               </button>
             </>}
           >
+            {/* 납품 예정 장비 — 장비를 파는 견적일 때만(2026-11-26). 전부 채워야 등록된다. */}
+            {needsDeliveryDevices(poQuote) && (
+              <DeliveryDevices
+                drafts={poDevices}
+                onChange={setPoDevices}
+                sites={poSites}
+                blocked={poBlocked}
+                disabled={poUploading}
+              />
+            )}
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 11, color: GRAY, marginBottom: 6, fontWeight: 600 }}>배송 방법</div>
               <div style={{ display: 'flex', gap: 8 }}>

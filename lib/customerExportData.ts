@@ -17,7 +17,7 @@
 // 읽기만 한다. service role 로 읽는 이유는 RLS 때문에 줄이 비는 일을 막기 위해서다.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { isInUse } from './deviceStatus'
+import { isPendingDelivery, isInUse } from './deviceStatus'
 import { PENDING_STATUS } from './quoteStatus'
 import { shortSiteName } from './customerList'
 import { regionCells, type ExportAgency, type ExportCompany, type ExportContact, type ExportInput, type ExportSite, type ExportSiteDevice } from './customerExportSheets'
@@ -80,6 +80,8 @@ function toSiteDevice(d: DeviceRow): ExportSiteDevice {
     installYear: d.install_year ?? null,
     installDate: d.install_date ?? null,
     disposedAt: d.disposed_at ?? null,
+    status: d.status ?? null,
+    installDueMonth: (d as { install_due_month?: string | null }).install_due_month ?? null,
   }
 }
 
@@ -120,7 +122,8 @@ export async function gatherCustomerExport(
       .select('customer_id, parent_customer_id, agency_customer_id, is_parent, is_agency, company_name, site_name, name_en, industry, status, region1, region2, address, note')
       .is('deleted_at', null).range(0, PAGE),
     sb.from('devices')
-      .select('device_id, customer_id, device_name, device_name2, option, serial_number, program, install_year, install_date, status, disposed_at')
+      // install_due_month 는 칸이 없을 수 있다 — select('*') 로 받아 있으면 쓴다(42703 방지).
+      .select('*')
       .is('deleted_at', null).range(0, PAGE),
     sb.from('contacts')
       .select('customer_id, name, position, department, phone, email')
@@ -154,14 +157,16 @@ export async function gatherCustomerExport(
     if (q.status === PENDING_STATUS) openQ.set(id, (openQ.get(id) ?? 0) + 1)
   }
 
-  // ── 장비 — 업체별로 묶고, 화면과 같은 「장비 수」(폐기 뺀 수)도 센다 ──
+  // ── 장비 — 업체별로 묶고, 화면과 같은 「장비 수」도 센다 ──
+  // 세는 것은 **가동 중인 것**뿐이다 — 폐기도 **납품 예정**도 뺀다(2026-11-26).
+  // 장비 시트에는 납품 예정 줄도 **상태 열과 함께** 그대로 나간다(빠지는 것이 없게).
   const devicesOf = new Map<number, DeviceRow[]>()
   const liveCount = new Map<number, number>()
   for (const d of devices) {
     const id = Number(d.customer_id)
     const list = devicesOf.get(id)
     if (list) list.push(d); else devicesOf.set(id, [d])
-    if (isInUse(d)) liveCount.set(id, (liveCount.get(id) ?? 0) + 1)
+    if (isInUse(d) && !isPendingDelivery(d)) liveCount.set(id, (liveCount.get(id) ?? 0) + 1)
   }
 
   /** 그 사업장을 묶는 회사 줄(없으면 null — 미연결 사업장이다). */

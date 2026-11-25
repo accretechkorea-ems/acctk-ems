@@ -5,7 +5,8 @@ import { EditIconButton } from '@/components/common/IconButton'
 import type { Device, Holding, ServiceHistory } from './types'
 import { getInstallDisplay, getDefaultImageUrl } from './utils'
 import { deviceImageWidthFor } from '@/lib/deviceImage'
-import { isDisposed, disposedLabel, inUseOnly, disposedOnly } from '@/lib/deviceStatus'
+import { isDisposed, disposedLabel, inUseOnly, disposedOnly, isPendingDelivery, isDeliveryLate, pendingLabel } from '@/lib/deviceStatus'
+import { todayKST } from '@/lib/date'
 import { useDeviceImageUrls, type StorageImageLookup } from '@/hooks/useStorageImageUrls'
 import { R } from '@/lib/radius'
 import { SUB } from '@/components/common/ui'
@@ -205,11 +206,15 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
   // 폐기된 장비는 **지워진 것이 아니라 쓰지 않는 것**이다 — 카드는 그대로 두고 바탕과
   // 글자만 죽인다(사진·버튼은 그대로 쓴다. 지난 레포트를 열어 볼 일이 남아 있다).
   const disposed = isDisposed(d)
+  // 납품 예정 — **아직 없는 장비**다. 점선으로 두르고 예정월을 적는다(2026-11-26).
+  // 예정월이 지났으면 「지연」으로 바꿔 빨갛게 — 누가 챙겨야 하는 줄이다.
+  const pending = isPendingDelivery(d)
+  const late = pending && isDeliveryLate(d.install_due_month, todayKST())
 
   return (
     <article style={{
       width: CARD_W, display: 'flex', flexDirection: 'column', flex: '0 0 auto',
-      background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.card, overflow: 'hidden',
+      background: '#ffffff', border: pending ? '1px dashed #9ca3af' : '1px solid #ebebeb', borderRadius: R.card, overflow: 'hidden',
       position: 'relative',
       // 폐기 장비는 **지워진 것이 아니라 쓰지 않는 것**이다 — 카드를 죽여 두되 그대로 둔다
       // (지난 레포트를 열어 볼 일이 남아 있다).
@@ -269,6 +274,15 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
       </div>
 
       <div style={{ padding: '12px 14px' }}>
+        {/* 납품 예정 태그 — 모델명 위. 지났으면 「지연」이다. */}
+        {pending && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', height: 22, padding: '0 8px', borderRadius: R.tag, background: late ? '#fee2e2' : '#f3f4f6', color: late ? '#b91c1c' : '#4b5563', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>
+              {late ? `지연 · ${pendingLabel(d.install_due_month)}` : pendingLabel(d.install_due_month)}
+            </span>
+          </div>
+        )}
+
         {/* 폐기 태그 — 모델명 위. 언제 뺀 장비인지가 곧 이력이다. */}
         {disposed && (
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>

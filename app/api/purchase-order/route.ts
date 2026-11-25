@@ -1,5 +1,8 @@
 import { adminClient } from '@/lib/supabase/admin'
 import { syncForecastOf } from '@/lib/forecastSync'
+import { DEVICE_PENDING } from '@/lib/deviceStatus'
+import { draftsBlocked, type DeliveryDraft } from '@/lib/deliveryPending'
+import { writeCustomerEvents } from '@/lib/customerEvents'
 import { loadCaller } from '@/lib/apiCaller'
 import { NextResponse } from 'next/server'
 import { canViewMenu } from '@/lib/permissions'
@@ -119,6 +122,23 @@ export async function POST(req: Request) {
       ...(rawMemo === null ? null : { order_request_memo: requestMemo || null }),
     }).eq('quote_id', Number(quoteId))
     if (updErr) console.error(' quotes update failed', { action, quoteId, error: updErr })
+
+    // ── 납품 예정 장비(E) ────────────────────────────────────────────
+    //
+    // 장비를 파는 견적이면 창이 「납품 예정 장비」를 함께 보낸다. 그 줄을 **여기서**
+    // 만든다 — 발주 상태 변경과 **한 번의 요청**으로 묶는다.
+    // 장비를 넣지 못하면 **발주 상태를 되돌린다**(반쪽으로 끝나지 않게).
+    const rawDevices = formData.get('devices') as string | null
+    if (rawDevices) {
+      const made = await insertPendingDevices(supabaseAdmin, Number(quoteId), rawDevices, caller.engineer_id)
+      if (!made.ok) {
+        await supabaseAdmin.from('quotes').update({
+          status: '견적중', purchase_order_url: null, purchase_order_at: null,
+        }).eq('quote_id', Number(quoteId))
+        console.error('[purchase-order] 납품 예정 장비 실패 — 발주를 되돌렸다', { quoteId, error: made.error })
+        return NextResponse.json({ error: `납품 예정 장비를 만들지 못했습니다: ${made.error}` }, { status: 500 })
+      }
+    }
 
     // 연결된 포캐스트를 **수주**로 올린다(2026-11-26) — 단계·금액·수주일(= 발주일).
     // 규칙은 lib/forecastSync.ts 한 곳이고 **올리는 쪽으로만** 간다. 실패해도 발주는 그대로다.
@@ -396,4 +416,67 @@ export async function GET(req: Request) {
 
   if (error || !data?.signedUrl) return NextResponse.json({ error: 'URL 생성 실패' }, { status: 500 })
   return NextResponse.json({ signedUrl: data.signedUrl })
+}
+
+/**
+ * 발주서 등록이 만드는 **납품 예정 장비** (2026-11-26).
+ *
+ * 창이 보낸 줄을 그대로 믿지 않는다 — 장비명·사업장·설치 예정월 셋을 서버가 다시 본다
+ * (창의 검사는 거들 뿐이다). 한 줄이라도 모자라면 **아무것도 만들지 않는다**.
+ * 만든 줄에는 `source_quote_id` 를 적어 둔다 — 발주가 취소되면 그 줄만 숨긴다.
+ *
+ * 칸이 아직 없는 DB(42703)에서는 **만들지 않고 그냥 지나간다** — 발주 자체는 끝난다.
+ */
+async function insertPendingDevices(
+  sb: ReturnType<typeof adminClient>,
+  quoteId: number,
+  raw: string,
+  actorId: number | null,
+): Promise<{ ok: true; made: number } | { ok: false; error: string }> {
+  let drafts: DeliveryDraft[]
+  try {
+    const parsed = JSON.parse(raw)
+    drafts = Array.isArray(parsed) ? parsed as DeliveryDraft[] : []
+  } catch {
+    return { ok: false, error: '장비 목록을 읽지 못했습니다' }
+  }
+  if (drafts.length === 0) return { ok: true, made: 0 }
+  const blocked = draftsBlocked(drafts)
+  if (blocked) return { ok: false, error: blocked }
+
+  const rows = drafts.map(d => ({
+    customer_id: d.customer_id,
+    device_name: d.device_name.trim(),
+    device_name2: d.device_name2.trim() || null,
+    option: d.option.trim() || null,
+    status: DEVICE_PENDING,
+    install_due_month: d.install_due_month,
+    source_quote_id: quoteId,
+    master_pending: d.master_pending === true,
+  }))
+  const { data, error } = await sb.from('devices').insert(rows).select('device_id, customer_id, device_name, device_name2, install_due_month')
+  if (error) {
+    if (error.code === '42703' || error.code === 'PGRST204') {
+      console.warn('[purchase-order] devices 의 납품 예정 칸이 아직 없다 — 장비를 만들지 않고 지나간다', error.code)
+      return { ok: true, made: 0 }
+    }
+    return { ok: false, error: error.message }
+  }
+  // 사업장 활동 이력에 「납품 예정 등록」으로 남는다.
+  const now = new Date().toISOString()
+  await writeCustomerEvents(sb, (data ?? [])
+    .filter(r => Number.isInteger(Number(r.customer_id)) && Number(r.customer_id) > 0)
+    .map(r => ({
+      customer_id: Number(r.customer_id),
+      event_type: 'device_edited' as const,
+      occurred_at: now,
+      actor_engineer_id: actorId,
+      payload: {
+        mode: 'delivery_pending',
+        device_id: Number(r.device_id),
+        device: [r.device_name, r.device_name2].filter(Boolean).join(' ') || null,
+        changes: [{ field: 'install_due_month', label: '설치 예정월', before: null, after: String(r.install_due_month ?? '') }],
+      },
+    })))
+  return { ok: true, made: (data ?? []).length }
 }

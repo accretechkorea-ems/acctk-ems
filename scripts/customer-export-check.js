@@ -135,12 +135,14 @@ eq('장비 3대면 사업장 정보가 3줄 반복된다',
   sheet('device').rows.slice(1, 4).map(r => r.slice(0, 4).join('|')),
   Array(3).fill('가나공업|GANA|3.자동차 - 완성차|1공장'))
 eq('그 세 줄의 장비 칸은 서로 다르다', sheet('device').rows.slice(1, 4).map(r => r[10]), ['NEX 100', 'NEX 200', 'NEX 300'])
-eq('장비 없는 사업장은 장비 칸 일곱이 빈 한 줄', sheet('device').rows[4].slice(9, 16), ['', '', '', '', '', '', ''])
+// 2026-11-26 — 장비 칸이 아홉이 됐다(「장비 상태」·「설치 예정월」 추가. 납품 예정 장비는
+// 가동 수에서 빠지지만 시트에는 줄로 남고 그 두 열로 구분된다).
+eq('장비 없는 사업장은 장비 칸 아홉이 빈 한 줄', sheet('device').rows[4].slice(9, 18), ['', '', '', '', '', '', '', '', ''])
 eq('장비 칸은 저장 칸 그대로다(합치지 않는다)', sheet('device').rows[1].slice(9, 14), ['SURFCOM', 'NEX 100', 'A', 'SN1', 'ACCTee'])
 ok('납입일은 날짜(Date)', sheet('device').rows[1][14] instanceof Date)
 eq('쓰는 장비는 「폐기」 칸이 빈 칸', sheet('device').rows[1][15], '')
 ok('폐기한 장비는 폐기일이 날짜로 든다', sheet('device').rows[5][15] instanceof Date)
-eq('담당자 끔 — 16열뿐', sheet('device', false).rows[0].length, 16)
+eq('담당자 끔 — 18열뿐', sheet('device', false).rows[0].length, 18)
 
 console.log('\n── ⑥ 「대리점」 단위 ──')
 eq('앞 7열 이름·순서', sheet('agency').rows[0].slice(0, 7), [

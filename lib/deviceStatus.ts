@@ -66,3 +66,50 @@ export const disposePatch = (today: string) => ({ status: DEVICE_DISPOSED, dispo
 
 /** 폐기 취소로 쓸 값 — 상태를 되돌리고 날짜를 비운다. */
 export const restorePatch = () => ({ status: DEVICE_IN_USE, disposed_at: null })
+
+// ── 납품 예정 장비 (2026-11-26) ────────────────────────────────────────
+//
+// 발주서가 등록되면 그 사업장에 **곧 들어올 장비**를 미리 만들어 둔다. 아직 물건이
+// 오지 않았으므로 **가동 대수·통계에서는 빼고**, 카드에는 점선과 「설치 예정 2027-03」을
+// 붙인다. 신규 설치 레포트를 쓰면 S/N·납입일을 받고 '사용중' 으로 바뀐다.
+//
+// 폐기와 다른 자리다 — 폐기는 **있었는데 뺀 것**이고, 납품 예정은 **아직 없는 것**이다.
+
+/** 아직 들어오지 않은 장비. */
+export const DEVICE_PENDING = '납품 예정'
+
+/** 납품 예정인가. */
+export const isPendingDelivery = (d: DeviceStatusLike | null | undefined): boolean =>
+  (d?.status ?? '').trim() === DEVICE_PENDING
+
+/**
+ * **가동 중인 장비**만 — 폐기도 납품 예정도 아닌 것.
+ * 「장비 N대」·통계·엑셀의 가동 집계가 이것을 쓴다(목록은 inUseOnly 그대로 — 예정 장비도
+ * 카드로 보여 준다).
+ */
+export function operatingOnly<T extends DeviceStatusLike>(list: readonly T[]): T[] {
+  return list.filter(d => !isDisposed(d) && !isPendingDelivery(d))
+}
+
+/** 설치 예정월이 지났는가 — 「지연」 뱃지의 조건. `today` 는 'YYYY-MM-DD'. */
+export function isDeliveryLate(due: string | null | undefined, today: string): boolean {
+  const ym = String(due ?? '').slice(0, 7)
+  if (!/^\d{4}-\d{2}$/.test(ym)) return false
+  return ym < today.slice(0, 7)
+}
+
+/** 뱃지 글자 — 「설치 예정 2027-03」. 월이 없으면 「설치 예정」만. */
+export function pendingLabel(due: string | null | undefined): string {
+  const ym = String(due ?? '').slice(0, 7)
+  return /^\d{4}-\d{2}$/.test(ym) ? `설치 예정 ${ym}` : '설치 예정'
+}
+
+/** 다음 교정일 — 완료일에서 열두 달 뒤. 날짜가 깨졌으면 null. */
+export function nextCalibrationDate(doneDate: string | null | undefined): string | null {
+  const s = String(doneDate ?? '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null
+  const [y, m, d] = s.split('-').map(Number)
+  // 같은 날짜의 1년 뒤. 2/29 는 3/1 로 밀리지 않게 그 달의 말일로 맞춘다.
+  const last = new Date(Date.UTC(y + 1, m, 0)).getUTCDate()
+  return `${y + 1}-${String(m).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`
+}

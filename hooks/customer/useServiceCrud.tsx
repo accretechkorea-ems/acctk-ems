@@ -7,6 +7,10 @@
 // 레포트 PDF 를 만들 때 JSX 를 쓰므로 이 파일만 .tsx 다.
 
 import { useCallback, useRef, useState } from 'react'
+import { customerChange } from '@/lib/customerChange'
+
+/** 교정 레포트의 유형 — 이 글자일 때 다음 교정일을 잡는다(lib/categoryColors.ts 의 표와 같다). */
+const CALIBRATION_TYPE = '장비교정'
 
 import { createClient } from '@/lib/supabase/client'
 import { registerReportFont } from '@/lib/pdf/reportFont'
@@ -45,7 +49,7 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
 
   // ── 서비스 CRUD ──
   // files — 추가 모달이 들고 있던 첨부파일. service_id 는 기록을 넣어야 나오므로 저장 뒤에 올린다.
-  const handleAddService = async (form: ServiceForm, engineerIds: number[], files: File[] = []) => {
+  const handleAddService = async (form: ServiceForm, engineerIds: number[], files: File[] = [], commission?: { serial_number: string; install_date: string }) => {
     if (!selectedDeviceId) return
     setIsSavingService(true)
     const engineerSnapshot = engineerIds
@@ -72,6 +76,22 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
     if (files.length > 0) {
       const r = await uploadAttachments(newService.service_id, files)
       if (!r.ok) { attachFailed = true; console.error('[customer] 첨부 업로드 실패', { serviceId: newService.service_id, error: r.error }) }
+    }
+    // ── 장비 쪽 뒷일(2026-11-26) ─────────────────────────────────────
+    //   신규설치 + 납품 예정 장비 → **운용으로** 바꾸고 S/N·납입일을 적는다(E4).
+    //   교정 유형 → 다음 교정일을 완료일 + 12개월로 잡는다(④).
+    //   쓰기는 라우트가 한다. 실패해도 레포트는 이미 저장됐다 — 알리고 넘어간다.
+    if (commission) {
+      const r = await customerChange({
+        action: 'device-commission', id: selectedDeviceId,
+        serial_number: commission.serial_number, install_date: commission.install_date,
+      })
+      if (!r.ok) toast.error('장비를 운용으로 바꾸지 못했습니다: ' + r.error)
+      else toast.success('장비가 운용으로 바뀌었습니다')
+    }
+    if (form.service_type === CALIBRATION_TYPE) {
+      const r = await customerChange({ action: 'device-calibrated', id: selectedDeviceId, doneDate: form.visit_date.trim() })
+      if (!r.ok) console.error('[customer] 다음 교정일을 적지 못했다', r.error)
     }
     setIsSavingService(false)
     if (attachFailed) toast.error('서비스 기록은 저장되었습니다. 첨부파일 업로드에 실패했습니다')

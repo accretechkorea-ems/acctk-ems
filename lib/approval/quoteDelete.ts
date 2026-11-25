@@ -21,6 +21,8 @@
 // '취소요청' 에 갇히면 안 되기 때문이다. 그래서 조건부 UPDATE 로 짜서 여러 번 불려도 안전하다.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { DEVICE_PENDING } from '@/lib/deviceStatus'
+import { writeCustomerEvents } from '@/lib/customerEvents'
 import type { OnCompleteContext } from './docTypes'
 
 const TAG = 'approval/quoteDelete'
@@ -232,6 +234,14 @@ export async function executeQuoteDelete(opts: {
     console.error(`[${TAG}:${via}] 지울 수 있는 상태가 아니다`, { quoteId, status: quote.status })
     return { ok: false, error: `지금은 삭제할 수 없는 상태입니다 (${quote.status})`, status: 409 }
   }
+
+  // ── 그 발주가 만든 **납품 예정 장비**를 먼저 숨긴다(2026-11-26) ──────
+  //
+  // 발주서를 등록하면 그 사업장에 「납품 예정」 장비 줄이 생긴다(E). 발주가 취소되면
+  // 그 줄은 올 일이 없다 — **숨기고**(deleted_at) 사건으로 남긴다. 지우기 전에 한다:
+  // 견적이 사라진 뒤에는 source_quote_id 가 null 이 되어 어느 줄이었는지 알 수 없다.
+  // 이미 설치가 끝나 '사용중' 이 된 줄은 건드리지 않는다 — 물건은 와 있다.
+  await hidePendingDevices(sb, quoteId, via)
 
   // 자식(quote_items · quote_expenses)을 수동으로 지우지 않는다 — 둘 다 ON DELETE CASCADE 라
   // quotes 행을 지우면 DB 가 함께 지운다(실측 확인, 2026-10-02).
@@ -584,4 +594,55 @@ export async function unlinkRepairs(sb: SupabaseClient, quoteId: number): Promis
     return false
   }
   return true
+}
+
+/**
+ * 그 견적(발주)이 만든 **납품 예정 장비**를 숨긴다 — 발주가 취소될 때 (2026-11-26).
+ *
+ * 숨기는 것은 아직 안 온 줄뿐이다(status = '납품 예정'). 설치가 끝나 '사용중' 이 된 줄은
+ * 물건이 와 있으므로 그대로 둔다. 칸이 아직 없으면(42703) 조용히 지나간다.
+ * 실패해도 견적 삭제는 막지 않는다 — 로그와 사건으로 남긴다.
+ */
+export async function hidePendingDevices(sb: SupabaseClient, quoteId: number, via: string): Promise<number> {
+  const { data, error } = await sb
+    .from('devices')
+    .select('device_id, customer_id, device_name, device_name2, install_due_month')
+    .eq('source_quote_id', quoteId)
+    .eq('status', DEVICE_PENDING)
+    .is('deleted_at', null)
+  if (error) {
+    // 칸이 아직 없다(SQL 전) — 만들어진 줄도 없다.
+    if (error.code !== '42703' && error.code !== 'PGRST204') {
+      console.error(`[${TAG}:${via}] 납품 예정 장비 조회 실패`, { quoteId, error })
+    }
+    return 0
+  }
+  const rows = data ?? []
+  if (rows.length === 0) return 0
+
+  const now = new Date().toISOString()
+  const ids = rows.map(r => Number(r.device_id))
+  const { error: upErr } = await sb.from('devices')
+    .update({ deleted_at: now, delete_reason: '발주 취소 — 납품 예정 장비' })
+    .in('device_id', ids)
+  if (upErr) {
+    console.error(`[${TAG}:${via}] 납품 예정 장비를 숨기지 못했다`, { quoteId, ids, error: upErr })
+    return 0
+  }
+  await writeCustomerEvents(sb, rows
+    .filter(r => Number.isInteger(Number(r.customer_id)) && Number(r.customer_id) > 0)
+    .map(r => ({
+      customer_id: Number(r.customer_id),
+      event_type: 'customer_deleted' as const,
+      occurred_at: now,
+      actor_engineer_id: null,
+      payload: {
+        kind: 'device',
+        name: [r.device_name, r.device_name2].filter(Boolean).join(' ') || null,
+        reason: '발주 취소 — 납품 예정 장비',
+        install_due_month: r.install_due_month ?? null,
+      },
+    })))
+  console.log(`[${TAG}:${via}] 납품 예정 장비 ${ids.length}대를 숨겼다`, { quoteId, ids })
+  return ids.length
 }

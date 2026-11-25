@@ -54,6 +54,10 @@ export type ExportSiteDevice = {
   installDate: string | null
   /** 폐기일. 쓰고 있으면 null — 그 칸이 비어 있으면 쓰는 장비다. */
   disposedAt: string | null
+  /** 장비 상태(「사용중」·「폐기」·「납품 예정」). 2026-11-26. */
+  status?: string | null
+  /** 설치 예정월 — 납품 예정 장비만 찬다. */
+  installDueMonth?: string | null
 }
 
 /** 사업장 한 줄. */
@@ -175,7 +179,9 @@ export const SITE_HEADER = [
 /** 사업장 × 장비 — 앞 아홉은 사업장, 뒤 일곱은 **그 줄의 장비**다(장비가 없으면 빈 칸). */
 export const DEVICE_HEADER = [
   '회사명', '영문명', '분류', '사업장명', '상태', '지역1', '지역2', '주소', '대리점',
-  '라인업', '모델', '옵션', 'S/N', '소프트웨어', '납입일', '폐기',
+  // 2026-11-26 — 「장비 상태」 열을 더했다. 납품 예정 장비는 가동 수에서 빠지지만
+  // 시트에는 **줄로 남고** 이 열로 구분된다(빠지는 것이 없게).
+  '라인업', '모델', '옵션', 'S/N', '소프트웨어', '납입일', '폐기', '장비 상태', '설치 예정월',
 ] as const
 
 export const AGENCY_HEADER = [
@@ -324,7 +330,7 @@ export function buildCustomerSheet(input: ExportInput, unit: ExportUnit, withCon
     const tail = contactCells(s.contacts, n)
     if (s.devices.length === 0) {
       // 장비가 없는 사업장도 한 줄 남긴다 — 장비 칸만 비운다.
-      rows.push([...head, '', '', '', '', '', '', '', ...tail])
+      rows.push([...head, '', '', '', '', '', '', '', '', '', ...tail])
       continue
     }
     for (const d of s.devices) {
@@ -332,6 +338,7 @@ export function buildCustomerSheet(input: ExportInput, unit: ExportUnit, withCon
         ...head,
         d.lineup, d.model, d.option, d.serial, d.program,
         installCell(d.installYear, d.installDate), dateCell(d.disposedAt),
+        d.status ?? '', d.installDueMonth ?? '',
         ...tail,
       ])
     }

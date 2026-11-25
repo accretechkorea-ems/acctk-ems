@@ -5,6 +5,7 @@
 
 import { createClient } from '@/lib/supabase/client'
 import { customerChange } from '@/lib/customerChange'
+import type { DeliveryDraft } from '@/lib/deliveryPending'
 import { APPROVAL_STATUS } from '@/lib/quoteStatus'
 import type { LineInput } from '@/lib/approval/types'
 
@@ -71,6 +72,8 @@ export type UploadPurchaseOrderParams = {
   file: File
   deliveryMethod: string
   deliveryAddress?: string // 이미 구성된 배송정보 문자열(UI 파생). 있으면만 전송.
+  /** 납품 예정 장비(장비 견적일 때만). 서버가 **같은 요청에서** 만든다. */
+  devices?: DeliveryDraft[]
 }
 
 // 발주서 업로드(/api/purchase-order, action=upload). deliveryAddress 구성은 호출부 책임.
@@ -82,6 +85,9 @@ export async function uploadPurchaseOrder(p: UploadPurchaseOrderParams): Promise
   fd.append('file', p.file)
   fd.append('deliveryMethod', p.deliveryMethod)
   if (p.deliveryAddress) fd.append('deliveryAddress', p.deliveryAddress)
+  // 납품 예정 장비(2026-11-26) — 장비를 파는 견적이면 창이 함께 보낸다. 서버가 같은 요청에서
+  // 만들고, 만들지 못하면 **발주 상태를 되돌린다**(반쪽으로 끝나지 않게).
+  if (p.devices && p.devices.length > 0) fd.append('devices', JSON.stringify(p.devices))
   // 메모는 **보내지 않는다** — 발주서 등록은 파일만 맡고, 요청 메모는 목록의 메모 팝오버가
   // 따로 저장한다(saveQuoteMemo). 안 보내면 서버가 기존 메모를 건드리지 않는다.
   const res = await fetch('/api/purchase-order', { method: 'POST', body: fd })

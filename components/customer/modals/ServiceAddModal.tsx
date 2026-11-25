@@ -24,7 +24,12 @@ type Props = {
   isSaving: boolean
   onClose: () => void
   /** files — 저장 직후 올릴 첨부파일. 서비스 기록이 생겨야 service_id 가 나오므로 그때까지 브라우저에 둔다. */
-  onSave: (form: ServiceForm, engineerIds: number[], files: File[]) => void
+  onSave: (form: ServiceForm, engineerIds: number[], files: File[], commission?: { serial_number: string; install_date: string }) => void
+  /**
+   * 이 장비가 **납품 예정**인가(2026-11-26). 그렇다면 신규설치 레포트를 쓸 때
+   * S/N·납입일을 함께 받아 **운용으로 바꾼다** — 물건이 왔다는 뜻이기 때문이다.
+   */
+  pendingDevice?: { device_id: number; label: string } | null
   /**
    * 문구함 자리표의 값 — 사업장·장비·작성자를 부르는 화면이 준다(문구함, 2026-11-25).
    * 수신인·직급·오늘은 이 창이 채운다(고른 담당자와 오늘 날짜를 여기서 안다).
@@ -62,7 +67,10 @@ const freshForm = (): ServiceForm => ({
   work_hours: '', start_time: '08:30', end_time: '17:30',
 })
 
-export default function ServiceAddModal({ deviceId, contacts, engineers, currentUserEngineerId, isSaving, onClose, onSave, snippetCtx }: Props) {
+export default function ServiceAddModal({ deviceId, contacts, engineers, currentUserEngineerId, isSaving, onClose, onSave, snippetCtx, pendingDevice = null }: Props) {
+  // 납품 예정 장비의 S/N·납입일 — 신규설치일 때만 받는다.
+  const [serial, setSerial] = useState('')
+  const [installDate, setInstallDate] = useState('')
   const [form, setForm] = useState<ServiceForm>(freshForm)
   /** 문구를 끼울 두 칸 — 커서 자리를 알아야 해서 ref 로 잡는다. */
   const notesRef = useRef<HTMLTextAreaElement | null>(null)
@@ -71,7 +79,7 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
   const [showExtraEngineers, setShowExtraEngineers] = useState(false)
   const [showHint, setShowHint] = useState(false)
   const [files, setFiles] = useState<File[]>([])
-  const { errors, setErrors, clearError, validate } = useFieldErrors<'visit_date' | 'service_notes' | 'contact_id' | 'engineers'>()
+  const { errors, setErrors, clearError, validate } = useFieldErrors<'visit_date' | 'service_notes' | 'contact_id' | 'engineers' | 'serial_number' | 'install_date'>()
   const scrollBodyRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const hintRef = useRef<HTMLDivElement | null>(null)
@@ -109,6 +117,9 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
   const todayStr = todayKST()
   const selectableEngineers = engineers.filter(e => isCurrentlyEmployed(e.resigned_date, todayStr))
 
+  /** 지금 쓰는 레포트가 그 장비를 **운용으로 바꾸는** 건인가. */
+  const commissioning = !!pendingDevice && form.service_type === '신규설치'
+
   const handleSave = () => {
     // 검증 규칙은 동일. alert 대신 필드별 인라인 에러로 한꺼번에 표시.
     const ok = validate({
@@ -116,10 +127,14 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
       service_notes: form.service_notes.trim() ? null : '서비스 내용을 입력해주세요',
       contact_id: form.contact_id ? null : '고객 담당자를 선택해주세요',
       engineers: selectedEngineerIds.length > 0 ? null : '방문 엔지니어를 선택해주세요',
+      // 납품 예정 장비 + 신규설치 — S/N·납입일이 있어야 운용으로 바꾼다(2026-11-26).
+      serial_number: commissioning && !serial.trim() ? 'S/N 을 입력해주세요' : null,
+      install_date: commissioning && !installDate.trim() ? '납입일을 입력해주세요' : null,
     })
     if (!ok) return
     if (!timeValid) return
-    onSave({ ...form, work_hours: String(workHours) }, selectedEngineerIds, files)
+    onSave({ ...form, work_hours: String(workHours) }, selectedEngineerIds, files,
+      commissioning ? { serial_number: serial.trim(), install_date: installDate.trim() } : undefined)
   }
 
   return (
@@ -241,6 +256,28 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
               <FieldError message={errors.visit_date} />
             </div>
           </div>
+
+          {/* 납품 예정 장비 — **신규설치**로 쓰면 그 장비가 운용으로 바뀐다(2026-11-26).
+              물건이 왔다는 뜻이므로 S/N·납입일을 여기서 받는다. */}
+          {commissioning && (
+            <div style={{ border: '1px dashed #9ca3af', borderRadius: R.control, padding: '10px 12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ gridColumn: '1 / -1', fontSize: 12, color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                납품 예정 장비입니다 — S/N 과 납입일을 적으면 **운용**으로 바뀝니다 ({pendingDevice?.label})
+              </div>
+              <div>
+                <label style={labelStyle}>S/N</label>
+                <input value={serial} onChange={e => { setSerial(e.target.value); clearError('serial_number') }} placeholder="시리얼넘버"
+                  style={errors.serial_number ? { ...fieldStyle, border: errBorder } : fieldStyle} />
+                <FieldError message={errors.serial_number} />
+              </div>
+              <div>
+                <label style={labelStyle}>납입일</label>
+                <input type="date" className="date-fit" value={installDate} onChange={e => { setInstallDate(e.target.value); clearError('install_date') }}
+                  style={errors.install_date ? { ...dateFieldStyle, border: errBorder } : dateFieldStyle} />
+                <FieldError message={errors.install_date} />
+              </div>
+            </div>
+          )}
 
           <div className="svc-row3">
             {/* 유무상 */}

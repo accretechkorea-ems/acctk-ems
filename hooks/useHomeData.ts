@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { IN_USE_FILTER } from '@/lib/deviceStatus'
+import { DEVICE_PENDING, IN_USE_FILTER } from '@/lib/deviceStatus'
 import { createClient } from '@/lib/supabase/client'
 import { type Customer, type Device } from '@/lib/home'
 import { loadLastTouchMap, touchValue, type LastTouch } from '@/lib/customerLastTouch'
@@ -47,7 +47,9 @@ export function useHomeData({
         )
         .is('deleted_at', null)
         // 폐기한 장비는 업체 카드·목록·지도의 장비 줄에 나오지 않는다(lib/deviceStatus.ts).
+        // **납품 예정**도 뺀다(2026-11-26) — 아직 오지 않은 장비는 「가동 N대」가 아니다.
         .or(IN_USE_FILTER)
+        .or(`status.is.null,status.neq.${DEVICE_PENDING}`)
         .range(0, 5000),
 
       // 마지막 접점은 네 표를 함께 본다(lib/customerLastTouch.ts).

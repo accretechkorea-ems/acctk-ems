@@ -20,7 +20,7 @@
 
 import { NextResponse } from 'next/server'
 import { loadCaller } from '@/lib/apiCaller'
-import { disposePatch, restorePatch } from '@/lib/deviceStatus'
+import { disposePatch, restorePatch, DEVICE_IN_USE, nextCalibrationDate } from '@/lib/deviceStatus'
 import { todayKST } from '@/lib/date'
 import { forecastPatch, type ForecastNow, type LinkedQuote } from '@/lib/forecastSync'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -566,6 +566,60 @@ export async function POST(req: Request) {
       : { written: 0 }
     console.log(`[${TAG}] quote-forecast-link`, { quoteId, before, next, by: caller.email })
     return NextResponse.json({ ok: true, changed: true, events: written })
+  }
+
+  // ── 납품 예정 → **운용** · 교정 예정일 (2026-11-26) ──────────────────
+  //
+  // 신규설치 레포트를 쓰면 그 장비는 **온 것**이다 — S/N·납입일을 받아 '사용중' 으로
+  // 바꾼다(E4). 교정 레포트를 쓰면 다음 교정일을 **완료일 + 12개월**로 잡는다.
+  // 칸이 아직 없으면(42703) 조용히 지나간다 — 레포트 저장을 막지 않는다.
+  if (action === 'device-commission' || action === 'device-calibrated') {
+    const id = Number(body.id)
+    if (!Number.isInteger(id) || id <= 0) return bad('장비를 찾지 못했습니다')
+    const { data: before, error: readErr } = await sb
+      .from('devices').select('device_id, customer_id, device_name, device_name2, status')
+      .eq('device_id', id).maybeSingle()
+    if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 })
+    if (!before) return bad('장비를 찾지 못했습니다')
+    const name = [before.device_name, before.device_name2].filter(Boolean).join(' ') || null
+
+    if (action === 'device-calibrated') {
+      const next = nextCalibrationDate(String(body.doneDate ?? '')) ?? nextCalibrationDate(todayKST())
+      const { error } = await sb.from('devices').update({ next_calibration_date: next }).eq('device_id', id)
+      if (error) {
+        if (error.code === '42703' || error.code === 'PGRST204') return NextResponse.json({ ok: true, skipped: '칸 없음' })
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+      return NextResponse.json({ ok: true, next_calibration_date: next })
+    }
+
+    const serial = String(body.serial_number ?? '').trim()
+    const installDate = String(body.install_date ?? '').trim()
+    if (!serial) return bad('S/N 을 입력해주세요')
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(installDate)) return bad('납입일을 입력해주세요')
+
+    const patch = {
+      status: DEVICE_IN_USE, serial_number: serial, install_date: installDate,
+      install_due_month: null,
+    }
+    let { error } = await sb.from('devices').update(patch).eq('device_id', id)
+    if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+      const again = await sb.from('devices')
+        .update({ status: DEVICE_IN_USE, serial_number: serial, install_date: installDate }).eq('device_id', id)
+      error = again.error
+    }
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    const { written } = await writeCustomerEvents(sb, [event(Number(before.customer_id), 'device_edited', {
+      mode: 'commission', device_id: id, device: name,
+      changes: [
+        { field: 'status', label: '상태', before: String(before.status ?? ''), after: DEVICE_IN_USE },
+        { field: 'serial_number', label: 'S/N', before: null, after: serial },
+        { field: 'install_date', label: '납입일', before: null, after: installDate },
+      ],
+    })])
+    console.log(`[${TAG}] device-commission`, { id, by: caller.email })
+    return NextResponse.json({ ok: true, events: written })
   }
 
   return bad('모르는 작업입니다')
