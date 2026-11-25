@@ -51,8 +51,11 @@ const STATUS_RULE_GAP = 12
  */
 export const STATUS_RESERVE = 56
 
-/** 상태 dot 색 — 사업장·대리점이 같은 표를 쓴다. */
-const STATUS_DOT: Record<string, string> = { '활성': '#16a34a', '잠재': '#f59e0b', '이탈': '#ef4444' }
+/**
+ * 상태 dot 색 — 사업장·대리점이 같은 표를 쓴다.
+ * 2026-11-25: 사업장 화면의 왼쪽 열(SiteInfoColumn)도 같은 값을 쓴다 — 한 벌로 둔다.
+ */
+export const STATUS_DOT: Record<string, string> = { '활성': '#16a34a', '잠재': '#f59e0b', '이탈': '#ef4444' }
 
 /** 메모 줄 높이를 모를 때 쓰는 값(13px · 1.6). 실제로는 재서 쓴다. */
 const MEMO_LINE_FALLBACK = 21

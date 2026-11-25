@@ -78,6 +78,7 @@ ok('CHECK 에 bulk 를 더한다',
 ok('빈 확인일을 등록일로 채운다(bulk 는 빼고)',
   /set verified_at = registered_at/.test(SQL) && /input_method is distinct from 'bulk'/.test(SQL))
 ok('스키마를 깨운다', /notify pgrst, 'reload schema'/.test(SQL))
+// 이 파일은 아직 돌리지 않았다(아래 묶음 SQL·초안 SQL 은 2026-11-25 에 적용됐다).
 ok('APPLIED.md 에 미적용으로 적었다',
   /business_cards_bulk_20261124\.sql[^|]*\|\s*\*\*미적용\*\*/.test(read('db/APPLIED.md')))
 
@@ -321,8 +322,8 @@ ok('묶음 칸과 인덱스를 더한다',
   /add column if not exists import_batch_id uuid/.test(BSQL)
   && /create index if not exists business_cards_import_batch_idx/.test(BSQL))
 ok('스키마를 깨운다', /notify pgrst, 'reload schema'/.test(BSQL))
-ok('APPLIED.md 에 미적용으로 적었다',
-  /business_cards_batch_20261125\.sql[^|]*\|\s*\*\*미적용\*\*/.test(read('db/APPLIED.md')))
+ok('APPLIED.md 에 적용한 날을 적었다',
+  /business_cards_batch_20261125\.sql[^|]*\|\s*2026-\d\d-\d\d/.test(read('db/APPLIED.md')))
 ok('사건 FK 를 건드리지 않은 까닭을 적었다', /on delete cascade/.test(BSQL))
 
 ok('화면이 묶음 id 를 만든다', /newBatchId\(\)/.test(M))

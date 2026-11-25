@@ -190,8 +190,8 @@ ok('칸 셋을 더한다',
   && /add column if not exists revive_reason text/.test(SQL))
 ok('스키마를 깨운다', /notify pgrst, 'reload schema'/.test(SQL))
 ok('재실행 안전', /add column if not exists/.test(SQL))
-ok('APPLIED.md 에 미적용으로 적었다',
-  /quote_revive_20261125\.sql[^|]*\|\s*\*\*미적용\*\*/.test(read('db/APPLIED.md')))
+ok('APPLIED.md 에 적용한 날을 적었다',
+  /quote_revive_20261125\.sql[^|]*\|\s*2026-\d\d-\d\d/.test(read('db/APPLIED.md')))
 
 console.log(fails === 0 ? '\n전부 통과' : `\n${fails}건 실패`)
 process.exit(fails === 0 ? 0 : 1)

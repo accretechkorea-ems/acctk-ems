@@ -20,6 +20,8 @@
 
 import { NextResponse } from 'next/server'
 import { loadCaller } from '@/lib/apiCaller'
+import { disposePatch, restorePatch } from '@/lib/deviceStatus'
+import { todayKST } from '@/lib/date'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   fieldChanges, writeCustomerEvents,
@@ -320,6 +322,35 @@ export async function POST(req: Request) {
     })]
     const { written } = await writeCustomerEvents(sb, rows)
     return NextResponse.json({ ok: true, events: written, changed: changes.length })
+  }
+
+  // ── 장비 폐기·폐기 취소 ───────────────────────────────────────────────
+  //
+  // 2026-11-25 에 **화면에서 라우트로** 옮겼다. 전에는 브라우저가 devices 를 직접
+  // update 했다 — 그 길은 ① 사건이 남지 않고(누가 언제 폐기했는지 알 수 없다)
+  // ② 열 단위 GRANT·RLS 에 걸리면 42501 로 조용히 막힌다. 쓰기는 라우트가 한다.
+  if (action === 'device-dispose' || action === 'device-restore') {
+    const id = Number(body.id)
+    if (!Number.isInteger(id) || id <= 0) return bad('장비를 찾지 못했습니다')
+    const { data: before, error: readErr } = await sb
+      .from('devices').select('device_id, customer_id, device_name, device_name2, status, disposed_at')
+      .eq('device_id', id).maybeSingle()
+    if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 })
+    if (!before) return bad('장비를 찾지 못했습니다')
+
+    const dispose = action === 'device-dispose'
+    const patch = dispose ? disposePatch(todayKST()) : restorePatch()
+    const { error } = await sb.from('devices').update(patch).eq('device_id', id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    const name = [before.device_name, before.device_name2].filter(Boolean).join(' ') || null
+    const { written } = await writeCustomerEvents(sb, [event(Number(before.customer_id), 'device_edited', {
+      mode: dispose ? 'dispose' : 'undispose',
+      device_id: id, device: name,
+      changes: trimChanges(fieldChanges(before as Record<string, unknown>, patch, DEVICE_COLUMNS)),
+    })])
+    console.log(`[${TAG}] ${action}`, { id, by: caller.email })
+    return NextResponse.json({ ok: true, events: written })
   }
 
   return bad('모르는 작업입니다')

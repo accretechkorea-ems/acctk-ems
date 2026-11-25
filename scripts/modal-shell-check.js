@@ -75,7 +75,19 @@ const PENDING_STRUCTURED = [
   'components/showroom/UsageModal.tsx'
 ]
 
-const PENDING = [...PENDING_BESPOKE, ...PENDING_STRUCTURED]
+/**
+ * **라이트박스** — 사진 한 장만 띄우는 창이다(2026-11-25).
+ *
+ * 머리줄·본문·바닥줄이 없어 공용 카드(ModalCard)를 두를 자리가 없다. 카드 껍데기를
+ * 씌우면 흰 테가 사진을 가둬 「크게 보기」가 아니게 된다. 바탕·Esc·겹친 창의 차례는
+ * 공용 오버레이(ModalOverlay)가 그대로 맡으므로 ④의 「제 바탕을 직접 그리는 셋」과도
+ * 다르다. 아래 ⑥-나 가 **이 창들이 정말 사진만 띄우는지** 다시 본다.
+ */
+const LIGHTBOX = [
+  'components/customer/modals/DevicePhotoModal.tsx',
+]
+
+const PENDING = [...PENDING_BESPOKE, ...PENDING_STRUCTURED, ...LIGHTBOX]
 
 let fail = 0
 const ok = (name, cond, hint) => {
@@ -158,6 +170,17 @@ ok('사업장 화면이 지우기 창과 수정 창을 함께 그린다',
   /<DeleteCustomerModal/.test(BODY_SRC) && /<DeviceEditModal/.test(BODY_SRC))
 ok('지우면 수정 창도 닫힌다(고른 장비를 비운다)',
   /setSelectedDevice\(null\)/.test(fs.readFileSync(path.join(ROOT, 'hooks/customer/useDeviceCrud.ts'), 'utf8')))
+
+// ── ⑥-나 라이트박스는 **사진만** 띄운다(2026-11-25) ──────────────────────
+// 목록에 들었다고 아무 창이나 카드를 지나칠 수는 없다 — 사진 한 장뿐인지 본다.
+console.log('\n── ⑥-나 라이트박스는 사진만 ──')
+for (const f of LIGHTBOX) {
+  const src = fs.readFileSync(path.join(ROOT, f), 'utf8')
+  ok(`${f} — 머리줄·바닥줄이 없다`, !/title=|footer=/.test(src), '글이 붙으면 공용 카드를 써라')
+  ok(`${f} — 사진 한 장이다(img 하나)`, (src.match(/<img /g) || []).length === 1)
+  ok(`${f} — 화면 안에 비율대로 담는다(contain)`, /objectFit: 'contain'/.test(src) && /maxHeight/.test(src))
+  ok(`${f} — 닫는 길은 공용 오버레이가 맡는다`, /<ModalOverlay/.test(src) && /onClose=\{onClose\}/.test(src))
+}
 
 // ── ⑦ 사이드바의 떠오르는 판은 **body 에** 띄운다(2026-11-25) ────────────
 // 사이드바는 overflow: hidden 이라 안에 두면 접힌 폭(64) 밖이 잘린다.

@@ -75,9 +75,14 @@ for (const a of ['site-status', 'site-agency', 'company-industry', 'company-edit
 console.log('\n── ② 지우는 길 — 슈퍼관리자 ──')
 ok('지우기 라우트의 기본 문턱이 슈퍼관리자',
   /: await loadCaller\(\{ kind: 'superadmin' \}, \{ tag: TAG, req, method: 'POST' \}\)/.test(CD))
-ok('요청·목록만 고객사 메뉴로 내려온다',
-  /const MEMBER_ACTIONS = new Set\(\['request', 'list-requests'\]\)/.test(CD))
-ok('요청·목록은 지우지 않는다', !/MEMBER_ACTIONS[\s\S]{0,200}deleted_at: new Date/.test(CD))
+// 2026-11-25 — **지우기와 세기도** 고객사 메뉴로 내려왔다(지시). 지우기는 숨기기이고
+// 누가·왜가 사건으로 남으며 관리자가 되돌릴 수 있어, 문턱을 낮춰도 잃는 것이 없다.
+// 되살리기와 숨긴 목록은 그대로 관리 쪽이다 — 아래 ②-ⓑ 가 그것을 본다.
+ok('요청·목록·세기·지우기가 고객사 메뉴로 내려온다',
+  /const MEMBER_ACTIONS = new Set\(\['request', 'list-requests', 'counts', 'delete'\]\)/.test(CD))
+ok('되살리기·숨긴 목록은 관리 메뉴다',
+  /const ADMIN_ACTIONS = new Set\(\['restore', 'list-deleted'\]\)/.test(CD)
+  && /ADMIN_ACTIONS\.has\(action\)\s*\n\s*\? await loadCaller\(\{ kind: 'menu', keys: \['admin'\] \}/.test(CD))
 for (const a of ['rename', 'merge', 'convert-agency', 'delete']) {
   ok(`회사 수준 ${a} 는 SITE_LEVEL 에 없다`, !new RegExp(`SITE_LEVEL = new Set\\(\\[[^\\]]*'${a}'`).test(PC))
 }
@@ -86,9 +91,11 @@ console.log('\n── ③ 화면과 라우트가 같은 말을 한다 ──')
 const PANEL = read('components/home/list/CustomerListPanel.tsx')
 const PAGE = read('app/page.tsx')
 ok('지우기 버튼은 넘겨받을 때만 선다', /onDeleteCompany\?: \(companyId: number, companyName: string\) => void/.test(PANEL))
-ok('화면이 슈퍼관리자에게만 지우기를 넘긴다',
-  /onDeleteCompany=\{isSuperAdmin\(me\) \? \(\(id, name\) => deleteEmptyCompany\(id, name\)\) : undefined\}/.test(PAGE))
-ok('그 밖에는 「삭제 요청」이 선다', PANEL.includes('DELETE_REQUEST_LABEL') && PANEL.includes('onRequestDelete'))
+// 2026-11-25 — 화면도 라우트와 같이 **누구에게나** 넘긴다. 그래서 「삭제 요청」 자리는
+// 서지 않는다 — 길(라우트·창·꼬리표)은 그대로 남아 있다(다시 좁히면 그 자리가 돌아온다).
+ok('화면이 누구에게나 지우기를 넘긴다',
+  /onDeleteCompany=\{\(id, name\) => deleteEmptyCompany\(id, name\)\}/.test(PAGE))
+ok('「삭제 요청」 길은 그대로 남아 있다', PANEL.includes('DELETE_REQUEST_LABEL') && PANEL.includes('onRequestDelete'))
 ok('이미 요청된 줄엔 꼬리표', PANEL.includes('DELETE_REQUESTED_LABEL') && /deleteRequested\.has\(r\.companyId\)/.test(PANEL))
 eq('버튼 글자', [D.DELETE_REQUEST_LABEL, D.DELETE_REQUESTED_LABEL], ['삭제 요청', '삭제 요청됨'])
 

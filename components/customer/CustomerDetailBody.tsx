@@ -22,12 +22,15 @@ import { useContactCrud } from '@/hooks/customer/useContactCrud'
 import { useDeviceCrud } from '@/hooks/customer/useDeviceCrud'
 import { useCustomerCrud } from '@/hooks/customer/useCustomerCrud'
 import { useHoldingCrud } from '@/hooks/customer/useHoldingCrud'
-import { isSuperAdmin } from '@/lib/permissions'
+import { canViewMenu } from '@/lib/permissions'
+import { useMe } from '@/lib/appData/MeProvider'
 
 import type { Device, ServiceHistory } from '@/components/customer/types'
 import { PAGE_BG, TEXT_MUTED } from '@/components/customer/constants'
 
 import SiteHeaderBand from '@/components/customer/SiteHeaderBand'
+import SiteInfoColumn, { SITE_COL_W } from '@/components/customer/SiteInfoColumn'
+import DeletedDevices from '@/components/customer/DeletedDevices'
 import DeviceSection from '@/components/customer/DeviceSection'
 import { inUseOnly } from '@/lib/deviceStatus'
 import HoldingModal from '@/components/customer/modals/HoldingModal'
@@ -41,7 +44,7 @@ import DeviceEditModal from '@/components/customer/modals/DeviceEditModal'
 import ServiceAddModal from '@/components/customer/modals/ServiceAddModal'
 import ServiceEditModal from '@/components/customer/modals/ServiceEditModal'
 import SignModal from '@/components/customer/modals/SignModal'
-import DeviceImageModal from '@/components/customer/modals/DeviceImageModal'
+import DevicePhotoModal from '@/components/customer/modals/DevicePhotoModal'
 import { R } from '@/lib/radius'
 
 export type CustomerDetailBodyProps = {
@@ -77,6 +80,15 @@ export default function CustomerDetailBody({
     loading, currentUserEngineerId, currentUserRole,
     historyByDevice, fetchDetail,
   } = detail
+
+  /**
+   * **되살리기는 관리 메뉴를 가진 사람**(+슈퍼관리자)이다 — 라우트와 같은 판정이다
+   * (app/api/customer-delete 의 ADMIN_ACTIONS). 지우기·고치기는 로그인한 사람 전부에게
+   * 열었지만(2026-11-25 지시), 되살리는 일은 지운 사람이 아니라 전체를 보는 사람이
+   * 판단한다. permission_level 하나로는 못 가린다 — 메뉴 권한은 me.perm 에 있다.
+   */
+  const { me } = useMe()
+  const canRestoreDevice = canViewMenu(me, 'admin')
 
   // 건수·요약은 **쓰는 장비만** 센다. 목록(DeviceSection)과 타임라인은 폐기까지 받아 간다 —
   // 목록은 「폐기 포함」 토글을 갖고, 타임라인은 지난 기록의 장비 이름을 여기서 찾는다.
@@ -144,6 +156,8 @@ export default function CustomerDetailBody({
   // 같은 타임라인을 두 곳에서 따로 고쳐야 했다. 여기는 장비만 남는다.
   /** 요약의 「장비」 숫자를 누르면 이 카드로 내려간다(전에는 탭을 바꿨다). */
   const deviceCardRef = useRef<HTMLDivElement | null>(null)
+  /** 크게 보고 있는 장비 사진 — 카드의 사진을 누르면 담긴다(2026-11-25). */
+  const [photo, setPhoto] = useState<{ path: string; preview: string; alt: string } | null>(null)
   const [isSignModalOpen, setIsSignModalOpen] = useState(false)
   const [pendingReportService, setPendingReportService] = useState<ServiceHistory | null>(null)
   const [pendingReportDevice, setPendingReportDevice] = useState<Device | null>(null)
@@ -166,11 +180,34 @@ export default function CustomerDetailBody({
     }
     @keyframes sk-pulse { 0%,100% { opacity:1 } 50% { opacity:0.45 } }
 
-    /* 한 단이다 — 맨 위 가로 띠(업체·장비 수·담당자) 아래를 장비가 전부 쓴다.
-       전에는 왼쪽 300~340px 열에 업체·담당자 카드를 세로로 쌓았는데, 그 열이 가져간
-       자리만큼 장비 카드가 좁아 1366 에서 두 대만 보였다(2026-11-20 실측). */
+    /*
+      ── V8(2026-11-25) — PC 는 **좌 340 열 + 우 장비**다 ───────────────────
+      2026-11-20 에는 왼쪽 열을 걷고 가로 띠로 눕혔다(그 열이 가져간 300px 만큼 장비가
+      좁았다). 그런데 띠는 담당자를 칩 두 줄로 접어야 해서, 다섯 명이면 「더보기 +3」이
+      되고 전화·이메일이 칩 안에서 자리를 다퉜다. 사업장 화면에서 가장 자주 하는 일이
+      「담당자에게 전화」다 — 그래서 열을 되살리되 **장비 카드와 같은 폭(340)** 으로
+      못 박았다. 1440 에서 오른쪽에 카드 셋이 선다.
+
+      기본(폰)은 **한 단**이고 지난 회차의 가로 띠(SiteHeaderBand)가 그대로 선다.
+      둘은 CSS 로만 갈린다 — 넓어지면 띠가 사라지고 열이 선다.
+
+      접는 기준이 두 벌인 까닭: 상세 페이지(.site-page)는 **화면 폭**으로 접고,
+      분할 보기(.cust-embed)는 **칸 폭**으로 접는다(@container). 1366 에서도 오른쪽
+      칸은 600px 인데 화면 폭으로 접으면 2단을 고집하다 장비 카드가 칸을 넘친다.
+    */
     .site-wrap { display: flex; flex-direction: column; gap: 12px; max-width: 1920px; margin: 0 auto; }
     .cust-center { min-width: 0; }
+    .site-col-wrap { display: none; min-width: 0; }
+    @media (min-width: 768px) {
+      .site-page .site-wrap { display: grid; grid-template-columns: ${SITE_COL_W}px minmax(0, 1fr); gap: 14px; align-items: start; }
+      .site-page .site-col-wrap { display: block; position: sticky; top: 14px; }
+      .site-page .site-band-phone { display: none; }
+    }
+    @container (min-width: 768px) {
+      .cust-embed .site-wrap { display: grid; grid-template-columns: ${SITE_COL_W}px minmax(0, 1fr); gap: 14px; align-items: start; }
+      .cust-embed .site-col-wrap { display: block; position: sticky; top: 14px; }
+      .cust-embed .site-band-phone { display: none; }
+    }
 
     /* 장비 카드는 **폭 340 고정**이다. 남는 자리에 맞춰 늘리지 않고 왼쪽부터 채운다 —
        한 줄에 몇 장이 서느냐에 따라 카드가 달라지면 같은 장비가 화면마다 다르게 보인다.
@@ -281,23 +318,40 @@ export default function CustomerDetailBody({
 
       <div className={wrapClass} style={wrapStyle}>
 
-        {/* 맨 위 가로 띠 — 업체 · 장비 수 · 담당자. 그 아래를 장비가 전부 쓴다.
-            세로 카드 둘을 왼쪽에 쌓던 때는 그 열이 가져간 300px 만큼 장비가 좁았다. */}
+        {/* 넓으면 **좌 340 열 + 우 장비**(V8), 폰에서는 가로 띠 아래를 장비가 전부 쓴다.
+            같은 내용을 두 모양으로 그리는 자리라 하네스가 둘을 함께 본다(site-v8-check.js). */}
         <div className="site-wrap">
-          <SiteHeaderBand
-            customer={customer}
-            companyName={family?.name ?? null}
-            contacts={contacts}
-            onBack={onBack}
-            /* 회사명을 누르는 것과 ← 는 같은 곳으로 간다(분할 보기의 회사 화면).
-               둘 다 두는 까닭: ← 는 「돌아가기」, 회사명은 「이 사업장이 어느 회사인가」다. */
-            onOpenCompany={embedded ? onBack : undefined}
-            onEdit={() => customerCrud.setIsEditCustomerModalOpen(true)}
-            onAddContact={() => contact.setIsAddContactModalOpen(true)}
-            onEditContact={contact.setSelectedContact}
-          />
+          {/* 폰 — 지난 회차의 가로 띠 그대로다(≥768 에서는 CSS 가 감춘다). */}
+          <div className="site-band-phone">
+            <SiteHeaderBand
+              customer={customer}
+              companyName={family?.name ?? null}
+              contacts={contacts}
+              onBack={onBack}
+              /* 회사명을 누르는 것과 ← 는 같은 곳으로 간다(분할 보기의 회사 화면).
+                 둘 다 두는 까닭: ← 는 「돌아가기」, 회사명은 「이 사업장이 어느 회사인가」다. */
+              onOpenCompany={embedded ? onBack : undefined}
+              onEdit={() => customerCrud.setIsEditCustomerModalOpen(true)}
+              onAddContact={() => contact.setIsAddContactModalOpen(true)}
+              onEditContact={contact.setSelectedContact}
+            />
+          </div>
 
-          {/* 장비 — 머리줄을 두지 않는다. 장비 수는 띠에 있고, 더하는 자리는 그리드 끝 점선 카드다. */}
+          {/* PC — 따라 내려오는 왼쪽 열(사업장 정보 + 담당자). */}
+          <div className="site-col-wrap">
+            <SiteInfoColumn
+              customer={customer}
+              companyName={family?.name ?? null}
+              contacts={contacts}
+              onBack={onBack}
+              onOpenCompany={embedded ? onBack : undefined}
+              onEdit={() => customerCrud.setIsEditCustomerModalOpen(true)}
+              onAddContact={() => contact.setIsAddContactModalOpen(true)}
+              onEditContact={contact.setSelectedContact}
+            />
+          </div>
+
+          {/* 장비 — 머리줄을 두지 않는다. 장비 수는 왼쪽 열에 있고, 더하는 자리는 그리드 끝 점선 카드다. */}
           <div className="cust-center" ref={deviceCardRef}>
         <DeviceSection
           devices={devices}
@@ -307,7 +361,7 @@ export default function CustomerDetailBody({
           onEditDevice={device.setSelectedDevice}
           onAddService={service.setSelectedDeviceId}
           onEditService={service.setSelectedService}
-          onImageUpload={device.setSelectedImageDevice}
+          onViewPhoto={(dev, p, preview) => setPhoto({ path: p, preview, alt: [dev.device_name, dev.device_name2].filter(Boolean).join(' ') || '장비 사진' })}
           onPrintReport={(svc, dev) => {
             setPendingReportService(svc)
             setPendingReportDevice(dev)
@@ -323,6 +377,8 @@ export default function CustomerDetailBody({
           onOpenHolding={holding.openHolding}
           showDisposed={showDisposed}
         />
+        {/* 그리드 끝 — 숨긴 장비를 되살리는 줄(관리 메뉴를 가진 사람에게만 보인다). */}
+        <DeletedDevices customerId={customerId} canRestore={canRestoreDevice} onRestored={refreshAll} />
           </div>
         </div>
 
@@ -336,7 +392,7 @@ export default function CustomerDetailBody({
           isDeleting={customerCrud.isDeletingCustomer}
           onClose={() => customerCrud.setIsEditCustomerModalOpen(false)}
           onSave={customerCrud.handleUpdateCustomer}
-          onDelete={isSuperAdmin({ permission_level: currentUserRole }) ? customerCrud.openDeleteCustomer : undefined}
+          onDelete={customerCrud.openDeleteCustomer}
         />
         {/* 담당자·장비 지우기 창 — 사업장 창과 같은 부품이다. */}
         {contact.deleteContactOpen && contact.selectedContact && (
@@ -371,6 +427,8 @@ export default function CustomerDetailBody({
             busy={customerCrud.isDeletingCustomer}
             onClose={() => customerCrud.setDeleteOpen(false)}
             onDelete={reason => void customerCrud.confirmDeleteCustomer(reason)}
+            /* 창이 「이탈로 바꾸세요」라고 말한다 — 그 길을 같은 창에 둔다(사업장에만). */
+            onLeave={() => void customerCrud.leaveSite()}
           />
         )}
         <ContactAddModal
@@ -384,7 +442,7 @@ export default function CustomerDetailBody({
           isSaving={contact.isSavingContactEdit}
           onClose={() => contact.setSelectedContact(null)}
           onSave={contact.handleUpdateContact}
-          onDelete={isSuperAdmin({ permission_level: currentUserRole }) ? contact.openDeleteContact : undefined}
+          onDelete={contact.openDeleteContact}
         />
         <DeviceAddModal
           isOpen={device.isAddDeviceModalOpen}
@@ -397,7 +455,7 @@ export default function CustomerDetailBody({
           isSaving={device.isSavingDeviceEdit}
           onClose={() => device.setSelectedDevice(null)}
           onSave={device.handleUpdateDevice}
-          onDelete={isSuperAdmin({ permission_level: currentUserRole }) ? device.openDeleteDevice : undefined}
+          onDelete={device.openDeleteDevice}
           onDispose={device.handleDisposeDevice}
           onRestore={device.handleRestoreDevice}
           onOpenPacking={() => device.selectedDevice && device.handleOpenPacking(device.selectedDevice)}
@@ -480,12 +538,8 @@ export default function CustomerDetailBody({
           onClose={holding.closeResolve}
           onResolve={holding.handleResolve}
         />
-        <DeviceImageModal
-          device={device.selectedImageDevice}
-          isSaving={device.isSavingDeviceImage}
-          onClose={() => device.setSelectedImageDevice(null)}
-          onSave={device.handleUploadDeviceImage}
-        />
+        {/* 사진 크게 보기 — 사진만 띄운다(등록·변경은 장비 수정 창에 있다, 2026-11-25). */}
+        <DevicePhotoModal photo={photo} onClose={() => setPhoto(null)} />
 
       </div>
     </>

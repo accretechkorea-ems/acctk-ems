@@ -73,8 +73,8 @@ ok('status 와 import_page 를 더한다',
 ok('status 는 draft·active 둘뿐', /check \(status in \('draft', 'active'\)\)/.test(SQL))
 ok('찾기 쉽게 인덱스', /create index if not exists business_cards_draft_idx/.test(SQL))
 ok('스키마를 깨운다', /notify pgrst, 'reload schema'/.test(SQL))
-ok('APPLIED.md 에 미적용으로 적었다',
-  /business_cards_draft_20261125\.sql[^|]*\|\s*\*\*미적용\*\*/.test(read('db/APPLIED.md')))
+ok('APPLIED.md 에 적용한 날을 적었다',
+  /business_cards_draft_20261125\.sql[^|]*\|\s*2026-\d\d-\d\d/.test(read('db/APPLIED.md')))
 eq('상태 이름', [V.STATUS_DRAFT, V.STATUS_ACTIVE], ['draft', 'active'])
 
 console.log('\n── ② 검토 대기는 명함첩에 나오지 않는다 ──')

@@ -42,7 +42,7 @@ import { todayKST } from '@/lib/date'
 import { useToast } from '@/components/common/Toast'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { isSuperAdmin } from '@/lib/permissions'
+import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
 
 
 import {
@@ -65,6 +65,8 @@ export default function HomePage() {
   const { engineer: me, loading: guardLoading, authorized } = usePageGuard()
   // 엑셀 내보내기는 관리자만 — 팀 관리·목표 관리 버튼과 같은 판정(permission_level).
   const canExportExcel = isSuperAdmin(me)
+  /** 숨긴 줄을 되살리는 사람 — 관리 메뉴(+슈퍼관리자). 라우트와 같은 판정이다. */
+  const canRestoreCustomer = canViewMenu(me, 'admin')
   const toast = useToast()
 
   const listScrollRef = useRef<HTMLDivElement | null>(null)
@@ -1115,13 +1117,16 @@ useEffect(() => {
               cleanup={cleanup}
               cleanupBucket={cleanupBucket}
               setCleanupBucket={setCleanupBucket}
-              /* 지우기는 슈퍼관리자만 — 버튼 자체를 내주지 않는다(라우트도 같은 문턱이다).
-                 그 밖의 사람에게는 「삭제 요청」이 그 자리에 선다(2026-11-23). */
-              onDeleteCompany={isSuperAdmin(me) ? ((id, name) => deleteEmptyCompany(id, name)) : undefined}
+              /* 지우기는 **고객사를 보는 사람 전부**다(2026-11-25 지시 — 라우트도 같은 문턱이다).
+                 지우기는 숨기기이고(deleted_at) 누가·왜가 사건으로 남으며 관리자가 되돌릴 수
+                 있어, 문턱을 낮춰도 잃는 것이 없다. 그래서 「삭제 요청」 자리는 서지 않는다 —
+                 길과 라우트는 그대로 남아 있다(다시 좁히면 그 자리가 돌아온다). */
+              onDeleteCompany={(id, name) => deleteEmptyCompany(id, name)}
               onRequestDelete={(id, name) => setRequestTarget({ id, name })}
               deleteRequested={deleteRequested}
-              /* 되돌리기도 슈퍼관리자만. */
-              onRestore={canExportExcel ? ((id, name) => void restoreCustomer(id, name)) : undefined}
+              /* 되돌리기는 **관리 메뉴를 가진 사람**(+슈퍼관리자)이다 — 지운 사람이 아니라
+                 전체를 보는 사람이 판단한다(라우트의 ADMIN_ACTIONS 와 같은 판정). */
+              onRestore={canRestoreCustomer ? ((id, name) => void restoreCustomer(id, name)) : undefined}
               agencies={agencyList}
               agencySiteCount={agencySiteCount}
               /* 대리점을 누르면 **우측에 대리점 화면**이 선다(2026-11-21).
@@ -1166,7 +1171,8 @@ useEffect(() => {
                 touchOf={id => lastTouchMap.get(id) ?? null}
                 today={today}
                 me={{ engineer_id: me?.engineer_id ?? null }}
-                canDeleteContact={canExportExcel}
+                /* 담당자 삭제도 누구나 — 사유를 받고 사건으로 남긴다(2026-11-25 지시). */
+                canDeleteContact
                 onOpenSite={id => openSite(id)}
                 onBackToList={() => setSelectedAgencyId(null)}
                 onSaved={() => { void refreshCustomers() }}

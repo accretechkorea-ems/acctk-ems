@@ -15,8 +15,8 @@ import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import { R } from '@/lib/radius'
 import { BAND_BG, BORDER, CARD_BG, DANGER, DANGER_TINT, MUTED, SUB, TEXT } from '@/components/common/ui'
 import {
-  DELETE_ADVICE, DELETE_NOTE, DELETE_REASON_MAX, EMPTY_COUNTS, TARGET_LABEL,
-  deleteBlockedReason, hiddenWithText, type DeleteCounts, type DeleteTarget,
+  DELETE_NOTE, DELETE_REASON_MAX, EMPTY_COUNTS, LEAVE_LABEL, TARGET_LABEL,
+  adviceFor, deleteBlockedReason, hiddenWithText, type DeleteCounts, type DeleteTarget,
 } from '@/lib/customerDelete'
 
 
@@ -29,10 +29,16 @@ export type DeleteCustomerModalProps = {
   busy?: boolean
   onClose: () => void
   onDelete: (reason: string) => void
+  /**
+   * 「이탈로 바꾸기」 — **사업장에만** 넘긴다(2026-11-25 지시).
+   * 넘기지 않으면 버튼이 서지 않는다. 창이 「이탈로 바꾸세요」라고 말해 놓고 그 길이
+   * 다른 화면에 있으면 읽은 사람은 그냥 지운다.
+   */
+  onLeave?: () => void
 }
 
 export default function DeleteCustomerModal({
-  target, name, counts, busy = false, onClose, onDelete,
+  target, name, counts, busy = false, onClose, onDelete, onLeave,
 }: DeleteCustomerModalProps) {
   // 까닭은 창이 떠 있는 동안만 산다. **창을 새로 열면 비어 있어야 한다** — 부르는 쪽이
   // 대상이 바뀔 때 key 를 갈아 끼워 이 컴포넌트를 새로 만든다(효과에서 지우지 않는다).
@@ -42,6 +48,12 @@ export default function DeleteCustomerModal({
   const blocked = deleteBlockedReason(reason, busy)
   const hidden = hiddenWithText(counts ?? EMPTY_COUNTS)
   const label = TARGET_LABEL[target]
+  /**
+   * 연결 기록을 **세는 대상**인가 — 업체 셋만 센다(부르는 쪽이 counts 를 받아 온다).
+   * 담당자·장비는 null 로 들어오는데, 전에는 그 창에 「연결된 기록을 세는 중…」이
+   * 끝까지 떠 있었다(세는 쪽이 없으므로 영원히 끝나지 않는다). 지금은 아무 말도 하지 않는다.
+   */
+  const counting = counts === null && (target === 'site' || target === 'company' || target === 'agency')
 
   return (
     /**
@@ -85,22 +97,22 @@ export default function DeleteCustomerModal({
           </button>
         </>}
       >
-        {/* ① 지우지 마세요 */}
+        {/* ① 지우지 마세요 — 업체는 긴 글, 담당자·장비는 한 줄이다(lib/customerDelete.ts). */}
         <div style={{
           padding: '10px 12px', borderRadius: R.control, background: DANGER_TINT,
           border: `1px solid ${DANGER_TINT}`, fontSize: 13, color: DANGER, fontWeight: 600, lineHeight: 1.6,
         }}>
-          {DELETE_ADVICE}
+          {adviceFor(target)}
         </div>
 
         {/* ② 무엇이 함께 숨는가 */}
         <div>
           <div style={{ fontSize: 13, color: TEXT, fontWeight: 700, marginBottom: 6, wordBreak: 'break-all' }}>{name}</div>
-          <div style={{ fontSize: 12, color: SUB, lineHeight: 1.7 }}>
-            {counts === null
-              ? '연결된 기록을 세는 중…'
-              : hidden || '연결된 기록이 없습니다.'}
-          </div>
+          {counting ? (
+            <div style={{ fontSize: 12, color: SUB, lineHeight: 1.7 }}>연결된 기록을 세는 중…</div>
+          ) : counts !== null ? (
+            <div style={{ fontSize: 12, color: SUB, lineHeight: 1.7 }}>{hidden || '연결된 기록이 없습니다.'}</div>
+          ) : null}
           <div style={{ fontSize: 12, color: MUTED, marginTop: 4, lineHeight: 1.7 }}>{DELETE_NOTE}</div>
         </div>
 
@@ -122,6 +134,19 @@ export default function DeleteCustomerModal({
           <div className="num" style={{ fontSize: 11, color: MUTED, textAlign: 'right', marginTop: 2 }}>
             {reason.length} / {DELETE_REASON_MAX}
           </div>
+
+          {/* 대신 할 일 — 사업장에만 선다. 까닭을 적지 않아도 누를 수 있다(지우는 길이 아니다). */}
+          {onLeave && (
+            <button type="button" onClick={onLeave} disabled={busy}
+              style={{
+                marginTop: 10, width: '100%', height: 34, borderRadius: R.control,
+                border: `1px solid ${BORDER}`, background: CARD_BG, color: SUB,
+                fontSize: 13, fontWeight: 600, cursor: busy ? 'not-allowed' : 'pointer',
+                fontFamily: 'inherit',
+              }}>
+              {LEAVE_LABEL}
+            </button>
+          )}
         </div>
       </ModalCard>
     </ModalOverlay>

@@ -9,7 +9,8 @@ import { saveCustomerEdit } from '@/lib/saveCustomerEdit'
 import { useToast } from '@/components/common/Toast'
 import type { Customer, CustomerEditFormData } from '@/components/customer/types'
 import { customerDelete } from '@/lib/customerDelete.client'
-import { EMPTY_COUNTS, type DeleteCounts } from '@/lib/customerDelete'
+import { customerChange } from '@/lib/customerChange'
+import { EMPTY_COUNTS, LEAVE_STATUS, type DeleteCounts } from '@/lib/customerDelete'
 
 type Args = {
   customer: Customer | null
@@ -84,10 +85,32 @@ export function useCustomerCrud({ customer, fetchDetail }: Args) {
     router.push('/')
   }
 
+  /**
+   * **이탈로 바꾸기** — 지우기 창의 보조 버튼이 부른다(2026-11-25 지시).
+   *
+   * 창이 「거래가 끊긴 업체는 삭제하지 말고 상태를 이탈로」라고 말한다. 그 길이 다른
+   * 화면(사업장 수정 모달의 상태 칸)에만 있으면 읽은 사람은 그냥 지운다 — 그래서 같은
+   * 창에 둔다. 쓰기는 목록 보기의 일괄 상태 변경과 **같은 라우트**다(site-status) —
+   * 사건(site_status_changed)도 그쪽이 함께 남긴다.
+   */
+  const leaveSite = async () => {
+    if (!customer) return
+    setIsDeletingCustomer(true)
+    const r = await customerChange({
+      action: 'site-status', ids: [customer.customer_id], status: LEAVE_STATUS,
+    })
+    setIsDeletingCustomer(false)
+    if (!r.ok) { toast.error(r.error); return }
+    setDeleteOpen(false)
+    setIsEditCustomerModalOpen(false)
+    toast.success(`상태를 「${LEAVE_STATUS}」로 바꿨습니다`)
+    await fetchDetail()
+  }
+
   return {
     isEditCustomerModalOpen, setIsEditCustomerModalOpen,
     isSavingCustomerEdit, isDeletingCustomer,
-    handleUpdateCustomer,
+    handleUpdateCustomer, leaveSite,
     // 삭제 — 창을 열고(openDeleteCustomer), 창이 까닭과 함께 부른다(confirmDeleteCustomer).
     deleteOpen, setDeleteOpen, deleteCounts, openDeleteCustomer, confirmDeleteCustomer,
   }

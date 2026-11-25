@@ -13,8 +13,6 @@ import { useToast } from '@/components/common/Toast'
 import { DEVICE_BUCKET, deviceImagePath, isDefaultDeviceImage } from '@/lib/deviceImage'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { downsizeImage } from '@/lib/leadCardImage'
-import { disposePatch, restorePatch } from '@/lib/deviceStatus'
-import { todayKST } from '@/lib/date'
 import type { Device, DeviceForm } from '@/components/customer/types'
 import { errMessage } from '@/lib/errMessage'
 
@@ -264,9 +262,10 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
     })
     if (!ok) return
     setIsSavingDeviceEdit(true)
-    const { error } = await supabase.from('devices').update(disposePatch(todayKST())).eq('device_id', selectedDevice.device_id)
+    // 쓰기는 **라우트**가 한다(2026-11-25) — 사건을 함께 남기고, 열 권한(42501)에 걸리지 않는다.
+    const r = await customerChange({ action: 'device-dispose', id: selectedDevice.device_id })
     setIsSavingDeviceEdit(false)
-    if (error) { toast.error(error.message || '폐기 처리 중 오류가 발생했습니다'); return }
+    if (!r.ok) { toast.error(r.error || '폐기 처리 중 오류가 발생했습니다'); return }
     toast.success('장비를 폐기 처리했습니다')
     setSelectedDevice(null)
     await fetchDetail()
@@ -276,9 +275,9 @@ export function useDeviceCrud({ customerId, fetchDetail }: Args) {
   const handleRestoreDevice = async () => {
     if (!selectedDevice) return
     setIsSavingDeviceEdit(true)
-    const { error } = await supabase.from('devices').update(restorePatch()).eq('device_id', selectedDevice.device_id)
+    const r = await customerChange({ action: 'device-restore', id: selectedDevice.device_id })
     setIsSavingDeviceEdit(false)
-    if (error) { toast.error(error.message || '폐기 취소 중 오류가 발생했습니다'); return }
+    if (!r.ok) { toast.error(r.error || '폐기 취소 중 오류가 발생했습니다'); return }
     toast.success('폐기를 취소했습니다')
     setSelectedDevice(null)
     await fetchDetail()

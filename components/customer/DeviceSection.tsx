@@ -8,6 +8,7 @@ import { deviceImageWidthFor } from '@/lib/deviceImage'
 import { isDisposed, disposedLabel, inUseOnly, disposedOnly } from '@/lib/deviceStatus'
 import { useDeviceImageUrls, type StorageImageLookup } from '@/hooks/useStorageImageUrls'
 import { R } from '@/lib/radius'
+import { SUB } from '@/components/common/ui'
 
 /** 카드 사진을 받을 폭(px) — 장비 카드 폭에 맞춘다. */
 const CARD_IMG_W = 240
@@ -45,7 +46,11 @@ type Props = {
   onEditDevice: (device: Device) => void
   onAddService: (deviceId: number) => void
   onEditService: (service: ServiceHistory) => void
-  onImageUpload: (device: Device) => void
+  /**
+   * 사진을 **크게 본다**(2026-11-25). 전에는 같은 자리가 사진 등록 창을 열었다 —
+   * 보려고 누른 사람이 올리는 창을 만났다. 올리고 바꾸는 일은 장비 수정 창에만 있다.
+   */
+  onViewPhoto: (device: Device, path: string, preview: string) => void
   onPrintReport: (service: ServiceHistory, device: Device) => void
   onOpenReport: (service: ServiceHistory) => void
   // 레포트를 만들거나 여는 중인 service_id. 그 카드의 버튼만 잠근다.
@@ -162,7 +167,7 @@ function ServiceCard({ h, companyName, onEdit, onPrint, onOpenReport, reportBusy
   )
 }
 
-function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, reportBusyId, onUploadPacking, onOpenPacking, supabaseUrl, imageUrl, activeHolding, holdingByService, onAddHolding, onOpenHolding }: {
+function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService, onEditService, onViewPhoto, onPrintReport, onOpenReport, reportBusyId, onUploadPacking, onOpenPacking, supabaseUrl, imageUrl, activeHolding, holdingByService, onAddHolding, onOpenHolding }: {
   d: Device
   companyName: string | null
   deviceHistory: ServiceHistory[]
@@ -173,7 +178,8 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
   onAddHolding: (serviceId?: number | null) => void
   onOpenHolding: (h: Holding) => void
   onEditService: (s: ServiceHistory) => void
-  onImageUpload: () => void
+  /** 저장된 경로와 **지금 보이는 썸네일** 둘을 넘긴다 — 창이 원본을 따로 받는다. */
+  onViewPhoto: (path: string, preview: string) => void
   onPrintReport: (s: ServiceHistory) => void
   reportBusyId: number | null
   onOpenReport: (s: ServiceHistory) => void
@@ -211,8 +217,17 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
       <EditIconButton size={24} label="장비 수정" onClick={onEditDevice}
         style={{ position: 'absolute', top: 10, right: 10, zIndex: 2 }} />
 
-      {/* 사진 — 카드 폭에 4:3. 사진이 있으면 **눌러 크게 본다**(사진 창이 열린다).
-          없으면 점선 「사진 등록」 — 같은 창이 열려 거기서 올린다. */}
+      {/*
+        사진 — 카드 폭에 4:3.
+
+        **전체가 보이게** 칸을 채운다(object-fit: fill, 2026-11-25 지시). cover 는 넘치는
+        쪽을 잘라 내서, 가로로 긴 장비 사진은 양 끝이 사라졌다(어느 기종인지가 그 끝에
+        있을 때가 있다). fill 은 비율이 살짝 눌리지만 **빠지는 것이 없다** — 비율 그대로
+        보려면 눌러서 크게 본다(contain).
+
+        누르면 **크게 보기**다. 사진이 없으면 점선 칸에 「사진 등록」이라고만 적는다 —
+        눌러도 아무 일도 없다(올리는 일은 장비 수정 창에 있다).
+      */}
       <div className="dev-photo" style={{
         width: '100%', height: PHOTO_H, boxSizing: 'border-box', overflow: 'hidden',
         ...(hasPhoto
@@ -222,22 +237,21 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
       }}>
         {hasPhoto ? (
           shownSrc ? (
-            <button type="button" onClick={onImageUpload} title="사진 크게 보기"
+            <button type="button" onClick={() => onViewPhoto(d.image_url ?? defaultImg ?? '', shownSrc)} title="사진 크게 보기"
               style={{ width: '100%', height: '100%', padding: 0, border: 'none', background: 'none', cursor: 'zoom-in' }}>
               {/* 저장소(Supabase)의 장비 사진이다 — next/image 로 보내려면 원격 도메인을 설정에
                   등록해야 하고, 그 최적화는 **이 자리**에 이득이 없다(목록 썸네일 한 장, 이미
                   loading=lazy·decoding=async 다). 규칙만 이 줄에서 끈다. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={shownSrc} alt={deviceTitle || 'device'}
+              <img className="dev-img" src={shownSrc} alt={deviceTitle || 'device'}
                 loading="lazy" decoding="async"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block' }} />
             </button>
           ) : null
         ) : (
-          <button
-            onClick={onImageUpload}
+          <div
             style={{
-              width: '100%', height: '100%', background: 'transparent', border: 'none', cursor: 'pointer',
+              width: '100%', height: '100%',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
             }}
           >
@@ -246,8 +260,9 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
               <circle cx="8.5" cy="8.5" r="1.5" />
               <polyline points="21 15 16 10 5 21" />
             </svg>
-            <span style={{ fontSize: 12, color: '#6b7280', fontWeight: 600 }}>사진 등록</span>
-          </button>
+            {/* 안내색 — 「없다」를 알려 주는 글자다(lib/textTokens.ts 의 안내문·보조). */}
+            <span style={{ fontSize: 12, color: SUB, fontWeight: 600 }}>사진 등록</span>
+          </div>
         )}
       </div>
 
@@ -384,7 +399,7 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
   )
 }
 
-export default function DeviceSection({ devices, companyName, historyByDevice, onAddDevice, onEditDevice, onAddService, onEditService, onImageUpload, onPrintReport, onOpenReport, reportBusyId, onUploadPacking, onOpenPacking, activeHoldingByDevice, holdingByService, onAddHolding, onOpenHolding, showDisposed = false }: Props) {
+export default function DeviceSection({ devices, companyName, historyByDevice, onAddDevice, onEditDevice, onAddService, onEditService, onViewPhoto, onPrintReport, onOpenReport, reportBusyId, onUploadPacking, onOpenPacking, activeHoldingByDevice, holdingByService, onAddHolding, onOpenHolding, showDisposed = false }: Props) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   /**
    * 보여 줄 장비 — 폐기된 것은 **살아 있는 것 뒤**에 세운다(쓰는 장비가 먼저다).
@@ -421,7 +436,7 @@ export default function DeviceSection({ devices, companyName, historyByDevice, o
             onAddService={() => onAddService(d.device_id)}
             onEditService={onEditService}
             reportBusyId={reportBusyId}
-            onImageUpload={() => onImageUpload(d)}
+            onViewPhoto={(p, preview) => onViewPhoto(d, p, preview)}
             imageUrl={imageUrl}
             onPrintReport={(s) => onPrintReport(s, d)}
             onOpenReport={(s) => onOpenReport(s)}

@@ -41,8 +41,20 @@ const TABLE: Record<DeleteTarget, { table: string; key: string }> = {
   device: { table: 'devices', key: 'device_id' },
 }
 
-/** 고객사를 보는 사람이면 되는 작업 — 지우지 않는 것들. */
-const MEMBER_ACTIONS = new Set(['request', 'list-requests'])
+/**
+ * 고객사를 보는 사람이면 되는 작업 (2026-11-25에 **지우기까지** 넓혔다).
+ *
+ * 전에는 지우기가 슈퍼관리자뿐이었다. 그런데 잘못 등록한 줄·중복 줄을 치우는 일이
+ * 현장에서 막혀, 쓰지 않는 줄이 쌓이고 「이탈」과 구분되지 않았다. 지우기는
+ * **숨기기**이고(deleted_at) 누가·왜가 사건으로 남으며 관리자가 되돌릴 수 있다 —
+ * 그래서 문턱을 낮춰도 잃는 것이 없다.
+ *
+ * **복구(restore)와 숨긴 목록(list-deleted)은 그대로 관리 쪽이다** — 되살리는 일은
+ * 지운 사람이 아니라 전체를 보는 사람이 판단한다.
+ */
+const MEMBER_ACTIONS = new Set(['request', 'list-requests', 'counts', 'delete'])
+/** 관리 메뉴를 가진 사람(+superadmin) — 되돌리기와 숨긴 목록. */
+const ADMIN_ACTIONS = new Set(['restore', 'list-deleted'])
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null) as Record<string, unknown> | null
@@ -52,12 +64,39 @@ export async function POST(req: Request) {
   // 문턱은 **작업마다** 다르다(위 「누가」).
   const { error: authError, caller, sb } = MEMBER_ACTIONS.has(action)
     ? await loadCaller({ kind: 'menu', keys: ['customers'] }, { tag: TAG, req, method: 'POST' })
-    : await loadCaller({ kind: 'superadmin' }, { tag: TAG, req, method: 'POST' })
+    : ADMIN_ACTIONS.has(action)
+      ? await loadCaller({ kind: 'menu', keys: ['admin'] }, { tag: TAG, req, method: 'POST' })
+      : await loadCaller({ kind: 'superadmin' }, { tag: TAG, req, method: 'POST' })
   if (authError) return authError
   const target = String(body.target ?? '') as DeleteTarget
   // ── 숨겨진 줄 목록 — 「삭제됨」 소탭이 읽는다 ─────────────────────────
   //   화면 조회는 지워진 줄을 보지 않으므로(.is('deleted_at', null)) 여기서 읽어 준다.
   if (action === 'list-deleted') {
+    /**
+     * 장비는 **그 사업장 것만** 읽는다(2026-11-25) — 사업장 화면의 장비 그리드 끝
+     * 「삭제된 장비 N대」가 쓴다. 업체 쪽은 화면 전체(정리 필요 탭)라 사업장을 가리지 않는다.
+     */
+    if (String(body.target ?? '') === 'device') {
+      const customerId = Number(body.customerId)
+      if (!Number.isInteger(customerId) || customerId <= 0) return bad('사업장을 찾지 못했습니다')
+      const { data, error } = await sb
+        .from('devices')
+        .select('device_id, device_name, device_name2, serial_number, deleted_at')
+        .eq('customer_id', customerId)
+        .not('deleted_at', 'is', null)
+        .order('deleted_at', { ascending: false })
+        .limit(100)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({
+        ok: true,
+        rows: (data ?? []).map(r => ({
+          device_id: Number(r.device_id),
+          name: [r.device_name, r.device_name2].filter(Boolean).join(' ') || `#${r.device_id}`,
+          serial_number: (r.serial_number ?? '') || null,
+          hint: `${String(r.deleted_at ?? '').slice(0, 10)} 숨김`,
+        })),
+      })
+    }
     const { data, error } = await sb
       .from('customers')
       .select('customer_id, company_name, site_name, is_parent, deleted_at')
@@ -155,7 +194,14 @@ export async function POST(req: Request) {
     if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 })
     if (!before) return bad('줄을 찾지 못했습니다')
 
-    const { error } = await sb.from(table).update({ deleted_at: null }).eq(key, id)
+    // 자국도 함께 지운다 — 되살아난 줄에 「누가 왜 숨겼나」가 남아 있으면 다음에 읽는
+    // 사람이 아직 숨어 있는 줄로 읽는다. 그 칸이 없는 DB 에서는(42703) 시각만 비운다.
+    let { error } = await sb.from(table)
+      .update({ deleted_at: null, deleted_by: null, delete_reason: null }).eq(key, id)
+    if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+      const again = await sb.from(table).update({ deleted_at: null }).eq(key, id)
+      error = again.error
+    }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     const row = before as Record<string, unknown>
@@ -193,13 +239,24 @@ export async function POST(req: Request) {
       if ((count ?? 0) > 0) return bad(`사업장 ${count}곳이 묶여 있습니다 — 먼저 옮기거나 지우세요`, 409)
     }
 
-    const { error } = await sb.from(table)
-      .update({ deleted_at: new Date().toISOString() }).eq(key, id)
+    /**
+     * 숨긴 시각과 함께 **누가·왜**도 그 줄에 적는다(db/devices_soft_delete_20261125.sql).
+     * 그 칸이 아직 없는 표·DB 에서는(42703) 시각만 적고 넘어간다 — 까닭은 사건에 남는다.
+     */
+    const now = new Date().toISOString()
+    const full = { deleted_at: now, deleted_by: caller.engineer_id, delete_reason: reason }
+    let { error } = await sb.from(table).update(full).eq(key, id)
+    if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+      const again = await sb.from(table).update({ deleted_at: now }).eq(key, id)
+      error = again.error
+    }
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     const customerId = target === 'contact' || target === 'device' ? Number(row.customer_id) : id
     const { written } = await writeCustomerEvents(sb, [{
       customer_id: customerId,
+      // 종류는 하나(customer_deleted)이고 **payload.kind** 가 대상을 가른다 —
+      // 활동 이력이 그 값으로 「장비 삭제」·「담당자 삭제」를 적는다.
       event_type: 'customer_deleted',
       occurred_at: new Date().toISOString(),
       actor_engineer_id: caller.engineer_id,

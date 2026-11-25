@@ -52,6 +52,15 @@ export type Contact = {
   position: string | null
   phone: string | null
   email: string | null
+  /**
+   * 2026-11-25 에 더한 네 칸(db/contacts_fields_20261125.sql). 화면은 `select('*')` 로
+   * 읽으므로 전부터 값은 와 있었는데 이 표에 없어 타입이 모르고 있었다 — 담당자 카드가
+   * 휴대폰과 회사 전화를 가려 보여 주려면 필요하다(phone 은 **회사 전화**다).
+   */
+  mobile?: string | null
+  fax?: string | null
+  name_en?: string | null
+  memo?: string | null
 }
 
 /** 서비스 레포트 첨부파일. report_url(레포트 본체)과는 별개다 — PDF 에는 들어가지 않는다. */

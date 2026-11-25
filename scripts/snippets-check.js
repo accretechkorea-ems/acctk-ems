@@ -91,8 +91,8 @@ ok('쓰기는 라우트가 한다 — authenticated 에는 select 만 내려 준
   /grant select on table public\.text_snippets to authenticated/.test(SQL)
   && !/grant[^;]*insert[^;]*to authenticated/.test(SQL))
 ok('스키마를 깨운다', /notify pgrst, 'reload schema'/.test(SQL))
-ok('APPLIED.md 에 미적용으로 적었다',
-  /text_snippets_20261125\.sql[^|]*\|\s*\*\*미적용\*\*/.test(read('db/APPLIED.md')))
+ok('APPLIED.md 에 적용한 날을 적었다',
+  /text_snippets_20261125\.sql[^|]*\|\s*2026-\d\d-\d\d/.test(read('db/APPLIED.md')))
 
 console.log('\n── ② 용도와 범위 ──')
 eq('용도 다섯', [...S.SNIPPET_KINDS],
