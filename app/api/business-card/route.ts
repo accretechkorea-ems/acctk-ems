@@ -23,7 +23,7 @@ import { NextResponse } from 'next/server'
 import { adminClient, loadCaller } from '@/lib/apiCaller'
 import { isDivision } from '@/lib/division'
 import {
-  CARD_FIELDS, EN_FIELDS, FIELD_MAX, MEMO_MAX, cardBlockedReason, checkedOnEntry, isInputMethod, snapshotOf,
+  CARD_FIELDS, EN_FIELDS, FIELD_MAX, MEMO_MAX, cardBlockedReason, isInputMethod, snapshotOf,
   type CardField,
 } from '@/lib/businessCard'
 
@@ -125,15 +125,11 @@ export async function POST(req: Request) {
     const method = isInputMethod(body.input_method) ? body.input_method : 'manual'
     const snap = snapshotOf(caller, division)
 
-    // 한 장씩 담은 명함은 **담은 날이 곧 확인한 날**이다 — 그 자리에서 눈으로 보고 넣었다.
-    // 일괄(bulk)로 담은 줄만 비워 둔다(= 확인 전). /api/cards/ocr-bulk 가 그 길이다.
-    const verified = checkedOnEntry(method) ? now : null
-
     const { data: made, error } = await supabaseAdmin
       .from('business_cards')
       .insert({
         ...(await dropMissingColumns(fields)),
-        division, input_method: method, registered_at: now, verified_at: verified, ...snap,
+        division, input_method: method, registered_at: now, ...snap,
       })
       .select('card_id')
       .single()
@@ -183,18 +179,6 @@ export async function POST(req: Request) {
     const changes = changesOf(before as Record<string, unknown>, fields)
     await logChange(cardId, 'card_edited', { name, changes })
     return NextResponse.json({ ok: true, changed: changes.length })
-  }
-
-  // ── 확인 — 「아직 그 자리에 있다」. 등록일은 건드리지 않는다 ────────────
-  if (action === 'verify') {
-    const { error } = await supabaseAdmin
-      .from('business_cards').update({ verified_at: now }).eq('card_id', cardId)
-    if (error) {
-      console.error(`[${TAG}] verify failed`, { cardId, error })
-      return NextResponse.json({ error: '확인을 적지 못했습니다' }, { status: 500 })
-    }
-    await logChange(cardId, 'card_verified', { name: before.name ?? null })
-    return NextResponse.json({ ok: true, verified_at: now })
   }
 
   // ── 지우기·되돌리기 — 슈퍼관리자. 소프트다 ────────────────────────────

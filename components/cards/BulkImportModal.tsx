@@ -15,10 +15,6 @@
  *   나눠 보내면 중간에 멈춰도 **앞의 묶음은 이미 담긴 뒤**다 — 그래서 중단해도
  *   잃는 것이 없고, 닫기를 누르면 그 사실을 먼저 알려 준다.
  *
- * ── 담긴 줄은 「확인 전」이다 ────────────────────────────────────────────
- *   아무도 눈으로 보지 않았으므로 verified_at 을 비워 둔다. 목록에서 「확인 전」으로
- *   걸러 보고, 한 장씩 눌러 확인한다.
- *
  * ── 사진·PDF 는 남지 않는다 ─────────────────────────────────────────────
  *   보내고 버린다. 올리는 저장소도, 기록도 없다.
  */
@@ -134,14 +130,12 @@ async function flip(file: File): Promise<File | null> {
   }
 }
 
-export default function BulkImportModal({ division, onClose, onDone, onShowUnchecked }: {
+export default function BulkImportModal({ division, onClose, onDone }: {
   /** 담을 사업부 — 목록 화면이 보고 있는 값. */
   division: string
   onClose: () => void
   /** 한 장이라도 담겼으면 목록을 다시 읽게 알린다. */
   onDone: (tally: BulkTally) => void
-  /** 「확인 전 보기」 — 목록에 그 조건을 건다. */
-  onShowUnchecked: () => void
 }) {
   const confirmDialog = useConfirm()
   const [files, setFiles] = useState<File[]>([])
@@ -441,9 +435,6 @@ export default function BulkImportModal({ division, onClose, onDone, onShowUnche
                 </button>
               </>
             )}
-            <div style={{ fontSize: 12, color: SUB, lineHeight: 1.7 }}>
-              담긴 명함은 「확인 전」으로 들어갑니다 — 목록에서 걸러 보고 한 장씩 확인해 주세요.
-            </div>
           </div>
         )}
 
@@ -510,16 +501,6 @@ export default function BulkImportModal({ division, onClose, onDone, onShowUnche
               </div>
             )}
 
-            {phase === 'finished' && tally.saved > 0 && undone == null && (
-              <button type="button" onClick={() => { onShowUnchecked(); onClose() }}
-                style={{
-                  height: BTN_H, border: `1px solid ${BLUE_BORDER}`, borderRadius: R.control,
-                  background: BLUE_TINT, color: BLUE, fontWeight: 700, fontSize: 13,
-                  cursor: 'pointer', fontFamily: 'inherit',
-                }}>
-                확인 전 보기
-              </button>
-            )}
           </div>
         )}
       </ModalCard>

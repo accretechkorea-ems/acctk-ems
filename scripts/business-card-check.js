@@ -81,8 +81,9 @@ ok('지우기·되돌리기만 슈퍼관리자',
 ok('그 밖에는 로그인이면 된다', /: await loadCaller\(\{ kind: 'login' \}/.test(ROUTE))
 ok('고친 자국을 남긴다', /business_card_events/.test(ROUTE) && /card_edited/.test(ROUTE))
 ok('등록자는 세션에서 만든다', /snapshotOf\(caller, division\)/.test(ROUTE) && !/registered_name: body\./.test(ROUTE))
-ok('확인은 등록일을 건드리지 않는다',
-  /action === 'verify'[\s\S]{0,200}update\(\{ verified_at: now \}\)/.test(ROUTE))
+// 「마지막 확인」은 2026-11-25 에 걷었다 — 그 자취가 남아 있지 않아야 한다.
+ok('확인 기능의 자취가 없다',
+  !/verified_at/.test(ROUTE) && !/card_verified/.test(ROUTE) && !/'verify'/.test(ROUTE))
 
 console.log('\n── ③ 사업부 ──')
 eq('기본값은 등록자 팀의 사업부', [
@@ -125,7 +126,6 @@ eq('색은 표의 상태색', [C.AGE_TONES.fresh, C.AGE_TONES.stale, C.AGE_TONES
 eq('글자', [C.ageLabel(0), C.ageLabel(12), C.ageLabel(90), C.ageLabel(400), C.ageLabel(1200)],
   ['오늘', '12일 전', '3개월 전', '1년 전', '3년 전'])
 eq('날짜 수 세기', C.daysBetween('2026-11-01T00:00:00Z', '2026-11-23T00:00:00Z'), 22)
-eq('확인 꼬리표', [C.verifiedLabel('2026-11-23T05:00:00Z'), C.verifiedLabel(null)], ['확인 2026-11', ''])
 
 // 글자를 줄로 끊어 칸을 맞추던 규칙은 2026-11-23 에 **모델**로 넘어갔다(app/api/cards/ocr).
 // 여기서는 모델이 돌려준 값을 **믿지 않고 다듬는 쪽**만 본다.
@@ -252,6 +252,30 @@ ok('지우기는 서버 라우트로', /fetch\('\/api\/cards\/delete'/.test(CARD
 ok('폰에서는 「선택」 토글로 체크칸이 뜬다',
   /\{picking \? '선택 끝' : '선택'\}/.test(CARDS_PAGE) && /\{picking && \(/.test(CARDS_PAGE))
 ok('체크칸이 줄 열기를 가로채지 않는다', /onClick=\{e => e\.stopPropagation\(\)\}/.test(CARDS_PAGE))
+
+// ── ⑩-2 화면 정돈 — 2026-11-25 ──
+console.log('\n── ⑩-2 목록·모달 정돈 ──')
+const FORM_SRC = read('components/cards/CardFormModal.tsx')
+ok('필터는 단추 하나로', /aria-label="필터"/.test(CARDS_PAGE) && /setFilterOpen\(true\)/.test(CARDS_PAGE))
+ok('그 창이 있다', fs.existsSync(path.join(ROOT, 'components/cards/CardFilterModal.tsx')))
+ok('드롭다운 셋을 걷었다',
+  !/등록자 전체/.test(CARDS_PAGE) && !/사업부 전체/.test(CARDS_PAGE) && !/가져오기 전체/.test(CARDS_PAGE))
+ok('엑셀은 아이콘 버튼', /aria-label="엑셀 내보내기"/.test(CARDS_PAGE) && !/⬇ 엑셀/.test(CARDS_PAGE))
+ok('등록 버튼은 「＋ 명함」', CARDS_PAGE.includes('＋ 명함<') && !CARDS_PAGE.includes('＋ 명함 등록<'))
+eq('등록일은 yy-mm-dd', (() => {
+  const m = CARDS_PAGE.match(/const shortDay[\s\S]*?\n\}/)
+  return m ? /slice\(2\)/.test(m[0]) : false
+})(), true)
+ok('「● 오늘」 꼬리표를 표에서 걷었다', !/<AgeTag registeredAt=\{c\.registered_at\} today=\{today\} \/>\s*\n\s*<\/td>/.test(CARDS_PAGE))
+ok('행 호버 클래스', /className="ems-card-row"/.test(CARDS_PAGE)
+  && /\.ems-card-row:hover > td/.test(read('app/globals.css')))
+ok('호버는 테마 파랑 테두리', /--color-brand-border/.test(read('app/globals.css')))
+ok('열람이 기본이다', /const \[mode2, setMode2\] = useState<'view' \| 'edit'>\('view'\)/.test(FORM_SRC))
+ok('수정을 누르면 입력 모드', /setMode2\('edit'\)/.test(FORM_SRC))
+ok('취소로 열람에 돌아온다', /if \(editing\) setMode2\('view'\)/.test(FORM_SRC))
+ok('값은 글자로 보여 준다', /const viewValue/.test(FORM_SRC) && /viewLabel/.test(FORM_SRC))
+ok('넓은 창(760)', /width=\{760\}/.test(FORM_SRC))
+ok('폰은 1단', /narrow \? '1fr' : '1fr 1fr'/.test(FORM_SRC))
 
 // ── ⑪ 휴대폰이 없으면 회사 전화 — 2026-11-25 ──
 console.log('\n── ⑪ 연락처 한 줄 ──')

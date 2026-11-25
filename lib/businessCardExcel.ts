@@ -21,7 +21,7 @@ export function cardRowsAoA(cards: readonly BusinessCard[], todayIso: string): (
     const row: (string | number)[] = []
     for (const col of EXCEL_COLUMNS) {
       const v = (c as unknown as Record<string, unknown>)[col.key]
-      row.push(col.key === 'registered_at' || col.key === 'verified_at' ? day(v) : String(v ?? ''))
+      row.push(col.key === 'registered_at' ? day(v) : String(v ?? ''))
     }
     row.push(ageLabel(daysBetween(c.registered_at, todayIso)))
     out.push(row)

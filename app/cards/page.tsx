@@ -22,20 +22,20 @@ import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/confirmContext'
-import { canSwitchDivision, teamDivisionOf, DIVISIONS } from '@/lib/division'
-import { isSuperAdmin } from '@/lib/permissions'
+import { canSwitchDivision, teamDivisionOf } from '@/lib/division'
 import {
   AGE_TONES, ageLabel, ageTone, daysBetween, defaultDivision, registrarLabel,
-  checkedLabel, COMPANY_PHONE_MARK, displayPhone, visibleDivisions, type BusinessCard, type CardForm,
+  COMPANY_PHONE_MARK, displayPhone, visibleDivisions, type BusinessCard, type CardForm,
 } from '@/lib/businessCard'
-import { applyCardFilter, countUnchecked, filterFromQuery, isUnchecked, queryFromFilter, type CardFilter } from '@/lib/businessCardQuery'
+import { applyCardFilter, filterFromQuery, queryFromFilter, type CardFilter } from '@/lib/businessCardQuery'
 import { canDeleteCard, selectionTitle, skippedNotice } from '@/lib/businessCardBulk'
 import { exportCardXlsx } from '@/lib/businessCardExcel'
 import CardFormModal from '@/components/cards/CardFormModal'
 import BulkImportModal from '@/components/cards/BulkImportModal'
+import CardFilterModal from '@/components/cards/CardFilterModal'
 // 선택 띠의 가름선 — 고객사 목록의 선택 바와 **같은 값**을 그대로 쓴다(새 색을 만들지 않는다).
 import { BAR_LINE } from '@/components/home/list/BulkBar'
-import { BLUE, BORDER, CARD_BG, MUTED, PAGE_BG, SUB, TEXT } from '@/components/common/ui'
+import { BLUE, BLUE_TINT, BORDER, CARD_BG, MUTED, PAGE_BG, SUB, TEXT } from '@/components/common/ui'
 import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 import { R } from '@/lib/radius'
 
@@ -68,6 +68,12 @@ const th: React.CSSProperties = {
   padding: '10px 14px', fontSize: 12, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, textAlign: 'left', whiteSpace: 'nowrap',
 }
 const td: React.CSSProperties = { padding: '0 14px', fontSize: 13, color: TEXT, whiteSpace: 'nowrap' }
+
+/** 등록일 — 목록은 **yy-mm-dd** 로 짧게 적는다(26-11-25). */
+const shortDay = (iso: string | null | undefined): string => {
+  const d = String(iso ?? '').slice(0, 10)
+  return d.length === 10 ? d.slice(2) : '—'
+}
 
 /**
  * 영문 값 — 한글 옆에 **작은 글씨**로. 값이 없으면 **아무것도 그리지 않는다**(자리도 안 쓴다).
@@ -112,6 +118,8 @@ function CardsPageInner() {
   const [picked, setPicked] = useState<Set<number>>(new Set())
   /** 폰에서는 체크칸을 늘 두지 않는다 — 「선택」을 눌러야 나온다. */
   const [picking, setPicking] = useState(false)
+  /** 필터 창 — 사업부·등록자·기간·가져오기를 한곳에서 고른다(2026-11-25). */
+  const [filterOpen, setFilterOpen] = useState(false)
 
   const filter = useMemo(() => filterFromQuery(params), [params])
   const today = new Date().toISOString()
@@ -154,8 +162,6 @@ function CardsPageInner() {
     [canSwitch, me],
   )
   const shown = useMemo(() => applyCardFilter(rows, filter, allowed), [rows, filter, allowed])
-  /** 확인 전 몇 건 — 조건과 무관하게 「이 사람에게 몇 건 남았나」를 센다. */
-  const unchecked = useMemo(() => countUnchecked(rows, allowed), [rows, allowed])
 
   /** 조건을 주소에 적는다 — 새로고침·공유에도 같은 화면이 뜬다. */
   const setFilter = (next: Partial<CardFilter>) => {
@@ -255,7 +261,7 @@ function CardsPageInner() {
     }
   }
 
-  const save = async (form: CardForm) => {
+  const save = async (form: CardForm): Promise<boolean> => {
     const patch: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(form)) {
       if (k === 'division' || k === 'input_method') continue
@@ -264,29 +270,38 @@ function CardsPageInner() {
     const ok = editing
       ? await call({ action: 'update', card_id: editing.card_id, patch, division: form.division })
       : await call({ action: 'create', patch, division: form.division, input_method: form.input_method })
-    if (!ok) return
-    setFormOpen(false)
-    setEditing(null)
+    if (!ok) return false
+    // 고친 것이면 **창을 닫지 않는다** — 창이 열람 모드로 돌아가 고친 값을 보여 준다.
+    if (!editing) { setFormOpen(false); setEditing(null) }
     await load()
     toast.success(editing ? '고쳤습니다' : `${form.name} 명함을 담았습니다`)
+    return true
   }
 
-  const verify = async (card: BusinessCard) => {
-    if (!await call({ action: 'verify', card_id: card.card_id })) return
-    await load()
-    toast.success(`${card.name} — 오늘 확인으로 적었습니다`)
-  }
-
-  const remove = async (card: BusinessCard) => {
+  /** 열람 창의 「삭제」 — 고른 줄 지우기와 **같은 라우트**를 쓴다(권한도 같다). */
+  const deleteOne = async (card: BusinessCard) => {
     const ok = await confirm({
-      title: '명함 삭제', message: `${card.name} 명함을 지우시겠습니까? 되돌릴 수 있습니다.`,
-      confirmText: '삭제', variant: 'danger',
+      title: `${card.name} 명함을 지울까요?`,
+      message: '지운 명함은 목록에서 사라집니다.',
+      confirmText: '삭제', cancelText: '그대로 두기', variant: 'danger',
     })
     if (!ok) return
-    if (!await call({ action: 'delete', card_id: card.card_id, reason: '목록에서 삭제' })) return
-    setFormOpen(false); setEditing(null)
-    await load()
-    toast.success('지웠습니다')
+    setBusy(true)
+    try {
+      const res = await fetch('/api/cards/delete', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'cards', card_ids: [card.card_id] }),
+      })
+      const json = await res.json() as { ok?: boolean; deleted?: number; error?: string }
+      if (!json?.ok || !json.deleted) { toast.error(json?.error ?? '지우지 못했습니다'); return }
+      setFormOpen(false); setEditing(null)
+      await load()
+      toast.success('지웠습니다')
+    } catch {
+      toast.error('지우지 못했습니다')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const openNew = () => { setEditing(null); setFormOpen(true) }
@@ -307,8 +322,13 @@ function CardsPageInner() {
     )
   }
 
+  /** 걸려 있는 조건 수 — 「필터」 단추의 숫자. 검색어는 제 칸이 따로 있어 세지 않는다. */
+  const filterCount = [
+    filter.division, filter.engineerId > 0 ? '1' : '', filter.from, filter.to, filter.batch,
+  ].filter(Boolean).length
+
   const header = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
       <b style={{ fontSize: 18, color: TEXT, letterSpacing: '-0.3px' }}>명함</b>
       <span style={{ fontSize: 12, color: SUB }}>전사 · {shown.length}장</span>
       <span style={{ flex: 1 }} />
@@ -321,58 +341,51 @@ function CardsPageInner() {
           border: `1px solid ${BORDER}`, borderRadius: R.control, fontSize: 13, color: TEXT,
           background: CARD_BG, outline: 'none', fontFamily: 'inherit',
         }} />
-      {allowed.length > 1 && (
-        <select value={filter.division} onChange={e => setFilter({ division: e.target.value })} style={btn()}>
-          <option value="">사업부 전체</option>
-          {DIVISIONS.map(d => <option key={d} value={d}>{d}</option>)}
-        </select>
-      )}
-      <select value={filter.engineerId || ''} onChange={e => setFilter({ engineerId: Number(e.target.value) || 0 })} style={btn()}>
-        <option value="">등록자 전체</option>
-        {registrars.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-      </select>
-      {/* 확인 전 — 여러 장 등록으로 담은 줄이 여기 모인다. 0건이면 칩을 두지 않는다. */}
-      {unchecked > 0 && (
-        <button type="button"
-          onClick={() => setFilter({ checked: filter.checked === 'none' ? '' : 'none' })}
-          style={{
-            ...btn(), borderRadius: R.pill,
-            border: `1px solid ${filter.checked === 'none' ? BLUE : BORDER}`,
-            color: filter.checked === 'none' ? BLUE : SUB,
-            fontWeight: 700,
-          }}>
-          확인 전 {unchecked}건
+
+      {/* 필터 — 고객사 목록과 같은 단추·아이콘. 걸려 있으면 숫자가 붙는다. */}
+      <button type="button" onClick={() => setFilterOpen(true)} title="필터" aria-label="필터"
+        onMouseEnter={e => { e.currentTarget.style.borderColor = BLUE }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER }}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5, height: 34, padding: '0 10px',
+          border: `1px solid ${BORDER}`, borderRadius: R.control, background: CARD_BG,
+          color: TEXT_LABEL, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+          transition: 'border-color 0.15s ease', flexShrink: 0,
+        }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M3 5h18l-7 8v6l-4-2v-4z" />
+        </svg>
+        필터
+        {filterCount > 0 && (
+          <span style={{ fontSize: 11, fontWeight: 700, color: BLUE, background: BLUE_TINT, borderRadius: R.pill, padding: '1px 7px' }}>
+            {filterCount}
+          </span>
+        )}
+      </button>
+
+      {/* 엑셀 — 시스템 공통 아이콘 버튼(고객사 목록과 같은 모양). */}
+      <button type="button" onClick={() => void exportCardXlsx(shown, today)}
+        disabled={shown.length === 0}
+        title="엑셀 내보내기" aria-label="엑셀 내보내기"
+        style={{
+          width: 34, height: 34, borderRadius: R.icon, border: `1px solid ${BORDER}`, background: CARD_BG,
+          color: shown.length === 0 ? MUTED : SUB, cursor: shown.length === 0 ? 'not-allowed' : 'pointer',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v3h16v-3" />
+        </svg>
+      </button>
+
+      {narrow && (
+        <button type="button" style={btn(picking)}
+          onClick={() => { setPicking(v => !v); setPicked(new Set()) }}>
+          {picking ? '선택 끝' : '선택'}
         </button>
       )}
-      {!narrow && (
-        <>
-          <input type="date" value={filter.from} onChange={e => setFilter({ from: e.target.value })} style={{ ...btn(), padding: '0 8px' }} />
-          <span style={{ color: MUTED, fontSize: 12 }}>~</span>
-          <input type="date" value={filter.to} onChange={e => setFilter({ to: e.target.value })} style={{ ...btn(), padding: '0 8px' }} />
-          <button type="button" style={btn()} onClick={() => void exportCardXlsx(shown, today)}>⬇ 엑셀</button>
-          <button type="button" style={btn()} onClick={() => setBulkOpen(true)}>여러 장 등록</button>
-          <button type="button" style={btn(true)} onClick={openNew}>＋ 명함 등록</button>
-        </>
-      )}
-      {/* 가져오기 묶음 — 최근 10개. 묶음이 없으면 칸을 두지 않는다. */}
-      {batches.length > 0 && (
-        <select value={filter.batch} onChange={e => { setPicked(new Set()); setFilter({ batch: e.target.value }) }} style={btn()}>
-          <option value="">가져오기 전체</option>
-          {batches.map(([id, b]) => (
-            <option key={id} value={id}>{b.day} · {b.count}건</option>
-          ))}
-        </select>
-      )}
-      {/* 폰에서도 열 수 있게 — 날짜·엑셀은 넓은 화면에서만이지만 이 길은 둔다. */}
-      {narrow && (
-        <>
-          <button type="button" style={btn()} onClick={() => setBulkOpen(true)}>여러 장 등록</button>
-          <button type="button" style={btn(picking)}
-            onClick={() => { setPicking(v => !v); setPicked(new Set()) }}>
-            {picking ? '선택 끝' : '선택'}
-          </button>
-        </>
-      )}
+      <button type="button" style={btn(true)} onClick={openNew}>＋ 명함</button>
     </div>
   )
 
@@ -469,33 +482,32 @@ function CardsPageInner() {
                     </span>
                   )
                 })()}
-                <span>등록 {String(c.registered_at).slice(0, 10)}</span>
+                <span>등록 {shortDay(c.registered_at)}</span>
                 <span>{c.division}</span>
-                {/* 확인 전이면 그 사실을, 확인한 날이 등록일과 다르면 그 달을. 같으면 적지 않는다. */}
-                {checkedLabel(c) && <span>{checkedLabel(c)}</span>}
               </div>
             </button>
             </div>
           ))}
         </div>
       ) : (
-        /* ── PC — 표(보드) ── */
+        /* ── PC — 표 ── */
         <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.card, overflow: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
             <thead>
               <tr style={{ background: '#f9fafb' }}>
                 <th style={{ ...th, width: 34, paddingRight: 0 }}>
                   <input type="checkbox" checked={allPicked} onChange={toggleAll}
                     aria-label="모두 고르기" style={{ cursor: 'pointer' }} />
                 </th>
-                <th style={th}>이름</th><th style={th}>회사 · 부서</th><th style={th}>직급</th>
-                <th style={th}>휴대폰</th><th style={th}>이메일</th><th style={th}>사업부</th>
-                <th style={th}>등록일</th><th style={th}>마지막 확인</th><th style={th}>등록자</th><th style={th} />
+                <th style={th}>등록일</th><th style={th}>회사</th><th style={th}>부서</th>
+                <th style={th}>이름</th><th style={th}>직급</th><th style={th}>전화번호</th>
+                <th style={th}>이메일</th><th style={th}>사업부</th><th style={th}>등록자</th>
               </tr>
             </thead>
             <tbody>
               {shown.map(c => (
-                <tr key={c.card_id} style={{ height: 44, borderTop: `1px solid ${BORDER}`, cursor: 'pointer' }}
+                <tr key={c.card_id} className="ems-card-row"
+                  style={{ height: 44, cursor: 'pointer' }}
                   onClick={() => openCard(c)}>
                   {/* 체크칸은 줄 열기와 섞이지 않게 눌림을 여기서 멈춘다. */}
                   <td style={{ ...td, paddingRight: 0 }} onClick={e => e.stopPropagation()}>
@@ -503,12 +515,14 @@ function CardsPageInner() {
                       onChange={() => togglePick(c.card_id)}
                       aria-label={`${c.name} 고르기`} style={{ cursor: 'pointer' }} />
                   </td>
-                  <td style={td}><b>{c.name}</b><En value={c.name_en} /></td>
+                  <td style={{ ...td, color: SUB }}>{shortDay(c.registered_at)}</td>
                   <td style={{ ...td, whiteSpace: 'normal' }}>
-                    {[c.company, c.department].filter(Boolean).join(' · ') || '—'}
+                    {c.company || '—'}
                     <En value={c.company_en} />
                   </td>
-                  <td style={td}>{c.position ?? '—'}</td>
+                  <td style={{ ...td, whiteSpace: 'normal' }}>{c.department || '—'}</td>
+                  <td style={td}><b>{c.name}</b><En value={c.name_en} /></td>
+                  <td style={td}>{c.position || '—'}</td>
                   {/* 휴대폰이 없으면 회사 전화를 대신 보여 준다(앞에 작은 「회사」). */}
                   <td style={{ ...td, color: BLUE }}>
                     {(() => {
@@ -529,27 +543,7 @@ function CardsPageInner() {
                     {c.email ? <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} style={{ color: TEXT, textDecoration: 'none' }}>{c.email}</a> : '—'}
                   </td>
                   <td style={td}>{c.division}</td>
-                  <td style={td}>
-                    {String(c.registered_at).slice(0, 10)}{' '}
-                    <AgeTag registeredAt={c.registered_at} today={today} />
-                  </td>
-                  {/* 확인 전이면 그렇게 적는다. 등록일과 같은 날이면 날짜를 되풀이하지 않는다. */}
-                  <td style={{ ...td, color: SUB }}>
-                    {isUnchecked(c)
-                      ? '확인 전'
-                      : String(c.verified_at).slice(0, 10) === String(c.registered_at).slice(0, 10)
-                        ? '등록일과 같음'
-                        : String(c.verified_at).slice(0, 10)}
-                  </td>
                   <td style={td}>{registrarLabel(c)}</td>
-                  <td style={{ ...td, textAlign: 'right' }}>
-                    <button type="button" onClick={e => { e.stopPropagation(); void verify(c) }} disabled={busy}
-                      style={{ ...btn(), height: 28, fontSize: 12 }}>확인</button>
-                    {isSuperAdmin(me) && (
-                      <button type="button" onClick={e => { e.stopPropagation(); void remove(c) }} disabled={busy}
-                        style={{ ...btn(), height: 28, fontSize: 12, marginLeft: 6, color: '#dc2626', borderColor: '#fecaca' }}>삭제</button>
-                    )}
-                  </td>
                 </tr>
               ))}
             </tbody>
@@ -559,11 +553,9 @@ function CardsPageInner() {
 
       {!narrow && (
         <div style={{ fontSize: 12, color: SUB, lineHeight: 1.8 }}>
-          「확인」 = 아직 그 회사·부서·직급에 있는 걸 확인했을 때 누릅니다 → 마지막 확인 날짜가 갱신됩니다(등록일은 그대로).
-          1년 넘으면 주황, 3년 넘으면 빨강. 줄을 누르면 고칠 수 있습니다.
+          줄을 누르면 명함을 펼쳐 봅니다. 여러 장을 지우려면 왼쪽 네모를 골라 주세요.
         </div>
       )}
-
       {/* 폰 — 우하단 고정 버튼(보드 ①) */}
       {narrow && (
         <button type="button" onClick={openNew}
@@ -583,8 +575,11 @@ function CardsPageInner() {
           existing={rows}
           defaultDivision={defaultDivision(me)}
           busy={busy}
-          onSave={form => void save(form)}
+          canDelete={editing ? canDeleteCard(me, editing) : false}
+          onSave={save}
           onOpenExisting={c => { setEditing(c) }}
+          onDelete={() => { if (editing) void deleteOne(editing) }}
+          onBulk={() => { setFormOpen(false); setEditing(null); setBulkOpen(true) }}
           onClose={() => { setFormOpen(false); setEditing(null) }}
         />
       )}
@@ -594,7 +589,16 @@ function CardsPageInner() {
           division={filter.division || teamDivisionOf(me)}
           onClose={() => setBulkOpen(false)}
           onDone={t => { if (t.saved > 0) void load() }}
-          onShowUnchecked={() => setFilter({ checked: 'none' })}
+        />
+      )}
+
+      {filterOpen && (
+        <CardFilterModal
+          value={filter}
+          options={{ divisions: allowed, registrars, batches }}
+          matchCount={next => applyCardFilter(rows, next, allowed).length}
+          onApply={next => { setPicked(new Set()); setFilter(next) }}
+          onClose={() => setFilterOpen(false)}
         />
       )}
     </main>

@@ -10,9 +10,7 @@
 //   성공분까지 함께 잃는다. 나눠 보내면 앞의 묶음은 이미 **담긴 뒤**다.
 //
 // ── 담을 때 ──────────────────────────────────────────────────────────────
-//   input_method 는 'bulk', **verified_at 은 비운다**(= 확인 전). 아무도 눈으로 보지
-//   않았기 때문이다. 등록자는 **세션에서** 만든다 — 화면이 보낸 값을 믿지 않는다.
-//   (한 장씩 담는 /api/business-card 는 verified_at 을 등록일로 채운다)
+//   input_method 는 'bulk'. 등록자는 **세션에서** 만든다 — 화면이 보낸 값을 믿지 않는다.
 //
 // ── 담지 않는 두 경우 ────────────────────────────────────────────────────
 //   · 'dup'   — 읽힌 휴대폰 또는 이메일이 **살아 있는 줄**과 같다. 기존 card_id 를 함께 준다.
@@ -37,10 +35,8 @@ import {
 const supabaseAdmin = adminClient()
 const TAG = 'cards-ocr-bulk'
 
-/** 담은 방식·확인일 — 이 라우트가 담는 줄은 늘 이렇다. */
+/** 담은 방식 — 이 라우트가 담는 줄은 늘 이렇다. */
 const INPUT_METHOD = BULK_METHOD
-/** **비운다** = 확인 전. 아무도 눈으로 보지 않았다. */
-const VERIFIED_AT = null
 
 type Line = BulkLine
 
@@ -252,7 +248,6 @@ export async function POST(req: Request) {
         division,
         input_method: INPUT_METHOD,
         registered_at: now,
-        verified_at: VERIFIED_AT,
         ...(batchId ? { import_batch_id: batchId } : {}),
         ...snap,
       })

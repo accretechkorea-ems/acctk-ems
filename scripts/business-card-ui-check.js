@@ -55,10 +55,10 @@ eq('걸린 것만 적는다',
   '?q=%ED%99%8D%EA%B8%B8%EB%8F%99&div=%EB%B0%98%EB%8F%84%EC%B2%B4&by=7')
 eq('주소를 다시 읽으면 같은 조건',
   Q.filterFromQuery(new URLSearchParams('q=a&div=계측&by=3&team=80CS&from=2026-01-01&to=2026-12-31')),
-  { q: 'a', division: '계측', engineerId: 3, team: '80CS', from: '2026-01-01', to: '2026-12-31', checked: '', batch: '' })
+  { q: 'a', division: '계측', engineerId: 3, team: '80CS', from: '2026-01-01', to: '2026-12-31', batch: '' })
 eq('깨진 값은 기본값으로 떨어진다',
   Q.filterFromQuery(new URLSearchParams('div=물류&by=abc')),
-  { q: '', division: '', engineerId: 0, team: '', from: '', to: '', checked: '', batch: '' })
+  { q: '', division: '', engineerId: 0, team: '', from: '', to: '', batch: '' })
 eq('조건이 걸렸는지', [Q.hasFilter(Q.EMPTY_FILTER), Q.hasFilter({ ...Q.EMPTY_FILTER, q: 'a' })], [false, true])
 
 const CARDS = [
@@ -97,7 +97,10 @@ console.log('\n── ③ 화면이 보드대로인가 ──')
 const PAGE = read('app/cards/page.tsx')
 const FORM = read('components/cards/CardFormModal.tsx')
 ok('폰은 카드, 넓으면 표', /narrow \? \(/.test(PAGE) && /<table/.test(PAGE))
-eq('PC 표의 열 열 개', (PAGE.match(/<th style=\{th\}/g) || []).length, 10)
+// 2026-11-25 — 열을 다시 세웠다: 등록일·회사·부서·이름·직급·전화번호·이메일·사업부·등록자.
+eq('PC 표의 열 아홉 개(+체크칸)', (PAGE.match(/<th style={th}>/g) || []).length, 9)
+eq('열 차례', (PAGE.match(/<th style={th}>([^<]+)</g) || []).map(s => s.replace(/.*>/, '').replace('<', '')),
+  ['등록일', '회사', '부서', '이름', '직급', '전화번호', '이메일', '사업부', '등록자'])
 ok('폰 우하단에 고정 버튼', /position: 'fixed', right: 16, bottom: 16[\s\S]{0,400}＋ 명함 등록/.test(PAGE))
 ok('전화·이메일은 바로 걸고 보낸다', PAGE.includes('tel:') && PAGE.includes('mailto:'))
 ok('나이 꼬리표에 틴트 배경을 쓰지 않는다(디자인 규칙)',
@@ -116,7 +119,10 @@ ok('뒷면 추가로 읽기', FORM.includes('뒷면 추가로 읽기') && FORM.i
 ok('중복이면 물어본다', FORM.includes('DUPLICATE_TITLE') && FORM.includes('DUPLICATE_SAVE'))
 ok('등록일은 고칠 수 없다(자동)', FORM.includes('(자동)'))
 ok('사업부 기본값은 등록자 팀의 사업부', /defaultDivision=\{defaultDivision\(me\)\}/.test(PAGE))
-ok('지우기는 슈퍼관리자에게만 보인다', /isSuperAdmin\(me\) && \([\s\S]{0,400}삭제/.test(PAGE))
+// 2026-11-25 — 행의 버튼을 걷었다. 지우기는 **열람 창**과 **선택 띠** 둘뿐이다.
+ok('행에 확인·삭제 버튼이 없다', !/void verify\(c\)/.test(PAGE) && !/void remove\(c\)/.test(PAGE))
+ok('열람 창이 권한을 보고 삭제를 둔다',
+  /canDelete=\{editing \? canDeleteCard\(me, editing\) : false\}/.test(PAGE))
 
 // 읽는 쪽(모델·라우트)은 scripts/card-ocr-check.js 가 본다. 여기서는 **화면 흐름**만.
 console.log('\n── ④ 사진은 줄여서 우리 라우트로 ──')

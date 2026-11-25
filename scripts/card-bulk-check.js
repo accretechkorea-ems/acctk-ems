@@ -71,7 +71,6 @@ eq('빈 목록', B.chunk([]), [])
 console.log('\n── ② 일괄로 담은 줄 = 확인 전 ──')
 ok('방식은 bulk', /const INPUT_METHOD = BULK_METHOD/.test(R))
 eq('그 값이 bulk', B.BULK_METHOD, 'bulk')
-ok('확인일을 비운다', /const VERIFIED_AT = null/.test(R) && /verified_at: VERIFIED_AT/.test(R))
 ok('표가 bulk 를 받아들이게 SQL 이 있다', has('db/business_cards_bulk_20261124.sql'))
 const SQL = has('db/business_cards_bulk_20261124.sql') ? read('db/business_cards_bulk_20261124.sql') : ''
 ok('CHECK 에 bulk 를 더한다',
@@ -82,12 +81,12 @@ ok('스키마를 깨운다', /notify pgrst, 'reload schema'/.test(SQL))
 ok('APPLIED.md 에 미적용으로 적었다',
   /business_cards_bulk_20261124\.sql[^|]*\|\s*\*\*미적용\*\*/.test(read('db/APPLIED.md')))
 
-console.log('\n── ③ 한 장씩 담은 줄 = 확인일이 등록일 ──')
+console.log('\n── ③ 「마지막 확인」은 걷었다 ──')
 const ONE = read(ONE_PATH)
-ok('담을 때 확인일을 함께 넣는다', /verified_at: verified/.test(ONE))
-ok('방식으로 가른다', /checkedOnEntry\(method\) \? now : null/.test(ONE))
-eq('bulk 만 비운다',
-  ['manual', 'camera', 'upload', 'bulk'].map(m => C.checkedOnEntry(m)), [true, true, true, false])
+// 2026-11-25 — 쓰는 사람이 없었고 한 장씩 담으면 등록일과 늘 같은 값이었다.
+ok('한 장씩 담는 라우트에 확인일이 없다', !/verified_at/.test(ONE))
+ok('여러 장 담는 라우트에도 없다', !/verified_at/.test(R))
+ok('지우는 SQL 이 있다', has('db/business_cards_drop_verified_20261125.sql'))
 eq('방식 넷', [...C.INPUT_METHODS], ['camera', 'upload', 'manual', 'bulk'])
 eq('이름', C.METHOD_LABEL.bulk, '여러 장 등록')
 
@@ -378,34 +377,20 @@ eq('묶음으로 거른다', Q.applyCardFilter([
   { card_id: 3, name: 'ㄷ', division: '계측', registered_at: '2026-11-25' },
 ], { ...Q.EMPTY_FILTER, batch: 'A' }, ['계측']).map(r => r.card_id), [1])
 const PAGE_SRC = read('app/cards/page.tsx')
-ok('목록에 묶음 칸이 있다', /가져오기 전체/.test(PAGE_SRC))
-ok('최근 열 개만', PAGE_SRC.includes('.slice(0, 10)'))
+const FILTER_SRC = read('components/cards/CardFilterModal.tsx')
+// 2026-11-25 — 묶음 고르기는 **필터 창** 안으로 들어갔다.
+ok('필터 창에 묶음 칸이 있다', /가져오기 묶음/.test(FILTER_SRC))
+ok('최근 열 개만 넘긴다', PAGE_SRC.includes('.slice(0, 10)'))
 
-console.log('\n── ⑦ 「확인 전」 보기 ──')
-const rows = [
-  { card_id: 1, name: 'ㄱ', division: '계측', registered_at: '2026-11-24', verified_at: '2026-11-24' },
-  { card_id: 2, name: 'ㄴ', division: '계측', registered_at: '2026-11-24', verified_at: null },
-  { card_id: 3, name: 'ㄷ', division: '반도체', registered_at: '2026-11-24', verified_at: null },
-]
-eq('확인 전인가', rows.map(r => Q.isUnchecked(r)), [false, true, true])
-eq('보이는 사업부 안에서만 센다', Q.countUnchecked(rows, ['계측']), 1)
-eq('양쪽을 보면 둘', Q.countUnchecked(rows, ['계측', '반도체']), 2)
-eq('조건을 걸면 확인 전만',
-  Q.applyCardFilter(rows, { ...Q.EMPTY_FILTER, checked: 'none' }, ['계측', '반도체']).map(r => r.card_id), [2, 3])
-eq('조건이 없으면 전부',
-  Q.applyCardFilter(rows, Q.EMPTY_FILTER, ['계측', '반도체']).map(r => r.card_id), [1, 2, 3])
-eq('주소에 남는다', Q.queryFromFilter({ ...Q.EMPTY_FILTER, checked: 'none' }), '?checked=none')
-eq('주소에서 읽는다', Q.filterFromQuery(new URLSearchParams('checked=none')).checked, 'none')
-eq('모르는 값은 전체', Q.filterFromQuery(new URLSearchParams('checked=yes')).checked, '')
-eq('목록 글자 — 확인 전', C.checkedLabel({ verified_at: null, registered_at: '2026-11-24' }), '확인 전')
-eq('등록일과 같으면 되풀이하지 않는다',
-  C.checkedLabel({ verified_at: '2026-11-24T05:00:00Z', registered_at: '2026-11-24T00:00:00Z' }), '')
-eq('다른 날이면 그 달을',
-  C.checkedLabel({ verified_at: '2026-12-01T00:00:00Z', registered_at: '2026-11-24T00:00:00Z' }), '확인 2026-12')
+console.log("\n── ⑦ 방식 고르기와 필터 ──")
 const PAGE = read('app/cards/page.tsx')
-ok('목록에 「여러 장 등록」 버튼이 있다', /여러 장 등록/.test(PAGE))
-ok('확인 전 칩이 있다', /확인 전 \{unchecked\}건/.test(PAGE))
-ok('0건이면 칩을 두지 않는다', /\{unchecked > 0 && \(/.test(PAGE))
+const FORM = read('components/cards/CardFormModal.tsx')
+// 2026-11-25 — 「여러 장 등록」 버튼을 걷고 방식 고르기의 **네 번째 항목**으로 옮겼다.
+ok('목록에 여러 장 등록 버튼이 없다', !/onClick={() => setBulkOpen(true)}>여러 장 등록/.test(PAGE))
+ok('방식 고르기에 네 번째가 있다', /여러 장 등록/.test(FORM) && /PDF·사진 여러 장을 한 번에/.test(FORM))
+ok('그 자리에서 건너간다', PAGE.includes('onBulk={() => { setFormOpen(false)'))
+ok('파일 올리기로 이름이 바뀌었다', FORM.includes('파일 올리기') && FORM.includes('(jpg · png · pdf)'))
+ok('확인 전 칩이 사라졌다', !/확인 전/.test(PAGE))
 
 console.log(fails === 0 ? '\n전부 통과' : `\n${fails}건 실패`)
 process.exit(fails === 0 ? 0 : 1)

@@ -299,3 +299,25 @@ html:hover::-webkit-scrollbar-thumb,
 }
 html::-webkit-scrollbar-track,
 .stable-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* 명함 목록의 줄 — 커서가 올라가면 **테마 파랑 테두리**(카드 호버와 같은 색·두께).
+   표의 줄에는 radius 가 먹지 않으므로 첫·끝 칸에만 둥근 모서리를 준다. */
+.ems-card-row > td {
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.ems-card-row:hover > td {
+  border-top-color: var(--color-brand-border);
+  border-bottom-color: var(--color-brand-border);
+}
+.ems-card-row:hover > td:first-child {
+  border-left: 1px solid var(--color-brand-border);
+  border-top-left-radius: var(--radius-control);
+  border-bottom-left-radius: var(--radius-control);
+}
+.ems-card-row:hover > td:last-child {
+  border-right: 1px solid var(--color-brand-border);
+  border-top-right-radius: var(--radius-control);
+  border-bottom-right-radius: var(--radius-control);
+}

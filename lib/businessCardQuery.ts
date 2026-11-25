@@ -22,21 +22,17 @@ export type CardFilter = {
   /** 등록 기간 — YYYY-MM-DD. 빈 글자면 열려 있다. */
   from: string
   to: string
-  /**
-   * 확인 상태 (2026-11-24). `'none'` 이면 **확인 전**(verified_at 이 비어 있는 줄)만.
-   * 여러 장 등록으로 담은 줄이 여기에 모인다 — 아무도 눈으로 보지 않았기 때문이다.
-   */
-  checked: '' | 'none'
+| 'none'
   /** 가져오기 묶음(uuid). 빈 글자면 전체 (2026-11-25). */
   batch: string
 }
 
 export const EMPTY_FILTER: CardFilter =
-  { q: '', division: '', engineerId: 0, team: '', from: '', to: '', checked: '', batch: '' }
+  { q: '', division: '', engineerId: 0, team: '', from: '', to: '', batch: '' }
 
 /** 주소에 적는 이름 — 짧게 둔다(붙여 넣은 주소가 읽히게). */
 const KEYS = {
-  q: 'q', division: 'div', engineerId: 'by', team: 'team', from: 'from', to: 'to', checked: 'checked', batch: 'batch',
+  q: 'q', division: 'div', engineerId: 'by', team: 'team', from: 'from', to: 'to', batch: 'batch',
 } as const
 
 /** 주소 → 조건. 모르는 값은 기본값으로 떨어진다(깨진 주소로도 화면이 뜬다). */
@@ -54,7 +50,6 @@ export function filterFromQuery(params: URLSearchParams | Record<string, string 
     team: get(KEYS.team),
     from: get(KEYS.from),
     to: get(KEYS.to),
-    checked: get(KEYS.checked) === 'none' ? 'none' : '',
     batch: get(KEYS.batch),
   }
 }
@@ -68,7 +63,6 @@ export function queryFromFilter(f: CardFilter): string {
   if (f.team) p.set(KEYS.team, f.team)
   if (f.from) p.set(KEYS.from, f.from)
   if (f.to) p.set(KEYS.to, f.to)
-  if (f.checked === 'none') p.set(KEYS.checked, 'none')
   if (f.batch) p.set(KEYS.batch, f.batch)
   const s = p.toString()
   return s ? `?${s}` : ''
@@ -98,22 +92,8 @@ export function applyCardFilter(
     const day = String(c.registered_at ?? '').slice(0, 10)
     if (f.from && day < f.from) return false
     if (f.to && day > f.to) return false
-    if (f.checked === 'none' && !isUnchecked(c)) return false
     if (f.batch && String(c.import_batch_id ?? '') !== f.batch) return false
     return matchesCard(c, f.q)
   })
 }
 
-/** 아직 아무도 눈으로 보지 않은 줄인가 — 마지막 확인(verified_at)이 비어 있다. */
-export function isUnchecked(c: Pick<BusinessCard, 'verified_at'>): boolean {
-  return String(c.verified_at ?? '').trim() === ''
-}
-
-/**
- * 「확인 전 N건」의 N — **사업부가 보이는 줄 중에서만** 센다.
- * 검색어·기간 같은 다른 조건은 보지 않는다(그 칩을 누르면 조건이 바뀌므로,
- * 세는 수는 「지금 조건에서 몇 건」이 아니라 「이 사람에게 몇 건 남았나」가 맞다).
- */
-export function countUnchecked(rows: readonly BusinessCard[], allowed: readonly string[]): number {
-  return rows.filter(c => !c.deleted_at && allowed.includes(c.division) && isUnchecked(c)).length
-}

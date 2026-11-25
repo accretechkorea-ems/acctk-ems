@@ -15,14 +15,14 @@
  * 폰에서 한 손으로 — 입력칸 높이 44 · 전화·이메일은 알맞은 키패드 · 하단 고정 바.
  */
 
-import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import ModalCard, { keepPads } from '@/components/common/ModalCard'
-import { BLUE, BLUE_BORDER, BLUE_TINT, BORDER, CARD_BG, MUTED, SUB, TEXT } from '@/components/common/ui'
+import { BLUE, BLUE_BORDER, BLUE_TINT, BORDER, CARD_BG, DANGER, MUTED, SUB, TEXT } from '@/components/common/ui'
 import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 import { DIVISIONS, type Division } from '@/lib/division'
 import {
-  CARD_FIELDS, DUPLICATE_OPEN, DUPLICATE_SAVE, DUPLICATE_TITLE, EMPTY_CARD_FORM,
+  CARD_FIELDS, DUPLICATE_OPEN, DUPLICATE_SAVE, DUPLICATE_TITLE, EMPTY_CARD_FORM, registrarLabel,
   FIELD_INPUT_TYPE, FIELD_LABEL, MEMO_MAX, cardBlockedReason, findDuplicate,
   type BusinessCard, type CardField, type CardForm,
 } from '@/lib/businessCard'
@@ -55,6 +55,16 @@ const bigBtn: CSSProperties = {
 /** 큰 버튼의 첫 줄 — 아이콘 + 이름. */
 const bigBtnHead: CSSProperties = { display: 'flex', alignItems: 'center', gap: 7 }
 
+/** 열람 모드의 라벨·값 — 입력칸이 아니라 **글자**다. */
+const viewLabel: CSSProperties = { fontSize: 12, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, marginBottom: 3 }
+const viewValue: CSSProperties = { fontSize: 14, color: TEXT, wordBreak: 'break-word' }
+
+/** 하단의 흐린 버튼(닫기·삭제·취소). */
+const ghostBtn: CSSProperties = {
+  height: 44, flex: 1, border: `1px solid ${BORDER}`, borderRadius: R.control,
+  background: CARD_BG, color: SUB, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+}
+
 /**
  * 방식 셋의 아이콘 — **lucide 모양 인라인 SVG**다(디자인 규칙: 이모지를 아이콘으로 쓰지 않는다).
  * lucide-react 는 미설치라 import 하지 않고 path 를 직접 적는다. stroke-width 2 · 18px.
@@ -69,11 +79,14 @@ const ICON = {
   camera: svg(<><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z" /><circle cx="12" cy="13" r="3" /></>),
   image: svg(<><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" /></>),
   pen: svg(<><path d="M12 20h9" /><path d="M16.4 3.6a1 1 0 0 1 3 3L7.4 18.6a2 2 0 0 1-.9.5l-2.8.8a.5.5 0 0 1-.6-.6l.8-2.8a2 2 0 0 1 .5-.9Z" /></>),
+  stack: svg(<><rect x="7" y="3" width="14" height="14" rx="2" /><path d="M3 7v12a2 2 0 0 0 2 2h12" /></>),
 }
 
 type Mode = 'pick' | 'form'
 
-export default function CardFormModal({ initial, existing, defaultDivision, busy, onSave, onOpenExisting, onClose }: {
+export default function CardFormModal({
+  initial, existing, defaultDivision, busy, canDelete, onSave, onOpenExisting, onDelete, onBulk, onClose,
+}: {
   /** 고치는 중이면 그 명함. 새로 담는 중이면 null. */
   initial: BusinessCard | null
   /** 새로 담을 때의 사업부 — **등록하는 사람의 팀 사업부**다(폼에서 바꿀 수 있다). */
@@ -81,12 +94,28 @@ export default function CardFormModal({ initial, existing, defaultDivision, busy
   /** 중복을 찾을 때 보는 목록(지금 화면이 들고 있는 것). */
   existing: readonly BusinessCard[]
   busy: boolean
-  onSave: (form: CardForm) => void
+  /** 이 사람이 이 명함을 지울 수 있나 — 열람 모드의 「삭제」를 둘지 정한다. */
+  canDelete?: boolean
+  /** 저장한다. 참을 돌려주면 창이 **열람 모드**로 돌아간다. */
+  onSave: (form: CardForm) => void | Promise<boolean>
   onOpenExisting: (card: BusinessCard) => void
+  onDelete?: () => void
+  /** 「여러 장 등록」으로 건너간다 — 방식 고르기의 네 번째 항목. */
+  onBulk?: () => void
   onClose: () => void
 }) {
   const editing = initial != null
   const [mode, setMode] = useState<Mode>(editing ? 'form' : 'pick')
+  /** 이미 담긴 명함은 **읽는 것이 먼저**다. 「수정」을 눌러야 입력칸이 뜬다. */
+  const [mode2, setMode2] = useState<'view' | 'edit'>('view')
+  /** 폰이면 1단 세로. 넓으면 2단(스크롤 없이 한눈에). */
+  const [narrow, setNarrow] = useState(false)
+  useEffect(() => {
+    const check = () => setNarrow(window.innerWidth < 900)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
   const [form, setForm] = useState<CardForm>(() => {
     if (!initial) return { ...EMPTY_CARD_FORM, division: defaultDivision }
     const next = { ...EMPTY_CARD_FORM }
@@ -150,7 +179,11 @@ export default function CardFormModal({ initial, existing, defaultDivision, busy
   const trySave = () => {
     if (blocked || busy) return
     if (duplicate) { setDup(duplicate); return }
-    onSave(form)
+    // 고치던 중이면 저장이 끝난 뒤 **열람 모드**로 돌아간다(창은 닫지 않는다).
+    const done = onSave(form)
+    if (editing && done && typeof (done as Promise<boolean>).then === 'function') {
+      void (done as Promise<boolean>).then(ok => { if (ok) setMode2('view') })
+    }
   }
 
   // ── ② 방식 고르기 ──────────────────────────────────────────────────────
@@ -175,13 +208,20 @@ export default function CardFormModal({ initial, existing, defaultDivision, busy
               <span style={{ fontSize: 12, color: SUB, fontWeight: 400 }}>명함을 찍으면 글자를 읽어 칸을 채웁니다 · 사진은 저장하지 않습니다</span>
             </button>
             <button type="button" style={bigBtn} onClick={() => uploadRef.current?.click()}>
-              <span style={bigBtnHead}>{ICON.image}사진 올리기</span>
-              <span style={{ fontSize: 12, color: SUB, fontWeight: 400 }}>이미 찍어 둔 사진에서 읽기</span>
+              <span style={bigBtnHead}>{ICON.image}파일 올리기</span>
+              <span style={{ fontSize: 12, color: SUB, fontWeight: 400 }}>이미 찍어 둔 사진에서 읽기 (jpg · png · pdf)</span>
             </button>
             <button type="button" style={bigBtn} onClick={() => { setFromPhoto(false); setMode('form') }}>
               <span style={bigBtnHead}>{ICON.pen}직접 입력</span>
               <span style={{ fontSize: 12, color: SUB, fontWeight: 400 }}>명함을 보고 칸에 입력</span>
             </button>
+            {/* 네 번째 길 — 수십·수백 장을 한 번에. 버튼을 위에 따로 두지 않고 여기에 모았다. */}
+            {onBulk && (
+              <button type="button" style={bigBtn} onClick={onBulk}>
+                <span style={bigBtnHead}>{ICON.stack}여러 장 등록</span>
+                <span style={{ fontSize: 12, color: SUB, fontWeight: 400 }}>PDF·사진 여러 장을 한 번에</span>
+              </button>
+            )}
             <div style={{ fontSize: 12, color: SUB, padding: '4px 2px', lineHeight: 1.7 }}>
               사진으로 읽은 값은 틀릴 수 있으니 저장 전에 꼭 확인해 주세요.
             </div>
@@ -196,7 +236,89 @@ export default function CardFormModal({ initial, existing, defaultDivision, busy
     )
   }
 
-  // ── ③ 확인·저장 ────────────────────────────────────────────────────────
+  // ── ③ 열람 ─────────────────────────────────────────────────────────────
+  /**
+   * 이미 담긴 명함은 **읽는 것이 먼저**다(2026-11-25). 전에는 열자마자 입력칸이 떠
+   * 고치는 창처럼 보였다. 이제 글자로 보여 주고, 「수정」을 눌러야 입력 모드가 된다.
+   */
+  if (editing && mode2 === 'view') {
+    const show = (f: CardField) => {
+      const v = String(form[f] ?? '').trim()
+      return (
+        <div key={f} style={{ minWidth: 0 }}>
+          <div style={viewLabel}>{FIELD_LABEL[f]}</div>
+          <div style={viewValue}>{v || '—'}</div>
+        </div>
+      )
+    }
+    return (
+      <ModalOverlay onClose={onClose}>
+        <ModalCard
+          width={760}
+          closeX={false}
+          {...PADS}
+          ariaLabel="명함"
+          title={<div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <b style={{ fontSize: 17, fontWeight: 800, color: TEXT }}>{form.name || '명함'}</b>
+            {form.position && <span style={{ fontSize: 13, color: SUB }}>{form.position}</span>}
+          </div>}
+          footer={<>
+            <button type="button" onClick={onClose} style={ghostBtn}>닫기</button>
+            {canDelete && onDelete && (
+              <button type="button" onClick={onDelete} disabled={busy}
+                style={{ ...ghostBtn, color: DANGER }}>
+                삭제
+              </button>
+            )}
+            <button type="button" onClick={() => setMode2('edit')}
+              style={{
+                height: INPUT_H, flex: 2, border: 'none', borderRadius: R.control,
+                background: BLUE, color: '#fff', fontWeight: 700, fontSize: 14,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+              수정
+            </button>
+          </>}
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr', gap: '14px 20px' }}>
+            {/* 좌 — 누구인가 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {(['name', 'name_en', 'position', 'department', 'company', 'company_en'] as CardField[]).map(show)}
+            </div>
+            {/* 우 — 어떻게 닿는가 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {(['mobile', 'phone', 'fax', 'email', 'website', 'address'] as CardField[]).map(show)}
+            </div>
+            {/* 하 — 언제·누가·메모 */}
+            <div style={{
+              gridColumn: '1 / -1', display: 'grid', gap: '14px 20px', paddingTop: 12,
+              gridTemplateColumns: narrow ? '1fr' : '1fr 1fr 1fr',
+              borderTop: `1px solid ${BORDER}`,
+            }}>
+              <div>
+                <div style={viewLabel}>사업부</div>
+                <div style={viewValue}>{form.division}</div>
+              </div>
+              <div>
+                <div style={viewLabel}>등록일</div>
+                <div style={viewValue}>{String(initial?.registered_at ?? '').slice(0, 10) || '—'}</div>
+              </div>
+              <div>
+                <div style={viewLabel}>등록자</div>
+                <div style={viewValue}>{registrarLabel(initial ?? {})}</div>
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div style={viewLabel}>메모</div>
+                <div style={{ ...viewValue, whiteSpace: 'pre-wrap' }}>{form.memo.trim() || '—'}</div>
+              </div>
+            </div>
+          </div>
+        </ModalCard>
+      </ModalOverlay>
+    )
+  }
+
+  // ── ④ 확인·저장 ────────────────────────────────────────────────────────
   /** 칸 한 개. **컴포넌트가 아니라 함수**다 — 렌더마다 새 컴포넌트를 만들면 입력 상태가 날아간다. */
   const row = (f: CardField, wide = false) => (
     <div key={f} style={{ gridColumn: wide ? '1 / -1' : undefined, minWidth: 0 }}>
@@ -210,7 +332,7 @@ export default function CardFormModal({ initial, existing, defaultDivision, busy
   return (
     <ModalOverlay onClose={onClose} confirmClose dirty={form.name.trim() !== ''}>
       <ModalCard
-        width={460}
+        width={760}
         closeX={false}
         {...PADS}
         title={<>
@@ -245,9 +367,9 @@ export default function CardFormModal({ initial, existing, defaultDivision, busy
               다시 찍기
             </button>
           )}
-          <button type="button" onClick={onClose}
-            style={{ height: INPUT_H, flex: 1, border: `1px solid ${BORDER}`, borderRadius: R.control, background: CARD_BG, color: SUB, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
-            닫기
+          {/* 이미 담긴 명함을 고치는 중이면 **취소**로 열람 모드에 돌아간다. */}
+          <button type="button" onClick={() => { if (editing) setMode2('view'); else onClose() }} style={ghostBtn}>
+            {editing ? '취소' : '닫기'}
           </button>
           <button type="button" onClick={trySave} disabled={blocked != null || busy}
             style={{
@@ -259,7 +381,7 @@ export default function CardFormModal({ initial, existing, defaultDivision, busy
           </button>
         </>}
       >
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : '1fr 1fr', gap: 10 }}>
           {row('name', true)}
           {/* 영문은 한글 칸 **바로 아래**에 선다. 선택 입력이다 — 영문이 없는 명함이 더 많다. */}
           {row('name_en', true)}
