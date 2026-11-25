@@ -14,6 +14,7 @@
 
 import { useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import { Z } from '@/lib/zIndex'
 import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import { BLUE, BORDER, MUTED, SUB, TEXT } from '@/components/common/ui'
 import { TEXT_LABEL, LABEL_WEIGHT } from '@/lib/textTokens'
@@ -33,7 +34,8 @@ export default function DeleteRequestModal({ name, busy, onSend, onClose }: {
   const blocked = requestBlockedReason(reason, busy)
 
   return (
-    <ModalOverlay onClose={onClose} confirmClose dirty={reason.trim() !== ''}>
+    // 삭제 **요청** 창도 다른 창 위에서 열린다 — 확인 층에 둔다(2026-11-25).
+    <ModalOverlay onClose={onClose} confirmClose dirty={reason.trim() !== ''} style={{ zIndex: Z.confirm }}>
       <ModalCard
         width={420}
         closeX={false}

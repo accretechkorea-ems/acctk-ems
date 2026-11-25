@@ -993,10 +993,15 @@ useEffect(() => {
   .mobile-tab-bar { display: flex !important; }
   .mobile-hide { display: none !important; }
   /* 상단 고정 영역 = 앱바 48 + 여백 8 + 세그먼트 40 = 96 (지시 ②: 100 이내). */
-  .home-wrapper { height: calc(100dvh - ${TOPBAR_HEIGHT}px) !important; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)) !important; overflow: hidden !important; }
+  /* 앱바 = 48 + 상태바 안전 영역. 그 둘을 함께 뺀다(2026-11-25). */
+  .home-wrapper { height: calc(100dvh - ${TOPBAR_HEIGHT}px - env(safe-area-inset-top)) !important; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)) !important; overflow: hidden !important; }
   .home-grid { height: 100% !important; overflow: hidden !important; }
   .home-grid > div { height: 100% !important; min-height: 0 !important; min-width: 0 !important; overflow: hidden !important; }
   .home-grid > div > div { height: 100% !important; }
+  /* 가로 넘침 가림막 — **덮개가 아니라 보험**이다(2026-11-25 재측정).
+     390 에서 루트 overflow 를 걷어 내고 다시 재 보니 넘치는 요소는 0 이었다(문서 390).
+     그래도 한 줄은 남겨 둔다: 닫힌 드로어가 화면 왼쪽 밖(-304)에 서 있고, iOS 에서
+     고무줄 스크롤 중에 그 자리가 스크롤 폭으로 잡히는 일이 있다. */
   body { overflow-x: hidden !important; }
   /* 좁은 화면은 예전 「업체 목록 | 지도」 탭이 맡는다 — 토글이 둘이면 뜻이 겹친다. */
   .home-header { display: none !important; }

@@ -251,6 +251,21 @@ ok('＋ 문구 추가 — 저장 창을 다시 쓴다', TAB.includes('＋ 문구
 ok('아래에 자리표 안내', TAB.includes('VAR_HELP_HEAD') && TAB.includes('SNIPPET_VARS'))
 ok('지우기 전에 묻는다(confirm 창)', /await confirm\(\{/.test(TAB) && /deleteQuestion\(s\.title\)/.test(TAB))
 
+console.log('\n── 홈의 「내 문구」 카드 ──')
+const CARD = read('components/dashboard/MySnippetCard.tsx')
+const DASH = read('app/dashboard/page.tsx')
+ok('홈 격자의 **마지막 칸**에 선다', /<MySnippetCard/.test(DASH) && /마지막 칸/.test(DASH))
+ok('건수를 개인·공용으로 적는다', /개인 \{mine\} · 공용 \{shared\}/.test(CARD))
+ok('최근 세 장', /const RECENT = 3/.test(CARD) && /\.slice\(0, RECENT\)/.test(CARD))
+ok('최근순으로 고른다', /updated_at \?\? b\.created_at/.test(CARD))
+ok('제목 옆에 용도 뱃지', /KIND_LABEL\[s\.kind\]/.test(CARD))
+ok('＋ 추가 · 전체 관리 둘', CARD.includes('＋ 추가') && CARD.includes('전체 관리'))
+// 「전체 관리」는 **화면을 옮기지 않는다** — 내 정보 탭과 같은 부품을 창에 끼운다.
+ok('전체 관리는 모달 안에서 같은 부품을 쓴다',
+  /<MySnippets me=\{me\} \/>/.test(CARD) && /width=\{760\}/.test(CARD) && !/router\.push\('\/account/.test(CARD))
+ok('＋ 추가는 저장 창을 그대로 쓴다', /<SnippetSaveModal/.test(CARD))
+ok('내 정보 탭은 그대로 있다', read('app/account/page.tsx').includes("tab === 'snippets'"))
+
 console.log('\n── ⑦ 공용 초기 문구 둘 ──')
 ok('견적서 송부', /insert into public\.text_snippets[\s\S]{0,400}'견적서 송부'[\s\S]{0,400}'mail_body', 'shared', 4/.test(SQL))
 ok('그 본문에 자리표가 있다',

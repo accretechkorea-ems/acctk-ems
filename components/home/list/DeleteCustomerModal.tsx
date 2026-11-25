@@ -10,6 +10,7 @@
 
 import { useState } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
+import { Z } from '@/lib/zIndex'
 import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import { R } from '@/lib/radius'
 import { BAND_BG, BORDER, CARD_BG, DANGER, DANGER_TINT, MUTED, SUB, TEXT } from '@/components/common/ui'
@@ -43,7 +44,14 @@ export default function DeleteCustomerModal({
   const label = TARGET_LABEL[target]
 
   return (
-    <ModalOverlay onClose={busy ? () => {} : onClose} closeOn={busy ? 'none' : 'both'} confirmClose dirty={reason.trim().length > 0}>
+    /**
+     * **확인 층**에 띄운다(Z.confirm, 2026-11-25).
+     * 이 창은 늘 **다른 창 위에서** 열린다 — 장비·담당자는 그 수정 창에서, 사업장은 상세
+     * 화면에서 부른다. 기본 층(Z.modal)이면 같은 층의 수정 창과 **DOM 차례**로 가려져
+     * 뒤에 떴다(2026-11-25: 장비 삭제 확인창이 수정 창 뒤에 깔려 누를 수 없었다).
+     */
+    <ModalOverlay onClose={busy ? () => {} : onClose} closeOn={busy ? 'none' : 'both'} confirmClose dirty={reason.trim().length > 0}
+      style={{ zIndex: Z.confirm }}>
       <ModalCard
         width={460}
         closeX

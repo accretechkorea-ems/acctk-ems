@@ -16,6 +16,7 @@ import ModalCard from '@/components/common/ModalCard'
 import { BAND_BG, BLUE, BORDER, CARD_BG, DANGER, MUTED, SUB, TEXT } from '@/components/common/ui'
 import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 import { R } from '@/lib/radius'
+import { Z } from '@/lib/zIndex'
 import {
   REASON_LABEL, REASON_MAX, REASON_PLACEHOLDER, REVIVE_CONFIRM, REVIVE_NOTICE, REVIVE_TITLE,
   reviveBlockedReason,
@@ -40,7 +41,9 @@ export default function QuoteReviveModal({ quote, busy, onClose, onRevive }: {
   }
 
   return (
-    <ModalOverlay onClose={onClose} confirmClose dirty={reason.trim() !== ''}>
+    /* 이 창도 **다른 창 위에서** 열린다(상태 창의 「견적중으로 되돌리기」) — 확인 층에 둔다.
+       기본 층이면 같은 층의 창과 DOM 차례로 가려진다(2026-11-25 장비 삭제 확인창과 같은 자리). */
+    <ModalOverlay onClose={onClose} confirmClose dirty={reason.trim() !== ''} style={{ zIndex: Z.confirm }}>
       <ModalCard
         width={380}
         onClose={onClose}

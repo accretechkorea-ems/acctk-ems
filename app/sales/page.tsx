@@ -737,8 +737,9 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, me
       {/* 높이는 **견적 수와 무관하게 고정**이다(92vh). 내용에 맞춰 늘었다 줄었다 하면
           상태 칩을 누를 때마다 모달이 들썩이고, 표의 머리줄·쪽 넘김 버튼 자리가 옮겨
           다음에 누를 것을 눈으로 다시 찾아야 한다. 개인 그래프 모달과 같은 방식이다
-          (components/sales/EngineerChartModal.tsx — 그쪽은 min(760px, 90vh)). */}
-      <div style={{ background: CARD_BG, borderRadius: R.modal, width: '100%', minWidth: 900, maxWidth: 1200, height: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', position: 'relative' }}>
+          (components/sales/EngineerChartModal.tsx — 그쪽은 min(760px, 90vh)).
+          minWidth 900 은 폰(390)에서 그대로 510px 넘쳤다(2026-11-25) — min() 으로 둔다. */}
+      <div style={{ background: CARD_BG, borderRadius: R.modal, width: '100%', minWidth: 'min(900px, 100%)', maxWidth: 1200, height: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', position: 'relative' }}>
         <div style={{ padding: '18px 24px', borderBottom: `1px solid ${BORDER}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
             <div>

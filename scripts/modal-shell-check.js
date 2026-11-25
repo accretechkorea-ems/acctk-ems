@@ -137,5 +137,39 @@ ok('옮긴 것은 목록에서 빠졌다', gone.length === 0,
   gone.join(' · ') + ' — 이 파일은 옮겼으니 PENDING 에서 지워라')
 console.log(`   남은 ${pendingNow.length}파일: ${pendingNow.join(', ')}`)
 
+// ── ⑥ 중첩 확인창은 **위층**에 뜬다(2026-11-25) ──────────────────────────
+// 모달 위에서 열리는 창이 기본 층(Z.modal)이면 같은 층의 창과 **DOM 차례**로 가려진다.
+// 장비 삭제 확인창이 수정 창 뒤에 깔려 누를 수 없던 자리다.
+console.log('\n── ⑥ 중첩 확인창은 확인 층(Z.confirm) ──')
+const NESTED = [
+  'components/home/list/DeleteCustomerModal.tsx',
+  'components/home/list/DeleteRequestModal.tsx',
+  'components/quote/QuoteReviveModal.tsx',
+  'components/common/ConfirmDialog.tsx',
+]
+for (const f of NESTED) {
+  const src = fs.readFileSync(path.join(ROOT, f), 'utf8')
+  ok(`${f} — zIndex: Z.confirm`, /zIndex: Z\.confirm/.test(src),
+    '다른 창 위에서 열리는 창은 확인 층에 둔다')
+}
+// 지우기 확인창은 **그 수정 창보다 위**여야 한다 — 두 창을 나란히 그리는 화면에서 확인한다.
+const BODY_SRC = fs.readFileSync(path.join(ROOT, 'components/customer/CustomerDetailBody.tsx'), 'utf8')
+ok('사업장 화면이 지우기 창과 수정 창을 함께 그린다',
+  /<DeleteCustomerModal/.test(BODY_SRC) && /<DeviceEditModal/.test(BODY_SRC))
+ok('지우면 수정 창도 닫힌다(고른 장비를 비운다)',
+  /setSelectedDevice\(null\)/.test(fs.readFileSync(path.join(ROOT, 'hooks/customer/useDeviceCrud.ts'), 'utf8')))
+
+// ── ⑦ 사이드바의 떠오르는 판은 **body 에** 띄운다(2026-11-25) ────────────
+// 사이드바는 overflow: hidden 이라 안에 두면 접힌 폭(64) 밖이 잘린다.
+console.log('\n── ⑦ 사이드바 팝오버는 portal ──')
+const SIDE = fs.readFileSync(path.join(ROOT, 'components/layout/Sidebar.tsx'), 'utf8')
+ok('아바타 메뉴가 Popover 로 뜬다', /<Popover anchorRef=\{meRef\}/.test(SIDE))
+ok('사이드바 안의 absolute 메뉴를 걷었다',
+  !/position: 'absolute', bottom: '100%'/.test(SIDE), '잘리는 자리로 되돌아가지 않게')
+ok('층은 사이드바 위·모달 아래', /anchorRef=\{meRef\}[\s\S]{0,400}zIndex: Z\.sidebarPanel/.test(SIDE))
+ok('사업부 패널도 같은 길', /<Popover anchorRef=\{anchor\}/.test(SIDE))
+ok('Popover 는 body 로 보낸다(portal)',
+  /createPortal/.test(fs.readFileSync(path.join(ROOT, 'components/common/Popover.tsx'), 'utf8')))
+
 console.log(fail === 0 ? '\n전부 통과' : `\n${fail}건 실패`)
 process.exit(fail === 0 ? 0 : 1)

@@ -22,6 +22,7 @@ import { loadActivityTypes } from '@/lib/activityTypes'
 import ActivityCard from '@/components/activity/ActivityCard'
 import ActivityDetailModal from '@/components/activity/ActivityDetailModal'
 import DashCard from '@/components/dashboard/DashCard'
+import MySnippetCard from '@/components/dashboard/MySnippetCard'
 import { ApprovalCard, ForecastCard, MyStatCard, NotificationCard } from '@/components/dashboard/HomeCards'
 import MyQuoteCard from '@/components/dashboard/MyQuoteCard'
 import { useDashboardCards } from '@/hooks/dashboard/useDashboardCards'
@@ -240,8 +241,13 @@ function DashboardPageInner() {
             <NotificationCard engineerId={engineerId} onOpenAll={() => router.push('/notifications')} />
           </div>
 
-          {/* 빈 자리 둘 — 카드 없이 칸만 둔다(격자 정렬). */}
-          <div className="home-cell" />
+          {/* 내 문구 — 격자의 **마지막 칸**이다(폰에서는 맨 아래, 2026-11-25).
+              「전체 관리」는 화면을 옮기지 않고 내 정보의 그 탭을 창 안에 그대로 띄운다. */}
+          <div className="home-cell">
+            {me && <MySnippetCard me={{ engineer_id: me.engineer_id, permission_level: me.permission_level }} />}
+          </div>
+
+          {/* 빈 자리 하나 — 카드 없이 칸만 둔다(격자 정렬). */}
           <div className="home-cell" />
         </div>
       </div>

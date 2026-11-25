@@ -193,7 +193,7 @@ export default function PeriodPickerModal({ period, onPick, onClose }: Props) {
     // 고르던 기간이 날아가지 않게 확인 뒤 닫는다.
     <ModalOverlay onClose={onClose} confirmClose style={{ padding: '6vh 12px' }}>
       <div ref={panelRef} onClick={e => e.stopPropagation()} role="dialog" aria-label="기간 선택" style={{
-        width: 'calc(100vw - 24px)', maxWidth: 380, maxHeight: 'calc(100dvh - 32px)',
+        width: '100%', maxWidth: 380, maxHeight: 'calc(100dvh - 32px)',
         background: CARD_BG, borderRadius: R.control, boxSizing: 'border-box',
         boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
         animation: 'modal-in 0.18s ease', display: 'flex', flexDirection: 'column',

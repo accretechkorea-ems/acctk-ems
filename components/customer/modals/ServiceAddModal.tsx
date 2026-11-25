@@ -135,7 +135,7 @@ export default function ServiceAddModal({ deviceId, contacts, engineers, current
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 'calc(100vw - 24px)', maxWidth: 560, maxHeight: 'calc(100dvh - 32px)',
+          width: '100%', maxWidth: 560, maxHeight: 'calc(100dvh - 32px)',
           background: '#ffffff', borderRadius: R.control, boxSizing: 'border-box',
           boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: '1px solid #ebebeb',
           animation: 'modal-in 0.18s ease',

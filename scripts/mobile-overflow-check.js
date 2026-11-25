@@ -54,6 +54,26 @@ const hideRoots = [
 ].flatMap(([name, src]) => (src.match(/overflow-x:\s*hidden/g) ?? []).map(() => name))
 eq('overflow-x: hidden 을 쓰는 자리', hideRoots, ['app/page.tsx'])
 
+console.log('\n── ①-2 화면 폭을 100vw 로 재지 않는다 ──')
+// 100vw 는 **세로 스크롤바를 포함한** 폭이다(PC 에서 15px 넘친다). 모바일에서도 고무줄
+// 스크롤 중에 화면보다 커진다. 가로 폭은 늘 100% 로 잰다(2026-11-25).
+const VW = []
+const seekVw = (dir) => {
+  for (const e of fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true })) {
+    const rel = `${dir}/${e.name}`
+    if (e.isDirectory()) { seekVw(rel); continue }
+    if (!/\.(tsx?|css)$/.test(e.name)) continue
+    // 높이(100vh·100dvh)는 그대로 둔다 — 문제는 **가로**다.
+    if (/\b100vw\b/.test(fs.readFileSync(path.join(ROOT, rel), 'utf8'))) VW.push(rel)
+  }
+}
+for (const d of ['app', 'components']) seekVw(d)
+eq('100vw 를 쓰는 자리', VW, [])
+// 폰에서 **화면보다 넓어지는 최소 폭**도 두지 않는다(표는 가로 스크롤 상자 안에서 쓴다).
+// 화면보다 넓어지는 값(≥400)만 본다 — 200·180 같은 칸 최소 폭은 폰에서도 들어간다.
+eq('모달에 화면보다 넓은 minWidth 를 두지 않는다',
+  /minWidth: ([4-9]\d{2}|\d{4,})\b/.test(read('app/sales/page.tsx')) ? ['app/sales/page.tsx'] : [], [])
+
 console.log('\n── ② 폰에서 고정 폭을 쓰지 않는다 ──')
 // 2026-11-25 실측: /quote 가 390 에서 **60px** 넘쳤다 — 왼쪽 입력 열이 430 고정이었다.
 ok('견적 입력 열에 이름표가 있다', /className="quote-left"/.test(QUOTE))
@@ -85,6 +105,15 @@ eq('세그먼트 40', seg, 40)
 ok(`상단 고정 영역 ${topbar} + ${pad} + ${seg} = ${topbar + pad + seg} ≤ 100`, topbar + pad + seg <= 100)
 ok('세그먼트 아래 여백 8', segGap === 8)
 ok('아래는 홈바만큼만', /padding: 8px 8px calc\(8px \+ env\(safe-area-inset-bottom\)\)/.test(HOME))
+
+console.log('\n── ⑤-2 앱바는 안전 영역 바로 아래 ──')
+ok('viewport-fit=cover 를 켠다 — 안전 영역이 값을 갖는다',
+  /viewportFit: 'cover'/.test(read('app/layout.tsx')))
+ok('앱바가 그 값만큼 아래로 깔린다',
+  /env\(safe-area-inset-top\)\)`/.test(TOPBAR) && /padding: 'env\(safe-area-inset-top\) 8px 0'/.test(TOPBAR))
+ok('화면 높이 셈도 그 값을 뺀다', /env\(safe-area-inset-top\)\) !important/.test(HOME))
+ok('앱바 위에 다른 레이아웃 요소를 두지 않는다 — body 의 첫 요소는 앱바다',
+  /<header className="ems-topbar"/.test(TOPBAR))
 
 console.log('\n── ⑥ 사업장 상세(폰) ──')
 ok('앱바 아래 12px 뒤 카드', /\.site-page \{ padding: 12px !important; \}/.test(BODY))

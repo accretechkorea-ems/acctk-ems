@@ -586,7 +586,15 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
           보이고 숨기는 것은 HeaderWrapper 의 .ems-topbar 규칙만 정한다. ── */}
       <header className="ems-topbar" style={{
         position: 'sticky', top: 0, zIndex: Z.sidebar,
-        height: TOPBAR_HEIGHT, alignItems: 'center', gap: 8, padding: '0 8px',
+        /**
+         * 높이는 **48 그대로**이고, 노치 기기에서는 그 위에 상태바 안전 영역만큼만 더 깐다
+         * (viewport-fit=cover 를 켠 뒤 그 자리를 우리가 비워 준다 — app/layout.tsx).
+         * 안전 영역이 0 인 기기(PC·구형)에서는 아무 차이가 없다.
+         */
+        height: `calc(${TOPBAR_HEIGHT}px + env(safe-area-inset-top))`,
+        alignItems: 'center', gap: 8,
+        // 위 여백만 안전 영역이다 — 뒤에 오는 padding 단축 속성이 이것을 지우지 않게 함께 적는다.
+        padding: 'env(safe-area-inset-top) 8px 0',
         background: '#ffffff', borderBottom: `1px solid ${BORDER}`, boxSizing: 'border-box',
       }}>
         <button type="button" aria-label="메뉴 열기" onClick={() => setDrawerOpen(true)}
@@ -715,22 +723,28 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
             )}
           </button>
 
-          {meOpen && (
-            <div style={{
-              position: 'absolute', bottom: '100%', left: 0, marginBottom: 6, zIndex: Z.sidebarPanel,
-              background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: R.control, padding: 6,
-              width: 160, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          {/*
+            아바타 메뉴 — **body 에 띄운다**(Popover, 2026-11-25).
+            전에는 사이드바 안의 absolute 였다. 사이드바는 overflow: hidden 이라 접힌 폭
+            (64px) 밖으로 나간 부분이 잘려, 「정보 수정·로그아웃」이 반쯤만 보였다.
+            SearchSelect·툴팁과 **같은 길**을 쓴다 — 바깥 클릭·Esc 도 Popover 가 맡는다.
+            층은 사이드바 위·모달 아래다(Z.sidebarPanel).
+          */}
+          <Popover anchorRef={meRef} open={meOpen} onClose={() => setMeOpen(false)}
+            align="start" prefer="top" width={160} gap={6}
+            style={{
+              background: '#ffffff', border: `1px solid ${BORDER}`, borderRadius: R.control,
+              padding: 6, boxShadow: '0 4px 16px rgba(0,0,0,0.12)', zIndex: Z.sidebarPanel,
             }}>
-              <button type="button" onClick={() => { setMeOpen(false); router.push('/account') }}
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 10px', border: 'none', background: 'transparent', color: TEXT, fontWeight: 600, fontSize: 13, borderRadius: R.icon, cursor: 'pointer', fontFamily: 'inherit' }}>
-                정보 수정
-              </button>
-              <button type="button" onClick={handleLogout}
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 10px', border: 'none', background: 'transparent', color: '#dc2626', fontWeight: 600, fontSize: 13, borderRadius: R.icon, cursor: 'pointer', fontFamily: 'inherit' }}>
-                로그아웃
-              </button>
-            </div>
-          )}
+            <button type="button" onClick={() => { setMeOpen(false); router.push('/account') }}
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 10px', border: 'none', background: 'transparent', color: TEXT, fontWeight: 600, fontSize: 13, borderRadius: R.icon, cursor: 'pointer', fontFamily: 'inherit' }}>
+              정보 수정
+            </button>
+            <button type="button" onClick={handleLogout}
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 10px', border: 'none', background: 'transparent', color: '#dc2626', fontWeight: 600, fontSize: 13, borderRadius: R.icon, cursor: 'pointer', fontFamily: 'inherit' }}>
+              로그아웃
+            </button>
+          </Popover>
         </div>
       </nav>
 
@@ -747,9 +761,14 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
       )}
 
       {/* ── 모바일 드로어 — 닫혀 있어도 붙여 두고 translateX 로 민다(0.2s) ── */}
+      {/* 닫혀 있으면 **그리지 않는다**(2026-11-25). 전에는 화면 왼쪽 밖(-304)에 선 채로
+          남아 있었다 — 크로미움에서는 넘침이 아니지만, iOS 의 고무줄 스크롤에서 그 자리가
+          가로 스크롤 폭으로 잡히는 일이 있다. 열 때 그리면 그런 자리가 아예 없다.
+          (열림 전환은 transform 이라 첫 프레임에 -100% 에서 시작한다 — 움직임은 그대로다) */}
       <div className="ems-drawer-wrap" aria-hidden={!drawerOpen} style={{
         position: 'fixed', inset: 0, zIndex: Z.sidebarPanel,
         pointerEvents: drawerOpen ? 'auto' : 'none',
+        display: drawerOpen ? 'block' : 'none',
       }}>
         <div
           onClick={() => setDrawerOpen(false)}

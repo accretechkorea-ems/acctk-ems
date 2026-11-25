@@ -69,7 +69,7 @@ export default function DeviceSettingsModal({ device, onClose, onSubmit }: Props
     // 입력 폼 — 확인 뒤 닫는다.
     <ModalOverlay onClose={onClose} confirmClose style={{ padding: '6vh 12px' }}>
       <div onClick={e => e.stopPropagation()} style={{
-        width: 'calc(100vw - 24px)', maxWidth: 460, maxHeight: 'calc(100dvh - 32px)',
+        width: '100%', maxWidth: 460, maxHeight: 'calc(100dvh - 32px)',
         background: CARD_BG, borderRadius: R.control, boxSizing: 'border-box',
         boxShadow: '0 20px 60px rgba(0,0,0,0.22)', border: `1px solid ${BORDER}`,
         animation: 'modal-in 0.18s ease', display: 'flex', flexDirection: 'column',
