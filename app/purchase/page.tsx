@@ -20,6 +20,8 @@ import { useToast } from '@/components/common/Toast'
 import AssigneePicker from '@/components/quote/AssigneePicker'
 import Pager from '@/components/common/Pager'
 import { PAGE_SIZE, pageRange } from '@/lib/pager'
+import { companyPickOr } from '@/lib/companySearch'
+import { withNameEnFallback } from '@/lib/nameEn'
 import { R } from '@/lib/radius'
 
 const BLUE = '#234ea2'
@@ -216,8 +218,10 @@ export default function PurchasePage() {
     if (term) {
       // ilike 의 와일드카드와 or() 의 구분자를 글자 그대로 넘긴다.
       const safe = term.replace(/[%,()]/g, ' ')
-      const { data: hits } = await supabase.from('customers')
-        .select('customer_id').ilike('company_name', `%${safe}%`).limit(SEARCH_ID_MAX)
+      // 회사는 **한 함수로** 찾는다 — 회사명과 영문명을 함께 본다(lib/companySearch.ts ⓑ).
+      // 영문명 칸이 아직 없는 DB 에서는 그 칸만 빼고 다시 읽는다(lib/nameEn.ts).
+      const { data: hits } = await withNameEnFallback(useEn => supabase.from('customers')
+        .select('customer_id').or(companyPickOr(safe, useEn)).limit(SEARCH_ID_MAX))
       const ids = (hits || []).map(h => Number(h.customer_id)).filter(n => Number.isInteger(n))
       const parts = [`quote_number.ilike.%${safe}%`]
       if (ids.length > 0) parts.push(`customer_id.in.(${ids.join(',')})`)

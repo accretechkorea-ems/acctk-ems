@@ -114,8 +114,10 @@ ok('받아 온 줄을 다시 거르지 않는다(서버가 걸렀다)',
 ok('이름으로 검색하면 고객사 id 로 좁힌다', /customer_id\.in\.\(\$\{ids\.join\(','\)\}\)/.test(PUR))
 // 이름으로 맞는 고객사는 **서버에 묻는다** — customers 를 통째로 받아 두면 PostgREST 의
 // 기본 상한(1,000줄) 밖의 고객사가 검색에 걸리지 않는다(2026-11-26 실측: 「현대」 0건).
-ok('이름은 customers 에 물어 좁힌다',
-  /\.ilike\('company_name', `%\$\{safe\}%`\)\.limit\(SEARCH_ID_MAX\)/.test(PUR))
+// 2026-11-26(H) — 회사는 **한 함수로** 찾는다: 회사명·영문명(lib/companySearch.ts ⓑ).
+ok('이름은 customers 에 물어 좁힌다(회사명·영문명)',
+  /\.or\(companyPickOr\(safe, useEn\)\)\.limit\(SEARCH_ID_MAX\)/.test(PUR)
+  && /withNameEnFallback/.test(PUR))
 ok('이름표는 그 쪽에 보이는 고객사만 받아 둔다', /void fetchNames\(/.test(PUR))
 ok('주소로 들어온 쪽을 첫 효과가 1 로 돌려놓지 않는다',
   /if \(firstRun\.current\) \{ firstRun\.current = false; return \}/.test(PUR))
