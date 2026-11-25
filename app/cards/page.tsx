@@ -29,13 +29,16 @@ import {
 } from '@/lib/businessCard'
 import { applyCardFilter, filterFromQuery, queryFromFilter, type CardFilter } from '@/lib/businessCardQuery'
 import { canDeleteCard, selectionTitle, skippedNotice } from '@/lib/businessCardBulk'
+import {
+  STATUS_ACTIVE, STATUS_DRAFT, discardQuestion, pageRangeLabel, pendingBannerLabel, readFileName,
+} from '@/lib/cardReview'
 import { exportCardXlsx } from '@/lib/businessCardExcel'
 import CardFormModal from '@/components/cards/CardFormModal'
 import BulkImportModal from '@/components/cards/BulkImportModal'
 import CardFilterModal from '@/components/cards/CardFilterModal'
 // 선택 띠의 가름선 — 고객사 목록의 선택 바와 **같은 값**을 그대로 쓴다(새 색을 만들지 않는다).
 import { BAR_LINE } from '@/components/home/list/BulkBar'
-import { BLUE, BLUE_TINT, BORDER, CARD_BG, MUTED, PAGE_BG, SUB, TEXT } from '@/components/common/ui'
+import { BLUE, BLUE_TINT, BORDER, CARD_BG, DANGER, MUTED, PAGE_BG, SUB, TEXT } from '@/components/common/ui'
 import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 import { R } from '@/lib/radius'
 
@@ -53,6 +56,7 @@ const SELECT_BASE = 'card_id, name, company, department, position, mobile, phone
  * 칸이 더 생길 때마다 맨 앞에 한 줄을 더하면 된다(SQL 적용 전에도 목록이 뜬다).
  */
 const SELECT_TRIES = [
+  `${SELECT_BASE}, name_en, company_en, import_batch_id, status, import_page`,
   `${SELECT_BASE}, name_en, company_en, import_batch_id`,
   `${SELECT_BASE}, name_en, company_en`,
   SELECT_BASE,
@@ -69,12 +73,45 @@ const th: React.CSSProperties = {
 }
 const td: React.CSSProperties = { padding: '0 14px', fontSize: 13, color: TEXT, whiteSpace: 'nowrap' }
 
+/** 줄 높이 — **두 줄 기준으로 고정**한다. 긴 이름이 행마다 들쭉날쭉하지 않게. */
+const ROW_H = 56
+
 /** 회사·부서 칸 — 줄을 바꿔 쓴다(긴 이름이 표를 밀지 않게). */
 const wrapCell: React.CSSProperties = { whiteSpace: 'normal', verticalAlign: 'middle' }
 /** 두 줄까지만 보여 주고 그 뒤는 말줄임 — 전체는 칸의 title 로 본다. */
 const clamp2: React.CSSProperties = {
   display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
   overflow: 'hidden', lineHeight: 1.45,
+}
+
+/** 대기 줄들이 속한 묶음 — 가장 최근 것 하나. */
+function draftBatch(drafts: readonly BusinessCard[]): string {
+  const sorted = [...drafts].sort((a, b) => String(b.registered_at).localeCompare(String(a.registered_at)))
+  return String(sorted[0]?.import_batch_id ?? '')
+}
+
+/** 「파일명 · 1~20쪽 · 11-25」. 파일명은 브라우저가 기억한다(표에는 없다). */
+function draftLabel(drafts: readonly BusinessCard[]): string {
+  const batch = draftBatch(drafts)
+  const name = batch ? readFileName(batch) : null
+  const pages = drafts.map(d => Number(d.import_page ?? -1)).filter(n => n >= 0).sort((a, b) => a - b)
+  const range = pages.length > 0 ? pageRangeLabel(pages[0], pages[pages.length - 1]) : ''
+  const day = String(drafts[0]?.registered_at ?? '').slice(5, 10)
+  return [name, range, day].filter(Boolean).join(' · ')
+}
+
+/**
+ * 영문 값 — 본칸 **아랫줄**에 작은 글씨로. 본칸과 같으면 적지 않는다(두 번 읽히지 않게).
+ */
+function Under({ value, same }: { value?: string | null; same?: string | null }) {
+  const v = String(value ?? '').trim()
+  if (!v || v === String(same ?? '').trim()) return null
+  return (
+    <div style={{
+      fontSize: 11, color: SUB, fontWeight: 400, lineHeight: 1.4,
+      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+    }}>{v}</div>
+  )
 }
 
 /** 등록일 — 목록은 **yy-mm-dd** 로 짧게 적는다(26-11-25). */
@@ -116,6 +153,8 @@ function CardsPageInner() {
   const [picking, setPicking] = useState(false)
   /** 필터 창 — 사업부·등록자·기간·가져오기를 한곳에서 고른다(2026-11-25). */
   const [filterOpen, setFilterOpen] = useState(false)
+  /** 내 검토 대기 — 목록 위의 띠로만 보인다(명함첩에는 넣지 않는다). */
+  const [drafts, setDrafts] = useState<BusinessCard[]>([])
 
   const filter = useMemo(() => filterFromQuery(params), [params])
   const today = new Date().toISOString()
@@ -146,9 +185,12 @@ function CardsPageInner() {
       setLoading(false)
       return
     }
-    setRows((data ?? []) as unknown as BusinessCard[])
+    const all = (data ?? []) as unknown as BusinessCard[]
+    // **승인된 줄만** 명함첩에 보인다. 검토 대기(draft)는 띠로만 알린다.
+    setRows(all.filter(r => String(r.status ?? STATUS_ACTIVE) === STATUS_ACTIVE))
+    setDrafts(all.filter(r => String(r.status ?? '') === STATUS_DRAFT && Number(r.engineer_id ?? 0) === Number(me?.engineer_id ?? -1)))
     setLoading(false)
-  }, [supabase])
+  }, [supabase, me?.engineer_id])
 
   useEffect(() => { void load() }, [load])
 
@@ -291,6 +333,33 @@ function CardsPageInner() {
     return true
   }
 
+  /** 검토 대기를 통째로 버린다 — 읽은 글자가 사라진다. */
+  const discardDrafts = async () => {
+    const batch = draftBatch(drafts)
+    if (!batch) return
+    const ok = await confirm({
+      title: '검토 대기를 버릴까요?',
+      message: discardQuestion(drafts.length),
+      confirmText: '버리기', cancelText: '그대로 두기', variant: 'danger',
+    })
+    if (!ok) return
+    setBusy(true)
+    try {
+      const res = await fetch('/api/cards/import', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'discard', import_batch_id: batch }),
+      })
+      const json = await res.json() as { ok?: boolean; discarded?: number; error?: string }
+      if (!json?.ok) { toast.error(json?.error ?? '버리지 못했습니다'); return }
+      toast.success(`${json.discarded ?? 0}장을 버렸습니다`)
+      await load()
+    } catch {
+      toast.error('버리지 못했습니다')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   /** 열람 창의 「삭제」 — 고른 줄 지우기와 **같은 라우트**를 쓴다(권한도 같다). */
   const deleteOne = async (card: BusinessCard) => {
     const ok = await confirm({
@@ -406,6 +475,28 @@ function CardsPageInner() {
     <main style={{ padding: narrow ? '12px 12px 96px' : 16, background: PAGE_BG, minHeight: '100vh', display: 'flex', flexDirection: 'column', gap: 12 }}>
       {header}
 
+      {/* 검토 대기 띠 — 시안 3번째 패널. 내 대기 줄이 있을 때만 선다. */}
+      {drafts.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
+          borderRadius: R.card, background: '#fff7ed', border: '1px solid #fed7aa', flexWrap: 'wrap',
+        }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <b style={{ fontSize: 14, color: TEXT }}>{pendingBannerLabel(drafts.length)}</b>
+            <div style={{ fontSize: 12, color: SUB, marginTop: 2 }}>
+              {draftLabel(drafts)} · 검토 대기는 목록·엑셀에 나오지 않습니다
+            </div>
+          </div>
+          <button type="button" style={btn()} onClick={() => router.push(`/cards/import?batch=${draftBatch(drafts)}`)}>
+            이어서
+          </button>
+          <button type="button" style={{ ...btn(), color: DANGER, borderColor: '#fecaca' }}
+            disabled={busy} onClick={() => void discardDrafts()}>
+            버리기
+          </button>
+        </div>
+      )}
+
       {/* 고른 것이 있으면 검은 띠 — 고객사 목록의 선택 바와 같은 모양이다. */}
       {picked.size > 0 && (
         <div className="ems-bulk-bar"
@@ -517,8 +608,8 @@ function CardsPageInner() {
             </thead>
             <tbody>
               {shown.map(c => (
-                <tr key={c.card_id} className="ems-card-row"
-                  style={{ height: 44, cursor: 'pointer' }}
+                <tr key={c.card_id} className="ems-row-hover"
+                  style={{ height: ROW_H, cursor: 'pointer' }}
                   onClick={() => openCard(c)}>
                   {/* 체크칸은 줄 열기와 섞이지 않게 눌림을 여기서 멈춘다. */}
                   <td style={{ ...td, paddingRight: 0 }} onClick={e => e.stopPropagation()}>
@@ -529,13 +620,18 @@ function CardsPageInner() {
                   <td style={{ ...td, color: SUB }}>{shortDay(c.registered_at)}</td>
                   {/* 회사·부서는 **두 줄까지** 보여 주고 그 뒤는 말줄임. 전체는 호버로. */}
                   <td style={{ ...td, ...wrapCell, minWidth: 220 }} title={[c.company, c.company_en].filter(Boolean).join(' ')}>
-                    <span style={clamp2}>{c.company || '—'}<En value={c.company_en} /></span>
+                    <span style={clamp2}>{c.company || '—'}</span>
+                    <Under value={c.company_en} same={c.company} />
                   </td>
                   <td style={{ ...td, ...wrapCell }} title={c.department ?? ''}>
                     <span style={clamp2}>{c.department || '—'}</span>
                   </td>
-                  <td style={td}><b>{c.name}</b><En value={c.name_en} /></td>
-                  <td style={td}>{c.position || '—'}</td>
+                  <td style={{ ...td, ...wrapCell }}>
+                    <b>{c.name}</b>
+                    <Under value={c.name_en} same={c.name} />
+                  </td>
+                  <td style={{ ...td, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}
+                    title={c.position ?? ''}>{c.position || '—'}</td>
                   {/* 휴대폰이 없으면 회사 전화를 대신 보여 준다(앞에 작은 「회사」). */}
                   <td style={{ ...td, color: BLUE }}>
                     {(() => {

@@ -101,9 +101,13 @@ console.log('\n── ③ 토큰과 같은 값의 직접 표기는 늘지 않는
  *   손으로 적은 색이 늘어서가 아니다 — 원래 있던 #6b7280 자리들이 그 값으로 옮겨 갔고,
  *   그 값이 토큰이 되면서 세는 대상에 들어왔다. 역할 토큰을 적어 둔 두 파일(lib/textTokens.ts ·
  *   scripts/text-color-check.js)도 그 값을 들고 있어 파일 수가 148 → 150 이 됐다.
+ * 2026-11-25 … 1915 / 154 — 명함 **검토 화면**(app/cards/import)이 새로 생겼다.
+ *   시안의 상태 뱃지 색(승인 초록·건너뜀 빨강·합침 남색·중복 주황)을 쓴다. 그 값들은
+ *   표에 없는 **상태색**이라 토큰이 없다 — 한 파일 안에 BADGE 로 모아 두었다.
+ *   쓸 수 있는 토큰(NEUTRAL_BG·SUB·MUTED·SKELETON·CARD_BG)은 전부 토큰으로 썼다.
  */
-const BASELINE = 1914
-const BASELINE_FILES = 153
+const BASELINE = 1915
+const BASELINE_FILES = 154
 const byValue = new Map()
 const byFile = new Map()
 const tokenValues = new Map()      // 값 → 토큰 이름(여럿이면 첫 번째)

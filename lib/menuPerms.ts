@@ -199,6 +199,8 @@ export const PARENT_MENU: Record<string, string> = {
   // 접촉 보고서 Project 상세·작성 — 목록과 같은 메뉴 권한. 가드는 contact_semi 를 canAccessSemiContact 로 판정한다.
   '/contact/semi/[projectId]': 'contact_semi',
   '/contact/semi/[projectId]/write': 'contact_semi',
+  // 명함 여러 장 등록의 **검토 화면** — 목록과 같은 메뉴 권한이다(2026-11-25).
+  '/cards/import': 'business_cards',
   '/holdings': 'dashboard_80',
   '/account': 'public',
   // 결재 문서 전용 화면 — 결재 화면 자체가 전원 공개이므로(approvals 의 menuPublic) 같은 자격이다.

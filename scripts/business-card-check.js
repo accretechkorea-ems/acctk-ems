@@ -273,8 +273,8 @@ eq('등록일은 yy-mm-dd', (() => {
   return m ? /slice\(2\)/.test(m[0]) : false
 })(), true)
 ok('「● 오늘」 꼬리표를 표에서 걷었다', !/<AgeTag registeredAt=\{c\.registered_at\} today=\{today\} \/>\s*\n\s*<\/td>/.test(CARDS_PAGE))
-ok('행 호버 클래스', /className="ems-card-row"/.test(CARDS_PAGE)
-  && /\.ems-card-row:hover > td/.test(read('app/globals.css')))
+ok('행 호버 클래스', CARDS_PAGE.includes('className="ems-row-hover"')
+  && /.ems-row-hover:hover > td/.test(read('app/globals.css')))
 ok('호버는 테마 파랑 테두리', /--color-brand-border/.test(read('app/globals.css')))
 ok('열람이 기본이다', /const \[mode2, setMode2\] = useState<'view' \| 'edit'>\('view'\)/.test(FORM_SRC))
 ok('수정을 누르면 입력 모드', /setMode2\('edit'\)/.test(FORM_SRC))
@@ -298,6 +298,21 @@ ok('회사·부서는 두 줄 말줄임', CARDS_PAGE.includes('WebkitLineClamp: 
   && (CARDS_PAGE.match(/style=\{clamp2\}/g) || []).length === 2)
 ok('전체는 호버(title)로 본다', CARDS_PAGE.includes('title={[c.company, c.company_en]'))
 ok('폰 카드에서도 나이 꼬리표를 걷었다', !/AgeTag/.test(CARDS_PAGE))
+
+// ── ⑩-3 목록 손질 — 2026-11-25 ──
+console.log('\n── ⑩-3 목록 손질 ──')
+ok('영문은 **아랫줄** 작은 글씨', /function Under\(/.test(CARDS_PAGE)
+  && CARDS_PAGE.includes('<Under value={c.company_en} same={c.company} />')
+  && CARDS_PAGE.includes('<Under value={c.name_en} same={c.name} />'))
+ok('본칸과 같으면 아랫줄을 적지 않는다',
+  CARDS_PAGE.includes("if (!v || v === String(same ?? '').trim()) return null"))
+ok('직급 열은 160 한 줄 말줄임',
+  CARDS_PAGE.includes('maxWidth: 160') && CARDS_PAGE.includes("textOverflow: 'ellipsis'"))
+ok('행 높이를 고정했다', /const ROW_H = 56/.test(CARDS_PAGE) && CARDS_PAGE.includes('height: ROW_H'))
+ok('호버는 공용 클래스', CARDS_PAGE.includes('className="ems-row-hover"')
+  && /\.ems-row-hover:hover > td/.test(read('app/globals.css')))
+ok('그 색은 고객사 카드 호버와 같은 토큰',
+  /--color-brand-border/.test(read('app/globals.css')))
 
 // ── ⑪ 휴대폰이 없으면 회사 전화 — 2026-11-25 ──
 console.log('\n── ⑪ 연락처 한 줄 ──')

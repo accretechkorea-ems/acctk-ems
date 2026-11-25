@@ -76,6 +76,10 @@ export type BusinessCard = {
   company_en?: string | null
   /** 여러 장 등록 한 번(묶음)의 id. 칸은 db/business_cards_batch_20261125.sql 이 더한다. */
   import_batch_id?: string | null
+  /** 검토 대기(draft)인가 — db/business_cards_draft_20261125.sql. 칸이 없으면 active 로 본다. */
+  status?: string | null
+  /** 그 줄이 PDF 몇 쪽이었나(0부터). 위와 같은 SQL 이 더한다. */
+  import_page?: number | null
   department?: string | null
   position?: string | null
   mobile?: string | null

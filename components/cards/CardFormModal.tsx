@@ -218,8 +218,8 @@ export default function CardFormModal({
               <span style={bigBtnHead}>{ICON.pen}직접 입력</span>
               <span style={{ fontSize: 12, color: SUB, fontWeight: 400 }}>명함을 보고 칸에 입력</span>
             </button>
-            {/* 네 번째 길 — 수십·수백 장을 한 번에. 버튼을 위에 따로 두지 않고 여기에 모았다. */}
-            {onBulk && (
+            {/* 네 번째 길 — 수십·수백 장을 한 번에. 검토 화면이 PC 전용이라 **넓은 화면에서만** 둔다. */}
+            {onBulk && !narrow && (
               <button type="button" style={bigBtn} onClick={onBulk}>
                 <span style={bigBtnHead}>{ICON.stack}여러 장 등록</span>
                 <span style={{ fontSize: 12, color: SUB, fontWeight: 400 }}>PDF·사진 여러 장을 한 번에</span>

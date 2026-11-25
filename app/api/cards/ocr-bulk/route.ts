@@ -27,6 +27,7 @@ import {
 } from '@/lib/businessCard'
 import type { OcrKey } from '@/lib/businessCardOcr'
 import { readCard } from '@/lib/cardOcrServer'
+import { STATUS_ACTIVE, STATUS_DRAFT } from '@/lib/cardReview'
 import {
   BULK_METHOD, EVENT_HANGUL, EVENT_MERGED, MAX_PER_REQUEST,
   canMergeBack, fillBlanks, hasContact, isBatchId, isNoPerson, localScriptPatch, sameCompany,
@@ -63,6 +64,18 @@ async function hasEnColumns(): Promise<boolean> {
   const { error } = await supabaseAdmin.from('business_cards').select('name_en').limit(1)
   enColumnsKnown = !missing(error)
   return enColumnsKnown
+}
+
+/** 검토 대기 칸이 표에 있나 — db/business_cards_draft_20261125.sql 전일 수 있다. */
+let draftKnown: boolean | null = null
+async function hasDraftColumns(): Promise<boolean> {
+  if (draftKnown != null) return draftKnown
+  const { error } = await supabaseAdmin.from('business_cards').select('status, import_page').limit(1)
+  draftKnown = !missing(error)
+  if (!draftKnown) {
+    console.warn(`[${TAG}] 검토 대기 칸이 아직 없다 — 그때까지는 읽은 줄을 바로 등록한다`)
+  }
+  return draftKnown
 }
 
 /** 묶음 칸이 표에 있나 — db/business_cards_batch_20261125.sql 을 아직 안 돌렸을 수 있다. */
@@ -117,9 +130,20 @@ export async function POST(req: Request) {
   // ── 셋을 **동시에** 읽는다 ──
   const read = await Promise.all(files.map(f => readCard(f, key)))
 
-  // ── 중복을 보려고 살아 있는 줄의 번호·메일을 한 번만 읽는다 ──
-  const { data: existing } = await supabaseAdmin
-    .from('business_cards').select('card_id, name, mobile, email').is('deleted_at', null)
+  /**
+   * 읽은 줄을 **검토 대기**로 담을까 (2026-11-25).
+   * 칸이 있으면 draft 로 담아 사람이 승인하게 하고, 아직 없으면 종전처럼 바로 등록한다.
+   */
+  const asDraft = await hasDraftColumns()
+
+  // ── 중복을 보려고 **등록된** 줄의 번호·메일을 한 번만 읽는다 ──
+  // 검토 대기(draft)는 중복 판정에 넣지 않는다 — 아직 명함첩에 없는 줄이다.
+  // 다만 **같은 묶음 안의 draft** 끼리는 아래 byPhone·byMail 에 쌓여 서로 걸린다.
+  let existingQuery = supabaseAdmin
+    .from('business_cards').select('card_id, name, mobile, email')
+    .is('deleted_at', null)
+  if (asDraft) existingQuery = existingQuery.eq('status', STATUS_ACTIVE)
+  const { data: existing } = await existingQuery
   const byPhone = new Map<string, { card_id: number; name: string | null }>()
   const byMail = new Map<string, { card_id: number; name: string | null }>()
   for (const r of existing ?? []) {
@@ -280,6 +304,8 @@ export async function POST(req: Request) {
         input_method: INPUT_METHOD,
         registered_at: now,
         ...(batchId ? { import_batch_id: batchId } : {}),
+        // 검토 대기로 담는다 — 사람이 승인해야 명함첩에 나온다.
+        ...(asDraft ? { status: STATUS_DRAFT, import_page: page } : {}),
         ...snap,
       })
       .select('card_id')

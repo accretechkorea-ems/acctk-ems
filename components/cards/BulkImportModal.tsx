@@ -20,12 +20,15 @@
  */
 
 import { useCallback, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import { BLUE, BLUE_BORDER, BLUE_TINT, BORDER, CARD_BG, DANGER, MUTED, SUB, TEXT } from '@/components/common/ui'
 import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 import { R } from '@/lib/radius'
+import { putSession } from '@/lib/cardImportSession'
+import { REVIEW_CHUNK, writeFileName } from '@/lib/cardReview'
 import {
   BULK_REASON_LABEL, BULK_SQL_FILE, EMPTY_TALLY, MAX_PER_REQUEST, addLines, costLabel,
   acceptRetry, newBatchId, undoQuestion, worthRetry,
@@ -138,6 +141,7 @@ export default function BulkImportModal({ division, onClose, onDone }: {
   onDone: (tally: BulkTally) => void
 }) {
   const confirmDialog = useConfirm()
+  const router = useRouter()
   const [files, setFiles] = useState<File[]>([])
   const [phase, setPhase] = useState<'pick' | 'running' | 'finished'>('pick')
   const [total, setTotal] = useState(0)
@@ -180,7 +184,10 @@ export default function BulkImportModal({ division, onClose, onDone }: {
         pieces.push({ file: await shrink(f), label: f.name })
       }
     }
-    setTotal(pieces.length)
+    // **20쪽씩** 읽고 멈춘다 — 그 뒤는 검토 화면이 이어받는다(사람이 지치지 않는 단위).
+    const batch = pieces.slice(0, REVIEW_CHUNK)
+    const rest = pieces.slice(REVIEW_CHUNK)
+    setTotal(batch.length)
     setNote('')
 
     let acc = EMPTY_TALLY
@@ -239,14 +246,33 @@ export default function BulkImportModal({ division, onClose, onDone }: {
      * 뒷면은 **바로 앞 쪽**에만 붙으므로, 돌려 읽는 쪽도 제 앞 쪽을 찾아 보내야 한다.
      */
     const cardByPage = new Map<number, number>()
+    /** 쪽 → 그 쪽의 판정. 검토 화면이 뱃지를 그릴 때 쓴다. */
+    const lineByPage = new Map<number, BulkLine>()
+    /** card_id → 그 명함이 **처음 담긴 쪽**. 합쳐진 면이 어느 쪽에 붙었는지 되짚는다. */
+    const pageOfCard = new Map<number, number>()
     const noteResult = (page: number, line: BulkLine) => {
-      const id = line.ok ? line.card_id : line.card_id
-      if (id != null) cardByPage.set(page, id)
+      lineByPage.set(page, line)
+      const id = line.card_id
+      if (id == null) return
+      cardByPage.set(page, id)
+      if (line.ok && !pageOfCard.has(id)) pageOfCard.set(id, page)
+    }
+    /** 그 쪽의 까닭 — 담겼으면 null. */
+    const reasonOf = (page: number): BulkReason | null => {
+      const l = lineByPage.get(page)
+      return !l || l.ok ? null : l.reason
+    }
+    /** 이 쪽이 합쳐 들어간 명함의 **쪽 번호**. */
+    const mergedPageOf = (page: number): number | null => {
+      const l = lineByPage.get(page)
+      if (!l || l.ok || l.reason !== 'merged') return null
+      const id = l.merged_into ?? l.card_id
+      return id != null ? (pageOfCard.get(id) ?? null) : null
     }
 
-    for (let base = 0; base < pieces.length; base += MAX_PER_REQUEST) {
+    for (let base = 0; base < batch.length; base += MAX_PER_REQUEST) {
       if (stop.current) break
-      const group = pieces.slice(base, base + MAX_PER_REQUEST)
+      const group = batch.slice(base, base + MAX_PER_REQUEST)
       let got = await send(group, { pageBase: base, prevId: prevCardId, prevPage })
       got.forEach(l => noteResult(base + l.index, l))
 
@@ -294,9 +320,27 @@ export default function BulkImportModal({ division, onClose, onDone }: {
       setUsage({ ...used })
     }
 
+    // ── 읽기가 끝났다 — **검토 화면**으로 넘긴다 ──
+    // 쪽 이미지는 서버에 보내지 않았다. 브라우저 메모리에만 담아 넘긴다.
+    putSession({
+      batchId: batchId.current,
+      fileName: files[0]?.name ?? '',
+      total: pieces.length,
+      pages: batch.map((p, i) => ({
+        page: i,
+        blob: p.file,
+        reason: reasonOf(i),
+        cardId: lineByPage.get(i)?.card_id ?? null,
+        mergedIntoPage: mergedPageOf(i),
+      })),
+      rest: rest.map((p, i) => ({ page: batch.length + i, file: p.file })),
+      usage: { ...used },
+    })
+    if (files[0]?.name) writeFileName(batchId.current, files[0].name)
     setPhase('finished')
     onDone(acc)
-  }, [files, division, onDone])
+    router.push('/cards/import')
+  }, [files, division, onDone, router])
 
   /**
    * 닫기. 돌고 있으면 먼저 묻는다 — **이미 담긴 것은 남는다**는 사실을 앞에 적는다.
