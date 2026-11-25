@@ -206,6 +206,9 @@ export const PARENT_MENU: Record<string, string> = {
   // 결재 문서 전용 화면 — 결재 화면 자체가 전원 공개이므로(approvals 의 menuPublic) 같은 자격이다.
   // 그 문서를 볼 수 있는지는 /api/approval/doc 이 canViewApprovalDocument 로 따로 판정한다.
   '/approval/doc/[id]': 'public',
+  // 화면 진단(2026-11-26) — 실기기에서 재는 수를 보여 주기만 한다(읽기 전용).
+  // **메뉴에는 두지 않는다**(MENU_PERMS 에 없다) — 주소를 아는 사람만 연다.
+  '/debug/viewport': 'public',
 }
 
 export const MENU_BY_KEY: Record<string, MenuPerm> =
