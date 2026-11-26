@@ -809,7 +809,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
           quoteIds={quoteSel.selected}
           engineerId={engineerId}
           onDone={quoteSel.clear}
-          style={{ padding: '4px 10px', borderRadius: R.icon, border: 'none', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: BLUE, color: '#fff' }}
+          size={26}
         />
       </div>
 

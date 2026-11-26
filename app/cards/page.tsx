@@ -37,6 +37,7 @@ import CardFormModal from '@/components/cards/CardFormModal'
 import BulkImportModal from '@/components/cards/BulkImportModal'
 import { resumeFromSession, type ResumeInput } from '@/lib/cardImportSession'
 import CardFilterModal from '@/components/cards/CardFilterModal'
+import ExcelIconButton from '@/components/common/ExcelIconButton'
 // 선택 띠의 가름선 — 고객사 목록의 선택 바와 **같은 값**을 그대로 쓴다(새 색을 만들지 않는다).
 import { BAR_LINE } from '@/components/home/list/BulkBar'
 import { BLUE, BLUE_TINT, BORDER, CARD_BG, DANGER, MUTED, PAGE_BG, SUB, TEXT } from '@/components/common/ui'
@@ -467,20 +468,10 @@ function CardsPageInner() {
         )}
       </button>
 
-      {/* 엑셀 — 시스템 공통 아이콘 버튼(고객사 목록과 같은 모양). */}
-      <button type="button" onClick={() => void exportCardXlsx(shown, today)}
-        disabled={shown.length === 0}
-        title="엑셀 내보내기" aria-label="엑셀 내보내기"
-        style={{
-          width: 34, height: 34, borderRadius: R.icon, border: `1px solid ${BORDER}`, background: CARD_BG,
-          color: shown.length === 0 ? MUTED : SUB, cursor: shown.length === 0 ? 'not-allowed' : 'pointer',
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-        }}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v3h16v-3" />
-        </svg>
-      </button>
+      {/* 엑셀 — 시스템 공통 아이콘 버튼(components/common/ExcelIconButton.tsx).
+          이 줄의 다른 단추들이 34px 이라 크기만 맞춘다. */}
+      <ExcelIconButton size={34} onClick={() => void exportCardXlsx(shown, today)}
+        disabled={shown.length === 0} count={shown.length} />
 
       {narrow && (
         <button type="button" style={btn(picking)}

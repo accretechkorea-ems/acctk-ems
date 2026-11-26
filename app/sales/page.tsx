@@ -821,7 +821,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, me
               quoteIds={sel.selected}
               engineerId={currentEngineerId}
               onDone={sel.clear}
-              style={{ padding: '5px 12px', borderRadius: R.control, border: 'none', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', background: BLUE, color: '#fff' }}
+              size={26}
             />
           </div>
         </>}

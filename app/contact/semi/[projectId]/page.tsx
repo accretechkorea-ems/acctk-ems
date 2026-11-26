@@ -28,6 +28,7 @@ import AccessGate from '@/components/common/AccessGate'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import ModalCard, { keepPads } from '@/components/common/ModalCard'
 import { useToast } from '@/components/common/Toast'
+import ExcelIconButton from '@/components/common/ExcelIconButton'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { FieldError, errBorder, useFieldErrors } from '@/components/common/fieldErrors'
 import { isSuperAdmin } from '@/lib/permissions'
@@ -73,7 +74,6 @@ const DONE_STATUS = 'Done'
 /** 직전 보고서와 값이 다른 칸의 행 배경(왼쪽 막대는 액센트 #234ea2). */
 const CHANGED_BG = '#f4f7fd'
 /** Excel 아이콘 색 — 디자인 표의 상태색 「활성」 초록. */
-const EXCEL_GREEN = '#16a34a'
 
 /** 위험(기한 지남) 글자색 — 디자인 표의 「위험」 값. */
 const DANGER_TEXT = '#ef4444'
@@ -500,8 +500,11 @@ function SemiProjectDetailInner() {
                 <EditIconButton size={30} label="Project 정보 수정" onClick={() => setEditingProject(true)} />
               )}
               {views.length > 0 && (
-                <ExcelButton title="Excel 출력" busy={exporting === 'history'} disabled={exporting !== null}
-                  onClick={() => downloadExcel('history')} />
+                /* 초록 XLS 문서 아이콘이던 것을 공용 ⬇ 로 바꿨다(2026-11-26 묶음2 E) —
+                   시스템 안에서 「엑셀로 받기」는 한 모양이다. 동작은 그대로다. */
+                <ExcelIconButton size={30} label="Excel 출력"
+                  busy={exporting === 'history'} disabled={exporting !== null}
+                  onClick={() => void downloadExcel('history')} />
               )}
               <Link href={writeHref} style={{ ...btnPrimary(), textDecoration: 'none' }}>+ 새 접촉 보고</Link>
             </span>
@@ -1021,23 +1024,8 @@ function PencilIcon() {
   return <PencilGlyph size={15} />
 }
 
-/** Excel 출력 — 배경·테두리 없는 초록 문서(접힌 모서리) 아이콘에 흰 글자 XLS. */
-function ExcelButton({ title, onClick, disabled, busy }: { title: string; onClick: () => void; disabled?: boolean; busy?: boolean }) {
-  return (
-    <button type="button" onClick={onClick} disabled={disabled} title={busy ? '만드는 중...' : title} aria-label={title}
-      style={{
-        width: 30, height: 30, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        border: 'none', background: 'transparent', padding: 0,
-        cursor: disabled ? (busy ? 'wait' : 'not-allowed') : 'pointer', opacity: disabled ? 0.5 : 1,
-      }}>
-      <svg viewBox="0 0 24 28" width="22" height="26" aria-hidden="true">
-        <path d="M3 1h12l7 7v17a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2z" fill={EXCEL_GREEN} />
-        <path d="M15 1v5a2 2 0 0 0 2 2h5z" fill={CARD_BG} fillOpacity="0.45" />
-        <text x="11.5" y="21" textAnchor="middle" fontSize="7" fontWeight="700" fill={CARD_BG} fontFamily="inherit">XLS</text>
-      </svg>
-    </button>
-  )
-}
+// 초록 XLS 문서 아이콘(ExcelButton)은 2026-11-26 묶음2 E 에서 걷었다 —
+// 시스템 안에서 「엑셀로 받기」는 공용 ⬇ 하나다(components/common/ExcelIconButton.tsx).
 
 // ── Project 정보 수정 모달 ─────────────────────────────────────────────
 // 목록의 「새 Project」 모달과 같은 틀·같은 검증(번호: validateProjectNo, 나머지: 등록표 검증에서 Project 칸 오류만,

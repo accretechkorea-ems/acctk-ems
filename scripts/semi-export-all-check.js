@@ -170,7 +170,10 @@ eq('같은 함수가 건별 시트를 그린다', typeof X.buildReportSheet, 'fu
 eq('Project 하나 이력도 그대로', typeof X.buildHistoryWorkbook, 'function')
 ok('라우트의 세 길이 모두 남아 있다',
   /report_id=<id>/.test(ROUTE) && /buildHistoryWorkbook\(wb/.test(ROUTE) && /buildAllWorkbook\(wb/.test(ROUTE))
-ok('목록 단추는 조건이 없을 때도 쓸 수 있다(막지 않는다)', /disabled=\{exporting \|\| shown\.length === 0\}/.test(PAGE))
+// 공용 ⬇ 아이콘으로 바뀌면서(2026-11-26 묶음2 E) 「내보내는 중」은 busy 로, 「내보낼 것이
+//   없다」는 disabled 로 갈렸다 — 막는 조건 자체는 같다(걸린 조건이 무엇이든 목록만 있으면 눌린다).
+ok('목록 단추는 조건이 없을 때도 쓸 수 있다(막지 않는다)',
+  /disabled=\{shown\.length === 0\}/.test(PAGE) && /busy=\{exporting\}/.test(PAGE))
 eq('거르기 모듈은 그대로다', typeof S.filterProjects, 'function')
 
 console.log(fails === 0 ? '\n전부 통과' : `\n${fails}건 실패`)

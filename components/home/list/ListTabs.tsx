@@ -11,12 +11,12 @@
  */
 
 import { R } from '@/lib/radius'
+import ExcelIconButton from '@/components/common/ExcelIconButton'
 import type { ListTab } from './CustomerListPanel'
 
 const BORDER = '#ebebeb'
 const TEXT = '#111827'
 const SUB = '#4b5563'
-const MUTED = '#6b7280'
 const BLUE = '#234ea2'
 const NEUTRAL = '#f3f4f6'
 const DANGER = '#b91c1c'
@@ -63,18 +63,10 @@ export default function ListTabs({ tab, setTab, counts, onExport, canExport, exp
       </button>
       <span style={{ flex: 1, minWidth: 4 }} />
 
-      {/* 엑셀 — 지금 보이는 목록 그대로 내보낸다(기능은 그대로, 생김새만 아이콘이다). */}
-      <button type="button" onClick={onExport} disabled={!canExport || exporting}
-        title={exporting ? '내보내는 중…' : '엑셀 내보내기'} aria-label="엑셀 내보내기"
-        style={{
-          width: 28, height: 28, borderRadius: R.icon, border: `1px solid ${BORDER}`, background: '#ffffff',
-          color: canExport && !exporting ? SUB : MUTED, cursor: canExport && !exporting ? 'pointer' : 'not-allowed',
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-        }}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v3h16v-3" />
-        </svg>
-      </button>
+      {/* 엑셀 — 지금 보이는 목록 그대로 내보낸다. **이 자리가 기준**이었고, 2026-11-26
+          (묶음2 E)에 그 생김새를 공용 부품으로 옮겼다(components/common/ExcelIconButton.tsx).
+          보이는 모양은 한 픽셀도 바뀌지 않았다 — 다른 화면이 이 모양을 따라온 것이다. */}
+      <ExcelIconButton onClick={onExport} disabled={!canExport} busy={exporting} />
 
       {/* 업체 등록 — 주색. 이 패널에서 가장 자주 누르는 하나다. */}
       <button type="button" onClick={onAdd} title="업체 등록" aria-label="업체 등록"

@@ -1,27 +1,33 @@
 'use client'
 
-import { useState, type CSSProperties } from 'react'
+import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { fetchQuotesForExcel, buildQuoteSheet } from '@/lib/quoteExcel'
 import { todayKST } from '@/lib/date'
+import ExcelIconButton from '@/components/common/ExcelIconButton'
 
 /**
  * 선택한 견적들을 "이익률 분석표" 엑셀로 내보내는 버튼.
  * exceljs 는 클릭 시점에 동적 import 한다(초기 번들에 포함되지 않도록).
- * 화면마다 스타일 토큰이 달라 style 을 밖에서 받는다.
+ *
+ * ⚠ **생김새는 공용 ⬇ 아이콘 하나다** (2026-11-26 묶음2 E).
+ *   전에는 화면마다 style 을 밖에서 받아 파란 글자 버튼(「엑셀 내보내기 (3)」)으로 섰다 —
+ *   발주·실적 현황·내 견적이 각각 다른 여백·글자 크기였다. 지금은 세 자리가 같은 부품이고,
+ *   고른 건수는 **툴팁**이 말한다(「엑셀 내보내기 (3건)」). 크기만 자리에 맞춘다.
  */
 type Props = {
   quoteIds: number[]
   engineerId: number | null   // download_logs 기록용
-  style?: CSSProperties
+  /** 단추 크기. 줄이 빽빽한 자리는 26, 넉넉한 자리는 28(기본)·30 을 쓴다. */
+  size?: number
   onDone?: () => void         // 성공 후 선택 해제 등
 }
 
 // PDF 다운로드와 동일한 금칙문자 처리
 const safeFileName = (s: string) => s.replace(/[\\/:*?"<>|]/g, '')
 
-export default function QuoteExcelButton({ quoteIds, engineerId, style, onDone }: Props) {
+export default function QuoteExcelButton({ quoteIds, engineerId, size, onDone }: Props) {
   const supabase = createClient()
   const toast = useToast()
   const [loading, setLoading] = useState(false)
@@ -80,8 +86,12 @@ export default function QuoteExcelButton({ quoteIds, engineerId, style, onDone }
   }
 
   return (
-    <button onClick={handleExport} disabled={disabled} style={{ ...style, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1 }}>
-      {loading ? '내보내는 중...' : `엑셀 내보내기 (${quoteIds.length})`}
-    </button>
+    <ExcelIconButton
+      onClick={() => void handleExport()}
+      disabled={quoteIds.length === 0}
+      busy={loading}
+      count={quoteIds.length}
+      size={size}
+    />
   )
 }

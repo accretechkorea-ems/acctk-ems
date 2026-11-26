@@ -266,7 +266,9 @@ ok('필터는 단추 하나로', /aria-label="필터"/.test(CARDS_PAGE) && /setF
 ok('그 창이 있다', fs.existsSync(path.join(ROOT, 'components/cards/CardFilterModal.tsx')))
 ok('드롭다운 셋을 걷었다',
   !/등록자 전체/.test(CARDS_PAGE) && !/사업부 전체/.test(CARDS_PAGE) && !/가져오기 전체/.test(CARDS_PAGE))
-ok('엑셀은 아이콘 버튼', /aria-label="엑셀 내보내기"/.test(CARDS_PAGE) && !/⬇ 엑셀/.test(CARDS_PAGE))
+// 2026-11-26 묶음2 E — 손으로 그리던 아이콘을 **공용 부품**으로 옮겼다(모양은 그대로다).
+//   title·aria-label 은 그 부품이 들고 있다(scripts/excel-icon-check.js 가 본다).
+ok('엑셀은 공용 아이콘 버튼', CARDS_PAGE.includes('<ExcelIconButton size={34}') && !/⬇ 엑셀/.test(CARDS_PAGE))
 ok('등록 버튼은 「＋ 명함」', CARDS_PAGE.includes('＋ 명함<') && !CARDS_PAGE.includes('＋ 명함 등록<'))
 eq('등록일은 yy-mm-dd', (() => {
   const m = CARDS_PAGE.match(/const shortDay[\s\S]*?\n\}/)

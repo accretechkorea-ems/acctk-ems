@@ -27,6 +27,7 @@ import AccessGate from '@/components/common/AccessGate'
 import ModalOverlay from '@/components/common/ModalOverlay'
 import ModalCard from '@/components/common/ModalCard'
 import { useToast } from '@/components/common/Toast'
+import ExcelIconButton from '@/components/common/ExcelIconButton'
 import { FieldError, errBorder, useFieldErrors } from '@/components/common/fieldErrors'
 import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, FAINT, ROW_HOVER_BG, NEUTRAL_BG, BLUE,
@@ -319,16 +320,17 @@ export default function ContactSemiPage() {
           )}
 
           {/* 전체 엑셀 — **지금 걸린 조건 그대로** 한 파일로(2026-11-26, 지시 M).
-              Project 하나씩 받던 건별 엑셀은 Project 상세에 그대로 있다. */}
-          <button
-            type="button"
+              Project 하나씩 받던 건별 엑셀은 Project 상세에 그대로 있다.
+              글자 버튼이던 것을 공용 ⬇ 아이콘으로 바꿨다(묶음2 E) — 무엇을 내보내는지는
+              툴팁이 말한다. 동작·권한은 한 줄도 바뀌지 않았다. */}
+          <ExcelIconButton
             onClick={() => { void exportAll() }}
-            disabled={exporting || shown.length === 0}
-            title={shown.length === 0 ? '내보낼 Project 가 없습니다' : '목록에 걸린 조건 그대로 한 파일로 내려받습니다'}
-            style={{ ...btnGhost(exporting || shown.length === 0), padding: '0 10px', height: 32, flexShrink: 0 }}
-          >
-            {exporting ? '만드는 중…' : '전체 엑셀'}
-          </button>
+            disabled={shown.length === 0}
+            busy={exporting}
+            count={shown.length}
+            label={shown.length === 0 ? '내보낼 Project 가 없습니다' : '전체 엑셀 — 목록에 걸린 조건 그대로'}
+            size={32}
+          />
 
           {rows !== null && (
             <span className="num" style={{ marginLeft: 'auto', fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>

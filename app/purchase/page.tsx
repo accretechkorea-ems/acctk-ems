@@ -526,7 +526,7 @@ export default function PurchasePage() {
             quoteIds={sel.selected}
             engineerId={me?.engineer_id ?? null}
             onDone={sel.clear}
-            style={{ padding: '6px 12px', borderRadius: R.control, border: 'none', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap', background: BLUE, color: '#fff' }}
+            size={30}
           />
         </div>
 
