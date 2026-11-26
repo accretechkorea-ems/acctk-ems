@@ -195,14 +195,23 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
   /**
    * 담당자가 **한 사람뿐이면** 고를 것이 없다 — 그 사람으로 정하고 다음 칸으로 넘어간다.
    * 사람이 이미 고른 뒤에는 건드리지 않는다.
+   *
+   * ⚠ **대리점 건은 E.U 를 고르기 전까지 기다린다** (2026-11-26 묶음2 B3 실측).
+   *   대리점을 고른 순간 후보는 그 대리점의 담당자뿐이다. 그 회사에 담당자가 한 사람이면
+   *   이 효과가 곧바로 그를 수신인으로 정하고 **커서를 가격표 칸으로 보냈다** — 사람은
+   *   아직 E.U 를 적으려던 중이었다. 그러고 나면 E.U 를 고른 뒤의 「수신인으로 가라」가
+   *   아래 focusQuoteStep 의 「사람이 잡은 칸은 빼앗지 않는다」에 걸려 영원히 포기했다
+   *   (실측: E.U → 커서가 「가격표 검색」. 수신인은 건너뛰었다).
+   *   대리점 건의 후보는 **양쪽 담당자**다 — E.U 가 정해지기 전의 「한 사람」은 답이 아니다.
    */
   useEffect(() => {
     if (recipientContactId != null || contactsLoading) return
+    if (isDealer && !selectedEU) return
     const only = onlyContactId(contacts)
     if (only == null) return
     setRecipientContactId(only)
     focusQuoteStep('priceSearch')
-  }, [contacts, contactsLoading, recipientContactId, setRecipientContactId])
+  }, [contacts, contactsLoading, recipientContactId, setRecipientContactId, isDealer, selectedEU])
   const {
     remarks, setRemarks, remarksOpen, setRemarksOpen, defaultRemarks,
     showSignature, setShowSignature, termsOpen, setTermsOpen, terms, setTerms,

@@ -18,6 +18,7 @@
 /out/
 # 번들 크기 측정용 빌드(NEXT_DIST_DIR) — 개발 서버의 .next 와 섞이지 않게 따로 둔다
 /.next-perf*/
+/.next-probe*/
 
 # production
 /build

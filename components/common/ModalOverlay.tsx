@@ -25,10 +25,23 @@
 //   대부분이라, 그때까지 확인을 받으면 성가신 쪽이 이긴다). 못 주는 모달은 confirmClose
 //   만 켜 둔다 — 그런 모달은 늘 묻는다.
 
-import { createContext, useContext, useRef, type CSSProperties, type ReactNode } from 'react'
+import { createContext, useContext, useRef, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { modalOverlayStyle } from '../customer/constants'
 import { useConfirmOptional } from './confirmContext'
 import { useOverlayEsc } from './overlayStack'
+
+/**
+ * 브라우저에 올라왔는가. 서버에서 그릴 때는 거짓이라 **아무것도 내지 않는다**.
+ *
+ * 포털은 document.body 가 있어야 하므로 첫(수화) 렌더에서는 쓸 수 없다. effect 안에서
+ * setState 로 켜면 lint 가 막는 모양(set-state-in-effect)이 되므로, 서버 값과 클라이언트
+ * 값이 다른 외부 저장소처럼 읽는다 — 수화는 서버 값으로 맞춰지고 그 뒤 한 번 다시 그린다.
+ */
+const noSubscribe = () => () => {}
+const onClient = () => true
+const onServer = () => false
+const useMounted = (): boolean => useSyncExternalStore(noSubscribe, onClient, onServer)
 
 /**
  * **닫기 요청** — Esc·바깥 클릭이 지나는 그 함수를 자식에게 그대로 내려 준다.
@@ -89,8 +102,9 @@ export default function ModalOverlay({
   useOverlayEsc(closeOn === 'both', () => { void requestClose() })
 
   const backdropOk = closeOn === 'both' || closeOn === 'backdrop'
+  const mounted = useMounted()
 
-  return (
+  const overlay = (
     <div
       /* 공용 규칙은 app/globals.css 의 .ems-modal-overlay 가 들고 있다 —
          윗변 6vh 고정 · 최대 높이 88vh · 폰에서는 전체 화면 시트. */
@@ -108,4 +122,20 @@ export default function ModalOverlay({
       </RequestCloseContext.Provider>
     </div>
   )
+
+  // ── 왜 포털인가 (2026-11-26 묶음2 B1) ─────────────────────────────────────
+  //
+  // 이 바탕은 position: fixed 다 — 「화면 전체」를 덮으려면 기준이 뷰포트여야 한다.
+  // 그런데 **조상 중 하나에 transform 이 걸리면 그 조상이 기준이 된다**(CSS 의
+  // containing block 규칙). 홈의 카드 껍데기(DashCard)는 호버에 translateY(-2px) 을
+  // 걸고 overflow: hidden 이라, 그 안에서 모달을 열면 바탕이 **카드 크기로 줄고
+  // 잘렸다.** 게다가 호버가 들고 나면서 transform 이 붙었다 떨어져, 모달이 카드
+  // 크기 ↔ 전체 화면을 왕복하며 깜빡였다(「＋ 사후 실적」 창. 2026-11-26 실측:
+  // 리렌더는 늘지 않았다 — 렌더 루프가 아니라 **CSS 기준점**이 범인이다).
+  //
+  // 그래서 어디서 열든 **document.body 밑으로 옮겨 그린다**. 이벤트는 React 나무를
+  // 따라 그대로 올라가므로(포털도 부모에게 버블한다) 넣는 쪽의 stopPropagation 은
+  // 그대로 듣고, context·`.acc-form` 같은 조상 클래스도 children 과 함께 옮겨 간다.
+  if (!mounted) return null
+  return createPortal(overlay, document.body)
 }

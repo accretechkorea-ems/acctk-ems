@@ -1,0 +1,39 @@
+{
+  "B2": {
+    "cards": 17,
+    "withAs": 6,
+    "maxPerCard": 1,
+    "rows": [
+      {
+        "name": "80CS",
+        "as": 1,
+        "count": "14"
+      },
+      {
+        "name": "80CS",
+        "as": 1,
+        "count": "14"
+      },
+      {
+        "name": "80CS",
+        "as": 1,
+        "count": "11"
+      },
+      {
+        "name": "80CS",
+        "as": 1,
+        "count": "9"
+      },
+      {
+        "name": "80CS",
+        "as": 1,
+        "count": "10"
+      },
+      {
+        "name": "80CS",
+        "as": 1,
+        "count": "11"
+      }
+    ]
+  }
+}

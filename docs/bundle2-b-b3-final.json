@@ -1,0 +1,50 @@
+{
+  "B3": {
+    "way": "click",
+    "query": "한",
+    "active": "input[최종 사용 업체 검색 (사전 등록 필요)].q-box-field",
+    "euExists": true,
+    "euFocused": true,
+    "euDisabled": false,
+    "step2": {
+      "recipientValue": "1048",
+      "recipientText": "손정식",
+      "active": "input[가격표 검색].q-bare",
+      "activeBox": "(상자 밖)",
+      "contactsCount": 1,
+      "recipientFocused": false,
+      "recipientDisabled": false,
+      "recipientOptions": 2
+    },
+    "trail": [
+      {
+        "at": 1482,
+        "how": "focus()",
+        "tag": "input",
+        "ph": "가격표 검색",
+        "box": null,
+        "from": "HTMLElement.focus (eval at evaluate (:370:30), <anonymous>:19:53) ← tick (http://localhost:3100/_next/static/chunks/lib_11d2rnh._.js:839:16)"
+      },
+      {
+        "at": 1484,
+        "how": "focusin",
+        "tag": "input",
+        "ph": "가격표 검색",
+        "box": null,
+        "from": null
+      }
+    ],
+    "recipientPicked": true,
+    "step3": {
+      "active": "input[가격표 검색]"
+    },
+    "step4": {
+      "query": "동",
+      "euBox": false,
+      "contacts": 0,
+      "focused": false,
+      "value": "",
+      "active": "input[업체·대리점 검색 (사전 등록 필요)]"
+    }
+  }
+}

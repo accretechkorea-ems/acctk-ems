@@ -9,8 +9,11 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
-    // 번들 크기·브라우저 실측용 빌드(NEXT_DIST_DIR=.next-perf) — 빌드 산출물이라 검사 대상이 아니다.
+    // 번들 크기·브라우저 실측용 빌드(NEXT_DIST_DIR=.next-perf·.next-probe) —
+    // 빌드 산출물이라 검사 대상이 아니다. 적지 않으면 그 안의 수천 줄이 그대로 세어져
+    // 기준선 비교가 무의미해진다(2026-11-26 실제로 오류 1,107·경고 11,828 이 찍혔다).
     ".next-perf*/**",
+    ".next-probe*/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

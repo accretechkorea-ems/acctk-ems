@@ -1,0 +1,26 @@
+{
+  "B1": {
+    "mech": {
+      "found": true,
+      "off": {
+        "w": 1430,
+        "h": 900,
+        "transform": "none",
+        "overflow": "hidden"
+      },
+      "on": {
+        "w": 275,
+        "h": 328,
+        "transform": "matrix(1, 0, 0, 1, 0, -2)",
+        "overflow": "hidden"
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "overlayParent": "DIV.home-cell",
+    "mounts": null,
+    "skippedReal": true
+  }
+}

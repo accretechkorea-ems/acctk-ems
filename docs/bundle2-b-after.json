@@ -1,0 +1,88 @@
+{
+  "B1": {
+    "mech": {
+      "found": true,
+      "off": {
+        "w": 1430,
+        "h": 900,
+        "transform": "none",
+        "overflow": "hidden"
+      },
+      "on": {
+        "w": 275,
+        "h": 328,
+        "transform": "matrix(1, 0, 0, 1, 0, -2)",
+        "overflow": "hidden"
+      },
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      }
+    },
+    "overlayParent": "body",
+    "mounts": 1,
+    "skippedReal": true
+  },
+  "B3": {
+    "way": "click",
+    "query": "한",
+    "active": "input[최종 사용 업체 검색 (사전 등록 필요)].q-box-field",
+    "euExists": true,
+    "euFocused": true,
+    "euDisabled": false,
+    "step2": {
+      "active": "input[가격표 검색].q-bare",
+      "activeBox": "(상자 밖)",
+      "contactsCount": 9,
+      "recipientFocused": false,
+      "recipientDisabled": false,
+      "recipientOptions": 10
+    },
+    "recipientPicked": true,
+    "step3": {
+      "active": "input[가격표 검색]"
+    }
+  },
+  "B4": {
+    "bar": true,
+    "numbers": 2,
+    "out": [
+      {
+        "text": "1",
+        "btn": {
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "w": 6.6,
+          "h": 14
+        },
+        "dx": 0,
+        "dy": 0,
+        "display": "block",
+        "align": "center",
+        "line": "18px",
+        "box": "border-box"
+      },
+      {
+        "text": "2",
+        "btn": {
+          "w": 30,
+          "h": 30
+        },
+        "glyph": {
+          "w": 6.6,
+          "h": 14
+        },
+        "dx": 0,
+        "dy": 0,
+        "display": "block",
+        "align": "center",
+        "line": "18px",
+        "box": "border-box"
+      }
+    ],
+    "groupLeftGap": 584,
+    "groupRightGap": 584
+  }
+}

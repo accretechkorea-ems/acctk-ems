@@ -43,10 +43,27 @@ type Target = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
 
 const targets = new Map<QuoteFocusStep, Target>()
 
+/**
+ * **이 파일이 마지막으로 커서를 옮긴 칸.**
+ *
+ * 아래 tick 은 「사람이 그새 다른 칸을 직접 잡았으면 그만둔다」를 지킨다. 그 판정에
+ * 기준이 없으면 **제가 옮겨 놓은 커서**까지 「사람이 잡은 것」으로 보게 된다 —
+ * 2026-11-26 묶음2 B3 에서 정확히 그 일이 났다: 대리점을 고른 직후 수신인이 혼자
+ * 정해져 커서가 가격표 칸으로 갔고, E.U 를 고른 뒤의 「수신인으로 가라」가 그 칸을
+ * 사람의 것으로 보고 영원히 포기했다. 제가 옮긴 자리는 사람의 자리가 아니다.
+ */
+let movedTo: Target | null = null
+
 /** 칸이 제 이름을 적어 둔다. 사라질 때는 지운다. */
 export function registerQuoteFocus(step: QuoteFocusStep, el: Target | null): void {
   if (el) targets.set(step, el)
-  else targets.delete(step)
+  else {
+    const was = targets.get(step)
+    targets.delete(step)
+    // 사라진 칸이 「내가 옮긴 자리」였다면 그 기억도 지운다 — 없는 요소를 기준으로
+    // 판정하면 다음 요청이 엉뚱하게 통과한다.
+    if (was && was === movedTo) movedTo = null
+  }
 }
 
 /** 등록된 칸(하네스가 본다). */
@@ -68,7 +85,6 @@ export function quoteFocusTarget(step: QuoteFocusStep): Target | null {
 const MAX_FRAMES = 90
 /** 뒤에 온 요청이 앞의 기다림을 끊는다. */
 let token = 0
-
 export function focusQuoteStep(step: QuoteFocusStep, opts: { open?: boolean } = {}): void {
   if (typeof window === 'undefined') return
   const mine = ++token
@@ -83,9 +99,11 @@ export function focusQuoteStep(step: QuoteFocusStep, opts: { open?: boolean } = 
      */
     const taken = document.activeElement
     if (frames > 0 && taken && taken !== document.body && taken !== el
+      && taken !== movedTo                                    // 제가 옮긴 자리는 사람의 것이 아니다
       && /^(input|select|textarea|button)$/i.test(taken.tagName)) return
 
     if (el && !(el as HTMLInputElement | HTMLSelectElement).disabled) {
+      movedTo = el
       el.focus()
       if (opts.open && el instanceof HTMLSelectElement) {
         // showPicker 는 아직 모든 브라우저에 없다 — 없으면 포커스만으로 끝낸다.

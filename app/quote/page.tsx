@@ -169,6 +169,16 @@ function QuotePageInner() {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [contactsLoading, setContactsLoading] = useState(false)
   /**
+   * **지금 담겨 있는 목록이 어느 업체들의 것인가** (2026-11-26 묶음2 B3).
+   *
+   * 고객사가 바뀌면 조회는 효과 안에서 시작되는데, 효과는 **자식이 먼저** 돈다. 그래서
+   * 대리점 건에서 E.U 를 고른 바로 그 한 번은 아래 카드의 효과가 **옛 목록**을 들고 먼저
+   * 돌았다 — 대리점 담당자가 한 사람이면 그를 수신인으로 혼자 정하고 커서를 가격표
+   * 칸으로 보냈다(실측: 수신인 1441ms → 가격표 1478ms). 「불러오는 중」을 효과가 아니라
+   * **렌더에서** 판정하면 그 한 번이 사라진다 — 열쇠가 어긋나는 순간 곧 불러오는 중이다.
+   */
+  const [contactsKey, setContactsKey] = useState('')
+  /**
    * 옛 견적의 수신인 글자. 다시쓰기·복제로 **FK 가 없는 견적**을 열었을 때만 찬다.
    * 고르는 자리에는 쓰지 않고 「이전 수신인: …」 안내로만 보여 준다.
    */
@@ -319,7 +329,7 @@ function QuotePageInner() {
     const ids = recipientCustomerIds({ isDealer, customerId, euCustomerId })
     if (!keepContactRef.current) setRecipientContactId(null)
     keepContactRef.current = false
-    if (ids.length === 0) { setContacts([]); return }
+    if (ids.length === 0) { setContacts([]); setContactsKey(''); return }
     setContactsLoading(true)
     supabase.from('contacts')
       .select('contact_id, customer_id, name, department, position, phone, email')
@@ -329,10 +339,18 @@ function QuotePageInner() {
         // 사이에 고객사를 또 바꿨으면 늦게 온 답은 버린다.
         if (contactReqRef.current !== req) return
         setContacts((data as Contact[]) ?? [])
+        setContactsKey(ids.join(','))
         setContactsLoading(false)
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId, euCustomerId, isDealer])
+
+  /**
+   * 담겨 있는 담당자 목록이 **지금 고른 업체들의 것인가** (묶음2 B3).
+   * 어긋나면 아직 불러오는 중이다 — 효과를 기다리지 않고 렌더에서 바로 안다.
+   */
+  const recipientIdsKey = recipientCustomerIds({ isDealer, customerId, euCustomerId }).join(',')
+  const contactsStale = contactsKey !== recipientIdsKey
 
   /**
    * 수신인 후보의 묶음 — 대리점 건이면 **둘**이다(대리점 담당자 · E.U 담당자).
@@ -974,7 +992,7 @@ function QuotePageInner() {
               contactId: recipientContactId,
               setContactId: v => { setRecipientContactId(v); clearError('recipient') },
               contacts,
-              loading: contactsLoading,
+              loading: contactsLoading || contactsStale,
               customerId,
               sources: recipientSources,
               legacyText: legacyRecipient,

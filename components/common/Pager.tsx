@@ -45,10 +45,17 @@ export default function Pager({ page, total, size = PAGE_SIZE, onChange, alwaysS
         display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
         padding: '10px 14px', borderTop: `1px solid ${BORDER}`,
       }}>
-      <span className="num" style={{ fontSize: 12, color: MUTED }}>{pageLabel(page, size, total)}</span>
-      <span style={{ flex: 1 }} />
+      {/* 건수는 왼쪽, **번호는 줄 가운데**다 (2026-11-26 묶음2 B4).
+          전에는 건수 뒤에 `flex: 1` 받침 하나만 두어 번호가 오른쪽 끝에 붙어 있었다
+          (실측: 왼쪽 여백 1,154px · 오른쪽 여백 14px — 1600 창의 발주 목록).
+          양쪽에 같은 받침을 두면 번호 묶음이 줄의 가운데에 선다.
+          번호 **안의** 글자는 전부터 정확히 가운데였다(실측: 가로·세로 치우침 0px) —
+          그래서 버튼 자체는 한 줄도 고치지 않았다. */}
+      <span className="num" style={{ flex: 1, minWidth: 0, fontSize: 12, color: MUTED }}>
+        {pageLabel(page, size, total)}
+      </span>
       {pages > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
           <button type="button" aria-label="이전 쪽" disabled={page <= 1}
             onClick={() => page > 1 && onChange(page - 1)} style={btn(false, page <= 1)}>‹</button>
           {pageItems(page, pages).map((it, i) => (
@@ -65,6 +72,8 @@ export default function Pager({ page, total, size = PAGE_SIZE, onChange, alwaysS
             onClick={() => page < pages && onChange(page + 1)} style={btn(false, page >= pages)}>›</button>
         </div>
       )}
+      {/* 오른쪽 받침 — 왼쪽 건수와 **같은 flex** 라 번호가 가운데에 선다. */}
+      {pages > 1 && <span style={{ flex: 1, minWidth: 0 }} aria-hidden />}
     </div>
   )
 }
