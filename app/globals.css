@@ -541,3 +541,55 @@ tr.ems-pick[data-on='true'] > td:last-child {
   border-top-right-radius: var(--radius-control);
   border-bottom-right-radius: var(--radius-control);
 }
+
+/* ══ 폰의 고객사 **좌 패널** — 화면 폭을 그대로 쓴다 (2026-11-27) ═════════════
+   ── 무엇이 잘못됐나 ───────────────────────────────────────────────────────
+   좌 패널은 폭이 **340px 로 못 박혀** 있었다(components/home/SidePanel.tsx 의
+   PANEL_WIDTH — `position: absolute; left: 16; width: 340`). 어느 폭에서든 340 이라,
+   화면이 **364px(= 페이지 여백 8 + left 16 + 340)보다 좁아지면 그대로 오른쪽으로
+   삐져나간다.** 그 안의 검색 카드·필터 칩 줄·업체 카드·회사 트리가 전부 함께 나간다.
+
+   ── 왜 아무도 못 봤나 ─────────────────────────────────────────────────────
+   조상(.home-grid > div)이 `overflow: hidden` 이라 **문서는 넓어지지 않는다.**
+   scripts/ios-overflow.js 는 문서 폭과 「구르는 통 밖」만 보므로 「넘침 0」이었다 —
+   잘린 채로 조용했다. 2026-11-27 에 요소 단위로 다시 쟀다
+   (scripts/home-phone-measure.js — 빼는 규칙 없이 모든 요소의 right 를 센다).
+
+   실측(WebKit 390×844, 고객사 목록 보기):
+     창 390 → 패널 left 24 · right 364 — 들어가지만 오른쪽에 26px 을 **쓰지 않는다**
+     창 360 → right 364 — **4px 넘침** · 그 안의 요소 871개가 함께 넘친다
+     창 350 → right 364 — **14px 넘침** · 1,208개
+   실기기 iPhone 의 layout viewport 는 350 으로 잰 적이 있다(2026-11-26 /debug/viewport).
+   그 폭에서 신고된 모습 그대로다.
+
+   ── 고치는 법 ─────────────────────────────────────────────────────────────
+   폰에서는 패널이 **칸을 가득** 쓴다(left·right 0 · width auto). 바깥 여백은
+   .home-wrapper 의 padding 8px 이 **양쪽 같게** 준다. 안쪽은 줄어들 수 있게
+   min-width: 0 · max-width: 100% 를 함께 건다(flex 자식은 기본이 「안 줄어듦」이다).
+
+   ⚠ 이 규칙은 **머리 스타일시트(여기)** 에 있어야 한다. 본문 <style> 에 두면 첫
+     페인트보다 늦을 수 있고, iOS Safari 는 그 순간 내용이 화면보다 넓으면 레이아웃
+     뷰포트를 넓힌 채 두고 다시 줄이지 않는다(2026-11-26 앱바 회귀와 같은 까닭). */
+@media (max-width: 768px) {
+  .side-panel {
+    left: 0 !important;
+    right: 0 !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  /* 패널 안의 상단 카드·목록 통 — 줄어들 수 있게 한다. */
+  .side-panel > * {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+  /* 업체 카드 목록은 호버 그림자가 잘리지 않게 좌우로 4px 씩 삐져나와 있다
+     (components/home/CustomerList.tsx 의 음수 margin). 폰에서는 그 4px 이 페이지
+     여백을 먹고 화면 끝에 닿는다 — 폰에서만 평평하게 둔다. */
+  .customer-list-scroll {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+}

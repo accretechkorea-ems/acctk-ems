@@ -171,8 +171,57 @@ const PROBE = () => {
     // 가로로 구르는 통 안에 있던 것 — 문서를 넓히지 않으므로 넘침이 아니다.
     구르는통수: rolled.length,
     구르는통: [...new Set(rolled)].slice(0, 4),
+    /**
+     * **빼지 않고 센 수** (2026-11-27).
+     *
+     * 위의 「구르는 통 안은 뺀다」 규칙이 실제 결함 하나를 놓쳤다 — 고객사 화면의 좌
+     * 패널은 폭이 340px 로 못 박혀 있었고(SidePanel.tsx), 조상이 overflow: hidden 이라
+     * **문서는 넓어지지 않은 채** 화면 밖으로 잘렸다. 그래서 「넘침 0」으로 보였다.
+     * 아래 STRICT_PATHS 의 화면은 **아무것도 빼지 않고** 모든 요소의 right 를 센다.
+     */
+    엄격넘친수: (() => {
+      let n = 0
+      for (const el of document.querySelectorAll('*')) {
+        const r = el.getBoundingClientRect()
+        if (r.width === 0 || r.height === 0) continue
+        if (r.right <= 0) continue
+        if (r.right > window.innerWidth + 0.5) n++
+      }
+      return n
+    })(),
+    엄격넘친것: (() => {
+      const out = []
+      for (const el of document.querySelectorAll('*')) {
+        const r = el.getBoundingClientRect()
+        if (r.width === 0 || r.height === 0) continue
+        if (r.right <= 0) continue
+        if (r.right <= window.innerWidth + 0.5) continue
+        const cls = typeof el.className === 'string' ? el.className.trim().split(/\s+/).slice(0, 2).join('.') : ''
+        out.push({ tag: el.tagName.toLowerCase() + (cls ? '.' + cls : ''), left: Math.round(r.left), right: Math.round(r.right), w: Math.round(r.width), over: Math.round(r.right - window.innerWidth) })
+      }
+      return out.sort((a, b) => b.over - a.over).slice(0, 6)
+    })(),
   }
 }
+
+/**
+ * **빼지 않고 보는 화면** — 고객사 화면의 세 상태 (2026-11-27).
+ * 그 화면들은 조상이 가로를 가두고 있어, 잘려도 문서가 넓어지지 않는다.
+ * 여기 적힌 경로에서는 「구르는 통 안은 뺀다」를 적용하지 않고 **전 요소**를 센다.
+ */
+const STRICT_PATHS = ['/', '/?view=list', '/?view=map']
+/** 윈도 셸이 앞에 붙이는 여분의 '/' 를 떼고 본다(--paths=//,//?view=list 로 넘어온다). */
+const normPath = p => '/' + String(p).replace(/^\/+/, '')
+const isStrict = p => STRICT_PATHS.includes(normPath(p))
+/**
+ * 엄격 검사를 **한 번 더 돌리는 좁은 폭** (2026-11-27).
+ *
+ * 2026-11-27 의 결함(좌 패널 고정 340px)은 창이 364 보다 좁아야 드러난다 — 기본 기기인
+ * iPhone 14(390)에서는 26px 을 안 쓸 뿐 잘리지는 않았다. 그래서 **좁은 폭 한 번**을
+ * 더 본다. 360 은 흔한 안드로이드 폭이고, iOS 에서 레이아웃 뷰포트가 좁아진 상태
+ * (2026-11-26 /debug/viewport 실측 350)와도 가깝다.
+ */
+const NARROW_W = Number(arg('narrow', '360'))
 
 async function measure(engineName, engine) {
   const playwright = require(path.join(ROOT, 'node_modules/playwright'))
@@ -197,7 +246,18 @@ async function measure(engineName, engine) {
   for (const p of PATHS) {
     await page.goto(`${BASE}${p}`, { waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(6000)
-    rows.push({ path: p, ...(await page.evaluate(PROBE)) })
+    const row = { path: p, ...(await page.evaluate(PROBE)) }
+    // 고객사 화면은 **좁은 폭에서 한 번 더** — 빼지 않고 전 요소를 센다.
+    if (isStrict(p) && NARROW_W > 0) {
+      const wide = page.viewportSize()
+      await page.setViewportSize({ width: NARROW_W, height: wide.height })
+      await page.waitForTimeout(1200)
+      const narrow = await page.evaluate(PROBE)
+      row.좁은폭 = { w: NARROW_W, 넘친수: narrow.엄격넘친수, 넘친것: narrow.엄격넘친것 }
+      await page.setViewportSize(wide)
+      await page.waitForTimeout(600)
+    }
+    rows.push(row)
     if (SHOTS) {
       const dir = path.join(ROOT, SHOTS)
       fs.mkdirSync(dir, { recursive: true })
@@ -224,12 +284,27 @@ async function measure(engineName, engine) {
       if (over > 0 || r.넘친수 > 0) bad++
       // 앱바·하단 공백·작은 입력칸도 함께 본다(2026-11-26) — 셋 다 넘침과 같은 신고에서 왔다.
       const seam = r.하단공백 > 2 && !r.하단틈색.같다
-      const sick = over > 0 || r.넘친수 > 0 || !/보임=true/.test(String(r.앱바)) || seam || r.작은입력칸.length > 0
+      // 고객사 화면은 **빼지 않고** 센 수로도 가른다(2026-11-27).
+      const strict = isStrict(r.path) && (r.엄격넘친수 > 0 || (r.좁은폭?.넘친수 ?? 0) > 0)
+      if (strict) bad++
+      const sick = over > 0 || r.넘친수 > 0 || strict || !/보임=true/.test(String(r.앱바)) || seam || r.작은입력칸.length > 0
       if (sick) bad++
       console.log(`${sick ? '걸림' : '정상'} ${r.path}  문서 ${r.문서폭} / 창 ${r.창폭} (${over > 0 ? `+${over}` : '0'}) · body ${r.body폭} · overflow-x html:${r.html넘침} body:${r.body넘침} · 삐져나온 요소 ${r.넘친수}${r.구르는통수 ? ` · (구르는 통 안 ${r.구르는통수}: ${r.구르는통.join(' · ')})` : ''}`)
       console.log(`      앱바 ${r.앱바} · 하단 틈 ${r.하단공백}px(${seam ? `**보인다** body ${r.하단틈색.body} ≠ 화면 ${r.하단틈색.화면}` : '색이 같아 안 보인다'}) · 16px 미만 입력칸 ${r.작은입력칸.length}${r.작은입력칸.length ? ` → ${r.작은입력칸.slice(0, 5).join(' · ')}` : ''}`)
       for (const e of r.넘친것) {
         console.log(`      ${e.tag}.${e.cls}  left ${e.left} right ${e.right} (w ${e.w}) ${e.pos} · ${e.넓이규칙}`)
+      }
+      if (isStrict(r.path)) {
+        console.log(`      [빼지 않고] 전 요소 right ≤ 창폭 — 넘친 요소 ${r.엄격넘친수}개`)
+        for (const e of r.엄격넘친것) {
+          console.log(`        +${e.over}px ${e.tag}  left ${e.left} right ${e.right} (w ${e.w})`)
+        }
+        if (r.좁은폭) {
+          console.log(`      [빼지 않고 · 좁은 폭 ${r.좁은폭.w}] 넘친 요소 ${r.좁은폭.넘친수}개`)
+          for (const e of r.좁은폭.넘친것) {
+            console.log(`        +${e.over}px ${e.tag}  left ${e.left} right ${e.right} (w ${e.w})`)
+          }
+        }
       }
     }
   }
