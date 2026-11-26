@@ -10,6 +10,7 @@ import { DIVISION_HOME, canSwitchDivision, readSavedDivision, teamDivisionOf } f
 import { IDLE_REASON } from '@/components/common/SessionManager'
 import { RESIGNED_MESSAGE, RESIGNED_REASON } from '@/lib/accountRules'
 import { R } from '@/lib/radius'
+import StandaloneNote from '@/components/auth/StandaloneNote'
 
 function LoginPageInner() {
   const router = useRouter()
@@ -211,6 +212,10 @@ function LoginPageInner() {
             {loading ? '로그인 중...' : '로그인'}
           </button>
         </div>
+
+        {/* 홈 화면 앱(standalone)일 때만 한 줄 — Safari 와 로그인이 따로라는 안내.
+            첫 그림에는 없다(서버가 알 수 없는 값이라 수화가 어긋난다). */}
+        <StandaloneNote />
       </div>
     </div>
   )

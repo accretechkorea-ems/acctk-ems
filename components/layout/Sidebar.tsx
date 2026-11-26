@@ -590,7 +590,14 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
          * 높이는 **48 그대로**이고, 노치 기기에서는 그 위에 상태바 안전 영역만큼만 더 깐다
          * (viewport-fit=cover 를 켠 뒤 그 자리를 우리가 비워 준다 — app/layout.tsx).
          * 안전 영역이 0 인 기기(PC·구형)에서는 아무 차이가 없다.
+         *
+         * ⚠ 홈 화면 앱(standalone)에서는 바닥값이 하나 더 필요하다 — 상태바를 투명으로
+         *   두었으므로(black-translucent) 내용이 그 밑으로 들어가는데, 노치가 없는 기기는
+         *   safe-area-inset-top 이 0 이라 상태바(20px)가 앱바를 덮는다. 그 바닥값은
+         *   app/globals.css 의 `@media (display-mode: standalone)` 이 깐다 —
+         *   높이 숫자를 두 곳에 적지 않도록 **이 변수**를 거기서 읽는다.
          */
+        ['--ems-topbar-h' as string]: `${TOPBAR_HEIGHT}px`,
         height: `calc(${TOPBAR_HEIGHT}px + env(safe-area-inset-top))`,
         alignItems: 'center', gap: 8,
         // 위 여백만 안전 영역이다 — 뒤에 오는 padding 단축 속성이 이것을 지우지 않게 함께 적는다.

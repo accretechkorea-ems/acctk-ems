@@ -422,6 +422,20 @@ html::-webkit-scrollbar-track,
   /* 모바일은 상단 바 아래 전체 폭 */
   .ems-notif { left: 8px; right: 8px; top: 60px; width: auto; }
 }
+
+/* ══ 홈 화면 앱(standalone) — 상태바 자리를 확실히 비운다 (2026-11-26) ═══════
+   상태바를 투명으로 두었으므로(apple-mobile-web-app-status-bar-style=black-translucent)
+   내용이 그 밑으로 들어간다. 노치 기기는 env(safe-area-inset-top) 이 그 자리를 알려 주지만,
+   **노치가 없는 기기에서는 0** 이라 상태바(20px)가 앱바를 덮는다. 바닥값을 둔다.
+   높이 숫자는 적지 않는다 — 앱바가 내려 주는 --ems-topbar-h(= Sidebar.tsx 의 TOPBAR_HEIGHT)를
+   읽어, 두 곳에 같은 숫자를 적어 두는 일이 생기지 않게 한다.
+   인라인 style 을 이겨야 해서 !important 다. */
+@media (display-mode: standalone) {
+  .ems-topbar {
+    padding-top: max(env(safe-area-inset-top), 20px) !important;
+    height: calc(var(--ems-topbar-h, 48px) + max(env(safe-area-inset-top), 20px)) !important;
+  }
+}
 /* 가로 넘침 **가림막은 두지 않는다**(2026-11-26).
    고객사 화면에 있던 그 한 줄(루트에 가로 넘침을 감추는 규칙)을 모든 화면으로 넓혀 봤다가
    물렀다 — WebKit 390 측정에서 **발주 목록처럼 일부러 넓은 표**가 있는 화면은 그 줄
