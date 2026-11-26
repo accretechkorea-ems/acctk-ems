@@ -60,7 +60,7 @@ const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8')
  */
 const code = p => read(p)
   .replace(/\/\*[\s\S]*?\*\//g, ' ')
-  .split('\n').map(l => l.replace(/(^|[^:])\/\/.*$/, '$1')).join('\n')
+  .split(/\r?\n/).map(l => l.replace(/(^|[^:])\/\/.*$/, '$1')).join('\n')
 
 const TODAY = '2026-11-26'
 

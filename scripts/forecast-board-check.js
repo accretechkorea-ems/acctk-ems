@@ -102,7 +102,7 @@ const CARD = read('components/pipeline/OpportunityCard.tsx')
 /** 주석을 뺀 코드 — 「이 글자가 **없어야** 한다」는 제 설명에 걸리지 않게 이것으로 본다. */
 const strip = t => t
   .replace(/\/\*[\s\S]*?\*\//g, ' ')
-  .split('\n').map(l => l.replace(/(^|[^:])\/\/.*$/, '$1')).join('\n')
+  .split(/\r?\n/).map(l => l.replace(/(^|[^:])\/\/.*$/, '$1')).join('\n')
   .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ')
 const PAGE_CODE = strip(PAGE)
 ok('기간 거르개를 새로 두지 않았다(기본은 전부)', /useState<string \| null>\(null\)/.test(PAGE) && /setQuarter\(on \? null : s\.key\)/.test(PAGE))

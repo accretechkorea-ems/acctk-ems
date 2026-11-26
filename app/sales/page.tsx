@@ -48,6 +48,8 @@ import {
   STATUS_FILTER_TABS, editStatusesFor, REJECTED_STATUS,
 } from '@/lib/quoteStatus'
 import SegmentedControl from '@/components/common/SegmentedControl'
+// 금액 축약은 **칸반과 같은 함수**다(지시) — 한 벌만 둔다.
+import { krwFull, krwShort } from '@/lib/forecastBoard'
 import QuoteExcelButton from '@/components/quote/QuoteExcelButton'
 import { useQuoteSelection } from '@/hooks/useQuoteSelection'
 import { Z } from '@/lib/zIndex'
@@ -209,16 +211,96 @@ function getRemainingLabel(mode: string, fy: number, month: number): string | nu
   return null
 }
 
-function getPeriodLabel(mode: string, fy: number, month: number): string {
-  if (mode === 'year') return `FY${fy} 연간 (${fy}.4 ~ ${fy + 1}.3)`
-  if (mode === 'q1') return `FY${fy} Q1 (4~6월)`
-  if (mode === 'q2') return `FY${fy} Q2 (7~9월)`
-  if (mode === 'q3') return `FY${fy} Q3 (10~12월)`
-  if (mode === 'q4') return `FY${fy} Q4 (1~3월)`
-  if (mode === 'h1') return `FY${fy} H1 (4~9월)`
-  if (mode === 'h2') return `FY${fy} H2 (10~3월)`
-  if (mode === 'month') return `${month}월`
-  return ''
+/**
+ * **제목에 적는 기간** — 「2026년 11월」·「2026년 3분기」·「2026년 H1」·「2026년 연간」
+ * (2026-11-27 야간3 1-2, SalesPage 시안).
+ *
+ * 필터 바 옆에 적던 글자(「FY2026 Q3 (10~12월)」)를 **대신한다**. 그쪽은 회계연도 범위까지
+ * 밝히는 글이었다 — 제목은 사람이 읽는 말이라 **해와 기간**만 적는다.
+ * 분기는 회계분기가 아니라 **그 분기가 걸친 달력 해**를 적는다 — Q4(1~3월)는 다음 해다.
+ */
+export function periodTitle(mode: PeriodMode, fy: number, month: number): string {
+  if (mode === 'month') return `${month < 4 ? fy + 1 : fy}년 ${month}월`
+  if (mode === 'h1') return `${fy}년 H1`
+  if (mode === 'h2') return `${fy}년 H2`
+  if (mode === 'year') return `${fy}년 연간`
+  if (isQuarterMode(mode)) {
+    const q = Number(mode.slice(1))
+    return `${q === 4 ? fy + 1 : fy}년 ${q}분기`
+  }
+  return `${fy}년`
+}
+
+/** 분기 스테퍼에 적는 글자 — 「3분기」. */
+export const quarterStepLabel = (mode: PeriodMode): string =>
+  isQuarterMode(mode) ? `${mode.slice(1)}분기` : ''
+
+// getPeriodLabel(「FY2026 Q3 (10~12월)」)은 2026-11-27(야간3 1-1·1-2)에 걷었다 —
+// 필터 바 옆에 적던 글자인데, 지금은 통합 카드의 제목이 사람이 읽는 말로 말한다
+// (periodTitle: 「2026년 3분기」). 두 글자를 함께 두면 같은 말을 두 번 하게 된다.
+
+/**
+ * **‹ 11월 ›** 스테퍼 — 한 칸씩 앞뒤로 (2026-11-27 야간3 1-1).
+ * 드롭다운이던 자리다. 목록을 펴고 고르는 두 손길이 한 손길이 된다.
+ */
+function Stepper({ label, onPrev, onNext }: { label: string; onPrev: () => void; onNext: () => void }) {
+  const btn: React.CSSProperties = {
+    width: 26, height: 26, padding: 0, borderRadius: R.icon, border: `1px solid ${BORDER}`,
+    background: CARD_BG, color: GRAY, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+    fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  }
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+      <button type="button" onClick={onPrev} title="이전" aria-label="이전" style={btn}>‹</button>
+      <span style={{ minWidth: 52, textAlign: 'center', fontSize: 13, fontWeight: 700, color: TEXT, whiteSpace: 'nowrap' }}>{label}</span>
+      <button type="button" onClick={onNext} title="다음" aria-label="다음" style={btn}>›</button>
+    </div>
+  )
+}
+
+/**
+ * 요약 타일 한 칸 (2026-11-27 야간3 1-3).
+ *
+ * 금액은 **억·만 축약**이고 전체 자릿수는 호버(title)로 본다 — 여섯 칸이 한 줄에 서려면
+ * 「₩836,845,600」 같은 글자가 들어갈 자리가 없다. 달성률 칸만 막대를 하나 더 얹는다.
+ * 높이는 여섯 칸이 **같다**(세로 flex + 바닥에 붙는 보조 줄).
+ */
+function StatTile({ label, value, full, sub, subFull, color, gauge, gaugeColor }: {
+  label: string
+  value: string
+  /** 호버에 적을 전체 자릿수. 금액이 아닌 칸(달성률 %)은 주지 않는다. */
+  full?: string
+  sub?: string | null
+  subFull?: string
+  color?: string
+  /** 달성률 칸만 — 0~100+ 막대. null 이면 그리지 않는다. */
+  gauge?: number | null
+  gaugeColor?: string
+}) {
+  return (
+    <div style={{
+      background: '#f8fafc', borderRadius: R.control, padding: '10px 12px',
+      display: 'flex', flexDirection: 'column', minWidth: 0,
+    }}>
+      <div style={{ fontSize: 10, fontWeight: 600, color: MUTED, marginBottom: 4, letterSpacing: '0.2px', whiteSpace: 'nowrap' }}>{label}</div>
+      <div className="num" title={full}
+        style={{ fontSize: 15, fontWeight: 800, color: color || TEXT, letterSpacing: '-0.3px', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {value}
+      </div>
+      {gauge !== null && gauge !== undefined && (
+        <div style={{ marginTop: 6 }}>
+          <AnimatedGauge pct={gauge} color={gaugeColor || BLUE} height={5} delay={100} />
+        </div>
+      )}
+      <span style={{ flex: 1 }} />
+      {sub && (
+        <div className="num" title={subFull}
+          style={{ fontSize: 10, color: MUTED, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {sub}
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ── 통합 실적 차트 ────────────────────────────────────────────────────────────
@@ -237,50 +319,48 @@ function getPeriodLabel(mode: string, fy: number, month: number): string {
  * 팀 필터). 목표도 그 사람들의 합이다 — 예전에는 매출 막대는 팀 필터를 따르면서 목표 합은
  * 집계 대상 여부를 보지 않아, 둘의 기준이 어긋나 있었다.
  */
-function PerformanceChart({ quotes, fy, targets, engineerIds }: {
+/**
+ * 상단 필터의 기간 → 그래프 **가로축 단위**. (2026-11-27 야간3 1-4)
+ * 그래프가 제 토글을 들고 있던 것을 걷었다 — 화면 위에서 고른 기간과 그래프가 서로
+ * 다른 단위를 보고 있으면, 같은 카드 안에서 두 개의 「지금」이 생긴다.
+ */
+export function chartUnitOf(mode: PeriodMode): ChartUnit {
+  if (mode === 'year') return 'quarter'      // 연간은 네 분기로 본다(열두 칸은 너무 잘다)
+  if (isQuarterMode(mode)) return 'quarter'
+  return 'month'                              // 월별·H1·H2 는 달로 본다
+}
+
+/** 지금 고른 기간이 가로축의 **어느 칸**인가 — 그 칸만 진하게 칠한다(1-4). */
+export function selectedBarKey(mode: PeriodMode, fy: number, month: number): string | null {
+  if (chartUnitOf(mode) === 'quarter') return isQuarterMode(mode) ? mode : null
+  if (mode === 'month') return `${month < 4 ? fy + 1 : fy}-${month}`
+  return null                                 // H1·H2 는 여러 칸이라 고른 칸이 없다
+}
+
+function PerformanceChart({ quotes, fy, targets, engineerIds, mode, month }: {
   quotes: Quote[]
   fy: number
   targets: SalesTarget[]
   /** 집계 대상 담당자 — 화면이 이미 걸러 둔 목록이다(목표 합도 이 사람들로 낸다). */
   engineerIds: number[]
+  /** 상단 필터의 기간 — 가로축 단위와 「고른 칸」이 이것을 따른다(1-4). */
+  mode: PeriodMode
+  month: number
 }) {
-  const [unit, setUnit] = useState<ChartUnit>('quarter')
   const today = todayKST()
+  const unit = chartUnitOf(mode)
 
   const bars = unitBars(quotes, targets, { engineerIds, fy, unit, today })
-  // 보조 지표는 **연간 누적**이다 — 단위를 바꿔도 같은 다섯 칸이다(개인 그래프와 같다).
-  const sum = yearSummary(quotes, targets, { engineerIds, fy, today })
   // Y축은 두 패널 공통(axisMaxOf) — 눈금이 다르면 위아래 막대를 눈으로 비교할 수 없다.
   const axisMax = axisMaxOf(bars)
   const unitLabel = unit === 'month' ? '월 목표' : unit === 'quarter' ? '분기 목표' : '연간 목표'
+  const selected = selectedBarKey(mode, fy, month)
 
   return (
-    <div style={{ background: CARD_BG, borderRadius: R.modal, padding: '20px 22px', marginBottom: 20, border: `1px solid ${BORDER}` }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          <div style={{ width: 3, height: 16, background: BLUE, borderRadius: R.tag }} />
-          <span style={{ fontSize: 14, fontWeight: 800, color: TEXT, whiteSpace: 'nowrap' }}>실적 추이</span>
-          <span style={{ fontSize: 12, color: MUTED, fontWeight: 400 }}>FY{fy}</span>
-          <span style={{ fontSize: 11, color: MUTED }}>· 집계 대상 {engineerIds.length}명</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
-          {/* 범례 — 개인 그래프와 같은 글자·같은 색이다. */}
-          <ChartLegend />
-          <div style={{ display: 'flex', background: '#f3f4f6', borderRadius: R.tile, padding: 3, gap: 1 }}>
-            {([['month', '월별'], ['quarter', '분기별'], ['year', '연도별']] as [ChartUnit, string][]).map(([v, label]) => (
-              <button key={v} onClick={() => setUnit(v)}
-                style={{ padding: '5px 12px', borderRadius: R.control, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: unit === v ? '#fff' : 'transparent', color: unit === v ? TEXT : GRAY, boxShadow: unit === v ? '0 1px 3px rgba(0,0,0,0.10)' : 'none', transition: 'all 0.15s ease' }}>
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <ChartPanel kind="order" bars={bars} axisMax={axisMax} unitLabel={unitLabel} />
-      <ChartPanel kind="sales" bars={bars} axisMax={axisMax} unitLabel={unitLabel} />
-      <SummaryBoxes sum={sum} />
-    </div>
+    <>
+      <ChartPanel kind="order" bars={bars} axisMax={axisMax} unitLabel={unitLabel} selectedKey={selected} />
+      <ChartPanel kind="sales" bars={bars} axisMax={axisMax} unitLabel={unitLabel} selectedKey={selected} />
+    </>
   )
 }
 
@@ -339,14 +419,15 @@ function TeamCard({ teamId, engineers, filteredQuotes, orderQuotes, revenueQuote
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7, marginBottom: 12 }}>
         {[
-          { label: '견적 제출', value: `₩${numKR(quoteAmt)}`, color: quoteAmt > 0 ? TEXT : MUTED },
-          { label: '수주', value: `₩${numKR(orderAmt)}`, color: orderAmt > 0 ? TEXT : MUTED },
-          { label: '매출완료', value: `₩${numKR(revenueAmt)}`, color: revenueAmt > 0 ? TEXT : MUTED },
-          { label: '순이익', value: profitAmt > 0 ? `₩${numKR(profitAmt)}` : '-', color: profitAmt > 0 ? '#15803d' : MUTED, sub: profitRate !== null && profitAmt > 0 ? `${profitRate.toFixed(1)}%` : undefined },
-        ].map(({ label, value, color, sub }) => (
+          // 금액은 **칸반과 같은 축약**이다(2026-11-27 야간3 1-6) — 전체 자릿수는 호버로 본다.
+          { label: '견적 제출', value: krwShort(quoteAmt), full: krwFull(quoteAmt), color: quoteAmt > 0 ? TEXT : MUTED },
+          { label: '수주', value: krwShort(orderAmt), full: krwFull(orderAmt), color: orderAmt > 0 ? TEXT : MUTED },
+          { label: '매출완료', value: krwShort(revenueAmt), full: krwFull(revenueAmt), color: revenueAmt > 0 ? TEXT : MUTED },
+          { label: '순이익', value: profitAmt > 0 ? krwShort(profitAmt) : '-', full: profitAmt > 0 ? krwFull(profitAmt) : undefined, color: profitAmt > 0 ? '#15803d' : MUTED, sub: profitRate !== null && profitAmt > 0 ? `${profitRate.toFixed(1)}%` : undefined },
+        ].map(({ label, value, full, color, sub }) => (
           <div key={label} style={{ background: '#f8fafc', borderRadius: R.control, padding: '9px 11px' }}>
             <div style={{ fontSize: 10, color: MUTED, marginBottom: 3, fontWeight: 500 }}>{label}</div>
-            <div className="num" style={{ fontSize: 13, fontWeight: 700, color }}>{value}</div>
+            <div className="num" title={full} style={{ fontSize: 13, fontWeight: 700, color }}>{value}</div>
             {sub && <div className="num" style={{ fontSize: 10, color: '#15803d', fontWeight: 700, marginTop: 1 }}>{sub}</div>}
           </div>
         ))}
@@ -358,7 +439,7 @@ function TeamCard({ teamId, engineers, filteredQuotes, orderQuotes, revenueQuote
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 11 }}>
                 <span style={{ color: MUTED }}>수주 달성률</span>
-                <span className="num" style={{ color: orderAchieveColor, fontWeight: 700 }}>{orderAchieve?.toFixed(1)}% · ₩{numKR(orderPeriodTarget)}</span>
+                <span className="num" title={krwFull(orderPeriodTarget)} style={{ color: orderAchieveColor, fontWeight: 700 }}>{orderAchieve?.toFixed(1)}% · {krwShort(orderPeriodTarget)}</span>
               </div>
               <AnimatedGauge pct={orderAchieve || 0} color={orderAchieveColor} height={7} delay={200} />
             </div>
@@ -367,7 +448,7 @@ function TeamCard({ teamId, engineers, filteredQuotes, orderQuotes, revenueQuote
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 11 }}>
                 <span style={{ color: MUTED }}>매출 달성률</span>
-                <span className="num" style={{ color: achieveColor, fontWeight: 700 }}>{achieve?.toFixed(1)}% · ₩{numKR(periodTarget)}</span>
+                <span className="num" title={krwFull(periodTarget)} style={{ color: achieveColor, fontWeight: 700 }}>{achieve?.toFixed(1)}% · {krwShort(periodTarget)}</span>
               </div>
               <AnimatedGauge pct={achieve || 0} color={achieveColor} height={7} delay={200} />
             </div>
@@ -762,12 +843,12 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, me
                 {engineer.teams && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: R.modal, background: tc.bg, color: tc.text, fontWeight: 700 }}>{engineer.teams}</span>}
               </div>
               <div style={{ display: 'flex', gap: 20, fontSize: 13 }}>
-                <div><span style={{ color: GRAY, fontSize: 11 }}>견적 제출</span><div className="num" style={{ fontWeight: 700, color: TEXT }}>₩{numKR(engineer.quotedAmt)}</div></div>
-                <div><span style={{ color: GRAY, fontSize: 11 }}>매출 완료</span><div className="num" style={{ fontWeight: 700, color: BLUE }}>₩{numKR(engineer.revenueAmt)}</div></div>
+                <div><span style={{ color: GRAY, fontSize: 11 }}>견적 제출</span><div className="num" title={krwFull(engineer.quotedAmt)} style={{ fontWeight: 700, color: TEXT }}>{krwShort(engineer.quotedAmt)}</div></div>
+                <div><span style={{ color: GRAY, fontSize: 11 }}>매출 완료</span><div className="num" title={krwFull(engineer.revenueAmt)} style={{ fontWeight: 700, color: BLUE }}>{krwShort(engineer.revenueAmt)}</div></div>
                 <div>
                   <span style={{ color: GRAY, fontSize: 11 }}>순이익</span>
                   <div className="num" style={{ fontWeight: 800, color: '#16a34a' }}>
-                    {engineer.profitAmt > 0 ? `₩${numKR(engineer.profitAmt)}` : '-'}
+                    {engineer.profitAmt > 0 ? krwShort(engineer.profitAmt) : '-'}
                     {engineer.profitRate !== null && engineer.profitAmt > 0 && <span style={{ fontSize: 11, marginLeft: 4 }}>({engineer.profitRate.toFixed(1)}%)</span>}
                   </div>
                 </div>
@@ -1447,7 +1528,8 @@ export default function SalesPage() {
    */
   const [selectedEngineer, setSelectedEngineer] = useState<EngineerWithStats | null>(null)
   const [chartEngineer, setChartEngineer] = useState<Engineer | null>(null)
-  const [showChart, setShowChart] = useState(false)
+  // 「실적 추이」 펼침 상태(showChart)는 2026-11-27(야간3 1-2)에 걷었다 —
+  // 요약과 차트가 **한 카드**가 되면서 접을 것이 없다.
   const [currentEngineer, setCurrentEngineer] = useState<Engineer | null>(null)
   const fetchAll = async () => {
     setLoading(true)
@@ -1618,10 +1700,15 @@ const visibleEngineers = sortedEngineers.filter(e => {
           </div>
         )}
 
-        {/* 필터 */}
-        <div style={{ background: CARD_BG, borderRadius: R.modal, padding: '12px 16px', marginBottom: 20, border: `1px solid ${BORDER}` }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <select value={fy} onChange={e => setFy(Number(e.target.value))} style={{ ...inp, width: 100, fontWeight: 700 }}>
+        {/* ── 필터 바 (2026-11-27 야간3 1-1, SalesPage 시안) ────────────────────
+            한 줄 46px. 좌 — FY ▾ · 기간 세그먼트 · (월별·분기면) ‹ 스테퍼 ›
+            우 — 「팀」 + 팀 세그먼트.
+            ⚠ 「잔여 N일」은 여기서 **뺐다** — 아래 통합 카드의 제목이 말한다(1-2).
+              기간 글자(「FY2026 Q3 (10~12월)」)도 제목으로 갔다. 필터 바는 **고르는 줄**이고
+              지금 무엇을 보고 있는지는 그 아래 카드의 제목이 말한다. */}
+        <div style={{ background: CARD_BG, borderRadius: R.control, padding: '0 14px', marginBottom: 12, border: `1px solid ${BORDER}`, minHeight: 46, display: 'flex', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', width: '100%' }}>
+            <select value={fy} onChange={e => setFy(Number(e.target.value))} style={{ ...inp, width: 96, fontWeight: 700 }}>
               {[currentFY + 1, currentFY, currentFY - 1].map(y => <option key={y} value={y}>FY{y}</option>)}
             </select>
             <SegmentedControl
@@ -1632,32 +1719,30 @@ const visibleEngineers = sortedEngineers.filter(e => {
                 { label: '분기', value: 'quarter' },
                 { label: '월별', value: 'month' },
               ]}
-              // q1~q4 는 '분기' 세그먼트로 묶어 표시, 실제 선택은 옆 드롭다운으로.
+              // q1~q4 는 '분기' 세그먼트로 묶어 표시, 실제 선택은 옆 스테퍼로 옮긴다.
               value={isQuarterMode(mode) ? 'quarter' : mode}
               onChange={v => {
                 if (v === 'quarter') { if (!isQuarterMode(mode)) setMode(`q${getFiscalQuarter(todayKST())}` as PeriodMode) }
                 else setMode(v as PeriodMode)
               }}
             />
-            {isQuarterMode(mode) && (
-              <select value={mode} onChange={e => setMode(e.target.value as PeriodMode)} style={{ ...inp, width: 76, fontWeight: 700 }}>
-                {['q1', 'q2', 'q3', 'q4'].map(q => <option key={q} value={q}>{q.toUpperCase()}</option>)}
-              </select>
-            )}
-            {mode === 'month' && (
-              <select value={month} onChange={e => setMonth(Number(e.target.value))} style={{ ...inp, width: 76, fontWeight: 700 }}>
-                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}월</option>)}
-              </select>
-            )}
-            <span style={{ fontSize: 12, color: MUTED, fontWeight: 500 }}>{getPeriodLabel(mode, fy, month)}</span>
-            {remainingLabel && (
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#b91c1c', background: '#fef2f2', padding: '3px 10px', borderRadius: R.pill, border: '1px solid #fecaca' }}>{remainingLabel}</span>
+            {/* 스테퍼 — 드롭다운이던 것을 ‹ › 로 바꿨다. 한 칸씩 앞뒤로 보는 일이
+                대부분이라 목록을 펴고 고르는 두 손길이 한 손길이 된다. */}
+            {(mode === 'month' || isQuarterMode(mode)) && (
+              <Stepper
+                label={mode === 'month' ? `${month}월` : quarterStepLabel(mode)}
+                onPrev={() => {
+                  if (mode === 'month') setMonth(m => (m === 1 ? 12 : m - 1))
+                  else setMode(`q${Number(mode.slice(1)) === 1 ? 4 : Number(mode.slice(1)) - 1}` as PeriodMode)
+                }}
+                onNext={() => {
+                  if (mode === 'month') setMonth(m => (m === 12 ? 1 : m + 1))
+                  else setMode(`q${Number(mode.slice(1)) === 4 ? 1 : Number(mode.slice(1)) + 1}` as PeriodMode)
+                }}
+              />
             )}
             <div style={{ flex: 1 }} />
-            {/* 「＋ 사후 실적」은 2026-11-26 에 **홈 「내 견적」 카드 머리로 옮겼다**(지시 F6).
-                이 화면은 모아 보는 자리고, 그 일은 내 견적을 손보는 일이다. 창·검사·라우트는
-                그대로다(components/dashboard/BackfillButton.tsx → components/sales/BackfillModal.tsx). */}
-            <div style={{ width: 1, height: 20, background: BORDER }} />
+            {/* 「＋ 사후 실적」은 2026-11-26 에 **홈 「내 견적」 카드 머리로 옮겼다**(지시 F6). */}
             <span style={{ fontSize: 11, color: MUTED, fontWeight: 600, letterSpacing: '0.2px' }}>팀</span>
             <SegmentedControl
               options={['전체', ...teams]}
@@ -1667,64 +1752,60 @@ const visibleEngineers = sortedEngineers.filter(e => {
           </div>
         </div>
 
-        {/* 사업부 전체 요약 */}
-        <div style={{ background: CARD_BG, borderRadius: R.control, padding: '20px 22px', marginBottom: 20, border: `1px solid ${BORDER}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 16, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>
-                {teamFilter ? teamFilter : '계측부 전체'}
-              </span>
-              <span style={{ fontSize: 12, color: MUTED, fontWeight: 400 }}>{getPeriodLabel(mode, fy, month)}</span>
-            </div>
-            <button onClick={() => setShowChart(p => !p)}
-              style={{ padding: '6px 14px', borderRadius: R.control, border: `1px solid ${showChart ? '#c7d7f8' : BORDER}`, background: showChart ? '#eff4ff' : '#f8fafc', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: showChart ? BLUE : GRAY, display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, transition: 'all 0.15s ease' }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-              실적 추이
-            </button>
+        {/* ── 통합 카드 **하나** (2026-11-27 야간3 1-2·1-3·1-4·1-5, SalesPage 시안) ──
+            전에는 요약 카드와 추이 차트가 **따로 선 두 박스**였고, 차트는 「실적 추이」
+            단추로 펴야 보였다. 같은 기간의 같은 수를 둘로 나눠 담으면서 머리글만 두 번
+            적고 있었고, 펼침이 기본 접힘이라 그래프를 본 사람이 드물었다. 한 카드로 묶고
+            펼침 단추를 걷는다.
+
+              머리줄   **정중앙** 「{계측사업부|팀명} {기간} 실적 · 잔여 N일」 · 우측 끝 범례
+              요약     여섯 칸 한 줄(회색 타일)
+              차트     수주·매출 두 단
+              누적     연간 누적 다섯 칸
+
+            금액은 전부 **억·만 축약**이고 전체 자릿수는 호버로 본다 — 칸반과 **같은 함수**다
+            (lib/forecastBoard.ts 의 krwShort·krwFull). 수치 정의는 한 줄도 바뀌지 않았다. */}
+        <div style={{ background: CARD_BG, borderRadius: R.control, padding: '14px 18px 16px', marginBottom: 16, border: `1px solid ${BORDER}` }}>
+          {/* 머리줄 — 제목이 **가운데**다. 왼쪽은 비우고 오른쪽 끝에 범례를 둔다.
+              셋을 같은 flex 로 두고 양 끝에 같은 폭의 받침을 주면 가운데가 진짜 가운데다. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, minHeight: 22 }}>
+            <span style={{ flex: 1, minWidth: 0 }} />
+            <span style={{ fontSize: 15, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px', whiteSpace: 'nowrap', textAlign: 'center' }}>
+              {teamFilter ? teamFilter : '계측사업부'} {periodTitle(mode, fy, month)} 실적
+              {remainingLabel && (
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#b91c1c', marginLeft: 8 }}>· {remainingLabel}</span>
+              )}
+            </span>
+            <span style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'flex-end' }}>
+              <ChartLegend />
+            </span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(138px, 1fr))', gap: 10, marginBottom: 18 }}>
-            {[
-              { label: '견적 제출', value: `₩${numKR(totalQuoteAmt)}`, sub: `${totalQuoteCnt}건` },
-              { label: '수주액', value: `₩${numKR(totalOrderAmt)}`, sub: `${totalOrderCnt}건` },
-              { label: '매출 완료액', value: `₩${numKR(totalRevenueAmt)}` },
-              { label: '원가 합계', value: totalCostAmt > 0 ? `₩${numKR(totalCostAmt)}` : '—', sub: '매출완료 기준' },
-              { label: '순이익', value: totalProfitAmt > 0 ? `₩${numKR(totalProfitAmt)}` : '—', sub: totalProfitRate !== null && totalProfitAmt > 0 ? `이익률 ${totalProfitRate.toFixed(1)}%` : null, color: '#15803d' },
-              { label: '수주 전환율', value: `${convRate.toFixed(1)}%`, sub: `${totalOrderCnt} / ${totalQuoteCnt}건` },
-              { label: '수주 달성률', value: totalOrderAchieve !== null ? `${totalOrderAchieve.toFixed(1)}%` : '미설정', sub: totalOrderTargetAmt > 0 ? `목표 ₩${numKR(totalOrderTargetAmt)}` : null, color: totalOrderAchieveColor },
-              { label: '매출 달성률', value: totalAchieve !== null ? `${totalAchieve.toFixed(1)}%` : '미설정', sub: totalTargetAmt > 0 ? `목표 ₩${numKR(totalTargetAmt)}` : null, color: totalAchieveColor },
-            ].map(({ label, value, sub, color }) => (
-              <div key={label} style={{ background: '#f8fafc', borderRadius: R.control, padding: '13px 15px' }}>
-                <div style={{ fontSize: 10, fontWeight: 600, color: MUTED, marginBottom: 5, letterSpacing: '0.2px' }}>{label}</div>
-                <div className="num" style={{ fontSize: 16, fontWeight: 800, color: color || TEXT, letterSpacing: '-0.3px', lineHeight: 1 }}>{value}</div>
-                {sub && <div style={{ fontSize: 10, color: MUTED, marginTop: 4 }}>{sub}</div>}
-              </div>
-            ))}
+          {/* ── 요약 여섯 칸 한 줄 (1-3) — 타일 높이가 같다 ───────────────────── */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 8, marginBottom: 12 }}>
+            <StatTile label="견적 제출" value={krwShort(totalQuoteAmt)} full={krwFull(totalQuoteAmt)} sub={`${totalQuoteCnt}건`} />
+            <StatTile label="수주액" value={krwShort(totalOrderAmt)} full={krwFull(totalOrderAmt)}
+              sub={`${totalOrderCnt}건 · 전환 ${convRate.toFixed(1)}%`} />
+            <StatTile label="매출 완료액" value={krwShort(totalRevenueAmt)} full={krwFull(totalRevenueAmt)}
+              sub={totalCostAmt > 0 ? `원가 ${krwShort(totalCostAmt)}` : '원가 —'} subFull={totalCostAmt > 0 ? krwFull(totalCostAmt) : undefined} />
+            <StatTile label="순이익" value={totalProfitAmt > 0 ? krwShort(totalProfitAmt) : '—'} full={totalProfitAmt > 0 ? krwFull(totalProfitAmt) : undefined}
+              sub={totalProfitRate !== null && totalProfitAmt > 0 ? `이익률 ${totalProfitRate.toFixed(1)}%` : null} color="#15803d" />
+            <StatTile label="수주 달성률" value={totalOrderAchieve !== null ? `${totalOrderAchieve.toFixed(1)}%` : '미설정'}
+              color={totalOrderAchieveColor} gauge={totalOrderTargetAmt > 0 ? (totalOrderAchieve ?? 0) : null} gaugeColor={totalOrderAchieveColor}
+              sub={totalOrderTargetAmt > 0 ? `${krwShort(totalOrderAmt)} / ${krwShort(totalOrderTargetAmt)}` : null}
+              subFull={totalOrderTargetAmt > 0 ? `${krwFull(totalOrderAmt)} / ${krwFull(totalOrderTargetAmt)}` : undefined} />
+            <StatTile label="매출 달성률" value={totalAchieve !== null ? `${totalAchieve.toFixed(1)}%` : '미설정'}
+              color={totalAchieveColor} gauge={totalTargetAmt > 0 ? (totalAchieve ?? 0) : null} gaugeColor={totalAchieveColor}
+              sub={totalTargetAmt > 0 ? `${krwShort(totalRevenueAmt)} / ${krwShort(totalTargetAmt)}` : null}
+              subFull={totalTargetAmt > 0 ? `${krwFull(totalRevenueAmt)} / ${krwFull(totalTargetAmt)}` : undefined} />
           </div>
-          {totalOrderTargetAmt > 0 && (
-            <div style={{ marginBottom: totalTargetAmt > 0 ? 14 : 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12 }}>
-                <span style={{ color: MUTED, fontWeight: 500 }}>사업부 수주 달성률</span>
-                <span className="num" style={{ fontWeight: 700, color: totalOrderAchieveColor }}>₩{numKR(totalOrderAmt)} / ₩{numKR(totalOrderTargetAmt)} ({totalOrderAchieve?.toFixed(1)}%)</span>
-              </div>
-              <AnimatedGauge pct={totalOrderAchieve || 0} color={totalOrderAchieveColor} height={8} delay={100} />
-            </div>
-          )}
-          {totalTargetAmt > 0 && (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12 }}>
-                <span style={{ color: MUTED, fontWeight: 500 }}>사업부 매출 달성률</span>
-                <span className="num" style={{ fontWeight: 700, color: totalAchieveColor }}>₩{numKR(totalRevenueAmt)} / ₩{numKR(totalTargetAmt)} ({totalAchieve?.toFixed(1)}%)</span>
-              </div>
-              <AnimatedGauge pct={totalAchieve || 0} color={totalAchieveColor} height={8} delay={100} />
-            </>
-          )}
-        </div>
 
-        {/* 실적 추이 차트 */}
-        <div style={{ overflow: 'hidden', maxHeight: showChart ? 600 : 0, transition: 'max-height 0.4s cubic-bezier(0.4,0,0.2,1)', marginBottom: showChart ? 20 : 0 }}>
+          {/* ── 차트 두 단 (1-4) — 단위는 **상단 필터**를 따른다(제 토글을 걷었다) ── */}
           {/* 집계 대상(inSalesStats · 재직 · 열람 권한 · 팀 필터)을 그대로 넘긴다 — 목표 합도 그 사람들로 낸다. */}
-          <PerformanceChart quotes={quotes} fy={fy} targets={targets} engineerIds={filteredEngineerIds} />
+          <PerformanceChart quotes={quotes} fy={fy} targets={targets} engineerIds={filteredEngineerIds} mode={mode} month={month} />
+
+          {/* ── 연간 누적 다섯 칸 (1-5) — 기간을 바꿔도 **같은 다섯 칸**이다 ───── */}
+          <SummaryBoxes sum={yearSummary(quotes, targets, { engineerIds: filteredEngineerIds, fy, today: todayKST() })} />
         </div>
 
         {/* 팀별 실적 — 이 화면은 관리자 전용이라 항상 전사 범위다.
@@ -1732,7 +1813,9 @@ const visibleEngineers = sortedEngineers.filter(e => {
         {!teamFilter && teams.length > 0 && getViewScope(currentEngineer) !== 'self' && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <span style={{ fontSize: 15, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>팀별 실적</span>
+              <span style={{ fontSize: 15, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>
+                {periodTitle(mode, fy, month)} · 팀별 실적
+              </span>
             </div>
            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
                {teams.map(t => (
@@ -1744,7 +1827,9 @@ const visibleEngineers = sortedEngineers.filter(e => {
         {/* 개인 실적 */}
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-            <span style={{ fontSize: 15, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>개인 실적</span>
+            <span style={{ fontSize: 15, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>
+              {periodTitle(mode, fy, month)} · 개인 실적
+            </span>
             <span style={{ fontSize: 12, color: MUTED, fontWeight: 400 }}>({filteredEngineers.length}명) · 카드 클릭 시 견적 목록</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 14 }}>

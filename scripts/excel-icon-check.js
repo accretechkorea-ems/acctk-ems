@@ -28,7 +28,7 @@ const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8')
 /** 주석을 뺀 코드 — 「이 글자가 없어야 한다」는 제 설명에 걸리지 않게 이것으로 본다. */
 const code = p => read(p)
   .replace(/\/\*[\s\S]*?\*\//g, ' ')
-  .split('\n').map(l => l.replace(/(^|[^:])\/\/.*$/, '$1')).join('\n')
+  .split(/\r?\n/).map(l => l.replace(/(^|[^:])\/\/.*$/, '$1')).join('\n')
   .replace(/\{\s+\}/g, ' ')
 
 console.log('── ① 공용 부품 하나 ──')

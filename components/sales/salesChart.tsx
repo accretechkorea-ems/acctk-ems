@@ -37,8 +37,14 @@ const BORDER = '#ebebeb'
 const TEXT = '#111113'
 const GRAY = '#4b5563'
 const MUTED = '#6b7280'
-/** 현재 칸 세로 띠 — 기존 연한 파랑(가격표 드롭존·버튼 hover 와 같은 값). */
-const NOW_BAND = '#eff4ff'
+/**
+ * 고른 칸의 **진한 막대** (2026-11-27 야간3 1-4).
+ * 새 색을 만들지 않는다 — 액센트의 hover 색(디자인 표의 「액센트 hover」)과, 그 초록의
+ * 같은 단만큼 진한 쪽이다. 세로 띠(NOW_BAND)는 그 날 걷었다 — 기간을 고르는 화면에서
+ * 그 띠는 「지금」인지 「고른 것」인지 말해 주지 않았다.
+ */
+export const CHART_BLUE_DARK = '#1c3e87'
+export const CHART_GREEN_DARK = '#15803d'
 
 export const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
 export const numM = (n: number) => {
@@ -183,12 +189,21 @@ export type ChartKind = 'order' | 'sales'
  * kind 가 그리는 값을 고른다 — 'order' 는 수주(파랑), 'sales' 는 매출(초록). 두 패널이
  * 같은 자료(UnitBar[])를 받아 제 칸만 꺼내 쓰므로, 한쪽만 다른 집계를 보는 일이 없다.
  */
-export function ChartPanel({ kind, bars, axisMax, unitLabel }: {
+export function ChartPanel({ kind, bars, axisMax, unitLabel, selectedKey }: {
   kind: ChartKind
   bars: readonly UnitBar[]
   axisMax: number
   /** 제목 아래 목표 줄의 머리말 — 「월 목표」·「분기 목표」·「연간 목표」. */
   unitLabel: string
+  /**
+   * 화면 위에서 **고른 칸**의 key (2026-11-27 야간3 1-4).
+   *
+   * 주지 않으면 종전처럼 **오늘이 든 칸**(isNow)을 고른 칸으로 본다 — 개인 그래프
+   * 모달이 그 길이다. 고른 칸은 **막대를 진하게 + 라벨 아래 2px 파란 밑줄**로 알린다.
+   * 전에는 막대 뒤에 연한 세로 띠를 깔았는데, 기간을 고르는 화면에서는 그 띠가
+   * 「지금」인지 「고른 것」인지 말해 주지 않아 둘이 다를 때 읽히지 않았다.
+   */
+  selectedKey?: string | null
 }) {
   const isOrder = kind === 'order'
   const title = isOrder ? '수주' : '매출'
@@ -210,9 +225,10 @@ export function ChartPanel({ kind, bars, axisMax, unitLabel }: {
   const sameTarget = targets.length > 0 && targets.every(t => t === targets[0])
   const commonTarget = sameTarget ? targets[0] : 0
 
-  // 현재 칸 띠는 **맨 위 눈금선까지**다. 축 최대값(1.15배)까지 올리면 눈금 바깥으로
-  // 머리를 내밀어 그래프 영역을 넘어선 것처럼 보인다.
-  const bandTop = y(ticks[ticks.length - 1] ?? 0)
+  /** 그 칸이 **고른 칸**인가 — 주지 않았으면 오늘이 든 칸이다. */
+  const isPicked = (b: UnitBar) => (selectedKey === undefined ? b.isNow : b.key === selectedKey)
+  /** 고른 칸의 막대 — 같은 색의 **진한 쪽**. 새 색을 만들지 않는다. */
+  const pickedColor = isOrder ? CHART_BLUE_DARK : CHART_GREEN_DARK
 
   return (
     <svg
@@ -249,11 +265,11 @@ export function ChartPanel({ kind, bars, axisMax, unitLabel }: {
         const t = targetOf(b)
         return (
           <g key={b.key}>
-            {/* 현재 칸 — 막대 뒤 연한 세로 띠 하나. */}
-            {b.isNow && <rect x={cx - slot / 2 + 2} y={bandTop} width={slot - 4} height={BASE_Y - bandTop} fill={NOW_BAND} rx={4} />}
+            {/* 고른 칸 — **배경 띠·테두리를 두지 않는다**(1-4). 막대를 진하게 칠하고
+                라벨 아래 2px 파란 밑줄만 긋는다(아래 label 뒤). */}
             {has && (
               <>
-                <BarAnimate x={cx - barW / 2} height={barH} width={barW} color={color} />
+                <BarAnimate x={cx - barW / 2} height={barH} width={barW} color={isPicked(b) ? pickedColor : color} />
                 {/* 넘친 칸 — 축 끝에서 끊겼음을 띠로, 금액 뒤의 ▲ 로 알린다. */}
                 {shape.over && <BreakBands x={cx - barW / 2} width={barW} top={BASE_Y - barH} />}
                 <text x={cx} y={BASE_Y - barH - 6} textAnchor="middle" fontSize={11} fontWeight={700} fill={color}>
@@ -268,17 +284,18 @@ export function ChartPanel({ kind, bars, axisMax, unitLabel }: {
                 stroke={CHART_ORANGE} strokeWidth={2} strokeDasharray="6 4"
               />
             )}
-            <text x={cx} y={BASE_Y + 15} textAnchor="middle" fontSize={12} fontWeight={700} fill={b.isNow ? CHART_BLUE : TEXT}>
-              {b.label}{b.isNow ? ' ◀' : ''}
+            <text x={cx} y={BASE_Y + 15} textAnchor="middle" fontSize={12} fontWeight={700} fill={isPicked(b) ? CHART_BLUE : TEXT}>
+              {b.label}{has && ach !== null ? ` ${ach.toFixed(0)}%` : ''}
             </text>
+            {/* 고른 칸 — 라벨 아래 2px 파란 밑줄 하나. 배경 띠도 테두리도 없다. */}
+            {isPicked(b) && (
+              <rect x={cx - 18} y={BASE_Y + 19} width={36} height={2} fill={CHART_BLUE} rx={1} />
+            )}
             {b.sub && (
               <text x={cx} y={BASE_Y + 26} textAnchor="middle" fontSize={10} fill={MUTED}>{b.sub}</text>
             )}
-            {has && ach !== null && (
-              <text x={cx} y={BASE_Y + (b.sub ? 37 : 27)} textAnchor="middle" fontSize={10} fontWeight={700} fill={achieveColorOf(ach)}>
-                {ach.toFixed(0)}%
-              </text>
-            )}
+            {/* 달성률은 2026-11-27(1-4)에 **라벨과 한 줄**로 합쳤다 — 「11월 22%」.
+                줄이 셋이던 것이 둘이 되어 카드가 그만큼 낮아진다. */}
           </g>
         )
       })}

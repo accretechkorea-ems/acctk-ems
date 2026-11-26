@@ -16,6 +16,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { TEAM_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import type { EngineerStat } from '@/lib/salesStats'
 import { R } from '@/lib/radius'
+import { krwFull, krwShort } from '@/lib/forecastBoard'
 
 const BLUE = '#234ea2'
 const CARD_BG = '#ffffff'
@@ -26,7 +27,8 @@ const MUTED = '#6b7280'
 const achieveColorOf = (v: number | null): string => v === null ? GRAY : v >= 100 ? '#16a34a' : '#111827'
 
 
-const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
+// 금액은 **칸반과 같은 축약**이다(2026-11-27 야간3 1-6) — 전체 자릿수는 호버로 본다.
+// 카드 넷이 한 줄에 서려면 「₩836,845,600」 이 들어갈 자리가 없다.
 
 /** 달성률 막대 — 켜질 때 0 에서 자라 오른다. 실적 현황의 것 그대로다. */
 export function AnimatedGauge({ pct, color, height = 12, delay = 0 }: { pct: number; color: string; height?: number; delay?: number }) {
@@ -116,21 +118,21 @@ export default function EngineerStatCard({
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10, flexShrink: 0 }}>
         <div style={{ background: '#f8fafc', borderRadius: R.control, padding: boxPad }}>
           <div style={{ fontSize: 10, color: MUTED, marginBottom: 2, fontWeight: 500 }}>견적 제출</div>
-          <div className="num" style={{ fontSize: 13, fontWeight: 700, color: stat.quotedAmt > 0 ? TEXT : MUTED }}>₩{numKR(stat.quotedAmt)}</div>
+          <div className="num" title={krwFull(stat.quotedAmt)} style={{ fontSize: 13, fontWeight: 700, color: stat.quotedAmt > 0 ? TEXT : MUTED }}>{krwShort(stat.quotedAmt)}</div>
           <div style={{ fontSize: 10, color: MUTED }}>{stat.quotedCnt}건</div>
         </div>
         <div style={{ background: '#f8fafc', borderRadius: R.control, padding: boxPad }}>
           <div style={{ fontSize: 10, color: MUTED, marginBottom: 2, fontWeight: 500 }}>수주</div>
-          <div className="num" style={{ fontSize: 13, fontWeight: 700, color: stat.orderedAmt > 0 ? TEXT : MUTED }}>₩{numKR(stat.orderedAmt)}</div>
+          <div className="num" title={krwFull(stat.orderedAmt)} style={{ fontSize: 13, fontWeight: 700, color: stat.orderedAmt > 0 ? TEXT : MUTED }}>{krwShort(stat.orderedAmt)}</div>
           <div style={{ fontSize: 10, color: MUTED }}>{stat.orderedCnt}건</div>
         </div>
         <div style={{ background: '#f8fafc', borderRadius: R.control, padding: boxPad }}>
           <div style={{ fontSize: 10, color: MUTED, marginBottom: 2, fontWeight: 500 }}>매출 완료</div>
-          <div className="num" style={{ fontSize: 13, fontWeight: 700, color: stat.revenueAmt > 0 ? TEXT : MUTED }}>₩{numKR(stat.revenueAmt)}</div>
+          <div className="num" title={krwFull(stat.revenueAmt)} style={{ fontSize: 13, fontWeight: 700, color: stat.revenueAmt > 0 ? TEXT : MUTED }}>{krwShort(stat.revenueAmt)}</div>
         </div>
         <div style={{ background: '#f8fafc', borderRadius: R.control, padding: boxPad }}>
           <div style={{ fontSize: 10, color: MUTED, marginBottom: 2, fontWeight: 500 }}>순이익</div>
-          <div className="num" style={{ fontSize: 13, fontWeight: 700, color: stat.profitAmt > 0 ? '#16a34a' : MUTED }}>{stat.profitAmt > 0 ? `₩${numKR(stat.profitAmt)}` : '-'}</div>
+          <div className="num" title={krwFull(stat.profitAmt)} style={{ fontSize: 13, fontWeight: 700, color: stat.profitAmt > 0 ? '#16a34a' : MUTED }}>{stat.profitAmt > 0 ? krwShort(stat.profitAmt) : '-'}</div>
           {stat.profitRate !== null && stat.profitAmt > 0 && <div className="num" style={{ fontSize: 10, color: '#16a34a', fontWeight: 700 }}>{stat.profitRate.toFixed(1)}%</div>}
         </div>
       </div>
@@ -141,7 +143,7 @@ export default function EngineerStatCard({
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 11 }}>
                 <span style={{ color: MUTED }}>수주 달성률</span>
-                <span style={{ color: orderAchieveColor, fontWeight: 700 }}>{stat.orderAchieve?.toFixed(0)}% · 목표 {numKR(stat.orderTargetAmt)}</span>
+                <span title={krwFull(stat.orderTargetAmt)} style={{ color: orderAchieveColor, fontWeight: 700 }}>{stat.orderAchieve?.toFixed(0)}% · 목표 {krwShort(stat.orderTargetAmt)}</span>
               </div>
               <AnimatedGauge pct={stat.orderAchieve || 0} color={orderAchieveColor} height={7} delay={delay} />
             </div>
@@ -150,7 +152,7 @@ export default function EngineerStatCard({
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5, fontSize: 11 }}>
                 <span style={{ color: MUTED }}>매출 달성률</span>
-                <span style={{ color: achieveColor, fontWeight: 700 }}>{stat.achieve?.toFixed(0)}% · 목표 {numKR(stat.targetAmt)}</span>
+                <span title={krwFull(stat.targetAmt)} style={{ color: achieveColor, fontWeight: 700 }}>{stat.achieve?.toFixed(0)}% · 목표 {krwShort(stat.targetAmt)}</span>
               </div>
               <AnimatedGauge pct={stat.achieve || 0} color={achieveColor} height={7} delay={delay} />
             </div>
