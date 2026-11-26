@@ -47,7 +47,6 @@ export type Device = {
    * 화면은 `select('*')` 로 읽으므로 SQL 을 돌리면 그대로 들어온다 — 돌리기 전에는 undefined 다.
    */
   install_due_month?: string | null
-  next_calibration_date?: string | null
   source_quote_id?: number | null
   master_pending?: boolean | null
 }

@@ -104,12 +104,6 @@ export function pendingLabel(due: string | null | undefined): string {
   return /^\d{4}-\d{2}$/.test(ym) ? `설치 예정 ${ym}` : '설치 예정'
 }
 
-/** 다음 교정일 — 완료일에서 열두 달 뒤. 날짜가 깨졌으면 null. */
-export function nextCalibrationDate(doneDate: string | null | undefined): string | null {
-  const s = String(doneDate ?? '').slice(0, 10)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null
-  const [y, m, d] = s.split('-').map(Number)
-  // 같은 날짜의 1년 뒤. 2/29 는 3/1 로 밀리지 않게 그 달의 말일로 맞춘다.
-  const last = new Date(Date.UTC(y + 1, m, 0)).getUTCDate()
-  return `${y + 1}-${String(m).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`
-}
+// 「다음 교정일」은 2026-11-26 지시로 **뺐다** — 교정 주기를 12개월로 못박는 것이
+// 장비마다 맞지 않았고, 무엇을 교정이라 부르는지(서비스 유형)도 정해지지 않았다.
+// 다시 할 때는 그 두 가지를 먼저 정한다.

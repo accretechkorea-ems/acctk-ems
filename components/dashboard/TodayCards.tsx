@@ -67,7 +67,6 @@ export function TodayTiles({ counts, go }: { counts: TileCounts; go: (where: str
       <Tile label="오늘 할 일" value={counts.today} />
       <Tile label="멈춘 딜 (14일+)" value={counts.stale} tone="warn" onClick={() => go('/pipeline')} />
       <Tile label="미배정 리드" value={counts.lead} onClick={() => go('/leads')} />
-      <Tile label="교정 예정 (30일)" value={counts.calibration} />
       <Tile label="결재 대기" value={counts.approval} onClick={() => go('/approval')} />
     </div>
   )
@@ -176,7 +175,7 @@ export function TaskListCard({ items, today, loading, note, onAdd, onToggle }: {
 
 // ── 작은 카드 셋 ────────────────────────────────────────────────────────────
 
-/** 제목 + 건수 + 줄 몇 개. 셋이 같은 틀을 쓴다(멈춘 딜·교정 예정·미배정 리드). */
+/** 제목 + 건수 + 줄 몇 개. 둘이 같은 틀을 쓴다(멈춘 딜·미배정 리드). */
 function MiniCard({ title, count, tone, empty, children, onClick }: {
   title: string
   count: number
@@ -230,29 +229,8 @@ export function StaleDealsCard({ rows, onOpen }: {
   )
 }
 
-export function CalibrationCard({ rows, today }: {
-  rows: readonly { device_id: number; device_name: string | null; device_name2: string | null; site: string | null; next_calibration_date: string | null }[]
-  today: string
-}) {
-  return (
-    <MiniCard title="교정·점검 예정" count={rows.length} empty="30일 안에 예정된 교정이 없습니다">
-      {rows.slice(0, 6).map((d, i) => {
-        const late = !!d.next_calibration_date && d.next_calibration_date < today
-        const name = [d.device_name, d.device_name2].map(v => (v ?? '').trim()).filter(Boolean).join(' ')
-        return (
-          <div key={d.device_id} style={miniRow(i === 0)}>
-            <span style={miniName} title={`${d.site ?? ''} ${name}`}>
-              {d.site ? `${d.site} » ` : ''}{name || `장비 ${d.device_id}`}
-            </span>
-            <span style={late ? { ...tagStyle(), background: LATE_BG, color: LATE } : tagStyle()}>
-              {(d.next_calibration_date ?? '').slice(5)} 교정
-            </span>
-          </div>
-        )
-      })}
-    </MiniCard>
-  )
-}
+// 「교정·점검 예정」 카드는 2026-11-26 지시로 **뺐다**(교정 주기·유형이 정해지지 않았다).
+// 작은 카드의 틀(MiniCard)은 그대로다 — 멈춘 딜·미배정 리드가 쓴다.
 
 export function UnassignedLeadsCard({ rows, onOpen }: {
   rows: readonly { lead_id: number; lead_no: string | null; company: string | null; created_at: string | null }[]

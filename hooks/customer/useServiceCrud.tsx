@@ -9,8 +9,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { customerChange } from '@/lib/customerChange'
 
-/** 교정 레포트의 유형 — 이 글자일 때 다음 교정일을 잡는다(lib/categoryColors.ts 의 표와 같다). */
-const CALIBRATION_TYPE = '장비교정'
 
 import { createClient } from '@/lib/supabase/client'
 import { registerReportFont } from '@/lib/pdf/reportFont'
@@ -79,7 +77,7 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
     }
     // ── 장비 쪽 뒷일(2026-11-26) ─────────────────────────────────────
     //   신규설치 + 납품 예정 장비 → **운용으로** 바꾸고 S/N·납입일을 적는다(E4).
-    //   교정 유형 → 다음 교정일을 완료일 + 12개월로 잡는다(④).
+    //   ⚠ 「교정이면 다음 교정일을 12개월 뒤로」는 2026-11-26 지시로 **뺐다**.
     //   쓰기는 라우트가 한다. 실패해도 레포트는 이미 저장됐다 — 알리고 넘어간다.
     if (commission) {
       const r = await customerChange({
@@ -88,10 +86,6 @@ export function useServiceCrud({ customerId, customer, contacts, engineers, fetc
       })
       if (!r.ok) toast.error('장비를 운용으로 바꾸지 못했습니다: ' + r.error)
       else toast.success('장비가 운용으로 바뀌었습니다')
-    }
-    if (form.service_type === CALIBRATION_TYPE) {
-      const r = await customerChange({ action: 'device-calibrated', id: selectedDeviceId, doneDate: form.visit_date.trim() })
-      if (!r.ok) console.error('[customer] 다음 교정일을 적지 못했다', r.error)
     }
     setIsSavingService(false)
     if (attachFailed) toast.error('서비스 기록은 저장되었습니다. 첨부파일 업로드에 실패했습니다')

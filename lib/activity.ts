@@ -18,9 +18,15 @@ import type { ActivityType } from '@/lib/activityTypes'
  * 영업 쪽은 비활성·system 까지 전부 넣는다 — 이 순서는 「고를 수 있는 것」이 아니라
  * 「집계에 나올 수 있는 것」이고, 비활성 종류의 과거 줄도 집계에 남아야 한다.
  * 표를 아직 못 읽었으면 서비스 유형만 돌려준다(그 뒤 다시 그려진다).
+ *
+ * ⚠ **같은 이름이 두 쪽에 다 있을 수 있다.** 2026-11-26 에 activity_types 에 'A/S' 를
+ *   더했는데(수리 완료가 남기는 자동 줄이 거르개에 보이게), SERVICE_TYPES 에도 'A/S' 가
+ *   있어 목록에 두 번 들어갔다 — 카드가 같은 줄을 두 번 그리고 React 가 **키 중복**을
+ *   열두 번 외쳤다(활동 현황). 집계(counts)는 이름을 열쇠로 쓰므로 한 줄이 맞다.
+ *   그래서 **처음 나온 자리를 남기고 겹치는 것을 지운다** — 서비스 유형의 차례가 먼저다.
  */
 export function activityTypeOrder(salesTypes: ActivityType[]): string[] {
-  return [...SERVICE_TYPES, ...salesTypes.map(t => t.label)]
+  return [...new Set([...SERVICE_TYPES, ...salesTypes.map(t => t.label)])]
 }
 
 export type ActivitySource = 'service' | 'sales'

@@ -259,10 +259,12 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
   const [poAddress, setPoAddress] = useState('')
   const [poAddressMode, setPoAddressMode] = useState<'company' | 'direct'>('company')
   const [poCompanyAddress, setPoCompanyAddress] = useState<string | null>(null)
-  /** 납품 예정 장비(E) — 장비를 파는 견적일 때만 섹션이 선다. */
+  /** 납품 예정 장비(E) — 품목에 본체 묶음 줄이 있을 때만 섹션이 선다(2026-11-26 지시 ②). */
   const [poDevices, setPoDevices] = useState<DeliveryDraft[]>([])
   const [poSites, setPoSites] = useState<{ customer_id: number; label: string }[]>([])
   const [poContacts, setPoContacts] = useState<{ contact_id: number; name: string; phone: string | null; position: string | null; department: string | null }[]>([])
+  /** 품목에 본체 묶음 줄이 있었는가 — 발주 창이 장비를 물을지 가른다(2026-11-26 지시 ②). */
+  const [poNeedsDevices, setPoNeedsDevices] = useState(false)
   const [poContactId, setPoContactId] = useState<number | ''>('')
   const [poUploading, setPoUploading] = useState(false)
   const [poIsDragging, setPoIsDragging] = useState(false)
@@ -363,12 +365,13 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
       setPoAddressMode('company')
       setPoAddress('')
     })
-    // 납품 예정 장비 — **장비를 파는 견적일 때만** 묻는다(lib/deliveryPending.ts).
-    if (!needsDeliveryDevices(poQuote)) { setPoDevices([]); setPoSites([]); return }
+    // 납품 예정 장비 — 품목을 읽고 **본체 묶음 줄이 있을 때만** 묻는다(lib/deliveryPending.ts).
     void Promise.all([
       supabase.from('quote_items').select('product_name, model, quantity, row_kind, group_kind').eq('quote_id', poQuote.quote_id),
       supabase.from('customers').select('customer_id, company_name, site_name, parent_customer_id').eq('customer_id', poQuote.customer_id).single(),
     ]).then(async ([{ data: items }, { data: site }]) => {
+      // 판정은 **품목**이 한다(2026-11-26 지시 ②) — 본체 묶음 줄이 없으면 묻지 않는다.
+      if (!needsDeliveryDevices(items ?? [])) { setPoDevices([]); setPoSites([]); setPoNeedsDevices(false); return }
       // 고를 수 있는 사업장 — 그 사업장과 **같은 회사의 형제 사업장**.
       const parent = site?.parent_customer_id ?? null
       const sibs = parent
@@ -377,6 +380,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
       const list = (sibs && sibs.length > 0 ? sibs : [site].filter(Boolean)) as { customer_id: number; company_name: string | null; site_name: string | null }[]
       setPoSites(list.map(c => ({ customer_id: Number(c.customer_id), label: [c.company_name, c.site_name].filter(Boolean).join(' » ') })))
       setPoDevices(draftsFromItems(items ?? [], { customerId: poQuote.customer_id ?? null, month: nextMonthKey() }))
+      setPoNeedsDevices(true)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poQuote])
@@ -658,7 +662,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
   }
 
   /** 납품 예정 장비가 덜 찼으면 등록을 막는다(장비 견적일 때만). */
-  const poBlocked = poQuote && needsDeliveryDevices(poQuote) ? draftsBlocked(poDevices) : null
+  const poBlocked = poQuote && poNeedsDevices ? draftsBlocked(poDevices) : null
 
   const handlePoUpload = async () => {
     if (!poQuote || !poFile) return
@@ -678,12 +682,12 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
     }
     const result = await uploadPurchaseOrder({
       quoteId: poQuote.quote_id, quoteNumber: poQuote.quote_number, file: poFile, deliveryMethod: poDelivery, deliveryAddress,
-      devices: needsDeliveryDevices(poQuote) ? poDevices : undefined,
+      devices: poNeedsDevices ? poDevices : undefined,
     })
     setPoUploading(false)
     if (!result.ok) { toast.error(`발주서 등록 실패: ${result.error}`); return }
     toast.success('발주서가 등록되었습니다')
-    setPoQuote(null); setPoFile(null); setPoAddress(''); setPoAddressMode('company'); setPoCompanyAddress(null); setPoContactId(''); setPoContacts([]); setPoDevices([]); setPoSites([]); setPoDevices([]); setPoSites([])
+    setPoQuote(null); setPoFile(null); setPoAddress(''); setPoAddressMode('company'); setPoCompanyAddress(null); setPoContactId(''); setPoContacts([]); setPoDevices([]); setPoSites([]); setPoNeedsDevices(false)
     await loadData()
   }
 
@@ -1147,8 +1151,9 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
               </button>
             </>}
           >
-            {/* 납품 예정 장비 — 장비를 파는 견적일 때만(2026-11-26). 전부 채워야 등록된다. */}
-            {needsDeliveryDevices(poQuote) && (
+            {/* 납품 예정 장비 — **품목에 본체 묶음 줄이 있을 때만**(2026-11-26 지시 ②).
+                전부 채워야 등록된다. 판정은 품목을 읽은 뒤에 나므로 state 로 들고 있다. */}
+            {poNeedsDevices && (
               <DeliveryDevices
                 drafts={poDevices}
                 onChange={setPoDevices}

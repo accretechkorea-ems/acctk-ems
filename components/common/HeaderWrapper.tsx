@@ -155,7 +155,11 @@ export default function HeaderWrapper({ children }: { children: ReactNode }) {
         /* 알림 패널 — PC 는 사이드바 오른쪽 */
         .ems-notif { left: ${SIDEBAR_WIDTH + 6}px; top: 72px; width: 340px; }
         /* ★ 폰(≤${MOBILE_MAX})의 **껍데기 규칙은 여기에 없다** — app/globals.css 에 있다.
-           까닭(2026-11-26): 이 <style> 은 **본문 안에서** 그려진다. 머리의 스타일시트가
+           ⚠ **이 주석 안에 꺾쇠(여는 부등호)를 한 글자도 적지 마라.** style 태그 안의 그 글자를
+             서버는 CSS 이스케이프로 피해 적고 브라우저는 글자 그대로 넣는다 — 두 글자가
+             달라져 **전 화면에 수화 오류 한 건**이 떴다(React #418). 2026-11-26 에 찾아
+             고쳤다. 태그를 가리켜야 하면 「style 태그」처럼 **글로** 적는다.
+           까닭(2026-11-26): 이 style 태그는 **본문 안에서** 그려진다. 머리의 스타일시트가
            아니라서, 느린 회선·캐시 miss·스트리밍 지연이면 **그 사이의 첫 페인트가 PC
            배치**다(.ems-main 의 왼쪽 여백 ${SIDEBAR_WIDTH}px). iOS Safari 는 그 순간 내용이
            화면보다 넓으면 **레이아웃 뷰포트를 넓힌 채로 둔다** — 그 뒤에 이 규칙이 와도

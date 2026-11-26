@@ -1,6 +1,6 @@
 'use client'
 
-// 홈 「내 오늘」의 조회 — 타일 여섯 · 할 일 목록 · 작은 카드 셋 (2026-11-26).
+// 홈 「내 오늘」의 조회 — 타일 다섯 · 할 일 목록 · 작은 카드 둘 (2026-11-26).
 //
 // useDashboardCards 와 **같은 방식**이다: 조회를 조각마다 나누되 동시에 시작하고, 상태도
 // 조각마다 따로 둔다. 하나가 실패해도 그 줄만 빠지고 나머지는 뜬다 — 홈이 통째로 비는 것이
@@ -10,15 +10,15 @@
 // **읽어서 넘겨 주기만** 한다.
 //
 // ── 아직 없는 칸·표 ─────────────────────────────────────────────────────────
-//   tasks 표(db/tasks_20261126.sql)와 devices 의 납품·교정 칸(devices_delivery)이 아직
+//   tasks 표(db/tasks_20261126.sql)와 devices 의 납품 칸(devices_delivery)이 아직
 //   없을 수 있다. 그때는 그 조각만 **빈 값**이 되고(42703·42P01·PGRST205) 화면은 그대로
 //   돈다. 할 일 카드만 「표를 먼저 적용해주세요」 한 줄을 띄운다.
 
 import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { addDays, todayKST } from '@/lib/date'
+import { todayKST } from '@/lib/date'
 import { isClosedStage } from '@/components/customer/opportunity'
-import { CALIBRATION_SOON_DAYS, EXPIRY_TASK_STATUSES, type CalibrationDevice, type StaleDeal, type SynthDevice, type SynthLead, type SynthLost, type SynthQuote, type SynthReasonPending, type TaskRow } from '@/lib/tasks'
+import { EXPIRY_TASK_STATUSES, type StaleDeal, type SynthDevice, type SynthLead, type SynthLost, type SynthQuote, type SynthReasonPending, type TaskRow } from '@/lib/tasks'
 import { DEVICE_PENDING } from '@/lib/deviceStatus'
 import { isReasonPending } from '@/lib/lostReason'
 
@@ -54,7 +54,6 @@ export type TodayData = {
   /** 실패인데 사유가 빈 내 견적(지시 L3) — 안내만 한다. */
   reasonPending: Piece<SynthReasonPending[]>
   stale: Piece<StaleDeal[]>
-  calibration: Piece<CalibrationDevice[]>
   today: string
   /** 할 일을 담거나 완료한 뒤 — 표의 줄만 다시 읽는다. */
   reloadTasks: () => Promise<void>
@@ -84,7 +83,6 @@ export function useToday(engineerId: number | null, opts: { seeUnassignedLeads: 
   const [lost, setLost] = useState<Piece<SynthLost[]>>(() => idle<SynthLost[]>([]))
   const [reasonPending, setReasonPending] = useState<Piece<SynthReasonPending[]>>(() => idle<SynthReasonPending[]>([]))
   const [stale, setStale] = useState<Piece<StaleDeal[]>>(() => idle<StaleDeal[]>([]))
-  const [calibration, setCalibration] = useState<Piece<CalibrationDevice[]>>(() => idle<CalibrationDevice[]>([]))
 
   // ── 할 일(표) — 라우트가 읽는다(RLS 밖에서도 같은 판정을 쓰려고) ────────────
   const reloadTasks = useCallback(async () => {
@@ -222,25 +220,12 @@ export function useToday(engineerId: number | null, opts: { seeUnassignedLeads: 
       }))
     })
 
-    // 교정 예정 — next_calibration_date 칸이 아직 없으면 빈 값이다(타일은 0 으로 남는다).
-    void run<CalibrationDevice[]>('calibration', setCalibration, [], async () => {
-      const rows = unwrap<Array<{ device_id: number; device_name: string | null; device_name2: string | null; customer_id: number | null; next_calibration_date: string | null }>>(
-        await supabase.from('devices')
-          .select('device_id, device_name, device_name2, customer_id, next_calibration_date')
-          .is('deleted_at', null)
-          .not('next_calibration_date', 'is', null)
-          .lte('next_calibration_date', addDays(today, CALIBRATION_SOON_DAYS))
-          .order('next_calibration_date', { ascending: true }).limit(50))
-      const names = await siteNames(rows.map(r => Number(r.customer_id)))
-      return rows.map(r => ({ ...r, site: r.customer_id ? names.get(Number(r.customer_id)) ?? null : null }))
-    })
-
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engineerId, seeLeads])
 
   return {
-    tasks, schemaNote, quotes, leads, pendingDevices, lost, reasonPending, stale, calibration,
+    tasks, schemaNote, quotes, leads, pendingDevices, lost, reasonPending, stale,
     today, reloadTasks,
   }
 }

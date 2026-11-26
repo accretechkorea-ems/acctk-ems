@@ -26,13 +26,13 @@ import MySnippetCard from '@/components/dashboard/MySnippetCard'
 import { MyStatCard } from '@/components/dashboard/HomeCards'
 import MyQuoteCard from '@/components/dashboard/MyQuoteCard'
 import BackfillButton from '@/components/dashboard/BackfillButton'
-import { CalibrationCard, StaleDealsCard, TaskListCard, TodayTiles, UnassignedLeadsCard } from '@/components/dashboard/TodayCards'
+import { StaleDealsCard, TaskListCard, TodayTiles, UnassignedLeadsCard } from '@/components/dashboard/TodayCards'
 import TaskAddModal from '@/components/task/TaskAddModal'
 import { useDashboardCards } from '@/hooks/dashboard/useDashboardCards'
 import { useToday } from '@/hooks/dashboard/useToday'
 import { useApprovalInbox } from '@/lib/appData/approvalInbox'
 import { isSuperAdmin } from '@/lib/permissions'
-import { buildTaskList, calibrationSoon, staleDeals, tileCounts, type TaskItem } from '@/lib/tasks'
+import { buildTaskList, staleDeals, tileCounts, type TaskItem } from '@/lib/tasks'
 import { nowKSTParts } from '@/lib/date'
 import { countedVisitEnd } from '@/lib/serviceVisit'
 import { R } from '@/lib/radius'
@@ -98,11 +98,9 @@ function DashboardPageInner() {
     reasonPending: today.reasonPending.data,
   })
   const stale = staleDeals(today.stale.data, today.today)
-  const calibration = calibrationSoon(today.calibration.data, today.today)
   const tiles = tileCounts(taskItems, today.today, {
     stale: stale.length,
     lead: today.leads.data.length,
-    calibration: calibration.length,
     approval: inbox.count,
   })
 
@@ -210,7 +208,7 @@ function DashboardPageInner() {
         @media (max-width: 768px) { .home-grid > .home-cell.wide { grid-column: span 1; } }
         /* 타일 여섯 — 넓은 화면은 한 줄, 좁아지면 3열 → 2열이다. */
         .today-tiles {
-          display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-top: 14px;
+          display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-top: 14px;
         }
         @media (max-width: 1280px) { .today-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
         @media (max-width: 480px)  { .today-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -224,7 +222,7 @@ function DashboardPageInner() {
           <span style={{ fontSize: 13, fontWeight: 600, color: '#4b5563' }}>{todayLabel}</span>
         </div>
 
-        {/* 타일 여섯 — 「지금 무엇이 밀려 있나」. 0 이어도 자리를 지킨다(없는 것과
+        {/* 타일 다섯 — 「지금 무엇이 밀려 있나」. 0 이어도 자리를 지킨다(없는 것과
             못 읽은 것을 같게 보이지 않게). 누르면 그 목록으로 간다. */}
         <TodayTiles counts={tiles} go={where => router.push(where)} />
 
@@ -275,7 +273,7 @@ function DashboardPageInner() {
             )}
           </div>
 
-          {/* 2행 — 활동 기록 · 멈춘 딜 · 교정·점검 예정 · 미배정 리드 */}
+          {/* 2행 — 활동 기록 · 멈춘 딜 · 미배정 리드 */}
           <div className="home-cell">
             {showActivity && me && actCounts ? (
               <ActivityCard
@@ -307,12 +305,6 @@ function DashboardPageInner() {
           {/* 멈춘 딜 — 14일 넘게 활동이 없는 내 포캐스트. 누르면 포캐스트 화면으로. */}
           <div className="home-cell">
             <StaleDealsCard rows={stale} onOpen={() => router.push('/pipeline')} />
-          </div>
-
-          {/* 교정·점검 예정 — devices.next_calibration_date 30일(db/devices_delivery_20261126.sql).
-              칸이 아직 없으면 0 으로 남는다(조회가 42703 을 조용히 받는다). */}
-          <div className="home-cell">
-            <CalibrationCard rows={calibration} today={today.today} />
           </div>
 
           {/* 미배정 리드 — 배정하는 사람(superadmin)에게만 자료를 읽어 준다.

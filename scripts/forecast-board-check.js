@@ -102,6 +102,9 @@ const CARD = read('components/pipeline/OpportunityCard.tsx')
 ok('기간 거르개를 새로 두지 않았다(기본은 전부)', /useState<string \| null>\(null\)/.test(PAGE) && /setQuarter\(on \? null : s\.key\)/.test(PAGE))
 ok('한 번 더 누르면 전부로 돌아온다', /분기 전체/.test(PAGE))
 ok('띠는 한 줄이다', /컴팩트 띠 하나/.test(PAGE))
+// ③ 2026-11-26 확인 — 「14일 활동 없음」 자리는 **띠에 없다**(세려면 활동 이력을 한 번 더
+//   읽어야 하고, 같은 수를 홈의 「멈춘 딜」 타일이 이미 보여 준다 — lib/forecastBoard.ts 주석).
+ok('띠에 「활동 없음」 자리가 없다', !/활동 없음/.test(PAGE) && !/14일/.test(PAGE))
 ok('띠에 건수·합계·단계별 수·이번 달 마감이 있다',
   /진행 중/.test(PAGE) && /단계<\/span>/.test(PAGE) && /이번 달 마감/.test(PAGE) && /예정 분기/.test(PAGE))
 ok('띠는 판에 보이는 줄을 센다', /boardSummary\(shown\.filter\(o => !isClosed\(o\)\), BOARD_STAGES/.test(PAGE))

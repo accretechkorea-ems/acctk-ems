@@ -99,6 +99,9 @@ const SHELL_CSS = `
   @container (min-width: 1040px) { .iq-cards { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
   /* 한 종류만 볼 때는 카드 하나가 가로를 다 쓴다(번호를 더 크게 보여 준다). */
   .iq-cards.one { grid-template-columns: minmax(0, 1fr); }
+  /* 전화기 폭 — 카드를 **세로로 쌓는다**. 2열로 두면 카드 하나가 180px 밑으로 내려가
+     「기존 번호 등록」 단추와 번호가 같이 끼인다(2026-11-26 실측). */
+  @container (max-width: 480px) { .iq-cards, .iq-cards.one { grid-template-columns: minmax(0, 1fr); } }
   .iq-typebtn { transition: background ${MOTION_MS}ms ${MOTION_EASE}; }
   .iq-typebtn:hover { background: ${NEUTRAL_BG}; }
   /* 접수 창구 안내 — 종류 필터가 아니라 모달을 여는 항목이다. 아래 「전체」와 가는 선으로 가른다.
@@ -111,7 +114,12 @@ const SHELL_CSS = `
     .iq-desk { white-space: nowrap; }
   }
   @container (max-width: 900px) {
-    .iq-body { flex-direction: column; }
+    /* 세로로 쌓으면 align-items 를 **stretch 로 되돌려야** 한다. flex-start 를 그대로 두면
+       세로 방향에서는 그것이 **폭을 내용에 맞추라**는 뜻이 되어, 본문이 창보다 넓어진다
+       (2026-11-26 실측: 폰에서 .iq-cards 가 619px 로 고정되고 257px 가 삐져나왔다).
+       width 100% 를 함께 못 박는다 — stretch 만으로는 min-content 보다 작아지지 않는다. */
+    .iq-body { flex-direction: column; align-items: stretch; }
+    .iq-main { width: 100%; max-width: 100%; }
     .iq-rail { width: 100%; flex-direction: row; overflow-x: auto; gap: 4px; align-items: center; }
     .iq-typebtn { width: auto !important; flex: 0 0 auto; }
     /* 「내용」과 「담당자」 열을 접는다 — 남는 폭을 업체명이 혼자 쓴다(flex 라 가로 스크롤이 없다).

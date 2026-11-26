@@ -128,12 +128,13 @@ eq('태그 글자는 종류가 정한다', [T.KIND_LABEL.manual, T.KIND_LABEL.qu
   ['할 일', '견적', '결재', '서비스'])
 
 console.log('\n── ③ 타일 ──')
-const tiles = T.tileCounts(list, TODAY, { stale: 2, lead: 1, calibration: 4, approval: 0 })
+const tiles = T.tileCounts(list, TODAY, { stale: 2, lead: 1, approval: 0 })
 eq('지난 할 일 — 목록의 지남과 같은 수', tiles.late, list.filter(i => T.bucketOf(i.due, TODAY) === 'late').length)
 eq('오늘 할 일 — 목록의 오늘과 같은 수', tiles.today, list.filter(i => T.bucketOf(i.due, TODAY) === 'today').length)
-eq('나머지 넷은 받은 수 그대로', [tiles.stale, tiles.lead, tiles.calibration, tiles.approval], [2, 1, 4, 0])
+eq('나머지 셋은 받은 수 그대로', [tiles.stale, tiles.lead, tiles.approval], [2, 1, 0])
+// 「교정 예정 30일」 타일은 2026-11-26 지시로 **빠졌다** — 다시 생기지 않는 것까지 본다.
+ok('교정 타일은 없다', tiles.calibration === undefined && T.CALIBRATION_SOON_DAYS === undefined && T.calibrationSoon === undefined)
 eq('멈춘 딜은 14일', T.STALE_DAYS, 14)
-eq('교정 예정은 30일', T.CALIBRATION_SOON_DAYS, 30)
 const stale = T.staleDeals([
   { opportunity_id: 1, title: 'A', last_at: '2026-11-05' },   // 21일
   { opportunity_id: 2, title: 'B', last_at: '2026-11-10' },   // 16일
@@ -142,13 +143,6 @@ const stale = T.staleDeals([
 ], TODAY)
 eq('14일 넘은 건만, 오래 멈춘 것부터', stale.map(d => d.opportunity_id), [4, 1, 2])
 eq('멈춘 날 수를 함께 준다', stale[1].idleDays, 21)
-const cal = T.calibrationSoon([
-  { device_id: 1, device_name: 'a', device_name2: null, site: null, next_calibration_date: '2026-11-28' },
-  { device_id: 2, device_name: 'b', device_name2: null, site: null, next_calibration_date: '2026-11-10' },  // 지났다 — 함께 센다
-  { device_id: 3, device_name: 'c', device_name2: null, site: null, next_calibration_date: '2027-03-01' },  // 멀다
-  { device_id: 4, device_name: 'd', device_name2: null, site: null, next_calibration_date: null },
-], TODAY)
-eq('30일 안(지난 것 포함), 가까운 것부터', cal.map(d => d.device_id), [2, 1])
 
 console.log('\n── ④ 라우트 ──')
 const ROUTE = read('app/api/task/route.ts')
@@ -183,9 +177,10 @@ for (const [where, file, what] of [
 
 console.log('\n── ⑥ 홈 화면 ──')
 const HOME = read('app/dashboard/page.tsx')
-ok('타일 여섯이 선다', /<TodayTiles/.test(HOME))
+ok('타일 다섯이 선다', /<TodayTiles/.test(HOME))
 ok('할 일 카드는 두 칸을 쓴다', /className="home-cell wide"/.test(HOME) && /\.home-cell\.wide \{ grid-column: span 2; \}/.test(HOME))
-ok('작은 카드 셋이 선다', /<StaleDealsCard/.test(HOME) && /<CalibrationCard/.test(HOME) && /<UnassignedLeadsCard/.test(HOME))
+ok('작은 카드 둘이 선다', /<StaleDealsCard/.test(HOME) && /<UnassignedLeadsCard/.test(HOME))
+ok('교정 카드는 없다(2026-11-26 지시로 뺐다)', !/CalibrationCard/.test(HOME) && !/CalibrationCard/.test(read('components/dashboard/TodayCards.tsx')))
 ok('남긴 카드 넷 — 내 실적·내 견적·활동 기록·내 문구',
   /<MyStatCard/.test(HOME) && /<MyQuoteCard/.test(HOME) && /<ActivityCard/.test(HOME) && /<MySnippetCard/.test(HOME))
 ok('뺀 카드 셋 — 포캐스트·알림·결재 대기',

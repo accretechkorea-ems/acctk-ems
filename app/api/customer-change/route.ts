@@ -20,7 +20,7 @@
 
 import { NextResponse } from 'next/server'
 import { loadCaller } from '@/lib/apiCaller'
-import { disposePatch, restorePatch, DEVICE_IN_USE, nextCalibrationDate } from '@/lib/deviceStatus'
+import { disposePatch, restorePatch, DEVICE_IN_USE } from '@/lib/deviceStatus'
 import { todayKST } from '@/lib/date'
 import { forecastPatch, type ForecastNow, type LinkedQuote } from '@/lib/forecastSync'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -568,12 +568,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, changed: true, events: written })
   }
 
-  // ── 납품 예정 → **운용** · 교정 예정일 (2026-11-26) ──────────────────
+  // ── 납품 예정 → **운용** (2026-11-26) ────────────────────────────────
   //
   // 신규설치 레포트를 쓰면 그 장비는 **온 것**이다 — S/N·납입일을 받아 '사용중' 으로
-  // 바꾼다(E4). 교정 레포트를 쓰면 다음 교정일을 **완료일 + 12개월**로 잡는다.
-  // 칸이 아직 없으면(42703) 조용히 지나간다 — 레포트 저장을 막지 않는다.
-  if (action === 'device-commission' || action === 'device-calibrated') {
+  // 바꾸고 설치 예정월을 비운다(E4). 칸이 아직 없으면(42703) 설치 예정월만 빼고 다시
+  // 쓴다 — 레포트 저장을 막지 않는다.
+  // ⚠ 'device-calibrated'(다음 교정일 + 12개월)는 2026-11-26 지시로 **뺐다**.
+  if (action === 'device-commission') {
     const id = Number(body.id)
     if (!Number.isInteger(id) || id <= 0) return bad('장비를 찾지 못했습니다')
     const { data: before, error: readErr } = await sb
@@ -582,16 +583,6 @@ export async function POST(req: Request) {
     if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 })
     if (!before) return bad('장비를 찾지 못했습니다')
     const name = [before.device_name, before.device_name2].filter(Boolean).join(' ') || null
-
-    if (action === 'device-calibrated') {
-      const next = nextCalibrationDate(String(body.doneDate ?? '')) ?? nextCalibrationDate(todayKST())
-      const { error } = await sb.from('devices').update({ next_calibration_date: next }).eq('device_id', id)
-      if (error) {
-        if (error.code === '42703' || error.code === 'PGRST204') return NextResponse.json({ ok: true, skipped: '칸 없음' })
-        return NextResponse.json({ error: error.message }, { status: 500 })
-      }
-      return NextResponse.json({ ok: true, next_calibration_date: next })
-    }
 
     const serial = String(body.serial_number ?? '').trim()
     const installDate = String(body.install_date ?? '').trim()

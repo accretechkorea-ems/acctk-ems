@@ -47,10 +47,28 @@ for (const line of fs.readFileSync(path.join(ROOT, '.env.local'), 'utf8').split(
  * 창 밖으로 **오른쪽으로** 나간 요소를 찾는다.
  * 숨은 것(크기 0)과 화면 밖으로 치워 둔 것(right ≤ 0)은 세지 않는다 —
  * 닫힌 서랍처럼 일부러 밖에 둔 것은 스크롤을 늘리지 않는다.
+ *
+ * ── 가로로 **스스로 구르는 통** 안에 있는 것은 따로 센다 (2026-11-26) ──────
+ *   의뢰서의 종류 탭 띠(.iq-rail)와 포캐스트 판은 `overflow-x: auto` 다 — 안의 것이
+ *   창보다 오른쪽에 있어도 **문서는 넓어지지 않는다**(그 통만 옆으로 구른다. 일부러
+ *   그렇게 만든 자리다). 그것을 넘침으로 세면 고칠 것이 없는데도 빨간불이 켜져,
+ *   정말 고쳐야 하는 자리(문서가 넓어지는 것)가 묻힌다.
+ *   그래서 **조상 가운데 하나라도 가로를 가두면**(overflow-x 가 visible 이 아니면)
+ *   그 줄은 `구르는통` 으로 옮기고 넘침에서 뺀다. 숨기는 것이 아니라 **가르는** 것이다 —
+ *   두 수를 함께 적는다.
  */
 const PROBE = () => {
   const vw = window.innerWidth
   const out = []
+  const rolled = []
+  /** 이 요소와 뿌리 사이에 가로를 가두는 조상이 있는가. 있으면 그것을 돌려준다. */
+  const clipper = el => {
+    for (let a = el.parentElement; a && a !== document.documentElement; a = a.parentElement) {
+      const ox = getComputedStyle(a).overflowX
+      if (ox !== 'visible') return a
+    }
+    return null
+  }
   for (const el of document.querySelectorAll('body *')) {
     const r = el.getBoundingClientRect()
     if (r.width === 0 || r.height === 0) continue
@@ -58,6 +76,11 @@ const PROBE = () => {
     if (r.right <= 0) continue
     const cs = getComputedStyle(el)
     if (cs.visibility === 'hidden' || cs.display === 'none') continue
+    const box = clipper(el)
+    if (box) {
+      rolled.push(`${el.tagName.toLowerCase()}.${String(el.className || '').slice(0, 24)} ⊂ ${box.tagName.toLowerCase()}.${String(box.className || '').slice(0, 24)}`)
+      continue
+    }
     out.push({
       tag: el.tagName.toLowerCase(),
       cls: String(el.className || '').slice(0, 40),
@@ -78,6 +101,9 @@ const PROBE = () => {
     body넘침: getComputedStyle(document.body).overflowX,
     넘친것: out.slice(0, 8),
     넘친수: out.length,
+    // 가로로 구르는 통 안에 있던 것 — 문서를 넓히지 않으므로 넘침이 아니다.
+    구르는통수: rolled.length,
+    구르는통: [...new Set(rolled)].slice(0, 4),
   }
 }
 
@@ -123,7 +149,7 @@ async function measure(engineName, engine) {
     for (const r of rows) {
       const over = r.문서폭 - r.창폭
       if (over > 0 || r.넘친수 > 0) bad++
-      console.log(`${over > 0 || r.넘친수 > 0 ? '넘침' : '정상'} ${r.path}  문서 ${r.문서폭} / 창 ${r.창폭} (${over > 0 ? `+${over}` : '0'}) · body ${r.body폭} · overflow-x html:${r.html넘침} body:${r.body넘침} · 삐져나온 요소 ${r.넘친수}`)
+      console.log(`${over > 0 || r.넘친수 > 0 ? '넘침' : '정상'} ${r.path}  문서 ${r.문서폭} / 창 ${r.창폭} (${over > 0 ? `+${over}` : '0'}) · body ${r.body폭} · overflow-x html:${r.html넘침} body:${r.body넘침} · 삐져나온 요소 ${r.넘친수}${r.구르는통수 ? ` · (구르는 통 안 ${r.구르는통수}: ${r.구르는통.join(' · ')})` : ''}`)
       for (const e of r.넘친것) {
         console.log(`      ${e.tag}.${e.cls}  left ${e.left} right ${e.right} (w ${e.w}) ${e.pos} · ${e.넓이규칙}`)
       }

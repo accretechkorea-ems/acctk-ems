@@ -337,8 +337,6 @@ export function buildTaskList(rows: readonly TaskRow[], synth: SynthInput): Task
 
 /** 멈춘 딜로 보는 무활동 일수. */
 export const STALE_DAYS = 14
-/** 교정 예정으로 보는 남은 날 수. */
-export const CALIBRATION_SOON_DAYS = 30
 
 export type StaleDeal = {
   opportunity_id: number
@@ -357,41 +355,20 @@ export function staleDeals(deals: readonly StaleDeal[], today: string, days = ST
     .sort((a, b) => b.idleDays - a.idleDays)
 }
 
-export type CalibrationDevice = {
-  device_id: number
-  device_name: string | null
-  device_name2: string | null
-  site: string | null
-  next_calibration_date: string | null
-}
-
-/**
- * 30일 안에 교정일이 오는 장비 — 가까운 것부터. 지난 날짜도 **함께** 센다
- * (지난 교정이야말로 먼저 챙길 일이다).
- */
-export function calibrationSoon(
-  devices: readonly CalibrationDevice[],
-  today: string,
-  days = CALIBRATION_SOON_DAYS,
-): CalibrationDevice[] {
-  const limit = addDays(today, days)
-  return devices
-    .filter(d => !!d.next_calibration_date && d.next_calibration_date <= limit)
-    .sort((a, b) => (a.next_calibration_date! < b.next_calibration_date! ? -1 : 1))
-}
+// 「교정 예정 30일」 타일·카드는 2026-11-26 지시로 **뺐다**(calibrationSoon·CalibrationDevice).
+// devices.next_calibration_date 칸도 함께 지웠다 — db/devices_delivery_20261126.sql 참고.
 
 export type TileCounts = {
   late: number
   today: number
   stale: number
   lead: number
-  calibration: number
   approval: number
 }
 
-/** 타일 여섯 개의 수. 목록과 **같은 줄**을 세므로 카드와 타일이 어긋나지 않는다. */
+/** 타일 다섯 개의 수. 목록과 **같은 줄**을 세므로 카드와 타일이 어긋나지 않는다. */
 export function tileCounts(items: readonly TaskItem[], today: string, extra: {
-  stale: number; lead: number; calibration: number; approval: number
+  stale: number; lead: number; approval: number
 }): TileCounts {
   let late = 0
   let now = 0
@@ -400,5 +377,5 @@ export function tileCounts(items: readonly TaskItem[], today: string, extra: {
     if (b === 'late') late++
     else if (b === 'today') now++
   }
-  return { late, today: now, stale: extra.stale, lead: extra.lead, calibration: extra.calibration, approval: extra.approval }
+  return { late, today: now, stale: extra.stale, lead: extra.lead, approval: extra.approval }
 }
