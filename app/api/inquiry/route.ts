@@ -192,11 +192,18 @@ async function handle(req: NextRequest) {
 
   /**
    * 어느 사업장·장비의 의뢰인가(db/inquiry_customer_device_20261120.sql).
-   * 둘 다 **선택**이다 — 업체가 정해지지 않은 채 번호부터 받는 일이 있다.
-   * 장비만 고르고 사업장을 비우는 일은 없다(화면이 사업장을 고른 뒤에만 장비를 낸다).
+   *
+   * **사업장은 필수다**(2026-11-27 야간3 6-1). 화면은 2026-11-23 부터 회사 → 사업장을
+   * 고르게 하고 고르지 않으면 발급 단추가 꺼진다(canIssue) — 그런데 **서버는 비워도
+   * 받고 있었다.** 번호를 점유하는 그 순간이 업체를 아는 유일한 시점이라, 그때 비면
+   * 그 의뢰서는 영영 어느 사업장 것인지 모른 채 남는다. 마지막 문턱도 같은 규칙으로 둔다.
+   *
+   * 장비는 선택이다. 장비만 고르고 사업장을 비우는 일은 없다(화면이 사업장을 고른
+   * 뒤에만 장비를 낸다).
    */
   const customerId = asId(body.customer_id)
-  const deviceId = customerId === null ? null : asId(body.device_id)
+  if (customerId === null) return bad('사업장을 골라주세요.')
+  const deviceId = asId(body.device_id)
 
   // 발행일·연도는 KST 로 고정한다. 서버(Vercel)는 UTC 라 new Date() 를 그대로 쓰면
   // 한국 시간 아침 9시 전에 하루가 밀린다(lib/date.ts 머리말 참고).
@@ -388,6 +395,9 @@ async function update(sb: ReturnType<typeof admin>, caller: Caller, body: Record
    *   서버도 한 번 더 본다(여기가 마지막 문이다).
    */
   if (body.customer_id !== undefined || body.device_id !== undefined) {
+    // **고친다면 사업장을 요구한다**(2026-11-27 야간3 6-1). 과거분은 그대로 두되,
+    //   손을 대는 순간에는 채우게 한다 — 연결을 **끊는 길은 막는다**.
+    if (body.customer_id === null) return bad('사업장은 비울 수 없습니다. 사업장을 골라주세요.')
     const nextCustomer = body.customer_id === null ? null : asId(body.customer_id)
     const nextDevice = body.device_id === null || body.device_id === undefined ? null : asId(body.device_id)
     if (body.customer_id !== undefined && body.customer_id !== null && nextCustomer === null) {

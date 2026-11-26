@@ -114,5 +114,13 @@ ok('안내문은 한 곳에서 온다', DETAIL.includes('SITE_PICK_NOTE') && PAG
 ok('상세 화면에도 자유 입력 업체명 칸이 없다', !/value={title} maxLength/.test(DETAIL))
 ok('사업장을 고르면 업체명이 따라온다', DETAIL.includes("setTitle(v ? v.name : '')"))
 
+console.log('\n── ⑥ 서버도 같은 규칙이다 (2026-11-27 야간3 6-1) ──')
+const ROUTE = read('app/api/inquiry/route.ts')
+// 화면이 잠가도 서버가 비워 받으면, 그 의뢰서는 영영 어느 사업장 것인지 모른 채 남는다.
+ok('발급은 사업장을 요구한다', /if \(customerId === null\) return bad\('사업장을 골라주세요\.'\)/.test(ROUTE))
+ok('고칠 때 연결을 끊는 길은 막는다(과거분은 그대로)', /사업장은 비울 수 없습니다/.test(ROUTE))
+ok('장비는 선택 그대로', /const deviceId = asId\(body\.device_id\)/.test(ROUTE))
+ok('작성이 고객 이력에 선다(6-2)', /event_type: 'inquiry_created'/.test(ROUTE))
+
 console.log(fails === 0 ? '\n전부 통과' : `\n${fails}건 실패`)
 process.exit(fails === 0 ? 0 : 1)
