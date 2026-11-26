@@ -175,6 +175,16 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
       console.warn('[opportunity] 실주 사유 칸이 아직 없다 — 글자만 적는다', error.code)
       ;({ error } = await supabase.from('sales_opportunities').update(base).eq('opportunity_id', o.opportunity_id))
     }
+    // 옛 **글자** 칸에 값 목록을 못 박은 CHECK 가 남아 있으면 23514 로 막힌다 —
+    // 새 사유 이름이 그 목록에 없기 때문이다(2026-11-26 실측에서 실주가 **전부** 막혀 있었다).
+    // 그때는 글자 칸을 빼고 **id 로만** 적는다 — 사유를 잃는 것보다 낫다. 제약을 떼면
+    // (db/lost_reason_drop_check_20261126.sql) 첫 시도에서 글자까지 함께 들어간다.
+    if (error && error.code === '23514') {
+      console.warn('[opportunity] 옛 lost_reason CHECK 가 막는다 — 글자 칸을 빼고 id 로만 적는다', error.code)
+      const noText = { ...full }
+      delete (noText as Record<string, unknown>).lost_reason
+      ;({ error } = await supabase.from('sales_opportunities').update(noText).eq('opportunity_id', o.opportunity_id))
+    }
     if (error) {
       console.error('[opportunity] mark lost failed', error)
       toast.error(error.message || '실주 처리 중 오류가 발생했습니다')

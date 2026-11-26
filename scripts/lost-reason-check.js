@@ -136,6 +136,14 @@ ok('포캐스트 — 셋을 빼고 다시 쓴다', /42703/.test(CRUD) && /update
 ok('견적 — 셋을 빼고 다시 쓴다', /42703/.test(MUT) && /await run\(base\)/.test(MUT))
 ok('목록을 못 읽으면 기본 여덟 줄로 돈다', /FALLBACK_REASONS, fallback: true/.test(read('lib/lostReasonList.ts')))
 ok('창이 그 사실을 한 줄로 알린다', /LOST_SCHEMA_NOTE/.test(MODAL))
+// 2026-11-26 실측 — 옛 글자 칸의 CHECK 가 남아 있어 실주 처리가 **전부** 23514 로 막혀 있었다.
+// 글자를 빼고 id 로만 적는 길이 없으면 사유를 아예 못 남긴다. 그 길을 못 박는다.
+ok('포캐스트 — 옛 CHECK(23514)에 막히면 글자 칸을 빼고 id 로만 적는다',
+  /error\.code === '23514'/.test(CRUD) && /delete \(noText as Record<string, unknown>\)\.lost_reason/.test(CRUD))
+ok('그 제약을 떼는 SQL 이 있다',
+  /drop constraint if exists sales_opportunities_lost_reason_check/.test(read('db/lost_reason_drop_check_20261126.sql')))
+ok('APPLIED.md 에 미적용으로 적어 두었다',
+  /lost_reason_drop_check_20261126\.sql/.test(read('db/APPLIED.md')))
 
 console.log('\n── ⑦ SQL ──')
 const SQL = read('db/lost_reasons_20261126.sql')
