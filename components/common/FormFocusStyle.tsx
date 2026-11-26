@@ -1,38 +1,17 @@
 'use client'
 
 /**
- * 폼 안의 **포커스 강조** — 한 곳에서 정한다.
+ * 폼 안의 **포커스 강조** — 이제 아무것도 하지 않는다 (2026-11-26 묶음2 D).
  *
- * 고객사 상세 화면은 자기 페이지에 이 규칙을 전역으로 깔아 두었는데(파란 테두리 +
- * 옅은 테두리광), 모달에서 여는 폼은 그 바깥이라 규칙이 닿지 않았다. 그래서 등록 폼만
- * 포커스가 보이지 않아 「지금 어느 칸에 있는지」를 알 수 없었다(2026-11-20 지적).
+ * 왜 남겨 두는가 — 이 조각은 세 모달이 쓰고 있다(업체 등록·회사 수정·사업장 수정).
+ * 지우면 그 셋을 함께 고쳐야 하고, 그 자리에 className="acc-form" 도 남아 있어
+ * 「왜 아무 일도 안 하는 클래스가 있나」를 다음 사람이 다시 쫓게 된다. 여기 한 줄로
+ * 답을 적어 둔다 — **그 일은 공용 링이 가져갔다**(app/globals.css 의 「고르는 자리의 링」).
+ * 이제 모달 안이든 밖이든 모든 input·select·textarea 가 같은 링을 받는다.
  *
- * 쓰는 법 — 폼을 감싼 요소에 className="acc-form" 을 주고, 그 안 어딘가에 이 조각을 한 번 둔다.
- *
- *   <div className="acc-form">
- *     <FormFocusStyle />
- *     …input·select·textarea…
- *   </div>
- *
- * 색·치수는 새로 만들지 않는다 — 액센트 #234ea2 와 상세 화면이 쓰던 그림자 값 그대로다.
+ * 쓰던 모양(파란 테두리 + 3% 테두리광)이 그 공용 링의 **원본 가운데 하나**다
+ * (견적 「사명」 칸과 같은 값 — lib/focusRing.ts 에 적어 두었다).
  */
 export default function FormFocusStyle() {
-  return (
-    <style jsx global>{`
-      .acc-form input:focus,
-      .acc-form select:focus,
-      .acc-form textarea:focus {
-        border-color: #234ea2 !important;
-        box-shadow: 0 0 0 3px rgba(35, 78, 162, 0.1) !important;
-        outline: none;
-      }
-      /* 입력칸 사이 간격이 좁아도 테두리광이 잘리지 않게 — 겹쳐 그린다. */
-      .acc-form input:focus,
-      .acc-form select:focus,
-      .acc-form textarea:focus {
-        position: relative;
-        z-index: 1;
-      }
-    `}</style>
-  )
+  return null
 }

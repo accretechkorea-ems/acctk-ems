@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from 'react'
 import { R } from '@/lib/radius'
+import { PICK_CLASS } from '@/lib/focusRing'
 
 /**
  * 슬라이딩 인디케이터 세그먼트 컨트롤 (단일 선택).
@@ -81,7 +82,10 @@ export default function SegmentedControl({ options, value, onChange, equal = fal
   }
 
   return (
-    <div ref={containerRef} style={containerStyle}>
+    /* 호버·키보드 포커스에 **공용 링**(2026-11-26 묶음2 D). 「고른 칸」의 표시는
+       슬라이딩 인디케이터 그대로다 — 디자인 규칙의 단일 선택 패러다임이고, 거기에
+       링까지 겹치면 한 상자 안에 테두리가 둘이 된다. **판단 필요**로 적어 둔다. */
+    <div ref={containerRef} className={PICK_CLASS} style={containerStyle}>
       {ind && (
         <div style={{
           position: 'absolute', top: 3, bottom: 3, left: 0, width: ind.width,

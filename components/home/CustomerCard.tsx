@@ -38,6 +38,7 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
 
   return (
     <div
+      className="ems-pick"
       onClick={onMove}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -45,7 +46,9 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
         width: '100%',
         // 카드 사이 간격은 **목록의 gap** 이 정한다 — 여기서 margin 을 주면 그림자가 겹친다.
         borderRadius: R.card,
-        border: `1px solid ${hovered ? '#c7d7f8' : '#ebebeb'}`,
+        // 테두리는 **공용 링**이 올린다(2026-11-26 묶음2 D) — hovered 는 카드 안의
+        // 다른 것(단추 띄우기)에도 쓰이므로 상태는 그대로 둔다.
+        border: '1px solid #ebebeb',
         background: '#ffffff',
         // 지도 위에 떠 있는 카드라 그림자로 띄운다(2026-11-20).
         // 호버에 **움직임을 주지 않는다** — 구르는 칸이 위를 잘라 맨 위 카드만 잘려 보였다.

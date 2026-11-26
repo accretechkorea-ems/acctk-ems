@@ -849,9 +849,11 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                   : '-'
                 const showOrderInfo = ['주문완료', '세금계산서 요청', '매출완료'].includes(q.status)
                 return (
-                  <tr key={q.quote_id} style={{ borderBottom: `1px solid ${BORDER}`, transition: 'background 0.12s ease' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
-                    onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                  // 호버·고른 줄이 **같은 링**이다(2026-11-26 묶음2 D).
+                  <tr key={q.quote_id}
+                    className="ems-pick"
+                    aria-selected={quoteSel.isSelected(q.quote_id)}
+                    style={{ borderBottom: `1px solid ${BORDER}` }}>
                     <td style={{ padding: '8px 6px', textAlign: 'center' }}>
                       <input type="checkbox" checked={quoteSel.isSelected(q.quote_id)} onChange={() => quoteSel.toggle(q.quote_id)} style={{ cursor: 'pointer' }} />
                     </td>

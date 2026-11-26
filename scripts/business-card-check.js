@@ -275,9 +275,10 @@ eq('등록일은 yy-mm-dd', (() => {
   return m ? /slice\(2\)/.test(m[0]) : false
 })(), true)
 ok('「● 오늘」 꼬리표를 표에서 걷었다', !/<AgeTag registeredAt=\{c\.registered_at\} today=\{today\} \/>\s*\n\s*<\/td>/.test(CARDS_PAGE))
-ok('행 호버 클래스', CARDS_PAGE.includes('className="ems-row-hover"')
-  && /.ems-row-hover:hover > td/.test(read('app/globals.css')))
-ok('호버는 테마 파랑 테두리', /--color-brand-border/.test(read('app/globals.css')))
+// 2026-11-26 묶음2 D — 호버·고른 줄이 **공용 링**이다(바탕은 .ems-row-hover 가 그대로 그린다).
+ok('행 호버 클래스', CARDS_PAGE.includes('className="ems-row-hover ems-pick"')
+  && /\.ems-row-hover:hover > td/.test(read('app/globals.css')))
+ok('호버 테두리는 공용 링이다', /tr\.ems-pick:hover > td,/.test(read('app/globals.css')))
 ok('열람이 기본이다', /const \[mode2, setMode2\] = useState<'view' \| 'edit'>\('view'\)/.test(FORM_SRC))
 ok('수정을 누르면 입력 모드', /setMode2\('edit'\)/.test(FORM_SRC))
 ok('취소로 열람에 돌아온다', /if \(editing\) setMode2\('view'\)/.test(FORM_SRC))
@@ -313,10 +314,11 @@ ok('본칸과 같으면 아랫줄을 적지 않는다',
 ok('직급 열은 160 한 줄 말줄임',
   CARDS_PAGE.includes('maxWidth: 160') && CARDS_PAGE.includes("textOverflow: 'ellipsis'"))
 ok('행 높이를 고정했다(44)', /const ROW_H = 44/.test(CARDS_PAGE) && CARDS_PAGE.includes('height: ROW_H'))
-ok('호버는 공용 클래스', CARDS_PAGE.includes('className="ems-row-hover"')
+ok('호버는 공용 클래스', CARDS_PAGE.includes('className="ems-row-hover ems-pick"')
   && /\.ems-row-hover:hover > td/.test(read('app/globals.css')))
-ok('그 색은 고객사 카드 호버와 같은 토큰',
-  /--color-brand-border/.test(read('app/globals.css')))
+ok('그 테두리는 공용 링이다(고객사 사업장 표와 같다)',
+  /tr\.ems-pick:hover > td,/.test(read('app/globals.css'))
+  && /ems-pick/.test(read('components/home/list/CompanyPane.tsx')))
 
 // ── ⑪ 휴대폰이 없으면 회사 전화 — 2026-11-25 ──
 console.log('\n── ⑪ 연락처 한 줄 ──')

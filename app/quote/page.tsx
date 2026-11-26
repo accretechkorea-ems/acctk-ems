@@ -802,11 +802,9 @@ function QuotePageInner() {
   return (
     <div className="quote-page" style={{ background: '#fafafa', minHeight: '100vh' }}>
       <style>{`
-        .q-input:focus {
-          border-color: #234ea2 !important;
-          box-shadow: 0 0 0 3px rgba(35,78,162,0.10) !important;
-          outline: none;
-        }
+        /* .q-input 의 포커스 규칙은 2026-11-26(묶음2 D)에 **공용 링**으로 옮겼다 —
+           app/globals.css 의 「고르는 자리의 링」이 모든 input·select·textarea 를 덮는다.
+           여기 있던 값(#234ea2 + 3px 10%)이 그 링의 **원본**이다(lib/focusRing.ts 참고). */
         /* 숫자 입력창의 브라우저 기본 스피너(위아래 화살표) 제거.
            type="number" 는 그대로 둬서 모바일 숫자 키패드는 유지된다.
            .quote-page 하위로 한정해 다른 화면에는 영향이 없다. */
@@ -845,7 +843,8 @@ function QuotePageInner() {
 
         /* 라벨을 입력칸 안에 넣는 상자.
            포커스는 :focus-within 으로 상자 전체에 건다 — 라벨만 남고 입력만 파래지는 모양을 피한다.
-           값은 .q-input:focus 와 같은 것을 쓴다. */
+           **호버에도 같은 링**이다(묶음2 D — 세 상태에 단계를 두지 않는다). 안의 칸들은
+           ems-ring-off 라 제 링을 그리지 않는다(상자가 한 벌만 그린다). */
         .q-box {
           display: flex;
           align-items: stretch;
@@ -855,9 +854,10 @@ function QuotePageInner() {
           border-radius: ${R.icon}px;
           transition: border-color 0.15s ease, box-shadow 0.15s ease;
         }
+        .q-box:hover,
         .q-box:focus-within {
-          border-color: #234ea2;
-          box-shadow: 0 0 0 3px rgba(35,78,162,0.10);
+          border-color: var(--color-brand);
+          box-shadow: 0 0 0 3px var(--color-brand-ring);
         }
         /* 라벨 — 상자 안 왼쪽. 오른쪽에 세로 구분선을 둔다.
            폭은 가장 긴 상시 라벨(수신인 = 54px)에 맞춰 모두 같게 한다. 글자 수대로 두면
@@ -933,7 +933,8 @@ function QuotePageInner() {
           font-size: 12px;
           color: #111827;
         }
-        .q-term-input:focus { border-color: #c7d7f8; }
+        /* 조건 칸의 옛 포커스(#c7d7f8 테두리)는 공용 링으로 올렸다(묶음2 D) —
+           같은 「글자를 넣는 칸」인데 혼자 연한 파랑이었다. */
         .q-box-area {
           width: 100%;
           box-sizing: border-box;

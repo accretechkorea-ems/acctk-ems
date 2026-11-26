@@ -640,8 +640,11 @@ export default function CompanyPane({
                   /* 호버·고른 줄의 바탕은 **공용 클래스**가 그린다(.ems-row-hover, 2026-11-25).
                      전에는 이 줄이 손으로 background 를 칠했고 명함 목록은 다른 모양이라,
                      같은 「표의 줄」이 화면마다 달랐다. 값(#fafafa)은 그대로다 —
-                     구분선 색만 이 표의 것(#ebebeb)을 --row-line 으로 넘긴다. */
-                  <tr key={id} className={on ? 'site-row ems-row-hover ems-row-brand on' : 'site-row ems-row-hover ems-row-brand'}
+                     구분선 색만 이 표의 것(#ebebeb)을 --row-line 으로 넘긴다.
+                     테두리는 2026-11-26(묶음2 D)에 **공용 링**(.ems-pick)으로 올렸다 —
+                     전에는 연파랑(#c7d7f8)이었고 고른 줄에는 테두리가 없었다. */
+                  <tr key={id} className={on ? 'site-row ems-row-hover ems-pick on' : 'site-row ems-row-hover ems-pick'}
+                    aria-selected={on}
                     onClick={() => onOpenSite(id)}
                     style={{ cursor: 'pointer', ['--row-line' as string]: BORDER } as CSSProperties}>
                     <td style={td} onClick={e => e.stopPropagation()}>

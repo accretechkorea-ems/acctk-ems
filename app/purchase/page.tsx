@@ -561,10 +561,13 @@ export default function PurchasePage() {
                   const dc = getCategoryColor(DELIVERY_METHOD_COLORS, q.delivery_method)
                   const isParcel = q.delivery_method === '택배발송'
                   return (
+                    /* 호버·고른 줄이 **같은 링**이다(2026-11-26 묶음2 D).
+                       전에는 호버에 바탕 #f8fafc 만 깔렸고 고른 줄(체크)에는 아무 표시도
+                       없어, 긴 목록에서 무엇을 골랐는지 체크박스를 하나씩 봐야 했다. */
                     <tr key={q.quote_id}
-                      style={{ borderBottom: `1px solid ${BORDER}`, transition: 'background 0.1s' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
-                      onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                      className="ems-pick"
+                      aria-selected={sel.isSelected(q.quote_id)}
+                      style={{ borderBottom: `1px solid ${BORDER}` }}>
                       <td style={{ padding: '9px 6px', textAlign: 'center' }}>
                         <input type="checkbox" checked={sel.isSelected(q.quote_id)} onChange={() => sel.toggle(q.quote_id)} style={{ cursor: 'pointer' }} />
                       </td>

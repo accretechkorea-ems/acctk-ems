@@ -20,6 +20,7 @@ import ExpenseSection from './ExpenseSection'
 import { Z } from '@/lib/zIndex'
 import { R } from '@/lib/radius'
 import { registerQuoteFocus } from '@/lib/quoteFocus'
+import { PICK_CLASS } from '@/lib/focusRing'
 
 // 후보가 없을 때 쓰는 고정 빈 배열 — 렌더마다 새 배열을 만들지 않기 위해 모듈 상수로 둔다.
 const EMPTY_ITEMS: PriceItem[] = []
@@ -583,7 +584,8 @@ export default function QuoteItemRow({ row, itemNo, errors, ctx, actions, recent
               const hasStock = item.stock_quantity != null && item.stock_quantity > 0
               const hasDelivery = item.delivery_time != null
               return (
-                <div key={item.id} onClick={() => { handleSelect(row.id, item); focusItemName() }}
+                /* 공용 링(2026-11-26 묶음2 D) — 사명 검색의 줄과 같은 모양이다. */
+                <div key={item.id} className={PICK_CLASS} onClick={() => { handleSelect(row.id, item); focusItemName() }}
                   style={{ padding: '5px 9px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', transition: 'background 0.15s ease', background: itemKeys.active === i ? '#f0f4ff' : '#fff' }}
                   onMouseEnter={() => itemKeys.setActive(i)}>
                   {/* 1줄 — 무엇인가. 넘치면 품명부터 줄어든다(품번·모델은 끝까지 남는다). */}

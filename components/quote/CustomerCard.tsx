@@ -33,6 +33,7 @@ import type { SalesOpportunity } from '@/components/customer/types'
 import { BLUE, BORDER, CARD_BG, MUTED } from '@/components/common/ui'
 import { TEXT_LABEL } from '@/lib/textTokens'
 import { R } from '@/lib/radius'
+import { PICK_CLASS } from '@/lib/focusRing'
 import { advanceQuoteFocus, focusQuoteStep, onlyContactId, registerQuoteFocus } from '@/lib/quoteFocus'
 
 
@@ -268,7 +269,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
         <div className="q-box" style={{ border: errors.category ? errBorder : undefined }}>
           <span className="q-box-label">분류</span>
           <select
-            className="q-box-field"
+            className="q-box-field ems-ring-off"
             value={categoryValue}
             disabled={categoriesLoading}
             onChange={e => { setCategoryValue(e.target.value); clearError('category') }}
@@ -285,7 +286,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
         <div className="q-box" style={{ border: errors.form ? errBorder : undefined }}>
           <span className="q-box-label">양식</span>
           <select
-            className="q-box-field"
+            className="q-box-field ems-ring-off"
             value={formKind}
             onChange={e => { setFormKind(e.target.value); clearError('form') }}
             style={{ color: formKind ? '#111827' : '#6b7280', cursor: 'pointer' }}
@@ -344,7 +345,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
             </span>
           ) : (
             <input
-              className="q-box-field"
+              className="q-box-field ems-ring-off"
               value={customerQuery}
               onChange={e => { handleCustomerSearch(e.target.value); clearError('company'); setPrefillNotice(null) }}
               onFocus={() => customerResults.length > 0 && setCustomerSearchOpen(true)}
@@ -370,7 +371,13 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
                   대리점이면서 우리 고객인 15곳은 **같은 이름이 두 줄**로 뜬다(역할이 다르다).
                   key 에 역할을 함께 넣는 까닭이 그것이다(lib/quoteCustomerPick.ts). */}
               {customerResults.map((c, i) => (
+                /* 마우스와 키보드가 **같은 자리 표시**를 쓴다(active) — 2026-11-26(묶음2 D)에
+                   그 표시에 공용 링을 더했다. 연파랑 바탕은 그대로 둔다(줄이 길어 바탕이
+                   어디까지가 한 줄인지도 알려 준다). */
                 <div key={pickKey(c)} onClick={() => { handleCustomerSelect(c); advanceQuoteFocus('company', { isDealer: isAgencyPick(c) }) }}
+                  className={PICK_CLASS}
+                  role="option"
+                  aria-selected={customerKeys.active === i}
                   style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 12, transition: 'background 0.15s ease', background: customerKeys.active === i ? '#f0f4ff' : '#fff' }}
                   onMouseEnter={() => customerKeys.setActive(i)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
@@ -410,7 +417,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
         <div ref={euSearchRef} className="q-box" style={{ borderColor: '#fed7aa' }}>
             <span className="q-box-label" style={{ borderRightColor: '#fed7aa' }}>E.U</span>
             <input
-              className="q-box-field"
+              className="q-box-field ems-ring-off"
               value={euQuery}
               onChange={e => { handleEUSearch(e.target.value); clearError('eu') }}
               onFocus={() => euResults.length > 0 && setEuSearchOpen(true)}
@@ -434,6 +441,9 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
               <div ref={euListRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #c2410c', borderRadius: R.control, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(194,65,12,0.12)' }}>
                 {euResults.map((c, i) => (
                   <div key={c.customer_id} onClick={() => { handleEUSelect(c); advanceQuoteFocus('eu', { isDealer: true }) }}
+                    className={PICK_CLASS}
+                    role="option"
+                    aria-selected={euKeys.active === i}
                     style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 12, transition: 'background 0.15s ease', background: euKeys.active === i ? '#fff7ed' : '#fff' }}
                     onMouseEnter={() => euKeys.setActive(i)}>
                     <div style={{ fontWeight: 700, color: '#c2410c' }}>{c.company_name}</div>
@@ -465,7 +475,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
         {/* 공용 콤보박스로 고른다(SearchSelect) — ↑↓·Enter·Esc 가 다른 칸과 같다.
             맨 위에 「연결 안 함」, 맨 아래에 「＋ 새 포캐스트 만들기」가 선다.
             기본값은 **가장 최근 진행 건**이다(hooks/quote/useQuoteCustomer.ts). */}
-        <div className="q-box-field" style={{ padding: 0, border: 'none', minWidth: 0 }}>
+        <div className="q-box-field ems-ring-off" style={{ padding: 0, border: 'none', minWidth: 0 }}>
           <SearchSelect<SalesOpportunity>
             items={selectableOpportunities.filter(o => !oppQuery.trim()
               || `${o.stage} ${o.title}`.toLowerCase().includes(oppQuery.trim().toLowerCase()))}
@@ -533,7 +543,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
       <div className="q-box" style={{ border: errors.recipient ? errBorder : undefined }}>
         <span className="q-box-label">수신인</span>
         <select
-          className="q-box-field"
+          className="q-box-field ems-ring-off"
           value={recipientContactId ?? ''}
           ref={el => registerQuoteFocus('recipient', el)}
           disabled={recipientCustomerId == null || contacts.length === 0}

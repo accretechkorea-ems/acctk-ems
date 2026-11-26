@@ -596,7 +596,9 @@ export default function RepairPage() {
   // 목록 행 (고정 블록·페이지 목록 공용)
   const repairRow = (r: Repair) => {
     return (
-    <tr key={r.repair_id} style={{ borderBottom: `1px solid ${BORDER}` }}>
+    // 줄에 링을 둔다(2026-11-26 묶음2 D) — 전에는 호버 표시가 아예 없어, 넓은 표에서
+    // 가로로 눈이 미끄러졌다(어느 줄을 읽고 있는지 잃는다).
+    <tr key={r.repair_id} className="ems-pick" style={{ borderBottom: `1px solid ${BORDER}` }}>
       <td style={{ ...td, textAlign: 'center', color: GRAY }}>{seqMap.get(r.repair_id)}</td>
       <td style={{ ...td, textAlign: 'center' }}>
         <span style={{ fontSize: 13, color: GRAY }}>{r.item_type || '-'}</span>

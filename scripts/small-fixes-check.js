@@ -83,11 +83,12 @@ ok('공용 바탕값이 있다', !!hoverBg)
 eq('그 값 = 고객사 목록이 쓰던 값', hoverBg, paneHover)
 ok('구분선 색은 표마다 넘긴다(--row-line)', /--row-line:\s*[^;]+;/.test(CSS)
   && /border-bottom: 1px solid var\(--row-line\);/.test(CSS))
-ok('고객사 목록 줄이 그 클래스를 쓴다', /'site-row ems-row-hover ems-row-brand on' : 'site-row ems-row-hover ems-row-brand'/.test(PANE))
+// 2026-11-26 묶음2 D — 테두리를 그리던 .ems-row-brand 는 공용 링(.ems-pick)으로 바뀌었다.
+ok('고객사 목록 줄이 그 클래스를 쓴다', /'site-row ems-row-hover ems-pick on' : 'site-row ems-row-hover ems-pick'/.test(PANE))
 ok('고객사 줄의 구분선 값은 그대로 — 그 표의 BORDER 를 넘긴다', /\['--row-line' as string\]: BORDER/.test(PANE))
 ok('손으로 칠하던 호버를 걷었다',
   !/onMouseEnter=\{e => \{ if \(!on\) e\.currentTarget\.style\.background/.test(PANE))
-ok('명함 목록도 같은 클래스', /className="ems-row-hover"/.test(CARDS))
+ok('명함 목록도 같은 클래스', /className="ems-row-hover ems-pick"/.test(CARDS))
 // 테마 파랑 테두리(inset box-shadow)는 걷었다 — 두 화면이 같은 모양이어야 한다.
 ok('줄 호버에 inset box-shadow 를 쓰지 않는다',
   !/\.ems-row-hover:hover > td \{[\s\S]{0,120}inset/.test(CSS))

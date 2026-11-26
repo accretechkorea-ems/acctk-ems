@@ -26,6 +26,7 @@ import Popover from '@/components/common/Popover'
 import { useOverlayEsc } from '@/components/common/overlayStack'
 import { BORDER, CARD_BG, MUTED, NEUTRAL_BG, TEXT } from '@/components/common/ui'
 import { R } from '@/lib/radius'
+import { PICK_CLASS } from '@/lib/focusRing'
 
 /**
  * 후보 말고 더 두는 줄 — 「직판」(위)·「새 회사로 등록」(아래)처럼.
@@ -186,6 +187,10 @@ export default function SearchSelect<T>({
             {rows.map((r, i) => (
               <div key={r.key}
                 role="option"
+                // 호버·키보드·고른 자리가 **같은 링**이다(2026-11-26 묶음2 D).
+                // 여기는 전부터 마우스와 키보드가 같은 표시(active)를 썼다 — 그 표시의
+                // 생김새만 공용 링으로 바뀐 것이다(중립 바탕은 그대로 둔다).
+                className={PICK_CLASS}
                 aria-selected={i === keys.active}
                 // mousedown 으로 고른다 — click 까지 기다리면 입력칸이 먼저 포커스를 잃어 목록이 닫힌다.
                 onMouseDown={e => { e.preventDefault(); r.run() }}

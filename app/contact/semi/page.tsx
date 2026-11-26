@@ -28,6 +28,7 @@ import ModalOverlay from '@/components/common/ModalOverlay'
 import ModalCard from '@/components/common/ModalCard'
 import { useToast } from '@/components/common/Toast'
 import ExcelIconButton from '@/components/common/ExcelIconButton'
+import { PICK_CLASS } from '@/lib/focusRing'
 import { FieldError, errBorder, useFieldErrors } from '@/components/common/fieldErrors'
 import {
   PAGE_BG, CARD_BG, BORDER, TEXT, MUTED, SUB, FAINT, ROW_HOVER_BG, NEUTRAL_BG, BLUE,
@@ -377,9 +378,11 @@ export default function ContactSemiPage() {
               tabIndex={0}
               onClick={() => openProject(r.project_id)}
               onKeyDown={e => { if (e.key === 'Enter') openProject(r.project_id) }}
+              // 호버·키보드 포커스가 **같은 링**이다(2026-11-26 묶음2 D). 바탕은 그대로 둔다
+              // — 이 표는 줄 사이 구분선이 없어 바탕이 줄의 경계를 알려 주는 몫을 한다.
               onMouseEnter={e => (e.currentTarget.style.background = ROW_HOVER_BG)}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-              className="cs-grid"
+              className={`cs-grid ${PICK_CLASS}`}
               style={{ ...rowStyle(i === 0), cursor: 'pointer' }}
             >
               <span className="num" style={{

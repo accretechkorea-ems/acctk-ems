@@ -103,7 +103,9 @@ ok('입력칸 ref 를 받는 자리', /inputRef\?: \(el: HTMLInputElement \| nul
 
 console.log('\n── ② 품목 카드 포커스 표시 ──')
 ok('카드에 이름표', ROW.includes('q-item-card'))
-ok(':focus-within 테두리 규칙', /\.q-item-card:focus-within\s*\{[^}]*--color-brand-border/.test(CSS))
+// 2026-11-26 묶음2 D — 연파랑(--color-brand-border)이던 것을 **공용 링**으로 올리고
+//   호버도 함께 받게 했다(세 상태에 단계를 두지 않는다).
+ok('호버·포커스 테두리 규칙', /\.q-item-card:hover,\s*\n\.q-item-card:focus-within\s*\{[^}]*--color-brand\)/.test(CSS))
 // 2026-11-25 실측 — 테두리를 줄 쪽 style 에 두면 인라인이 CSS 를 이겨 색이 바뀌지 않았다.
 ok('테두리는 CSS 가 그린다(인라인이 이기지 못하게)',
   /\.q-item-card\s*\{[^}]*border: 1px solid/.test(CSS) && !/border: '1px solid #e5e7eb'/.test(ROW))

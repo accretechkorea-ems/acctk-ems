@@ -339,8 +339,8 @@ export default function OpportunityModal({
                         border: '1px solid #ebebeb', borderRadius: R.icon, padding: '8px 10px', textAlign: 'left',
                         background: '#fff', cursor: q.pdf_url ? 'pointer' : 'default', width: '100%',
                       }}
-                      onMouseEnter={e => { if (q.pdf_url) e.currentTarget.style.borderColor = '#c7d7f8' }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = '#ebebeb' }}
+                      /* 연파랑 테두리던 호버를 **공용 링**으로 올렸다(2026-11-26 묶음2 D). */
+                      className="ems-pick"
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ fontSize: 12, fontWeight: 600, color: '#234ea2' }}>{q.quote_number}</span>

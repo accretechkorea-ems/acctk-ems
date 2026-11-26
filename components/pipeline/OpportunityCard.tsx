@@ -67,18 +67,18 @@ export default function OpportunityCard({
   const fullName = name.join(' » ')
 
   return (
+    /* 호버·키보드 포커스는 **공용 링**이다(2026-11-26 묶음2 D) — 전에는 이 카드만
+       연파랑(#c7d7f8) 테두리였다. 흐림(opacity)은 그대로 이 파일이 들고 있다. */
     <div
-      className="pl-card"
+      className="pl-card ems-pick"
       style={{
         background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control,
-        padding: '10px 12px', transition: 'border-color 0.15s ease, opacity 0.15s ease',
+        padding: '10px 12px', transition: 'opacity 0.15s ease',
         // 14일 넘게 아무 일도 없었던 건은 **흐리게** 둔다 — 지우지 않는다(판에 남아 있어야
         // 다시 손이 간다). 호버하면 원래 짙기로 돌아온다(.pl-card:hover, 페이지 전역 스타일).
         opacity: dim ? 0.55 : 1,
       }}
       title={dim ? `${idleLabel(idleDays)} — 14일 넘게 활동이 없습니다` : undefined}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = '#c7d7f8' }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER }}
     >
       {/* 1~3행 — 누르면 상세가 열린다(카드에서 가장 넓은 과녁). */}
       <button

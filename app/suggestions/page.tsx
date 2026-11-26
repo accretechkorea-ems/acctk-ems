@@ -518,10 +518,9 @@ export default function SuggestionsPage() {
               </thead>
               <tbody>
                 {paged.map(s => (
-                  <tr key={s.suggestion_id} style={{ borderBottom: `1px solid ${BORDER}`, cursor: 'pointer', transition: 'background 0.12s ease' }}
-                    onClick={() => openDetail(s)}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
-                    onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                  // 호버·키보드 포커스가 **같은 링**이다(2026-11-26 묶음2 D).
+                  <tr key={s.suggestion_id} className="ems-pick" style={{ borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}
+                    onClick={() => openDetail(s)}>
                     <td style={{ padding: '10px 12px', color: TEXT, fontWeight: 600, maxWidth: 460, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {s.title}
                       {(s.image_urls ?? []).length > 0 && (

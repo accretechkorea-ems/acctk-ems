@@ -620,7 +620,10 @@ function CardsPageInner() {
             </thead>
             <tbody>
               {shown.map(c => (
-                <tr key={c.card_id} className="ems-row-hover"
+                /* 호버·고른 줄이 **같은 링**이다(2026-11-26 묶음2 D) — 전에는 호버에
+                   바탕만 깔리고 고른 줄(체크)에는 표시가 없었다. */
+                <tr key={c.card_id} className="ems-row-hover ems-pick"
+                  aria-selected={picked.has(c.card_id)}
                   style={{ height: ROW_H, cursor: 'pointer' }}
                   onClick={() => openCard(c)}>
                   {/* 체크칸은 줄 열기와 섞이지 않게 눌림을 여기서 멈춘다. */}

@@ -39,6 +39,7 @@ export type DashCardProps = {
 export default function DashCard({ title, onClick, error, errorMessage, loading, headerRight, children }: DashCardProps) {
   return (
     <section
+      className={onClick ? 'ems-pick' : undefined}
       onClick={onClick}
       style={{
         background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.control,
@@ -46,16 +47,10 @@ export default function DashCard({ title, onClick, error, errorMessage, loading,
         cursor: onClick ? 'pointer' : 'default',
         transition: 'transform 0.15s ease, border-color 0.15s ease',
       }}
-      onMouseEnter={e => {
-        if (!onClick) return
-        e.currentTarget.style.borderColor = '#c7d7f8'
-        e.currentTarget.style.transform = 'translateY(-2px)'
-      }}
-      onMouseLeave={e => {
-        if (!onClick) return
-        e.currentTarget.style.borderColor = BORDER
-        e.currentTarget.style.transform = ''
-      }}
+      /* 테두리는 **공용 링**이 올린다(2026-11-26 묶음2 D) — 연파랑이던 것을 액센트로.
+         떠오름(2px)은 이 카드만의 모양이라 그대로 둔다. */
+      onMouseEnter={e => { if (onClick) e.currentTarget.style.transform = 'translateY(-2px)' }}
+      onMouseLeave={e => { if (onClick) e.currentTarget.style.transform = '' }}
     >
       {/* 제목 줄 — 아래 구분선. 치수는 활동 기록 카드와 **같은 상수**를 쓴다. */}
       <div style={CARD_HEAD_STYLE}>

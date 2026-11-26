@@ -26,6 +26,7 @@ import { useSnippets, type SnippetForm } from '@/hooks/useSnippets'
 import { useToast } from '@/components/common/Toast'
 import { BLUE, BORDER, CARD_BG, MUTED, NEUTRAL_BG, SUB, TEXT } from '@/components/common/ui'
 import { R } from '@/lib/radius'
+import { PICK_CLASS } from '@/lib/focusRing'
 import {
   EMPTY_MESSAGE, KIND_LABEL, OTHER_KINDS_LABEL, PICK_LABEL, SAVE_CURRENT_LABEL,
   applyVars, matchSnippet, oneLine, visibleKinds,
@@ -128,7 +129,7 @@ export default function SnippetPicker({ kind, ctx, onPick, currentValue }: Props
       {list.map((s, i) => {
         const at = from + i
         return (
-          <div key={s.snippet_id} role="option" aria-selected={at === keys.active}
+          <div key={s.snippet_id} role="option" className={PICK_CLASS} aria-selected={at === keys.active}
             // mousedown 으로 고른다 — click 까지 기다리면 검색칸이 먼저 포커스를 잃어 목록이 닫힌다.
             onMouseDown={e => { e.preventDefault(); insert(s) }}
             onMouseEnter={() => keys.setActive(at)}

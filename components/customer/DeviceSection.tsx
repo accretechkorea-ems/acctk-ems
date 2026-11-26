@@ -75,12 +75,15 @@ function ServiceCard({ h, companyName, onEdit, onPrint, onOpenReport, reportBusy
   const sc = getCategoryColor(SERVICE_TYPE_COLORS, h.service_type)
 
   return (
+    /* 호버 테두리는 연파랑(#c7d7f8)이었다 — 2026-11-26(묶음2 D)에 공용 링으로 올렸다.
+       hovered 는 그대로 쓴다: 오른쪽 「수정」 단추를 띄우고 감추는 데도 쓰이기 때문이다. */
     <div
+      className="ems-pick"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
         width: '100%', background: '#fff', borderRadius: R.control, padding: '12px 14px 12px 17px',
-        border: `1px solid ${hovered ? '#c7d7f8' : '#ebebeb'}`,
+        border: '1px solid #ebebeb',
         boxSizing: 'border-box', transition: 'border-color 0.15s ease',
         position: 'relative', overflow: 'hidden',
       }}
@@ -213,7 +216,10 @@ function DeviceCard({ d, companyName, deviceHistory, onEditDevice, onAddService,
   const late = pending && isDeliveryLate(d.install_due_month, todayKST())
 
   return (
-    <article style={{
+    /* 호버·키보드 포커스에 **공용 링**(2026-11-26 묶음2 D) — 전에는 장비 카드에
+       호버 표시가 아예 없었다(안의 작은 단추만 반응했다). 납품 예정 카드의 점선은
+       그대로다 — 링은 색만 바꾸고 선 모양은 건드리지 않는다. */
+    <article className="ems-pick" style={{
       width: CARD_W, display: 'flex', flexDirection: 'column', flex: '0 0 auto',
       background: '#ffffff', border: pending ? '1px dashed #9ca3af' : '1px solid #ebebeb', borderRadius: R.card, overflow: 'hidden',
       position: 'relative',

@@ -104,9 +104,8 @@ export default function QuoteHistoryModal({ isOpen, customer, quotes, onClose, f
                     ? q.quote_items.map(i => i.product_name || i.price_list?.model_jp).filter(Boolean).join(', ')
                     : '-'
                   return (
-                    <tr key={q.quote_id} style={{ borderBottom: `1px solid ${INPUT_BORDER}` }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
-                      onMouseLeave={e => (e.currentTarget.style.background = '')}>
+                    // 모달 안 목록도 **같은 링**이다(2026-11-26 묶음2 D).
+                    <tr key={q.quote_id} className="ems-pick" style={{ borderBottom: `1px solid ${INPUT_BORDER}` }}>
                       {/* 번호 옆 작은 표 — 지난 날짜로 넣은 건이다(홈 목록·실적 현황과 같은 부품). */}
                       <td style={{ padding: '10px 12px', fontWeight: 700, color: WHITE_BUTTON_BG, whiteSpace: 'nowrap' }}>
                         {onOpenPdf ? (

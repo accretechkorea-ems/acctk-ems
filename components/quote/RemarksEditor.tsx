@@ -59,7 +59,7 @@ export default function RemarksEditor({
     {/* grid 1fr↔0fr 로 높이를 애니메이션한다. 내용은 늘 마운트돼 있어 접었다 펴도 값이 남는다. */}
     <div style={{ display: 'grid', gridTemplateRows: remarksOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.15s ease' }}>
       <div style={{ overflow: 'hidden', minHeight: 0 }}>
-        <textarea className="q-box-area" value={remarks} onChange={e => setRemarks(e.target.value)} rows={3} />
+        <textarea className="q-box-area ems-ring-off" value={remarks} onChange={e => setRemarks(e.target.value)} rows={3} />
         {/* 길이 안내 — 막지 않는다. PDF 하단 블록이 품목 표와 같은 칸을 나눠 쓰기 때문이다. */}
         {remarksLineCount > REMARKS_HINT_LINES && (
           <div style={{ padding: '0 11px 8px', fontSize: 11, color: '#6b7280', lineHeight: 1.6 }}>

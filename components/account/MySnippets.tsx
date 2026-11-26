@@ -141,7 +141,9 @@ export default function MySnippets({ me }: {
           {g.rows.map(s => {
             const canEdit = canEditSnippet({ engineer_id: me.engineer_id, permission_level: me.permission_level }, s)
             return (
-              <div key={s.snippet_id} className="ems-row-hover"
+              /* 줄에 공용 링을 둔다(2026-11-26 묶음2 D) — 문구 고르개(SnippetPicker)의
+                 항목과 같은 모양이어야, 같은 글을 고르는 두 자리가 다르게 보이지 않는다. */
+              <div key={s.snippet_id} className="ems-row-hover ems-pick"
                 style={{
                   display: 'flex', alignItems: 'flex-start', gap: 10,
                   padding: '10px 2px', borderTop: `1px solid ${BORDER}`,

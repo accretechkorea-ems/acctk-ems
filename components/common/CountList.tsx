@@ -116,9 +116,10 @@ export function CountList({ rows, emptyText, fitHeight = false }: {
                 // 바탕은 줄 전체에 깔고 점·뱃지 자리는 안 누르는 줄과 똑같이 둔다.
                 <button
                   key={row.key} type="button"
+                  /* 호버·키보드 포커스가 **같은 링**이다(2026-11-26 묶음2 D) —
+                     전에는 호버에 바탕만 깔려 키보드로는 어디에 있는지 알 수 없었다. */
+                  className="ems-pick"
                   onClick={e => { e.stopPropagation(); row.onClick?.() }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'none' }}
                   style={{
                     ...rowStyle,
                     padding: 0, borderRadius: R.icon, width: '100%',

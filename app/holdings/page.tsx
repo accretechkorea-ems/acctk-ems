@@ -37,9 +37,9 @@ function HoldingCard({ h, onOpen, onResolve }: { h: Holding; onOpen: () => void;
 
   return (
     <div
-      style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.control, padding: '12px 14px', transition: 'border-color 0.15s ease' }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = '#c7d7f8' }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = '#ebebeb' }}
+      /* 연파랑 테두리던 호버를 **공용 링**으로 올렸다(2026-11-26 묶음2 D). */
+      className="ems-pick"
+      style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.control, padding: '12px 14px' }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <button onClick={onOpen}
