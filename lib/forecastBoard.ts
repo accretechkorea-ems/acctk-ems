@@ -217,6 +217,34 @@ export function pickNextTask(
   return first ? { title: first.title, due: first.due_date } : null
 }
 
+// ── 이번 달 마감 · 열 안 차례 (2026-11-27 야간3 0-2·0-3) ───────────────────
+
+/**
+ * 예정 월이 **이번 달**인가 — 카드에 노란 띠가 서는 조건이고,
+ * 머리 띠의 「이번 달 마감 N건」(boardSummary 의 soon)과 **같은 판정**이다.
+ * 두 곳이 어긋나면 「4건」이라고 적힌 옆에 띠가 셋만 보이는 일이 난다.
+ */
+export const isDueThisMonth = (expectedClose: string | null | undefined, today: string): boolean =>
+  (expectedClose ?? '').slice(0, 7) === soonMonthOf(today)
+
+/** 열 안에서 **먼저 보여야 하는 정도**. 작을수록 위다. */
+export type CardRank = 0 | 1 | 2
+
+/**
+ * 0 이번 달 마감 · 1 지난 할 일이 있다 · 2 나머지.
+ *
+ * 흐림을 걷으면서(0-1) 「먼저 볼 것」을 가리는 일을 **차례**가 맡는다. 같은 등급 안에서는
+ * 종전 차례 그대로다(마감 임박 → 등록 순 — app/pipeline/page.tsx 의 byDueDate).
+ */
+export function cardRank(
+  row: { expected_close: string | null },
+  opts: { today: string; taskLate: boolean },
+): CardRank {
+  if (isDueThisMonth(row.expected_close, opts.today)) return 0
+  if (opts.taskLate) return 1
+  return 2
+}
+
 /** 기회별 **마지막 활동일** — 판이 이미 읽어 둔 활동 줄에서 만든다(조회를 늘리지 않는다). */
 export function lastActivityByOpp(
   activities: readonly { opportunity_id?: number | null; activity_date?: string | null }[],

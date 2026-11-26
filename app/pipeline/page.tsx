@@ -50,7 +50,8 @@ import { todayKST } from '@/lib/date'
 import { FORM_LABELS, isFormKind } from '@/lib/quoteForms'
 import { bucketOf, emptyBucket, fiscalMonths, fiscalYearOfMonth, type Bucket } from '@/lib/forecast'
 import {
-  boardSummary, idleDaysOf, inQuarter, krwFull, krwShort, lastActivityByOpp, pickNextTask, quarterSlices,
+  boardSummary, cardRank, idleDaysOf, inQuarter, isTaskLate, krwFull, krwShort,
+  lastActivityByOpp, pickNextTask, quarterSlices,
 } from '@/lib/forecastBoard'
 import ExcelIconButton from '@/components/common/ExcelIconButton'
 import { customerCompanyName } from '@/lib/customerLabel'
@@ -279,14 +280,23 @@ export default function PipelinePage() {
   const [pendingStage, setPendingStage] = useState<Map<number, string>>(new Map())
   const stageOf = (o: SalesOpportunity) => pendingStage.get(o.opportunity_id) ?? o.stage
 
+  /**
+   * 열 안 차례 — **이번 달 마감 → 지난 할 일 있음 → 나머지**(2026-11-27 야간3 0-3).
+   * 같은 등급 안에서는 종전 그대로다(byDueDate: 마감 임박 → 등록 순).
+   * 흐림을 걷으면서(0-1) 「먼저 볼 것」을 가리는 일을 차례가 맡는다.
+   */
   const columns = useMemo(
     () => BOARD_STAGES.map(stage => {
       const rows = shown
         .filter(o => !isClosed(o) && (pendingStage.get(o.opportunity_id) ?? o.stage) === stage)
-        .sort(byDueDate)
+        .sort((a, b) => {
+          const ra = cardRank(a, { today, taskLate: isTaskLate(pickNextTask(tasks, a.opportunity_id), today) })
+          const rb = cardRank(b, { today, taskLate: isTaskLate(pickNextTask(tasks, b.opportunity_id), today) })
+          return ra !== rb ? ra - rb : byDueDate(a, b)
+        })
       return { stage, rows, sum: rows.reduce((s, o) => s + (o.expected_amount ?? 0), 0) }
     }),
-    [shown, pendingStage]
+    [shown, pendingStage, tasks, today]
   )
   // 끝난 건 = 실주 + 매출 확정 등으로 종료된 것. 판에서 빼고 아래에 접어둔다.
   const done = useMemo(() => shown.filter(o => isClosed(o)), [shown])

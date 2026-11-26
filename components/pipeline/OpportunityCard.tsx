@@ -6,13 +6,18 @@
 //   2행  제목(품명)                                  한 줄 말줄임, 회색
 //   3행  금액                                        굵게·액센트. 「4억 9,040만」(호버=전액)
 //   4행  예정 2026 12월 ····· (아바타) 마지막 활동 N일 전
-//   5행  → 다음 할 일 띠                             늦었으면 빨간 바탕 + ⚠
+//   5행  띠 — 이번 달 마감(노랑) · 다음 할 일(늦으면 빨강)
 //   그 아래  ＋ 할 일 · 견적 쓰기 · 단계 ▾ · 종료    (호버 때만 — 종전 그대로)
 //
 // 왜 늘렸나 — 2026-10-28 에 세 줄로 줄였을 때 「언제까지·누가·다음에 무엇을」이 카드에서
 // 빠졌다. 그래서 판을 보고도 다음 손이 정해지지 않아, 사람마다 모달을 한 장씩 열어 봤다.
-// 한 장에 다 적는 대신 **활동이 멎은 카드는 흐리게**(opacity .55) 둬서, 바쁜 열에서
-// 눈이 먼저 갈 카드가 드러나게 한다(14일 — lib/forecastBoard.ts 의 IDLE_DIM_DAYS).
+//
+// ── 흐림을 걷었다 (2026-11-27 야간3 0-1, 캔버스 KanbanDue A안) ───────────────
+//   11-26 에는 14일 넘게 멎은 카드를 **흐리게**(opacity .55) 뒀다. 한 열에 열 장이 넘게
+//   쌓이는 화면에서 그 흐림이 **대부분의 카드**에 걸려(실측 30장 중 22장) 판 전체가
+//   뿌옇게 보였다 — 눈에 띄게 하려던 것이 오히려 다 같이 묻혔다. 지금은 **카드 전부
+//   선명**하고, 멎었다는 사실은 4행의 「N일 전」 **글자만 빨갛게** 말한다.
+//   대신 **지금 손이 가야 하는 것**을 띠로 올린다 — 이번 달 마감(노랑)이 그것이다.
 //
 // 단계 select·견적 쓰기·종료는 평소 감춰두고 호버 때만 띄운다(.pl-card-action, 페이지 전역
 // 스타일). **display 로 감춘다** — visibility 로 자리를 남기면 그 줄의 글자가 늘 그만큼
@@ -23,16 +28,19 @@ import { BLUE, BORDER, CARD_BG, NEUTRAL_BG, TEXT } from '@/components/common/ui'
 import { TEXT_LABEL, TEXT_NOTE } from '@/lib/textTokens'
 import { STAGES } from '@/components/customer/opportunity'
 import {
-  dueLabelOf, idleLabel, initialsOf, isIdle, isTaskLate, krwFull, krwShort, nextTaskLabel,
+  dueLabelOf, idleLabel, initialsOf, isDueThisMonth, isIdle, isTaskLate, krwFull, krwShort, nextTaskLabel,
   type NextTask,
 } from '@/lib/forecastBoard'
 import type { SalesOpportunity } from '@/components/customer/types'
 import { R } from '@/lib/radius'
 
 const MUTED = '#6b7280'
-/** 늦은 할 일 — 홈 할 일 카드의 「지남」과 같은 값이다. */
+/** 늦은 할 일 · 멎은 활동 — 홈 할 일 카드의 「지남」과 같은 값이다. */
 const LATE = '#b91c1c'
 const LATE_BG = '#fee2e2'
+/** 이번 달 마감 — 홈 할 일 카드의 「경고」와 같은 값이다(TodayCards 의 WARN). */
+const DUE = '#92400e'
+const DUE_BG = '#fef3c7'
 
 type Props = {
   opp: SalesOpportunity
@@ -61,24 +69,23 @@ export default function OpportunityCard({
 }: Props) {
   const quoteCount = opp.quotes?.length ?? 0
   const owner = (opp.engineers?.name ?? '').trim()
-  const dim = isIdle(idleDays)
+  /** 14일 넘게 멎었나 — **카드를 흐리게 하지 않고** 4행 글자만 빨갛게 한다(0-1). */
+  const stalled = isIdle(idleDays)
   const late = isTaskLate(nextTask, today)
+  /** 예정 월이 **이번 달**인가 — 5행 위에 노란 띠가 선다(0-2). */
+  const dueSoon = isDueThisMonth(opp.expected_close, today)
   const name = [company, site].map(v => v.trim()).filter(Boolean)
   const fullName = name.join(' » ')
 
   return (
-    /* 호버·키보드 포커스는 **공용 링**이다(2026-11-26 묶음2 D) — 전에는 이 카드만
-       연파랑(#c7d7f8) 테두리였다. 흐림(opacity)은 그대로 이 파일이 들고 있다. */
+    /* 호버·키보드 포커스는 **공용 링**이다(2026-11-26 묶음2 D).
+       ⚠ **흐림(opacity)은 2026-11-27 에 걷었다**(야간3 0-1) — 카드는 전부 선명하다. */
     <div
       className="pl-card ems-pick"
       style={{
         background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control,
-        padding: '10px 12px', transition: 'opacity 0.15s ease',
-        // 14일 넘게 아무 일도 없었던 건은 **흐리게** 둔다 — 지우지 않는다(판에 남아 있어야
-        // 다시 손이 간다). 호버하면 원래 짙기로 돌아온다(.pl-card:hover, 페이지 전역 스타일).
-        opacity: dim ? 0.55 : 1,
+        padding: '10px 12px',
       }}
-      title={dim ? `${idleLabel(idleDays)} — 14일 넘게 활동이 없습니다` : undefined}
     >
       {/* 1~3행 — 누르면 상세가 열린다(카드에서 가장 넓은 과녁). */}
       <button
@@ -153,10 +160,42 @@ export default function OpportunityCard({
         >
           {initialsOf(owner)}
         </span>
-        <span style={{ fontSize: 11, color: MUTED, whiteSpace: 'nowrap', flexShrink: 0 }}>
+        {/* 멎었으면 **이 글자만** 빨갛다(0-1) — 카드를 흐리게 하는 대신이다. */}
+        <span
+          title={stalled ? `${idleLabel(idleDays)} — 14일 넘게 활동이 없습니다` : undefined}
+          style={{
+            fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0,
+            color: stalled ? LATE : MUTED, fontWeight: stalled ? 600 : 400,
+          }}
+        >
           {idleLabel(idleDays)}
         </span>
       </div>
+
+      {/* 5행 위 — **이번 달 마감** 띠(0-2). 다음 할 일 띠와 **같은 자리·같은 모양**이고
+          바탕만 노랗다. 지난 할 일 빨간 띠가 있으면 **둘 다 쌓인다** — 「이번 달에 닫혀야
+          하는데 할 일도 밀렸다」가 한눈에 보여야 한다.
+          ⏰ 는 이모지가 아니라 인라인 SVG 다(디자인 규칙: 이모지를 UI 아이콘으로 쓰지 않는다). */}
+      {dueSoon && (
+        <div
+          title={`${dueLabelOf(opp.expected_close)} — 이번 달에 닫히기로 한 건입니다`}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4, marginTop: 5,
+            padding: '3px 7px', borderRadius: R.tag, minWidth: 0,
+            background: DUE_BG, color: DUE, fontSize: 11, fontWeight: 600,
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden>
+            <circle cx="12" cy="13" r="8" />
+            <path d="M12 9v4l2.5 2.5" />
+            <path d="M5 3L2.5 5.5M19 3l2.5 2.5" />
+          </svg>
+          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            이번 달 마감
+          </span>
+        </div>
+      )}
 
       {/* 5행 — 다음 할 일 띠. 늦었으면 빨간 바탕 + ⚠(이모지가 아니라 인라인 SVG). */}
       <div

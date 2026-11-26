@@ -128,7 +128,7 @@ ok('엑셀은 공용 ⬇ 아이콘이다', /<ExcelIconButton/.test(PAGE)
 ok('띠는 판에 보이는 줄을 센다', /boardSummary\(shown\.filter\(o => !isClosed\(o\)\), BOARD_STAGES/.test(PAGE))
 ok('분포는 분기를 고르기 전 줄에서 센다', /quarterSlices\(filtered\.filter\(o => !isClosed\(o\)\)\)/.test(PAGE))
 ok('판·끝난 건은 고른 분기를 따른다', /const shown = useMemo\(\(\) => filtered\.filter\(o => inQuarter\(o, quarter\)\)/.test(PAGE)
-  && /\[shown, pendingStage\]/.test(PAGE) && /shown\.filter\(o => isClosed\(o\)\)/.test(PAGE))
+  && /\[shown, pendingStage, tasks, today\]/.test(PAGE) && /shown\.filter\(o => isClosed\(o\)\)/.test(PAGE))
 ok('카드 금액은 축약 + 호버 전체', /title=\{krwFull\(opp\.expected_amount\)\}/.test(CARD) && /krwShort\(opp\.expected_amount\)/.test(CARD))
 ok('연결 견적은 뱃지다', /견적 \{quoteCount\}/.test(CARD) && /borderRadius: R\.pill/.test(CARD))
 ok('카드에 「＋ 할 일」이 있다', /<TaskAddButton/.test(CARD) && /type: 'forecast'/.test(CARD))
@@ -142,9 +142,22 @@ ok('4행 예정월 · 이니셜 아바타 · 마지막 활동', /dueLabelOf\(opp
 ok('5행 다음 할 일 띠', /nextTaskLabel\(nextTask\)/.test(CARD) && /isTaskLate\(nextTask, today\)/.test(CARD))
 ok('늦은 할 일은 빨간 바탕 + ⚠(이모지 아님, 인라인 SVG)',
   /background: late \? LATE_BG/.test(CARD) && /\{late && \(/.test(CARD) && /<svg/.test(CARD))
-ok('14일 넘게 멎은 카드는 흐리다', /opacity: dim \? 0\.55 : 1/.test(CARD)
-  && /IDLE_DIM_DAYS = 14/.test(read('lib/forecastBoard.ts')))
-ok('호버하면 제 짙기로 돌아온다', /\.pl-card:hover \{ opacity: 1 !important; \}/.test(PAGE))
+// ── 2026-11-27 야간3 0 — 흐림을 걷고 띠·차례로 가린다 ──────────────────────
+ok('카드를 흐리게 하지 않는다(0-1)', !/opacity: dim/.test(CARD) && !/opacity: 0\.55/.test(CARD))
+ok('대신 「N일 전」 글자만 빨갛다',
+  /color: stalled \? LATE : MUTED/.test(CARD) && /fontWeight: stalled \? 600 : 400/.test(CARD))
+ok('그 판정은 14일 그대로다', /IDLE_DIM_DAYS = 14/.test(read('lib/forecastBoard.ts')))
+ok('이번 달 마감 노란 띠가 있다(0-2)',
+  /\{dueSoon && \(/.test(CARD) && /background: DUE_BG, color: DUE/.test(CARD) && /이번 달 마감/.test(CARD))
+ok('그 띠는 다음 할 일 띠 **위**다', CARD.indexOf('dueSoon && (') < CARD.indexOf('nextTaskLabel(nextTask)'))
+ok('띠 아이콘은 이모지가 아니라 인라인 SVG 다', !/⏰/.test(strip(CARD)))
+ok('두 띠는 **함께** 설 수 있다(둘을 가르는 조건이 없다)',
+  !/dueSoon \? [\s\S]{0,40}: late/.test(CARD))
+ok('카드의 판정과 머리 띠의 수가 **같은 함수**다(0-3)',
+  /isDueThisMonth\(opp\.expected_close, today\)/.test(CARD)
+  && /export const isDueThisMonth/.test(read('lib/forecastBoard.ts')))
+ok('열 안 차례 — 이번 달 마감 → 지난 할 일 → 나머지',
+  /cardRank\(a, \{ today, taskLate:/.test(PAGE) && /ra !== rb \? ra - rb : byDueDate\(a, b\)/.test(PAGE))
 ok('마지막 활동은 **이미 읽어 둔 활동 줄**로 만든다(조회를 늘리지 않는다)',
   /lastActivityByOpp\(activities\)/.test(PAGE))
 ok('다음 할 일은 /api/task 가 준다', /action: 'list'/.test(PAGE) && /pickNextTask\(tasks, /.test(PAGE))
