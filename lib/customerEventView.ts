@@ -107,6 +107,22 @@ ${full}` : head,
         owner: '',
       }
     }
+    // ── 밖에서 벌어진 일 (2026-11-27 야간3 2-2) ───────────────────────
+    case 'holding_started':
+      return { label: '홀딩 시작', title: str(p.device ?? p.title), body: str(p.reason) || '홀딩이 걸렸습니다', owner: str(p.owner) }
+    case 'holding_resolved':
+      return { label: '홀딩 해제', title: str(p.device ?? p.title), body: str(p.reason) || '홀딩이 풀렸습니다', owner: str(p.owner) }
+    case 'forecast_created':
+      return { label: '포캐스트 생성', title: str(p.title), body: str(p.amount_text), owner: str(p.owner) }
+    case 'forecast_closed':
+      return { label: `포캐스트 ${str(p.result) || '종료'}`, title: str(p.title), body: str(p.reason) || str(p.amount_text), owner: str(p.owner) }
+    case 'repair_received':
+      return { label: '수리 입고', title: str(p.item), body: str(p.symptom), owner: str(p.owner) }
+    case 'repair_shipped':
+      return { label: '수리 출고', title: str(p.item), body: str(p.note), owner: str(p.owner) }
+    case 'inquiry_created':
+      return { label: '의뢰서 작성', title: str(p.inquiry_no), body: str(p.subject), owner: str(p.owner) }
+
     case 'site_edited':
       return { label: '사업장 수정', title: str(p.site_name), body: changeText(p.changes), owner: '' }
     case 'contact_edited':

@@ -125,12 +125,12 @@ ok('함께 숨는 장비 수에서도 뺀다',
   /from\('devices'\)\.select\('device_id', \{ count: 'exact', head: true \}\)\.eq\('customer_id', id\)\.is\('deleted_at', null\)/.test(DELETE))
 
 console.log('\n── ⑤ 사건으로 남는다 ──')
-// 등록·수정은 **한 종류**(device_edited)이고 payload.mode 가 가른다 — 활동 이력이 그 값으로
-// 「장비 등록」·「장비 수정」을 적는다. 종류를 늘리지 않는 쪽이 기존 규칙이다.
-ok('등록·수정은 바뀐 칸을 적는다',
+// 2026-11-27 야간3 2-2 — **장비 정보 수정은 사건이 아니다**(옵션·메모·납입일을 고친 것은
+//   일이 아니다). 등록·폐기·폐기 취소·운용 전환은 그대로 남는다 — 상태가 바뀐 일이다.
+ok('등록은 바뀐 칸을 적는다',
   /mode: 'add', device_id: made\.device_id/.test(CHANGE)
-  && /mode: 'edit', device_id: id/.test(CHANGE)
-  && /changes: trimChanges\(changes\)/.test(CHANGE))
+  && /changes: trimChanges\(fieldChanges\(null, patch, DEVICE_COLUMNS\)\)/.test(CHANGE))
+ok('수정은 사건으로 적지 않는다', !/mode: 'edit', device_id: id/.test(CHANGE))
 ok('폐기·폐기취소도 같은 종류에 mode 로 남는다',
   /mode: dispose \? 'dispose' : 'undispose'/.test(CHANGE))
 ok('삭제는 payload.kind 로 장비를 가린다',

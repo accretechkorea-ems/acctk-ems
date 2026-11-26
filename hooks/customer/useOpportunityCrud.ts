@@ -8,6 +8,8 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { logCustomerEvent } from '@/lib/customerEventLog'
+import { krwShort } from '@/lib/forecastBoard'
 import { josa } from '@/lib/josa'
 import { useToast } from '@/components/common/Toast'
 import { useConfirm } from '@/components/common/ConfirmDialog'
@@ -79,6 +81,19 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
       return
     }
     const wasEditing = !!editingOpp
+    // 고객 이력에 한 줄 (2026-11-27 야간3 2-2) — **새로 만든 때만**이다.
+    // 「진행(단계 고침)」은 적지 않는다: 단계는 자주 오르내려 이력이 그 줄로 덮인다.
+    if (!wasEditing) {
+      void logCustomerEvent({
+        customerId: resolveCustomerId(form),
+        type: 'forecast_created',
+        payload: {
+          title: payload.title,
+          amount_text: payload.expected_amount ? krwShort(payload.expected_amount) : null,
+          stage: payload.stage,
+        },
+      })
+    }
     closeOppModal()
     // 목록 갱신이 실패하면 fetchDetail 쪽에서 알리므로 성공 안내는 띄우지 않는다.
     if (await fetchDetail()) toast.success(wasEditing ? '포캐스트가 수정되었습니다' : '포캐스트가 등록되었습니다')
@@ -190,6 +205,18 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
       toast.error(error.message || '실주 처리 중 오류가 발생했습니다')
       return false
     }
+    // 고객 이력에 한 줄 (2026-11-27 야간3 2-2).
+    void logCustomerEvent({
+      customerId: o.customer_id,
+      type: 'forecast_closed', occurredAt: patch.lost_at || undefined,
+      payload: {
+        title: o.title,
+        result: opts.closeOnly ? '종료' : (opts.stage ?? '실주'),
+        reason: patch.lost_reason || null,
+        competitor: patch.competitor || null,
+        amount_text: o.expected_amount ? krwShort(o.expected_amount) : null,
+      },
+    })
     if (await fetchDetail()) {
       toast.success(opts.closeOnly
         ? `'${o.title}'${josa(o.title, '을')} 종료했습니다`
@@ -209,6 +236,14 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
       console.error('[opportunity] set closed failed', error)
       toast.error(error.message || (close ? '종료 처리 중 오류가 발생했습니다' : '종료 해제 중 오류가 발생했습니다'))
       return false
+    }
+    // 고객 이력에 한 줄 — **종료할 때만**이다(종료 해제는 적지 않는다).
+    if (close) {
+      void logCustomerEvent({
+        customerId: o.customer_id,
+        type: 'forecast_closed',
+        payload: { title: o.title, result: '종료', amount_text: o.expected_amount ? krwShort(o.expected_amount) : null },
+      })
     }
     if (await fetchDetail()) {
       toast.success(close

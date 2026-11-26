@@ -25,7 +25,7 @@ import { todayKST } from '@/lib/date'
 import { forecastPatch, type ForecastNow, type LinkedQuote } from '@/lib/forecastSync'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
-  fieldChanges, writeCustomerEvents,
+  fieldChanges, writeCustomerEvents, WORK_EVENT_TYPES,
   type CustomerEventRow, type CustomerEventType, type FieldChange,
 } from '@/lib/customerEvents'
 
@@ -277,12 +277,12 @@ export async function POST(req: Request) {
     if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 })
 
     const changes = fieldChanges(before as Record<string, unknown>, patch, SITE_COLUMNS)
-    const rows = changes.length === 0 ? [] : [event(id, 'site_edited', {
-      site_name: (before as { company_name?: string }).company_name ?? null,
-      changes: trimChanges(changes),
-    })]
-    const { written } = await writeCustomerEvents(sb, rows)
-    return NextResponse.json({ ok: true, events: written, changed: changes.length })
+    // ⚠ **사건으로 적지 않는다**(2026-11-27 야간3 2-2). 주소·전화·메모를 고친 것은
+    //   「이 사업장에 무슨 일이 있었나」가 아니다 — 그 줄이 쌓이면 정작 일(홀딩·포캐스트·
+    //   수리·의뢰서)이 그 사이에 묻힌다. 감사 자국은 audit_log 가 들고 있다.
+    //   되살리려면 여기서 site_edited 를 다시 적으면 된다(종류는 그대로 남겨 두었다 —
+    //   **옛 줄**이 그 종류로 쌓여 있어 지우면 이력에서 사라진다).
+    return NextResponse.json({ ok: true, events: 0, changed: changes.length })
   }
 
   // ── 담당자 추가·수정 ──────────────────────────────────────────────────
@@ -313,11 +313,9 @@ export async function POST(req: Request) {
     const { error } = await sb.from('contacts').update(patch).eq('contact_id', id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     const changes = fieldChanges(before as Record<string, unknown>, patch, CONTACT_COLUMNS)
-    const rows = changes.length === 0 ? [] : [event(Number((before as { customer_id: number }).customer_id), 'contact_edited', {
-      mode: 'edit', contact_id: id, name: patch.name ?? null, changes: trimChanges(changes),
-    })]
-    const { written } = await writeCustomerEvents(sb, rows)
-    return NextResponse.json({ ok: true, events: written, changed: changes.length })
+    // ⚠ **수정은 사건이 아니다**(2026-11-27 야간3 2-2) — 전화번호를 고친 것은 일이 아니다.
+    //   **추가는 그대로 남긴다**(위 contact-add) — 그 사업장에 사람이 하나 생긴 일이다.
+    return NextResponse.json({ ok: true, events: 0, changed: changes.length })
   }
 
   // ── 장비 추가·수정 ────────────────────────────────────────────────────
@@ -349,14 +347,10 @@ export async function POST(req: Request) {
     const { error } = await sb.from('devices').update(patch).eq('device_id', id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     const changes = fieldChanges(before as Record<string, unknown>, patch, DEVICE_COLUMNS)
-    const rows = changes.length === 0 ? [] : [event(Number((before as { customer_id: number }).customer_id), 'device_edited', {
-      mode: 'edit', device_id: id,
-      device: [patch.device_name ?? (before as { device_name?: string }).device_name,
-        patch.device_name2 ?? (before as { device_name2?: string }).device_name2].filter(Boolean).join(' ') || null,
-      changes: trimChanges(changes),
-    })]
-    const { written } = await writeCustomerEvents(sb, rows)
-    return NextResponse.json({ ok: true, events: written, changed: changes.length })
+    //  **장비 정보 수정은 사건이 아니다**(2026-11-27 야간3 2-2) — 옵션·메모·납입일을
+    //   고친 것은 일이 아니다. **추가·폐기·폐기 취소·운용 전환**은 그대로 남긴다(상태가
+    //   바뀐 일이다). 종류(device_edited)는 지우지 않는다 — 옛 줄이 그 종류로 쌓여 있다.
+    return NextResponse.json({ ok: true, events: 0, changed: changes.length })
   }
 
   // ── 장비 폐기·폐기 취소 ───────────────────────────────────────────────
@@ -482,6 +476,34 @@ export async function POST(req: Request) {
     if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 })
     console.log(`[${TAG}] repair-done`, { repairId, customerId, by: caller.email })
     return NextResponse.json({ ok: true, made: true })
+  }
+
+  // ── 밖에서 벌어진 일 한 줄 (2026-11-27 야간3 2-2) ─────────────────────
+  //
+  // 홀딩·포캐스트·수리·의뢰서는 화면이 **제 표에 직접** 쓴다(service role 이 아니다).
+  // 그런데 customer_events 는 RLS 로 service role 만 쓸 수 있어, 그 일들이 이력에
+  // 한 줄도 남지 않았다. 그 한 줄만 여기서 받아 적는다 — **본 일은 부르는 쪽이 이미
+  // 끝냈고**, 이 길이 실패해도 그 일을 되돌리지 않는다(이력 한 줄이 빠질 뿐이다).
+  //
+  // 받는 종류는 **허용 목록**뿐이다. 아무 종류나 받으면 화면이 제멋대로 이력을 쓸 수
+  // 있게 되고, 그러면 「이력은 서버가 적는다」는 약속이 깨진다.
+  if (action === 'log-event') {
+    const customerId = Number(body.customerId)
+    const type = String(body.type ?? '')
+    if (!Number.isInteger(customerId) || customerId <= 0) return bad('사업장을 찾지 못했습니다')
+    if (!(WORK_EVENT_TYPES as readonly string[]).includes(type)) return bad('적을 수 없는 종류입니다')
+    const payload = (body.payload && typeof body.payload === 'object' ? body.payload : {}) as Record<string, unknown>
+    // 일이 벌어진 때를 부르는 쪽이 알면 그것을 쓴다(수리 입고일처럼 오늘이 아닐 수 있다).
+    const at = typeof body.occurredAt === 'string' && /^\d{4}-\d{2}-\d{2}/.test(body.occurredAt)
+      ? new Date(body.occurredAt).toISOString() : new Date().toISOString()
+    const { written } = await writeCustomerEvents(sb, [{
+      customer_id: customerId,
+      event_type: type as CustomerEventType,
+      occurred_at: at,
+      actor_engineer_id: actor,
+      payload,
+    }])
+    return NextResponse.json({ ok: true, events: written })
   }
 
   // ── 포캐스트 ↔ 연결 견적 맞추기 ──────────────────────────────────────

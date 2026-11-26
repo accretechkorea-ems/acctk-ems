@@ -193,7 +193,124 @@ async function stage1c(page) {
   }
 }
 
+// ── 2. 고객 이력 — [검증용] 홀딩 한 건으로 잰다 ─────────────────────────────
+//
+// 만드는 것: 홀딩 한 줄 + 그 홀딩이 남기는 사건 두 줄(시작·해제). **전부 지운다.**
+// 장부는 docs/night3-ids-20261127.json — 적힌 id 말고는 지우는 문장이 없다.
+const MARK = '[검증용]'
+const IDS = path.join(ROOT, 'docs/night3-ids-20261127.json')
+const ledger = fs.existsSync(IDS) ? JSON.parse(fs.readFileSync(IDS, 'utf8')) : {}
+const note = (bucket, v) => {
+  ledger[bucket] = [...new Set([...(ledger[bucket] ?? []), v])]
+  fs.mkdirSync(path.dirname(IDS), { recursive: true })
+  fs.writeFileSync(IDS, JSON.stringify(ledger, null, 2) + '\n')
+  console.log(`  ↳ 장부에 적었다: ${bucket} ${v}`)
+}
+const H = {
+  apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+  Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+  'Content-Type': 'application/json',
+}
+async function sel(table, q) {
+  const r = await fetch(`${env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/${table}?${q}`, { headers: H })
+  if (!r.ok) throw new Error(`${table} 조회 실패 ${r.status}`)
+  return r.json()
+}
+async function del(table, col, id) {
+  const r = await fetch(`${env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/${table}?${col}=eq.${id}`, { method: 'DELETE', headers: H })
+  if (!r.ok) throw new Error(`${table} 삭제 실패 ${r.status}`)
+}
+
+async function stage2(page) {
+  head('2. 고객 이력 — [검증용] 홀딩')
+  const SITE = Number(arg('site', '593'))
+  await page.setViewportSize({ width: 1600, height: 1000 })
+
+  // 그 사업장의 장비 하나를 빌린다(고치지 않는다 — 홀딩만 건다).
+  const dev = (await sel('devices', `customer_id=eq.${SITE}&deleted_at=is.null&select=device_id,device_name&limit=1`))[0]
+  if (!dev) { console.log('건너뜀 — 그 사업장에 장비가 없다'); return }
+  say('빌린 사업장·장비', `${SITE} · 장비 ${dev.device_id}`)
+
+  const before = await sel('customer_events', `customer_id=eq.${SITE}&select=id&order=id.desc&limit=1`)
+  const lastId = Number(before[0]?.id ?? 0)
+
+  // 라우트를 **로그인한 브라우저**에서 그대로 부른다(화면이 부르는 그 길이다).
+  await page.goto(`${BASE}/customer/${SITE}`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(6000)
+  await dismissNotice(page)
+  const res = await page.evaluate(async ([site, device, mark]) => {
+    const post = (type, payload) => fetch('/api/customer-change', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'log-event', customerId: site, type, payload }),
+    }).then(r => r.status)
+    return {
+      started: await post('holding_started', { device: `${mark} 장비 ${device}`, title: `${mark} 홀딩`, reason: `${mark} 실측` }),
+      resolved: await post('holding_resolved', { device: `${mark} 장비 ${device}`, title: `${mark} 홀딩`, reason: `${mark} 해제` }),
+      blocked: await post('site_edited', { site_name: 'x' }),
+    }
+  }, [SITE, dev.device_id, MARK])
+  say('라우트 응답', `시작 ${res.started} · 해제 ${res.resolved} · 허용 목록 밖 ${res.blocked}`)
+  ok('홀딩 시작이 적힌다', res.started === 200)
+  ok('홀딩 해제가 적힌다', res.resolved === 200)
+  ok('허용 목록 밖 종류는 막힌다', res.blocked === 400)
+
+  const made = await sel('customer_events', `customer_id=eq.${SITE}&id=gt.${lastId}&select=id,event_type,payload&order=id`)
+  for (const e of made) {
+    if (JSON.stringify(e.payload ?? {}).includes(MARK)) note('customer_events', e.id)
+  }
+  eq2('만든 줄은 둘', made.length, 2)
+  eq2('종류', made.map(e => e.event_type), ['holding_started', 'holding_resolved'])
+
+  // 화면이 그 둘을 보여 주는가 — 기본 거르개에서 **켜져** 있어야 한다.
+  // 이력은 **회사 화면**이 그린다(2026-11-20 에 사업장 상세에서 옮겼다) —
+  //   /?view=list&site=<id> 가 그 사업장의 타임라인을 편다(lib/activity.ts 의 activityHref).
+  await page.goto(`${BASE}/?view=list&site=${SITE}`, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(9000)
+  await dismissNotice(page)
+  // 이력은 회사 화면의 **탭**이다 — 있으면 눌러 편다.
+  for (const name of ['활동 이력', '이력', '활동']) {
+    const t = page.getByRole('button', { name, exact: true }).first()
+    if (await t.isVisible().catch(() => false)) { await t.click().catch(() => {}); await page.waitForTimeout(3000); break }
+  }
+  const seen = await page.evaluate(mark => {
+    const t = (document.body.textContent ?? '').replace(/\s+/g, ' ')
+    return { start: t.includes('홀딩 시작'), end: t.includes('홀딩 해제'), mine: t.includes(mark) }
+  }, MARK)
+  ok('타임라인에 「홀딩 시작」이 보인다(기본 거르개)', seen.start)
+  ok('「홀딩 해제」도 보인다', seen.end)
+  await shot(page, 'night3-2-timeline')
+}
+
+function eq2(name, got, want) {
+  const good = JSON.stringify(got) === JSON.stringify(want)
+  if (!good) fails++
+  console.log(`${good ? 'OK  ' : 'FAIL'} ${name}${good ? '' : `  got ${JSON.stringify(got)} want ${JSON.stringify(want)}`}`)
+}
+
+async function stageClean() {
+  head('2-CLEAN — 장부에 적힌 id 만 지운다')
+  console.log(JSON.stringify(ledger, null, 2))
+  for (const id of ledger.customer_events ?? []) {
+    const row = (await sel('customer_events', `id=eq.${id}&select=id,payload`))[0]
+    if (!row) { console.log(`  이미 없다 ${id}`); continue }
+    if (!JSON.stringify(row.payload ?? {}).includes(MARK)) {
+      console.error(`  ⚠ 멈춘다 — customer_events ${id} 에 ${MARK} 가 없다`); process.exit(1)
+    }
+    await del('customer_events', 'id', id)
+    console.log(`  지웠다 customer_events ${id}`)
+  }
+  for (const id of ledger.customer_events ?? []) {
+    ok(`customer_events ${id} 가 없다`, (await sel('customer_events', `id=eq.${id}&select=id`)).length === 0)
+  }
+  fs.writeFileSync(IDS, JSON.stringify({ ...ledger, cleaned_at: new Date().toISOString() }, null, 2) + '\n')
+}
+
 ;(async () => {
+  if (STAGE === '2CLEAN') {
+    await stageClean()
+    console.log(fails === 0 ? '\n전부 통과' : `\n${fails}건 실패`)
+    process.exit(fails === 0 ? 0 : 1)
+  }
   const { chromium } = require(path.join(ROOT, 'node_modules/playwright-core'))
   const browser = await chromium.launch()
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } })
@@ -205,6 +322,7 @@ async function stage1c(page) {
     if (STAGE === '0') await stage0(page)
     if (STAGE === '1b') await stage1b(page)
     if (STAGE === '1c') await stage1c(page)
+    if (STAGE === '2') await stage2(page)
   } catch (e) {
     console.log('\n오류 —', e.message)
     fails++

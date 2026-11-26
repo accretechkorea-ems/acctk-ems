@@ -1,120 +1,113 @@
-/**
- * lib/customerEvents.ts — 리드 배정에서 **어떤 사건이 몇 줄 생기는가**.
- *
- * 재는 것:
- *   ① 처음 배정   → lead_registered(등록된 날) + lead_assigned(지금)  … 두 줄
- *   ② 담당 변경   → lead_reassigned 한 줄(전·후가 payload 에 들어간다)
- *   ③ 같은 리드 재배정에서 lead_registered 를 **다시 만들지 않는다**
- *   ④ 회수(담당 없음)도 변경으로 본다 / 같은 사람으로 다시 배정하면 사건 없음
- *   ⑤ 메모 줄이기(briefNote)
- */
-const path = require('path')
-const Module = require('module')
-const ts = require('typescript')
+// 고객 이력(customer_events) — **무엇이 사건이고 무엇이 아닌가** (2026-11-27 야간3 2).
+//
+//   node scripts/customer-events-check.js
+//
+// 이 표가 흔들리면 이력은 금세 못 쓰게 된다. 쌓이는 쪽으로만 흔들리기 때문이다 —
+// 「이것도 남기자」가 몇 번 쌓이면, 정작 일(홀딩·포캐스트·수리·의뢰서)이 고친 자국 사이에
+// 묻힌다. 그래서 **적는 것**과 **적지 않는 것**을 둘 다 못 박는다.
+
 const load = module.require.bind(module)
-const ROOT = path.resolve(__dirname, '..')
+const path = load('path')
+const fs = load('fs')
+const Module = load('module')
+const ROOT = path.join(__dirname, '..')
+const ts = load(path.join(ROOT, 'node_modules/typescript'))
 
+for (const ext of ['.ts', '.tsx']) {
+  Module._extensions[ext] = (mod, filename) => {
+    mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
+        esModuleInterop: true, jsx: ts.JsxEmit.React,
+      }, fileName: filename,
+    }).outputText, filename)
+  }
+}
 const origResolve = Module._resolveFilename
-Module._resolveFilename = function (request, ...rest) {
-  if (request.startsWith('@/')) request = path.join(ROOT, request.slice(2))
-  return origResolve.call(this, request, ...rest)
-}
-require.extensions['.ts'] = (mod, filename) => {
-  const src = require('fs').readFileSync(filename, 'utf8')
-  const out = ts.transpileModule(src, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-    fileName: filename,
-  }).outputText
-  mod._compile(out, filename)
+Module._resolveFilename = function (req, ...rest) {
+  if (req.startsWith('@/')) req = path.join(ROOT, req.slice(2))
+  return origResolve.call(this, req, ...rest)
 }
 
-const { leadAssignmentEvents, briefNote } = load(path.join(ROOT, 'lib/customerEvents.ts'))
-
-let fail = 0
+let fails = 0
+const ok = (name, cond, hint) => {
+  if (!cond) fails++
+  console.log(`${cond ? 'OK  ' : 'FAIL'} ${name}${cond || !hint ? '' : `  — ${hint}`}`)
+}
 const eq = (name, got, want) => {
-  const ok = JSON.stringify(got) === JSON.stringify(want)
-  if (!ok) { fail++; console.error(`  ✗ ${name}\n      얻음: ${JSON.stringify(got)}\n      기대: ${JSON.stringify(want)}`) }
-  else console.log(`  ✓ ${name}`)
+  const good = JSON.stringify(got) === JSON.stringify(want)
+  if (!good) fails++
+  console.log(`${good ? 'OK  ' : 'FAIL'} ${name}`)
+  if (!good) console.log(`       got  ${JSON.stringify(got)}\n       want ${JSON.stringify(want)}`)
+}
+const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8')
+
+const E = load(path.join(ROOT, 'lib/customerEvents.ts'))
+const V = load(path.join(ROOT, 'lib/customerEventView.ts'))
+const CHANGE = read('app/api/customer-change/route.ts')
+
+console.log('── ① 밖에서 벌어진 일 일곱 ──')
+eq('묶음 그대로', [...E.WORK_EVENT_TYPES], [
+  'holding_started', 'holding_resolved',
+  'forecast_created', 'forecast_closed',
+  'repair_received', 'repair_shipped',
+  'inquiry_created',
+])
+for (const t of E.WORK_EVENT_TYPES) {
+  ok(`${t} — 「일」로 센다`, E.isWorkEvent(t))
+  ok(`${t} — 「고친 일」이 아니다(기본으로 켜져 보인다)`, !E.isChangeEvent(t))
+  ok(`${t} — 「리드」도 아니다`, !E.isLeadEvent(t))
 }
 
-const LEAD = {
-  lead_id: 77,
-  lead_no: 'L-2026-077',
-  industry: '2.자동차',
-  created_at: '2026-10-02T01:23:45.000Z',
-  meeting_note: '  첫 미팅에서 설비 교체를 검토 중이라고 했다.  ',
-  request_note: null,
-  assigned_to: null,
-}
-const NOW = '2026-11-20T05:00:00.000Z'
-const run = (over = {}) => leadAssignmentEvents({
-  lead: { ...LEAD, ...(over.lead ?? {}) },
-  customerId: 500,
-  assignedTo: 7,
-  assigneeName: '김영기',
-  previousName: null,
-  actorId: 226,
-  alreadyRegistered: false,
-  now: NOW,
-  ...over,
-})
+console.log('\n── ② 타임라인이 그 일곱을 읽는다 ──')
+for (const [t, want] of [
+  ['holding_started', '홀딩 시작'],
+  ['holding_resolved', '홀딩 해제'],
+  ['forecast_created', '포캐스트 생성'],
+  ['repair_received', '수리 입고'],
+  ['repair_shipped', '수리 출고'],
+  ['inquiry_created', '의뢰서 작성'],
+]) eq(`${t} 의 이름표`, V.eventLine({ event_type: t, payload: {} }).label, want)
+eq('포캐스트 종료는 결과를 이름표에 넣는다',
+  V.eventLine({ event_type: 'forecast_closed', payload: { result: '실주' } }).label, '포캐스트 실주')
+eq('결과를 모르면 「종료」', V.eventLine({ event_type: 'forecast_closed', payload: {} }).label, '포캐스트 종료')
 
-console.log('[customer-events] ① 처음 배정')
-{
-  const rows = run()
-  eq('두 줄이 생긴다', rows.map(r => r.event_type), ['lead_registered', 'lead_assigned'])
-  eq('최초 등록은 리드가 들어온 날', rows[0].occurred_at, LEAD.created_at)
-  eq('최초 등록에는 실행자를 적지 않는다', rows[0].actor_engineer_id, null)
-  // 2026-11-23: 요약 줄(관심 제품 · 파트너사)을 쓰려고 두 칸을 payload 에 더했다.
-  // 본보기 리드에는 그 값이 없어 null 로 들어간다 — 옛 줄도 같은 모양이라 화면은 업종으로 떨어진다.
-  eq('최초 등록 payload', rows[0].payload, {
-    lead_id: 77, lead_no: 'L-2026-077', industry: '2.자동차',
-    interest_product: null, partner_company: null,
-    note: '첫 미팅에서 설비 교체를 검토 중이라고 했다.',
-  })
-  eq('배정은 지금 시각', rows[1].occurred_at, NOW)
-  eq('배정 payload', rows[1].payload, { lead_id: 77, lead_no: 'L-2026-077', to_engineer_id: 7, to_name: '김영기' })
-  eq('배정 실행자', rows[1].actor_engineer_id, 226)
-  eq('사건은 고객사 줄에 달린다', rows[1].customer_id, 500)
-}
+console.log('\n── ③ 적는 자리 ──')
+ok('라우트는 **허용 목록**만 받는다',
+  /action === 'log-event'/.test(CHANGE) && /WORK_EVENT_TYPES as readonly string\[\]\)\.includes\(type\)/.test(CHANGE))
+ok('화면용 한 줄 도우미가 있다', fs.existsSync(path.join(ROOT, 'lib/customerEventLog.ts')))
+ok('그 도우미는 **던지지 않는다**(본 일을 막지 않는다)',
+  /못 적으면 콘솔에만 남기고/.test(read('lib/customerEventLog.ts')))
+ok('고객사가 없으면 조용히 건너뛴다', /if \(!Number\.isInteger\(customerId\) \|\| customerId <= 0\) return false/.test(read('lib/customerEventLog.ts')))
+for (const [what, file, pat] of [
+  ['홀딩 시작', 'hooks/customer/useHoldingCrud.ts', /type: 'holding_started'/],
+  ['홀딩 해제', 'hooks/customer/useHoldingCrud.ts', /type: 'holding_resolved'/],
+  ['포캐스트 생성', 'hooks/customer/useOpportunityCrud.ts', /type: 'forecast_created'/],
+  ['포캐스트 종료·실주', 'hooks/customer/useOpportunityCrud.ts', /type: 'forecast_closed'/],
+  ['수리 입고', 'app/repair/page.tsx', /type: 'repair_received'/],
+  ['수리 출고', 'app/repair/page.tsx', /type: 'repair_shipped'/],
+  ['의뢰서 작성', 'app/api/inquiry/route.ts', /event_type: 'inquiry_created'/],
+]) ok(`${what} 를 적는다`, pat.test(read(file)))
+// 리드 — 배정하면 **두 줄**이 함께 선다(원래 등록 + 배정).
+ok('리드 배정은 등록 줄과 배정 줄을 함께 적는다',
+  /lead_registered/.test(read('lib/customerEvents.ts')) && /alreadyRegistered/.test(read('lib/customerEvents.ts')))
+ok('등록 줄의 날짜는 **리드가 들어온 날**이다', /occurred_at: lead\.created_at/.test(read('lib/customerEvents.ts')))
 
-console.log('[customer-events] ② 담당 변경')
-{
-  const rows = run({
-    lead: { ...LEAD, assigned_to: 7 },
-    assignedTo: 9, assigneeName: '조성연', previousName: '김영기',
-    alreadyRegistered: true,
-  })
-  eq('한 줄만 생긴다', rows.map(r => r.event_type), ['lead_reassigned'])
-  eq('전·후가 함께 들어간다', rows[0].payload, {
-    lead_id: 77, lead_no: 'L-2026-077',
-    to_engineer_id: 9, to_name: '조성연', from_engineer_id: 7, from_name: '김영기',
-  })
-}
+console.log('\n── ④ 적지 않는 것 ──')
+ok('포캐스트 **단계 고침**은 적지 않는다',
+  !/forecast_stage|forecast_updated/.test(read('hooks/customer/useOpportunityCrud.ts'))
+  && /새로 만든 때만/.test(read('hooks/customer/useOpportunityCrud.ts')))
+ok('사업장 **정보 수정**은 적지 않는다', !/'site_edited'/.test(CHANGE))
+ok('담당자 **수정**은 적지 않는다(추가는 남긴다)',
+  !/mode: 'edit', contact_id: id/.test(CHANGE) && /mode: 'add', contact_id: made\.contact_id/.test(CHANGE))
+ok('장비 **정보 수정**도 적지 않는다(등록·폐기·운용 전환은 남긴다)',
+  !/mode: 'edit', device_id: id/.test(CHANGE)
+  && /mode: 'add', device_id: made\.device_id/.test(CHANGE)
+  && /mode: 'commission'/.test(CHANGE))
+// 종류 자체는 지우지 않는다 — **옛 줄**이 그 종류로 쌓여 있어 지우면 이력에서 사라진다.
+ok('옛 종류는 타입에 그대로 남겨 두었다',
+  /'site_edited'/.test(read('lib/customerEvents.ts')) && /'contact_edited'/.test(read('lib/customerEvents.ts')))
+ok('그 까닭을 적어 두었다', /옛 줄이 그 종류로 쌓여 있다|옛 줄\*\* 이 그 종류로/.test(CHANGE))
 
-console.log('[customer-events] ③ 최초 등록은 한 번만')
-{
-  const rows = run({ alreadyRegistered: true })
-  eq('이미 적혀 있으면 다시 만들지 않는다', rows.map(r => r.event_type), ['lead_assigned'])
-  const again = run({ lead: { ...LEAD, assigned_to: 7 }, assignedTo: 7, alreadyRegistered: true })
-  eq('같은 사람으로 다시 배정하면 사건이 없다', again, [])
-}
-
-console.log('[customer-events] ④ 회수')
-{
-  const rows = run({
-    lead: { ...LEAD, assigned_to: 7 },
-    assignedTo: null, assigneeName: null, previousName: '김영기',
-    alreadyRegistered: true,
-  })
-  eq('회수도 변경 한 줄', rows.map(r => r.event_type), ['lead_reassigned'])
-  eq('받는 사람 칸이 빈다', [rows[0].payload.to_engineer_id, rows[0].payload.from_name], [null, '김영기'])
-}
-
-console.log('[customer-events] ⑤ 메모 줄이기')
-eq('공백을 하나로 줄이고 앞뒤를 턴다', briefNote('  두 줄\n  짜리 메모  '), '두 줄 짜리 메모')
-eq('길면 말줄임', briefNote('가'.repeat(130), 120), '가'.repeat(120) + '…')
-eq('비면 null', briefNote('   '), null)
-
-if (fail > 0) { console.error(`\n[customer-events] 실패 ${fail}건`); process.exit(1) }
-console.log('\n[customer-events] 전부 통과')
+console.log(fails === 0 ? '\n전부 통과' : `\n${fails}건 실패`)
+process.exit(fails === 0 ? 0 : 1)

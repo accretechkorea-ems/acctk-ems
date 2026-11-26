@@ -6,6 +6,7 @@ import { EditIconButton } from '@/components/common/IconButton'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { logCustomerEvent } from '@/lib/customerEventLog'
 import { useRepairs, type Repair, type RepairStatus, type RepairQuote } from '@/hooks/useRepairs'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
@@ -328,6 +329,29 @@ export default function RepairPage() {
     const { error } = await supabase.from('repairs').update(patch).eq('repair_id', repairId)
     setIsEditSaving(false)
     if (error) { toast.error('수정 실패: ' + error.message); return false }
+    // ── 고객 이력에 한 줄 (2026-11-27 야간3 2-2) ─────────────────────────
+    //
+    // ⚠ **등록(입고) 화면에는 사업장이 없다** — 회사명을 글자로만 받는다. 사건은 사업장
+    //   줄에 달리므로 그때는 적을 곳이 없다. 그래서 **사업장이 붙는 그때**(수정 창에서
+    //   고객사를 이어 붙일 때) 입고를 적고, 출고일이 찍히면 출고를 적는다.
+    //   사업장이 끝내 안 붙는 건은 이력에 서지 않는다 — 보고서에 판단 필요로 적었다.
+    {
+      const row = repairs.find(r => r.repair_id === repairId)
+      const item = [row?.product_type, row?.item_type, row?.serial_number].map(v => String(v ?? '').trim()).filter(Boolean).join(' · ')
+      const custId = ('customer_id' in patch ? Number(patch.customer_id) : Number(row?.customer_id)) || null
+      if ('customer_id' in patch && custId) {
+        void logCustomerEvent({
+          customerId: custId, type: 'repair_received', occurredAt: String(row?.received_date ?? '') || undefined,
+          payload: { item: item || String(row?.customer_name ?? ''), symptom: row?.repair_content ?? null },
+        })
+      }
+      if ('shipped_date' in patch && patch.shipped_date) {
+        void logCustomerEvent({
+          customerId: custId, type: 'repair_shipped', occurredAt: String(patch.shipped_date),
+          payload: { item: item || String(row?.customer_name ?? ''), note: row?.repair_content ?? null },
+        })
+      }
+    }
     // 수정 창에서도 완료 시각이 붙거나 떨어진다(RepairEditModal 의 buildPatch) —
     // 그 값이 patch 에 들어 있을 때만 영업활동 줄을 맞춘다. 없으면 건드리지 않는다.
     if ('repair_done_at' in patch) await syncRepairActivity(repairId, patch.repair_done_at != null)

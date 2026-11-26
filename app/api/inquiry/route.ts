@@ -21,6 +21,7 @@ import { loadCaller, type Caller as ApiCaller } from '@/lib/apiCaller'
 import { NextRequest, NextResponse } from 'next/server'
 import { isSuperAdmin } from '@/lib/permissions'
 import { addDays, todayKST } from '@/lib/date'
+import { writeCustomerEvents } from '@/lib/customerEvents'
 import {
   buildInquiryNo, inquiryTypeOf, isInquiryDirection, periodKeyFor,
   EDITABLE_STATUSES, INQUIRY_BODY_MAX, INQUIRY_TYPES, REQ20_SERIES, REQ80_SERIES,
@@ -258,6 +259,17 @@ async function handle(req: NextRequest) {
         action: 'INQUIRY_CREATE', inquiryNo: row.inquiry_no, actorId: caller.engineer_id,
         newData: { id: row.id, inquiry_type: row.inquiry_type, period_key: row.period_key, seq: row.seq },
       })
+      // 고객 이력에 한 줄 (2026-11-27 야간3 2-2·6-2) — 사업장이 붙은 건만.
+      // 못 적어도 발급은 그대로다(번호는 이미 나갔다).
+      if (customerId !== null) {
+        await writeCustomerEvents(sb, [{
+          customer_id: customerId,
+          event_type: 'inquiry_created',
+          occurred_at: new Date().toISOString(),
+          actor_engineer_id: caller.engineer_id,
+          payload: { inquiry_no: row.inquiry_no, inquiry_type: row.inquiry_type, subject: title, device_id: deviceId },
+        }]).catch((e: unknown) => console.warn(`[${TAG}] 이력 한 줄을 적지 못했다 — 발급은 그대로다`, e))
+      }
       console.log(`[${TAG}] 발급`, { inquiryNo: row.inquiry_no, by: caller.engineer_id })
       return NextResponse.json({ inquiry: made })
     }

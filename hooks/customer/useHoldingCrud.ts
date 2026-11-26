@@ -21,6 +21,7 @@ import { isSuperAdmin } from '@/lib/permissions'
 import { createHolding } from '@/lib/holdingCreate'
 import type { HoldingReport } from '@/components/customer/holding'
 import type { Holding, HoldingForm, HoldingNote } from '@/components/customer/types'
+import { logCustomerEvent } from '@/lib/customerEventLog'
 
 // 레포트 파일 경로 — 과거 데이터에 전체 URL 이 들어 있어 버킷 안 경로만 잘라 쓴다.
 // (useServiceCrud 의 toReportPath 와 같은 규칙)
@@ -189,6 +190,11 @@ export function useHoldingCrud({ customerId, holdings, engineerId, fetchDetail, 
       return
     }
     if (r.noteFailed) toast.error('홀딩은 등록됐지만 메모 저장에 실패했습니다')
+    // 고객 이력에 한 줄 (2026-11-27 야간3 2-2) — 못 적어도 홀딩은 그대로다.
+    void logCustomerEvent({
+      customerId, type: 'holding_started', occurredAt: form.started_at,
+      payload: { device: null, title: form.title, reason: form.first_note || null },
+    })
     setIsSavingHolding(false)
     closeHoldingModal()
     if (await fetchDetail()) toast.success('홀딩이 등록되었습니다')
@@ -363,6 +369,14 @@ export function useHoldingCrud({ customerId, holdings, engineerId, fetchDetail, 
       toast.error(error.message || '홀딩 해제 중 오류가 발생했습니다')
       return
     }
+    // 고객 이력에 한 줄 (2026-11-27 야간3 2-2). 홀딩 현황 화면에서도 부르므로
+    // customerId 가 없으면(그 화면은 null 이다) 그 줄의 고객사를 찾아 쓴다.
+    const resolved = holdings.find(x => x.holding_id === holdingId)
+    void logCustomerEvent({
+      customerId: customerId ?? resolved?.customer_id ?? null,
+      type: 'holding_resolved', occurredAt: resolvedAt,
+      payload: { device: [resolved?.devices?.device_name, resolved?.devices?.device_name2].filter(Boolean).join(' ') || null, title: resolved?.title ?? null, reason: resolvedNote.trim() || null },
+    })
     closeResolve()
     closeHoldingModal()
     if (await fetchDetail()) toast.success('홀딩이 해제되었습니다')

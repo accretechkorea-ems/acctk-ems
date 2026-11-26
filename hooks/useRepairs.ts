@@ -21,6 +21,12 @@ export type Repair = {
   hq_requested_at: string | null   // 본사 발송일
   hq_returned_at: string | null    // 본사 복귀일
   quote_id: number | null          // 연결된 견적서(quotes.quote_id). 청구 금액의 유일 출처.
+  /**
+   * 사업장(customers.customer_id). 등록 화면은 **회사명만** 받으므로 처음에는 비어 있고,
+   * 수정 창에서 사업장을 이어 붙일 때 찬다. 조회가 이 칸을 안 읽어 올 수도 있어 선택 칸이다
+   * (2026-11-27 야간3 2-2 — 고객 이력에 수리 줄을 세울 때 이 값이 필요하다).
+   */
+  customer_id?: number | null
   created_by: number | null
   created_at: string
 }

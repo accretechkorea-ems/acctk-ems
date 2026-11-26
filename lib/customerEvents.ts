@@ -35,6 +35,19 @@ export type CustomerEventType =
   | 'lead_unassignable' | 'lead_converted' | 'lead_status_changed'
   // 견적을 포캐스트에 걸거나 푼 자국(2026-11-26).
   | 'quote_forecast_linked'
+  /**
+   * ── 2026-11-27 야간3 2-2 에서 더한 것 ──────────────────────────────────
+   * 「이 사업장에 **무슨 일이 있었나**」를 타임라인이 다 말하게 한다. 전에는 리드와
+   * 고친 자국만 남아, 홀딩이 걸려 있어도·포캐스트가 끝나도·수리품이 들어와도
+   * 이력에는 아무 줄도 서지 않았다.
+   *
+   * ⚠ 포캐스트의 **「진행(단계 고침)」은 적지 않는다** — 단계는 자주 오르내려서
+   *   적으면 이력이 그 줄로 덮인다. 생긴 때와 끝난 때만 남긴다.
+   */
+  | 'holding_started' | 'holding_resolved'
+  | 'forecast_created' | 'forecast_closed'
+  | 'repair_received' | 'repair_shipped'
+  | 'inquiry_created'
 
 /**
  * 「리드」 묶음 — 활동 이력이 이 묶음을 **「리드」 종류**로 세운다(기본 켜짐).
@@ -57,6 +70,22 @@ export const CHANGE_EVENT_TYPES: readonly CustomerEventType[] = [
   'company_industry_changed', 'site_edited', 'contact_edited', 'device_edited',
   'customer_deleted', 'customer_restored', 'quote_forecast_linked',
 ]
+
+/**
+ * 「일」 묶음 — **밖에서 벌어진 일**이다(고친 자국이 아니다). 2026-11-27 야간3 2-2.
+ * 활동 이력이 리드와 같은 자리에 세운다 — 접어 두지 않는다.
+ */
+export const WORK_EVENT_TYPES: readonly CustomerEventType[] = [
+  'holding_started', 'holding_resolved',
+  'forecast_created', 'forecast_closed',
+  'repair_received', 'repair_shipped',
+  'inquiry_created',
+]
+
+/** 그 사건이 「일」인가. */
+export function isWorkEvent(type: string): boolean {
+  return (WORK_EVENT_TYPES as readonly string[]).includes(type)
+}
 
 /** 그 사건이 「고친 일」인가. 모르는 종류는 아니라고 본다(옛 줄이 섞여도 종전처럼 보인다). */
 export function isChangeEvent(type: string): boolean {
