@@ -54,11 +54,14 @@ import {
   lastActivityByOpp, pickNextTask, quarterSlices,
 } from '@/lib/forecastBoard'
 import ExcelIconButton from '@/components/common/ExcelIconButton'
-import { customerCompanyName } from '@/lib/customerLabel'
 import { shortSiteName } from '@/lib/customerList'
 import type { TaskRow } from '@/lib/tasks'
 import { useStoredFlag } from '@/lib/storedFlag'
 import { exportForecastXlsx } from '@/lib/forecastExcel'
+import { createClient } from '@/lib/supabase/client'
+import { useToast } from '@/components/common/Toast'
+import { CUSTOMER_NAME_SELECT, customerCompanyName } from '@/lib/customerLabel'
+import { exportForecastStatsXlsx, statsKindOf, type StatsRow } from '@/lib/forecastStatsExcel'
 import { STAGES, isClosed } from '@/components/customer/opportunity'
 import type { SalesOpportunity } from '@/components/customer/types'
 
@@ -153,6 +156,8 @@ function DroppableColumn({ stage, isOver, children }: { stage: string; isOver: b
 
 export default function PipelinePage() {
   const { loading: guardLoading, authorized } = usePageGuard()
+  const supabase = useMemo(() => createClient(), [])
+  const toast = useToast()
   const data = usePipelineData()
   const { opportunities, activities, engineers, customers, loading, me, reload } = data
 
@@ -354,6 +359,106 @@ export default function PipelinePage() {
     () => [...new Set(engineers.map(e => e.teams).filter((t): t is string => !!t))].sort(),
     [engineers],
   )
+
+  /**
+   * **통계용(전체)** — 포캐스트 1건 + 포캐스트에 안 붙은 확정 견적 1장이 한 줄이다
+   * (2026-11-27 야간3 3). 위 「본사 보고용」과 다른 파일이다 — 그쪽은 월별 버킷,
+   * 이쪽은 **낱건**이다(피벗을 돌릴 자료).
+   *
+   * 기간은 **생성일** 기준이고 기본은 고른 FY 전체다. 팀은 위 팝오버의 그 값을 쓴다.
+   * 권한은 기존 엑셀과 같다 — 이 화면에 들어온 사람이면 누른다.
+   */
+  const [statsBusy, setStatsBusy] = useState(false)
+  const runStatsExport = async () => {
+    setStatsBusy(true)
+    try {
+      const from = `${xFy}-04-01`
+      const to = `${xFy + 1}-03-31`
+      const idSet = new Set(exportEngineerIds)
+      const engName = new Map(engineers.map(e => [e.engineer_id, `${e.name} ${e.position ?? ''}`.trim()]))
+      const engTeam = new Map(engineers.map(e => [e.engineer_id, e.teams ?? '']))
+
+      // ① 포캐스트 — 판이 이미 읽어 둔 줄을 쓴다(조회를 늘리지 않는다).
+      const oppRows: StatsRow[] = opportunities
+        .filter(o => {
+          const d = (o.created_at ?? '').slice(0, 10)
+          return d >= from && d <= to && (o.engineer_id == null || idSet.has(o.engineer_id))
+        })
+        .map(o => {
+          const closed = isClosed(o)
+          const stage = o.stage ?? ''
+          return {
+            kindOfUnit: '포캐스트' as const,
+            // 포캐스트에는 품목이 없다 — 붙은 견적의 분류로 가린다(없으면 기타).
+            kind: statsKindOf({ category: null, items: null }),
+            company: customerCompanyName(o.customers),
+            site: shortSiteName({ company_name: o.customers?.company_name ?? '', site_name: o.customers?.site_name ?? null }, customerCompanyName(o.customers)),
+            dealer: '',
+            owner: o.engineer_id == null ? '' : (engName.get(o.engineer_id) ?? `#${o.engineer_id}`),
+            team: o.engineer_id == null ? '' : (engTeam.get(o.engineer_id) ?? ''),
+            product: o.title ?? '',
+            amount: Math.round(o.expected_amount ?? 0),
+            createdAt: (o.created_at ?? '').slice(0, 10),
+            stage,
+            result: (stage === '실주' ? '실주' : closed ? (stage === '수주' ? '수주' : '취소') : '진행') as StatsRow['result'],
+            closedAt: (o.closed_at ?? '').slice(0, 10),
+            lostReason: o.lost_reason ?? '',
+            competitor: String((o as unknown as { competitor?: string | null }).competitor ?? ''),
+            quoteNos: (o.quotes ?? []).map(q => q.quote_number).filter(Boolean).join(', '),
+          }
+        })
+
+      // ② 포캐스트에 **안 붙은** 확정 견적 — 그 건들을 빼면 쫓은 일의 절반이 사라진다.
+      const { data: loose, error } = await supabase
+        .from('quotes')
+        .select(`quote_id, quote_number, quote_date, status, total_supply, engineer_id, category, repair_id, opportunity_id, customers(${CUSTOMER_NAME_SELECT}), quote_items(product_name, group_kind)`)
+        .is('opportunity_id', null)
+        .gte('quote_date', from).lte('quote_date', to)
+      if (error) { console.error('[stats] 견적을 읽지 못했다', error); toast.error('견적을 읽지 못했습니다'); return }
+
+      type LooseQuote = {
+        quote_number: string | null; quote_date: string | null; status: string | null
+        total_supply: number | null; engineer_id: number | null; category: string | null; repair_id: number | null
+        customers?: { company_name: string | null; site_name?: string | null; parent?: { company_name?: string | null } | { company_name?: string | null }[] | null } | null
+        quote_items?: { product_name: string | null; group_kind: string | null }[] | null
+      }
+      const quoteRows: StatsRow[] = ((loose ?? []) as unknown as LooseQuote[])
+        .filter(q => q.engineer_id == null || idSet.has(q.engineer_id))
+        .map(q => {
+          const st = q.status ?? ''
+          return {
+            kindOfUnit: '견적 단독' as const,
+            kind: statsKindOf({
+              category: q.category,
+              categoryLabel: categories.find(c => c.code === q.category)?.label ?? null,
+              repairId: q.repair_id, items: q.quote_items ?? null,
+            }),
+            company: customerCompanyName(q.customers),
+            site: shortSiteName({ company_name: q.customers?.company_name ?? '', site_name: q.customers?.site_name ?? null }, customerCompanyName(q.customers)),
+            dealer: '',
+            owner: q.engineer_id == null ? '' : (engName.get(q.engineer_id) ?? `#${q.engineer_id}`),
+            team: q.engineer_id == null ? '' : (engTeam.get(q.engineer_id) ?? ''),
+            product: (q.quote_items ?? [])[0]?.product_name ?? '',
+            amount: Math.round(q.total_supply ?? 0),
+            createdAt: (q.quote_date ?? '').slice(0, 10),
+            stage: st,
+            result: (st === '실패' ? '실주' : st === '구매취소' ? '취소'
+              : /발주|주문|매출/.test(st) ? '수주' : '진행') as StatsRow['result'],
+            closedAt: '',
+            lostReason: '',
+            competitor: '',
+            quoteNos: q.quote_number ?? '',
+          }
+        })
+
+      const all = [...oppRows, ...quoteRows]
+      await exportForecastStatsXlsx(all, `FY${xFy}${xTeam ? `_${xTeam}` : ''}`, today)
+      toast.success(`통계용 ${all.length}줄을 내려받았습니다(포캐스트 ${oppRows.length} · 견적 단독 ${quoteRows.length})`)
+      setExportOpen(false)
+    } finally {
+      setStatsBusy(false)
+    }
+  }
 
   const runExport = async () => {
     const months = fiscalMonths(xFy)
@@ -717,6 +822,23 @@ export default function PipelinePage() {
             }}>
             {fc.loading ? '자료 읽는 중...' : '내려받기'}
           </button>
+
+          {/* ── 통계용(전체) — 2026-11-27 야간3 3 ──────────────────────────
+              위 「내려받기」는 **본사 보고용**(월별 버킷 두 시트)이고 이쪽은 **낱건**이다.
+              포캐스트 1건 + 포캐스트에 안 붙은 확정 견적 1장이 한 줄 — 피벗을 돌릴 자료다. */}
+          <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4, paddingTop: 8 }}>
+            <span style={{ fontSize: 11, color: MUTED, lineHeight: 1.6, display: 'block', marginBottom: 6 }}>
+              통계용은 **한 줄 = 한 건**입니다 — 포캐스트와, 포캐스트에 안 붙은 견적까지.
+            </span>
+            <button type="button" onClick={() => void runStatsExport()} disabled={statsBusy}
+              style={{
+                width: '100%', padding: '8px 14px', borderRadius: R.icon, border: `1px solid ${BORDER}`,
+                cursor: statsBusy ? 'default' : 'pointer', background: CARD_BG, color: statsBusy ? MUTED : BLUE,
+                fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
+              }}>
+              {statsBusy ? '만드는 중…' : '통계용(전체) 내려받기'}
+            </button>
+          </div>
         </div>
       </Popover>
 
