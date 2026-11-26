@@ -8,7 +8,9 @@
 //   ② 자동 줄은 **표에 쓰지 않고 조회 때 만든다** — 견적 유효기간 만료 · 미배정 리드 ·
 //     결재 대기 · 설치 예정 장비 · 실주 사유 미입력. 그래서 원본이 바뀌면 줄도 사라진다
 //     (발주가 나면 「유효기간 만료」 줄은 그 자리에서 없어진다).
-//   ③ 타일 여섯은 **목록과 같은 줄**을 센다. 한 곳(lib/tasks.ts)에서 만들기 때문에 어긋나지 않는다.
+//   ③ 제목 옆의 두 수(지남·오늘)는 **목록과 같은 줄**을 센다. 한 곳(lib/tasks.ts)에서
+//     만들기 때문에 어긋나지 않는다. 타일 줄과 작은 카드 둘은 2026-11-26(묶음2 A1)에 걷었다.
+//   ③-2 실주 사유 미입력 줄은 기한이 없어도 **늘 맨 위**다(묶음2 A2).
 //   ④ 쓰기는 /api/task(service role)만 한다. 만든 사람은 세션에서 박고, 표가 아직 없으면
 //     503 과 **무엇을 돌려야 하는지** 한 줄로 알려 준다(홈의 다른 카드는 그대로 돈다).
 //   ⑤ 창은 **한 벌**이다 — 홈·포캐스트 카드·견적 줄·리드 줄·장비 카드가 같은 TaskAddModal 을 쓴다.
@@ -52,6 +54,13 @@ const ok = (name, cond, hint) => {
   console.log(`${cond ? 'OK  ' : 'FAIL'} ${name}${cond || !hint ? '' : `  — ${hint}`}`)
 }
 const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8')
+/**
+ * 주석을 뺀 코드. 「이 글자가 **없어야** 한다」를 볼 때 쓴다 — 왜 걷었는지 적어 둔 주석에
+ * 그 글자가 그대로 들어 있어서, 주석을 세면 제 설명에 걸려 실패한다(2026-11-26 실제로 걸렸다).
+ */
+const code = p => read(p)
+  .replace(/\/\*[\s\S]*?\*\//g, ' ')
+  .split('\n').map(l => l.replace(/(^|[^:])\/\/.*$/, '$1')).join('\n')
 
 const TODAY = '2026-11-26'
 
@@ -70,6 +79,10 @@ eq('지남 → 오늘 → 이후, 오래 밀린 것이 위',
   T.sortItems([item('c', '2026-12-05'), item('b', TODAY), item('a1', '2026-11-20'), item('a2', '2026-11-10'), item('z', null)], TODAY)
     .map(i => i.key),
   ['a2', 'a1', 'b', 'c', 'z'])
+// 못 박은 줄은 기한이 없어도 **지남보다 위**다 — 끝난 건을 되돌아보는 일이라 미루면 묻힌다.
+eq('실주 사유 미입력 줄이 맨 위',
+  T.sortItems([item('a2', '2026-11-10'), { ...item('pin', null), pin: true }, item('b', TODAY)], TODAY).map(i => i.key),
+  ['pin', 'a2', 'b'])
 
 console.log('\n── ② 자동 줄 ──')
 const quotes = [
@@ -114,6 +127,9 @@ eq('글자는 「사업장 » 장비 — 설치 예정」', devs[0].title, '일�
 const lostRows = T.lostReasonItems([{ opportunity_id: 5, title: '측정실 증설', company: '오토인더스트리' }])
 eq('실주 사유 — 안내만 한다', lostRows[0].title, '오토인더스트리 » 측정실 증설 — 실주 사유 입력 필요')
 eq('실주 사유 줄도 체크할 수 없다', lostRows[0].real, false)
+eq('실주 사유 줄은 못 박혀 있다(맨 위)', lostRows[0].pin, true)
+eq('견적 쪽 실주 사유 줄도 못 박혀 있다',
+  T.reasonPendingItems([{ quote_id: 1, quote_number: 'K', company: 'A' }])[0].pin, true)
 
 console.log('\n── ②-2 표의 줄 + 자동 줄 ──')
 const rows = [
@@ -127,22 +143,14 @@ ok('표의 줄과 자동 줄이 한 목록이다', list.some(i => i.real) && lis
 eq('태그 글자는 종류가 정한다', [T.KIND_LABEL.manual, T.KIND_LABEL.quote_expiry, T.KIND_LABEL.approval, T.KIND_LABEL.service],
   ['할 일', '견적', '결재', '서비스'])
 
-console.log('\n── ③ 타일 ──')
-const tiles = T.tileCounts(list, TODAY, { stale: 2, lead: 1, approval: 0 })
-eq('지난 할 일 — 목록의 지남과 같은 수', tiles.late, list.filter(i => T.bucketOf(i.due, TODAY) === 'late').length)
-eq('오늘 할 일 — 목록의 오늘과 같은 수', tiles.today, list.filter(i => T.bucketOf(i.due, TODAY) === 'today').length)
-eq('나머지 셋은 받은 수 그대로', [tiles.stale, tiles.lead, tiles.approval], [2, 1, 0])
-// 「교정 예정 30일」 타일은 2026-11-26 지시로 **빠졌다** — 다시 생기지 않는 것까지 본다.
-ok('교정 타일은 없다', tiles.calibration === undefined && T.CALIBRATION_SOON_DAYS === undefined && T.calibrationSoon === undefined)
-eq('멈춘 딜은 14일', T.STALE_DAYS, 14)
-const stale = T.staleDeals([
-  { opportunity_id: 1, title: 'A', last_at: '2026-11-05' },   // 21일
-  { opportunity_id: 2, title: 'B', last_at: '2026-11-10' },   // 16일
-  { opportunity_id: 3, title: 'C', last_at: '2026-11-25' },   // 1일 — 아니다
-  { opportunity_id: 4, title: 'D', last_at: null },           // 활동 없음
-], TODAY)
-eq('14일 넘은 건만, 오래 멈춘 것부터', stale.map(d => d.opportunity_id), [4, 1, 2])
-eq('멈춘 날 수를 함께 준다', stale[1].idleDays, 21)
+console.log('── ③ 제목 옆의 두 수 ──')
+const counts = T.dueCounts(list, TODAY)
+eq('지남 — 목록의 지남과 같은 수', counts.late, list.filter(i => T.bucketOf(i.due, TODAY) === 'late').length)
+eq('오늘 — 목록의 오늘과 같은 수', counts.today, list.filter(i => T.bucketOf(i.due, TODAY) === 'today').length)
+// 걷어낸 것들이 **다시 생기지 않는** 것까지 본다 — 타일 다섯·멈춘 딜·교정 예정.
+ok('타일 세는 함수는 없다', T.tileCounts === undefined)
+ok('멈춘 딜 판정도 없다', T.staleDeals === undefined && T.STALE_DAYS === undefined)
+ok('교정 타일도 없다', T.CALIBRATION_SOON_DAYS === undefined && T.calibrationSoon === undefined)
 
 console.log('\n── ④ 라우트 ──')
 const ROUTE = read('app/api/task/route.ts')
@@ -177,11 +185,19 @@ for (const [where, file, what] of [
 
 console.log('\n── ⑥ 홈 화면 ──')
 const HOME = read('app/dashboard/page.tsx')
-ok('타일 다섯이 선다', /<TodayTiles/.test(HOME))
-ok('할 일 카드는 두 칸을 쓴다', /className="home-cell wide"/.test(HOME) && /\.home-cell\.wide \{ grid-column: span 2; \}/.test(HOME))
-ok('작은 카드 둘이 선다', /<StaleDealsCard/.test(HOME) && /<UnassignedLeadsCard/.test(HOME))
+ok('타일 줄은 없다(묶음2 A1 로 걷었다)',
+  !/<TodayTiles/.test(HOME) && !/export function TodayTiles/.test(read('components/dashboard/TodayCards.tsx')))
+ok('할 일 카드는 두 칸 × 두 줄을 쓴다',
+  /className="home-cell wide tall"/.test(HOME)
+  && /\.home-cell\.wide \{ grid-column: span 2; \}/.test(HOME)
+  && /\.home-cell\.tall \{ grid-row: span 2; \}/.test(HOME))
+ok('지남·오늘은 제목 옆으로 갔다', /late=\{counts\.late\}/.test(HOME) && /now=\{counts\.today\}/.test(HOME))
+ok('작은 카드 둘도 없다',
+  !/<StaleDealsCard/.test(HOME) && !/<UnassignedLeadsCard/.test(HOME)
+  && !/export function StaleDealsCard/.test(read('components/dashboard/TodayCards.tsx'))
+  && !/export function UnassignedLeadsCard/.test(read('components/dashboard/TodayCards.tsx')))
 ok('교정 카드는 없다(2026-11-26 지시로 뺐다)', !/CalibrationCard/.test(HOME) && !/CalibrationCard/.test(read('components/dashboard/TodayCards.tsx')))
-ok('남긴 카드 넷 — 내 실적·내 견적·활동 기록·내 문구',
+ok('남긴 카드 넷 — 내 실적·내 견적·활동 기록·내 문구(할 일 카드까지 다섯)',
   /<MyStatCard/.test(HOME) && /<MyQuoteCard/.test(HOME) && /<ActivityCard/.test(HOME) && /<MySnippetCard/.test(HOME))
 ok('뺀 카드 셋 — 포캐스트·알림·결재 대기',
   !/<ForecastCard/.test(HOME) && !/<NotificationCard/.test(HOME) && !/<ApprovalCard/.test(HOME))
@@ -195,6 +211,10 @@ const HOOK = read('hooks/dashboard/useToday.ts')
 ok('조각마다 따로 읽는다(하나가 실패해도 나머지는 뜬다)', /const run = async/.test(HOOK))
 ok('칸·표가 없으면 조용히 빈 값', /schemaMissing/.test(HOOK) && /42703/.test(HOOK))
 ok('미배정 리드를 못 보는 사람에게는 **읽지도** 않는다', /if \(seeLeads\) \{/.test(HOOK))
+// 멈춘 딜을 걷으면서 활동 이력 조회 한 벌이 사라졌다 — 다시 들어오지 않는 것까지 본다.
+const HOOK_CODE = code('hooks/dashboard/useToday.ts')
+ok('홈은 활동 이력을 읽지 않는다', !/sales_activities/.test(HOOK_CODE))
+ok('멈춘 딜 조각도 없다', !/setStale/.test(HOOK_CODE) && !/StaleDeal/.test(HOOK_CODE))
 
 console.log('\n── ⑦ 80 대시보드 · ＋ 사후 실적 ──')
 const D80 = read('app/dashboard/80/page.tsx')

@@ -12,7 +12,7 @@
 //   「내 견적」 표의 전체 자료는 **모달을 열 때** 읽는다 — 카드는 숫자만 본다.
 
 import { Suspense, useEffect, useMemo, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { canViewCustomers } from '@/lib/permissions'
 import { useMe } from '@/lib/appData/MeProvider'
@@ -26,13 +26,13 @@ import MySnippetCard from '@/components/dashboard/MySnippetCard'
 import { MyStatCard } from '@/components/dashboard/HomeCards'
 import MyQuoteCard from '@/components/dashboard/MyQuoteCard'
 import BackfillButton from '@/components/dashboard/BackfillButton'
-import { StaleDealsCard, TaskListCard, TodayTiles, UnassignedLeadsCard } from '@/components/dashboard/TodayCards'
+import { TaskListCard } from '@/components/dashboard/TodayCards'
 import TaskAddModal from '@/components/task/TaskAddModal'
 import { useDashboardCards } from '@/hooks/dashboard/useDashboardCards'
 import { useToday } from '@/hooks/dashboard/useToday'
 import { useApprovalInbox } from '@/lib/appData/approvalInbox'
 import { isSuperAdmin } from '@/lib/permissions'
-import { buildTaskList, staleDeals, tileCounts, type TaskItem } from '@/lib/tasks'
+import { buildTaskList, dueCounts, type TaskItem } from '@/lib/tasks'
 import { nowKSTParts } from '@/lib/date'
 import { countedVisitEnd } from '@/lib/serviceVisit'
 import { R } from '@/lib/radius'
@@ -44,7 +44,6 @@ type SalesTypeRow = { activity_type: string | null }
 
 function DashboardPageInner() {
   const supabase = useMemo(() => createClient(), [])
-  const router = useRouter()
   // ?quoteTab=견적중 — 「내 견적」 모달을 그 상태 탭으로 연다.
   // 카드의 상태 줄이 이 주소로 보낸다(다른 화면에서 보낼 때도 같은 열쇠를 쓴다).
   const quoteTab = useSearchParams().get('quoteTab')
@@ -97,12 +96,8 @@ function DashboardPageInner() {
     lost: today.lost.data,
     reasonPending: today.reasonPending.data,
   })
-  const stale = staleDeals(today.stale.data, today.today)
-  const tiles = tileCounts(taskItems, today.today, {
-    stale: stale.length,
-    lead: today.leads.data.length,
-    approval: inbox.count,
-  })
+  // 제목 옆의 두 수 — 목록과 **같은 줄**을 센다(lib/tasks.ts 의 dueCounts).
+  const counts = dueCounts(taskItems, today.today)
 
   /** 할 일 체크 — 끝낸 것으로 찍고 목록을 다시 읽는다(지우지 않는다). */
   const finishTask = async (it: TaskItem) => {
@@ -206,12 +201,11 @@ function DashboardPageInner() {
            1열로 접히면 한 칸이다(span 2 를 그대로 두면 격자가 비뚤어진다). */
         .home-grid > .home-cell.wide { grid-column: span 2; }
         @media (max-width: 768px) { .home-grid > .home-cell.wide { grid-column: span 1; } }
-        /* 타일 여섯 — 넓은 화면은 한 줄, 좁아지면 3열 → 2열이다. */
-        .today-tiles {
-          display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-top: 14px;
-        }
-        @media (max-width: 1280px) { .today-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-        @media (max-width: 480px)  { .today-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        /* 할 일은 **두 칸 × 두 줄**을 쓴다(묶음2 A1·A2) — 타일 줄과 작은 카드 둘을 걷고
+           그 자리를 전부 목록에 준다. 홈에서 먼저 읽어야 하는 것이 「무엇이 내 차례인가」다.
+           1열로 접히면 한 칸·한 줄이다(span 을 그대로 두면 격자가 비뚤어진다). */
+        .home-grid > .home-cell.tall { grid-row: span 2; }
+        @media (max-width: 768px) { .home-grid > .home-cell.tall { grid-row: span 1; } }
       `}</style>
       <div style={{ maxWidth: 1600, margin: '0 auto' }}>
         {/* 인사말 + 오늘 날짜 (한 줄) */}
@@ -222,17 +216,19 @@ function DashboardPageInner() {
           <span style={{ fontSize: 13, fontWeight: 600, color: '#4b5563' }}>{todayLabel}</span>
         </div>
 
-        {/* 타일 다섯 — 「지금 무엇이 밀려 있나」. 0 이어도 자리를 지킨다(없는 것과
-            못 읽은 것을 같게 보이지 않게). 누르면 그 목록으로 간다. */}
-        <TodayTiles counts={tiles} go={where => router.push(where)} />
-
+        {/* ⚠ 타일 줄(지난 할 일·오늘 할 일·멈춘 딜·미배정 리드·결재 대기)은 2026-11-26
+            (묶음2 A1)에 **걷었다.** 아래 할 일 목록이 이미 같은 줄을 세고 있었고, 타일을
+            누르면 가는 곳(포캐스트·리드·결재)도 그 줄을 누르면 가는 곳과 같다.
+            지남·오늘은 할 일 카드 **제목 옆**으로 옮겼다. */}
         <div className="home-grid">
-          {/* 1행 — 할 일(두 칸) · 내 실적 · 내 견적
-              아침에 먼저 읽어야 하는 것이 「오늘 무엇을 하나」다. 성적은 그 옆이다. */}
-          <div className="home-cell wide">
+          {/* 할 일 — **두 칸 × 두 줄**. 아침에 먼저 읽어야 하는 것이 「오늘 무엇을 하나」다.
+              성적·견적은 그 옆, 활동·문구는 그 아래 줄이다. */}
+          <div className="home-cell wide tall">
             <TaskListCard
               items={taskItems}
               today={today.today}
+              late={counts.late}
+              now={counts.today}
               loading={today.tasks.loading}
               note={today.schemaNote}
               onAdd={() => setTaskOpen(true)}
@@ -273,7 +269,7 @@ function DashboardPageInner() {
             )}
           </div>
 
-          {/* 2행 — 활동 기록 · 멈춘 딜 · 미배정 리드 */}
+          {/* 2행 — 활동 기록 · 내 문구 (할 일 카드가 왼쪽 두 칸을 계속 쓴다) */}
           <div className="home-cell">
             {showActivity && me && actCounts ? (
               <ActivityCard
@@ -302,23 +298,10 @@ function DashboardPageInner() {
             ) : null}
           </div>
 
-          {/* 멈춘 딜 — 14일 넘게 활동이 없는 내 포캐스트. 누르면 포캐스트 화면으로. */}
-          <div className="home-cell">
-            <StaleDealsCard rows={stale} onOpen={() => router.push('/pipeline')} />
-          </div>
-
-          {/* 미배정 리드 — 배정하는 사람(superadmin)에게만 자료를 읽어 준다.
-              아닌 사람에게는 칸을 비워 둔다(격자 정렬은 유지). */}
-          <div className="home-cell">
-            {seeUnassignedLeads && (
-              <UnassignedLeadsCard rows={today.leads.data} onOpen={() => router.push('/leads')} />
-            )}
-          </div>
-
           {/* 내 문구 — 격자의 **마지막 칸**이다(폰에서는 맨 아래, 2026-11-25).
               「전체 관리」는 화면을 옮기지 않고 내 정보의 그 탭을 창 안에 그대로 띄운다.
               ⚠ 포캐스트·알림·결재 대기 카드는 2026-11-26 에 **뺐다**(지시 F4, 시안 Home2) —
-                포캐스트는 칸반으로, 알림은 상단 종으로, 결재는 타일과 할 일 줄로 간다.
+                포캐스트는 칸반으로, 알림은 상단 종으로, 결재는 할 일 줄로 간다.
                 카드 부품은 그대로 남아 있다(components/dashboard/HomeCards.tsx). */}
           <div className="home-cell">
             {me && <MySnippetCard me={{ engineer_id: me.engineer_id, permission_level: me.permission_level }} />}

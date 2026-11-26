@@ -11,7 +11,7 @@
 //
 // 두 줄은 화면에서 **같은 모양**(TaskItem)으로 다룬다 — 다른 점은 체크할 수 있는지뿐이다.
 
-import { addDays, daysBetween } from './date'
+import { addDays } from './date'
 import { quoteExpiry } from './quoteStatus'
 
 /**
@@ -80,6 +80,14 @@ export type TaskItem = {
   refId: number | null
   /** 표의 줄인가. 합성 줄은 체크로 완료할 수 없다(원본을 처리해야 사라진다). */
   real: boolean
+  /**
+   * **늘 맨 위**에 서는 줄인가 (2026-11-26 묶음2 A2).
+   *
+   * 실주 사유 미입력 줄만 참이다. 그 줄은 기한이 없어서(due null) 차례대로 세우면 목록
+   * **맨 끝**으로 떨어진다 — 「언젠가」 묶음이기 때문이다. 그런데 이 줄은 끝난 건을
+   * 되돌아보는 일이라 미루면 영원히 묻힌다. 그래서 기한 대신 이 표식으로 맨 위에 세운다.
+   */
+  pin?: boolean
   /** 표의 줄일 때의 id. */
   taskId?: number
   memo?: string | null
@@ -117,6 +125,8 @@ const BUCKET_ORDER: Record<TaskBucket, number> = { late: 0, today: 1, later: 2 }
  */
 export function sortItems(items: readonly TaskItem[], today: string): TaskItem[] {
   return [...items].sort((a, b) => {
+    // 못 박은 줄(실주 사유 미입력)은 기한을 보지 않고 맨 위다 — 묶음2 A2.
+    if (!!a.pin !== !!b.pin) return a.pin ? -1 : 1
     const ba = BUCKET_ORDER[bucketOf(a.due, today)]
     const bb = BUCKET_ORDER[bucketOf(b.due, today)]
     if (ba !== bb) return ba - bb
@@ -276,6 +286,7 @@ export function lostReasonItems(opps: readonly SynthLost[]): TaskItem[] {
     refType: 'forecast' as TaskRefType,
     refId: o.opportunity_id,
     real: false,
+    pin: true,
   }))
 }
 
@@ -300,6 +311,7 @@ export function reasonPendingItems(quotes: readonly SynthReasonPending[]): TaskI
     refType: 'quote' as TaskRefType,
     refId: q.quote_id,
     real: false,
+    pin: true,
   }))
 }
 
@@ -333,43 +345,28 @@ export function buildTaskList(rows: readonly TaskRow[], synth: SynthInput): Task
   return sortItems([...mine, ...synthItems(synth)], synth.today)
 }
 
-// ── 타일 ────────────────────────────────────────────────────────────────────
+// ── 제목 옆의 두 수 ─────────────────────────────────────────────────────────
+//
+// 타일 다섯(지난 할 일·오늘 할 일·멈춘 딜·미배정 리드·결재 대기)은 2026-11-26(묶음2 A1)에
+// **걷었다.** 아래 목록이 이미 같은 줄을 세고 있어, 타일은 같은 말을 두 번 하는 자리였다.
+// 남긴 둘(지남·오늘)은 할 일 카드의 **제목 옆 한 줄**로 간다.
+//
+// 함께 지운 것 — staleDeals·STALE_DAYS·StaleDeal(멈춘 딜 판정), tileCounts·TileCounts.
+//   멈춘 딜은 판에서 **카드 흐림**과 정렬이 대신한다(묶음2 C3 — 14일 이상 활동 없음은
+//   카드를 opacity .55 로 둔다). 교정 예정(calibrationSoon)은 그 전 회차에 걷었다.
 
-/** 멈춘 딜로 보는 무활동 일수. */
-export const STALE_DAYS = 14
-
-export type StaleDeal = {
-  opportunity_id: number
-  title: string | null
-  company?: string | null
-  expected_amount?: number | null
-  /** 마지막 활동일('YYYY-MM-DD'). 없으면 만든 날을 쓴다 — 부르는 쪽이 정해 넘긴다. */
-  last_at: string | null
-}
-
-/** 14일 넘게 아무 활동이 없는 건 — 오래 멈춘 것부터. */
-export function staleDeals(deals: readonly StaleDeal[], today: string, days = STALE_DAYS): (StaleDeal & { idleDays: number })[] {
-  return deals
-    .map(d => ({ ...d, idleDays: d.last_at ? daysBetween(d.last_at, today) : Number.MAX_SAFE_INTEGER }))
-    .filter(d => d.idleDays >= days)
-    .sort((a, b) => b.idleDays - a.idleDays)
-}
-
-// 「교정 예정 30일」 타일·카드는 2026-11-26 지시로 **뺐다**(calibrationSoon·CalibrationDevice).
-// devices.next_calibration_date 칸도 함께 지웠다 — db/devices_delivery_20261126.sql 참고.
-
-export type TileCounts = {
+export type DueCounts = {
+  /** 기한이 지난 줄 수. */
   late: number
+  /** 기한이 오늘인 줄 수. */
   today: number
-  stale: number
-  lead: number
-  approval: number
 }
 
-/** 타일 다섯 개의 수. 목록과 **같은 줄**을 세므로 카드와 타일이 어긋나지 않는다. */
-export function tileCounts(items: readonly TaskItem[], today: string, extra: {
-  stale: number; lead: number; approval: number
-}): TileCounts {
+/**
+ * 목록과 **같은 줄**을 센다 — 한 곳에서 만들기 때문에 제목의 수와 목록이 어긋나지 않는다.
+ * 못 박은 줄(실주 사유 미입력)은 기한이 없어 어느 쪽에도 들어가지 않는다.
+ */
+export function dueCounts(items: readonly TaskItem[], today: string): DueCounts {
   let late = 0
   let now = 0
   for (const it of items) {
@@ -377,5 +374,5 @@ export function tileCounts(items: readonly TaskItem[], today: string, extra: {
     if (b === 'late') late++
     else if (b === 'today') now++
   }
-  return { late, today: now, stale: extra.stale, lead: extra.lead, approval: extra.approval }
+  return { late, today: now }
 }

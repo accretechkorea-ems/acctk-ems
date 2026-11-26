@@ -84,9 +84,9 @@ export function quarterSlices(deals: readonly BoardDeal[]): QuarterSlice[] {
 /** 마감 임박으로 보는 기준 — 이번 달에 닫히기로 한 건. */
 export const soonMonthOf = (today: string): string => today.slice(0, 7)
 
-// 「14일 넘게 활동 없음」은 **띠에 두지 않는다** — 그 수를 세려면 활동 이력을 한 번 더
-// 읽어야 하고(판은 지금 영업기회만 읽는다), 같은 수를 홈의 「멈춘 딜」 타일이 이미 보여
-// 준다(lib/tasks.ts 의 staleDeals). 판에서는 카드 정렬이 그 일을 한다(마감 임박 순).
+// 「14일 넘게 활동 없음」은 **띠에 두지 않는다** — 세어 봐야 어느 건인지는 알 수 없고,
+// 판에서는 **그 카드를 흐리게**(opacity .55) 두는 편이 바로 눈에 든다(2026-11-26 묶음2 C3).
+// 홈의 「멈춘 딜」 타일·카드도 같은 날 걷었다 — 이제 이 판이 그 일을 혼자 한다.
 
 export type BoardSummary = {
   count: number

@@ -1,6 +1,6 @@
 'use client'
 
-// 홈 「내 오늘」의 조회 — 타일 다섯 · 할 일 목록 · 작은 카드 둘 (2026-11-26).
+// 홈 「내 오늘」의 조회 — **할 일 목록 한 벌** (2026-11-26, 묶음2 A1 에서 줄였다).
 //
 // useDashboardCards 와 **같은 방식**이다: 조회를 조각마다 나누되 동시에 시작하고, 상태도
 // 조각마다 따로 둔다. 하나가 실패해도 그 줄만 빠지고 나머지는 뜬다 — 홈이 통째로 비는 것이
@@ -18,7 +18,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { todayKST } from '@/lib/date'
 import { isClosedStage } from '@/components/customer/opportunity'
-import { EXPIRY_TASK_STATUSES, type StaleDeal, type SynthDevice, type SynthLead, type SynthLost, type SynthQuote, type SynthReasonPending, type TaskRow } from '@/lib/tasks'
+import { EXPIRY_TASK_STATUSES, type SynthDevice, type SynthLead, type SynthLost, type SynthQuote, type SynthReasonPending, type TaskRow } from '@/lib/tasks'
 import { DEVICE_PENDING } from '@/lib/deviceStatus'
 import { isReasonPending } from '@/lib/lostReason'
 
@@ -53,7 +53,6 @@ export type TodayData = {
   lost: Piece<SynthLost[]>
   /** 실패인데 사유가 빈 내 견적(지시 L3) — 안내만 한다. */
   reasonPending: Piece<SynthReasonPending[]>
-  stale: Piece<StaleDeal[]>
   today: string
   /** 할 일을 담거나 완료한 뒤 — 표의 줄만 다시 읽는다. */
   reloadTasks: () => Promise<void>
@@ -82,7 +81,6 @@ export function useToday(engineerId: number | null, opts: { seeUnassignedLeads: 
   const [pendingDevices, setPendingDevices] = useState<Piece<SynthDevice[]>>(() => idle<SynthDevice[]>([]))
   const [lost, setLost] = useState<Piece<SynthLost[]>>(() => idle<SynthLost[]>([]))
   const [reasonPending, setReasonPending] = useState<Piece<SynthReasonPending[]>>(() => idle<SynthReasonPending[]>([]))
-  const [stale, setStale] = useState<Piece<StaleDeal[]>>(() => idle<StaleDeal[]>([]))
 
   // ── 할 일(표) — 라우트가 읽는다(RLS 밖에서도 같은 판정을 쓰려고) ────────────
   const reloadTasks = useCallback(async () => {
@@ -182,41 +180,22 @@ export function useToday(engineerId: number | null, opts: { seeUnassignedLeads: 
       }))
     })
 
-    // 멈춘 딜 + 실주 사유 미입력 — 내 포캐스트를 한 번 읽어 둘을 함께 만든다.
-    void run<StaleDeal[]>('stale', setStale, [], async () => {
-      const opps = unwrap<Array<{ opportunity_id: number; title: string | null; stage: string; expected_amount: number | null; closed_at: string | null; created_at: string | null; lost_reason: string | null; customer_id: number | null }>>(
+    // 실주 사유 미입력 — 내 포캐스트를 읽어 **사유가 빈 종료 건**만 만든다.
+    //
+    // ⚠ 전에는 이 조회가 「멈춘 딜」도 함께 만들었다(14일 무활동). 그 카드를 2026-11-26
+    //   (묶음2 A1)에 걷으면서 **sales_activities 조회 한 벌이 사라졌다** — 종료되지 않은
+    //   건의 마지막 활동일을 알아야 했던 유일한 자리였다. 지금은 포캐스트 한 번만 읽는다.
+    void run<SynthLost[]>('lost', setLost, [], async () => {
+      const opps = unwrap<Array<{ opportunity_id: number; title: string | null; stage: string; closed_at: string | null; lost_reason: string | null; customer_id: number | null }>>(
         await supabase.from('sales_opportunities')
-          .select('opportunity_id, title, stage, expected_amount, closed_at, created_at, lost_reason, customer_id')
+          .select('opportunity_id, title, stage, closed_at, lost_reason, customer_id')
           .eq('engineer_id', engineerId))
-      const names = await siteNames(opps.map(o => Number(o.customer_id)))
-
-      // 사유가 비어 있는 종료 건 — 목록에 한 줄로 안내만 한다(막지 않는다).
-      if (!cancelled) {
-        setLost(done(opps
-          .filter(o => (isClosedStage(o.stage) || !!o.closed_at) && !(o.lost_reason ?? '').trim())
-          .map(o => ({ opportunity_id: o.opportunity_id, title: o.title, company: o.customer_id ? names.get(Number(o.customer_id)) ?? null : null }))))
-      }
-
-      const open = opps.filter(o => !o.closed_at && !isClosedStage(o.stage))
-      if (open.length === 0) return []
-      // 마지막 활동일 — 활동이 없으면 만든 날을 쓴다(그만큼 오래 멈춰 있는 것이다).
-      const acts = unwrap<Array<{ opportunity_id: number | null; activity_date: string | null }>>(
-        await supabase.from('sales_activities')
-          .select('opportunity_id, activity_date')
-          .in('opportunity_id', open.map(o => o.opportunity_id)))
-      const last = new Map<number, string>()
-      for (const a of acts) {
-        const id = Number(a.opportunity_id)
-        if (!a.activity_date || !Number.isInteger(id)) continue
-        const was = last.get(id)
-        if (!was || was < a.activity_date) last.set(id, a.activity_date)
-      }
-      return open.map(o => ({
+      const closed = opps.filter(o => (isClosedStage(o.stage) || !!o.closed_at) && !(o.lost_reason ?? '').trim())
+      const names = await siteNames(closed.map(o => Number(o.customer_id)))
+      return closed.map(o => ({
         opportunity_id: o.opportunity_id,
         title: o.title,
         company: o.customer_id ? names.get(Number(o.customer_id)) ?? null : null,
-        expected_amount: o.expected_amount,
-        last_at: last.get(o.opportunity_id) ?? (o.created_at ? o.created_at.slice(0, 10) : null),
       }))
     })
 
@@ -225,7 +204,7 @@ export function useToday(engineerId: number | null, opts: { seeUnassignedLeads: 
   }, [engineerId, seeLeads])
 
   return {
-    tasks, schemaNote, quotes, leads, pendingDevices, lost, reasonPending, stale,
+    tasks, schemaNote, quotes, leads, pendingDevices, lost, reasonPending,
     today, reloadTasks,
   }
 }
