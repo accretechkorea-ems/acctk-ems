@@ -593,3 +593,20 @@ tr.ems-pick[data-on='true'] > td:last-child {
     padding-right: 0 !important;
   }
 }
+
+/* ══ 명함의 전화·이메일 링크 (2026-11-27 야간3 5-2) ═════════════════════════
+   줄 전체가 눌리는 표라, 링크에 늘 밑줄이 있으면 **줄마다 파란 줄 두 개**가 깔려
+   표가 시끄러웠다. 평소에는 글자색만 두고 **올렸을 때만** 파랗게 한다 — 밑줄은 두지 않는다.
+   그 파랑은 링크용 파랑(#2563eb)이다. 액센트(#234ea2)와 **다른 자리**다 —
+   액센트는 「우리 것」이고 이 색은 「눌러서 나가는 곳」이다(mailto·tel).
+   ⚠ `.ems-row-hover a:hover` 는 밑줄을 긋는다(고객사 표의 규칙) — 이 클래스가 이기게
+     같은 자리에서 밑줄을 끈다. */
+.card-link {
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.card-link:hover,
+.ems-row-hover .card-link:hover {
+  color: #2563eb;
+  text-decoration: none;
+}

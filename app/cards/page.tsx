@@ -658,13 +658,13 @@ function CardsPageInner() {
                             <span style={{ fontSize: 11, color: SUB, marginRight: 4 }}>{COMPANY_PHONE_MARK}</span>
                           )}
                           <a href={`tel:${got.number}`} onClick={e => e.stopPropagation()}
-                            style={{ color: BLUE, textDecoration: 'none' }}>{got.number}</a>
+                            className="card-link" style={{ color: BLUE }}>{got.number}</a>
                         </>
                       )
                     })()}
                   </td>
                   <td style={td}>
-                    {c.email ? <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} style={{ color: TEXT, textDecoration: 'none' }}>{c.email}</a> : '—'}
+                    {c.email ? <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} className="card-link" style={{ color: TEXT }}>{c.email}</a> : '—'}
                   </td>
                   <td style={td}>{c.division}</td>
                   <td style={td}>{registrarLabel(c)}</td>
