@@ -21,7 +21,7 @@ import {
 } from '@/lib/salesStats'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { getViewScope, type TeamPerm } from '@/lib/permissions'
+import { getViewScope, isSuperAdmin, type TeamPerm } from '@/lib/permissions'
 import { inSalesStats } from '@/lib/salesScope'
 import {
   ChartLegend, ChartPanel, SummaryBoxes, axisMaxOf,
@@ -1535,8 +1535,14 @@ export default function SalesPage() {
     setLoading(true)
     // 자동 실주는 Vercel Cron(하루 한 번, KST 새벽 3시)이 돌린다. 이 호출은 그 보조다 —
     // Cron 이 실패했거나 아직 안 돈 날에도 실적 현황이 맞는 상태를 보여 주기 위해 남긴다.
-    // 같은 건을 두 번 처리해도 안전하다(조건부 UPDATE). superadmin 이 아니면 403 이고 그냥 넘어간다.
-    await fetch('/api/auto-fail', { method: 'POST' }).catch(() => {})
+    // 같은 건을 두 번 처리해도 안전하다(조건부 UPDATE).
+    //
+    // ⚠ **슈퍼관리자일 때만 부른다**(2026-11-27 야간3 8-1). 라우트는 그 밖의 사람에게
+    //   403 을 주고 화면은 그것을 삼키는데, 브라우저는 그 403 을 **콘솔 오류로 찍는다** —
+    //   실적 현황을 열 때마다 모든 사람의 콘솔에 빨간 줄이 하나씩 남았다. 부르지 않으면
+    //   그 줄이 없고, 보조 호출은 어차피 슈퍼관리자만 통과하던 길이다.
+    const { me: pre } = await loadMe()
+    if (isSuperAdmin(pre)) await fetch('/api/auto-fail', { method: 'POST' }).catch(() => {})
     // 본인·직원 목록은 공통 층에서(조회 0회) — 예전에는 engineers 를 두 번 읽었다.
     const [{ me: meData }, eData, { data: qData, error: qErr }, { data: tData }, { data: custData }] = await Promise.all([
       loadMe(),

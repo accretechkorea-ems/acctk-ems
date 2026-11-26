@@ -503,12 +503,14 @@ export default function SuggestionsPage() {
 
         {/* 목록 */}
         <div style={{ background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control, overflow: 'hidden' }}>
+          {/* 폰에서 여섯 칸이 390 보다 넓다. 숨기면 제목이 잘려 읽을 수 없으니 **옆으로 구르게** 둔다(2026-11-27 야간3 8-2). */}
           {loading ? (
             <div style={{ textAlign: 'center', padding: 40, color: MUTED, fontSize: 13 }}>불러오는 중...</div>
           ) : paged.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 40, color: MUTED, fontSize: 13 }}>건의사항이 없습니다</div>
           ) : (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 620 }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
                   {['제목', '분류', '작성자', '상태', '답변', '작성일'].map(h => (
@@ -548,6 +550,7 @@ export default function SuggestionsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
 

@@ -1,0 +1,476 @@
+[
+ {
+  "w": 390,
+  "page": "/",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/account",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/activity",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/admin",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/approval",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 32,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/cards",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/cards/import",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/contact/semi",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 180,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/dashboard",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/dashboard/80",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/holdings",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/inquiries",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 16,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/inventory",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 5007,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/leads",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/notifications",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/pipeline",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 240,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/purchase",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/quote",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/repair",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 2871,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/repair/dashboard",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 70,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/sales",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/showroom",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 390,
+  "page": "/suggestions",
+  "W": 390,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 160,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/account",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/activity",
+  "W": 350,
+  "over": [
+   {
+    "tag": "div.ems-pick",
+    "right": 353,
+    "over": 3,
+    "rolled": false
+   }
+  ],
+  "overCount": 1,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/admin",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/approval",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 35,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/cards",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/cards/import",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/contact/semi",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 180,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/dashboard",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/dashboard/80",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/holdings",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/inquiries",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 18,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/inventory",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 5008,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/leads",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/notifications",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/pipeline",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 269,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/purchase",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/quote",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 18,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/repair",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 2871,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/repair/dashboard",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 70,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/sales",
+  "W": 350,
+  "over": [
+   {
+    "tag": "div.ems-pick",
+    "right": 351,
+    "over": 1,
+    "rolled": false
+   }
+  ],
+  "overCount": 1,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/showroom",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 0,
+  "small": 0,
+  "barOk": true
+ },
+ {
+  "w": 350,
+  "page": "/suggestions",
+  "W": 350,
+  "over": [],
+  "overCount": 0,
+  "rolledCount": 160,
+  "small": 0,
+  "barOk": true
+ }
+]

@@ -1,0 +1,201 @@
+[
+ {
+  "page": "/dashboard",
+  "total": 13,
+  "tables": [
+   {
+    "table": "quotes",
+    "calls": 4,
+    "repeated": []
+   },
+   {
+    "table": "sales_opportunities",
+    "calls": 2,
+    "repeated": []
+   },
+   {
+    "table": "teams",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "engineers",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "notifications",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "sales_targets",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "service_engineers",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "sales_activities",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "activity_types",
+    "calls": 1,
+    "repeated": []
+   }
+  ]
+ },
+ {
+  "page": "/",
+  "total": 14,
+  "tables": [
+   {
+    "table": "customers",
+    "calls": 2,
+    "repeated": []
+   },
+   {
+    "table": "sales_activities",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "service_history",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "quotes",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "repairs",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "service_engineers",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "inquiries",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "sales_opportunities",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "holdings",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "devices",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "teams",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "engineers",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "notifications",
+    "calls": 1,
+    "repeated": []
+   }
+  ]
+ },
+ {
+  "page": "/pipeline",
+  "total": 8,
+  "tables": [
+   {
+    "table": "engineers",
+    "calls": 2,
+    "repeated": []
+   },
+   {
+    "table": "sales_opportunities",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "sales_activities",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "customers",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "quote_categories",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "teams",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "notifications",
+    "calls": 1,
+    "repeated": []
+   }
+  ]
+ },
+ {
+  "page": "/sales",
+  "total": 7,
+  "tables": [
+   {
+    "table": "engineers",
+    "calls": 2,
+    "repeated": []
+   },
+   {
+    "table": "teams",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "quotes",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "sales_targets",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "customers",
+    "calls": 1,
+    "repeated": []
+   },
+   {
+    "table": "notifications",
+    "calls": 1,
+    "repeated": []
+   }
+  ]
+ }
+]

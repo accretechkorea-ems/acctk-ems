@@ -162,6 +162,13 @@ const SHELL_CSS = `
     .ap-railtitle { padding: 0 2px 0 8px !important; }
     .ap-boxbtn { width: auto !important; flex: 0 0 auto; }
     .ap-railfoot { margin: 0 0 0 auto; padding: 0 0 0 8px; border-top: none; flex: 0 0 auto; }
+    /* 문서 줄은 날짜 88 + 상신자 116 + 상태 150 + 제목이라 390 에 못 들어간다(2026-11-27 야간3 8-2).
+       칸을 숨기면 어느 문서인지 모르게 되므로 카드를 **한 몸으로 옆으로 구르게** 둔다 —
+       머리 줄과 문서 줄이 같은 카드 안이라 줄이 어긋나지 않는다.
+       세로로 떨어진 줄은 .ap-body 의 align-items: flex-start 때문에 늘어나지 않는다 —
+       width: 100% 를 주어야 화면 폭을 넘겨받는다(옆의 .ap-rail 도 같은 까닭으로 100% 다). */
+    .ap-main { width: 100%; overflow-x: auto; }
+    .ap-card { min-width: 480px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .ap-shell, .ap-shell * {
@@ -566,7 +573,7 @@ function ApprovalPageInner() {
           </nav>
 
           <div className="ap-main">
-            <div style={cardStyle}>
+            <div className="ap-card" style={cardStyle}>
               {/* 기간 · 검색 — 카드 안 첫 줄. 예전에는 카드 밖에 띠로 떠 있어 자리를 버렸다.
                   왼쪽이 기간, 오른쪽이 검색이다(아래 라디오 줄과 같은 좌우 배치). */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>

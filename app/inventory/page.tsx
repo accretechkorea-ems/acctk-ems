@@ -642,7 +642,7 @@ function InventoryPage() {
         </div>
 
         {/* ── 탭 바 ── */}
-        <div style={{ background: CARD_BG, borderRadius: '14px 14px 0 0', border: `1px solid ${BORDER}`, borderBottom: 'none', display: 'flex', alignItems: 'flex-end', padding: '0 8px', gap: 2 }}>
+        <div style={{ background: CARD_BG, borderRadius: '14px 14px 0 0', border: `1px solid ${BORDER}`, borderBottom: 'none', display: 'flex', alignItems: 'flex-end', padding: '0 8px', gap: 2, overflowX: 'auto', scrollbarWidth: 'none' }}>
           {tabs.map(({ key, label, count, urgent }) => {
             const isActive = activeTab === key
             return (

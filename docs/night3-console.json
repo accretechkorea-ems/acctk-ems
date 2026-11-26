@@ -1,0 +1,165 @@
+[
+ {
+  "page": "/",
+  "err": 1,
+  "warn": 0,
+  "ext": 0,
+  "sample": [
+   "카카오 지도 SDK 로드 실패"
+  ]
+ },
+ {
+  "page": "/account",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/activity",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/admin",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/approval",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/cards",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/cards/import",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/contact/semi",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/dashboard",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/dashboard/80",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/holdings",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/inquiries",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/inventory",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/leads",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/notifications",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/pipeline",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/purchase",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/quote",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/repair",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/repair/dashboard",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/sales",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/showroom",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ },
+ {
+  "page": "/suggestions",
+  "err": 0,
+  "warn": 0,
+  "ext": 0,
+  "sample": []
+ }
+]

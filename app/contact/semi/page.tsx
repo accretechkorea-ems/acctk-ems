@@ -63,7 +63,12 @@ const gridCols = (site: boolean) => [
 
 /** 머리·행 공용 grid. 좁은 화면에서는 사업장 칸을 숨기고 그 칸을 뺀 열 정의로 바꾼다. container-type 이 있어야 @container 가 동작한다. */
 const SHELL_CSS = `
-  .cs-shell { container-type: inline-size; }
+  /* 폰(390·350)에서는 고정 칸 넷(번호·최근 접촉·횟수·작성)만 520px 이라 어떤 글자 크기로도 못
+     들어간다. 숨기거나 줄이면 Project 번호와 날짜가 잘려 쓸 수 없는 표가 되므로, 머리와 행을
+     **한 몸으로 옆으로 구르게** 둔다 — 머리가 행과 같은 min-width 를 가져 어긋나지 않는다
+     (2026-11-27 야간3 8-2). */
+  .cs-shell { container-type: inline-size; overflow-x: auto; }
+  .cs-grid { min-width: 540px; }
   .cs-grid { display: grid; grid-template-columns: ${gridCols(true)}; column-gap: ${COL.gap}px; align-items: center; }
   @container (max-width: 820px) {
     .cs-grid { grid-template-columns: ${gridCols(false)}; }

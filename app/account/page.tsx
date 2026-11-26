@@ -408,7 +408,10 @@ export default function AccountPage() {
                 </span>
               )}
             </div>
-            <div>
+            {/* 폰에서 **이 칸이 줄어들어야 한다**(2026-11-27 야간3 8-2 실측: 390 에서 50px 넘침).
+                <input type="file"> 은 「파일 선택 + 파일 이름」만큼의 **제 너비**를 갖는데(303px),
+                flex 자식은 기본이 「안 줄어듦」이라 그 너비가 그대로 밀고 나갔다. */}
+            <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontSize: 13, color: TEXT_SECONDARY, marginBottom: 6 }}>프로필 사진</div>
               <input
                 type="file"
@@ -422,7 +425,7 @@ export default function AccountPage() {
                     return file ? URL.createObjectURL(file) : null
                   })
                 }}
-                style={{ fontSize: 13, color: TEXT_PRIMARY }}
+                style={{ fontSize: 13, color: TEXT_PRIMARY, maxWidth: '100%' }}
               />
             </div>
           </div>
