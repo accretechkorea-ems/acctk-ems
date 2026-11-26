@@ -16,7 +16,16 @@ const securityHeaders = [
       "default-src 'self'",
       // Supabase API + Storage + Realtime + 한국수출입은행 환율 API + 폰트 다운로드
       // + Kakao Maps 좌표변환(Geocoder/Places)·지도 타일 요청
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://oapi.koreaexim.go.kr https://fonts.gstatic.com https://dapi.kakao.com https://*.daumcdn.net https://*.kakaocdn.net https://*.kakao.com http://dapi.kakao.com http://*.daumcdn.net",
+      //
+      // data: — **react-pdf 가 쓰는 yoga-layout 의 wasm**(2026-11-26). 그 모듈은 wasm 을
+      //   base64 data URL 로 품고 있고 `fetch(dataUrl)` 로 먼저 집는다. 막으면 동기 디코딩으로
+      //   되돌아가 PDF 는 그대로 돌지만, 브라우저가 위반 보고를 콘솔에 두 줄 남긴다
+      //   (견적 화면. 자바스크립트로 잡을 수 있는 오류가 아니다).
+      //   data: 를 받는 것은 **같은 머리글의 font-src·img-src 가 이미 하는 것**과 같은
+      //   성격이다 — data URL 은 내용을 스스로 들고 있어 밖으로 빼낼 길이 되지 않는다
+      //   (connect-src 가 막는 것은 **어디로 보내는가**인데, data: 에는 보낼 곳이 없다).
+      //   되돌리려면 아래 목록에서 `data:` 한 낱말만 지운다(콘솔 두 줄이 돌아온다).
+      "connect-src 'self' data: https://*.supabase.co wss://*.supabase.co https://oapi.koreaexim.go.kr https://fonts.gstatic.com https://dapi.kakao.com https://*.daumcdn.net https://*.kakaocdn.net https://*.kakao.com http://dapi.kakao.com http://*.daumcdn.net",
       // Kakao Maps SDK
       // (카카오 SDK는 내부적으로 t1.daumcdn.net의 kakao.js를 로드하는데,
       //  로컬(http) 환경에서는 http로 불러오므로 http 스킴도 허용한다.)
