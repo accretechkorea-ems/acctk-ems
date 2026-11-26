@@ -31,6 +31,7 @@ import ModalOverlay from './ModalOverlay'
 import ModalCard, { keepPads } from './ModalCard'
 import { Z } from '@/lib/zIndex'
 import { R } from '@/lib/radius'
+import { guardRestoredPage, signOutAndLeave } from '@/lib/auth/logout'
 
 /** 로그아웃까지의 무활동 시간. */
 const IDLE_MS = 30 * 60 * 1000
@@ -80,19 +81,20 @@ export default function SessionManager() {
     setWarnOpen(false)
   }, [])
 
-  /** 무활동으로 끊는다. 다른 탭이 사유를 알 수 있게 표식을 먼저 남긴다. */
+  /**
+   * 무활동으로 끊는다. 다른 탭이 사유를 알 수 있게 표식을 먼저 남긴다.
+   *
+   * 끊는 일 자체는 **공용 한 길**이 한다(lib/auth/logout.ts) — 사이드바의 로그아웃과 같은
+   * 함수다. 2026-11-26 전에는 두 자리가 달라, 사이드바 쪽만 망이 끊기면 아무 일도 하지
+   * 않았다(이쪽은 try/catch 뒤에 반드시 화면을 옮겼다).
+   */
   const logoutIdle = useCallback(async () => {
     if (leavingRef.current) return
     leavingRef.current = true
     setWarnOpen(false)
-    try {
-      localStorage.setItem(IDLE_FLAG, String(Date.now()))
-      await supabase.auth.signOut()
-    } catch (e) {
-      console.error('[session] 자동 로그아웃 실패', e)
-    }
-    router.replace(IDLE_LOGIN_PATH)
-  }, [router, supabase])
+    try { localStorage.setItem(IDLE_FLAG, String(Date.now())) } catch { /* 표식을 못 남겨도 끊는다 */ }
+    await signOutAndLeave(supabase, IDLE_LOGIN_PATH)
+  }, [supabase])
 
   /**
    * 지금 상태를 판정한다 — 10초마다, 그리고 탭으로 **돌아온 순간**.
@@ -146,6 +148,12 @@ export default function SessionManager() {
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [isPublic, check])
+
+  // ── 뒤로 가기로 **되살아난** 화면 ────────────────────────────────────
+  // 로그아웃한 뒤 뒤로 가기를 누르면 브라우저가 보호 화면을 그림째 되살릴 수 있다
+  // (bfcache — 자바스크립트도 미들웨어도 다시 돌지 않아 옛 화면이 그대로 보인다.
+  //  iOS Safari 가 특히 적극적이다). 되살아난 순간에만 세션을 다시 본다.
+  useEffect(() => guardRestoredPage(supabase, () => isPublic), [isPublic, supabase])
 
   // ── 다른 탭에서 끊긴 경우 ─────────────────────────────────────────────
   // 무활동 표식이 방금 찍힌 것이면 같은 곳으로 간다. 표식이 없으면(= 손으로 한 로그아웃)

@@ -11,7 +11,6 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { HOME_STATE_KEY } from '@/lib/home'
-import { useOutsideClick } from '@/hooks/useOutsideClick'
 import { type EngineerLike, type TeamPerm } from '@/lib/permissions'
 // 메뉴 목록·권한 판정은 이 파일 한곳에서만 정한다(1단계).
 import {
@@ -29,6 +28,7 @@ import { useApprovalInbox } from '@/lib/appData/approvalInbox'
 import { Z } from '@/lib/zIndex'
 import { useOverlayEsc } from '@/components/common/overlayStack'
 import { R } from '@/lib/radius'
+import { signOutAndLeave } from '@/lib/auth/logout'
 
 /** 사이드바 폭. 본문 margin-left 와 같아야 한다(HeaderWrapper 가 같은 값을 쓴다). */
 export const SIDEBAR_WIDTH = 232
@@ -237,7 +237,21 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
   const [tip, setTip] = useState<{ label: string; top: number } | null>(null)
   const meRef = useRef<HTMLDivElement>(null)
 
-  useOutsideClick(meRef, () => setMeOpen(false), meOpen)
+  /*
+   * ⚠ 여기 있던 `useOutsideClick(meRef, () => setMeOpen(false), meOpen)` 을 **걷었다**
+   *   (2026-11-26). 이것이 「로그아웃이 안 된다」의 원인이었다.
+   *
+   *   2026-11-25(772c96e)에 아바타 메뉴를 Popover 로 바꾸면서 패널이 **document.body 로
+   *   포털**됐다. meRef 는 아바타를 감싼 div 다 — 패널은 더 이상 그 안에 없다. 그래서
+   *   패널 안을 누르면 이 훅이 「바깥을 눌렀다」로 보고 **mousedown 에서 메뉴를 닫았다**.
+   *   click 은 mousedown 과 mouseup 이 **같은 요소**에서 나야 생기는데, 그 사이에 단추가
+   *   사라지니 **click 이 아예 나지 않는다** — 눌러도 아무 일이 없었다.
+   *   측정으로 확인했다: pointerdown·mousedown 은 「로그아웃」에서 나고 click 은 0건.
+   *   같은 이유로 **「정보 수정」도 눌리지 않았다**.
+   *
+   *   바깥 클릭과 Esc 는 이제 Popover 가 맡는다 — 그쪽은 **패널 자신**을 보므로 맞게 센다
+   *   (components/common/Popover.tsx 의 onDown). 두 벌을 두면 다시 같은 일이 난다.
+   */
 
   // 알림·결재 배지는 **앱 당 한 벌인 스토어**에서 받는다(lib/appData/) — 홈 카드와 같은
   // 자료를 보고, 조회는 60초에 한 번이며 탭이 숨으면 멈춘다. 예전에는 배지가 알림을 10초마다
@@ -428,10 +442,15 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
     router.push(path)
   }
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    window.location.href = '/login'
-  }
+  /**
+   * 로그아웃 — 공용 한 길이다(lib/auth/logout.ts).
+   *
+   * 전에는 여기서 `await supabase.auth.signOut()` 뒤에 주소를 바꿨는데, 그 호출이 망을 타는
+   * 것이라 거절·지연되면 **다음 줄이 아예 실행되지 않았다** — 눌러도 아무 일이 없었다
+   * (2026-11-26 재현). 지금은 못 거둬도 반드시 로그인 화면으로 간다.
+   * 두 자리(PC 팝오버·폰 드로어)가 같은 함수를 쓴다.
+   */
+  const handleLogout = () => { void signOutAndLeave(supabase) }
 
   const itemStyle = (active: boolean, big: boolean): CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: big ? 12 : 10,
