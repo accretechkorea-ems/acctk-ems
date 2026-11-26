@@ -19,6 +19,7 @@
 
 import { NextResponse } from 'next/server'
 import { adminClient, loadCaller } from '@/lib/apiCaller'
+import { writeAdminEvent } from '@/lib/adminEvents'
 import { FAIL_STATUS } from '@/lib/quoteStatus'
 import {
   REVIVED_STATUS, REASON_MAX, SCHEMA_MESSAGE, appendNote, canReviveQuote,
@@ -96,6 +97,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '되돌리지 못했습니다' }, { status: 500 })
   }
 
+  // 관리자 기록표에 한 줄 (2026-11-27 야간3 4).
+  await writeAdminEvent(supabaseAdmin, {
+    actorId: caller.engineer_id, action: 'quote_revived',
+    targetType: 'quote', targetId: quoteId,
+    detail: { number: quote.quote_number, revived_at: now },
+  })
   console.log(`[${TAG}] revived`, { quoteId, number: quote.quote_number, by: caller.email })
   return NextResponse.json({ ok: true, quote_id: quoteId, revived_at: now })
 }

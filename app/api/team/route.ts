@@ -20,6 +20,7 @@
 
 import { NextResponse } from 'next/server'
 import { adminClient, loadCaller } from '@/lib/apiCaller'
+import { writeAdminEvent } from '@/lib/adminEvents'
 import { invalidateTeamPerms } from '@/lib/teamPermsServer'
 import { isDivision, isMissingSwitchColumn } from '@/lib/division'
 
@@ -59,7 +60,7 @@ const MISSING_COLUMN_MESSAGE =
 
 /** 팀 추가. 순서(display_order)는 서버가 정한다 — 화면이 센 값은 다른 사람이 만든 팀을 모른다. */
 export async function POST(req: Request) {
-  const { error: authErr } = await loadCaller({ kind: 'superadmin' }, { tag: 'team', method: 'POST' })
+  const { error: authErr, caller } = await loadCaller({ kind: 'superadmin' }, { tag: 'team', method: 'POST' })
   if (authErr) return authErr
 
   const body = await readBody(req)
@@ -89,6 +90,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '팀을 만들지 못했습니다.' }, { status: 500 })
   }
 
+  // 관리자 기록표에 한 줄 (2026-11-27 야간3 4). 사업부 전환 플래그도 여기 담긴다.
+  await writeAdminEvent(supabaseAdmin, {
+    actorId: caller.engineer_id, action: 'team_created',
+    targetType: 'team', targetId: created.name,
+    detail: { division: created.division, in_sales_stats: created.in_sales_stats, can_switch_division: created.can_switch_division },
+  })
   invalidateTeamPerms()
   return NextResponse.json({ ok: true, team: created })
 }
@@ -133,7 +140,7 @@ export async function PATCH(req: Request) {
 
 /** 팀 삭제. 재직 중인 소속 직원이 있으면 막는다. */
 export async function DELETE(req: Request) {
-  const { error: authErr } = await loadCaller({ kind: 'superadmin' }, { tag: 'team', method: 'DELETE' })
+  const { error: authErr, caller } = await loadCaller({ kind: 'superadmin' }, { tag: 'team', method: 'DELETE' })
   if (authErr) return authErr
 
   const body = await readBody(req)
@@ -170,6 +177,10 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: '팀을 지우지 못했습니다.' }, { status: 500 })
   }
 
+  await writeAdminEvent(supabaseAdmin, {
+    actorId: caller.engineer_id, action: 'team_deleted',
+    targetType: 'team', targetId: team.name, detail: { teamId },
+  })
   invalidateTeamPerms()
   return NextResponse.json({ ok: true, teamId, name: team.name })
 }

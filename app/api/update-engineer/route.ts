@@ -1,4 +1,5 @@
 import { loadCaller } from '@/lib/apiCaller'
+import { writeAdminEvent } from '@/lib/adminEvents'
 import { NextResponse } from 'next/server'
 import { INITIALS_TAKEN_MESSAGE, isInitialsTaken, isInitialsUniqueViolation, normalizeInitials } from '@/lib/initials'
 
@@ -104,5 +105,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: '직원 정보 수정에 실패했습니다.' }, { status: 400 })
   }
 
+  // 관리자 기록표에 한 줄 (2026-11-27 야간3 4) — 역할·팀·직책·집계 대상 변경.
+  //   사업부 전환 플래그는 **팀** 설정이라 /api/team 쪽에 담긴다(teams.can_switch_division).
+  await writeAdminEvent(sb, {
+    actorId: caller.engineer_id, action: 'engineer_updated',
+    targetType: 'engineer', targetId: engineer_id,
+    detail: {
+      name: updateData.name, position: updateData.position, teams: updateData.teams,
+      permission_level: updateData.permission_level ?? null,
+      in_sales_stats: updateData.in_sales_stats ?? null,
+      resigned_date: updateData.resigned_date ?? null, office: updateData.office ?? null,
+    },
+  })
   return NextResponse.json({ success: true })
 }

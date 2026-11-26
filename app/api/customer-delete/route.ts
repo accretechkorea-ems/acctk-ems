@@ -27,6 +27,7 @@
 import { NextResponse } from 'next/server'
 import { loadCaller } from '@/lib/apiCaller'
 import { writeCustomerEvents } from '@/lib/customerEvents'
+import { writeAdminEvent } from '@/lib/adminEvents'
 import { DELETE_REASON_MAX, DELETE_TARGETS, type DeleteTarget } from '@/lib/customerDelete'
 
 const TAG = 'customer-delete'
@@ -213,6 +214,11 @@ export async function POST(req: Request) {
       actor_engineer_id: caller.engineer_id,
       payload: { kind: target, name: nameOf(target, row) },
     }])
+    // 관리자 기록표에 한 줄 (2026-11-27 야간3 4).
+    await writeAdminEvent(sb, {
+      actorId: caller.engineer_id, action: 'customer_restored',
+      targetType: target, targetId: id, detail: {},
+    })
     console.log(`[${TAG}] restore`, { target, id, by: caller.email })
     return NextResponse.json({ ok: true, events: written })
   }

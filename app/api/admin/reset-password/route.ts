@@ -18,6 +18,7 @@
 //   응답의 `forced` 가 그 사실을 알려 주고, 화면이 한 줄로 덧붙인다.
 
 import { loadCaller } from '@/lib/apiCaller'
+import { writeAdminEvent } from '@/lib/adminEvents'
 import { NextResponse } from 'next/server'
 import { makeTempPassword } from '@/lib/tempPassword'
 
@@ -80,6 +81,22 @@ export async function POST(req: Request) {
     target: engineerId, targetName: target.name,
     at: new Date().toISOString(),
     forced,
+  })
+
+  // 관리자 기록표에도 한 줄 (2026-11-27 야간3 4). ⚠ **값은 넣지 않는다** —
+  // writeAdminEvent 가 비밀 열쇠를 한 번 더 턴다(lib/adminEvents.ts 의 scrubDetail).
+  await writeAdminEvent(sb, {
+    actorId: caller.engineer_id, action: 'password_reset',
+    targetType: 'engineer', targetId: engineerId,
+    detail: { targetName: target.name, forced },
+  })
+
+  // 관리자 기록표에도 한 줄 (2026-11-27 야간3 4). ⚠ **값은 넣지 않는다** —
+  // writeAdminEvent 가 비밀 열쇠를 한 번 더 턴다(lib/adminEvents.ts 의 scrubDetail).
+  await writeAdminEvent(sb, {
+    actorId: caller.engineer_id, action: 'password_reset',
+    targetType: 'engineer', targetId: engineerId,
+    detail: { targetName: target.name, forced },
   })
 
   // 임시 비밀번호는 **이 응답에만** 있다. 화면이 한 번 보여 주고 버린다.
