@@ -20,6 +20,13 @@ export const RESIGNED_MESSAGE = '퇴사 처리된 계정입니다'
 /** 퇴사로 끊긴 뒤 돌아가는 로그인 주소의 까닭 값(?reason=). */
 export const RESIGNED_REASON = 'resigned'
 
+/**
+ * 관리자가 비밀번호를 초기화해 준 사람이 **반드시 지나는** 화면 (2026-11-26).
+ * 미들웨어가 그 사람을 어느 화면에서든 이리로 보내고, 새 비밀번호를 저장하면 표식이 꺼진다.
+ * 한 글자를 두 곳에 적지 않도록 여기 둔다(middleware.ts · 그 화면 · 하네스가 함께 쓴다).
+ */
+export const CHANGE_PASSWORD_PATH = '/account/change-password'
+
 /** 비밀번호 최소 길이 — 만들 때도 바꿀 때도 같다. */
 export const PASSWORD_MIN = 8
 

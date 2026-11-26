@@ -35,6 +35,7 @@ import ModalOverlay from '@/components/common/ModalOverlay'
 import ModalCard from '@/components/common/ModalCard'
 import { todayKST, nowKSTParts } from '@/lib/date'
 import { R } from '@/lib/radius'
+import ResetPasswordButton from '@/components/admin/ResetPasswordButton'
 
 const BLUE = '#234ea2'
 const PAGE_BG = '#f4f5f7'
@@ -1621,7 +1622,7 @@ function AdminPageInner() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 800 }}>
                   <thead style={{ position: 'sticky', top: 0, background: CARD_BG }}>
                     <tr style={{ borderBottom: `2px solid ${BORDER}` }}>
-                      {['이름', '직책', '팀', '이메일', '이니셜', '권한', '수정', '관리'].map(h => (
+                      {['이름', '직책', '팀', '이메일', '이니셜', '권한', '수정', '비밀번호', '관리'].map(h => (
                         <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: GRAY, fontWeight: 700, whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -1657,6 +1658,15 @@ function AdminPageInner() {
                         <td style={{ padding: '10px 12px' }}>
                           <button onClick={() => { setEditEngineer(eng); setEditForm(editFormOf(eng)) }}
                             style={{ padding: '4px 12px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>수정</button>
+                        </td>
+                        {/* 비밀번호 초기화 — 임시값을 **한 번만** 보여 준다(2026-11-26, 지시 D).
+                            확인창·창·복사는 부품이 들고 있다(components/admin/ResetPasswordButton.tsx). */}
+                        <td style={{ padding: '10px 12px' }}>
+                          <ResetPasswordButton
+                            engineerId={eng.engineer_id}
+                            name={eng.name}
+                            style={{ padding: '4px 12px', background: '#f3f4f6', border: `1px solid ${BORDER}`, borderRadius: R.icon, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', fontFamily: 'inherit', color: TEXT }}
+                          />
                         </td>
                         <td style={{ padding: '10px 12px' }}>
                           <button onClick={() => { setResignDate(todayKST()); setDeleteEngineer(eng) }}

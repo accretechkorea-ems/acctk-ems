@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { isPublicPath, isPublicAsset } from '@/lib/publicPaths'
-import { RESIGNED_REASON, isResigned } from '@/lib/accountRules'
+import { CHANGE_PASSWORD_PATH, RESIGNED_REASON, isResigned } from '@/lib/accountRules'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -62,17 +62,42 @@ export async function middleware(request: NextRequest) {
    * 조회가 실패하면 **그대로 들여보낸다**. 판정 자료를 못 읽었다고 재직자를 쫓아내지 않는다
    * (쓰기는 어차피 라우트가 다시 막는다 — 그쪽은 fail-closed 다).
    */
+  /**
+   * 비밀번호를 **초기화당한 사람**은 새 비밀번호를 정할 때까지 다른 화면으로 못 간다
+   * (2026-11-26, 지시 D4). 표식은 engineers.must_change_password 다.
+   *
+   * 같은 한 줄 조회에 얹는다 — 화면 이동마다 조회가 하나 더 늘지 않게 한다.
+   * ⚠ 칸이 아직 없으면(42703, db/must_change_password_20261126.sql 미적용) **떠밀지 않는다**.
+   *   그래서 칸을 빼고 한 번 더 묻는다 — 재직 판정까지 함께 잃으면 안 되기 때문이다.
+   */
   if (user?.email) {
-    const { data } = await supabase
+    const first = await supabase
       .from('engineers')
-      .select('resigned_date')
+      .select('resigned_date, must_change_password')
       .eq('email', user.email)
       .maybeSingle()
+    let data = first.data as { resigned_date?: string | null; must_change_password?: boolean } | null
+    const error = first.error
+    if (error && (error.code === '42703' || error.code === 'PGRST204')) {
+      // 표식 칸이 아직 없다 — 재직 판정만 받아 온다(떠밀기는 건너뛴다).
+      ;({ data } = await supabase
+        .from('engineers')
+        .select('resigned_date')
+        .eq('email', user.email)
+        .maybeSingle())
+    }
     if (isResigned(data)) {
       await supabase.auth.signOut()
       const url = request.nextUrl.clone()
       url.pathname = '/login'
       url.search = `?reason=${RESIGNED_REASON}`
+      return NextResponse.redirect(url)
+    }
+    const mustChange = (data as { must_change_password?: boolean } | null)?.must_change_password === true
+    if (mustChange && pathname !== CHANGE_PASSWORD_PATH) {
+      const url = request.nextUrl.clone()
+      url.pathname = CHANGE_PASSWORD_PATH
+      url.search = ''
       return NextResponse.redirect(url)
     }
   }
