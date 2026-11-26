@@ -166,5 +166,24 @@ ok('발주 찾기 인덱스', /devices_source_quote_idx/.test(SQL) && !/devices_
 ok('스키마를 깨운다', /notify pgrst, 'reload schema'/.test(SQL))
 ok('APPLIED.md 에 적어 두었다', /devices_delivery_20261126\.sql/.test(read('db/APPLIED.md')))
 
+console.log('\n── ⑦ 2026-11-26 묶음2 F 실측으로 못 박은 것 ──')
+const ROUTE_CC = read('app/api/customer-change/route.ts')
+// 실측: [검증용] 납품 예정 장비 한 줄을 만들어(견적 없이) 사업장 화면·운용 전환·삭제까지 봤다.
+ok('운용 전환은 S/N·납입일을 **둘 다** 받아야 한다',
+  /if \(!serial\) return bad\('S\/N 을 입력해주세요'\)/.test(ROUTE_CC)
+  && /return bad\('납입일을 입력해주세요'\)/.test(ROUTE_CC))
+ok('전환하면 설치 예정월을 비운다', /install_due_month: null,/.test(ROUTE_CC))
+ok('칸이 아직 없으면 예정월만 빼고 다시 쓴다(레포트를 막지 않는다)',
+  /error\.code === '42703' \|\| error\.code === 'PGRST204'/.test(ROUTE_CC))
+// 홈의 「설치 예정」 줄은 **내 견적이 만든 장비**만 센다 — 견적 없이 만든 줄은 뜨지 않는다.
+//   실측에서 그렇게 나왔고, 그것이 지금 규칙이다(보고서에 판단 필요로 적었다).
+ok('홈은 내 견적이 만든 장비만 센다(source_quote_id)',
+  /\.in\('source_quote_id', ids\)/.test(read('hooks/dashboard/useToday.ts')))
+ok('실측 대본이 있다(서버·키가 필요해 check 에 넣지 않는다)',
+  fs.existsSync(path.join(ROOT, 'scripts/bundle2-f-measure.js')))
+ok('그 대본은 [검증용] 만 만들고 장부의 id 만 지운다',
+  /장부에 적힌 id 만 지운다/.test(read('scripts/bundle2-f-measure.js'))
+  && /이름이 \$\{MARK\} 로 시작하지 않는다/.test(read('scripts/bundle2-f-measure.js')))
+
 console.log(fails === 0 ? '\n전부 통과' : `\n${fails}건 실패`)
 process.exit(fails === 0 ? 0 : 1)
