@@ -107,7 +107,12 @@
 /* 기존 --background(#ffffff) / --foreground(#171717) 는 제거.
    body 는 동일한 렌더링을 유지하기 위해 기존 값으로 재배선. */
 body {
-  background: #ffffff;
+  /* 바탕은 **페이지 배경**이다(2026-11-26). 흰색이던 때는 내용이 화면보다 짧은 화면에서
+     아래에 **흰 띠**가 드러났다 — 폰에서 「하단 흰 공백」으로 신고된 것이 이것이다
+     (측정: /cards 의 접근 안내 화면이 446px 로 끝나는데 화면은 664px → 218px 이 흰색).
+     화면마다 제 배경을 100dvh 로 깔고 있어서 보이는 자리는 **그 틈뿐**이고, 틈에
+     페이지 배경이 보이는 쪽이 맞다. 로그인처럼 제 배경을 쓰는 화면은 그대로다. */
+  background: #fafafa;
   color: #171717;
   font-family: Arial, Helvetica, sans-serif;
   font-feature-settings: 'tnum' 1;
@@ -208,12 +213,15 @@ select option[value=""] {
 
 .ems-modal-overlay {
   align-items: flex-start;
-  padding-top: 6vh;
-  padding-bottom: 6vh;
+  /* 6dvh — 안쪽 카드의 88vh/94dvh 와 **같은 단위**로 맞춘다(2026-11-26). vh 는 iOS 에서
+     툴바를 **접은** 높이(lvh)라, 툴바가 보이면 윗변 + 카드 높이가 보이는 높이를 넘어
+     창 아래가 화면 밖으로 밀렸다. */
+  padding-top: 6dvh;
+  padding-bottom: calc(6dvh + env(safe-area-inset-bottom));
   overflow-y: auto;
 }
 .ems-modal-overlay > * {
-  max-height: 88vh !important;
+  max-height: 88dvh !important;
   overflow-y: auto;
 }
 @media (max-width: 640px) {
@@ -223,7 +231,7 @@ select option[value=""] {
      남긴다 — 「반쪽 카드」로 보이던 2026-11-21 의 문제도 생기지 않는다.
      아래는 홈 바(safe-area)만큼만 띄운다. */
   .ems-modal-overlay {
-    padding: 6vh 0 env(safe-area-inset-bottom) !important;
+    padding: 6dvh 0 env(safe-area-inset-bottom) !important;
     align-items: flex-start;
   }
   .ems-modal-overlay > * {
@@ -368,10 +376,48 @@ html::-webkit-scrollbar-track,
    그래서 **접는 규칙만** 여기(머리)로 옮겼다. 폭·전환 시간처럼 TS 상수를 쓰는 PC 쪽
    규칙은 그대로 그 파일에 있다. 두 자리가 어긋나지 않게 하네스가 함께 본다
    (scripts/mobile-overflow-check.js ⑧). */
+/* ══ 폰 입력칸은 **16px** — iOS 자동 확대를 막는 유일한 길 (2026-11-26) ═══════
+   /debug/viewport 실측(iOS 18.7·26, Safari): `visualViewport.scale 1.15` · `innerWidth 350` ·
+   넘친 요소 0 · `.ems-topbar display:none`. 즉 **가로 잘림은 잘린 것이 아니라 확대된 것**이다
+   — iOS 는 글자가 16px 미만인 입력칸에 포커스가 가면 화면을 키우고 되돌려 주지 않는다.
+   짝이 되는 규칙은 app/layout.tsx 의 `maximum-scale=1` 이다(둘 중 하나만으로는 안 된다).
+
+   ── 왜 !important 인가 ───────────────────────────────────────────────────
+   이 앱의 입력칸 글자 크기는 거의 전부 **인라인 style** 이다 — 전수 조사에서 입력 태그에
+   바로 붙은 자리 **80곳**, 입력칸이 쓰는 공용 스타일 객체 **56곳**이 16px 미만이었다
+   (docs/urgent-20261126.md 의 표). 인라인은 보통 CSS 규칙을 이기므로 `!important` 가
+   아니면 한 곳도 덮지 못한다. 그 136곳을 지우는 길은 **PC 디자인을 함께 바꾼다**
+   (13px 칸이 전부 16px 이 된다) — 그래서 **폰 폭에서만** 덮는다. PC 는 한 픽셀도 안 바뀐다.
+
+   ── 무엇을 뺐나 ─────────────────────────────────────────────────────────
+   체크박스·라디오·범위·색은 글자를 쓰지 않는다(크기를 키우면 자리만 흔들린다).
+   단추는 확대를 일으키지 않아 건드리지 않는다. */
+@media (max-width: 768px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+  select,
+  textarea,
+  [contenteditable]:not([contenteditable='false']) {
+    font-size: 16px !important;
+  }
+}
+
+/* PC 기본 — 모바일 전용 껍데기는 자리를 차지하지 않는다.
+   ⚠ **이 두 줄은 반드시 여기(머리 스타일시트)에 있어야 한다.** 2026-11-25 의 f207d63 이
+     아래 @media 블록만 이 파일로 옮기고 PC 기본값은 본문 <style>
+     (components/common/HeaderWrapper.tsx)에 남겨 두었다. 특정도가 같으면 **뒤에 오는 쪽**이
+     이기고 본문은 머리보다 뒤다 — 그래서 `display: none` 이 폰에서도 이겨 **앱바가 모든 폭에서
+     사라졌다**(11-26 신고). 기본값과 그것을 덮는 규칙은 **한 파일에 차례대로** 두어야 한다. */
+.ems-topbar, .ems-drawer-wrap { display: none; }
+
 @media (max-width: 768px) {
   .ems-sidebar { display: none !important; }
   .ems-main, .ems-main.collapsed { margin-left: 0 !important; }
+  /* 앱바는 폰에서 **늘 보인다**. 드로어가 열리면 가려지지만 그것은 숨기는 규칙이 아니라
+     드로어가 fixed·inset 0 로 위 층(Z.sidebarPanel)을 덮기 때문이다 — 그래서 여기에
+     「열렸을 때 숨긴다」를 따로 두지 않는다(두어도 보이지 않는 규칙이 된다). */
   .ems-topbar { display: flex; }
+  /* .ems-drawer-wrap 은 **인라인 display** 로 열림을 가린다(Sidebar.tsx) — 인라인이 클래스를
+     이기므로 이 줄은 PC 에서 혹시 인라인이 빠졌을 때의 그물일 뿐이다. */
   .ems-drawer-wrap { display: block; }
   /* 모바일은 상단 바 아래 전체 폭 */
   .ems-notif { left: 8px; right: 8px; top: 60px; width: auto; }

@@ -974,7 +974,9 @@ useEffect(() => {
           // 보기마다 다른 padding 을 주던 때는 세그먼트를 누를 때 패널이 20px 씩 움직였다.
           padding: 0,
           // 높이는 .home-wrapper 규칙이 정한다 — PC 는 상단 바가 없고 모바일만 그만큼 뺀다.
-          height: '100vh',
+          // 100vh 가 아니라 **100dvh** 다(2026-11-26) — iOS 의 vh 는 툴바를 **접은** 높이라
+          // 툴바가 보일 때 판이 화면보다 그만큼 길어지고, 그 길이만큼 아래에 빈 자리가 남는다.
+          height: '100dvh',
           boxSizing: 'border-box',
           display: 'flex',
           flexDirection: 'column',

@@ -744,8 +744,8 @@ export default function RepairPage() {
     <div className="rp-page" style={{ background: PAGE_BG, padding: 20, boxSizing: 'border-box' }}>
       <style jsx global>{`
         /* PC 는 상단 바가 없어 화면 높이를 그대로 쓴다. 모바일만 상단 바만큼 뺀다. */
-        .rp-page { min-height: 100vh; }
-        @media (max-width: 768px) { .rp-page { min-height: calc(100vh - ${TOPBAR_HEIGHT}px); } }
+        .rp-page { min-height: 100dvh; }
+        @media (max-width: 768px) { .rp-page { min-height: calc(100dvh - ${TOPBAR_HEIGHT}px); } }
         /* select { appearance: none } 은 지웠다 — 다크 테마 잔재인데 대신 그릴 화살표를
            두지 않아 드롭다운이 그냥 텍스트 칸으로 보였다(수리 수정 모달의 선택 칸).
            app/page.tsx 에서도 같은 이유로 지웠다(2026-09-29). */

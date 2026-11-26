@@ -143,9 +143,11 @@ export default function HeaderWrapper({ children }: { children: ReactNode }) {
         .ems-sidebar:not(.collapsed) > * { min-width: ${SIDEBAR_WIDTH - 20}px; }
         .ems-main { margin-left: ${SIDEBAR_WIDTH}px; transition: margin-left ${COLLAPSE_MS}ms ${COLLAPSE_EASE}; }
         .ems-main.collapsed { margin-left: ${SIDEBAR_COLLAPSED_WIDTH}px; }
-        /* 모바일 전용 껍데기는 PC 에서 자리를 차지하지 않는다.
-           display 는 여기서만 정한다 — 컴포넌트에 인라인으로 두면 이 규칙을 이긴다. */
-        .ems-topbar, .ems-drawer-wrap { display: none; }
+        /* ★ 모바일 전용 껍데기(.ems-topbar · .ems-drawer-wrap)의 display 는 **여기에 두지 않는다**
+           — app/globals.css 로 옮겼다(2026-11-26). 여기(본문 style)는 머리 스타일시트보다
+           **뒤**라, PC 기본값을 여기 두고 폰 규칙을 머리에 두면 기본값이 늘 이긴다. 그래서
+           11-25 에 앱바가 폰에서도 사라졌다. 두 규칙은 한 파일에 차례대로 있어야 한다.
+           여기에 다시 쓰지 마라 — scripts/mobile-overflow-check.js 가 두 자리를 함께 본다. */
         /* 사이드바 가운데 메뉴 영역(.ems-nav-scroll)의 스크롤바 규칙은 여기에 두지 않는다.
            ★ Sidebar.tsx 의 MOTION_CSS 한곳에서만 정한다 — 여기에 같은 규칙을 다시 쓰면 안 된다.
            두 곳에 나뉘어 있으면 고칠 방법이 없어진다: 크로미움은 요소에 표준 속성

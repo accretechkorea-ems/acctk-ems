@@ -140,7 +140,10 @@ ok('「상세보기 ›」는 카드 우하단', /alignItems: 'flex-end'/.test(C
 
 console.log('\n── ⑦ 폰 모달 ──')
 ok('폭 100%', /@media \(max-width: 640px\)[\s\S]{0,700}width: 100% !important;/.test(CSS))
-ok('윗변 6vh 그대로', /\.ems-modal-overlay \{\s*padding: 6vh 0 env\(safe-area-inset-bottom\) !important;/.test(CSS))
+// 2026-11-26 — 윗변을 **6dvh** 로 바꿨다. 안쪽 카드가 94dvh 라 단위가 다르면(vh 는 iOS 에서
+// 툴바를 접은 높이 lvh 다) 툴바가 보일 때 둘의 합이 화면을 넘어 창 아래가 밖으로 밀린다.
+ok('윗변은 6dvh — 안쪽 94dvh 와 같은 단위',
+  /\.ems-modal-overlay \{\s*padding: 6dvh 0 env\(safe-area-inset-bottom\) !important;/.test(CSS))
 ok('입력칸 40px 이상', /\.ems-modal-card input[\s\S]{0,180}min-height: 40px;/.test(CSS))
 ok('전체 화면 시트로 늘리지 않는다', !/min-height: 100dvh;/.test(CSS))
 ok('고정 하단 바는 홈바만큼 띄운다',

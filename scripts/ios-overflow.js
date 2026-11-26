@@ -36,6 +36,8 @@ const PATHS = arg('paths', '/,/quote,/cards,/customer/593').split(',').filter(Bo
 const ONLY = arg('only', '')
 /** 실기기와 같은 창 — iPhone 14(390×844, DPR 3). Playwright 의 기기 목록에서 가져온다. */
 const DEVICE = arg('device', 'iPhone 14')
+/** 캡처를 남길 자리. `--shots=` 로 비우면 찍지 않는다(기본은 찍지 않는다 — 부를 때 고른다). */
+const SHOTS = arg('shots', '')
 
 const env = {}
 for (const line of fs.readFileSync(path.join(ROOT, '.env.local'), 'utf8').split(/\r?\n/)) {
@@ -101,6 +103,71 @@ const PROBE = () => {
     body넘침: getComputedStyle(document.body).overflowX,
     넘친것: out.slice(0, 8),
     넘친수: out.length,
+    // ── 앱바 (2026-11-26) ──────────────────────────────────────────────
+    //   f207d63 이 폰 규칙만 머리 스타일시트로 옮기고 PC 기본값(display:none)을 본문
+    //   <style> 에 남겨, 뒤에 오는 본문이 이겨 **모든 폭에서 앱바가 사라졌다**.
+    //   눈으로 보이는가를 직접 센다 — 규칙을 읽는 것으로는 캐스케이드를 알 수 없다.
+    앱바: (() => {
+      const el = document.querySelector('.ems-topbar')
+      if (!el) return '없다(마크업)'
+      const cs = getComputedStyle(el)
+      const r = el.getBoundingClientRect()
+      return `display=${cs.display} 높이=${Math.round(r.height)} 보임=${cs.display !== 'none' && r.height > 0}`
+    })(),
+    // ── 하단 흰 공백 ──────────────────────────────────────────────────
+    //   문서가 보이는 높이보다 길면서 **내용이 그만큼 없으면** 아래가 빈다.
+    //   내용 끝(body 안에서 가장 아래에 있는 것)과 문서 끝의 차이를 적는다.
+    //   ⚠ **떠 있는 것 안의 것은 세지 않는다.** fixed 요소 자신뿐 아니라 그 **자손**도
+    //     빼야 한다 — 모달이 열려 있으면 .ems-modal-card(static)가 「가장 아래 내용」으로
+    //     잡혀, 뒤 화면이 짧은 것을 공백으로 잘못 읽는다(2026-11-26 에 /cards 가 그랬다).
+    하단공백: (() => {
+      const floating = el => {
+        for (let a = el; a && a !== document.body; a = a.parentElement) {
+          if (getComputedStyle(a).position === 'fixed') return true
+        }
+        return false
+      }
+      let bottom = 0
+      for (const el of document.querySelectorAll('body *')) {
+        const r = el.getBoundingClientRect()
+        if (r.width === 0 || r.height === 0) continue
+        if (floating(el)) continue
+        bottom = Math.max(bottom, r.bottom + window.scrollY)
+      }
+      return Math.max(0, Math.round(document.documentElement.scrollHeight - bottom))
+    })(),
+    //   틈이 있는 것 자체는 흠이 아니다 — 내용이 화면보다 짧으면 늘 생긴다. 흠은 **그 틈이
+    //   눈에 띄는 것**(흰 띠)이다. 그래서 틈의 바탕(body)과 화면이 깐 바탕을 견주어,
+    //   **색이 다를 때만** 걸린 것으로 센다.
+    하단틈색: (() => {
+      const bodyBg = getComputedStyle(document.body).backgroundColor
+      // 화면이 깐 바탕 — 본문 칸(.ems-main) 안에서 가장 넓고 위에 있는 칸의 바탕.
+      let pageBg = bodyBg
+      const main = document.querySelector('.ems-main')
+      for (const el of main ? main.querySelectorAll(':scope > *, :scope > * > *') : []) {
+        const r = el.getBoundingClientRect()
+        if (r.width < window.innerWidth * 0.9 || r.height < 40) continue
+        const bg = getComputedStyle(el).backgroundColor
+        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') { pageBg = bg; break }
+      }
+      return { body: bodyBg, 화면: pageBg, 같다: bodyBg === pageBg }
+    })(),
+    // ── 입력칸 글자 크기 ─────────────────────────────────────────────
+    //   16px 미만이면 iOS 가 포커스 때 화면을 키운다(그리고 되돌려 주지 않는다).
+    작은입력칸: (() => {
+      const bad = []
+      for (const el of document.querySelectorAll('input, select, textarea, [contenteditable]')) {
+        const t = (el.getAttribute('type') || '').toLowerCase()
+        if (['checkbox', 'radio', 'range', 'color', 'hidden', 'submit', 'button'].includes(t)) continue
+        if (el.getAttribute('contenteditable') === 'false') continue
+        const cs = getComputedStyle(el)
+        if (cs.display === 'none' || cs.visibility === 'hidden') continue
+        const px = parseFloat(cs.fontSize)
+        if (px >= 16) continue
+        bad.push(`${el.tagName.toLowerCase()}${t ? `[${t}]` : ''}.${String(el.className || '').slice(0, 20)}=${px}`)
+      }
+      return bad
+    })(),
     // 가로로 구르는 통 안에 있던 것 — 문서를 넓히지 않으므로 넘침이 아니다.
     구르는통수: rolled.length,
     구르는통: [...new Set(rolled)].slice(0, 4),
@@ -131,6 +198,12 @@ async function measure(engineName, engine) {
     await page.goto(`${BASE}${p}`, { waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(6000)
     rows.push({ path: p, ...(await page.evaluate(PROBE)) })
+    if (SHOTS) {
+      const dir = path.join(ROOT, SHOTS)
+      fs.mkdirSync(dir, { recursive: true })
+      const name = `${engineName}-${p === '/' ? 'home' : p.replace(/\//g, '-').replace(/^-/, '')}.png`
+      await page.screenshot({ path: path.join(dir, name) }).catch(() => {})
+    }
   }
   await browser.close()
   return rows
@@ -149,12 +222,17 @@ async function measure(engineName, engine) {
     for (const r of rows) {
       const over = r.문서폭 - r.창폭
       if (over > 0 || r.넘친수 > 0) bad++
-      console.log(`${over > 0 || r.넘친수 > 0 ? '넘침' : '정상'} ${r.path}  문서 ${r.문서폭} / 창 ${r.창폭} (${over > 0 ? `+${over}` : '0'}) · body ${r.body폭} · overflow-x html:${r.html넘침} body:${r.body넘침} · 삐져나온 요소 ${r.넘친수}${r.구르는통수 ? ` · (구르는 통 안 ${r.구르는통수}: ${r.구르는통.join(' · ')})` : ''}`)
+      // 앱바·하단 공백·작은 입력칸도 함께 본다(2026-11-26) — 셋 다 넘침과 같은 신고에서 왔다.
+      const seam = r.하단공백 > 2 && !r.하단틈색.같다
+      const sick = over > 0 || r.넘친수 > 0 || !/보임=true/.test(String(r.앱바)) || seam || r.작은입력칸.length > 0
+      if (sick) bad++
+      console.log(`${sick ? '걸림' : '정상'} ${r.path}  문서 ${r.문서폭} / 창 ${r.창폭} (${over > 0 ? `+${over}` : '0'}) · body ${r.body폭} · overflow-x html:${r.html넘침} body:${r.body넘침} · 삐져나온 요소 ${r.넘친수}${r.구르는통수 ? ` · (구르는 통 안 ${r.구르는통수}: ${r.구르는통.join(' · ')})` : ''}`)
+      console.log(`      앱바 ${r.앱바} · 하단 틈 ${r.하단공백}px(${seam ? `**보인다** body ${r.하단틈색.body} ≠ 화면 ${r.하단틈색.화면}` : '색이 같아 안 보인다'}) · 16px 미만 입력칸 ${r.작은입력칸.length}${r.작은입력칸.length ? ` → ${r.작은입력칸.slice(0, 5).join(' · ')}` : ''}`)
       for (const e of r.넘친것) {
         console.log(`      ${e.tag}.${e.cls}  left ${e.left} right ${e.right} (w ${e.w}) ${e.pos} · ${e.넓이규칙}`)
       }
     }
   }
-  console.log(bad === 0 ? '\n넘친 화면 없음' : `\n${bad}건 넘침`)
+  console.log(bad === 0 ? '\n걸린 화면 없음' : `\n${bad}건 걸림`)
   process.exit(bad === 0 ? 0 : 1)
 })()

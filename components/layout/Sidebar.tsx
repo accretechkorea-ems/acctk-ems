@@ -616,7 +616,7 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
       {/* ── PC 사이드바 ── */}
       <nav className={`ems-sidebar${collapsed ? ' collapsed' : ''}${moving ? ' moving' : ''}`} aria-label="주 메뉴" style={{
         position: 'fixed', top: 0, left: 0, zIndex: Z.sidebar,
-        height: '100vh', boxSizing: 'border-box',
+        height: '100dvh', boxSizing: 'border-box',
         background: BG, borderRight: `1px solid ${BORDER}`,
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>

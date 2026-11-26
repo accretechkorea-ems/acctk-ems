@@ -579,8 +579,8 @@ export default function RepairDashboardPage() {
       <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <style>{`
         /* PC 는 상단 바가 없어 화면 높이를 그대로 쓴다. 모바일만 상단 바만큼 뺀다. */
-        .rd-page { min-height: 100vh; }
-        @media (max-width: 768px) { .rd-page { min-height: calc(100vh - ${TOPBAR_HEIGHT}px); } }
+        .rd-page { min-height: 100dvh; }
+        @media (max-width: 768px) { .rd-page { min-height: calc(100dvh - ${TOPBAR_HEIGHT}px); } }
           /* KPI: 4열 × 3줄(12칸) 고정, 좁아지면 2열 → 1열 */
           .repair-kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
           @media (max-width: 900px) { .repair-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

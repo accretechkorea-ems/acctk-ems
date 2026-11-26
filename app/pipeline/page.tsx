@@ -363,8 +363,8 @@ export default function PipelinePage() {
     }}>
       <style jsx global>{`
         /* PC 는 상단 바가 없어 화면 높이를 그대로 쓴다. 모바일만 상단 바만큼 뺀다. */
-        .pl-page { min-height: 100vh; }
-        @media (max-width: 768px) { .pl-page { min-height: calc(100vh - ${TOPBAR_HEIGHT}px); } }
+        .pl-page { min-height: 100dvh; }
+        @media (max-width: 768px) { .pl-page { min-height: calc(100dvh - ${TOPBAR_HEIGHT}px); } }
         /* 카드의 단계 select·견적 쓰기·종료는 호버 때만 띄운다.
            hover 를 지원하지 않는 기기(터치)에서는 이 미디어 쿼리가 걸리지 않아 항상 보인다.
            **display 로 감춘다** — visibility 로 자리를 남기면 3행의 담당자·마감 글자가 늘

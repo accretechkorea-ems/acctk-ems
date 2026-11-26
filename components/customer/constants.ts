@@ -48,5 +48,8 @@ export const iconButtonStyle: CSSProperties = {
 export const modalOverlayStyle: CSSProperties = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)',
   display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: Z.modal,
-  padding: '6vh 20px', overflowY: 'auto',
+  // 6dvh — 안쪽 카드의 94dvh 와 **같은 단위**여야 둘을 더해 화면에 들어간다(2026-11-26).
+  // vh(=lvh, 툴바를 접은 높이)로 두면 툴바가 보일 때 합이 보이는 높이를 넘는다.
+  // 아래는 홈 바(safe-area)만큼 띄운다 — 폰 규칙(globals.css)과 같은 모양이다.
+  padding: '6dvh 20px calc(6dvh + env(safe-area-inset-bottom))', overflowY: 'auto',
 }

@@ -20,9 +20,22 @@ export const metadata: Metadata = {
  * 켠 뒤에는 **우리가** 비운다 — 앱바는 위쪽 안전 영역만큼 내려 깔고(components/layout/Sidebar),
  * 고정 하단 바·모달은 아래쪽만큼 띄운다(app/globals.css).
  */
+/**
+ * **최대 배율 1** — iOS 의 자동 확대를 막는다 (2026-11-26).
+ *
+ * /debug/viewport 실측(iOS 18.7·26, Safari): `visualViewport.scale 1.15` · `innerWidth 350` ·
+ * 넘친 요소 0. 즉 **잘린 것이 아니라 확대된 것**이었다 — iOS 는 글자가 16px 미만인 입력칸에
+ * 포커스가 가면 화면을 제 맘대로 키우고, 그 뒤로 오른쪽이 잘린 채 남는다(되돌려 주지 않는다).
+ *
+ * `user-scalable=no` 는 쓰지 않는다 — 두 손가락 확대까지 막으면 글자를 키워 보는 길이 사라진다
+ * (접근성). `maximum-scale=1` 은 **자동 확대만** 막고 사용자가 직접 하는 확대는 iOS 17+ 에서
+ * 그대로 된다. 짝이 되는 규칙은 app/globals.css 의 「폰 입력칸은 16px」이다 — 둘 중 하나만
+ * 두면 자동 확대가 그대로 남거나(16px 규칙만), 확대된 자리로 끌려간다(maximum-scale 만).
+ */
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  maximumScale: 1,
   viewportFit: 'cover',
 };
 
@@ -33,7 +46,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body className={`antialiased bg-white text-black`}>
+      {/* bg-white 를 걷었다(2026-11-26) — 내용이 화면보다 짧을 때 아래에 흰 띠가 드러났다.
+          바탕은 app/globals.css 의 `body { background }`(페이지 배경)가 정한다. */}
+      <body className={`antialiased text-black`}>
         {/* 본인 정보(세션 + engineers + 팀 권한)를 **여기서 한 번** 읽어 아래로 내린다.
             화면·훅은 useMe() 로 받는다 — docs/perf-rules.md 1. */}
         <MeProvider>

@@ -332,7 +332,8 @@ function ImportReviewInner() {
 
   return (
     <main style={{
-      height: '100vh', background: PAGE_BG, padding: 16, boxSizing: 'border-box',
+      // 고정 셸은 100dvh — iOS 의 vh(=툴바 접은 높이)로 두면 아래에 빈 자리가 남는다.
+      height: '100dvh', background: PAGE_BG, padding: 16, boxSizing: 'border-box',
       display: 'flex', flexDirection: 'column', gap: 12,
     }}>
       {/* 상단 — 단계 */}
