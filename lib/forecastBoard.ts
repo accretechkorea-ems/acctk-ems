@@ -126,3 +126,108 @@ export function boardSummary(
 /** 고른 분기만 남긴다. 아무것도 고르지 않았으면(null) 전부다. */
 export const inQuarter = <T extends { expected_close: string | null }>(row: T, quarter: string | null): boolean =>
   quarter === null || quarterKeyOf(row.expected_close) === quarter
+
+// ── 카드 한 장이 말하는 것 (2026-11-26 묶음2 C3) ────────────────────────────
+//
+// 카드는 다섯 줄이다 — 회사 » 사업장 / 제목 / 금액 / 예정·담당·마지막 활동 / 다음 할 일.
+// 「무엇을 언제까지, 누가, 다음에 무엇을」이 한 장에 다 있어야 판에서 손이 멈추지 않는다.
+// 아래 함수들은 그 다섯 줄에 **무슨 글자를 적을지**만 정한다(순수 함수다).
+
+/** 활동이 없다고 보는 날 수 — 그 넘으면 카드를 흐리게 둔다. */
+export const IDLE_DIM_DAYS = 14
+
+/**
+ * 마지막 활동으로부터 지난 날. 활동이 없으면 **만든 날**부터 센다(그만큼 멈춰 있다).
+ * 둘 다 없으면 null — 「활동 없음」으로 적는다.
+ */
+export function idleDaysOf(lastAt: string | null | undefined, createdAt: string | null | undefined, today: string): number | null {
+  const base = (lastAt ?? '').slice(0, 10) || (createdAt ?? '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(base)) return null
+  const d = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${base}T00:00:00Z`)) / 86400000)
+  return d < 0 ? 0 : d
+}
+
+/** 4행 오른쪽 글자 — 「오늘 활동」 · 「3일 전」 · 「활동 없음」. */
+export function idleLabel(days: number | null): string {
+  if (days === null) return '활동 없음'
+  if (days === 0) return '오늘 활동'
+  return `${days}일 전`
+}
+
+/** 14일 넘게 아무 일도 없었나 — 카드를 흐리게 둘지. 알 수 없으면(날짜 없음) 흐리게 둔다. */
+export const isIdle = (days: number | null): boolean => days === null || days >= IDLE_DIM_DAYS
+
+/**
+ * 담당자 이니셜 — 「김철수」 → 「김철」, 「Hong Gildong」 → 「HG」.
+ * 한글은 **앞 두 글자**다(성 한 자만 두면 같은 성이 전부 같아 보인다).
+ */
+export function initialsOf(name: string | null | undefined): string {
+  const n = (name ?? '').trim()
+  if (!n) return '?'
+  const words = n.split(/\s+/).filter(Boolean)
+  if (words.length > 1 && /^[A-Za-z]/.test(n)) return words.slice(0, 2).map(w => w[0].toUpperCase()).join('')
+  return n.slice(0, 2)
+}
+
+/** 4행 왼쪽 글자 — 「예정 2026 12월」. 마감월이 없으면 「예정 미정」. */
+export function dueLabelOf(expectedClose: string | null | undefined): string {
+  const m = (expectedClose ?? '').trim()
+  if (!/^\d{4}-\d{2}/.test(m)) return '예정 미정'
+  return `예정 ${m.slice(0, 4)} ${Number(m.slice(5, 7))}월`
+}
+
+/** 5행이 말하는 다음 할 일 한 줄. */
+export type NextTask = {
+  title: string
+  /** 'YYYY-MM-DD' 또는 null(기한 없음). */
+  due: string | null
+}
+
+/** 그 할 일이 **늦었나** — 기한이 오늘보다 앞이면 참이다. */
+export const isTaskLate = (t: NextTask | null, today: string): boolean =>
+  !!t && !!t.due && t.due < today
+
+/**
+ * 5행 글자 — 「→ 11-28 구매팀 가격 협의」 · 「→ 구매팀 가격 협의」 · 「다음 할 일 없음」.
+ * 날짜는 월-일만 적는다(띠 한 줄에 제목이 들어가야 한다).
+ */
+export function nextTaskLabel(t: NextTask | null): string {
+  if (!t) return '다음 할 일 없음'
+  const head = t.due ? `${t.due.slice(5)} ` : ''
+  return `→ ${head}${t.title}`
+}
+
+/**
+ * 한 포캐스트의 **다음 할 일** — 기한이 이른 것 하나. 기한 없는 줄은 기한 있는 줄 뒤다
+ * (언젠가 할 일보다 날이 박힌 일이 먼저 보여야 한다).
+ */
+export function pickNextTask(
+  tasks: readonly { ref_type?: string | null; ref_id?: number | null; title: string; due_date: string | null; done_at?: string | null }[],
+  opportunityId: number,
+): NextTask | null {
+  const mine = tasks
+    .filter(t => t.ref_type === 'forecast' && Number(t.ref_id) === opportunityId && !t.done_at)
+    .sort((a, b) => {
+      if (!a.due_date && !b.due_date) return a.title < b.title ? -1 : 1
+      if (!a.due_date) return 1
+      if (!b.due_date) return -1
+      return a.due_date < b.due_date ? -1 : 1
+    })
+  const first = mine[0]
+  return first ? { title: first.title, due: first.due_date } : null
+}
+
+/** 기회별 **마지막 활동일** — 판이 이미 읽어 둔 활동 줄에서 만든다(조회를 늘리지 않는다). */
+export function lastActivityByOpp(
+  activities: readonly { opportunity_id?: number | null; activity_date?: string | null }[],
+): Map<number, string> {
+  const out = new Map<number, string>()
+  for (const a of activities) {
+    const id = Number(a.opportunity_id)
+    const d = (a.activity_date ?? '').slice(0, 10)
+    if (!Number.isInteger(id) || !d) continue
+    const was = out.get(id)
+    if (!was || was < d) out.set(id, d)
+  }
+  return out
+}

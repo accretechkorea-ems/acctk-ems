@@ -202,7 +202,15 @@ export type SalesOpportunity = {
   created_at: string
   updated_at: string
   engineers?: { name: string; position: string | null } | null
-  customers?: { company_name: string | null } | null
+  /**
+   * 조인해 온 업체 한 줄. 사업장명·부모(회사) 이름은 **읽는 쪽이 있을 때만** 들어온다
+   * (lib/customerLabel.ts 의 CUSTOMER_NAME_SELECT — 포캐스트 판이 쓴다, 2026-11-26).
+   */
+  customers?: {
+    company_name: string | null
+    site_name?: string | null
+    parent?: { company_name?: string | null } | { company_name?: string | null }[] | null
+  } | null
   // 이 기회에 연결된 견적 (quotes.opportunity_id 역방향 임베딩)
   quotes?: { quote_id: number; quote_number: string; quote_date: string; total_supply: number; status: string; pdf_url: string | null }[]
 }

@@ -99,14 +99,32 @@ eq('미정도 고를 수 있다', deals.filter(d => B.inQuarter(d, '')).map(d =>
 console.log('\n── ⑤ 화면 ──')
 const PAGE = read('app/pipeline/page.tsx')
 const CARD = read('components/pipeline/OpportunityCard.tsx')
+/** 주석을 뺀 코드 — 「이 글자가 **없어야** 한다」는 제 설명에 걸리지 않게 이것으로 본다. */
+const strip = t => t
+  .replace(/\/\*[\s\S]*?\*\//g, ' ')
+  .split('\n').map(l => l.replace(/(^|[^:])\/\/.*$/, '$1')).join('\n')
+  .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ')
+const PAGE_CODE = strip(PAGE)
 ok('기간 거르개를 새로 두지 않았다(기본은 전부)', /useState<string \| null>\(null\)/.test(PAGE) && /setQuarter\(on \? null : s\.key\)/.test(PAGE))
 ok('한 번 더 누르면 전부로 돌아온다', /분기 전체/.test(PAGE))
-ok('띠는 한 줄이다', /컴팩트 띠 하나/.test(PAGE))
+// 2026-11-26 묶음2 C1 — 제목 카드와 띠가 **카드 하나**가 됐다(위 44px · 아래 34px).
+ok('상단은 카드 하나다(제목·띠가 한 상자)', /상단 카드 \*\*하나\*\*/.test(PAGE))
+ok('아래 띠는 접을 수 있다', /지표 숨기기 ▴/.test(PAGE) && /지표 보기 ▾/.test(PAGE))
+ok('접힘은 사용자별로 이 브라우저에 남는다',
+  /useStoredFlag\(`pipeline:metrics:\$\{me\.engineer_id \?\? 'anon'\}`, true\)/.test(PAGE))
+ok('그 저장은 수화를 깨지 않는다(서버에서는 기본값)',
+  /getServerSnapshot/.test(read('lib/storedFlag.ts')) && /useSyncExternalStore/.test(read('lib/storedFlag.ts')))
 // ③ 2026-11-26 확인 — 「14일 활동 없음」 자리는 **띠에 없다**(세려면 활동 이력을 한 번 더
 //   읽어야 하고, 같은 수를 홈의 「멈춘 딜」 타일이 이미 보여 준다 — lib/forecastBoard.ts 주석).
-ok('띠에 「활동 없음」 자리가 없다', !/활동 없음/.test(PAGE) && !/14일/.test(PAGE))
-ok('띠에 건수·합계·단계별 수·이번 달 마감이 있다',
-  /진행 중/.test(PAGE) && /단계<\/span>/.test(PAGE) && /이번 달 마감/.test(PAGE) && /예정 분기/.test(PAGE))
+ok('띠에 「활동 없음」 자리가 없다', !/활동 없음/.test(PAGE_CODE))
+// C2 — 「단계」 묶음은 **띠에서 뺐다**. 열 머리가 같은 말을 이미 한다.
+ok('띠에 단계 묶음이 없다', !/단계<\/span>/.test(PAGE_CODE))
+ok('그 수는 열 머리가 보여 준다', /\{col\.stage\}/.test(PAGE) && /\{col\.rows\.length\}/.test(PAGE))
+ok('띠에 건수·합계·이번 달 마감·예정 분기가 있다',
+  /진행 중 /.test(PAGE) && /이번 달 마감 /.test(PAGE) && /예정 분기/.test(PAGE))
+// 팝오버의 **제목**에는 그 글자가 남는다(창 이름이다) — 사라져야 하는 것은 **단추**다.
+ok('엑셀은 공용 ⬇ 아이콘이다', /<ExcelIconButton/.test(PAGE)
+  && !/엑셀 내보내기\s*<\/button>/.test(PAGE_CODE))
 ok('띠는 판에 보이는 줄을 센다', /boardSummary\(shown\.filter\(o => !isClosed\(o\)\), BOARD_STAGES/.test(PAGE))
 ok('분포는 분기를 고르기 전 줄에서 센다', /quarterSlices\(filtered\.filter\(o => !isClosed\(o\)\)\)/.test(PAGE))
 ok('판·끝난 건은 고른 분기를 따른다', /const shown = useMemo\(\(\) => filtered\.filter\(o => inQuarter\(o, quarter\)\)/.test(PAGE)
@@ -115,7 +133,25 @@ ok('카드 금액은 축약 + 호버 전체', /title=\{krwFull\(opp\.expected_am
 ok('연결 견적은 뱃지다', /견적 \{quoteCount\}/.test(CARD) && /borderRadius: R\.pill/.test(CARD))
 ok('카드에 「＋ 할 일」이 있다', /<TaskAddButton/.test(CARD) && /type: 'forecast'/.test(CARD))
 ok('「견적 쓰기」는 그대로다', /견적 쓰기/.test(CARD) && /onWriteQuote/.test(CARD))
-ok('카드 높이를 줄였다(패딩 10)', /padding: '10px 12px'/.test(CARD))
+ok('카드 여백은 그대로다(10)', /padding: '10px 12px'/.test(CARD))
+// C3 — 카드는 다섯 줄이다.
+ok('1행 회사 » 사업장', /company=\{customerCompanyName\(o\.customers\)\}/.test(PAGE)
+  && /site=\{shortSiteName\(/.test(PAGE) && /' » '/.test(CARD))
+ok('4행 예정월 · 이니셜 아바타 · 마지막 활동', /dueLabelOf\(opp\.expected_close\)/.test(CARD)
+  && /initialsOf\(owner\)/.test(CARD) && /idleLabel\(idleDays\)/.test(CARD))
+ok('5행 다음 할 일 띠', /nextTaskLabel\(nextTask\)/.test(CARD) && /isTaskLate\(nextTask, today\)/.test(CARD))
+ok('늦은 할 일은 빨간 바탕 + ⚠(이모지 아님, 인라인 SVG)',
+  /background: late \? LATE_BG/.test(CARD) && /\{late && \(/.test(CARD) && /<svg/.test(CARD))
+ok('14일 넘게 멎은 카드는 흐리다', /opacity: dim \? 0\.55 : 1/.test(CARD)
+  && /IDLE_DIM_DAYS = 14/.test(read('lib/forecastBoard.ts')))
+ok('호버하면 제 짙기로 돌아온다', /\.pl-card:hover \{ opacity: 1 !important; \}/.test(PAGE))
+ok('마지막 활동은 **이미 읽어 둔 활동 줄**로 만든다(조회를 늘리지 않는다)',
+  /lastActivityByOpp\(activities\)/.test(PAGE))
+ok('다음 할 일은 /api/task 가 준다', /action: 'list'/.test(PAGE) && /pickNextTask\(tasks, /.test(PAGE))
+// C4 — 판에 들어오면 사이드바를 임시로 접는다(고객사 탭과 같은 규칙).
+const RAIL = read('lib/railPaths.ts')
+ok('포캐스트도 사이드바를 접는 화면이다', /'\/pipeline'/.test(RAIL))
+ok('그 접힘은 임시다(저장값을 건드리지 않는다)', /접힘은 「임시」다/.test(RAIL))
 // 주석에는 compactKRW 라는 이름이 남아 있다(왜 바꿨는지 적어 둔 글이다) — **부르는 자리**만 본다.
 ok('열 합계도 같은 축약이다(카드와 글자가 같다)',
   PAGE.includes('krwShort(col.sum)') && !PAGE.includes('{compactKRW('))

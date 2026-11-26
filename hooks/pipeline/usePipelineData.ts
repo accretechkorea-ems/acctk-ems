@@ -10,6 +10,7 @@ import { loadEngineers } from '@/lib/appData/engineers'
 import { useToast } from '@/components/common/Toast'
 
 import { NOT_AGENCY_ONLY } from '@/lib/customerAgency'
+import { CUSTOMER_NAME_SELECT } from '@/lib/customerLabel'
 import type { Customer, Engineer, SalesActivity, SalesOpportunity } from '@/components/customer/types'
 
 export function usePipelineData() {
@@ -27,8 +28,10 @@ export function usePipelineData() {
   const reload = async (): Promise<boolean> => {
     setLoading(true)
     const [oppRes, actRes, engRes, custRes] = await Promise.all([
+      // 카드 1행이 「회사 » 사업장」이라(2026-11-26 묶음2 C3) 회사명(부모 줄)과 사업장명을
+      // 함께 읽는다 — 조회 수는 그대로다(내장 조인 한 줄이 늘었을 뿐이다).
       supabase.from('sales_opportunities')
-        .select('*, engineers(name, position), customers(company_name), quotes(quote_id, quote_number, quote_date, total_supply, status, pdf_url)')
+        .select(`*, engineers(name, position), customers(${CUSTOMER_NAME_SELECT}), quotes(quote_id, quote_number, quote_date, total_supply, status, pdf_url)`)
         .order('created_at', { ascending: false }),
       // 기회에 묶인 활동만 있으면 된다
       supabase.from('sales_activities')

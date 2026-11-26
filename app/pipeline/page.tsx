@@ -26,7 +26,7 @@ import { matchesCompany } from '@/lib/companySearch'
  * 이보다 좁아지면 열을 더 줄이는 대신 판을 가로로 민다.
  */
 const BOARD_MIN_W = 960
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
   useDraggable, useDroppable, pointerWithin,
@@ -35,8 +35,8 @@ import {
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { isSuperAdmin } from '@/lib/permissions'
-import { BLUE, BLUE_TINT, BORDER, CARD_BG, MUTED, TEXT, cardTitle } from '@/components/common/ui'
-import { TEXT_DISABLED, TEXT_NOTE } from '@/lib/textTokens'
+import { BLUE, BLUE_HOVER, BLUE_TINT, BORDER, CARD_BG, MUTED, NEUTRAL_BG, TEXT, cardTitle } from '@/components/common/ui'
+import { TEXT_DISABLED } from '@/lib/textTokens'
 import OpportunityCard from '@/components/pipeline/OpportunityCard'
 import OpportunityModal from '@/components/customer/modals/OpportunityModal'
 import LostModal from '@/components/forecast/LostModal'
@@ -49,7 +49,14 @@ import { useQuoteCategories } from '@/lib/quoteCategories'
 import { todayKST } from '@/lib/date'
 import { FORM_LABELS, isFormKind } from '@/lib/quoteForms'
 import { bucketOf, emptyBucket, fiscalMonths, fiscalYearOfMonth, type Bucket } from '@/lib/forecast'
-import { boardSummary, inQuarter, krwFull, krwShort, quarterSlices } from '@/lib/forecastBoard'
+import {
+  boardSummary, idleDaysOf, inQuarter, krwFull, krwShort, lastActivityByOpp, pickNextTask, quarterSlices,
+} from '@/lib/forecastBoard'
+import ExcelIconButton from '@/components/common/ExcelIconButton'
+import { customerCompanyName } from '@/lib/customerLabel'
+import { shortSiteName } from '@/lib/customerList'
+import type { TaskRow } from '@/lib/tasks'
+import { useStoredFlag } from '@/lib/storedFlag'
 import { exportForecastXlsx } from '@/lib/forecastExcel'
 import { STAGES, isClosed } from '@/components/customer/opportunity'
 import type { SalesOpportunity } from '@/components/customer/types'
@@ -77,13 +84,8 @@ const PAGE_BG = '#f4f5f7'
 /** 이번 달 마감을 알리는 빨강 — 홈 할 일·장비 카드의 「지남」과 같은 값이다. */
 const LATE_RED = '#b91c1c'
 
-// ── 머리 띠의 칸 셋 — 칸마다 라벨 한 줄 + 값 한 줄 (2026-11-26, K3) ──────────
-const bandCell: React.CSSProperties = {
-  padding: '8px 14px', display: 'flex', flexDirection: 'column', gap: 1,
-  borderRight: `1px solid ${BORDER}`, minWidth: 0,
-}
-const bandLabel: React.CSSProperties = { fontSize: 11, color: MUTED, whiteSpace: 'nowrap' }
-const bandValue: React.CSSProperties = { fontSize: 14, fontWeight: 700, color: TEXT, whiteSpace: 'nowrap' }
+// 머리 띠의 「칸 셋」(bandCell·bandLabel·bandValue)은 2026-11-26 묶음2 C1 에서 걷었다 —
+// 띠가 제목 카드와 한 몸이 되면서 칸막이 없는 **한 줄**이 됐다(라벨·값이 옆으로 붙는다).
 
 // 열 안 정렬 — 마감이 임박한 것부터. 마감일 없는 건은 맨 아래.
 // 같은 날짜(또는 둘 다 마감일 없음)면 등록 순(오래된 것 먼저)으로 고정해 순서가 흔들리지 않게 한다.
@@ -230,6 +232,35 @@ export default function PipelinePage() {
    */
   const [quarter, setQuarter] = useState<string | null>(null)
 
+  /**
+   * 지표 줄(아래 띠)을 펴 두었나 — **사용자별로** 이 브라우저에 남는다 (묶음2 C1).
+   * 첫 그림은 늘 「펴짐」이다(서버가 그린 것과 어긋나지 않게 — lib/storedFlag.ts).
+   */
+  const [metricsOpen, setMetricsOpen] = useStoredFlag(`pipeline:metrics:${me.engineer_id ?? 'anon'}`, true)
+
+  /**
+   * 카드 5행의 **다음 할 일** — /api/task 가 내 줄만 돌려준다(RLS 밖에서도 같은 판정).
+   * 표가 아직 없으면(503) 빈 목록이고 띠는 「다음 할 일 없음」이 된다 — 판은 그대로 돈다.
+   * 남의 포캐스트에는 내 할 일이 없으므로 그 카드는 빈 띠다(그 사람 화면에서는 보인다).
+   */
+  const [tasks, setTasks] = useState<TaskRow[]>([])
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch('/api/task', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'list' }),
+        })
+        const json = await res.json().catch(() => null) as { ok?: boolean; rows?: TaskRow[] } | null
+        if (!cancelled && res.ok && json?.ok) setTasks(json.rows ?? [])
+      } catch (e) {
+        console.error('[pipeline] 할 일을 읽지 못했다 — 띠는 비워 둔다', e)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
   /** 판에 보이는 줄 — 담당자·검색에 분기까지 걸린 것. 띠도 **이 줄을** 센다(어긋나지 않게). */
   const shown = useMemo(() => filtered.filter(o => inQuarter(o, quarter)), [filtered, quarter])
 
@@ -239,6 +270,9 @@ export default function PipelinePage() {
     () => boardSummary(shown.filter(o => !isClosed(o)), BOARD_STAGES, todayKST()),
     [shown],
   )
+
+  /** 기회별 마지막 활동일 — **이미 읽어 둔 활동 줄**로 만든다(조회를 늘리지 않는다). */
+  const lastActivity = useMemo(() => lastActivityByOpp(activities), [activities])
 
   // 낙관적 업데이트 — 저장이 끝나기 전에 화면에서 먼저 옮긴다.
   // 실패하면 이 값만 지우면 원래 단계로 되돌아간다(서버 데이터는 그대로이므로).
@@ -271,6 +305,16 @@ export default function PipelinePage() {
       <OpportunityCard
         opp={o}
         canEdit={opp.canEditOpp(o)}
+        // 1행 「회사 » 사업장」 — 회사명은 부모 줄의 이름, 사업장명은 그 줄의 site_name 이다
+        // (lib/customerLabel.ts · lib/customerList.ts. 이관 전 줄은 제 이름이 곧 회사명이다).
+        company={customerCompanyName(o.customers)}
+        site={shortSiteName(
+          { company_name: o.customers?.company_name ?? '', site_name: o.customers?.site_name ?? null },
+          customerCompanyName(o.customers),
+        )}
+        idleDays={idleDaysOf(lastActivity.get(o.opportunity_id) ?? null, o.created_at, today)}
+        nextTask={pickNextTask(tasks, o.opportunity_id)}
+        today={today}
         onOpen={() => opp.openEditOpp(o)}
         onChangeStage={next => moveTo(o, next)}
         // 실주·종료는 **사유 창**을 지난다(2026-11-26, L2). 전에는 영업기회 수정 창이
@@ -374,16 +418,30 @@ export default function PipelinePage() {
           .pl-card .pl-card-action { display: none; }
           .pl-card:hover .pl-card-action { display: flex; }
         }
+        /* 14일 넘게 멎은 카드는 흐리다(묶음2 C3). **호버하면 제 짙기로 돌아온다** —
+           흐리다고 읽을 수 없으면 안 된다(그 건을 다시 보려고 호버하는 것이다). */
+        .pl-card:hover { opacity: 1 !important; }
       `}</style>
 
       <div style={{ maxWidth: 1600, width: '100%', margin: '0 auto', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
 
-        {/* 머리줄 — **제목도 이 박스 안에 있다**(의뢰서 목록과 같은 식). 페이지 맨 위에
-            제목만 있는 줄을 따로 두면 20px + 여백 12px 을 제목 한 단어에 쓰게 되고,
-            칸반은 그만큼 아래로 내려간다. 제목 · 담당자 · 검색 · 단추가 한 줄이다. */}
-        <div style={{ background: '#ffffff', border: '1px solid #ebebeb', borderRadius: R.control, padding: '14px 16px', marginBottom: 12, flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ ...cardTitle, fontSize: 20, flexShrink: 0, marginRight: 4 }}>포캐스트</span>
+        {/* ── 상단 카드 **하나** (2026-11-26 묶음2 C1, 캔버스 KanbanHeader 2안) ──────
+            전에는 제목 카드와 요약 띠가 **따로 선 두 박스**였다. 둘 사이 12px 과 테두리
+            두 벌이 판을 그만큼 아래로 밀었고, 「무엇을 보고 있나(담당자·검색)」와 「얼마나
+            있나(건수·금액·분기)」가 서로 다른 상자에 흩어져 있었다. 한 카드 두 줄로 묶는다.
+
+              위 줄 44px — 포캐스트 · 담당자 ▾ · 검색 ·········· ⬇ 엑셀 · ＋ 포캐스트
+              아래 줄 34px(연회색) — 진행 중 N건·금액 | 이번 달 마감 N건 | 예정 분기 칩 ····· 지표 숨기기 ▴
+
+            「단계」 묶음은 띠에서 뺐다(C2) — 열 머리가 「상담 [16] 14억 3,900만」으로
+            같은 말을 이미 하고 있다. 두 군데에 적으면 한쪽만 고쳐져 어긋난다. */}
+        <div style={{
+          background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control,
+          marginBottom: 12, flexShrink: 0, overflow: 'hidden',
+        }}>
+          {/* 위 줄 — 44px */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minHeight: 44, padding: '5px 12px' }}>
+            <span style={{ ...cardTitle, fontSize: 17, flexShrink: 0, marginRight: 2 }}>포캐스트</span>
             {/* 담당자 — 「내 포캐스트 | 전체」 토글을 대신한다. 사람이 늘면 토글로는 남의
                 포캐스트를 볼 길이 없었다(전체에서 눈으로 찾아야 했다).
                 항목은 포캐스트가 있는 사람만이고, 기본값은 본인이다(ownerValue). */}
@@ -392,8 +450,8 @@ export default function PipelinePage() {
               onChange={e => setOwnerPick(e.target.value === 'all' ? 'all' : Number(e.target.value))}
               title="담당자"
               style={{
-                flexShrink: 0, height: 34, padding: '0 8px', border: '1px solid #ebebeb',
-                borderRadius: R.icon, background: '#fff', color: '#111827', fontSize: 13, fontWeight: 600,
+                flexShrink: 0, height: 32, padding: '0 8px', border: `1px solid ${BORDER}`,
+                borderRadius: R.icon, background: CARD_BG, color: TEXT, fontSize: 13, fontWeight: 600,
                 fontFamily: 'inherit', cursor: 'pointer', outline: 'none', maxWidth: 180,
               }}
             >
@@ -405,61 +463,48 @@ export default function PipelinePage() {
               onChange={e => setSearch(e.target.value)}
               placeholder="업체명 / 제목 검색"
               style={{
-                width: 220, padding: '8px 11px', border: '1px solid #ebebeb',
-                borderRadius: R.icon, background: '#fff', color: '#111827', fontSize: 13,
+                width: 220, height: 32, padding: '0 11px', border: `1px solid ${BORDER}`,
+                borderRadius: R.icon, background: CARD_BG, color: TEXT, fontSize: 13,
                 outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
               }}
             />
-            <button ref={exportRef} onClick={() => setExportOpen(v => !v)}
-              onMouseEnter={e => { e.currentTarget.style.background = '#f3f4f6' }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#fff' }}
-              style={{ marginLeft: 'auto', padding: '8px 14px', background: '#fff', color: '#234ea2', border: '1px solid #ebebeb', borderRadius: R.icon, cursor: 'pointer', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, transition: 'background 0.15s ease' }}>
-              엑셀 내보내기
-            </button>
+            <span style={{ flex: 1, minWidth: 8 }} />
+            {/* 엑셀 — 글자 버튼을 **공용 ⬇ 아이콘**으로 바꿨다(묶음2 E). 누르면 종전과 같은
+                팝오버가 열린다(연도·팀을 고르고 내려받는다). 동작·권한은 한 줄도 바뀌지 않았다. */}
+            <span ref={exportRef as React.RefObject<HTMLSpanElement>} style={{ display: 'inline-flex', flexShrink: 0 }}>
+              <ExcelIconButton onClick={() => setExportOpen(v => !v)} size={32} />
+            </span>
             <button onClick={opp.openNewOpp}
-              onMouseEnter={e => { e.currentTarget.style.background = '#1c3e87' }}
-              onMouseLeave={e => { e.currentTarget.style.background = '#234ea2' }}
-              style={{ padding: '8px 16px', background: '#234ea2', color: '#fff', border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, transition: 'background 0.15s ease' }}>
+              onMouseEnter={e => { e.currentTarget.style.background = BLUE_HOVER }}
+              onMouseLeave={e => { e.currentTarget.style.background = BLUE }}
+              style={{ height: 32, padding: '0 14px', background: BLUE, color: CARD_BG, border: 'none', borderRadius: R.icon, cursor: 'pointer', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, transition: 'background 0.15s ease' }}>
               + 포캐스트
             </button>
           </div>
-        </div>
 
-        {/* 컴팩트 띠 하나 — 건수·합계·단계별 수·마감 임박·분기 분포 (2026-11-26, K1·K3).
-            판 위에 큰 요약 카드를 두면 칸반이 그만큼 아래로 내려간다. 한 줄에 다 담고,
-            **판에 보이는 줄만** 센다(분포만 분기를 고르기 전 줄에서 센다 — 다른 분기로
-            옮겨 갈 수 있어야 한다). 분기를 누르면 그 분기만, 한 번 더 누르면 전부다. */}
-        {!loading && summary.count > 0 && (
-          <div style={{
-            display: 'flex', alignItems: 'stretch', flexWrap: 'wrap',
-            background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.control,
-            marginBottom: 12, flexShrink: 0, overflow: 'hidden', fontSize: 12,
-          }}>
-            <div style={bandCell}>
-              <span style={bandLabel}>진행 중</span>
-              <b style={bandValue} title={krwFull(summary.sum)} className="num">
-                {summary.count}건 · {krwShort(summary.sum)}
-              </b>
-            </div>
-            <div style={bandCell}>
-              <span style={bandLabel}>단계</span>
-              <span style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
-                {summary.byStage.map(s => (
-                  <span key={s.stage} style={{ fontSize: 12, color: s.count === 0 ? TEXT_DISABLED : TEXT_NOTE, whiteSpace: 'nowrap' }}>
-                    {s.stage} <b style={{ fontWeight: 700, color: s.count === 0 ? TEXT_DISABLED : TEXT }}>{s.count}</b>
-                  </span>
-                ))}
+          {/* 아래 줄 — 34px 연회색 띠. **판에 보이는 줄만** 센다(분포만 분기를 고르기 전
+              줄에서 센다 — 다른 분기로 옮겨 갈 수 있어야 한다). 분기를 누르면 그 분기만,
+              한 번 더 누르면 전부다. 접으면 이 줄이 통째로 사라지고 카드는 44px 이 된다. */}
+          {!loading && summary.count > 0 && metricsOpen && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+              minHeight: 34, padding: '4px 12px', background: NEUTRAL_BG,
+              borderTop: `1px solid ${BORDER}`, fontSize: 12,
+            }}>
+              <span style={{ whiteSpace: 'nowrap' }}>
+                <span style={{ color: MUTED }}>진행 중 </span>
+                <b title={krwFull(summary.sum)} className="num" style={{ fontWeight: 700, color: TEXT }}>
+                  {summary.count}건 · {krwShort(summary.sum)}
+                </b>
               </span>
-            </div>
-            <div style={bandCell}>
-              <span style={bandLabel}>이번 달 마감</span>
-              <b style={{ ...bandValue, color: summary.soon === 0 ? TEXT_DISABLED : LATE_RED }}>{summary.soon}건</b>
-            </div>
-            <div style={{ ...bandCell, borderRight: 'none', flex: 1, minWidth: 260 }}>
-              <span style={bandLabel}>
-                예정 분기 <span style={{ fontWeight: 400 }}>(누르면 그 분기만)</span>
+              <span style={{ color: BORDER }}>|</span>
+              <span style={{ whiteSpace: 'nowrap' }}>
+                <span style={{ color: MUTED }}>이번 달 마감 </span>
+                <b style={{ fontWeight: 700, color: summary.soon === 0 ? TEXT_DISABLED : LATE_RED }}>{summary.soon}건</b>
               </span>
-              <span style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+              <span style={{ color: BORDER }}>|</span>
+              <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}>
+                <span style={{ color: MUTED, whiteSpace: 'nowrap' }}>예정 분기</span>
                 {slices.map(s => {
                   const on = quarter === s.key
                   return (
@@ -467,9 +512,9 @@ export default function PipelinePage() {
                       key={s.key || 'none'}
                       type="button"
                       onClick={() => setQuarter(on ? null : s.key)}
-                      title={`${s.label} — ${s.count}건 · ${krwFull(s.sum)}`}
+                      title={`${s.label} — ${s.count}건 · ${krwFull(s.sum)} (누르면 그 분기만)`}
                       style={{
-                        display: 'inline-flex', alignItems: 'baseline', gap: 5, padding: '2px 8px',
+                        display: 'inline-flex', alignItems: 'baseline', gap: 5, padding: '1px 8px',
                         borderRadius: R.pill, border: `1px solid ${on ? BLUE : BORDER}`,
                         background: on ? BLUE_TINT : CARD_BG, cursor: 'pointer', fontFamily: 'inherit',
                       }}
@@ -486,9 +531,25 @@ export default function PipelinePage() {
                   </button>
                 )}
               </span>
+              <span style={{ flex: 1, minWidth: 4 }} />
+              <button type="button" onClick={() => setMetricsOpen(false)}
+                title="지표 줄을 접습니다 — 이 선택은 이 브라우저에 남습니다"
+                style={{ border: 'none', background: 'none', color: MUTED, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                지표 숨기기 ▴
+              </button>
             </div>
-          </div>
-        )}
+          )}
+          {/* 접어 두었을 때 — 다시 펴는 줄 하나만 남긴다(카드는 44px 그대로다). */}
+          {!loading && summary.count > 0 && !metricsOpen && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 12px 4px' }}>
+              <button type="button" onClick={() => setMetricsOpen(true)}
+                title="건수·금액·예정 분기를 다시 봅니다"
+                style={{ border: 'none', background: 'none', color: MUTED, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                지표 보기 ▾
+              </button>
+            </div>
+          )}
+        </div>
 
         {loading ? (
           <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, padding: 40, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
@@ -595,6 +656,14 @@ export default function PipelinePage() {
                     onOpen={() => {}}
                     onChangeStage={() => {}}
                     onPickLost={() => {}}
+                    company={customerCompanyName(activeOpp.customers)}
+                    site={shortSiteName(
+                      { company_name: activeOpp.customers?.company_name ?? '', site_name: activeOpp.customers?.site_name ?? null },
+                      customerCompanyName(activeOpp.customers),
+                    )}
+                    idleDays={idleDaysOf(lastActivity.get(activeOpp.opportunity_id) ?? null, activeOpp.created_at, today)}
+                    nextTask={pickNextTask(tasks, activeOpp.opportunity_id)}
+                    today={today}
                   />
                 </div>
               )}
