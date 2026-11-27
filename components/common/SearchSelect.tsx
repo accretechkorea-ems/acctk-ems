@@ -92,6 +92,11 @@ type Props<T> = {
   inputStyle?: CSSProperties
   /** 칸에 붙는 title — 말줄임으로 잘린 값을 호버로 끝까지 읽는 자리. */
   title?: string
+  /**
+   * 입력칸 자체를 밖에서 잡아야 할 때(견적의 커서 흐름 — lib/quoteFocus.ts).
+   * 부품 안의 ref 와 **함께** 불린다 — 둘 다 같은 칸을 가리킨다.
+   */
+  inputRef?: (el: HTMLInputElement | null) => void
   /** 입력칸을 감싸는 상자의 스타일(폭 맞추기 등). */
   wrapStyle?: CSSProperties
   /** 목록 최대 높이. 기본 240. */
@@ -124,7 +129,7 @@ type Row = { key: string; node: ReactNode; run: () => void }
 export default function SearchSelect<T>({
   items, itemKey, renderItem, onSelect,
   query, onQueryChange,
-  placeholder, disabled, autoFocus, inputId, tabIndex, className, inputStyle, wrapStyle, title,
+  placeholder, disabled, autoFocus, inputId, tabIndex, className, inputStyle, wrapStyle, title, inputRef,
   maxHeight = 240, extras, emptyText, openWhenEmpty, openOnFocus = true, note,
   mobileSheet = true,
 }: Props<T>) {
@@ -231,6 +236,7 @@ export default function SearchSelect<T>({
   return (
     <div ref={anchorRef} style={wrapStyle}>
       <input
+        ref={inputRef}
         id={inputId}
         role="combobox"
         aria-expanded={isOpen}

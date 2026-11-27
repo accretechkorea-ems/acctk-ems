@@ -140,11 +140,13 @@ const handRolled = FILES.filter(f => f !== 'lib/companySearch.ts')
 eq('남은 자리', handRolled, [])
 
 console.log('\n── ④ 드롭다운은 공용 컴포넌트를 쓴다 ──')
-// 아직 옮기지 못한 자리 — **견적 화면 셋**. 입력칸이 상자(q-box) 안에서 지우기 × 와 한 몸이라
-// 입력칸을 통째로 넘기는 공용 컴포넌트에 그대로 들어가지 않는다. 그 상자를 손보는 일은
-// 견적 입력 전체를 건드리므로 따로 다룬다. 지금은 **수가 늘지 않는 것**만 지킨다.
+// 아직 옮기지 못한 자리. 2026-11-27 에 **둘이 옮겨 갔다** — 사명(묶음4 F)·E.U(묶음5 7).
+// 상자(q-box) 안에서 지우기 × 와 한 몸이라 못 옮긴다고 적어 두었는데, 공용 콤보에
+// wrapStyle·inputStyle·inputRef 를 받는 길을 내니 상자는 그대로 두고 **속만** 바뀌었다.
+// 남은 것은 **가격표 드롭다운** 하나다 — 그쪽은 줄 하나가 품번·재고·납기·지난가를 함께
+// 그리는 자리라 생김새부터 다르다. 지금은 **수가 늘지 않는 것**만 지킨다.
 const PENDING_HOOK = ['app/quote/QuoteItemRow.tsx', 'hooks/quote/useQuoteCustomer.ts']
-const PENDING_LIST = ['app/quote/QuoteItemRow.tsx', 'components/quote/CustomerCard.tsx']
+const PENDING_LIST = ['app/quote/QuoteItemRow.tsx']
 const ALLOWED = ['components/common/SearchSelect.tsx', 'hooks/useListKeyboard.ts']
 // 엑셀 미리보기는 드롭다운이 아니라 **표**다 — 같은 훅을 쓰지만 고르는 목록이 아니다.
 const NOT_A_DROPDOWN = ['components/xlsx/XlsxPreviewModal.tsx']

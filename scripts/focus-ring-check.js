@@ -134,7 +134,8 @@ for (const [where, file, pat] of [
   ['문구 목록', 'components/account/MySnippets.tsx', /ems-row-hover ems-pick/],
   ['모달 안 견적 이력', 'components/customer/modals/QuoteHistoryModal.tsx', /className="ems-pick"/],
   ['모달 안 연결 견적', 'components/customer/modals/OpportunityModal.tsx', /className="ems-pick"/],
-  ['견적 사명·E.U 드롭다운', 'components/quote/CustomerCard.tsx', /className=\{PICK_CLASS\}/],
+  // 사명(묶음4 F)·E.U(묶음5 7) 는 공용 SearchSelect 로 갔다 — 링은 **그 부품**이 붙인다.
+  ['공용 콤보(사명·E.U·포캐스트…)', 'components/common/SearchSelect.tsx', /className=\{PICK_CLASS\}/],
   ['견적 가격표 드롭다운', 'app/quote/QuoteItemRow.tsx', /className=\{PICK_CLASS\}/],
 ]) ok(where, pat.test(read(file)), '링을 붙이지 않았다')
 ok('견적 품목 카드는 CSS 로 받는다', /\.q-item-card:hover,\s*\n\.q-item-card:focus-within \{/.test(CSS))

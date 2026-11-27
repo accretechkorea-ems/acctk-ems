@@ -18,7 +18,6 @@ import { euDisplayName } from '@/lib/quoteEuName'
 import { contactOptionLabel } from '@/lib/quoteRecipient'
 import { type RecipientSource, groupRecipients, isAgencyPick, pickKey } from '@/lib/quoteCustomerPick'
 import type { Contact } from '@/components/customer/types'
-import { Z } from '@/lib/zIndex'
 import { type SetTerms, type Terms, TERM_LABELS, defaultTermsFor, termKeysFor } from '@/lib/quoteTerms'
 import SearchSelect from '@/components/common/SearchSelect'
 import ModalOverlay from '@/components/common/ModalOverlay'
@@ -33,7 +32,6 @@ import type { SalesOpportunity } from '@/components/customer/types'
 import { BLUE, BORDER, CARD_BG, MUTED } from '@/components/common/ui'
 import { TEXT_LABEL } from '@/lib/textTokens'
 import { R } from '@/lib/radius'
-import { PICK_CLASS } from '@/lib/focusRing'
 import { advanceQuoteFocus, focusQuoteStep, onlyContactId, registerQuoteFocus } from '@/lib/quoteFocus'
 
 
@@ -179,8 +177,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
     prefillNotice, setPrefillNotice, isDealer,
   } = customer
   const {
-    euQuery, euResults, euSearchOpen, setEuSearchOpen, euKeys,
-    euSearchRef, euListRef, selectedEU, euParentName,
+    euQuery, euResults, euSearchRef, selectedEU, euParentName,
     handleEUSearch, handleEUSelect, handleEUClear,
   } = eu
   const { opportunities, opportunityId, setOpportunityId, onCreate } = opportunity
@@ -407,14 +404,26 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
         {/* E.U 상자 — 대리점 건이라 테두리만 주황 계열을 유지한다(기존 색). */}
         <div ref={euSearchRef} className="q-box" style={{ borderColor: '#fed7aa' }}>
             <span className="q-box-label" style={{ borderRightColor: '#fed7aa' }}>E.U</span>
-            <input
-              className="q-box-field ems-ring-off"
-              value={euQuery}
-              onChange={e => { handleEUSearch(e.target.value); clearError('eu') }}
-              onFocus={() => euResults.length > 0 && setEuSearchOpen(true)}
-              onKeyDown={euKeys.onKeyDown}
-              ref={el => registerQuoteFocus('eu', el)}
+            {/* 사명 칸과 **같은 공용 콤보**다(2026-11-27, 묶음5 7). 손수 만든 목록을 걷었다 —
+               ↑↓·Enter·Esc·Tab 이 다른 칸과 같아지고, **폰에서는 화면 아래 시트**로 뜬다.
+               고르는 값·검색 대상·다음 칸으로 옮기는 흐름(quoteFocus)은 **그대로**다. */}
+            <SearchSelect<CustomerResult>
+              items={euResults}
+              itemKey={c => c.customer_id}
+              renderItem={c => (
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, color: '#c2410c', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.company_name}</div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{c.address ?? ''}{c.status ? ` · ${c.status}` : ''}</div>
+                </div>
+              )}
+              onSelect={c => { handleEUSelect(c); advanceQuoteFocus('eu', { isDealer: true }) }}
+              query={euQuery}
+              onQueryChange={v => { handleEUSearch(v); clearError('eu') }}
               placeholder="최종 사용 업체 검색 (사전 등록 필요)"
+              className="q-box-field ems-ring-off"
+              inputRef={el => registerQuoteFocus('eu', el)}
+              wrapStyle={{ flex: 1, minWidth: 0, display: 'flex' }}
+              inputStyle={{ border: 'none', background: 'transparent', padding: 0, borderRadius: 0 }}
             />
             {/* 고른 뒤에는 상자 안 오른쪽 끝에 체크(= 거래이력 연동)와 지우기만 남긴다. */}
             {selectedEU && (
@@ -426,21 +435,6 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', padding: 0, display: 'flex', alignItems: 'center' }}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
-              </div>
-            )}
-            {euSearchOpen && euResults.length > 0 && (
-              <div ref={euListRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #c2410c', borderRadius: R.control, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(194,65,12,0.12)' }}>
-                {euResults.map((c, i) => (
-                  <div key={c.customer_id} onClick={() => { handleEUSelect(c); advanceQuoteFocus('eu', { isDealer: true }) }}
-                    className={PICK_CLASS}
-                    role="option"
-                    aria-selected={euKeys.active === i}
-                    style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 12, transition: 'background 0.15s ease', background: euKeys.active === i ? '#fff7ed' : '#fff' }}
-                    onMouseEnter={() => euKeys.setActive(i)}>
-                    <div style={{ fontWeight: 700, color: '#c2410c' }}>{c.company_name}</div>
-                    <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{c.address ?? ''}{c.status ? ` · ${c.status}` : ''}</div>
-                  </div>
-                ))}
               </div>
             )}
         </div>
