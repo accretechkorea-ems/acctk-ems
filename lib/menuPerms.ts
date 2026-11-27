@@ -247,6 +247,42 @@ export function menuKeyForPath(pathname: string): string | null {
   return null
 }
 
+/**
+ * **메뉴에 없는 화면의 앱바 제목** (2026-11-27, 묶음4 C).
+ *
+ * 폰 앱바의 제목은 지금 MENU_PERMS 에서 경로로 찾는다. 그래서 메뉴에 없는 화면
+ * (사업장·회사·대리점 상세, 홀딩 현황, 내 정보…)에서는 **제목 칸이 비어 있었다** —
+ * 폰에는 사이드바가 없으니 어느 화면인지 알 길이 사라진다.
+ *
+ * PARENT_MENU 와 **따로 두는 까닭**: 저쪽은 「누가 들어갈 수 있나」를 정하는 표이고
+ * 이쪽은 「무엇이라고 적을까」를 정하는 표다. 홀딩 현황은 권한이 80 대시보드를 따르지만
+ * 제목은 「홀딩 현황」이어야 한다 — 둘을 한 표로 묶으면 그런 자리에서 틀린 이름이 뜬다.
+ *
+ * 메뉴에 있는 화면은 여기 적지 않는다(이름이 두 곳에 생긴다).
+ */
+export const SCREEN_TITLES: Record<string, string> = {
+  // 사업장·회사·대리점 상세가 한 주소를 쓴다 — 셋 다 「고객사」다(메뉴 이름과 같다).
+  '/customer/[id]': '고객사',
+  '/holdings': '홀딩 현황',
+  '/account': '내 정보',
+  '/account/change-password': '비밀번호 변경',
+  '/debug/viewport': '화면 진단',
+}
+
+/**
+ * 폰 앱바에 적을 이름. 메뉴에 있으면 메뉴 이름, 없으면 위 표, 그래도 없으면 null.
+ * 경로의 [id] 자리는 아무 값이나 받는다.
+ */
+export function screenTitleOf(pathname: string): string | null {
+  const path = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname
+  const menu = MENU_PERMS.find(m => m.path === path)
+  if (menu) return menu.label
+  for (const [pattern, title] of Object.entries(SCREEN_TITLES)) {
+    if (matchesPattern(pattern, path)) return title
+  }
+  return null
+}
+
 /** 기존 판정 함수가 묻는 영역 이름. TeamPerm 이 플래그였을 때의 키와 같다. */
 export type PermArea = 'customers' | 'dashboard' | 'quote' | 'pipeline' | 'salesMgmt' | 'admin' | 'leads'
 

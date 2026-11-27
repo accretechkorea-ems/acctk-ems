@@ -15,7 +15,7 @@ import { type EngineerLike, type TeamPerm } from '@/lib/permissions'
 // 메뉴 목록·권한 판정은 이 파일 한곳에서만 정한다(1단계).
 import {
   MENU_GROUPS, MENU_PATHS, MENU_PERMS, menuDivision, menuForPath,
-  readCollapsedMenuGroups, visibleMenus, writeCollapsedMenuGroups,
+  readCollapsedMenuGroups, screenTitleOf, visibleMenus, writeCollapsedMenuGroups,
   type MenuGroup, type MenuPerm,
 } from '@/lib/menuPerms'
 import { useMe } from '@/lib/appData/MeProvider'
@@ -432,8 +432,14 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
     .filter(matchSub)
     .sort((a, b) => (a === pathname ? 1 : 0) - (b === pathname ? 1 : 0) || a.length - b.length)
     .pop() ?? null
-  /** 모바일 상단 바에 띄우는 현재 화면 이름. 해당 메뉴가 없으면 비운다. */
-  const currentLabel = MENU_PERMS.find(i => i.path === activePath)?.label ?? ''
+  /**
+   * 모바일 상단 바에 띄우는 현재 화면 이름.
+   *   ① 지금 켜진 메뉴의 이름 — 하위 경로도 그 메뉴를 따른다(/inquiries/12 → 「의뢰서」).
+   *   ② 메뉴에 없는 화면은 **이름표**를 본다(lib/menuPerms.ts 의 SCREEN_TITLES).
+   *      사업장 상세·홀딩 현황·내 정보가 그렇다 — 폰에는 사이드바가 없어서, 비워 두면
+   *      어느 화면인지 알 길이 없다(2026-11-27, 묶음4 C).
+   */
+  const currentLabel = MENU_PERMS.find(i => i.path === activePath)?.label ?? screenTitleOf(pathname) ?? ''
 
   // '/' 는 홈 상태 초기화 + 하드 내비게이션이 필요하므로 별도 처리한다.
   const navigate = (path: string) => {
