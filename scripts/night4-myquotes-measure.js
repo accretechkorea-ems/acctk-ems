@@ -162,17 +162,17 @@ const OVERFLOW = `(() => {
     await ctx.close()
   }
 
-  // ── 폰 390×844 ──────────────────────────────────────────────────────────
-  {
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
+  // ── 폰 390×844 · 350×760 ────────────────────────────────────────────────
+  for (const W of [390, 350]) {
+    const ctx = await browser.newContext({ viewport: { width: W, height: W === 390 ? 844 : 760 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
     const page = await ctx.newPage()
     await login(page)
     await openModal(page)
-    report.phone390 = {
+    report[`phone${W}`] = {
       overflow: await page.evaluate(OVERFLOW),
       rows: await page.evaluate(ROWS),
     }
-    await page.screenshot({ path: path.join(SHOTS, `myquotes-390-${TAG}.png`), fullPage: false })
+    await page.screenshot({ path: path.join(SHOTS, `myquotes-${W}-${TAG}.png`), fullPage: false })
     await ctx.close()
   }
 

@@ -1,0 +1,92 @@
+{
+ "tag": "after",
+ "at": "2026-11-27T12:58:13.164Z",
+ "base": "http://localhost:3101",
+ "pc": {
+  "summary": [
+   {
+    "label": "견적서 송부",
+    "value": "메일 본문"
+   },
+   {
+    "label": "견적 제출-0건",
+    "value": "견적중-0건 / 수주액-0건 / 매출 완료액-순이익 — / 수주 달성률미설정 / 매출 달성률미설정"
+   },
+   {
+    "label": "견적 제출",
+    "value": "- / 0건"
+   },
+   {
+    "label": "견적중",
+    "value": "- / 0건"
+   },
+   {
+    "label": "수주액",
+    "value": "- / 0건"
+   },
+   {
+    "label": "매출 완료액",
+    "value": "- / 순이익 —"
+   },
+   {
+    "label": "수주 달성률",
+    "value": "미설정"
+   },
+   {
+    "label": "매출 달성률",
+    "value": "미설정"
+   }
+  ],
+  "titles": [
+   {
+    "top": 81,
+    "left": 1087,
+    "fontSize": "14px",
+    "fontWeight": "700"
+   },
+   {
+    "top": 60,
+    "left": 80,
+    "fontSize": "17px",
+    "fontWeight": "800"
+   }
+  ],
+  "rows": {
+   "count": 0,
+   "heights": [],
+   "unique": [],
+   "inView": 0,
+   "firstCellLines": null
+  }
+ },
+ "phone390": {
+  "overflow": {
+   "innerWidth": 390,
+   "docWidth": 390,
+   "count": 0,
+   "hits": []
+  },
+  "rows": {
+   "count": 0,
+   "heights": [],
+   "unique": [],
+   "inView": 0,
+   "firstCellLines": null
+  }
+ },
+ "phone350": {
+  "overflow": {
+   "innerWidth": 350,
+   "docWidth": 350,
+   "count": 0,
+   "hits": []
+  },
+  "rows": {
+   "count": 0,
+   "heights": [],
+   "unique": [],
+   "inView": 0,
+   "firstCellLines": null
+  }
+ }
+}

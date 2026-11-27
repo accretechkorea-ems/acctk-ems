@@ -113,11 +113,13 @@ export default function MyQuoteCard({ engineerId, slot, initialTab, onReload, he
             style={{
               borderRadius: R.control, width: '90vw', maxWidth: '90vw', height: '85vh',
             }}
-            headStyle={{ padding: '12px 16px', borderBottom: `1px solid ${BORDER}`, alignItems: 'center', gap: 8 }}
+            // 폰(≤768)에서는 조종 칸이 **제목 아래 줄**로 접힌다(app/globals.css 의
+            // .myq-controls-slot). 접히지 않으면 제목과 겹친다 — 390 에서 재어 보고 고쳤다.
+            headStyle={{ padding: '12px 16px', borderBottom: `1px solid ${BORDER}`, alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
             bodyStyle={{ padding: 12, overflowX: 'hidden' }}
             title={<span style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}>내 견적</span>}
             // 제목과 ✕ 사이가 조종 칸의 자리다. 패널이 여기에 포털로 심는다.
-            titleExtra={<span ref={setControlsBox} style={{ display: 'flex', justifyContent: 'flex-end', minWidth: 0 }} />}
+            titleExtra={<span className="myq-controls-slot" ref={setControlsBox} />}
           >
             {/* 본문 — 여기서만 스크롤한다.
                 ⚠ fitToHeight 를 주지 않는다. 그 모드는 **표 상자를 모달 높이에 맞춰 잘라 내고**

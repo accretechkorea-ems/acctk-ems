@@ -676,3 +676,28 @@ tr:has(+ tr.ems-pick[data-on='true']) > td {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* ══ 내 견적 제목 줄의 조종 칸 (2026-11-28 야간4 2-3·2-4) ═══════════════════
+   PC 에서는 제목 오른쪽 · ✕ 왼쪽에 한 줄로 선다.
+   폰(≤768)에서는 **제목 아래 줄**로 접힌다. 접지 않으면 제목(「내 견적」, nowrap)과
+   겹친다 — 390 에서 재어 보고 고쳤다. 머리줄에 flexWrap 이 걸려 있어 100% 를 차지하면
+   줄이 하나 늘고, ✕ 는 첫 줄 오른쪽에 그대로 남는다. */
+.myq-controls-slot {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+@media (max-width: 768px) {
+  .myq-controls-slot {
+    /* 머리줄 맨 끝으로 보낸다 — 그래야 ✕ 가 제목과 **첫 줄**에 남고
+       조종 칸만 아래로 접힌다(order 를 안 주면 ✕ 가 셋째 줄로 밀린다). */
+    order: 1;
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+  /* 검색 칸이 남는 자리를 먹는다 — 드롭다운 둘은 제 글자만큼만 쓴다. */
+  .myq-controls input {
+    flex: 1 1 auto;
+    min-width: 90px;
+  }
+}

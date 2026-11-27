@@ -129,7 +129,11 @@ ok('품목이 없으면 빈 글자', itemsTextOf({ quote_items: null }), '')
 console.log('── ⑥ 조종 칸은 모달 머리줄에 ──')
 ok('패널이 포털로 심는다', /createPortal\(controlsRow, controlsTarget\)/.test(BODY))
 ok('없으면 제 줄로 선다(홈 카드 밖에서도 쓰게)', /controlsTarget\r?\n?\s*\? createPortal/.test(BODY) || /controlsTarget[\s\S]{0,40}\? createPortal/.test(BODY))
-ok('모달이 그 자리를 내려 준다', /titleExtra=\{<span ref=\{setControlsBox\}/.test(CARD))
+ok('모달이 그 자리를 내려 준다', /titleExtra=\{<span className="myq-controls-slot" ref=\{setControlsBox\} \/>\}/.test(CARD))
+// 폰에서는 조종 칸이 제목 아래 줄로 접힌다 — order 를 안 주면 ✕ 가 셋째 줄로 밀린다(390 에서 봤다).
+ok('폰에서는 그 자리가 제목 아래로 접힌다',
+  /\.myq-controls-slot \{[\s\S]{0,500}order: 1;[\s\S]{0,120}flex: 1 1 100%;/.test(read('app/globals.css')))
+ok('머리줄이 접히게 두었다', /flexWrap: 'wrap' \}\}/.test(CARD))
 ok('그 자리를 패널에 넘긴다', /controlsTarget=\{controlsBox\}/.test(CARD))
 ok('상태를 끌어올리지 않았다 — 카드에 기간·검색 상태가 없다',
   !/useState<Period>/.test(CARD) && !/setSearch/.test(CARD))
