@@ -174,8 +174,7 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
     formKind, setFormKind,
   } = category
   const {
-    selectedCustomer, customerQuery, customerResults, customerSearchOpen, setCustomerSearchOpen,
-    customerKeys, customerSearchRef, customerListRef,
+    selectedCustomer, customerQuery, customerResults, customerSearchRef,
     handleCustomerSearch, handleCustomerSelect, handleCustomerClear,
     prefillNotice, setPrefillNotice, isDealer,
   } = customer
@@ -344,13 +343,33 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
               </span>
             </span>
           ) : (
-            <input
-              className="q-box-field ems-ring-off"
-              value={customerQuery}
-              onChange={e => { handleCustomerSearch(e.target.value); clearError('company'); setPrefillNotice(null) }}
-              onFocus={() => customerResults.length > 0 && setCustomerSearchOpen(true)}
-              onKeyDown={customerKeys.onKeyDown}
+            /* 공용 콤보박스로 고른다(2026-11-27, 묶음4 F). 손수 만든 목록을 걷었다 —
+               ↑↓·Enter·Esc·Tab 이 다른 칸과 같아지고, **폰에서는 화면 아래 시트**로 뜬다
+               (칸에 갇힌 목록은 390 에서 회사 이름이 잘려 무엇을 고르는지 알 수 없었다).
+               고르는 값·검색 대상·다음 칸으로 옮기는 흐름은 **그대로**다. */
+            <SearchSelect<CustomerResult>
+              items={customerResults}
+              itemKey={pickKey}
+              renderItem={c => (
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                    <span style={{ fontWeight: 700, color: isAgencyPick(c) ? '#c2410c' : BLUE, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.company_name}</span>
+                    {isAgencyPick(c) && (
+                      <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: '#c2410c', background: '#f3f4f6', borderRadius: R.tag, padding: '1px 5px' }}>
+                        대리점
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{c.address ?? ''}{c.status ? ` · ${c.status}` : ''}</div>
+                </div>
+              )}
+              onSelect={c => { handleCustomerSelect(c); advanceQuoteFocus('company', { isDealer: isAgencyPick(c) }) }}
+              query={customerQuery}
+              onQueryChange={v => { handleCustomerSearch(v); clearError('company'); setPrefillNotice(null) }}
               placeholder="업체·대리점 검색 (사전 등록 필요)"
+              className="q-box-field ems-ring-off"
+              wrapStyle={{ flex: 1, minWidth: 0, display: 'flex' }}
+              inputStyle={{ border: 'none', background: 'transparent', padding: 0, borderRadius: 0 }}
             />
           )}
           {/* 상자 오른쪽 끝 — 지우기 ×.
@@ -365,34 +384,6 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
             )}
           </div>
           <FieldError message={errors.company} style={{ position: 'absolute', top: '100%', left: 0, marginTop: 2, whiteSpace: 'nowrap' }} />
-          {customerSearchOpen && customerResults.length > 0 && (
-            <div ref={customerListRef} style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: Z.inPage, background: '#fff', border: '1px solid #234ea2', borderRadius: R.control, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 24px rgba(35,78,162,0.12)' }}>
-              {/* 한 목록에 사업장과 대리점이 함께 있다 — 대리점 줄에만 꼬리표를 붙인다.
-                  대리점이면서 우리 고객인 15곳은 **같은 이름이 두 줄**로 뜬다(역할이 다르다).
-                  key 에 역할을 함께 넣는 까닭이 그것이다(lib/quoteCustomerPick.ts). */}
-              {customerResults.map((c, i) => (
-                /* 마우스와 키보드가 **같은 자리 표시**를 쓴다(active) — 2026-11-26(묶음2 D)에
-                   그 표시에 공용 링을 더했다. 연파랑 바탕은 그대로 둔다(줄이 길어 바탕이
-                   어디까지가 한 줄인지도 알려 준다). */
-                <div key={pickKey(c)} onClick={() => { handleCustomerSelect(c); advanceQuoteFocus('company', { isDealer: isAgencyPick(c) }) }}
-                  className={PICK_CLASS}
-                  role="option"
-                  aria-selected={customerKeys.active === i}
-                  style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #ebebeb', fontSize: 12, transition: 'background 0.15s ease', background: customerKeys.active === i ? '#f0f4ff' : '#fff' }}
-                  onMouseEnter={() => customerKeys.setActive(i)}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-                    <span style={{ fontWeight: 700, color: isAgencyPick(c) ? '#c2410c' : '#234ea2', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.company_name}</span>
-                    {isAgencyPick(c) && (
-                      <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: '#c2410c', background: '#f3f4f6', borderRadius: R.tag, padding: '1px 5px' }}>
-                        대리점
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{c.address ?? ''}{c.status ? ` · ${c.status}` : ''}</div>
-                </div>
-              ))}
-            </div>
-          )}
       </div>
       {/* 고른 업체를 알리는 칩 줄은 두지 않는다 — 상자 안에 업체명이 그대로 들어가 있어
           같은 말을 두 번 하는 셈이고, 대리점 여부는 상자 안 체크박스와 E.U 상자가 보여준다.
