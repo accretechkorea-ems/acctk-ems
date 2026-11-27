@@ -73,13 +73,17 @@ const hyundai = {
   address: '충남 서산시 지곡면',
   agency_name: '감마세타',
 }
-eq('다섯 칸을 다 본다', [
+// 2026-11-27(묶음4 D) — **이름 셋만** 본다. 주소·대리점명은 뺐다:
+//   주소를 보면 「지곡면」에 남의 회사가 전부 걸리고(지역은 칩이 가른다),
+//   대리점명을 보면 그 대리점이 맡은 회사 전부가 걸려 정작 그 대리점 줄이 묻힌다.
+// 보는 칸이 바뀌는 자리라 scripts/list-search-scope-check.js 가 탭별로 따로 본다.
+eq('이름 셋을 본다 · 주소와 대리점명은 보지 않는다', [
   S.matchesCompany(hyundai, '현대'),
   S.matchesCompany(hyundai, 'HYUNDAI'),
   S.matchesCompany(hyundai, '서산공장'),
   S.matchesCompany(hyundai, '지곡면'),
   S.matchesCompany(hyundai, '감마세타'),
-], [true, true, true, true, true])
+], [true, true, true, false, false])
 ok('대소문자를 가리지 않는다', S.matchesCompany(hyundai, 'hyundai transys'))
 ok('없는 말은 안 걸린다', S.matchesCompany(hyundai, '기아') === false)
 ok('검색어가 비면 전부 통과(거르지 않는다)', S.matchesCompany({ company_name: null }, '   '))
@@ -88,9 +92,10 @@ ok('그 자리만 보는 칸(extra)도 본다',
   S.matchesCompany(hyundai, 'SBS-100', ['SBS-100 · 12345']))
 ok('extra 가 없어도 터지지 않는다', S.matchesCompany(hyundai, '현대', undefined))
 eq('한 줄로 모은 글자는 소문자다', S.companyHaystack({ company_name: 'ACCT-K' }), 'acct-k')
-eq('칸 이름 다섯', S.COMPANY_SEARCH_FIELDS.length, 5)
-ok('안내 글이 다섯 칸을 적어 둔다',
-  ['회사명', '영문명', '사업장명', '주소', '대리점'].every(w => S.COMPANY_SEARCH_PLACEHOLDER.includes(w)))
+eq('칸 이름 셋', S.COMPANY_SEARCH_FIELDS.length, 3)
+ok('안내 글이 그 셋을 적어 둔다',
+  ['회사명', '영문명', '사업장명'].every(w => S.COMPANY_SEARCH_PLACEHOLDER.includes(w))
+  && !/주소|대리점/.test(S.COMPANY_SEARCH_PLACEHOLDER))
 
 console.log('\n── ①-ⓑ 회사를 **고를** 때는 이름 둘만 본다 ──')
 // 고르는 칸에서 주소까지 보면 「지곡면」으로 그 동네의 남의 회사가 후보에 오른다.
@@ -124,9 +129,9 @@ eq('고르는 자리에 ⓐ 가 섞이지 않았다',
 
 console.log('\n── ② 서버 조회 조건 ──')
 eq('영문명 칸이 있을 때', S.companySearchOr('현대', true),
-  'company_name.ilike.%현대%,name_en.ilike.%현대%,site_name.ilike.%현대%,address.ilike.%현대%')
+  'company_name.ilike.%현대%,name_en.ilike.%현대%,site_name.ilike.%현대%')
 eq('영문명 칸이 없을 때는 그것만 빠진다', S.companySearchOr('현대', false),
-  'company_name.ilike.%현대%,site_name.ilike.%현대%,address.ilike.%현대%')
+  'company_name.ilike.%현대%,site_name.ilike.%현대%')
 
 console.log('\n── ③ 손으로 적은 회사명 필터가 없다 ──')
 // 「회사명 한 칸만 보고 거르는」 코드. 자리마다 보는 칸이 갈리던 원인이다.

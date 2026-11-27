@@ -10,7 +10,7 @@ import MapView from '@/components/home/MapView'
 import AddCustomerModal from '@/components/home/AddCustomerModal'
 import { useHomeData } from '@/hooks/useHomeData'
 import { CATEGORY_OPTIONS } from '@/lib/constants'
-import { matchesCompany } from '@/lib/companySearch'
+import { AGENCY_SEARCH_PLACEHOLDER, COMPANY_SEARCH_PLACEHOLDER, matchesCompany } from '@/lib/companySearch'
 import { useAgencies } from '@/lib/customerAgency'
 import { REGION_FILTER_OPTIONS } from '@/lib/region'
 import ExportModal from '@/components/home/ExportModal'
@@ -49,7 +49,6 @@ import {
   HOME_STATE_KEY,
   PAGE_BG,
   TEXT_MUTED,
-  getDeviceLine,
   type Customer,
   type Device,
 } from '@/lib/home'
@@ -454,17 +453,16 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
 
       if (!categoryMatched) return false
 
-      const deviceLine = getDeviceLine(devices).toLowerCase()
-
       if (!q) return true
 
-      // 찾는 칸은 **공용 함수 하나**가 본다(lib/companySearch.ts) — 회사명·영문명·사업장명·주소·대리점명.
-      // 이 자리만 더 보는 것: 상태와 장비 줄.
+      // 찾는 칸은 **공용 함수 하나**가 본다(lib/companySearch.ts) — 회사명 · 영문명 · 사업장명.
+      // 2026-11-27(묶음4 D) — 주소·대리점명·상태·장비 줄을 **뺐다**. 지도 보기의 검색칸은
+      // 목록 보기의 회사 탭과 **같은 것**을 본다(둘이 다르면 같은 글자에 다른 수가 나온다).
+      // 지역·분류·상태는 칩이 가르는 자리라, 검색까지 그것을 보면 이름으로 찾을 수 없다.
       const parent = c.parent_customer_id != null ? companyMap.get(c.parent_customer_id) : undefined
       return matchesCompany(
-        { ...c, name_en: parent?.name_en ?? null },
+        { company_name: c.company_name, name_en: parent?.name_en ?? null, site_name: c.site_name },
         query,
-        [c.status, deviceLine],
       )
     })
 
@@ -916,6 +914,9 @@ useEffect(() => {
       sort={view === 'list' ? listSort : undefined}
       setSort={view === 'list' ? setListSort : undefined}
       bordered={false}
+      /* 탭마다 보는 칸이 다르다 — 안내 글도 따라간다(2026-11-27, 묶음4 D).
+         지도 보기는 회사 탭과 **같은 것**을 본다. */
+      searchPlaceholder={view === 'list' && listTab === 'agency' ? AGENCY_SEARCH_PLACEHOLDER : COMPANY_SEARCH_PLACEHOLDER}
       tabs={view === 'list' ? (
         <ListTabs
           tab={listTab}
@@ -1132,6 +1133,8 @@ useEffect(() => {
                  전체를 보는 사람이 판단한다(라우트의 ADMIN_ACTIONS 와 같은 판정). */
               onRestore={canRestoreCustomer ? ((id, name) => void restoreCustomer(id, name)) : undefined}
               agencies={agencyList}
+              /* 대리점·정리 필요 탭도 같은 검색칸으로 좁힌다(2026-11-27, 묶음4 D). */
+              query={query}
               agencySiteCount={agencySiteCount}
               /* 대리점을 누르면 **우측에 대리점 화면**이 선다(2026-11-21).
                  전에는 회사 탭으로 옮겨 가며 그 대리점의 사업장만 걸렀다 — 거르기는

@@ -94,7 +94,8 @@ ok('지도 칸에 이름표', /className="home-map"/.test(HOME))
 console.log('\n── ④ 검색칸은 하나 ──')
 ok('지도 열의 칸은 폰에서도 숨긴다',
   /\.sidebar-search \{ display: none !important; \}/.test(HOME))
-ok('패널 머리줄의 칸 하나가 남는다', /placeholder=\{COMPANY_SEARCH_PLACEHOLDER\}/.test(read('components/home/PanelHeader.tsx')))
+// 안내 글은 탭이 정한다(2026-11-27, 묶음4 D) — 칸은 그대로 하나다.
+ok('패널 머리줄의 칸 하나가 남는다', /placeholder=\{searchPlaceholder \?\? COMPANY_SEARCH_PLACEHOLDER\}/.test(read('components/home/PanelHeader.tsx')))
 ok('건수는 그 칸 **오른쪽 작은 글씨**다',
   /count\.toLocaleString\('ko-KR'\)/.test(read('components/home/PanelHeader.tsx')))
 

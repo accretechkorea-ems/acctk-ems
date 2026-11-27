@@ -49,6 +49,8 @@ type Props = {
   bordered?: boolean
   /** 목록 보기의 탭 줄 — 상단 카드의 셋째 줄로 들어간다(지도 보기에는 없다). */
   tabs?: React.ReactNode
+  /** 검색칸 안내 글 — 탭마다 보는 칸이 달라서 밖에서 받는다(2026-11-27, 묶음4 D). */
+  searchPlaceholder?: string
 }
 
 const MapGlyph = () => (
@@ -65,6 +67,7 @@ const ListGlyph = () => (
 export default function PanelHeader({
   view, setView, query, setQuery, count, loading, filterCount, chips,
   onOpenFilter, onDropChip, onClearChips, sort, setSort, bordered = true, tabs,
+  searchPlaceholder,
 }: Props) {
   const [focused, setFocused] = useState(false)
 
@@ -102,7 +105,7 @@ export default function PanelHeader({
           </svg>
           <input value={query} onChange={e => setQuery(e.target.value)}
             onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-            placeholder={COMPANY_SEARCH_PLACEHOLDER}
+            placeholder={searchPlaceholder ?? COMPANY_SEARCH_PLACEHOLDER}
             style={{ border: 'none', outline: 'none', flex: 1, minWidth: 0, fontSize: 13, color: TEXT, background: 'transparent', fontFamily: 'inherit' }} />
           {query ? (
             <button type="button" onClick={() => setQuery('')} aria-label="검색어 지우기"

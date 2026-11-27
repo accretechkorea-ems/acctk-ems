@@ -9,10 +9,11 @@
 //   「회사」 탭만 돈다. 「대리점」·「미연결」은 **자리와 건수만** 둔다 — 누르면
 //   「다음 회차」라고 알린다. 건수는 진짜 값이라 지금도 규모를 알 수 있다.
 
-import { useRef, type CSSProperties, useState } from 'react'
+import { useCallback, useMemo, useRef, type CSSProperties, useState } from 'react'
 import ScrollHints from '@/components/common/ScrollHints'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import type { AgencyOption } from '@/lib/customerAgency'
+import { matchesAgency } from '@/lib/companySearch'
 import {
   daysLabel, isStale, type CompanyGroup, 
 } from '@/lib/customerList'
@@ -51,6 +52,8 @@ export type CleanupRow = { companyId: number; companyName: string; hint: string 
 
 type Props = {
   tab: ListTab
+  /** 검색어 — 대리점·정리 필요 탭도 이 글자로 좁힌다(2026-11-27, 묶음4 D). */
+  query?: string
   groups: CompanyGroup[]
   siteCount: number
   /** 펼친 회사 id 집합. */
@@ -109,8 +112,27 @@ export default function CustomerListPanel({
   onSelectCompany, onSelectSite, loading,
   checkedCompanies, toggleCompanyCheck, clearCompanyChecks, onBulkIndustry,
   cleanup, cleanupBucket, setCleanupBucket, onDeleteCompany, onRequestDelete, deleteRequested, onRestore,
-  agencies, agencySiteCount, onPickAgency, selectedAgencyId,
+  agencies, agencySiteCount, onPickAgency, selectedAgencyId, query = '',
 }: Props) {
+  /**
+   * 대리점·정리 필요 탭의 **검색** (2026-11-27, 묶음4 D).
+   *   대리점 — 대리점명 · 영문명만 본다(matchesAgency). 주소·사업장명은 보지 않는다.
+   *   정리 필요 — 회사명으로 좁힌다(그 묶음에는 회사 이름 하나뿐이다).
+   * 회사 탭은 트리를 만들 때 이미 좁혀져 들어온다(lib/customerList.ts).
+   */
+  const shownAgencies = useMemo(
+    () => agencies.filter(a => matchesAgency({ company_name: a.company_name, name_en: a.name_en }, query)),
+    [agencies, query],
+  )
+  const cleanupShown = useCallback(
+    (b: CleanupBucket) => {
+      const q = query.trim().toLowerCase()
+      return q ? cleanup[b].filter(r => r.companyName.toLowerCase().includes(q)) : cleanup[b]
+    },
+    [cleanup, query],
+  )
+  const shownCleanup = cleanupShown(cleanupBucket)
+
   /** 트리가 구르는 요소 — 위·아래 힌트가 이것을 본다. */
   const treeRef = useRef<HTMLElement | null>(null)
   /** 「분류 지정」 적용 모달이 떠 있는가. */
@@ -130,10 +152,14 @@ export default function CustomerListPanel({
       <ScrollHints scrollRef={treeRef} top={34} bottom={10} />
       <nav ref={treeRef} aria-label="회사 목록" className="stable-scroll" style={{ flex: 1, overflowY: 'auto', padding: '4px 8px 12px', minHeight: 0 }}>
         {tab === 'agency' ? (
-          /* ── 대리점 탭(7) — 누르면 회사 탭이 그 대리점의 사업장만 거른다 ── */
-          agencies.length === 0 ? (
-            <div style={{ padding: '36px 16px', textAlign: 'center', color: MUTED, fontSize: 13 }}>등록된 대리점이 없습니다</div>
-          ) : agencies.map(a => {
+          /* ── 대리점 탭(7) — 누르면 그 대리점 화면이 선다.
+             검색은 **대리점명 · 영문명**만 본다(2026-11-27, 묶음4 D). 회사명으로 찾으면
+             0건이다 — 그 회사는 회사 탭에 있고, 대리점으로 좁히는 일은 필터가 맡는다. ── */
+          shownAgencies.length === 0 ? (
+            <div style={{ padding: '36px 16px', textAlign: 'center', color: MUTED, fontSize: 13 }}>
+              {query.trim() ? `「${query.trim()}」 에 맞는 대리점이 없습니다` : '등록된 대리점이 없습니다'}
+            </div>
+          ) : shownAgencies.map(a => {
             /* 고른 줄은 켜 둔다 — 우측에 그 대리점 화면이 서 있다(회사 트리와 같은 규칙). */
             const on = a.customer_id === selectedAgencyId
             return (
@@ -155,13 +181,15 @@ export default function CustomerListPanel({
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, padding: '2px 4px 10px' }}>
               {(Object.keys(CLEANUP_LABEL) as CleanupBucket[]).map(b => (
                 <button key={b} type="button" onClick={() => setCleanupBucket(b)} style={chipStyle(cleanupBucket === b)}>
-                  {CLEANUP_LABEL[b]} <b style={{ fontWeight: 700 }}>{cleanup[b].length}</b>
+                  {CLEANUP_LABEL[b]} <b style={{ fontWeight: 700 }}>{cleanupShown(b).length}</b>
                 </button>
               ))}
             </div>
-            {cleanup[cleanupBucket].length === 0 ? (
-              <div style={{ padding: '28px 16px', textAlign: 'center', color: MUTED, fontSize: 13 }}>정리할 것이 없습니다</div>
-            ) : cleanup[cleanupBucket].map(r => (
+            {shownCleanup.length === 0 ? (
+              <div style={{ padding: '28px 16px', textAlign: 'center', color: MUTED, fontSize: 13 }}>
+                {query.trim() ? `「${query.trim()}」 에 맞는 회사가 없습니다` : '정리할 것이 없습니다'}
+              </div>
+            ) : shownCleanup.map(r => (
               <div key={r.companyId}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '0 8px', borderRadius: R.icon }}
                 onMouseEnter={e => { e.currentTarget.style.background = '#fafafa' }}

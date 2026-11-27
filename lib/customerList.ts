@@ -229,15 +229,15 @@ export function matchesSite(
     if (!filter.agencies.includes(a)) return false
   }
 
-  // 찾는 칸은 **공용 함수 하나**가 본다(lib/companySearch.ts) — 회사명·영문명·사업장명·주소·대리점명.
+  // 찾는 칸은 **공용 함수 하나**가 본다(lib/companySearch.ts) — 회사명 · 영문명 · 사업장명.
+  // 주소·대리점명은 2026-11-27(묶음4 D)에 뺐다 — 지역 칩과 대리점 필터가 하는 일이라,
+  // 검색까지 그것을 보면 「화성」 한 글자에 남의 회사가 전부 걸려 이름으로 못 찾는다.
   // c.company_name 을 따로 더하는 까닭: 그 줄에는 「회사명 사업장명」이 합쳐 들어 있는 옛 자료가 있다.
   return matchesCompany(
     {
       company_name: companyName,
       name_en: companyNameEn,
       site_name: site.siteName,
-      address: c.address,
-      agency_name: c.agency_name,
     },
     filter.query,
     [c.company_name],
