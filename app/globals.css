@@ -659,3 +659,20 @@ tr:has(+ tr.ems-pick[data-on='true']) > td {
   color: #2563eb;
   text-decoration: none;
 }
+
+/* ══ 내 견적 요약 여섯 칸 (2026-11-28 야간4 2-1) ════════════════════════════
+   PC 에서는 **같은 폭 여섯 칸 한 줄**이다(minmax(0,1fr) — 긴 금액이 칸을 밀지 않게).
+   폰에서는 한 줄에 여섯이 서지 못한다. 390 에서 한 칸이 118px 이라 「14억 3,900만」이
+   잘린다 → **3×2** 로 접는다. 접는 것이 줄이는 것보다 낫다: 글자를 더 줄이면 숫자가
+   읽히지 않고, 가로로 밀면 오른쪽 석 칸을 **본 사람만** 보게 된다.
+   실적 현황(app/sales)의 여섯 칸은 자기 자리에 grid 를 박아 두고 있어 건드리지 않는다. */
+.myq-tiles {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+@media (max-width: 768px) {
+  .myq-tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

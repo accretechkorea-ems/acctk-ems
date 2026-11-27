@@ -78,8 +78,12 @@ ok('요약·차트·누적이 한 상자다',
 ok('「실적 추이」 펼침 단추가 없다',
   !/showChart/.test(PAGE_CODE) && !/실적 추이/.test(PAGE_CODE))
 ok('요약은 여섯 칸 한 줄', /gridTemplateColumns: 'repeat\(6, minmax\(0, 1fr\)\)'/.test(PAGE))
+// 타일 한 칸은 **공용 부품**이다(2026-11-28, 야간4 2-1) — 내 견적 모달도 같은 것을 쓴다.
+const TILE = read('components/sales/StatTile.tsx')
+ok('이 화면이 공용 타일을 쓴다(제 정의를 들고 있지 않다)',
+  /import StatTile from '@\/components\/sales\/StatTile'/.test(PAGE) && !/function StatTile\(/.test(PAGE))
 ok('타일 높이가 같다(세로 flex + 바닥 보조 줄)',
-  /flexDirection: 'column'/.test(PAGE) && /<span style=\{\{ flex: 1 \}\} \/>/.test(PAGE))
+  /flexDirection: 'column'/.test(TILE) && /<span style=\{\{ flex: 1 \}\} \/>/.test(TILE))
 ok('달성률 칸만 막대를 얹는다', /gauge=\{total(Order)?TargetAmt > 0/.test(PAGE))
 ok('누적 다섯 칸은 그대로다', /gridTemplateColumns: 'repeat\(5, minmax\(0, 1fr\)\)'/.test(read('components/sales/salesChart.tsx')))
 

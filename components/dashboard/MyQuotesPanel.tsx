@@ -52,6 +52,9 @@ import { nowKSTParts, todayKST } from '@/lib/date'
 import { R } from '@/lib/radius'
 import { errMessage } from '@/lib/errMessage'
 import { quoteCustomerLabel } from '@/lib/quoteEuName'
+import StatTile from '@/components/sales/StatTile'
+import { myQuotesSummary } from '@/lib/myQuotesSummary'
+import { krwShort, krwFull } from '@/lib/forecastBoard'
 
 // 대시보드 '내 견적' 패널. 실적 현황 EngineerQuoteModal 의 표시 + 관리 기능을 동일하게 구현한다.
 // mutation 은 lib/quoteMutations.ts 공용 함수 사용(직접 supabase.update/fetch 안 씀).
@@ -410,32 +413,24 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
   // ── 실적 요약(아래 KPI·달성률)은 목록과 모수가 다르다. ──
   // 목록에는 내가 남 대신 쓴 견적도 실리지만, 그 실적은 원래 담당자의 것이다.
   // 그래서 집계는 engineer_id 가 나인 건만 쓴다 — 실적 현황(app/sales)과 같은 기준.
-  const creditedQuotes = quotes.filter(q => q.engineer_id === engineerId)
-  const quotedAmt = creditedQuotes
-    .filter(q => q.quote_date >= rangeStart && q.quote_date <= rangeEnd)
-    .reduce((s, q) => s + (q.total_supply || 0), 0)
-  // 기간을 재는 날짜가 지표마다 다르다(실적 현황과 같은 규칙).
-  //   견적 제출 — quote_date / 수주 — purchase_order_at / 매출 — tax_invoice_completed_at
-  // 처리 시각이 비어 있는 건은 그 지표의 어느 기간에도 잡히지 않는다.
-  const inRange = (ts: string | null) => !!ts && ts.slice(0, 10) >= rangeStart && ts.slice(0, 10) <= rangeEnd
-  const orderedQuotes = creditedQuotes.filter(q => isOrdered(q.status) && inRange(q.purchase_order_at))
-  const orderedAmt = orderedQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
-  const revenueQuotes = creditedQuotes.filter(q => q.status === REVENUE_STATUS && inRange(q.tax_invoice_completed_at))
-  const revenueAmt = revenueQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
-  const profitAmt = revenueQuotes.reduce((s, q) => s + (q.total_profit || 0), 0)
-  const profitRate = revenueAmt > 0 ? (profitAmt / revenueAmt * 100) : null
-
   // ── 달성률: 선택 기간에 맞춰 연간 목표를 분할(월÷12·분기÷4·반기÷2·연간×1). 유효 견적은 월에 준해 ÷12. ──
-  //    수주 달성률 = 수주액 / 수주목표(order_target_amount), 매출 달성률 = 매출액 / 매출목표(target_amount).
   const divisor = unit === 'valid' ? 12 : UNIT_DIVISOR[unit]
   const targetYear = unit === 'valid' ? curFy : fy   // 유효 견적은 현재 회계연도 목표 기준
-  const yearTargets = targetsByYear[targetYear]
-  const salesTarget = yearTargets ? Math.round(yearTargets.target / divisor) : 0
-  const orderTarget = yearTargets ? Math.round(yearTargets.orderTarget / divisor) : 0
-  const achieve = salesTarget > 0 ? (revenueAmt / salesTarget * 100) : null
-  const orderAchieve = orderTarget > 0 ? (orderedAmt / orderTarget * 100) : null
-  const achieveColor = achieveColorOf(achieve)
-  const orderAchieveColor = achieveColorOf(orderAchieve)
+
+  /**
+   * 요약 여섯 칸의 숫자 — 셈은 **lib/myQuotesSummary.ts** 하나다(2026-11-28, 야간4 2-1).
+   *
+   * 정의는 한 줄도 바뀌지 않았다. 옮긴 까닭은 칸의 생김새를 바꾸면서 숫자가 함께
+   * 흔들렸는지 **눈으로는 가릴 수 없기** 때문이다 — 순수 함수라 하네스가 그대로 돌린다
+   * (scripts/my-quotes-summary-check.js).
+   */
+  const S = myQuotesSummary({
+    quotes, engineerId, rangeStart, rangeEnd,
+    isOrdered, revenueStatus: REVENUE_STATUS, pendingStatus: PENDING_STATUS,
+    divisor, target: targetsByYear[targetYear] ?? null,
+  })
+  const achieveColor = achieveColorOf(S.achieve)
+  const orderAchieveColor = achieveColorOf(S.orderAchieve)
 
   // 옆 열(활동·알림)에 맞춰 카드가 늘어나면, 표 상자에 남는 높이만큼 줄을 더 싣는다.
   // 표 상자는 flex: 1 + overflowY: hidden 이라 줄이 늘어도 상자가 되레 커지지 않는다 →
@@ -725,38 +720,45 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
     <div
       style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: R.control, overflow: 'hidden',
         ...(fitToHeight ? { flex: 1, display: 'flex', flexDirection: 'column' } as const : null) }}>
-      {/* 제목 + KPI */}
-      <div style={{ padding: '14px 16px', borderBottom: `1px solid ${BORDER}` }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: TEXT, marginBottom: 10 }}>내 견적</div>
+      {/* ── 요약 여섯 칸 (2026-11-28, 야간4 2-1) ─────────────────────────────
+          제목 「내 견적」을 **걷었다**. 이 판은 늘 「내 견적」 모달 안에 뜨고, 모달
+          머리줄에 이미 같은 글자가 17/800 으로 서 있었다 — 같은 말이 두 줄 겹치면
+          그만큼 숫자가 아래로 밀린다. 그 자리를 요약이 받는다.
+
+          생김새는 실적 현황의 여섯 칸과 **같은 것**이다(components/sales/StatTile.tsx) —
+          같은 폭 회색 타일 한 줄, 금액은 억·만 축약이고 전체 자릿수는 호버로 본다.
+          전에는 라벨+금액 묶음 여섯 개를 gap 20 flex 로 늘어놓아, 금액 자릿수에 따라
+          칸 폭이 저마다 달라지고 줄이 접혔다. 숫자 정의는 바뀌지 않았다. */}
+      <div style={{ padding: '12px 16px', borderBottom: `1px solid ${BORDER}` }}>
         {loading ? (
           <div style={{ fontSize: 13, color: MUTED }}>불러오는 중...</div>
         ) : loadError ? (
           // 조회 실패를 0원과 구분해서 보여준다 — 실적이 0 인 것과 못 읽은 것은 전혀 다르다.
           <div style={{ fontSize: 13, color: '#ef4444', fontWeight: 700 }}>데이터를 불러오지 못했습니다</div>
         ) : (
-          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 13 }}>
-            <div><div style={{ color: GRAY, fontSize: 11 }}>견적 제출</div><div className="num" style={{ fontWeight: 700, color: TEXT }}>₩{numKR(quotedAmt)}</div></div>
-            <div><div style={{ color: GRAY, fontSize: 11 }}>수주</div><div className="num" style={{ fontWeight: 700, color: orderedAmt > 0 ? TEXT : MUTED }}>₩{numKR(orderedAmt)}</div></div>
-            <div><div style={{ color: GRAY, fontSize: 11 }}>매출 완료</div><div className="num" style={{ fontWeight: 700, color: BLUE }}>₩{numKR(revenueAmt)}</div></div>
-            <div><div style={{ color: GRAY, fontSize: 11 }}>순이익</div><div className="num" style={{ fontWeight: 800, color: '#16a34a' }}>{profitAmt > 0 ? `₩${numKR(profitAmt)}` : '-'}{profitRate !== null && profitAmt > 0 && <span style={{ fontSize: 11, marginLeft: 4 }}>({profitRate.toFixed(1)}%)</span>}</div></div>
-            {orderAchieve !== null && (
-              <div>
-                <div style={{ color: GRAY, fontSize: 11 }}>수주 달성률</div>
-                <div className="num" style={{ fontWeight: 800, color: orderAchieveColor }}>
-                  {orderAchieve.toFixed(1)}%
-                  <span style={{ fontSize: 11, fontWeight: 600, color: GRAY, marginLeft: 6 }}>(목표 {numKR(orderTarget)}원)</span>
-                </div>
-              </div>
-            )}
-            {achieve !== null && (
-              <div>
-                <div style={{ color: GRAY, fontSize: 11 }}>매출 달성률</div>
-                <div className="num" style={{ fontWeight: 800, color: achieveColor }}>
-                  {achieve.toFixed(1)}%
-                  <span style={{ fontSize: 11, fontWeight: 600, color: GRAY, marginLeft: 6 }}>(목표 {numKR(salesTarget)}원)</span>
-                </div>
-              </div>
-            )}
+          <div className="myq-tiles">
+            <StatTile label="견적 제출" value={krwShort(S.quotedAmt)} full={krwFull(S.quotedAmt)} sub={`${S.quotedCnt}건`} />
+            {/* 견적중 — 위 모수 중 상태가 「견적중」인 것이다(견적 제출의 부분집합). */}
+            <StatTile label="견적중" value={krwShort(S.pendingAmt)} full={krwFull(S.pendingAmt)} sub={`${S.pendingCnt}건`} />
+            <StatTile label="수주액" value={krwShort(S.orderedAmt)} full={krwFull(S.orderedAmt)}
+              color={S.orderedAmt > 0 ? undefined : MUTED}
+              sub={S.convRate !== null ? `${S.orderedCnt}건 · 전환 ${S.convRate.toFixed(1)}%` : `${S.orderedCnt}건`} />
+            {/* 매출 완료액 — 순이익·이익률을 보조 줄로 받는다(제 칸을 쓰지 않는다). */}
+            <StatTile label="매출 완료액" value={krwShort(S.revenueAmt)} full={krwFull(S.revenueAmt)} color={BLUE}
+              sub={S.profitAmt > 0
+                ? `순이익 ${krwShort(S.profitAmt)}${S.profitRate !== null ? ` · ${S.profitRate.toFixed(1)}%` : ''}`
+                : '순이익 —'}
+              subFull={S.profitAmt > 0 ? krwFull(S.profitAmt) : undefined} />
+            {/* 달성률 둘 — 목표가 없으면 「미설정」이다. 전에는 칸 자체가 사라져,
+                목표를 안 넣은 사람에게는 여섯 칸이 네 칸으로 보였다. */}
+            <StatTile label="수주 달성률" value={S.orderAchieve !== null ? `${S.orderAchieve.toFixed(1)}%` : '미설정'}
+              color={orderAchieveColor} gauge={S.orderTarget > 0 ? (S.orderAchieve ?? 0) : null} gaugeColor={orderAchieveColor}
+              sub={S.orderTarget > 0 ? `${krwShort(S.orderedAmt)} / ${krwShort(S.orderTarget)}` : null}
+              subFull={S.orderTarget > 0 ? `${krwFull(S.orderedAmt)} / ${krwFull(S.orderTarget)}` : undefined} />
+            <StatTile label="매출 달성률" value={S.achieve !== null ? `${S.achieve.toFixed(1)}%` : '미설정'}
+              color={achieveColor} gauge={S.salesTarget > 0 ? (S.achieve ?? 0) : null} gaugeColor={achieveColor}
+              sub={S.salesTarget > 0 ? `${krwShort(S.revenueAmt)} / ${krwShort(S.salesTarget)}` : null}
+              subFull={S.salesTarget > 0 ? `${krwFull(S.revenueAmt)} / ${krwFull(S.salesTarget)}` : undefined} />
           </div>
         )}
       </div>

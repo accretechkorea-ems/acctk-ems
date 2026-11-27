@@ -1,0 +1,75 @@
+{
+ "tag": "before",
+ "at": "2026-11-27T12:07:47.604Z",
+ "base": "http://localhost:3101",
+ "pc": {
+  "summary": [
+   {
+    "label": "견적서 송부",
+    "value": "메일 본문"
+   },
+   {
+    "label": "견적 제출₩0",
+    "value": "수주₩0 / 매출 완료₩0 / 순이익-"
+   },
+   {
+    "label": "견적 제출",
+    "value": "₩0"
+   },
+   {
+    "label": "수주",
+    "value": "₩0"
+   },
+   {
+    "label": "매출 완료",
+    "value": "₩0"
+   },
+   {
+    "label": "순이익",
+    "value": "-"
+   }
+  ],
+  "titles": [
+   {
+    "top": 81,
+    "left": 1087,
+    "fontSize": "14px",
+    "fontWeight": "700"
+   },
+   {
+    "top": 60,
+    "left": 80,
+    "fontSize": "17px",
+    "fontWeight": "800"
+   },
+   {
+    "top": 127,
+    "left": 93,
+    "fontSize": "14px",
+    "fontWeight": "700"
+   }
+  ],
+  "rows": {
+   "count": 0,
+   "heights": [],
+   "unique": [],
+   "inView": 0,
+   "firstCellLines": null
+  }
+ },
+ "phone390": {
+  "overflow": {
+   "innerWidth": 390,
+   "docWidth": 390,
+   "count": 0,
+   "hits": []
+  },
+  "rows": {
+   "count": 0,
+   "heights": [],
+   "unique": [],
+   "inView": 0,
+   "firstCellLines": null
+  }
+ }
+}

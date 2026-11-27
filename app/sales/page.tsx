@@ -12,6 +12,7 @@ import { SALES_STATUS_COLORS, TEAM_COLORS, getCategoryColor, salesStatusLabel } 
 // 개인 실적 카드와 월별 그래프 모달은 부품으로 뽑아 두었다 — 개인 대시보드가 같은 것을 쓴다.
 // 기간 판정·담당자 집계도 lib/salesStats.ts 한 곳에 있다(두 화면이 같은 숫자를 내야 한다).
 import EngineerStatCard, { AnimatedGauge } from '@/components/sales/EngineerStatCard'
+import StatTile from '@/components/sales/StatTile'
 import EngineerChartModal from '@/components/sales/EngineerChartModal'
 import {
   engineerStat,
@@ -259,50 +260,8 @@ function Stepper({ label, onPrev, onNext }: { label: string; onPrev: () => void;
   )
 }
 
-/**
- * 요약 타일 한 칸 (2026-11-27 야간3 1-3).
- *
- * 금액은 **억·만 축약**이고 전체 자릿수는 호버(title)로 본다 — 여섯 칸이 한 줄에 서려면
- * 「₩836,845,600」 같은 글자가 들어갈 자리가 없다. 달성률 칸만 막대를 하나 더 얹는다.
- * 높이는 여섯 칸이 **같다**(세로 flex + 바닥에 붙는 보조 줄).
- */
-function StatTile({ label, value, full, sub, subFull, color, gauge, gaugeColor }: {
-  label: string
-  value: string
-  /** 호버에 적을 전체 자릿수. 금액이 아닌 칸(달성률 %)은 주지 않는다. */
-  full?: string
-  sub?: string | null
-  subFull?: string
-  color?: string
-  /** 달성률 칸만 — 0~100+ 막대. null 이면 그리지 않는다. */
-  gauge?: number | null
-  gaugeColor?: string
-}) {
-  return (
-    <div style={{
-      background: '#f8fafc', borderRadius: R.control, padding: '10px 12px',
-      display: 'flex', flexDirection: 'column', minWidth: 0,
-    }}>
-      <div style={{ fontSize: 10, fontWeight: 600, color: MUTED, marginBottom: 4, letterSpacing: '0.2px', whiteSpace: 'nowrap' }}>{label}</div>
-      <div className="num" title={full}
-        style={{ fontSize: 15, fontWeight: 800, color: color || TEXT, letterSpacing: '-0.3px', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        {value}
-      </div>
-      {gauge !== null && gauge !== undefined && (
-        <div style={{ marginTop: 6 }}>
-          <AnimatedGauge pct={gauge} color={gaugeColor || BLUE} height={5} delay={100} />
-        </div>
-      )}
-      <span style={{ flex: 1 }} />
-      {sub && (
-        <div className="num" title={subFull}
-          style={{ fontSize: 10, color: MUTED, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {sub}
-        </div>
-      )}
-    </div>
-  )
-}
+// 요약 타일 한 칸은 **공용 부품**이다 — components/sales/StatTile.tsx
+// (2026-11-28, 야간4 2-1). 내 견적 모달의 여섯 칸도 같은 것을 쓴다. 겉모양·규칙은 그대로다.
 
 // ── 통합 실적 차트 ────────────────────────────────────────────────────────────
 /**
