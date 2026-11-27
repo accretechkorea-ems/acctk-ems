@@ -366,6 +366,37 @@ useEffect(() => {
   }, [])
 
 
+  /**
+   * **구르는 통이 어디인가** (2026-11-28, 야간4 5-3).
+   *
+   * 넓은 화면 — 목록 통(.customer-list-scroll)이 스스로 구른다.
+   * 폰        — 그 통을 풀어 **페이지(body)가 구른다**(5-2). 그래서 통의 scrollTop 은
+   *             늘 0 이고, 돌아왔을 때 되살릴 값이 없었다 — 목록 꼭대기로 떨어졌다.
+   *
+   * 둘 중 **실제로 구르고 있는 쪽**을 읽고 쓴다.
+   */
+  const listScrolls = () => {
+    const el = listScrollRef.current
+    return !!el && el.scrollHeight > el.clientHeight + 2
+  }
+  const readListScroll = (): number => {
+    if (listScrolls()) return listScrollRef.current?.scrollTop ?? 0
+    return typeof window === 'undefined' ? 0 : Math.round(window.scrollY)
+  }
+  /** 세션에 적혀 있는 목록 자리. 없으면 0 이다. */
+  const readSavedListScroll = (): number => {
+    if (typeof window === 'undefined') return 0
+    try {
+      const raw = sessionStorage.getItem(HOME_STATE_KEY)
+      const v = raw ? Number(JSON.parse(raw)?.listScrollTop) : 0
+      return Number.isFinite(v) && v > 0 ? v : 0
+    } catch { return 0 }
+  }
+  const writeListScroll = (top: number) => {
+    if (listScrolls()) { if (listScrollRef.current) listScrollRef.current.scrollTop = top; return }
+    if (typeof window !== 'undefined') window.scrollTo(0, top)
+  }
+
   const saveHomeState = () => {
     if (typeof window === 'undefined') return
 
@@ -374,7 +405,12 @@ useEffect(() => {
   listFilter,
   listSort,
   view,
-  listScrollTop: listScrollRef.current?.scrollTop ?? 0,
+  /**
+   * 목록 자리 — **상세를 보고 있는 동안에는 덮어쓰지 않는다**(2026-11-28, 야간4 5-3).
+   * 폰에서 상세를 열면 좌 패널이 숨어 페이지가 접히고 스크롤이 0 으로 떨어진다. 그 0 을
+   * 적어 버리면 돌아왔을 때 꼭대기로 간다 — 적혀 있던 자리를 그대로 둔다.
+   */
+  listScrollTop: selectedSiteId != null ? readSavedListScroll() : readListScroll(),
   mapCenter,
   mapLevel,
   openOverlayCustomerId,
@@ -382,6 +418,24 @@ useEffect(() => {
 
     sessionStorage.setItem(HOME_STATE_KEY, JSON.stringify(payload))
   }
+
+  /**
+   * **떠나기 직전에 한 번 더 적는다** (2026-11-28, 야간4 5-3).
+   *
+   * 평소 저장은 상태가 바뀔 때 일어난다. 그런데 **구르는 일은 상태를 바꾸지 않는다** —
+   * 폰에서 목록을 한참 내린 뒤 「사업장 상세 ›」를 누르면, 적혀 있는 자리는 **마지막으로
+   * 무언가를 고쳤을 때**의 것이다(대개 0). 돌아오면 꼭대기로 떨어졌다.
+   *
+   * pagehide 는 뒤로 가기 캐시(bfcache)로 들어갈 때도 불린다 — beforeunload 보다 믿을 만하다.
+   */
+  const saveRef = useRef(saveHomeState)
+  saveRef.current = saveHomeState
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onLeave = () => { saveRef.current() }
+    window.addEventListener('pagehide', onLeave)
+    return () => window.removeEventListener('pagehide', onLeave)
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -836,18 +890,11 @@ useEffect(() => {
   let retry = 0
 
   const interval = setInterval(() => {
-    if (!listScrollRef.current) {
-      clearInterval(interval)
-      return
-    }
-
-    listScrollRef.current.scrollTop = targetScrollTop
+    // 폰에서는 통이 구르지 않고 **페이지**가 구른다 — 통이 없어도 멈추지 않는다.
+    writeListScroll(targetScrollTop)
 
     // 실제로 적용됐는지 확인
-    if (
-      Math.abs(listScrollRef.current.scrollTop - targetScrollTop) < 5 ||
-      retry > 15
-    ) {
+    if (Math.abs(readListScroll() - targetScrollTop) < 5 || retry > 15) {
       clearInterval(interval)
     }
 
@@ -855,6 +902,9 @@ useEffect(() => {
   }, 50)
 
   return () => clearInterval(interval)
+  // readListScroll·writeListScroll 은 렌더마다 새로 만들어지지만 **ref 만 본다** —
+  // 목록에 더해 두면 이 효과가 렌더마다 다시 걸려 되살리는 중에 스스로를 끊는다.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [filteredCustomers])
 
   const panelHeader = (
@@ -1086,6 +1136,13 @@ useEffect(() => {
                     if (origin === 'map') { setOrigin(null); setSelectedSiteId(null); setView('map'); return }
                     if (origin && origin.startsWith('/')) { setOrigin(null); window.location.href = origin; return }
                     setSelectedSiteId(null)
+                    /**
+                     * 폰에서는 상세를 열 때 좌 패널이 숨어 페이지가 접히고, 그때 스크롤이
+                     * 0 으로 떨어진다. 목록으로 돌아오면 **보던 자리**로 되돌린다
+                     * (2026-11-28, 야간4 5-3). 넓은 화면은 접히지 않아 그대로다.
+                     */
+                    const saved = readSavedListScroll()
+                    if (saved > 0) window.setTimeout(() => writeListScroll(saved), 120)
                   }}
                   /* 가운데 pane 에서 고친 것(담당자·장비·사업장 정보)도 좌측 트리·지도에 바로 든다. */
                   onChanged={() => { void refreshCustomers() }}
