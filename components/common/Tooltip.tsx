@@ -26,7 +26,7 @@
  *   그래서 **아예 그리지 않는다** — 대신 aria-label 이 늘 붙어 있어 읽어 주기는 된다.
  */
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { R } from '@/lib/radius'
 import { Z } from '@/lib/zIndex'
@@ -58,13 +58,18 @@ export type TooltipProps = {
 }
 
 /**
- * 터치 기기인가 — **뜰 때 묻는다**(상태로 들고 있지 않는다).
- * 처음 그릴 때 물으면 서버와 브라우저의 답이 달라 hydration 이 어긋나고,
- * 효과 안에서 물으면 한 번 그린 것을 그 자리에서 다시 그리게 된다.
- * 어차피 **뜨려는 순간**에만 알면 되는 값이다.
+ * **손가락으로 건드린 것인가** — 그 일이 일어난 **그 사건**에게 묻는다.
+ *
+ * 전에는 `matchMedia('(hover: none)')` 로 기기를 물었다. 두 가지가 나빴다:
+ *   · **기기가 아니라 손이 중요하다.** 터치 화면 달린 노트북에서 마우스를 쓰는 사람은
+ *     툴팁을 봐야 한다 — 기기로 물으면 그 사람이 못 본다.
+ *   · 머리 없는 브라우저(실측 도구)가 `hover: none` 을 돌려주는 일이 있다. 그러면
+ *     **실측에서는 툴팁이 영영 안 뜬다** — 2026-11-27 묶음5 캡처에서 실제로 그랬다.
+ *
+ * PointerEvent 는 `pointerType` 으로 **무엇이 건드렸는지**('mouse'·'pen'·'touch')를 말해 준다.
+ * 손가락이면 그리지 않는다 — 누른 것을 가리기 때문이다. 키보드로 온 것(focus)은 그린다.
  */
-const isTouch = (): boolean =>
-  typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(hover: none)').matches
+// 쓰는 자리는 아래 onPointer 하나다 — 함수로 빼 두면 그 한 줄이 두 곳이 된다.
 
 type Pos = { left: number; top: number; flipped: boolean; cx: number }
 
@@ -74,21 +79,42 @@ export default function Tooltip({ label, shortcut, children, prefer = 'top', sty
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<Pos | null>(null)
+  /** 바로 앞에 **손가락**이 닿았는가. 터치 뒤에 따라오는 가짜 mouseenter 를 막는다. */
+  const touched = useRef(false)
   const id = useId()
 
   const clear = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null } }
   const show = () => {
-    // 터치에는 「올려 두기」가 없다. 누른 것을 가리므로 아예 그리지 않는다.
-    if (isTouch()) return
+    // 손가락이 닿았던 자리면 띄우지 않는다 — 누른 것을 가린다.
+    if (touched.current) return
     clear()
     timer.current = setTimeout(() => setOpen(true), TOOLTIP_DELAY_MS)
+  }
+  /**
+   * 올라온 것이 **무엇인지** 기억해 둔다.
+   * pointerenter 와 mouseenter 를 **둘 다** 듣는 까닭: 브라우저·자동화 도구마다 어느
+   * 쪽을 주는지가 다르다(2026-11-27 실측 — 머리 없는 크로미움에서 pointer 만으로는
+   * 한 번도 뜨지 않았다). 먼저 오는 쪽이 띄우고, 뒤에 오는 쪽은 이미 돌고 있는
+   * 타이머를 다시 걸 뿐이라 해가 없다.
+   */
+  const onPointer = (e: React.PointerEvent) => {
+    touched.current = e.pointerType === 'touch'
+    if (!touched.current) show()
   }
   const hide = () => { clear(); setOpen(false); setPos(null) }
 
   useEffect(() => () => clear(), [])
 
-  // 자리를 잡는다 — 말풍선이 붙은 뒤(크기를 알아야 가운데를 맞춘다).
-  const place = (el: HTMLDivElement | null) => {
+  /**
+   * 자리를 잡는다 — 말풍선이 **붙은 뒤**에만 알 수 있다(크기를 알아야 가운데를 맞춘다).
+   *
+   * ⚠ 두 가지를 지켜야 한다. 2026-11-27 에 둘 다 어겨서 툴팁이 **한 번도 뜨지 않았다**:
+   *   ① **같은 함수**여야 한다(useCallback). ref 콜백은 identity 가 바뀌면 React 가
+   *      떼었다 다시 붙인다 — 렌더마다 새 함수를 주면 붙을 때마다 setPos 가 돌고,
+   *      그 setPos 가 또 렌더를 부른다. 끝없이 돈다.
+   *   ② **값이 그대로면 넣지 않는다.** 같은 자리를 다시 넣어도 새 객체라 렌더가 돈다.
+   */
+  const place = useCallback((el: HTMLDivElement | null) => {
     bubbleRef.current = el
     const a = anchorRef.current
     if (!el || !a) return
@@ -101,8 +127,13 @@ export default function Tooltip({ label, shortcut, children, prefer = 'top', sty
     // 가운데 맞춤 — 화면 밖으로 나가면 안으로 민다. 꼬리는 **앵커 가운데**에 그대로 둔다.
     const raw = r.left + r.width / 2 - b.width / 2
     const left = Math.min(Math.max(MARGIN, raw), Math.max(MARGIN, window.innerWidth - b.width - MARGIN))
-    setPos({ left, top, flipped: top > r.top, cx: r.left + r.width / 2 - left })
-  }
+    const next: Pos = { left, top, flipped: top > r.top, cx: r.left + r.width / 2 - left }
+    setPos(prev => (
+      prev && prev.left === next.left && prev.top === next.top && prev.flipped === next.flipped && prev.cx === next.cx
+        ? prev
+        : next
+    ))
+  }, [prefer])
 
   const has = label != null && label !== ''
   const live = has && open
@@ -111,8 +142,11 @@ export default function Tooltip({ label, shortcut, children, prefer = 'top', sty
     <>
       <span
         ref={anchorRef}
+        onPointerEnter={onPointer}
+        onPointerLeave={hide}
         onMouseEnter={show}
         onMouseLeave={hide}
+        onTouchStart={() => { touched.current = true; hide() }}
         // 키보드로 닿아도 뜬다 — 마우스가 없는 사람에게도 같은 말을 해 준다.
         onFocus={show}
         onBlur={hide}

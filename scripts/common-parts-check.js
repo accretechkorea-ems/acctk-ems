@@ -44,8 +44,15 @@ ok('300ms 뒤에 뜬다', /TOOLTIP_DELAY_MS = 300/.test(TIP))
 ok('기본은 위, 자리가 없으면 아래', /prefer = 'top'/.test(TIP) && /flipped/.test(TIP))
 ok('body 로 포털한다(모달 안에서도 안 잘린다)', /createPortal\(/.test(code(TIP)))
 ok('Z.popover 에 띄운다', /zIndex: Z\.popover/.test(TIP))
-// 터치에는 「올려 두기」가 없다 — 누른 것을 가린다.
-ok('폰(터치)에서는 아예 그리지 않는다', /const isTouch = \(\)/.test(TIP) && /if \(isTouch\(\)\) return/.test(TIP))
+// 기기가 아니라 **손**을 본다 — 터치 화면 달린 노트북에서 마우스를 쓰는 사람은 툴팁을 봐야 한다.
+// 머리 없는 브라우저가 hover: none 을 돌려주는 일도 있어, 미디어 질의로는 실측에서 영영 안 떴다.
+ok('손가락으로 건드리면 그리지 않는다',
+  /touched\.current = e\.pointerType === 'touch'/.test(TIP) && /if \(touched\.current\) return/.test(TIP))
+ok('마우스·펜은 올리면 뜬다', /onPointerEnter=\{onPointer\}/.test(TIP) && /onMouseEnter=\{show\}/.test(TIP))
+// 2026-11-27 — 자리를 잡는 ref 콜백이 **렌더마다 새 함수**라, 붙을 때마다 setPos 가 돌고
+// 그 setPos 가 또 렌더를 불렀다. 그래서 툴팁이 **한 번도 뜨지 않았다**(실측으로 찾았다).
+ok('자리 잡는 함수가 같은 함수로 남는다', /const place = useCallback\(/.test(TIP))
+ok('값이 그대로면 다시 넣지 않는다', /\? prev/.test(TIP) && /: next/.test(TIP))
 ok('키보드로 닿아도 뜬다', /onFocus=\{show\}/.test(TIP))
 ok('누르면 사라진다', /onPointerDown=\{hide\}/.test(TIP))
 ok('읽어 주기와 이어진다(aria-describedby)', /aria-describedby=/.test(TIP))
