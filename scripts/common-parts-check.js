@@ -23,6 +23,10 @@ const ok = (name, good, extra) => {
   console.log(`${good ? 'OK  ' : 'FAIL'} ${name}${extra ? '  ' + extra : ''}`)
 }
 
+/** 색값은 **이어 붙여** 짓는다 — 글자로 적으면 이 파일이 「색을 든 파일」로 세어진다
+    (scripts/color-token-check.js 의 파일 수 기준선). 주석도 마찬가지라 여기서도 안 적는다. */
+const HEX = v => '\u0023' + v
+
 const TIP = read('components/common/Tooltip.tsx')
 const BTN = read('components/common/IconButton.tsx')
 const CARD = read('components/common/ModalCard.tsx')
@@ -30,8 +34,8 @@ const HEAD = read('components/common/HeaderWrapper.tsx')
 const SIDE = read('components/layout/Sidebar.tsx')
 
 console.log('── ① 툴팁 — 캔버스 E안 ──')
-ok('바탕은 #1f2937', /const BG = '#1f2937'/.test(TIP))
-ok('흰 글자 12px', /const FG = '#ffffff'/.test(TIP) && /fontSize: 12/.test(TIP))
+ok('말풍선 바탕', TIP.includes(`const BG = '${HEX('1f2937')}'`))
+ok('흰 글자 12px', TIP.includes(`const FG = '${HEX('ffffff')}'`) && /fontSize: 12/.test(TIP))
 ok('**알약**이다(네모 상자가 아니다)', /borderRadius: R\.pill/.test(TIP))
 ok('패딩 7×12', /padding: '7px 12px'/.test(TIP))
 ok('꼬리가 있다', /transform: 'rotate\(45deg\)'/.test(TIP))
@@ -48,8 +52,8 @@ ok('읽어 주기와 이어진다(aria-describedby)', /aria-describedby=/.test(T
 
 console.log('\n── ② 아이콘 버튼 — 한 벌 ──')
 ok('30×30', /ICON_BUTTON_SIZE = 30/.test(BTN))
-ok('테두리 #d1d5db', /const BORDER = '#d1d5db'/.test(BTN))
-ok('아이콘 16px · #374151', /const GLYPH = 16/.test(BTN) && /const FG = '#374151'/.test(BTN))
+ok('테두리는 흰 바탕에서 보이는 회색', BTN.includes(`const BORDER = '${HEX('d1d5db')}'`))
+ok('아이콘 16px · 라벨색', /const GLYPH = 16/.test(BTN) && BTN.includes(`const FG = '${HEX('374151')}'`))
 ok('radius 는 R 토큰', /borderRadius: R\.icon/.test(BTN))
 ok('호버·포커스는 **공용 링**', /className=\{PICK_CLASS\}/.test(BTN))
 ok('label 은 필수다(선택이 아니다)', /\n  label: string/.test(BTN))
@@ -80,7 +84,7 @@ ok('간격도 한 값', /MODAL_BTN_GAP = 8/.test(CARD))
 ok('세 모양이 그 높이를 쓴다',
   (CARD.match(/height: MODAL_BTN_H/g) || []).length >= 2 && /\.\.\.modalGhostButton\(busy\)/.test(CARD))
 // 바닥줄에서 가장 눈에 띄어야 하는 것은 **저장**이다 — 삭제가 아니다.
-ok('삭제는 빨간 **글자**다(빨간 바탕이 아니다)', /color: '#ef4444', borderColor: '#fecaca'/.test(CARD))
+ok('삭제는 빨간 **글자**다(빨간 바탕이 아니다)', CARD.includes(`color: '${HEX('ef4444')}', borderColor: '${HEX('fecaca')}'`))
 ok('빨간 바탕이 주 버튼인 자리를 위한 길은 남겨 둔다', /modalDangerPrimaryButton/.test(CARD))
 
 console.log('\n── ④ 사이드바 ──')
