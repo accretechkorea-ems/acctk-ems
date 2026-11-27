@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import { useMe } from '@/lib/appData/MeProvider'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -22,7 +23,7 @@ import { QUOTE_TYPE, SUBMITTED_STATUS, gateAllows, gateNotice } from '@/lib/appr
 import { openQuotePdf } from '@/lib/openQuotePdf'
 import { approvalDocPath, type LineInput } from '@/lib/approval/types'
 import {
-  isAutoFailed, isOrdered, isExpired, validFromDate, inValidQuoteView,
+  isAutoFailed, isOrdered, isExpired,
   REVENUE_STATUS, REVERT_NOTICE, AUTO_FAIL_NOTICE,
   STATUS_FILTER_TABS, editStatusesFor, REJECTED_STATUS, FAIL_STATUS, PENDING_STATUS,
   type QuoteStatus,
@@ -94,12 +95,41 @@ const SUBMODAL_Z = Z.subModal
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
-const MONTHS_FISCAL = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
 const UNIT_DIVISOR = { month: 12, quarter: 4, half: 2, year: 1 } as const
 type PeriodUnit = keyof typeof UNIT_DIVISOR
-// 'valid' = 유효 견적(작성일+1개월 이내). 회계연도 기반 4단위와 별개로 오늘 기준 롤링 범위를 쓴다.
-type Unit = 'valid' | PeriodUnit
 const lastDay = (y: number, mm: number) => new Date(y, mm, 0).getDate()
+
+/**
+ * **기간 — 드롭다운 하나, 다섯 갈래** (2026-11-28, 야간4 2-3).
+ *
+ * ── 전에는 ───────────────────────────────────────────────────────────────
+ *   셀렉트가 **셋**이었다: 회계연도(4갈래) × 단위(유효 견적·월·분기·반기·연간) ×
+ *   그 안의 칸(월 12 / 분기 4 / 반기 2). 고를 수 있는 조합이 쉰 가지가 넘는데,
+ *   실제로 보는 것은 「이번 달」·「이번 분기」·「올해」·「지난해」·「전부」뿐이었다.
+ *   게다가 기본값이 「유효 견적」이라, 모달을 열면 **작성일+1개월 안의 건만** 보였다 —
+ *   「내 견적」을 열었는데 지난달 수주가 없어 보이는 일이 여기서 났다.
+ *
+ * ── 지금은 ───────────────────────────────────────────────────────────────
+ *   다섯 갈래 하나다. 기본은 **올해(FY)** 다 — 모달을 열면 올해 내가 한 일이 다 보인다.
+ *
+ * ⚠ 걷힌 것: 「유효 견적」·「반기」·회계연도 자유 선택(FY-2 이전). 유효기간이 지난
+ *   건은 줄의 상태 보조에 「만료」로 서고(2-2), 그 목록은 할 일 카드가 따로 센다.
+ *   **판단 필요** — 「유효 견적」을 다시 쓰려면 여기에 한 갈래를 더하면 된다.
+ */
+const PERIODS = [
+  { key: 'month', label: '이번 달' },
+  { key: 'quarter', label: '이번 분기' },
+  { key: 'thisFy', label: 'FY' },
+  { key: 'prevFy', label: 'FY' },
+  { key: 'all', label: '전체' },
+] as const
+type Period = typeof PERIODS[number]['key']
+
+/** 기간 → **나눔수**. 연간·전체는 나누지 않는다(÷1). */
+const PERIOD_DIVISOR: Record<Period, number> = {
+  month: UNIT_DIVISOR.month, quarter: UNIT_DIVISOR.quarter,
+  thisFy: UNIT_DIVISOR.year, prevFy: UNIT_DIVISOR.year, all: UNIT_DIVISOR.year,
+}
 
 function periodRange(fy: number, unit: PeriodUnit, sel: number): { start: string; end: string } {
   if (unit === 'year') return { start: `${fy}-04-01`, end: `${fy + 1}-03-31` }
@@ -114,6 +144,35 @@ function periodRange(fy: number, unit: PeriodUnit, sel: number): { start: string
   }
   const yr = sel >= 4 ? fy : fy + 1
   return { start: `${yr}-${pad(sel)}-01`, end: `${yr}-${pad(sel)}-${pad(lastDay(yr, sel))}` }
+}
+
+/**
+ * 고른 기간의 **날짜 범위**. 요약 여섯 칸과 목록이 **같은 범위**를 쓴다.
+ * 「전체」는 모든 날을 담는 넓은 범위다 — 조회를 거르지 않는 쪽이 아니라 범위를 넓히는
+ * 쪽으로 둔다(요약의 셈이 범위 하나만 보면 되게).
+ */
+function periodDates(period: Period, curFy: number, cm: number, curQuarter: number): { start: string; end: string } {
+  if (period === 'month') return periodRange(cm >= 4 ? curFy : curFy, 'month', cm)
+  if (period === 'quarter') return periodRange(curFy, 'quarter', curQuarter)
+  if (period === 'thisFy') return periodRange(curFy, 'year', 1)
+  if (period === 'prevFy') return periodRange(curFy - 1, 'year', 1)
+  return { start: '1900-01-01', end: '2999-12-31' }
+}
+
+/** 기간 드롭다운에 적는 글자 — FY 두 갈래만 해가 들어간다. */
+function periodLabel(period: Period, curFy: number): string {
+  if (period === 'thisFy') return `FY${curFy}`
+  if (period === 'prevFy') return `FY${curFy - 1}`
+  return PERIODS.find(x => x.key === period)!.label
+}
+
+/** 검색이 보는 품목 글자 — 줄에 적는 것과 **같은 규칙**이다(할인 줄은 뺀다). */
+function itemsTextOf(q: { quote_items?: QuoteItem[] | null }): string {
+  return (q.quote_items ?? [])
+    .filter(i => i.row_kind !== 'discount')
+    .map(i => i.product_name || i.price_list?.model_jp)
+    .filter(Boolean)
+    .join(', ')
 }
 
 type QuoteItem = { product_name: string | null; row_kind?: string | null; price_list?: { model_jp: string | null } | null }
@@ -164,9 +223,14 @@ type EditStatus = QuoteStatus
  */
 const SUB_PADS = keepPads({ x: 24, top: 24, bottom: 24 }, 0, 0)
 
-export default function MyQuotesPanel({ engineerId, fitToHeight = false, initialStatus }: {
+export default function MyQuotesPanel({ engineerId, fitToHeight = false, initialStatus, controlsTarget = null }: {
   engineerId: number
   fitToHeight?: boolean
+  /**
+   * 조종 칸(기간·상태·검색·엑셀)을 **심을 자리**. 모달이 제 머리줄의 한 칸을 내려 준다
+   * (2026-11-28, 야간4 2-3). 주지 않으면 패널 안에 제 줄로 선다.
+   */
+  controlsTarget?: HTMLElement | null
   /** 처음에 걸어 둘 상태 탭. 홈의 「내 견적」 카드가 상태 줄을 눌러 열 때 쓴다. */
   initialStatus?: string
 }) {
@@ -226,10 +290,9 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
   const curFy = nowParts.m >= 4 ? nowParts.y : nowParts.y - 1
   const cm = nowParts.m
   const curQuarter = cm >= 4 && cm <= 6 ? 1 : cm >= 7 && cm <= 9 ? 2 : cm >= 10 ? 3 : 4
-  const curHalf = cm >= 4 && cm <= 9 ? 1 : 2
-  const [fy, setFy] = useState(curFy)
-  const [unit, setUnit] = useState<Unit>('valid')   // 기본값: 유효 견적(작성일+1개월 이내)
-  const [sel, setSel] = useState(cm)
+  // 기본은 **올해**다(2026-11-28, 야간4 2-3) — 전에는 「유효 견적」이라 모달을 열면
+  // 작성일+1개월 안의 건만 보였다.
+  const [period, setPeriod] = useState<Period>('thisFy')
   // 모르는 값이 오면 「전체」로 떨어뜨린다(주소로 들어오는 값이라 무엇이든 올 수 있다).
   const [statusFilter, setStatusFilter] = useState(
     initialStatus && STATUS_TABS.includes(initialStatus) ? initialStatus : '전체')
@@ -293,12 +356,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setErrors({}) }, [taxQuote])
 
-  const changeUnit = (u: Unit) => {
-    setUnit(u)
-    setSel(u === 'quarter' ? curQuarter : u === 'half' ? curHalf : cm)
-    setPage(1)
-  }
-  const fyOptions = [curFy + 1, curFy, curFy - 1, curFy - 2]
+  const changePeriod = (next: Period) => { setPeriod(next); setPage(1) }
 
   // 데이터 로드(초기 + mutation 후 refetch). 본인 견적만.
   const loadData = async () => {
@@ -406,9 +464,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
   // 유효 견적: 견적 유효기간(작성일+1개월-1일)이 아직 안 지난 견적 = validFromDate(오늘) ~ 오늘.
   // 만료일 계산은 lib/quoteStatus.ts 에 모여 있다(자동 실주·80 대시보드와 같은 함수).
   const today = todayKST()
-  const { start: rangeStart, end: rangeEnd } = unit === 'valid'
-    ? { start: validFromDate(today), end: today }
-    : periodRange(fy, unit, sel)
+  const { start: rangeStart, end: rangeEnd } = periodDates(period, curFy, cm, curQuarter)
   const inRangeDate = (q: Quote) => q.quote_date >= rangeStart && q.quote_date <= rangeEnd
   /** 만료됐지만 아직 견적중인 건 — 줄에 「만료」 표를 붙인다(자동 실주 전이거나 판단이 남은 건이다). */
   // 기준일은 coalesce(revived_at, quote_date) 다 — 되돌린 건은 되돌린 날부터 다시 1개월이다.
@@ -419,15 +475,14 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
    * 주문완료·세금계산서 요청·매출완료·실패 같은 결과가 난 건은 기간과 무관하게 남는다.
    * 다른 기간 선택은 그 기간의 성적을 보는 화면이라 날짜로만 거른다.
    */
-  const dateFiltered = quotes.filter(q => (unit === 'valid'
-    ? inValidQuoteView(q.status, q.quote_date, today, inRangeDate(q))
-    : inRangeDate(q)))
+  const dateFiltered = quotes.filter(inRangeDate)
   // ── 실적 요약(아래 KPI·달성률)은 목록과 모수가 다르다. ──
   // 목록에는 내가 남 대신 쓴 견적도 실리지만, 그 실적은 원래 담당자의 것이다.
   // 그래서 집계는 engineer_id 가 나인 건만 쓴다 — 실적 현황(app/sales)과 같은 기준.
   // ── 달성률: 선택 기간에 맞춰 연간 목표를 분할(월÷12·분기÷4·반기÷2·연간×1). 유효 견적은 월에 준해 ÷12. ──
-  const divisor = unit === 'valid' ? 12 : UNIT_DIVISOR[unit]
-  const targetYear = unit === 'valid' ? curFy : fy   // 유효 견적은 현재 회계연도 목표 기준
+  const divisor = PERIOD_DIVISOR[period]
+  // 「지난해」만 그 해 목표를 본다. 「전체」는 올해 목표로 잰다(해마다 견주는 일은 실적 현황이 맡는다).
+  const targetYear = period === 'prevFy' ? curFy - 1 : curFy
 
   /**
    * 요약 여섯 칸의 숫자 — 셈은 **lib/myQuotesSummary.ts** 하나다(2026-11-28, 야간4 2-1).
@@ -463,8 +518,9 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
   }, [fitToHeight])
 
   const filtered = dateFiltered.filter(q => {
-    // 회사 쪽은 공용 함수가 본다(lib/companySearch.ts). 이 자리만 더 보는 것: 견적번호.
-    const matchSearch = matchesCompany({ company_name: q.company_name }, search, [q.quote_number])
+    // 회사 쪽은 공용 함수가 본다(lib/companySearch.ts). 이 자리가 더 보는 것:
+    // **견적번호와 품목**이다(2026-11-28, 야간4 2-3) — 「S-NEX」로 찾는 손이 있었다.
+    const matchSearch = matchesCompany({ company_name: q.company_name }, search, [q.quote_number, itemsTextOf(q)])
     return matchSearch && (statusFilter === '전체' || q.status === statusFilter)
   })
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
@@ -727,6 +783,46 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
   }
 
   const inp: CSSProperties = { padding: '6px 10px', border: `1px solid ${BORDER}`, borderRadius: R.icon, fontSize: 13, outline: 'none', background: '#fff', boxSizing: 'border-box', colorScheme: 'light' }
+  /** 머리줄에 서는 조종 칸은 조금 낮다 — 제목(17px)과 한 줄에 서야 한다. */
+  const headInp: CSSProperties = { ...inp, padding: '4px 8px', fontSize: 12, fontWeight: 600, color: TEXT }
+
+  /**
+   * 기간 · 상태 · 검색 · 엑셀 — **한 줄**이다(2026-11-28, 야간4 2-3).
+   * controlsTarget 이 있으면 모달 머리줄에 포털로 심고, 없으면 패널 안에 제 줄로 선다.
+   */
+  const controlsRow = (
+    <div className="myq-controls" style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}>
+      {/* 기간 — 다섯 갈래 하나. 요약 여섯 칸과 목록이 **같은 범위**를 본다. */}
+      <select value={period} onChange={e => changePeriod(e.target.value as Period)}
+        title="기간 — 요약과 목록이 함께 바뀝니다" aria-label="기간" style={headInp}>
+        {PERIODS.map(x => <option key={x.key} value={x.key}>{periodLabel(x.key, curFy)}</option>)}
+      </select>
+      {/* 상태 — 칩 열두 개 한 줄을 드롭다운으로 바꿨다. 「전체」가 맨 위다. */}
+      <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
+        title="상태" aria-label="상태" style={headInp}>
+        {STATUS_TABS.map(st => (
+          <option key={st} value={st}>{st === '전체' ? '상태: 전체' : salesStatusLabel(st)}</option>
+        ))}
+      </select>
+      <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }}
+        placeholder="번호 · 고객사 · 품목" aria-label="검색"
+        style={{ ...headInp, fontWeight: 400, width: 170, minWidth: 110 }} />
+      {/* 선택한 견적을 이익률 분석표 엑셀로 내보낸다(보이는 행만 선택 가능). */}
+      <QuoteExcelButton
+        quoteIds={quoteSel.selected}
+        engineerId={engineerId}
+        onDone={quoteSel.clear}
+        size={26}
+      />
+    </div>
+  )
+  const controls = controlsTarget
+    ? createPortal(controlsRow, controlsTarget)
+    : (
+      <div style={{ padding: '10px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'flex-end' }}>
+        {controlsRow}
+      </div>
+    )
 
   return (
     <div
@@ -775,59 +871,15 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
         )}
       </div>
 
-      {/* 필터: 회계연도 + 단위 + 기간 + 검색 */}
-      <div style={{ padding: '10px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        {/* 유효 견적 모드에선 회계연도 선택이 의미 없어 숨긴다(오늘 기준 롤링 범위) */}
-        {unit !== 'valid' && (
-          <select value={fy} onChange={e => { setFy(Number(e.target.value)); setPage(1) }} style={inp}>
-            {fyOptions.map(y => <option key={y} value={y}>{y}년도</option>)}
-          </select>
-        )}
-        <select value={unit} onChange={e => changeUnit(e.target.value as Unit)} style={inp}>
-          <option value="valid">유효 견적</option>
-          <option value="month">월</option>
-          <option value="quarter">분기</option>
-          <option value="half">반기</option>
-          <option value="year">연간</option>
-        </select>
-        {unit === 'month' && (
-          <select value={sel} onChange={e => { setSel(Number(e.target.value)); setPage(1) }} style={inp}>
-            {MONTHS_FISCAL.map(m => <option key={m} value={m}>{m}월</option>)}
-          </select>
-        )}
-        {unit === 'quarter' && (
-          <select value={sel} onChange={e => { setSel(Number(e.target.value)); setPage(1) }} style={inp}>
-            <option value={1}>1분기 (4~6월)</option>
-            <option value={2}>2분기 (7~9월)</option>
-            <option value={3}>3분기 (10~12월)</option>
-            <option value={4}>4분기 (1~3월)</option>
-          </select>
-        )}
-        {unit === 'half' && (
-          <select value={sel} onChange={e => { setSel(Number(e.target.value)); setPage(1) }} style={inp}>
-            <option value={1}>상반기 (4~9월)</option>
-            <option value={2}>하반기 (10~3월)</option>
-          </select>
-        )}
-        <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} placeholder="견적번호 / 고객사 / 내용" style={{ ...inp, flex: 1, minWidth: 140 }} />
-      </div>
-      {/* 상태 필터 바 */}
-      {/* 상태 칩 — 좁아지면 줄을 늘리지 않고 가로로 민다(표 높이가 들쭉날쭉해지지 않게) */}
-      <div style={{ padding: '8px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'thin' }}>
-        {STATUS_TABS.map(s => (
-          <button key={s} onClick={() => { setStatusFilter(s); setPage(1) }}
-            style={{ padding: '4px 9px', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0, background: statusFilter === s ? (s === '전체' ? BLUE : getCategoryColor(SALES_STATUS_COLORS, s).text) : '#f3f4f6', color: statusFilter === s ? '#fff' : TEXT }}>
-            {salesStatusLabel(s)}
-          </button>
-        ))}
-        {/* 선택한 견적을 이익률 분석표 엑셀로 내보낸다(보이는 행만 선택 가능). */}
-        <QuoteExcelButton
-          quoteIds={quoteSel.selected}
-          engineerId={engineerId}
-          onDone={quoteSel.clear}
-          size={26}
-        />
-      </div>
+      {/* ── 제목 줄의 **조종 칸** (2026-11-28, 야간4 2-3) ────────────────────
+          기간 · 상태 · 검색 · 엑셀이 **모달 머리줄**로 올라갔다(controlsTarget 이 있으면
+          그 자리에 포털로 심는다 — components/dashboard/MyQuoteCard.tsx).
+
+          전에는 줄이 **둘**이었다: 셀렉트 셋 + 검색 한 줄, 그 아래 상태 칩 열두 개 한 줄.
+          두 줄이 합쳐 70px 을 먹고, 상태 칩은 좁아지면 가로로 밀려 **본 사람만** 뒤쪽
+          상태를 보았다. 지금은 제목과 같은 줄에 **드롭다운 둘 + 검색 하나**다.
+          칩을 드롭다운으로 바꾼 값: 열두 상태가 늘 같은 자리에서 한 번에 보인다. */}
+      {controls}
 
       {/* 테이블 — fitToHeight 면 카드에서 남는 높이를 이 상자가 받고, 그 높이만큼 줄을 싣는다 */}
       <div ref={listBoxRef} style={{ overflowX: 'auto', ...(fitToHeight ? { flex: 1, minHeight: 0, overflowY: 'hidden' } as const : null) }}>
@@ -859,10 +911,8 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                 // 품목명은 **저장된 값(product_name)이 먼저**다. 가격표(price_list)는 비었을 때만 쓴다 —
                 // 가격표를 다시 등록하면 설명이 덮어쓰이는데, 그 글자를 먼저 쓰면 지난 견적의 품목명이
                 // 따라 바뀌어 버린다(가격표 2단계에서 뒤집었다).
-                const itemNames = q.quote_items && q.quote_items.length > 0
-                  // 할인은 품목이 아니라 총액 차감이라 목록에서 뺀다.
-                  ? q.quote_items.filter(i => i.row_kind !== 'discount').map(i => i.product_name || i.price_list?.model_jp).filter(Boolean).join(', ')
-                  : '-'
+                // 검색도 **같은 글자**를 본다(itemsTextOf 하나다 — 보이는 것과 찾히는 것이 어긋나지 않게).
+                const itemNames = itemsTextOf(q) || '-'
                 const showOrderInfo = ['주문완료', '세금계산서 요청', '매출완료'].includes(q.status)
                 /**
                  * **상태 보조 한 줄** — 뱃지 아래 11px 한 자리다(2026-11-28, 야간4 2-2).

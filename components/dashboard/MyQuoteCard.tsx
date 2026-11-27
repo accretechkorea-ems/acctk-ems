@@ -61,6 +61,18 @@ export default function MyQuoteCard({ engineerId, slot, initialTab, onReload, he
   const closeRef = useRef(close)
   useEffect(() => { closeRef.current = close })
 
+  /**
+   * **머리줄에 패널의 조종 칸을 심는다** (2026-11-28, 야간4 2-3).
+   *
+   * 제목 줄은 「내 견적 ··· [기간 ▾] [상태 ▾] [검색] ⬇ ✕」 한 줄이다. 기간·상태·검색은
+   * 패널이 들고 있는 상태라 **그 자리를 패널에 내려 준다** — 상태를 끌어올려 양쪽에
+   * 흘리는 대신, 빈 칸 하나를 ref 로 잡아 넘기고 패널이 포털로 심는다. 그래야 필터가
+   * 바뀔 때 다시 그려지는 것이 패널 안쪽뿐이다.
+   */
+  // 모달이 닫히면 React 가 그 ref 를 **null 로 한 번 더** 불러 준다 — 따로 비우지 않는다.
+  // (상태 설정 함수는 이름이 바뀌지 않으므로 ref 가 렌더마다 다시 붙지도 않는다.)
+  const [controlsBox, setControlsBox] = useState<HTMLElement | null>(null)
+
   // 모달이 열려 있는 동안 **뒤 화면을 잠근다.** Esc 는 ModalOverlay 가 받는다
   // (2026-11-02 부터 공용 한곳이고, 입력 폼 모달은 그쪽에서 확인을 받는다).
   useEffect(() => {
@@ -103,7 +115,9 @@ export default function MyQuoteCard({ engineerId, slot, initialTab, onReload, he
             }}
             headStyle={{ padding: '12px 16px', borderBottom: `1px solid ${BORDER}`, alignItems: 'center', gap: 8 }}
             bodyStyle={{ padding: 12, overflowX: 'hidden' }}
-            title={<span style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px' }}>내 견적</span>}
+            title={<span style={{ fontSize: 17, fontWeight: 800, color: TEXT, letterSpacing: '-0.3px', whiteSpace: 'nowrap' }}>내 견적</span>}
+            // 제목과 ✕ 사이가 조종 칸의 자리다. 패널이 여기에 포털로 심는다.
+            titleExtra={<span ref={setControlsBox} style={{ display: 'flex', justifyContent: 'flex-end', minWidth: 0 }} />}
           >
             {/* 본문 — 여기서만 스크롤한다.
                 ⚠ fitToHeight 를 주지 않는다. 그 모드는 **표 상자를 모달 높이에 맞춰 잘라 내고**
@@ -112,7 +126,7 @@ export default function MyQuoteCard({ engineerId, slot, initialTab, onReload, he
                   두고 넘치는 만큼 이 상자가 내려간다.
                 바깥 상자에 display:flex 를 쓰지 않는 것도 같은 이유다 — flex 자식은 늘어나는
                   대신 눌려서, 넘칠 일이 생기지 않는다(= 스크롤이 생기지 않는다). */}
-            <MyQuotesPanel engineerId={engineerId} initialStatus={openTab} />
+            <MyQuotesPanel engineerId={engineerId} initialStatus={openTab} controlsTarget={controlsBox} />
           </ModalCard>
         </ModalOverlay>
       )}
