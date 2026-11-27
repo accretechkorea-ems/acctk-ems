@@ -70,7 +70,7 @@ const DEVICE_COLUMNS: Record<string, string> = {
   install_due_month: '설치 예정월',
 }
 /** 장비 표에 **아직 없을 수 있는** 칸 — SQL 적용 전에는 빼고 담는다. */
-const DEVICE_NEW: readonly string[] = ['master_pending', 'install_due_month']
+const DEVICE_NEW: readonly string[] = ['master_pending', 'install_due_month', 'created_by']
 let deviceNewKnown: boolean | null = null
 
 /**
@@ -326,8 +326,12 @@ export async function POST(req: Request) {
       const customerId = Number(body.customerId)
       if (!Number.isInteger(customerId) || customerId <= 0) return bad('사업장을 찾지 못했습니다')
       if (!String(patch.device_name ?? '').trim()) return bad('장비 라인업을 입력해주세요')
+      // **만든 사람**을 적는다(2026-11-27, 묶음4 G1) — 「납품 예정」 줄의 주인을 정할 때
+      // 견적 작성자 다음으로 보는 값이다(lib/deviceOwner.ts). 칸이 아직 없으면 위
+      // dropMissingDeviceColumns 가 빼므로, SQL 적용 전에도 장비 등록은 그대로 된다.
+      const withOwner = deviceNewKnown === false ? patch : { ...patch, created_by: actor }
       const { data: made, error } = await sb.from('devices')
-        .insert({ customer_id: customerId, ...patch }).select('device_id').single()
+        .insert({ customer_id: customerId, ...withOwner }).select('device_id').single()
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       const { written } = await writeCustomerEvents(sb, [event(customerId, 'device_edited', {
         mode: 'add', device_id: made.device_id,

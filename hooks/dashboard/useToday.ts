@@ -20,6 +20,17 @@ import { todayKST } from '@/lib/date'
 import { isClosedStage } from '@/components/customer/opportunity'
 import { EXPIRY_TASK_STATUSES, type SynthDevice, type SynthLead, type SynthLost, type SynthQuote, type SynthReasonPending, type TaskRow } from '@/lib/tasks'
 import { DEVICE_PENDING } from '@/lib/deviceStatus'
+
+/** 납품 예정 줄에서 읽는 것. 두 갈래가 같은 모양이라 한 번만 적는다. */
+type PendingRow = {
+  device_id: number
+  device_name: string | null
+  device_name2: string | null
+  customer_id: number | null
+  install_due_month: string | null
+}
+/** 칸이 아직 없을 때 돌아오는 코드 — 그 갈래만 건너뛴다(db/devices_created_by_20261127.sql). */
+const MISSING_COLUMN = new Set(['42703', 'PGRST204', 'PGRST205'])
 import { isReasonPending } from '@/lib/lostReason'
 
 /** 한 조각의 자료 — 못 읽었으면 error 가 참이고 그 조각만 그 사실을 말한다. */
@@ -149,17 +160,39 @@ export function useToday(engineerId: number | null, opts: { seeUnassignedLeads: 
       setLeads(done<SynthLead[]>([]))
     }
 
-    // 내가 수주해 만든 **납품 예정 장비**. source_quote_id 칸이 없으면 빈 값이다.
+    /**
+     * **납품 예정 장비** — 주인 규칙은 lib/deviceOwner.ts 에 있다(2026-11-27, 묶음4 G1):
+     *   ① 그 줄을 만든 견적의 작성자 → ② 없으면 그 줄을 만든 사람(created_by)
+     *   → ③ 둘 다 없으면 **홈에 띄우지 않는다**(사업장 화면에만 선다).
+     *
+     * 그래서 두 갈래를 읽어 합친다. ②는 `devices.created_by` 가 있어야 하는데
+     * (db/devices_created_by_20261127.sql) **없어도 돈다** — 42703 을 만나면 그 갈래만
+     * 건너뛰고 ①만으로 답한다. ③은 조회하지 않는 것으로 지켜진다.
+     */
     void run<SynthDevice[]>('pendingDevices', setPendingDevices, [], async () => {
+      const SELECT = 'device_id, device_name, device_name2, customer_id, install_due_month'
+      const base = () => supabase.from('devices').select(SELECT)
+        .eq('status', DEVICE_PENDING).is('deleted_at', null)
+
+      // ① 내가 쓴 견적에서 생긴 줄.
       const mine = unwrap<Array<{ quote_id: number }>>(
         await supabase.from('quotes').select('quote_id').eq('engineer_id', engineerId))
       const ids = mine.map(q => Number(q.quote_id))
-      if (ids.length === 0) return []
-      const rows = unwrap<Array<{ device_id: number; device_name: string | null; device_name2: string | null; customer_id: number | null; install_due_month: string | null }>>(
-        await supabase.from('devices')
-          .select('device_id, device_name, device_name2, customer_id, install_due_month')
-          .eq('status', DEVICE_PENDING).is('deleted_at', null)
-          .in('source_quote_id', ids))
+      const fromQuote = ids.length === 0 ? [] : unwrap<PendingRow[]>(await base().in('source_quote_id', ids))
+
+      // ② 견적 없이 **내가 손으로 넣은** 줄. 칸이 없으면 조용히 건너뛴다.
+      let fromMe: PendingRow[] = []
+      const made = await base().is('source_quote_id', null).eq('created_by', engineerId)
+      if (made.error) {
+        if (!MISSING_COLUMN.has(made.error.code ?? '')) throw made.error
+      } else {
+        fromMe = (made.data ?? []) as PendingRow[]
+      }
+
+      // 같은 줄이 두 번 들어오지 않게 id 로 합친다.
+      const byId = new Map<number, PendingRow>()
+      for (const r of [...fromQuote, ...fromMe]) byId.set(Number(r.device_id), r)
+      const rows = [...byId.values()]
       const names = await siteNames(rows.map(r => Number(r.customer_id)))
       return rows.map(r => ({ ...r, site: r.customer_id ? names.get(Number(r.customer_id)) ?? null : null }))
     })

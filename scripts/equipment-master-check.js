@@ -123,7 +123,7 @@ ok('표가 없으면 빈 마스터로 돈다', /EMPTY_MASTER/.test(MASTER) && /�
 ok('저장할 때 센다', /master_pending: isMasterPending\(master, form\.device_name, form\.device_name2, form\.option\)/.test(CRUD))
 ok('라우트의 흰 목록에 있다', /master_pending: '마스터 밖'/.test(ROUTE))
 ok('칸이 없으면 빼고 담는다(42703)', /dropMissingDeviceColumns/.test(ROUTE)
-  && /DEVICE_NEW: readonly string\[\] = \['master_pending', 'install_due_month'\]/.test(ROUTE))
+  && /DEVICE_NEW: readonly string\[\] = \['master_pending', 'install_due_month', 'created_by'\]/.test(ROUTE))
 
 console.log(fails === 0 ? '\n전부 통과' : `\n${fails}건 실패`)
 process.exit(fails === 0 ? 0 : 1)

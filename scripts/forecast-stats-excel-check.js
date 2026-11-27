@@ -49,17 +49,25 @@ const X = load(path.join(ROOT, 'lib/forecastStatsExcel.ts'))
 const base = { group_kind: 'base' }
 const opt = { group_kind: 'option' }
 
+// 2026-11-27(묶음4 G2) — 차례가 바뀌었다. **사실을 먼저** 본다:
+//   ① 수리 건 연결 → ② 품목에 base → ③ option 만 → ④ 소모품 분류 → ⑤ 그 외 기타.
+// 분류 글자는 사람이 고르는 칸이라 자주 비거나 틀린다. 품목은 견적을 쓰며 쌓인 사실이다.
 console.log('── ① 종류 판정 — 차례가 규칙이다 ──')
-eq('수리 건이면 수리', X.statsKindOf({ repairId: 7, items: [base] }), '수리')
-eq('분류 이름에 「수리」가 있어도 수리', X.statsKindOf({ category: 'REPAIR', categoryLabel: '수리' }), '수리')
-eq('업그레이드 분류', X.statsKindOf({ category: 'UPG', categoryLabel: '업그레이드' }), '업그레이드')
-eq('업그레이드가 수리보다 **뒤**다(수리가 이긴다)',
-  X.statsKindOf({ repairId: 1, category: 'UPG', categoryLabel: '업그레이드' }), '수리')
-eq('본체 줄이 있으면 장비', X.statsKindOf({ items: [opt, base] }), '장비')
-eq('본체 줄이 없고 분류가 소모품', X.statsKindOf({ category: 'PART', categoryLabel: '소모품', items: [opt] }), '소모품')
-eq('분류를 몰라도 품목이 있으면 소모품', X.statsKindOf({ items: [opt] }), '소모품')
-eq('아무것도 없으면 기타', X.statsKindOf({}), '기타')
+eq('① 수리 건이면 수리', X.statsKindOf({ repairId: 7, items: [base] }), '수리')
+eq('수리는 **연결**로만 판정한다 — 분류 글자가 「수리」여도 연결이 없으면 아니다',
+  X.statsKindOf({ category: 'REPAIR', categoryLabel: '수리' }), '기타')
+eq('② 본체 줄이 있으면 장비', X.statsKindOf({ items: [opt, base] }), '장비')
+eq('분류가 업그레이드여도 **본체를 팔았으면 장비**다',
+  X.statsKindOf({ category: 'UPG', categoryLabel: '업그레이드', items: [base] }), '장비')
+eq('장비도 수리보다는 뒤다(수리가 이긴다)', X.statsKindOf({ repairId: 1, items: [base] }), '수리')
+eq('③ 본체 없이 옵션만이면 업그레이드', X.statsKindOf({ items: [opt] }), '업그레이드')
+eq('분류가 소모품이어도 옵션 줄이 있으면 업그레이드다',
+  X.statsKindOf({ category: 'PART', categoryLabel: '소모품', items: [opt] }), '업그레이드')
+eq('④ 품목이 없고 분류만 소모품', X.statsKindOf({ category: 'PART', categoryLabel: '소모품' }), '소모품')
+eq('⑤ 아무것도 없으면 기타', X.statsKindOf({}), '기타')
 eq('품목을 못 읽었으면 기타', X.statsKindOf({ items: null }), '기타')
+// **품목이 있다고 소모품으로 떨어뜨리지 않는다** — 무엇인지 모르면 기타다.
+eq('base 도 option 도 아닌 줄만 있으면 기타', X.statsKindOf({ items: [{ group_kind: 'include' }] }), '기타')
 eq('본체 묶음 열쇠는 한 곳에서 온다', X.statsKindOf({ items: [{ group_kind: 'base' }] }), '장비')
 eq('다섯 가지뿐', [...X.STATS_KINDS], ['장비', '소모품', '업그레이드', '수리', '기타'])
 

@@ -17,16 +17,28 @@
 
 import { MAIN_GROUP_KIND } from './deliveryPending'
 
+/** 옵션 묶음 — quote_items.group_kind 는 'base' · 'option' · 'include' 셋이다. */
+const OPTION_GROUP_KIND = 'option'
+
 // ── 종류 판정 ───────────────────────────────────────────────────────────────
 //
 // 「장비 / 소모품 / 업그레이드 / 수리 / 기타」 다섯. 가르는 차례는 **위에서부터**다 —
 // 한 건이 여러 조건에 걸릴 수 있어(수리 건에 본체 줄이 붙기도 한다) 차례가 곧 규칙이다.
 //
-//   ① 수리         — 견적이 수리 건에 묶여 있다(repair_id). 분류가 '수리'여도 같다.
-//   ② 업그레이드   — 분류(quotes.category)가 업그레이드다.
-//   ③ 장비         — 품목에 **본체 줄**(group_kind = 'base')이 하나라도 있다.
-//   ④ 소모품       — 분류가 소모품·부품이거나, 본체 줄 없이 품목만 있다.
+//   ① 수리         — 견적이 **수리 건에 묶여 있다**(repair_id).
+//   ② 장비         — 품목에 **본체 줄**(group_kind = 'base')이 하나라도 있다.
+//   ③ 업그레이드   — 본체 없이 **옵션 줄만**(group_kind = 'option') 있다.
+//   ④ 소모품       — 분류가 소모품·부품이다.
 //   ⑤ 기타         — 위 어디에도 안 걸린다(품목을 못 읽은 건 포함).
+//
+// ⚠ 2026-11-27(묶음4 G2)에 **차례가 바뀌었다.** 전에는 분류 글자(「수리」·「업그레이드」)가
+//   품목보다 앞섰다. 분류는 사람이 고르는 칸이라 자주 비거나 잘못 들어 있는데, 품목은
+//   견적을 쓰면서 쌓인 **사실**이다. 그래서 **사실을 먼저** 본다:
+//     · 수리는 수리 건 연결(repair_id)이라는 사실 하나로만 판정한다. 분류 글자가
+//       「수리」여도 연결이 없으면 수리가 아니다.
+//     · 본체 줄이 있으면 분류가 무엇이든 **장비**다(「업그레이드」로 적고 본체를 판 건).
+//     · 본체 없이 품목만 있다고 소모품으로 떨어뜨리지 않는다 — 옵션만이면 업그레이드이고,
+//       그 밖이면 **기타**다(잘못 세는 것보다 「모르겠다」가 낫다).
 
 export const STATS_KINDS = ['장비', '소모품', '업그레이드', '수리', '기타'] as const
 export type StatsKind = (typeof STATS_KINDS)[number]
@@ -54,12 +66,18 @@ export type KindInput = {
 export function statsKindOf(input: KindInput): StatsKind {
   const { category, categoryLabel, repairId, items } = input
   const name = `${category ?? ''} ${categoryLabel ?? ''}`
-  if (repairId != null || has(name, '수리', 'repair')) return '수리'
-  if (has(name, '업그레이드', 'upgrade')) return '업그레이드'
   const lines = items ?? []
-  if (lines.some(it => String(it.group_kind ?? '').trim() === MAIN_GROUP_KIND)) return '장비'
+  const kindOf = (it: StatsItem) => String(it.group_kind ?? '').trim()
+
+  // ① 수리 — **연결**이라는 사실 하나로만. 분류 글자는 보지 않는다.
+  if (repairId != null) return '수리'
+  // ② 장비 — 본체 줄이 하나라도 있으면 분류와 무관하게 장비다.
+  if (lines.some(it => kindOf(it) === MAIN_GROUP_KIND)) return '장비'
+  // ③ 업그레이드 — 본체 없이 **옵션 줄만**. 한 줄이라도 옵션이면 족하다(본체는 위에서 걸렀다).
+  if (lines.some(it => kindOf(it) === OPTION_GROUP_KIND)) return '업그레이드'
+  // ④ 소모품 — 분류가 그렇게 적혀 있을 때만.
   if (has(name, '소모품', '부품', 'part', 'consum')) return '소모품'
-  if (lines.length > 0) return '소모품'
+  // ⑤ 그 밖 — 품목이 있어도 무엇인지 모르면 기타다(잘못 세지 않는다).
   return '기타'
 }
 
