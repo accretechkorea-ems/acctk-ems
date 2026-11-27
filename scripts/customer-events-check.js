@@ -94,9 +94,16 @@ ok('리드 배정은 등록 줄과 배정 줄을 함께 적는다',
 ok('등록 줄의 날짜는 **리드가 들어온 날**이다', /occurred_at: lead\.created_at/.test(read('lib/customerEvents.ts')))
 
 console.log('\n── ④ 적지 않는 것 ──')
-ok('포캐스트 **단계 고침**은 적지 않는다',
-  !/forecast_stage|forecast_updated/.test(read('hooks/customer/useOpportunityCrud.ts'))
-  && /새로 만든 때만/.test(read('hooks/customer/useOpportunityCrud.ts')))
+// 2026-11-28(야간4 4-2)부터 **단계 고침은 적는다** — 전에는 「자주 오르내려 이력이 덮인다」고
+// 빼 두었는데, 그 바람에 언제 어디까지 갔는지를 아무 데서도 볼 수 없었다. 대신 적는 것은
+// **단계 하나**이고, 금액·제목 같은 잡 변경은 여전히 줄로 서지 않는다.
+ok('포캐스트 **단계 고침**은 적는다(2026-11-28)',
+  /forecast_stage_changed/.test(read('hooks/customer/useOpportunityCrud.ts'))
+  && /FORECAST_EVENT_TYPES/.test(read('lib/customerEvents.ts')))
+ok('그래도 금액·제목 같은 **잡 변경**은 적지 않는다',
+  !/forecast_updated|forecast_amount/.test(read('hooks/customer/useOpportunityCrud.ts')))
+ok('단계 고침 한 줄은 **옮긴 때만**이다(만든 때는 forecast_created 가 적는다)',
+  /from == null \|\| from === to\) return/.test(read('hooks/customer/useOpportunityCrud.ts')))
 ok('사업장 **정보 수정**은 적지 않는다', !/'site_edited'/.test(CHANGE))
 ok('담당자 **수정**은 적지 않는다(추가는 남긴다)',
   !/mode: 'edit', contact_id: id/.test(CHANGE) && /mode: 'add', contact_id: made\.contact_id/.test(CHANGE))

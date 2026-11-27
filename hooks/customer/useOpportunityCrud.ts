@@ -9,6 +9,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { logCustomerEvent } from '@/lib/customerEventLog'
+import { recordStageChange } from '@/lib/opportunityStageHistory'
 import { krwShort } from '@/lib/forecastBoard'
 import { josa } from '@/lib/josa'
 import { useToast } from '@/components/common/Toast'
@@ -39,6 +40,39 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
   const canEditOpp = (o: SalesOpportunity) =>
     superAdmin || (engineerId !== null && o.engineer_id === engineerId)
 
+  /**
+   * **단계 이력 한 줄** (2026-11-28, 야간4 4-1·4-2).
+   *
+   * 두 군데에 남는다. 쓰는 곳이 둘인 까닭이 다르다:
+   *   ① opportunity_stage_history — **자국**이다. 이력 요약(「상담 9/4 → 협상 10/15」)이
+   *      이것을 읽는다. 표가 아직 없으면 사건으로 떨어진다(42P01 폴백).
+   *   ② customer_events(forecast_stage_changed) — **활동 이력에 보일 한 줄**이다.
+   *      옮긴 때만 적는다(만든 때는 forecast_created 가 이미 적는다).
+   *
+   * 저장이 끝난 **뒤에** 부른다 — 이력을 적지 못해도 단계 이동은 그대로 끝난 일이다.
+   */
+  const logStage = (
+    o: { opportunity_id: number; customer_id: number; title?: string | null },
+    from: string | null,
+    to: string,
+  ) => {
+    void recordStageChange(supabase, {
+      opportunityId: o.opportunity_id,
+      fromStage: from,
+      toStage: to,
+      changedBy: engineerId,
+      customerId: o.customer_id,
+      logEvent: row => { void logCustomerEvent(row) },
+    })
+    // 만든 때(from 이 없다)는 적지 않는다 — forecast_created 와 두 줄이 되기 때문이다.
+    if (from == null || from === to) return
+    void logCustomerEvent({
+      customerId: o.customer_id,
+      type: 'forecast_stage_changed',
+      payload: { opportunity_id: o.opportunity_id, title: o.title ?? null, from_stage: from, to_stage: to },
+    })
+  }
+
   const openNewOpp = () => { setEditingOpp(null); setIsOppModalOpen(true) }
   const openEditOpp = (o: SalesOpportunity) => { setEditingOpp(o); setIsOppModalOpen(true) }
   const closeOppModal = () => { setIsOppModalOpen(false); setEditingOpp(null) }
@@ -68,11 +102,15 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
     }
 
     setIsSavingOpp(true)
-    const { error } = editingOpp
+    // 새로 만든 줄의 id 가 필요하다(첫 단계 이력을 그 id 로 적는다).
+    const { data: saved, error } = editingOpp
       ? await supabase.from('sales_opportunities')
           .update({ ...payload, updated_at: new Date().toISOString() })
           .eq('opportunity_id', editingOpp.opportunity_id)
-      : await supabase.from('sales_opportunities').insert({ ...payload, customer_id: resolveCustomerId(form) })
+          .select('opportunity_id, customer_id').maybeSingle()
+      : await supabase.from('sales_opportunities')
+          .insert({ ...payload, customer_id: resolveCustomerId(form) })
+          .select('opportunity_id, customer_id').maybeSingle()
     setIsSavingOpp(false)
 
     if (error) {
@@ -81,6 +119,13 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
       return
     }
     const wasEditing = !!editingOpp
+    // 단계 이력 — 만든 때는 **첫 줄**, 고친 때는 단계가 **바뀐 때만**.
+    // 금액·제목 같은 잡 변경은 담지 않는다(4-1 의 규칙).
+    if (saved?.opportunity_id != null) {
+      const row = { opportunity_id: Number(saved.opportunity_id), customer_id: Number(saved.customer_id), title: payload.title }
+      if (!wasEditing) logStage(row, null, payload.stage)
+      else if (editingOpp && editingOpp.stage !== payload.stage) logStage(row, editingOpp.stage, payload.stage)
+    }
     // 고객 이력에 한 줄 (2026-11-27 야간3 2-2) — **새로 만든 때만**이다.
     // 「진행(단계 고침)」은 적지 않는다: 단계는 자주 오르내려 이력이 그 줄로 덮인다.
     if (!wasEditing) {
@@ -150,6 +195,7 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
       toast.error(error.message || '단계 변경 중 오류가 발생했습니다')
       return false
     }
+    logStage(o, o.stage, next)
     if (await fetchDetail()) toast.success(`'${o.title}'${josa(o.title, '을')} ${next}${josa(next, '으로')} 옮겼습니다`)
     return true
   }
@@ -205,6 +251,8 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
       toast.error(error.message || '실주 처리 중 오류가 발생했습니다')
       return false
     }
+    // 단계 이력 — 실주로 **옮긴** 때만이다. closeOnly(종료만 찍기)는 단계가 그대로다.
+    if (!opts.closeOnly && opts.stage && opts.stage !== o.stage) logStage(o, o.stage, opts.stage)
     // 고객 이력에 한 줄 (2026-11-27 야간3 2-2).
     void logCustomerEvent({
       customerId: o.customer_id,

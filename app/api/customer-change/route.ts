@@ -23,6 +23,7 @@ import { loadCaller } from '@/lib/apiCaller'
 import { disposePatch, restorePatch, DEVICE_IN_USE } from '@/lib/deviceStatus'
 import { todayKST } from '@/lib/date'
 import { forecastPatch, type ForecastNow, type LinkedQuote } from '@/lib/forecastSync'
+import { recordStageChange } from '@/lib/opportunityStageHistory'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   fieldChanges, writeCustomerEvents, WORK_EVENT_TYPES,
@@ -527,7 +528,7 @@ export async function POST(req: Request) {
     if (!oppId) return NextResponse.json({ ok: true, skipped: '연결된 포캐스트 없음' })
 
     const [{ data: opp }, { data: linked }] = await Promise.all([
-      sb.from('sales_opportunities').select('opportunity_id, stage, expected_amount, closed_at').eq('opportunity_id', oppId).maybeSingle(),
+      sb.from('sales_opportunities').select('opportunity_id, customer_id, stage, expected_amount, closed_at').eq('opportunity_id', oppId).maybeSingle(),
       sb.from('quotes').select('quote_id, status, total_supply, purchase_order_at').eq('opportunity_id', oppId),
     ])
     if (!opp) return NextResponse.json({ ok: true, skipped: '포캐스트를 찾지 못함' })
@@ -536,6 +537,23 @@ export async function POST(req: Request) {
     if (Object.keys(patch).length === 0) return NextResponse.json({ ok: true, changed: false })
     const { error } = await sb.from('sales_opportunities').update(patch).eq('opportunity_id', oppId)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    /**
+     * **견적이 끌고 간 단계도 자국을 남긴다** (2026-11-28, 야간4 4-1).
+     *
+     * 이 길은 사람이 카드를 옮긴 것이 아니라 **견적 상태가 올린** 것이다. 그래도 이력에는
+     * 똑같이 한 줄이어야 한다 — 「언제 견적제출로 갔나」를 묻는 사람은 누가 올렸는지를
+     * 먼저 묻지 않는다. changed_by 는 비운다(사람이 아니다).
+     */
+    if (typeof patch.stage === 'string' && patch.stage !== opp.stage) {
+      await recordStageChange(sb, {
+        opportunityId: oppId,
+        fromStage: (opp.stage as string | null) ?? null,
+        toStage: patch.stage,
+        changedBy: null,
+        customerId: Number((opp as { customer_id?: number }).customer_id ?? 0) || null,
+        logEvent: row => { void writeCustomerEvents(sb, [event(row.customerId, row.type, row.payload)]) },
+      })
+    }
     console.log(`[${TAG}] forecast-sync`, { oppId, patch, by: caller.email })
     return NextResponse.json({ ok: true, changed: true, patch })
   }

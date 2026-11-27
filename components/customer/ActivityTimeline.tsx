@@ -26,7 +26,8 @@ import { INQUIRY_TYPE_LABEL, inquiryTypeOf } from '@/lib/inquiries'
 import type { InquiryRow } from '@/hooks/useCompanyTimeline'
 import { isFutureVisit } from '@/lib/serviceVisit'
 import { timelineKey } from '@/lib/activity'
-import { isChangeEvent, isLeadEvent } from '@/lib/customerEvents'
+import { isChangeEvent, isForecastEvent, isLeadEvent } from '@/lib/customerEvents'
+import type { StageHistoryRow } from '@/lib/opportunityStageHistory'
 import { eventLine, type CustomerEvent } from '@/lib/customerEventView'
 import { R } from '@/lib/radius'
 import { TITLE } from '@/lib/textTokens'
@@ -59,6 +60,11 @@ type Props = {
   events?: CustomerEvent[]
   /** 영업 기회 — 「포캐스트」 종류의 줄을 만든다(만든 날·종료, 두 줄). */
   opportunities?: SalesOpportunity[]
+  /**
+   * 포캐스트 **단계 이력** — 건 id → 시간 순 줄(2026-11-28, 야간4 4-2).
+   * 생성 줄의 꼬리표가 **그때 단계**를 적는 데 쓴다. 없으면 지금 단계로 떨어진다.
+   */
+  stageHistories?: Map<number, StageHistoryRow[]>
   /** 이 사업장들에 걸린 의뢰서 — 「의뢰」 종류의 줄이 된다. 연결되지 않은 과거 건은 오지 않는다. */
   inquiries?: InquiryRow[]
   /**
@@ -85,6 +91,8 @@ type Item = {
   label: string          // 종류 라벨 (신규설치 / A/S / 견적 …)
   dot: string
   labelSuffix?: string   // 종류 뒤에 붙는 값 (서비스의 유상/무상)
+  /** 그 꼬리표에 붙는 호버 글자 — 값이 **확실하지 않을 때**만 준다(2026-11-28, 야간4 4-2). */
+  labelSuffixTitle?: string
   title: string          // 장비 모델명 또는 견적번호
   body: string           // 내용 또는 금액·상태
   bodySuffix?: string    // 내용 뒤에 괄호로 붙는 값 (영업 활동에서 만난 고객사 담당자)
@@ -239,9 +247,9 @@ function TimelineRow({ item, first, focused, siteName }: { item: Item; first: bo
             </SizedCell>
             <SizedCell sizer={LONGEST_PAID} style={{ fontSize: 12, color: TEXT_DIM }}>
               {item.labelSuffix && (
-                <>
+                <span title={item.labelSuffixTitle}>
                   <span style={{ color: '#6b7280' }}>{'· '}</span>{item.labelSuffix}
-                </>
+                </span>
               )}
             </SizedCell>
             <span style={{ fontSize: 12, color: '#234ea2', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{item.title}</span>
@@ -319,7 +327,7 @@ function TimelineRow({ item, first, focused, siteName }: { item: Item; first: bo
   )
 }
 
-export default function ActivityTimeline({ history, devices, quotes, activities, holdings, customerId, onOpenQuotePdf, onOpenHolding, onAddRecord, onEditActivity, canEditActivity, focusKey, onFocused, sites, events, opportunities, inquiries, forecastOnlyAt, initialSiteIds, title }: Props) {
+export default function ActivityTimeline({ history, devices, quotes, activities, holdings, customerId, onOpenQuotePdf, onOpenHolding, onAddRecord, onEditActivity, canEditActivity, focusKey, onFocused, sites, events, opportunities, stageHistories, inquiries, forecastOnlyAt, initialSiteIds, title }: Props) {
   const [showUndated, setShowUndated] = useState(false)
 
   /** 고를 수 있는 것 전부 — 「좁히지 않음」의 기준이다(lib/timelineFilter.ts). */
@@ -454,8 +462,16 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
      * 전에는 「고침」 줄을 하나 더 냈다(updated_at 이 만든 날·끝난 날과 다를 때). 그런데
      * 그 시각은 **제목이나 금액만 고쳐도 올라간다** — 밖으로 나가 한 일이 아닌데 활동 이력에
      * 줄로 섰다. 활동이 아닌 것은 줄로 내지 않는다(2026-11-22 지시, lib/customerLastTouch.ts
-     * 가 최근 활동을 세는 규칙과 같다). 단계가 언제 바뀌었는지는 담는 표가 없어 여전히 알 수
-     * 없고, 지금 단계는 만든 줄의 꼬리표(labelSuffix)가 보여 준다.
+     * 가 최근 활동을 세는 규칙과 같다).
+     *
+     * ── 꼬리표가 **그때 단계**다 (2026-11-28, 야간4 4-2) ─────────────────────
+     *   만든 줄의 꼬리표는 `o.stage` 였다 — **지금 단계**다. 그래서 9월에 만든 줄이
+     *   11월에 보면 「포캐스트 · 협상」으로 적혀, 9월에 무슨 일이 있었는지 말하지 못하고
+     *   날마다 뜻이 달라졌다. 이제 단계 이력의 **첫 줄**을 쓴다. 이력이 없으면(표가 아직
+     *   없거나 소급 전) 지금 단계로 떨어지고, 그때는 title 로 그렇다고 알린다.
+     *
+     *   단계가 **옮겨 간** 줄은 따로 서지 않는다 — 사건(forecast_stage_changed)이
+     *   「포캐스트 단계 · 견적제출 → 협상」으로 낸다.
      */
     const forecastItems: Item[] = (opportunities ?? []).flatMap(o => {
       const money = o.expected_amount ? `₩${numKR(o.expected_amount)}` : '금액 미정'
@@ -471,12 +487,15 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
         sortId: o.opportunity_id,
       }
       const madeOn = (o.created_at ?? '').slice(0, 10) || null
+      const hist = stageHistories?.get(o.opportunity_id) ?? []
+      const bornStage = hist.length > 0 ? hist[0].to_stage : null
       const rows: Item[] = [{
         ...base,
         key: `op-${o.opportunity_id}`,
         date: madeOn,
         label: '포캐스트',
-        labelSuffix: o.stage,
+        labelSuffix: bornStage ?? o.stage,
+        labelSuffixTitle: bornStage ? undefined : '단계 이력이 아직 없어 **지금** 단계를 적었습니다',
         body,
         sortAt: sortKey(o.created_at, madeOn),
       }]
@@ -529,7 +548,10 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
         key: `ev-${e.id}`,
         // 리드는 **밖에서 들어온 일**이라 활동으로 읽힌다 — 따로 세우고 기본으로 켜 둔다.
         // 고친 자국(변경)만 꺼 둔다(2026-11-23).
-        kind: isLeadEvent(e.event_type)
+        // 포캐스트 셋(생성·단계·종료)은 **포캐스트 종류**로 선다(2026-11-28, 야간4 4-2) —
+        // 같은 건의 줄이 회색 「사건」과 노란 「포캐스트」로 갈라져 서면 한 건으로 읽히지 않는다.
+        kind: isForecastEvent(e.event_type) ? ('포캐스트' as const)
+          : isLeadEvent(e.event_type)
           ? ('리드' as const)
           : isChangeEvent(e.event_type) ? ('변경' as const) : ('사건' as const),
         siteId: e.customer_id ?? null,
@@ -545,7 +567,7 @@ export default function ActivityTimeline({ history, devices, quotes, activities,
     })
 
     return [...serviceItems, ...quoteItems, ...salesItems, ...holdingItems, ...forecastItems, ...inquiryItems, ...eventItems]
-  }, [history, quotes, activities, holdings, events, opportunities, inquiries, customerId, deviceNameOf, disposedIds, onOpenQuotePdf, onOpenHolding, onEditActivity, canEditActivity])
+  }, [history, quotes, activities, holdings, events, opportunities, stageHistories, inquiries, customerId, deviceNameOf, disposedIds, onOpenQuotePdf, onOpenHolding, onEditActivity, canEditActivity])
 
   /** 필터를 모두 걸어 남은 줄. */
   const scoped = useMemo(() => applyFilter(items, filter, available), [items, filter, available])

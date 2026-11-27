@@ -41,11 +41,17 @@ export type CustomerEventType =
    * 고친 자국만 남아, 홀딩이 걸려 있어도·포캐스트가 끝나도·수리품이 들어와도
    * 이력에는 아무 줄도 서지 않았다.
    *
-   * ⚠ 포캐스트의 **「진행(단계 고침)」은 적지 않는다** — 단계는 자주 오르내려서
-   *   적으면 이력이 그 줄로 덮인다. 생긴 때와 끝난 때만 남긴다.
+   * 포캐스트의 **단계 고침**은 2026-11-28(야간4 4-2)부터 적는다 — 「단계 견적제출 →
+   * 협상」 한 줄이다. 전에는 「자주 오르내려 이력이 덮인다」는 이유로 빼 두었는데,
+   * 그 바람에 **언제 어디까지 갔는지**를 아무 데서도 볼 수 없었다. 대신 그 줄은
+   * 작게 적고(활동 이력의 보조 줄), 금액·제목 같은 잡 변경은 여전히 적지 않는다.
+   *
+   * forecast_stage_changed 는 두 길로 들어온다:
+   *   ① opportunity_stage_history 표가 아직 없을 때의 **폴백**
+   *   ② 표가 있어도 **활동 이력에 보일 한 줄**로(두 곳이 같은 payload 를 쓴다)
    */
   | 'holding_started' | 'holding_resolved'
-  | 'forecast_created' | 'forecast_closed'
+  | 'forecast_created' | 'forecast_closed' | 'forecast_stage_changed'
   | 'repair_received' | 'repair_shipped'
   | 'inquiry_created'
 
@@ -85,6 +91,20 @@ export const WORK_EVENT_TYPES: readonly CustomerEventType[] = [
 /** 그 사건이 「일」인가. */
 export function isWorkEvent(type: string): boolean {
   return (WORK_EVENT_TYPES as readonly string[]).includes(type)
+}
+
+/**
+ * 포캐스트 셋 — 생성 · 단계 · 종료 (2026-11-28, 야간4 4-2).
+ * 활동 이력이 이 셋을 **「포캐스트」 종류**로 세운다. 같은 건의 줄이 회색 「사건」과
+ * 노란 「포캐스트」로 갈라져 서면 한 건으로 읽히지 않는다.
+ */
+export const FORECAST_EVENT_TYPES: readonly CustomerEventType[] = [
+  'forecast_created', 'forecast_stage_changed', 'forecast_closed',
+]
+
+/** 그 사건이 포캐스트 줄인가. */
+export function isForecastEvent(type: string): boolean {
+  return (FORECAST_EVENT_TYPES as readonly string[]).includes(type)
 }
 
 /** 그 사건이 「고친 일」인가. 모르는 종류는 아니라고 본다(옛 줄이 섞여도 종전처럼 보인다). */

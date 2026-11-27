@@ -114,6 +114,14 @@ ${full}` : head,
       return { label: '홀딩 해제', title: str(p.device ?? p.title), body: str(p.reason) || '홀딩이 풀렸습니다', owner: str(p.owner) }
     case 'forecast_created':
       return { label: '포캐스트 생성', title: str(p.title), body: str(p.amount_text), owner: str(p.owner) }
+    // 단계가 옮겨 간 줄(2026-11-28, 야간4 4-2). 금액·제목 같은 잡 변경은 줄로 서지 않는다.
+    case 'forecast_stage_changed':
+      return {
+        label: '포캐스트 단계',
+        title: str(p.title),
+        body: arrow(p.from_stage, p.to_stage),
+        owner: str(p.owner),
+      }
     case 'forecast_closed':
       return { label: `포캐스트 ${str(p.result) || '종료'}`, title: str(p.title), body: str(p.reason) || str(p.amount_text), owner: str(p.owner) }
     case 'repair_received':

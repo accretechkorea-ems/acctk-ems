@@ -15,6 +15,7 @@ import { createClient } from '@/lib/supabase/client'
 import { QUOTE_SELECT } from '@/hooks/customer/useCustomerDetail'
 import type { Contact, Device, Holding, Quote, SalesActivity, SalesOpportunity, ServiceHistory } from '@/components/customer/types'
 import type { CustomerEvent } from '@/lib/customerEventView'
+import { fetchStageHistories, type StageHistoryRow } from '@/lib/opportunityStageHistory'
 
 export type CompanyTimelineData = {
   history: ServiceHistory[]
@@ -28,6 +29,11 @@ export type CompanyTimelineData = {
   events: CustomerEvent[]
   /** 이 사업장들에 걸린 의뢰서. customer_id 칸이 없으면 빈 배열이다. */
   inquiries: InquiryRow[]
+  /**
+   * 포캐스트 **단계 이력** — 건 id → 시간 순 줄(2026-11-28, 야간4 4-1).
+   * 표가 아직 없으면 **빈 Map** 이다(db/opportunity_stage_history_20261128.sql).
+   */
+  stageHistories: Map<number, StageHistoryRow[]>
   loading: boolean
   /** 마지막 조회에 걸린 밀리초. */
   ms: number
@@ -57,6 +63,7 @@ let inquiryLinked = true
 
 const EMPTY: Omit<CompanyTimelineData, 'reload'> = {
   history: [], quotes: [], activities: [], holdings: [], devices: [], contacts: [], opportunities: [], events: [],
+  stageHistories: new Map<number, StageHistoryRow[]>(),
   inquiries: [],
   loading: false, ms: 0,
 }
@@ -127,9 +134,14 @@ export function useCompanyTimeline(siteIds: number[]): CompanyTimelineData {
         opportunities: (o.data as SalesOpportunity[]) ?? [],
         events: (ev.data as CustomerEvent[]) ?? [],
         inquiries: (iq.data as InquiryRow[]) ?? [],
+        // 단계 이력은 **포캐스트를 읽은 뒤에** 그 id 로만 묻는다(한 번 더 가지만 짧다).
+        stageHistories: new Map<number, StageHistoryRow[]>(),
         loading: false,
         ms: Math.round(performance.now() - started),
       })
+      // 표가 아직 없으면 빈 Map 이라 요약 칸만 비어 보인다 — 화면이 기다리지 않는다.
+      void fetchStageHistories(supabase, ((o.data as SalesOpportunity[]) ?? []).map(x => x.opportunity_id))
+        .then(m => { if (!cancelled && m.size > 0) setData(prev => ({ ...prev, stageHistories: m })) })
     })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
