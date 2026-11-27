@@ -58,11 +58,15 @@ ok('가로 띠가 그대로 있다', /<SiteHeaderBand/.test(BODY) && /className=
 ok('넓어지면 띠를 감춘다',
   (BODY.match(/\.site-band-phone \{ display: none; \}/g) || []).length === 2)
 ok('띠는 공용 틀(HeaderBand)을 그대로 쓴다', /<HeaderBand/.test(BAND))
+// 2026-11-27(묶음4 B) — 담당자 카드는 **한 벌**이고, 폭으로 갈리는 규칙은 그 부품에 있다.
+const CTL = read('components/customer/ContactList.tsx')
+ok('띠와 왼쪽 열이 같은 담당자 부품을 쓴다', /<ContactList/.test(HEAD) && /<ContactList/.test(COL))
 for (const [what, re] of [
-  ['담당자 세로 목록', /\.pane-band \.chip-list \{/],
-  ['「＋ 담당자」 넓은 단추', /\.pane-band \.contact-add-wide \{ display: flex !important \}/],
-  ['상태 뱃지가 연필을 피한다', /\.pane-band \.band-status \{ right: 40px !important \}/],
-]) ok(`폰 규칙이 남아 있다 — ${what}`, re.test(read('components/customer/HeaderBand.tsx')))
+  ['한 사람 = 한 카드', /\.ctl-card \{ position: relative; \}/],
+  ['「＋ 담당자」 넓은 단추', /\.ctl-add-wide \{ display: flex !important; \}/],
+  ['폰에서는 카드를 눌러 고친다', /\.ctl-edit \{ display: none; \}/],
+]) ok(`폰 규칙이 남아 있다 — ${what}`, re.test(CTL))
+ok('상태 뱃지가 연필을 피한다', /\.pane-band \.band-status \{ right: 40px !important \}/.test(read('components/customer/HeaderBand.tsx')))
 
 console.log('\n── ③ 왼쪽 열의 두 카드 ──')
 ok('회사 » 사업장 한 줄', /<CompanyLink name=\{title\} companyId=\{companyId\} onOpen=\{onOpenCompany\} fontSize=\{COMPANY_NAME_SIZE\} \/>/.test(COL)
@@ -81,17 +85,17 @@ ok('수정 연필은 호버에서만 보인다',
   /\.site-col \.site-info:hover \.card-edit/.test(COL) && /opacity: 0/.test(COL))
 
 console.log('\n── ③-ⓑ 담당자 한 사람 = 두 줄 ──')
-ok('머리는 「담당자 N ＋」', /담당자<\/b>/.test(COL) && /\{contacts\.length\}/.test(COL)
-  && /<AddIconButton size=\{26\} label="담당자 추가"/.test(COL))
-ok('＋ 는 호버와 무관하게 늘 보인다', !/chip-add|add-edit/.test(COL))
-ok('윗줄은 이름 + 직급 · 부서', /\[c\.position, c\.department\]\.map/.test(COL))
-ok('아랫줄은 전화 줄 · 이메일 줄', /href=\{`tel:\$\{tel\.replace/.test(COL) && /href=\{`mailto:\$\{email\}`\}/.test(COL))
-ok('휴대폰이 없으면 회사 전화를 쓴다', /const tel = mobile \|\| office/.test(COL)
-  && /mobile \? <SmartphoneGlyph \/> : <PhoneGlyph \/>/.test(COL))
-ok('이메일이 없으면 —', /<MailGlyph \/><\/span>—/.test(COL))
-ok('전부 펼친다(더보기·접기가 없다)',
-  !/더보기/.test(COL_CODE) && !/maxHeight/.test(COL_CODE) && !/openContacts/.test(COL_CODE))
-ok('칸에 손을 올리면 바탕이 든다', /background: hover \? NEUTRAL_BG : 'transparent'/.test(COL))
+ok('머리는 「담당자 N ＋」', /담당자<\/b>/.test(CTL) && /\{contacts\.length\}/.test(CTL)
+  && /<AddIconButton size=\{26\} label="담당자 추가"/.test(CTL))
+ok('윗줄은 이름 + 직급 · 부서', /\[c\.position, c\.department\]\.map/.test(CTL))
+ok('아랫줄은 전화 줄 · 이메일 줄', /href=\{`tel:\$\{tel\.replace/.test(CTL) && /href=\{`mailto:\$\{email\}`\}/.test(CTL))
+ok('휴대폰이 없으면 회사 전화를 쓴다', /const tel = mobile \|\| office/.test(CTL)
+  && /mobile \? <SmartphoneGlyph \/> : <PhoneGlyph \/>/.test(CTL))
+ok('이메일이 없으면 —', /<MailGlyph \/><\/span>—/.test(CTL))
+// 왼쪽 열은 접지 않는다(collapsible 을 주지 않는다) — 띠만 높이가 고정이라 접는다.
+ok('왼쪽 열은 전부 펼친다', /<ContactList contacts=\{contacts\} onAdd=\{onAddContact\} onEdit=\{onEditContact\} \/>/.test(COL)
+  && !/더보기/.test(COL_CODE) && !/openContacts/.test(COL_CODE))
+ok('칸에 손을 올리면 바탕이 든다', /background: hover \? NEUTRAL_BG : 'transparent'/.test(CTL))
 ok('아이콘은 인라인 SVG 다(이모지가 아니다)',
   /<svg /.test(COL) && !/[📱✉☎✎]/.test(COL_CODE), '이모지를 UI 아이콘으로 쓰지 않는다')
 

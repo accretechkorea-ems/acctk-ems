@@ -117,19 +117,23 @@ ok('이름을 함께 적는다(어느 줄과 겹치는지 알아야 지운다)',
 ok('합치는 말은 없다 — 지우라고만 한다', !/병합|합칩|합치기/.test(read('lib/contactDupes.ts').split('export function dupeHint')[1].slice(0, 400)))
 
 console.log('\n── ⑥ 화면 ──')
+// 2026-11-27(묶음4 B) — 담당자 카드는 **한 벌**이다. 왼쪽 열도 가로 띠도 이것을 쓴다.
+const CTL = read('components/customer/ContactList.tsx')
 const COL = read('components/customer/SiteInfoColumn.tsx')
 const BAND = read('components/customer/HeaderBand.tsx')
-ok('담당자 카드 줄에 뱃지가 붙는다', /dupe={dupes\.get\(c\.contact_id\)}/.test(COL) && /\{DUPE_BADGE\}/.test(COL))
-ok('칩에도 붙는다(회사 머리줄)', /dupe={dupes\.get\(c\.contact_id\)}/.test(BAND) && /\{DUPE_BADGE\}/.test(BAND))
-ok('호버 안내를 쓴다', /title=\{dupe\.hint\}/.test(COL) && /dupe \? dupe\.hint :/.test(BAND))
-ok('목록에서 한 번만 센다', /useMemo\(\(\) => dupeMarks\(contacts\), \[contacts\]\)/.test(COL)
-  && /useMemo\(\(\) => dupeMarks\(contacts\), \[contacts\]\)/.test(BAND))
+ok('담당자 카드 줄에 뱃지가 붙는다', /dupe={dupes\.get\(c\.contact_id\)}/.test(CTL) && /\{DUPE_BADGE\}/.test(CTL))
+ok('두 자리가 그 한 벌을 쓴다(따로 그리지 않는다)',
+  /<ContactList/.test(COL) && /<ContactList/.test(BAND)
+  && !/DUPE_BADGE/.test(COL) && !/DUPE_BADGE/.test(BAND))
+ok('호버 안내를 쓴다', /title=\{dupe\.hint\}/.test(CTL))
+ok('목록에서 한 번만 센다', /useMemo\(\(\) => dupeMarks\(contacts\), \[contacts\]\)/.test(CTL))
 ok('자동으로 합치는 길은 어디에도 없다',
-  !/merge|병합/.test(COL) && !/merge|병합/.test(BAND))
+  !/merge|병합/.test(CTL) && !/merge|병합/.test(COL) && !/merge|병합/.test(BAND))
 // 색은 **lib 한 곳에만** 적는다 — 담당자 카드와 칩이 같은 값을 쓰고, SiteInfoColumn 에는
 // hex 를 한 줄도 두지 않는다(scripts/site-v8-check.js 가 그것을 지킨다).
-ok('뱃지 색은 한 곳에만 있다', /#fef3c7/.test(read('lib/contactDupes.ts')) && !/#[0-9a-fA-F]{6}/.test(COL))
-ok('두 화면이 같은 색을 쓴다', /DUPE_BG/.test(COL) && /DUPE_BG/.test(BAND))
+ok('뱃지 색은 한 곳에만 있다', /#fef3c7/.test(read('lib/contactDupes.ts'))
+  && !/#[0-9a-fA-F]{6}/.test(COL) && !/#[0-9a-fA-F]{6}/.test(CTL))
+ok('그 색을 쓰는 자리는 한 곳이다', /DUPE_BG/.test(CTL))
 
 console.log(fails === 0 ? '\n전부 통과' : `\n${fails}건 실패`)
 process.exit(fails === 0 ? 0 : 1)

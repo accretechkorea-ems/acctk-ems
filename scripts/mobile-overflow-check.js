@@ -120,13 +120,17 @@ ok('앱바 위에 다른 레이아웃 요소를 두지 않는다 — body 의 �
 
 console.log('\n── ⑥ 사업장 상세(폰) ──')
 ok('앱바 아래 12px 뒤 카드', /\.site-page \{ padding: 12px !important; \}/.test(BODY))
-ok('담당자는 세로 목록', /\.chip-list \{[\s\S]{0,120}flex-direction: column !important/.test(BAND))
-ok('칩이 가로로 넘치지 않는다 — 한 칸이 한 줄을 쓴다', /\.chip-c \{[\s\S]{0,160}width: 100%/.test(BAND))
-ok('아랫줄에 전화·이메일', /\.chip-c \.chip-contact \{ flex-basis: 100%/.test(BAND)
-  && /\.chip-mail \{ display: inline-block !important \}/.test(BAND))
+// 2026-11-27(묶음4 B) — 담당자는 PC·폰이 **같은 카드**다. 규칙은 그 부품이 들고 있다.
+const CTL = read('components/customer/ContactList.tsx')
+ok('담당자 카드가 한 벌이다', /<ContactList/.test(BAND) && /<ContactList/.test(read('components/customer/SiteInfoColumn.tsx')))
+ok('한 사람이 한 줄을 쓴다(세로)', /flexDirection: 'column', gap: 2, minWidth: 0/.test(CTL))
+ok('아랫줄에 전화·이메일', /href={`tel:/.test(CTL) && /href={`mailto:/.test(CTL))
+ok('번호가 없으면 회사 전화로 떨어진다', /const tel = mobile \|\| office/.test(CTL))
 ok('「＋ 담당자」가 목록 아래 늘 보인다',
-  /className="contact-add-wide"/.test(BAND) && /\.contact-add-wide \{ display: flex !important \}/.test(BAND))
-ok('폰에서는 더보기·＋ 아이콘을 쓰지 않는다', /\.chip-more, \.pane-band \.chip-add \{ display: none !important \}/.test(BAND))
+  /className="ctl-add-wide"/.test(CTL) && /\.ctl-add-wide \{ display: flex !important; \}/.test(CTL))
+ok('폰에서는 더보기·＋ 아이콘을 쓰지 않는다', /\.ctl-more, \.ctl-add-icon \{ display: none !important; \}/.test(CTL))
+ok('폰에서는 카드를 눌러 고친다(작은 ✎ 를 겨누지 않는다)',
+  /\.ctl-edit \{ display: none; \}/.test(CTL) && /role="button"/.test(CTL) && /onClick={onEdit}/.test(CTL))
 ok('상태 뱃지가 ✎ 와 겹치지 않는다', /\.band-status \{ right: 40px !important \}/.test(BAND))
 ok('장비 사진은 4:3', /\.dev-photo \{ height: auto !important; aspect-ratio: 4 \/ 3; \}/.test(BODY)
   && /className="dev-photo"/.test(DEV))

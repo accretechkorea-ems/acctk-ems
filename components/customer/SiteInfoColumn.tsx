@@ -20,18 +20,18 @@
  *   (scripts/site-v8-check.js).
  */
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import BackIconButton from '@/components/common/BackIconButton'
-import { AddIconButton, EditIconButton } from '@/components/common/IconButton'
+import { EditIconButton } from '@/components/common/IconButton'
+import ContactList from '@/components/customer/ContactList'
 import MemoHoverText from '@/components/common/MemoHoverText'
 import { hasMemo } from '@/components/common/MemoPopover'
 import CompanyLink from '@/components/customer/CompanyLink'
 import { STATUS_DOT } from '@/components/customer/HeaderBand'
 import { agencyLabelOf } from '@/lib/customerAgency'
 import { R } from '@/lib/radius'
-import { BLUE, BORDER, CARD_BG, MUTED, NEUTRAL_BG, SUB, TEXT } from '@/components/common/ui'
+import { BORDER, CARD_BG, MUTED, SUB, TEXT } from '@/components/common/ui'
 import { TEXT_LABEL } from '@/lib/textTokens'
-import { DUPE_BADGE, DUPE_BG, DUPE_TEXT, dupeMarks, type DupeMark } from '@/lib/contactDupes'
 import type { Contact, Customer } from './types'
 
 
@@ -47,30 +47,8 @@ const COMPANY_NAME_SIZE = 18
 /** 라벨 열의 폭 — 주소·대리점·메모의 값이 같은 x 에서 시작한다. */
 const KEY_W = 44
 
-function SmartphoneGlyph() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      {/* 12px 에서도 **전화기로 읽히게** 좁게 그린다 — 넓으면 그냥 네모로 보인다. */}
-      <rect x="7" y="2" width="10" height="20" rx="2" /><line x1="10.5" y1="18.5" x2="13.5" y2="18.5" />
-    </svg>
-  )
-}
 
-function PhoneGlyph() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-    </svg>
-  )
-}
 
-function MailGlyph() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="4" width="20" height="16" rx="2" /><polyline points="2.5 6 12 13 21.5 6" />
-    </svg>
-  )
-}
 
 function CopyGlyph({ done }: { done: boolean }) {
   return done ? (
@@ -96,80 +74,6 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
  *   아랫줄 휴대폰(tel) / 이메일(mailto) — 한 줄에 하나씩이라 손가락·눈이 헷갈리지 않는다.
  * 휴대폰이 없으면 **회사 전화**를 같은 자리에 놓는다(아이콘만 다르다). 이메일이 없으면 「—」.
  */
-function ContactBlock({ c, onEdit, dupe }: { c: Contact; onEdit: () => void; dupe?: DupeMark }) {
-  const [hover, setHover] = useState(false)
-  const role = [c.position, c.department].map(v => (v ?? '').trim()).filter(Boolean).join(' · ')
-  const mobile = (c.mobile ?? '').trim()
-  const office = (c.phone ?? '').trim()
-  const tel = mobile || office
-  const email = (c.email ?? '').trim()
-  const link: React.CSSProperties = {
-    display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: BLUE,
-    textDecoration: 'none', maxWidth: '100%', minWidth: 0,
-  }
-
-  return (
-    <div className="ct-row"
-      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{
-        position: 'relative', padding: '8px 10px', borderRadius: R.control,
-        display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0,
-        background: hover ? NEUTRAL_BG : 'transparent', transition: 'background 0.15s ease',
-      }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0, paddingRight: 24 }}>
-        <b style={{ fontSize: 13, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap' }}>{c.name?.trim() || '이름 없음'}</b>
-        {/* 「중복?」 — 같은 휴대폰·이메일을 쓰는 줄이 또 있다(2026-11-26, 지시 N).
-            **묻기만 한다** — 합치는 일은 어느 줄의 활동·명함을 어디로 옮기느냐를 정하는
-            일이라 사람이 보고 해야 한다(lib/contactDupes.ts). 호버에 무엇을 할지 적는다. */}
-        {dupe && (
-          <span
-            title={dupe.hint}
-            style={{
-              flexShrink: 0, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: R.tag,
-              background: DUPE_BG, color: DUPE_TEXT, cursor: 'help',
-            }}
-          >
-            {DUPE_BADGE}
-          </span>
-        )}
-        {role && (
-          <span style={{ fontSize: 12, color: SUB, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {role}
-          </span>
-        )}
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-        {tel ? (
-          <a href={`tel:${tel.replace(/[^0-9+]/g, '')}`} style={link} title={mobile ? '휴대폰' : '회사 전화'}>
-            <span style={{ color: MUTED, display: 'inline-flex', flexShrink: 0 }}>
-              {mobile ? <SmartphoneGlyph /> : <PhoneGlyph />}
-            </span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tel}</span>
-          </a>
-        ) : (
-          <span style={{ ...link, color: MUTED }}>
-            <span style={{ display: 'inline-flex', flexShrink: 0 }}><SmartphoneGlyph /></span>—
-          </span>
-        )}
-        {email ? (
-          <a href={`mailto:${email}`} style={link} title="이메일">
-            <span style={{ color: MUTED, display: 'inline-flex', flexShrink: 0 }}><MailGlyph /></span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email}</span>
-          </a>
-        ) : (
-          <span style={{ ...link, color: MUTED }}>
-            <span style={{ display: 'inline-flex', flexShrink: 0 }}><MailGlyph /></span>—
-          </span>
-        )}
-      </div>
-      {/* ✎ 는 칸 **오른쪽 위**에 붙인다 — 흐름에 두면 줄이 하나 더 생긴다. */}
-      <span className="ct-edit" style={{ position: 'absolute', top: 6, right: 6 }}>
-        <EditIconButton size={22} label={`${c.name ?? '담당자'} 수정`} onClick={onEdit}
-          style={{ border: 'none', background: 'transparent' }} />
-      </span>
-    </div>
-  )
-}
 
 export type SiteInfoColumnProps = {
   customer: Customer | null
@@ -193,7 +97,6 @@ export default function SiteInfoColumn({
    * 중복 의심 — **목록에서 한 번** 센다(줄마다 세면 n² 번 돈다).
    * 휴대폰·이메일만 본다. 회사 전화는 같은 사무실이면 같은 것이 정상이라 보지 않는다.
    */
-  const dupes = useMemo(() => dupeMarks(contacts), [contacts])
 
   const title = companyName?.trim() || customer?.company_name || '사업장 정보 없음'
   /** 묶인 회사의 id — 상세 페이지에서 회사 보기로 가는 길이 이 값이다(없으면 단독 업체다). */
@@ -286,23 +189,13 @@ export default function SiteInfoColumn({
         </div>
       </section>
 
-      {/* ── 담당자 ── 전부 펼친다(접지 않는다). ＋ 는 늘 보인다. ── */}
+      {/* ── 담당자 ── **공용 부품 하나**다(2026-11-27, 묶음4 B) — 폰의 띠도 같은 것을 쓴다. */}
       <section
         style={{
           background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.card,
           padding: '10px 6px 8px', boxSizing: 'border-box',
         }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px 6px' }}>
-          <b style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>담당자</b>
-          <span className="num" style={{ fontSize: 12, color: MUTED }}>{contacts.length}</span>
-          <span style={{ flex: 1 }} />
-          <AddIconButton size={26} label="담당자 추가" onClick={onAddContact} />
-        </div>
-        {contacts.length === 0 ? (
-          <div style={{ padding: '10px 10px 6px', fontSize: 12, color: MUTED }}>등록된 담당자가 없습니다</div>
-        ) : contacts.map(c => (
-          <ContactBlock key={c.contact_id} c={c} onEdit={() => onEditContact(c)} dupe={dupes.get(c.contact_id)} />
-        ))}
+        <ContactList contacts={contacts} onAdd={onAddContact} onEdit={onEditContact} />
       </section>
     </div>
   )
