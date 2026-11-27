@@ -47,16 +47,30 @@ export function popupTitle(c: PopupCustomer): { company: string; site: string | 
 }
 
 /** 회사 화면으로 가는 길. 회사를 모르면 null — 그때는 단추를 내지 않는다. */
-export function companyHref(c: PopupCustomer): string | null {
+export function companyHref(c: PopupCustomer, origin?: Origin | null): string | null {
   const id = Number(c.parent_customer_id ?? 0)
-  return Number.isInteger(id) && id > 0 ? `/?view=list&company=${id}` : null
+  if (!Number.isInteger(id) || id <= 0) return null
+  const o = origin ? `&origin=${encodeURIComponent(origin)}` : ''
+  return `/?view=list&company=${id}${o}`
 }
 
+/**
+ * **들어온 곳** — ← 가 어디로 돌아갈지 정한다(2026-11-28, 야간4 7-2).
+ *
+ *   'map'        지도 보기. ← 가 지도를 **보던 자리 그대로** 되살린다(화면이 기억한다).
+ *   '/quote…'    다른 메뉴. ← 가 그 주소로 돌아간다.
+ *   없음         왔던 화면(회사 pane)으로 — 종전 그대로다.
+ *
+ * 주소에 실어 보내는 까닭: history.back() 은 301 로 들어온 옛 주소로 되튀어 돌 수 있다.
+ */
+export type Origin = 'map' | string
+
 /** 사업장 상세로 가는 길 — 회사를 알면 함께 적어 트리가 그 자리에서 펴진다. */
-export function siteHref(c: PopupCustomer): string {
+export function siteHref(c: PopupCustomer, origin?: Origin | null): string {
   const parent = Number(c.parent_customer_id ?? 0)
   const q = Number.isInteger(parent) && parent > 0 ? `&company=${parent}` : ''
-  return `/?view=list${q}&site=${c.customer_id}`
+  const o = origin ? `&origin=${encodeURIComponent(origin)}` : ''
+  return `/?view=list${q}&site=${c.customer_id}${o}`
 }
 
 /**
@@ -72,6 +86,16 @@ export function siteHref(c: PopupCustomer): string {
 export function showCompanyButton(c: PopupCustomer, siteCount: number | undefined): boolean {
   if (companyHref(c) === null) return false
   return (siteCount ?? 0) > 1
+}
+
+/**
+ * 사업장 **id 하나로** 가는 분할 보기 주소 — 회사를 모를 때 쓴다(2026-11-28, 야간4 7-1).
+ * 목록 자료가 들어온 뒤 app/page.tsx 가 그 사업장의 회사를 찾아 트리를 편다.
+ * 옛 단독 상세 `/customer/{id}` 를 대신하는 주소다.
+ */
+export function siteListHref(customerId: number | string, origin?: Origin | null): string {
+  const o = origin ? `&origin=${encodeURIComponent(origin)}` : ''
+  return `/?view=list&site=${customerId}${o}`
 }
 
 /** 회사명 링크의 밑줄 — 점선이다(눌리는 글자이지만 단추는 아니다). */

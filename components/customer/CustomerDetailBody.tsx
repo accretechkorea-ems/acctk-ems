@@ -17,6 +17,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 
 import { useCustomerDetail } from '@/hooks/customer/useCustomerDetail'
+import { siteListHref } from '@/lib/mapPopup'
 import { useServiceCrud } from '@/hooks/customer/useServiceCrud'
 import { useContactCrud } from '@/hooks/customer/useContactCrud'
 import { useDeviceCrud } from '@/hooks/customer/useDeviceCrud'
@@ -292,7 +293,7 @@ export default function CustomerDetailBody({
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   {childSites.map(c => (
                     <a key={c.customer_id}
-                      href={`/customer/${c.customer_id}`}
+                      href={siteListHref(c.customer_id)}
                       style={{
                         textDecoration: 'none',
                         display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',

@@ -26,6 +26,7 @@ import { BLUE_TINT, BLUE, BORDER, CARD_BG, NEUTRAL_BG, TEXT } from '@/components
 import { TEXT_DISABLED, TEXT_LABEL, TEXT_NOTE } from '@/lib/textTokens'
 import { KIND_LABEL, bucketOf, dueLabel, type TaskItem } from '@/lib/tasks'
 import { R } from '@/lib/radius'
+import { siteListHref } from '@/lib/mapPopup'
 
 const CARD: CSSProperties = {
   background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.card, padding: '14px 16px',
@@ -50,7 +51,8 @@ function hrefOf(it: TaskItem): string | null {
   if (it.refType === 'quote') return '/quote'
   if (it.refType === 'lead') return '/leads'
   if (it.refType === 'forecast') return '/pipeline'
-  if (it.refType === 'customer') return `/customer/${it.refId}`
+  // 고객사는 **분할 보기**로 간다(2026-11-28, 야간4 7-1) — 단독 상세는 없앴다.
+  if (it.refType === 'customer') return siteListHref(it.refId)
   if (it.refType === 'device') return null
   return null
 }

@@ -17,13 +17,19 @@
  */
 
 import Link from 'next/link'
+import { companyHref } from '@/lib/mapPopup'
 
 const TEXT = '#111827'
 const MUTED = '#6b7280'
 
 /** 목록 보기에서 한 회사를 고른 채 여는 주소. 읽는 쪽은 app/page.tsx 의 `?company=` 다. */
+/**
+ * 목록 보기에서 한 회사를 고른 채 여는 주소. 읽는 쪽은 app/page.tsx 의 `?company=` 다.
+ * 주소를 만드는 규칙은 **lib/mapPopup.ts 한 곳**이다(2026-11-28, 야간4 7-1) —
+ * 지도 팝업·업체 카드·이 링크가 같은 글자를 만든다.
+ */
 export function companyListHref(companyId: number): string {
-  return `/?view=list&company=${companyId}`
+  return companyHref({ customer_id: 0, company_name: '', parent_customer_id: companyId }) ?? `/?view=list&company=${companyId}`
 }
 
 export default function CompanyLink({

@@ -171,9 +171,12 @@ eq('다시 전부 고르면 기억을 지운다', recallFilter(11, available), n
 ok('화면이 그 기억을 쓴다',
   /recallFilter\(customerId, \{ kinds: TIMELINE_KINDS, siteIds \}\) \?\? base/.test(TIMELINE)
   && /rememberFilter\(customerId, filter, available\)/.test(TIMELINE))
+// 2026-11-28(야간4 7-2) — ← 는 **들어온 곳**으로 간다(지도·다른 메뉴). 들어온 곳이
+// 없으면 종전처럼 회사 pane 으로 올라간다. 어느 길에서도 칩은 걸지 않는다.
 ok('사업장에서 돌아올 때 칩을 자동으로 걸지 않는다',
-  /onBack=\{\(\) => \{ setSelectedSiteId\(null\) \}\}/.test(HOME),
+  /setSelectedSiteId\(null\)/.test(HOME) && !/setTimelineFocusSiteId\(selectedSiteId\)/.test(HOME),
   'setTimelineFocusSiteId 를 다시 넣지 말 것 — 돌아오면 한 사업장으로 좁혀진다')
+ok('← 가 들어온 곳으로 간다', /if \(origin === 'map'\)/.test(HOME) && /origin\.startsWith\('\/'\)/.test(HOME))
 ok('활동 현황에서 넘어온 길(?site=)은 그대로다',
   /setPendingFocusSiteId\(site\)/.test(HOME) && /setTimelineFocusSiteId\(site\)/.test(HOME))
 

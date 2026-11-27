@@ -1,0 +1,36 @@
+{
+ "tag": "after",
+ "at": "2026-11-27T15:08:10.481Z",
+ "base": "http://localhost:3101",
+ "site": 776,
+ "맨 주소": {
+  "status": 301,
+  "location": "/?view=list&site=776"
+ },
+ "?contact= 가 붙은 주소": {
+  "status": 301,
+  "location": "/?contact=1642&view=list&site=776"
+ },
+ "들어간_뒤": {
+  "주소": "/?view=list&company=1525",
+  "트리": {
+   "고른줄": true,
+   "글자": "본점5일",
+   "바탕": "rgb(35, 78, 162)",
+   "줄": {
+    "top": 522,
+    "bottom": 554
+   },
+   "패널": {
+    "top": 16,
+    "bottom": 884
+   },
+   "패널안에_보인다": true
+  },
+  "상세가_열렸나": true
+ },
+ "돌아가기": {
+  "단추가_있나": true,
+  "간_곳": "/quote"
+ }
+}

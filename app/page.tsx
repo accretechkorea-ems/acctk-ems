@@ -142,6 +142,21 @@ export default function HomePage() {
   const [timelineFocusKey, setTimelineFocusKey] = useState<string | null>(null)
   /** 아직 회사를 못 찾은 ?site= — 목록 자료가 들어온 뒤에 편다. */
   const [pendingFocusSiteId, setPendingFocusSiteId] = useState<number | null>(null)
+  /**
+   * **들어온 곳**(?origin=) — ← 가 어디로 돌아갈지(2026-11-28, 야간4 7-2).
+   *   'map'      지도 보기로. 보던 자리는 화면이 기억하고 있다.
+   *   '/…'       그 주소로 나간다(견적·칸반 등 다른 메뉴).
+   *   null       왔던 화면(회사 pane)으로 — 종전 그대로다.
+   * 한 번 쓰면 비운다 — 두 번째 ← 는 평소처럼 회사 pane 으로 올라간다.
+   */
+  const [origin, setOrigin] = useState<string | null>(null)
+  /**
+   * ?contact=<id> — 열자마자 **그 담당자 수정 창**을 연다(2026-11-25).
+   * 견적 저장 창의 「수신인에 이메일이 없습니다 — 담당자 정보에서 추가」가 보낸 길이다.
+   * 단독 상세 페이지가 받던 일을 2026-11-28(야간4 7-1)부터 이 화면이 받는다.
+   * 한 번 열고 비운다 — 창을 닫았다가 다른 사업장을 열 때 또 뜨면 안 된다.
+   */
+  const [openContactId, setOpenContactId] = useState<number | null>(null)
   /** 등록 폼의 모드 — 사업장 / 대리점. 같은 폼을 쓰고 칸만 달라진다. */
   // 진행 견적 수는 **목록 보기를 열 때만** 읽는다(첫 화면 조회를 늘리지 않는다).
   const openQuotes = useOpenQuotes(view === 'list')
@@ -253,19 +268,50 @@ useEffect(() => {
       setTimelineFocusSiteId(site)
       setTimelineFocusKey(q.get('focus'))
     }
+    const o = (q.get('origin') ?? '').trim()
+    if (o === 'map' || o.startsWith('/')) setOrigin(o)
+    const contact = Number(q.get('contact'))
+    if (Number.isInteger(contact) && contact > 0) setOpenContactId(contact)
   }, [])
 
-  // 사업장 번호로 회사를 찾는 일은 목록 자료가 들어온 뒤에야 된다.
+  /**
+   * 사업장 번호로 회사를 찾는 일은 목록 자료가 들어온 뒤에야 된다.
+   *
+   * 2026-11-28(야간4 7-2)부터 **그 사업장까지 연다**. 전에는 회사만 펴고 골라, 지도
+   * 핀이나 견적에서 들어오면 회사 화면이 떴다 — 보려던 사업장은 트리 어딘가에 있고
+   * 사람이 다시 찾아 눌러야 했다(871줄 가운데 하나다).
+   *
+   * 회사를 못 찾는 줄(미연결)도 **사업장은 연다** — 트리에서는 「미연결」 묶음에 선다.
+   */
   useEffect(() => {
     if (pendingFocusSiteId == null || customers.length === 0) return
     const site = customers.find(c => c.customer_id === pendingFocusSiteId)
-    const parent = site?.parent_customer_id ?? null
-    if (parent != null) {
-      setSelectedCompanyId(parent)
-      setExpanded(prev => new Set(prev).add(parent))
+    if (site) {
+      const parent = site.parent_customer_id ?? null
+      if (parent != null) {
+        setSelectedCompanyId(parent)
+        setExpanded(prev => new Set(prev).add(parent))
+      }
+      setSelectedSiteId(pendingFocusSiteId)
     }
     setPendingFocusSiteId(null)
   }, [pendingFocusSiteId, customers])
+
+  /**
+   * **고른 줄을 패널 가운데로** (2026-11-28, 야간4 7-2).
+   *
+   * 트리가 길어(871줄) 고른 줄이 화면 밖에 있는 일이 잦다. 파랗게 칠해 두어도 보이지
+   * 않으면 칠한 뜻이 없다. 줄이 바뀔 때마다 **한 번** 데려온다 — 사람이 그 뒤에 손으로
+   * 굴린 자리는 건드리지 않는다.
+   */
+  useEffect(() => {
+    if (selectedSiteId == null) return
+    const t = window.setTimeout(() => {
+      const row = document.querySelector('[data-site-row="on"]')
+      row?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }, 180)
+    return () => window.clearTimeout(t)
+  }, [selectedSiteId])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -1023,13 +1069,24 @@ useEffect(() => {
                   key={selectedSiteId}
                   customerId={selectedSiteId}
                   embedded
+                  /* 주소로 받은 담당자 — 한 번 열고 비운다(7-1). */
+                  openContactId={openContactId}
                   /* ← 는 **왔던 화면**으로 돌아간다(회사 또는 대리점).
                      전에는 돌아갈 때 그 사업장 칩을 활동 이력에 자동으로 걸었다. 보던
                      자리를 지켜 주려던 것인데, 돌아오면 늘 한 사업장으로 좁혀진 이력이
                      떠서 「회사 전체」를 다시 보려면 매번 필터를 풀어야 했다(2026-11-21에
                      걷었다). 떠날 때의 필터는 그대로 되살아난다 —
                      lib/timelineFilter.ts 의 기억이 맡는다. */
-                  onBack={() => { setSelectedSiteId(null) }}
+                  /**
+                   * ← 는 **들어온 곳**으로 간다(2026-11-28, 야간4 7-2) — 지도 핀에서
+                   * 왔으면 지도로, 견적에서 왔으면 견적으로. 그 값을 쓰고 나면 비우므로
+                   * 두 번째 ← 는 평소처럼 회사 pane 으로 올라간다.
+                   */
+                  onBack={() => {
+                    if (origin === 'map') { setOrigin(null); setSelectedSiteId(null); setView('map'); return }
+                    if (origin && origin.startsWith('/')) { setOrigin(null); window.location.href = origin; return }
+                    setSelectedSiteId(null)
+                  }}
                   /* 가운데 pane 에서 고친 것(담당자·장비·사업장 정보)도 좌측 트리·지도에 바로 든다. */
                   onChanged={() => { void refreshCustomers() }}
                 />

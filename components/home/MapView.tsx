@@ -108,7 +108,8 @@ export default function MapView({
     const deviceSummary = deviceNameSummary(devices)
     /** 제목 두 토막과 회사로 가는 길 — 규칙은 lib/mapPopup.ts 한 곳이다. */
     const title = popupTitle(c)
-    const companyUrl = companyHref(c)
+    // 지도에서 들어간 길에는 **들어온 곳**을 실어 보낸다 — ← 가 지도로 돌아온다(7-2).
+    const companyUrl = companyHref(c, 'map')
     const withCompany = showCompanyButton(c, siteCountByCompany?.get(Number(c.parent_customer_id ?? 0)))
     const makeNavUrl = (o: { lat: number; lng: number; name: string }) =>
       `https://map.naver.com/p/directions/${o.lng},${o.lat},${encodeURIComponent(o.name)}/${c.longitude},${c.latitude},${encodeURIComponent(c.company_name)}/-/car`
@@ -183,7 +184,7 @@ export default function MapView({
        * 가는 길은 **분할 보기** 하나다(2026-11-28, 야간4 6-1) — 단독 상세 페이지
        * `/customer/{id}` 로 보내지 않는다(7절이 걷는 길이다).
        */
-      const detailUrl = siteHref(c)
+      const detailUrl = siteHref(c, 'map')
       let navigated = false
       const goTo = (url: string) => {
         if (navigated) return

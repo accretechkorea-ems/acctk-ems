@@ -244,6 +244,10 @@ export default function CustomerListPanel({
                 const late = isStale(s.days)
                 return (
                   <div key={s.customer.customer_id}
+                    // 고른 줄을 **패널 가운데**로 데려오는 표(2026-11-28, 야간4 7-2).
+                    // 지도 핀·견적·알림에서 들어오면 그 사업장이 트리 어디에 있는지
+                    // 사람이 찾아야 했다 — 871줄 가운데 하나다.
+                    data-site-row={on ? 'on' : undefined}
                     role="button"
                     tabIndex={0}
                     onClick={() => onSelectSite(g.companyId, s.customer.customer_id)}

@@ -15,6 +15,7 @@ import { FieldError, errBorder } from '@/components/common/fieldErrors'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import { isClosed } from '@/components/customer/opportunity'
 import { euDisplayName } from '@/lib/quoteEuName'
+import { siteListHref } from '@/lib/mapPopup'
 import { contactOptionLabel } from '@/lib/quoteRecipient'
 import { type RecipientSource, groupRecipients, isAgencyPick, pickKey } from '@/lib/quoteCustomerPick'
 import type { Contact } from '@/components/customer/types'
@@ -566,7 +567,8 @@ export default function CustomerCard({ locked, errors, clearError, category, cus
       {recipientCustomerId != null && !contactsLoading && contacts.length === 0 && (
         <div style={{ marginTop: 4, marginLeft: 10, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, color: '#6b7280' }}>고객사 상세에서 담당자를 먼저 등록하세요</span>
-          <a href={`/customer/${recipientCustomerId}`} target="_blank" rel="noopener noreferrer"
+          {/* 고객사로 가는 길도 **분할 보기**다(2026-11-28, 야간4 7-1). */}
+          <a href={siteListHref(recipientCustomerId, '/quote')} target="_blank" rel="noopener noreferrer"
             style={{ fontSize: 11, color: '#234ea2', fontWeight: 600, textDecoration: 'none' }}>
             고객사 상세 열기 →
           </a>

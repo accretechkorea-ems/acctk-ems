@@ -63,7 +63,11 @@ const REVIEW = read('app/cards/import/page.tsx')
 const SESSION = read('lib/cardImportSession.ts')
 const SAVED = read('components/quote/QuoteSavedModal.tsx')
 const DETAIL = read('components/customer/CustomerDetailBody.tsx')
-const SITE_PAGE = read('app/customer/[id]/page.tsx')
+/**
+ * 사업장 화면 — 2026-11-28(야간4 7-1)부터 **분할 보기 하나**다.
+ * 단독 상세 페이지 app/customer/[id]/page.tsx 는 지웠고, 그 주소는 301 로 받는다.
+ */
+const SITE_PAGE = read('app/page.tsx')
 
 console.log('── ① 줄 호버는 한 곳에서 ──')
 ok('공용 클래스가 바탕을 그린다',
@@ -134,9 +138,10 @@ ok('새로고침해서 파일이 없으면 종전 안내', V.RELOAD_NOTICE.inclu
   && /RELOAD_NOTICE/.test(REVIEW))
 
 console.log('\n── ⑤ 이메일이 없을 때 ──')
+// 2026-11-28(야간4 7-1)부터 **분할 보기**로 간다 — 단독 상세는 없앴다.
 eq('수신인을 알면 그 담당자 수정 창으로',
-  M.contactHref({ quoteNo: 'Q-1', customerId: 593, contactId: 1642 }), '/customer/593?contact=1642')
-eq('사업장만 알면 사업장 화면으로', M.contactHref({ quoteNo: 'Q-1', customerId: 593 }), '/customer/593')
+  M.contactHref({ quoteNo: 'Q-1', customerId: 593, contactId: 1642 }), '/?view=list&site=593&contact=1642')
+eq('사업장만 알면 사업장 화면으로', M.contactHref({ quoteNo: 'Q-1', customerId: 593 }), '/?view=list&site=593')
 eq('둘 다 모르면 링크 없음', M.contactHref({ quoteNo: 'Q-1' }), null)
 eq('잘못된 id 도 링크 없음', M.contactHref({ quoteNo: 'Q-1', customerId: 0 }), null)
 eq('링크가 되는 글자', M.NO_EMAIL_LINK_TEXT, '담당자 정보에서 추가')
@@ -146,9 +151,12 @@ ok('링크가 없으면 글자만', /\) : NO_EMAIL_NOTICE\}/.test(SAVED))
 ok('견적 화면이 두 id 를 넘긴다',
   /customerId: euCustomerId \?\? customerId,/.test(read('app/quote/page.tsx'))
   && /contactId: selectedContact\?\.contact_id \?\? null,/.test(read('app/quote/page.tsx')))
-ok('사업장 화면이 ?contact= 를 받는다', /search\.get\('contact'\)/.test(SITE_PAGE)
+ok('사업장 화면이 ?contact= 를 받는다', /q\.get\('contact'\)/.test(SITE_PAGE)
   && /openContactId=\{openContactId\}/.test(SITE_PAGE))
-ok('Suspense 경계 안에서 읽는다', /<Suspense fallback=\{null\}>/.test(SITE_PAGE))
+// 옛 단독 상세는 지웠다 — 그 주소는 next.config.ts 가 301 로 분할 보기로 보낸다.
+ok('옛 단독 상세 라우트가 없다', !require('fs').existsSync(require('path').join(ROOT, 'app/customer')))
+ok('그 주소를 301 로 받는다',
+  /source: '\/customer\/:id', destination: '\/\?view=list&site=:id', statusCode: 301/.test(read('next.config.ts')))
 ok('본문이 그 담당자 창을 연다', /contact\.setSelectedContact\(found\)/.test(DETAIL))
 ok('한 번만 연다', /openedContact\.current = true/.test(DETAIL))
 

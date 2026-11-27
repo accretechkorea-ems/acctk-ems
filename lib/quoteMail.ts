@@ -9,6 +9,8 @@
  */
 
 /** 메일에 들어갈 값들. 없는 것은 비워도 된다. */
+import { siteListHref } from '@/lib/mapPopup'
+
 export type MailParts = {
   /** 견적서 번호 — 제목에 그대로 들어간다. */
   quoteNo: string
@@ -81,7 +83,9 @@ export function contactHref(p: MailParts): string | null {
   const id = Number(p.customerId ?? 0)
   if (!Number.isInteger(id) || id <= 0) return null
   const contact = Number(p.contactId ?? 0)
-  return contact > 0 ? `/customer/${id}?contact=${contact}` : `/customer/${id}`
+  // 분할 보기 한 곳이다(2026-11-28, 야간4 7-1). ?contact= 는 그대로 — 열자마자
+  // 그 담당자 수정 창이 열린다(components/customer/CustomerDetailBody.tsx).
+  return contact > 0 ? `${siteListHref(id)}&contact=${contact}` : siteListHref(id)
 }
 
 /** 창 제목. */
