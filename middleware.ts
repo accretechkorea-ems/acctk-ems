@@ -3,6 +3,12 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { isPublicPath, isPublicAsset } from '@/lib/publicPaths'
 import { CHANGE_PASSWORD_PATH, RESIGNED_REASON, isResigned } from '@/lib/accountRules'
 
+/**
+ * 누구인지 못 물어봤을 때 **쉬었다 한 번 더** 묻는 사이(ms).
+ * 화면 전환에서 사람이 느끼지 못하는 길이다. 하네스가 이 값을 본다.
+ */
+export const AUTH_RETRY_MS = 250
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
@@ -25,7 +31,35 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  /**
+   * 지금 누구인가 — **한 번 더 물어보고** 판정한다 (2026-11-27, 묶음5 8-2).
+   *
+   * ── 왜 ───────────────────────────────────────────────────────────────
+   *   `getUser()` 는 Auth 서버에 묻는 **망 요청**이다. 그 한 번이 끊기거나 늦으면
+   *   user 가 null 로 오고, 바로 아래 줄이 그 사람을 /login 으로 보낸다 —
+   *   **토큰은 멀쩡한데 쓰던 중에 튕긴다.** 「사용 중에도 로그아웃된다」는 신고의
+   *   가장 큰 몫이 여기다(화면을 옮길 때마다 이 요청이 한 번씩 나간다).
+   *
+   *   세션이 **정말** 끝났으면 두 번 물어도 null 이다. 한 번 더 묻는 값은 싸고,
+   *   잘못 쫓아내는 값은 비싸다 — 하던 일을 잃는다.
+   *
+   * ⚠ 두 번째는 **곧바로** 묻지 않는다. 순간의 끊김이라면 조금 쉬어야 뜻이 있다.
+   *   250ms 는 화면 전환에서 사람이 느끼지 못하는 길이다.
+   */
+  const askUser = async () => {
+    try {
+      const { data } = await supabase.auth.getUser()
+      return data.user
+    } catch {
+      // 망이 아예 끊긴 경우 — 「없는 사람」이 아니라 「못 물어봤다」다.
+      return null
+    }
+  }
+  let user = await askUser()
+  if (user === null) {
+    await new Promise(r => setTimeout(r, AUTH_RETRY_MS))
+    user = await askUser()
+  }
   const { pathname } = request.nextUrl
 
   // API 라우트는 각 핸들러에서 인증 처리

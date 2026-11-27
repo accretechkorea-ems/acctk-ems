@@ -50,6 +50,23 @@ const IDLE_FLAG = 'idleLogoutAt'
 /** 그 표식을 믿어 주는 시간. 지나면 손으로 한 로그아웃으로 본다. */
 const IDLE_FLAG_TTL = 15 * 1000
 
+/**
+ * 활동으로 치는 일 (2026-11-27, 묶음5 8-2).
+ *
+ *   바로 기록  pointerdown(마우스·펜·손가락을 한 길로) · keydown · touchstart
+ *   10초에 한 번  scroll(굴려 읽는 것도 쓰는 것이다) · mousemove
+ *
+ * **잡는 단계**(capture)로 듣는다 — 가는 길에 누가 stopPropagation 을 불러도 가려지지
+ * 않는다. 거품 단계로 듣던 때는 체크칸·트리 화살표처럼 전파를 멈추는 자리를 눌러
+ * 일하는 동안 타이머가 멈추지 않았다.
+ */
+const DIRECT_EVENTS = ['pointerdown', 'keydown', 'touchstart'] as const
+const THROTTLED_EVENTS = ['scroll', 'mousemove'] as const
+/** 잡는 단계 + 수동(굴리기를 막지 않는다). */
+const CAPTURE = { capture: true, passive: true } as const
+/** 쏟아지는 일을 기록하는 사이 — localStorage 쓰기라 너무 자주 하면 안 된다. */
+const THROTTLE_MS = 10 * 1000
+
 /** /login 이 읽는 사유 값. 로그인 화면이 이 글자로 안내를 낸다. */
 export const IDLE_REASON = 'idle'
 /** 무활동으로 끊겼을 때 가는 곳. 로그인 화면·여기 둘이 같은 글자를 쓴다. */
@@ -111,13 +128,26 @@ export default function SessionManager() {
   }, [logoutIdle])
 
   // ── 활동 기록 ──────────────────────────────────────────────────────────
+  //
+  // ⚠ 2026-11-27(묶음5 8) — 「쓰고 있는데 튕긴다」 신고의 한 몫이 여기 있었다.
+  //
+  //   ① 듣는 일이 **click · keydown · mousemove** 셋뿐이었다. 긴 표를 **굴려** 읽거나
+  //      폰에서 **쓸어 넘기는** 동안에는 활동으로 세어지지 않았다 — 30분을 꼬박 읽고
+  //      있어도 타이머는 처음 그대로였다.
+  //   ② **거품 단계**로 듣고 있었다. 가는 길에 누가 stopPropagation 을 부르면 그 누름은
+  //      window 까지 오지 않는다 — 이 저장소에도 그런 자리가 여럿이다(표의 체크칸,
+  //      트리의 화살표, 목록 줄 안의 링크…). **그 자리들을 눌러 일하는 동안 타이머가
+  //      멈추지 않았다.** 그래서 **잡는 단계**(capture)로 바꾼다 — 아무도 가릴 수 없다.
+  //   ③ 탭으로 **돌아온 것**도 활동이다. 전에는 돌아오면 바로 판정만 했다.
+  //
+  //   굴리기·마우스 이동처럼 쏟아지는 일은 **10초에 한 번만** 기록한다(localStorage 쓰기다).
   useEffect(() => {
     if (isPublic) return
-    let lastMouseMove = 0
-    const onMouseMove = () => {
+    let lastThrottled = 0
+    const throttled = () => {
       const now = Date.now()
-      if (now - lastMouseMove < 10000) return
-      lastMouseMove = now
+      if (now - lastThrottled < THROTTLE_MS) return
+      lastThrottled = now
       touch()
     }
 
@@ -126,14 +156,14 @@ export default function SessionManager() {
     // 경우(15초 안)에 다른 탭이 「30분 동안 활동이 없어」라는 거짓 사유를 보게 된다.
     localStorage.removeItem(IDLE_FLAG)
 
-    window.addEventListener('click', touch)
-    window.addEventListener('keydown', touch)
-    window.addEventListener('mousemove', onMouseMove)
+    // 바로 기록하는 일 — 사람이 **뜻을 가지고** 한 것이다.
+    for (const ev of DIRECT_EVENTS) window.addEventListener(ev, touch, CAPTURE)
+    // 쏟아지는 일 — 10초에 한 번.
+    for (const ev of THROTTLED_EVENTS) window.addEventListener(ev, throttled, CAPTURE)
 
     return () => {
-      window.removeEventListener('click', touch)
-      window.removeEventListener('keydown', touch)
-      window.removeEventListener('mousemove', onMouseMove)
+      for (const ev of DIRECT_EVENTS) window.removeEventListener(ev, touch, CAPTURE)
+      for (const ev of THROTTLED_EVENTS) window.removeEventListener(ev, throttled, CAPTURE)
     }
   }, [isPublic, touch])
 
@@ -141,13 +171,19 @@ export default function SessionManager() {
   useEffect(() => {
     if (isPublic) return
     const interval = setInterval(check, TICK_MS)
-    const onVisible = () => { if (document.visibilityState === 'visible') check() }
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      // 돌아온 것도 **활동**이다 — 다만 돌아오기 전의 경과는 그대로 판정해야 하므로
+      // **판정을 먼저** 하고, 끊을 일이 아니면 그때 시계를 되돌린다.
+      check()
+      if (!leavingRef.current && idleFor() < IDLE_MS) touch()
+    }
     document.addEventListener('visibilitychange', onVisible)
     return () => {
       clearInterval(interval)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [isPublic, check])
+  }, [isPublic, check, touch])
 
   // ── 뒤로 가기로 **되살아난** 화면 ────────────────────────────────────
   // 로그아웃한 뒤 뒤로 가기를 누르면 브라우저가 보호 화면을 그림째 되살릴 수 있다
