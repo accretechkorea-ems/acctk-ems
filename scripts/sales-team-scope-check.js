@@ -58,18 +58,20 @@ const VISIBLE = ALL                       // 슈퍼관리자 — 전부 보인�
 const ONLY_ME = [E(4, '임원')]            // 그 밖 — 자기 것만 보인다
 
 console.log('── ① 요약 여섯 칸이 보는 사람들 ──')
-eq('「전체」면 집계 대상 전원', S.scopeEngineersOf(null, VISIBLE, ALL).map(e => e.engineer_id), [1, 2, 3, 4])
-eq('팀을 고르면 그 팀만', S.scopeEngineersOf('80CS', VISIBLE, ALL).map(e => e.engineer_id), [1, 2])
-eq('다른 팀', S.scopeEngineersOf('20수리', VISIBLE, ALL).map(e => e.engineer_id), [3])
+eq('「전체」면 **보이는 사람 전부**', S.scopeEngineersOf(null, VISIBLE).map(e => e.engineer_id), [1, 2, 3, 4])
+eq('팀을 고르면 그 팀만', S.scopeEngineersOf('80CS', VISIBLE).map(e => e.engineer_id), [1, 2])
+eq('다른 팀', S.scopeEngineersOf('20수리', VISIBLE).map(e => e.engineer_id), [3])
 // 권한이 좁은 사람은 남의 팀을 골라도 남의 숫자를 보지 못한다 — 그래프와 같은 규칙이다.
-eq('볼 수 없는 팀을 고르면 빈 목록', S.scopeEngineersOf('80CS', ONLY_ME, ALL).map(e => e.engineer_id), [])
-eq('없는 팀', S.scopeEngineersOf('없는팀', VISIBLE, ALL), [])
-// 「전체」는 **전과 같은 값**이어야 한다 — 그래서 all 을 그대로 쓴다.
-ok('「전체」는 보이는 사람이 아니라 전원이다(전과 같은 값)',
-  S.scopeEngineersOf(null, ONLY_ME, ALL).length === 4)
+eq('볼 수 없는 팀을 고르면 빈 목록', S.scopeEngineersOf('80CS', ONLY_ME).map(e => e.engineer_id), [])
+eq('없는 팀', S.scopeEngineersOf('없는팀', VISIBLE), [])
+// 2026-11-28(야간4 1) — 「전체」도 **보이는 사람**으로 좁혔다. 그 전에는 권한이 좁은
+// 사람에게도 여섯 칸이 전사 금액을 보여 주었다(그래프는 그 사람 것만 보여 주는데도).
+ok('권한이 좁으면 「전체」도 제 것만 본다',
+  S.scopeEngineersOf(null, ONLY_ME).length === 1)
+ok('권한이 넓으면 「전체」가 전원이다', S.scopeEngineersOf(null, VISIBLE).length === 4)
 
 console.log('\n── ② 화면이 그 규칙을 쓴다 ──')
-ok('여섯 칸의 사람들을 한 줄로 정한다', /const scopeEngineers = scopeEngineersOf\(teamFilter, visibleEngineers, allEngineers\)/.test(PAGE))
+ok('여섯 칸의 사람들을 한 줄로 정한다', /const scopeEngineers = scopeEngineersOf\(teamFilter, visibleEngineers\)/.test(PAGE))
 ok('그 사람들의 견적만 센다',
   /sumQuotes = quotes\.filter\(q => matchPeriod\(q\.quote_date, fy\) && scopeIds\.includes\(q\.engineer_id\)\)/.test(PAGE)
   && /sumOrderQuotes = quotes\.filter\(q => inOrderPeriod\(q, fy\) && scopeIds\.includes\(q\.engineer_id\)\)/.test(PAGE)
@@ -80,6 +82,8 @@ ok('여섯 칸이 그 집합을 쓴다',
 ok('목표 합도 같은 사람들로 낸다', /scopeEngineers\.reduce\(\(s, e\) =>/.test(PAGE))
 ok('전사만 보던 옛 집합이 없다', !/allFilteredQuotes/.test(PAGE) && !/allOrderQuotes/.test(PAGE) && !/allRevenueQuotes/.test(PAGE))
 ok('그래프·연간 누적은 전부터 팀을 따른다', /engineerIds=\{filteredEngineerIds\}/.test(PAGE) && /engineerIds: filteredEngineerIds/.test(PAGE))
+// 여섯 칸·그래프·연간 누적이 **한 목록**을 본다 — 한 화면에서 위아래가 다른 말을 하지 않게.
+ok('전사만 보던 목록이 화면에 남아 있지 않다', !/allEngineers/.test(PAGE) && !/allEngineerIds/.test(PAGE))
 ok('제목이 팀 이름과 잔여 일수를 적는다',
   /\{teamFilter \? teamFilter : '계측사업부'\} \{periodTitle\(mode, fy, month\)\} 실적/.test(PAGE) && /remainingLabel/.test(PAGE))
 

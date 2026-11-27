@@ -1650,7 +1650,6 @@ const visibleEngineers = sortedEngineers.filter(e => {
   // 기간 판정은 lib/salesStats.ts 가 한다 — 여기서는 지금 고른 mode·month 만 얹는다.
   const matchPeriod = (dateStr: string, fiscalYear: number) => matchPeriodOf(dateStr, fiscalYear, mode, month)
 
-  const allEngineers = sortedEngineers.filter(e => inSalesStats(e) && isActiveInPeriod(e.resigned_date, periodStart))
   // 기간을 재는 날짜가 지표마다 다르다.
   //   견적 제출 — 견적을 낸 날(quote_date)
   //   수주      — 발주서를 등록한 날(purchase_order_at)
@@ -1665,15 +1664,16 @@ const visibleEngineers = sortedEngineers.filter(e => {
   const scopedRevenueQuotes = quotes.filter(q => inRevenuePeriod(q, fy) && (teamFilter ? filteredEngineerIds.includes(q.engineer_id) : true))
 
   /**
-   * **요약 여섯 칸이 보는 사람들** (2026-11-27, 묶음6 1-1).
+   * **요약 여섯 칸이 보는 사람들** — 그래프·연간 누적과 **같은 목록**이다.
    *
-   * 2026-11-27 전에는 여섯 칸이 늘 `allEngineerIds`(전사)를 봤다 — **팀을 골라도 숫자가
-   * 그대로**였다. 그래서 「80CS 를 골랐는데 왜 전사 금액이 뜨지」가 됐다. 그래프와 연간
-   * 누적은 이미 팀을 따르고 있어서, 한 화면 안에서 **위아래가 서로 다른 말**을 했다.
+   * 두 번 고쳤다:
+   *   2026-11-27(묶음6 1-1) 여섯 칸이 **늘 전사**를 봤다 — 팀을 골라도 숫자가 그대로였다.
+   *   2026-11-28(야간4 1)   「전체」도 **보이는 사람**으로 좁혔다 — 그 전에는 권한이
+   *     좁은 사람에게도 전사 금액이 보였다(그래프는 그 사람 것만 보여 주는데도).
    *
-   * 「전체」일 때는 전과 **똑같다**(allEngineerIds) — 숫자가 바뀌지 않는다.
+   * 권한은 visibleEngineers 가 이미 담고 있다 — superadmin 이면 전원, 그 밖이면 자기.
    */
-  const scopeEngineers = scopeEngineersOf(teamFilter, visibleEngineers, allEngineers)
+  const scopeEngineers = scopeEngineersOf(teamFilter, visibleEngineers)
   const scopeIds = scopeEngineers.map(e => e.engineer_id)
   const sumQuotes = quotes.filter(q => matchPeriod(q.quote_date, fy) && scopeIds.includes(q.engineer_id))
   const sumOrderQuotes = quotes.filter(q => inOrderPeriod(q, fy) && scopeIds.includes(q.engineer_id))

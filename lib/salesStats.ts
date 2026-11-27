@@ -346,23 +346,29 @@ const achieveOf = (amt: number, target: number): number | null =>
  * **요약 여섯 칸이 보는 사람들** (2026-11-27, 묶음6 1-1).
  *
  *   팀을 골랐으면 — 그 팀 사람들(보이는 사람 중에서)
- *   「전체」면   — 집계 대상 전원
+ *   「전체」면   — **보이는 사람 전부**
  *
- * 이 한 줄이 2026-11-27 전에는 없었다. 여섯 칸이 늘 전원을 봤고, 그래서 **팀을 골라도
- * 숫자가 그대로**였다 — 같은 화면의 그래프·연간 누적은 팀을 따르고 있었으므로
- * 위아래가 서로 다른 말을 했다.
+ * ── 두 번 고쳤다 ────────────────────────────────────────────────────
+ *   2026-11-27(묶음6 1-1) — 그 전에는 여섯 칸이 **늘 전원**을 봤다. 팀을 골라도
+ *     숫자가 그대로였다 — 그래프·연간 누적은 팀을 따르고 있었으므로 한 화면 안에서
+ *     위아래가 서로 다른 말을 했다. 그때 팀 쪽만 고쳤다.
+ *   2026-11-28(야간4 1) — 「전체」도 **보이는 사람**으로 좁혔다. 그 전에는 권한이
+ *     좁은 사람(getViewScope → 'self')에게도 여섯 칸이 **전사 금액**을 보여 주었다.
+ *     같은 화면의 그래프는 그 사람 것만 보여 주는데도 — 숫자가 새는 자리였다.
+ *     이제 여섯 칸·그래프·연간 누적이 **한 목록**을 본다.
+ *
+ * 권한은 부르는 쪽이 이미 담아 둔다 — visible 은 superadmin 이면 전원,
+ * 그 밖이면 자기 자신이다(app/sales/page.tsx 의 visibleEngineers).
  *
  * 목표 합도 **같은 사람들**로 낸다 — 팀 목표라는 칸은 따로 없고, 그 팀 사람들의
- * 개인 목표를 더한 것이 팀 목표다(「전체」면 전원 합 = 사업부 목표, 전과 같은 값).
+ * 개인 목표를 더한 것이 팀 목표다.
  */
 export function scopeEngineersOf<T extends { engineer_id: number; teams?: string | null }>(
   teamFilter: string | null,
   /** 이 사람이 **볼 수 있는** 사람들(권한·재직·집계 대상으로 이미 걸러져 있다). */
   visible: readonly T[],
-  /** 집계 대상 전원. */
-  all: readonly T[],
 ): T[] {
-  return teamFilter ? visible.filter(e => e.teams === teamFilter) : [...all]
+  return teamFilter ? visible.filter(e => e.teams === teamFilter) : [...visible]
 }
 
 export function unitBars(
