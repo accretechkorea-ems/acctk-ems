@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import { Suspense, useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
@@ -26,6 +26,7 @@ import { geocodeAddress } from '@/lib/geocode'
 import { ROLE_COLORS, getCategoryColor } from '@/lib/categoryColors'
 import { toDivision, type Division } from '@/lib/division'
 import { useToast } from '@/components/common/Toast'
+import { customerDelete } from '@/lib/customerDelete.client'
 import { APPROVAL_PATH } from '@/lib/approval/types'
 import { useConfirm } from '@/components/common/ConfirmDialog'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
@@ -182,6 +183,33 @@ function AdminPageInner() {
   /** 집계 설정을 저장 중인 직원. 선택칸을 잠그는 데만 쓴다. */
   const [savingScope, setSavingScope] = useState<number | null>(null)
   const [showLogModal, setShowLogModal] = useState(false)
+
+  /**
+   * **삭제된 회사** — 임시 카드 (2026-11-27, 묶음6 4-4).
+   *
+   * 되돌리는 길은 「정리 필요」 탭의 소탭 하나에만 있었다. 그 탭을 걷으면서(4-1)
+   * **지워진 회사를 되살릴 자리가 사라졌다** — 그래서 여기 임시로 둔다.
+   * 리뉴얼 때 **휴지통**(사업장·담당자·장비까지 한자리)으로 흡수한다.
+   */
+  const [showDeletedModal, setShowDeletedModal] = useState(false)
+  const [deletedRows, setDeletedRows] = useState<{ customer_id: number; company_name: string; hint: string }[] | null>(null)
+  const [deletedBusy, setDeletedBusy] = useState(false)
+  const loadDeletedCompanies = useCallback(async () => {
+    setDeletedBusy(true)
+    const r = await customerDelete({ action: 'list-deleted', target: 'company' })
+    setDeletedBusy(false)
+    if (!r.ok) { toast.error(r.error); return }
+    const rows = (r.data.rows ?? []) as { customer_id: number; company_name: string; hint: string }[]
+    setDeletedRows(rows)
+  }, [toast])
+  const restoreCompany = async (id: number, name: string) => {
+    setDeletedBusy(true)
+    const r = await customerDelete({ action: 'restore', target: 'company', id })
+    setDeletedBusy(false)
+    if (!r.ok) { toast.error(r.error); return }
+    toast.success(`${name} 을(를) 되돌렸습니다`)
+    void loadDeletedCompanies()
+  }
 
   // 팀 관리
   const [showTeamModal, setShowTeamModal] = useState(false)
@@ -1338,6 +1366,23 @@ function AdminPageInner() {
             </button>
           </div>
 
+          {/* 삭제된 회사 — **임시 카드**(2026-11-27, 묶음6 4-4). 슈퍼관리자만.
+              리뉴얼 때 휴지통으로 흡수한다. */}
+          {isSuperAdmin(currentEngineer) && (
+            <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontSize: 28, marginBottom: 12 }}>🗂</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>
+                삭제된 회사{deletedRows ? ` ${deletedRows.length}건` : ''}
+              </div>
+              <div style={{ fontSize: 13, color: GRAY, marginBottom: 20, lineHeight: 1.6 }}>
+                숨긴 회사를 되돌립니다. 지우기는 **숨기기**라 자료는 그대로 있습니다.
+              </div>
+              <div style={{ flex: 1 }} />
+              <button style={{ width: '100%', padding: '10px', background: BLUE, color: '#fff', border: 'none', borderRadius: R.tile, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}
+                onClick={() => { setShowDeletedModal(true); void loadDeletedCompanies() }}>조회하기</button>
+            </div>
+          )}
+
  <div style={{ background: CARD_BG, borderRadius: R.modal, padding: 24, border: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>📋</div>
             <div style={{ fontSize: 16, fontWeight: 800, color: TEXT, marginBottom: 8 }}>다운로드 로그</div>
@@ -1349,6 +1394,37 @@ function AdminPageInner() {
 
         </div>
       </div>
+
+      {/* ── 삭제된 회사 (임시) ── */}
+      {showDeletedModal && (
+        <ModalOverlay onClose={() => setShowDeletedModal(false)}>
+          <ModalCard
+            width={640}
+            title="삭제된 회사"
+            subtitle="되돌리면 목록에 다시 선다. 리뉴얼 때 휴지통으로 옮긴다."
+            onClose={() => setShowDeletedModal(false)}
+          >
+            {deletedRows === null ? (
+              <div style={{ padding: '28px 0', textAlign: 'center', color: GRAY, fontSize: 13 }}>불러오는 중…</div>
+            ) : deletedRows.length === 0 ? (
+              <div style={{ padding: '28px 0', textAlign: 'center', color: GRAY, fontSize: 13 }}>숨긴 회사가 없습니다</div>
+            ) : deletedRows.map(r => (
+              <div key={r.customer_id}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 2px', borderBottom: `1px solid ${BORDER}` }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.company_name}</div>
+                  <div style={{ fontSize: 11, color: GRAY }}>{r.hint}</div>
+                </div>
+                <button type="button" disabled={deletedBusy}
+                  onClick={() => void restoreCompany(r.customer_id, r.company_name)}
+                  style={{ height: 30, padding: '0 12px', borderRadius: R.icon, border: `1px solid ${BLUE}`, background: '#fff', color: BLUE, fontSize: 12, fontWeight: 700, cursor: deletedBusy ? 'not-allowed' : 'pointer', fontFamily: 'inherit', flexShrink: 0 }}>
+                  복구
+                </button>
+              </div>
+            ))}
+          </ModalCard>
+        </ModalOverlay>
+      )}
 
       {/* ── 목표 금액 모달 ── */}
       {showTargetModal && (

@@ -25,8 +25,7 @@ import { customerChange } from '@/lib/customerChange'
 import { customerDelete } from '@/lib/customerDelete.client'
 import { EMPTY_COUNTS, type DeleteCounts, type DeleteTarget } from '@/lib/customerDelete'
 import DeleteCustomerModal from '@/components/home/list/DeleteCustomerModal'
-import DeleteRequestModal from '@/components/home/list/DeleteRequestModal'
-import CustomerListPanel, { type CleanupBucket, type CleanupRow, type ListTab } from '@/components/home/list/CustomerListPanel'
+import CustomerListPanel, { type ListTab } from '@/components/home/list/CustomerListPanel'
 import CompanyPane from '@/components/home/list/CompanyPane'
 import AgencyPane from '@/components/home/list/AgencyPane'
 import CustomerDetailBody from '@/components/customer/CustomerDetailBody'
@@ -42,7 +41,7 @@ import { todayKST } from '@/lib/date'
 import { useToast } from '@/components/common/Toast'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
-import { canViewMenu, isSuperAdmin } from '@/lib/permissions'
+import { isSuperAdmin } from '@/lib/permissions'
 
 
 import {
@@ -65,7 +64,6 @@ export default function HomePage() {
   // 엑셀 내보내기는 관리자만 — 팀 관리·목표 관리 버튼과 같은 판정(permission_level).
   const canExportExcel = isSuperAdmin(me)
   /** 숨긴 줄을 되살리는 사람 — 관리 메뉴(+슈퍼관리자). 라우트와 같은 판정이다. */
-  const canRestoreCustomer = canViewMenu(me, 'admin')
   const toast = useToast()
 
   const listScrollRef = useRef<HTMLDivElement | null>(null)
@@ -119,18 +117,13 @@ export default function HomePage() {
   /** 분류를 한 번에 지정할 회사들(3a). */
   const [checkedCompanies, setCheckedCompanies] = useState<Set<number>>(new Set())
   /** 정리 필요 탭에서 보고 있는 묶음(4). */
-  const [cleanupBucket, setCleanupBucket] = useState<CleanupBucket>('industry')
   /** 「삭제 요청」 창이 열린 회사. 지울 수 없는 사람이 지워 달라고 할 때 뜬다. */
-  const [requestTarget, setRequestTarget] = useState<{ id: number; name: string } | null>(null)
-  const [requesting, setRequesting] = useState(false)
   /** 이미 요청이 들어온 회사들 — 정리 필요 탭이 「삭제 요청됨」을 붙인다. */
-  const [deleteRequested, setDeleteRequested] = useState<Set<number>>(new Set())
   /** 지우기 창 — 무엇을 지우려는가(없으면 닫혀 있다). */
   const [deleteTarget, setDeleteTarget] = useState<{ target: DeleteTarget; id: number; name: string } | null>(null)
   const [deleteCounts, setDeleteCounts] = useState<DeleteCounts | null>(null)
   const [deleting, setDeleting] = useState(false)
   /** 「삭제됨」 소탭의 줄 — 숨긴 사업장·회사다. */
-  const [deletedRows, setDeletedRows] = useState<{ customer_id: number; company_name: string; hint: string }[]>([])
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null)
   const [selectedSiteId, setSelectedSiteId] = useState<number | null>(null)
@@ -598,70 +591,10 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
     }).length
   }
 
-  // ── 정리 필요 탭의 네 묶음(4) ────────────────────────────────────────────
-  //   조건을 각 조각에 흩지 않고 여기서 한 번에 만든다 — 건수와 줄이 같은 셈법이어야 한다.
-  const cleanup = useMemo<Record<CleanupBucket, CleanupRow[]>>(() => {
-    const sitesByParent = new Map<number, Customer[]>()
-    for (const c of customers) {
-      const pid = c.parent_customer_id
-      if (pid == null) continue
-      const list = sitesByParent.get(pid)
-      if (list) list.push(c); else sitesByParent.set(pid, [c])
-    }
-    // 이름 중복 의심 — 괄호·㈜·공백을 턴 뒤 같은 이름인 회사가 둘 이상.
-    const norm = (v: string) => v
-      .replace(/㈜|\(\s*주\s*\)|주식회사|\(유\)|㈲|유한회사/g, '')
-      .replace(/[()\[\]{}·,.\-_/\s]/g, '').toLowerCase()
-    const byNorm = new Map<string, ParentOption[]>()
-    for (const p of companies) {
-      const k = norm(p.company_name)
-      const list = byNorm.get(k)
-      if (list) list.push(p); else byNorm.set(k, [p])
-    }
-
-    const industry: CleanupRow[] = []
-    const dupName: CleanupRow[] = []
-    const blankSites: CleanupRow[] = []
-    const emptyCompany: CleanupRow[] = []
-    // 「삭제됨」은 화면 조회에 없는 줄이라(지워진 줄은 안 읽는다) 라우트가 준 목록을 그대로 쓴다.
-    const deleted: CleanupRow[] = deletedRows.map(r => ({
-      companyId: r.customer_id, companyName: r.company_name, hint: r.hint,
-    }))
-
-    for (const p of companies) {
-      const sites = sitesByParent.get(p.customer_id) ?? []
-      if (!(p.industry ?? '').trim()) {
-        industry.push({ companyId: p.customer_id, companyName: p.company_name, hint: `사업장 ${sites.length}곳 · 분류를 고르세요` })
-      }
-      if (sites.length === 0) {
-        emptyCompany.push({ companyId: p.customer_id, companyName: p.company_name, hint: '묶인 사업장이 없습니다 — 지울 수 있습니다' })
-      }
-      const blanks = sites.filter(c => !(c.site_name ?? '').trim()).length
-      // 한 곳만 비어도 든다 — 겹칠 때만 세던 전에는 「이름 없는 사업장 한 곳」이 끝내 안 보였다.
-      if (blanks >= 1) {
-        blankSites.push({
-          companyId: p.customer_id, companyName: p.company_name,
-          hint: `사업장 ${sites.length}곳 중 ${blanks}곳이 이름 없음 — 사업장명을 적으세요`,
-        })
-      }
-    }
-    for (const [, list] of byNorm) {
-      if (list.length < 2) continue
-      for (const p of list) {
-        dupName.push({
-          companyId: p.customer_id, companyName: p.company_name,
-          hint: `같은 이름: ${list.filter(x => x.customer_id !== p.customer_id).map(x => x.company_name).join(' · ')}`,
-        })
-      }
-    }
-    const byName = (a: CleanupRow, b: CleanupRow) => a.companyName.localeCompare(b.companyName, 'ko')
-    return {
-      industry: industry.sort(byName), dupName: dupName.sort(byName),
-      blankSites: blankSites.sort(byName), emptyCompany: emptyCompany.sort(byName),
-      // 삭제됨은 라우트가 준 순서 그대로다(지운 때의 역순).
-      deleted,
-    }
-  }, [companies, customers, deletedRows])
+  // 「정리 필요」 네 묶음을 만들던 셈 — **탭과 함께 걷었다**(2026-11-27, 묶음6 4-1).
+  // 그 목록이 보여 주던 넷(분류 없는 회사·이름 중복 의심·사업장명 입력 필요·사업장 0곳)은
+  // 「고치라고 재촉하는 목록」이었는데 고치는 길이 그 안에 없어, 결국 회사를 하나씩 열어야
+  // 했다. 다시 둘 때는 **그 자리에서 고치는 길**과 함께 두어야 한다.
 
   /** 대리점 하나가 몇 곳에 붙어 있나(대리점 탭의 오른쪽 수). */
   const agencySiteCount = useCallback(
@@ -683,29 +616,12 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
     toast.success(`회사 ${ids.length}곳의 분류를 「${value}」 로 바꿨습니다`)
   }
 
-  /** 이미 들어온 삭제 요청 — 정리 필요 탭을 열 때 한 번 읽는다. */
-  const loadDeleteRequests = useCallback(async () => {
-    const r = await customerDelete({ action: 'list-requests' })
-    if (!r.ok) return
-    const rows = (r.data.rows ?? []) as { customer_id: number }[]
-    setDeleteRequested(new Set(rows.map(x => Number(x.customer_id))))
-  }, [])
 
-  useEffect(() => {
-    if (listTab === 'cleanup') void loadDeleteRequests()
-  }, [listTab, loadDeleteRequests])
+  // 「삭제 요청」은 **걷었다**(2026-11-27, 묶음6 4-3) — 미처리 요청 0건을 확인하고 걷었다.
+  // 지우기 문턱이 「고객사를 보는 사람 전부」로 내려간 뒤(2026-11-25) 요청할 까닭이 없다.
+  // 라우트(/api/customer-delete 의 request·list-requests)와 지난 사건은 **그대로** 남는다.
 
-  /** 「삭제 요청 보내기」 — 지우지 않는다. 자국과 알림만 남는다. */
-  const sendDeleteRequest = async (reason: string) => {
-    if (!requestTarget) return
-    setRequesting(true)
-    const r = await customerDelete({ action: 'request', target: 'company', id: requestTarget.id, reason })
-    setRequesting(false)
-    if (!r.ok) { toast.error(r.error); return }
-    setDeleteRequested(prev => new Set(prev).add(requestTarget.id))
-    setRequestTarget(null)
-    toast.success(`「${requestTarget.name}」 삭제를 요청했습니다 — 슈퍼관리자에게 알림이 갑니다`)
-  }
+
 
   /**
    * 사업장 0곳 회사를 지운다(정리 필요 탭) — **숨기기다**(deleted_at).
@@ -741,29 +657,12 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
     setDeleteTarget(null)
     if (selectedCompanyId === id) { setSelectedCompanyId(null); setSelectedSiteId(null) }
     void refreshCustomers()
-    void loadDeletedRows()
     toast.success(`${name} 을(를) 숨겼습니다`)
   }
 
-  /** 「삭제됨」 소탭 목록 — 라우트가 service role 로 읽어 준다(화면 조회는 지워진 줄을 보지 않는다). */
-  const loadDeletedRows = useCallback(async () => {
-    const r = await customerDelete({ action: 'list-deleted' })
-    setDeletedRows(r.ok ? (r.data.rows as { customer_id: number; company_name: string; hint: string }[]) : [])
-  }, [])
 
-  /** 되돌리기 — 슈퍼관리자만 버튼을 받는다. */
-  const restoreCustomer = async (customerId: number, name: string) => {
-    const r = await customerDelete({ action: 'restore', target: 'site', id: customerId })
-    if (!r.ok) { toast.error(r.error); return }
-    void refreshCustomers()
-    void loadDeletedRows()
-    toast.success(`${name} 을(를) 되돌렸습니다`)
-  }
 
-  // 「삭제됨」 소탭을 열 때만 읽는다 — 평소에는 조회를 늘리지 않는다.
-  useEffect(() => {
-    if (listTab === 'cleanup' && cleanupBucket === 'deleted') void loadDeletedRows()
-  }, [listTab, cleanupBucket, loadDeletedRows])
+  // 지워진 회사 목록은 **관리 메뉴의 임시 카드**가 읽는다(묶음6 4-4) — 여기서는 안 읽는다.
 
   /** 지금 고른 회사 묶음. */
   const selectedGroup = useMemo(
@@ -924,7 +823,6 @@ useEffect(() => {
           counts={{
             company: listTree.groups.length,
             agency: agencyCount,
-            cleanup: new Set(Object.values(cleanup).flat().map(r => r.companyId)).size,
           }}
           onExport={openExport}
           canExport={canExportExcel}
@@ -1132,19 +1030,8 @@ useEffect(() => {
               })}
               clearCompanyChecks={() => setCheckedCompanies(new Set())}
               onBulkIndustry={v => void bulkIndustry(v)}
-              cleanup={cleanup}
-              cleanupBucket={cleanupBucket}
-              setCleanupBucket={setCleanupBucket}
-              /* 지우기는 **고객사를 보는 사람 전부**다(2026-11-25 지시 — 라우트도 같은 문턱이다).
-                 지우기는 숨기기이고(deleted_at) 누가·왜가 사건으로 남으며 관리자가 되돌릴 수
-                 있어, 문턱을 낮춰도 잃는 것이 없다. 그래서 「삭제 요청」 자리는 서지 않는다 —
-                 길과 라우트는 그대로 남아 있다(다시 좁히면 그 자리가 돌아온다). */
-              onDeleteCompany={(id, name) => deleteEmptyCompany(id, name)}
-              onRequestDelete={(id, name) => setRequestTarget({ id, name })}
-              deleteRequested={deleteRequested}
-              /* 되돌리기는 **관리 메뉴를 가진 사람**(+슈퍼관리자)이다 — 지운 사람이 아니라
-                 전체를 보는 사람이 판단한다(라우트의 ADMIN_ACTIONS 와 같은 판정). */
-              onRestore={canRestoreCustomer ? ((id, name) => void restoreCustomer(id, name)) : undefined}
+              /* 「정리 필요」 탭이 쓰던 것들은 그 탭과 함께 걷었다(묶음6 4-1).
+                 회사 삭제는 **회사 화면의 수정 창**으로(4-2), 복구는 **관리 메뉴**로(4-4) 갔다. */
               agencies={agencyList}
               /* 대리점·정리 필요 탭도 같은 검색칸으로 좁힌다(2026-11-27, 묶음4 D). */
               query={query}
@@ -1206,6 +1093,9 @@ useEffect(() => {
                 engineerName={id => (id == null ? '' : engineerNameMap.get(id) ?? '')}
                 onSaved={() => { void refreshCustomers() }}
                 onPatchLocal={patchCustomersLocally}
+                /* 회사 삭제 — 수정 창 바닥줄 왼쪽(2026-11-27, 묶음6 4-2).
+                   확인 창·사유·사건은 사업장 삭제와 **같은 길**을 쓴다(deleteTarget). */
+                onDeleteCompany={(id, name) => deleteEmptyCompany(id, name)}
                 onError={msg => toast.error(msg)}
                 onToast={msg => toast.success(msg)}
                 onOpenSite={id => openSite(id)}
@@ -1292,16 +1182,9 @@ useEffect(() => {
           />
         )}
 
-        {/* ── 삭제 요청 창 — 지울 수 없는 사람이 지워 달라고 한다 ── */}
-        {requestTarget && (
-          <DeleteRequestModal
-            key={requestTarget.id}
-            name={requestTarget.name}
-            busy={requesting}
-            onClose={() => setRequestTarget(null)}
-            onSend={reason => void sendDeleteRequest(reason)}
-          />
-        )}
+        {/* 삭제 요청 창은 **걷었다**(2026-11-27, 묶음6 4-3) — 미처리 요청 0건을 확인했다.
+           지우기 문턱이 「고객사를 보는 사람 전부」로 내려간 뒤(2026-11-25) 요청할 까닭이 없다.
+           라우트와 지난 사건은 그대로 남는다. */}
 
         {exportOpen && (
           <ExportModal

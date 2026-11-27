@@ -16,7 +16,7 @@
 
 import { useState, type CSSProperties } from 'react'
 import ModalOverlay from '@/components/common/ModalOverlay'
-import ModalCard from '@/components/common/ModalCard'
+import ModalCard, { modalDangerButton, modalGhostButton, modalPrimaryButton } from '@/components/common/ModalCard'
 import FormFocusStyle from '@/components/common/FormFocusStyle'
 import { useFieldErrors, FieldError, errBorder } from '@/components/common/fieldErrors'
 import { INDUSTRIES } from '@/lib/leadOptions'
@@ -28,7 +28,6 @@ const BORDER = '#ebebeb'
 const TEXT = '#111827'
 const SUB = '#4b5563'
 const MUTED = '#6b7280'
-const BLUE = '#234ea2'
 
 const labelStyle: CSSProperties = { fontSize: 13, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL, marginBottom: 6, display: 'block' }
 const fieldStyle: CSSProperties = {
@@ -68,6 +67,13 @@ type Props = {
   onClose: () => void
   onSave: (form: CompanyEditForm) => void
   /**
+   * **삭제** — 바닥줄 왼쪽. 주지 않으면 그 자리가 비고, 창은 그대로 돈다
+   * (대리점 수정 창은 주지 않는다 — 대리점을 지우는 길은 아직 없다).
+   */
+  onDelete?: () => void
+  /** 지울 수 없는 까닭(사업장이 남아 있다 등). 있으면 꺼진 채로 그 까닭을 띄운다. */
+  deleteBlockedReason?: string | null
+  /**
    * 「대리점으로 전환」 — 회사 모드에서만 둔다(2026-11-21).
    * 주지 않으면 버튼 자체가 없다. 조건에 안 맞으면 jsx 가 잠그고 이유를 툴팁으로 말한다.
    */
@@ -78,7 +84,7 @@ type Props = {
 
 export default function CompanyEditModal({
   initial, kind = 'company', siteCount, canRename, isSaving, onClose, onSave,
-  onConvertAgency, convertBlockedReason,
+  onConvertAgency, convertBlockedReason, onDelete, deleteBlockedReason,
 }: Props) {
   const [form, setForm] = useState<CompanyEditForm>(initial)
   const { errors, clearError, validate } = useFieldErrors<'name' | 'nameEn' | 'industry'>()
@@ -117,33 +123,53 @@ export default function CompanyEditModal({
         title={<>
           <div style={{ fontSize: 18, fontWeight: 700, color: TEXT, letterSpacing: '-0.3px' }}>{agency ? '대리점 정보 수정' : '회사 정보 수정'}</div>
         </>}
-        footer={<>
-          {/* 대리점으로 전환 — 왼쪽 끝에 글자 버튼으로 둔다(저장과 성격이 다른 일이다.
-              의뢰서 상세의 「이 번호 취소」와 같은 자리·같은 모양이다).
-              살아있는 사업장이 정확히 1곳인 회사에서만 켜진다 — 이유는 툴팁에 있다. */}
-          {!agency && onConvertAgency && (
-            <button
-              type="button"
-              onClick={onConvertAgency}
-              disabled={isSaving || !!convertBlockedReason}
-              title={convertBlockedReason ?? '이 회사를 대리점 한 줄로 바꿉니다'}
-              style={{
-                border: 'none', background: 'transparent', padding: 0,
-                color: convertBlockedReason ? MUTED : '#c2410c',
-                fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
-                cursor: isSaving || convertBlockedReason ? 'not-allowed' : 'pointer',
-              }}>
-              대리점으로 전환
+        /**
+         * 바닥줄은 **슬롯 둘**이다(2026-11-27, 묶음5 1-3 의 규칙 · 묶음6 4-2).
+         *   왼쪽  — 되돌릴 수 없는 일: **삭제** · 대리점으로 전환
+         *   오른쪽 — 취소 → 저장
+         * 삭제가 여기 온 까닭: 전에는 **「정리 필요」 탭 안에만** 있었다(묶음6 4-1 에서
+         * 그 탭을 걷었다). 회사를 지우는 일은 그 회사를 보고 있는 자리에 있어야 한다.
+         */
+        footer={{
+          left: <>
+            {!agency && onDelete && (
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={isSaving || !!deleteBlockedReason}
+                title={deleteBlockedReason ?? '이 회사를 숨깁니다 — 까닭을 적어야 하고, 되돌릴 수 있습니다'}
+                style={{
+                  ...modalDangerButton(isSaving),
+                  ...(deleteBlockedReason ? { color: MUTED, borderColor: BORDER, cursor: 'not-allowed' } : null),
+                }}>
+                삭제
+              </button>
+            )}
+            {/* 대리점으로 전환 — 저장과 성격이 다른 일이라 **왼쪽**이다.
+                살아있는 사업장이 정확히 1곳인 회사에서만 켜진다 — 이유는 툴팁에 있다. */}
+            {!agency && onConvertAgency && (
+              <button
+                type="button"
+                onClick={onConvertAgency}
+                disabled={isSaving || !!convertBlockedReason}
+                title={convertBlockedReason ?? '이 회사를 대리점 한 줄로 바꿉니다'}
+                style={{
+                  border: 'none', background: 'transparent', padding: 0,
+                  color: convertBlockedReason ? MUTED : '#c2410c',
+                  fontSize: 12, fontWeight: 700, fontFamily: 'inherit',
+                  cursor: isSaving || convertBlockedReason ? 'not-allowed' : 'pointer',
+                }}>
+                대리점으로 전환
+              </button>
+            )}
+          </>,
+          right: <>
+            <button onClick={onClose} disabled={isSaving} style={modalGhostButton(isSaving)}>취소</button>
+            <button onClick={handleSave} disabled={isSaving} style={modalPrimaryButton(isSaving)}>
+              {isSaving ? '저장 중…' : '저장'}
             </button>
-          )}
-          <span style={{ flex: 1 }} />
-          <button onClick={onClose} disabled={isSaving}
-            style={{ padding: '10px 15px', background: '#fff', color: SUB, borderRadius: R.icon, border: `1px solid ${BORDER}`, cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>취소</button>
-          <button onClick={handleSave} disabled={isSaving}
-            style={{ padding: '10px 17px', background: BLUE, color: '#fff', borderRadius: R.icon, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, opacity: isSaving ? 0.6 : 1 }}>
-            {isSaving ? '저장 중…' : '저장'}
-          </button>
-        </>}
+          </>,
+        }}
       >
         <FormFocusStyle />
 

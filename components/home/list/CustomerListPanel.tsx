@@ -9,7 +9,7 @@
 //   「회사」 탭만 돈다. 「대리점」·「미연결」은 **자리와 건수만** 둔다 — 누르면
 //   「다음 회차」라고 알린다. 건수는 진짜 값이라 지금도 규모를 알 수 있다.
 
-import { useCallback, useMemo, useRef, type CSSProperties, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import ScrollHints from '@/components/common/ScrollHints'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import type { AgencyOption } from '@/lib/customerAgency'
@@ -19,7 +19,6 @@ import {
   daysLabel, isStale, type CompanyGroup, 
 } from '@/lib/customerList'
 import { R } from '@/lib/radius'
-import { DELETE_REQUEST_LABEL, DELETE_REQUESTED_LABEL } from '@/lib/customerDelete'
 import BulkBar from '@/components/home/list/BulkBar'
 import BulkApplyModal from '@/components/home/list/BulkApplyModal'
 import { currentValueCounts } from '@/lib/bulkActions'
@@ -30,11 +29,16 @@ const SUB = '#4b5563'
 const MUTED = '#6b7280'
 const BLUE = '#234ea2'
 const DANGER = '#ef4444'
-const NEUTRAL_BG = '#f3f4f6'
 
 const STATUS_DOT: Record<string, string> = { '활성': '#16a34a', '잠재': '#f59e0b', '이탈': '#ef4444' }
 
-export type ListTab = 'company' | 'agency' | 'cleanup'
+/**
+ * 목록 보기의 탭 — **둘**이다(2026-11-27, 묶음6 4-1).
+ * 'cleanup'(정리 필요)은 걷었다. 그 목록은 「고치라고 재촉하는 목록」이었는데 고치는 길이
+ * 그 안에 없어서, 결국 회사를 하나씩 열어야 했다. 다시 둘 때는 **그 자리에서 고치는 길**과
+ * 함께 두어야 한다. 그 안에 있던 셋(회사 삭제·삭제 요청·복구)의 행방은 ListTabs 주석에.
+ */
+export type ListTab = 'company' | 'agency'
 
 /** 「정리 필요」 탭의 묶음 — 넷 다 **손으로 고쳐야 하는 것**이다. */
 export type CleanupBucket = 'industry' | 'dupName' | 'blankSites' | 'emptyCompany' | 'deleted'
@@ -71,19 +75,12 @@ type Props = {
   clearCompanyChecks: () => void
   onBulkIndustry: (industry: string) => void
   /** 정리 필요 탭의 묶음별 줄. */
-  cleanup: Record<CleanupBucket, CleanupRow[]>
-  cleanupBucket: CleanupBucket
-  setCleanupBucket: (b: CleanupBucket) => void
   /**
    * 사업장 0곳 회사를 **지운다** — 슈퍼관리자에게만 넘어온다. 없으면 그 자리에 「삭제 요청」이 선다.
    */
-  onDeleteCompany?: (companyId: number, companyName: string) => void
   /** 지울 수 없는 사람이 **지워 달라고** 한다(lib/customerDelete.ts). */
-  onRequestDelete: (companyId: number, companyName: string) => void
   /** 이미 삭제 요청이 들어온 회사들 — 그 줄에 꼬리표를 붙인다. */
-  deleteRequested: Set<number>
   /** 지워진 줄을 되돌린다(슈퍼관리자에게만 넘어온다 — 없으면 버튼도 없다). */
-  onRestore?: (customerId: number, name: string) => void
   /** 대리점 목록(7). 누르면 회사 탭이 그 대리점의 사업장만 거른다. */
   agencies: AgencyOption[]
   agencySiteCount: (agencyId: number) => number
@@ -97,14 +94,6 @@ type Props = {
 
 
 
-const chipStyle = (on: boolean): CSSProperties => ({
-  height: 28, padding: '0 10px', borderRadius: R.icon, cursor: 'pointer',
-  border: `1px solid ${on ? BLUE : BORDER}`,
-  background: on ? '#eff4ff' : '#ffffff',
-  color: on ? BLUE : SUB,
-  fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 5,
-  whiteSpace: 'nowrap',
-})
 
 
 export default function CustomerListPanel({
@@ -112,7 +101,6 @@ export default function CustomerListPanel({
   groups, siteCount, expanded, toggleExpand, selectedCompanyId, selectedSiteId,
   onSelectCompany, onSelectSite, loading,
   checkedCompanies, toggleCompanyCheck, clearCompanyChecks, onBulkIndustry,
-  cleanup, cleanupBucket, setCleanupBucket, onDeleteCompany, onRequestDelete, deleteRequested, onRestore,
   agencies, agencySiteCount, onPickAgency, selectedAgencyId, query = '',
 }: Props) {
   /**
@@ -125,14 +113,7 @@ export default function CustomerListPanel({
     () => agencies.filter(a => matchesAgency({ company_name: a.company_name, name_en: a.name_en }, query)),
     [agencies, query],
   )
-  const cleanupShown = useCallback(
-    (b: CleanupBucket) => {
-      const q = query.trim().toLowerCase()
-      return q ? cleanup[b].filter(r => r.companyName.toLowerCase().includes(q)) : cleanup[b]
-    },
-    [cleanup, query],
-  )
-  const shownCleanup = cleanupShown(cleanupBucket)
+
 
   /**
    * 회사 줄을 눌렀을 때 — **닫혀 있으면 펴고 고른다. 열려 있으면 고르기만 한다**
@@ -193,62 +174,6 @@ export default function CustomerListPanel({
               <span style={{ fontSize: 12, color: SUB }}>{agencySiteCount(a.customer_id)}</span>
             </div>
           )})
-        ) : tab === 'cleanup' ? (
-          /* ── 정리 필요 탭(4) — 묶음 넷 ── */
-          <div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, padding: '2px 4px 10px' }}>
-              {(Object.keys(CLEANUP_LABEL) as CleanupBucket[]).map(b => (
-                <button key={b} type="button" onClick={() => setCleanupBucket(b)} style={chipStyle(cleanupBucket === b)}>
-                  {CLEANUP_LABEL[b]} <b style={{ fontWeight: 700 }}>{cleanupShown(b).length}</b>
-                </button>
-              ))}
-            </div>
-            {shownCleanup.length === 0 ? (
-              <div style={{ padding: '28px 16px', textAlign: 'center', color: MUTED, fontSize: 13 }}>
-                {query.trim() ? `「${query.trim()}」 에 맞는 회사가 없습니다` : '정리할 것이 없습니다'}
-              </div>
-            ) : shownCleanup.map(r => (
-              <div key={r.companyId}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '0 8px', borderRadius: R.icon }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#fafafa' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}>
-                <button type="button" onClick={() => { if (cleanupBucket !== 'deleted') onSelectCompany(r.companyId) }}
-                  style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 'none', background: 'none', cursor: cleanupBucket === 'deleted' ? 'default' : 'pointer', padding: '7px 0', fontFamily: 'inherit' }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.companyName}</div>
-                  <div style={{ fontSize: 11, color: MUTED, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.hint}</div>
-                </button>
-{/* 사업장 0곳 회사 — 지울 수 있으면 「삭제」, 아니면 「삭제 요청」.
-                    전에는 누구에게나 「삭제」가 보였고 슈퍼관리자가 아니면 눌러도 403 이었다(2026-11-23). */}
-                {cleanupBucket === 'emptyCompany' && (
-                  deleteRequested.has(r.companyId) ? (
-                    <span style={{
-                      height: 24, padding: '0 8px', borderRadius: R.icon, border: `1px solid ${BORDER}`,
-                      background: NEUTRAL_BG, color: SUB, fontSize: 11, fontWeight: 700,
-                      display: 'inline-flex', alignItems: 'center', flexShrink: 0,
-                    }}>
-                      {DELETE_REQUESTED_LABEL}
-                    </span>
-                  ) : onDeleteCompany ? (
-                    <button type="button" onClick={() => onDeleteCompany(r.companyId, r.companyName)}
-                      style={{ height: 24, padding: '0 8px', borderRadius: R.icon, border: `1px solid ${DANGER}`, background: '#fff', color: DANGER, fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
-                      삭제
-                    </button>
-                  ) : (
-                    <button type="button" onClick={() => onRequestDelete(r.companyId, r.companyName)}
-                      style={{ height: 24, padding: '0 8px', borderRadius: R.icon, border: `1px solid ${BLUE}`, background: '#fff', color: BLUE, fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
-                      {DELETE_REQUEST_LABEL}
-                    </button>
-                  )
-                )}
-                {cleanupBucket === 'deleted' && onRestore && (
-                  <button type="button" onClick={() => onRestore(r.companyId, r.companyName)}
-                    style={{ height: 24, padding: '0 8px', borderRadius: R.icon, border: `1px solid ${BLUE}`, background: '#fff', color: BLUE, fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
-                    복구
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
         ) : loading && groups.length === 0 ? (
           <div style={{ padding: '36px 16px', textAlign: 'center', color: MUTED, fontSize: 13 }}>불러오는 중…</div>
         ) : groups.length === 0 ? (
@@ -351,7 +276,7 @@ export default function CustomerListPanel({
       </nav>
 
       {/* 일괄 작업 바 — 회사를 체크했을 때. 우측 사업장 표의 바와 **같은 부품**이다. */}
-      {tab === 'company' && (
+      {(
         <BulkBar
           scope="company"
           count={checkedCompanies.size}

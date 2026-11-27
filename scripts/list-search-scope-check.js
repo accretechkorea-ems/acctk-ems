@@ -102,8 +102,9 @@ ok('목록 보기(트리)도 주소·대리점명을 넘기지 않는다',
   !/address: c\.address,/.test(LIST.split('export function matchesSite')[1].slice(0, 1600))
   && !/agency_name: c\.agency_name/.test(LIST))
 ok('대리점 탭이 matchesAgency 로 좁힌다', /matchesAgency\(/.test(PANEL) && /shownAgencies/.test(PANEL))
-ok('정리 필요 탭도 회사명으로 좁힌다', /cleanupShown/.test(PANEL))
-ok('묶음 수도 좁힌 뒤의 수다(칩과 목록이 어긋나지 않게)', /\{cleanupShown\(b\)\.length\}/.test(PANEL))
+// 2026-11-27(묶음6 4-1) — 「정리 필요」 탭을 걷었다. 탭은 회사·대리점 둘이다.
+ok('탭은 둘뿐이다', /export type ListTab = .company. | .agency./.test(PANEL))
+ok('정리 필요 셈도 함께 걷었다', !/cleanupShown/.test(PANEL))
 ok('안내 글은 탭이 정한다', /searchPlaceholder/.test(HEAD) && /AGENCY_SEARCH_PLACEHOLDER : COMPANY_SEARCH_PLACEHOLDER/.test(PAGE))
 
 console.log(fails === 0 ? '\n전부 통과' : `\n실패 ${fails}건`)

@@ -36,7 +36,6 @@ Module._resolveFilename = function (req, ...rest) {
 }
 
 const D = load(path.join(ROOT, 'lib/customerDelete.ts'))
-const { CLEANUP_LABEL } = load(path.join(ROOT, 'components/home/list/CustomerListPanel.tsx'))
 
 let fails = 0
 const eq = (name, got, want) => {
@@ -148,14 +147,19 @@ ok('사건을 남긴다', ROUTE.includes('customer_deleted') && ROUTE.includes('
 ok('사업장이 묶인 회사는 숨기지 않는다', /사업장 \$\{count\}곳이 묶여 있습니다/.test(ROUTE))
 
 console.log('\n── ⑥ 되돌릴 자리 ──')
-ok('정리 필요 탭에 「삭제됨」 소탭이 있다', CLEANUP_LABEL.deleted === '삭제됨')
+// 2026-11-27(묶음6 4-4) — 되돌리는 자리가 **관리 메뉴의 임시 카드**로 옮겼다.
+// 「정리 필요」 탭이 사라지면서 지워진 회사를 되살릴 화면이 없어졌기 때문이다.
+// 리뉴얼 때 휴지통(사업장·담당자·장비까지 한자리)으로 흡수한다.
+const ADMIN = fs.readFileSync(path.join(ROOT, 'app/admin/page.tsx'), 'utf8')
+ok('관리 메뉴에 「삭제된 회사」 카드가 있다', /삭제된 회사/.test(ADMIN))
+ok('슈퍼관리자에게만 보인다', /isSuperAdmin\(currentEngineer\) && \(/.test(ADMIN))
+ok('목록과 복구는 같은 라우트를 부른다',
+  /action: 'list-deleted', target: 'company'/.test(ADMIN)
+  && /action: 'restore', target: 'company'/.test(ADMIN)
+  && /list-deleted/.test(ROUTE) && /restore/.test(ROUTE))
+// 목록 보기에서는 걷었다 — 두 자리에 두면 한쪽만 고치는 날이 온다.
 const PANEL = fs.readFileSync(path.join(ROOT, 'components/home/list/CustomerListPanel.tsx'), 'utf8')
-ok('복구 버튼은 넘겨줄 때만 선다(권한)', /onRestore && \(/.test(PANEL))
-const PAGE = fs.readFileSync(path.join(ROOT, 'app/page.tsx'), 'utf8')
-ok('복구는 관리 메뉴를 가진 사람에게 넘긴다',
-  /const canRestoreCustomer = canViewMenu\(me, 'admin'\)/.test(PAGE)
-  && /onRestore=\{canRestoreCustomer \?/.test(PAGE))
-ok('지워진 줄 목록은 라우트가 읽어 준다', /action: 'list-deleted'/.test(PAGE) && /list-deleted/.test(ROUTE))
+ok('목록 보기에는 복구가 없다', !/onRestore/.test(PANEL))
 
 console.log('\n── ⑦ 삭제 단추는 모두에게 선다(2026-11-25) ──')
 // 버튼이 보이는데 눌러서 403 이 나는 자리를 만들지 않는다 — 라우트와 화면이 같은 말을 한다.
@@ -164,6 +168,7 @@ ok('담당자 수정 창의 삭제', /onDelete=\{contact\.openDeleteContact\}/.t
 ok('장비 수정 창의 삭제', /onDelete=\{device\.openDeleteDevice\}/.test(BODY))
 ok('슈퍼관리자 판정이 그 셋에 남아 있지 않다',
   !/isSuperAdmin\(\{ permission_level: currentUserRole \}\)/.test(BODY))
+const PAGE = fs.readFileSync(path.join(ROOT, 'app/page.tsx'), 'utf8')
 ok('담당자 삭제는 대리점 화면에도 열려 있다', /canDeleteContact\n/.test(PAGE) || /canDeleteContact$/m.test(PAGE))
 
 console.log(fails === 0 ? '\n전부 통과' : `\n${fails}건 실패`)

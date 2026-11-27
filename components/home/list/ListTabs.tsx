@@ -24,7 +24,7 @@ const DANGER = '#b91c1c'
 type Props = {
   tab: ListTab
   setTab: (t: ListTab) => void
-  counts: { company: number; agency: number; cleanup: number }
+  counts: { company: number; agency: number }
   onExport: () => void
   canExport: boolean
   exporting: boolean
@@ -58,9 +58,11 @@ export default function ListTabs({ tab, setTab, counts, onExport, canExport, exp
       <button type="button" onClick={() => setTab('agency')} style={tabStyle(tab === 'agency')}>
         대리점 <span style={countStyle()}>{counts.agency}</span>
       </button>
-      <button type="button" onClick={() => setTab('cleanup')} style={tabStyle(tab === 'cleanup')}>
-        정리 필요 <span style={countStyle(counts.cleanup > 0 ? 'danger' : undefined)}>{counts.cleanup}</span>
-      </button>
+      {/* 「정리 필요」 탭은 **걷었다**(2026-11-27, 묶음6 4-1). 탭은 회사·대리점 둘이다.
+          그 탭 안에만 있던 셋은 제자리를 찾아갔다:
+            회사 삭제   → 회사 수정 창 바닥줄 **왼쪽**(4-2)
+            삭제 요청   → **걷었다**(4-3 — 미처리 요청 0건을 확인하고 걷었다)
+            삭제됨 복구 → 관리 메뉴의 임시 카드 「삭제된 회사 N건」(4-4) */}
       <span style={{ flex: 1, minWidth: 4 }} />
 
       {/* 엑셀 — 지금 보이는 목록 그대로 내보낸다. **이 자리가 기준**이었고, 2026-11-26

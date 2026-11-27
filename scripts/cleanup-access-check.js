@@ -88,15 +88,22 @@ for (const a of ['rename', 'merge', 'convert-agency', 'delete']) {
 }
 
 console.log('\n── ③ 화면과 라우트가 같은 말을 한다 ──')
-const PANEL = read('components/home/list/CustomerListPanel.tsx')
 const PAGE = read('app/page.tsx')
-ok('지우기 버튼은 넘겨받을 때만 선다', /onDeleteCompany\?: \(companyId: number, companyName: string\) => void/.test(PANEL))
+// 2026-11-27(묶음6 4) — 「정리 필요」 탭을 걷으면서 그 안의 셋이 제자리를 찾아갔다:
+//   회사 삭제   → **회사 수정 창 바닥줄 왼쪽**(4-2)
+//   삭제 요청   → **걷었다**(4-3 — 미처리 0건을 확인하고)
+//   삭제됨 복구 → **관리 메뉴의 임시 카드**(4-4)
+ok('회사 삭제는 수정 창 바닥줄 왼쪽이다', /onDelete=\{onDelete \? /.test(read('components/home/list/CompanyPane.tsx')) || /onDelete=\{onDeleteCompany \? /.test(read('components/home/list/CompanyPane.tsx')))
+ok('지울 수 없으면 꺼진 채로 까닭을 띄운다', /deleteBlockedReason/.test(read('components/home/list/CompanyEditModal.tsx')))
+ok('지우는 길은 사업장 삭제와 같은 확인 창을 쓴다', /onDeleteCompany=\{\(id, name\) => deleteEmptyCompany\(id, name\)\}/.test(read('app/page.tsx')))
 // 2026-11-25 — 화면도 라우트와 같이 **누구에게나** 넘긴다. 그래서 「삭제 요청」 자리는
 // 서지 않는다 — 길(라우트·창·꼬리표)은 그대로 남아 있다(다시 좁히면 그 자리가 돌아온다).
 ok('화면이 누구에게나 지우기를 넘긴다',
   /onDeleteCompany=\{\(id, name\) => deleteEmptyCompany\(id, name\)\}/.test(PAGE))
-ok('「삭제 요청」 길은 그대로 남아 있다', PANEL.includes('DELETE_REQUEST_LABEL') && PANEL.includes('onRequestDelete'))
-ok('이미 요청된 줄엔 꼬리표', PANEL.includes('DELETE_REQUESTED_LABEL') && /deleteRequested\.has\(r\.companyId\)/.test(PANEL))
+// 화면의 길만 걷었다 — **라우트와 지난 사건은 그대로**다(되살릴 때 그대로 쓴다).
+ok('삭제 요청 라우트는 그대로 살아 있다', /action === 'request'/.test(read('app/api/customer-delete/route.ts')))
+ok('화면에서는 삭제 요청을 걷었다', !/DeleteRequestModal/.test(read('app/page.tsx')))
+ok('요청 꼬리표도 함께 걷었다', !/deleteRequested/.test(read('components/home/list/CustomerListPanel.tsx')))
 eq('버튼 글자', [D.DELETE_REQUEST_LABEL, D.DELETE_REQUESTED_LABEL], ['삭제 요청', '삭제 요청됨'])
 
 console.log('\n── ③-ⓑ 영문명은 회사 줄 한 칸이다 ──')

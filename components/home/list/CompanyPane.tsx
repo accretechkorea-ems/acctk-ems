@@ -127,6 +127,8 @@ function StatTile({ label, value, unit, note, color = TEXT, valueSize = 24, onCl
 }
 
 export type CompanyPaneProps = {
+  /** 회사를 숨긴다 — 수정 창 바닥줄 왼쪽의 「삭제」(2026-11-27, 묶음6 4-2). */
+  onDeleteCompany?: (companyId: number, companyName: string) => void
   group: CompanyGroup
   /** 작성자 id → 이름. 「최근 활동 · 작성자」 칸이 쓴다. */
   engineerName: (id: number | null | undefined) => string
@@ -171,6 +173,7 @@ export type CompanyPaneProps = {
 
 export default function CompanyPane({
   group, engineerName, onSaved, onError, onToast, onOpenSite, onAddSite, canEditCompany, me, onOpenQuote, focusSiteId, focusKey, onFocused, onBackToList, onConverted, onPatchLocal,
+  onDeleteCompany,
 }: CompanyPaneProps) {
   const supabase = createClient()
   const agencies = useAgencies()
@@ -761,6 +764,11 @@ export default function CompanyPane({
           onSave={form => void saveCompany(form)}
           onConvertAgency={onConverted ? () => { setEditCompanyOpen(false); setConvertOpen(true) } : undefined}
           convertBlockedReason={convertReason}
+          /* **삭제** — 바닥줄 왼쪽(2026-11-27, 묶음6 4-2). 전에는 「정리 필요」 탭 안에만
+             있었다. 사업장이 남아 있으면 꺼진 채로 그 까닭을 띄운다 — 라우트도 같은 기준이라
+             (app/api/customer-delete/route.ts) 눌러 봐야 거절당할 뿐이다. */
+          onDelete={onDeleteCompany ? () => { setEditCompanyOpen(false); onDeleteCompany(group.companyId, group.companyName) } : undefined}
+          deleteBlockedReason={group.sites.length > 0 ? `사업장 ${group.sites.length}곳이 묶여 있습니다 — 먼저 옮기거나 지우세요` : null}
         />
       )}
 
