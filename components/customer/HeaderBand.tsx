@@ -150,7 +150,17 @@ export default function HeaderBand({
         @media (max-width: 640px) {
           .pane-band { grid-template-columns: minmax(0, 1fr); gap: 12px }
           .pane-band .band-rule { display: none }
-          .pane-band .band-right { border-top: 1px solid ${BORDER}; padding-top: 12px }
+          /* 메모는 **대리점 바로 아래**다 — PC 왼쪽 열(V8)과 같은 차례다
+             (2026-11-27, 묶음5 12-1). 전에는 담당자 **아래**에 있어, 폰에서 담당자가
+             다섯이면 메모를 보려고 한참 굴려야 했다. 메모는 그 사업장을 여는 순간
+             알아야 하는 한 줄이다.
+             구분선은 **담당자 위**로 옮긴다 — 메모는 위 묶음(업체)에 속하고
+             담당자가 새 묶음을 연다. */
+          .pane-band .band-right { border-top: none; padding-top: 0 }
+          .pane-band .band-memo-row { order: -1 }
+          .pane-band .band-contacts { border-top: 1px solid ${BORDER}; padding-top: 12px }
+          /* 비면 줄 자체가 없다 — 라벨만 남은 빈 줄은 「못 읽었다」로 읽힌다. */
+          .pane-band .band-memo-row.is-empty { display: none }
           /* 폰에는 호버가 없다 — 메모는 줄여 두지 않고 전부 보여 준다. */
           .pane-band .band-memo {
             display: block !important; white-space: pre-wrap !important;
@@ -199,18 +209,21 @@ export default function HeaderBand({
       <div className="band-right" style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0, paddingRight: 36 }}>
         {/* 담당자 — **공용 부품 하나**다(2026-11-27, 묶음4 B). 왼쪽 열(SiteInfoColumn)과
             같은 카드를 그린다. 띠는 높이가 고정이라 넘치면 접고, 폰에서는 접지 않는다. */}
-        <ContactList
-          contacts={contacts}
-          onAdd={onAddContact}
-          onEdit={onEditContact}
-          collapsible
-          listRef={contactRowRef}
-        />
+        <div className="band-contacts">
+          <ContactList
+            contacts={contacts}
+            onAdd={onAddContact}
+            onEdit={onEditContact}
+            collapsible
+            listRef={contactRowRef}
+          />
+        </div>
 
         {/* 메모 — 같은 열 정렬. 없으면 **라벨만** 둔다(없다는 것을 아이콘으로 말하지 않는다).
             담당자 줄이 쓰고 **남는 높이만큼 줄바꿈**한다(위 memoLines). 그래도 넘치면
             마지막 줄이 말줄임되고, 그때만 손을 300ms 올려 전체를 본다. */}
-        <div style={{ display: 'grid', gridTemplateColumns: '44px minmax(0, 1fr)', gap: '0 8px', alignItems: 'start', fontSize: 13, color: LABEL }}>
+        <div className={hasMemo(memo) ? 'band-memo-row' : 'band-memo-row is-empty'}
+          style={{ display: 'grid', gridTemplateColumns: '44px minmax(0, 1fr)', gap: '0 8px', alignItems: 'start', fontSize: 13, color: LABEL }}>
           <span style={{ color: MUTED }}>메모</span>
           {hasMemo(memo) ? (
             <MemoHoverText
