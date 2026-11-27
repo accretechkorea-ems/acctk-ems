@@ -55,8 +55,17 @@ export type ModalFooterSlots = {
   right?: ReactNode
 }
 
+/**
+ * 슬롯 둘로 준 것인가, 조각 하나로 준 것인가.
+ *
+ * ⚠ React 조각의 표시는 **$$typeof**(달러 둘)다. 2026-11-27(묶음5 1-3)에 이 줄을
+ *   달러 **하나**로 적어 두어, 조각으로 준 바닥줄이 전부 슬롯으로 잘못 읽혔다 —
+ *   footer.left·footer.right 가 undefined 라 **버튼이 하나도 그려지지 않았다**.
+ *   조각 바닥줄을 쓰는 모달이 77곳이라(확인 창까지) 그 사이 저장·취소가 전부 사라져
+ *   있었다. 2026-11-28(야간4)에 포캐스트 등록 창을 캡처하다 보고 고쳤다.
+ */
 const isSlots = (f: ReactNode | ModalFooterSlots): f is ModalFooterSlots =>
-  f != null && typeof f === 'object' && !Array.isArray(f) && !('$typeof' in (f as object))
+  f != null && typeof f === 'object' && !Array.isArray(f) && !('$$typeof' in (f as object))
 
 /** 바닥줄 버튼의 **한 벌 높이**. 왼쪽이든 오른쪽이든 같다. */
 export const MODAL_BTN_H = 34

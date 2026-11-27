@@ -1,0 +1,74 @@
+{
+ "tag": "after",
+ "at": "2026-11-27T13:39:30.996Z",
+ "base": "http://localhost:3101",
+ "만든_id": [],
+ "지운_id": [],
+ "남은_id": [],
+ "세그먼트": {
+  "진행 중": {
+   "표": false,
+   "표의_머리": [],
+   "표의_줄수": 0,
+   "칸반_열": 17,
+   "빈_안내": null
+  },
+  "수주": {
+   "표": true,
+   "표의_머리": [
+    "회사 » 사업장",
+    "제목",
+    "금액",
+    "단계 이력",
+    "종료 · 사유",
+    "담당",
+    ""
+   ],
+   "표의_줄수": 3,
+   "칸반_열": 0,
+   "빈_안내": null
+  },
+  "실주": {
+   "표": true,
+   "표의_머리": [
+    "회사 » 사업장",
+    "제목",
+    "금액",
+    "단계 이력",
+    "종료 · 사유",
+    "담당",
+    ""
+   ],
+   "표의_줄수": 4,
+   "칸반_열": 0,
+   "빈_안내": null
+  },
+  "전체": {
+   "표": true,
+   "표의_머리": [
+    "회사 » 사업장",
+    "제목",
+    "금액",
+    "단계 이력",
+    "종료 · 사유",
+    "담당",
+    ""
+   ],
+   "표의_줄수": 7,
+   "칸반_열": 0,
+   "빈_안내": null
+  }
+ },
+ "브라우저_오류": [
+  "Failed to load resource: the server responded with a status of 404 ()",
+  "Failed to load resource: the server responded with a status of 404 ()",
+  "Failed to load resource: the server responded with a status of 404 ()"
+ ],
+ "단계": [
+  {
+   "name": "만들기",
+   "ok": false,
+   "note": "TimeoutError: locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: /저장|등록/ }).last()\u001b[22m\n"
+  }
+ ]
+}
