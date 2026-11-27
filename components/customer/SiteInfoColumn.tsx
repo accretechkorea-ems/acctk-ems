@@ -114,9 +114,7 @@ export default function SiteInfoColumn({
     <div className="site-col" style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
       <style>{`
         /* 연필은 **호버·포커스에서만** 보이고 자리는 늘 차지한다 — 나타날 때 글자가 밀리지 않게. */
-        .site-col .card-edit, .site-col .ct-edit { opacity: 0; transition: opacity 0.15s ease }
-        .site-col .site-info:hover .card-edit, .site-col .site-info:focus-within .card-edit { opacity: 1 }
-        .site-col .ct-row:hover .ct-edit, .site-col .ct-row:focus-within .ct-edit { opacity: 1 }
+  /* 아이콘 버튼은 **늘 보인다**(2026-11-27, 묶음5 1-2) — 호버해야 나타나면 폰에서는 못 찾고 PC 에서도 거기에 무언가 있다는 것을 알 길이 없다. */
         /* 전화·이메일은 **누를 수 있는 글자**다 — 올리면 밑줄이 선다(2026-11-26).
            색은 이미 테마 파랑이라, 움직이는 것은 밑줄 하나다(표의 줄과 같은 규칙:
            app/globals.css 의 .ems-row-hover a:hover). */

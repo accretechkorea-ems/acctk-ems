@@ -57,8 +57,8 @@ const TWO_CARDS = 150
 export const CONTACT_LIST_CSS = `
   .ctl-card { position: relative; }
   /* 연필은 자리를 늘 차지하고 보이기만 바뀐다 — 나타날 때 글자가 밀리지 않게. */
-  .ctl-edit { opacity: 0; transition: opacity 0.15s ease; }
-  .ctl-card:hover .ctl-edit, .ctl-card:focus-within .ctl-edit { opacity: 1; }
+  /* ✎ 는 **늘 보인다**(2026-11-27, 묶음5 1-2). 호버해야 나타나면 거기에 무언가 있다는
+     것을 알 길이 없다. 폰에서는 카드를 눌러 고치므로 아래 폰 단에서 숨긴다. */
   .ctl-add-wide { display: none; }
   @media (max-width: 767px) {
     /* 폰에는 호버가 없다 — ✎ 를 감추고 **카드를 누르면** 수정이 열린다. */

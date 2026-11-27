@@ -467,21 +467,15 @@ export default function CompanyPane({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
 
-      {/* 줄 호버에서만 보이는 연필 — 평소에는 표가 글자만으로 조용하다.
-          키보드로 올 때도 보여야 하므로 :focus-within 을 함께 둔다. */}
+      {/* 연필·＋ 는 **늘 보인다**(2026-11-27, 묶음5 1-2) — 호버해야 나타나면 폰에서는
+          아예 못 찾고, PC 에서도 거기에 무언가 있다는 것을 알 길이 없다. */}
       <style>{`
-        .site-row .site-edit { opacity: 0; transition: opacity 0.12s ease }
-        .site-row:hover .site-edit, .site-row:focus-within .site-edit { opacity: 1 }
         /* 좁은 화면에서 표가 옆으로 밀려도 연필은 오른쪽 끝에 붙어 있다 —
            스크롤해야 나타나면 「고치기」를 못 찾는다. */
         .site-edit-cell { position: sticky; right: 0; background: #ffffff }
         .site-row:hover .site-edit-cell { background: #fafafa }
         .site-row.on .site-edit-cell { background: #fafafa }
-        /* 회사 카드의 ✎·＋ — 사업장 카드와 같은 규칙이다. 호버·포커스에서만 보이고
-           자리는 늘 차지한다(나타날 때 제목이 밀리지 않게). 폰에는 호버가 없어 늘 보인다. */
-        .company-card .card-act { opacity: 0; transition: opacity 0.15s ease }
-        .company-card:hover .card-act, .company-card:focus-within .card-act { opacity: 1 }
-        @media (max-width: 640px) { .company-card .card-act { opacity: 1 } }
+        /* 회사 카드의 ✎·＋ 도 늘 보인다(위와 같은 까닭). */
         /* 수치 네 칸 + 포캐스트 — 좁으면 **아래로 쌓인다.**
            좌 칸을 440px 로 못 박아 두었더니 폰(390)에서는 그 한 칸만으로 화면을 넘어
            카드 안쪽이 오른쪽으로 잘렸다(2026-11-20 실측: 넘치는 요소 29개).

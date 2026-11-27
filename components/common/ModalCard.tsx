@@ -47,6 +47,22 @@ const MUTED = '#6b7280'
 /** 머리줄·바닥줄의 좌우 여백. 본문 기본 여백과 같은 값이라 글자가 한 줄로 선다. */
 const PAD_X = 22
 
+/** 바닥줄의 두 자리. 비는 쪽은 주지 않아도 된다. */
+export type ModalFooterSlots = {
+  /** 되돌릴 수 없는 일 — 삭제·폐기·종료. 왼쪽 끝에 선다. */
+  left?: ReactNode
+  /** 취소 → 주 버튼. 오른쪽 끝에 선다. */
+  right?: ReactNode
+}
+
+const isSlots = (f: ReactNode | ModalFooterSlots): f is ModalFooterSlots =>
+  f != null && typeof f === 'object' && !Array.isArray(f) && !('$typeof' in (f as object))
+
+/** 바닥줄 버튼의 **한 벌 높이**. 왼쪽이든 오른쪽이든 같다. */
+export const MODAL_BTN_H = 34
+/** 버튼 사이 간격. */
+export const MODAL_BTN_GAP = 8
+
 export type ModalCardProps = {
   /** 머리줄의 제목. 글자 대신 조각을 넣어도 된다(두 줄 제목·뱃지…). */
   title?: ReactNode
@@ -57,7 +73,19 @@ export type ModalCardProps = {
   /** 카드 최대 폭(px). 좁은 화면에서는 92vw 로 줄어든다. */
   width?: number
   /** 바닥줄 — 버튼 묶음. 주지 않으면 바닥줄을 그리지 않는다. */
-  footer?: ReactNode
+  /**
+   * 바닥줄. **슬롯 둘**로 주는 것이 바른 길이다(2026-11-27, 묶음5 1-3):
+   *
+   *     footer={{ left: [<삭제/>], right: [<취소/>, <저장/>] }}
+   *
+   *   왼쪽  — **되돌릴 수 없는 일**(삭제·폐기·종료). 빨간 글자 · 흰 바탕.
+   *   오른쪽 — 취소(흰) → 주 버튼(파랑). **주 버튼이 늘 맨 오른쪽**이다.
+   *
+   * 왜 자리를 못 박나: 모달마다 순서가 달라 「삭제」가 저장 자리에 있던 창이 있었다.
+   * 자리가 뜻을 말해야 손이 먼저 간다. 조각 하나를 그대로 넘기는 옛 길도 받지만
+   * (scripts/modal-footer-check.js 가 남은 자리를 센다), 새로 쓰는 곳은 슬롯을 쓴다.
+   */
+  footer?: ReactNode | ModalFooterSlots
   children: ReactNode
   /** ✕ 를 둘까. 기본은 둔다. 확인 창처럼 길이 버튼뿐인 자리는 false. */
   closeX?: boolean
@@ -153,12 +181,19 @@ export default function ModalCard({
       </div>
 
       {/* ── 바닥줄 — 늘 같은 자리 ── */}
-      {footer && (
+      {footer != null && (
         <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexShrink: 0,
+          display: 'flex', alignItems: 'center', gap: MODAL_BTN_GAP, flexShrink: 0,
+          justifyContent: isSlots(footer) ? 'space-between' : 'flex-end',
           padding: `14px ${PAD_X}px 18px`, ...footStyle,
         }}>
-          {footer}
+          {isSlots(footer) ? (
+            <>
+              {/* 왼쪽 — 되돌릴 수 없는 일. 비어도 자리를 둔다(오른쪽이 늘 오른쪽 끝이게). */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: MODAL_BTN_GAP }}>{footer.left}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: MODAL_BTN_GAP }}>{footer.right}</div>
+            </>
+          ) : footer}
         </div>
       )}
     </div>
@@ -192,21 +227,37 @@ export function keepPads(
   }
 }
 
+/**
+ * 바닥줄의 세 모양 — **높이가 같다**(MODAL_BTN_H). 전에는 자리마다 padding 이 달라
+ * 취소와 저장의 키가 1~2px 씩 어긋났다.
+ */
 export const modalGhostButton = (busy = false): CSSProperties => ({
-  padding: '10px 15px', background: '#fff', color: SUB, borderRadius: R.icon,
+  height: MODAL_BTN_H, padding: '0 15px', background: '#fff', color: SUB, borderRadius: R.icon,
   border: `1px solid ${BORDER}`, cursor: busy ? 'not-allowed' : 'pointer',
   fontWeight: 600, fontSize: 13, fontFamily: 'inherit',
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
 })
 
 /** 바닥줄의 파란 버튼. */
 export const modalPrimaryButton = (busy = false): CSSProperties => ({
-  padding: '10px 17px', background: '#234ea2', color: '#fff', borderRadius: R.icon,
+  height: MODAL_BTN_H, padding: '0 17px', background: '#234ea2', color: '#fff', borderRadius: R.icon,
   border: 'none', cursor: busy ? 'not-allowed' : 'pointer',
   fontWeight: 700, fontSize: 13, opacity: busy ? 0.6 : 1, fontFamily: 'inherit',
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
 })
 
-/** 되돌릴 수 없는 일(삭제·합치기)의 붉은 버튼. */
+/**
+ * 되돌릴 수 없는 일 — **왼쪽 자리**의 버튼이다(2026-11-27, 묶음5 1-3).
+ * 빨간 **글자**에 흰 바탕이다. 전에는 빨간 바탕이었는데, 바닥줄에서 가장 눈에 띄는 것이
+ * 삭제가 되어 버렸다 — 가장 눈에 띄어야 하는 것은 **저장**이다.
+ */
 export const modalDangerButton = (busy = false): CSSProperties => ({
+  ...modalGhostButton(busy),
+  color: '#ef4444', borderColor: '#fecaca', fontWeight: 700,
+})
+
+/** 옛 빨간 **바탕** 버튼 — 지우기 확인창처럼 그것이 주 버튼인 자리에만 쓴다. */
+export const modalDangerPrimaryButton = (busy = false): CSSProperties => ({
   ...modalPrimaryButton(busy), background: '#ef4444',
 })
 

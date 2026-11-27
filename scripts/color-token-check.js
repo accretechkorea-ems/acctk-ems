@@ -106,13 +106,16 @@ console.log('\n── ③ 토큰과 같은 값의 직접 표기는 늘지 않는
  *   표에 없는 **상태색**이라 토큰이 없다 — 한 파일 안에 BADGE 로 모아 두었다.
  *   쓸 수 있는 토큰(NEUTRAL_BG·SUB·MUTED·SKELETON·CARD_BG)은 전부 토큰으로 썼다.
  * 2026-11-26 … 1915 / 155 — 홈 화면 앱의 로그인 안내 한 줄(components/auth/StandaloneNote.tsx).
+ * 2026-11-27 … 1915 / 156 — **툴팁**(components/common/Tooltip.tsx). 바탕 #1f2937 은
+ *   디자인 표에 없던 값인데, 캔버스 Tooltips E안이 못 박은 값이라 그대로 썼다. 어두운
+ *   말풍선은 흰 바탕 위에서만 서는 자리라 본문 글자색(#111827)을 쓸 수 없다. **판단 필요**.
  *   **건수는 늘지 않았다** — 파일만 하나 늘었다. 로그인 화면은 어두운 바탕이라 제 색을
  *   따로 쓰는데(#111 · #2a2a2a 는 토큰이 아니다), 그 가운데 글자색 하나(#6b7280)가
  *   토큰과 같은 값이다. 로그인 화면의 다른 안내 두 줄(무활동·퇴사)과 **똑같은 모양**이어야
  *   해서 그 값을 그대로 적었다 — 그 두 줄도 같은 값을 손으로 들고 있다.
  */
 const BASELINE = 1915
-const BASELINE_FILES = 155
+const BASELINE_FILES = 156
 const byValue = new Map()
 const byFile = new Map()
 const tokenValues = new Map()      // 값 → 토큰 이름(여럿이면 첫 번째)

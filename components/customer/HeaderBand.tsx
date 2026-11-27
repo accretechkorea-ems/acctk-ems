@@ -146,14 +146,11 @@ export default function HeaderBand({
         /* 세로선은 카드의 안쪽 여백까지 가로질러 위·아래 끝에 닿는다. */
         .pane-band .band-rule { background: ${BORDER}; align-self: stretch; margin: -14px 0 -12px }
         /* 연필은 자리를 늘 차지하고 보이기만 바뀐다 — 나타날 때 글자가 밀리지 않게. */
-        .pane-band .edit1, .pane-band .edit2 { opacity: 0; transition: opacity 0.15s ease }
-        .pane-band:hover .edit1, .pane-band:focus-within .edit1 { opacity: 1 }
+  /* 아이콘 버튼은 **늘 보인다**(2026-11-27, 묶음5 1-2) — 호버해야 나타나면 폰에서는 못 찾고 PC 에서도 거기에 무언가 있다는 것을 알 길이 없다. */
         @media (max-width: 640px) {
-          /* 폰에는 호버가 없다 — 늘 보인다. */
           .pane-band { grid-template-columns: minmax(0, 1fr); gap: 12px }
           .pane-band .band-rule { display: none }
           .pane-band .band-right { border-top: 1px solid ${BORDER}; padding-top: 12px }
-          .pane-band .edit1, .pane-band .edit2 { opacity: 1 }
           /* 폰에는 호버가 없다 — 메모는 줄여 두지 않고 전부 보여 준다. */
           .pane-band .band-memo {
             display: block !important; white-space: pre-wrap !important;

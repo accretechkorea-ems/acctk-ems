@@ -12,7 +12,7 @@
 //                   임시 값은 절대 저장하지 않는다 — 다음 로그인·다른 화면에 영향을 주면 안 된다.
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import Sidebar, { COLLAPSE_EASE, COLLAPSE_MS, SIDEBAR_WIDTH, SIDEBAR_COLLAPSED_WIDTH } from '@/components/layout/Sidebar'
 import NoticePopup from '@/components/common/NoticePopup'
@@ -71,10 +71,27 @@ export default function HeaderWrapper({ children }: { children: ReactNode }) {
   /** 실제로 그리는 값 — 임시 값이 있으면 그것이 이긴다. */
   const shown = tempCollapsed ?? collapsed
 
-  // 레일이 있는 화면에 들어가면 접고, 벗어나면 임시 값을 버려 저장값으로 돌아간다.
-  // 그 화면 안에서 사용자가 직접 펼친 경우에는 경로가 그대로라 이 효과가 다시 돌지 않는다
-  // — 머무는 동안 펼친 채로 남고, 나갔다 다시 들어오면 wide 가 false→true 로 바뀌며 다시 접힌다.
-  useEffect(() => { setTempCollapsed(wide ? true : null) }, [wide])
+  /**
+   * **화면을 옮길 때마다 접는다**(2026-11-27, 묶음5 1-4).
+   *
+   * 전에는 레일이 있는 화면 넷(결재·의뢰서·포캐스트·고객사)에서만 접었다. 그런데
+   * **어느 화면이든** 본문이 232px 넓어지는 쪽이 낫다 — 사이드바는 옮길 때만 쓰고,
+   * 옮기고 나면 보고 있는 것이 넓어야 한다. 메뉴를 고른 뒤 그 메뉴가 그대로 펼쳐져
+   * 본문을 덮고 있는 것이 지금까지의 모습이었다.
+   *
+   * 「펼친 뒤 **다음 이동 전까지** 유지」 — 직접 펴면 경로가 그대로이므로 이 효과가
+   * 돌지 않는다. 다음 이동에서 다시 접힌다.
+   *
+   * **첫 그림은 건드리지 않는다** — 저장된 설정(sidebar:collapsed:<id>)이 그대로
+   * 드러나야 한다. 그래서 처음 한 번은 건너뛴다.
+   *
+   * 폰 드로어는 이 값과 무관하다(.ems-drawer-wrap 은 따로 열고 닫는다).
+   */
+  const firstPath = useRef(true)
+  useEffect(() => {
+    if (firstPath.current) { firstPath.current = false; return }
+    setTempCollapsed(true)
+  }, [pathname])
 
   // 계정이 확인되면 그 계정의 저장값으로 맞춘다(저장된 적이 없으면 지금 값을 그 계정 값으로 둔다).
   useEffect(() => {
@@ -86,9 +103,11 @@ export default function HeaderWrapper({ children }: { children: ReactNode }) {
   }, [engineerId])
 
   const toggle = () => {
-    // 레일이 있는 화면에서는 임시 값만 움직인다. 저장된 설정은 읽지도 쓰지도 않는다 —
+    // 손으로 움직이면 **임시 값**이 먼저 움직인다 — 그 값이 다음 이동까지 보인다.
+    setTempCollapsed(!shown)
+    // 레일이 있는 화면에서는 저장된 설정을 읽지도 쓰지도 않는다 —
     // 「이 화면에서만 잠깐 펼쳐 둔다」가 다음 로그인까지 따라가면 안 되기 때문이다.
-    if (wide) { setTempCollapsed(!shown); return }
+    if (wide) return
     setCollapsed(prev => {
       const next = !prev
       writeFlag(LAST_KEY, next)

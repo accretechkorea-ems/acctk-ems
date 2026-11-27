@@ -81,8 +81,10 @@ ok('주소·대리점·메모가 **세로**로 쌓인다',
   && /flexDirection: 'column', gap: 7/.test(COL))
 ok('주소는 복사할 수 있다', /navigator\.clipboard\.writeText\(customer\.address\)/.test(COL))
 ok('메모는 공용 부품이다(MemoHoverText)', /<MemoHoverText/.test(COL))
-ok('수정 연필은 호버에서만 보인다',
-  /\.site-col \.site-info:hover \.card-edit/.test(COL) && /opacity: 0/.test(COL))
+// 2026-11-27(묶음5 1-2) — 아이콘 버튼은 **늘 보인다**. 호버해야 나타나면 폰에서는
+// 아예 못 찾고, PC 에서도 거기에 무언가 있다는 것을 알 길이 없다.
+ok('수정 연필은 **늘 보인다**(호버에서만 나타나지 않는다)',
+  !/\.site-info:hover \.card-edit/.test(COL) && !/\.card-edit, \.site-col \.ct-edit \{ opacity: 0/.test(COL))
 
 console.log('\n── ③-ⓑ 담당자 한 사람 = 두 줄 ──')
 ok('머리는 「담당자 N ＋」', /담당자<\/b>/.test(CTL) && /\{contacts\.length\}/.test(CTL)

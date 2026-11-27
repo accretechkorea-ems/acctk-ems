@@ -26,6 +26,7 @@ import Popover from '@/components/common/Popover'
 import { useNotificationStore } from '@/lib/appData/notifications'
 import { useApprovalInbox } from '@/lib/appData/approvalInbox'
 import { Z } from '@/lib/zIndex'
+import Tooltip from '@/components/common/Tooltip'
 import { useOverlayEsc } from '@/components/common/overlayStack'
 import { R } from '@/lib/radius'
 import { signOutAndLeave } from '@/lib/auth/logout'
@@ -656,12 +657,15 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
         {collapsed ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '4px 0 10px' }}>
             <div style={logoMark(30)} role="img" aria-label="아크레텍코리아" />
+            {/* 단축키를 **툴팁이 알려 준다**(2026-11-27, 묶음5 1-4) — 메뉴 어디에도
+                Ctrl+B 를 적어 둔 자리가 없어 아는 사람만 썼다. */}
+            <Tooltip label="사이드바 펼치기" shortcut="Ctrl+B" prefer="bottom">
             <button type="button" aria-label="사이드바 펼치기"
-              onMouseEnter={showTip('사이드바 펼치기')} onMouseLeave={hideTip}
               onClick={onToggle}
               style={{ width: 28, height: 28, border: 0, background: 'transparent', borderRadius: R.icon, color: MUTED, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /></svg>
             </button>
+            </Tooltip>
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 6px 12px' }}>
@@ -672,10 +676,12 @@ export default function Sidebar({ collapsed, onToggle, onEngineerId }: Props) {
               <span style={{ fontSize: 13, fontWeight: 800, color: TEXT, lineHeight: 1.2, whiteSpace: 'nowrap' }}>아크레텍코리아</span>
               {renderDivision('pc')}
             </div>
+            <Tooltip label="사이드바 접기" shortcut="Ctrl+B" prefer="bottom">
             <button type="button" aria-label="사이드바 접기" onClick={onToggle}
               style={{ width: 28, height: 28, border: 0, background: 'transparent', borderRadius: R.icon, color: MUTED, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /></svg>
             </button>
+            </Tooltip>
           </div>
         )}
 
