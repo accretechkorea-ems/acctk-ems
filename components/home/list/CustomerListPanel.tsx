@@ -14,6 +14,7 @@ import ScrollHints from '@/components/common/ScrollHints'
 import { INDUSTRIES } from '@/lib/leadOptions'
 import type { AgencyOption } from '@/lib/customerAgency'
 import { matchesAgency } from '@/lib/companySearch'
+import Tooltip from '@/components/common/Tooltip'
 import {
   daysLabel, isStale, type CompanyGroup, 
 } from '@/lib/customerList'
@@ -159,6 +160,14 @@ export default function CustomerListPanel({
 
       {/* 트리 — 위·아래 스크롤 힌트를 함께 둔다(스크롤바를 숨겨 두었다). */}
       <ScrollHints scrollRef={treeRef} top={34} bottom={10} />
+      <style>{`
+        /* 트리 화살표 — **배경 없이** 색만 들고 1.2배(2026-11-27, 묶음5 2-3). */
+        .tree-chev:hover, .tree-chev:focus-visible {
+          color: #2563eb !important;
+          transform: scale(1.2);
+          outline: none;
+        }
+      `}</style>
       <nav ref={treeRef} aria-label="회사 목록" className="stable-scroll" style={{ flex: 1, overflowY: 'auto', padding: '4px 8px 12px', minHeight: 0 }}>
         {tab === 'agency' ? (
           /* ── 대리점 탭(7) — 누르면 그 대리점 화면이 선다.
@@ -277,8 +286,13 @@ export default function CustomerListPanel({
                   onChange={() => toggleCompanyCheck(g.companyId)}
                   aria-label={`${g.companyName} 선택`}
                   style={{ flexShrink: 0, cursor: 'pointer' }} />
-                {/* ∨ — **접고 펴는 유일한 자리**다. 줄 클릭과 갈라 둔다(위 주석). */}
+                {/* ∨ — **접고 펴는 유일한 자리**다. 줄 클릭과 갈라 둔다(위 주석).
+                    손을 올리면 **배경 없이** 색만 들고 살짝 커진다(2026-11-27, 묶음5 2-3).
+                    회색 동그라미가 깔리면 줄 안에 또 하나의 단추가 생겨 줄이 시끄러워진다 —
+                    여기서 알려야 하는 것은 「이것도 눌린다」 하나뿐이다. */}
+                <Tooltip label={open ? '사업장 접기' : '사업장 펼치기'}>
                 <button type="button"
+                  className="tree-chev"
                   onClick={e => { e.stopPropagation(); toggleExpand(g.companyId) }}
                   onKeyDown={e => e.stopPropagation()}
                   aria-label={`${g.companyName} ${open ? '접기' : '펼치기'}`}
@@ -286,12 +300,14 @@ export default function CustomerListPanel({
                   style={{
                     width: 22, height: 22, flexShrink: 0, padding: 0, border: 'none', background: 'transparent',
                     cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    color: MUTED, transition: 'color 0.1s ease, transform 0.1s ease',
                   }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
                     style={{ transform: open ? 'none' : 'rotate(-90deg)', transition: 'transform 0.15s ease' }}>
                     <polyline points="6 9 12 15 18 9" />
                   </svg>
                 </button>
+                </Tooltip>
                 <b style={{ fontSize: 13, fontWeight: 700, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.companyName}</b>
                 {/* 분류(생산품) 뱃지는 걷었다(2026-11-20) — 트리에서 읽어야 하는 것은
                     **회사 이름과 사업장 수**다. 분류는 회사 카드와 필터가 맡는다. */}
