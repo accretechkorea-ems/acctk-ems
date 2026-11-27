@@ -125,10 +125,15 @@ ok('띠에 건수·합계·이번 달 마감·예정 분기가 있다',
 // 팝오버의 **제목**에는 그 글자가 남는다(창 이름이다) — 사라져야 하는 것은 **단추**다.
 ok('엑셀은 공용 ⬇ 아이콘이다', /<ExcelIconButton/.test(PAGE)
   && !/엑셀 내보내기\s*<\/button>/.test(PAGE_CODE))
-ok('띠는 판에 보이는 줄을 센다', /boardSummary\(shown\.filter\(o => !isClosed\(o\)\), BOARD_STAGES/.test(PAGE))
-ok('분포는 분기를 고르기 전 줄에서 센다', /quarterSlices\(filtered\.filter\(o => !isClosed\(o\)\)\)/.test(PAGE))
-ok('판·끝난 건은 고른 분기를 따른다', /const shown = useMemo\(\(\) => filtered\.filter\(o => inQuarter\(o, quarter\)\)/.test(PAGE)
-  && /\[shown, pendingStage, tasks, today\]/.test(PAGE) && /shown\.filter\(o => isClosed\(o\)\)/.test(PAGE))
+// 2026-11-28(야간4 4-3) — 「끝난 건」 묶음을 걷고 세그먼트(진행 중|수주|실주|전체)로 바꿨다.
+// 판에 서는 줄의 판정도 isClosed 하나에서 onBoard 로 옮겼다 — 수주는 30일까지만 선다.
+ok('띠는 판에 보이는 줄을 센다', /boardSummary\(shown\.filter\(o => onBoard\(o, today\)\), BOARD_STAGES/.test(PAGE))
+ok('분포는 분기를 고르기 전 줄에서 센다', /quarterSlices\(filtered\.filter\(o => onBoard\(o, today\)\)\)/.test(PAGE))
+ok('판은 고른 분기를 따른다', /const shown = useMemo\(\(\) => filtered\.filter\(o => inQuarter\(o, quarter\)\)/.test(PAGE)
+  && /\[shown, pendingStage, tasks, today\]/.test(PAGE))
+ok('「끝난 건」 접이 묶음은 걷혔다', !/끝난 건<\/span>/.test(PAGE) && !/setShowLost/.test(PAGE))
+ok('그 자리를 세그먼트가 대신한다', /<SegmentedControl/.test(PAGE) && /FORECAST_VIEWS\.map/.test(PAGE))
+ok('끝난 건은 표로 선다', /<ClosedTable/.test(PAGE))
 ok('카드 금액은 축약 + 호버 전체', /title=\{krwFull\(opp\.expected_amount\)\}/.test(CARD) && /krwShort\(opp\.expected_amount\)/.test(CARD))
 ok('연결 견적은 뱃지다', /견적 \{quoteCount\}/.test(CARD) && /borderRadius: R\.pill/.test(CARD))
 ok('카드에 「＋ 할 일」이 있다', /<TaskAddButton/.test(CARD) && /type: 'forecast'/.test(CARD))

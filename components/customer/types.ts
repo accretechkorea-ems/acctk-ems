@@ -198,6 +198,13 @@ export type SalesOpportunity = {
   expected_close: string | null
   lost_reason: string | null
   lost_note: string | null
+  /**
+   * 실주 사유 셋 — db/lost_reasons_20261126.sql 이 더한 칸이다. 아직 없는 DB 가 있어
+   * 선택 칸으로 둔다(없으면 undefined 로 온다). 끝난 건 표가 「실주 · 가격 · ZEISS」로 적는다.
+   */
+  lost_reason_id?: number | null
+  competitor?: string | null
+  lost_at?: string | null
   closed_at: string | null
   created_at: string
   updated_at: string

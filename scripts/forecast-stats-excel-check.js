@@ -4,7 +4,8 @@
 //
 // 지키는 약속
 //   ① 종류 판정의 **차례**가 규칙이다(수리 → 업그레이드 → 장비 → 소모품 → 기타).
-//   ② 열 열여섯이 그 차례로 선다. 금액은 **원 단위 전체 자릿수**다(축약하지 않는다).
+//   ② 열 **열일곱**이 그 차례로 선다(2026-11-28 야간4 4-4 에서 「단계 이력」이 늘었다).
+//      금액은 **원 단위 전체 자릿수**다(축약하지 않는다).
 //   ③ 생성일 **내림차순**.
 //   ④ 파일 이름은 「포캐스트통계_{기간}_{yyyymmdd}.xlsx」.
 //   ⑤ 기존 「본사 보고용」 엑셀은 **그대로 남아 있다**(둘은 다른 파일이다).
@@ -72,17 +73,22 @@ eq('본체 묶음 열쇠는 한 곳에서 온다', X.statsKindOf({ items: [{ gro
 eq('다섯 가지뿐', [...X.STATS_KINDS], ['장비', '소모품', '업그레이드', '수리', '기타'])
 
 console.log('\n── ② 열 ──')
-eq('열 열여섯', [...X.STATS_HEAD], [
+eq('열 열일곱', [...X.STATS_HEAD], [
   '구분', '종류', '회사', '사업장', '대리점', '담당자', '팀', '품명', '금액',
-  '생성일', '단계/상태', '종료 상태', '종료일', '실주 사유', '경쟁사', '연결 견적 번호',
+  '생성일', '단계/상태', '단계 이력', '종료 상태', '종료일', '실주 사유', '경쟁사', '연결 견적 번호',
 ])
 const row = {
   kindOfUnit: '포캐스트', kind: '장비', company: '네오오토', site: '본사', dealer: '',
   owner: '박상 선임', team: '80CS', product: '측정실 증설', amount: 490406000,
-  createdAt: '2026-11-02', stage: '협상', result: '진행', closedAt: '',
+  createdAt: '2026-11-02', stage: '협상', stageHistory: '상담 9/4 → 협상 10/15', result: '진행', closedAt: '',
   lostReason: '', competitor: '', quoteNos: 'KJW261102A',
 }
-eq('한 줄이 그 차례로 선다', X.statsRowCells(row).length, 16)
+eq('한 줄이 그 차례로 선다', X.statsRowCells(row).length, 17)
+// 「단계/상태」는 **지금** 어디인지, 「단계 이력」은 **거쳐 온 길**이다. 두 칸이 다르다.
+eq('단계 이력 칸이 단계 칸 바로 뒤에 선다',
+  [X.statsRowCells(row)[10], X.statsRowCells(row)[11]], [row.stage, row.stageHistory])
+eq('이력이 없으면 빈 글자(내려받기가 막히지 않는다)',
+  X.statsRowCells({ ...row, stageHistory: undefined })[11], '')
 eq('금액은 **원 단위 전체 자릿수**', X.statsRowCells(row)[8], 490406000)
 ok('축약 함수를 부르지 않는다', !/krwShort|compactKRW/.test(read('lib/forecastStatsExcel.ts')))
 
@@ -108,7 +114,13 @@ ok('기간은 생성일 기준 FY 전체다', /const from = `\$\{xFy\}-04-01`/.t
 ok('팀·담당자 거르개는 기존 것을 그대로 쓴다', /const idSet = new Set\(exportEngineerIds\)/.test(PAGE))
 ok('포캐스트에 **안 붙은** 견적만 더한다', /\.is\('opportunity_id', null\)/.test(PAGE))
 ok('포캐스트 줄은 판이 이미 읽어 둔 것을 쓴다(조회를 늘리지 않는다)',
-  /const oppRows: StatsRow\[\] = opportunities/.test(PAGE))
+  /const inRange = opportunities\.filter\(/.test(PAGE) && /const oppRows: StatsRow\[\] = inRange/.test(PAGE))
+// 단계 이력만은 **한 번 더** 묻는다 — 판은 그것을 읽지 않는다(칸반에 쓸 데가 없다).
+ok('단계 이력은 낼 건들만 한 번 묻는다',
+  /const hist = await fetchStageHistories\(supabase, inRange\.map\(o => o\.opportunity_id\)\)/.test(PAGE))
+ok('그 요약을 칸에 넣는다',
+  /stageHistory: summarizeStageHistory\(hist\.get\(o\.opportunity_id\) \?\? \[\]\)/.test(PAGE))
+ok('견적 단독 줄은 빈 글자다', /stageHistory: '',/.test(PAGE))
 ok('끝난 결과 네 가지', /'실주' : closed \? \(stage === '수주' \? '수주' : '취소'\) : '진행'/.test(PAGE))
 ok('기존 엑셀 파일 이름은 그대로다', /포캐스트_\$\{safe\}\.xlsx/.test(read('lib/forecastExcel.ts')))
 

@@ -86,7 +86,7 @@ export function statsKindOf(input: KindInput): StatsKind {
 /** 표의 열 — 순서가 곧 머리줄이다. */
 export const STATS_HEAD = [
   '구분', '종류', '회사', '사업장', '대리점', '담당자', '팀', '품명', '금액',
-  '생성일', '단계/상태', '종료 상태', '종료일', '실주 사유', '경쟁사', '연결 견적 번호',
+  '생성일', '단계/상태', '단계 이력', '종료 상태', '종료일', '실주 사유', '경쟁사', '연결 견적 번호',
 ] as const
 
 export type StatsRow = {
@@ -105,6 +105,13 @@ export type StatsRow = {
   createdAt: string
   /** 포캐스트면 단계, 견적이면 상태. */
   stage: string
+  /**
+   * **단계 이력 요약** — 「상담 9/4 → 견적제출 9/20 → 협상 10/15 → 실주 11/24」
+   * (2026-11-28, 야간4 4-4). 「단계/상태」 칸은 **지금** 어디인지만 말한다. 피벗에서
+   * 「어디에서 깨지나」를 보려면 거쳐 온 길이 한 칸에 있어야 한다.
+   * 견적 단독 줄과 이력이 아직 없는 건은 빈 글자다.
+   */
+  stageHistory: string
   /** 수주 · 실주 · 취소 · 진행. */
   result: '수주' | '실주' | '취소' | '진행'
   closedAt: string
@@ -117,7 +124,7 @@ export type StatsRow = {
 /** 한 줄을 표의 칸 차례대로. */
 export const statsRowCells = (r: StatsRow): (string | number)[] => [
   r.kindOfUnit, r.kind, r.company, r.site, r.dealer, r.owner, r.team, r.product, r.amount,
-  r.createdAt, r.stage, r.result, r.closedAt, r.lostReason, r.competitor, r.quoteNos,
+  r.createdAt, r.stage, r.stageHistory ?? '', r.result, r.closedAt, r.lostReason, r.competitor, r.quoteNos,
 ]
 
 /** 시트 전체 — 머리줄 + 줄들. 생성일 **내림차순**으로 세운다. */

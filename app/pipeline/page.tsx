@@ -55,6 +55,10 @@ import {
 } from '@/lib/forecastBoard'
 import ExcelIconButton from '@/components/common/ExcelIconButton'
 import { shortSiteName } from '@/lib/customerList'
+import SegmentedControl from '@/components/common/SegmentedControl'
+import ClosedTable from '@/components/pipeline/ClosedTable'
+import { FORECAST_VIEWS, onBoard, tableRows, viewCounts, type ForecastView } from '@/lib/forecastClosed'
+import { fetchStageHistories, summarizeStageHistory, type StageHistoryRow } from '@/lib/opportunityStageHistory'
 import type { TaskRow } from '@/lib/tasks'
 import { useStoredFlag } from '@/lib/storedFlag'
 import { exportForecastXlsx } from '@/lib/forecastExcel'
@@ -169,7 +173,13 @@ export default function PipelinePage() {
   // 담당자 필터 — 사용자가 고르기 전에는 null 이고 기본값(본인)이 쓰인다.
   const [ownerPick, setOwnerPick] = useState<OwnerPick>(null)
   const [search, setSearch] = useState('')
-  const [showLost, setShowLost] = useState(false)
+  /**
+   * **보는 것** — 진행 중(칸반) · 수주 · 실주 · 전체(표). 기본은 진행 중이다
+   * (2026-11-28, 야간4 4-3). 판 아래에 접혀 있던 「끝난 건」 묶음을 대신한다.
+   */
+  const [view, setView] = useState<ForecastView>('open')
+  /** 끝난 건 표가 읽는 단계 이력. 표를 처음 열 때만 읽는다(칸반에는 쓰지 않는다). */
+  const [stageHistories, setStageHistories] = useState<Map<number, StageHistoryRow[]>>(new Map())
 
   // 드래그 상태. 5px 이상 움직여야 끌기로 보므로 카드 클릭·select 조작과 겹치지 않는다.
   // ── 엑셀 내보내기 ──
@@ -272,11 +282,28 @@ export default function PipelinePage() {
   const shown = useMemo(() => filtered.filter(o => inQuarter(o, quarter)), [filtered, quarter])
 
   /** 분기 분포는 **분기를 고르기 전** 줄에서 센다 — 고른 뒤에도 다른 분기로 옮겨 갈 수 있어야 한다. */
-  const slices = useMemo(() => quarterSlices(filtered.filter(o => !isClosed(o))), [filtered])
+  const slices = useMemo(() => quarterSlices(filtered.filter(o => onBoard(o, today))), [filtered, today])
   const summary = useMemo(
-    () => boardSummary(shown.filter(o => !isClosed(o)), BOARD_STAGES, todayKST()),
-    [shown],
+    () => boardSummary(shown.filter(o => onBoard(o, today)), BOARD_STAGES, today),
+    [shown, today],
   )
+  /** 세그먼트 옆 건수 — **분기를 고르기 전** 줄에서 센다(끝난 건은 분기가 뜻이 없다). */
+  const counts = useMemo(() => viewCounts(filtered, today), [filtered, today])
+  /** 표에 서는 줄 — 담당자·검색이 이미 걸린 filtered 를 쓴다. */
+  const closedRows = useMemo(() => tableRows(filtered, view), [filtered, view])
+
+  /**
+   * 끝난 건 표의 **단계 이력** — 표를 처음 열 때 한 번만 읽는다(칸반에는 쓰지 않는다).
+   * 표(opportunity_stage_history)가 아직 없으면 빈 Map 이라 그 칸만 「—」로 보인다.
+   */
+  useEffect(() => {
+    if (view === 'open' || closedRows.length === 0) return
+    let cancelled = false
+    void fetchStageHistories(supabase, closedRows.map(o => o.opportunity_id))
+      .then(m => { if (!cancelled && m.size > 0) setStageHistories(m) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, closedRows.length])
 
   /** 기회별 마지막 활동일 — **이미 읽어 둔 활동 줄**로 만든다(조회를 늘리지 않는다). */
   const lastActivity = useMemo(() => lastActivityByOpp(activities), [activities])
@@ -294,7 +321,9 @@ export default function PipelinePage() {
   const columns = useMemo(
     () => BOARD_STAGES.map(stage => {
       const rows = shown
-        .filter(o => !isClosed(o) && (pendingStage.get(o.opportunity_id) ?? o.stage) === stage)
+        // 수주는 closed_at 에서 **30일**까지만 판에 선다(lib/forecastClosed.ts) —
+        // 전에는 쌓이기만 해 수주 열이 해마다 길어졌다. 표에는 그대로 남는다.
+        .filter(o => onBoard(o, today) && (pendingStage.get(o.opportunity_id) ?? o.stage) === stage)
         .sort((a, b) => {
           const ra = cardRank(a, { today, taskLate: isTaskLate(pickNextTask(tasks, a.opportunity_id), today) })
           const rb = cardRank(b, { today, taskLate: isTaskLate(pickNextTask(tasks, b.opportunity_id), today) })
@@ -304,8 +333,6 @@ export default function PipelinePage() {
     }),
     [shown, pendingStage, tasks, today]
   )
-  // 끝난 건 = 실주 + 매출 확정 등으로 종료된 것. 판에서 빼고 아래에 접어둔다.
-  const done = useMemo(() => shown.filter(o => isClosed(o)), [shown])
 
   const moveTo = async (o: SalesOpportunity, next: string) => {
     if (next === stageOf(o)) return
@@ -380,11 +407,16 @@ export default function PipelinePage() {
       const engTeam = new Map(engineers.map(e => [e.engineer_id, e.teams ?? '']))
 
       // ① 포캐스트 — 판이 이미 읽어 둔 줄을 쓴다(조회를 늘리지 않는다).
-      const oppRows: StatsRow[] = opportunities
-        .filter(o => {
-          const d = (o.created_at ?? '').slice(0, 10)
-          return d >= from && d <= to && (o.engineer_id == null || idSet.has(o.engineer_id))
-        })
+      const inRange = opportunities.filter(o => {
+        const d = (o.created_at ?? '').slice(0, 10)
+        return d >= from && d <= to && (o.engineer_id == null || idSet.has(o.engineer_id))
+      })
+      /**
+       * **단계 이력** — 엑셀에 낼 건들만 한 번 묻는다(2026-11-28, 야간4 4-4).
+       * 표가 아직 없으면 빈 Map 이고 그 칸만 빈 글자다 — 내려받기가 막히지 않는다.
+       */
+      const hist = await fetchStageHistories(supabase, inRange.map(o => o.opportunity_id))
+      const oppRows: StatsRow[] = inRange
         .map(o => {
           const closed = isClosed(o)
           const stage = o.stage ?? ''
@@ -401,6 +433,7 @@ export default function PipelinePage() {
             amount: Math.round(o.expected_amount ?? 0),
             createdAt: (o.created_at ?? '').slice(0, 10),
             stage,
+            stageHistory: summarizeStageHistory(hist.get(o.opportunity_id) ?? []),
             result: (stage === '실주' ? '실주' : closed ? (stage === '수주' ? '수주' : '취소') : '진행') as StatsRow['result'],
             closedAt: (o.closed_at ?? '').slice(0, 10),
             lostReason: o.lost_reason ?? '',
@@ -436,6 +469,8 @@ export default function PipelinePage() {
               categoryLabel: categories.find(c => c.code === q.category)?.label ?? null,
               repairId: q.repair_id, items: q.quote_items ?? null,
             }),
+            // 견적 단독 줄에는 단계가 없다 — 이력 칸도 빈 글자다.
+            stageHistory: '',
             company: quoteCustomerLabel(q.customer_id, customerCompanyName(q.customers), ''),
             site: shortSiteName({ company_name: q.customers?.company_name ?? '', site_name: q.customers?.site_name ?? null }, customerCompanyName(q.customers)),
             dealer: '',
@@ -560,6 +595,21 @@ export default function PipelinePage() {
           {/* 위 줄 — 44px */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minHeight: 44, padding: '5px 12px' }}>
             <span style={{ ...cardTitle, fontSize: 17, flexShrink: 0, marginRight: 2 }}>포캐스트</span>
+            {/* **보는 것** — 진행 중(칸반) · 수주 · 실주 · 전체(표). 2026-11-28, 야간4 4-3.
+                전에는 판 아래에 「끝난 건 N건 [펼치기]」가 접혀 있었다. 접힌 것은 **안 보는
+                것**이라 실주 사유를 되돌아보는 일이 거의 없었고, 펼쳐도 카드 격자라
+                사유·경쟁사·어디까지 갔는지를 적을 자리가 없었다. 끝난 건은 표가 맞다. */}
+            <span style={{ flexShrink: 0 }}>
+              <SegmentedControl
+                height={32}
+                value={view}
+                onChange={v => setView(v as ForecastView)}
+                options={FORECAST_VIEWS.map(x => ({
+                  label: x.label, value: x.key,
+                  suffix: counts[x.key] > 0 ? String(counts[x.key]) : undefined,
+                }))}
+              />
+            </span>
             {/* 담당자 — 「내 포캐스트 | 전체」 토글을 대신한다. 사람이 늘면 토글로는 남의
                 포캐스트를 볼 길이 없었다(전체에서 눈으로 찾아야 했다).
                 항목은 포캐스트가 있는 사람만이고, 기본값은 본인이다(ownerValue). */}
@@ -676,6 +726,17 @@ export default function PipelinePage() {
           <div style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, padding: 40, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>
             불러오는 중...
           </div>
+        ) : view !== 'open' ? (
+          /* 끝난 건 — **표**다(2026-11-28, 야간4 4-3). 판은 그리지 않는다:
+             끝난 건은 끌 수 없고, 다섯 열 가운데 둘만 차는 판은 빈 자리가 더 넓다. */
+          <ClosedTable
+            rows={closedRows}
+            stageHistories={stageHistories}
+            onOpen={o => opp.openEditOpp(o)}
+            emptyText={view === 'won' ? '수주로 끝난 건이 없습니다'
+              : view === 'lost' ? '실주·종료된 건이 없습니다'
+              : '끝난 건이 없습니다'}
+          />
         ) : (
           <DndContext
             sensors={sensors}
@@ -741,29 +802,7 @@ export default function PipelinePage() {
               </div>
             </div>
 
-            {/* 끝난 건(실주 · 종료) — 판 아래에 함께 접어둔다.
-                판이 남은 높이를 다 쓰므로 이 블록만큼은 화면을 넘겨 페이지가 스크롤된다(펼쳤을 때). */}
-            {done.length > 0 && (
-              <div style={{ marginTop: 16, flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <button onClick={() => setShowLost(v => !v)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#4b5563' }}>끝난 건</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px' }}>{done.length}건</span>
-                    <span style={{ fontSize: 11, color: '#6b7280' }}>
-                      실주 {done.filter(o => o.stage === '실주').length} · 종료 {done.filter(o => o.stage !== '실주').length}
-                    </span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#234ea2' }}>{showLost ? '접기' : '펼치기'}</span>
-                  </button>
-                  <span style={{ flex: 1, height: 1, background: '#ebebeb' }} />
-                </div>
-                {showLost && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
-                    {done.map(cardOf)}
-                  </div>
-                )}
-              </div>
-            )}
+            {/* 「끝난 건」 묶음은 **걷었다**(2026-11-28, 야간4 4-3) — 세그먼트가 대신한다. */}
 
             {filtered.length === 0 && (
               <div style={{ marginTop: 12, background: '#fff', border: '1px solid #ebebeb', borderRadius: R.control, padding: 40, textAlign: 'center', color: '#6b7280', fontSize: 13 }}>

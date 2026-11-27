@@ -117,9 +117,13 @@ console.log('\n── ③ 토큰과 같은 값의 직접 표기는 늘지 않는
  *   있던 칸을 내 견적 모달도 쓰게 되어 파일로 내놓았다(야간4 2-1). 값은 **옮겨 온 것**이라
  *   새로 만든 색이 하나도 없다 — 글자 #111827 · 흐림 #9ca3af · 액센트 #234ea2 · 타일 바탕
  *   #f8fafc 다. **건수는 늘지 않았다**(원래 있던 자리에서 옮겨 왔다). 파일만 하나 늘었다.
+ * 2026-11-28 … 1915 / 158 — **끝난 포캐스트 표**(components/pipeline/ClosedTable.tsx).
+ *   판 아래에 접혀 있던 카드 격자를 대신하는 표다(야간4 4-3). 값은 전부 표에 있는 것이다 —
+ *   글자 #111827 · 보조 #4b5563 · 흐림 #6b7280 / #9ca3af · 테두리 #ebebeb · 액센트 #234ea2 ·
+ *   실주 빨강 #ef4444. **새로 만든 색이 없다.**
  */
 const BASELINE = 1915
-const BASELINE_FILES = 157
+const BASELINE_FILES = 158
 const byValue = new Map()
 const byFile = new Map()
 const tokenValues = new Map()      // 값 → 토큰 이름(여럿이면 첫 번째)
