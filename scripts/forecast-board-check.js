@@ -137,8 +137,11 @@ ok('카드 여백은 그대로다(10)', /padding: '10px 12px'/.test(CARD))
 // C3 — 카드는 다섯 줄이다.
 ok('1행 회사 » 사업장', /company=\{customerCompanyName\(o\.customers\)\}/.test(PAGE)
   && /site=\{shortSiteName\(/.test(PAGE) && /' » '/.test(CARD))
-ok('4행 예정월 · 이니셜 아바타 · 마지막 활동', /dueLabelOf\(opp\.expected_close\)/.test(CARD)
-  && /initialsOf\(owner\)/.test(CARD) && /idleLabel\(idleDays\)/.test(CARD))
+// 2026-11-28(야간4 3-3) — 이니셜 동그라미를 걷고 **이름**을 제목 줄 오른쪽에 두었다.
+// 두 글자로는 누구인지 알아맞혀야 했고, 같은 성씨가 둘이면 알 수도 없었다.
+ok('1행 오른쪽에 담당자 이름', /const ownerLabel = /.test(CARD) && /{ownerLabel || .담당 없음.}/.test(CARD))
+ok('이니셜 동그라미는 없다', !/initialsOf(owner)/.test(CARD))
+ok('4행은 예정 · 마지막 활동 둘뿐', CARD.includes('예정 {dueLabelOf(opp.expected_close)}') && CARD.includes('마지막 활동 {idleLabel(idleDays)}'))
 ok('5행 다음 할 일 띠', /nextTaskLabel\(nextTask\)/.test(CARD) && /isTaskLate\(nextTask, today\)/.test(CARD))
 ok('늦은 할 일은 빨간 바탕 + ⚠(이모지 아님, 인라인 SVG)',
   /background: late \? LATE_BG/.test(CARD) && /\{late && \(/.test(CARD) && /<svg/.test(CARD))

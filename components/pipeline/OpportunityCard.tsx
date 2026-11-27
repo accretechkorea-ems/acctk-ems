@@ -28,7 +28,7 @@ import { BLUE, BORDER, CARD_BG, NEUTRAL_BG, TEXT } from '@/components/common/ui'
 import { TEXT_LABEL, TEXT_NOTE } from '@/lib/textTokens'
 import { STAGES } from '@/components/customer/opportunity'
 import {
-  dueLabelOf, idleLabel, initialsOf, isDueThisMonth, isIdle, isTaskLate, krwFull, krwShort, nextTaskLabel,
+  dueLabelOf, idleLabel, isDueThisMonth, isIdle, isTaskLate, krwFull, krwShort, nextTaskLabel,
   type NextTask,
 } from '@/lib/forecastBoard'
 import type { SalesOpportunity } from '@/components/customer/types'
@@ -69,6 +69,8 @@ export default function OpportunityCard({
 }: Props) {
   const quoteCount = opp.quotes?.length ?? 0
   const owner = (opp.engineers?.name ?? '').trim()
+  /** 「박상욱 책임」 — 직급이 없으면 이름만. 카드 제목 줄 오른쪽에 선다. */
+  const ownerLabel = [owner, (opp.engineers?.position ?? '').trim()].filter(Boolean).join(' ')
   /** 14일 넘게 멎었나 — **카드를 흐리게 하지 않고** 4행 글자만 빨갛게 한다(0-1). */
   const stalled = isIdle(idleDays)
   const late = isTaskLate(nextTask, today)
@@ -95,20 +97,36 @@ export default function OpportunityCard({
           padding: 0, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
         }}
       >
-        {/* 1행 — 회사 » 사업장. 잘린 뒷부분은 title 로 본다. */}
-        <div
-          title={fullName || '-'}
-          style={{
-            fontSize: 13, fontWeight: 700, color: TEXT, lineHeight: '18px',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}
-        >
-          {name.length === 0 ? '-' : (
-            <>
-              {name[0]}
-              {name[1] && <span style={{ color: TEXT_LABEL, fontWeight: 600 }}>{' » '}{name[1]}</span>}
-            </>
-          )}
+        {/* 1행 — 회사 » 사업장 ····· **담당자**(2026-11-28, 야간4 3-3).
+            담당은 이니셜 동그라미였다. 두 글자로는 누구인지 **알아맞혀야** 했고, 같은
+            성씨가 둘이면 알 수도 없었다. 이름을 그대로 적는다 — 「박상욱 책임」.
+            제목 줄 오른쪽인 까닭: 카드에서 가장 먼저 읽는 것이 「어디의 무엇」이고,
+            그 다음이 「누구 것」이다. 아래 줄은 **날짜 둘**만 남아 한눈에 읽힌다. */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+          <div
+            title={fullName || '-'}
+            style={{
+              flex: 1, minWidth: 0,
+              fontSize: 13, fontWeight: 700, color: TEXT, lineHeight: '18px',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}
+          >
+            {name.length === 0 ? '-' : (
+              <>
+                {name[0]}
+                {name[1] && <span style={{ color: TEXT_LABEL, fontWeight: 600 }}>{' » '}{name[1]}</span>}
+              </>
+            )}
+          </div>
+          <span
+            title={ownerLabel || '담당 없음'}
+            style={{
+              flexShrink: 0, fontSize: 11, color: TEXT_LABEL, fontWeight: 600,
+              whiteSpace: 'nowrap', maxWidth: 96, overflow: 'hidden', textOverflow: 'ellipsis',
+            }}
+          >
+            {ownerLabel || '담당 없음'}
+          </span>
         </div>
 
         {/* 2행 — 품명·제목 */}
@@ -135,7 +153,7 @@ export default function OpportunityCard({
       {/* 4행 — 예정월 ····· 담당 이니셜 + 마지막 활동 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, minWidth: 0 }}>
         <span style={{ fontSize: 11, color: MUTED, whiteSpace: 'nowrap', flexShrink: 0 }}>
-          {dueLabelOf(opp.expected_close)}
+          예정 {dueLabelOf(opp.expected_close)}
         </span>
         {quoteCount > 0 && (
           <span
@@ -149,18 +167,9 @@ export default function OpportunityCard({
           </span>
         )}
         <span style={{ flex: 1, minWidth: 0 }} />
-        {/* 담당 이니셜 — 색을 쓰지 않는다(중립 배경 + 진한 글자). 이름은 title 로 본다. */}
-        <span
-          title={`${owner}${opp.engineers?.position ? ` ${opp.engineers.position}` : ''}`.trim() || '담당 없음'}
-          style={{
-            flexShrink: 0, width: 18, height: 18, borderRadius: '50%', background: NEUTRAL_BG,
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 9, fontWeight: 700, color: TEXT_LABEL, letterSpacing: 0,
-          }}
-        >
-          {initialsOf(owner)}
-        </span>
-        {/* 멎었으면 **이 글자만** 빨갛다(0-1) — 카드를 흐리게 하는 대신이다. */}
+        {/* 담당 이니셜 동그라미는 **걷었다**(2026-11-28, 야간4 3-3) — 이름이 제목 줄로 갔다.
+            이 줄에는 **날짜 둘**만 남는다: 언제 닫히나 · 마지막으로 움직인 게 언제인가.
+            멎었으면(14일 초과) **이 글자만** 빨갛다 — 카드를 흐리게 하는 대신이다(0-1). */}
         <span
           title={stalled ? `${idleLabel(idleDays)} — 14일 넘게 활동이 없습니다` : undefined}
           style={{
@@ -168,7 +177,7 @@ export default function OpportunityCard({
             color: stalled ? LATE : MUTED, fontWeight: stalled ? 600 : 400,
           }}
         >
-          {idleLabel(idleDays)}
+          마지막 활동 {idleLabel(idleDays)}
         </span>
       </div>
 

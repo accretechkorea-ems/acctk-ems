@@ -35,7 +35,7 @@ import {
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
 import { isSuperAdmin } from '@/lib/permissions'
-import { BLUE, BLUE_HOVER, BLUE_TINT, BORDER, CARD_BG, MUTED, NEUTRAL_BG, TEXT, cardTitle } from '@/components/common/ui'
+import { BLUE, BLUE_HOVER, BLUE_TINT, BORDER, CARD_BG, MUTED, TEXT, cardTitle } from '@/components/common/ui'
 import { TEXT_DISABLED } from '@/lib/textTokens'
 import OpportunityCard from '@/components/pipeline/OpportunityCard'
 import OpportunityModal from '@/components/customer/modals/OpportunityModal'
@@ -603,7 +603,10 @@ export default function PipelinePage() {
           {!loading && summary.count > 0 && metricsOpen && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-              minHeight: 34, padding: '4px 12px', background: NEUTRAL_BG,
+              // 띠 배경은 **흰색**이다(2026-11-28, 야간4 3-1). 회색 띠는 「여기는 다른
+              // 묶음」이라고 말하는데, 이 줄은 바로 위 제목 줄과 **한 카드**다 —
+              // 선 하나로 나누면 족하다. 회색을 깔면 판 위쪽이 두 층으로 무거워진다.
+              minHeight: 34, padding: '4px 12px', background: CARD_BG,
               borderTop: `1px solid ${BORDER}`, fontSize: 12,
             }}>
               <span style={{ whiteSpace: 'nowrap' }}>
@@ -702,17 +705,21 @@ export default function PipelinePage() {
                     minWidth: 0, minHeight: 0,
                     display: 'flex', flexDirection: 'column',
                   }}>
-                    <div style={{ padding: '0 2px 8px', flexShrink: 0 }}>
-                      {/* 단계·건수·금액을 한 줄에 둔다 — 열이 좁아 두 줄을 쓰면 판이 그만큼 낮아진다 */}
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+                    {/* 열 머리 — 「상담 **16건** · 14억 3,900만」 **한 줄**이다
+                        (2026-11-28, 야간4 3-2). 건수를 알약 배지로 띄우던 것을 걷었다:
+                        열마다 회색 알약이 하나씩 서면 판 위에 점이 다섯 줄로 깔려,
+                        정작 **카드**를 보기 전에 눈이 거기서 멈춘다. 숫자는 글자로 족하다.
+                        위 4px · 아래 6px, 밑줄 없음. */}
+                    <div style={{ padding: '4px 2px 6px', flexShrink: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, minWidth: 0 }}>
                         <span style={{ fontSize: 13, fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>{col.stage}</span>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: '#4b5563', background: '#f3f4f6', borderRadius: R.pill, padding: '2px 8px', flexShrink: 0 }}>{col.rows.length}</span>
+                        <span className="num" style={{ fontSize: 13, fontWeight: 700, color: '#111827', whiteSpace: 'nowrap' }}>{col.rows.length}건</span>
                         {col.sum > 0 && (
                           <>
                             <span style={{ fontSize: 11, color: '#6b7280', flexShrink: 0 }}>·</span>
                             {/* 열 합계도 카드와 **같은 축약**이다(2026-11-26, K2) — 전에는
                                 열 머리만 compactKRW 의 「1.3억」이라 카드와 글자가 달랐다. */}
-                            <span title={krwFull(col.sum)} style={{ fontSize: 12, fontWeight: 600, color: '#4b5563', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <span title={krwFull(col.sum)} className="num" style={{ fontSize: 12, fontWeight: 600, color: '#4b5563', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {krwShort(col.sum)}
                             </span>
                           </>
