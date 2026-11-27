@@ -64,10 +64,16 @@ const numKR = (n: number) => Math.round(n).toLocaleString('ko-KR')
 // 한 페이지에 싣는 기본 줄 수. fitToHeight 를 켜면 카드에 주어진 높이만큼 이 값에서 늘어난다.
 const PAGE_SIZE = 10
 const MAX_PAGE_SIZE = 40
-// 목록 높이를 건수와 무관하게 고정하기 위한 한 줄 높이(패딩 8+8 + 글자 줄높이).
-// 한 페이지가 다 안 차면 이 높이의 빈 줄로 채워, 페이지를 넘길 때 아래 요소가 튀지 않게 한다.
-const ROW_H = 33
-const TABLE_COLS = 10
+/**
+ * 한 줄 높이 — **42px 고정**이다(2026-11-28, 야간4 2-2).
+ *
+ * 위아래 3px 패딩 + 두 줄(줄간 1.25)이 42 에 들어간다. 전에는 33 이었는데 그것은
+ * **빈 줄에만** 걸린 값이었고, 실제 줄은 상태 칸에 쌓이는 것(만료·출하예정·포캐스트·
+ * 할 일·메모 둘)에 따라 50~90px 사이로 들쭉날쭉했다. 스무 줄을 훑는 눈이 줄마다
+ * 자리를 다시 찾아야 했다. 이제 **모든 줄이 같은 높이**이고, 보조는 한 줄에 하나다.
+ */
+const ROW_H = 42
+const TABLE_COLS = 7
 // 상태 목록은 lib/quoteStatus.ts 한 곳에서 온다. 「전체」만 화면이 앞에 붙인다.
 const STATUS_TABS: string[] = ['전체', ...STATUS_FILTER_TABS]
 
@@ -77,6 +83,12 @@ const BLUE = '#234ea2', TEXT = '#111827', GRAY = '#6b7280', MUTED = '#9ca3af', B
 const isOnBehalf = (q: { engineer_id: number; created_by: number | null }) =>
   q.created_by != null && q.created_by !== q.engineer_id
 const ORANGE = '#d97706'
+/** 칸 하나 — 위아래 3px. 두 줄이 이 안에서 세로로 선다. */
+const CELL: CSSProperties = { padding: '3px 10px', verticalAlign: 'middle', whiteSpace: 'nowrap' }
+/** 첫 줄 — 먼저 읽히는 것(번호·고객사·품목·금액·상태·단추). 13px. */
+const LINE1: CSSProperties = { fontSize: 13, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
+/** 둘째 줄 — 거드는 것(날짜·대리점·순이익·보조 링크·상태 보조). 11px. */
+const LINE2: CSSProperties = { fontSize: 11, lineHeight: 1.25, color: MUTED, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
 // 서브모달은 모달 위에 겹쳐 열린다.
 const SUBMODAL_Z = Z.subModal
 
@@ -852,124 +864,87 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                   ? q.quote_items.filter(i => i.row_kind !== 'discount').map(i => i.product_name || i.price_list?.model_jp).filter(Boolean).join(', ')
                   : '-'
                 const showOrderInfo = ['주문완료', '세금계산서 요청', '매출완료'].includes(q.status)
+                /**
+                 * **상태 보조 한 줄** — 뱃지 아래 11px 한 자리다(2026-11-28, 야간4 2-2).
+                 *
+                 * 전에는 이 칸이 세로로 계속 쌓였다: 뱃지 · 반려 사유 · 만료 · 실주 사유 ·
+                 * 출하예정 · 포캐스트 · 할 일 · 메모 둘. 줄 높이가 건마다 달라져 **스무 줄을
+                 * 훑는 눈이 매번 자리를 다시 찾아야** 했다. 보조는 **한 번에 하나**만 적는다 —
+                 * 급한 것이 위다: 실주 사유 → 반려 사유 → 만료 → 출하예정 → 매출일.
+                 */
+                const statusSub = (() => {
+                  if (q.status === FAIL_STATUS && isReasonPending(q)) return { kind: 'reason' } as const
+                  if (q.status === REJECTED_STATUS && docIdFor(q.quote_id, gates) != null) return { kind: 'rejected' } as const
+                  if (isOverdue(q)) return { kind: 'overdue' } as const
+                  if (showOrderInfo && q.shipping_date) return { kind: 'ship', text: q.shipping_date } as const
+                  if (q.tax_invoice_completed_at) return { kind: 'revenue', text: q.tax_invoice_completed_at.slice(0, 10) } as const
+                  return null
+                })()
                 return (
                   // 호버·고른 줄이 **같은 링**이다(2026-11-26 묶음2 D).
+                  // 높이는 **42px 고정**이다(2026-11-28, 야간4 2-2) — 위아래 3px 패딩에
+                  // 두 줄(줄간 1.25)이 들어간다. 건마다 달라지던 높이를 못 박았다.
                   <tr key={q.quote_id}
                     className="ems-pick"
                     aria-selected={quoteSel.isSelected(q.quote_id)}
-                    style={{ borderBottom: `1px solid ${BORDER}` }}>
-                    <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                    style={{ height: ROW_H, borderBottom: `1px solid ${BORDER}` }}>
+                    <td style={{ ...CELL, padding: '3px 6px', textAlign: 'center' }}>
                       <input type="checkbox" checked={quoteSel.isSelected(q.quote_id)} onChange={() => quoteSel.toggle(q.quote_id)} style={{ cursor: 'pointer' }} />
                     </td>
-                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                      {/* 견적번호 + 그 아래 날짜.
-                          PDF 는 승인 게이트가 허용할 때만 열린다(전자결재 6단계 B) — 막힌 행은
-                          아이콘·클릭을 모두 거두고 이유를 title 로 알린다(서버도 409 로 막는다). */}
+
+                    {/* ① 견적번호 / 날짜 */}
+                    <td style={{ ...CELL, textAlign: 'left' }}>
+                      {/* PDF 는 승인 게이트가 허용할 때만 열린다(전자결재 6단계 B) — 막힌 행은
+                          아이콘·클릭을 모두 거두고 이유를 title 로 알린다(서버도 409 로 막는다).
+                          아이콘은 번호 **앞**에 선다(2026-11-28) — 「문서 하나」로 먼저 읽힌다. */}
                       {(() => {
                         const pdfOpen = pdfOpenableFor(q)
                         return (
-                          <span
+                          <div
                             onClick={() => { if (pdfOpen) openPdf(q) }}
                             title={pdfBusyId === q.quote_id ? '여는 중…' : (!pdfOpen ? gateTitleFor(q) : undefined)}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 700, color: pdfOpen ? BLUE : TEXT, cursor: pdfOpen && pdfBusyId === null ? 'pointer' : 'default', opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
-                            {/* 대필 건 표시. 쓴 사람과 실적 담당자가 다른 견적에만 붙는다. */}
-                            {isOnBehalf(q) && (
-                              <span title="대필 견적" style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: BLUE, verticalAlign: 'middle' }} />
-                            )}
-                            {q.quote_number}
-                            {/* 견적 날짜와 실제로 넣은 날이 다르면 작은 표시(지난 날짜로 넣은 건). */}
-                            <BackdatedMark quoteDate={q.quote_date} createdAt={q.created_at} color={MUTED} />
-                            {/* 되돌림 — 미수주였다가 견적중으로 되살린 줄. 유효기간은 그 날부터 1개월이다. */}
-                            {isRevived(q) && (
-                              <span style={{
-                                fontSize: 10, padding: '1px 5px', borderRadius: R.tag,
-                                background: '#eff6ff', color: BLUE, fontWeight: 700, whiteSpace: 'nowrap',
-                              }}>
-                                {reviveBadge(q)}
-                              </span>
-                            )}
+                            style={{ ...LINE1, display: 'flex', alignItems: 'center', gap: 4, fontWeight: 700, color: pdfOpen ? BLUE : TEXT, cursor: pdfOpen && pdfBusyId === null ? 'pointer' : 'default', opacity: pdfBusyId === q.quote_id ? 0.5 : 1, transition: 'opacity 0.15s ease' }}>
                             {pdfOpen && (
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-label="PDF">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-label="PDF" style={{ flexShrink: 0 }}>
                                 <title>PDF 열기</title>
                                 <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
                                 <path d="M14 3v6h6" />
                               </svg>
                             )}
-                          </span>
+                            {/* 대필 건 표시. 쓴 사람과 실적 담당자가 다른 견적에만 붙는다. */}
+                            {isOnBehalf(q) && (
+                              <span title="대필 견적" style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: BLUE, flexShrink: 0 }} />
+                            )}
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{q.quote_number}</span>
+                            {/* 견적 날짜와 실제로 넣은 날이 다르면 작은 표시(지난 날짜로 넣은 건). */}
+                            <BackdatedMark quoteDate={q.quote_date} createdAt={q.created_at} color={MUTED} />
+                            {/* 되돌림 — 미수주였다가 견적중으로 되살린 줄. 유효기간은 그 날부터 1개월이다. */}
+                            {isRevived(q) && (
+                              <span style={{
+                                fontSize: 10, padding: '0 5px', borderRadius: R.tag, flexShrink: 0,
+                                background: '#eff6ff', color: BLUE, fontWeight: 700, whiteSpace: 'nowrap',
+                              }}>
+                                {reviveBadge(q)}
+                              </span>
+                            )}
+                          </div>
                         )
                       })()}
-                      <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>{q.quote_date}</div>
+                      <div style={LINE2}>{q.quote_date}</div>
                     </td>
-                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', maxWidth: 150, textAlign: 'center' }}>
-                      {/* 고객사 + 그 아래 판매 경로(직판 / 대리점명) */}
-                      <div style={{ fontWeight: 600, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis' }}>{q.company_name || '-'}</div>
-                      <div style={{ fontSize: 12, color: MUTED, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {q.dealer_name || '직판'}
-                      </div>
+
+                    {/* ② 고객사 / 대리점 */}
+                    <td style={{ ...CELL, maxWidth: 150, textAlign: 'left' }}>
+                      <div style={{ ...LINE1, fontWeight: 600, color: TEXT }}>{q.company_name || '-'}</div>
+                      <div style={LINE2}>{q.dealer_name || '직판'}</div>
                     </td>
-                    <td style={{ padding: '8px 10px', color: GRAY, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>{itemNames}</td>
-                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                      {/* 매출액 + 그 아래 순이익·이익률 */}
-                      <div className="num" style={{ fontWeight: 700, color: TEXT }}>₩{numKR(q.total_supply)}</div>
-                      {hasProfit ? (
-                        <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
-                          순이익 <span className="num" style={{ fontWeight: 700, color: profitColor }}>₩{numKR(q.total_profit!)}</span>
-                          <span style={{ color: BORDER, margin: '0 3px' }}>·</span>
-                          <span style={{ fontWeight: 700, color: profitRateColor }}>{q.profit_rate?.toFixed(0)}%</span>
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: 12, color: BORDER, marginTop: 2 }}>—</div>
-                      )}
-                    </td>
-                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
-                        <span style={{ padding: '3px 7px', borderRadius: R.icon, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text, whiteSpace: 'nowrap', alignSelf: 'center' }}>
-                          {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : salesStatusLabel(q.status)}
-                        </span>
-                        {/* 반려 사유는 **결재 문서**에 있다 — 목록에 사유 문자열을 내려받지 않는다(게이트 응답에
-                            담기는 것은 문서 id 하나다). 내가 쓴 견적에만 링크가 나온다. */}
-                        {q.status === REJECTED_STATUS && docIdFor(q.quote_id, gates) != null && (
-                          <a href={approvalDocPath(docIdFor(q.quote_id, gates)!)} target="_blank" rel="noopener noreferrer"
-                            title="반려 사유를 결재 문서에서 확인합니다"
-                            style={{ fontSize: 10, fontWeight: 700, color: BLUE, textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                            반려 사유 보기
-                          </a>
-                        )}
-                        {/* 유효기간이 지났는데 아직 견적중인 건 — 자동 실주 전이거나 판단이 남은 건이다.
-                            80 대시보드의 「만료」와 같은 색(실패 상태색)을 쓴다. */}
-                        {isOverdue(q) && (
-                          <span style={{ padding: '2px 6px', borderRadius: R.icon, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, FAIL_STATUS).bg, color: getCategoryColor(SALES_STATUS_COLORS, FAIL_STATUS).text, whiteSpace: 'nowrap' }}>
-                            만료
-                          </span>
-                        )}
-                        {/* 「실주 사유 입력 필요」 — 실패인데 사유가 비었거나 자동 실주가 넣은
-                            「유효기간 만료」뿐인 건이다(2026-11-26, L3). **안내만 한다** —
-                            사유가 비었다고 다른 일을 막지 않는다. 누르면 사유 창이 열리고,
-                            고르면 그 줄의 사유만 채운다(상태는 그대로다). */}
-                        {q.status === FAIL_STATUS && isReasonPending(q) && (
-                          <button
-                            type="button"
-                            onClick={() => setReasonQuote(q)}
-                            title="실주 사유를 골라 채웁니다 — 상태는 바뀌지 않습니다"
-                            style={{
-                              padding: '2px 7px', borderRadius: R.pill, fontSize: 10, fontWeight: 700,
-                              border: `1px solid ${BLUE}`, background: '#fff', color: BLUE,
-                              cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {PENDING_LABEL}
-                          </button>
-                        )}
-                        {/* 출하예정 — 주문 뒤 단계에서만 적힌다. */}
-                        {showOrderInfo && q.shipping_date && (
-                          <span style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 3 }}>
-                            <span style={{ color: MUTED, fontWeight: 600 }}>출하예정</span>
-                            <span style={{ color: '#0369a1', fontWeight: 700 }}>{q.shipping_date}</span>
-                          </span>
-                        )}
-                        {/* 메모 둘 — **발주서가 올라간 건이면 상태와 무관하게** 낸다.
-                            전에는 주문완료 뒤에만 보여서, 발주 직후에는 자기가 쓴 요청 메모조차
-                            다시 볼 수 없었다. 요청 메모는 작성자 본인이 여기서 바로 고친다. */}
+
+                    {/* ③ 품목 / **보조 링크** — 포캐스트·할 일·메모가 여기로 내려왔다(2026-11-28).
+                        전에는 상태 칸에 쌓여 줄을 밀어 올렸다. 아무것도 없으면 **빈 줄**이다 —
+                        줄마다 자리가 같아야 눈이 멈추지 않는다. */}
+                    <td style={{ ...CELL, maxWidth: 200, textAlign: 'left' }}>
+                      <div style={{ ...LINE1, color: GRAY }} title={itemNames}>{itemNames}</div>
+                      <div style={{ ...LINE2, display: 'flex', alignItems: 'center', gap: 6 }}>
                         {/* 포캐스트 연결/해제 — 쓴 뒤에 생각나는 일이라 **목록에서도** 건다(2026-11-26).
                             같은 회사의 진행 중 포캐스트만 후보다(components/quote/ForecastLink.tsx). */}
                         <ForecastLink
@@ -980,15 +955,16 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                           onChanged={loadData}
                         />
                         {/* 「＋ 할 일」 (2026-11-26, F1) — 이 앱에는 견적 **상세 화면**이 따로
-                            없다. 한 건을 들여다보는 자리가 이 줄이라 여기에 둔다(「재견적 회신」
-                            같은 약속을 그 자리에서 담는다). 창은 홈과 같은 창이다. */}
+                            없다. 한 건을 들여다보는 자리가 이 줄이라 여기에 둔다. */}
                         <TaskAddButton
                           preset={{ type: 'quote', id: q.quote_id, label: `${q.quote_number} · ${q.company_name}` }}
                           kind="quote_expiry"
                           label="＋ 할 일"
                         />
+                        {/* 메모 둘 — **발주서가 올라간 건이면 상태와 무관하게** 낸다.
+                            요청 메모는 작성자 본인이 여기서 바로 고친다. */}
                         {q.purchase_order_at && (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <>
                             <MemoPopover
                               title={`${q.quote_number} · ${q.company_name}`}
                               value={q.order_request_memo}
@@ -1004,34 +980,94 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                               badge="영업관리"
                               label="영업관리 메모"
                             />
+                          </>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* ④ 매출액 / 순이익(%) */}
+                    <td style={{ ...CELL, textAlign: 'right' }}>
+                      <div className="num" style={{ ...LINE1, fontWeight: 700, color: TEXT }}>₩{numKR(q.total_supply)}</div>
+                      {hasProfit ? (
+                        <div style={LINE2}>
+                          순이익 <span className="num" style={{ fontWeight: 700, color: profitColor }}>₩{numKR(q.total_profit!)}</span>
+                          <span style={{ color: BORDER, margin: '0 3px' }}>·</span>
+                          <span className="num" style={{ fontWeight: 700, color: profitRateColor }}>{q.profit_rate?.toFixed(0)}%</span>
+                        </div>
+                      ) : (
+                        <div style={{ ...LINE2, color: BORDER }}>—</div>
+                      )}
+                    </td>
+
+                    {/* ⑤ 상태 뱃지 / 상태 보조 한 줄 */}
+                    <td style={{ ...CELL, textAlign: 'center' }}>
+                      <div style={{ ...LINE1, display: 'flex', justifyContent: 'center' }}>
+                        <span style={{ padding: '1px 7px', borderRadius: R.icon, fontSize: 10, fontWeight: 700, background: getCategoryColor(SALES_STATUS_COLORS, q.status).bg, color: getCategoryColor(SALES_STATUS_COLORS, q.status).text, whiteSpace: 'nowrap' }}>
+                          {q.status === '세금계산서 요청' ? '세금계산서 발행 요청' : salesStatusLabel(q.status)}
+                        </span>
+                      </div>
+                      <div style={{ ...LINE2, textAlign: 'center' }}>
+                        {/* 「실주 사유 입력」 — 실패인데 사유가 비었거나 자동 실주가 넣은
+                            「유효기간 만료」뿐인 건이다(2026-11-26, L3). **안내만 한다** —
+                            사유가 비었다고 다른 일을 막지 않는다. 2026-11-28 부터 알약 단추가
+                            아니라 **빨간 글자 링크**다: 줄 안에서 눌리는 것이 셋(번호·포캐스트·
+                            이것)인데, 단추 모양이 둘이면 어느 쪽이 주된 일인지 흐려진다. */}
+                        {statusSub?.kind === 'reason' && (
+                          <button type="button" onClick={() => setReasonQuote(q)}
+                            title="실주 사유를 골라 채웁니다 — 상태는 바뀌지 않습니다"
+                            style={{ padding: 0, border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, color: '#ef4444', whiteSpace: 'nowrap' }}>
+                            {PENDING_LABEL}
+                          </button>
+                        )}
+                        {/* 반려 사유는 **결재 문서**에 있다 — 목록에 사유 문자열을 내려받지 않는다. */}
+                        {statusSub?.kind === 'rejected' && (
+                          <a href={approvalDocPath(docIdFor(q.quote_id, gates)!)} target="_blank" rel="noopener noreferrer"
+                            title="반려 사유를 결재 문서에서 확인합니다"
+                            style={{ fontWeight: 700, color: BLUE, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                            반려 사유 보기
+                          </a>
+                        )}
+                        {/* 유효기간이 지났는데 아직 견적중인 건 — 자동 실주 전이거나 판단이 남은 건이다. */}
+                        {statusSub?.kind === 'overdue' && (
+                          <span style={{ fontWeight: 700, color: getCategoryColor(SALES_STATUS_COLORS, FAIL_STATUS).text, whiteSpace: 'nowrap' }}>
+                            만료 {expiryBase(q)}
+                          </span>
+                        )}
+                        {statusSub?.kind === 'ship' && (
+                          <span style={{ whiteSpace: 'nowrap' }}>
+                            출하예정 <span className="num" style={{ color: '#0369a1', fontWeight: 700 }}>{statusSub.text}</span>
+                          </span>
+                        )}
+                        {statusSub?.kind === 'revenue' && (
+                          <span style={{ whiteSpace: 'nowrap' }}>
+                            매출 <span className="num" style={{ color: BLUE, fontWeight: 700 }}>{statusSub.text}</span>
                           </span>
                         )}
                       </div>
                     </td>
-                    <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+
+                    {/* ⑥ 주 버튼 + ⋮ — 한 줄이다. ⋮ 는 기존 그대로. */}
+                    <td style={{ ...CELL, textAlign: 'right' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, height: '100%' }}>
                         {/* 국내수리(repair_domestic)는 발주 없이 수리중→세금계산서 요청으로 바로 간다 → 발주서 등록 숨김 */}
-                        {/* 결재 올리기 — 확정 때 상신이 실패한 건을 다시 올린다.
-                            결재 도입 전 견적과 이미 결재 문서가 있는 견적에는 나오지 않는다. */}
+                        {/* 결재 올리기 — 확정 때 상신이 실패한 건을 다시 올린다. */}
                         {canSubmitFor(q) && (
                           <button onClick={() => { setApprovalError(null); setApprovalQuote(q) }}
                             title="결재선을 지정해 이 견적을 결재로 올립니다"
-                            style={{ padding: '3px 7px', background: '#eff6ff', border: '1px solid #c7d7f8', borderRadius: R.icon, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#0369a1' }}>
+                            style={{ padding: '3px 7px', background: '#eff6ff', border: '1px solid #c7d7f8', borderRadius: R.icon, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#0369a1', whiteSpace: 'nowrap' }}>
                             결재 올리기
                           </button>
                         )}
-                        {/* 수주 전환·계산서 요청은 승인 게이트가 허용할 때만 낸다(서버도 409 로 막는다).
-                            '주문완료' 에서 넘어가는 계산서 요청은 이미 수주된 건이라 게이트가 허용이다
-                            — 발주 이후 상태는 라우트가 막지 않으므로 화면도 같은 기준으로 둔다. */}
+                        {/* 수주 전환·계산서 요청은 승인 게이트가 허용할 때만 낸다(서버도 409 로 막는다). */}
                         {q.status === '견적중' && q.quote_type !== 'repair_domestic' && allowsFor(q) && (
                           <button onClick={() => { setPoQuote(q); setPoFile(null) }}
-                            style={{ padding: '3px 7px', background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: R.icon, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#7c3aed' }}>
+                            style={{ padding: '3px 7px', background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: R.icon, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#7c3aed', whiteSpace: 'nowrap' }}>
                             발주서 등록
                           </button>
                         )}
                         {(q.status === '주문완료' || (q.quote_type === 'repair_domestic' && q.status === '수리중' && allowsFor(q))) && (
                           <button onClick={() => { setTaxQuote(q); setTaxDate(q.tax_invoice_date || '') }}
-                            style={{ padding: '3px 7px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: R.icon, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#b45309' }}>
+                            style={{ padding: '3px 7px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: R.icon, cursor: 'pointer', fontSize: 10, fontWeight: 700, color: '#b45309', whiteSpace: 'nowrap' }}>
                             계산서 요청
                           </button>
                         )}
@@ -1054,7 +1090,6 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                             toast={toast}
                           />
                         )}
-
                         {/* 왜 버튼이 없는지 — 결재 중·미승인·확인 중을 짧게 알린다. */}
                         {(q.status === '견적중' || q.status === SUBMITTED_STATUS
                           || (q.quote_type === 'repair_domestic' && q.status === '수리중')) && !allowsFor(q) && (
@@ -1087,8 +1122,7 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
                             >다시쓰기</button>
                             {/* 결재가 도는 중이면 상태 변경·삭제 요청·본인 삭제를 아예 내지 않는다
                                 — 그 창의 모든 동작이 updateQuoteStatus 를 지나고, 그 함수는
-                                '결재중' 에서 0행이 된다(lib/quoteMutations.ts). 눌러서 실패하게
-                                두는 대신 「다시쓰기」만 남기고 안내를 띄운다. */}
+                                '결재중' 에서 0행이 된다(lib/quoteMutations.ts). */}
                             {/* 반려 견적은 상태 변경도 삭제 요청도 막혀 있다 — 「다시쓰기」만 남는다. */}
                             {q.status === REJECTED_STATUS ? (
                               <div style={{ padding: '8px 10px', fontSize: 11, color: MUTED, lineHeight: 1.6 }}>
