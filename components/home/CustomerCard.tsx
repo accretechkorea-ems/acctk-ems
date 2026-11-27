@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { getDeviceLines, type Customer, type Device } from '@/lib/home'
 import { DIRECT_SALE_LABEL } from '@/lib/customerAgency'
 import { R } from '@/lib/radius'
+import { companyHref, popupTitle, siteHref } from '@/lib/mapPopup'
 
 const STATUS_COLOR: Record<string, string> = {
   '활성': '#22c55e',
@@ -35,6 +36,9 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
   const deviceLines = getDeviceLines(devices)
   const statusColor = STATUS_COLOR[customer.status ?? ''] ?? '#9ca3af'
   const hasNoDevice = deviceLines.length === 1 && deviceLines[0] === '-'
+  /** 제목 두 토막과 회사로 가는 길 — 지도 팝업과 **같은 규칙**이다(lib/mapPopup.ts). */
+  const title = popupTitle(customer)
+  const companyUrl = companyHref(customer)
 
   return (
     <div
@@ -63,13 +67,32 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
     >
       {/* 폰에서 장비 줄을 두 줄로 줄이는 규칙. 글자가 같아 브라우저가 한 벌로 묶는다. */}
       <style>{CARD_CSS}</style>
-      {/* 헤더: 회사명 + 상태 */}
+      {/* 헤더: 「**회사명** » 사업장명」 + 상태 (2026-11-28, 야간4 6-2).
+          지도 팝업과 **같은 규칙**이다(lib/mapPopup.ts) — 두 자리가 같은 업체를 서로 다르게
+          부르면 같은 곳인지 매번 맞춰 봐야 한다. 회사명은 점선 밑줄 링크다. */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
         <div style={{
           fontWeight: 800, color: '#111827', fontSize: 17, letterSpacing: '-0.3px',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
         }}>
-          {customer.company_name}
+          {companyUrl
+            ? (
+              <a
+                href={companyUrl}
+                onClick={e => { e.stopPropagation() }}
+                title={`${title.company} 회사 화면으로`}
+                style={{
+                  color: '#111827', textDecoration: 'underline',
+                  textDecorationStyle: 'dotted', textUnderlineOffset: 3,
+                }}
+              >
+                {title.company}
+              </a>
+            )
+            : (title.company || '-')}
+          {title.site && (
+            <span style={{ color: '#6b7280', fontWeight: 600 }}>{' » '}{title.site}</span>
+          )}
         </div>
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 5,
@@ -133,8 +156,11 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
           </>
         )}
       </div>
+        {/* 우하단 하나 — 「사업장 상세 ›」(2026-11-28, 야간4 6-2). 글자를 「상세보기」에서
+            바꾼 까닭: 제목에 회사 링크가 생겨, 「상세보기」가 회사 것인지 사업장 것인지
+            흐려졌다. 가는 곳도 분할 보기다 — 단독 상세 페이지로 보내지 않는다(7절). */}
         <a
-          href={`/customer/${customer.customer_id}`}
+          href={siteHref(customer)}
           onClick={(e) => { e.stopPropagation(); onDetailClick() }}
           onMouseEnter={(e) => { const el = e.currentTarget; el.style.color = '#1c3e87'; el.style.transform = 'scale(1.06)' }}
           onMouseLeave={(e) => { const el = e.currentTarget; el.style.color = '#234ea2'; el.style.transform = 'scale(1)' }}
@@ -148,7 +174,7 @@ export default function CustomerCard({ customer, devices, onMove, onDetailClick 
             textDecoration: 'none',
           }}
         >
-          상세보기
+          사업장 상세
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
             <polyline points="9 18 15 12 9 6" />
           </svg>

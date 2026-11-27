@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from 'react'
 import { loadKakaoMap, type KakaoClusterer, type KakaoMap, type KakaoNamespace, type KakaoOverlay, type KakaoWindow } from '@/lib/loadKakaoMap'
 import {
   PANEL_BG,
-  getDeviceLines,
   type Customer,
   type Device,
 } from '@/lib/home'
@@ -13,6 +12,8 @@ import { DIRECT_SALE_LABEL } from '@/lib/customerAgency'
 import { useMe } from '@/lib/appData/MeProvider'
 import { useToast } from '@/components/common/Toast'
 import { R } from '@/lib/radius'
+import { COMPANY_LINK_CSS, companyHref, popupTitle, showCompanyButton, siteHref } from '@/lib/mapPopup'
+import { deviceNameSummary } from '@/lib/deviceName'
 
 /** 클러스터 숫자 박스의 세 크기(px). 건수가 많을수록 큰 상자를 쓴다. */
 const CLUSTER_SIZES = [36, 44, 52] as const
@@ -20,6 +21,12 @@ const CLUSTER_SIZES = [36, 44, 52] as const
 type Props = {
   customers: Customer[]
   deviceMap: Map<number, Device[]>
+  /**
+   * 회사 id → 그 회사의 사업장 수. **거르기 전** 전체에서 센 값이다(2026-11-28, 야간4 6-1).
+   * 팝업이 「회사 보기」를 낼지 가린다 — 화면 필터로 한 곳만 남은 회사에서 단추가
+   * 사라지면 안 되므로 거른 목록으로 세지 않는다.
+   */
+  siteCountByCompany?: Map<number, number>
   focusedCustomerId: number | null
   restoredMapCenter: { lat: number; lng: number } | null
   restoredMapLevel: number | null
@@ -46,6 +53,7 @@ const nationalCenter = (): [number, number] =>
 export default function MapView({
   customers,
   deviceMap,
+  siteCountByCompany,
   focusedCustomerId,
   restoredMapCenter,
   restoredMapLevel,
@@ -97,7 +105,11 @@ export default function MapView({
   // 오버레이 동적 생성 함수
   const createOverlay = (c: Customer, map: KakaoMap, kakao: KakaoNamespace) => {
     const devices = deviceMap.get(Number(c.customer_id)) || []
-    const deviceLines = getDeviceLines(devices)
+    const deviceSummary = deviceNameSummary(devices)
+    /** 제목 두 토막과 회사로 가는 길 — 규칙은 lib/mapPopup.ts 한 곳이다. */
+    const title = popupTitle(c)
+    const companyUrl = companyHref(c)
+    const withCompany = showCompanyButton(c, siteCountByCompany?.get(Number(c.parent_customer_id ?? 0)))
     const makeNavUrl = (o: { lat: number; lng: number; name: string }) =>
       `https://map.naver.com/p/directions/${o.lng},${o.lat},${encodeURIComponent(o.name)}/${c.longitude},${c.latitude},${encodeURIComponent(c.company_name)}/-/car`
     const overlayContent = document.createElement('div')
@@ -123,8 +135,14 @@ export default function MapView({
         <div style="padding:14px 16px;">
 
           <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:5px;">
+            <!-- 제목 「**회사명** » 사업장명」(2026-11-28, 야간4 6-1). 회사명은 점선 밑줄
+                 링크다 — 눌리는 글자이지만 단추는 아니다. 회사를 모르면 그냥 글자다. -->
             <div style="font-weight:800; font-size:17px; color:#111827; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0;">
-              ${esc(c.company_name)}
+              ${title.company
+                ? (companyUrl
+                  ? `<a href="${esc(companyUrl)}" class="overlay-company" style="color:#111827; ${COMPANY_LINK_CSS}">${esc(title.company)}</a>`
+                  : esc(title.company))
+                : '-'}${title.site ? `<span style="color:#6b7280; font-weight:600;"> » ${esc(title.site)}</span>` : ''}
             </div>
             <span style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; color:#4b5563; flex-shrink:0; white-space:nowrap;">
               <span style="width:7px; height:7px; border-radius:50%; background:${statusColor}; flex-shrink:0;"></span>
@@ -138,10 +156,14 @@ export default function MapView({
 
           <div style="font-size:11px; color:#6b7280; margin-bottom:8px;">대리점 ${esc(c.agency_name ?? DIRECT_SALE_LABEL)}</div>
 
+          <!-- 장비는 **한 줄**이다(2026-11-28, 야간4 6-1) — 「SURFCOM NEX030 외 3대」.
+               전에는 네 줄까지 세로로 쌓고 그 아래 「외 N대 더」를 붙여, 장비가 많은 핀은
+               팝업이 지도를 반쯤 가렸다. 자세한 목록은 사업장 상세가 보여 준다.
+               글자 규칙은 카드·표와 **같은 함수**다(lib/deviceName.ts 의 deviceNameSummary). -->
           <div style="display:flex; flex-direction:column; gap:3px;">
-            ${deviceLines.length === 1 && deviceLines[0] === '-'
+            ${deviceSummary === '-'
               ? `<span style="font-size:11px; color:#6b7280; font-style:italic;">장비 없음</span>`
-              : `${deviceLines.slice(0, 4).map(l => `<span style="font-size:11px; color:#234ea2; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(l)}</span>`).join('')}${deviceLines.length > 4 ? `<span style="font-size:11px; font-weight:500; color:#6b7280;">외 ${deviceLines.length - 4}대 더</span>` : ''}`}
+              : `<span title="${esc(deviceSummary)}" style="font-size:11px; color:#234ea2; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(deviceSummary)}</span>`}
           </div>
 
           <div style="margin-top:12px; padding-top:12px; border-top:1px solid #ebebeb; display:flex; flex-direction:column; gap:7px;">
@@ -157,22 +179,44 @@ export default function MapView({
     const detailSlot = overlayContent.querySelector('.overlay-detail') as HTMLElement
     const navRow = overlayContent.querySelector('.overlay-nav') as HTMLElement
     if (detailSlot && navRow) {
-      const detailUrl = `/customer/${c.customer_id}`
+      /**
+       * 가는 길은 **분할 보기** 하나다(2026-11-28, 야간4 6-1) — 단독 상세 페이지
+       * `/customer/{id}` 로 보내지 않는다(7절이 걷는 길이다).
+       */
+      const detailUrl = siteHref(c)
       let navigated = false
-      const goDetail = () => {
+      const goTo = (url: string) => {
         if (navigated) return
         navigated = true
-        window.location.href = detailUrl
+        window.location.href = url
       }
 
-      const detailBtn = document.createElement('button')
-      detailBtn.textContent = '상세보기'
-      detailBtn.style.cssText = `width:100%;text-align:center;padding:8px 14px;background:#234ea2;color:#ffffff;border-radius:${R.icon}px;font-size:13px;font-weight:700;border:none;cursor:pointer;`
-      // touchstart에서 stopPropagation — 카카오맵이 터치 시퀀스 자체를 가로채지 못하도록
-      detailBtn.addEventListener('touchstart', (e) => { e.stopPropagation() }, { passive: true })
-      detailBtn.addEventListener('touchend', (e) => { e.stopPropagation(); e.preventDefault(); goDetail() })
-      detailBtn.addEventListener('pointerup', (e) => { e.stopPropagation(); goDetail() })
-      detailBtn.addEventListener('click', (e) => { e.stopPropagation(); goDetail() })
+      /** 단추 한 벌 — 터치 시퀀스를 카카오맵이 가로채지 못하게 네 자리를 모두 막는다. */
+      const makeButton = (label: string, url: string, primary: boolean) => {
+        const b = document.createElement('button')
+        b.type = 'button'
+        b.textContent = label
+        b.style.cssText = primary
+          ? `flex:1 1 0;min-width:0;text-align:center;padding:8px 14px;background:#234ea2;color:#ffffff;border-radius:${R.icon}px;font-size:13px;font-weight:700;border:none;cursor:pointer;font-family:inherit;`
+          : `flex:1 1 0;min-width:0;text-align:center;padding:8px 14px;background:#ffffff;color:#4b5563;border-radius:${R.icon}px;font-size:13px;font-weight:700;border:1px solid #ebebeb;cursor:pointer;font-family:inherit;`
+        b.addEventListener('touchstart', e => { e.stopPropagation() }, { passive: true })
+        b.addEventListener('touchend', e => { e.stopPropagation(); e.preventDefault(); goTo(url) })
+        b.addEventListener('pointerup', e => { e.stopPropagation(); goTo(url) })
+        b.addEventListener('click', e => { e.stopPropagation(); goTo(url) })
+        return b
+      }
+      detailSlot.style.display = 'flex'
+      detailSlot.style.gap = '7px'
+      // 「회사 보기」는 **사업장이 둘 이상일 때만**이다 — 한 곳뿐이면 같은 화면으로 가는
+      // 단추가 둘이 된다(lib/mapPopup.ts 의 showCompanyButton).
+      if (withCompany && companyUrl) detailSlot.appendChild(makeButton('회사 보기', companyUrl, false))
+      const detailBtn = makeButton('사업장 상세', detailUrl, true)
+      // 제목의 회사명 링크도 같은 길을 쓴다(카카오맵이 a 의 기본 동작을 먹는 일이 있다).
+      const companyLink = overlayContent.querySelector('.overlay-company') as HTMLAnchorElement | null
+      if (companyLink && companyUrl) {
+        companyLink.addEventListener('touchstart', e => { e.stopPropagation() }, { passive: true })
+        companyLink.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); goTo(companyUrl) })
+      }
 
       // 출발지 버튼 하나 — 한 줄을 n 등분한다(flex:1). 자택까지 넷이면 4분할이다.
       const NAV_CSS = `flex:1 1 0;min-width:0;text-align:center;padding:7px 0;background:#ffffff;border:1px solid #ebebeb;border-radius:${R.icon}px;font-size:12px;text-decoration:none;font-weight:700;`

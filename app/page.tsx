@@ -424,6 +424,21 @@ if (typeof parsed.openOverlayCustomerId === 'number') {
     [companies],
   )
 
+  /**
+   * 회사별 **사업장 수** — 거르기 **전** 전체에서 센다(2026-11-28, 야간4 6-1).
+   * 지도 팝업이 「회사 보기」를 낼지 가리는 데 쓴다. 거른 목록으로 세면 화면 필터로
+   * 한 곳만 남은 회사에서 단추가 사라진다 — 그 회사에는 여전히 사업장이 여럿이다.
+   */
+  const siteCountByCompany = useMemo(() => {
+    const m = new Map<number, number>()
+    for (const c of customers) {
+      const pid = Number(c.parent_customer_id ?? 0)
+      if (!Number.isInteger(pid) || pid <= 0) continue
+      m.set(pid, (m.get(pid) ?? 0) + 1)
+    }
+    return m
+  }, [customers])
+
   const filteredCustomers = useMemo(() => {
     const q = query.trim().toLowerCase()
 
@@ -1086,6 +1101,7 @@ useEffect(() => {
           <MapView
             customers={filteredCustomers}
             deviceMap={deviceMap}
+            siteCountByCompany={siteCountByCompany}
             focusedCustomerId={focusedCustomerId}
             restoredMapCenter={mapCenter}
             restoredMapLevel={mapLevel}
