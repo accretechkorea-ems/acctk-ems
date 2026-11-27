@@ -20,6 +20,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { customerLabel } from '@/lib/customerLabel'
 import { districtOf, normalizeRegion } from '@/lib/region'
+import { AGENCY_EXISTS_MSG, COMPANY_EXISTS_MSG, companyNameKey, sameCompanyName } from '@/lib/companyNameKey'
 import { withNameEnFallback } from '@/lib/nameEn'
 import { invalidateParents } from '@/components/customer/ParentPicker'
 import { invalidateAgencies } from '@/lib/customerAgency'
@@ -62,6 +63,29 @@ export type AddCustomerResult = {
   message: string
 }
 
+/**
+ * **반대쪽에 같은 이름이 있는가** (2026-11-27, 묶음5 3-8).
+ *
+ * 같은 회사가 회사로도 대리점으로도 등록되면 견적이 두 줄로 흩어지고 실적이 갈린다
+ * (하나무역 — 묶음5 10 이 그 뒷정리다). 만들기 전에 한 번 묻는다.
+ *
+ * 글자 그대로 견주지 않고 **묶는 열쇠**로 본다 — 「(주)하나무역」과 「하나무역」은 같다
+ * (lib/companyNameKey.ts). 후보를 좁히려고 `ilike` 로 먼저 긁고, 판정은 열쇠로 한다.
+ */
+async function findByNameOnOtherSide(
+  supabase: ReturnType<typeof createClient>,
+  name: string,
+  side: 'agency' | 'company',
+): Promise<string | null> {
+  const key = companyNameKey(name)
+  if (key === '') return null
+  let q = supabase.from('customers').select('customer_id, company_name').is('deleted_at', null).limit(50)
+  q = side === 'agency' ? q.eq('is_agency', true) : q.eq('is_parent', true).eq('is_agency', false)
+  const { data } = await q
+  const hit = (data ?? []).find(r => sameCompanyName(r.company_name, name))
+  return hit ? String(hit.company_name) : null
+}
+
 export async function addCustomerEntry(input: AddCustomerInput): Promise<AddCustomerResult> {
   const supabase = createClient()
   const name = input.companyName.trim()
@@ -81,6 +105,9 @@ export async function addCustomerEntry(input: AddCustomerInput): Promise<AddCust
     const { data: dup } = await supabase.from('customers').select('customer_id')
       .eq('is_agency', true).is('deleted_at', null).eq('company_name', name).maybeSingle()
     if (dup) throw new Error('같은 이름의 대리점이 이미 있습니다')
+    // 같은 이름이 **회사**로 이미 있으면 막는다(2026-11-27, 묶음5 3-8).
+    const asCompany = await findByNameOnOtherSide(supabase, name, 'company')
+    if (asCompany) throw new Error(COMPANY_EXISTS_MSG)
 
     const site = input.sites[0] ?? { siteName: '', address: '', agencyId: null, status: '활성', contacts: [] }
     const { data, error } = await withNameEnFallback(useEn => supabase.from('customers')
@@ -119,6 +146,9 @@ export async function addCustomerEntry(input: AddCustomerInput): Promise<AddCust
         // 폼이 못 걸러낸 동명 회사 — 새로 만들지 않고 그 줄에 붙인다.
         companyId = dup.customer_id
       } else {
+        // 같은 이름이 **대리점**으로 이미 있으면 막는다(2026-11-27, 묶음5 3-8).
+        const asAgency = await findByNameOnOtherSide(supabase, name, 'agency')
+        if (asAgency) throw new Error(AGENCY_EXISTS_MSG)
         const { data, error } = await withNameEnFallback(useEn => supabase.from('customers')
           .insert({
             company_name: name,

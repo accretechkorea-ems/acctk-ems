@@ -1,3 +1,4 @@
+import { deviceNameLine, deviceNames } from '@/lib/deviceName'
 import type { CSSProperties } from 'react'
 import { R } from '@/lib/radius'
 
@@ -143,21 +144,18 @@ export function isEmptyContactForm(c: { name: string; department: string; positi
   return !c.name.trim() && !c.department.trim() && !c.position.trim() && !c.phone.trim()
 }
 
+/**
+ * 장비 이름 줄 — 조립은 **공용 한 곳**이 한다(lib/deviceName.ts, 2026-11-27 묶음5 3-7).
+ * 전에는 여기서 직접 이어 붙였는데, 프로그램이 글자 「없음」으로 저장된 줄에
+ * **「…(없음)」** 꼬리가 붙었다. 「없음」은 값이 아니라 값이 없다는 말이다.
+ */
 export function getDeviceLines(devices: Device[]): string[] {
   if (!devices || devices.length === 0) return ['-']
-
-  return devices
-    .map((d) => {
-      const name = `${d.device_name ?? ''}${d.device_name2 ?? ''}${d.option ?? ''}`.trim()
-      const program = d.program ? `(${d.program})` : ''
-      const combined = `${name}${program}`.trim()
-      return combined
-    })
-    .filter(Boolean)
+  return deviceNames(devices)
 }
 
 export function getDeviceLine(devices: Device[]): string {
-  return getDeviceLines(devices).join(' / ')
+  return deviceNameLine(devices)
 }
 
 export function toTimeValue(value: string | null | undefined): number {
