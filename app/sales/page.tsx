@@ -64,6 +64,7 @@ import RepairInfoModal from '@/components/quote/RepairInfoModal'
 import { fetchRepairInfoStates, type RepairInfoRow, type RepairInfoState } from '@/lib/quoteRepairInfo'
 import { todayKST, nowKSTParts, daysBetween, kstYmd, ymdParts } from '@/lib/date'
 import { R } from '@/lib/radius'
+import { quoteCustomerLabel } from '@/lib/quoteEuName'
 
 // 기간 필터 모드 — 회계연도(4월 시작) 기준. h1=상반기(4~9월), h2=하반기(10~다음해 3월)
 type PeriodMode = 'year' | 'h1' | 'h2' | 'q1' | 'q2' | 'q3' | 'q4' | 'month'
@@ -1044,7 +1045,7 @@ function EngineerQuoteModal({ engineer, quotes, currentEngineerId, engineers, me
                           ? <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: R.tag, background: '#fff7ed', color: '#c2410c', fontWeight: 700, border: '1px solid #fed7aa' }}>{q.dealer.company_name}</span>
                           : <span style={{ fontSize: 11, color: MUTED }}>직판</span>}
                       </td>
-                      <td style={{ padding: '8px 10px', fontWeight: 600, whiteSpace: 'nowrap', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{q.customers?.company_name || '-'}</td>
+                      <td style={{ padding: '8px 10px', fontWeight: 600, whiteSpace: 'nowrap', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{quoteCustomerLabel(q.customer_id, q.customers?.company_name)}</td>
                       <td style={{ padding: '8px 10px', color: GRAY, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>{itemNames}</td>
                       <td className="num" style={{ padding: '8px 10px', fontWeight: 700, whiteSpace: 'nowrap', color: TEXT, textAlign: 'center' }}>₩{numKR(q.total_supply)}</td>
                       <td style={{ padding: '8px 10px', whiteSpace: 'nowrap', textAlign: 'center' }}>

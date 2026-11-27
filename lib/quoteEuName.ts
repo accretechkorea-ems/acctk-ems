@@ -31,3 +31,31 @@ export function euDisplayName(input: {
   if (parent) return parent
   return (input.siteName ?? '').trim()
 }
+
+// ── 사명이 비어 있는 견적 ──────────────────────────────────────────────────
+//   quotes.customer_id 는 NULL 을 받는다(필수 칸은 quote_id·quote_number·quote_date·created_by
+//   네 칸뿐이다). 지금 NULL 인 줄은 0건이지만, 대리점 건의 E.U 를 **나중에 채우는** 길을
+//   열어 두려면 비어 있는 동안에도 읽히는 글자가 있어야 한다
+//   (2026-11-28, 야간4 8-2 · docs/hanamuyeok-quotes-20261128.md).
+//
+//   전에는 어느 표나 `|| '-'` 였다. `-` 하나로는 **「아직 안 적었다」와 「내가 못 보는
+//   사명」**이 같아 보인다 — 뒤쪽은 고객사 열람 권한이 없을 때 나는 모습이라 사람이 할
+//   일이 없고, 앞쪽은 **고치라는 표시**다. 둘을 갈라 적는다.
+
+/** 사명(E.U)이 비어 있는 견적에 적는 글자. 한 곳에서 정한다. */
+export const EU_UNSET_LABEL = 'E.U 미지정'
+
+/**
+ * 견적 표의 사명 칸 글자.
+ *
+ *   사명 id 가 없다       → 「E.U 미지정」
+ *   id 는 있고 이름이 없다 → fallback(기본 `-`) — 권한으로 가려진 경우다
+ */
+export function quoteCustomerLabel(
+  customerId: number | null | undefined,
+  name: string | null | undefined,
+  fallback = '-',
+): string {
+  if (customerId == null) return EU_UNSET_LABEL
+  return (name ?? '').trim() || fallback
+}

@@ -61,6 +61,7 @@ import { exportForecastXlsx } from '@/lib/forecastExcel'
 import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/components/common/Toast'
 import { CUSTOMER_NAME_SELECT, customerCompanyName } from '@/lib/customerLabel'
+import { quoteCustomerLabel } from '@/lib/quoteEuName'
 import { exportForecastStatsXlsx, statsKindOf, type StatsRow } from '@/lib/forecastStatsExcel'
 import { STAGES, isClosed } from '@/components/customer/opportunity'
 import type { SalesOpportunity } from '@/components/customer/types'
@@ -411,7 +412,7 @@ export default function PipelinePage() {
       // ② 포캐스트에 **안 붙은** 확정 견적 — 그 건들을 빼면 쫓은 일의 절반이 사라진다.
       const { data: loose, error } = await supabase
         .from('quotes')
-        .select(`quote_id, quote_number, quote_date, status, total_supply, engineer_id, category, repair_id, opportunity_id, customers(${CUSTOMER_NAME_SELECT}), quote_items(product_name, group_kind)`)
+        .select(`quote_id, quote_number, quote_date, status, total_supply, engineer_id, category, repair_id, opportunity_id, customer_id, customers(${CUSTOMER_NAME_SELECT}), quote_items(product_name, group_kind)`)
         .is('opportunity_id', null)
         .gte('quote_date', from).lte('quote_date', to)
       if (error) { console.error('[stats] 견적을 읽지 못했다', error); toast.error('견적을 읽지 못했습니다'); return }
@@ -419,6 +420,8 @@ export default function PipelinePage() {
       type LooseQuote = {
         quote_number: string | null; quote_date: string | null; status: string | null
         total_supply: number | null; engineer_id: number | null; category: string | null; repair_id: number | null
+        /** 사명 id — 비어 있으면 표에 「E.U 미지정」으로 적는다(2026-11-28, 야간4 8-2). */
+        customer_id?: number | null
         customers?: { company_name: string | null; site_name?: string | null; parent?: { company_name?: string | null } | { company_name?: string | null }[] | null } | null
         quote_items?: { product_name: string | null; group_kind: string | null }[] | null
       }
@@ -433,7 +436,7 @@ export default function PipelinePage() {
               categoryLabel: categories.find(c => c.code === q.category)?.label ?? null,
               repairId: q.repair_id, items: q.quote_items ?? null,
             }),
-            company: customerCompanyName(q.customers),
+            company: quoteCustomerLabel(q.customer_id, customerCompanyName(q.customers), ''),
             site: shortSiteName({ company_name: q.customers?.company_name ?? '', site_name: q.customers?.site_name ?? null }, customerCompanyName(q.customers)),
             dealer: '',
             owner: q.engineer_id == null ? '' : (engName.get(q.engineer_id) ?? `#${q.engineer_id}`),

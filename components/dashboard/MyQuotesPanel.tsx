@@ -51,6 +51,7 @@ import BackdatedMark from '@/components/quote/BackdatedMark'
 import { nowKSTParts, todayKST } from '@/lib/date'
 import { R } from '@/lib/radius'
 import { errMessage } from '@/lib/errMessage'
+import { quoteCustomerLabel } from '@/lib/quoteEuName'
 
 // 대시보드 '내 견적' 패널. 실적 현황 EngineerQuoteModal 의 표시 + 관리 기능을 동일하게 구현한다.
 // mutation 은 lib/quoteMutations.ts 공용 함수 사용(직접 supabase.update/fetch 안 씀).
@@ -329,7 +330,8 @@ export default function MyQuotesPanel({ engineerId, fitToHeight = false, initial
     for (const t of tgts ?? []) if (t.year != null) tmap[t.year] = { target: t.target_amount || 0, orderTarget: t.order_target_amount || 0 }
     setQuotes(list.map(q => ({
       ...q,
-      company_name: (q.customer_id != null && custMap[q.customer_id]) || '-',
+      // 사명이 **없는** 건과 **못 보는** 건은 다른 글자다(2026-11-28, 야간4 8-2).
+      company_name: quoteCustomerLabel(q.customer_id, q.customer_id == null ? null : custMap[q.customer_id]),
       dealer_name: (q.dealer_id != null && custMap[q.dealer_id]) || null,
       // 조회 칸이 Quote 보다 적다(임베드 모양도 다르다) — 화면이 쓰는 칸은 다 들어 있다.
       // 그래서 한 번 unknown 을 지난다. any 를 쓰지 않는 쪽을 골랐다.
