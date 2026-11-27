@@ -4,7 +4,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 // 모바일 상단 바 높이 — 화면 높이를 계산하는 곳은 이 상수 하나를 본다(PC 는 상단 바가 없다).
-import { TOPBAR_HEIGHT } from '@/components/layout/Sidebar'
 import Sidebar from '@/components/home/Sidebar'
 import MapView from '@/components/home/MapView'
 import AddCustomerModal from '@/components/home/AddCustomerModal'
@@ -882,61 +881,15 @@ useEffect(() => {
           background: PAGE_BG,
           overflow: 'hidden',
         }}
-        className="home-wrapper"
+        // 폰에서 **목록 보기는 페이지가 구르고**, 지도 보기는 지도가 화면을 꽉 채운다.
+        // 그 둘을 CSS 가 가를 수 있게 보기를 클래스로 적는다(app/globals.css).
+        className={`home-wrapper ${mobileTab === 'map' ? 'mobile-map' : 'mobile-list'}`}
       >
 
-       <style>{`
-        /* 왼쪽 열의 검색칸은 **좁은 화면 전용**이다 — 넓은 화면은 맨 위 헤더가 맡는다. */
-        .sidebar-search { display: none; }
-        @media (max-width: 768px) {
-  /* 2026-11-25 — 검색칸은 패널 머리줄(PanelHeader)에 **하나만** 둔다. 지도 열의 칸까지
-     띄우면 폰에서 둘이 위아래로 겹쳤다(실측). 건수는 그 칸 오른쪽의 작은 숫자다. */
-  .sidebar-search { display: none !important; }
-  .home-grid { grid-template-columns: 1fr !important; grid-template-rows: 1fr !important; }
-  .mobile-tab-bar { display: flex !important; }
-  .mobile-hide { display: none !important; }
-  /* 상단 고정 영역 = 앱바 48 + 여백 8 + 세그먼트 40 = 96 (지시 ②: 100 이내). */
-  /* 앱바 = 48 + 상태바 안전 영역. 그 둘을 함께 뺀다(2026-11-25). */
-  .home-wrapper { height: calc(100dvh - ${TOPBAR_HEIGHT}px - env(safe-area-inset-top)) !important; padding: 8px 8px calc(8px + env(safe-area-inset-bottom)) !important; overflow: hidden !important; }
-  .home-grid { height: 100% !important; overflow: hidden !important; }
-  .home-grid > div { height: 100% !important; min-height: 0 !important; min-width: 0 !important; overflow: hidden !important; }
-  .home-grid > div > div { height: 100% !important; }
-  /**
-   * ⚠ 위 줄의 **예외** — 좌 패널 안의 두 칸 (2026-11-27, 묶음4 E 실측).
-   *
-   * .side-panel 이 .home-grid > div 라서, 그 안의 **상단 카드와 목록 통이 둘 다**
-   * 위 규칙에 걸려 height: 100% 가 되었다. 카드가 패널 높이를 다 먹고(실측 732px,
-   * 속 내용은 135px) 목록 통은 2px 로 눌려, 폰 **목록 보기의 회사 줄이 통째로 화면
-   * 밖**에 있었다(첫 줄 top = 897 > 844). 아무것도 안 보이니 「목록이 비었나」로 읽힌다.
-   *
-   * 카드는 **제 높이**를 쓰고, 목록 통이 **남는 높이**를 가져간다 — 패널이 세로 flex 라
-   * 그렇게 두면 된다. 클래스 둘이라 위 줄(클래스 하나 + 요소 둘)을 이긴다.
-   */
-  .home-grid .side-panel > * { height: auto !important; }
-  .home-grid .side-panel > *:last-child { flex: 1 1 0% !important; min-height: 0 !important; }
-  /* 가로 넘침 가림막은 **app/globals.css 로 옮겼다**(2026-11-26) — 머리 스타일시트에
-     있어야 첫 페인트부터 듣고, 이 화면만의 보험이 아니라 모든 화면의 보험이다. */
-  /* 좁은 화면은 예전 「업체 목록 | 지도」 탭이 맡는다 — 토글이 둘이면 뜻이 겹친다. */
-  .home-header { display: none !important; }
-
-  /* ── 폰의 분할 보기 ──────────────────────────────────────────────────
-     넓은 화면은 좌 패널과 우측 pane 이 나란히 선다. 폰에서는 둘을 나란히 둘 폭이
-     없어, 좌 패널 자리만큼(372px) 밀린 pane 이 화면 밖으로 나가 있었다
-     (2026-11-21 실측: 회사 카드가 x=384·폭 38 로 접혔다).
-     고른 것이 있으면 **pane 이 폭을 다 쓰고 좌 패널은 숨는다.** 목록으로
-     돌아가는 길은 pane 머리의 ← 다(.pane-back — 폰에서만 보인다). */
-  .home-grid.detail-open .side-panel { display: none !important; }
-  /* 좌 패널 자리만큼 밀어 두는 여백은 **폰에서 늘 0**이다(2026-11-26).
-     전에는 「고른 것이 있을 때」(.detail-open)만 풀었다 — 아무것도 고르지 않은 목록
-     보기에서는 빈 pane 이 x=380 에 서서 화면을 6px 넘겼다(WebKit·크로미움 둘 다
-     실측). 가림막이 가려 주고 있었을 뿐이다. 폰에서는 pane 과 패널이 나란히 설 폭이
-     아예 없으니 조건을 둘 까닭이 없다. */
-  .pane { margin-left: 0 !important; padding-right: 0 !important; }
-  .pane-back { display: inline-flex !important; }
-}
-/* ← 는 폰에서만 쓴다 — 넓은 화면에서는 좌 패널이 늘 옆에 있다. */
-.pane-back { display: none; }
-      `}</style>
+      {/* 폰(≤768)의 규칙은 **app/globals.css 한 곳**에 있다(2026-11-28, 야간4 5-2).
+          여기 본문 <style> 에 두면 첫 페인트보다 늦을 수 있고, iOS Safari 는 그 순간
+          내용이 화면보다 넓으면 레이아웃 뷰포트를 넓힌 채 두고 다시 줄이지 않는다.
+          게다가 묶음4 의 두 고침이 여기, 세로 규칙이 저기로 갈려 서로를 덮고 있었다. */}
 
       {/* 맨 위 한 줄(ListHeader)은 걷었다(2026-11-20) — 토글·검색·필터는 좌 패널 머리줄로
           내려갔고(components/home/PanelHeader.tsx), 지도는 그만큼 위로 올라와 칸을 가득 쓴다. */}

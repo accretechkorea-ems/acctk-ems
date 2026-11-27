@@ -34,6 +34,13 @@
   --color-text-muted:     #6b7280;             /* placeholder 급 (4.8:1) */
   --color-text-disabled:  #9ca3af;             /* 비활성 — 읽어야 하는 글자에는 쓰지 않는다 */
 
+  /* ── 자리 ── */
+  /* 앱바 높이 — components/layout/Sidebar.tsx 의 TOPBAR_HEIGHT 와 **같은 값**이다.
+     앱바는 제 요소에 같은 이름으로 다시 내려 준다(그 안의 것들이 읽는다). 여기 두는
+     까닭은 앱바 **밖**의 화면(.home-wrapper)도 그 높이를 알아야 하기 때문이다
+     (2026-11-28, 야간4 5-2). 두 값이 어긋나면 scripts/home-phone-scroll-check.js 가 잡는다. */
+  --ems-topbar-h: 48px;
+
   /* ── Surface / Background ── */
   --color-white:     #ffffff;
   --color-surface:   #ffffff;                  /* 카드 */
@@ -641,6 +648,102 @@ tr:has(+ tr.ems-pick[data-on='true']) > td {
     padding-left: 0 !important;
     padding-right: 0 !important;
   }
+
+  /* ── 폰의 **세로** 규칙 (2026-11-28, 야간4 5-2) ─────────────────────────
+     2026-11-28 전에는 이 규칙들이 **app/page.tsx 의 본문 <style>** 에 있었다.
+     가로 규칙은 여기(머리 스타일시트), 세로 규칙은 저기로 갈려 있어서, 묶음4 E 의
+     예외(`.home-grid .side-panel > *`)가 무엇을 되돌리는 것인지 한 파일만 봐서는
+     알 수 없었다. 폰 규칙은 **한 곳**에 둔다.
+
+     ── 전에는 ──────────────────────────────────────────────────────────
+       .home-wrapper 가 100dvh 로 못 박히고 그 안의 목록 통(.customer-list-scroll)이
+       스스로 굴렀다. 실측(2026-11-28, docs/night4-panel-before.json):
+         390×844 패널 700 = 상단 카드 98 + 목록 통 592, 목록 내용 122,933
+         350×760 패널 616 = 상단 카드 98 + 목록 통 508
+       잘못된 것은 아니었다 — 다만 **페이지가 구르지 않아서** iOS 의 주소창이 접히지
+       않고, 바닥에 늘 24px 의 회색 띠가 남았으며, 통 안에서만 구르니 화면 끝까지
+       민 뒤에도 더 밀리지 않고 멈췄다. 폰에서 긴 목록은 **페이지가 굴러야** 한다.
+
+     ── 지금은 ──────────────────────────────────────────────────────────
+       목록 보기 — 안쪽 통을 풀고 **페이지(body)가 구른다**. 세그먼트 줄과 검색 카드는
+                  sticky 로 앱바 아래에 붙는다. 바닥 회색 띠가 없다.
+       지도 보기 — 지도는 구르는 것이 아니라 **끌고 확대하는** 것이다. 화면을 꽉 채우고
+                  페이지는 구르지 않는다(종전 그대로).
+
+     앱바 높이는 숫자로 적지 않는다 — --ems-topbar-h 를 읽는다(components/layout/Sidebar.tsx
+     의 TOPBAR_HEIGHT 가 그 값을 내려 준다. 기본값 48px 은 그 상수와 같아야 한다 —
+     scripts/home-phone-scroll-check.js 가 둘을 견준다). */
+
+  /* 두 보기에 함께 걸리는 것 — 한 칸 격자 · 폰 탭 · ← · 넓은 화면용 머리줄 감추기. */
+  .sidebar-search { display: none !important; }
+  .home-header { display: none !important; }
+  .mobile-tab-bar { display: flex !important; }
+  .mobile-hide { display: none !important; }
+  .home-grid { grid-template-columns: 1fr !important; grid-template-rows: 1fr !important; }
+  /* 좌 패널 자리만큼 밀어 두는 여백은 **폰에서 늘 0**이다(2026-11-26). 전에는 고른 것이
+     있을 때만 풀어, 빈 pane 이 x=380 에 서서 화면을 6px 넘겼다(두 엔진 모두 실측). */
+  .pane { margin-left: 0 !important; padding-right: 0 !important; }
+  .pane-back { display: inline-flex !important; }
+  /* 고른 것이 있으면 pane 이 폭을 다 쓰고 좌 패널은 숨는다 — 둘을 나란히 둘 폭이 없다. */
+  .home-grid.detail-open .side-panel { display: none !important; }
+
+  /* ── 목록 보기 — **페이지가 구른다** ──────────────────────────────── */
+  .home-wrapper.mobile-list {
+    height: auto !important;
+    min-height: calc(100dvh - var(--ems-topbar-h, 48px) - env(safe-area-inset-top)) !important;
+    overflow: visible !important;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom)) !important;
+  }
+  .home-wrapper.mobile-list .home-grid,
+  .home-wrapper.mobile-list .home-grid > div,
+  .home-wrapper.mobile-list .home-grid > div > div {
+    height: auto !important;
+    min-height: 0 !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+  }
+  /* 목록 통은 **스스로 구르지 않는다** — 카드가 페이지로 흘러나온다. */
+  .home-wrapper.mobile-list .customer-list-scroll {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
+    flex: none !important;
+  }
+  /* 세그먼트 줄 — **앱바 바로 아래**에 붙는다. 앱바는 흐름 안의 sticky(top: 0)라
+     그 높이만큼 내려 잡아야 한다 — 0 으로 두면 앱바 **뒤**로 숨는다(390 캡처에서 보았다).
+     위 여백 8px 은 래퍼 padding 이 이미 주므로 음수로 당겨 붙인다. */
+  .home-wrapper.mobile-list .mobile-tab-bar {
+    position: sticky;
+    top: calc(var(--ems-topbar-h, 48px) + env(safe-area-inset-top));
+    z-index: 3;
+    background: #fafafa;
+  }
+  /* 검색 카드(패널의 첫 칸) — 세그먼트 줄(40) + 그 아래 여백(8) 밑에 붙는다. */
+  .home-wrapper.mobile-list .side-panel > *:first-child {
+    position: sticky;
+    top: calc(var(--ems-topbar-h, 48px) + env(safe-area-inset-top) + 48px);
+    z-index: 2;
+    background: #fafafa;
+  }
+  /* 패널은 **자리에 선다**(position: static) — absolute 로 두면 흐름에서 빠져 부모가
+     높이를 갖지 못하고, 페이지가 구를 거리가 생기지 않는다(2026-11-28 실측에서 보았다:
+     목록 내용이 122,933 인데 문서는 844 였다). 넓은 화면은 종전대로 absolute 다. */
+  .home-wrapper.mobile-list .side-panel {
+    position: static !important;
+    height: auto !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+  }
+
+  /* ── 지도 보기 — 지도가 화면을 꽉 채우고 페이지는 구르지 않는다 ───── */
+  .home-wrapper.mobile-map {
+    height: calc(100dvh - var(--ems-topbar-h, 48px) - env(safe-area-inset-top)) !important;
+    overflow: hidden !important;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom)) !important;
+  }
+  .home-wrapper.mobile-map .home-grid { height: 100% !important; overflow: hidden !important; }
+  .home-wrapper.mobile-map .home-grid > div { height: 100% !important; min-height: 0 !important; min-width: 0 !important; overflow: hidden !important; }
+  .home-wrapper.mobile-map .home-grid > div > div { height: 100% !important; }
 }
 
 /* ══ 명함의 전화·이메일 링크 (2026-11-27 야간3 5-2) ═════════════════════════

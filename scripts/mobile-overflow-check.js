@@ -37,6 +37,12 @@ const ok = (name, cond, hint) => {
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8')
 
 const HOME = read('app/page.tsx')
+/**
+ * 폰(≤768) 규칙은 2026-11-28(야간4 5-2)부터 **app/globals.css 한 곳**이다.
+ * 전에는 가로 규칙이 globals.css, 세로 규칙이 app/page.tsx 의 본문 <style> 로 갈려 있어
+ * 묶음4 의 예외가 무엇을 되돌리는지 한 파일만 봐서는 알 수 없었다.
+ */
+const PHONE = read('app/globals.css')
 const QUOTE = read('app/quote/page.tsx')
 const BODY = read('components/customer/CustomerDetailBody.tsx')
 const BAND = read('components/customer/HeaderBand.tsx')
@@ -93,7 +99,7 @@ ok('지도 칸에 이름표', /className="home-map"/.test(HOME))
 
 console.log('\n── ④ 검색칸은 하나 ──')
 ok('지도 열의 칸은 폰에서도 숨긴다',
-  /\.sidebar-search \{ display: none !important; \}/.test(HOME))
+  /\.sidebar-search \{ display: none !important; \}/.test(PHONE))
 // 안내 글은 탭이 정한다(2026-11-27, 묶음4 D) — 칸은 그대로 하나다.
 ok('패널 머리줄의 칸 하나가 남는다', /placeholder=\{searchPlaceholder \?\? COMPANY_SEARCH_PLACEHOLDER\}/.test(read('components/home/PanelHeader.tsx')))
 ok('건수는 그 칸 **오른쪽 작은 글씨**다',
@@ -108,14 +114,14 @@ eq('앱바 48', topbar, 48)
 eq('세그먼트 40', seg, 40)
 ok(`상단 고정 영역 ${topbar} + ${pad} + ${seg} = ${topbar + pad + seg} ≤ 100`, topbar + pad + seg <= 100)
 ok('세그먼트 아래 여백 8', segGap === 8)
-ok('아래는 홈바만큼만', /padding: 8px 8px calc\(8px \+ env\(safe-area-inset-bottom\)\)/.test(HOME))
+ok('아래는 홈바만큼만', /padding: 8px 8px calc\(8px \+ env\(safe-area-inset-bottom\)\)/.test(PHONE))
 
 console.log('\n── ⑤-2 앱바는 안전 영역 바로 아래 ──')
 ok('viewport-fit=cover 를 켠다 — 안전 영역이 값을 갖는다',
   /viewportFit: 'cover'/.test(read('app/layout.tsx')))
 ok('앱바가 그 값만큼 아래로 깔린다',
   /env\(safe-area-inset-top\)\)`/.test(TOPBAR) && /padding: 'env\(safe-area-inset-top\) 8px 0'/.test(TOPBAR))
-ok('화면 높이 셈도 그 값을 뺀다', /env\(safe-area-inset-top\)\) !important/.test(HOME))
+ok('화면 높이 셈도 그 값을 뺀다', /env\(safe-area-inset-top\)\) !important/.test(PHONE))
 ok('앱바 위에 다른 레이아웃 요소를 두지 않는다 — body 의 첫 요소는 앱바다',
   /<header className="ems-topbar"/.test(TOPBAR))
 
@@ -173,7 +179,7 @@ ok('PC 쪽 규칙은 그대로 그 파일에 있다(TS 상수를 쓴다)',
   /\.ems-main \{ margin-left: \$\{SIDEBAR_WIDTH\}px;/.test(WRAP))
 // 좌 패널 자리만큼 밀어 두는 여백 — 폰에서는 **늘** 0 이다(고른 것이 있든 없든).
 ok('폰에서 pane 의 왼쪽 여백은 조건 없이 0',
-  /\n  \.pane \{ margin-left: 0 !important; padding-right: 0 !important; \}/.test(HOME),
+  /\n  \.pane \{ margin-left: 0 !important; padding-right: 0 !important; \}/.test(PHONE),
   '.detail-open 에 매어 두면 아무것도 고르지 않았을 때 빈 pane 이 화면을 넘긴다')
 
 console.log('\n── ⑧-2 WebKit 측정 스크립트 ──')
