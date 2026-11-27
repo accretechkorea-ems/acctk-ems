@@ -101,11 +101,15 @@ ok('제목이 가운데다(양 끝에 같은 받침)',
 ok('우측 끝은 범례다', /<ChartLegend \/>/.test(PAGE))
 
 console.log('\n── ④ 그래프는 상단 필터를 따른다 ──')
-eq('연간 → 분기 축', S.chartUnitOf('year'), 'quarter')
-eq('분기 → 분기 축', S.chartUnitOf('q2'), 'quarter')
+// 2026-11-27(묶음6 1-2) — 축의 **단위는 늘 달**이고 기간은 보여 주는 **범위**만 바꾼다.
+// 전에는 연간·분기가 네 칸(분기)이라, 기간을 바꿀 때마다 축의 뜻이 달라져
+// 「연간에서 보던 11월 막대」를 월별로 옮기면 같은 것을 못 찾았다.
+// 범위는 scripts/sales-team-scope-check.js 가 따로 본다.
+eq('연간도 달 축', S.chartUnitOf('year'), 'month')
+eq('분기도 달 축', S.chartUnitOf('q2'), 'month')
 eq('월별 → 달 축', S.chartUnitOf('month'), 'month')
 eq('H1 → 달 축', S.chartUnitOf('h1'), 'month')
-eq('고른 칸 — 분기', S.selectedBarKey('q3', 2026, 11), 'q3')
+eq('분기에는 고른 칸이 없다(범위지 한 칸이 아니다)', S.selectedBarKey('q3', 2026, 11), null)
 eq('고른 칸 — 월(11월은 그 해)', S.selectedBarKey('month', 2026, 11), '2026-11')
 eq('고른 칸 — 월(1월은 다음 해)', S.selectedBarKey('month', 2026, 1), '2027-1')
 eq('H1 은 여러 칸이라 고른 칸이 없다', S.selectedBarKey('h1', 2026, 11), null)

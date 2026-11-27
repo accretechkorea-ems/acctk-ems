@@ -342,6 +342,29 @@ const achieveOf = (amt: number, target: number): number | null =>
  * 범위(engineerId 하나 또는 engineerIds 여럿)는 다른 함수와 같다 — 그래서 사업부 그래프의
  * 숫자는 개인 그래프 숫자의 합과 어긋날 수 없다.
  */
+/**
+ * **요약 여섯 칸이 보는 사람들** (2026-11-27, 묶음6 1-1).
+ *
+ *   팀을 골랐으면 — 그 팀 사람들(보이는 사람 중에서)
+ *   「전체」면   — 집계 대상 전원
+ *
+ * 이 한 줄이 2026-11-27 전에는 없었다. 여섯 칸이 늘 전원을 봤고, 그래서 **팀을 골라도
+ * 숫자가 그대로**였다 — 같은 화면의 그래프·연간 누적은 팀을 따르고 있었으므로
+ * 위아래가 서로 다른 말을 했다.
+ *
+ * 목표 합도 **같은 사람들**로 낸다 — 팀 목표라는 칸은 따로 없고, 그 팀 사람들의
+ * 개인 목표를 더한 것이 팀 목표다(「전체」면 전원 합 = 사업부 목표, 전과 같은 값).
+ */
+export function scopeEngineersOf<T extends { engineer_id: number; teams?: string | null }>(
+  teamFilter: string | null,
+  /** 이 사람이 **볼 수 있는** 사람들(권한·재직·집계 대상으로 이미 걸러져 있다). */
+  visible: readonly T[],
+  /** 집계 대상 전원. */
+  all: readonly T[],
+): T[] {
+  return teamFilter ? visible.filter(e => e.teams === teamFilter) : [...all]
+}
+
 export function unitBars(
   quotes: readonly StatQuote[],
   targets: readonly StatTarget[],

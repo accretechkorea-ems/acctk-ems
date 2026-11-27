@@ -17,7 +17,7 @@ import {
   engineerStat,
   inOrderPeriod as inOrderPeriodOf, inRevenuePeriod as inRevenuePeriodOf,
   matchPeriod as matchPeriodOf,
-  unitBars, yearSummary, type ChartUnit,
+  scopeEngineersOf, unitBars, yearSummary, type ChartUnit,
 } from '@/lib/salesStats'
 import { usePageGuard } from '@/hooks/usePageGuard'
 import AccessGate from '@/components/common/AccessGate'
@@ -324,17 +324,41 @@ function StatTile({ label, value, full, sub, subFull, color, gauge, gaugeColor }
  * 그래프가 제 토글을 들고 있던 것을 걷었다 — 화면 위에서 고른 기간과 그래프가 서로
  * 다른 단위를 보고 있으면, 같은 카드 안에서 두 개의 「지금」이 생긴다.
  */
-export function chartUnitOf(mode: PeriodMode): ChartUnit {
-  if (mode === 'year') return 'quarter'      // 연간은 네 분기로 본다(열두 칸은 너무 잘다)
-  if (isQuarterMode(mode)) return 'quarter'
-  return 'month'                              // 월별·H1·H2 는 달로 본다
+/**
+ * 가로축의 **단위** — 2026-11-27(묶음6 1-2)부터 **늘 달**이다.
+ *
+ * 전에는 연간·분기를 네 칸(분기)으로 그렸다. 그러면 기간을 바꿀 때마다 가로축의 **뜻이**
+ * 바뀌어, 「연간에서 보던 11월 막대」를 「월별」로 옮기면 같은 것을 못 찾았다.
+ * 단위를 달 하나로 두고 **보여 주는 범위만** 기간에 맞춘다(chartMonthsOf).
+ */
+export function chartUnitOf(_mode: PeriodMode): ChartUnit {
+  return 'month'
+}
+
+/**
+ * 그 기간에 **보여 줄 달들**(회계연도 차례: 4월 → 3월).
+ *
+ *   연간 · 월별  12칸 — 월별은 고른 달에 **밑줄**만 긋는다(앞뒤를 함께 봐야 한다)
+ *   H1          4~9월 · H2 10~3월
+ *   분기        그 석 달
+ *
+ * 월별에서 12칸을 다 두는 까닭: 한 칸만 그리면 「많은지 적은지」를 알 수 없다.
+ */
+export const FY_MONTHS: readonly number[] = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
+export function chartMonthsOf(mode: PeriodMode): readonly number[] {
+  if (mode === 'h1') return [4, 5, 6, 7, 8, 9]
+  if (mode === 'h2') return [10, 11, 12, 1, 2, 3]
+  if (isQuarterMode(mode)) {
+    const q = Number(mode.slice(1))            // 'q3' → 3
+    return FY_MONTHS.slice((q - 1) * 3, q * 3)
+  }
+  return FY_MONTHS                             // 연간 · 월별
 }
 
 /** 지금 고른 기간이 가로축의 **어느 칸**인가 — 그 칸만 진하게 칠한다(1-4). */
 export function selectedBarKey(mode: PeriodMode, fy: number, month: number): string | null {
-  if (chartUnitOf(mode) === 'quarter') return isQuarterMode(mode) ? mode : null
   if (mode === 'month') return `${month < 4 ? fy + 1 : fy}-${month}`
-  return null                                 // H1·H2 는 여러 칸이라 고른 칸이 없다
+  return null       // 연간·H1·H2·분기는 **범위**다 — 그 안의 한 칸을 고른 것이 아니다
 }
 
 function PerformanceChart({ quotes, fy, targets, engineerIds, mode, month }: {
@@ -350,7 +374,11 @@ function PerformanceChart({ quotes, fy, targets, engineerIds, mode, month }: {
   const today = todayKST()
   const unit = chartUnitOf(mode)
 
+  // 값은 **달마다** 낸 뒤 기간에 맞는 달만 남긴다 — 자르는 것은 보여 주는 범위뿐이고,
+  // 한 칸의 수치는 어느 기간에서 보든 같다(1-2).
+  const months = chartMonthsOf(mode)
   const bars = unitBars(quotes, targets, { engineerIds, fy, unit, today })
+    .filter(b => months.includes(Number(b.key.split('-')[1])))
   // Y축은 두 패널 공통(axisMaxOf) — 눈금이 다르면 위아래 막대를 눈으로 비교할 수 없다.
   const axisMax = axisMaxOf(bars)
   const unitLabel = unit === 'month' ? '월 목표' : unit === 'quarter' ? '분기 목표' : '연간 목표'
@@ -1615,6 +1643,7 @@ const visibleEngineers = sortedEngineers.filter(e => {
     return e.engineer_id === currentEngineer.engineer_id
   })
 
+  // 팀을 고르면 **보이는 사람 중 그 팀**. 「전체」면 보이는 사람 전부(= 권한 범위).
   const filteredEngineers = teamFilter ? visibleEngineers.filter(e => e.teams === teamFilter) : visibleEngineers
   const filteredEngineerIds = filteredEngineers.map(e => e.engineer_id)
 
@@ -1622,7 +1651,6 @@ const visibleEngineers = sortedEngineers.filter(e => {
   const matchPeriod = (dateStr: string, fiscalYear: number) => matchPeriodOf(dateStr, fiscalYear, mode, month)
 
   const allEngineers = sortedEngineers.filter(e => inSalesStats(e) && isActiveInPeriod(e.resigned_date, periodStart))
-  const allEngineerIds = allEngineers.map(e => e.engineer_id)
   // 기간을 재는 날짜가 지표마다 다르다.
   //   견적 제출 — 견적을 낸 날(quote_date)
   //   수주      — 발주서를 등록한 날(purchase_order_at)
@@ -1632,25 +1660,42 @@ const visibleEngineers = sortedEngineers.filter(e => {
   const inRevenuePeriod = (q: Quote, year: number) => inRevenuePeriodOf(q, year, mode, month)
 
   const filteredQuotes = quotes.filter(q => matchPeriod(q.quote_date, fy) && (teamFilter ? filteredEngineerIds.includes(q.engineer_id) : true))
-  const allFilteredQuotes = quotes.filter(q => matchPeriod(q.quote_date, fy) && allEngineerIds.includes(q.engineer_id))
   // 수주·매출은 기간 기준이 달라 별도 집합으로 모은다(팀 카드·개인 카드도 이 집합을 쓴다).
   const scopedOrderQuotes = quotes.filter(q => inOrderPeriod(q, fy) && (teamFilter ? filteredEngineerIds.includes(q.engineer_id) : true))
   const scopedRevenueQuotes = quotes.filter(q => inRevenuePeriod(q, fy) && (teamFilter ? filteredEngineerIds.includes(q.engineer_id) : true))
-  const allOrderQuotes = quotes.filter(q => inOrderPeriod(q, fy) && allEngineerIds.includes(q.engineer_id))
-  const allRevenueQuotes = quotes.filter(q => inRevenuePeriod(q, fy) && allEngineerIds.includes(q.engineer_id))
-  const totalQuoteAmt = allFilteredQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
-  const totalOrderAmt = allOrderQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
-  const totalRevenueAmt = allRevenueQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
-  const totalCostAmt = allRevenueQuotes.reduce((s, q) => s + (q.total_cost || 0), 0)
-  const totalProfitAmt = allRevenueQuotes.reduce((s, q) => s + (q.total_profit || 0), 0)
+
+  /**
+   * **요약 여섯 칸이 보는 사람들** (2026-11-27, 묶음6 1-1).
+   *
+   * 2026-11-27 전에는 여섯 칸이 늘 `allEngineerIds`(전사)를 봤다 — **팀을 골라도 숫자가
+   * 그대로**였다. 그래서 「80CS 를 골랐는데 왜 전사 금액이 뜨지」가 됐다. 그래프와 연간
+   * 누적은 이미 팀을 따르고 있어서, 한 화면 안에서 **위아래가 서로 다른 말**을 했다.
+   *
+   * 「전체」일 때는 전과 **똑같다**(allEngineerIds) — 숫자가 바뀌지 않는다.
+   */
+  const scopeEngineers = scopeEngineersOf(teamFilter, visibleEngineers, allEngineers)
+  const scopeIds = scopeEngineers.map(e => e.engineer_id)
+  const sumQuotes = quotes.filter(q => matchPeriod(q.quote_date, fy) && scopeIds.includes(q.engineer_id))
+  const sumOrderQuotes = quotes.filter(q => inOrderPeriod(q, fy) && scopeIds.includes(q.engineer_id))
+  const sumRevenueQuotes = quotes.filter(q => inRevenuePeriod(q, fy) && scopeIds.includes(q.engineer_id))
+  const totalQuoteAmt = sumQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
+  const totalOrderAmt = sumOrderQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
+  const totalRevenueAmt = sumRevenueQuotes.reduce((s, q) => s + (q.total_supply || 0), 0)
+  const totalCostAmt = sumRevenueQuotes.reduce((s, q) => s + (q.total_cost || 0), 0)
+  const totalProfitAmt = sumRevenueQuotes.reduce((s, q) => s + (q.total_profit || 0), 0)
   const totalProfitRate = totalRevenueAmt > 0 ? (totalProfitAmt / totalRevenueAmt * 100) : null
-  const totalQuoteCnt = allFilteredQuotes.length
-  const totalOrderCnt = allOrderQuotes.length
+  const totalQuoteCnt = sumQuotes.length
+  const totalOrderCnt = sumOrderQuotes.length
   // 전환율 — 분자(수주)는 발주 시점, 분모(견적)는 작성 시점 기준이라 기간이 정확히 겹치지는 않는다.
   const convRate = totalQuoteCnt > 0 ? (totalOrderCnt / totalQuoteCnt * 100) : 0
   // 「전년 동기 대비」 타일과 그 셈(지난해 같은 기간 매출)은 걷었다(2026-11-26 지시) —
   // 값이 거의 늘 「—」 였다. 해마다 견주는 일은 실적 추이 차트가 맡는다.
-  const sumAllTarget = (key: 'target_amount' | 'order_target_amount') => allEngineers.reduce((s, e) => {
+  /**
+   * 목표 합 — **보고 있는 사람들의 개인 목표를 더한다**(2026-11-27, 묶음6 1-1).
+   * 팀 목표라는 칸은 따로 없다. 팀을 고르면 **그 팀 사람들의 합**이고, 「전체」면 전원의
+   * 합 — 그것이 곧 사업부 목표다(전과 같은 값).
+   */
+  const sumAllTarget = (key: 'target_amount' | 'order_target_amount') => scopeEngineers.reduce((s, e) => {
     const t = targets.find(t => t.engineer_id === e.engineer_id && t.year === fy && t.quarter === null)
     return s + (t?.[key] || 0)
   }, 0)
