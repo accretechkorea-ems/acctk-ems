@@ -510,9 +510,10 @@ export default function CompanyPane({
             <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: R.tag, background: NEUTRAL, color: SUB }}>{group.industry}</span>
           )}
           <span style={{ flex: 1 }} />
+          {/* ＋ 는 **사업장 표 머리줄**로 갔다(2026-11-27, 묶음6 5-1) — 더하는 것이
+              사업장이니, 사업장 목록 옆에 있어야 한다. 여기 제목 옆에는 ✎ 만 남는다. */}
           <span className="card-act" style={{ display: 'inline-flex', gap: 8 }}>
             <EditIconButton label="회사 정보 수정" onClick={() => setEditCompanyOpen(true)} />
-            <AddIconButton label="사업장 추가" onClick={onAddSite} />
           </span>
         </div>
 
@@ -522,7 +523,13 @@ export default function CompanyPane({
             떠오르는 판은 사업장 화면의 메모와 같은 부품이다(MemoHoverText). */}
         {hasMemo(group.note) && (
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0, marginTop: -2 }}>
-            <span style={{ fontSize: 12, color: MUTED, flexShrink: 0 }}>메모</span>
+            {/* 「메모」 라는 글자 대신 **아이콘**이다(2026-11-27, 묶음6 5-2 · 캔버스 A안) —
+                한 줄짜리 자리에서 라벨 두 글자는 글을 그만큼 밀어낸다. 읽어 주기에는 남긴다. */}
+            <span aria-label="메모" title="메모" style={{ color: MUTED, flexShrink: 0, display: 'inline-flex', alignSelf: 'center' }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M4 4h16v12H8l-4 4z" />
+              </svg>
+            </span>
             <span onClick={() => setEditCompanyOpen(true)} style={{ minWidth: 0, cursor: 'pointer' }}>
               <MemoHoverText
                 title={group.companyName}
@@ -623,7 +630,11 @@ export default function CompanyPane({
                 <th style={{ ...th, textAlign: 'right', width: 64 }}>장비</th>
                 <th style={{ ...th, textAlign: 'right', width: 86 }}>진행 견적</th>
                 <th style={th}>최근 활동</th>
-                <th className="site-edit-cell" style={{ ...th, width: 52, background: "#fafafa" }} />
+                {/* 오른쪽 끝 — 줄의 ✎ 가 서는 칸이자 **＋ 사업장 추가**가 서는 자리다
+                    (2026-11-27, 묶음6 5-1). 늘 보인다(묶음5 1-2). */}
+                <th className="site-edit-cell" style={{ ...th, width: 52, background: "#fafafa", textAlign: 'right', paddingRight: 8 }}>
+                  <AddIconButton size={24} label="사업장 추가" onClick={onAddSite} />
+                </th>
               </tr>
             </thead>
             <tbody>
