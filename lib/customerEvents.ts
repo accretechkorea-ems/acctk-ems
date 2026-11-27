@@ -83,7 +83,9 @@ export const CHANGE_EVENT_TYPES: readonly CustomerEventType[] = [
  */
 export const WORK_EVENT_TYPES: readonly CustomerEventType[] = [
   'holding_started', 'holding_resolved',
-  'forecast_created', 'forecast_closed',
+  // 단계 고침도 **일**이다(2026-11-28, 야간4 4-2) — 이 목록에 없으면
+  // /api/customer-change 의 log-event 가 400 으로 막는다(실측에서 보았다).
+  'forecast_created', 'forecast_stage_changed', 'forecast_closed',
   'repair_received', 'repair_shipped',
   'inquiry_created',
 ]

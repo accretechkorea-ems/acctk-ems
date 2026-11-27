@@ -153,18 +153,9 @@ export default function OpportunityModal({
               </span>
             )}
           </div>
-          <button
-            onClick={onClose}
-            title="닫기"
-            onMouseEnter={(e) => (e.currentTarget.style.color = '#111827')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = '#6b7280')}
-            style={{ width: 28, height: 28, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563', transition: 'color 0.15s ease' }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+          {/* ✕ 는 **공용 카드가 그린다**(2026-11-28, 야간4). 이 창이 제 것을 하나 더
+              그리고 있어 머리줄에 ✕ 가 둘이었다. 공용 것을 쓰면 Esc·바깥 클릭과
+              **같은 함수**를 지난다(ModalCard 머리말). */}
         </>}
         footer={<>
           {canEdit && opportunity

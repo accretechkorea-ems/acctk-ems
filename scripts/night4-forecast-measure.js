@@ -107,24 +107,16 @@ const WHAT = `(() => {
     await page.waitForTimeout(1500)
 
     // 업체 — 검색칸에 치고 첫 줄을 고른다. 고르기만 한다(그 줄은 고치지 않는다).
-    const pick = page.locator('input[placeholder*="업체"], input[placeholder*="고객"], input[placeholder*="검색"]').first()
+    const pick = page.getByPlaceholder('회사명 · 영문명').first()
     if (await pick.isVisible().catch(() => false)) {
       await pick.fill('가레트')
       await page.waitForTimeout(1600)
       const first = page.locator('[role="option"], li, button').filter({ hasText: '가레트' }).first()
       if (await first.isVisible().catch(() => false)) { await first.click(); await page.waitForTimeout(800) }
     }
-    const title = page.locator('input[placeholder*="제목"], input[name="title"]').first()
+    const title = page.getByPlaceholder('예: A동 라인 증설').first()
     if (await title.isVisible().catch(() => false)) await title.fill(MARK)
-    else {
-      // 제목 칸을 placeholder 로 못 찾으면 **텍스트 입력칸 가운데 빈 것**에 넣는다.
-      const inputs = page.locator('input[type="text"]:visible')
-      const n = await inputs.count()
-      for (let i = 0; i < n; i++) {
-        const v = await inputs.nth(i).inputValue().catch(() => 'x')
-        if (v === '') { await inputs.nth(i).fill(MARK); break }
-      }
-    }
+    else step('제목 칸', false, 'placeholder 로 찾지 못함')
     await page.screenshot({ path: path.join(SHOTS, `forecast-new-modal-${TAG}.png`) })
     const save = page.getByRole('button', { name: /저장|등록/ }).last()
     await save.click()
@@ -165,12 +157,22 @@ const WHAT = `(() => {
         step(`단계 → ${next}`, now.ok && now.body?.[0]?.stage === next, `지금=${now.body?.[0]?.stage}`)
       }
       // 실주 — 카드의 「실주」를 누르고 사유를 고른다.
-      const lost = page.getByRole('button', { name: '실주' }).first()
-      if (await lost.isVisible().catch(() => false)) {
-        await lost.click()
-        await page.waitForTimeout(1500)
-        const reason = page.getByRole('button', { name: '가격' }).first()
-        if (await reason.isVisible().catch(() => false)) { await reason.click(); await page.waitForTimeout(500) }
+      // 실주는 **단계 select** 에서 고른다 — 고르면 사유 창이 열린다(OpportunityCard).
+      await card.hover()
+      await page.waitForTimeout(600)
+      const lostSel = card.locator('select').first()
+      if (await lostSel.isVisible().catch(() => false)) {
+        await lostSel.selectOption('실주').catch(() => {})
+        await page.waitForTimeout(1800)
+        // 사유는 **고르는 칸**이다(「사유 고르기」) — 눌러서 목록을 열고 첫 줄을 고른다.
+        const reasonBox = page.getByPlaceholder('사유 고르기').first()
+        if (await reasonBox.isVisible().catch(() => false)) {
+          await reasonBox.click()
+          await page.waitForTimeout(900)
+          const item = page.getByText('가격', { exact: true }).first()
+          if (await item.isVisible().catch(() => false)) { await item.click(); await page.waitForTimeout(700) }
+        }
+        await page.screenshot({ path: path.join(SHOTS, `forecast-lost-modal-${TAG}.png`) })
         const ok2 = page.getByRole('button', { name: /실주 처리|저장|확인/ }).last()
         await ok2.click().catch(() => {})
         await page.waitForTimeout(3000)

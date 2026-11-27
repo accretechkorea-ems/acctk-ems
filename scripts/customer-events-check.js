@@ -46,13 +46,19 @@ const E = load(path.join(ROOT, 'lib/customerEvents.ts'))
 const V = load(path.join(ROOT, 'lib/customerEventView.ts'))
 const CHANGE = read('app/api/customer-change/route.ts')
 
-console.log('── ① 밖에서 벌어진 일 일곱 ──')
+console.log('── ① 밖에서 벌어진 일 여덟 ──')
+// 2026-11-28(야간4 4-2) — 포캐스트 **단계 고침**이 여기 들어왔다. 이 목록에 없으면
+// /api/customer-change 의 log-event 가 400 으로 막는다(4-5 실측에서 그렇게 막혔다).
 eq('묶음 그대로', [...E.WORK_EVENT_TYPES], [
   'holding_started', 'holding_resolved',
-  'forecast_created', 'forecast_closed',
+  'forecast_created', 'forecast_stage_changed', 'forecast_closed',
   'repair_received', 'repair_shipped',
   'inquiry_created',
 ])
+// 적을 수 있는 종류여야 화면이 그 줄을 남긴다 — 길이 두 군데라 함께 못 박는다.
+eq('포캐스트 셋이 모두 「일」이다',
+  ['forecast_created', 'forecast_stage_changed', 'forecast_closed'].map(t => E.isWorkEvent(t)),
+  [true, true, true])
 for (const t of E.WORK_EVENT_TYPES) {
   ok(`${t} — 「일」로 센다`, E.isWorkEvent(t))
   ok(`${t} — 「고친 일」이 아니다(기본으로 켜져 보인다)`, !E.isChangeEvent(t))

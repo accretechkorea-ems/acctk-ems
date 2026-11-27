@@ -1,9 +1,13 @@
 {
  "tag": "after",
- "at": "2026-11-27T13:39:30.996Z",
+ "at": "2026-11-27T13:57:18.202Z",
  "base": "http://localhost:3101",
- "만든_id": [],
- "지운_id": [],
+ "만든_id": [
+  63
+ ],
+ "지운_id": [
+  63
+ ],
  "남은_id": [],
  "세그먼트": {
   "진행 중": {
@@ -62,13 +66,109 @@
  "브라우저_오류": [
   "Failed to load resource: the server responded with a status of 404 ()",
   "Failed to load resource: the server responded with a status of 404 ()",
+  "Failed to load resource: the server responded with a status of 404 ()",
+  "Failed to load resource: the server responded with a status of 404 ()",
+  "Failed to load resource: the server responded with a status of 404 ()",
+  "Failed to load resource: the server responded with a status of 404 ()",
   "Failed to load resource: the server responded with a status of 404 ()"
+ ],
+ "만든_줄": {
+  "opportunity_id": 63,
+  "title": "[검증용] 야간4 단계이력",
+  "stage": "상담",
+  "customer_id": 776,
+  "engineer_id": 226,
+  "created_at": "2026-11-27T13:57:38.25972+00:00"
+ },
+ "단계_이력": "표 없음/오류 404 — {\"code\":\"PGRST205\",\"details\":null,\"hint\":\"Perhaps you meant the table 'public.approval_history'\",\"message\":\"Could not fi",
+ "사건": [
+  {
+   "id": 279,
+   "event_type": "forecast_closed",
+   "occurred_at": "2026-11-27T00:00:00+00:00",
+   "payload": {
+    "title": "[검증용] 야간4 단계이력",
+    "reason": "가격",
+    "result": "실주",
+    "competitor": null,
+    "amount_text": null
+   }
+  },
+  {
+   "id": 278,
+   "event_type": "forecast_stage_changed",
+   "occurred_at": "2026-11-27T13:57:56.027+00:00",
+   "payload": {
+    "title": "[검증용] 야간4 단계이력",
+    "to_stage": "실주",
+    "from_stage": "견적제출",
+    "opportunity_id": 63
+   }
+  },
+  {
+   "id": 277,
+   "event_type": "forecast_stage_changed",
+   "occurred_at": "2026-11-27T13:57:49.138+00:00",
+   "payload": {
+    "title": "[검증용] 야간4 단계이력",
+    "to_stage": "견적제출",
+    "from_stage": "사양검토",
+    "opportunity_id": 63
+   }
+  },
+  {
+   "id": 276,
+   "event_type": "forecast_stage_changed",
+   "occurred_at": "2026-11-27T13:57:46.643+00:00",
+   "payload": {
+    "title": "[검증용] 야간4 단계이력",
+    "to_stage": "사양검토",
+    "from_stage": "상담",
+    "opportunity_id": 63
+   }
+  },
+  {
+   "id": 275,
+   "event_type": "forecast_created",
+   "occurred_at": "2026-11-27T13:57:39.271+00:00",
+   "payload": {
+    "stage": "상담",
+    "title": "[검증용] 야간4 단계이력",
+    "amount_text": null
+   }
+  }
+ ],
+ "지운_사건_id": [
+  279,
+  278,
+  277,
+  276,
+  275
  ],
  "단계": [
   {
    "name": "만들기",
-   "ok": false,
-   "note": "TimeoutError: locator.click: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: /저장|등록/ }).last()\u001b[22m\n"
+   "ok": true,
+   "note": "opportunity_id=63"
+  },
+  {
+   "name": "카드가 판에 있다",
+   "ok": true
+  },
+  {
+   "name": "단계 → 사양검토",
+   "ok": true,
+   "note": "지금=사양검토"
+  },
+  {
+   "name": "단계 → 견적제출",
+   "ok": true,
+   "note": "지금=견적제출"
+  },
+  {
+   "name": "실주로 닫혔다",
+   "ok": true,
+   "note": "{\"stage\":\"실주\",\"closed_at\":\"2026-11-27T13:57:55.558+00:00\",\"lost_reason\":\"가격\"}"
   }
  ]
 }

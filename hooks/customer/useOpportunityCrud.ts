@@ -56,13 +56,15 @@ export function useOpportunityCrud({ customerId, engineerId, role, fetchDetail }
     from: string | null,
     to: string,
   ) => {
+    // 표가 없을 때의 **폴백 사건은 여기서 주지 않는다** — 바로 아래에서 같은 뜻의
+    // 줄을 적기 때문이다(2026-11-28 실측에서 한 번 옮길 때 사건이 둘씩 쌓였다).
+    // 만든 때의 단계는 forecast_created 의 payload.stage 가 이미 담는다.
     void recordStageChange(supabase, {
       opportunityId: o.opportunity_id,
       fromStage: from,
       toStage: to,
       changedBy: engineerId,
       customerId: o.customer_id,
-      logEvent: row => { void logCustomerEvent(row) },
     })
     // 만든 때(from 이 없다)는 적지 않는다 — forecast_created 와 두 줄이 되기 때문이다.
     if (from == null || from === to) return
