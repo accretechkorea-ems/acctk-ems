@@ -133,6 +133,15 @@ export default function CustomerListPanel({
   )
   const shownCleanup = cleanupShown(cleanupBucket)
 
+  /**
+   * 회사 줄을 눌렀을 때 — **닫혀 있으면 펴고 고른다. 열려 있으면 고르기만 한다**
+   * (2026-11-27, 묶음4 E). 접는 길은 ∨ 하나뿐이다.
+   */
+  const pickCompany = useCallback((companyId: number, open: boolean) => {
+    if (!open) toggleExpand(companyId)
+    onSelectCompany(companyId)
+  }, [toggleExpand, onSelectCompany])
+
   /** 트리가 구르는 요소 — 위·아래 힌트가 이것을 본다. */
   const treeRef = useRef<HTMLElement | null>(null)
   /** 「분류 지정」 적용 모달이 떠 있는가. */
@@ -243,8 +252,18 @@ export default function CustomerListPanel({
               <div
                 role="button"
                 tabIndex={0}
-                onClick={() => { toggleExpand(g.companyId); onSelectCompany(g.companyId) }}
-                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpand(g.companyId); onSelectCompany(g.companyId) } }}
+                aria-expanded={open}
+                /**
+                 * 줄을 누르면 — **닫혀 있으면 펴고 고른다. 열려 있으면 고르기만 한다**
+                 * (2026-11-27, 묶음4 E).
+                 *
+                 * 전에는 누를 때마다 토글이라, 펴 둔 회사를 다시 눌러 **고르려는 순간
+                 * 접혔다**. 사업장을 보며 회사를 고르는 일이 한 번에 되지 않았다.
+                 * 접는 길은 **∨ 하나**로 남긴다 — 접는 것은 드물고 분명한 뜻이다.
+                 * 폰·키보드(Enter·Space)도 같은 규칙이다.
+                 */
+                onClick={() => pickCompany(g.companyId, open)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickCompany(g.companyId, open) } }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8, height: 38, padding: '0 10px 0 6px',
                   borderRadius: R.icon, cursor: 'pointer', background: sel ? '#eff4ff' : 'transparent',
@@ -258,10 +277,21 @@ export default function CustomerListPanel({
                   onChange={() => toggleCompanyCheck(g.companyId)}
                   aria-label={`${g.companyName} 선택`}
                   style={{ flexShrink: 0, cursor: 'pointer' }} />
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                  style={{ flexShrink: 0, transform: open ? 'none' : 'rotate(-90deg)', transition: 'transform 0.15s ease' }}>
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
+                {/* ∨ — **접고 펴는 유일한 자리**다. 줄 클릭과 갈라 둔다(위 주석). */}
+                <button type="button"
+                  onClick={e => { e.stopPropagation(); toggleExpand(g.companyId) }}
+                  onKeyDown={e => e.stopPropagation()}
+                  aria-label={`${g.companyName} ${open ? '접기' : '펼치기'}`}
+                  aria-expanded={open}
+                  style={{
+                    width: 22, height: 22, flexShrink: 0, padding: 0, border: 'none', background: 'transparent',
+                    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                    style={{ transform: open ? 'none' : 'rotate(-90deg)', transition: 'transform 0.15s ease' }}>
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
                 <b style={{ fontSize: 13, fontWeight: 700, color: TEXT, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.companyName}</b>
                 {/* 분류(생산품) 뱃지는 걷었다(2026-11-20) — 트리에서 읽어야 하는 것은
                     **회사 이름과 사업장 수**다. 분류는 회사 카드와 필터가 맡는다. */}
