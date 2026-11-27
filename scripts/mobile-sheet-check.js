@@ -38,9 +38,14 @@ const DELIV = code(read('components/quote/DeliveryDevices.tsx'))
 
 console.log('── ① 장비 세 칸은 좁은 화면에서 세로로 선다 ──')
 
-ok('부품이 자기 격자를 들고 있다', /\.eqp-grid\s*\{[^}]*grid-template-columns:\s*1fr 1fr 1fr/.test(PICKER))
+// PC 는 글자 길이대로 2 : 1 : 1.5 다 — 똑같이 셋으로 나누면 라인업이 가장 먼저 잘린다(묶음4 A).
+ok('부품이 자기 격자를 들고 있다', /\.eqp-grid\s*\{[^}]*grid-template-columns:\s*2fr 1fr 1\.5fr/.test(PICKER))
+ok('격자가 모달 폭을 다 쓴다', /\.eqp-grid\s*\{[^}]*width:\s*100%/.test(PICKER))
+ok('긴 값은 말줄임으로 자른다', /textOverflow: 'ellipsis'/.test(PICKER))
+ok('잘린 값은 title 로 끝까지 읽는다', /title=\{lineup \|\| undefined\}/.test(PICKER) && /title=\{model \|\| undefined\}/.test(PICKER) && /title=\{config \|\| undefined\}/.test(PICKER))
 ok('좁은 화면에서는 한 열이다', /@media \(max-width: 768px\)[\s\S]{0,200}\.eqp-grid\s*\{\s*grid-template-columns:\s*1fr\b/.test(PICKER))
 ok('칸마다 min-width: 0 이 있다(글자가 길어도 칸을 밀지 않는다)', /\.eqp-cell\s*\{\s*min-width:\s*0/.test(PICKER))
+ok('그 min-width 는 폰 단 밖에 있다(PC 에서도 든다)', PICKER.indexOf('.eqp-cell { min-width: 0; }') < PICKER.indexOf('@media (max-width: 768px)'))
 
 // 세로로 서면 「라인업 / 모델명 / 옵션」 한 줄 제목만으로는 어느 칸인지 알 수 없다.
 for (const label of ['라인업', '모델명', '옵션']) {

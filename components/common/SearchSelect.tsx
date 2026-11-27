@@ -90,6 +90,8 @@ type Props<T> = {
   className?: string
   /** 입력칸 스타일. 적지 않으면 공용 입력 모양. */
   inputStyle?: CSSProperties
+  /** 칸에 붙는 title — 말줄임으로 잘린 값을 호버로 끝까지 읽는 자리. */
+  title?: string
   /** 입력칸을 감싸는 상자의 스타일(폭 맞추기 등). */
   wrapStyle?: CSSProperties
   /** 목록 최대 높이. 기본 240. */
@@ -122,7 +124,7 @@ type Row = { key: string; node: ReactNode; run: () => void }
 export default function SearchSelect<T>({
   items, itemKey, renderItem, onSelect,
   query, onQueryChange,
-  placeholder, disabled, autoFocus, inputId, tabIndex, className, inputStyle, wrapStyle,
+  placeholder, disabled, autoFocus, inputId, tabIndex, className, inputStyle, wrapStyle, title,
   maxHeight = 240, extras, emptyText, openWhenEmpty, openOnFocus = true, note,
   mobileSheet = true,
 }: Props<T>) {
@@ -243,6 +245,7 @@ export default function SearchSelect<T>({
         onFocus={() => { if (openOnFocus) setOpen(true) }}
         onKeyDown={onKeyDown}
         placeholder={placeholder}
+        title={title}
         style={{ ...DEFAULT_INPUT, ...inputStyle }}
       />
       {asSheet ? (
