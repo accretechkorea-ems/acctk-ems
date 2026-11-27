@@ -28,6 +28,7 @@
 import { useEffect, useState } from 'react'
 import type { UnitBar, YearSummary } from '@/lib/salesStats'
 import { R } from '@/lib/radius'
+import { krwShort } from '@/lib/forecastBoard'
 
 export const CHART_BLUE = '#234ea2'
 export const CHART_GREEN = '#16a34a'
@@ -237,9 +238,13 @@ export function ChartPanel({ kind, bars, axisMax, unitLabel, selectedKey }: {
     >
       {/* 패널 이름 — Y축 바깥 여백, 그래프 세로 중앙. 제목 줄 하나를 아끼려고 이 자리다. */}
       <text x={2} y={PAD_T + PLOT_H / 2 - 2} fontSize={14} fontWeight={800} fill={TEXT} letterSpacing="-0.3">{title}</text>
+      {/* 목표 금액은 **축약**한다(2026-11-27, 묶음5 5-2) — 「₩768,916,667」 은 열한 글자라
+          차트 왼쪽 여백을 넘고, 사람이 자릿수를 세어야 읽힌다. 「7억 6,892만」이면 한눈에
+          든다. 전체 자릿수는 **올려 두면** 보인다(칸반·실적 타일과 같은 규칙·같은 함수). */}
       <text x={2} y={PAD_T + PLOT_H / 2 + 13} className="num" fontSize={10} fontWeight={600} fill={MUTED}>
+        {sameTarget && commonTarget > 0 && <title>{`${unitLabel} ₩${numKR(commonTarget)}`}</title>}
         {sameTarget
-          ? `${unitLabel} ${commonTarget > 0 ? `₩${numKR(commonTarget)}` : '미설정'}`
+          ? `${unitLabel} ${commonTarget > 0 ? krwShort(commonTarget) : '미설정'}`
           : `${unitLabel} 칸마다 다름`}
       </text>
 

@@ -1712,7 +1712,10 @@ const visibleEngineers = sortedEngineers.filter(e => {
             ⚠ 「잔여 N일」은 여기서 **뺐다** — 아래 통합 카드의 제목이 말한다(1-2).
               기간 글자(「FY2026 Q3 (10~12월)」)도 제목으로 갔다. 필터 바는 **고르는 줄**이고
               지금 무엇을 보고 있는지는 그 아래 카드의 제목이 말한다. */}
-        <div style={{ background: CARD_BG, borderRadius: R.control, padding: '0 14px', marginBottom: 12, border: `1px solid ${BORDER}`, minHeight: 46, display: 'flex', alignItems: 'center' }}>
+        {/* **따라 내려온다**(2026-11-27, 묶음5 5-1) — 표가 길어 아래로 굴리면 기간·팀을
+            바꾸러 맨 위까지 되돌아가야 했다. 바탕을 흰색으로 두고(뒤 내용이 비치지 않게)
+            아래에 선 하나를 둔다. 층은 표 머리줄(Z.thead)보다 위, 떠 있는 것들보다는 아래다. */}
+        <div style={{ background: CARD_BG, borderRadius: R.control, padding: '0 14px', marginBottom: 12, border: `1px solid ${BORDER}`, minHeight: 46, display: 'flex', alignItems: 'center', position: 'sticky', top: 0, zIndex: Z.inPage, boxShadow: '0 1px 0 rgba(0,0,0,0.06)' }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', width: '100%' }}>
             <select value={fy} onChange={e => setFy(Number(e.target.value))} style={{ ...inp, width: 96, fontWeight: 700 }}>
               {[currentFY + 1, currentFY, currentFY - 1].map(y => <option key={y} value={y}>FY{y}</option>)}
