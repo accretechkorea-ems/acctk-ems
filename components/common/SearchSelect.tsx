@@ -20,13 +20,43 @@
 // 그대로 그린다 — 자리마다 조건이 다르고, 서버에서 찾는 자리도 있기 때문이다.
 // 회사를 찾는 자리는 lib/companySearch.ts 의 한 함수를 쓴다.
 
-import { useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useListKeyboard } from '@/hooks/useListKeyboard'
 import Popover from '@/components/common/Popover'
 import { useOverlayEsc } from '@/components/common/overlayStack'
 import { BORDER, CARD_BG, MUTED, NEUTRAL_BG, TEXT } from '@/components/common/ui'
 import { R } from '@/lib/radius'
+import { Z } from '@/lib/zIndex'
 import { PICK_CLASS } from '@/lib/focusRing'
+
+/**
+ * 폰에서는 **아래에서 올라오는 시트**다 (2026-11-27).
+ *
+ * 칸에 붙는 목록은 칸만큼만 넓다(matchAnchorWidth). 390 짜리 화면에서 세 칸이 나란히
+ * 선 자리라면 한 칸이 109px 이라, 목록도 109px 이 되어 「CONTOURECORD」 가
+ * 「CONTOURECO…」 로 잘린다 — **무엇을 고르는지 모르는 채** 고르게 된다.
+ * 그래서 좁은 화면에서는 목록을 화면 아래 시트로 띄운다: 좌우 꽉 차고, 높이는 최대
+ * 70dvh 이며 그 안에서 구르고, 맨 위에 검색칸이 그대로 선다.
+ *
+ * **고르는 값과 동작은 그대로다** — 같은 rows 를 그리고 같은 run() 을 부른다.
+ * 모양만 다르다. 그래서 다른 SearchSelect(견적 사명·수신인·품목, 문구함…)도 함께 나아진다.
+ */
+const SHEET_MAX_W = 768
+
+/** 지금 폰 폭인가. 창 크기가 바뀌면 따라 바뀐다(개발자 도구로 줄여도 동작한다). */
+function useNarrow(enabled: boolean): boolean {
+  const [narrow, setNarrow] = useState(false)
+  useEffect(() => {
+    if (!enabled || typeof window === 'undefined' || !window.matchMedia) return
+    const mq = window.matchMedia(`(max-width: ${SHEET_MAX_W}px)`)
+    const sync = () => setNarrow(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [enabled])
+  return narrow
+}
 
 /**
  * 후보 말고 더 두는 줄 — 「직판」(위)·「새 회사로 등록」(아래)처럼.
@@ -73,6 +103,11 @@ type Props<T> = {
   openOnFocus?: boolean
   /** 목록 아래에 붙는 고정 안내(고를 수 없는 줄 — 키보드가 닿지 않는다). */
   note?: ReactNode
+  /**
+   * 좁은 화면(≤768)에서 목록을 **화면 아래 시트**로 띄운다. 기본은 켜짐 —
+   * 칸 폭에 갇힌 목록은 폰에서 늘 읽기 어렵다. 끄면 전처럼 칸에 붙는다.
+   */
+  mobileSheet?: boolean
 }
 
 const DEFAULT_INPUT: CSSProperties = {
@@ -89,8 +124,10 @@ export default function SearchSelect<T>({
   query, onQueryChange,
   placeholder, disabled, autoFocus, inputId, tabIndex, className, inputStyle, wrapStyle,
   maxHeight = 240, extras, emptyText, openWhenEmpty, openOnFocus = true, note,
+  mobileSheet = true,
 }: Props<T>) {
   const anchorRef = useRef<HTMLDivElement>(null)
+  const sheetRef = useRef<HTMLDivElement | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
   const [open, setOpen] = useState(false)
   const autoId = useId()
@@ -113,6 +150,8 @@ export default function SearchSelect<T>({
   // 고를 것이 하나도 없으면 「없습니다」 한 줄만 띄운다(검색어가 있을 때). 그마저 없으면 열지 않는다.
   const showEmpty = rows.length === 0 && !!emptyText && (hasQuery || !!openWhenEmpty)
   const isOpen = open && !disabled && (rows.length > 0 || showEmpty)
+  const narrow = useNarrow(mobileSheet)
+  const asSheet = mobileSheet && narrow && isOpen
 
   /**
    * 키보드 훅에 넘기는 목록은 **그대로인 동안 같은 배열**이어야 한다.
@@ -150,6 +189,43 @@ export default function SearchSelect<T>({
     keys.onKeyDown(e)
   }
 
+  /**
+   * 목록의 **속**. 칸에 붙든 시트로 뜨든 **같은 조각**을 쓴다 — 두 벌을 두면
+   * 한쪽만 고치는 날이 온다. 고르는 동작(run)도 같은 것이다.
+   */
+  const listBody = showEmpty ? (
+    <div style={{ padding: '8px 11px', fontSize: 12, color: MUTED }}>{emptyText}</div>
+  ) : (
+    <div ref={listRef} id={listId} role="listbox">
+      {rows.map((r, i) => (
+        <div key={r.key}
+          role="option"
+          // 호버·키보드·고른 자리가 **같은 링**이다(2026-11-26 묶음2 D).
+          // 여기는 전부터 마우스와 키보드가 같은 표시(active)를 썼다 — 그 표시의
+          // 생김새만 공용 링으로 바뀐 것이다(중립 바탕은 그대로 둔다).
+          className={PICK_CLASS}
+          aria-selected={i === keys.active}
+          // mousedown 으로 고른다 — click 까지 기다리면 입력칸이 먼저 포커스를 잃어 목록이 닫힌다.
+          onMouseDown={e => { e.preventDefault(); r.run() }}
+          // hover 는 색을 칠하지 않고 **고른 자리만 옮긴다** — 키보드와 같은 표시를 쓴다.
+          onMouseEnter={() => keys.setActive(i)}
+          style={{
+            padding: asSheet ? '13px 16px' : '8px 11px',
+            cursor: 'pointer', fontSize: 13, color: TEXT,
+            background: i === keys.active ? NEUTRAL_BG : 'transparent',
+            ...(asSheet ? { borderBottom: `1px solid ${BORDER}` } : null),
+          }}>
+          {r.node}
+        </div>
+      ))}
+    </div>
+  )
+  const noteBody = note == null ? null : (
+    <div style={{ padding: '7px 11px', fontSize: 11, color: MUTED, borderTop: `1px solid ${BORDER}` }}>
+      {note}
+    </div>
+  )
+
   return (
     <div ref={anchorRef} style={wrapStyle}>
       <input
@@ -169,49 +245,104 @@ export default function SearchSelect<T>({
         placeholder={placeholder}
         style={{ ...DEFAULT_INPUT, ...inputStyle }}
       />
-      <Popover
-        anchorRef={anchorRef}
-        open={isOpen}
-        onClose={() => setOpen(false)}
-        matchAnchorWidth
-        maxHeight={maxHeight}
+      {asSheet ? (
+        <Sheet
+          onClose={() => setOpen(false)}
+          sheetRef={sheetRef}
+          query={query}
+          onQueryChange={onQueryChange}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+          note={noteBody}
+        >
+          {listBody}
+        </Sheet>
+      ) : (
+        <Popover
+          anchorRef={anchorRef}
+          open={isOpen}
+          onClose={() => setOpen(false)}
+          matchAnchorWidth
+          maxHeight={maxHeight}
+          style={{
+            background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.icon,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+          }}
+        >
+          {listBody}
+          {noteBody}
+        </Popover>
+      )}
+    </div>
+  )
+}
+
+/**
+ * 아래에서 올라오는 **시트** — 좌우 꽉 차고, 높이 최대 70dvh, 속에서 구른다.
+ * 바깥(어둑한 바탕)을 누르면 닫히고, Esc 는 부르는 쪽의 쌓임이 이미 받는다.
+ * 바닥에는 safe-area 만큼 여백을 둔다 — 홈 인디케이터에 마지막 줄이 가리지 않게.
+ */
+function Sheet({
+  onClose, sheetRef, query, onQueryChange, onKeyDown, placeholder, label, note, children,
+}: {
+  onClose: () => void
+  sheetRef: { current: HTMLDivElement | null }
+  query: string
+  onQueryChange: (q: string) => void
+  onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void
+  placeholder?: string
+  label?: string
+  note: ReactNode
+  children: ReactNode
+}) {
+  if (typeof document === 'undefined') return null
+  return createPortal(
+    <>
+      <div
+        aria-hidden
+        onMouseDown={onClose}
+        onTouchStart={onClose}
+        style={{ position: 'fixed', inset: 0, zIndex: Z.popover, background: 'rgba(17, 24, 39, 0.35)' }}
+      />
+      <div
+        ref={sheetRef}
+        role="dialog"
+        aria-label={label ?? placeholder ?? '고르기'}
         style={{
-          background: CARD_BG, border: `1px solid ${BORDER}`, borderRadius: R.icon,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+          position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: Z.popover + 1,
+          display: 'flex', flexDirection: 'column',
+          maxHeight: '70dvh',
+          background: CARD_BG,
+          borderTopLeftRadius: R.modal, borderTopRightRadius: R.modal,
+          borderTop: `1px solid ${BORDER}`,
+          boxShadow: '0 -8px 30px rgba(0,0,0,0.18)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         }}
       >
-        {showEmpty ? (
-          <div style={{ padding: '8px 11px', fontSize: 12, color: MUTED }}>{emptyText}</div>
-        ) : (
-          <div ref={listRef} id={listId} role="listbox">
-            {rows.map((r, i) => (
-              <div key={r.key}
-                role="option"
-                // 호버·키보드·고른 자리가 **같은 링**이다(2026-11-26 묶음2 D).
-                // 여기는 전부터 마우스와 키보드가 같은 표시(active)를 썼다 — 그 표시의
-                // 생김새만 공용 링으로 바뀐 것이다(중립 바탕은 그대로 둔다).
-                className={PICK_CLASS}
-                aria-selected={i === keys.active}
-                // mousedown 으로 고른다 — click 까지 기다리면 입력칸이 먼저 포커스를 잃어 목록이 닫힌다.
-                onMouseDown={e => { e.preventDefault(); r.run() }}
-                // hover 는 색을 칠하지 않고 **고른 자리만 옮긴다** — 키보드와 같은 표시를 쓴다.
-                onMouseEnter={() => keys.setActive(i)}
-                style={{
-                  padding: '8px 11px', cursor: 'pointer', fontSize: 13, color: TEXT,
-                  background: i === keys.active ? NEUTRAL_BG : 'transparent',
-                }}>
-                {r.node}
-              </div>
-            ))}
-          </div>
-        )}
-        {note != null && (
-          <div style={{ padding: '7px 11px', fontSize: 11, color: MUTED, borderTop: `1px solid ${BORDER}` }}>
-            {note}
-          </div>
-        )}
-      </Popover>
-    </div>
+        <div style={{ padding: '10px 14px 8px', borderBottom: `1px solid ${BORDER}`, flex: '0 0 auto' }}>
+          {/* 손잡이 — 아래에서 올라온 판이라는 것을 알린다. */}
+          <div aria-hidden style={{ width: 36, height: 4, borderRadius: R.pill, background: BORDER, margin: '0 auto 10px' }} />
+          <input
+            autoFocus
+            value={query}
+            onChange={e => onQueryChange(e.target.value)}
+            onKeyDown={onKeyDown}
+            placeholder={placeholder}
+            // 16px 아래로 내리지 않는다 — iOS 가 칸을 확대하며 화면을 밀어 버린다.
+            style={{
+              width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: R.control,
+              fontSize: 16, color: TEXT, background: CARD_BG, outline: 'none',
+              boxSizing: 'border-box', fontFamily: 'inherit',
+            }}
+          />
+        </div>
+        <div style={{ overflowY: 'auto', flex: '1 1 auto', WebkitOverflowScrolling: 'touch' }}>
+          {children}
+        </div>
+        {note}
+      </div>
+    </>,
+    document.body,
   )
 }
 

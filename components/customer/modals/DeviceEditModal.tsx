@@ -191,8 +191,9 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
         <div style={{ display: 'grid', gap: 14 }}>
           <div>
             <label style={labelStyle}>장비 라인업 / 모델명 / 옵션</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-              {/* 마스터에서 고르거나 그냥 적는다(2026-11-26) — 등록 창과 같은 부품이다. */}
+              {/* 마스터에서 고르거나 그냥 적는다(2026-11-26) — 등록 창과 같은 부품이다.
+                  **3열 격자를 여기서 또 두지 않는다**(2026-11-27): 부품이 스스로 3열이라
+                  한 번 더 감싸면 세 칸이 1fr 한 칸(390 에서 95px) 안에 다시 갇힌다. */}
               <EquipmentPicker
                 lineup={form.device_name} model={form.device_name2} config={form.option}
                 onChange={next => {
@@ -207,7 +208,6 @@ export default function DeviceEditModal({ device, isSaving, onClose, onSave, onD
                 fieldStyle={{ ...fieldStyle, fontSize: 13 }}
                 lineupInvalid={!!errors.device_name}
               />
-            </div>
             <FieldError message={errors.device_name} />
           </div>
 

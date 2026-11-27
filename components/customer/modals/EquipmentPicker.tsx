@@ -16,14 +16,34 @@
  * 고르면 그 모델의 구성만 보인다. 손으로 적은 값이면 좁힐 것이 없으니 전부 보여 준다.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import SearchSelect from '@/components/common/SearchSelect'
 import {
   EMPTY_MASTER, filterByQuery, loadEquipmentMaster,
   type EquipmentMaster, type MasterConfig, type MasterLineup, type MasterModel,
 } from '@/lib/equipmentMaster'
 import { BLUE, MUTED } from '@/components/common/ui'
+import { LABEL_WEIGHT, TEXT_LABEL } from '@/lib/textTokens'
 import type { CSSProperties } from 'react'
+
+/**
+ * 폰에서는 **세로 석 줄**이다 (2026-11-27).
+ *
+ * 세 칸을 390 에 1fr 셋으로 나누면 한 칸이 **109px**(350 에서는 95px)이 된다 —
+ * 「라인업 (ex. SURFCOM NEX)」 가 「라인업 (ex.」 에서 잘리고, 빈 상자 셋으로 보인다.
+ * 칸을 좁히는 것으로는 못 푼다(글자는 16px 아래로 내릴 수 없다 — iOS 가 확대한다).
+ * 그래서 좁은 화면에서는 **한 줄에 한 칸**씩 놓고 칸마다 이름을 붙인다.
+ * PC 는 지금 그대로 3열이다.
+ */
+const GRID_CSS = `
+  .eqp-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .eqp-label { display: none; }
+  @media (max-width: 768px) {
+    .eqp-grid { grid-template-columns: 1fr; gap: 10px; }
+    .eqp-cell { min-width: 0; }
+    .eqp-label { display: block; margin-bottom: 4px; }
+  }
+`
 
 export type EquipmentPickerProps = {
   lineup: string
@@ -40,6 +60,7 @@ export type EquipmentPickerProps = {
 export default function EquipmentPicker({
   lineup, model, config, onChange, fieldStyle, lineupInvalid, disabled,
 }: EquipmentPickerProps) {
+  const uid = useId()
   const [master, setMaster] = useState<EquipmentMaster>(EMPTY_MASTER)
   const [qL, setQL] = useState('')
   const [qM, setQM] = useState('')
@@ -57,9 +78,15 @@ export default function EquipmentPicker({
     ...(invalid ? { borderColor: 'var(--color-danger)' } : null),
   })
 
+  const labelStyle: CSSProperties = { fontSize: 12, fontWeight: LABEL_WEIGHT, color: TEXT_LABEL }
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+    <div className="eqp-grid">
+      <style>{GRID_CSS}</style>
+      <div className="eqp-cell">
+      <label className="eqp-label" htmlFor={`${uid}-lineup`} style={labelStyle}>라인업</label>
       <SearchSelect<MasterLineup>
+        inputId={`${uid}-lineup`}
         items={filterByQuery(master.lineups, qL || lineup)}
         itemKey={l => l.id}
         renderItem={l => (
@@ -77,7 +104,11 @@ export default function EquipmentPicker({
         openWhenEmpty
         emptyText="목록에 없는 라인업입니다 — 적은 그대로 저장됩니다"
       />
+      </div>
+      <div className="eqp-cell">
+      <label className="eqp-label" htmlFor={`${uid}-model`} style={labelStyle}>모델명</label>
       <SearchSelect<MasterModel>
+        inputId={`${uid}-model`}
         items={filterByQuery(models, qM || model)}
         itemKey={m => m.id}
         renderItem={m => <span style={{ fontSize: 13 }}>{m.name}</span>}
@@ -90,7 +121,11 @@ export default function EquipmentPicker({
         openWhenEmpty
         emptyText="목록에 없는 모델입니다 — 적은 그대로 저장됩니다"
       />
+      </div>
+      <div className="eqp-cell">
+      <label className="eqp-label" htmlFor={`${uid}-config`} style={labelStyle}>옵션</label>
       <SearchSelect<MasterConfig>
+        inputId={`${uid}-config`}
         items={filterByQuery(configs, qC || config)}
         itemKey={c => c.id}
         renderItem={c => <span style={{ fontSize: 13 }}>{c.name}</span>}
@@ -106,6 +141,7 @@ export default function EquipmentPicker({
           ? <span style={{ fontSize: 11, color: MUTED }}>마스터가 없어 자유 입력으로 받습니다</span>
           : <span style={{ fontSize: 11, color: BLUE }}>목록에 없으면 그대로 적어도 됩니다</span>}
       />
+      </div>
     </div>
   )
 }
